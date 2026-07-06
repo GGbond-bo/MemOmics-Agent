@@ -1,0 +1,19 @@
+{
+  "id": "retrieve_topk_repurposing_drugs_from_disease_txgnn",
+  "name": "Retrieve Topk Repurposing Drugs From Disease Txgnn",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Computes TxGNN model predictions for drug repurposing and returns the top predicted drugs with their scores for a given disease.",
+  "detailed_description": "Computes TxGNN model predictions for drug repurposing and returns the top predicted drugs with their scores for a given disease.",
+  "when_to_use": "When you need retrieve topk repurposing drugs from disease txgnn analysis",
+  "parameters": {
+    "disease_name": "[Required] The name of the disease for which to retrieve drug predictions (str)",
+    "data_lake_path": "[Required] Path to the data lake (str)",
+    "k": "[Optional] The number of top drug predictions to return (default: 5)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,99 @@
+{
+  "id": "deg-analysis",
+  "name": "差异表达分析",
+  "category": "transcriptomics",
+  "language": "R+Python",
+  "description": "Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正",
+  "starting_prompt": "进行差异表达分析",
+  "source_dir": "skills/built_in/deg-analysis",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "DESeq2",
+    "pseudobulk",
+    "differential-expression"
+  ],
+  "aliases": [
+    "Bulk RNA-seq DE (DESeq2)"
+  ],
+  "steps": [
+    {
+      "name": "Pseudobulk aggregation",
+      "description": "Aggregate by celltype/sample",
+      "tool": "terminal"
+    },
+    {
+      "name": "DESeq2 DE",
+      "description": "Wald test + LFC shrinkage",
+      "tool": "terminal"
+    },
+    {
+      "name": "Wilcoxon test",
+      "description": "FindMarkers single-cell DE",
+      "tool": "terminal"
+    },
+    {
+      "name": "MAST (optional)",
+      "description": "GLM with detection rate",
+      "tool": "terminal"
+    },
+    {
+      "name": "Multiple testing correction",
+      "description": "BH correction + filter",
+      "tool": "terminal"
+    },
+    {
+      "name": "VolcanoPlot/Heatmap",
+      "description": "Visualize DEG",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "DESeq2",
+    "Seurat",
+    "edgeR",
+    "clusterProfiler",
+    "org.Hs.eg.db",
+    "org.Mm.eg.db"
+  ],
+  "python_packages": [
+    "scanpy",
+    "diffxpy"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "有分组的scRNA-seq"
+  ],
+  "parameters": {
+    "r_packages": "DESeq2, Seurat, edgeR, clusterProfiler, org.Hs.eg.db, org.Mm.eg.db",
+    "python_packages": "scanpy, diffxpy",
+    "steps": "Pseudobulk aggregation -> DESeq2 DE -> Wilcoxon test -> MAST (optional) -> Multiple testing correction -> VolcanoPlot/Heatmap"
+  },
+  "detailed_description": "Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正\n\n适用场景: 有分组的scRNA-seq\n\n分析步骤:\n  - Pseudobulk aggregation: Aggregate by celltype/sample\n  - DESeq2 DE: Wald test + LFC shrinkage\n  - Wilcoxon test: FindMarkers single-cell DE\n  - MAST (optional): GLM with detection rate\n  - Multiple testing correction: BH correction + filter\n  - VolcanoPlot/Heatmap: Visualize DEG\n\n依赖包: org.Hs.eg.db, clusterProfiler, DESeq2, Seurat, scanpy, org.Mm.eg.db, diffxpy, edgeR\n\n难度: intermediate\n\n触发提示: \"进行差异表达分析\"\n\n别名: Bulk RNA-seq DE (DESeq2)",
+  "when_to_use": "适用于: 有分组的scRNA-seq",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "deg_analysis.R",
+      "params": "Pseudobulk DESeq2 + Wilcoxon, Old vs Young per celltype, padj<0.05, |log2FC|>0.25, 10 cell types",
+      "date": "2026-07-04",
+      "score": 8.5,
+      "result": "1,119 DEGs across 10 cell types. Type I most active (156↑ 182↓), Endothelial vascular degeneration (30↑ 154↓), Schwann neural remodeling (54↑ 5↓), Denervated innervation loss (12↑ 85↓)"
+    }
+  ],
+  "proven_script": "deg_analysis.R",
+  "error_count": 0,
+  "success_count": 1,
+  "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  }
+}

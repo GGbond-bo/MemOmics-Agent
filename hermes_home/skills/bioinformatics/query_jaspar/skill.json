@@ -1,0 +1,19 @@
+{
+  "id": "query_jaspar",
+  "name": "Query Jaspar",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the JASPAR REST API for transcription factor binding profiles.",
+  "detailed_description": "Query the JASPAR REST API for transcription factor binding profiles.",
+  "when_to_use": "When you need query jaspar analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about TF binding profiles (str)",
+    "endpoint": "[Optional] API endpoint path or full URL",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

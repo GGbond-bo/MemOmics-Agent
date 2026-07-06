@@ -1,0 +1,18 @@
+{
+  "id": "get_rna_seq_archs4",
+  "name": "Get Rna Seq Archs4",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Given a gene name, fetch RNA-seq expression data showing the top K tissues with highest transcripts-per-million (TPM) values.",
+  "detailed_description": "Given a gene name, fetch RNA-seq expression data showing the top K tissues with highest transcripts-per-million (TPM) values.",
+  "when_to_use": "When you need get rna seq archs4 analysis",
+  "parameters": {
+    "gene_name": "[Required] The gene name for which RNA-seq data is being fetched (str)",
+    "K": "[Optional] The number of tissues to return (default: 10)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

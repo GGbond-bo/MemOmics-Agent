@@ -1,0 +1,13 @@
+analysis_type: cellchat
+date: '2026-06-27'
+methods:
+  v2:
+    min_pct:
+      confidence: medium
+      source: domain_convention
+      value: 0.1
+    nboot:
+      confidence: low
+      source: default_value
+      value: 100
+source: default_seed

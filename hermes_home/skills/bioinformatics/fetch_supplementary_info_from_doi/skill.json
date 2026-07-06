@@ -1,0 +1,18 @@
+{
+  "id": "fetch_supplementary_info_from_doi",
+  "name": "Fetch Supplementary Info From Doi",
+  "category": "literature",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Fetches supplementary information for a paper given its DOI and saves it to a specified directory.",
+  "detailed_description": "Fetches supplementary information for a paper given its DOI and saves it to a specified directory.",
+  "when_to_use": "When you need fetch supplementary info from doi analysis",
+  "parameters": {
+    "doi": "[Required] The paper DOI (str)",
+    "output_dir": "[Optional] Directory to save supplementary files (default: supplementary_info)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

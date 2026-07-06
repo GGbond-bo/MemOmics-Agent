@@ -1,0 +1,60 @@
+{
+  "id": "milor",
+  "name": "差异丰度分析 (MiloR)",
+  "category": "transcriptomics",
+  "language": "R",
+  "description": "MiloR邻域差异丰度检验, 适用于多条件比较",
+  "starting_prompt": "进行差异丰度分析",
+  "source_dir": "skills/built_in/milor",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "milo",
+    "differential-abundance",
+    "neighborhood"
+  ],
+  "steps": [
+    {
+      "name": "KNN graph + neighborhoods",
+      "description": "MiloR from Seurat",
+      "tool": "terminal"
+    },
+    {
+      "name": "Differential abundance test",
+      "description": "testNhoods + spatial FDR",
+      "tool": "terminal"
+    },
+    {
+      "name": "Visualization",
+      "description": "Significant neighborhoods on UMAP",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "miloR",
+    "Seurat",
+    "edgeR"
+  ],
+  "python_packages": [
+    "milo-py"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "有分组的scRNA-seq",
+    "aging",
+    "disease",
+    ">5样本"
+  ],
+  "parameters": {
+    "r_packages": "miloR, Seurat, edgeR",
+    "python_packages": "milo-py",
+    "steps": "KNN graph + neighborhoods -> Differential abundance test -> Visualization"
+  },
+  "detailed_description": "MiloR邻域差异丰度检验, 适用于多条件比较\n\n适用场景: 有分组的scRNA-seq, aging, disease, >5样本\n\n分析步骤:\n  - KNN graph + neighborhoods: MiloR from Seurat\n  - Differential abundance test: testNhoods + spatial FDR\n  - Visualization: Significant neighborhoods on UMAP\n\n依赖包: edgeR, Seurat, milo-py, miloR\n\n难度: intermediate\n\n触发提示: \"进行差异丰度分析\"",
+  "when_to_use": "适用于: 有分组的scRNA-seq, aging, disease, >5样本",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

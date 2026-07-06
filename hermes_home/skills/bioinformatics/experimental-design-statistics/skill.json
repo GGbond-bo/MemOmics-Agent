@@ -1,0 +1,40 @@
+{
+  "name": "实验设计统计",
+  "id": "experimental-design-statistics",
+  "category": "clinical",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验",
+  "triggers": [
+    "实验设计",
+    "统计检验",
+    "样本量",
+    "power分析"
+  ],
+  "steps": [
+    "研究问题定义",
+    "样本量估算",
+    "统计方法选择",
+    "效应量计算",
+    "多重比较校正"
+  ],
+  "dependencies": [
+    "pwr",
+    "rstatix",
+    "effsize"
+  ],
+  "outputs": [
+    "样本量报告",
+    "统计结果",
+    "效应量图"
+  ],
+  "detailed_description": "实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验\n\n分析步骤:\n  - 研究问题定义\n  - 样本量估算\n  - 统计方法选择\n  - 效应量计算\n  - 多重比较校正\n\n依赖包: pwr, effsize, rstatix",
+  "when_to_use": "当你需要 实验设计统计 时触发",
+  "parameters": {
+    "steps": "研究问题定义 -> 样本量估算 -> 统计方法选择 -> 效应量计算 -> 多重比较校正"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

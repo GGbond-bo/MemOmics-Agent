@@ -1,0 +1,36 @@
+{
+  "name": "CRISPR 筛选分析",
+  "id": "pooled-crispr-screens",
+  "category": "genomics",
+  "language": "R/Python",
+  "source": "Biomni Lab",
+  "description": "Pooled CRISPR: MAGeCK → 基因必需性",
+  "triggers": [
+    "CRISPR筛选",
+    "MAGeCK",
+    "基因必需性"
+  ],
+  "steps": [
+    "sgRNA计数",
+    "MAGeCK test",
+    "RRA排名",
+    "通路富集"
+  ],
+  "dependencies": [
+    "MAGeCK",
+    "gseapy"
+  ],
+  "outputs": [
+    "显著基因",
+    "RRA图"
+  ],
+  "detailed_description": "Pooled CRISPR: MAGeCK → 基因必需性\n\n分析步骤:\n  - sgRNA计数\n  - MAGeCK test\n  - RRA排名\n  - 通路富集\n\n依赖包: gseapy, MAGeCK",
+  "when_to_use": "当你需要 CRISPR 筛选分析 时触发",
+  "parameters": {
+    "steps": "sgRNA计数 -> MAGeCK test -> RRA排名 -> 通路富集"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,10 @@
+doublet_method: DoubletFinder
+last_updated: '2026-06-25'
+mt_percent: 5
+nCount_high: 40000
+nFeature_high: 6000
+nFeature_low: 200
+note: 默认参数, 建议从文献中更新
+source: nuclei 数据特异参数
+species: monkey
+tissue: brain

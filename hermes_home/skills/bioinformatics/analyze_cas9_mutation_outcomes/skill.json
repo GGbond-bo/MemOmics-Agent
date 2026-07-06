@@ -1,0 +1,20 @@
+{
+  "id": "analyze_cas9_mutation_outcomes",
+  "name": "Analyze Cas9 Mutation Outcomes",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes and categorizes mutations induced by Cas9 at target sites.",
+  "detailed_description": "Analyzes and categorizes mutations induced by Cas9 at target sites.",
+  "when_to_use": "When you need analyze cas9 mutation outcomes analysis",
+  "parameters": {
+    "reference_sequences": "[Required] Dictionary mapping sequence IDs to reference DNA sequences (strings) (dict)",
+    "edited_sequences": "[Required] Nested dictionary: {sequence_id: {read_id: sequence}} containing the edited/mutated sequences for each reference (dict)",
+    "cell_line_info": "[Optional] Dictionary mapping sequence IDs to cell line information (e.g., wildtype, knockout gene)",
+    "output_prefix": "[Optional] Prefix for output files (default: cas9_mutation_analysis)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,19 @@
+{
+  "id": "query_chatnt",
+  "name": "Query Chatnt",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Answer functions and properties questions for DNA sequences ",
+  "detailed_description": "Answer functions and properties questions for DNA sequences ",
+  "when_to_use": "When you need query chatnt analysis",
+  "parameters": {
+    "question": "[Required] Questions about the DNA sequence (str)",
+    "sequence": "[Required] DNA sequence with potential functions (str)",
+    "device": "[Optional] Device to use for the ChatNT model. Default is -1 (CPU). (default: -1)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

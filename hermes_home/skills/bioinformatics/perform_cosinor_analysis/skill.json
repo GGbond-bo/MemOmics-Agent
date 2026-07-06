@@ -1,0 +1,19 @@
+{
+  "id": "perform_cosinor_analysis",
+  "name": "Perform Cosinor Analysis",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs cosinor analysis on physiological time series data to characterize circadian rhythms.",
+  "detailed_description": "Performs cosinor analysis on physiological time series data to characterize circadian rhythms.",
+  "when_to_use": "When you need perform cosinor analysis analysis",
+  "parameters": {
+    "time_data": "[Required] Time points of the measurements in hours (array-like)",
+    "physiological_data": "[Required] Physiological measurements corresponding to each time point (array-like)",
+    "period": "[Optional] Period of the rhythm in hours, default is 24 hours for circadian rhythms (default: 24.0)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

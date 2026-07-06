@@ -1,0 +1,37 @@
+{
+  "name": "多基因风险评分",
+  "id": "polygenic-risk-score-prs-catalog",
+  "category": "genomics",
+  "language": "Python/R",
+  "source": "Biomni Lab",
+  "description": "PRS计算: GWAS → PRS → 风险分层",
+  "triggers": [
+    "PRS",
+    "多基因风险",
+    "PGS"
+  ],
+  "steps": [
+    "GWAS质控",
+    "clumping",
+    "PRSice2计算",
+    "百分位分层",
+    "AUC评估"
+  ],
+  "dependencies": [
+    "PRSice2",
+    "plink2"
+  ],
+  "outputs": [
+    "PRS分布",
+    "风险分层表"
+  ],
+  "detailed_description": "PRS计算: GWAS → PRS → 风险分层\n\n分析步骤:\n  - GWAS质控\n  - clumping\n  - PRSice2计算\n  - 百分位分层\n  - AUC评估\n\n依赖包: plink2, PRSice2",
+  "when_to_use": "当你需要 多基因风险评分 时触发",
+  "parameters": {
+    "steps": "GWAS质控 -> clumping -> PRSice2计算 -> 百分位分层 -> AUC评估"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

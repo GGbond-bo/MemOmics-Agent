@@ -1,0 +1,93 @@
+{
+  "id": "cellchat-v2",
+  "name": "细胞通讯分析 (CellChat v2)",
+  "category": "transcriptomics",
+  "language": "R",
+  "description": "CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seurat输出链接",
+  "starting_prompt": "分析细胞间通讯",
+  "source_dir": "skills/built_in/cellchat-v2",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "cellchat",
+    "cell-communication",
+    "ligand-receptor"
+  ],
+  "aliases": [
+    "细胞通讯 (CellChat v2)"
+  ],
+  "steps": [
+    {
+      "name": "Create CellChat object",
+      "description": "Import from Seurat",
+      "tool": "terminal"
+    },
+    {
+      "name": "L-R interaction inference",
+      "description": "CellChatDB v2 matching",
+      "tool": "terminal"
+    },
+    {
+      "name": "Signal flow visualization",
+      "description": "netVisual_aggregate",
+      "tool": "terminal"
+    },
+    {
+      "name": "Comparison (multi-condition)",
+      "description": "compareInteractions",
+      "tool": "terminal"
+    },
+    {
+      "name": "Source-target summary",
+      "description": "Signal contribution",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "CellChat",
+    "Seurat",
+    "NMF",
+    "reticulate"
+  ],
+  "python_packages": [
+    "cellchat"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "多细胞类型",
+    "disease",
+    "aging",
+    "development"
+  ],
+  "parameters": {
+    "r_packages": "CellChat, Seurat, NMF, reticulate",
+    "python_packages": "cellchat",
+    "steps": "Create CellChat object -> L-R interaction inference -> Signal flow visualization -> Comparison (multi-condition) -> Source-target summary"
+  },
+  "detailed_description": "CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seurat输出链接\n\n适用场景: 多细胞类型, disease, aging, development\n\n分析步骤:\n  - Create CellChat object: Import from Seurat\n  - L-R interaction inference: CellChatDB v2 matching\n  - Signal flow visualization: netVisual_aggregate\n  - Comparison (multi-condition): compareInteractions\n  - Source-target summary: Signal contribution\n\n依赖包: reticulate, Seurat, CellChat, NMF, cellchat\n\n难度: intermediate\n\n触发提示: \"分析细胞间通讯\"\n\n别名: 细胞通讯 (CellChat v2)",
+  "when_to_use": "适用于: 多细胞类型, disease, aging, development",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "cellchat_analysis.R",
+      "params": "CellChat v2, Young vs Old separately, 10 cell types, secreted+cell-cell contact signaling",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "Young: 9 interactions, 21 pathways. Old: 9 interactions, 24 pathways. 12 figures generated (chord+heatmap+bubble per group)"
+    }
+  ],
+  "proven_script": "cellchat_analysis.R",
+  "error_count": 0,
+  "success_count": 1,
+  "official_docs": "https://raw.githubusercontent.com/sqjin/CellChat/refs/heads/master/README.md",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类/注释的数据"
+  }
+}

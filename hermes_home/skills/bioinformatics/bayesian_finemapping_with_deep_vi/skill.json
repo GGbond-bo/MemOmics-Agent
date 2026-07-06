@@ -1,0 +1,22 @@
+{
+  "id": "bayesian_finemapping_with_deep_vi",
+  "name": "Bayesian Finemapping With Deep Vi",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs Bayesian fine-mapping from GWAS summary statistics using deep variational inference to compute posterior inclusion probabilities and credible sets for putative causal variants.",
+  "detailed_description": "Performs Bayesian fine-mapping from GWAS summary statistics using deep variational inference to compute posterior inclusion probabilities and credible sets for putative causal variants.",
+  "when_to_use": "When you need bayesian finemapping with deep vi analysis",
+  "parameters": {
+    "gwas_summary_path": "[Required] Path to CSV or TSV file containing GWAS summary statistics with variant_id, effect_size, pvalue, and optional se columns (str)",
+    "ld_matrix": "[Required] Linkage disequilibrium matrix with pairwise correlations between variants (numpy.ndarray)",
+    "n_iterations": "[Optional] Number of training iterations for the variational inference algorithm (default: 5000)",
+    "learning_rate": "[Optional] Learning rate for the optimization algorithm (default: 0.01)",
+    "hidden_dim": "[Optional] Hidden dimension size for the neural network (default: 64)",
+    "credible_threshold": "[Optional] Threshold for defining the credible set (e.g., 0.95 for a 95% credible set) (default: 0.95)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

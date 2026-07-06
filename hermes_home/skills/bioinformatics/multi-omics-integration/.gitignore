@@ -1,0 +1,18 @@
+# System files
+.DS_Store
+
+# R temporary
+.RData
+.Rhistory
+.Rproj.user/
+
+# Data files
+**/data/
+**/*.rds
+**/*.hdf5
+**/*.h5
+
+# Analysis outputs
+**/mofa_results/
+**/*_results/
+assets/eval/test_results/

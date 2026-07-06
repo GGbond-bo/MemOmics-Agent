@@ -1,0 +1,21 @@
+{
+  "id": "analyze_itc_binding_thermodynamics",
+  "name": "Analyze Itc Binding Thermodynamics",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes isothermal titration calorimetry (ITC) data to determine binding affinity and thermodynamic parameters.",
+  "detailed_description": "Analyzes isothermal titration calorimetry (ITC) data to determine binding affinity and thermodynamic parameters.",
+  "when_to_use": "When you need analyze itc binding thermodynamics analysis",
+  "parameters": {
+    "itc_data_path": "[Optional] Path to CSV or TSV file containing ITC thermogram data with columns for injection number, injection volume, and heat released/absorbed.",
+    "itc_data": "[Optional] Raw ITC thermogram data as a numpy array with shape (n_injections, 3) containing injection number, injection volume, and heat.",
+    "temperature": "[Optional] Temperature in Kelvin at which the experiment was conducted. (default: 298.15)",
+    "protein_concentration": "[Optional] Initial concentration of protein in the cell in molar (M).",
+    "ligand_concentration": "[Optional] Concentration of ligand in the syringe in molar (M)."
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

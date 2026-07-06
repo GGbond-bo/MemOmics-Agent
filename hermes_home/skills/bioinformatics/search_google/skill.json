@@ -1,0 +1,19 @@
+{
+  "id": "search_google",
+  "name": "Search Google",
+  "category": "literature",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Search using Google search and return formatted results.",
+  "detailed_description": "Search using Google search and return formatted results.",
+  "when_to_use": "When you need search google analysis",
+  "parameters": {
+    "query": "[Required] The search query (e.g., \"protocol text or search question\") (str)",
+    "num_results": "[Optional] Number of results to return (default: 3)",
+    "language": "[Optional] Language code for search results (default: en)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

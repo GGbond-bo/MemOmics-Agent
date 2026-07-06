@@ -1,0 +1,22 @@
+{
+  "id": "analyze_xenograft_tumor_growth_inhibition",
+  "name": "Analyze Xenograft Tumor Growth Inhibition",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze tumor growth inhibition in xenograft models across different treatment groups.",
+  "detailed_description": "Analyze tumor growth inhibition in xenograft models across different treatment groups.",
+  "when_to_use": "When you need analyze xenograft tumor growth inhibition analysis",
+  "parameters": {
+    "data_path": "[Required] Path to CSV or TSV file containing tumor volume measurements (str)",
+    "time_column": "[Required] Name of the column containing time points (str)",
+    "volume_column": "[Required] Name of the column containing tumor volume measurements (str)",
+    "group_column": "[Required] Name of the column containing treatment group labels (str)",
+    "subject_column": "[Required] Name of the column containing subject/mouse identifiers (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

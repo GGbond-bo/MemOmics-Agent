@@ -1,0 +1,34 @@
+{"personality":"helpful","headline":"Ready when you are","body":"Upload your h5ad/h5/RDS file or describe your project. I will scan data, recommend modules, and guide the analysis step-by-step."}
+{"personality":"helpful","headline":"How can I help today?","body":"Point me at your omics data, paste an error, or describe your research goal. I will take it from there."}
+{"personality":"helpful","headline":"Let us get started","body":"Try: /scan my data, /skills for bioinformatics tools, or describe your analysis. Ask anything about your multi-omics project."}
+{"personality":"helpful","headline":"Tell me what you need","body":"I can run QC, cell annotation, trajectory inference, cell communication analysis, and more. Just describe the goal."}
+{"personality":"helpful","headline":"Hi, MemOmics here","body":"Share your data path or a research question to start. I keep results reproducible and cite the methods I use."}
+{"personality":"concise","headline":"Ready.","body":"Describe the analysis. I will run it."}
+{"personality":"concise","headline":"Waiting for input","body":"Paste data path, species, or goal. Short results, fast execution."}
+{"personality":"concise","headline":"Go.","body":"Ask. I will scan data, run pipelines, return results. No filler."}
+{"personality":"concise","headline":"Standing by","body":"One line is enough: species + tissue + direction. I handle the rest."}
+{"personality":"concise","headline":"Your move","body":"Data path, analysis type, or error message. I execute immediately."}
+{"personality":"technical","headline":"Pipeline initialized. Awaiting input.","body":"Provide data path, species, tissue. Tools: scanpy, seurat, cellchat, monocle3, SCENIC, WGCNA, MOFA+."}
+{"personality":"technical","headline":"Analysis loop idle","body":"Send parameters to trigger pipeline steps. Supports QC, clustering, DEG, trajectory, cell communication."}
+{"personality":"technical","headline":"Ready for dispatch","body":"Enter analysis request. I will plan, call bioinformatics tools, verify output. Results stream inline."}
+{"personality":"technical","headline":"Stdin open","body":"Accepts natural language or structured commands. Typical flow: scan -> QC -> cluster -> annotate -> advanced."}
+{"personality":"technical","headline":"Modules loaded","body":"15+ bioinformatics skills: scRNA-seq, spatial, multi-omics, GRN, drug discovery. Describe the analysis; I return figures and reports."}
+{"personality":"none","headline":"MemOmics Agent is ready.","body":"Upload omics data, describe your project, or use /scan /skills. I can run pipelines, find markers, and generate reports."}
+{"personality":"none","headline":"What are we analyzing today?","body":"Describe the species, tissue, and research direction. I will pick the right modules and guide you through each step."}
+{"personality":"none","headline":"Start anywhere.","body":"Drop a data path, a gene list, or a research question. I will investigate, recommend next steps, and keep things reproducible."}
+{"personality":"none","headline":"Your omics data, one prompt away.","body":"QC, clustering, annotation, trajectory, cell communication. Tell me the goal and I handle the pipeline."}
+{"personality":"none","headline":"Ready when you are.","body":"Type a species + tissue + direction. I have knowledge bases for many tissues and bioinformatics skills ready to run."}
+{"personality":"creative","headline":"A blank notebook, a waiting cursor","body":"What shall we discover? Upload single-cell data, spatial transcriptomics, or multi-omics. I will paint the biological story."}
+{"personality":"creative","headline":"Fresh data, warm pipeline","body":"Give me a spark: a cell type, a pathway, a disease model. I will turn it into figures you can publish."}
+{"personality":"creative","headline":"New dataset, new discoveries","body":"Bring an experiment, not a spec. We can explore fast, validate later, and rewrite the narrative with data."}
+{"personality":"teacher","headline":"Class is in session","body":"Ask about any pipeline, parameter, or visualization. I will explain the why, not just the how, and show a worked example."}
+{"personality":"teacher","headline":"What shall we learn today?","body":"Paste a Seurat/Scanpy error, a QC question, or a method to unpack. I will guide you step by step."}
+{"personality":"kawaii","headline":"hiii! ready to analyze! (^_^)","body":"upload your omics data and i will scan it super gently! QC, clustering, DEG - all with extra care! *sparkle*"}
+{"personality":"kawaii","headline":"memomics-chan is here! <3","body":"tell me your species and tissue! i love scRNA-seq, spatial, and multi-omics alike (>w<)"}
+{"personality":"catgirl","headline":"nya~ what are we analyzing?","body":"upload h5ad or paste a data path, nya! i will pounce on QC issues and leave clean plots, nyan~"}
+{"personality":"catgirl","headline":"nyaaa~ memomics reporting","body":"say the word and i will scan your data, run the pipeline, and curl up with a tidy report."}
+{"personality":"pirate","headline":"Ahoy! Ready to sail the data","body":"Name yer quarry: differential genes, cell types, or a cursed batch effect. I will chase it down, matey."}
+{"personality":"pirate","headline":"MemOmics at the helm, arrr","body":"Point me at the charts (your data) and I will run QC, cluster cells, hoist a clean UMAP."}
+{"personality":"noir","headline":"MemOmics. Bioinformatics investigator.","body":"Paste the error, the suspect gene, the ambiguous cluster. I read between the cells and return with the truth."}
+{"personality":"hype","headline":"MEMOMICS ONLINE. LFG.","body":"Drop your data and watch me cook. QC run, cells clustered, markers found. We are NOT losing today, friend."}
+{"personality":"philosopher","headline":"The unexamined dataset is not worth publishing","body":"Share a data path, a research question, or a method. I will trace the biology, propose an analysis, and justify each step."}

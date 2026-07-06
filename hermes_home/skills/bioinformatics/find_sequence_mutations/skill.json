@@ -1,0 +1,19 @@
+{
+  "id": "find_sequence_mutations",
+  "name": "Find Sequence Mutations",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Compare query sequence against reference sequence to identify mutations.",
+  "detailed_description": "Compare query sequence against reference sequence to identify mutations.",
+  "when_to_use": "When you need find sequence mutations analysis",
+  "parameters": {
+    "query_sequence": "[Required] The sequence being analyzed (str)",
+    "reference_sequence": "[Required] The reference sequence to compare against (str)",
+    "query_start": "[Optional] The start position of the query sequence (default: 1)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

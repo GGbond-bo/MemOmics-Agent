@@ -1,0 +1,56 @@
+{
+  "id": "paper-summary",
+  "name": "AI文献总结",
+  "category": "general",
+  "language": "Python",
+  "description": "深度AI文献解读：全文提取→结构化总结(15字段)→图表提取→报告生成",
+  "triggers": [
+    "总结论文",
+    "解读文献",
+    "论文总结",
+    "ai总结",
+    "文献解读"
+  ],
+  "tools": [
+    "execute_python"
+  ],
+  "python_requires": [
+    "pymupdf4llm",
+    "markitdown"
+  ],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "全文提取",
+      "description": "markitdown提取全文→fitz兜底→Docling兜底"
+    },
+    {
+      "name": "AI总结",
+      "description": "deepseek-v4-flash结构化总结15字段"
+    },
+    {
+      "name": "图表提取",
+      "description": "fitz提取Figure+Caption"
+    },
+    {
+      "name": "报告生成",
+      "description": "可选生成HTML/PPT报告"
+    }
+  ],
+  "parameters": {
+    "steps": "全文提取 -> AI总结 -> 图表提取 -> 报告生成"
+  },
+  "chains_from": [
+    "paper-download"
+  ],
+  "chains_to": [
+    "html-report",
+    "ppt-generator"
+  ],
+  "detailed_description": "深度AI文献解读：全文提取→结构化总结(15字段)→图表提取→报告生成\n\n分析步骤:\n  - 全文提取: markitdown提取全文→fitz兜底→Docling兜底\n  - AI总结: deepseek-v4-flash结构化总结15字段\n  - 图表提取: fitz提取Figure+Caption\n  - 报告生成: 可选生成HTML/PPT报告",
+  "when_to_use": "当你需要 AI文献总结 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

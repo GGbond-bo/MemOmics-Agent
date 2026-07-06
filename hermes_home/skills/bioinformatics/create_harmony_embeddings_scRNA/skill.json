@@ -1,0 +1,43 @@
+{
+  "id": "create_harmony_embeddings_scRNA",
+  "name": "Create Harmony Embeddings Scrna",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs batch integration on single-cell RNA-seq data using Harmony and saves the integrated embeddings.",
+  "detailed_description": "Performs batch integration on single-cell RNA-seq data using Harmony and saves the integrated embeddings.",
+  "when_to_use": "When you need create harmony embeddings scRNA analysis",
+  "parameters": {
+    "adata_filename": "[Required] Filename of the AnnData object to load (str)",
+    "batch_key": "[Required] Column name in adata.obs that defines the batch variable for integration (str)",
+    "data_dir": "[Required] Directory path where the input file is located and output will be saved (str)"
+  },
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_harmony_umap.R",
+      "params": "Harmony2 on donor_id (19 donors), PCA 50 PCs, dims=1:30 UMAP, theta=2, max_iter=20, 6 iterations convergence",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "39,982 cells, 19 donors, 6 iterations, PC30=88.6% variance, UMAP clear separation by age/celltype"
+    }
+  ],
+  "proven_script": "01_harmony_umap.R",
+  "error_count": 1,
+  "success_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-07-04 04:09",
+      "error_type": "logic_error",
+      "message": "RunHarmony with sample_id (16,003 unique) → 1 iteration convergence (pseudo-convergence). Harmony2 max.iter.harmony → max_iter, assay.use removed",
+      "root_cause": "sample_id had 16,003 unique values (individual cell barcodes), avg 2.5 cells/batch. Harmony requires sufficient cells per batch for covariance estimation. Harmony2 also changed parameter names.",
+      "fix_applied": "Switch batch variable from sample_id to donor_id (19 donors). Fix Harmony2 API: max.iter.harmony→max_iter, remove assay.use. 6 iterations, proper convergence.",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "01_harmony_umap.R",
+      "severity": "high"
+    }
+  ]
+}

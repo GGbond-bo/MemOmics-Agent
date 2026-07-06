@@ -1,0 +1,9 @@
+api_base: https://dcsapi.dcs.cloud/api/aigress/unified/v1
+api_key: sk-H9xYcOay-hMPrIO8bQeHibl3ToEDMyjte22IktUWvVfQ6w3D
+max_turns: 200
+model: deepseek-v4-pro
+provider: openai
+sessions:
+  write_json_snapshots: true
+skills:
+  disabled: []

@@ -1,0 +1,53 @@
+{
+  "id": "grn-pyscenic",
+  "name": "基因调控网络 (pySCENIC)",
+  "category": "transcriptomics",
+  "language": "Python",
+  "description": "pySCENIC基因调控网络推断。TF调控子/aUCell活性评分",
+  "starting_prompt": "推断我的scRNA-seq数据的基因调控网络",
+  "source_dir": "skills/external/13_grn-pyscenic",
+  "memomics_module": "03_高级分析",
+  "chains_from": [
+    "scrnaseq-scanpy-core"
+  ],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GRN inference (GRNBoost2)",
+      "description": "Infer from expression matrix",
+      "tool": "terminal"
+    },
+    {
+      "name": "Motif enrichment (cisTarget)",
+      "description": "Identify direct regulation",
+      "tool": "terminal"
+    },
+    {
+      "name": "Regulon activity (AUCell)",
+      "description": "Per-cell regulon scores",
+      "tool": "terminal"
+    },
+    {
+      "name": "Visualization",
+      "description": "Regulon heatmap + network",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GRN inference (GRNBoost2) -> Motif enrichment (cisTarget) -> Regulon activity (AUCell) -> Visualization"
+  },
+  "detailed_description": "pySCENIC基因调控网络推断。TF调控子/aUCell活性评分\n\n分析步骤:\n  - GRN inference (GRNBoost2): Infer from expression matrix\n  - Motif enrichment (cisTarget): Identify direct regulation\n  - Regulon activity (AUCell): Per-cell regulon scores\n  - Visualization: Regulon heatmap + network\n\n触发提示: \"推断我的scRNA-seq数据的基因调控网络\"",
+  "when_to_use": "当你需要 基因调控网络 (pySCENIC) 时触发",
+  "proven_params": [],
+  "error_count": 1,
+  "success_count": 1,
+  "official_docs": "https://pyscenic.readthedocs.io/en/latest/tutorial.html",
+  "doc_source": "official",
+  "proven_script": "scripts/run_proven.py",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  }
+}

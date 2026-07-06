@@ -1,0 +1,46 @@
+{
+  "id": "scrna-disease-drug",
+  "name": "scRNA-seq疾病药物发现",
+  "category": "drug_discovery",
+  "language": "Python",
+  "description": "疾病scRNA-seq+遗传证据整合的药物靶点优先级排序。Open Targets/GWAS/eQTL",
+  "starting_prompt": "从疾病scRNA-seq数据发现和优先排序药物靶点",
+  "source_dir": "skills/external/26_scrna-disease-drug-discovery",
+  "memomics_module": "04_个性化分析",
+  "chains_from": [
+    "scrnaseq-scanpy-core"
+  ],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "Disease DE analysis",
+      "description": "Disease vs control celltype DEG",
+      "tool": "terminal"
+    },
+    {
+      "name": "Drug-gene interaction (DGIdb)",
+      "description": "DEG targets match drugs",
+      "tool": "terminal"
+    },
+    {
+      "name": "Drug ranking",
+      "description": "Multi-dimension scoring",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "Disease DE analysis -> Drug-gene interaction (DGIdb) -> Drug ranking"
+  },
+  "detailed_description": "疾病scRNA-seq+遗传证据整合的药物靶点优先级排序。Open Targets/GWAS/eQTL\n\n分析步骤:\n  - Disease DE analysis: Disease vs control celltype DEG\n  - Drug-gene interaction (DGIdb): DEG targets match drugs\n  - Drug ranking: Multi-dimension scoring\n\n触发提示: \"从疾病scRNA-seq数据发现和优先排序药物靶点\"",
+  "when_to_use": "当你需要 scRNA-seq疾病药物发现 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  }
+}

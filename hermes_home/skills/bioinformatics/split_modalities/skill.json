@@ -1,0 +1,19 @@
+{
+  "id": "split_modalities",
+  "name": "Split Modalities",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Split a 4D NIfTI file into separate modality files for nnUNet processing. Handles BRATS dataset format with FLAIR, T1w, t1gd, and T2w modalities.",
+  "detailed_description": "Split a 4D NIfTI file into separate modality files for nnUNet processing. Handles BRATS dataset format with FLAIR, T1w, t1gd, and T2w modalities.",
+  "when_to_use": "When you need split modalities analysis",
+  "parameters": {
+    "input_file": "[Required] Path to the 4D NIfTI file to split (str)",
+    "output_dir": "[Required] Directory to save the split modality files (str)",
+    "case_name": "[Optional] Base name for the case files (default: BRAT)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

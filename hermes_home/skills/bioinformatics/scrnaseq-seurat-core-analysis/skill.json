@@ -1,0 +1,54 @@
+{
+  "name": "Seurat 核心分析",
+  "id": "scrnaseq-seurat-core-analysis",
+  "category": "transcriptomics",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释",
+  "detailed_description": "基于Seurat v5的标准单细胞分析流程。支持SCTransform归一化(glmGamPoi)，PCA降维，UMAP可视化，Leiden/Louvain聚类，和半自动细胞类型注释。",
+  "when_to_use": "用户有scRNA-seq数据需要R/Seurt基础分析",
+  "triggers": [
+    "Seurat",
+    "Seurat分析",
+    "R单细胞",
+    "scRNA-seq R"
+  ],
+  "steps": [
+    "CreateSeuratObject",
+    "QC过滤",
+    "SCTransform(glmGamPoi)",
+    "RunPCA+ElbowPlot",
+    "FindNeighbors+FindClusters",
+    "RunUMAP+DimPlot",
+    "FindAllMarkers+注释"
+  ],
+  "dependencies": [
+    "Seurat",
+    "glmGamPoi",
+    "scDblFinder"
+  ],
+  "outputs": [
+    "Seurat对象",
+    "UMAP图",
+    "标记基因表",
+    "注释结果"
+  ],
+  "parameters": {
+    "min_features": "200",
+    "max_features": "8000",
+    "max_mt": "20",
+    "resolution": "0.5-0.8"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-qc"
+    ],
+    "description": "需要已QC的数据"
+  }
+}

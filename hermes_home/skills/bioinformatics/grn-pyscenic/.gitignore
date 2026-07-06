@@ -1,0 +1,29 @@
+# System files
+.DS_Store
+
+# Data files
+**/*.h5ad
+**/*.loom
+**/*.pkl
+**/data/
+**/*_results/
+**/scenic_results/
+**/scenic_output/
+
+# Database files (large)
+**/pyscenic_databases/
+**/*.feather
+**/*.tbl
+
+# Python temporary
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Log files
+*.log
+
+# Output files
+**/*.png
+**/*.svg
+**/*.csv

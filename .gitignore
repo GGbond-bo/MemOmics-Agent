@@ -1,0 +1,55 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# === 虚拟环境 ===
+.venv/
+venv/
+env/
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+
+# === 运行结果/数据（体积大，不进 git）===
+hermes-agent/results/
+results/
+work/
+*.h5ad
+*.rds
+*.h5
+*.mtx
+*.mtx.gz
+*.tar.gz
+*.zip
+
+# === Miniconda 安装包 ===
+miniconda/
+miniconda_env/
+
+# === 日志/缓存 ===
+*.log
+.cache/
+.run_logs/
+error_memory/
+
+# === IDE/系统文件 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === 临时脚本 ===
+batch_inject_*.py
+apply_nav.py
+fix_*.py
+test_*.py
+verify_*.py

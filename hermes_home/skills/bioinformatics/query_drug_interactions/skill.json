@@ -1,0 +1,20 @@
+{
+  "id": "query_drug_interactions",
+  "name": "Query Drug Interactions",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query drug-drug interactions from DDInter database to identify potential interactions, mechanisms, and severity levels between specified drugs.",
+  "detailed_description": "Query drug-drug interactions from DDInter database to identify potential interactions, mechanisms, and severity levels between specified drugs.",
+  "when_to_use": "When you need query drug interactions analysis",
+  "parameters": {
+    "drug_names": "[Required] List of drug names to query for interactions (List[str])",
+    "interaction_types": "[Optional] Filter results by specific interaction types",
+    "severity_levels": "[Optional] Filter results by severity levels (Major, Moderate, Minor)",
+    "data_lake_path": "[Optional] Path to data lake directory containing DDInter data"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

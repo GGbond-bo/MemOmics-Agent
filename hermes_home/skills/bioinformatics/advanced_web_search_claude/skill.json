@@ -1,0 +1,19 @@
+{
+  "id": "advanced_web_search_claude",
+  "name": "Advanced Web Search Claude",
+  "category": "literature",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Initiate an advanced web search by launching a specialized agent to collect relevant information and citations through multiple rounds of web searches for a given query.",
+  "detailed_description": "Initiate an advanced web search by launching a specialized agent to collect relevant information and citations through multiple rounds of web searches for a given query.",
+  "when_to_use": "When you need advanced web search claude analysis",
+  "parameters": {
+    "query": "[Required] The search query string. (str)",
+    "max_searches": "[Optional] Maximum number of searches (default: 1)",
+    "max_retries": "[Optional] Maximum number of retry attempts with modified queries. (default: 3)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

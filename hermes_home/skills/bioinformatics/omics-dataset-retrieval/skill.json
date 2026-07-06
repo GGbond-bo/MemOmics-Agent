@@ -1,0 +1,38 @@
+{
+  "id": "omics-dataset-retrieval",
+  "name": "组学数据集检索 (GEO/SRA)",
+  "category": "data_retrieval",
+  "language": "Python",
+  "description": "GEO/SRA数据集检索和下载。元数据解析和筛选",
+  "starting_prompt": "搜索和下载GEO数据集",
+  "source_dir": "skills/external/19_omics-dataset-retrieval",
+  "memomics_module": "文献系统",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GEO search + metadata",
+      "description": "GEOquery search + parse",
+      "tool": "terminal"
+    },
+    {
+      "name": "SRA download",
+      "description": "prefetch + fasterq-dump",
+      "tool": "terminal"
+    },
+    {
+      "name": "Quality assessment",
+      "description": "FastQC + MultiQC",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GEO search + metadata -> SRA download -> Quality assessment"
+  },
+  "detailed_description": "GEO/SRA数据集检索和下载。元数据解析和筛选\n\n分析步骤:\n  - GEO search + metadata: GEOquery search + parse\n  - SRA download: prefetch + fasterq-dump\n  - Quality assessment: FastQC + MultiQC\n\n触发提示: \"搜索和下载GEO数据集\"",
+  "when_to_use": "当你需要 组学数据集检索 (GEO/SRA) 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

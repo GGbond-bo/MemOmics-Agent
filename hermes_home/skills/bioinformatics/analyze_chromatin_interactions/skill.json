@@ -1,0 +1,19 @@
+{
+  "id": "analyze_chromatin_interactions",
+  "name": "Analyze Chromatin Interactions",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze chromatin interactions from Hi-C data to identify enhancer-promoter interactions and TADs.",
+  "detailed_description": "Analyze chromatin interactions from Hi-C data to identify enhancer-promoter interactions and TADs.",
+  "when_to_use": "When you need analyze chromatin interactions analysis",
+  "parameters": {
+    "hic_file_path": "[Required] Path to the Hi-C data file (.cool or .hic format) (str)",
+    "regulatory_elements_bed": "[Required] Path to BED file containing genomic coordinates of regulatory elements (enhancers, promoters, CTCF sites, etc.) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

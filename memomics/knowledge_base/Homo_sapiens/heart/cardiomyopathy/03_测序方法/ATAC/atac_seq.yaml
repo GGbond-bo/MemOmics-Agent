@@ -1,0 +1,17 @@
+analysis_type: atac_seq
+date: '2026-06-27'
+methods:
+  archr:
+    additerativelsi_niter:
+      confidence: low
+      source: default_value
+      value: 2
+    min_frags:
+      confidence: medium
+      source: domain_convention
+      value: 1000
+    min_tss:
+      confidence: medium
+      source: domain_convention
+      value: 4
+source: default_seed

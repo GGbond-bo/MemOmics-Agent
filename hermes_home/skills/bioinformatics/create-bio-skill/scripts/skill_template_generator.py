@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""skill_template_generator.py — 生成标准 MemOmics 生信 skill 的 SKILL.md 文本。
+
+用法:
+    from skill_template_generator import generate_skill_md
+    content = generate_skill_md(
+        name="scTour-trajectory",
+        description="scTour 轨迹推断...",
+        tags=["trajectory", "scRNA-seq"],
+        difficulty="advanced",
+        language="Python",
+        category="transcriptomics",
+        r_packages=[],
+        python_packages=["sctour", "scanpy"],
+        title="scTour 轨迹推断",
+        overview="使用 scTour 进行单细胞轨迹推断...",
+        when_to_use="...",
+        pipeline=[("Step 1", "加载数据"), ...],
+        parameters=[("param1", "默认值", "说明"), ...],
+        references=["Author et al. 2024"],
+    )
+    # content 是完整的 SKILL.md 文本
+"""
+
+# ============================================================
+# 标准铁律头（写入每个新 skill 的脚本开头）
+# ============================================================
+
+IRON_RULE_HEADER = '''# ============================================================
+# 🔒 MemOmics 审查与辩论机制 + 自进化日志
+# ============================================================
+# 此脚本由 MemOmics Agent 执行。原脚本永远不被修改。
+#
+# 执行前必须:
+#   1. rail_review(action="pre")  — 检查环境/参数/数据
+#   2. skill_evolution(action="query_logs", script_name="本脚本名",
+#      species="物种", tissue="组织", direction="方向")
+#      → 查同类运行日志，有则参考已有参数和经验，无则按原脚本执行
+#   3. debate_analysis(topic, context) — 参数不确定时多角色辩论
+#
+# 执行后必须:
+#   1. rail_review(action="post") — 检查输出/质量/图表
+#      ★ 强制审查项（任一不通过则重新执行）:
+#        a. 图片是否生成？无图 → 重新执行
+#        b. 图片是否空白（全白/全黑/全单一色）？空白 → 强制重新出图
+#        c. 图片是否有 NA/缺失值（>10%像素是NA）？有NA → 强制重新出图
+#        d. 图片大小是否过小（<5KB）？过小 → 强制重新出图
+#        e. 图片数量是否足够？（每步至少1张图，关键步骤至少2-3张）
+#        f. 代码行数是否合理？是否分段执行（禁止&&连接）？
+#        g. 数值范围是否合理？跟知识库对应吗？
+#   2. 如果通过 → skill_evolution(action="record_run",
+#      script_name="本脚本名", species="物种", tissue="组织",
+#      direction="方向", params_used="参数JSON", result_summary="结果",
+#      quality_score=8, notes="经验总结")
+#      → 记录成功运行日志，供后续同类型分析参考
+#   3. 如果失败 → skill_evolution(action="record_error",
+#      script_name="本脚本名", species="物种", tissue="组织",
+#      direction="方向", error_message="报错", root_cause="根因",
+#      fix_applied="修复方案")
+#      → 记录错误日志，修正后重跑
+#
+# ★ 参数和结论辩论铁律:
+#   - 有参数选择 → 必须调 debate_analysis 辩论
+#   - 有结论输出 → 必须调 debate_analysis 辩论
+#   - 辩论格式：正方(支持) vs 反方(质疑+替代) → 裁判决断
+#   - 最多3轮，3轮后选最优结果
+#
+# 日志存储: skill 目录下 .run_logs/ 目录，按 物种_组织_方向_日期 命名
+# ============================================================
+
+# ============================================================
+# 🔒 MemOmics 审查铁律 — 执行本脚本前后的强制步骤
+# ============================================================
+# 执行前必须: rail_review(action="pre")  — 环境检查 + 参数校验 + 代码审查
+# 执行后必须: rail_review(action="post") — 结果质量评估 + 图表检查 + 数值检查
+#   ★ 强制: 图片空白/NA/过小 → 重新出图 | 图片不够 → 补图 | 代码未分段 → 重写
+#   ★ 强制: 有参数有结论 → debate_analysis 辩论
+# 参数有争议: debate_analysis(topic=..., context=...) — 多角色辩论
+# 执行失败:   skill_evolution(action="record_error") — 记录错误
+# 修复成功:   skill_evolution(action="update_script") — 替换脚本
+# ============================================================
+'''
+
+
+# ============================================================
+# 标准强制规则块（写入每个新 skill 的 SKILL.md）
+# ============================================================
+
+ENFORCED_RULES = '''## ⛔ MemOmics 强制规则（不可违反，优先级最高）
+
+> 本 skill 已集成到 MemOmics-Agent 自进化生信分析平台。使用本 skill 前，必须先通过 skill_view 加载本文件。以下规则覆盖所有默认行为。
+
+### 规则1: 写代码前 → 必须先 search_knowledge + skill_view
+- **每个分析步骤写代码前**，必须先调 `search_knowledge(species=..., tissue=..., direction=..., query="<步骤名> 参数")`
+- 知识库有匹配 → 用知识库的参数和模板
+- 知识库无匹配 → 用 search_papers_by_context 搜文献，提取方法和参数，存入知识库
+- **绝对不能跳过直接写代码**
+
+### 规则2: 8步循环（每步必须走完整循环）
+```
+1. search_knowledge 查本步骤的方法和参数
+2. skill_view 加载本 SKILL.md（获取脚本模板+审查规则+参数范围）
+3. check_env 检查环境（缺包自动安装）
+4. rail_review(pre) 前置审查（参数合理吗？包齐了吗？数据准备好了吗？）
+5. 写这一步的代码（基于 skill 模板，只写这一步，不写后续步骤）
+6. terminal 执行（分步执行，禁止 && 连接多步骤）
+7. debate_analysis 多方辩论（正方/反方切断上下文独立生成 + LLM裁决）
+8. rail_review(post) 后置审查（图有没有？结果合理吗？跟知识库对应吗？）
+```
+
+### 规则3: 代码分段执行 — 写一步跑一步
+- ❌ **禁止**一次性写完全部代码用 && 连接执行
+- ✅ **必须**分步：写一步 → 执行 → 检查结果 → 辩论 → 下一步
+
+### 规则4: 关键参数多参数尝试 + 辩论
+- 涉及数值参数时，**至少尝试 2-3 个值**
+- 每次参数变更后调 `debate_analysis` 辩论"这个参数合理吗？结果有没有变好？"
+- 辩论格式：正方（支持当前参数）vs 反方（质疑+替代方案）→ 裁判决断
+- **不确定的参数就辩论**，不要自己拍脑袋
+- **辩论最多 3 轮**：3 轮后选最优参数结果
+
+### 规则5: 执行后审查（强化版）
+- 每步执行完调 `rail_review(post)` 审查，审查内容**全部强制**：
+  - **图片检查**：
+    - 图有没有生成？没生成 → **强制重新执行**
+    - 图片是否空白（全白/全黑/全单一色）？空白 → **强制重新出图**
+    - 图片是否有 NA/缺失值（>10% 像素是 NA）？有 NA → **强制重新出图**
+    - 图片大小是否过小（<5KB）？过小 → **强制重新出图**
+    - 图片数量是否足够？（每步至少 1 张图，关键步骤至少 2-3 张）
+  - **代码质量检查**：
+    - 代码行数是否合理？（过短可能偷懒，过长可能未分段）
+    - 代码是否有注释？
+    - 代码是否分段执行（禁止 && 连接多步骤）？
+  - **结果合理性**：
+    - 数值范围是否合理？
+    - 跟知识库对应吗？
+  - **参数和结论辩论**：
+    - 有参数的选择 → **必须调 debate_analysis 辩论**
+    - 有结论输出 → **必须调 debate_analysis 辩论**
+    - 不通过 → 修复重跑
+    - 通过 → 创建目录存储(figures/results/scripts/data) → 下一步
+
+### 规则6: 结果存储结构
+```
+results/<模块>/<方法>/
+  ├── scripts/     # 分析脚本
+  ├── figures/     # PNG + SVG 图表
+  ├── data/        # RDS/H5AD 中间数据
+  └── results/     # CSV/TSV 结果表
+```
+
+### 规则7: 脚本出错/成功 → 必须调 skill_evolution（自进化）
+
+| 时机 | action | 调 | 不调 |
+|------|--------|----|------|
+| 脚本报错+你分析根因+修复后 | record_error | ✅ R/Python 脚本报错，你找到根因并修复 | ❌ trivial 错误（打字错误、路径不存在） |
+| 脚本成功+结果通过 rail_review | record_success | ✅ 分析步骤完成，图生成，审查通过 | ❌ 闲聊/方法咨询/非分析任务 |
+| 修复后脚本验证稳定有效 | update_script | ✅ 同一错误修复了，重跑成功 | ❌ 只改参数没改脚本；未验证就更新 |
+'''
+
+
+def generate_skill_md(
+    name: str,
+    description: str,
+    tags: list,
+    difficulty: str,
+    language: str,
+    category: str,
+    r_packages: list,
+    python_packages: list,
+    title: str,
+    overview: str,
+    when_to_use: str,
+    pipeline: list,
+    parameters: list,
+    common_issues: str = "",
+    references: list = None,
+    related_skills: list = None,
+) -> str:
+    """生成完整的 SKILL.md 文本。
+
+    Args:
+        name: skill 名称（如 "sctour-trajectory"）
+        description: 一句话描述
+        tags: 标签列表
+        difficulty: beginner/intermediate/advanced
+        language: R/Python/R+Python
+        category: transcriptomics/epigenomics/spatial/proteomics/meta
+        r_packages: R 依赖包列表
+        python_packages: Python 依赖包列表
+        title: 分析步骤标题
+        overview: 功能概述
+        when_to_use: 触发场景
+        pipeline: [(step_name, step_desc), ...] 列表
+        parameters: [(param_name, default_value, description), ...] 列表
+        common_issues: 常见问题文本
+        references: 文献引用列表
+        related_skills: 相关 skill 列表
+
+    Returns:
+        完整的 SKILL.md 文本
+    """
+    related_skills = related_skills or []
+    references = references or []
+
+    # Frontmatter
+    fm = f"""---
+name: {name}
+description: "{description}"
+version: 1.0.0
+author: MemOmics (auto-created)
+license: MIT
+platforms: [windows, linux, macos]
+metadata:
+  hermes:
+    tags: {tags}
+    difficulty: {difficulty}
+    language: {language}
+    category: {category}
+prerequisites:
+  r_packages: {r_packages}
+  python_packages: {python_packages}"""
+    if related_skills:
+        fm += f"\nrelated_skills: {related_skills}"
+    fm += "\n---\n\n"
+
+    # 强制规则块
+    rules = ENFORCED_RULES
+
+    # 正文
+    body = f"\n---\n\n# {title}\n\n{overview}\n\n"
+    body += f"## When to Use\n\n{when_to_use}\n\n"
+
+    # Pipeline
+    body += "## Pipeline\n\n"
+    for step_name, step_desc in pipeline:
+        body += f"### {step_name}\n```\nTool: terminal\n{step_desc}\n```\n\n"
+
+    # Parameters
+    body += "## Parameters\n\n"
+    body += "| 参数 | 默认值 | 说明 |\n|------|--------|------|\n"
+    for p_name, p_default, p_desc in parameters:
+        body += f"| {p_name} | {p_default} | {p_desc} |\n"
+    body += "\n"
+
+    # Proven Scripts
+    body += "## Proven Scripts\n\n"
+    body += f"- `scripts/run.py` — 主脚本模板（含 MemOmics 审查辩论铁律头）\n"
+    if language in ("R", "R+Python"):
+        body += f"- `scripts/reference_script.R` — R 参考实现\n"
+    if language in ("Python", "R+Python"):
+        body += f"- `scripts/reference_script.py` — Python 参考实现\n"
+    body += "\n"
+
+    # Common Issues
+    body += "## Common Issues\n\n"
+    body += common_issues if common_issues else "（待补充）\n"
+    body += "\n"
+
+    # References
+    body += "## References\n\n"
+    for ref in references:
+        body += f"- {ref}\n"
+
+    return fm + rules + body
+
+
+def generate_run_py(skill_name: str, language: str, steps: list) -> str:
+    """生成 scripts/run.py 脚本模板。
+
+    Args:
+        skill_name: skill 名称
+        language: R/Python/R+Python
+        steps: [(step_name, step_desc), ...] 列表
+
+    Returns:
+        完整的 run.py 文本
+    """
+    header = IRON_RULE_HEADER
+
+    if language == "R":
+        lang_line = "#!/usr/bin/env Rscript"
+    else:
+        lang_line = "#!/usr/bin/env python3"
+
+    title = f"# {skill_name} — Proven Analysis Script\n# Auto-generated by MemOmics create-bio-skill\n#"
+
+    usage = "# USAGE: This script is loaded by MemOmics agent when the skill is triggered.\n# Parameters are adapted based on species, tissue, and condition.\n"
+
+    steps_text = "# Steps:\n"
+    for i, (step_name, step_desc) in enumerate(steps, 1):
+        steps_text += f"# Step {i}: {step_name} — {step_desc}\n"
+
+    params_section = "\n# ── Parameters (adapt before running) ────────────────────────────────\n# TODO: Fill in parameters based on data quality and literature\n"
+    main_section = "\n# ── Main Pipeline ─────────────────────────────────────────────────────\n# TODO: Proven code will be saved here after successful execution + review\n"
+    save_section = "\n# ── Save Results ──────────────────────────────────────────────────────\n# TODO: Export figures, results, and metadata\n"
+
+    return f"{lang_line}\n{title}\n{usage}\n{steps_text}\n{header}\n{params_section}\n{main_section}\n{save_section}\n"
+
+
+def generate_reference_script(skill_name: str, language: str, steps: list, example_code: str = "") -> str:
+    """生成 scripts/reference_script.R 或 .py 参考脚本模板。
+
+    Args:
+        skill_name: skill 名称
+        language: R/Python
+        steps: [(step_name, step_desc), ...] 列表
+        example_code: 从官方文档提取的示例代码
+
+    Returns:
+        完整的参考脚本文本
+    """
+    header = IRON_RULE_HEADER
+
+    if language == "R":
+        lang_line = "#!/usr/bin/env Rscript"
+    else:
+        lang_line = "#!/usr/bin/env python3"
+
+    title = f"# {skill_name} — Reference Implementation\n# Auto-generated by MemOmics create-bio-skill\n# Based on official documentation and literature\n"
+
+    steps_text = "# Steps:\n"
+    for i, (step_name, step_desc) in enumerate(steps, 1):
+        steps_text += f"# Step {i}: {step_name} — {step_desc}\n"
+
+    code_section = f"\n# ── Reference Implementation ──────────────────────────────────────────\n# 以下代码基于官方文档示例，运行前必须根据数据调整参数\n\n{example_code if example_code else '# TODO: Paste example code from official documentation here'}\n"
+
+    return f"{lang_line}\n{title}\n{header}\n{steps_text}\n{code_section}\n"

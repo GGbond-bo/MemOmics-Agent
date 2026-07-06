@@ -1,0 +1,31 @@
+{
+  "updated_at": "2026-07-02T12:03:44.307689",
+  "platforms": {
+    "telegram": [],
+    "discord": [],
+    "whatsapp": [],
+    "slack": [],
+    "signal": [],
+    "mattermost": [],
+    "matrix": [],
+    "homeassistant": [],
+    "email": [],
+    "sms": [],
+    "dingtalk": [],
+    "msgraph_webhook": [],
+    "feishu": [],
+    "wecom": [],
+    "wecom_callback": [],
+    "weixin": [
+      {
+        "id": "o9cq804YIjdb4Zyux8p1ASe5eUbE@im.wechat",
+        "name": "o9cq804YIjdb4Zyux8p1ASe5eUbE@im.wechat",
+        "type": "dm",
+        "thread_id": null
+      }
+    ],
+    "bluebubbles": [],
+    "qqbot": [],
+    "yuanbao": []
+  }
+}
