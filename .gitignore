@@ -53,3 +53,18 @@ apply_nav.py
 fix_*.py
 test_*.py
 verify_*.py
+
+# === 敏感/个人数据（不进 git）===
+hermes_home/provider_keys.json
+hermes_home/model_config.json
+hermes_home/memories/
+hermes_home/state.db
+hermes_home/state.db-shm
+hermes_home/state.db-wal
+hermes_home/sessions/
+hermes_home/checkpoints/
+hermes_home/cache/
+hermes_home/.install_path
+hermes_home/.skills_prompt_snapshot.json
+hermes_home/.usage.json
+hermes_home/skills/.usage.json

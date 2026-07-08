@@ -103,11 +103,14 @@ def _parse_pubmed_abstracts(text: str) -> dict:
 # ============ Source 2: EuropePMC ============
 
 def _search_europepmc(query: str, max_results: int = 10) -> list:
-    """搜索 EuropePMC (覆盖更广, 含 preprints)."""
+    """搜索 EuropePMC (覆盖更广, 含 preprints).
+
+    注意: sort=RELEVANCE 参数会导致 API 返回 0 条结果 (API bug), 不传 sort 参数即可。
+    """
     try:
         encoded_q = urllib.parse.quote(query)
-        # 默认相关性排序 (RELEVANCE), 不用 CITED desc 否则全是高引经典文献
-        url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={encoded_q}&format=json&pageSize={max_results}&sort=RELEVANCE"
+        # 不传 sort 参数 (传 sort=RELEVANCE 会导致 0 结果)
+        url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={encoded_q}&format=json&pageSize={max_results}"
         req = urllib.request.Request(url, headers={"User-Agent": "MemOmics/1.0"})
         with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read())
@@ -121,8 +124,11 @@ def _search_europepmc(query: str, max_results: int = 10) -> list:
 
             # 构建全文 PDF URL (如果有 PMC 全文)
             fulltext_url = ""
+            pdf_url = ""
             if pmcid:
+                # EuropePMC ?pdf=render 是最可靠的 OA PDF 源
                 fulltext_url = f"https://europepmc.org/articles/{pmcid}"
+                pdf_url = f"https://europepmc.org/articles/{pmcid}?pdf=render"
 
             papers.append({
                 "pmid": pmid,
@@ -136,6 +142,7 @@ def _search_europepmc(query: str, max_results: int = 10) -> list:
                 "citations": int(item.get("citedByCount", 0) or 0),
                 "pmcid": pmcid,
                 "fulltext_url": fulltext_url,
+                "pdf_url": pdf_url,
             })
         return papers
     except Exception as e:
@@ -146,18 +153,27 @@ def _search_europepmc(query: str, max_results: int = 10) -> list:
 # ============ Source 3: Semantic Scholar ============
 
 def _search_semantic_scholar(query: str, max_results: int = 10) -> list:
-    """搜索 Semantic Scholar (含引用数). 429 限流时直接返回空, 不拖慢."""
-    try:
-        url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={urllib.parse.quote(query)}&limit={max_results}&fields=title,authors,year,abstract,citationCount,journal,externalIds,openAccessPdf"
-        req = urllib.request.Request(url, headers={"User-Agent": "MemOmics/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        if e.code != 429:  # 429 限流很常见, 静默跳过
+    """搜索 Semantic Scholar (含引用数). 429 限流时等待重试1次."""
+    import urllib.error
+    url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={urllib.parse.quote(query)}&limit={max_results}&fields=title,authors,year,abstract,citationCount,journal,externalIds,openAccessPdf"
+    req = urllib.request.Request(url, headers={"User-Agent": "MemOmics/1.0"})
+
+    for attempt in range(2):  # 最多尝试2次
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read())
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt == 0:
+                time.sleep(2)  # 429 限流，等待2秒重试
+                continue
+            if e.code != 429:
+                print(f"Semantic Scholar search error: {e}", file=sys.stderr)
+            return []
+        except Exception as e:
             print(f"Semantic Scholar search error: {e}", file=sys.stderr)
-        return []
-    except Exception as e:
-        print(f"Semantic Scholar search error: {e}", file=sys.stderr)
+            return []
+    else:
         return []
 
     papers = []
@@ -184,10 +200,41 @@ def _search_semantic_scholar(query: str, max_results: int = 10) -> list:
 
 # ============ 统一搜索接口 ============
 
+def _merge_and_dedup(papers: list) -> list:
+    """合并去重，保留有 URL 的版本。
+
+    去重策略：按 title 前60字符去重，但优先保留带 pdf_url/fulltext_url/pmcid 的版本。
+    这样 EuropePMC/Semantic Scholar 的 URL 信息不会因 PubMed 先入而被丢弃。
+    """
+    seen = {}  # title_key -> paper
+    for p in papers:
+        title_key = p["title"].lower().strip()[:60]
+        if not title_key:
+            continue
+        if title_key not in seen:
+            seen[title_key] = p
+        else:
+            # 已存在，合并字段：保留非空字段
+            existing = seen[title_key]
+            for field in ["pdf_url", "fulltext_url", "pmcid", "doi", "citations", "abstract"]:
+                if not existing.get(field) and p.get(field):
+                    existing[field] = p[field]
+            # 如果新版本有 URL 但旧版本没有，用新版本
+            new_has_url = bool(p.get("pdf_url") or p.get("fulltext_url"))
+            old_has_url = bool(existing.get("pdf_url") or existing.get("fulltext_url"))
+            if new_has_url and not old_has_url:
+                # 保留 existing 的字段，但用 p 作为基础
+                for field in ["pdf_url", "fulltext_url", "pmcid"]:
+                    if p.get(field):
+                        existing[field] = p[field]
+    return list(seen.values())
+
+
 def search_papers(query: str, max_results: int = 10, sort: str = "relevance") -> str:
     """多源文献搜索.
 
     策略: PubMed → EuropePMC → Semantic Scholar, 合并去重。
+    去重时优先保留带 pdf_url/fulltext_url 的版本。
     默认返回 15-30 篇 (3个源各搜 max_results).
 
     Args:
@@ -205,24 +252,15 @@ def search_papers(query: str, max_results: int = 10, sort: str = "relevance") ->
     europepmc = _search_europepmc(query, max_results)
     all_papers.extend(europepmc)
 
-    # 去重 (按 title 模糊匹配)
-    seen_titles = set()
-    deduped = []
-    for p in all_papers:
-        title_key = p["title"].lower().strip()[:60]
-        if title_key and title_key not in seen_titles:
-            seen_titles.add(title_key)
-            deduped.append(p)
+    # 合并去重（保留 URL 版本）
+    deduped = _merge_and_dedup(all_papers)
 
-    # Source 3: Semantic Scholar (仅当 PubMed+EuropePMC 不足时才查, 避免限流拖慢)
+    # Source 3: Semantic Scholar (仅当不足时才查, 避免限流拖慢)
     semantic = []
     if len(deduped) < max_results * 2:
         semantic = _search_semantic_scholar(query, max_results)
-        for p in semantic:
-            title_key = p["title"].lower().strip()[:60]
-            if title_key and title_key not in seen_titles:
-                seen_titles.add(title_key)
-                deduped.append(p)
+        if semantic:
+            deduped = _merge_and_dedup(deduped + semantic)
 
     # 排序
     if sort == "citations":
@@ -230,8 +268,8 @@ def search_papers(query: str, max_results: int = 10, sort: str = "relevance") ->
     elif sort == "date":
         deduped.sort(key=lambda x: x.get("year", "0"), reverse=True)
     else:
-        # relevance: PubMed 优先, 然后按引用数
-        deduped.sort(key=lambda x: (x.get("citations", 0) + (100 if x["source"] == "pubmed" else 0)), reverse=True)
+        # relevance: 有URL的优先，然后按引用数
+        deduped.sort(key=lambda x: (x.get("citations", 0) + (100 if x["source"] == "pubmed" else 0) + (50 if x.get("pdf_url") or x.get("fulltext_url") else 0)), reverse=True)
 
     return json.dumps({
         "success": True,
@@ -321,8 +359,186 @@ def search_papers_by_context(species: str, tissue: str, direction: str, assay: s
 
 # ============ download_pdf ============
 
-def download_pdf(url_or_pmid: str, output_dir: str = None) -> str:
-    """下载 PDF 文件."""
+def _unpaywall_lookup(doi: str) -> str:
+    """通过 Unpaywall API 查找开放获取 PDF URL."""
+    try:
+        url = f"https://api.unpaywall.org/v2/{urllib.parse.quote(doi)}?email=memomics@research.org"
+        # 优先 httpx
+        try:
+            import httpx
+            with httpx.Client(timeout=15) as client:
+                resp = client.get(url)
+                data = resp.json()
+        except Exception:
+            req = urllib.request.Request(url, headers={"User-Agent": "MemOmics/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read())
+        # 优先选 best_oa_location 的 pdf_url
+        best = data.get("best_oa_location", {}) or {}
+        if best.get("url_for_pdf"):
+            return best["url_for_pdf"]
+        # 回退到任意 oa location
+        for loc in data.get("oa_locations", []) or []:
+            if loc.get("url_for_pdf"):
+                return loc["url_for_pdf"]
+        # 最后回退到 landing page
+        if best.get("url_for_landing_page"):
+            return best["url_for_landing_page"]
+        return ""
+    except Exception:
+        return ""
+
+
+def _doi_to_pmcid(doi: str) -> str:
+    """用 DOI 查 PMC ID (通过 EuropePMC API)。"""
+    try:
+        url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:{urllib.parse.quote(doi)}&format=json&pageSize=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "MemOmics/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        results = data.get("resultList", {}).get("result", [])
+        if results:
+            pmcid = results[0].get("pmcid", "")
+            if pmcid:
+                return pmcid
+        return ""
+    except Exception:
+        return ""
+
+
+def _doi_to_pdf_urls(doi: str) -> list:
+    """用 DOI 尝试多个来源获取 PDF URL（强制下载）。
+
+    优先级：
+    1. EuropePMC ?pdf=render（最可靠的 OA PDF 源）
+    2. Unpaywall OA URL
+    3. DOI 直接解析（会跳转到出版商页面）
+    """
+    urls = []
+    # 1. EuropePMC ?pdf=render（最可靠）
+    pmcid = _doi_to_pmcid(doi)
+    if pmcid:
+        urls.append(("europepmc_pdf_render", f"https://europepmc.org/articles/{pmcid}?pdf=render"))
+    # 2. Unpaywall（最可靠的 OA 查找）
+    upw = _unpaywall_lookup(doi)
+    if upw:
+        urls.append(("unpaywall", upw))
+    # 3. DOI 直接解析（会跳转到出版商页面）
+    urls.append(("doi_redirect", f"https://doi.org/{doi}"))
+    return urls
+
+
+def _download_url_to_file(url: str, output_dir: Path, filename_hint: str = "") -> dict:
+    """下载 URL 到文件，返回结果 dict。
+
+    下载策略（逐级升级）：
+    1. httpx — 快速 HTTP，能处理大部分开放文献（Nature、EuropePMC 等）
+    2. urllib — httpx 失败时的回退
+    3. Scrapling StealthyFetcher — 无头浏览器 + Cloudflare 绕过，用于反爬保护严格的网站
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+
+    content = None
+    sf_error = None  # Scrapling 状态跟踪（预定义，避免未定义引用）
+    # 策略1: httpx (快速 HTTP)
+    try:
+        import httpx
+        with httpx.Client(headers=headers, follow_redirects=True, timeout=60) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                content = resp.content
+    except Exception:
+        pass
+
+    # 策略2: urllib 回退
+    if content is None:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                content = resp.read()
+        except Exception:
+            pass  # 继续到策略3
+
+    # 检查 httpx/urllib 结果是否为有效 PDF
+    is_pdf = content is not None and content[:5] == b"%PDF-"
+
+    # 策略3: Scrapling StealthyFetcher — 仅当 httpx/urllib 失败或返回非 PDF 时
+    if not is_pdf:
+        sf_error = None
+        try:
+            from scrapling.fetchers import StealthyFetcher
+        except ImportError:
+            sf_error = "Scrapling not installed (pip install scrapling[fetchers])"
+        if sf_error is None:
+            try:
+                page = StealthyFetcher.fetch(url, headless=True, solve_cloudflare=True, network_idle=True)
+                sf_content = page.body if hasattr(page, "body") else b""
+                if sf_content and sf_content[:5] == b"%PDF-":
+                    content = sf_content
+                    is_pdf = True
+                else:
+                    sf_error = f"Scrapling returned non-PDF (status={getattr(page, 'status', '?')}, size={len(sf_content)})"
+            except Exception as e:
+                sf_error = f"Scrapling error: {str(e)[:120]}"
+        # 记录 Scrapling 状态到结果中（不静默吞掉）
+        if not is_pdf and sf_error:
+            import sys
+            print(f"[literature_search] Scrapling fallback: {sf_error}", file=sys.stderr)
+
+    if not content:
+        return {"success": False, "error": "All download methods failed (httpx + urllib + scrapling)", "scrapling_status": sf_error or "not attempted"}
+
+    # 如果仍然不是 PDF，检查是否是 HTML 页面包含 PDF 链接
+    if not is_pdf:
+        if b"<html" in content[:500].lower() or b"<!DOCTYPE" in content[:500].lower():
+            html = content.decode("utf-8", errors="replace")
+            import re
+            pdf_links = re.findall(r'href=["\']([^"\'>]+\.pdf[^"\'>]*)["\']', html, re.IGNORECASE)
+            if pdf_links:
+                pdf_url = pdf_links[0]
+                if not pdf_url.startswith("http"):
+                    from urllib.parse import urljoin
+                    pdf_url = urljoin(url, pdf_url)
+                return _download_url_to_file(pdf_url, output_dir, filename_hint)
+            # 反爬验证页面
+            if len(content) < 5000 and ("cloudflare" in html.lower() or "captcha" in html.lower() or "javascript" in html.lower()):
+                return {"success": False, "error": f"Anti-bot protection (size={len(content)}, Cloudflare/JS check). Scrapling status: {sf_error or 'tried but failed'}"}
+        return {"success": False, "error": f"Not PDF after all strategies (size={len(content)}, first bytes={content[:20]}). Scrapling status: {sf_error or 'N/A'}"}
+
+    # 生成文件名
+    if filename_hint:
+        filename = filename_hint
+    else:
+        filename = url.split("/")[-1] or "paper.pdf"
+    if not filename.endswith(".pdf"):
+        filename = filename + ".pdf"
+    filename = "".join(c if c.isalnum() or c in "._-" else "_" for c in filename)[:80]
+
+    file_path = output_dir / filename
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    return {
+        "success": True,
+        "file_path": str(file_path),
+        "file_size": len(content),
+        "message": f"Downloaded {filename} ({len(content)//1024}KB)"
+    }
+
+
+def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str:
+    """下载文献 PDF 到 work/papers/ 目录。强制多源尝试。
+
+    下载策略（按优先级依次尝试）：
+    1. 如果传入的是 PDF URL → 直接下载
+    2. 如果传入的是 PMID → 查 PMC 全文 → 下载
+    3. 如果有 DOI → 查 Unpaywall → 下载
+    4. 如果有 DOI → DOI 直接解析 → 下载
+    """
     try:
         if output_dir is None:
             project_root = Path(__file__).parent.parent.parent
@@ -330,37 +546,76 @@ def download_pdf(url_or_pmid: str, output_dir: str = None) -> str:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        url = url_or_pmid
-        if url_or_pmid.isdigit():
-            pmc_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id={url_or_pmid}&retmode=json"
-            req = urllib.request.Request(pmc_url, headers={"User-Agent": "MemOmics/1.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read())
-            linksets = data.get("linksets", [])
-            if linksets and linksets[0].get("linksetdbs"):
-                pmc_id = linksets[0]["linksetdbs"][0]["links"][0]
-                url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/PMC{pmc_id}/pdf/"
-            else:
-                return json.dumps({"success": False, "error": "No PMC full text available for this PMID"}, ensure_ascii=False)
+        attempts = []  # 记录每次尝试的结果
+        url = url_or_pmid.strip()
 
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            content = resp.read()
+        # 策略1: 直接 URL
+        if url.startswith("http"):
+            result = _download_url_to_file(url, output_dir)
+            if result.get("success"):
+                return json.dumps(result, ensure_ascii=False)
+            attempts.append({
+                "strategy": "direct_url",
+                "result": result.get("error", ""),
+                "scrapling_status": result.get("scrapling_status", ""),
+            })
 
-        filename = url.split("/")[-1] or "paper.pdf"
-        if not filename.endswith(".pdf"):
-            filename = filename + ".pdf"
-        filename = "".join(c if c.isalnum() or c in "._-" else "_" for c in filename)[:80]
+        # 策略2: PMID → PMC 全文
+        if url.isdigit() or (url.startswith("PMID") and url[4:].strip().isdigit()):
+            pmid = url.replace("PMID", "").strip()
+            try:
+                pmc_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id={pmid}&retmode=json"
+                req = urllib.request.Request(pmc_url, headers={"User-Agent": "MemOmics/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read())
+                linksets = data.get("linksets", [])
+                if linksets and linksets[0].get("linksetdbs"):
+                    pmc_id = linksets[0]["linksetdbs"][0]["links"][0]
+                    pmc_pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/PMC{pmc_id}/pdf/"
+                    result = _download_url_to_file(pmc_pdf_url, output_dir, filename_hint=f"PMID_{pmid}.pdf")
+                    if result.get("success"):
+                        return json.dumps(result, ensure_ascii=False)
+                    attempts.append({
+                        "strategy": "pmc_fulltext",
+                        "result": result.get("error", ""),
+                        "scrapling_status": result.get("scrapling_status", ""),
+                    })
+                else:
+                    attempts.append({"strategy": "pmc_fulltext", "result": "No PMC full text"})
+            except Exception as e:
+                attempts.append({"strategy": "pmc_fulltext", "result": str(e)})
 
-        file_path = output_dir / filename
-        with open(file_path, "wb") as f:
-            f.write(content)
+        # 策略3: DOI → 多源 PDF URL
+        if doi:
+            for source, pdf_url in _doi_to_pdf_urls(doi):
+                result = _download_url_to_file(pdf_url, output_dir, filename_hint=f"{doi.replace('/', '_')}.pdf")
+                if result.get("success"):
+                    return json.dumps(result, ensure_ascii=False)
+                attempts.append({
+                    "strategy": source,
+                    "result": result.get("error", ""),
+                    "scrapling_status": result.get("scrapling_status", ""),
+                })
 
+        # 策略4: 如果 url_or_pmid 看起来像 DOI (含 /)
+        if "/" in url and not url.startswith("http"):
+            for source, pdf_url in _doi_to_pdf_urls(url):
+                result = _download_url_to_file(pdf_url, output_dir, filename_hint=f"{url.replace('/', '_')}.pdf")
+                if result.get("success"):
+                    return json.dumps(result, ensure_ascii=False)
+                attempts.append({
+                    "strategy": source,
+                    "result": result.get("error", ""),
+                    "scrapling_status": result.get("scrapling_status", ""),
+                })
+
+        # 所有策略都失败
         return json.dumps({
-            "success": True,
-            "file_path": str(file_path),
-            "file_size": len(content),
-            "message": f"Downloaded {filename} ({len(content)//1024}KB)"
+            "success": False,
+            "error": "All download strategies failed",
+            "attempts": attempts,
+            "output_dir": str(output_dir),
+            "hint": "可以手动下载 PDF 放到 work/papers/ 目录，然后用 extract_params_from_pdf 提取参数"
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -460,12 +715,18 @@ def register(registry):
         toolset="memomics",
         schema={
             "name": "download_pdf",
-            "description": "下载文献 PDF 到 work/papers/ 目录。支持 PDF URL 或 PMID。下载后可用 extract_params_from_pdf 提取参数。",
+            "description": (
+                "下载文献 PDF 到 work/papers/ 目录。强制多源尝试下载。\n"
+                "下载策略（依次尝试）：1)直接URL 2)PMID→PMC全文 3)DOI→Unpaywall 4)DOI直接解析\n"
+                "下载后可用 extract_params_from_pdf 提取参数。\n"
+                "搜索文献时拿到 pdf_url/fulltext_url/doi/pmid 后，尽量传给此工具下载。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url_or_pmid": {"type": "string", "description": "PDF URL or PMID"},
+                    "url_or_pmid": {"type": "string", "description": "PDF URL / PMID / DOI"},
                     "output_dir": {"type": "string", "description": "Save directory (default work/papers/)"},
+                    "doi": {"type": "string", "description": "DOI (如 10.1038/xxx)，当 url_or_pmid 是 PMID 时传入 DOI 可启用 Unpaywall 兑底下载"},
                 },
                 "required": ["url_or_pmid"],
             },
@@ -473,6 +734,7 @@ def register(registry):
         handler=lambda args, **kw: download_pdf(
             args.get("url_or_pmid", ""),
             output_dir=args.get("output_dir"),
+            doi=args.get("doi", ""),
         ),
         emoji="📄",
     )

@@ -1,7 +1,57 @@
+---
+name: bioinformatics-html-report
+description: A zero-dependency Python toolkit for generating publication-quality interactive HTML reports from bioinformatics analysis outputs
+version: 1.1.0
+---
+
 # Bioinformatics HTML Report Builder
 
 A zero-dependency Python toolkit for generating publication-quality interactive
 HTML reports from bioinformatics analysis outputs (figures + tables).
+
+### 规则N+1: 报告必须从日志自动填充（auto_fill_from_logs）
+- 生成报告时，必须调用 `collect_session_data(session_id)` 收集五层日志数据
+- 然后调用 `rb.auto_fill_from_logs(session_data)` 自动填充日志溯源 section
+- 不要仅凭 LLM 上下文记忆生成报告——会话过长时上下文会丢失
+- 日志溯源 section 包括：工具调用记录、Skill经验日志、运行归档、辩论归档
+- 如果 LLM 上下文中有分析内容（图表、参数等），仍然可以手动 add_figure/add_table
+- **日志溯源是报告的必要部分**，不是可选项
+
+### 新增功能：日志溯源 auto_fill_from_logs()
+
+```python
+from html_report_builder import ReportBuilder, collect_session_data
+
+# 1. 收集本次会话的五层日志数据
+session_data = collect_session_data(session_id="memomics-xxxxx")
+
+# 2. 创建报告
+rb = ReportBuilder(title="Analysis Report", ...)
+
+# 3. 手动添加分析内容（图表、表格等）
+rb.add_figure("result.png", title="UMAP", ...)
+rb.add_table(...)
+
+# 4. 自动填充日志溯源 section（从日志文件读取，不依赖 LLM 记忆）
+rb.auto_fill_from_logs(session_data)
+
+# 5. 保存
+rb.save("output/report.html")
+```
+
+**日志溯源会自动添加以下 section：**
+- 日志溯源：数据来源统计、会话元数据
+- 工具调用记录：本次会话所有工具调用（从 state.db 读取）
+- Skill经验日志：错误记录+修复方案（从 skills/logs/ 读取）
+- 运行归档：每次运行的参数+结果（从 results/log/ 读取）
+- 辩论归档：辩论完整记录（从 results/log/debate_*.json 读取）
+
+### 规则N: 运行记录只是参考，不能跳过审查
+- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
+- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
+- 禁止因"之前跑过"而跳过任何审查步骤
+- 禁止直接用历史日志里的脚本运行而不经本次审查
+- 运行日志是"参考"不是"免审凭证"
 
 ---
 
@@ -14,6 +64,7 @@ Three files:
 | `html_report_builder.py` | Core library — import this in your script |
 | `example_usage.py` | Minimal template for any analysis (DEG, GSEA, etc.) |
 | `hdwgcna_report_generator.py` | Full reference implementation for hdWGCNA |
+| `references/sctour-report-template.md` | scTour trajectory report template (9 sections, 10 figs, 5 debates, 4 tables) |
 
 ---
 
@@ -287,7 +338,8 @@ download the CDN files and replace the `<script>` / `<link>` tags.
 | hdWGCNA | Dendrogram, module UMAP, trait heatmap | Hub genes, DME, preservation |
 | Proteomics | Volcano, heatmap, PCA | Protein DE results |
 | ATAC-seq | Peak heatmap, motif enrichment | DA peaks, TF motifs |
-| Spatial | Spatial feature plots | SVG results |
+| scTour | UMAP-overview, vector-field, KS-heatmap, boxplot, effect-plot | Pseudotime stats, group stats, subcluster stats, KS test results |
+| Spatial | Spatial feature plots, spatial trajectory | SVG results, spot deconvolution |
 
 ---
 
@@ -321,10 +373,12 @@ from the internet when the HTML is opened in a browser.
 本 skill 在执行后，如果涉及**参数选择、方法决策、结果判断**等不确定环节，**必须**调用  工具进行多角色辩论。
 
 ### 辩论规则
-- **正方 3 角色**（各自独立，互相看不到）：生物学 agent / 统计学 agent / 生信 agent
-- **反方 4 角色**（各自独立，互相看不到，也看不到正方）：生物学 agent / 统计学 agent / 生信 agent / 历史经验 agent
+- **正方 3 位专业编辑**（各自独立，互相看不到）：生物学编辑 / 统计学编辑 / 生信编辑
+- **反方 4 位专业编辑**（各自独立，互相看不到，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
 - **裁判**：看到所有 7 方论点后给出裁决 + 置信度（高/中/低）
-- **上下文隔离**：每个角色是独立的 LLM API 调用，messages 只包含自己的 prompt
+- **上下文隔离**：每个编辑是独立的 LLM API 调用，messages 只包含自己的 prompt
+- **分科知识库**：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
+- **辩论结果自动归档**到 results/.../log/debate_*.json
 
 ### 触发场景
 - 参数选择有多个合理选项时（如分辨率 0.4 vs 0.6 vs 0.8）

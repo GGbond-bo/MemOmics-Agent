@@ -15,20 +15,75 @@ import os
 import json
 import re
 import shutil
+import time
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, Optional
+
+
+def _archive_to_results_log(record: dict, action: str):
+    """需求1c：将 record_run/record_error 记录归档到 results/.../log/run_record_*.json"""
+    try:
+        from memomics.bio_tools.debate_analysis import get_session_results_dir, get_session_sid
+        results_dir = get_session_results_dir()
+        if not results_dir:
+            # 尝试从 session 字典恢复（回退方案）
+            sid = get_session_sid()
+            if sid:
+                import importlib, sys
+                # 尝试从 webui.server 的 _sessions 字典获取
+                try:
+                    server_mod = sys.modules.get("webui.server")
+                    if server_mod and hasattr(server_mod, "_sessions"):
+                        sess = server_mod._sessions.get(sid, {})
+                        results_dir = sess.get("results_dir", "")
+                except Exception:
+                    pass
+        if not results_dir:
+            # 最后回退：打印警告，不静默跳过
+            import sys as _sys
+            print(f"[skill_evolution] WARNING: results_dir is empty, cannot archive {action} record", file=_sys.stderr)
+            return
+        log_dir = Path(results_dir) / "log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        action_tag = "run" if action in ("record_success", "record_run") else "error"
+        archive_path = log_dir / f"run_record_{ts}_{action_tag}.json"
+        with open(archive_path, "w", encoding="utf-8") as f:
+            json.dump(record, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # 归档失败不阻断主流程
 
 
 def _get_skill_dir(skill_name: str) -> Optional[str]:
     """找到 skill 目录（先 skills/ 再 hermes_home/skills/bioinformatics/）"""
+    # 动态获取 MemOmics 安装目录
+    memomics_root = _get_memomics_root()
     candidates = [
-        f"E:/MemOmics-Agent/skills/{skill_name}",
-        f"E:/MemOmics-Agent/hermes_home/skills/bioinformatics/{skill_name}",
+        os.path.join(memomics_root, "skills", skill_name),
+        os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name),
     ]
     for p in candidates:
         if os.path.isdir(p):
             return p
     return None
+
+
+def _get_memomics_root() -> str:
+    """动态获取 MemOmics 安装根目录"""
+    # 1. 从 .install_path 读取
+    install_path_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "hermes_home", ".install_path")
+    try:
+        if os.path.isfile(install_path_file):
+            with open(install_path_file, "r", encoding="utf-8") as f:
+                root = f.read().strip()
+                if os.path.isdir(root):
+                    return root
+    except Exception:
+        pass
+    # 2. 回退：从当前文件路径推导
+    # memomics/bio_tools/skill_evolution.py → 上三级 → 安装根目录
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _ensure_logs_dir(skill_dir: str) -> str:
@@ -503,6 +558,10 @@ def skill_evolution(action: str = "record_error",
         )
     else:
         result = {"success": False, "error": f"Unknown action: {action}. Use: record_error, record_success, record_run, query_logs, update_script"}
+
+    # 需求1c：record_run/record_error 归档到 results/.../log/
+    if action in ("record_error", "record_success", "record_run") and isinstance(result, dict):
+        _archive_to_results_log(result, action)
 
     return json.dumps(result, ensure_ascii=False, indent=2)
 

@@ -1,0 +1,68 @@
+{
+  "name": "sctour-trajectory-inference",
+  "version": "1.1.0",
+  "success_count": 6,
+  "proven_script": "04_generate_report.py",
+  "proven_params": [
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "01_preprocess.py",
+      "params": "{\"use_layer\": \"counts\", \"fallback_to_raw\": true, \"n_top_genes\": null, \"subsample\": null, \"batch_key\": \"samplename\", \"group_key\": \"type\", \"cluster_key\": \"subcluster\"}",
+      "date": "2026-07-08",
+      "score": 9.0,
+      "result": "11630 cells × 51227 genes 预处理完成。counts层验证通过，type分组6组，subcluster 7个亚群"
+    },
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "02_run_sctour.py",
+      "params": "{\"configs\": [{\"name\": \"run1_balanced\", \"alpha_recon_leiden\": 0.5, \"alpha_recon_lode\": 0.5}, {\"name\": \"run2_encoder\", \"alpha_recon_leiden\": 0.8, \"alpha_recon_lode\": 0.2}, {\"name\": \"run3_ode\", \"alpha_recon_leiden\": 0.3, \"alpha_recon_lode\": 0.7}], \"n_neighbors\": 30, \"umap_min_dist\": 0.3}",
+      "date": "2026-07-08",
+      "score": 9.0,
+      "result": "三配置scTour训练完成。总计5个.h5ad结果文件+3个CSV伪时间+3个CSV向量场+1个KS结果+12张图"
+    },
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "03_compare_runs.py",
+      "params": "{\"ks_test\": true, \"anova\": true, \"correlation_method\": \"spearman\"}",
+      "date": "2026-07-08",
+      "score": 9.0,
+      "result": "三配置对比完成：3张图+2个CSV。KS检验21/21 p<0.05。recommended_config=run1_balanced"
+    },
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "04_generate_report.py",
+      "params": "{\"embed_images\": true, \"include_debate\": true}",
+      "date": "2026-07-08",
+      "score": 9.0,
+      "result": "HTML报告生成：scTour_Trajectory_Report.html（3,869KB），9张嵌入图片"
+    },
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "03_compare_runs.py",
+      "params": "{\"comparison_methods\": {\"ks_test\": true, \"correlation\": true, \"mean_across_ages\": true}, \"configs\": [\"run1_balanced\", \"run2_encoder\", \"run3_ode\"], \"group_order\": [\"Young_normal\", \"Young_normal_Post\", \"Old_normal\", \"Old_normal_Post\", \"Old_diabete\", \"Old_diabete_Post\"]}",
+      "date": "2026-07-08",
+      "score": 0.0,
+      "result": "3配置对比完成：21/21 KS检验全部显著(p<0.05)。衰老-糖尿病-运动三因素均显著改变伪时间分布。run1_balanced和run3_ode相关性最强(ρ=0.85+)，run2_encoder与其他两配置相关性中等(ρ~0.7)。"
+    },
+    {
+      "species": "人类",
+      "tissue": "骨骼肌",
+      "direction": "衰老",
+      "script": "04_generate_report.py",
+      "params": "{\"report_type\": \"html\", \"embeds\": {\"figures\": 9, \"illustrations\": 6, \"comparisons\": 3}, \"script\": \"04_generate_report.py\"}",
+      "date": "2026-07-08",
+      "score": 0.0,
+      "result": "scTour_Trajectory_Report.html 生成完成（3,869KB），含9张嵌入PNG图+6张三配置结果+3张对比。所有图片>5KB无空白。参数来源辩论已在报告中记录。"
+    }
+  ]
+}

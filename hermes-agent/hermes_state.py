@@ -776,12 +776,24 @@ CREATE TABLE IF NOT EXISTS compression_locks (
     expires_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tool_calls_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    tool_id TEXT,
+    args_json TEXT,
+    result_text TEXT,
+    timestamp REAL NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
 CREATE INDEX IF NOT EXISTS idx_sessions_source_id ON sessions(source, id);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_compression_locks_expires ON compression_locks(expires_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_log_session ON tool_calls_log(session_id, timestamp);
 """
 
 # Indexes that reference columns added in later schema versions must be

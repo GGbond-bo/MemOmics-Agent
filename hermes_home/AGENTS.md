@@ -1,36 +1,19 @@
 # MemOmics Agent — 项目上下文
 
-## 项目路径
-- 项目根目录：E:/MemOmics-Agent/
-- Hermes 框架：E:/MemOmics-Agent/hermes-agent/
-- 知识库：E:/MemOmics-Agent/memomics/knowledge_base/ (90个YAML)
-- 技能库：~/.hermes/skills/bioinformatics/ (241个SKILL.md)
-- 分析结果：E:/MemOmics-Agent/hermes-agent/results/
+## 项目路径（动态：由安装位置决定，启动时自动扫描写入）
+- 项目根目录：`{MEMOMICS_ROOT}`（hermes_home 的父目录，见 hermes_home/.install_path）
+- Hermes 框架：`{MEMOMICS_ROOT}/hermes-agent/`
+- 知识库：`{MEMOMICS_ROOT}/memomics/knowledge_base/`
+- 技能库：`{MEMOMICS_ROOT}/hermes_home/skills/bioinformatics/`
+- 分析结果：`{MEMOMICS_ROOT}/results/`
+- 文献下载：`{MEMOMICS_ROOT}/work/papers/`
 
-## 数据库
-- 用户数据：D:/我的下载/Migule_lai_24 _new.h5ad (人类骨骼肌 scRNA-seq, 324,434 cells, 已注释)
-- 物种：Homo sapiens
-- 组织：骨骼肌 (skeletal muscle)
-- 方向：衰老 (aging) — 年轻 vs 老年
-
-## 环境
-- Python: <auto-detected>
-- R: Rscript (4.4.x, Seurat v5.5.0, CellChat, monocle3 等)
-- 模型: deepseek-v4-pro (DCS Cloud)
-- 包管理: BiocManager (R), pip (Python)
-
-## 默认分析参数
-- 细胞数：默认 subset 60,000
-- QC 过滤：nFeature 200-6000, MT% < 15%
-- 标准化：SCTransform v2, conserve.memory=TRUE
-- 批次校正：Harmony
-- 降维：PCA 50PCs → UMAP 30 dims
-- 聚类：Leiden, resolution=0.5
-- 注释：SingleR + FindAllMarkers
+> **重要**：`{MEMOMICS_ROOT}` 不是固定值，而是**当前安装目录**。每次启动时 server.py 会自动扫描并写入 `hermes_home/.install_path`。Agent 读取 `.install_path` 获取真实路径，**绝不使用硬编码路径**。
 
 ## 工作流约定
 1. 分析前先 scan_data 扫描数据
 2. 分析前先 search_knowledge 搜索知识库
-3. 分析结果按 results/<模块>/<方法>/{figures,results,scripts,data} 存储
+3. 分析结果按 results/<模块>/<方法>/{figures,results,scripts,data,log} 存储
 4. 每个子分析执行前后铁轨审查
 5. 待办完成后标记 completed
+6. **所有输出（脚本、图、报告）都在 `results/<sid>/` 下，绝对不放桌面、不放 work/、不放其他任意位置**

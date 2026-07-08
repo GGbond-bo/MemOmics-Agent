@@ -47,6 +47,26 @@
 
 ---
 
+## 🔒 执行前强制检查清单（每次分析任务开始前必须逐条确认，不可跳过任何一项）
+
+在进入分析流程后，**每完成一个子分析任务，必须逐条确认以下清单**。这不是建议，是强制要求。跳过任何一项 = 分析不完整，用户会不满。
+
+### 开始前检查
+- [ ] **1. 结果目录**：确认 `results_dir` 路径正确（系统自动创建：`results/<sid>/`，含 `figures/` `results/` `scripts/` `data/` `log/` 五个子目录）
+- [ ] **2. 查历史**：调用 `skill_evolution(action="query_logs", skill="当前技能名")` 查是否有同类运行记录
+- [ ] **3. 查知识库**：调用 `search_knowledge()` 获取当前物种/组织/方向的参数推荐
+- [ ] **4. 查技能**：调用 `skill_view(name="当前技能名")` 加载技能模板
+
+### 执行后检查
+- [ ] **5. 记录成功**：调用 `skill_evolution(action="record_run", skill="当前技能名", script="脚本路径", params_json="...", result="成功摘要")` 
+- [ ] **6. 记录失败**（如有）：调用 `skill_evolution(action="record_error", skill="当前技能名", error_msg="错误信息", fix_suggestion="修复建议")`
+- [ ] **7. 确认日志**：确认 `results/<sid>/log/system_log.jsonl` 已自动记录（系统自动完成，无需手动操作）
+- [ ] **8. 结果写到正确位置**：所有输出（脚本、图、报告）都在 `results/<sid>/` 下的对应子目录，**绝对不放桌面，不放 work/，不放其他任意位置**
+
+**处罚规则**：如果 LLM 跳过上述任何一项，分析结果被视为不完整，用户有权要求重新运行。
+
+---
+
 ### 操作级别判定（进入分析流程后第一步，在 scan_data 之后）
 
 agent 必须在回复中显式声明本次操作的级别，格式固定：
@@ -287,6 +307,25 @@ scRNA-seq | scATAC-seq | 空间转录组 | 多组学整合 | 临床数据
 - 用户明确要求切换（"这次用 Python""换成 Scanpy"）→ 立即切换，不再追问
 - 在回复中**展示语言选择的依据**（"继续用 R，因为：上一轮已确认 R + 同一份数据 + Seurat 对象已存好"），让用户知道为什么没再问
 
+### 🔒 规则-2: 运行记录只是参考，绝不替代审查
+
+> **`skill_evolution(action="query_logs")` 返回的运行日志（`.run_logs/`）只能用于参考参数选择和避免已知坑，绝不能替代本次分析的任何审查步骤。**
+
+运行日志是历史会话的产物，不代表本次数据/环境/参数组合下的结论。即使有 quality_score=9.0 的历史日志，本次分析仍须完整执行所有审查。
+
+**强制行为**：
+- 即使 query_logs 返回了高 quality_score 的历史日志，仍**必须执行** rail_review(pre)、rail_review(post)、debate_analysis（按操作级别要求）
+- 运行日志不能替代 search_knowledge——每次分析仍须查知识库
+- 运行日志里的"参数"只能作为参数选择的**参考输入**，不是"参数已验证、免审"的依据
+- 有运行记录时，agent 仍须走完整流程：skill_view → check_env → rail_review(pre) → 写代码 → terminal → debate_analysis → rail_review(post)
+
+**禁止行为**：
+- ❌ 因"query_logs 返回了之前成功的参数"而跳过 rail_review(pre)
+- ❌ 因"历史日志显示该参数辩论通过过"而跳过 debate_analysis
+- ❌ 因"之前跑过同类分析"而跳过 search_knowledge 或 skill_view
+- ❌ 直接用历史日志里的脚本运行而不经过本次审查
+- ❌ 因"有 run_logs"而跳过任何铁律步骤
+
 ### 规则0: 写分析代码前 → 必须先 skill_view 加载对应 skill（最高优先级）
 
 > **这是最关键的规则。** skill 的 SKILL.md 里包含了该分析步骤的强制审查规则、脚本模板、参数范围、QC 阈值。如果不加载 skill，这些规则你根本看不到，写出的代码没有保障。
@@ -382,7 +421,8 @@ scRNA-seq | scATAC-seq | 空间转录组 | 多组学整合 | 临床数据
 | **功能富集** | functional-enrichment | GSEA/ORA，clusterProfiler/gseapy，GO/KEGG/Reactome |
 | **基因集富集** | gene_set_enrichment_analysis | 基因列表富集分析，支持自定义背景 |
 | **细胞通讯** | cellchat-v2 | CellChat v2 配体-受体分析，和弦图/气泡图 |
-| **轨迹分析** | trajectory-analysis | PAGA/扩散拟时序/scVelo RNA velocity/CellRank |
+| **轨迹分析** | trajectory-analysis | PAGA/扩散拟时序/scVelo RNA velocity/CellRank — 元技能，按数据特征推荐子 skill |
+| **scTour 轨迹** | sctour-trajectory-inference | VAE 深度潜在时间推断 + 向量场，无监督，无需起点，批次不敏感。用户说"scTour""深度伪时间""VAE轨迹""神经ODE"时触发 |
 | **调控网络** | grn-pyscenic | SCENIC 转录因子调控网络（已有审查规则） |
 | **共表达网络** | hdwgcna | WGCNA/hdWGCNA 模块鉴定/hub 基因 |
 | **CNV 推断** | infercnv | 肿瘤细胞 CNV 推断+恶性细胞鉴定 |
@@ -394,11 +434,13 @@ scRNA-seq | scATAC-seq | 空间转录组 | 多组学整合 | 临床数据
 | **NMF** | perform_gene_expression_nmf_analysis | 基因表达 NMF 分解 |
 | **可视化** | cns-visualization / data-viz | UMAP/DotPlot/Violin/Heatmap/Sankey 等 |
 | **报告生成** | bioinformatics-html-report / html-report | HTML 分析报告，图表画廊 |
+| **创建新 Skill** | create-bio-skill | 自动查文档+文献，生成标准 skill（SKILL.md + 脚本 + skill.json） |
 | **文献参数提取** | literature-param-extraction | 从文献 PDF 提取生信参数写入知识库 |
 | **跨物种基因转换** | interspecies_gene_conversion | ENSEMBL ID 跨物种映射 |
 | **embedding-State** | generate_embeddings_with_state | State 模型 embedding 生成 |
 | **embedding-UCE** | get_uce_embeddings_scRNA | UCE embedding+参考映射 |
 | **embedding-IMA** | map_to_ima_interpret_scRNA | IMA 大图谱映射注释 |
+<!-- ⬇ AUTO_SKILL_INSERT_MARKER：create-bio-skill 创建的新 skill 自动注册到此处上方 ⬇ -->
 
 #### ATAC 单细胞测序专属步骤
 | 分析步骤 | 对应子 skill | 何时使用 |
@@ -502,6 +544,30 @@ scRNA-seq | scATAC-seq | 空间转录组 | 多组学整合 | 临床数据
 - 不通过 → 修复重跑
 - 通过 → 进入下一步
 
+### 规则5.1: 🔴 分析完成后 → 检查 skill 注册状态（新 skill 必须注册到 SOUL.md）
+
+> **如果分析过程中使用了新创建的 skill（如 `create-bio-skill` 生成），或使用了未在 SOUL.md 技能匹配表中列出的 skill，分析完成后必须检查注册状态。**
+
+**检查时机**：rail_review(post) 全部通过后，生成报告前
+
+**检查方法**：
+```
+1. grep("hermes_home/SOUL.md", pattern="<skill-name>")
+2. 如果 grep 返回 0 结果 → skill 未注册！
+3. 立即按 create-bio-skill 的 Step 7 格式，在 <!-- AUTO_SKILL_INSERT_MARKER --> 上方插入新行
+4. 再次 grep 确认注册成功
+```
+
+**检查项**：
+- 本次分析中调用的所有 skill（通过 skill_view 调用的）是否都在 SOUL.md 技能匹配表中？
+- 新创建的 skill（skill_manage create）是否已注册？
+- 注册格式是否正确（分析步骤名 | skill-name | 描述+触发关键词）？
+
+**为什么必须做**：
+- 未注册的 skill 在后续分析中**无法被自动触发**（SOUL.md 铁律要求 skill_view 前先查匹配表）
+- 其他用户（或同一用户下次会话）用相同方法时，skill_view 找不到 → 又得重新创建 → 浪费 token 和时间
+- SOUL.md 的匹配表是 skill 被发现的**唯一入口**
+
 ### 规则6: 执行 R 代码用 terminal
 - 用 terminal 工具执行 Rscript，不用 execute_r（terminal 更灵活，可以看实时输出）
 - 但必须分步执行，不能一条 bash 命令跑完所有步骤
@@ -564,22 +630,27 @@ skill_evolution(
 #### 自进化闭环
 ```
 执行脚本前
-  → query_logs(查同类运行日志)
-  → 有日志：参考已有参数和经验
-  → 无日志：按原脚本和知识库执行
-  → 执行脚本
+  → search_knowledge（分析级强制，不可跳过）
+  → skill_view（强制，加载对应 skill）
+  → query_logs(查同类运行日志，仅作参考，不替代审查)
+  → rail_review(pre) 前置审查（统计级/分析级强制）
+  → 写代码 + 执行脚本
 
 执行脚本后
-  → rail_review(post) 审查
+  → debate_analysis（分析级强制，不可因有运行记录而跳过）
+  → rail_review(post) 后置审查
   → 通过 → record_run(记录成功运行日志)
          → 日志存到 .run_logs/脚本名_物种_组织_方向_日期.log
-         → 下次同类型分析可参考
+         → 日志同步归档到 results/.../log/run_record_*.json
+         → 下次同类型分析可参考（仅参考，不替代审查）
   → 失败 → record_error(记录错误日志)
          → 日志存到 .run_logs/脚本名_物种_组织_方向_日期.err
+         → 日志同步归档到 results/.../log/run_record_*.json
          → 修正后重跑
          → 重跑通过 → record_run(记录成功日志)
 
 原脚本永远不动。不同组织/物种的日志互不覆盖。
+运行日志只是参考，绝不替代本次审查（见规则-2）。
 ```
 
 ---
@@ -715,7 +786,11 @@ results/<模块名>/<方法名>/
 ├── figures/    # 所有图表（PNG/PDF/SVG）
 ├── results/    # 结果文件（CSV/RDS/H5AD/JSON）
 ├── scripts/    # 分析脚本（R/Python）
-└── data/       # 中间数据（MTX/TSV/中间 Seurat 对象）
+├── data/       # 中间数据（MTX/TSV/中间 Seurat 对象）
+└── log/        # 【强制保留】分析log + 辩论记录 + 运行记录
+    ├── analysis.log       # 本次分析全过程log
+    ├── debate_*.json      # 每次辩论的完整记录（7角色论点+裁判裁决）
+    └── run_record_*.json  # skill_evolution record_run/error 记录
 ```
 
 **规则**：
@@ -724,7 +799,16 @@ results/<模块名>/<方法名>/
 - 图表（PNG/PDF）→ figures/
 - 脚本（R/Python）→ scripts/
 - 中间数据（MTX/中间对象）→ data/
-- 文献 PDF → data/papers/
+- 文献 PDF → work/papers/（分析过程中下载，与 download_pdf 默认路径一致）
+- 辩论记录 → log/debate_*.json（每次 debate_analysis 自动归档）
+- 运行记录 → log/run_record_*.json（record_run/record_error 自动归档）
+- 分析log → log/analysis.log（分析全过程记录）
+
+**log/ 目录强制保留规则**：
+- `log/` 目录是分析可复现性的核心凭证，**禁止删除、禁止跳过写入**
+- 每次分析完成后，`log/` 下必须包含至少 1 个 `analysis.log` + 本次所有 `debate_*.json` + 本次所有 `run_record_*.json`
+- 缺 `log/` 目录的分析结果视为不完整
+- `log/` 目录下的文件**不可手动修改**，只能由工具自动写入
 
 ---
 

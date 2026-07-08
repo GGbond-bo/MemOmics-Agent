@@ -1,3 +1,4 @@
+# 铁律：运行记录(query_logs)只是参考，不能跳过 rail_review/debate_analysis 审查
 # ============================================================
 # 🔒 MemOmics 审查与辩论机制 + 自进化日志
 # ============================================================
@@ -68,7 +69,7 @@ def run_sctour_inference(
     input_h5ad: str,
     output_dir: str = "sctour_results",
     # Preprocessing
-    n_top_genes: int = 2000,
+    n_top_genes: int = 1000,
     hvg_flavor: str = "seurat_v3",
     # Model parameters
     percent: float = None,
@@ -87,7 +88,7 @@ def run_sctour_inference(
     wt_decay: float = 1e-6,
     random_state: int = 0,
     val_frac: float = 0.1,
-    use_gpu: bool = True,
+    use_gpu: bool = None,  # None=auto-detect (GPU if available, else CPU)
     # Latent space parameters
     alpha_z: float = 0.5,
     alpha_predz: float = 0.5,
@@ -189,6 +190,16 @@ def run_sctour_inference(
     sc.pp.highly_variable_genes(adata, flavor=hvg_flavor, n_top_genes=n_top_genes, subset=True)
     print(f"  ✓ HVG selection: {adata.n_vars} genes retained")
 
+    # Convert to float32 to avoid PyTorch dtype mismatch
+    # AnnData defaults to float64 (Double), PyTorch models use float32 (Float)
+    # Without this: RuntimeError: mat1 and mat2 must have the same dtype, but got Double and Float
+    from scipy.sparse import issparse
+    if issparse(adata.X):
+        adata.X.data = adata.X.data.astype('float32')
+    else:
+        adata.X = adata.X.astype('float32')
+    print(f"  ✓ Dtype converted: {adata.X.dtype}")
+
     # ================================================================
     # Step 3: Train scTour model
     # ================================================================
@@ -200,7 +211,19 @@ def run_sctour_inference(
     print(f"    percent: {percent} (auto={percent is None})")
     print(f"    nepoch: {nepoch} (auto={nepoch is None})")
     print(f"    batch_size: {batch_size}, lr: {lr}, random_state: {random_state}")
-    print(f"    use_gpu: {use_gpu}")
+    # Auto-detect GPU: if use_gpu is None, check CUDA availability
+    if use_gpu is None:
+        try:
+            import torch
+            use_gpu = torch.cuda.is_available()
+        except ImportError:
+            use_gpu = False
+        if use_gpu:
+            print(f"    use_gpu: True (CUDA detected — using GPU)")
+        else:
+            print(f"    use_gpu: False (no CUDA — using CPU, training will be slower)")
+    else:
+        print(f"    use_gpu: {use_gpu} (user-specified)")
 
     tnode = sct.train.Trainer(
         adata=adata,
@@ -325,7 +348,7 @@ def main():
     )
     parser.add_argument("--input", required=True, help="Path to input AnnData (.h5ad)")
     parser.add_argument("--output_dir", default="sctour_results", help="Output directory")
-    parser.add_argument("--n_top_genes", type=int, default=2000, help="Number of HVGs")
+    parser.add_argument("--n_top_genes", type=int, default=1000, help="Number of HVGs (scTour official: 1000)")
     parser.add_argument("--loss_mode", default="nb", choices=["mse", "nb", "zinb"])
     parser.add_argument("--alpha_recon_lec", type=float, default=0.5)
     parser.add_argument("--alpha_recon_lode", type=float, default=0.5)
@@ -361,7 +384,7 @@ def main():
         batch_size=args.batch_size,
         lr=args.lr,
         random_state=args.random_state,
-        use_gpu=not args.no_gpu,
+        use_gpu=None if not args.no_gpu else False,  # None=auto-detect
         save_model=not args.no_save_model,
     )
 

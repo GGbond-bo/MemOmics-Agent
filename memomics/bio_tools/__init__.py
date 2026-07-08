@@ -10,3 +10,9 @@ from . import debate_analysis
 from . import generate_report
 from . import skill_evolution
 from . import literature_search
+from . import query_geo
+from . import query_kegg
+from . import query_stringdb
+from . import query_uniprot
+from . import query_ensembl
+from . import query_ncbi

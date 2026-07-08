@@ -1,7 +1,7 @@
 ---
 name: sctour-trajectory-inference
 description: "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。"
-version: 1.0.0
+version: 1.2.0
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
@@ -22,6 +22,57 @@ prerequisites:
     - matplotlib
     - scipy
     - anndata
+    - scikit-misc
+---
+
+## 🚨 执行前强制检查清单（加载此 skill 后必须逐条确认，不可跳过）
+
+> **此 skill 的 SKILL.md 已加载成功。在写任何代码之前，必须完成以下 10 步检查。**
+> 跳过任何一项 = 分析不完整，用户会不满。**历史教训：此 skill 曾被跳过，导致 log/ 缺失、结果路径错误、record_run 未记录。**
+
+| # | 步骤 | 工具调用 | 状态 |
+|:-:|:----|:---------|:----:|
+| 1 | search_knowledge | `search_knowledge(species, tissue, direction, "scTour 参数")` | ⬜ |
+| 2 | skill_view | ✅ 当前已加载 `sctour-trajectory-inference` | ✅ |
+| 3 | check_env | `check_env(["sctour", "scanpy", "torch", "scikit-misc"], language="Python")` | ⬜ |
+| 4 | rail_review(pre) | `rail_review(phase="pre", module_id="sctour", ...)` | ⬜ |
+| 5 | write_file | 写脚本到 `results/.../scTour/scripts/` | ⬜ |
+| 6 | terminal | 分步执行，禁止 && 连接 | ⬜ |
+| 7 | debate_analysis | `debate_analysis(topic="scTour 参数/结果", ...)` | ⬜ |
+| 8 | rail_review(post) | `rail_review(phase="post", module_id="sctour", ...)` | ⬜ |
+| 9 | skill_evolution | `record_run` 或 `record_error` → **⚠️ 验证文件已落盘** | ⬜ |
+| 10 | log/ 目录 | 确认 `log/analysis.log` + `debate_*.json` + `run_record_*.json` 存在 | ⬜ |
+| 11 | **结果路径验证** | 确认结果在 `{MEMOMICS_ROOT}/results/` 下，**不是** `{MEMOMICS_ROOT}/hermes-agent/results/` | ⬜ |
+| 12 | **报告完整性验证** | 生成 HTML 报告后执行：检查图片引用数、辩论段数、裁判裁决数、参数来源章节皆完整 | ⬜ |
+
+> **⚠️ 常见错误**：Agent 经常跳过步骤 1（search_knowledge）和步骤 9（skill_evolution），直接凭记忆或 web 搜索就写代码。**这违反铁律。** 即使你觉得自己会写 scTour，也必须先查知识库和加载此 skill。此 checklist 的存在就是为了防止这种跳过。
+>
+> **⚠️ Step 9 落盘验证**：`skill_evolution(action="record_run")` 可能返回 `{"success": true}` 但实际**未写入文件**（2026-07-08 会话中发现：6 次调用中 2 次静默不写）。强制预防措施——每次 `record_run` 后立即执行：
+> ```python
+> import os
+> log_dir = "results/.../log/"
+> expected = f"run_record_{timestamp}_{seq}.json"
+> if not os.path.isfile(os.path.join(log_dir, expected)):
+>     # skill_evolution 未落盘，手动写入
+>     with open(os.path.join(log_dir, expected), "w") as f:
+>         json.dump(record_data, f, indent=2)
+> ```
+> 此验证步骤**不可跳过**。宁可多检查一次，不可漏一份记录。
+>
+> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `E:/MemOmics-Agent/results/`），**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `hermes_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
+>
+> ⚠️ **目录结构**：每步执行后必须创建 `figures/` `results/` `scripts/` `data/` `log/` 五个子目录。`log/` 目录是强制保留的，包含 `analysis.log`、`debate_*.json`、`run_record_*.json`。
+
+---
+
+## Proven Scripts
+
+> 以下为经实际运行验证成功的脚本记录。下次同类分析可在 `skill_evolution(action="query_logs")` 中查阅。
+
+| 物种 | 组织 | 方向 | 日期 | 评分 |
+|:----|:----|:----|:----:|:----:|
+| 人类 | 骨骼肌 | 衰老 | 2026-07-08 | 9.0 |
+
 ---
 
 # scTour — 深度潜在时间轨迹推断
@@ -43,7 +94,15 @@ prerequisites:
 - 需要基于图的伪时间（Monocle3 风格）→ 用 Monocle3 / Slingshot
 - 需要命运概率映射 → 用 CellRank
 - 细胞数 < 500 → 数据量不足以训练 VAE
-- 需要 GPU 但没有 GPU → 训练会很慢（但 CPU 也能跑）
+- 细胞数 < 500 → 数据量不足以训练 VAE
+
+> **GPU 策略**：scTour 优先使用 GPU（CUDA），如果没有 GPU 则自动回退到 CPU。CPU 也能完整跑通，只是训练较慢。**不因无 GPU 而阻断执行**。
+>
+> **Blackwell GPU (RTX 50 系列)**：NVIDIA RTX 5070 Ti / 5080 / 5090 使用 Blackwell 架构 (compute capability sm_120)。PyTorch 官方 cu124 索引仅提供 ≤2.6.0 版本（只支持到 sm_90 Hopper）。要使用 CUDA 加速，必须安装 PyTorch ≥2.8.0 从 cu128 测试通道：
+> ```bash
+> pip install "torch>=2.8.0" --index-url https://download.pytorch.org/whl/test/cu128
+> ```
+> （这会下载 ~2.7GB，因包含完整的 CUDA 12.8 运行时。安装后验证：`python -c "import torch; print(torch.cuda.is_available())"`）
 
 **关键词触发**：scTour、深度伪时间、VAE 轨迹、无监督伪时间、潜在时间推断、向量场、神经ODE轨迹
 
@@ -80,6 +139,13 @@ prerequisites:
 - **不确定的参数就辩论**，不要自己拍脑袋
 
 ### 规则5: 执行后审查
+
+### 规则N: 运行记录只是参考，不能跳过审查
+- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
+- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
+- 禁止因"之前跑过"而跳过任何审查步骤
+- 禁止直接用历史日志里的脚本运行而不经本次审查
+- 运行日志是"参考"不是"免审凭证"
 
   - **图片检查**：
     - 图有没有生成？没生成 → **强制重新执行**
@@ -128,6 +194,8 @@ results/<模块>/<方法>/
 | **Jupyter Notebook** | `scripts/sctour_notebook.py` | 手动交互式探索，逐 Cell 运行，参数调优只需重跑 Cell 3 |
 
 > **Notebook 版**：13 个 Cell（环境→加载→预处理→训练→伪时间→潜在空间→向量场→4 种可视化→保存→统计→调参参考），适合在 Jupyter 中逐步调试。训练 Cell 独立，改参数后只重跑它即可。
+>
+> **📋 交付规则**：当用户说"给我脚本""我要拿去跑"时，直接把 `sctour_notebook.py` 的完整代码贴到对话中，不要只保存到 skill 目录。用户要的是可操作的交付物，不是文件路径。
 
 ## Quick Start
 
@@ -142,7 +210,7 @@ adata = sc.read("your_data.h5ad")
 
 # Step 2: 预处理（必须计算 QC metrics + 选择高变基因）
 sc.pp.calculate_qc_metrics(adata, percent_top=None, log1p=False, inplace=True)
-sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000, subset=True)
+sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1000, subset=True)
 
 # Step 3: 训练 scTour 模型
 tnode = sct.train.Trainer(adata, loss_mode='nb', alpha_recon_lec=0.5, alpha_recon_lode=0.5)
@@ -184,19 +252,21 @@ sct.vf.plot_vector_field(adata, zs_key='X_TNODE', vf_key='X_VF', use_rep_neigh='
 | matplotlib | ≥ 3.4 | 随 scTour 自动安装 |
 | scipy | ≥ 1.7 | 随 scTour 自动安装 |
 | anndata | ≥ 0.8 | 随 scTour 自动安装 |
+| scikit-misc | ≥ 0.1.4 | `pip install scikit-misc`（`flavor='seurat_v3'` 需要） |
 
 **快速安装：**
 ```bash
-pip install sctour scanpy
+pip install sctour scanpy scikit-misc
 
 # 或 conda
-conda install -c conda-forge sctour scanpy
+conda install -c conda-forge sctour scanpy scikit-misc
 ```
 
-**GPU 支持（推荐）：**
-- scTour 自动检测 GPU，如果有 CUDA 可用则自动使用
-- 无需额外配置，`use_gpu=True`（默认）即可
-- 如果不想用 GPU，设置 `use_gpu=False`
+**GPU/CPU 策略（自动检测）：**
+- `use_gpu=None`（默认）：自动检测 CUDA，有 GPU 用 GPU，无 GPU 自动回退 CPU
+- `use_gpu=True`：强制使用 GPU（无 GPU 时会报错）
+- `use_gpu=False`：强制使用 CPU
+- **不因无 GPU 而阻断执行**——CPU 也能完整跑通，只是训练较慢
 
 ---
 
@@ -206,14 +276,19 @@ conda install -c conda-forge sctour scanpy
 
 1. **AnnData 对象**（.h5ad），包含：
    - `.X`：原始 UMI counts（`loss_mode='nb'` 或 `'zinb'`）或 log1p 归一化表达（`loss_mode='mse'`）
+   - **若 counts 在 `.layers['counts']` 中**：先复制到 `.X`：
+     ```python
+     adata.X = adata.layers['counts'].copy()
+     # 然后 scTour 用 loss_mode='nb'
+     ```
    - `.obs`：必须包含 `n_genes_by_counts`（通过 `scanpy.pp.calculate_qc_metrics` 计算）
    - 预处理：建议先跑 `scanpy.pp.highly_variable_genes` 选择 1000-2000 个高变基因
 
 ### 数据要求
 
 - **最小细胞数**：500（推荐 1000+）
-- **推荐高变基因数**：1000-2000
-- **GPU**：推荐但非必需（CPU 也可以跑，但慢）
+- **推荐高变基因数**：1000（scTour 官方推荐，平衡速度和精度）
+- **GPU**：自动检测（有 GPU 用 GPU，无 GPU 自动回退 CPU，不阻断）
 - **内存**：8GB+ RAM（大数据集需要更多）
 - **运行时间**：取决于数据大小，通常 10-60 分钟
 
@@ -247,7 +322,7 @@ conda install -c conda-forge sctour scanpy
 sc.pp.calculate_qc_metrics(adata, percent_top=None, log1p=False, inplace=True)
 
 # 选择高变基因
-sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000, subset=True)
+sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1000, subset=True)
 ```
 
 **⚠️ 注意：`n_genes_by_counts` 必须存在于 `adata.obs` 中，否则 scTour 会报错！**
@@ -268,7 +343,7 @@ tnode = sct.train.Trainer(
     batch_size=1024,
     lr=1e-3,
     random_state=0,
-    use_gpu=True,
+    use_gpu=None,              # None=自动检测（有GPU用GPU，无GPU用CPU）
 )
 tnode.train()
 ```
@@ -352,7 +427,7 @@ sct.vf.plot_vector_field(
 | `wt_decay` | 1e-6 | 权重衰减 |
 | `random_state` | 0 | 随机种子 |
 | `val_frac` | 0.1 | 验证集比例 |
-| `use_gpu` | True | 是否使用 GPU |
+| `use_gpu` | None (auto) | None=自动检测 / True=强制GPU / False=强制CPU |
 
 **核心方法：**
 - `train()` — 训练模型
@@ -396,6 +471,207 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 
 ---
 
+## 🔄 多配置对比工作流（Multi-Configuration Comparison）
+
+> 本会话经验：scTour 对参数敏感，建议每次分析至少跑 3 个对比配置，再通过统计比较 + debate 选出最优结果。
+
+### 推荐配置方案
+
+| 配置 | 命名 | `alpha_recon_lec` | `alpha_recon_lode` | `n_latent` | 目标 |
+|:----:|:----:|:---:|:---:|:---:|------|
+| 🟢 平衡 | `run1_balanced` | 0.5 | 0.5 | 5 | scTour 默认，通用基线 |
+| 🔵 编码器偏重 | `run2_encoder` | 0.8 | 0.2 | 8 | 保留更多细胞类型结构 |
+| 🟠 ODE 偏重 | `run3_ode` | 0.3 | 0.7 | 3 | 强调伪时间排序 |
+| 🟣 大潜在空间 | `run4_large` | 0.5 | 0.5 | 10 | 高维生物信号捕获 |
+
+### 对比分析 Pipeline
+
+```python
+import numpy as np
+import pandas as pd
+from scipy.stats import ks_2samp
+
+# 1. 收集各配置的伪时间统计
+runs = {}
+for run_name in ['run1_balanced', 'run2_encoder', 'run3_ode']:
+    ptime = pd.read_csv(f'{run_name}/results/pseudotime.csv', index_col=0)
+    runs[run_name] = ptime
+
+# 2. 合并统计
+stats = []
+for run_name, ptime_df in runs.items():
+    for group in ptime_df['type'].unique():
+        subset = ptime_df[ptime_df['type'] == group]['ptime']
+        stats.append({
+            'run': run_name, 'group': group,
+            'mean': subset.mean(), 'std': subset.std(),
+            'median': subset.median(), 'n_cells': len(subset)
+        })
+stats_df = pd.DataFrame(stats)
+stats_df.to_csv('comparison/parameter_comparison.csv', index=False)
+
+# 3. KS 检验（年轻 vs 老年伪时间分离度）
+results = []
+for run_name, ptime_df in runs.items():
+    young = ptime_df[ptime_df['type'].str.contains('Young', case=False)]['ptime']
+    old = ptime_df[ptime_df['type'].str.contains('Old|diabete', case=False)]['ptime']
+    ks_stat, ks_pval = ks_2samp(young, old)
+    results.append({
+        'run': run_name,
+        'young_mean': young.mean(), 'old_mean': old.mean(),
+        'delta': old.mean() - young.mean(),
+        'KS_stat': ks_stat, 'KS_pval': ks_pval,
+        'separability': 'good' if ks_pval < 0.05 and abs(old.mean() - young.mean()) > 0.1 else 'poor'
+    })
+comparison_df = pd.DataFrame(results)
+```
+
+### 选择最佳配置的辩论标准
+
+| 标准 | 权重 | 说明 |
+|:----|:---:|------|
+| **生物学一致性** | ⭐⭐⭐ | 伪时间排序是否与已知生物学方向一致（如 Young→Old） |
+| **组间分离度** | ⭐⭐ | KS 检验 p-value + 均值差的绝对值 |
+| **组内方差** | ⭐⭐ | 每组内标准差尽量小（组内均质） |
+| **细胞类型连续性** | ⭐ | 同细胞类型是否连续分布在伪时间轴上 |
+
+> **辩论要求**：多配置结果对比后，**必须调用 `debate_analysis` 辩论**，让正方/反方/裁判从生物学+统计+生信角度选出最优配置。辩论记录归档到 `results/.../log/debate_comparison_*.json`。
+
+### 目录结构
+
+```
+results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
+├── run1_balanced/          # 平衡配置
+│   ├── figures/            # 伪时间UMAP、向量场图
+│   ├── results/            # pseudotime.csv, 潜在空间坐标
+│   ├── data/               # 中间adata对象
+│   └── scripts/            # 单配置脚本
+├── run2_encoder/           # 编码器偏重配置
+├── run3_ode/               # ODE偏重配置
+├── comparison/             # 多配置对比
+│   ├── figures/            # 对比箱线图、KS检验表
+│   └── parameter_comparison.csv
+├── data/                   # 共享预处理数据
+├── scripts/                # 全局脚本
+└── scTour_Trajectory_Report.html  # 综合HTML报告
+```
+
+> **重要**：结果基路径为 `results/`（如 `E:/MemOmics-Agent/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
+
+### 报告生成要求
+
+使用脚本 `scripts/generate_full_report.py` 生成综合 HTML 报告，**必须包含以下全部内容**（2026-07-08 用户明确要求："把辩证结果、参数怎么来的、结论辩证全都写上去"）：
+
+#### 报告必备 8 项清单
+| # | 内容 | 检查标准 |
+|:-:|:----|:--------|
+| 1 | **分析流程** | 完整写出每一步的文字描述 |
+| 2 | **参数来源表** | 每个关键参数：参数名、值、来源（知识库/技能模板/辩论轮次/官方默认）、选择依据 |
+| 3 | **配置裁决表** | 多配置对比时展示量化指标（平均KS统计量、Delta均值、训练时间），标注胜出配置 |
+| 4 | **所有图集** | 所有配置的所有 PNG（base64 嵌入），按配置分组展示 |
+| 5 | **统计表** | 分组统计（均值/标准差/中位数）、亚群统计、KS检验表 |
+| 6 | **辩论记录** | 每轮辩论完整呈现：辩题 + 正方论点×3（各自独立）+ 反方论点×4 + 裁判裁决（胜方+得分+决策+理由+行动） |
+| 7 | **结论辩论** | 对最终生物学结论的独立辩论 → 裁决 → 限定后的结论 |
+| 8 | **最终结论** | 经辩论验证的生物学结论，含辩论提醒/限定条件 |
+
+#### 辩论样式模板
+辩论在报告中用独立面板展示，正方/反方分列左右，下方展示裁决：
+```html
+<div class="debate-box">
+  <h3>{步骤名称}</h3>
+  <p>{时间戳}</p>
+  <p><strong>辩题：</strong>{topic}</p>
+  <div class="args">
+    <div class="pro-side"><h4>✅ 正方（独立论证）</h4>{pro_args_html}</div>
+    <div class="con-side"><h4>❌ 反方（独立论证）</h4>{con_args_html}</div>
+  </div>
+  <div class="verdict">
+    <p><strong>胜方：</strong>{winner}（正方{X}分 vs 反方{Y}分）</p>
+    <p><strong>决策：</strong>{decision}</p>
+    <p><strong>理由：</strong>{reasoning}</p>
+    <p><strong>行动：</strong>{action}</p>
+  </div>
+</div>
+```
+
+#### 辩论持久化（铁律）
+- 每轮 `debate_analysis` 后，**立即**将辩论全记录写入 `results/.../log/debate_<序号>_<主题>.json`
+- JSON 必须含：`id`、`step`、`timestamp`、`topic`、`pro_args`（各含role+argument）、`con_args`（各含role+argument）、`judge_verdict`（含winner/pro_score/con_score/decision/reasoning/action）
+- 报告中辩论章节直接引用这些 JSON 的数据渲染
+
+#### 报告生成脚本
+- 封装为 `scripts/generate_full_report.py`，下次同类分析只需改路径和图片引用
+- 内容包括：图片 base64 嵌入、辩论 JSON 读取、参数来源表生成、统计表渲染
+- 参考 `references/report-content-checklist.md` 确保不遗漏
+
+#### 文件命名与版本
+- **完整版**（含辩论+参数来源+结论+自进化日志+全部图集）：`scTour_Complete_Report.html`（2026-07-08 最终用户接受的命名）
+- **精简版**（仅图+统计）：保留原 `scTour_Trajectory_Report.html` 或 `scTour_Full_Report.html` 作为对照
+- **原报告不覆盖**，多个版本并存
+- 完整版与精简版同时交付，满足不同阅读需求
+
+报告保存到 `results/.../03_advanced/scTour/`，**不保存到桌面**。
+
+#### 图片引入策略（2026-07-08 用户强制执行 — 不可违反）
+
+**⚠️ 铁律：所有图片必须 base64 嵌入到 HTML 中，禁止使用路径引用。**
+
+2026-07-08 会话教训：Agent 生成了一个 38KB 的报告（仅文字 + 路径引用的图片），用户立即质疑"怎么只有37kb?不审查吗？" → 被迫重写完整的 9.3MB 报告。用户要的是可双击直接看的报告，不是路径引用的轻量版。
+
+```python
+# ✅ 强制使用（写入 generate_full_report.py）
+with open("figure.png", "rb") as f:
+    b64 = base64.b64encode(f.read()).decode("utf-8")
+html += f'<img src="data:image/png;base64,{b64}">'
+
+# ❌ 禁止使用
+<img src="file:///E:/.../figure.png">     # 路径引用 → 用户拒绝
+<img src="figures/figure.png">             # 相对路径 → 本地打开空白
+```
+
+**后报告验证**：生成后必须检查图片是否真正 base64 嵌入（`content.count("data:image") >= 总图数`），文件大小应 > 1MB/图数 × 图数（每张嵌入图 ~500KB-2MB）。16 张图 + HTML 结构 ≈ 8-15MB 为正常。**小于 500KB 的报告意味着图片未嵌入。**
+
+#### 后报告验证（Post-Generation Verification）
+
+HTML 报告生成后，必须运行以下验证确保完整性：
+
+```python
+with open(report_path, encoding='utf-8') as f:
+    html = f.read()
+    
+checks = {
+    "结构": html.startswith("<!DOCTYPE html>") and "</html>" in html,
+    "图片引用数≥15": html.count('<img') >= 15,
+    "辩论段数≥5": html.count("辩论 #") >= 5,
+    "裁判裁决≥5": html.count("⚖") >= 5,  # 含⚖️变体
+    "自进化日志≥6": all(f"...{d:04d}" in html for d in range(6)),
+    "参数来源表": "参数来源" in html or "tag-kb" in html,
+    "图集章节": any(k in html for k in ["三配置训练结果", "平衡版深度分析"]),
+    "最终结论": "最终结论" in html or "生物学结论" in html,
+}
+failed = [k for k, v in checks.items() if not v]
+assert not failed, f"报告验证失败: {failed}"
+print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
+```
+
+#### 报告必备 8 项清单（增强版）
+
+| # | 内容 | 检查标准 |
+|:-:|:----|:--------|
+| 1 | **分析流程** | 完整写出每一步的文字描述 |
+| 2 | **参数来源表** | 每个关键参数：参数名、值、来源（知识库/技能模板/辩论轮次/官方默认）、选择依据 |
+| 3 | **配置裁决表** | 多配置对比时展示量化指标（平均KS统计量、Delta均值、训练时间），标注胜出配置 |
+| 4 | **所有图集** | 所有配置的所有 PNG（按配置分组展示），包括：\
+  - 每个配置的 overview UMAP（1张）+ vector field（1张）\
+  - 平衡版额外图：最终UMAP总览、最终向量场、组间箱线图、亚群箱线图、运动效应图、衰老梯度图\
+  - 三配置对比图：箱线图对比、KS热力图、Delta均值对比 |
+| 5 | **统计表** | 分组统计（均值/标准差/中位数）、亚群统计、KS检验表 |
+| 6 | **辩论记录** | 每轮辩论完整呈现：辩题 + 正方论点×3（各自独立）+ 反方论点×4 + 裁判裁决（胜方+得分+决策+理由+行动） |
+| 7 | **结论辩论** | 对最终生物学结论的独立辩论 → 裁决 → 限定后的结论 |
+| 8 | **自进化日志表** | 列出每一步的 `run_record_*.json`：脚本名、质量评分、关键经验 |
+
+---
+
 ## 参数调优建议
 
 ### `alpha_recon_lec` 和 `alpha_recon_lode`（必须满足和为 1）
@@ -435,10 +711,20 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 | `Invalid expression matrix` (loss_mode='mse') | `.X` 值域不对 | 确保 `.X` 是 log1p 归一化值，值域 [0, log1p(1e6)] |
 | `alpha_recon_lec + alpha_recon_lode != 1` | 两个参数之和不为 1 | 调整参数使和为 1 |
 | 伪时间方向反了 | ODE 积分方向随机 | 用 `reverse_time()` 反转 |
-| 训练很慢 | 数据量大且无 GPU | 减小 `percent` 参数，或 subsample 到 5000-10000 细胞 |
+| `RuntimeError: mat1 and mat2 must have the same dtype, but got Double and Float` | AnnData 默认 float64（Double），PyTorch 模型用 float32（Float） | 训练前转换 dtype：`if issparse(adata.X): adata.X.data = adata.X.data.astype('float32') else: adata.X = adata.X.astype('float32')`。这是 PyTorch 经典问题，scTour 不会自动处理 |
+| `ModuleNotFoundError: No module named 'skmisc'` 或 `ImportError: cannot import name 'loess'` | `flavor='seurat_v3'` 需要 `scikit-misc` 包，但未安装 | `pip install scikit-misc`。scTour 不会自动安装这个隐式依赖 |
+| 训练极慢/不收敛/伪时间无意义 | **忘记选高变基因** | 全基因（>20000）直接喂 VAE → 训练慢 10× + 噪声淹没信号。必须先跑 `sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1000, subset=True)` |
+| 训练很慢 | 数据量大且无 GPU（CPU 模式） | 减小 `percent` 参数，或 subsample 到 5000-10000 细胞；CPU 模式正常现象，不是错误 |
 | 潜在空间不能区分细胞类型 | alpha_recon_lec 太小 | 增大 alpha_recon_lec（如 0.7-0.8） |
 | 向量场不明显 | 数据噪声大 | 增加 `n_top_genes`，或调整 `stream_density` |
 | 跨数据集预测失败 | 新数据基因不匹配 | 确保新数据使用相同的基因集 |
+| scanpy/anndata 包版本冲突，`import scanpy` 报错 | 环境中的 anndata 与 scanpy 版本不兼容（如 `make_register_namespace_decorator` 签名不匹配），或 Windows 上 `D:\Python\site-packages` 在 sys.path 中优先级高于系统 site-packages 导致加载了错误 Python 版本的包 | **方案 A（最快）**：`PYTHONPATH="" python ...` — 清除 PYTHONPATH 后系统 Python 只加载自己的 site-packages，绕过冲突包。**方案 B**：用 h5py 直接读取 h5ad 元数据做预览（详见 `references/h5ad-data-access.md`）。**方案 C**：创建新的 conda/uv 虚拟环境重新安装兼容版本 |
+| `AttributeError: 'SparseCSRView' object has no attribute 'A'` | 新版 scipy 中 SparseCSRView 没有 `.A` 属性，但 scTour 的 `data.py:99` 调用了 `X.A`（即 `X.toarray()`） | 训练前将稀疏矩阵转为 dense numpy array：`if issparse(adata.X): adata.X = adata.X.toarray().astype('float32')`。11,630 细胞 × 1,000 基因 ≈ 46MB，内存无压力 |
+| `IORegistryError: No method registered for writing <class 'pandas.arrays.StringArray'>` | anndata 0.10.9 + pandas 3.0.3 的 StringArray 写入 h5ad 不兼容 | 改用内存管道：不保存中间 h5ad，直接在内存中加载 → 预处理 → scTour 训练 → 可视化。或在保存前转换所有 string 列为 `object` dtype（但 pandas 3.0+ 的 `.values` 仍返回 StringArray，跳过中间 h5ad 更可靠） |
+| `TypeError: Axes.boxplot() got an unexpected keyword argument 'labels'` | matplotlib ≥3.9 将 `labels` 参数重命名为 `tick_labels` | 使用 `tick_labels` 替代 `labels`：`ax.boxplot(data, tick_labels=labels)` |
+| GPU 不可用但用户有 NVIDIA 显卡 | PyTorch 安装的是 CPU-only 版本（`torch 2.12.1+cpu`），或显卡架构太新（如 Blackwell sm_120）不被旧版 PyTorch 支持 | 检查：`python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"`。若为 CPU-only 且是 Blackwell 显卡，需安装 `torch>=2.8.0` 从 cu128 测试通道（见上方 GPU 策略） |
+| `OSError: [Errno 28] No space left on device` 在安装 PyTorch cu128 时 | C: 盘空间不足（<10GB 可用），cu128 包 ~2.7GB 需要下载+解压的临时空间 | 设置临时目录到其他盘：`TMPDIR=/e/tmp TEMP=/e/tmp TMP=/e/tmp pip install "torch>=2.8.0" --index-url https://download.pytorch.org/whl/test/cu128 --force-reinstall --no-cache-dir`。常见于 Windows C 盘空间紧张的系统。 |
+| `.X` 存储的是归一化值而非原始 UMI counts，但 `loss_mode='nb'` 要求整数 counts | 数据是已注释 Seurat 对象，SCTransform 归一化后 `.X` 存储的是 Pearson 残差而非 counts | **解决方案 A**：直接从 `.layers['counts']` 提取原始 counts（推荐）→ `adata.X = adata.layers['counts'].copy()`。**解决方案 B**：若 `adata.raw` 存在且 `.raw.X` 是 counts，复制 `adata.X = adata.raw.X.copy()`。**解决方案 C**：用 `loss_mode='mse'`（已归一化数据用 MSE 损失）。**验证方法**：`print(adata.X[:5, :5].toarray() if issparse(adata.X) else adata.X[:5, :5])` — 若为整数则为 counts |
 
 ---
 
@@ -446,15 +732,23 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 
 > 成功运行并通过审查的脚本记录。
 
-| Species | Tissue | Condition | Date | Score |
-|---------|--------|-----------|------|-------|
-| *(none yet)* | | | | |
+| Species | Tissue | Condition | Date | Score | Notes |
+|---------|--------|-----------|------|-------|-------|
+| human | skeletal_muscle | aging_diabetes_exercise | 2026-07-07 | 9.0 | 3-config comparison (balanced/encoder/ODE), counts from layer, CPU mode |
+| human | skeletal_muscle | aging_diabetes_exercise | 2026-07-08 | 8.5 | Same 3-config workflow, verified: search_knowledge+skill_view should be loaded first. log/ dir created retroactively. Result of failed execution discipline. |
 
 ---
 
-## 自进化日志 (.run_logs/)
+## 自进化日志 (.run_logs/ + results/log/)
 
-> 日志存储: skill 目录下 `.run_logs/` 目录，按 `脚本名_物种_组织_方向_日期.log` 命名
+> 日志以**双路径**存储。每次 `record_run`/`record_error` 后必须验证两个路径均有文件落盘（2026-07-08 会话教训：仅一路径有日志导致用户两次追问）。
+
+| 路径 | 用途 | 验证命令 |
+|:----|:----|:---------|
+| `~/.hermes/skills/bioinformatics/sctour-trajectory-inference/.run_logs/` | 跨分析复用 | `ls ~/.hermes/skills/.../sctour-trajectory-inference/.run_logs/` |
+| `results/.../scTour/log/run_record_*.json` | 本次分析追溯 | `ls results/.../scTour/log/run_record_*.json` |
+
+> 文件名格式：`脚本名_物种_组织_方向_日期.log`（`.run_logs/`）或 `run_record_日期_序号_run.json`（`results/log/`）
 
 ---
 
@@ -464,6 +758,12 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 - scTour 官方文档: https://sctour.readthedocs.io/
 - scTour GitHub: https://github.com/LiQian-XC/sctour
 - scTour PyPI: https://pypi.org/project/sctour/
+- Blackwell GPU 设置: `references/blackwell-gpu-setup.md` — RTX 50 系列 CUDA 配置
+- 多配置对比工作流（2026-07-07 第一次运行）: `references/multi-config-comparison-20260707.md` — 3 config comparison, run2_encoder won
+- 多配置对比工作流（2026-07-08 第二次运行）: `references/multi-config-comparison-20260708.md` — 同一数据不同辩论标准, run1_balanced won
+- skill_evolution 静默失败修复: `references/skill-evolution-silent-failure.md` — 当 record_run 返回 Success 但不落盘时的排查和修复方法
+- 报告内容清单（报告生成前必查）: `references/report-content-checklist.md` — 8项必备内容的详细检查标准
+- 完整报告生成脚本: `scripts/generate_full_report.py` — 可复用的综合HTML报告生成器
 
 ---
 
@@ -472,7 +772,7 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 本 skill 执行代码前**必须**调用 `rail_review(phase="pre")` 进行前置审查，执行后**必须**调用 `rail_review(phase="post")` 进行后置审查。
 
 ### 审查内容
-- **pre 审查**：环境检查（包是否安装）→ 参数校验（alpha_recon_lec+alpha_recon_lode=1？）→ 数据检查（n_genes_by_counts 存在？）→ 硬件检查（GPU 是否可用）
+- **pre 审查**：环境检查（包是否安装）→ 参数校验（alpha_recon_lec+alpha_recon_lode=1？）→ 数据检查（n_genes_by_counts 存在？）→ **HVG 检查（高变基因是否已筛选？n_vars > 5000 且未 subset 则阻断）** → 硬件检查（GPU 可用则用 GPU，不可用则回退 CPU，不阻断）
 - **post 审查**：结果质量评估（伪时间是否合理？）→ 图表检查（图是否生成？）→ 数值检查（潜在空间维度是否正确？）→ 错误检查（有无 warning/error）
 
 ### 审查不通过
@@ -487,9 +787,12 @@ reversed_t = reverse_time(adata.obs['ptime'].values)
 
 当遇到**不确定的参数选择或结果判断**时，**必须**调用 `debate_analysis`：
 
-- **正方 3 角色**（各自独立，互相看不到）：生物学 agent / 统计学 agent / 生信 agent
-- **反方 4 角色**（各自独立，互相看不到，也看不到正方）：生物学 agent / 统计学 agent / 生信 agent / 历史经验 agent
-- **裁判**：看到所有 7 方论点，给出裁决 + 置信度（高/中/低）
+- **正方 3 位专业编辑**（各自独立，互相看不到）：生物学编辑 / 统计学编辑 / 生信编辑
+- **反方 4 位专业编辑**（各自独立，互相看不到，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
+- **裁判编辑**：看到所有 7 方论点，给出裁决 + 置信度（高/中/低）
+- **上下文隔离**：每个编辑独立 HTTP API 调用，messages 只有自己的 prompt
+- **分科知识库**：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
+- **辩论结果自动归档**到 results/.../log/debate_*.json
 
 ### 辩论触发场景
 - `alpha_recon_lec` 选择（0.3 vs 0.5 vs 0.7）

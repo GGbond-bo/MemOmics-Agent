@@ -576,7 +576,7 @@ TOOLSETS = {
 
 
     "memomics": {
-        "description": "MemOmics bioinformatics tools — scan_data, search_knowledge, guide_analysis, check_env, rail_review, todo_manage, memomics_pipeline, update_results_dir, skill_evolution, debate_figure_conclusions, search_papers, search_papers_by_context, download_pdf, extract_params_from_pdf",
+        "description": "MemOmics bioinformatics tools — scan_data, search_knowledge, guide_analysis, check_env, rail_review, todo_manage, memomics_pipeline, update_results_dir, skill_evolution, debate_figure_conclusions, search_papers, search_papers_by_context, download_pdf, extract_params_from_pdf, search_geo, get_geo_details, query_kegg, query_string, query_uniprot, query_ensembl, query_ncbi",
         "tools": [
             "scan_data",
             "search_knowledge",
@@ -592,6 +592,13 @@ TOOLSETS = {
             "search_papers_by_context",
             "download_pdf",
             "extract_params_from_pdf",
+            "search_geo",
+            "get_geo_details",
+            "query_kegg",
+            "query_string",
+            "query_uniprot",
+            "query_ensembl",
+            "query_ncbi",
         ],
         "module": "tools.memomics_tools",
         "includes": []

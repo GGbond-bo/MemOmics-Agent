@@ -1,15 +1,20 @@
 """Knowledge base search tool — searches the MemOmics knowledge base.
 
-v2: 增强搜索逻辑
+v3: 全面增强
 - 按 species/tissue/direction 定位目录
-- 同义词扩展覆盖英文关键词
+- 同义词扩展覆盖英文关键词 + 疾病/表型术语
+- 词边界匹配（防止短词误命中）
+- 动态路径检测（不硬编码）
+- 文件内容缓存（避免每次 os.walk 重新读取）
 - 返回完整参数而非片段
 - 知识库不存在时返回建议
 """
 import json
 import os
+import re
+import time
 import logging
-import yaml
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -39,7 +44,7 @@ SCHEMA = {
     }
 }
 
-# 语义同义词 — 覆盖中英文 + 学名
+# 语义同义词 — 覆盖中英文 + 学名 + 疾病/表型
 SYNONYMS = {
     # 物种 — 标准目录名为 Homo_sapiens / Mus_musculus / monkey / zebrafish
     "human": ["human", "智人", "homo sapiens", "人类", "人", "homo_sapiens", "human pbmc"],
@@ -63,15 +68,32 @@ SYNONYMS = {
     "intestine": ["intestine", "肠", "肠道", "gut", "colon", "结肠", "small intestine"],
     "skin": ["skin", "皮肤", "dermal", "epidermal"],
     "fat": ["fat", "脂肪", "adipose", "adipose tissue"],
+    "pancreas": ["pancreas", "胰", "胰腺", "pancreatic"],
+    "eye": ["eye", "眼", "视网膜", "retina", "ocular"],
+    "bladder": ["bladder", "膀胱", "urinary"],
+    "uterus": ["uterus", "子宫", "endometrium", "子宫内膜"],
+    "prostate": ["prostate", "前列腺", "prostatic"],
+    "ovary": ["ovary", "卵巢", "ovarian"],
+    "testis": ["testis", "睾丸", "testicular"],
+    "thymus": ["thymus", "胸腺", "thymic"],
     # 方向
-    "aging": ["aging", "aged", "elderly", "老年", "衰老", "老", "senescence", "老化"],
-    "ad": ["alzheimer", "ad", "阿尔茨海默", "alzheimer's disease"],
+    "aging": ["aging", "aged", "elderly", "老年", "衰老", "老", "senescence", "老化", "sarcopenia", "肌少症", "frailty", "衰弱"],
+    "ad": ["alzheimer", "alzheimer's disease", "阿尔茨海默", "ad"],
     "development": ["development", "发育", "发展", "embryonic", "胚胎"],
     "cardiomyopathy": ["cardiomyopathy", "心肌病"],
-    "fibrosis": ["fibrosis", "纤维化"],
+    "fibrosis": ["fibrosis", "纤维化", "pulmonary fibrosis", "肺纤维化"],
     "denervation": ["denervation", "去神经", "神经切除"],
     "regeneration": ["regeneration", "再生", "sarcomere regeneration"],
     "disease": ["disease", "疾病", "病理", "pathology"],
+    "cancer": ["cancer", "癌", "肿瘤", "tumor", "tumour", "oncology", "neoplasm", "malignancy"],
+    "inflammation": ["inflammation", "炎症", "inflammatory", "炎"],
+    "injury": ["injury", "损伤", "injured", "damage", "wound", "创伤"],
+    "diabetes": ["diabetes", "糖尿病", "diabetic", "dm", "t2d", "type 2 diabetes"],
+    "obesity": ["obesity", "肥胖", "obese"],
+    "neurodegeneration": ["neurodegeneration", "神经退行", "neurodegenerative", "als", "parkinson", "帕金森", "hd", "huntington"],
+    "ischemia": ["ischemia", "缺血", "ischemic", "hypoxia", "缺氧", "reperfusion", "再灌注"],
+    "infection": ["infection", "感染", "infectious", "viral", "bacterial", "covid", "sars"],
+    "autoimmune": ["autoimmune", "自身免疫", "lupus", "狼疮", "ra", "rheumatoid", "类风湿"],
     # 分析步骤
     "qc": ["quality control", "质控", "质量过滤", "qc", "filtering"],
     "normalize": ["normalize", "normalization", "sctransform", "归一化", "标准化"],
@@ -98,7 +120,138 @@ SYNONYMS = {
     "methylation": ["methylation", "甲基化", "bisulfite", "epigenome"],
     "chipseq": ["chipseq", "chip-seq", "cuttag", "cut&tag"],
     "multiome": ["multiome", "multi-ome", "10x multiome"],
+    "cite_seq": ["cite-seq", "cite_seq", "adt", "antibody", "蛋白质抗体"],
+    "vdj": ["vdj", "vdj-seq", "tcr", "bcr", "immune repertoire", "免疫组库"],
 }
+
+
+# === 短词黑名单：这些词长度 <=3，在子串匹配中容易误命中 ===
+_SHORT_WORD_BLACKLIST = {"ad", "qc", "go", "dm", "ra", "hd", "als"}
+
+# === 文件内容缓存 ===
+_file_cache = {}
+_file_cache_lock = threading.Lock()
+_CACHE_TTL = 300  # 缓存5分钟
+
+
+def _find_kb_root() -> Path:
+    """动态检测知识库根目录，不硬编码路径。
+
+    搜索策略（按优先级）：
+    1. 环境变量 MEMOMICS_KB_DIR
+    2. 相对路径 memomics/knowledge_base（当前工作目录）
+    3. 基于 memomics 包安装位置推导
+    4. 常见部署路径
+    """
+    # 1. 环境变量
+    env_dir = os.environ.get("MEMOMICS_KB_DIR")
+    if env_dir and Path(env_dir).exists():
+        return Path(env_dir)
+
+    # 2. 相对路径
+    cwd_path = Path("memomics/knowledge_base")
+    if cwd_path.exists():
+        return cwd_path
+
+    # 3. 基于本文件位置推导
+    this_file = Path(__file__).resolve()
+    # 本文件在 memomics/bio_tools/kb_search.py
+    # 知识库在 memomics/knowledge_base
+    derived_path = this_file.parent.parent / "knowledge_base"
+    if derived_path.exists():
+        return derived_path
+
+    # 4. 基于项目根目录
+    # 可能是 E:/MemOmics-Agent 或 E:/MemOmics 等
+    project_root = this_file.parent.parent.parent
+    for candidate in [
+        project_root / "memomics" / "knowledge_base",
+        project_root / "MemOmics-Agent" / "memomics" / "knowledge_base",
+    ]:
+        if candidate.exists():
+            return candidate
+
+    # 5. 常见部署路径（最后手段）
+    for fallback in [
+        Path("E:/MemOmics-Agent/memomics/knowledge_base"),
+        Path("E:/MemOmics/memomics/knowledge_base"),
+    ]:
+        if fallback.exists():
+            return fallback
+
+    return None  # 未找到
+
+
+def _read_file_cached(fpath: Path) -> str:
+    """读取文件内容，带缓存（TTL 5分钟），避免每次搜索重新读磁盘。"""
+    now = time.time()
+    cache_key = str(fpath)
+
+    with _file_cache_lock:
+        if cache_key in _file_cache:
+            content, ts = _file_cache[cache_key]
+            if now - ts < _CACHE_TTL:
+                return content
+
+    try:
+        content = fpath.read_text(encoding='utf-8', errors='ignore')
+    except Exception:
+        return ""
+
+    with _file_cache_lock:
+        _file_cache[cache_key] = (content, now)
+
+    # 清理过期缓存（简单策略：超过2倍TTL的条目清理）
+    if len(_file_cache) > 200:
+        with _file_cache_lock:
+            expired = [k for k, (_, ts) in _file_cache.items() if now - ts > _CACHE_TTL * 2]
+            for k in expired:
+                del _file_cache[k]
+
+    return content
+
+
+def _word_match(term: str, text: str) -> bool:
+    """词边界匹配：检查 term 是否作为独立词出现在 text 中。
+
+    对于短词（<=3字符，如 'ad', 'qc', 'go'），
+    使用正则词边界防止误匹配（'ad' 不匹配 'read', 'had' 等）。
+    对于长词，保持子串匹配（兼容性）。
+    """
+    term_lower = term.lower()
+    text_lower = text.lower()
+
+    # 短词且在黑名单中 → 必须词边界匹配
+    if len(term_lower) <= 3 and term_lower in _SHORT_WORD_BLACKLIST:
+        # 使用正则词边界：\b 在英文中工作，对中文无害
+        try:
+            pattern = r'\b' + re.escape(term_lower) + r'\b'
+            return bool(re.search(pattern, text_lower))
+        except re.error:
+            return term_lower in text_lower
+
+    # CJK 字符不做词边界检查（中文没有空格分词）
+    has_cjk = any('\u4e00' <= c <= '\u9fff' for c in term_lower)
+    if has_cjk:
+        return term_lower in text_lower
+
+    # 长英文词：子串匹配即可（"aging" 不会误匹配其他常见词）
+    return term_lower in text_lower
+
+
+def _word_count(term: str, text: str) -> int:
+    """统计 term 在 text 中的匹配次数（短词用词边界，长词用子串）。"""
+    term_lower = term.lower()
+    text_lower = text.lower()
+
+    if len(term_lower) <= 3 and term_lower in _SHORT_WORD_BLACKLIST:
+        try:
+            pattern = r'\b' + re.escape(term_lower) + r'\b'
+            return len(re.findall(pattern, text_lower))
+        except re.error:
+            return text_lower.count(term_lower)
+
+    return text_lower.count(term_lower)
 
 
 def _expand_query(query: str) -> list:
@@ -118,7 +271,7 @@ def _expand_query(query: str) -> list:
 
 def _normalize_species(species: str) -> list:
     """标准化物种名，返回可能的路径名列表。
-    
+
     语义映射: 人/智人/human/Homo sapiens -> Homo_sapiens
               鼠/小鼠/mouse/Mus musculus -> Mus_musculus
               猴/猕猴/monkey/macaque -> monkey
@@ -139,14 +292,14 @@ def _normalize_species(species: str) -> list:
             variants.add(key)
             matched_key = key
             break
-    
+
     # 路径格式: 标准目录名
     path_variants = set()
     for v in variants:
         path_variants.add(v)
         path_variants.add(v.lower())
         path_variants.add(v.title())
-    
+
     # 映射到实际知识库目录名
     if matched_key == "human" or s in ("人", "人类", "智人", "homo sapiens"):
         path_variants.update(["Homo_sapiens", "Homo sapiens", "human"])
@@ -178,85 +331,101 @@ def _normalize_tissue(tissue: str) -> list:
     return list(path_variants)
 
 
+def _normalize_direction(direction: str) -> list:
+    """标准化研究方向名。"""
+    if not direction:
+        return []
+    d = direction.lower().strip()
+    variants = set([direction.strip(), d])
+    for key, syns in SYNONYMS.items():
+        if d == key or d in [x.lower() for x in syns]:
+            variants.update(syns)
+            variants.add(key)
+            break
+    return list(variants)
+
+
 def _search_kb(query: str, species: str = "", tissue: str = "", direction: str = "") -> dict:
-    """Search knowledge base files with enhanced logic."""
-    kb_paths = [
-        Path("E:/MemOmics-Agent/memomics/knowledge_base"),
-        Path("memomics/knowledge_base"),
-        Path("E:/MemOmics/knowledge_base"),
-    ]
+    """Search knowledge base files with enhanced logic (v3)."""
+    kb_root = _find_kb_root()
+    if kb_root is None:
+        return {
+            "query": query, "species": species, "tissue": tissue, "direction": direction,
+            "total": 0, "results": [],
+            "suggestion": "知识库目录未找到。请设置 MEMOMICS_KB_DIR 环境变量或确认项目安装路径。"
+        }
 
     results = []
     queries = _expand_query(query)
     species_variants = _normalize_species(species)
     tissue_variants = _normalize_tissue(tissue)
+    direction_variants = _normalize_direction(direction)
 
-    for kb_path in kb_paths:
-        if not kb_path.exists():
-            continue
-        for root, dirs, files in os.walk(kb_path):
-            for fname in files:
-                if not fname.endswith(('.yaml', '.yml', '.json', '.md')):
+    for root, dirs, files in os.walk(kb_root):
+        for fname in files:
+            if not fname.endswith(('.yaml', '.yml', '.json', '.md')):
+                continue
+            fpath = Path(root) / fname
+            try:
+                rel_path = str(fpath.relative_to(kb_root))
+            except ValueError:
+                continue
+
+            # 路径优先匹配 — 如果指定了 species/tissue/direction，优先匹配路径
+            # 权重设置：species > tissue > direction，因为物种匹配最重要
+            path_boost = 0
+            if species_variants:
+                for sv in species_variants:
+                    if sv.lower() in rel_path.lower():
+                        path_boost += 25  # 物种匹配权重最高
+                        break  # 每类最多加一次
+            if tissue_variants:
+                for tv in tissue_variants:
+                    if tv.lower() in rel_path.lower():
+                        path_boost += 15  # 组织匹配次之
+                        break
+            if direction_variants:
+                for dv in direction_variants:
+                    if dv.lower() in rel_path.lower():
+                        path_boost += 10  # 方向匹配再次之
+                        break
+
+            # 读取文件内容（带缓存）
+            content = _read_file_cached(fpath)
+            if not content:
+                continue
+
+            content_lower = content.lower()
+
+            # 词边界匹配（防止短词误命中）
+            matched_terms = [q for q in queries if _word_match(q, content_lower)]
+            if matched_terms or path_boost > 0:
+                # 综合评分: 内容匹配 + 路径加权
+                content_score = sum(_word_count(q, content_lower) for q in matched_terms) if matched_terms else 0
+                score = content_score + path_boost
+
+                if score == 0:
                     continue
-                fpath = Path(root) / fname
-                rel_path = str(fpath.relative_to(kb_path))
 
-                # 路径优先匹配 — 如果指定了 species/tissue，优先匹配路径
-                path_boost = 0
-                if species_variants:
-                    for sv in species_variants:
-                        if sv.lower() in rel_path.lower():
-                            path_boost += 10
-                if tissue_variants:
-                    for tv in tissue_variants:
-                        if tv.lower() in rel_path.lower():
-                            path_boost += 10
-                if direction:
-                    dir_lower = direction.lower()
-                    if dir_lower in rel_path.lower():
-                        path_boost += 5
-                    # 同义词扩展 direction
-                    for key, syns in SYNONYMS.items():
-                        if dir_lower == key or dir_lower in syns:
-                            for syn in syns:
-                                if syn.lower() in rel_path.lower():
-                                    path_boost += 5
-                                    break
+                # 提取相关片段 — 对于 YAML 返回完整内容
+                snippet = ""
+                if fname.endswith(('.yaml', '.yml')):
+                    # 对于 YAML，返回完整内容（通常不超过几百行）
+                    snippet = content[:2000]
+                else:
+                    for line in content.split('\n'):
+                        if any(_word_match(q, line) for q in matched_terms):
+                            snippet += line.strip() + "\n"
+                            if len(snippet) > 500:
+                                break
 
-                try:
-                    content = fpath.read_text(encoding='utf-8', errors='ignore')
-                    content_lower = content.lower()
-                    # 检查 query 匹配
-                    matched_terms = [q for q in queries if q in content_lower]
-                    if matched_terms or path_boost > 0:
-                        # 综合评分: 内容匹配 + 路径加权
-                        content_score = sum(content_lower.count(q) for q in matched_terms) if matched_terms else 0
-                        score = content_score + path_boost
-
-                        if score == 0:
-                            continue
-
-                        # 提取相关片段 — 对于 YAML 返回完整内容
-                        snippet = ""
-                        if fname.endswith(('.yaml', '.yml')):
-                            # 对于 YAML，返回完整内容（通常不超过几百行）
-                            snippet = content[:2000]
-                        else:
-                            for line in content.split('\n'):
-                                if any(q in line.lower() for q in matched_terms):
-                                    snippet += line.strip() + "\n"
-                                    if len(snippet) > 500:
-                                        break
-
-                        results.append({
-                            "file": rel_path,
-                            "score": score,
-                            "matched_terms": matched_terms[:5],
-                            "path_boost": path_boost,
-                            "snippet": snippet[:1500]
-                        })
-                except Exception:
-                    continue
+                results.append({
+                    "file": rel_path,
+                    "score": score,
+                    "matched_terms": matched_terms[:5],
+                    "path_boost": path_boost,
+                    "snippet": snippet[:1500]
+                })
 
     # 去重（按文件名），保留高分
     seen = {}
@@ -285,19 +454,22 @@ def search_knowledge(query: str, species: str = "", tissue: str = "", direction:
 
 
 def _register():
-    from tools.registry import registry
-    registry.register(
-        name="search_knowledge",
-        toolset="memomics",
-        schema=SCHEMA,
-        handler=lambda args, **kw: search_knowledge(
-            args.get("query", ""),
-            args.get("species", ""),
-            args.get("tissue", ""),
-            args.get("direction", "")
-        ),
-        emoji="📚",
-        max_result_size_chars=50_000,
-    )
+    try:
+        from tools.registry import registry
+        registry.register(
+            name="search_knowledge",
+            toolset="memomics",
+            schema=SCHEMA,
+            handler=lambda args, **kw: search_knowledge(
+                args.get("query", ""),
+                args.get("species", ""),
+                args.get("tissue", ""),
+                args.get("direction", "")
+            ),
+            emoji="📚",
+            max_result_size_chars=50_000,
+        )
+    except ImportError:
+        pass  # 不在 Hermes 环境中时不注册
 
 _register()

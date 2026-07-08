@@ -36,6 +36,14 @@ MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERMES_HOME_DIR = os.path.join(MEMOMICS_DIR, "hermes_home")
 os.environ["HERMES_HOME"] = HERMES_HOME_DIR
 
+# === 启动时路径扫描：写入 .install_path 供 Agent 读取，避免硬编码路径 ===
+_install_path_file = os.path.join(HERMES_HOME_DIR, ".install_path")
+try:
+    with open(_install_path_file, "w", encoding="utf-8") as _f:
+        _f.write(MEMOMICS_DIR.replace("\\", "/") + "\n")
+except Exception:
+    pass  # 写入失败不影响启动
+
 HERMES_DIR = os.path.join(MEMOMICS_DIR, "hermes-agent")
 if HERMES_DIR not in sys.path:
     sys.path.insert(0, HERMES_DIR)
@@ -426,6 +434,39 @@ def _pt(session, key, default=None):
     return _PROGRESS_TEXT.get(lang, _PROGRESS_TEXT["zh"]).get(key, default or key)
 
 
+# === 会话级消息发射器（支持 WS 断开后进度持久化） ===
+def _session_emit(session, msg_dict):
+    """存储消息到 progress_log 并通过 WS 发送（如果已连接）。
+
+    解决的核心问题：WS 断开/切换会话时，agent 继续运行，
+    进度事件存储在 session 内存中，切回时可重放。
+
+    重要：自动注入 session_id — 前端 handleMessage 依赖此字段做会话分流，
+    缺少 session_id 的消息不会被拦截，会串到当前会话的 UI。
+    """
+    # 自动注入 session_id（如果调用者没带）
+    if "session_id" not in msg_dict:
+        msg_dict["session_id"] = session.get("id", "")
+    msg_type = msg_dict.get("type", "")
+    # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
+    if msg_type not in ("delta", "reasoning", "tool_gen"):
+        progress_log = session.setdefault("progress_log", [])
+        progress_log.append(msg_dict)
+        # 上限 500 条，超出删最早的
+        if len(progress_log) > 500:
+            del progress_log[:len(progress_log) - 500]
+    # 通过 WS 发送（如果已连接）
+    ws_ref = session.get("ws_ref")
+    loop_ref = session.get("loop_ref")
+    if ws_ref and loop_ref:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
+        except Exception:
+            pass
+
+
+
 def _create_session(title="新会话"):
     sid = f"memomics-{str(uuid.uuid4())[:8]}"
     db = _get_session_db()
@@ -445,9 +486,11 @@ def _create_session(title="新会话"):
         "running_agent": None,
         "running_task": None,
         "lang": "zh",  # 问题9: 会话语言，首条用户消息后更新
+        "progress_log": [],   # 进度事件持久化（切换会话后可重放）
+        "ws_attached": True,  # 当前是否有 WebSocket 连接监听此会话
     }
-    # 预创建会话结果目录
-    os.makedirs(session["results_dir"], exist_ok=True)
+    # 结果目录延迟创建：仅在首次分析（scan_data/update_results_dir）时创建
+    # 避免每次开新会话（即使只是聊天）都产生空目录
     _sessions[sid] = session
     return session
 
@@ -458,28 +501,36 @@ def _get_or_create_session(session_id=None):
     return _create_session()
 
 
-def _cleanup_session_agent(session):
-    """清理 session 关联的 agent 资源（子进程/终端/连接）"""
+def _cleanup_session_agent(session, kill_agent=False):
+    """清理 session 关联的资源。
+
+    kill_agent=False（默认）: 只断开 WS 引用，agent 继续在后台运行。
+    kill_agent=True: 中断并清理 agent（仅在用户显式删除会话时使用）。
+    """
     if not session:
         return
-    agent_ref = session.get("running_agent")
-    if agent_ref:
-        # 先中断运行中的任务
-        try:
-            if hasattr(agent_ref, "interrupt"):
-                agent_ref.interrupt()
-        except Exception:
-            pass
-        # 调 Hermes 原生 close() 清理所有资源
-        try:
-            if hasattr(agent_ref, "close"):
-                agent_ref.close()
-        except Exception:
-            pass
-        session["running_agent"] = None
-        session["running_task"] = None
-        session["bg_running"] = False
-        session["agent"] = None  # 清除缓存的 agent
+    # 断开 WS 引用（agent 的回调会通过 _session_emit 静默失败）
+    session["ws_ref"] = None
+    session["loop_ref"] = None
+    session["ws_attached"] = False
+
+    if kill_agent:
+        agent_ref = session.get("running_agent")
+        if agent_ref:
+            try:
+                if hasattr(agent_ref, "interrupt"):
+                    agent_ref.interrupt()
+            except Exception:
+                pass
+            try:
+                if hasattr(agent_ref, "close"):
+                    agent_ref.close()
+            except Exception:
+                pass
+            session["running_agent"] = None
+            session["running_task"] = None
+            session["bg_running"] = False
+            session["agent"] = None
 
 
 def _load_persisted_sessions():
@@ -540,6 +591,10 @@ def _load_persisted_sessions():
                 "running_agent": None,
                 "running_task": None,
                 "restored": True,
+                "progress_log": [],
+                "ws_attached": False,
+                "ws_ref": None,
+                "loop_ref": None,
             }
             _sessions[sid] = session
             count += 1
@@ -803,6 +858,7 @@ async def list_sessions():
     """列出所有会话"""
     return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
                           "bg_running": s.get("bg_running", False),
+                          "is_running": bool(s.get("running_agent") or s.get("running_task")),
                           "restored": s.get("restored", False),
                           "msg_count": len(s.get("messages", []))} for s in _sessions.values()]}
 
@@ -891,10 +947,21 @@ async def rename_results_dir(sid: str, body: dict = None):
             except Exception:
                 pass
     
+    # 创建完整子目录结构（需求1d：分析log+辩证记录+运行记录强制保留）
+    for sub in ["figures", "results", "scripts", "data", "log"]:
+        os.makedirs(os.path.join(new_dir, sub), exist_ok=True)
+    log_dir = os.path.join(new_dir, "log")
+    
+    # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
+    from memomics.bio_tools.debate_analysis import set_session_context
+    set_session_context(sid=sid, results_dir=new_dir.replace("\\", "/"))
+    # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
+    
     return {
         "ok": True, 
         "results_dir": new_dir.replace("\\", "/"),
         "results_name": new_name,
+        "log_dir": log_dir.replace("\\", "/"),
         "title": _sessions[sid]["title"]
     }
 
@@ -909,11 +976,11 @@ async def get_messages(sid: str):
 
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid: str):
-    """删除会话：内存 + state.db + agent 资源"""
+    """删除会话：内存 + state.db + agent 资源（真正杀死 agent）"""
     session = _sessions.get(sid)
     if session:
-        # 清理 agent 资源
-        _cleanup_session_agent(session)
+        # 清理 agent 资源（真正杀死 agent）
+        _cleanup_session_agent(session, kill_agent=True)
         del _sessions[sid]
     # 从 state.db 删除
     db = _get_session_db()
@@ -1747,6 +1814,18 @@ async def get_todos(sid: str):
         return JSONResponse({"error": "Session not found"}, status_code=404)
     return {"todos": _sessions[sid].get("todos", [])}
 
+@app.get("/api/sessions/{sid}/progress")
+async def get_progress(sid: str):
+    """获取会话的进度日志（用于切换会话后重放）"""
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    return {
+        "progress_log": session.get("progress_log", []),
+        "is_running": bool(session.get("running_agent") or session.get("running_task")),
+        "session_id": sid,
+    }
+
 
 # --- 外置记忆 (跨会话) ---
 
@@ -1806,6 +1885,26 @@ async def delete_memory(filename: str):
     return JSONResponse({"error": "Not found"}, status_code=404)
 
 
+# === 系统级自动日志（确保 LLM 即使跳过 skill_evolution 也有审计记录） ===
+
+def _auto_system_log(session, tool_name, args, result_str):
+    """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl"""
+    try:
+        log_dir = os.path.join(session["results_dir"], "log")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "system_log.jsonl")
+        entry = {
+            "ts": datetime.now().isoformat(),
+            "tool": tool_name,
+            "args": args if isinstance(args, dict) else str(args or ""),
+            "result_preview": result_str[:300] if result_str else "",
+        }
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 # === WebSocket ===
 
 @app.websocket("/ws")
@@ -1813,6 +1912,7 @@ async def ws_endpoint(ws: WebSocket):
     """WebSocket 端点 — 支持多会话 + 后台任务"""
     await ws.accept()
     current_sid = None
+    loop = asyncio.get_event_loop()
 
     try:
         while True:
@@ -1822,10 +1922,39 @@ async def ws_endpoint(ws: WebSocket):
             # --- 消息类型 ---
             msg_type = msg.get("type", "chat")
             sid = msg.get("session_id")
+            prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
             session = _get_or_create_session(sid)
             current_sid = session["id"]
 
-            if msg_type == "chat":
+            if msg_type == "switch_session":
+                # 前端切换会话 - 不中断旧会话的 agent，只重定向 WS
+                old_sid = prev_sid  # ← 修复：用切换前的 sid，不是新的
+                if old_sid and old_sid in _sessions and old_sid != session["id"]:
+                    _sessions[old_sid]["ws_ref"] = None
+                    _sessions[old_sid]["loop_ref"] = None
+                    _sessions[old_sid]["ws_attached"] = False
+                # 连接新会话的 WS
+                session["ws_ref"] = ws
+                session["loop_ref"] = loop
+                session["ws_attached"] = True
+                current_sid = session["id"]
+                # 发送进度日志重放
+                progress_log = session.get("progress_log", [])
+                is_running = bool(session.get("running_agent") or session.get("running_task"))
+                await ws.send_text(json.dumps({
+                    "type": "progress_replay",
+                    "progress_log": progress_log,
+                    "is_running": is_running,
+                    "session_id": session["id"],
+                }, ensure_ascii=False))
+                if is_running:
+                    await ws.send_text(json.dumps({
+                        "type": "agent_running",
+                        "session_id": session["id"],
+                    }, ensure_ascii=False))
+                continue
+
+            elif msg_type == "chat":
                 user_text = msg.get("message", "").strip()
                 if not user_text:
                     continue
@@ -1848,62 +1977,66 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass  # 标题重复不报错，仅内存中使用
 
+                # 注册 WebSocket 引用（必须在 emit 之前，否则 session/thinking/progress 事件被丢弃）
+                loop = asyncio.get_event_loop()
+                session["ws_ref"] = ws
+                session["loop_ref"] = loop
+                session["ws_attached"] = True
+
                 # 发送 session_id
-                await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
+                # session 级标识
+                _session_emit(session, {"type": "session", "session_id": session["id"], "title": session["title"]})
 
                 # 立即发送 thinking (消除初始空白)
                 # 问题9: thinking 和进度文本按会话语言
                 _t = _pt(session, "understanding")
                 _tk = _pt(session, "thinking")
-                await ws.send_text(json.dumps({"type": "thinking", "content": _t + "..."}, ensure_ascii=False))
+                _session_emit(session, {"type": "thinking", "content": _t + "..."})
                 # 发送进度时间线起始
-                await ws.send_text(json.dumps({"type": "progress", "step": _tk, "status": "pending", "detail": _t, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
+                _session_emit(session, {"type": "progress", "step": _tk, "status": "pending", "detail": _t, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
                 # session 级 agent 复用：如果已有 agent 则复用，否则创建
-                loop = asyncio.get_event_loop()
                 agent = session.get("agent")
                 if agent is None:
                     try:
                         agent = _create_agent(session["model_config"], session_id=session["id"])
                         session["agent"] = agent  # 缓存到 session
                     except Exception as e:
-                        await ws.send_text(json.dumps({"type": "error", "content": f"Agent 创建失败: {e}"}, ensure_ascii=False))
+                        _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
                         continue
                 session["restored"] = False
                 # 问题2: 不再用环境变量传 sid（进程级变量会串会话），改用 agent 实例属性
                 agent.memomics_sid = session["id"]
                 agent.memomics_session = session
 
+                # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
+                from memomics.bio_tools.debate_analysis import set_session_context
+                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
+
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail=""):
-                    """发送进度时间线条目"""
-                    try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
-                    except Exception:
-                        pass
+                    """发送进度时间线条目 - 同时存储到 progress_log"""
+                    _session_emit(session, {"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
                 # 回调
                 def stream_cb(delta):
                     try:
                         if delta is None: return
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "delta", "content": str(delta), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "delta", "content": str(delta), "session_id": session["id"]})
                     except Exception:
                         pass
 
                 def reasoning_cb(text):
                     try:
                         if text is None: return
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "reasoning", "content": str(text), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "reasoning", "content": str(text), "session_id": session["id"]})
                     except Exception:
                         pass
 
                 def tool_start_cb(tool_id, tool_name, args=None):
                     try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
                         _send_progress(_pt(session, "executing") + ": " + tool_name, "pending", tool_name)
                     except Exception:
@@ -1938,10 +2071,26 @@ async def ws_endpoint(ws: WebSocket):
                 def tool_complete_cb(tool_id, tool_name, args=None, result=None):
                     try:
                         result_str = str(result or "")
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(session, "tool_completed") + ": " + tool_name, "done", tool_name)
+                        # 持久化工具调用到 state.db 的 tool_calls_log 表
+                        try:
+                            import json as _tcl_json
+                            import time as _tcl_time
+                            _db_path = os.path.join(hermes_home, "state.db")
+                            _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
+                            _result_trunc = result_str[:2000]  # 截断长结果
+                            import sqlite3 as _tcl_sqlite
+                            _conn = _tcl_sqlite.connect(_db_path, timeout=5)
+                            _conn.execute(
+                                "INSERT INTO tool_calls_log (session_id, tool_name, tool_id, args_json, result_text, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                                (session["id"], tool_name, str(tool_id or ""), _args_json, _result_trunc, _tcl_time.time())
+                            )
+                            _conn.commit()
+                            _conn.close()
+                        except Exception:
+                            pass
                         # 检测 skill_evolution 自进化事件
                         if tool_name == "skill_evolution":
                             try:
@@ -1950,23 +2099,22 @@ async def ws_endpoint(ws: WebSocket):
                                 result_obj = _json.loads(result_str) if isinstance(result_str, str) else result_str
                                 if isinstance(result_obj, dict) and result_obj.get("_evolution_event"):
                                     evt = result_obj["_evolution_event"]
-                                    asyncio.run_coroutine_threadsafe(
-                                        ws.send_text(json.dumps({"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                                    _session_emit(session, {"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
                         # terminal 执行后检测新图片
                         if tool_name in ("terminal", "run_command", "execute_code"):
                             new_figs = _scan_new_figures()
                             for fig in new_figs:
-                                asyncio.run_coroutine_threadsafe(
-                                    ws.send_text(json.dumps({"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                                _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
+                        _auto_system_log(session, tool_name, args, result_str)
                     except Exception:
                         pass
 
                 def status_cb(category, message):
                     try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "status", "category": category, "content": message, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "status", "category": category, "content": message, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception:
                         pass
 
@@ -1976,24 +2124,21 @@ async def ws_endpoint(ws: WebSocket):
                         notice_text = getattr(notice, 'text', None) or str(notice)
                         notice_key = getattr(notice, 'key', None) or ''
                         notice_level = getattr(notice, 'level', None) or 'info'
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "notice", "content": notice_text[:500], "key": notice_key, "level": notice_level, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "notice", "content": notice_text[:500], "key": notice_key, "level": notice_level, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception:
                         pass
 
                 def notice_clear_cb(key):
                     """Hermes notice_clear_callback: 清除前端对应的通知"""
                     try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "notice_clear", "key": str(key), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "notice_clear", "key": str(key), "session_id": session["id"]})
                     except Exception:
                         pass
 
                 def tool_gen_cb(tool_name, partial_args=""):
                     """Hermes tool_gen_callback: 工具参数生成中实时回调"""
                     try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception:
                         pass
 
@@ -2006,8 +2151,7 @@ async def ws_endpoint(ws: WebSocket):
                             msg_str = _pt(session, "tool_started")
                         elif msg_str == "tool.completed":
                             msg_str = _pt(session, "tool_completed")
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "tool_progress", "tool": tool_name, "content": msg_str[:500], "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "tool_progress", "tool": tool_name, "content": msg_str[:500], "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 问题4: 同步推送到进度时间线
                         _send_progress(_pt(session, "executing") + ": " + tool_name, "pending", msg_str[:200])
                     except Exception:
@@ -2029,8 +2173,7 @@ async def ws_endpoint(ws: WebSocket):
                         q_text = str(question) if question else "Please confirm"
                         # 进度不停，只改为 waiting 状态
                         _send_progress(_pt(session, "waiting"), "waiting", q_text[:200])
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "clarify", "content": q_text[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "clarify", "content": q_text[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception:
                         pass
                 agent.clarify_callback = clarify_cb
@@ -2050,8 +2193,7 @@ async def ws_endpoint(ws: WebSocket):
                 def event_cb(event_type, data):
                     """Hermes event_callback(event_type, data) — 统一事件流"""
                     try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_text(json.dumps({"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False)), loop)
+                        _session_emit(session, {"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception:
                         pass
                 agent.event_callback = event_cb
@@ -2099,6 +2241,45 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception as _e:
                         _env_ctx = None
 
+                # 问题11: 用户说"html"/"报告"时，自动检测是否有分析结果，有则注入 skill_view 上下文
+                _html_ctx = None
+                _html_keywords = ["html", "报告", "report", "做报告", "生成报告", "分析报告", "总结报告", "生成html", "html报告"]
+                _html_triggered = any(kw in user_text.lower() for kw in _html_keywords)
+                if _html_triggered:
+                    # 检查是否有分析结果：1) results_dir 已重命名 2) tool_calls_log 有分析工具调用
+                    _has_analysis = False
+                    _results_dir = session.get("results_dir", "")
+                    # 检查1: results_dir 不是默认的 memomics-xxx 格式
+                    _sid = session.get("id", "")
+                    if _results_dir and not _results_dir.endswith(_sid):
+                        _has_analysis = True
+                    # 检查2: tool_calls_log 有分析工具
+                    if not _has_analysis:
+                        try:
+                            db = _get_session_db()
+                            if db and hasattr(db, "conn"):
+                                _rows = db.conn.execute(
+                                    "SELECT COUNT(*) FROM tool_calls_log WHERE session_id=? AND tool_name IN ('scan_data','execute_r','execute_python','terminal','add_figure','debate_analysis','generate_report','rail_review','skill_view','env_check','module_selector')",
+                                    (_sid,)
+                                ).fetchone()
+                                if _rows and _rows[0] > 0:
+                                    _has_analysis = True
+                        except Exception:
+                            pass
+                    if _has_analysis:
+                        _html_ctx = (
+                            "【系统指令：报告生成】\n"
+                            "用户要求生成 HTML 报告。当前会话已包含分析结果。\n"
+                            "你必须使用 bioinformatics-html-report skill 来生成专业报告，不要用 generate_report 工具简单包装。\n"
+                            "步骤：\n"
+                            "1. 调用 skill_view('bioinformatics-html-report') 加载完整指令\n"
+                            "2. 使用 html_report_builder.py 的 ReportBuilder + auto_fill_from_logs() 自动收集日志和图表\n"
+                            "3. 报告保存到桌面，包含所有分析图表、辩论记录、参数来源、日志溯源\n"
+                            "4. 报告使用的语言必须与用户交互语言一致\n"
+                            "不要偷懒用 generate_report 工具传入手工 HTML——那样会丢失图表、辩论和日志溯源。"
+                        )
+                        _send_progress("📄 报告生成", "pending", "检测到分析结果，自动触发 HTML 报告生成...")
+
                 # 是否后台运行
                 is_bg = msg.get("background", False)
 
@@ -2136,6 +2317,10 @@ async def ws_endpoint(ws: WebSocket):
                         if _env_ctx:
                             conversation_history.append({"role": "system", "content": _env_ctx})
 
+                        # 问题11: HTML报告关键词自动触发 skill_view
+                        if _html_ctx:
+                            conversation_history.append({"role": "system", "content": _html_ctx})
+
                         def _do_run():
                             result = agent.run_conversation(
                                 user_text,
@@ -2147,8 +2332,8 @@ async def ws_endpoint(ws: WebSocket):
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
-                            await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                            await ws.send_text(json.dumps({"type": "cancelled", "session_id": session["id"]}, ensure_ascii=False))
+                            _session_emit(session, {"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
                             return
                         # 记录助手回复到 session + state.db
                         session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
@@ -2161,16 +2346,15 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
                         # 发送进度完成
-                        await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "complete"), "status": "done", "detail": _pt(session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                        # 发送完成
-                        await ws.send_text(json.dumps({"type": "complete", "content": result, "session_id": session["id"]}, ensure_ascii=False))
+                        _session_emit(session, {"type": "progress", "step": _pt(session, "complete"), "status": "done", "detail": _pt(session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(session, {"type": "complete", "content": result, "session_id": session["id"]})
                     except asyncio.CancelledError:
                         if not getattr(agent, "_interrupt_requested", False):
                             agent.interrupt()
-                        await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                        await ws.send_text(json.dumps({"type": "cancelled", "session_id": session["id"]}, ensure_ascii=False))
+                        _session_emit(session, {"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
                     except Exception as e:
-                        await ws.send_text(json.dumps({"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": session["id"]}, ensure_ascii=False))
+                        _session_emit(session, {"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": session["id"]})
                     finally:
                         session["running_agent"] = None
                         session["running_task"] = None
@@ -2186,7 +2370,7 @@ async def ws_endpoint(ws: WebSocket):
                 session["running_task"] = task
 
             elif msg_type == "get_todos":
-                await ws.send_text(json.dumps({"type": "todos", "todos": session.get("todos", []), "session_id": session["id"]}, ensure_ascii=False))
+                _session_emit(session, {"type": "todos", "todos": session.get("todos", []), "session_id": session["id"]})
 
             elif msg_type == "cancel":
                 # 强制停止当前运行的 agent
@@ -2203,7 +2387,7 @@ async def ws_endpoint(ws: WebSocket):
                 # 不在此发 cancelled 消息 — 由 run_agent 的 except/finally 统一发送
                 # 如果 agent 引用为空（没有运行中的任务），直接回 cancelled
                 if not agent_ref:
-                    await ws.send_text(json.dumps({"type": "cancelled", "session_id": session["id"]}, ensure_ascii=False))
+                    _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
 
             elif msg_type == "steer":
                 # 中途引导：agent 运行时注入消息，不中断当前工具
@@ -2212,24 +2396,24 @@ async def ws_endpoint(ws: WebSocket):
                 if agent_ref and hasattr(agent_ref, "steer") and steer_text:
                     try:
                         ok = agent_ref.steer(steer_text)
-                        await ws.send_text(json.dumps({"type": "steer_sent", "content": steer_text, "success": bool(ok), "session_id": session["id"]}, ensure_ascii=False))
+                        _session_emit(session, {"type": "steer_sent", "content": steer_text, "success": bool(ok), "session_id": session["id"]})
                     except Exception as e:
-                        await ws.send_text(json.dumps({"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]}, ensure_ascii=False))
+                        _session_emit(session, {"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]})
                 else:
                     # agent 未运行，前端不应该发 steer，但作为保护：提示用户
-                    await ws.send_text(json.dumps({"type": "info", "content": "Agent 未在运行，请直接发送消息", "session_id": session["id"]}, ensure_ascii=False))
+                    _session_emit(session, {"type": "info", "content": "Agent 未在运行，请直接发送消息", "session_id": session["id"]})
 
     except WebSocketDisconnect:
-        # session 可能在循环内赋值，用 current_sid 安全查找
+        # WS 断开 - 只断开 WS 引用，不杀 agent（agent 继续在后台运行）
         if current_sid and current_sid in _sessions:
-            _cleanup_session_agent(_sessions[current_sid])
+            _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:
         try:
             await ws.send_text(json.dumps({"type": "error", "content": f"WebSocket 错误: {e}"}, ensure_ascii=False))
         except Exception:
             pass
         if current_sid and current_sid in _sessions:
-            _cleanup_session_agent(_sessions[current_sid])
+            _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
 
 
 if __name__ == "__main__":

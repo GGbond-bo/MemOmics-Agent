@@ -2,6 +2,24 @@
 
 This module is auto-discovered by discover_builtin_tools() because it lives
 in the tools/ directory and calls registry.register() at module level.
+
+⚠️ 双注册说明：
+  Hermes agent 启动时，先执行 discover_builtin_tools()（加载本文件），
+  再执行 from memomics import bio_tools（加载 memomics/bio_tools/__init__.py）。
+  bio_tools/ 下的子模块也会注册同名工具，且后注册者覆盖先注册者。
+
+  因此以下 6 个工具在本文件中的注册实际会被 bio_tools/ 版本覆盖：
+    - scan_data       → 最终生效: bio_tools/data_scanner.py
+    - search_knowledge → 最终生效: bio_tools/kb_search.py（v3 增强版）
+    - guide_analysis   → 最终生效: bio_tools/module_selector.py
+    - check_env        → 最终生效: bio_tools/env_check.py
+    - rail_review      → 最终生效: bio_tools/rail_review.py
+    - skill_evolution  → 最终生效: bio_tools/skill_evolution.py
+
+  以下 3 个工具是本文件独有的，不会被覆盖：
+    - todo_manage
+    - memomics_pipeline
+    - update_results_dir
 """
 import sys
 import os
@@ -176,100 +194,75 @@ registry.register(
 )
 
 # ============================================================================
-# search_knowledge
+# search_knowledge — 委托给 kb_search.py v3（统一版本，避免两套逻辑不同步）
 # ============================================================================
-SYNONYMS = {
-    "人": ["human", "智人", "homo sapiens", "人类"],
-    "鼠": ["mouse", "小鼠", "mus musculus", "老鼠"],
-    "大脑": ["brain", "脑", "cerebral"],
-    "骨骼肌": ["skeletal muscle", "muscle", "肌", "肌肉"],
-    "衰老": ["aging", "aged", "elderly", "老年", "老"],
-    "肝脏": ["liver", "肝"],
-    "心脏": ["heart", "cardiac", "心肌"],
-    "肾脏": ["kidney", "肾"],
-    "qc": ["quality control", "质控", "质量过滤"],
-    "去污染": ["decontamination", "cellbender", "soupx", "ambient rna"],
-    "注释": ["annotation", "cell type", "label transfer", "singler"],
-    "通讯": ["communication", "cellchat", "interaction", "ligand receptor"],
-    "轨迹": ["trajectory", "pseudotime", "monocle", "cellrank"],
-    "调控": ["regulon", "scenic", "grn", "gene regulatory"],
-    "deg": ["differential expression", "差异表达", "差异基因"],
-    "富集": ["enrichment", "gsea", "go", "kegg", "pathway"],
-}
+# 注意：旧版 SYNONYMS + _expand_query + search_knowledge 已替换为委托调用，
+# 统一使用 memomics.bio_tools.kb_search 中的 v3 实现。
+# v3 增强：动态路径检测、词边界匹配、文件缓存、direction 参数、扩展同义词表。
+# 此处注册会被 bio_tools/kb_search.py 的后注册覆盖，但逻辑一致。
 
 SEARCH_KNOWLEDGE_SCHEMA = {
     "name": "search_knowledge",
     "description": (
         "Search the MemOmics knowledge base for bioinformatics analysis "
-        "templates, QC parameters, method recommendations, skill templates. "
-        "ALWAYS call before starting any analysis step. "
-        "Supports semantic matching (e.g. '人' matches 'human', '智人')."
+        "templates, QC parameters, method recommendations, and biological knowledge. "
+        "ALWAYS call this BEFORE writing any analysis code to get the correct "
+        "parameters and templates. "
+        "Pass species, tissue, and direction for targeted search. "
+        "支持中英文语义匹配（如 '人' → 'human', '智人', 'Homo sapiens')."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Search query"},
-            "species": {"type": "string"},
-            "tissue": {"type": "string"}
+            "query": {"type": "string", "description": "Search query (e.g. 'QC parameters', 'clustering resolution', 'CellChat')"},
+            "species": {"type": "string", "description": "Species (e.g. human, mouse, Homo sapiens, 人)"},
+            "tissue": {"type": "string", "description": "Tissue (e.g. skeletal_muscle, brain, heart, 骨骼肌)"},
+            "direction": {"type": "string", "description": "Research direction (e.g. aging, ad, development, 衰老)"}
         },
         "required": ["query"]
     }
 }
 
 
-def _expand_query(query):
-    """Expand query with synonyms and split into individual terms."""
-    import re
-    # Split on spaces, commas, and common CJK punctuation
-    raw_terms = re.split(r'[\s,，、；;]+', query.strip())
-    queries = [q.lower() for q in raw_terms if q]
-    # Add the full query too
-    queries.insert(0, query.lower())
-    # Expand with synonyms
-    for key, syns in SYNONYMS.items():
-        if key in query.lower():
-            queries.extend(syns)
-    return queries
-
-
-def search_knowledge(query, species="", tissue=""):
-    _memomics_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    kb_paths = [
-        Path(os.path.join(_memomics_dir, "memomics", "knowledge_base")),
-        Path("memomics/knowledge_base"),
-    ]
-    results = []
-    queries = _expand_query(query)
-    for kb_path in kb_paths:
+def _search_knowledge_handler(args, **kw):
+    """委托给 kb_search.py v3 的统一实现。"""
+    try:
+        from memomics.bio_tools.kb_search import search_knowledge
+        return search_knowledge(
+            args.get("query", ""),
+            args.get("species", ""),
+            args.get("tissue", ""),
+            args.get("direction", "")
+        )
+    except ImportError:
+        # kb_search.py 不可用时回退到极简实现
+        _memomics_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        kb_path = Path(os.path.join(_memomics_dir, "memomics", "knowledge_base"))
         if not kb_path.exists():
-            continue
+            return json.dumps({"query": args.get("query", ""), "total": 0, "results": [],
+                               "error": "知识库目录未找到"}, ensure_ascii=False)
+        query_lower = args.get("query", "").lower()
+        results = []
         for root, dirs, files in os.walk(kb_path):
             for fname in files:
-                if fname.endswith(('.yaml', '.yml', '.json', '.md', '.py')):
-                    fpath = Path(root) / fname
-                    try:
-                        content = fpath.read_text(encoding='utf-8', errors='ignore')
-                        content_lower = content.lower()
-                        matched_terms = [q for q in queries if q in content_lower]
-                        if matched_terms:
-                            score = sum(content_lower.count(q) for q in matched_terms)
-                            snippet = ""
-                            for line in content.split('\n'):
-                                if any(q in line.lower() for q in matched_terms):
-                                    snippet += line.strip() + "\n"
-                                    if len(snippet) > 500:
-                                        break
-                            results.append({"file": str(fpath.relative_to(kb_path)), "score": score,
-                                            "matched_terms": matched_terms[:3], "snippet": snippet[:500]})
-                    except Exception:
-                        continue
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return json.dumps({"query": query, "total": len(results), "results": results[:10]}, ensure_ascii=False, indent=2)
+                if not fname.endswith(('.yaml', '.yml', '.json', '.md')):
+                    continue
+                fpath = Path(root) / fname
+                try:
+                    content = fpath.read_text(encoding='utf-8', errors='ignore')
+                    if query_lower in content.lower():
+                        results.append({"file": str(fpath.relative_to(kb_path)), "score": 1,
+                                        "matched_terms": [query_lower], "snippet": content[:500]})
+                except Exception:
+                    continue
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return json.dumps({"query": args.get("query", ""), "total": len(results),
+                           "results": results[:10]}, ensure_ascii=False, indent=2)
 
 
 registry.register(
     name="search_knowledge", toolset="memomics", schema=SEARCH_KNOWLEDGE_SCHEMA,
-    handler=lambda args, **kw: search_knowledge(args.get("query", ""), args.get("species", ""), args.get("tissue", "")),
+    handler=_search_knowledge_handler,
     emoji="📚", max_result_size_chars=50_000,
 )
 
@@ -678,8 +671,9 @@ import httpx as _httpx
 def update_results_dir(species: str, tissue: str, direction: str, output_root: str = "") -> str:
     """调用 server API 重命名当前会话的结果目录。"""
     import os as _os
-    # 问题2: 不再用环境变量获取 sid，改用调用方传入的 session_id
-    sid = _os.environ.get("MEMOMICS_CURRENT_SID", "")
+    # 从线程级上下文获取 sid（纯线程隔离，无 os.environ 竞态）
+    from memomics.bio_tools.debate_analysis import get_session_sid
+    sid = get_session_sid()
     if not sid:
         return '{"ok": false, "error": "No active session"}'
     port = _os.environ.get("MEMOMICS_PORT", "8899")
@@ -694,15 +688,29 @@ def update_results_dir(species: str, tissue: str, direction: str, output_root: s
         return f'{{"ok": false, "error": "API call failed: {e}"}}'
 
 def _update_results_dir_handler(args, **kw):
-    """问题2: 从 dispatch kwargs 获取 session_id，避免进程级环境变量串会话"""
-    import os as _os
-    sid = kw.get("session_id", "") or _os.environ.get("MEMOMICS_CURRENT_SID", "")
+    """从 dispatch kwargs 获取 session_id，设置线程级上下文。
+    修复：保留已有 results_dir 不覆盖，并在 API 成功后更新线程上下文。"""
+    import json as _json
+    sid = kw.get("session_id", "")
     if sid:
-        _os.environ["MEMOMICS_CURRENT_SID"] = sid  # 兼容 update_results_dir 内部读取
-    return update_results_dir(
+        from memomics.bio_tools.debate_analysis import set_session_context, get_session_results_dir
+        # 保留已有的 results_dir，不要覆盖为空（否则后续工具找不到日志目录）
+        existing = get_session_results_dir()
+        set_session_context(sid=sid, results_dir=existing or "")
+    result_str = update_results_dir(
         args.get("species", ""), args.get("tissue", ""),
         args.get("direction", ""), args.get("output_root", "")
     )
+    # API 成功后，解析新的 results_dir 并更新线程上下文
+    if sid:
+        try:
+            resp = _json.loads(result_str)
+            if resp.get("ok") and resp.get("results_dir"):
+                from memomics.bio_tools.debate_analysis import set_session_context
+                set_session_context(sid=sid, results_dir=resp["results_dir"])
+        except Exception:
+            pass
+    return result_str
 
 registry.register(
     name="update_results_dir", toolset="memomics", schema=UPDATE_RESULTS_DIR_SCHEMA,

@@ -7,10 +7,14 @@ trigger:
     - 知识库缺少对应物种/组织/方向的方法或参数
     - 需要验证某个参数的文献来源
     - 需要补充知识库的生物学/生信/统计知识
+    - 用户明确要求"收集文献补充知识库"(无真实数据也可触发)
   not_when:
-    - 用户没有说要分析真实数据
     - 知识库已有充足的方法和参数
     - 只是普通聊天，不涉及分析
+  rules:
+    - "skill_evolution(action='query_logs') 返回的历史运行日志仅供参数参考，不能替代任何审查步骤"
+    - "禁止因'之前跑过'而跳过 rail_review(pre)、debate_analysis、rail_review(post)"
+    - "运行日志是'参考'不是'免审凭证'"
 ---
 
 # 文献参数提取 Skill
@@ -22,12 +26,12 @@ trigger:
 2. **知识库缺少方法/参数时** — 搜索知识库后，发现对应物种/组织/方向/测序方法的方法不完整或缺失
 3. **验证参数来源时** — 需要确认某个参数（如 resolution、min_cells、MT%阈值）是否有文献支持
 4. **补充知识库时** — 知识库的生物学知识、生信方法、统计方法不够，需要从文献补充
+5. **用户明确要求收集文献补充知识库** — 即使用户没有真实数据，只要说"收集XX文献补充知识库"，就触发
 
 ### 什么时候不用
-1. 用户没有说要分析真实数据（只是聊天、问概念）
-2. 知识库已有充足的方法和参数（搜索后命中充分）
-3. 用户明确说不需要文献支持
-4. 只是做演示/测试，没有真实数据
+1. 知识库已有充足的方法和参数（搜索后命中充分）
+2. 用户明确说不需要文献支持
+3. 只是做演示/测试，没有真实数据且用户没有要求补充知识库
 
 ### 重要原则：生物学知识一般都有
 生物学知识（细胞类型、marker、组织结构、已知通路）在知识库里**通常已存在**，不需要每次都重新搜索。
@@ -195,8 +199,54 @@ clustering:
 2. **第二级**: 知识库不足 → 调用文献搜索 → 下载 PDF → 提取参数 → 写入知识库 → 再用
 3. **第三级**: 文献也找不到 → 按 skill 预设参数 + 自身数据质量决定 → 辩论后选择
 
+### 规则 6: 每个结论必须有来源标注（★ 用户纠正经验）
+写入知识库的**每个 biological finding**（细胞类型描述、aging_note、key_finding）都必须标注 PMID/DOI 来源，不能只写"paper name"。
+
+**正确做法**:
+```yaml
+aging_note: |
+  - 衰老时肝细胞体积增大，多倍体比例上升 (PMID: 40622856)
+  - 区域化被破坏，Zone 1/Zone 3基因表达边界模糊 (PMID: 37946043, 40622856)
+source: |
+  - Hepatology 2025 (PMID: 40622856)
+  - Nikopoulou 2023 Nature Aging (PMID: 37946043)
+```
+
+**错误做法**（被用户纠正过）:
+```yaml
+aging_note: |
+  - 衰老时肝细胞体积增大，多倍体比例上升
+  # ❌ 没有标注来源！
+```
+
+**规范**:
+- 每个 aging_note 条目末尾加 `(PMID: XXXXXXXX)` 或 `(DOI: 10.XXXX/...)`
+- 每个 cell_type 的 `source:` 字段列出所有引用文献的 PMID
+- 文件顶部 `source:` 汇总所有引用文献，格式统一为 `作者 年份, 期刊 (PMID: XXXXXXXX)`
+
+### 规则 7: 写入 YAML 后必须验证语法
+写入知识库 YAML 后，必须验证 YAML 语法正确性。用 Python 的 `yaml.safe_load()` 检查：
+```python
+import yaml
+with open(yaml_path, 'r', encoding='utf-8') as f:
+    data = yaml.safe_load(f)
+if data is None:
+    # 空文件，报错
+```
+
+### 规则 8: 写入后必须更新 index.yaml 记录下载状态
+每次补充知识库后，更新 `index.yaml` 的 `note:` 字段，记录：
+- PDF 下载目录（`work/papers/{tissue}_{direction}/`）
+- ✅ 已下载 PDF 全文的文献列表
+- ⚠️ 仅 HTML/PubMed 摘要的文献列表
+- ❌ 付费墙无法获取的文献列表
+- 新增文献的 PMID 列表
+
+这样后续分析 Agent 能快速知道哪些文献有 PDF 全文，避免重复尝试下载。
+
 ## 工具链
 
+### 标准路径（PDF 可提取时）
 1. `search_papers_by_context(species, tissue, direction, assay)` → 搜索文献
 2. `download_pdf(url_or_pmid)` → 下载 PDF
 3. `extract_params_from_pdf(pdf_path)` → 提取 PDF 文本
@@ -204,18 +254,97 @@ clustering:
 5. `write_to_kb.py` → 写入知识库 YAML
 6. `search_knowledge(species, tissue, direction, assay)` → 验证写入成功
 
+### 回退路径（PDF 不能提取时）
+当 web_extract 返回错误（如 "DuckDuckGo is a search-only backend"），或标准工具不支持解析时，使用 `execute_code` + Python 工作流替代：
+
+#### 路径 A：web_search → 手动构建（无 PDF 下载能力）
+1. **web_search 并行搜索**：用 `web_search` 搜索 PubMed/期刊论文摘要
+   - 搜索词: `{species} {tissue} {direction} {assay} 2023 2024 2025`
+   - 多测序类型并行搜索：scRNA-seq / ATAC-seq / spatial / bulk 各搜一轮
+2. **从搜索结果提取**：从标题和描述中提取关键信息：
+   - 论文元数据（标题、作者、期刊、年份、PMID）
+   - 关键发现和方法
+   - 样本信息
+3. **构建知识库文件**：手动构建 YAML 知识库
+
+#### 路径 B：execute_code + Python requests → 下载 PDF → PyMuPDF 提取（推荐，有 requests 时）
+
+> ⚠️ **重要更新 (2026-07-07)**: 不同出版商的实际 PDF 可访问性差异很大，必须按以下策略分级尝试。下载后必须验证文件大小 > 50KB 且 Content-Type 含 application/pdf，否则视为失败。
+当 `requests` 库可用时，用 `execute_code` 写 Python 脚本完成完整下载+提取：
+
+1. **搜索论文**：用 `web_search` 找到论文的 PMID 或直接 URL
+2. **下载 PDF**：在 `execute_code` 中用 Python requests 下载：
+   ```python
+   import requests
+   r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 ...'}, timeout=30)
+   with open('work/papers/xxx.pdf', 'wb') as f:
+       f.write(r.content)
+   ```
+3. **不同期刊的 PDF URL 模式**（按成功率排序，必须依次尝试，下载后验证）：
+   - **Nature 系列**: `https://www.nature.com/articles/{doi}.pdf` — 用 `requests` 带正确 User-Agent 可下载（已验证: Nature Aging, Nat Commun, Nature Genetics, Nature Reviews, Nature 2026）
+   - **BMC/Springer**: `https://link.springer.com/content/pdf/{doi}.pdf` 或 `{journal}.biomedcentral.com/counter/pdf/{doi}` — 多数返回 HTML 而非 PDF（~120KB HTML），需 fallback 到 HTML 提取
+   - **PMC 开放获取**: `/pmc/articles/{PMCID}/pdf/` 或 `pmc.ncbi.nlm.nih.gov/articles/{PMCID}/pdf/` — 返回 1.8KB HTML 而非 PDF，已被重定向。FTP 路径返回 404。**结论: PMC 直接 PDF 下载不可用，只能获取 HTML 页面。**
+   - **FASEB/Wiley**: `https://faseb.onlinelibrary.wiley.com/doi/pdf/{doi}` 或 `epdf/{doi}` — 返回 403 (Wiley 付费墙)，无法自动下载
+   - **LWW/Journals@Ovid**: `https://journals.lww.com/{journal}/.../pdf` — 返回 403 (付费墙)
+   - **Sci-Hub**: `https://sci-hub.{se/ru/st}/{doi}` — 返回 ~7KB HTML 而非 PDF，不再可靠
+   - **Europe PMC 全文 XML**: `https://www.ebi.ac.uk/europepmc/webservices/rest/PMC/{PMCID}/fullTextXML` — 返回 404，不可用
+   - **PubMed XML fallback**: `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={PMID}&retmode=xml&rettype=abstract` — ✅ 可靠，返回 ~20KB PubMed XML 摘要
+
+4. **下载后验证**（强制步骤）：
+   ```python
+   if len(response.content) < 50000:
+       # 不是真 PDF，可能是 HTML 或错误页面
+       # 检查 Content-Type: 'application/pdf' 才是真 PDF
+       fallback_to_html_extraction()
+   elif response.headers.get('Content-Type', '').startswith('text/html'):
+       # 是 HTML 页面，保存为 HTML 并通过 BeautifulSoup 提取
+       save_as_html()
+   else:
+       # 真 PDF，保存后用 PyMuPDF 提取
+       save_as_pdf()
+       extract_with_fitz()
+   ```
+4. **提取 PDF 文本**：用 PyMuPDF (fitz)：
+   ```python
+   import fitz
+   doc = fitz.open(pdf_path)
+   text = ""
+   for page in doc:
+       text += page.get_text()
+   doc.close()
+   ```
+5. **从文本中提取方法参数**：搜索 Methods 节（通常在正文末尾），提取：
+   - 测序平台、分析工具、版本号、基因组版本
+   - QC 参数、归一化方法、降维维度、聚类参数
+   - DEG 工具、通路分析工具
+6. **写入知识库 YAML**：用 Python 的 `yaml` 库或将 YAML 格式写为字符串后 `write_file`
+7. **验证**：用 `search_knowledge` 验证写入成功
+
+> 注意：PDF 下载可能被 paywall 拦截（返回 403）。此时策略：
+> - 尝试 PMC 开放获取版本（优先查 PubMed 获取 PMC ID）
+> - 尝试 ResearchGate 等第三方平台
+- 如果都失败，回到路径 A（web_search 手动构建），confidence 标注为 medium
+
+### 多物种同步更新
+构建知识库时，如果文献同时涉及人类和小鼠，建议**同步构建两个物种**的知识库：
+- 生物学知识部分：marker 基因名大小写不同（人全大写，鼠首字母大写）
+- 关键发现和基因集部分：大部分可共享，仅基因名大小写需转换
+
+> 参考文件：`references/liver_aging_literature_collection_2026-07-07.md` 记录了具体的 PDF 下载 URL 模式、PyMuPDF 提取流程和多物种同步更新示例。
 
 ---
 
 ## 🗣️ 辩论机制（debate_analysis）
 
-本 skill 在执行后，如果涉及**参数选择、方法决策、结果判断**等不确定环节，**必须**调用  工具进行多角色辩论。
+本 skill 在执行后，如果涉及**参数选择、方法决策、结果判断**等不确定环节，**必须**调用工具进行多角色辩论。
 
 ### 辩论规则
-- **正方 3 角色**（各自独立，互相看不到）：生物学 agent / 统计学 agent / 生信 agent
-- **反方 4 角色**（各自独立，互相看不到，也看不到正方）：生物学 agent / 统计学 agent / 生信 agent / 历史经验 agent
+- **正方 3 位专业编辑**（各自独立，互相看不到）：生物学编辑 / 统计学编辑 / 生信编辑
+- **反方 4 位专业编辑**（各自独立，互相看不到，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
 - **裁判**：看到所有 7 方论点后给出裁决 + 置信度（高/中/低）
-- **上下文隔离**：每个角色是独立的 LLM API 调用，messages 只包含自己的 prompt
+- **上下文隔离**：每个编辑是独立的 LLM API 调用，messages 只包含自己的 prompt
+- **分科知识库**：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
+- **辩论结果自动归档**到 results/.../log/debate_*.json
 
 ### 触发场景
 - 参数选择有多个合理选项时（如分辨率 0.4 vs 0.6 vs 0.8）

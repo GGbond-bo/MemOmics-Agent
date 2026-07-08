@@ -1,83 +1,79 @@
+# 小鼠肝脏 衰老方向 RNA-seq 分析流程（文献更新版）
 direction: aging
 omics: rna
 pipeline:
   ambient_rna:
-    language: Python
     method: CellBender
     package: CellBender
     reference: Fleming et al. 2023, Nature Methods
-  annotation:
-    language: R
-    method: SingleR
-    package: SingleR
-    reference: Aran et al. 2019, Nature Immunology
+  qc:
+    method: Seurat + custom
+    package: Seurat
+    params:
+      nFeature_RNA_min: 200
+      nFeature_RNA_max: 6000
+      percent_mt_max: 20
+    reference: "Nikopoulou 2023 Nature Aging: zUMIs v2.9.7, STAR v2.7.1a, mm10/Ensembl v99"
+  doublet_detection:
+    method: DoubletFinder
+    package: DoubletFinder
+    doublet_rate: 0.08
+  normalization:
+    method: SCTransform v2
+    package: Seurat (v4.1.1+)
+    conserve.memory: TRUE
+    vars.to.regress: [percent.mt]
+    reference: "Nikopoulou 2023 Nature Aging: Seurat v4.1.1 SCTransform default params"
   batch_correction:
-    language: R
     method: Harmony
     package: harmony
-    reference: Korsunsky et al. 2019, Nature Methods
-  cellchat:
-    language: R
-    method: CellChat v2
-    package: CellChat
-    reference: Jin et al. 2021, Nature Communications
   clustering:
-    language: R
     method: Leiden
     package: Seurat
-    reference: Traag et al. 2019, Scientific Reports
-  composition:
-    language: R
-    method: MiloR
-    package: miloR
-    reference: Dann et al. 2022, Nature Biotechnology
+    resolution: 0.5-1.0
+  annotation:
+    method: SingleR + manual (marker-based)
+    package: SingleR
+    markers:
+      hepatocyte: [Alb, Cyp3a11, Serpina1a, Ttr]
+      periportal: [Cyp2f2, Ass1, Arg1, Pck1]
+      pericentral: [Cyp2e1, Glul, Cyp1a2, Axin2]
+      kupffer: [Clec4f, Vsig4, Cd163, Cd68]
+      lsec: [Pecam1, Vwf, Stab1, Stab2, Lyve1]
+      hsc: [Pdgfra, Des, Lrat, Gfap]
+      cholangiocyte: [Krt19, Krt7, Epcam]
+    reference: "Nikopoulou 2023 Nature Aging + Lin 2024 FASEB"
   deg:
-    language: R
-    method: DESeq2 (pseudobulk)
-    package: DESeq2
-    reference: Love et al. 2014, Genome Biology
-  gene_scoring:
-    language: R
-    method: UCell
-    package: UCell
-    reference: Andreatta & Carmona 2021, Computational and Structural Biotechnology
-      Journal
-  microglia_dam:
-    language: R
-    method: DAM (Keren-Shaul 2017)
-    package: Seurat + UCell
-    reference: Keren-Shaul et al. 2017, Cell
-  normalization:
-    language: R
-    method: SCTransform
-    package: Seurat
-    reference: Hafemeister & Satija 2019, Genome Biology
+    method: DESeq2 (pseudobulk) + MAST (Seurat FindMarkers)
+    package: DESeq2 / Seurat
+    params:
+      min_log2FC: 0.585
+      padj_cutoff: 0.05
+    reference: "BASiCS v2.8.0 used in Nikopoulou 2023 for dispersion analysis"
+  cellchat:
+    method: CellChat v2
+    package: CellChat
   pathway:
-    language: R
-    method: clusterProfiler
+    method: clusterProfiler (v3.14.3)
     package: clusterProfiler
-    reference: Wu et al. 2021, The Innovation
-  qc:
-    language: R
-    method: Seurat
-    package: Seurat
-    reference: Stuart et al. 2019, Cell
+    params:
+      simplify: TRUE
+      organism: mouse
+    reference: "Nikopoulou 2023 Nature Aging: enrichGO + simplify default params"
   tf:
-    language: R
-    method: decoupleR
-    package: decoupleR
-    reference: Badia-i-Mompel et al. 2022, Bioinformatics
-  trajectory:
-    language: R
-    method: Slingshot
-    package: slingshot
-    reference: Street et al. 2018, BMC Genomics
-  wgcna:
-    language: R
-    method: hdWGCNA
-    package: hdWGCNA
-    reference: Morabito et al. 2023, Cell Reports Methods
-source: MemOmics default KB (15 methods, literature-verified)
+    method: decoupleR + SCENIC
+    key_tfs: [Hnf4a, Foxa3, Hnf1a, Cebpa, Srebf2, Axin2, Lef1, Tcf7l2, Nr4a2, Hnf1b]
+    reference: "Nikopoulou 2023: iRegulon in Cytoscape for TF activity prediction"
+  smart_seq3xpress:
+    method: Smart-seq3xpress (scRNA-seq full-length)
+    package: zUMIs v2.9.7 + STAR v2.7.1a
+    reference: "Nikopoulou 2023 Nature Aging Methods"
+    params:
+      mapping: mm10 (Ensembl v99)
+      min_cells: 3
+      min_genes: 200
+      min_counts: 1000
+source: "Updated 2026-07-07 from Nature Aging 2023, FASEB 2024, Nature Genetics 2023, BMC Genomics 2015"
 species: mouse
 tissue: liver
-updated: '2026-06-26'
+updated: '2026-07-07'

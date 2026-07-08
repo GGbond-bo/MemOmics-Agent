@@ -506,6 +506,87 @@ def _get_hermes_config_resolved() -> str | None:
     return _hermes_config_resolved
 
 
+# ---------------------------------------------------------------------------
+# Skill-directory write guard
+# ---------------------------------------------------------------------------
+
+def _is_path_in_skills_dir(filepath: str, task_id: str = "default") -> bool:
+    """Check if a target path is inside any skills directory."""
+    try:
+        from agent.skill_utils import get_all_skills_dirs
+        resolved = Path(_resolve_path_for_task(filepath, task_id)).resolve()
+        for skills_root in get_all_skills_dirs():
+            try:
+                resolved.relative_to(Path(skills_root).resolve())
+                return True
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return False
+
+
+def _check_skill_dir_write(filepath: str, content: str, task_id: str = "default") -> str | None:
+    """Guard writes that target the skills directory.
+
+    When an agent uses write_file() to create or modify files inside a
+    skills directory (bypassing skill_manage), scan the *content* for
+    prompt-injection patterns and security threats before allowing the
+    write.  This closes the create-bio-skill write_file backdoor.
+
+    Returns an error message string if the write should be blocked, else None.
+    """
+    if not _is_path_in_skills_dir(filepath, task_id):
+        return None
+
+    # 1. Prompt-injection pattern check (same patterns as skills_tool.py)
+    try:
+        from tools.skills_tool import _INJECTION_PATTERNS
+        content_lower = content.lower()
+        for pattern in _INJECTION_PATTERNS:
+            if pattern in content_lower:
+                return (
+                    f"Blocked: write_file to skills directory refused because "
+                    f"the content contains a prompt-injection pattern "
+                    f"({repr(pattern)}). Use skill_manage(create) instead, or "
+                    f"remove the flagged phrase before retrying."
+                )
+    except ImportError:
+        pass
+
+    # 2. Threat-pattern scan (reuse skills_guard scanner on the content)
+    #    We scan the *content string* in-memory by writing it to a temp file
+    #    that scan_file() can read, or we can inline the regex checks.
+    try:
+        import re
+        import tempfile
+        from tools.skills_guard import THREAT_PATTERNS
+        critical_findings = []
+        lines = content.split("\n")
+        for pattern, pid, severity, category, description in THREAT_PATTERNS:
+            if severity not in ("critical", "high"):
+                continue  # only block on critical/high
+            for i, line in enumerate(lines, start=1):
+                if re.search(pattern, line, re.IGNORECASE):
+                    critical_findings.append(
+                        f"  line {i}: [{severity}] {description}"
+                    )
+                    break  # one per pattern
+        if critical_findings:
+            report = "\n".join(critical_findings[:5])
+            return (
+                f"Blocked: write_file to skills directory refused because "
+                f"the content triggered {len(critical_findings)} security "
+                f"finding(s):\n{report}\n"
+                f"Use skill_manage(create) instead, or remove the flagged "
+                f"content before retrying."
+            )
+    except ImportError:
+        pass
+
+    return None
+
+
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
     try:
@@ -1493,6 +1574,12 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     sensitive_err = _check_sensitive_path(path, task_id)
     if sensitive_err:
         return tool_error(sensitive_err)
+    # Skill-directory write guard: scan content for injection/threat patterns
+    # when write_file targets a skills directory (closes the create-bio-skill
+    # write_file backdoor — agent should use skill_manage instead).
+    skill_err = _check_skill_dir_write(path, content, task_id)
+    if skill_err:
+        return tool_error(skill_err)
     if not cross_profile:
         cross_warning = _check_cross_profile_path(path, task_id)
         if cross_warning:

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """skill_template_generator.py — 生成标准 MemOmics 生信 skill 的 SKILL.md 文本。
+    + 自动注册到 SOUL.md 技能匹配表。
 
 用法:
-    from skill_template_generator import generate_skill_md
+    from skill_template_generator import generate_skill_md, register_to_soul_md
+
+    # 1. 生成 SKILL.md
     content = generate_skill_md(
-        name="scTour-trajectory",
+        name="sctour-trajectory-inference",
         description="scTour 轨迹推断...",
         tags=["trajectory", "scRNA-seq"],
         difficulty="advanced",
@@ -19,7 +22,14 @@
         parameters=[("param1", "默认值", "说明"), ...],
         references=["Author et al. 2024"],
     )
-    # content 是完整的 SKILL.md 文本
+    # 2. 注册到 SOUL.md 技能匹配表
+    register_to_soul_md(
+        skill_name="sctour-trajectory-inference",
+        step_name="scTour 轨迹",
+        description="VAE 深度潜在时间推断+向量场，无监督",
+        trigger_keywords="scTour/深度伪时间/VAE轨迹/神经ODE",
+        soul_md_path="hermes_home/SOUL.md",
+    )
 """
 
 # ============================================================
@@ -326,3 +336,177 @@ def generate_reference_script(skill_name: str, language: str, steps: list, examp
     code_section = f"\n# ── Reference Implementation ──────────────────────────────────────────\n# 以下代码基于官方文档示例，运行前必须根据数据调整参数\n\n{example_code if example_code else '# TODO: Paste example code from official documentation here'}\n"
 
     return f"{lang_line}\n{title}\n{header}\n{steps_text}\n{code_section}\n"
+
+
+# ============================================================
+# 🔴 SOUL.md 自动注册（新 skill 必须注册到技能匹配表）
+# ============================================================
+
+AUTO_SKILL_MARKER = "<!-- AUTO_SKILL_INSERT_MARKER"
+
+
+def register_to_soul_md(
+    skill_name: str,
+    step_name: str,
+    description: str,
+    trigger_keywords: str = "",
+    soul_md_path: str = "hermes_home/SOUL.md",
+) -> dict:
+    """在 SOUL.md 技能匹配表中注册新 skill。
+
+    在 AUTO_SKILL_INSERT_MARKER 上方插入新行，格式：
+    | **<step_name>** | <skill_name> | <description>。用户说"<trigger_keywords>"时触发 |
+
+    Args:
+        skill_name: skill 名称（如 "sctour-trajectory-inference"）
+        step_name: 分析步骤中文名（如 "scTour 轨迹"）
+        description: 一句话描述
+        trigger_keywords: 触发关键词（用 / 分隔，如 "scTour/深度伪时间/VAE轨迹"）
+        soul_md_path: SOUL.md 路径
+
+    Returns:
+        {"success": bool, "message": str, "skill_name": str}
+    """
+    import os
+
+    if not os.path.exists(soul_md_path):
+        return {
+            "success": False,
+            "message": f"SOUL.md 不存在: {soul_md_path}",
+            "skill_name": skill_name,
+        }
+
+    with open(soul_md_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # 找到 AUTO_SKILL_INSERT_MARKER 所在行
+    marker_idx = None
+    for i, line in enumerate(lines):
+        if AUTO_SKILL_MARKER in line:
+            marker_idx = i
+            break
+
+    if marker_idx is None:
+        return {
+            "success": False,
+            "message": f"未找到 {AUTO_SKILL_MARKER} 标记，请先在 SOUL.md 中添加该标记",
+            "skill_name": skill_name,
+        }
+
+    # 检查是否已注册（避免重复）
+    already_registered = False
+    for line in lines:
+        if f"| {skill_name} |" in line or f"| **{skill_name}**" in line:
+            already_registered = True
+            break
+
+    if already_registered:
+        return {
+            "success": True,
+            "message": f"skill '{skill_name}' 已在 SOUL.md 中注册，跳过",
+            "skill_name": skill_name,
+            "already_registered": True,
+        }
+
+    # 构造新行
+    trigger_part = f"。用户说\"{trigger_keywords}\"时触发" if trigger_keywords else ""
+    new_row = f"| **{step_name}** | {skill_name} | {description}{trigger_part} |\n"
+
+    # 在 marker 上方插入
+    lines.insert(marker_idx, new_row)
+
+    # 写回
+    with open(soul_md_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    return {
+        "success": True,
+        "message": f"skill '{skill_name}' 已注册到 SOUL.md 技能匹配表（{step_name}）",
+        "skill_name": skill_name,
+        "registered_at": f"第 {marker_idx + 1} 行（{AUTO_SKILL_MARKER} 上方）",
+    }
+
+
+def verify_registration(skill_name: str, soul_md_path: str = "hermes_home/SOUL.md") -> dict:
+    """验证 skill 是否已注册到 SOUL.md 技能匹配表。
+
+    Args:
+        skill_name: skill 名称
+        soul_md_path: SOUL.md 路径
+
+    Returns:
+        {"registered": bool, "line": int or None, "message": str}
+    """
+    import os
+
+    if not os.path.exists(soul_md_path):
+        return {
+            "registered": False,
+            "line": None,
+            "message": f"SOUL.md 不存在: {soul_md_path}",
+        }
+
+    with open(soul_md_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    for i, line in enumerate(lines):
+        if skill_name in line and line.strip().startswith("|"):
+            parts = [p.strip() for p in line.split("|") if p.strip()]
+            if len(parts) >= 2 and parts[1] == skill_name:
+                return {
+                    "registered": True,
+                    "line": i + 1,
+                    "message": f"skill '{skill_name}' 已注册在第 {i + 1} 行",
+                }
+
+    return {
+        "registered": False,
+        "line": None,
+        "message": f"skill '{skill_name}' 未在 SOUL.md 技能匹配表中找到！请调用 register_to_soul_md() 注册。",
+    }
+
+
+def register_and_verify(
+    skill_name: str,
+    step_name: str,
+    description: str,
+    trigger_keywords: str = "",
+    soul_md_path: str = "hermes_home/SOUL.md",
+) -> dict:
+    """注册 + 验证一体化：注册后立即验证。
+
+    Returns:
+        {"success": bool, "registered": bool, "verified": bool, "message": str}
+    """
+    reg_result = register_to_soul_md(
+        skill_name=skill_name,
+        step_name=step_name,
+        description=description,
+        trigger_keywords=trigger_keywords,
+        soul_md_path=soul_md_path,
+    )
+
+    if not reg_result["success"]:
+        return {
+            "success": False,
+            "registered": False,
+            "verified": False,
+            "message": f"注册失败: {reg_result['message']}",
+        }
+
+    verify_result = verify_registration(skill_name, soul_md_path)
+
+    if not verify_result["registered"]:
+        return {
+            "success": False,
+            "registered": True,
+            "verified": False,
+            "message": f"注册完成但验证失败: {verify_result['message']}",
+        }
+
+    return {
+        "success": True,
+        "registered": True,
+        "verified": True,
+        "message": f"skill '{skill_name}' 注册+验证通过（{step_name}）",
+    }

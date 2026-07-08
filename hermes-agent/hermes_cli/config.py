@@ -2199,16 +2199,16 @@ DEFAULT_CONFIG = {
         # Timeout (seconds) for each !`cmd` snippet when inline_shell is on.
         "inline_shell_timeout": 10,
         # Run the keyword/pattern security scanner on skills the agent
-        # writes via skill_manage (create/edit/patch).  Off by default
-        # because the agent can already execute the same code paths via
-        # terminal() with no gate, so the scan adds friction (blocks
-        # skills that mention risky keywords in prose) without meaningful
-        # security.  Turn on if you want the belt-and-suspenders — a
-        # dangerous verdict will then surface as a tool error to the
-        # agent, which can retry with the flagged content removed.
+        # writes via skill_manage (create/edit/patch).  On by default
+        # because agent-authored skills are persisted and re-loaded on
+        # later turns, so scanning them adds meaningful defense-in-depth.
+        # The scan only blocks skills with *dangerous* findings; low/
+        # medium findings still pass through.  Turn off with
+        # `hermes config set skills.guard_agent_created false` if you
+        # find it too aggressive for your workflow.
         # External hub installs (trusted/community sources) are always
         # scanned regardless of this setting.
-        "guard_agent_created": False,
+        "guard_agent_created": True,
         # Approval gate for skill_manage (create/edit/patch/write_file/delete/
         # remove_file), applied to BOTH foreground agent turns and the
         # background self-improvement review fork.

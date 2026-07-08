@@ -38,18 +38,72 @@ prerequisites:
 4. **When to Use**（触发场景）
 5. **Pipeline**（每步标注 Tool: terminal）
 6. **Parameters**（关键参数 + 默认值 + 来源）
-7. **Proven Scripts**（脚本模板引用）
+7. **Proven Scripts**（脚本模板引用 + 有效空表格，见规则2.6）
 8. **Common Issues**（常见问题）
 9. **References**（文献引用）
+
+### 规则2.5: 创建新 skill 时**必须同时生成 `skill.json`**
+> **⚠️ 历史教训**：`skill_evolution(action="record_run")` 的 `_record_success` 函数依赖 `skill.json` 存储 proven_params。如果 `skill.json` 不存在，`record_run` 会**静默失败**——返回 Success 但不落盘。这是所有新 skill 的共性缺陷源。2026-07-08 会话中 `sctour-trajectory-inference` 的 4 次 record_run 均因缺少 skill.json 而静默丢失。
+
+创建 SKILL.md 后，**必须立即在同目录下创建 `skill.json`**，格式如下：
+
+```json
+{
+  "name": "<skill-name>",
+  "version": "1.0.0",
+  "success_count": 0,
+  "proven_script": "",
+  "proven_params": []
+}
+```
+
+创建方法：`write_file` 写入 `SKILL.md` 同目录下的 `skill.json`。
+
+### 规则2.6: SKILL.md 的 Proven Scripts 表必须是有效空表格
+`_record_success` 通过正则匹配 `## Proven Scripts` 后的 markdown 表格来追加行。**必须使用有效 markdown 表格**（含表头+分隔行+占位行），不能是纯注释或空段落。
+
+```markdown
+## Proven Scripts
+
+> 经实际运行验证成功的脚本记录。`skill_evolution(action="record_run")` 自动追加至此表。
+
+| 物种 | 组织 | 方向 | 日期 | 质量评分 |
+|:----|:----|:----|:----:|:--------:|
+| <!-- 首次运行后自动填充 --> | | | | |
+```
+
+注意：`<!-- 首次运行后自动填充 -->` 注释行作为占位是必需的，否则 `_record_success` 的正则匹配可能找不到表格行追加位置。
 
 ### 规则3: 创建的脚本必须包含审查辩论铁律头
 每个新建 skill 的 `scripts/run.py` 和 `scripts/reference_script.*` 必须在文件开头包含 MemOmics 审查辩论铁律注释块（逐字复制下方模板）。
 
-### 规则4: 创建后必须验证
+### 规则4: 创建后必须验证 + 分析后审核
+
+**4a. 创建后验证（基础检查）**
 - 用 `skill_view(name="新skill名")` 确认可加载
 - 确认 SKILL.md 的强制规则块完整
 - 确认脚本模板的铁律头完整
-- 验证通过 → 继续正常分析流程
+
+**4b. 分析后审核（质量检查 — skill 创建后、交付用户前必须执行）**
+
+创建 skill 后，必须对照以下 **6 项审核清单** 逐项检查。任何一项不通过 → 修正后重审，全部通过才能交付。
+
+| # | 审核项 | 检查内容 | 不通过 → 修正动作 |
+|---|--------|----------|-------------------|
+| 1 | **官网一致性** | SKILL.md 中的函数名、参数名、默认值是否与官方文档/API 完全一致？用 `web_extract` 重新拉取官方 API 页面逐条比对 | 不一致 → 修正 SKILL.md 和脚本中的函数/参数，重新 `skill_manage` 更新 |
+| 2 | **文档/教程参考** | 是否参考了官方教程/vignette/example？References 中是否列出了官方文档 URL？是否参考了实例文档或教程？ | 未参考 → 补查官方教程页面，提取示例代码，更新脚本模板 + References |
+| 3 | **安装包完整** | prerequisites 的 r_packages/python_packages 是否覆盖了所有依赖？是否包含隐式依赖（如 scTour 需要 scikit-misc 但不自动安装）？用 `check_env` 验证 | 缺失 → 补全到 prerequisites，在 Common Issues 中说明隐式依赖的安装方法 |
+| 4 | **使用场景说明** | When to Use 是否明确写了「应该使用」和「不应该使用」两种场景？是否有量化阈值（如最小细胞数、最小基因数）？ | 不完整 → 补充「不应该使用」场景和量化阈值 |
+| 5 | **查询官网留痕** | Step 1 查询的官网 URL 是否记录在 References 中？是否有 `web_search` + `web_extract` 的调用证据？ | 未留痕 → 补录官方文档 URL 到 References |
+| 6 | **🔴 SOUL.md 注册** | 新 skill 是否已注册到 `hermes_home/SOUL.md` 的技能匹配表中？用 `grep` 搜索 skill name 确认存在。**这是最关键的一项**：未注册 → 后续分析无法自动触发 skill_view | 未注册 → 按 Step 7 格式在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 上方插入新行 |
+
+**审核执行方式**：
+- 在 terminal 中逐项执行检查，每项检查输出 ✅ 通过 / ❌ 不通过 + 原因
+- 6 项全部 ✅ → 审核通过，skill 可交付
+- 有 ❌ → 修正后重新审核该项，直到全部通过
+- 审核结果调 `skill_evolution(action="record_run")` 记录（skill_name/quality_score/notes）
+
+- 验证 + 审核全部通过 → 继续正常分析流程
 
 ---
 
@@ -94,9 +148,18 @@ Tool: write_file
 - Pipeline 步骤根据官方文档的教程填写
 - Parameters 根据官方 API + 文献填写
 - References 根据文献填写
+- Proven Scripts 必须是有效空表格（见规则2.6），不可用纯注释
 ```
 
-### Step 4: 生成脚本模板
+### Step 4: 生成 `skill.json`（**必须创建，不可跳过**）
+```
+Tool: write_file
+- 写入同目录下的 skill.json，格式见规则2.5
+- 这是 `skill_evolution(action="record_run")` 正确落盘的前提
+- 不创建 → 后续所有 record_run 调用静默失败
+```
+
+### Step 5: 生成脚本模板
 ```
 Tool: write_file
 - scripts/run.py：含审查辩论铁律头 + 步骤注释 + TODO 参数区 + 主流程区 + 结果保存区
@@ -105,18 +168,75 @@ Tool: write_file
 
 ### Step 5: 注册到 skill 库
 ```
-Tool: skill_manage + write_file
+Tool: skill_manage
 - skill_manage(action="create", name="<skill名>", content="<SKILL.md内容>")
-- 或直接 write_file 到 hermes_home/skills/bioinformatics/<skill名>/SKILL.md
-- 同时 write_file 脚本到 hermes_home/skills/bioinformatics/<skill名>/scripts/
+- 脚本也通过 skill_manage(action="write_file")写入，不要用 write_file 直接写 skills 目录
+- 注意：write_file 写入 skills 目录会触发安全扫描，含 injection 模式的内容会被阻断
 ```
 
-### Step 6: 验证
+### Step 6: 验证 skill 可加载
 ```
 Tool: skill_view
 - skill_view(name="<skill名>")
 - 确认 success=true
 - 确认强制规则块完整
+- 确认脚本模板的铁律头完整
+```
+
+### Step 7: 🔴 注册到 SOUL.md 技能匹配表（必须执行，不可跳过）
+
+> **这是 create-bio-skill 的强制步骤。新 skill 不注册到 SOUL.md，后续分析无法自动触发 skill_view。**
+
+```
+Tool: read_file + edit_file
+1. read_file("hermes_home/SOUL.md") 定位 <!-- AUTO_SKILL_INSERT_MARKER -->
+2. 在该标记上方插入新行，格式与现有行一致：
+   | **<分析步骤名>** | <skill-name> | <一句话描述+触发关键词> |
+3. 示例：
+   | **scTour 轨迹** | sctour-trajectory-inference | VAE 深度潜在时间推断+向量场，无监督。用户说"scTour""深度伪时间"时触发 |
+```
+
+**注册规则**：
+- 分析步骤名：从 SKILL.md 的标题提取（如 `# scTour — 深度潜在时间轨迹推断` → `scTour 轨迹`）
+- skill-name：与 SKILL.md frontmatter 的 `name` 字段一致
+- 触发关键词：从 SKILL.md 的 `When to Use` 和 `metadata.hermes.tags` 提取
+- **插入位置**：必须在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 上方，不要插到 ATAC/空间组/bulk 的专属表格里
+
+### Step 8: 分析后审核（6项检查清单 + 注册检查）
+```
+Tool: web_extract + check_env + terminal
+
+审核清单（逐项检查，全部通过才能交付）：
+
+1. 官网一致性检查
+   - web_extract(urls=[官方API页面]) 重新拉取官方文档
+   - 逐条比对：函数名、参数名、参数类型、默认值是否与 SKILL.md 和脚本中的一致
+   - 输出：✅ 一致 / ❌ 不一致 + 差异列表
+
+2. 文档/教程参考检查
+   - 确认 Step 1 查询了官方教程/vignette/example 页面
+   - 确认 References 中列出了官方文档 URL
+   - 确认脚本模板中的代码参考了官方示例代码
+   - 输出：✅ 已参考 / ❌ 未参考
+
+3. 安装包完整性检查
+   - check_env 检查 prerequisites 中列出的包是否可导入
+   - 检查隐式依赖：在官方文档中搜索“requires”/“dependency”/“install separately”
+   - 确认 Common Issues 中说明了隐式依赖
+   - 输出：✅ 完整 / ❌ 缺失 + 缺失包列表
+
+4. 使用场景说明检查
+   - 确认 When to Use 包含「应该使用」和「不应该使用」两种场景
+   - 确认有量化阈值（如最小细胞数、最小基因数、数据类型要求）
+   - 输出：✅ 完整 / ❌ 不完整
+
+5. 查询官网留痕检查
+   - 确认 References 中有官方文档 URL
+   - 确认有 web_search + web_extract 的调用记录
+   - 输出：✅ 已留痕 / ❌ 未留痕
+
+全部 ✅ → skill_evolution(action="record_run", notes="审核通过")
+有 ❌ → 修正后重新审核该项
 ```
 
 ---
@@ -174,7 +294,13 @@ related_skills: [<相关skill>]
 ### 规则4: 关键参数多参数尝试 + 辩论
 - 涉及数值参数时，**至少尝试 2-3 个值**
 - 每次参数变更后调 `debate_analysis` 辩论"这个参数合理吗？结果有没有变好？"
-- 辩论格式：正方（支持当前参数）vs 反方（质疑+替代方案）→ 裁判决断
+- 辩论格式（多角色对抗 v3）：
+  - 正方 3 位专业编辑（各自独立，互相不知道）：生物学编辑 / 统计学编辑 / 生信编辑
+  - 反方 4 位专业编辑（各自独立，互相不知道，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
+  - 裁判编辑：看到所有 7 方论点，给出裁决 + 置信度（高/中/低）
+  - 上下文隔离：每个编辑独立 HTTP API 调用，messages 只有自己的 prompt
+  - 分科知识库：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
+  - 辩论结果自动归档到 results/.../log/debate_*.json
 - **不确定的参数就辩论**，不要自己拍脑袋
 - **辩论最多 3 轮**：3 轮后选最优参数结果
 
@@ -199,6 +325,13 @@ related_skills: [<相关skill>]
     - 不通过 → 修复重跑
     - 通过 → **必须调 skill_evolution(action="record_run")** 记录成功经验（skill_name/script_name/species/tissue/direction/params_used/result_summary/quality_score/notes） → 创建目录存储(figures/results/scripts/data) → 下一步
     - **不通过 → 修复后重跑 → 成功后调 skill_evolution(action="record_run")**；如果是脚本报错 → **调 skill_evolution(action="record_error")** 记录根因+修复方案
+
+### 规则N: 运行记录只是参考，不能跳过审查
+- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
+- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
+- 禁止因"之前跑过"而跳过任何审查步骤
+- 禁止直接用历史日志里的脚本运行而不经本次审查
+- 运行日志是"参考"不是"免审凭证"
 
 ### 规则6: 结果存储结构
 ```
@@ -233,7 +366,12 @@ results/<模块>/<方法>/
 <关键参数 + 默认值 + 来源>
 
 ## Proven Scripts
-<脚本模板引用>
+
+> 经实际运行验证成功的脚本记录。`skill_evolution(action="record_run")` 自动追加至此表。
+
+| 物种 | 组织 | 方向 | 日期 | 质量评分 |
+|:----|:----|:----|:----:|:--------:|
+| <!-- 首次运行后自动填充 --> | | | | |
 
 ## Common Issues
 <常见问题>
@@ -324,9 +462,10 @@ results/<模块>/<方法>/
 ## Common Issues
 
 1. **web_search 搜不到官方文档** → 尝试搜 GitHub 仓库 + Bioconductor/CRAN/PyPI 页面
-2. **skill_manage create 失败** → 直接用 write_file 写入 SKILL.md 到 skills 目录
+2. **skill_manage create 失败** → 检查错误信息，修复后重试 skill_manage；不要用 write_file 直接写 skills 目录（会触发安全扫描阻断）
 3. **创建后 skill_view 找不到** → 检查目录名和 SKILL.md frontmatter 的 name 字段是否一致
 4. **包不存在于 CRAN/Bioconductor/PyPI** → 搜 GitHub，如果确实不存在则告知用户
+5. **skill_evolution record_run 静默失败** → `record_run` 返回 "Success recorded" 但数据未落盘。检查：`skill.json` 是否存在？SKILL.md 是否有有效的 Proven Scripts 表格？两者缺一都会导致 `_record_success` 写操作被 `try/except pass` 吞掉。修复方法：创建 `skill.json` 并补全 Proven Scripts 表，然后手动归档到 `results/.../log/run_record_*.json`。
 
 ## References
 

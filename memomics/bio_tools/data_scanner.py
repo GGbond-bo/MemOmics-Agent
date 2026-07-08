@@ -96,7 +96,10 @@ def scan_data(file_path: str) -> str:
 
 
 def _register():
-    from tools.registry import registry
+    try:
+        from tools.registry import registry
+    except ImportError:
+        return  # 非 Hermes 运行时跳过注册
     registry.register(
         name="scan_data",
         toolset="memomics",

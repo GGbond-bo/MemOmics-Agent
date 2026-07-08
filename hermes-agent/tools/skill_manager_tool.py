@@ -100,28 +100,29 @@ except ImportError:
 
 
 def _guard_agent_created_enabled() -> bool:
-    """Read skills.guard_agent_created from config (default False).
+    """Read skills.guard_agent_created from config (default True).
 
-    Off by default because the agent can already execute the same code
-    paths via terminal() with no gate, so the scan adds friction without
-    meaningful security.  Users who want belt-and-suspenders can turn it
-    on via `hermes config set skills.guard_agent_created true`.
+    On by default. Agent-authored skills are persisted and re-loaded on
+    later turns, so scanning them adds meaningful defense-in-depth.  The
+    scan only blocks skills with *dangerous* findings (allow/allow/ask
+    policy); low/medium findings still pass through.  Users who want to
+    disable can run `hermes config set skills.guard_agent_created false`.
     """
     try:
         from hermes_cli.config import load_config
         cfg = load_config()
         return is_truthy_value(
             cfg_get(cfg, "skills", "guard_agent_created"),
-            default=False,
+            default=True,
         )
     except Exception:
-        return False
+        return True  # fail-closed: scan when config read fails
 
 
 def _security_scan_skill(skill_dir: Path) -> Optional[str]:
     """Scan a skill directory after write. Returns error string if blocked, else None.
 
-    No-op when skills.guard_agent_created is disabled (the default).
+    Active by default (skills.guard_agent_created defaults to True).
     """
     if not _GUARD_AVAILABLE:
         return None

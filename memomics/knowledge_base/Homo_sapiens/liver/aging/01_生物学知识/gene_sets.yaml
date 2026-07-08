@@ -1,0 +1,106 @@
+# 肝脏衰老 — 基因集
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+species: Homo sapiens
+tissue: liver
+direction: aging
+
+gene_sets:
+  # ─── 肝脏区域化标记基因 ──────────────────────────────
+  hepatocyte_zonation_markers:
+    description: 肝细胞区域化标志基因
+    periportal_zone1:
+      genes: [CYP2F2, ASS1, ARG1, PCK1, G6PC, SLC2A2, ALDOB, FBP1, PC, CPS1, OTC]
+      source: "Nikopoulou 2023, Nature Aging; Hepatology 2025"
+    pericentral_zone3:
+      genes: [CYP2E1, GLUL, CYP1A2, OAT, RBP4, LGR5, AXIN2, CYP2A6, CYP2C9, LECT2, WIF1]
+      source: "Nikopoulou 2023, Nature Aging; Hepatology 2025"
+    midzonal_zone2:
+      genes: [HAL, SULT1E1, HAMP, IGF1]
+      source: Consensus
+
+  # ─── 肝脏衰老标志 ─────────────────────────────────────
+  liver_aging_up:
+    description: 衰老肝脏中上调的基因
+    genes: [CDKN2A, CDKN1A, CLU, LCN2, CLEc7A, SAA1, SAA2, C3, C4A, C4B, SERPINE1, IGFBP3, IGFBP7, CXCL8, IL6, IL1B, TNF, CCL2, CXCL10, MMP9, TIMP1, TGFB1, FN1, COL1A1, COL3A1, ACTA2, CTGF, SREBF2, LEPR]
+    source: "Lin 2024 FASEB + Nikopoulou 2023 Nature Aging + Inflamm Regen 2025"
+    confidence: high
+
+  liver_aging_down:
+    description: 衰老肝脏中下调的基因
+    genes: [PPARGC1A, TFAM, NDUFS1, NDUFV1, COX5A, ATP5F1A, CYP3A4, CYP2E1, ALB, PCK1, G6PC, GCK, HNF4A, FOXA2, PPARA, SIRT1, ATG5, ATG7, BECN1, SOD1, SOD2, CAT, GPX1]
+    source: "Nikopoulou 2023 Nature Aging + BMC Genomics 2015"
+    confidence: high
+
+  # ─── 炎症/免疫衰老 ───────────────────────────────────
+  liver_inflammaging:
+    description: 肝脏衰老相关炎症特征 (inflammaging)
+    genes: [IL1B, IL6, TNF, CXCL8, CCL2, CCL3, CCL5, CXCL1, CXCL10, NFKB1, NFKB2, RELA, STAT1, STAT3, JUN, FOS, ICAM1, VCAM1, SELE]
+    source: "Hepatology 2024 (PMC10871588) + Inflamm Regen 2025"
+    confidence: high
+
+  kupffer_cell_aging:
+    description: 衰老Kupffer细胞标志
+    genes_up: [CXCL2, IL1B, TNF, NLRP3, CASP1, CD80, CD86, TLR2, TLR4, S100A8, S100A9]
+    genes_down: [VSIG4, TIMD4, CLEC4F, CD163, MRC1, IL10, TGFB1]
+    source: "Hepatology 2024 (PMC10871588)"
+    confidence: high
+
+  # ─── 衰老细胞/SASP ─────────────────────────────────────
+  liver_sasp:
+    description: 肝脏衰老相关分泌表型
+    genes: [IL6, IL1A, IL1B, CXCL8, CXCL1, CCL2, CCL3, MMP1, MMP2, MMP3, MMP9, MMP10, TIMP1, TIMP2, IGFBP3, IGFBP7, SERPINE1, TGFB1, TGFBI, CTGF, HGF, AREG, EREG]
+    source: "Coppe et al. 2010 PLoS Biology + J Hepatol 2025"
+    confidence: high
+
+  hepatocyte_senescence:
+    description: 肝细胞衰老标志
+    genes: [CDKN1A, CDKN2A, GLB1, LMNB1, HMGB1, TP53, RB1, E2F1, PCNA, MKI67, SREBF2, LCN2, CLU, SERPINE1]
+    source: "Protein Cell 2024 (灵长类snRNA-seq) + J Hepatol 2025"
+    confidence: high
+
+  # ─── 线粒体功能障碍 ─────────────────────────────────
+  liver_mitochondrial_dysfunction:
+    description: 肝脏衰老中线粒体功能下降相关基因
+    genes: [PPARGC1A, TFAM, ESRRA, NDUFS1, NDUFV1, NDUFA13, SDHA, UQCRC1, COX5A, COX6B1, ATP5F1A, ATP5O, SLC25A4, SLC25A5, MFN1, MFN2, OPA1, FIS1, BNIP3, BNIP3L, PARK2, PINK1]
+    source: "Nikopoulou 2023, Nature Aging"
+    confidence: high
+
+  # ─── 脂质代谢重编程 ─────────────────────────────────
+  liver_lipid_aging:
+    description: 衰老肝脏脂质代谢改变相关基因
+    genes_up: [DGAT2, SCD, FASN, ACACA, SREBF1, SREBF2, HMGCR, LDLR, LPL, LEPR]
+    genes_down: [CPT1A, CPT2, ACADL, ACADM, PPARA, PPARD, ACOX1, CYP4A10, CYP4A14]
+    source: "Nikopoulou 2023 Nature Aging + Inflamm Regen 2025"
+    confidence: high
+
+  # ─── 纤维化/ECM ───────────────────────────────────────
+  liver_fibrosis_aging:
+    description: 衰老肝脏ECM重塑相关基因
+    genes: [COL1A1, COL1A2, COL3A1, COL4A1, COL6A1, COL6A2, FN1, TGFB1, TGFBI, CTGF, ACTA2, PDGFRA, PDGFRB, MMP2, MMP9, TIMP1, TIMP2, LOX, LOXL2, LUM, DCN, SPARC]
+    source: "Lin 2024 FASEB + J Hepatol 2025"
+    confidence: high
+
+  # ─── LSEC衰老 ─────────────────────────────────────────
+  lsec_aging:
+    description: 肝窦内皮细胞衰老特征基因
+    genes_down: [STAB1, STAB2, LYVE1, FCGR2B, F8, CLEC4M, CLEC1B, KDR, FLT1]
+    genes_up: [VWF, ICAM1, VCAM1, SELE, EDN1, NOS3, ENG]
+    source: "Lin 2024 FASEB + Hepatology Communications 2023"
+    confidence: high
+
+  # ─── 昼夜节律 ─────────────────────────────────────────
+  liver_circadian_aging:
+    description: 衰老肝脏昼夜节律紊乱基因
+    genes: [CLOCK, ARNTL, PER1, PER2, CRY1, CRY2, NR1D1, RORA, DBP]
+    note: "核心时钟基因(CLOCK, BMAL1, PER, CRY)表达幅度下降"
+    source: "BMC Genomics 2015"
+    confidence: medium
+
+  # ─── 保护/抗衰老 ─────────────────────────────────────
+  liver_longevity_associated:
+    description: 长寿相关保护性肝脏基因
+    genes: [SIRT1, FOXO1, FOXO3, PPARGC1A, KLOTHO, GHRL, GHR, IGF1R, MTOR, SESN1, SESN2, SESN3]
+    source: "Longevity literature consensus"
+    confidence: medium

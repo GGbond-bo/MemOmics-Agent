@@ -113,3 +113,29 @@ prerequisites:
 
 - **Source**: `skills/external/29_scrnaseq-seurat-core-analysis/scripts/`
 - **Imported scripts**: cluster_cells.R
+
+
+## 辩论机制 (debate_analysis)
+
+当遇到**不确定的参数选择或结果判断**时，**必须**调用 `debate_analysis`：
+
+### 多角色辩论 (debate_analysis)
+- 正方 3 位专业编辑（各自独立，互相不知道）：生物学编辑 / 统计学编辑 / 生信编辑
+- 反方 4 位专业编辑（各自独立，互相不知道，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
+- 裁判编辑：看到所有 7 方论点，给出裁决 + 置信度（高/中/低）
+- 上下文隔离：每个编辑独立 HTTP API 调用，messages 只有自己的 prompt
+- 分科知识库：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
+- 辩论结果自动归档到 results/.../log/debate_*.json
+
+### 辩论触发场景
+- 聚类分辨率选择（0.3 vs 0.5 vs 0.8 vs 1.2）
+- QC 阈值设定（MT% 10% vs 15% vs 20%）
+- 降维参数选择（PC 数量 10 vs 20 vs 30）
+- 任何需要多方审视的分析决策
+
+### 规则: 运行记录只是参考，不能跳过审查
+- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
+- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
+- 禁止因"之前跑过"而跳过任何审查步骤
+- 禁止直接用历史日志里的脚本运行而不经本次审查
+- 运行日志是"参考"不是"免审凭证"

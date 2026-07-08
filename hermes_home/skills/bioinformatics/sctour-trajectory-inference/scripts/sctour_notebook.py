@@ -25,8 +25,8 @@ scTour 完整工作流 Notebook (Jupyter)
 # ## Cell 0: 环境准备 + 导入
 # 安装 scTour（如未安装）并导入所有需要的包
 
-# 安装 scTour
-# !pip install sctour --quiet
+# 安装 scTour + scikit-misc（flavor='seurat_v3' 需要）
+# !pip install sctour scikit-misc --quiet
 
 import sctour as sct
 import scanpy as sc
@@ -71,7 +71,7 @@ print(f"基因数: {adata.n_vars}")
 # ╚══════════════════════════════════════════════════════════════╝
 
 # ## Cell 2: 预处理 (Step 1/6)
-# 确保数据包含必要的层和计数信息
+# 必须: 计算 QC metrics + 选择高变基因 + 子采样
 
 # 获取原始计数矩阵
 # 如果数据已经过标准化，需要从 raw 或 layers 中获取原始 counts
@@ -85,34 +85,38 @@ else:
     counts = adata.X
     print("使用 adata.X 作为计数（假设未标准化）")
 
-# 确保是稀疏矩阵
+# 确保 adata.X 是原始计数（scTour Trainer 需要原始 counts）
 from scipy.sparse import issparse, csr_matrix
 if not issparse(counts):
     counts = csr_matrix(counts)
-    print("转换为稀疏矩阵")
-else:
-    print("已是稀疏矩阵")
+adata.X = counts
 
-# 确保 obs 中有 'n_genes' 和 'n_counts' 列
-# 注意: scTour 的 get_time() 需要 'n_genes_by_counts' 列
-if 'n_genes_by_counts' not in adata.obs.columns:
-    n_genes_arr = np.array((counts > 0).sum(axis=1)).flatten()
-    adata.obs['n_genes_by_counts'] = n_genes_arr
-    adata.obs['n_genes'] = n_genes_arr
-else:
-    adata.obs['n_genes'] = adata.obs['n_genes_by_counts']
-if 'n_counts' not in adata.obs.columns:
-    adata.obs['n_counts'] = np.array(counts.sum(axis=1)).flatten()
+# ★ 必须: 计算 QC metrics（scTour 的 get_time() 需要 'n_genes_by_counts' 列）
+sc.pp.calculate_qc_metrics(adata, percent_top=None, log1p=False, inplace=True)
+print(f"n_genes_by_counts 范围: {adata.obs['n_genes_by_counts'].min():.0f} - {adata.obs['n_genes_by_counts'].max():.0f}")
+print(f"total_counts 范围: {adata.obs['total_counts'].min():.0f} - {adata.obs['total_counts'].max():.0f}")
 
-print(f"n_genes 范围: {adata.obs['n_genes'].min():.0f} - {adata.obs['n_genes'].max():.0f}")
-print(f"n_counts 范围: {adata.obs['n_counts'].min():.0f} - {adata.obs['n_counts'].max():.0f}")
+# ★ 必须: 选择高变基因（scTour 官方教程要求，减少噪声 + 加速训练）
+N_TOP_GENES = 1000  # 高变基因数，推荐 1000-2000
+print(f"选择 {N_TOP_GENES} 个高变基因 (Seurat v3)...")
+sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=N_TOP_GENES, subset=True)
+print(f"高变基因筛选后: {adata.shape}")
+
+# ★ 必须: 转换为 float32（避免 PyTorch dtype 不匹配）
+# AnnData 默认 float64 (Double)，PyTorch 模型用 float32 (Float)
+# 不转换会报错: RuntimeError: mat1 and mat2 must have the same dtype, but got Double and Float
+from scipy.sparse import issparse
+if issparse(adata.X):
+    adata.X.data = adata.X.data.astype('float32')
+else:
+    adata.X = adata.X.astype('float32')
+print(f"数据类型已转换: {adata.X.dtype}")
 
 # 可选: 对超大数据进行子采样以提高速度
 N_MAX_CELLS = 50000  # 如果细胞数过多，随机子采样
 if adata.n_obs > N_MAX_CELLS:
     print(f"⚠️ 细胞数 {adata.n_obs} > {N_MAX_CELLS}，随机子采样 {N_MAX_CELLS} 个细胞")
     sc.pp.subsample(adata, n_obs=N_MAX_CELLS)
-    counts = adata.X if adata.raw is None else adata.raw.X
     print(f"子采样后: {adata.n_obs} 细胞")
 
 
