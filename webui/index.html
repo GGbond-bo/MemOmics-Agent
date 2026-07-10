@@ -929,14 +929,17 @@ function handleMessage(msg) {
   } else if (msg.type === 'todos_update') {
     // 来自 server 的实时待办同步
     renderTodos(msg.todos);
-    // 如果 todos 包含 skill 字段，高亮显示
+    renderPlanTodos(msg.todos);
     if (msg.todos && msg.todos.length) {
       updatePlanIndicator(true);
+    } else {
+      updatePlanIndicator(false);
     }
   } else if (msg.type === 'intent_active') {
     // research_plan / plan_refine 激活
     if (msg.intent === 'research_plan' || msg.intent === 'plan_refine') {
       updatePlanIndicator(true);
+      switchView('plan'); // auto-switch to plan panel
     }
   } else if (msg.type === 'cancelled') {
     addError('任务已取消');
@@ -2310,6 +2313,38 @@ function renderTodos(todos) {
   if (todos && todos.length) {
     el.style.maxHeight = '400px';
     el.style.overflowY = 'auto';
+  }
+}
+
+function renderPlanTodos(todos) {
+  var planTodo = document.getElementById('plan-todo-list');
+  var planContent = document.getElementById('plan-content');
+  var planEmpty = document.getElementById('plan-empty');
+  if (!planTodo) return;
+  if (!todos || !todos.length) {
+    planTodo.innerHTML = '<span style="font-size:12px;color:var(--text-light);">No todos yet</span>';
+    if (planContent) planContent.style.display = 'none';
+    if (planEmpty) planEmpty.style.display = '';
+    updatePlanIndicator(false);
+    return;
+  }
+  if (planContent) planContent.style.display = '';
+  if (planEmpty) planEmpty.style.display = 'none';
+  updatePlanIndicator(true);
+  planTodo.innerHTML = todos.map(function(t, i) {
+    var skill = t.skill || '';
+    var skillTag = skill ? ' <span style="font-size:10px;background:var(--primary);color:#fff;border-radius:3px;padding:0 4px;">' + escapeHtml(skill) + '</span>' : '';
+    var module = t.module || '';
+    var moduleTag = module ? ' [' + module + ']' : '';
+    var title = t.title || t.content || t.text || ('Task ' + (i+1));
+    return '<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="flex:1;">' + escapeHtml(title) + moduleTag + '</span>' +
+      '<span style="flex-shrink:0;margin-left:8px;">' + skillTag + '</span>' +
+      '</div>';
+  }).join('');
+  var overviewEl = document.getElementById('plan-overview');
+  if (overviewEl && !overviewEl.innerHTML) {
+    overviewEl.innerHTML = '<div style="font-size:12px;color:var(--success);padding:8px;border-radius:4px;background:rgba(0,200,0,0.08);">OK: ' + todos.length + ' todos generated (with skill binding)</div>';
   }
 }
 
