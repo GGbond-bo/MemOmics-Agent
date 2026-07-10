@@ -89,11 +89,21 @@
       "date": "2026-07-04",
       "score": 8.5,
       "result": "40k cells subset from 324k, QC filtered ~39.5k retained, 24 samples, snRNA-seq low MT%, per-sample MAD correctly handled batch-level QC differences"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_qc_metrics.py, 02_qc_visualization.py",
+      "params": "backed_mode=True, 6 QC figures generated, n_genes 200-6000, pct_mt 0-5%",
+      "date": "2026-07-10",
+      "score": 9,
+      "result": "QC PASS: Upstream QC already applied. 324,434 cells, 0 filtered, 11 cell types. Young 125k, Old 199k. Raw counts available in layers['counts']."
     }
   ],
-  "proven_script": "qc_metrics.R",
+  "proven_script": "01_qc_metrics.py, 02_qc_visualization.py",
   "error_count": 1,
-  "success_count": 2,
+  "success_count": 3,
   "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
   "doc_source": "official",
   "prerequisites": {

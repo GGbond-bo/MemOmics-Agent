@@ -514,13 +514,19 @@ def _classify_intent(text: str):
                "实验设计", "研究设计", "研究思路", "分析路线", "分析策略",
                "下一步做", "接下来做", "下一步怎么", "接下来怎么",
                "怎么设计", "如何设计", "方案设计",
-               "研究框架", "分析框架", "科研设计", "课题设计"]
+               "研究框架", "分析框架", "科研设计", "课题设计",
+               "设计研究方案", "研究方案", "设计分析方案", "分析方案",
+               "研究计划", "实验方案", "制定方案", "设计一个方案",
+               "帮忙设计", "给我设计", "制定分析", "设计.*方案"]
     if any(kw in t for kw in PLAN_KW):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.92, meta)
-    # Pure question about HOW to analyze (no "help me do")
-    if ("怎么分析" in t or "如何分析" in t or "怎样分析" in t) and \
-       not any(kw in t for kw in ["帮我", "做一下", "跑一下", "直接"]):
+    # "设计" + "方案" 同时出现在文中（宽松匹配）
+    if ("设计" in t or "制定" in t) and ("方案" in t or "路线" in t or "思路" in t):
+        meta["modalities"] = _detect_modalities_from_text(t)
+        return ("research_plan", 0.88, meta)
+    # Questions about HOW to analyze
+    if "怎么分析" in t or "如何分析" in t or "怎样分析" in t:
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.85, meta)
 
@@ -2773,9 +2779,24 @@ async def ws_endpoint(ws: WebSocket):
                                     _session_emit(session, {"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
-                        # todo/todo_manage 完成后同步待办到前端
-                        if tool_name in ("todo", "todo_manage", "memomics_todo_manage"):
+                        # todo/todo_manage/memomics_pipeline 完成后同步待办到前端
+                        if tool_name in ("todo", "todo_manage", "memomics_todo_manage", "memomics_pipeline"):
                             try:
+                                # memomics_pipeline 返回的 todos 写入 store
+                                if tool_name == "memomics_pipeline" and hasattr(agent, "_todo_store"):
+                                    try:
+                                        result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
+                                        if isinstance(result_obj, dict) and result_obj.get("todos"):
+                                            for td in result_obj["todos"]:
+                                                agent._todo_store.add({
+                                                    "title": td.get("title", td.get("name", "")),
+                                                    "module": td.get("module", td.get("id", "")),
+                                                    "skill": td.get("skill", ""),
+                                                    "status": "pending",
+                                                    "description": td.get("description", td.get("desc", ""))
+                                                })
+                                    except Exception:
+                                        pass
                                 todos = agent._todo_store.read() if hasattr(agent, "_todo_store") and agent._todo_store else []
                                 _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
