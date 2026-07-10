@@ -3097,7 +3097,9 @@ async def ws_endpoint(ws: WebSocket):
                         _saved_tools = None
                         if _intent == "plan_refine" and agent.tools:
                             _saved_tools = agent.tools
-                            agent.tools = [t for t in agent.tools if t.get("function", {}).get("name", "") not in ("todo", "todo_manage", "memomics_todo_manage")]
+                            # 白名单：plan_refine 只允许规划+文献+方案工具
+                            PLAN_ONLY = ("memomics_pipeline", "skill_view", "skill_search", "search_knowledge", "search_papers", "search_papers_by_context", "web_search", "web_fetch")
+                            agent.tools = [t for t in agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
 
                         def _do_run():
                             result = agent.run_conversation(
