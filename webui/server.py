@@ -510,6 +510,12 @@ def _classify_intent(text: str):
         return ("chat", 0.70, {"reason": "short_no_bio"})
 
     # === Priority 3: research_plan (literature-driven plan design) ===
+    # 先检查 plan_refine 关键词（如'生成方案'），避免被 PLAN_KW 抢先
+    REFINE_KW = ["生成方案", "出方案", "出完整方案", "出研究方案", "生成研究方案",
+                 "开始做", "做吧", "按这个做", "照这个", "就按这些", "开始方案",
+                 "帮我写", "制定方案", "写成方案", "做方案", "生成完整", "出完整"]
+    if any(kw in t for kw in REFINE_KW):
+        return ("plan_refine", 0.88, {"phase2": True})
     PLAN_KW = ["设计方案", "出个方案", "出方案", "规划一下", "规划",
                "实验设计", "研究设计", "研究思路", "分析路线", "分析策略",
                "下一步做", "接下来做", "下一步怎么", "接下来怎么",
@@ -537,13 +543,6 @@ def _classify_intent(text: str):
                  "就按参数", "就这个参数", "跑一下就行", "直接按"]
     if any(kw in t for kw in DIRECT_KW):
         return ("direct_exec", 0.90, {"skip_planning": True})
-
-    # === Priority 3.5: plan_refine — Phase2 continuation after literature review ===
-    REFINE_KW = ["生成方案", "出方案", "出完整方案", "出研究方案", "生成研究方案",
-                 "开始做", "做吧", "按这个做", "照这个", "就按这些", "开始方案",
-                 "帮我写", "制定方案", "写成方案", "做方案", "生成完整", "出完整"]
-    if any(kw in t for kw in REFINE_KW):
-        return ("plan_refine", 0.88, {"phase2": True})
 
     # === Priority 5: report / literature / install (existing intents, preserved) ===
     report_kw = ["html", "报告", "report", "做报告", "生成报告", "分析报告",
