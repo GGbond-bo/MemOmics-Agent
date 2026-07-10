@@ -538,6 +538,13 @@ def _classify_intent(text: str):
     if any(kw in t for kw in DIRECT_KW):
         return ("direct_exec", 0.90, {"skip_planning": True})
 
+    # === Priority 3.5: plan_refine — Phase2 continuation after literature review ===
+    REFINE_KW = ["生成方案", "出方案", "出完整方案", "出研究方案", "生成研究方案",
+                 "开始做", "做吧", "按这个做", "照这个", "就按这些", "开始方案",
+                 "帮我写", "制定方案", "写成方案", "做方案", "生成完整", "出完整"]
+    if any(kw in t for kw in REFINE_KW):
+        return ("plan_refine", 0.88, {"phase2": True})
+
     # === Priority 5: report / literature / install (existing intents, preserved) ===
     report_kw = ["html", "报告", "report", "做报告", "生成报告", "分析报告",
                   "总结报告", "生成html", "html报告", "做ppt", "slides"]
@@ -680,36 +687,36 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
     
     elif intent == "research_plan":
         lines += [
-            "你是一个生信研究方案设计专家。按以下流程工作：",
+            "你是一个生信研究方案设计专家。本次是【阶段1：信息收集+文献调研】，不要生成完整方案！",
             "",
-            "## 第1步：收集信息（必须）",
-            "1. 确认用户的实验设计、数据模态、物种、组织、研究方向",
-            "2. 确认用户当前的进度（原始数据？已注释？已有DEG？）",
-            "3. 调用 memomics_pipeline(action='parse', user_input='用户原始消息') 解析方向+模态",
+            "## 本次任务（仅做以下两件事，完成后立即停止）",
+            "1. 调用 memomics_pipeline(action='parse', user_input='用户原始消息') 解析方向+模态",
+            "2. 并行调用 literature_search + search_knowledge_base 搜索相关文献（各最多5条）",
             "",
-            "## 第2步：文献检索（必须先检索再出方案，禁止凭空编造）",
-            "1. literature_search(query='研究方向 数据模态 组织', max_results=5) 搜索PubMed",
-            "2. search_knowledge_base(query='关键生物学问题') 查询知识库",
-            "3. 如需补充，调用 web_search(query='研究方法 文献')",
+            "## 输出格式",
+            "先总结用户研究背景（数据/物种/组织/方向/进度），",
+            "再以表格列出文献调研结果：| 文献(作者+年份) | 方法 | 关键发现 | 与用户研究相关性 |",
+            "文献不足5条时诚实告知，标注'文献有限，以下部分基于AI知识'",
             "",
-            "## 第3步：生成结构化研究方案",
-            "按模板输出：1.背景 2.文献依据(表格:文献|方法|关键发现) 3.分析路线(方法+skill+文献) 4.图表策略 5.验证建议 6.参考文献",
-            "每步标注文献来源(作者+年份+期刊)，无文献支持标注'AI建议'",
-            "",
-            "## 第4步：生成执行待办（必须）",
-            "1. memomics_pipeline(action='todos', selected_modules=[...]) 生成结构化待办",
-            "2. todo(todos=[...]) 写入待办列表，每个待办必须带skill字段",
-            "",
-            "## 铁律：必须先查文献再出方案；待办skill必须真实存在；文献为0时诚实告知；先单独分析每种模态，再整合，最后下游分析",
+            "## 结尾问题（必须问）",
+            "最后问用户：【需要我基于以上文献，生成包含具体分析方法、图表策略和可执行待办的完整研究方案吗？】",
+            "禁止在本轮生成研究方案或待办列表！文献调研完成就停止！",
             "",
         ]
     elif intent == "plan_refine":
+        # plan_refine可能是: A)Phase2-文献后生成完整方案 B)修改已有方案
         lines += [
-            "用户想修改已有的研究方案。",
-            "1. 回顾现有 active_plan 和 todos",
-            "2. 根据用户新要求追加/修改/移除分析步骤",
-            "3. 调用 memomics_pipeline + todo(todos=[...]) 更新待办列表",
-            "4. 简要说明修改了什么",
+            "你现在需要生成/修改研究方案。",
+            "",
+            "## 两种情况：",
+            "A) 前一轮已做文献调研，用户让你生成完整方案 -> 引用前轮文献，直接输出方案+待办",
+            "B) 用户要修改已有方案 -> 回顾active_plan和todos，按新要求调整",
+            "",
+            "## 生成方案模板（必须输出）",
+            "【研究背景】【文献依据表格】【分析路线(分阶段+skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
+            "",
+            "## 执行待办（必须，方案输出完立即调用）",
+            "memomics_pipeline(action='todos', selected_modules=[...]) + 每个待办带真实skill",
             "",
         ]
     elif intent == "direct_exec":
@@ -3049,7 +3056,20 @@ async def ws_endpoint(ws: WebSocket):
                             )
                             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
-                        result = await loop.run_in_executor(None, _do_run)
+                        # research_plan 模式 3分钟超时保护
+                        if _intent == "research_plan":
+                            try:
+                                result = await asyncio.wait_for(
+                                    loop.run_in_executor(None, _do_run),
+                                    timeout=180
+                                )
+                            except asyncio.TimeoutError:
+                                result = agent.checkpoint.read_partial() if hasattr(agent, "checkpoint") else ""
+                                if not result:
+                                    result = "文献调研超时。请说'继续'让我生成完整方案。"
+                                _session_emit(session, {"type": "timeout", "content": "research_plan超时(3分钟)，已返回部分结果", "session_id": session["id"]})
+                        else:
+                            result = await loop.run_in_executor(None, _do_run)
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
