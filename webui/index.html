@@ -297,6 +297,38 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #env-check-panel .env-row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; }
 #env-check-panel .env-ok { color:#22c55e; }
 #env-check-panel .env-no { color:#ef4444; }
+
+/* === 上下文窗口面板 === */
+.ctx-panel { padding:14px 16px; }
+.ctx-gauge-wrap { display:flex; justify-content:center; align-items:center; margin:8px 0 16px; }
+.ctx-gauge { position:relative; width:140px; height:140px; }
+.ctx-gauge svg { transform:rotate(-90deg); width:140px; height:140px; }
+.ctx-gauge .bg-circle { fill:none; stroke:var(--border); stroke-width:10; }
+.ctx-gauge .fg-circle { fill:none; stroke:var(--primary); stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1); }
+.ctx-gauge .fg-circle.warn { stroke:var(--warning); }
+.ctx-gauge .fg-circle.danger { stroke:var(--danger); }
+.ctx-gauge .gauge-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+.ctx-gauge .gauge-pct { font-size:28px; font-weight:700; color:var(--text); line-height:1; }
+.ctx-gauge .gauge-label { font-size:10px; color:var(--text-light); margin-top:2px; }
+.ctx-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+.ctx-stat { background:var(--bg); border-radius:8px; padding:10px 12px; text-align:center; }
+.ctx-stat .stat-val { font-size:18px; font-weight:700; color:var(--text); }
+.ctx-stat .stat-lbl { font-size:10px; color:var(--text-light); margin-top:2px; }
+.ctx-stat .stat-val.small { font-size:13px; }
+.ctx-breakdown { margin-top:4px; }
+.ctx-breakdown h3 { font-size:12px; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+.ctx-bar-item { margin-bottom:8px; }
+.ctx-bar-item .bar-label { display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
+.ctx-bar-item .bar-label .bar-name { color:var(--text); font-weight:500; }
+.ctx-bar-item .bar-label .bar-val { color:var(--text-light); font-family:Consolas,monospace; }
+.ctx-bar-item .bar-track { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; }
+.ctx-bar-item .bar-fill { height:100%; border-radius:3px; transition:width 0.5s cubic-bezier(0.4,0,0.2,1); }
+.ctx-model-info { font-size:11px; color:var(--text-light); text-align:center; margin-top:8px; padding-top:10px; border-top:1px solid var(--border); }
+.ctx-refresh { display:flex; align-items:center; gap:4px; font-size:10px; color:var(--text-light); cursor:pointer; padding:2px 8px; border-radius:4px; border:1px solid var(--border); background:transparent; }
+.ctx-refresh:hover { background:var(--primary-light); }
+.ctx-refresh.spinning .ctx-refresh-icon { animation:spin 0.6s linear infinite; }
+.ctx-empty { text-align:center; padding:40px 20px; color:var(--text-light); font-size:13px; }
+.ctx-empty .ctx-empty-icon { font-size:40px; margin-bottom:10px; opacity:0.6; }
 </style>
 </head>
 <body>
@@ -317,6 +349,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="nav-item" onclick="switchView('skills')" id="nav-skills">🧩 Skill库</div>
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings">⚙️ 设置</div>
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
+      <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
@@ -572,6 +605,41 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
             <div class="theme-btn dark" onclick="setTheme('dark')" data-theme="dark">🌙 深色</div>
             <div class="theme-btn blue" onclick="setTheme('blue')" data-theme="blue">🔵 蓝色</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上下文窗口面板 -->
+    <div id="panel-context" style="display:none;">
+      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📐 上下文窗口</span>
+        <button class="ctx-refresh" id="ctx-refresh-btn" onclick="refreshContextUsage()" title="刷新">
+          <span class="ctx-refresh-icon">🔄</span> 刷新
+        </button>
+      </div>
+      <div class="ctx-panel" id="ctx-panel">
+        <div class="ctx-empty" id="ctx-empty">
+          <div class="ctx-empty-icon">📐</div>
+          <div>点击刷新获取上下文使用情况</div>
+          <div style="font-size:11px;margin-top:4px;">需要已创建 Agent 会话</div>
+        </div>
+        <div id="ctx-content" style="display:none;">
+          <div class="ctx-gauge-wrap">
+            <div class="ctx-gauge">
+              <svg viewBox="0 0 140 140">
+                <circle class="bg-circle" cx="70" cy="70" r="60"/>
+                <circle class="fg-circle" id="ctx-gauge-fg" cx="70" cy="70" r="60"
+                  stroke-dasharray="377" stroke-dashoffset="377"/>
+              </svg>
+              <div class="gauge-center">
+                <div class="gauge-pct" id="ctx-gauge-pct">--</div>
+                <div class="gauge-label">已使用</div>
+              </div>
+            </div>
+          </div>
+          <div class="ctx-stats" id="ctx-stats"></div>
+          <div class="ctx-breakdown" id="ctx-breakdown"></div>
+          <div class="ctx-model-info" id="ctx-model-info"></div>
         </div>
       </div>
     </div>
@@ -845,6 +913,8 @@ function handleMessage(msg) {
     if (msg.figure) {
       handleNewFigure(msg.figure);
     }
+  } else if (msg.type === 'context_usage') {
+    renderContextUsage(msg.data, msg.error);
   }
 }
 
@@ -1375,17 +1445,17 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory'];
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
 
   // 显示对应右侧面板
-  ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory'].forEach(function(p) {
+  ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context'].forEach(function(p) {
     document.getElementById(p).style.display = 'none';
   });
 
-  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory' };
+  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context' };
   document.getElementById(panelMap[view]).style.display = '';
 
   if (view === 'files') browseFiles('');
@@ -1394,6 +1464,7 @@ function switchView(view) {
   if (view === 'results') refreshResults();
   if (view === 'settings') loadSettings();
   if (view === 'memory') loadMemory();
+  if (view === 'context') refreshContextUsage();
 }
 
 // === 模型管理 ===
@@ -2466,6 +2537,160 @@ async function showEnvCheck() {
 
 // 启动后检测
 setTimeout(checkFirstRun, 1000);
+
+// === 上下文窗口 ===
+let ctxPollTimer = null;
+let ctxPollRunning = false;
+
+function refreshContextUsage() {
+  if (!ws || ws.readyState !== 1) {
+    showCtxError('WebSocket 未连接');
+    return;
+  }
+  var btn = document.getElementById('ctx-refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  ws.send(JSON.stringify({ type: 'get_context_usage', session_id: currentSid }));
+}
+
+function renderContextUsage(data, error) {
+  var btn = document.getElementById('ctx-refresh-btn');
+  if (btn) btn.classList.remove('spinning');
+
+  var emptyEl = document.getElementById('ctx-empty');
+  var contentEl = document.getElementById('ctx-content');
+
+  if (error || !data) {
+    showCtxError(error || '暂无上下文数据');
+    return;
+  }
+
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = '';
+
+  var ctxMax = data.context_max || 0;
+  var ctxUsed = data.context_used || 0;
+  var ctxPct = data.context_percent || 0;
+
+  updateGauge(ctxPct, ctxUsed, ctxMax);
+  updateStats(data.session_stats);
+  updateBreakdown(data.categories, ctxMax);
+
+  var modelInfo = document.getElementById('ctx-model-info');
+  if (modelInfo) {
+    modelInfo.textContent = '模型: ' + (data.model || '未知') +
+      ' ｜ 上下文窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知');
+  }
+}
+
+function updateGauge(pct, used, max) {
+  var fgCircle = document.getElementById('ctx-gauge-fg');
+  var pctEl = document.getElementById('ctx-gauge-pct');
+  if (!fgCircle || !pctEl) return;
+
+  var circumference = 377;
+  var offset = circumference - (pct / 100) * circumference;
+  fgCircle.setAttribute('stroke-dashoffset', offset);
+
+  fgCircle.classList.remove('warn', 'danger');
+  if (pct >= 85) fgCircle.classList.add('danger');
+  else if (pct >= 65) fgCircle.classList.add('warn');
+
+  pctEl.textContent = Math.round(pct) + '%';
+
+  var lblEl = document.querySelector('.ctx-gauge .gauge-label');
+  if (lblEl && max > 0) {
+    lblEl.textContent = used.toLocaleString() + ' / ' + max.toLocaleString();
+  }
+}
+
+function updateStats(stats) {
+  if (!stats) return;
+  var container = document.getElementById('ctx-stats');
+  if (!container) return;
+
+  var totalTokens = (stats.prompt_tokens || stats.input_tokens || 0) + (stats.output_tokens || 0);
+
+  var items = [
+    { val: totalTokens.toLocaleString(), lbl: '本会话总 Token', klass: '' },
+    { val: (stats.output_tokens || 0).toLocaleString(), lbl: '输出 Token', klass: 'small' },
+    { val: (stats.input_tokens || stats.prompt_tokens || 0).toLocaleString(), lbl: '输入 Token', klass: 'small' },
+    { val: (stats.cache_read_tokens || 0).toLocaleString(), lbl: '缓存读取', klass: 'small' },
+  ];
+
+  container.innerHTML = items.map(function(item) {
+    return '<div class="ctx-stat"><div class="stat-val' + (item.klass ? ' ' + item.klass : '') + '">' +
+      item.val + '</div><div class="stat-lbl">' + item.lbl + '</div></div>';
+  }).join('');
+}
+
+function updateBreakdown(categories, max) {
+  var container = document.getElementById('ctx-breakdown');
+  if (!container) return;
+
+  if (!categories || categories.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  var html = '<h3>分类明细</h3>';
+  var sortedCategories = categories.slice().sort(function(a, b) { return b.tokens - a.tokens; });
+
+  sortedCategories.forEach(function(cat) {
+    var pct = max > 0 ? Math.round(cat.tokens / max * 100) : 0;
+    var barWidth = max > 0 ? Math.max(1, Math.round(cat.tokens / max * 100)) : 0;
+    var color = cat.color || 'var(--primary)';
+    html += '<div class="ctx-bar-item">' +
+      '<div class="bar-label"><span class="bar-name">' + escapeHtml(cat.label) + '</span>' +
+      '<span class="bar-val">' + cat.tokens.toLocaleString() + ' (' + pct + '%)</span></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + barWidth + '%;background:' + color + ';"></div></div>' +
+      '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function showCtxError(msg) {
+  var emptyEl = document.getElementById('ctx-empty');
+  var contentEl = document.getElementById('ctx-content');
+  if (emptyEl) {
+    emptyEl.innerHTML = '<div class="ctx-empty-icon">\u26a0\ufe0f</div><div>' + escapeHtml(msg) + '</div>' +
+      '<div style="font-size:11px;margin-top:4px;">发送一条消息后再试</div>';
+    emptyEl.style.display = '';
+  }
+  if (contentEl) contentEl.style.display = 'none';
+}
+
+function startCtxPolling() {
+  if (ctxPollRunning) return;
+  ctxPollRunning = true;
+  function poll() {
+    if (!ctxPollRunning) return;
+    var panel = document.getElementById('panel-context');
+    if (panel && panel.style.display !== 'none' && agentRunning) {
+      refreshContextUsage();
+    }
+    ctxPollTimer = setTimeout(poll, 3000);
+  }
+  poll();
+}
+
+function stopCtxPolling() {
+  ctxPollRunning = false;
+  if (ctxPollTimer) { clearTimeout(ctxPollTimer); ctxPollTimer = null; }
+}
+
+(function() {
+  var origSwitchView = switchView;
+  window.switchView = function(view) {
+    origSwitchView(view);
+    if (view === 'context') {
+      refreshContextUsage();
+      startCtxPolling();
+    } else {
+      stopCtxPolling();
+    }
+  };
+})();
 </script>
 </body>
 </html>

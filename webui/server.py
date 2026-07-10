@@ -64,6 +64,9 @@ from typing import Optional
 
 app = FastAPI(title="MemOmics WebUI v2")
 
+import logging
+logger = logging.getLogger("memomics")
+
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
@@ -618,6 +621,8 @@ _PROGRESS_TEXT = {
         "scanning_data": "正在扫描数据", "analyzing": "正在分析",
         "generating_report": "正在生成报告", "debating": "正在辩论",
         "reviewing": "正在审查", "writing_code": "正在写代码",
+        "completed": "已完成",
+        "intro_reasoning": "用户询问系统身份，触发自我介绍快速回复模板，无需调用 LLM。",
     },
     "en": {
         "thinking": "Thinking", "understanding": "Understanding your request",
@@ -629,6 +634,8 @@ _PROGRESS_TEXT = {
         "scanning_data": "Scanning data", "analyzing": "Analyzing",
         "generating_report": "Generating report", "debating": "Debating",
         "reviewing": "Reviewing", "writing_code": "Writing code",
+        "completed": "Completed",
+        "intro_reasoning": "User asked about system identity. Self-introduction fast-reply template triggered, no LLM call needed.",
     },
 }
 
@@ -2464,6 +2471,33 @@ async def ws_endpoint(ws: WebSocket):
                 session["loop_ref"] = loop
                 session["ws_attached"] = True
 
+                # === 自我介绍快速回复（绕过 agent LLM）===
+                if _intent == "self_intro":
+                    _intro = (
+                        "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
+                        "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
+                        "## 核心能力\n\n"
+                        "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
+                        "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
+                        "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
+                        "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
+                        "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
+                        "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
+                        "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
+                        "有什么需要帮忙的，直接告诉我！"
+                    )
+                    session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
+                    _persist_session_message(session, "assistant", _intro)
+                    await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "..."}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
+                    await asyncio.sleep(1.0)  # 让前端有时间渲染思考状态
+                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "done", "detail": _pt(session, "completed"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "delta", "content": _intro}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "complete", "content": _intro}, ensure_ascii=False))
+                    continue  # 跳过 agent 调用
+
                 # 发送 session_id
                 # session 级标识
                 _session_emit(session, {"type": "session", "session_id": session["id"], "title": session["title"]})
@@ -2871,6 +2905,49 @@ async def ws_endpoint(ws: WebSocket):
             elif msg_type == "get_todos":
                 _session_emit(session, {"type": "todos", "todos": session.get("todos", []), "session_id": session["id"]})
 
+            elif msg_type == "get_context_usage":
+                # 返回当前会话的上下文窗口使用情况
+                agent = session.get("agent")
+                if agent is None:
+                    _session_emit(session, {"type": "context_usage", "error": "Agent 未初始化", "session_id": session["id"]})
+                else:
+                    try:
+                        from agent.context_breakdown import compute_session_context_breakdown
+                        msgs = session.get("messages", [])
+                        conv_msgs = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in msgs]
+                        breakdown = compute_session_context_breakdown(agent, messages=conv_msgs)
+                        # 附加累计 session 统计
+                        breakdown["session_stats"] = {
+                            "prompt_tokens": getattr(agent, "session_prompt_tokens", 0),
+                            "input_tokens": getattr(agent, "session_input_tokens", 0),
+                            "output_tokens": getattr(agent, "session_output_tokens", 0),
+                            "cache_read_tokens": getattr(agent, "session_cache_read_tokens", 0),
+                            "cache_write_tokens": getattr(agent, "session_cache_write_tokens", 0),
+                            "reasoning_tokens": getattr(agent, "session_reasoning_tokens", 0),
+                        }
+                        _session_emit(session, {"type": "context_usage", "data": breakdown, "session_id": session["id"]})
+                    except Exception as e:
+                        # 降级：直接从 compressor 获取基础数据
+                        try:
+                            compressor = getattr(agent, "context_compressor", None)
+                            ctx_max = int(getattr(compressor, "context_length", 0) or 0)
+                            ctx_used = int(getattr(compressor, "last_prompt_tokens", 0) or 0)
+                            ctx_pct = round(ctx_used / ctx_max * 100, 1) if ctx_max > 0 else 0
+                            _session_emit(session, {"type": "context_usage", "data": {
+                                "categories": [],
+                                "context_max": ctx_max,
+                                "context_used": ctx_used,
+                                "context_percent": ctx_pct,
+                                "model": getattr(agent, "model", "") or "",
+                                "session_stats": {
+                                    "prompt_tokens": getattr(agent, "session_prompt_tokens", 0),
+                                    "input_tokens": getattr(agent, "session_input_tokens", 0),
+                                    "output_tokens": getattr(agent, "session_output_tokens", 0),
+                                },
+                            }, "session_id": session["id"]})
+                        except Exception as e2:
+                            _session_emit(session, {"type": "context_usage", "error": str(e2), "session_id": session["id"]})
+
             elif msg_type == "cancel":
                 # 强制停止当前运行的 agent
                 session["bg_running"] = False
@@ -2907,6 +2984,9 @@ async def ws_endpoint(ws: WebSocket):
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f'WS EXCEPTION: {type(e).__name__}: {e}', flush=True)
         try:
             await ws.send_text(json.dumps({"type": "error", "content": f"WebSocket 错误: {e}"}, ensure_ascii=False))
         except Exception:
