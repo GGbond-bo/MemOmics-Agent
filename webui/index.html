@@ -350,6 +350,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings">⚙️ 设置</div>
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
+      <div class="nav-item" onclick="switchView('plan')" id="nav-plan">📋 研究方案</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
@@ -643,6 +644,30 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         </div>
       </div>
     </div>
+    <!-- 研究方案面板 -->
+    <div id="panel-plan" style="display:none;">
+      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📋 研究方案</span>
+        <button class="ctx-refresh" onclick="refreshPlanStatus()" title="刷新">🔄</button>
+      </div>
+      <div class="ctx-panel" id="plan-panel-content">
+        <div class="ctx-empty" id="plan-empty">
+          <div class="ctx-empty-icon">📋</div>
+          <div>暂无研究方案</div>
+          <div style="font-size:11px;margin-top:4px;">使用"设计方案"/"怎么分析"等关键词触发</div>
+        </div>
+        <div id="plan-content" style="display:none;">
+          <div class="plan-overview" id="plan-overview"></div>
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">
+            <h3 style="font-size:13px;margin-bottom:8px;">执行待办</h3>
+            <div id="plan-todo-list" style="font-size:12px;"></div>
+          </div>
+          <div style="margin-top:8px;">
+            <button class="ctx-refresh" onclick="executePlan()" style="width:100%;padding:6px;text-align:center;">▶ 开始执行方案</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -901,6 +926,18 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
+  } else if (msg.type === 'todos_update') {
+    // 来自 server 的实时待办同步
+    renderTodos(msg.todos);
+    // 如果 todos 包含 skill 字段，高亮显示
+    if (msg.todos && msg.todos.length) {
+      updatePlanIndicator(true);
+    }
+  } else if (msg.type === 'intent_active') {
+    // research_plan / plan_refine 激活
+    if (msg.intent === 'research_plan' || msg.intent === 'plan_refine') {
+      updatePlanIndicator(true);
+    }
   } else if (msg.type === 'cancelled') {
     addError('任务已取消');
     document.getElementById('send').disabled = false;
@@ -1445,17 +1482,17 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context'];
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'plan'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
 
   // 显示对应右侧面板
-  ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context'].forEach(function(p) {
+  ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-plan'].forEach(function(p) {
     document.getElementById(p).style.display = 'none';
   });
 
-  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context' };
+  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', plan: 'panel-plan' };
   document.getElementById(panelMap[view]).style.display = '';
 
   if (view === 'files') browseFiles('');
@@ -1465,6 +1502,7 @@ function switchView(view) {
   if (view === 'settings') loadSettings();
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
+  if (view === 'plan') refreshPlanStatus();
 }
 
 // === 模型管理 ===
@@ -2268,6 +2306,25 @@ function renderTodos(todos) {
     var done = t.status === 'completed' || t.done;
     return '<div class="todo-item' + (done ? ' done' : '') + '"><div class="todo-check">' + (done ? '✓' : '') + '</div><span class="todo-text">' + escapeHtml(t.content || t.text || t.title || '') + '</span></div>';
   }).join('');
+  // 如果有 skill 字段，追加显示
+  if (todos && todos.length) {
+    el.style.maxHeight = '400px';
+    el.style.overflowY = 'auto';
+  }
+}
+
+function updatePlanIndicator(active) {
+  var navPlan = document.getElementById('nav-plan');
+  if (!navPlan) return;
+  if (active) {
+    navPlan.style.display = '';
+    navPlan.style.color = 'var(--primary)';
+    navPlan.innerHTML = '📋 研究方案 <span style="font-size:10px;background:var(--primary);color:#fff;border-radius:3px;padding:1px 5px;">活跃</span>';
+  } else {
+    navPlan.style.display = '';
+    navPlan.style.color = '';
+    navPlan.innerHTML = '📋 研究方案';
+  }
 }
 
 // === 设置 ===
@@ -2689,8 +2746,52 @@ function stopCtxPolling() {
     } else {
       stopCtxPolling();
     }
+    if (view === 'plan') refreshPlanStatus();
   };
 })();
+
+// === 研究方案面板 ===
+function refreshPlanStatus() {
+  // 检查是否有活跃方案
+  var planEl = document.getElementById('plan-content');
+  var emptyEl = document.getElementById('plan-empty');
+  var overviewEl = document.getElementById('plan-overview');
+  var todoListEl = document.getElementById('plan-todo-list');
+  
+  // 从 todo-list 同步待办到方案面板
+  var todoEl = document.getElementById('todo-list');
+  if (todoEl && todoListEl) {
+    todoListEl.innerHTML = todoEl.innerHTML || '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>';
+  }
+  
+  // 检查是否有方案内容(从聊天消息中提取)
+  var msgs = document.querySelectorAll('.msg-bubble.assistant .msg-content');
+  var hasPlan = false;
+  msgs.forEach(function(m) {
+    if (m.innerHTML.indexOf('研究背景') > -1 || m.innerHTML.indexOf('分析路线') > -1 || m.innerHTML.indexOf('文献依据') > -1) {
+      hasPlan = true;
+      if (overviewEl && !overviewEl.innerHTML) {
+        overviewEl.innerHTML = '<div style="font-size:12px;color:var(--success);padding:8px;">✅ 已有研究方案 — 请查看对话中的详细方案</div>';
+      }
+    }
+  });
+  
+  if (hasPlan || (todoEl && todoEl.textContent.indexOf('暂无') === -1)) {
+    if (planEl) planEl.style.display = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+  } else {
+    if (planEl) planEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = '';
+  }
+}
+
+function executePlan() {
+  // 触发方案执行 — 发送消息让 agent 执行 todos
+  var input = document.getElementById('input');
+  if (!input) return;
+  input.value = '请开始执行研究方案中的所有待办任务';
+  send(false);
+}
 </script>
 </body>
 </html>

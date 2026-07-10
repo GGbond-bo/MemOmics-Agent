@@ -468,20 +468,96 @@ def _detect_domain_from_text(text: str) -> str:
 
 
 # === 图路由：意图分类 + 技能触发注入 ===
+# 五级意图：self_intro > chat > research_plan > direct_exec > analysis
+# SOUL.md 三级操作级别（轻量/统计/分析级）在 agent 内部独立判断，意图不覆盖
 def _classify_intent(text: str):
-    """六类意图：analysis, report, install, knowledge, literature, chat
-    Returns: (intent, confidence)"""
-    if not text:
-        return ("chat", 0.0)
-    t = text.lower()
+    """五级意图识别。Returns: (intent, confidence, meta_dict)
     
+    Intent flow:
+      self_intro    — 自介快回，绕过LLM
+      chat          — 纯闲聊，不注入skill
+      research_plan — 设计研究方案，文献驱动
+      direct_exec   — 参数已定，直接执行（跳过规划，保留审查）
+      analysis      — 标准分析流程（默认）
+    """
+    if not text:
+        return ("chat", 0.0, {})
+    t = text.lower().strip()
+    meta = {}  # extra context for downstream handlers
+
+    # === Priority 1: self-intro (fast-reply, no LLM) ===
+    SELF_INTRO_KW = ["你是谁", "介绍你自己", "介绍下自己", "你能做什么", "介绍一下", "自我介绍",
+                     "who are you", "what can you do", "introduce yourself"]
+    if any(kw in t for kw in SELF_INTRO_KW):
+        return ("self_intro", 0.99, {})
+
+    # === Priority 2: chat (non-bioinfo, casual) ===
+    CHAT_KW = ["你好", "嗨", "hello", "hi", "谢谢", "感谢", "再见", "拜拜",
+               "天气", "今天天气", "怎么样", "好吗",
+               "怎么用", "如何使用", "能不能", "可不可以",
+               "有趣", "好玩", "厉害", "牛逼", "哈哈", "呵呵",
+               "吃饭", "睡觉", "周末", "节日", "放假",
+               "你觉得", "你认为", "你的看法"]
+    BIO_KW = ["分析", "跑", "做", "执行", "计算", "画图", "出图",
+              "处理", "统计", "差异", "富集", "聚类", "降维", "注释",
+              "数据", "基因", "细胞", "表达", "qc", "deg", "rna", "atac",
+              "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物"]
+    has_chat = any(kw in t for kw in CHAT_KW)
+    has_bio = any(kw in t for kw in BIO_KW)
+    if has_chat and not has_bio:
+        return ("chat", 0.90, {"reason": "casual_no_bio"})
+    if not has_bio and len(t) < 15:
+        return ("chat", 0.70, {"reason": "short_no_bio"})
+
+    # === Priority 3: research_plan (literature-driven plan design) ===
+    PLAN_KW = ["设计方案", "出个方案", "出方案", "规划一下", "规划",
+               "实验设计", "研究设计", "研究思路", "分析路线", "分析策略",
+               "下一步做", "接下来做", "下一步怎么", "接下来怎么",
+               "怎么设计", "如何设计", "方案设计",
+               "研究框架", "分析框架", "科研设计", "课题设计"]
+    if any(kw in t for kw in PLAN_KW):
+        meta["modalities"] = _detect_modalities_from_text(t)
+        return ("research_plan", 0.92, meta)
+    # Pure question about HOW to analyze (no "help me do")
+    if ("怎么分析" in t or "如何分析" in t or "怎样分析" in t) and \
+       not any(kw in t for kw in ["帮我", "做一下", "跑一下", "直接"]):
+        meta["modalities"] = _detect_modalities_from_text(t)
+        return ("research_plan", 0.85, meta)
+
+    # === Priority 4: direct_exec (user provides params, skip planning) ===
+    DIRECT_KW = ["直接跑", "直接执行", "直接做", "照这个做", "按这个做",
+                 "参数写好了", "确定了", "代码写好了", "已经写好了",
+                 "就按这个", "只用执行", "照着做", "就做这个", "只做这个",
+                 "就按参数", "就这个参数", "跑一下就行", "直接按"]
+    if any(kw in t for kw in DIRECT_KW):
+        return ("direct_exec", 0.90, {"skip_planning": True})
+
+    # === Priority 5: report / literature / install (existing intents, preserved) ===
     report_kw = ["html", "报告", "report", "做报告", "生成报告", "分析报告",
                   "总结报告", "生成html", "html报告", "做ppt", "slides"]
     install_kw = ["安装", "install", "配置", "配置环境", "setup", "依赖", "dependency",
                   "创建skill", "create skill", "新skill", "新 skill", "注册skill", "创建"]
-    kb_kw = ["知识库", "knowledge", "搜索知识", "查找方法", "protocol", "流程"]
     lit_kw = ["文献", "论文", "literature", "paper", "pubmed", "下载论文",
               "找文献", "查论文", "搜索文献", "search paper", "find paper"]
+    kb_kw = ["知识库", "knowledge", "搜索知识", "查找方法", "protocol", "流程"]
+    
+    rpt_s = sum(1 for kw in report_kw if kw in t)
+    ins_s = sum(1 for kw in install_kw if kw in t)
+    lit_s = sum(1 for kw in lit_kw if kw in t)
+    kb_s = sum(1 for kw in kb_kw if kw in t)
+    
+    if rpt_s >= 1:
+        return ("report", min(rpt_s * 0.3, 1.0), {})
+    if lit_s >= 2 or (lit_s >= 1 and ins_s == 0):
+        return ("literature", min(lit_s * 0.4, 1.0), {})
+    if lit_s >= 1:
+        return ("literature", 0.5, {})
+    if ins_s >= 1:
+        return ("install", min(ins_s * 0.4, 1.0), {})
+    if kb_s >= 1:
+        return ("knowledge", min(kb_s * 0.3, 1.0), {})
+
+    # === Default: analysis (standard bioinfo flow) ===
     analysis_kw = [
         "分析", "analysis", "建库", "测序", "seq", "组学", "omics",
         "差异", "differential", "聚类", "clustering", "轨迹", "trajectory",
@@ -499,33 +575,40 @@ def _classify_intent(text: str):
         "酶切", "restriction", "表达量", "expression", "热图", "heatmap",
         "火山图", "volcano", "小提琴", "violin", "cns", "nature"
     ]
-    
-    report_s = sum(1 for kw in report_kw if kw in t)
-    install_s = sum(1 for kw in install_kw if kw in t)
-    kb_s = sum(1 for kw in kb_kw if kw in t)
-    lit_s = sum(1 for kw in lit_kw if kw in t)
     analysis_s = sum(1 for kw in analysis_kw if kw in t)
-    
-    if report_s >= 1 and report_s > analysis_s:
-        return ("report", min(report_s * 0.3, 1.0))
-    if lit_s >= 2 or (lit_s >= 1 and install_s == 0):
-        return ("literature", min(lit_s * 0.4, 1.0))
-    if lit_s >= 1:
-        return ("literature", 0.5)
-    if install_s >= 1:
-        return ("install", min(install_s * 0.4, 1.0))
     if analysis_s >= 2:
-        return ("analysis", min(analysis_s * 0.15, 1.0))
+        return ("analysis", min(analysis_s * 0.15, 1.0), {})
     if analysis_s >= 1:
-        return ("analysis", 0.5)
-    if kb_s >= 1:
-        return ("knowledge", min(kb_s * 0.3, 1.0))
-    # 自我介绍关键词检测
-    self_intro_kw = ["你是谁", "介绍你自己", "介绍下自己", "你能做什么", "介绍一下", "自我介绍",
-                     "who are you", "what can you do", "introduce yourself"]
-    if any(kw in t for kw in self_intro_kw):
-        return ("self_intro", 1.0)
-    return ("chat", 0.0)
+        return ("analysis", 0.50, {})
+
+    return ("chat", 0.0, {})
+
+
+def _detect_modalities_from_text(text: str) -> list:
+    """Quick modality detection for routing before agent runs."""
+    t = text.lower()
+    mods = []
+    if any(kw in t for kw in ["scrna", "单细胞", "single cell", "10x", "seurat", "scanpy"]):
+        mods.append("scrna")
+    if any(kw in t for kw in ["atac", "scatac", "开放染色质", "chromatin", "archr", "signac"]):
+        mods.append("scatac")
+    if any(kw in t for kw in ["bulk rna", "bulk-rna", "转录组测序", "rna-seq", "rnaseq", "deseq2", "edger"]):
+        mods.append("bulk_rna")
+    if any(kw in t for kw in ["蛋白", "proteom", "质谱", "蛋白质", "docking", "ppp"]):
+        mods.append("proteomics")
+    if any(kw in t for kw in ["药物", "drug", "靶点", "靶向", "admet", "重定位"]):
+        mods.append("drug")
+    if any(kw in t for kw in ["微生物", "microbiom", "菌群", "16s", "宏基因"]):
+        mods.append("microbiome")
+    if any(kw in t for kw in ["空间", "spatial", "visium"]):
+        mods.append("spatial")
+    if any(kw in t for kw in ["脂质", "lipidom"]):
+        mods.append("lipidomics")
+    if any(kw in t for kw in ["gwas", "遗传", "变异", "variant", "mendelian", "prs"]):
+        mods.append("genetics")
+    if any(kw in t for kw in ["生存", "survival", "cox", "kaplan", "预后"]):
+        mods.append("clinical")
+    return mods if mods else ["scrna"]
 
 
 def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -> str:
@@ -589,6 +672,59 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
         lines.append("禁止在没有 skill_view 的情况下直接写代码运行分析！" if zh else
                      "NEVER write analysis code without skill_view!")
     
+    elif intent == "research_plan":
+        lines += [
+            "你是一个生信研究方案设计专家。按以下流程工作：",
+            "",
+            "## 第1步：收集信息（必须）",
+            "1. 确认用户的实验设计、数据模态、物种、组织、研究方向",
+            "2. 确认用户当前的进度（原始数据？已注释？已有DEG？）",
+            "3. 调用 memomics_pipeline(action='parse', user_input='用户原始消息') 解析方向+模态",
+            "",
+            "## 第2步：文献检索（必须先检索再出方案，禁止凭空编造）",
+            "1. literature_search(query='研究方向 数据模态 组织', max_results=5) 搜索PubMed",
+            "2. search_knowledge_base(query='关键生物学问题') 查询知识库",
+            "3. 如需补充，调用 web_search(query='研究方法 文献')",
+            "",
+            "## 第3步：生成结构化研究方案",
+            "按模板输出：1.背景 2.文献依据(表格:文献|方法|关键发现) 3.分析路线(方法+skill+文献) 4.图表策略 5.验证建议 6.参考文献",
+            "每步标注文献来源(作者+年份+期刊)，无文献支持标注'AI建议'",
+            "",
+            "## 第4步：生成执行待办（必须）",
+            "1. memomics_pipeline(action='todos', selected_modules=[...]) 生成结构化待办",
+            "2. todo(todos=[...]) 写入待办列表，每个待办必须带skill字段",
+            "",
+            "## 铁律：必须先查文献再出方案；待办skill必须真实存在；文献为0时诚实告知；先单独分析每种模态，再整合，最后下游分析",
+            "",
+        ]
+    elif intent == "plan_refine":
+        lines += [
+            "用户想修改已有的研究方案。",
+            "1. 回顾现有 active_plan 和 todos",
+            "2. 根据用户新要求追加/修改/移除分析步骤",
+            "3. 调用 memomics_pipeline + todo(todos=[...]) 更新待办列表",
+            "4. 简要说明修改了什么",
+            "",
+        ]
+    elif intent == "direct_exec":
+        lines += [
+            "用户参数/代码已确定，只需执行。",
+            "",
+            "跳过: literature_search, memomics_pipeline, kb_search, module_select, todo",
+            "",
+            "保留(SOUL.md三级操作级别不受影响):",
+            "1. skill_view(相关skill) 加载模板参数",
+            "2. check_env() 环境检查",
+            "3. search_knowledge_base() (统计级及以上保留)",
+            "4. rail_review(phase='pre') (统计级及以上保留)",
+            "5. terminal 执行用户指定的代码/参数",
+            "6. rail_review(phase='post') (所有级别保留)",
+            "7. debate_analysis() (分析级保留)",
+            "8. record_run() 记录执行",
+            "",
+            "直接执行用户给定的参数，不要改写！该审查的不能跳过。",
+            "",
+        ]
     elif intent == "report":
         lines.append("用户要求生成报告。先调用 skill_view('bioinformatics-html-report')，"
                      "使用 ReportBuilder + auto_fill_from_logs() 自动收集所有分析数据。" if zh else
@@ -2456,14 +2592,20 @@ async def ws_endpoint(ws: WebSocket):
                     session["domain"] = domain
                 
                 # 意图分类 + 构建技能注入上下文
-                _intent, _intent_conf = _classify_intent(user_text)
+                _intent, _intent_conf, _intent_meta = _classify_intent(user_text)
                 session["intent"] = _intent
                 session["intent_conf"] = _intent_conf
-                if _intent != "chat":
+                session["intent_meta"] = _intent_meta
+                # plan_refine: if active plan exists and user wants to modify
+                if _intent == "research_plan" and session.get("active_plan"):
+                    _intent = "plan_refine"
+                    session["intent"] = _intent
+                    _intent_meta["is_refine"] = True
+                if _intent not in ("chat", "self_intro"):
                     _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"))
-                    logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
                 else:
                     _skill_ctx = None
+                logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
                 # 注册 WebSocket 引用（必须在 emit 之前，否则 session/thinking/progress 事件被丢弃）
                 loop = asyncio.get_event_loop()
@@ -2615,6 +2757,13 @@ async def ws_endpoint(ws: WebSocket):
                                 if isinstance(result_obj, dict) and result_obj.get("_evolution_event"):
                                     evt = result_obj["_evolution_event"]
                                     _session_emit(session, {"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            except Exception:
+                                pass
+                        # todo/todo_manage 完成后同步待办到前端
+                        if tool_name in ("todo", "todo_manage", "memomics_todo_manage"):
+                            try:
+                                todos = agent._todo_store.read() if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
                         # terminal 执行后检测新图片
@@ -2853,6 +3002,10 @@ async def ws_endpoint(ws: WebSocket):
                         # 图路由：根据意图+领域注入技能触发指令（P1+P2+P3）
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
+
+                        # research_plan 模式通知前端激活方案面板
+                        if _intent in ("research_plan", "plan_refine"):
+                            _session_emit(session, {"type": "intent_active", "intent": _intent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
                         def _do_run():
                             result = agent.run_conversation(
