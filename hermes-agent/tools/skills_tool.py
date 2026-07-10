@@ -2204,6 +2204,23 @@ _PIPELINE_STAGE_KEYWORDS = {
     "04_report": ["html", "report", "报告", "ppt", "presentation", "演示", "论文", "paper", "manuscript", "写作", "文献", "总结", "summary", "literature"],
 }
 
+# === S1: when_to_use index ===
+_wtu_index = None
+
+def _load_wtu_index() -> dict:
+    """Load when_to_use keyword index from cache file."""
+    global _wtu_index
+    if _wtu_index is not None:
+        return _wtu_index
+    import json, os
+    wtu_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'hermes_home', 'skill_when_to_use_index.json')
+    try:
+        with open(wtu_path, 'r', encoding='utf-8') as f:
+            _wtu_index = json.load(f)
+    except Exception:
+        _wtu_index = {}
+    return _wtu_index
+
 def _detect_analysis_stage(user_message: str) -> Optional[str]:
     """检测用户消息属于哪个分析流水线阶段。
 
@@ -2215,10 +2232,19 @@ def _detect_analysis_stage(user_message: str) -> Optional[str]:
     best_score = 0
     for stage, keywords in _PIPELINE_STAGE_KEYWORDS.items():
         score = sum(1 for kw in keywords if kw in msg_lower)
+        # Chinese bigram boost: split Chinese text into 2-char bigrams for fuzzy matching
+        import re as _re_stage
+        chinese_chars = _re_stage.findall(r'[一-鿿]', user_message)
+        for i in range(len(chinese_chars) - 1):
+            bigram = chinese_chars[i] + chinese_chars[i+1]
+            for kw in keywords:
+                if len(kw) >= 2 and bigram in kw:
+                    score += 0.3  # partial match bonus
+                    break
         if score > best_score:
             best_score = score
             best_stage = stage
-    return best_stage if best_score >= 2 else None
+    return best_stage if best_score >= 1 else None
 
 def _get_skills_by_stage(stage: str) -> list:
     """获取指定流水线阶段的 skill 列表。"""
@@ -2704,11 +2730,15 @@ def skill_list_by_domain(domain: str = None, task_id: str = None) -> str:
 # ===== 语义 skill 搜索工具 =====
 # 受 PantheonOS 启发：LLM 可通过自然语言描述搜索技能
 
-def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = None) -> str:
+def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = None, stage: str = None) -> str:
     """Search skills by natural language query.
     
     Uses keyword matching + TF-IDF to find relevant skills.
     Returns up to top_k results with scores and domain info.
+    
+    Pipeline stage routing: skills are pre-filtered by analysis stage
+    (00_data/01_preprocess/02_basic/03_advanced/04_report) to narrow
+    search space from ~276 to ~20-30 skills, dramatically improving precision.
     
     PantheonOS-inspired: LLM can search skills by describing what it needs,
     without knowing the exact skill name.
@@ -2718,6 +2748,7 @@ def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = 
                "批次校正", "find cell type markers")
         domain: Optional domain filter to narrow search
         top_k: Maximum results (default 5, max 20)
+        stage: Optional pipeline stage code. Auto-detected from query if not provided.
     
     Returns:
         JSON with ranked skill matches
@@ -2729,6 +2760,23 @@ def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = 
         
         query_lower = query.strip().lower()
         top_k = min(max(1, top_k), 20)
+        
+        # === S2: Pipeline stage routing ===
+        # Auto-detect stage from query if not explicitly provided
+        if not stage:
+            stage = _detect_analysis_stage(query_lower)
+        
+        # Pre-filter by stage: only search skills within the detected pipeline stage
+        # Narrows search space from ~276 skills to ~20-30, boosting precision
+        stage_skill_names = set()
+        if stage and stage in _PIPELINE_STAGE_INDEX:
+            for sd in _PIPELINE_STAGE_INDEX[stage]["skills"]:
+                stage_skill_names.add(sd["name"])
+        
+        # Also add data retrieval skills to all stages (always accessible)
+        if stage != "00_data" and "00_data" in _PIPELINE_STAGE_INDEX:
+            for sd in _PIPELINE_STAGE_INDEX["00_data"]["skills"]:
+                stage_skill_names.add(sd["name"])
         
         # === Hybrid search: try curated alias matching (100% known coverage) ===
         try:
@@ -2758,6 +2806,16 @@ def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = 
                 boost = 0.6 if len(alias_key) >= 10 else 0.3
                 alias_boosts[canonical_name] = max(alias_boosts.get(canonical_name, 0), boost)
         
+        # === S1: when_to_use index scoring boost ===
+        # Skills whose "When to Use" section matches the query get a score boost.
+        # This captures trigger scenarios that keyword/alias matching misses.
+        wtu_index = _load_wtu_index()
+        wtu_boosts = {}
+        for skill_name, wtu_keywords in wtu_index.items():
+            matches = sum(1 for kw in wtu_keywords if kw in query_lower)
+            if matches >= 3:
+                wtu_boosts[skill_name] = min(0.25, 0.05 * matches)  # cap at 0.25
+        
         candidates = []
         seen_names = set()
         name_tokens = [t for t in query_lower.split() if len(t) >= 2]
@@ -2768,6 +2826,10 @@ def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = 
         for s in all_skills:
             skill_name = s.get("name", "")
             skill_desc = s.get("description", "")
+            
+            # Stage filter: skip skills outside the detected stage
+            if stage_skill_names and skill_name not in stage_skill_names:
+                continue
             skill_category = s.get("category", "")
             
             # Skip if already added via alias
@@ -2881,7 +2943,12 @@ def skill_search(query: str, domain: str = None, top_k: int = 5, task_id: str = 
                         })
                         break
         
-        # Step 4: Apply alias boosts
+        # Step 4: Apply alias boosts + when_to_use boosts
+        for c in candidates:
+            wtu_boost = wtu_boosts.get(c["name"], 0)
+            if wtu_boost > 0:
+                c["score"] = round(min(1.0, c["score"] + wtu_boost), 3)
+                c["match_type"] = c["match_type"] + "+when_to_use"
         for c in candidates:
             boost = alias_boosts.get(c["name"], 0)
             if boost > 0:

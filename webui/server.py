@@ -534,6 +534,14 @@ def _classify_intent(text: str):
     if any(kw in t for kw in PLAN_KW):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.92, meta)
+    # regex fallback for patterns like "多组学.*整合"
+    PLAN_RE = ["多组学.*整合", "整合.*数据", "鉴定.*群体",
+               "atac.*rna.*整合", "rna.*atac.*整合", "atac.*和.*rna",
+               "rna.*和.*atac", "怎么.*鉴定", "设计.*方案"]
+    for pat in PLAN_RE:
+        if _re_mod.search(pat, t):
+            meta["modalities"] = _detect_modalities_from_text(t)
+            return ("research_plan", 0.90, meta)
     # "设计" + "方案" 同时出现在文中（宽松匹配）
     if ("设计" in t or "制定" in t) and ("方案" in t or "路线" in t or "思路" in t):
         meta["modalities"] = _detect_modalities_from_text(t)
@@ -682,7 +690,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
     if intent == "analysis":
         lines += [
             "这是一个生物信息学分析任务。你必须严格执行以下步骤，不可跳过：",
-            "1. 调用 skill_search() 查找合适的 skill",
+            "1. 调用 skill_search(query='你的分析需求', stage='auto') 查找合适的 skill（stage参数自动缩小搜索范围到当前分析阶段）",
             "2. 调用 skill_view() 加载完整的 skill 指令",
             "3. 确认参数后，通过 terminal 执行代码",
             "4. 执行前必须经过 rail_review(phase=\"pre\", skill_name=\"加载的skill名\") 审查",
@@ -691,7 +699,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "",
         ] if zh else [
             "Bioinformatics analysis task. Follow SOUL.md iron rules:",
-            "1. skill_search() to find the right skill",
+            "1. skill_search(query='your analysis', stage='auto') to find skills (stage narrows search by analysis phase)",
             "2. skill_view() to load complete skill instructions",
             "3. terminal to execute code after confirming parameters",
             "4. rail_review(phase=\"pre\", skill_name=\"loaded skill\") BEFORE execution",
