@@ -2828,6 +2828,23 @@ async def ws_endpoint(ws: WebSocket):
                                                     })
                                     except Exception:
                                         pass
+                                # ⚡ 桥接: todo_manage → agent._todo_store
+                                if tool_name == "todo_manage" and hasattr(agent, "_todo_store"):
+                                    try:
+                                        result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
+                                        if isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and result_obj.get("todos"):
+                                            hermes_todos = []
+                                            for i, td in enumerate(result_obj["todos"]):
+                                                hermes_todos.append({
+                                                    "id": td.get("id", f"todo_{i}"),
+                                                    "content": f"[{td.get('module_id','')}] {td.get('substep_name','')}",
+                                                    "status": td.get("status", "pending"),
+                                                })
+                                            agent._todo_store.write(hermes_todos)
+                                            # 同时缓存为 pipeline_todos 供 skill 映射
+                                            session["_pipeline_todos"] = result_obj["todos"]
+                                    except Exception:
+                                        pass
                                 # 规范化 store_todos: 字符串→字典；模糊匹配补充 skill
                                 store_todos_raw = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") and agent._todo_store else []
                                 store_todos = []
@@ -2835,7 +2852,17 @@ async def ws_endpoint(ws: WebSocket):
                                     if isinstance(t, str):
                                         store_todos.append({"title": t, "status": "pending", "skill": "", "module": ""})
                                     elif isinstance(t, dict):
-                                        store_todos.append(t)
+                                        # Hermes TodoStore 格式: {id, content, status} → {title, status, skill, module}
+                                        if "content" in t and "title" not in t:
+                                            store_todos.append({
+                                                "title": t.get("content", ""),
+                                                "status": t.get("status", "pending"),
+                                                "skill": t.get("skill", ""),
+                                                "module": t.get("module", t.get("module_id", "")),
+                                                "id": t.get("id", ""),
+                                            })
+                                        else:
+                                            store_todos.append(t)
                                 pipeline_todos = session.get("_pipeline_todos", [])
                                 if not store_todos and pipeline_todos:
                                     todos = pipeline_todos
