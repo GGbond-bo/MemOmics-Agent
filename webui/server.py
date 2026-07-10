@@ -694,8 +694,8 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "",
             "## 输出格式",
             "先总结用户研究背景（数据/物种/组织/方向/进度），",
-            "再以表格列出文献调研结果：| 文献(作者+年份) | 方法 | 关键发现 | 与用户研究相关性 |",
-            "文献不足5条时诚实告知，标注'文献有限，以下部分基于AI知识'",
+            "再以表格列出文献调研结果：| 文献(作者+年份,PMID/DOI) | 方法 | 关键发现 | 与用户研究相关性 |",
+            "每篇文献必须附 PMID/DOI！文献不足5条时诚实告知，标注'文献有限，以下部分基于AI知识'",
             "",
             "## 结尾问题（必须问）",
             "最后问用户：【需要我基于以上文献，生成包含具体分析方法、图表策略和可执行待办的完整研究方案吗？】",
@@ -715,12 +715,11 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "",
             "## 执行步骤（严格按顺序，缺一不可）",
             "Step 1: skill_search(query='需要的分析类型') → 找到匹配的真实skill名",
-            "Step 2: 输出完整的方案文本（Markdown），含:",
+            "Step 2: 输出完整的方案文本（Markdown，每篇文献必须附 PMID/DOI 链接），含:",
             "  【研究背景】【文献依据表格】【分析路线(分阶段，每步标注skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
-            "Step 3: 立即调用 memomics_pipeline(action='todos', selected_modules=[...])",
-            "Step 4: 立即调用 todo(todos=[{title:..., skill:'真实skill名', module:'...'}]) 写入待办",
-            "  skill 必须来自 Step 1 中找到的真实skill名！禁止空skill！",
-            "  不要执行任何分析代码！方案和待办输出后就结束！",
+            "Step 3: 调用 memomics_pipeline(action='todos', selected_modules=[...]) 生成带skill的待办",
+            "  ⚠️ memomics_pipeline 自动绑定真实 skill → 不要调用 todo() → 禁止空 skill！",
+            "  方案和待办的 skill 必须来自 Step 1 的 skill_search 结果！禁止执行任何分析代码！方案和待办输出后就结束！",
             "",
         ]
     elif intent == "direct_exec":
@@ -2812,21 +2811,44 @@ async def ws_endpoint(ws: WebSocket):
                                                     })
                                     except Exception:
                                         pass
-                                # 读取 store 和缓存的 pipeline todos，合并后发射
-                                store_todos = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                # 规范化 store_todos: 字符串→字典；模糊匹配补充 skill
+                                store_todos_raw = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                store_todos = []
+                                for t in store_todos_raw:
+                                    if isinstance(t, str):
+                                        store_todos.append({"title": t, "status": "pending", "skill": "", "module": ""})
+                                    elif isinstance(t, dict):
+                                        store_todos.append(t)
                                 pipeline_todos = session.get("_pipeline_todos", [])
-                                # 如果 store 为空但有 pipeline todos，用 pipeline 的
                                 if not store_todos and pipeline_todos:
                                     todos = pipeline_todos
                                 else:
                                     todos = store_todos
-                                    # 如果 store 中有无 skill 的 todo，尝试从 pipeline 匹配
-                                    if pipeline_todos and any(not t.get("skill") for t in todos):
-                                        skill_map = {t.get("title",""): t for t in pipeline_todos if isinstance(t, dict) and t.get("skill")}
+                                    if pipeline_todos:
+                                        skill_map = {}
+                                        for pt in pipeline_todos:
+                                            if isinstance(pt, dict) and pt.get("skill"):
+                                                ttl = pt.get("title", pt.get("name", ""))
+                                                skill_map[ttl] = pt
+                                                for kw in re.split(r"[\s\-–—]+", ttl.lower()):
+                                                    if len(kw) >= 3:
+                                                        skill_map[kw] = pt
                                         for st in todos:
-                                            if not st.get("skill") and st.get("title") in skill_map:
-                                                st["skill"] = skill_map[st["title"]].get("skill", "")
-                                                st["module"] = skill_map[st["title"]].get("module", "")
+                                            if not st.get("skill"):
+                                                ttl = st.get("title", "")
+                                                if ttl in skill_map:
+                                                    st["skill"] = skill_map[ttl].get("skill", "")
+                                                    st["module"] = skill_map[ttl].get("module", "")
+                                                else:
+                                                    best, best_score = None, 0
+                                                    for kw, pt in skill_map.items():
+                                                        if len(kw) >= 4 and kw in ttl.lower():
+                                                            if len(kw) > best_score:
+                                                                best_score = len(kw)
+                                                                best = pt
+                                                    if best:
+                                                        st["skill"] = best.get("skill", "")
+                                                        st["module"] = best.get("module", "")
                                 _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
