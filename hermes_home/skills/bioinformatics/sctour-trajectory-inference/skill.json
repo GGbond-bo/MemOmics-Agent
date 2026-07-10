@@ -1,8 +1,8 @@
 {
   "name": "sctour-trajectory-inference",
   "version": "1.1.0",
-  "success_count": 6,
-  "proven_script": "04_generate_report.py",
+  "success_count": 7,
+  "proven_script": "02_dual_route_sctour.py",
   "proven_params": [
     {
       "species": "人类",
@@ -63,6 +63,16 @@
       "date": "2026-07-08",
       "score": 0.0,
       "result": "scTour_Trajectory_Report.html 生成完成（3,869KB），含9张嵌入PNG图+6张三配置结果+3张对比。所有图片>5KB无空白。参数来源辩论已在报告中记录。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_dual_route_sctour.py",
+      "params": "配置: run1_balanced(alpha_recon_lec=0.5, alpha_recon_lode=0.5, n_latent=5), run2_encoder(lec=1.0, lode=0.0), run3_ode(lec=0.5, lode=0.5, ode_decoder=True)。路线A: Zone1/2/NMJ/5/6 (9,568 cells, 200ep, HVG2000)。路线B: Zone3/4/5 (6,974 cells, 200ep, HVG2000)。预过滤: nCounts 500-50000, nGenes 200-6000, MT%<20。无密度转换(保留稀疏矩阵)。CPU模式(24GB可用内存)。",
+      "date": "2026-07-08",
+      "score": 9,
+      "result": "路线A run1_balanced验证方向：Zone1(0.22/72y)→Zone2(0.39/68y)→NMJ(0.43/59y)→Zone5(0.67/57y)→Zone6(0.66/54y)。低伪时间=病理(Zone1, 72岁最高龄)，高伪时间=健康(Zone5/6, 54-57岁年轻)。Zone1内部梯度：底部MYH7+(慢肌)→中部RUNX1+++(去神经)→上部COL19A1+(N"
     }
   ]
 }

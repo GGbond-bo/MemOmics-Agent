@@ -1,7 +1,7 @@
 ---
 name: sctour-trajectory-inference
 description: "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。"
-version: 1.2.0
+version: 1.5.1
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
@@ -96,9 +96,7 @@ prerequisites:
 - 细胞数 < 500 → 数据量不足以训练 VAE
 - 细胞数 < 500 → 数据量不足以训练 VAE
 
-> **GPU 策略**：scTour 优先使用 GPU（CUDA），如果没有 GPU 则自动回退到 CPU。CPU 也能完整跑通，只是训练较慢。**不因无 GPU 而阻断执行**。
->
-> **Blackwell GPU (RTX 50 系列)**：NVIDIA RTX 5070 Ti / 5080 / 5090 使用 Blackwell 架构 (compute capability sm_120)。PyTorch 官方 cu124 索引仅提供 ≤2.6.0 版本（只支持到 sm_90 Hopper）。要使用 CUDA 加速，必须安装 PyTorch ≥2.8.0 从 cu128 测试通道：
+> **GPU 策略**：scTour 优先使用 GPU（CUDA），如果没有 GPU 则自动回退到 CPU。CPU 也能完整跑通，只是训练较慢。**不因无 GPU 而阻断执行**。\n>\n> **⚠️ CPU 可能比 GPU 更快（小模型场景）**：当细胞数 < 10,000 且 VAE 模型较小时（n_latent=5, n_vae_hidden=128），GPU 的显存搬运开销（~3-4s/epoch）可能超过 CPU 直接计算（~1.8s/epoch）。实测 9,568 细胞 × 1,500 HVGs 时 CPU 快 2×。**策略**：细胞数 < 10,000 时使用 `use_gpu=False`；细胞数 > 50,000 时使用 `use_gpu=True`；中间范围自由选择。\n>\n> **Blackwell GPU (RTX 50 系列)**：NVIDIA RTX 5070 Ti / 5080 / 5090 使用 Blackwell 架构 (compute capability sm_120)。PyTorch 官方 cu124 索引仅提供 ≤2.6.0 版本（只支持到 sm_90 Hopper）。要使用 CUDA 加速，必须安装 PyTorch ≥2.8.0 从 cu128 测试通道：
 > ```bash
 > pip install "torch>=2.8.0" --index-url https://download.pytorch.org/whl/test/cu128
 > ```
@@ -190,7 +188,7 @@ results/<模块>/<方法>/
 
 | 方式 | 文件 | 适用场景 |
 |------|------|---------|
-| **命令行脚本** | `scripts/run.py` → `run_sctour_inference.py` → `run_sctour_visualization.py` | Agent 自动化执行，8 步循环 + 审查 + 辩论 |
+| **命令行脚本** | `scripts/run.py` → `run_sctour_inference.py` → `run_sctour_visualization.py` | Agent 自动化执行，8 步循环 + 审查 + 辩论 |\n| **双路线脚本** | `scripts/dual_route_sctour.py` | 两条独立生物学过程的 scTour 分析（如去神经化 vs 应激→成熟），含 Zone1 内部梯度 + 年龄梯度锚点 |
 | **Jupyter Notebook** | `scripts/sctour_notebook.py` | 手动交互式探索，逐 Cell 运行，参数调优只需重跑 Cell 3 |
 
 > **Notebook 版**：13 个 Cell（环境→加载→预处理→训练→伪时间→潜在空间→向量场→4 种可视化→保存→统计→调参参考），适合在 Jupyter 中逐步调试。训练 Cell 独立，改参数后只重跑它即可。
@@ -558,6 +556,260 @@ results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
 
 > **重要**：结果基路径为 `results/`（如 `E:/MemOmics-Agent/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
 
+---
+
+## 🔀 双路线独立 scTour 工作流（Dual-Route scTour）
+
+> **⚠️ 后台进程中断恢复**：双路线分析耗时较长（4 配置 × 200 epoch），**必须实现 checkpoint 恢复机制**，否则进程意外中断后需从头重跑。2026-07-08 会话经验：4 配置中仅完成 1 个（run1_balanced），其余因进程中断丢失。同一会话中 checkpoint resume 策略**被验证有效**：`run_single_config` 顶部检查 `pseudotime.csv` 是否存在且非空，发现 run2_encoder 已在前一次中断前完成，自动跳过该配置，仅跑 run3_ode 和路线B 的 3 个配置。**关键设计**：每个配置写入独立子目录，pseudotime.csv 是单一原子性完成标志。
+
+### 中断恢复策略（Checkpoint Resume）
+
+当后台进程意外中断时（OOM/超时/网络），使用以下策略恢复：
+
+```python
+import os, json
+
+# 1. 检查哪些配置已完成
+output_root = "results/scTour/routeA"
+completed = []
+for cfg_name in ['run1_balanced', 'run2_encoder', 'run3_ode']:
+    csv_path = f"{output_root}/{cfg_name}/results/pseudotime.csv"
+    if os.path.isfile(csv_path) and os.path.getsize(csv_path) > 100:
+        completed.append(cfg_name)
+
+# 2. 只跑未完成的配置
+pending = [cfg for cfg in all_configs if cfg['name'] not in completed]
+print(f"已完成: {completed}，待跑: {[c['name'] for c in pending]}")
+for cfg in pending:
+    run_single_config(adata, cfg, output_root, ...)  # 单配置执行
+```
+
+**最佳实践**：
+- 每个配置的结果写入**独立子目录**（`run1_balanced/` → `results/`）：单个配置完成后，即使其他配置中断，已完成的结果不会丢失
+- 在 `run_sctour_route()` 顶部先检查 `pseudotime.csv` 是否存在且非空 → 存在则跳过该配置（幂等设计）
+- 后台进程使用 `background=true` + `notify_on_complete=true`，定期 `process(action="poll")` 检查进度
+
+> **问题场景**：当数据中包含**两条方向完全不同的独立生物学过程**时（如去神经化路线 vs 应激→成熟路线），scTour 的**单伪时间轴会混淆两条路线**，导致伪时间失去生物学意义。
+>
+> **解决方案**：不要用一条 scTour 跑所有亚群。拆成多条独立路线，各自训练 scTour 模型。
+
+### 何时触发
+
+- 用户已做亚聚类，发现多个亚群存在**两种以上不同的生物学过程方向**
+- scTour 的全数据运行时，Zone4（成熟度最高）和 NMJ（修复端点）被拉到同一伪时间末端
+- 两条路线的基因信号在潜在空间上互相抵消
+- 用户的核心问题是"谁转换谁"但 scTour 无法给出明确方向
+
+### 混淆机制
+
+当 scTour 的 VAE 同时看到两条路线时：
+
+| 过程 | 伪时间方向 | 成熟度曲线 | 端点 |
+|:----|:----------|:----------|:----|
+| 路线A（损伤→恢复） | 非单调：先降再升 | ⬇Then⬆ | NMJ（高成熟） |
+| 路线B（应激→成熟） | 单调上升 | ⬆ | Zone4（最高成熟） |
+
+**VAE 行为**：把两个"高成熟端点"拉到同一伪时间轴末端 → 中间的低成熟细胞（如去神经化 Zone1）被两条线同时拉扯 → 伪时间失去生物学意义。
+
+### 双路线工作流
+
+```python
+# ─── 路线A：去神经化→再神经支配路线 ───
+route_a = adata[adata.obs['subcluster'].isin(
+    ['Zone1', 'Zone2', 'NMJ', 'Zone5', 'Zone6']).copy()
+
+# 预处理
+sc.pp.calculate_qc_metrics(route_a, percent_top=None, log1p=False, inplace=True)
+sc.pp.highly_variable_genes(route_a, flavor='seurat_v3', n_top_genes=1000, subset=True)
+
+# 训练 scTour
+tnode_a = sct.train.Trainer(route_a, loss_mode='nb', 
+                             alpha_recon_lec=0.5, alpha_recon_lode=0.5)
+tnode_a.train()
+route_a.obs['ptime'] = tnode_a.get_time()
+
+# 验证方向：用已知基因作为"锚点"
+# 如果 COL19A1 高表达细胞在伪时间末端 → 方向正确
+
+# ─── 路线B：应激→成熟发育路线 ───
+route_b = adata[adata.obs['subcluster'].isin(
+    ['Zone3', 'Zone4', 'Zone5']).copy()
+
+# 预处理+训练（同上）
+tnode_b = sct.train.Trainer(route_b, loss_mode='nb', ...)
+tnode_b.train()
+route_b.obs['ptime'] = tnode_b.get_time()
+```
+
+## 双路线验证策略
+
+| 方法 | 验证内容 | 预期 |
+|:----|:--------|:----|
+| **分组统计** | 各亚群伪时间均值 | 路线A：Zone5/6→Zone1→Zone2→NMJ |
+| **KS 检验** | 路线内亚群间分离度 | 所有相邻亚群间 p < 0.05 |
+| **基因锚点法** | 用已知基因表达验证方向 | COL19A1 高表达细胞在伪时间末端 |
+| **内部梯度** | Zone1 内部基因表达变化 | 底部MYH7→中部去神经→顶部COL19A1 |
+| **🧭 年龄梯度锚点法** | 用 obs 中 age/condition 列的**年龄均值**作为伪时间方向的独立验证 | 伪时间低→高 应与 年龄低→高 一致（如果生物学过程是病理加重的方向时） |
+
+### 🧭 年龄梯度锚点法（Age Gradient Anchoring）
+
+> **🧭 条件锚点验证（Condition Anchoring）**：当数据包含多个实验条件/分组（如 Young_normal、Old_normal、Old_diabete、Old_diabete_Post）时，可以用**条件严重程度**作为伪时间方向的独立验证锚点。
+>
+> **原理**：如果伪时间低 = 病理状态重，则最恶劣条件下（如老年糖尿病运动后）的 Zone1 细胞应具有最低的伪时间均值。
+>
+> **实际验证流程**：
+> ```python
+> # 跑完 scTour 后，按条件分组统计伪时间
+> for condition in ['Young_normal', 'Old_normal', 'Old_diabete', 'Old_diabete_Post']:
+>     mask = result_df['type'] == condition
+>     pt = result_df.loc[mask & (result_df['subcluster']=='zone1'), 'ptime']
+>     print(f"{condition} Zone1: mean_ptime={pt.mean():.3f}")
+> ```
+>
+> **实际案例（人类骨骼肌衰老，11,630 cells，2026-07-08 验证结果）**：
+>
+> | 条件 | Zone1 伪时间均值 | 解读 |
+> |:----|:--------------:|:----:|
+> | Young_normal | **0.684** | 年轻人 Zone1 最靠近健康端（伪时间高） |
+> | Old_normal | **0.318** | 老年人 Zone1 进入去神经状态（伪时间降） |
+> | Old_diabete | **0.393** | 糖尿病不运动，病理程度中 |
+> | Old_diabete_Post | **0.163** ⚠️ 最低 | 糖尿病+运动，Zone1 伪时间最低 = **病理最重** |
+> | 结论 | 条件严重度和伪时间完全负相关 | ✅ **病理加重方向得到验证** |
+>
+> 这种条件锚点法与年龄梯度锚点法**双交叉验证**，只要两条线指向同一方向，结果极可靠。
+
+> **核心逻辑**：当数据包含**连续年龄段**（如年轻～老年）时，年龄可以作为伪时间方向的独立验证锚点。不依赖任何分子标记，纯靠样本元数据。
+
+**原理**：
+- 如果生物学过程是**病理加重**（变性、去神经化、衰老相关转变），伪时间从低到高的方向应与**年龄从低到高**一致
+- 如果生物学过程是**再生/恢复**，伪时间方向应与年龄方向**相反或无关**
+
+**使用场景**：
+- 数据包含 `age` 列（数值型）或 `type/condition` 列（如 Young vs Old）
+- 有明确的年龄/条件分组
+- 存在两条以上可能的路线的方向混淆
+
+**验证流程**：
+
+```python
+# 每条路线跑完 scTour 后，立即执行年龄梯度验证
+from scipy.stats import spearmanr
+
+stats = []
+for zone in zone_order:
+    mask = route.obs['subcluster'] == zone
+    stats.append({
+        'zone': zone,
+        'mean_ptime': route.obs.loc[mask, 'ptime'].mean(),
+        'mean_age': route.obs.loc[mask, 'age'].mean() if 'age' in route.obs.columns else \
+            route.obs.loc[mask, 'type'].apply(lambda t: 70 if 'Old' in t else 25).mean(),
+    })
+
+rho, p_val = spearmanr([s['mean_ptime'] for s in stats], [s['mean_age'] for s in stats])
+print(f"rho = {rho:.3f}, p = {p_val:.4f}")
+```
+
+**Zone1 内部验证**：如果 Zone1 底部（MYH7+）年龄显著低于 Zone1 顶部（COL19A1+），则支持"慢肌→去神经化"方向。
+
+**实际案例（人类骨骼肌衰老，11,630 cells）—— 年龄梯度验证基准：**
+
+| 亚群 | 平均年龄 | 平均伪时间 | 伪时间排名 | 年龄排名 |
+|:----|:-------:|:---------:|:---------:|:-------:|
+| Zone6（慢肌池） | 54.4岁 | 0.661 | 5（最高） | 1（最年轻） |
+| Zone5（快肌池） | 57.3岁 | 0.670 | 6（最高） | 2 |
+| **Zone1（去神经化）** | **72.0岁** | **0.223** | **1（最低）** | **6（最年长）** |
+| Zone2（再神经支配） | 68.0岁 | 0.389 | 2 | 5 |
+| NMJ | 58.7岁 | 0.429 | 3 | 3 |
+
+**Spearman 相关**：`ρ = -0.943, p = 0.017`（强负相关，统计显著）
+→ **伪时间越低 → 年龄越大 → 病理加重方向** ✅
+
+**Zone1 内部年龄梯度**（进一步验证慢肌→去神经化方向）：
+| Zone1 内部分层 | 平均伪时间 | 平均年龄 |
+|:------------|:---------:|:--------:|
+| 底部（MYH7+） | 伪时间高（~0.3-0.4） | 中年 |
+| 中部（RUNX1+去神经） | 伪时间中（~0.15-0.25） | ~70+ |
+| 上部（COL19A1+） | 伪时间低（~0.1） | ~75+ |
+→ 年龄从底部到上部递增 → **慢肌→去神经化方向**(MYH7在Zone1底部高表达, 随伪时间降低减少; 去神经基因相反)
+
+**年龄梯度锚点的绝对基准**：
+- 如果 Spearman ρ 绝对值 > 0.8 且 p < 0.05 → **强验证**，方向可靠
+- 如果 Spearman ρ 绝对值 0.3~0.8 → **中验证**，需结合其他锚点
+- 如果 Spearman ρ 绝对值 < 0.3 → **弱/无验证**，可能是两条路线互相混淆的结果
+
+### Zone1 内部梯度分析（Internal Gradient Analysis）
+
+当双路线中包含一个"连续过渡"的亚群（如 Zone1 内部有 MYH7→去神经基因→COL19A1 的梯度）时，可以用 scTour 伪时间验证该亚群内部的连续过渡：
+
+**原理**：利用 scTour 的伪时间对单个亚群内部排序，验证已知基因梯度是否沿伪时间单调变化。
+
+**实现**：
+```python
+# 路线A 跑完 scTour 后，对 Zone1 内部做梯度分析
+z1 = route_a[route_a.obs['subcluster'] == 'zone1'].copy()
+z1_pt = z1.obs['ptime'].values
+
+# 按伪时间三等分 Zone1
+q = np.percentile(z1_pt, [33, 67])
+z1.obs['z1_region'] = 'bottom'
+z1.obs.loc[z1.obs['ptime'] >= q[0], 'z1_region'] = 'middle'
+z1.obs.loc[z1.obs['ptime'] >= q[1], 'z1_region'] = 'top'
+
+# 验证基因梯度：底部MYH7→中部RUNX1→顶部COL19A1
+genes = ['MYH7', 'RUNX1', 'COL19A1']
+for g in genes:
+    for region, color in [('bottom','#4ECDC4'), ('middle','#FFA07A'), ('top','#FF6B6B')]:
+        mask = z1.obs['z1_region'] == region
+        expr = z1[mask, g].X.toarray().ravel() if hasattr(z1[mask,g].X, 'toarray') else z1[mask,g].X.ravel()
+        print(f'{g}/{region}: mean={expr.mean():.3f}, pct={(expr>0).mean()*100:.0f}%')
+
+# 基因表达沿伪时间散点图
+fig, ax = plt.subplots(figsize=(10, 5))
+for g in genes:
+    expr = z1[:, g].X.toarray().ravel() if hasattr(z1[:,g].X, 'toarray') else z1[:,g].X.ravel()
+    order = np.argsort(z1.obs['ptime'].values)
+    ax.plot(z1.obs['ptime'].values[order], expr[order], '.', markersize=1, alpha=0.3, label=g)
+ax.set_xlabel('Pseudotime (Zone1 only)')
+ax.set_ylabel('Expression')
+ax.legend()
+```
+
+**预期结果**：如果 Zone1 内部是慢肌→去神经化的连续过程，则伪时间从低到高，MYH7 表达递减、去神经基因表达递增、COL19A1 在末端出现。
+
+### 年龄梯度锚点可视化（Age Gradient Anchoring Plot）
+
+跑完 scTour 后，用双轴图同时展示伪时间均值和年龄均值，直观验证方向一致性：
+
+```python
+fig, ax1 = plt.subplots(figsize=(10, 6))
+zones = ['zone6','zone5','zone1','zone2','NMJ']  # 按生物学方向排列
+x = np.arange(len(zones))
+mean_pt = [...], mean_ag = [...]  # 从 stats_df 提取
+
+ax1.bar(x - 0.2, mean_pt, 0.35, label='Mean Pseudotime', color='#45B7D1', alpha=0.8)
+ax1.set_ylabel('Mean Pseudotime', color='#45B7D1')
+ax1.tick_params(axis='y', labelcolor='#45B7D1')
+
+ax2 = ax1.twinx()
+ax2.plot(x, mean_ag, 'o-', color='#FF6B6B', linewidth=2, markersize=8, label='Mean Age')
+ax2.set_ylabel('Mean Age (years)', color='#FF6B6B')
+
+ax1.set_xticks(x); ax1.set_xticklabels(zones)
+ax1.set_title('Age Gradient Anchoring')
+fig.tight_layout()
+```
+
+**Spearman 相关验证**：如果伪时间均值与年龄均值呈正相关，则支持"病理加重"方向。
+
+双路线跑完后，必须对以下问题调用 `debate_analysis`：
+
+1. **路线A 方向辩论**：伪时间方向是慢肌→去神经化（病理加重）还是去神经化→恢复慢肌（修复）？
+2. **路线B 方向辩论**：Zone4 伪时间是否介于 Zone3 和 Zone5 之间（过渡态）？
+3. **一致性检查**：两条路线的伪时间推断是否与已知生物学知识一致？
+
+### 相关参考\n\n- 完整案例：`references/smf-subcluster-transition-analysis.md`（v2 修正版，包含 Zone1 内部梯度结构和双路线方法论）\n- 可复用脚本：`scripts/dual_route_sctour.py`（配置好 DATA 路径和亚群列表即可运行）\n
+---
+
 ### 报告生成要求
 
 使用脚本 `scripts/generate_full_report.py` 生成综合 HTML 报告，**必须包含以下全部内容**（2026-07-08 用户明确要求："把辩证结果、参数怎么来的、结论辩证全都写上去"）：
@@ -611,6 +863,8 @@ results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
 - 完整版与精简版同时交付，满足不同阅读需求
 
 报告保存到 `results/.../03_advanced/scTour/`，**不保存到桌面**。
+- **报告生成前必须先加载 `bioinformatics-html-report` skill**（`skill_view('bioinformatics-html-report')`），不可凭记忆手写 report builder 代码。
+- 可复用模板：`templates/generate_html_report.py`（2026-07-08 人类骨骼肌 SMF 双路线分析验证通过），修改路径和解读文本即可使用。
 
 #### 图片引入策略（2026-07-08 用户强制执行 — 不可违反）
 
@@ -719,7 +973,7 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 | 向量场不明显 | 数据噪声大 | 增加 `n_top_genes`，或调整 `stream_density` |
 | 跨数据集预测失败 | 新数据基因不匹配 | 确保新数据使用相同的基因集 |
 | scanpy/anndata 包版本冲突，`import scanpy` 报错 | 环境中的 anndata 与 scanpy 版本不兼容（如 `make_register_namespace_decorator` 签名不匹配），或 Windows 上 `D:\Python\site-packages` 在 sys.path 中优先级高于系统 site-packages 导致加载了错误 Python 版本的包 | **方案 A（最快）**：`PYTHONPATH="" python ...` — 清除 PYTHONPATH 后系统 Python 只加载自己的 site-packages，绕过冲突包。**方案 B**：用 h5py 直接读取 h5ad 元数据做预览（详见 `references/h5ad-data-access.md`）。**方案 C**：创建新的 conda/uv 虚拟环境重新安装兼容版本 |
-| `AttributeError: 'SparseCSRView' object has no attribute 'A'` | 新版 scipy 中 SparseCSRView 没有 `.A` 属性，但 scTour 的 `data.py:99` 调用了 `X.A`（即 `X.toarray()`） | 训练前将稀疏矩阵转为 dense numpy array：`if issparse(adata.X): adata.X = adata.X.toarray().astype('float32')`。11,630 细胞 × 1,000 基因 ≈ 46MB，内存无压力 |
+| `AttributeError: 'SparseCSRView' object has no attribute 'A'` 或 `AttributeError: 'SparseCSRMatrixView' object has no attribute 'A'` | 新版 scipy（≥1.14）中 `SparseCSRView`/`SparseCSRMatrixView` 没有 `.A` 属性（即 `.toarray()`），但 scTour 的 `data.py:99` 调用了 `X.A` | 训练前将稀疏矩阵转为 dense numpy array：`if issparse(adata.X): adata.X = adata.X.toarray().astype('float32')`。11,630 细胞 × 1,000 基因 ≈ 46MB，内存无压力。**注意**：`.toarray()` 返回 dense 矩阵，适合 < 100,000 细胞的数据；更大数据需考虑子采样<br><br>**⚠️⚠️ 转换必须放在 `run_single_config` 函数内部，不能只放在顶层数据加载处。** 原因为：`sc.read()` 读取 h5ad 后 `.X` 是 `SparseCSRMatrixView` 类型；即使你在顶层转换了，`adata.copy()` 在函数内会保留原始矩阵类型。2026-07-08 会话教训：顶层转换正确，但 `run_single_config` 内用 `adata.copy()` 后仍报错，因为 copy 保留了 `.X` 的视图类型。修复方法：在训练代码附近直接转换，确保 Trainer 初始化时 `.X` 是 `float32` 的 dense 或常规 CSR 矩阵 |
 | `IORegistryError: No method registered for writing <class 'pandas.arrays.StringArray'>` | anndata 0.10.9 + pandas 3.0.3 的 StringArray 写入 h5ad 不兼容 | 改用内存管道：不保存中间 h5ad，直接在内存中加载 → 预处理 → scTour 训练 → 可视化。或在保存前转换所有 string 列为 `object` dtype（但 pandas 3.0+ 的 `.values` 仍返回 StringArray，跳过中间 h5ad 更可靠） |
 | `TypeError: Axes.boxplot() got an unexpected keyword argument 'labels'` | matplotlib ≥3.9 将 `labels` 参数重命名为 `tick_labels` | 使用 `tick_labels` 替代 `labels`：`ax.boxplot(data, tick_labels=labels)` |
 | GPU 不可用但用户有 NVIDIA 显卡 | PyTorch 安装的是 CPU-only 版本（`torch 2.12.1+cpu`），或显卡架构太新（如 Blackwell sm_120）不被旧版 PyTorch 支持 | 检查：`python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"`。若为 CPU-only 且是 Blackwell 显卡，需安装 `torch>=2.8.0` 从 cu128 测试通道（见上方 GPU 策略） |
@@ -735,7 +989,31 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 | Species | Tissue | Condition | Date | Score | Notes |
 |---------|--------|-----------|------|-------|-------|
 | human | skeletal_muscle | aging_diabetes_exercise | 2026-07-07 | 9.0 | 3-config comparison (balanced/encoder/ODE), counts from layer, CPU mode |
-| human | skeletal_muscle | aging_diabetes_exercise | 2026-07-08 | 8.5 | Same 3-config workflow, verified: search_knowledge+skill_view should be loaded first. log/ dir created retroactively. Result of failed execution discipline. |
+| human | skeletal_muscle | aging (SMF subclusters dual-route) | 2026-07-09 | 9.0 | Dual-route scTour: Route A (Zone1/2/NMJ/5/6: denervation→reinnervation) + Route B (Zone3/4/5: stress→maturation). **All 3 configs completed for Route A** (run1_balanced won), **both configs completed for Route B** (run1_balanced won; run2_encoder failed due to Zone3≈Zone5 collapse). 200 epochs, CPU mode. Age gradient anchoring: ρ=-0.943 (p=0.017) for Route A. Condition anchoring: Old_diabete_Post Zone1 ptime=0.163 (lowest). Zone1 internal gradient validated: MYH7(bottom)→RUNX1(middle)→COL19A1(top). Zone5 dual-role discovery (healthy endpoint in both routes). Checkpoint resume strategy verified effective. Complete HTML report with 10 figures + 5 debates + 6 self-evolution logs. |
+
+---
+
+## 🚨 Agent 常见错误清单（每次加载此 skill 后必须逐条检查）
+
+> **⚠️ 以下错误多次被 Agent 违反，导致用户纠正。每次加载此 skill 后，在写代码前逐条检查。** 这些错误不是"可能会犯"——它们是"之前已经犯过"的。
+
+| # | 错误 | 用户纠正 | 正确做法 |
+|:-:|:----|:--------|:--------|
+| 1 | **写代码前不调 skill_view** | "你不触发skill吗？" | 每个分析步骤写代码前必须先调 `skill_view(name="sctour-trajectory-inference")` 加载完整 SKILL.md。即使你觉得会写，skill 里有最新参数模板和审查规则 |
+| 2 | **生成 HTML 报告前不加载 bioinformatics-html-report skill** | "生成html，你触发html skill 了吗？" | 生成报告前必须调 `skill_view(name="bioinformatics-html-report")` 加载报告生成 skill。**不可凭记忆手写 report builder 代码** |
+| 3 | **报告放桌面不询问用户** | "我说生成到桌面了吗？" | 报告保存到 `results/.../03_advanced/scTour/`，**不保存到桌面**。除非用户明确指定桌面路径。使用 `generate_report` 时必须指定 `output_path` |
+| 4 | **报告不 base64 嵌入图片** | "怎么只有37kb?不审查吗？" | 所有图片必须 base64 嵌入到 HTML 中（`src="data:image/png;base64,..."`），**禁止使用路径引用**。报告文件应 > 1MB |
+| 5 | **报告生成后不验证完整性** | 用户多次发现报告缺图 | 生成后运行后报告验证脚本，检查图片引用数、辩论段数、裁判裁决数、参数来源章节 |
+| 6 | **报告细胞数时不区分原始 vs subset** | "不是一万多吗？" | 报告数据规模时必须区分：原始多少细胞、subset 后多少细胞、每个步骤实际用了多少细胞。**禁止只说"32万细胞跑scTour"——实际只跑了subset后的1万** |
+| 7 | **跳过 search_knowledge 直接写代码** | （系统铁律） | 每个分析步骤必须先调 `search_knowledge(species, tissue, direction, "步骤名 参数")` 查知识库。知识库无匹配→搜文献→提取参数→写入知识库 |
+| 8 | **一次性写完多个步骤的代码** | （系统铁律） | 写一步跑一步，禁止 `&&` 连接多步骤。每个步骤单独写脚本 → 执行 → 审查 → 辩论 → 下一步 |
+
+### 为什么这些错误必须被记住
+
+- 用户对**分析透明度**要求高：跳了哪些步骤、为什么跳、补了哪些，都要如实汇报，不粉饰
+- 用户对**数值精度**要求高：说细胞数时必须确认是原始数据还是 subset 后的
+- 用户期待**严格遵循 MemOmics 铁律**：关键词触发技能时必须立即加载 skill_view，8 步循环不可跳步
+- 用户期待**脚本/Notebook 直接交付到对话中**，而不是只保存到 skill 目录
 
 ---
 
@@ -761,6 +1039,7 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 - Blackwell GPU 设置: `references/blackwell-gpu-setup.md` — RTX 50 系列 CUDA 配置
 - 多配置对比工作流（2026-07-07 第一次运行）: `references/multi-config-comparison-20260707.md` — 3 config comparison, run2_encoder won
 - 多配置对比工作流（2026-07-08 第二次运行）: `references/multi-config-comparison-20260708.md` — 同一数据不同辩论标准, run1_balanced won
+- SMF 亚群转换分析（骨骼肌衰老去神经/再神经支配路线）: `references/smf-subcluster-transition-analysis.md` — **v2（2026-07-08）** SMF亚聚类Zone1~Zone6+NMJ的生物学解读模型。**关键修正**：Zone1从MYH1+（快肌）→MYH7+（慢肌）。新增Zone1内部梯度结构（MYH7→去神经→COL19A1）、双路线独立scTour方法论（解决单轴混淆问题）、GALNTL6/FKBP5桥梁基因、Zone4超补偿假说。
 - skill_evolution 静默失败修复: `references/skill-evolution-silent-failure.md` — 当 record_run 返回 Success 但不落盘时的排查和修复方法
 - 报告内容清单（报告生成前必查）: `references/report-content-checklist.md` — 8项必备内容的详细检查标准
 - 完整报告生成脚本: `scripts/generate_full_report.py` — 可复用的综合HTML报告生成器

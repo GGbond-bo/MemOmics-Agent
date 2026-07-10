@@ -147,12 +147,40 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
         if isinstance(parsed, dict):
             frontmatter = parsed
     except Exception:
-        # Fallback: simple key:value parsing for malformed YAML
-        for line in yaml_content.strip().split("\n"):
-            if ":" not in line:
-                continue
-            key, value = line.split(":", 1)
-            frontmatter[key.strip()] = value.strip()
+        # 第一次回退：尝试剥离非 YAML 行（### 规则、- skill_evolution 等）
+        # 213/269 个 skill 的 SKILL.md 有规则混入 YAML 块的问题
+        try:
+            lines = yaml_content.strip().split("\n")
+            # 找到第一个以 ### 或 - 开头的非缩进行，截断之前的合法 YAML
+            clean_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("### ") or stripped.startswith("## "):
+                    break
+                if stripped.startswith("- ") and not line.startswith(" "):
+                    break
+                clean_lines.append(line)
+            clean_yaml = "\n".join(clean_lines)
+            parsed = yaml_load(clean_yaml)
+            if isinstance(parsed, dict):
+                frontmatter = parsed
+        except Exception:
+            # 第二次回退：简单 key:value 解析
+            for line in yaml_content.strip().split("\n"):
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                frontmatter[key.strip()] = value.strip()
+            # 修复列表值：如果值是 '[a, b, c]' 格式，尝试解析为列表
+            for key in list(frontmatter.keys()):
+                val = frontmatter[key]
+                if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
+                    try:
+                        items = yaml_load(val)
+                        if isinstance(items, list):
+                            frontmatter[key] = items
+                    except Exception:
+                        pass
 
     return frontmatter, body
 

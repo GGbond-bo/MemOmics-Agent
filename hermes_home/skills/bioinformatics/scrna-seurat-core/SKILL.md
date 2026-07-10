@@ -4,6 +4,8 @@ display-name: Single-Cell RNA-seq Core Analysis (Seurat)
 category: transcriptomics
 short-description: Complete single-cell RNA-seq analysis using Seurat from raw data
   to cell type annotation with clustering and visualization.
+description: Single-cell RNA-seq analysis using Seurat v5 from raw data to cell type
+  annotation with clustering, visualization, and publication-quality figures.
 detailed-description: Complete single-cell RNA-seq analysis using Seurat v5 from raw
   data to cell type annotation. Use when you have 10X Chromium, Drop-seq, or other
   scRNA-seq data requiring QC, normalization, clustering, and visualization. Implements
@@ -707,6 +709,8 @@ After completing core scRNA-seq analysis:
 **Scripts:** See [scripts/](scripts/) for all modular R functions
 
 **Evaluation:** [assets/eval/complete_example_analysis.R](assets/eval/complete_example_analysis.R) - Full PBMC 3k example
+
+**Publication-quality figures:** See [references/publication-feature-plots.md](references/publication-feature-plots.md) for Nature-style UMAP feature plots (grey→red gradient, transparent bg, 4×4in, 300dpi PNG+PDF, R/ggplot2 + Python matplotlib fallback).
 
 **Online resources:**
 - Official Seurat tutorials: https://satijalab.org/seurat/articles/

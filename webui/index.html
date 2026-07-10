@@ -550,6 +550,21 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         </div>
         <button class="save-btn" onclick="saveModel()">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+        <!-- 微信 iLink 连接 -->
+        <div class="settings-group">
+          <label>📱 微信连接</label>
+          <div id="weixin-status" style="font-size:12px;margin-bottom:6px;color:var(--text-light);">未连接</div>
+          <div id="weixin-qr-container" style="display:none;text-align:center;margin:8px 0;">
+            <img id="weixin-qr-img" src="" style="width:180px;height:180px;border:1px solid var(--border);border-radius:8px;">
+            <div id="weixin-qr-hint" style="font-size:11px;color:var(--text-light);margin-top:4px;">请用微信扫描二维码</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button id="weixin-connect-btn" onclick="weixinConnect()" style="padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;">连接微信</button>
+            <button id="weixin-disconnect-btn" onclick="weixinDisconnect()" style="display:none;padding:6px 14px;border:1px solid var(--danger);border-radius:6px;background:transparent;color:var(--danger);cursor:pointer;font-size:12px;">断开</button>
+            <button id="weixin-test-btn" onclick="weixinTest()" style="display:none;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--primary);cursor:pointer;font-size:12px;">测试推送</button>
+          </div>
+        </div>
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">;
         <div class="settings-group">
           <label>配色主题</label>
           <div class="theme-options">
@@ -613,6 +628,7 @@ function handleMessage(msg) {
     currentSid = msg.session_id;
     if (msg.title) document.getElementById('chat-title').textContent = msg.title;
     updateSessionList();
+    refreshResults();  // 刷新结果面板以匹配新会话
     return;
   }
 
@@ -1212,6 +1228,7 @@ function newSession() {
   document.getElementById('messages').appendChild(welcome);
   document.getElementById('chat-title').textContent = '新会话';
   updateSessionList();
+  refreshResults();  // 清除旧会话的分析结果面板
 }
 
 async function loadSessions() {
@@ -1641,6 +1658,83 @@ async function saveModel() {
   alert('\u2705 模型已切换为: ' + currentModel.model + (p ? '\\n\ud83d\udce1 Provider: ' + p.name : ''));
   await refreshModelSelect();
   await refreshConnectedModels();
+}
+
+
+// === 微信 iLink 连接 ===
+let _weixinPollTimer = null;
+
+async function weixinConnect() {
+  var btn = document.getElementById('weixin-connect-btn');
+  btn.disabled = true;
+  btn.textContent = '获取中...';
+  try {
+    var r = await fetch('/api/weixin/qr-login', { method: 'POST' });
+    var d = await r.json();
+    if (!d.ok) { alert('获取二维码失败: ' + d.error); btn.disabled = false; btn.textContent = '连接微信'; return; }
+    document.getElementById('weixin-qr-img').src = d.qrcode_url;
+    document.getElementById('weixin-qr-container').style.display = 'block';
+    document.getElementById('weixin-qr-hint').textContent = '请用微信扫码';
+    btn.textContent = '等待扫码...';
+    _weixinPollTimer = setInterval(weixinPollQR, 2000);
+  } catch(e) {
+    alert('请求失败: ' + e);
+    btn.disabled = false;
+    btn.textContent = '连接微信';
+  }
+}
+
+async function weixinPollQR() {
+  try {
+    var r = await fetch('/api/weixin/qr-poll');
+    var d = await r.json();
+    document.getElementById('weixin-qr-hint').textContent = d.message;
+    var btn = document.getElementById('weixin-connect-btn');
+    if (d.status === 'connected') {
+      clearInterval(_weixinPollTimer);
+      document.getElementById('weixin-qr-container').style.display = 'none';
+      updateWeixinUI(true, d.account_id);
+    } else if (d.status === 'expired') {
+      clearInterval(_weixinPollTimer);
+      document.getElementById('weixin-qr-container').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '重新获取';
+      alert('二维码已过期');
+    }
+  } catch(e) {}
+}
+
+async function weixinDisconnect() {
+  clearInterval(_weixinPollTimer);
+  await fetch('/api/weixin/disconnect', { method: 'POST' });
+  updateWeixinUI(false);
+  document.getElementById('weixin-qr-container').style.display = 'none';
+}
+
+async function weixinTest() {
+  try {
+    var r = await fetch('/api/weixin/test', { method: 'POST' });
+    var d = await r.json();
+    alert(d.ok ? '测试消息已发送!' : '发送失败: ' + (d.error || ''));
+  } catch(e) { alert('请求失败: ' + e); }
+}
+
+function updateWeixinUI(connected, accountId) {
+  document.getElementById('weixin-status').textContent = connected ? '已连接: ' + (accountId || '') : '未连接';
+  document.getElementById('weixin-status').style.color = connected ? 'var(--success)' : 'var(--text-light)';
+  document.getElementById('weixin-connect-btn').style.display = connected ? 'none' : '';
+  document.getElementById('weixin-connect-btn').textContent = '连接微信';
+  document.getElementById('weixin-connect-btn').disabled = false;
+  document.getElementById('weixin-disconnect-btn').style.display = connected ? '' : 'none';
+  document.getElementById('weixin-test-btn').style.display = connected ? '' : 'none';
+}
+
+async function checkWeixinStatus() {
+  try {
+    var r = await fetch('/api/weixin/status');
+    var d = await r.json();
+    if (d.connected) updateWeixinUI(true, d.account_id);
+  } catch(e) {}
 }
 
 // === 配色 ===

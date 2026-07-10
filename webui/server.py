@@ -363,7 +363,9 @@ SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
 WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
 RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
-SOUL_PATH = os.path.join(MEMOMICS_DIR, "SOUL.md")
+SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
+SKILLS_INDEX_PATH = os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md")
+_SKILLS_INDEX_CACHE = None  # 模块级缓存：服务器启动后只读一次，所有会话共享
 
 # 允许浏览的根目录
 _BROWSE_ROOTS = {
@@ -374,11 +376,18 @@ _BROWSE_ROOTS = {
 
 # === 辅助函数 ===
 
-def _read_soul():
-    if os.path.isfile(SOUL_PATH):
-        with open(SOUL_PATH, encoding="utf-8") as f:
-            return f.read()
-    return ""
+def _read_skills_index():
+    """读取技能目录 (SKILLS_INDEX.md)，作为 ephemeral_system_prompt 注入。
+    预加载缓存：首次调用时读取，后续返回缓存，避免每次会话都读 27KB 文件。
+    SOUL.md 由 Hermes 框架从 HERMES_HOME 自动加载，此处不重复加载。"""
+    global _SKILLS_INDEX_CACHE
+    if _SKILLS_INDEX_CACHE is None:
+        if os.path.isfile(SKILLS_INDEX_PATH):
+            with open(SKILLS_INDEX_PATH, encoding="utf-8") as f:
+                _SKILLS_INDEX_CACHE = f.read()
+        else:
+            _SKILLS_INDEX_CACHE = ""
+    return _SKILLS_INDEX_CACHE
 
 
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
@@ -402,7 +411,202 @@ def ascii_lang_ratio(text):
         return 0
     return len(_re_mod.findall(r'[a-zA-Z]', text)) / total
 
-# 进度文本双语映射表
+
+def _detect_domain_from_text(text: str) -> str:
+    """检测用户消息所属的领域（用于 skill 匹配优化）
+    
+    受 PantheonOS 团队路由启发：在会话级别确定领域上下文，
+    帮助 LLM 缩小 skill 搜索范围。
+    
+    Returns:
+        领域代码 (01_RNA, 02_ATAC, ...) 或空字符串（无法确定）
+    """
+    if not text:
+        return ""
+    t = text.lower()
+    
+    # 11 个领域的关键词映射
+    domain_patterns = [
+        ("01_RNA", ["scrna", "scrna-seq", "rna", "单细胞", "转录", "transcript", "rna-seq", "single cell", "单细胞rna", "gene expression", "基因表达", "cell type", "细胞类型", "clustering", "聚类", "umap", "tsne", "trajectory", "拟时序", "pseudotime", "velocity", "rna velocity", "qc", "质量控制", "cellbender", "细胞通讯", "cellchat", "cell chat", "cell-cell", "富集", "GO ", "KEGG", "pathway", "sctour"]),
+        ("02_ATAC", ["atac", "atac-seq", "scatac", "chromatin", "染色质", "open chromatin", "peak calling", "motif", "cis-regulatory", "cre"]),
+        ("03_空间组", ["spatial", "空间", "stereo-seq", "merfish", "xenium", "visium", "空间转录组", "spatial transcriptomics", "image"]),
+        ("04_Bulk", ["bulk", "bulk rna", "bulk rna-seq", "rnaseq", "deseq2", "edger", "limma", "differential expression", "差异表达", "差异分析", "deg", "gsea", "通路", "pathway", "chip-seq", "wgbs", "全基因组", "whole genome"]),
+        ("05_蛋白", ["protein", "蛋白", "proteomics", "质谱", "mass spec", "flow", "流式", "cytof", "western", "elisa", "immune", "免疫", "抗体", "antibody"]),
+        ("06_微生物植物", ["microbiome", "微生物", "16s", "metagenomics", "宏基因", "bacteria", "菌群", "plant", "植物", "arabidopsis", "拟南芥", "crop"]),
+        ("07_药物临床", ["drug", "药物", "clinical", "临床", "pharma", "pharmacology", "药理学", "disease", "疾病", "biomarker", "诊断", "diagnosis", "therapeutic", "治疗", "生存", "survival"]),
+        ("08_报告", ["report", "html", "报告", "summary", "总结", "dashboard", "可视化", "visualization", "ppt", "pdf", "热图", "heatmap", "火山图", "volcano", "violin", "散点图", "scatter", "小提琴图"]),
+        ("09_内置", ["function", "计算", "math", "stat", "统计", "test", "system", "系统"]),
+        ("10_多组学整合", ["multi-omics", "multiomics", "多组学", "integrate", "整合", "multi-modal", "cross-omics", "联合分析", "wgcna", "network"]),
+        ("11_文献搜索", ["literature", "文献", "paper", "论文", "search", "搜索", "pubmed", "find papers", "query", "检索"]),
+    ]
+    
+    scores = []
+    for domain, keywords in domain_patterns:
+        score = 0
+        for kw in keywords:
+            if kw in t:
+                score += 1
+        if score > 0:
+            scores.append((domain, score))
+    
+    if not scores:
+        return ""
+    
+    # 按分数降序排列
+    scores.sort(key=lambda x: -x[1])
+    best_domain, best_score = scores[0]
+    
+    # 如果有两个以上的领域得分相同，不做决定
+    top_count = sum(1 for _, s in scores if s == best_score)
+    if top_count >= 2:
+        return ""
+    
+    return best_domain
+
+
+# === 图路由：意图分类 + 技能触发注入 ===
+def _classify_intent(text: str):
+    """六类意图：analysis, report, install, knowledge, literature, chat
+    Returns: (intent, confidence)"""
+    if not text:
+        return ("chat", 0.0)
+    t = text.lower()
+    
+    report_kw = ["html", "报告", "report", "做报告", "生成报告", "分析报告",
+                  "总结报告", "生成html", "html报告", "做ppt", "slides"]
+    install_kw = ["安装", "install", "配置", "配置环境", "setup", "依赖", "dependency",
+                  "创建skill", "create skill", "新skill", "新 skill", "注册skill", "创建"]
+    kb_kw = ["知识库", "knowledge", "搜索知识", "查找方法", "protocol", "流程"]
+    lit_kw = ["文献", "论文", "literature", "paper", "pubmed", "下载论文",
+              "找文献", "查论文", "搜索文献", "search paper", "find paper"]
+    analysis_kw = [
+        "分析", "analysis", "建库", "测序", "seq", "组学", "omics",
+        "差异", "differential", "聚类", "clustering", "轨迹", "trajectory",
+        "批次", "batch", "整合", "integration", "harmony", "注释", "annotation",
+        "富集", "enrichment", "gsea", "go ", "kegg", "pathway",
+        "qc", "质量控制", "cellbender", "deg", "scrna", "rna ",
+        "atac", "空间", "spatial", "蛋白", "protein", "药物", "drug",
+        "拷贝数", "cnv", "细胞通讯", "cell chat", "cellchat", "cell-cell",
+        "拟时序", "pseudotime", "velocity", "rna velocity",
+        "单细胞", "single cell", "sc-", "10x", "多组", "multiom",
+        "降维", "umap", "tsne", "pca", "标准化", "normalize",
+        "统计", "survival", "机器学习", "machine learning",
+        "比对", "alignment", "peak", "motif", "mutation", "突变",
+        "基因编辑", "crispr", "质粒", "plasmid", "引物", "primer",
+        "酶切", "restriction", "表达量", "expression", "热图", "heatmap",
+        "火山图", "volcano", "小提琴", "violin", "cns", "nature"
+    ]
+    
+    report_s = sum(1 for kw in report_kw if kw in t)
+    install_s = sum(1 for kw in install_kw if kw in t)
+    kb_s = sum(1 for kw in kb_kw if kw in t)
+    lit_s = sum(1 for kw in lit_kw if kw in t)
+    analysis_s = sum(1 for kw in analysis_kw if kw in t)
+    
+    if report_s >= 1 and report_s > analysis_s:
+        return ("report", min(report_s * 0.3, 1.0))
+    if lit_s >= 2 or (lit_s >= 1 and install_s == 0):
+        return ("literature", min(lit_s * 0.4, 1.0))
+    if lit_s >= 1:
+        return ("literature", 0.5)
+    if install_s >= 1:
+        return ("install", min(install_s * 0.4, 1.0))
+    if analysis_s >= 2:
+        return ("analysis", min(analysis_s * 0.15, 1.0))
+    if analysis_s >= 1:
+        return ("analysis", 0.5)
+    if kb_s >= 1:
+        return ("knowledge", min(kb_s * 0.3, 1.0))
+    # 自我介绍关键词检测
+    self_intro_kw = ["你是谁", "介绍你自己", "介绍下自己", "你能做什么", "介绍一下", "自我介绍",
+                     "who are you", "what can you do", "introduce yourself"]
+    if any(kw in t for kw in self_intro_kw):
+        return ("self_intro", 1.0)
+    return ("chat", 0.0)
+
+
+def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -> str:
+    """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
+    if intent == "chat":
+        return ""
+    if intent == "self_intro":
+        # 硬注入固定自我介绍，LLM 禁止自由发挥
+        return (
+            "【系统指令：自我介绍 — 必须逐字输出以下内容，禁止修改、禁止缩写、禁止自己编】\n\n"
+            "请直接输出以下固定内容作为回复，不要改动任何字：\n\n"
+            "> 我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n"
+            "> \n"
+            "> 我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n"
+            "> \n"
+            "> ## 核心能力\n"
+            "> \n"
+            "> **数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n"
+            "> \n"
+            "> **完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n"
+            "> \n"
+            "> **R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n"
+            "> \n"
+            "> **内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n"
+            "> \n"
+            "> **铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n"
+            "> \n"
+            "> **知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n"
+            "> \n"
+            "> **结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n"
+            "> \n"
+            "> 有什么需要帮忙的，直接告诉我！"
+        )
+    zh = session_lang == "zh"
+    lines = ["【系统指令：自动路由 - 必须遵守】",
+             f"意图类型：{intent} | 领域：{domain or '自动检测'}", ""]
+    
+    if intent == "analysis":
+        lines += [
+            "这是一个生物信息学分析任务。你必须严格执行以下步骤，不可跳过：",
+            "1. 调用 skill_search() 查找合适的 skill",
+            "2. 调用 skill_view() 加载完整的 skill 指令",
+            "3. 确认参数后，通过 terminal 执行代码",
+            "4. 执行前必须经过 rail_review(phase=\"pre\", skill_name=\"加载的skill名\") 审查",
+            "5. rail_review 要求 skill_name 参数，不传 skill 名 → should_proceed=false 铁轨阻断",
+            "6. 执行后 rail_review(phase=\"post\") 检查结果质量",
+            "",
+        ] if zh else [
+            "Bioinformatics analysis task. Follow SOUL.md iron rules:",
+            "1. skill_search() to find the right skill",
+            "2. skill_view() to load complete skill instructions",
+            "3. terminal to execute code after confirming parameters",
+            "4. rail_review(phase=\"pre\", skill_name=\"loaded skill\") BEFORE execution",
+            "5. rail_review REQUIRES skill_name — without it, should_proceed=false (hard block)",
+            "6. rail_review(phase=\"post\") AFTER execution to check quality",
+            "",
+        ]
+        if domain:
+            lines.append(f"领域索引：skill_list_by_domain('{domain}') 可查看该领域所有 skill" if zh else
+                         f"Domain index: skill_list_by_domain('{domain}') to browse all skills in this domain")
+        lines.append("禁止在没有 skill_view 的情况下直接写代码运行分析！" if zh else
+                     "NEVER write analysis code without skill_view!")
+    
+    elif intent == "report":
+        lines.append("用户要求生成报告。先调用 skill_view('bioinformatics-html-report')，"
+                     "使用 ReportBuilder + auto_fill_from_logs() 自动收集所有分析数据。" if zh else
+                     "Report. Call skill_view('bioinformatics-html-report') first.")
+    
+    elif intent == "install":
+        lines.append("安装任务。先 env_check 检测环境，如需新 skill 则调用 skill_view('create-bio-skill')。" if zh else
+                     "Install task. env_check first, then skill_view('create-bio-skill') if needed.")
+    
+    elif intent == "literature":
+        lines.append("文献任务。调用 skill_search('文献') 或 skill_view('pubmed-search')。PDF保存到 work/papers/" if zh else
+                     "Literature task. Use skill_search('literature') or skill_view('pubmed-search').")
+    
+    elif intent == "knowledge":
+        lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
+                     "Knowledge query. Use search_knowledge_base.")
+    
+    return "\n".join(lines)
+
+
+# Progress text map (moved down from above)
 _PROGRESS_TEXT = {
     "zh": {
         "thinking": "思考", "understanding": "正在理解您的需求",
@@ -533,6 +737,19 @@ def _cleanup_session_agent(session, kill_agent=False):
             session["agent"] = None
 
 
+def _scan_results_dir_for_session(sid, fallback_dir):
+    """扫描 RESULTS_DIR，找到与 sid 关联的分析结果目录。
+    目录名包含 sid 短ID（rename 时会在目录名末尾加短ID）。
+    如果找不到，返回 fallback_dir。"""
+    if not os.path.isdir(RESULTS_DIR):
+        return fallback_dir
+    short_id = sid.split("-")[-1] if "-" in sid else sid[:8]
+    for d in sorted(os.listdir(RESULTS_DIR), reverse=True):
+        if d.endswith('_' + short_id) and os.path.isdir(os.path.join(RESULTS_DIR, d)):
+            return os.path.join(RESULTS_DIR, d)
+    return fallback_dir
+
+
 def _load_persisted_sessions():
     """启动时从 Hermes state.db 恢复历史会话"""
     db = _get_session_db()
@@ -563,22 +780,28 @@ def _load_persisted_sessions():
                 continue
             # 恢复 results_dir：优先从 state.db 的 cwd 字段读，没有就用 sid
             persisted_cwd = s.get("cwd") or ""
+            # list_sessions_rich 不返回 cwd 字段，需要单独查询
+            if not persisted_cwd:
+                try:
+                    row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
+                    if row and row[0]:
+                        persisted_cwd = row[0]
+                except Exception:
+                    pass
             if persisted_cwd and os.path.isdir(persisted_cwd):
                 results_dir = persisted_cwd.replace("/", os.sep)
             else:
                 # 尝试 RESULTS_DIR/sid
                 default_dir = os.path.join(RESULTS_DIR, sid)
                 if os.path.isdir(default_dir):
-                    results_dir = default_dir
+                    contents = os.listdir(default_dir)
+                    if contents == ["log"] or contents == []:
+                        # 空壳目录 — 扫描找到实际分析结果目录
+                        results_dir = _scan_results_dir_for_session(sid, default_dir)
+                    else:
+                        results_dir = default_dir
                 else:
-                    # 扫描 RESULTS_DIR 下含 sid 短ID 的目录（rename 后可能加了后缀）
-                    short_id = sid.split("-")[-1] if "-" in sid else sid[:8]
-                    results_dir = default_dir  # 默认值
-                    if os.path.isdir(RESULTS_DIR):
-                        for d in os.listdir(RESULTS_DIR):
-                            if short_id in d and os.path.isdir(os.path.join(RESULTS_DIR, d)):
-                                results_dir = os.path.join(RESULTS_DIR, d)
-                                break
+                    results_dir = _scan_results_dir_for_session(sid, default_dir)
             session = {
                 "id": sid,
                 "title": s.get("title") or messages[0]["content"][:30],
@@ -664,7 +887,7 @@ def _create_agent(model_config=None, session_id=None):
     """
     from run_agent import AIAgent
     cfg = model_config or _current_model
-    soul = _read_soul()
+    skills_index = _read_skills_index()
     return AIAgent(
         base_url=cfg["base_url"],
         api_key=cfg["api_key"],
@@ -672,7 +895,7 @@ def _create_agent(model_config=None, session_id=None):
         model=cfg["model"],
         max_iterations=300,
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web"],
-        ephemeral_system_prompt=soul,
+        ephemeral_system_prompt=skills_index,
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -1170,6 +1393,222 @@ async def list_available_models():
                 "is_current": is_current and _current_model.get("model") == m["id"],
             })
     return {"models": models, "total": len(models)}
+
+
+# --- 微信 iLink 连接 ---
+
+_weixin_state = {
+    "connected": False,
+    "account_id": "",
+    "token": "",
+    "chat_id": "",
+    "base_url": "https://ilinkai.weixin.qq.com",
+    "qrcode_url": "",
+    "qrcode_token": "",
+    "qr_login_in_progress": False,
+    "last_error": "",
+}
+
+# 从磁盘恢复已保存的微信凭据
+def _load_weixin_persist():
+    try:
+        persist_path = os.path.join(hermes_home, "weixin_account.json")
+        if os.path.exists(persist_path):
+            with open(persist_path, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            _weixin_state["account_id"] = saved.get("account_id", "")
+            _weixin_state["token"] = saved.get("token", "")
+            _weixin_state["base_url"] = saved.get("base_url", _weixin_state["base_url"])
+            _weixin_state["chat_id"] = saved.get("chat_id", _weixin_state.get("chat_id", ""))
+            _weixin_state["connected"] = bool(_weixin_state["token"])
+            return True
+    except Exception:
+        pass
+    return False
+
+def _save_weixin_persist():
+    try:
+        os.makedirs(hermes_home, exist_ok=True)
+        persist_path = os.path.join(hermes_home, "weixin_account.json")
+        with open(persist_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "account_id": _weixin_state["account_id"],
+                "token": _weixin_state["token"],
+                "chat_id": _weixin_state.get("chat_id", ""),
+                "base_url": _weixin_state["base_url"],
+            }, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+_load_weixin_persist()
+
+
+@app.get("/api/weixin/status")
+async def weixin_status():
+    """获取微信连接状态"""
+    return {
+        "connected": _weixin_state["connected"],
+        "account_id": _weixin_state["account_id"][:16] + "..." if _weixin_state["account_id"] else "",
+        "qr_login_in_progress": _weixin_state["qr_login_in_progress"],
+        "last_error": _weixin_state["last_error"],
+    }
+
+
+@app.post("/api/weixin/qr-login")
+async def weixin_qr_login():
+    """发起微信 iLink QR 码登录"""
+    global _weixin_state
+    if _weixin_state["qr_login_in_progress"]:
+        return {"ok": False, "error": "QR 登录正在进行中"}
+    
+    try:
+        import aiohttp
+        _weixin_state["qr_login_in_progress"] = True
+        _weixin_state["last_error"] = ""
+        
+        base_url = _weixin_state["base_url"]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{base_url}/ilink/bot/get_bot_qrcode?bot_type=3",
+                headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                raw = await resp.text()
+                data = json.loads(raw)
+                if data.get("ret") != 0:
+                    _weixin_state["qr_login_in_progress"] = False
+                    _weixin_state["last_error"] = f"获取二维码失败: {data.get('msg', '未知错误')} (ret={data.get('ret')})"
+                    return {"ok": False, "error": _weixin_state["last_error"]}
+                
+                qrcode_token = data.get("qrcode", "")
+                qrcode_url_raw = data.get("qrcode_img_content", "")
+                _weixin_state["qrcode_token"] = qrcode_token
+                _weixin_state["qrcode_url"] = qrcode_url_raw
+                
+                # 生成 QR 码图片 (base64 PNG) — 兼容 qrcode v7 和 v8
+                qrcode_img_b64 = ""
+                try:
+                    import qrcode as _qr, io as _io, base64 as _b64
+                    if hasattr(_qr, 'make'):
+                        # qrcode v8+ API
+                        img = _qr.make(qrcode_url_raw)
+                    else:
+                        # qrcode v7 API
+                        qr = _qr.QRCode(box_size=6, border=2)
+                        qr.add_data(qrcode_url_raw)
+                        qr.make(fit=True)
+                        img = qr.make_image(fill_color="black", back_color="white")
+                    buf = _io.BytesIO()
+                    img.save(buf, format="PNG")
+                    qrcode_img_b64 = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+                except Exception:
+                    pass
+                
+                return {"ok": True, "qrcode_url": qrcode_img_b64, "qrcode_token": qrcode_token, "raw_url": qrcode_url_raw}
+    except Exception as e:
+        _weixin_state["qr_login_in_progress"] = False
+        _weixin_state["last_error"] = str(e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/weixin/qr-poll")
+async def weixin_qr_poll():
+    """轮询 QR 码扫描状态"""
+    if not _weixin_state["qrcode_token"]:
+        return {"status": "idle", "message": "未发起登录"}
+    
+    try:
+        import aiohttp
+        qrcode = _weixin_state["qrcode_token"]
+        base_url = _weixin_state["base_url"]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{base_url}/ilink/bot/get_qrcode_status?qrcode={qrcode}",
+                headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
+                timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
+                raw = await resp.text()
+                data = json.loads(raw)
+                status = data.get("status", "unknown")
+                ret_code = data.get("ret")
+                if ret_code is not None and ret_code != 0:
+                    return {"status": "error", "message": data.get("msg", "API error")}
+                
+                if status == "wait":
+                    return {"status": "waiting", "message": "等待扫码..."}
+                elif status == "scaned":
+                    return {"status": "scanned", "message": "已扫码，请在微信里确认登录"}
+                elif status == "scaned_but_redirect":
+                    redirect_host = data.get("redirect_host", "") or data.get("redirecthost", "")
+                    if redirect_host:
+                        _weixin_state["base_url"] = f"https://{redirect_host.rstrip('/')}"
+                        _save_weixin_persist()
+                    return {"status": "scanned", "message": "已扫码，正在重定向..."}
+                elif status == "confirmed":
+                    token = data.get("bot_token", "")
+                    account_id = data.get("ilink_bot_id", "")
+                    user_id = data.get("ilink_user_id", "")
+                    _weixin_state["token"] = token
+                    _weixin_state["account_id"] = account_id
+                    _weixin_state["connected"] = True
+                    _weixin_state["qr_login_in_progress"] = False
+                    _weixin_state["qrcode_token"] = ""
+                    _weixin_state["chat_id"] = user_id or account_id  # 优先用用户微信ID
+                    _save_weixin_persist()
+                    return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
+                elif status == "expired":
+                    _weixin_state["qr_login_in_progress"] = False
+                    _weixin_state["qrcode_token"] = ""
+                    return {"status": "expired", "message": "二维码已过期，请重新获取"}
+                else:
+                    return {"status": "unknown", "message": f"未知状态: {status}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/weixin/test")
+async def weixin_test():
+    """测试微信消息推送"""
+    if not _weixin_state["connected"]:
+        return {"ok": False, "error": "微信未连接"}
+    ok = await _send_weixin_progress("🎉 MemOmics 微信推送测试成功! 时间: " + datetime.now().strftime("%H:%M:%S"))
+    return {"ok": ok, "error": "" if ok else "发送失败"}
+
+@app.post("/api/weixin/disconnect")
+async def weixin_disconnect():
+    """断开微信连接"""
+    global _weixin_state
+    _weixin_state["connected"] = False
+    _weixin_state["token"] = ""
+    _weixin_state["account_id"] = ""
+    _weixin_state["qr_login_in_progress"] = False
+    _weixin_state["qrcode_token"] = ""
+    _weixin_state["last_error"] = ""
+    _save_weixin_persist()
+    return {"ok": True}
+
+
+async def _send_weixin_progress(message: str) -> bool:
+    """向微信发送进度消息 — 使用 Hermes 原生 send_weixin_direct"""
+    if not _weixin_state["connected"] or not _weixin_state["token"]:
+        return False
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent"))
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "gateway"))
+        from platforms.weixin import send_weixin_direct
+        result = await send_weixin_direct(
+            extra={
+                "account_id": _weixin_state["account_id"],
+                "base_url": _weixin_state["base_url"],
+            },
+            token=_weixin_state["token"],
+            chat_id=_weixin_state.get("chat_id") or _weixin_state["account_id"],
+            message=message,
+        )
+        return result.get("success", False)
+    except Exception:
+        return False
 
 
 # --- 文件浏览 ---
@@ -1681,6 +2120,16 @@ language: {req.language}
         shutil.rmtree(dest)
     shutil.copytree(skill_dir, dest)
 
+    # P5: 自动重建技能索引（新 skill 创建后立即生效）
+    try:
+        import subprocess
+        index_script = os.path.join(HERMES_DIR, "tools", "build_skill_index.py")
+        if os.path.exists(index_script):
+            subprocess.run([sys.executable, index_script], capture_output=True, timeout=30)
+            print(f"[MemOmics] Auto-rebuilt skill index after creating {safe_name}", flush=True)
+    except Exception as e:
+        print(f"[MemOmics] Auto-rebuild index failed (non-fatal): {e}", flush=True)
+
     return {"ok": True, "name": safe_name, "path": skill_dir, "scripts": list(req.scripts.keys())}
 
 
@@ -1887,6 +2336,23 @@ async def delete_memory(filename: str):
 
 # === 系统级自动日志（确保 LLM 即使跳过 skill_evolution 也有审计记录） ===
 
+
+async def _weixin_push_progress(session, tool_name, result_str):
+    """微信进度推送：关键工具完成时向微信发送进度"""
+    if not _weixin_state.get("connected") or not _weixin_state.get("token"):
+        return
+    KEY_TOOLS = {"scan_data", "execute_r", "execute_python", "terminal",
+                  "rail_review", "debate_analysis", "skill_evolution", "generate_report"}
+    if tool_name not in KEY_TOOLS:
+        return
+    try:
+        step_name = session.get("step_name", "")
+        ts = datetime.now().strftime("%H:%M:%S")
+        msg = "🔬 MemOmics: {} 完成 ({})".format(step_name or tool_name, ts)
+        asyncio.create_task(_send_weixin_progress(msg))
+    except Exception:
+        pass
+
 def _auto_system_log(session, tool_name, args, result_str):
     """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl"""
     try:
@@ -1975,7 +2441,22 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             db.set_session_title(session["id"], session["title"])
                         except Exception:
-                            pass  # 标题重复不报错，仅内存中使用
+                            pass
+                
+                # 图路由：每条消息检测领域 + 意图（不仅是第一条消息，随时切换）
+                domain = _detect_domain_from_text(user_text)
+                if domain:
+                    session["domain"] = domain
+                
+                # 意图分类 + 构建技能注入上下文
+                _intent, _intent_conf = _classify_intent(user_text)
+                session["intent"] = _intent
+                session["intent_conf"] = _intent_conf
+                if _intent != "chat":
+                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"))
+                    logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
+                else:
+                    _skill_ctx = None
 
                 # 注册 WebSocket 引用（必须在 emit 之前，否则 session/thinking/progress 事件被丢弃）
                 loop = asyncio.get_event_loop()
@@ -2078,7 +2559,7 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             import json as _tcl_json
                             import time as _tcl_time
-                            _db_path = os.path.join(hermes_home, "state.db")
+                            _db_path = os.path.join(HERMES_HOME_DIR, "state.db")
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
@@ -2109,6 +2590,20 @@ async def ws_endpoint(ws: WebSocket):
                                 _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
                         _auto_system_log(session, tool_name, args, result_str)
+                        # 📱 微信进度推送：关键步骤完成时推送到微信
+                        _weixin_push_progress(session, tool_name, result_str)
+                        # 🔧 update_results_dir 后同步更新 session 的 results_dir
+                        if tool_name == "update_results_dir":
+                            try:
+                                resp = json.loads(result_str)
+                                if resp.get("ok") and resp.get("results_dir"):
+                                    new_dir = resp["results_dir"].replace("/", os.sep)
+                                    session["results_dir"] = new_dir
+                                    db = _get_session_db()
+                                    if db:
+                                        db.update_session_cwd(session["id"], new_dir.replace("\\", "/"))
+                            except Exception:
+                                pass
                     except Exception:
                         pass
 
@@ -2320,6 +2815,10 @@ async def ws_endpoint(ws: WebSocket):
                         # 问题11: HTML报告关键词自动触发 skill_view
                         if _html_ctx:
                             conversation_history.append({"role": "system", "content": _html_ctx})
+
+                        # 图路由：根据意图+领域注入技能触发指令（P1+P2+P3）
+                        if _skill_ctx:
+                            conversation_history.append({"role": "system", "content": _skill_ctx})
 
                         def _do_run():
                             result = agent.run_conversation(

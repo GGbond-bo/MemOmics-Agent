@@ -3,6 +3,7 @@ id: "skill_9971a7d3e3134ee9acc25ba3d0e1fdae"
 name: "scrna-trajectory-inference"
 display-name: "Single-Cell Trajectory Inference"
 category: transcriptomics
+description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data using PAGA, DPT, scVelo, CellRank, and scTour."
 short-description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data."
 detailed-description: "Reconstruct developmental or differentiation trajectories from single-cell RNA-seq data using PAGA, diffusion pseudotime, scVelo RNA velocity, and CellRank fate mapping. Discovers cell ordering along pseudotime, identifies branching points and terminal fates, and reveals gene expression dynamics along trajectories. Chains from scrnaseq-scanpy-core-analysis or any preprocessed AnnData (.h5ad). Produces publication-ready trajectory visualizations and structured PDF reports."
 starting-prompt: Infer differentiation trajectories from my single-cell RNA-seq data using PAGA, pseudotime, and RNA velocity
@@ -308,6 +309,38 @@ export_all(adata, results, output_dir="trajectory_results")
 
 **Alternative trajectory methods:**
 - `disease-progression-longitudinal` — Bulk/multi-omics longitudinal trajectories (TimeAx)
+- `sctour-trajectory-inference` — scTour VAE-based deep learning pseudotime (no start cell needed, GPU-accelerated, batch-insensitive)
+
+### 🔀 Dual-Route Trajectory Strategy
+
+> **Problem**: When data contains **two independent biological processes** with different directions (e.g., denervation + stress→maturation), a single pseudotime axis conflates them. The VAE/scTour pulls both "high maturity endpoints" to the same pseudotime end, making intermediate cells ambiguous.
+
+**When to use**:
+- User has annotated subclusters with **two different biological process directions**
+- scTour or other methods show counterintuitive "high maturity" clusters that don't fit the expected direction
+- The user's core question is "who transitions to whom" but the trajectory method gives ambiguous results
+
+**Signals to detect confusion**:
+- A cluster expected to be intermediate shows highest "maturity" score
+- Two clusters from different trajectories get pulled to the same pseudotime endpoint
+- Gene markers from two different processes show conflicting gradient directions
+
+**Dual-route workflow**:
+```python
+route_a = adata[adata.obs['subcluster'].isin(['RouteA_clusters'])].copy()
+route_b = adata[adata.obs['subcluster'].isin(['RouteB_clusters'])].copy()
+# Run trajectory inference independently on each route
+```
+
+**Validation strategies**:
+| Method | What it checks | Expected |
+|:-------|:---------------|:---------|
+| **Gene anchor** | Known marker at trajectory end | Gene+ cells at end = correct direction |
+| **Age gradient** | Age correlates with pseudotime | Spearman rho > 0.5 supports pathological direction |
+| **Condition distribution** | Condition enrichment along trajectory | Most pathological condition at trajectory end |
+| **KS test** | Adjacent subcluster separation | All adjacent pairs p < 0.05 |
+
+**Reference**: See `sctour-trajectory-inference` skill's `references/smf-subcluster-transition-analysis.md` for a complete case study.
 
 ## References
 

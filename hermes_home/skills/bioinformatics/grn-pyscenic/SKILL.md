@@ -383,8 +383,12 @@ export_all(
 | **AUCell scores all low** | Poor regulon quality or normalization | Check regulon sizes (need 10+ genes); verify input is normalized counts |
 | **Database loading fails** | Path incorrect or file not found | Use absolute paths to databases; verify files exist |
 | **SVG export error** | Missing optional dependency | **Normal - script falls back to PNG automatically. Both formats will be created.** |
-| **NumPy AttributeError: np.object** | Incompatible NumPy version | **Install NumPy <1.24: `pip install 'numpy<1.24.0'` - pySCENIC 0.12.1 requires NumPy 1.20-1.23** |
-| **TypeError: Must supply at least one delayed object** | Incompatible Dask version | **Install Dask 2023.5.0: `pip install 'dask[complete]==2023.5.0' 'distributed==2023.5.0'` and uninstall dask-expr if present** |
+| **NumPy AttributeError: np.object** | NumPy >=2.0 removed `np.object` | **Patch pyscenic source**: `pip install pyscenic` then edit `transform.py` → replace `np.object` with `object` (3 occurrences). Quick fix: `python -c \"import pyscenic.transform as t; src=inspect.getfile(t)\"` then patch. |
+| **TypeError: object of type 'generator' has no len()** | Incompatible Dask + dask-expr | **Install dask 2024.8.0**: `pip install 'dask[complete]==2024.8.0'` then `pip uninstall -y dask-expr` |
+| **RegDiffusion: 'RegDiffusionME' object has no attribute 'adj_matrix'** | `memory_efficient=True` uses different class | **Use `get_adj()` instead**: `adj_matrix = trainer.model.get_adj()` returns numpy float16 array |
+| RegDiffusion: cisTarget corrupts gene names | RegDiffusion adjacencies use HVG gene names, cisTarget motif DB uses different IDs | Direct TF activity scoring: Skip cisTarget, use top N target genes per TF from adjacencies to compute activity (mean expression of target genes per cell) |
+| **AssertionError: Signatures dataframe is empty!** | Expression data gene names (ENSEMBL IDs with version suffixes like `AL669831.1`) don't match cisTarget database HGNC symbols | Pre-filter expression matrix: Load the .feather ranking database, extract its column names (`set(db.column_names)`), filter the expression matrix to only keep genes in that set. The hg38 10kb db has 27,091 HGNC symbols. Run GRNBoost2 on the filtered matrix. |
+| **RuntimeError on Windows: multiprocessing spawn** | Python multiprocessing on Windows uses `spawn` (not `fork`), re-executing all module-level code | Wrap all execution code in `if __name__ == '__main__':` guard. Mandatory for `run_complete_grn_workflow()` on Windows. |
 
 ## Suggested Next Steps
 

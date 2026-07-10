@@ -32,6 +32,10 @@ SCHEMA = {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Required packages for pre-review"
+            },
+            "skill_name": {
+                "type": "string",
+                "description": "名称已在 skill_view() 中加载（如 'deg-analysis'）。必须传递此参数以确认正确使用 skill。"
             }
         },
         "required": ["phase", "module_id"]
@@ -39,11 +43,19 @@ SCHEMA = {
 }
 
 
-def _pre_review(module_id, required_packages=None):
+def _pre_review(module_id, required_packages=None, skill_name=""):
     """Pre-analysis review."""
     issues = []
     warnings = []
     missing_packages = []
+
+    # P4: Check if skill_view was called (铁轨阻断)
+    if not skill_name or not skill_name.strip():
+        issues.append(
+            "SKILL_NOT_LOADED: 未检测到 skill_view 调用。"
+            "请先调用 skill_search() 找到合适的 skill，然后用 skill_view() 加载完整指令。"
+            "所有分析必须在 skill 指导下进行，禁止未经 skill 确认直接写代码。"
+        )
 
     # Check required packages
     if required_packages:
@@ -193,10 +205,10 @@ def _post_review(module_id, method_name, output_dir, code_executed):
     }
 
 
-def rail_review(phase, module_id, method_name="", output_dir="", code_executed="", required_packages=None):
+def rail_review(phase, module_id, method_name="", output_dir="", code_executed="", required_packages=None, skill_name=""):
     """Rail review handler."""
     if phase == "pre":
-        result = _pre_review(module_id, required_packages)
+        result = _pre_review(module_id, required_packages, skill_name)
     else:
         result = _post_review(module_id, method_name, output_dir, code_executed)
     return json.dumps(result, ensure_ascii=False, indent=2)
@@ -214,7 +226,8 @@ def _register():
             args.get("method_name", ""),
             args.get("output_dir", ""),
             args.get("code_executed", ""),
-            args.get("required_packages")
+            args.get("required_packages"),
+            args.get("skill_name", "")
         ),
         emoji="🛡️",
         max_result_size_chars=20_000,

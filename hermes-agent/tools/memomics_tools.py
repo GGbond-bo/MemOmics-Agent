@@ -1010,3 +1010,16 @@ registry.register(
     handler=lambda args, **kw: _skill_evolution_dispatch(args, **kw),
     emoji="🧬", max_result_size_chars=5_000,
 )
+
+# === 微信消息推送 ===
+# 注册 send_message 为 Agent 可调用工具，支持分析启动/完成通知和进度推送
+# 底层使用 Hermes 的 send_message_tool 共享传输层，但只开放 weixin 平台
+try:
+    from tools.send_message_tool import send_message_tool, SEND_MESSAGE_SCHEMA
+    registry.register(
+        name="send_message", toolset="memomics", schema=SEND_MESSAGE_SCHEMA,
+        handler=send_message_tool,
+        emoji="📱", max_result_size_chars=2_000,
+    )
+except ImportError:
+    pass
