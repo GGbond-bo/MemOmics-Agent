@@ -531,6 +531,20 @@ def _classify_intent(text: str):
     if ("设计" in t or "制定" in t) and ("方案" in t or "路线" in t or "思路" in t):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.88, meta)
+    # 数据分析需求检测：用户说"我要分析/想分析/帮分析XXX" → research_plan
+    ANALYSIS_INTENT_KW = [
+        "我要分析", "我想分析", "帮我分析", "帮我看", "分析一下",
+        "看看这个数据", "看一下数据", "探索数据", "数据探索",
+        "数据分析方案", "分析思路", "该怎么分析", "该怎么办",
+        "想分析", "要做分析", "需要分析", "分析需求",
+        "研究一下", "看一下数据", "帮我看看",
+        "做分析", "做数据分析", "跑分析", "跑一下",
+        "预处理", "做预处理", "进行", "做个分析",
+        "看看结果", "帮我解读", "给我分析", "数据在哪里",
+    ]
+    if any(kw in t for kw in ANALYSIS_INTENT_KW):
+        meta["modalities"] = _detect_modalities_from_text(t)
+        return ("research_plan", 0.82, meta)
     # Questions about HOW to analyze
     if "怎么分析" in t or "如何分析" in t or "怎样分析" in t:
         meta["modalities"] = _detect_modalities_from_text(t)
@@ -686,42 +700,40 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
     
     elif intent == "research_plan":
         lines += [
-            "你是一个生信研究方案设计专家。本次是【阶段1：信息收集+文献调研】，不要生成完整方案！",
+            "🚨 研究方案·文献调研阶段。不调工具就输出 = 任务失败！",
             "",
-            "## 本次任务（仅做以下两件事，完成后立即停止）",
-            "1. 调用 memomics_pipeline(action='parse', user_input='用户原始消息') 解析方向+模态",
-            "2. 并行调用 literature_search + search_knowledge_base 搜索相关文献（各最多5条）",
+            "## ⚠️ 强制规则（必须遵守！）",
+            "- 你必须调用至少一个工具！禁止仅靠固有知识回复！",
+            "- 如果你不知道该做什么，先调 skill_search(query='文献调研') 查看可用工具",
+            "- 仅做以下三件事，完成后立即停止：",
+            "  1. memomics_pipeline(action='parse', ...) 解析方向+模态",
+            "  2. literature_search + search_knowledge_base 各最多5条",
+            "  3. 输出文献表格，每篇必须附 PMID/DOI",
             "",
             "## 输出格式",
             "先总结用户研究背景（数据/物种/组织/方向/进度），",
             "再以表格列出文献调研结果：| 文献(作者+年份,PMID/DOI) | 方法 | 关键发现 | 与用户研究相关性 |",
-            "每篇文献必须附 PMID/DOI！文献不足5条时诚实告知，标注'文献有限，以下部分基于AI知识'",
             "",
             "## 结尾问题（必须问）",
             "最后问用户：【需要我基于以上文献，生成包含具体分析方法、图表策略和可执行待办的完整研究方案吗？】",
-            "禁止在本轮生成研究方案或待办列表！文献调研完成就停止！",
+            "禁止在本轮生成研究方案或待办列表！记住：不调用工具直接输出文本 = 任务彻底失败！",
             "",
         ]
     elif intent == "plan_refine":
         # plan_refine可能是: A)Phase2-文献后生成完整方案 B)修改已有方案
         lines += [
-            "⚠️ 研究方案规划模式（非分析执行模式）— 你只生成方案和待办，不执行分析代码。",
-            "❌ 禁止：execute_python, execute_code, terminal, scan_data, 或任何运行分析的代码",
-            "✅ 允许：memomics_pipeline, todo, skill_view, skill_search, search_knowledge, search_papers",
+            "🚨 方案规划模式（禁止执行分析代码！）",
             "",
-            "## 两种情况：",
-            "A) 前一轮已做文献调研，用户让你生成完整方案 -> 引用前轮文献，直接输出方案+待办",
-            "B) 用户要修改已有方案 -> 回顾active_plan和todos，按新要求调整",
+            "## ⚠️ 强制规则（必须遵守，违规 = 任务失败）",
+            "1. 你必须调用至少一个工具！禁止只输出文本不调工具！",
+            "2. 严禁：execute_python / terminal / scan_data / 任何数据分析代码",
+            "3. 允许：memomics_pipeline / skill_search / skill_view / search_knowledge / search_papers",
             "",
             "## 执行步骤（严格按顺序，缺一不可）",
-            "Step 1: skill_search(query='需要的分析类型') → 找到匹配的真实skill名",
-            "Step 2: 输出完整的方案文本（Markdown，每篇文献必须附 PMID/DOI 链接），含:",
-            "  【研究背景】【文献依据表格】【分析路线(分阶段，每步标注skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
-            "⚠️ Step 3 (强制！不可跳过！): 回复用户之前，必须先调用 memomics_pipeline(action='todos') 生成待办！",
-            "  调用格式: memomics_pipeline(action='todos', selected_modules=['02','03'])",
-            "  memomics_pipeline 会自动绑定 Step 1 搜索到的真实 skill，skill 永远不为空",
-            "  先调用 memomics_pipeline → 收到返回 → 再回复用户",
-            "  禁止只写方案不调用 pipeline！禁止执行任何分析代码！",
+            "Step 1 [必须]→ skill_search(query='需要的分析类型') 找到真实skill名",
+            "Step 2 [必须]→ 输出完整的方案文本, 每篇文献必须附 PMID/DOI",
+            "Step 3 [必须，不可跳过]→ memomics_pipeline(action='todos', selected_modules=[...])",
+            "  禁止只写方案不调 tools！禁止执行任何分析代码！",
             "",
         ]
     elif intent == "direct_exec":
@@ -2719,8 +2731,11 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception:
                         pass
 
+                _tool_call_log = []
+                
                 def tool_start_cb(tool_id, tool_name, args=None):
                     try:
+                        _tool_call_log.append({"tool": tool_name, "id": tool_id})
                         _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
                         _send_progress(_pt(session, "executing") + ": " + tool_name, "pending", tool_name)
@@ -3130,13 +3145,30 @@ async def ws_endpoint(ws: WebSocket):
                                 _session_emit(session, {"type": "timeout", "content": "research_plan超时(3分钟)，已返回部分结果", "session_id": session["id"]})
                         else:
                             result = await loop.run_in_executor(None, _do_run)
+
+                        # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
+                        if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
+                            # 检查是否调过核心工具
+                            _tool_list = _tool_call_log
+                            _all_tool_names = [t.get("tool", "") for t in _tool_list]
+                            _core_tools = {"memomics_pipeline", "skill_search", "search_knowledge", "search_papers", "literature_search"}
+                            _called_core = _core_tools & set(_all_tool_names)
+                            if not _called_core:
+                                _warning = (
+                                    "\n\n【⚠️ 系统检测：以上回复未调用任何搜索/方案工具】\n"
+                                    "本回复可能缺乏真实文献和数据支持。\n"
+                                    "请回复 **'请用文献搜索工具重新生成方案，附 PMID/DOI'** 触发完整流程。"
+                                )
+                                result += _warning
+                                logger.warning(f"[TOOL-VALIDATION] {_intent}: 0 core tools called, warning appended")
+
                         # 恢复原始工具列表
                         if _saved_tools is not None:
                             agent.tools = _saved_tools
                         # 兜底：plan_refine 结束后若未调用 memomics_pipeline，自动触发生成待办
 # 兜底：plan_refine 结束后若未调用 memomics_pipeline，直接调用 Python 函数生成待办
                         if _intent == "plan_refine":
-                            did_call = any(t for t in (getattr(agent, "_tool_call_log", []) or []) if t.get("tool") == "memomics_pipeline")
+                            did_call = any(t for t in _tool_call_log if t.get("tool") == "memomics_pipeline")
                             if not did_call:
                                 try:
                                     import sys, os
