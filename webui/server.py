@@ -523,7 +523,14 @@ def _classify_intent(text: str):
                "研究框架", "分析框架", "科研设计", "课题设计",
                "设计研究方案", "研究方案", "设计分析方案", "分析方案",
                "研究计划", "实验方案", "制定方案", "设计一个方案",
-               "帮忙设计", "给我设计", "制定分析", "设计.*方案"]
+               "帮忙设计", "给我设计", "制定分析", "设计.*方案",
+               "多组学.*整合", "整合.*数据", "整合分析",
+               "新细胞群", "未知群", "新群体", "鉴定.*群体",
+               "novel", "unknown cluster", "rare population",
+               "atac.*rna.*整合", "rna.*atac.*整合",
+               "怎么研究", "如何研究", "研究这个", "深入分析",
+               "atac.*和.*rna", "rna.*和.*atac", "怎么.*鉴定",
+               "表征", "验证这个群", "发育过程", "细胞命运"]
     if any(kw in t for kw in PLAN_KW):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.92, meta)
@@ -703,12 +710,13 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "🚨 研究方案·文献调研阶段。不调工具就输出 = 任务失败！",
             "",
             "## ⚠️ 强制规则（必须遵守！）",
-            "- 你必须调用至少一个工具！禁止仅靠固有知识回复！",
-            "- 如果你不知道该做什么，先调 skill_search(query='文献调研') 查看可用工具",
-            "- 仅做以下三件事，完成后立即停止：",
+            "- 你必须调用至少2种不同类型工具！禁止仅靠固有知识回复！禁止只调skill_view一种！",
+            "- 推荐组合: memomics_pipeline(parse) + search_knowledge_base + search_papers 三者都要调",
+            "- 仅做以下四件事，完成后立即停止：",
             "  1. memomics_pipeline(action='parse', ...) 解析方向+模态",
             "  2. literature_search + search_knowledge_base 各最多5条",
-            "  3. 输出文献表格，每篇必须附 PMID/DOI",
+            "  3. 输出文献表格，每篇必须附 PMID/DOI（格式: [PMID:12345678] 或 DOI:10.xxx）",
+            "  4. 输出结论解读：每个分析方法能得出什么生物学结论、用什么实验验证",
             "",
             "## 输出格式",
             "先总结用户研究背景（数据/物种/组织/方向/进度），",
@@ -725,15 +733,16 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "🚨 方案规划模式（禁止执行分析代码！）",
             "",
             "## ⚠️ 强制规则（必须遵守，违规 = 任务失败）",
-            "1. 你必须调用至少一个工具！禁止只输出文本不调工具！",
+            "1. 你必须调用至少2种不同类型工具！禁止只输出文本不调工具！唯一例外：纯修改已有方案",
             "2. 严禁：execute_python / terminal / scan_data / 任何数据分析代码",
             "3. 允许：memomics_pipeline / skill_search / skill_view / search_knowledge / search_papers",
             "",
             "## 执行步骤（严格按顺序，缺一不可）",
             "Step 1 [必须]→ skill_search(query='需要的分析类型') 找到真实skill名",
             "Step 2 [必须]→ 输出完整的方案文本, 每篇文献必须附 PMID/DOI",
-            "Step 3 [必须，不可跳过]→ memomics_pipeline(action='todos', selected_modules=[...])",
-            "  禁止只写方案不调 tools！禁止执行任何分析代码！",
+            "Step 3 [必须]→ 方案末尾加入结论解读段落：本分析能得出什么生物学结论、后续如何实验验证",
+            "Step 4 [必须，不可跳过]→ memomics_pipeline(action='todos', selected_modules=[...])",
+            "  禁止只写方案不调 tools！禁止执行任何分析代码！调不到2种工具 = 失败！",
             "",
         ]
     elif intent == "direct_exec":
@@ -2914,7 +2923,8 @@ async def ws_endpoint(ws: WebSocket):
                                                     if best:
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
-                                _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                if todos and len(todos) > 0:
+                                    _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
                         # terminal 执行后检测新图片
@@ -3209,6 +3219,22 @@ async def ws_endpoint(ws: WebSocket):
                                 )
                                 result += _warning
                                 logger.warning(f"[TOOL-VALIDATION] {_intent}: 0 core tools called, warning appended")
+
+                        # B5: post-hoc quality validation (PMID/DOI, conclusion, tool diversity)
+                        if _intent in ("research_plan", "plan_refine") and result:
+                            quality_warnings = []
+                            has_pmid = "PMID" in result or "DOI:" in result or "doi:" in result.lower()
+                            if not has_pmid:
+                                quality_warnings.append("[LIT] literature refs missing (no PMID/DOI)")
+                            has_conc = any(k in result.lower() for k in ["conclusion", "validation", "experiment", "follow-up"])
+                            if not has_conc:
+                                quality_warnings.append("[INTERP] no conclusion or validation section")
+                            unique_tools = set(t.get("tool", "") for t in _tool_call_log)
+                            if len(unique_tools) < 2 and _intent not in ("chat", "self_intro"):
+                                quality_warnings.append("[TOOLS] only " + str(len(unique_tools)) + " tool types called")
+                            if quality_warnings:
+                                result += "\n\n---\n**Quality Check:**\n" + "\n".join("- " + w for w in quality_warnings)
+                                logger.info(f"[QUALITY] {_intent}: {len(quality_warnings)} warnings")
 
                         # 恢复原始工具列表
                         if _saved_tools is not None:
