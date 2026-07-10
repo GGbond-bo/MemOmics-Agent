@@ -75,10 +75,6 @@ MODULES = {
         {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": "phylogenetics-toolkit"},
         {"id": "micro_phylo", "name": "系统发育树", "skill": "phylogenetics-toolkit"},
     ]},
-        {"id": "micro_diversity", "name": "Alpha/Beta多样性", "skill": "phylogenetics-toolkit"},
-        {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": "phylogenetics-toolkit"},
-        {"id": "micro_phylo", "name": "系统发育树", "skill": "phylogenetics-toolkit"},
-    ]},
 
     # === 空间转录组 ===
     "11": {"id": "11", "name": "空间转录组", "modality": "spatial", "description": "Seurat/Squidpy: 空间特征->区域分割->空间通讯", "skills": ["spatial-transcriptomics", "cell-cell-communication"], "substeps": [

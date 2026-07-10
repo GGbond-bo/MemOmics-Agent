@@ -2843,6 +2843,27 @@ async def ws_endpoint(ws: WebSocket):
                                             agent._todo_store.write(hermes_todos)
                                             # 同时缓存为 pipeline_todos 供 skill 映射
                                             session["_pipeline_todos"] = result_obj["todos"]
+                                        # 兜底: todo_manage 未传 modules → 0个todo → 自动生成默认待办
+                                        elif isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and not result_obj.get("todos"):
+                                            if not agent._todo_store.has_items():
+                                                try:
+                                                    import sys, os
+                                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "agent"))
+                                                    from memomics_pipeline import modules_to_todos
+                                                    default_ids = ["01","02","03","04","05"]
+                                                    pipe_todos = modules_to_todos(default_ids)
+                                                    hermes_todos = []
+                                                    for i, td in enumerate(pipe_todos):
+                                                        hermes_todos.append({
+                                                            "id": td.get("id", f"todo_{i}"),
+                                                            "content": td.get("title", td.get("name", f"Module {td.get('module','')}-{td.get('substep','')}")),
+                                                            "status": "pending",
+                                                        })
+                                                    agent._todo_store.write(hermes_todos)
+                                                    session["_pipeline_todos"] = pipe_todos
+                                                    logger.info(f"[TODO-FALLBACK] 自动生成 {len(pipe_todos)} 个默认待办")
+                                                except Exception:
+                                                    pass
                                     except Exception:
                                         pass
                                 # 规范化 store_todos: 字符串→字典；模糊匹配补充 skill
