@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 # =============================================================================
 MODULES = {
     # === scRNA-seq ===
-    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-remove-background"], "note": "探索性分析不建议"},
+    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-remove-background"], "note": "探索性分析不建议", "substeps": [{"id": "cellbender", "name": "CellBender去背景", "skill": "cellbender-remove-background"}, {"id": "doublet", "name": "双胞过滤", "skill": "scrna-qc"}]},
     "02": {"id": "02", "name": "基础分析", "modality": "scrna", "description": "QC->SCTransform->Harmony->UMAP->Leiden->Annotation->Markers", "skills": ["scrna-clustering", "annotate_celltype_scRNA"], "substeps": [
         {"id": "qc", "name": "QC", "skill": "scrna-qc"},
         {"id": "sct", "name": "SCTransform", "skill": "scrna-clustering"},
@@ -20,13 +20,13 @@ MODULES = {
         {"id": "annotate", "name": "Annotation", "skill": "annotate_celltype_scRNA"},
         {"id": "markers", "name": "Markers", "skill": "deg-analysis"},
     ]},
-    "03": {"id": "03", "name": "高级分析(单细胞)", "modality": "scrna", "description": "DEG+Enrichment / CellChat / Trajectory / SCENIC", "items": [
-        {"id": "deg", "name": "DEG+富集", "skills": ["deg-analysis", "functional-enrichment"]},
-        {"id": "cellchat", "name": "CellChat通讯", "skills": ["cellchat-v2"]},
-        {"id": "trajectory", "name": "轨迹分析", "skills": ["trajectory-analysis"]},
-        {"id": "scenic", "name": "SCENIC调控", "skills": ["grn-pyscenic"]},
+    "03": {"id": "03", "name": "高级分析(单细胞)", "modality": "scrna", "description": "DEG+Enrichment / CellChat / Trajectory / SCENIC", "substeps": [
+        {"id": "deg", "name": "DEG+富集", "skill": "deg-analysis"},
+        {"id": "cellchat", "name": "CellChat通讯", "skill": "cellchat-v2"},
+        {"id": "trajectory", "name": "轨迹分析", "skill": "trajectory-analysis"},
+        {"id": "scenic", "name": "SCENIC调控", "skill": "grn-pyscenic"},
     ]},
-    "04": {"id": "04", "name": "个性化分析", "modality": "scrna", "description": "按研究方向定制", "skills": ["sasp-scoring", "immune-deconvolution"]},
+    "04": {"id": "04", "name": "个性化分析", "modality": "scrna", "description": "按研究方向定制", "skills": ["sasp-scoring", "immune-deconvolution"], "substeps": [{"id": "sasp", "name": "衰老分泌表型评分", "skill": "sasp-scoring"}, {"id": "immune", "name": "免疫浸润", "skill": "immune-deconvolution"}]},
 
     # === scATAC-seq ===
     "05": {"id": "05", "name": "scATAC分析", "modality": "scatac", "description": "ArchR/Signac: QC->Peak->Motif->Footprinting->差异可及性", "skills": ["atac-seq-memomics", "find_enriched_motifs_with_homer"], "substeps": [
@@ -71,8 +71,8 @@ MODULES = {
 
     # === 微生物组 ===
     "10": {"id": "10", "name": "微生物组", "modality": "microbiome", "description": "Alpha/Beta多样性+差异丰度+系统发育(专用skill较少,AI可用通用代码)", "skills": ["phylogenetics-toolkit", "analyze_bacterial_growth_curve"], "note": "专用skill较少，AI可用通用代码", "substeps": [
-        {"id": "micro_diversity", "name": "Alpha/Beta多样性", "skill": ""},
-        {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": ""},
+        {"id": "micro_diversity", "name": "Alpha/Beta多样性", "skill": "phylogenetics-toolkit"},
+        {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": "phylogenetics-toolkit"},
         {"id": "micro_phylo", "name": "系统发育树", "skill": "phylogenetics-toolkit"},
     ]},
 
@@ -271,16 +271,6 @@ def modules_to_todos(selected_modules: List[str], direction_info: Dict[str, Any]
                     "module": mid,
                     "modality": modality,
                     "skill": step.get("skill", ""),
-                    "status": "pending"
-                })
-        elif "items" in mod:
-            for item in mod["items"]:
-                todos.append({
-                    "id": f"{modality}_{item['id']}",
-                    "title": f"[{mod['name']}] {item['name']}",
-                    "module": mid,
-                    "modality": modality,
-                    "skills": item.get("skills", []),
                     "status": "pending"
                 })
         elif mid == "01":

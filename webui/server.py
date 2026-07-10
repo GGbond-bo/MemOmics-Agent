@@ -2480,8 +2480,10 @@ async def delete_memory(filename: str):
 # === 系统级自动日志（确保 LLM 即使跳过 skill_evolution 也有审计记录） ===
 
 
-async def _weixin_push_progress(session, tool_name, result_str):
-    """微信进度推送：关键工具完成时向微信发送进度"""
+def _weixin_push_progress(session, tool_name, result_str, loop=None):
+    """微信进度推送：关键工具完成时向微信发送进度
+    在 thread-pool callback 中调用时需传入主 event loop。
+    """
     if not _weixin_state.get("connected") or not _weixin_state.get("token"):
         return
     KEY_TOOLS = {"scan_data", "execute_r", "execute_python", "terminal",
@@ -2492,7 +2494,15 @@ async def _weixin_push_progress(session, tool_name, result_str):
         step_name = session.get("step_name", "")
         ts = datetime.now().strftime("%H:%M:%S")
         msg = "🔬 MemOmics: {} 完成 ({})".format(step_name or tool_name, ts)
-        asyncio.create_task(_send_weixin_progress(msg))
+        if loop is not None:
+            asyncio.run_coroutine_threadsafe(_send_weixin_progress(msg), loop)
+        else:
+            # fallback: try running loop
+            try:
+                l = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(_send_weixin_progress(msg), l)
+            except RuntimeError:
+                pass
     except Exception:
         pass
 
@@ -2725,6 +2735,8 @@ async def ws_endpoint(ws: WebSocket):
                         pass
                     return new_figs
 
+                _main_loop = asyncio.get_running_loop()  # for thread-safe async scheduling
+
                 def tool_complete_cb(tool_id, tool_name, args=None, result=None):
                     try:
                         result_str = str(result or "")
@@ -2739,7 +2751,9 @@ async def ws_endpoint(ws: WebSocket):
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
-                            _conn = _tcl_sqlite.connect(_db_path, timeout=5)
+                            _conn = _tcl_sqlite.connect(_db_path, timeout=2)
+                            _conn.execute("PRAGMA journal_mode=WAL")
+                            _conn.execute("PRAGMA busy_timeout=2000")
                             _conn.execute(
                                 "INSERT INTO tool_calls_log (session_id, tool_name, tool_id, args_json, result_text, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                                 (session["id"], tool_name, str(tool_id or ""), _args_json, _result_trunc, _tcl_time.time())
@@ -2774,7 +2788,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
                         _auto_system_log(session, tool_name, args, result_str)
                         # 📱 微信进度推送：关键步骤完成时推送到微信
-                        _weixin_push_progress(session, tool_name, result_str)
+                        _weixin_push_progress(session, tool_name, result_str, loop=_main_loop)
                         # 🔧 update_results_dir 后同步更新 session 的 results_dir
                         if tool_name == "update_results_dir":
                             try:
@@ -2961,7 +2975,7 @@ async def ws_endpoint(ws: WebSocket):
                 # 是否后台运行
                 is_bg = msg.get("background", False)
 
-                async def run_agent():
+                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx):
                     """在 executor 中运行 agent — 用 run_conversation + conversation_history"""
                     try:
                         # 从 state.db 加载 conversation_history（排除当前消息，run_conversation 会加）

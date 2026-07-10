@@ -686,6 +686,7 @@ def _git(cwd: Path, *args: str) -> str:
             ["git", "-C", str(cwd), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8", errors="replace",
             timeout=_GIT_TIMEOUT,
             **_popen_kwargs,
         )
