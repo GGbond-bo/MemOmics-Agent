@@ -3093,6 +3093,12 @@ async def ws_endpoint(ws: WebSocket):
                         if _intent in ("research_plan", "plan_refine"):
                             _session_emit(session, {"type": "intent_active", "intent": _intent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
+                        # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
+                        _saved_tools = None
+                        if _intent == "plan_refine" and agent.tools:
+                            _saved_tools = agent.tools
+                            agent.tools = [t for t in agent.tools if t.get("function", {}).get("name", "") not in ("todo", "todo_manage", "memomics_todo_manage")]
+
                         def _do_run():
                             result = agent.run_conversation(
                                 user_text,
@@ -3114,6 +3120,9 @@ async def ws_endpoint(ws: WebSocket):
                                 _session_emit(session, {"type": "timeout", "content": "research_plan超时(3分钟)，已返回部分结果", "session_id": session["id"]})
                         else:
                             result = await loop.run_in_executor(None, _do_run)
+                        # 恢复原始工具列表
+                        if _saved_tools is not None:
+                            agent.tools = _saved_tools
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
