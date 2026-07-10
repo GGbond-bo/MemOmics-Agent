@@ -75,6 +75,10 @@ MODULES = {
         {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": "phylogenetics-toolkit"},
         {"id": "micro_phylo", "name": "系统发育树", "skill": "phylogenetics-toolkit"},
     ]},
+        {"id": "micro_diversity", "name": "Alpha/Beta多样性", "skill": "phylogenetics-toolkit"},
+        {"id": "micro_diff", "name": "差异丰度(LEfSe/ALDEx2)", "skill": "phylogenetics-toolkit"},
+        {"id": "micro_phylo", "name": "系统发育树", "skill": "phylogenetics-toolkit"},
+    ]},
 
     # === 空间转录组 ===
     "11": {"id": "11", "name": "空间转录组", "modality": "spatial", "description": "Seurat/Squidpy: 空间特征->区域分割->空间通讯", "skills": ["spatial-transcriptomics", "cell-cell-communication"], "substeps": [
@@ -273,15 +277,6 @@ def modules_to_todos(selected_modules: List[str], direction_info: Dict[str, Any]
                     "skill": step.get("skill", ""),
                     "status": "pending"
                 })
-        elif mid == "01":
-            todos.append({
-                "id": "decontamination",
-                "title": f"[{mod['name']}] 去污染",
-                "module": "01",
-                "modality": modality,
-                "skills": mod.get("skills", []),
-                "status": "pending"
-            })
         elif mid == "04":
             d = (direction_info or {}).get("directions", [])
             todos.append({
@@ -289,7 +284,7 @@ def modules_to_todos(selected_modules: List[str], direction_info: Dict[str, Any]
                 "title": f"[{mod['name']}] 个性化({'/'.join(d) if d else 'custom'})",
                 "module": "04",
                 "modality": modality,
-                "skills": mod.get("skills", []),
+                "skill": mod.get("skills", [None])[0] if mod.get("skills") else "",
                 "status": "pending"
             })
         else:
@@ -298,7 +293,7 @@ def modules_to_todos(selected_modules: List[str], direction_info: Dict[str, Any]
                 "title": f"[{mod['name']}] {mod['description']}",
                 "module": mid,
                 "modality": modality,
-                "skills": mod.get("skills", []),
+                "skill": mod.get("skills", [None])[0] if mod.get("skills") else "",
                 "status": "pending"
             })
     return todos

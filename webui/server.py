@@ -705,17 +705,22 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
     elif intent == "plan_refine":
         # plan_refine可能是: A)Phase2-文献后生成完整方案 B)修改已有方案
         lines += [
-            "你现在需要生成/修改研究方案。",
+            "⚠️ 研究方案规划模式（非分析执行模式）— 你只生成方案和待办，不执行分析代码。",
+            "❌ 禁止：execute_python, execute_code, terminal, scan_data, 或任何运行分析的代码",
+            "✅ 允许：memomics_pipeline, todo, skill_view, skill_search, search_knowledge, search_papers",
             "",
             "## 两种情况：",
             "A) 前一轮已做文献调研，用户让你生成完整方案 -> 引用前轮文献，直接输出方案+待办",
             "B) 用户要修改已有方案 -> 回顾active_plan和todos，按新要求调整",
             "",
-            "## 生成方案模板（必须输出）",
-            "【研究背景】【文献依据表格】【分析路线(分阶段+skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
-            "",
-            "## 执行待办（必须，方案输出完立即调用）",
-            "memomics_pipeline(action='todos', selected_modules=[...]) + 每个待办带真实skill",
+            "## 执行步骤（严格按顺序，缺一不可）",
+            "Step 1: skill_search(query='需要的分析类型') → 找到匹配的真实skill名",
+            "Step 2: 输出完整的方案文本（Markdown），含:",
+            "  【研究背景】【文献依据表格】【分析路线(分阶段，每步标注skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
+            "Step 3: 立即调用 memomics_pipeline(action='todos', selected_modules=[...])",
+            "Step 4: 立即调用 todo(todos=[{title:..., skill:'真实skill名', module:'...'}]) 写入待办",
+            "  skill 必须来自 Step 1 中找到的真实skill名！禁止空skill！",
+            "  不要执行任何分析代码！方案和待办输出后就结束！",
             "",
         ]
     elif intent == "direct_exec":
@@ -2792,18 +2797,36 @@ async def ws_endpoint(ws: WebSocket):
                                 if tool_name == "memomics_pipeline" and hasattr(agent, "_todo_store"):
                                     try:
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
-                                        if isinstance(result_obj, dict) and result_obj.get("todos"):
-                                            for td in result_obj["todos"]:
-                                                agent._todo_store.add({
-                                                    "title": td.get("title", td.get("name", "")),
-                                                    "module": td.get("module", td.get("id", "")),
-                                                    "skill": td.get("skill", ""),
-                                                    "status": "pending",
-                                                    "description": td.get("description", td.get("desc", ""))
-                                                })
+                                        if isinstance(result_obj, dict):
+                                            # 缓存 pipeline 结果供后续合并
+                                            session["_pipeline_todos"] = result_obj.get("todos", result_obj.get("modules", []))
+                                            # 如果有 todos，写入 store
+                                            if result_obj.get("todos"):
+                                                for td in result_obj["todos"]:
+                                                    agent._todo_store.add({
+                                                        "title": td.get("title", td.get("name", "")),
+                                                        "module": td.get("module", td.get("id", "")),
+                                                        "skill": td.get("skill", ""),
+                                                        "status": "pending",
+                                                        "description": td.get("description", td.get("desc", ""))
+                                                    })
                                     except Exception:
                                         pass
-                                todos = agent._todo_store.read() if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                # 读取 store 和缓存的 pipeline todos，合并后发射
+                                store_todos = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                pipeline_todos = session.get("_pipeline_todos", [])
+                                # 如果 store 为空但有 pipeline todos，用 pipeline 的
+                                if not store_todos and pipeline_todos:
+                                    todos = pipeline_todos
+                                else:
+                                    todos = store_todos
+                                    # 如果 store 中有无 skill 的 todo，尝试从 pipeline 匹配
+                                    if pipeline_todos and any(not t.get("skill") for t in todos):
+                                        skill_map = {t.get("title",""): t for t in pipeline_todos if isinstance(t, dict) and t.get("skill")}
+                                        for st in todos:
+                                            if not st.get("skill") and st.get("title") in skill_map:
+                                                st["skill"] = skill_map[st["title"]].get("skill", "")
+                                                st["module"] = skill_map[st["title"]].get("module", "")
                                 _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
