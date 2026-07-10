@@ -717,9 +717,11 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
             "Step 1: skill_search(query='需要的分析类型') → 找到匹配的真实skill名",
             "Step 2: 输出完整的方案文本（Markdown，每篇文献必须附 PMID/DOI 链接），含:",
             "  【研究背景】【文献依据表格】【分析路线(分阶段，每步标注skill名+文献依据)】【图表策略】【验证建议】【参考文献】",
-            "Step 3: 调用 memomics_pipeline(action='todos', selected_modules=[...]) 生成带skill的待办",
-            "  ⚠️ memomics_pipeline 自动绑定真实 skill → 不要调用 todo() → 禁止空 skill！",
-            "  方案和待办的 skill 必须来自 Step 1 的 skill_search 结果！禁止执行任何分析代码！方案和待办输出后就结束！",
+            "⚠️ Step 3 (强制！不可跳过！): 回复用户之前，必须先调用 memomics_pipeline(action='todos') 生成待办！",
+            "  调用格式: memomics_pipeline(action='todos', selected_modules=['02','03'])",
+            "  memomics_pipeline 会自动绑定 Step 1 搜索到的真实 skill，skill 永远不为空",
+            "  先调用 memomics_pipeline → 收到返回 → 再回复用户",
+            "  禁止只写方案不调用 pipeline！禁止执行任何分析代码！",
             "",
         ]
     elif intent == "direct_exec":
@@ -3125,6 +3127,24 @@ async def ws_endpoint(ws: WebSocket):
                         # 恢复原始工具列表
                         if _saved_tools is not None:
                             agent.tools = _saved_tools
+                        # 兜底：plan_refine 结束后若未调用 memomics_pipeline，自动触发生成待办
+# 兜底：plan_refine 结束后若未调用 memomics_pipeline，直接调用 Python 函数生成待办
+                        if _intent == "plan_refine":
+                            did_call = any(t for t in (getattr(agent, "_tool_call_log", []) or []) if t.get("tool") == "memomics_pipeline")
+                            if not did_call:
+                                try:
+                                    import sys, os
+                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "agent"))
+                                    from memomics_pipeline import modules_to_todos
+                                    default_ids = ["02", "03", "04"]
+                                    pipe_todos = modules_to_todos(default_ids)
+                                    if pipe_todos:
+                                        for td in pipe_todos:
+                                            agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
+                                        _session_emit(session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                        _session_emit(session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                except Exception as e:
+                                    logger.warning(f"auto-todos failed: {e}")
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
