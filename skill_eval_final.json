@@ -1,14 +1,14 @@
 {
   "test_a": {
     "sample_size": 50,
-    "r1_top1_pct": 10,
-    "r1_top3_pct": 52,
-    "r2_top1_pct": 10,
-    "r2_top3_pct": 52,
-    "r3_top1_pct": 70,
-    "r3_top3_pct": 76,
-    "stable_pct": 52,
-    "ever_hit_pct": 76
+    "r1_top1_pct": 48,
+    "r1_top3_pct": 66,
+    "r2_top1_pct": 48,
+    "r2_top3_pct": 66,
+    "r3_top1_pct": 68,
+    "r3_top3_pct": 82,
+    "stable_pct": 66,
+    "ever_hit_pct": 82
   },
   "test_b": {
     "Bulk RNA": {
@@ -25,9 +25,9 @@
     },
     "General Bioinfo": {
       "total": 15,
-      "top1": 9,
-      "top3": 9,
-      "pct": 60
+      "top1": 10,
+      "top3": 10,
+      "pct": 66
     },
     "Genetics": {
       "total": 12,
@@ -49,21 +49,21 @@
     },
     "Other": {
       "total": 107,
-      "top1": 73,
-      "top3": 74,
-      "pct": 69
+      "top1": 72,
+      "top3": 75,
+      "pct": 70
     },
     "Protein": {
       "total": 15,
-      "top1": 12,
+      "top1": 11,
       "top3": 12,
       "pct": 80
     },
     "Query/DB": {
       "total": 41,
       "top1": 37,
-      "top3": 37,
-      "pct": 90
+      "top3": 38,
+      "pct": 92
     },
     "Spatial": {
       "total": 1,
@@ -86,14 +86,14 @@
     "scRNA": {
       "total": 31,
       "top1": 19,
-      "top3": 20,
-      "pct": 64
+      "top3": 21,
+      "pct": 67
     }
   },
   "summary": {
     "all_skills_top1": "64%",
-    "all_skills_top3": "69%",
-    "multi_turn_stable": "52%",
-    "combined": "60%"
+    "all_skills_top3": "70%",
+    "multi_turn_stable": "66%",
+    "combined": "68%"
   }
 }
