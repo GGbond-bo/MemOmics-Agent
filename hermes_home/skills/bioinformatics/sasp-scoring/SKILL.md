@@ -1,7 +1,7 @@
 ---
 name: sasp-scoring
 description: "SASP gene set scoring + heatmap + group comparison"
-when_to_use: "SASP gene set scoring + heatmap + group comparison"
+when_to_use: "SASP衰老分泌表型评分：衰老细胞表达→SASP基因集→衰老评分→药物干预效果"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: analyze_bone_microct_morphometry
 description: "Analyze bone microarchitecture parameters from 3D micro-CT images to calculate bone mineral density, bone volume, trabecular number, thickness, and separation."
-when_to_use: "Analyze bone microarchitecture parameters from 3D micro-CT images to calculate bone mineral density, bone volume, trabecular number, thickness, and separation."
+when_to_use: "骨微CT形态计量：microCT扫描→骨小梁参数(BV/TV/Tb.Th/Tb.N/Tb.Sp)→骨质疏松评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

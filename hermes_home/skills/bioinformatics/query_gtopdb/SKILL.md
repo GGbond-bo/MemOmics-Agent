@@ -1,7 +1,7 @@
 ---
 name: query_gtopdb
 description: "Query the Guide to PHARMACOLOGY (GtoPdb) database using natural language or a direct endpoint."
-when_to_use: "Query the Guide to PHARMACOLOGY (GtoPdb) database using natural language or a direct endpoint."
+when_to_use: "GtoPdb药理学数据库查询：受体/通道/酶→配体/药物→亲和力→药理学特性"
 version: 1.0.0
 author: MemOmics
 license: MIT

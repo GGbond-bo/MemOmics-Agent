@@ -1,7 +1,7 @@
 ---
 name: analyze_cell_senescence_and_apoptosis
 description: "Analyze flow cytometry data to quantify senescent and apoptotic cell populations."
-when_to_use: "Analyze flow cytometry data to quantify senescent and apoptotic cell populations."
+when_to_use: "细胞衰老与凋亡分析：流式/荧光数据→衰老/凋亡比例→药物诱导效应评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

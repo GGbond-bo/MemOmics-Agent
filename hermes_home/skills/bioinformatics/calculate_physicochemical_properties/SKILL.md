@@ -1,7 +1,7 @@
 ---
 name: calculate_physicochemical_properties
 description: "Calculate key physicochemical properties of a drug candidate molecule."
-when_to_use: "Calculate key physicochemical properties of a drug candidate molecule."
+when_to_use: "分子理化性质计算：化合物SMILES→分子量/logP/HBD/HBA/TPSA→类药五规则评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

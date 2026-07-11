@@ -1,7 +1,7 @@
 ---
 name: region_to_ccre_screen
 description: "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs."
-when_to_use: "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs."
+when_to_use: "cCRE候选调控元件筛查：基因组区域→ENCODE cCRE→启动子/增强子/绝缘子→靶基因预测"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: quantify_amyloid_beta_plaques
 description: "Analyzes an image to detect and quantify amyloid-beta plaques, returning a detailed analysis log."
-when_to_use: "Analyzes an image to detect and quantify amyloid-beta plaques, returning a detailed analysis log."
+when_to_use: "淀粉样蛋白斑块定量：脑组织切片→Aβ免疫染色→斑块面积/数量→阿尔茨海默病理评分"
 version: 1.0.0
 author: MemOmics
 license: MIT

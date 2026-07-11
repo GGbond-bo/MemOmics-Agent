@@ -1,7 +1,7 @@
 ---
 name: ppt-generator
 description: "AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入"
-when_to_use: "已有分析结果和图表，需生成汇报用PPT，自动排版图文"
+when_to_use: "PPT演示文稿生成：内容大纲→专业幻灯片设计→图表/排版→汇报材料"
 version: 1.0.0
 author: MemOmics
 license: MIT

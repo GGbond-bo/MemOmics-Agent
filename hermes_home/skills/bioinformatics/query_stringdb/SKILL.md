@@ -1,7 +1,7 @@
 ---
 name: query_stringdb
 description: "Query the STRING protein interaction database using natural language or direct endpoint."
-when_to_use: "Query the STRING protein interaction database using natural language or direct endpoint."
+when_to_use: "STRING蛋白互作网络：基因列表→PPI网络→功能富集→互作证据→网络可视化"
 version: 1.0.0
 author: MemOmics
 license: MIT

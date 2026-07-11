@@ -1,7 +1,7 @@
 ---
 name: query_regulomedb
 description: "Query the RegulomeDB database using natural language or direct endpoint."
-when_to_use: "Query the RegulomeDB database using natural language or direct endpoint."
+when_to_use: "RegulomeDB调控变异查询：变异rs号→调控元件注释→TF结合→DNase→eQTL→功能评分"
 version: 1.0.0
 author: MemOmics
 license: MIT

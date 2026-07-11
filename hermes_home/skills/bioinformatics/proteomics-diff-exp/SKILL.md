@@ -1,7 +1,7 @@
 ---
 id: "skill_08c0e01956d643148a85f5334cfd7abd"
 name: "proteomics-diff-exp"
-when_to_use: "需使用proteomics diff exp功能，适用于相关生信分析场景"
+when_to_use: "蛋白质组差异表达分析：蛋白定量数据→差异蛋白筛选(limma/DEP)→火山图/热图→通路富集"
 display-name: "Proteomics Differential Expression (limma + DEqMS)"
 category: proteomics_metabolomics
 short-description: "Differential protein expression analysis on mass spectrometry proteomics data using limma and DEqMS with PSM-aware variance estimation."

@@ -1,7 +1,7 @@
 ---
 name: analyze_aortic_diameter_and_geometry
 description: "Analyze aortic diameter and geometry from cardiovascular imaging data to measure aortic root diameter, ascending aorta diameter, and calculate geometric parameters such as tortuosity and dilation indi"
-when_to_use: "Analyze aortic diameter and geometry from cardiovascular imaging data to measure aortic root diameter, ascending aorta diameter, and calculate geometric parameters such as tortuosity and dilation indi"
+when_to_use: "主动脉几何分析：血管影像→管径测量→动脉瘤评估→扩张速率→手术指征"
 version: 1.0.0
 author: MemOmics
 license: MIT

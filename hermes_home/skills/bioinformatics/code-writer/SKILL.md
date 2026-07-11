@@ -1,7 +1,7 @@
 ---
 name: code-writer
 description: "编写Python/R脚本，数据分析代码，函数封装，程序开发"
-when_to_use: "编写Python/R脚本，数据分析代码，函数封装，程序开发"
+when_to_use: "代码自动编写：需求描述→Python/R/Shell代码生成→带注释→可执行"
 version: 1.0.0
 author: MemOmics
 license: MIT
