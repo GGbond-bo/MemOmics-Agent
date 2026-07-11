@@ -1408,6 +1408,7 @@ function filterSessions() {
 
 function renderSessionList(sessions) {
   var el = document.getElementById('session-list');
+  var scrollTop = el.scrollTop;  // 保留滚动位置，防止innerHTML重建后跳回顶部
   if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; return; }
   // 按创建时间从新到旧排列（最新的在最上面）
   _allSessions = sessions;
@@ -1427,6 +1428,10 @@ function renderSessionList(sessions) {
     var msgCount = s.msg_count ? '<span style="font-size:10px;color:var(--text-light);float:right;">' + s.msg_count + '条</span>' : '';
     return '<div class="session-item' + active + '" onclick="switchSession(\'' + s.id + '\')">' + bg + runningBadge + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(s.title) + '</span>' + restored + msgCount + '<button class="del-btn" onclick="event.stopPropagation();deleteSession(\'' + s.id + '\')" title="删除会话">🗑</button></div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 function deleteSession(sid) {
@@ -1943,6 +1948,10 @@ async function browseFiles(path) {
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseFiles('" + f.path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 async function previewFile(path) {
@@ -1983,6 +1992,10 @@ async function browseKb(path) {
     var icon = f.is_dir ? '📁' : (f.ext === '.yaml' || f.ext === '.yml' ? '📚' : '📄');
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseKb('" + f.path + "')" : "previewKb('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span></div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 async function previewKb(path) {
@@ -2062,6 +2075,10 @@ function renderSkillList(skills, filter) {
     var disabledBadge = s.disabled ? ' <span style="color:#e74c3c;font-size:10px;">[已禁用]</span>' : '';
     return '<div class="skill-item" style="' + disabledStyle + '" onclick="viewSkill(\'' + s.name + '\')"><div style="display:flex;justify-content:space-between;align-items:center;"><div class="skill-name" style="flex:1;">' + catIcon + ' ' + escapeHtml(s.name) + disabledBadge + '</div>' + toggleBtn + '</div><div class="skill-desc">' + escapeHtml(s.description) + '</div><div class="skill-meta">📜 ' + s.scripts_count + ' 脚本' + (s.has_skill_md ? ' · ✅ SKILL.md' : '') + '</div></div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 async function viewSkill(name) {
@@ -2298,6 +2315,10 @@ async function loadResultsFiles() {
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 function switchResultsTab(tab) {
@@ -2798,6 +2819,10 @@ function updateStats(stats) {
     return '<div class="ctx-stat"><div class="stat-val' + (item.klass ? ' ' + item.klass : '') + '">' +
       item.val + '</div><div class="stat-lbl">' + item.lbl + '</div></div>';
   }).join('');
+  el.scrollTop = scrollTop;  // 恢复滚动位置
+  // 确保当前活跃会话在可视区内
+  var activeEl = el.querySelector('.session-item.active');
+  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 function updateBreakdown(categories, max) {

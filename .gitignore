@@ -68,3 +68,5 @@ hermes_home/.install_path
 hermes_home/.skills_prompt_snapshot.json
 hermes_home/.usage.json
 hermes_home/skills/.usage.json
+*.db-shm
+*.db-wal
