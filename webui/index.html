@@ -727,7 +727,7 @@ let _currentRunningSid = null;   // 当前正在运行的会话 ID
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions(); newSession(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -1364,6 +1364,19 @@ function newSession() {
   document.getElementById('chat-title').textContent = '新会话';
   updateSessionList();
   refreshResults();  // 清除旧会话的分析结果面板
+}
+
+// WS重连时自动选择最新会话，不再无条件创建新会话（避免幽灵会话覆盖已选会话）
+function autoSelectLatestSession() {
+  if (!_allSessions || !_allSessions.length) {
+    newSession();  // 首次启动，没有任何会话才新建
+    return;
+  }
+  // 选最新的一个（已按时间排序，第一个即最新）
+  var latest = _allSessions[0];
+  if (latest && latest.id) {
+    switchSession(latest.id);
+  }
 }
 
 async function loadSessions() {
