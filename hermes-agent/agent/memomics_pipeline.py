@@ -140,7 +140,32 @@ MODALITY_KW = {
     "lipidomics":  ["脂质", "lipid", "lipidom"],
     "genetics":    ["gwas", "遗传", "变异", "variant", "mendelian", "prs", "多基因风险"],
     "clinical":    ["生存分析", "survival", "cox", "kaplan", "临床", "预后", "prognosis"],
+    "multi_omics": ["多组学", "multiom", "multi-om", "整合组学", "多模态", "联合分析", "整合分析"],
 }
+
+# Cross-modality pairs: when both modalities detected, auto-add multi_omics
+_MULTI_MODALITY_PAIRS = [
+    ({"scrna", "scatac"}, "scRNA+ATAC"),
+    ({"scrna", "spatial"}, "scRNA+spatial"),
+    ({"scrna", "bulk_rna"}, "scRNA+bulk"),
+    ({"scrna", "proteomics"}, "scRNA+proteomics"),
+    ({"bulk_rna", "proteomics"}, "bulk+proteomics"),
+    ({"genetics", "clinical"}, "genetics+clinical"),
+    ({"scrna", "drug"}, "scRNA+drug"),
+    ({"microbiome", "drug"}, "microbiome+drug"),
+]
+
+# Cross-modality pairs: when both modalities detected, auto-add multi_omics
+_MULTI_MODALITY_PAIRS = [
+    ({"scrna", "scatac"}, "scRNA+ATAC"),
+    ({"scrna", "spatial"}, "scRNA+spatial"),
+    ({"scrna", "bulk_rna"}, "scRNA+bulk"),
+    ({"scrna", "proteomics"}, "scRNA+proteomics"),
+    ({"bulk_rna", "proteomics"}, "bulk+proteomics"),
+    ({"genetics", "clinical"}, "genetics+clinical"),
+    ({"scrna", "drug"}, "scRNA+drug"),
+    ({"microbiome", "drug"}, "microbiome+drug"),
+]
 
 DIRECTION_MAP = {
     "aging": ["衰老", "aging", "aged", "老年", "elderly", "senescence", "寿命", "longevity"],
@@ -190,14 +215,30 @@ def extract_direction(user_input: str) -> Dict[str, Any]:
 
 
 def detect_modality(text: str) -> list:
-    """Detect data modalities from user input."""
+    """Detect data modalities from user input. Auto-detects multi_omics when 2+ modalities co-occur.
+    Priority: scrna suppresses bulk_rna unless explicit 'bulk' keyword present."""
     t = text.lower()
     modalities = []
+    has_scrna = False
     for mod, keywords in MODALITY_KW.items():
         for kw in keywords:
             if kw in t:
+                if mod == "scrna": has_scrna = True
                 modalities.append(mod)
                 break
+
+    # Priority rule: if scrna detected, remove bulk_rna unless explicit 'bulk' keyword
+    if has_scrna and "bulk_rna" in modalities and "bulk" not in t:
+        modalities.remove("bulk_rna")
+
+    # Auto-detect multi_omics from co-occurring modalities (need real multi-modal)
+    mod_set = set(modalities)
+    for pair, _desc in _MULTI_MODALITY_PAIRS:
+        if pair.issubset(mod_set):
+            if "multi_omics" not in modalities:
+                modalities.append("multi_omics")
+            break
+
     return modalities if modalities else ["scrna"]
 
 
@@ -367,4 +408,15 @@ TOOL_SCHEMA = {
         },
         "required": ["action"],
     },
+}
+
+# Additional skill aliases for search expansion
+SKILL_KEYWORD_ALIASES = {
+    "umap": "umap-embedding",
+    "cca": "create_harmony_embeddings_scrnaseq",
+    "mag": "mageck_analysis",
+    "snp": "variant-calling",
+    "scenic": "grn-pyscenic",
+    "pseudotime": "trajectory-analysis",
+    "cell2location": "spatial-deconvolution",
 }

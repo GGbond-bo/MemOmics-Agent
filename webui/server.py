@@ -345,6 +345,23 @@ def _load_provider_keys():
 
 _load_provider_keys()
 
+def _sync_debate_env():
+    """Inject API key + base_url into environ for debate_analysis independent LLM calls"""
+    for pid, info in _provider_keys.items():
+        ak = info.get("api_key", "")
+        bu = info.get("base_url", "")
+        if ak and ("dcs" in pid.lower() or "dcs" in bu.lower() or "deepseek" in pid.lower()):
+            os.environ["DEEPSEEK_API_KEY"] = ak
+            if bu:
+                os.environ["DEEPSEEK_BASE_URL"] = bu.rstrip("/")
+            os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
+            print(f"[INFO] Debate env injected: KEY=*** URL={bu} MODEL={_current_model.get('model','?')}")
+            return
+    if _current_model.get("api_key"):
+        os.environ["DEEPSEEK_API_KEY"] = _current_model["api_key"]
+        os.environ["DEEPSEEK_BASE_URL"] = _current_model.get("base_url", "").rstrip("/")
+        os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
+
 # 启动同步：如果 _current_model 有 key 但 provider_keys 为空，
 # 自动按 base_url 反查 provider 并同步 key，保证交互框下拉框能显示模型
 if _current_model.get("api_key") and not _provider_keys:
@@ -355,6 +372,9 @@ if _current_model.get("api_key") and not _provider_keys:
             _save_provider_keys()
             print(f"[INFO] 已自动同步 provider key: {_p['id']} (从 model_config.json)")
             break
+
+# 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量
+_sync_debate_env()
 
 # 预设模型 (兼容旧 API, 从 _CHINA_PROVIDERS 生成)
 _preset_models = []
@@ -556,14 +576,20 @@ def _classify_intent(text: str):
         "做分析", "做数据分析", "跑分析", "跑一下",
         "预处理", "做预处理", "进行", "做个分析",
         "看看结果", "帮我解读", "给我分析", "数据在哪里",
+        "空间组", "蛋白", "蛋白质", "微生物组", "代谢组", "脂质组", "药物组",
+        "atac测序", "基因组测序", "芯片数据", "药物筛选",
+        "蛋白表达", "多组学", "单细胞测序", "空间转录组",
     ]
     if any(kw in t for kw in ANALYSIS_INTENT_KW):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.82, meta)
-    # Questions about HOW to analyze
+    # Questions about HOW to analyze (must fire before lit/kb/report)
     if "怎么分析" in t or "如何分析" in t or "怎样分析" in t:
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.85, meta)
+    if "怎么做" in t:
+        meta["modalities"] = _detect_modalities_from_text(t)
+        return ("research_plan", 0.84, meta)
 
     # === Priority 4: direct_exec (user provides params, skip planning) ===
     DIRECT_KW = ["直接跑", "直接执行", "直接做", "照这个做", "按这个做",

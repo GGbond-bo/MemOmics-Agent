@@ -227,6 +227,23 @@ CHINESE_ALIASES = {
     "16s": "microbiome-analysis",
     "宏基因组": "metagenomics-analysis",
     "metagenom": "metagenomics-analysis",
+    
+    # ---- 遗传/变异 ----
+    "snp": "genetic-variant-annotation",
+    "snv": "genetic-variant-annotation",
+    "基因变异": "genetic-variant-annotation",
+    "snp注释": "genetic-variant-annotation",
+    "变异注释": "genetic-variant-annotation",
+    "gwas": "gwas-analysis",
+    "eqtl": "genetic-variant-annotation",
+    "基因组关联": "gwas-analysis",
+    
+    # ---- 其他 ----
+    "cca": "create_harmony_embeddings_scRNA",
+    "mag": "mageck_analysis",
+    "sgrna-seq": "mageck_analysis",
+    "guide": "sgrna-design",
+    "网络药理学": "drug-target-prediction",
 }
 
 

@@ -563,6 +563,111 @@ registry.register(
 )
 
 # ============================================================================
+# debate_analysis — 多角色辩论审查
+# ============================================================================
+DEBATE_ANALYSIS_SCHEMA = {
+    "name": "debate_analysis",
+    "description": "多角色辩论审查：对分析参数/方法/结论进行正方3编辑+反方4编辑+裁判辩论。适用于参数不确定、方法有争议、结论需验证的场景。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "topic": {"type": "string", "description": "辩论主题：参数选择/方法决策/结论验证"},
+            "context": {"type": "string", "description": "分析上下文：当前数据、已执行步骤、待决策点"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "备选方案列表，如 ['resolution=0.4','resolution=0.6','resolution=0.8']"},
+            "output_dir": {"type": "string", "description": "归档目录，辩论结果保存到 {output_dir}/debate_{timestamp}.json"}
+        },
+        "required": ["topic", "context"]
+    }
+}
+
+
+def debate_analysis(topic, context, options=None, output_dir=""):
+    """Generate a structured multi-role debate framework. The calling LLM should
+    play each role and produce the debate, then the judge synthesizes.
+    Returns a JSON debate specification that the agent must follow."""
+    import datetime
+
+    roles = {
+        "pro": [
+            {"id": "bio_pro", "name": "生物学编辑(正)", "perspective": "从生物学意义角度支持最佳方案", "kb": "biology"},
+            {"id": "stat_pro", "name": "统计学编辑(正)", "perspective": "从统计效力角度支持最佳方案", "kb": "statistics"},
+            {"id": "bioinfo_pro", "name": "生信编辑(正)", "perspective": "从计算可行性角度支持最佳方案", "kb": "bioinfo"},
+        ],
+        "con": [
+            {"id": "bio_con", "name": "生物学编辑(反)", "perspective": "从生物学角度质疑方案，提出替代解释", "kb": "biology"},
+            {"id": "stat_con", "name": "统计学编辑(反)", "perspective": "从统计角度寻找漏洞和假设违反", "kb": "statistics"},
+            {"id": "bioinfo_con", "name": "生信编辑(反)", "perspective": "从计算角度指出潜在错误和边界条件", "kb": "bioinfo"},
+            {"id": "history_con", "name": "历史经验编辑(反)", "perspective": "从历史运行记录找相似失败案例和陷阱", "kb": "history_errors"},
+        ],
+    }
+
+    debate_spec = {
+        "topic": topic,
+        "context": context[:3000],
+        "options": options or [],
+        "roles": roles,
+        "rules": [
+            "每个编辑独立发言，互不可见对方的论点",
+            "正方从各自专业角度推荐最佳方案并论证",
+            "反方从各自专业角度找出方案漏洞和风险",
+            "所有编辑发言需引用具体数据、文献或历史证据",
+            "裁判看到全部7方论点后给出最终裁决+置信度(高/中/低)",
+            "最终输出包含：推荐方案、置信度、理由、风险提示",
+        ],
+        "timestamp": datetime.datetime.now().isoformat(),
+        "status": "pending"
+    }
+
+    # Archive if output_dir is provided
+    archive_path = ""
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_path = os.path.join(output_dir, f"debate_{ts}.json")
+        with open(archive_path, "w", encoding="utf-8") as f:
+            json.dump(debate_spec, f, ensure_ascii=False, indent=2)
+
+    prompt = f"""🗣️ **多角色辩论：{topic}**
+
+请依次扮演以下 7 个角色进行辩论，每个角色独立发言（用 --- 分隔）：
+
+## 正方（3 位）
+1. **生物学编辑(正)**：[从生物学意义论证最佳方案]
+2. **统计学编辑(正)**：[从统计效力论证最佳方案]
+3. **生信编辑(正)**：[从计算可行性论证最佳方案]
+
+## 反方（4 位）
+4. **生物学编辑(反)**：[从生物学角度质疑，提出替代解释]
+5. **统计学编辑(反)**：[从统计角度找漏洞和假设违反]
+6. **生信编辑(反)**：[从计算角度指出边界条件和潜在错误]
+7. **历史经验编辑(反)**：[从历史运行记录找相似失败案例]
+
+## 裁判
+8. **裁判**：综合以上7方论点，给出最终裁决（推荐方案 + 置信度 + 理由 + 风险提示）
+
+---
+**背景**：{context[:2000]}
+**选项**：{json.dumps(options or [], ensure_ascii=False)}
+
+请开始辩论："""
+
+    result = {
+        "debate_prompt": prompt,
+        "roles_count": 8,
+        "archive_path": archive_path,
+        "instruction": "必须严格执行以上辩论流程，每个角色独立输出，裁判最后综合裁决。不得跳过任何角色。"
+    }
+
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+registry.register(
+    name="debate_analysis", toolset="memomics", schema=DEBATE_ANALYSIS_SCHEMA,
+    handler=lambda args, **kw: debate_analysis(args.get("topic", ""), args.get("context", ""), args.get("options"), args.get("output_dir", "")),
+    emoji="🗣️", max_result_size_chars=50_000,
+)
+
+# ============================================================================
 # todo_manage
 # ============================================================================
 TODO_MANAGE_SCHEMA = {
