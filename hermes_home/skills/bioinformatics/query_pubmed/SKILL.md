@@ -1,7 +1,7 @@
 ---
 name: query_pubmed
 description: "Query PubMed for papers based on the provided search query."
-when_to_use: "Query PubMed for papers based on the provided search query."
+when_to_use: "PubMed文献检索：关键词/作者/PMID查询→摘要获取→文献管理"
 version: 1.0.0
 author: MemOmics
 license: MIT

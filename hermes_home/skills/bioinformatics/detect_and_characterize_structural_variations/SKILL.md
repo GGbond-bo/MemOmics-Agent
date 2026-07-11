@@ -1,7 +1,7 @@
 ---
 name: detect_and_characterize_structural_variations
 description: "Detects and characterizes structural variations (SVs) in genomic sequencing data using LUMPY for SV detection followed by annotation with COSMIC and/or ClinVar databases."
-when_to_use: "Detects and characterizes structural variations (SVs) in genomic sequencing data using LUMPY for SV detection followed by annotation with COSMIC and/or ClinVar databases."
+when_to_use: "结构变异检测：BAM文件→SV检测(长读/短读)→断点→融合基因"
 version: 1.0.0
 author: MemOmics
 license: MIT

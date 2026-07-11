@@ -1,7 +1,7 @@
 ---
 name: query_arxiv
 description: "Query arXiv for papers based on the provided search query."
-when_to_use: "Query arXiv for papers based on the provided search query."
+when_to_use: "arXiv预印本检索：关键词搜索→最新预印本→CS/stat/q-bio分类"
 version: 1.0.0
 author: MemOmics
 license: MIT

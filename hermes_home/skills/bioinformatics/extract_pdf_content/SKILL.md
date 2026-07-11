@@ -1,7 +1,7 @@
 ---
 name: extract_pdf_content
 description: "Extract text content from a PDF file."
-when_to_use: "Extract text content from a PDF file."
+when_to_use: "PDF文献内容提取：PDF论文→文本/图表/参考文献提取→结构化输出"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: analyze_ddr_network_in_cancer
 description: "Analyze DNA Damage Response (DDR) network alterations and dependencies in cancer samples."
-when_to_use: "Analyze DNA Damage Response (DDR) network alterations and dependencies in cancer samples."
+when_to_use: "DNA损伤修复网络分析：癌症突变数据→DDR通路→缺陷评分→药物靶点"
 version: 1.0.0
 author: MemOmics
 license: MIT

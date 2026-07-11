@@ -1,7 +1,7 @@
 ---
 name: annotate_celltype_with_panhumanpy
 description: "Perform cell type annotation of single-cell RNA-seq data using Panhuman Azimuth Neural Network. This function implements the Panhuman Azimuth workflow for cell type annotation using the panhumanpy pac"
-when_to_use: "Perform cell type annotation of single-cell RNA-seq data using Panhuman Azimuth Neural Network. This function implements the Panhuman Azimuth workflow for cell type annotation using the panhumanpy pac"
+when_to_use: "PanHumanPy细胞类型注释：scRNA数据→跨物种参考映射→自动标注"
 version: 1.0.0
 author: MemOmics
 license: MIT

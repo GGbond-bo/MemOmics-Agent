@@ -1,7 +1,7 @@
 ---
 name: find_enriched_motifs_with_homer
 description: "Find DNA sequence motifs enriched in genomic regions using the HOMER motif discovery software."
-when_to_use: "Find DNA sequence motifs enriched in genomic regions using the HOMER motif discovery software."
+when_to_use: "HOMER motif富集分析：peak文件→已知/新motif发现→富集统计"
 version: 1.0.0
 author: MemOmics
 license: MIT

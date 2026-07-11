@@ -1,7 +1,7 @@
 ---
 name: gene_set_enrichment_analysis
 description: "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality."
-when_to_use: "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality."
+when_to_use: "基因集富集分析(GSEA)：差异基因列表→GO/KEGG/MSigDB富集→网络可视化"
 version: 1.0.0
 author: MemOmics
 license: MIT

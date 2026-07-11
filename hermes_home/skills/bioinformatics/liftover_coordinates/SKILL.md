@@ -1,7 +1,7 @@
 ---
 name: liftover_coordinates
 description: "Perform liftover of genomic coordinates between hg19 and hg38 formats with detailed intermediate steps."
-when_to_use: "Perform liftover of genomic coordinates between hg19 and hg38 formats with detailed intermediate steps."
+when_to_use: "基因组坐标转换(LiftOver)：hg19/hg38坐标→UCSC chain文件→坐标映射"
 version: 1.0.0
 author: MemOmics
 license: MIT

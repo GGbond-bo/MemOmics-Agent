@@ -1,7 +1,7 @@
 ---
 name: perform_chipseq_peak_calling_with_macs2
 description: "Perform ChIP-seq peak calling using MACS2 to identify genomic regions with significant binding."
-when_to_use: "Perform ChIP-seq peak calling using MACS2 to identify genomic regions with significant binding."
+when_to_use: "ChIP-seq峰值检测：比对文件→MACS2 peak calling→差异peak→motif富集"
 version: 1.0.0
 author: MemOmics
 license: MIT
