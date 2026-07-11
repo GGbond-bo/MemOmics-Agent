@@ -2718,7 +2718,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # === 自我介绍快速回复（绕过 agent LLM）===
                 if _intent == "self_intro":
-                    _intro = (
+                    _intro_zh = (
                         "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
                         "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
                         "## 核心能力\n\n"
@@ -2731,6 +2731,20 @@ async def ws_endpoint(ws: WebSocket):
                         "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
                         "有什么需要帮忙的，直接告诉我！"
                     )
+                    _intro_en = (
+                        "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
+                        "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
+                        "## Core Capabilities\n\n"
+                        "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
+                        "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
+                        "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
+                        "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
+                        "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
+                        "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
+                        "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
+                        "What can I help you with? Just let me know!"
+                    )
+                    _intro = _intro_en if session.get("lang") == "en" else _intro_zh
                     session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
                     _persist_session_message(session, "assistant", _intro)
                     await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
