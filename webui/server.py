@@ -524,7 +524,8 @@ def _classify_intent(text: str):
               "数据", "基因", "细胞", "表达", "qc", "deg", "rna", "atac",
               "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物",
               "umap", "tsne", "可视化", "热图", "火山图", "小提琴图", "散点图",
-              "轨迹", "通路", "通讯", "调控", "模块"]
+              "轨迹", "通路", "通讯", "调控", "模块",
+              "结果", "输出", "文献", "文献综述"]
     has_chat = any(kw in t for kw in CHAT_KW)
     has_bio = any(kw in t for kw in BIO_KW)
     if has_chat and not has_bio:
@@ -535,11 +536,12 @@ def _classify_intent(text: str):
     # === Priority 3: research_plan (literature-driven plan design) ===
     # 先检查 plan_refine 关键词（如'生成方案'），避免被 PLAN_KW 抢先
     REFINE_KW = ["生成方案", "出方案", "出完整方案", "出研究方案", "生成研究方案",
-                 "开始做", "做吧", "开始方案",
+                 "开始做", "开始方案",
                  "帮我写", "写成方案", "做方案", "生成完整", "出完整"]
     if any(kw in t for kw in REFINE_KW):
         return ("plan_refine", 0.88, {"phase2": True})
     PLAN_KW = ["设计方案", "出个方案", "出方案", "规划一下", "规划",
+               "查文献", "找文献", "文献调研",
                "实验设计", "研究设计", "研究思路", "分析路线", "分析策略",
                "下一步做", "接下来做", "下一步怎么", "接下来怎么",
                "怎么设计", "如何设计", "方案设计",
@@ -553,7 +555,8 @@ def _classify_intent(text: str):
                "atac.*rna.*整合", "rna.*atac.*整合",
                "怎么研究", "如何研究", "研究这个", "深入分析",
                "atac.*和.*rna", "rna.*和.*atac", "怎么.*鉴定",
-               "表征", "验证这个群", "发育过程", "细胞命运"]
+               "表征", "验证这个群", "发育过程", "细胞命运",
+               "加入.*分析", "加上.*分析", "加入.*组学"]
     # 重新生成/不满意 → force plan_refine (not research_plan)
     REGEN_KW = ["重新生成", "换个方案", "不满意", "重新设计", "方案不行", "方案不好"]
     if any(kw in t for kw in REGEN_KW):
@@ -577,13 +580,27 @@ def _classify_intent(text: str):
     DIRECT_KW_2 = ["直接跑", "直接执行", "直接做", "照这个做", "按这个做",
                  "参数写好了", "确定了", "代码写好了", "已经写好了",
                  "就按这个", "只用执行", "照着做", "就做这个", "只做这个",
-                 "就按参数", "就这个参数", "跑一下就行", "直接按"]
+                 "就按参数", "就这个参数", "跑一下就行", "直接按",
+                 "做吧", "就按这个做吧", "照这个方案做", "照这个来"]
     if any(kw in t for kw in DIRECT_KW_2):
         return ("direct_exec", 0.90, {"skip_planning": True})
+    
+    # 工具名直接使用检测："用Seurat做" → analysis（必须在ANALYSIS_INTENT_KW之前）
+    TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
+                  "cellchat", "cellbender", "harmony", "scenic", "sctransform",
+                  "velocyto", "diffxpy", "clusterprofiler", "fgsea", "gseapy",
+                  "scrublet", "soupX", "soupx", "doubletfinder", "archr", "signac"]
+    if any(f"用{tool}" in t or f"with {tool}" in t or f"run {tool}" in t for tool in TOOL_NAMES):
+        return ("analysis", 0.88, {"reason": "direct_tool_usage"})
+    if any(tool in t for tool in TOOL_NAMES):
+        # Tool name present without plan keywords → analysis
+        has_plan = any(kw in t for kw in ["方案","设计","路线","思路","怎么","如何","规划","框架"])
+        if not has_plan:
+            return ("analysis", 0.84, {"reason": "specific_tool_no_plan"})
     # 数据分析需求检测：用户说"我要分析/想分析/帮分析XXX" → research_plan
     ANALYSIS_INTENT_KW = [
         "我要分析", "我想分析", "帮我分析", "帮我看", "分析一下",
-        "看看这个数据", "看一下数据", "探索数据", "探索一下", "数据探索",
+        "看看这个数据", "看一下数据", "探索数据", "数据探索",
         "数据分析方案", "分析思路", "该怎么分析", "该怎么办",
         "想分析", "要做分析", "需要分析", "分析需求",
         "研究一下", "看一下数据", "帮我看看",
@@ -593,16 +610,13 @@ def _classify_intent(text: str):
         "空间组", "蛋白", "蛋白质", "微生物组", "代谢组", "脂质组", "药物组",
         "atac测序", "基因组测序", "芯片数据", "药物筛选",
         "蛋白表达", "多组学", "单细胞测序", "空间转录组",
+        # English equivalents
+        "i want to analyze", "i need to analyze", "can you analyze",
+        "help me analyze", "help me design", "design a plan",
+        "design an analysis", "make a plan", "create a plan",
     ]
     if any(kw in t for kw in ANALYSIS_INTENT_KW):
-        # Heuristic: specific tool name + no plan keywords -> analysis
-        TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
-                      "cellchat", "cellbender", "harmony", "scenic", "sctransform",
-                      "velocyto", "diffxpy", "clusterprofiler", "fgsea"]
-        has_tool = any(tool in t for tool in TOOL_NAMES)
-        has_plan = any(kw in t for kw in ["方案","设计","路线","思路","怎么","如何","规划","框架"])
-        if has_tool and not has_plan:
-            return ("analysis", 0.84, {"reason": "specific_tool_no_plan"})
+        # 工具名+无方案关键词 → analysis（已在上方处理）
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.82, meta)
     # Questions about HOW to analyze (must fire before lit/kb/report)
@@ -656,7 +670,9 @@ def _classify_intent(text: str):
         "比对", "alignment", "peak", "motif", "mutation", "突变",
         "基因编辑", "crispr", "质粒", "plasmid", "引物", "primer",
         "酶切", "restriction", "表达量", "expression", "热图", "heatmap",
-        "火山图", "volcano", "小提琴", "violin", "cns", "nature"
+        "火山图", "volcano", "小提琴", "violin", "cns", "nature",
+        "探索一下", "探索这个数据", "结果怎么样", "结果如何",
+        "看看结果", "结果", "出结果", "跑完", "跑得",
     ]
     analysis_s = sum(1 for kw in analysis_kw if kw in t)
     if analysis_s >= 2:
