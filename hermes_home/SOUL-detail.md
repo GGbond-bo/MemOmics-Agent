@@ -32,8 +32,8 @@
 ```
 用户："这是我的scRNA数据 E:/data/liver_aging.h5ad"
 → scan_data → 识别为 h5ad, 20000 cells, 8 samples
-→ domain=01_RNA
-→ skill_list_by_domain(domain="01_RNA") → 展示 44 个 RNA 技能
+→ domain=01_scRNA
+→ skill_list_by_domain(domain="01_scRNA") → 展示 44 个 RNA 技能
 → 问用户："你要做QC？聚类？差异分析？还是全部？"
 → 用户确认 → 进入分析阶段
 ```
@@ -57,7 +57,7 @@
 → **必触发**：`skill_view("create-bio-skill")`
 → 讨论：
   - 这个工具做什么？（一句话描述）
-  - 属于哪个领域？（01_RNA / 02_ATAC / ... / 15_CRISPR基因编辑）
+  - 属于哪个领域？（01_scRNA / 02_scATAC / ... / 19_Assay）
   - 输入是什么？输出是什么？
   - 依赖哪些包？
 → 生成 skill 后：
@@ -82,25 +82,29 @@
 
 ---
 
-## 15 领域一览
+## 19 领域一览（对齐 SKILL.md category 字段）
 
-| 代码 | 名称 | 技能数 | 触发关键词 |
-|------|------|--------|-----------|
-| 01_RNA | 单细胞转录组 | 44 | scrna, seurat, scanpy, cell, gene, 单细胞 |
-| 02_ATAC | ATAC/染色质 | 10 | atac, chip, motif, 染色质, epigenome |
-| 03_空间组 | 空间转录组 | 18 | spatial, visium, 空间, merfish, 图像配准 |
-| 04_Bulk | Bulk/表观遗传 | 18 | gwas, bulk, mutation, prs, mendelian |
-| 05_蛋白 | 蛋白/免疫 | 26 | protein, docking, western, 蛋白, antibody |
-| 06_微生物植物 | 微生物/植物 | 5 | bacteria, microbiome, plant, 细菌, 植物 |
-| 07_药物临床 | 药物/临床 | 22 | drug, fda, clinical, survival, 药物, 临床 |
-| 08_报告 | 报告/可视化 | 13 | report, html, ppt, figure, 报告, 出图 |
-| 09_内置 | Hermes 系统 | 13 | code, file, convert, system, 系统 |
-| 10_多组学整合 | 多组学 | 11 | multi-omics, integration, 多组学, 整合 |
-| 11_文献搜索 | 文献/数据库 | 60 | query, search, paper, pubmed, 文献, 搜索 |
-| 12_分子生物学 | 分子克隆 | 20 | primer, pcr, plasmid, blast, 引物, 质粒 |
-| 13_组织学病理 | 组织学 | 5 | histology, h&e, stain, microscopy, 染色, 切片 |
-| 14_细胞生物学实验 | 细胞实验 | 5 | facs, flow cytometry, cell sorting, 流式 |
-| 15_CRISPR基因编辑 | 基因编辑 | 4 | crispr, sgrna, knockout, 基因编辑, cas9 |
+| 代码 | 名称 | 技能数 | SKILL.md category | 触发关键词 |
+|------|------|--------|-------------------|-----------|
+| 01_scRNA | 单细胞转录组 | 31 | scRNA | scrna, seurat, scanpy, cell, gene, 单细胞, clustering, trajectory |
+| 02_scATAC | ATAC/染色质 | 4 | scATAC | atac, chip, motif, 染色质, epigenome, archr, signac |
+| 03_Spatial | 空间转录组 | 1 | Spatial | spatial, visium, 空间, merfish, squidpy |
+| 04_Bulk | Bulk/表观遗传 | 2 | Bulk RNA | bulk, deseq2, edger, limma, rnaseq |
+| 05_Drug | 药物研发 | 31 | Drug Discovery | drug, fda, docking, admet, pharmac, target, 药物, 虚拟筛选 |
+| 06_Clinical | 临床分析 | 10 | Clinical | clinical, survival, disease, 临床, 预后, KM, 生存 |
+| 07_Genetics | 遗传/GWAS | 34 | GWAS/Genetics | gwas, mendelian, snp, eqtl, cnv, mutation, phylogen, 遗传, 突变 |
+| 08_Visualization | 报告/可视化 | 10 | Visualization | report, html, ppt, figure, 报告, 出图, visualize |
+| 09_General | 通用工具 | 24 | General Utility | code, file, convert, system, translate, 系统, 写代码 |
+| 10_Multiomics | 多组学整合 | 3 | Multi-omics | multi-omics, integration, 多组学, 整合, mofa, rgcca |
+| 11_DataQuery | 数据库查询 | 44 | Data Query | query, search, database, pubmed, uniprot, 查询, 数据库 |
+| 12_Literature | 文献检索 | 13 | Literature | paper, pubmed, arxiv, scholar, 文献, 论文, 搜索 |
+| 13_Proteomics | 蛋白组学 | 1 | Proteomics | proteomics, mass spec, 蛋白组, 质谱 |
+| 14_MolBio | 分子生物学 | 19 | Mol Bio | primer, pcr, plasmid, blast, 引物, 质粒, 克隆 |
+| 15_Immunology | 免疫学 | 6 | Immunology | immune, cytokine, 免疫, antibody, 抗体, tcell |
+| 16_Structural | 结构生物学 | 10 | Structural Biology | docking, itc, cd spectra, pdb, protein structure, 对接, 结构 |
+| 17_Bioimaging | 生物成像 | 22 | Bioimaging | nnunet, registration, segmentation, microscopy, 成像, 配准 |
+| 18_Histology | 组织学/病理 | 8 | Histology/Pathology | histology, h&e, stain, microscopy, 染色, 切片, amyloid |
+| 19_Assay | 湿实验 | 4 | Assay/Wet Lab | facs, flow cytometry, assay, 流式, 实验, protocol |
 
 ---
 
