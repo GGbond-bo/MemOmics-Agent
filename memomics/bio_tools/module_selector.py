@@ -117,17 +117,23 @@ def guide_analysis(data_stage: str = "raw", redo: bool = False) -> str:
 
 
 def _register():
-    from tools.registry import registry
-    registry.register(
-        name="guide_analysis",
-        toolset="memomics",
-        schema=SCHEMA,
-        handler=lambda args, **kw: guide_analysis(
-            args.get("data_stage", "raw"),
-            args.get("redo", False)
-        ),
-        emoji="📋",
-        max_result_size_chars=20_000,
-    )
+    try:
+        from tools.registry import registry
+        registry.register(
+            name="guide_analysis",
+            toolset="memomics",
+            schema=SCHEMA,
+            handler=lambda args, **kw: guide_analysis(
+                args.get("data_stage", "raw"),
+                args.get("redo", False)
+            ),
+            emoji="📋",
+            max_result_size_chars=20_000,
+        )
+    except ImportError:
+        pass
 
-_register()
+try:
+    _register()
+except Exception:
+    pass
