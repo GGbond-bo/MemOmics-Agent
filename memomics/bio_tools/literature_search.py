@@ -772,3 +772,6 @@ try:
     register(_registry)
 except Exception:
     pass
+
+# Alias for backward compatibility
+literature_search = search_papers

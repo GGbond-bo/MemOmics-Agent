@@ -2683,7 +2683,7 @@ async def ws_endpoint(ws: WebSocket):
                 continue
 
             elif msg_type == "chat":
-                user_text = msg.get("message", "").strip()
+                user_text = msg.get("message", msg.get("content", "")).strip()
                 if not user_text:
                     continue
 

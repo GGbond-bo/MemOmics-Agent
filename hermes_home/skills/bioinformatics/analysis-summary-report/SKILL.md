@@ -1,3 +1,10 @@
+---
+name: Analysis Summary Report
+description: Generate comprehensive analysis summary reports
+category: reporting
+tags: [report, summary]
+when_to_use: "生成分析总结报告：分析完成→自动汇总结果→生成综合报告→含图表/表格/结论"
+---
 # Analysis Summary Report — 分析后总结报告
 
 ## 🔒 报告完整性铁律（禁止偷懒）

@@ -1,3 +1,10 @@
+---
+name: Heart Conference Monitor
+description: Monitor and analyze heart conference presentations
+category: clinical
+tags: [heart, conference, monitor]
+when_to_use: "心脏会议监控：追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告"
+---
 # Heart Conference Monitor Pipeline
 
 ## Overview

@@ -1,3 +1,10 @@
+---
+name: Phylogenetics Toolkit
+description: Phylogenetic tree construction and analysis toolkit
+category: genomics
+tags: [phylogenetics, tree, evolution]
+when_to_use: "系统发育分析工具包：序列比对→建树(ML/NJ/MP)→树可视化→进化距离→祖先重建"
+---
 # Phylogenetics Toolkit
 
 A unified workflow for protein (or nucleotide) phylogenetic analysis, from raw sequence identifiers to publication-ready figures. All steps are implemented in Python unless noted. Validated on divergent protein families (EC 2.7.7.*, RT palm domain, ~20–350 sequences, 10–40% pairwise identity).
