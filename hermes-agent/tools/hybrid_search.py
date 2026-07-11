@@ -103,11 +103,11 @@ CHINESE_ALIASES = {
     "甲基化": "methylation-analysis",
     "methylation": "methylation-analysis",
     "表观": "epigenetic-analysis",
-    "chip": "perform_chipseq_peak_calling_with_macs2",
-    "chipseq": "perform_chipseq_peak_calling_with_macs2",
-    "gwas": "gwas-analysis",
-    "孟德尔": "mendelian-randomization",
-    "mendel": "mendelian-randomization",
+    "chip": "chip-atlas-target-genes",
+    "chipseq": "chip-atlas-target-genes",
+    "gwas": "gwas-phewas",
+    "孟德尔": "mendelian-randomization-twosamplemr",
+    "mendel": "mendelian-randomization-twosamplemr",
     "eqtl": "eqtl-analysis",
     "sqtl": "sqtl-analysis",
     
@@ -234,7 +234,7 @@ CHINESE_ALIASES = {
     "基因变异": "genetic-variant-annotation",
     "snp注释": "genetic-variant-annotation",
     "变异注释": "genetic-variant-annotation",
-    "gwas": "gwas-analysis",
+    "gwas": "gwas-phewas",
     "eqtl": "genetic-variant-annotation",
     "基因组关联": "gwas-analysis",
     
@@ -243,7 +243,53 @@ CHINESE_ALIASES = {
     "mag": "mageck_analysis",
     "sgrna-seq": "mageck_analysis",
     "guide": "sgrna-design",
-    "网络药理学": "drug-target-prediction",
+        "bulk rna": "bulk-rnaseq-differential-expression",
+    "bulk rnaseq": "bulk-rnaseq-differential-expression",
+    "deseq": "bulk-rnaseq-differential-expression",
+    "rna-seq差异": "bulk-rnaseq-differential-expression",
+    "转录组差异": "bulk-rnaseq-differential-expression",
+    "hdwgcna": "hdwgcna",
+    "高维wgcna": "hdwgcna",
+    "bulk聚类": "bulk-omics-clustering",
+    "counts to de": "bulk-rnaseq-counts-to-de-deseq2",
+    "atac全流程": "atac-seq-memomics",
+    "atac-seq": "atac-seq-memomics",
+    "chip atlas": "chip-atlas-target-genes",
+    "chip-atlas": "chip-atlas-target-genes",
+    "homer motif": "find_enriched_motifs_with_homer",
+    "chip diff": "chip-atlas-diff-analysis",
+    "fda安全": "analyze_fda_safety_signals",
+    "药物安全": "analyze_fda_safety_signals",
+    "fda safety": "analyze_fda_safety_signals",
+    "药物联用": "check_drug_combination_safety",
+    "drug combination": "check_drug_combination_safety",
+    "fda召回": "check_fda_drug_recalls",
+    "clinical trial": "clinicaltrials-landscape",
+    "药物反应": "drug-response",
+    "drug response": "drug-response",
+    "药物标签": "get_fda_drug_label_info",
+    "crispr编辑": "analyze_crispr_genome_editing",
+    "twas": "gwas-to-function-twas",
+    "孟德尔随机化": "mendelian-randomization-twosamplemr",
+    "mendelian randomization": "mendelian-randomization-twosamplemr",
+    "prs": "polygenic-risk-score-prs-catalog",
+    "多基因风险": "polygenic-risk-score-prs-catalog",
+    "基因必需": "gene-essentiality",
+    "gene essential": "gene-essentiality",
+    "质粒注释": "annotate_plasmid",
+    "引物设计": "design_primer",
+    "primer design": "design_primer",
+    "验证引物": "design_verification_primers",
+    "限制酶": "find_restriction_enzymes",
+    "酶切位点": "find_restriction_sites",
+    "enzyme cut": "find_restriction_sites",
+    "gwas catalog": "query_gwas_catalog",
+    "ppt生成": "ppt-html",
+    "生存临床": "survival-analysis-clinical",
+    "多组学整合": "multi-omics-integration",
+    "multi omics": "multi-omics-integration",
+    "整合分析": "multi-omics-integration",
+"网络药理学": "drug-target-prediction",
 }
 
 
@@ -313,13 +359,11 @@ class HybridMatcher:
 
         # === Layer 3: Directory name direct match (fallback) ===
         if not results:
-            # Scan all subdirectories for partial name match
             import glob as _glob
             skill_dirs = {}
             for _sf in _glob.glob(os.path.join(self.skills_dir, '*', 'SKILL.md')):
                 _dn = os.path.basename(os.path.dirname(_sf))
                 _sn = _dn.lower()
-                # Score based on how many query words match the dir name
                 _qw = [w.lower() for w in query.split() if len(w) >= 3]
                 _hits = sum(1 for w in _qw if w in _sn)
                 if _hits > 0:

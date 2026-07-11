@@ -1,0 +1,99 @@
+{
+  "test_a": {
+    "sample_size": 50,
+    "r1_top1_pct": 10,
+    "r1_top3_pct": 52,
+    "r2_top1_pct": 10,
+    "r2_top3_pct": 52,
+    "r3_top1_pct": 70,
+    "r3_top3_pct": 76,
+    "stable_pct": 52,
+    "ever_hit_pct": 76
+  },
+  "test_b": {
+    "Bulk RNA": {
+      "total": 3,
+      "top1": 1,
+      "top3": 1,
+      "pct": 33
+    },
+    "Drug": {
+      "total": 16,
+      "top1": 8,
+      "top3": 10,
+      "pct": 62
+    },
+    "General Bioinfo": {
+      "total": 15,
+      "top1": 9,
+      "top3": 9,
+      "pct": 60
+    },
+    "Genetics": {
+      "total": 12,
+      "top1": 6,
+      "top3": 7,
+      "pct": 58
+    },
+    "Lab/Protocol": {
+      "total": 16,
+      "top1": 8,
+      "top3": 12,
+      "pct": 75
+    },
+    "Multi-omics": {
+      "total": 1,
+      "top1": 0,
+      "top3": 0,
+      "pct": 0
+    },
+    "Other": {
+      "total": 107,
+      "top1": 73,
+      "top3": 74,
+      "pct": 69
+    },
+    "Protein": {
+      "total": 15,
+      "top1": 12,
+      "top3": 12,
+      "pct": 80
+    },
+    "Query/DB": {
+      "total": 41,
+      "top1": 37,
+      "top3": 37,
+      "pct": 90
+    },
+    "Spatial": {
+      "total": 1,
+      "top1": 0,
+      "top3": 0,
+      "pct": 0
+    },
+    "Visualization": {
+      "total": 13,
+      "top1": 6,
+      "top3": 9,
+      "pct": 69
+    },
+    "scATAC": {
+      "total": 6,
+      "top1": 1,
+      "top3": 1,
+      "pct": 16
+    },
+    "scRNA": {
+      "total": 31,
+      "top1": 19,
+      "top3": 20,
+      "pct": 64
+    }
+  },
+  "summary": {
+    "all_skills_top1": "64%",
+    "all_skills_top3": "69%",
+    "multi_turn_stable": "52%",
+    "combined": "60%"
+  }
+}
