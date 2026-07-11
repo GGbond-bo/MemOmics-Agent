@@ -1,7 +1,7 @@
 ---
 name: retrieve_topk_repurposing_drugs_from_disease_txgnn
 description: "Computes TxGNN model predictions for drug repurposing and returns the top predicted drugs with their scores for a given disease."
-when_to_use: "Computes TxGNN model predictions for drug repurposing and returns the top predicted drugs with their scores for a given disease."
+when_to_use: "[retrieve_topk_repurposing_drugs_from_disease_txgnn] 药物重定位预测(TxGNN)：疾病→图神经网络→候选重定位药物→预测分数排序→证据强度"
 version: 1.0.0
 author: MemOmics
 license: MIT

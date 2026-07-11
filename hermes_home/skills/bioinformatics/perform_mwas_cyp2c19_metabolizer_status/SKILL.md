@@ -1,7 +1,7 @@
 ---
 name: perform_mwas_cyp2c19_metabolizer_status
 description: "Perform a Methylome-wide Association Study (MWAS) to identify CpG sites significantly associated with CYP2C19 metabolizer status."
-when_to_use: "Perform a Methylome-wide Association Study (MWAS) to identify CpG sites significantly associated with CYP2C19 metabolizer status."
+when_to_use: "[perform_mwas_cyp2c19_metabolizer_status] CYP2C19代谢者状态MWAS分析：基因型→CYP2C19表型预测→药物代谢能力→剂量指导"
 version: 1.0.0
 author: MemOmics
 license: MIT

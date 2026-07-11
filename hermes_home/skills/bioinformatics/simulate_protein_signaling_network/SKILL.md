@@ -1,7 +1,7 @@
 ---
 name: simulate_protein_signaling_network
 description: "Simulate protein signaling network dynamics using ODE-based logic modeling with normalized Hill functions."
-when_to_use: "Simulate protein signaling network dynamics using ODE-based logic modeling with normalized Hill functions."
+when_to_use: "[simulate_protein_signaling_network] Simulate protein signaling network dynamics using ODE-based logic modeling with normalized Hill functions."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: query_emdb
 description: "Query the Electron Microscopy Data Bank (EMDB) using natural language or a direct endpoint."
-when_to_use: "EMDB电镜数据库查询：蛋白/复合物→冷冻电镜密度图→分辨率/方法→3D结构"
+when_to_use: "[query_emdb] EMDB冷冻电镜数据库查询：蛋白/复合物→电镜密度图→分辨率/方法→3D结构信息"
 version: 1.0.0
 author: MemOmics
 license: MIT

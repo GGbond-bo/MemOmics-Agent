@@ -1,7 +1,7 @@
 ---
 name: estimate_cell_cycle_phase_durations
 description: "Estimate cell cycle phase durations using dual-nucleoside pulse labeling data and mathematical modeling."
-when_to_use: "Estimate cell cycle phase durations using dual-nucleoside pulse labeling data and mathematical modeling."
+when_to_use: "[estimate_cell_cycle_phase_durations] Estimate cell cycle phase durations using dual-nucleoside pulse labeling data and mathematical modeling."
 version: 1.0.0
 author: MemOmics
 license: MIT

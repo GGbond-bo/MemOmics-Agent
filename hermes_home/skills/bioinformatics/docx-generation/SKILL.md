@@ -9,7 +9,7 @@ keywords: "Word, docx, document, python-docx, Phylo, scientific, tables, figures
 version: "1.0"
 last-updated: "April 2026"
 description: >
-when_to_use: "需使用docx generation功能，适用于相关生信分析场景"
+when_to_use: "[docx-generation] 需使用docx generation功能，适用于相关生信分析场景"
   Generate professional, Phylo-branded Word documents from scientific analysis
   results using python-docx. Use this skill whenever the agent needs to produce
   a .docx deliverable. Only create when the user explicitly requests a Word

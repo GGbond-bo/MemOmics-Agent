@@ -1,7 +1,7 @@
 ---
 id: "skill_d7c1ec9d98a54a4eb7ae69a23c8314fe"
 name: "scrna-disease-drug-discovery"
-when_to_use: "需要完整药物发现pipeline：从scRNA数据→靶点识别→化合物筛选→已有药物重定位，输出候选药物+证据强度"
+when_to_use: "[scrna-disease-drug-discovery] scRNA疾病药物发现pipeline：scRNA数据→靶点识别→化合物筛选→已有药重定位→候选药物+证据强度→结果排序"
 display-name: "scRNA-seq Disease Drug Discovery Pipeline"
 category: transcriptomics
 short-description: "End-to-end scRNA-seq disease analysis with genetic evidence integration for multi-omics drug target prioritization."

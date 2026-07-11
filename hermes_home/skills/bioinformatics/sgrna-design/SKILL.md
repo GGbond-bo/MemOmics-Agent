@@ -30,7 +30,7 @@ Save both to the user's results directory.
 
 ## Scripts
 | Script | Purpose |
-|when_to_use: "需使用sgrna design功能，适用于相关生信分析场景"
+|when_to_use: "[sgrna-design] 需使用sgrna design功能，适用于相关生信分析场景"
 ------
 ---
 

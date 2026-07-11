@@ -1,7 +1,7 @@
 ---
 name: annotate_open_reading_frames
 description: "Find all Open Reading Frames (ORFs) in a DNA sequence using Biopython, searching both forward and reverse complement strands."
-when_to_use: "Find all Open Reading Frames (ORFs) in a DNA sequence using Biopython, searching both forward and reverse complement strands."
+when_to_use: "[annotate_open_reading_frames] Find all Open Reading Frames (ORFs) in a DNA sequence using Biopython, searching both forward and reverse complement strands."
 version: 1.0.0
 author: MemOmics
 license: MIT

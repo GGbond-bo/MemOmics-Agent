@@ -1,7 +1,7 @@
 ---
 name: analyze_cas9_mutation_outcomes
 description: "Analyzes and categorizes mutations induced by Cas9 at target sites."
-when_to_use: "Analyzes and categorizes mutations induced by Cas9 at target sites."
+when_to_use: "[analyze_cas9_mutation_outcomes] Analyzes and categorizes mutations induced by Cas9 at target sites."
 version: 1.0.0
 author: MemOmics
 license: MIT

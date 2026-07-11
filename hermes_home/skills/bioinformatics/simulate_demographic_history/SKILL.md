@@ -1,7 +1,7 @@
 ---
 name: simulate_demographic_history
 description: "Simulate DNA sequences with specified demographic and coalescent histories using msprime."
-when_to_use: "Simulate DNA sequences with specified demographic and coalescent histories using msprime."
+when_to_use: "[simulate_demographic_history] Simulate DNA sequences with specified demographic and coalescent histories using msprime."
 version: 1.0.0
 author: MemOmics
 license: MIT

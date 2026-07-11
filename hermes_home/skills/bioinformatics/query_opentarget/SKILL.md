@@ -1,7 +1,7 @@
 ---
 name: query_opentarget
 description: "Query the OpenTargets Platform API using natural language or a direct GraphQL query."
-when_to_use: "Query the OpenTargets Platform API using natural language or a direct GraphQL query."
+when_to_use: "[query_opentarget] Open Targets药物靶点查询：疾病/靶点→靶点-疾病关联→遗传证据→药物开发阶段"
 version: 1.0.0
 author: MemOmics
 license: MIT

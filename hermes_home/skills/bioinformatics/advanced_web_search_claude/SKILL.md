@@ -1,7 +1,7 @@
 ---
 name: advanced_web_search_claude
 description: "Initiate an advanced web search by launching a specialized agent to collect relevant information and citations through multiple rounds of web searches for a given query."
-when_to_use: "Initiate an advanced web search by launching a specialized agent to collect relevant information and citations through multiple rounds of web searches for a given query."
+when_to_use: "[advanced_web_search_claude] Initiate an advanced web search by launching a specialized agent to collect relevant information and citations through multiple rounds of web searches for a given query."
 version: 1.0.0
 author: MemOmics
 license: MIT

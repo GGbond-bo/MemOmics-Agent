@@ -1,7 +1,7 @@
 ---
 name: doubletfinder-remove-doublets
 description: "DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤"
-when_to_use: "DoubletFinder双胞去除：scRNA数据→模拟双胞→pANN分类→去除doublets→单细胞矩阵"
+when_to_use: "[doubletfinder-remove-doublets] DoubletFinder双胞去除：scRNA数据→模拟双胞→pANN分类→最优pK选择→去除doublets→单细胞矩阵"
 version: 1.0.0
 author: MemOmics
 license: MIT

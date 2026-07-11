@@ -1,7 +1,7 @@
 ---
 name: analyze_bacterial_growth_curve
 description: "Analyzes bacterial growth curve data to determine growth parameters such as doubling time, growth rate, and lag phase."
-when_to_use: "Analyzes bacterial growth curve data to determine growth parameters such as doubling time, growth rate, and lag phase."
+when_to_use: "[analyze_bacterial_growth_curve] Analyzes bacterial growth curve data to determine growth parameters such as doubling time, growth rate, and lag phase."
 version: 1.0.0
 author: MemOmics
 license: MIT

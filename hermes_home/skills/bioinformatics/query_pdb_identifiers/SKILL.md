@@ -1,7 +1,7 @@
 ---
 name: query_pdb_identifiers
 description: "Retrieve detailed data and/or download files for PDB identifiers."
-when_to_use: "Retrieve detailed data and/or download files for PDB identifiers."
+when_to_use: "[query_pdb_identifiers] Retrieve detailed data and/or download files for PDB identifiers."
 version: 1.0.0
 author: MemOmics
 license: MIT

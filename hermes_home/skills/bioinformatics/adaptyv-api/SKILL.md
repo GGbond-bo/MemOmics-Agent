@@ -1,7 +1,7 @@
 ---
 id: "skill_085891b3e4b948e1bcb75deb6539d5bd"
 name: "adaptyv-api"
-when_to_use: "需使用adaptyv api功能，适用于相关生信分析场景"
+when_to_use: "[adaptyv-api] 需使用adaptyv api功能，适用于相关生信分析场景"
 display-name: "Adaptyv Bio Foundry API Reference"
 short-description: "Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv."
 category: "integration"

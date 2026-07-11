@@ -1,7 +1,7 @@
 ---
 name: file-convert
 description: "数据格式转换：CSV/Excel/TSV/H5AD/MTX等常见格式互转"
-when_to_use: "数据格式转换：CSV/Excel/TSV/H5AD/MTX等常见格式互转"
+when_to_use: "[file-convert] 数据格式转换：CSV/Excel/TSV/H5AD/MTX等常见格式互转"
 version: 1.0.0
 author: MemOmics
 license: MIT

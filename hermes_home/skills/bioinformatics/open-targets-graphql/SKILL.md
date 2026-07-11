@@ -1,7 +1,7 @@
 ---
 name: open-targets-graphql
 description: "Open Targets Platform GraphQL API查询。靶点-疾病-药物关联"
-when_to_use: "Open Targets Platform GraphQL API查询。靶点-疾病-药物关联"
+when_to_use: "[open-targets-graphql] Open Targets GraphQL查询：GraphQL查询→靶点-疾病关联→结构化数据→批量分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

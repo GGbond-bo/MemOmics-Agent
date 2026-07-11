@@ -1,7 +1,7 @@
 ---
 name: fetch_supplementary_info_from_doi
 description: "Fetches supplementary information for a paper given its DOI and saves it to a specified directory."
-when_to_use: "DOI补充材料下载：论文DOI→自动获取补充材料→文件下载"
+when_to_use: "[fetch_supplementary_info_from_doi] DOI补充材料下载：论文DOI→自动获取补充材料→文件下载"
 version: 1.0.0
 author: MemOmics
 license: MIT

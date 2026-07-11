@@ -1,7 +1,7 @@
 ---
 id: "skill_e4c50152a70f4d6fa8a4802573755f54"
 name: "scrnaseq-scanpy-core-analysis"
-when_to_use: "同功能但用Python/Scanpy，适合>60万细胞的大规模数据或GPU环境用户"
+when_to_use: "[scrnaseq-scanpy-core-analysis] Scanpy单细胞核心分析：10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释"
 display-name: "Single-Cell RNA-seq Core Analysis (Scanpy)"
 category: transcriptomics
 short-description: "Complete single-cell RNA-seq analysis using Scanpy from raw data to cell type annotation with clustering and visualization."

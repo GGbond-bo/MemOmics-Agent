@@ -1,7 +1,7 @@
 ---
 name: query_scholar
 description: "Query Google Scholar for papers based on the provided search query and return the first search result."
-when_to_use: "Query Google Scholar for papers based on the provided search query and return the first search result."
+when_to_use: "[query_scholar] Query Google Scholar for papers based on the provided search query and return the first search result."
 version: 1.0.0
 author: MemOmics
 license: MIT

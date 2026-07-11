@@ -1,7 +1,7 @@
 ---
 name: literature-param-extraction
 description: 从文献 PDF 提取生信参数并写入知识库。触发场景：拿到真实数据做分析时、知识库缺少对应方法/参数时、需要验证参数来源时。
-when_to_use: "从文献 PDF 提取生信参数并写入知识库。触发场景：拿到真实数据做分析时、知识库缺少对应方法/参数时、需要验证参数来源时。"
+when_to_use: "[literature-param-extraction] 从文献 PDF 提取生信参数并写入知识库。触发场景：拿到真实数据做分析时、知识库缺少对应方法/参数时、需要验证参数来源时。"
 trigger:
   when:
     - 用户拿到真实数据要做生信分析

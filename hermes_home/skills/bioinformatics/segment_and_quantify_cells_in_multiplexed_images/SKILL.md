@@ -1,7 +1,7 @@
 ---
 name: segment_and_quantify_cells_in_multiplexed_images
 description: "Segment cells and quantify protein expression levels from multichannel tissue images."
-when_to_use: "Segment cells and quantify protein expression levels from multichannel tissue images."
+when_to_use: "[segment_and_quantify_cells_in_multiplexed_images] 多重免疫荧光图像细胞分割与定量：多重染色图像→细胞分割→蛋白表达定量→空间分布分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 id: skill_62f7fe9a2d3e475983cadecafd0547e3
 name: pcr-primer-design
-when_to_use: "需使用pcr primer design功能，适用于相关生信分析场景"
+when_to_use: "[pcr-primer-design] PCR引物设计：DNA模板序列→Primer3→引物对(正向/反向)→Tm/GC含量→特异性检查→PCR条件优化"
 category: molecular_design
 short-description: Design and validate primers for PCR, qPCR, TaqMan, and sequencing applications.
 detailed-description: >

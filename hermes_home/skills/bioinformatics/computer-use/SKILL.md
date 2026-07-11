@@ -1,7 +1,7 @@
 ---
 name: computer-use
 description: "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。"
-when_to_use: "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。"
+when_to_use: "[computer-use] 控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。"
 version: 1.0.0
 author: MemOmics
 license: MIT

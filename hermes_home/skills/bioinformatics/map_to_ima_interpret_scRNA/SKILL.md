@@ -1,7 +1,7 @@
 ---
 name: map_to_ima_interpret_scRNA
 description: "Map cell embeddings from the input dataset to the Integrated Megascale Atlas reference dataset using UCE embeddings."
-when_to_use: "Map cell embeddings from the input dataset to the Integrated Megascale Atlas reference dataset using UCE embeddings."
+when_to_use: "[map_to_ima_interpret_scRNA] Map cell embeddings from the input dataset to the Integrated Megascale Atlas reference dataset using UCE embeddings."
 version: 1.0.0
 author: MemOmics
 license: MIT

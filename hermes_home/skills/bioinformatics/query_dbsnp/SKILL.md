@@ -1,7 +1,7 @@
 ---
 name: query_dbsnp
 description: "Query the NCBI dbSNP database using natural language or direct search term."
-when_to_use: "dbSNP变异查询：rs号/基因/位置→dbSNP→等位基因频率→临床意义→文献引用"
+when_to_use: "[query_dbsnp] dbSNP变异数据库查询：rs号/基因/位置→dbSNP→等位基因频率→临床意义→文献引用"
 version: 1.0.0
 author: MemOmics
 license: MIT

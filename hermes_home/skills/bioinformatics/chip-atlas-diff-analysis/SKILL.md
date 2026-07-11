@@ -1,7 +1,7 @@
 ---
 id: "skill_7f4da97222334fba9984eab5b78eb392"
 name: "chip-atlas-diff-analysis"
-when_to_use: "有ChIP-Atlas实验组/对照组peak数据，需做差异peak分析，找出组间显著变化peak的基因组位置和邻近基因"
+when_to_use: "[chip-atlas-diff-analysis] 有ChIP-Atlas实验组/对照组peak数据，需做差异peak分析，找出组间显著变化peak的基因组位置和邻近基因"
 display-name: "ChIP-Atlas Diff Analysis"
 category: epigenomics
 short-description: "Compare two groups of ChIP/ATAC/DNase-seq or Bisulfite-seq experiments to identify differential peak regions (DPR) or differentially methylated regions (DMR) via the ChIP-Atlas API."

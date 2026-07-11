@@ -1,7 +1,7 @@
 ---
 name: analyze_crispr_genome_editing
 description: "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences."
-when_to_use: "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences."
+when_to_use: "[analyze_crispr_genome_editing] CRISPR基因组编辑分析：编辑前后序列→比对→编辑效率→indel类型→脱靶分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

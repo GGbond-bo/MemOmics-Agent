@@ -1,7 +1,7 @@
 ---
 name: analyze_fda_safety_signals
 description: "Analyze safety signals across multiple drugs using OpenFDA adverse event data to identify patterns and comparative risk profiles."
-when_to_use: "FDA药物安全信号检测：FAERS数据→不良反应信号挖掘→PRR/ROR分析→安全风险评估"
+when_to_use: "[analyze_fda_safety_signals] FDA药物安全信号检测：FAERS数据库→不良反应挖掘→PRR/ROR分析→药物安全信号→风险评估报告"
 version: 1.0.0
 author: MemOmics
 license: MIT

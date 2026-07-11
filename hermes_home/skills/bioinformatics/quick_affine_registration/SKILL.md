@@ -1,7 +1,7 @@
 ---
 name: quick_affine_registration
 description: "Perform affine image registration between two medical images using SimpleITK. Affine registration handles translation, rotation, scaling, and shearing. More flexible than rigid registration but still "
-when_to_use: "Perform affine image registration between two medical images using SimpleITK. Affine registration handles translation, rotation, scaling, and shearing. More flexible than rigid registration but still"
+when_to_use: "[quick_affine_registration] Perform affine image registration between two medical images using SimpleITK. Affine registration handles translation, rotation, scaling, and shearing. More flexible than rigid registration but still"
 version: 1.0.0
 author: MemOmics
 license: MIT

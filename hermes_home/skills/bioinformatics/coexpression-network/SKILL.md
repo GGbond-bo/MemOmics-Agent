@@ -1,7 +1,7 @@
 ---
 id: "skill_4aec92a664ad4b63baaf2b4981daa277"
 name: "coexpression-network"
-when_to_use: "需使用coexpression network功能，适用于相关生信分析场景"
+when_to_use: "[coexpression-network] 需使用coexpression network功能，适用于相关生信分析场景"
 display-name: "Weighted Gene Co-expression Network Analysis (WGCNA)"
 category: transcriptomics
 short-description: Build gene co-expression networks to identify modules and hub genes from RNA-seq data.

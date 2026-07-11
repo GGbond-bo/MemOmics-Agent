@@ -1,7 +1,7 @@
 ---
 name: query_pubchem
 description: "Query the PubChem PUG-REST API using natural language or a direct endpoint."
-when_to_use: "PubChem化合物数据库：化学名/SMILES→化合物信息→生物活性→类似物→购买信息"
+when_to_use: "[query_pubchem] PubChem化合物数据库：化学名/SMILES→化合物信息→生物活性→类似物→购买信息"
 version: 1.0.0
 author: MemOmics
 license: MIT

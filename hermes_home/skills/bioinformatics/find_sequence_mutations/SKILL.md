@@ -1,7 +1,7 @@
 ---
 name: find_sequence_mutations
 description: "Compare query sequence against reference sequence to identify mutations."
-when_to_use: "Compare query sequence against reference sequence to identify mutations."
+when_to_use: "[find_sequence_mutations] Compare query sequence against reference sequence to identify mutations."
 version: 1.0.0
 author: MemOmics
 license: MIT

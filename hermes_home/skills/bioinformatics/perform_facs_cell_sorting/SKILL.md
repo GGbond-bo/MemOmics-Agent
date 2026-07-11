@@ -1,7 +1,7 @@
 ---
 name: perform_facs_cell_sorting
 description: "Performs Fluorescence-Activated Cell Sorting (FACS) to enrich cell populations based on fluorescence characteristics."
-when_to_use: "Performs Fluorescence-Activated Cell Sorting (FACS) to enrich cell populations based on fluorescence characteristics."
+when_to_use: "[perform_facs_cell_sorting] FACS流式细胞分选分析：流式数据→设门策略→细胞群分选→纯度评估→分选效率→下机细胞数"
 version: 1.0.0
 author: MemOmics
 license: MIT

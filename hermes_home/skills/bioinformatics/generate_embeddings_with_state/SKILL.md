@@ -1,7 +1,7 @@
 ---
 name: generate_embeddings_with_state
 description: "Generate State embeddings for single-cell RNA-seq data using the SE-600M model. This function downloads the SE-600M model from Hugging Face, installs required dependencies (git-lfs, uv, arc-state), an"
-when_to_use: "Generate State embeddings for single-cell RNA-seq data using the SE-600M model. This function downloads the SE-600M model from Hugging Face, installs required dependencies (git-lfs, uv, arc-state), an"
+when_to_use: "[generate_embeddings_with_state] Generate State embeddings for single-cell RNA-seq data using the SE-600M model. This function downloads the SE-600M model from Hugging Face, installs required dependencies (git-lfs, uv, arc-state), an"
 version: 1.0.0
 author: MemOmics
 license: MIT

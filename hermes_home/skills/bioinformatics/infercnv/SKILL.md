@@ -1,7 +1,7 @@
 ---
 name: infercnv
 description: "inferCNV肿瘤细胞CNV推断+恶性细胞鉴定"
-when_to_use: "inferCNV肿瘤细胞CNV推断+恶性细胞鉴定"
+when_to_use: "[infercnv] inferCNV肿瘤细胞CNV推断+恶性细胞鉴定"
 version: 1.0.0
 author: MemOmics
 license: MIT

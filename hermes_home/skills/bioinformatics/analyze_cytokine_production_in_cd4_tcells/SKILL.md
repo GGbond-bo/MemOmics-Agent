@@ -1,7 +1,7 @@
 ---
 name: analyze_cytokine_production_in_cd4_tcells
 description: "Analyze cytokine production (IFN-γ, IL-17) in CD4+ T cells after antigen stimulation."
-when_to_use: "Analyze cytokine production (IFN-γ, IL-17) in CD4+ T cells after antigen stimulation."
+when_to_use: "[analyze_cytokine_production_in_cd4_tcells] Analyze cytokine production (IFN-γ, IL-17) in CD4+ T cells after antigen stimulation."
 version: 1.0.0
 author: MemOmics
 license: MIT

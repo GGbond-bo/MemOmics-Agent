@@ -1,7 +1,7 @@
 ---
 name: run_autosite
 description: "Runs AutoSite on a PDB file to identify potential binding sites and returns a research log with the results."
-when_to_use: "Runs AutoSite on a PDB file to identify potential binding sites and returns a research log with the results."
+when_to_use: "[run_autosite] Runs AutoSite on a PDB file to identify potential binding sites and returns a research log with the results."
 version: 1.0.0
 author: MemOmics
 license: MIT

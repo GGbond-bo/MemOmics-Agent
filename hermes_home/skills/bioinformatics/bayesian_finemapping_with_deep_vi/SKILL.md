@@ -1,7 +1,7 @@
 ---
 name: bayesian_finemapping_with_deep_vi
 description: "Performs Bayesian fine-mapping from GWAS summary statistics using deep variational inference to compute posterior inclusion probabilities and credible sets for putative causal variants."
-when_to_use: "GWAS精细定位与因果变异识别：summary statistics→贝叶斯fine-mapping→可信变异集"
+when_to_use: "[bayesian_finemapping_with_deep_vi] GWAS精细定位与因果变异识别：summary statistics→贝叶斯fine-mapping→可信变异集"
 version: 1.0.0
 author: MemOmics
 license: MIT

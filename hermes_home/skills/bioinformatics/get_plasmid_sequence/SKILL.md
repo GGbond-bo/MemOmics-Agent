@@ -1,7 +1,7 @@
 ---
 name: get_plasmid_sequence
 description: "Unified function to retrieve plasmid sequences from either Addgene or NCBI. If is_addgene is True or identifier is numeric, uses Addgene. Otherwise searches NCBI using the plasmid name."
-when_to_use: "Unified function to retrieve plasmid sequences from either Addgene or NCBI. If is_addgene is True or identifier is numeric, uses Addgene. Otherwise searches NCBI using the plasmid name."
+when_to_use: "[get_plasmid_sequence] 质粒序列获取：质粒名/Addgene ID→Addgene/SnapGene→完整质粒序列→注释信息"
 version: 1.0.0
 author: MemOmics
 license: MIT

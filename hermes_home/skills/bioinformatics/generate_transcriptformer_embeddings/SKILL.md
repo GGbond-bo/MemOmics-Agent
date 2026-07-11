@@ -1,7 +1,7 @@
 ---
 name: generate_transcriptformer_embeddings
 description: "Generate Transcriptformer embeddings for single-cell RNA-seq data. This function downloads model checkpoints, prepares the AnnData object with required fields (ensembl_id, raw counts, assay metadata),"
-when_to_use: "Generate Transcriptformer embeddings for single-cell RNA-seq data. This function downloads model checkpoints, prepares the AnnData object with required fields (ensembl_id, raw counts, assay metadata),"
+when_to_use: "[generate_transcriptformer_embeddings] Transcriptformer基因嵌入生成：scRNA数据→预训练转录组Transformer→基因嵌入向量→下游分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

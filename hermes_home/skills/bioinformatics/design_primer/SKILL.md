@@ -1,7 +1,7 @@
 ---
 name: design_primer
 description: "Design a single primer within the given sequence window."
-when_to_use: "Design a single primer within the given sequence window."
+when_to_use: "[design_primer] Design a single primer within the given sequence window."
 version: 1.0.0
 author: MemOmics
 license: MIT

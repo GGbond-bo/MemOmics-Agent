@@ -1,7 +1,7 @@
 ---
 id: "skill_caf61714cb394d14b2d099387baec0b0"
 name: "genetic-variant-annotation"
-when_to_use: "需使用genetic variant annotation功能，适用于相关生信分析场景"
+when_to_use: "[genetic-variant-annotation] 需使用genetic variant annotation功能，适用于相关生信分析场景"
 display-name: "Genetic Variant Annotation"
 category: genomics_genetics
 short-description: Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions.

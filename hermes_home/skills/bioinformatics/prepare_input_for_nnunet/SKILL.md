@@ -1,7 +1,7 @@
 ---
 name: prepare_input_for_nnunet
 description: "Prepare input data for nnUNet by handling both 4D and pre-split modality files. Automatically detects file format and prepares data accordingly."
-when_to_use: "Prepare input data for nnUNet by handling both 4D and pre-split modality files. Automatically detects file format and prepares data accordingly."
+when_to_use: "[prepare_input_for_nnunet] Prepare input data for nnUNet by handling both 4D and pre-split modality files. Automatically detects file format and prepares data accordingly."
 version: 1.0.0
 author: MemOmics
 license: MIT

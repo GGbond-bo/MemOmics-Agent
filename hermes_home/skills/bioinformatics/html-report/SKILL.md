@@ -1,7 +1,7 @@
 ---
 name: html-report
 description: "生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好"
-when_to_use: "HTML交互报告生成：分析结果→HTML报告→图表嵌入→可分享"
+when_to_use: "[html-report] HTML交互报告生成：分析结果→HTML报告→图表嵌入→可分享"
 version: 1.0.0
 author: MemOmics
 license: MIT

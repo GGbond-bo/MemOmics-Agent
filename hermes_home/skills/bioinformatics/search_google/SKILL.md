@@ -1,7 +1,7 @@
 ---
 name: search_google
 description: "Search using Google search and return formatted results."
-when_to_use: "Google学术搜索：关键词/作者→文献引用→相关论文推荐"
+when_to_use: "[search_google] Google学术搜索：关键词/作者→文献引用→相关论文推荐"
 version: 1.0.0
 author: MemOmics
 license: MIT

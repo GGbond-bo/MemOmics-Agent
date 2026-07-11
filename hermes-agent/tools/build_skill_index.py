@@ -22,7 +22,7 @@ def read_skill_desc(skill_dir):
     with open(md, encoding='utf-8', errors='replace') as f:
         content = f.read()
     
-    info = {'name': skill_dir, 'description': '', 'tags': [], 'keywords': []}
+    info = {'name': skill_dir, 'description': '', 'when_to_use': '', 'tags': [], 'keywords': []}
     
     # Parse YAML frontmatter
     lines = content.split('\n')
@@ -53,6 +53,7 @@ def read_skill_desc(skill_dir):
                 data[k.strip()] = v.strip().strip("'").strip('"')
     
     info['description'] = str(data.get('description', '') or '').strip()
+    info['when_to_use'] = str(data.get('when_to_use', '') or '').strip()
     info['name'] = str(data.get('name', skill_dir)).strip()
     
     # Extract tags
@@ -69,8 +70,8 @@ def read_skill_desc(skill_dir):
         token = token.strip().lower()
         if len(token) >= 2:
             keywords.add(token)
-    # Add description words
-    desc_lower = info['description'].lower()
+    # Add description + when_to_use words
+    desc_lower = (info['description'] + ' ' + info['when_to_use']).lower()
     for word in re.findall(r'[a-z\u4e00-\u9fff]{2,}', desc_lower):
         keywords.add(word)
     # Add tags
@@ -108,7 +109,7 @@ def build_index():
     corpus = []
     corpus_skills = []
     for name, info in all_skills.items():
-        text = f"{info['name']} {info['description']} {' '.join(info['keywords'])}"
+        text = f"{info['name']} {info['description']} {info['when_to_use']} {' '.join(info['keywords'])}"
         corpus.append(text)
         corpus_skills.append(name)
     

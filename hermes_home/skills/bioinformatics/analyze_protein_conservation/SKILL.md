@@ -1,7 +1,7 @@
 ---
 name: analyze_protein_conservation
 description: "Perform multiple sequence alignment and phylogenetic analysis to identify conserved protein regions."
-when_to_use: "Perform multiple sequence alignment and phylogenetic analysis to identify conserved protein regions."
+when_to_use: "[analyze_protein_conservation] Perform multiple sequence alignment and phylogenetic analysis to identify conserved protein regions."
 version: 1.0.0
 author: MemOmics
 license: MIT

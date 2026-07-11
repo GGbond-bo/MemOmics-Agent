@@ -1,7 +1,7 @@
 ---
 name: analyze_comparative_genomics_and_haplotypes
 description: "Perform comparative genomics and haplotype analysis on multiple genome samples. Aligns genome samples to a reference, identifies variants, analyzes shared and unique genomic regions, and determines ha"
-when_to_use: "Perform comparative genomics and haplotype analysis on multiple genome samples. Aligns genome samples to a reference, identifies variants, analyzes shared and unique genomic regions, and determines ha"
+when_to_use: "[analyze_comparative_genomics_and_haplotypes] Perform comparative genomics and haplotype analysis on multiple genome samples. Aligns genome samples to a reference, identifies variants, analyzes shared and unique genomic regions, and determines ha"
 version: 1.0.0
 author: MemOmics
 license: MIT

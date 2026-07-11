@@ -1,7 +1,7 @@
 ---
 name: run_3d_chondrogenic_aggregate_assay
 description: "Generates a detailed protocol for performing a 3D chondrogenic aggregate culture assay to evaluate compounds' effects on chondrogenesis."
-when_to_use: "Generates a detailed protocol for performing a 3D chondrogenic aggregate culture assay to evaluate compounds' effects on chondrogenesis."
+when_to_use: "[run_3d_chondrogenic_aggregate_assay] Generates a detailed protocol for performing a 3D chondrogenic aggregate culture assay to evaluate compounds' effects on chondrogenesis."
 version: 1.0.0
 author: MemOmics
 license: MIT

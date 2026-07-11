@@ -1,7 +1,7 @@
 ---
 name: query_jaspar
 description: "Query the JASPAR REST API for transcription factor binding profiles."
-when_to_use: "JASPAR转录因子数据库：TF名称/物种→结合motif→PWM矩阵→motif扫描"
+when_to_use: "[query_jaspar] JASPAR转录因子motif数据库：TF名称/物种→结合motif→PWM矩阵→motif扫描预测"
 version: 1.0.0
 author: MemOmics
 license: MIT

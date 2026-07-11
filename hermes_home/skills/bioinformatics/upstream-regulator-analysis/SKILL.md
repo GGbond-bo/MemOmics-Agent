@@ -1,7 +1,7 @@
 ---
 id: "skill_cf9489278b984eef91e08a40b68943be"
 name: "upstream-regulator-analysis"
-when_to_use: "上游调控因子分析：差异基因→Ingenuity/DecoupleR→激活/抑制调控因子→机制推测"
+when_to_use: "[upstream-regulator-analysis] 上游调控因子分析：差异基因→Ingenuity/DecoupleR→激活/抑制调控因子→机制推测"
 display-name: "Upstream Regulator Analysis"
 category: multi_omics
 short-description: "Integrate ChIP-Atlas TF binding data with RNA-seq differential expression to identify upstream regulators driving transcriptomic changes."

@@ -1,7 +1,7 @@
 ---
 name: deg-analysis
 description: "Pseudobulk DESeq2+Wilcoxon+MAST多方法差异表达分析。使用场景：已注释的scRNA-seq，需找不同条件/群之间的差异基因，含多重检验校正"
-when_to_use: "Pseudobulk DESeq2+Wilcoxon+MAST多方法差异表达分析。使用场景：已注释的scRNA-seq，需找不同条件/群之间的差异基因，含多重检验校正"
+when_to_use: "[deg-analysis] Pseudobulk DESeq2+Wilcoxon+MAST多方法差异表达分析。使用场景：已注释的scRNA-seq，需找不同条件/群之间的差异基因，含多重检验校正"
 version: 1.0.0
 author: MemOmics
 license: MIT

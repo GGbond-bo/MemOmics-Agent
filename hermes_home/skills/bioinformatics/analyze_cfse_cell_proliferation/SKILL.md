@@ -1,7 +1,7 @@
 ---
 name: analyze_cfse_cell_proliferation
 description: "Analyze CFSE-labeled cell samples to quantify cell division and proliferation."
-when_to_use: "CFSE细胞增殖分析：流式CFSE数据→增殖代次建模→增殖指数→药物/刺激效果评估"
+when_to_use: "[analyze_cfse_cell_proliferation] CFSE细胞增殖分析：流式CFSE数据→增殖代次建模→增殖指数→药物/刺激效果评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: query_interpro
 description: "Query the InterPro REST API using natural language or a direct endpoint."
-when_to_use: "Query the InterPro REST API using natural language or a direct endpoint."
+when_to_use: "[query_interpro] Query the InterPro REST API using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

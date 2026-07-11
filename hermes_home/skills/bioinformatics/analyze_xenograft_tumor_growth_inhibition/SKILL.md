@@ -1,7 +1,7 @@
 ---
 name: analyze_xenograft_tumor_growth_inhibition
 description: "Analyze tumor growth inhibition in xenograft models across different treatment groups."
-when_to_use: "Analyze tumor growth inhibition in xenograft models across different treatment groups."
+when_to_use: "[analyze_xenograft_tumor_growth_inhibition] Analyze tumor growth inhibition in xenograft models across different treatment groups."
 version: 1.0.0
 author: MemOmics
 license: MIT

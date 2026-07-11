@@ -1,7 +1,7 @@
 ---
 name: ml-classification
 description: "LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA"
-when_to_use: "LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA"
+when_to_use: "[ml-classification] LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA"
 version: 1.0.0
 author: MemOmics
 license: MIT

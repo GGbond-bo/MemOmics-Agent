@@ -1,7 +1,7 @@
 ---
 name: query_encode
 description: "Query the ENCODE Portal API to locate functional genomics data (experiments, files, biosamples, datasets)."
-when_to_use: "Query the ENCODE Portal API to locate functional genomics data (experiments, files, biosamples, datasets)."
+when_to_use: "[query_encode] Query the ENCODE Portal API to locate functional genomics data (experiments, files, biosamples, datasets)."
 version: 1.0.0
 author: MemOmics
 license: MIT

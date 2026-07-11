@@ -1,7 +1,7 @@
 ---
 name: query_kegg
 description: "Take a natural language prompt and convert it to a structured KEGG API query."
-when_to_use: "Take a natural language prompt and convert it to a structured KEGG API query."
+when_to_use: "[query_kegg] KEGG通路数据库查询：基因/化合物→KEGG通路→pathway图→功能模块→KO注释"
 version: 1.0.0
 author: MemOmics
 license: MIT

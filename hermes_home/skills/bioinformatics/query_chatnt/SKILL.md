@@ -1,7 +1,7 @@
 ---
 name: query_chatnt
 description: "Answer functions and properties questions for DNA sequences "
-when_to_use: "Answer functions and properties questions for DNA sequences"
+when_to_use: "[query_chatnt] Answer functions and properties questions for DNA sequences"
 version: 1.0.0
 author: MemOmics
 license: MIT

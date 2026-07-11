@@ -1,7 +1,7 @@
 ---
 name: create_segmentation_visualization
 description: "Create and save visualization of segmentation results using nilearn. Generates overlay plots and multiple anatomical views."
-when_to_use: "Create and save visualization of segmentation results using nilearn. Generates overlay plots and multiple anatomical views."
+when_to_use: "[create_segmentation_visualization] Create and save visualization of segmentation results using nilearn. Generates overlay plots and multiple anatomical views."
 version: 1.0.0
 author: MemOmics
 license: MIT

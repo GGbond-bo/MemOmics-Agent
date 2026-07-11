@@ -1,7 +1,7 @@
 ---
 name: analyze_flow_cytometry_immunophenotyping
 description: "Analyze flow cytometry data to identify and quantify specific cell populations based on surface markers."
-when_to_use: "Analyze flow cytometry data to identify and quantify specific cell populations based on surface markers."
+when_to_use: "[analyze_flow_cytometry_immunophenotyping] Analyze flow cytometry data to identify and quantify specific cell populations based on surface markers."
 version: 1.0.0
 author: MemOmics
 license: MIT

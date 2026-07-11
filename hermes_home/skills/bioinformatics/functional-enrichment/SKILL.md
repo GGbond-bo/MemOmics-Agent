@@ -1,7 +1,7 @@
 ---
 name: functional-enrichment
 description: "GSEA/ORA功能富集分析。使用场景：有DEG基因列表或排序列表，需GO/KEGG/Reactome/MSigDB通路富集，R用clusterProfiler Python用gseapy"
-when_to_use: "有差异基因(DEG)列表或pre-ranked基因排序，需GO/KEGG/Reactome/MSigDB通路富集，用clusterProfiler或gseapy"
+when_to_use: "[functional-enrichment] 有差异基因(DEG)列表或pre-ranked基因排序，需GO/KEGG/Reactome/MSigDB通路富集，用clusterProfiler或gseapy"
 version: 1.0.0
 author: MemOmics
 license: MIT

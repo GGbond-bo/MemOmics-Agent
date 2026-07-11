@@ -1,7 +1,7 @@
 ---
 name: query_uniprot
 description: "Query the UniProt REST API using either natural language or a direct endpoint."
-when_to_use: "UniProt蛋白信息查询：基因/蛋白名→序列/结构/功能/定位/相互作用→文献"
+when_to_use: "[query_uniprot] UniProt蛋白数据库查询：基因/蛋白名→序列/结构/功能/定位/相互作用→文献信息"
 version: 1.0.0
 author: MemOmics
 license: MIT

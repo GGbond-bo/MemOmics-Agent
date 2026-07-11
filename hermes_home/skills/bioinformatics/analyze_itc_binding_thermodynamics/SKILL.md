@@ -1,7 +1,7 @@
 ---
 name: analyze_itc_binding_thermodynamics
 description: "Analyzes isothermal titration calorimetry (ITC) data to determine binding affinity and thermodynamic parameters."
-when_to_use: "Analyzes isothermal titration calorimetry (ITC) data to determine binding affinity and thermodynamic parameters."
+when_to_use: "[analyze_itc_binding_thermodynamics] Analyzes isothermal titration calorimetry (ITC) data to determine binding affinity and thermodynamic parameters."
 version: 1.0.0
 author: MemOmics
 license: MIT

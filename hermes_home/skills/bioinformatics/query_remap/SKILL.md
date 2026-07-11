@@ -1,7 +1,7 @@
 ---
 name: query_remap
 description: "Query the ReMap database for regulatory elements and transcription factor binding."
-when_to_use: "Query the ReMap database for regulatory elements and transcription factor binding."
+when_to_use: "[query_remap] Query the ReMap database for regulatory elements and transcription factor binding."
 version: 1.0.0
 author: MemOmics
 license: MIT

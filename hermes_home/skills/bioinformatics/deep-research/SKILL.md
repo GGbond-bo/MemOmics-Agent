@@ -1,7 +1,7 @@
 ---
 name: deep-research
 description: "13-agent深度研究团队，系统性文献检索+综述+PRISMA"
-when_to_use: "13-agent深度研究团队，系统性文献检索+综述+PRISMA"
+when_to_use: "[deep-research] 13-agent深度研究团队，系统性文献检索+综述+PRISMA"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: simulate_thyroid_hormone_pharmacokinetics
 description: "Simulates the transport and binding of thyroid hormones across different tissue compartments using an ODE-based pharmacokinetic model."
-when_to_use: "甲状腺激素药代模拟：T3/T4参数→激素转运/结合→药代曲线→甲亢/甲减治疗优化"
+when_to_use: "[simulate_thyroid_hormone_pharmacokinetics] 甲状腺激素药代模拟：T3/T4参数→激素转运/结合→药代曲线→甲亢/甲减治疗优化"
 version: 1.0.0
 author: MemOmics
 license: MIT

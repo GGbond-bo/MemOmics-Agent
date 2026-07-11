@@ -1,7 +1,7 @@
 ---
 id: "skill_019caa158c8a4011b19285967639a364"
 name: "bulk-rnaseq-counts-to-de-deseq2"
-when_to_use: "有raw counts矩阵(从featureCounts/HTSeq输出)，仅需用DESeq2做差异(不包含后续富集/可视化)，作为pipeline的第一步"
+when_to_use: "[bulk-rnaseq-counts-to-de-deseq2] 有raw counts矩阵(从featureCounts/HTSeq输出)，仅需用DESeq2做差异(不包含后续富集/可视化)，作为pipeline的第一步"
 display-name: "Bulk RNAseq differential expression (DeSeq2)"
 category: transcriptomics
 short-description: Perform differential expression analysis using DESeq2 on RNA-seq raw count data.

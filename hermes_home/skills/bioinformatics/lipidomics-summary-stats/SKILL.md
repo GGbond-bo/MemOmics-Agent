@@ -23,7 +23,7 @@ The pipeline transposes this to metabolite-per-row for statistics computation.
 ### Required
 
 | Parameter | Type | Description |
-|when_to_use: "需使用lipidomics summary stats功能，适用于相关生信分析场景"
+|when_to_use: "[lipidomics-summary-stats] 需使用lipidomics summary stats功能，适用于相关生信分析场景"
 ------
 ---
 

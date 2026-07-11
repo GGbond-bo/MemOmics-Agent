@@ -1,7 +1,7 @@
 ---
 name: query_openfda
 description: "Query the OpenFDA API using natural language or direct parameters."
-when_to_use: "OpenFDA药物安全查询：药品名/企业→FDA不良事件→药物安全信号→召回历史"
+when_to_use: "[query_openfda] OpenFDA药物安全查询：药品名/企业→FDA不良事件→FAERS数据→安全信号→召回信息"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: query_ucsc
 description: "Query the UCSC Genome Browser API using natural language or a direct endpoint."
-when_to_use: "UCSC基因组浏览器：基因/坐标→基因组注释→conservation tracks→ENCODE→自定义track"
+when_to_use: "[query_ucsc] UCSC基因组浏览器：基因/坐标→基因组注释→conservation tracks→ENCODE→自定义track"
 version: 1.0.0
 author: MemOmics
 license: MIT

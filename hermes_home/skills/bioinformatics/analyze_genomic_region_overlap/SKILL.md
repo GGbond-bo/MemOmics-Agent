@@ -1,7 +1,7 @@
 ---
 name: analyze_genomic_region_overlap
 description: "Analyze overlaps between two or more sets of genomic regions."
-when_to_use: "Analyze overlaps between two or more sets of genomic regions."
+when_to_use: "[analyze_genomic_region_overlap] Analyze overlaps between two or more sets of genomic regions."
 version: 1.0.0
 author: MemOmics
 license: MIT

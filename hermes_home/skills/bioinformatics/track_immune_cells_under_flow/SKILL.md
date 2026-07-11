@@ -1,7 +1,7 @@
 ---
 name: track_immune_cells_under_flow
 description: "Track immune cells under flow conditions and classify their behaviors."
-when_to_use: "Track immune cells under flow conditions and classify their behaviors."
+when_to_use: "[track_immune_cells_under_flow] Track immune cells under flow conditions and classify their behaviors."
 version: 1.0.0
 author: MemOmics
 license: MIT

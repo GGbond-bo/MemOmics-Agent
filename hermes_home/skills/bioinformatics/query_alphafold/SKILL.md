@@ -1,7 +1,7 @@
 ---
 name: query_alphafold
 description: "Query the AlphaFold Database API for protein structure predictions or metadata; optionally download structures."
-when_to_use: "AlphaFold蛋白结构查询：基因名/UniProt ID→AlphaFold预测结构→结构下载→结构分析"
+when_to_use: "[query_alphafold] AlphaFold蛋白结构查询：基因名/UniProt ID→AlphaFold预测→PDB结构下载→3D结构分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

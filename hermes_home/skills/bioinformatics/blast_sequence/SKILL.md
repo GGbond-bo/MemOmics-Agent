@@ -1,7 +1,7 @@
 ---
 name: blast_sequence
 description: "Identify a DNA or protein sequence using NCBI BLAST."
-when_to_use: "BLAST序列比对搜索：DNA/蛋白序列→NCBI BLAST→同源序列→物种/功能注释→进化分析"
+when_to_use: "[blast_sequence] BLAST序列比对搜索：DNA/蛋白序列→NCBI BLAST→同源序列→物种注释→进化分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

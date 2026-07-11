@@ -1,7 +1,7 @@
 ---
 name: query_dailymed
 description: "Query the DailyMed RESTful API using natural language or a direct endpoint."
-when_to_use: "Query the DailyMed RESTful API using natural language or a direct endpoint."
+when_to_use: "[query_dailymed] Query the DailyMed RESTful API using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

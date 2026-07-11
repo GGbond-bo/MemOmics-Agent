@@ -1,7 +1,7 @@
 ---
 name: identify_transcription_factor_binding_sites
 description: "Identifies binding sites for a specific transcription factor in a genomic sequence."
-when_to_use: "转录因子结合位点预测：TF motif扫描→结合位点识别→靶基因预测"
+when_to_use: "[identify_transcription_factor_binding_sites] 转录因子结合位点预测：DNA序列→TF motif扫描→结合位点→靶基因→调控网络"
 version: 1.0.0
 author: MemOmics
 license: MIT

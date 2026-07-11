@@ -3,7 +3,7 @@ name: "phylo-create-skill"
 display-name: "Create Skill"
 id: "skill_80991743e52842abb92207cd7ff8c29e"
 description: "Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows."
-when_to_use: "Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows."
+when_to_use: "[phylo-create-skill] Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows."
 starting-prompt: "Help me design a skill for..."
 ---
 ---

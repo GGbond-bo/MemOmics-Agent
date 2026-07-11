@@ -1,7 +1,7 @@
 ---
 name: data-viz
 description: "绘制高质量数据可视化图表：UMAP/tSNE/热图/火山图/小提琴图等"
-when_to_use: "数据可视化：数据表格→散点图/热图/火山图/小提琴图→ggplot2/matplotlib→发表级图表"
+when_to_use: "[data-viz] 数据可视化：数据表格→散点图/热图/火山图/小提琴图→ggplot2/matplotlib→发表级图表"
 version: 1.0.0
 author: MemOmics
 license: MIT

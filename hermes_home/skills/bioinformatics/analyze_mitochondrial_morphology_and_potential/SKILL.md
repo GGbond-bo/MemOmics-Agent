@@ -1,7 +1,7 @@
 ---
 name: analyze_mitochondrial_morphology_and_potential
 description: "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images."
-when_to_use: "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images."
+when_to_use: "[analyze_mitochondrial_morphology_and_potential] 线粒体形态与膜电位分析：荧光图像→线粒体网络参数(长度/分支)→膜电位→代谢状态评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: analyze_abr_waveform_p1_metrics
 description: "Extracts P1 amplitude and latency from Auditory Brainstem Response (ABR) waveform data."
-when_to_use: "Extracts P1 amplitude and latency from Auditory Brainstem Response (ABR) waveform data."
+when_to_use: "[analyze_abr_waveform_p1_metrics] Extracts P1 amplitude and latency from Auditory Brainstem Response (ABR) waveform data."
 version: 1.0.0
 author: MemOmics
 license: MIT

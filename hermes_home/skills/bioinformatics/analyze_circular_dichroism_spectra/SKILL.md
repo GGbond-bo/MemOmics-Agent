@@ -1,7 +1,7 @@
 ---
 name: analyze_circular_dichroism_spectra
 description: "Analyzes circular dichroism (CD) spectroscopy data to determine secondary structure and thermal stability."
-when_to_use: "Analyzes circular dichroism (CD) spectroscopy data to determine secondary structure and thermal stability."
+when_to_use: "[analyze_circular_dichroism_spectra] Analyzes circular dichroism (CD) spectroscopy data to determine secondary structure and thermal stability."
 version: 1.0.0
 author: MemOmics
 license: MIT

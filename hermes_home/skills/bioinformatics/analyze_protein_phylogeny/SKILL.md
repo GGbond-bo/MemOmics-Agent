@@ -1,7 +1,7 @@
 ---
 name: analyze_protein_phylogeny
 description: "Perform phylogenetic analysis on a set of protein sequences. This function aligns sequences, constructs a phylogenetic tree, and visualizes evolutionary relationships."
-when_to_use: "Perform phylogenetic analysis on a set of protein sequences. This function aligns sequences, constructs a phylogenetic tree, and visualizes evolutionary relationships."
+when_to_use: "[analyze_protein_phylogeny] Perform phylogenetic analysis on a set of protein sequences. This function aligns sequences, constructs a phylogenetic tree, and visualizes evolutionary relationships."
 version: 1.0.0
 author: MemOmics
 license: MIT

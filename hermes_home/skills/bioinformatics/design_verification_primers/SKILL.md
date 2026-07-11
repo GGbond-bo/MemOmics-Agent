@@ -1,7 +1,7 @@
 ---
 name: design_verification_primers
 description: "Design Sanger sequencing primers to verify a specific region in a plasmid. First tries to use primers from an existing primer pool. If they cannot fully cover the region, designs additional primers as"
-when_to_use: "Design Sanger sequencing primers to verify a specific region in a plasmid. First tries to use primers from an existing primer pool. If they cannot fully cover the region, designs additional primers as"
+when_to_use: "[design_verification_primers] Sanger测序验证引物设计：目标区域坐标→Primer3→测序引物对→扩增子大小→测序覆盖"
 version: 1.0.0
 author: MemOmics
 license: MIT

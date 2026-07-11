@@ -1,7 +1,7 @@
 ---
 name: quick_deformable_registration
 description: "Perform deformable (B-spline) image registration between two medical images using SimpleITK. Deformable registration allows for local non-linear transformations, handling complex deformations. Most fl"
-when_to_use: "Perform deformable (B-spline) image registration between two medical images using SimpleITK. Deformable registration allows for local non-linear transformations, handling complex deformations. Most fl"
+when_to_use: "[quick_deformable_registration] Perform deformable (B-spline) image registration between two medical images using SimpleITK. Deformable registration allows for local non-linear transformations, handling complex deformations. Most fl"
 version: 1.0.0
 author: MemOmics
 license: MIT

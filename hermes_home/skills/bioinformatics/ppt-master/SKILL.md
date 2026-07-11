@@ -1,7 +1,7 @@
 ---
 name: ppt-master
 description: "AI驱动的SVG-PPT生成系统，多角色协作：策划→执行→质量检查→导出"
-when_to_use: "需要设计母版风格的完整PPT（公司/会议级），包含统一配色/字体/布局模板"
+when_to_use: "[ppt-master] PPT母版设计：品牌风格→统一配色/字体/布局→母版模板→会议/公司级PPT"
 version: 1.0.0
 author: MemOmics
 license: MIT

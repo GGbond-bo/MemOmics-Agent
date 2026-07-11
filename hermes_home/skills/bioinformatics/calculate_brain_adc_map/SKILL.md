@@ -1,7 +1,7 @@
 ---
 name: calculate_brain_adc_map
 description: "Calculate Apparent Diffusion Coefficient (ADC) map from diffusion-weighted MRI data using monoexponential diffusion model."
-when_to_use: "Calculate Apparent Diffusion Coefficient (ADC) map from diffusion-weighted MRI data using monoexponential diffusion model."
+when_to_use: "[calculate_brain_adc_map] Calculate Apparent Diffusion Coefficient (ADC) map from diffusion-weighted MRI data using monoexponential diffusion model."
 version: 1.0.0
 author: MemOmics
 license: MIT

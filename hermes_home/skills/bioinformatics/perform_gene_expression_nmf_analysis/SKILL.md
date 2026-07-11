@@ -1,7 +1,7 @@
 ---
 name: perform_gene_expression_nmf_analysis
 description: "Performs Non-negative Matrix Factorization (NMF) on gene expression data to extract metagenes and their associated sample weights for tumor subtype identification."
-when_to_use: "Performs Non-negative Matrix Factorization (NMF) on gene expression data to extract metagenes and their associated sample weights for tumor subtype identification."
+when_to_use: "[perform_gene_expression_nmf_analysis] Performs Non-negative Matrix Factorization (NMF) on gene expression data to extract metagenes and their associated sample weights for tumor subtype identification."
 version: 1.0.0
 author: MemOmics
 license: MIT

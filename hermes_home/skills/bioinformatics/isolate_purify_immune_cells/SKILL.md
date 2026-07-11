@@ -1,7 +1,7 @@
 ---
 name: isolate_purify_immune_cells
 description: "Simulates the isolation and purification of immune cells from tissue samples."
-when_to_use: "Simulates the isolation and purification of immune cells from tissue samples."
+when_to_use: "[isolate_purify_immune_cells] Simulates the isolation and purification of immune cells from tissue samples."
 version: 1.0.0
 author: MemOmics
 license: MIT

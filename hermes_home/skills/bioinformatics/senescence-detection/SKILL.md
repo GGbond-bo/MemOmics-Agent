@@ -1,7 +1,7 @@
 ---
 name: senescence-detection
 description: "SASP scoring + p16/p21 + senescent subpopulation"
-when_to_use: "细胞衰老检测：scRNA数据→衰老标志物(p16/p21/SA-beta-gal)→衰老细胞比例→衰老状态"
+when_to_use: "[senescence-detection] 细胞衰老检测：scRNA数据→衰老标志物(p16/p21/SA-beta-gal)→衰老细胞比例→衰老状态"
 version: 1.0.0
 author: MemOmics
 license: MIT

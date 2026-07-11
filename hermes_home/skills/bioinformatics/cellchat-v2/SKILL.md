@@ -1,7 +1,7 @@
 ---
 name: cellchat-v2
 description: "CellChat v2配体-受体细胞通讯分析。使用场景：已聚类注释的Seurat对象，需分析细胞间信号通路、配体受体互作、信号角色（发出者/接收者），多条件比较"
-when_to_use: "CellChat v2配体-受体细胞通讯分析。使用场景：已聚类注释的Seurat对象，需分析细胞间信号通路、配体受体互作、信号角色（发出者/接收者），多条件比较"
+when_to_use: "[cellchat-v2] CellChat v2配体-受体细胞通讯分析。使用场景：已聚类注释的Seurat对象，需分析细胞间信号通路、配体受体互作、信号角色（发出者/接收者），多条件比较"
 version: 1.0.0
 author: MemOmics
 license: MIT

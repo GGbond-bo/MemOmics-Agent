@@ -1,7 +1,7 @@
 ---
 name: quick_rigid_registration
 description: "Perform rigid image registration between two medical images using SimpleITK. Rigid registration handles translation and rotation only, preserving shape and size. Includes preprocessing, similarity met"
-when_to_use: "Perform rigid image registration between two medical images using SimpleITK. Rigid registration handles translation and rotation only, preserving shape and size. Includes preprocessing, similarity met"
+when_to_use: "[quick_rigid_registration] Perform rigid image registration between two medical images using SimpleITK. Rigid registration handles translation and rotation only, preserving shape and size. Includes preprocessing, similarity met"
 version: 1.0.0
 author: MemOmics
 license: MIT

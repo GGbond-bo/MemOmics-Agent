@@ -1,7 +1,7 @@
 ---
 name: analyze_interaction_mechanisms
 description: "Analyze interaction mechanisms between two specific drugs providing detailed mechanistic insights and clinical significance assessment."
-when_to_use: "分子相互作用机制分析：蛋白对接/分子动力学→结合模式→关键残基→相互作用能"
+when_to_use: "[analyze_interaction_mechanisms] 分子相互作用机制分析：蛋白对接/分子动力学→结合模式→关键残基→相互作用能"
 version: 1.0.0
 author: MemOmics
 license: MIT

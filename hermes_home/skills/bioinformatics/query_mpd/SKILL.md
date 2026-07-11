@@ -1,7 +1,7 @@
 ---
 name: query_mpd
 description: "Query the Mouse Phenome Database (MPD) using natural language or a direct endpoint."
-when_to_use: "MPD小鼠表型数据库：基因敲除/突变→小鼠表型→生理/行为数据→人类疾病模型"
+when_to_use: "[query_mpd] MPD小鼠表型数据库查询：基因敲除/突变→小鼠表型→生理/行为数据→人类疾病模型"
 version: 1.0.0
 author: MemOmics
 license: MIT

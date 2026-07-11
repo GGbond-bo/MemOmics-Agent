@@ -1,7 +1,7 @@
 ---
 name: get_gene_coding_sequence
 description: "Retrieves the coding sequence(s) of a specified gene from NCBI Entrez."
-when_to_use: "Retrieves the coding sequence(s) of a specified gene from NCBI Entrez."
+when_to_use: "[get_gene_coding_sequence] Retrieves the coding sequence(s) of a specified gene from NCBI Entrez."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: annotate_celltype_scRNA
 description: "基于marker基因和标签转移的LLM细胞类型注释。使用场景：聚类后需要鉴定细胞身份，有已知marker列表，或需从参考数据集转移标签"
-when_to_use: "基于marker基因和标签转移的LLM细胞类型注释。使用场景：聚类后需要鉴定细胞身份，有已知marker列表，或需从参考数据集转移标签"
+when_to_use: "[annotate_celltype_scRNA] 基于marker基因和标签转移的LLM细胞类型注释。使用场景：聚类后需要鉴定细胞身份，有已知marker列表，或需从参考数据集转移标签"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 id: "skill_958f96c6713242519fa8a76cea5f69de"
 name: "pathway-enrichment"
-when_to_use: "需使用pathway enrichment功能，适用于相关生信分析场景"
+when_to_use: "[pathway-enrichment] 需使用pathway enrichment功能，适用于相关生信分析场景"
 display-name: "Pathway Enrichment Analysis"
 short-description: "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly."
 category: "pathway_analysis"

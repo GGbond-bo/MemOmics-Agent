@@ -173,7 +173,7 @@ rb.save("analysis_summary_report.html")
 - 禁止直接用历史日志里的脚本运行而不经本次审查
 - 运行日志是"参考"不是"免审凭证"
 
-when_to_use: "需使用analysis summary report功能，适用于相关生信分析场景"
+when_to_use: "[analysis-summary-report] 需使用analysis summary report功能，适用于相关生信分析场景"
 ---
 
 ## 🔒 审查与辩论机制（分析 skill 必须执行）

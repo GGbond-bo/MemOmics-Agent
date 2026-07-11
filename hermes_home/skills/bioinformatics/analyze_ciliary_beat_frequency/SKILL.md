@@ -1,7 +1,7 @@
 ---
 name: analyze_ciliary_beat_frequency
 description: "Analyze ciliary beat frequency from high-speed video microscopy data using FFT analysis."
-when_to_use: "Analyze ciliary beat frequency from high-speed video microscopy data using FFT analysis."
+when_to_use: "[analyze_ciliary_beat_frequency] Analyze ciliary beat frequency from high-speed video microscopy data using FFT analysis."
 version: 1.0.0
 author: MemOmics
 license: MIT

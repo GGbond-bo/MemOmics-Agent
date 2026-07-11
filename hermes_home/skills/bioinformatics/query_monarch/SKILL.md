@@ -1,7 +1,7 @@
 ---
 name: query_monarch
 description: "Query the Monarch Initiative API using natural language or a direct endpoint."
-when_to_use: "Query the Monarch Initiative API using natural language or a direct endpoint."
+when_to_use: "[query_monarch] Query the Monarch Initiative API using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

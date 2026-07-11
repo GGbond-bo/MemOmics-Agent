@@ -1,7 +1,7 @@
 ---
 name: align_sequences
 description: "Align short sequences (primers) to a longer sequence, allowing for one mismatch. Checks both forward and reverse complement strands."
-when_to_use: "Align short sequences (primers) to a longer sequence, allowing for one mismatch. Checks both forward and reverse complement strands."
+when_to_use: "[align_sequences] Align short sequences (primers) to a longer sequence, allowing for one mismatch. Checks both forward and reverse complement strands."
 version: 1.0.0
 author: MemOmics
 license: MIT

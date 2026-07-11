@@ -1,7 +1,7 @@
 ---
 id: "skill_827c499e76084524a2e098d80383a3a4"
 name: "survival-analysis-clinical"
-when_to_use: "临床生存分析：临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物"
+when_to_use: "[survival-analysis-clinical] 临床生存分析：临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物"
 display-name: "Clinical Survival & Outcome Analysis"
 category: multi_omics
 short-description: "Perform Kaplan-Meier estimation, Cox proportional hazards regression, and risk stratification from clinical time-to-event data."

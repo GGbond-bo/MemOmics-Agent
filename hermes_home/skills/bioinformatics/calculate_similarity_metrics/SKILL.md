@@ -1,7 +1,7 @@
 ---
 name: calculate_similarity_metrics
 description: "Calculate similarity metrics between two medical images. Supports mutual information, mean squared error, correlation, and normalized cross correlation."
-when_to_use: "Calculate similarity metrics between two medical images. Supports mutual information, mean squared error, correlation, and normalized cross correlation."
+when_to_use: "[calculate_similarity_metrics] Calculate similarity metrics between two medical images. Supports mutual information, mean squared error, correlation, and normalized cross correlation."
 version: 1.0.0
 author: MemOmics
 license: MIT

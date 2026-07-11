@@ -1,7 +1,7 @@
 ---
 name: perform_pcr_and_gel_electrophoresis
 description: "Performs PCR amplification of a target transgene and visualizes results using agarose gel electrophoresis."
-when_to_use: "Performs PCR amplification of a target transgene and visualizes results using agarose gel electrophoresis."
+when_to_use: "[perform_pcr_and_gel_electrophoresis] PCR与凝胶电泳分析：DNA模板+引物→模拟PCR扩增→产物大小→凝胶电泳可视化→结果解读"
 version: 1.0.0
 author: MemOmics
 license: MIT

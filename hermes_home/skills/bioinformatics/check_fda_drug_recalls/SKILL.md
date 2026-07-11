@@ -1,7 +1,7 @@
 ---
 name: check_fda_drug_recalls
 description: "Check for FDA drug recalls and enforcement actions from the OpenFDA database to identify safety concerns and regulatory actions."
-when_to_use: "FDA药品召回查询：药品名称/企业→召回历史→召回原因/分类→安全性报告"
+when_to_use: "[check_fda_drug_recalls] FDA药品召回查询：药品名称/企业→召回历史→召回原因/分类→安全性评估→监管合规"
 version: 1.0.0
 author: MemOmics
 license: MIT

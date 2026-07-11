@@ -1,7 +1,7 @@
 ---
 name: query_reactome
 description: "Query the Reactome database using natural language or a direct endpoint; optionally download pathway diagrams."
-when_to_use: "Query the Reactome database using natural language or a direct endpoint; optionally download pathway diagrams."
+when_to_use: "[query_reactome] Reactome通路数据库查询：基因/蛋白→Reactome通路→pathway层次→生物过程"
 version: 1.0.0
 author: MemOmics
 license: MIT

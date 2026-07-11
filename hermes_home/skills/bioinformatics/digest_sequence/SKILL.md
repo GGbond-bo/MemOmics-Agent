@@ -1,7 +1,7 @@
 ---
 name: digest_sequence
 description: "Simulates restriction enzyme digestion of a DNA sequence and returns the resulting fragments with their properties."
-when_to_use: "Simulates restriction enzyme digestion of a DNA sequence and returns the resulting fragments with their properties."
+when_to_use: "[digest_sequence] Simulates restriction enzyme digestion of a DNA sequence and returns the resulting fragments with their properties."
 version: 1.0.0
 author: MemOmics
 license: MIT

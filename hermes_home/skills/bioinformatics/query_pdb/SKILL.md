@@ -1,7 +1,7 @@
 ---
 name: query_pdb
 description: "Query the RCSB PDB database using natural language or a direct structured query."
-when_to_use: "PDB蛋白结构数据库查询：蛋白名/PDB ID→3D结构→配体→分辨率→结构下载"
+when_to_use: "[query_pdb] PDB蛋白结构数据库查询：蛋白名/PDB ID→3D结构→配体信息→分辨率→下载结构文件"
 version: 1.0.0
 author: MemOmics
 license: MIT

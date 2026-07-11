@@ -1,7 +1,7 @@
 ---
 name: analyze_copy_number_purity_ploidy_and_focal_events
 description: "CNVkit-based copy number workflow performing CNV segmentation, purity & ploidy approximation, simplified HRD-style metrics, and focal amplification/deletion detection in selected genes."
-when_to_use: "拷贝数变异与肿瘤纯度分析：CNV数据→肿瘤纯度/倍性→局灶性扩增/缺失事件→驱动基因识别"
+when_to_use: "[analyze_copy_number_purity_ploidy_and_focal_events] 拷贝数变异与肿瘤纯度分析：CNV数据→肿瘤纯度/倍性→局灶性扩增/缺失事件→驱动基因识别"
 version: 1.0.0
 author: MemOmics
 license: MIT

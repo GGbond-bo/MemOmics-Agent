@@ -1,7 +1,7 @@
 ---
 name: model_protein_dimerization_network
 description: "Model protein dimerization networks to find equilibrium concentrations of dimers."
-when_to_use: "Model protein dimerization networks to find equilibrium concentrations of dimers."
+when_to_use: "[model_protein_dimerization_network] Model protein dimerization networks to find equilibrium concentrations of dimers."
 version: 1.0.0
 author: MemOmics
 license: MIT

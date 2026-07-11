@@ -9,7 +9,7 @@ keywords: "PowerPoint, pptx, slides, presentation, python-pptx, Phylo, scientifi
 version: "1.0"
 last-updated: "April 2026"
 description: >
-when_to_use: "需使用pptx generation功能，适用于相关生信分析场景"
+when_to_use: "[pptx-generation] PPTX文件生成：内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件"
   Generate professional, Phylo-branded PowerPoint presentations from scientific
   analysis results using python-pptx. Use this skill whenever the agent needs to
   produce a .pptx slide deck. Only create when the user explicitly requests slides,

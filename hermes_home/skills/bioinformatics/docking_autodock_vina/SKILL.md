@@ -1,7 +1,7 @@
 ---
 name: docking_autodock_vina
 description: "Performs molecular docking using AutoDock Vina to predict binding affinities between small molecules and a receptor protein."
-when_to_use: "分子对接虚拟筛选：受体PDB+配体SMILES→AutoDock Vina→结合能打分→最优结合构象→筛选hit化合物"
+when_to_use: "[docking_autodock_vina] 分子对接虚拟筛选：受体PDB+配体SMILES→AutoDock Vina→结合能打分→最优结合构象→筛选hit化合物"
 version: 1.0.0
 author: MemOmics
 license: MIT

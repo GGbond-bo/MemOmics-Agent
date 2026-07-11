@@ -1,7 +1,7 @@
 ---
 name: query_gwas_catalog
 description: "Query the GWAS Catalog API using natural language or a direct endpoint."
-when_to_use: "Query the GWAS Catalog API using natural language or a direct endpoint."
+when_to_use: "[query_gwas_catalog] GWAS Catalog查询：表型/基因→GWAS关联→SNP-trait→显著位点→曼哈顿图数据"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: generate_gene_embeddings_with_ESM_models
 description: "Generate average protein embeddings for a list of Ensembl gene IDs using ESM (Evolutionary Scale Modeling) protein language models. This function fetches all protein isoform sequences for each gene, c"
-when_to_use: "Generate average protein embeddings for a list of Ensembl gene IDs using ESM (Evolutionary Scale Modeling) protein language models. This function fetches all protein isoform sequences for each gene, c"
+when_to_use: "[generate_gene_embeddings_with_ESM_models] Generate average protein embeddings for a list of Ensembl gene IDs using ESM (Evolutionary Scale Modeling) protein language models. This function fetches all protein isoform sequences for each gene, c"
 version: 1.0.0
 author: MemOmics
 license: MIT

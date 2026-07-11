@@ -1,7 +1,7 @@
 ---
 name: get_gene_set_enrichment_analysis_supported_database_list
 description: "Returns a list of supported databases for gene set enrichment analysis."
-when_to_use: "Returns a list of supported databases for gene set enrichment analysis."
+when_to_use: "[get_gene_set_enrichment_analysis_supported_database_list] Returns a list of supported databases for gene set enrichment analysis."
 version: 1.0.0
 author: MemOmics
 license: MIT

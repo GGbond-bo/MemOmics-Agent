@@ -1,7 +1,7 @@
 ---
 name: analyze_chromatin_interactions
 description: "Analyze chromatin interactions from Hi-C data to identify enhancer-promoter interactions and TADs."
-when_to_use: "Analyze chromatin interactions from Hi-C data to identify enhancer-promoter interactions and TADs."
+when_to_use: "[analyze_chromatin_interactions] Analyze chromatin interactions from Hi-C data to identify enhancer-promoter interactions and TADs."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -5,7 +5,7 @@ category: transcriptomics
 short-description: Complete single-cell RNA-seq analysis using Seurat from raw data
   to cell type annotation with clustering and visualization.
 description: Single-cell RNA-seq analysis using Seurat v5 from raw data to cell type
-when_to_use: "有scRNA数据(10X count矩阵)，需Seurat全流程：QC→归一化→PCA→聚类→UMAP→marker→注释"
+when_to_use: "[scrna-seurat-core] Seurat单细胞核心分析流程：10X count矩阵→QC过滤→SCTransform归一化→PCA→聚类→UMAP→marker基因→细胞注释"
   annotation with clustering, visualization, and publication-quality figures.
 detailed-description: Complete single-cell RNA-seq analysis using Seurat v5 from raw
   data to cell type annotation. Use when you have 10X Chromium, Drop-seq, or other

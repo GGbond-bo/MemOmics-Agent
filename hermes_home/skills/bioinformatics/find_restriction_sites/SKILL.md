@@ -1,7 +1,7 @@
 ---
 name: find_restriction_sites
 description: "Identifies restriction enzyme sites in a given DNA sequence for specified enzymes."
-when_to_use: "Identifies restriction enzyme sites in a given DNA sequence for specified enzymes."
+when_to_use: "[find_restriction_sites] 限制性酶切位点查找：DNA序列→REBASE→酶切位点→片段大小→酶切图谱→克隆策略"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: pdf-translate
 description: "使用PDFMathTranslate(pdf2zh)进行学术论文保留排版翻译，公式/图/表格完整保留，支持Google/OpenAI/DeepSeek等24种引擎"
-when_to_use: "使用PDFMathTranslate(pdf2zh)进行学术论文保留排版翻译，公式/图/表格完整保留，支持Google/OpenAI/DeepSeek等24种引擎"
+when_to_use: "[pdf-translate] PDF学术论文排版保留翻译：英文PDF→pdf2zh翻译→中文PDF→公式/图/表格完整保留"
 version: 1.0.0
 author: MemOmics
 license: MIT

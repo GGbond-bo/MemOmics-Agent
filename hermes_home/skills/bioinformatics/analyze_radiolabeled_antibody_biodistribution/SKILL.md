@@ -1,7 +1,7 @@
 ---
 name: analyze_radiolabeled_antibody_biodistribution
 description: "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies."
-when_to_use: "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies."
+when_to_use: "[analyze_radiolabeled_antibody_biodistribution] 放射性标记抗体生物分布分析：放射标记抗体→组织分布→药代动力学→肿瘤/器官摄取→辐射剂量学"
 version: 1.0.0
 author: MemOmics
 license: MIT

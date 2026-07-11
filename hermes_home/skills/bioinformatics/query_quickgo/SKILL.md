@@ -1,7 +1,7 @@
 ---
 name: query_quickgo
 description: "Query the QuickGO API using natural language or a direct endpoint."
-when_to_use: "QuickGO基因本体查询：基因名→GO注释→GO证据→GO图→功能富集"
+when_to_use: "[query_quickgo] QuickGO基因本体查询：基因名→GO注释→GO证据→GO图→功能富集"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,7 +1,7 @@
 ---
 name: immune-deconvolution
 description: "CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计"
-when_to_use: "免疫细胞去卷积：bulk RNA-seq→CIBERSORT/EPIC/quantiseq→22种免疫细胞比例→免疫浸润评分"
+when_to_use: "[immune-deconvolution] 免疫细胞去卷积：bulk RNA-seq→CIBERSORT/EPIC/quantiseq→22种免疫细胞比例→免疫浸润评分"
 version: 1.0.0
 author: MemOmics
 license: MIT

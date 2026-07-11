@@ -1,7 +1,7 @@
 ---
 name: find_restriction_enzymes
 description: "Finds common restriction enzyme sites in a DNA sequence and returns their cut positions."
-when_to_use: "Finds common restriction enzyme sites in a DNA sequence and returns their cut positions."
+when_to_use: "[find_restriction_enzymes] Finds common restriction enzyme sites in a DNA sequence and returns their cut positions."
 version: 1.0.0
 author: MemOmics
 license: MIT

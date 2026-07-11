@@ -9,7 +9,7 @@ via `Rscript` subprocess. Does NOT perform upstream preprocessing (normalisation
 batch correction, feature selection) beyond scaling; those steps must be done before
 calling this skill.
 
-when_to_use: "需使用rgcca multiblock功能，适用于相关生信分析场景"
+when_to_use: "[rgcca-multiblock] RGCCA多组块正则化典型相关分析：多组学数据块→RGCCA→共享变异→跨组学关联→组分可视化"
 ---
 
 ## Inputs

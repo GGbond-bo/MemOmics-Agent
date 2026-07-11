@@ -1,7 +1,7 @@
 ---
 name: query_gnomad
 description: "Query gnomAD for variants in a gene using natural language or direct gene symbol."
-when_to_use: "gnomAD人群频率查询：基因/变异→全球人群等位基因频率→LOF约束→致病性评估"
+when_to_use: "[query_gnomad] gnomAD人群频率查询：基因/变异→全球人群等位基因频率→LOF约束→致病性评估"
 version: 1.0.0
 author: MemOmics
 license: MIT

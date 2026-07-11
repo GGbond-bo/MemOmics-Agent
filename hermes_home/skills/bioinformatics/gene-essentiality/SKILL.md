@@ -1,7 +1,7 @@
 ---
 id: "skill_b3014b99ed26490e879253afb0aae61f"
 name: "gene-essentiality"
-when_to_use: "需使用gene essentiality功能，适用于相关生信分析场景"
+when_to_use: "[gene-essentiality] 需使用gene essentiality功能，适用于相关生信分析场景"
 display-name: "Gene Essentiality Analysis"
 short-description: "Guidance for interpreting DepMap essentiality scores and correlations correctly."
 category: "functional_genomics"

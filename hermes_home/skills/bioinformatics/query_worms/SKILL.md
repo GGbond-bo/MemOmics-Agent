@@ -1,7 +1,7 @@
 ---
 name: query_worms
 description: "Query the World Register of Marine Species (WoRMS) REST API using natural language or a direct endpoint."
-when_to_use: "Query the World Register of Marine Species (WoRMS) REST API using natural language or a direct endpoint."
+when_to_use: "[query_worms] Query the World Register of Marine Species (WoRMS) REST API using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

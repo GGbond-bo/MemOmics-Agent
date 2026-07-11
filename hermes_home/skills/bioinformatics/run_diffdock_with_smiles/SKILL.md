@@ -1,7 +1,7 @@
 ---
 name: run_diffdock_with_smiles
 description: "Run DiffDock molecular docking using a protein PDB file and a SMILES string for the ligand, executing the process in a Docker container."
-when_to_use: "Run DiffDock molecular docking using a protein PDB file and a SMILES string for the ligand, executing the process in a Docker container."
+when_to_use: "[run_diffdock_with_smiles] Run DiffDock molecular docking using a protein PDB file and a SMILES string for the ligand, executing the process in a Docker container."
 version: 1.0.0
 author: MemOmics
 license: MIT

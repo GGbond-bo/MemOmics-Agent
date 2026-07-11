@@ -1,7 +1,7 @@
 ---
 name: paper-download
 description: "搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台"
-when_to_use: "需要下载单篇论文PDF（DOI/PMID/arXiv ID），仅下载不分析"
+when_to_use: "[paper-download] 需要下载单篇论文PDF（DOI/PMID/arXiv ID），仅下载不分析"
 version: 1.0.0
 author: MemOmics
 license: MIT

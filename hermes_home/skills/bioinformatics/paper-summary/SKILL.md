@@ -1,7 +1,7 @@
 ---
 name: paper-summary
 description: "深度AI文献解读：全文提取→结构化总结(15字段)→图表提取→报告生成"
-when_to_use: "已有PDF或论文链接，需生成结构化的论文摘要（背景/方法/结果/结论），快速了解论文内容"
+when_to_use: "[paper-summary] 已有PDF或论文链接，需生成结构化的论文摘要（背景/方法/结果/结论），快速了解论文内容"
 version: 1.0.0
 author: MemOmics
 license: MIT

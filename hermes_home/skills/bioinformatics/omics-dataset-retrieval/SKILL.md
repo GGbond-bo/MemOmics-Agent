@@ -1,7 +1,7 @@
 ---
 id: omics-dataset-retrieval
 name: omics-dataset-retrieval
-when_to_use: "需使用omics dataset retrieval功能，适用于相关生信分析场景"
+when_to_use: "[omics-dataset-retrieval] 需使用omics dataset retrieval功能，适用于相关生信分析场景"
 category: data_discovery
 short-description: Retrieve, catalog, and relevance-audit publicly available omics datasets across 25+ repositories.
 detailed-description: >
