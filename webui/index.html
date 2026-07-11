@@ -152,6 +152,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .todo-item .todo-check { width:16px; height:16px; border:2px solid var(--border); border-radius:3px; display:flex; align-items:center; justify-content:center; }
 .todo-item.done .todo-check { background:var(--success); border-color:var(--success); color:#fff; }
 .todo-item.done .todo-text { text-decoration:line-through; color:var(--text-light); }
+/* P2: Plan todo interactive styles */
+.plan-todo-item { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.plan-todo-item.todo-done .plan-todo-text { text-decoration:line-through; color:var(--text-light); }
+.plan-todo-check { width:14px; height:14px; cursor:pointer; accent-color:var(--primary); flex-shrink:0; }
+.plan-todo-text { flex:1; }
+.plan-skill-tag { font-size:10px; background:var(--primary); color:#fff; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
+.plan-todo-del { border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; opacity:0.5; }
+.plan-todo-del:hover { opacity:1; }
 
 /* 状态通知 */
 .status-notice { padding:6px 12px; background:var(--primary-light); border-radius:6px; margin:4px 0; font-size:12px; color:var(--primary); }
@@ -342,8 +350,10 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <h1>🧬 MemOmics</h1>
       <div class="subtitle">自进化多组学生信分析平台</div>
     </div>
-    <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
-    <input class="session-search" id="session-search" type="text" placeholder="🔍 搜索会话..." oninput="filterSessions()" />
+    <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
+
+    <input class="session-search" id="session-search" type="text" placeholder="🔍 搜索会话..." oninput="filterSessions()" />
+
     <div class="session-list" id="session-list"></div>
     <div class="sidebar-nav">
       <div class="nav-item active" onclick="switchView('chat')" id="nav-chat">💬 对话分析</div>
@@ -652,23 +662,34 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <div id="panel-plan" style="display:none;">
       <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
         <span>📋 研究方案</span>
-        <button class="ctx-refresh" onclick="refreshPlanStatus()" title="刷新">🔄</button>
+        <div style="display:flex;gap:4px;">
+          <button class="ctx-refresh" onclick="refreshPlanStatus()" title="刷新">🔄</button>
+        </div>
       </div>
-      <div class="ctx-panel" id="plan-panel-content">
+      <div class="ctx-panel" id="plan-panel-content" style="max-height:calc(100vh - 180px);overflow-y:auto;">
         <div class="ctx-empty" id="plan-empty">
           <div class="ctx-empty-icon">📋</div>
           <div>暂无研究方案</div>
           <div style="font-size:11px;margin-top:4px;">使用"设计方案"/"怎么分析"等关键词触发</div>
         </div>
         <div id="plan-content" style="display:none;">
-          <div class="plan-overview" id="plan-overview"></div>
+          <!-- 方案文本摘要 -->
+          <div id="plan-text" style="font-size:12px;line-height:1.6;margin-bottom:8px;padding:8px;background:rgba(0,120,255,0.04);border-radius:6px;max-height:150px;overflow-y:auto;"></div>
+          <!-- 文献表格 -->
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;"></div>
+          <h3 style="font-size:12px;margin-bottom:6px;color:var(--text-light);">📚 文献依据</h3>
+          <div id="plan-lit-table" style="font-size:11px;margin-bottom:8px;max-height:200px;overflow-y:auto;"></div>
+          <!-- 执行待办 -->
           <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">
-            <h3 style="font-size:13px;margin-bottom:8px;">执行待办</h3>
+            <h3 style="font-size:13px;margin-bottom:8px;">✅ 执行待办</h3>
             <div id="plan-todo-list" style="font-size:12px;"></div>
           </div>
-          <div style="margin-top:8px;">
-            <button class="ctx-refresh" onclick="executePlan()" style="width:100%;padding:6px;text-align:center;">▶ 开始执行方案</button>
+          <!-- 操作按钮 -->
+          <div style="margin-top:10px;display:flex;gap:6px;">
+            <button class="ctx-refresh" onclick="generateFullPlan()" id="plan-generate-btn" style="flex:1;padding:6px;text-align:center;">📝 生成完整方案</button>
+            <button class="ctx-refresh" onclick="executePlan()" id="plan-execute-btn" style="flex:1;padding:6px;text-align:center;background:var(--primary);color:#fff;">▶ 开始执行</button>
           </div>
+          <div id="plan-status-msg" style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center;"></div>
         </div>
       </div>
     </div>
@@ -2336,37 +2357,68 @@ function renderTodos(todos) {
   }
 }
 
+// P1+P2+P3: Enhanced plan panel rendering
+var _planCache = {text:'',lit:'',todos:[]};
 function renderPlanTodos(todos) {
+  // extract metadata if attached
+  if (todos && todos._plan_text) { _planCache.text = todos._plan_text; delete todos._plan_text; }
+  if (todos && todos._lit_table) { _planCache.lit = todos._lit_table; delete todos._lit_table; }
+  _planCache.todos = (todos && todos.length) ? todos : _planCache.todos;
+  todos = _planCache.todos;
+  
   var planTodo = document.getElementById('plan-todo-list');
   var planContent = document.getElementById('plan-content');
   var planEmpty = document.getElementById('plan-empty');
   if (!planTodo) return;
   if (!todos || !todos.length) {
-    planTodo.innerHTML = '<span style="font-size:12px;color:var(--text-light);">No todos yet</span>';
-    if (planContent) planContent.style.display = 'none';
-    if (planEmpty) planEmpty.style.display = '';
+    planTodo.innerHTML = '<span style="font-size:12px;color:var(--text-light);">等待生成方案...</span>';
+    if (_planCache.text && planContent) { planContent.style.display = ''; planEmpty.style.display = 'none'; }
     updatePlanIndicator(false);
     return;
   }
   if (planContent) planContent.style.display = '';
   if (planEmpty) planEmpty.style.display = 'none';
   updatePlanIndicator(true);
+  
+  // P2: Interactive todos with checkboxes + delete
   planTodo.innerHTML = todos.map(function(t, i) {
     var skill = t.skill || '';
-    var skillTag = skill ? ' <span style="font-size:10px;background:var(--primary);color:#fff;border-radius:3px;padding:0 4px;">' + escapeHtml(skill) + '</span>' : '';
+    var skillTag = skill ? ' <span class="plan-skill-tag">' + escapeHtml(skill) + '</span>' : ' <span class="plan-skill-tag" style="background:#888;">?</span>';
     var module = t.module || '';
-    var moduleTag = module ? ' [' + module + ']' : '';
+    var moduleTag = module ? ' <span style="color:var(--text-light);font-size:10px;">[' + module + ']</span>' : '';
     var title = t.title || t.content || t.text || ('Task ' + (i+1));
-    return '<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;">' +
-      '<span style="flex:1;">' + escapeHtml(title) + moduleTag + '</span>' +
-      '<span style="flex-shrink:0;margin-left:8px;">' + skillTag + '</span>' +
+    var checked = t.status === 'completed' ? ' checked' : '';
+    var doneClass = t.status === 'completed' ? ' todo-done' : '';
+    return '<div class="plan-todo-item' + doneClass + '" data-idx="' + i + '">' +
+      '<input type="checkbox" class="plan-todo-check"' + checked + ' onchange="togglePlanTodo(' + i + ',this.checked)" title="勾选确认">' +
+      '<span class="plan-todo-text">' + escapeHtml(title) + moduleTag + '</span>' +
+      skillTag +
+      '<button class="plan-todo-del" onclick="deletePlanTodo(' + i + ')" title="移除">×</button>' +
       '</div>';
   }).join('');
-  var overviewEl = document.getElementById('plan-overview');
-  if (overviewEl && !overviewEl.innerHTML) {
-    overviewEl.innerHTML = '<div style="font-size:12px;color:var(--success);padding:8px;border-radius:4px;background:rgba(0,200,0,0.08);">OK: ' + todos.length + ' todos generated (with skill binding)</div>';
-  }
+  
+  // P1: plan text + lit table
+  var pt = document.getElementById('plan-text');
+  if (pt && _planCache.text) { pt.innerHTML = '<div style="font-weight:600;margin-bottom:4px;color:var(--primary);">📖 方案摘要</div>' + _planCache.text; pt.style.display = ''; }
+  var lt = document.getElementById('plan-lit-table');
+  if (lt && _planCache.lit) { lt.innerHTML = _planCache.lit; lt.style.display = ''; }
+  
+  // P3: button visibility
+  var gb = document.getElementById('plan-generate-btn');
+  var eb = document.getElementById('plan-execute-btn');
+  var hasSkills = todos.some(function(t){return t.skill && t.skill !== '?';});
+  if (gb && eb) { gb.style.display = hasSkills ? 'none' : ''; eb.style.display = hasSkills ? '' : 'none'; }
+  
+  var st = document.getElementById('plan-status-msg');
+  if (st) { var ws = todos.filter(function(t){return t.skill && t.skill !== '?';}).length;
+    st.textContent = todos.length + ' steps · ' + ws + ' skill-bound · ' + todos.filter(function(t){return t.status==='completed';}).length + ' done'; }
 }
+function togglePlanTodo(idx, ck) {
+  if (!_planCache.todos[idx]) return;
+  _planCache.todos[idx].status = ck ? 'completed' : 'pending';
+  renderPlanTodos(_planCache.todos);
+}
+function deletePlanTodo(idx) { _planCache.todos.splice(idx,1); renderPlanTodos(_planCache.todos); }
 
 function updatePlanIndicator(active) {
   var navPlan = document.getElementById('nav-plan');
@@ -2806,45 +2858,50 @@ function stopCtxPolling() {
 })();
 
 // === 研究方案面板 ===
+// P1: extract plan from last assistant message and show in panel
 function refreshPlanStatus() {
-  // 检查是否有活跃方案
   var planEl = document.getElementById('plan-content');
   var emptyEl = document.getElementById('plan-empty');
-  var overviewEl = document.getElementById('plan-overview');
-  var todoListEl = document.getElementById('plan-todo-list');
-  
-  // 从 todo-list 同步待办到方案面板
-  var todoEl = document.getElementById('todo-list');
-  if (todoEl && todoListEl) {
-    todoListEl.innerHTML = todoEl.innerHTML || '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>';
-  }
-  
-  // 检查是否有方案内容(从聊天消息中提取)
   var msgs = document.querySelectorAll('.msg-bubble.assistant .msg-content');
-  var hasPlan = false;
-  msgs.forEach(function(m) {
-    if (m.innerHTML.indexOf('研究背景') > -1 || m.innerHTML.indexOf('分析路线') > -1 || m.innerHTML.indexOf('文献依据') > -1) {
-      hasPlan = true;
-      if (overviewEl && !overviewEl.innerHTML) {
-        overviewEl.innerHTML = '<div style="font-size:12px;color:var(--success);padding:8px;">✅ 已有研究方案 — 请查看对话中的详细方案</div>';
-      }
+  var lastMsg = msgs.length ? msgs[msgs.length-1] : null;
+  if (lastMsg) {
+    var html = lastMsg.innerHTML;
+    // extract plan summary (first 500 chars of meaningful content)
+    var txt = lastMsg.textContent || '';
+    var summary = txt.substring(0, 600).replace(/\n+/g,'<br>');
+    if (txt.length > 600) summary += '...<br><span style="color:var(--primary);cursor:pointer;" onclick="switchView(\'chat\')">[查看完整方案 ↓]</span>';
+    // extract lit table (anything that looks like a markdown table with PMID)
+    var litMatch = html.match(/<table[^>]*>.*?<\/table>/s) || html.match(/PMID.*?<\/tr>/s);
+    var litHtml = litMatch ? '<div style="font-size:10px;overflow-x:auto;">' + litMatch[0] + '</div>' : '';
+    if (summary.indexOf('研究背景') > -1 || summary.indexOf('分析') > -1 || summary.indexOf('文献') > -1) {
+      _planCache.text = summary;
+      if (litHtml) _planCache.lit = litHtml;
+      if (planEl) planEl.style.display = '';
+      if (emptyEl) emptyEl.style.display = 'none';
     }
-  });
-  
-  if (hasPlan || (todoEl && todoEl.textContent.indexOf('暂无') === -1)) {
-    if (planEl) planEl.style.display = '';
-    if (emptyEl) emptyEl.style.display = 'none';
-  } else {
-    if (planEl) planEl.style.display = 'none';
-    if (emptyEl) emptyEl.style.display = '';
   }
+  renderPlanTodos(_planCache.todos);
 }
 
-function executePlan() {
-  // 触发方案执行 — 发送消息让 agent 执行 todos
+// P3: Phase1→Phase2 one-click trigger
+function generateFullPlan() {
   var input = document.getElementById('input');
   if (!input) return;
-  input.value = '请开始执行研究方案中的所有待办任务';
+  var planEl = document.getElementById('plan-text');
+  var ctx = planEl && planEl.textContent ? planEl.textContent.substring(0,200) : '';
+  input.value = '请基于上面的文献调研结果，生成完整的分析方案，包含详细的步骤和skill绑定。';
+  send(false);
+}
+// P4: Structured execute command
+function executePlan() {
+  var input = document.getElementById('input');
+  if (!input) return;
+  var activeTodos = (_planCache.todos || []).filter(function(t){return t.status !== 'completed';});
+  if (!activeTodos.length) { input.value = '请开始执行研究方案中的所有待办任务'; }
+  else {
+    var titles = activeTodos.map(function(t){return t.title || t.content || '';}).join(', ');
+    input.value = '请按以下顺序执行分析(direct_exec模式): ' + titles;
+  }
   send(false);
 }
 </script>

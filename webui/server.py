@@ -384,6 +384,7 @@ for p in _CHINA_PROVIDERS:
 
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
+_lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
 WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
 RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
 SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
@@ -2965,6 +2966,15 @@ async def ws_endpoint(ws: WebSocket):
                                     _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
+                        # P5: 文献结果缓存 (去重, 24h 有效)
+                        if tool_name in ("literature_search", "search_papers", "search_papers_by_context", "search_knowledge", "search_knowledge_base"):
+                            try:
+                                import hashlib as _hl
+                                query_key = _hl.md5(str(args).encode()).hexdigest()[:16]
+                                _lit_cache[query_key] = (time.time(), result_str[:10000], session["id"])
+                                now2 = time.time()
+                                _lit_cache.update({k: v for k, v in list(_lit_cache.items()) if now2 - v[0] < 86400})
+                            except Exception: pass
                         # terminal 执行后检测新图片
                         if tool_name in ("terminal", "run_command", "execute_code"):
                             new_figs = _scan_new_figures()
