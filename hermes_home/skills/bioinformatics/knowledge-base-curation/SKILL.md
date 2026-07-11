@@ -1,4 +1,5 @@
 ---
+category: General Utility
 name: knowledge-base-curation
 description: >
 when_to_use: "[knowledge-base-curation] 需使用knowledge base curation功能，适用于相关生信分析场景"

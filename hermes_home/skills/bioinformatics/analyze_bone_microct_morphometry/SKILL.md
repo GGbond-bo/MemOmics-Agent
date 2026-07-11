@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: Clinical
+    category: Histology/Pathology
 prerequisites:
   r_packages: []
   python_packages: []

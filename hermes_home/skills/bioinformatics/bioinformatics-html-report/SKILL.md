@@ -1,4 +1,5 @@
 ---
+category: Visualization
 name: bioinformatics-html-report
 description: A zero-dependency Python toolkit for generating publication-quality interactive HTML reports from bioinformatics analysis outputs
 when_to_use: "[bioinformatics-html-report] A zero-dependency Python toolkit for generating publication-quality interactive HTML reports from bioinformatics analysis outputs"

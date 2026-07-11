@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: Clinical
+    category: Bioimaging
 prerequisites:
   r_packages: []
   python_packages: []

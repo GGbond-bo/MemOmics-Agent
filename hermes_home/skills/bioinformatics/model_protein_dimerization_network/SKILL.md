@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: Proteomics
+    category: Structural Biology
 prerequisites:
   r_packages: []
   python_packages: []
