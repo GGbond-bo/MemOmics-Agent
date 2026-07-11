@@ -2018,7 +2018,7 @@ async function loadSkills() {
   document.getElementById('skill-detail').style.display = 'none';
   document.getElementById('skill-list').style.display = '';
   // 只展示分类卡片网格
-  var catIcons = {'scRNA-seq':'🔬','scATAC-seq':'🧬','空间转录组':'🗺️','Bulk RNA-seq':'📊','表观/甲基化':'🧪','蛋白/代谢':'💧','微生物/基因组':'🦠','多组学整合':'🔗','报告/工具':'📄','文献/检索':'📚','数据库查询':'🗄️','药物/临床':'💊','内置':'⚙️'};
+  var catIcons = {'scRNA':'🔬','scATAC':'🧬','Spatial':'🗺️','Bulk RNA':'📊','Proteomics':'💧','Drug Discovery':'💊','Microbiome':'🦠','Multi-omics':'🔗','Clinical':'🏥','GWAS/Genetics':'🧬','Data Query':'🗄️','Literature':'📚','Visualization':'📄','General Utility':'⚙️','Immunology':'🛡️','Mol Bio':'🧫','Assay/Wet Lab':'🧪','Bioimaging':'📷','Histology/Pathology':'🔬','Structural Biology':'🧬'};
   var sortedCats = Object.keys(cats).sort(function(a,b){ return cats[b]-cats[a]; });
   var html = '<div class="skill-cat-grid">';
   sortedCats.forEach(function(c) {
@@ -2040,7 +2040,7 @@ async function loadSkills() {
 function selectSkillCategory(cat) {
   _skillFilter = cat;
   // 切换到 skill 列表视图
-  var catIcons = {'scRNA-seq':'🔬','scATAC-seq':'🧬','空间转录组':'🗺️','Bulk RNA-seq':'📊','表观/甲基化':'🧪','蛋白/代谢':'💧','微生物/基因组':'🦠','多组学整合':'🔗','报告/工具':'📄','文献/检索':'📚','数据库查询':'🗄️','药物/临床':'💊','内置':'⚙️'};
+  var catIcons = {'scRNA':'🔬','scATAC':'🧬','Spatial':'🗺️','Bulk RNA':'📊','Proteomics':'💧','Drug Discovery':'💊','Microbiome':'🦠','Multi-omics':'🔗','Clinical':'🏥','GWAS/Genetics':'🧬','Data Query':'🗄️','Literature':'📚','Visualization':'📄','General Utility':'⚙️','Immunology':'🛡️','Mol Bio':'🧫','Assay/Wet Lab':'🧪','Bioimaging':'📷','Histology/Pathology':'🔬','Structural Biology':'🧬'};
   var icon = catIcons[cat] || '📂';
   var filtered = _allSkills.filter(function(s) { return s.category === cat; });
   var disabledCount = filtered.filter(function(s) { return s.disabled; }).length;
@@ -2059,7 +2059,7 @@ function renderSkillList(skills, filter) {
   var filtered = filter === 'all' ? skills : skills.filter(function(s) { return s.category === filter; });
   if (!filtered.length) return '<div style="padding:12px;font-size:13px;color:var(--text-light);">该分类暂无 skill</div>';
   return filtered.map(function(s) {
-    var catIcon = {'scRNA-seq':'🔬','scATAC-seq':'🧬','空间转录组':'🗺️','Bulk RNA-seq':'📊','表观/甲基化':'🧪','蛋白/代谢':'💧','微生物/基因组':'🦠','多组学整合':'🔗','报告/工具':'📄','文献/检索':'📚','数据库查询':'🗄️','药物/临床':'💊','内置':'⚙️'}[s.category] || '📂';
+    var catIcon = {'scRNA':'🔬','scATAC':'🧬','Spatial':'🗺️','Bulk RNA':'📊','Proteomics':'💧','Drug Discovery':'💊','Microbiome':'🦠','Multi-omics':'🔗','Clinical':'🏥','GWAS/Genetics':'🧬','Data Query':'🗄️','Literature':'📚','Visualization':'📄','General Utility':'⚙️','Immunology':'🛡️','Mol Bio':'🧫','Assay/Wet Lab':'🧪','Bioimaging':'📷','Histology/Pathology':'🔬','Structural Biology':'🧬'}[s.category] || '📂';
     var toggleBtn = s.disabled
       ? '<button class="skill-toggle-btn" onclick="event.stopPropagation();toggleSkill(\'' + s.name + '\', this)" style="background:#27ae60;color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;">启用</button>'
       : '<button class="skill-toggle-btn" onclick="event.stopPropagation();toggleSkill(\'' + s.name + '\', this)" style="background:#e74c3c;color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;">禁用</button>';
