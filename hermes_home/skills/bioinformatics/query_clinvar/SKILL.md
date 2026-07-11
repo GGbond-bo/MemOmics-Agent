@@ -1,7 +1,7 @@
 ---
 name: query_clinvar
 description: "Convert a natural language prompt into a structured ClinVar search query and run it."
-when_to_use: "[query_clinvar] Convert a natural language prompt into a structured ClinVar search query and run it."
+when_to_use: "[query_clinvar] ClinVar临床变异数据库：基因/变异→ClinVar→致病性分类→临床意义→文献证据"
 version: 1.0.0
 author: MemOmics
 license: MIT
