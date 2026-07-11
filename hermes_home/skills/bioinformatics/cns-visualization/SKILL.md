@@ -11,7 +11,7 @@ metadata:
     tags: [visualization, cns, ggplot2, umap, dotplot, 07_可视化]
     difficulty: basic
     language: R+Python
-    category: visualization
+    category: Visualization
 prerequisites:
   r_packages: []
   python_packages: []

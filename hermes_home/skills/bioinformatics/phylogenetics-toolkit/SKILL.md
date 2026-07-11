@@ -1,7 +1,7 @@
 ---
 name: Phylogenetics Toolkit
 description: Phylogenetic tree construction and analysis toolkit
-category: genomics
+category: GWAS/Genetics
 tags: [phylogenetics, tree, evolution]
 when_to_use: "系统发育分析工具包：序列比对→建树(ML/NJ/MP)→树可视化→进化距离→祖先重建"
 ---

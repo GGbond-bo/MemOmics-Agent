@@ -11,7 +11,7 @@ metadata:
     tags: [html, report, 文献报告, 图文报告, 报告]
     difficulty: beginner
     language: Python
-    category: visualization
+    category: Visualization
 prerequisites:
   r_packages: []
   python_packages: ["jinja2", "PyMuPDF", "Pillow"]

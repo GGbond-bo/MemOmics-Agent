@@ -11,7 +11,7 @@ metadata:
     tags: [cellchat, cell-communication, ligand-receptor, 03_高级分析]
     difficulty: intermediate
     language: R
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["CellChat", "Seurat", "NMF", "reticulate"]
   python_packages: ["cellchat"]

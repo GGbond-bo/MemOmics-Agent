@@ -11,7 +11,7 @@ metadata:
     tags: [meta, skill, search, find, 技能, 搜索技能, 有没有, 元技能]
     difficulty: beginner
     language: Python
-    category: meta
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

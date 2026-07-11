@@ -11,7 +11,7 @@ metadata:
     tags: [computer-use, desktop, automation, screenshot, mouse, keyboard, window-management, ocr, 电脑控制]
     difficulty: basic
     language: Python
-    category: system
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

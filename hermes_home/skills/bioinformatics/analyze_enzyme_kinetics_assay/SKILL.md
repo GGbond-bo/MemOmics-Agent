@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: multi_omics
+    category: Assay/Wet Lab
 prerequisites:
   r_packages: []
   python_packages: []

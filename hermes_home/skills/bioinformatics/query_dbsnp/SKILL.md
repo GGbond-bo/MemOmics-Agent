@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: data_retrieval
+    category: Data Query
 prerequisites:
   r_packages: []
   python_packages: []

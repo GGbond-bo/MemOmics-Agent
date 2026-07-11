@@ -3,7 +3,7 @@ id: "skill_4fd6fa5f7294443f987c36586080b69f"
 name: "cell-cell-communication"
 when_to_use: "[cell-cell-communication] 需使用cell cell communication功能，适用于相关生信分析场景"
 display-name: "Cell-Cell Communication Analysis (CellChat)"
-category: transcriptomics
+category: scRNA
 short-description: "Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis."
 detailed-description: "Analyze intercellular communication from annotated single-cell RNA-seq data using CellChat v2. Infers ligand-receptor interactions between cell populations, builds communication probability networks, computes signaling pathway activity, and identifies dominant sender/receiver/mediator roles. Generates chord diagrams, network plots, bubble plots, and signaling role heatmaps. Accepts Seurat objects directly — chains from scrnaseq-seurat-core-analysis."
 starting-prompt: Analyze cell-cell communication from my scRNA-seq data using CellChat to identify ligand-receptor interactions and signaling networks between cell types.

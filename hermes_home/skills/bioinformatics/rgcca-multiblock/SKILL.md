@@ -1,7 +1,7 @@
 ---
 name: RGCCA Multiblock Analysis
 description: Regularized Generalized Canonical Correlation Analysis for multi-omics
-category: multi_omics
+category: Multi-omics
 tags: [rgcca, multiblock, integration]
 when_to_use: "RGCCA多组学整合分析：多个数据块→正则化典型相关→共享变异→跨组学关联→组分可视化"
 ---

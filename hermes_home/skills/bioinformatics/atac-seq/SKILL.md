@@ -11,7 +11,7 @@ metadata:
     tags: [atac-seq, archr, chromatin, peak-calling, scATAC, epigenomics, 05_表观组学]
     difficulty: advanced
     language: R
-    category: epigenomics
+    category: scATAC
 prerequisites:
   r_packages: ["ArchR", "Signac", "Seurat", "chromVAR", "motifmatchr", "ChIPseeker", "BSgenome.Hsapiens.UCSC.hg38"]
   python_packages: ["MACS2"]

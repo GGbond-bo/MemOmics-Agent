@@ -11,7 +11,7 @@ metadata:
     tags: [ppt, presentation, svg, slide, powerpoint, 报告]
     difficulty: intermediate
     language: Python
-    category: visualization
+    category: Visualization
 prerequisites:
   r_packages: []
   python_packages: ["python-pptx", "Pillow", "PyMuPDF"]

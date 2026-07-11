@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python/R
-    category: general
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

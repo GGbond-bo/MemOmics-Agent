@@ -4,7 +4,7 @@ name: "data-analysis-best-practices"
 when_to_use: "[data-analysis-best-practices] 需使用data analysis best practices功能，适用于相关生信分析场景"
 display-name: "Best practices for data analyses"
 short-description: "Best practices for data analyses with focused on user supplied data."
-category: "data_analysis"
+category: General Utility
 visibility: "internal"
 keywords: "data analysis, data validation, handling duplicates, missing data, data quality"
 version: "1.0"

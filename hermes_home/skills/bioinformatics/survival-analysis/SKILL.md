@@ -11,7 +11,7 @@ metadata:
     tags: [survival, KM, cox, risk-score, 04_临床分析]
     difficulty: intermediate
     language: R+Python
-    category: clinical
+    category: Clinical
 prerequisites:
   r_packages: ["survival", "survminer", "forestplot", "timeROC"]
   python_packages: ["lifelines", "scikit-survival"]

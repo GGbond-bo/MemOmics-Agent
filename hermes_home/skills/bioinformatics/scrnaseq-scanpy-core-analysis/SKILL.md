@@ -3,7 +3,7 @@ id: "skill_e4c50152a70f4d6fa8a4802573755f54"
 name: "scrnaseq-scanpy-core-analysis"
 when_to_use: "[scrnaseq-scanpy-core-analysis] Scanpy单细胞核心分析：10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释"
 display-name: "Single-Cell RNA-seq Core Analysis (Scanpy)"
-category: transcriptomics
+category: scRNA
 short-description: "Complete single-cell RNA-seq analysis using Scanpy from raw data to cell type annotation with clustering and visualization."
 detailed-description: "Complete single-cell RNA-seq analysis using Scanpy from raw data to cell type annotation. Use when you have 10X Chromium, Drop-seq, or other scRNA-seq data requiring QC, normalization, clustering, and visualization. Implements current best practices including ambient RNA correction (CellBender), batch-aware adaptive QC (MAD), doublet detection (Scrublet), standard or Pearson residuals normalization, batch integration (scVI/Harmony), multi-resolution Leiden clustering, and pseudobulk differential expression for condition comparisons. Best for human or mouse data with 500+ cells per sample. Produces publication-ready plots and annotated AnnData objects."
 starting-prompt: "Analyze single-cell RNA-seq data with Scanpy from QC through cell type annotation. Generate a PDF report with an intro, methods, results, conclusions and figures from all of the analyses you perform."

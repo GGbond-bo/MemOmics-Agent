@@ -11,7 +11,7 @@ metadata:
     tags: [research, experiment, design, 实验设计, 方案, 研究设计]
     difficulty: advanced
     language: Python
-    category: literature
+    category: Literature
 prerequisites:
   r_packages: []
   python_packages: []

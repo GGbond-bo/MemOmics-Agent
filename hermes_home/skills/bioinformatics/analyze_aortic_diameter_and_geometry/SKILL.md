@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: clinical
+    category: Clinical
 prerequisites:
   r_packages: []
   python_packages: []

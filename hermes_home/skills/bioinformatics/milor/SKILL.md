@@ -11,7 +11,7 @@ metadata:
     tags: [milo, differential-abundance, neighborhood, 03_高级分析]
     difficulty: intermediate
     language: R
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["miloR", "Seurat", "edgeR"]
   python_packages: ["milo-py"]

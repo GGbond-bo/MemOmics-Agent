@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: visualization
+    category: Visualization
 prerequisites:
   r_packages: []
   python_packages: []

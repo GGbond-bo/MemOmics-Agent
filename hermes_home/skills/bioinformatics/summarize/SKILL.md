@@ -11,7 +11,7 @@ metadata:
     tags: [meta, summary, summarize, 总结, 摘要, 概览, 要点, 归纳, 元技能]
     difficulty: beginner
     language: Python
-    category: meta
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

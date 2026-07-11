@@ -3,7 +3,7 @@ id: "skill_7f4da97222334fba9984eab5b78eb392"
 name: "chip-atlas-diff-analysis"
 when_to_use: "[chip-atlas-diff-analysis] 有ChIP-Atlas实验组/对照组peak数据，需做差异peak分析，找出组间显著变化peak的基因组位置和邻近基因"
 display-name: "ChIP-Atlas Diff Analysis"
-category: epigenomics
+category: scATAC
 short-description: "Compare two groups of ChIP/ATAC/DNase-seq or Bisulfite-seq experiments to identify differential peak regions (DPR) or differentially methylated regions (DMR) via the ChIP-Atlas API."
 detailed-description: "Submit two groups of experiment accession IDs to ChIP-Atlas Diff Analysis API, which uses edgeR for differential peak regions (DPR) and metilene for differentially methylated regions (DMR). Returns BED files with genomic coordinates, logFC, p-values, and FDR-corrected q-values. Supports 10 genomes: human (hg38, hg19), mouse (mm10, mm9), rat (rn6), fly (dm6, dm3), worm (ce11, ce10), yeast (sacCer3)."
 starting-prompt: Compare two sets of ChIP-seq experiments to find differential peaks using ChIP-Atlas.

@@ -11,7 +11,7 @@ metadata:
     tags: [meta, skill, create, 生成技能, 创建技能, skill不存在, not found, 新建skill]
     difficulty: advanced
     language: Python
-    category: meta
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

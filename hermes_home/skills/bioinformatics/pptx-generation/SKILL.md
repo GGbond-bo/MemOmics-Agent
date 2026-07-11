@@ -3,7 +3,7 @@ id: "skill_a0ffd6a768fa4c1f9ed4ce21bceb41d3"
 name: "pptx-generation"
 display-name: "Best practices for presentation generation"
 short-description: "Generate professional, Phylo-branded PowerPoint presentations from scientific analysis results using python-pptx."
-category: "reporting"
+category: Visualization
 visibility: "internal"
 keywords: "PowerPoint, pptx, slides, presentation, python-pptx, Phylo, scientific, figures, charts"
 version: "1.0"

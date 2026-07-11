@@ -11,7 +11,7 @@ metadata:
     tags: [ml, classification, LASSO, random-forest, SVM, SHAP, 04_临床分析]
     difficulty: advanced
     language: Python
-    category: machine_learning
+    category: General Utility
 prerequisites:
   r_packages: ["caret", "glmnet", "randomForest", "e1071", "pROC", "shapviz"]
   python_packages: ["scikit-learn", "xgboost", "shap", "optuna"]

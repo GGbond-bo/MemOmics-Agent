@@ -3,7 +3,7 @@ id: "skill_49bf9e9135264577947c33033a39160c"
 name: "docx-generation"
 display-name: "Best practices for Word document generation"
 short-description: "Generate professional, Phylo-branded Word documents (.docx) using python-docx."
-category: "reporting"
+category: Visualization
 visibility: "internal"
 keywords: "Word, docx, document, python-docx, Phylo, scientific, tables, figures, editable"
 version: "1.0"

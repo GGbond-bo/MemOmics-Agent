@@ -11,7 +11,7 @@ metadata:
     tags: [trajectory, pseudotime, monocle3, slingshot, 03_高级分析]
     difficulty: advanced
     language: R+Python
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["monocle3", "SeuratWrappers"]
   python_packages: ["scvelo", "cellrank", "scanpy"]

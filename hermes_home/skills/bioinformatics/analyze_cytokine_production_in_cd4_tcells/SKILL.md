@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: immunology
+    category: Immunology
 prerequisites:
   r_packages: []
   python_packages: []

@@ -11,7 +11,7 @@ metadata:
     tags: [hdwgcna, wgcna, co-expression, module, 03_高级分析]
     difficulty: advanced
     language: R
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["hdWGCNA", "Seurat", "WGCNA", "igraph"]
   python_packages: []

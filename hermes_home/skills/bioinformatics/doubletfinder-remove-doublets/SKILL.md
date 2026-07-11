@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: R
-    category: decontamination
+    category: scRNA
 prerequisites:
   r_packages: []
   python_packages: []

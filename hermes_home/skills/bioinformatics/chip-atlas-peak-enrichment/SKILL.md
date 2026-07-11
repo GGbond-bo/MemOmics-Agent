@@ -3,7 +3,7 @@ id: "skill_dd3e525ed3e84cb9a73aa45781117110"
 name: "chip-atlas-peak-enrichment"
 when_to_use: "[chip-atlas-peak-enrichment] ChIP-Atlas peak富集分析：peak列表→基因组区域注释→motif富集→GO/KEGG通路富集→调控网络"
 display-name: "ChIP-Atlas Peak Enrichment"
-category: epigenomics
+category: scATAC
 short-description: "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the ChIP-Atlas API."
 detailed-description: "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the official ChIP-Atlas Enrichment Analysis API. Submits gene lists for Fisher's exact test enrichment with Benjamini-Hochberg Q-values against all public ChIP-seq data. Generates 4-panel visualization. Supports 10 genomes - human (hg38, hg19), mouse (mm10, mm9), rat (rn6), fly (dm6, dm3), worm (ce11, ce10), yeast (sacCer3)."
 starting-prompt: Find ChIP-seq peak enrichment near my genes using ChIP-Atlas database . .

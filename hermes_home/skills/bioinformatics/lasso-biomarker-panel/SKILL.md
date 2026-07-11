@@ -3,7 +3,7 @@ id: "skill_024b2165ef874c1aa509a07168b27d98"
 name: "lasso-biomarker-panel"
 when_to_use: "[lasso-biomarker-panel] LASSO生物标志物筛选：表达矩阵+分组→LASSO回归→特征选择→标志物panel→ROC评估"
 display-name: "LASSO Biomarker Panel Discovery & Validation"
-category: multi_omics
+category: scRNA
 short-description: "Select minimal biomarker panels using LASSO regularization with nested cross-validation, stability selection, and independent cohort validation."
 detailed-description: "Build parsimonious biomarker panels (5-15 features) from high-dimensional omics data using penalized logistic regression (elastic net) with nested cross-validation and stability selection. Produces ROC/AUC curves, calibration plots, and feature importance visualizations suitable for clinical exploratory endpoint submissions. Supports discovery/validation cohort design following Ali et al. (Nat Med 2025) methodology. Works with RNA-seq, proteomics, or any quantitative feature matrix with binary outcomes."
 starting-prompt: Build a LASSO biomarker panel to predict treatment response from gene expression data.

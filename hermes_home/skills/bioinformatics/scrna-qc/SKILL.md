@@ -11,7 +11,7 @@ metadata:
     tags: [qc, doublet, ambient-rna, scRNA-seq, 01_质控]
     difficulty: basic
     language: R+Python
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["Seurat", "patchwork", "ggplot2", "dplyr"]
   python_packages: ["scanpy", "matplotlib", "harmonypy"]

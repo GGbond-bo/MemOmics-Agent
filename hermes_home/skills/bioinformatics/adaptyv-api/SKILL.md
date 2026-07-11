@@ -4,7 +4,7 @@ name: "adaptyv-api"
 when_to_use: "[adaptyv-api] 需使用adaptyv api功能，适用于相关生信分析场景"
 display-name: "Adaptyv Bio Foundry API Reference"
 short-description: "Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv."
-category: "integration"
+category: Multi-omics
 visibility: "internal"
 keywords: "adaptyv, protein characterization, binding assay, BLI, SPR, thermostability, expression, affinity, experiment, foundry"
 version: "1.0"

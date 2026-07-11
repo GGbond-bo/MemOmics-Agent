@@ -11,7 +11,7 @@ metadata:
     tags: [deg, DESeq2, pseudobulk, differential-expression, 03_高级分析]
     difficulty: intermediate
     language: R+Python
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["DESeq2", "Seurat", "edgeR", "clusterProfiler", "org.Hs.eg.db", "org.Mm.eg.db"]
   python_packages: ["scanpy", "diffxpy"]

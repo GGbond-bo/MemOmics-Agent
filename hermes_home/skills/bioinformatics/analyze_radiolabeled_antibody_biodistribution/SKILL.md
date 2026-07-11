@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: drug_discovery
+    category: Imaging
 prerequisites:
   r_packages: []
   python_packages: []

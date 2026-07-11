@@ -11,7 +11,7 @@ metadata:
     tags: [aging, senescence, 04_aging]
     difficulty: basic
     language: R+Python
-    category: aging
+    category: scRNA
 prerequisites:
   r_packages: ["Seurat", "UCell", "AUCell"]
   python_packages: ["scanpy", "gseapy"]

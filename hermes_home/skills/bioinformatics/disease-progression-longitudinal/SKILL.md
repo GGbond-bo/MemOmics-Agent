@@ -3,7 +3,7 @@ id: "skill_26fd7b7e1ad64ad89d97bb183182d4f0"
 name: "disease-progression-longitudinal"
 when_to_use: "[disease-progression-longitudinal] 疾病进展纵向分析：多样本时间点→轨迹分析→疾病动态→进展标志物→早期预警"
 display-name: "Disease Progression Trajectory Analysis"
-category: multi_omics
+category: Clinical
 short-description: Reconstruct disease progression trajectories from longitudinal patient omics data.
 detailed-description: Analyze time-series patient data (RNA-seq, proteomics, metabolomics) to reconstruct consensus disease trajectories using TimeAx multiple alignment. Orders samples by disease pseudotime, identifies trajectory-associated features, and validates against clinical outcomes. Handles irregular sampling patterns and works with cross-sectional or longitudinal cohorts.
 starting-prompt: Analyze disease progression trajectories from longitudinal patient omics data

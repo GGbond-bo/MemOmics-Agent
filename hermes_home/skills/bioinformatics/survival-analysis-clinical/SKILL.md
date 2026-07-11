@@ -3,7 +3,7 @@ id: "skill_827c499e76084524a2e098d80383a3a4"
 name: "survival-analysis-clinical"
 when_to_use: "[survival-analysis-clinical] 临床生存分析：临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物"
 display-name: "Clinical Survival & Outcome Analysis"
-category: multi_omics
+category: Clinical
 short-description: "Perform Kaplan-Meier estimation, Cox proportional hazards regression, and risk stratification from clinical time-to-event data."
 detailed-description: "Analyze clinical survival outcomes using Kaplan-Meier estimation with log-rank tests, Cox proportional hazards regression with automatic covariate selection, proportional hazards assumption testing (Schoenfeld residuals), and risk stratification (median/tertile/quartile split). Produces publication-quality survival curves with risk tables, forest plots of hazard ratios, and diagnostic plots. Supports TCGA, clinical trial, and real-world evidence datasets. Exports risk scores and analysis objects (RDS) for downstream integration with biomarker panel discovery and multi-omics stratification."
 starting-prompt: Run a survival analysis on breast cancer clinical data to identify prognostic factors and stratify patients by risk. Generate a PDF report with an intro, methods, results, conclusions and figures from all of the analyses you perform.

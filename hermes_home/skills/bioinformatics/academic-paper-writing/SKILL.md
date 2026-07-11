@@ -11,7 +11,7 @@ metadata:
     tags: [academic-paper, writing, 论文写作, 研究设计]
     difficulty: advanced
     language: Python
-    category: literature
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

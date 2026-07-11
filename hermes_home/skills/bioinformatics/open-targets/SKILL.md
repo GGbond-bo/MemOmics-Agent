@@ -2,7 +2,7 @@
 id: open-targets
 name: Open Targets Platform (GraphQL API)
 when_to_use: "[open-targets] Open Targets平台查询：疾病/靶点→靶点-疾病关联证据→遗传/组学/文献→药物开发管线"
-category: drug_discovery
+category: Drug Discovery
 short-description: Query the Open Targets Platform GraphQL API for target–disease associations, evidence, and annotations supporting drug target identification.
 detailed-description: Query the Open Targets Platform GraphQL API for drug target identification, validation, and prioritisation in human disease. Use whenever the user asks about target–disease associations, evidence linking a gene to a disease, gene/protein annotations relevant to drug discovery (tractability, essentiality, baseline expression, genetic constraint, safety liabilities, FAERS adverse events), disease annotations (ontology, known drugs, associated targets), drug/compound info (mechanism of action, indications, clinical trial phase), GWAS variants and studies, credible sets, colocalisation, or Locus-to-Gene (L2G) predictions — even if they don't say "Open Targets" by name. Also use when they mention Ensembl gene IDs (ENSG…), EFO disease IDs (EFO_…), ChEMBL drug IDs, or GWAS Catalog study IDs (GCST…) in a drug discovery context. Do NOT use for non-human biology, general literature search, or bulk extraction across many entities (point users to FTP/BigQuery downloads).
 starting-prompt: "What targets are most strongly associated with Alzheimer's disease in Open Targets, and what evidence types support the top hits? . . "

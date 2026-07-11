@@ -1,7 +1,7 @@
 ---
 name: microplate-layout-design
 when_to_use: "[microplate-layout-design] 需使用microplate layout design功能，适用于相关生信分析场景"
-category: experimental_design
+category: General Utility
 short-description: "Design optimized microplate layouts with randomization, edge effect mitigation, and covariate balancing."
 detailed-description: "Generate optimized well-plate layouts that minimize positional bias, handle edge effects, balance covariates, and distribute controls across the plate. Exports lab-ready plate maps (images, CSV, Excel) and educates users on common design pitfalls."
 starting-prompt: "Design a randomized 96-well plate layout for a dose-response experiment. Generate a PDF report with an intro, methods, results, conclusions and figures from all of the analyses you perform."

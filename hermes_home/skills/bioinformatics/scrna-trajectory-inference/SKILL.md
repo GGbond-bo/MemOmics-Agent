@@ -2,7 +2,7 @@
 id: "skill_9971a7d3e3134ee9acc25ba3d0e1fdae"
 name: "scrna-trajectory-inference"
 display-name: "Single-Cell Trajectory Inference"
-category: transcriptomics
+category: scRNA
 description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data using PAGA, DPT, scVelo, CellRank, and scTour."
 when_to_use: "[scrna-trajectory-inference] 单细胞轨迹推断与拟时序分析：RNA velocity→Monocle3/Slingshot→分化轨迹→命运决定"
 short-description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data."

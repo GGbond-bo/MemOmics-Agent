@@ -11,7 +11,7 @@ metadata:
     tags: [immune, deconvolution, cibersort, xcell, 04_免疫分析]
     difficulty: intermediate
     language: R+Python
-    category: immunology
+    category: Immunology
 prerequisites:
   r_packages: ["CIBERSORTx", "IOBR", "GSVA"]
   python_packages: ["cibersortx-py"]

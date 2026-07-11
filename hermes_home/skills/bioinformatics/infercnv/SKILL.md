@@ -11,7 +11,7 @@ metadata:
     tags: [infercnv, cnv, tumor, malignant, 05_基因组学]
     difficulty: basic
     language: R
-    category: genomics
+    category: GWAS/Genetics
 prerequisites:
   r_packages: []
   python_packages: []

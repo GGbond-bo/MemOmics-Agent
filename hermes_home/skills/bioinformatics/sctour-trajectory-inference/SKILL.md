@@ -11,7 +11,7 @@ metadata:
     tags: [trajectory, pseudotime, sctour, VAE, vector-field, latent-space, 03_高级分析]
     difficulty: advanced
     language: Python
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   python_packages:
     - sctour

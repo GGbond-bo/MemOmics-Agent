@@ -3,7 +3,7 @@ id: "skill_51a601b71a454a00aa0d378fe8e3205c"
 name: "bulk-omics-clustering"
 when_to_use: "[bulk-omics-clustering] Bulk组学样本聚类：bulk RNA表达矩阵→PCA/t-SNE/UMAP→样本分群→WGCNA共表达网络→模块-性状关联"
 display-name: "Bulk Omics Clustering Analysis"
-category: multi_omics
+category: Bulk RNA
 short-description: Cluster samples or features from bulk transcriptomics, proteomics, or metabolomics data.
 detailed-description: Perform systematic clustering analysis on biological data matrices (samples or features) using multiple algorithms with rigorous validation and interpretation. Use when you need to identify natural groupings in expression data, discover biological subtypes, group genes by expression patterns, or compare clustering methods. Supports hierarchical, k-means, HDBSCAN, and Gaussian mixture models. Includes optimal cluster number determination, quality validation, stability testing, and comprehensive visualization. Best for bulk transcriptomics, proteomics, metabolomics, or any quantitative data matrix with 10+ samples/features.
 starting-prompt: Cluster my samples by gene expression to identify biological subtypes . .

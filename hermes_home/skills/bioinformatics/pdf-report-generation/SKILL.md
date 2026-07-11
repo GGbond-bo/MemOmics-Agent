@@ -3,7 +3,7 @@ id: "skill_89a81caf3c33403c8707b27722481796"
 name: "pdf-report-generation"
 display-name: "PDF Report Generation"
 short-description: "Generate professional, Phylo-branded PDF reports from scientific analysis results using ReportLab."
-category: "reporting"
+category: Visualization
 visibility: "internal"
 keywords: "PDF, report, ReportLab, scientific, figures, tables, charts"
 version: "1.0"

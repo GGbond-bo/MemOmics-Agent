@@ -11,7 +11,7 @@ metadata:
     tags: [, 04_个性化分析]
     difficulty: basic
     language: Python
-    category: drug_discovery
+    category: Drug Discovery
 prerequisites:
   r_packages: []
   python_packages: []

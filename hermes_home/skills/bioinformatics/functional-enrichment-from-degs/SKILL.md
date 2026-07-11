@@ -3,7 +3,7 @@ id: "skill_eb2ad58c6e5a40fa9328874443eef99d"
 name: "functional-enrichment-from-degs"
 when_to_use: "[functional-enrichment-from-degs] DEG功能富集一键分析：DEG表(logFC/p-value)→GO/KEGG/MSigDB富集→气泡图/网络图→通路解读"
 display-name: "Functional Enrichment Analysis (GSEA + ORA)"
-category: functional_analysis
+category: Bulk RNA
 short-description: Perform functional enrichment analysis using clusterProfiler on differential expression results with GSEA and ORA.
 detailed-description: Perform functional enrichment analysis using clusterProfiler on differential expression results with GSEA and ORA. Use when you have DE results with log2 fold changes and want to identify enriched biological pathways, GO terms, or gene sets. Supports MSigDB (Hallmark, KEGG, Reactome, GO), human and mouse data. GSEA (default, uses all ranked genes) detects coordinated pathway changes without arbitrary cutoffs. ORA (optional, uses significant gene lists) provides intuitive validation. Best for exploratory pathway analysis after DE testing.
 starting-prompt: Perform functional enrichment analysis on my differential expression results . . 

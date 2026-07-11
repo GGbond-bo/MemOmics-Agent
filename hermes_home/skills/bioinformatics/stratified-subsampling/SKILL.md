@@ -10,7 +10,7 @@ metadata:
     tags: [subsampling, stratified, umap, visualization, train-test-split, scrna]
     difficulty: basic
     language: R+Python
-    category: bioinformatics
+    category: scRNA
 prerequisites:
   r_packages: [Seurat, ggplot2, dplyr]
   python_packages: [scanpy, anndata, numpy]

@@ -1,7 +1,7 @@
 ---
 name: sgRNA Design
 description: CRISPR sgRNA design with three-tiered scoring
-category: functional_genomics
+category: Mol Bio
 tags: [crispr, sgrna, design]
 when_to_use: "sgRNA设计：基因序列→CRISPR靶点扫描→效率+脱靶评分→最优sgRNA推荐→文库设计"
 ---

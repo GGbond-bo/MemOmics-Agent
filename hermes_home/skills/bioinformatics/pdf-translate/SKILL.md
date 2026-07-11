@@ -11,7 +11,7 @@ metadata:
     tags: [translate, pdf, 翻译, 中英文, 公式保留, 排版保留, pdf2zh, PDFMathTranslate, 文献翻译]
     difficulty: basic
     language: Python
-    category: literature
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: ["pdf2zh>=1.7.0"]

@@ -11,7 +11,7 @@ metadata:
     tags: [clustering, SCTransform, UMAP, leiden, annotation, 02_基础分析]
     difficulty: basic
     language: R+Python
-    category: transcriptomics
+    category: scRNA
 prerequisites:
   r_packages: ["SingleR", "celldex", "Seurat"]
   python_packages: ["scanpy", "celltypist"]

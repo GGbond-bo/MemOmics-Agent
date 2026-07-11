@@ -3,7 +3,7 @@ id: "skill_97fe00d84ed84cb784c5c4dc3e0478ab"
 name: "scrnaseq-seurat-core-analysis"
 when_to_use: "[scrnaseq-seurat-core-analysis] Seurat v5单细胞分析：scRNA数据→SCTransform v2→整合(Harmony/CCA)→聚类→UMAP→marker→注释→差异分析"
 display-name: "Single-Cell RNA-seq Core Analysis (Seurat)"
-category: transcriptomics
+category: scRNA
 short-description: Complete single-cell RNA-seq analysis using Seurat from raw data to cell type annotation with clustering and visualization.
 detailed-description: Complete single-cell RNA-seq analysis using Seurat v5 from raw data to cell type annotation. Use when you have 10X Chromium, Drop-seq, or other scRNA-seq data requiring QC, normalization, clustering, and visualization. Implements current best practices including ambient RNA correction (SoupX), batch-aware adaptive QC (MAD), doublet detection (DoubletFinder), SCTransform normalization, batch integration (Harmony/CCA), multi-resolution clustering, and pseudobulk differential expression for condition comparisons. Best for human or mouse data with 500+ cells per sample. Produces publication-ready plots and annotated Seurat objects.
 starting-prompt: "Analyze my single-cell RNA-seq data using Seurat from QC through cell type annotation. Generate a PDF report with an intro, methods, results, conclusions and figures from all of the analyses you perform."

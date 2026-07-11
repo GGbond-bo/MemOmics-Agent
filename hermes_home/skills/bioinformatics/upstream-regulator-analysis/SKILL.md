@@ -3,7 +3,7 @@ id: "skill_cf9489278b984eef91e08a40b68943be"
 name: "upstream-regulator-analysis"
 when_to_use: "[upstream-regulator-analysis] 上游调控因子分析：差异基因→Ingenuity/DecoupleR→激活/抑制调控因子→机制推测"
 display-name: "Upstream Regulator Analysis"
-category: multi_omics
+category: scRNA
 short-description: "Integrate ChIP-Atlas TF binding data with RNA-seq differential expression to identify upstream regulators driving transcriptomic changes."
 detailed-description: "Identifies transcription factors driving differential expression by integrating ChIP-Atlas peak enrichment (433,000+ public ChIP-seq experiments) with RNA-seq DE results. Submits DE gene lists to ChIP-Atlas API, downloads target gene lists for top enriched TFs, computes Fisher's exact test for target-DE overlap, measures directional concordance (activator vs repressor), and ranks TFs by a combined regulatory score. Supports 10 genomes including human (hg38, hg19), mouse (mm10, mm9), rat (rn6), and model organisms."
 starting-prompt: Identify upstream regulators driving my differential expression results using ChIP-Atlas binding data . .

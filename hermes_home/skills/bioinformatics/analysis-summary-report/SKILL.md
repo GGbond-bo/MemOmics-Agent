@@ -1,7 +1,7 @@
 ---
 name: Analysis Summary Report
 description: Generate comprehensive analysis summary reports
-category: reporting
+category: General Utility
 tags: [report, summary]
 when_to_use: "生成分析总结报告：分析完成→自动汇总结果→生成综合报告→含图表/表格/结论"
 ---

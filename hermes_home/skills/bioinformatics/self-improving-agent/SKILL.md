@@ -11,7 +11,7 @@ metadata:
     tags: [meta, evolution, self-improving, learn, 自进化, 自我改进, 经验沉淀, 技能生成, 元技能]
     difficulty: advanced
     language: Python
-    category: meta
+    category: General Utility
 prerequisites:
   r_packages: []
   python_packages: []

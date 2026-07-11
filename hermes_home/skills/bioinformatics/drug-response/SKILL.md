@@ -11,7 +11,7 @@ metadata:
     tags: [drug, cmap, pharmacogenomics, 06_药物发现]
     difficulty: advanced
     language: Python
-    category: drug_discovery
+    category: Drug Discovery
 prerequisites:
   r_packages: ["pRRophetic", "oncoPredict", "GSVA"]
   python_packages: ["cmapPy"]

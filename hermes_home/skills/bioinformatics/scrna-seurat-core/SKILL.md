@@ -1,7 +1,7 @@
 ---
 name: scrna-seurat-core-memomics
 display-name: Single-Cell RNA-seq Core Analysis (Seurat)
-category: transcriptomics
+category: scRNA
 short-description: Complete single-cell RNA-seq analysis using Seurat from raw data
   to cell type annotation with clustering and visualization.
 description: Single-cell RNA-seq analysis using Seurat v5 from raw data to cell type
