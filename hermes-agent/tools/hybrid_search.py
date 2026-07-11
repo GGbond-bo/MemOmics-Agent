@@ -310,6 +310,21 @@ class HybridMatcher:
             except Exception:
                 pass
         
+
+        # === Layer 3: Directory name direct match (fallback) ===
+        if not results:
+            # Scan all subdirectories for partial name match
+            import glob as _glob
+            skill_dirs = {}
+            for _sf in _glob.glob(os.path.join(self.skills_dir, '*', 'SKILL.md')):
+                _dn = os.path.basename(os.path.dirname(_sf))
+                _sn = _dn.lower()
+                # Score based on how many query words match the dir name
+                _qw = [w.lower() for w in query.split() if len(w) >= 3]
+                _hits = sum(1 for w in _qw if w in _sn)
+                if _hits > 0:
+                    score = 0.3 * _hits / max(len(_qw), 1)
+                    results[_dn] = {'score': score, 'source': 'dir_match'}
         # === Sort by score ===
         sorted_results = sorted(results.items(), key=lambda x: -x[1]['score'])
         

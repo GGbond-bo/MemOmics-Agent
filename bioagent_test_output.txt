@@ -1,0 +1,8 @@
+============================================================
+  BioAgent Bench — MemOmics-Agent Evaluation
+  Target: ws://localhost:8899/ws
+  Data: E:/bioagent-bench/tasks/single-cell/data
+  Tasks: 8
+============================================================
+
+[1/8] T1_cognitive_plan: 分析规划...
