@@ -522,7 +522,9 @@ def _classify_intent(text: str):
     BIO_KW = ["分析", "跑", "做", "执行", "计算", "画图", "出图",
               "处理", "统计", "差异", "富集", "聚类", "降维", "注释",
               "数据", "基因", "细胞", "表达", "qc", "deg", "rna", "atac",
-              "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物"]
+              "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物",
+              "umap", "tsne", "可视化", "热图", "火山图", "小提琴图", "散点图",
+              "轨迹", "通路", "通讯", "调控", "模块"]
     has_chat = any(kw in t for kw in CHAT_KW)
     has_bio = any(kw in t for kw in BIO_KW)
     if has_chat and not has_bio:
@@ -533,8 +535,8 @@ def _classify_intent(text: str):
     # === Priority 3: research_plan (literature-driven plan design) ===
     # 先检查 plan_refine 关键词（如'生成方案'），避免被 PLAN_KW 抢先
     REFINE_KW = ["生成方案", "出方案", "出完整方案", "出研究方案", "生成研究方案",
-                 "开始做", "做吧", "按这个做", "照这个", "就按这些", "开始方案",
-                 "帮我写", "制定方案", "写成方案", "做方案", "生成完整", "出完整"]
+                 "开始做", "做吧", "开始方案",
+                 "帮我写", "写成方案", "做方案", "生成完整", "出完整"]
     if any(kw in t for kw in REFINE_KW):
         return ("plan_refine", 0.88, {"phase2": True})
     PLAN_KW = ["设计方案", "出个方案", "出方案", "规划一下", "规划",
@@ -552,6 +554,10 @@ def _classify_intent(text: str):
                "怎么研究", "如何研究", "研究这个", "深入分析",
                "atac.*和.*rna", "rna.*和.*atac", "怎么.*鉴定",
                "表征", "验证这个群", "发育过程", "细胞命运"]
+    # 重新生成/不满意 → force plan_refine (not research_plan)
+    REGEN_KW = ["重新生成", "换个方案", "不满意", "重新设计", "方案不行", "方案不好"]
+    if any(kw in t for kw in REGEN_KW):
+        return ("plan_refine", 0.90, {"regen": True, "reason": "用户不满意当前方案"})
     if any(kw in t for kw in PLAN_KW):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.92, meta)
@@ -567,10 +573,17 @@ def _classify_intent(text: str):
     if ("设计" in t or "制定" in t) and ("方案" in t or "路线" in t or "思路" in t):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.88, meta)
+    # === Priority 3.5: direct_exec (checked before ANALYSIS_INTENT_KW to avoid ambiguity) ===
+    DIRECT_KW_2 = ["直接跑", "直接执行", "直接做", "照这个做", "按这个做",
+                 "参数写好了", "确定了", "代码写好了", "已经写好了",
+                 "就按这个", "只用执行", "照着做", "就做这个", "只做这个",
+                 "就按参数", "就这个参数", "跑一下就行", "直接按"]
+    if any(kw in t for kw in DIRECT_KW_2):
+        return ("direct_exec", 0.90, {"skip_planning": True})
     # 数据分析需求检测：用户说"我要分析/想分析/帮分析XXX" → research_plan
     ANALYSIS_INTENT_KW = [
         "我要分析", "我想分析", "帮我分析", "帮我看", "分析一下",
-        "看看这个数据", "看一下数据", "探索数据", "数据探索",
+        "看看这个数据", "看一下数据", "探索数据", "探索一下", "数据探索",
         "数据分析方案", "分析思路", "该怎么分析", "该怎么办",
         "想分析", "要做分析", "需要分析", "分析需求",
         "研究一下", "看一下数据", "帮我看看",
@@ -582,6 +595,14 @@ def _classify_intent(text: str):
         "蛋白表达", "多组学", "单细胞测序", "空间转录组",
     ]
     if any(kw in t for kw in ANALYSIS_INTENT_KW):
+        # Heuristic: specific tool name + no plan keywords -> analysis
+        TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
+                      "cellchat", "cellbender", "harmony", "scenic", "sctransform",
+                      "velocyto", "diffxpy", "clusterprofiler", "fgsea"]
+        has_tool = any(tool in t for tool in TOOL_NAMES)
+        has_plan = any(kw in t for kw in ["方案","设计","路线","思路","怎么","如何","规划","框架"])
+        if has_tool and not has_plan:
+            return ("analysis", 0.84, {"reason": "specific_tool_no_plan"})
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.82, meta)
     # Questions about HOW to analyze (must fire before lit/kb/report)
@@ -592,13 +613,7 @@ def _classify_intent(text: str):
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.84, meta)
 
-    # === Priority 4: direct_exec (user provides params, skip planning) ===
-    DIRECT_KW = ["直接跑", "直接执行", "直接做", "照这个做", "按这个做",
-                 "参数写好了", "确定了", "代码写好了", "已经写好了",
-                 "就按这个", "只用执行", "照着做", "就做这个", "只做这个",
-                 "就按参数", "就这个参数", "跑一下就行", "直接按"]
-    if any(kw in t for kw in DIRECT_KW):
-        return ("direct_exec", 0.90, {"skip_planning": True})
+
 
     # === Priority 5: report / literature / install (existing intents, preserved) ===
     report_kw = ["html", "报告", "report", "做报告", "生成报告", "分析报告",
