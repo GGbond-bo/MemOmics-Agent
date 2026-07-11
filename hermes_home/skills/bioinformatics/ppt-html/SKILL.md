@@ -1,6 +1,7 @@
 ---
 name: ppt-html
 description: "图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示"
+when_to_use: "已有内容框架，需生成HTML格式的演示文稿（可转PPT），适合快速预览和分享"
 version: 1.0.0
 author: MemOmics
 license: MIT

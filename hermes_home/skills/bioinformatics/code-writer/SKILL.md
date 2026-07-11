@@ -1,6 +1,7 @@
 ---
 name: code-writer
 description: "编写Python/R脚本，数据分析代码，函数封装，程序开发"
+when_to_use: "编写Python/R脚本，数据分析代码，函数封装，程序开发"
 version: 1.0.0
 author: MemOmics
 license: MIT

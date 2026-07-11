@@ -1,6 +1,7 @@
 ---
 name: analyze_crispr_genome_editing
 description: "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences."
+when_to_use: "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: cellbender-remove-background
 description: "CellBender去除环境RNA污染。使用场景：10X raw h5矩阵，怀疑有空滴/环境RNA污染，需GPU环境，输入raw_feature_bc_matrix"
+when_to_use: "CellBender去除环境RNA污染。使用场景：10X raw h5矩阵，怀疑有空滴/环境RNA污染，需GPU环境，输入raw_feature_bc_matrix"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: analyze_atp_luminescence_assay
 description: "Analyze luminescence-based ATP assay data to determine intracellular ATP concentration."
+when_to_use: "Analyze luminescence-based ATP assay data to determine intracellular ATP concentration."
 version: 1.0.0
 author: MemOmics
 license: MIT

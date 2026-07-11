@@ -1,6 +1,7 @@
 ---
 name: query_gtopdb
 description: "Query the Guide to PHARMACOLOGY (GtoPdb) database using natural language or a direct endpoint."
+when_to_use: "Query the Guide to PHARMACOLOGY (GtoPdb) database using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

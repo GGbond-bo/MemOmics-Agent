@@ -1,6 +1,7 @@
 ---
 name: analyze_radiolabeled_antibody_biodistribution
 description: "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies."
+when_to_use: "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies."
 version: 1.0.0
 author: MemOmics
 license: MIT

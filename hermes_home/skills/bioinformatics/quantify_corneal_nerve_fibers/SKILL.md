@@ -1,6 +1,7 @@
 ---
 name: quantify_corneal_nerve_fibers
 description: "Quantify the volume/density of immunofluorescence-labeled corneal nerve fibers."
+when_to_use: "Quantify the volume/density of immunofluorescence-labeled corneal nerve fibers."
 version: 1.0.0
 author: MemOmics
 license: MIT

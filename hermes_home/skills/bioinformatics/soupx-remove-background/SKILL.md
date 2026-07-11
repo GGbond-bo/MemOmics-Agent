@@ -1,6 +1,7 @@
 ---
 name: soupx-remove-background
 description: "SoupX环境RNA去污染: 估计soup → 减法去除"
+when_to_use: "SoupX环境RNA去污染: 估计soup → 减法去除"
 version: 1.0.0
 author: MemOmics
 license: MIT

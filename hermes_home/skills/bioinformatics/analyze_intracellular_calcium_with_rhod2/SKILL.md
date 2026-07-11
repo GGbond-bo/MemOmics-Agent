@@ -1,6 +1,7 @@
 ---
 name: analyze_intracellular_calcium_with_rhod2
 description: "Analyzes intracellular calcium concentration using Rhod-2 fluorescent indicator from microscopy images."
+when_to_use: "Analyzes intracellular calcium concentration using Rhod-2 fluorescent indicator from microscopy images."
 version: 1.0.0
 author: MemOmics
 license: MIT

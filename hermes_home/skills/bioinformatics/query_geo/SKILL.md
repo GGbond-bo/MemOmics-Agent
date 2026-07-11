@@ -1,6 +1,7 @@
 ---
 name: query_geo
 description: "Query the NCBI GEO database (GDS/GEOPROFILES) using natural language or direct search term."
+when_to_use: "Query the NCBI GEO database (GDS/GEOPROFILES) using natural language or direct search term."
 version: 1.0.0
 author: MemOmics
 license: MIT

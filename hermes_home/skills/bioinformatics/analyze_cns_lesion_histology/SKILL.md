@@ -1,6 +1,7 @@
 ---
 name: analyze_cns_lesion_histology
 description: "Analyzes histological images of CNS lesions to quantify immune cell infiltration, demyelination, and tissue damage."
+when_to_use: "Analyzes histological images of CNS lesions to quantify immune cell infiltration, demyelination, and tissue damage."
 version: 1.0.0
 author: MemOmics
 license: MIT

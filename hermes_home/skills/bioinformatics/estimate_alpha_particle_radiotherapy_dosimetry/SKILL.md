@@ -1,6 +1,7 @@
 ---
 name: estimate_alpha_particle_radiotherapy_dosimetry
 description: "Estimate radiation absorbed doses to tumor and normal organs for alpha-particle radiotherapeutics using the Medical Internal Radiation Dose (MIRD) schema."
+when_to_use: "Estimate radiation absorbed doses to tumor and normal organs for alpha-particle radiotherapeutics using the Medical Internal Radiation Dose (MIRD) schema."
 version: 1.0.0
 author: MemOmics
 license: MIT

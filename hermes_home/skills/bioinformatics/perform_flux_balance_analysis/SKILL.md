@@ -1,6 +1,7 @@
 ---
 name: perform_flux_balance_analysis
 description: "Perform Flux Balance Analysis (FBA) on a genome-scale metabolic network model and return a research log of the process and results."
+when_to_use: "Perform Flux Balance Analysis (FBA) on a genome-scale metabolic network model and return a research log of the process and results."
 version: 1.0.0
 author: MemOmics
 license: MIT

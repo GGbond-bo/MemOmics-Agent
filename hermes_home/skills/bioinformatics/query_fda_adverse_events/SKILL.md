@@ -1,6 +1,7 @@
 ---
 name: query_fda_adverse_events
 description: "Query FDA adverse event reports for specific drugs from the OpenFDA database to identify potential safety signals, reaction patterns, and regulatory intelligence."
+when_to_use: "Query FDA adverse event reports for specific drugs from the OpenFDA database to identify potential safety signals, reaction patterns, and regulatory intelligence."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: scrna-disease-drug
 description: "疾病scRNA-seq+遗传证据整合的药物靶点优先级排序。Open Targets/GWAS/eQTL"
+when_to_use: "有疾病scRNA数据+公共遗传证据(Open Targets/GWAS/eQTL)，需为组织中靶细胞群排序候选药物靶点，输出优先级列表"
 version: 1.0.0
 author: MemOmics
 license: MIT

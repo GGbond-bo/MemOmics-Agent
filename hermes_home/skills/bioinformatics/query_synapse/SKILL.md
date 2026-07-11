@@ -1,6 +1,7 @@
 ---
 name: query_synapse
 description: "Query Synapse REST API for biomedical datasets/files using natural language or structured search parameters. Supports optional authentication via SYNAPSE_AUTH_TOKEN."
+when_to_use: "Query Synapse REST API for biomedical datasets/files using natural language or structured search parameters. Supports optional authentication via SYNAPSE_AUTH_TOKEN."
 version: 1.0.0
 author: MemOmics
 license: MIT

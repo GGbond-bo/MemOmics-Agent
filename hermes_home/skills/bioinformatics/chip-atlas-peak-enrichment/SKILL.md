@@ -1,6 +1,7 @@
 ---
 id: "skill_dd3e525ed3e84cb9a73aa45781117110"
 name: "chip-atlas-peak-enrichment"
+when_to_use: "已有ChIP-Atlas peak列表(非差异)，需对peak做基因组区域注释+已知motif富集+GO/KEGG通路富集"
 display-name: "ChIP-Atlas Peak Enrichment"
 category: epigenomics
 short-description: "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the ChIP-Atlas API."

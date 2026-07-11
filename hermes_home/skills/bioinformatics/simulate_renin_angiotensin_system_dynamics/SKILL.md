@@ -1,6 +1,7 @@
 ---
 name: simulate_renin_angiotensin_system_dynamics
 description: "Simulate the time-dependent concentrations of renin-angiotensin system (RAS) components."
+when_to_use: "Simulate the time-dependent concentrations of renin-angiotensin system (RAS) components."
 version: 1.0.0
 author: MemOmics
 license: MIT

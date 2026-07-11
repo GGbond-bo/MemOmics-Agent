@@ -1,6 +1,7 @@
 ---
 name: paper-translate
 description: "保留排版的PDF全文翻译，支持中英互译"
+when_to_use: "已有英文PDF，需翻译成中文保留排版格式，用于阅读外文文献"
 version: 1.0.0
 author: MemOmics
 license: MIT

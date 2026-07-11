@@ -1,6 +1,7 @@
 ---
 name: analyze_protein_colocalization
 description: "Analyze colocalization between two fluorescently labeled proteins in microscopy images."
+when_to_use: "Analyze colocalization between two fluorescently labeled proteins in microscopy images."
 version: 1.0.0
 author: MemOmics
 license: MIT

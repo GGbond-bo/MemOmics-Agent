@@ -1,6 +1,7 @@
 ---
 name: analyze_accelerated_stability_of_pharmaceutical_formulations
 description: "Analyzes the stability of pharmaceutical formulations under accelerated storage conditions."
+when_to_use: "Analyzes the stability of pharmaceutical formulations under accelerated storage conditions."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: check_fda_drug_recalls
 description: "Check for FDA drug recalls and enforcement actions from the OpenFDA database to identify safety concerns and regulatory actions."
+when_to_use: "Check for FDA drug recalls and enforcement actions from the OpenFDA database to identify safety concerns and regulatory actions."
 version: 1.0.0
 author: MemOmics
 license: MIT

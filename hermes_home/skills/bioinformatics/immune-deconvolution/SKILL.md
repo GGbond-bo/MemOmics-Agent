@@ -1,6 +1,7 @@
 ---
 name: immune-deconvolution
 description: "CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计"
+when_to_use: "CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计"
 version: 1.0.0
 author: MemOmics
 license: MIT

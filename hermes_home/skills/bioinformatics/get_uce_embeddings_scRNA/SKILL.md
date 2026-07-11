@@ -1,6 +1,7 @@
 ---
 name: get_uce_embeddings_scRNA
 description: "Generate UCE embeddings for single-cell RNA-seq data and map them to a reference dataset for cell type annotation."
+when_to_use: "Generate UCE embeddings for single-cell RNA-seq data and map them to a reference dataset for cell type annotation."
 version: 1.0.0
 author: MemOmics
 license: MIT

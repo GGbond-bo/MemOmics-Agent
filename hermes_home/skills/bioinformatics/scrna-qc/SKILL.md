@@ -1,6 +1,7 @@
 ---
 name: scrna-qc
 description: "scRNA-seq质控+Doublet+Ambient RNA去除。使用场景：拿到raw矩阵第一步，需过滤低质量细胞/双胞/环境RNA，自动推荐阈值，支持人/鼠"
+when_to_use: "scRNA-seq质控+Doublet+Ambient RNA去除。使用场景：拿到raw矩阵第一步，需过滤低质量细胞/双胞/环境RNA，自动推荐阈值，支持人/鼠"
 version: 1.0.0
 author: MemOmics
 license: MIT

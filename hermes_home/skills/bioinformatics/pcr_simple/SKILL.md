@@ -1,6 +1,7 @@
 ---
 name: pcr_simple
 description: "Simulate PCR amplification with given primers and sequence."
+when_to_use: "Simulate PCR amplification with given primers and sequence."
 version: 1.0.0
 author: MemOmics
 license: MIT

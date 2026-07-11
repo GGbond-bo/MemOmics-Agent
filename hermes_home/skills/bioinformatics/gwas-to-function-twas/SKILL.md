@@ -1,6 +1,7 @@
 ---
 id: "skill_6313334ee7324c7099fa65c5f5ee9590"
 name: "gwas-to-function-twas"
+when_to_use: "需使用gwas to function twas功能，适用于相关生信分析场景"
 display-name: "GWAS to Function via TWAS"
 category: genomics_genetics
 short-description: Identify causal genes and therapeutic targets from GWAS using transcriptome-wide association studies

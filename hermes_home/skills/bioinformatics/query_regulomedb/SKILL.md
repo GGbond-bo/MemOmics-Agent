@@ -1,6 +1,7 @@
 ---
 name: query_regulomedb
 description: "Query the RegulomeDB database using natural language or direct endpoint."
+when_to_use: "Query the RegulomeDB database using natural language or direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

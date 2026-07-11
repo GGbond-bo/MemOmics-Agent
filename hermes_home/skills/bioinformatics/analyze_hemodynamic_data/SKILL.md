@@ -1,6 +1,7 @@
 ---
 name: analyze_hemodynamic_data
 description: "Analyzes raw blood pressure data to calculate key hemodynamic parameters."
+when_to_use: "Analyzes raw blood pressure data to calculate key hemodynamic parameters."
 version: 1.0.0
 author: MemOmics
 license: MIT

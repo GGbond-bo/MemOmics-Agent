@@ -1,6 +1,7 @@
 ---
 name: create-bio-skill
 description: "当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包时触发。自动查询官方文档+文献，按 BioMinI 标准格式创建新的生信 skill（含 SKILL.md + 脚本模板 + MemOmics 强制规则）。创建后立即可用。"
+when_to_use: "当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包时触发。自动查询官方文档+文献，按 BioMinI 标准格式创建新的生信 skill（含 SKILL.md + 脚本模板 + MemOmics 强制规则）。创建后立即可用。"
 version: 1.0.0
 author: MemOmics
 license: MIT

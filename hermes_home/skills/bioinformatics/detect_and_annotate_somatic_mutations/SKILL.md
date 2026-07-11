@@ -1,6 +1,7 @@
 ---
 name: detect_and_annotate_somatic_mutations
 description: "Detects and annotates somatic mutations in tumor samples compared to matched normal samples using GATK Mutect2 for variant calling, GATK FilterMutectCalls for filtering, and SnpEff for functional anno"
+when_to_use: "Detects and annotates somatic mutations in tumor samples compared to matched normal samples using GATK Mutect2 for variant calling, GATK FilterMutectCalls for filtering, and SnpEff for functional anno"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: senescence-detection
 description: "SASP scoring + p16/p21 + senescent subpopulation"
+when_to_use: "SASP scoring + p16/p21 + senescent subpopulation"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: docking_autodock_vina
 description: "Performs molecular docking using AutoDock Vina to predict binding affinities between small molecules and a receptor protein."
+when_to_use: "Performs molecular docking using AutoDock Vina to predict binding affinities between small molecules and a receptor protein."
 version: 1.0.0
 author: MemOmics
 license: MIT

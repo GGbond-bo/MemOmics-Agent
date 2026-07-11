@@ -1,6 +1,7 @@
 ---
 id: "skill_827c499e76084524a2e098d80383a3a4"
 name: "survival-analysis-clinical"
+when_to_use: "已有survival-analysis结果，需进一步做临床分层(分期/分级/年龄)的高阶生存分析，或时间依赖ROC评估biomarker预测能力"
 display-name: "Clinical Survival & Outcome Analysis"
 category: multi_omics
 short-description: "Perform Kaplan-Meier estimation, Cox proportional hazards regression, and risk stratification from clinical time-to-event data."

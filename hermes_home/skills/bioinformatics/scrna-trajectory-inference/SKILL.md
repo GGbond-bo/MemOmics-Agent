@@ -4,6 +4,7 @@ name: "scrna-trajectory-inference"
 display-name: "Single-Cell Trajectory Inference"
 category: transcriptomics
 description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data using PAGA, DPT, scVelo, CellRank, and scTour."
+when_to_use: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data using PAGA, DPT, scVelo, CellRank, and scTour."
 short-description: "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data."
 detailed-description: "Reconstruct developmental or differentiation trajectories from single-cell RNA-seq data using PAGA, diffusion pseudotime, scVelo RNA velocity, and CellRank fate mapping. Discovers cell ordering along pseudotime, identifies branching points and terminal fates, and reveals gene expression dynamics along trajectories. Chains from scrnaseq-scanpy-core-analysis or any preprocessed AnnData (.h5ad). Produces publication-ready trajectory visualizations and structured PDF reports."
 starting-prompt: Infer differentiation trajectories from my single-cell RNA-seq data using PAGA, pseudotime, and RNA velocity

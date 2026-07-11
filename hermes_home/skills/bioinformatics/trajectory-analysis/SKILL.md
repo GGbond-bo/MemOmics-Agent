@@ -1,6 +1,7 @@
 ---
 name: trajectory-analysis
 description: "PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接"
+when_to_use: "PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接"
 version: 1.0.0
 author: MemOmics
 license: MIT

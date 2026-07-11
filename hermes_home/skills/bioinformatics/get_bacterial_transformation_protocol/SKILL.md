@@ -1,6 +1,7 @@
 ---
 name: get_bacterial_transformation_protocol
 description: "Return a standard protocol for bacterial transformation."
+when_to_use: "Return a standard protocol for bacterial transformation."
 version: 1.0.0
 author: MemOmics
 license: MIT

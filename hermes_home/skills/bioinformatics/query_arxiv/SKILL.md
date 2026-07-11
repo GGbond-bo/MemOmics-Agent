@@ -1,6 +1,7 @@
 ---
 name: query_arxiv
 description: "Query arXiv for papers based on the provided search query."
+when_to_use: "Query arXiv for papers based on the provided search query."
 version: 1.0.0
 author: MemOmics
 license: MIT

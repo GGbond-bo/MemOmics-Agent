@@ -1,6 +1,7 @@
 ---
 name: design_knockout_sgrna
 description: "Design sgRNAs for CRISPR knockout by searching pre-computed sgRNA libraries. Returns optimized guide RNAs for targeting a specific gene."
+when_to_use: "Design sgRNAs for CRISPR knockout by searching pre-computed sgRNA libraries. Returns optimized guide RNAs for targeting a specific gene."
 version: 1.0.0
 author: MemOmics
 license: MIT

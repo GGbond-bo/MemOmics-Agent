@@ -1,6 +1,7 @@
 ---
 id: "skill_97fe00d84ed84cb784c5c4dc3e0478ab"
 name: "scrnaseq-seurat-core-analysis"
+when_to_use: "同scrna-seurat-core，使用Seurat v5新版pipeline，包含SCTransform归一化+harmony整合+自动注释"
 display-name: "Single-Cell RNA-seq Core Analysis (Seurat)"
 category: transcriptomics
 short-description: Complete single-cell RNA-seq analysis using Seurat from raw data to cell type annotation with clustering and visualization.

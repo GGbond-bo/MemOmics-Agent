@@ -1,6 +1,7 @@
 ---
 name: drug-response
 description: "Connectivity Map+药物敏感性+联合用药预测"
+when_to_use: "Connectivity Map+药物敏感性+联合用药预测"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: design_golden_gate_oligos
 description: "Design complementary oligonucleotides with Type IIS restriction enzyme overhangs for Golden Gate assembly based on restriction site analysis of the backbone."
+when_to_use: "Design complementary oligonucleotides with Type IIS restriction enzyme overhangs for Golden Gate assembly based on restriction site analysis of the backbone."
 version: 1.0.0
 author: MemOmics
 license: MIT

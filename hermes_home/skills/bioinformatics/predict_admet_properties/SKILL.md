@@ -1,6 +1,7 @@
 ---
 name: predict_admet_properties
 description: "Predicts ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity) properties for a list of compounds using pretrained models."
+when_to_use: "Predicts ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity) properties for a list of compounds using pretrained models."
 version: 1.0.0
 author: MemOmics
 license: MIT

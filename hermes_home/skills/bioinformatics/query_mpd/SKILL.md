@@ -1,6 +1,7 @@
 ---
 name: query_mpd
 description: "Query the Mouse Phenome Database (MPD) using natural language or a direct endpoint."
+when_to_use: "Query the Mouse Phenome Database (MPD) using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

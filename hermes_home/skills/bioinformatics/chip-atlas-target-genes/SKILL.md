@@ -1,6 +1,7 @@
 ---
 id: "skill_aaafb560ba89480dbb01b2979f49630d"
 name: "chip-atlas-target-genes"
+when_to_use: "有ChIP-Atlas peak坐标或transcription factor名，需查询这些peak调控的靶基因列表，输出TF→target调控表"
 display-name: "ChIP-Atlas Target Genes"
 category: epigenomics
 short-description: "Retrieve pre-computed target genes for any transcription factor from ChIP-Atlas public ChIP-seq data."

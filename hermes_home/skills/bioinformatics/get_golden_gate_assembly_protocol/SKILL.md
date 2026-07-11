@@ -1,6 +1,7 @@
 ---
 name: get_golden_gate_assembly_protocol
 description: "Return a customized protocol for Golden Gate assembly based on the number of inserts and specific DNA sequences."
+when_to_use: "Return a customized protocol for Golden Gate assembly based on the number of inserts and specific DNA sequences."
 version: 1.0.0
 author: MemOmics
 license: MIT

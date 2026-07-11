@@ -1,6 +1,7 @@
 ---
 name: doubletfinder-remove-doublets
 description: "DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤"
+when_to_use: "DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤"
 version: 1.0.0
 author: MemOmics
 license: MIT

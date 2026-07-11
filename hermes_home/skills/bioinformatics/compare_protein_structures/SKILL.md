@@ -1,6 +1,7 @@
 ---
 name: compare_protein_structures
 description: "Compares two protein structures to identify structural differences and conformational changes."
+when_to_use: "Compares two protein structures to identify structural differences and conformational changes."
 version: 1.0.0
 author: MemOmics
 license: MIT

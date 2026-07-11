@@ -1,6 +1,7 @@
 ---
 name: golden_gate_assembly
 description: "Simulate Golden Gate assembly to predict final construct sequences from backbone and fragment sequences."
+when_to_use: "Simulate Golden Gate assembly to predict final construct sequences from backbone and fragment sequences."
 version: 1.0.0
 author: MemOmics
 license: MIT

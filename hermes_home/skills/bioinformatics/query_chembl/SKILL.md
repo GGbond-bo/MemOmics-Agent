@@ -1,6 +1,7 @@
 ---
 name: query_chembl
 description: "Query the ChEMBL REST API via natural language, direct endpoint, or identifiers (chembl_id, smiles, molecule_name)."
+when_to_use: "Query the ChEMBL REST API via natural language, direct endpoint, or identifiers (chembl_id, smiles, molecule_name)."
 version: 1.0.0
 author: MemOmics
 license: MIT

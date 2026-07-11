@@ -1,6 +1,7 @@
 ---
 name: reconstruct_3d_face_from_mri
 description: "Generate a 3D model of facial anatomy from MRI scans of the head and neck."
+when_to_use: "Generate a 3D model of facial anatomy from MRI scans of the head and neck."
 version: 1.0.0
 author: MemOmics
 license: MIT

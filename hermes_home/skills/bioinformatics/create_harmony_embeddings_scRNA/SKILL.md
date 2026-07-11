@@ -1,6 +1,7 @@
 ---
 name: create_harmony_embeddings_scRNA
 description: "Harmony批次校正整合。使用场景：多样本scRNA-seq需去批次效应，快速高效，适合中等数据量（<100万细胞），R/Seurat生态"
+when_to_use: "Harmony批次校正整合。使用场景：多样本scRNA-seq需去批次效应，快速高效，适合中等数据量（<100万细胞），R/Seurat生态"
 version: 1.0.0
 author: MemOmics
 license: MIT

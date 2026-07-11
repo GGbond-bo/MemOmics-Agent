@@ -1,6 +1,7 @@
 ---
 name: query_dbsnp
 description: "Query the NCBI dbSNP database using natural language or direct search term."
+when_to_use: "Query the NCBI dbSNP database using natural language or direct search term."
 version: 1.0.0
 author: MemOmics
 license: MIT

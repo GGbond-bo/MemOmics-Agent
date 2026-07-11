@@ -1,6 +1,7 @@
 ---
 name: query_drug_interactions
 description: "Query drug-drug interactions from DDInter database to identify potential interactions, mechanisms, and severity levels between specified drugs."
+when_to_use: "Query drug-drug interactions from DDInter database to identify potential interactions, mechanisms, and severity levels between specified drugs."
 version: 1.0.0
 author: MemOmics
 license: MIT

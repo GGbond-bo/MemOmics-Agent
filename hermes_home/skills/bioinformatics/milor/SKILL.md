@@ -1,6 +1,7 @@
 ---
 name: milor
 description: "MiloR邻域差异丰度检验, 适用于多条件比较"
+when_to_use: "MiloR邻域差异丰度检验, 适用于多条件比较"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: query_pride
 description: "Query the PRIDE proteomics database using natural language or a direct endpoint."
+when_to_use: "Query the PRIDE proteomics database using natural language or a direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

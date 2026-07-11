@@ -1,6 +1,7 @@
 ---
 name: web-research
 description: "网络搜索和调研，获取最新信息，综合多个来源生成报告"
+when_to_use: "网络搜索和调研，获取最新信息，综合多个来源生成报告"
 version: 1.0.0
 author: MemOmics
 license: MIT

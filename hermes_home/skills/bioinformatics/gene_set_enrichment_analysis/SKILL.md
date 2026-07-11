@@ -1,6 +1,7 @@
 ---
 name: gene_set_enrichment_analysis
 description: "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality."
+when_to_use: "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: academic-paper-writing
 description: "12-agent论文写作流水线，从大纲到完稿"
+when_to_use: "12-agent论文写作流水线，从大纲到完稿"
 version: 1.0.0
 author: MemOmics
 license: MIT

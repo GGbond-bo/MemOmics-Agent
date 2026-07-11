@@ -1,6 +1,7 @@
 ---
 name: html-report
 description: "生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好"
+when_to_use: "生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好"
 version: 1.0.0
 author: MemOmics
 license: MIT

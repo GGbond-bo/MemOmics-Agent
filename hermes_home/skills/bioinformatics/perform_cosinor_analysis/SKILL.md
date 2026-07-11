@@ -1,6 +1,7 @@
 ---
 name: perform_cosinor_analysis
 description: "Performs cosinor analysis on physiological time series data to characterize circadian rhythms."
+when_to_use: "Performs cosinor analysis on physiological time series data to characterize circadian rhythms."
 version: 1.0.0
 author: MemOmics
 license: MIT

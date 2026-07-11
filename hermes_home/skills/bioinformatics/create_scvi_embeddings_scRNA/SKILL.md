@@ -1,6 +1,7 @@
 ---
 name: create_scvi_embeddings_scRNA
 description: "Create scVI and scANVI embeddings for single-cell RNA-seq data, saving the results to an AnnData object."
+when_to_use: "Create scVI and scANVI embeddings for single-cell RNA-seq data, saving the results to an AnnData object."
 version: 1.0.0
 author: MemOmics
 license: MIT

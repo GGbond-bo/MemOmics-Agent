@@ -1,6 +1,7 @@
 ---
 name: sasp-scoring
 description: "SASP gene set scoring + heatmap + group comparison"
+when_to_use: "SASP gene set scoring + heatmap + group comparison"
 version: 1.0.0
 author: MemOmics
 license: MIT

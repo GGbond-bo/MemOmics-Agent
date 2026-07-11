@@ -1,6 +1,7 @@
 ---
 name: query_gnomad
 description: "Query gnomAD for variants in a gene using natural language or direct gene symbol."
+when_to_use: "Query gnomAD for variants in a gene using natural language or direct gene symbol."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: bioinformatics-html-report
 description: A zero-dependency Python toolkit for generating publication-quality interactive HTML reports from bioinformatics analysis outputs
+when_to_use: "A zero-dependency Python toolkit for generating publication-quality interactive HTML reports from bioinformatics analysis outputs"
 version: 1.1.0
 ---
 

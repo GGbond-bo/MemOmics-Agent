@@ -1,6 +1,7 @@
 ---
 name: quantify_and_cluster_cell_motility
 description: "Quantify cell motility features from time-lapse microscopy images and cluster cells based on motility patterns."
+when_to_use: "Quantify cell motility features from time-lapse microscopy images and cluster cells based on motility patterns."
 version: 1.0.0
 author: MemOmics
 license: MIT

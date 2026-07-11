@@ -1,6 +1,7 @@
 ---
 name: create_registration_visualization
 description: "Create visualization plots for registration results. Generates comparison plots, difference images, overlays, and metric charts."
+when_to_use: "Create visualization plots for registration results. Generates comparison plots, difference images, overlays, and metric charts."
 version: 1.0.0
 author: MemOmics
 license: MIT

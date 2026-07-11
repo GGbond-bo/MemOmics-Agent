@@ -1,6 +1,7 @@
 ---
 id: "skill_024b2165ef874c1aa509a07168b27d98"
 name: "lasso-biomarker-panel"
+when_to_use: "需使用lasso biomarker panel功能，适用于相关生信分析场景"
 display-name: "LASSO Biomarker Panel Discovery & Validation"
 category: multi_omics
 short-description: "Select minimal biomarker panels using LASSO regularization with nested cross-validation, stability selection, and independent cohort validation."

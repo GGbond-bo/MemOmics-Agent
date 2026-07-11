@@ -1,6 +1,7 @@
 ---
 name: interspecies_gene_conversion
 description: "Convert ENSEMBL gene IDs between different species using BioMart homology mapping. This function converts a list of ENSEMBL gene IDs from one species to their homologous counterparts in another specie"
+when_to_use: "Convert ENSEMBL gene IDs between different species using BioMart homology mapping. This function converts a list of ENSEMBL gene IDs from one species to their homologous counterparts in another specie"
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: batch_register_images
 description: "Perform batch registration of multiple images to a single reference image. Automatically processes all medical image files in a directory and registers them to the fixed reference. Supports rigid, aff"
+when_to_use: "Perform batch registration of multiple images to a single reference image. Automatically processes all medical image files in a directory and registers them to the fixed reference. Supports rigid, aff"
 version: 1.0.0
 author: MemOmics
 license: MIT

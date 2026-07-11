@@ -1,6 +1,7 @@
 ---
 id: "skill_546a8868863342c093eb2570dcd538f4"
 name: "clinicaltrials-landscape"
+when_to_use: "需使用clinicaltrials landscape功能，适用于相关生信分析场景"
 display-name: "ClinicalTrials.gov Disease Landscape Scanner"
 category: literature
 short-description: "Query ClinicalTrials.gov API v2 to map the clinical trial landscape for any disease area by mechanism, phase, and sponsor."

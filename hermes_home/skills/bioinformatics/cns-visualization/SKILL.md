@@ -1,6 +1,7 @@
 ---
 name: cns-visualization
 description: "Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey"
+when_to_use: "Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey"
 version: 1.0.0
 author: MemOmics
 license: MIT

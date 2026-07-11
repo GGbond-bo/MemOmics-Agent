@@ -1,6 +1,7 @@
 ---
 name: check_drug_combination_safety
 description: "Analyze safety of a drug combination for potential interactions using DDInter database with comprehensive risk assessment and clinical recommendations."
+when_to_use: "Analyze safety of a drug combination for potential interactions using DDInter database with comprehensive risk assessment and clinical recommendations."
 version: 1.0.0
 author: MemOmics
 license: MIT

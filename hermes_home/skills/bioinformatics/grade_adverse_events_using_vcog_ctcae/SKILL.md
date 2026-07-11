@@ -1,6 +1,7 @@
 ---
 name: grade_adverse_events_using_vcog_ctcae
 description: "Grade and monitor adverse events in animal studies using the VCOG-CTCAE standard."
+when_to_use: "Grade and monitor adverse events in animal studies using the VCOG-CTCAE standard."
 version: 1.0.0
 author: MemOmics
 license: MIT

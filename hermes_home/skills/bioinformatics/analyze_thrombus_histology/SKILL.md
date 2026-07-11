@@ -1,6 +1,7 @@
 ---
 name: analyze_thrombus_histology
 description: "Analyze histological images of thrombus samples stained with H&E to identify and quantify different thrombus components (fresh, cellular lysis, endothelialization, fibroblastic reaction)."
+when_to_use: "Analyze histological images of thrombus samples stained with H&E to identify and quantify different thrombus components (fresh, cellular lysis, endothelialization, fibroblastic reaction)."
 version: 1.0.0
 author: MemOmics
 license: MIT

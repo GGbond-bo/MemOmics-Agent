@@ -1,6 +1,7 @@
 ---
 name: analyze_enzyme_kinetics_assay
 description: "Performs in vitro enzyme kinetics assay and analyzes the dose-dependent effects of modulators."
+when_to_use: "Performs in vitro enzyme kinetics assay and analyzes the dose-dependent effects of modulators."
 version: 1.0.0
 author: MemOmics
 license: MIT

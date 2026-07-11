@@ -8,7 +8,8 @@ generate AI summaries per cluster, and render an interactive HTML dashboard.
 ## Conference Coverage (24 total)
 
 | # | Short | Conference Name | Dates | Location | Abstract Source | Est. Total | Est. Saved | Sampling |
-|---|-------|----------------|-------|----------|-----------------|-----------|-----------|---------|
+|when_to_use: "需使用heart conference monitor功能，适用于相关生信分析场景"
+---|-------|----------------|-------|----------|-----------------|-----------|-----------|---------|
 | 1 | ACC | ACC Annual Scientific Session | Mar 28–30, 2026 | Chicago, IL | PubMed (J Am Coll Cardiol) + scrape | ~2,500 | ~188 | 100% |
 | 2 | ESC | ESC Congress | Aug 28–31, 2026 | Munich | PubMed (Eur Heart J Suppl) + scrape | ~5,000 | ~500 | **10%** |
 | 3 | AHA | AHA Scientific Sessions | Nov 6–9, 2026 | TBD | Ovid scrape (Circulation Suppl) | ~4,200 | ~420 | **10%** |

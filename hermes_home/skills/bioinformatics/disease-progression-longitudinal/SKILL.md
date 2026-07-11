@@ -1,6 +1,7 @@
 ---
 id: "skill_26fd7b7e1ad64ad89d97bb183182d4f0"
 name: "disease-progression-longitudinal"
+when_to_use: "需使用disease progression longitudinal功能，适用于相关生信分析场景"
 display-name: "Disease Progression Trajectory Analysis"
 category: multi_omics
 short-description: Reconstruct disease progression trajectories from longitudinal patient omics data.

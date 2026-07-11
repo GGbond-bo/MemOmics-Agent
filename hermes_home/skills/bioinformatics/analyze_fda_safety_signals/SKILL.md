@@ -1,6 +1,7 @@
 ---
 name: analyze_fda_safety_signals
 description: "Analyze safety signals across multiple drugs using OpenFDA adverse event data to identify patterns and comparative risk profiles."
+when_to_use: "Analyze safety signals across multiple drugs using OpenFDA adverse event data to identify patterns and comparative risk profiles."
 version: 1.0.0
 author: MemOmics
 license: MIT

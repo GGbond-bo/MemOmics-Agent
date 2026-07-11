@@ -1,6 +1,7 @@
 ---
 name: quantify_cell_cycle_phases_from_microscopy
 description: "Quantify the percentage of cells in each cell cycle phase using Calcofluor white stained microscopy images."
+when_to_use: "Quantify the percentage of cells in each cell cycle phase using Calcofluor white stained microscopy images."
 version: 1.0.0
 author: MemOmics
 license: MIT

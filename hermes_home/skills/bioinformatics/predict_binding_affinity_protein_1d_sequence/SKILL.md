@@ -1,6 +1,7 @@
 ---
 name: predict_binding_affinity_protein_1d_sequence
 description: "Predicts binding affinity between small molecules and a protein sequence using pre-trained deep learning models."
+when_to_use: "Predicts binding affinity between small molecules and a protein sequence using pre-trained deep learning models."
 version: 1.0.0
 author: MemOmics
 license: MIT

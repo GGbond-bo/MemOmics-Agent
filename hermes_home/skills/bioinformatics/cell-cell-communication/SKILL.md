@@ -1,6 +1,7 @@
 ---
 id: "skill_4fd6fa5f7294443f987c36586080b69f"
 name: "cell-cell-communication"
+when_to_use: "需使用cell cell communication功能，适用于相关生信分析场景"
 display-name: "Cell-Cell Communication Analysis (CellChat)"
 category: transcriptomics
 short-description: "Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis."

@@ -1,6 +1,7 @@
 ---
 name: split_modalities
 description: "Split a 4D NIfTI file into separate modality files for nnUNet processing. Handles BRATS dataset format with FLAIR, T1w, t1gd, and T2w modalities."
+when_to_use: "Split a 4D NIfTI file into separate modality files for nnUNet processing. Handles BRATS dataset format with FLAIR, T1w, t1gd, and T2w modalities."
 version: 1.0.0
 author: MemOmics
 license: MIT

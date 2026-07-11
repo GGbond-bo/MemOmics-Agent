@@ -1,6 +1,7 @@
 ---
 name: region_to_ccre_screen
 description: "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs."
+when_to_use: "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs."
 version: 1.0.0
 author: MemOmics
 license: MIT

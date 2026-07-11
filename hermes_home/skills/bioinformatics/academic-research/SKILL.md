@@ -1,6 +1,7 @@
 ---
 name: academic-research
 description: "综合学术研究技能：实验方案设计、文献检索、研究规划"
+when_to_use: "综合学术研究技能：实验方案设计、文献检索、研究规划"
 version: 1.0.0
 author: MemOmics
 license: MIT

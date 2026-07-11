@@ -1,6 +1,7 @@
 ---
 name: query_pubmed
 description: "Query PubMed for papers based on the provided search query."
+when_to_use: "Query PubMed for papers based on the provided search query."
 version: 1.0.0
 author: MemOmics
 license: MIT

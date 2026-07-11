@@ -1,6 +1,7 @@
 ---
 id: "skill_51a601b71a454a00aa0d378fe8e3205c"
 name: "bulk-omics-clustering"
+when_to_use: "有bulk RNA表达矩阵(非counts)，需做样本聚类/降维(PCA/t-SNE/UMAP)看组间分群，或WGCNA共表达模块"
 display-name: "Bulk Omics Clustering Analysis"
 category: multi_omics
 short-description: Cluster samples or features from bulk transcriptomics, proteomics, or metabolomics data.

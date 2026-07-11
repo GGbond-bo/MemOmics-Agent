@@ -1,6 +1,7 @@
 ---
 name: find_alternative_drugs_ddinter
 description: "Find alternative drugs that don't interact with contraindicated drugs using DDInter database for safer therapeutic substitutions."
+when_to_use: "Find alternative drugs that don't interact with contraindicated drugs using DDInter database for safer therapeutic substitutions."
 version: 1.0.0
 author: MemOmics
 license: MIT

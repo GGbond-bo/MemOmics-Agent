@@ -1,6 +1,7 @@
 ---
 name: calculate_physicochemical_properties
 description: "Calculate key physicochemical properties of a drug candidate molecule."
+when_to_use: "Calculate key physicochemical properties of a drug candidate molecule."
 version: 1.0.0
 author: MemOmics
 license: MIT

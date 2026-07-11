@@ -1,6 +1,7 @@
 ---
 name: get_genes_near_ccre
 description: "Given a cCRE accession, return k nearest genes sorted by distance."
+when_to_use: "Given a cCRE accession, return k nearest genes sorted by distance."
 version: 1.0.0
 author: MemOmics
 license: MIT

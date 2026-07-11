@@ -50,8 +50,8 @@
     "Other": {
       "total": 107,
       "top1": 72,
-      "top3": 75,
-      "pct": 70
+      "top3": 80,
+      "pct": 74
     },
     "Protein": {
       "total": 15,
@@ -86,14 +86,14 @@
     "scRNA": {
       "total": 31,
       "top1": 19,
-      "top3": 21,
-      "pct": 67
+      "top3": 22,
+      "pct": 70
     }
   },
   "summary": {
     "all_skills_top1": "64%",
-    "all_skills_top3": "70%",
+    "all_skills_top3": "72%",
     "multi_turn_stable": "66%",
-    "combined": "68%"
+    "combined": "69%"
   }
 }

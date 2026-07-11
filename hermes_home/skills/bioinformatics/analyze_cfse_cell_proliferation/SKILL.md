@@ -1,6 +1,7 @@
 ---
 name: analyze_cfse_cell_proliferation
 description: "Analyze CFSE-labeled cell samples to quantify cell division and proliferation."
+when_to_use: "Analyze CFSE-labeled cell samples to quantify cell division and proliferation."
 version: 1.0.0
 author: MemOmics
 license: MIT

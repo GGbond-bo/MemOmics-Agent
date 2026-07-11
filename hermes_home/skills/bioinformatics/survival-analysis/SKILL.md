@@ -1,6 +1,7 @@
 ---
 name: survival-analysis
 description: "KM曲线+Cox回归+风险评分模型+时间依赖ROC"
+when_to_use: "患者生存数据(OS/PFS)有完整随访记录，需KM曲线+Cox回归+RFS/DSS分析，临床样本量>50"
 version: 1.0.0
 author: MemOmics
 license: MIT

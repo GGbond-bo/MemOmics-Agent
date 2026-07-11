@@ -1,6 +1,7 @@
 ---
 name: analyze_mitochondrial_morphology_and_potential
 description: "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images."
+when_to_use: "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images."
 version: 1.0.0
 author: MemOmics
 license: MIT

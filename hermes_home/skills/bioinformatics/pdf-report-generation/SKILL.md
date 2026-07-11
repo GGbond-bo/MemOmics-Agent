@@ -9,6 +9,7 @@ keywords: "PDF, report, ReportLab, scientific, figures, tables, charts"
 version: "1.0"
 last-updated: "April 2026"
 description: >
+when_to_use: "需使用pdf report generation功能，适用于相关生信分析场景"
   Generate professional, Phylo-branded PDF reports from scientific analysis results
   using ReportLab. Use this skill whenever the agent needs to produce a PDF report,
   analysis summary, or any standalone PDF deliverable. Triggers include: user requests

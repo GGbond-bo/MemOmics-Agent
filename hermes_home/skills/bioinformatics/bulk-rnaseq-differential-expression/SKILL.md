@@ -1,6 +1,7 @@
 ---
 id: "skill_33283695bf07404fae5c57c1195f646d"
 name: "bulk-rnaseq-differential-expression"
+when_to_use: "有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图)"
 display-name: "Best practices for RNA-seq Differential Expression Analysis"
 short-description: "Best practices on differential expression analysis for bulk RNA-seq data."
 category: "transcriptomics"

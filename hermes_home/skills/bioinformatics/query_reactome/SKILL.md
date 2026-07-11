@@ -1,6 +1,7 @@
 ---
 name: query_reactome
 description: "Query the Reactome database using natural language or a direct endpoint; optionally download pathway diagrams."
+when_to_use: "Query the Reactome database using natural language or a direct endpoint; optionally download pathway diagrams."
 version: 1.0.0
 author: MemOmics
 license: MIT

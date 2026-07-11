@@ -1,6 +1,7 @@
 ---
 name: sctour-trajectory-inference
 description: "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。"
+when_to_use: "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。"
 version: 1.5.1
 author: MemOmics
 license: MIT

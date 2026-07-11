@@ -1,6 +1,7 @@
 ---
 id: "skill_35e45ff33cb141a981a3fc5711c4760f"
 name: "grn-pyscenic"
+when_to_use: "需使用grn pyscenic功能，适用于相关生信分析场景"
 display-name: "Gene Regulatory Network Inference (pySCENIC)"
 category: transcriptomics
 short-description: Infer transcription factor regulatory networks and cell-level TF activity from single-cell RNA-seq data.

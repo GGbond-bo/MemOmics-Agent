@@ -1,6 +1,7 @@
 ---
 name: analyze_ebv_antibody_titers
 description: "Analyze ELISA data to quantify EBV antibody titers in plasma/serum samples."
+when_to_use: "Analyze ELISA data to quantify EBV antibody titers in plasma/serum samples."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: annotate_plasmid
 description: "Annotate a DNA sequence using pLannotate's command-line interface."
+when_to_use: "Annotate a DNA sequence using pLannotate's command-line interface."
 version: 1.0.0
 author: MemOmics
 license: MIT

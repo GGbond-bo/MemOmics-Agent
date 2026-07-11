@@ -1,6 +1,7 @@
 ---
 id: "skill_6655c68c5e9249eba44e6519b7c0b11e"
 name: "mendelian-randomization-twosamplemr"
+when_to_use: "需使用mendelian randomization twosamplemr功能，适用于相关生信分析场景"
 display-name: "Two-Sample Mendelian Randomization"
 category: genomics_genetics
 short-description: "Assess causal relationships between traits using GWAS summary statistics and genetic instruments."

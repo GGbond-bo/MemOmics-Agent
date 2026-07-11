@@ -1,6 +1,7 @@
 ---
 name: simulate_metabolic_network_perturbation
 description: "Construct and simulate kinetic models of metabolic networks and analyze their responses to perturbations."
+when_to_use: "Construct and simulate kinetic models of metabolic networks and analyze their responses to perturbations."
 version: 1.0.0
 author: MemOmics
 license: MIT

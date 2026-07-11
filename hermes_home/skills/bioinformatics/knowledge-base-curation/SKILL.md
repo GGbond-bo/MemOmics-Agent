@@ -1,6 +1,7 @@
 ---
 name: knowledge-base-curation
 description: >
+when_to_use: "需使用knowledge base curation功能，适用于相关生信分析场景"
   端到端构建组织特异性多组学知识库。从文献搜索→生物知识提取→基因集构建→
   测序方法参数→多物种同步→YAML验证的完整流程。覆盖 scRNA-seq / ATAC-seq /
   spatial / bulk 四种测序方法。当知识库缺少某个物种/组织/方向的生物学知识、

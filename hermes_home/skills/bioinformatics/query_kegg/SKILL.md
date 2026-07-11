@@ -1,6 +1,7 @@
 ---
 name: query_kegg
 description: "Take a natural language prompt and convert it to a structured KEGG API query."
+when_to_use: "Take a natural language prompt and convert it to a structured KEGG API query."
 version: 1.0.0
 author: MemOmics
 license: MIT

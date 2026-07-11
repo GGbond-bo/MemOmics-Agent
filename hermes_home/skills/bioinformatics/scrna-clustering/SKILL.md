@@ -1,6 +1,7 @@
 ---
 name: scrna-clustering
 description: "完整Seurat v5聚类注释工作流。使用场景：QC后的scRNA-seq，需SCTransform→PCA→UMAP→聚类→注释→Markers，含SoupX/DoubletFinder/Harmony"
+when_to_use: "完整Seurat v5聚类注释工作流。使用场景：QC后的scRNA-seq，需SCTransform→PCA→UMAP→聚类→注释→Markers，含SoupX/DoubletFinder/Harmony"
 version: 1.0.0
 author: MemOmics
 license: MIT

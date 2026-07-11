@@ -1,6 +1,7 @@
 ---
 name: segment_with_nn_unet
 description: "Segment images using nnUNet with proper environment setup. Supports brain tumor segmentation and other medical image segmentation tasks."
+when_to_use: "Segment images using nnUNet with proper environment setup. Supports brain tumor segmentation and other medical image segmentation tasks."
 version: 1.0.0
 author: MemOmics
 license: MIT

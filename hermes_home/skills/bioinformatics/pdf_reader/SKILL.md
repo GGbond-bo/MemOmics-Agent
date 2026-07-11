@@ -1,6 +1,7 @@
 ---
 name: pdf_reader
 description: "读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换"
+when_to_use: "读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换"
 version: 1.0.0
 author: MemOmics
 license: MIT

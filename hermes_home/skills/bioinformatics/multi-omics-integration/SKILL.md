@@ -1,6 +1,7 @@
 ---
 id: "skill_b022f7a4010244ac8956c13d9dd60967"
 name: "multi-omics-integration"
+when_to_use: "需使用multi omics integration功能，适用于相关生信分析场景"
 display-name: "Multi-Omics Integration (MOFA+)"
 category: multi_omics
 short-description: "Integrate 2+ omics layers using MOFA+ to identify latent factors explaining cross-omics variation, with variance decomposition and factor interpretation."

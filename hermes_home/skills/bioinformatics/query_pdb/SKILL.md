@@ -1,6 +1,7 @@
 ---
 name: query_pdb
 description: "Query the RCSB PDB database using natural language or a direct structured query."
+when_to_use: "Query the RCSB PDB database using natural language or a direct structured query."
 version: 1.0.0
 author: MemOmics
 license: MIT

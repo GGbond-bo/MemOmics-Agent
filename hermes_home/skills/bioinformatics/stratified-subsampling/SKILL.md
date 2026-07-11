@@ -1,6 +1,7 @@
 ---
 name: stratified-subsampling
 description: "分层抽样：3种场景 — 降采样均衡、训练/测试拆分、可视化抽样。Seurat/Scanpy通用"
+when_to_use: "分层抽样：3种场景 — 降采样均衡、训练/测试拆分、可视化抽样。Seurat/Scanpy通用"
 version: 1.0.0
 author: MemOmics
 license: MIT

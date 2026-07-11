@@ -1,6 +1,7 @@
 ---
 id: "skill_d3fa7c2c0f2b43ffb679e44ad7a3eafe"
 name: "pooled-crispr-screens"
+when_to_use: "需使用pooled crispr screens功能，适用于相关生信分析场景"
 display-name: "Pooled CRISPR Screen Analysis"
 category: transcriptomics
 short-description: "Analyze pooled CRISPR screens with single-cell RNA-seq readout (Perturb-seq/CROP-seq)."

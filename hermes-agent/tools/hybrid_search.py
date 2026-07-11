@@ -358,6 +358,20 @@ class HybridMatcher:
         except Exception:
             self._loaded = True  # Mark as loaded to avoid retry
     
+    def _load_when_to_use(self):
+        import glob as _glob, re as _re
+        self._wtu_cache = {}
+        for sf in _glob.glob(os.path.join(self.skills_dir, '*', 'SKILL.md')):
+            skill_id = os.path.basename(os.path.dirname(sf))
+            try:
+                with open(sf, 'r', encoding='utf-8') as f:
+                    content = f.read(4096)
+                m = _re.search(r'^when_to_use:\s*"?(.+?)"?$', content, _re.MULTILINE)
+                if m:
+                    self._wtu_cache[skill_id] = m.group(1).strip('"').strip()
+            except Exception:
+                pass
+    
     def search(self, query: str, domain_filter: str = None, top_k: int = 5) -> dict:
         """Hybrid search: keyword aliases + TF-IDF fusion."""
         query_lower = query.lower()
@@ -412,6 +426,34 @@ class HybridMatcher:
         # === Sort by score ===
         sorted_results = sorted(results.items(), key=lambda x: -x[1]['score'])
         
+        # === Collision expansion: include sibling skills for LLM disambiguation ===
+        skill_prefixes = {}
+        for name, data in sorted_results:
+            prefix = name.split('-')[0]
+            if prefix not in skill_prefixes:
+                skill_prefixes[prefix] = []
+            skill_prefixes[prefix].append(name)
+        
+        # For any prefix group with 2+ skills, expand: add missing siblings
+        import glob as _glob
+        expanded = {}
+        for name, data in sorted_results:
+            expanded[name] = data
+            prefix = name.split('-')[0]
+            if len(skill_prefixes.get(prefix, [])) >= 2:
+                continue  # Already present
+            # Find sibling skills with same prefix
+            for sf in _glob.glob(os.path.join(self.skills_dir, '*', 'SKILL.md')):
+                sibling = os.path.basename(os.path.dirname(sf))
+                if sibling == name:
+                    continue
+                if sibling.split('-')[0] == prefix and sibling not in expanded:
+                    # Add sibling with slightly lower score
+                    expanded[sibling] = {'score': data['score'] * 0.7, 'source': 'sibling_expand'}
+        
+        if expanded != dict(sorted_results):
+            sorted_results = sorted(expanded.items(), key=lambda x: -x[1]['score'])
+        
         # === Domain filter ===
         if domain_filter:
             sorted_results = [r for r in sorted_results if getattr(self, '_skill_info', {}).get(r[0], {}).get('domain') == domain_filter or r[0] in domain_filter]
@@ -419,11 +461,21 @@ class HybridMatcher:
         # === Format output ===
         out = []
         skill_info = getattr(self, '_skill_info', {})
+        
+        # Lazy-load when_to_use from SKILL.md files
+        if not getattr(self, '_wtu_cache', None):
+            self._load_when_to_use()
+        
         for name, data in sorted_results[:top_k]:
             info = skill_info.get(name, {})
+            wtu = getattr(self, '_wtu_cache', {}).get(name, '')
+            # For collision groups with close scores, append when_to_use to help LLM choose
+            if not wtu:
+                wtu = info.get('description', '')
             out.append({
                 'name': name,
                 'description': info.get('description', ''),
+                'when_to_use': wtu,
                 'score': data['score'],
                 'match_type': data['source'],
             })

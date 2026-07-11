@@ -1,6 +1,7 @@
 ---
 name: get_oligo_annealing_protocol
 description: "Return a standard protocol for annealing oligonucleotides without phosphorylation."
+when_to_use: "Return a standard protocol for annealing oligonucleotides without phosphorylation."
 version: 1.0.0
 author: MemOmics
 license: MIT

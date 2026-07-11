@@ -1,6 +1,7 @@
 ---
 name: search_google
 description: "Search using Google search and return formatted results."
+when_to_use: "Search using Google search and return formatted results."
 version: 1.0.0
 author: MemOmics
 license: MIT

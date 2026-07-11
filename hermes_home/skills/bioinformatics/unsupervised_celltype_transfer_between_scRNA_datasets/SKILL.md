@@ -1,6 +1,7 @@
 ---
 name: unsupervised_celltype_transfer_between_scRNA_datasets
 description: "Transfer cell type labels from an annotated reference scRNA-seq dataset to an unannotated query dataset using popV. Loads both AnnData .h5ad files, prepares count layers for scVI, processes the query "
+when_to_use: "Transfer cell type labels from an annotated reference scRNA-seq dataset to an unannotated query dataset using popV. Loads both AnnData .h5ad files, prepares count layers for scVI, processes the query"
 version: 1.0.0
 author: MemOmics
 license: MIT

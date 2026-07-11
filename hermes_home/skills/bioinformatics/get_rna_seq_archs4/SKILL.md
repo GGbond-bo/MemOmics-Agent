@@ -1,6 +1,7 @@
 ---
 name: get_rna_seq_archs4
 description: "Given a gene name, fetch RNA-seq expression data showing the top K tissues with highest transcripts-per-million (TPM) values."
+when_to_use: "Given a gene name, fetch RNA-seq expression data showing the top K tissues with highest transcripts-per-million (TPM) values."
 version: 1.0.0
 author: MemOmics
 license: MIT

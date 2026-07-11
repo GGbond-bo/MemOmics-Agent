@@ -1,6 +1,7 @@
 ---
 name: analyze_fatty_acid_composition_by_gc
 description: "Analyzes fatty acid composition in tissue samples using gas chromatography data."
+when_to_use: "Analyzes fatty acid composition in tissue samples using gas chromatography data."
 version: 1.0.0
 author: MemOmics
 license: MIT

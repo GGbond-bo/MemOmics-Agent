@@ -1,6 +1,7 @@
 ---
 name: hdwgcna
 description: "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联"
+when_to_use: "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联"
 version: 1.0.0
 author: MemOmics
 license: MIT

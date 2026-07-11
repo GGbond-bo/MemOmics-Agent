@@ -1,6 +1,7 @@
 ---
 name: query_openfda
 description: "Query the OpenFDA API using natural language or direct parameters."
+when_to_use: "Query the OpenFDA API using natural language or direct parameters."
 version: 1.0.0
 author: MemOmics
 license: MIT

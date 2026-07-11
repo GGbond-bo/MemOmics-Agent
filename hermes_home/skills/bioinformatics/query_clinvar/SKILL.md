@@ -1,6 +1,7 @@
 ---
 name: query_clinvar
 description: "Convert a natural language prompt into a structured ClinVar search query and run it."
+when_to_use: "Convert a natural language prompt into a structured ClinVar search query and run it."
 version: 1.0.0
 author: MemOmics
 license: MIT

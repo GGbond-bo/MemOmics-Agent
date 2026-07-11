@@ -1,6 +1,7 @@
 ---
 name: data-viz
 description: "绘制高质量数据可视化图表：UMAP/tSNE/热图/火山图/小提琴图等"
+when_to_use: "绘制高质量数据可视化图表：UMAP/tSNE/热图/火山图/小提琴图等"
 version: 1.0.0
 author: MemOmics
 license: MIT

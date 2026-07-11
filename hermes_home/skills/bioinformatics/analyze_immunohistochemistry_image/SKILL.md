@@ -1,6 +1,7 @@
 ---
 name: analyze_immunohistochemistry_image
 description: "Analyzes immunohistochemistry images to quantify protein expression and spatial distribution."
+when_to_use: "Analyzes immunohistochemistry images to quantify protein expression and spatial distribution."
 version: 1.0.0
 author: MemOmics
 license: MIT

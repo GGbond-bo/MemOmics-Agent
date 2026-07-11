@@ -1,6 +1,7 @@
 ---
 name: analyze_rna_secondary_structure_features
 description: "Calculate numeric values for various structural features of an RNA secondary structure."
+when_to_use: "Calculate numeric values for various structural features of an RNA secondary structure."
 version: 1.0.0
 author: MemOmics
 license: MIT

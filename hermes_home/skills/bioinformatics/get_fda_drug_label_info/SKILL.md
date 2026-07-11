@@ -1,6 +1,7 @@
 ---
 name: get_fda_drug_label_info
 description: "Retrieve FDA drug label information including indications, contraindications, warnings, and dosage information from the OpenFDA database."
+when_to_use: "Retrieve FDA drug label information including indications, contraindications, warnings, and dosage information from the OpenFDA database."
 version: 1.0.0
 author: MemOmics
 license: MIT

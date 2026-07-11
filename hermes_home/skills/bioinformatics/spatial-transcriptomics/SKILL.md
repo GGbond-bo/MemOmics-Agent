@@ -1,6 +1,7 @@
 ---
 id: "skill_30b65ae0dee54a929017fbc760aefe01"
 name: "spatial-transcriptomics"
+when_to_use: "需使用spatial transcriptomics功能，适用于相关生信分析场景"
 display-name: "Spatial Transcriptomics Visium Analysis"
 category: transcriptomics
 short-description: "Analyze 10x Visium spatial transcriptomics data from QC through spatial domain analysis with clustering, spatially variable genes, and neighborhood enrichment."

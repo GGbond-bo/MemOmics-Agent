@@ -1,6 +1,7 @@
 ---
 name: simulate_thyroid_hormone_pharmacokinetics
 description: "Simulates the transport and binding of thyroid hormones across different tissue compartments using an ODE-based pharmacokinetic model."
+when_to_use: "Simulates the transport and binding of thyroid hormones across different tissue compartments using an ODE-based pharmacokinetic model."
 version: 1.0.0
 author: MemOmics
 license: MIT

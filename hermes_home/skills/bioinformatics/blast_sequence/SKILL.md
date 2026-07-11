@@ -1,6 +1,7 @@
 ---
 name: blast_sequence
 description: "Identify a DNA or protein sequence using NCBI BLAST."
+when_to_use: "Identify a DNA or protein sequence using NCBI BLAST."
 version: 1.0.0
 author: MemOmics
 license: MIT

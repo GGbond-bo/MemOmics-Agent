@@ -1,6 +1,7 @@
 ---
 name: analyze_protease_kinetics
 description: "Analyze protease kinetics data from fluorogenic peptide cleavage assays, fit the data to Michaelis-Menten kinetics, and determine key kinetic parameters."
+when_to_use: "Analyze protease kinetics data from fluorogenic peptide cleavage assays, fit the data to Michaelis-Menten kinetics, and determine key kinetic parameters."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: analyze_endolysosomal_calcium_dynamics
 description: "Analyze calcium dynamics in endo-lysosomal compartments using ELGA/ELGA1 probe data."
+when_to_use: "Analyze calcium dynamics in endo-lysosomal compartments using ELGA/ELGA1 probe data."
 version: 1.0.0
 author: MemOmics
 license: MIT

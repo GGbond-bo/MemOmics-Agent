@@ -1,6 +1,7 @@
 ---
 name: fit_genomic_prediction_model
 description: "Fit a linear mixed model for genomic prediction using genotype and phenotype data."
+when_to_use: "Fit a linear mixed model for genomic prediction using genotype and phenotype data."
 version: 1.0.0
 author: MemOmics
 license: MIT

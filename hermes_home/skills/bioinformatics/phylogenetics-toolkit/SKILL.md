@@ -9,6 +9,7 @@ A unified workflow for protein (or nucleotide) phylogenetic analysis, from raw s
 - 禁止直接用历史日志里的脚本运行而不经本次审查
 - 运行日志是"参考"不是"免审凭证"
 
+when_to_use: "需使用phylogenetics toolkit功能，适用于相关生信分析场景"
 ---
 
 ## 0. Sanity-check before starting

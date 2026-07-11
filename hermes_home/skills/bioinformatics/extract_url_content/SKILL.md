@@ -1,6 +1,7 @@
 ---
 name: extract_url_content
 description: "Extract the text content of a webpage using requests and BeautifulSoup."
+when_to_use: "Extract the text content of a webpage using requests and BeautifulSoup."
 version: 1.0.0
 author: MemOmics
 license: MIT

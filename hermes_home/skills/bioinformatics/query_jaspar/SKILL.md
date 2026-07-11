@@ -1,6 +1,7 @@
 ---
 name: query_jaspar
 description: "Query the JASPAR REST API for transcription factor binding profiles."
+when_to_use: "Query the JASPAR REST API for transcription factor binding profiles."
 version: 1.0.0
 author: MemOmics
 license: MIT

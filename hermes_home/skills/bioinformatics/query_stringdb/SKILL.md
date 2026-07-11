@@ -1,6 +1,7 @@
 ---
 name: query_stringdb
 description: "Query the STRING protein interaction database using natural language or direct endpoint."
+when_to_use: "Query the STRING protein interaction database using natural language or direct endpoint."
 version: 1.0.0
 author: MemOmics
 license: MIT

@@ -1,6 +1,7 @@
 ---
 name: fetch_supplementary_info_from_doi
 description: "Fetches supplementary information for a paper given its DOI and saves it to a specified directory."
+when_to_use: "Fetches supplementary information for a paper given its DOI and saves it to a specified directory."
 version: 1.0.0
 author: MemOmics
 license: MIT

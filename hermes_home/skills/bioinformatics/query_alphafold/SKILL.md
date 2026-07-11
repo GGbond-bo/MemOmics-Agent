@@ -1,6 +1,7 @@
 ---
 name: query_alphafold
 description: "Query the AlphaFold Database API for protein structure predictions or metadata; optionally download structures."
+when_to_use: "Query the AlphaFold Database API for protein structure predictions or metadata; optionally download structures."
 version: 1.0.0
 author: MemOmics
 license: MIT

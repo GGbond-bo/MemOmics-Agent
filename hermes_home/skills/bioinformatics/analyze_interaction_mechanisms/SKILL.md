@@ -1,6 +1,7 @@
 ---
 name: analyze_interaction_mechanisms
 description: "Analyze interaction mechanisms between two specific drugs providing detailed mechanistic insights and clinical significance assessment."
+when_to_use: "Analyze interaction mechanisms between two specific drugs providing detailed mechanistic insights and clinical significance assessment."
 version: 1.0.0
 author: MemOmics
 license: MIT

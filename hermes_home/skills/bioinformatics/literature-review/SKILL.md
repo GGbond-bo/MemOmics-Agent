@@ -2,6 +2,7 @@
 id: skill_9b0361e33e5541bbb2b43f671dc0d5a5
 name: literature-review
 description: >
+when_to_use: "需使用literature review功能，适用于相关生信分析场景"
   General-purpose literature review and evidence synthesis for any scientific
   topic. Aligns with the user through a short clarification step, then searches
   the peer-reviewed literature with the Biomni LiteratureSearch tool using a

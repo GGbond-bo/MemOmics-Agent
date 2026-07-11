@@ -1,6 +1,7 @@
 ---
 id: "skill_eb2ad58c6e5a40fa9328874443eef99d"
 name: "functional-enrichment-from-degs"
+when_to_use: "已有DEG分析结果(从DESeq2/Seurat出来的logFC/p-value表)，需要从DEG表直接一键做功能富集，不手动整理基因列表"
 display-name: "Functional Enrichment Analysis (GSEA + ORA)"
 category: functional_analysis
 short-description: Perform functional enrichment analysis using clusterProfiler on differential expression results with GSEA and ORA.

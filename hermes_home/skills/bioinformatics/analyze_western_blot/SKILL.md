@@ -1,6 +1,7 @@
 ---
 name: analyze_western_blot
 description: "Performs densitometric analysis of Western blot images to quantify relative protein expression."
+when_to_use: "Performs densitometric analysis of Western blot images to quantify relative protein expression."
 version: 1.0.0
 author: MemOmics
 license: MIT

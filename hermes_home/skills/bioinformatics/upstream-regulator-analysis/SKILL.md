@@ -1,6 +1,7 @@
 ---
 id: "skill_cf9489278b984eef91e08a40b68943be"
 name: "upstream-regulator-analysis"
+when_to_use: "需使用upstream regulator analysis功能，适用于相关生信分析场景"
 display-name: "Upstream Regulator Analysis"
 category: multi_omics
 short-description: "Integrate ChIP-Atlas TF binding data with RNA-seq differential expression to identify upstream regulators driving transcriptomic changes."
