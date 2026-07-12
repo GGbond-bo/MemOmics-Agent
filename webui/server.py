@@ -3457,23 +3457,7 @@ async def ws_endpoint(ws: WebSocket):
                                         _session_emit(session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
-                            # 推送结构化方案数据到前端面板
-                            try:
-                                phases = _parse_plan_phases(result or "")
-                                lit_table = _extract_lit_table(result or "")
-                                _session_emit(session, {
-                                    "type": "plan_update",
-                                    "text": (result or "")[:3000],
-                                    "phases": phases,
-                                    "lit": lit_table,
-                                    "todos": pipe_todos if not did_call else [],
-                                    "intent": _intent,
-                                    "session_id": session["id"],
-                                    "ts": datetime.now().strftime("%H:%M:%S"),
-                                })
-                                session["active_plan"] = True
-                            except Exception as e:
-                                logger.warning(f"plan_update push failed: {e}")
+                            session["active_plan"] = True
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
