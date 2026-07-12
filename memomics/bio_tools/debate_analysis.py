@@ -138,6 +138,8 @@ PRO_BIO_PROMPT = """你是一位**生物学专业编辑**（正方）。你的�
 3. **生物学预期**：结果是否符合该物种/组织/方向的生物学预期？
 
 要求：
+- 如果知识库参考中有具体发现和文献，**必须引用**（标注文献来源）
+- 如果知识库参考为空，标注 [LLM常识，非知识库引用]
 - 给出具体的基因名、表达数据、文献引用
 - 不要空话，要有数据支撑
 - 控制在 300 字以内
@@ -580,6 +582,18 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     kb = knowledge_base_info or "无知识库参考"
     hist = history_errors or "无历史报错记录"
 
+    # ========== 自动加载知识库（兜底：KB 为空时从 context 提取物种/组织/方向） ==========
+    if kb == "无知识库参考" and not biology_kb and not statistics_kb and not bioinfo_kb:
+        auto_kb = _auto_load_kb(context, topic)
+        if auto_kb:
+            kb = auto_kb
+            if not biology_kb:
+                biology_kb = auto_kb
+            if not statistics_kb:
+                statistics_kb = auto_kb
+            if not bioinfo_kb:
+                bioinfo_kb = auto_kb
+
     # ========== 查询历史辩论（优化2：持久化复用） ==========
     cached = _load_debate(topic, context)
     if cached:
@@ -696,6 +710,73 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         logger.warning(f"Multi-role debate failed, using fallback: {e}")
         return _fallback_debate(topic, context, knowledge_base_info, history_errors)
 
+
+def _auto_load_kb(context: str, topic: str) -> str:
+    """当 KB 未传入时，从 context/topic 提取物种/组织/方向，自动加载知识库。"""
+    import yaml
+    text = (topic + " " + context).lower()
+    
+    species_map = {
+        "homo_sapiens": ["人", "human", "患者", "homo sapiens", "病人"],
+        "mus_musculus": ["小鼠", "mouse", "mus musculus", "c57", "balb"],
+        "rattus_norvegicus": ["大鼠", "rat", "rattus"],
+        "danio_rerio": ["斑马鱼", "zebrafish", "danio"],
+    }
+    tissue_map = {
+        "liver": ["肝脏", "liver", "肝", "hepatocyte"],
+        "skeletal_muscle": ["骨骼肌", "skeletal muscle", "肌肉", "myofiber"],
+        "brain": ["脑", "brain", "neuron", "cortex"],
+        "kidney": ["肾", "kidney", "renal"],
+        "heart": ["心脏", "heart", "cardiac"],
+        "lung": ["肺", "lung", "pulmonary"],
+        "blood": ["血液", "blood", "pbmc"],
+        "skin": ["皮肤", "skin", "dermal"],
+        "adipose": ["脂肪", "adipose"],
+        "pancreas": ["胰腺", "pancreas"],
+        "intestine": ["肠道", "intestine", "colon"],
+        "bone_marrow": ["骨髓", "bone marrow"],
+    }
+    direction_map = {
+        "aging": ["衰老", "aging", "ageing", "老化", "年龄", "增龄"],
+        "development": ["发育", "development", "胚胎", "分化", "再生", "regeneration"],
+        "disease": ["疾病", "disease", "癌症", "cancer", "肿瘤", "tumor"],
+    }
+    
+    sp = next((k for k, vs in species_map.items() if any(v in text for v in vs)), None)
+    ts = next((k for k, vs in tissue_map.items() if any(v in text for v in vs)), None)
+    dr = next((k for k, vs in direction_map.items() if any(v in text for v in vs)), "general")
+    
+    if not sp or not ts:
+        return ""
+    
+    kb_root = os.path.join(
+        os.path.dirname(__file__), "..", "..", "memomics", "knowledge_base"
+    )
+    kb_dir = os.path.join(kb_root, sp, ts, dr)
+    if not os.path.isdir(kb_dir):
+        kb_dir = os.path.join(kb_root, sp, ts, "general")
+    if not os.path.isdir(kb_dir):
+        return ""
+    
+    parts = []
+    for dirpath, dirnames, filenames in os.walk(kb_dir):
+        for fn in sorted(filenames):
+            if fn.endswith((".yaml", ".yml")) and fn != "index.yaml":
+                fp = os.path.join(dirpath, fn)
+                try:
+                    with open(fp, "r", encoding="utf-8") as fh:
+                        content = fh.read()
+                    if len(content) > 100:
+                        label = "## " + fn + "\n"
+                        parts.append(label + content[:3000])
+                except Exception:
+                    pass
+    
+    if not parts:
+        return ""
+    
+    header = "[auto-loaded KB] " + sp + "/" + ts + "/" + dr + "\n\n"
+    return header + "\n\n".join(parts[:6])
 
 def _fallback_debate(topic: str, context: str, kb_info: str, history_errors: str) -> str:
     """退化为 prompt 模式（无 API 调用）。"""

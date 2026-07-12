@@ -101,7 +101,7 @@
 2. **先查知识库**：有物种/组织/方向 → `search_knowledge()` 获取参数推荐
 3. **先审查再跑**：分析级操作 → `rail_review(pre)` → 写代码 → `terminal` → `rail_review(post)`
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
-5. **必须辩论**：分析级结论 → `debate_analysis` 正反方辩论
+5. **必须辩论**：分析级结论 → 必须将 `search_knowledge()` 返回的物种/组织/方向知识库内容作为 `knowledge_base_info`/`biology_kb`/`statistics_kb`/`bioinfo_kb` 传入 `debate_analysis`。KB 非空时辩论编辑必须引用 KB 中的具体文献和发现。辩论结果中无 KB 引用 → 重新辩论。
 6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run 沉淀"
 7. **必须记录**：跑通过 → `skill_evolution(action="record_run")`，跑失败 → `record_error`
 7. **结果目录**：所有输出放在 `results/{session_dir}/` 下对应子目录，**不放桌面**
@@ -119,7 +119,7 @@
 |------|------|----------|
 | **轻量级** (5步) | skill_view → check_env → write → terminal → rail_review(post) | 格式转换、文件处理 |
 | **统计级** (7步) | + search_knowledge + rail_review(pre) | 统计检验、富集分析、生存分析 |
-| **分析级** (8步) | + debate_analysis | RNA,ATAC,空间组，bulk，蛋白、QC、聚类、DEG、轨迹、通讯、整合 |
+| **分析级** (8步) | + search_knowledge → 结果传入 debate_analysis(knowledge_base_info=...) | RNA,ATAC,空间组，bulk，蛋白、QC、聚类、DEG、轨迹、通讯、整合 |
 
 > 无法判定 → 默认分析级，宁可多做不可少做
 
