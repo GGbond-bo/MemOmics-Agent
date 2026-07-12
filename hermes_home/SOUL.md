@@ -63,6 +63,7 @@
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "报错" / "error" / "出错" / "怎么修" / "不工作" / "跑不了" / "fix" / "debug" | `skill_view("error-recovery")` |
+| "研究方案" / "实验设计" / "方案设计" / "设计实验" / "研究计划" / "research plan" / "research proposal" | `skill_view("academic-research")` → 然后 search_knowledge(species, tissue, direction) 加载 KB 方法推荐 |
 
 ### LLM 决策树（每条用户消息走一遍）
 

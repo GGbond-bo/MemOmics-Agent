@@ -40,6 +40,54 @@ prerequisites:
 
 适用于: 实验方案设计, 研究规划, 文献综述
 
+## 执行模板 — 研究方案生成
+
+当用户请求生成研究方案时，必须按以下模板输出：
+
+```
+## 研究方案: {species} {tissue} {direction}
+### 背景与假说
+- 生物学问题:
+- 已有数据:
+- 科学假说:
+
+### 文献依据
+| 文献(作者+年份,DOI) | 方法 | 关键发现 | 来源 |
+|---------------------|------|----------|------|
+| ... | ... | ... | [KB]/[PMID] |
+
+### 分析方法
+1. **[KB]** Seurat v4.0.2 → SCTransform → QC (已在本知识库 Nikopoulou 2023 中验证)
+2. **[KB]** Harmony v1.0 → 批次校正
+3. **[PubMed]** cell-cell communication → CellChat v2 (PMID:33950716)
+... (每个方法标注来源)
+
+### 图表策略
+- Figure 1: UMAP + 标记基因表达
+- Figure 2: ...
+
+### 可执行待办
+调用 memomics_pipeline(action='todos', selected_modules=[...])
+```
+
+## ⚠️ 知识库引用规则（Iron Law #7）
+
+1. **必须**调 `search_knowledge(species, tissue, direction)` 加载本地KB论文
+2. KB中的论文推荐**优先级最高**：版本号 → KB版本，方法链 → KB已验证流程
+3. KB来源标注 **[KB]**，PubMed来源标注 **[PMID:xxx]**
+4. 方案中推荐的工具如果与KB冲突 → 优先KB中的版本号
+5. 如果KB中某篇论文的方法链与用户研究高度相关 → 在方案中引用并说明"可复现性"
+
+## Loop Gate — 方案质量检查
+
+交付前必须通过以下检查：
+- [ ] search_knowledge 是否已调用？KB内容是否注入方案？
+- [ ] 方案中的工具/版本号是否标注了来源 ([KB] / [PMID])？
+- [ ] 是否有 ≥2 个方法推荐来自KB论文？
+- [ ] 方案是否包含可执行待办？
+
+全部 ✅ → 交付。有 ❌ → 补充缺失步骤。
+
 ## Proven Scripts
 
 > Scripts that have been successfully executed and passed analysis review.
