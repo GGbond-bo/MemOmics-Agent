@@ -608,6 +608,9 @@ Make six critical decisions during analysis:
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
+| SCTransform on 150K cells crashed with glmGamPoi | glmGamPoi version 1.8 incompatible with  | Downgrade glmGamPoi to 1.6.0 + conserve.memory=TRU |
+| SCTransform model failed to converge for 342 genes | Too many cells with zero counts in genes | Use glmGamPoi backend: SCTransform(..., method='gl |
+| Cannot allocate vector of size 8.0 Gb | SCTransform on full dataset exceeded mem | Use SCTransform with conserve.memory=TRUE and down |
 | "Cannot find package 'Seurat'" | Package not installed | `install.packages("Seurat")` or check R version ≥4.1 |
 | Low cell retention (<50%) | Too strict QC thresholds | Use MAD-based filtering instead of fixed thresholds. Review tissue-specific QC guidelines: [references/qc_guidelines.md](references/qc_guidelines.md) |
 | "No harmony reduction found" | Trying to cluster on harmony before integration | Skip integration step for single-batch data, or run `run_harmony_integration()` before clustering |
@@ -755,3 +758,16 @@ After completing core scRNA-seq analysis:
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| Homo sapiens | heart | sinoatrial node development | 2026-07-12 | run_seurat.R | 7.0 | 8.5 | ✅ |
+| Homo sapiens | heart | sinus node aging | 2026-07-12 | run_seurat.R | 8.5 | 9.0 | ✅ |
+| Homo sapiens | heart | sinoatrial node development | 2026-07-12 | run_seurat.R | 8.5 | 9.0 | ✅ |
+| Homo sapiens | heart | sinoatrial node development | 2026-07-12 | run_seurat.R | 7.0 | 8.5 | ✅ |
+| Homo sapiens | heart | sinus node aging | 2026-07-12 | run_seurat.R | 8.5 | 9.0 | ✅ |
+| Homo sapiens | heart | sinoatrial node development | 2026-07-12 | run_seurat.R | 8.5 | 9.0 | ✅ |

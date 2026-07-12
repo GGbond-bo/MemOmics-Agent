@@ -8,5 +8,231 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "success_count": 9,
+  "proven_script": "run_seurat.R",
+  "proven_params": [
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "resolution=0.8, dims=1:30, nfeatures=2000",
+      "date": "2026-07-12",
+      "score": 8.5,
+      "auto_score": 7.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Identified 3 pacemaker cell subtypes (SAN_PC1/2/3) via SCTransform+Harmony"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinus node aging",
+      "script": "run_seurat.R",
+      "params": "resolution=1.2, dims=1:30, nfeatures=3000, SCTransform",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Aged pacemaker cells show HCN4 downregulation, fibrosis gene upregulation"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "SCTransform(conserve.memory=TRUE, method='glmGamPoi'), resolution=0.8",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Fixed: 150K cells processed via glmGamPoi (version fixed) + SCTransform, 3 subtypes identified"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "resolution=0.8, dims=1:30, nfeatures=2000",
+      "date": "2026-07-12",
+      "score": 8.5,
+      "auto_score": 7.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Identified 3 pacemaker cell subtypes (SAN_PC1/2/3) via SCTransform+Harmony"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinus node aging",
+      "script": "run_seurat.R",
+      "params": "resolution=1.2, dims=1:30, nfeatures=3000, SCTransform",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Aged pacemaker cells show HCN4 downregulation, fibrosis gene upregulation"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "SCTransform(conserve.memory=TRUE, method='glmGamPoi'), resolution=0.8",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Fixed: 150K cells processed via glmGamPoi (version fixed) + SCTransform, 3 subtypes identified"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "resolution=0.8, dims=1:30, nfeatures=2000",
+      "date": "2026-07-12",
+      "score": 8.5,
+      "auto_score": 7.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Identified 3 pacemaker cell subtypes (SAN_PC1/2/3) via SCTransform+Harmony"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinus node aging",
+      "script": "run_seurat.R",
+      "params": "resolution=1.2, dims=1:30, nfeatures=3000, SCTransform",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Aged pacemaker cells show HCN4 downregulation, fibrosis gene upregulation"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node development",
+      "script": "run_seurat.R",
+      "params": "SCTransform(conserve.memory=TRUE, method='glmGamPoi'), resolution=0.8",
+      "date": "2026-07-12",
+      "score": 9.0,
+      "auto_score": 8.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "Fixed: 150K cells processed via glmGamPoi (version fixed) + SCTransform, 3 subtypes identified"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "run_seurat.R"
+  },
+  "error_count": 9,
+  "errors": [
+    {
+      "timestamp": "2026-07-12 21:23",
+      "error_type": "MemoryError",
+      "message": "Cannot allocate vector of size 8.0 Gb",
+      "root_cause": "SCTransform on full dataset exceeded memory limit",
+      "fix_applied": "Use SCTransform with conserve.memory=TRUE and downsample to 50K cells",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-07-12 21:23",
+      "error_type": "ConvergenceError",
+      "message": "SCTransform model failed to converge for 342 genes",
+      "root_cause": "Too many cells with zero counts in genes",
+      "fix_applied": "Use glmGamPoi backend: SCTransform(..., method='glmGamPoi')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:23",
+      "error_type": "MemoryError",
+      "message": "SCTransform on 150K cells crashed with glmGamPoi",
+      "root_cause": "glmGamPoi version 1.8 incompatible with Matrix 1.6",
+      "fix_applied": "Downgrade glmGamPoi to 1.6.0 + conserve.memory=TRUE (from query_logs)",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "low"
+    },
+    {
+      "timestamp": "2026-07-12 21:26",
+      "error_type": "MemoryError",
+      "message": "Cannot allocate vector of size 8.0 Gb",
+      "root_cause": "SCTransform on full dataset exceeded memory limit",
+      "fix_applied": "Use SCTransform with conserve.memory=TRUE and downsample to 50K cells",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-07-12 21:26",
+      "error_type": "ConvergenceError",
+      "message": "SCTransform model failed to converge for 342 genes",
+      "root_cause": "Too many cells with zero counts in genes",
+      "fix_applied": "Use glmGamPoi backend: SCTransform(..., method='glmGamPoi')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:26",
+      "error_type": "MemoryError",
+      "message": "SCTransform on 150K cells crashed with glmGamPoi",
+      "root_cause": "glmGamPoi version 1.8 incompatible with Matrix 1.6",
+      "fix_applied": "Downgrade glmGamPoi to 1.6.0 + conserve.memory=TRUE (from query_logs)",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "low"
+    },
+    {
+      "timestamp": "2026-07-12 21:27",
+      "error_type": "MemoryError",
+      "message": "Cannot allocate vector of size 8.0 Gb",
+      "root_cause": "SCTransform on full dataset exceeded memory limit",
+      "fix_applied": "Use SCTransform with conserve.memory=TRUE and downsample to 50K cells",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-07-12 21:27",
+      "error_type": "ConvergenceError",
+      "message": "SCTransform model failed to converge for 342 genes",
+      "root_cause": "Too many cells with zero counts in genes",
+      "fix_applied": "Use glmGamPoi backend: SCTransform(..., method='glmGamPoi')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:27",
+      "error_type": "MemoryError",
+      "message": "SCTransform on 150K cells crashed with glmGamPoi",
+      "root_cause": "glmGamPoi version 1.8 incompatible with Matrix 1.6",
+      "fix_applied": "Downgrade glmGamPoi to 1.6.0 + conserve.memory=TRUE (from query_logs)",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "low"
+    }
+  ]
 }

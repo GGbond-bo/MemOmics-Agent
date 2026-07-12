@@ -83,11 +83,50 @@
       "date": "2026-07-04",
       "score": 8.5,
       "result": "1,119 DEGs across 10 cell types. Type I most active (156↑ 182↓), Endothelial vascular degeneration (30↑ 154↓), Schwann neural remodeling (54↑ 5↓), Denervated innervation loss (12↑ 85↓)"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
     }
   ],
-  "proven_script": "deg_analysis.R",
-  "error_count": 0,
-  "success_count": 1,
+  "proven_script": "run_deg.R",
+  "error_count": 3,
+  "success_count": 4,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -95,5 +134,43 @@
       "scrna-clustering"
     ],
     "description": "需要已聚类的数据"
-  }
+  },
+  "user_prefs": {
+    "last_used_script": "run_deg.R"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-07-12 21:23",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:26",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:27",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    }
+  ]
 }

@@ -171,10 +171,14 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
+| Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
+| Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| there is no package called 'MAST' | MAST not installed in R environment | install.packages('BiocManager'); BiocManager::inst |
 | *(accumulated from runs)* | | |
 
 ## References

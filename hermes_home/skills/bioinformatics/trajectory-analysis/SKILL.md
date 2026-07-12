@@ -98,6 +98,12 @@ PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出�
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
+| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
+| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
+| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
+| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
+| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

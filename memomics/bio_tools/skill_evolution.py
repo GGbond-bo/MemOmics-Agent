@@ -793,19 +793,19 @@ def _sync_to_hermes_home(skill_name: str, skill_dir: str):
         return
     if os.path.isdir(target) and os.path.isdir(skill_dir):
         try:
-            # 只同步 .md, .json, logs/
+            # 只同步 .md, .json, logs/ — 添加重试机制处理 Windows 文件锁
             for item in ["SKILL.md", "skill.json"]:
                 src = os.path.join(skill_dir, item)
                 if os.path.exists(src):
-                    shutil.copy2(src, os.path.join(target, item))
+                    _copy_with_retry(src, os.path.join(target, item))
             # 同步 logs
             src_logs = os.path.join(skill_dir, "logs")
             dst_logs = os.path.join(target, "logs")
             if os.path.isdir(src_logs):
                 if not os.path.isdir(dst_logs):
-                    os.makedirs(dst_logs)
+                    os.makedirs(dst_logs, exist_ok=True)
                 for f in os.listdir(src_logs):
-                    shutil.copy2(os.path.join(src_logs, f), os.path.join(dst_logs, f))
+                    _copy_with_retry(os.path.join(src_logs, f), os.path.join(dst_logs, f))
             # 同步 scripts
             src_scripts = os.path.join(skill_dir, "scripts")
             dst_scripts = os.path.join(target, "scripts")
