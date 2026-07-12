@@ -1442,6 +1442,7 @@ function filterSessions() {
 var _lastSessionFingerprint = '';
 function renderSessionList(sessions) {
   console.log('[RSL] renderSessionList called with ' + (sessions?sessions.length:0) + ' sessions, currentSid=' + currentSid);
+  if (!sessions || !sessions.length) { console.trace('[RSL-EMPTY] renderSessionList called with EMPTY!'); }
   var el = document.getElementById('session-list');
   if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; _lastSessionFingerprint = ''; return; }
   // 按创建时间从新到旧排列（最新的在最上面）
