@@ -416,6 +416,47 @@ def _read_skills_index():
 
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
 import re as _re_mod
+
+def _parse_plan_phases(plan_text):
+    """从方案文本中提取分阶段技术路线"""
+    if not plan_text:
+        return []
+    phases = []
+    pattern = r'(?:^|\n)(?:#{1,3}\s*)?(?:Phase\s*\d+|阶段\s*[一二三四五六七八\d]|Step\s*\d+|第\s*[一二三四五六七八\d]\s*[步阶段])[：:\s]*(.+?)(?=\n(?:#{1,3}\s*)?(?:Phase\s*\d+|阶段\s*[一二三四五六七八\d]|Step\s*\d+|第\s*[一二三四五六七八\d]\s*[步阶段])|\n---|\Z)'
+    matches = _re_mod.findall(pattern, plan_text, _re_mod.DOTALL | _re_mod.IGNORECASE)
+    for i, m in enumerate(matches):
+        m = m.strip()
+        skills = _re_mod.findall(r'(?:skill|调用|运行|执行)[：:\s]*(?:`)?([a-zA-Z][a-zA-Z0-9_-]{3,40})', m)
+        phases.append({
+            "id": i + 1,
+            "title": m[:60],
+            "detail": m[:300],
+            "skills": list(set(skills))[:5],
+        })
+    if not phases:
+        sections = _re_mod.split(r'\n##\s+', plan_text)
+        for i, s in enumerate(sections[1:]):
+            title = s.split('\n')[0].strip()[:60]
+            skills = _re_mod.findall(r'(?:skill|调用|运行|执行)[：:\s]*(?:`)?([a-zA-Z][a-zA-Z0-9_-]{3,40})', s)
+            phases.append({
+                "id": i + 1,
+                "title": title,
+                "detail": s[:300],
+                "skills": list(set(skills))[:5],
+            })
+    return phases[:8]
+
+def _extract_lit_table(plan_text):
+    """从方案文本中提取文献表格"""
+    if not plan_text:
+        return ""
+    lit_lines = []
+    for line in plan_text.split('\n'):
+        if 'PMID' in line or 'DOI' in line.lower() or 'doi:' in line.lower():
+            clean = line.strip().strip('|')
+            lit_lines.append(clean[:200])
+    return '<br>'.join(lit_lines[:10]) if lit_lines else ""
+
 def _detect_lang(text):
     """检测文本语言: 中文返回 'zh', 否则返回 'en'"""
     if not text:
@@ -3405,6 +3446,23 @@ async def ws_endpoint(ws: WebSocket):
                                         _session_emit(session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
+                            # 推送结构化方案数据到前端面板
+                            try:
+                                phases = _parse_plan_phases(result or "")
+                                lit_table = _extract_lit_table(result or "")
+                                _session_emit(session, {
+                                    "type": "plan_update",
+                                    "text": (result or "")[:3000],
+                                    "phases": phases,
+                                    "lit": lit_table,
+                                    "todos": pipe_todos if not did_call else [],
+                                    "intent": _intent,
+                                    "session_id": session["id"],
+                                    "ts": datetime.now().strftime("%H:%M:%S"),
+                                })
+                                session["active_plan"] = True
+                            except Exception as e:
+                                logger.warning(f"plan_update push failed: {e}")
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()

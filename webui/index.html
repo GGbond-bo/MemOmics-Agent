@@ -966,6 +966,9 @@ function handleMessage(msg) {
       updatePlanIndicator(true);
       switchView('plan'); // auto-switch to plan panel
     }
+  } else if (msg.type === 'plan_update') {
+    // 服务端推送结构化方案数据
+    renderPlanPhases(msg);
   } else if (msg.type === 'cancelled') {
     addError('任务已取消');
     document.getElementById('send').disabled = false;
@@ -2946,6 +2949,74 @@ function refreshPlanStatus() {
     }
   }
   renderPlanTodos(_planCache.todos);
+}
+
+// 渲染服务端推送的结构化方案（分阶段技术路线）
+function renderPlanPhases(msg) {
+  var emptyEl = document.getElementById('plan-empty');
+  var contentEl = document.getElementById('plan-content');
+  var textEl = document.getElementById('plan-text');
+  var litEl = document.getElementById('plan-lit-table');
+  var todoList = document.getElementById('plan-todo-list');
+  
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = '';
+  
+  // 方案摘要
+  if (textEl && msg.text) {
+    textEl.innerHTML = '<div style="font-size:12px;line-height:1.6;max-height:120px;overflow-y:auto;">' +
+      msg.text.substring(0, 800).replace(/
+/g, '<br>') +
+      (msg.text.length > 800 ? '...<br><span style="color:var(--primary);cursor:pointer;" onclick="switchView('chat')">[查看完整方案 ↓]</span>' : '') +
+      '</div>';
+  }
+  
+  // 文献表
+  if (litEl && msg.lit) {
+    litEl.innerHTML = '<div style="font-size:10px;line-height:1.5;max-height:160px;overflow-y:auto;">' + msg.lit + '</div>';
+    litEl.parentElement.style.display = '';
+  }
+  
+  // 分阶段技术路线
+  var phasesContainer = document.getElementById('plan-phases');
+  if (!phasesContainer) {
+    phasesContainer = document.createElement('div');
+    phasesContainer.id = 'plan-phases';
+    var litSection = document.getElementById('plan-lit-table').parentElement;
+    if (litSection) litSection.after(phasesContainer);
+  }
+  
+  var phases = msg.phases || [];
+  if (phases.length > 0) {
+    var html = '<h3 style="font-size:13px;margin:10px 0 6px;">🗺️ 技术路线</h3>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    for (var i = 0; i < phases.length; i++) {
+      var p = phases[i];
+      var skillsHtml = (p.skills || []).map(function(s) {
+        return '<code style="font-size:9px;background:rgba(0,120,255,0.1);padding:1px 4px;border-radius:3px;">' + s + '</code>';
+      }).join(' ');
+      html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:rgba(0,120,255,0.03);border-radius:6px;border-left:3px solid var(--primary);">' +
+        '<div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;">' + p.id + '</div>' +
+        '<div style="flex:1;"><div style="font-size:12px;font-weight:600;">' + escapeHtml(p.title) + '</div>' +
+        '<div style="font-size:10px;color:var(--text-light);margin-top:2px;">' + escapeHtml(p.detail || '').substring(0, 200) + '</div>' +
+        (skillsHtml ? '<div style="margin-top:4px;">' + skillsHtml + '</div>' : '') +
+        '</div></div>';
+    }
+    html += '</div>';
+    phasesContainer.innerHTML = html;
+  } else {
+    phasesContainer.innerHTML = '';
+  }
+  
+  // 待办
+  if (todoList && msg.todos && msg.todos.length > 0) {
+    renderPlanTodos(msg.todos);
+  }
+  
+  _planCache.text = msg.text || '';
+  _planCache.lit = msg.lit || '';
+  _planCache.todos = msg.todos || [];
+  updatePlanIndicator(true);
 }
 
 // P3: Phase1→Phase2 one-click trigger
