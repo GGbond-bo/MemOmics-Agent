@@ -126,24 +126,57 @@ def extract_fulltext(pdf_path: str, max_chars: int = 150000) -> str:
 
 # ── Step 3: Methods 段定位 ────────────────────────────────────
 def locate_methods(fulltext: str) -> Optional[str]:
-    """正则定位 Methods 段落"""
-    # Multiple patterns for different journal formats
-    patterns = [
-        # Standard: "Methods" section header
-        r'(?:^|\n)(?:M[Ee][Tt][Hh][Oo][Dd][Ss]|Methods|METHODS)\s*\n\s*\n(.+?)(?=\n(?:Results|Discussion|References|Supplementary|Acknowledgments|Figure|Table|Data availability|Code availability|Author contributions|Competing|Funding)\s*\n)',
-        # Alternative: "Materials and Methods"
-        r'(?:^|\n)(?:Materials?\s*(?:and|&)\s*[Mm]ethods?|MATERIALS?\s*(?:AND|&)\s*METHODS?)\s*\n\s*\n(.+?)(?=\n(?:Results|Discussion|References|Supplementary|Acknowledgments|Figure|Table)\s*\n)',
-        # Chinese: 材料与方法 / 方法
-        r'(?:^|\n)(?:材料与方法|方法|实验方法)\s*\n\s*\n(.+?)(?=\n(?:结果|讨论|参考文献|补充|致谢|图表)\s*\n)',
-        # Online Methods (Nature format)
-        r'(?:^|\n)(?:Online\s*[Mm]ethods?|ONLINE\s*METHODS?)\s*\n\s*\n(.+?)(?=\n(?:References|Data availability|Code availability|Author contributions)\s*\n)',
+    """精确定位 Methods 段落 — 支持 Nature/Cell/PMC/中文格式"""
+    # 1. 找到 Methods 标题的偏移量
+    methods_headers = [
+        r'\nMethods\s*\n',           # Nature Communications 标准格式
+        r'\nMETHODS\s*\n',
+        r'\nMethods\s+\n',
+        r'\n(?:M[Ee][Tt][Hh][Oo][Dd][Ss])\s*\n',
+        r'\n(?:Materials?\s*(?:and|&)\s*[Mm]ethods?)\s*\n',
+        r'\n(?:材料与方法|方法|实验方法)\s*\n',
+        r'\n(?:Online\s*[Mm]ethods?)\s*\n',
     ]
-    for pat in patterns:
-        m = re.search(pat, fulltext, re.DOTALL)
-        if m and len(m.group(1).strip()) > 500:
-            return m.group(1).strip()
-    # Fallback: return all text
-    return fulltext
+    methods_start = None
+    for pat in methods_headers:
+        m = re.search(pat, fulltext)
+        if m:
+            methods_start = m.start()
+            break
+    
+    if methods_start is None:
+        return None  # 找不到 Methods 段
+    
+    # 2. 从 Methods 标题后取文本，直到下一个主要段落标题
+    text_after = fulltext[methods_start:]
+    # 第一个换行后的内容开始
+    first_nl = text_after.find('\n')
+    if first_nl < 0:
+        return None
+    body_start = first_nl + 1
+    body = text_after[body_start:]
+    
+    # 3. 截断到下一个段落标题
+    next_section_pats = [
+        r'\n(?:Data\s+availability|Code\s+availability)\s*\n',
+        r'\n(?:References|REFERENCES)\s*\n',
+        r'\n(?:Acknowledgments?|ACKNOWLEDGMENTS?)\s*\n',
+        r'\n(?:Author\s+contributions|Competing\s+interests|Funding)\s*\n',
+        r'\n(?:Supplementary|Figure\s+\d|Table\s+\d)\s*\n',
+        r'\n(?:Results|RESULTS|Discussion|DISCUSSION)\s*\n',  # 非 Nature 格式
+    ]
+    end_pos = len(body)
+    for pat in next_section_pats:
+        m = re.search(pat, body)
+        if m and m.start() < end_pos:
+            end_pos = m.start()
+    
+    methods_text = body[:end_pos].strip()
+    
+    # 4. 质量检查
+    if len(methods_text) < 500:
+        return None  # 太短，可能误匹配
+    return methods_text
 
 
 # ── Step 4: Layer1 正则提取 ───────────────────────────────────
@@ -161,11 +194,29 @@ def extract_layer1(methods_text: str) -> Dict:
         # Find package mentions
         for m in re.finditer(rf'\b{re.escape(pkg)}\b', methods_text, re.I):
             pos = m.start()
-            ctx = methods_text[max(0,pos-5):min(len(methods_text),pos+len(pkg)+100)]
-            # Extract version near this mention
-            ver_match = re.search(r'[Vv]\s*\.?\s*[\(\[]?\s*(\d+\.\d+(?:\.\d+)?)\)?\s*\)?', ctx)
-            version = ver_match.group(1) if ver_match else None
-            # Extract parameters near this mention
+            ctx = methods_text[max(0,pos-30):min(len(methods_text),pos+len(pkg)+150)]
+            
+            # 跳过假阳性 — Peer review / MACS cell sorting
+            if pkg == 'PEER' and ('Peer review' in ctx or 'peer review' in ctx.lower()):
+                continue
+            if pkg == 'MACS' and ('CD34' in ctx or 'magnetic' in ctx.lower() or 'flow cytometry' in ctx.lower() or 'MACS for' in ctx):
+                continue
+            
+            # 提取版本 — 支持两种 Nature 格式:
+            #   "package V. 4.0.4" / "package v4.0.4"
+            #   "package (version 4.0.4)" / "package (version 1.0)"
+            version = None
+            # 格式1: V. X.Y.Z 或 vX.Y.Z
+            ver_match = re.search(r'[Vv]\s*\.?\s*[\[\(]?\s*(\d+\.\d+(?:\.\d+)?)\)?\s*\)?', ctx)
+            if ver_match:
+                version = ver_match.group(1)
+            else:
+                # 格式2: (version X.Y.Z) 或 (version X.Y.Z, ...) — Nature 风格带逗号
+                ver_match = re.search(r'\(version\s+(\d[\.\d]+)[,\)]', ctx, re.I)
+                if ver_match:
+                    version = ver_match.group(1)
+            
+            # 提取上下文参数
             nearby_params = []
             for pat, pname in PARAM_PATTERNS:
                 for pm in re.finditer(pat, ctx):
@@ -177,15 +228,15 @@ def extract_layer1(methods_text: str) -> Dict:
                 'params': nearby_params[:5]
             })
 
-    # Dedup packages (case-insensitive)
-    seen = set()
-    unique_pkgs = []
+    # Dedup packages (case-insensitive), prefer versioned over unversioned
+    seen = {}
     for p in result['packages']:
         key = p['name'].lower()
         if key not in seen:
-            seen.add(key)
-            unique_pkgs.append(p)
-    result['packages'] = unique_pkgs
+            seen[key] = p
+        elif p.get('version') and not seen[key].get('version'):
+            seen[key] = p  # Prefer versioned occurrence
+    result['packages'] = list(seen.values())
 
     # 4b1. 代码风格参数提取
     for pat, pname in PARAM_PATTERNS:
@@ -366,9 +417,13 @@ def dissect_paper(pdf_path: str, output_dir: str = None, api_key: str = None,
 
     # Step 3: Locate Methods
     methods = locate_methods(fulltext)
-    print(f"  [3/8] Methods: {len(methods):,} chars")
+    if methods is None:
+        methods = fulltext
+        print(f"  [3/8] Methods: ⚠️  not found — using fulltext ({len(methods):,} chars)")
+    else:
+        print(f"  [3/8] Methods: {len(methods):,} chars (extracted section)")
     if len(methods) < 500 and not force:
-        return {'status': 'rejected', 'reason': 'methods not found', 'stats': {'methods_chars': len(methods)}}
+        return {'status': 'rejected', 'reason': 'methods too short', 'stats': {'methods_chars': len(methods)}}
 
     # Step 4: Layer1 regex
     layer1 = extract_layer1(methods)

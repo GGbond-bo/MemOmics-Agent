@@ -1,6 +1,6 @@
 metadata:
   source: work/papers/heart_san/bioRxiv_2025_MERFISH_heart.pdf
-  dissected_at: '2026-07-12T17:51:23.441259'
+  dissected_at: '2026-07-12T18:02:19.940534'
   pipeline_version: '2.0'
   paper_title: ''
   doi: ''
@@ -10,28 +10,27 @@ methods:
   packages:
   - name: Scanpy
     version: null
-    context: "the Scanpy tool to map the newly generated \ndata onto the previously\
-      \ published MERFISH data 93. \nAnalysis of 2"
+    context: "the “ingest” function of the Scanpy tool to map the newly generated\
+      \ \ndata onto the previously published MERFISH data 93. \nAnalysis of 2D heart\
+      \ sections with MERFISH+ probes \nMERFISH dat"
     params: []
   - name: scVI
     version: null
-    context: "nce (scVI)74 framework, using a \nvariational autoencoder (VAE)98 to\
-      \ model gene expression data. Each cell i h"
+    context: "e-cell variational inference (scVI)74 framework, using a \nvariational\
+      \ autoencoder (VAE)98 to model gene expression data. Each cell i has an \nunderlying\
+      \ global latent variable \n that ca"
     params: []
   - name: STAR
     version: null
-    context: "and STAR \nMethods). We provide a complete list of parts to assemble\
-      \ this high-throughput \nmicrofluidics-micr"
-    params: []
-  - name: PEER
-    version: null
-    context: d by peer review) is the author/funder, who has granted bioRxiv a license
-      to display the preprint in perpetui
+    context: "atforms15 (Figures 4A, 4B and STAR \nMethods). We provide a complete\
+      \ list of parts to assemble this high-throughput \nmicrofluidics-microscope\
+      \ system. To comprehensively examine the hear"
     params: []
   - name: MERFISH
-    version: null
-    context: "1 \nMERFISH+, a large-scale, multi-omics spatial technology resolves\
-      \ the \nmolecular holograms of the 3D human d"
+    version: 0.6.1
+    context: "ctions with acrydite-modified MERFISH probes \nMERFISH data imaged using\
+      \ acrydite-modified MERFISH probes were analyzed using \nMERlin v0.6.1 exactly\
+      \ as previously described15. Cell types w"
     params: []
   parameters:
   - name: nPCs
@@ -44,8 +43,8 @@ methods:
   stats:
     methods_length: 150000
     methods_lines: 3034
-    package_count: 5
-    version_count: 0
+    package_count: 4
+    version_count: 1
     parameter_count: 1
     platform_count: 2
 llm_extraction: null
