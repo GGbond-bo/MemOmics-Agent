@@ -1123,7 +1123,7 @@ def _load_persisted_sessions():
                     results_dir = _scan_results_dir_for_session(sid, default_dir)
             session = {
                 "id": sid,
-                "title": s.get("title") or messages[0]["content"][:30],
+                "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
                 "created": s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "messages": messages,
                 "model_config": _current_model,
