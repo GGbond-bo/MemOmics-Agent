@@ -50,6 +50,9 @@
 | "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" / "发育" / "分化" | `skill_view("trajectory-analysis")` |
 | "富集分析" / "GO"/"KEGG"/"pathway" | `skill_view("functional-enrichment")` |
 | "EDA" / "数据探索" / "看看数据" / "概览" / "data exploration" | `skill_view("scrna-eda")` |
+| "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" / "经验" | `skill_evolution(action="query_logs", skill=match) + recall_experience()` |
+| "我的偏好" / "user pref" / "可视化偏好" / "记忆" | `recall_experience(category="user_pref")` |
+| "之前报错" / "上次出错" / "error history" | `skill_evolution(action="query_logs", skill=match) — 优先查 holographic 错误记忆` |
 | "QC" / "质控" | `skill_view("scrna-qc")` |
 | "聚类" / "分群" / "cluster" | `skill_view("scrna-clustering")` |
 | "Seurat" / "SCTransform" / "NormalizeData" | `skill_view("scrnaseq-seurat-core-analysis")` |

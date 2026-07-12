@@ -21,6 +21,21 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 
+# Holographic memory bridge (lazy import to avoid __init__ chain)
+try:
+    import importlib.util
+    _mb_spec = importlib.util.spec_from_file_location(
+        "memory_bridge",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory_bridge.py")
+    )
+    _mb = importlib.util.module_from_spec(_mb_spec)
+    _mb_spec.loader.exec_module(_mb)
+    _has_memory_bridge = True
+except Exception:
+    _has_memory_bridge = False
+    _mb = None
+
+
 def _archive_to_results_log(record: dict, action: str):
     """需求1c：将 record_run/record_error 记录归档到 results/.../log/run_record_*.json"""
     try:
@@ -217,6 +232,18 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
         except Exception:
             pass
 
+    
+    # 3.5. Holographic memory: store error experience
+    if _has_memory_bridge and _mb:
+        try:
+            _mb.store_skill_exp(
+                skill_name=skill_name,
+                content=f"ERROR [{error_type}] {error_message[:200]} | fix: {fix_applied[:200]}",
+                tags=f"error,{error_type},{species},{tissue},{direction},severity-{severity}"
+            )
+        except Exception:
+            pass
+
     # 4. 同步到 hermes_home
     _sync_to_hermes_home(skill_name, skill_dir)
 
@@ -301,6 +328,32 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
         for ref_file in os.listdir(refs_dir):
             if ref_file.endswith(".md"):
                 result["references"].append({"file": ref_file, "path": os.path.join(refs_dir, ref_file)})
+
+    # 3.5. Holographic memory: recall experience
+    if _has_memory_bridge and _mb:
+        try:
+            mem = _mb.recall_experience(
+                skill_name=skill_name,
+                species=species or "",
+                tissue=tissue or "",
+                direction=direction or "",
+            )
+            for s in mem.get("proven_scripts", []):
+                result["proven_runs"].append({
+                    "source": "holographic",
+                    "fact_id": s["fact_id"],
+                    "content": s["content"],
+                    "trust_score": s["trust_score"],
+                })
+            for e in mem.get("known_errors", []):
+                result["known_errors"].append({
+                    "source": "holographic",
+                    "fact_id": e["fact_id"],
+                    "content": e["content"],
+                    "trust_score": e["trust_score"],
+                })
+        except Exception:
+            pass
 
     # 4. 生成摘要
     n_proven = len(result["proven_runs"])
@@ -399,6 +452,30 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
             with open(skill_json_path, "w", encoding="utf-8") as f:
                 json.dump(sj, f, indent=2, ensure_ascii=False)
             json_updated = True
+        except Exception:
+            pass
+
+    
+    # 3.5. Holographic memory: store script score
+    if _has_memory_bridge and _mb and script_name:
+        try:
+            _mb.store_script_score(
+                skill_name=skill_name,
+                script_name=script_name,
+                user_score=int(score) if score else 0,
+                auto_score=int(auto_score) if auto_score else 0,
+                species=species or "",
+                tissue=tissue or "",
+                direction=direction or "",
+                approved=approved,
+                notes=result_summary[:200] if result_summary else ""
+            )
+            if result_summary:
+                _mb.store_skill_exp(
+                    skill_name=skill_name,
+                    content=f"{species}/{tissue}/{direction}: {result_summary[:200]}",
+                    tags=f"{species},{tissue},{direction},success"
+                )
         except Exception:
             pass
 
