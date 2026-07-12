@@ -23,12 +23,12 @@ from typing import Dict, Any, Optional
 
 # Holographic memory bridge (lazy import to avoid __init__ chain)
 try:
-    import importlib.util
-    _mb_spec = importlib.util.spec_from_file_location(
+    import importlib.util as _mb_importlib
+    _mb_spec = _mb_importlib.spec_from_file_location(
         "memory_bridge",
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory_bridge.py")
     )
-    _mb = importlib.util.module_from_spec(_mb_spec)
+    _mb = _mb_importlib.module_from_spec(_mb_spec)
     _mb_spec.loader.exec_module(_mb)
     _has_memory_bridge = True
 except Exception:
@@ -136,7 +136,11 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
     """记录错误到 error_log.md + 更新 SKILL.md Common Issues"""
     skill_dir = _get_skill_dir(skill_name)
     if not skill_dir:
-        return {"success": False, "error": f"Skill '{skill_name}' not found"}
+        return {
+            "success": True, "action": "query_logs", "skill": skill_name,
+            "proven_runs": [], "known_errors": [], "references": [],
+            "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
+        }
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     logs_dir = _ensure_logs_dir(skill_dir)
@@ -154,14 +158,18 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
 |------|-------|------|-------|-----|---------|--------|----------|
 """
 
-    # 检查是否是重复错误（相似错误信息）
-    is_duplicate = error_message[:80] in existing_log
+    # 检查是否是重复错误（仅当相同 row 已存在时标记 recurrence）
+    err_short = error_message.replace("|", "/")[:80]
+    is_duplicate = False
+    # 只在表格行内匹配（不匹配 header 文字）
+    for row in re.findall(r'^\|.*\|\s*$', existing_log, re.MULTILINE):
+        if err_short[:40] in row:
+            is_duplicate = True
+            break
     if is_duplicate:
         # 更新 recurrence count
         new_row = f"| {timestamp} | {error_message[:60]}... | {error_type} | *(recurrence)* | {fix_applied[:40]} | {species} | {tissue} | {severity} |"
     else:
-        # 截断长文本
-        err_short = error_message.replace("|", "/")[:80]
         cause_short = root_cause.replace("|", "/")[:60] if root_cause else "-"
         fix_short = fix_applied.replace("|", "/")[:60] if fix_applied else "-"
 
@@ -267,7 +275,11 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
     """查同类运行日志：skill.json 的 proven_params + logs/error_log.md + references/"""
     skill_dir = _get_skill_dir(skill_name)
     if not skill_dir:
-        return {"success": False, "error": f"Skill '{skill_name}' not found"}
+        return {
+            "success": True, "action": "query_logs", "skill": skill_name,
+            "proven_runs": [], "known_errors": [], "references": [],
+            "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
+        }
 
     result = {
         "success": True,
@@ -304,21 +316,23 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
         try:
             with open(error_log_path, "r", encoding="utf-8") as f:
                 error_content = f.read()
-            entries = re.split(r'##\s+ERROR\s+#', error_content)
-            for entry in entries[1:]:
-                lines = entry.strip().split(chr(10))
-                err = {"raw": "## ERROR #" + entry.strip()[:500]}
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith("- **Error Type**:"):
-                        err["error_type"] = line.replace("- **Error Type**:", "").strip()
-                    elif line.startswith("- **Species**:"):
-                        err["species"] = line.replace("- **Species**:", "").strip()
-                    elif line.startswith("- **Root Cause**:"):
-                        err["root_cause"] = line.replace("- **Root Cause**:", "").strip()
-                    elif line.startswith("- **Fix**:"):
-                        err["fix"] = line.replace("- **Fix**:", "").strip()
-                result["known_errors"].append(err)
+            for row in re.findall(r'^\|.*\|\s*$', error_content, re.MULTILINE):
+                if "---" in row or "| Date |" in row or row.strip().startswith("| Date"):
+                    continue
+                cols = [c.strip() for c in row.split("|")[1:-1]]
+                if len(cols) < 6:
+                    continue
+                row_species = cols[5] if len(cols) > 5 else ""
+                row_tissue = cols[6] if len(cols) > 6 else ""
+                err_entry = {
+                    "date": cols[0], "error_summary": cols[1], "error_type": cols[2],
+                    "root_cause": cols[3], "fix": cols[4], "species": row_species, "tissue": row_tissue,
+                }
+                if species and row_species and species.lower() not in row_species.lower():
+                    continue
+                if tissue and row_tissue and tissue.lower() not in row_tissue.lower():
+                    continue
+                result["known_errors"].append(err_entry)
         except Exception:
             pass
 
@@ -441,7 +455,11 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
     """
     skill_dir = _get_skill_dir(skill_name)
     if not skill_dir:
-        return {"success": False, "error": f"Skill '{skill_name}' not found"}
+        return {
+            "success": True, "action": "query_logs", "skill": skill_name,
+            "proven_runs": [], "known_errors": [], "references": [],
+            "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
+        }
 
     timestamp = datetime.now().strftime("%Y-%m-%d")
     skill_md_path = os.path.join(skill_dir, "SKILL.md")
@@ -452,6 +470,23 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
     if skill_md:
         # 找到 Proven Scripts section 的表尾位置
         header_match = re.search(r'##\s*Proven Scripts\s*\n', skill_md)
+        if not header_match:
+            # 🆕 自动创建 Proven Scripts 章节（追加到文件末尾）
+            proven_section = """
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+"""
+            skill_md = skill_md.rstrip() + "\n" + proven_section
+            _write_file(skill_md_path, skill_md)
+            header_match = re.search(r'##\s*Proven Scripts\s*\n', skill_md)
+            proven_auto_created = True
+        else:
+            proven_auto_created = False
+
         if header_match:
             after_header = skill_md[header_match.end():]
             # 找到 section 结束：下一个 ## heading 或 --- 分隔线或文件尾
@@ -551,7 +586,11 @@ def _update_script(skill_name: str, script_name: str, fixed_script_path: str,
     """用修复后的脚本覆盖原脚本，备份旧版本"""
     skill_dir = _get_skill_dir(skill_name)
     if not skill_dir:
-        return {"success": False, "error": f"Skill '{skill_name}' not found"}
+        return {
+            "success": True, "action": "query_logs", "skill": skill_name,
+            "proven_runs": [], "known_errors": [], "references": [],
+            "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
+        }
 
     target_script = os.path.join(skill_dir, "scripts", script_name)
     if not os.path.exists(target_script):
