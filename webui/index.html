@@ -1383,6 +1383,7 @@ async function loadSessions() {
   try {
     var r = await fetch('/api/sessions');
     var d = await r.json();
+    _allSessions = d.sessions || [];
     renderSessionList(d.sessions || []);
   } catch(e) {}
 }
@@ -1397,7 +1398,7 @@ var _allSessions = [];
 function filterSessions() {
   var kw = (document.getElementById('session-search') || {}).value || '';
   kw = kw.toLowerCase().trim();
-  if (!_allSessions.length) { _allSessions = []; return; }
+  if (!_allSessions.length) { renderSessionList([]); return; }
   if (!kw) { renderSessionList(_allSessions); return; }
   var filtered = _allSessions.filter(function(s) {
     return (s.title || '').toLowerCase().indexOf(kw) >= 0
@@ -1411,7 +1412,8 @@ function renderSessionList(sessions) {
   var scrollTop = el.scrollTop;  // 保留滚动位置，防止innerHTML重建后跳回顶部
   if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; return; }
   // 按创建时间从新到旧排列（最新的在最上面）
-  _allSessions = sessions;
+  // _allSessions 只在 loadSessions 中更新，render 不覆盖全量
+  sessions = sessions.slice(); // 不修改调用者传入的数组
   sessions.sort(function(a,b) {
     // restored 会话排后面
     var ra = a.restored ? 1 : 0;
