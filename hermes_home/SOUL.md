@@ -46,8 +46,8 @@
 | "CellBender" / "去背景" | `skill_view("cellbender-remove-background")` |
 | "DEG" / "差异分析" / "差异基因" / "differential expression" | `skill_view("deg-analysis")` |
 | "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
-| "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" / "发育" / "分化" | `skill_view("trajectory-analysis")` |
 | "scTour" / "深度伪时间" / "VAE轨迹" / "向量场" / "sctour" | `skill_view("sctour-trajectory-inference")` |
+| "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" / "发育" / "分化" | `skill_view("trajectory-analysis")` |
 | "富集分析" / "GO"/"KEGG"/"pathway" | `skill_view("functional-enrichment")` |
 | "EDA" / "数据探索" / "看看数据" / "概览" / "data exploration" | `skill_view("scrna-eda")` |
 | "QC" / "质控" | `skill_view("scrna-qc")` |
