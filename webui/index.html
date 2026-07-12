@@ -1414,6 +1414,9 @@ async function loadSessions() {
     console.log('[LS#' + seq + '] setting _allSessions to ' + sessions.length + ' items, calling renderSessionList');
     _allSessions = sessions;
     renderSessionList(sessions);
+    // 清除搜索框（防止浏览器 autofill 触发 oninput 清空列表）
+    var searchEl = document.getElementById('session-search');
+    if (searchEl && searchEl.value) { searchEl.value = ''; console.log('[LS#' + seq + '] cleared search box autofill'); }
   } catch(e) {
     if (e.name === 'AbortError') { console.log('[LS#' + seq + '] ABORTED'); return; }
     console.error('[LS#' + seq + '] ERROR:', e);
