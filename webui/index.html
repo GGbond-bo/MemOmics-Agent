@@ -1379,13 +1379,21 @@ function autoSelectLatestSession() {
   }
 }
 
+var _loadSessionsCtl = null;
 async function loadSessions() {
+  // 取消上一次未完成的请求，只保留最新一次
+  if (_loadSessionsCtl) _loadSessionsCtl.abort();
+  _loadSessionsCtl = new AbortController();
   try {
-    var r = await fetch('/api/sessions');
+    var r = await fetch('/api/sessions', { signal: _loadSessionsCtl.signal });
     var d = await r.json();
-    _allSessions = d.sessions || [];
-    renderSessionList(d.sessions || []);
-  } catch(e) {}
+    var sessions = d.sessions || [];
+    _allSessions = sessions;
+    renderSessionList(sessions);
+  } catch(e) {
+    if (e.name === 'AbortError') return; // 被取消，忽略
+    console.error('loadSessions:', e);
+  }
 }
 
 function updateSessionList() {
