@@ -1380,6 +1380,7 @@ function autoSelectLatestSession() {
 }
 
 var _loadSessionsCtl = null;
+var _hasEverLoaded = false; // 是否曾经成功加载过会话（防止第1次被取消后误判）
 var _consecutiveEmpty = 0; // 连续空响应计数，≥2才接受
 async function loadSessions() {
   // 取消上一次未完成的请求，只保留最新一次
@@ -1389,15 +1390,19 @@ async function loadSessions() {
     var r = await fetch('/api/sessions', { signal: _loadSessionsCtl.signal });
     var d = await r.json();
     var sessions = d.sessions || [];
-    // 收到空列表但本地有数据：需要连续2次空响应才接受（防瞬时空响应）
-    if (sessions.length === 0 && _allSessions.length > 0) {
-      _consecutiveEmpty++;
-      if (_consecutiveEmpty < 2) {
-        console.warn('loadSessions: 忽略瞬时第' + _consecutiveEmpty + '次空响应，保留' + _allSessions.length + '个会话');
-        return;
+    if (sessions.length === 0) {
+      if (_hasEverLoaded) {
+        // 曾经加载过会话 → 必须连续2次空响应才接受
+        _consecutiveEmpty++;
+        if (_consecutiveEmpty < 2) {
+          console.warn('loadSessions: 忽略瞬时第' + _consecutiveEmpty + '次空响应，保留' + _allSessions.length + '个会话');
+          return;
+        }
       }
+      // 从未加载过 → 接受空列表（服务器确实无会话）
     } else {
       _consecutiveEmpty = 0;
+      _hasEverLoaded = true;
     }
     _allSessions = sessions;
     renderSessionList(sessions);

@@ -48,6 +48,7 @@ class SessionListSimulator:
         self._isSearching = False
         self._domVisible = True
         self._consecutiveEmpty = 0  # 连续空响应计数
+        self._hasEverLoaded = False  # 是否曾经成功加载
 
     # ---------- JS 函数模拟 ----------
     async def loadSessions(self):
@@ -62,13 +63,17 @@ class SessionListSimulator:
                 raise asyncio.CancelledError("AbortError")
             d = api_sessions()
             sessions = d.get("sessions", [])
-            # 连续空响应防护：需要连续2次空响应才接受
-            if len(sessions) == 0 and len(self._allSessions) > 0:
-                self._consecutiveEmpty += 1
-                if self._consecutiveEmpty < 2:
-                    return  # 忽略第1次空响应
+            # 连续空响应防护：用 _hasEverLoaded 替代 _allSessions 判空
+            # （如果第1次被取消，_allSessions 还是 []，会误判）
+            if len(sessions) == 0:
+                if self._hasEverLoaded:
+                    self._consecutiveEmpty += 1
+                    if self._consecutiveEmpty < 2:
+                        return  # 忽略瞬时空响应
+                # 从未加载过 → 接受空
             else:
                 self._consecutiveEmpty = 0
+                self._hasEverLoaded = True
             self._allSessions = sessions
             self.renderSessionList([s.copy() for s in sessions])
         except asyncio.CancelledError:
@@ -322,6 +327,35 @@ async def test_cases():
     fp2 = sim7._lastSessionFingerprint
     check(fp1 != fp2, "msg_count 变化 → fingerprint 不同")
     check(len(sim7._rendered) > render_before, "触发了 DOM 重建")
+
+    # === T13: 精确复现 Bug — 第1个 fetch 被 AbortController 取消后 _allSessions 仍为 [] ===
+    print("\n--- T13: 第1个fetch被取消后_hasEverLoaded=False, 空响应被接受 ---")
+    sim8 = SessionListSimulator()
+    _sessions.clear()
+    create_sessions(5)
+    # call A: 模拟 ws.onopen 的 loadSessions，被后续调用取消
+    sim8.updateSessionList()  # 不等待
+    await asyncio.sleep(0.01)
+    # call B: 模拟 WS complete 触发的 loadSessions，取消 call A
+    _sessions.clear()  # 服务器瞬时返回空
+    await sim8.loadSessions()
+    # 从未成功加载 → 空被接受
+    check(len(sim8._allSessions) == 0, "从未成功加载，服务器空 → 接受空列表")
+    # 恢复服务器
+    create_sessions(5)
+    await sim8.loadSessions()
+    check(len(sim8._allSessions) == 5, "服务器恢复后正常加载 5 个")
+    check(sim8._hasEverLoaded, "_hasEverLoaded 变为 True")
+    # 现在 guard 应生效：第1次空被忽略
+    _sessions.clear()
+    await sim8.loadSessions()
+    check(len(sim8._allSessions) == 5, "_hasEverLoaded 后第1次空被忽略")
+    await sim8.loadSessions()
+    check(len(sim8._allSessions) == 0, "第2次连续空被接受")
+    # 恢复
+    create_sessions(3)
+    await sim8.loadSessions()
+    check(len(sim8._allSessions) == 3, "重建 3 个会话")
 
     # === 总结 ===
     print(f"\n{'='*50}")
