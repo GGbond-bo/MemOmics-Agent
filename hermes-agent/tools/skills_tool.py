@@ -2636,6 +2636,82 @@ def _skill_view_with_bump(args, **kw):
                     if related:
                         parsed["_related_skills"] = related
                         parsed["_hint"] = f"Skill belongs to {domain}. Related skills in same domain: {', '.join(related)}"
+            # ── Holographic experience recall ──
+            # Inject past experience: proven_params, user_prefs, known_errors
+            # Uses direct SQLite to avoid memory_bridge import chain. Degrades silently.
+            try:
+                import sqlite3 as _sqlite3
+                _db_path = os.path.join(os.path.dirname(__file__), "..", "..", "hermes_home", "memory_store.db")
+                _db_path = os.path.abspath(_db_path)
+                if os.path.exists(_db_path):
+                    _db = _sqlite3.connect(_db_path)
+                    _db.row_factory = _sqlite3.Row
+                    _safe = (skill_name or name)
+                    # FTS5 OR query: split "scrna-seurat-core" -> '"scrna" OR "seurat" OR "core"'
+                    _words = [w for w in _safe.replace("-", " ").replace(".", " ").split() if len(w) >= 2]
+                    _fts_q = " OR ".join('"' + w + '"' for w in _words) if _words else _safe.replace("-", " ")
+                    # Skill-specific recall: FTS5(OR) + tags LIKE
+                    _rows = list(_db.execute(
+                        "SELECT * FROM ("
+                        " SELECT f.* FROM facts f JOIN facts_fts ft ON f.fact_id=ft.rowid WHERE facts_fts MATCH ?"
+                        " UNION"
+                        " SELECT f.* FROM facts f WHERE f.tags LIKE ?"
+                        ") ORDER BY trust_score DESC, retrieval_count DESC LIMIT 6",
+                        (_fts_q, "%" + _safe + "%")
+                    ).fetchall())
+                    # Known errors: skill_exp with error tags, matching any skill word
+                    _errs = []
+                    if _words:
+                        _err_clauses = " OR ".join("tags LIKE '%" + w + "%'" for w in _words)
+                        _errs = _db.execute(
+                            "SELECT * FROM facts WHERE category='skill_exp'"
+                            " AND tags LIKE '%error%' AND (" + _err_clauses + ")"
+                            " ORDER BY trust_score DESC, retrieval_count DESC LIMIT 2"
+                        ).fetchall()
+                    # Global user_prefs (not skill-tagged, capped at 2)
+                    _uprefs = _db.execute(
+                        "SELECT * FROM facts WHERE category='user_pref' ORDER BY trust_score DESC LIMIT 2"
+                    ).fetchall()
+                    # Merge: errors first, then user_prefs, dedup by fact_id
+                    _extra = list(_errs) + list(_uprefs)
+                    _seen = set(str(r["fact_id"]) for r in _rows)
+                    for _x in _extra:
+                        if str(_x["fact_id"]) not in _seen and len(_rows) < 8:
+                            _rows.append(_x)
+                            _seen.add(str(_x["fact_id"]))
+                    if _rows:
+                        _exp = {"proven_params": [], "user_prefs": [], "known_errors": [], "hint": ""}
+                        for _r in _rows:
+                            _c = _r["category"]
+                            _t = (_r["tags"] or "").lower()
+                            _ct = _r["content"]
+                            if _c == "user_pref":
+                                _exp["user_prefs"].append(_ct[:200])
+                            elif _c == "skill_exp" and "error" in _t:
+                                _exp["known_errors"].append(_ct[:250])
+                            elif _c in ("skill_exp", "script_score"):
+                                _exp["proven_params"].append(_ct[:250])
+                        # Cap at ~1500 chars total
+                        _total = sum(len(s) for v in _exp.values() if isinstance(v, list) for s in v)
+                        if _total > 1500:
+                            _exp["proven_params"] = _exp["proven_params"][:3]
+                            _exp["user_prefs"] = _exp["user_prefs"][:2]
+                            _exp["known_errors"] = _exp["known_errors"][:2]
+                        _exp["hint"] = (
+                            "[Holographic Memory] " + str(len(_rows)) + " records for '" + _safe + "'. "
+                            "Use proven_params as defaults, avoid known_errors."
+                        )
+                        parsed["_experience"] = _exp
+                        # Bump retrieval counts
+                        _ids = [str(r["fact_id"]) for r in _rows]
+                        _db.execute(
+                            "UPDATE facts SET retrieval_count=retrieval_count+1 WHERE fact_id IN (%s)"
+                            % ",".join(_ids)
+                        )
+                        _db.commit()
+                    _db.close()
+            except Exception:
+                pass  # never break skill_view on memory failure
             result = json.dumps(parsed, ensure_ascii=False)
     except Exception:
         pass
