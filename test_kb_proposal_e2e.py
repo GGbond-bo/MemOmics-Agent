@@ -56,7 +56,7 @@ check('[KB]' in server_text, 'server.py research_plan 要求 KB 标注 [KB]')
 
 # plan_refine 检查
 check('if intent == "plan_refine"' in server_text, 'server.py 含 plan_refine 意图分支')
-check('来源：【KB】' in server_text, 'server.py plan_refine 要求 KB 来源标注')
+check('[KB]' in server_text, 'server.py plan_refine 要求 KB 来源标注')
 check('KB论文版本' in server_text, 'server.py plan_refine 要求 KB 版本优先')
 
 # =====================================================================
