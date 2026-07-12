@@ -759,18 +759,25 @@ def _auto_load_kb(context: str, topic: str) -> str:
         return ""
     
     parts = []
+    # Collect with mtime, prioritize newest files
+    candidates = []
     for dirpath, dirnames, filenames in os.walk(kb_dir):
-        for fn in sorted(filenames):
+        for fn in filenames:
             if fn.endswith((".yaml", ".yml")) and fn != "index.yaml":
                 fp = os.path.join(dirpath, fn)
                 try:
                     with open(fp, "r", encoding="utf-8") as fh:
                         content = fh.read()
                     if len(content) > 100:
-                        label = "## " + fn + "\n"
-                        parts.append(label + content[:3000])
+                        mtime = os.path.getmtime(fp)
+                        candidates.append((mtime, fn, content))
                 except Exception:
                     pass
+    # Sort by mtime descending (newest first), take top 8
+    candidates.sort(reverse=True, key=lambda x: x[0])
+    for mtime, fn, content in candidates[:8]:
+        label = "## " + fn + "\n"
+        parts.append(label + content[:3000])
     
     if not parts:
         return ""
