@@ -400,9 +400,9 @@ def _verify_delivery_gate(skill_name: str, portal_urls: str = "") -> dict:
     results.append({"check": "usage_scenarios", "passed": ok2, "detail": "Has scenarios" if ok2 else "No usage scenarios"})
     if not ok2: blocked.append("When to Use missing usage scenarios")
 
-    # 3. Prerequisites have packages?
-    p = re.search(r'prerequisites:', skill_md)
-    ok3 = bool(p and (re.search(r'[a-zA-Z]', skill_md[p.end():p.end()+200])))
+    # 3. Prerequisites have packages? (case-insensitive: "Prerequisites:" or "prerequisites:")
+    p = re.search(r'prerequisites', skill_md, re.I)
+    ok3 = bool(p and (re.search(r'[a-zA-Z]', skill_md[p.end():p.end()+300])))
     results.append({"check": "prerequisites", "passed": ok3, "detail": "Has packages" if ok3 else "Empty"})
     if not ok3: blocked.append("Prerequisites empty - must list packages")
 
