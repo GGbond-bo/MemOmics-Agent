@@ -308,6 +308,28 @@ def generate_run_py(skill_name: str, language: str, steps: list) -> str:
     return f"{lang_line}\n{title}\n{usage}\n{steps_text}\n{header}\n{params_section}\n{main_section}\n{save_section}\n"
 
 
+def generate_skill_json(skill_name: str) -> str:
+    """生成 skill.json 文本（JSON 字符串）。
+
+    ⚠️ 这很关键：skill_evolution(action="record_run") 的 _record_success 依赖
+    skill.json 存储 proven_params。如果 skill.json 不存在，record_run 会静默失败。
+
+    Args:
+        skill_name: skill 名称
+
+    Returns:
+        格式化的 JSON 字符串
+    """
+    import json
+    return json.dumps({
+        "name": skill_name,
+        "version": "1.0.0",
+        "success_count": 0,
+        "proven_script": "",
+        "proven_params": []
+    }, indent=2, ensure_ascii=False)
+
+
 def generate_reference_script(skill_name: str, language: str, steps: list, example_code: str = "") -> str:
     """生成 scripts/reference_script.R 或 .py 参考脚本模板。
 

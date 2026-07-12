@@ -42,18 +42,24 @@
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
-| "画图" / "可视化" / "figure" / "发表级" | `skill_view("cns-visualization")` + `skill_view("nature-figure")` |
+| "画图" / "可视化" / "figure" / "发表级" | `skill_view("cns-visualization")` |
 | "CellBender" / "去背景" | `skill_view("cellbender-remove-background")` |
-| "DEG" / "差异分析" / "差异基因" | `skill_view("deg-analysis")` |
+| "DEG" / "差异分析" / "差异基因" / "differential expression" | `skill_view("deg-analysis")` |
 | "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
-| "轨迹" / "trajectory" / "拟时序" | `skill_view("trajectory-analysis")` |
+| "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" / "发育" / "分化" | `skill_view("trajectory-analysis")` |
+| "scTour" / "深度伪时间" / "VAE轨迹" / "向量场" / "sctour" | `skill_view("sctour-trajectory-inference")` |
 | "富集分析" / "GO"/"KEGG"/"pathway" | `skill_view("functional-enrichment")` |
+| "EDA" / "数据探索" / "看看数据" / "概览" / "data exploration" | `skill_view("scrna-eda")` |
 | "QC" / "质控" | `skill_view("scrna-qc")` |
-| "聚类" / "分群" | `skill_view("scrna-clustering")` |
-| "Seurat" / "Scanpy" 处理流程 | `skill_view("scrnaseq-seurat-core-analysis")` 或 `skill_view("scrnaseq-scanpy-core-analysis")` |
-| "生存分析" / "KM" / "预后" | `skill_view("survival-analysis")` |
+| "聚类" / "分群" / "cluster" | `skill_view("scrna-clustering")` |
+| "Seurat" / "SCTransform" / "NormalizeData" | `skill_view("scrnaseq-seurat-core-analysis")` |
+| "Scanpy" | `skill_view("scrnaseq-scanpy-core-analysis")` |
+| "空间转录组" / "spatial" / "spot" | `skill_view("spatial-transcriptomics")` |
+| "多组学" / "multi-omics" / "整合" | `skill_view("multi-omics-integration")` |
+| "生存分析" / "KM" / "预后" / "活多久" / "生存期" | `skill_view("survival-analysis")` |
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
+| "报错" / "error" / "出错" / "怎么修" / "不工作" / "跑不了" / "fix" / "debug" | `skill_view("error-recovery")` |
 
 ### LLM 决策树（每条用户消息走一遍）
 
@@ -93,7 +99,8 @@
 3. **先审查再跑**：分析级操作 → `rail_review(pre)` → 写代码 → `terminal` → `rail_review(post)`
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
 5. **必须辩论**：分析级结论 → `debate_analysis` 正反方辩论
-6. **必须记录**：跑通过 → `skill_evolution(action="record_run")`，跑失败 → `record_error`
+6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run 沉淀"
+7. **必须记录**：跑通过 → `skill_evolution(action="record_run")`，跑失败 → `record_error`
 7. **结果目录**：所有输出放在 `results/{session_dir}/` 下对应子目录，**不放桌面**
 8. **语言一致**：R 代码用 R，Python 代码用 Python，同会话保持一致
 9. **skill 注册**：新创建 skill → 必须注册到 SOUL.md 的 AUTO_SKILL_INSERT_MARKER

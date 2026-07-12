@@ -21,6 +21,19 @@ prerequisites:
 
 当分析需要的 skill 在 skill 库中不存在时，自动查询官方文档和文献，按 MemOmics/BioMinI 标准格式创建完整的新 skill。
 
+## 🛑 Step 0: 创建前重复检测（必须执行，不可跳过）
+
+> **在创建任何新 skill 之前，必须先检查是否已存在同功能 skill。**
+
+1. 调用 `skill_search` 用用户提到的包名/功能关键词搜索
+2. 检查搜索结果中是否有同名的 skill
+3. 检查搜索结果中是否有功能重叠的 skill（如 CellChat vs cellchat-v2 vs cell-cell-communication）
+4. **如果已存在 → 直接告诉用户**："这个 skill 已经有了: `skill_view(\"<name>\")`，不需要重新创建"
+5. **如果功能类似但不完全相同 → 告诉用户差异**，让用户决定是否创建新 skill 还是扩展现有 skill
+6. 只有确认**不存在同功能 skill** 时，才进入 Step 1
+
+> **铁律: Step 0 未执行 = 不允许进入 Step 1。** 重复创建已存在的 skill 会污染 skill 库。
+
 ## ⛔ MemOmics 强制规则（不可违反，优先级最高）
 
 > 本 meta-skill 用于创建新 skill，创建的新 skill 必须包含下方全部规则。
@@ -54,9 +67,24 @@ prerequisites:
   "version": "1.0.0",
   "success_count": 0,
   "proven_script": "",
-  "proven_params": []
+  "proven_params": [],
+  "user_prefs": {
+    "last_used_script": "",
+    "preferred_params": {},
+    "notes": ""
+  }
 }
 ```
+
+**字段说明**：
+
+| 字段 | 类型 | 说明 |
+|:-----|:-----|:-----|
+| `proven_params[].user_score` | int (0-10) | 🆕 用户认可打分。8-10=满意，4-6=一般，1-3=不满意但留档。**只有用户明确认可的脚本才有此字段** |
+| `proven_params[].auto_score` | int (0-10) | 🆕 `rail_review(post)` 自动评的技术分。基于图质量(4) + 代码质量(3) + 性能(3) |
+| `proven_params[].approved` | bool | 🆕 是否经用户确认。true → 参与排序推荐，false → 仅存 logs/ 供调试 |
+| `user_prefs.last_used_script` | str | 🆕 最近一次使用的脚本路径，`query_logs` 优先返回 |
+| `user_prefs.preferred_params` | obj | 🆕 用户偏好的参数组合，跨会话复用 |
 
 创建方法：`write_file` 写入 `SKILL.md` 同目录下的 `skill.json`。
 
@@ -67,13 +95,19 @@ prerequisites:
 ## Proven Scripts
 
 > 经实际运行验证成功的脚本记录。`skill_evolution(action="record_run")` 自动追加至此表。
+>
+> 🆕 评分规则：`auto` 来自 rail_review 技术审查，`user` 来自用户认可。`query_logs` 按 approved → recency → score 排序推荐。
 
-| 物种 | 组织 | 方向 | 日期 | 质量评分 |
-|:----|:----|:----|:----:|:--------:|
-| <!-- 首次运行后自动填充 --> | | | | |
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|:----|:----|:----|:----:|:-----|:----:|:----:|:-:|
+| <!-- 首次运行后自动填充 --> | | | | | | | |
 ```
 
-注意：`<!-- 首次运行后自动填充 -->` 注释行作为占位是必需的，否则 `_record_success` 的正则匹配可能找不到表格行追加位置。
+注意：
+- `auto` = rail_review 自动技术分 (0-10)
+- `user` = 用户认可分 (0-10)，只有用户明确认可才填
+- `✔` = approved，true=参与推荐，false=仅存档 logs/
+- `<!-- 首次运行后自动填充 -->` 占位行是必需的，否则 `_record_success` 的正则匹配可能找不到表格行追加位置
 
 ### 规则3: 创建的脚本必须包含审查辩论铁律头
 每个新建 skill 的 `scripts/run.py` 和 `scripts/reference_script.*` 必须在文件开头包含 MemOmics 审查辩论铁律注释块（逐字复制下方模板）。
@@ -167,7 +201,7 @@ Tool: write_file
 - scripts/reference_script.R 或 .py：含铁律头 + 完整函数实现（基于官方文档示例代码）
 ```
 
-### Step 5: 注册到 skill 库
+### Step 6: 注册到 skill 库
 ```
 Tool: skill_manage
 - skill_manage(action="create", name="<skill名>", content="<SKILL.md内容>")
@@ -175,7 +209,7 @@ Tool: skill_manage
 - 注意：write_file 写入 skills 目录会触发安全扫描，含 injection 模式的内容会被阻断
 ```
 
-### Step 6: 验证 skill 可加载
+### Step 7: 验证 skill 可加载
 ```
 Tool: skill_view
 - skill_view(name="<skill名>")
@@ -184,26 +218,34 @@ Tool: skill_view
 - 确认脚本模板的铁律头完整
 ```
 
-### Step 7: 🔴 注册到 SOUL.md 技能匹配表（必须执行，不可跳过）
+### Step 8: 🔴 注册到 SOUL.md 技能匹配表（必须执行，不可跳过）
 
 > **这是 create-bio-skill 的强制步骤。新 skill 不注册到 SOUL.md，后续分析无法自动触发 skill_view。**
 
 ```
-Tool: read_file + edit_file
-1. read_file("hermes_home/SOUL.md") 定位 <!-- AUTO_SKILL_INSERT_MARKER -->
-2. 在该标记上方插入新行，格式与现有行一致：
-   | **<分析步骤名>** | <skill-name> | <一句话描述+触发关键词> |
-3. 示例：
-   | **scTour 轨迹** | sctour-trajectory-inference | VAE 深度潜在时间推断+向量场，无监督。用户说"scTour""深度伪时间"时触发 |
+Tool: skill_evolution(action="register_skill")
+1. 从 SKILL.md 的 When to Use / metadata.tags / 用户输入中提取关键词
+2. 调用：
+   skill_evolution(
+     action="register_skill",
+     skill_name="<skill名>",
+     keywords='"关键词1" / "关键词2" / "关键词3"',
+     trigger_level="RED 必触发",
+     category="<分类标签>"
+   )
+3. 该 action 会自动将触发行写入 SOUL.md 的 AUTO_SKILL_INSERT_MARKER 上方
+4. 验证：grep 'skill_view("<skill名>")' hermes_home/SOUL.md 应有输出
 ```
 
-**注册规则**：
-- 分析步骤名：从 SKILL.md 的标题提取（如 `# scTour — 深度潜在时间轨迹推断` → `scTour 轨迹`）
-- skill-name：与 SKILL.md frontmatter 的 `name` 字段一致
-- 触发关键词：从 SKILL.md 的 `When to Use` 和 `metadata.hermes.tags` 提取
-- **插入位置**：必须在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 上方，不要插到 ATAC/空间组/bulk 的专属表格里
+**关键词提取规则**：
+- 包名本身（如 `scTour`、`CellChat`）
+- 功能短描述（如 `深度伪时间`、`VAE轨迹`）
+- 从 SKILL.md 的 When to Use 和 metadata.hermes.tags 提取
+- 用 ` / ` 分隔多个关键词
+- **🔴 至少 5-8 个关键词（含中英文）** — 太少会导致命中率低，下次用户换一种说法就触发不了
+- **系统自动扩展**：`_expand_keywords` 会自动从复合词派生短词（如 "衰老分类" → 追加 "衰老"、"senescence scoring" → 追加 "senescence"），并自动过滤通用停用词（"scoring", "细胞" 等），确保高命中率 + 低误报率
 
-### Step 8: 分析后审核（6项检查清单 + 注册检查）
+### Step 9: 分析后审核（6 项检查清单）
 ```
 Tool: web_extract + check_env + terminal
 
@@ -236,7 +278,12 @@ Tool: web_extract + check_env + terminal
    - 确认有 web_search + web_extract 的调用记录
    - 输出：✅ 已留痕 / ❌ 未留痕
 
-全部 ✅ → skill_evolution(action="record_run", notes="审核通过")
+6. 🔴 SOUL.md 注册检查
+   - `grep 'skill_view("<skill名>")' hermes_home/SOUL.md` 必须命中
+   - 确认注册行格式正确、关键词完整
+   - 输出：✅ 已注册 / ❌ 未注册 → 调用 skill_evolution(action="register_skill") 补救
+
+6 项全部 ✅ → skill_evolution(action="record_run", notes="审核通过")
 有 ❌ → 修正后重新审核该项
 ```
 

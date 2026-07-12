@@ -325,8 +325,15 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
 
 def _record_success(skill_name: str, script_name: str = "", params_used: str = "",
                     species: str = "", tissue: str = "", direction: str = "",
-                    result_summary: str = "", score: float = 0.0) -> Dict[str, Any]:
-    """记录成功脚本到 Proven Scripts + skill.json"""
+                    result_summary: str = "", score: float = 0.0,
+                    auto_score: float = 0.0, approved: bool = False,
+                    custom_script: bool = False) -> Dict[str, Any]:
+    """记录成功脚本到 Proven Scripts + skill.json
+    
+    🆕 auto_score: rail_review 自动技术分 (0-10). 0 表示未评分.
+    🆕 approved: 用户是否确认认可. False = 仅存 logs/ 供调试.
+    🆕 custom_script: 是否为用户自定义脚本 (figure_scripts/ 或 user_scripts/).
+    """
     skill_dir = _get_skill_dir(skill_name)
     if not skill_dir:
         return {"success": False, "error": f"Skill '{skill_name}' not found"}
@@ -335,19 +342,29 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
     skill_md_path = os.path.join(skill_dir, "SKILL.md")
     skill_md = _read_file(skill_md_path)
 
-    # 1. 更新 Proven Scripts 表
+    # 1. 更新 Proven Scripts 表（追加到表尾，不覆盖已有行）
     proven_added = False
     if skill_md:
-        proven_pattern = r'(##\s*Proven Scripts\s*\n\s*\|.*?\n.*?\n)'
-        if re.search(proven_pattern, skill_md):
-            proven_row = f"| {species or '-'} | {tissue or '-'} | {direction or '-'} | {timestamp} | {score} |"
-            skill_md = re.sub(
-                proven_pattern,
-                lambda m: m.group(0).rstrip() + "\n" + proven_row + "\n",
-                skill_md
-            )
-            _write_file(skill_md_path, skill_md)
-            proven_added = True
+        # 找到 Proven Scripts section 的表尾位置
+        header_match = re.search(r'##\s*Proven Scripts\s*\n', skill_md)
+        if header_match:
+            after_header = skill_md[header_match.end():]
+            # 找到 section 结束：下一个 ## heading 或 --- 分隔线或文件尾
+            sec_end_marker = re.search(r'\n(?:##\s|---)', after_header)
+            sec_end = header_match.end() + (sec_end_marker.start() + 1 if sec_end_marker else len(after_header))
+            section = skill_md[header_match.start():sec_end]
+            # 确认 section 中有表格行
+            if re.search(r'^\|.*\|\s*$', section, re.MULTILINE):
+                # 🆕 8-column format: 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔
+                user_score_str = str(score) if approved and score > 0 else "-"
+                auto_score_str = str(auto_score) if auto_score > 0 else "-"
+                approved_str = "✅" if approved else ""
+                script_short = os.path.basename(script_name) if script_name else "-"
+                proven_row = f"| {species or '-'} | {tissue or '-'} | {direction or '-'} | {timestamp} | {script_short} | {auto_score_str} | {user_score_str} | {approved_str} |"
+                # 在 section 末尾（下一个 ## 之前）追加新行
+                skill_md = skill_md[:sec_end] + proven_row + "\n" + skill_md[sec_end:]
+                _write_file(skill_md_path, skill_md)
+                proven_added = True
 
     # 2. 更新 skill.json
     skill_json_path = os.path.join(skill_dir, "skill.json")
@@ -356,11 +373,12 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
         try:
             with open(skill_json_path, "r", encoding="utf-8") as f:
                 sj = json.load(f)
+            # 🆕 记录 auto_score + approved + user_prefs
             sj["success_count"] = sj.get("success_count", 0) + 1
             sj["proven_script"] = script_name
             if sj.get("proven_params") is None:
                 sj["proven_params"] = []
-            sj["proven_params"].append({
+            entry = {
                 "species": species,
                 "tissue": tissue,
                 "direction": direction,
@@ -368,8 +386,16 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
                 "params": params_used,
                 "date": timestamp,
                 "score": score,
+                "auto_score": auto_score,
+                "approved": approved,
+                "custom_script": custom_script,
                 "result": result_summary[:200],
-            })
+            }
+            sj["proven_params"].append(entry)
+            # 🆕 更新 user_prefs 的 last_used_script
+            if "user_prefs" not in sj:
+                sj["user_prefs"] = {}
+            sj["user_prefs"]["last_used_script"] = script_name
             with open(skill_json_path, "w", encoding="utf-8") as f:
                 json.dump(sj, f, indent=2, ensure_ascii=False)
             json_updated = True
@@ -438,11 +464,149 @@ def _update_script(skill_name: str, script_name: str, fixed_script_path: str,
     }
 
 
+# ─── 4. REGISTER SKILL ────────────────────────────
+
+# Stop words: overly generic terms filtered from auto-expansion
+_EN_GENERIC = {
+    "scoring", "analysis", "data", "pipeline", "based", "tool",
+    "method", "model", "result", "test", "sample", "run",
+    "processing", "detection", "identification", "inference",
+}
+_CN_GENERIC = {
+    "细胞", "分类", "分析", "数据", "工具", "方法", "结果",
+    "样本", "处理", "检测", "模型",
+    # 过于泛化的 bigram
+    "深度",  # 深度学习/深度测序/深度分析
+    "推断",  # 统计推断/轨迹推断/推断分析
+    "学习",  # 深度学习/机器学习
+    "时间",  # 伪时间/时间序列/时间点
+}
+
+
+def _expand_keywords(keywords: str) -> str:
+    """Derive short keywords from compound ones to boost hit coverage.
+
+    ZH: 4+ char words → 2-char bigram expansion ("衰老分类" → appends "衰老")
+    EN: multi-word phrases → word splitting ("senescence scoring" → appends "senescence")
+    Filters generic stop-words to prevent false positives ("scoring", "细胞", etc.)
+    """
+    raw_kws = [kw.strip().strip('"') for kw in keywords.split("/")]
+    expanded = set(raw_kws)
+
+    for kw in raw_kws:
+        if re.search(r'[\u4e00-\u9fff]', kw):
+            if len(kw) >= 4:
+                for i in range(len(kw) - 1):
+                    bigram = kw[i:i+2]
+                    # 🆕 只有纯中文 bigram 才加入(过滤 VA/AE 等 ASCII 碎片)
+                    if bigram not in expanded and len(bigram) == 2 \
+                            and re.match(r'^[\u4e00-\u9fff]{2}$', bigram) \
+                            and bigram not in _CN_GENERIC:
+                        expanded.add(bigram)
+        elif ' ' in kw:
+            for w in kw.lower().split():
+                w_stripped = w.strip('()[]{}')
+                if len(w_stripped) >= 3 and w_stripped != kw \
+                        and w_stripped not in _EN_GENERIC:
+                    expanded.add(w_stripped)
+
+    # 交叉词印证过滤：中文 bigram 必须被 >=2 个原始关键词包含才保留
+    bigram_candidates = expanded - set(raw_kws)
+    validated = set()
+    for bg in bigram_candidates:
+        if re.match(r'^[一-鿿]{2}$', bg):
+            count = sum(1 for kw in raw_kws if bg in kw)
+            if count >= 2:
+                validated.add(bg)
+        else:
+            validated.add(bg)
+    expanded = set(raw_kws) | validated
+
+    ordered = raw_kws + sorted(expanded - set(raw_kws), key=len)
+    return " / ".join(f'"{k}"' for k in ordered)
+
+
+def _register_skill(skill_name: str, keywords: str = "",
+                    trigger_level: str = "RED 必触发",
+                    category: str = "") -> Dict[str, Any]:
+    """注册新 skill 到 SOUL.md 的 AUTO_SKILL_INSERT_MARKER 上方，使下次可自动触发。"""
+    memomics_root = _get_memomics_root()
+    soul_path = os.path.join(memomics_root, "hermes_home", "SOUL.md")
+    if not os.path.exists(soul_path):
+        return {"success": False, "error": f"SOUL.md not found at {soul_path}"}
+
+    soul_md = _read_file(soul_path)
+    if not soul_md:
+        return {"success": False, "error": "Failed to read SOUL.md"}
+
+    # 检查是否已注册
+    if f'skill_view("{skill_name}")' in soul_md:
+        return {
+            "success": True,
+            "action": "register_skill",
+            "skill": skill_name,
+            "already_registered": True,
+            "message": f"Skill '{skill_name}' already registered in SOUL.md"
+        }
+
+    # 生成关键词（未提供则用 skill_name）
+    if not keywords:
+        keywords = f'"{skill_name}"'
+
+    # 构建触发行（与 SOUL.md 必触发表格式一致）
+    trigger_row = f'| {keywords} | `skill_view("{skill_name}")` |'
+
+    # 插入到 AUTO_SKILL_INSERT_MARKER 上方
+    marker = "<!-- AUTO_SKILL_INSERT_MARKER -->"
+    if marker not in soul_md:
+        return {"success": False, "error": "AUTO_SKILL_INSERT_MARKER not found in SOUL.md"}
+
+    # 自动扩展关键词：从 "衰老分类" 派生 "衰老"，从 "senescence scoring" 派生 "senescence"
+    keywords = _expand_keywords(keywords)
+
+    # 重新构建触发行（使用扩展后的关键词）
+    trigger_row = f'| {keywords} | `skill_view("{skill_name}")` |'
+
+    # ===== 去重: 检查手写触发表中是否已存在相同的 skill_view =====
+    existing_pattern = f'skill_view(\\"{skill_name}\\")'
+    if re.search(existing_pattern, soul_md):
+        return {
+            "success": True,
+            "action": "register_skill",
+            "skill": skill_name,
+            "already_registered": True,
+            "message": f"Skill '{skill_name}' already in trigger table (not re-inserting)"
+        }
+
+    soul_md = soul_md.replace(marker, trigger_row + "\n" + marker)
+    if not _write_file(soul_path, soul_md):
+        return {"success": False, "error": "Failed to write SOUL.md"}
+
+    return {
+        "success": True,
+        "action": "register_skill",
+        "skill": skill_name,
+        "keywords": keywords,
+        "trigger_level": trigger_level,
+        "soul_md_updated": True,
+        "message": (
+            f"Skill '{skill_name}' 已注册到 SOUL.md。"
+            f"关键词: {keywords}。重启 server 后 SKILLS_INDEX.md 将自动重建。"
+            f"验证: grep 'skill_view(\"{skill_name}\")' hermes_home/SOUL.md"
+        )
+    }
+
+
 # ─── SYNC ─────────────────────────────────────────
 
 def _sync_to_hermes_home(skill_name: str, skill_dir: str):
-    """同步更新到 hermes_home/skills/bioinformatics/<skill_name>/"""
-    target = f"E:/MemOmics-Agent/hermes_home/skills/bioinformatics/{skill_name}"
+    """同步更新到 hermes_home/skills/bioinformatics/<skill_name>/ — 动态推导路径"""
+    memomics_root = _get_memomics_root()
+    target = os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name)
+    # 🆕 如果 hermes_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.hermes 的 bug）
+    if not os.path.isdir(target) and os.path.isdir(skill_dir):
+        shutil.copytree(skill_dir, target)
+        return
     if os.path.isdir(target) and os.path.isdir(skill_dir):
         try:
             # 只同步 .md, .json, logs/
@@ -467,8 +631,9 @@ def _sync_to_hermes_home(skill_name: str, skill_dir: str):
                 for f in os.listdir(src_scripts):
                     if not f.startswith("."):
                         shutil.copy2(os.path.join(src_scripts, f), os.path.join(dst_scripts, f))
-        except Exception:
-            pass
+        except Exception as e:
+            import sys
+            print(f"[skill_evolution] WARNING: sync to hermes_home failed for '{skill_name}': {e}", file=sys.stderr)
 
 
 # ─── MAIN ENTRY ───────────────────────────────────
@@ -489,12 +654,15 @@ def skill_evolution(action: str = "record_error",
                     result_summary: str = "",
                     score: float = 0.0,
                     severity: str = "medium",
-                    reason: str = "") -> str:
+                    reason: str = "",
+                    keywords: str = "",
+                    trigger_level: str = "RED 必触发",
+                    category: str = "") -> str:
     """
     MemOmics Skill 自进化引擎
 
     Args:
-        action: "record_error" | "record_success" | "update_script"
+        action: "record_error" | "record_success" | "update_script" | "register_skill"
         skill_name: Skill 名称 (如 "atac-seq", "scrnaseq-seurat-core-analysis")
         error_message: 错误信息 (record_error)
         error_type: 错误类型 (missing_package, memory, syntax, logic, ...)
@@ -511,6 +679,9 @@ def skill_evolution(action: str = "record_error",
         score: 质量评分 0-10 (record_success)
         severity: 严重程度 critical/high/medium/low
         reason: 更新原因 (update_script)
+        keywords: SOUL.md 命中关键词 (register_skill), 如 '"scTour" / "深度伪时间"'
+        trigger_level: 触发级别 RED必触发/YEL讨论触发/GRN按需触发/WHT系统级
+        category: skill 分类 (register_skill)
 
     Returns:
         JSON string with result
@@ -556,6 +727,13 @@ def skill_evolution(action: str = "record_error",
             fixed_script_path=fixed_script_path,
             reason=reason,
         )
+    elif action == "register_skill":
+        result = _register_skill(
+            skill_name=skill_name,
+            keywords=keywords,
+            trigger_level=trigger_level,
+            category=category,
+        )
     else:
         result = {"success": False, "error": f"Unknown action: {action}. Use: record_error, record_success, record_run, query_logs, update_script"}
 
@@ -585,8 +763,8 @@ SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["record_error", "record_success", "record_run", "query_logs", "update_script"],
-                "description": "record_error: 记录错误+根因+修复方案到skill; record_success/record_run: 记录成功脚本+参数到proven scripts; query_logs: 查同类运行日志拿历史经验; update_script: 用修复后的脚本覆盖原脚本并备份",
+                "enum": ["record_error", "record_success", "record_run", "query_logs", "update_script", "register_skill"],
+                "description": "record_error: 记录错误+根因+修复方案到skill; record_success/record_run: 记录成功脚本+参数到proven scripts; query_logs: 查同类运行日志拿历史经验; update_script: 用修复后的脚本覆盖原脚本并备份; register_skill: 注册新skill到SOUL.md使下次可自动触发",
             },
             "skill_name": {
                 "type": "string",
@@ -614,6 +792,13 @@ SCHEMA = {
                 "description": "严重程度",
             },
             "reason": {"type": "string", "description": "更新原因 (update_script)"},
+            "keywords": {"type": "string", "description": "SOUL.md 命中关键词 (register_skill), 如 '\"scTour\" / \"深度伪时间\"'"},
+            "trigger_level": {
+                "type": "string",
+                "enum": ["RED 必触发", "YEL 讨论触发", "GRN 按需触发", "WHT 系统级"],
+                "description": "触发级别 (register_skill)",
+            },
+            "category": {"type": "string", "description": "Skill 分类 (register_skill)"},
         },
         "required": ["action", "skill_name"],
     },
@@ -644,15 +829,16 @@ try:
             score=args.get("score", 0.0),
             severity=args.get("severity", "medium"),
             reason=args.get("reason", ""),
+            keywords=args.get("keywords", ""),
+            trigger_level=args.get("trigger_level", "RED 必触发"),
+            category=args.get("category", ""),
         ),
         emoji="🧬",
         max_result_size_chars=40_000,
         description=(
             "MemOmics Skill 自进化引擎: 脚本出错→记录错误+根因+修复方案到skill的error_log.md和Common Issues; "
-            "成功→记录proven脚本+参数; 跑前→query_logs查同类经验。 "
-            "Actions: record_error(出错), record_success/record_run(成功), query_logs(查经验), update_script(修脚本)。"
-            "脚本成功→记录proven script+参数; 修复有效→更新脚本到skill并备份旧版本. "
-            "3个action: record_error, record_success, update_script."
+            "成功→记录proven脚本+参数; 跑前→query_logs查同类经验; 创建skill后→register_skill注册到SOUL.md使下次可自动触发。 "
+            "Actions: record_error(出错), record_success/record_run(成功), query_logs(查经验), update_script(修脚本), register_skill(注册触发)。"
         ),
     )
 except Exception:
