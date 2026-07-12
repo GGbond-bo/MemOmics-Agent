@@ -1326,8 +1326,18 @@ function escapeHtml(s) {
 
 function renderMarkdown(text) {
   if (!text) return '';
+  // 长文本截断：防止正则回溯卡死整页
+  if (text.length > 15000) text = text.substring(0, 15000) + '\n\n...';
   var html = escapeHtml(text);
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m,lang,code) { return '<pre><code>' + code + '</code></pre>'; });
+  // 代码块安全处理：先检查是否有成对的 ```
+  var tickCount = (html.match(/```/g) || []).length;
+  if (tickCount >= 2 && tickCount % 2 === 0) {
+    var blocks = [];
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
+      blocks.push('<pre><code>' + code + '</code></pre>');
+      return '\x00CODE' + (blocks.length - 1) + '\x00';
+    });
+  }
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
