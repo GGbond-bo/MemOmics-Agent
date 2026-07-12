@@ -1,0 +1,204 @@
+metadata:
+  source: work/papers/heart_san/Lim_2024_NatCommun_SAN_CD34.pdf
+  dissected_at: '2026-07-12T17:50:01.261771'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Seurat
+    version: null
+    context: 'the
+
+      Seurat toolkit (version 4.0.2, https://satijalab.org/seurat/)68. First, data
+
+      was ﬁltered to remove low-qua'
+    params: []
+  - name: SCTransform
+    version: null
+    context: 'sing
+
+      ScTransform, principal components analysis was performed using
+
+      RunPCA, and the top 25 principal components were'
+    params: []
+  - name: Harmony
+    version: null
+    context: 'used Harmony integration and combined the two datasets
+
+      (Fig. 2h–j, Supplementary Fig. 2d–g)25. This analysis sho'
+    params: []
+  - name: PEER
+    version: null
+    context: 'tze.
+
+      Peer review information Nature Communications thanks the anon-
+
+      ymous reviewers for their contribution to'
+    params: []
+  - name: MACS
+    version: null
+    context: 'ing (MACS) for CD34+ cells
+
+      can also enrich for SANLPCs. Interestingly, MACS for CD34+ cells
+
+      enriched for SIRP'
+    params: []
+  - name: CellRanger
+    version: null
+    context: 'mics
+
+      CellRanger pipeline by UHN’s Princess Margaret Genomics Centre.
+
+      Single-cell RNA-seq data and single-nuclei RNA'
+    params: []
+  parameters:
+  - name: ndims
+    value: '25'
+    context: 'sis was performed using
+
+      RunPCA, and the top 25 principal components were used for clus-
+
+      tering into distinc'
+    source: prose
+  - name: nPCs
+    value: '1'
+    context: '2248
+
+      RP11-269F21.3
+
+      ADARB2
+
+      MB
+
+      NKAIN3
+
+      GRIK1
+
+      PCDH7
+
+      MDGA2
+
+      LINC01880
+
+      SPOCK1
+
+      NPPA
+
+      TENM2
+
+      PP'
+    source: prose
+  - name: nPCs
+    value: '25'
+    context: 'was performed using
+
+      RunPCA, and the top 25 principal components were used for clus-
+
+      tering into distinc'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 's from the fetal SAN and hPSC datasets. p < 0.05 for all correlations
+
+      (asymptotic t appr'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'iedman test with Dunn’s post hoc
+
+      test: *p < 0.05, **p < 0.01, ***p < 0.001 vs indicated'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'with Dunn’s post hoc
+
+      test: *p < 0.05, **p < 0.01, ***p < 0.001 vs indicated sample. Erro'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'ost hoc
+
+      test: *p < 0.05, **p < 0.01, ***p < 0.001 vs indicated sample. Error bars represe'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'cell populations
+
+      indicated on the axes. p < 0.05 for all correlations (asymptotic t appr'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'test followed by
+
+      Dunn’s post hoc test: *p < 0.05, **p < 0.01, ***p < 0.001 vs. indicated'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'd by
+
+      Dunn’s post hoc test: *p < 0.05, **p < 0.01, ***p < 0.001 vs. indicated sample.
+
+      c S'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'ost hoc test: *p < 0.05, **p < 0.01, ***p < 0.001 vs. indicated sample.
+
+      c Schematic overv'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'zed using two-sided Mann-Whitney test:
+
+      *p < 0.05 vs indicated sample. d Optical action p'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'zed using two-sided Mann-Whitney test: *p < 0.05, **p < 0.01 vs indicated
+
+      sample. Error'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'o-sided Mann-Whitney test: *p < 0.05, **p < 0.01 vs indicated
+
+      sample. Error bars represe'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: '. Results were considered signiﬁcant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***)'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'considered signiﬁcant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***). All statisti'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'ant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***). All statistical parameters are d'
+    source: prose
+  platforms:
+  - NovaSeq 6000
+  - 10x Genomics
+  - '10x
+
+    Genomics'
+  - Chromium Single Cell 3
+  - Chromium
+  - Chromium 10
+  stats:
+    methods_length: 128685
+    methods_lines: 3467
+    package_count: 6
+    version_count: 0
+    parameter_count: 17
+    platform_count: 11
+llm_extraction: null

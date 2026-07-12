@@ -1,0 +1,329 @@
+metadata:
+  source: work/papers/heart_san/HAND2_2025_NatCommun_pacemaker_ATAC.pdf
+  dissected_at: '2026-07-12T17:51:16.283678'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Monocle
+    version: null
+    context: 'into
+
+      Monocle, and dimensionality reduction was performed to create a
+
+      matrix where each “cell” is simply the bulk'
+    params: []
+  - name: Slingshot
+    version: null
+    context: 'bed (Slingshot)98.
+
+      The raw read counts obtained from HT seq were imported into
+
+      Monocle, and dimensionality reducti'
+    params: []
+  - name: DESeq2
+    version: null
+    context: 'ove. DEseq2 was used to calculate differentially expressed genes
+
+      between MEF RNA seq at Day 6 and P14 PM cells.'
+    params: []
+  - name: Bowtie
+    version: null
+    context: 'with
+
+      Bowtie 2. Nat. Methods 9, 357–359 (2012).
+
+      100. Ramirez, F., Dundar, F., Diehl, S., Gruning, B. A. & Manke,'
+    params: []
+  - name: Bowtie2
+    version: 2.2.1
+    context: 'with bowtie2 (version 2.3.3.1). The
+
+      duplicates were marked using Picard-Tools (v2.2.1), and blacklist
+
+      regions we'
+    params: []
+  - name: HTSeq
+    version: null
+    context: ', W. HTSeq-a Python framework to
+
+      work with high-throughput sequencing data. Bioinformatics 31,
+
+      166–169 (2015).'
+    params: []
+  - name: PEER
+    version: null
+    context: 'shi.
+
+      Peer review information Nature Communications thanks the anon-
+
+      ymous reviewers for their contribution to'
+    params: []
+  - name: MACS2
+    version: null
+    context: 'from MACS2 and extended
+
+      outward 2 kb for the analysis of nucleosome occupancy. The graphs
+
+      for nucleosome occup'
+    params: []
+  - name: MACS
+    version: null
+    context: 'the MACS input subtracted
+
+      begraph using bamtools.
+
+      ChIP-seq proﬁle plots were generated using deepTools100. M'
+    params: []
+  - name: HOMER
+    version: null
+    context: 'ent (HOMER) de novo
+
+      motif analysis on HAND2 ChIP-seq peaks in euchromatin and hetero-
+
+      chromatin. Interestingly'
+    params: []
+  - name: MEME
+    version: null
+    context: 'al. MEME SUITE: tools for motif discovery and
+
+      searching. Nucleic Acids Res. 37, W202–W208 (2009).
+
+      91.
+
+      Grant,'
+    params: []
+  - name: FIMO
+    version: null
+    context: '. S. FIMO: scanning for
+
+      occurrences of a given motif. Bioinformatics 27, 1017–1018 (2011).
+
+      92.
+
+      Trapnell, C.,'
+    params: []
+  - name: deepTools
+    version: null
+    context: 'ets. Deeptools
+
+      BigWig Compare was used to normalize the signal between Nucleolar
+
+      and Genomic samples resulting in'
+    params: []
+  - name: computeMatrix
+    version: null
+    context: 'sing ComputeMatrix with “reference-point” fol-
+
+      lowed by PlotHeatmap to generate the visual graphics. At default,
+
+      peaks'
+    params: []
+  - name: plotHeatmap
+    version: null
+    context: 'd by PlotHeatmap to generate the visual graphics. At default,
+
+      peaks were plotted in order of descending signal, for'
+    params: []
+  - name: bedtools
+    version: null
+    context: 'ADs. BedTools Intersect
+
+      Intervals function was used with an overlap of 1 bp for the histone
+
+      peaks. The number of'
+    params: []
+  - name: picard
+    version: '1.127'
+    context: 'sing Picard tools (v1.127; https://broadinstitute.github.
+
+      io/picard/), the RNA counts generated from HTseqCount'
+    params: []
+  - name: FastQC
+    version: 0.11.2
+    context: 'sing FastQC
+
+      v0.11.2 (Andrews, 2010), and reads were quality-trimmed using Trim-
+
+      momatic (Bolger, 2014). The tri'
+    params: []
+  parameters:
+  - name: resolution
+    value: '1'
+    context: 'er TFs are deﬁned by two essential features: 1) binding to
+
+      nucleosome-occupied sites a'
+  - name: FDR
+    value: '0.05'
+    context: 'onsistently
+
+      and signiﬁcantly different (FDR < 0.05) between at least two condi-
+
+      tions. Big'
+  - name: FDR
+    value: '0.05'
+    context: 'onsistently and signiﬁcantly different
+
+      (FDR < 0.05) between at least two conditions.
+
+      NAD-s'
+  - name: FDR_threshold
+    value: '0.05'
+    context: 'onsistently
+
+      and signiﬁcantly different (FDR < 0.05) between at least two condi-
+
+      tions. Big'
+    source: prose
+  - name: FDR_threshold
+    value: '0.05'
+    context: 'onsistently and signiﬁcantly different
+
+      (FDR < 0.05) between at least two conditions.
+
+      NAD-s'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'ical analysis: repeated measures ANOVA: P < 0.001. Data
+
+      presented as mean values ± SEM. G'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'multiple comparison test: Hand2 vs. GMT P < 0.001, Hand2 vs. N- D +
+
+      P < 0.001, Hand2 vs.'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'nd2 vs. GMT P < 0.001, Hand2 vs. N- D +
+
+      P < 0.001, Hand2 vs. N + D- P < 0.001. L P value'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'vs. N- D +
+
+      P < 0.001, Hand2 vs. N + D- P < 0.001. L P value from one-way ANOVA with Dunn'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'multiple comparison test: Hand2 vs. GMT P < 0.001, Hand2 vs. N- D +
+      P = 0.9874,
+
+      Hand2 vs.'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'vs. N- D + P = 0.9874,
+
+      Hand2 vs. N + D- P < 0.001. White dashed line represents nuclear b'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'n test. Non-NAD PM genes GMT vs. N- D + P < 0.0001,
+
+      GMT vs. Hand2 P < 0.0001, NAD PM genes'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'MT vs. N- D + P < 0.0001,
+
+      GMT vs. Hand2 P < 0.0001, NAD PM genes GMT vs. N- D + P = 0.1573'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'ological replicates for NAD
+
+      genes (Pkp2 P < 0.0001, Kcnj5 P < 0.0037, Popdc3 P = 0.0358, S'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0037'
+    context: 's for NAD
+
+      genes (Pkp2 P < 0.0001, Kcnj5 P < 0.0037, Popdc3 P = 0.0358, Scn5a P = .0239,
+
+      Ds'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'sg2 P = 0.0082) and non-NAD gene (Tnnt2 P < 0.0001, Myh6 P = 0.0075,
+
+      Adora1 P = 0.0069, Ac'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: '. P value from two-sided
+
+      binomial test. P < 0.0001 for H3K4me3, H3K27ac, H3K9me2 and H3K9m'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'from two-sided Wilcoxon Rank-sum Test. P < 0.0001 for both
+
+      ATAC and NAS. J Percent of pea'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: '. P value from two-sided binomial test. P < 0.0001 for both Eu
+
+      and srHC peaks. K GREAT ana'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'Mock vs. GMT P = 0.0913, Mock vs.
+
+      GHMT P < 0.0001, Mock vs. iPM P < .0001. For H3K27ac Mo'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'Mock vs. GMT P = 0.0007,
+
+      Mock vs. GHMT P < 0.0001. D Representative genome browser tracks'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'ank-sum Test. For H3K27me3 Mock vs. iPM
+
+      P < 0.0001. For H3K9me3, Mock vs. iPM P = 0.1259.'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.0001'
+    context: 'PM1 intensity. For Mock, N-D + , N + D-
+
+      P < 0.0001. For Hand2 P = 0.8236. Scale bars, 10 µ'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'multiple comparison test. Hand2 vs. GMT P < 0.001, Hand2 vs. Hand2 +
+      E12
+
+      P < 0.001. E EMS'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 's. GMT P < 0.001, Hand2 vs. Hand2 + E12
+
+      P < 0.001. E EMSA using HAND2 homodimers and dsDN'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'the GraphPad Prism
+
+      10 software package. P < 0.05 was considered signiﬁcant in all cases.'
+    source: prose
+  platforms:
+  - NextSeq2
+  - Illumina
+  stats:
+    methods_length: 108039
+    methods_lines: 2021
+    package_count: 18
+    version_count: 3
+    parameter_count: 26
+    platform_count: 5
+llm_extraction: null
