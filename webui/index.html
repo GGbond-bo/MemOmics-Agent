@@ -1407,10 +1407,10 @@ function filterSessions() {
   renderSessionList(filtered);
 }
 
+var _lastSessionFingerprint = '';
 function renderSessionList(sessions) {
   var el = document.getElementById('session-list');
-  var scrollTop = el.scrollTop;  // 保留滚动位置，防止innerHTML重建后跳回顶部
-  if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; return; }
+  if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; _lastSessionFingerprint = ''; return; }
   // 按创建时间从新到旧排列（最新的在最上面）
   // _allSessions 只在 loadSessions 中更新，render 不覆盖全量
   sessions = sessions.slice(); // 不修改调用者传入的数组
@@ -1422,6 +1422,21 @@ function renderSessionList(sessions) {
     // 同为 restored 或同为非 restored，按创建时间倒序
     return (b.created || '').localeCompare(a.created || '');
   });
+  // 防闪烁：内容没变就不重建 DOM，只更新 .active 标记
+  var fp = sessions.map(function(s){ return s.id + '|' + (s.is_running?1:0) + '|' + (s.msg_count||0); }).join(',');
+  if (fp === _lastSessionFingerprint) {
+    // 只更新 active 样式，不重建整个列表
+    var items = el.querySelectorAll('.session-item');
+    for (var i = 0; i < items.length; i++) {
+      var sid = items[i].getAttribute('onclick') || '';
+      sid = sid.replace(/^switchSession\('|'\).*$/g, '');
+      if (sid === currentSid) items[i].classList.add('active');
+      else items[i].classList.remove('active');
+    }
+    return;
+  }
+  _lastSessionFingerprint = fp;
+  var scrollTop = el.scrollTop;
   el.innerHTML = sessions.map(function(s) {
     var active = s.id === currentSid ? ' active' : '';
     var runningBadge = s.is_running ? '<span style="color:#2d8659;font-size:10px;margin-right:4px;animation:pulse 1.5s infinite;" title="分析中">●</span>' : '';
