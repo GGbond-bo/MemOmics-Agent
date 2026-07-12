@@ -1345,6 +1345,7 @@ function renderMarkdown(text) {
 
 // === 会话管理 ===
 function newSession() {
+  console.log('[NEW] newSession called');
   currentSid = null;
   document.getElementById('messages').innerHTML = '';
   // 欢迎画面 — 企鹅服小女孩 + 极简问候 (学 hermes 风格)
@@ -1368,6 +1369,7 @@ function newSession() {
 
 // WS重连时自动选择最新会话，不再无条件创建新会话（避免幽灵会话覆盖已选会话）
 function autoSelectLatestSession() {
+  console.log('[AUTO] autoSelectLatestSession called, _allSessions.length=' + (_allSessions?_allSessions.length:0) + ', currentSid=' + currentSid);
   if (!_allSessions || !_allSessions.length) {
     newSession();  // 首次启动，没有任何会话才新建
     return;
@@ -1382,34 +1384,39 @@ function autoSelectLatestSession() {
 var _loadSessionsCtl = null;
 var _hasEverLoaded = false; // 是否曾经成功加载过会话（防止第1次被取消后误判）
 var _consecutiveEmpty = 0; // 连续空响应计数，≥2才接受
+var _loadSessionsSeq = 0; // 调试：调用序号
 async function loadSessions() {
+  var seq = ++_loadSessionsSeq;
+  console.log('[LS#' + seq + '] loadSessions called, _hasEverLoaded=' + _hasEverLoaded + ', _allSessions.length=' + _allSessions.length);
   // 取消上一次未完成的请求，只保留最新一次
-  if (_loadSessionsCtl) _loadSessionsCtl.abort();
+  if (_loadSessionsCtl) { console.log('[LS#' + seq + '] aborting previous'); _loadSessionsCtl.abort(); }
   _loadSessionsCtl = new AbortController();
   try {
     var r = await fetch('/api/sessions', { signal: _loadSessionsCtl.signal });
     var d = await r.json();
     var sessions = d.sessions || [];
+    console.log('[LS#' + seq + '] server returned ' + sessions.length + ' sessions');
     if (sessions.length === 0) {
       if (_hasEverLoaded) {
         // 曾经加载过会话 → 必须连续2次空响应才接受
         _consecutiveEmpty++;
+        console.warn('[LS#' + seq + '] empty response #' + _consecutiveEmpty + ', _hasEverLoaded=true, ' + (_consecutiveEmpty < 2 ? 'IGNORING' : 'ACCEPTING'));
         if (_consecutiveEmpty < 2) {
-          console.warn('loadSessions: 忽略瞬时第' + _consecutiveEmpty + '次空响应，保留' + _allSessions.length + '个会话');
           return;
         }
+      } else {
+        console.warn('[LS#' + seq + '] empty response, _hasEverLoaded=false, ACCEPTING (first load)');
       }
-      // 从未加载过 → 接受空列表（服务器确实无会话）
     } else {
       _consecutiveEmpty = 0;
       _hasEverLoaded = true;
     }
+    console.log('[LS#' + seq + '] setting _allSessions to ' + sessions.length + ' items, calling renderSessionList');
     _allSessions = sessions;
     renderSessionList(sessions);
   } catch(e) {
-    if (e.name === 'AbortError') return; // 被取消，忽略
-    console.error('loadSessions:', e);
-    // 网络错误不覆盖本地数据
+    if (e.name === 'AbortError') { console.log('[LS#' + seq + '] ABORTED'); return; }
+    console.error('[LS#' + seq + '] ERROR:', e);
   }
 }
 
@@ -1434,6 +1441,7 @@ function filterSessions() {
 
 var _lastSessionFingerprint = '';
 function renderSessionList(sessions) {
+  console.log('[RSL] renderSessionList called with ' + (sessions?sessions.length:0) + ' sessions, currentSid=' + currentSid);
   var el = document.getElementById('session-list');
   if (!sessions.length) { el.innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">暂无历史会话</div>'; _lastSessionFingerprint = ''; return; }
   // 按创建时间从新到旧排列（最新的在最上面）
@@ -1450,6 +1458,7 @@ function renderSessionList(sessions) {
   // 防闪烁：内容没变就不重建 DOM，只更新 .active 标记
   var fp = sessions.map(function(s){ return s.id + '|' + (s.is_running?1:0) + '|' + (s.msg_count||0); }).join(',');
   if (fp === _lastSessionFingerprint) {
+    console.log('[RSL] fingerprint MATCH, skipping DOM rebuild');
     // 只更新 active 样式，不重建整个列表
     var items = el.querySelectorAll('.session-item');
     for (var i = 0; i < items.length; i++) {
@@ -1461,6 +1470,7 @@ function renderSessionList(sessions) {
     return;
   }
   _lastSessionFingerprint = fp;
+  console.log('[RSL] fingerprint CHANGED, rebuilding DOM with ' + sessions.length + ' items');
   var scrollTop = el.scrollTop;
   el.innerHTML = sessions.map(function(s) {
     var active = s.id === currentSid ? ' active' : '';
