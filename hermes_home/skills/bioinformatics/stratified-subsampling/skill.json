@@ -1,0 +1,12 @@
+{
+  "id": "stratified-subsampling",
+  "name": "stratified-subsampling",
+  "category": "stratified",
+  "language": "R+Python",
+  "description": "Auto-generated for stratified-subsampling",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

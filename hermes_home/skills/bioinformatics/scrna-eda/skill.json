@@ -1,0 +1,32 @@
+{
+  "id": "scrna-eda",
+  "name": "scRNA-seq 数据探索",
+  "category": "scRNA",
+  "language": "Python",
+  "description": "分析前自动数据探索: 细胞/基因数、稀疏度、批次分布、表达分布、top HVG、UMAP 预览",
+  "starting_prompt": "先看看数据长什么样",
+  "memomics_module": "01_数据探索",
+  "chains_from": ["scrna-qc", "scrna-clustering"],
+  "chains_to": [],
+  "tags": [
+    "eda",
+    "exploration",
+    "data-quality",
+    "metadata",
+    "distribution",
+    "数据探索",
+    "看看数据",
+    "数据概览"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": [
+    {"name": "加载数据", "description": "anndata.read_h5ad 读入", "tool": "terminal"},
+    {"name": "基本统计", "description": "n_cells, n_genes, sparsity, mito%, doublet_score", "tool": "terminal"},
+    {"name": "批次分布", "description": "sample/batch 柱状图，检查批次效应信号", "tool": "terminal"},
+    {"name": "表达分布", "description": "count depth 直方图，percent_top50 箱线图", "tool": "terminal"},
+    {"name": "高变基因", "description": "Top 2000 HVG 热图预览", "tool": "terminal"},
+    {"name": "QC 建议", "description": "基于分布推荐 QC 阈值", "tool": "rail_review"}
+  ]
+}

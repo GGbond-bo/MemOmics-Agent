@@ -1,0 +1,12 @@
+{
+  "id": "microplate-layout-design",
+  "name": "microplate-layout-design",
+  "category": "General Utility",
+  "language": "R+Python",
+  "description": "Design optimized microplate layouts with randomization, edge effect mitigation, and covariate balancing.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

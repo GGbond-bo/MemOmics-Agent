@@ -1,0 +1,12 @@
+{
+  "id": "chip-atlas-peak-enrichment",
+  "name": "chip-atlas-peak-enrichment",
+  "category": "scATAC",
+  "language": "R+Python",
+  "description": "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the ChIP-Atlas API.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

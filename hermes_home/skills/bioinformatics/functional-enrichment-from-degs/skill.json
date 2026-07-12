@@ -1,0 +1,12 @@
+{
+  "id": "functional-enrichment-from-degs",
+  "name": "functional-enrichment-from-degs",
+  "category": "Bulk RNA",
+  "language": "R+Python",
+  "description": "Perform functional enrichment analysis using clusterProfiler on differential expression results with GSEA and ORA.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

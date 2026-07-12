@@ -1,0 +1,12 @@
+{
+  "id": "lipidomics-summary-stats",
+  "name": "Lipidomics Summary Statistics",
+  "category": "Drug Discovery",
+  "language": "R+Python",
+  "description": "Statistical analysis of lipidomics data",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

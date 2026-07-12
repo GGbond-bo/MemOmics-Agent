@@ -1,0 +1,12 @@
+{
+  "id": "scrna-trajectory-inference",
+  "name": "scrna-trajectory-inference",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities from scRNA-seq data using PAGA, DPT, scVelo, CellRank, and scTour.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

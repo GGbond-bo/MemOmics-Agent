@@ -1,0 +1,12 @@
+{
+  "id": "heart-conference-monitor",
+  "name": "Heart Conference Monitor",
+  "category": "General Utility",
+  "language": "R+Python",
+  "description": "Monitor and analyze heart conference presentations",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}
