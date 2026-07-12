@@ -1036,9 +1036,7 @@ def _load_persisted_sessions():
             # 只加载 memomics 开头的会话
             if not sid.startswith("memomics-"):
                 continue
-            msgs = db.get_messages_as_conversation(sid)
-            if not msgs:
-                continue
+            msgs = db.get_messages_as_conversation(sid) or []
             # 转成 MemOmics 格式
             messages = []
             for m in msgs:
@@ -1046,8 +1044,7 @@ def _load_persisted_sessions():
                 content = m.get("content", "")
                 if role in ("user", "assistant") and content:
                     messages.append({"role": role, "content": str(content), "time": ""})
-            if not messages:
-                continue
+            # 空会话也恢复（用户可能创建了但还没发消息）
             # 恢复 results_dir：优先从 state.db 的 cwd 字段读，没有就用 sid
             persisted_cwd = s.get("cwd") or ""
             # list_sessions_rich 不返回 cwd 字段，需要单独查询
@@ -1182,13 +1179,32 @@ def _create_agent(model_config=None, session_id=None):
 async def index():
     html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
     with open(html_path, encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return HTMLResponse(f.read(), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
 
+
+
+@app.get("/api/sessions/diag")
+async def diag_sessions():
+    """诊断：检查会话恢复状态"""
+    db = _get_session_db()
+    db_count = 0
+    if db:
+        try:
+            sessions = db.list_sessions_rich()
+            db_count = len(sessions)
+        except Exception:
+            pass
+    return {
+        "memory_count": len(_sessions),
+        "db_count": db_count,
+        "db_available": db is not None,
+        "memory_ids": list(_sessions.keys()),
+    }
 
 # === 首次启动 / 环境检测 ===
 
