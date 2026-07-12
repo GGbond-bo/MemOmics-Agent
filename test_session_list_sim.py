@@ -47,6 +47,7 @@ class SessionListSimulator:
         self._searchText = ''  # 搜索框文本
         self._isSearching = False
         self._domVisible = True
+        self._consecutiveEmpty = 0  # 连续空响应计数
 
     # ---------- JS 函数模拟 ----------
     async def loadSessions(self):
@@ -61,6 +62,13 @@ class SessionListSimulator:
                 raise asyncio.CancelledError("AbortError")
             d = api_sessions()
             sessions = d.get("sessions", [])
+            # 连续空响应防护：需要连续2次空响应才接受
+            if len(sessions) == 0 and len(self._allSessions) > 0:
+                self._consecutiveEmpty += 1
+                if self._consecutiveEmpty < 2:
+                    return  # 忽略第1次空响应
+            else:
+                self._consecutiveEmpty = 0
             self._allSessions = sessions
             self.renderSessionList([s.copy() for s in sessions])
         except asyncio.CancelledError:
@@ -231,10 +239,12 @@ async def test_cases():
     check(len(sim3._allSessions) == 3, "初始 3 个会话")
     check(sim3._domVisible, "DOM 可见")
     
-    # 模拟服务器清空（如全部删除）
+    # 模拟服务器清空（如全部删除） — 需要2次调用突破防护
     _sessions.clear()
-    await sim3.loadSessions()
-    check(len(sim3._allSessions) == 0, "空响应后 _allSessions 为空")
+    await sim3.loadSessions()  # 第1次空 → 被忽略
+    check(len(sim3._allSessions) == 3, "第1次空响应被忽略")
+    await sim3.loadSessions()  # 第2次空 → 被接受
+    check(len(sim3._allSessions) == 0, "第2次空响应后 _allSessions 为空")
     check(not sim3._domVisible, "DOM 显示空状态")
     
     # 重新创建
@@ -266,6 +276,8 @@ async def test_cases():
     check(len(sim5._allSessions) == 2, "初始 2 个会话")
     sids = [s["id"] for s in sim5._allSessions]
     for sid in sids:
+        # 本地先移除
+        sim5._allSessions = [s for s in sim5._allSessions if s["id"] != sid]
         sim5.deleteSession(sid)
         await asyncio.sleep(0.06)
     check(len(sim5._allSessions) == 0, "删除全部后为空")

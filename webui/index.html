@@ -1380,6 +1380,7 @@ function autoSelectLatestSession() {
 }
 
 var _loadSessionsCtl = null;
+var _consecutiveEmpty = 0; // 连续空响应计数，≥2才接受
 async function loadSessions() {
   // 取消上一次未完成的请求，只保留最新一次
   if (_loadSessionsCtl) _loadSessionsCtl.abort();
@@ -1388,11 +1389,22 @@ async function loadSessions() {
     var r = await fetch('/api/sessions', { signal: _loadSessionsCtl.signal });
     var d = await r.json();
     var sessions = d.sessions || [];
+    // 收到空列表但本地有数据：需要连续2次空响应才接受（防瞬时空响应）
+    if (sessions.length === 0 && _allSessions.length > 0) {
+      _consecutiveEmpty++;
+      if (_consecutiveEmpty < 2) {
+        console.warn('loadSessions: 忽略瞬时第' + _consecutiveEmpty + '次空响应，保留' + _allSessions.length + '个会话');
+        return;
+      }
+    } else {
+      _consecutiveEmpty = 0;
+    }
     _allSessions = sessions;
     renderSessionList(sessions);
   } catch(e) {
     if (e.name === 'AbortError') return; // 被取消，忽略
     console.error('loadSessions:', e);
+    // 网络错误不覆盖本地数据
   }
 }
 
@@ -1462,6 +1474,8 @@ function renderSessionList(sessions) {
 function deleteSession(sid) {
   if (!confirm('确定删除这个会话吗？所有消息历史将被清除。')) return;
   fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(r => r.json()).then(function() {
+    // 立即从本地移除，再同步服务器（避免空响应 guard 阻止更新）
+    _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
     if (currentSid === sid) {
       currentSid = null;
       document.getElementById('messages').innerHTML = '';
