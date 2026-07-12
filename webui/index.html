@@ -2111,10 +2111,6 @@ function renderSkillList(skills, filter) {
     var disabledBadge = s.disabled ? ' <span style="color:#e74c3c;font-size:10px;">[已禁用]</span>' : '';
     return '<div class="skill-item" style="' + disabledStyle + '" onclick="viewSkill(\'' + s.name + '\')"><div style="display:flex;justify-content:space-between;align-items:center;"><div class="skill-name" style="flex:1;">' + catIcon + ' ' + escapeHtml(s.name) + disabledBadge + '</div>' + toggleBtn + '</div><div class="skill-desc">' + escapeHtml(s.description) + '</div><div class="skill-meta">📜 ' + s.scripts_count + ' 脚本' + (s.has_skill_md ? ' · ✅ SKILL.md' : '') + '</div></div>';
   }).join('');
-  el.scrollTop = scrollTop;  // 恢复滚动位置
-  // 确保当前活跃会话在可视区内
-  var activeEl = el.querySelector('.session-item.active');
-  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 async function viewSkill(name) {
@@ -2351,10 +2347,6 @@ async function loadResultsFiles() {
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
-  el.scrollTop = scrollTop;  // 恢复滚动位置
-  // 确保当前活跃会话在可视区内
-  var activeEl = el.querySelector('.session-item.active');
-  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 function switchResultsTab(tab) {
@@ -2855,10 +2847,6 @@ function updateStats(stats) {
     return '<div class="ctx-stat"><div class="stat-val' + (item.klass ? ' ' + item.klass : '') + '">' +
       item.val + '</div><div class="stat-lbl">' + item.lbl + '</div></div>';
   }).join('');
-  el.scrollTop = scrollTop;  // 恢复滚动位置
-  // 确保当前活跃会话在可视区内
-  var activeEl = el.querySelector('.session-item.active');
-  if (activeEl) activeEl.scrollIntoView({block:'nearest'});
 }
 
 function updateBreakdown(categories, max) {
