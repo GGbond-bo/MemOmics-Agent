@@ -374,6 +374,58 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
     return result
 
 
+
+
+# --- 1c. DELIVERY GATE ---
+
+def _verify_delivery_gate(skill_name: str, portal_urls: str = "") -> dict:
+    """Create-bio-skill Step 9 delivery gate: 6-item review checklist."""
+    results = []
+    blocked = []
+    skill_dir = _get_skill_dir(skill_name)
+    if not skill_dir:
+        return {"passed": False, "error": f"Skill '{skill_name}' not found", "checks": [], "blocked": ["skill not found"]}
+    skill_md_path = os.path.join(skill_dir, "SKILL.md")
+    skill_md = _read_file(skill_md_path) or ""
+
+    # 1. References have URLs?
+    refs = skill_md.split("## References")[-1] if "## References" in skill_md else ""
+    ok1 = bool(re.search(r'https?://', refs))
+    results.append({"check": "official_docs", "passed": ok1, "detail": "Has URLs" if ok1 else "No official URL"})
+    if not ok1: blocked.append("Missing official doc URLs in References")
+
+    # 2. When to Use has scenarios?
+    when = skill_md.split("## When to Use")[-1].split("## ")[0] if "## When to Use" in skill_md else ""
+    ok2 = bool(re.search(r'(should|trigger|use|适用)', when, re.I))
+    results.append({"check": "usage_scenarios", "passed": ok2, "detail": "Has scenarios" if ok2 else "No usage scenarios"})
+    if not ok2: blocked.append("When to Use missing usage scenarios")
+
+    # 3. Prerequisites have packages?
+    p = re.search(r'prerequisites:', skill_md)
+    ok3 = bool(p and (re.search(r'[a-zA-Z]', skill_md[p.end():p.end()+200])))
+    results.append({"check": "prerequisites", "passed": ok3, "detail": "Has packages" if ok3 else "Empty"})
+    if not ok3: blocked.append("Prerequisites empty - must list packages")
+
+    # 4. Scripts exist?
+    sd = os.path.join(skill_dir, "scripts")
+    ok4 = os.path.isdir(sd) and any(f.endswith(('.py','.R')) for f in os.listdir(sd))
+    results.append({"check": "scripts_exist", "passed": ok4, "detail": "Has scripts" if ok4 else "No scripts"})
+    if not ok4: blocked.append("No runnable scripts found")
+
+    # 5. skill.json exists?
+    ok5 = os.path.exists(os.path.join(skill_dir, "skill.json"))
+    results.append({"check": "skill_json", "passed": ok5, "detail": "Exists" if ok5 else "Missing"})
+    if not ok5: blocked.append("skill.json missing - record_run will silently fail")
+
+    # 6. Proven Scripts table?
+    ok6 = bool(re.search(r'##\s*Proven Scripts', skill_md))
+    results.append({"check": "proven_table", "passed": ok6, "detail": "Has table" if ok6 else "Missing"})
+    if not ok6: blocked.append("Proven Scripts table missing")
+
+    passed = len(blocked) == 0
+    return {"passed": passed, "skill": skill_name, "checks": results, "blocked": blocked,
+            "message": "GATE PASSED" if passed else "GATE FAILED: %d blocked" % len(blocked)}
+
 # ─── 2. RECORD SUCCESS ────────────────────────────
 
 def _record_success(skill_name: str, script_name: str = "", params_used: str = "",
@@ -641,6 +693,22 @@ def _register_skill(skill_name: str, keywords: str = "",
     # 自动扩展关键词：从 "衰老分类" 派生 "衰老"，从 "senescence scoring" 派生 "senescence"
     keywords = _expand_keywords(keywords)
 
+    # ===== Gate: minimum keyword check =====
+    kw_parts = [k.strip().strip('"').strip() for k in keywords.split("/") if k.strip().strip('"').strip()]
+    if len(kw_parts) < 4:
+        return {
+            "success": False,
+            "action": "register_skill",
+            "skill": skill_name,
+            "error": f"KEYWORD_GATE_FAILED: only {len(kw_parts)} keywords ({keywords}). "
+                     f"Need >=4 (Chinese + English mixed). "
+                     f"Add more from SKILL.md When to Use / metadata.tags / package name / function description.",
+            "hint": "Example minimum: '\"包名\" / \"功能中文\" / \"package_name\" / \"function_english\"'"
+        }
+    # Warning (non-blocking) for <5 keywords
+    if len(kw_parts) < 5:
+        logger.warning(f"register_skill: only {len(kw_parts)} keywords for '{skill_name}'. Recommend >=5.")
+
     # 重新构建触发行（使用扩展后的关键词）
     trigger_row = f'| {keywords} | `skill_view("{skill_name}")` |'
 
@@ -803,6 +871,11 @@ def skill_evolution(action: str = "record_error",
             script_name=script_name,
             fixed_script_path=fixed_script_path,
             reason=reason,
+        )
+    elif action == "verify_delivery_gate":
+        result = _verify_delivery_gate(
+            skill_name=args.get("skill_name", args.get("skill", "")),
+            portal_urls=args.get("portal_urls", "")
         )
     elif action == "register_skill":
         result = _register_skill(

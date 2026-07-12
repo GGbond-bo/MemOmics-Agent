@@ -158,13 +158,37 @@ prerequisites:
 
 ## Pipeline
 
-### Step 1: 查询官方文档
+### Step 1: 查询官方文档（硬门禁，不可跳过）
+
+> **🔴 这是硬门禁。web_extract 失败 → 不允许进入 Step 2。必须换源重试，直到成功提取官方文档内容。**
+
 ```
-Tool: web_search + web_extract
-- web_search(query="<包名> official documentation tutorial")
-- web_extract(urls=[官方文档URL, API参考URL, 教程URL])
-- 提取：包名、主要函数、参数列表、默认值、输入输出格式、示例代码
+Tool: web_search + web_extract (MANDATORY, max 3 retries)
+
+1. web_search(query="<包名> official documentation tutorial")
+2. web_extract(urls=[官方文档URL, API参考URL, 教程URL])
+3. 提取：包名、主要函数、参数列表、默认值、输入输出格式、示例代码
+4. 记录：提取时间、文档版本号、API 函数名列表（用于 Step 9 一致性比对）
+
+🔴 失败处理：
+   - 第 1 次 web_extract 失败 → 换一个 URL（GitHub README / PyPI / CRAN / Bioconductor）
+   - 第 2 次失败 → 尝试搜索 "<包名> GitHub repository"
+   - 第 3 次失败 → 标记 skill 为 "_UNVERIFIED_"，在 SKILL.md top 添加警告注释，
+     并告知用户："官方文档无法获取，创建的 skill 可能不准确"
+   - 任何时候失败 → 不允许凭记忆编造函数签名和参数
 ```
+
+**Step 1 输出必须包含**（缺少任何一项 → 不允许进入 Step 2）：
+
+| 输出项 | 说明 |
+|--------|------|
+| `extraction_timestamp` | 文档抓取时间 (ISO 8601) |
+| `source_urls` | 成功抓取的官方 URL 列表 |
+| `doc_version` | 文档版本号（如果有） |
+| `api_functions` | 提取到的 API 函数名列表 |
+| `parameter_table` | 函数名 → 参数名 → 类型 → 默认值 对照表 |
+
+此表将用于 Step 9 的一致性比对。
 
 ### Step 2: 查询文献
 ```
@@ -237,19 +261,35 @@ Tool: skill_evolution(action="register_skill")
 4. 验证：grep 'skill_view("<skill名>")' hermes_home/SOUL.md 应有输出
 ```
 
-**关键词提取规则**：
+**关键词提取规则（🔴 硬门禁）**：
 - 包名本身（如 `scTour`、`CellChat`）
 - 功能短描述（如 `深度伪时间`、`VAE轨迹`）
 - 从 SKILL.md 的 When to Use 和 metadata.hermes.tags 提取
 - 用 ` / ` 分隔多个关键词
-- **🔴 至少 5-8 个关键词（含中英文）** — 太少会导致命中率低，下次用户换一种说法就触发不了
+- **🔴 至少 4 个关键词（含中英文各至少 1 个）** — `_register_skill` 会程序化检查，不足 4 个 → 直接返回 `KEYWORD_GATE_FAILED`，**拒绝注册**
+- **推荐 5-8 个关键词** — 太少会导致命中率低，下次用户换一种说法就触发不了
+- **必须覆盖的 4 类关键词**：
+  1. 包名/工具名（如 `scTour`、`SenCat`）
+  2. 中文功能描述（如 `深度伪时间`、`衰老分类`）
+  3. 英文功能描述（如 `VAE trajectory`、`senescence scoring`）
+  4. 同义词/缩写/变体（如 `伪时间`=`拟时序`、`scoring`=`classification`）
 - **系统自动扩展**：`_expand_keywords` 会自动从复合词派生短词（如 "衰老分类" → 追加 "衰老"、"senescence scoring" → 追加 "senescence"），并自动过滤通用停用词（"scoring", "细胞" 等），确保高命中率 + 低误报率
 
-### Step 9: 分析后审核（6 项检查清单）
-```
-Tool: web_extract + check_env + terminal
+**🔴 交付前自检**：调用 `skill_evolution(action="register_skill")` 若返回 `KEYWORD_GATE_FAILED` → 回到本步骤补全关键词
 
-审核清单（逐项检查，全部通过才能交付）：
+### Step 9: 🔴 交付门禁（程序化阻断，不可跳过）
+
+> **这是硬门禁。任何一项 ❌ → 不允许交付 skill。必须修正后重新过门禁，直到全部 ✅。**
+
+```
+Tool: skill_evolution(action="verify_delivery_gate")
+
+1. 调用 skill_evolution(action="verify_delivery_gate", skill_name="<skill名>")
+   该函数自动检查以下 6 项，返回 {"passed": True/False, "blocked": [...]}
+2. passed=False → blocked 列表中的每一项必须修正 → 修正后重新调用 verify_delivery_gate
+3. passed=True → 门禁通过，继续下一步
+
+6 项自动检查清单：
 
 1. 官网一致性检查
    - web_extract(urls=[官方API页面]) 重新拉取官方文档
@@ -288,6 +328,59 @@ Tool: web_extract + check_env + terminal
 ```
 
 ---
+
+
+
+### Step 10: 🆕 首次使用自进化（skill 创建后的经验累积）
+
+> **新 skill 创建后，必须在首次分析使用后收集经验，否则 skill 永远没有 proven_params。**
+> 这是 create-bio-skill 区别于普通 skill 创建工具的核心能力。
+
+```
+Tool: skill_evolution(actions) + memory_bridge
+
+首次分析完成后（skill 被实际执行用于分析）：
+1. skill_evolution(action="record_run", skill_name="<skill名>", ...)
+   → 将成功运行记录追加到 SKILL.md Proven Scripts 表
+   → 自动触发 memory_bridge.store_script_score() 写入 holographic 外置记忆
+
+2. 询问用户："这次分析结果满意吗？(1-10 分)"
+   → 用户打分 → memory_bridge.record_feedback(fact_id, helpful=True/False)
+   → 影响 trust_score，后续 _query_logs 按 trust_score 排序返回
+
+3. 如果用户提供了自定义脚本（放在 figure_scripts/ 或 user_scripts/）
+   → skill_evolution(action="record_run", custom_script=True)
+   → memory_bridge.store_script_score(approved=True) 标记为用户认可
+
+4. 自进化检查：
+   - 是否有参数需要调整？→ _record_success(params_used=...) 记录优化参数
+   - 是否有新的错误模式？→ _record_error(...) 记录到 error_log.md
+   - 是否有新的经验？→ memory_bridge.store_skill_exp(...) 写入外置记忆
+
+5. 验证经验跨会话持久化：
+   - 关闭当前会话 → 新开会话
+   - skill_evolution(action="query_logs", skill="<skill名>")
+   - 确认返回的 proven_params 和 holographic 结果一致
+```
+
+**Step 10 目的**：确保 create-bio-skill 创建的 skill 不是"空壳"——首次使用后立即积累经验，
+下次再被调用时 _query_logs 能返回历史经验，形成正向循环。
+
+---
+
+
+### Step 10: 首次使用自进化
+
+> **新 skill 创建后首次用于分析 → 必须收集经验。否则 skill 永远是空壳。**
+
+```
+1. skill_evolution(action="record_run", skill_name="<name>", ...)
+   → 追加 Proven Scripts → 自动写 holographic 外置记忆
+2. 询问用户满意度 (1-10) → memory_bridge.record_feedback()
+3. 用户自定义脚本？→ record_run(custom_script=True, approved=True)
+4. 自进化检查: 参数调整? 新错误? 新经验? → store_skill_exp()
+5. 验证: 新会话 → query_logs → 确认经验可召回
+```
 
 ## SKILL.md 模板
 
@@ -513,7 +606,13 @@ results/<模块>/<方法>/
 2. **skill_manage create 失败** → 检查错误信息，修复后重试 skill_manage；不要用 write_file 直接写 skills 目录（会触发安全扫描阻断）
 3. **创建后 skill_view 找不到** → 检查目录名和 SKILL.md frontmatter 的 name 字段是否一致
 4. **包不存在于 CRAN/Bioconductor/PyPI** → 搜 GitHub，如果确实不存在则告知用户
-5. **skill_evolution record_run 静默失败** → `record_run` 返回 "Success recorded" 但数据未落盘。检查：`skill.json` 是否存在？SKILL.md 是否有有效的 Proven Scripts 表格？两者缺一都会导致 `_record_success` 写操作被 `try/except pass` 吞掉。修复方法：创建 `skill.json` 并补全 Proven Scripts 表，然后手动归档到 `results/.../log/run_record_*.json`。
+6. **🔴 KEYWORD_GATE_FAILED** → `_register_skill` 返回关键词不足的错误。原因：提取的关键词少于 4 个。修复：回到 Step 8，补充中英文关键词，至少覆盖：包名/中文描述/英文描述/同义词 四类。
+7. **🔴 DELIVERY GATE FAILED** → `_verify_delivery_gate` 返回 blocked 列表。逐项修正：缺官方 URL → 补 References；缺脚本 → 生成 scripts/run.py；缺 skill.json → 按 Rule 2.5 创建；缺 Proven Scripts 表 → 按 Rule 2.6 补全。修正后重新调用 verify_delivery_gate。
+8. **🔴 首次使用后 query_logs 返回空** → 确认 Step 10 已执行 record_run + record_feedback。确认 skill.json 存在且有 proven_params 数据。
+5. **KEYWORD_GATE_FAILED** -> `_register_skill` 拒绝注册 (<4 关键词)。回到 Step 8 补全 4 类关键词。
+6. **DELIVERY GATE FAILED** -> `_verify_delivery_gate` blocked。逐项修正后重试。
+7. **首次使用后 query_logs 返回空** -> 确认 Step 10 已执行 + skill.json 存在。
+8. **skill_evolution record_run 静默失败** → `record_run` 返回 "Success recorded" 但数据未落盘。检查：`skill.json` 是否存在？SKILL.md 是否有有效的 Proven Scripts 表格？两者缺一都会导致 `_record_success` 写操作被 `try/except pass` 吞掉。修复方法：创建 `skill.json` 并补全 Proven Scripts 表，然后手动归档到 `results/.../log/run_record_*.json`。
 
 ## References
 
