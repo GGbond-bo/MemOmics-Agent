@@ -418,33 +418,44 @@ def _read_skills_index():
 import re as _re_mod
 
 def _parse_plan_phases(plan_text):
-    """从方案文本中提取分阶段技术路线"""
+    """从方案文本中提取分阶段技术路线 — 安全版本，无回溯风险"""
     if not plan_text:
         return []
+    # 截断超长文本，防止正则回溯
+    text = plan_text[:8000]
     phases = []
-    pattern = r'(?:^|\n)(?:#{1,3}\s*)?(?:Phase\s*\d+|阶段\s*[一二三四五六七八\d]|Step\s*\d+|第\s*[一二三四五六七八\d]\s*[步阶段])[：:\s]*(.+?)(?=\n(?:#{1,3}\s*)?(?:Phase\s*\d+|阶段\s*[一二三四五六七八\d]|Step\s*\d+|第\s*[一二三四五六七八\d]\s*[步阶段])|\n---|\Z)'
-    matches = _re_mod.findall(pattern, plan_text, _re_mod.DOTALL | _re_mod.IGNORECASE)
-    for i, m in enumerate(matches):
-        m = m.strip()
-        skills = _re_mod.findall(r'(?:skill|调用|运行|执行)[：:\s]*(?:`)?([a-zA-Z][a-zA-Z0-9_-]{3,40})', m)
-        phases.append({
-            "id": i + 1,
-            "title": m[:60],
-            "detail": m[:300],
-            "skills": list(set(skills))[:5],
-        })
-    if not phases:
-        sections = _re_mod.split(r'\n##\s+', plan_text)
-        for i, s in enumerate(sections[1:]):
-            title = s.split('\n')[0].strip()[:60]
-            skills = _re_mod.findall(r'(?:skill|调用|运行|执行)[：:\s]*(?:`)?([a-zA-Z][a-zA-Z0-9_-]{3,40})', s)
+    try:
+        # 安全策略：按 ## 标题分割（最可靠，无回溯风险）
+        sections = _re_mod.split(r'\n(?=#{1,3}\s+)', text)
+        phase_id = 0
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
+            # 提取标题
+            first_line = section.split('\n')[0].strip()
+            title = _re_mod.sub(r'^#+\s*', '', first_line)[:60]
+            body = section[len(first_line):].strip()[:300]
+            # 跳过明显不是阶段的段（如文献表格）
+            if not title or len(title) < 2:
+                continue
+            # 提取 skill 引用
+            skills = _re_mod.findall(
+                r'(?:skill_view|skill_search|执行|运行|调用)[(（"\']?\s*["\']?([a-zA-Z][a-zA-Z0-9_-]{3,50})',
+                section
+            )
+            phase_id += 1
             phases.append({
-                "id": i + 1,
+                "id": phase_id,
                 "title": title,
-                "detail": s[:300],
+                "detail": body,
                 "skills": list(set(skills))[:5],
             })
-    return phases[:8]
+            if phase_id >= 8:
+                break
+    except Exception:
+        pass
+    return phases
 
 def _extract_lit_table(plan_text):
     """从方案文本中提取文献表格"""
