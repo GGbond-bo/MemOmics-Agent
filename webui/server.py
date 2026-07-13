@@ -3369,18 +3369,18 @@ async def ws_endpoint(ws: WebSocket):
                             )
                             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
-                        # research_plan 模式 3分钟超时保护
+                        # research_plan 模式超时保护（CNS级方案 8 分钟）
                         if _intent == "research_plan":
                             try:
                                 result = await asyncio.wait_for(
                                     loop.run_in_executor(None, _do_run),
-                                    timeout=180
+                                    timeout=480
                                 )
                             except asyncio.TimeoutError:
                                 result = agent.checkpoint.read_partial() if hasattr(agent, "checkpoint") else ""
                                 if not result:
-                                    result = "文献调研超时。请说'继续'让我生成完整方案。"
-                                _session_emit(session, {"type": "timeout", "content": "research_plan超时(3分钟)，已返回部分结果", "session_id": session["id"]})
+                                    result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
+                                _session_emit(session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": session["id"]})
                         else:
                             result = await loop.run_in_executor(None, _do_run)
 
@@ -3400,7 +3400,7 @@ async def ws_endpoint(ws: WebSocket):
                                 result += _warning
                                 logger.warning(f"[TOOL-VALIDATION] {_intent}: 0 core tools called, warning appended")
 
-                        # B5: post-hoc quality validation (PMID/DOI, conclusion, tool diversity)
+                        # B5: post-hoc quality validation (internal — NOT shown to user)
                         if _intent in ("research_plan", "plan_refine") and result:
                             quality_warnings = []
                             has_pmid = "PMID" in result or "DOI:" in result or "doi:" in result.lower()
@@ -3413,8 +3413,8 @@ async def ws_endpoint(ws: WebSocket):
                             if len(unique_tools) < 2 and _intent not in ("chat", "self_intro"):
                                 quality_warnings.append("[TOOLS] only " + str(len(unique_tools)) + " tool types called")
                             if quality_warnings:
-                                result += "\n\n---\n**Quality Check:**\n" + "\n".join("- " + w for w in quality_warnings)
-                                logger.info(f"[QUALITY] {_intent}: {len(quality_warnings)} warnings")
+                                logger.warning(f"[QUALITY] {_intent}: {len(quality_warnings)} warnings: {quality_warnings}")
+                                # 只记日志，不附加到用户可见输出
 
                         # 恢复原始工具列表
                         if _saved_tools is not None:
