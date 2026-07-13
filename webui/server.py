@@ -74,9 +74,11 @@ _SKILLS_WARMED = False
 async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
     元数据快照写入 hermes_home/.skills_prompt_snapshot.json。
-    此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。"""
+    此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
+    同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。"""
     global _SKILLS_WARMED
     try:
+        from run_agent import AIAgent  # 预导入，消除首次请求的模块加载延迟
         from agent.prompt_builder import build_skills_system_prompt
         result = build_skills_system_prompt()
         _SKILLS_WARMED = True
