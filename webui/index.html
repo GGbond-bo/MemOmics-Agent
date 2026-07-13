@@ -1324,7 +1324,7 @@ function initMermaid() {
   if (!window._hasMermaid) return;
   window._hasMermaid = false;
   if (_mermaidLoaded) {
-    try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+    _safeMermaidRun();
     return;
   }
   if (_mermaidLoading) return;
@@ -1335,7 +1335,7 @@ function initMermaid() {
     mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
     _mermaidLoaded = true;
     _mermaidLoading = false;
-    try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+    _safeMermaidRun();
   };
   script.onerror = function() {
     _mermaidLoading = false;
@@ -1343,6 +1343,27 @@ function initMermaid() {
     for (var i = 0; i < els.length; i++) { els[i].innerHTML = '<pre><code>' + escapeHtml(els[i].textContent) + '</code></pre>'; }
   };
   document.head.appendChild(script);
+}
+
+function _safeMermaidRun() {
+  var els = document.querySelectorAll('.mermaid');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    // 保存原始代码（mermaid.run 内部会清空）
+    var code = el.textContent || '';
+    // 用临时 id 追踪
+    var tmpId = '_mm_tmp_' + i;
+    try {
+      mermaid.run({ nodes: [el] });
+    } catch(e) {
+      // 渲染失败：显示错误提示+源码
+      el.classList.add('mermaid-error');
+      el.innerHTML = '<div style="color:#c62828;font-size:11px;margin-bottom:6px;">'
+        + '⚠ Mermaid 语法错误: ' + (e.message || e).toString().substring(0, 80) + '</div>'
+        + '<pre style="background:#fff5f5;padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;"><code>'
+        + escapeHtml(code) + '</code></pre>';
+    }
+  }
 }
 
 // === 会话管理 ===

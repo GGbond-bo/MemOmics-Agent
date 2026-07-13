@@ -173,8 +173,22 @@ S₅ = 跨物种预测AUC = AUC(monkey_model → human_data)              [w₅=
 **规则：**
 > ⛔ 每节点 ≤15 中文字符 — 只写模块名
 > ⛔ 最多 3 层 — 一级(阶段)、二级(关键步骤)、三级(产出)
-> ✅ 使用 `flowchart TD` 格式
-> ✅ 不同模块用不同颜色区分（`style` 语法）
+> ✅ 使用 `flowchart TD` 格式（禁止 `graph TD`，Mermaid 11.x 已弃用）
+> ✅ 不同模块用不同颜色区分（`classDef` + `class` 语法，不用 `style` 逐个写）
+
+**⛔ Mermaid 11.x 严格语法规则（违反即报错）：**
+1. **所有节点文本必须用双引号包裹**：`A["QC与过滤"]` 而非 `A[QC与过滤]`
+2. **括号 () 必须转义或避免**：`B["SCTransform 归一化"]` 而非 `B[SCTransform(归一化)]`
+3. **禁用字符**：`&` `<` `>` `{` `}` 放在节点文本中会报错，用中文全角「」或改用其他表述
+4. **节点 ID 只用字母+数字，不以下划线开头**：`N1` `N2` 而非 `_start`
+5. **classDef 放在所有节点定义之后、class 引用之前**：
+```mermaid
+flowchart TD
+  N1["QC与过滤"] --> N2["降维聚类"]
+  N2 --> N3["细胞注释"]
+  classDef phase1 fill:#e3f2fd,stroke:#1565c0
+  class N1 phase1
+```
 
 #### 4. 步骤 3 — 生成对照表
 

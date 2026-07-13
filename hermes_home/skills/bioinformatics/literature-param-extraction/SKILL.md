@@ -271,50 +271,81 @@ if data is None:
 
 #### 路径 B：execute_code + Python requests → 下载 PDF → PyMuPDF 提取（推荐，有 requests 时）
 
-> ⚠️ **重要更新 (2026-07-07)**: 不同出版商的实际 PDF 可访问性差异很大，必须按以下策略分级尝试。下载后必须验证文件大小 > 50KB 且 Content-Type 含 application/pdf，否则视为失败。
-当 `requests` 库可用时，用 `execute_code` 写 Python 脚本完成完整下载+提取：
+> ⚠️ **Cloudflare 全面封锁（2026-07-13 更新）**: 几乎所有学术出版商（EuropePMC、NCBI PMC、Cell Press、Science、Oxford Academic）都已部署 Cloudflare 反爬保护。`download_pdf` 工具的所有策略（URL/DOI/PMID）均返回 1.8KB HTML captcha 页面而非 PDF。**`download_pdf(doi=...)` 也不再可靠**，本session验证 Nature DOI、Cell DOI、Oxford DOI 全部返回 anti-bot 页面。
+>
+> **影响**: 依赖 `download_pdf` → `extract_params_from_pdf` 的标准路径已断裂，须用以下替代策略。
 
-1. **搜索论文**：用 `web_search` 找到论文的 PMID 或直接 URL
-2. **下载 PDF**：在 `execute_code` 中用 Python requests 下载：
-   ```python
-   import requests
-   r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 ...'}, timeout=30)
-   with open('work/papers/xxx.pdf', 'wb') as f:
-       f.write(r.content)
-   ```
-3. **不同期刊的 PDF URL 模式**（按成功率排序，必须依次尝试，下载后验证）：
-   - **Nature 系列**: `https://www.nature.com/articles/{doi}.pdf` — 用 `requests` 带正确 User-Agent 可下载（已验证: Nature Aging, Nat Commun, Nature Genetics, Nature Reviews, Nature 2026）
-   - **BMC/Springer**: `https://link.springer.com/content/pdf/{doi}.pdf` 或 `{journal}.biomedcentral.com/counter/pdf/{doi}` — 多数返回 HTML 而非 PDF（~120KB HTML），需 fallback 到 HTML 提取
-   - **PMC 开放获取**: `/pmc/articles/{PMCID}/pdf/` 或 `pmc.ncbi.nlm.nih.gov/articles/{PMCID}/pdf/` — 返回 1.8KB HTML 而非 PDF，已被重定向。FTP 路径返回 404。**结论: PMC 直接 PDF 下载不可用，只能获取 HTML 页面。**
-   - **FASEB/Wiley**: `https://faseb.onlinelibrary.wiley.com/doi/pdf/{doi}` 或 `epdf/{doi}` — 返回 403 (Wiley 付费墙)，无法自动下载
-   - **LWW/Journals@Ovid**: `https://journals.lww.com/{journal}/.../pdf` — 返回 403 (付费墙)
-   - **Sci-Hub**: `https://sci-hub.{se/ru/st}/{doi}` — 返回 ~7KB HTML 而非 PDF，不再可靠
-   - **Europe PMC 全文 XML**: `https://www.ebi.ac.uk/europepmc/webservices/rest/PMC/{PMCID}/fullTextXML` — 返回 404，不可用
-   - **PubMed XML fallback**: `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={PMID}&retmode=xml&rettype=abstract` — ✅ 可靠，返回 ~20KB PubMed XML 摘要
+### Cloudflare 封锁下的 PDF 获取策略（按优先级排序）
 
-4. **下载后验证**（强制步骤）：
-   ```python
-   if len(response.content) < 50000:
-       # 不是真 PDF，可能是 HTML 或错误页面
-       # 检查 Content-Type: 'application/pdf' 才是真 PDF
-       fallback_to_html_extraction()
-   elif response.headers.get('Content-Type', '').startswith('text/html'):
-       # 是 HTML 页面，保存为 HTML 并通过 BeautifulSoup 提取
-       save_as_html()
-   else:
-       # 真 PDF，保存后用 PyMuPDF 提取
-       save_as_pdf()
-       extract_with_fitz()
-   ```
-4. **提取 PDF 文本**：用 PyMuPDF (fitz)：
-   ```python
-   import fitz
-   doc = fitz.open(pdf_path)
-   text = ""
-   for page in doc:
-       text += page.get_text()
-   doc.close()
-   ```
+#### 策略 A：terminal + extract_pdf.py 直接运行（推荐——当 PDF 已存在于 work/papers/ 时）
+⚠️ **重要：`extract_params_from_pdf` 工具有路径硬编码问题**：它查找 `{MEMOMICS_ROOT}/skills/literature-param-extraction/scripts/extract_pdf.py`，但实际脚本在 `{MEMOMICS_ROOT}/hermes_home/skills/bioinformatics/literature-param-extraction/scripts/extract_pdf.py`。此路径差异导致工具总是返回 `extract_pdf.py not found`。
+
+**替代方案：通过 terminal 直接运行脚本**
+```bash
+cd {MEMOMICS_ROOT}
+python hermes_home/skills/bioinformatics/literature-param-extraction/scripts/extract_pdf.py "work/papers/<文件名>.pdf" --method pymupdf
+```
+⚠️ **PyMuPDF 可用性**：PyMuPDF (fitz) 安装在 conda 环境中，但**不在 `execute_code` 的沙箱环境中**。在 `execute_code` 中 `import fitz` 会报 `ModuleNotFoundError`。应改用 `terminal` 来运行提取脚本。
+
+#### 策略 B：手动下载（唯一可靠路径——当用户有权限时）
+由于所有自动下载策略均被 Cloudflare 拦截，PDF 需要**用户手动下载**。下载后放入 `work/papers/`，然后用策略 A 提取。
+```text
+请求用户: "请手动从 <期刊官网链接> 下载 PDF 放到 work/papers/ 下"
+```
+
+#### 策略 C：EuropePMC HTML 全文提取（当 PDF 不可用时回退）
+`https://europepmc.org/articles/{PMCID}` 的 HTML 页面通常可通过 `requests` 获取（即使 PDF 被 Cloudflare 拦截）：
+```python
+import requests
+resp = requests.get(f"https://europepmc.org/articles/{PMCID}", 
+    headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+if len(resp.text) > 10000 and "europepmc" in resp.text.lower():
+    # 保存 HTML 并从中提取方法段落
+    with open("work/papers/{name}.html", "w") as f:
+        f.write(resp.text)
+```
+从 HTML 中提取 Methods 和 Results 章节，整理参数。
+
+#### 策略 D：PubMed XML 摘要（兜底）
+```python
+import requests
+resp = requests.get(
+    f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={PMID}&retmode=xml&rettype=abstract")
+```
+返回 ~20KB PubMed XML 摘要，至少可提取关键结论和样本信息。
+
+### 已知出版商 PDF 可访问性矩阵（2026-07-13 实测）
+
+| 出版商 | URL 模式 | 状态 | 说明 |
+|--------|---------|------|------|
+| **PLOS ONE** | `https://journals.plos.org/plosone/article/file?id={doi}&type=printable` | ✅ **可用** | 开放获取，直接返回 PDF（已验证 4.2MB） |
+| **Nature/Springer**（已有 PDF） | 从 work/papers/ 读取 | ✅ **可用** | 如用户已手动下载到目录，直接 terminal 提取 |
+| **EuropePMC**（PDF） | `https://europepmc.org/articles/{PMCID}?pdf=render` | ❌ **Cloudflare** | 返回 1.8KB HTML captcha |
+| **EuropePMC**（HTML） | `https://europepmc.org/articles/{PMCID}` | ✅ **有时可用** | HTML 全文可通过 requests 获取（本 session 成功获取 Franjic 2022 的 28KB HTML） |
+| **NCBI PMC**（PDF） | `https://www.ncbi.nlm.nih.gov/pmc/articles/{PMCID}/pdf/` | ❌ **Cloudflare** | 所有子路径均被拦截 |
+| **Cell Press (Neuron)** | `https://www.cell.com/neuron/pdf/{S...}.pdf` | ❌ **Cloudflare** | 返回 5.8KB HTML captcha |
+| **Science** | `https://www.science.org/doi/pdf/10.1126/science.xxx` | ❌ **Cloudflare** | 返回 5.8KB HTML captcha |
+| **Oxford Academic** | `https://academic.oup.com/{journal}/article-pdf/{doi}` | ❌ **Cloudflare** | 返回 5.8KB HTML captcha |
+| **Wiley** | `https://onlinelibrary.wiley.com/doi/pdf/{doi}` | ❌ **403 paywall** | 付费墙，非 Cloudflare |
+| **MDPI** | `https://www.mdpi.com/{journal}/{vol}/{article}/pdf` | ❌ | 返回 ~2KB HTML 占位页 |
+| **BMC** | `https://link.springer.com/content/pdf/{doi}.pdf` | ❌ | 返回 ~120KB HTML 而非 PDF |
+| **Sci-Hub** | `https://sci-hub.se/{doi}` | ❌ | 不再可靠 |
+
+### 图片式 PDF（Image-based）检测
+部分期刊（如 Cell Research 的 Wang 2022 PDF）的正文是扫描图像而非文本，PyMuPDF 提取后只有 500+ 字节（仅附图说明）。
+**检测方法**：提取后检查字符数 < 5,000 → 判定为图片式 PDF → 回退到 EuropePMC HTML 提取或策略 D。
+
+### 提取 PDF 文本（仅当 PDF 为真文本格式时）
+```python
+import fitz  # 用 terminal 而非 execute_code 运行
+doc = fitz.open(pdf_path)
+text = ""
+for page in doc:
+    text += page.get_text()
+doc.close()
+```
+注意：**fitz 模块在 `execute_code` 沙箱中不可用**（输出：`ModuleNotFoundError: No module named 'fitz'`），但在 conda 环境中已安装。始终通过 `terminal` 运行提取。
+
 5. **从文本中提取方法参数**：搜索 Methods 节（通常在正文末尾），提取：
    - 测序平台、分析工具、版本号、基因组版本
    - QC 参数、归一化方法、降维维度、聚类参数
@@ -322,17 +353,18 @@ if data is None:
 6. **写入知识库 YAML**：用 Python 的 `yaml` 库或将 YAML 格式写为字符串后 `write_file`
 7. **验证**：用 `search_knowledge` 验证写入成功
 
-> 注意：PDF 下载可能被 paywall 拦截（返回 403）。此时策略：
-> - 尝试 PMC 开放获取版本（优先查 PubMed 获取 PMC ID）
-> - 尝试 ResearchGate 等第三方平台
-- 如果都失败，回到路径 A（web_search 手动构建），confidence 标注为 medium
+### 多物种同步更新
+构建知识库时，如果文献同时涉及人类和小鼠，建议**同步构建两个物种**的知识库：
+- 生物学知识部分：marker 基因名大小写不同（人全大写，鼠首字母大写）
+- 关键发现和基因集部分：大部分可共享，仅基因名大小写需转换
 
 ### 多物种同步更新
 构建知识库时，如果文献同时涉及人类和小鼠，建议**同步构建两个物种**的知识库：
 - 生物学知识部分：marker 基因名大小写不同（人全大写，鼠首字母大写）
 - 关键发现和基因集部分：大部分可共享，仅基因名大小写需转换
 
-> 参考文件：`references/liver_aging_literature_collection_2026-07-07.md` 记录了具体的 PDF 下载 URL 模式、PyMuPDF 提取流程和多物种同步更新示例。
+> 参考文件 1：`references/liver_aging_literature_collection_2026-07-07.md` 记录了具体的 PDF 下载 URL 模式、PyMuPDF 提取流程和多物种同步更新示例。
+> 参考文件 2：`references/hippocampus_aging_literature_collection_2026-07-13.md` 记录了跨物种（猴vs人）海马体衰老 snRNA-seq 文献收集和 DOI 直链下载策略。
 
 ---
 
