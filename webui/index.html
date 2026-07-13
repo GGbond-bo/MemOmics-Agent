@@ -1353,9 +1353,16 @@ function _safeMermaidRun() {
     var code = el.textContent || '';
     var self = el;
 
+    // 归一化 LLM 常见错误:
+    // 1. 字面量 \n → 真正换行（LLM 常把多行标签挤成单行）
+    // 2. 4 空格缩进 → 换行（LLM 可能把整段 Mermaid 压成一行）
+    code = code.replace(/\\n/g, '\n').replace(/    /g, '\n    ');
+    self.textContent = code;
+
     mermaid.parse(code).then(function() {
       mermaid.run({ nodes: [self] }).catch(function() {});
     }).catch(function(e) {
+      // 括号 () 在未引号标签 → 自动包双引号
       var fixed = code
         .replace(/\[([^\[\]"\n]*\([^\[\]"\n]*\)[^\[\]"\n]*)\]/g, '["$1"]')
         .replace(/\{([^{}"\n]*\([^{}"\n]*\)[^{}"\n]*)\}/g, '{"$1"}');
