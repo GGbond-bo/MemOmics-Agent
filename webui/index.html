@@ -152,17 +152,13 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .todo-item .todo-check { width:16px; height:16px; border:2px solid var(--border); border-radius:3px; display:flex; align-items:center; justify-content:center; }
 .todo-item.done .todo-check { background:var(--success); border-color:var(--success); color:#fff; }
 .todo-item.done .todo-text { text-decoration:line-through; color:var(--text-light); }
-/* P2: Plan todo interactive styles */
-.plan-todo-item { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--border); font-size:12px; }
-.plan-todo-item.todo-done .plan-todo-text { text-decoration:line-through; color:var(--text-light); }
-.plan-todo-check { width:14px; height:14px; cursor:pointer; accent-color:var(--primary); flex-shrink:0; }
-.plan-todo-text { flex:1; }
-.plan-skill-tag { font-size:10px; background:var(--primary); color:#fff; border-radius:3px; padding:0 5px; flex-shrink:0; white-space:nowrap; }
-.plan-todo-del { border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; opacity:0.5; }
-.plan-todo-del:hover { opacity:1; }
 
 /* 状态通知 */
 .status-notice { padding:6px 12px; background:var(--primary-light); border-radius:6px; margin:4px 0; font-size:12px; color:var(--primary); }
+
+/* Mermaid 图表 */
+.mermaid { margin:12px 0; padding:12px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
+.mermaid svg { max-width:100%; height:auto; }
 
 /* 输入区 */
 .chat-input { padding:12px 20px; border-top:1px solid var(--border); }
@@ -364,7 +360,6 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings">⚙️ 设置</div>
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
-      <div class="nav-item" onclick="switchView('plan')" id="nav-plan">📋 研究方案</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
@@ -658,43 +653,6 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         </div>
       </div>
     </div>
-    <!-- 研究方案面板 -->
-    <div id="panel-plan" style="display:none;">
-      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>📋 研究方案</span>
-        <div style="display:flex;gap:4px;">
-          <button class="ctx-refresh" onclick="refreshPlanStatus()" title="刷新">🔄</button>
-        </div>
-      </div>
-      <div class="ctx-panel" id="plan-panel-content" style="max-height:calc(100vh - 180px);overflow-y:auto;">
-        <div class="ctx-empty" id="plan-empty">
-          <div class="ctx-empty-icon">📋</div>
-          <div>暂无研究方案</div>
-          <div style="font-size:11px;margin-top:4px;">使用"设计方案"/"怎么分析"等关键词触发</div>
-        </div>
-        <div id="plan-content" style="display:none;">
-          <!-- 方案文本摘要 -->
-          <div id="plan-text" style="font-size:12px;line-height:1.6;margin-bottom:8px;padding:8px;background:rgba(0,120,255,0.04);border-radius:6px;max-height:150px;overflow-y:auto;"></div>
-          <!-- 文献表格 -->
-          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;"></div>
-          <h3 style="font-size:12px;margin-bottom:6px;color:var(--text-light);">📚 文献依据</h3>
-          <div id="plan-lit-table" style="font-size:11px;margin-bottom:8px;max-height:200px;overflow-y:auto;"></div>
-          <!-- 执行待办 -->
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">
-            <h3 style="font-size:13px;margin-bottom:8px;">✅ 执行待办</h3>
-            <div id="plan-todo-list" style="font-size:12px;"></div>
-          </div>
-          <!-- 操作按钮 -->
-          <div style="margin-top:10px;display:flex;gap:6px;">
-            <button class="ctx-refresh" onclick="generateFullPlan()" id="plan-generate-btn" style="flex:1;padding:6px;text-align:center;">📝 生成完整方案</button>
-            <button class="ctx-refresh" onclick="executePlan()" id="plan-execute-btn" style="flex:1;padding:6px;text-align:center;background:var(--primary);color:#fff;">▶ 开始执行</button>
-          </div>
-          <div id="plan-status-msg" style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
 // === 全局状态 ===
@@ -835,7 +793,7 @@ function handleMessage(msg) {
     } else {
       fullText += (msg.content || '');
     }
-    if (currentBubble) { currentBubble.innerHTML = renderMarkdown(fullText); scrollBottom(); }
+    if (currentBubble) { currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); scrollBottom(); }
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
@@ -929,7 +887,7 @@ function handleMessage(msg) {
     }
   } else if (msg.type === 'complete') {
     var completeContent = msg.content || '';
-    if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); }
+    if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
     finalizeProgressTimeline();
@@ -954,21 +912,6 @@ function handleMessage(msg) {
   } else if (msg.type === 'todos_update') {
     // 来自 server 的实时待办同步
     renderTodos(msg.todos);
-    renderPlanTodos(msg.todos);
-    if (msg.todos && msg.todos.length) {
-      updatePlanIndicator(true);
-    } else {
-      updatePlanIndicator(false);
-    }
-  } else if (msg.type === 'intent_active') {
-    // research_plan / plan_refine 激活
-    if (msg.intent === 'research_plan' || msg.intent === 'plan_refine') {
-      updatePlanIndicator(true);
-      switchView('plan'); // auto-switch to plan panel
-    }
-  } else if (msg.type === 'plan_update') {
-    // 服务端推送结构化方案数据
-    renderPlanPhases(msg);
   } else if (msg.type === 'cancelled') {
     addError('任务已取消');
     document.getElementById('send').disabled = false;
@@ -1049,7 +992,7 @@ function addAssistantMsg(text) {
   text = text || '';
   var div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = '<div class="role">🧬 MemOmics</div><div class="bubble">' + renderMarkdown(text) + '</div>';
+  div.innerHTML = '<div class="role">🧬 MemOmics</div><div class="bubble">' + renderMarkdown(text) + '</div>'; initMermaid();
   document.getElementById('messages').appendChild(div);
   scrollBottom();
   return div;
@@ -1328,9 +1271,18 @@ function renderMarkdown(text) {
   if (!text) return '';
   // 长文本截断：防止正则回溯卡死整页
   if (text.length > 15000) text = text.substring(0, 15000) + '\n\n...';
+  // Mermaid 块优先提取（在 escapeHtml 之前，保留原始语法）
+  var mermaidBlocks = [];
+  var tickCount = (text.match(/```/g) || []).length;
+  if (tickCount >= 2 && tickCount % 2 === 0) {
+    text = text.replace(/```mermaid\n([\s\S]*?)```/g, function(m, code) {
+      mermaidBlocks.push(code.trim());
+      return '\x00MERMAID' + (mermaidBlocks.length - 1) + '\x00';
+    });
+  }
   var html = escapeHtml(text);
-  // 代码块安全处理：先检查是否有成对的 ```
-  var tickCount = (html.match(/```/g) || []).length;
+  // 代码块处理
+  tickCount = (html.match(/```/g) || []).length;
   if (tickCount >= 2 && tickCount % 2 === 0) {
     var blocks = [];
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
@@ -1352,8 +1304,45 @@ function renderMarkdown(text) {
     return '<table><tr>' + tds + '</tr></table>';
   });
   html = html.replace(/<\/table>\n<table>/g, '');
+  // 恢复 Mermaid 块 → <div class="mermaid">，标记需要渲染
+  html = html.replace(/\x00MERMAID(\d+)\x00/g, function(m, idx) {
+    window._hasMermaid = true;
+    return '<div class="mermaid">' + mermaidBlocks[parseInt(idx)] + '</div>';
+  });
+  // 恢复代码块
+  html = html.replace(/\x00CODE(\d+)\x00/g, function(m, idx) {
+    return blocks[parseInt(idx)] || '';
+  });
   html = html.replace(/\n/g, '<br>');
   return html;
+}
+
+// Mermaid 懒加载 + 渲染
+var _mermaidLoaded = false;
+var _mermaidLoading = false;
+function initMermaid() {
+  if (!window._hasMermaid) return;
+  window._hasMermaid = false;
+  if (_mermaidLoaded) {
+    try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+    return;
+  }
+  if (_mermaidLoading) return;
+  _mermaidLoading = true;
+  var script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+  script.onload = function() {
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+    _mermaidLoaded = true;
+    _mermaidLoading = false;
+    try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+  };
+  script.onerror = function() {
+    _mermaidLoading = false;
+    var els = document.querySelectorAll('.mermaid');
+    for (var i = 0; i < els.length; i++) { els[i].innerHTML = '<pre><code>' + escapeHtml(els[i].textContent) + '</code></pre>'; }
+  };
+  document.head.appendChild(script);
 }
 
 // === 会话管理 ===
@@ -1425,7 +1414,6 @@ async function loadSessions() {
 function updateSessionList() {
   loadSessions();
 }
-
 
 // 会话搜索过滤
 var _allSessions = [];
@@ -1604,17 +1592,20 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'plan'];
+  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context' };
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
 
   // 显示对应右侧面板
-  ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-plan'].forEach(function(p) {
-    document.getElementById(p).style.display = 'none';
-  });
+  var panelId = panelMap[view];
+  if (panelId) {
+    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context'].forEach(function(p) {
+      document.getElementById(p).style.display = 'none';
+    });
+  }
 
-  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', plan: 'panel-plan' };
   document.getElementById(panelMap[view]).style.display = '';
 
   if (view === 'files') browseFiles('');
@@ -1624,7 +1615,6 @@ function switchView(view) {
   if (view === 'settings') loadSettings();
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
-  if (view === 'plan') refreshPlanStatus();
 }
 
 // === 模型管理 ===
@@ -1890,7 +1880,6 @@ async function saveModel() {
   await refreshModelSelect();
   await refreshConnectedModels();
 }
-
 
 // === 微信 iLink 连接 ===
 let _weixinPollTimer = null;
@@ -2436,81 +2425,6 @@ function renderTodos(todos) {
 }
 
 // P1+P2+P3: Enhanced plan panel rendering
-var _planCache = {text:'',lit:'',todos:[]};
-function renderPlanTodos(todos) {
-  // extract metadata if attached
-  if (todos && todos._plan_text) { _planCache.text = todos._plan_text; delete todos._plan_text; }
-  if (todos && todos._lit_table) { _planCache.lit = todos._lit_table; delete todos._lit_table; }
-  _planCache.todos = (todos && todos.length) ? todos : _planCache.todos;
-  todos = _planCache.todos;
-  
-  var planTodo = document.getElementById('plan-todo-list');
-  var planContent = document.getElementById('plan-content');
-  var planEmpty = document.getElementById('plan-empty');
-  if (!planTodo) return;
-  if (!todos || !todos.length) {
-    planTodo.innerHTML = '<span style="font-size:12px;color:var(--text-light);">等待生成方案...</span>';
-    if (_planCache.text && planContent) { planContent.style.display = ''; planEmpty.style.display = 'none'; }
-    updatePlanIndicator(false);
-    return;
-  }
-  if (planContent) planContent.style.display = '';
-  if (planEmpty) planEmpty.style.display = 'none';
-  updatePlanIndicator(true);
-  
-  // P2: Interactive todos with checkboxes + delete
-  planTodo.innerHTML = todos.map(function(t, i) {
-    var skill = t.skill || '';
-    var skillTag = skill ? ' <span class="plan-skill-tag">' + escapeHtml(skill) + '</span>' : ' <span class="plan-skill-tag" style="background:#888;">?</span>';
-    var module = t.module || '';
-    var moduleTag = module ? ' <span style="color:var(--text-light);font-size:10px;">[' + module + ']</span>' : '';
-    var title = t.title || t.content || t.text || ('Task ' + (i+1));
-    var checked = t.status === 'completed' ? ' checked' : '';
-    var doneClass = t.status === 'completed' ? ' todo-done' : '';
-    return '<div class="plan-todo-item' + doneClass + '" data-idx="' + i + '">' +
-      '<input type="checkbox" class="plan-todo-check"' + checked + ' onchange="togglePlanTodo(' + i + ',this.checked)" title="勾选确认">' +
-      '<span class="plan-todo-text">' + escapeHtml(title) + moduleTag + '</span>' +
-      skillTag +
-      '<button class="plan-todo-del" onclick="deletePlanTodo(' + i + ')" title="移除">×</button>' +
-      '</div>';
-  }).join('');
-  
-  // P1: plan text + lit table
-  var pt = document.getElementById('plan-text');
-  if (pt && _planCache.text) { pt.innerHTML = '<div style="font-weight:600;margin-bottom:4px;color:var(--primary);">📖 方案摘要</div>' + _planCache.text; pt.style.display = ''; }
-  var lt = document.getElementById('plan-lit-table');
-  if (lt && _planCache.lit) { lt.innerHTML = _planCache.lit; lt.style.display = ''; }
-  
-  // P3: button visibility
-  var gb = document.getElementById('plan-generate-btn');
-  var eb = document.getElementById('plan-execute-btn');
-  var hasSkills = todos.some(function(t){return t.skill && t.skill !== '?';});
-  if (gb && eb) { gb.style.display = hasSkills ? 'none' : ''; eb.style.display = hasSkills ? '' : 'none'; }
-  
-  var st = document.getElementById('plan-status-msg');
-  if (st) { var ws = todos.filter(function(t){return t.skill && t.skill !== '?';}).length;
-    st.textContent = todos.length + ' steps · ' + ws + ' skill-bound · ' + todos.filter(function(t){return t.status==='completed';}).length + ' done'; }
-}
-function togglePlanTodo(idx, ck) {
-  if (!_planCache.todos[idx]) return;
-  _planCache.todos[idx].status = ck ? 'completed' : 'pending';
-  renderPlanTodos(_planCache.todos);
-}
-function deletePlanTodo(idx) { _planCache.todos.splice(idx,1); renderPlanTodos(_planCache.todos); }
-
-function updatePlanIndicator(active) {
-  var navPlan = document.getElementById('nav-plan');
-  if (!navPlan) return;
-  if (active) {
-    navPlan.style.display = '';
-    navPlan.style.color = 'var(--primary)';
-    navPlan.innerHTML = '📋 研究方案 <span style="font-size:10px;background:var(--primary);color:#fff;border-radius:3px;padding:1px 5px;">活跃</span>';
-  } else {
-    navPlan.style.display = '';
-    navPlan.style.color = '';
-    navPlan.innerHTML = '📋 研究方案';
-  }
-}
 
 // === 设置 ===
 function loadSettings() {
@@ -2931,125 +2845,9 @@ function stopCtxPolling() {
     } else {
       stopCtxPolling();
     }
-    if (view === 'plan') refreshPlanStatus();
-  };
+    };
 })();
 
-// === 研究方案面板 ===
-// P1: extract plan from last assistant message and show in panel
-function refreshPlanStatus() {
-  var planEl = document.getElementById('plan-content');
-  var emptyEl = document.getElementById('plan-empty');
-  var msgs = document.querySelectorAll('.msg-bubble.assistant .msg-content');
-  var lastMsg = msgs.length ? msgs[msgs.length-1] : null;
-  if (lastMsg) {
-    var html = lastMsg.innerHTML;
-    // extract plan summary (first 500 chars of meaningful content)
-    var txt = lastMsg.textContent || '';
-    var summary = txt.substring(0, 600).replace(/\n+/g,'<br>');
-    if (txt.length > 600) summary += '...<br><span style="color:var(--primary);cursor:pointer;" onclick="switchView(\'chat\')">[查看完整方案 ↓]</span>';
-    // extract lit table (anything that looks like a markdown table with PMID)
-    var litMatch = html.match(/<table[^>]*>.*?<\/table>/s) || html.match(/PMID.*?<\/tr>/s);
-    var litHtml = litMatch ? '<div style="font-size:10px;overflow-x:auto;">' + litMatch[0] + '</div>' : '';
-    if (summary.indexOf('研究背景') > -1 || summary.indexOf('分析') > -1 || summary.indexOf('文献') > -1) {
-      _planCache.text = summary;
-      if (litHtml) _planCache.lit = litHtml;
-      if (planEl) planEl.style.display = '';
-      if (emptyEl) emptyEl.style.display = 'none';
-    }
-  }
-  renderPlanTodos(_planCache.todos);
-}
-
-// 渲染服务端推送的结构化方案（分阶段技术路线）
-function renderPlanPhases(msg) {
-  var emptyEl = document.getElementById('plan-empty');
-  var contentEl = document.getElementById('plan-content');
-  var textEl = document.getElementById('plan-text');
-  var litEl = document.getElementById('plan-lit-table');
-  var todoList = document.getElementById('plan-todo-list');
-  
-  if (emptyEl) emptyEl.style.display = 'none';
-  if (contentEl) contentEl.style.display = '';
-  
-  // 方案摘要
-  if (textEl && msg.text) {
-    textEl.innerHTML = '<div style="font-size:12px;line-height:1.6;max-height:120px;overflow-y:auto;">' +
-      msg.text.substring(0, 800).replace(/
-/g, '<br>') +
-      (msg.text.length > 800 ? '...<br><span style="color:var(--primary);cursor:pointer;" onclick="switchView('chat')">[查看完整方案 ↓]</span>' : '') +
-      '</div>';
-  }
-  
-  // 文献表
-  if (litEl && msg.lit) {
-    litEl.innerHTML = '<div style="font-size:10px;line-height:1.5;max-height:160px;overflow-y:auto;">' + msg.lit + '</div>';
-    litEl.parentElement.style.display = '';
-  }
-  
-  // 分阶段技术路线
-  var phasesContainer = document.getElementById('plan-phases');
-  if (!phasesContainer) {
-    phasesContainer = document.createElement('div');
-    phasesContainer.id = 'plan-phases';
-    var litSection = document.getElementById('plan-lit-table').parentElement;
-    if (litSection) litSection.after(phasesContainer);
-  }
-  
-  var phases = msg.phases || [];
-  if (phases.length > 0) {
-    var html = '<h3 style="font-size:13px;margin:10px 0 6px;">🗺️ 技术路线</h3>';
-    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
-    for (var i = 0; i < phases.length; i++) {
-      var p = phases[i];
-      var skillsHtml = (p.skills || []).map(function(s) {
-        return '<code style="font-size:9px;background:rgba(0,120,255,0.1);padding:1px 4px;border-radius:3px;">' + s + '</code>';
-      }).join(' ');
-      html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:rgba(0,120,255,0.03);border-radius:6px;border-left:3px solid var(--primary);">' +
-        '<div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;">' + p.id + '</div>' +
-        '<div style="flex:1;"><div style="font-size:12px;font-weight:600;">' + escapeHtml(p.title) + '</div>' +
-        '<div style="font-size:10px;color:var(--text-light);margin-top:2px;">' + escapeHtml(p.detail || '').substring(0, 200) + '</div>' +
-        (skillsHtml ? '<div style="margin-top:4px;">' + skillsHtml + '</div>' : '') +
-        '</div></div>';
-    }
-    html += '</div>';
-    phasesContainer.innerHTML = html;
-  } else {
-    phasesContainer.innerHTML = '';
-  }
-  
-  // 待办
-  if (todoList && msg.todos && msg.todos.length > 0) {
-    renderPlanTodos(msg.todos);
-  }
-  
-  _planCache.text = msg.text || '';
-  _planCache.lit = msg.lit || '';
-  _planCache.todos = msg.todos || [];
-  updatePlanIndicator(true);
-}
-
-// P3: Phase1→Phase2 one-click trigger
-function generateFullPlan() {
-  var input = document.getElementById('input');
-  if (!input) return;
-  var planEl = document.getElementById('plan-text');
-  var ctx = planEl && planEl.textContent ? planEl.textContent.substring(0,200) : '';
-  input.value = '请基于上面的文献调研结果，生成完整的分析方案，包含详细的步骤和skill绑定。';
-  send(false);
-}
-// P4: Structured execute command
-function executePlan() {
-  var input = document.getElementById('input');
-  if (!input) return;
-  var activeTodos = (_planCache.todos || []).filter(function(t){return t.status !== 'completed';});
-  if (!activeTodos.length) { input.value = '请开始执行研究方案中的所有待办任务'; }
-  else {
-    var titles = activeTodos.map(function(t){return t.title || t.content || '';}).join(', ');
-    input.value = '请按以下顺序执行分析(direct_exec模式): ' + titles;
-  }
-  send(false);
-}
 </script>
 </body>
 </html>

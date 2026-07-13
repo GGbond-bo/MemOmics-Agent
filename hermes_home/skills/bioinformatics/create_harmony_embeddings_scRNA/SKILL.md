@@ -28,6 +28,19 @@ prerequisites:
 - 知识库无匹配 → 用 web 搜索文献，提取方法和参数，存入知识库
 - **绝对不能跳过直接写代码**
 
+### 规则1a: batch_key 预检查（写代码前必须执行）
+- **使用 `batch_key` 前**，必须先用 Python 检查唯一条目数：
+  ```python
+  n_unique = adata.obs['<batch_key>'].nunique()
+  print(f"batch_key 唯一条目数: {n_unique}")
+  if n_unique > 100:
+      print("⚠️ 警告：batch_key 有 {n_unique} 个唯一值，可能误用了 cells/barcode 列！")
+      print("  预期：sample/donor ID（通常 2-20 个）")
+      print("  如果不是 → 阻断，检查数据，修正 batch_key")
+  ```
+- 如果 `n_unique > 100` 且不是预期的样本数 → **阻断执行**，提示用户在 `adata.obs.columns` 中找正确的分组列
+- 参考 Common Issues → 已有 `sample_id (16,003 unique)` 先例
+
 ### 规则2: 8步循环（每步必须走完整循环）
 ```
 1. search_knowledge 查本步骤的方法和参数
@@ -144,3 +157,42 @@ When you need create harmony embeddings scRNA analysis
 - Source: Biomni
 - Category: genomics
 - Language: Python
+
+## 📊 集成质量评估（必输出）
+
+> **铁轨规则**：Harmony 批次校正后，**必须**运行 4 项评估并输出图表。未输出 → rail_review(post) 阻断。
+
+### 必输出指标（4 项铁轨）
+
+| # | 指标 | 通过 | 警告 | 阻断 |
+|---|------|------|------|------|
+| 1 | **LISI** | > N_batch×0.8 | 0.5-0.8 | < 0.5 |
+| 2 | **ASW(batch)** | < 0.1 | 0.1-0.15 | > 0.15 |
+| 3 | **kBET** | rejection < 0.05 | 0.05-0.15 | > 0.15 |
+| 4 | **PC方差贡献** | PC1 < 50% | PC1 50-70% | PC1 > 70% |
+
+### 必须输出的图（≥3 张）
+1. **LISI 分布** — 小提琴图，分 batch（校正前后对比更佳）
+2. **ASW 条形图** — 每个 cluster 的 ASW，标注批次基线
+3. **PCA Scree plot** — 前 50 PC 方差贡献率 + 累积线
+
+### 不通过处理
+- 警告（1-2 指标在警告区）→ `debate_analysis` 辩论是否接受
+- 阻断（≥1 指标在阻断区）→ 切换方法（scVI/Scanorama/BBKNN）重跑
+
+### Python 模板 (scanpy + scib)
+```python
+import scib
+lisi = scib.metrics.lisi(adata, batch_key)
+asw = scib.metrics.silhouette_batch(adata, batch_key, 'leiden')
+kbet = scib.metrics.kBET(adata, batch_key, 'leiden')
+sc.pl.pca_variance_ratio(adata, n_pcs=50, save="_scree.png")
+```
+
+### R 模板 (Seurat + lisi + kBET)
+```r
+library(lisi); library(kBET)
+lisi_res <- compute_lisi(Embeddings(obj, "harmony"), obj@meta.data, "batch")
+kbet_res <- kBET(Embeddings(obj, "harmony"), obj$batch, k0=25)
+ElbowPlot(obj, ndims = 50)
+```

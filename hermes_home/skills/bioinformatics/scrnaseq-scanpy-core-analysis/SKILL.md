@@ -241,11 +241,15 @@ adata = find_highly_variable_genes(adata, n_top_genes=2000)
 adata = scale_data(adata, vars_to_regress=["total_counts", "pct_counts_mt"])
 adata = run_pca_analysis(adata, n_pcs=50)
 
-# Multi-batch only: integration + diagnostics
+# Multi-batch: integration + 4 项铁轨评估（必输出）
 from integrate_scvi import run_scvi_integration
-from integration_diagnostics import compute_lisi_scores
+from integration_diagnostics import compute_lisi_scores, compute_batch_asw, compute_kbet
 adata = run_scvi_integration(adata, batch_key="batch", condition_key="condition")
 lisi = compute_lisi_scores(adata, batch_key="batch", use_rep="X_scVI")
+asw = compute_batch_asw(adata, batch_key="batch", cluster_key="leiden_0.8")
+kbet = compute_kbet(adata, batch_key="batch", cluster_key="leiden_0.8")
+# PC 方差贡献
+sc.pl.pca_variance_ratio(adata, n_pcs=50, save="_scree.png")
 ```
 
 **DO NOT write inline normalization or integration code.** The integration script auto-detects batch-condition confounding. [Details →](references/integration_methods.md)
@@ -254,7 +258,7 @@ lisi = compute_lisi_scores(adata, batch_key="batch", use_rep="X_scVI")
 - Normalization: `"✓ Normalization complete"`
 - PCA: `"PCA loadings verified: N HVG rows have non-zero loadings"` — if you see a WARNING about zero loadings, re-run PCA with `use_highly_variable=True`
 - After PCA, call `suggest_n_pcs(adata)` to get recommended PC count for Step 3
-- Integration (multi-batch): LISI scores printed
+- Integration (multi-batch): 4 项集成质量评估 (LISI+ASW+kBET+PC方差) printed
 
 **Step 3 — Cluster, annotate, visualize** | [scripts/cluster_cells.py](scripts/cluster_cells.py), [scripts/find_markers.py](scripts/find_markers.py), [scripts/annotate_celltypes.py](scripts/annotate_celltypes.py)
 
@@ -333,6 +337,7 @@ Exports: H5AD, expression matrices (raw + normalized CSV), cell metadata, UMAP/P
 | `FileNotFoundError: barcodes.tsv.gz` | Wrong directory | Verify 10X output files present. Use `import_h5_data()` for .h5 |
 | H5AD export hangs or is very slow | Large file write with compression | Normal for >50 MB files. Script uses fast `lzf` compression. If still slow, pass `compression=None` to `save_h5ad()`. |
 | `NameError` after export interruption | Kernel restart lost variables | Re-run from Step 1 to restore `adata`. Export is idempotent — safe to re-run. |
+| **batch_key 唯一值过多**（如 >100） | 误用了 barcode/obs_names 作为 batch 列 | **写代码前检查**：`adata.obs['<batch_key>'].nunique()`。正确值应为 sample/donor ID（通常 2-20）。已有 `sample_id (16,003 unique)` 先例 → 在 `adata.obs.columns` 中找正确列 |
 
 **Expected warnings (not errors):**
 

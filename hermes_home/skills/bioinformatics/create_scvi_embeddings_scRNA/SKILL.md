@@ -41,6 +41,8 @@ When you need create scvi embeddings scRNA analysis
 | `label_key` | [Required] Column name in adata.obs for cell type labels (str) | |
 | `data_dir` | [Required] Directory path where the AnnData file is located and where output will be saved (str) | |
 
+> **⚠️ batch_key 预检查（写代码前必须执行）**：使用 `batch_key` 前必须先用 `adata.obs['<batch_key>'].nunique()` 检查唯一条目数。若 >100 且 ≠ 预期样本数 → **阻断执行**，提示用户可能误用了 barcode/cells 列。已有 `sample_id (16,003 unique)` 的前车之鉴。
+
 > **Parameter Adaptation**: Adjust parameters based on tissue quality, species, and condition. Literature values take priority, then official defaults, then tissue-specific adjustments.
 
 ## Proven Scripts
@@ -63,6 +65,36 @@ When you need create scvi embeddings scRNA analysis
 - Source: Biomni
 - Category: genomics
 - Language: Python
+
+## 📊 集成质量评估（必输出）
+
+> **铁轨规则**：scVI 嵌入后，**必须**运行 4 项评估并输出图表。未输出 → rail_review(post) 阻断。
+
+### 必输出指标（4 项铁轨）
+
+| # | 指标 | 通过 | 警告 | 阻断 |
+|---|------|------|------|------|
+| 1 | **LISI** | > N_batch×0.8 | 0.5-0.8 | < 0.5 |
+| 2 | **ASW(batch)** | < 0.1 | 0.1-0.15 | > 0.15 |
+| 3 | **kBET** | rejection < 0.05 | 0.05-0.15 | > 0.15 |
+| 4 | **ELBO 收敛** | loss 平稳 | loss 波动 < 10% | loss 未收敛 |
+
+### scVI 额外检查
+- **latent 维度**：`adata.obsm['X_scVI'].shape[1]` ≤ 30，过大 → 过拟合
+- **重构误差**：NMSE 应在 0.1-0.5
+
+### 不通过处理
+- 警告 → debate_analysis 辩论
+- 阻断 → 降 latent dim / 增 epochs / 切换 Harmony/Scanorama
+
+### 代码模板
+```python
+import scib
+lisi = scib.metrics.lisi(adata, batch_key)
+asw = scib.metrics.silhouette_batch(adata, batch_key, 'leiden')
+kbet = scib.metrics.kBET(adata, batch_key, 'leiden')
+print(f"Latent dims: {adata.obsm['X_scVI'].shape[1]}")
+```
 
 
 ---

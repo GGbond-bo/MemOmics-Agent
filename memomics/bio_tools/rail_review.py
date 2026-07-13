@@ -27,11 +27,11 @@ SCHEMA = {
             "module_id": {"type": "string", "description": "Module ID (e.g. qc, normalize, cellchat)"},
             "method_name": {"type": "string", "description": "Method name (e.g. Seurat_QC, CellChat_v2)"},
             "output_dir": {"type": "string", "description": "Output directory for post-review (results/module/method/)"},
-            "code_executed": {"type": "string", "description": "The code that was executed (for post-review quality check)"},
+            "code_executed": {"type": "string", "description": "The code that was executed (for post-review quality check and package detection)"},
             "required_packages": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Required packages for pre-review"
+                "description": "Required packages. PRE: checked for installation. POST: compared against packages actually used in code_executed to detect unregistered packages."
             },
             "skill_name": {
                 "type": "string",
@@ -78,7 +78,49 @@ def _pre_review(module_id, required_packages=None, skill_name=""):
     }
 
 
-def _post_review(module_id, method_name, output_dir, code_executed):
+def _extract_packages(code):
+    """Extract package names from R/Python code that are actually used.
+
+    R patterns: library(x), require(x), requireNamespace("x"), x::func
+    Python patterns: import x, from x import y
+
+    Excludes R/Python base packages. Returns a sorted set of unique package names.
+    """
+    import re
+    if not code or not isinstance(code, str):
+        return set()
+
+    packages = set()
+
+    # --- R patterns ---
+    # library(CellChat), library("CellChat"), library('CellChat')
+    for m in re.finditer(r'(?:library|require)\s*\(\s*["\']?(\w+(?:\.\w+)*)', code):
+        packages.add(m.group(1))
+    # requireNamespace("CellChat")
+    for m in re.finditer(r'requireNamespace\s*\(\s*["\'](\w+(?:\.\w+)*)', code):
+        packages.add(m.group(1))
+    # pkg::func  (e.g. SCP::CellDimPlot, presto::wilcoxauc)
+    for m in re.finditer(r'(\w+(?:\.\w+)*)::', code):
+        packages.add(m.group(1))
+
+    # --- Python patterns ---
+    for m in re.finditer(r'^import\s+(\w+(?:\.\w+)*)', code, re.MULTILINE):
+        packages.add(m.group(1))
+    for m in re.finditer(r'^from\s+(\w+(?:\.\w+)*)\s+import', code, re.MULTILINE):
+        packages.add(m.group(1))
+
+    # Exclude R/Python base packages (false positives)
+    r_base = {'base', 'stats', 'utils', 'graphics', 'grDevices', 'methods', 'datasets',
+              'parallel', 'grid', 'splines', 'stats4', 'tcltk', 'tools', 'compiler'}
+    py_base = {'os', 'sys', 're', 'json', 'math', 'time', 'datetime', 'collections',
+               'itertools', 'pathlib', 'logging', 'warnings', 'argparse', 'copy',
+               'glob', 'subprocess', 'tempfile', 'shutil', 'typing', 'functools'}
+
+    packages = {p for p in packages if p.lower() not in r_base and p.lower() not in py_base}
+    return packages
+
+
+def _post_review(module_id, method_name, output_dir, code_executed, required_packages=None):
     """Post-analysis review."""
     issues = []
     warnings = []
@@ -162,6 +204,23 @@ def _post_review(module_id, method_name, output_dir, code_executed):
         if 'tryCatch' not in code_executed and 'try:' not in code_executed and 'stopifnot' not in code_executed:
             warnings.append("No error handling in code (tryCatch/try)")
 
+        # === 包检测：扫描代码中实际使用的包 vs skill 声明的 required_packages ===
+        code_packages = _extract_packages(code_executed)
+        unregistered = []
+        if code_packages and required_packages is not None:
+            declared_lower = {p.lower() for p in required_packages if p}
+            for pkg in code_packages:
+                if pkg.lower() not in declared_lower:
+                    unregistered.append(pkg)
+            if unregistered:
+                warnings.append(
+                    f"UNREGISTERED_PACKAGES: 代码使用了 {len(unregistered)} 个 skill 未声明的包: "
+                    f"{', '.join(unregistered)}。"
+                    f"这些包未在 skill_view() 的 r_packages/python_packages 中声明。"
+                    f"请选择其一: (1) 用原生包替代 (2) 补充到 SKILL.md 的 r_packages/python_packages 列表 (3) 记录到 Common Issues 作为可选加速包。"
+                    f"否则下次分析可能因环境不同而失败。"
+                )
+
     passed = len(issues) == 0
     # 强化提醒：有参数或结论时必须辩论
     debate_reminder = ""
@@ -202,6 +261,8 @@ def _post_review(module_id, method_name, output_dir, code_executed):
         "result_files": result_files,
         "debate_reminder": debate_reminder,
         "evolution_reminder": evolution_reminder,
+        "code_packages": list(code_packages) if code_packages else [],
+        "unregistered_packages": unregistered,
     }
 
 
@@ -210,7 +271,7 @@ def rail_review(phase, module_id, method_name="", output_dir="", code_executed="
     if phase == "pre":
         result = _pre_review(module_id, required_packages, skill_name)
     else:
-        result = _post_review(module_id, method_name, output_dir, code_executed)
+        result = _post_review(module_id, method_name, output_dir, code_executed, required_packages)
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 

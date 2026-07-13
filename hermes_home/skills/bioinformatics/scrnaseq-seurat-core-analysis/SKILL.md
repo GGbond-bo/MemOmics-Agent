@@ -181,8 +181,10 @@ Use this skill when you need to:
 - `cluster_markers_all.csv` - Marker genes per cluster (exploratory)
 - `{celltype}_deseq2_results.csv` - Pseudobulk DE per cell type (inferential)
 
-**Integration diagnostics (multi-batch):**
-- LISI/ASW scores, before/after UMAPs
+**Integration diagnostics (multi-batch) — 4 项铁轨必输出：**
+- LISI + ASW(batch) + kBET + PC 方差贡献 (Scree plot)
+- 通过阈值：LISI > N_batch×0.8, ASW < 0.1, kBET rejection < 0.05, PC1 < 50%
+- 不通过 → 切换方法（Harmony→scVI→CCA）重新评估
 - `analysis_report.pdf` — Comprehensive PDF report with Introduction, Methods, Results, Conclusions, and embedded figures
 
 **⚠️ PDF style rules:**
@@ -407,11 +409,22 @@ seurat_obj <- run_harmony_integration(seurat_obj, batch_var = "batch", dims_use 
 
 # Validate integration
 lisi_scores <- compute_lisi_scores(seurat_obj, batch_var = "batch", reduction = "harmony")
+# kBET
+kbet_res <- kBET(Embeddings(seurat_obj, "harmony"), seurat_obj$batch, k0=25)
+print(paste("kBET rejection:", kbet_res$summary$kBET.observed[1]))
+# ASW
+sil <- cluster::silhouette(as.numeric(seurat_obj$seurat_clusters), dist(Embeddings(seurat_obj, "harmony")))
+print(paste("Batch ASW:", mean(sil[,3])))
+# PC variance
+ElbowPlot(seurat_obj, ndims=50)
 ```
 
-**✅ VERIFICATION:** You should see: `"✓ Harmony integration completed successfully"` and LISI score summary
-
-**Success criteria:** Batch LISI ≈1 (good mixing), cell type LISI preserved. See [references/integration_methods.md](references/integration_methods.md)
+**✅ VERIFICATION:** 4 项集成质量评估必须全部输出：
+1. LISI distribution (batch mixing, violin plot)
+2. ASW batch (silhouette width, < 0.1 for batch effect removal)
+3. kBET rejection rate (< 0.05 for full mixing)
+4. PC variance contribution (Scree plot, PC1 < 50%)
+See [references/integration_methods.md](references/integration_methods.md) for full framework.
 
 ⚠️ **DO NOT** write inline Harmony/CCA integration code → complex parameter tuning and batch handling required
 
@@ -585,6 +598,7 @@ Make six critical decisions during analysis:
 | Memory error during SCTransform | Dataset too large (>50k cells) | Use `run_lognormalize()` instead, or process in batches |
 | All cells marked as doublets | DoubletFinder parameters incorrect | Check expected doublet rate (typically 0.075 per 1000 cells). Use batch-aware processing |
 | "Cannot find mitochondrial genes" | Wrong species or gene format | Specify correct species in `calculate_qc_metrics()`. Check if genes use gene symbols (MT-) or Ensembl IDs |
+| **batch_key 唯一值过多**（如 >100） | 误用了 `orig.ident`/barcode 作为 batch 列 | **写代码前检查**：`table(seurat_obj$meta.data$<batch_col>)`。正确值应为 sample/donor ID（通常 2-20）。已有 `sample_id (16,003 unique)` 先例 → 改用 `sample` 或 `donor_id` |
 
 **Detailed troubleshooting:** [references/troubleshooting_guide.md](references/troubleshooting_guide.md)
 
@@ -620,6 +634,14 @@ seurat_obj <- seurat_obj |>
   run_harmony_integration(batch_var = "batch", dims_use = 1:30)
 
 lisi_scores <- compute_lisi_scores(seurat_obj, batch_var = "batch", reduction = "harmony")
+# kBET
+kbet_res <- kBET(Embeddings(seurat_obj, "harmony"), seurat_obj$batch, k0=25)
+print(paste("kBET rejection:", kbet_res$summary$kBET.observed[1]))
+# ASW
+sil <- cluster::silhouette(as.numeric(seurat_obj$seurat_clusters), dist(Embeddings(seurat_obj, "harmony")))
+print(paste("Batch ASW:", mean(sil[,3])))
+# PC variance
+ElbowPlot(seurat_obj, ndims=50)
 
 # Cluster on integrated space
 seurat_obj <- seurat_obj |>

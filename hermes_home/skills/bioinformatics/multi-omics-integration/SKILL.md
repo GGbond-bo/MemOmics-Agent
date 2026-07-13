@@ -328,6 +328,23 @@ After running MOFA:
 - Argelaguet R, et al. (2018) Multi-Omics Factor Analysis—a framework for unsupervised integration of multi-omics data sets. *Molecular Systems Biology* 14:e8124.
 - Dietrich S, et al. (2018) Drug-perturbation-based stratification of blood cancer. *Journal of Clinical Investigation* 128(1):427-445.
 
+## 📊 集成质量评估（必输出）
+
+> **铁轨规则**：多组学集成后，**必须**运行以下评估并输出图表。未输出 → rail_review(post) 阻断。
+
+### 必输出指标
+
+| # | 指标 | 说明 | 通过标准 |
+|---|------|------|---------|
+| 1 | **LISI (batch)** | 跨组学的批次混合度 | > N_batch×0.8 |
+| 2 | **Cell type ASW** | 细胞类型保留度 | > 0.5 |
+| 3 | **Factor variance explained** | MOFA/MOFA+ 因子解释的方差比例 | at least 2 factors & R² > 5% |
+| 4 | **Cross-modal correlation** | RNA vs ATAC/Protein 的跨模态相关性 | Spearman R > 0.3 for top factors |
+
+### 不通过处理
+- 警告 → debate_analysis 辩论
+- 阻断 → 调整因子数 / 切换方法（MOFA+ → WNN → Seurat v5 bridge）
+
 
 ## 🔒 审查机制（rail_review）
 

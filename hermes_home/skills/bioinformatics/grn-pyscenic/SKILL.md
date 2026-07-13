@@ -419,6 +419,21 @@ After completing pySCENIC analysis:
 - pySCENIC Documentation: https://pyscenic.readthedocs.io/
 - SCENIC Resources: https://resources.aertslab.org/cistarget/
 
+## 📊 pySCENIC GRN 质量评估（必输出）
+
+### 必输出指标
+| 指标 | 通过 | 警告 | 阻断 |
+|------|------|------|------|
+| **AUC 阈值分布** | 双峰（成功分离） | 峰不明显 | 单峰（过拟合） |
+| **调控子基因数中位数** | 10-50 | 5-10 或 50-200 | < 5 或 > 200 |
+| **靶基因数据库重叠率**（TRRUST/ENCODE） | > 20% | 10-20% | < 10% |
+| **调控子-细胞类型特异性** | 有 cell-type specific regulons | 部分共享 | 全部共享/无特异性 |
+
+### 不通过处理
+- AUC 单峰 → 增加迭代 / 调整 motif 数据库 / 检查基因过滤
+- 调控子过大 → 提高 AUC 阈值（默认 0.057 → 0.06）
+- 无特异性 → 可能是细胞类型分得不清楚 → 返回聚类步骤
+
 
 ## 🔒 审查机制（rail_review）
 

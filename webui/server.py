@@ -67,6 +67,26 @@ app = FastAPI(title="MemOmics WebUI v2")
 import logging
 logger = logging.getLogger("memomics")
 
+# === 启动预热：预构建 skills snapshot（避免首次分析请求冷扫描 355 个 SKILL.md） ===
+_SKILLS_WARMED = False
+
+@app.on_event("startup")
+async def _warm_skills_snapshot():
+    """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
+    元数据快照写入 hermes_home/.skills_prompt_snapshot.json。
+    此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。"""
+    global _SKILLS_WARMED
+    try:
+        from agent.prompt_builder import build_skills_system_prompt
+        result = build_skills_system_prompt()
+        _SKILLS_WARMED = True
+        logger.info(
+            f"[MemOmics] Skills snapshot warmed: {len(result)} chars prompt, "
+            f"snapshot at {os.path.join(HERMES_HOME_DIR, '.skills_prompt_snapshot.json')}"
+        )
+    except Exception as e:
+        logger.warning(f"[MemOmics] Skills snapshot warm failed (will cold-scan on first request): {e}")
+
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
@@ -417,56 +437,6 @@ def _read_skills_index():
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
 import re as _re_mod
 
-def _parse_plan_phases(plan_text):
-    """从方案文本中提取分阶段技术路线 — 安全版本，无回溯风险"""
-    if not plan_text:
-        return []
-    # 截断超长文本，防止正则回溯
-    text = plan_text[:8000]
-    phases = []
-    try:
-        # 安全策略：按 ## 标题分割（最可靠，无回溯风险）
-        sections = _re_mod.split(r'\n(?=#{1,3}\s+)', text)
-        phase_id = 0
-        for section in sections:
-            section = section.strip()
-            if not section:
-                continue
-            # 提取标题
-            first_line = section.split('\n')[0].strip()
-            title = _re_mod.sub(r'^#+\s*', '', first_line)[:60]
-            body = section[len(first_line):].strip()[:300]
-            # 跳过明显不是阶段的段（如文献表格）
-            if not title or len(title) < 2:
-                continue
-            # 提取 skill 引用
-            skills = _re_mod.findall(
-                r'(?:skill_view|skill_search|执行|运行|调用)[(（"\']?\s*["\']?([a-zA-Z][a-zA-Z0-9_-]{3,50})',
-                section
-            )
-            phase_id += 1
-            phases.append({
-                "id": phase_id,
-                "title": title,
-                "detail": body,
-                "skills": list(set(skills))[:5],
-            })
-            if phase_id >= 8:
-                break
-    except Exception:
-        pass
-    return phases
-
-def _extract_lit_table(plan_text):
-    """从方案文本中提取文献表格"""
-    if not plan_text:
-        return ""
-    lit_lines = []
-    for line in plan_text.split('\n'):
-        if 'PMID' in line or 'DOI' in line.lower() or 'doi:' in line.lower():
-            clean = line.strip().strip('|')
-            lit_lines.append(clean[:200])
-    return '<br>'.join(lit_lines[:10]) if lit_lines else ""
 
 def _detect_lang(text):
     """检测文本语言: 中文返回 'zh', 否则返回 'en'"""
@@ -678,7 +648,6 @@ def _classify_intent(text: str):
     if "怎么做" in t:
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.84, meta)
-
 
 
     # === Priority 5: report / literature / install (existing intents, preserved) ===
@@ -914,8 +883,23 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -
                      "Install task. env_check first, then skill_view('create-bio-skill') if needed.")
     
     elif intent == "literature":
-        lines.append("文献任务。调用 skill_search('文献') 或 skill_view('pubmed-search')。PDF保存到 work/papers/" if zh else
-                     "Literature task. Use skill_search('literature') or skill_view('pubmed-search').")
+        # Detect paper-writing sub-intent
+        lit_text = user_text if zh else user_text.lower()
+        paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
+                         "write a paper", "draft a paper", "帮我写", "投稿", "学术论文"]
+        paper_research_kw = ["研究方案", "实验设计", "方案设计", "设计实验", "研究计划",
+                            "research plan", "research proposal", "技术路线"]
+        if any(kw in lit_text for kw in paper_write_kw):
+            lines.append("论文写作任务。调用 skill_view('academic-paper-writing')，"
+                        "按 12-agent pipeline 生成论文。" if zh else
+                        "Paper writing. Call skill_view('academic-paper-writing').")
+        elif any(kw in lit_text for kw in paper_research_kw):
+            lines.append("研究方案设计。调用 skill_view('research-plan')，"
+                        "生成含 Mermaid 技术路线图的完整方案。" if zh else
+                        "Research plan. Call skill_view('research-plan').")
+        else:
+            lines.append("文献任务。调用 skill_search('文献') 或 skill_view('pubmed-search')。PDF保存到 work/papers/" if zh else
+                         "Literature task. Use skill_search('literature') or skill_view('pubmed-search').")
     
     elif intent == "knowledge":
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
@@ -938,6 +922,9 @@ _PROGRESS_TEXT = {
         "reviewing": "正在审查", "writing_code": "正在写代码",
         "completed": "已完成",
         "intro_reasoning": "用户询问系统身份，触发自我介绍快速回复模板，无需调用 LLM。",
+        "initializing_engine": "正在初始化分析引擎",
+        "loading_skills": "加载 355 个生信技能模板...",
+        "engine_ready": "引擎就绪，分析环境已就绪",
     },
     "en": {
         "thinking": "Thinking", "understanding": "Understanding your request",
@@ -951,6 +938,9 @@ _PROGRESS_TEXT = {
         "reviewing": "Reviewing", "writing_code": "Writing code",
         "completed": "Completed",
         "intro_reasoning": "User asked about system identity. Self-introduction fast-reply template triggered, no LLM call needed.",
+        "initializing_engine": "Initializing analysis engine",
+        "loading_skills": "Loading 355 bioinformatics skill templates...",
+        "engine_ready": "Engine ready, analysis environment initialized",
     },
 }
 
@@ -990,7 +980,6 @@ def _session_emit(session, msg_dict):
                 ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
         except Exception:
             pass
-
 
 
 def _create_session(title="新会话"):
@@ -1237,7 +1226,6 @@ async def index():
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
-
 
 
 @app.get("/api/sessions/diag")
@@ -2802,6 +2790,14 @@ async def ws_endpoint(ws: WebSocket):
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 _persist_session_message(session, "user", user_text)
 
+                # 注册 WebSocket 引用 + 立即发送 thinking（在意图分类之前，消除初始空白）
+                loop = asyncio.get_event_loop()
+                session["ws_ref"] = ws
+                session["loop_ref"] = loop
+                session["ws_attached"] = True
+                _session_emit(session, {"type": "thinking", "content": _pt(session, "understanding") + "..."})
+                _session_emit(session, {"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+
                 # 如果是第一条消息, 更新标题
                 if len(session["messages"]) == 1:
                     session["title"] = user_text[:30]
@@ -2822,22 +2818,11 @@ async def ws_endpoint(ws: WebSocket):
                 session["intent"] = _intent
                 session["intent_conf"] = _intent_conf
                 session["intent_meta"] = _intent_meta
-                # plan_refine: if active plan exists and user wants to modify
-                if _intent == "research_plan" and session.get("active_plan"):
-                    _intent = "plan_refine"
-                    session["intent"] = _intent
-                    _intent_meta["is_refine"] = True
                 if _intent not in ("chat", "self_intro"):
                     _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"))
                 else:
                     _skill_ctx = None
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
-
-                # 注册 WebSocket 引用（必须在 emit 之前，否则 session/thinking/progress 事件被丢弃）
-                loop = asyncio.get_event_loop()
-                session["ws_ref"] = ws
-                session["loop_ref"] = loop
-                session["ws_attached"] = True
 
                 # === 自我介绍快速回复（绕过 agent LLM）===
                 if _intent == "self_intro":
@@ -2880,24 +2865,21 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_text(json.dumps({"type": "complete", "content": _intro}, ensure_ascii=False))
                     continue  # 跳过 agent 调用
 
-                # 发送 session_id
-                # session 级标识
+                # 发送 session_id（thinking 已在消息到达时即时发送）
                 _session_emit(session, {"type": "session", "session_id": session["id"], "title": session["title"]})
-
-                # 立即发送 thinking (消除初始空白)
-                # 问题9: thinking 和进度文本按会话语言
-                _t = _pt(session, "understanding")
-                _tk = _pt(session, "thinking")
-                _session_emit(session, {"type": "thinking", "content": _t + "..."})
-                # 发送进度时间线起始
-                _session_emit(session, {"type": "progress", "step": _tk, "status": "pending", "detail": _t, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
                 # session 级 agent 复用：如果已有 agent 则复用，否则创建
                 agent = session.get("agent")
                 if agent is None:
+                    # 发送引擎初始化进度（首次加载较大，让用户感知系统在工作）
+                    _ei = _pt(session, "initializing_engine")
+                    _session_emit(session, {"type": "progress", "step": _ei, "status": "pending",
+                        "detail": _pt(session, "loading_skills"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     try:
                         agent = _create_agent(session["model_config"], session_id=session["id"])
                         session["agent"] = agent  # 缓存到 session
+                        _session_emit(session, {"type": "progress", "step": _ei, "status": "done",
+                            "detail": _pt(session, "engine_ready"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
                         continue
@@ -3364,10 +3346,6 @@ async def ws_endpoint(ws: WebSocket):
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
 
-                        # research_plan 模式通知前端激活方案面板
-                        if _intent in ("research_plan", "plan_refine"):
-                            _session_emit(session, {"type": "intent_active", "intent": _intent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None
                         if _intent == "plan_refine" and agent.tools:
@@ -3457,7 +3435,6 @@ async def ws_endpoint(ws: WebSocket):
                                         _session_emit(session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
-                            session["active_plan"] = True
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
@@ -3498,8 +3475,6 @@ async def ws_endpoint(ws: WebSocket):
                 task = asyncio.ensure_future(run_agent())
                 session["running_task"] = task
 
-            elif msg_type == "get_todos":
-                _session_emit(session, {"type": "todos", "todos": session.get("todos", []), "session_id": session["id"]})
 
             elif msg_type == "get_context_usage":
                 # 返回当前会话的上下文窗口使用情况

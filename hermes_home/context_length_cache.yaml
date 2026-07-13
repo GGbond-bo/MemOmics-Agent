@@ -1,0 +1,2 @@
+context_lengths:
+  qwen3.6:35b-a3b@http://localhost:11434/v1: 262144

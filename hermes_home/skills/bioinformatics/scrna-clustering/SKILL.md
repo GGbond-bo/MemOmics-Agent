@@ -145,8 +145,10 @@ results/<模块>/<方法>/
 3. **PCA + PC selection**
    - ElbowPlot/JackStraw
    - Tool: `terminal`
-4. **Batch correction (Harmony)**
+4. **Batch correction (Harmony) → 必须输出 4 项铁轨评估（LISI/ASW/kBET/PC方差）**
    - Multi-sample integration
+   - 评估 Threshold：LISI > N_batch×0.8, ASW < 0.1, kBET rejection < 0.05, PC1 < 50%
+   - 不通过 → 切换方法（Harmony→scVI→CCA）重新评估
    - Tool: `terminal`
 5. **Cluster (Leiden)**
    - FindNeighbors+FindClusters

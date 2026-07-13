@@ -186,3 +186,18 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 - Source: MemOmics built-in
 - Category: transcriptomics
 - Language: R+Python
+
+## 📊 DEG 质量评估（必输出）
+
+### 必输出指标
+| 指标 | 通过 | 警告 | 阻断 |
+|------|------|------|------|
+| **MA 图对称性**（中位 LFC 偏离） | < 0.2 | 0.2-0.5 | > 0.5 |
+| **p-value 分布均匀性** | 均匀（峰在 p=0） | 轻微偏差 | U型/U型明显 |
+| **BH 校正后 DEG 数合理性** | 50-3000 | 30-50 或 3000-5000 | < 30 或 > 5000 |
+| **火山图分布** | 对称、有正负 LFC | 轻微偏斜 | 严重偏斜 |
+
+### 不通过处理
+- DEG 过少 → 放宽 FDR / 降低 logFC 阈值 / 检查分组对比设计
+- DEG 过多 → 收紧 FDR / 提高 logFC 阈值 / 检查是否未校正批次
+- MA 不对称 → 检查归一化 / 可能需 TMM/quantile 替代

@@ -117,6 +117,20 @@ PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出�
 - Language: R+Python
 - **Related**: `sctour-trajectory-inference` — VAE 深度潜在时间推断，无监督，无需指定起点，批次不敏感。适合替代传统伪时间方法。
 
+## 📊 轨迹推断质量评估（必输出）
+
+### 必输出指标
+| 指标 | 通过 | 警告 | 阻断 |
+|------|------|------|------|
+| **分支点置信度**（slingshot） | 所有分支 `stability > 0.5` | 有分支 0.3-0.5 | 有分支 < 0.3 |
+| **伪时间 vs Marker 相关性** | Spearman R > 0.5 | 0.3-0.5 | < 0.3 |
+| **拓扑一致性**（PAGA connectivity） | 连通图、无孤立节点 | 有少量断连 | 大量断连/不连通 |
+
+### 不通过处理
+- 分支不稳定 → 增加 k 邻居数 / 换 diffusion map / 用 Monocle3
+- 伪时间无意义 → 检查"根细胞"指定是否合理 / 可能是非分化过程
+- 拓扑断裂 → 可能是过度移除批次效应 / 检查 PC 选择
+
 
 ## Reference Script (from External Skill)
 

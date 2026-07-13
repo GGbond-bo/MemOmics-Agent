@@ -41,6 +41,7 @@
 |--------|---------|
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
+| "写论文" / "写文章" / "论文写作" / "manuscript" / "write a paper" / "投稿" | `skill_view("academic-paper-writing")` → 12-agent pipeline 生成完整论文 |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "发表级" | `skill_view("cns-visualization")` |
 | "CellBender" / "去背景" | `skill_view("cellbender-remove-background")` |
@@ -63,7 +64,7 @@
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "报错" / "error" / "出错" / "怎么修" / "不工作" / "跑不了" / "fix" / "debug" | `skill_view("error-recovery")` |
-| "研究方案" / "实验设计" / "方案设计" / "设计实验" / "研究计划" / "research plan" / "research proposal" | `skill_view("academic-research")` → 然后 search_knowledge(species, tissue, direction) 加载 KB 方法推荐 |
+| "研究方案" / "实验设计" / "方案设计" / "设计实验" / "研究计划" / "research plan" / "research proposal" / "技术路线" | `skill_view("research-plan")` → 生成含 Mermaid 技术路线图 + 目的/输出细节表的完整方案 |
 
 ### LLM 决策树（每条用户消息走一遍）
 
@@ -109,6 +110,7 @@
 8. **语言一致**：R 代码用 R，Python 代码用 Python，同会话保持一致
 9. **skill 注册**：新创建 skill → 必须注册到 SOUL.md 的 AUTO_SKILL_INSERT_MARKER
 10. **无数据不审查**：无真实数据时，可查看 skill、写代码片段，但不执行审查和辩论
+11. **batch_key/sample 预检查**：使用 `batch_key`/`sample_col`/`group.by`/`orig.ident` 等分组参数前，**必须**先检查该列的唯一条目数（`table(obj$meta.data$col)` / `adata.obs['col'].nunique()`）。若唯一值 > 预期样本数×10 或 >100 且明显不合理 → **阻断执行**，提示用户检查是否误用了 cells/barcode 列作为 sample 列
 
 > 详细规则（三级操作级别、辩论格式、审查范围、场景触发表等）→ `SOUL-detail.md`
 
@@ -165,6 +167,101 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 | 跑脚本前 | `skill_evolution(action="query_logs", skill="技能名")` |
 | 跑通过后 | `skill_evolution(action="record_run", skill="技能名", script="路径", params_json="...")` |
 | 跑失败后 | `skill_evolution(action="record_error", skill="技能名", error_msg="...")` |
+
+---
+
+## 长任务追踪铁律（task_plan.md 磁盘持久化）
+
+> **背景**：生信分析常包含 5-20 个子任务（QC→归一化→聚类→整合→DEG→轨迹→通讯→GRN→可视化→报告）。上下文压缩或服务器重启后，Agent 仅靠消息历史无法可靠恢复"做到哪一步了"。
+> **解决方案**：所有分析级任务必须在磁盘维护 `task_plan.md`，作为 Agent 的"外部工作记忆"。
+
+### 规则 12: 分析开始前创建 task_plan.md
+
+**触发条件**：用户确认分析方案 + 提供了数据路径 + 进入分析流程。
+
+1. 调用 `memomics_pipeline(action="todos")` 生成完整的 module→substep→skill 待办列表
+2. 将待办列表写入 `results/{session_dir}/task_plan.md`，包含：
+   - **Goal**：一句话描述分析目标
+   - **Current Phase**：当前阶段（初始为 Phase 1）
+   - **Phases**：每个分析模块一个 Phase，含 checklist + 状态标记（`pending` / `in_progress` / `complete` / `failed`）
+   - **Errors Encountered**：空表格（含 Error / Attempt / Resolution 列）
+   - **Decisions Made**：空表格（含 Decision / Rationale 列）
+3. 写完后 echo 确认：`"task_plan.md 已创建 → {文件路径}"`
+
+> ⛔ **未创建 task_plan.md = 不允许执行任何分析代码。**
+
+### 规则 13: 每步完成后立即更新 task_plan.md
+
+**时机**：`rail_review(post)` 通过后 / `skill_evolution(record_run)` 后 / 出错后。
+
+| 发生了什么 | task_plan.md 更新内容 |
+|-----------|---------------------|
+| Phase 开始 | `**Status:** in_progress`，更新 `## Current Phase` |
+| Phase 完成 | `**Status:** complete`，勾选 checklist |
+| Phase 失败 | `**Status:** failed`，追加到 `## Errors Encountered` 表（Error + Attempt 1/2/3） |
+| 关键决策 | 追加到 `## Decisions Made` 表（如 "用 Harmony 而非 scVI，因为批次 n=2"） |
+| 重试后通过 | 更新 Error 表的 Resolution 列 |
+
+> ⛔ **task_plan.md 与 `todo_manage` 状态必须同步。一方更新时另一方也必须更新。**
+
+### 规则 14: 每次新 turn 先读 task_plan.md 恢复状态
+
+**触发条件**：任何新对话 turn 开始（用户发了新消息 / 上下文恢复后）。
+
+1. **第一步**：检查 `results/{session_dir}/task_plan.md` 是否存在
+2. 存在 → **必须先读** task_plan.md，再读 `progress.md`（如果存在）
+3. 读取后：
+   - 确认 `## Current Phase` → 这是你当前应该在的位置
+   - 检查 `## Errors Encountered` → 避免重复已失败的尝试
+   - 调用 `skill_evolution(action="query_logs")` 交叉验证历史记录
+4. 读取后立即回复用户："已恢复状态 → {Current Phase}，继续执行。"
+5. 若 task_plan.md 不存在 → 按正常流程重新开始
+
+> ⛔ **不要凭记忆恢复。task_plan.md 是唯一信任的状态源。**
+> ⛔ **不要重新执行已标记 `complete` 的 Phase。**
+> ⛔ **同一个错误不要用相同方法重试 3 次以上。第 3 次失败后 → debate_analysis 辩论替代方案。**
+
+### task_plan.md 模板
+
+```markdown
+# Task Plan: {分析描述，如"小鼠肝脏衰老 scRNA-seq 全流程分析"}
+
+## Goal
+{一句话分析目标}
+
+## Current Phase
+Phase 1
+
+## Phases
+
+### Phase 1: QC 与去污染
+- [ ] CellBender 去背景
+- [ ] 空液滴过滤
+- [ ] 双胞率检测
+- [ ] 线粒体/核糖体比例过滤
+**Status:** in_progress
+
+### Phase 2: 基础分析
+- [ ] 归一化 (SCTransform)
+- [ ] 高变基因选择
+- [ ] PCA 降维
+- [ ] 聚类 (Leiden)
+- [ ] UMAP 可视化
+**Status:** pending
+
+### Phase 3-N: {后续模块...}
+...
+
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+|       | 1       |            |
+
+## Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+|          |           |
+```
 
 ---
 
