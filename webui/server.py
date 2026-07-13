@@ -2799,6 +2799,8 @@ async def ws_endpoint(ws: WebSocket):
                 session["ws_attached"] = True
                 _session_emit(session, {"type": "thinking", "content": _pt(session, "understanding") + "..."})
                 _session_emit(session, {"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                # 强制刷新事件循环，确保 thinking/progress 消息在阻塞操作前发送到前端
+                await asyncio.sleep(0)
 
                 # 如果是第一条消息, 更新标题
                 if len(session["messages"]) == 1:
