@@ -196,12 +196,35 @@ S₅ = 跨物种预测AUC = AUC(monkey_model → human_data)              [w₅=
 > ✅ 不同模块用不同颜色区分（`classDef` + `class` 语法）
 > ✅ 所有节点文本用双引号包裹
 
-**⛔ Mermaid 11.x 严格语法规则（违反即报错）：**
-1. **所有节点文本必须用双引号包裹**：`A["QC与过滤"]` 而非 `A[QC与过滤]`
-2. **括号 () 必须转义或避免**：`B["SCTransform 归一化"]` 而非 `B[SCTransform(归一化)]`
-3. **禁用字符**：`&` `<` `>` `{` `}` 放在节点文本中会报错，用中文全角「」或改用其他表述
+**⛔ **⏩ Mermaid 11.x 严格语法规则（违反即报错，已验证）:**
+1. **🔴 致命: 括号 () 在未引号标签中 → 解析失败** — 必须用 `["QC (CellBinder)"]` 而非 `[QC (CellBinder)]`
+2. **所有节点文本必须用双引号包裹**：`A["QC与过滤"]` 而非 `A[QC与过滤]`
+3. **禁用字符**：`&` `<` `>` `{` `}` 放在节点文本中会报错
 4. **节点 ID 只用字母+数字，不以下划线开头**：`N1` `N2` 而非 `_start`
 5. **classDef 放在所有节点定义之后、class 引用之前**
+
+**以下是经过 Mermaid 11.16.0 实际验证的模板——直接复制修改，不要自己编:**
+
+```mermaid
+flowchart TD
+    A["数据输入"] --> B["QC 与去污染"]
+    B --> C["基础分析"]
+    C --> D{"批次校正?"}
+    D -->|"是"| E["Harmony 整合"]
+    D -->|"否"| F["直接 DEG"]
+    E --> G["差异表达"]
+    F --> G
+    G --> H["功能富集"]
+    H --> I["Figure: 完整报告"]
+    classDef input fill:#e8f5e9,stroke:#333
+    classDef process fill:#e3f2fd,stroke:#333
+    classDef decision fill:#fff3e0,stroke:#333
+    classDef output fill:#fce4ec,stroke:#333
+    class A input
+    class B,C,E,F,G,H process
+    class D decision
+    class I output
+```
 
 **CNS 级 4 组件 Mermaid 说明：**
 

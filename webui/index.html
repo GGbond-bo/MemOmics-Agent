@@ -1349,17 +1349,20 @@ function _safeMermaidRun() {
   var els = document.querySelectorAll('.mermaid');
   for (var i = 0; i < els.length; i++) {
     var el = els[i];
-    // 保存原始代码（mermaid.run 内部会清空）
     var code = el.textContent || '';
-    // 用临时 id 追踪
-    var tmpId = '_mm_tmp_' + i;
     try {
       mermaid.run({ nodes: [el] });
     } catch(e) {
-      // 渲染失败：显示错误提示+源码
-      el.classList.add('mermaid-error');
+      // 自动修复: 括号 () 在未引号标签中导致 Mermaid 11.x 解析失败
+      var fixed = code.replace(/\[([^\]]*\([^\]]*\)[^\]]*)\]/g, '["$1"]');
+      if (fixed !== code) {
+        el.textContent = fixed;
+        try { mermaid.run({ nodes: [el] }); return; } catch(e2) { el.textContent = code; }
+      }
       el.innerHTML = '<div style="color:#c62828;font-size:11px;margin-bottom:6px;">'
         + '⚠ Mermaid 语法错误: ' + (e.message || e).toString().substring(0, 80) + '</div>'
+        + '<div style="color:#666;font-size:10px;margin-bottom:6px;">'
+        + '💡 常见原因: 括号 () 未用双引号包裹 — 如 QC (CellBinder) 应写成 "QC (CellBinder)"</div>'
         + '<pre style="background:#fff5f5;padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;"><code>'
         + escapeHtml(code) + '</code></pre>';
     }
