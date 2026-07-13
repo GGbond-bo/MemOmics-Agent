@@ -2797,10 +2797,10 @@ async def ws_endpoint(ws: WebSocket):
                 session["ws_ref"] = ws
                 session["loop_ref"] = loop
                 session["ws_attached"] = True
-                _session_emit(session, {"type": "thinking", "content": _pt(session, "understanding") + "..."})
-                _session_emit(session, {"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                # 强制刷新事件循环，确保 thinking/progress 消息在阻塞操作前发送到前端
-                await asyncio.sleep(0)
+                # 直接用 await ws.send_text() 而非 _session_emit——确保立刻发送到前端，
+                # 不受事件循环排队影响（_session_emit 用 run_coroutine_threadsafe 排队）
+                await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
+                await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
 
                 # 如果是第一条消息, 更新标题
                 if len(session["messages"]) == 1:
