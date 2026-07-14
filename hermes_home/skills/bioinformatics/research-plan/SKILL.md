@@ -172,16 +172,24 @@ S₅ = 跨物种预测AUC = AUC(monkey_model → human_data)              [w₅=
 
 #### 3. 步骤 2 — 生成 Mermaid 技术路线图
 
-**两种模式：**
+**三种模式：**
 
 | 模式 | 触发条件 | 输出 |
 |------|---------|------|
-| **标准模式** | 普通方案咨询 | 单张 flowchart TD 树状图 |
+| **双图模式（默认）** | 所有路线图咨询（RNA/ATAC/空间/Bulk/蛋白/多组学） | 主图 Flowchart TD + 辅图 Mindmap 思维导图 |
+| **标准模式** | 用户明确说"只要流程图" | 单张 flowchart TD 树状图 |
 | **CNS 级模式** | 用户说"CNS"/"深度"/"分阶段"/"太泛了" | 4 组件：总览漏斗 + 决策树 + 数据流 + 方法版本表 |
+
+**双图模式规则（默认，适用于所有组学路线图）：**
+> ✅ 主图用 **Flowchart TD** — 分支清晰、参数内嵌、色彩分区（classDef 6-8 色）、每节点含工具名和参数阈值
+> ✅ 辅图用 **Mindmap** — 全景俯瞰、层级分明、无参数细节、用图标 emoji 前缀区分模块类型
+> ✅ 两图必须同时输出，Flowchart TD 在前、Mindmap 在后
+> ✅ Mindmap 的层级结构与 Flowchart 的 Phase 保持一致
 
 **标准模式规则：**
 > ⛔ 每节点 ≤15 中文字符 — 只写模块名
 > ⛔ 最多 3 层 — 一级(阶段)、二级(关键步骤)、三级(产出)
+> ⛔ 仅当用户明确要求"只要流程图"或"不用思维导图"时才降级到标准模式
 
 **CNS 级模式规则（覆盖标准模式的限制）：**
 > ✅ 节点可包含方法名和版本号（如 `"QC: nFeature 200-6000, MT<5%\nSeurat v5 + CellBender"`）
@@ -325,7 +333,8 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 
 ### 📁 参考文件
 
-- **`templates/tech-roadmap-html.html`** — Mermaid 失败时的 HTML 技术路线图模板。含 5 阶段卡片流 + Panel 布局网格 + 数据流表 + 故事线。颜色编码：🔴核心/🟡增强/🟢输出。
+- **`templates/tech-roadmap-html.html`** — Mermaid 失败时的 HTML 技术路线图模板。
+- **`references/mermaid-style-showcase.md`** — 同一流程六种 Mermaid 样式展示（Flowchart TD/LR、Mindmap、Gantt、Timeline、Sankey、State）。当用户要求"换一种展示方式"时加载。含 5 阶段卡片流 + Panel 布局网格 + 数据流表 + 故事线。颜色编码：🔴核心/🟡增强/🟢输出。
 - **`references/cns-level-plan-template.md`** — CNS 级完整 15 段方案模板。当用户说"太泛了"/"不够深"/"分阶段"/"CNS级别"时加载。包含：文献依据表、H₀/H₁假说、Gap分析、Figure三一结构、专利分析、Loop Gate等所有必需段落。
 - **`references/cross-species-hippocampus-aging-analysis.md`** — 跨物种海马衰老分析案例参考。
 - **`references/multi-group-subtype-deep-analysis.md`** — 复杂多组×亚型分析 Playbook。≥4 组 + 亚型分解的场景：伪bulk DEG/基因集评分/应答指数/多条件 DotPlot/轨迹推断。
