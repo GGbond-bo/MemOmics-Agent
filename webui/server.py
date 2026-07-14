@@ -103,6 +103,12 @@ def _get_session_db():
         try:
             from hermes_state import SessionDB
             _session_db = SessionDB()
+            # 确保 kv 表存在（微信会话映射持久化）
+            if hasattr(_session_db, '_conn'):
+                _session_db._conn.execute(
+                    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)"
+                )
+                _session_db._conn.commit()
         except Exception as e:
             print(f"[MemOmics] SessionDB 初始化失败: {e}", flush=True)
     return _session_db
@@ -1200,6 +1206,8 @@ def _load_persisted_sessions():
                 break
         if count:
             print(f"[MemOmics] 从 state.db 恢复了 {count} 个历史会话", flush=True)
+            # 恢复微信会话映射
+            _rebuild_weixin_session_map()
     except Exception as e:
         print(f"[MemOmics] 会话恢复失败: {e}", flush=True)
 
@@ -2018,6 +2026,8 @@ _MAX_WEIXIN_MSGS = 200
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
 _weixin_agent_enabled = False     # Agent 自动回复开关
+_weixin_session_map: dict = {}    # {wx_user_id: {"session_id": ..., "last_ts": ...}}
+_WEIXIN_SESSION_TTL = 86400       # 24 小时无消息自动新建会话
 
 
 def _extract_text_from_weixin_msg(msg: dict) -> str:
@@ -2035,17 +2045,113 @@ def _extract_text_from_weixin_msg(msg: dict) -> str:
     return "".join(text_parts)
 
 
+
+
+def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
+    """获取或创建微信用户关联的 MemOmics 会话（24h 超时自动新建）"""
+    global _weixin_session_map
+    now = time.time()
+    entry = _weixin_session_map.get(sender_id)
+
+    if entry:
+        elapsed = now - entry.get("last_ts", 0)
+        sid = entry["session_id"]
+        if sid in _sessions and elapsed < _WEIXIN_SESSION_TTL:
+            _weixin_session_map[sender_id]["last_ts"] = now
+            _save_weixin_session_map()
+            return _sessions[sid]
+
+    title = f"📱 {sender_name or sender_id[:12]}"
+    session = _create_session(title)
+    _weixin_session_map[sender_id] = {"session_id": session["id"], "last_ts": now}
+    session["wx_sender_id"] = sender_id
+    _save_weixin_session_map()
+    print(f"[MemOmics] 微信新会话: {sender_name} → {session["id"]}", flush=True)
+    return session
+
+
+def _save_weixin_session_map():
+    """持久化微信会话映射到 state.db"""
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, "_conn"):
+            import json as _json
+            db._conn.execute(
+                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                ("weixin_session_map", _json.dumps(_weixin_session_map, ensure_ascii=False))
+            )
+            db._conn.commit()
+    except Exception:
+        pass
+
+
+def _rebuild_weixin_session_map():
+    """启动时从 state.db 恢复微信会话映射"""
+    global _weixin_session_map
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, "_conn"):
+            import json as _json
+            row = db._conn.execute(
+                "SELECT value FROM kv WHERE key = ?", ("weixin_session_map",)
+            ).fetchone()
+            if row:
+                stored = _json.loads(row[0])
+                cleaned = {}
+                for uid, entry in stored.items():
+                    sid = entry.get("session_id", "")
+                    if sid in _sessions:
+                        cleaned[uid] = entry
+                    else:
+                        print(f"[MemOmics] 微信映射清理: {uid} → {sid} 会话不存在", flush=True)
+                _weixin_session_map = cleaned
+                print(f"[MemOmics] 微信会话映射已恢复 ({len(cleaned)} 个)", flush=True)
+    except Exception as e:
+        print(f"[MemOmics] 恢复微信会话映射失败: {e}", flush=True)
+        _weixin_session_map = {}
+
+
 async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: str, context_token: str):
-    """用 MemOmics Agent 处理微信消息并自动回复"""
+    """用 MemOmics Agent 处理微信消息并自动回复（关联 MemOmics 会话，24h 超时自动新建）"""
     import sys as _sys_agent, os as _os_agent
+
+    # 获取或创建关联的 MemOmics 会话
+    session = _get_or_create_weixin_session(sender_id, sender_name)
+    sid = session["id"]
+
+    # 构建对话历史（最多最近 20 条）
+    history = []
+    for m in session.get("messages", [])[-20:]:
+        if m.get("role") in ("user", "assistant"):
+            history.append({"role": m["role"], "content": m.get("content", m.get("text", ""))})
+
+    # 把用户消息追加到会话
+    user_msg = {
+        "role": "user", "text": text,
+        "time": time.strftime("%H:%M:%S"), "source": "weixin",
+    }
+    session.setdefault("messages", []).append(user_msg)
+    if len(session["messages"]) > 200:
+        session["messages"] = session["messages"][-200:]
+
+    # 更新会话标题（首次消息）
+    if session.get("title", "").startswith("📱 ") and len(session["messages"]) <= 2:
+        short_text = text[:30].replace(chr(10), " ").strip()
+        session["title"] = f"📱 {sender_name}: {short_text}"
+        try:
+            db = _get_session_db()
+            if db and hasattr(db, "set_session_title"):
+                db.set_session_title(sid, session["title"])
+        except Exception:
+            pass
+
     _hermes_root = _os_agent.path.join(_os_agent.path.dirname(__file__), '..', 'hermes-agent')
     _sys_agent.path.insert(0, _hermes_root)
     _sys_agent.path.insert(0, _os_agent.path.join(_hermes_root, 'gateway'))
     from run_agent import AIAgent
     from platforms.weixin import _send_message
-    
+
     try:
-        # 用 run_agent 的方式创建 agent
         _model_cfg = _current_model if _current_model else {
             "provider": "openai", "model": "gpt-4o", "base_url": "https://api.openai.com/v1",
             "api_key": os.environ.get("OPENAI_API_KEY", "")
@@ -2055,30 +2161,40 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             api_key=_model_cfg.get("api_key", ""),
             provider=_model_cfg.get("provider", "openai"),
             model=_model_cfg.get("model", "gpt-4o"),
-            hermes_home=_hermes_root.replace('/gateway', '').replace('\\gateway', ''),
+            hermes_home=_hermes_root.replace('/gateway', '').replace('\gateway', ''),
             tools=[],
             skills_index=None,
             system_prompt=f"用户正在通过微信与 MemOmics 对话。请用简洁友好的方式回答，不超过500字。",
         )
-        # 在线程池运行 agent（不阻塞 event loop）
         loop = asyncio.get_event_loop()
+
         def _do_run():
-            result = agent.run_conversation(text, conversation_history=None)
+            result = agent.run_conversation(text, conversation_history=history if history else None)
             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
-        
+
         result_text = await asyncio.wait_for(
             loop.run_in_executor(None, _do_run),
-            timeout=120  # 微信场景 2 分钟超时
+            timeout=120
         )
         if result_text and result_text.strip():
-            # 截断过长回复（微信限制约 2000 字符）
             if len(result_text) > 1800:
                 result_text = result_text[:1800] + "..."
-            import aiohttp, uuid
+
+            # 把 Agent 回复追加到会话
+            agent_msg = {
+                "role": "assistant", "text": result_text.strip(),
+                "time": time.strftime("%H:%M:%S"), "source": "weixin-agent",
+            }
+            session["messages"].append(agent_msg)
+            if len(session["messages"]) > 200:
+                session["messages"] = session["messages"][-200:]
+
+            # 发送到微信
+            import aiohttp as _aiohttp
             client_id = str(uuid.uuid4()).replace("-", "")[:16]
-            async with aiohttp.ClientSession() as session:
+            async with _aiohttp.ClientSession() as http_session:
                 await _send_message(
-                    session,
+                    http_session,
                     base_url=_weixin_state["base_url"],
                     token=_weixin_state["token"],
                     to=sender_id,
@@ -2086,7 +2202,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                     context_token=context_token,
                     client_id=client_id,
                 )
-            # 记录到消息存储
+            # 记录到微信消息存储（供前端面板）
             wx_msg = {
                 "id": str(int(time.time() * 1000)),
                 "sender_id": _weixin_state["account_id"],
@@ -2099,11 +2215,26 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             _weixin_msg_store.append(wx_msg)
             if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
                 _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+
+            # WebSocket 推送消息更新
+            from_msg = {
+                "type": "weixin_message",
+                "message": wx_msg,
+            }
+            dead = set()
+            for ws_client in list(_WEIXIN_WS_CLIENTS):
+                try:
+                    await ws_client.send_text(json.dumps(from_msg, ensure_ascii=False))
+                except Exception:
+                    dead.add(ws_client)
+            _WEIXIN_WS_CLIENTS -= dead
+
             print(f"[MemOmics] 微信Agent回复 sent to={sender_name}: {result_text[:80]}...", flush=True)
     except asyncio.TimeoutError:
         print(f"[MemOmics] 微信Agent超时 {sender_name}", flush=True)
     except Exception as e:
         print(f"[MemOmics] 微信Agent异常: {e}", flush=True)
+
 
 
 async def _weixin_poll_loop():
