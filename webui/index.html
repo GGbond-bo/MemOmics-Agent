@@ -339,6 +339,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .ctx-refresh.spinning .ctx-refresh-icon { animation:spin 0.6s linear infinite; }
 .ctx-empty { text-align:center; padding:40px 20px; color:var(--text-light); font-size:13px; }
 .ctx-empty .ctx-empty-icon { font-size:40px; margin-bottom:10px; opacity:0.6; }
+  /* WeChat messages */
+  .wx-msg { margin:4px 0; padding:6px 10px; border-radius:8px; font-size:13px; max-width:90%; }
+  .wx-msg-in { background:var(--panel); border:1px solid var(--border); margin-right:auto; }
+  .wx-msg-out { background:rgba(21,101,192,0.1); border:1px solid rgba(21,101,192,0.2); margin-left:auto; text-align:right; }
+  .wx-msg-sender { font-size:11px; color:var(--text-light); margin-bottom:2px; }
+  .wx-msg-time { font-size:10px; color:var(--text-light); }
+  .wx-msg-text { line-height:1.5; word-break:break-word; }
+  .wx-empty { text-align:center; padding:40px 20px; color:var(--text-light); }
 </style>
 </head>
 <body>
@@ -363,6 +371,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings">⚙️ 设置</div>
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
+      <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin">💬 微信消息</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
@@ -657,6 +666,32 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       </div>
     </div>
 
+    <!-- === 微信消息面板 === -->
+    <div id="panel-weixin" style="display:none;">
+      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>💬 微信消息</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-light);">
+            <input type="checkbox" id="weixin-agent-toggle" onchange="toggleWeixinAgent()" style="margin:0;"> Agent 自动回复
+          </label>
+          <button onclick="weixinRefresh()" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;font-size:11px;color:var(--text);">🔄 刷新</button>
+        </div>
+      </div>
+      <div id="weixin-msg-list" style="max-height:calc(100vh - 180px);overflow-y:auto;padding:8px;">
+        <div class="wx-empty" id="weixin-empty">
+          <div class="ctx-empty-icon">💬</div>
+          <div>微信消息将在这里显示</div>
+          <div style="font-size:11px;margin-top:4px;">先在设置页连接微信</div>
+        </div>
+      </div>
+      <div id="weixin-reply-box" style="display:none;padding:8px;border-top:1px solid var(--border);">
+        <div style="display:flex;gap:6px;">
+          <input id="weixin-reply-input" type="text" placeholder="输入回复..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);" onkeydown="if(event.key==='Enter')weixinSendReply()">
+          <button onclick="weixinSendReply()" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">发送</button>
+        </div>
+      </div>
+    </div>
+
 <script>
 // === 全局状态 ===
 let ws = null;
@@ -689,7 +724,7 @@ let _currentRunningSid = null;   // 当前正在运行的会话 ID
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -701,6 +736,12 @@ function setStatus(text, color) {
 
 // === 消息处理 ===
 function handleMessage(msg) {
+
+  // === 微信消息分发 ===
+  if (msg.type === 'weixin_message' || msg.type === 'weixin_list' || msg.type === 'weixin_status') {
+    handleWeixinMessage(msg);
+    return;
+  }
   // === 后端告知真正的 session_id（必须在分流之前处理！） ===
   // 首次发消息时 currentSid 是 null，后端返回 {type:"session", session_id:"memomics-xxx"}
   // 如果不在这里先设置 currentSid，后续所有消息都会被分流拦截
@@ -1636,8 +1677,8 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
-  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context' };
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context'];
+  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', weixin: 'panel-weixin' };
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
@@ -1645,7 +1686,7 @@ function switchView(view) {
   // 显示对应右侧面板
   var panelId = panelMap[view];
   if (panelId) {
-    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context'].forEach(function(p) {
+    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-weixin'].forEach(function(p) {
       document.getElementById(p).style.display = 'none';
     });
   }
@@ -1659,6 +1700,7 @@ function switchView(view) {
   if (view === 'settings') loadSettings();
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
+  if (view === 'weixin') weixinRefresh();
 }
 
 // === 模型管理 ===
@@ -1991,6 +2033,90 @@ function updateWeixinUI(connected, accountId) {
   document.getElementById('weixin-connect-btn').disabled = false;
   document.getElementById('weixin-disconnect-btn').style.display = connected ? '' : 'none';
   document.getElementById('weixin-test-btn').style.display = connected ? '' : 'none';
+}
+
+// === 微信消息面板 ===
+var _weixinAgentEnabled = false;
+var _weixinLastSenderId = '';
+var _weixinMsgSeen = {};
+
+function toggleWeixinAgent() {
+  _weixinAgentEnabled = document.getElementById('weixin-agent-toggle').checked;
+}
+
+function weixinRefresh() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'weixin_list' }));
+}
+
+function renderWeixinMessages(messages) {
+  var list = document.getElementById('weixin-msg-list');
+  var empty = document.getElementById('weixin-empty');
+  if (!messages || !messages.length) {
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  var html = '';
+  for (var i = 0; i < messages.length; i++) {
+    var m = messages[i];
+    var mid = m.id;
+    if (_weixinMsgSeen[mid]) continue;
+    _weixinMsgSeen[mid] = true;
+    var isOut = m.direction === 'out';
+    var timeStr = new Date(m.ts * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    var sender = isOut ? '我' : (m.sender_name || m.sender_id || '未知');
+    html += '<div class="wx-msg ' + (isOut ? 'wx-msg-out' : 'wx-msg-in') + '">' +
+      '<div class="wx-msg-sender">' + escapeHtml(sender) + ' <span class="wx-msg-time">' + timeStr + '</span></div>' +
+      '<div class="wx-msg-text">' + escapeHtml(m.text) + '</div></div>';
+    if (!isOut && m.sender_id) _weixinLastSenderId = m.sender_id;
+  }
+  if (html) {
+    list.insertAdjacentHTML('beforeend', html);
+    list.scrollTop = list.scrollHeight;
+  }
+  var replyBox = document.getElementById('weixin-reply-box');
+  if (_weixinLastSenderId && _weixinStateConnected()) {
+    replyBox.style.display = '';
+  }
+}
+
+function _weixinStateConnected() {
+  var status = document.getElementById('weixin-status');
+  return status && status.textContent.startsWith('已连接');
+}
+
+async function weixinSendReply() {
+  var input = document.getElementById('weixin-reply-input');
+  var text = input.value.trim();
+  if (!text) return;
+  if (!_weixinLastSenderId) { alert('没有可回复的联系人'); return; }
+  input.value = '';
+  input.disabled = true;
+  try {
+    var r = await fetch('/api/weixin/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: _weixinLastSenderId, text: text })
+    });
+    var d = await r.json();
+    if (!d.ok) { alert('发送失败: ' + (d.error || '')); }
+  } catch(e) { alert('发送失败: ' + e); }
+  input.disabled = false;
+  input.focus();
+}
+
+function handleWeixinMessage(msg) {
+  if (msg.type === 'weixin_message') {
+    renderWeixinMessages([msg.message]);
+  } else if (msg.type === 'weixin_list') {
+    _weixinMsgSeen = {};
+    var list = document.getElementById('weixin-msg-list');
+    list.innerHTML = '<div class="wx-empty" id="weixin-empty"><div class="ctx-empty-icon">💬</div><div>微信消息将在这里显示</div></div>';
+    renderWeixinMessages(msg.messages);
+  } else if (msg.type === 'weixin_status') {
+    updateWeixinUI(msg.connected, msg.account_id);
+  }
 }
 
 async function checkWeixinStatus() {

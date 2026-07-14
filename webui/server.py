@@ -1950,6 +1950,7 @@ async def weixin_qr_poll():
                     _weixin_state["qrcode_token"] = ""
                     _weixin_state["chat_id"] = user_id or account_id  # 优先用用户微信ID
                     _save_weixin_persist()
+                    _start_weixin_poll()  # 启动消息轮询
                     return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
                 elif status == "expired":
                     _weixin_state["qr_login_in_progress"] = False
@@ -1979,6 +1980,7 @@ async def weixin_disconnect():
     _weixin_state["qr_login_in_progress"] = False
     _weixin_state["qrcode_token"] = ""
     _weixin_state["last_error"] = ""
+    _stop_weixin_poll()  # 停止消息轮询
     _save_weixin_persist()
     return {"ok": True}
 
@@ -2006,7 +2008,221 @@ async def _send_weixin_progress(message: str) -> bool:
         return False
 
 
-# --- 文件浏览 ---
+# --- 微信双向消息轮询 ---
+
+_weixin_msg_store = []       # 最近消息列表（供前端拉取和 WS 推送）
+_weixin_seen_ids = set()     # 已处理消息 ID 去重
+_weixin_sync_buf = ""        # iLink 增量轮询 sync_buf
+_weixin_poll_task = None     # 后台轮询 asyncio.Task
+_MAX_WEIXIN_MSGS = 200
+
+_WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
+
+
+def _extract_text_from_weixin_msg(msg: dict) -> str:
+    """从 iLink 消息格式中提取纯文本"""
+    text_parts = []
+    item_list = msg.get("item_list", [])
+    if not item_list and msg.get("msg_text"):
+        return str(msg["msg_text"])
+    for item in item_list:
+        if item.get("type") == 1:  # ITEM_TEXT
+            text_item = item.get("text_item", {})
+            text = text_item.get("text", "")
+            if text:
+                text_parts.append(text)
+    return "".join(text_parts)
+
+
+async def _weixin_poll_loop():
+    """后台轮询微信消息，推送到 WebSocket 前端"""
+    global _weixin_sync_buf
+    import aiohttp
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent'))
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent', 'gateway'))
+    from platforms.weixin import _get_updates, _send_message
+    poll_interval = 3
+    if _weixin_state["qr_login_in_progress"]:
+        poll_interval = 1  # QR 登录期间加速轮询
+
+    while _weixin_state["connected"] or _weixin_state["qr_login_in_progress"]:
+        try:
+            # 如果有活跃的 QR 登录，先处理它
+            if _weixin_state["qr_login_in_progress"] and _weixin_state["qrcode_token"]:
+                # QR 登录期间只轮询状态，不获取消息
+                await asyncio.sleep(poll_interval)
+                continue
+
+            if not _weixin_state["connected"] or not _weixin_state["token"]:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            token = _weixin_state["token"]
+            base_url = _weixin_state["base_url"]
+            account_id = _weixin_state["account_id"]
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    result = await _get_updates(
+                        session,
+                        base_url=base_url,
+                        token=token,
+                        sync_buf=_weixin_sync_buf,
+                        timeout_ms=15000,
+                    )
+            except Exception as e:
+                if "Token验证失败" in str(e) or "token" in str(e).lower():
+                    _weixin_state["connected"] = False
+                    _weixin_state["token"] = ""
+                    _save_weixin_persist()
+                    print(f"[MemOmics] 微信 token 失效，已断开", flush=True)
+                else:
+                    print(f"[MemOmics] 微信轮询错误: {e}", flush=True)
+                await asyncio.sleep(poll_interval)
+                continue
+
+            if result.get("ret") == 0:
+                new_sync_buf = result.get("get_updates_buf", "")
+                if new_sync_buf:
+                    _weixin_sync_buf = new_sync_buf
+                msgs = result.get("msgs") or []
+                for msg in msgs:
+                    msg_id = msg.get("message_id") or msg.get("msg_id") or ""
+                    if msg_id and msg_id in _weixin_seen_ids:
+                        continue
+                    if msg_id:
+                        _weixin_seen_ids.add(msg_id)
+                        # 限制去重集合大小
+                        if len(_weixin_seen_ids) > 5000:
+                            _weixin_seen_ids = set(list(_weixin_seen_ids)[-2000:])
+
+                    sender_id = msg.get("from_user_id") or msg.get("from") or ""
+                    sender_name = msg.get("from_user_name") or msg.get("sender_name") or sender_id
+                    text = _extract_text_from_weixin_msg(msg)
+                    context_token = msg.get("context_token") or ""
+                    if not text and not msg.get("item_list"):
+                        continue  # 跳过空消息（如图片、系统通知等）
+
+                    ts = msg.get("create_time") or msg.get("msg_create_time") or int(time.time())
+                    wx_msg = {
+                        "id": msg_id or str(int(time.time() * 1000)),
+                        "sender_id": sender_id,
+                        "sender_name": sender_name[:60] if sender_name else "",
+                        "text": text,
+                        "context_token": context_token,
+                        "ts": int(ts) if isinstance(ts, (int, float)) else int(time.time()),
+                        "direction": "in",
+                    }
+                    _weixin_msg_store.append(wx_msg)
+                    if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
+                        _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+
+                    # 推送到已订阅 WebSocket 客户端
+                    ws_event = json.dumps({"type": "weixin_message", "message": wx_msg})
+                    dead = set()
+                    for ws in list(_WEIXIN_WS_CLIENTS):
+                        try:
+                            await ws.send_text(ws_event)
+                        except Exception:
+                            dead.add(ws)
+                    _WEIXIN_WS_CLIENTS -= dead
+
+                    print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[MemOmics] 微信轮询异常: {e}", flush=True)
+
+        await asyncio.sleep(poll_interval)
+
+    print("[MemOmics] 微信轮询已停止", flush=True)
+
+
+def _start_weixin_poll():
+    """启动微信消息轮询后台任务"""
+    global _weixin_poll_task
+    if _weixin_poll_task is None or _weixin_poll_task.done():
+        _weixin_poll_task = asyncio.create_task(_weixin_poll_loop())
+        print("[MemOmics] 微信消息轮询已启动", flush=True)
+
+
+def _stop_weixin_poll():
+    """停止微信消息轮询"""
+    global _weixin_poll_task
+    if _weixin_poll_task and not _weixin_poll_task.done():
+        _weixin_poll_task.cancel()
+        _weixin_poll_task = None
+        print("[MemOmics] 微信消息轮询已停止", flush=True)
+
+
+@app.get("/api/weixin/messages")
+async def weixin_messages(since: str = ""):
+    """获取微信消息列表"""
+    if since:
+        # 返回 after 指定 ID 的新消息
+        found = False
+        result = []
+        for m in _weixin_msg_store:
+            if found:
+                result.append(m)
+            if m["id"] == since:
+                found = True
+        return {"messages": result}
+    return {"messages": _weixin_msg_store[-50:]}  # 最近 50 条
+
+
+@app.post("/api/weixin/send")
+async def weixin_send(body: dict = None):
+    """向微信用户发送/回复消息"""
+    if not body:
+        return JSONResponse({"ok": False, "error": "请求体为空"}, status_code=400)
+    if not _weixin_state["connected"] or not _weixin_state["token"]:
+        return {"ok": False, "error": "微信未连接"}
+
+    to_user = body.get("to", "") or body.get("sender_id", "") or _weixin_state.get("chat_id") or _weixin_state["account_id"]
+    text = body.get("text", "").strip()
+    if not text:
+        return {"ok": False, "error": "消息不能为空"}
+    context_token = body.get("context_token") or None
+
+    import aiohttp, uuid, sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent'))
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent', 'gateway'))
+    from platforms.weixin import _send_message
+    try:
+        client_id = str(uuid.uuid4()).replace("-", "")[:16]
+        async with aiohttp.ClientSession() as session:
+            result = await _send_message(
+                session,
+                base_url=_weixin_state["base_url"],
+                token=_weixin_state["token"],
+                to=to_user,
+                text=text,
+                context_token=context_token,
+                client_id=client_id,
+            )
+        if result.get("ret") == 0 or result.get("errcode") == 0:
+            # 记录到消息存储
+            wx_msg = {
+                "id": str(int(time.time() * 1000)),
+                "sender_id": _weixin_state["account_id"],
+                "sender_name": "我",
+                "text": text,
+                "context_token": context_token or "",
+                "ts": int(time.time()),
+                "direction": "out",
+            }
+            _weixin_msg_store.append(wx_msg)
+            if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
+                _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+            return {"ok": True}
+        else:
+            errmsg = result.get("msg") or result.get("errmsg") or f"ret={result.get('ret')}"
+            return {"ok": False, "error": errmsg}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/files")
 async def list_files(path: str = ""):
@@ -2821,6 +3037,26 @@ async def ws_endpoint(ws: WebSocket):
 
             # --- 消息类型 ---
             msg_type = msg.get("type", "chat")
+
+            # 微信订阅/列表不涉及 MemOmics 会话
+            if msg_type == "weixin_subscribe":
+                _WEIXIN_WS_CLIENTS.add(ws)
+                await ws.send_text(json.dumps({
+                    "type": "weixin_status",
+                    "connected": _weixin_state["connected"],
+                    "account_id": _weixin_state["account_id"][:16] + "..." if _weixin_state["account_id"] else "",
+                }, ensure_ascii=False))
+                continue
+            if msg_type == "weixin_unsubscribe":
+                _WEIXIN_WS_CLIENTS.discard(ws)
+                continue
+            if msg_type == "weixin_list":
+                await ws.send_text(json.dumps({
+                    "type": "weixin_list",
+                    "messages": _weixin_msg_store[-50:],
+                }, ensure_ascii=False))
+                continue
+
             sid = msg.get("session_id")
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
             session = _get_or_create_session(sid)
