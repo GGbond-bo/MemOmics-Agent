@@ -1383,6 +1383,8 @@ function renderMermaidNode(el) {
   }
   if (!code.trim()) { el.removeAttribute('data-mermaid'); return; }
   var mid = el.getAttribute('data-mermaid') || 'mm' + (mermaidIdx++);
+  // 确保 ID 不以数字开头（CSS querySelector 不支持 '#123-svg' 这样的选择器）
+  if (/^[0-9]/.test(mid)) mid = 'm' + mid;
   mermaid.render(mid + '-svg', code).then(function(result) {
     el.innerHTML = result.svg;
     el.removeAttribute('data-mermaid');
