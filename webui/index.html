@@ -2042,6 +2042,9 @@ var _weixinMsgSeen = {};
 
 function toggleWeixinAgent() {
   _weixinAgentEnabled = document.getElementById('weixin-agent-toggle').checked;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'weixin_agent_toggle', enabled: _weixinAgentEnabled }));
+  }
 }
 
 function weixinRefresh() {

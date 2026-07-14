@@ -2017,6 +2017,7 @@ _weixin_poll_task = None     # 后台轮询 asyncio.Task
 _MAX_WEIXIN_MSGS = 200
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
+_weixin_agent_enabled = False     # Agent 自动回复开关
 
 
 def _extract_text_from_weixin_msg(msg: dict) -> str:
@@ -2032,6 +2033,77 @@ def _extract_text_from_weixin_msg(msg: dict) -> str:
             if text:
                 text_parts.append(text)
     return "".join(text_parts)
+
+
+async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: str, context_token: str):
+    """用 MemOmics Agent 处理微信消息并自动回复"""
+    import sys as _sys_agent, os as _os_agent
+    _hermes_root = _os_agent.path.join(_os_agent.path.dirname(__file__), '..', 'hermes-agent')
+    _sys_agent.path.insert(0, _hermes_root)
+    _sys_agent.path.insert(0, _os_agent.path.join(_hermes_root, 'gateway'))
+    from run_agent import AIAgent
+    from platforms.weixin import _send_message
+    
+    try:
+        # 用 run_agent 的方式创建 agent
+        _model_cfg = _current_model if _current_model else {
+            "provider": "openai", "model": "gpt-4o", "base_url": "https://api.openai.com/v1",
+            "api_key": os.environ.get("OPENAI_API_KEY", "")
+        }
+        agent = AIAgent(
+            base_url=_model_cfg.get("base_url", ""),
+            api_key=_model_cfg.get("api_key", ""),
+            provider=_model_cfg.get("provider", "openai"),
+            model=_model_cfg.get("model", "gpt-4o"),
+            hermes_home=_hermes_root.replace('/gateway', '').replace('\\gateway', ''),
+            tools=[],
+            skills_index=None,
+            system_prompt=f"用户正在通过微信与 MemOmics 对话。请用简洁友好的方式回答，不超过500字。",
+        )
+        # 在线程池运行 agent（不阻塞 event loop）
+        loop = asyncio.get_event_loop()
+        def _do_run():
+            result = agent.run_conversation(text, conversation_history=None)
+            return result.get("final_response") or "" if isinstance(result, dict) else str(result)
+        
+        result_text = await asyncio.wait_for(
+            loop.run_in_executor(None, _do_run),
+            timeout=120  # 微信场景 2 分钟超时
+        )
+        if result_text and result_text.strip():
+            # 截断过长回复（微信限制约 2000 字符）
+            if len(result_text) > 1800:
+                result_text = result_text[:1800] + "..."
+            import aiohttp, uuid
+            client_id = str(uuid.uuid4()).replace("-", "")[:16]
+            async with aiohttp.ClientSession() as session:
+                await _send_message(
+                    session,
+                    base_url=_weixin_state["base_url"],
+                    token=_weixin_state["token"],
+                    to=sender_id,
+                    text=result_text.strip(),
+                    context_token=context_token,
+                    client_id=client_id,
+                )
+            # 记录到消息存储
+            wx_msg = {
+                "id": str(int(time.time() * 1000)),
+                "sender_id": _weixin_state["account_id"],
+                "sender_name": "Agent",
+                "text": result_text.strip(),
+                "context_token": "",
+                "ts": int(time.time()),
+                "direction": "out",
+            }
+            _weixin_msg_store.append(wx_msg)
+            if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
+                _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+            print(f"[MemOmics] 微信Agent回复 sent to={sender_name}: {result_text[:80]}...", flush=True)
+    except asyncio.TimeoutError:
+        print(f"[MemOmics] 微信Agent超时 {sender_name}", flush=True)
+    except Exception as e:
+        print(f"[MemOmics] 微信Agent异常: {e}", flush=True)
 
 
 async def _weixin_poll_loop():
@@ -2129,6 +2201,12 @@ async def _weixin_poll_loop():
                     _WEIXIN_WS_CLIENTS -= dead
 
                     print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
+
+                    # Agent 自动回复
+                    if _weixin_agent_enabled and text.strip():
+                        asyncio.create_task(_process_weixin_agent_reply(
+                            sender_id, sender_name, text, context_token
+                        ))
 
         except asyncio.CancelledError:
             break
@@ -3049,6 +3127,11 @@ async def ws_endpoint(ws: WebSocket):
                 continue
             if msg_type == "weixin_unsubscribe":
                 _WEIXIN_WS_CLIENTS.discard(ws)
+                continue
+            if msg_type == "weixin_agent_toggle":
+                global _weixin_agent_enabled
+                _weixin_agent_enabled = msg.get("enabled", False)
+                print(f"[MemOmics] 微信Agent自动回复: {'开启' if _weixin_agent_enabled else '关闭'}", flush=True)
                 continue
             if msg_type == "weixin_list":
                 await ws.send_text(json.dumps({
