@@ -50,11 +50,24 @@
       "date": "2026-07-04",
       "score": 8.0,
       "result": "566 enriched terms total (Old↑ 267, Old↓ 299). 10 figures generated. 10 cell types each with up/down enrichment"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "clusterProfiler ORA, GO-BP+KEGG, p<0.05, up(405 genes/LFC>0.5) down(2043/LFC<-0.5)",
+      "date": "2026-07-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GO-BP: Up=41 terms(ECM组织/肌肉发育), Down=131 terms(氧化磷酸化/ATP合成/电子传递链)。KEGG: Up=12, Down=31。3张图。"
     }
   ],
-  "proven_script": "functional_enrichment.R",
+  "proven_script": "",
   "error_count": 0,
-  "success_count": 1,
+  "success_count": 2,
   "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
   "doc_source": "official",
   "prerequisites": {
@@ -62,5 +75,8 @@
       "deg-analysis"
     ],
     "description": "需要DEG结果"
+  },
+  "user_prefs": {
+    "last_used_script": ""
   }
 }

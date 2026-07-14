@@ -122,11 +122,24 @@
       "approved": true,
       "custom_script": false,
       "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "DESeq2 ~subcluster+age_group, padj<0.05, 143 pseudobulk samples (110 Old, 33 Young), LFC shrinkage not applied (apeglm unavailable)",
+      "date": "2026-07-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "3,864 DEGs Old vs Young: PPARGC1A↓, MT-ND5↓, HK2↓ (线粒体+代谢崩溃), MCU↑ (代偿)。Wilcoxon zone5验证2,615 DEGs。3张图。注: 未控制donor随机效应"
     }
   ],
-  "proven_script": "run_deg.R",
+  "proven_script": "",
   "error_count": 3,
-  "success_count": 4,
+  "success_count": 5,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -136,7 +149,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": "run_deg.R"
+    "last_used_script": ""
   },
   "errors": [
     {

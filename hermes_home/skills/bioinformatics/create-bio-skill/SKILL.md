@@ -600,6 +600,22 @@ results/<模块>/<方法>/
 | 物种/组织/方向 | 从 update_results_dir 获取，用于文献搜索 |
 | 测序类型 | RNA/ATAC/spatial/bulk，决定 skill 的 category |
 
+## 📦 R 包安装规则：GitHub 包统一用 `pak`
+
+> 🆕 2026-07-14: 用户明确要求 R GitHub 包安装优先使用 `pak::pak()`。
+> `pak` 已在系统预装 (v0.9.4)，比 `remotes::install_github()` 更快更稳，使用不同的 GitHub API 策略可绕过某些网络限制。
+
+**规则**：所有 GitHub R 包安装必须使用：
+```r
+pak::pak("user/repo")           # 替代 remotes::install_github("user/repo")
+pak::pak("user/repo@branch")    # 指定分支
+pak::pak("user/repo@v1.0")      # 指定版本
+```
+
+**禁止**使用 `remotes::install_github()`（除非 pak 不可用）。
+
+**创建的新 R skill** 的 `prerequisites` 部分和安装指令中必须使用 `pak::pak()` 语法。
+
 ## Common Issues
 
 1. **web_search 搜不到官方文档** → 尝试搜 GitHub 仓库 + Bioconductor/CRAN/PyPI 页面
@@ -618,3 +634,4 @@ results/<模块>/<方法>/
 
 - BioMinI skill 格式规范（基于 275 个现有 skill）
 - MemOmics 强制规则 v2.0（7 条规则 + 强化版审查）
+- `references/cuttag-analysis-tools.md` — CUT&Tag 生信工具链文献调研 (2026-07-14)，供未来创建 CUT&Tag skill 使用

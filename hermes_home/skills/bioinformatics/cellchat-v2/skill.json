@@ -77,11 +77,24 @@
       "date": "2026-07-04",
       "score": 8.0,
       "result": "Young: 9 interactions, 21 pathways. Old: 9 interactions, 24 pathways. 12 figures generated (chord+heatmap+bubble per group)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "min.pct=0.1, trim=0.1, type=truncatedMean, population.size=FALSE+TRUE compared, 7 subclusters, 39 pathways, LAMININ/COLLAGEN/TGFb/NRG/NCAM key",
+      "date": "2026-07-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CellChat v2完成: 11630 cells, 7 subclusters, 39通路。标志基因验证排除FAP污染。发现ECM重塑(COL1A1/LAMININ)、NMJ信号(NRG/NCAM)、TGFb纤维化、WNT/FGF肌源性。population.size归一化后zone1主导(去神经化)。14/15通路跨参数一致。19张图。"
     }
   ],
-  "proven_script": "cellchat_analysis.R",
+  "proven_script": "",
   "error_count": 0,
-  "success_count": 1,
+  "success_count": 2,
   "official_docs": "https://raw.githubusercontent.com/sqjin/CellChat/refs/heads/master/README.md",
   "doc_source": "official",
   "prerequisites": {
@@ -89,5 +102,8 @@
       "scrna-clustering"
     ],
     "description": "需要已聚类/注释的数据"
+  },
+  "user_prefs": {
+    "last_used_script": ""
   }
 }

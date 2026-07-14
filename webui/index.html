@@ -157,8 +157,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .status-notice { padding:6px 12px; background:var(--primary-light); border-radius:6px; margin:4px 0; font-size:12px; color:var(--primary); }
 
 /* Mermaid 图表 */
-.mermaid { margin:12px 0; padding:12px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
+/* Mermaid 图表 */
+.mermaid { margin:12px 0; padding:16px; background:#fafafa; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
 .mermaid svg { max-width:100%; height:auto; }
+.mermaid-error { margin:12px 0; padding:16px; background:#fff5f5; border:1px solid #ffcdd2; border-radius:8px; color:#c62828; font-size:13px; white-space:pre-wrap; }
+.mermaid-error pre { margin:8px 0 0 0; padding:8px; background:#fff; border-radius:4px; overflow-x:auto; font-size:12px; color:#333; white-space:pre-wrap; }
 
 /* 输入区 */
 .chat-input { padding:12px 20px; border-top:1px solid var(--border); }
@@ -663,6 +666,7 @@ let currentBubble = null;
 let fullText = '';
 let reasoningText = '';
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
+var mermaidIdx = 0;  // Mermaid 渲染计数器
 
 // 欢迎问候语 (学 hermes intro-copy 风格)
 const _introLines = [
@@ -992,7 +996,8 @@ function addAssistantMsg(text) {
   text = text || '';
   var div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = '<div class="role">🧬 MemOmics</div><div class="bubble">' + renderMarkdown(text) + '</div>'; initMermaid();
+  div.innerHTML = '<div class="role">🧬 MemOmics</div><div class="bubble">' + renderMarkdown(text) + '</div>';
+  initMermaid();
   document.getElementById('messages').appendChild(div);
   scrollBottom();
   return div;
@@ -1271,6 +1276,9 @@ function renderMarkdown(text) {
   if (!text) return '';
   // 长文本截断：防止正则回溯卡死整页
   if (text.length > 15000) text = text.substring(0, 15000) + '\n\n...';
+  // 统一换行符：CRLF (\r\n) / 单独 \r → \n
+  // 否则后续正则用 \n 匹配时，Windows 风格的 LLM 输出会全部失配
+  text = text.replace(/\r\n?/g, '\n');
   // Mermaid 块优先提取（在 escapeHtml 之前，保留原始语法）
   var mermaidBlocks = [];
   var tickCount = (text.match(/```/g) || []).length;
@@ -1304,87 +1312,88 @@ function renderMarkdown(text) {
     return '<table><tr>' + tds + '</tr></table>';
   });
   html = html.replace(/<\/table>\n<table>/g, '');
-  // 恢复 Mermaid 块 → <div class="mermaid">，标记需要渲染
+  // 先把 \n → <br>（此时 Mermaid/CODE 块仍是占位符，不受影响）
+  html = html.replace(/\n/g, '<br>');
+  // 恢复 Mermaid 块 → 占位 div，随后 initMermaid 异步渲染
   html = html.replace(/\x00MERMAID(\d+)\x00/g, function(m, idx) {
-    window._hasMermaid = true;
-    return '<div class="mermaid">' + mermaidBlocks[parseInt(idx)] + '</div>';
+    return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(mermaidBlocks[parseInt(idx)]) + '</div>';
   });
-  // 恢复代码块
+  // 恢复代码块（<pre> 保留原始 \n，正常显示换行）
   html = html.replace(/\x00CODE(\d+)\x00/g, function(m, idx) {
     return blocks[parseInt(idx)] || '';
   });
-  html = html.replace(/\n/g, '<br>');
   return html;
 }
 
-// Mermaid 懒加载 + 渲染
-var _mermaidLoaded = false;
+// === Mermaid 图表渲染（懒加载 CDN → mermaid.render() API） ===
 var _mermaidLoading = false;
+var _mermaidLoaded = false;
+var _mermaidQueue = [];
+
 function initMermaid() {
-  if (!window._hasMermaid) return;
-  window._hasMermaid = false;
+  var els = document.querySelectorAll('.mermaid[data-mermaid]');
+  if (els.length === 0) return;
+  // 收集待渲染的节点
+  var pending = [];
+  for (var i = 0; i < els.length; i++) {
+    if (els[i].querySelector('svg')) continue; // 已渲染
+    pending.push(els[i]);
+  }
+  if (pending.length === 0) return;
+  // 如果 Mermaid 已经加载，直接渲染
   if (_mermaidLoaded) {
-    _safeMermaidRun();
+    for (var pi = 0; pi < pending.length; pi++) renderMermaidNode(pending[pi]);
     return;
   }
+  // 加入等待队列
+  for (var pj = 0; pj < pending.length; pj++) _mermaidQueue.push(pending[pj]);
+  // 如果正在加载，等待回调
   if (_mermaidLoading) return;
+  // 开始加载 Mermaid CDN
   _mermaidLoading = true;
   var script = document.createElement('script');
-  script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js';
   script.onload = function() {
     mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
     _mermaidLoaded = true;
     _mermaidLoading = false;
-    _safeMermaidRun();
+    // 批量渲染所有排队的节点
+    var queue = _mermaidQueue.slice();
+    _mermaidQueue = [];
+    for (var qi = 0; qi < queue.length; qi++) renderMermaidNode(queue[qi]);
   };
   script.onerror = function() {
     _mermaidLoading = false;
-    var els = document.querySelectorAll('.mermaid');
-    for (var i = 0; i < els.length; i++) { els[i].innerHTML = '<pre><code>' + escapeHtml(els[i].textContent) + '</code></pre>'; }
+    _mermaidQueue = [];
+    for (var ei = 0; ei < pending.length; ei++) {
+      var el = pending[ei];
+      el.className = 'mermaid-error';
+      el.innerHTML = '⚠ Mermaid CDN 加载失败，请检查网络连接';
+    }
   };
   document.head.appendChild(script);
 }
 
-function _safeMermaidRun() {
-  var els = document.querySelectorAll('.mermaid');
-  for (var i = 0; i < els.length; i++) {
-    var el = els[i];
-    if (el.querySelector('svg')) continue;
-    var code = el.textContent || '';
-    var self = el;
-
-    // 归一化 LLM 常见错误:
-    // 1. 字面量 \n → 真正换行（LLM 常把多行标签挤成单行）
-    // 2. 4 空格缩进 → 换行（LLM 可能把整段 Mermaid 压成一行）
-    code = code.replace(/\\n/g, '\n').replace(/    /g, '\n    ');
-    self.textContent = code;
-
-    mermaid.parse(code).then(function() {
-      mermaid.run({ nodes: [self] }).catch(function() {});
-    }).catch(function(e) {
-      // 括号 () 在未引号标签 → 自动包双引号
-      var fixed = code
-        .replace(/\[([^\[\]"\n]*\([^\[\]"\n]*\)[^\[\]"\n]*)\]/g, '["$1"]')
-        .replace(/\{([^{}"\n]*\([^{}"\n]*\)[^{}"\n]*)\}/g, '{"$1"}');
-      if (fixed !== code) {
-        self.textContent = fixed;
-        mermaid.parse(fixed).then(function() {
-          mermaid.run({ nodes: [self] }).catch(function() {});
-        }).catch(function(e2) {
-          self.innerHTML = '<div style="color:#c62828;font-size:11px;">'
-            + '⚠ Mermaid 语法错误: ' + (e2.message || e2).toString().substring(0, 80) + '</div>'
-            + '<div style="color:#666;font-size:10px;">💡 括号 () 未用双引号包裹</div>'
-            + '<pre style="background:#fff5f5;padding:8px;font-size:11px;"><code>'
-            + escapeHtml(fixed) + '</code></pre>';
-        });
-      } else {
-        self.innerHTML = '<div style="color:#c62828;font-size:11px;">'
-          + '⚠ Mermaid 语法错误: ' + (e.message || e).toString().substring(0, 80) + '</div>'
-          + '<pre style="background:#fff5f5;padding:8px;font-size:11px;"><code>'
-          + escapeHtml(code) + '</code></pre>';
-      }
-    });
+function renderMermaidNode(el) {
+  var code;
+  try {
+    code = el.textContent || '';
+  } catch(e) {
+    code = el.innerText || '';
   }
+  if (!code.trim()) { el.removeAttribute('data-mermaid'); return; }
+  var mid = el.getAttribute('data-mermaid') || 'mm' + (mermaidIdx++);
+  mermaid.render(mid + '-svg', code).then(function(result) {
+    el.innerHTML = result.svg;
+    el.removeAttribute('data-mermaid');
+  }).catch(function(err) {
+    el.className = 'mermaid-error';
+    var msg = err.message || String(err);
+    // 截取错误信息的前 200 字符
+    if (msg.length > 200) msg = msg.substring(0, 200) + '...';
+    el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>';
+    el.removeAttribute('data-mermaid');
+  });
 }
 
 // === 会话管理 ===

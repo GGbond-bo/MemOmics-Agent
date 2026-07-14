@@ -311,7 +311,21 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 - **research-plan → 分析 skill**：根据选定的模块自动触发对应的分析 skill（如 `scrna-clustering`、`deg-analysis`、`cellchat-v2`）
 - **与 SOUL.md 铁律联动**：`rail_review(pre)` 检查实际执行是否符合方案，偏差 >1 步 → 警告
 
+### 🔄 Mermaid 失败兜底：HTML 技术路线图
+
+**触发条件：** Mermaid 图渲染失败 ≥2 次（Syntax error / 空白 / 用户说"图没出来"/"重新生成"≥3 次）
+
+**立即执行的兜底动作：**
+1. **停止尝试修复 Mermaid** — 即使语法完全正确，Mermaid 11.x 在某些环境下也不稳定
+2. **改用 HTML 文件交付技术路线图** — 使用 `templates/tech-roadmap-html.html` 模板
+3. **HTML 优势**：自包含、无渲染依赖、支持复杂表格+流程图+Panel 布局+颜色编码
+4. **写文件后提示用户直接打开**：浏览器打开 `file:///E:/MemOmics-Agent/results/...html`
+
+> ⛔ **不要在第 3 次失败后继续尝试 Mermaid。直接切 HTML。** 用户要的是可见的路线图，不是 Mermaid 语法正确性。
+
 ### 📁 参考文件
 
+- **`templates/tech-roadmap-html.html`** — Mermaid 失败时的 HTML 技术路线图模板。含 5 阶段卡片流 + Panel 布局网格 + 数据流表 + 故事线。颜色编码：🔴核心/🟡增强/🟢输出。
 - **`references/cns-level-plan-template.md`** — CNS 级完整 15 段方案模板。当用户说"太泛了"/"不够深"/"分阶段"/"CNS级别"时加载。包含：文献依据表、H₀/H₁假说、Gap分析、Figure三一结构、专利分析、Loop Gate等所有必需段落。
 - **`references/cross-species-hippocampus-aging-analysis.md`** — 跨物种海马衰老分析案例参考。
+- **`references/multi-group-subtype-deep-analysis.md`** — 复杂多组×亚型分析 Playbook。≥4 组 + 亚型分解的场景：伪bulk DEG/基因集评分/应答指数/多条件 DotPlot/轨迹推断。

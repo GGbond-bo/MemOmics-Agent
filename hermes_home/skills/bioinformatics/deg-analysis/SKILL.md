@@ -174,12 +174,35 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
 | Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
 | Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
+| human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
+## 🚨 Critical Pitfalls
+
+### P1: Pseudobulk per subcluster×condition breaks DESeq2
+**Symptom**: `Error: The design matrix has the same number of samples and coefficients to fit`
+**Root cause**: Aggregating by subcluster×condition produces exactly 1 pseudobulk sample per combination. DESeq2 requires replicates.
+**Fix**: Aggregate by **sample** (samplename/donor) × subcluster, not by condition. Then use condition (age_group, treatment) as the design variable. This gives n_donors × n_subclusters pseudobulk samples with real biological replicates.
+
+### P2: Donor random effects matter for aging studies with imbalanced groups
+**Symptom**: Debate flags DEG count as inflated, low validation rate.
+**Root cause**: Design `~subcluster + age_group` treats every pseudobulk sample as independent, but multiple subcluster pseudobulks from the same donor share donor-level variation. This inflates effective sample size.
+**Mitigation**: When possible, use `~subcluster + age_group + (1|donor)` with variancePartition::dream. When impractical (as in our 2026-07-14 run with 143 samples), report the limitation and validate with Wilcoxon on the most balanced subcluster.
+
+### P3: Sample imbalance >3:1 inflates DEG count
+**Symptom**: Old=110, Young=33 → 3,864 DEGs; debate flags >3,000 as potentially inflated.
+**Mitigation**: Apply |LFC|>1 filter post-hoc, report both filtered and unfiltered counts, validate top hits with independent method (e.g. Wilcoxon on zone5).
+
+### P4: apeglm shrinkage unavailable by default
+**Symptom**: `lfcShrink(type="apeglm")` fails with package-not-found.
+**Fix**: Use `type="normal"` or `type="ashr"` as fallback, or skip shrinkage and report raw LFC with caveat.
+
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| there is no package called 'MAST' | MAST not installed in R environment | install.packages('BiocManager'); BiocManager::inst |
-| *(accumulated from runs)* | | |
+| there is no package called 'MAST' | MAST not installed | `BiocManager::install('MAST')` |
+| design matrix = samples/coefficients | Pseudobulk aggregated by condition, not sample | Aggregate by donor×subcluster, use condition as design variable |
+| lfcShrink type='apeglm' fails | apeglm not installed | Use type='normal' or skip shrinkage |
+| DEG count >3,000 | Sample imbalance >3:1 without donor RE | Apply |LFC|>1, validate with Wilcoxon on balanced subcluster |
 
 ## References
 

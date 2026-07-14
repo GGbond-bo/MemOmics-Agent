@@ -1015,6 +1015,11 @@ def _create_session(title="新会话"):
 def _get_or_create_session(session_id=None):
     if session_id and session_id in _sessions:
         return _sessions[session_id]
+    # 尝试从 state.db 加载会话（服务器重启后 _sessions 可能为空）
+    if session_id:
+        restored = _restore_single_session(session_id)
+        if restored:
+            return restored
     return _create_session()
 
 
@@ -1061,6 +1066,66 @@ def _scan_results_dir_for_session(sid, fallback_dir):
         if d.endswith('_' + short_id) and os.path.isdir(os.path.join(RESULTS_DIR, d)):
             return os.path.join(RESULTS_DIR, d)
     return fallback_dir
+
+
+def _restore_single_session(sid):
+    """从 state.db 恢复单个会话到内存（用于 HTTP API 按需加载）"""
+    db = _get_session_db()
+    if not db:
+        return None
+    try:
+        sessions = db.list_sessions_rich()
+        for s in sessions:
+            s_id = s.get("session_id") or s.get("id")
+            if s_id != sid:
+                continue
+            if not sid.startswith("memomics-"):
+                continue
+            msgs = db.get_messages_as_conversation(sid) or []
+            messages = []
+            for m in msgs:
+                role = m.get("role", "")
+                content = m.get("content", "")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": str(content), "time": ""})
+            persisted_cwd = ""
+            try:
+                row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
+                if row and row[0]:
+                    persisted_cwd = row[0]
+            except Exception:
+                pass
+            if persisted_cwd and os.path.isdir(persisted_cwd):
+                results_dir = persisted_cwd.replace("/", os.sep)
+            else:
+                default_dir = os.path.join(RESULTS_DIR, sid)
+                if os.path.isdir(default_dir):
+                    results_dir = default_dir
+                else:
+                    results_dir = _scan_results_dir_for_session(sid, default_dir)
+            session = {
+                "id": sid,
+                "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
+                "created": s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "messages": messages,
+                "model_config": _current_model,
+                "results_dir": results_dir,
+                "todos": [],
+                "bg_running": False,
+                "running_agent": None,
+                "running_task": None,
+                "restored": True,
+                "progress_log": [],
+                "ws_attached": False,
+                "ws_ref": None,
+                "loop_ref": None,
+            }
+            _sessions[sid] = session
+            print(f"[MemOmics] 按需恢复会话: {sid}", flush=True)
+            return session
+    except Exception as e:
+        print(f"[MemOmics] 单会话恢复失败 ({sid}): {e}", flush=True)
+    return None
 
 
 def _load_persisted_sessions():
@@ -2713,9 +2778,13 @@ def _weixin_push_progress(session, tool_name, result_str, loop=None):
         pass
 
 def _auto_system_log(session, tool_name, args, result_str):
-    """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl"""
+    """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl
+    仅当 results_dir 已存在（即有实际分析产出）时才写入，不主动创建目录。"""
     try:
-        log_dir = os.path.join(session["results_dir"], "log")
+        results_dir = session.get("results_dir", "")
+        if not results_dir or not os.path.isdir(results_dir):
+            return  # 纯聊天会话不创建目录
+        log_dir = os.path.join(results_dir, "log")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, "system_log.jsonl")
         entry = {

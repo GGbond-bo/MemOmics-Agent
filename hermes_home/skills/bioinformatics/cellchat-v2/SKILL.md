@@ -130,21 +130,31 @@ CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seu
 
 适用于: 多细胞类型, disease, aging, development
 
-## Pipeline
+## Pipeline (with mandatory pre-steps)
 
+0. **Metadata cleaning (h5ad→Seurat)** ⚠️ NEW
+   - Clean `b'...'` bytes prefixes from h5ad metadata
+   - Tool: `terminal` (R)
 1. **Create CellChat object**
    - Import from Seurat
    - Tool: `terminal`
 2. **L-R interaction inference**
    - CellChatDB v2 matching
+   - Run with AND without `population.size=TRUE`, compare rankings
    - Tool: `terminal`
-3. **Signal flow visualization**
-   - netVisual_aggregate
+3. **Marker validation for ECM pathways** ⚠️ NEW
+   - If LAMININ/COLLAGEN/FN1 are top pathways, validate PDGFRA/LUM/DCN/PDGFRB
+   - See `references/ecm-contamination-validation.md`
+   - Tool: `terminal` (R)
+4. **Compute centrality** ⚠️ REQUIRED before heatmaps
+   - `netAnalysis_computeCentrality(cellchat, slot.name="netP")`
+5. **Signal flow visualization**
+   - netVisual_aggregate (always pass explicit `signaling=` parameter)
    - Tool: `terminal`
-4. **Comparison (multi-condition)**
+6. **Comparison (multi-condition)**
    - compareInteractions
    - Tool: `terminal`
-5. **Source-target summary**
+7. **Source-target summary**
    - Signal contribution
    - Tool: `terminal`
 
@@ -167,11 +177,50 @@ CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seu
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
+## 🚨 Critical Pitfalls (from real runs)
+
+### P1: h5ad → Seurat metadata corruption (`b'...'` prefix)
+**Symptom**: `cellchat@idents` shows `b'zone1'`, `b'NMJ'` etc — every cell gets its own identity.
+**Root cause**: Python `bytes` strings from `anndata` imported via reticulate carry `b'...'` literal prefix.
+**Fix**: After h5ad→Seurat conversion, strip prefixes:
+```r
+clean_col <- function(x) {
+  if (is.factor(x)) x <- as.character(x)
+  if (is.character(x)) x <- gsub("^b['\"](.*?)['\"]$", "\\1", x)
+  return(x)
+}
+for (col in colnames(seurat_obj@meta.data)) {
+  seurat_obj@meta.data[[col]] <- clean_col(seurat_obj@meta.data[[col]])
+}
+```
+
+### P2: `population.size=TRUE` dramatically changes rankings
+**Symptom**: Small clusters (e.g. NMJ, 59 cells) appear as #1 sender without normalization; drop to #7 with normalization.
+**Root cause**: CellChat v2 does NOT normalize for cluster size by default. `computeCommunProb(population.size=FALSE)` inflates weights for small clusters.
+**Fix**: ALWAYS run both `population.size=FALSE` and `population.size=TRUE`, report both rankings, and debate the discrepancy. If cluster sizes differ >3x, prefer normalized results.
+
+### P3: `netAnalysis_signalingRole_heatmap` fails without centrality
+**Symptom**: `Error: Please run netAnalysis_computeCentrality to compute the network centrality scores!`
+**Fix**: Always call `cellchat <- netAnalysis_computeCentrality(cellchat, slot.name = "netP")` BEFORE any signaling role plots.
+
+### P4: `netVisual_chord_cell` requires explicit `signaling` parameter
+**Symptom**: `Error: Please assign values to either signaling or net`
+**Fix**: `netVisual_chord_cell(cellchat, signaling = "LAMININ", ...)` — never pass `signaling=NULL`.
+
+### P5: ECM pathways (LAMININ/COLLAGEN) may reflect fibroblast contamination
+**Symptom**: COL1A1/COL3A1/FN1 high in muscle fiber clusters → debate will flag as possible FAP contamination.
+**Fix**: BEFORE interpreting ECM pathways, validate with fibroblast markers: PDGFRA, PDGFRB, LUM, DCN, LOX. If PDGFRA ≤ 1% and LUM < 10% across clusters, contamination is ruled out and ECM is genuinely from muscle fibers.
+
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| *(accumulated from runs)* | | |
+| `b'...'` in idents | Python bytes from h5ad metadata | Clean with `gsub("^b['\"](.*?)['\"]$", "\\1", x)` |
+| Small cluster inflated weight | No population.size normalization | Run both FALSE and TRUE, debate ranking changes |
+| signaling role heatmap fails | Centrality not computed | `netAnalysis_computeCentrality(cellchat, slot.name="netP")` first |
+| chord diagram fails | Missing `signaling` parameter | Always pass explicit signaling pathway name |
+| ECM pathways over-interpreted | Possible fibroblast contamination | Validate PDGFRA/LUM/DCN/PDGFRB before interpreting |
 
 ## References
 

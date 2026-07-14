@@ -67,6 +67,7 @@ Three files:
 | `example_usage.py` | Minimal template for any analysis (DEG, GSEA, etc.) |
 | `hdwgcna_report_generator.py` | Full reference implementation for hdWGCNA |
 | `references/sctour-report-template.md` | scTour trajectory report template (9 sections, 10 figs, 5 debates, 4 tables) |
+| `references/figure-completeness-check.md` | Post-generation figure completeness verification and recovery procedure |
 
 ---
 
@@ -366,6 +367,27 @@ Standard library only: base64, csv, os, re, contextlib, datetime, typing
 
 No pip installs needed. The CDN dependencies (jQuery, DataTables) are loaded
 from the internet when the HTML is opened in a browser.
+
+
+### ⚠️ Pitfall: Missing Figures in Generated Reports
+
+**Problem**: The `ReportBuilder` only includes figures explicitly added via `add_figure()`.
+When the LLM generates the report after a multi-phase analysis (CellChat → DEG →
+Enrichment → etc.), it often omits figures from earlier phases — the context may not
+contain them. Users will open the report and say "I only see X figures, where are Y?"
+
+**Fix**: After saving the report, ALWAYS verify figure completeness:
+
+```python
+# Count PNGs on disk vs base64 images in report
+import os, re
+png_count = sum(1 for f in os.listdir(figures_dir) if f.endswith('.png'))
+with open(report_path) as f:
+    b64_count = len(re.findall(r'<img src="data:image/', f.read()))
+assert png_count == b64_count, f"MISSING {png_count - b64_count} figures!"
+```
+
+If mismatch, use the recovery procedure in `references/figure-completeness-check.md`.
 
 
 ---
