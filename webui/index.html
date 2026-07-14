@@ -1420,18 +1420,9 @@ function newSession() {
   refreshResults();  // 清除旧会话的分析结果面板
 }
 
-// WS重连时自动选择最新会话，不再无条件创建新会话（避免幽灵会话覆盖已选会话）
+// 首次加载：始终显示企鹅欢迎画面，用户自行选择会话（避免自动跳入旧会话遮住企鹅）
 function autoSelectLatestSession() {
-
-  if (!_allSessions || !_allSessions.length) {
-    newSession();  // 首次启动，没有任何会话才新建
-    return;
-  }
-  // 选最新的一个（已按时间排序，第一个即最新）
-  var latest = _allSessions[0];
-  if (latest && latest.id) {
-    switchSession(latest.id);
-  }
+  newSession();  // 始终显示企鹅欢迎画面
 }
 
 var _loadSessionsCtl = null;

@@ -1584,7 +1584,9 @@ async def rename_results_dir(sid: str, body: dict = None):
 
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str):
-    """获取会话历史消息"""
+    """获取会话历史消息 — 支持从 state.db 按需恢复"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
     return {"messages": _sessions[sid]["messages"]}
@@ -2674,12 +2676,16 @@ async def get_figure(sid: str, path: str = ""):
 async def get_todos(sid: str):
     """获取会话待办"""
     if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
     return {"todos": _sessions[sid].get("todos", [])}
 
 @app.get("/api/sessions/{sid}/progress")
 async def get_progress(sid: str):
     """获取会话的进度日志（用于切换会话后重放）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
     session = _sessions[sid]
