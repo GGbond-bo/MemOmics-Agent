@@ -3128,10 +3128,11 @@ async def list_figures(sid: str):
 
 @app.get("/api/results/{sid}/figure")
 async def get_figure(sid: str, path: str = ""):
-    """返回会话下的图片文件"""
-    if sid in _sessions:
+    """返回会话下的图片文件 — 每次实时扫描磁盘"""
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
         base = _sessions[sid]["results_dir"]
-    else:
+    if not base:
         base = os.path.join(RESULTS_DIR, sid)
     file_path = os.path.join(base, path) if path else base
     if not os.path.isfile(file_path):
