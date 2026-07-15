@@ -8,7 +8,7 @@ license: MIT
 platforms: [windows, linux, macos]
 metadata:
   hermes:
-    tags: [, 03_高级分析]
+    tags: [03_高级分析]
     difficulty: basic
     language: R+Python
     category: scRNA
@@ -154,11 +154,23 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 | *(none yet)* | | | | |
 
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-07-15 | - | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| *(accumulated from runs)* | | |
+| GO+KEGG混排气泡图误导 | KEGG基因集远大于GO CC/MF，统一用GeneCount做气泡大小导致KEGG视觉膨胀 | 按类别分面(facet_wrap)，气泡大小改用Rich Factor/Fold Enrichment；或GO和KEGG分两张图 |
+| 分析前未创建会话目录 | 直接在results/根目录输出文件，散乱无法溯源 | 分析开始前必须先 `update_results_dir` 创建 `results/{species}_{tissue}_{direction}_{date}/`，再建子目录 `figures/scripts/data/results/` |
+
+### Visualization Pitfalls (from debate)
+
+> **2026-07-15 debate verdict (confidence: high)**: When visualizing enrichment across GO (BP/CC/MF) and KEGG on the same axes:
+> 1. **Don't use Gene Count as bubble size** — KEGG pathways have inherently larger gene sets, creating false visual dominance. Use **Rich Factor** or **Fold Enrichment** instead.
+> 2. **Facet by category** — GO sub-ontologies and KEGG have different statistical backgrounds; mixing them on one y-axis invites false cross-category comparisons.
+> 3. **Show direction** — if up/down regulation is known, encode it with color or use bidirectional bars (GSEA NES).
+> 4. **Verify cell purity first** — enrichment in muscle subclusters can be driven by contaminating vascular/stromal cells rather than myofibers. Validate with marker gene expression (e.g., ACTA2 for VSMC, MYH7 for slow fibers).
+>
+> Full debate archive: `references/enrichment-viz-debate-20260715.md`
 
 ## References
 

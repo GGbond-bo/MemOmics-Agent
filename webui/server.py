@@ -3208,6 +3208,20 @@ def _weixin_push_progress(session, tool_name, result_str, loop=None):
     except Exception:
         pass
 
+def _ensure_results_dir(session):
+    """确保 session 的 results_dir 物理目录存在。
+    仅在目录不存在时创建，避免纯聊天产生空目录。
+    由工具执行钩子触发（首个分析工具调用时自动创建）。"""
+    try:
+        results_dir = session.get("results_dir", "")
+        if not results_dir:
+            return
+        if not os.path.isdir(results_dir):
+            os.makedirs(results_dir, exist_ok=True)
+    except Exception:
+        pass
+
+
 def _auto_system_log(session, tool_name, args, result_str):
     """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl
     仅当 results_dir 已存在（即有实际分析产出）时才写入，不主动创建目录。"""
@@ -3644,6 +3658,8 @@ async def ws_endpoint(ws: WebSocket):
                             for fig in new_figs:
                                 _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
+                        # 先确保 results_dir 物理目录存在（纯聊天不创建，首次分析自动创建）
+                        _ensure_results_dir(session)
                         _auto_system_log(session, tool_name, args, result_str)
                         # 📱 微信进度推送：关键步骤完成时推送到微信
                         _weixin_push_progress(session, tool_name, result_str, loop=_main_loop)

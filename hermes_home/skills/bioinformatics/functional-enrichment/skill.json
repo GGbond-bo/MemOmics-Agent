@@ -63,11 +63,24 @@
       "approved": false,
       "custom_script": false,
       "result": "GO-BP: Up=41 terms(ECM组织/肌肉发育), Down=131 terms(氧化磷酸化/ATP合成/电子传递链)。KEGG: Up=12, Down=31。3张图。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "bubble+bar combo plot, -log10(q-value) x-axis, BP/CC/MF/KEGG categories, gene count bubbles, top10 gene labels",
+      "date": "2026-07-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RSS(5 terms) + SMF(6 terms) GO/KEGG enrichment bubble plots generated. RSS: 2600×1100, SMF: 2600×1320, both valid PNGs at 200dpi"
     }
   ],
   "proven_script": "",
   "error_count": 0,
-  "success_count": 2,
+  "success_count": 3,
   "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
   "doc_source": "official",
   "prerequisites": {
