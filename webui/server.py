@@ -2977,15 +2977,31 @@ language: {req.language}
 # --- 分析结果 ---
 
 @app.get("/api/results/{sid}")
+@app.get("/api/results/{sid}")
 async def list_results(sid: str, path: str = ""):
-    """列出会话分析结果目录（支持旧会话：不在内存也能查看）"""
-    # 优先从内存获取 results_dir，否则从磁盘扫描
+    """列出会话分析结果目录（每次实时扫描，不缓存）"""
+    base = ""
+    # 1. 优先从内存获取
     if sid in _sessions:
         base = _sessions[sid]["results_dir"]
-    else:
+    # 2. 如果内存中的目录无效，智能扫描磁盘
+    if not base or not os.path.isdir(base) or not any(Path(base).iterdir()):
+        base = _find_best_results_dir(sid)
+    # 3. 回退
+    if not base:
         base = os.path.join(RESULTS_DIR, sid)
+    # 4. 每次请求都实时扫描文件系统
     if not os.path.isdir(base):
         return {"items": [], "path": base, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
+    # 5. 同步更新内存中的 results_dir
+    if sid in _sessions and os.path.abspath(_sessions[sid]["results_dir"]) != os.path.abspath(base):
+        _sessions[sid]["results_dir"] = base
+        try:
+            db = _get_session_db()
+            if db:
+                db.update_session_cwd(sid, base.replace("\\", "/"))
+        except Exception:
+            pass
     target = os.path.join(base, path) if path else base
     if not os.path.isdir(target):
         return {"items": [], "path": target, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
@@ -3006,6 +3022,37 @@ async def list_results(sid: str, path: str = ""):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
+
+def _find_best_results_dir(sid: str) -> str:
+    """智能扫描 results/，找到最可能属于该会话的目录。每次调用都实时扫描。
+    仅返回：1) 目录名含sid短ID 2) 或 sid 在内存 _sessions 中（取最近目录）"""
+    if not os.path.isdir(RESULTS_DIR):
+        return ""
+    short_id = sid.split("-")[-1] if "-" in sid else ""
+    candidates = []
+    try:
+        for d in os.listdir(RESULTS_DIR):
+            dpath = os.path.join(RESULTS_DIR, d)
+            if not os.path.isdir(dpath) or d.startswith("."):
+                continue
+            # 跳过 memomics-xxx 临时目录
+            if d.startswith("memomics-"):
+                continue
+            mtime = os.path.getmtime(dpath)
+            has_content = any(Path(dpath).iterdir())
+            if not has_content:
+                continue
+            # 只有目录名含sid短ID，或者sid在内存中，才作为候选
+            if short_id and short_id in d:
+                candidates.append((100 + mtime, dpath))
+            elif sid in _sessions:
+                candidates.append((mtime, dpath))
+    except OSError:
+        return ""
+    candidates.sort(reverse=True, key=lambda x: x[0])
+    if candidates:
+        return candidates[0][1]
+    return ""
 
 @app.get("/api/results")
 async def list_all_results():
