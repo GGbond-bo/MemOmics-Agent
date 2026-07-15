@@ -3013,9 +3013,15 @@ async def list_results(sid: str, path: str = ""):
 
 
 def _find_best_results_dir(sid: str) -> str:
-    """每次实时扫描 results/，找到最可能属于该会话的目录。
-    优先级：1) 目录名含sid短ID 2) sid在_sessions中的最近有内容目录
-    3) 跳过空目录"""
+    """每次实时扫描 results/，智能匹配会话目录。
+    策略：1) 内存中的 results_dir 有内容 → 直接用
+          2) 目录名含 sid 短ID → 精确匹配
+          3) 所有有内容的目录，取最近修改的（给非 memomics- 目录+1小时优待）"""
+    # 1. 内存中的 results_dir 优先
+    if sid in _sessions:
+        cached = _sessions[sid].get("results_dir", "")
+        if cached and os.path.isdir(cached) and any(Path(cached).iterdir()):
+            return cached
     if not os.path.isdir(RESULTS_DIR):
         return ""
     short_id = sid.split("-")[-1] if "-" in sid else ""
@@ -3025,25 +3031,24 @@ def _find_best_results_dir(sid: str) -> str:
             dpath = os.path.join(RESULTS_DIR, d)
             if not os.path.isdir(dpath) or d.startswith("."):
                 continue
-            has_content = any(Path(dpath).iterdir())
-            if not has_content:
+            try:
+                has_any = any(Path(dpath).iterdir())
+            except Exception:
+                has_any = False
+            if not has_any:
                 continue
             mtime = os.path.getmtime(dpath)
-            # 目录名含短ID → 高分优先
+            # 精确匹配短ID → 最高优先级
             if short_id and short_id in d:
-                candidates.append((1000 + mtime, dpath))
-            # sid在内存中 → 中等分（取最近修改的）
+                candidates.append((1_000_000_000 + mtime, dpath, d))
             elif sid in _sessions:
-                candidates.append((mtime, dpath))
-            # 即使sid不在内存，如果短ID≥8字符且匹配目录名，也可匹配
-            elif short_id and len(short_id) >= 8:
-                # 模糊匹配：目录名内含日期+关键词
-                pass  # fallback 太危险，跳过
+                # 在内存中的会话：非 memomics- 目录优待
+                bonus = 0 if d.startswith("memomics-") else 3600
+                candidates.append((mtime + bonus, dpath, d))
     except OSError:
         return ""
     if not candidates:
         return ""
-    # 按分数降序，取最高分
     candidates.sort(reverse=True, key=lambda x: x[0])
     return candidates[0][1]
 
