@@ -2456,7 +2456,7 @@ async def list_files(path: str = ""):
         return JSONResponse({"error": "只能浏览 work/ 和 results/ 目录"}, status_code=403)
     try:
         items = []
-        for p in sorted(Path(path).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        for p in sorted(Path(path).iterdir(), key=lambda x: (not x.is_dir(), -x.stat().st_mtime)):
             if p.name.startswith(".") or p.name == "__pycache__":
                 continue
             items.append({
@@ -3093,6 +3093,10 @@ async def list_all_results():
                 "results_dir": str(p).replace("\\", "/"),
                 "file_count": file_count,
             })
+    # 按修改时间倒序排列（最新在最上面）
+    sessions_with_results.sort(key=lambda x: x.get("results_dir", ""), reverse=True)
+    # 也可以通过文件数量辅助排序：让有更多文件的目录优先
+    sessions_with_results.sort(key=lambda x: (os.path.getmtime(x["results_dir"]) if os.path.isdir(x["results_dir"]) else 0), reverse=True)
     return {"sessions": sessions_with_results, "debug_results_dir": RESULTS_DIR}
 
 
