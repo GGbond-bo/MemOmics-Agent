@@ -3435,6 +3435,8 @@ async def ws_endpoint(ws: WebSocket):
                 from memomics.bio_tools.debate_analysis import set_session_context
                 set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
                 # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
+                # 确保 results_dir 物理目录存在（agent 跑工具前创建，避免文件散落）
+                _ensure_results_dir(session)
 
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail=""):
