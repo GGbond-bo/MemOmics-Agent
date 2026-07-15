@@ -3436,6 +3436,14 @@ async def ws_endpoint(ws: WebSocket):
                 set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
                 # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
 
+                # 注入 results_dir 到 Agent 系统提示词，确保输出文件写到正确位置
+                rd = session.get("results_dir", "")
+                if rd:
+                    agent.ephemeral_system_prompt = (
+                        (agent.ephemeral_system_prompt or "")
+                        + f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+                    )
+
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail=""):
                     """发送进度时间线条目 - 同时存储到 progress_log"""
