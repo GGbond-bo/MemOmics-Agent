@@ -228,7 +228,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .results-col-files { flex:1; overflow-y:auto; padding:4px 0; }
 .results-col-header { font-size:11px; font-weight:600; color:var(--text-light); padding:4px 8px; background:#f5f6f8; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; }
 /* 缩略图网格 */
-.fig-thumb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; padding:4px; }
+.fig-thumb-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:4px; }
 .fig-thumb { position:relative; border:1px solid var(--border); border-radius:8px; overflow:hidden; cursor:pointer; background:#f8f9fa; transition:transform 0.15s; }
 .fig-thumb:hover { border-color:var(--primary); box-shadow:0 4px 12px rgba(0,0,0,0.12); transform:translateY(-2px); }
 .fig-thumb img { width:100%; height:120px; object-fit:contain; background:#fff; }
@@ -446,17 +446,15 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="file-path-bar" id="results-path"></div>
       <!-- 图片预览区（新图自动弹出，可叉掉） -->
       <div id="figure-preview-area" style="display:none;"></div>
-      <!-- 图片+文件 两栏布局 -->
-      <div id="results-two-col" style="display:none;flex:1;overflow:hidden;min-height:0;">
-        <div class="results-col-figures">
-          <div class="results-col-header">🖼️ 图片</div>
-          <div id="results-figures" style="padding:4px 0;"></div>
-        </div>
-        <div class="results-col-files">
-          <div class="results-col-header">📁 文件</div>
-          <div class="file-browser" id="results-list" style="overflow-y:auto;"></div>
-        </div>
+      <!-- 分类标签 -->
+      <div id="results-tabs" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;">
+        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;">🖼️ 图片</span>
+        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);">📁 文件</span>
       </div>
+      <!-- 图片缩略图网格 -->
+      <div id="results-figures" style="display:none;padding:8px;overflow-y:auto;flex:1;"></div>
+      <!-- 文件浏览区 -->
+      <div class="file-browser" id="results-list" style="overflow-y:auto;flex:1;"></div>
     </div>
 
     <!-- 文件浏览面板 -->
@@ -2463,15 +2461,20 @@ async function refreshResults() {
   if (!currentSid) {
     // 没选会话 — 提示用户先选择会话
     document.getElementById('results-path').textContent = '请先选择或新建会话';
-    document.getElementById('results-two-col').style.display = 'none';
+    document.getElementById('results-tabs').style.display = 'none';
+    document.getElementById('results-figures').style.display = 'none';
     document.getElementById('figure-preview-area').style.display = 'none';
     document.getElementById('results-list').innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-light);">📋 请先在左侧选择一个会话，或新建会话开始分析。<br>分析结果将自动保存到当前会话目录。</div>';
     return;
   }
-  // 选了会话 — 同时加载 figures 和文件列表，两栏显示
-  document.getElementById('results-two-col').style.display = 'flex';
+  // 选了会话 — 同时加载 figures 和文件列表
+  document.getElementById('results-tabs').style.display = 'block';
+  // 加载 figures
   loadFigures();
+  // 加载文件列表
   loadResultsFiles();
+  // 显示当前 tab
+  switchResultsTab(resultsTab);
 }
 
 async function loadFigures() {
