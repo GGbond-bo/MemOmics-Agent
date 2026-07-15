@@ -2979,29 +2979,18 @@ language: {req.language}
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
 async def list_results(sid: str, path: str = ""):
-    """列出会话分析结果目录（每次实时扫描，不缓存）"""
-    base = ""
-    # 1. 优先从内存获取
-    if sid in _sessions:
+    """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）"""
+    # 每次都扫描磁盘，不依赖内存中的 results_dir
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
         base = _sessions[sid]["results_dir"]
-    # 2. 如果内存中的目录无效，智能扫描磁盘
-    if not base or not os.path.isdir(base) or not any(Path(base).iterdir()):
-        base = _find_best_results_dir(sid)
-    # 3. 回退
     if not base:
         base = os.path.join(RESULTS_DIR, sid)
-    # 4. 每次请求都实时扫描文件系统
-    if not os.path.isdir(base):
+    if not os.path.isdir(base) or not any(Path(base).iterdir()):
         return {"items": [], "path": base, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
-    # 5. 同步更新内存中的 results_dir
-    if sid in _sessions and os.path.abspath(_sessions[sid]["results_dir"]) != os.path.abspath(base):
+    # 同步更新内存
+    if sid in _sessions and os.path.abspath(_sessions[sid].get("results_dir","")) != os.path.abspath(base):
         _sessions[sid]["results_dir"] = base
-        try:
-            db = _get_session_db()
-            if db:
-                db.update_session_cwd(sid, base.replace("\\", "/"))
-        except Exception:
-            pass
     target = os.path.join(base, path) if path else base
     if not os.path.isdir(target):
         return {"items": [], "path": target, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
@@ -3024,8 +3013,9 @@ async def list_results(sid: str, path: str = ""):
 
 
 def _find_best_results_dir(sid: str) -> str:
-    """智能扫描 results/，找到最可能属于该会话的目录。每次调用都实时扫描。
-    仅返回：1) 目录名含sid短ID 2) 或 sid 在内存 _sessions 中（取最近目录）"""
+    """每次实时扫描 results/，找到最可能属于该会话的目录。
+    优先级：1) 目录名含sid短ID 2) sid在_sessions中的最近有内容目录
+    3) 跳过空目录"""
     if not os.path.isdir(RESULTS_DIR):
         return ""
     short_id = sid.split("-")[-1] if "-" in sid else ""
@@ -3035,34 +3025,37 @@ def _find_best_results_dir(sid: str) -> str:
             dpath = os.path.join(RESULTS_DIR, d)
             if not os.path.isdir(dpath) or d.startswith("."):
                 continue
-            # 跳过 memomics-xxx 临时目录
-            if d.startswith("memomics-"):
-                continue
-            mtime = os.path.getmtime(dpath)
             has_content = any(Path(dpath).iterdir())
             if not has_content:
                 continue
-            # 只有目录名含sid短ID，或者sid在内存中，才作为候选
+            mtime = os.path.getmtime(dpath)
+            # 目录名含短ID → 高分优先
             if short_id and short_id in d:
-                candidates.append((100 + mtime, dpath))
+                candidates.append((1000 + mtime, dpath))
+            # sid在内存中 → 中等分（取最近修改的）
             elif sid in _sessions:
                 candidates.append((mtime, dpath))
+            # 即使sid不在内存，如果短ID≥8字符且匹配目录名，也可匹配
+            elif short_id and len(short_id) >= 8:
+                # 模糊匹配：目录名内含日期+关键词
+                pass  # fallback 太危险，跳过
     except OSError:
         return ""
+    if not candidates:
+        return ""
+    # 按分数降序，取最高分
     candidates.sort(reverse=True, key=lambda x: x[0])
-    if candidates:
-        return candidates[0][1]
-    return ""
+    return candidates[0][1]
 
 @app.get("/api/results")
 async def list_all_results():
     """列出所有有分析结果目录的会话（包括不在内存中的旧会话）"""
     sessions_with_results = []
     seen_sids = set()
-    # 1. 内存中的会话
+    # 1. 内存中的会话 — 每次实时扫描磁盘
     for sid, s in _sessions.items():
         seen_sids.add(sid)
-        rdir = s["results_dir"]
+        rdir = _find_best_results_dir(sid) or s["results_dir"]
         if os.path.isdir(rdir) and any(Path(rdir).iterdir()):
             file_count = sum(1 for _ in Path(rdir).rglob("*") if _.is_file())
             sessions_with_results.append({
@@ -3101,9 +3094,11 @@ async def list_all_results():
 @app.get("/api/results/{sid}/figures")
 async def list_figures(sid: str):
     """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）"""
-    if sid in _sessions:
+    # 每次实时扫描
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
         base = _sessions[sid]["results_dir"]
-    else:
+    if not base:
         base = os.path.join(RESULTS_DIR, sid)
     if not os.path.isdir(base):
         return {"figures": [], "base": base.replace("\\", "/")}
