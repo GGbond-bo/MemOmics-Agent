@@ -171,6 +171,20 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 > 4. **Verify cell purity first** — enrichment in muscle subclusters can be driven by contaminating vascular/stromal cells rather than myofibers. Validate with marker gene expression (e.g., ACTA2 for VSMC, MYH7 for slow fibers).
 >
 > Full debate archive: `references/enrichment-viz-debate-20260715.md`
+>
+> **Exception — small datasets (≤15 entries)**: When gene counts are comparable across categories (all in 3-15 range), a combined bubble+bar plot is acceptable and publication-grade. The visual bias from GeneCount bubbles is negligible at this scale. Template: `references/go-kegg-bubble-bar.R`.
+
+### Bubble + Bar Template (Small-Dataset GO+KEGG)
+
+For subcluster-level enrichment with ≤15 entries across GO+KEGG. One PDF per subcluster.
+
+- **Template**: `references/go-kegg-bubble-bar.R`
+- **Input**: Excel with columns Category | Description | Hits | neg_log_q | Subcluster
+- **Layout**: left category blocks → bubbles (size=GeneCount, no text inside) → bars (-log10 q-value) → pathway name → gene list at bar end
+- **Output**: transparent-background PDF (`ggsave(..., bg="transparent")`)
+- **Height**: auto-scaled `max(5, nrow * 0.55 + 2)` inches
+- **Category separators**: dashed lines between BP/CC/MF/KEGG blocks
+- **Color scheme**: BP=#5B9BD5, CC=#63B5A0, MF=#88C4E8, KEGG=#E8836E
 
 ## References
 
