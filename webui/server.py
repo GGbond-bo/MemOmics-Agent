@@ -1968,7 +1968,7 @@ async def weixin_qr_poll():
                 _weixin_state["connected"] = True
                 _weixin_state["qr_login_in_progress"] = False
                 _weixin_state["qrcode_token"] = ""
-                _weixin_state["chat_id"] = user_id or account_id  # 优先用用户微信ID
+                _weixin_state["chat_id"] = (user_id + "@im.wechat") if user_id and "@" not in user_id else (user_id or account_id)  # 优先用用户微信ID
                 base_url_new = data.get("baseurl", "")
                 if base_url_new:
                     _weixin_state["base_url"] = base_url_new.rstrip("/")
@@ -2023,7 +2023,10 @@ async def _send_weixin_progress(message: str) -> bool:
     if _weixin_adapter is None:
         return False
     try:
-        chat_id = _weixin_state.get("chat_id") or _weixin_state["account_id"]
+        chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
+        # Ensure @im.wechat suffix for user IDs
+        if chat_id and "@" not in chat_id:
+            chat_id = chat_id + "@im.wechat"
         print(f"[MemOmics] send to chat_id={chat_id[:30] if chat_id else 'EMPTY'}", flush=True)
         result = await _weixin_adapter.send(chat_id, message)
         print(f"[MemOmics] send result: success={getattr(result,'success','?')}, error={getattr(result,'error','?')}", flush=True)
@@ -2044,7 +2047,8 @@ _weixin_msg_store = []       # 最近消息列表（供前端拉取和 WS 推送
 _weixin_seen_ids = set()     # 已处理消息 ID 去重
 _weixin_sync_buf = ""        # iLink 增量轮询 sync_buf
 _weixin_poll_task = None     # 后台轮询 asyncio.Task
-_weixin_adapter = None      # Hermes 原生 WeixinAdapter 实例
+_weixin_adapter = None
+_weixin_last_user_id = ""     # Last user who sent a message      # Hermes 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
@@ -2432,6 +2436,7 @@ async def _hermes_weixin_message_handler(event):
     try:
         msg_id = event.message_id or str(int(time.time() * 1000))
         sender_id = event.source.user_id or ""
+        _weixin_last_user_id = sender_id
         sender_name = event.source.user_name or sender_id
         text = event.text or ""
         ctx_token = ""
@@ -2441,6 +2446,7 @@ async def _hermes_weixin_message_handler(event):
             _weixin_state["context_token"] = ctx_token
         if event.source.chat_id:
             _weixin_state["chat_id"] = event.source.chat_id
+            _weixin_last_user_id = event.source.chat_id
 
         if not text and not (event.raw_message and isinstance(event.raw_message, dict) and event.raw_message.get("item_list")):
             return
