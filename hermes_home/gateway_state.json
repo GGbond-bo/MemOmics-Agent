@@ -1,0 +1,1 @@
+{"pid":67392,"kind":"hermes-gateway","argv":["webui/server.py"],"start_time":178422079854,"gateway_state":"starting","exit_reason":null,"restart_requested":false,"active_agents":0,"platforms":{"weixin":{"state":"connected","error_code":null,"error_message":null,"updated_at":"2026-07-16T16:55:27.626066+00:00"}},"updated_at":"2026-07-16T16:55:27.626066+00:00"}

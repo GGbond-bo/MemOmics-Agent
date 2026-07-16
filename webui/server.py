@@ -1810,6 +1810,7 @@ _weixin_state = {
     "qrcode_token": "",
     "qr_login_in_progress": False,
     "last_error": "",
+    "context_token": "",
 }
 
 # 从磁盘恢复已保存的微信凭据
@@ -1823,6 +1824,7 @@ def _load_weixin_persist():
             _weixin_state["token"] = saved.get("token", "")
             _weixin_state["base_url"] = saved.get("base_url", _weixin_state["base_url"])
             _weixin_state["chat_id"] = saved.get("chat_id", _weixin_state.get("chat_id", ""))
+            _weixin_state["context_token"] = saved.get("context_token", "")
             _weixin_state["connected"] = bool(_weixin_state["token"])
             return True
     except Exception:
@@ -1839,6 +1841,7 @@ def _save_weixin_persist():
                 "token": _weixin_state["token"],
                 "chat_id": _weixin_state.get("chat_id", ""),
                 "base_url": _weixin_state["base_url"],
+                "context_token": _weixin_state.get("context_token", ""),
             }, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
@@ -1849,12 +1852,16 @@ _load_weixin_persist()
 @app.get("/api/weixin/status")
 async def weixin_status():
     """获取微信连接状态"""
-    return {
+    result = {
         "connected": _weixin_state["connected"],
         "account_id": _weixin_state["account_id"][:16] + "..." if _weixin_state["account_id"] else "",
         "qr_login_in_progress": _weixin_state["qr_login_in_progress"],
         "last_error": _weixin_state["last_error"],
+        "agent_enabled": _weixin_agent_enabled,
+        "adapter_alive": _weixin_adapter is not None and getattr(_weixin_adapter, '_poll_task', None) is not None and not getattr(_weixin_adapter._poll_task, 'done', lambda: True)(),
+        "msg_count": len(_weixin_msg_store),
     }
+    return result
 
 
 @app.post("/api/weixin/qr-login")
@@ -1862,7 +1869,9 @@ async def weixin_qr_login():
     """发起微信 iLink QR 码登录"""
     global _weixin_state
     if _weixin_state["qr_login_in_progress"]:
-        return {"ok": False, "error": "QR 登录正在进行中"}
+        # 如果上一次 QR 登录已超时，强制重置
+        _weixin_state["qr_login_in_progress"] = False
+        _weixin_state["qrcode_token"] = ""
     
     try:
         import aiohttp
@@ -1871,43 +1880,44 @@ async def weixin_qr_login():
         
         base_url = _weixin_state["base_url"]
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{base_url}/ilink/bot/get_bot_qrcode?bot_type=3",
-                headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                raw = await resp.text()
-                data = json.loads(raw)
-                if data.get("ret") != 0:
-                    _weixin_state["qr_login_in_progress"] = False
-                    _weixin_state["last_error"] = f"获取二维码失败: {data.get('msg', '未知错误')} (ret={data.get('ret')})"
-                    return {"ok": False, "error": _weixin_state["last_error"]}
+            async def _qr_get():
+                async with session.get(
+                    f"{base_url}/ilink/bot/get_bot_qrcode?bot_type=3",
+                    headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
+                ) as resp:
+                    return await resp.text()
+            raw = await asyncio.wait_for(_qr_get(), timeout=35)
+            data = json.loads(raw)
+            if data.get("ret") != 0:
+                _weixin_state["qr_login_in_progress"] = False
+                _weixin_state["last_error"] = f"获取二维码失败: {data.get('msg', '未知错误')} (ret={data.get('ret')})"
+                return {"ok": False, "error": _weixin_state["last_error"]}
                 
-                qrcode_token = data.get("qrcode", "")
-                qrcode_url_raw = data.get("qrcode_img_content", "")
-                _weixin_state["qrcode_token"] = qrcode_token
-                _weixin_state["qrcode_url"] = qrcode_url_raw
+            qrcode_token = data.get("qrcode", "")
+            qrcode_url_raw = data.get("qrcode_img_content", "")
+            _weixin_state["qrcode_token"] = qrcode_token
+            _weixin_state["qrcode_url"] = qrcode_url_raw
                 
-                # 生成 QR 码图片 (base64 PNG) — 兼容 qrcode v7 和 v8
-                qrcode_img_b64 = ""
-                try:
-                    import qrcode as _qr, io as _io, base64 as _b64
-                    if hasattr(_qr, 'make'):
-                        # qrcode v8+ API
-                        img = _qr.make(qrcode_url_raw)
-                    else:
-                        # qrcode v7 API
-                        qr = _qr.QRCode(box_size=6, border=2)
-                        qr.add_data(qrcode_url_raw)
-                        qr.make(fit=True)
-                        img = qr.make_image(fill_color="black", back_color="white")
-                    buf = _io.BytesIO()
-                    img.save(buf, format="PNG")
-                    qrcode_img_b64 = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
-                except Exception:
-                    pass
+            # 生成 QR 码图片 (base64 PNG) — 兼容 qrcode v7 和 v8
+            qrcode_img_b64 = ""
+            try:
+                import qrcode as _qr, io as _io, base64 as _b64
+                if hasattr(_qr, 'make'):
+                    # qrcode v8+ API
+                    img = _qr.make(qrcode_url_raw)
+                else:
+                    # qrcode v7 API
+                    qr = _qr.QRCode(box_size=6, border=2)
+                    qr.add_data(qrcode_url_raw)
+                    qr.make(fit=True)
+                    img = qr.make_image(fill_color="black", back_color="white")
+                buf = _io.BytesIO()
+                img.save(buf, format="PNG")
+                qrcode_img_b64 = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+            except Exception:
+                pass
                 
-                return {"ok": True, "qrcode_url": qrcode_img_b64, "qrcode_token": qrcode_token, "raw_url": qrcode_url_raw}
+            return {"ok": True, "qrcode_url": qrcode_img_b64, "qrcode_token": qrcode_token, "raw_url": qrcode_url_raw}
     except Exception as e:
         _weixin_state["qr_login_in_progress"] = False
         _weixin_state["last_error"] = str(e)
@@ -1925,49 +1935,61 @@ async def weixin_qr_poll():
         qrcode = _weixin_state["qrcode_token"]
         base_url = _weixin_state["base_url"]
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{base_url}/ilink/bot/get_qrcode_status?qrcode={qrcode}",
-                headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
-                timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
-                raw = await resp.text()
-                data = json.loads(raw)
-                status = data.get("status", "unknown")
-                ret_code = data.get("ret")
-                if ret_code is not None and ret_code != 0:
-                    return {"status": "error", "message": data.get("msg", "API error")}
+            async def _poll_get():
+                async with session.get(
+                    f"{base_url}/ilink/bot/get_qrcode_status?qrcode={qrcode}",
+                    headers={"iLink-App-Id": "bot", "iLink-App-ClientVersion": "131584"},
+                ) as resp:
+                    return await resp.text()
+            raw = await asyncio.wait_for(_poll_get(), timeout=35)
+            data = json.loads(raw)
+            print(f"[MemOmics] qr-poll: status={data.get('status')}, ret={data.get('ret')}, keys={list(data.keys())[:8]}", flush=True)
+            status = data.get("status", "unknown")
+            ret_code = data.get("ret")
+            if ret_code is not None and ret_code != 0:
+                return {"status": "error", "message": data.get("msg", "API error")}
                 
-                if status == "wait":
-                    return {"status": "waiting", "message": "等待扫码..."}
-                elif status == "scaned":
-                    return {"status": "scanned", "message": "已扫码，请在微信里确认登录"}
-                elif status == "scaned_but_redirect":
-                    redirect_host = data.get("redirect_host", "") or data.get("redirecthost", "")
-                    if redirect_host:
-                        _weixin_state["base_url"] = f"https://{redirect_host.rstrip('/')}"
-                        _save_weixin_persist()
-                    return {"status": "scanned", "message": "已扫码，正在重定向..."}
-                elif status == "confirmed":
-                    token = data.get("bot_token", "")
-                    account_id = data.get("ilink_bot_id", "")
-                    user_id = data.get("ilink_user_id", "")
-                    _weixin_state["token"] = token
-                    _weixin_state["account_id"] = account_id
-                    _weixin_state["connected"] = True
-                    _weixin_state["qr_login_in_progress"] = False
-                    _weixin_state["qrcode_token"] = ""
-                    _weixin_state["chat_id"] = user_id or account_id  # 优先用用户微信ID
+            if status == "wait":
+                return {"status": "waiting", "message": "等待扫码..."}
+            elif status == "scaned":
+                return {"status": "scanned", "message": "已扫码，请在微信里确认登录"}
+            elif status == "scaned_but_redirect":
+                redirect_host = data.get("redirect_host", "") or data.get("redirecthost", "")
+                if redirect_host:
+                    _weixin_state["base_url"] = f"https://{redirect_host.rstrip('/')}"
                     _save_weixin_persist()
-                    _start_weixin_poll()  # 启动消息轮询
-                    return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
-                elif status == "expired":
-                    _weixin_state["qr_login_in_progress"] = False
-                    _weixin_state["qrcode_token"] = ""
-                    return {"status": "expired", "message": "二维码已过期，请重新获取"}
-                else:
+                return {"status": "scanned", "message": "已扫码，正在重定向..."}
+            elif status == "confirmed":
+                token = data.get("bot_token", "")
+                account_id = data.get("ilink_bot_id", "")
+                user_id = data.get("ilink_user_id", "")
+                _weixin_state["token"] = token
+                _weixin_state["account_id"] = account_id
+                _weixin_state["connected"] = True
+                _weixin_state["qr_login_in_progress"] = False
+                _weixin_state["qrcode_token"] = ""
+                _weixin_state["chat_id"] = user_id or account_id  # 优先用用户微信ID
+                base_url_new = data.get("baseurl", "")
+                if base_url_new:
+                    _weixin_state["base_url"] = base_url_new.rstrip("/")
+                print(f"[MemOmics] QR confirmed: account={account_id[:20] if account_id else 'empty'}, user={user_id[:20] if user_id else 'empty'}", flush=True)
+                _save_weixin_persist()
+                try:
+                    _start_weixin_poll()  # 启动 Hermes WeixinAdapter
+                except Exception as e:
+                    print(f"[MemOmics] 启动微信适配器异常: {e}", flush=True)
+                return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
+            elif status == "expired":
+                _weixin_state["qr_login_in_progress"] = False
+                _weixin_state["qrcode_token"] = ""
+                return {"status": "expired", "message": "二维码已过期，请重新获取"}
+            else:
                     return {"status": "unknown", "message": f"未知状态: {status}"}
+    except asyncio.TimeoutError:
+        return {"status": "waiting", "message": "等待扫码..."}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        print(f"[MemOmics] qr-poll 异常: {e}", flush=True)
+        return {"status": "error", "message": str(e) or repr(e)}
 
 
 @app.post("/api/weixin/test")
@@ -1982,37 +2004,37 @@ async def weixin_test():
 async def weixin_disconnect():
     """断开微信连接"""
     global _weixin_state
+    _stop_weixin_poll()  # 先停止轮询，再清空状态
     _weixin_state["connected"] = False
     _weixin_state["token"] = ""
     _weixin_state["account_id"] = ""
+    _weixin_state["chat_id"] = ""
+    _weixin_state["context_token"] = ""
     _weixin_state["qr_login_in_progress"] = False
     _weixin_state["qrcode_token"] = ""
     _weixin_state["last_error"] = ""
-    _stop_weixin_poll()  # 停止消息轮询
-    _save_weixin_persist()
+    # 注意：不在这里调 _save_weixin_persist()，避免清空状态被持久化
+    # 下次 QR confirmed 后会重新保存
     return {"ok": True}
 
 
 async def _send_weixin_progress(message: str) -> bool:
-    """向微信发送进度消息 — 使用 Hermes 原生 send_weixin_direct"""
-    if not _weixin_state["connected"] or not _weixin_state["token"]:
+    """向微信发送进度消息 — 使用 Hermes 原生 WeixinAdapter.send()"""
+    if _weixin_adapter is None:
         return False
     try:
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent"))
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "gateway"))
-        from platforms.weixin import send_weixin_direct
-        result = await send_weixin_direct(
-            extra={
-                "account_id": _weixin_state["account_id"],
-                "base_url": _weixin_state["base_url"],
-            },
-            token=_weixin_state["token"],
-            chat_id=_weixin_state.get("chat_id") or _weixin_state["account_id"],
-            message=message,
-        )
-        return result.get("success", False)
-    except Exception:
+        chat_id = _weixin_state.get("chat_id") or _weixin_state["account_id"]
+        print(f"[MemOmics] send to chat_id={chat_id[:30] if chat_id else 'EMPTY'}", flush=True)
+        result = await _weixin_adapter.send(chat_id, message)
+        print(f"[MemOmics] send result: success={getattr(result,'success','?')}, error={getattr(result,'error','?')}", flush=True)
+        if hasattr(result, 'error') and result.error and 'session' in str(result.error).lower():
+            _weixin_state["connected"] = False
+            _weixin_state["last_error"] = "微信会话已过期，请重新扫码"
+            print(f"[MemOmics] 微信会话过期: {result.error}", flush=True)
+            return False
+        return result.success if hasattr(result, 'success') else bool(result)
+    except Exception as e:
+        print(f"[MemOmics] 微信发送异常: {e}", flush=True)
         return False
 
 
@@ -2022,6 +2044,7 @@ _weixin_msg_store = []       # 最近消息列表（供前端拉取和 WS 推送
 _weixin_seen_ids = set()     # 已处理消息 ID 去重
 _weixin_sync_buf = ""        # iLink 增量轮询 sync_buf
 _weixin_poll_task = None     # 后台轮询 asyncio.Task
+_weixin_adapter = None      # Hermes 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
@@ -2113,6 +2136,7 @@ def _rebuild_weixin_session_map():
 
 async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: str, context_token: str):
     """用 MemOmics Agent 处理微信消息并自动回复（关联 MemOmics 会话，24h 超时自动新建）"""
+    global _weixin_msg_store, _WEIXIN_WS_CLIENTS
     import sys as _sys_agent, os as _os_agent
 
     # 获取或创建关联的 MemOmics 会话
@@ -2161,10 +2185,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             api_key=_model_cfg.get("api_key", ""),
             provider=_model_cfg.get("provider", "openai"),
             model=_model_cfg.get("model", "gpt-4o"),
-            hermes_home=_hermes_root.replace('/gateway', '').replace('\gateway', ''),
-            tools=[],
-            skills_index=None,
-            system_prompt=f"用户正在通过微信与 MemOmics 对话。请用简洁友好的方式回答，不超过500字。",
+            ephemeral_system_prompt="用户正在通过微信与 MemOmics 对话。请用简洁友好的方式回答，不超过500字。",
         )
         loop = asyncio.get_event_loop()
 
@@ -2189,19 +2210,26 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
 
-            # 发送到微信
-            import aiohttp as _aiohttp
-            client_id = str(uuid.uuid4()).replace("-", "")[:16]
-            async with _aiohttp.ClientSession() as http_session:
-                await _send_message(
-                    http_session,
-                    base_url=_weixin_state["base_url"],
-                    token=_weixin_state["token"],
-                    to=sender_id,
-                    text=result_text.strip(),
-                    context_token=context_token,
-                    client_id=client_id,
-                )
+            # 通过 Hermes adapter 发送回复
+            if _weixin_adapter:
+                try:
+                    send_result = await _weixin_adapter.send(sender_id, result_text.strip())
+                    print(f"[MemOmics] 微信Agent回复: success={send_result.success}", flush=True)
+                except Exception as e:
+                    print(f"[MemOmics] 微信Agent回复发送失败: {e}", flush=True)
+            else:
+                import aiohttp as _aiohttp
+                client_id = str(uuid.uuid4()).replace("-", "")[:16]
+                async with _aiohttp.ClientSession() as http_session:
+                    await _send_message(
+                        http_session,
+                        base_url=_weixin_state["base_url"],
+                        token=_weixin_state["token"],
+                        to=sender_id,
+                        text=result_text.strip(),
+                        context_token=context_token,
+                        client_id=client_id,
+                    )
             # 记录到微信消息存储（供前端面板）
             wx_msg = {
                 "id": str(int(time.time() * 1000)),
@@ -2350,20 +2378,146 @@ async def _weixin_poll_loop():
 
 
 def _start_weixin_poll():
-    """启动微信消息轮询后台任务"""
-    global _weixin_poll_task
-    if _weixin_poll_task is None or _weixin_poll_task.done():
-        _weixin_poll_task = asyncio.create_task(_weixin_poll_loop())
-        print("[MemOmics] 微信消息轮询已启动", flush=True)
+    """启动 Hermes 原生 WeixinAdapter"""
+    global _weixin_adapter
+    if _weixin_adapter is not None:
+        return
+    asyncio.create_task(_connect_hermes_weixin_adapter())
+    print("[MemOmics] Hermes 微信适配器启动中...", flush=True)
 
 
 def _stop_weixin_poll():
-    """停止微信消息轮询"""
-    global _weixin_poll_task
-    if _weixin_poll_task and not _weixin_poll_task.done():
-        _weixin_poll_task.cancel()
-        _weixin_poll_task = None
-        print("[MemOmics] 微信消息轮询已停止", flush=True)
+    """停止 Hermes 原生 WeixinAdapter"""
+    global _weixin_adapter
+    if _weixin_adapter is not None:
+        asyncio.create_task(_disconnect_hermes_weixin_adapter())
+
+# ================================================================
+# Hermes 原生 WeixinAdapter 集成
+# ================================================================
+
+def _build_weixin_platform_config():
+    """用当前 _weixin_state 构建 Hermes PlatformConfig"""
+    import sys as _sys
+    _hermes_root = os.path.join(os.path.dirname(__file__), "..", "hermes-agent")
+    _sys.path.insert(0, _hermes_root)
+    from gateway.config import Platform, PlatformConfig
+    return PlatformConfig(
+        enabled=True,
+        token=_weixin_state["token"],
+        extra={
+            "account_id": _weixin_state["account_id"],
+            "base_url": _weixin_state.get("base_url", "https://ilinkai.weixin.qq.com"),
+            "dm_policy": "pairing",
+            "group_policy": "disabled",
+            "send_chunk_delay_seconds": "1.5",
+            "send_chunk_retries": "4",
+        }
+    )
+
+
+async def _hermes_weixin_message_handler(event):
+    """Hermes 消息回调 — 存储、推送、自动回复"""
+    global _weixin_msg_store, _WEIXIN_WS_CLIENTS
+    try:
+        msg_id = event.message_id or str(int(time.time() * 1000))
+        sender_id = event.source.user_id or ""
+        sender_name = event.source.user_name or sender_id
+        text = event.text or ""
+        ctx_token = ""
+        if event.raw_message and isinstance(event.raw_message, dict):
+            ctx_token = event.raw_message.get("context_token", "")
+        if ctx_token:
+            _weixin_state["context_token"] = ctx_token
+        if event.source.chat_id:
+            _weixin_state["chat_id"] = event.source.chat_id
+
+        if not text and not (event.raw_message and isinstance(event.raw_message, dict) and event.raw_message.get("item_list")):
+            return
+
+        ts = int(time.time())
+        wx_msg = {
+            "id": msg_id,
+            "sender_id": sender_id,
+            "sender_name": sender_name[:60] if sender_name else "",
+            "text": text,
+            "context_token": ctx_token,
+            "ts": ts,
+            "direction": "in",
+        }
+        _weixin_msg_store.append(wx_msg)
+        if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
+            _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+
+        ws_event = json.dumps({"type": "weixin_message", "message": wx_msg})
+        dead = set()
+        for ws in list(_WEIXIN_WS_CLIENTS):
+            try:
+                await ws.send_text(ws_event)
+            except Exception:
+                dead.add(ws)
+        _WEIXIN_WS_CLIENTS -= dead
+
+        print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
+
+        if _weixin_agent_enabled and text.strip():
+            asyncio.create_task(_process_weixin_agent_reply(
+                sender_id, sender_name, text, ctx_token
+            ))
+    except Exception:
+        import traceback
+        traceback.print_exc()
+    return None
+
+
+async def _connect_hermes_weixin_adapter():
+    """连接 Hermes 原生 WeixinAdapter"""
+    global _weixin_adapter
+    try:
+        import sys as _sys
+        _hermes_root = os.path.join(os.path.dirname(__file__), "..", "hermes-agent")
+        _sys.path.insert(0, _hermes_root)
+        from gateway.platforms.weixin import WeixinAdapter, check_weixin_requirements
+        if not check_weixin_requirements():
+            print("[MemOmics] 微信依赖缺失 (aiohttp/cryptography)", flush=True)
+            return
+        config = _build_weixin_platform_config()
+        print(f"[MemOmics] adapter config: token={'YES' if config.token else 'NO'}, account={_weixin_state.get('account_id','')[:20]}", flush=True)
+        _weixin_adapter = WeixinAdapter(config)
+        _weixin_adapter.set_message_handler(_hermes_weixin_message_handler)
+        ok = await _weixin_adapter.connect()
+        print(f"[MemOmics] adapter connect result: {ok}", flush=True)
+        if ok:
+            print("[MemOmics] Hermes 微信适配器已连接", flush=True)
+            _weixin_state["connected"] = True
+            _save_weixin_persist()
+        else:
+            print("[MemOmics] Hermes 微信适配器连接失败", flush=True)
+            _weixin_state["last_error"] = "Hermes 适配器连接失败"
+            _weixin_adapter = None
+    except Exception as e:
+        print(f"[MemOmics] Hermes 微信适配器异常: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        _weixin_state["last_error"] = str(e)
+        _weixin_adapter = None
+
+
+async def _disconnect_hermes_weixin_adapter():
+    """断开 Hermes 原生 WeixinAdapter"""
+    global _weixin_adapter
+    if _weixin_adapter is not None:
+        try:
+            await _weixin_adapter.disconnect()
+        except Exception:
+            pass
+        _weixin_adapter = None
+    _weixin_state["connected"] = False
+
+    print("[MemOmics] Hermes 微信适配器已停止", flush=True)
+
+
+
 
 
 @app.get("/api/weixin/messages")
@@ -2384,42 +2538,28 @@ async def weixin_messages(since: str = ""):
 
 @app.post("/api/weixin/send")
 async def weixin_send(body: dict = None):
-    """向微信用户发送/回复消息"""
+    """向微信用户发送/回复消息 — 使用 Hermes 原生 WeixinAdapter"""
+    global _weixin_msg_store
     if not body:
         return JSONResponse({"ok": False, "error": "请求体为空"}, status_code=400)
-    if not _weixin_state["connected"] or not _weixin_state["token"]:
+    if _weixin_adapter is None:
         return {"ok": False, "error": "微信未连接"}
 
     to_user = body.get("to", "") or body.get("sender_id", "") or _weixin_state.get("chat_id") or _weixin_state["account_id"]
     text = body.get("text", "").strip()
     if not text:
         return {"ok": False, "error": "消息不能为空"}
-    context_token = body.get("context_token") or None
 
-    import aiohttp, uuid, sys as _sys, os as _os
-    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent'))
-    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', 'hermes-agent', 'gateway'))
-    from platforms.weixin import _send_message
     try:
-        client_id = str(uuid.uuid4()).replace("-", "")[:16]
-        async with aiohttp.ClientSession() as session:
-            result = await _send_message(
-                session,
-                base_url=_weixin_state["base_url"],
-                token=_weixin_state["token"],
-                to=to_user,
-                text=text,
-                context_token=context_token,
-                client_id=client_id,
-            )
-        if result.get("ret") == 0 or result.get("errcode") == 0:
-            # 记录到消息存储
+        result = await _weixin_adapter.send(to_user, text)
+        ok = result.success if hasattr(result, 'success') else bool(result)
+        if ok:
             wx_msg = {
                 "id": str(int(time.time() * 1000)),
                 "sender_id": _weixin_state["account_id"],
                 "sender_name": "我",
                 "text": text,
-                "context_token": context_token or "",
+                "context_token": _weixin_state.get("context_token", ""),
                 "ts": int(time.time()),
                 "direction": "out",
             }
@@ -2428,10 +2568,11 @@ async def weixin_send(body: dict = None):
                 _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
             return {"ok": True}
         else:
-            errmsg = result.get("msg") or result.get("errmsg") or f"ret={result.get('ret')}"
-            return {"ok": False, "error": errmsg}
+            return {"ok": False, "error": "发送失败"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
 
 @app.get("/api/files")
 async def list_files(path: str = ""):
