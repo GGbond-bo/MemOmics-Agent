@@ -2048,7 +2048,7 @@ _weixin_adapter = None      # Hermes 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
-_weixin_agent_enabled = False     # Agent 自动回复开关
+_weixin_agent_enabled = True     # Agent 自动回复开关
 _weixin_session_map: dict = {}    # {wx_user_id: {"session_id": ..., "last_ts": ...}}
 _WEIXIN_SESSION_TTL = 86400       # 24 小时无消息自动新建会话
 
@@ -2180,12 +2180,22 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             "provider": "openai", "model": "gpt-4o", "base_url": "https://api.openai.com/v1",
             "api_key": os.environ.get("OPENAI_API_KEY", "")
         }
+        # 微信也使用完整的 MemOmics Agent 配置（含 SOUL.md + 技能目录）
+        skills_idx = _read_skills_index()
+        weixin_prompt = "用户正在通过微信与 MemOmics 对话。请遵循 SOUL.md 规则回答，保持简洁友好，不超过500字。"
+        if skills_idx:
+            weixin_prompt = weixin_prompt + "\n\n" + skills_idx
         agent = AIAgent(
             base_url=_model_cfg.get("base_url", ""),
             api_key=_model_cfg.get("api_key", ""),
             provider=_model_cfg.get("provider", "openai"),
             model=_model_cfg.get("model", "gpt-4o"),
-            ephemeral_system_prompt="用户正在通过微信与 MemOmics 对话。请用简洁友好的方式回答，不超过500字。",
+            max_iterations=90,
+            enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web"],
+            ephemeral_system_prompt=weixin_prompt,
+            quiet_mode=True,
+            tool_progress_mode="all",
+            session_id=f"weixin-{uuid.uuid4().hex[:8]}",
         )
         loop = asyncio.get_event_loop()
 
