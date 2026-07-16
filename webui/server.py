@@ -65,6 +65,9 @@ from typing import Optional
 app = FastAPI(title="MemOmics WebUI v2")
 
 import logging
+# Enable Hermes weixin debug logging
+logging.getLogger("gateway.platforms.weixin").setLevel(logging.DEBUG)
+logging.getLogger("gateway.platforms.weixin").addHandler(logging.StreamHandler())
 logger = logging.getLogger("memomics")
 
 # === 启动预热：预构建 skills snapshot（避免首次分析请求冷扫描 355 个 SKILL.md） ===
@@ -2027,9 +2030,9 @@ async def _send_weixin_progress(message: str) -> bool:
         # Ensure @im.wechat suffix for user IDs
         if chat_id and "@" not in chat_id:
             chat_id = chat_id + "@im.wechat"
-        print(f"[MemOmics] send to chat_id={chat_id[:30] if chat_id else 'EMPTY'}", flush=True)
+        print(f"[MemOmics] send to chat_id={chat_id if chat_id else 'EMPTY'}", flush=True)
         result = await _weixin_adapter.send(chat_id, message)
-        print(f"[MemOmics] send result: success={getattr(result,'success','?')}, error={getattr(result,'error','?')}", flush=True)
+        print(f"[MemOmics] send result: success={getattr(result,'success','?')}, error={getattr(result,'error','?')}, raw={repr(result)[:200]}", flush=True)
         if hasattr(result, 'error') and result.error and 'session' in str(result.error).lower():
             _weixin_state["connected"] = False
             _weixin_state["last_error"] = "微信会话已过期，请重新扫码"
