@@ -467,22 +467,21 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       </div>
     </div>
 
-    <!-- 分析结果面板 (Git 仓库风格) -->
+    <!-- 分析结果面板 -->
     <div id="panel-results" style="display:none;">
-      <div class="info-header">
-        <span id="results-title">📊 分析结果</span>
-        <button class="back-btn" onclick="refreshResults()" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;float:right;">🔄 刷新</button>
-      </div>
-      <!-- Git 风格文件树 -->
-      <div class="results-tree-header">
-        <span class="tree-breadcrumb" id="tree-breadcrumb"></span>
-        <span class="tree-stats" id="tree-stats"></span>
-      </div>
-      <div class="results-tree" id="results-tree">
-        <!-- JS 递归渲染 -->
-      </div>
-      <!-- 图片/文件预览区 -->
+      <div class="info-header">分析结果 <button class="back-btn" onclick="refreshResults()" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;float:right;">🔄 刷新</button></div>
+      <div class="file-path-bar" id="results-path"></div>
+      <!-- 图片预览区（新图自动弹出，可叉掉） -->
       <div id="figure-preview-area" style="display:none;"></div>
+      <!-- 分类标签 -->
+      <div id="results-tabs" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;">
+        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;">🖼️ 图片</span>
+        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);">📁 文件</span>
+      </div>
+      <!-- 图片缩略图网格 -->
+      <div id="results-figures" style="display:none;padding:8px;overflow-y:auto;flex:1;"></div>
+      <!-- 文件浏览区 -->
+      <div class="file-browser" id="results-list" style="overflow-y:auto;flex:1;"></div>
     </div>
 
     <!-- 文件浏览面板 -->
@@ -743,6 +742,7 @@ const _introLines = [
   '从数据扫描到分析报告，我全程陪你走完。'
 ];
 let currentPath = { files: '', kb: '', results: '' };
+var resultsTab = 'figures';
 let models = [];
 let currentModel = {};
 let progressTimelineEl = null;
@@ -2576,136 +2576,95 @@ async function createSkill() {
 // === 分析结果 (Git 风格文件树) ===
 
 /** 获取文件图标 (git仓库风格) */
-function getTreeIcon(node) {
-  if (node.is_dir) return '📁';
-  var ext = node.ext;
-  if (ext === '.png' || ext === '.jpg' || ext === '.jpeg' || ext === '.svg') return '🖼️';
-  if (ext === '.pdf') return '📕';
-  if (ext === '.csv' || ext === '.tsv' || ext === '.xlsx') return '📊';
-  if (ext === '.r' || ext === '.R') return '🔵';
-  if (ext === '.py') return '🐍';
-  if (ext === '.rds' || ext === '.rda' || ext === '.h5ad') return '💾';
-  if (ext === '.html') return '🌐';
-  if (ext === '.json') return '📋';
-  if (ext === '.md' || ext === '.txt') return '📝';
-  if (ext === '.log') return '📜';
-  return '📄';
-}
-
 async function refreshResults() {
-  var treeEl = document.getElementById('results-tree');
   if (!currentSid) {
-    document.getElementById('tree-breadcrumb').textContent = '';
-    document.getElementById('tree-stats').textContent = '';
-    treeEl.innerHTML = '<div class="tree-node-empty">📋 请先在左侧选择一个会话，或新建会话开始分析。<br>分析结果将自动保存到当前会话目录。</div>';
+    document.getElementById('results-path').textContent = '请先选择或新建会话';
+    document.getElementById('results-tabs').style.display = 'none';
+    document.getElementById('results-figures').style.display = 'none';
     document.getElementById('figure-preview-area').style.display = 'none';
+    document.getElementById('results-list').innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-light);">📋 请先在左侧选择一个会话，或新建会话开始分析。<br>分析结果将自动保存到当前会话目录。</div>';
     return;
   }
+  document.getElementById('results-tabs').style.display = 'block';
+  loadFigures();
+  loadResultsFiles();
+  switchResultsTab(resultsTab);
+}
+
+async function loadFigures() {
   try {
-    var r = await fetch('/api/results/' + currentSid + '/tree');
+    var r = await fetch('/api/results/' + currentSid + '/figures');
     var d = await r.json();
-    if (!d.tree) {
-      document.getElementById('tree-breadcrumb').textContent = '';
-      document.getElementById('tree-stats').textContent = '';
-      treeEl.innerHTML = '<div class="tree-node-empty">' + (d.note || '该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。') + '</div>';
+    var figs = d.figures || [];
+    var el = document.getElementById('results-figures');
+    if (!figs.length) {
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
       return;
     }
-    // 面包屑
-    document.getElementById('tree-breadcrumb').innerHTML = '<a onclick="refreshResults()">' + escapeHtml(d.results_name) + '</a>';
-    document.getElementById('tree-stats').textContent = (d.total_files || 0) + ' 文件 · ' + (d.total_dirs || 0) + ' 目录';
-    // 渲染树
-    treeEl.innerHTML = '';
-    renderTreeNodes(d.tree.children || [], treeEl, 0);
+    el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
+      var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
+      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
+    }).join('') + '</div>';
   } catch(e) {
-    treeEl.innerHTML = '<div class="tree-node-empty">加载分析结果失败: ' + e + '</div>';
+    document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">加载图片失败</div>';
   }
 }
 
-/** 递归渲染树节点 (GitHub 风格) */
-function renderTreeNodes(nodes, parentEl, depth) {
-  if (!nodes || !nodes.length) return;
-  nodes.forEach(function(node) {
-    var indent = depth * 16;
-    var wrapper = document.createElement('div');
-    var nodeEl = document.createElement('div');
-    nodeEl.className = 'tree-node' + (node.is_dir ? ' directory' : ' file');
-    nodeEl.style.paddingLeft = (12 + indent) + 'px';
-    
-    // 展开箭头
-    var chevronHtml = node.is_dir ? '<span class="tree-chevron" id="chevron-' + node.path.replace(/[^a-zA-Z0-9]/g,'_') + '">▶</span>' : '<span class="tree-chevron" style="visibility:hidden;">▶</span>';
-    // 图标
-    var iconHtml = '<span class="tree-icon">' + getTreeIcon(node) + '</span>';
-    // 文件名
-    var nameHtml = '<span class="tree-name" title="' + escapeHtml(node.name) + '">' + escapeHtml(node.name) + '</span>';
-    // 大小
-    var sizeHtml = node.is_dir ? '' : '<span class="tree-size">' + formatSize(node.size) + '</span>';
-    // 日期
-    var dateHtml = '';
-    if (node.mtime) {
-      var d = new Date(node.mtime * 1000);
-      dateHtml = '<span class="tree-date">' + d.toLocaleDateString('zh-CN', {month:'short',day:'numeric'}) + '</span>';
-    }
-    
-    nodeEl.innerHTML = chevronHtml + iconHtml + nameHtml + sizeHtml + dateHtml;
-    
-    // 子节点容器
-    var childrenEl = null;
-    if (node.is_dir && node.children && node.children.length > 0) {
-      childrenEl = document.createElement('div');
-      childrenEl.className = 'tree-children';
-      childrenEl.id = 'children-' + node.path.replace(/[^a-zA-Z0-9]/g,'_');
-      renderTreeNodes(node.children, childrenEl, depth + 1);
-    }
-    
-    // 点击事件
-    nodeEl.addEventListener('click', function(e) {
-      e.stopPropagation();
-      if (node.is_dir) {
-        // 展开/折叠
-        toggleTreeNode(node, nodeEl, childrenEl);
-      } else {
-        // 预览文件
-        previewResultFile(node);
-      }
-    });
-    
-    wrapper.appendChild(nodeEl);
-    parentEl.appendChild(wrapper);
-    if (childrenEl) {
-      parentEl.appendChild(childrenEl);
-    }
-  });
-}
-
-/** 切换目录展开/折叠 */
-function toggleTreeNode(node, nodeEl, childrenEl) {
-  if (!childrenEl) return;
-  var chevron = nodeEl.querySelector('.tree-chevron');
-  if (childrenEl.classList.contains('open')) {
-    childrenEl.classList.remove('open');
-    if (chevron) chevron.classList.remove('open');
-  } else {
-    childrenEl.classList.add('open');
-    if (chevron) chevron.classList.add('open');
+async function loadResultsFiles() {
+  var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || ''));
+  var d = await r.json();
+  var sessionId = d.session_id || currentSid;
+  var pathParts = (d.path || '').split('/').filter(function(p){return p;});
+  var breadcrumb = '<span style="color:var(--primary);font-weight:600;cursor:pointer;" onclick="currentPath.results=\'\';loadResultsFiles()">' + escapeHtml(d.results_name || ('会话 ' + sessionId)) + '</span>';
+  var accumPath = '';
+  for (var i = 0; i < pathParts.length; i++) {
+    accumPath += (i > 0 ? '/' : '') + pathParts[i];
+    var p = accumPath;
+    breadcrumb += ' / <span style="cursor:pointer;color:var(--text-light);" onclick="currentPath.results=\'' + p + '\';loadResultsFiles()">' + escapeHtml(pathParts[i]) + '</span>';
   }
-}
-
-/** 预览结果文件 */
-function previewResultFile(node) {
-  var ext = node.ext;
-  var path = node.path;
-  // 图片/PDF → 预览区
-  if (ext === '.png' || ext === '.jpg' || ext === '.jpeg' || ext === '.svg' || ext === '.pdf') {
-    showFigurePreview('/api/download?file=' + encodeURIComponent(path), node.name);
+  var parentPath = '';
+  if (currentPath.results) {
+    var parts = currentPath.results.split('/').filter(function(p){return p;});
+    parts.pop();
+    parentPath = parts.join('/');
+  }
+  var backBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--primary);color:#fff;border:none;cursor:pointer;margin-left:6px;">⬆️ 返回上一级</button>' : '';
+  var rootBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;margin-left:4px;">🏠 根目录</button>' : '';
+  document.getElementById('results-path').innerHTML = breadcrumb + backBtn + rootBtn;
+  var items = d.items || [];
+  if (!items.length) {
+    document.getElementById('results-list').innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + (d.note || '暂无分析结果') + '</div>';
     return;
   }
-  // 文本文件 → 新标签页预览
-  if (ext === '.r' || ext === '.R' || ext === '.py' || ext === '.md' || ext === '.txt' || ext === '.csv' || ext === '.tsv' || ext === '.json' || ext === '.log') {
-    previewFile(path);
-    return;
+  var upItem = currentPath.results ? '<div class="file-item" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="color:var(--primary);"><span class="file-icon">⬆️</span><span class="file-name">返回上一级</span></div>' : '';
+  document.getElementById('results-list').innerHTML = upItem + items.map(function(f) {
+    var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' ? '📊' : f.ext === '.rds' ? '💾' : '📄');
+    var sizeStr = f.is_dir ? '' : formatSize(f.size);
+    var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
+    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+  }).join('');
+}
+
+function switchResultsTab(tab) {
+  resultsTab = tab;
+  document.getElementById('tab-figures').style.background = tab === 'figures' ? 'var(--primary)' : '';
+  document.getElementById('tab-figures').style.color = tab === 'figures' ? '#fff' : 'var(--text-light)';
+  document.getElementById('tab-files').style.background = tab === 'files' ? 'var(--primary)' : '';
+  document.getElementById('tab-files').style.color = tab === 'files' ? '#fff' : 'var(--text-light)';
+  document.getElementById('results-figures').style.display = tab === 'figures' ? 'block' : 'none';
+  document.getElementById('results-list').style.display = tab === 'files' ? 'block' : 'none';
+}
+
+function browseResults(relPath) {
+  currentPath.results = relPath;
+  refreshResults();
+}
+
+function handleNewFigure(fig) {
+  showFigurePreview(fig.url, fig.name);
+  if (document.getElementById('panel-results').style.display !== 'none' && currentSid) {
+    loadFigures();
   }
-  // 其他 → 下载
-  downloadFile(path);
 }
 
 function showFigurePreview(url, name) {
@@ -2725,14 +2684,6 @@ function showFigurePreview(url, name) {
 function closeFigurePreview() {
   document.getElementById('figure-preview-area').style.display = 'none';
   document.getElementById('figure-preview-area').innerHTML = '';
-}
-
-function handleNewFigure(fig) {
-  showFigurePreview(fig.url, fig.name);
-  // 同时刷新树视图
-  if (document.getElementById('panel-results').style.display !== 'none' && currentSid) {
-    refreshResults();
-  }
 }
 
 // === 待办 ===
