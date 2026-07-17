@@ -2095,7 +2095,7 @@ def _extract_text_from_weixin_msg(msg: dict) -> str:
 
 
 def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
-    """获取或创建微信用户关联的 MemOmics 会话（24h 超时自动新建）"""
+    """获取或创建微信用户关联的 MemOmics 会话（12h 超时自动新建）"""
     global _weixin_session_map
     now = time.time()
     entry = _weixin_session_map.get(sender_id)
@@ -2108,7 +2108,8 @@ def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
             _save_weixin_session_map()
             return _sessions[sid]
 
-    title = f"📱 {sender_name or sender_id[:12]}"
+    date_str = datetime.now().strftime("%m-%d")
+    title = f"📱 {date_str} {sender_name or sender_id[:12]}"
     session = _create_session(title)
     _weixin_session_map[sender_id] = {"session_id": session["id"], "last_ts": now}
     session["wx_sender_id"] = sender_id
