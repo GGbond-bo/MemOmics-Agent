@@ -2253,6 +2253,20 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
 
         def _wx_tool_complete_cb(tool_name, result_str=""):
             _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            # 扫描新生成的图片 → 推送 new_figure 事件
+            try:
+                base = session.get("results_dir", "")
+                if base and os.path.isdir(base):
+                    for p in sorted(Path(base).rglob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
+                        if p.is_file() and p.suffix.lower() in {'.png', '.jpg', '.jpeg', '.svg'}:
+                            key = str(p)
+                            if key not in getattr(_wx_tool_complete_cb, '_known', set()):
+                                _wx_tool_complete_cb._known = getattr(_wx_tool_complete_cb, '_known', set()) | {key}
+                                rel = str(p.relative_to(base)).replace(chr(92), "/")
+                                fig = {"name": p.name, "rel_path": rel, "url": f"/api/results/{sid}/figure?path={rel}", "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%H:%M:%S")}
+                                _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            except Exception:
+                pass
             if _weixin_adapter:
                 try:
                     asyncio.get_event_loop().create_task(_send_weixin_progress("\u2705 {} 完成".format(tool_name)))

@@ -148,11 +148,24 @@
       "approved": false,
       "custom_script": false,
       "result": "TypeI: 1561 DEG (1178 Aged↑/383 Young↑), TypeII: 1465 DEG (867/598), FAP: 413 DEG, EC: 180 DEG (mainly Young↑=144), MuSC: 64 DEG, Pericytes: 56 DEG"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_deg_pseudobulk.R",
+      "params": "Pseudobulk DESeq2, donor×celltype aggregation, design=~age_group, padj<0.05, min 5 cells/pseudobulk, min 2 donors/group",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "7 cell types DEG: TypeI=148, TypeII=189, FAP=102, EC=79, MuSC=39, Pericyte=18, Myeloid=46. 5/5 KB predictions validated (CHRNG↑ denervation, CDKN1A↑ senescence, CCL2↑ inflammation, PAX7↓ MuSC decline,"
     }
   ],
-  "proven_script": "run_deg.R",
+  "proven_script": "run_deg_pseudobulk.R",
   "error_count": 3,
-  "success_count": 6,
+  "success_count": 7,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -162,7 +175,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": "run_deg.R"
+    "last_used_script": "run_deg_pseudobulk.R"
   },
   "errors": [
     {

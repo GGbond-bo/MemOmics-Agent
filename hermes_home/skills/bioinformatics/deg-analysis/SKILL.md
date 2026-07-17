@@ -176,6 +176,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | Homo sapiens | heart | sinoatrial node aging | 2026-07-12 | run_deg.R | 7.5 | 6.0 | ✅ |
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | run_deg.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-07-17 | run_deg_pseudobulk.R | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2

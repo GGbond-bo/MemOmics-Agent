@@ -819,6 +819,11 @@ function handleMessage(msg) {
     _sessionProgressCache[msg.session_id].items.push(msg);
     if (msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
       _sessionProgressCache[msg.session_id].running = false;
+      // 任务完成 → 自动刷新结果面板
+      if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
+        loadFigures();
+        if (resultsTab === 'files') loadResultsFiles();
+      }
     } else if (msg.type === 'thinking' || msg.type === 'agent_running') {
       _sessionProgressCache[msg.session_id].running = true;
     }
@@ -933,6 +938,15 @@ function handleMessage(msg) {
       addProgressItem(msg.content, 'pending', '', msg.ts || _nowTs());
     } else if (msg.content) {
       addProgressItem(msg.tool + ': ' + msg.content.substring(0,40), 'pending', '', msg.ts || _nowTs());
+    }
+  } else if (msg.type === 'new_figure') {
+    // 分析过程中生成了新图 → 自动展示 + 刷新结果面板
+    if (msg.figure) handleNewFigure(msg.figure);
+  } else if (msg.type === 'tool_complete') {
+    // 工具完成 → 如果结果面板打开且是当前会话，自动刷新
+    if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
+      loadFigures();
+      if (resultsTab === 'files') loadResultsFiles();
     }
   } else if (msg.type === 'event') {
     // Hermes 统一事件流（session:compress 等）
