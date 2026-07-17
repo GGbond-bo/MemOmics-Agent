@@ -773,6 +773,11 @@ function handleMessage(msg) {
     handleWeixinMessage(msg);
     return;
   }
+  // 微信会话更新通知（不打开该会话也能刷新列表）
+  if (msg.type === 'session_update' && msg.session_id) {
+    updateSessionList();
+    return;
+  }
   // 微信消息同步到聊天面板
   if (msg.type === 'chat' && msg.message && msg.session_id) {
     var m = msg.message;

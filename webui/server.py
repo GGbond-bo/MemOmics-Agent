@@ -2581,11 +2581,28 @@ async def _hermes_weixin_message_handler(event):
         # 同步推送到 MemOmics 会话聊天面板
         session = _get_or_create_weixin_session(sender_id, sender_name)
         if session:
+            # 1) 通过 session 的 ws_ref 推送（如果用户正在看该会话）
             _session_emit(session, {
                 "type": "chat",
                 "session_id": session["id"],
                 "message": {"role": "user", "content": text, "source": "weixin"}
             })
+            # 2) 通过微信 WS 广播 session_update（让前端刷新会话列表）
+            session_update = json.dumps({
+                "type": "session_update",
+                "session_id": session["id"],
+                "title": session.get("title", ""),
+                "last_active": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "source": "weixin",
+                "msg_count": len(session.get("messages", [])),
+            }, ensure_ascii=False)
+            dead = set()
+            for ws_cli in list(_WEIXIN_WS_CLIENTS):
+                try:
+                    await ws_cli.send_text(session_update)
+                except Exception:
+                    dead.add(ws_cli)
+            _WEIXIN_WS_CLIENTS -= dead
             # 更新 last_active
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             # 消息持久化
