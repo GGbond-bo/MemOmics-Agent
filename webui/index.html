@@ -1531,7 +1531,12 @@ function addToolBlock(tool, args, running) {
     div.classList.add('debate-tool');
   }
 
-  document.getElementById('messages').appendChild(div);
+  // 嵌入到当前 assistant 气泡内部（而非 messages 底部），避免视觉上像重复消息
+  if (currentBubble) {
+    currentBubble.appendChild(div);
+  } else {
+    document.getElementById('messages').appendChild(div);
+  }
   scrollBottom();
   return div;
 }
