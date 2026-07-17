@@ -135,11 +135,24 @@
       "approved": false,
       "custom_script": false,
       "result": "3,864 DEGs Old vs Young: PPARGC1A↓, MT-ND5↓, HK2↓ (线粒体+代谢崩溃), MCU↑ (代偿)。Wilcoxon zone5验证2,615 DEGs。3张图。注: 未控制donor随机效应"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_deg.R",
+      "params": "method=Wilcoxon_FindMarkers, min.pct=0.1, logfc.threshold=0.1, test.use=wilcox, age_groups=Young(15-34) vs Aged(77-99), n_cells=10000",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "TypeI: 1561 DEG (1178 Aged↑/383 Young↑), TypeII: 1465 DEG (867/598), FAP: 413 DEG, EC: 180 DEG (mainly Young↑=144), MuSC: 64 DEG, Pericytes: 56 DEG"
     }
   ],
-  "proven_script": "",
+  "proven_script": "run_deg.R",
   "error_count": 3,
-  "success_count": 5,
+  "success_count": 6,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -149,7 +162,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": ""
+    "last_used_script": "run_deg.R"
   },
   "errors": [
     {

@@ -27,9 +27,9 @@ prerequisites:
 
 # 分层抽样 (Stratified Subsampling)
 
-单细胞分析中按样本（sample/group）分层抽样的3种常见场景。适用于已有多样本Seurat/AnnData对象的场景。
+单细胞分析中按样本（sample/group）抽样的4种常见场景。适用于已有多样本Seurat/AnnData对象的场景。
 
-## 3种场景
+## 4种场景
 
 ### 场景1: 分层降采样 (Stratified Downsampling)
 每个sample取相同数量细胞，避免大样本主导下游分析（聚类、DEG、composition）。
@@ -45,6 +45,15 @@ prerequisites:
 每个sample随机抽N个细胞画UMAP/tSNE，避免overplotting（大样本点太多遮盖小样本）。
 
 **触发**: "分层可视化抽样" / "每个sample抽N个画UMAP" / "抽样可视化"
+
+### 场景4: 纯随机抽样 (Pure Random Sampling)
+从全量数据中随机抽取N个细胞，不做分层保证。简单直接，但**稀有细胞类型可能被严重稀释**（如 MastCells 0.2% → 10k 中仅 ~20 cells）。
+
+**触发**: "随机抽样" / "random subset" / "随机抽取N个细胞"
+
+**⚠️ 风险**: 纯随机与分层抽样的关键区别——稀有类型（<1%）在纯随机中可能只有个位数细胞，影响下游分析统计功效。若下游需要每种细胞类型都有足够代表，改用场景1的分层降采样。
+
+**实现**: `np.random.choice(n_total, size=N, replace=False)` + `adata[selected].to_memory()`
 
 ## 通用流程
 
@@ -73,6 +82,7 @@ prerequisites:
 - **UMAP必须已存在**：抽样前确保对象已有UMAP降维结果，抽样后重新算UMAP会改变布局
 - **抽样后不要重新聚类**：抽样后的对象仅用于可视化/ML，聚类结果不可靠
 - **Seurat subset很慢**：大量细胞时用 `WhichCells` + `subset` 替代循环subset
+- **🔴 每步至少1张图**：`rail_review(post)` 强制要求 `figure_count >= 1`。抽样完成后必须生成分布图（如年龄柱状图 + 细胞类型条形图 + 比例饼图的 3-panel），否则审查直接 `passed=false`。跑完抽样立即绘图，不要等到下游分析。
 
 ## References
 
@@ -121,3 +131,4 @@ prerequisites:
 | 物种 | 组织 | 方向 | 日期 | 脚本 | 评分 |
 |------|------|------|------|------|------|
 | human | skeletal_muscle | aging | 2026-07-17 | subsample_10k.py | 9/10 |
+| human | skeletal_muscle | aging | 2026-07-17 | subsample_10k_random.py | 9/10 | 纯随机, MastCells仅11个 |

@@ -178,6 +178,7 @@ CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seu
 | *(none yet)* | | | | |
 
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-07-17 | run_cellchat.R | - | - |  |
 ## 🚨 Critical Pitfalls (from real runs)
 
 ### P1: h5ad → Seurat metadata corruption (`b'...'` prefix)

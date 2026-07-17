@@ -90,11 +90,24 @@
       "approved": false,
       "custom_script": false,
       "result": "CellChat v2完成: 11630 cells, 7 subclusters, 39通路。标志基因验证排除FAP污染。发现ECM重塑(COL1A1/LAMININ)、NMJ信号(NRG/NCAM)、TGFb纤维化、WNT/FGF肌源性。population.size归一化后zone1主导(去神经化)。14/15通路跨参数一致。19张图。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_cellchat.R",
+      "params": "method=CellChat_v2, population.size=FALSE, min.cells=10, n_cells=10000, celltypes=11",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "35 signaling pathways detected. Top: LAMININ(2.27), COLLAGEN(1.51), PTPRM(0.93), EGF(0.26), CD45(0.22), PARs(0.20), PECAM1(0.19), THBS(0.17), NOTCH(0.15), VEGF(0.09). 447 significant interactions. ECM"
     }
   ],
-  "proven_script": "",
+  "proven_script": "run_cellchat.R",
   "error_count": 0,
-  "success_count": 2,
+  "success_count": 3,
   "official_docs": "https://raw.githubusercontent.com/sqjin/CellChat/refs/heads/master/README.md",
   "doc_source": "official",
   "prerequisites": {
@@ -104,6 +117,6 @@
     "description": "需要已聚类/注释的数据"
   },
   "user_prefs": {
-    "last_used_script": ""
+    "last_used_script": "run_cellchat.R"
   }
 }
