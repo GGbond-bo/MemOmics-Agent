@@ -1003,8 +1003,6 @@ def _session_emit(session, msg_dict):
     # 自动注入 session_id（如果调用者没带）
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
-    # 每条消息带唯一 ID，前端去重
-    msg_dict["_msg_id"] = str(uuid.uuid4())[:8]
     msg_type = msg_dict.get("type", "")
     # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
     if msg_type not in ("delta", "reasoning", "tool_gen"):
@@ -1018,8 +1016,12 @@ def _session_emit(session, msg_dict):
     loop_ref = session.get("loop_ref")
     if ws_ref and loop_ref:
         try:
+            payload = json.dumps(msg_dict, ensure_ascii=False)
+            # 诊断：打印非流式消息类型，追踪重复来源
+            if msg_type in ("complete", "tool_start", "tool_complete"):
+                print(f"[WS-EMIT] {msg_type} content={str(msg_dict.get('content',''))[:80]} sid={msg_dict.get('session_id','')[:16]}", flush=True)
             asyncio.run_coroutine_threadsafe(
-                ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
+                ws_ref.send_text(payload), loop_ref)
         except Exception:
             pass
 
