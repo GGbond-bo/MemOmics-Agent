@@ -161,11 +161,24 @@
       "approved": false,
       "custom_script": false,
       "result": "7 cell types DEG: TypeI=148, TypeII=189, FAP=102, EC=79, MuSC=39, Pericyte=18, Myeloid=46. 5/5 KB predictions validated (CHRNG↑ denervation, CDKN1A↑ senescence, CCL2↑ inflammation, PAX7↓ MuSC decline,"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "Pseudobulk sample_id×celltype; 9 cell types; DESeq2 with normal shrinkage; |LFC|>1 filter; Young=3,771 / Old=6,229 cells; 24 samples",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "TypeII: 504 DEGs (456 |LFC|>1), TypeI: 361 (332), FAP: 161 (160), EC: 99 (97), Myeloid: 61, Pericyte: 39, MuSC: 32, Lym: 15, SchwannCell: 0. CDKN1A up in FAP (LFC=4.01). Missing kb markers: COL1A1/COL"
     }
   ],
-  "proven_script": "run_deg_pseudobulk.R",
+  "proven_script": "",
   "error_count": 3,
-  "success_count": 7,
+  "success_count": 8,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -175,7 +188,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": "run_deg_pseudobulk.R"
+    "last_used_script": ""
   },
   "errors": [
     {

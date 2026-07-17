@@ -179,6 +179,7 @@ CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seu
 
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | run_cellchat.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-07-17 | - | - | - |  |
 ## 🚨 Critical Pitfalls (from real runs)
 
 ### P1: h5ad → Seurat metadata corruption (`b'...'` prefix)
@@ -222,6 +223,18 @@ for (col in colnames(seurat_obj@meta.data)) {
 | signaling role heatmap fails | Centrality not computed | `netAnalysis_computeCentrality(cellchat, slot.name="netP")` first |
 | chord diagram fails | Missing `signaling` parameter | Always pass explicit signaling pathway name |
 | ECM pathways over-interpreted | Possible fibroblast contamination | Validate PDGFRA/LUM/DCN/PDGFRB before interpreting |
+| Seurat `data` layer empty | h5ad→Seurat only has `counts` layer | `NormalizeData(obj)` before `createCellChat()` |
+| meta/data rownames mismatch | Barcodes don't match | `rownames(meta) <- colnames(obj)` before `createCellChat()` |
+
+### P6: `compareInteractions`/`netVisual_diffInteraction` 产空白图
+**Symptom**: `mergeCellChat` 后 `compareInteractions()` 输出 105B 空白图。
+**Root cause**: Young/Old 通路集不对称（如 22 vs 43），merge 对象不兼容某些比较函数。
+**Fix**: 跳过跨条件比较图，改用柱状图对比通路数量。见 `references/comparison-workaround.md`。
+
+### P7: `rankComparison` 函数不存在
+**Symptom**: `Error: could not find function "rankComparison"`
+**Root cause**: CellChat 部分 CRAN 版本无此函数。
+**Fix**: 手动排通路：`data.frame(pathway, score)` → `merge()` → `order(-abs(diff))`。
 
 ## References
 

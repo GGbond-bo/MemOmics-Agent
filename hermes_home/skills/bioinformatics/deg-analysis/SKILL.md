@@ -177,6 +177,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | run_deg.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | run_deg_pseudobulk.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-07-17 | - | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2
@@ -196,6 +197,11 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 ### P4: apeglm shrinkage unavailable by default
 **Symptom**: `lfcShrink(type="apeglm")` fails with package-not-found.
 **Fix**: Use `type="normal"` or `type="ashr"` as fallback, or skip shrinkage and report raw LFC with caveat.
+
+### P5: h5ad → Seurat via SeuratDisk fails with HDF5 errors
+**Symptom**: `Convert(h5ad, dest="h5seurat")` → HDF5-API Errors / `decrementing ID ref count` → R session crash.
+**Root cause**: HDF5 version mismatch between anndata and SeuratDisk; `obs` columns may contain non-standard types.
+**Fix**: Export counts/features/barcodes as MTX from Python, then `ReadMtx()` in R. See `references/h5ad-to-mtx-workaround.md` for the two-step procedure (Python export + R import).
 
 ## Common Issues
 
