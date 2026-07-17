@@ -1312,6 +1312,13 @@ def _sanitize_dir_name(s: str) -> str:
     return s or 'unknown'
 
 
+@app.get("/")
+async def index():
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+    with open(html_path, encoding="utf-8") as f:
+        return HTMLResponse(f.read(), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
 @app.post("/api/sessions/{sid}/rename-results")
 async def rename_results_dir(sid: str, body: dict = None):
     """scan_data 后用 物种_组织_方向_日期 重命名结果目录
