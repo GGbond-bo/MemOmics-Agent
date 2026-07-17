@@ -213,11 +213,24 @@
       "approved": false,
       "custom_script": false,
       "result": "Verification test - auto record_run"
+    },
+    {
+      "species": "human",
+      "tissue": "muscle",
+      "direction": "aging",
+      "script": "eval_test.r",
+      "params": "{\"method\":\"DESeq2\"}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Evaluation test - multi-round verification"
     }
   ],
-  "proven_script": "verify_test.r",
+  "proven_script": "eval_test.r",
   "error_count": 3,
-  "success_count": 11,
+  "success_count": 12,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -227,7 +240,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": "verify_test.r"
+    "last_used_script": "eval_test.r"
   },
   "errors": [
     {
