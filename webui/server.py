@@ -1016,12 +1016,8 @@ def _session_emit(session, msg_dict):
     loop_ref = session.get("loop_ref")
     if ws_ref and loop_ref:
         try:
-            payload = json.dumps(msg_dict, ensure_ascii=False)
-            # 诊断：打印非流式消息类型，追踪重复来源
-            if msg_type in ("complete", "tool_start", "tool_complete"):
-                print(f"[WS-EMIT] {msg_type} content={str(msg_dict.get('content',''))[:80]} sid={msg_dict.get('session_id','')[:16]}", flush=True)
             asyncio.run_coroutine_threadsafe(
-                ws_ref.send_text(payload), loop_ref)
+                ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
         except Exception:
             pass
 
@@ -2369,7 +2365,8 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                 except Exception:
                     pass
 
-            _session_emit(session, {"type": "chat", "session_id": sid, "message": {"role": "assistant", "content": result_text.strip(), "source": "weixin-agent"}})
+            # 注意：不再发送 type=chat 消息 — delta 已实时流式渲染全部文本
+            # state.db 中已持久化，重连后通过消息历史加载
             print(f"[MemOmics] 微信Agent回复 sent to={sender_name}: {result_text[:80]}...", flush=True)
 
     except Exception as e:
