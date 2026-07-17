@@ -1769,6 +1769,7 @@ function switchSession(sid) {
       else addAssistantMsg(m.content);
     });
     refreshTodos();
+    refreshResults();  // 切换会话时刷新分析结果面板
     // 加载消息后从缓存 HTML 重建进度时间线
     if (cached.timelineHtml) {
       var tmp = document.createElement('div');

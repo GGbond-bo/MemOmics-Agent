@@ -71,7 +71,7 @@
 | "样本量" / "功效分析" / "power analysis" / "统计功效" / "实验统计" / "多少样本" / "sample size" | `skill_view("experimental-design-statistics")` → 实验统计设计：样本量计算、功效分析、随机化方案 |
 | "文献综述" / "文献回顾" / "literature review" / "系统回顾" / "综述" / "调研报告" | `skill_view("literature-review")` → 系统性文献综述，含检索策略、纳入排除标准、证据质量评估 |
 | "提取参数" / "文献参数" / "从文献提取" / "参数推荐" / "parameter extraction" | `skill_view("literature-param-extraction")` → 从文献中提取分析参数（阈值、工具版本、过滤标准） |
-| "总结论文" / "概括文献" / "论文要点" / "速读" / "summarize paper" | `skill_view("paper-summary")` → 论文结构化总结（背景/方法/结果/局限） |
+| "总结论文" / "概括文献" / "论文要点" / "速读" / "精读" / "解读" / "解读论文" / "论文解读" / "全文解读" / "解读文献" / "文献解读" / "讲一下这篇" / "summarize paper" / "interpret paper" / "interpret" | `skill_view("paper-summary")` → 论文结构化总结（背景/方法/结果/局限） |
 | "生成总结" / "分析总结" / "跑完总结" / "结果汇总" / "summary report" | `skill_view("analysis-summary-report")` → 分析完成后生成综合总结报告，链入结论目录 |
 | "公共数据" / "下载数据集" / "公开数据" / "GEO数据" / "公共数据库" / "找数据" / "检索数据" / "omics data" | `skill_view("omics-dataset-retrieval")` → 跨数据库组学数据检索（GEO/ArrayExpress/TCGA/SRA） |
 | "PPT" / "幻灯片" / "演示文稿" / "presentation" / "汇报" / "组会" | `skill_view("ppt-generator")` → 生成 PPT 演示文稿 |
