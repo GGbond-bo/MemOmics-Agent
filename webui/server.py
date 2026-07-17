@@ -3369,6 +3369,44 @@ async def list_all_results():
     return {"sessions": sessions_with_results, "debug_results_dir": RESULTS_DIR}
 
 
+@app.get("/api/results/{sid}/tree")
+async def results_tree(sid: str):
+    """返回会话结果目录的树形结构"""
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
+        base = _sessions[sid].get("results_dir", "")
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not os.path.isdir(base) or not any(Path(base).iterdir()):
+        return {"tree": None, "results_name": "", "total_files": 0, "total_dirs": 0, "note": "No results yet"}
+
+    def _bt(dp):
+        ch = []
+        tf = 0
+        td = 0
+        try:
+            for p in sorted(Path(dp).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if p.name.startswith("."):
+                    continue
+                rel = str(p.relative_to(base)).replace(chr(92), "/")
+                if p.is_dir():
+                    td += 1
+                    sub = _bt(str(p))
+                    ch.append({"name": p.name, "path": rel, "is_dir": True, "children": sub["ch"], "mtime": p.stat().st_mtime})
+                    tf += sub["tf"]
+                    td += sub["td"]
+                else:
+                    tf += 1
+                    ch.append({"name": p.name, "path": rel, "is_dir": False, "size": p.stat().st_size, "mtime": p.stat().st_mtime, "ext": p.suffix.lower()})
+        except Exception:
+            pass
+        return {"ch": ch, "tf": tf, "td": td}
+
+    tree = _bt(base)
+    rn = os.path.basename(base)
+    return {"tree": {"name": rn, "path": "", "is_dir": True, "children": tree["ch"], "total_files": tree["tf"], "total_dirs": tree["td"]}, "results_name": rn, "total_files": tree["tf"], "total_dirs": tree["td"], "base": base.replace(chr(92), "/"), "session_id": sid}
+
+
 @app.get("/api/results/{sid}/figures")
 async def list_figures(sid: str):
     """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）"""
