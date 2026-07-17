@@ -44,7 +44,8 @@
 | 28 | pathway-enrichment |  | rna, scrna, scrnaseq | RED 必触发 |
 | 29 | quantify_and_cluster_cell_motility |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 30 | sasp-scoring |  | rna, scrna, scrnaseq | YEL 讨论触发 |
-| 31 | scrna-clustering | 完整Seurat v5聚类注释工作流。使用场景：QC后的scRNA-seq，需SCTransform→PCA→UMAP→聚类→注释→Markers，含SoupX/DoubletFinder/Harmo | rna, scrna, scrnaseq | RED 必触发 |
+| 31 | scrna-eda | EDA数据探索：QC后的数据概览，含分布图/相关性/主成分 | rna, scrna, scrnaseq, 数据探索, 概览 | RED 必触发 |
+| scrna-clustering | 完整Seurat v5聚类注释工作流。使用场景：QC后的scRNA-seq，需SCTransform→PCA→UMAP→聚类→注释→Markers，含SoupX/DoubletFinder/Harmo | rna, scrna, scrnaseq | RED 必触发 |
 | 34 | scrna-qc | scRNA-seq质控+Doublet+Ambient RNA去除。使用场景：拿到raw矩阵第一步，需过滤低质量细胞/双胞/环境RNA，自动推荐阈值，支持人/鼠 | rna, scrna, scrnaseq | RED 必触发 |
 | 37 | scrnaseq-scanpy-core-analysis |  | rna, scrna, scrnaseq | RED 必触发 |
 | 38 | scrnaseq-seurat-core-analysis |  | rna, scrna, scrnaseq | RED 必触发 |
@@ -53,6 +54,7 @@
 | 41 | soupx-remove-background |  | rna, scrna, scrnaseq | RED 必触发 |
 | 42 | stratified-subsampling |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 43 | trajectory-analysis |  | rna, scrna, scrnaseq | RED 必触发 |
+| 40 | scrna-eda | EDA数据探索：QC后的数据概览，含分布图/相关性/主成分 | rna, scrna, scrnaseq, 数据探索, 概览 | RED 必触发 |
 | 44 | upstream-regulator-analysis |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 ---
 
@@ -163,7 +165,8 @@
 | 5 | simulate_metabolic_network_perturbation |  | bacterial, bacteria, yeast | YEL 讨论触发 |
 ---
 
-## 07_药物临床 - 药物/临床 (22 skills)
+## 07_药物临床 - 药物/临床 (23 skills)
+
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
@@ -190,6 +193,7 @@
 | 21 | survival-analysis |  | drug, clinical, fda | RED 必触发 |
 | 22 | survival-analysis-clinical |  | drug, clinical, fda | RED 必触发 |
 ---
+| 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
 ## 08_报告 - 报告/可视化 (13 skills)
 
@@ -210,7 +214,8 @@
 | 13 | summarize |  | report, html, ppt | YEL 讨论触发 |
 ---
 
-## 09_内置 - Hermes系统 (13 skills)
+## 09_内置 - Hermes系统 (14 skills)
+
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
@@ -228,6 +233,7 @@
 | 12 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics wo | code, file, convert | WHT 系统级 |
 | 13 | self-improving-agent |  | code, file, convert | WHT 系统级 |
 ---
+| 14 | error-recovery | 错误自动修复：根据报错信息查找解决方案 | error, fix, debug, 报错, 修复 | RED 必触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 
@@ -246,7 +252,8 @@
 | 11 | unsupervised_celltype_transfer_between_scRNA_datasets |  | multi_omics, multi-omics, rgcca | YEL 讨论触发 |
 ---
 
-## 11_文献搜索 - 文献/数据库 (60 skills)
+## 11_文献搜索 - 文献/数据库 (61 skills)
+
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
@@ -311,8 +318,10 @@
 | 59 | search_google |  | query, literature, paper | GRN 按需触发 |
 | 60 | web-research |  | query, literature, paper | GRN 按需触发 |
 ---
+| 61 | research-plan | Mermaid技术路线图+模块映射表生成 | 技术路线, 分析路线, 研究方案, research plan | RED 必触发 |
 
-## 12_分子生物学 - 分子克隆 (20 skills)
+## 12_分子生物学 - 分子克隆 (21 skills)
+
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
@@ -337,6 +346,7 @@
 | 19 | pcr_simple |  | primer, plasmid, pcr | RED 必触发 |
 | 20 | perform_pcr_and_gel_electrophoresis |  | primer, plasmid, pcr | RED 必触发 |
 ---
+| 21 | phylogenetics-toolkit | 系统发育树构建+MCMC+祖先状态重建 | phylogenetics, tree, 系统发育, 进化 | YEL 讨论触发 |
 
 ## 13_组织学病理 - 组织学/病理 (5 skills)
 
