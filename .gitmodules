@@ -1,0 +1,3 @@
+[submodule "hermes_home/skills/bioinformatics/scipilot-figure-skill"]
+	path = hermes_home/skills/bioinformatics/scipilot-figure-skill
+	url = https://github.com/Haojae/scipilot-figure-skill.git
