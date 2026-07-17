@@ -2578,6 +2578,24 @@ async def _hermes_weixin_message_handler(event):
                 dead.add(ws)
         _WEIXIN_WS_CLIENTS -= dead
 
+        # 同步推送到 MemOmics 会话聊天面板
+        session = _get_or_create_weixin_session(sender_id, sender_name)
+        if session:
+            _session_emit(session, {
+                "type": "chat",
+                "session_id": session["id"],
+                "message": {"role": "user", "content": text, "source": "weixin"}
+            })
+            # 更新 last_active
+            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # 消息持久化
+            try:
+                db = _get_session_db()
+                if db and hasattr(db, "append_message"):
+                    db.append_message(session_id=session["id"], role="user", content=text)
+            except Exception:
+                pass
+
         print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
 
         if _weixin_agent_enabled and text.strip():
