@@ -78,7 +78,20 @@ async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
     元数据快照写入 hermes_home/.skills_prompt_snapshot.json。
     此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
-    同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。"""
+    同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。
+    自动注册新 skill：补全缺失的 skill.json + SKILLS_INDEX 条目。"""
+    try:
+        from webui import auto_register
+        auto_register.init(
+            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+        )
+        result = auto_register.scan_and_register_all()
+        if result.get("json_generated", 0) > 0 or result.get("index_added", 0) > 0:
+            print(f"[auto-register] Startup scan: {result}", flush=True)
+    except Exception as e:
+        print(f"[auto-register] Startup scan failed: {e}", flush=True)
     global _SKILLS_WARMED
     try:
         from run_agent import AIAgent  # 预导入，消除首次请求的模块加载延迟
@@ -1495,6 +1508,26 @@ def _save_skills_disabled(disabled_list: list):
             _yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
     except Exception as e:
         logger.warning(f"save skills config failed: {e}")
+
+@app.post("/api/skills/register")
+async def register_skill(request: Request):
+    """手动注册 skill：生成 skill.json + 添加到 SKILLS_INDEX"""
+    try:
+        from webui import auto_register
+        data = await request.json()
+        skill_name = data.get("skill", "")
+        trigger_kw = data.get("trigger_keywords", None)
+        register_soul = data.get("register_soul", False)
+        auto_register.init(
+            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+        )
+        result = auto_register.register_skill(skill_name, trigger_kw, register_soul)
+        return result
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 
 @app.get("/api/skills/manage")
 async def get_skills_manage():
