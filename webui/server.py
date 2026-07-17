@@ -2211,13 +2211,32 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         def _wx_delta_cb(delta_text):
             _session_emit(session, {"type": "delta", "content": str(delta_text), "session_id": sid})
 
-        agent.tool_progress_callback = _wx_tool_progress_cb
-        if hasattr(agent, "on_tool_start"):
-            agent.on_tool_start = _wx_tool_start_cb
-        if hasattr(agent, "on_tool_complete"):
-            agent.on_tool_complete = _wx_tool_complete_cb
-        if hasattr(agent, "on_delta"):
-            agent.on_delta = _wx_delta_cb
+        # 合并 enforcement + WeChat 回调（先保存 enforcement 回调）
+        _enf_tool_start = agent.tool_start_callback
+        _enf_tool_complete = agent.tool_complete_callback
+        _enf_progress = agent.tool_progress_callback
+        
+        def _merged_tool_start(tool_call_id, tool_name, args):
+            if _enf_tool_start:
+                _enf_tool_start(tool_call_id, tool_name, args)
+            _wx_tool_start_cb(tool_name, args)
+        
+        def _merged_tool_complete(tool_call_id, tool_name, args, result):
+            if _enf_tool_complete:
+                _enf_tool_complete(tool_call_id, tool_name, args, result)
+            _wx_tool_complete_cb(tool_name, str(result)[:500] if result else "")
+        
+        def _merged_progress(event_type, **kwargs):
+            if _enf_progress:
+                try: _enf_progress(event_type, **kwargs)
+                except Exception: pass
+            try: _wx_tool_progress_cb(event_type, **kwargs)
+            except Exception: pass
+        
+        agent.tool_start_callback = _merged_tool_start
+        agent.tool_complete_callback = _merged_tool_complete
+        agent.tool_progress_callback = _merged_progress
+        agent.stream_delta_callback = _wx_delta_cb
 
         # 构建对话历史（最近 20 条）
         history = []
