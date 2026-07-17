@@ -2291,6 +2291,14 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                     dead.add(ws_client)
             _WEIXIN_WS_CLIENTS -= dead
 
+            # 同步推送到 MemOmics 会话聊天面板
+            session = _get_or_create_weixin_session(sender_id, sender_name)
+            if session:
+                _session_emit(session, {
+                    "type": "chat",
+                    "session_id": session["id"],
+                    "message": {"role": "assistant", "content": result_text.strip(), "source": "weixin-agent"}
+                })
             print(f"[MemOmics] 微信Agent回复 sent to={sender_name}: {result_text[:80]}...", flush=True)
     except asyncio.TimeoutError:
         err_msg = "处理超时（600秒），请稍后再试或简化问题"
@@ -2398,6 +2406,14 @@ async def _weixin_poll_loop():
                             dead.add(ws)
                     _WEIXIN_WS_CLIENTS -= dead
 
+                    # 同步推送到 MemOmics 会话聊天面板
+                    session = _get_or_create_weixin_session(sender_id, sender_name)
+                    if session:
+                        _session_emit(session, {
+                            "type": "chat",
+                            "session_id": session["id"],
+                            "message": {"role": "user", "content": text, "source": "weixin"}
+                        })
                     print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
 
                     # Agent 自动回复

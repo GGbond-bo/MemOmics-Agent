@@ -773,6 +773,19 @@ function handleMessage(msg) {
     handleWeixinMessage(msg);
     return;
   }
+  // 微信消息同步到聊天面板
+  if (msg.type === 'chat' && msg.message && msg.session_id) {
+    if (currentSid === msg.session_id) {
+      var m = msg.message;
+      if (m.role === 'user') {
+        addUserMsg(m.content || m.text || '');
+      } else if (m.role === 'assistant') {
+        addAssistantMsg(m.content || m.text || '');
+      }
+      scrollBottom();
+    }
+    return;
+  }
   // === 后端告知真正的 session_id（必须在分流之前处理！） ===
   // 首次发消息时 currentSid 是 null，后端返回 {type:"session", session_id:"memomics-xxx"}
   // 如果不在这里先设置 currentSid，后续所有消息都会被分流拦截
