@@ -2205,6 +2205,68 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         # 用 WebUI 同款的 _create_agent 工厂函数，确保完整配置
         agent = _create_agent(session_id=sid)
 
+        # 注册进度回调：同步推送到微信 + WebUI 聊天面板
+        def _wx_tool_progress_cb(event_type, **kwargs):
+            msg_text = kwargs.get("message", kwargs.get("text", ""))
+            tool_name = kwargs.get("tool", "")
+            percent = kwargs.get("percent", 0)
+            # 推送到 WebUI 聊天面板（通过 _session_emit）
+            _session_emit(session, {
+                "type": "tool_progress",
+                "tool": tool_name,
+                "content": msg_text[:500] if msg_text else "",
+                "percent": percent,
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "session_id": sid
+            })
+            # 推送到微信（简短摘要）
+            if msg_text and _weixin_adapter:
+                try:
+                    loop = asyncio.get_event_loop()
+                    short_msg = f"⚡ {tool_name}: {msg_text[:80]}" if tool_name else f"⚡ {msg_text[:80]}"
+                    loop.create_task(_send_weixin_progress(short_msg))
+                except Exception:
+                    pass
+
+        def _wx_tool_start_cb(tool_name, args=None):
+            _session_emit(session, {
+                "type": "tool_start",
+                "tool": tool_name,
+                "args": args or {},
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "session_id": sid
+            })
+
+        def _wx_tool_complete_cb(tool_name, result_str=""):
+            _session_emit(session, {
+                "type": "tool_complete",
+                "tool": tool_name,
+                "result": result_str[:500],
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "session_id": sid
+            })
+            if _weixin_adapter:
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(_send_weixin_progress(f"✅ {tool_name} 完成"))
+                except Exception:
+                    pass
+
+        def _wx_delta_cb(delta_text):
+            _session_emit(session, {
+                "type": "delta",
+                "content": str(delta_text),
+                "session_id": sid
+            })
+
+        agent.tool_progress_callback = _wx_tool_progress_cb
+        if hasattr(agent, "on_tool_start"):
+            agent.on_tool_start = _wx_tool_start_cb
+        if hasattr(agent, "on_tool_complete"):
+            agent.on_tool_complete = _wx_tool_complete_cb
+        if hasattr(agent, "on_delta"):
+            agent.on_delta = _wx_delta_cb
+
         # 构建对话历史（最近 20 条）
         history = []
         for m in session.get("messages", [])[-20:]:
