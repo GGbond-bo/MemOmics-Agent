@@ -773,33 +773,26 @@ function handleMessage(msg) {
     handleWeixinMessage(msg);
     return;
   }
-  // 微信会话更新通知（不打开该会话也能刷新列表）
+  // 微信会话更新通知（自动切换+刷新列表）
   if (msg.type === 'session_update' && msg.session_id) {
     updateSessionList();
+    // 如果是微信Agent开始运行，自动切换到该会话（像手动输入一样展示过程）
+    if (msg.is_running && currentSid !== msg.session_id) {
+      switchSession(msg.session_id);
+    }
     return;
   }
   // 微信消息同步到聊天面板
   if (msg.type === 'chat' && msg.message && msg.session_id) {
     var m = msg.message;
     if (currentSid === msg.session_id) {
-      // 当前会话：直接显示
       if (m.role === 'user') {
         addUserMsg(m.content || m.text || '');
       } else if (m.role === 'assistant') {
         addAssistantMsg(m.content || m.text || '');
       }
       scrollBottom();
-    } else {
-      // 非当前会话：标记未读 + 更新会话列表
-      var el = document.querySelector('.session-item[onclick*="' + msg.session_id + '"]');
-      if (el && !el.querySelector('.unread-dot')) {
-        var dot = document.createElement('span');
-        dot.className = 'unread-dot';
-        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;';
-        el.insertBefore(dot, el.querySelector('.del-btn'));
-      }
     }
-    // 刷新会话列表（更新 last_message 和运行状态）
     updateSessionList();
     return;
   }

@@ -2167,7 +2167,14 @@ def _rebuild_weixin_session_map():
 
 
 async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: str, context_token: str = ""):
-    """用 MemOmics Agent 处理微信消息并自动回复（关联 MemOmics 会话，12h 超时自动新建）"""
+    """用 MemOmics Agent 处理微信消息并自动回复（关联 MemOmics 会话，12h 超时自动新建）
+    
+    双通道展示：
+    - 中间交互框：完整思考/分析过程（等同手动输入）
+    - 右侧微信面板：简短阶段性汇报
+    - 不限时，支持长任务
+    - 离线继续跑（WebSocket断开不影响Agent执行）
+    """
     global _weixin_msg_store, _WEIXIN_WS_CLIENTS
 
     # 获取或创建关联的 MemOmics 会话
@@ -2175,15 +2182,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     sid = session["id"]
 
     # 把用户消息追加到会话
-    user_msg = {
-        "role": "user", "text": text,
-        "time": time.strftime("%H:%M:%S"), "source": "weixin",
-    }
-    session.setdefault("messages", []).append(user_msg)
+    session.setdefault("messages", []).append({"role": "user", "content": text, "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin"})
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    # Persist to Hermes DB for restore
+    # Persist user message to DB
     try:
         db = _get_session_db()
         if db and hasattr(db, "append_message"):
@@ -2192,9 +2195,10 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         pass
 
     # 更新会话标题（首次消息）
-    if session.get("title", "").startswith("📱 ") and len(session["messages"]) <= 2:
-        short_text = text[:30].replace(chr(10), " ").strip()
-        session["title"] = f"📱 {sender_name}: {short_text}"
+    phone_icon = "\U0001f4f1"
+    if session.get("title", "").startswith(phone_icon) and len(session["messages"]) <= 2:
+        short_text = text[:30].replace("\n", " ").strip()
+        session["title"] = f"{phone_icon} {datetime.now().strftime('%m-%d')} {sender_name}: {short_text}"
         try:
             db = _get_session_db()
             if db and hasattr(db, "set_session_title"):
@@ -2202,63 +2206,61 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         except Exception:
             pass
 
+    # 标记会话为运行状态
+    session["running_agent"] = True
+    session["running_task"] = "weixin_agent"
+
+    # === 关键：把当前 WebSocket 连接绑到微信会话 ===
+    # 让中间交互框能接收所有 thinking/progress/delta/tool 事件
+    loop = asyncio.get_event_loop()
+    if _WEIXIN_WS_CLIENTS:
+        ws_ref = max(_WEIXIN_WS_CLIENTS, key=lambda ws: id(ws))
+        session["ws_ref"] = ws_ref
+        session["loop_ref"] = loop
+        session["ws_attached"] = True
+
+    # 发送初始事件（等同WebUI手动输入的体验）
+    _session_emit(session, {"type": "thinking", "content": "正在理解您的问题...", "session_id": sid})
+    _session_emit(session, {"type": "progress", "step": "thinking", "status": "pending", "detail": "正在理解您的问题", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+    _session_emit(session, {"type": "agent_running", "session_id": sid})
+    # 广播 session_update 让前端刷新列表（显示运行状态）
+    session_update_msg = json.dumps({"type": "session_update", "session_id": sid, "is_running": True, "last_active": session["last_active"]}, ensure_ascii=False)
+    for ws_cli in list(_WEIXIN_WS_CLIENTS):
+        try:
+            await ws_cli.send_text(session_update_msg)
+        except Exception:
+            pass
+
     try:
-        # 用 WebUI 同款的 _create_agent 工厂函数，确保完整配置
+        # 用 WebUI 同款的 _create_agent 工厂函数
         agent = _create_agent(session_id=sid)
 
-        # 注册进度回调：同步推送到微信 + WebUI 聊天面板
+        # === 注册完整回调：中间框显示全过程 ===
         def _wx_tool_progress_cb(event_type, **kwargs):
             msg_text = kwargs.get("message", kwargs.get("text", ""))
             tool_name = kwargs.get("tool", "")
             percent = kwargs.get("percent", 0)
-            # 推送到 WebUI 聊天面板（通过 _session_emit）
-            _session_emit(session, {
-                "type": "tool_progress",
-                "tool": tool_name,
-                "content": msg_text[:500] if msg_text else "",
-                "percent": percent,
-                "ts": datetime.now().strftime("%H:%M:%S"),
-                "session_id": sid
-            })
-            # 推送到微信（简短摘要）
+            _session_emit(session, {"type": "tool_progress", "tool": tool_name, "content": msg_text[:500] if msg_text else "", "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
             if msg_text and _weixin_adapter:
                 try:
-                    loop = asyncio.get_event_loop()
-                    short_msg = f"⚡ {tool_name}: {msg_text[:80]}" if tool_name else f"⚡ {msg_text[:80]}"
-                    loop.create_task(_send_weixin_progress(short_msg))
+                    short_msg = "\u26a1 {}{}".format(f"{tool_name}: " if tool_name else "", msg_text[:80])
+                    asyncio.get_event_loop().create_task(_send_weixin_progress(short_msg))
                 except Exception:
                     pass
 
         def _wx_tool_start_cb(tool_name, args=None):
-            _session_emit(session, {
-                "type": "tool_start",
-                "tool": tool_name,
-                "args": args or {},
-                "ts": datetime.now().strftime("%H:%M:%S"),
-                "session_id": sid
-            })
+            _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
 
         def _wx_tool_complete_cb(tool_name, result_str=""):
-            _session_emit(session, {
-                "type": "tool_complete",
-                "tool": tool_name,
-                "result": result_str[:500],
-                "ts": datetime.now().strftime("%H:%M:%S"),
-                "session_id": sid
-            })
+            _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
             if _weixin_adapter:
                 try:
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(_send_weixin_progress(f"✅ {tool_name} 完成"))
+                    asyncio.get_event_loop().create_task(_send_weixin_progress("\u2705 {} 完成".format(tool_name)))
                 except Exception:
                     pass
 
         def _wx_delta_cb(delta_text):
-            _session_emit(session, {
-                "type": "delta",
-                "content": str(delta_text),
-                "session_id": sid
-            })
+            _session_emit(session, {"type": "delta", "content": str(delta_text), "session_id": sid})
 
         agent.tool_progress_callback = _wx_tool_progress_cb
         if hasattr(agent, "on_tool_start"):
@@ -2274,31 +2276,18 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if m.get("role") in ("user", "assistant"):
                 history.append({"role": m["role"], "content": m.get("content", m.get("text", ""))})
 
-        loop = asyncio.get_event_loop()
-
+        # === 不限时运行 ===（支持长任务，关机后Agent还在跑）
         def _do_run():
             result = agent.run_conversation(text, conversation_history=history if history else None)
             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
-        # 延长超时到 600s，支持长任务
-        result_text = await asyncio.wait_for(
-            loop.run_in_executor(None, _do_run),
-            timeout=600
-        )
+        result_text = await loop.run_in_executor(None, _do_run)
 
         if result_text and result_text.strip():
-            # 不截断！Hermes adapter 自动分段发送（2000字/chunk）
-
-            # 把 Agent 回复追加到会话
-            agent_msg = {
-                "role": "assistant", "text": result_text.strip(),
-                "time": time.strftime("%H:%M:%S"), "source": "weixin-agent",
-            }
-            session["messages"].append(agent_msg)
+            session["messages"].append({"role": "assistant", "content": result_text.strip(), "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin-agent"})
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            # Persist to Hermes DB for restore
             try:
                 db = _get_session_db()
                 if db and hasattr(db, "append_message"):
@@ -2306,73 +2295,52 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             except Exception:
                 pass
 
-            # 通过 Hermes adapter 发送回复（自动分段）
+            _session_emit(session, {"type": "complete", "session_id": sid})
+            _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+
             if _weixin_adapter:
                 try:
                     send_result = await _weixin_adapter.send(sender_id, result_text.strip())
                     print(f"[MemOmics] 微信Agent回复: success={send_result.success}", flush=True)
                 except Exception as e:
                     print(f"[MemOmics] 微信Agent回复发送失败: {e}", flush=True)
-            else:
-                import aiohttp as _aiohttp
-                from platforms.weixin import _send_message
-                client_id = str(uuid.uuid4()).replace("-", "")[:16]
-                async with _aiohttp.ClientSession() as http_session:
-                    await _send_message(
-                        http_session,
-                        base_url=_weixin_state["base_url"],
-                        token=_weixin_state["token"],
-                        to=sender_id,
-                        text=result_text.strip(),
-                        context_token=context_token,
-                        client_id=client_id,
-                    )
-            # 记录到微信消息存储（供前端面板）
-            wx_msg = {
-                "id": str(int(time.time() * 1000)),
-                "sender_id": _weixin_state["account_id"],
-                "sender_name": "Agent",
-                "text": result_text.strip(),
-                "context_token": "",
-                "ts": int(time.time()),
-                "direction": "out",
-            }
+
+            wx_msg = {"id": str(int(time.time() * 1000)), "sender_id": _weixin_state["account_id"], "sender_name": "Agent", "text": result_text.strip(), "context_token": "", "ts": int(time.time()), "direction": "out"}
             _weixin_msg_store.append(wx_msg)
             if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
                 _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
-
-            # WebSocket 推送消息更新
-            from_msg = {
-                "type": "weixin_message",
-                "message": wx_msg,
-            }
-            dead = set()
             for ws_client in list(_WEIXIN_WS_CLIENTS):
                 try:
-                    await ws_client.send_text(json.dumps(from_msg, ensure_ascii=False))
+                    await ws_client.send_text(json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False))
                 except Exception:
-                    dead.add(ws_client)
-            _WEIXIN_WS_CLIENTS -= dead
+                    pass
 
-            # 同步推送到 MemOmics 会话聊天面板
-            session = _get_or_create_weixin_session(sender_id, sender_name)
-            if session:
-                _session_emit(session, {
-                    "type": "chat",
-                    "session_id": session["id"],
-                    "message": {"role": "assistant", "content": result_text.strip(), "source": "weixin-agent"}
-                })
+            _session_emit(session, {"type": "chat", "session_id": sid, "message": {"role": "assistant", "content": result_text.strip(), "source": "weixin-agent"}})
             print(f"[MemOmics] 微信Agent回复 sent to={sender_name}: {result_text[:80]}...", flush=True)
-    except asyncio.TimeoutError:
-        err_msg = "处理超时（600秒），请稍后再试或简化问题"
-        print(f"[MemOmics] 微信Agent超时 {sender_name}", flush=True)
-        if _weixin_adapter:
-            try:
-                await _weixin_adapter.send(sender_id, err_msg)
-            except Exception:
-                pass
+
     except Exception as e:
         print(f"[MemOmics] 微信Agent异常: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        _session_emit(session, {"type": "error", "session_id": sid, "message": str(e)})
+        if _weixin_adapter:
+            try:
+                await _weixin_adapter.send(sender_id, f"处理出错: {str(e)[:200]}")
+            except Exception:
+                pass
+
+    finally:
+        session["running_agent"] = None
+        session["running_task"] = None
+        session["ws_attached"] = False
+        session["ws_ref"] = None
+        session["loop_ref"] = None
+        session_update_msg = json.dumps({"type": "session_update", "session_id": sid, "is_running": False, "last_active": session["last_active"]}, ensure_ascii=False)
+        for ws_cli in list(_WEIXIN_WS_CLIENTS):
+            try:
+                await ws_cli.send_text(session_update_msg)
+            except Exception:
+                pass
 
 
 async def _weixin_poll_loop():
