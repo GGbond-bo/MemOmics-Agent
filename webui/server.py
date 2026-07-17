@@ -1003,6 +1003,8 @@ def _session_emit(session, msg_dict):
     # 自动注入 session_id（如果调用者没带）
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
+    # 每条消息带唯一 ID，前端去重
+    msg_dict["_msg_id"] = str(uuid.uuid4())[:8]
     msg_type = msg_dict.get("type", "")
     # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
     if msg_type not in ("delta", "reasoning", "tool_gen"):

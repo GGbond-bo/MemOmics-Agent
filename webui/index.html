@@ -753,6 +753,7 @@ let currentBubble = null;
 let fullText = '';
 let reasoningText = '';
 let _renderFinalized = false;  // complete 后锁定渲染，防止乱序 delta 导致重复
+let _processedMsgs = {};       // 已处理消息 ID → true，防止任何消息重复渲染
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
 var mermaidIdx = 0;  // Mermaid 渲染计数器
 
@@ -791,6 +792,12 @@ function setStatus(text, color) {
 
 // === 消息处理 ===
 function handleMessage(msg) {
+
+  // === 全局去重：每条消息带唯一 _msg_id，跳过已处理的 ===
+  if (msg._msg_id && !msg._replay) {
+    if (_processedMsgs[msg._msg_id]) return;
+    _processedMsgs[msg._msg_id] = true;
+  }
 
   // === 微信消息分发 ===
   if (msg.type === 'weixin_message' || msg.type === 'weixin_list' || msg.type === 'weixin_status') {
@@ -1219,6 +1226,7 @@ async function send(background) {
   fullText = '';
   reasoningText = '';
   _renderFinalized = false;
+  _processedMsgs = {};
   currentAssistantEl = null;
   currentBubble = null;
   progressTimelineEl = null;
@@ -1881,6 +1889,7 @@ function deleteSession(sid) {
 
 function switchSession(sid) {
   clearPendingImages();
+  _processedMsgs = {};
   // === 保存旧会话的全部渲染状态 ===
   if (currentSid) {
     _sessionProgressCache[currentSid] = {
