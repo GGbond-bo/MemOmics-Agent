@@ -1266,7 +1266,7 @@ def _fmt_tool_result(tool_name, result):
         return "完成"
 
 
-def _create_agent(model_config=None, session_id=None):
+def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
     链接 Hermes 原生能力：
