@@ -775,15 +775,27 @@ function handleMessage(msg) {
   }
   // 微信消息同步到聊天面板
   if (msg.type === 'chat' && msg.message && msg.session_id) {
+    var m = msg.message;
     if (currentSid === msg.session_id) {
-      var m = msg.message;
+      // 当前会话：直接显示
       if (m.role === 'user') {
         addUserMsg(m.content || m.text || '');
       } else if (m.role === 'assistant') {
         addAssistantMsg(m.content || m.text || '');
       }
       scrollBottom();
+    } else {
+      // 非当前会话：标记未读 + 更新会话列表
+      var el = document.querySelector('.session-item[onclick*="' + msg.session_id + '"]');
+      if (el && !el.querySelector('.unread-dot')) {
+        var dot = document.createElement('span');
+        dot.className = 'unread-dot';
+        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;';
+        el.insertBefore(dot, el.querySelector('.del-btn'));
+      }
     }
+    // 刷新会话列表（更新 last_message 和运行状态）
+    updateSessionList();
     return;
   }
   // === 后端告知真正的 session_id（必须在分流之前处理！） ===
@@ -817,6 +829,10 @@ function handleMessage(msg) {
   // 以下只处理当前会话的消息
 
   // === 进度重放：切换会话后服务器返回历史进度 ===
+  // 微信工具进度：更新会话列表运行状态
+  if (msg.type === 'tool_progress' && msg.session_id && msg.session_id !== currentSid) {
+    updateSessionList();
+  }
   if (msg.type === 'progress_replay') {
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
     if (progressTimelineEl || progressItems.length > 0) {
