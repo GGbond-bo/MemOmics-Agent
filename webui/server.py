@@ -755,7 +755,7 @@ def _detect_modalities_from_text(text: str) -> list:
     return mods if mods else ["scrna"]
 
 
-def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh") -> str:
+def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "") -> str:
     """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
     if intent == "chat":
         return ""
@@ -1384,6 +1384,14 @@ async def rename_results_dir(sid: str, body: dict = None):
         short_id = sid.split("-")[-1] if "-" in sid else sid[:6]
         new_name = f"{new_name}_{short_id}"
         new_dir = os.path.join(RESULTS_DIR, new_name)
+    # Persist results_dir to state.db
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, '_conn'):
+            db._conn.execute("UPDATE sessions SET cwd = ? WHERE id = ?", (new_dir, sid))
+            db._conn.commit()
+    except Exception:
+        pass
     
     # 问题3: 用户可指定 output_root（桌面等），同时 results/ 下保留备份
     output_root = body.get("output_root", "")  # 用户指定路径
@@ -3286,7 +3294,7 @@ def _find_best_results_dir(sid: str) -> str:
     """每次实时扫描 results/，智能匹配会话目录。
     策略：1) 内存中的 results_dir 有内容 → 直接用
           2) 目录名含 sid 短ID → 精确匹配
-          3) 所有有内容的目录，取最近修改的（给非 memomics- 目录+1小时优待）"""
+          3) 无匹配 → 使用会话默认 results_dir 或回退到 results/{sid}"""
     # 1. 内存中的 results_dir 优先
     if sid in _sessions:
         cached = _sessions[sid].get("results_dir", "")
@@ -3295,7 +3303,8 @@ def _find_best_results_dir(sid: str) -> str:
     if not os.path.isdir(RESULTS_DIR):
         return ""
     short_id = sid.split("-")[-1] if "-" in sid else ""
-    candidates = []
+    best_match = ""
+    best_mtime = 0
     try:
         for d in os.listdir(RESULTS_DIR):
             dpath = os.path.join(RESULTS_DIR, d)
@@ -3308,19 +3317,21 @@ def _find_best_results_dir(sid: str) -> str:
             if not has_any:
                 continue
             mtime = os.path.getmtime(dpath)
-            # 精确匹配短ID → 最高优先级
+            # 精确匹配短ID → 只返回精确匹配的目录
             if short_id and short_id in d:
-                candidates.append((1_000_000_000 + mtime, dpath, d))
-            elif sid in _sessions:
-                # 在内存中的会话：非 memomics- 目录优待
-                bonus = 0 if d.startswith("memomics-") else 3600
-                candidates.append((mtime + bonus, dpath, d))
+                if mtime > best_mtime:
+                    best_mtime = mtime
+                    best_match = dpath
     except OSError:
         return ""
-    if not candidates:
-        return ""
-    candidates.sort(reverse=True, key=lambda x: x[0])
-    return candidates[0][1]
+    if best_match:
+        return best_match
+    # 无精确匹配 → 使用会话自己的 results_dir 或默认路径
+    if sid in _sessions:
+        default = _sessions[sid].get("results_dir", "")
+        if default and os.path.isdir(default):
+            return default
+    return os.path.join(RESULTS_DIR, sid)
 
 @app.get("/api/results")
 async def list_all_results():
@@ -3730,7 +3741,7 @@ async def ws_endpoint(ws: WebSocket):
                 session["intent_conf"] = _intent_conf
                 session["intent_meta"] = _intent_meta
                 if _intent not in ("chat", "self_intro"):
-                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"))
+                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
                 else:
                     _skill_ctx = None
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
