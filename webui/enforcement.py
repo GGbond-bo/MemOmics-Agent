@@ -11,18 +11,21 @@ from pathlib import Path
 # === 分析级别判定 ===
 ANALYSIS_KEYWORDS = {
     "analysis": [
-        "分析", "analysis", "QC", "质控", "聚类", "cluster", "降维", "DEG", "差异",
-        "CellBender", "去背景", "SoupX", "归一化", "normalize", "SCTransform",
+        "分析", "analysis", "analyze", "QC", "质控", "聚类", "cluster", "降维", "DEG", "差异",
+        "CellBender", "cellbender", "去背景", "background", "SoupX", "归一化", "normalize", "SCTransform",
         "轨迹", "trajectory", "拟时序", "pseudotime", "Monocle", "Slingshot",
-        "细胞通讯", "CellChat", "转录因子", "SCENIC", "空间转录组", "spatial",
+        "细胞通讯", "CellChat", "cellchat", "转录因子", "SCENIC", "空间转录组", "spatial",
         "富集分析", "GO", "KEGG", "pathway", "生存分析", "survival",
         "整合", "integration", "multi-omics", "多组学", "bulk", "ATAC",
-        "画图", "可视化", "figure", "报告", "report", "html",
-        "跑", "run", "执行", "开始", "start", "go",
+        "画图", "可视化", "figure", "plot", "chart", "graph", "volcano", "heatmap", "generate", "create", "draw",
+        "报告", "report", "html",
+        "差异表达", "differential expression", "deg",
+        "跑", "执行", "开始", "start",
+        "subset", "抽", "取", "子集", "subsample",
     ],
     "statistical": [
-        "统计", "statistical", "t-test", "wilcoxon", "回归", "regression",
-        "相关性", "correlation", "p-value", "显著性", "significant",
+        "统计", "statistical", "statistic", "t-test", "ttest", "wilcoxon", "回归", "regression",
+        "相关性", "correlation", "p-value", "p value", "显著性", "significant",
     ],
 }
 
@@ -37,13 +40,13 @@ def detect_analysis_level(user_message: str) -> str:
     for kw in ANALYSIS_KEYWORDS["statistical"]:
         if kw.lower() in msg_lower:
             score += 1
-
-    if score >= 4:
+    
+    # 有分析关键词 + 执行意图 → analysis
+    has_action = any(kw in msg_lower for kw in ["run", "do", "go", "start", "generate", "create", "draw", "plot", "subset", "exec"])
+    if score >= 3 or (score >= 2 and has_action):
         return "analysis"
-    elif score >= 2:
+    elif score >= 1:
         return "statistical"
-    elif any(kw in msg_lower for kw in ["运行", "跑", "执行", "run", "go", "start"]):
-        return "analysis"  # 有执行意图
     return "chat"
 
 
