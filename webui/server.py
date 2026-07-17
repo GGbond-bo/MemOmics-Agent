@@ -2029,7 +2029,7 @@ async def weixin_test():
 
 @app.post("/api/weixin/disconnect")
 async def weixin_disconnect():
-    """断开微信连接"""
+    """断开微信连接 — 清除内存状态并持久化到磁盘，重启后不再自动重连"""
     global _weixin_state
     _stop_weixin_poll()  # 先停止轮询，再清空状态
     _weixin_state["connected"] = False
@@ -2040,8 +2040,7 @@ async def weixin_disconnect():
     _weixin_state["qr_login_in_progress"] = False
     _weixin_state["qrcode_token"] = ""
     _weixin_state["last_error"] = ""
-    # 注意：不在这里调 _save_weixin_persist()，避免清空状态被持久化
-    # 下次 QR confirmed 后会重新保存
+    _save_weixin_persist()  # 持久化空状态，确保重启后不会自动重连
     return {"ok": True}
 
 
