@@ -755,7 +755,7 @@ let _currentRunningSid = null;   // 当前正在运行的会话 ID
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -1623,8 +1623,8 @@ function renderSessionList(sessions) {
     var ra = a.restored ? 1 : 0;
     var rb = b.restored ? 1 : 0;
     if (ra !== rb) return ra - rb;
-    // 同为 restored 或同为非 restored，按创建时间倒序
-    return (b.created || '').localeCompare(a.created || '');
+    // 同为 restored 或同为非 restored，按最后活动时间倒序（最新的在最上面）
+    return (b.last_active || b.created || '').localeCompare(a.last_active || a.created || '');
   });
   // 防闪烁：内容没变就不重建 DOM，只更新 .active 标记
   var fp = sessions.map(function(s){ return s.id + '|' + (s.is_running?1:0) + '|' + (s.msg_count||0); }).join(',');

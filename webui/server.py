@@ -1004,6 +1004,7 @@ def _create_session(title="新会话"):
         "id": sid,
         "title": title,
         "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "last_active": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "messages": [],
         "model_config": dict(_current_model),
         "results_dir": os.path.join(RESULTS_DIR, sid),
@@ -1116,6 +1117,7 @@ def _restore_single_session(sid):
                 "id": sid,
                 "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
                 "created": s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "last_active": s.get("last_active") or s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "messages": messages,
                 "model_config": _current_model,
                 "results_dir": results_dir,
@@ -1487,7 +1489,9 @@ async def list_sessions():
                           "bg_running": s.get("bg_running", False),
                           "is_running": bool(s.get("running_agent") or s.get("running_task")),
                           "restored": s.get("restored", False),
-                          "msg_count": len(s.get("messages", []))} for s in _sessions.values()]}
+                          "msg_count": len(s.get("messages", [])),
+                          "last_active": s.get("last_active", s["created"])
+                         } for s in _sessions.values()]}
 
 
 @app.post("/api/sessions/new")
@@ -2157,6 +2161,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     session.setdefault("messages", []).append(user_msg)
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
+    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # 更新会话标题（首次消息）
     if session.get("title", "").startswith("📱 ") and len(session["messages"]) <= 2:
@@ -2202,6 +2207,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             session["messages"].append(agent_msg)
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
+            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
             # 通过 Hermes adapter 发送回复（自动分段）
             if _weixin_adapter:
@@ -3523,6 +3529,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
+                session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 _persist_session_message(session, "user", user_text)
 
                 # 注册 WebSocket 引用 + 立即发送 thinking（在意图分类之前，消除初始空白）
@@ -3591,6 +3598,7 @@ async def ws_endpoint(ws: WebSocket):
                     )
                     _intro = _intro_en if session.get("lang") == "en" else _intro_zh
                     session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
+                    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     _persist_session_message(session, "assistant", _intro)
                     await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "..."}, ensure_ascii=False))
@@ -4199,6 +4207,7 @@ async def ws_endpoint(ws: WebSocket):
                             return
                         # 记录助手回复到 session + state.db
                         session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
+                        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                         _persist_session_message(session, "assistant", result)
                         # 尝试提取 todo
                         try:
