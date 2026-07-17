@@ -752,6 +752,7 @@ let currentAssistantEl = null;
 let currentBubble = null;
 let fullText = '';
 let reasoningText = '';
+let _renderFinalized = false;  // complete 后锁定渲染，防止乱序 delta 导致重复
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
 var mermaidIdx = 0;  // Mermaid 渲染计数器
 
@@ -914,6 +915,7 @@ function handleMessage(msg) {
     reasoningText += (msg.content || '');
     updateReasoningBlock();
   } else if (msg.type === 'delta') {
+    if (_renderFinalized) return;  // complete 后忽略乱序 delta
     if (!currentAssistantEl || !currentBubble) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
@@ -1030,9 +1032,10 @@ function handleMessage(msg) {
       currentBubble.appendChild(infoEl);
     }
   } else if (msg.type === 'complete') {
+    _renderFinalized = true;
     var completeContent = msg.content || '';
     if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
-    else if (!currentBubble) { addAssistantMsg(completeContent); }
+    else if (!currentBubble && completeContent) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
     finalizeProgressTimeline();
     document.getElementById('send').disabled = false;
@@ -1215,6 +1218,7 @@ async function send(background) {
   clearPendingImages();
   fullText = '';
   reasoningText = '';
+  _renderFinalized = false;
   currentAssistantEl = null;
   currentBubble = null;
   progressTimelineEl = null;
