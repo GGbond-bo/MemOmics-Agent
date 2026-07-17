@@ -1609,7 +1609,15 @@ async def get_messages(sid: str):
         _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
-    return {"messages": _sessions[sid]["messages"]}
+    # Normalize: ensure all messages have 'content' field for frontend
+    msgs = _sessions[sid]["messages"]
+    normalized = []
+    for m in msgs:
+        nm = dict(m)
+        if "content" not in nm and "text" in nm:
+            nm["content"] = nm["text"]
+        normalized.append(nm)
+    return {"messages": normalized}
 
 
 @app.delete("/api/sessions/{sid}")
