@@ -928,11 +928,13 @@ function handleMessage(msg) {
     }
     if (currentBubble) { currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); scrollBottom(); }
   } else if (msg.type === 'tool_start') {
-    // 不在聊天区创建大块, 只进进度时间线
+    // 进度时间线 + 聊天区工具块
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
+    addToolBlock(msg.tool, msg.args, true);
   } else if (msg.type === 'tool_complete') {
-    // 更新时间线中对应行为 done, 附带结果摘要
+    // 更新时间线 + 聊天区工具块
     addProgressItem(msg.tool, 'done', _fmtToolResult(msg.tool, msg.result), msg.ts || _nowTs());
+    updateToolBlock(msg.tool, msg.result);
   } else if (msg.type === 'status') {
     // status 只进时间线
     addProgressItem(msg.content.substring(0,40), 'pending', msg.category, msg.ts || _nowTs());
