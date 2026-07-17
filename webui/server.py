@@ -1126,6 +1126,8 @@ def _restore_single_session(sid):
                 "running_agent": None,
                 "running_task": None,
                 "restored": True,
+                "last_active": s.get("last_active") or s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "source": "",
                 "progress_log": [],
                 "ws_attached": False,
                 "ws_ref": None,
@@ -1490,7 +1492,10 @@ async def list_sessions():
                           "is_running": bool(s.get("running_agent") or s.get("running_task")),
                           "restored": s.get("restored", False),
                           "msg_count": len(s.get("messages", [])),
-                          "last_active": s.get("last_active", s["created"])
+                          "last_active": s.get("last_active", s["created"]),
+                          "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
+                          "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
+                          "last_message": (s.get("messages", [{}])[-1].get("content") or s.get("messages", [{}])[-1].get("text", ""))[:80] if s.get("messages") else ""
                          } for s in _sessions.values()]}
 
 
@@ -2099,6 +2104,7 @@ def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
     session = _create_session(title)
     _weixin_session_map[sender_id] = {"session_id": session["id"], "last_ts": now}
     session["wx_sender_id"] = sender_id
+    session["source"] = "weixin"
     _save_weixin_session_map()
     print(f"[MemOmics] 微信新会话: {sender_name} → {session["id"]}", flush=True)
     return session
@@ -2139,6 +2145,12 @@ def _rebuild_weixin_session_map():
                     else:
                         print(f"[MemOmics] 微信映射清理: {uid} → {sid} 会话不存在", flush=True)
                 _weixin_session_map = cleaned
+                # Mark weixin sessions with source tag
+                for uid, entry in cleaned.items():
+                    sid = entry.get("session_id", "")
+                    if sid in _sessions:
+                        _sessions[sid]["source"] = "weixin"
+                        _sessions[sid]["wx_sender_id"] = uid
                 print(f"[MemOmics] 微信会话映射已恢复 ({len(cleaned)} 个)", flush=True)
     except Exception as e:
         print(f"[MemOmics] 恢复微信会话映射失败: {e}", flush=True)
@@ -2162,6 +2174,13 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Persist to Hermes DB for restore
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, "add_message"):
+            db.add_message(sid, "user", text)
+    except Exception:
+        pass
 
     # 更新会话标题（首次消息）
     if session.get("title", "").startswith("📱 ") and len(session["messages"]) <= 2:
@@ -2208,6 +2227,13 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # Persist to Hermes DB for restore
+            try:
+                db = _get_session_db()
+                if db and hasattr(db, "add_message"):
+                    db.add_message(sid, "assistant", result_text.strip())
+            except Exception:
+                pass
 
             # 通过 Hermes adapter 发送回复（自动分段）
             if _weixin_adapter:
