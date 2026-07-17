@@ -64,7 +64,19 @@
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "报错" / "error" / "出错" / "怎么修" / "不工作" / "跑不了" / "fix" / "debug" | `skill_view("error-recovery")` |
-| "研究方案" / "实验设计" / "方案设计" / "设计实验" / "研究计划" / "research plan" / "research proposal" / "技术路线" | `skill_view("research-plan")` → 生成含 Mermaid 技术路线图 + 目的/输出细节表的完整方案 |
+| "技术路线" / "分析路线" / "怎么分析" / "如何分析" / "用什么方法" / "研究思路" / "研究方案" / "研究计划" / "research plan" / "research proposal" | `skill_view("research-plan")` → 生成含 Mermaid 技术路线图 + 目的/输出细节表的完整方案 |
+| "基金申请" / "课题申请" / "立项依据" / "开题报告" / "写标书" / "grant proposal" / "实验方案" / "课题设计" / "研究框架" | `skill_view("academic-research")` → 10段 CNS 级研究提案（背景/假说/方法/预期结果/专利点） |
+| "深度调研" / "全面调研" / "系统调研" / "deep research" / "深入研究" | `skill_view("deep-research")` → 多轮次深度学术调研，含文献追溯和交叉验证 |
+| "样本量" / "功效分析" / "power analysis" / "统计功效" / "实验统计" / "多少样本" / "sample size" | `skill_view("experimental-design-statistics")` → 实验统计设计：样本量计算、功效分析、随机化方案 |
+| "文献综述" / "文献回顾" / "literature review" / "系统回顾" / "综述" / "调研报告" | `skill_view("literature-review")` → 系统性文献综述，含检索策略、纳入排除标准、证据质量评估 |
+| "提取参数" / "文献参数" / "从文献提取" / "参数推荐" / "parameter extraction" | `skill_view("literature-param-extraction")` → 从文献中提取分析参数（阈值、工具版本、过滤标准） |
+| "总结论文" / "概括文献" / "论文要点" / "速读" / "summarize paper" | `skill_view("paper-summary")` → 论文结构化总结（背景/方法/结果/局限） |
+| "生成总结" / "分析总结" / "跑完总结" / "结果汇总" / "summary report" | `skill_view("analysis-summary-report")` → 分析完成后生成综合总结报告，链入结论目录 |
+| "公共数据" / "下载数据集" / "公开数据" / "GEO数据" / "公共数据库" / "找数据" / "检索数据" / "omics data" | `skill_view("omics-dataset-retrieval")` → 跨数据库组学数据检索（GEO/ArrayExpress/TCGA/SRA） |
+| "PPT" / "幻灯片" / "演示文稿" / "presentation" / "汇报" / "组会" | `skill_view("ppt-generator")` → 生成 PPT 演示文稿 |
+| "Word" / "docx" / "word文档" / "生成文档" | `skill_view("docx-generation")` → 生成 Word 文档 |
+| "最佳实践" / "best practice" / "分析规范" / "标准流程" / "guideline" | `skill_view("data-analysis-best-practices")` → 生信分析最佳实践指南 |
+| "药物靶点" / "靶点发现" / "drug target" / "药物重定位" / "disease drug" | `skill_view("scrna-disease-drug-discovery")` → 疾病 scRNA-seq + 遗传证据整合的药物靶点优先级排序 |
 
 ### LLM 决策树（每条用户消息走一遍）
 

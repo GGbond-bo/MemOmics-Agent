@@ -32,7 +32,6 @@
 | 15 | doubletfinder-remove-doublets |  | rna, scrna, scrnaseq | RED 必触发 |
 | 16 | estimate_cell_cycle_phase_durations |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 17 | functional-enrichment |  | rna, scrna, scrnaseq | RED 必触发 |
-| 18 | functional-enrichment-from-degs |  | rna, scrna, scrnaseq | RED 必触发 |
 | 19 | gene-essentiality |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 20 | gene_set_enrichment_analysis |  | rna, scrna, scrnaseq | RED 必触发 |
 | 21 | get_gene_set_enrichment_analysis_supported_database_list |  | rna, scrna, scrnaseq | RED 必触发 |
@@ -46,11 +45,7 @@
 | 29 | quantify_and_cluster_cell_motility |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 30 | sasp-scoring |  | rna, scrna, scrnaseq | YEL 讨论触发 |
 | 31 | scrna-clustering | 完整Seurat v5聚类注释工作流。使用场景：QC后的scRNA-seq，需SCTransform→PCA→UMAP→聚类→注释→Markers，含SoupX/DoubletFinder/Harmo | rna, scrna, scrnaseq | RED 必触发 |
-| 32 | scrna-disease-drug |  | rna, scrna, scrnaseq | RED 必触发 |
-| 33 | scrna-disease-drug-discovery |  | rna, scrna, scrnaseq | RED 必触发 |
 | 34 | scrna-qc | scRNA-seq质控+Doublet+Ambient RNA去除。使用场景：拿到raw矩阵第一步，需过滤低质量细胞/双胞/环境RNA，自动推荐阈值，支持人/鼠 | rna, scrna, scrnaseq | RED 必触发 |
-| 35 | scrna-seurat-core | Single-cell RNA-seq analysis using Seurat v5 from raw data to cell type annotation with clustering,  | rna, scrna, scrnaseq | RED 必触发 |
-| 36 | scrna-trajectory-inference | Infer differentiation trajectories, pseudotime ordering, RNA velocity, and cell fate probabilities f | rna, scrna, scrnaseq | RED 必触发 |
 | 37 | scrnaseq-scanpy-core-analysis |  | rna, scrna, scrnaseq | RED 必触发 |
 | 38 | scrnaseq-seurat-core-analysis |  | rna, scrna, scrnaseq | RED 必触发 |
 | 39 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | rna, scrna, scrnaseq | RED 必触发 |
