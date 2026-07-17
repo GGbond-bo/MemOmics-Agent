@@ -2177,8 +2177,8 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     # Persist to Hermes DB for restore
     try:
         db = _get_session_db()
-        if db and hasattr(db, "add_message"):
-            db.add_message(sid, "user", text)
+        if db and hasattr(db, "append_message"):
+            db.append_message(sid, role="user", content=text)
     except Exception:
         pass
 
@@ -2230,8 +2230,8 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             # Persist to Hermes DB for restore
             try:
                 db = _get_session_db()
-                if db and hasattr(db, "add_message"):
-                    db.add_message(sid, "assistant", result_text.strip())
+                if db and hasattr(db, "append_message"):
+                    db.append_message(sid, role="assistant", content=result_text.strip())
             except Exception:
                 pass
 
