@@ -2289,6 +2289,9 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         def _wx_delta_cb(delta_text):
             _session_emit(session, {"type": "delta", "content": str(delta_text), "session_id": sid})
 
+        def _wx_reasoning_cb(reasoning_text):
+            _session_emit(session, {"type": "reasoning", "content": str(reasoning_text), "session_id": sid})
+
         # 合并 enforcement + WeChat 回调（先保存 enforcement 回调）
         _enf_tool_start = agent.tool_start_callback
         _enf_tool_complete = agent.tool_complete_callback
@@ -2315,6 +2318,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         agent.tool_complete_callback = _merged_tool_complete
         agent.tool_progress_callback = _merged_progress
         agent.stream_delta_callback = _wx_delta_cb
+        agent.reasoning_callback = _wx_reasoning_cb
 
         # 构建对话历史（最近 20 条）
         history = []
@@ -3901,9 +3905,13 @@ async def ws_endpoint(ws: WebSocket):
                     _session_emit(session, {"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
 
                 # 回调
+                has_delta = False  # 追踪是否已通过流式发送过文本
+
                 def stream_cb(delta):
+                    nonlocal has_delta
                     try:
                         if delta is None: return
+                        has_delta = True
                         _session_emit(session, {"type": "delta", "content": str(delta), "session_id": session["id"]})
                     except Exception:
                         pass
@@ -4467,7 +4475,7 @@ async def ws_endpoint(ws: WebSocket):
                             pass
                         # 发送进度完成
                         _session_emit(session, {"type": "progress", "step": _pt(session, "complete"), "status": "done", "detail": _pt(session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                        _session_emit(session, {"type": "complete", "content": result, "session_id": session["id"]})
+                        _session_emit(session, {"type": "complete", "content": "" if has_delta else result, "session_id": session["id"]})
                     except asyncio.CancelledError:
                         if not getattr(agent, "_interrupt_requested", False):
                             agent.interrupt()
