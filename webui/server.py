@@ -104,6 +104,17 @@ async def _warm_skills_snapshot():
         )
     except Exception as e:
         logger.warning(f"[MemOmics] Skills snapshot warm failed (will cold-scan on first request): {e}")
+    
+    # === 微信自动重连 ===
+    try:
+        if _weixin_state.get("connected") and _weixin_state.get("token"):
+            import asyncio as _asyncio
+            _asyncio.get_event_loop().call_soon_threadsafe(
+                lambda: _asyncio.ensure_future(_auto_reconnect_weixin())
+            )
+            logger.info("[MemOmics] 检测到已保存的微信凭据，将在后台自动重连...")
+    except Exception as e:
+        logger.warning(f"[MemOmics] 微信自动重连调度失败: {e}")
 
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -1709,7 +1720,7 @@ _weixin_state = {
 # 从磁盘恢复已保存的微信凭据
 def _load_weixin_persist():
     try:
-        persist_path = os.path.join(hermes_home, "weixin_account.json")
+        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
         if os.path.exists(persist_path):
             with open(persist_path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
@@ -1720,14 +1731,14 @@ def _load_weixin_persist():
             _weixin_state["context_token"] = saved.get("context_token", "")
             _weixin_state["connected"] = bool(_weixin_state["token"])
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[MemOmics] 加载微信持久化状态失败: {e}", flush=True)
     return False
 
 def _save_weixin_persist():
     try:
-        os.makedirs(hermes_home, exist_ok=True)
-        persist_path = os.path.join(hermes_home, "weixin_account.json")
+        os.makedirs(HERMES_HOME_DIR, exist_ok=True)
+        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
         with open(persist_path, "w", encoding="utf-8") as f:
             json.dump({
                 "account_id": _weixin_state["account_id"],
@@ -1736,8 +1747,8 @@ def _save_weixin_persist():
                 "base_url": _weixin_state["base_url"],
                 "context_token": _weixin_state.get("context_token", ""),
             }, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[MemOmics] 保存微信持久化状态失败: {e}", flush=True)
 
 _load_weixin_persist()
 
@@ -2633,6 +2644,34 @@ async def _hermes_weixin_message_handler(event):
         traceback.print_exc()
     return None
 
+
+async def _auto_reconnect_weixin():
+    """服务启动时自动重连微信 — 使用已保存的 token"""
+    global _weixin_adapter
+    try:
+        token = _weixin_state.get("token", "")
+        account_id = _weixin_state.get("account_id", "")
+        if not token:
+            logger.info("[MemOmics] 微信自动重连: 无已保存 token，跳过")
+            return
+        
+        logger.info(f"[MemOmics] 微信自动重连: 尝试恢复账号 {account_id[:16] if account_id else 'unknown'}...")
+        
+        # 等待 uvicorn 完全启动 (让事件循环就绪)
+        await asyncio.sleep(2)
+        
+        # 调用 Hermes WeixinAdapter 连接
+        await _connect_hermes_weixin_adapter()
+        
+        if _weixin_adapter and _weixin_state.get("connected"):
+            logger.info("[MemOmics] 微信自动重连成功!")
+        else:
+            logger.warning("[MemOmics] 微信自动重连失败，token 可能已过期，请手动扫码")
+            _weixin_state["connected"] = False
+            _weixin_state["token"] = ""
+            _save_weixin_persist()
+    except Exception as e:
+        logger.warning(f"[MemOmics] 微信自动重连异常: {e}")
 
 async def _connect_hermes_weixin_adapter():
     """连接 Hermes 原生 WeixinAdapter"""
