@@ -1696,6 +1696,100 @@ def _save_weixin_persist():
 _load_weixin_persist()
 
 
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
+
+
+# === 首次启动 / 环境检测 ===
+
+@app.get("/api/setup/status")
+async def setup_status():
+    """检查是否需要首次配置"""
+    needs_config = not _current_model.get("api_key") or not _current_model.get("base_url") or not _current_model.get("model")
+    return {
+        "needs_config": needs_config,
+        "current": {
+            "provider": _current_model.get("provider", "openai"),
+            "base_url": _current_model.get("base_url", ""),
+            "model": _current_model.get("model", ""),
+            "has_key": bool(_current_model.get("api_key")),
+        }
+    }
+
+
+@app.post("/api/setup/config")
+async def setup_config(req: Request):
+    """首次配置：保存 API key + base_url + model"""
+    data = await req.json()
+    provider = data.get("provider", "openai")
+    base_url = data.get("base_url", "").strip()
+    api_key = data.get("api_key", "").strip()
+    model = data.get("model", "").strip()
+    if not api_key or not base_url or not model:
+        return JSONResponse({"error": "api_key, base_url, model are required"}, status_code=400)
+    _current_model["provider"] = provider
+    _current_model["base_url"] = base_url
+    _current_model["api_key"] = api_key
+    _current_model["model"] = model
+    _save_model_config()
+    try:
+        _cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        _cfg_lines = [
+            f"api_base: {base_url}",
+            f"api_key: {api_key}",
+            "max_turns: 200",
+            f"model: {model}",
+            f"provider: {provider}",
+            "sessions:",
+            "  write_json_snapshots: true",
+            "skills:",
+            "  disabled: []",
+        ]
+        with open(_cfg_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(_cfg_lines) + "\n")
+    except Exception as e:
+        print(f"[WARN] 写入 config.yaml 失败: {e}")
+    return {"ok": True, "model": model, "base_url": base_url}
+
+
+@app.get("/api/env/check")
+async def env_check():
+    """环境自检：Python/R/GPU/磁盘/内存/关键包"""
+    import shutil, platform, subprocess as _sp
+    result = {"python": {}, "r": {}, "gpu": {}, "system": {}, "packages": {}}
+    result["python"]["version"] = sys.version.split()[0]
+    result["python"]["ok"] = True
+    r_path = shutil.which("Rscript")
+    if r_path:
+        try:
+            rv = _sp.run(["Rscript", "-e", "cat(R.version$major, R.version$minor, sep='.')"], capture_output=True, text=True, timeout=10)
+            result["r"]["version"] = rv.stdout.strip()
+            result["r"]["ok"] = True
+        except Exception:
+            result["r"]["ok"] = False
+    else:
+        result["r"]["ok"] = False
+    try:
+        gpu = shutil.which("nvidia-smi")
+        if gpu:
+            gv = _sp.run([gpu, "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=10)
+            result["gpu"]["name"] = gv.stdout.strip()
+            result["gpu"]["ok"] = True
+        else:
+            result["gpu"]["ok"] = False
+    except Exception:
+        result["gpu"]["ok"] = False
+    result["system"]["platform"] = platform.platform()
+    try:
+        import psutil
+        result["system"]["memory_gb"] = round(psutil.virtual_memory().total / (1024**3), 1)
+        result["system"]["disk_free_gb"] = round(psutil.disk_usage(".").free / (1024**3), 1)
+    except Exception:
+        pass
+    return result
+
+
 @app.get("/api/enforcement/{sid}")
 async def enforcement_status(sid: str):
     """查询会话的强制执行状态"""
