@@ -1304,6 +1304,28 @@ def _create_agent(model_config=None, session_id=None):
             agent.tool_progress_callback = cbs.get("tool_progress_callback")
     return agent
 
+@app.get("/api/sessions")
+async def list_sessions():
+    """列出所有会话"""
+    return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
+                          "bg_running": s.get("bg_running", False),
+                          "is_running": bool(s.get("running_agent") or s.get("running_task")),
+                          "restored": s.get("restored", False),
+                          "msg_count": len(s.get("messages", [])),
+                          "last_active": s.get("last_active", s["created"]),
+                          "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
+                          "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
+                          "last_message": (s.get("messages", [{}])[-1].get("content") or s.get("messages", [{}])[-1].get("text", ""))[:80] if s.get("messages") else ""
+                         } for s in _sessions.values()]}
+
+
+@app.post("/api/sessions/new")
+async def new_session(title: str = "新会话"):
+    """新建会话"""
+    s = _create_session(title)
+    return {"id": s["id"], "title": s["title"]}
+
+
 def _sanitize_dir_name(s: str) -> str:
     """清理目录名：只保留字母数字中文下划线连字符，其余替换为_"""
     import re
