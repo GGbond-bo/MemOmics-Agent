@@ -119,8 +119,11 @@
 ### 核心铁律（10条，不可跳过）
 
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")` 加载技能文档
-2. **先查知识库**：有物种/组织/方向 → `search_knowledge()` 获取参数推荐
-3. **先审查再跑**：分析级操作 → `rail_review(pre)` → 写代码 → `terminal` → `rail_review(post)`
+2. **skill 不存在 → 三级回退**：
+   - ① `skill_view` 返回 not found → 调用 `skill_search` 找相似
+   - ② 无相似 skill → **优先使用包官方文档/教程**（用 `search_knowledge` + 联网搜索 Bioconductor/CRAN/PyPI 官方 vignette）
+   - ③ 无官方文档 → 才由 LLM 自行编写，**但必须 rail_review(pre) + rail_review(post) 双重审查**
+3. **先审查再跑**：分析级操作 → `skill_view` 加载后 → 必须 `rail_review(pre)` → 写代码 → `terminal` → `rail_review(post)`。**加载了 skill 不等于可以跳过审查**。
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
 5. **必须辩论**：分析级结论 → 必须将 `search_knowledge()` 返回的物种/组织/方向知识库内容作为 `knowledge_base_info`/`biology_kb`/`statistics_kb`/`bioinfo_kb` 传入 `debate_analysis`。KB 非空时辩论编辑必须引用 KB 中的具体文献和发现。辩论结果中无 KB 引用 → 重新辩论。
 6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run 沉淀"
@@ -142,8 +145,10 @@
 | **轻量级** (5步) | skill_view → check_env → write → terminal → rail_review(post) | 格式转换、文件处理 |
 | **统计级** (7步) | + search_knowledge + rail_review(pre) | 统计检验、富集分析、生存分析 |
 | **分析级** (8步) | + search_knowledge → 结果传入 debate_analysis(knowledge_base_info=...) | RNA,ATAC,空间组，bulk，蛋白、QC、聚类、DEG、轨迹、通讯、整合 |
+| **无 skill 级** (回退) | skill_search(无) → 官方文档 → rail_review(pre) → write → terminal → rail_review(post) | skill 不存在时的三级回退 |
 
 > 无法判定 → 默认分析级，宁可多做不可少做
+> skill 不存在 → 走三级回退，**禁止不经审查直接写代码**
 
 ---
 

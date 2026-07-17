@@ -1276,9 +1276,10 @@ def _create_agent(model_config=None, session_id=None):
     - background_review: 自动启用（conversation_loop 内置）
     """
     from run_agent import AIAgent
+    from webui import enforcement as _enf
     cfg = model_config or _current_model
     skills_index = _read_skills_index()
-    return AIAgent(
+    agent = AIAgent(
         base_url=cfg["base_url"],
         api_key=cfg["api_key"],
         provider=cfg.get("provider", "openai"),
@@ -1294,217 +1295,14 @@ def _create_agent(model_config=None, session_id=None):
         checkpoint_max_total_size_mb=200,
         checkpoint_max_file_size_mb=10,
     )
-
-
-# === REST API ===
-
-@app.get("/")
-async def index():
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
-    with open(html_path, encoding="utf-8") as f:
-        return HTMLResponse(f.read(), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-
-
-@app.get("/api/health")
-async def health():
-    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
-
-
-@app.get("/api/sessions/diag")
-async def diag_sessions():
-    """诊断：检查会话恢复状态"""
-    db = _get_session_db()
-    db_count = 0
-    if db:
-        try:
-            sessions = db.list_sessions_rich()
-            db_count = len(sessions)
-        except Exception:
-            pass
-    return {
-        "memory_count": len(_sessions),
-        "db_count": db_count,
-        "db_available": db is not None,
-        "memory_ids": list(_sessions.keys()),
-    }
-
-# === 首次启动 / 环境检测 ===
-
-@app.get("/api/setup/status")
-async def setup_status():
-    """检查是否需要首次配置"""
-    needs_config = not _current_model.get("api_key") or not _current_model.get("base_url") or not _current_model.get("model")
-    return {
-        "needs_config": needs_config,
-        "current": {
-            "provider": _current_model.get("provider", "openai"),
-            "base_url": _current_model.get("base_url", ""),
-            "model": _current_model.get("model", ""),
-            "has_key": bool(_current_model.get("api_key")),
-        }
-    }
-
-
-@app.post("/api/setup/config")
-async def setup_config(req: Request):
-    """首次配置：保存 API key + base_url + model"""
-    data = await req.json()
-    provider = data.get("provider", "openai")
-    base_url = data.get("base_url", "").strip()
-    api_key = data.get("api_key", "").strip()
-    model = data.get("model", "").strip()
-    if not api_key or not base_url or not model:
-        return JSONResponse({"error": "api_key, base_url, model are required"}, status_code=400)
-    _current_model["provider"] = provider
-    _current_model["base_url"] = base_url
-    _current_model["api_key"] = api_key
-    _current_model["model"] = model
-    _save_model_config()
-    # 同步写入 config.yaml
-    try:
-        _cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
-        _cfg_lines = [
-            f"api_base: {base_url}",
-            f"api_key: {api_key}",
-            "max_turns: 200",
-            f"model: {model}",
-            f"provider: {provider}",
-            "sessions:",
-            "  write_json_snapshots: true",
-            "skills:",
-            "  disabled: []",
-        ]
-        with open(_cfg_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(_cfg_lines) + "\n")
-    except Exception as e:
-        print(f"[WARN] 写入 config.yaml 失败: {e}")
-    return {"ok": True, "model": model, "base_url": base_url}
-
-
-@app.get("/api/env/check")
-async def env_check():
-    """环境自检：Python/R/GPU/磁盘/内存/关键包"""
-    import shutil, platform, subprocess
-    result = {"python": {}, "r": {}, "gpu": {}, "system": {}, "packages": {}}
-    # Python
-    result["python"]["version"] = sys.version.split()[0]
-    result["python"]["ok"] = True
-    # R
-    r_path = shutil.which("Rscript")
-    if r_path:
-        try:
-            rv = subprocess.run(["Rscript", "-e", "cat(R.version$major, R.version$minor, sep='.')"],
-                                capture_output=True, text=True, timeout=10)
-            result["r"]["version"] = rv.stdout.strip()
-            result["r"]["ok"] = True
-        except Exception:
-            result["r"]["ok"] = False
-    else:
-        result["r"]["ok"] = False
-    # GPU — 多路径检测 + torch.cuda 备用检测
-    gpu_paths = [
-        shutil.which("nvidia-smi"),
-        r"C:\Windows\System32\nvidia-smi.exe",
-        r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
-        "/usr/bin/nvidia-smi",
-        "/usr/local/bin/nvidia-smi",
-    ]
-    nvidia_smi = next((p for p in gpu_paths if p and os.path.isfile(p)), None)
-    result["gpu"]["debug"] = {"found_path": nvidia_smi}
-    if nvidia_smi:
-        try:
-            gv = subprocess.run([nvidia_smi, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
-                                capture_output=True, timeout=10)
-            out = gv.stdout.decode("utf-8", errors="replace").strip() if gv.stdout else ""
-            result["gpu"]["debug"]["returncode"] = gv.returncode
-            result["gpu"]["debug"]["stdout"] = out[:200]
-            if gv.returncode == 0 and out:
-                parts = [p.strip() for p in out.split("\n")[0].split(",")]
-                result["gpu"]["name"] = parts[0]
-                result["gpu"]["vram_mb"] = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
-                result["gpu"]["ok"] = True
-            else:
-                result["gpu"]["ok"] = False
-        except Exception as e:
-            result["gpu"]["ok"] = False
-            result["gpu"]["debug"]["error"] = str(e)
-    else:
-        result["gpu"]["ok"] = False
-    # 备用检测：nvidia-smi 不可用时尝试 torch.cuda
-    if not result["gpu"]["ok"]:
-        try:
-            import torch
-            if torch.cuda.is_available():
-                result["gpu"]["name"] = torch.cuda.get_device_name(0)
-                result["gpu"]["vram_mb"] = int(torch.cuda.get_device_properties(0).total_memory // 1024 // 1024)
-                result["gpu"]["ok"] = True
-                result["gpu"]["debug"]["via"] = "torch.cuda"
-        except Exception as e:
-            result["gpu"]["debug"]["torch_error"] = str(e)
-    # System
-    try:
-        import psutil
-        result["system"]["cpu_cores"] = psutil.cpu_count(logical=False) or 0
-        result["system"]["memory_gb"] = round(psutil.virtual_memory().total / 1024**3, 1)
-        result["system"]["memory_available_gb"] = round(psutil.virtual_memory().available / 1024**3, 1)
-        result["system"]["disk_free_gb"] = round(psutil.disk_usage(MEMOMICS_DIR).free / 1024**3, 1)
-    except Exception:
-        pass
-    result["system"]["platform"] = platform.platform()
-    # Key Python packages
-    for pkg in ["fastapi", "uvicorn", "httpx", "psutil", "openai"]:
-        try:
-            __import__(pkg)
-            result["packages"][pkg] = True
-        except ImportError:
-            result["packages"][pkg] = False
-    # Key R packages (quick check via Rscript)
-    if r_path:
-        r_check_code = (
-            "pkgs <- c('Seurat','DESeq2','SingleR','CellChat','harmony','glmGamPoi','future');"
-            "for (p in pkgs) cat(p, ':', ifelse(requireNamespace(p, quietly=TRUE), 'YES', 'NO'), '\n')"
-        )
-        try:
-            rp = subprocess.run(["Rscript", "-e", r_check_code], capture_output=True, text=True, timeout=30)
-            for line in rp.stdout.strip().split("\n"):
-                if ":" in line:
-                    pname, pstatus = line.split(":", 1)
-                    result["packages"]["R:" + pname.strip()] = (pstatus.strip() == "YES")
-        except Exception:
-            pass
-    # web_search backend
-    for pkg in ["duckduckgo_search", "tavily", "exa_py"]:
-        try:
-            __import__(pkg)
-            result["packages"]["web:" + pkg] = True
-        except ImportError:
-            result["packages"]["web:" + pkg] = False
-    return result
-
-
-# --- 会话管理 ---
-
-@app.get("/api/sessions")
-async def list_sessions():
-    """列出所有会话"""
-    return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
-                          "bg_running": s.get("bg_running", False),
-                          "is_running": bool(s.get("running_agent") or s.get("running_task")),
-                          "restored": s.get("restored", False),
-                          "msg_count": len(s.get("messages", [])),
-                          "last_active": s.get("last_active", s["created"]),
-                          "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
-                          "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
-                          "last_message": (s.get("messages", [{}])[-1].get("content") or s.get("messages", [{}])[-1].get("text", ""))[:80] if s.get("messages") else ""
-                         } for s in _sessions.values()]}
-
-
-@app.post("/api/sessions/new")
-async def new_session(title: str = "新会话"):
-    """新建会话"""
-    s = _create_session(title)
-    return {"id": s["id"], "title": s["title"]}
-
+    # 注入代码级强制执行回调
+    if session:
+        cbs = _enf.create_enforcement_callbacks(session, _session_emit, agent_ref=[agent])
+        agent.tool_start_callback = cbs["tool_start_callback"]
+        agent.tool_complete_callback = cbs["tool_complete_callback"]
+        if not agent.tool_progress_callback:
+            agent.tool_progress_callback = cbs.get("tool_progress_callback")
+    return agent
 
 def _sanitize_dir_name(s: str) -> str:
     """清理目录名：只保留字母数字中文下划线连字符，其余替换为_"""
@@ -2232,8 +2030,15 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             pass
 
     try:
+        # 分析级别检测
+        from webui import enforcement as _enf3
+        _level = _enf3.detect_analysis_level(text)
+        _es = _enf3.get_enforcement(sid)
+        _es.analysis_level = _level
+        _es.results_dir = session.get("results_dir", "")
+        
         # 用 WebUI 同款的 _create_agent 工厂函数
-        agent = _create_agent(session_id=sid)
+        agent = _create_agent(session_id=sid, session=session)
 
         # === 注册完整回调：中间框显示全过程 ===
         def _wx_tool_progress_cb(event_type, **kwargs):
@@ -3700,6 +3505,13 @@ async def ws_endpoint(ws: WebSocket):
                 detected_lang = _detect_lang(user_text)
                 session["lang"] = detected_lang
 
+                # 分析级别检测 (闲聊 vs 分析)
+                from webui import enforcement as _enf2
+                _level = _enf2.detect_analysis_level(user_text)
+                _es = _enf2.get_enforcement(session["id"])
+                _es.analysis_level = _level
+                _es.results_dir = session.get("results_dir", "")
+
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -3794,7 +3606,7 @@ async def ws_endpoint(ws: WebSocket):
                     _session_emit(session, {"type": "progress", "step": _ei, "status": "pending",
                         "detail": _pt(session, "loading_skills"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     try:
-                        agent = _create_agent(session["model_config"], session_id=session["id"])
+                        agent = _create_agent(session["model_config"], session_id=session["id"], session=session)
                         session["agent"] = agent  # 缓存到 session
                         _session_emit(session, {"type": "progress", "step": _ei, "status": "done",
                             "detail": _pt(session, "engine_ready"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
