@@ -773,12 +773,14 @@ function handleMessage(msg) {
     handleWeixinMessage(msg);
     return;
   }
-  // 微信会话更新通知（自动切换+刷新列表）
+  // 微信会话更新通知（自动切换+刷新列表，防抖3秒）
   if (msg.type === 'session_update' && msg.session_id) {
-    updateSessionList();
-    // 如果是微信Agent开始运行，自动切换到该会话（像手动输入一样展示过程）
     if (msg.is_running && currentSid !== msg.session_id) {
       switchSession(msg.session_id);
+    }
+    if (!window._sessionUpdateTimer) {
+      updateSessionList();
+      window._sessionUpdateTimer = setTimeout(function() { window._sessionUpdateTimer = null; }, 3000);
     }
     return;
   }
