@@ -225,11 +225,40 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             except Exception:
                 pass
 
-            # rail_review(post) 完成后 → 触发 debate
-            if es.rail_post_done and not es.debate_done and es.analysis_level == "analysis":
-                _emit("enforcement", action="require",
-                      message="💬 rail_review(post) 通过。请调用 debate_analysis 进行多专家辩证审查。",
-                      require=["debate_analysis"])
+            # rail_review(post) 完成后 → 自动 record_run + 触发 debate
+            if es.rail_post_done:
+                # 自动记录成功运行到 skill（自进化）
+                if es.analysis_level in ("analysis", "statistical") and es.skills_loaded:
+                    try:
+                        import importlib.util as _iu2
+                        import os as _os2
+                        _sep2 = _iu2.spec_from_file_location(
+                            "skill_evolution",
+                            _os2.join(_os2.dirname(_os2.abspath(__file__)),
+                                      "..", "memomics", "bio_tools", "skill_evolution.py")
+                        )
+                        _se = _iu2.module_from_spec(_sep2)
+                        _sep2.loader.exec_module(_se)
+                        for _sk in es.skills_loaded:
+                            _se.skill_evolution(
+                                action="record_run",
+                                skill_name=_sk,
+                                script_name=f"session_{sid}_terminal{es.terminal_count}",
+                                species="", tissue="", direction="",
+                                params_used="{}",
+                                result_summary=f"rail_review(post) passed. session={sid}, terminal_count={es.terminal_count}",
+                                score=7
+                            )
+                        _emit("enforcement", action="recorded",
+                              message=f"🧬 自动 record_run: {', '.join(es.skills_loaded)}")
+                    except Exception as _e:
+                        _emit("enforcement", action="warning",
+                              message=f"⚠️ record_run 失败: {_e}")
+                # 触发 debate
+                if not es.debate_done and es.analysis_level == "analysis":
+                    _emit("enforcement", action="require",
+                          message="💬 rail_review(post) 通过。请调用 debate_analysis 进行多专家辩证审查。",
+                          require=["debate_analysis"])
 
         elif tool_name == "debate_analysis":
             es.debate_done = True

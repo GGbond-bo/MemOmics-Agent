@@ -1072,8 +1072,15 @@ def _skill_evolution_dispatch(args, **kw):
     query_logs, update_script。存储到 SKILL.md / skill.json / error_log.md。
     """
     try:
-        import importlib
-        se = importlib.import_module("memomics.bio_tools.skill_evolution")
+        import importlib.util as _iu
+        import os as _os
+        _sep = _iu.spec_from_file_location(
+            "skill_evolution",
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "memomics", "bio_tools", "skill_evolution.py")
+        )
+        se = _iu.module_from_spec(_sep)
+        _sep.loader.exec_module(se)
     except Exception:
         return skill_evolution(
             args.get("action", ""), args.get("skill_name", ""),

@@ -174,11 +174,37 @@
       "approved": false,
       "custom_script": false,
       "result": "TypeII: 504 DEGs (456 |LFC|>1), TypeI: 361 (332), FAP: 161 (160), EC: 99 (97), Myeloid: 61, Pericyte: 39, MuSC: 32, Lym: 15, SchwannCell: 0. CDKN1A up in FAP (LFC=4.01). Missing kb markers: COL1A1/COL"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "test_degs.r",
+      "params": "{}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Test run summary"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "test_degs.r",
+      "params": "{}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Test run"
     }
   ],
-  "proven_script": "",
+  "proven_script": "test_degs.r",
   "error_count": 3,
-  "success_count": 8,
+  "success_count": 10,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -188,7 +214,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": ""
+    "last_used_script": "test_degs.r"
   },
   "errors": [
     {
