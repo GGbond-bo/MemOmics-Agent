@@ -56,7 +56,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -109,6 +109,11 @@ async def _warm_skills_snapshot():
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
     app.mount("/assets", StaticFiles(directory=_static_dir), name="assets")
+
+# 挂载用户上传图片目录
+_uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 # === Hermes SessionDB (state.db) — 原生会话持久化 ===
 _session_db = None
@@ -1736,6 +1741,28 @@ def _save_weixin_persist():
 
 _load_weixin_persist()
 
+
+@app.post("/api/upload")
+async def upload_image(file: UploadFile = File(...)):
+    """上传图片 — 支持粘贴/拖拽/文件选择的截图和图片"""
+    import uuid, time
+    # 限制文件类型
+    ext = os.path.splitext(file.filename or "image.png")[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"):
+        return JSONResponse({"error": f"不支持的图片格式: {ext}"}, status_code=400)
+    # 限制文件大小 (20MB)
+    contents = await file.read()
+    if len(contents) > 20 * 1024 * 1024:
+        return JSONResponse({"error": "图片大小超过 20MB 限制"}, status_code=400)
+    # 生成唯一文件名
+    ts = int(time.time() * 1000)
+    uid = str(uuid.uuid4())[:8]
+    fname = f"{ts}_{uid}{ext}"
+    fpath = os.path.join(_uploads_dir, fname)
+    with open(fpath, "wb") as f:
+        f.write(contents)
+    url = f"/uploads/{fname}"
+    return {"url": url, "name": fname, "size": len(contents)}
 
 @app.get("/api/health")
 async def health():
@@ -3691,8 +3718,14 @@ async def ws_endpoint(ws: WebSocket):
 
             elif msg_type == "chat":
                 user_text = msg.get("message", msg.get("content", "")).strip()
-                if not user_text:
+                image_urls = msg.get("images", []) or []
+                # 允许仅图片无文字
+                if not user_text and not image_urls:
                     continue
+                # 如果有图片，将图片 URL 作为上下文附加到用户消息中
+                if image_urls:
+                    img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
+                    user_text = (user_text or "查看图片") + img_context
 
                 # 问题9: 检测用户语言并更新会话语言
                 detected_lang = _detect_lang(user_text)

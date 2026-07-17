@@ -181,6 +181,23 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-input .input-info { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--text-light); }
 .chat-input .model-select { font-size:11px; padding:2px 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); }
 
+/* 图片粘贴/上传 */
+.image-preview-area { display:flex; gap:8px; flex-wrap:wrap; padding:4px 0 8px 0; min-height:0; }
+.image-preview-item { position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:2px solid var(--border); flex-shrink:0; background:var(--tool-bg); }
+.image-preview-item img { width:100%; height:100%; object-fit:cover; }
+.image-preview-item .img-remove { position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.6); color:#fff; border:none; font-size:12px; line-height:20px; cursor:pointer; text-align:center; padding:0; opacity:0; transition:opacity 0.15s; }
+.image-preview-item:hover .img-remove { opacity:1; }
+.img-upload-btn { width:40px; height:40px; border-radius:8px; border:2px dashed var(--border); background:var(--tool-bg); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--text-light); transition:all 0.2s; flex-shrink:0; align-self:flex-end; margin-bottom:2px; }
+.img-upload-btn:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
+.img-upload-btn input[type=file] { display:none; }
+/* 消息中的图片 */
+.msg-image { margin:8px 0; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+.msg-image img { max-width:100%; max-height:320px; display:block; cursor:zoom-in; }
+.msg-image .img-caption { font-size:11px; color:var(--text-light); padding:4px 8px; background:var(--tool-bg); }
+/* 拖拽高亮 */
+.chat-input.drop-active { background:var(--primary-light); border-radius:8px; }
+.chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
+
 /* === 右侧面板 === */
 .info-panel { width:340px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 .info-panel > div[id^="panel-"] { flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
@@ -420,10 +437,15 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <div class="chat-messages" id="messages">
       <!-- 欢迎画面由 newSession() 动态生成 -->
     </div>
-    <div class="chat-input">
+    <div class="chat-input" id="chat-input">
       <div class="input-grip" id="input-grip" title="拖拽调整输入框高度"></div>
+      <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
       <div class="input-row">
-        <textarea id="input" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)" rows="1"></textarea>
+        <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)">
+          🖼️
+          <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)">
+        </label>
+        <textarea id="input" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="1"></textarea>
         <button id="send" onclick="send(false)">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行">⏹ 停止</button>
       </div>
@@ -747,6 +769,7 @@ let models = [];
 let currentModel = {};
 let progressTimelineEl = null;
 let progressItems = [];
+let pendingImages = [];  // 待发送图片 [{dataUrl, file, uploadedUrl}]
 // === 会话级进度缓存（切换会话时保存/恢复） ===
 let _sessionProgressCache = {};  // sid -> { timelineEl, items }
 let _currentRunningSid = null;   // 当前正在运行的会话 ID
@@ -1048,25 +1071,146 @@ function handleMessage(msg) {
   }
 }
 
+// === 图片粘贴/拖拽/上传 ===
+function addImagePreview(dataUrl, file) {
+  pendingImages.push({ dataUrl: dataUrl, file: file, uploadedUrl: null });
+  renderImagePreviews();
+}
+
+function removeImagePreview(index) {
+  pendingImages.splice(index, 1);
+  renderImagePreviews();
+}
+
+function renderImagePreviews() {
+  var area = document.getElementById('image-preview-area');
+  if (!pendingImages.length) { area.style.display = 'none'; area.innerHTML = ''; return; }
+  area.style.display = 'flex';
+  area.innerHTML = pendingImages.map(function(img, i) {
+    return '<div class="image-preview-item">' +
+      '<img src="' + img.dataUrl + '" alt="图片预览">' +
+      '<button class="img-remove" onclick="removeImagePreview(' + i + ')" title="移除">×</button>' +
+      '</div>';
+  }).join('');
+}
+
+async function uploadPendingImages() {
+  // 上传所有待发送图片，返回 URL 列表
+  var urls = [];
+  for (var i = 0; i < pendingImages.length; i++) {
+    var img = pendingImages[i];
+    if (img.uploadedUrl) { urls.push(img.uploadedUrl); continue; }
+    try {
+      // dataUrl → Blob
+      var resp = await fetch(img.dataUrl);
+      var blob = await resp.blob();
+      var form = new FormData();
+      form.append('file', blob, img.file ? img.file.name : 'paste.png');
+      var r = await fetch('/api/upload', { method: 'POST', body: form });
+      var d = await r.json();
+      if (d.url) { img.uploadedUrl = d.url; urls.push(d.url); }
+    } catch(e) { console.error('图片上传失败:', e); }
+  }
+  return urls;
+}
+
+function clearPendingImages() {
+  pendingImages = [];
+  renderImagePreviews();
+}
+
+// 粘贴事件 — 支持截图粘贴
+function handlePaste(e) {
+  var items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') === 0) {
+      e.preventDefault();
+      var blob = items[i].getAsFile();
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        addImagePreview(ev.target.result, blob);
+      };
+      reader.readAsDataURL(blob);
+    }
+  }
+}
+
+// 拖拽事件
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('chat-input').classList.add('drop-active');
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('chat-input').classList.remove('drop-active');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('chat-input').classList.remove('drop-active');
+  var files = e.dataTransfer && e.dataTransfer.files;
+  if (!files) return;
+  for (var i = 0; i < files.length; i++) {
+    if (files[i].type.indexOf('image') === 0) {
+      var reader = new FileReader();
+      var file = files[i];
+      reader.onload = function(ev) {
+        addImagePreview(ev.target.result, file);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+}
+
+// 文件选择
+function handleFileSelect(e) {
+  var files = e.target.files;
+  if (!files) return;
+  for (var i = 0; i < files.length; i++) {
+    if (files[i].type.indexOf('image') === 0) {
+      var reader = new FileReader();
+      var file = files[i];
+      reader.onload = function(ev) {
+        addImagePreview(ev.target.result, file);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  e.target.value = '';  // 重置以允许重复选择同一文件
+}
+
 // === 发送消息 ===
-function send(background) {
+async function send(background) {
   var input = document.getElementById('input');
   var text = input.value.trim();
-  if (!text || !ws || ws.readyState !== 1) return;
+  // 允许仅图片无文字（但至少要有一样）
+  if ((!text && !pendingImages.length) || !ws || ws.readyState !== 1) return;
   input.value = '';
   input.style.height = 'auto';
+  // 先上传图片获取 URL
+  var imageUrls = [];
+  if (pendingImages.length) {
+    document.getElementById('send').disabled = true;
+    imageUrls = await uploadPendingImages();
+  }
   // 检查 agent 是否正在运行 — 如果在运行，走 steer 中途引导
   if (typeof agentRunning !== 'undefined' && agentRunning && !background) {
     // agent 运行中，发 steer 引导消息
-    addUserMsg(text);
-    ws.send(JSON.stringify({ type: 'steer', content: text, session_id: currentSid }));
-    // 显示引导反馈
+    addUserMsg(text, imageUrls);
+    ws.send(JSON.stringify({ type: 'steer', content: text, session_id: currentSid, images: imageUrls }));
+    clearPendingImages();
     var hint = document.getElementById('steer-hint');
-    hint.innerHTML = '↳ 已发送引导: ' + text.substring(0, 60) + (text.length > 60 ? '...' : '');
+    hint.innerHTML = '↳ 已发送引导: ' + (text || '[图片]').substring(0, 60);
     hint.style.display = '';
     return;
   }
-  addUserMsg(text);
+  addUserMsg(text, imageUrls);
+  clearPendingImages();
   fullText = '';
   reasoningText = '';
   currentAssistantEl = null;
@@ -1077,7 +1221,7 @@ function send(background) {
   document.getElementById('stop').classList.add('active');
   agentRunning = true;
   document.getElementById('steer-hint').style.display = '';
-  ws.send(JSON.stringify({ type: 'chat', message: text, session_id: currentSid, background: background }));
+  ws.send(JSON.stringify({ type: 'chat', message: text, session_id: currentSid, background: background, images: imageUrls }));
 }
 
 // === 停止 agent ===
@@ -1158,10 +1302,17 @@ function copyMessage(el) {
   });
 }
 
-function addUserMsg(text) {
+function addUserMsg(text, imageUrls) {
   var div = document.createElement('div');
   div.className = 'message user';
-  div.innerHTML = '<div class="role"><span>你</span></div><div class="bubble">' + escapeHtml(text) + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
+  var imgsHtml = '';
+  if (imageUrls && imageUrls.length) {
+    imgsHtml = imageUrls.map(function(url) {
+      return '<div class="msg-image"><img src="' + url + '" onclick="window.open(\'' + url + '\')" title="点击查看大图"></div>';
+    }).join('');
+  }
+  var textHtml = text ? '<div>' + escapeHtml(text) + '</div>' : '';
+  div.innerHTML = '<div class="role"><span>你</span></div><div class="bubble">' + imgsHtml + textHtml + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
   scrollBottom();
 }
@@ -1577,6 +1728,7 @@ function newSession() {
 
   currentSid = null;
   document.getElementById('messages').innerHTML = '';
+  clearPendingImages();
   // 欢迎画面 — 企鹅服小女孩 + 极简问候 (学 hermes 风格)
   var welcome = document.createElement('div');
   welcome.className = 'message assistant';
@@ -1717,6 +1869,7 @@ function deleteSession(sid) {
 }
 
 function switchSession(sid) {
+  clearPendingImages();
   // === 保存旧会话的全部渲染状态 ===
   if (currentSid) {
     _sessionProgressCache[currentSid] = {
@@ -2814,6 +2967,18 @@ document.getElementById('input').addEventListener('input', function() {
 
 // 恢复配色
 try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) setTheme(savedTheme); } catch(e) {}
+
+// === 图片粘贴/拖拽事件监听 ===
+var chatInputEl = document.getElementById('chat-input');
+document.addEventListener('paste', function(e) {
+  // 仅当焦点在聊天输入区域时处理
+  if (chatInputEl.contains(document.activeElement) || document.activeElement === document.body) {
+    handlePaste(e);
+  }
+});
+chatInputEl.addEventListener('dragover', handleDragOver);
+chatInputEl.addEventListener('dragleave', handleDragLeave);
+chatInputEl.addEventListener('drop', handleDrop);
 
 connect();
 
