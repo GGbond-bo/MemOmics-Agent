@@ -195,7 +195,9 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (13 skills)
+## 08_报告 - 报告/可视化 (14 skills)
+
+| scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|

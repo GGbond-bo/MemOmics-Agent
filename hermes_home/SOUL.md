@@ -43,7 +43,8 @@
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" / "write a paper" / "投稿" | `skill_view("academic-paper-writing")` → 12-agent pipeline 生成完整论文 |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
-| "画图" / "可视化" / "figure" / "发表级" | `skill_view("cns-visualization")` |
+| "画图" / "可视化" / "figure" / "发表级" / "plot" / "作图" / "出图" | `skill_view("scipilot-figure-skill")` → 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→视觉自检 |
+| "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` → 生信专用图型模板（UMAP/DotPlot/Violin/Heatmap/Sankey）|
 | "CellBender" / "去背景" | `skill_view("cellbender-remove-background")` |
 | "DEG" / "差异分析" / "差异基因" / "differential expression" | `skill_view("deg-analysis")` |
 | "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
