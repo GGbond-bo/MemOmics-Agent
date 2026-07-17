@@ -1667,6 +1667,13 @@ def _save_weixin_persist():
 _load_weixin_persist()
 
 
+@app.get("/api/enforcement/{sid}")
+async def enforcement_status(sid: str):
+    """查询会话的强制执行状态"""
+    from webui import enforcement as _enf
+    return _enf.get_enforcement_report(sid)
+
+
 @app.get("/api/weixin/status")
 async def weixin_status():
     """获取微信连接状态"""
