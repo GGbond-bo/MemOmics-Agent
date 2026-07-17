@@ -2549,7 +2549,12 @@ async def _hermes_weixin_message_handler(event):
         # 同步推送到 MemOmics 会话聊天面板
         session = _get_or_create_weixin_session(sender_id, sender_name)
         if session:
-            # 1) 通过 session 的 ws_ref 推送（如果用户正在看该会话）
+            # 重新绑定 ws_ref（每次消息都需要，因为上次 finally 清除过）
+            if _WEIXIN_WS_CLIENTS:
+                session["ws_ref"] = max(_WEIXIN_WS_CLIENTS, key=lambda ws: id(ws))
+                session["loop_ref"] = asyncio.get_event_loop()
+                session["ws_attached"] = True
+            # 1) 通过 session 的 ws_ref 推送
             _session_emit(session, {
                 "type": "chat",
                 "session_id": session["id"],
