@@ -1142,11 +1142,21 @@ def _restore_single_session(sid):
                     results_dir = default_dir
                 else:
                     results_dir = _scan_results_dir_for_session(sid, default_dir)
+            ts_started = s.get("started_at")
+            ts_active = s.get("last_active")
+            try:
+                created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            try:
+                active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
+            except Exception:
+                active_str = created_str
             session = {
                 "id": sid,
                 "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
-                "created": s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "last_active": s.get("last_active") or s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "created": created_str,
+                "last_active": active_str,
                 "messages": messages,
                 "model_config": _current_model,
                 "results_dir": results_dir,
@@ -1155,7 +1165,7 @@ def _restore_single_session(sid):
                 "running_agent": None,
                 "running_task": None,
                 "restored": True,
-                "last_active": s.get("last_active") or s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "last_active": active_str,
                 "source": "",
                 "progress_log": [],
                 "ws_attached": False,
@@ -1219,10 +1229,21 @@ def _load_persisted_sessions():
                         results_dir = default_dir
                 else:
                     results_dir = _scan_results_dir_for_session(sid, default_dir)
+            ts_started = s.get("started_at")
+            ts_active = s.get("last_active")
+            try:
+                created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            try:
+                active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
+            except Exception:
+                active_str = created_str
             session = {
                 "id": sid,
                 "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
-                "created": s.get("created") or datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "created": created_str,
+                "last_active": active_str,
                 "messages": messages,
                 "model_config": _current_model,
                 "results_dir": results_dir,
