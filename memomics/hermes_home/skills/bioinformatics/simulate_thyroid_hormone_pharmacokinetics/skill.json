@@ -1,0 +1,20 @@
+{
+  "id": "simulate_thyroid_hormone_pharmacokinetics",
+  "name": "Simulate Thyroid Hormone Pharmacokinetics",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulates the transport and binding of thyroid hormones across different tissue compartments using an ODE-based pharmacokinetic model.",
+  "detailed_description": "Simulates the transport and binding of thyroid hormones across different tissue compartments using an ODE-based pharmacokinetic model.",
+  "when_to_use": "When you need simulate thyroid hormone pharmacokinetics analysis",
+  "parameters": {
+    "parameters": "[Required] Dictionary containing model parameters including transport_rates, binding_constants, metabolism_rates, and volumes (dict)",
+    "initial_conditions": "[Required] Dictionary of initial concentrations for all molecular species in each compartment (dict)",
+    "time_span": "[Optional] Start and end time for simulation in hours (default: (0, 24))",
+    "time_points": "[Optional] Number of time points to output (default: 100)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

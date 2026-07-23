@@ -1,0 +1,39 @@
+{
+  "name": "蛋白质组差异分析",
+  "id": "proteomics-diff-exp",
+  "category": "multi_omics",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "蛋白质组差异: 定量 → limma → 差异蛋白 → 富集",
+  "triggers": [
+    "蛋白质组",
+    "蛋白差异",
+    "proteomics"
+  ],
+  "steps": [
+    "定量矩阵读取",
+    "缺失值处理",
+    "limma差异分析",
+    "火山图",
+    "功能富集"
+  ],
+  "dependencies": [
+    "limma",
+    "DEP",
+    "clusterProfiler"
+  ],
+  "outputs": [
+    "差异蛋白表",
+    "火山图",
+    "富集结果"
+  ],
+  "detailed_description": "蛋白质组差异: 定量 → limma → 差异蛋白 → 富集\n\n分析步骤:\n  - 定量矩阵读取\n  - 缺失值处理\n  - limma差异分析\n  - 火山图\n  - 功能富集\n\n依赖包: limma, clusterProfiler, DEP",
+  "when_to_use": "当你需要 蛋白质组差异分析 时触发",
+  "parameters": {
+    "steps": "定量矩阵读取 -> 缺失值处理 -> limma差异分析 -> 火山图 -> 功能富集"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

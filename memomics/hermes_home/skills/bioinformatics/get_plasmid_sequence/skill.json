@@ -1,0 +1,18 @@
+{
+  "id": "get_plasmid_sequence",
+  "name": "Get Plasmid Sequence",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Unified function to retrieve plasmid sequences from either Addgene or NCBI. If is_addgene is True or identifier is numeric, uses Addgene. Otherwise searches NCBI using the plasmid name.",
+  "detailed_description": "Unified function to retrieve plasmid sequences from either Addgene or NCBI. If is_addgene is True or identifier is numeric, uses Addgene. Otherwise searches NCBI using the plasmid name.",
+  "when_to_use": "When you need get plasmid sequence analysis",
+  "parameters": {
+    "identifier": "[Required] Either an Addgene ID or plasmid name (str)",
+    "is_addgene": "[Optional] Force Addgene lookup if True, force NCBI if False. If None, attempts to auto-detect based on identifier format."
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

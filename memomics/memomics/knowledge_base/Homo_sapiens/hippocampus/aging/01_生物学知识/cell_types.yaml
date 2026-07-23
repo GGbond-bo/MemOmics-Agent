@@ -1,0 +1,92 @@
+# 人海马体衰老snRNA-seq知识库
+species: Homo sapiens
+tissue: hippocampus
+direction: aging
+
+cell_types:
+  - name: Neural stem cell (NSC)
+    subtypes:
+      - quiescent NSC (qNSC)
+      - primed NSC (pNSC)
+      - active NSC (aNSC)
+    markers:
+      - SOX2
+      - PAX6
+      - GFAP
+    aging_note: "人海马NSC在衰老中进入深度静息; 成人海马神经发生争议中，多数证据支持存在但水平极低; 衰老导致NSC数量和活性显著下降"
+    source: "Yao 2024 eLife, Franjic 2022 Neuron"
+
+  - name: Microglia (MG)
+    markers:
+      - CX3CR1
+      - AIF1
+      - TREM2
+      - P2RY12
+      - TMEM119
+    aging_note: "人小胶质细胞在衰老中呈现促炎表型; APOE通路随年龄上调; 与小鼠共享~70%衰老DEG; 但IL1RAPL1和SPP1为人特异性"
+    source: "He 2024 PLoS One"
+
+  - name: Astrocyte
+    markers:
+      - GFAP
+      - ALDH1L1
+      - S100B
+      - AQP4
+    aging_note: "人海马星形胶质细胞在衰老中呈现反应性增生; 跨物种最保守的衰老细胞类型"
+    source: "Xiong 2025 Mol Biol Evol"
+
+  - name: Oligodendrocyte
+    markers:
+      - MBP
+      - PLP1
+      - MOBP
+    aging_note: "少突胶质细胞在衰老中髓鞘相关基因下调"
+    source: "Franjic 2022 Neuron"
+
+  - name: Granule cell (DG)
+    markers:
+      - PROX1
+      - NEUROD1
+    aging_note: "成人海马DG颗粒细胞新生在衰老中大幅下降; 争议存在但多数研究支持下降趋势"
+
+  - name: Pyramidal neuron (CA1/CA3)
+    markers:
+      - CAMK2A
+      - SLC17A7
+    aging_note: "CA1锥体神经元在衰老中最易受损; 突触基因下调"
+
+  - name: GABAergic interneuron
+    markers:
+      - GAD1
+      - GAD2
+      - SST
+      - PVALB
+
+literature:
+  - pmid: "34798047"
+    title: "Single-cell transcriptomic analysis identifies distinct neuronal populations in the human hippocampus and across species"
+    authors: "Franjic D et al."
+    journal: "Neuron"
+    year: 2022
+    doi: "10.1016/j.neuron.2021.11.003"
+
+  - pmid: "38607670"
+    title: "Deciphering molecular heterogeneity and dynamics of human hippocampal neural stem cells at different ages and injury states"
+    authors: "Yao J et al."
+    journal: "eLife"
+    year: 2024
+    doi: "10.7554/eLife.89507"
+
+  - pmid: "39591421"
+    title: "Exploring the feasibility of using mice as a substitute model for investigating microglia in aging and AD"
+    authors: "He R et al."
+    journal: "PLoS One"
+    year: 2024
+    doi: "10.1371/journal.pone.0311374"
+
+  - pmid: "41883201"
+    title: "Differential Gene Expression in Human Hippocampus With Aging"
+    authors: "Saenz-Antoñanzas A et al."
+    journal: "Aging Cell"
+    year: 2026
+    doi: "10.1111/acel.70459"

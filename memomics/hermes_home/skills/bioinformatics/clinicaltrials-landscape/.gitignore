@@ -1,0 +1,30 @@
+# System files
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+
+# Data and outputs
+data/
+*_results/
+test_results/
+
+# Large data files
+*.pkl
+*.pickle
+
+# Generated outputs (except fixtures)
+*.csv
+*.pdf
+*.png
+*.svg
+!assets/eval/fixtures/*.csv
+!assets/eval/fixtures/*.json
+
+# Temporary
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/

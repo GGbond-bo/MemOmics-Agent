@@ -1,0 +1,80 @@
+{
+  "id": "create-bio-skill",
+  "name": "生信Skill自动创建器",
+  "category": "meta",
+  "language": "Python",
+  "description": "当 skill_view 返回 not found 或用户指定了特定包时触发。自动查询官方文档+文献，按 BioMinI/MemOmics 标准格式创建新的生信 skill（含 SKILL.md + 脚本模板 + skill.json + 强制规则）。创建后立即注册到 SOUL.md，立即可用。",
+  "triggers": [
+    "创建skill",
+    "新建skill",
+    "生成技能",
+    "创建技能",
+    "skill不存在",
+    "not found",
+    "没有这个skill",
+    "找不到skill",
+    "creat-bio-skill",
+    "create skill",
+    "new skill",
+    "skill not found",
+    "生成新skill",
+    "新建分析skill",
+    "创建分析skill"
+  ],
+  "tools": [
+    "web_search",
+    "web_extract",
+    "search_papers_by_context",
+    "download_pdf",
+    "extract_params_from_pdf",
+    "write_file",
+    "skill_view",
+    "skill_manage",
+    "terminal"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "查询官方文档",
+      "description": "web_search + web_extract 查询包的官方文档首页、API 参考、教程/vignette（至少 3 个页面）"
+    },
+    {
+      "name": "查文献",
+      "description": "search_papers_by_context 搜索相关文献，download_pdf + extract_params_from_pdf 提取方法参数"
+    },
+    {
+      "name": "生成 SKILL.md",
+      "description": "按 BioMinI 标准格式生成 SKILL.md（含 7 条强制规则 + Pipeline + Parameters + Proven Scripts + Common Issues + References）"
+    },
+    {
+      "name": "生成脚本模板",
+      "description": "生成 R/Python 脚本模板（含审查辩论铁律注释块 + 图片空白/NA 检查规则）"
+    },
+    {
+      "name": "生成 skill.json",
+      "description": "在同目录下创建 skill.json（含 triggers/tools/steps/proven_params），确保 skill_evolution.record_run 可写入 proven_params"
+    },
+    {
+      "name": "写入 skill 库",
+      "description": "用 write_file 写入 skills/bioinformatics/<skill-name>/ 目录"
+    },
+    {
+      "name": "注册到 SOUL.md",
+      "description": "在 SOUL.md 技能匹配表的 AUTO_SKILL_INSERT_MARKER 上方插入新行，确保后续分析可自动匹配"
+    },
+    {
+      "name": "验证",
+      "description": "调用 skill_view 确认新 skill 可加载，调用 verify_registration 确认 SOUL.md 已注册"
+    }
+  ],
+  "parameters": {
+    "steps": "查询官方文档 → 查文献 → 生成 SKILL.md → 生成脚本 → 生成 skill.json → 写入 skill 库 → 注册 SOUL.md → 验证",
+    "note": "绝对不能凭记忆创建 skill — 必须查官方文档 + 文献。创建后立即可用。"
+  },
+  "when_to_use": "当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

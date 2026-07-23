@@ -1,0 +1,95 @@
+{
+  "id": "functional-enrichment",
+  "name": "功能富集 (GSEA + ORA)",
+  "category": "functional_analysis",
+  "language": "R+Python",
+  "description": "GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB",
+  "starting_prompt": "对DEG做功能富集分析",
+  "source_dir": "skills/external/11_functional-enrichment-from-degs",
+  "memomics_module": "03_高级分析",
+  "chains_from": [
+    "scrnaseq-seurat-core",
+    "scrnaseq-scanpy-core",
+    "bulk-rnaseq-deseq2"
+  ],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GO enrichment",
+      "description": "BP/CC/MF via clusterProfiler",
+      "tool": "terminal"
+    },
+    {
+      "name": "KEGG pathway",
+      "description": "Pathway enrichment + network",
+      "tool": "terminal"
+    },
+    {
+      "name": "GSEA (fgsea)",
+      "description": "Ranked gene set enrichment",
+      "tool": "terminal"
+    },
+    {
+      "name": "Visualization",
+      "description": "DotPlot + EnrichMap",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GO enrichment -> KEGG pathway -> GSEA (fgsea) -> Visualization"
+  },
+  "detailed_description": "GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB\n\n分析步骤:\n  - GO enrichment: BP/CC/MF via clusterProfiler\n  - KEGG pathway: Pathway enrichment + network\n  - GSEA (fgsea): Ranked gene set enrichment\n  - Visualization: DotPlot + EnrichMap\n\n触发提示: \"对DEG做功能富集分析\"",
+  "when_to_use": "当你需要 功能富集 (GSEA + ORA) 时触发",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "functional_enrichment.R",
+      "params": "clusterProfiler ORA, GO BP+MF+CC, KEGG, Reactome, Old↑ and Old↓ per celltype, padj<0.05",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "566 enriched terms total (Old↑ 267, Old↓ 299). 10 figures generated. 10 cell types each with up/down enrichment"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "clusterProfiler ORA, GO-BP+KEGG, p<0.05, up(405 genes/LFC>0.5) down(2043/LFC<-0.5)",
+      "date": "2026-07-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GO-BP: Up=41 terms(ECM组织/肌肉发育), Down=131 terms(氧化磷酸化/ATP合成/电子传递链)。KEGG: Up=12, Down=31。3张图。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "bubble+bar combo plot, -log10(q-value) x-axis, BP/CC/MF/KEGG categories, gene count bubbles, top10 gene labels",
+      "date": "2026-07-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RSS(5 terms) + SMF(6 terms) GO/KEGG enrichment bubble plots generated. RSS: 2600×1100, SMF: 2600×1320, both valid PNGs at 200dpi"
+    }
+  ],
+  "proven_script": "",
+  "error_count": 0,
+  "success_count": 3,
+  "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "deg-analysis"
+    ],
+    "description": "需要DEG结果"
+  },
+  "user_prefs": {
+    "last_used_script": ""
+  }
+}

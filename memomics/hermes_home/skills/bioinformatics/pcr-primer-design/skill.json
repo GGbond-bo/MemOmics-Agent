@@ -1,0 +1,38 @@
+{
+  "name": "PCR 引物设计",
+  "id": "pcr-primer-design",
+  "category": "other",
+  "language": "Python",
+  "source": "Biomni Lab",
+  "description": "PCR引物设计: Primer3 → 特异性验证",
+  "triggers": [
+    "引物设计",
+    "PCR",
+    "primer",
+    "Primer3"
+  ],
+  "steps": [
+    "基因序列获取",
+    "Primer3设计",
+    "BLAST验证",
+    "评分排序"
+  ],
+  "dependencies": [
+    "primer3-py",
+    "Biopython"
+  ],
+  "outputs": [
+    "引物对",
+    "Tm值",
+    "产物大小"
+  ],
+  "detailed_description": "PCR引物设计: Primer3 → 特异性验证\n\n分析步骤:\n  - 基因序列获取\n  - Primer3设计\n  - BLAST验证\n  - 评分排序\n\n依赖包: Biopython, primer3-py",
+  "when_to_use": "当你需要 PCR 引物设计 时触发",
+  "parameters": {
+    "steps": "基因序列获取 -> Primer3设计 -> BLAST验证 -> 评分排序"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

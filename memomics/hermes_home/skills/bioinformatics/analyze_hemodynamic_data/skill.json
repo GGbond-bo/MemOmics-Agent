@@ -1,0 +1,19 @@
+{
+  "id": "analyze_hemodynamic_data",
+  "name": "Analyze Hemodynamic Data",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes raw blood pressure data to calculate key hemodynamic parameters.",
+  "detailed_description": "Analyzes raw blood pressure data to calculate key hemodynamic parameters.",
+  "when_to_use": "When you need analyze hemodynamic data analysis",
+  "parameters": {
+    "pressure_data": "[Required] Raw blood pressure measurements in mmHg (numpy.ndarray)",
+    "sampling_rate": "[Required] Data acquisition rate in Hz (samples per second) (float)",
+    "output_file": "[Optional] Filename to save the calculated parameters (default: hemodynamic_results.csv)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

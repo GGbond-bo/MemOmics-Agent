@@ -15,13 +15,14 @@ import type {
 } from '@/global'
 import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, iconSize } from '@/lib/icons'
+import { capitalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
 
 /**
  * DesktopInstallOverlay
  *
- * Renders the first-launch install progress for MemOmics Agent. Mounted always;
- * shows itself only when main.cjs reports an in-flight bootstrap (state.active)
+ * Renders the first-launch install progress for Hermes Agent. Mounted always;
+ * shows itself only when main.ts reports an in-flight bootstrap (state.active)
  * OR an error from a completed-failed bootstrap (state.error). When the
  * bootstrap finishes successfully the overlay fades out and the rest of the
  * app (existing onboarding overlay -> main UI) takes over.
@@ -31,7 +32,7 @@ import { cn } from '@/lib/utils'
  *   - onBootstrapEvent(callback)    -- live event stream
  *
  * The reducer is intentionally simple: every event mutates an in-component
- * snapshot the same way main.cjs mutates its server-side snapshot. We don't
+ * snapshot the same way main.ts mutates its server-side snapshot. We don't
  * try to reconcile -- if we miss an event (shouldn't happen) the initial
  * getBootstrapState() call will resync the picture on the next render.
  *
@@ -62,7 +63,7 @@ function formatStageName(name: string): string {
 
   return name
     .split('-')
-    .map((word, i) => (i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .map((word, i) => (i === 0 ? capitalize(word) : word))
     .join(' ')
 }
 
@@ -145,11 +146,7 @@ function StageRow({ descriptor, result, now }: StageRowProps) {
         {reason && state !== 'pending' && <p className="mt-0.5 truncate text-xs text-muted-foreground">{reason}</p>}
       </div>
       <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">
-        {state === 'running'
-          ? elapsed
-            ? `${copy.stageStates[state]} · ${elapsed}`
-            : copy.stageStates[state]
-          : null}
+        {state === 'running' ? (elapsed ? `${copy.stageStates[state]} · ${elapsed}` : copy.stageStates[state]) : null}
         {state === 'succeeded' || state === 'skipped' ? formatDuration(result?.durationMs) : null}
         {state === 'failed' ? copy.stageStates[state] : null}
       </span>
@@ -342,7 +339,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   }
 
   // Unsupported-platform branch: macOS/Linux packaged builds hit this when
-  // there's no MemOmics Agent installed yet and we can't drive install.sh
+  // there's no Hermes Agent installed yet and we can't drive install.sh
   // (no stage protocol equivalent yet). Show a copy-paste install command
   // and the docs URL; user runs it from Terminal and relaunches the app.
   if (state.unsupportedPlatform) {
@@ -536,7 +533,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">
                 {copy.transcriptSaved}{' '}
-                <code className="font-mono text-(--ui-text-secondary)">%LOCALAPPDATA%\memomics\logs\</code>
+                <code className="font-mono text-(--ui-text-secondary)">%LOCALAPPDATA%\hermes\logs\</code>
               </span>
               <div className="flex gap-2">
                 <Button
@@ -562,7 +559,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                 </Button>
                 <Button
                   onClick={async () => {
-                    // Tell main.cjs to clear its latched failure BEFORE we
+                    // Tell main.ts to clear its latched failure BEFORE we
                     // reload. Otherwise the renderer reload calls getConnection
                     // and main short-circuits to the latched error without
                     // re-running install.ps1.

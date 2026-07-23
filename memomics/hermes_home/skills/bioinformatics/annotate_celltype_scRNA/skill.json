@@ -1,0 +1,36 @@
+{
+  "id": "annotate_celltype_scRNA",
+  "name": "Annotate Celltype Scrna",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Annotate cell types based on gene markers and transferred labels using LLM. After leiden clustering, annotate clusters using differentially expressed genes and optionally incorporate transferred label",
+  "detailed_description": "Annotate cell types based on gene markers and transferred labels using LLM. After leiden clustering, annotate clusters using differentially expressed genes and optionally incorporate transferred labels from reference datasets.",
+  "when_to_use": "When you need annotate celltype scRNA analysis",
+  "parameters": {
+    "adata_filename": "[Required] Name of the AnnData file containing scRNA-seq data (str)",
+    "data_dir": "[Required] Directory containing the data files (str)",
+    "data_info": "[Required] Information about the scRNA-seq data (e.g., \"homo sapiens, brain tissue, normal\") (str)",
+    "data_lake_path": "[Required] Path to the data lake (str)",
+    "cluster": "[Optional] Clustering method to use for cell type annotation (default: leiden)",
+    "llm": "[Optional] Language model instance for cell type prediction (default: claude-3-5-sonnet-20241022)",
+    "composition": "[Optional] Transferred cell type composition for each cluster"
+  },
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_annotate.R",
+      "params": "Leiden res=0.6 (18 clusters), FindAllMarkers, KB marker scoring (14 cell type panels), human skeletal muscle markers",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "18 clusters → 10 cell types: Type I (4 subclusters, 15,089 cells), Type II (2, 8,434), Denervated (2, 6,563), EC (3, 3,762), FAP (2,481), MuSC (1,188), Pericyte (1,177), Lymphocyte (2, 687), Schwann ("
+    }
+  ],
+  "proven_script": "01_annotate.R",
+  "error_count": 0,
+  "success_count": 1,
+  "official_docs": "https://celltypist.readthedocs.io/en/latest/annotation.html",
+  "doc_source": "official"
+}

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 
 const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
 
-// Brand badge: MemOmics mark on a white tile, identical in light/dark.
+// Brand badge: nous-girl mark on a white tile, identical in light/dark.
 // Fills the tile (softly rounded); size via className (default size-14).
 export function BrandMark({ className, ...props }: React.ComponentProps<'span'>) {
   return (
@@ -13,7 +13,7 @@ export function BrandMark({ className, ...props }: React.ComponentProps<'span'>)
       )}
       {...props}
     >
-      <img alt="" className="size-full object-contain" src={assetPath('favicon.svg')} />
+      <img alt="" className="size-full object-contain" src={assetPath('nous-girl.jpg')} />
     </span>
   )
 }

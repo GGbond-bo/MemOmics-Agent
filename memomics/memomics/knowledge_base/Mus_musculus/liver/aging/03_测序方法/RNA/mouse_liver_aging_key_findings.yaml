@@ -1,0 +1,101 @@
+# 小鼠肝脏 衰老方向 RNA-seq 关键发现与分析参数（文献更新版）
+direction: aging
+omics: rna
+updated: '2026-07-07'
+
+key_findings:
+  - paper: "Lin et al. 2024, FASEB Journal (PMID: 38334462)"
+    method: scRNA-seq (10x Genomics)
+    species: "Mouse (C57BL/6)"
+    sample: "Young (2-4M) vs Aged (20-24M) male mice"
+    key_results: |
+      - LSEC假毛细血管化，HSC活化
+      - 衰老肝脏呈肝窦失调控和中度促炎状态
+      - 热量限制可逆转部分衰老变化
+
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    method: "scRNA-seq (Smart-seq3xpress) + scATAC-seq (10x) + Spatial Visium + Lipidomics"
+    species: "Mouse (C57BL/6N, male)"
+    sample: "Young (3-4M) vs Aged (18-22M)"
+    key_results: |
+      - Zone 1肝细胞: 线粒体功能下降显著, SRC活性丧失
+      - Zone 3肝细胞: 大脂滴累积, 脂质代谢重编程
+      - 表观基因组以区域依赖性方式改变 (cisTopic分析)
+      - 转录噪声被多倍体缓冲
+      - 关键TF: Hnf4a, Foxa3, Hnf1a (iRegulon预测)
+    analysis_params:
+      platform: "Smart-seq3xpress (384-well plate, MGI G400RS PE100)"
+      alignment: "zUMIs v2.9.7 + STAR v2.7.1a → mm10/Ensembl v99"
+      filter: "min_genes=200, min_counts=1000, min_cells=3"
+      seurat: "v4.1.1, SCTransform → RunPCA → RunUMAP → FindNeighbors → FindClusters"
+      deg: "BASiCS v2.8.0 (MCMC 20000 iterations, burn-in 10000)"
+      tms_facs: "min_genes=500, min_counts=5000"
+      tms_droplets: "min_genes=250, min_counts=2500"
+
+  - paper: "Gyenis et al. 2023, Nature Genetics (PMID: 36646902)"
+    method: "Nascent RNA-seq (EU-seq) + RNAPII ChIP-seq (liver)"
+    species: "Mouse (C57BL6J/FVB F1, male)"
+    sample: "Young (15 wk) vs Aged (104 wk)"
+    key_results: |
+      - 40%的延伸RNA聚合酶在衰老肝脏中停滞 (stalling)
+      - 转录stress由内源性DNA损伤引起
+      - 基因长度依赖的转录偏移: 长基因更受影响
+      - 影响衰老标志通路: 营养感知, 自噬, 蛋白质稳态, 能量代谢, 免疫
+      - 该现象从线虫到人类保守
+    analysis_params:
+      platform: "Illumina (total RNA-seq + EU-seq)"
+      rna_seq: "miRNeasy kit, RIN>8, Bioanalyzer QC"
+      alignment: "STAR, mm10 genome"
+      deg: "DESeq2"
+      chip_seq: "RNAPII ChIP (total RNAPII, Ser2P, Ser5P)"
+
+  - paper: "Hepatology 2024 (PMC10871588)"
+    method: scRNA-seq
+    species: "Mouse (C57BL/6)"
+    key_results: "Cxcl2+巨噬细胞积累，招募中性粒细胞加重肝损伤，免疫微环境促炎转变"
+
+  - paper: "Geroscience 2023 (PMC10643490)"
+    method: "Data-driven transcriptomics analysis"
+    species: "Mouse"
+    key_results: "PCSK9被鉴定为肝脏衰老新型关键调控因子"
+    source: "PMID: 37726433"
+
+  - paper: "Aging Cell 2023 (PMC10577549)"
+    method: "RNA-seq + functional assays"
+    species: "Mouse"
+    key_results: "抑制FOXO1减轻炎症衰老(inflamm-aging)并改善衰老肝脏功能"
+    source: "PMID: 37602516"
+
+  - paper: "Hepatol Commun 2023 (PMC9894352)"
+    method: "scRNA-seq (liver endothelial cells)"
+    species: "Mouse"
+    sample: "Young vs Aged"
+    key_results: "衰老肝脏内皮细胞landscape变化: LSEC窗孔减少, 血管发育基因下调, 促收缩表型获得"
+    source: "PMID: 36724124"
+
+  - paper: "White et al. 2015, BMC Genomics (PMID: 26542215)"
+    method: "Bulk RNA-seq (directional whole transcriptome)"
+    species: "Mouse (C57BL/6)"
+    sample: "Young (5M) vs Aged (24M)"
+    key_results: |
+      - 数千基因衰老差异表达
+      - 炎症/免疫↑, 代谢↓, 昼夜节律↓
+      - LCN2, SAA, 补体系统上调
+      - CYP450家族, 糖代谢下调
+      - Dlk-Dio3 miRNA位点 (Meg3, Rian, Mirg) 上调 → 衰老调控热点
+      - 个体间变异增加
+
+analysis_params:
+  qc:
+    nFeature_RNA_min: 200
+    nFeature_RNA_max: 6000
+    percent_mt_max: 20
+  normalization:
+    method: SCTransform v2
+    conserve.memory: TRUE
+  batch_correction: Harmony
+  clustering:
+    resolution: 0.5-1.0
+  annotation: "SingleR + manual (小鼠肝脏marker明确)"
+  deg: "DESeq2 pseudobulk / MAST (Seurat)"
+  smart_seq3xpress_qc: "min_genes=200, min_counts=1000, min_cells=3"

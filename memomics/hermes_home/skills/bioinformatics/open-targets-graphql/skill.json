@@ -1,0 +1,38 @@
+{
+  "id": "open-targets-graphql",
+  "name": "Open Targets GraphQL API",
+  "category": "drug_discovery",
+  "language": "Python",
+  "description": "Open Targets Platform GraphQL API查询。靶点-疾病-药物关联",
+  "starting_prompt": "查询Open Targets靶点-疾病关联",
+  "source_dir": "skills/external/20_open-targets-platform-graphql-api",
+  "memomics_module": "04_个性化分析",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GraphQL query build",
+      "description": "Target-disease association query",
+      "tool": "terminal"
+    },
+    {
+      "name": "Target prioritization",
+      "description": "Genetic + functional scoring",
+      "tool": "terminal"
+    },
+    {
+      "name": "Network visualization",
+      "description": "Target-disease network graph",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GraphQL query build -> Target prioritization -> Network visualization"
+  },
+  "detailed_description": "Open Targets Platform GraphQL API查询。靶点-疾病-药物关联\n\n分析步骤:\n  - GraphQL query build: Target-disease association query\n  - Target prioritization: Genetic + functional scoring\n  - Network visualization: Target-disease network graph\n\n触发提示: \"查询Open Targets靶点-疾病关联\"",
+  "when_to_use": "当你需要 Open Targets GraphQL API 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

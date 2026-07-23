@@ -1,0 +1,164 @@
+{
+  "id": "trajectory-analysis",
+  "name": "轨迹推断",
+  "category": "transcriptomics",
+  "language": "R+Python",
+  "description": "PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接",
+  "starting_prompt": "进行轨迹推断分析",
+  "source_dir": "skills/built_in/trajectory-analysis",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "trajectory",
+    "pseudotime",
+    "monocle3",
+    "slingshot"
+  ],
+  "aliases": [
+    "轨迹推断 (PAGA/scVelo/CellRank)"
+  ],
+  "steps": [
+    {
+      "name": "Monocle3 trajectory",
+      "description": "learn_graph+order_cells",
+      "tool": "terminal"
+    },
+    {
+      "name": "RNA velocity (scVelo)",
+      "description": "latent_time inference",
+      "tool": "terminal"
+    },
+    {
+      "name": "Branch point detection",
+      "description": "Branch DE genes",
+      "tool": "terminal"
+    },
+    {
+      "name": "CellRank endstates",
+      "description": "GPCCA initial/terminal",
+      "tool": "terminal"
+    },
+    {
+      "name": "Trajectory visualization",
+      "description": "UMAP + trajectory overlay",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "monocle3",
+    "SeuratWrappers"
+  ],
+  "python_packages": [
+    "scvelo",
+    "cellrank",
+    "scanpy"
+  ],
+  "difficulty": "advanced",
+  "applicable": [
+    "development",
+    "regeneration",
+    "differentiation"
+  ],
+  "parameters": {
+    "r_packages": "monocle3, SeuratWrappers",
+    "python_packages": "scvelo, cellrank, scanpy",
+    "steps": "Monocle3 trajectory -> RNA velocity (scVelo) -> Branch point detection -> CellRank endstates -> Trajectory visualization"
+  },
+  "detailed_description": "PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接\n\n适用场景: development, regeneration, differentiation\n\n分析步骤:\n  - Monocle3 trajectory: learn_graph+order_cells\n  - RNA velocity (scVelo): latent_time inference\n  - Branch point detection: Branch DE genes\n  - CellRank endstates: GPCCA initial/terminal\n  - Trajectory visualization: UMAP + trajectory overlay\n\n依赖包: SeuratWrappers, scanpy, cellrank, scvelo, monocle3\n\n难度: advanced\n\n触发提示: \"进行轨迹推断分析\"\n\n别名: 轨迹推断 (PAGA/scVelo/CellRank)",
+  "when_to_use": "适用于: development, regeneration, differentiation",
+  "proven_params": [
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "run_trajectory.R",
+      "params": "method=slingshot, k=5, curves=3",
+      "date": "2026-07-12",
+      "score": 7.0,
+      "auto_score": 6.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Hepatocyte→cholangiocyte trajectory with aging-associated mid-point bifurcation"
+    },
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "traj_scvelo.py",
+      "params": "mode=dynamical, n_top_genes=2000",
+      "date": "2026-07-12",
+      "score": 4.0,
+      "auto_score": 8.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RNA velocity shows hepatocyte aging driver vs. quiescent subpopulation"
+    },
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "run_trajectory.R",
+      "params": "method=slingshot, k=5, curves=3",
+      "date": "2026-07-12",
+      "score": 7.0,
+      "auto_score": 6.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Hepatocyte→cholangiocyte trajectory with aging-associated mid-point bifurcation"
+    },
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "traj_scvelo.py",
+      "params": "mode=dynamical, n_top_genes=2000",
+      "date": "2026-07-12",
+      "score": 4.0,
+      "auto_score": 8.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RNA velocity shows hepatocyte aging driver vs. quiescent subpopulation"
+    },
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "run_trajectory.R",
+      "params": "method=slingshot, k=5, curves=3",
+      "date": "2026-07-12",
+      "score": 7.0,
+      "auto_score": 6.0,
+      "approved": true,
+      "custom_script": false,
+      "result": "Hepatocyte→cholangiocyte trajectory with aging-associated mid-point bifurcation"
+    },
+    {
+      "species": "Mus musculus",
+      "tissue": "liver",
+      "direction": "aging",
+      "script": "traj_scvelo.py",
+      "params": "mode=dynamical, n_top_genes=2000",
+      "date": "2026-07-12",
+      "score": 4.0,
+      "auto_score": 8.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RNA velocity shows hepatocyte aging driver vs. quiescent subpopulation"
+    }
+  ],
+  "proven_script": "traj_scvelo.py",
+  "error_count": 0,
+  "success_count": 6,
+  "official_docs": "https://scanpy.readthedocs.io/en/stable/tutorials.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类/注释的数据"
+  },
+  "user_prefs": {
+    "last_used_script": "traj_scvelo.py"
+  }
+}

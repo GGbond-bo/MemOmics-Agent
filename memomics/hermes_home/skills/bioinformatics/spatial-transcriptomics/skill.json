@@ -1,0 +1,72 @@
+{
+  "id": "spatial-transcriptomics",
+  "name": "空间转录组 (Visium)",
+  "category": "spatial",
+  "language": "R+Python",
+  "description": "10x Visium空间转录组分析。Spot deconvolution/空间可变基因/邻域分析",
+  "starting_prompt": "分析我的Visium空间转录组数据",
+  "source_dir": "skills/external/30_spatial-transcriptomics",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "Spatial data QC",
+      "description": "Load10X_Spatial + SCTransform",
+      "tool": "terminal"
+    },
+    {
+      "name": "Spot deconvolution",
+      "description": "SPOTlight with scRNA ref",
+      "tool": "terminal"
+    },
+    {
+      "name": "Spatial variable genes",
+      "description": "Moran's I / SPATA2",
+      "tool": "terminal"
+    },
+    {
+      "name": "Neighborhood enrichment",
+      "description": "Spatial clustering",
+      "tool": "terminal"
+    },
+    {
+      "name": "Spatial visualization",
+      "description": "SpatialFeaturePlot",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "Seurat",
+    "SPOTlight",
+    "SpatialExperiment",
+    "squidpy"
+  ],
+  "python_packages": [
+    "squidpy",
+    "scanpy",
+    "spatialdata"
+  ],
+  "difficulty": "advanced",
+  "applicable": [
+    "spatial",
+    "Visium/MERFISH/Slide-seq"
+  ],
+  "parameters": {
+    "r_packages": "Seurat, SPOTlight, SpatialExperiment, squidpy",
+    "python_packages": "squidpy, scanpy, spatialdata",
+    "steps": "Spatial data QC -> Spot deconvolution -> Spatial variable genes -> Neighborhood enrichment -> Spatial visualization"
+  },
+  "detailed_description": "10x Visium空间转录组分析。Spot deconvolution/空间可变基因/邻域分析\n\n适用场景: spatial, Visium/MERFISH/Slide-seq\n\n分析步骤:\n  - Spatial data QC: Load10X_Spatial + SCTransform\n  - Spot deconvolution: SPOTlight with scRNA ref\n  - Spatial variable genes: Moran's I / SPATA2\n  - Neighborhood enrichment: Spatial clustering\n  - Spatial visualization: SpatialFeaturePlot\n\n依赖包: scanpy, Seurat, SpatialExperiment, SPOTlight, spatialdata, squidpy\n\n难度: advanced\n\n触发提示: \"分析我的Visium空间转录组数据\"",
+  "when_to_use": "适用于: spatial, Visium/MERFISH/Slide-seq",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://squidpy.readthedocs.io/en/stable/tutorials/tutorial_visium.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [],
+    "description": "空间数据直接开始"
+  }
+}

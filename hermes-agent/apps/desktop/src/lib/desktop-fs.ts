@@ -46,7 +46,7 @@ function bridge() {
   const desktop = window.hermesDesktop
 
   if (!desktop) {
-    throw new Error('MemOmics Desktop bridge is unavailable')
+    throw new Error('Hermes Desktop bridge is unavailable')
   }
 
   return desktop
@@ -179,7 +179,7 @@ export async function selectDesktopPaths(options?: HermesSelectPathsOptions): Pr
   }
 
   if (!options?.directories) {
-    return []
+    return desktop.selectPaths(options)
   }
 
   return remotePicker ? remotePicker.selectPaths({ ...options, multiple: false }) : []

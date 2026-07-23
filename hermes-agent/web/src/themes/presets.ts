@@ -40,24 +40,18 @@ const DEFAULT_LAYOUT: ThemeLayout = {
 
 export const defaultTheme: DashboardTheme = {
   name: "default",
-  label: "MemOmics Light",
-  description: "Clean white theme — MemOmics default look",
+  label: "Hermes Teal",
+  description: "Classic dark teal — the canonical Hermes look",
   palette: {
-    background: { hex: "#ffffff", alpha: 1 },
-    midground: { hex: "#1a6d5c", alpha: 1 },
-    foreground: { hex: "#170d02", alpha: 0 },
-    warmGlow: "rgba(26, 109, 92, 0.08)",
-    noiseOpacity: 0,
+    background: { hex: "#041c1c", alpha: 1 },
+    midground: { hex: "#ffe6cb", alpha: 1 },
+    foreground: { hex: "#ffffff", alpha: 0 },
+    warmGlow: "rgba(255, 189, 56, 0.35)",
+    noiseOpacity: 1,
   },
   typography: DEFAULT_TYPOGRAPHY,
   layout: DEFAULT_LAYOUT,
-  terminalBackground: "#f8fafb",
-  terminalForeground: "#170d02",
-  seriesColors: {
-    inputTokenAccent: "#001934",
-    outputTokenAccent: "#1a6d5c",
-  },
-  swatchColors: ["#170d02", "#1a6d5c", "#ffffff"],
+  terminalBackground: "#000000",
 };
 
 export const midnightTheme: DashboardTheme = {
@@ -220,7 +214,7 @@ export const nousBlueTheme: DashboardTheme = {
  */
 export const defaultLargeTheme: DashboardTheme = {
   name: "default-large",
-  label: "MemOmics Light (Large)",
+  label: "Hermes Teal (Large)",
   description: "Hermes Teal with bigger fonts and roomier spacing",
   palette: defaultTheme.palette,
   typography: {

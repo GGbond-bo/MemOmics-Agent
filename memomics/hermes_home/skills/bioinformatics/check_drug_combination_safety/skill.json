@@ -1,0 +1,20 @@
+{
+  "id": "check_drug_combination_safety",
+  "name": "Check Drug Combination Safety",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze safety of a drug combination for potential interactions using DDInter database with comprehensive risk assessment and clinical recommendations.",
+  "detailed_description": "Analyze safety of a drug combination for potential interactions using DDInter database with comprehensive risk assessment and clinical recommendations.",
+  "when_to_use": "When you need check drug combination safety analysis",
+  "parameters": {
+    "drug_list": "[Required] List of drugs to analyze for combination safety (List[str])",
+    "include_mechanisms": "[Optional] Include interaction mechanism descriptions in results (default: True)",
+    "include_management": "[Optional] Include management recommendations in results (default: True)",
+    "data_lake_path": "[Optional] Path to data lake directory containing DDInter data"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

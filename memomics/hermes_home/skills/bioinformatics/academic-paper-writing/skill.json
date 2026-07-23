@@ -1,0 +1,37 @@
+{
+  "id": "academic-paper-writing",
+  "name": "学术论文写作",
+  "category": "literature",
+  "language": "Python",
+  "description": "12-agent论文写作流水线，从大纲到完稿",
+  "starting_prompt": "帮我写论文",
+  "source_dir": "skills/external/academic-research-skills",
+  "memomics_module": "研究设计",
+  "chains_from": [
+    "deep-research"
+  ],
+  "chains_to": [],
+  "tags": [
+    "academic-paper",
+    "writing",
+    "论文写作"
+  ],
+  "aliases": [
+    "写论文",
+    "学术论文",
+    "guide my paper"
+  ],
+  "r_packages": [],
+  "python_packages": [],
+  "difficulty": "advanced",
+  "applicable": [
+    "学术论文写作"
+  ],
+  "parameters": {},
+  "detailed_description": "12-agent论文写作流水线，从大纲到完稿\n\n适用场景: 学术论文写作\n\n难度: advanced\n\n触发提示: \"帮我写论文\"\n\n别名: 写论文, 学术论文, guide my paper",
+  "when_to_use": "适用于: 学术论文写作",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,19 @@
+{
+  "id": "analyze_interaction_mechanisms",
+  "name": "Analyze Interaction Mechanisms",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze interaction mechanisms between two specific drugs providing detailed mechanistic insights and clinical significance assessment.",
+  "detailed_description": "Analyze interaction mechanisms between two specific drugs providing detailed mechanistic insights and clinical significance assessment.",
+  "when_to_use": "When you need analyze interaction mechanisms analysis",
+  "parameters": {
+    "drug_pair": "[Required] Pair of drug names to analyze (drug1, drug2) (Tuple[str, str])",
+    "detailed_analysis": "[Optional] Include detailed mechanistic information in analysis (default: True)",
+    "data_lake_path": "[Optional] Path to data lake directory containing DDInter data"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

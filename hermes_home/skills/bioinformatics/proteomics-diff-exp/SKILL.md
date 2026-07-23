@@ -4,6 +4,7 @@ name: "proteomics-diff-exp"
 when_to_use: "[proteomics-diff-exp] 蛋白质组差异表达分析 蛋白组学差异分析 proteomics：蛋白定量矩阵→limma/DEP差异分析→差异蛋白筛选→火山图/热图→通路富集→蛋白互作网络"
 display-name: "Proteomics Differential Expression (limma + DEqMS)"
 category: Proteomics
+description: "Differential protein expression analysis for mass spectrometry proteomics data using limma and DEqMS. For no-replicate data use references/no-replicate-proteomics.md."
 short-description: "Differential protein expression analysis on mass spectrometry proteomics data using limma and DEqMS with PSM-aware variance estimation."
 detailed-description: "Analyze TMT or LFQ mass spectrometry proteomics data for differential protein expression. Uses limma linear models with DEqMS spectra-count-aware empirical Bayes variance estimation for improved statistical power. Supports MaxQuant, Proteome Discoverer, or generic protein intensity matrices. Includes missing value imputation (MinProb/kNN), normalization, QC visualization, and publication-quality plots."
 starting-prompt: Perform differential protein expression analysis on my proteomics mass spectrometry data.
@@ -114,6 +115,8 @@ Use this skill when you have:
 - ❌ RNA-seq data → use bulk-rnaseq-counts-to-de-deseq2
 - ❌ Metabolomics data → different normalization/statistics needed
 - ❌ Pre-computed fold changes without raw intensities
+- ❌ **No-replicate / low-N proteomics** → use `references/no-replicate-proteomics.md` (includes mandatory replicate detection before analysis)
+- ❌ **Secretome / conditioned medium classification** → use `references/secretome-classification.md`
 
 ## Quick Start (Example Data)
 
@@ -325,6 +328,7 @@ source("scripts/basic_workflow.R")
 | **svglite dependency conflict** | System library version mismatch | Normal — `generate_all_plots()` falls back to base R svg() device automatically. Both PNG and SVG will be created |
 | **All proteins filtered out** | Too stringent missing value filter | Adjust filter threshold in basic_workflow.R |
 | **No significant proteins** | Weak effect or wrong comparison | Check PCA for condition separation; try relaxed thresholds |
+| **⛔ Two columns treated as conditions but actually replicates** | r > 0.9 in correlation check | **STOP**: columns are replicates, not conditions. Switch to `references/no-replicate-proteomics.md` Path A (abundance-based). NEVER compute log2FC on replicates — all fold changes are noise. |
 
 ## Suggested Next Steps
 
@@ -332,7 +336,9 @@ After running this skill:
 1. **Pathway enrichment** → functional-enrichment skill with significant proteins
 2. **Biomarker panel** → lasso-biomarker-panel with DE proteins as features
 3. **Network analysis** → coexpression-network with protein matrix
-4. **Gene list processing** → de-results-to-gene-lists for annotation
+4. **PPI network** → query_string + literature-curated interactions
+5. **No-replicate data?** → See `references/no-replicate-proteomics.md`. **MANDATORY**: run replicate detection (Step 0) first. If r > 0.9 → Path A (abundance-based). If r < 0.7 → Path B (fold-change only, no stats).
+6. **Secretome/CM data?** → Classify proteins by existence form using `references/secretome-classification.md`. For anti-aging relevance, cross-reference with UniProt aging annotations and KB gene sets.
 
 ## Related Skills
 

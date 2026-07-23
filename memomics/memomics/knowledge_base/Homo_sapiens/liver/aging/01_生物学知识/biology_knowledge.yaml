@@ -1,0 +1,175 @@
+# 人类肝脏衰老 — 生物学知识
+# MemOmics Knowledge Base — 文献提取 + 已知生物学
+# 更新日期: 2026-07-07
+# 文献来源: 综合PubMed搜索 (liver aging scRNA-seq/spatial/bulk/ATAC)
+# PDF下载: work/papers/liver_aging/ (Nikopoulou 2023 Nature Aging PDF 14MB, 
+#            NatComm 2025 MERFISH PDF 2.8MB, Nature 2026 spatial atlas PDF 100MB)
+# 部分付费论文仅获取到PubMed XML摘要 (FASEB 2024, Aging Cell 2023, Hepatology 2025)
+
+species: Homo sapiens
+tissue: liver
+direction: aging
+updated: '2026-07-07'
+source: |
+  - Lin et al. 2024, FASEB Journal (PMID: 38334462) — 小鼠肝脏衰老scRNA-seq
+  - Nikopoulou et al. 2023, Nature Aging (PMID: 37946043) — 空间+scATAC+scRNA多组学
+  - Hepatology 2024 (PMC10871588, PMID: 38334462关联) — 肝脏免疫衰老scRNA-seq
+  - Hepatology 2025 (PMID: 40622856) — 衰老破坏肝细胞区域化稳态
+  - Nature Communications 2025 (PMID: 39747095) — 人类肝脏MERFISH空间转录组
+  - Journal of Hepatology 2024 (PMID: 38936380) — 多倍体缓冲肝细胞衰老
+  - Tabula Muris Senis (PMID: 32214236) — 小鼠多器官衰老图谱
+  - BMC Genomics 2015 (PMID: 26542215) — 小鼠肝脏衰老bulk转录组
+  - scAgeCom (PMID: 37169972) — 衰老细胞间通讯
+  - Yang et al. 2024, Protein Cell (DOI: 10.1093/procel/pwad055) — 灵长类肝脏衰老snRNA-seq
+  - Gyenis et al. 2023, Nature Genetics (PMID: 36646902) — 小鼠肝脏衰老转录stress
+  - Geroscience 2023 (PMID: 37726433) — PCSK9肝脏衰老调控因子
+  - Aging Cell 2023 (PMID: 37602516) — FOXO1抑制减轻肝脏炎症衰老
+  - Hepatol Commun 2023 (PMID: 36724124) — 衰老肝脏内皮细胞scRNA-seq
+  - White et al. 2015, BMC Genomics (PMID: 26542215) — 小鼠肝脏衰老bulk转录组
+  - Inflammation & Regeneration 2025 (DOI: 10.1186/s41232-025-00364-1) — 肝脏衰老脂质组+转录组
+  - Nature Reviews Gastro 2025 (PMID: 40033000) — 肝脏衰老综合综述
+
+# 肝脏细胞类型与 marker genes
+cell_types:
+  # ─── 实质细胞 ──────────────────────────────────────────
+  hepatocyte:
+    aliases: [肝细胞, hepatocytes, Hep]
+    markers: [ALB, CYP3A4, SERPINA1, TTR, APOA1, APOB, FGA, FGB, FGG]
+    description: 肝脏主要实质细胞，占肝脏体积~80%，行使代谢、解毒、蛋白合成等功能
+    subtypes:
+      periportal_hepatocyte:
+        aliases: [门静脉周肝细胞, portal hepatocyte, zone 1]
+        markers: [CYP2F2, ASS1, ARG1, GLUL(low), PCK1, G6PC, SLC2A2]
+        description: 门静脉周(Zone 1)肝细胞，糖异生、β-氧化、尿素循环
+        zonation: periportal (zone 1)
+        source: "Nikopoulou 2023 Nature Aging PMID:37946043; Nature 2026 PMID:41986723"
+      midzonal_hepatocyte:
+        aliases: [中间带肝细胞, zone 2]
+        markers: [HAL, SULT1E1, HAMP]
+        description: 中间带(Zone 2)肝细胞，兼具Zone1和Zone3特征
+        zonation: midzonal (zone 2)
+        source: "Nature 2026 PMID:41986723"
+      pericentral_hepatocyte:
+        aliases: [中央静脉周肝细胞, centrilobular, zone 3]
+        markers: [CYP2E1, GLUL, CYP1A2, CYP2A6, OAT, RBP4, LGR5, AXIN2]
+        description: 中央静脉周(Zone 3)肝细胞，糖酵解、脂质合成、谷氨酰胺合成、药物代谢
+        aging_note: 衰老时中央静脉周肝细胞累积大脂滴，线粒体功能下降
+        zonation: pericentral (zone 3)
+        source: "Nikopoulou 2023 Nature Aging PMID:37946043"
+    aging_note: |
+      - 衰老时肝细胞体积增大(均匀性增大)，多倍体比例上升 (PMID: 40622856)
+      - 区域化(zonation)被破坏，Zone 1/Zone 3基因表达边界模糊 (PMID: 37946043, 40622856)
+      - 中央静脉周区域线粒体功能下降，脂滴积累 (PMID: 37946043)
+      - SREBP2激活驱动肝细胞衰老程序 (Yang 2024 Protein Cell, DOI: 10.1093/procel/pwad055)
+      - 多倍体化增加→通过缓冲基因调控网络延缓衰老 (PMID: 38936380)
+    source: |
+      - Hepatology 2025 (PMID: 40622856) — 细胞体积增大+区域化破坏
+      - Nikopoulou 2023 Nature Aging (PMID: 37946043) — 区域特异性衰老变化
+      - Yang et al. 2024 Protein Cell (DOI: 10.1093/procel/pwad055) — SREBP2促衰老
+      - Journal of Hepatology 2024 (PMID: 38936380) — 多倍体缓冲
+
+  cholangiocyte:
+    aliases: [胆管细胞, bile duct cell, biliary epithelial cell]
+    markers: [KRT19, KRT7, EPCAM, SOX9, CFTR, AQP1, SCTR]
+    description: 胆管上皮细胞，形成胆管网络，分泌和转运胆汁
+    aging_note: 衰老时胆管细胞增生反应改变
+
+  # ─── 非实质细胞 — 肝星状细胞 ──────────────────────────
+  hepatic_stellate_cell:
+    aliases: [HSC, 肝星状细胞, Ito cell, perisinusoidal cell]
+    markers: [PDGFRA, PDGFRB, DES, ACTA2, COL1A1, COL1A2, LRAT, GFAP, NGFR, VIM]
+    description: 肝星状细胞，储存维生素A，维持肝窦微环境
+    subtypes:
+      quiescent_HSC:
+        markers: [LRAT, GFAP, PPARG, ADFP]
+        description: 静息态星状细胞，含维生素A脂滴
+      activated_HSC:
+        markers: [ACTA2, COL1A1, COL1A2, TGFB1, PDGFRA, PDGFRB]
+        description: 活化态星状细胞，肌成纤维细胞表型，产ECM
+    aging_note: 衰老时HSC获得"活化"表型，参与肝内血管张力增加和纤维化
+    source: "Lin et al. 2024, FASEB Journal (PMID: 38334462); Du et al. 2024, Hepatol Commun (PMC11019831)"
+
+  # ─── 肝窦内皮细胞 ──────────────────────────────────────
+  liver_sinusoidal_endothelial_cell:
+    aliases: [LSEC, 肝窦内皮细胞, liver endothelial cell]
+    markers: [PECAM1, VWF, CDH5, CLDN5, FLT1, KDR, STAB1, STAB2, LYVE1, F8, CD32B]
+    description: 肝窦内皮细胞，形成有窗孔的内皮屏障，调节物质交换
+    aging_note: |
+      - 衰老时LSEC发生"假毛细血管化"(pseudocapillarization)
+      - 窗孔减少→肝窦内皮屏障增厚
+      - 血管发育和稳态相关基因下调
+      - 获得促收缩表型(procontractile)
+      - 代谢基因表达在衰老肝脏不同血管床中显示异质性
+    source: |
+      - Lin et al. 2024, FASEB Journal (PMID: 38334462)
+      - Hepatology Communications 2023 (PMID: 36724124, PMC9894352)
+
+  # ─── 库普弗细胞（肝脏驻留巨噬细胞） ────────────────────
+  kupffer_cell:
+    aliases: [Kupffer cell, 库普弗细胞, liver resident macrophage, KC]
+    markers: [CLE4F, VSIG4, CD163, FCGR2A, CD68, CD14, MARCO, TIMD4, SIRPA]
+    description: 肝脏驻留巨噬细胞，定植于肝窦，清除血源病原体和细胞碎片
+    aging_note: |
+      - 衰老时Kupffer细胞向促炎表型转变(M1-like)
+      - Cxcl2+巨噬细胞亚群在衰老肝脏中积累
+      - 巨噬细胞衰老是肝脏免疫衰老的关键驱动
+      - 免疫监视功能下降→衰老细胞清除不足
+    source: Hepatology 2024 (PMC10871588)
+
+  # ─── 单核/巨噬细胞 ─────────────────────────────────────
+  monocyte_macrophage:
+    aliases: [单核细胞, 巨噬细胞, monocyte, macrophage, recruited macrophage]
+    markers: [CD14, FCGR3A, CSF1R, CD68, ITGAM, CCR2]
+    description: 循环单核细胞来源的巨噬细胞，炎症时招募到肝脏
+    aging_note: 衰老时招募增加，M1/M2比例升高
+
+  # ─── T细胞 ──────────────────────────────────────────────
+  t_cell:
+    aliases: [T淋巴细胞, T lymphocyte]
+    markers: [CD3D, CD3E, CD3G, TRAC, TRBC1, TRBC2]
+    subtypes:
+      cd4_t_cell:
+        markers: [CD4, CD40LG, IL7R]
+        description: CD4+辅助T细胞
+        aging_note: 衰老时CD4+ T细胞向调节性和效应表型重组
+      cd8_t_cell:
+        markers: [CD8A, CD8B, GZMB, PRF1, NKG7]
+        description: CD8+细胞毒性T细胞
+        aging_note: 衰老时CD8+ T细胞耗竭标志(PD1+, TIM3+)增加
+    aging_note: 衰老时T细胞在肝脏中浸润增加，表型向耗竭方向发展
+    source: "Hepatology 2024 (PMC10871588) — 肝脏免疫衰老scRNA-seq"
+
+  # ─── B细胞 ──────────────────────────────────────────────
+  b_cell:
+    aliases: [B淋巴细胞, B lymphocyte]
+    markers: [CD19, MS4A1, CD79A, CD79B, PAX5, JCHAIN]
+    description: B淋巴细胞，抗体产生和抗原呈递
+    aging_note: 衰老时B细胞数量和功能改变
+
+  # ─── NK细胞 ─────────────────────────────────────────────
+  nk_cell:
+    aliases: [NK细胞, natural killer cell]
+    markers: [NKG7, GNLY, KLRD1, KLRB1, KLRF1, NCR1, FCGR3A]
+    description: 自然杀伤细胞，先天免疫，识别和清除应激细胞
+    aging_note: 衰老时NK细胞频率降低，呈现耗竭表型
+
+  # ─── 树突状细胞 ─────────────────────────────────────────
+  dendritic_cell:
+    aliases: [DC, 树突状细胞]
+    markers: [CLEC9A, CD1C, FCER1A, XCR1, FLT3, CCR7]
+    subtypes:
+      cDC1: [CLEC9A, XCR1, CADM1]
+      cDC2: [CD1C, FCER1A, CLEC10A]
+    description: 树突状细胞，抗原呈递，桥接先天和适应性免疫
+
+  # ─── 中性粒细胞 ─────────────────────────────────────────
+  neutrophil:
+    aliases: [中性粒细胞, polymorphonuclear leukocyte]
+    markers: [CSF3R, S100A8, S100A9, FCGR3B, CEACAM8, CXCL8]
+    description: 中性粒细胞，先天免疫，炎症早期应答
+
+  # ─── 成纤维细胞 ─────────────────────────────────────────
+  fibroblast:
+    aliases: [成纤维细胞, mesenchymal cell, portal fibroblast]
+    markers: [DCN, COL1A1, COL3A1, LUM, PDGFRA, THY1, VIM]
+    description: 门静脉周成纤维细胞，参与ECM维持

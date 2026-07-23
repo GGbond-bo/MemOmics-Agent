@@ -1,0 +1,69 @@
+# MemOmics-Agent Python Dependencies
+# Install: pip install -r requirements.txt
+# Python 3.11-3.13 required
+
+# === Web Framework ===
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+websockets>=12.0
+python-multipart>=0.0.12
+
+# === HTTP / API ===
+httpx[socks]>=0.27.0
+openai>=1.30.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# === Hermes Core ===
+rich>=13.0.0
+fire>=0.6.0
+jinja2>=3.1.0
+pyyaml>=6.0
+tenacity>=8.0.0
+tiktoken>=0.7.0
+aiohttp>=3.9.0
+jmespath>=1.0.0
+validators>=0.20.0
+wcwidth>=0.2.0
+defusedxml>=0.7.0
+cryptography>=42.0.0
+prompt_toolkit>=3.0.0
+Pillow>=10.0.0
+
+# === Terminal (platform-specific) ===
+# Linux/macOS:
+pexpect>=4.8.0; sys_platform != "win32"
+# Windows:
+pywinpty>=2.0.0; sys_platform == "win32"
+# Windows log rotation:
+concurrent-log-handler>=0.9.25; sys_platform == "win32"
+# Windows timezone data:
+tzdata>=2024.1; sys_platform == "win32"
+
+# === System ===
+psutil>=5.9.0
+
+# === Web Search (multi-backend, auto-detected) ===
+# ddgs (DuckDuckGo) — free, no API key needed, installed by default
+duckduckgo-search>=4.0.0
+# Optional backends (uncomment if you have API keys):
+# tavily-python>=0.4.0
+# exa-py>=1.0.0
+
+# === Bioinformatics (Python — for Scanpy/Python analysis) ===
+# These are installed by default but agent can also auto-install on demand.
+# If installing on a server without Python analysis needs, you can comment these out.
+scanpy>=1.10.0
+anndata>=0.10.0
+numpy>=1.26.0
+pandas>=2.1.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# === Note ===
+# R packages are NOT installed via pip.
+# See R_packages.txt for R dependency list.
+# The agent auto-installs missing R packages via BiocManager during analysis.
+# R itself must be installed separately: https://cran.r-project.org/

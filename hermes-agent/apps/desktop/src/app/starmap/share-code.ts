@@ -12,7 +12,7 @@ import type { StarmapEdge, StarmapGraph, StarmapNode } from '@/types/hermes'
 // text almost free. A 60-skill map is a few hundred chars.
 
 const VERSION = 3
-const PREFIX = 'HML' // "MemOmics Memory Loadout" — namespaces our codes like WoW's leading bytes.
+const PREFIX = 'HML' // "Hermes Memory Loadout" — namespaces our codes like WoW's leading bytes.
 const MAX_LABEL = 64 // trim runaway memory titles so one card can't bloat the code.
 
 const trim = (s: string): string => (s.length > MAX_LABEL ? s.slice(0, MAX_LABEL) : s)
@@ -157,7 +157,9 @@ function readGraph(r: BitReader): StarmapGraph {
     counts.set(n.category, (counts.get(n.category) ?? 0) + 1)
   }
 
-  const clusters = [...counts.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count)
+  const clusters = [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
 
   // Memory cards are dropped (viz-only); a marker lets the UI tell a decoded map
   // apart from a freshly-scanned one.

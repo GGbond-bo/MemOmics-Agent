@@ -1,0 +1,20 @@
+{
+  "id": "region_to_ccre_screen",
+  "name": "Region To Ccre Screen",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs.",
+  "detailed_description": "Given genomic coordinates, retrieve intersecting ENCODE SCREEN cCREs.",
+  "when_to_use": "When you need region to ccre screen analysis",
+  "parameters": {
+    "coord_chrom": "[Required] Chromosome (e.g., 'chr12') (str)",
+    "coord_start": "[Required] Start coordinate (int)",
+    "coord_end": "[Required] End coordinate (int)",
+    "assembly": "[Optional] Genome assembly (e.g., 'GRCh38') (default: GRCh38)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

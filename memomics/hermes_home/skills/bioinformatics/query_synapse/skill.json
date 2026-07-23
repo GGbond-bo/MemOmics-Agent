@@ -1,0 +1,22 @@
+{
+  "id": "query_synapse",
+  "name": "Query Synapse",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query Synapse REST API for biomedical datasets/files using natural language or structured search parameters. Supports optional authentication via SYNAPSE_AUTH_TOKEN.",
+  "detailed_description": "Query Synapse REST API for biomedical datasets/files using natural language or structured search parameters. Supports optional authentication via SYNAPSE_AUTH_TOKEN.",
+  "when_to_use": "When you need query synapse analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about biomedical data (str)",
+    "query_term": "[Optional] Search term(s) (AND logic across list)",
+    "return_fields": "[Optional] Fields to return (default: ['name', 'node_type', 'description'])",
+    "max_results": "[Optional] Max results (20 typical, up to 50) (default: 20)",
+    "query_type": "[Optional] 'dataset', 'file', or 'folder' (default: dataset)",
+    "verbose": "[Optional] Return full API response or formatted (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

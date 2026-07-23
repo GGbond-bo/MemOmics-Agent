@@ -1,0 +1,23 @@
+{
+  "id": "analyze_circular_dichroism_spectra",
+  "name": "Analyze Circular Dichroism Spectra",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes circular dichroism (CD) spectroscopy data to determine secondary structure and thermal stability.",
+  "detailed_description": "Analyzes circular dichroism (CD) spectroscopy data to determine secondary structure and thermal stability.",
+  "when_to_use": "When you need analyze circular dichroism spectra analysis",
+  "parameters": {
+    "sample_name": "[Required] Name of the biomolecule sample (e.g., \"Znf706\", \"G-quadruplex\") (str)",
+    "sample_type": "[Required] Type of biomolecule (\"protein\" or \"nucleic_acid\") (str)",
+    "wavelength_data": "[Required] Wavelength values in nm for CD spectrum (list or numpy.ndarray)",
+    "cd_signal_data": "[Required] CD signal intensity values (typically in mdeg or Δε) (list or numpy.ndarray)",
+    "temperature_data": "[Optional] Temperature values (°C) for thermal denaturation experiment",
+    "thermal_cd_data": "[Optional] CD signal values at specific wavelength across different temperatures",
+    "output_dir": "[Optional] Directory to save result files (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

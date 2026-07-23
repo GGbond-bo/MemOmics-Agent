@@ -1,0 +1,16 @@
+{
+  "id": "cross-species-regulatory-conservation",
+  "name": "Cross-Species Regulatory Element Conservation Assessment (CRCA)",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Cross-Species Regulatory Element Conservation Assessment (CRCA) 进行分析",
+  "source_dir": "skills/bioinformatics/cross-species-regulatory-conservation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

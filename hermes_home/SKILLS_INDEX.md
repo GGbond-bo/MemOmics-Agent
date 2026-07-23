@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (14 skills)
+## 08_报告 - 报告/可视化 (20 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -216,6 +216,12 @@
 | 13 | summarize |  | report, html, ppt | YEL 讨论触发 |
 ---
 
+| patent-analysis | 生物信息学/方法类专利深度分析：竞品拆解、权利解读、规避策略、创新点空白识别 |  | YEL 讨论触发 |
+| proteomics-secretome-analysis | > |  | YEL 讨论触发 |
+| bioinformatics-patent-strategy | > |  | YEL 讨论触发 |
+| cross-species-cre-conservation | > |  | YEL 讨论触发 |
+| atac-seq-memomics | ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出 |  | YEL 讨论触发 |
+| cross-species-regulatory-conservation | > |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (14 skills)
 
 
@@ -361,7 +367,7 @@
 | 5 | run_3d_chondrogenic_aggregate_assay |  | histology, h&e, stain | GRN 按需触发 |
 ---
 
-## 14_细胞生物学实验 - 细胞生物学 (5 skills)
+## 14_细胞生物学实验 - 细胞生物学 (6 skills)
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
@@ -372,6 +378,7 @@
 | 5 | track_immune_cells_under_flow |  | flow cytometry, facs, cell sorting | GRN 按需触发 |
 ---
 
+| secretome-classification | > |  | YEL 讨论触发 |
 ## 15_CRISPR基因编辑 - CRISPR (4 skills)
 
 | # | Skill | Description | Keywords | Trigger |

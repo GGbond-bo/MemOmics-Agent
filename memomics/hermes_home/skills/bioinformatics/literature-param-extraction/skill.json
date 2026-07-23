@@ -1,0 +1,19 @@
+{
+  "id": "literature-param-extraction",
+  "name": "Literature Parameter Extraction",
+  "category": "literature",
+  "language": "Python",
+  "source": "MemOmics",
+  "description": "从科学文献 PDF 中提取生信分析参数，结构化写入知识库 YAML。支持 pymupdf + markitdown 双层解析。",
+  "detailed_description": "当知识库缺少对应物种/组织/方法的参数时，从文献 PDF 提取参数值、置信度、来源，写入知识库。支持 pymupdf 快速提取 + markitdown fallback。",
+  "when_to_use": "拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时",
+  "parameters": {
+    "pdf_path": "[Required] PDF 文件路径 (str)",
+    "kb_dir": "[Required] 知识库根目录 (str)",
+    "method": "[Optional] 提取方法: auto/pymupdf/markitdown (default: auto)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

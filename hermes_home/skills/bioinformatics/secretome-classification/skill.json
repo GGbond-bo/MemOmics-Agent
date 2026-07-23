@@ -1,0 +1,23 @@
+{
+  "id": "secretome-classification",
+  "name": "Secretome Protein Classification",
+  "category": "cell_biology",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Secretome Protein Classification 进行分析",
+  "source_dir": "skills/bioinformatics/secretome-classification",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "proteomics",
+    "secretome",
+    "exosome",
+    "EV",
+    "conditioned-medium",
+    "stem-cell"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

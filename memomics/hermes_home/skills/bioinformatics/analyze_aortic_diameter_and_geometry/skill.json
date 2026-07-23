@@ -1,0 +1,18 @@
+{
+  "id": "analyze_aortic_diameter_and_geometry",
+  "name": "Analyze Aortic Diameter And Geometry",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze aortic diameter and geometry from cardiovascular imaging data to measure aortic root diameter, ascending aorta diameter, and calculate geometric parameters such as tortuosity and dilation indi",
+  "detailed_description": "Analyze aortic diameter and geometry from cardiovascular imaging data to measure aortic root diameter, ascending aorta diameter, and calculate geometric parameters such as tortuosity and dilation indices.",
+  "when_to_use": "When you need analyze aortic diameter and geometry analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the cardiovascular imaging data (DICOM, JPG, PNG) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

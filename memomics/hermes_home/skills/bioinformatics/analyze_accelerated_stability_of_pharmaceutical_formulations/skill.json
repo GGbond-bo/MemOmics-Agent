@@ -1,0 +1,19 @@
+{
+  "id": "analyze_accelerated_stability_of_pharmaceutical_formulations",
+  "name": "Analyze Accelerated Stability Of Pharmaceutical Formulations",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes the stability of pharmaceutical formulations under accelerated storage conditions.",
+  "detailed_description": "Analyzes the stability of pharmaceutical formulations under accelerated storage conditions.",
+  "when_to_use": "When you need analyze accelerated stability of pharmaceutical formulations analysis",
+  "parameters": {
+    "formulations": "[Required] List of formulation dictionaries containing name, active ingredient, concentration, and excipients (List[dict])",
+    "storage_conditions": "[Required] List of storage condition dictionaries containing temperature, humidity (optional), and description (List[dict])",
+    "time_points": "[Required] List of time points in days to evaluate stability (List[int])"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

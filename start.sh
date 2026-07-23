@@ -76,18 +76,15 @@ if [ -z "$PYTHON" ]; then
 
     # 确定安装脚本路径
     CONDA_INSTALLER=""
-    CONDA_HOME="$HOME/miniconda3"
+    CONDA_HOME="$SCRIPT_DIR/miniconda_env"
 
-    # 方式1: 本地已有 miniconda 安装包（离线场景）
+    # 方式1: 本地已有 miniconda 安装包（离线场景 — 解压目录内置）
     for f in \
-        "$SCRIPT_DIR/Miniconda3-latest-Linux-x86_64.sh" \
-        "$SCRIPT_DIR/Miniconda3-latest-Linux-aarch64.sh" \
-        "$SCRIPT_DIR/Miniconda3-latest-MacOSX-x86_64.sh" \
-        "$SCRIPT_DIR/Miniconda3-latest-MacOSX-arm64.sh" \
-        "$SCRIPT_DIR/Miniconda3-latest-Windows-x86_64.exe" \
-        "$SCRIPT_DIR/miniconda*.sh" \
-        "$HOME/Downloads/Miniconda3-latest-*.sh" \
-        "$HOME/Miniconda3-latest-*.sh"; do
+        "$SCRIPT_DIR/miniconda/Miniconda3-latest-Linux-x86_64.sh" \
+        "$SCRIPT_DIR/miniconda/Miniconda3-latest-Linux-aarch64.sh" \
+        "$SCRIPT_DIR/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" \
+        "$SCRIPT_DIR/miniconda/Miniconda3-latest-MacOSX-arm64.sh" \
+        "$SCRIPT_DIR/miniconda/Miniconda3-latest-Windows-x86_64.exe"; do
         if [ -f "$f" ]; then
             CONDA_INSTALLER="$f"
             echo "📦 找到本地 Miniconda 安装包: $f"
@@ -98,15 +95,15 @@ if [ -z "$PYTHON" ]; then
     # 方式2: 已有 conda，但没有合适的 Python 环境
     if [ -z "$CONDA_INSTALLER" ]; then
         if command -v conda &>/dev/null; then
-            echo "📦 检测到 conda，创建 memomics 环境..."
-            conda create -n memomics python=3.12 -y 2>&1 | tail -5
-            if [ -f "$CONDA_HOME/envs/memomics/bin/python" ]; then
-                PYTHON="$CONDA_HOME/envs/memomics/bin/python"
-            else
-                # 尝试找到 conda 的 base python
-                CONDA_BASE=$(conda info --base 2>/dev/null)
-                if [ -n "$CONDA_BASE" ] && [ -f "$CONDA_BASE/bin/python" ]; then
-                    PYTHON="$CONDA_BASE/bin/python"
+            echo "📦 检测到 conda，尝试使用 conda Python..."
+            CONDA_BASE=$(conda info --base 2>/dev/null)
+            if [ -n "$CONDA_BASE" ] && [ -f "$CONDA_BASE/bin/python" ]; then
+                PYTHON="$CONDA_BASE/bin/python"
+            fi
+            if [ -z "$PYTHON" ]; then
+                conda create -n memomics python=3.12 -y 2>&1 | tail -5
+                if [ -f "$CONDA_HOME/envs/memomics/bin/python" ]; then
+                    PYTHON="$CONDA_HOME/envs/memomics/bin/python"
                 fi
             fi
         fi
@@ -157,12 +154,6 @@ if [ -z "$PYTHON" ]; then
         if [ -f "$CONDA_HOME/bin/python" ]; then
             PYTHON="$CONDA_HOME/bin/python"
             echo "✅ Miniconda 安装成功"
-            # 创建 memomics 环境
-            echo "📦 创建 memomics 环境 (Python 3.12)..."
-            "$CONDA_HOME/bin/conda" create -n memomics python=3.12 -y 2>&1 | tail -3
-            if [ -f "$CONDA_HOME/envs/memomics/bin/python" ]; then
-                PYTHON="$CONDA_HOME/envs/memomics/bin/python"
-            fi
         fi
     fi
 
@@ -170,13 +161,10 @@ if [ -z "$PYTHON" ]; then
         echo ""
         echo "❌ 无法自动安装 Python。请手动安装:"
         echo ""
-        echo "   方法1: 用 download_miniconda.sh 在有网的机器上下载安装包"
-        echo "          然后把安装包放到 MemOmics-Agent 目录下，重新运行 ./start.sh"
+        echo "   方法1: 从 https://docs.conda.io 下载对应平台的 Miniconda 安装包"
+        echo "          放到 miniconda/ 目录下，重新运行 ./start.sh"
         echo ""
-        echo "   方法2: 直接安装"
-        echo "          conda create -n memomics python=3.12 && conda activate memomics"
-        echo ""
-        echo "   方法3: 从官网下载 Python 3.12"
+        echo "   方法2: 手动安装 Python 3.11-3.13"
         echo "          https://www.python.org/downloads/"
         echo ""
         exit 1

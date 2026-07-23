@@ -1,0 +1,18 @@
+{
+  "id": "get_fda_drug_label_info",
+  "name": "Get Fda Drug Label Info",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Retrieve FDA drug label information including indications, contraindications, warnings, and dosage information from the OpenFDA database.",
+  "detailed_description": "Retrieve FDA drug label information including indications, contraindications, warnings, and dosage information from the OpenFDA database.",
+  "when_to_use": "When you need get fda drug label info analysis",
+  "parameters": {
+    "drug_name": "[Required] Name of the drug to query for label information (str)",
+    "sections": "[Optional] Optional list of specific sections to retrieve ['indications_and_usage', 'contraindications', 'warnings', 'dosage_and_administration']"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

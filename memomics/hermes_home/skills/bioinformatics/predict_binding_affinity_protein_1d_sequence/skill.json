@@ -1,0 +1,19 @@
+{
+  "id": "predict_binding_affinity_protein_1d_sequence",
+  "name": "Predict Binding Affinity Protein 1D Sequence",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Predicts binding affinity between small molecules and a protein sequence using pre-trained deep learning models.",
+  "detailed_description": "Predicts binding affinity between small molecules and a protein sequence using pre-trained deep learning models.",
+  "when_to_use": "When you need predict binding affinity protein 1d sequence analysis",
+  "parameters": {
+    "smiles_list": "[Required] List of SMILES strings representing chemical compounds (List[str])",
+    "amino_acid_sequence": "[Required] Protein sequence in amino acid format (str)",
+    "affinity_model_type": "[Optional] Deep learning model architecture to use for binding affinity prediction (options: CNN-CNN, MPNN-CNN, Morgan-CNN, Morgan-AAC, Daylight-AAC) (default: MPNN-CNN)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================
-#  MemOmics-Agent 集群终端启动器
-#  适用于 HPC/SLURM/服务器集群环境
-#  特性: 支持 module load、conda activate、SLURM 作业提交
+#  MemOmics-Agent 集群启动器 (HPC/SLURM)
 #  用法:
-#    交互模式:  ./start_cluster.sh
-#    SLURM 模式: ./start_cluster.sh --slurm
-#    指定端口:   ./start_cluster.sh 8899
+#    ./start.sh          交互模式
+#    ./start.sh --slurm  生成 SLURM 作业脚本
+#    ./start.sh 8899     指定端口
 # ============================================================
-set -e
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 PORT="${MEMOMICS_PORT:-8899}"
 SLURM_MODE=false
 
-# 解析参数
 for arg in "$@"; do
     case "$arg" in
         --slurm) SLURM_MODE=true ;;
@@ -24,14 +21,13 @@ for arg in "$@"; do
 done
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║  MemOmics-Agent v1.0 (Cluster Edition)      ║"
+echo "║  MemOmics-Agent v2.0 (Cluster Edition)      ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
-# === Step 0: SLURM 模式 ===
+# SLURM mode: generate job script and exit
 if [ "$SLURM_MODE" = true ]; then
-    echo "📝 生成 SLURM 作业脚本..."
-    cat > "$SCRIPT_DIR/submit_memomics.slurm" << SLURMEOF
+    cat > "$SCRIPT_DIR/submit_memomics.slurm" << 'SLURMEOF'
 #!/bin/bash
 #SBATCH --job-name=memomics
 #SBATCH --partition=compute
@@ -41,92 +37,95 @@ if [ "$SLURM_MODE" = true ]; then
 #SBATCH --mem=16G
 #SBATCH --time=24:00:00
 #SBATCH --output=memomics_%j.log
-
 cd "$SCRIPT_DIR"
 export MEMOMICS_PORT="$PORT"
-exec bash "$SCRIPT_DIR/start_cluster.sh" "$PORT"
+exec bash "$SCRIPT_DIR/start.sh" "$PORT"
 SLURMEOF
-    echo "✅ SLURM 脚本已生成: submit_memomics.slurm"
-    echo "   提交作业: sbatch submit_memomics.slurm"
-    echo "   查看队列: squeue -u \$USER"
+    echo "[OK] SLURM script: submit_memomics.slurm"
+    echo "  Submit: sbatch submit_memomics.slurm"
+    echo "  Queue:  squeue -u \$USER"
     exit 0
 fi
 
-# === Step 1: 尝试 module load ===
+export HERMES_HOME="$SCRIPT_DIR/hermes_home"
+export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
+export MEMOMICS_PORT="$PORT"
+export MEMOMICS_HOST="0.0.0.0"
+
+# Try module load on HPC
 if command -v module &>/dev/null; then
-    echo "🔍 尝试加载 Python 模块..."
     for mod in python/3.12 python/3.11 python/3.13 python python3; do
-        if module avail "$mod" 2>&1 | grep -q "$mod"; then
-            module load "$mod" 2>/dev/null && echo "  ✅ module load $mod" && break
-        fi
+        module load "$mod" 2>/dev/null && echo "[OK] module load $mod" && break
     done
 fi
 
-# === Step 2: Find Python 3.11-3.13 ===
+# === Find Python ===
 PYTHON=""
 for c in python3 python python3.13 python3.12 python3.11 \
          /usr/bin/python3 /usr/local/bin/python3 \
          "$HOME/miniconda3/bin/python3" "$HOME/anaconda3/bin/python3" \
          "$SCRIPT_DIR/miniconda_env/bin/python"; do
     if command -v "$c" &>/dev/null || [ -x "$c" ]; then
-        if "$c" -c "import sys; sys.exit(0 if sys.version_info >= (3,11) and sys.version_info < (3,14) else 1)" 2>/dev/null; then
+        if "$c" -c "import sys; sys.exit(0 if (3,10) <= sys.version_info < (3,14) else 1)" 2>/dev/null; then
             PYTHON="$c"
-            echo "✅ 找到 Python: $c ($("$c" --version 2>&1))"
+            echo "[OK] Found: $c"
             break
         fi
     fi
 done
 
-# === Step 3: No Python? Use bundled miniconda ===
+# === Use bundled miniconda ===
 if [ -z "$PYTHON" ]; then
-    echo "⚠️ 未找到 Python 3.11-3.13，使用内置 Miniconda..."
-    CONDA_PYTHON="$SCRIPT_DIR/miniconda_env/bin/python"
-    if [ ! -f "$CONDA_PYTHON" ]; then
+    echo "[WARN] Python 3.11-3.13 not found"
+    echo "[INFO] Using bundled Miniconda..."
+
+    CONDA_PY="$SCRIPT_DIR/miniconda_env/bin/python"
+    if [ ! -f "$CONDA_PY" ]; then
         INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-latest-Linux-x86_64.sh"
         if [ ! -f "$INSTALLER" ]; then
-            echo "❌ 内置 miniconda 安装包未找到!"
-            echo "   请从 https://docs.conda.io 下载 Miniconda3-latest-Linux-x86_64.sh"
-            echo "   放到 $SCRIPT_DIR/miniconda/ 目录下"
+            echo "[ERROR] miniconda installer missing!"
             exit 1
         fi
-        echo "📦 安装 Miniconda 到 miniconda_env/ ..."
+        echo "[INSTALL] Installing Miniconda (1-2 min)..."
         bash "$INSTALLER" -b -p "$SCRIPT_DIR/miniconda_env"
-        if [ ! -f "$CONDA_PYTHON" ]; then
-            echo "❌ Miniconda 安装失败!"
+        if [ ! -f "$CONDA_PY" ]; then
+            echo "[ERROR] Miniconda install failed!"
             exit 1
         fi
     fi
-    PYTHON="$CONDA_PYTHON"
-    echo "✅ 使用 Miniconda Python: $PYTHON"
+    PYTHON="$CONDA_PY"
+    echo "[OK] Miniconda ready"
 fi
 
-# === Step 4: Create venv (用户家目录，避免节点存储限制) ===
-VENV_DIR="$HOME/.memomics_venv"
-VENV_PYTHON="$VENV_DIR/bin/python"
-if [ ! -f "$VENV_PYTHON" ]; then
-    echo "🔧 创建虚拟环境 (~/​.memomics_venv)..."
-    "$PYTHON" -m venv "$VENV_DIR" || {
-        echo "⚠️ venv 创建失败，直接使用当前 Python"
-        VENV_PYTHON="$PYTHON"
-    }
-    echo "✅ 虚拟环境已创建"
+# === Create venv ===
+if [ ! -f ".venv/bin/python" ]; then
+    echo "[SETUP] Creating .venv..."
+    if "$PYTHON" -m venv .venv 2>/dev/null; then
+        echo "[OK] .venv created"
+    else
+        echo "[WARN] venv failed, using Python directly"
+        VENV_PY="$PYTHON"
+    fi
 fi
 
-# === Step 5: Install dependencies ===
-if ! "$VENV_PYTHON" -c "import fastapi" 2>/dev/null; then
-    echo "📥 安装依赖包..."
-    "$VENV_PYTHON" -m pip install --upgrade pip -q
-    "$VENV_PYTHON" -m pip install -r requirements.txt -q || echo "⚠️ 部分依赖安装失败，尝试继续..."
-    echo "✅ 依赖安装完成"
+if [ -z "$VENV_PY" ] && [ -f ".venv/bin/python" ]; then
+    VENV_PY=".venv/bin/python"
+elif [ -z "$VENV_PY" ]; then
+    VENV_PY="$PYTHON"
+fi
+
+# === Install dependencies ===
+if ! "$VENV_PY" -c "import fastapi" 2>/dev/null; then
+    echo "[INSTALL] Installing dependencies (3-8 min, once)..."
+    "$VENV_PY" -m pip install --upgrade pip --quiet 2>/dev/null || true
+    "$VENV_PY" -m pip install -r requirements.txt || echo "[WARN] Some packages failed"
 else
-    echo "✅ 依赖已就绪"
+    echo "[OK] Dependencies ready"
 fi
 
-# === Step 6: Start server ===
+# === Start ===
 echo ""
-echo "🚀 启动 MemOmics-Agent (端口 $PORT)..."
-echo "   浏览器访问: http://localhost:$PORT"
-echo "   集群远程: ssh -L $PORT:localhost:$PORT user@cluster"
+echo "[START] http://localhost:$PORT"
+echo "  Remote: ssh -L $PORT:localhost:$PORT user@cluster"
 echo ""
-export MEMOMICS_PORT="$PORT"
-exec "$VENV_PYTHON" webui/server.py
+exec "$VENV_PY" webui/server.py

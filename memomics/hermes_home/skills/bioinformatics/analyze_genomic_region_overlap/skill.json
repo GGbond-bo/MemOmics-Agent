@@ -1,0 +1,18 @@
+{
+  "id": "analyze_genomic_region_overlap",
+  "name": "Analyze Genomic Region Overlap",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze overlaps between two or more sets of genomic regions.",
+  "detailed_description": "Analyze overlaps between two or more sets of genomic regions.",
+  "when_to_use": "When you need analyze genomic region overlap analysis",
+  "parameters": {
+    "region_sets": "[Required] List of genomic region sets. Each item can be either a string path to a BED file or a list of tuples/lists with format (chrom, start, end) or (chrom, start, end, name) (list)",
+    "output_prefix": "[Optional] Prefix for output files (default: overlap_analysis)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

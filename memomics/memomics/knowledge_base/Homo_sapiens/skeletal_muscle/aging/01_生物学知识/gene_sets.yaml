@@ -1,0 +1,35 @@
+# 骨骼肌衰老 — 基因集
+# 注意: 详细生物学知识请见 biology_knowledge.yaml
+gene_sets:
+  sasp:
+    description: 衰老相关分泌表型
+    genes: [IL6, IL1A, IL1B, CXCL8, CXCL1, CCL2, CCL3, MMP1, MMP3, MMP10, TIMP1, IGFBP3, SERPINE1]
+    source: Coppe et al. 2010, PLoS Biology
+    confidence: high
+  senescence_markers:
+    description: 细胞衰老标志
+    genes: [CDKN1A, CDKN2A, GLB1, LMNB1, TP53, RB1]
+    source: Hernandez-Segura et al. 2018, Cell Reports
+    confidence: high
+  mitochondrial_dysfunction:
+    description: 线粒体功能相关 (衰老时下降)
+    genes: [PPARGC1A, TFAM, NDUFS1, NDUFV1, COX5A, ATP5F1A]
+    source: Calvani et al. 2022, Aging Cell
+    confidence: high
+  fibrosis:
+    description: 纤维化 (衰老时增加)
+    genes: [COL1A1, COL1A2, COL3A1, FN1, TGFBI, CTGF, TGFB1, ACTA2]
+    source: Barberi et al. 2023, Nature Communications
+    confidence: high
+  inflammation:
+    description: inflammaging
+    genes: [IL6, TNF, NFKB1, NFKB2, RELA, STAT1, STAT3, CXCL8, CCL2]
+    confidence: high
+  oxidative_stress:
+    description: 氧化应激
+    genes: [SOD1, SOD2, CAT, GPX1, GSR, NQO1, HMOX1]
+    confidence: medium
+  autophagy:
+    description: 自噬 (衰老时下降)
+    genes: [ATG5, ATG7, ATG12, BECN1, SQSTM1]
+    confidence: medium

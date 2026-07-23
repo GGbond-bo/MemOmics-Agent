@@ -1,0 +1,74 @@
+{
+  "id": "grn-pyscenic",
+  "name": "基因调控网络 (pySCENIC)",
+  "category": "transcriptomics",
+  "language": "Python",
+  "description": "pySCENIC基因调控网络推断。TF调控子/aUCell活性评分",
+  "starting_prompt": "推断我的scRNA-seq数据的基因调控网络",
+  "source_dir": "skills/external/13_grn-pyscenic",
+  "memomics_module": "03_高级分析",
+  "chains_from": [
+    "scrnaseq-scanpy-core"
+  ],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GRN inference (GRNBoost2)",
+      "description": "Infer from expression matrix",
+      "tool": "terminal"
+    },
+    {
+      "name": "Motif enrichment (cisTarget)",
+      "description": "Identify direct regulation",
+      "tool": "terminal"
+    },
+    {
+      "name": "Regulon activity (AUCell)",
+      "description": "Per-cell regulon scores",
+      "tool": "terminal"
+    },
+    {
+      "name": "Visualization",
+      "description": "Regulon heatmap + network",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GRN inference (GRNBoost2) -> Motif enrichment (cisTarget) -> Regulon activity (AUCell) -> Visualization"
+  },
+  "detailed_description": "pySCENIC基因调控网络推断。TF调控子/aUCell活性评分\n\n分析步骤:\n  - GRN inference (GRNBoost2): Infer from expression matrix\n  - Motif enrichment (cisTarget): Identify direct regulation\n  - Regulon activity (AUCell): Per-cell regulon scores\n  - Visualization: Regulon heatmap + network\n\n触发提示: \"推断我的scRNA-seq数据的基因调控网络\"",
+  "when_to_use": "当你需要 基因调控网络 (pySCENIC) 时触发",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "05_grnboost2_tf_activity.py / 06_grnboost2_routeB.py",
+      "params": "n_HVG=2000, n_top_targets=50, GRNBoost2+cisTarget+full(失败), GRNBoost2-only(成功)",
+      "date": "2026-07-09",
+      "score": 0.0,
+      "result": "路线A(9568细胞)和路线B(6974细胞)GRNBoost2-only分析完成。分别获得121/108 TF活性。RUNX1两条路线均排前5。ATF3两条路线排第1。cisTarget全部跳过(基因名不匹配)。GRNBoost2-only替代方案成功。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "07_comprehensive_visualization.py",
+      "params": "{\"routeA_key_tfs\": 28, \"routeB_key_tfs\": 25, \"figures\": \"heatmap+boxplot+network+zscore+violin+zone_top_tfs+dual_comparison\"}",
+      "date": "2026-07-09",
+      "score": 8.5,
+      "result": "SCENIC comprehensive visualization: 26 figures generated across RouteA (去神经), RouteB (应激), and dual comparison. Key findings: RUNX1 top TF in RouteA (去神经核心), MAF lowest in zone1 (验证文献), FOS highest in"
+    }
+  ],
+  "error_count": 1,
+  "success_count": 3,
+  "official_docs": "https://pyscenic.readthedocs.io/en/latest/tutorial.html",
+  "doc_source": "official",
+  "proven_script": "07_comprehensive_visualization.py",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  }
+}

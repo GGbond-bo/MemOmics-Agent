@@ -126,10 +126,22 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     Uses yaml with CSafeLoader for full YAML support (nested metadata, lists)
     with a fallback to simple key:value splitting for robustness.
 
+    A single leading UTF-8 BOM (U+FEFF) is stripped before parsing. Windows
+    GUI editors (Notepad, PowerShell ``>``) prepend one when saving a SKILL.md
+    as UTF-8, and ``read_text(encoding="utf-8")`` preserves it (only
+    ``utf-8-sig`` strips it). Left in place, the BOM defeats the ``---`` fence
+    check below and the whole frontmatter is silently discarded — name,
+    description, ``platforms`` gating, env-var setup, and conditional
+    activation all vanish. See CONTRIBUTING.md "File encoding".
+
     Returns:
         (frontmatter_dict, remaining_body)
     """
     frontmatter: Dict[str, Any] = {}
+
+    # Strip only a leading BOM; a BOM mid-content is data, not a marker.
+    if content.startswith("\ufeff"):
+        content = content[1:]
     body = content
 
     if not content.startswith("---"):
@@ -147,45 +159,42 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
         if isinstance(parsed, dict):
             frontmatter = parsed
     except Exception:
-        # 第一次回退：尝试剥离非 YAML 行（### 规则、- skill_evolution 等）
-        # 213/269 个 skill 的 SKILL.md 有规则混入 YAML 块的问题
-        try:
-            lines = yaml_content.strip().split("\n")
-            # 找到第一个以 ### 或 - 开头的非缩进行，截断之前的合法 YAML
-            clean_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith("### ") or stripped.startswith("## "):
-                    break
-                if stripped.startswith("- ") and not line.startswith(" "):
-                    break
-                clean_lines.append(line)
-            clean_yaml = "\n".join(clean_lines)
-            parsed = yaml_load(clean_yaml)
-            if isinstance(parsed, dict):
-                frontmatter = parsed
-        except Exception:
-            # 第二次回退：简单 key:value 解析
-            for line in yaml_content.strip().split("\n"):
-                if ":" not in line:
-                    continue
-                key, value = line.split(":", 1)
-                frontmatter[key.strip()] = value.strip()
-            # 修复列表值：如果值是 '[a, b, c]' 格式，尝试解析为列表
-            for key in list(frontmatter.keys()):
-                val = frontmatter[key]
-                if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
-                    try:
-                        items = yaml_load(val)
-                        if isinstance(items, list):
-                            frontmatter[key] = items
-                    except Exception:
-                        pass
+        # Fallback: simple key:value parsing for malformed YAML
+        for line in yaml_content.strip().split("\n"):
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            frontmatter[key.strip()] = value.strip()
 
     return frontmatter, body
 
 
 # ── Platform matching ─────────────────────────────────────────────────────
+
+
+def skill_matches_platform_list(platforms: Any) -> bool:
+    """Return True when *platforms* is compatible with the current OS."""
+    if not platforms:
+        return True
+    if not isinstance(platforms, list):
+        platforms = [platforms]
+    current = sys.platform
+    running_in_termux = is_termux()
+    for platform in platforms:
+        normalized = str(platform).lower().strip()
+        mapped = PLATFORM_MAP.get(normalized, normalized)
+        if current.startswith(mapped):
+            return True
+        # Termux runs a Linux userland on Android. Accept linux-tagged
+        # skills regardless of whether sys.platform is "linux" (pre-3.13
+        # Termux) or "android" (Python 3.13+ Termux, and any other
+        # Android runtime).
+        if running_in_termux and mapped == "linux":
+            return True
+        # Explicit termux/android tags match a Termux session too.
+        if running_in_termux and mapped in ("termux", "android"):
+            return True
+    return False
 
 
 def skill_matches_platform(frontmatter: Dict[str, Any]) -> bool:
@@ -208,28 +217,7 @@ def skill_matches_platform(frontmatter: Dict[str, Any]) -> bool:
     inside a skill may still misbehave (no systemd, BusyBox utils, no
     apt/dnf, etc.) but that is on the skill, not on platform gating.
     """
-    platforms = frontmatter.get("platforms")
-    if not platforms:
-        return True
-    if not isinstance(platforms, list):
-        platforms = [platforms]
-    current = sys.platform
-    running_in_termux = is_termux()
-    for platform in platforms:
-        normalized = str(platform).lower().strip()
-        mapped = PLATFORM_MAP.get(normalized, normalized)
-        if current.startswith(mapped):
-            return True
-        # Termux runs a Linux userland on Android. Accept linux-tagged
-        # skills regardless of whether sys.platform is "linux" (pre-3.13
-        # Termux) or "android" (Python 3.13+ Termux, and any other
-        # Android runtime).
-        if running_in_termux and mapped == "linux":
-            return True
-        # Explicit termux/android tags match a Termux session too.
-        if running_in_termux and mapped in ("termux", "android"):
-            return True
-    return False
+    return skill_matches_platform_list(frontmatter.get("platforms"))
 
 
 # ── Environment matching ──────────────────────────────────────────────────
@@ -535,6 +523,63 @@ def get_all_skills_dirs() -> List[Path]:
     return dirs
 
 
+def normalize_skill_lookup_name(identifier: str) -> str:
+    """Normalize a skill identifier to a ``skill_view()``-safe relative path.
+
+    Slash commands and cron jobs may store absolute paths to skills that live
+    under ``~/.hermes/skills/`` (including via symlinks) or configured
+    ``skills.external_dirs``. ``skill_view()`` rejects absolute names for
+    security, so callers must translate trusted absolute paths to their
+    relative form first.
+    """
+    raw_identifier = (identifier or "").strip()
+    if not raw_identifier:
+        return raw_identifier
+
+    identifier_path = Path(raw_identifier).expanduser()
+    if not identifier_path.is_absolute():
+        return raw_identifier.lstrip("/")
+
+    # Look the primary skills root up on tools.skills_tool at CALL time
+    # (not via get_skills_dir()): callers and tests patch
+    # ``tools.skills_tool.SKILLS_DIR`` and skill_view() itself resolves
+    # against that module attribute, so normalization must agree with the
+    # exact root skill_view() will enforce.  Import deferred to avoid a
+    # module cycle (tools.skills_tool imports agent.skill_utils).
+    try:
+        from tools import skills_tool as _skills_tool
+        primary_root = Path(_skills_tool.SKILLS_DIR)
+    except Exception:
+        primary_root = get_skills_dir()
+
+    trusted_roots = [primary_root]
+    try:
+        trusted_roots.extend(get_external_skills_dirs())
+    except Exception:
+        pass
+
+    # Prefer the lexical path under a trusted skill root before resolving
+    # symlinks. Slash-command discovery can legitimately find a skill via
+    # ~/.hermes/skills/<name> where <name> is a symlink to a checked-out
+    # skill elsewhere. Resolving first turns that trusted visible path into
+    # an arbitrary absolute path that skill_view() refuses to load.
+    for root in trusted_roots:
+        try:
+            return str(identifier_path.relative_to(root))
+        except ValueError:
+            continue
+
+    try:
+        return str(identifier_path.resolve().relative_to(primary_root.resolve()))
+    except Exception:
+        logger.debug(
+            "Skill identifier %r is an absolute path outside trusted skills "
+            "roots — passing through unchanged (skill_view will reject it)",
+            raw_identifier,
+        )
+        return raw_identifier
+
+
 def _resolve_for_skill_ownership(path) -> Path:
     path_obj = path if isinstance(path, Path) else Path(str(path))
     try:
@@ -758,8 +803,9 @@ def iter_skill_index_files(skills_dir: Path, filename: str):
     ``SKILL.md`` files, but they are progressive-disclosure data loaded through
     ``skill_view(..., file_path=...)`` rather than active skill roots.
     """
-    matches = []
-    for root, dirs, files in os.walk(skills_dir, followlinks=True):
+    skills_dir_str = str(skills_dir)
+    matches: list[str] = []
+    for root, dirs, files in os.walk(skills_dir_str, followlinks=True):
         has_skill_md = "SKILL.md" in files
         dirs[:] = [
             d
@@ -768,9 +814,9 @@ def iter_skill_index_files(skills_dir: Path, filename: str):
             and not (has_skill_md and d in SKILL_SUPPORT_DIRS)
         ]
         if filename in files:
-            matches.append(Path(root) / filename)
-    for path in sorted(matches, key=lambda p: str(p.relative_to(skills_dir))):
-        yield path
+            matches.append(os.path.join(root, filename))
+    for path in sorted(matches):
+        yield Path(path)
 
 
 # ── Namespace helpers for plugin-provided skills ───────────────────────────

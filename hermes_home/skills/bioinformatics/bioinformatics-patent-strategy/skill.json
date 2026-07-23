@@ -1,0 +1,16 @@
+{
+  "id": "bioinformatics-patent-strategy",
+  "name": "Bioinformatics Method Patent Strategy",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Bioinformatics Method Patent Strategy 进行分析",
+  "source_dir": "skills/bioinformatics/bioinformatics-patent-strategy",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

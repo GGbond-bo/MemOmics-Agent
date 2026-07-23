@@ -15,6 +15,7 @@ metadata:
 prerequisites:
   r_packages: []
   python_packages: [pymupdf, markitdown]
+  external_repos: [https://github.com/caj2pdf/caj2pdf.git]  # for CAJ/KDH conversion
 ---
 
 ## 🎯 两级触发模型
@@ -400,11 +401,57 @@ python scripts/run.py extract --tier2 --pdf {pdf_path} --out {results_dir}
 | 图表提取为空白 | PDF 主图多为矢量嵌入 | 正常，用 Figure Legends 文字解读替代 |
 | rail_review(post) 误报 | 本 skill 是知识工作管线 | 检查实际交付物通过即可 |
 | markitdown 未安装 | 缺包 | `pip install markitdown pymupdf` |
+| .caj 文件打不开 (二进制) | CNKI CAJ/KDH 专有格式 | 见 `references/caj-kdh-conversion.md` — 用 caj2pdf 解密后 pymupdf 读取 |
+
+---
+
+## 📄 Non-PDF Input Formats
+
+### CAJ/KDH (CNKI 知网专利/论文)
+
+CNKI `.caj` 文件内部是加密的 KDH 格式。转换方法详见 `references/caj-kdh-conversion.md`。
+
+**快速步骤：**
+1. `git clone https://github.com/caj2pdf/caj2pdf.git`
+2. Python 端用 `KDH_PASSPHRASE` XOR 解密（跳过 254 字节头）
+3. 解密后数据可直接用 pymupdf 打开（无需 mutool！.tmp 文件就是有效 PDF）
+
+### 专利文档解读模式（Patent Mode）
+
+当输入为**专利文献**（CNKI .caj 专利文件）时，Tier 1 输出模板调整如下：
+
+**① 专利基本信息表**
+```
+| 字段 | 内容 |
+|------|------|
+| 专利名称 | ... |
+| 申请人/专利权人 | ... |
+| 专利号 | CNxxxxxxA/B |
+| 申请日/授权日 | ... |
+| IPC分类号 | G16B... |
+| 法律状态 | 审中/已授权 |
+```
+
+**② 技术领域与解决的问题** (专利说明书"背景技术"段)
+
+**③ 🔥 技术路线图** (Mermaid Flowchart TD — 必须展示 S1→S2→... 步骤流)
+
+**④ 权利要求分析表** (核心！)
+```
+| 权项 | 保护内容 | 对你是否构成障碍 |
+|------|---------|:---:|
+| 权1 | ... | ⚠️/✅ |
+```
+
+**⑤ 创新点与差异化空间**
+
+**⑥ 与你的专利策略关联** — 含规避建议 + 可借鉴要素
 
 ---
 
 ## References
 
 - `references/15_fields_template.md` — HTML 报告模板 + 格式约定
+- `references/caj-kdh-conversion.md` — CNKI CAJ/KDH 格式转换完整方法
 - `scripts/run.py` — PDF 提取工具 (文本+图表+元数据)
 - `templates/report_template.html` — HTML 报告 Jinja2 模板 (Tier 2)

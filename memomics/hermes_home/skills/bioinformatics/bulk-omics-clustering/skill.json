@@ -1,0 +1,43 @@
+{
+  "name": "Bulk 多组学聚类",
+  "id": "bulk-omics-clustering",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni Lab",
+  "description": "多组学数据聚类: ConsensusClustering → 亚型发现",
+  "triggers": [
+    "多组学聚类",
+    "Bulk聚类",
+    "ConsensusClustering",
+    "亚型发现"
+  ],
+  "steps": [
+    "数据预处理",
+    "特征选择",
+    "ConsensusClustering",
+    "亚型可视化",
+    "生存分析"
+  ],
+  "dependencies": [
+    "scanpy",
+    "scikit-learn"
+  ],
+  "outputs": [
+    "聚类结果",
+    "共识矩阵热图",
+    "亚型生存曲线"
+  ],
+  "detailed_description": "多组学数据聚类: ConsensusClustering → 亚型发现\n\n分析步骤:\n  - 数据预处理\n  - 特征选择\n  - ConsensusClustering\n  - 亚型可视化\n  - 生存分析\n\n依赖包: scanpy, scikit-learn",
+  "when_to_use": "当你需要 Bulk 多组学聚类 时触发",
+  "parameters": {
+    "steps": "数据预处理 -> 特征选择 -> ConsensusClustering -> 亚型可视化 -> 生存分析"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "prerequisites": {
+    "requires": [],
+    "description": "Bulk数据直接开始"
+  }
+}

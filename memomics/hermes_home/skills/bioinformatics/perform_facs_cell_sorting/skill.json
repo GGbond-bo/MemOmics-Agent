@@ -1,0 +1,21 @@
+{
+  "id": "perform_facs_cell_sorting",
+  "name": "Perform Facs Cell Sorting",
+  "category": "transcriptomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs Fluorescence-Activated Cell Sorting (FACS) to enrich cell populations based on fluorescence characteristics.",
+  "detailed_description": "Performs Fluorescence-Activated Cell Sorting (FACS) to enrich cell populations based on fluorescence characteristics.",
+  "when_to_use": "When you need perform facs cell sorting analysis",
+  "parameters": {
+    "cell_suspension_data": "[Required] Path to the FCS file containing flow cytometry data (str)",
+    "fluorescence_parameter": "[Required] The fluorescence parameter to use for sorting (e.g., 'GFP', 'FITC', 'PE') (str)",
+    "threshold_min": "[Optional] Minimum threshold for the fluorescence parameter. Cells below this value will be excluded",
+    "threshold_max": "[Optional] Maximum threshold for the fluorescence parameter. Cells above this value will be excluded",
+    "output_file": "[Optional] Filename to save the sorted cell population data (default: sorted_cells.csv)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

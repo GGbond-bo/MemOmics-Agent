@@ -1,0 +1,22 @@
+{
+  "id": "analyze_endolysosomal_calcium_dynamics",
+  "name": "Analyze Endolysosomal Calcium Dynamics",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze calcium dynamics in endo-lysosomal compartments using ELGA/ELGA1 probe data.",
+  "detailed_description": "Analyze calcium dynamics in endo-lysosomal compartments using ELGA/ELGA1 probe data.",
+  "when_to_use": "When you need analyze endolysosomal calcium dynamics analysis",
+  "parameters": {
+    "time_points": "[Required] Time points of the measurements in seconds (numpy.ndarray or list)",
+    "luminescence_values": "[Required] Luminescence intensity values from ELGA/ELGA1 probes corresponding to Ca2+ levels (numpy.ndarray or list)",
+    "treatment_time": "[Optional] Time point (in seconds) when treatment/stimulus was applied",
+    "cell_type": "[Optional] Type of cells used in the experiment (default: )",
+    "treatment_name": "[Optional] Name of the treatment or stimulus applied (default: )",
+    "output_file": "[Optional] Name of the file to save detailed analysis results (default: calcium_analysis_results.txt)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

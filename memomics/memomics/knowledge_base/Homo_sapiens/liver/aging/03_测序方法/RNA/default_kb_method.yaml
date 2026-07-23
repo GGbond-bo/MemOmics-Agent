@@ -1,0 +1,109 @@
+# 人类肝脏 衰老方向 RNA-seq / scRNA-seq 分析流程
+# MemOmics Knowledge Base — 文献驱动，肝脏特有参数
+# 更新日期: 2026-07-07
+
+direction: aging
+omics: rna
+pipeline:
+  ambient_rna:
+    language: Python
+    method: CellBender
+    package: CellBender
+    reference: Fleming et al. 2023, Nature Methods
+    notes: "肝脏组织ambient RNA较多，建议使用CellBender去除"
+  qc:
+    language: R
+    method: Seurat + custom
+    package: Seurat
+    reference: "Lin 2024 FASEB; Nikopoulou 2023 Nature Aging"
+    params:
+      nFeature_RNA_min: 200
+      nFeature_RNA_max: 6000
+      percent_mt_max: 20
+      note: "肝脏代谢旺盛，线粒体比例可放宽至20%"
+  doublet_detection:
+    language: R
+    method: DoubletFinder
+    package: DoubletFinder
+    reference: McGinnis et al. 2019, Cell Systems
+    params:
+      doublet_rate: 0.08
+  normalization:
+    language: R
+    method: SCTransform v2
+    package: Seurat
+    reference: Hafemeister & Satija 2019, Genome Biology
+    params:
+      conserve.memory: TRUE
+      vars.to.regress: [percent.mt]
+  batch_correction:
+    language: R
+    method: Harmony
+    package: harmony
+    reference: Korsunsky et al. 2019, Nature Methods
+  dimension_reduction:
+    language: R
+    method: PCA + UMAP
+    package: Seurat
+    npcs: 50
+  clustering:
+    language: R
+    method: Leiden
+    package: Seurat
+    reference: Traag et al. 2019, Scientific Reports
+    params:
+      resolution: 0.5-1.0
+  annotation:
+    language: R
+    method: SingleR + manual
+    package: SingleR + Seurat
+    reference: Aran et al. 2019, Nature Immunology
+    note: "肝脏细胞marker明确，建议人工验证"
+  composition:
+    language: R
+    method: MiloR
+    package: miloR
+    reference: Dann et al. 2022, Nature Biotechnology
+  deg:
+    language: R
+    method: DESeq2 (pseudobulk)
+    package: DESeq2
+    reference: Love et al. 2014, Genome Biology
+    min_cells_per_cluster: 50
+  cellchat:
+    language: R
+    method: CellChat v2
+    package: CellChat
+    reference: Jin et al. 2021, Nature Communications
+    note: "肝细胞-LSEC-Kupffer通讯网络是肝脏核心"
+  pathway:
+    language: R
+    method: clusterProfiler
+    package: clusterProfiler
+    reference: Wu et al. 2021, The Innovation
+  gene_scoring:
+    language: R
+    method: UCell
+    package: UCell
+    reference: Andreatta & Carmona 2021, Computational and Structural Biotechnology Journal
+  trajectory:
+    language: R
+    method: Slingshot
+    package: slingshot
+    reference: Street et al. 2018, BMC Genomics
+    note: "肝细胞区域化(zonation)轨迹分析"
+  tf:
+    language: R
+    method: decoupleR + SCENIC
+    package: decoupleR / SCENIC
+    reference: "Badia-i-Mompel 2022 Bioinformatics; Aibar 2017 Nature Methods"
+    key_tfs: [HNF4A, FOXA3, HNF1A, CEBPA, SREBF2, AXIN2, LEF1, TCF7L2]
+  wgcna:
+    language: R
+    method: hdWGCNA
+    package: hdWGCNA
+    reference: Morabito et al. 2023, Cell Reports Methods
+source: "Literature-driven, curated from 12+ papers on human/mouse liver aging"
+species: human
+tissue: liver
+updated: '2026-07-07'

@@ -1,0 +1,20 @@
+{
+  "id": "reconstruct_3d_face_from_mri",
+  "name": "Reconstruct 3D Face From Mri",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Generate a 3D model of facial anatomy from MRI scans of the head and neck.",
+  "detailed_description": "Generate a 3D model of facial anatomy from MRI scans of the head and neck.",
+  "when_to_use": "When you need reconstruct 3d face from mri analysis",
+  "parameters": {
+    "mri_file_path": "[Required] Path to the MRI scan file (NIfTI format: .nii or .nii.gz) (str)",
+    "output_dir": "[Optional] Directory where output files will be saved (default: ./output)",
+    "subject_id": "[Optional] Identifier for the subject, used in output filenames (default: subject)",
+    "threshold_value": "[Optional] Threshold value for initial segmentation of facial tissues (default: 300)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

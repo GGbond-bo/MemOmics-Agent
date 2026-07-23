@@ -1,0 +1,16 @@
+{
+  "id": "scipilot-figure-skill",
+  "name": "SciPilot 可视化顾问",
+  "category": "visualization",
+  "language": "Python",
+  "description": "可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检闭环。15条画图陷阱主动拦截，Nature/Science/IEEE/Elsevier/PNAS期刊规范自适应，CJK中文字体自动配置",
+  "starting_prompt": "帮我画论文图",
+  "source_dir": "skills/bioinformatics/scipilot-figure-skill",
+  "memomics_module": "07_可视化",
+  "chains_from": ["deg-analysis", "scrna-seurat-core", "cellchat-v2", "trajectory-analysis", "functional-enrichment"],
+  "chains_to": ["bioinformatics-html-report", "pdf-report-generation"],
+  "tags": ["figure", "visualization", "plot", "chart", "publication", "CNS", "期刊", "画图", "可视化", "scipilot"],
+  "aliases": ["scipilot-figure"],
+  "trigger_level": "RED",
+  "trigger_keywords": ["画图", "可视化", "figure", "plot", "发表级", "作图", "出图"]
+}

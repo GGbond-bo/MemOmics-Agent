@@ -1,0 +1,211 @@
+# 骨骼肌衰老 — 生物学知识
+# 来源: 文献提取 + CellMark + PanglaoDB + 已知生物学
+species: Homo sapiens
+tissue: skeletal muscle
+direction: aging
+updated: '2026-07-03'
+source: literature + curated
+
+# 细胞类型与 marker genes (scRNA-seq 骨骼肌)
+cell_types:
+  # 主要细胞类型
+  skeletal_muscle_satellite_cell:
+    aliases: [MuSC, satellite cell, SC, 肌卫星细胞]
+    markers: [PAX7, MYF5, MYOD1]
+    description: 肌肉干细胞, 负责肌肉再生和修复
+    aging_note: 衰老过程中数量减少, 功能下降 (再生能力受损)
+
+  muscle_fiber:
+    aliases: [myofiber, 肌纤维]
+    markers: [ACTA1, MYH1, MYH2, MYH4, MYH7, TNNI1, TNNI2, TNNT1, TNNT3]
+    subtypes:
+      type_1_slow:
+        markers: [MYH7, TNNI1, TNNT1]
+        description: 慢肌纤维, 抗疲劳, 有氧代谢
+      type_2a_fast:
+        markers: [MYH2, TNNT3]
+        description: 快肌纤维, 中等抗疲劳
+      type_2x:
+        markers: [MYH1]
+        description: 快肌纤维
+      type_2b_fast:
+        markers: [MYH4]
+        description: 最快肌纤维, 易疲劳
+    aging_note: 衰老时 type 2 纤维选择性萎缩, 纤维类型转换 (2a→2x/2b 减少)
+
+  fibroblast:
+    aliases: [成纤维细胞, fibro/adipogenic progenitors]
+    markers: [PDGFRA, DCN, COL1A1, COL3A1, COL6A1, THY1]
+    description: 结缔组织细胞, 产生细胞外基质
+    aging_note: 衰老时纤维化增加, FAP 分化为脂肪细胞替代肌纤维
+
+  endothelial_cell:
+    aliases: [EC, 内皮细胞]
+    markers: [PECAM1, VWF, CLDN5, CDH5, FLT1]
+    subtypes:
+      arterial: [GJA5, SEMA3G, HEY1]
+      venous: [NR2F2, ACKR1]
+      capillary: [RGCC, CA4]
+    aging_note: 衰老时血管密度下降, 毛细血管稀疏化
+
+  smooth_muscle:
+    aliases: [SMC, 平滑肌]
+    markers: [MYH11, ACTA2, TAGLN, CNN1]
+    description: 血管平滑肌细胞
+
+  immune_cell:
+    description: 免疫细胞群体
+    subtypes:
+      macrophage:
+        aliases: [巨噬细胞]
+        markers: [CD68, C1QA, C1QB, CD163, LYZ]
+        subtypes:
+          pro_inflammatory_M1: [IL1B, TNF, NOS2]
+          anti_inflammatory_M2: [CD206, MRC1, ARG1]
+        aging_note: 衰老肌肉中促炎巨噬细胞增加 (inflammaging)
+      t_cell:
+        markers: [CD3D, CD3E, CD2]
+        subtypes:
+          cd8: [CD8A, CD8B, GZMK]
+          cd4: [CD4, IL7R]
+          treg: [FOXP3, IL2RA]
+        aging_note: 衰老时 T 细胞浸润增加, 特别是 CD8+ 耗竭 T 细胞
+      nk_cell:
+        markers: [NKG7, GNLY, KLRD1]
+      b_cell:
+        markers: [CD79A, MS4A1, CD19]
+      neutrophil:
+        markers: [S100A8, S100A9, FCGR3A]
+
+  adipocyte:
+    aliases: [脂肪细胞]
+    markers: [ADIPOQ, PLIN1, LEP]
+    description: 脂肪细胞
+    aging_note: 衰老肌肉中肌内脂肪浸润增加 (sarcopenia 特征)
+
+  schwann_cell:
+    aliases: [神经膜细胞]
+    markers: [MPZ, PLP1, SOX10, MBP]
+    description: 神经胶质细胞, 包裹神经纤维
+
+  tenocyte:
+    aliases: [腱细胞]
+    markers: [TNMD, MKX, SCX, COL14A1]
+    description: 肌腱细胞
+
+# 衰老相关基因集
+gene_sets:
+  # 衰老标志物 (SASP)
+  sasp:
+    description: 衰老相关分泌表型 (Senescence-Associated Secretory Phenotype)
+    genes: [IL6, IL1A, IL1B, CXCL8, CXCL1, CCL2, CCL3, MMP1, MMP3, MMP10, TIMP1, TIMP2, IGFBP3, IGFBP4, SERPINE1]
+    source: Coppe et al. 2010, PLoS Biology
+    confidence: high
+
+  # 细胞周期阻滞
+  senescence_markers:
+    description: 细胞衰老标志基因
+    genes: [CDKN1A, CDKN2A, GLB1, LMNB1, TP53, RB1]
+    source: Hernandez-Segura et al. 2018, Cell Reports
+    confidence: high
+
+  # 氧化应激
+  oxidative_stress:
+    description: 氧化应激相关基因
+    genes: [SOD1, SOD2, CAT, GPX1, GSR, NQO1, HMOX1]
+    confidence: medium
+
+  # 线粒体功能
+  mitochondrial_dysfunction:
+    description: 线粒体功能相关基因 (衰老时下降)
+    genes: [PPARGC1A, TFAM, NDUFS1, NDUFV1, COX5A, ATP5F1A]
+    source: Calvani et al. 2022, Aging Cell
+    confidence: high
+
+  # 自噬
+  autophagy:
+    description: 自噬相关基因 (衰老时下降)
+    genes: [ATG5, ATG7, ATG12, BECN1, LC3, SQSTM1]
+    confidence: medium
+
+  # 纤维化
+  fibrosis:
+    description: 纤维化相关基因 (衰老时增加)
+    genes: [COL1A1, COL1A2, COL3A1, FN1, TGFBI, CTGF, TGFB1, ACTA2]
+    source: Barberi et al. 2023, Nature Communications
+    confidence: high
+
+  # 炎症
+  inflammation:
+    description: 炎症相关基因 (inflammaging)
+    genes: [IL6, TNF, NFKB1, NFKB2, RELA, STAT1, STAT3, CXCL8, CCL2]
+    confidence: high
+
+# 关键发现
+key_findings:
+  - finding: 衰老骨骼肌中 type 2 (快肌) 纤维选择性萎缩, type 1 (慢肌) 相对保留
+    evidence: 约 30% type 2 纤维丢失, type 1 基本不变
+    source: Nilwik et al. 2013, J Cachexia Sarcopenia Muscle
+    confidence: high
+
+  - finding: 肌卫星细胞 (PAX7+) 数量在衰老时减少约 30-50%, 再生能力下降
+    evidence: 衰老 SC 进入衰老状态, SASP 分泌增加
+    source: Garcia-Prat et al. 2016, Nature
+    confidence: high
+
+  - finding: 衰老肌肉中促炎巨噬细胞 (M1) 增加, 抗炎巨噬细胞 (M2) 减少
+    evidence: M1/M2 比值上升, IL6/TNF 表达增加
+    source: Wang et al. 2022, Nature Aging
+    confidence: high
+
+  - finding: 衰老时肌内脂肪浸润 (fatty infiltration) 增加, FAP 分化为脂肪细胞
+    evidence: ADIPOQ+ 细胞比例上升, PDGFRA+ FAP 数量增加
+    source: Lukjanenko et al. 2019, Nature Medicine
+    confidence: high
+
+  - finding: 衰老骨骼肌纤维化增加, COL1A1/COL3A1 表达上升
+    evidence: ECM 沉积增加, 成纤维细胞活化
+    source: Barberi et al. 2023, Nature Communications
+    confidence: high
+
+  - finding: 衰老肌肉毛细血管密度下降, 内皮细胞减少
+    evidence: PECAM1+ 细胞比例下降, VEGF 信号减弱
+    source: Emeis et al. 2020, Aging Cell
+    confidence: medium
+
+  - finding: 衰老时 CD8+ 耗竭 T 细胞 (PD1+, TIM3+) 在肌肉中积累
+    evidence: 衰老肌肉 T 细胞浸润增加, 耗竭标志物上调
+    source: Bencsik et al. 2023, Nature Communications
+    confidence: medium
+
+# 衰老相关通路
+pathways:
+  - name: p53/p21/p16 通路激活
+    description: 细胞周期阻滞, 衰老核心通路
+    genes: [TP53, CDKN1A, CDKN2A, RB1]
+    direction: up
+
+  - name: NF-κB 炎症通路
+    description: inflammaging 核心通路
+    genes: [NFKB1, RELA, IKK, TNF, IL6]
+    direction: up
+
+  - name: mTOR 信号
+    description: 营养感知, 衰老时过度激活
+    genes: [MTOR, RPTOR, RICTOR, S6K]
+    direction: up
+
+  - name: AMPK 信号
+    description: 能量感知, 衰老时下降
+    genes: [PRKAA1, PRKAA2, TSC2]
+    direction: down
+
+  - name: 线粒体生物合成
+    description: 衰老时下降
+    genes: [PPARGC1A, TFAM, NRF1, NRF2]
+    direction: down
+
+  - name: Wnt 信号 (再生)
+    description: 衰老时 Wnt 信号异常, 再生受损
+    genes: [WNT3A, WNT5A, CTNNB1, AXIN2]
+    direction: dysregulated

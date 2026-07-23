@@ -1,0 +1,67 @@
+{
+  "id": "immune-deconvolution",
+  "name": "免疫浸润分析",
+  "category": "immunology",
+  "language": "R+Python",
+  "description": "CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计",
+  "starting_prompt": "分析免疫浸润",
+  "source_dir": "skills/built_in/immune-deconvolution",
+  "memomics_module": "04_免疫分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "immune",
+    "deconvolution",
+    "cibersort",
+    "xcell"
+  ],
+  "steps": [
+    {
+      "name": "CIBERSORTx estimation",
+      "description": "LM22/custom signature",
+      "tool": "terminal"
+    },
+    {
+      "name": "xCell scoring",
+      "description": "64 cell types enrichment",
+      "tool": "terminal"
+    },
+    {
+      "name": "MCP-counter",
+      "description": "8 major immune cells",
+      "tool": "terminal"
+    },
+    {
+      "name": "Multi-method comparison",
+      "description": "Heatmap + correlation",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "CIBERSORTx",
+    "IOBR",
+    "GSVA"
+  ],
+  "python_packages": [
+    "cibersortx-py"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "disease",
+    "tumor",
+    "immune"
+  ],
+  "parameters": {
+    "r_packages": "CIBERSORTx, IOBR, GSVA",
+    "python_packages": "cibersortx-py",
+    "steps": "CIBERSORTx estimation -> xCell scoring -> MCP-counter -> Multi-method comparison"
+  },
+  "detailed_description": "CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计\n\n适用场景: disease, tumor, immune\n\n分析步骤:\n  - CIBERSORTx estimation: LM22/custom signature\n  - xCell scoring: 64 cell types enrichment\n  - MCP-counter: 8 major immune cells\n  - Multi-method comparison: Heatmap + correlation\n\n依赖包: cibersortx-py, IOBR, GSVA, CIBERSORTx\n\n难度: intermediate\n\n触发提示: \"分析免疫浸润\"",
+  "when_to_use": "适用于: disease, tumor, immune",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://icbi-lab.github.io/immunedeconv/articles/immunedeconv.html",
+  "doc_source": "official"
+}

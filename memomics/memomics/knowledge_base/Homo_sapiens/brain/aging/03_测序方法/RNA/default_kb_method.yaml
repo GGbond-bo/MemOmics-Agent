@@ -1,0 +1,83 @@
+direction: aging
+omics: rna
+pipeline:
+  ambient_rna:
+    language: Python
+    method: CellBender
+    package: CellBender
+    reference: Fleming et al. 2023, Nature Methods
+  annotation:
+    language: R
+    method: SingleR
+    package: SingleR
+    reference: Aran et al. 2019, Nature Immunology
+  batch_correction:
+    language: R
+    method: Harmony
+    package: harmony
+    reference: Korsunsky et al. 2019, Nature Methods
+  cellchat:
+    language: R
+    method: CellChat v2
+    package: CellChat
+    reference: Jin et al. 2021, Nature Communications
+  clustering:
+    language: R
+    method: Leiden
+    package: Seurat
+    reference: Traag et al. 2019, Scientific Reports
+  composition:
+    language: R
+    method: MiloR
+    package: miloR
+    reference: Dann et al. 2022, Nature Biotechnology
+  deg:
+    language: R
+    method: DESeq2 (pseudobulk)
+    package: DESeq2
+    reference: Love et al. 2014, Genome Biology
+  gene_scoring:
+    language: R
+    method: UCell
+    package: UCell
+    reference: Andreatta & Carmona 2021, Computational and Structural Biotechnology
+      Journal
+  microglia_dam:
+    language: R
+    method: DAM (Keren-Shaul 2017)
+    package: Seurat + UCell
+    reference: Keren-Shaul et al. 2017, Cell
+  normalization:
+    language: R
+    method: SCTransform
+    package: Seurat
+    reference: Hafemeister & Satija 2019, Genome Biology
+  pathway:
+    language: R
+    method: clusterProfiler
+    package: clusterProfiler
+    reference: Wu et al. 2021, The Innovation
+  qc:
+    language: R
+    method: Seurat
+    package: Seurat
+    reference: Stuart et al. 2019, Cell
+  tf:
+    language: R
+    method: decoupleR
+    package: decoupleR
+    reference: Badia-i-Mompel et al. 2022, Bioinformatics
+  trajectory:
+    language: R
+    method: Slingshot
+    package: slingshot
+    reference: Street et al. 2018, BMC Genomics
+  wgcna:
+    language: R
+    method: hdWGCNA
+    package: hdWGCNA
+    reference: Morabito et al. 2023, Cell Reports Methods
+source: MemOmics default KB (15 methods, literature-verified)
+species: human
+tissue: brain
+updated: '2026-06-26'

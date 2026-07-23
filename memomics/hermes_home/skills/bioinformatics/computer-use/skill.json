@@ -1,0 +1,56 @@
+{
+  "id": "computer-use",
+  "name": "电脑控制",
+  "category": "system",
+  "language": "Python",
+  "description": "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。",
+  "starting_prompt": "帮我操作电脑",
+  "source_dir": "skills/built_in/computer-use",
+  "memomics_module": "电脑控制",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "computer-use",
+    "desktop",
+    "automation",
+    "screenshot",
+    "mouse",
+    "keyboard",
+    "window-management",
+    "ocr"
+  ],
+  "steps": [
+    {
+      "name": "截屏观察",
+      "description": "截取当前屏幕, 了解屏幕内容",
+      "tool": "screen_capture"
+    },
+    {
+      "name": "定位目标",
+      "description": "通过OCR或图像匹配定位目标元素",
+      "tool": "screen_ocr"
+    },
+    {
+      "name": "执行操作",
+      "description": "鼠标点击/键盘输入/窗口切换",
+      "tool": "mouse_click"
+    },
+    {
+      "name": "验证结果",
+      "description": "再次截屏确认操作效果",
+      "tool": "screen_capture"
+    }
+  ],
+  "parameters": {
+    "screenshot_quality": 85,
+    "ocr_language": "chi_sim+eng",
+    "failsafe": true,
+    "action_delay": 0.3
+  },
+  "safety": {
+    "failsafe": true,
+    "dangerous_actions": ["close", "delete", "format"],
+    "confirmation_required": true,
+    "abort_key": "鼠标移到屏幕左上角(0,0)"
+  }
+}

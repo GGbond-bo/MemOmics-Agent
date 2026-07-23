@@ -1,0 +1,20 @@
+{
+  "id": "run_3d_chondrogenic_aggregate_assay",
+  "name": "Run 3D Chondrogenic Aggregate Assay",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Generates a detailed protocol for performing a 3D chondrogenic aggregate culture assay to evaluate compounds' effects on chondrogenesis.",
+  "detailed_description": "Generates a detailed protocol for performing a 3D chondrogenic aggregate culture assay to evaluate compounds' effects on chondrogenesis.",
+  "when_to_use": "When you need run 3d chondrogenic aggregate assay analysis",
+  "parameters": {
+    "chondrocyte_cells": "[Required] Dictionary with cell information including 'source', 'passage_number', and 'cell_density' (dict)",
+    "test_compounds": "[Required] List of compounds to test, each with 'name', 'concentration', and 'vehicle' keys (list of dict)",
+    "culture_duration_days": "[Optional] Total duration of the culture period in days (default: 21)",
+    "measurement_intervals": "[Optional] Interval in days between measurements (default: 7)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

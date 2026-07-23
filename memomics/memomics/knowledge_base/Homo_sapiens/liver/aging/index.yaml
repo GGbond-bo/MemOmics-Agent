@@ -1,0 +1,41 @@
+# 人类肝脏衰老 — 知识库索引
+species: Homo sapiens
+tissue: liver
+direction: aging
+created: '2026-07-07'
+last_updated: '2026-07-07'
+status: active
+version: 2
+literature_count: 15
+omics:
+  - rna
+  - atac
+  - spatial
+  - bulk
+note: |
+  2026-07-07 v2: 新增文献下载+参数提取
+  PDF下载目录: work/papers/liver_aging/
+  ✅ 已下载PDF全文:
+    - Nikopoulou 2023 Nature Aging (14MB) — 空间+scATAC+scRNA多组学
+    - NatComm 2025 MERFISH (2.8MB) — 人类肝脏MERFISH空间转录组
+    - Yakubovsky 2026 Nature (100MB) — 人类肝脏健康供体空间图谱
+    - NatRevGastro 2025 (1.3MB) — 肝脏衰老综合综述
+  ⚠️ 仅HTML/PubMed摘要:
+    - White 2015 BMC Genomics (BMC反爬虫，仅HTML页面)
+    - Geroscience 2023 PCSK9 (Springer反爬虫，仅HTML页面)
+    - Gyenis 2023 Nature Genetics (Nature反爬虫，仅HTML页面)
+  ❌ 付费墙无法获取:
+    - FASEB 2024 (Wiley 403)
+    - Aging Cell 2023 (Wiley 403)
+    - Hepatology 2025 (LWW 403)
+    - HepatolComm 2023 (LWW 403)
+  新增文献:
+    - Karpova et al. 2026, Cell Genomics — 人类肝脏衰老细胞衰老空间图谱 (Xenium+CODEX)
+    - Nature Reviews Gastro 2025 — 肝脏衰老与疾病综合综述
+    - Gyenis et al. 2023, Nature Genetics — RNAPII stalling in aging (进化保守)
+    - J Transl Med 2023 (PMC10326954) — NAFLD纤维化亚型分子分型
+    - Geroscience 2023 — PCSK9肝脏衰老调控
+    - Aging Cell 2023 — FOXO1炎症衰老
+  核心文献: Nikopoulou 2023 Nature Aging, Lin 2024 FASEB,
+            Karpova 2026 Cell Genomics, Hepatology 2024,
+            Nature Reviews Gastro 2025

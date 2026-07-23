@@ -1,0 +1,44 @@
+{
+  "id": "ppt-html",
+  "name": "HTML文献报告",
+  "category": "visualization",
+  "language": "Python",
+  "description": "图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示",
+  "starting_prompt": "生成HTML报告",
+  "source_dir": "skills/external/ppt-html",
+  "memomics_module": "报告",
+  "chains_from": [
+    "ppt-master"
+  ],
+  "chains_to": [],
+  "tags": [
+    "html",
+    "report",
+    "文献报告",
+    "图文报告"
+  ],
+  "aliases": [
+    "生成HTML报告",
+    "HTML报告",
+    "文献HTML"
+  ],
+  "r_packages": [],
+  "python_packages": [
+    "jinja2",
+    "PyMuPDF",
+    "Pillow"
+  ],
+  "difficulty": "beginner",
+  "applicable": [
+    "文献解读后生成HTML报告"
+  ],
+  "parameters": {
+    "python_packages": "jinja2, PyMuPDF, Pillow"
+  },
+  "detailed_description": "图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示\n\n适用场景: 文献解读后生成HTML报告\n\n依赖包: jinja2, PyMuPDF, Pillow\n\n难度: beginner\n\n触发提示: \"生成HTML报告\"\n\n别名: 生成HTML报告, HTML报告, 文献HTML",
+  "when_to_use": "适用于: 文献解读后生成HTML报告",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

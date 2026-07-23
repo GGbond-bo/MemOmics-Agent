@@ -98,8 +98,6 @@ import type { Translations } from "@/i18n/types";
 import { PluginPage, PluginSlot, usePlugins } from "@/plugins";
 import type { PluginManifest } from "@/plugins";
 import { useTheme } from "@/themes";
-import { MemOmicsPanel } from "@/components/MemOmicsPanel";
-
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { api } from "@/lib/api";
 import type { StatusResponse, UpdateCheckResponse } from "@/lib/api";
@@ -578,9 +576,9 @@ export default function App() {
                 <PluginSlot name="header-left" />
 
                 <Typography className="font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground uppercase">
-                  Memo
+                  Hermes
                   <br />
-                  mics
+                  Agent
                 </Typography>
               </div>
 
@@ -783,11 +781,6 @@ export default function App() {
               <PluginSlot name="post-main" />
             </div>
           </PageHeaderProvider>
-
-          {/* MemOmics right panel — context stats + usage + results */}
-          <aside className="hidden xl:flex w-64 shrink-0 flex-col border-l border-border bg-muted/30 overflow-y-auto">
-            <MemOmicsPanel />
-          </aside>
         </div>
       </div>
 

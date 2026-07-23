@@ -1,0 +1,281 @@
+{
+  "nodes": {
+    "species:human": {
+      "type": "species",
+      "id": "human",
+      "label": "human",
+      "scientific": "Homo sapiens",
+      "taxonomy": 9606
+    },
+    "species:mouse": {
+      "type": "species",
+      "id": "mouse",
+      "label": "mouse",
+      "scientific": "Mus musculus",
+      "taxonomy": 10090
+    },
+    "species:rat": {
+      "type": "species",
+      "id": "rat",
+      "label": "rat",
+      "scientific": "Rattus norvegicus",
+      "taxonomy": 10116
+    },
+    "species:monkey_cyno": {
+      "type": "species",
+      "id": "monkey_cyno",
+      "label": "monkey_cyno",
+      "scientific": "Macaca fascicularis",
+      "taxonomy": 9541
+    },
+    "species:monkey_rhesus": {
+      "type": "species",
+      "id": "monkey_rhesus",
+      "label": "monkey_rhesus",
+      "scientific": "Macaca mulatta",
+      "taxonomy": 9544
+    },
+    "species:zebrafish": {
+      "type": "species",
+      "id": "zebrafish",
+      "label": "zebrafish",
+      "scientific": "Danio rerio",
+      "taxonomy": 7955
+    },
+    "species:pig": {
+      "type": "species",
+      "id": "pig",
+      "label": "pig",
+      "scientific": "Sus scrofa",
+      "taxonomy": 9823
+    },
+    "tissue:brain": {
+      "type": "tissue",
+      "id": "brain",
+      "label": "brain",
+      "aliases": [
+        "cerebrum",
+        "cortex",
+        "hippocampus",
+        "neuron"
+      ]
+    },
+    "tissue:muscle_skeletal": {
+      "type": "tissue",
+      "id": "muscle_skeletal",
+      "label": "muscle_skeletal",
+      "aliases": [
+        "muscle",
+        "skeletal muscle",
+        "myofiber"
+      ]
+    },
+    "tissue:muscle_cardiac": {
+      "type": "tissue",
+      "id": "muscle_cardiac",
+      "label": "muscle_cardiac",
+      "aliases": [
+        "heart",
+        "cardiac",
+        "myocardium"
+      ]
+    },
+    "tissue:blood": {
+      "type": "tissue",
+      "id": "blood",
+      "label": "blood",
+      "aliases": [
+        "PBMC",
+        "whole blood",
+        "peripheral blood"
+      ]
+    },
+    "tissue:liver": {
+      "type": "tissue",
+      "id": "liver",
+      "label": "liver",
+      "aliases": [
+        "hepatocyte",
+        "hepatic"
+      ]
+    },
+    "tissue:lung": {
+      "type": "tissue",
+      "id": "lung",
+      "label": "lung",
+      "aliases": [
+        "pulmonary",
+        "alveoli"
+      ]
+    },
+    "tissue:kidney": {
+      "type": "tissue",
+      "id": "kidney",
+      "label": "kidney",
+      "aliases": [
+        "renal",
+        "nephron"
+      ]
+    },
+    "tissue:spleen": {
+      "type": "tissue",
+      "id": "spleen",
+      "label": "spleen",
+      "aliases": [
+        "splenic"
+      ]
+    },
+    "tissue:bone_marrow": {
+      "type": "tissue",
+      "id": "bone_marrow",
+      "label": "bone_marrow",
+      "aliases": [
+        "marrow"
+      ]
+    },
+    "tissue:intestine": {
+      "type": "tissue",
+      "id": "intestine",
+      "label": "intestine",
+      "aliases": [
+        "gut",
+        "colon",
+        "small intestine"
+      ]
+    },
+    "tissue:skin": {
+      "type": "tissue",
+      "id": "skin",
+      "label": "skin",
+      "aliases": [
+        "dermal",
+        "epidermis"
+      ]
+    },
+    "tissue:fat": {
+      "type": "tissue",
+      "id": "fat",
+      "label": "fat",
+      "aliases": [
+        "adipose",
+        "adipocyte"
+      ]
+    },
+    "tissue:eye": {
+      "type": "tissue",
+      "id": "eye",
+      "label": "eye",
+      "aliases": [
+        "retina",
+        "cornea"
+      ]
+    },
+    "tissue:pancreas": {
+      "type": "tissue",
+      "id": "pancreas",
+      "label": "pancreas",
+      "aliases": [
+        "islet",
+        "beta cell"
+      ]
+    },
+    "tissue:tumor": {
+      "type": "tissue",
+      "id": "tumor",
+      "label": "tumor",
+      "aliases": [
+        "cancer",
+        "neoplasm",
+        "malignant"
+      ]
+    },
+    "condition:normal": {
+      "type": "condition",
+      "id": "normal",
+      "label": "normal",
+      "aliases": [
+        "healthy",
+        "control",
+        "wild type"
+      ]
+    },
+    "condition:aging": {
+      "type": "condition",
+      "id": "aging",
+      "label": "aging",
+      "aliases": [
+        "aged",
+        "old",
+        "senescence"
+      ]
+    },
+    "condition:disease": {
+      "type": "condition",
+      "id": "disease",
+      "label": "disease",
+      "aliases": [
+        "pathology",
+        "disorder"
+      ]
+    },
+    "condition:treatment": {
+      "type": "condition",
+      "id": "treatment",
+      "label": "treatment",
+      "aliases": [
+        "drug",
+        "intervention",
+        "therapy"
+      ]
+    },
+    "condition:development": {
+      "type": "condition",
+      "id": "development",
+      "label": "development",
+      "aliases": [
+        "embryonic",
+        "fetal",
+        "postnatal"
+      ]
+    },
+    "condition:exercise": {
+      "type": "condition",
+      "id": "exercise",
+      "label": "exercise",
+      "aliases": [
+        "training",
+        "physical activity"
+      ]
+    },
+    "condition:diabetes": {
+      "type": "condition",
+      "id": "diabetes",
+      "label": "diabetes",
+      "aliases": [
+        "T2D",
+        "T1D",
+        "hyperglycemia"
+      ]
+    },
+    "condition:obesity": {
+      "type": "condition",
+      "id": "obesity",
+      "label": "obesity",
+      "aliases": [
+        "overweight",
+        "high fat"
+      ]
+    }
+  },
+  "edges": [],
+  "task_params": {},
+  "parameter_evolution": {},
+  "graph_stats": {
+    "species": 7,
+    "tissues": 15,
+    "conditions": 8,
+    "papers": 0
+  },
+  "created_at": "2026-06-26T13:29:52.974689",
+  "updated_at": "2026-06-26T13:29:52.974689"
+}

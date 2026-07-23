@@ -1,0 +1,21 @@
+{
+  "id": "perform_gene_expression_nmf_analysis",
+  "name": "Perform Gene Expression Nmf Analysis",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs Non-negative Matrix Factorization (NMF) on gene expression data to extract metagenes and their associated sample weights for tumor subtype identification.",
+  "detailed_description": "Performs Non-negative Matrix Factorization (NMF) on gene expression data to extract metagenes and their associated sample weights for tumor subtype identification.",
+  "when_to_use": "When you need perform gene expression nmf analysis analysis",
+  "parameters": {
+    "expression_data_path": "[Required] Path to a CSV or TSV file containing gene expression data with genes as rows and samples as columns. Values should be non-negative. (str)",
+    "n_components": "[Optional] Number of metagenes (components) to extract. (default: 10)",
+    "normalize": "[Optional] Whether to normalize the expression data before applying NMF. (default: True)",
+    "output_dir": "[Optional] Directory to save the output files. (default: nmf_results)",
+    "random_state": "[Optional] Random seed for reproducibility. (default: 42)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

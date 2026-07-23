@@ -1,0 +1,51 @@
+{
+  "id": "ppt-generator",
+  "name": "PPT生成",
+  "category": "general",
+  "language": "Python",
+  "description": "AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入",
+  "triggers": [
+    "做ppt",
+    "生成ppt",
+    "制作演示",
+    "幻灯片",
+    "ppt"
+  ],
+  "tools": [
+    "execute_python",
+    "write_file"
+  ],
+  "python_requires": [
+    "python-pptx",
+    "Pillow"
+  ],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "内容规划",
+      "description": "根据输入内容规划PPT结构和页面"
+    },
+    {
+      "name": "生成PPT",
+      "description": "使用python-pptx生成16:9暗色主题PPT"
+    },
+    {
+      "name": "质量检查",
+      "description": "检查页面布局、文字溢出、图表位置"
+    }
+  ],
+  "parameters": {
+    "steps": "内容规划 -> 生成PPT -> 质量检查"
+  },
+  "chains_from": [
+    "paper-summary",
+    "code-writer"
+  ],
+  "chains_to": [],
+  "detailed_description": "AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入\n\n分析步骤:\n  - 内容规划: 根据输入内容规划PPT结构和页面\n  - 生成PPT: 使用python-pptx生成16:9暗色主题PPT\n  - 质量检查: 检查页面布局、文字溢出、图表位置",
+  "when_to_use": "当你需要 PPT生成 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

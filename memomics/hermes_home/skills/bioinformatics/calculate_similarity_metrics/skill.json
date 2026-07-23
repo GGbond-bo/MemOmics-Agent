@@ -1,0 +1,18 @@
+{
+  "id": "calculate_similarity_metrics",
+  "name": "Calculate Similarity Metrics",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Calculate similarity metrics between two medical images. Supports mutual information, mean squared error, correlation, and normalized cross correlation.",
+  "detailed_description": "Calculate similarity metrics between two medical images. Supports mutual information, mean squared error, correlation, and normalized cross correlation.",
+  "when_to_use": "When you need calculate similarity metrics analysis",
+  "parameters": {
+    "image1_path": "[Required] Path to the first image file (str)",
+    "image2_path": "[Required] Path to the second image file (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

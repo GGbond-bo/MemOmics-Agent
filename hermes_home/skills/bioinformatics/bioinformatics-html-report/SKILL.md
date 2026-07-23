@@ -372,22 +372,22 @@ from the internet when the HTML is opened in a browser.
 ### ⚠️ Pitfall: Missing Figures in Generated Reports
 
 **Problem**: The `ReportBuilder` only includes figures explicitly added via `add_figure()`.
-When the LLM generates the report after a multi-phase analysis (CellChat → DEG →
-Enrichment → etc.), it often omits figures from earlier phases — the context may not
-contain them. Users will open the report and say "I only see X figures, where are Y?"
+When the LLM generates the report after a multi-phase analysis, it often omits figures
+from earlier phases.
 
-**Fix**: After saving the report, ALWAYS verify figure completeness:
+**Fix**: After saving the report, verify figure completeness (see `references/figure-completeness-check.md`).
 
-```python
-# Count PNGs on disk vs base64 images in report
-import os, re
-png_count = sum(1 for f in os.listdir(figures_dir) if f.endswith('.png'))
-with open(report_path) as f:
-    b64_count = len(re.findall(r'<img src="data:image/', f.read()))
-assert png_count == b64_count, f"MISSING {png_count - b64_count} figures!"
-```
+### ⚠️ Pitfall: param_source_zh Is Now Required (v1.1+)
 
-If mismatch, use the recovery procedure in `references/figure-completeness-check.md`.
+**Problem**: `add_figure()` now validates that ALL FOUR panels are non-empty:
+`method_zh`, `result_zh`, `bio_zh`, AND `param_source_zh`. Omitting `param_source_zh`
+raises `ValueError: param_source_zh 不能为空` — even though it's listed as optional
+in the API docs with default `""`.
+
+**Fix**: Always provide `param_source_zh` in every `add_figure()` call. Use a short
+string describing where parameters came from (e.g., `"UniProt REST API"`,
+`"clusterProfiler default"`, `"文献 PMID:XXXXX"`). For figures without specific
+parameter sources, use `"标准分析方法"` or `"standard workflow"`.
 
 
 ---

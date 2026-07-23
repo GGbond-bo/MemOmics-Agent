@@ -1,0 +1,20 @@
+{
+  "id": "design_golden_gate_oligos",
+  "name": "Design Golden Gate Oligos",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Design complementary oligonucleotides with Type IIS restriction enzyme overhangs for Golden Gate assembly based on restriction site analysis of the backbone.",
+  "detailed_description": "Design complementary oligonucleotides with Type IIS restriction enzyme overhangs for Golden Gate assembly based on restriction site analysis of the backbone.",
+  "when_to_use": "When you need design golden gate oligos analysis",
+  "parameters": {
+    "backbone_sequence": "[Required] Complete backbone sequence (str)",
+    "insert_sequence": "[Required] Sequence to be inserted (e.g., sgRNA target sequence) (str)",
+    "enzyme_name": "[Required] Type IIS restriction enzyme to be used (str)",
+    "is_circular": "[Optional] Whether the backbone is circular (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

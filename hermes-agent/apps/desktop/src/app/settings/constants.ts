@@ -1,5 +1,16 @@
-import { codiconIcon } from '@/components/ui/codicon'
-import { Brain, type IconComponent, Lock, MessageCircle, Mic, Monitor, Moon, Palette, Sun, Wrench } from '@/lib/icons'
+import {
+  Box,
+  Brain,
+  type IconComponent,
+  Lock,
+  MessageCircle,
+  Mic,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
+  Wrench
+} from '@/lib/icons'
 import type { ThemeMode } from '@/themes/context'
 
 import { defineFieldCopy } from './field-copy'
@@ -30,9 +41,18 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
   {
     prefix: 'NOUS_',
     name: 'Nous Portal',
-    description: 'Hosted MemOmics & Nous-trained models',
+    description: 'Hosted Hermes & Nous-trained models',
     docsUrl: 'https://portal.nousresearch.com',
     priority: 0
+  },
+  {
+    prefix: 'FIREWORKS_',
+    name: 'Fireworks AI',
+    description: 'OpenAI-compatible direct model API',
+    docsUrl: 'https://app.fireworks.ai/settings/users/api-keys',
+    // Slot #2 — mirrors CANONICAL_PROVIDERS (after Nous, ahead of OpenRouter).
+    // Same numeric priority as OpenRouter; name sort puts Fireworks first.
+    priority: 1
   },
   {
     prefix: 'OPENROUTER_',
@@ -226,8 +246,11 @@ export const ENUM_OPTIONS: Record<string, string[]> = {
   'approvals.mode': ['manual', 'smart', 'off'],
   'code_execution.mode': ['project', 'strict'],
   'context.engine': ['compressor', 'default', 'custom'],
-  'delegation.reasoning_effort': ['', 'minimal', 'low', 'medium', 'high', 'xhigh'],
-  'memory.provider': ['', 'builtin', 'hindsight', 'honcho'],
+  'delegation.reasoning_effort': ['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  // Built-in memory is not a provider plugin: the empty sentinel renders as
+  // "Built-in only" and a legacy literal `builtin` value is only kept visible
+  // via enumOptionsFor's current-value passthrough (#49513).
+  'memory.provider': ['', 'honcho', 'hindsight'],
   // Terminal execution backends — kept in sync with the dispatch ladder in
   // tools/terminal_tool.py::_create_environment (local/docker/singularity/
   // modal/daytona/ssh). Remote backends need extra env (image, tokens, host).
@@ -237,7 +260,77 @@ export const ENUM_OPTIONS: Record<string, string[]> = {
   // Speech-to-text backends — kept in sync with the stt block in
   // hermes_cli/config.py (local/groq/openai/mistral/elevenlabs).
   'stt.provider': ['local', 'groq', 'openai', 'mistral', 'xai', 'elevenlabs'],
-  'tts.openai.voice': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+  // gpt-4o-mini-tts voice set (the tts-1 era stopped at shimmer). Free-input
+  // field — the list is suggestions, not a gate (see FREE_INPUT_KEYS).
+  'tts.openai.voice': [
+    'alloy',
+    'ash',
+    'ballad',
+    'cedar',
+    'coral',
+    'echo',
+    'fable',
+    'marin',
+    'nova',
+    'onyx',
+    'sage',
+    'shimmer',
+    'verse'
+  ],
+  // Popular Edge neural voices (the full catalog is 400+ — free input).
+  'tts.edge.voice': [
+    'en-US-AriaNeural',
+    'en-US-JennyNeural',
+    'en-US-AndrewNeural',
+    'en-US-BrianNeural',
+    'en-US-GuyNeural',
+    'en-GB-SoniaNeural'
+  ],
+  'tts.gemini.model': ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'],
+  // Gemini TTS prebuilt voice set.
+  'tts.gemini.voice': [
+    'Zephyr',
+    'Puck',
+    'Charon',
+    'Kore',
+    'Fenrir',
+    'Leda',
+    'Orus',
+    'Aoede',
+    'Callirrhoe',
+    'Autonoe',
+    'Enceladus',
+    'Iapetus',
+    'Umbriel',
+    'Algieba',
+    'Despina',
+    'Erinome',
+    'Algenib',
+    'Rasalgethi',
+    'Laomedeia',
+    'Achernar',
+    'Alnilam',
+    'Schedar',
+    'Gacrux',
+    'Pulcherrima',
+    'Achird',
+    'Zubenelgenubi',
+    'Vindemiatrix',
+    'Sadachbia',
+    'Sadaltager',
+    'Sulafat'
+  ],
+  'tts.xai.voice_id': ['eve'],
+  'tts.minimax.model': ['speech-02-hd', 'speech-02-turbo'],
+  'tts.mistral.model': ['voxtral-mini-tts-2603'],
+  'tts.kittentts.model': [
+    'KittenML/kitten-tts-nano-0.8-int8',
+    'KittenML/kitten-tts-micro-0.8-int8',
+    'KittenML/kitten-tts-mini-0.8-int8'
+  ],
+  'tts.kittentts.voice': ['Jasper'],
+  'tts.piper.voice': ['en_US-lessac-medium', 'en_US-amy-medium', 'en_US-ryan-high', 'en_GB-alan-medium'],
+  'tts.neutts.model': ['neuphonic/neutts-air-q4-gguf', 'neuphonic/neutts-air-q8-gguf', 'neuphonic/neutts-air'],
   // Text-to-speech backends — kept in sync with the built-in source of truth
   // (agent/tts_registry.py::_BUILTIN_NAMES / tools/tts_tool.py::
   // BUILTIN_TTS_PROVIDERS). 'xai' is Grok TTS.
@@ -261,6 +354,31 @@ export const ENUM_OPTIONS: Record<string, string[]> = {
   'tts.neutts.device': ['cpu', 'cuda', 'mps'],
   'updates.non_interactive_local_changes': ['stash', 'discard']
 }
+
+// Voice/model name fields render as a free-input combobox (Input + datalist)
+// instead of a closed Select: providers accept custom voice IDs (ElevenLabs
+// cloned voices, xAI custom voices, Edge's 400+ catalog) and ship new model
+// names faster than this list updates. The ENUM_OPTIONS above become
+// suggestions rather than a gate for these keys.
+export const FREE_INPUT_KEYS = new Set([
+  'tts.edge.voice',
+  'tts.openai.model',
+  'tts.openai.voice',
+  'tts.elevenlabs.voice_id',
+  'tts.gemini.model',
+  'tts.gemini.voice',
+  'tts.xai.voice_id',
+  'tts.minimax.model',
+  'tts.minimax.voice_id',
+  'tts.mistral.model',
+  'tts.mistral.voice_id',
+  'tts.neutts.model',
+  'tts.kittentts.model',
+  'tts.kittentts.voice',
+  'tts.piper.voice',
+  'tts.deepinfra.model',
+  'tts.deepinfra.voice'
+])
 
 export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
   model: 'Default Model',
@@ -324,6 +442,7 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
   },
   stt: {
     enabled: 'Speech To Text',
+    echoTranscripts: 'Echo Transcripts',
     provider: 'Speech-To-Text Provider',
     local: {
       model: 'Local Transcription Model',
@@ -360,7 +479,12 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
     },
     xai: {
       voiceId: 'xAI (Grok) Voice',
-      language: 'xAI Language'
+      language: 'xAI Language',
+      speed: 'xAI Playback Speed',
+      autoSpeechTags: 'xAI Auto Speech Tags',
+      optimizeStreamingLatency: 'xAI Streaming Latency Optimization',
+      sampleRate: 'xAI Sample Rate',
+      bitRate: 'xAI Bit Rate'
     },
     minimax: {
       model: 'MiniMax TTS Model',
@@ -384,6 +508,10 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
     },
     piper: {
       voice: 'Piper Voice'
+    },
+    deepinfra: {
+      model: 'DeepInfra TTS Model',
+      voice: 'DeepInfra Voice'
     }
   },
   memory: {
@@ -423,10 +551,10 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
     personality: 'Default assistant style for new sessions.',
     showReasoning: 'Show reasoning sections when the backend provides them.'
   },
-  timezone: 'Used when MemOmics needs local time context. Blank uses the system timezone.',
+  timezone: 'Used when Hermes needs local time context. Blank uses the system timezone.',
   agent: {
     imageInputMode: 'Controls how image attachments are sent to the model.',
-    maxTurns: 'Upper bound for tool-calling turns before MemOmics stops a run.'
+    maxTurns: 'Upper bound for tool-calling turns before Hermes stops a run.'
   },
   terminal: {
     cwd: 'Default project folder for tool and terminal work.',
@@ -440,9 +568,9 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   codeExecution: {
     mode: 'How strictly code execution is scoped to the current project.'
   },
-  fileReadMaxChars: 'Maximum characters MemOmics can read from one file request.',
+  fileReadMaxChars: 'Maximum characters Hermes can read from one file request.',
   approvals: {
-    mode: 'How MemOmics handles commands that need explicit approval.',
+    mode: 'How Hermes handles commands that need explicit approval.',
     timeout: 'How long approval prompts wait before timing out.'
   },
   security: {
@@ -467,7 +595,12 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   tts: {
     xai: {
       voiceId: 'xAI voice ID (e.g. eve) or a custom voice ID.',
-      language: 'Spoken language code, e.g. en.'
+      language: 'Spoken language code (e.g. en, pt-BR) or "auto" for auto-detection.',
+      speed: 'Playback speed. 0.7 = slower, 1.0 = normal, 1.5 = faster.',
+      autoSpeechTags: 'Let an LLM insert expressive audio tags ([laughing], [sighs]) into the script before synthesis.',
+      optimizeStreamingLatency: 'Latency vs. quality trade-off. 0 = best quality, 2 = lowest latency.',
+      sampleRate: 'Audio sample rate in Hz. Higher = better quality, larger files.',
+      bitRate: 'MP3 bitrate in bps. Only applies when codec is mp3.'
     },
     neutts: {
       device: 'Local inference device for NeuTTS.'
@@ -475,13 +608,14 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   },
   stt: {
     enabled: 'Enable local or provider-backed speech transcription.',
+    echoTranscripts: 'Post the raw 🎙️ transcript of voice messages back to the chat.',
     elevenlabs: {
       languageCode: 'Optional ISO-639-3 language code. Blank lets ElevenLabs auto-detect.'
     }
   },
   updates: {
     nonInteractiveLocalChanges:
-      'When MemOmics updates itself from the app (no terminal prompt), keep local source edits (stash) or throw them away (discard). Terminal updates always ask.'
+      'When Hermes updates itself from the app (no terminal prompt), keep local source edits (stash) or throw them away (discard). Terminal updates always ask.'
   }
 })
 
@@ -490,7 +624,7 @@ export const SECTIONS: DesktopConfigSection[] = [
   {
     id: 'model',
     label: 'Model',
-    icon: codiconIcon('hubot'),
+    icon: Box,
     keys: ['model_context_length', 'fallback_providers']
   },
   {
@@ -557,6 +691,7 @@ export const SECTIONS: DesktopConfigSection[] = [
     keys: [
       'tts.provider',
       'stt.enabled',
+      'stt.echo_transcripts',
       'stt.provider',
       'voice.auto_tts',
       'tts.edge.voice',
@@ -566,6 +701,11 @@ export const SECTIONS: DesktopConfigSection[] = [
       'tts.elevenlabs.model_id',
       'tts.xai.voice_id',
       'tts.xai.language',
+      'tts.xai.speed',
+      'tts.xai.auto_speech_tags',
+      'tts.xai.optimize_streaming_latency',
+      'tts.xai.sample_rate',
+      'tts.xai.bit_rate',
       'tts.minimax.model',
       'tts.minimax.voice_id',
       'tts.mistral.model',
@@ -577,6 +717,8 @@ export const SECTIONS: DesktopConfigSection[] = [
       'tts.kittentts.model',
       'tts.kittentts.voice',
       'tts.piper.voice',
+      'tts.deepinfra.model',
+      'tts.deepinfra.voice',
       'stt.local.model',
       'stt.local.language',
       'stt.openai.model',

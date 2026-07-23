@@ -1,0 +1,12 @@
+{
+  "id": "scrnaseq-scanpy-core-analysis",
+  "name": "scrnaseq-scanpy-core-analysis",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "Complete single-cell RNA-seq analysis using Scanpy from raw data to cell type annotation with clustering and visualization.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

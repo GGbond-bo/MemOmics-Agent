@@ -29,6 +29,7 @@ defusedxml>=0.7.0
 cryptography>=42.0.0
 prompt_toolkit>=3.0.0
 Pillow>=10.0.0
+qrcode>=7.0
 
 # === Terminal (platform-specific) ===
 # Linux/macOS:

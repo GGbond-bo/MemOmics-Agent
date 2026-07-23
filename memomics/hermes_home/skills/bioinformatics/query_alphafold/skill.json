@@ -1,0 +1,24 @@
+{
+  "id": "query_alphafold",
+  "name": "Query Alphafold",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the AlphaFold Database API for protein structure predictions or metadata; optionally download structures.",
+  "detailed_description": "Query the AlphaFold Database API for protein structure predictions or metadata; optionally download structures.",
+  "when_to_use": "When you need query alphafold analysis",
+  "parameters": {
+    "uniprot_id": "[Required] UniProt accession ID (e.g., 'P12345') (str)",
+    "endpoint": "[Optional] Endpoint: 'prediction', 'summary', or 'annotations' (default: prediction)",
+    "residue_range": "[Optional] Residue range as 'start-end'",
+    "download": "[Optional] Whether to download structure file (default: False)",
+    "output_dir": "[Optional] Directory to save downloaded files",
+    "file_format": "[Optional] Download format 'pdb' or 'cif' (default: pdb)",
+    "model_version": "[Optional] AlphaFold model version (e.g., v4) (default: v4)",
+    "model_number": "[Optional] Model number (1-5) (default: 1)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

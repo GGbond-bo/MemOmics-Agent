@@ -337,4 +337,5 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 - **`references/mermaid-style-showcase.md`** — 同一流程六种 Mermaid 样式展示（Flowchart TD/LR、Mindmap、Gantt、Timeline、Sankey、State）。当用户要求"换一种展示方式"时加载。含 5 阶段卡片流 + Panel 布局网格 + 数据流表 + 故事线。颜色编码：🔴核心/🟡增强/🟢输出。
 - **`references/cns-level-plan-template.md`** — CNS 级完整 15 段方案模板。当用户说"太泛了"/"不够深"/"分阶段"/"CNS级别"时加载。包含：文献依据表、H₀/H₁假说、Gap分析、Figure三一结构、专利分析、Loop Gate等所有必需段落。
 - **`references/cross-species-hippocampus-aging-analysis.md`** — 跨物种海马衰老分析案例参考。
+- **`references/cross-species-replaceability-framework.md`** — 🔑 五层递进可代替性评估框架（Level 1-5: IRS+SDI+cos(θ)+Mixed Model+ABCD基因分类）。专利级跨物种方法论，比 S₁-S₅ 更严谨。
 - **`references/multi-group-subtype-deep-analysis.md`** — 复杂多组×亚型分析 Playbook。≥4 组 + 亚型分解的场景：伪bulk DEG/基因集评分/应答指数/多条件 DotPlot/轨迹推断。

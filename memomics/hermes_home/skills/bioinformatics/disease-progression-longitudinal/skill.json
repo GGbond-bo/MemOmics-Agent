@@ -1,0 +1,40 @@
+{
+  "name": "纵向疾病进展",
+  "id": "disease-progression-longitudinal",
+  "category": "clinical",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "纵向数据: LME → 轨迹建模",
+  "triggers": [
+    "纵向分析",
+    "LME",
+    "重复测量",
+    "混合效应"
+  ],
+  "steps": [
+    "长格式转换",
+    "lme4模型",
+    "随机效应选择",
+    "交互项检验",
+    "轨迹聚类"
+  ],
+  "dependencies": [
+    "lme4",
+    "lmerTest",
+    "nlme"
+  ],
+  "outputs": [
+    "LME结果",
+    "轨迹图",
+    "个体曲线"
+  ],
+  "detailed_description": "纵向数据: LME → 轨迹建模\n\n分析步骤:\n  - 长格式转换\n  - lme4模型\n  - 随机效应选择\n  - 交互项检验\n  - 轨迹聚类\n\n依赖包: nlme, lme4, lmerTest",
+  "when_to_use": "当你需要 纵向疾病进展 时触发",
+  "parameters": {
+    "steps": "长格式转换 -> lme4模型 -> 随机效应选择 -> 交互项检验 -> 轨迹聚类"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

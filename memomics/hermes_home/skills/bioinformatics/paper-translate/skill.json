@@ -1,0 +1,48 @@
+{
+  "id": "paper-translate",
+  "name": "PDF翻译",
+  "category": "general",
+  "language": "Python",
+  "description": "保留排版的PDF全文翻译，支持中英互译",
+  "triggers": [
+    "翻译pdf",
+    "翻译文献",
+    "翻译论文",
+    "翻译文章"
+  ],
+  "tools": [
+    "execute_python"
+  ],
+  "python_requires": [
+    "pymupdf4llm",
+    "markitdown"
+  ],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "提取文本",
+      "description": "使用markitdown提取PDF全文"
+    },
+    {
+      "name": "分块翻译",
+      "description": "调用LLM逐段翻译，保持专业术语"
+    },
+    {
+      "name": "生成译文",
+      "description": "输出翻译后的文本文件"
+    }
+  ],
+  "parameters": {
+    "steps": "提取文本 -> 分块翻译 -> 生成译文"
+  },
+  "chains_from": [
+    "paper-download"
+  ],
+  "chains_to": [],
+  "detailed_description": "保留排版的PDF全文翻译，支持中英互译\n\n分析步骤:\n  - 提取文本: 使用markitdown提取PDF全文\n  - 分块翻译: 调用LLM逐段翻译，保持专业术语\n  - 生成译文: 输出翻译后的文本文件",
+  "when_to_use": "当你需要 PDF翻译 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,53 @@
+{
+  "id": "bioinformatics-html-report",
+  "name": "生信HTML报告",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "生信分析HTML报告构建器 — 图文并茂、图表画廊、辩论记录、参数来源、生物结论，纯Python无依赖",
+  "triggers": [
+    "生成html",
+    "分析报告",
+    "做报告",
+    "html报告",
+    "总结报告",
+    "分析总结",
+    "生成报告",
+    "生信报告",
+    "图表报告"
+  ],
+  "tools": [
+    "execute_python",
+    "write_file",
+    "terminal"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "数据整理",
+      "description": "整理分析结果、图表路径、辩论记录、参数来源"
+    },
+    {
+      "name": "报告生成",
+      "description": "用 ReportBuilder API 生成结构化 HTML 报告"
+    }
+  ],
+  "parameters": {
+    "steps": "数据整理 -> 报告生成",
+    "api": "ReportBuilder(title, subtitle, stats, key_findings) -> section() -> add_figure() -> add_debate() -> add_table() -> save()"
+  },
+  "chains_from": [
+    "scrna-qc",
+    "scrna-clustering",
+    "deg-analysis",
+    "cellchat-v2",
+    "analysis-summary-report"
+  ],
+  "chains_to": [],
+  "detailed_description": "生信分析HTML报告构建器 — 图文并茂、图表画廊、辩论记录、参数来源、生物结论\n\n核心API:\n  - ReportBuilder(title, subtitle, stats, key_findings): 构造器\n  - rb.section(sec_id, title_en, title_zh): 章节上下文管理器\n  - rb.add_figure(fig_path, caption_en, method_zh, result_zh, bio_zh, param_source_zh): 添加图表（4面板）\n  - rb.add_debate(topic, rounds): 添加辩论记录\n  - rb.add_table(table_id, csv_path, title_en, title_zh): 添加表格\n  - rb.save('report.html'): 保存\n\n技术特点: 纯Python f-strings, PNG→base64, CSV→DataTables, CSS/JS内联, 无外部依赖",
+  "when_to_use": "当需要生成生信分析HTML报告时触发 — 包含图表、辩论记录、参数来源、生物结论的完整报告",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

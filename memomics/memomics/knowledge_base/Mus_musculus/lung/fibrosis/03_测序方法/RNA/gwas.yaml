@@ -1,0 +1,13 @@
+analysis_type: gwas
+date: '2026-06-27'
+methods:
+  plink:
+    hwe_pval:
+      confidence: medium
+      source: domain_convention
+      value: 1.0e-06
+    maf_threshold:
+      confidence: medium
+      source: domain_convention
+      value: 0.01
+source: default_seed

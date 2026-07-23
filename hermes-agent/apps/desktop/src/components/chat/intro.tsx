@@ -1,5 +1,7 @@
 import { type CSSProperties, useState } from 'react'
 
+import { capitalize, normalize } from '@/lib/text'
+
 import introCopyJsonl from './intro-copy.jsonl?raw'
 
 type IntroCopy = {
@@ -20,36 +22,36 @@ const NEUTRAL_PERSONALITIES = new Set(['', 'default', 'none', 'neutral'])
 
 const FALLBACK_COPY: IntroCopy[] = [
   {
-    headline: 'Ready to analyze your omics data?',
-    body: "Upload h5ad/h5/RDS files or describe your project. I'll scan the data, recommend modules, and guide you step-by-step."
+    headline: 'What are we moving today?',
+    body: "Send a bug, branch, plan, or rough idea. I'll inspect the repo and turn it into the next concrete step."
   },
   {
-    headline: "What's your research focus?",
-    body: "Single-cell RNA-seq, spatial transcriptomics, multi-omics integration — tell me your direction and data, I'll build the pipeline."
+    headline: "What's on your mind?",
+    body: "Bring the code, question, or stuck part. I'll read the room before making changes."
   },
   {
-    headline: 'What should MemOmics analyze?',
-    body: "Use /scan to inspect data, /skills to browse bioinformatics tools, or just describe your analysis goal."
+    headline: 'What should Hermes look at?',
+    body: "Send the task, failing path, or half-formed plan. I'll help turn it into action."
   },
   {
     headline: 'Where should we start?',
-    body: "From QC to cell annotation, trajectory inference, or cell communication — I'll match the best module for your data."
+    body: "Bring the problem, goal, or file. I'll inspect first and keep the next step concrete."
   },
   {
-    headline: 'What species and tissue?',
-    body: "Human skeletal muscle aging? Mouse brain development? I have knowledge bases tailored to your tissue and direction."
+    headline: 'What needs attention?',
+    body: "Send the context you have. I'll help sort it into a plan or a fix."
   }
 ]
 
 function normalizeKey(value?: string): string {
-  return (value || '').trim().toLowerCase()
+  return normalize(value)
 }
 
 function titleize(value: string): string {
   return value
     .split(/[-_\s]+/)
     .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(capitalize)
     .join(' ')
 }
 
@@ -116,24 +118,24 @@ function fallbackCopyForPersonality(personalityKey: string): IntroCopy[] {
 
   return [
     {
-      headline: `${label} mode is on. What data are we analyzing?`,
-      body: "Send your omics data or research question. I'll use your configured voice and build a bioinformatics pipeline."
+      headline: `${label} mode is on. What should we work on?`,
+      body: "Send the task, file, or rough idea. I'll use your configured voice and keep the work grounded in this repo."
     },
     {
-      headline: `What does ${label} MemOmics need to see?`,
-      body: "Bring the dataset, QC results, or stuck part. I'll adapt to your configured personality."
+      headline: `What does ${label} Hermes need to see?`,
+      body: "Bring the context or the stuck part. I'll adapt to your configured personality."
     },
     {
       headline: `${label} mode is ready.`,
-      body: "Describe your analysis goal or upload data. I'll follow the personality you've configured."
+      body: "Send the problem, file, or idea. I'll follow the personality you've configured."
     },
     {
-      headline: `What should ${label} MemOmics tackle?`,
-      body: "From differential expression to cell communication — drop the task here."
+      headline: `What should ${label} Hermes tackle?`,
+      body: "Drop the task here. I'll keep the work grounded in the repo."
     },
     {
       headline: 'Where should we begin?',
-      body: `Give me the species, tissue, and direction and I'll answer in ${label} mode.`
+      body: `Give me the context and I'll answer in ${label} mode.`
     }
   ]
 }
@@ -142,7 +144,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'MEMOMICS AGENT'
+const WORDMARK = 'HERMES AGENT'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)

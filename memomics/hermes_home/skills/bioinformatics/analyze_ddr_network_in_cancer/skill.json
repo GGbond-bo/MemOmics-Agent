@@ -1,0 +1,19 @@
+{
+  "id": "analyze_ddr_network_in_cancer",
+  "name": "Analyze Ddr Network In Cancer",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze DNA Damage Response (DDR) network alterations and dependencies in cancer samples.",
+  "detailed_description": "Analyze DNA Damage Response (DDR) network alterations and dependencies in cancer samples.",
+  "when_to_use": "When you need analyze ddr network in cancer analysis",
+  "parameters": {
+    "expression_data_path": "[Required] Path to gene expression data file (CSV format with genes as rows, samples as columns) (str)",
+    "mutation_data_path": "[Required] Path to mutation data file (CSV format with genes as rows, samples as columns, values indicating mutation status) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

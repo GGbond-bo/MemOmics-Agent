@@ -1,0 +1,25 @@
+{
+  "id": "perform_pcr_and_gel_electrophoresis",
+  "name": "Perform Pcr And Gel Electrophoresis",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs PCR amplification of a target transgene and visualizes results using agarose gel electrophoresis.",
+  "detailed_description": "Performs PCR amplification of a target transgene and visualizes results using agarose gel electrophoresis.",
+  "when_to_use": "When you need perform pcr and gel electrophoresis analysis",
+  "parameters": {
+    "genomic_dna": "[Required] Path to file containing genomic DNA sequence in FASTA format or the sequence itself (str)",
+    "forward_primer": "[Optional] Forward primer sequence. If not provided, will be designed based on target_region",
+    "reverse_primer": "[Optional] Reverse primer sequence. If not provided, will be designed based on target_region",
+    "target_region": "[Optional] Tuple of (start, end) positions for the target region in the genomic DNA",
+    "annealing_temp": "[Optional] Annealing temperature for PCR in °C (default: 58)",
+    "extension_time": "[Optional] Extension time in seconds (default: 30)",
+    "cycles": "[Optional] Number of PCR cycles (default: 35)",
+    "gel_percentage": "[Optional] Percentage of agarose gel (default: 2.0)",
+    "output_prefix": "[Optional] Prefix for output files (default: pcr_result)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

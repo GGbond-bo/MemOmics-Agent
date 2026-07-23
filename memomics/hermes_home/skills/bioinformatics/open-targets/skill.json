@@ -1,0 +1,12 @@
+{
+  "id": "open-targets",
+  "name": "Open Targets Platform (GraphQL API)",
+  "category": "Drug Discovery",
+  "language": "R+Python",
+  "description": "Query the Open Targets Platform GraphQL API for target–disease associations, evidence, and annotations supporting drug target identification.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

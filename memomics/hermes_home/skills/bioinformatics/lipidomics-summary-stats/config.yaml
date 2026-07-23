@@ -1,0 +1,74 @@
+# Default configuration for lipidomics-summary-stats pipeline
+
+# Sample key: maps SampleID to Condition
+# Override this for different experimental designs
+sample_key:
+  SampleID: ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21"]
+  Condition: ["WT","WT","WT","WT","WT","WT",
+              "Cpt2/Cpt1-DKO","Cpt2/Cpt1-DKO","Cpt2/Cpt1-DKO",
+              "Cpt2/Tsc1-DKO","Cpt2/Tsc1-DKO","Cpt2/Tsc1-DKO",
+              "Tsc1-KO","Tsc1-KO","Tsc1-KO",
+              "Cpt1-KO","Cpt1-KO","Cpt1-KO",
+              "Cpt2-KO","Cpt2-KO","Cpt2-KO"]
+
+# Display order for conditions
+condition_order: ["WT","Cpt2-KO","Cpt1-KO","Tsc1-KO","Cpt2/Cpt1-DKO","Cpt2/Tsc1-DKO"]
+
+# Significance thresholds
+fc_threshold: 1.0    # minimum |log2FC|
+p_threshold: 0.05    # maximum p-value
+
+# Minimum non-NA positive values per group for t-test
+min_per_group: 2
+
+# Output filename
+output_file: "CL_FS_Master_Summary_Statistics.xlsx"
+
+# CL tab-to-class mapping (regex patterns for case-insensitive matching)
+# Handles variations like "SM data" vs "SM Data"
+cl_tab_patterns:
+  "^PC data$": "PC"
+  "^P-PC data$": "P-PC"
+  "^O-PC data$": "O-PC"
+  "^LPC data$": "LPC"
+  "^PE data$": "PE"
+  "^P-PE data$": "P-PE"
+  "^LPE data$": "LPE"
+  "^PS data$": "PS"
+  "^LPS data$": "LPS"
+  "^PI data$": "PI"
+  "^PG data$": "PG"
+  "^SM [Dd]ata$": "SM"
+  "^Cer [Dd]ata$": "Cer"
+  "^TG [Dd]ata$": "TG"
+  "^DG [Dd]ata$": "DG"
+  "^AC [Dd]ata$": "AC"
+  "^CE [Dd]ata$": "CE"
+
+# CL read parameters
+cl_skip: 7
+cl_header_override: true   # row 1 becomes header after skip
+
+# FS read parameters
+fs_skip: 8
+fs_header_override: false  # headers already present, no override
+fs_sheet: 1
+fs_class_label: "FS"
+fs_conc_unit: "ng/mg"
+cl_conc_unit: "pmol/mg"
+
+# Per-class sheet order in output workbook
+class_order: ["PC","P-PC","O-PC","LPC","PE","P-PE","LPE","PS","LPS",
+              "PI","PG","SM","Cer","TG","DG","AC","CE","FS"]
+
+# 9 pairwise comparisons
+comparisons:
+  - ["Cpt2-KO", "WT"]
+  - ["Cpt1-KO", "WT"]
+  - ["Tsc1-KO", "WT"]
+  - ["Cpt2/Cpt1-DKO", "WT"]
+  - ["Cpt2/Tsc1-DKO", "WT"]
+  - ["Cpt1-KO", "Cpt2-KO"]
+  - ["Tsc1-KO", "Cpt2-KO"]
+  - ["Cpt2/Cpt1-DKO", "Cpt2-KO"]
+  - ["Cpt2/Tsc1-DKO", "Cpt2-KO"]

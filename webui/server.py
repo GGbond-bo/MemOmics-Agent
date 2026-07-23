@@ -1113,7 +1113,7 @@ def _restore_single_session(sid):
     if not db:
         return None
     try:
-        sessions = db.list_sessions_rich()
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
         for s in sessions:
             s_id = s.get("session_id") or s.get("id")
             if s_id != sid:
@@ -1177,7 +1177,7 @@ def _load_persisted_sessions():
         print("[MemOmics] SessionDB 不可用，跳过会话恢复", flush=True)
         return
     try:
-        sessions = db.list_sessions_rich()
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
         count = 0
         for s in sessions:
             sid = s.get("session_id") or s.get("id")
@@ -1238,8 +1238,6 @@ def _load_persisted_sessions():
             }
             _sessions[sid] = session
             count += 1
-            if count >= 20:
-                break
         if count:
             print(f"[MemOmics] 从 state.db 恢复了 {count} 个历史会话", flush=True)
             # 恢复微信会话映射

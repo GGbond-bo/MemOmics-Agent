@@ -1,0 +1,17 @@
+{
+  "id": "grade_adverse_events_using_vcog_ctcae",
+  "name": "Grade Adverse Events Using Vcog Ctcae",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Grade and monitor adverse events in animal studies using the VCOG-CTCAE standard.",
+  "detailed_description": "Grade and monitor adverse events in animal studies using the VCOG-CTCAE standard.",
+  "when_to_use": "When you need grade adverse events using vcog ctcae analysis",
+  "parameters": {
+    "clinical_data_file": "[Required] Path to a CSV file containing clinical evaluation data with columns: subject_id, time_point, symptom, severity, measurement (optional) (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

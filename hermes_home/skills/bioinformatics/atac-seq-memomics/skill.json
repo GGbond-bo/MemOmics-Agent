@@ -1,0 +1,16 @@
+{
+  "id": "atac-seq-memomics",
+  "name": "ATAC-seq 分析 (ArchR)",
+  "category": "general",
+  "language": "Python",
+  "description": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出",
+  "starting_prompt": "使用 ATAC-seq 分析 (ArchR) 进行分析",
+  "source_dir": "skills/bioinformatics/atac-seq-memomics",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

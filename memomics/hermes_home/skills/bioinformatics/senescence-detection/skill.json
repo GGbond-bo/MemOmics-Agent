@@ -1,0 +1,56 @@
+{
+  "id": "senescence-detection",
+  "name": "SASP + Senescence Detection",
+  "category": "aging",
+  "language": "R+Python",
+  "description": "SASP scoring + p16/p21 + senescent subpopulation",
+  "starting_prompt": "Detect senescent cells in my data",
+  "memomics_module": "04_aging",
+  "source_dir": "skills/built_in/senescence-detection",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "SASP scoring (UCell)",
+      "description": "SASP signature scoring",
+      "tool": "terminal"
+    },
+    {
+      "name": "p16/p21 expression",
+      "description": "CDKN2A/CDKN1A analysis",
+      "tool": "terminal"
+    },
+    {
+      "name": "Senescent subpopulation",
+      "description": "High-score subpopulation ID",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "Seurat",
+    "UCell"
+  ],
+  "python_packages": [
+    "scanpy"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "aging",
+    "fibrosis"
+  ],
+  "parameters": {
+    "r_packages": "Seurat, UCell",
+    "python_packages": "scanpy",
+    "steps": "SASP scoring (UCell) -> p16/p21 expression -> Senescent subpopulation"
+  },
+  "tags": [
+    "aging",
+    "senescence"
+  ],
+  "detailed_description": "SASP scoring + p16/p21 + senescent subpopulation\n\n适用场景: aging, fibrosis\n\n分析步骤:\n  - SASP scoring (UCell): SASP signature scoring\n  - p16/p21 expression: CDKN2A/CDKN1A analysis\n  - Senescent subpopulation: High-score subpopulation ID\n\n依赖包: UCell, Seurat, scanpy\n\n难度: intermediate\n\n触发提示: \"Detect senescent cells in my data\"",
+  "when_to_use": "适用于: aging, fibrosis",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

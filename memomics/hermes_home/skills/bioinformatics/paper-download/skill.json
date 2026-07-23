@@ -1,0 +1,45 @@
+{
+  "id": "paper-download",
+  "name": "文献下载",
+  "category": "general",
+  "language": "Python",
+  "description": "搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台",
+  "triggers": [
+    "下载文献",
+    "下载pdf",
+    "下载论文",
+    "找论文",
+    "获取文献"
+  ],
+  "tools": [
+    "web_search",
+    "web_search_academic",
+    "web_download"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "搜索论文",
+      "description": "根据关键词搜索学术数据库"
+    },
+    {
+      "name": "下载PDF",
+      "description": "下载论文PDF到work/papers/目录"
+    }
+  ],
+  "parameters": {
+    "steps": "搜索论文 -> 下载PDF"
+  },
+  "chains_from": [],
+  "chains_to": [
+    "paper-summary",
+    "paper-translate"
+  ],
+  "detailed_description": "搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台\n\n分析步骤:\n  - 搜索论文: 根据关键词搜索学术数据库\n  - 下载PDF: 下载论文PDF到work/papers/目录",
+  "when_to_use": "当你需要 文献下载 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}
