@@ -126,6 +126,24 @@ if !errorlevel! neq 0 (
     echo   The app may still start with limited features.
 )
 
+REM === Step 5.5: Git availability ===
+echo [CHECK] Git for GitHub operations...
+git --version >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [OK] Git found on PATH
+    goto :start_server
+)
+if exist "%LOCALAPPDATA%\hermes\git\cmd\git.exe" (
+    set "PATH=%LOCALAPPDATA%\hermes\git\cmd;%PATH%"
+    echo [OK] Git found (Hermes portable)
+    goto :start_server
+)
+echo [WARN] Git NOT found - GitHub operations will fail!
+echo   Install: https://git-scm.com/download/win
+echo   Or: powershell -File hermes-agent\scripts\install.ps1
+echo   MemOmics will start without git support.
+timeout /t 3 >nul
+
 REM === Step 6: Start ===
 :start_server
 echo.
