@@ -3363,8 +3363,10 @@ async def list_results(sid: str, path: str = ""):
 def _find_best_results_dir(sid: str) -> str:
     """每次实时扫描 results/，智能匹配会话目录。
     策略：1) 内存中的 results_dir 有内容 → 直接用
-          2) 目录名含 sid 短ID → 精确匹配
-          3) 无匹配 → 使用会话默认 results_dir 或回退到 results/{sid}"""
+          2) 查 state.db 的 cwd 字段（持久化的 results_dir）→ 有内容直接用
+          3) 目录名含 sid 短ID → 精确匹配，高优先级
+          4) sid 在内存中 → 取最近修改的非 memomics- 目录
+          5) 无匹配 → 使用会话默认 results_dir 或回退到 results/{sid}"""
     # 1. 内存中的 results_dir 优先
     if sid in _sessions:
         cached = _sessions[sid].get("results_dir", "")
@@ -3372,9 +3374,21 @@ def _find_best_results_dir(sid: str) -> str:
             return cached
     if not os.path.isdir(RESULTS_DIR):
         return ""
+    # 2. 从 state.db 恢复持久化的 results_dir（rename_results_dir 写入 cwd 字段）
+    persisted_cwd = ""
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, '_conn'):
+            row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
+            if row and row[0]:
+                persisted_cwd = row[0].replace("/", os.sep)
+    except Exception:
+        pass
+    if persisted_cwd and os.path.isdir(persisted_cwd) and any(Path(persisted_cwd).iterdir()):
+        return persisted_cwd
+    # 3. 扫描 results/ 目录，按优先级匹配
     short_id = sid.split("-")[-1] if "-" in sid else ""
-    best_match = ""
-    best_mtime = 0
+    candidates = []
     try:
         for d in os.listdir(RESULTS_DIR):
             dpath = os.path.join(RESULTS_DIR, d)
@@ -3387,16 +3401,23 @@ def _find_best_results_dir(sid: str) -> str:
             if not has_any:
                 continue
             mtime = os.path.getmtime(dpath)
-            # 精确匹配短ID → 只返回精确匹配的目录
+            # 精确匹配短ID → 高分优先
             if short_id and short_id in d:
-                if mtime > best_mtime:
-                    best_mtime = mtime
-                    best_match = dpath
+                candidates.append((1_000_000_000 + mtime, dpath, d))
+            # sid 在内存中 → 非 memomics- 目录优待（取最近修改的）
+            elif sid in _sessions:
+                bonus = 0 if d.startswith("memomics-") else 3600
+                candidates.append((mtime + bonus, dpath, d))
     except OSError:
         return ""
-    if best_match:
-        return best_match
-    # 无精确匹配 → 使用会话自己的 results_dir 或默认路径
+    if candidates:
+        candidates.sort(reverse=True, key=lambda x: x[0])
+        best = candidates[0][1]
+        # 同步到内存
+        if sid in _sessions:
+            _sessions[sid]["results_dir"] = best
+        return best
+    # 5. 无匹配 → 使用会话默认 results_dir 或默认路径
     if sid in _sessions:
         default = _sessions[sid].get("results_dir", "")
         if default and os.path.isdir(default):

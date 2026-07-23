@@ -844,8 +844,7 @@ function handleMessage(msg) {
       _sessionProgressCache[msg.session_id].running = false;
       // 任务完成 → 自动刷新结果面板
       if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
-        loadFigures();
-        if (resultsTab === 'files') loadResultsFiles();
+        refreshResults();
       }
     } else if (msg.type === 'thinking' || msg.type === 'agent_running') {
       _sessionProgressCache[msg.session_id].running = true;
@@ -966,10 +965,9 @@ function handleMessage(msg) {
     // 分析过程中生成了新图 → 自动展示 + 刷新结果面板
     if (msg.figure) handleNewFigure(msg.figure);
   } else if (msg.type === 'tool_complete') {
-    // 工具完成 → 如果结果面板打开且是当前会话，自动刷新
+    // 工具完成 → 如果结果面板打开且是当前会话，自动刷新图片和文件
     if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
-      loadFigures();
-      if (resultsTab === 'files') loadResultsFiles();
+      refreshResults();
     }
   } else if (msg.type === 'event') {
     // Hermes 统一事件流（session:compress 等）
@@ -2754,8 +2752,14 @@ async function refreshResults() {
     return;
   }
   document.getElementById('results-tabs').style.display = 'block';
-  loadFigures();
-  loadResultsFiles();
+  // 并行加载图片和文件，根据实际内容自动选择默认标签
+  var figPromise = loadFigures();
+  var filePromise = loadResultsFiles();
+  await Promise.all([figPromise, filePromise]);
+  // 自动选标签：有文件没有图片 → 切到文件标签；否则保持用户上次选择或默认图片
+  if (resultsTab === 'figures' && !_lastFiguresCount && _lastFilesCount) {
+    resultsTab = 'files';
+  }
   switchResultsTab(resultsTab);
 }
 
@@ -2765,6 +2769,7 @@ async function loadFigures() {
     var d = await r.json();
     var figs = d.figures || [];
     var el = document.getElementById('results-figures');
+    _lastFiguresCount = figs.length;
     if (!figs.length) {
       el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
       return;
@@ -2800,6 +2805,7 @@ async function loadResultsFiles() {
   var rootBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;margin-left:4px;">🏠 根目录</button>' : '';
   document.getElementById('results-path').innerHTML = breadcrumb + backBtn + rootBtn;
   var items = d.items || [];
+  _lastFilesCount = items.length;
   if (!items.length) {
     document.getElementById('results-list').innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + (d.note || '暂无分析结果') + '</div>';
     return;
@@ -2831,7 +2837,7 @@ function browseResults(relPath) {
 function handleNewFigure(fig) {
   showFigurePreview(fig.url, fig.name);
   if (document.getElementById('panel-results').style.display !== 'none' && currentSid) {
-    loadFigures();
+    refreshResults();
   }
 }
 
@@ -3006,7 +3012,7 @@ function showSetupModal() {
     '<label>API Base URL (自动填充)</label>' +
     '<input id="setup-baseurl" placeholder="自动填充" readonly />' +
     '<label>API Key</label>' +
-    '<input id="setup-apikey" type="password" placeholder="sk-..." />' +
+    '<input id="setup-apikey" type="password" placeholder="sk-..." autocomplete="off" />' +
     '<div id="setup-hint" style="font-size:11px;color:#888;margin-top:2px;"></div>' +
     '<div class="setup-err" id="setup-err"></div>' +
     '<button class="setup-btn" onclick="submitSetup()">🚀 开始使用</button>' +
