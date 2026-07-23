@@ -2774,10 +2774,26 @@ async function loadFigures() {
       el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
       return;
     }
-    el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
-      var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
-      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
-    }).join('') + '</div>';
+    // 按 category 分组
+    var groups = {};
+    var catOrder = [];
+    figs.forEach(function(f) {
+      var cat = f.category || 'root';
+      if (!groups[cat]) { groups[cat] = []; catOrder.push(cat); }
+      groups[cat].push(f);
+    });
+    // 渲染分组
+    var html = '';
+    catOrder.forEach(function(cat) {
+      html += '<div class="fig-category" style="margin-bottom:16px;">';
+      html += '<div class="fig-cat-title" style="font-size:13px;font-weight:600;color:var(--primary);padding:4px 4px 8px 4px;border-bottom:1px solid var(--border);margin-bottom:8px;">📁 ' + escapeHtml(cat) + ' <span style="font-weight:400;color:var(--text-light);">(' + groups[cat].length + '张)</span></div>';
+      html += '<div class="fig-thumb-grid">' + groups[cat].map(function(f) {
+        var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
+        return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
+      }).join('') + '</div>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
   } catch(e) {
     document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">加载图片失败</div>';
   }

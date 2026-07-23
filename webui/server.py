@@ -1391,15 +1391,11 @@ async def rename_results_dir(sid: str, body: dict = None):
     if len(parts) < 2:
         return {"ok": False, "error": "Need at least species and tissue"}
     
-    new_name = "_".join(parts)
+    # 始终追加短ID，确保目录名可追溯到会话（zip部署/换电脑等场景必备）
+    short_id = sid.split("-")[-1] if "-" in sid else sid[:6]
+    new_name = "_".join(parts) + "_" + short_id
     old_dir = _sessions[sid]["results_dir"]
     new_dir = os.path.join(RESULTS_DIR, new_name)
-    
-    # 防冲突：如目录已存在且不是当前会话的，加短ID
-    if os.path.isdir(new_dir) and os.path.abspath(old_dir) != os.path.abspath(new_dir):
-        short_id = sid.split("-")[-1] if "-" in sid else sid[:6]
-        new_name = f"{new_name}_{short_id}"
-        new_dir = os.path.join(RESULTS_DIR, new_name)
     # Persist results_dir to state.db
     try:
         db = _get_session_db()
@@ -3527,9 +3523,12 @@ async def list_figures(sid: str):
         for p in sorted(Path(base).rglob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0):
             if p.is_file() and p.suffix.lower() in img_exts:
                 rel = str(p.relative_to(base)).replace("\\", "/")
+                parts = rel.split("/")
+                category = parts[0] if len(parts) > 1 else "root"
                 figures.append({
                     "name": p.name,
                     "rel_path": rel,
+                    "category": category,
                     "url": f"/api/results/{sid}/figure?path={rel}",
                     "size": p.stat().st_size,
                     "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%H:%M:%S"),
