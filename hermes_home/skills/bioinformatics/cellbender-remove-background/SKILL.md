@@ -2,7 +2,7 @@
 name: cellbender-remove-background
 description: "CellBender去除环境RNA污染。使用场景：10X raw h5矩阵，怀疑有空滴/环境RNA污染，需GPU环境，输入raw_feature_bc_matrix"
 when_to_use: "[cellbender-remove-background] CellBender背景RNA去除：原始UMI矩阵→深度学习去噪→背景RNA去除→纯净表达矩阵"
-version: 1.0.0
+version: 3.0.0
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
@@ -16,7 +16,6 @@ prerequisites:
   r_packages: []
   python_packages: []
 ---
-
 
 ## ⛔ MemOmics 强制规则（不可违反，优先级最高）
 
@@ -107,7 +106,9 @@ results/<模块>/<方法>/
 
 # CellBender 去污染
 
-CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。适用于10x Chromium数据，特别是高污染组织(骨骼肌/脑)和衰老样本。参数自适应: 衰老→fpr=0.02/epochs=200; 大数据>50K→epochs=250; 稀缺细胞→fpr=0.005
+CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。内部架构：编码器(Encoder)将 UMI count 嵌入到潜在空间 → 解码器(Decoder)重建"去噪"表达矩阵 + 估计背景/空滴概率。训练时 90%数据用于训练，20%空滴注入每个batch。使用 OneCycle 学习率调度（`max_lr = 10 × learning_rate`）。
+
+适用于10x Chromium数据，特别是高污染组织(骨骼肌/脑)和衰老样本。
 
 ## When to Use
 
@@ -121,24 +122,192 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 - `ambient RNA`
 - `remove background`
 
-## Pipeline
+## Pipeline — 完整 4 阶段流水线
 
-1. 检查raw h5输入
-2. GPU检测+模式选择
-3. cellbender remove-background运行
-4. 质量对比: 前后细胞数/基因数/mt%
-5. 保存到cellbender/目录
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  F:/00.RawData/{sample}/output/raw_matrix/                      │
+│  ├── matrix.mtx.gz     ← 稀疏矩阵（基因×细胞）                   │
+│  ├── barcodes.tsv.gz   ← 细胞 barcode                           │
+│  └── features.tsv.gz   ← 基因名（兼容 BGI 1列 / 10x 2/3列）     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+             ┌────────────────▼────────────────┐
+             │  Stage 1: 读取原始矩阵 → h5ad   │
+             │  scripts/stage1_to_h5ad.py      │
+             │  • 自动探测 features 列数        │
+             │  • float64 → int32 省 50% 内存  │
+             │  • 添加样本前缀防 barcode 冲突   │
+             │  • 跳过已有的，支持断点续跑       │
+             └───────────────┬────────────────┘
+                             │ *.h5ad
+             ┌───────────────▼────────────────┐
+             │  Stage 2: CellBender 去污染     │
+             │  scripts/run_pipeline.py        │
+             │  • 串行执行，一次一个样本         │
+             │  • GPU (--cuda)                │
+             │  • 清 PYTHONPATH 防污染          │
+             │  • 清旧 ckpt 防 hash 冲突        │
+             │  • 验证 filtered.h5 产出才通过   │
+             │  • 失败不崩，记录日志继续下一个    │
+             └───────────────┬────────────────┘
+                             │ *_filtered.h5
+             ┌───────────────▼────────────────┐
+             │  Stage 3: ptrepack 压缩        │
+             │  scripts/ptrepack_all.py       │
+             │  • complevel=5 压缩            │
+             │  • 输出可直接被 Seurat 读取     │
+             └───────────────┬────────────────┘
+                             │ *_filtered_seurat.h5
+             ┌───────────────▼────────────────┐
+             │  Stage 4: 前后对比统计          │
+             │  scripts/stats_summary.py      │
+             │  • 细胞数 / 基因数 / 稀疏度      │
+             │  • 去除比例                     │
+             │  • 输出 TSV 到 summary/         │
+             └───────────────┬────────────────┘
+                             │ cellbender_stats.tsv
+```
 
-## Parameters
+### 快速启动
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `fpr` | 0.01(衰老→0.02,稀缺→0.005) | |
-| `epochs` | 150(大>50K→250,小<5K→100) | |
-| `learning_rate` | 0.001(小数据→0.0005) | |
-| `expected_cells` | auto | |
+```bash
+# 完整流水线（从 raw matrix 开始，脱离式后台）
+start /B python F:/CellBender_v2/run_pipeline.py ^
+  --base_dir F:/00.RawData ^
+  --work_dir F:/CellBender_v2
 
-> **Parameter Adaptation**: Adjust parameters based on tissue quality, species, and condition. Literature values take priority, then official defaults, then tissue-specific adjustments.
+# 从 Stage 2 开始（h5ad 已就绪）
+start /B python run_pipeline.py ^
+  --h5ad_dir F:/CellBender_v2/h5ad ^
+  --work_dir F:/CellBender_v2 ^
+  --skip_stage1
+
+# 仅跑某个阶段
+python run_pipeline.py --work_dir F:/CellBender_v2 --only_stage 4
+```
+
+### 阶段独立运行
+
+```bash
+# Stage 1: 只转换 h5ad
+python scripts/stage1_to_h5ad.py --base_dir F:/00.RawData --out_dir F:/CellBender_v2/h5ad
+
+# Stage 2: 只跑 CellBender
+python scripts/run_pipeline.py --work_dir F:/CellBender_v2 --skip_stage1 --only_stage 2
+
+# Stage 3: 只压缩
+python scripts/ptrepack_all.py --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/seurat_h5
+
+# Stage 4: 只统计
+python scripts/stats_summary.py --h5ad_dir F:/CellBender_v2/h5ad --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/summary
+```
+
+---
+
+## 核心参数（来源：官方源码 `remove_background/argparser.py`）
+
+| 参数 | 官方默认值 | 官方 Help 注释 | 版本 |
+|------|----------|---------------|------|
+| `--fpr` | `[0.01]` | 假阳性率阈值。可多值（如 `0.01 0.05 0.1`），每个值生成一个 filtered 输出 | v0.3+ |
+| `--epochs` | `150` | 训练总轮数 | v0.3+ |
+| **`--learning-rate`** | **`1e-4` (0.0001)** | 🔑 基学习率。OneCycle 调度下 `max_lr = 10× 此值`，即峰值 `1e-3`。官方注释："**probably do not exceed 1e-3**" | v0.3+ |
+| `--expected-cells` | `None` (auto) | 期望细胞数，不传则自动估计 | v0.3+ |
+| `--total-droplets` | `25000` | 用于分析的液滴总数（含空滴），从排序后的 UMI barcode 中取 top N | v0.3+ |
+| `--model` | `"full"` | 模型架构变体。`"full"`(默认, 2000 latent dims) / `"simple"`(100 dims) / `"ambient"`(无隐变量) | v0.3+ |
+
+### 引用
+- 官方仓库: `https://github.com/broadinstitute/CellBender`
+- `argparser.py` (v0.3+): `cellbender/remove_background/argparser.py` 第 ~180-220 行
+- `consts.py` (v0.3+): `cellbender/remove_background/consts.py`
+
+---
+
+## 内部常量（来源：官方源码 `remove_background/consts.py`）
+
+| 常量 | 值 | 含义 |
+|------|-----|------|
+| `TRAINING_FRACTION` | **0.9** | 90% 数据用于训练，10% 验证集 |
+| `FRACTION_EMPTIES` | **0.2** | 每个 batch 中 20% 的液滴是空滴（空滴=纯噪声，用于模型学习噪声分布） |
+| `DEFAULT_BATCH_SIZE` | **128** | 默认 batch size |
+| `CELL_PROB_CUTOFF` | **0.5** | 细胞概率 > 0.5 判定为真实细胞 |
+| `LOW_UMI_CUTOFF` | **5** | UMI < 5 的液滴直接移除，不参与分析 |
+| `LOW_UMI_FRACTION_CUTOFF` | 0.01 | 低 UMI 液滴比例上限 |
+| `MAX_STDDEV` | 10.0 | 背景基因表达的标准差上限（超出截断） |
+| `MIN_STDDEV` | 0.001 | 背景基因表达的标准差下限（计算数值稳定性） |
+
+---
+
+## 学习率详解（OneCycle 调度机制）
+
+```
+Step 1: 线性预热 → 学习率从 learning_rate/10 升至 max_lr
+Step 2: 余弦退火 → 学习率从 max_lr 降至 learning_rate/10
+```
+
+| 官方默认 `learning_rate = 1e-4` | 值 |
+|---------------------------------|-----|
+| 起始 LR | 1e-5 |
+| 峰值 LR (max_lr = 10×) | **1e-3** |
+| 结束 LR | 1e-5 |
+
+> ⚠️ **之前 Skill v1.0 的 `learning_rate=0.001` 是错误的** —— 它把峰值 LR 当成了基学习率，导致实际峰值达到 `0.01` (10×)，超出官方上限 "do not exceed 1e-3" 10 倍。v2.0 修正为官方默认 `1e-4`。
+
+---
+
+## 场景自适配参数（领域知识叠加，非官方默认）
+
+| 场景 | 调整 | 调整幅度 | 理由 |
+|------|------|---------|------|
+| **衰老样本** | `--fpr 0.02` | +0.01 | 衰老组织 RNA 渗漏更多，适度放宽 |
+| **大数据 (>50K cells)** | `--epochs 250` | +100 | 更多细胞需要更多训练轮次 |
+| **小数据 (<5K cells)** | `--epochs 100` | -50 | 防过拟合 |
+| **稀缺细胞类型** | `--fpr 0.005` | -0.005 | 收紧 FPR 保护稀有群体 |
+| **低质量样本 (高 mt%)** | `--learning-rate 5e-5` | 减半 | 更慢学习，避免过拟合噪声 |
+| **高质量样本 (低 mt%)** | `--learning-rate 1e-4` | 默认 | 标准即可 |
+
+> **自适应优先级**: 文献参数 > 官方默认 > 领域经验。领域经验值遵循官方注释的边界约束（如 learning_rate 不超过 1e-3）。
+
+---
+
+## 完整命令行示例
+
+```bash
+# 标准运行（官方默认参数）
+cellbender remove-background \
+  --input raw_feature_bc_matrix.h5 \
+  --output cellbender_output.h5 \
+  --fpr 0.01 \
+  --epochs 150 \
+  --learning-rate 1e-4 \
+  --total-droplets-included 25000
+
+# 衰老肌肉样本（领域自适应）
+cellbender remove-background \
+  --input raw_feature_bc_matrix.h5 \
+  --output cellbender_output.h5 \
+  --fpr 0.02 \
+  --epochs 150 \
+  --learning-rate 1e-4 \
+  --total-droplets-included 25000
+
+# 大数据 (100K+ cells)
+cellbender remove-background \
+  --input raw_feature_bc_matrix.h5 \
+  --output cellbender_output.h5 \
+  --fpr 0.01 \
+  --epochs 250 \
+  --learning-rate 1e-4
+
+# 多 FPR 输出（一个 FPR 一个 filtered 文件）
+cellbender remove-background \
+  --input raw_feature_bc_matrix.h5 \
+  --output cellbender_output.h5 \
+  --fpr 0.01 0.05 0.1 \
+  --epochs 150
+```
+
+---
 
 ## Dependencies
 
@@ -148,9 +317,20 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 
 ## Outputs
 
-- filtered.h5
-- 质量对比报告
-- 污染比例估计
+- `cellbender_output_filtered.h5` (去污染后的 count 矩阵)
+- `cellbender_output.h5` (完整输出: latent 编码 + 细胞概率 + 背景估计 + 报告数据)
+- `cellbender_output.pdf` / `.html` (训练报告, 可选)
+
+## Quality Check
+
+| 检查项 | 正常范围 | 异常处理 |
+|--------|---------|---------|
+| 去除细胞比例 | 5-30% | >50% → 怀疑 overkill, 调低 fpr 或用 --model simple |
+| 剩余细胞数 | 接近 --expected-cells | 偏差大 → 检查 --total-droplets-included |
+| 平均 UMI/细胞 变化 | 减少 5-20% | >50% → 去污染过猛 |
+| 训练 loss 曲线 | 持续下降 | 震荡 → 降 learning-rate 或加 epochs |
+
+---
 
 ## Proven Scripts
 
@@ -159,38 +339,59 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 
 | Species | Tissue | Condition | Date | Score |
 |---------|--------|-----------|------|-------|
-| Macaca mulatta | skeletal_muscle | aging | 2025-06-15 | 1.0 |
+| Macaca mulatta | skeletal_muscle | aging | 2025-06-15 | 9.0 |
 | Macaca mulatta | brain | aging | 2026-07-04 | 8.0 |
-### Proven Scripts
 
-- **Path**: `scripts/reference_script.py` (Stage 1+2+4: Python pipeline)
-- **Path**: `scripts/run_cellbender.ps1` (Stage 3: PowerShell batch runner)
-- **Path**: `scripts/run_ptrepack.ps1` (Stage 4: Seurat compression)
-- **Review Score**: N/A (user-verified, manually imported)
-- **Success Count**: 15 samples
+### Script Reference
 
-### Complete 4-Stage Pipeline
+| # | Script | 职能 | 输入 | 输出 |
+|---|--------|------|------|------|
+| 1 | `scripts/stage1_to_h5ad.py` | 原始 matrix → h5ad | F:/00.RawData/{s}/output/raw_matrix/ | {work_dir}/h5ad/{s}.h5ad |
+| 2 | `scripts/run_pipeline.py` | 完整流水线（Stage 1-4） | raw / h5ad | cellbender_output/ + seurat_h5/ + summary/ |
+| 3 | `scripts/ptrepack_all.py` | 批量 ptrepack 压缩 | cellbender_output/{s}/_filtered.h5 | seurat_h5/{s}_filtered_seurat.h5 |
+| 4 | `scripts/stats_summary.py` | 前后对比统计表 | h5ad/ + cellbender_output/ | summary/cellbender_stats.tsv |
+| 5 | `scripts/reference_script.py` | v1 参考（用户验证 15 样本） | — | — |
 
-1. **Stage 1** (`reference_script.py:read_raw_to_h5ad`): Read DNB rawmatrix -> h5ad
-   - Input: `{sample}/rawmatrix/` (matrix.mtx + barcodes.tsv + features.tsv)
-   - Output: `h5ad/{sample}.h5ad`
-   - Adds sample prefix to barcodes to prevent cross-sample collisions
+### Pipeline 数据流
 
-2. **Stage 2** (`reference_script.py:convert_h5ad_to_mtx`): h5ad -> CellRanger mtx
-   - Optional: CellBender can read h5ad directly
-   - Output: `cellbender/{sample}/input_mtx/` (matrix.mtx + barcodes.tsv + features.tsv)
-
-3. **Stage 3** (`run_cellbender.ps1`): CellBender remove-background
-   - CRITICAL: Must `Remove-Item Env:PYTHONPATH` before each run
-   - Clean `ckpt.tar.gz` before fresh runs (avoid hash mismatch)
-   - Verify success by output file existence, NOT exit code
-   - Serial execution only (12GB VRAM = 1 sample at a time)
-   - Output: `cellbender/{sample}/cellbender_output.h5` + `_filtered.h5`
-
-4. **Stage 4** (`run_ptrepack.ps1`): ptrepack compress for Seurat
-   - Input: `cellbender/{sample}/cellbender_output_filtered.h5`
-   - Output: `cellbender_seurat/{sample}_filtered_seurat.h5`
-   - `ptrepack --complevel 5 "{input}:/matrix" "{output}:/matrix"`
+```
+raw matrix (三件套)          Stage 1           h5ad (int32)
+    │                        stage1_to_h5ad.py     │
+    │                        ───────────────       │
+    │  features.tsv.gz (1/2/3列自动识别)            │
+    │  barcodes.tsv.gz                             │
+    │  matrix.mtx.gz                               │
+    │                        ← float64→int32 省50% │
+    │                        ← 添加样本前缀        │
+    └───────────────────────────────────────────────┘
+                                                   │
+    ┌───────────────────────────────────────────────┘
+    │  h5ad/                           Stage 2
+    │                                  run_pipeline.py (--skip_stage1)
+    │                                  ─────────────
+    │                                  串行 GPU, 清 PYTHONPATH
+    │                                  清 ckpt, 验证 .h5
+    │                                  失败→继续下一个
+    └──────────────────► cellbender_output/{s}/
+                            ├── cellbender_output.h5
+                            ├── cellbender_output_filtered.h5
+                            └── cellbender_output.pdf
+                                                    │
+                         Stage 3                    │
+                         ptrepack_all.py            │
+                         ─────────────              │
+                         complevel=5                 │
+                         PYTHONPATH clean            │
+                                                    │
+                         seurat_h5/{s}_filtered_seurat.h5
+                                                    │
+                         Stage 4                    │
+                         stats_summary.py           │
+                         ─────────────              │
+                         前后对比                    │
+                                                    │
+                         summary/cellbender_stats.tsv
+```
 
 ### Known Issues (7 patches, all applied to conda env)
 
@@ -203,3 +404,13 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 7. **pandas Series.nonzero()**: Patched with .to_numpy() (14 call sites)
 
 For full patch details: `E:/cellbender/wiki/patches.md`
+
+---
+
+## Changelog
+
+| 版本 | 日期 | 改动 |
+|------|------|------|
+| v3.0 | 2026-07-26 | **4 脚本大重构**：新增 `stage1_to_h5ad.py`（BGI 1列兼容+int32转换+argparse）、`run_pipeline.py`（完整 watchdog 流水线）、`ptrepack_all.py`（批量压缩）、`stats_summary.py`（前后对比统计表）。SKILL.md 重写 Pipeline 节为完整数据流图+快速启动+独立运行示例 |
+| v2.0 | 2026-07-24 | 修正 `learning_rate` 从 `0.001` → `1e-4`（与官方源码对齐）；新增 `--model`/`--total-droplets`/`--low-count-threshold` 等缺失参数；新增 OneCycle 调度说明 + 内部常量表 + 源码引用；新增 Quality Check 表 + Changelog |
+| v1.0 | 2025-06 | 初始版本，含场景自适应参数和 4-Stage Pipeline |

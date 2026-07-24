@@ -30,8 +30,9 @@ The pipeline transposes this to metabolite-per-row for statistics computation.
 ### Required
 
 | Parameter | Type | Description |
-|when_to_use: "[lipidomics-summary-stats] 需使用lipidomics summary stats功能，适用于相关生信分析场景"
-------
+|-----------|------|-------------|
+| `cl_file` | string | Path to the complex lipids Excel file (multi-tab, one tab per lipid class) |
+| `fs_file` | string | Path to the free sterols Excel file (single-tab) |
 ---
 
 ## ⛔ MemOmics 强制规则（不可违反，优先级最高）

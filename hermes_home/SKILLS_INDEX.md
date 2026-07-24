@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (20 skills)
+## 08_报告 - 报告/可视化 (24 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -222,6 +222,10 @@
 | cross-species-cre-conservation | > |  | YEL 讨论触发 |
 | atac-seq-memomics | ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出 |  | YEL 讨论触发 |
 | cross-species-regulatory-conservation | > |  | YEL 讨论触发 |
+| cellbender-batch-pipeline | CellBender 批量样本可靠执行方案 — PyTorch 2.12 weakref 修复 + 磁盘追踪式后台运行 + 进度监控。触发词：批量cellbender / 多样本去污染 / 后台运行c |  | YEL 讨论触发 |
+| metabolomics-functional-enrichment | 代谢组学功能富集分析：输入差异代谢物列表 → MSEA代谢物集富集 → MetPA代谢通路分析 → mummichog通路推断 → ORA过表达分析。基于 MetaboAnalystR 4.0 + K |  | YEL 讨论触发 |
+| metabolomics-statistical-analysis | 代谢组学统计分析全流程：输入 peak intensity matrix → 归一化 → 缺失值填充 → PCA → PLS-DA/OPLS-DA → VIP筛选 → 火山图 → Random For |  | YEL 讨论触发 |
+| windows-bioinformatics-batch-processing | Windows生信批量任务执行规程：进程生命周期管理、GPU内存、进度监控、错误恢复。适用于CellBender/scanpy/Seurat等需要在Windows上用GPU跑大批量样本的场景 |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (14 skills)
 
 

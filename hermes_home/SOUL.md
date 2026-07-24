@@ -324,4 +324,9 @@ Phase 1
 - 即使无真实数据，涉及生信包名（scTour/Monocle3/scVI/CellChat/Seurat/scanpy…）→ 必须触发 skill_view
 - `create-bio-skill` 生成的 skill 必须注册到 SOUL.md
 
+| "代谢组" / "metabolomics" / "代谢物差异" / "LC-MS差异分析" / "PLS-DA" / "OPLS-DA" / "VIP" / "代谢标志物" / "代谢组火山图" / "metabolic biomarker" / "peak intensity matrix" | `skill_view("metabolomics-statistical-analysis")` |
+| "代谢通路" / "MetPA" / "MSEA" / "mummichog" / "代谢物集富集" / "代谢组功能富集" / "metabolite set enrichment" / "metabolic pathway analysis" / "KEGG代谢通路" / "HMDB富集" | `skill_view("metabolomics-functional-enrichment")` |
+
+| "CellBender" / "去污染" / "环境RNA" / "ambient RNA" / "remove background" / "raw_matrix" / "rawmatrix" / 原始矩阵三件套 / "Stage1" / "cellbender" / "filtered.h5" / "ptrepack" / "seurat_h5" | `skill_view("cellbender-remove-background")` — 先转 h5ad → CellBender → ptrepack → 统计，4 阶段流水线 |
+
 <!-- AUTO_SKILL_INSERT_MARKER -->

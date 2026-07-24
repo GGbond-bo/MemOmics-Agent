@@ -2,7 +2,6 @@
 category: General Utility
 name: knowledge-base-curation
 description: >
-when_to_use: "[knowledge-base-curation] 需使用knowledge base curation功能，适用于相关生信分析场景"
   端到端构建组织特异性多组学知识库。从文献搜索→生物知识提取→基因集构建→
   测序方法参数→多物种同步→YAML验证的完整流程。覆盖 scRNA-seq / ATAC-seq /
   spatial / bulk 四种测序方法。当知识库缺少某个物种/组织/方向的生物学知识、
@@ -279,3 +278,6 @@ knowledge_base/{species}/{tissue}/{direction}/
 ## 相关技能
 - `literature-param-extraction` — 从 PDF 提取生信参数（互补，焦点在 PDF 而非构建完整知识库）
 - `create-bio-skill` — 创建生信分析 skill（不同领域，构建分析模板而非知识库）
+
+## 参考文档
+- `references/memomics-skill-gap-analysis-2026-07.md` — 286 skill × 5 用户角色覆盖度差距分析。含按角色/组学/优先级的三维评估，指导 skill 开发优先级决策。
