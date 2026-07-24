@@ -4830,6 +4830,22 @@ async def ws_endpoint(ws: WebSocket):
                         else:
                             _chat_content = ""
                         _session_emit(session, {"type": "complete", "content": _chat_content, "session_id": session["id"]})
+
+                        # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
+                        _action_words = ["启动", "运行", "执行", "开始", "跑", "启动pipeline", "launch", "run ", "start"]
+                        _has_action_promise = any(w in result.lower() for w in _action_words) if result else False
+                        _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
+                                       for t in _tool_call_log) if _tool_call_log else False
+                        _has_plan = bool(session.get("plan_path") or
+                                         os.path.isfile(os.path.join(session.get("results_dir", ""), "task_plan.md")))
+                        if _has_action_promise and not _has_exec and _has_plan:
+                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 自动补发执行指令")
+                            _session_emit(session, {"type": "info",
+                                "content": "⚠️ 检测到你说了要执行但没有调工具，已自动补发执行指令",
+                                "session_id": session["id"]})
+                            # 自动发一条 chat 消息触发新 turn
+                            _session_emit(session, {"type": "chat", "message": "请立即执行你刚才说的操作。不要分析，不要解释，直接调 terminal 启动。",
+                                "session_id": session["id"]})
                     except asyncio.CancelledError:
                         if not getattr(agent, "_interrupt_requested", False):
                             agent.interrupt()
