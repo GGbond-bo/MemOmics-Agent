@@ -211,8 +211,9 @@ def _auto_create_task_plan(session, plan_path):
                 if _path_match:
                     _user_dir = _path_match.group(1).rstrip("/\\")
                     if os.path.isdir(_user_dir):
-                        session["results_dir"] = _user_dir
-                        logger.info(f"[MemOmics] task_plan 自动对齐到用户目录: {_user_dir}")
+                        # 记录分析目录（用于心跳扫描），但不覆盖 results_dir（结果面板需要隔离）
+                        session["analysis_dir"] = _user_dir
+                        logger.info(f"[MemOmics] task_plan 检测到分析目录: {_user_dir}")
                 break
 
     # task_plan.md 写入 results_dir（此时已对齐到用户指定目录）
@@ -4504,28 +4505,22 @@ async def ws_endpoint(ws: WebSocket):
                                     except Exception:
                                         pass
 
-                                # 2. 检查真正的分析产出目录（task_plan.md 位置 + results 目录）
+                                # 2. 检查真正的分析产出目录
                                 try:
                                     _recent_files = []
                                     _scan_dirs = []
-                                    # 优先：task_plan.md 所在目录（用户实际分析输出位置，如 F:/CellBender_v2）
-                                    _plan_path = os.path.join(_results_dir, "task_plan.md")
-                                    if os.path.isfile(_plan_path):
-                                        _plan_dir = os.path.dirname(_plan_path)
-                                        if os.path.isdir(_plan_dir):
-                                            _scan_dirs.append(_plan_dir)
-                                            # 常见子目录
-                                            for _sub in ["cellbender_output", "output", "figures"]:
-                                                _sd = os.path.join(_plan_dir, _sub)
-                                                if os.path.isdir(_sd):
-                                                    _scan_dirs.append(_sd)
-                                    # 备选：MemOmics results 目录
+                                    # 用户指定的分析目录（如 F:/CellBender_v2）
+                                    _analysis_dir = session.get("analysis_dir", "")
+                                    if _analysis_dir and os.path.isdir(_analysis_dir):
+                                        _scan_dirs.append(_analysis_dir)
+                                        for _sub in ["cellbender_output", "output", "figures"]:
+                                            _sd = os.path.join(_analysis_dir, _sub)
+                                            if os.path.isdir(_sd):
+                                                _scan_dirs.append(_sd)
+                                    # MemOmics results 目录
                                     _res_sub = os.path.join(_results_dir, "results")
                                     if os.path.isdir(_res_sub):
                                         _scan_dirs.append(_res_sub)
-                                    if os.path.isdir(_results_dir) and _results_dir not in _scan_dirs:
-                                        _scan_dirs.append(_results_dir)
-                                    # 去重
                                     _scan_dirs = list(dict.fromkeys(_scan_dirs))
                                     for _scan_root in _scan_dirs:
                                         if not os.path.isdir(_scan_root):
