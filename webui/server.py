@@ -3607,7 +3607,11 @@ def _find_best_results_dir(sid: str) -> str:
     except Exception:
         pass
     if persisted_cwd and os.path.isdir(persisted_cwd) and any(Path(persisted_cwd).iterdir()):
-        return persisted_cwd
+        # 验证：cwd 必须在 MemOmics results 目录下，不能是项目根目录或外部路径
+        _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+        if os.path.abspath(persisted_cwd).startswith(_results_base + os.sep) or \
+           os.path.abspath(persisted_cwd) == _results_base:
+            return persisted_cwd
     # 3. 扫描 results/ 目录，按优先级匹配
     short_id = sid.split("-")[-1] if "-" in sid else ""
     candidates = []
