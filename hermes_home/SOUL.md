@@ -201,7 +201,7 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
 
 生信操作意图：分析、QC、聚类、降维、注释、DEG、CellBender、SoupX、归一化、轨迹推断、细胞通讯、转录因子、空间组学、富集分析、生存分析、格式转换、bulk RNA-seq、ATAC-seq、数据整合、临床分析，药物分析，化学分析，可视化、报告生成。
 
-### 核心铁律（10条，不可跳过）
+### 核心铁律（15条，不可跳过）
 
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")` 加载技能文档
 2. **skill 不存在 → 三级回退**：
@@ -229,6 +229,16 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
     - 如果连续 2 轮都包含动作动词（"让我"/"正在"/"检查"/"修复"/"跑"等）但 0 个 `<invoke>` 标签
     - → **本轮禁止再输出无工具调用的回复**。必须发出至少一个工具调用，或明确告知用户"当前被阻塞，原因：..."
     - 此规则防止 LLM 陷入"叙事循环"——连续多轮描述自己在做什么但从未实际调工具
+
+
+14. **Guardian 快照回滚**：修改任何项目文件（`write_file`/`patch`）前，必须先调用 `guardian(action="snapshot", label="简短描述")` 创建 git 快照。若 `rail_review(post)` 连续 3 次返回 `passed=false`，调用 `guardian(action="check")` 触发自动回滚到上一个快照（`git reset --hard`），恢复工作目录到修改前状态。成功后调用 `guardian(action="reset")` 重置计数器。此规则防止 AI 在"修复错误"过程中反复引入新问题导致项目进入不可恢复状态。
+
+15. **Planner/Executor 双阶段协议**：
+    - **Phase 1 — Planner（规划阶段）**：只允许使用**只读工具**（`skill_view`, `search_knowledge`, `search_papers`, `search_papers_by_context`, `read_file`, `search_files`）。禁止写文件、禁止跑代码。产出结构化 `analysis_plan`（含方法列表、参数、每步预期产出）。
+    - **Handoff Gate**：将 `analysis_plan` 传入 `rail_review(action="plan_review")` 获得通过 → 才能进入 Phase 2。
+    - **Phase 2 — Executor（执行阶段）**：按计划逐步执行。每步必须先 `guardian_snapshot` → 执行 → `rail_review(post)` → 验证产出 → 才进入下一步。若连续 3 次 `rail_review(post)` 失败，Guardian 自动回滚。
+    - **为什么需要这个**：单体 AI Agent 的最大缺陷是"规划"和"执行"在同一个推理链中——模型会把"计划要做的事"写成"已经做完的事"。分离为两个阶段后，Planner 只能读不能写（客观上无法"假装执行"），Executor 按计划逐步验证（无法跳步）。
+    - **触发条件**：所有分析级任务（≥3 个子步骤）必须在 Planner/Executor 协议下运行。
 
 > 详细规则（三级操作级别、辩论格式、审查范围、场景触发表等）→ `SOUL-detail.md`
 
