@@ -351,6 +351,38 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 > ⛔ **不要重新执行已标记 `complete` 的 Phase。**
 > ⛔ **同一个错误不要用相同方法重试 3 次以上。第 3 次失败后 → debate_analysis 辩论替代方案。**
 
+### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
+
+**为什么需要**：生信分析中工具输出经常达到数千行（scan_data、summary、terminal 输出），几轮对话就能填满上下文窗口。压缩后可释放 70-80% token 空间，让 Agent 继续工作而不丢失关键信息。
+
+**自动触发场景**（满足任一即触发）：
+
+| 场景 | 操作 |
+|------|------|
+| 工具输出 > 3000 字符 | `headroom(action='compress', content='工具输出内容')` — 压缩后仅保留压缩文本 + hash |
+| 连续 5 轮工具调用后 | `headroom(action='compress', content='最近5轮工具输出摘要')` — 主动释放空间 |
+| 上下文使用率 > 60% | `headroom(action='stats')` 查看统计 → 压缩历史中过时的工具输出 |
+| 开始新的分析 Phase | 压缩上一 Phase 的中间结果，只保留 task_plan.md 中的结论 |
+
+**使用方式**：
+```
+# 压缩大段输出
+headroom(action='compress', content=tool_output)
+→ 返回 {"compressed": "...摘要...", "hash": "a1b2c3", "tokens_saved_est": 5000}
+
+# 需要原始内容时还原
+headroom(action='retrieve', hash_key='a1b2c3')
+→ 返回完整原始内容
+
+# 查看当前压缩统计
+headroom(action='stats')
+→ {"compressions": 12, "tokens_saved_est": 45000}
+```
+
+> ⛔ **不要压缩 task_plan.md 的内容。task_plan.md 是磁盘锚点，不需要进压缩缓存。**
+> ⛔ **压缩后必须保留 hash，否则原始内容永久丢失。**
+> ⛔ **压缩后继续对话时，先用 task_plan.md 恢复当前 Phase 状态。**
+
 ### task_plan.md 模板
 
 ```markdown

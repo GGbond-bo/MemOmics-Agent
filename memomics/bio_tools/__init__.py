@@ -16,4 +16,5 @@ from . import query_stringdb
 from . import query_uniprot
 from . import query_ensembl
 from . import query_ncbi
+from . import headroom_tool
 from . import guardian

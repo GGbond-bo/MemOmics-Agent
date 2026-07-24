@@ -1746,9 +1746,14 @@ function newSession() {
   refreshResults();  // 清除旧会话的分析结果面板
 }
 
-// 首次加载：始终显示企鹅欢迎画面，用户自行选择会话（避免自动跳入旧会话遮住企鹅）
+// 首次加载：优先恢复到最近活跃会话，没有历史会话时才显示企鹅欢迎画面
 function autoSelectLatestSession() {
-  newSession();  // 始终显示企鹅欢迎画面
+  // 如果有历史会话，自动切换到最近活跃的（列表按 last_active 降序排列）
+  if (_allSessions && _allSessions.length > 0) {
+    switchSession(_allSessions[0].id);
+  } else {
+    newSession();  // 真的没有任何历史会话才新建
+  }
 }
 
 var _loadSessionsCtl = null;
@@ -3214,19 +3219,21 @@ function renderContextUsage(data, error) {
   var ctxMax = data.context_max || 0;
   var ctxUsed = data.context_used || 0;
   var ctxPct = data.context_percent || 0;
+  var cumulative = data.cumulative_tokens || 0;
 
-  updateGauge(ctxPct, ctxUsed, ctxMax);
-  updateStats(data.session_stats);
+  // 圆圈：当前调用占比（保留原有语义），累计 token 作为副标题
+  updateGauge(ctxPct, cumulative, ctxMax);
+  updateStats(data.session_stats, data.headroom_stats);
   updateBreakdown(data.categories, ctxMax);
 
   var modelInfo = document.getElementById('ctx-model-info');
   if (modelInfo) {
     modelInfo.textContent = '模型: ' + (data.model || '未知') +
-      ' ｜ 上下文窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知');
+      ' ｜ 窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知');
   }
 }
 
-function updateGauge(pct, used, max) {
+function updateGauge(pct, cumulative, max) {
   var fgCircle = document.getElementById('ctx-gauge-fg');
   var pctEl = document.getElementById('ctx-gauge-pct');
   if (!fgCircle || !pctEl) return;
@@ -3239,27 +3246,44 @@ function updateGauge(pct, used, max) {
   if (pct >= 85) fgCircle.classList.add('danger');
   else if (pct >= 65) fgCircle.classList.add('warn');
 
-  pctEl.textContent = Math.round(pct) + '%';
+  // 圆圈中心：累计总 token（大数字）+ 当前占比（小字）
+  if (cumulative > 0) {
+    pctEl.innerHTML = '<span style="font-size:22px;font-weight:800;">' +
+      (cumulative >= 1000000 ? (cumulative/1000000).toFixed(1) + 'M' :
+       cumulative >= 1000 ? (cumulative/1000).toFixed(1) + 'K' :
+       cumulative.toLocaleString()) +
+      '</span><br><span style="font-size:10px;color:var(--text-light);">' +
+      Math.round(pct) + '% 窗口</span>';
+  } else {
+    pctEl.textContent = Math.round(pct) + '%';
+  }
 
   var lblEl = document.querySelector('.ctx-gauge .gauge-label');
-  if (lblEl && max > 0) {
-    lblEl.textContent = used.toLocaleString() + ' / ' + max.toLocaleString();
+  if (lblEl) {
+    lblEl.textContent = (cumulative > 0 ? '全会话累计' : '当前使用');
   }
 }
 
-function updateStats(stats) {
+function updateStats(stats, headroomStats) {
   if (!stats) return;
   var container = document.getElementById('ctx-stats');
   if (!container) return;
 
   var totalTokens = (stats.prompt_tokens || stats.input_tokens || 0) + (stats.output_tokens || 0);
+  var hr = headroomStats || {};
+  var hrSaved = hr.tokens_saved || 0;
 
   var items = [
-    { val: totalTokens.toLocaleString(), lbl: '本会话总 Token', klass: '' },
+    { val: totalTokens.toLocaleString(), lbl: '累计 Token', klass: '' },
     { val: (stats.output_tokens || 0).toLocaleString(), lbl: '输出 Token', klass: 'small' },
     { val: (stats.input_tokens || stats.prompt_tokens || 0).toLocaleString(), lbl: '输入 Token', klass: 'small' },
-    { val: (stats.cache_read_tokens || 0).toLocaleString(), lbl: '缓存读取', klass: 'small' },
   ];
+
+  // headroom 压缩统计
+  if (hr.compressions > 0) {
+    items.push({ val: hrSaved.toLocaleString(), lbl: '压缩节省', klass: 'small saved' });
+    items.push({ val: hr.compressions + '次', lbl: '压缩次数', klass: 'small' });
+  }
 
   container.innerHTML = items.map(function(item) {
     return '<div class="ctx-stat"><div class="stat-val' + (item.klass ? ' ' + item.klass : '') + '">' +

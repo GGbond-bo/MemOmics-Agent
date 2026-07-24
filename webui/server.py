@@ -145,6 +145,198 @@ def _get_session_db():
             print(f"[MemOmics] SessionDB 初始化失败: {e}", flush=True)
     return _session_db
 
+
+def _build_session_stats(session_id, agent=None):
+    """构建 session token 统计：优先 agent 内存值，回退 state.db 聚合查询。"""
+    stats = {
+        "prompt_tokens": getattr(agent, "session_prompt_tokens", 0) if agent else 0,
+        "input_tokens": getattr(agent, "session_input_tokens", 0) if agent else 0,
+        "output_tokens": getattr(agent, "session_output_tokens", 0) if agent else 0,
+        "cache_read_tokens": getattr(agent, "session_cache_read_tokens", 0) if agent else 0,
+        "cache_write_tokens": getattr(agent, "session_cache_write_tokens", 0) if agent else 0,
+        "reasoning_tokens": getattr(agent, "session_reasoning_tokens", 0) if agent else 0,
+    }
+    total_mem = sum(v for v in stats.values())
+    if total_mem == 0:
+        db = _get_session_db()
+        if db and hasattr(db, "_conn"):
+            try:
+                row = db._conn.execute(
+                    "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens), "
+                    "SUM(cache_write_tokens), SUM(reasoning_tokens), SUM(api_call_count) "
+                    "FROM session_model_usage WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                if row and row[0] is not None:
+                    stats["input_tokens"] = row[0] or 0
+                    stats["output_tokens"] = row[1] or 0
+                    stats["cache_read_tokens"] = row[2] or 0
+                    stats["cache_write_tokens"] = row[3] or 0
+                    stats["reasoning_tokens"] = row[4] or 0
+            except Exception:
+                pass
+    return stats
+
+
+def _get_headroom_stats():
+    """读取 headroom 工具的内存压缩统计。"""
+    try:
+        from memomics.bio_tools.headroom_tool import _STATS as _hs, _COMPRESS_CACHE as _hc
+        return {
+            "compressions": _hs.get("compressions", 0),
+            "tokens_saved": _hs.get("tokens_saved_est", 0),
+            "original_chars": _hs.get("original_chars", 0),
+            "compressed_chars": _hs.get("compressed_chars", 0),
+            "cache_entries": len(_hc),
+        }
+    except Exception:
+        return {"compressions": 0, "tokens_saved": 0}
+
+
+def _auto_create_task_plan(session, plan_path):
+    """自动创建 task_plan.md 初始版本（用户没手动创建时的兜底保护）。"""
+    messages = session.get("messages", [])
+    # 从第一条用户消息提取分析目标
+    goal = "生信分析任务"
+    for m in messages:
+        if m.get("role") == "user":
+            text = m.get("content", "")
+            if isinstance(text, str) and len(text) > 3:
+                goal = text[:80].replace("\n", " ")
+                break
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    content = f"""# Task Plan: {goal}
+
+## Goal
+{goal}
+
+## Current Phase
+Phase 1
+
+## Phases
+
+### Phase 1: 分析任务
+- [ ] 待 LLM 根据实际任务补充
+**Status:** in_progress
+
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+|       |         |            |
+
+## Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+|          |           |
+
+---
+> ⚠️ 此文件由系统自动创建（{now}）。请 LLM 根据用户的实际需求更新 Phase 列表。
+> 每完成一个 Phase 更新 Status 和 Current Phase。
+"""
+    try:
+        os.makedirs(os.path.dirname(plan_path), exist_ok=True)
+        with open(plan_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"[MemOmics] 自动创建 task_plan.md: {plan_path}")
+    except Exception as e:
+        logger.warning(f"[MemOmics] 自动创建 task_plan.md 失败: {e}")
+        return None
+
+    return (
+        "[SYSTEM] ⚠️ 系统已自动创建 task_plan.md（磁盘文件）。"
+        "你当前正在进行分析任务，上下文可能被压缩丢失目标。\n\n"
+        "**你必须做的事**：\n"
+        "1. 用 read_file 读取 task_plan.md 查看当前状态\n"
+        "2. 根据用户需求完善 Phase 列表（每个 Phase 对应一个分析步骤）\n"
+        "3. 每完成一个 Phase，用 write_file/edit_file 更新 Status 和 Current Phase\n"
+        "4. 出错时追加到 Errors Encountered 表格\n\n"
+        "⛔ 这个文件是你唯一信任的状态源。压缩后凭它恢复进度。"
+    )
+
+
+def _build_task_plan_context(session):
+    """读取 task_plan.md 并提取状态摘要，注入到每轮对话中。
+
+    上下文压缩后 LLM 会丢失长任务目标。此函数从磁盘读取 task_plan.md，
+    提取 Goal + Current Phase + 各 Phase 状态，生成精简的系统消息注入。
+    token 预算控制在 ~500 以内，避免挤压对话空间。
+
+    如果 task_plan.md 不存在但检测到分析意图 → 自动创建初始版本，
+    确保即使用户不知道 task_plan.md 也能受到长任务保护。
+    """
+    results_dir = session.get("results_dir", "")
+    if not results_dir:
+        return None
+    plan_path = os.path.join(results_dir, "task_plan.md")
+
+    _intent = session.get("intent", "")
+    _is_analysis = _intent not in ("", "chat", "self_intro")
+    _has_messages = len(session.get("messages", [])) >= 2
+
+    if not os.path.isfile(plan_path):
+        # 自动创建：分析意图 + 有对话内容 → 防止用户不知道 task_plan.md
+        if _is_analysis and _has_messages:
+            return _auto_create_task_plan(session, plan_path)
+        return None
+    try:
+        with open(plan_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return None
+
+    # 只提取关键行：Goal、Current Phase、Phase 状态
+    lines = content.split("\n")
+    summary_lines = []
+    in_goal = False
+    in_current = False
+    phase_count = 0
+    for line in lines:
+        stripped = line.strip()
+        # Goal 段落
+        if stripped.startswith("## Goal") or stripped.startswith("# Goal"):
+            in_goal = True
+            summary_lines.append(line)
+            continue
+        if in_goal:
+            if stripped.startswith("##"):
+                in_goal = False
+            elif stripped:
+                summary_lines.append(line)
+                continue
+        # Current Phase
+        if stripped.startswith("## Current Phase"):
+            in_current = True
+            summary_lines.append(line)
+            continue
+        if in_current:
+            if stripped.startswith("##"):
+                in_current = False
+            elif stripped:
+                summary_lines.append(line)
+                continue
+        # Phase 状态行（只取标题和 Status）
+        if stripped.startswith("### Phase"):
+            phase_count += 1
+            summary_lines.append(line)
+            continue
+        if stripped.startswith("**Status:**"):
+            summary_lines.append(line)
+            continue
+
+    if not summary_lines:
+        return None
+
+    summary = "\n".join(summary_lines)
+    return (
+        "[SYSTEM] 以下是磁盘上 task_plan.md 的当前状态摘要。"
+        "你正在进行一个长任务，上下文可能已被压缩，"
+        "请以此文件为准恢复当前进度：\n\n"
+        + summary
+        + "\n\n⛔ 不要重新执行已标记 complete 的 Phase。"
+        "先从 Current Phase 的 pending/in_progress 项继续。"
+    )
+
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
 _bg_tasks = {}       # session_id -> background task info
@@ -1338,6 +1530,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
+        session_db=_get_session_db(),
         checkpoints_enabled=True,
         checkpoint_max_snapshots=10,
         checkpoint_max_total_size_mb=200,
@@ -4260,13 +4453,68 @@ async def ws_endpoint(ws: WebSocket):
                         pass
                 agent.clarify_callback = clarify_cb
 
-                # 问题4: 推理阶段心跳 — 每 15s 发一次进度，防止前端以为卡死
+                # 问题4: 长任务心跳监控 — 每 30s 检查磁盘进度并汇报
                 _heartbeat_active = {"on": True}
+                _heartbeat_last_report = {"ts": 0}
+
                 async def _heartbeat_loop():
                     while _heartbeat_active["on"]:
-                        await asyncio.sleep(15)
+                        await asyncio.sleep(30)
                         try:
-                            _send_progress(_pt(session, "thinking"), "pending", _pt(session, "understanding"))
+                            _results_dir = session.get("results_dir", "")
+                            _report_parts = []
+
+                            # 1. 读取 task_plan.md 提取当前 Phase 状态
+                            if _results_dir:
+                                _plan_path = os.path.join(_results_dir, "task_plan.md")
+                                if os.path.isfile(_plan_path):
+                                    try:
+                                        with open(_plan_path, "r", encoding="utf-8") as f:
+                                            _plan_text = f.read()
+                                        # 提取 Current Phase + 状态
+                                        import re
+                                        _phase_match = re.search(r"## Current Phase\n(.+?)(?:\n|$)", _plan_text)
+                                        if _phase_match:
+                                            _report_parts.append(f"📍 {_phase_match.group(1).strip()}")
+                                        # 找 in_progress 的 Phase
+                                        for _m in re.finditer(r"### (Phase \d+: .+?)\n(.*?)(?=\n###|\n##|\Z)", _plan_text, re.DOTALL):
+                                            if "**Status:** in_progress" in _m.group(2):
+                                                _checklist = [l.strip("- [ ] ").strip() for l in _m.group(2).split("\n") if l.strip().startswith("- [ ]")]
+                                                _report_parts.append(f"⏳ {_m.group(1).strip()}")
+                                                if _checklist:
+                                                    _report_parts.append(f"   待完成: {', '.join(_checklist[:3])}")
+                                                break
+                                    except Exception:
+                                        pass
+
+                                # 2. 检查结果目录是否有新文件
+                                try:
+                                    _recent_files = []
+                                    for _root, _dirs, _files in os.walk(_results_dir):
+                                        for _f in _files:
+                                            _fp = os.path.join(_root, _f)
+                                            try:
+                                                _mtime = os.path.getmtime(_fp)
+                                                if _mtime > _heartbeat_last_report["ts"]:
+                                                    _rel = os.path.relpath(_fp, _results_dir)
+                                                    _recent_files.append((_mtime, _rel))
+                                            except Exception:
+                                                pass
+                                    _recent_files.sort(reverse=True)
+                                    if _recent_files:
+                                        _newest = _recent_files[:3]
+                                        _report_parts.append(f"📄 新产出: {', '.join(f[1] for f in _newest)}")
+                                except Exception:
+                                    pass
+
+                            _heartbeat_last_report["ts"] = time.time()
+
+                            if _report_parts:
+                                _detail = " | ".join(_report_parts)
+                                _send_progress(_pt(session, "monitoring"), "pending",
+                                               f"🕐 {datetime.now().strftime('%H:%M')} {_detail}")
+                            else:
+                                _send_progress(_pt(session, "thinking"), "pending", _pt(session, "running_task"))
                         except Exception:
                             pass
                 _heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
@@ -4406,6 +4654,12 @@ async def ws_endpoint(ws: WebSocket):
                         # 图路由：根据意图+领域注入技能触发指令（P1+P2+P3）
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
+
+                        # 🔧 长任务记忆锚点：注入 task_plan.md 状态摘要
+                        # 上下文压缩后 LLM 会丢失任务目标，此注入确保每轮都能看到当前进度
+                        _plan_ctx = _build_task_plan_context(session)
+                        if _plan_ctx:
+                            conversation_history.append({"role": "system", "content": _plan_ctx})
 
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None
@@ -4549,15 +4803,14 @@ async def ws_endpoint(ws: WebSocket):
                         msgs = session.get("messages", [])
                         conv_msgs = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in msgs]
                         breakdown = compute_session_context_breakdown(agent, messages=conv_msgs)
-                        # 附加累计 session 统计
-                        breakdown["session_stats"] = {
-                            "prompt_tokens": getattr(agent, "session_prompt_tokens", 0),
-                            "input_tokens": getattr(agent, "session_input_tokens", 0),
-                            "output_tokens": getattr(agent, "session_output_tokens", 0),
-                            "cache_read_tokens": getattr(agent, "session_cache_read_tokens", 0),
-                            "cache_write_tokens": getattr(agent, "session_cache_write_tokens", 0),
-                            "reasoning_tokens": getattr(agent, "session_reasoning_tokens", 0),
-                        }
+                        # 累计 session 统计（优先内存，回退 DB 聚合）
+                        breakdown["session_stats"] = _build_session_stats(session["id"], agent)
+                        # headroom 压缩统计
+                        breakdown["headroom_stats"] = _get_headroom_stats()
+                        # 累计 token 用于圆圈展示（全部输入+输出）
+                        _ss = breakdown["session_stats"]
+                        _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
+                        breakdown["cumulative_tokens"] = _cumulative
                         _session_emit(session, {"type": "context_usage", "data": breakdown, "session_id": session["id"]})
                     except Exception as e:
                         # 降级：直接从 compressor 获取基础数据
@@ -4566,17 +4819,17 @@ async def ws_endpoint(ws: WebSocket):
                             ctx_max = int(getattr(compressor, "context_length", 0) or 0)
                             ctx_used = int(getattr(compressor, "last_prompt_tokens", 0) or 0)
                             ctx_pct = round(ctx_used / ctx_max * 100, 1) if ctx_max > 0 else 0
+                            _ss = _build_session_stats(session["id"], agent)
+                            _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
                             _session_emit(session, {"type": "context_usage", "data": {
                                 "categories": [],
                                 "context_max": ctx_max,
                                 "context_used": ctx_used,
                                 "context_percent": ctx_pct,
+                                "cumulative_tokens": _cumulative,
                                 "model": getattr(agent, "model", "") or "",
-                                "session_stats": {
-                                    "prompt_tokens": getattr(agent, "session_prompt_tokens", 0),
-                                    "input_tokens": getattr(agent, "session_input_tokens", 0),
-                                    "output_tokens": getattr(agent, "session_output_tokens", 0),
-                                },
+                                "session_stats": _ss,
+                                "headroom_stats": _get_headroom_stats(),
                             }, "session_id": session["id"]})
                         except Exception as e2:
                             _session_emit(session, {"type": "context_usage", "error": str(e2), "session_id": session["id"]})
