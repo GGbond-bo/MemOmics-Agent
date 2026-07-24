@@ -409,6 +409,7 @@ terminal(command="tail -5 F:/CellBender_v2/monitor.log")
 > ⛔ **任何 > 10 分钟的任务启动时必须同时部署心跳。心跳比 Agent 的心跳（每 30s）更可靠——它是独立进程。**
 > ⛔ **用户问"进度"时，读 monitor.log，不要重新调 nvidia-smi 或扫描文件。**
 > ⛔ **任务完成后必须杀心跳进程：`taskkill /F /PID <pid>`**
+> ⛔ **禁止 `taskkill /F /IM python.exe`——这会杀死 MemOmics 自己！必须用指定 PID 的方式。**
 
 ### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
 
