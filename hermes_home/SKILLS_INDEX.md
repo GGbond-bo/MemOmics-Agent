@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (24 skills)
+## 08_报告 - 报告/可视化 (25 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -226,7 +226,8 @@
 | metabolomics-functional-enrichment | 代谢组学功能富集分析：输入差异代谢物列表 → MSEA代谢物集富集 → MetPA代谢通路分析 → mummichog通路推断 → ORA过表达分析。基于 MetaboAnalystR 4.0 + K |  | YEL 讨论触发 |
 | metabolomics-statistical-analysis | 代谢组学统计分析全流程：输入 peak intensity matrix → 归一化 → 缺失值填充 → PCA → PLS-DA/OPLS-DA → VIP筛选 → 火山图 → Random For |  | YEL 讨论触发 |
 | windows-bioinformatics-batch-processing | Windows生信批量任务执行规程：进程生命周期管理、GPU内存、进度监控、错误恢复。适用于CellBender/scanpy/Seurat等需要在Windows上用GPU跑大批量样本的场景 |  | YEL 讨论触发 |
-## 09_内置 - Hermes系统 (14 skills)
+| agent-loop-engineering | 防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，或 rail_review(post) code_executed 过短。已部署 G |  | YEL 讨论触发 |
+## 09_内置 - Hermes系统 (15 skills)
 
 
 | # | Skill | Description | Keywords | Trigger |
@@ -247,6 +248,7 @@
 ---
 | 14 | error-recovery | 错误自动修复：根据报错信息查找解决方案 | error, fix, debug, 报错, 修复 | RED 必触发 |
 
+| heartbeat-monitor | 长任务心跳监控 — 独立后台进程持续记录进度，Agent 随时读取汇报 |  | RED 必触发 |
 ## 10_多组学整合 - 多组学整合 (11 skills)
 
 | # | Skill | Description | Keywords | Trigger |

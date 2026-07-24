@@ -216,8 +216,8 @@ Phase 1
 
 ## Phases
 
-### Phase 1: 分析任务
-- [ ] 待 LLM 根据实际任务补充
+### Phase 1: 执行用户任务
+- [ ] 直接开始执行（加载 skill → 写脚本 → 后台运行 → 部署心跳）
 **Status:** in_progress
 
 ## Errors Encountered
@@ -4659,17 +4659,21 @@ async def ws_endpoint(ws: WebSocket):
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
 
-                        # 🔧 长任务记忆锚点：注入 task_plan.md 状态摘要
-                        # 上下文压缩后 LLM 会丢失任务目标，此注入确保每轮都能看到当前进度
+                        # 🔧 长任务记忆锚点 + 强制执行指令（合并为一条，避免被稀释）
                         _plan_ctx = _build_task_plan_context(session)
                         if _plan_ctx:
-                            conversation_history.append({"role": "system", "content": _plan_ctx})
-                            # 强化：有 task_plan 时追加反"说而不做"指令
-                            conversation_history.append({"role": "system", "content": (
-                                "⛔ 铁律 -1（最高优先级）：你现在有 task_plan.md，说明你在执行分析任务。"
-                                "任何说了要做的事必须立刻发出工具调用。说启动就必须调 terminal。"
-                                "禁止只输出文字描述而不调工具。文字描述+无工具调用=无效回复。"
-                            )})
+                            # 把所有关键指令合并成一条 system 消息
+                            _merged = (
+                                _plan_ctx + "\n\n"
+                                "⛔⛔⛔ 最高优先级指令 ⛔⛔⛔\n"
+                                "你当前有 task_plan.md，正在执行分析任务。请严格遵守：\n"
+                                "1. 你的下一句话必须是一个工具调用（terminal/write_file/skill_view），不是文字。\n"
+                                "2. 说'启动'→调 terminal。说'写脚本'→调 write_file。说'检查'→调 terminal 执行命令。\n"
+                                "3. 禁止先输出大段文字再调工具。工具调用必须在文字之前。\n"
+                                "4. CellBender/训练/长时间命令必须 terminal(background=True, notify_on_complete=True)。\n"
+                                "5. 如果 task_plan 的 Phase 描述模糊，直接用你的判断补充具体步骤并执行。不要等用户确认。"
+                            )
+                            conversation_history.append({"role": "system", "content": _merged})
 
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None

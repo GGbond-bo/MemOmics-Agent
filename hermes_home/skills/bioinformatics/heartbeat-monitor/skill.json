@@ -1,0 +1,16 @@
+{
+  "id": "heartbeat-monitor",
+  "name": "Heartbeat Monitor — 长任务心跳监控",
+  "category": "system",
+  "language": "Python",
+  "description": "长任务心跳监控 — 独立后台进程持续记录进度，Agent 随时读取汇报",
+  "starting_prompt": "使用 Heartbeat Monitor — 长任务心跳监控 进行分析",
+  "source_dir": "skills/bioinformatics/heartbeat-monitor",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": []
+}

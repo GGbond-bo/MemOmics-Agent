@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "session_id": "proc_ca36787296c9",
+    "command": "cd /f/CellBender_v2 && TMPDIR=/e/tmp PYTHONPATH=\"\" /c/Users/23136/AppData/Local/Programs/Python/Python312/python.exe run_cellbender_serial.py",
+    "pid": 47556,
+    "pid_scope": "host",
+    "host_start_time": 178491388071,
+    "cwd": "F:\\CellBender_v2\\cellbender_output",
+    "started_at": 1784913880.706697,
+    "task_id": "default",
+    "session_key": "d89e34d7-15cf-4570-80af-94dd71e77a32",
+    "watcher_platform": "",
+    "watcher_chat_id": "",
+    "watcher_user_id": "",
+    "watcher_user_name": "",
+    "watcher_thread_id": "",
+    "watcher_message_id": "",
+    "watcher_interval": 0,
+    "notify_on_complete": true,
+    "watch_patterns": []
+  },
+  {
+    "session_id": "proc_e0049b8ad6e7",
+    "command": "export TMPDIR=/f/CellBender_v2/tmp && export TMP=/f/CellBender_v2/tmp && export TEMP=/f/CellBender_v2/tmp && mkdir -p /f/CellBender_v2/tmp && python F:/CellBender_v2/scripts/run_pipeline.py --h5ad_dir F:/CellBender_v2/h5ad --work_dir F:/CellBender_v2 --skip_stage1 --only_stage 2 2>&1",
+    "pid": 40328,
+    "pid_scope": "host",
+    "host_start_time": 178491548693,
+    "cwd": "F:/CellBender_v2",
+    "started_at": 1784915486.9255197,
+    "task_id": "default",
+    "session_key": "095ecef1-cc65-46c2-a312-33744451f9c1",
+    "watcher_platform": "",
+    "watcher_chat_id": "",
+    "watcher_user_id": "",
+    "watcher_user_name": "",
+    "watcher_thread_id": "",
+    "watcher_message_id": "",
+    "watcher_interval": 0,
+    "notify_on_complete": false,
+    "watch_patterns": []
+  }
+]
