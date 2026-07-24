@@ -351,6 +351,37 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 > ⛔ **不要重新执行已标记 `complete` 的 Phase。**
 > ⛔ **同一个错误不要用相同方法重试 3 次以上。第 3 次失败后 → debate_analysis 辩论替代方案。**
 
+### 规则 16: 长时间命令必须后台运行（terminal background 模式）
+
+**为什么需要**：`terminal()` 默认 foreground 模式会**阻塞 Agent**，命令跑多久 Agent 就卡多久。CellBender 跑 2 小时 → Agent 卡 2 小时 → 你发消息它不回复。
+
+**强制规则**：
+
+| 命令预计耗时 | 必须使用 |
+|-------------|---------|
+| > 5 分钟（CellBender、SCTransform、大数据处理） | `terminal(command=..., background=True, notify_on_complete=True, timeout=7200)` |
+| > 30 分钟 | 同上 + 用 `process(action="poll", session_id=...)` 定期检查进度 |
+| < 5 分钟（简单文件操作、pip install、小脚本） | 默认 foreground 即可 |
+
+**后台任务完整工作流**：
+```
+# 1. 提交后台任务
+terminal(command="cellbender run --input ...", background=True, notify_on_complete=True, timeout=7200)
+→ 返回 {"session_id": "abc123", "status": "running"}
+
+# 2. 等几分钟后检查进度（不阻塞！可以继续做其他事）
+process(action="poll", session_id="abc123")
+→ {"status": "running", "output": "Processing sample 15/26..."}
+
+# 3. 任务完成后处理结果
+process(action="wait", session_id="abc123")
+→ {"status": "completed", "output": "...", "exit_code": 0}
+```
+
+> ⛔ **禁止 foreground 模式跑 CellBender。必须 background=True。**
+> ⛔ **background=True 但没设 notify_on_complete → 任务完成后 Agent 永远不知道。必须同时设 notify_on_complete=True。**
+> ⛔ **后台任务期间 Agent 可以继续处理其他请求、回复用户消息。不要傻等。**
+
 ### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
 
 **为什么需要**：生信分析中工具输出经常达到数千行（scan_data、summary、terminal 输出），几轮对话就能填满上下文窗口。压缩后可释放 70-80% token 空间，让 Agent 继续工作而不丢失关键信息。
