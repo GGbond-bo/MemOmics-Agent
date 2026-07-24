@@ -4114,6 +4114,10 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
                         continue
+
+                # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
+                if getattr(agent, "_interrupt_requested", False):
+                    agent.clear_interrupt()
                 session["restored"] = False
                 # 问题2: 不再用环境变量传 sid（进程级变量会串会话），改用 agent 实例属性
                 agent.memomics_sid = session["id"]
