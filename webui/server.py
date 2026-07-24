@@ -4664,6 +4664,12 @@ async def ws_endpoint(ws: WebSocket):
                         _plan_ctx = _build_task_plan_context(session)
                         if _plan_ctx:
                             conversation_history.append({"role": "system", "content": _plan_ctx})
+                            # 强化：有 task_plan 时追加反"说而不做"指令
+                            conversation_history.append({"role": "system", "content": (
+                                "⛔ 铁律 -1（最高优先级）：你现在有 task_plan.md，说明你在执行分析任务。"
+                                "任何说了要做的事必须立刻发出工具调用。说启动就必须调 terminal。"
+                                "禁止只输出文字描述而不调工具。文字描述+无工具调用=无效回复。"
+                            )})
 
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None
