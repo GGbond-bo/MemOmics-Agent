@@ -39,6 +39,7 @@
 
 | 用户说 | 立即调用 |
 |--------|---------|
+| "心跳" / "监控" / "heartbeat" / "进度汇报" / "跑多久了" / "还在跑吗" / "monitor" | `skill_view("heartbeat-monitor")` → 部署独立心跳监控，Agent 读 monitor.log 汇报进度 |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" / "write a paper" / "投稿" | `skill_view("academic-paper-writing")` → 12-agent pipeline 生成完整论文 |
@@ -381,6 +382,33 @@ process(action="wait", session_id="abc123")
 > ⛔ **禁止 foreground 模式跑 CellBender。必须 background=True。**
 > ⛔ **background=True 但没设 notify_on_complete → 任务完成后 Agent 永远不知道。必须同时设 notify_on_complete=True。**
 > ⛔ **后台任务期间 Agent 可以继续处理其他请求、回复用户消息。不要傻等。**
+
+### 规则 17: 长任务必须部署心跳监控（heartbeat monitor）
+
+**触发条件**：任何 terminal 提交了预计 > 10 分钟的分析任务（CellBender、SCTransform、大数据训练等）。
+
+**部署方式**（一行命令）：
+```
+terminal(command="python scripts/heartbeat.py --task 'CellBender 26样本' --dir F:/CellBender_v2 --interval 120 &", background=True)
+```
+心跳脚本是独立进程，即使 Agent 阻塞/压缩/重启也持续记录。
+
+**汇报方式**（不需要 nvidia-smi）：
+```
+terminal(command="tail -5 F:/CellBender_v2/monitor.log")
+→ {"ts":"02:15","elapsed_min":6,"gpu":{"gpu_util":"87"},"output_files":5,"epoch":"23/150"}
+```
+然后向用户汇报："已完成 5/26，GPU 87%，epoch 23/150，预计还需 20 小时"
+
+**监控内容**：
+- GPU 使用率/显存/温度
+- 产出文件数量（如 filtered.h5）
+- 训练 epoch 进度（从 pipeline.log 提取）
+- 主进程是否存活
+
+> ⛔ **任何 > 10 分钟的任务启动时必须同时部署心跳。心跳比 Agent 的心跳（每 30s）更可靠——它是独立进程。**
+> ⛔ **用户问"进度"时，读 monitor.log，不要重新调 nvidia-smi 或扫描文件。**
+> ⛔ **任务完成后必须杀心跳进程：`taskkill /F /PID <pid>`**
 
 ### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
 
