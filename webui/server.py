@@ -4877,8 +4877,16 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]})
                 else:
-                    # agent 未运行，前端不应该发 steer，但作为保护：提示用户
-                    _session_emit(session, {"type": "info", "content": "Agent 未在运行，请直接发送消息", "session_id": session["id"]})
+                    # Agent 未运行 → 提示改用普通消息，同时自动发起新 turn
+                    if steer_text:
+                        _session_emit(session, {"type": "info", "content": "Agent 空闲，已自动转为新消息", "session_id": session["id"]})
+                        # 复用现有 chat 处理：通过消息队列自己触发
+                        loop.call_soon_threadsafe(
+                            lambda: asyncio.ensure_future(
+                                ws.send_text(json.dumps({"type": "_internal_chat", "message": steer_text, "session_id": session["id"]}, ensure_ascii=False))
+                            )
+                        )
+                    continue
 
     except WebSocketDisconnect:
         # WS 断开 - 只断开 WS 引用，不杀 agent（agent 继续在后台运行）
