@@ -4491,11 +4491,21 @@ async def ws_endpoint(ws: WebSocket):
                                     except Exception:
                                         pass
 
-                                # 2. 检查结果目录是否有新文件
+                                # 2. 检查结果目录是否有新文件（限制范围，防止扫整个项目）
                                 try:
                                     _recent_files = []
-                                    for _root, _dirs, _files in os.walk(_results_dir):
-                                        for _f in _files:
+                                    # 排除这些目录——它们有上万个文件，扫一次卡死
+                                    _skip_dirs = {".venv", ".git", "__pycache__", "node_modules",
+                                                  "hermes-agent", "hermes_home", "miniconda",
+                                                  "ckpt", "checkpoints", ".hermes"}
+                                    for _root, _dirs, _files in os.walk(_results_dir, topdown=True):
+                                        # 跳过不需要的目录
+                                        _dirs[:] = [d for d in _dirs if d not in _skip_dirs
+                                                    and not d.startswith(".")]
+                                        # 限制每层文件数
+                                        if len(_recent_files) > 500:
+                                            break
+                                        for _f in _files[:50]:  # 每目录最多50个
                                             _fp = os.path.join(_root, _f)
                                             try:
                                                 _mtime = os.path.getmtime(_fp)
