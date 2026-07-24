@@ -4491,14 +4491,29 @@ async def ws_endpoint(ws: WebSocket):
                                     except Exception:
                                         pass
 
-                                # 2. 检查结果目录是否有新产出（精确扫描，不递归整个项目）
+                                # 2. 检查真正的分析产出目录（task_plan.md 位置 + results 目录）
                                 try:
                                     _recent_files = []
-                                    # 只扫描 results/ 下的第一层（按分析模块分目录）
-                                    _scan_dirs = [
-                                        os.path.join(_results_dir, "results"),
-                                        _results_dir,  # 根目录本身（日志、report 等）
-                                    ]
+                                    _scan_dirs = []
+                                    # 优先：task_plan.md 所在目录（用户实际分析输出位置，如 F:/CellBender_v2）
+                                    _plan_path = os.path.join(_results_dir, "task_plan.md")
+                                    if os.path.isfile(_plan_path):
+                                        _plan_dir = os.path.dirname(_plan_path)
+                                        if os.path.isdir(_plan_dir):
+                                            _scan_dirs.append(_plan_dir)
+                                            # 常见子目录
+                                            for _sub in ["cellbender_output", "output", "figures"]:
+                                                _sd = os.path.join(_plan_dir, _sub)
+                                                if os.path.isdir(_sd):
+                                                    _scan_dirs.append(_sd)
+                                    # 备选：MemOmics results 目录
+                                    _res_sub = os.path.join(_results_dir, "results")
+                                    if os.path.isdir(_res_sub):
+                                        _scan_dirs.append(_res_sub)
+                                    if os.path.isdir(_results_dir) and _results_dir not in _scan_dirs:
+                                        _scan_dirs.append(_results_dir)
+                                    # 去重
+                                    _scan_dirs = list(dict.fromkeys(_scan_dirs))
                                     for _scan_root in _scan_dirs:
                                         if not os.path.isdir(_scan_root):
                                             continue
