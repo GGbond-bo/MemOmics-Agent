@@ -4773,7 +4773,18 @@ async def ws_endpoint(ws: WebSocket):
                             pass
                         # 发送进度完成
                         _session_emit(session, {"type": "progress", "step": _pt(session, "complete"), "status": "done", "detail": _pt(session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                        _session_emit(session, {"type": "complete", "content": "" if has_delta else result, "session_id": session["id"]})
+                        # 聊天框内容：有文本回复就用文本，纯工具调用时生成操作摘要
+                        if has_delta:
+                            _chat_content = ""  # 已通过 delta 流式发送，不重复
+                        elif result and result.strip():
+                            _chat_content = result
+                        elif _tool_call_log:
+                            _tools_done = [t["tool"] for t in _tool_call_log]
+                            _unique = list(dict.fromkeys(_tools_done))
+                            _chat_content = "✅ 已完成: " + " → ".join(_unique[:6])
+                        else:
+                            _chat_content = ""
+                        _session_emit(session, {"type": "complete", "content": _chat_content, "session_id": session["id"]})
                     except asyncio.CancelledError:
                         if not getattr(agent, "_interrupt_requested", False):
                             agent.interrupt()
