@@ -194,16 +194,29 @@ def _get_headroom_stats():
 
 
 def _auto_create_task_plan(session, plan_path):
-    """自动创建 task_plan.md 初始版本（用户没手动创建时的兜底保护）。"""
+    """自动创建 task_plan.md 初始版本（用户没手动创建时的兜底保护）。
+
+    同时自动检测用户消息中的路径，更新 results_dir 以对齐心跳扫描。
+    """
     messages = session.get("messages", [])
-    # 从第一条用户消息提取分析目标
     goal = "生信分析任务"
     for m in messages:
         if m.get("role") == "user":
             text = m.get("content", "")
             if isinstance(text, str) and len(text) > 3:
                 goal = text[:80].replace("\n", " ")
+                # 尝试提取用户指定的路径（如 F:/CellBender_v2）
+                import re
+                _path_match = re.search(r"([A-Za-z]:[/\\][^\s,，。]+)", text)
+                if _path_match:
+                    _user_dir = _path_match.group(1).rstrip("/\\")
+                    if os.path.isdir(_user_dir):
+                        session["results_dir"] = _user_dir
+                        logger.info(f"[MemOmics] task_plan 自动对齐到用户目录: {_user_dir}")
                 break
+
+    # task_plan.md 写入 results_dir（此时已对齐到用户指定目录）
+    plan_path = os.path.join(session["results_dir"], "task_plan.md")
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     content = f"""# Task Plan: {goal}
