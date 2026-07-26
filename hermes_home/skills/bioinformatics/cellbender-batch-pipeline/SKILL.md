@@ -392,8 +392,8 @@ WHILE pipeline not done:
 27. **🔥🔥 `torch.load` `weights_only=True` — PyTorch 2.11 默认值与旧 ckpt 不兼容 (2026-07-25, 26样本证实)**：
     - **症状**: `4CL_SD_D4_2_scRNA` 两次重试后日志显示 `_pickle.UnpicklingError: Weights only load failed...`。但日志里有 `Successfully unpacked tarball` — ckpt 解压成功了，是 `torch.load` 拒绝 `cellbender.remove_background.model.RemoveBackgroundPyroModel` 类。
     - **区分于 pitfall 8**: 不是 ckpt 解压失败，是 torch.load 失败。日志有关键线索：`Successfully unpacked tarball` → `UnpicklingError`。
-    - **修复**: 删除 ckpt.tar.gz + 旧产出 → 从头跑（不用 ckpt 恢复）。不能调 `weights_only=False`（CellBender 内部调用 torch.load）。已验证成功。
-    - **预防**: PyTorch 升级后旧 ckpt 全部失效，首次启动前清理全部 ckpt.tar.gz。
+    - **修复**: 编辑 `checkpoint.py:189`，`load_kwargs = {}` → `load_kwargs = {'weights_only': False}`。一行改动修复所有 4 处 `torch.load` 调用（因为都用 `**load_kwargs`）。30 秒完成。详见 `references/pytorch26-checkpoint-fix.md`。
+    - **预防**: PyTorch 升级后旧 ckpt 全部需要此修复，首次启动前改好 checkpoint.py。
 
 29. **🔥🔥🔥 `error_scanner.py` 只扫描 `watchdog.log` — 手动启动的 CellBender 崩溃无人知晓 (2026-07-26, 26样本证实)**：
     - **症状**: `4CL_SD_D4_2_scRNA` 在 MCKP chunk 5/9 处 `_ArrayMemoryError` 崩溃（16:20），但 `error_scanner.py` 未检测到——因为它只扫描 `watchdog.log`，而这个样本是 Agent 手动启动的（不用 watchdog 管理），日志在 `cellbender_output/4CL_SD_D4_2_scRNA/cellbender_output.log`。
@@ -408,6 +408,7 @@ WHILE pipeline not done:
     - **区分于 pitfall 9**: pitfall 9 是 `log_prob_sparse_to_dense()` 转换阶段 OOM，方案是 `--low-count-threshold 15`。pitfall 30 是 MCKP estimator 的 `df['map'] = df['m'].apply(...)` 产生的临时 DataFrame 太大——提高 threshold 可以减少特征数从而减少 DF 行数。
     - **为什么 2 次都失败**: Agent 第一次删目录重跑（未经用户同意）→白费 1 小时训练。第二次跑完后忘记上一次的教训，同样参数同样崩溃。**相同参数重跑 = 相同崩溃，必须改参数。**
     - **修复**: `--low-count-threshold 20` 减少纳入特征数，或 `--total-droplets-included 15000` 减少 droplet 数，或两者组合。优先调 threshold（对去污染结果影响最小）。
+    - **🆕 终极方案**: 如果 3+ 次重试仍 OOM，直接用 posterior.h5 提取 denoised counts 绕过 MCKP。详见 `references/mckp-posterior-bypass.md`。
     - **清理协议**: 重跑前 (a) 杀全部僵尸 Python 进程 → 释放碎片化内存 (b) 清理 `%TEMP%` (c) 确认 `free -m` > 30 GB (d) 删旧 ckpt.tar.gz 和 posterior.h5（残留大文件）。
     - ⛔ **禁止**: 管理员权限杀进程、重启系统——这些不能自动化。
 

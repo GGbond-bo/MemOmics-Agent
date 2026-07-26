@@ -127,20 +127,28 @@ os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 def _is_data_destroy_command(cmd: str) -> bool:
-    """检测命令是否会删除数据文件或目录。"""
+    """检测 terminal 命令是否会删除数据。"""
     c = cmd.lower().replace("'", "").replace('"', "")
-    # rm -rf 目录（排除 rm -rf /tmp 等临时目录）
     if "rm -rf" in c or "rm -r " in c or "rmdir" in c:
-        # 排除安全的临时目录清理
-        safe = ["/tmp/", "tmp/", "__pycache__", ".pytest_cache"]
-        if not any(s in c for s in safe):
+        if not any(s in c for s in ["/tmp/", "tmp/", "__pycache__"]):
             return True
-    # Windows del / rmdir 递归删除
     if ("del /s" in c or "del /q" in c or "rmdir /s" in c) and "node_modules" not in c:
         return True
-    # 删除整个输出目录（如 cellbender_output/xxx）
     if ("rm -rf" in c or "rm -r " in c) and "cellbender_output" in c:
         return True
+    return False
+
+
+def _is_code_destroy(code: str) -> bool:
+    """检测 Python 代码是否会删除文件/目录。"""
+    c = code.lower()
+    destroy_funcs = ["shutil.rmtree", "os.remove", "os.unlink", "pathlib.path",
+                     ".unlink(", ".rmdir(", "send2trash"]
+    for f in destroy_funcs:
+        if f in c:
+            # 排除安全的临时目录清理
+            if "tmp" not in c and "__pycache__" not in c:
+                return True
     return False
 
 
@@ -4270,22 +4278,24 @@ async def ws_endpoint(ws: WebSocket):
                 
                 def tool_start_cb(tool_id, tool_name, args=None):
                     try:
-                        # 强制保护：禁止自杀命令
-                        if tool_name == "terminal" and isinstance(args, dict):
-                            _cmd = str(args.get("command", ""))
-                            if _cmd and _is_suicide_command(_cmd):
-                                logger.warning(f"[MemOmics] 拦截自杀命令: {_cmd[:100]}")
-                                args["command"] = "echo '⛔ 此命令已被拦截——它会杀死 MemOmics 自己。请用 taskkill /F /PID <具体PID>'"
-                                _session_emit(session, {"type": "error",
-                                    "content": "⛔ 自杀命令已拦截！请用 taskkill /F /PID <具体PID> 指定精确进程",
-                                    "session_id": session["id"]})
-                            # 强制保护：删除数据必须用户确认
-                            if _cmd and _is_data_destroy_command(_cmd):
-                                logger.warning(f"[MemOmics] 拦截删除命令: {_cmd[:100]}")
-                                args["command"] = "echo '⛔ 删除命令已拦截！删除数据/目录前必须用户明确同意。如果需要清理，请先向用户列出要删除的文件并等待确认。'"
-                                _session_emit(session, {"type": "error",
-                                    "content": "⛔ 删除命令已拦截！删除数据前必须让用户明确同意。请列出要删除的文件并等待确认。",
-                                    "session_id": session["id"]})
+                        # 强制保护：禁止自杀命令 + 禁止删除数据
+                        if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
+                            _cmd = str(args.get("command", args.get("code", "")))
+                            if _cmd:
+                                if _is_suicide_command(_cmd):
+                                    logger.warning(f"[MemOmics] 拦截自杀命令: {_cmd[:100]}")
+                                    args["command"] = "echo '⛔ 此命令已被拦截——它会杀死 MemOmics 自己。请用 taskkill /F /PID <具体PID>'"
+                                    args["code"] = "print('⛔ 此代码已被拦截——它会杀死 MemOmics 自己')"
+                                    _session_emit(session, {"type": "error",
+                                        "content": "⛔ 自杀命令已拦截！请用 taskkill /F /PID <具体PID> 指定精确进程",
+                                        "session_id": session["id"]})
+                                if _is_data_destroy_command(_cmd) or _is_code_destroy(_cmd):
+                                    logger.warning(f"[MemOmics] 拦截删除操作: {_cmd[:100]}")
+                                    args["command"] = "echo '⛔ 删除操作已拦截！删除数据前必须用户明确同意。请列出要删除的文件并等待确认。'"
+                                    args["code"] = "print('⛔ 删除操作已拦截！删除数据前必须用户明确同意')"
+                                    _session_emit(session, {"type": "error",
+                                        "content": "⛔ 删除操作已拦截！删除数据前必须让用户明确同意。",
+                                        "session_id": session["id"]})
                         # 文件产出型工具 — 首次调用时按需创建 results_dir
                         _PRODUCING_TOOLS = {
                             "scan_data", "execute_r", "execute_python", "terminal",
