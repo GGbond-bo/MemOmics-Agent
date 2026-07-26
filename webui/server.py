@@ -3685,10 +3685,10 @@ def _find_best_results_dir(sid: str) -> str:
           3) 目录名含 sid 短ID → 精确匹配，高优先级
           4) sid 在内存中 → 取最近修改的非 memomics- 目录
           5) 无匹配 → 使用会话默认 results_dir 或回退到 results/{sid}"""
-    # 1. 内存中的 results_dir 优先
+    # 1. 内存中的 results_dir 优先（空目录也返回——新会话还没产出是正常的）
     if sid in _sessions:
         cached = _sessions[sid].get("results_dir", "")
-        if cached and os.path.isdir(cached) and any(Path(cached).iterdir()):
+        if cached and os.path.isdir(cached):
             return cached
     if not os.path.isdir(RESULTS_DIR):
         return ""
@@ -3702,25 +3702,18 @@ def _find_best_results_dir(sid: str) -> str:
                 persisted_cwd = row[0].replace("/", os.sep)
     except Exception:
         pass
-    if persisted_cwd and os.path.isdir(persisted_cwd) and any(Path(persisted_cwd).iterdir()):
-        # 验证：cwd 必须在 MemOmics results 目录下，不能是项目根目录或外部路径
+    if persisted_cwd and os.path.isdir(persisted_cwd):
         _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
         if os.path.abspath(persisted_cwd).startswith(_results_base + os.sep) or \
            os.path.abspath(persisted_cwd) == _results_base:
             return persisted_cwd
-    # 3. 扫描 results/ 目录，按优先级匹配
+    # 3. 扫描 results/ 目录，按优先级匹配（空目录也纳入——新会话可能还没产出）
     short_id = sid.split("-")[-1] if "-" in sid else ""
     candidates = []
     try:
         for d in os.listdir(RESULTS_DIR):
             dpath = os.path.join(RESULTS_DIR, d)
             if not os.path.isdir(dpath) or d.startswith("."):
-                continue
-            try:
-                has_any = any(Path(dpath).iterdir())
-            except Exception:
-                has_any = False
-            if not has_any:
                 continue
             mtime = os.path.getmtime(dpath)
             # 精确匹配短ID → 高分优先
