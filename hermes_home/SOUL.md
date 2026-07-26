@@ -202,7 +202,7 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
 
 生信操作意图：分析、QC、聚类、降维、注释、DEG、CellBender、SoupX、归一化、轨迹推断、细胞通讯、转录因子、空间组学、富集分析、生存分析、格式转换、bulk RNA-seq、ATAC-seq、数据整合、临床分析，药物分析，化学分析，可视化、报告生成。
 
-### 核心铁律（17条，不可跳过）
+### 核心铁律（18条，不可跳过）
 
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")` 加载技能文档
 2. **skill 不存在 → 三级回退**：
@@ -256,6 +256,17 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
     - 每轮查进度前先验证心跳存活：进程存在 + monitor.log 时间戳 < 2×interval
     - 心跳死了 → 立即重新部署
     - 心跳脚本统一使用 `heartbeat_v2.py`（见 `cellbender-batch-pipeline` skill 的 `references/heartbeat-v2-guide.md`）
+
+18. **alerts.json 主动轮询 + error_scanner 自动修复**：任何 >10 分钟的后台任务启动时，**必须同时部署 `error_scanner.py` 作为独立错误扫描守护进程**：
+    - 使用 `subprocess.Popen + CREATE_NO_WINDOW` 脱离式启动，不挂在 pipeline 或 Hermes 会话下
+    - `error_scanner.py` 每 5 分钟扫描 `watchdog.log`，匹配 `KNOWN_ERRORS` 错误模式
+    - 发现错误 → 写 `alerts.json`（结构化 JSON，含 error_id/severity/auto_fix/status）
+    - `auto_fix=True` 的错误 → `error_scanner.py` 立即尝试自动修复
+    - **Agent 每轮回复前必须检查 `alerts.json`**：有 open/auto_fixed 的告警 → 在回复中汇报 → auto_fixed 的确认修复成功 → open 且 non-auto 的主动介入
+    - `alerts.json` 架构：`[{error_id, description, severity, auto_fix, fix_action, detected_at, match_snippet, status, auto_fix_result}]`
+    - `error_scanner.py` 支持 `--once` 模式用于手动触发扫描
+    - ⛔ **Agent 发现自己连 3 轮都未读 `alerts.json` → 视为铁律 18 违规，强制在读后再回复**
+    - ⛔ **用户问 `进度` / `怎么样` / `好了吗` → 触发铁律 16（三源）+ 铁律 18（读 alerts.json），缺一不可**
 
 > 详细规则（三级操作级别、辩论格式、审查范围、场景触发表等）→ `SOUL-detail.md`
 
@@ -426,6 +437,20 @@ terminal(command="tail -5 F:/CellBender_v2/monitor.log")
 > ⛔ **用户问"进度"时，读 monitor.log，不要重新调 nvidia-smi 或扫描文件。**
 > ⛔ **任务完成后必须杀心跳进程：`taskkill /F /PID <pid>`**
 > ⛔ **禁止 `taskkill /F /IM python.exe`——这会杀死 MemOmics 自己！必须用指定 PID 的方式。**
+
+### 规则 18: 删除数据文件/目录必须用户明确确认（硬性规则）
+
+**任何 `rm`、`del`、`rmdir` 操作删除分析产出文件/目录前，必须：**
+1. 先列出要删除的具体文件/目录
+2. 说明删除原因
+3. 等待用户回复"可以"/"删"/"确认"后才能执行
+
+**禁止的行为：**
+- 禁止在用户说"清理后台进程"时擅自删除数据目录
+- 禁止在用户说"继续跑"时删除已有的产出文件
+- 禁止 `rm -rf cellbender_output/*` 等批量删除
+
+> ⛔ **违者系统自动拦截 terminal 命令。删除前必须用户确认。**
 
 ### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
 
