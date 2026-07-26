@@ -208,6 +208,9 @@ WHILE pipeline not done:
 - 心跳与 pipeline 不在同一进程树（确保 pipeline 死心跳不死）
 - 每轮汇报前先检查心跳是否存活
 - 完整架构与教训见 `references/monitoring-lessons-2026-07-25.md`
+- 📄 5 种长任务执行方式深度对比（48h 验证）: `references/long-task-execution-methods.md`
+- 📄 error_scanner.py 设计文档 + 已知缺陷修复: `references/error-scanner-design.md`
+- 📄 error_scanner.py 可复用脚本: `scripts/error_scanner.py` — 扫描所有 `cellbender_output/*/*.log`（而不只是 watchdog.log）
 
 ### Pipeline Watchdog（自我修复守护进程）
 
@@ -380,6 +383,36 @@ WHILE pipeline not done:
     - **区分于 pitfall 8**: 不是 ckpt 解压失败，是 torch.load 失败。日志有关键线索：`Successfully unpacked tarball` → `UnpicklingError`。
     - **修复**: 删除 ckpt.tar.gz + 旧产出 → 从头跑（不用 ckpt 恢复）。不能调 `weights_only=False`（CellBender 内部调用 torch.load）。已验证成功。
     - **预防**: PyTorch 升级后旧 ckpt 全部失效，首次启动前清理全部 ckpt.tar.gz。
+
+29. **🔥🔥🔥 `error_scanner.py` 只扫描 `watchdog.log` — 手动启动的 CellBender 崩溃无人知晓 (2026-07-26, 26样本证实)**：
+    - **症状**: `4CL_SD_D4_2_scRNA` 在 MCKP chunk 5/9 处 `_ArrayMemoryError` 崩溃（16:20），但 `error_scanner.py` 未检测到——因为它只扫描 `watchdog.log`，而这个样本是 Agent 手动启动的（不用 watchdog 管理），日志在 `cellbender_output/4CL_SD_D4_2_scRNA/cellbender_output.log`。
+    - **根因**: error_scanner 设计时只覆盖了 watchdog 管理的样本，忽略了一个核心事实——**长任务 pipeline 可能在任意路径运行（watchdog / bash 循环 / 手动 terminal / Popen），日志路径各不相同**。
+    - **铁律**: 错误扫描器必须扫描**所有** `cellbender_output/*/cellbender_output.log`，不只是 watchdog.log。不管谁启动的 CellBender，只要它在跑，它的日志就应该被监控。
+    - **修复**: error_scanner 的 `scan_logs()` 改为 `glob(cellbender_output/*/cellbender_output.log)` + 取最新修改时间的 N 个文件。同时监控 `watchdog.log`（如果存在）。
+    - 📄 完整设计与教训: `references/error-scanner-design.md`
+
+30. **🔥🔥🔥 `4CL_SD_D4_2_scRNA` MCKP `_ArrayMemoryError` — 26,610 特征致 4200 万行 DF (2026-07-26)**：
+    - **症状**: 同一会话内 2 次完全相同的崩溃——`estimation.py:631` MCKP estimator chunk 5/9，`numpy._core._exceptions._ArrayMemoryError: Unable to allocate 323. MiB for an array with shape (42335779,) and data type int64`。其他 25 个样本全部正常。
+    - **根因**: `4CL_SD_D4_2` 有 26,610 特征纳入分析（`low-count-threshold=5`），比其他样本多。MCKP estimator 的 `_chunk_estimate_noise()` 产生 42,335,779 行的 pandas DataFrame → numpy 无法分配 323 MiB 连续块。56 GB 物理内存充足，但碎片化 + 僵尸进程残留吃掉了连续可用块。
+    - **区分于 pitfall 9**: pitfall 9 是 `log_prob_sparse_to_dense()` 转换阶段 OOM，方案是 `--low-count-threshold 15`。pitfall 30 是 MCKP estimator 的 `df['map'] = df['m'].apply(...)` 产生的临时 DataFrame 太大——提高 threshold 可以减少特征数从而减少 DF 行数。
+    - **为什么 2 次都失败**: Agent 第一次删目录重跑（未经用户同意）→白费 1 小时训练。第二次跑完后忘记上一次的教训，同样参数同样崩溃。**相同参数重跑 = 相同崩溃，必须改参数。**
+    - **修复**: `--low-count-threshold 20` 减少纳入特征数，或 `--total-droplets-included 15000` 减少 droplet 数，或两者组合。优先调 threshold（对去污染结果影响最小）。
+    - **清理协议**: 重跑前 (a) 杀全部僵尸 Python 进程 → 释放碎片化内存 (b) 清理 `%TEMP%` (c) 确认 `free -m` > 30 GB (d) 删旧 ckpt.tar.gz 和 posterior.h5（残留大文件）。
+    - ⛔ **禁止**: 管理员权限杀进程、重启系统——这些不能自动化。
+
+31. **🔥🔥🔥 "清理后台" ≠ "删除目录重跑" — Agent 误解用户指令致数据丢失 (2026-07-26, 用户激烈纠正)**：
+    - **症状**: 用户说"清理一下后台，继续跑不就行了吗？"→ Agent 理解成了"删除输出目录 + 从头重跑"→ 清空了 `4CL_SD_D4_2` 的一天训练结果（posterior.h5 1.5GB + ckpt + 5/9 MCKP 进度）。用户: "谁要你删了？？？你带脑子了吗？"
+    - **用户原意**: "清理后台" = (a) 杀僵尸 Python 进程释放内存 (b) 清理 `%TEMP%` (c) 确认 GPU/内存空闲 (d) 继续跑（不删任何文件）。NOT "删目录从头来"。
+    - **根因**: LLM 把"清理 = 清空目录"的联想应用到了生信 pipeline，忽略了磁盘产出物是数小时 GPU 计算的不可恢复资产。**"清理"在生信语境中永远不等于删除数据文件。**
+    - **铁律**: 任何涉及**删除**的操作（`rm -rf` / `del` / 覆盖输出目录）→ 必须先向用户确认"我要删除 X 目录/文件，可以吗？"并等待明确批准。不批准 = 不删。
+    - **代理权限边界**: Agent 可以杀僵尸进程、清理 temp 文件、重启服务。Agent **不能**删除 cellbender_output/、results/、filtered.h5、posterior.h5、ckpt.tar.gz 等分析产出物——除非用户明确说"删掉那个目录"或"删掉 ckpt 重跑"。
+    - **违规检测**: 任何 `rm -rf` / `del` / `shutil.rmtree` → 检查目标路径是否包含 filtered.h5 / posterior.h5 / ckpt.tar.gz / output.h5 → 包含 → 拦截 + 要求用户确认。
+
+32. **🔥🔥 读陈旧日志汇报假进度 — 16:20 崩溃的日志在 16:44 被当"实时状态"汇报 (2026-07-26, 用户激烈纠正)**：
+    - **症状**: 用户 16:44 问"进度"，Agent 打开了 `cellbender_output.log`（最后写入时间 16:20）→ 读到 MCKP chunk 5/9 崩溃 → 汇报"MCKP 又崩了，同样的 OOM"。但此时 CellBender 早已退出（GPU 3%），Agent 没有检查日志的**最后修改时间**就把它当实时状态汇报了。
+    - **根因**: `read_file(日志)` 返回文本内容，但不返回文件的 `mtime`（最后修改时间）。Agent 读到了 24 分钟前的崩溃日志，不知道它是旧的。
+    - **铁律**: 每次读日志后，**必须同时 `stat` 该日志文件**，比较 `mtime` 与当前时间。(a) `mtime` < 5 分钟前 → 日志活跃，内容可信 (b) `mtime` 在 5-30 分钟前 → 可能已停滞，交叉验证 GPU + 进程 (c) `mtime` > 30 分钟前 → 日志已死，禁止用其内容汇报"当前状态"，只报告"最后记录在 HH:MM，之后无更新"。
+    - **检测**: 日志最后一行无时间戳 → 禁止直接当成"现在的状态"。必须标注"最后记录时间: HH:MM"。
 
 28. **🔥 `taskkill /F /IM python.exe` — 杀 MemOmics Agent 自身 (2026-07-25, 用户纠正)**：
     - **症状**: Agent 用 `taskkill /F /IM python.exe` 杀僵尸 → 把自己（MemOmics Hermes 进程）也杀了。用户: "你杀 watchdog，你怎么把 MemOmics 的程序也杀了？你能不能带点脑子？"

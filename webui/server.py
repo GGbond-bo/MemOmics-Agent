@@ -264,6 +264,24 @@ Phase 1
 - [ ] 直接开始执行（加载 skill → 写脚本 → 后台运行 → 部署心跳）
 **Status:** in_progress
 
+## Runtime State
+| Field | Value |
+|-------|-------|
+| current_pid | 待填充 |
+| log_path | 待填充 |
+| alerts_path | {analysis_dir}/alerts.json |
+| started_at | {now} |
+
+## Verification Checklist
+每个样本跑完后自动验证：
+- [ ] output_filtered.h5 存在且 > 10MB
+- [ ] 无 OOM / traceback 在日志尾部
+- [ ] ptrepack 成功（如适用）
+
+Phase 全部完成后：
+- [ ] 产出文件数 = 预期数
+- [ ] pipeline_status.json → completed
+
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
@@ -297,6 +315,37 @@ Phase 1
         "4. 出错时追加到 Errors Encountered 表格\n\n"
         "⛔ 这个文件是你唯一信任的状态源。压缩后凭它恢复进度。"
     )
+
+
+def _build_alerts_context(session):
+    """读取 analysis_dir 下的 alerts.json，注入未处理错误摘要。"""
+    analysis_dir = session.get("analysis_dir", "")
+    if not analysis_dir:
+        return None
+    alerts_path = os.path.join(analysis_dir, "alerts.json")
+    if not os.path.isfile(alerts_path):
+        return None
+    try:
+        import json
+        with open(alerts_path, "r", encoding="utf-8") as f:
+            alerts = json.load(f)
+    except Exception:
+        return None
+    if not alerts:
+        return None
+    # 只取最近 3 条未处理的高优先级错误
+    unhandled = [a for a in alerts if not a.get("handled") and a.get("urgency") == "HIGH"]
+    if not unhandled:
+        unhandled = alerts[:3]
+    if not unhandled:
+        return None
+    lines = ["⚠️ 磁盘上有未处理的错误 (alerts.json):"]
+    for a in unhandled[:3]:
+        lines.append(f"- [{a.get('ts','?')}] {a.get('type','?')}: {a.get('msg','?')[:120]}")
+        if a.get("auto_fix"):
+            lines.append(f"  可自动修复: {a.get('fix','')[:100]}")
+    lines.append("请处理或回复'忽略'跳过。")
+    return "\n".join(lines)
 
 
 def _build_task_plan_context(session):
@@ -4754,6 +4803,11 @@ async def ws_endpoint(ws: WebSocket):
                                 "5. 如果 task_plan 的 Phase 描述模糊，直接用你的判断补充具体步骤并执行。不要等用户确认。"
                             )
                             conversation_history.append({"role": "system", "content": _merged})
+
+                        # P0-1: Agent 启动协议 — 每轮自动读 alerts.json
+                        _alerts_ctx = _build_alerts_context(session)
+                        if _alerts_ctx:
+                            conversation_history.append({"role": "system", "content": _alerts_ctx})
 
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None

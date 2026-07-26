@@ -452,6 +452,32 @@ terminal(command="tail -5 F:/CellBender_v2/monitor.log")
 
 > ⛔ **违者系统自动拦截 terminal 命令。删除前必须用户确认。**
 
+### 规则 19: Agent 启动协议 — 每轮先读 alerts.json（Level 1 落地）
+
+**每次新 turn 开始时**（用户发消息后），Agent 必须：
+1. 检查 `{analysis_dir}/alerts.json` 是否存在
+2. 如果有未处理的高优先级错误 → 在第一条回复中立即汇报，不等用户问
+3. 如果是 `auto_fix=True` 的错误 → 直接执行修复脚本，然后汇报
+
+> ⛔ **不要等用户问"有没有报错"。主动检查，主动汇报。**
+
+### 规则 20: 长任务进程模式决策树
+
+**选择进程模式时严格按以下决策树**：
+
+| 预计耗时 | 模式 | 命令 |
+|---------|------|------|
+| < 5 分钟 | terminal(foreground) | `terminal("command")` |
+| 5-600 分钟 | terminal(background=True) | `terminal("command", background=True, notify_on_complete=True)` |
+| > 600 分钟或多步串行 | Popen 独立进程 | `python -c "import subprocess; subprocess.Popen(['cmd'], creationflags=0x08000000)"` |
+
+**同时必须**：
+- 记录 PID 到 task_plan.md
+- 启动 error_scanner 监控
+- 部署心跳
+
+> ⛔ **禁止 foreground 跑 > 5 分钟的任务。禁止 background=True 跑 > 10 小时的任务（会话回收会杀子进程）。**
+
 ### 规则 15: 长任务中使用 headroom 压缩上下文（自动触发）
 
 **为什么需要**：生信分析中工具输出经常达到数千行（scan_data、summary、terminal 输出），几轮对话就能填满上下文窗口。压缩后可释放 70-80% token 空间，让 Agent 继续工作而不丢失关键信息。
