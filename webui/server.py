@@ -144,6 +144,15 @@ def _is_data_destroy_command(cmd: str) -> bool:
     return False
 
 
+def _is_launch_command(cmd_str: str) -> bool:
+    """检测终端命令是否为启动长任务的命令。"""
+    c = str(cmd_str).lower()
+    keywords = ["cellbender", "subprocess.popen", "popen", "run_cellbender",
+                "run_serial", "run_pipeline", "python -c", "python3 -c",
+                "rscript", "no_window", "create_no_window"]
+    return any(k in c for k in keywords)
+
+
 def _is_suicide_command(cmd: str) -> bool:
     """检测命令是否会杀死 MemOmics 自己的进程。"""
     c = cmd.lower().replace("'", "").replace('"', "")
@@ -4327,6 +4336,29 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(session, "tool_completed") + ": " + tool_name, "done", tool_name)
+                        # 强制验证：如果 terminal 命令是启动类操作，二次确认进程存活
+                        if tool_name in ("terminal", "execute_code", "execute_python") and _is_launch_command(str(args)):
+                            _session_emit(session, {"type": "progress", "step": "verify_launch", "status": "pending",
+                                "detail": "验证启动状态...", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            try:
+                                import time as _t
+                                _t.sleep(3)  # 等进程启动
+                                _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader", 
+                                    shell=True, capture_output=True, text=True, timeout=10)
+                                _gpu = _check.stdout.strip()
+                                _check2 = subprocess.run("tasklist | findstr cellbender", 
+                                    shell=True, capture_output=True, text=True, timeout=5)
+                                _proc = _check2.stdout.strip()
+                                if "0 %" in _gpu and not _proc:
+                                    _session_emit(session, {"type": "error",
+                                        "content": "⚠️ 启动命令已执行但 GPU 0%、无 CellBender 进程——可能启动失败！请检查命令和日志。",
+                                        "session_id": session["id"]})
+                                    logger.warning(f"[MemOmics] Launch verify FAILED: GPU={_gpu}, proc={_proc}")
+                                else:
+                                    _session_emit(session, {"type": "progress", "step": "verify_launch", "status": "done",
+                                        "detail": f"GPU {_gpu} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            except Exception:
+                                pass
                         # 持久化工具调用到 state.db 的 tool_calls_log 表
                         try:
                             import json as _tcl_json

@@ -160,6 +160,7 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 | **🆕 `taskkill /F /IM python.exe` — 自杀式清理 (2026-07-25, 用户纠正)** | Agent 用 `taskkill /F /IM python.exe` 杀僵尸 → 把 MemOmics (Hermes) 进程一起杀了。用户: "你杀 watchdog，你怎么把 MemOmics 的程序也杀了？你能不能带点脑子？" | Agent 在"批量操作"心态下选用了范围过大的 `/IM` 筛选器。**铁律：进程清理只允许 `/PID <pid>`。先 tasklist 列出 → 逐个 /PID 杀 → 绝不 /IM python.exe。** | CellBender D3 — 2026-07-25 |
 | **🆕 "清理后台" Misinterpretation — 删目录致数据丢失 (2026-07-26)** | User says "清理一下后台，继续跑" → Agent does `rm -rf output_dir` destroying 1hr GPU work (posterior.h5 1.5GB + MCKP progress). User: "谁要你删了？？？你带脑子了吗？" | "清理" = kill zombies + free RAM + continue. NOT "delete and restart". LLM confuses sysadmin "clean" with bioinformatics "clean". **Iron Law: any delete operation → must ask user for confirmation first.** See `references/case-study-cleanup-misinterpretation.md`. | CellBender D4 — 2026-07-26 |
 | **🆕 Stale Log Reporting — 24min 旧日志当实时状态 (2026-07-26)** | Agent reads `cellbender_output.log` (mtime 16:20) at 16:44, reports crash as "current state". GPU idle + process dead for 24 min went unnoticed because log mtime wasn't checked. User: "你他妈的，蠢货...现在以及下午4点44了，你还在看之前的日志" | `read_file()` returns valid text but no mtime. Agent treats text retrieval as truth retrieval. **Must `stat` before every `read_file`.** 3-tier mtime rule: <5min=active, 5-30min=cross-validate, >30min=dead. See `references/case-study-stale-log-reporting.md`. | CellBender D4 — 2026-07-26 16:20-16:44 |
+| **🆕 Same Error Retried Without Change — 4CL_SD_D4_2 4次重试 (2026-07-26)** | `4CL_SD_D4_2_scRNA` MCKP `_ArrayMemoryError` at chunk 5/9. Agent retried 3 times with **identical parameters** (`--low-count-threshold 5`), same crash each time. Only #4 with `--low-count-threshold 20` succeeded. | Deterministic crash + same params = same result. **Retry protocol**: same error → MUST change at least one parameter. One change per retry so you know what worked. Record in task_plan.md. See `references/case-study-4CL-SD-D4-2-retry-loop.md`. | CellBender D4 — 2026-07-26 |
 
 > 完整案例参考：`references/case-study-cellbender-failures.md`
 > 推卸模式案例：`references/case-study-deflection-pattern.md`
@@ -181,6 +182,7 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 - [ ] 上一轮 rail_review(post) 的 code_executed 是否 > 200 字符？
 - [ ] 最近 2 轮是否有动作动词 + 0 tool call 的模式？
 - [ ] 连续 rail_review(post) 失败次数是否 ≥ 3？→ Guardian 应已触发回滚
+- [ ] 长任务重试前：是否与上次相同错误 + 相同参数？→ **相同 = 禁止重试，必须先改参数**
 
 ## 验证模式：hermes-verify-*.py
 

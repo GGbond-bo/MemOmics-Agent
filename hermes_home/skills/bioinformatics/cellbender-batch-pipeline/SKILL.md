@@ -120,6 +120,17 @@ WHILE pipeline not done:
 
 ---
 
+## 📋 进程启动决策树（所有长任务通用）
+
+> 何时用 foreground / background / Popen？详见 `references/process-launch-decision-tree.md`
+>
+> **速查**：
+> - < 5 min → `terminal(foreground)`
+> - 5–600 min → `terminal(background=True)`（⚠️ 会话回收会死）
+> - > 600 min 或多步骤 > 3h → `Popen + CREATE_NO_WINDOW`（唯一可靠方案）
+
+---
+
 ## 参数（与 cellbender-remove-background 对齐）
 
 | 参数 | 值 | 来源 |
