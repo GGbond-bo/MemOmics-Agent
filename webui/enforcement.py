@@ -148,6 +148,24 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 es.skills_loaded.add(skill)
                 _emit("enforcement", action="skill_loaded", skill=skill, skills=list(es.skills_loaded))
 
+        elif tool_name == "terminal":
+            # 代码级保护：禁止 Agent 自杀（taskkill /IM python.exe 等）
+            _cmd = str(args.get("command", "")) if isinstance(args, dict) else str(args)
+            _cmd_lower = _cmd.lower()
+            _danger = [
+                ("taskkill", "/im python", "禁止 /IM python.exe，会把 MemOmics 自己杀掉！请用 /F /PID <具体PID>"),
+                ("taskkill", "/im python3", "同上"),
+                ("killall", "python", "禁止 killall python！请用 kill <具体PID>"),
+                ("pkill", "python", "禁止 pkill python！请用 kill <具体PID>"),
+            ]
+            for _tool, _pattern, _msg in _danger:
+                if _tool in _cmd_lower and _pattern in _cmd_lower:
+                    es.warnings.append(f"terminal: 自杀命令被拦截 - {_cmd[:80]}")
+                    _emit("enforcement", action="blocked",
+                          message=f"⛔ 拦截：{_msg}")
+                    # 不阻止执行，但强制注入警告到 agent 的思考中
+                    # 真正阻断需要修改 Hermes 回调返回值，这里先做最强警告
+
         elif tool_name == "search_knowledge":
             es.knowledge_searched = True
 

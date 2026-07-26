@@ -202,7 +202,7 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
 
 生信操作意图：分析、QC、聚类、降维、注释、DEG、CellBender、SoupX、归一化、轨迹推断、细胞通讯、转录因子、空间组学、富集分析、生存分析、格式转换、bulk RNA-seq、ATAC-seq、数据整合、临床分析，药物分析，化学分析，可视化、报告生成。
 
-### 核心铁律（15条，不可跳过）
+### 核心铁律（17条，不可跳过）
 
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")` 加载技能文档
 2. **skill 不存在 → 三级回退**：
@@ -240,6 +240,22 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
     - **Phase 2 — Executor（执行阶段）**：按计划逐步执行。每步必须先 `guardian_snapshot` → 执行 → `rail_review(post)` → 验证产出 → 才进入下一步。若连续 3 次 `rail_review(post)` 失败，Guardian 自动回滚。
     - **为什么需要这个**：单体 AI Agent 的最大缺陷是"规划"和"执行"在同一个推理链中——模型会把"计划要做的事"写成"已经做完的事"。分离为两个阶段后，Planner 只能读不能写（客观上无法"假装执行"），Executor 按计划逐步验证（无法跳步）。
     - **触发条件**：所有分析级任务（≥3 个子步骤）必须在 Planner/Executor 协议下运行。
+
+16. **长任务监控 — 三源交叉验证**：查任何 >10 分钟的后台任务进度时，**必须同时查三个独立数据源，交叉验证一致后才能下结论**：
+    - ① `nvidia-smi` → GPU 实时（利用率% + 显存 + 温度）
+    - ② `tasklist` → 目标进程是否存活
+    - ③ `read_file(进程真实日志 最后 50 行)` → **不是 monitor.log，是 CellBender/训练脚本自己的输出日志**（如 `cellbender_output.log`、`train.log`、`pipeline.log`）
+    - ④ 时间戳校验：日志最新行在 5 分钟之前 → 标记为"可能僵死，需进一步排查"
+    - **禁止只看 monitor.log 或凭 GPU 快照单源推断**。monitor.log 是心跳的辅助摘要，可能已死/滞后/解析失败。GPU 单点采样不能区分"在跑"和"卡死"。
+    - ⛔ 违规示例："GPU=3%、filtered.h5=0 → 全白跑了" — 这是推理链，不是调查。
+
+17. **心跳脱离 Agent 生命周期**：任何 >10 分钟的任务启动时必须同时部署**独立心跳进程**：
+    - 心跳使用 Python `subprocess.Popen + CREATE_NO_WINDOW` 脱离式启动，不挂在 Hermes 会话或 pipeline 进程树下
+    - 心跳每 N 分钟读真实日志提取进度，写入 `monitor.log`
+    - Hermes 会话回收/压缩不得影响心跳存活
+    - 每轮查进度前先验证心跳存活：进程存在 + monitor.log 时间戳 < 2×interval
+    - 心跳死了 → 立即重新部署
+    - 心跳脚本统一使用 `heartbeat_v2.py`（见 `cellbender-batch-pipeline` skill 的 `references/heartbeat-v2-guide.md`）
 
 > 详细规则（三级操作级别、辩论格式、审查范围、场景触发表等）→ `SOUL-detail.md`
 

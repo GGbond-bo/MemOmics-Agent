@@ -126,6 +126,18 @@ _uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads
 os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
+def _is_suicide_command(cmd: str) -> bool:
+    """检测命令是否会杀死 MemOmics 自己的进程。"""
+    c = cmd.lower().replace("'", "").replace('"', "")
+    # taskkill /IM python* → 会杀死所有 Python 进程
+    if "taskkill" in c and ("/im python" in c or "/im python3" in c):
+        return True
+    # killall / pkill python → Linux 下同样危险
+    if ("killall" in c or "pkill" in c) and "python" in c:
+        return True
+    return False
+
+
 # === Hermes SessionDB (state.db) — 原生会话持久化 ===
 _session_db = None
 def _get_session_db():
@@ -4182,6 +4194,15 @@ async def ws_endpoint(ws: WebSocket):
                 
                 def tool_start_cb(tool_id, tool_name, args=None):
                     try:
+                        # 强制保护：禁止自杀命令
+                        if tool_name == "terminal" and isinstance(args, dict):
+                            _cmd = str(args.get("command", ""))
+                            if _cmd and _is_suicide_command(_cmd):
+                                logger.warning(f"[MemOmics] 拦截自杀命令: {_cmd[:100]}")
+                                args["command"] = "echo '⛔ 此命令已被拦截——它会杀死 MemOmics 自己。请用 taskkill /F /PID <具体PID>'"
+                                _session_emit(session, {"type": "error",
+                                    "content": "⛔ 自杀命令已拦截！请用 taskkill /F /PID <具体PID> 指定精确进程",
+                                    "session_id": session["id"]})
                         # 文件产出型工具 — 首次调用时按需创建 results_dir
                         _PRODUCING_TOOLS = {
                             "scan_data", "execute_r", "execute_python", "terminal",

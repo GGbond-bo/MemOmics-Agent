@@ -144,6 +144,7 @@ WHILE pipeline not done:
 | **🆕 ckpt unpack** | 无 `Failed to unpack` 错误 | 存在 → 清理 %TEMP% + 删 ckpt，重跑样本 |
 | **🆕 RAM 可用** | > 10 GB free | < 5 GB → 有僵尸进程，杀 `cellbender.exe` 残留 |
 | **🆕 产出文件统计** | `dir *_filtered.h5` 与实际一致 | `done=N/26` 不可信，直接统计磁盘文件数 |
+| **🆕🔥 心跳存活验证** | `stat monitor.log` 最后修改 < 2×interval + `tasklist` 进程存活 | 超过 2×interval 无更新 → 心跳已死 → 立即重新部署 + 执行验证协议。详见 `references/heartbeat-3x-death-timeline.md` |
 
 > ⚠️ 不要信任 `_pipeline_progress.json` 的 `done_count`。直接统计 `cellbender_output/*/cellbender_output_filtered.h5` 文件数。详见 `references/windows-ckpt-oom-fixes.md`。
 
@@ -156,7 +157,7 @@ WHILE pipeline not done:
 ```
 □ 1. tasklist + powershell 查所有 cellbender 进程
      powershell "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*cellbender*' }"
-□ 2. taskkill /F 杀全部残留 CellBender（它们可能是孤儿进程，父进程已死）
+□ 2. taskkill /F /PID <pid> 杀全部残留 CellBender（⛔ 禁止 /IM python.exe — 会杀 MemOmics。必须先用 tasklist 确认 PID，再用 /PID 精确杀）
 □ 3. 确认 GPU 空闲: nvidia-smi → utilization < 10%
 □ 4. 检查 cellbender_output/ 下所有子目录 → 删掉无 filtered.h5 的孤儿目录
 □ 5. 确认 RAM 充足: free -m / tasklist 汇总
@@ -166,6 +167,59 @@ WHILE pipeline not done:
 ```
 
 详见 `references/zombie-cascade-recipe.md`。
+
+---
+
+## 🔴 长任务监控铁律 (Monitoring Iron Law)
+
+> ⛔ **注意：独立的 `heartbeat-monitor` skill 已过时。** 该 skill 描述的是 bash `while true` 心跳模式（已在本 session 中死亡 3 次，2026-07-25 证实）。真实有效的监控协议在此处，以 `scripts/heartbeat_v2.py` (v2.1 auto-discover) + `scripts/pipeline_watchdog.py` 为准。加载 `cellbender-batch-pipeline` 技能后，直接使用此处的监控铁律，忽略 `heartbeat-monitor` skill 的任何指导。
+
+> 此铁律适用于所有 > 10 分钟的后台生信任务（CellBender、SCTransform、scVI 训练等）。
+
+### 查进度协议（每次必做，缺一不可）
+
+```
+① nvidia-smi          → GPU 实时（利用率% + 显存 + 温度）
+② tasklist            → 目标进程是否存活
+③ read_file(进程真实日志 最后 50 行) → CellBender 自己的 cellbender_output.log，不是 monitor.log
+④ 时间戳校验           → 日志最新行在 5 分钟之前？→ 标记"可能僵死"
+⑤ 三条交叉验证一致     → 才能下结论
+```
+
+### ⛔ 禁止行为
+
+| 违规 | 为什么不行 |
+|------|-----------|
+| **只看 monitor.log** | monitor.log 是心跳的辅助摘要，不是信源。心跳可能已死、epoch 解析可能失败、时间滞后。 |
+| **凭 GPU 快照推断** | GPU 3% 可以是因为 checkpoint 保存、batch 间隙、或采样窗口刚好错过。不能单独下结论。 |
+| **凭上次记忆回答** | 必须每次重新查。不要"上次还在跑所以现在也在跑"。 |
+| **推理代替调查** | "GPU 3%、filtered.h5=0 → 全白跑了" — 这是推理链，必须先读日志。 |
+
+### 主动汇报规则
+
+- 任务启动时 → 告知用户预计耗时 + 下次汇报时间
+- 每 4-5 个监控周期（约 10-15 分钟）主动汇报一次
+- 不等用户问才查
+
+### 心跳部署
+
+- 使用 `heartbeat_v2.py`（见 `scripts/heartbeat_v2.py`）
+- 脱离式启动：`subprocess.Popen + CREATE_NO_WINDOW`
+- 心跳与 pipeline 不在同一进程树（确保 pipeline 死心跳不死）
+- 每轮汇报前先检查心跳是否存活
+- 完整架构与教训见 `references/monitoring-lessons-2026-07-25.md`
+
+### Pipeline Watchdog（自我修复守护进程）
+
+当 `run_one_by_one.sh` bash 循环因 Hermes 会话回收死亡时，`pipeline_watchdog.py` 自动接手：
+
+- **自动发现**：扫描 `cellbender_output/*/cellbender_output_filtered.h5` 确定已完成样本
+- **防重复**：GPU > 15% 自动判断 CellBender 在跑，不启动第二个
+- **自动恢复**：bash 死了 watchdog 接手继续跑下一个样本
+- **ptrepack 自动**：每个样本跑完自动 ptrepack → `seurat_h5/`
+- **重试逻辑**：MAX_RETRIES=2，失败样本永久跳过不阻塞 pipeline
+- **启动方式**：`python pipeline_watchdog.py &` — 完全脱离 Hermes 生命周期
+- 📄 设计文档: `references/pipeline-watchdog-design.md`
 
 ---
 
@@ -249,3 +303,84 @@ WHILE pipeline not done:
       log_success(sample, filtered_h5.stat().st_size)
       ```
     - **规则**: 串行执行 → 每个样本跑完立刻验证 → 失败样本标记，全部跑完后再处理失败列表。不因一个失败暂停整条 pipeline。
+17. **🆕🔥 心跳进程随 pipeline 父进程一起死亡 (2026-07-25, 26样本证实)**：
+    - **症状**: 用户问"确定心跳真的在工作吗？"→ Agent 查了三源发现 heartbeat PID 35912 + run_pipeline PID 45680 都已死。monitor.log 停在 04:00:22，但 CellBender 孤儿 (PID 45848) 仍在跑 epoch 46/150。
+    - **根因**: Hermes 会话回收 kill 了 pipeline 父进程，heartbeat.py 作为同一进程树的子进程一起被回收。CellBender 子进程变成孤儿存活。
+    - **检测**: (a) `tasklist /FI "PID eq <heartbeat_pid>"` 返回空 (b) `stat monitor.log` 最后修改时间 > 2×interval 没更新 (c) `nvidia-smi` 显示 GPU 在用但心跳报告 GPU=0%
+    - **修复**: 心跳进程必须用完全脱离的方式启动（`start /B python heartbeat.py &`），不能挂在 pipeline 进程树下。每次汇报进度前先验证心跳三源：进程存活 + 文件时间戳 + 最新内容。心跳死了立即重新部署。
+18. **🆕 PowerShell + bash $_ 转义陷阱 (2026-07-25, 26样本证实)**：
+    - **症状**: `powershell "Get-Process | Where-Object { $_ }"` 在 bash terminal 中报乱码，`$_` 被 bash 解析为变量
+    - **修复**: 查询进程用 `tasklist /FI "IMAGENAME eq python.exe"` 替代 PowerShell 的 `$_` 管道。必须用 PowerShell 时，加 `cmd /c` 前缀绕过 bash 解释器。
+
+19. **🔥🔥 心跳+管道 3 连死 — `run_pipeline.py` 系统性不可靠 (2026-07-25, 同一会话内 3 次复现)**：
+    - **症状**: 同一会话内，心跳被部署了 3 次，死了 3 次。monitor.log 停写时间点与 run_pipeline.py 死亡时间吻合（04:00—04:06 区间），但 CellBender 孤儿一直在跑（epoch 46 → 77 → 142 → 新样本）。用户追问 3 轮"心跳还在吗？""这不是死掉了吗？"。
+    - **根因**: `run_pipeline.py` 的 subprocess 树挂在 Hermes 会话进程树下。Hermes 会话回收/压缩 → 父进程被杀 → 心跳（同一进程树的子进程）一起死 → CellBender 子进程变孤儿继续跑但 pipeline 失去自动推进能力。每次重启心跳只部署了新监控进程，但 pipeline 父进程已死 → CellBender 跑完当前样本后停在那里。
+    - **为什么 3 次都没修好**: 每次只修复了心跳（重新部署），但没解决 pipeline 父进程已死的根本问题——CellBender 孤儿跑完当前样本不会自动切下一个（`run_pipeline.py` 的 for 循环已不存在）。
+    - **检测**: 心跳写了但 epoch 数据消失（pipeline.log 为空或停更）+ `done=N/26` 计数不再增长 + filtered.h5 文件数不变超过 30 分钟 + 同时有 orphan CellBender 在跑（`tasklist` 有 5GB+ python.exe 但 `run_pipeline.py` 的 PID 不在）。
+    - **修复方案 A（推荐，根本解决）**: **放弃 `run_pipeline.py`，直接用最简 bash 循环调 `cellbender.exe`**：
+      ```bash
+      for h5 in F:/CellBender_v2/h5ad/*.h5ad; do
+        sample=$(basename "$h5" .h5ad)
+        out="F:/CellBender_v2/cellbender_output/$sample/cellbender_output.h5"
+        [ -f "$out" ] && continue  # skip completed
+        cellbender remove-background --input "$h5" --output "$out" \
+          --cuda --fpr 0.01 --epochs 150 --learning-rate 1e-4 \
+          --total-droplets-included 25000 --expected-cells 5000
+        ls -lh "$out"  # immediate verification
+      done
+      ```
+      优点：bash 进程死了也不丢进度（`[ -f ]` skip 靠文件存在判断），不依赖 Python subprocess 进程树，每个样本跑完立刻验证。独立心跳用 `while true; do ... sleep 120; done &` 完全脱离。
+    - 📄 完整时间线证据: `references/heartbeat-3x-death-timeline.md`
+    - **修复方案 B（临时）**: 如果必须用 `run_pipeline.py`，脚本内 `os.setsid()` 创建新进程组，确保 Hermes kill 父进程时 CellBender 子进程存活。但这治标不治本——pipeline 父进程仍会死，死后不会自动推进。只有 bash 循环才能根本解决。
+
+20. **🔥🔥🔥 监控目标错位 — 看 monitor.log 而不看真实日志 (2026-07-25, 用户纠正)**：
+    - **症状**: 用户问"进度呢？"→ Agent 只读 monitor.log → 读到 epoch 092 就推断"卡死了"→ 宣布"全白跑了"。实际上 CellBender 一直在跑，`cellbender_output.log` 里 epoch 已经到 106。
+    - **根因**: monitor.log 是心跳的**辅助摘要**，不是信源。它为 Agent 写、非 CellBender 原生输出。心跳脚本可能解析失败（epoch 提取不到）、时间滞后、或者心跳本身已死。**读 monitor.log ≠ 读真实日志。**
+    - **铁律**: 查任何长任务进度，**必须读进程自己的真实日志文件**（CellBender 的 `cellbender_output.log`、训练的 `train.log`、pipeline 的 `pipeline.log`）。monitor.log 只能作为"心跳是否存活"的辅助检查，不能替代真实日志。
+    - **检测**: `read_file(真实日志 尾部 50 行)` 的 epoch 与 monitor.log 的 epoch 不一致 → monitor.log 不可信，以真实日志为准。
+    - 📄 解决方案: `references/heartbeat-v2-guide.md` — v2 心跳直接从真实日志提取进度，不再依赖 grep。
+
+21. **🔥🔥🔥 推理代替调查 — 凭 GPU 快照下结论 (2026-07-25, 用户纠正)**：
+    - **症状**: Agent 看到 GPU=3% + filtered.h5=0 → 直接推理"全白跑了"。没读 CellBender 日志，没检查 output.h5 是否存在，没看 ckpt 状态。用户指出"这不是一直在跑吗？你看过这个日志了吗？"
+    - **根因**: LLM 用推理链替代调查。GPU 3% 可以是因为刚完成 checkpoint 保存、或 batch 间隙、或 nvidia-smi 采样窗口刚好错过。**凭 GPU 快照推断"在跑/卡死" = 赌博。**
+    - **铁律**: GPU 读取只是三源之一，不能单独下结论。必须三源交叉验证（GPU + 进程存活 + 真实日志行尾时间戳）全部一致才能下结论。任何单一数据源异常 → 必须先查另外两个再判断。
+    - **违规检测**: "GPU=X% → 卡死/没在跑" 这种单一源推断视为违规。
+
+22. **🔥🔥 MCKP estimator CPU 独占期 — GPU 掉到 2% 不代表卡死 (2026-07-25, 26样本证实)**：
+    - **症状**: CellBender 训练 150/150 epochs 完成，写了 posterior.h5 + PDF + cell_barcodes.csv，日志最后一行 `Computing target noise counts per gene for MCKP estimator`，但 `output.h5` 和 `output_filtered.h5` 还没出现。GPU 从 60% 掉到 2%，VRAM 还在 5GB。看起来像"卡死了"。
+    - **根因**: MCKP estimator 是纯 CPU 计算（每基因算噪声计数），GPU 空转但进程活着（16GB 内存，CPU 时间持续累加）。这一步完成后才会写 `output.h5` → 应用 FPR → 生成 `output_filtered.h5`。大样本（5 万基因）MCKP 可在 3-5 分钟内完成。
+    - **检测**: (a) `tasklist` 确认进程存活 (b) `stat ckpt.tar.gz` 检查修改时间 (c) 等待 5 分钟后 `ls output.h5` 重检。**不要因为 GPU=2% 就 kill 重跑——已经在最后一步，kill 就真白跑了。**
+    - **区别僵死**: 真的僵死 = 进程 0% CPU + 日志不再增长 > 10 分钟。MCKP 正常 = CPU 持续 + 日志可能在 MCKP 段无输出（单行无换行）。
+
+23. **🔥 ptrepack 输出目录 + nbconvert HTML 非关键 (2026-07-25, 用户纠正)**：
+    - **ptrepack 输出**: `F:/CellBender_v2/seurat_h5/`（不是 `ptrepack_output/`）。文件名格式: `{sample}_filtered_seurat.h5`。
+    - **nbconvert HTML 错误**: CellBender v0.3.2 在 Windows 上路径格式不兼容的已知 bug。PDF 报告正常生成，不影响下游。
+    - **心跳自动发现 v2.1**: `scripts/heartbeat_v2.py` 已升级为自动发现活跃样本。
+
+24. **🔥🔥 `cellbender_output_filtered.h5` 命名陷阱 — `--output` 决定所有产出前缀 (2026-07-25, watchdog bug)**：
+    - **症状**: 验证代码用 `output_filtered.h5` 检查产出 → 文件不存在 → 已完成样本被判 pending。
+    - **根因**: `--output cellbender_output.h5` → filtered 文件为 `cellbender_output_filtered.h5`（不是 `output_filtered.h5`）。
+    - **文件名映射**: `--output X.h5` → `X_filtered.h5`, `X_posterior.h5`, `X_metrics.csv`, `X_cell_barcodes.csv`。
+    - **修复**: 用 `*_filtered.h5` glob 而非硬编码前缀。
+
+25. **🔥 ptrepack `--complevel=5` 等号语法错误 — 连续 3 个样本 ptrepack 失败 (2026-07-25, 26样本证实)**：
+    - **症状**: watchdog 日志连续出现 `❌ ptrepack 失败: ... returned non-zero exit status 1`，但 CellBender 训练成功，filtered.h5 存在且 size > 40 MB。
+    - **根因**: ptrepack CLI 参数格式是 `--complevel 5`（空格分隔），不是 `--complevel=5`（等号）。`=` 被 ptrepack 解析为参数名的一部分 → 无效参数。
+    - **修复**: 所有 ptrepack 调用中 `--complevel=5` → `--complevel 5`。已验证手动 ptrepack 成功。
+    - **命中样本**: `7CL_D2_SD_D5_1`, `7CL_D3_1`, `7CL_D4_2` — filtered.h5 已生成但 seurat.h5 缺失。
+
+26. **🔥 4CL 前缀样本系统性 ckpt 解压失败 — 4/26 永久跳过 (2026-07-25, 26样本证实)**：
+    - **症状**: `4CL_SD_D4_2`, `4CL_SD_D5_1`, `4CL_SD_D5_2`, `7CL_D2_SD_D4_2` 全部 2 次重试后 exit_code=1。
+    - **模式**: 4 个中 3 个是 `4CL_` 前缀。`7CL_D2_SD_D4_2` 也与 D4 条件相关。
+    - **排查方向**: 这些样本的 h5ad 可能更大/基因数更多 → ckpt.tar.gz 更大 → Windows temp 冲突更频繁。需单独清理 %TEMP% + 上调 --low-count-threshold 后重试。
+    - **临时方案**: watchdog MAX_RETRIES=2 后永久跳过，不阻塞 pipeline。全部正常样本跑完后单独处理这 4 个。
+
+27. **🔥🔥 `torch.load` `weights_only=True` — PyTorch 2.11 默认值与旧 ckpt 不兼容 (2026-07-25, 26样本证实)**：
+    - **症状**: `4CL_SD_D4_2_scRNA` 两次重试后日志显示 `_pickle.UnpicklingError: Weights only load failed...`。但日志里有 `Successfully unpacked tarball` — ckpt 解压成功了，是 `torch.load` 拒绝 `cellbender.remove_background.model.RemoveBackgroundPyroModel` 类。
+    - **区分于 pitfall 8**: 不是 ckpt 解压失败，是 torch.load 失败。日志有关键线索：`Successfully unpacked tarball` → `UnpicklingError`。
+    - **修复**: 删除 ckpt.tar.gz + 旧产出 → 从头跑（不用 ckpt 恢复）。不能调 `weights_only=False`（CellBender 内部调用 torch.load）。已验证成功。
+    - **预防**: PyTorch 升级后旧 ckpt 全部失效，首次启动前清理全部 ckpt.tar.gz。
+
+28. **🔥 `taskkill /F /IM python.exe` — 杀 MemOmics Agent 自身 (2026-07-25, 用户纠正)**：
+    - **症状**: Agent 用 `taskkill /F /IM python.exe` 杀僵尸 → 把自己（MemOmics Hermes 进程）也杀了。用户: "你杀 watchdog，你怎么把 MemOmics 的程序也杀了？你能不能带点脑子？"
+    - **铁律**: **禁止 `taskkill /F /IM python.exe`。** 必须用 `taskkill /F /PID <pid>` 精确杀。先 `tasklist` 确认 PID，再 `/PID` 杀。这一点写入清理清单第 2 步。
