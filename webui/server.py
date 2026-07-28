@@ -366,6 +366,111 @@ def _build_background_process_check(session, agent):
     )
 
 
+def _build_task_resume_prompt(session):
+    """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
+    如果有，注入提示——agent 回答完用户问题后必须继续主线。"""
+    has_plan = False
+    results_dir = session.get("results_dir", "")
+    if results_dir:
+        plan_path = os.path.join(results_dir, "task_plan.md")
+        if os.path.isfile(plan_path):
+            has_plan = True
+    todos = session.get("todos", [])
+    incomplete = [t for t in todos if t.get("status") not in ("completed", "cancelled")]
+    has_todos = len(incomplete) > 0
+    
+    if not has_plan and not has_todos:
+        return ""
+    
+    parts = ["⛔ 你有未完成的主线任务！"]
+    if has_plan:
+        parts.append(f"- task_plan.md: {plan_path if results_dir else '存在'}")
+    if has_todos:
+        parts.append(f"- 待办: {len(incomplete)}/{len(todos)} 未完成: {', '.join(t.get('title','')[:30] for t in incomplete[:5])}")
+    parts += [
+        "",
+        "你必须按以下优先级行动：",
+        "1. 先简短回答用户的问题（如果用户问了问题）",
+        "2. 然后立即检查主线任务进度：",
+        "   - 读 task_plan.md 看当前 Phase",
+        "   - 调 process(action='list') 检查后台进程",
+        "   - 调 process(action='poll') 查具体进程状态",
+        "   - 用 search_files 看 results_dir 最新产出文件",
+        "3. 根据进度继续执行下一个未完成的待办/Phase",
+        "4. 报错→分析原因→能修就修→修不了记录到 task_plan.md Errors 段→跳过继续",
+        "禁止：回答完用户问题后直接结束 turn！必须检查并推进主线！",
+    ]
+    return "\n".join(parts)
+
+
+def _schedule_self_check(session, agent, loop):
+    """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。"""
+    if not agent or not loop:
+        return
+    has_todos = any(t.get("status") not in ("completed", "cancelled") 
+                    for t in session.get("todos", []))
+    results_dir = session.get("results_dir", "")
+    has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
+    if not has_todos and not has_plan:
+        return
+    _sc = session.setdefault("_self_check_count", 0)
+    if _sc >= 20:
+        return
+    session["_self_check_count"] = _sc + 1
+    sid = session["id"]
+    
+    async def _wakeup():
+        await asyncio.sleep(300)  # 5 min
+        try:
+            if sid not in _sessions: return
+            s = _sessions[sid]
+            if s.get("running_agent") or s.get("running_task"): return
+            wake_msg = (
+                f"⏰ [系统定时自检 #{_sc}]\n"
+                "你有未完成的主线任务。请执行以下检查：\n"
+                "1. 读 task_plan.md 看当前 Phase\n"
+                "2. process(action='list') 检查后台进程\n"
+                "3. process(action='poll') 查每个进程状态\n"
+                "4. search_files 看 results_dir 最新产出\n"
+                "5. 报错→修复→继续。无报错→汇报进度→继续下一个待办\n"
+                "6. 完成后汇报摘要"
+            )
+            s.setdefault("messages", []).append(
+                {"role": "system", "content": wake_msg, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+            s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            await _trigger_agent_turn(s, wake_msg)
+        except Exception:
+            pass
+    
+    asyncio.ensure_future(_wakeup())
+
+
+async def _trigger_agent_turn(session, message):
+    """从服务端触发一轮 agent 对话（不等用户消息），5分钟超时"""
+    agent = session.get("agent")
+    if not agent: return
+    try:
+        if getattr(agent, "_interrupt_requested", False):
+            agent.clear_interrupt()
+        session["running_agent"] = agent
+        loop = asyncio.get_event_loop()
+        def _run():
+            return agent.run_conversation(message)
+        result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
+        final = result.get("final_response", "") if isinstance(result, dict) else str(result)
+        session.setdefault("messages", []).append(
+            {"role": "assistant", "content": final, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+        _session_emit(session, {"type": "complete", "content": final[:200], "session_id": session["id"]})
+    except asyncio.TimeoutError:
+        _session_emit(session, {"type": "timeout", "content": "自检超时(5分钟)", "session_id": session["id"]})
+    except Exception as e:
+        pass
+    finally:
+        session["running_agent"] = None
+        session["running_task"] = None
+        _schedule_self_check(session, agent, asyncio.get_event_loop())
+
+
 def _build_alerts_context(session):
     """读取 analysis_dir 下的 alerts.json，注入未处理错误摘要。"""
     analysis_dir = session.get("analysis_dir", "")
@@ -4874,6 +4979,30 @@ async def ws_endpoint(ws: WebSocket):
                                     if _recent_files:
                                         _newest = _recent_files[:3]
                                         _report_parts.append(f"📄 新产出: {', '.join(f[1] for f in _newest)}")
+                                        
+                                        # 🔧 Layer3: 文件产出自动匹配待办
+                                        if hasattr(agent, "_todo_store"):
+                                            try:
+                                                _todos = list(agent._todo_store.read())
+                                                for _tf in _recent_files[:5]:
+                                                    _fname = _tf[1].lower()
+                                                    for _i, _td in enumerate(_todos):
+                                                        _title = (_td.get("title") or _td.get("content") or "").lower()
+                                                        # 模糊匹配：文件名关键词出现在待办标题中
+                                                        _keywords = _fname.replace("_", " ").replace(".", " ").split()
+                                                        if any(kw in _title for kw in _keywords if len(kw) > 2):
+                                                            if _td.get("status") not in ("completed", "cancelled"):
+                                                                _td["status"] = "completed"
+                                                                agent._todo_store._items[_i] = _td
+                                                                logger.info(f"[Heartbeat] todo matched: {_td.get('title','')[:40]} -> completed (file: {_tf[1]})")
+                                                                break
+                                                # 推送更新
+                                                _updated = [{"title": t.get("title", t.get("content", "")), "status": t.get("status", "pending")} 
+                                                           for t in agent._todo_store.read() if isinstance(t, dict)]
+                                                _session_emit(session, {"type": "todos_update", "todos": _updated, 
+                                                    "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                            except Exception:
+                                                pass
                                 except Exception:
                                     pass
 
@@ -5051,6 +5180,11 @@ async def ws_endpoint(ws: WebSocket):
                         if _alerts_ctx:
                             conversation_history.append({"role": "system", "content": _alerts_ctx})
 
+                        # 🔧 主线任务恢复：回答完用户问题后必须继续主线
+                        _resume_ctx = _build_task_resume_prompt(session)
+                        if _resume_ctx:
+                            conversation_history.append({"role": "system", "content": _resume_ctx})
+
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None
                         if _intent == "plan_refine" and agent.tools:
@@ -5197,10 +5331,12 @@ async def ws_endpoint(ws: WebSocket):
                     finally:
                         session["running_agent"] = None
                         session["running_task"] = None
-                        # 问题4: 停止心跳
+                        # 停止本轮心跳
                         _heartbeat_active["on"] = False
                         if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
                             _heartbeat_task.cancel()
+                        # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
+                        _schedule_self_check(session, agent, loop)
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
