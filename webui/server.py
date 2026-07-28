@@ -1437,7 +1437,13 @@ def _restore_single_session(sid):
             except Exception:
                 pass
             if persisted_cwd and os.path.isdir(persisted_cwd):
-                results_dir = persisted_cwd.replace("/", os.sep)
+                # 安全验证：cwd 必须在 results/ 下（防止被外部路径污染）
+                _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+                cwd_abs = os.path.abspath(persisted_cwd.replace("/", os.sep))
+                if cwd_abs.startswith(_results_base + os.sep) or cwd_abs == _results_base:
+                    results_dir = persisted_cwd.replace("/", os.sep)
+                else:
+                    results_dir = os.path.join(RESULTS_DIR, sid)
             else:
                 default_dir = os.path.join(RESULTS_DIR, sid)
                 if os.path.isdir(default_dir):
@@ -1518,7 +1524,13 @@ def _load_persisted_sessions():
                 except Exception:
                     pass
             if persisted_cwd and os.path.isdir(persisted_cwd):
-                results_dir = persisted_cwd.replace("/", os.sep)
+                # 安全验证：cwd 必须在 results/ 下（防止被外部路径污染）
+                _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+                cwd_abs = os.path.abspath(persisted_cwd.replace("/", os.sep))
+                if cwd_abs.startswith(_results_base + os.sep) or cwd_abs == _results_base:
+                    results_dir = persisted_cwd.replace("/", os.sep)
+                else:
+                    results_dir = os.path.join(RESULTS_DIR, sid)
             else:
                 # 尝试 RESULTS_DIR/sid
                 default_dir = os.path.join(RESULTS_DIR, sid)
@@ -1635,7 +1647,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=cfg.get("provider", "openai"),
         model=cfg["model"],
         max_iterations=300,
-        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web"],
+        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use"],
         ephemeral_system_prompt=skills_index,
         quiet_mode=True,
         tool_progress_mode="all",
@@ -2385,6 +2397,80 @@ async def _send_weixin_progress(message: str) -> bool:
         return False
 
 
+async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
+    """向微信发送本地图片 — 使用 Hermes 原生 WeixinAdapter.send_image_file()"""
+    if _weixin_adapter is None:
+        return False
+    if not os.path.isfile(image_path):
+        print(f"[MemOmics] 微信图片不存在: {image_path}", flush=True)
+        return False
+    try:
+        chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
+        if chat_id and "@" not in chat_id:
+            chat_id = chat_id + "@im.wechat"
+        print(f"[MemOmics] send_image to chat_id={chat_id}, path={image_path}", flush=True)
+        result = await _weixin_adapter.send_image_file(chat_id, image_path, caption=caption)
+        print(f"[MemOmics] send_image result: success={getattr(result,'success','?')}", flush=True)
+        return result.success if hasattr(result, 'success') else bool(result)
+    except Exception as e:
+        print(f"[MemOmics] 微信图片发送异常: {e}", flush=True)
+        return False
+
+
+async def _send_weixin_document(file_path: str, caption: str = "") -> bool:
+    """向微信发送文件 — 使用 Hermes 原生 WeixinAdapter.send_document()"""
+    if _weixin_adapter is None:
+        return False
+    if not os.path.isfile(file_path):
+        print(f"[MemOmics] 微信文件不存在: {file_path}", flush=True)
+        return False
+    try:
+        chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
+        if chat_id and "@" not in chat_id:
+            chat_id = chat_id + "@im.wechat"
+        print(f"[MemOmics] send_document to chat_id={chat_id}, path={file_path}", flush=True)
+        result = await _weixin_adapter.send_document(chat_id, file_path, caption=caption)
+        print(f"[MemOmics] send_document result: success={getattr(result,'success','?')}", flush=True)
+        return result.success if hasattr(result, 'success') else bool(result)
+    except Exception as e:
+        print(f"[MemOmics] 微信文件发送异常: {e}", flush=True)
+        return False
+
+
+def _weixin_push_image(image_path: str, caption: str = "", loop=None):
+    """线程安全地向微信推送图片"""
+    if not _weixin_state.get("connected") or not _weixin_state.get("token"):
+        return
+    try:
+        if loop is not None:
+            asyncio.run_coroutine_threadsafe(_send_weixin_image(image_path, caption), loop)
+        else:
+            try:
+                l = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(_send_weixin_image(image_path, caption), l)
+            except RuntimeError:
+                pass
+    except Exception:
+        pass
+
+
+def _weixin_push_document(file_path: str, caption: str = "", loop=None):
+    """线程安全地向微信推送文件"""
+    if not _weixin_state.get("connected") or not _weixin_state.get("token"):
+        return
+    try:
+        if loop is not None:
+            asyncio.run_coroutine_threadsafe(_send_weixin_document(file_path, caption), loop)
+        else:
+            try:
+                l = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(_send_weixin_document(file_path, caption), l)
+            except RuntimeError:
+                pass
+    except Exception:
+        pass
+
+
 # --- 微信双向消息轮询 ---
 
 _weixin_msg_store = []       # 最近消息列表（供前端拉取和 WS 推送）
@@ -2596,6 +2682,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                                 rel = str(p.relative_to(base)).replace(chr(92), "/")
                                 fig = {"name": p.name, "rel_path": rel, "url": f"/api/results/{sid}/figure?path={rel}", "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%H:%M:%S")}
                                 _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+                                # 📱 微信路径：新图片直接发微信
+                                try:
+                                    asyncio.get_event_loop().create_task(_send_weixin_image(str(p), f"🖼️ {p.name}"))
+                                except Exception:
+                                    pass
             except Exception:
                 pass
             if _weixin_adapter:
@@ -3679,64 +3770,64 @@ async def list_results(sid: str, path: str = ""):
 
 
 def _find_best_results_dir(sid: str) -> str:
-    """每次实时扫描 results/，智能匹配会话目录。
-    策略：1) 内存中的 results_dir 有内容 → 直接用
-          2) 查 state.db 的 cwd 字段（持久化的 results_dir）→ 有内容直接用
-          3) 目录名含 sid 短ID → 精确匹配，高优先级
-          4) sid 在内存中 → 取最近修改的非 memomics- 目录
-          5) 无匹配 → 使用会话默认 results_dir 或回退到 results/{sid}"""
-    # 1. 内存中的 results_dir 优先（空目录也返回——新会话还没产出是正常的）
-    if sid in _sessions:
-        cached = _sessions[sid].get("results_dir", "")
-        if cached and os.path.isdir(cached):
-            return cached
-    if not os.path.isdir(RESULTS_DIR):
-        return ""
-    # 2. 从 state.db 恢复持久化的 results_dir（rename_results_dir 写入 cwd 字段）
-    persisted_cwd = ""
+    """每次实时扫描 results/，找到当前会话的确定分析结果目录。
+    
+    核心不变式：返回路径必须属于当前会话（通过短ID验证），且必须在 results/ 下。
+    这防止了：① 新会话匹配旧会话目录 ② agent 改到桌面等外部路径后污染后续会话。
+    
+    策略（按优先级）：
+    1) state.db cwd — 最权威（rename_results_dir 持久化），需短ID验证
+    2) 内存 results_dir — 需在 results/ 下 + 短ID验证
+    3) 扫描 results/ 精确匹配
+    4) 回退到 results/{sid}（即使不存在，由调用方处理）"""
+    short_id = sid.split("-")[-1] if "-" in sid else ""
+    _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+    
+    def _is_session_dir(dpath: str) -> bool:
+        """验证目录路径确实属于当前会话"""
+        if not os.path.isdir(dpath):
+            return False
+        abs_path = os.path.abspath(dpath)
+        # 必须在 results/ 下
+        if not (abs_path.startswith(_results_base + os.sep) or abs_path == _results_base):
+            return False
+        # 目录名必须可追溯到当前会话：含短ID 或 等于 sid
+        dirname = os.path.basename(abs_path.rstrip(os.sep))
+        if short_id and short_id in dirname:
+            return True
+        if dirname == sid:
+            return True
+        return False
+    
+    # 1. state.db cwd — 最权威来源（rename 时写入，含短ID）
     try:
         db = _get_session_db()
         if db and hasattr(db, '_conn'):
             row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
             if row and row[0]:
-                persisted_cwd = row[0].replace("/", os.sep)
+                cwd = row[0].replace("/", os.sep)
+                if _is_session_dir(cwd):
+                    return cwd
     except Exception:
         pass
-    if persisted_cwd and os.path.isdir(persisted_cwd):
-        _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
-        if os.path.abspath(persisted_cwd).startswith(_results_base + os.sep) or \
-           os.path.abspath(persisted_cwd) == _results_base:
-            return persisted_cwd
-    # 3. 扫描 results/ 目录，按优先级匹配（空目录也纳入——新会话可能还没产出）
-    short_id = sid.split("-")[-1] if "-" in sid else ""
-    candidates = []
-    try:
+    
+    # 2. 内存 results_dir — 需验证属于当前会话
+    if sid in _sessions:
+        cached = _sessions[sid].get("results_dir", "")
+        if cached and _is_session_dir(cached):
+            return cached
+    
+    # 3. 扫描 results/ 目录，精确匹配
+    if os.path.isdir(RESULTS_DIR):
         for d in os.listdir(RESULTS_DIR):
             dpath = os.path.join(RESULTS_DIR, d)
-            if not os.path.isdir(dpath) or d.startswith("."):
-                continue
-            mtime = os.path.getmtime(dpath)
-            # 精确匹配短ID → 高分优先
-            if short_id and short_id in d:
-                candidates.append((1_000_000_000 + mtime, dpath, d))
-            # sid 在内存中 → 非 memomics- 目录优待（取最近修改的）
-            elif sid in _sessions:
-                bonus = 0 if d.startswith("memomics-") else 3600
-                candidates.append((mtime + bonus, dpath, d))
-    except OSError:
-        return ""
-    if candidates:
-        candidates.sort(reverse=True, key=lambda x: x[0])
-        best = candidates[0][1]
-        # 同步到内存
-        if sid in _sessions:
-            _sessions[sid]["results_dir"] = best
-        return best
-    # 5. 无匹配 → 使用会话默认 results_dir 或默认路径
-    if sid in _sessions:
-        default = _sessions[sid].get("results_dir", "")
-        if default and os.path.isdir(default):
-            return default
+            if _is_session_dir(dpath):
+                # 同步到内存
+                if sid in _sessions:
+                    _sessions[sid]["results_dir"] = dpath
+                return dpath
+    
+    # 4. 无匹配 — 回退到 results/{sid}（不信任内存缓存，前面所有验证已失败）
     return os.path.join(RESULTS_DIR, sid)
 
 @app.get("/api/results")
@@ -3979,22 +4070,47 @@ def _weixin_push_progress(session, tool_name, result_str, loop=None):
         if loop is not None:
             asyncio.run_coroutine_threadsafe(_send_weixin_progress(msg), loop)
         else:
-            # fallback: try running loop
             try:
                 l = asyncio.get_running_loop()
                 asyncio.run_coroutine_threadsafe(_send_weixin_progress(msg), l)
             except RuntimeError:
                 pass
+        # 📎 generate_report 完成后，自动发送 HTML 报告到微信
+        if tool_name == "generate_report":
+            _results_dir = session.get("results_dir", "")
+            if _results_dir and os.path.isdir(_results_dir):
+                try:
+                    for p in sorted(Path(_results_dir).rglob("*.html"), key=lambda x: x.stat().st_mtime, reverse=True):
+                        if p.stat().st_mtime > time.time() - 120:  # 2分钟内的新报告
+                            if loop is not None:
+                                asyncio.run_coroutine_threadsafe(
+                                    _send_weixin_document(str(p), f"📄 {p.name}"), loop)
+                            else:
+                                try:
+                                    l = asyncio.get_running_loop()
+                                    asyncio.run_coroutine_threadsafe(
+                                        _send_weixin_document(str(p), f"📄 {p.name}"), l)
+                                except RuntimeError:
+                                    pass
+                            break  # 只发最新的一个
+                except Exception:
+                    pass
     except Exception:
         pass
 
 def _ensure_results_dir(session):
     """确保 session 的 results_dir 物理目录存在。
     仅在目录不存在时创建，避免纯聊天产生空目录。
-    由工具执行钩子触发（首个分析工具调用时自动创建）。"""
+    由工具执行钩子触发（首个分析工具调用时自动创建）。
+    安全规则：只创建 results/ 下的目录，拒绝外部路径。"""
     try:
         results_dir = session.get("results_dir", "")
         if not results_dir:
+            return
+        # 安全验证：只允许在 results/ 下创建目录
+        _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+        if not (os.path.abspath(results_dir).startswith(_results_base + os.sep) or \
+                os.path.abspath(results_dir) == _results_base):
             return
         if not os.path.isdir(results_dir):
             os.makedirs(results_dir, exist_ok=True)
@@ -4518,6 +4634,9 @@ async def ws_endpoint(ws: WebSocket):
                             new_figs = _scan_new_figures()
                             for fig in new_figs:
                                 _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                # 📱 新图片自动推送微信
+                                img_path = os.path.join(session.get("results_dir", ""), fig["rel_path"])
+                                _weixin_push_image(img_path, f"🖼️ {fig['name']}", loop=_main_loop)
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
                         # 先确保 results_dir 物理目录存在（纯聊天不创建，首次分析自动创建）
                         _ensure_results_dir(session)
@@ -4525,15 +4644,24 @@ async def ws_endpoint(ws: WebSocket):
                         # 📱 微信进度推送：关键步骤完成时推送到微信
                         _weixin_push_progress(session, tool_name, result_str, loop=_main_loop)
                         # 🔧 update_results_dir 后同步更新 session 的 results_dir
+                        # 安全规则：results_dir 必须在 results/ 下，外部路径改为 output_root 镜像
                         if tool_name == "update_results_dir":
                             try:
                                 resp = json.loads(result_str)
                                 if resp.get("ok") and resp.get("results_dir"):
                                     new_dir = resp["results_dir"].replace("/", os.sep)
-                                    session["results_dir"] = new_dir
-                                    db = _get_session_db()
-                                    if db:
-                                        db.update_session_cwd(session["id"], new_dir.replace("\\", "/"))
+                                    _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+                                    if os.path.abspath(new_dir).startswith(_results_base + os.sep) or \
+                                       os.path.abspath(new_dir) == _results_base:
+                                        # 合法：在 results/ 下，直接更新
+                                        session["results_dir"] = new_dir
+                                        db = _get_session_db()
+                                        if db:
+                                            db.update_session_cwd(session["id"], new_dir.replace("\\", "/"))
+                                    else:
+                                        # 外部路径（如桌面）：不覆盖 results_dir，记录为 output_root
+                                        session["output_root"] = new_dir
+                                        logger.info(f"[MemOmics] update_results_dir 外部路径记录为 output_root: {new_dir}")
                             except Exception:
                                 pass
                     except Exception:

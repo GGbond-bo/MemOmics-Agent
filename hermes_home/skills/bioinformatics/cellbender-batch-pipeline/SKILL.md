@@ -151,7 +151,7 @@ WHILE pipeline not done:
 | output filtered.h5 大小 | > 80 MB | < 10 MB = 保存失败，检查 torch.save / ckpt unpack error |
 | epoch 数 | 150/150 | 未完成 = 超时或 ckpt 异常 |
 | 最终 JSON 状态 | DONE | 缺少 = 进程崩溃，检查最后更新时间 |
-| GPU 利用率 | > 80% | < 10% = 可能卡在 CPU / 进程僵死 |
+| GPU 利用率 | > 80%（小样本）；4-40%（>100 万液滴样本） | < 10% **且** epoch 停滞 + 日志 mtime 过期 = 僵死。⚠️ **单看 GPU 利用率不能下结论** — >100 万总液滴的样本（如 1.33M empty droplets），CPU 数据加载是瓶颈，4-10% GPU 利用率 + 187s/epoch 是正常行为，不是卡死。详见 pitfall 34。 |
 | **🆕 ckpt unpack** | 无 `Failed to unpack` 错误 | 存在 → 清理 %TEMP% + 删 ckpt，重跑样本 |
 | **🆕 RAM 可用** | > 10 GB free | < 5 GB → 有僵尸进程，杀 `cellbender.exe` 残留 |
 | **🆕 产出文件统计** | `dir *_filtered.h5` 与实际一致 | `done=N/26` 不可信，直接统计磁盘文件数 |
@@ -172,8 +172,8 @@ WHILE pipeline not done:
 □ 3. 确认 GPU 空闲: nvidia-smi → utilization < 10%
 □ 4. 检查 cellbender_output/ 下所有子目录 → 删掉无 filtered.h5 的孤儿目录
 □ 5. 确认 RAM 充足: free -m / tasklist 汇总
-□ 6. 确认 ptrepack 在 PATH（不然 Stage 3 静默跳过）:
-     python -c "import shutil; print(shutil.which('ptrepack'))"
+□ 6. 确认 ptrepack 可用（不硬编码路径）:
+     python -c "import shutil, sysconfig, os; scripts=sysconfig.get_path('scripts'); p=os.path.join(scripts,'ptrepack.exe'); print(p if os.path.exists(p) else shutil.which('ptrepack') or 'NOT FOUND')"
 □ 7. 用 Python subprocess.Popen + CREATE_NO_WINDOW 脱离式启动，不用 start /B
 ```
 
@@ -182,6 +182,14 @@ WHILE pipeline not done:
 ---
 
 ## 🔴 长任务监控铁律 (Monitoring Iron Law)
+
+> **🆕 与 SOUL.md 铁律 -3（意图分类路由）的关系**：SOUL.md 新增 铁律 -3（2026-07-27），确保长任务运行期间用户的多类消息（进度查询 / 知识问题 / 分析规划 / 新分析执行）被正确路由：
+> - "进度？" → `progress_check` → 直接三源验证，不加载 skill
+> - "fpr 参数什么意思？" → `knowledge_ask` → search_knowledge，不触发 skill_view
+> - "帮我规划差异分析" → `analysis_plan` → Planner 只读模式，不干扰后台任务
+> - "跑差异分析" → `analysis_exec` → 检查 task_plan.md 有 in_progress Phase → 提示等待
+>
+> **此路由在 SOUL.md 层面生效，不需要在每个 skill 中重复实现。** 本 skill 的监控铁律专注在"如何正确监控已启动的任务"，意图分类由 SOUL.md 统一处理。
 
 > ⛔ **注意：独立的 `heartbeat-monitor` skill 已过时。** 该 skill 描述的是 bash `while true` 心跳模式（已在本 session 中死亡 3 次，2026-07-25 证实）。真实有效的监控协议在此处，以 `scripts/heartbeat_v2.py` (v2.1 auto-discover) + `scripts/pipeline_watchdog.py` 为准。加载 `cellbender-batch-pipeline` 技能后，直接使用此处的监控铁律，忽略 `heartbeat-monitor` skill 的任何指导。
 
@@ -239,11 +247,11 @@ WHILE pipeline not done:
 
 ## Pitfalls
 
-1. **ckpt.tar.gz 残留** — 每次新样本前必须删，否则 hash mismatch
-2. **PYTHONPATH 污染** — `env.pop('PYTHONPATH', None)` 必须做
+1. **ckpt.tar.gz 残留 + hash 不确定性** — 每次新样本前必须删（防跨样本污染）。⚠️ **即使同一样本、相同参数，CellBender 重启时 workflow hash 也会变化**（非确定性算法 bug），导致 `--checkpoint` 恢复失败报 "Workflow hash does not match"。**2026-07-27 实锤**：`4CL_SD_D4_2_scRNA` 跑完 epoch 42/150 崩溃（MCKP OOM），ckpt 1.38 GB 完好且 checkpoint.py 能解压，但 `--checkpoint` 恢复时 workflow hash `a0882582e3` ≠ 重启后计算的新 hash → 无法恢复，1.5h GPU 训练白费。**结论：不要把 checkpoint 恢复当可靠方案。hash mismatch 一次后直接从头重跑，不反复尝试。**
+1b. **🔥 中途崩溃的恢复策略：不要指望 checkpoint** — 当 CellBender 跑到 epoch 42/150 崩溃（exit code 1、MCKP OOM、或其他中间崩溃），**不要尝试 `--checkpoint` 恢复**。原因：(a) workflow hash 非确定性——即使传入完全相同参数，重启后的 hash 大概率不匹配，checkpoint 白费；(b) 即使 hash 偶尔匹配，崩溃点附近的 ckpt 可能已损坏。**正确做法**：分析崩溃根因→修复参数（如提高 `--low-count-threshold`）→删旧 ckpt 和 posterior.h5→从头重跑。已训练 epoch 的算力浪费无法避免，但这比反复尝试 checkpoint 恢复（每次失败再等 5 分钟才知道）更快。\n\n2. **PYTHONPATH 污染** — `env.pop('PYTHONPATH', None)` 必须做
 3. **subprocess timeout** — 每样本设 2400s (40 min)，不要用 600s
 4. **不要用 `execute_python`** — max timeout 600s，样本 1 就需要 ~1800s
-5. **sitecustomize.py 不靠谱** — 直接改 checkpoint.py 是唯一可靠路径
+5. **sitecustomize.py patch** — `torch.save` weakref fix via dill fallback + `torch.load` weights_only=False default（已验证可靠于 2026-07-26）。详见 `references/pytorch-load-weights-only-fix.md`
 6. **🧟 Zombie Cascade — 内存饥饿** (2026-07-24 验证)：
    - 当 `run_pipeline.py` 父进程被 Hermes 会话终止 kill 时，CellBender 子进程变为孤儿继续运行
    - 3 个僵尸累积吃掉 11+ GB RAM → 后续样本在 `compute_denoised_counts` 阶段报 `numpy._core._exceptions._ArrayMemoryError: Unable to allocate 262. MiB`
@@ -326,7 +334,13 @@ WHILE pipeline not done:
     - **症状**: `powershell "Get-Process | Where-Object { $_ }"` 在 bash terminal 中报乱码，`$_` 被 bash 解析为变量
     - **修复**: 查询进程用 `tasklist /FI "IMAGENAME eq python.exe"` 替代 PowerShell 的 `$_` 管道。必须用 PowerShell 时，加 `cmd /c` 前缀绕过 bash 解释器。
 
-19. **🔥🔥 心跳+管道 3 连死 — `run_pipeline.py` 系统性不可靠 (2026-07-25, 同一会话内 3 次复现)**：
+37. **🔥🔥 单样本续跑或 ptrepack 操作前必须先加载 skill — 用户明确纠正 (2026-07-27)**：
+    - **症状**: 用户说"ptrepack 处理"→ Agent 直接写脚本用 ptrepack CLI，反复失败（PATH 问题、MSYS 路径、HDF5 checksum）。用户打断："你要加载skill啊，cellbender里面没有吗？" 加载 skill 后发现已有 `scripts/ptrepack_h5py_batch.py`（h5py 直接复制方案），一行调用即完成。
+    - **根因**: Agent 认为"ptrepack 很简单，不用加载 skill"→ 踩了 skill 里已文档化的所有坑（pitfall 25/25a/25b）。**skill 存在的价值就是避免 Agent 重复踩坑——跳过它就是浪费之前的试错积累。**
+    - **铁律**: 任何生信操作（即使看似简单如 ptrepack、格式转换）→ 必须先 `skill_view` 加载相关 skill。这个操作只需 0.5 秒，却能省掉几十分钟的错误排查。
+    - **适用场景**: 不限于 CellBender——任何与特定工具/管道交互的操作（ptrepack、Seurat Read10X、scanpy read_10x_mtx）都应先加载对应 skill。Skill 里的 pitfalls 和 scripts 是前 30+ 次执行的教训结晶。
+
+19.
     - **症状**: 同一会话内，心跳被部署了 3 次，死了 3 次。monitor.log 停写时间点与 run_pipeline.py 死亡时间吻合（04:00—04:06 区间），但 CellBender 孤儿一直在跑（epoch 46 → 77 → 142 → 新样本）。用户追问 3 轮"心跳还在吗？""这不是死掉了吗？"。
     - **根因**: `run_pipeline.py` 的 subprocess 树挂在 Hermes 会话进程树下。Hermes 会话回收/压缩 → 父进程被杀 → 心跳（同一进程树的子进程）一起死 → CellBender 子进程变孤儿继续跑但 pipeline 失去自动推进能力。每次重启心跳只部署了新监控进程，但 pipeline 父进程已死 → CellBender 跑完当前样本后停在那里。
     - **为什么 3 次都没修好**: 每次只修复了心跳（重新部署），但没解决 pipeline 父进程已死的根本问题——CellBender 孤儿跑完当前样本不会自动切下一个（`run_pipeline.py` 的 for 循环已不存在）。
@@ -377,6 +391,15 @@ WHILE pipeline not done:
     - **文件名映射**: `--output X.h5` → `X_filtered.h5`, `X_posterior.h5`, `X_metrics.csv`, `X_cell_barcodes.csv`。
     - **修复**: 用 `*_filtered.h5` glob 而非硬编码前缀。
 
+25a. **🔥🔥 ptrepack MSYS bash 路径转换 + 静默失败 (2026-07-27 证实)**：
+    - **症状 A — 路径破坏**: `ptrepack F:/path/src.h5 F:/path/dst.h5` → `FileNotFoundError: E:\MemOmics-Agent\F does not exist`（MSYS 把 `F:` 转成当前工作目录下的相对路径）
+    - **症状 B — 静默失败**: `python -m tables.scripts.ptrepack` exit code 0，无错误信息，但目标文件不存在。PyTables ptrepack 模块在某些条件下静默跳过写入。
+    - **修复 A（推荐，根除）**: 放弃 ptrepack CLI，用 Python `tables` API 直接复制 — `tables.Filters(complevel=5, complib='blosc:zstd')` + `copy_node` 递归。已验证 2026-07-27 产出 186 MB 文件。
+    - **修复 B（ptrepack CLI 备选）**: `cd /f/CellBender_v2` 切换到工作目录后使用相对路径，避免 MSYS 路径转换。
+    - **修复 C（完整路径）**: 使用 `Python312/Scripts/ptrepack.exe` 完整路径 + Windows 原生路径（如 `./cellbender_output/...` 相对路径）。
+    - 📄 完整方案: `references/ptrepack-msys-bash-fixes.md`
+    - 📄 h5py 绕过 HDF5 checksum 损坏: `references/ptrepack-h5py-corruption-fallback.md` — 当 ptrepack CLI 报 "incorrect metadata checksum" / "bad object header version" 时，h5py 可直接读取并复制 `/matrix` group。2026-07-27 批量 17/17 样本验证成功。
+
 25. **🔥 ptrepack `--complevel=5` 等号语法错误 — 连续 3 个样本 ptrepack 失败 (2026-07-25, 26样本证实)**：
     - **症状**: watchdog 日志连续出现 `❌ ptrepack 失败: ... returned non-zero exit status 1`，但 CellBender 训练成功，filtered.h5 存在且 size > 40 MB。
     - **根因**: ptrepack CLI 参数格式是 `--complevel 5`（空格分隔），不是 `--complevel=5`（等号）。`=` 被 ptrepack 解析为参数名的一部分 → 无效参数。
@@ -389,11 +412,12 @@ WHILE pipeline not done:
     - **排查方向**: 这些样本的 h5ad 可能更大/基因数更多 → ckpt.tar.gz 更大 → Windows temp 冲突更频繁。需单独清理 %TEMP% + 上调 --low-count-threshold 后重试。
     - **临时方案**: watchdog MAX_RETRIES=2 后永久跳过，不阻塞 pipeline。全部正常样本跑完后单独处理这 4 个。
 
-27. **🔥🔥 `torch.load` `weights_only=True` — PyTorch 2.11 默认值与旧 ckpt 不兼容 (2026-07-25, 26样本证实)**：
-    - **症状**: `4CL_SD_D4_2_scRNA` 两次重试后日志显示 `_pickle.UnpicklingError: Weights only load failed...`。但日志里有 `Successfully unpacked tarball` — ckpt 解压成功了，是 `torch.load` 拒绝 `cellbender.remove_background.model.RemoveBackgroundPyroModel` 类。
-    - **区分于 pitfall 8**: 不是 ckpt 解压失败，是 torch.load 失败。日志有关键线索：`Successfully unpacked tarball` → `UnpicklingError`。
-    - **修复**: 编辑 `checkpoint.py:189`，`load_kwargs = {}` → `load_kwargs = {'weights_only': False}`。一行改动修复所有 4 处 `torch.load` 调用（因为都用 `**load_kwargs`）。30 秒完成。详见 `references/pytorch26-checkpoint-fix.md`。
-    - **预防**: PyTorch 升级后旧 ckpt 全部需要此修复，首次启动前改好 checkpoint.py。
+27. **🔥🔥 `torch.load` `weights_only=True` — PyTorch 2.6+ 默认值与 CellBender ckpt 不兼容 (2026-07-25, 26样本证实; 2026-07-26 补充 sitecustomize 方案)**：
+    - **症状**: `4CL_SD_D4_2_scRNA` 日志显示 `_pickle.UnpicklingError: Weights only load failed...`。但前面有 `Successfully unpacked tarball` — ckpt 解压成功，是 `torch.load` 拒绝 `cellbender.remove_background.model.RemoveBackgroundPyroModel` 类。
+    - **区分于 pitfall 8**: 不是 ckpt 解压失败，是 torch.load 失败。关键线索：`Successfully unpacked tarball` → `UnpicklingError`。
+    - **修复方案 A（推荐，覆盖所有调用者）**: `sitecustomize.py` monkey-patch — 重写 `torch.load` 默认 `weights_only=False`。一行改动能修复 CellBender + 所有其他 PyTorch 代码。已验证于 2026-07-26 成功修复 `4CL_SD_D4_2_scRNA`。详见 `references/pytorch-load-weights-only-fix.md`。
+    - **修复方案 B（后备，仅覆盖 checkpoint.py）**: 编辑 `checkpoint.py:189`，`load_kwargs = {}` → `load_kwargs = {'weights_only': False}`。仅修复 CellBender 内部，CellBender 更新后需重新应用。
+    - **预防**: PyTorch 升级后旧 ckpt 全部需要此修复，首次启动前改好 sitecustomize.py。
 
 29. **🔥🔥🔥 `error_scanner.py` 只扫描 `watchdog.log` — 手动启动的 CellBender 崩溃无人知晓 (2026-07-26, 26样本证实)**：
     - **症状**: `4CL_SD_D4_2_scRNA` 在 MCKP chunk 5/9 处 `_ArrayMemoryError` 崩溃（16:20），但 `error_scanner.py` 未检测到——因为它只扫描 `watchdog.log`，而这个样本是 Agent 手动启动的（不用 watchdog 管理），日志在 `cellbender_output/4CL_SD_D4_2_scRNA/cellbender_output.log`。
@@ -429,3 +453,71 @@ WHILE pipeline not done:
 28. **🔥 `taskkill /F /IM python.exe` — 杀 MemOmics Agent 自身 (2026-07-25, 用户纠正)**：
     - **症状**: Agent 用 `taskkill /F /IM python.exe` 杀僵尸 → 把自己（MemOmics Hermes 进程）也杀了。用户: "你杀 watchdog，你怎么把 MemOmics 的程序也杀了？你能不能带点脑子？"
     - **铁律**: **禁止 `taskkill /F /IM python.exe`。** 必须用 `taskkill /F /PID <pid>` 精确杀。先 `tasklist` 确认 PID，再 `/PID` 杀。这一点写入清理清单第 2 步。
+
+33. **🔥 脱离式 Popen 找不到 `cellbender` 命令 — PATH 不含 Scripts 目录 (2026-07-26 证实)**：
+    - **症状**: `subprocess.Popen(['cellbender', ...], creationflags=CREATE_NO_WINDOW)` → `FileNotFoundError: 系统找不到指定的文件`。但 `terminal("cellbender --help")` 正常。
+    - **根因**: `CREATE_NO_WINDOW` 模式不启动 shell，PATH 解析不生效。`cellbender.exe` 位于 `Python312/Scripts/`，不在系统 PATH 中。shell（bash/cmd）能找到它，但裸 Popen 不能。
+    - **修复**: 使用 `find_tool("cellbender")` 三级探测（which → sysconfig → pip show）动态获取完整路径。**绝不硬编码路径**——不同机器/用户名/Python版本下路径不同。详见 `references/tool-path-detection.md`。
+    - **通用规则**: 所有脱离式 Popen 调用必须使用动态探测的完整路径，不做 PATH 依赖假设。分析启动时探测 → 写入 task_plan.md `## Environment` 段 → 脚本从 Environment 段读取。详见 `references/task-plan-template.md`。
+
+34. **🔥 GPU 利用率 < 10% 的样本 ≠ 僵死 — 大样本 CPU 数据加载瓶颈 (2026-07-26 证实)**：
+    - **症状**: `4CL_SD_D4_2_scRNA` 训练中 GPU 只有 4%（显存 3354 MiB 已分配），epoch 速度 187 秒。用户质疑"不用 GPU 吗？"。
+    - **根因**: 该样本有 **1,338,883 空液滴 + 56,327 条形码 = ~140 万总液滴**。每个 epoch 需遍历全部液滴做 SVI 迭代——CPU 数据加载时间远超 GPU 矩阵运算时间，形成 CPU 瓶颈。对比正常样本（10-30 万液滴，~30s/epoch，GPU 60-80%），这个样本的液滴数多了 4-13 倍。
+    - **关键诊断**（区分"正常 CPU 瓶颈"vs"僵死"）：
+      | 指标 | 正常大样本 | 僵死 |
+      |------|-----------|------|
+      | GPU 利用率 | 4-10% | 0-3% |
+      | 显存占用 | 3-5 GB（已分配） | 3-5 GB 或 0（残留） |
+      | 日志 mtime | < 5 分钟 | > 10 分钟 |
+      | epoch 推进 | 持续增加 | 停止 |
+      | loss 收敛 | 单调下降 | 无变化 |
+      | 进程 CPU | 持续累积 | 0% |
+    - **向用户解释模板**: "GPU 确实在用（显存 3354 MiB），4% 利用率是因为 133 万空液滴导致 CPU 数据加载成为瓶颈——每个 epoch 要遍历 140 万液滴，CPU 加载速度跟不上 GPU 计算速度。对比这个目录下的其他已完成样本（10-30 万液滴、~30s/epoch、GPU 60-80%），这个样本的液滴数多了 4-13 倍。预计 7.5 小时完成，参数不需要调。"
+    - **铁律**: 对 GPU 利用率异常低的样本，**必须先查总液滴数 + 对比已完成样本的命令行**。液滴数 > 50,000 且无 `--total-droplets-included` → 参数遗漏，不是"数据特征"。液滴数 > 50,000 但有 `--total-droplets-included 25000` → 才是真正的 CPU 瓶颈，不需要干预。
+    - 📄 诊断方法: `references/mandatory-parameters-checklist.md` + `references/comparison-diagnosis.md`
+
+35. **🔥 用户"有问题吧"时 = 需要更深层根因对比证据，不是表面解释 (2026-07-26, 用户风格纠正)**：
+    - **症状**: Agent 看到 GPU 4% 后说"确实在用 GPU，只是 epoch 间 CPU 加载数据"。用户追问"不应该是用 GPU 吗？有问题吧"——用户不接受"正常现象"的表面解释。
+    - **根因**: 用户能分辨 Agent 是查了还是猜了。说"4% 是正常的"但没有查总液滴数、没有对比其他样本的 epoch 速度、没有解释"为什么这个样本慢而其他不慢"→ 等于没回答。
+    - **正确做法**: 当用户质疑一个表面异常的指标时：(a) 从日志提取数据规模（总液滴数、特征数）(b) 与其他已完成样本做 `head -3` 数值对比（空液滴数、epoch 速度、GPU 利用率、命令行参数）(c) 给出量化解释而非模糊解释。用户的"有问题吧" = "给我看对比证据"。
+    - **区分于 pitfall 36**: pitfall 36 是启动前预防（先对比再启动），pitfall 35 是用户已质疑时的诊断回退（用户说"有问题"→立即执行对比诊断）。
+
+36. **🔥🔥🔥 手动启动单个样本前必须先对比已完成样本的命令行 (2026-07-26 + 2026-07-27 两次实锤, 用户纠正)**：
+    - **实锤 1 (07-26)**: Agent 手动启动 `4CL_SD_D4_2_scRNA` 时漏了 `--cuda` → GPU 4% + epoch 188 秒。用户说"你肯定是错的，你看看其他的怎么跑的"→ `head -3` 对比才发现。
+    - **实锤 2 (07-27, 同一样本)**: 修复后重启时漏了 `--total-droplets-included 25000` → 133 万空液滴拖死 CPU → GPU 4% + epoch 187 秒。用户再次质疑"不应该是用GPU吗？有问题吧"→ 对比其他已完成样本的命令行发现 `--total-droplets-included 25000` 缺失。**同一个样本、同一天、同一个 Agent 犯两次完全相同的错误**——因为 Agent 没有从对比中学习，第二次认为"GPU 问题已修复（加了 --cuda）就够了"。
+    - **根因**: 手动启动 ≠ 批量脚本。批量脚本参数是写死的，手动启动时 LLM 从记忆里拼命令，容易遗漏非直觉参数。**LLM 的记忆不可靠——漏了什么参数连自己都不知道。**
+    - **铁律**: **任何手动启动 CellBender 前，必须先 `head -3 <任一已完成样本目录>/cellbender_output.log` 提取完整命令行，逐参数对比确认无遗漏。** 不要凭记忆写命令。即使你认为"只改了一个参数"，全量对比仍然必须做。
+    - **对比检查清单**（每次必做，逐项打钩）：`--cuda` ✅？`--total-droplets-included` ✅？`--expected-cells` ✅？`--fpr` ✅？`--epochs` ✅？`--learning-rate` ✅？`--low-count-threshold` ✅？
+    - **🔴 自验证步骤**: 写完启动命令后：(1) 把命令保存到临时文件 (2) `cat` 读回逐项核对清单 (3) 全部通过才执行。
+    - **特殊诊断信号**: `--total-droplets-included` 遗漏 → 日志显示 `X empty droplets` > 50,000；`--cuda` 遗漏 → GPU < 5% 但 epoch 速度正常（因为实际在用 CPU 跑——比想象中快但没加速）。区分"正常 CPU 瓶颈"（pitfall 34）vs "参数遗漏"的关键：**对比已完成样本的空液滴数**，差 10x+ → 参数问题。
+    - 📄 诊断方法: `references/mandatory-parameters-checklist.md` + `references/comparison-diagnosis.md`
+
+35. **🔥 用户"有问题吧"时 = 需要更深层根因，不是表面解释 (2026-07-26, 用户风格纠正)**：
+    - **症状**: Agent 看到 GPU 4% 后说"确实在用 GPU，只是 epoch 间 CPU 加载数据"。用户追问"不应该是用 GPU 吗？有问题吧"——用户不接受"正常现象"的表面解释，要求 Agent 拿出数据来证明自己的判断。
+    - **根因**: 用户能分辨 Agent 是查了还是猜了。说"4% 是正常的"但没有查总液滴数、没有对比其他样本的 epoch 速度、没有解释"为什么这个样本慢而其他不慢"→ 等于没回答。
+    - **正确做法**: 当用户质疑一个表面异常的指标时：(a) 从日志提取数据规模（总液滴数、特征数）(b) 与其他已完成样本做数值对比（液滴数、epoch 速度、GPU 利用率）(c) 给出量化解释（"这个 133 万 vs 正常 10-30 万"）而非模糊解释（"数据加载阶段"）。用户的"有问题吧" = "给我看证据"。
+
+37. **🔥🔥 硬编码工具路径 — 机器/用户/Python版本变更即失效 (2026-07-27, 用户纠正)**：
+    - **症状**: Agent 用 `ptrepack = "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe"` 硬编码路径。用户指出："这个路径不是固定的，下次换机器就废了。分析前应该检索环境。"
+    - **根因**: 硬编码路径依赖当前用户/版本，无泛化能力。`CREATE_NO_WINDOW` Popen 不继承 shell PATH，但也不能硬编码代替。
+    - **修复**: 三级探测策略 — `shutil.which` → `sysconfig.get_path("scripts")` → `pip show <pkg>`。探测结果写入 task_plan.md `## Environment` 段。脚本启动时读 Environment 段（而非硬编码）。
+    - **铁律**: 所有脱离式 Popen/脚本中的工具路径必须来自动态探测。探测失败 → 写入 task_plan.md Errors 表 + 使用 fallback（如 h5py 替代 ptrepack）。
+    - 📄 完整方案: `references/tool-path-detection.md`
+
+38. **🔥 task_plan.md 应包含 Environment 段，不放核心规则 (2026-07-27, 用户纠正)**：
+    - **问题**: 用户问"task_plan.md 要不要写入核心规则/审查？"
+    - **回答**: **不放。** 核心规则和审查流程属于：
+      | 层 | 位置 |
+      |------|------|
+      | Agent 行为约束（审查、三源验证、辩论） | SOUL.md 铁律 |
+      | 操作步骤、参数、Known Issues | Skill SKILL.md |
+      | 任务特有：做什么、做到哪了、环境变量、关键决策 | task_plan.md |
+    - **task_plan.md 应该记录**：
+      - ✅ `## Environment` — 工具路径（动态探测）、Python版本
+      - ✅ `## Decisions Made` — 关键决策及理由（如"ptrepack 用 h5py fallback，因为 HDF5 checksum 损坏"）
+      - ✅ `## Errors Encountered` — 审查失败记录
+    - **task_plan.md 不应该记录**：
+      - ❌ `rail_review` 必须执行的铁律
+      - ❌ 三源交叉验证规则
+      - ❌ 通用分析参数（已在 Skill 参数表）
+    - 📄 模板: `references/task-plan-template.md`

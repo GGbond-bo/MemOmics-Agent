@@ -1135,3 +1135,57 @@ try:
     )
 except ImportError:
     pass
+
+# === 截屏工具（使用 mss 库，无需 cua-driver）===
+SCREENSHOT_SCHEMA = {
+    "name": "screenshot",
+    "description": (
+        "Capture a screenshot of the entire screen or a specific monitor and save as PNG. "
+        "Uses the lightweight mss library (already installed). "
+        "Returns the path to the saved screenshot file."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "output_dir": {
+                "type": "string",
+                "description": "Directory to save the screenshot. Defaults to current results_dir."
+            },
+            "monitor": {
+                "type": "integer",
+                "description": "Monitor index (1=primary, 2=secondary, etc). Default 1."
+            },
+        },
+        "required": []
+    }
+}
+
+def _handle_screenshot(args):
+    try:
+        import mss
+        import mss.tools
+        from datetime import datetime
+        
+        monitor = args.get("monitor", 1)
+        output_dir = args.get("output_dir", "")
+        
+        with mss.mss() as sct:
+            if monitor > len(sct.monitors):
+                monitor = 1
+            img = sct.grab(sct.monitors[monitor])
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"screenshot_{timestamp}.png"
+            if output_dir and os.path.isdir(output_dir):
+                filepath = os.path.join(output_dir, filename)
+            else:
+                filepath = os.path.join(os.getcwd(), filename)
+            mss.tools.to_png(img.rgb, img.size, output=filepath)
+            return json.dumps({"ok": True, "path": filepath.replace(chr(92), "/"), "size": img.size, "file": filename})
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+
+registry.register(
+    name="screenshot", toolset="memomics", schema=SCREENSHOT_SCHEMA,
+    handler=lambda args, **kw: _handle_screenshot(args),
+    emoji="📸", max_result_size_chars=2_000,
+)

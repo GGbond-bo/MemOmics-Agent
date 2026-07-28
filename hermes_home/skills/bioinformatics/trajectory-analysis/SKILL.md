@@ -1,238 +1,339 @@
 ---
 name: trajectory-analysis
-description: "PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接"
-when_to_use: "[trajectory-analysis] PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接"
+description: "单细胞轨迹推断/拟时序分析：Monocle3 (R)、Slingshot (R)、scVelo RNA velocity (Python)、CellRank 命运映射 (Python)。从 Seurat/Scanpy 对象链接。"
+when_to_use: "[trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景：已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。"
 version: 1.0.0
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
 metadata:
   hermes:
-    tags: [trajectory, pseudotime, monocle3, slingshot, 03_高级分析]
+    tags: [trajectory, pseudotime, monocle3, slingshot, scvelo, rna-velocity, cellrank, cell-fate, 03_高级分析]
     difficulty: advanced
-    language: R+Python
+    languages: [R, Python]
     category: scRNA
 prerequisites:
-  r_packages: ["monocle3", "SeuratWrappers"]
-  python_packages: ["scvelo", "cellrank", "scanpy"]
-related_skills: [sctour-trajectory-inference]
-### 规则N: 运行记录只是参考，不能跳过审查
-- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
-- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
-- 禁止因"之前跑过"而跳过任何审查步骤
-- 禁止直接用历史日志里的脚本运行而不经本次审查
-- 运行日志是"参考"不是"免审凭证"
+  r_packages:
+    - monocle3
+    - Seurat
+    - slingshot
+    - tradeSeq
+    - SingleCellExperiment
+    - SummarizedExperiment
+  python_packages:
+    - scvelo
+    - scanpy
+    - cellrank
+    - anndata
+    - numpy
+    - pandas
+    - matplotlib
+---
+
+# Trajectory Analysis — 轨迹推断全流程
+
+本 skill 覆盖 4 种轨迹推断方法，按用户数据格式和需求选择对应路径。
+
+## 方法选择决策树
+
+```
+用户数据格式？
+  ├─ Seurat 对象 (R) ──→ 路径 A: Monocle3  或  路径 B: Slingshot + tradeSeq
+  └─ AnnData 对象 (Python) ──→ 路径 C: scVelo  RNA velocity  或  路径 D: CellRank 命运映射
+
+已有注释好的 Seurat 对象？
+  └─ 是 → 跳过重新降维，用 Seurat 的 UMAP + 注释 → 路径 A 或 B
+```
 
 ---
 
-# 轨迹推断
+## 📌 通用铁律（所有路径适用）
 
-PAGA/扩散拟时序/scVelo RNA velocity/CellRank命运映射。从scanpy输出链接
-
-适用场景: development, regeneration, differentiation
-
-分析步骤:
-  - Monocle3 trajectory: learn_graph+order_cells
-  - RNA velocity (scVelo): latent_time inference
-  - Branch point detection: Branch DE genes
-  - CellRank endstates: GPCCA initial/terminal
-  - Trajectory visualization: UMAP + trajectory overlay
-
-依赖包: SeuratWrappers, scanpy, cellrank, scvelo, monocle3
-
-难度: advanced
-
-触发提示: "进行轨迹推断分析"
-
-别名: 轨迹推断 (PAGA/scVelo/CellRank)
-
-## When to Use
-
-适用于: development, regeneration, differentiation
-
-### 方法选择指南
-
-| 需求 | 推荐方法 | Skill |
-|------|---------|-------|
-| 需要指定起点/终点的经典伪时间 | Monocle3 / Slingshot | 本 skill |
-| RNA velocity（剪切/未剪切） | scVelo | 本 skill |
-| 命运概率 + 终点状态 | CellRank | 本 skill |
-| 图抽象 + 轨迹拓扑 | PAGA | 本 skill |
-| **无监督（无需起点）+ VAE 深度潜在时间 + 向量场 + 批次不敏感** | **scTour** | `sctour-trajectory-inference` |
-| 跨数据集预测伪时间/向量场 | scTour | `sctour-trajectory-inference` |
-
-## Pipeline
-
-1. **Monocle3 trajectory**
-   - learn_graph+order_cells
-   - Tool: `terminal`
-2. **RNA velocity (scVelo)**
-   - latent_time inference
-   - Tool: `terminal`
-3. **Branch point detection**
-   - Branch DE genes
-   - Tool: `terminal`
-4. **CellRank endstates**
-   - GPCCA initial/terminal
-   - Tool: `terminal`
-5. **Trajectory visualization**
-   - UMAP + trajectory overlay
-   - Tool: `terminal`
-
-## Parameters
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `r_packages` | monocle3, SeuratWrappers | |
-| `python_packages` | scvelo, cellrank, scanpy | |
-| `steps` | Monocle3 trajectory -> RNA velocity (scVelo) -> Branch point detection -> CellRank endstates -> Trajectory visualization | |
-
-> **Parameter Adaptation**: Adjust parameters based on tissue quality, species, and condition. Literature values take priority, then official defaults, then tissue-specific adjustments.
-
-## Proven Scripts
-
-> Scripts that have been successfully executed and passed analysis review.
-> These are automatically saved after successful runs.
-
-| Species | Tissue | Condition | Date | Score |
-|---------|--------|-----------|------|-------|
-| *(none yet)* | | | | |
-
-| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
-| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
-| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
-| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
-| Mus musculus | liver | aging | 2026-07-12 | run_trajectory.R | 6.0 | 7.0 | ✅ |
-| Mus musculus | liver | aging | 2026-07-12 | traj_scvelo.py | 8.0 | - |  |
-## Common Issues
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| *(accumulated from runs)* | | |
-
-## References
-
-- Source: MemOmics built-in
-- Category: transcriptomics
-- Language: R+Python
-- **Related**: `sctour-trajectory-inference` — VAE 深度潜在时间推断，无监督，无需指定起点，批次不敏感。适合替代传统伪时间方法。
-
-## 📊 轨迹推断质量评估（必输出）
-
-### 必输出指标
-| 指标 | 通过 | 警告 | 阻断 |
-|------|------|------|------|
-| **分支点置信度**（slingshot） | 所有分支 `stability > 0.5` | 有分支 0.3-0.5 | 有分支 < 0.3 |
-| **伪时间 vs Marker 相关性** | Spearman R > 0.5 | 0.3-0.5 | < 0.3 |
-| **拓扑一致性**（PAGA connectivity） | 连通图、无孤立节点 | 有少量断连 | 大量断连/不连通 |
-
-### 不通过处理
-- 分支不稳定 → 增加 k 邻居数 / 换 diffusion map / 用 Monocle3
-- 伪时间无意义 → 检查"根细胞"指定是否合理 / 可能是非分化过程
-- 拓扑断裂 → 可能是过度移除批次效应 / 检查 PC 选择
-
-
-## Reference Script (from External Skill)
-
-> Auto-imported from external skill `27_scrna-trajectory-inference`.
-> This script is a verified reference implementation, NOT a run.py template.
-> The agent can use it as a starting point or fetch official docs for the latest version.
-
-- **Source**: `skills/external/27_scrna-trajectory-inference/scripts/`
-- **Imported scripts**: run_trajectory_analysis.py
-
+| 规则 | 说明 |
+|------|------|
+| **用 `new_cell_data_set()` 手动构建 → 跑 `preprocess_cds()` 拿 Size_Factor/PCA → 跳过 `align_cds()` 和 `reduce_dimension()` → 注入 Seurat UMAP** | Monocle3 v1.4.x 没有 `as.cell_data_set()`，只能用 `new_cell_data_set()` |
+| **跑 `preprocess_cds()` 但不跑 `align_cds()`** | `preprocess_cds()` 提供 Size_Factor + PCA（后续 `graph_test()` 需要）；`align_cds()` 的 CCA 弱于 Harmony，再跑会洗掉 Seurat 的 Harmony 校正 |
+| **不跑 `reduce_dimension()`** | Monocle3 的 UMAP 只有简单 PCA→UMAP，没有 SCTransform/Harmony；用 Seurat 的 UMAP 替代 |
+| **>100K 细胞先 subset** | `learn_graph()` 复杂度 O(n²)，>60K 细胞会卡死 |
+| **有大分支才做分支分析** | 衰老数据通常线性（Young→Old），不一定有分叉；发育数据（干细胞→多种终末细胞）才有明显分叉 |
 
 ---
 
-## 🗣️ 辩论机制（debate_analysis）
+## 路径 A: Monocle3（R，推荐 — Seurat 对象直接使用）
 
-本 skill 在执行后，如果涉及**参数选择、方法决策、结果判断**等不确定环节，**必须**调用  工具进行多角色辩论。
+### 适用场景
+- 已有注释好的 Seurat 对象
+- 需要伪时间排序 + 轨迹图
+- 数据量 < 100K 细胞（建议 subset 到 30-60K）
 
-### 辩论规则
-- **正方 3 位专业编辑**（各自独立，互相看不到）：生物学编辑 / 统计学编辑 / 生信编辑
-- **反方 4 位专业编辑**（各自独立，互相看不到，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
-- **裁判**：看到所有 7 方论点后给出裁决 + 置信度（高/中/低）
-- **上下文隔离**：每个编辑是独立的 LLM API 调用，messages 只包含自己的 prompt
+### 标准流程
 
-### 触发场景
-- 参数选择有多个合理选项时（如分辨率 0.4 vs 0.6 vs 0.8）
-- 结果可能受方法选择影响时（如不同注释方法给出不同结果）
-- 生物结论需要验证可靠性时
-- QC 阈值不确定时（如 MT% 阈值 10% vs 15% vs 20%）
+> ⚠️ **Monocle3 v1.4.x 没有 `as.cell_data_set()`**，用 `new_cell_data_set()` 手动构建 + `preprocess_cds()` 拿 PCA + 跳过 `align_cds()` 和 `reduce_dimension()` + 注入 Seurat Harmony-UMAP。
 
-### 不触发场景
-- 参数有明确知识库推荐且无争议时
-- 纯计算步骤（如保存文件、读取数据）
+```r
+library(monocle3)
+library(Seurat)
+library(dplyr)
 
+# ==== Step 1: 加载 Seurat + subset ====
+seurat_obj <- readRDS("你的seurat对象.rds")
+set.seed(42)
+seurat_sub <- subset(seurat_obj, cells = sample(Cells(seurat_obj), 60000))
 
-## 🔒 审查机制（rail_review）
+# ==== Step 2: 手动构建 CDS（v1.4.x 唯一方式）====
+cds <- new_cell_data_set(
+    expression_data = GetAssayData(seurat_sub, assay = "RNA", layer = "counts"),
+    cell_metadata   = seurat_sub@meta.data,
+    gene_metadata   = data.frame(
+        gene_short_name = rownames(seurat_sub),
+        row.names       = rownames(seurat_sub)
+    )
+)
 
-本 skill 执行代码前**必须**调用  进行前置审查，执行后**必须**调用  进行后置审查。
+# ==== Step 3: 跑 PCA（拿 Size_Factor + 降维基座），跳过 align_cds ====
+cds <- preprocess_cds(cds, num_dim = 50)
+# ⚠️ 不跑 align_cds() — Harmony 已做校正，CCA 会洗掉
+# ⚠️ 不跑 reduce_dimension() — Monocle3 UMAP 没有 SCTransform/Harmony
 
-### 审查内容
-- **pre 审查**：环境检查（包是否安装）→ 参数校验（参数是否合理）→ 代码审查（语法/逻辑）→ 硬件检查（内存/GPU是否够）
-- **post 审查**：结果质量评估（输出是否合理）→ 图表检查（图是否生成）→ 数值检查（细胞数/基因数是否异常）→ 错误检查（有无 warning/error）
+# ==== Step 4: ⭐ 注入 Seurat 的 Harmony-UMAP ====
+cds@int_colData$reducedDims$UMAP <- Embeddings(seurat_sub, "umap")[colnames(cds), ]
 
-### 审查不通过
-- pre 不通过 → **阻断执行**，修正后重新审查
-- post 不通过 → **阻断下一步**，修正后重跑，直到通过
-- 失败时调用  记录错误
-- 修复成功后调用  +  替换脚本
+# ==== Step 5: 聚类 + 学习轨迹图 ====
+cds <- cluster_cells(cds, resolution = 1e-4)
+cds <- learn_graph(cds)
 
+# ==== Step 6: 可视化 ====
+plot_cells(cds, color_cells_by = "cell_type",    # 你的 Seurat 注释列名
+           label_groups_by_cluster = FALSE,
+           label_leaves = TRUE,
+           label_branch_points = TRUE,
+           graph_label_size = 1.5)
+
+# ==== Step 7: 伪时间排序 ====
+# 以某个分组（如 Young）细胞最多的节点为根
+get_earliest_principal_node <- function(cds, group_col, group_val) {
+  cell_ids <- which(colData(cds)[, group_col] == group_val)
+  closest_vertex <- as.matrix(
+    cds@principal_graph_aux[["UMAP"]]$pr_graph_cell_proj_closest_vertex[colnames(cds), ]
+  )
+  root_node <- igraph::V(principal_graph(cds)[["UMAP"]])$name[
+    as.numeric(names(which.max(table(closest_vertex[cell_ids, ]))))
+  ]
+  root_node
+}
+
+cds <- order_cells(cds, root_pr_nodes = get_earliest_principal_node(cds, "condition", "Young"))
+
+# 伪时间着色
+plot_cells(cds, color_cells_by = "pseudotime",
+           label_cell_groups = FALSE, label_leaves = TRUE,
+           label_branch_points = TRUE, graph_label_size = 1.5)
+
+# ==== Step 8: 轨迹差异表达（随时间变化的基因）====
+pr_test_res <- graph_test(cds, neighbor_graph = "principal_graph", cores = 8)
+pr_deg_ids <- row.names(subset(pr_test_res, q_value < 0.05))
+
+# 找共表达模块 + 热图
+gene_module_df <- find_gene_modules(cds[pr_deg_ids, ], resolution = 1e-3)
+
+cell_group_df <- tibble::tibble(
+  cell = row.names(colData(cds)),
+  cell_group = colData(cds)$cell_type
+)
+agg_mat <- aggregate_gene_expression(cds, gene_module_df, cell_group_df)
+row.names(agg_mat) <- stringr::str_c("Module ", row.names(agg_mat))
+pheatmap::pheatmap(agg_mat, scale = "column", clustering_method = "ward.D2")
+
+# 单个基因沿伪时间表达
+plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
+           show_trajectory_graph = FALSE,
+           label_cell_groups = FALSE)
+
+# ==== Step 9: 分叉分析（如果有多分叉）====
+# cds_sub <- choose_graph_segments(cds)  # 交互式选分叉
+# pr_deg_branch <- graph_test(cds_sub, neighbor_graph = "principal_graph")
+```
+
+### Monocle3 常见坑
+
+| 坑 | 解法 |
+|---|---|
+| `as.cell_data_set()` 不存在 | Monocle3 v1.4.x 已移除，必须用 `new_cell_data_set()` 手动构建 CDS |
+| `preprocess_cds()` 和 `reduce_dimension()` 覆盖了 Seurat UMAP | 跑 `preprocess_cds()`（拿 Size_Factor + PCA）但**不跑** `reduce_dimension()`；跑完后用 `cds@int_colData$reducedDims$UMAP <- Embeddings(seurat_sub, "umap")[colnames(cds), ]` 盖回 Seurat Harmony-UMAP |
+| `align_cds()` 洗掉 Harmony 校正 | **不要跑** `align_cds()`；Monocle3 的 CCA 校正弱于 Harmony，在 Harmony UMAP 上直接建轨迹即可 |
+| `learn_graph()` 卡死 | 细胞太多（>60K）→ subset |
+| `order_cells()` 报错 "no root node" | 用 `get_earliest_principal_node()` 编程式指定根 |
+| partition 太碎（多个独立轨迹）| `cluster_cells(resolution=1e-4)` 调小 |
+| `new_cell_data_set()` 构建后 `graph_test()` 报错缺 Size_Factor | 必须跑 `preprocess_cds()` — 它生成 `Size_Factor` 列，Monocle3 内部很多函数依赖它 |
+
+### 步骤对照表（Monocle3 v1.4.x）
+
+| 步骤 | 函数 | 跑不跑 | 理由 |
+|------|------|:---:|------|
+| 构建 CDS | `new_cell_data_set()` | ✅ | v1.4.x 唯一方式，传入 counts + metadata + gene_metadata |
+| PCA + Size_Factor | `preprocess_cds()` | ✅ | 生成内部状态（`graph_test()` 等依赖），不跑会报错 |
+| 批次校正 | `align_cds()` | ❌ | CCA 弱于 Harmony，会洗掉 Seurat 的校正结果 |
+| UMAP 降维 | `reduce_dimension()` | ❌ | 没有 SCTransform/Harmony，质量低于 Seurat UMAP |
+| 注入 UMAP | `cds@int_colData$reducedDims$UMAP <- ...` | ✅ | 一行代码注入 Seurat Harmony-UMAP |
 
 ---
 
-## 🔒 审查与辩论机制（分析 skill 必须执行）
+## 路径 B: Slingshot (R，适合复杂分叉轨迹)
 
-### 执行前审查 (rail_review pre)
-使用此 skill 的分析步骤前，**必须**调用 ：
-- 检查环境：R/Python 版本、必需包是否安装
-- 检查参数：参数来源（知识库/文献/辩论/经验），不能凭空设值
-- 检查数据：输入数据格式、细胞数、维度是否合理
-- 不通过则阻断，修正后重试
+### 适用场景
+- 已有 Seurat 对象的 UMAP 降维
+- 预期有多个分叉/分支点
+- 需要 tradeSeq 做分叉差异表达
 
-### 执行后审查 (rail_review post)
-分析步骤完成后，**必须**调用 ：
-- 检查输出：文件是否生成、大小是否合理
-- 检查质量：QC 指标、聚类质量、注释置信度
-- 检查图表：是否生成了预期图表、图表是否合理
-- 不通过则阻断，修正后重试
-- **失败时**：调用  记录错误
-- **修复成功后**：调用  +  替换脚本
+### 标准流程
 
-**★ 强制审查项（任一不通过则重新执行）：**
-- **图片检查**：
-  - 图有没有生成？没生成 → **强制重新执行**
-  - 图片是否空白（全白/全黑/全单一色）？空白 → **强制重新出图**
-  - 图片是否有 NA/缺失值（>10% 像素是 NA）？有 NA → **强制重新出图**
-  - 图片大小是否过小（<5KB）？过小 → **强制重新出图**
-  - 图片数量是否足够？（每步至少 1 张图，关键步骤至少 2-3 张）
-- **代码质量检查**：
-  - 代码行数是否合理？（过短可能偷懒，过长可能未分段）
-  - 代码是否有注释？
-  - 代码是否分段执行（禁止 && 连接多步骤）？
-- **结果合理性**：
-  - 数值范围是否合理？跟知识库对应吗？
-- **参数和结论辩论**：
-  - 有参数的选择 → **必须调 debate_analysis 辩论**
-  - 有结论输出 → **必须调 debate_analysis 辩论**
-  - 不通过 → 修复重跑
-  - 通过 → **必须调 skill_evolution(action="record_run")** 记录成功经验（skill_name/script_name/species/tissue/direction/params_used/result_summary/quality_score/notes） → 创建目录存储(figures/results/scripts/data) → 下一步
-    - **不通过 → 修复后重跑 → 成功后调 skill_evolution(action="record_run")**；如果是脚本报错 → **调 skill_evolution(action="record_error")** 记录根因+修复方案
-### 多角色辩论 (debate_analysis)
-当遇到**不确定的参数选择或结果判断**时，**必须**调用 ：
-- 正方 3 位专业编辑（各自独立，互相不知道）：生物学编辑 / 统计学编辑 / 生信编辑
-- 反方 4 位专业编辑（各自独立，互相不知道，也看不到正方）：生物学编辑 / 统计学编辑 / 生信编辑 / 历史经验编辑
-- 裁判编辑：看到所有 7 方论点，给出裁决 + 置信度（高/中/低）
-- 上下文隔离：每个编辑独立 HTTP API 调用，messages 只有自己的 prompt
-- 分科知识库：生物学编辑用 biology_kb / 统计学编辑用 statistics_kb / 生信编辑用 bioinfo_kb / 历史经验编辑用 history_errors
-- 辩论结果自动归档到 results/.../log/debate_*.json
+```r
+library(slingshot)
+library(tradeSeq)
+library(SingleCellExperiment)
+library(Seurat)
 
-### 辩论触发场景
-- 聚类分辨率选择（0.3 vs 0.5 vs 0.8 vs 1.2）
-- QC 阈值设定（MT% 10% vs 15% vs 20%）
-- 细胞类型注释争议（marker 不明显时）
-- 归一化方法选择（SCT vs LogNormalize）
-- 降维参数选择（PC 数量 10 vs 20 vs 30）
-- 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
-- 任何需要多方审视的分析决策
+# ==== 1. Seurat → SingleCellExperiment ====
+sce <- as.SingleCellExperiment(seurat_sub)
+
+# ==== 2. Slingshot 轨迹推断 ====
+# 用 UMAP 降维，指定起始 cluster
+sce <- slingshot(sce, 
+                 clusterLabels = "cell_type",     # 你的注释列
+                 reducedDim = "UMAP",             # 用 Seurat UMAP
+                 start.clus = "Satellite_Cell")   # 干细胞为起始
+
+# 提取伪时间
+pseudotime_values <- slingPseudotime(sce)
+
+# ==== 3. 可视化 ====
+colors <- rainbow(length(unique(sce$cell_type)))
+plot(reducedDims(sce)$UMAP, col = colors[sce$cell_type], pch = 16, cex = 0.5)
+lines(SlingshotDataSet(sce), lwd = 2, col = "black")
+
+# ==== 4. tradeSeq 分叉差异表达 ====
+# 找分叉点的差异基因
+counts <- counts(sce)
+counts <- as.matrix(counts[rowSums(counts) > 10, ])  # 过滤低表达
+
+# fit GAM
+sce <- fitGAM(sce, nknots = 6)
+
+# 全局检验：哪些基因沿轨迹变化
+asso_res <- associationTest(sce)
+asso_sig <- rownames(asso_res)[asso_res$pvalue < 0.05]
+
+# 分叉点检验
+start_res <- startVsEndTest(sce)
+# 热图
+plotSmoothers(sce, assays(sce)$counts, gene = asso_sig[1:20])
+```
+
+---
+
+## 路径 C: scVelo RNA velocity (Python)
+
+### 适用场景
+- 有 spliced/unspliced 计数
+- 需要推断细胞方向性（RNA velocity 有方向，伪时间没有）
+- 数据格式为 AnnData / h5ad
+
+### 标准流程
+
+```python
+import scvelo as scv
+import scanpy as sc
+
+# ==== 1. 加载数据 ====
+adata = sc.read_h5ad("your_data.h5ad")
+
+# ==== 2. 预处理 ====
+scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=2000)
+scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+
+# ==== 3. RNA velocity 计算 ====
+scv.tl.recover_dynamics(adata)
+scv.tl.velocity(adata, mode="dynamical")
+scv.tl.velocity_graph(adata)
+
+# ==== 4. 可视化 ====
+scv.pl.velocity_embedding_stream(adata, basis="umap", color="cell_type")
+scv.pl.velocity_embedding(adata, basis="umap", arrow_length=2, arrow_size=1.5)
+
+# ==== 5. 伪时间（velocity pseudotime）====
+scv.tl.velocity_pseudotime(adata)
+scv.pl.scatter(adata, color="velocity_pseudotime", basis="umap")
+```
+
+---
+
+## 路径 D: CellRank 命运映射 (Python)
+
+### 适用场景
+- 已有 RNA velocity（scVelo 输出）
+- 需要推断终末状态概率
+- 发育/分化数据
+
+### 标准流程
+
+```python
+import cellrank as cr
+import scvelo as scv
+
+# ==== 1. 先跑 scVelo velocity ====
+# （参考路径 C）
+
+# ==== 2. CellRank 初始化 ====
+vk = cr.kernels.VelocityKernel(adata)
+ck = cr.kernels.ConnectivityKernel(adata)
+combined_kernel = 0.8 * vk + 0.2 * ck
+
+# ==== 3. 估算终末状态 ====
+g = cr.estimators.GPCCA(combined_kernel)
+g.fit(cluster_key="cell_type")
+g.compute_schur(n_components=20)
+g.compute_macrostates(n_states=5, cluster_key="cell_type")
+
+# 可视化
+g.plot_macrostates(which="all", basis="umap", title="Macrostates")
+
+# ==== 4. 命运概率 ====
+g.compute_fate_probabilities()
+g.plot_fate_probabilities(same_plot=False, basis="umap")
+
+# ==== 5. 基因沿命运轨迹的趋势 ====
+driver_genes = g.compute_lineage_drivers(lineages="0")
+g.plot_lineage_drivers(lineage="0", n_genes=5)
+```
+
+---
+
+## 输出目录结构
+
+```
+results/trajectory_monocle3_{date}/
+├── figures/
+│   ├── trajectory_celltype.png
+│   ├── trajectory_pseudotime.png
+│   ├── module_heatmap.png
+│   └── gene_expression_facets.png
+├── results/
+│   ├── graph_test_results.csv
+│   └── pseudotime.csv
+├── scripts/
+│   └── monocle3_analysis.R
+└── data/
+    └── cds.rds
+```
+
+---
+
+## 常见问题排查
+
+| 问题 | 原因 | 解法 |
+|------|------|------|
+| Monocle3 没有 `as.cell_data_set()` | v1.4.x 已移除该函数 | 用 `new_cell_data_set()` 手动构建 CDS，然后 `preprocess_cds()` + 注入 Seurat UMAP |
+| `learn_graph()` 后轨迹图是一团乱线 | resolution 太大 → partition 太碎 | `cluster_cells(resolution=1e-5)` |
+| 伪时间值和生物学方向相反 | 根节点选错了 | 把 `group_val` 参数改成预期的起点组 |
+| `graph_test()` 结果全部不显著 | 轨迹太短或细胞太少 | 每个分支至少 200 个细胞 |
+| scVelo `recover_dynamics` 耗时过长 | 基因数太多 | `n_top_genes=2000` |

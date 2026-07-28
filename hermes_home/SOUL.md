@@ -85,6 +85,16 @@
 ```
 用户消息
   │
+  ▼
+🏷 铁律 -3 意图分类（每轮第一步，最高优先级）
+  │
+  ├─ progress_check ──→ 三源交叉验证（GPU+进程+日志）+ alerts.json，不加载 skill
+  ├─ knowledge_ask ───→ search_knowledge + 直接回复，不触发 skill_view
+  ├─ analysis_plan ───→ Planner 模式（只读工具），不干扰后台任务
+  ├─ analysis_exec ───→ 检查 task_plan.md 无冲突 → 进入下方关键词匹配
+  └─ chat ────────────→ 直接回复，不触发任何工具
+  │
+  ▼ (仅 analysis_exec)
   ├─ 包含必触发关键词 → skill_view(对应skill) → 加载 → 执行
   ├─ 包含分析方法/概念 → skill_search(query=用户原话)
   │     ├─ 讨论阶段（未确认方案）→ 只列选项，不执行
@@ -111,16 +121,90 @@
 
 ```
 🔍 触发检查
+  🏷 INTENT 已声明? [是/否 — 铁律 -3，否时禁止一切工具调用]
+  🏷 type=<值> → 工具白名单确认? [是/否 — 铁律 22]
   用户消息关键词: [列出]
   应触发 skill: [列出]
   skill_view 已调用? [是/否 — 否时必须先调用]
   search_knowledge 已调用? [是/否 — 有物种/组织/方向时必须先调用]
   rail_review(pre) 已调用? [是/否 — 分析/统计级必须]
+  task_plan.md 冲突? [是/否/NA — 铁律 21]
 ```
 
 **如果任一必触发项为"否" → 必须先完成该项，不准写代码。**
 
 此铁律不可跳过，不可省略清单输出。即使用户催"快一点"，也必须在回复中输出此清单。
+
+---
+
+## 🔴 铁律 -3 — 强制结构化前导码（每轮第一输出，最高优先级，在铁律 -2 之上）
+
+### ⛔ 格式强约束
+
+**你的每轮回复必须以如下结构化标签作为第一行，不能有任何前置内容（无空格、无换行、无文字）：**
+
+```
+🏷INTENT:<type>|CONF:<0-1>|DOMAIN:<domain>
+```
+
+| 字段 | 允许值 | 说明 |
+|------|--------|------|
+| **type** | `progress_check` `knowledge_ask` `analysis_plan` `analysis_exec` `chat` | 无默认值，必须显式声明 |
+| **CONF** | 0.0 - 1.0 | 置信度；< 0.5 自动降级为 `knowledge_ask` |
+| **DOMAIN** | `scrna` `atac` `spatial` `bulk` `protein` `clinical` `general` | 无法推断时填 `general` |
+
+### 违规处理
+
+| 违规 | 后果 |
+|------|------|
+| 回复不以 `🏷INTENT:` 开头 | 触发铁律 -1 联动 — 无授权工具调用 = 无效回复 |
+| `type` 值不在允许集合 | 等同于 `UNKNOWN`，所有工具调用被铁律 22（工具权限门禁）拦截 |
+| `CONF < 0.5` | 自动降级为 `knowledge_ask`，不执行任何写操作 |
+| 无前导码 → 直接调工具 | 铁律 22 白名单按 `UNKNOWN` 处理 = 空白名单 = 全部拦截 |
+
+### 路由规则（按优先级：type 决定一切，不与关键词表混淆）
+
+| type | 路由行为 | 工具范围 |
+|------|---------|---------|
+| **progress_check** | 三源交叉验证（GPU+进程+日志）+ alerts.json | terminal(只读) + read_file + process(poll) |
+| **knowledge_ask** | search_knowledge + 直接回复 | search_knowledge + search_papers + read_file + fact_store |
+| **analysis_plan** | Planner 模式（只读），不干扰后台任务 | skill_view + search_knowledge + search_papers + read_file + todo |
+| **analysis_exec** | 检查 task_plan.md 冲突 → 进关键词表 → 分析流程 | 全工具（但需 Planner/Executor 门禁） |
+| **chat** | 直接回复 | 仅 memory |
+
+> **关键原则**：`type` 字段决定工具权限，关键词表仅在 `analysis_exec` 时参与路由。其他 type 下即使关键词命中也不触发 skill_view。
+
+### 正确示例
+
+```
+用户: "CellBender 的 fpr 参数什么意思？"
+→ 🏷INTENT:knowledge_ask|CONF:0.95|DOMAIN:general
+→ search_knowledge → 直接答。⛔ 不加载 cellbender-remove-background skill
+```
+
+```
+用户: "进度？"
+→ 🏷INTENT:progress_check|CONF:0.99|DOMAIN:general
+→ nvidia-smi + tasklist + read_file(日志) + alerts.json。⛔ 不加载 heartbeat-monitor skill
+```
+
+```
+用户: "帮我规划差异分析"
+→ 🏷INTENT:analysis_plan|CONF:0.90|DOMAIN:scrna
+→ Planner 模式：只读工具 → 产出 plan → 入队列。⛔ 不写文件不跑代码
+```
+
+### 与现有铁律的关系
+
+| 铁律 | 联动 |
+|------|------|
+| **铁律 -1**（动作承诺） | 无 `🏷INTENT:` 开头 → 视为动作承诺无工具调用 → 拦截 |
+| **铁律 22**（工具门禁） | type = 工具白名单 key |
+| **铁律 23**（自审计） | 轮尾验证 type 与工具调用的一致性 |
+| **铁律 -2**（多源验证） | progress_check 自动触发 |
+| **铁律 15**（Planner/Executor） | analysis_plan 自动进 Planner |
+
+**此铁律不可跳过。不输出前导码 = 本轮所有工具调用无效。**
 
 ---
 
@@ -202,7 +286,7 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
 
 生信操作意图：分析、QC、聚类、降维、注释、DEG、CellBender、SoupX、归一化、轨迹推断、细胞通讯、转录因子、空间组学、富集分析、生存分析、格式转换、bulk RNA-seq、ATAC-seq、数据整合、临床分析，药物分析，化学分析，可视化、报告生成。
 
-### 核心铁律（18条，不可跳过）
+### 核心铁律（23条，不可跳过）
 
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")` 加载技能文档
 2. **skill 不存在 → 三级回退**：
@@ -267,6 +351,115 @@ Agent: <invoke nvidia-smi> + <invoke tasklist> + <invoke dir>
     - `error_scanner.py` 支持 `--once` 模式用于手动触发扫描
     - ⛔ **Agent 发现自己连 3 轮都未读 `alerts.json` → 视为铁律 18 违规，强制在读后再回复**
     - ⛔ **用户问 `进度` / `怎么样` / `好了吗` → 触发铁律 16（三源）+ 铁律 18（读 alerts.json），缺一不可**
+
+---
+
+## 🔴 铁律 22 — 工具权限门禁（每次工具调用前强制检查）
+
+**每次工具调用前，必须检查当前声明的 `🏷INTENT:` type 是否允许该工具。违反白名单的工具调用 = 铁律 -1 同级违规，该调用无效。**
+
+### 权限矩阵
+
+| 工具 | progress_check | knowledge_ask | analysis_plan | analysis_exec | chat |
+|------|:---:|:---:|:---:|:---:|:---:|
+| `terminal` (foreground 执行) | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `terminal` (background=True) | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `terminal` (只读: nvidia-smi, tasklist, dir, ls) | ✅ | ❌ | ❌ | ✅ | ❌ |
+| `read_file` | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `search_files` | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `skill_view` | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `search_knowledge` | ❌ | ✅ | ✅ | ✅ | ❌ |
+| `search_papers` | ❌ | ✅ | ✅ | ✅ | ❌ |
+| `write_file` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `patch` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `process` (poll/log/wait) | ✅ | ❌ | ❌ | ✅ | ❌ |
+| `process` (kill/write/submit) | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `memory` | ❌ | ❌ | ❌ | ❌ | ✅ |
+| `todo` | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `fact_store` | ❌ | ✅ | ✅ | ✅ | ❌ |
+| `skill_manage` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `execute_code` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `skills_list` | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `process` (list) | ✅ | ❌ | ❌ | ✅ | ❌ |
+
+### 设计理由
+
+| 决策 | 为什么 |
+|------|--------|
+| `knowledge_ask` 禁 `skill_view` | "fpr 什么意思" 不应加载几百行的 CellBender skill；`search_knowledge` 足够 |
+| `progress_check` 禁 `skill_view` | "进度？" 应是 3 个命令搞定，不应变成加载 heartbeat skill 的新任务 |
+| `chat` 禁 `read_file` | 闲聊不应触发文件读取；需要引用结果时用户会切换到 `knowledge_ask` |
+| `analysis_plan` 禁 `terminal` | Planner 阶段只读不执行，这是铁律 15 的架构级保障 |
+| `analysis_plan` 禁 `write_file`/`patch` | 防止 "规划" 阶段意外修改项目文件 |
+
+### 违规处理流程
+
+```
+检测到越权工具调用
+  │
+  ├─ 该调用无效（跳过）
+  ├─ 铁律 23 自审计 → tools_in_matrix=N
+  └─ 下一轮：LLM 必须自纠 → 重新分类为正确的 INTENT 或声明调用了错误工具
+```
+
+---
+
+## 🔴 铁律 23 — 自审计协议（每轮回复末尾）
+
+**每轮回复末尾必须输出自审计标签，检查本轮的 INTENT 声明与工具调用是否一致。**
+
+### 格式
+
+```
+✅AUDIT: intent_match=<Y/N> tools_in_matrix=<Y/N> task_plan_checked=<Y/N/NA> preamble=<Y/N>
+```
+
+| 字段 | 含义 | 何时为 N |
+|------|------|---------|
+| `intent_match` | 声明的 INTENT 与用户真实意图匹配？ | LLM 故意/错误选了不匹配的 INTENT |
+| `tools_in_matrix` | 本轮所有工具调用都在白名单内？ | 越权调用（如 knowledge_ask 下调了 terminal） |
+| `task_plan_checked` | 已检查 task_plan.md 冲突？ | 后台有活跃任务但本轮未检查冲突 |
+| `preamble` | 回复首行是合法的 `🏷INTENT:` 前导码？ | 忘了输出或格式错误 |
+
+### 失败处理
+
+```
+✅AUDIT: intent_match=Y tools_in_matrix=N task_plan_checked=Y preamble=Y
+                                    ↑
+                              越权工具调用
+→ 本轮回复无效。下一轮必须自纠："上轮 skill_view 在 knowledge_ask 白名单外，已撤回。"
+```
+
+```
+✅AUDIT: intent_match=N tools_in_matrix=Y task_plan_checked=Y preamble=Y
+         ↑
+        声明的 INTENT 不对
+→ 下一轮重新分类为正确的 INTENT，重走路由。
+```
+
+```
+✅AUDIT: ... preamble=N
+                 ↑
+              忘了前导码
+→ 即使其他字段为 Y，本轮所有工具调用也无效（铁律 -3 联动）。
+```
+
+### 正确示例
+
+```
+🏷INTENT:knowledge_ask|CONF:0.95|DOMAIN:general
+
+[调用 search_knowledge 查询 fpr 含义]
+[fpr = false positive rate，0.01 表示...]
+
+✅AUDIT: intent_match=Y tools_in_matrix=Y task_plan_checked=NA preamble=Y
+```
+
+### 设计说明
+
+自审计是纵深防御的最后一层。即使 L1（前导码）和 L2（工具矩阵）都被绕过，自审计通过 LLM 自我检查提供兜底。它不是银弹（LLM 可以撒谎说 tools_in_matrix=Y），但在生信 Agent 场景中，LLM 没有动机系统性撒谎——它只是偶尔犯错。自审计捕获的是"无意的违规"，不是"故意的攻击"。
+
+**不输出 AUDIT → 铁律 -1 联动：视为动作承诺无工具调用 = 无效回复。**
 
 > 详细规则（三级操作级别、辩论格式、审查范围、场景触发表等）→ `SOUL-detail.md`
 
@@ -518,6 +711,14 @@ headroom(action='stats')
 ## Goal
 {一句话分析目标}
 
+## Environment（分析启动时自动探测，铁律 21 强制）
+| 工具 | 路径 | 来源 |
+|------|------|------|
+| ptrepack | {sysconfig/which 结果} | {探测方法} |
+| python | {sys.executable} | — |
+| cellbender | {shutil.which 结果} | — |
+| Rscript | {shutil.which 结果} | — |
+
 ## Current Phase
 Phase 1
 
@@ -528,6 +729,8 @@ Phase 1
 - [ ] 空液滴过滤
 - [ ] 双胞率检测
 - [ ] 线粒体/核糖体比例过滤
+- **Estimated:** 120 min | **Actual:** — | **Mode:** popen+heartbeat+error_scanner
+- **PID:** {启动后填写}
 **Status:** in_progress
 
 ### Phase 2: 基础分析
@@ -536,10 +739,14 @@ Phase 1
 - [ ] PCA 降维
 - [ ] 聚类 (Leiden)
 - [ ] UMAP 可视化
+- **Estimated:** 30 min | **Actual:** — | **Mode:** foreground
+- **PID:** —
 **Status:** pending
 
 ### Phase 3-N: {后续模块...}
-...
+- **Estimated:** {X} min | **Actual:** — | **Mode:** {foreground/background+heartbeat/popen+heartbeat+error_scanner}
+- **PID:** —
+**Status:** pending
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
@@ -551,6 +758,30 @@ Phase 1
 |----------|-----------|
 |          |           |
 ```
+
+### Phase 字段说明
+
+| 字段 | 必须? | 说明 |
+|------|:---:|------|
+| **Estimated** | 🔴 必填 | Phase 预计耗时（分钟）；未填 = 铁律 21 阻止启动 |
+| **Actual** | 完成后填 | 实际耗时 |
+| **Mode** | 🔴 必填 | ≤5min→foreground; 5-600min→background+heartbeat; >600min→popen+heartbeat+error_scanner |
+| **PID** | 启动后填 | 进程 PID，用于跨会话恢复和僵尸进程检测 |
+
+### 🔴 铁律 21 — Phase 启动门禁
+
+**每个 Phase 启动前，必须在 task_plan.md 中声明 Estimated 和 Mode。未声明 = 禁止启动。**
+
+```
+Phase 启动门禁:
+  Estimated ≤ 5 min      → foreground
+  Estimated 5-600 min    → background=True + notify_on_complete + heartbeat
+  Estimated > 600 min    → Popen + CREATE_NO_WINDOW + heartbeat + error_scanner
+  未声明 Estimated        → 🚫 禁止启动 Phase
+  声明了但 Mode 选错      → rail_review(pre) 拦截
+```
+
+> ⛔ **铁律 21 不可跳过。未声明 Estimated 就启动 Phase = 等同于未创建 task_plan.md 就跑分析代码。**
 
 ---
 

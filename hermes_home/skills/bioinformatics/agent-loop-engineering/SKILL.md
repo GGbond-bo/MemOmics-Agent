@@ -1,7 +1,7 @@
 ---
 name: agent-loop-engineering
-description: "防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，或 rail_review(post) code_executed 过短。已部署 Guardian 快照回滚 + Planner/Executor 双阶段协议。"
-version: "2.0.0"
+description: "防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，知识问题错误触发分析流程，长任务模式误判，意图混淆。已部署 13 层纵深防御：Guardian 快照回滚 + Planner/Executor 双阶段 + 三层意图路由（前导码/工具门禁/自审计）+ Phase 启动门禁。"
+version: "3.0.0"
 trigger_keywords:
   - "loop engineering"
   - "agent reliability"
@@ -9,11 +9,15 @@ trigger_keywords:
   - "narrative hallucination"
   - "铁律 -1"
   - "铁律 -2"
+  - "铁律 -3"
   - "铁律 3b"
   - "铁律 12"
   - "铁律 13"
   - "铁律 14"
   - "铁律 15"
+  - "铁律 21"
+  - "铁律 22"
+  - "铁律 23"
   - "多源验证"
   - "产出物验证"
   - "动作承诺"
@@ -22,6 +26,12 @@ trigger_keywords:
   - "快照回滚"
   - "Planner/Executor"
   - "双阶段协议"
+  - "意图路由"
+  - "前导码"
+  - "工具权限"
+  - "自审计"
+  - "Phase 门禁"
+  - "intent routing"
 trigger_level: "YEL 讨论触发"
 category: "sys_internal"
 ---
@@ -125,6 +135,63 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 ```
 **来源**：DeepSeek-Reasonix SPEC.zh-CN.md 第 3.5 节（已研究，待 Hermes 框架支持）
 
+### 🔒 第 10 层：铁律 -3 — 强制结构化前导码（意图级）【v3.0 新增】
+```
+每轮回复首行必须是 🏷INTENT:<type>|CONF:<0-1>|DOMAIN:<domain>
+type ∈ {progress_check, knowledge_ask, analysis_plan, analysis_exec, chat}
+无前导码 → 铁律 -1 联动 → 所有工具调用无效
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 -3（改写为强制结构化格式）
+**防什么**：LLM 把所有消息都当"任务相关"处理——用户问"fpr 参数什么意思"触发了 CellBender skill 加载；问"进度？"触发了 heartbeat-monitor skill。前导码强制 LLM 先分类再路由，`knowledge_ask` 和 `progress_check` 下即使关键词命中也不触发 skill_view。
+**为什么有效**：🏷 emoji + 管道符格式 = 视觉中断锚点，类似 function calling 的 token。位置强制（首行，无前置内容）+ 缺失即违规（无前导码 → UNKNOWN → 铁律 22 空白名单拦截）。
+
+### 🔒 第 11 层：铁律 22 — 工具权限门禁（工具级）【v3.0 新增】
+```
+每次工具调用前检查 🏷INTENT type 是否允许该工具
+19 工具 × 5 意图 = 完整权限矩阵
+违反白名单 → 调用无效 + 自审计捕获
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 22
+**防什么**：LLM 声明 `knowledge_ask` 但调了 `terminal` 执行脚本；声明 `progress_check` 但调了 `skill_view` 加载几百行 CellBender skill。不同意图看到不同的工具世界。
+**关键设计**：`knowledge_ask` 禁 `skill_view`（回答概念问题不应加载操作手册）；`progress_check` 禁 `skill_view`（进度查询是 3 个命令，不应变成新任务）；`chat` 连 `read_file` 都禁（闲聊不应触发文件读取）。
+
+### 🔒 第 12 层：铁律 23 — 自审计协议（审计级）【v3.0 新增】
+```
+每轮回复末尾必须输出：
+✅AUDIT: intent_match=<Y/N> tools_in_matrix=<Y/N> task_plan_checked=<Y/N/NA> preamble=<Y/N>
+tools_in_matrix=N → 本轮回复无效，下轮自纠
+不输出 AUDIT → 铁律 -1 联动
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 23
+**防什么**：即使 L1（前导码）和 L2（工具矩阵）都被绕过，自审计通过 LLM 自我检查提供兜底。不是银弹（LLM 可以撒谎），但在生信 Agent 场景中 LLM 没有动机系统性撒谎——它只是偶尔犯错。自审计捕获"无意的违规"。
+**设计原则**：纵深防御的最后一层。三层叠加：意图分类 → 工具白名单 → 自我审计。
+
+### 🔒 第 13 层：铁律 21 — Phase 启动门禁（任务级）【v3.0 新增】
+```
+每个 Phase 启动前必须声明 Estimated（预计耗时）和 Mode（执行模式）
+未声明 → 🚫 禁止启动
+Estimated ≤5min → foreground
+Estimated 5-600min → background+heartbeat
+Estimated >600min → Popen+heartbeat+error_scanner
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 21 + task_plan.md 模板
+**防什么**：Agent 说"这个很快，30 秒"→ foreground → 实际跑了 60 分钟 → 无心跳、无监控、卡死无人知。强制声明耗时后，Agent 无法用"很快"来跳过长任务设施。
+
+### 三层意图路由纵深防御（v3.0 架构总结）
+
+```
+L1: 强制结构化前导码 (铁律 -3)
+  └─ 🏷INTENT: type 决定工具权限，非 analysis_exec 不触发关键词表
+
+L2: 工具权限门禁 (铁律 22)
+  └─ 19 工具 × 5 意图白名单，越权调用 = 无效
+
+L3: 自审计协议 (铁律 23)
+  └─ 每轮末尾自我检查 intent_match + tools_in_matrix + preamble
+```
+
+**完整架构图** 见 `references/three-layer-intent-routing.md`
+
 ## 部署工件
 
 | 文件 | 大小 | 作用 |
@@ -161,6 +228,10 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 | **🆕 "清理后台" Misinterpretation — 删目录致数据丢失 (2026-07-26)** | User says "清理一下后台，继续跑" → Agent does `rm -rf output_dir` destroying 1hr GPU work (posterior.h5 1.5GB + MCKP progress). User: "谁要你删了？？？你带脑子了吗？" | "清理" = kill zombies + free RAM + continue. NOT "delete and restart". LLM confuses sysadmin "clean" with bioinformatics "clean". **Iron Law: any delete operation → must ask user for confirmation first.** See `references/case-study-cleanup-misinterpretation.md`. | CellBender D4 — 2026-07-26 |
 | **🆕 Stale Log Reporting — 24min 旧日志当实时状态 (2026-07-26)** | Agent reads `cellbender_output.log` (mtime 16:20) at 16:44, reports crash as "current state". GPU idle + process dead for 24 min went unnoticed because log mtime wasn't checked. User: "你他妈的，蠢货...现在以及下午4点44了，你还在看之前的日志" | `read_file()` returns valid text but no mtime. Agent treats text retrieval as truth retrieval. **Must `stat` before every `read_file`.** 3-tier mtime rule: <5min=active, 5-30min=cross-validate, >30min=dead. See `references/case-study-stale-log-reporting.md`. | CellBender D4 — 2026-07-26 16:20-16:44 |
 | **🆕 Same Error Retried Without Change — 4CL_SD_D4_2 4次重试 (2026-07-26)** | `4CL_SD_D4_2_scRNA` MCKP `_ArrayMemoryError` at chunk 5/9. Agent retried 3 times with **identical parameters** (`--low-count-threshold 5`), same crash each time. Only #4 with `--low-count-threshold 20` succeeded. | Deterministic crash + same params = same result. **Retry protocol**: same error → MUST change at least one parameter. One change per retry so you know what worked. Record in task_plan.md. See `references/case-study-4CL-SD-D4-2-retry-loop.md`. | CellBender D4 — 2026-07-26 |
+| **🆕 意图混淆 — 知识问题触发分析流程 (2026-07-27)** | 用户问"CellBender 的 fpr 参数什么意思？"→ 关键词表命中 "CellBender" → `skill_view("cellbender-remove-background")` → 加载数百行操作手册来回答概念问题。或"进度？"→ 触发 `skill_view("heartbeat-monitor")` 加载整个心跳 skill。 | 关键词表是 🔴 必触发，无优先级区分。导致知识问题、进度查询、闲聊都被路由到分析技能加载。**修复：铁律 -3 强制结构化前导码 + 铁律 22 工具权限门禁。`knowledge_ask` 下即使关键词命中也不触发 skill_view。`progress_check` 下连 skill_view 都在白名单外。** | SOUL v3.0 — 2026-07-27 |
+| **🆕 长任务模式误判 — "很快"跳过所有防护 (2026-07-27)** | Agent 说"这个很快，30 秒"→ foreground 模式 → 实际跑了 60 分钟 → 无心跳、无 error_scanner、无后台监控。或 CellBender 被当短任务 foreground 跑，跑了几小时后才发现没部署心跳。 | Agent "预计耗时"判断不可靠。**修复：铁律 21 Phase 启动门禁。每个 Phase 必须声明 Estimated + Mode，未声明 = 禁止启动。声明 5min+ → 强制 background+heartbeat。** | SOUL v3.0 — 2026-07-27 |
+| **🆕 复合意图静默丢失 (2026-07-27)** | 用户"帮我看看质量，不好的话重跑" = 两个意图（check + exec）。铁律 -3 强制单选 → 第二个意图被忽略。 | 当前架构限制：单轮只支持一个意图标签。降级策略：复合意图 → `analysis_plan`（只读），不执行第二个意图。下一版支持意图队列。 | SOUL v3.0 — 2026-07-27 |
+| **🆕 工具路径硬编码跨机器崩溃 (2026-07-27)** | Agent 硬编码 `C:/Users/23136/.../ptrepack.exe`，换机器/Python 版本 → 崩溃。 | `write_file` 时应使用运行时探测而非硬编码。**修复：三级探测 (shutil.which → sysconfig → pip show) + 写入 task_plan.md Environment 段。** 详见 cellbender-batch-pipeline `references/tool-path-detection.md` | CellBender — 2026-07-27 |
 
 > 完整案例参考：`references/case-study-cellbender-failures.md`
 > 推卸模式案例：`references/case-study-deflection-pattern.md`
@@ -169,8 +240,12 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 
 ## 检查清单（MemOmics Agent 启动前自检）
 
+- [ ] SOUL.md 铁律 -3 是否已加载？（强制结构化前导码 — 每轮 🏷INTENT type）
 - [ ] SOUL.md 铁律 -2 是否已加载？（系统状态必须先查再答）
 - [ ] SOUL.md 铁律 -1 是否已加载？（动作承诺必须绑 tool call）
+- [ ] SOUL.md 铁律 22 是否已加载？（工具权限门禁 — type × 工具白名单）
+- [ ] SOUL.md 铁律 23 是否已加载？（自审计协议 — ✅AUDIT 标签）
+- [ ] SOUL.md 铁律 21 是否已加载？（Phase 启动门禁 — Estimated + Mode 强制声明）
 - [ ] SOUL.md 铁律 3b 是否已加载？（rail_review 代码完整性审计）
 - [ ] SOUL.md 铁律 12 是否已加载？（产出物验证）
 - [ ] SOUL.md 铁律 13 是否已加载？（连续无工具自检）
@@ -183,6 +258,10 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 - [ ] 最近 2 轮是否有动作动词 + 0 tool call 的模式？
 - [ ] 连续 rail_review(post) 失败次数是否 ≥ 3？→ Guardian 应已触发回滚
 - [ ] 长任务重试前：是否与上次相同错误 + 相同参数？→ **相同 = 禁止重试，必须先改参数**
+- [ ] 当前 INTENT type 是否匹配用户真实意图？（铁律 -3 + 铁律 23 intent_match）
+- [ ] 所有工具调用是否在当前 type 白名单内？（铁律 22 + 铁律 23 tools_in_matrix）
+- [ ] Phase 启动前：Estimated + Mode 是否已声明？（铁律 21）
+- [ ] task_plan.md Environment 段是否已探测工具路径？（三级探测）
 
 ## 验证模式：hermes-verify-*.py
 
@@ -200,9 +279,10 @@ task_plan.md todo completed + 期望产出文件不存在 → 拒绝标记 compl
 ## 参考文献
 
 - `references/reasonix-5-layer-defense.md` — Reasonix 源码分析 (SPEC.zh-CN.md, GOAL_ENFORCEMENT, DELIVERY_PROFILE)
+- `references/three-layer-intent-routing.md` — 三层意图路由架构设计（铁律 -3/22/23，v3.0）
 - TeLLAgent 双 Agent 框架：PMC13213623 (2026) — Validator 校验 Tool Plan + 执行结果
 - Claude Code 系统提示：`"Never end your turn with a promise — execute now"`
 - `memomics/bio_tools/guardian.py` — 已部署的 Guardian 实现
-- `hermes_home/SOUL.md` — 15 条核心铁律（第 126-241 行）
+- `hermes_home/SOUL.md` — 23 条核心铁律（v3.0）
 - `references/guardian-architecture.md` — Guardian 快照回滚架构（状态机图 + 集成点）
 - `references/hermes-verify-pattern.md` — ad-hoc 验证脚本模式（`%TEMP%/hermes-verify-*.py`）

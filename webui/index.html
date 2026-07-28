@@ -56,7 +56,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .app { display:flex; height:100vh; }
 
 /* === 左侧栏 === */
-.sidebar { width:260px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; }
+.sidebar { width:300px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; }
 .sidebar-header { padding:16px 18px; border-bottom:1px solid var(--border); }
 .sidebar-header h1 { font-size:18px; color:var(--primary); display:flex; align-items:center; gap:8px; }
 .sidebar-header .subtitle { font-size:11px; color:var(--text-light); margin-top:3px; }
@@ -171,7 +171,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-input .input-row { display:flex; gap:8px; align-items:flex-end; }
 .chat-input .input-grip { height:6px; cursor:ns-resize; background:var(--border); border-radius:3px; margin-bottom:2px; transition:background 0.15s; }
 .chat-input .input-grip:hover { background:var(--primary); }
-.chat-input textarea { flex:1; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:14px; font-family:inherit; resize:none; height:64px; transition:border-color 0.2s; background:var(--panel); color:var(--text); }
+.chat-input textarea { flex:1; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:14px; font-family:inherit; resize:none; height:100px; transition:border-color 0.2s; background:var(--panel); color:var(--text); }
 .chat-input textarea:focus { outline:none; border-color:var(--primary); }
 .chat-input button { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:0 20px; font-size:14px; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
 .chat-input button:hover { opacity:0.9; }
@@ -199,7 +199,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
 
 /* === 右侧面板 === */
-.info-panel { width:340px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+.info-panel { width:380px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 .info-panel > div[id^="panel-"] { flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
 .info-header { padding:12px 20px; border-bottom:1px solid var(--border); font-size:15px; font-weight:500; display:flex; justify-content:space-between; align-items:center; }
 .info-tabs { display:flex; border-bottom:1px solid var(--border); }
@@ -445,7 +445,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           🖼️
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)">
         </label>
-        <textarea id="input" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="1"></textarea>
+        <textarea id="input" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
         <button id="send" onclick="send(false)">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行">⏹ 停止</button>
       </div>
@@ -849,7 +849,7 @@ function handleMessage(msg) {
     } else if (msg.type === 'thinking' || msg.type === 'agent_running') {
       _sessionProgressCache[msg.session_id].running = true;
     }
-    updateSessionList();  // 刷新会话列表的运行中标记
+    updateSessionListThrottled();  // 节流刷新，避免高频事件反复重建 DOM
     return;  // 不渲染到 UI
   }
 
@@ -858,7 +858,7 @@ function handleMessage(msg) {
   // === 进度重放：切换会话后服务器返回历史进度 ===
   // 微信工具进度：更新会话列表运行状态
   if (msg.type === 'tool_progress' && msg.session_id && msg.session_id !== currentSid) {
-    updateSessionList();
+    updateSessionListThrottled();
   }
   if (msg.type === 'progress_replay') {
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
@@ -1786,6 +1786,16 @@ async function loadSessions() {
 
 function updateSessionList() {
   loadSessions();
+}
+
+// 节流版：后台会话事件高频触发时，最多每 2 秒重建一次列表，防止点击失效
+var _updateSessionListTimer = null;
+function updateSessionListThrottled() {
+  if (_updateSessionListTimer) return;
+  _updateSessionListTimer = setTimeout(function() {
+    _updateSessionListTimer = null;
+    loadSessions();
+  }, 2000);
 }
 
 // 会话搜索过滤
@@ -2779,26 +2789,11 @@ async function loadFigures() {
       el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
       return;
     }
-    // 按 category 分组
-    var groups = {};
-    var catOrder = [];
-    figs.forEach(function(f) {
-      var cat = f.category || 'root';
-      if (!groups[cat]) { groups[cat] = []; catOrder.push(cat); }
-      groups[cat].push(f);
-    });
-    // 渲染分组
-    var html = '';
-    catOrder.forEach(function(cat) {
-      html += '<div class="fig-category" style="margin-bottom:16px;">';
-      html += '<div class="fig-cat-title" style="font-size:13px;font-weight:600;color:var(--primary);padding:4px 4px 8px 4px;border-bottom:1px solid var(--border);margin-bottom:8px;">📁 ' + escapeHtml(cat) + ' <span style="font-weight:400;color:var(--text-light);">(' + groups[cat].length + '张)</span></div>';
-      html += '<div class="fig-thumb-grid">' + groups[cat].map(function(f) {
-        var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
-        return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
-      }).join('') + '</div>';
-      html += '</div>';
-    });
-    el.innerHTML = html;
+    // 平坦网格：当前会话所有图片统一展示
+    el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
+      var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
+      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
+    }).join('') + '</div>';
   } catch(e) {
     document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">加载图片失败</div>';
   }

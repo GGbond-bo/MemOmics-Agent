@@ -319,3 +319,140 @@ bio-tech inventions).
 
 - `references/patent-defense-wording.md` — Exact Chinese wording templates for A25 defense
 - `references/claim-templates.md` — Boilerplate claim structures for bioinformatics methods
+- `references/s100-s600-framework.md` — Expression-level cross-species replaceability framework (S100-S600)
+- `references/creca-multi-layer-framework.md` — Regulatory-element conservation assessment framework (R1-R5 CRECA), B-class gene detection, BNIP3 validation
+
+---
+
+## 10. CRECA: Cross-Species Regulatory Element Conservation Assessment
+
+### 10.1 When to Use This Pattern
+
+When the invention concerns **evaluating whether an animal model's gene regulatory machinery is conserved** — not just whether gene expression levels are similar. This pattern applies when:
+
+- The user has ATAC-seq/ChIP-seq data (or can access public datasets)
+- The problem is "表达保守 ≠ 调控保守" (expression conservation ≠ regulatory conservation)
+- The goal is to detect **B-class genes**: genes whose expression appears conserved but whose upstream regulatory drivers are divergent
+
+### 10.2 The B-Class Gene — Patent Narrative Gold
+
+**B-class genes** are the single most powerful differentiator for regulatory conservation patents:
+
+> Expression is conserved between species, but the transcription factors and regulatory elements driving that expression are completely different. These genes are invisible to all existing expression-level replaceability assessment methods. They are the hidden cause of animal model translation failure.
+
+**Literature anchor**: CroCoNet (2025 preprint) demonstrated that POU5F1 (OCT4) shows perfectly conserved expression between human and cynomolgus macaque neural differentiation — yet its upstream regulatory module is among the most divergent. This proves B-class genes exist and are not rare edge cases.
+
+**Patent narrative structure**:
+```
+"现有方法对某一类关键基因系统性失明——
+ 这些基因的表达水平跨物种高度一致，
+ 但上游调控程序完全不同。
+ 本发明第一次提供了系统检出这类基因的方法。"
+```
+
+### 10.3 The Five-Layer CRECA Framework (R1-R5)
+
+```
+R1: Sequence Conservation (pure computation, no ATAC needed)
+    ├─ Promoter liftover + phastCons/phyloP
+    ├─ Public brain cCRE cross-validation (ENCODE + macaque brain atlas)
+    └─ Key TF motif presence/absence/position/copy number (JASPAR)
+
+R2: CRE Chromatin Accessibility Conservation (ATAC-driven)
+    ├─ Peak overlap rate (Jaccard index after liftover)
+    ├─ Signal intensity conservation (cross-species Spearman ρ)
+    ├─ Cell-type specificity (same CRE open in matched cell types?)
+    └─ Aging dynamics (species × age interaction in mixed model)
+
+R3: TF Binding Dynamics Conservation (ATAC-driven)
+    ├─ TF footprinting across species (TOBIAS / HINT-ATAC)
+    ├─ Motif enrichment aging trajectories (chromVAR)
+    └─ Binding intensity dynamics (species × age mixed model)
+
+R4: TF→Target Regulatory Network Conservation (scRNA-driven)
+    ├─ SCENIC regulon edge conservation (ortholog TF→ortholog target)
+    ├─ Regulon activity aging dynamics (pseudobulk + cos(θ) + species×age)
+    └─ Cross-validation: R2 CRE + R3 footprint evidence for R4 regulon edges
+
+R5: Integrated Scoring
+    ├─ CRECS = w₁×S_seq + w₂×S_ATAC + w₃×S_footprint + w₄×S_network
+    ├─ Weights via evolutionary anchor calibration (logistic regression)
+    └─ A/B/C/D four-level classification
+```
+
+### 10.4 Evolutionary Anchor Calibration for Weights
+
+The weights w₁-w₄ are NOT fixed numbers — they are determined by a data-driven calibration method:
+
+```
+Training data: thousands of CRE pairs across species
+Labels: evolutionary distance → conservation expectation
+  • Human-Chimpanzee (6 Mya) → label = conserved
+  • Human-Macaque (25 Mya) → label = intermediate
+  • Human-Mouse (90 Mya) → label = not conserved
+
+Model: logistic regression (transparent, each weight maps to one dimension)
+Output: normalized regression coefficients → w₁, w₂, w₃, w₄
+Validation: MPRA functional validation data as independent test set
+```
+
+**Patent claim pattern**: The *method of determining weights* goes in the independent claim. Specific weight values NEVER go in claims. This follows the same SDI principle (Section 3.3): statistics in independent claims, thresholds/values in dependent claims.
+
+### 10.5 A/B/C/D Classification Table
+
+| Grade | CRECS | Meaning | Decision |
+|-------|-------|---------|----------|
+| **A** | ≥0.75 | Fully conserved regulation | ✅ Safe to use monkey model |
+| **B** | 0.50-0.75 | Expression conserved, regulation divergent | ⚠️ Hidden bomb — core detection target |
+| **C** | 0.25-0.50 | Regulation conserved, expression divergent | 🔧 Usable with dose/baseline calibration |
+| **D** | <0.25 | Both divergent | 🚫 Exclude from regulatory studies |
+
+### 10.6 BNIP3 Validation Template (Four-Step, All Dry-Lab)
+
+BNIP3 is the ideal validation gene because its upstream regulatory network is a published gold standard:
+
+- HIF-1α → BNIP3: HRE site at -94bp (validated 2007)
+- E2F1 → BNIP3: E2F site at -155bp (validated 2007)
+- FOXO3 → BNIP3: ChIP-validated direct binding
+- p53, NF-κB p65 → BNIP3: inhibitory regulation
+
+**Validation steps**:
+1. R1: Extract BNIP3 promoter (TSS±2kb), liftover human→macaque, verify HRE/E2F site presence and phastCons scores
+2. R2/R3: Check BNIP3 promoter accessibility in both species' ATAC, perform HIF1A footprinting
+3. R4: Run SCENIC on both species, verify all 4 known TF→BNIP3 edges are independently recovered
+4. R4b: Regulon activity aging trajectory comparison (cos(θ) + species×age interaction)
+
+**Plus negative control**: Select a gene with known primate regulatory divergence (from CroCoNet's POU5F1 module) and run the same pipeline — it should be classified as B or D. One positive + one negative = method discrimination power proven.
+
+### 10.7 A′ + C Sister Patent Architecture (Regulatory Layer)
+
+```
+Patent A′: Regulatory conservation assessment method ("evaluate the machine")
+  Independent claim core: R1 sequence → R2 ATAC → R3 footprint 
+                         → R4 network → R5 CRECS + A/B/C/D
+  Authorization probability: 65-75%
+
+Patent C: Anti-aging compound screening ("screen the drugs")
+  Independent claim core: Cross-species conservative filter signature 
+                         + cell-type-specific reversal score 
+                         + D-class target exclusion
+  Authorization probability: 55-65%
+
+Weld point: A′'s D-class exclusion list → C's screening input
+Same-day filing → mutual non-prejudice
+```
+
+### 10.8 CRECA-Specific A25 Defense
+
+The "B-class gene detection" capability is the strongest A25 defense for regulatory conservation patents:
+
+> "本方法不是对基因表达的简单比较，而是通过ATAC-seq数据的染色质可及性分析、
+> 转录因子足迹分析和SCENIC基因调控网络推断等多层技术手段，
+> 实现对'表达保守但调控分歧'基因的系统性检出——
+> 这一技术效果无法通过任何单一已知方法独立实现。"
+
+The additional safety anchor specific to CRECA:
+
+> "R2步骤包含liftover质量验证：若人-猴峰重叠率显著低于人-黑猩猩
+> 重叠率，则自动标记该基因组区域为'比对质量存疑'。
+> 本方法不是纯粹的数学演算，而是包含错误检测和风险控制的技术系统。"
