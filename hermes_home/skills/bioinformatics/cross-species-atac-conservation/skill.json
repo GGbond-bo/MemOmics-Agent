@@ -1,0 +1,16 @@
+{
+  "id": "cross-species-atac-conservation",
+  "name": "跨物种 ATAC CRE 保守性评估（纯 ATAC）",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 跨物种 ATAC CRE 保守性评估（纯 ATAC） 进行分析",
+  "source_dir": "skills/bioinformatics/cross-species-atac-conservation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED 必触发",
+  "trigger_keywords": []
+}

@@ -334,6 +334,38 @@ Phase 全部完成后：
     )
 
 
+def _build_background_process_check(session, agent):
+    """每轮开头检查上一轮是否有未完成的后台进程。
+    如果有，强制注入提醒——agent 必须先用 process(action='poll') 检查状态。"""
+    if not agent:
+        return ""
+    msgs = session.get("messages", [])
+    has_bg = False
+    last_bg_session_id = None
+    for m in reversed(msgs[-10:]):
+        content = m.get("content", "")
+        if not isinstance(content, str):
+            continue
+        if "background" in content.lower() and ("session_id" in content.lower() or "notify_on_complete" in content.lower()):
+            has_bg = True
+            import re
+            match = re.search(r"session_id[:\s=]+['\"]?(\S+)['\"]?", content)
+            if match:
+                last_bg_session_id = match.group(1).rstrip("',\")")
+            break
+    if not has_bg:
+        return ""
+    sid_hint = f" session_id='{last_bg_session_id}'" if last_bg_session_id else ""
+    return (
+        "⛔ 系统检测到上一轮启动了后台进程。在当前轮回复用户之前，你必须：\n"
+        "1. 调用 process(action='poll') 检查所有后台进程状态\n"
+        f"2. 用 process(action='poll'{sid_hint}) 精确查询\n"
+        "3. 进程已结束→汇报结果。进程还在跑→汇报进度。进程报错→分析错误并决定是否重试\n"
+        "4. 完成以上检查后，再回应用户的问题\n"
+        "禁止：不检查后台进程就直接回答用户！"
+    )
+
+
 def _build_alerts_context(session):
     """读取 analysis_dir 下的 alerts.json，注入未处理错误摘要。"""
     analysis_dir = session.get("analysis_dir", "")
@@ -889,7 +921,7 @@ def _classify_intent(text: str):
               "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物",
               "umap", "tsne", "可视化", "热图", "火山图", "小提琴图", "散点图",
               "轨迹", "通路", "通讯", "调控", "模块",
-              "结果", "输出", "文献", "文献综述"]
+              "结果", "输出", "文献", "文献综述", "专利", "patent", "法律", "申报"]
     has_chat = any(kw in t for kw in CHAT_KW)
     has_bio = any(kw in t for kw in BIO_KW)
     if has_chat and not has_bio:
@@ -998,7 +1030,8 @@ def _classify_intent(text: str):
     install_kw = ["安装", "install", "配置", "配置环境", "setup", "依赖", "dependency",
                   "创建skill", "create skill", "新skill", "新 skill", "注册skill", "创建"]
     lit_kw = ["文献", "论文", "literature", "paper", "pubmed", "下载论文",
-              "找文献", "查论文", "搜索文献", "search paper", "find paper"]
+              "找文献", "查论文", "搜索文献", "search paper", "find paper",
+              "专利", "patent", "知识产权", "权利要求", "ip", "技术交底"]
     kb_kw = ["知识库", "knowledge", "搜索知识", "查找方法", "protocol", "流程"]
     
     rpt_s = sum(1 for kw in report_kw if kw in t)
@@ -1225,6 +1258,18 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                      "Install task. env_check first, then skill_view('create-bio-skill') if needed.")
     
     elif intent == "literature":
+        # Detect patent sub-intent
+        if any(kw in user_text for kw in ["专利", "patent", "知识产权", "权利要求", "技术交底"]):
+            lines += [
+                "🚨 专利分析任务！必须加载专利专用 skill：",
+                "1. skill_view('patent-analysis') 加载专利撰写规范和防御策略",
+                "2. 专利检索三轮验证：①具体技术圈 ②抽象方法圈 ③IPC分类号G16B",
+                "3. 独权撰写必须严格遵循公式：数据输入形式 + 不可替代技术组件 + 计算机实现步骤 + 可验证技术效果",
+                "4. 必须在说明书第一段精确定义「可代替性」的含义",
+                "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
+                "",
+            ]
+            return "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -1628,6 +1673,35 @@ def _fmt_tool_result(tool_name, result):
         return "完成"
 
 
+# === Planning prompt: agent 收到任务后必须先创建待办清单 ===
+_PLANNING_PROMPT = """
+
+## Task Planning Protocol
+
+When the user asks you to perform a non-trivial task (analysis, research, code generation, data processing), you MUST follow this protocol:
+
+1. **Make a plan first.** Break the task into specific, actionable steps. Format your plan as a checklist using the `todo` tool:
+   - Each step should be one concrete action (e.g. "Scan the data file", "Run QC filtering", "Generate volcano plot")
+   - Keep each step focused — one tool call per step
+   - Order steps logically (prerequisites first)
+
+2. **Execute step by step.** After creating the plan, work through each step in order:
+   - Mark each step `in_progress` before starting it
+   - Mark it `completed` when done (with a brief result note)
+   - If a step fails, mark it `cancelled` and note why, then move to the next
+
+3. **Keep the user informed.** After each step completes, briefly report what was done and what's next. The user can see the todo list updating in real-time on the WebUI.
+
+Example plan format (use the `todo` tool to create these):
+- [ ] Step 1: Scan the input data file
+- [ ] Step 2: Run quality control filtering
+- [ ] Step 3: Perform normalization
+- [ ] Step 4: Generate summary report
+
+IMPORTANT: Use the `todo` tool (action='create') to register the plan. Then update status with `todo` tool (action='update') as you progress. Do NOT just describe the plan in text — actually create the todos.
+"""
+
+
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
@@ -1648,7 +1722,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         model=cfg["model"],
         max_iterations=300,
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use"],
-        ephemeral_system_prompt=skills_index,
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -4938,6 +5012,11 @@ async def ws_endpoint(ws: WebSocket):
                                     conversation_history.append({"role": role, "content": content})
                             except Exception:
                                 pass
+
+                        # 🔧 每轮开头：检查上一轮是否有未完成的后台进程
+                        _bg_check = _build_background_process_check(session, agent)
+                        if _bg_check:
+                            conversation_history.insert(0, {"role": "system", "content": _bg_check})
 
                         # 问题1: 如果检测到环境关键词，把真实检测结果作为 system context 注入
                         if _env_ctx:

@@ -493,3 +493,16 @@ def verify_one_sample(output_dir: str, sample_name: str) -> str:
 ---
 
 ## 🔴 铁规 15: Guardian 快照 — 修改脚本前先备份【v1.1】
+
+
+## 🔧 R 多版本库路径隔离【v1.3】
+
+当同时使用多个 R 版本（如 R 4.4.2 跑 Seurat/Signac + R 4.6.1 跑 ArchR），必须确保每个版本使用独立库路径。若 `.Rprofile` 硬编码旧版路径，新版 R 的 `.libPaths()` 会被劫持 → `library()` 全部失败。
+
+**修复**：`.Rprofile` 用 `R.version$major.minor` 动态构建库路径。详见 `references/r-multi-version-library-isolation.md`。
+
+**跨环境调用**：
+```bash
+"C:/Program Files/R/R-4.6.1/bin/Rscript.exe" archr_atac.R   # R 4.6.1
+"C:/Users/.../R/R-4.4.2/bin/x64/Rscript.exe" seurat.R        # R 4.4.2
+```

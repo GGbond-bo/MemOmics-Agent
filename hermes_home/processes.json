@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "session_id": "proc_18a916b64da7",
+    "command": "PATH=\"/c/rtools44/ucrt64/bin:/c/rtools44/usr/bin:$PATH\" \"C:/Program Files/R/R-4.5.3/bin/Rscript.exe\" --vanilla \"E:/MemOmics-Agent/results/memomics-1c1890da/install_archr_v4.R\" 2>&1",
+    "pid": 37456,
+    "pid_scope": "host",
+    "host_start_time": 178526050971,
+    "cwd": "C:\\Users\\23136\\AppData\\Roaming\\reasonix\\global-workspace",
+    "started_at": 1785260509.7072418,
+    "task_id": "default",
+    "session_key": "486b40fc-f995-4ad2-a23f-01e04b91fadf",
+    "watcher_platform": "",
+    "watcher_chat_id": "",
+    "watcher_user_id": "",
+    "watcher_user_name": "",
+    "watcher_thread_id": "",
+    "watcher_message_id": "",
+    "watcher_interval": 0,
+    "notify_on_complete": true,
+    "watch_patterns": []
+  }
+]
