@@ -369,7 +369,7 @@ def _build_background_process_check(session, agent):
 
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
-    如果有，注入提示——agent 回答完用户问题后必须继续主线。"""
+    如果是知识问答/进度查询 → 只给轻量提示。如果是正常对话 → 给完整提醒。"""
     has_plan = False
     results_dir = session.get("results_dir", "")
     if results_dir:
@@ -383,6 +383,21 @@ def _build_task_resume_prompt(session):
     if not has_plan and not has_todos:
         return ""
     
+    # 检查当前意图：知识问答/进度查询/方案讨论 → 轻量提示
+    _intent = session.get("intent", "")
+    _is_light_question = _intent in ("knowledge_ask", "progress_check", "analysis_plan", "chat")
+    
+    if _is_light_question:
+        # 轻量：只提醒有任务在后台，不强制推进
+        return (
+            "💡 提示：你有未完成的分析任务在后台。"
+            "先回答用户的问题，回答完后如果需要继续任务，"
+            f"可以读取 {plan_path} 查看进度。"
+            if has_plan else
+            "💡 提示：你有未完成的待办事项。先回答用户的问题。"
+        )
+    
+    # 正常对话 → 完整提醒
     parts = ["⛔ 你有未完成的主线任务！"]
     if has_plan:
         parts.append(f"- task_plan.md: {plan_path if results_dir else '存在'}")
@@ -573,20 +588,22 @@ def _build_task_plan_context(session):
     plan_path = os.path.join(results_dir, "task_plan.md")
 
     _intent = session.get("intent", "")
-    _is_analysis = _intent not in ("", "chat", "self_intro")
+    _is_analysis = _intent not in ("", "chat", "self_intro", "knowledge_ask", "progress_check")
     _has_messages = len(session.get("messages", [])) >= 2
 
     if not os.path.isfile(plan_path):
-        # 自动创建 task_plan.md：需要 ①数据路径 + ②执行意图 两者同时满足
-        # 仅"帮我看看 E:/data/xxx" → 不创建（用户只是给路径）
-        # "帮我分析/跑/执行 E:/data/xxx" → 创建
+        # 🔑 自动创建 task_plan.md 的严格条件：
+        # ① 有数据路径 ② 有执行关键词 ③ 意图不是轻量类型
         _msgs = session.get("messages", [])
         _last_msg = _msgs[-1].get("content", "") if _msgs else ""
         _has_data_path = bool(re.search(r'[A-Za-z]:[/\\]\S+', _last_msg))
         _has_exec_kw = any(kw in _last_msg for kw in 
-                          ("跑", "执行", "开始", "分析", "启动", "运行", "run", "start", "analyze"))
+                          ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze",
+                           "帮我做", "帮我跑", "做分析", "跑分析"))
         _is_exec = _intent in ("analysis_exec", "direct_exec")
-        if (_is_exec or (_has_data_path and _has_exec_kw)) and len(_msgs) >= 2:
+        # 三个条件同时满足才创建：explicit exec intent OR (data+exec keywords), AND not light intent
+        _LIGHT_FOR_PLAN = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan")
+        if (_is_exec or (_has_data_path and _has_exec_kw)) and _intent not in _LIGHT_FOR_PLAN and len(_msgs) >= 2:
             return _auto_create_task_plan(session, plan_path)
         return None
     try:
@@ -1136,13 +1153,74 @@ def _classify_intent(text: str):
     if any(kw in t for kw in SELF_INTRO_KW):
         return ("self_intro", 0.99, {})
 
+    # === 工具名常量（多处复用）===
+    TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
+                  "cellchat", "cellbender", "harmony", "scenic", "sctransform",
+                  "velocyto", "diffxpy", "clusterprofiler", "fgsea", "gseapy",
+                  "scrublet", "soupX", "soupx", "doubletfinder", "archr", "signac"]
+    _has_data_path_early = bool(_re_mod.search(r'[A-Za-z]:[/\\]\S+', t))
+
+    # === Priority 1.5: knowledge_ask / progress_check / analysis_plan（在 chat fallback 之前）===
+    # 这些意图即使消息很短也应该优先识别，避免被 short_no_bio 误判为 chat
+    
+    # 1.5a: progress_check
+    PROGRESS_KW = ["还在跑吗", "还在运行", "跑完了吗", "跑完没", "进度", "怎么样了",
+                   "状态", "nvidia-smi", "gpu", "显卡", "显存", "内存",
+                   "后台", "后台任务", "后台进程", "卡住了", "停了",
+                   "还要多久", "多久了", "跑了多久", "跑多久",
+                   "check progress", "how long", "status", "still running"]
+    if any(kw in t for kw in PROGRESS_KW):
+        return ("progress_check", 0.85, {"reason": "progress_or_status_query"})
+
+    # 1.5b: knowledge_ask（知识/错误/润色/参数问题 — 无数据路径）
+    KNOWLEDGE_QUESTION_KW = ["什么意思", "是什么", "什么是", "参数", "怎么选",
+                             "怎么设", "怎么调", "区别", "vs", "对比",
+                             "推荐", "建议", "选哪个", "哪个好", "最佳",
+                             "怎么用", "用途", "作用", "原理", "含义",
+                             "解释", "说明", "介绍一下",
+                             "哪些", "用什么方法", "怎么修", "怎么处理",
+                             "润色", "怎么写", "如何选择", "如何设置",
+                             "报错了", "不工作", "出错了", "失败了", "怎么解决"]
+    _has_knowledge_q = any(kw in t for kw in KNOWLEDGE_QUESTION_KW)
+    _is_planning_q = any(kw in t for kw in ["怎么设计", "如何设计", "方案", "路线",
+                                             "研究框架", "分析框架", "实验设计"])
+    # 错误/修复上下文：即使有"跑"也不当执行动作
+    _is_error_context = any(kw in t for kw in ["报错", "出错", "错误", "不工作", "失败", "怎么修", "怎么解决"])
+    _has_exec_action = not _is_error_context and any(kw in t for kw in 
+        ["跑", "执行", "运行", "帮我做", "开始做", "run ", "start ", "do ", "execute"])
+    if _has_knowledge_q and not _has_data_path_early and not _has_exec_action and not _is_planning_q:
+        return ("knowledge_ask", 0.82, {"reason": "knowledge_question_no_data"})
+    # 工具名 + 参数问句 → knowledge_ask
+    TOOL_PARAM_ASK = ["参数", "argument", "option", "flag", "设置"]
+    _has_tool_kw = any(tool in t for tool in TOOL_NAMES)
+    _has_param_ask = any(kw in t for kw in TOOL_PARAM_ASK)
+    if _has_tool_kw and _has_param_ask and not _has_data_path_early:
+        return ("knowledge_ask", 0.84, {"reason": "tool_param_question"})
+
+    # 1.5c: analysis_plan（技术路线图/分析方案 — 无数据路径）
+    ANALYSIS_PLAN_KW = ["技术路线", "分析路线", "路线图", "流程图",
+                        "怎么做.*分析", "分析流程", "分析步骤",
+                        "数据.*怎么分析", "怎么分析.*数据",
+                        "atac.*路线", "rna.*路线", "单细胞.*路线",
+                        "pipeline", "workflow", "分析框架"]
+    _has_plan_query = any(kw in t for kw in ANALYSIS_PLAN_KW)
+    _has_plan_regex = any(_re_mod.search(pat, t) for pat in [
+        r"怎么做.*分析", r"分析流程", r"分析步骤", r"分析路线",
+        r"数据.*怎么分析", r"怎么分析.*数据",
+        r"atac.*路线", r"rna.*路线", r"单细胞.*路线",
+    ])
+    if (_has_plan_query or _has_plan_regex) and not _has_data_path_early:
+        return ("analysis_plan", 0.85, {"reason": "analysis_roadmap_query"})
+
     # === Priority 2: chat (non-bioinfo, casual) ===
     CHAT_KW = ["你好", "嗨", "hello", "hi", "谢谢", "感谢", "再见", "拜拜",
                "天气", "今天天气", "怎么样", "好吗",
                "怎么用", "如何使用", "能不能", "可不可以",
                "有趣", "好玩", "厉害", "牛逼", "哈哈", "呵呵",
                "吃饭", "睡觉", "周末", "节日", "放假",
-               "你觉得", "你认为", "你的看法"]
+               "你觉得", "你认为", "你的看法",
+               "好烦", "烦死了", "气死", "无语", "崩溃", "心态",
+               "加油", "辛苦了", "太棒了", "nice", "good job"]
     BIO_KW = ["分析", "跑", "做", "执行", "计算", "画图", "出图",
               "处理", "统计", "差异", "富集", "聚类", "降维", "注释",
               "数据", "基因", "细胞", "表达", "qc", "deg", "rna", "atac",
@@ -1210,10 +1288,6 @@ def _classify_intent(text: str):
         return ("direct_exec", 0.90, {"skip_planning": True})
     
     # 工具名直接使用检测："用Seurat做" → analysis（必须在ANALYSIS_INTENT_KW之前）
-    TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
-                  "cellchat", "cellbender", "harmony", "scenic", "sctransform",
-                  "velocyto", "diffxpy", "clusterprofiler", "fgsea", "gseapy",
-                  "scrublet", "soupX", "soupx", "doubletfinder", "archr", "signac"]
     if any(f"用{tool}" in t or f"with {tool}" in t or f"run {tool}" in t for tool in TOOL_NAMES):
         return ("analysis", 0.88, {"reason": "direct_tool_usage"})
     if any(tool in t for tool in TOOL_NAMES):
@@ -1302,6 +1376,11 @@ def _classify_intent(text: str):
     if analysis_s >= 2:
         return ("analysis", min(analysis_s * 0.15, 1.0), {})
     if analysis_s >= 1:
+        # 边界情况：单独一个分析关键词 + 情绪词 → chat（如"分析跑崩了 好烦"）
+        EMOTION_KW = ["好烦", "烦死了", "气死", "无语", "崩溃", "心态", "加油", "辛苦了"]
+        _has_emotion = any(kw in t for kw in EMOTION_KW)
+        if _has_emotion and analysis_s == 1:
+            return ("chat", 0.60, {"reason": "analysis_ref_with_emotion"})
         return ("analysis", 0.50, {})
 
     return ("chat", 0.0, {})
@@ -1369,7 +1448,66 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     lines = ["【系统指令：自动路由 - 必须遵守】",
              f"意图类型：{intent} | 领域：{domain or '自动检测'}", ""]
     
-    if intent == "analysis":
+    if intent in ("knowledge_ask",):
+        lines += [
+            "用户正在询问知识/参数问题。这不是分析任务执行。",
+            "1. 调用 search_knowledge() 搜索知识库获取答案",
+            "2. 如果需要了解某个技能的参数细节，可以 skill_view(name='xxx') 只读查看",
+            "3. 直接回答用户的问题。给出准确、简洁的答案",
+            "⛔ 不要创建 task_plan。不要输出触发检查清单。不要追问'要不要跑'。",
+            "⛔ 不要调用 terminal 执行代码。这是纯知识问答。",
+            "",
+        ] if zh else [
+            "User is asking a knowledge/parameter question. This is NOT an analysis execution.",
+            "1. Call search_knowledge() to find the answer",
+            "2. Use skill_view(name='xxx') if you need to check a skill's parameter details",
+            "3. Answer directly, accurately and concisely",
+            "⛔ Do NOT create task_plan. Do NOT output trigger checklist. Do NOT ask 'want to run?'.",
+            "⛔ Do NOT call terminal. This is pure knowledge QA.",
+            "",
+        ]
+    
+    elif intent in ("progress_check",):
+        lines += [
+            "用户正在查询进度/状态。只做三源交叉验证，不做分析。",
+            "1. terminal('nvidia-smi') 或 terminal('tasklist') — 检查GPU/进程",
+            "2. search_files 或 terminal('dir <输出目录>') — 检查磁盘产出",
+            "3. read_file('<pipeline.log>', offset=-50) — 检查日志尾部",
+            "三个查完 → 交叉验证一致 → 汇报状态",
+            "⛔ 不要新建 task_plan。不要启动新任务。不要追问主线。",
+            "",
+        ] if zh else [
+            "User is checking progress/status. Three-source verification only.",
+            "1. terminal('nvidia-smi') or terminal('tasklist') — check GPU/processes",
+            "2. search_files or terminal('dir <output_dir>') — check disk output",
+            "3. read_file('<pipeline.log>', offset=-50) — check latest logs",
+            "Verify all three sources → cross-validate → report status",
+            "⛔ Do NOT create task_plan. Do NOT start new tasks.",
+            "",
+        ]
+    
+    elif intent in ("analysis_plan",):
+        lines += [
+            "用户正在询问分析方案/技术路线图。使用只读工具构建方案，不执行代码。",
+            "1. skill_list_by_domain(domain='推断的领域') 列出相关技能",
+            "2. skill_view() 加载关键技能的 Pipeline/Workflow 节获取方法论",
+            "3. 整理成清晰的路线图（步骤→方法→工具→预期产出）",
+            "4. 如果涉及文献支撑：search_papers() 补充最新文献",
+            "⛔ 不要调用 terminal 执行代码。不要创建 task_plan。",
+            "⛔ 这是方案讨论阶段，不是分析执行阶段。",
+            "",
+        ] if zh else [
+            "User is asking for an analysis plan/roadmap. Use read-only tools, do NOT execute.",
+            "1. skill_list_by_domain(domain='inferred domain') to list relevant skills",
+            "2. skill_view() to load methodology from Pipeline/Workflow sections",
+            "3. Organize into a clear roadmap (step → method → tool → expected output)",
+            "4. search_papers() to supplement with latest literature if needed",
+            "⛔ Do NOT call terminal. Do NOT create task_plan.",
+            "⛔ This is planning/discussion, NOT execution.",
+            "",
+        ]
+    
+    elif intent == "analysis":
         lines += [
             "这是一个生物信息学分析任务。你必须严格执行以下步骤，不可跳过：",
             "1. 调用 skill_search(query='你的分析需求', stage='auto') 查找合适的 skill（stage参数自动缩小搜索范围到当前分析阶段）",
@@ -4720,7 +4858,17 @@ async def ws_endpoint(ws: WebSocket):
                 #   有数据路径 + 分析执行 → SOUL.md + detail + skills_index + PLANNING
                 import re as _re_path
                 _has_data_path = bool(_re_path.search(r'[A-Za-z]:[/\\]\S+', user_text)) if user_text else False
-                _is_heavy = (_intent in ("analysis_exec", "direct_exec")) or (_has_data_path and _intent not in ("chat", "self_intro"))
+                # 轻量意图：永远不注入 SOUL-detail + skills_index（省 40%+ 上下文）
+                _LIGHT_INTENTS = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan")
+                # 重量意图：仅 explicit execution 或 analysis + 数据路径 + 执行关键词
+                _has_exec_kw = any(kw in user_text for kw in
+                    ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze")) if user_text else False
+                _is_explicit_exec = _intent in ("analysis_exec", "direct_exec")
+                _is_heavy = _is_explicit_exec or (
+                    _intent not in _LIGHT_INTENTS
+                    and _has_data_path
+                    and _has_exec_kw
+                )
                 if not _is_heavy:
                     # 轻量：闲聊/知识/进度/无数据路径的分析讨论 → 不注入 skills 和 detail
                     agent.ephemeral_system_prompt = (
@@ -4815,10 +4963,28 @@ async def ws_endpoint(ws: WebSocket):
                                         "session_id": session["id"]})
                                 if _is_data_destroy_command(_cmd) or _is_code_destroy(_cmd):
                                     logger.warning(f"[MemOmics] 拦截删除操作: {_cmd[:100]}")
-                                    args["command"] = "echo '⛔ 删除操作已拦截！删除数据前必须用户明确同意。请列出要删除的文件并等待确认。'"
-                                    args["code"] = "print('⛔ 删除操作已拦截！删除数据前必须用户明确同意')"
-                                    _session_emit(session, {"type": "error",
-                                        "content": "⛔ 删除操作已拦截！删除数据前必须让用户明确同意。",
+                                    # 不直接阻断，改为引导 Agent 向用户展示删除内容并请求确认
+                                    _safe_cmd = _cmd[:300].replace("'", "'\"'\"'")
+                                    args["command"] = (
+                                        f"echo '[⚠️ 操作需确认] 你刚才尝试执行删除操作。'\n"
+                                        f"echo ' '\n"
+                                        f"echo '📋 要执行的命令:'\n"
+                                        f"echo '  {_safe_cmd}'\n"
+                                        f"echo ' '\n"
+                                        f"echo '⛔ 此操作未被直接执行。请先向用户展示:\n"
+                                        f"echo '  1. 列出要删除的具体文件和目录\n"
+                                        f"echo '  2. 说明为什么需要删除\n"
+                                        f"echo '  3. 等待用户明确回复\"确认删除\"后再执行'\n"
+                                        f"echo ' '\n"
+                                        f"echo '💡 用户确认后，请使用确认后的命令重新执行。'"
+                                    )
+                                    args["code"] = (
+                                        "print('[⚠️ 操作需确认] 你刚才尝试执行删除操作。')\n"
+                                        "print()\n"
+                                        "print('⛔ 此操作未被直接执行。请先向用户展示要删除的具体文件和原因，等待用户确认后再执行。')"
+                                    )
+                                    _session_emit(session, {"type": "warning",
+                                        "content": f"⚠️ Agent 尝试删除文件：{_cmd[:200]}\n\n操作已暂停。请 Agent 先向用户列出要删除的内容并等待确认。",
                                         "session_id": session["id"]})
                         # 文件产出型工具 — 首次调用时按需创建 results_dir
                         _PRODUCING_TOOLS = {
