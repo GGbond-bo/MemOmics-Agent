@@ -138,13 +138,23 @@ WHILE pipeline not done:
 | `--fpr` | 0.01 | 官方默认 |
 | `--epochs` | 150 | 官方默认 |
 | `--learning-rate` | 1e-4 | 官方默认（不是 0.001！） |
-| `--total-droplets-included` | 25000 | 官方默认 |
+| `--total-droplets-included` | **≥ 4× 期望细胞** (官方 Tutorial: 2000/500=4×); 最低 ≥ 检出细胞 + 5000 buffer | 官方默认 `None` = 全量 → epoch 暴增 6-10×。此值外液滴为"确定空滴"仅供环境估计。比例不足 → GitHub Issue #414 NaN 崩溃。详见 `references/total-droplets-included-ratio-investigation.md` |
 | `--expected-cells` | 5000 | 显式设定 |
 | `--cuda` | yes | GPU 必需 |
+| `--low-count-threshold` | 5（默认）/ 15-20（大样本防 OOM） | 排除低 UMI 液滴，提高可减少 MCKP 内存 |
+| `--projected-ambient-count-threshold` | 0.1（默认）/ 5（加速） | 排除低环境计数基因，大幅加速（~70% 基因排除）；**官方正规参数** — 勿凭记忆判"非法"（pitfall #40）。设 5 = 49K→14K 特征，对去污染结果影响微小 |
 
 ---
 
-## Quality Check
+## 📊 Post-CellBender Summary
+
+After all samples complete, extract metrics from `*_raw_output_metrics.csv` files to generate before/after comparison tables (UMI counts, cell detection, per-cell metrics, convergence).
+
+- **Markdown 汇总**: 模板和提取脚本 → `references/post-cellbender-summary.md`
+- **Excel 汇总** (用户偏好): 包含 3 个 Sheet（细胞保留 / UMI 去除 / 运行参数），带颜色标注。生成模板 → `references/excel-summary-post-cellbender.md`
+- **`--total-droplets-included` 比例调查** (2026-07-29, 用户质疑后深度调查): 官方 Tutorial 4:1 比例 + GitHub Issue #414 + 实际日志验证 → `references/total-droplets-included-ratio-investigation.md`
+
+---
 
 | 检查项 | 正常范围 | 异常处理 |
 |--------|---------|---------|
@@ -288,10 +298,11 @@ WHILE pipeline not done:
     - **根因**: h5ad 文件实际在 `F:/CellBender_v2/h5ad/` 子目录，Agent 写脚本时假设它们在工作目录根目录，没有先 `ls` 确认。
     - **检测**: "Total to run: 0" 但 `dir *_filtered.h5` 只有 2 个 → 不是"全部完成"，是路径错了。必须检查 `expected_todo - completed` 是否等于 0 — 如果 `expected=26, completed=2, todo=0` → 逻辑矛盾，任务未执行。
     - **修复**: (a) 写批量脚本前必须 `ls`/`search_files` 确认 h5ad 文件位置 (b) 脚本启动后立刻读日志确认 `Total to run` 参数合理 (c) 如果 todo=0 而 completed < expected → 自动报错，不宣称"跑起来了"
-14. **🆕🔥 心跳监控口头承诺未实施 (2026-07-25, 26样本证实)**：
-    - **症状**: Agent 说"2分钟报一次"但实际没有 cron/后台脚本/定时器。用户问"你怎么搭的心跳监控？"→ Agent 承认"根本没有心跳监控"。
-    - **根因**: LLM 把"承诺未来会做"当成"已经做了"。这与铁律-1 是同一个模式但更难检测——承诺的是未来行为而非当前动作。
-    - **修复**: 必须部署实体的后台监控脚本写入 `monitor.log`，不能只靠口头发誓。见 `references/heartbeat-monitor.sh`。
+14. **🔥🔥 心跳监控口头承诺未实施 + 答应汇报但遗忘 (2026-07-25 26样本 + 2026-07-29 6脑样本 两次证实)**：
+    - **症状 A (07-25)**: Agent 说"2分钟报一次"但实际没有 cron/后台脚本/定时器。用户问"你怎么搭的心跳监控？"→ Agent 承认"根本没有心跳监控"。
+    - **症状 B (07-29)**: Agent 说"10 分钟后主动汇报"，用户 14 分钟后问"超过10分钟了你还没汇报"→ Agent 再承诺"15 分钟后汇报"→ 又没主动报。用户最后问"进度呢？"时 GPU 已经降到 3% 跑完了（跑完 >20 分钟无人知）。
+    - **根因**: LLM 把"承诺未来会做"当成"已经做了"。这与铁律-1 是同一个模式——承诺的是未来行为而非当前动作。即使心跳脚本在跑，Agent 自己不去读心跳日志，承诺的"主动汇报"就永远不会发生。
+    - **修复**: (a) 必须部署实体的后台监控脚本写入 `monitor.log`，不能只靠口头发誓。见 `references/heartbeat-monitor.sh`。(b) 承诺"X 分钟后汇报"时 → Agent 必须在同一轮设定一个内部检查点，不能依赖"下次用户发消息时再说"（因为用户不发消息就不会触发检查）。(c) 超时后用户质问 → 不要再次承诺"下次一定"→ 立即执行三源验证。
     - **监控脚本模式**:
       ```bash
       # 后台运行，每 2 分钟写一次 GPU+epoch+文件数 到 monitor.log
@@ -391,7 +402,14 @@ WHILE pipeline not done:
     - **文件名映射**: `--output X.h5` → `X_filtered.h5`, `X_posterior.h5`, `X_metrics.csv`, `X_cell_barcodes.csv`。
     - **修复**: 用 `*_filtered.h5` glob 而非硬编码前缀。
 
-25a. **🔥🔥 ptrepack MSYS bash 路径转换 + 静默失败 (2026-07-27 证实)**：
+25a. **🔥🔥 ptrepack CLI `:/raw_counts` 节点路径错误 — CellBender filtered.h5 存储矩阵在 `/matrix` 而非 `/raw_counts` (2026-07-29, 6 样本脑数据证实)**：
+    - **症状**: `ptrepack --complevel 5 input.h5:/raw_counts output.h5:/raw_counts` → `NoSuchNodeError: group "/" does not have a child named "/raw_counts"`。6 个样本全部失败。
+    - **根因**: CellBender `filtered.h5` 以 10X CSR 稀疏矩阵格式存储，数据节点在 `/matrix`（含 `data/indices/indptr/barcodes/features/shape`），不在 `/raw_counts`。`ptrepack` 必须指向正确的 HDF5 内部节点路径。
+    - **修复**: 不要尝试 `ptrepack .../matrix .../matrix` — ptrepack CLI 在 Windows/MSYS 环境还有更多已知坑（路径转换、静默失败、HDF5 checksum 损坏，见 pitfall 25b）。直接使用 `scripts/ptrepack_h5py_batch.py`（h5py 复制 `/matrix` group，`f_src.copy('/matrix', f_dst, name='matrix')`），已在此 session 验证 6/6 样本 21 秒全部完成。
+    - **区分于 pitfall 24**: pitfall 24 是文件名前缀因 `--output` 参数变化导致 glob 找不到文件，pitfall 25a 是 ptrepack CLI 传入错误 HDF5 内部节点路径导致复制失败。两者可能同时发生。
+    - 📄 h5py 绕过方案: `references/ptrepack-h5py-corruption-fallback.md`
+
+25b. **🔥🔥 ptrepack MSYS bash 路径转换 + 静默失败 (2026-07-27 证实)**：
     - **症状 A — 路径破坏**: `ptrepack F:/path/src.h5 F:/path/dst.h5` → `FileNotFoundError: E:\MemOmics-Agent\F does not exist`（MSYS 把 `F:` 转成当前工作目录下的相对路径）
     - **症状 B — 静默失败**: `python -m tables.scripts.ptrepack` exit code 0，无错误信息，但目标文件不存在。PyTables ptrepack 模块在某些条件下静默跳过写入。
     - **修复 A（推荐，根除）**: 放弃 ptrepack CLI，用 Python `tables` API 直接复制 — `tables.Filters(complevel=5, complib='blosc:zstd')` + `copy_node` 递归。已验证 2026-07-27 产出 186 MB 文件。
@@ -521,3 +539,23 @@ WHILE pipeline not done:
       - ❌ 三源交叉验证规则
       - ❌ 通用分析参数（已在 Skill 参数表）
     - 📄 模板: `references/task-plan-template.md`
+
+39. **🔥 macOS `._*` 隐藏文件被 glob 当成真样本 (2026-07-29, 6 样本脑数据证实)**：
+    - **症状**: `glob("*.h5ad")` 返回 12 个文件而非预期的 6 个。`._2309H_3_raw.h5ad` 等 6 个 4KB 文件被当成样本 → CellBender exit_code=1 秒崩 → pipeline 浪费时间处理垃圾文件
+    - **根因**: macOS 在非 HFS+ 文件系统上写入资源分支文件（`._*` 前缀），大小为 4096 字节。Windows 的 `glob`/`Path.glob` 不做过滤
+    - **检测**: `ls -la` 看到 `._*` 前缀文件 + 大小都是 4096 → 立刻杀 pipeline 修复
+    - **修复**: 样本发现时加双重过滤：
+      ```python
+      SAMPLES = sorted([
+          f.stem.replace("_raw", "")
+          for f in Path(INPUT_DIR).glob("*_raw.h5ad")
+          if not f.name.startswith("._") and f.stat().st_size > 100_000_000
+      ])
+      ```
+    - **通用规则**: 任何从外部存储/跨平台目录读取的 `glob` → 加 size 过滤（h5ad < 1MB = 不是真数据）。`.ipynb` 等其他非 h5ad 文件也需排除
+
+40. **🔥 参数验证必须先查官方文档，不能凭记忆判"非法" (2026-07-29, 用户纠正)**：
+    - **症状**: Agent 看到用户提供的 `--projected-ambient-count-threshold 5` → 说"这不是 remove-background 的标准参数，可能报 unrecognized arguments"。用户说"你先去 github 看看官方怎么说的"→ 一查 `cellbender remove-background --help`，发现这是**正规参数**，默认值 0.1
+    - **根因**: Agent 凭记忆判断参数合法性。CellBender 参数多、版本间有变化，记忆不可靠。`--projected-ambient-count-threshold` 控制"基因预期环境计数<阈值就排除"，是可大幅加速的正规参数
+    - **正确做法**: 用户提供参数列表 → 第一步是 `cellbender remove-background --help | grep <param>` 或查官方 GitHub README，而不是凭记忆说"不合法"。对所有工具通用——`--help` 是权威信源，LLM 记忆不是
+    - **规则**: 对任何工具参数进行"合法性"断言前，必须查官方文档（--help / GitHub README / 官方 vignette）。不查 → 不开口

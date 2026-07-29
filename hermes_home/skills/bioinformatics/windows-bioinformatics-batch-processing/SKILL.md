@@ -18,6 +18,8 @@ metadata:
 
 **这是用户最愤怒的错误模式。** 当用户问"现在还在跑吗？"时，凭"之前做了规划所以不可能在跑"推理断言"没有在跑"——但进程表里有 2 个 CellBender 各占 7.2 GB RAM，GPU 73%。
 
+**⚠️ task_plan.md 跨会话残留陷阱**：恢复会话时，task_plan.md 可能描述的是已完成的旧任务（如 CellBender），而实际运行的是完全不同的新任务（如 ArchR ATAC-seq）。四源交叉验证（进程+GPU+文件+日志）必须在读取 task_plan.md 后立即执行。当 task_plan.md 与系统状态矛盾时 → 以系统状态为准 → 更新 task_plan.md。详见 `references/session-resumption-stale-taskplan.md`。
+
 **⚠️ 关键误区**：这不是跨会话问题。即使在同一连续会话中，Agent 也可能因为信任"历史失败记录"（如日志里写着前 6 个失败了）而推断"整个 pipeline 停了"，不查实时状态就下结论。**三连击不是"跨会话时要做"，是"每次回答系统状态前必须做"。**
 
 ### 三连击检查法（回答系统状态问题前必须全做）
@@ -497,12 +499,51 @@ def verify_one_sample(output_dir: str, sample_name: str) -> str:
 
 ## 🔧 R 多版本库路径隔离【v1.3】
 
-当同时使用多个 R 版本（如 R 4.4.2 跑 Seurat/Signac + R 4.6.1 跑 ArchR），必须确保每个版本使用独立库路径。若 `.Rprofile` 硬编码旧版路径，新版 R 的 `.libPaths()` 会被劫持 → `library()` 全部失败。
+当同时使用多个 R 版本（如 R 4.4.2 跑 Seurat/Signac + R 4.5.3 跑 ArchR），必须确保每个版本使用独立库路径。若 `.Rprofile` 硬编码旧版路径，新版 R 的 `.libPaths()` 会被劫持 → `library()` 全部失败。
 
 **修复**：`.Rprofile` 用 `R.version$major.minor` 动态构建库路径。详见 `references/r-multi-version-library-isolation.md`。
 
 **跨环境调用**：
 ```bash
-"C:/Program Files/R/R-4.6.1/bin/Rscript.exe" archr_atac.R   # R 4.6.1
+"C:/Program Files/R/R-4.5.3/bin/Rscript.exe" archr_atac.R    # R 4.5.3
 "C:/Users/.../R/R-4.4.2/bin/x64/Rscript.exe" seurat.R        # R 4.4.2
 ```
+
+## 🔴 铁规 16: R on Windows — 必须用 cmd.exe /c，禁止 bash【v1.3】
+
+**2026-07-29 血训**：R 4.5.x（及更高版本）在 bash (git-bash/MSYS) 下**必定 segfault**。
+Rcpp/RcppArmadillo 的内存布局与 MSYS 的 POSIX 信号模拟冲突。各种症状：
+- 直接 `Rscript script.R` → segmentation fault
+- `terminal("Rscript script.R")` → segfault
+- `library()` 后的内存分配 → segfault
+
+### ✅ 唯一正确做法
+
+```bash
+# ❌ 不对 — bash 下 R 必死
+Rscript my_script.R
+
+# ✅ 正确 — Windows cmd 包装
+cmd.exe /c "set PATH=D:\rtools45\x86_64-w64-mingw32.static.posix\bin;D:\rtools45\mingw64\bin;%PATH% && C:\PROGRA~1\R\R-4.5.3\bin\Rscript.exe --vanilla my_script.R"
+```
+
+### ⛔ 所有 R 命令必须走 cmd.exe /c
+
+| 场景 | 正确写法 |
+|------|---------|
+| 运行脚本 | `cmd.exe /c "Rscript --vanilla script.R"` |
+| 安装包 | `cmd.exe /c "Rscript -e 'install.packages(...)'"` |
+| 检查库 | `cmd.exe /c "Rscript -e '.libPaths()'"` |
+| background 后台 | `cmd.exe /c "Rscript script.R"` + `terminal(background=TRUE)` |
+
+### 什么不能用 bash 调 R
+
+- `terminal("Rscript ...")` — 默认走 bash
+- `R CMD INSTALL` — 同上
+- 任何在 `bash -c` 内嵌的 R 调用
+
+### 为什么以前 R 4.4.2 在 bash 下没崩
+
+R 4.4.2 没有 RcppArmadillo 15.x+ 的某些内存对齐要求，恰好在 MSYS 下幸存。
+R 4.5+ 引入了更严格的 C++17 内存模型 → 与 MSYS 的 POSIX 模拟冲突 → segfault。
+这不是 bug，是两个世界的边界条件——R 在 Windows 上用 ucrt64 工具链，bash 用 MSYS，两者不可混用。

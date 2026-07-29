@@ -8,7 +8,7 @@
 | R 版本 | Rtools | Bioc | TFMPvalue | ArchR |
 |--------|:---:|:---:|:---:|:---:|
 | 4.4.2 | Rtools44 ✅ | 3.20 | ❌ 不存在 | ❌ |
-| **4.5.3** | Rtools44 可用 ✅ | **3.22** | ✅ | ✅ **首选** |
+| **4.5.3** | Rtools45 ✅ (461MB) 或 Rtools44+符号链接 | **3.22** | ✅ | ✅ **首选** | Rtools45 正确文件名: `rtools45-6768-6492.exe` (从 `rtools.html` 源码提取，错误文件名 `rtools45-6322-6322.exe` 返回 404) |
 | 4.6.1 | Rtools46 未发布 ❌ | 3.23 | ✅ | ❌ 无编译工具 |
 
 > **R 4.5.3 是黄金版本。** R 4.6.1 太新（2026-06-24 发布，Rtools46 尚未发布），R 4.4.2 太旧（Bioc 3.20 没有 TFMPvalue）。
@@ -29,9 +29,19 @@ curl -L -o /tmp/R-4.5.3-win.exe \
 ls "/c/Program Files/R/R-4.5.3/bin/Rscript.exe"
 ```
 
-## 第三步：配置 Rtools（复用 Rtools44）
+## 第三步：配置 Rtools
 
-Rtools45 安装器有 bug（exit code 2/5，无法静默安装）。**复用 Rtools44 + 符号链接**：
+**方案 A（推荐）：直接装 Rtools45**
+
+```bash
+# 正确文件名: rtools45-6768-6492.exe（不是 6322-6322！从 rtools.html 源码提取）
+curl -L -o /tmp/rtools45.exe \
+  "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe"
+# 静默安装
+/tmp/rtools45.exe /SILENT /DIR="C:\\rtools45"
+```
+
+**方案 B（备选）：复用 Rtools44 + 符号链接**
 
 ```bash
 # Rtools44 的 gcc 在非标准路径

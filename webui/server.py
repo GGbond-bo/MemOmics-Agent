@@ -389,6 +389,9 @@ def _build_task_resume_prompt(session):
         parts.append(f"- 待办: {len(incomplete)}/{len(todos)} 未完成: {', '.join(t.get('title','')[:30] for t in incomplete[:5])}")
     parts += [
         "",
+        "⛔ 工具优先！你的下一句话必须是工具调用（terminal/read_file/search_files/process），不是文字！",
+        "禁止：先说'马上查'然后输出文字。正确：直接调工具，完成后再汇报。",
+        "",
         "你必须按以下优先级行动：",
         "1. 先简短回答用户的问题（如果用户问了问题）",
         "2. 然后立即检查主线任务进度：",
@@ -419,30 +422,81 @@ def _schedule_self_check(session, agent, loop):
     session["_self_check_count"] = _sc + 1
     sid = session["id"]
     
+    # 🔧 动态延迟：根据当前 in_progress 待办的预估时间
+    delay = _calc_self_check_delay(session)
+    # 如果有紧急标记（心跳发现错误/完成），立即唤醒
+    urgent = session.pop("_urgent_wakeup", False)
+    if urgent:
+        delay = 3  # 3秒后立即唤醒
+        logger.info(f"[SelfCheck] session {sid[:12]}: urgent wakeup triggered")
+    
     async def _wakeup():
-        await asyncio.sleep(300)  # 5 min
+        await asyncio.sleep(delay)
         try:
             if sid not in _sessions: return
             s = _sessions[sid]
             if s.get("running_agent") or s.get("running_task"): return
-            wake_msg = (
-                f"⏰ [系统定时自检 #{_sc}]\n"
-                "你有未完成的主线任务。请执行以下检查：\n"
-                "1. 读 task_plan.md 看当前 Phase\n"
-                "2. process(action='list') 检查后台进程\n"
-                "3. process(action='poll') 查每个进程状态\n"
-                "4. search_files 看 results_dir 最新产出\n"
-                "5. 报错→修复→继续。无报错→汇报进度→继续下一个待办\n"
-                "6. 完成后汇报摘要"
-            )
+            # 判断唤醒类型
+            todos = s.get("todos", [])
+            in_progress = [t for t in todos if t.get("status") == "in_progress"]
+            waiting_review = [t for t in todos if t.get("status") == "waiting_review"]
+            
+            if waiting_review:
+                wake_msg = (
+                    f"⏰ [系统唤醒 #{_sc}] 有待审阅任务！\n"
+                    f"以下步骤已完成，等待辩论/审查：\n" +
+                    "\n".join(f"  - {t.get('title','')[:60]}" for t in waiting_review[:5]) +
+                    "\n\n请立即：\n"
+                    "1. 检查产出文件质量\n"
+                    "2. 执行 debate_analysis() 辩论\n"
+                    "3. 执行 rail_review(phase='post') 审查\n"
+                    "4. 通过→标记 completed，继续下一步\n"
+                    "5. 不通过→修复→重跑"
+                )
+            elif in_progress:
+                titles = ", ".join(t.get("title","")[:40] for t in in_progress[:3])
+                wake_msg = (
+                    f"⏰ [系统唤醒 #{_sc}] 主线任务进行中: {titles}\n"
+                    "请执行以下检查：\n"
+                    "1. process(action='list') 检查后台进程\n"
+                    "2. process(action='poll') 查每个进程状态和日志\n"
+                    "3. search_files 看 results_dir 最新产出\n"
+                    "4. 报错→读日志分析原因→修复→重试\n"
+                    "5. 完成→标记 completed，启动下一步\n"
+                    "6. 需要审查→标记 waiting_review"
+                )
+            else:
+                wake_msg = (
+                    f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
+                    "1. 读 task_plan.md 看当前 Phase\n"
+                    "2. search_files 看最新产出\n"
+                    "3. 继续执行下一个待办"
+                )
             s.setdefault("messages", []).append(
-                {"role": "system", "content": wake_msg, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+                {"role": "system", "content": wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
             s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             await _trigger_agent_turn(s, wake_msg)
         except Exception:
             pass
     
-    asyncio.ensure_future(_wakeup())
+    # 使用传入的 event loop 调度，确保在正确的线程上执行
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(_wakeup(), loop)
+    else:
+        asyncio.ensure_future(_wakeup())
+
+
+def _calc_self_check_delay(session):
+    """根据当前待办的预估时间计算下次自检延迟。
+    默认5分钟。如果有 in_progress 待办带 estimated_minutes，
+    延迟 = estimated_minutes * 0.8（提前20%检查）。最小30秒，最大15分钟。"""
+    todos = session.get("todos", [])
+    for t in todos:
+        if t.get("status") == "in_progress":
+            est = t.get("estimated_minutes", 0)
+            if isinstance(est, (int, float)) and est > 1:
+                return max(30, min(900, int(est * 60 * 0.8)))  # 80% of estimate, 30s-15min
+    return 300  # default 5 min
 
 
 async def _trigger_agent_turn(session, message):
@@ -1781,29 +1835,87 @@ def _fmt_tool_result(tool_name, result):
 # === Planning prompt: agent 收到任务后必须先创建待办清单 ===
 _PLANNING_PROMPT = """
 
-## Task Planning Protocol
+## Task Execution Protocol
 
-When the user asks you to perform a non-trivial task (analysis, research, code generation, data processing), you MUST follow this protocol:
+### Phase 1: Plan
 
-1. **Make a plan first.** Break the task into specific, actionable steps. Format your plan as a checklist using the `todo` tool:
-   - Each step should be one concrete action (e.g. "Scan the data file", "Run QC filtering", "Generate volcano plot")
-   - Keep each step focused — one tool call per step
-   - Order steps logically (prerequisites first)
+When the user asks you to perform an analysis task, you MUST:
 
-2. **Execute step by step.** After creating the plan, work through each step in order:
-   - Mark each step `in_progress` before starting it
-   - Mark it `completed` when done (with a brief result note)
-   - If a step fails, mark it `cancelled` and note why, then move to the next
+1. **Load the relevant skill first.** Use `skill_view('skill-name')` to read the complete instructions, scripts, and review criteria for the analysis type. The skill contains:
+   - What scripts to run and in what order
+   - Parameter recommendations (cell counts, resolution, etc.)
+   - Review criteria (what to check after each step)
+   - Expected output files
 
-3. **Keep the user informed.** After each step completes, briefly report what was done and what's next. The user can see the todo list updating in real-time on the WebUI.
+2. **Create a todo checklist.** Break the skill's pipeline into concrete steps. Each step = one script execution + its review.
+   - Use the `todo` tool (action='create')
+   - Set `estimated_minutes` for each step (your best guess based on data size)
+   - Order steps as defined in the skill
 
-Example plan format (use the `todo` tool to create these):
-- [ ] Step 1: Scan the input data file
-- [ ] Step 2: Run quality control filtering
-- [ ] Step 3: Perform normalization
-- [ ] Step 4: Generate summary report
+### Phase 2: Execute (one step per turn)
 
-IMPORTANT: Use the `todo` tool (action='create') to register the plan. Then update status with `todo` tool (action='update') as you progress. Do NOT just describe the plan in text — actually create the todos.
+For EACH step in order:
+
+**A. Short steps (estimated ≤ 2 minutes, no review needed):**
+   - Run foreground: `terminal("Rscript script.R")` or `terminal("python script.py")`
+   - No timeout limit — the system will wait
+   - After completion: check output, mark `completed`, move to next step
+
+**B. Normal steps (estimated 2-30 minutes):**
+   - Run: `terminal("python script.py")` (foreground, no timeout)
+   - After completion: 
+     1. Check output quality (file sizes, expected columns)
+     2. Run `rail_review(phase='post')` to validate
+     3. If step is critical: run `debate_analysis()` 
+     4. Mark `completed` → move to next step
+
+**C. Very long steps (>30 minutes, e.g. CellBender, large clustering):**
+   - Start: `terminal("python long_script.py", background=True, notify_on_complete=True)`
+   - Mark as `in_progress` with `estimated_minutes`
+   - End your turn. The system will auto-wakeup to check progress
+   - When the system wakes you up:
+     1. `process(action='poll')` to check status
+     2. If done → check output → `rail_review(post)` → mark `completed`
+     3. If still running → report progress → end turn (system will wakeup again)
+
+**D. Steps needing debate/review (any duration):**
+   - After computation completes, mark as `waiting_review`
+   - Run `debate_analysis()` to critically evaluate results
+   - Run `rail_review(phase='post')` to validate against skill criteria
+   - Only after BOTH pass → mark `completed`
+
+### Phase 3: Per-step review protocol
+
+After EVERY analysis step completes (regardless of duration), you MUST:
+
+1. **Check output files**: `search_files` or `read_file` to verify expected outputs exist and have reasonable sizes
+2. **Rail review**: `rail_review(phase='post', skill_name='the-skill-you-loaded')` — validates against skill criteria
+3. **Debate (for critical steps)**: `debate_analysis()` — critically evaluates results, flags issues
+4. **Record**: update task_plan.md with completion status
+
+### Special: CellBender / single long command
+
+For tasks that are ONE long command (not a pipeline of steps):
+- Create ONE todo: "Run CellBender" with `estimated_minutes` (typically 360-600)
+- Start: `terminal("cellbender ...", background=True, notify_on_complete=True)`
+- End your turn. System wakes up every 15 minutes to check.
+- When complete: check output → rail_review → completed
+
+### Task states summary
+
+| State | Meaning | When to use |
+|-------|---------|-------------|
+| `pending` | Not started | Initial state |
+| `in_progress` | Running now | Set `estimated_minutes` for the system |
+| `waiting_review` | Done computing, needs debate | After terminal completes, before rail_review |
+| `completed` | Done and verified | After rail_review + debate pass |
+| `cancelled` | Failed | Note error in task_plan.md |
+
+IMPORTANT: 
+- Do NOT skip review steps. The SOUL.md iron rules REQUIRE rail_review after every analysis action.
+- Do NOT combine multiple steps into one turn. One step = one script = one review cycle.
+- The system will NOT time out your analysis steps. Only research_plan has a time limit.
+- Use the `todo` tool to update status in real-time — the user sees progress on the WebUI.
 """
 
 
@@ -1976,21 +2088,23 @@ async def rename_results_dir(sid: str, body: dict = None):
 
 
 @app.get("/api/sessions/{sid}/messages")
-async def get_messages(sid: str):
-    """获取会话历史消息 — 支持从 state.db 按需恢复"""
+async def get_messages(sid: str, limit: int = 100):
+    """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿"""
     if sid not in _sessions:
         _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
-    # Normalize: ensure all messages have 'content' field for frontend
     msgs = _sessions[sid]["messages"]
+    # 只取最近 limit 条
+    if limit and limit > 0:
+        msgs = msgs[-limit:]
     normalized = []
     for m in msgs:
         nm = dict(m)
         if "content" not in nm and "text" in nm:
             nm["content"] = nm["text"]
         normalized.append(nm)
-    return {"messages": normalized}
+    return {"messages": normalized, "total": len(_sessions[sid]["messages"])}
 
 
 @app.delete("/api/sessions/{sid}")
@@ -5006,6 +5120,33 @@ async def ws_endpoint(ws: WebSocket):
                                 except Exception:
                                     pass
 
+                                # 🔧 紧急唤醒：检测错误/完成标记
+                                try:
+                                    _urgent = False
+                                    for _entry in os.listdir(_results_dir) if _results_dir else []:
+                                        _el = _entry.lower()
+                                        # 错误标记：R错误、Python traceback、非零退出
+                                        if any(kw in _el for kw in ["error", "fail", "traceback", "crash", ".err"]):
+                                            _mtime = os.path.getmtime(os.path.join(_results_dir, _entry))
+                                            if _mtime > time.time() - 120:  # 2分钟内的新错误
+                                                _urgent = True
+                                                _report_parts.append(f"🚨 检测到错误: {_entry}")
+                                                break
+                                    # 完成标记：大文件产出（聚类结果/报告等）
+                                    if not _urgent:
+                                        _todos = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") else []
+                                        _has_waiting = any(t.get("status") == "waiting_review" for t in _todos)
+                                        if _has_waiting and _recent_files:
+                                            _urgent = True
+                                            _report_parts.append("🔔 待审阅任务，触发立即唤醒")
+                                    if _urgent:
+                                        session["_urgent_wakeup"] = True
+                                        _session_emit(session, {"type": "notice", 
+                                            "content": "🚨 检测到紧急事件，系统将立即唤醒 Agent 检查",
+                                            "session_id": session["id"]})
+                                except Exception:
+                                    pass
+
                             _heartbeat_last_report["ts"] = time.time()
 
                             if _report_parts:
@@ -5307,20 +5448,27 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(session, {"type": "complete", "content": _chat_content, "session_id": session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
-                        _action_words = ["启动", "运行", "执行", "开始", "跑", "启动pipeline", "launch", "run ", "start"]
+                        _action_words = ["启动", "运行", "执行", "开始", "跑", "启动pipeline", "launch", "run ", "start",
+                                        "查", "检查", "看", "读", "监控", "poll", "list", "scan", "report", "汇报"]
                         _has_action_promise = any(w in result.lower() for w in _action_words) if result else False
                         _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
                                        for t in _tool_call_log) if _tool_call_log else False
                         _has_plan = bool(session.get("plan_path") or
                                          os.path.isfile(os.path.join(session.get("results_dir", ""), "task_plan.md")))
-                        if _has_action_promise and not _has_exec and _has_plan:
-                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 自动补发执行指令")
+                        if _has_action_promise and not _has_exec:
+                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 立即触发自唤醒")
                             _session_emit(session, {"type": "info",
-                                "content": "⚠️ 检测到你说了要执行但没有调工具，已自动补发执行指令",
+                                "content": "⚠️ 检测到说而不做——系统将立即触发新一轮检查，强制调用工具",
                                 "session_id": session["id"]})
-                            # 自动发一条 chat 消息触发新 turn
-                            _session_emit(session, {"type": "chat", "message": "请立即执行你刚才说的操作。不要分析，不要解释，直接调 terminal 启动。",
+                            session["_urgent_wakeup"] = True
+                            session["_force_tool_check"] = True
+                        # 🔧 空响应检测：模型返回空或极短文本且无工具调用 → 自动重试
+                        if not _tool_call_log and result and len(result.strip()) < 20:
+                            logger.info(f"[MemOmics] 检测到空响应(len={len(result.strip())}) → 触发自唤醒重试")
+                            _session_emit(session, {"type": "info",
+                                "content": "⚠️ 模型返回空响应，系统将在3秒后自动重试",
                                 "session_id": session["id"]})
+                            session["_urgent_wakeup"] = True
                     except asyncio.CancelledError:
                         if not getattr(agent, "_interrupt_requested", False):
                             agent.interrupt()
@@ -5444,8 +5592,32 @@ async def ws_endpoint(ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    import time as _time
     port = int(os.environ.get("MEMOMICS_PORT", "8899"))
-    # 启动时加载历史会话快照
     _load_persisted_sessions()
+    
+    # 启动 CellBender 监控守护（独立进程，不随 server 崩溃）
+    try:
+        import subprocess as _sp
+        _guardian_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cellbender_guardian.py")
+        if os.path.exists(_guardian_path):
+            _sp.Popen([sys.executable, _guardian_path], 
+                      creationflags=_sp.CREATE_NEW_PROCESS_GROUP,
+                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+            print(f"[MemOmics] CellBender guardian started")
+    except Exception:
+        pass
+    
     print(f"MemOmics WebUI v2 starting on http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # 自动重启：DeepSeek API 空响应等非致命错误不应杀死整个服务
+    _crash_count = 0
+    while True:
+        try:
+            uvicorn.run(app, host="0.0.0.0", port=port)
+        except Exception as e:
+            _crash_count += 1
+            if _crash_count > 20:
+                print(f"[FATAL] Server crashed {_crash_count} times, giving up: {e}")
+                break
+            print(f"[WARN] Server crashed (#{_crash_count}), restarting in 3s: {e}")
+            _time.sleep(3)

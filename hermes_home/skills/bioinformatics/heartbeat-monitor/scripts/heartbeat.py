@@ -1,124 +1,185 @@
-# Heartbeat Monitor — 长任务心跳监控脚本
+#!/usr/bin/env python3
 """
-独立后台进程，不依赖 Agent 线程。即使 Agent 阻塞/压缩/重启，心跳也持续记录。
+heartbeat_v2.1.py — 脱离 Agent 生命周期的独立心跳监控（自动发现活跃样本）
+======================================================================
+设计目标：不依赖任何 shell 会话，Hermes 被回收也不死。
+v2.1: 自动发现活跃样本 — 扫描 cellbender_output/*/cellbender_output.log，
+      取最新修改的那个，自动跟随切换，无需硬编码路径。
 
 用法:
-  python heartbeat.py --task "CellBender pipeline" --dir "F:/CellBender_v2" --interval 120
+  python heartbeat_v2.1.py \
+    --task "CellBender_26samples" \
+    --output-dir F:/CellBender_v2/cellbender_output \
+    --seurat-dir F:/CellBender_v2/seurat_h5 \
+    --interval 120 \
+    --output F:/CellBender_v2/monitor_v2.log
 
-输出:
-  monitor.log — 每 N 秒追加一行 JSON，Agent 可随时读取汇报进度
+输出格式:
+  [05:16:58] GPU=47%, 4987 MiB, 44°C | 4CL_SD_D4_2=epoch 70/150 | filtered.h5=3 | seurat.h5=3 | growing=True | cycle=2
+
+改进 vs v2:
+  1. 自动发现: 每轮扫描所有样本日志，自动跟随最活跃的
+  2. --epochs 从日志开头 15 行提取（只在 Command 行出现一次）
+  3. 独立输出文件 monitor_v2.log，避免旧心跳污染
+  4. MCKP/posterior/chunk/DONE 全阶段检测
 """
 
-import argparse, json, os, sys, time, subprocess, glob
+import argparse
+import os
+import re
+import subprocess
+import time
 from datetime import datetime
 
-def get_gpu_info():
-    """获取 GPU 使用率和显存"""
-    try:
-        r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
-                            "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10)
-        parts = [p.strip() for p in r.stdout.strip().split(",")]
-        return {"gpu_util": parts[0] if len(parts)>0 else "?",
-                "vram_used": parts[1] if len(parts)>1 else "?",
-                "vram_total": parts[2] if len(parts)>2 else "?",
-                "temp": parts[3] if len(parts)>3 else "?"}
-    except Exception:
-        return None
+MONITOR_LOG = None
 
-def count_output_files(directory, pattern="*.h5"):
-    """统计输出目录中的产出文件"""
+def log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(line, flush=True)
+    if MONITOR_LOG:
+        try:
+            with open(MONITOR_LOG, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+                f.flush()
+        except Exception:
+            pass
+
+def get_gpu() -> tuple[str, str, str]:
     try:
-        files = glob.glob(os.path.join(directory, "**", pattern), recursive=True)
-        return len(files)
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,temperature.gpu",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        if r.returncode == 0:
+            parts = r.stdout.strip().split(", ")
+            if len(parts) >= 3:
+                return parts[0], parts[1], parts[2]
+    except Exception:
+        pass
+    return "?", "?", "?"
+
+def get_process_count() -> int:
+    try:
+        r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq python.exe"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW)
+        return r.stdout.count("python.exe")
     except Exception:
         return -1
 
-def read_tail(filepath, lines=3):
-    """读取文件最后几行"""
+def find_active_log(output_dir: str) -> tuple[str, str, float]:
+    """扫描 output_dir/*/ 下的日志文件，返回最新修改的 (sample, path, mtime)
+    v2.2: 去掉1小时cutoff + 支持 *_raw_output.log 命名"""
+    best_path, best_sample, best_mtime = "", "", 0.0
+    if not os.path.isdir(output_dir):
+        return "", "", 0.0
     try:
-        if not os.path.exists(filepath): return ""
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-            all_lines = f.readlines()
-        return "".join(all_lines[-lines:]).strip()
+        for entry in os.listdir(output_dir):
+            d = os.path.join(output_dir, entry)
+            if not os.path.isdir(d): continue
+            # 兼容两种日志命名: cellbender_output.log 和 *_raw_output.log
+            for fname in os.listdir(d):
+                if fname == "cellbender_output.log" or fname.endswith("_raw_output.log"):
+                    lp = os.path.join(d, fname)
+                    mt = os.path.getmtime(lp)
+                    if mt > best_mtime:
+                        best_mtime, best_path, best_sample = mt, lp, entry
     except Exception:
-        return ""
+        pass
+    return best_sample, best_path, best_mtime
 
-def get_pipeline_epoch(log_path):
-    """从 pipeline 日志中提取 epoch 进度（CellBender 等训练任务）"""
-    tail = read_tail(log_path, 5)
-    if not tail:
-        return None
-    import re
-    # CellBender: "Epoch XXX/YYY"
-    m = re.search(r"Epoch\s+(\d+)/(\d+)", tail)
-    if m: return f"{m.group(1)}/{m.group(2)}"
-    # 通用进度: "Progress: XX%"
-    m = re.search(r"Progress:\s*(\d+\.?\d*)%", tail)
-    if m: return f"{m.group(1)}%"
-    # "Processing sample X/26"
-    m = re.search(r"(?:Processing|Sample)\s+(\d+)/(\d+)", tail)
-    if m: return f"{m.group(1)}/{m.group(2)}"
-    return None
+def parse_log_status(log_path: str) -> tuple[int, int, str, str]:
+    if not log_path or not os.path.exists(log_path):
+        return -1, -1, "", ""
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+        lines = all_lines[-50:]
+        cur_ep, tot_ep, ts, meaning = -1, -1, "", ""
+        for line in all_lines[:15]:
+            m = re.search(r'--epochs\s+(\d+)', line)
+            if m: tot_ep = int(m.group(1)); break
+        for line in lines:
+            m = re.search(r'\[epoch\s+(\d+)\]', line)
+            if m: cur_ep = int(m.group(1))
+            m = re.search(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})', line)
+            if m: ts = m.group(1)
+            m = re.search(r'Working on chunk \((\d+)/(\d+)\)', line)
+            if m: meaning = f"chunk {m.group(1)}/{m.group(2)}"
+            if 'Succeeded in writing posterior' in line: meaning = "posterior_done"
+            if 'Computing target noise counts' in line: meaning = "computing_mckp"
+            m = re.search(r'Saved (output.*?\.h5)', line)
+            if m: meaning = m.group(1)
+            if re.search(r'(Total elapsed|remove-background: Done)', line): meaning = "DONE"
+            if 'Loading data from' in line: meaning = "loading_data"
+        if meaning: pass
+        elif cur_ep > 0 and tot_ep > 0 and cur_ep >= tot_ep: meaning = "train_done(post-MCKP)"
+        elif cur_ep > 0:
+            meaning = f"epoch {cur_ep}/{tot_ep}" if tot_ep > 0 else f"epoch {cur_ep}/?"
+        return cur_ep, tot_ep, ts, meaning
+    except Exception:
+        return -1, -1, "", ""
+
+def count_files(d: str, p: str) -> int:
+    if not os.path.isdir(d): return 0
+    c = 0
+    try:
+        for _, _, fs in os.walk(d):
+            for f in fs:
+                if p in f or f.endswith(p): c += 1
+    except Exception: pass
+    return c
 
 def main():
-    parser = argparse.ArgumentParser(description="MemOmics heartbeat monitor")
-    parser.add_argument("--task", required=True, help="Task name for logging")
-    parser.add_argument("--dir", required=True, help="Output directory to monitor")
-    parser.add_argument("--interval", type=int, default=120, help="Check interval in seconds")
-    parser.add_argument("--log", default="pipeline.log", help="Pipeline log filename (in --dir)")
-    parser.add_argument("--pattern", default="*.h5", help="Output file pattern to count")
-    parser.add_argument("--gpu", action="store_true", default=True, help="Monitor GPU")
-    parser.add_argument("--pid", type=int, default=0, help="Main process PID to monitor")
-    args = parser.parse_args()
-
-    monitor_path = os.path.join(args.dir, "monitor.log")
-    log_path = os.path.join(args.dir, args.log)
-    started = datetime.now()
-
-    print(f"[heartbeat] Task: {args.task}")
-    print(f"[heartbeat] Monitor dir: {args.dir}")
-    print(f"[heartbeat] Interval: {args.interval}s")
-    print(f"[heartbeat] Log: {monitor_path}")
-
-    iteration = 0
+    global MONITOR_LOG
+    p = argparse.ArgumentParser(description="独立心跳监控 v2.1 (自动发现)")
+    p.add_argument("--task", required=True)
+    p.add_argument("--output-dir", required=True)
+    p.add_argument("--seurat-dir", default=None)
+    p.add_argument("--interval", type=int, default=120)
+    p.add_argument("--output", required=True)
+    a = p.parse_args()
+    MONITOR_LOG = a.output
+    od, sd, iv = a.output_dir, a.seurat_dir or "", a.interval
+    os.makedirs(os.path.dirname(MONITOR_LOG), exist_ok=True) if os.path.dirname(MONITOR_LOG) else None
+    log(f"=== heartbeat_v2.1 (auto-discover) ===")
+    log(f"任务: {a.task} | 目录: {od} | Seurat: {sd or 'N/A'} | 间隔: {iv}s | PID: {os.getpid()}")
+    cyc, stale, las, lls = 0, 0, "", 0
     while True:
-        iteration += 1
-        now = datetime.now()
-        elapsed = (now - started).total_seconds()
-
-        entry = {
-            "ts": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "task": args.task,
-            "iteration": iteration,
-            "elapsed_min": round(elapsed / 60, 1),
-        }
-
-        # GPU
-        if args.gpu:
-            gpu = get_gpu_info()
-            if gpu: entry["gpu"] = gpu
-
-        # 产出文件数
-        n_files = count_output_files(args.dir, args.pattern)
-        entry["output_files"] = n_files
-
-        # Pipeline 进度
-        epoch = get_pipeline_epoch(log_path)
-        if epoch: entry["epoch"] = epoch
-
-        # 进程存活
-        if args.pid > 0:
-            try: os.kill(args.pid, 0); entry["process_alive"] = True
-            except OSError: entry["process_alive"] = False
-
-        # 写入 monitor.log
         try:
-            with open(monitor_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            cyc += 1
+            gu, gv, gt = get_gpu()
+            py = get_process_count()
+            samp, lp, _ = find_active_log(od)
+            fn = count_files(od, "_filtered.h5")
+            mn = count_files(od, "_metrics.csv")
+            sn = count_files(sd, "_filtered_seurat.h5") if sd else 0
+            _, _, _, mean = parse_log_status(lp)
+            grow = False
+            if lp:
+                try:
+                    cs = os.path.getsize(lp)
+                    grow = (cs > lls and samp == las) or (samp != las)
+                    lls = cs
+                except Exception: pass
+            if samp:
+                st = f"{samp}={mean}" if mean else f"{samp}=idle"
+            else:
+                st = "no_active_sample"
+            gl = f"GPU={gu}%, {gv} MiB"
+            if gt != "?": gl += f", {gt}°C"
+            log(f"{gl} | {st} | filtered.h5={fn} | metrics={mn} | seurat.h5={sn} | py={py} | growing={grow} | cycle={cyc}")
+            if not grow and samp == las and mean not in ("DONE", ""):
+                stale += 1
+                if stale >= 3: log(f"⚠️ {stale} 轮未增长, 可能僵死 ({samp})")
+            else: stale = 0
+            las = samp
         except Exception as e:
-            print(f"[heartbeat] Write error: {e}", flush=True)
-
-        time.sleep(args.interval)
+            log(f"❌ heartbeat loop error: {e} — continuing")
+        time.sleep(iv)
 
 if __name__ == "__main__":
     main()

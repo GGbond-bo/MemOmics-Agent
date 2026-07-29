@@ -97,7 +97,7 @@ def detect_environment():
 
 # ── 主逻辑 ──
 print("=" * 60)
-print("ptrepack_h5py_batch.py v2.0")
+print("ptrepack_h5py_batch.py v2.1")
 print(f"SRC: {SRC_DIR}")
 print(f"DST: {DST_DIR}")
 print(f"DRY_RUN: {DRY_RUN}")
@@ -140,7 +140,14 @@ total, skipped, done, failed = 0, 0, 0, 0
 for sample in samples:
     total += 1
     sample_dir = SRC_DIR / sample
-    src = sample_dir / "cellbender_output_filtered.h5"
+    # Auto-discover filtered.h5 using glob (handles any --output naming convention)
+    # Examples: cellbender_output_filtered.h5, {sample}_raw_output_filtered.h5
+    filtered_files = sorted(sample_dir.glob("*_filtered.h5"))
+    if not filtered_files:
+        print(f"[FAIL] {sample} — 无 *_filtered.h5 文件 (检查子目录命名)")
+        failed += 1
+        continue
+    src = filtered_files[0]  # 取第一个匹配项
     # Remove _scRNA suffix for output filename
     dst_name = sample.replace("_scRNA", "") + "_filtered_seurat.h5"
     dst = DST_DIR / dst_name

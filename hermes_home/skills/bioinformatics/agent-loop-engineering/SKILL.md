@@ -51,6 +51,34 @@ category: "sys_internal"
 | `todo` 标记 `completed` 但产出文件不存在 | 磁盘验证 |
 | 连续 3 次 `rail_review(post)` 返回 `passed=false` | Guardian 计数器 |
 
+## 🔴 Turn 启动协议 — 每轮第一步（最高优先级，2026-07-29 部署）
+
+**任何新 turn 开始时**（用户发消息后），必须先执行：
+
+```
+1. process(action='list') — 检查所有后台进程（是否存活）
+2. 发现已死进程 → 读其日志最后 50 行 → 诊断根因 → 立即修复，不等用户问
+3. 发现运行中进程 → process(action='poll') → 汇报进度
+4. 有 task_plan.md → read_file(task_plan.md) — 恢复 Current Phase
+```
+
+### 为什么必须做（2026-07-29 血训）
+
+ArchR 安装用 `terminal(background=True)` 启动 → Agent 回答用户数据问题 → 忘记回来检查
+→ 进程崩了 3 轮没人发现 → 用户问"装好了吗？"时才发现早死了。
+
+**用户质问**："为什么你不会一直盯着呢？要是报错了，岂不是你没办法解决？"
+
+### 架构真相
+
+Agent 是**回合制请求-响应模型**，不是守护进程。两次消息之间 Agent"不存在"。
+`notify_on_complete` 只在同 turn 内可靠。跨 turn → 通知可能丢失。
+
+**补救方案**：每个 turn 开头强制执行上述 4 步。不是技术做不到，是必须坚持做。
+
+### 案例参考
+- `references/case-study-background-install-neglect.md`
+
 ## 防御层（全部来自 SOUL.md iron laws，2026-07-26 部署并验证）
 
 ### 🔒 第 1 层：铁律 -2 — 多源验证（系统级）
@@ -231,6 +259,8 @@ L3: 自审计协议 (铁律 23)
 | **🆕 意图混淆 — 知识问题触发分析流程 (2026-07-27)** | 用户问"CellBender 的 fpr 参数什么意思？"→ 关键词表命中 "CellBender" → `skill_view("cellbender-remove-background")` → 加载数百行操作手册来回答概念问题。或"进度？"→ 触发 `skill_view("heartbeat-monitor")` 加载整个心跳 skill。 | 关键词表是 🔴 必触发，无优先级区分。导致知识问题、进度查询、闲聊都被路由到分析技能加载。**修复：铁律 -3 强制结构化前导码 + 铁律 22 工具权限门禁。`knowledge_ask` 下即使关键词命中也不触发 skill_view。`progress_check` 下连 skill_view 都在白名单外。** | SOUL v3.0 — 2026-07-27 |
 | **🆕 长任务模式误判 — "很快"跳过所有防护 (2026-07-27)** | Agent 说"这个很快，30 秒"→ foreground 模式 → 实际跑了 60 分钟 → 无心跳、无 error_scanner、无后台监控。或 CellBender 被当短任务 foreground 跑，跑了几小时后才发现没部署心跳。 | Agent "预计耗时"判断不可靠。**修复：铁律 21 Phase 启动门禁。每个 Phase 必须声明 Estimated + Mode，未声明 = 禁止启动。声明 5min+ → 强制 background+heartbeat。** | SOUL v3.0 — 2026-07-27 |
 | **🆕 复合意图静默丢失 (2026-07-27)** | 用户"帮我看看质量，不好的话重跑" = 两个意图（check + exec）。铁律 -3 强制单选 → 第二个意图被忽略。 | 当前架构限制：单轮只支持一个意图标签。降级策略：复合意图 → `analysis_plan`（只读），不执行第二个意图。下一版支持意图队列。 | SOUL v3.0 — 2026-07-27 |
+| **🆕 监控承诺 → 遗忘 → 被质问 → 口头回应无工具 (2026-07-29)** | 用户说"记得监督"→ Agent "10分钟后主动报"→ 忘了 → 用户"超过10分钟了你还没有汇报"→ Agent "马上查"但 0 tool call → 用户"进度呢？"→ Agent 再次"马上查"仍 0 tool call → 用户"你没有执行工具吗？死掉一个了也没有及时重跑"。**3 轮连续叙事循环**。 | "马上查"是动作动词，必须有 tool call。Agent 把"承诺回应"当成"已经回应"。规则：用户说"监督/汇报/进度"后 Agent 说"X分钟后报"→ 必须在承诺时间后主动执行三源验证。详见 `references/case-study-monitoring-promise-broken.md` | CellBender 人脑 6 样本 — 2026-07-29 |
+| **🆕 Background Install Neglect — 启动即遗忘 (2026-07-29)** | Agent `terminal(background=True)` 启动 ArchR 安装 → 回答用户其他问题 → 忘记检查后台状态 → 进程崩了 3 轮没人发现。用户问"装好了吗？"时才发现早死了。**用户质问："为什么你不会一直盯着呢？"** | `notify_on_complete` 在 exit≠0 或跨 turn 时不可靠。Agent 是回合制——turn 之间不存在，无法持续监控。**每 turn 开头必须主动 `process(action='list')` + 检查存活。** `terminal(background=True)` ≠ "它会通知我" ≠ "不需要检查"。详见 `references/case-study-background-install-neglect.md` | ArchR — 2026-07-29 |
 | **🆕 工具路径硬编码跨机器崩溃 (2026-07-27)** | Agent 硬编码 `C:/Users/23136/.../ptrepack.exe`，换机器/Python 版本 → 崩溃。 | `write_file` 时应使用运行时探测而非硬编码。**修复：三级探测 (shutil.which → sysconfig → pip show) + 写入 task_plan.md Environment 段。** 详见 cellbender-batch-pipeline `references/tool-path-detection.md` | CellBender — 2026-07-27 |
 
 > 完整案例参考：`references/case-study-cellbender-failures.md`

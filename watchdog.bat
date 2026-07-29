@@ -8,9 +8,9 @@ title MemOmics Watchdog
 :: ============================================================
 
 set MEMOMICS_DIR=E:\MemOmics-Agent
+set HEALTH_URL=http://127.0.0.1:8899/api/health
 set RESTART_DELAY=5
-set MAX_RESTARTS=10
-set HEALTH_URL=http://127.0.0.1:8765/api/sessions
+set MAX_RESTARTS=50
 
 set restart_count=0
 

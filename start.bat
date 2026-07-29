@@ -177,6 +177,17 @@ REM === Step 6: Start ===
 echo.
 echo [START] http://localhost:!PORT!
 echo.
+
+REM === 启动 CellBender 监控守护（如果存在）===
+if exist "F:\CellBender_v2\heartbeat_v2.py" (
+    echo [MONITOR] 启动 CellBender 心跳监控...
+    start "CellBender-Heartbeat" /MIN python "F:\CellBender_v2\heartbeat_v2.py" --task "CellBender_26samples" --output-dir "F:\CellBender_v2\cellbender_output" --seurat-dir "F:\CellBender_v2\seurat_h5" --interval 120 --output "F:\CellBender_v2\monitor_v2.log"
+)
+if exist "F:\CellBender_v2\error_scanner.py" (
+    echo [MONITOR] 启动 CellBender 错误扫描...
+    start "CellBender-ErrorScanner" /MIN python "F:\CellBender_v2\error_scanner.py"
+)
+
 "!VPY!" webui\server.py
 echo.
 echo Exit code: !errorlevel!

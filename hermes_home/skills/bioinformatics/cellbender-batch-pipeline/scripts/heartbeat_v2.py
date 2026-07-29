@@ -71,21 +71,22 @@ def get_process_count() -> int:
         return -1
 
 def find_active_log(output_dir: str) -> tuple[str, str, float]:
-    """扫描 output_dir/*/cellbender_output.log，返回最新修改的 (sample, path, mtime)"""
+    """扫描 output_dir/*/ 下的日志文件，返回最新修改的 (sample, path, mtime)
+    v2.2: 去掉1小时cutoff + 支持 *_raw_output.log 命名"""
     best_path, best_sample, best_mtime = "", "", 0.0
-    cutoff = time.time() - 3600
     if not os.path.isdir(output_dir):
         return "", "", 0.0
     try:
         for entry in os.listdir(output_dir):
             d = os.path.join(output_dir, entry)
             if not os.path.isdir(d): continue
-            lp = os.path.join(d, "cellbender_output.log")
-            if not os.path.isfile(lp): continue
-            mt = os.path.getmtime(lp)
-            if mt < cutoff: continue
-            if mt > best_mtime:
-                best_mtime, best_path, best_sample = mt, lp, entry
+            # 兼容两种日志命名: cellbender_output.log 和 *_raw_output.log
+            for fname in os.listdir(d):
+                if fname == "cellbender_output.log" or fname.endswith("_raw_output.log"):
+                    lp = os.path.join(d, fname)
+                    mt = os.path.getmtime(lp)
+                    if mt > best_mtime:
+                        best_mtime, best_path, best_sample = mt, lp, entry
     except Exception:
         pass
     return best_sample, best_path, best_mtime
@@ -148,33 +149,36 @@ def main():
     log(f"任务: {a.task} | 目录: {od} | Seurat: {sd or 'N/A'} | 间隔: {iv}s | PID: {os.getpid()}")
     cyc, stale, las, lls = 0, 0, "", 0
     while True:
-        cyc += 1
-        gu, gv, gt = get_gpu()
-        py = get_process_count()
-        samp, lp, _ = find_active_log(od)
-        fn = count_files(od, "_filtered.h5")
-        mn = count_files(od, "_metrics.csv")
-        sn = count_files(sd, "_filtered_seurat.h5") if sd else 0
-        _, _, _, mean = parse_log_status(lp)
-        grow = False
-        if lp:
-            try:
-                cs = os.path.getsize(lp)
-                grow = (cs > lls and samp == las) or (samp != las)
-                lls = cs
-            except Exception: pass
-        if samp:
-            st = f"{samp}={mean}" if mean else f"{samp}=idle"
-        else:
-            st = "no_active_sample"
-        gl = f"GPU={gu}%, {gv} MiB"
-        if gt != "?": gl += f", {gt}°C"
-        log(f"{gl} | {st} | filtered.h5={fn} | metrics={mn} | seurat.h5={sn} | py={py} | growing={grow} | cycle={cyc}")
-        if not grow and samp == las and mean not in ("DONE", ""):
-            stale += 1
-            if stale >= 3: log(f"⚠️ {stale} 轮未增长, 可能僵死 ({samp})")
-        else: stale = 0
-        las = samp
+        try:
+            cyc += 1
+            gu, gv, gt = get_gpu()
+            py = get_process_count()
+            samp, lp, _ = find_active_log(od)
+            fn = count_files(od, "_filtered.h5")
+            mn = count_files(od, "_metrics.csv")
+            sn = count_files(sd, "_filtered_seurat.h5") if sd else 0
+            _, _, _, mean = parse_log_status(lp)
+            grow = False
+            if lp:
+                try:
+                    cs = os.path.getsize(lp)
+                    grow = (cs > lls and samp == las) or (samp != las)
+                    lls = cs
+                except Exception: pass
+            if samp:
+                st = f"{samp}={mean}" if mean else f"{samp}=idle"
+            else:
+                st = "no_active_sample"
+            gl = f"GPU={gu}%, {gv} MiB"
+            if gt != "?": gl += f", {gt}°C"
+            log(f"{gl} | {st} | filtered.h5={fn} | metrics={mn} | seurat.h5={sn} | py={py} | growing={grow} | cycle={cyc}")
+            if not grow and samp == las and mean not in ("DONE", ""):
+                stale += 1
+                if stale >= 3: log(f"⚠️ {stale} 轮未增长, 可能僵死 ({samp})")
+            else: stale = 0
+            las = samp
+        except Exception as e:
+            log(f"❌ heartbeat loop error: {e} — continuing")
         time.sleep(iv)
 
 if __name__ == "__main__":

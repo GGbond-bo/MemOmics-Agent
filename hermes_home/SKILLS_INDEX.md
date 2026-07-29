@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (27 skills)
+## 08_报告 - 报告/可视化 (28 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -229,6 +229,7 @@
 | agent-loop-engineering | 防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，或 rail_review(post) code_executed 过短。已部署 G |  | YEL 讨论触发 |
 | scrna-trajectory-analysis | 单细胞轨迹推断/拟时序分析：Monocle3 (R)、Slingshot (R)、scVelo RNA velocity (Python)、CellRank 命运映射 (Python)。从 Seura |  | YEL 讨论触发 |
 | cross-species-atac-conservation | > |  | YEL 讨论触发 |
+| archr-atac-analysis | > |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

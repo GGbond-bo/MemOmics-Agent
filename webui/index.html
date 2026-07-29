@@ -1889,6 +1889,16 @@ function deleteSession(sid) {
   }).catch(function(e) { console.error('delete failed:', e); });
 }
 
+function loadAllMessages(sid) {
+  fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
+    document.getElementById('messages').innerHTML = '';
+    (d.messages || []).forEach(function(m) {
+      if (m.role === 'user') addUserMsg(m.content);
+      else addAssistantMsg(m.content);
+    });
+  });
+}
+
 function switchSession(sid) {
   clearPendingImages();
   // === 保存旧会话的全部渲染状态 ===
@@ -1941,15 +1951,23 @@ function switchSession(sid) {
     ws.send(JSON.stringify({ type: 'switch_session', session_id: sid }));
   }
 
-  // 加载消息历史
-  fetch('/api/sessions/' + sid + '/messages').then(r => r.json()).then(d => {
+  // 加载消息历史（只加载最近100条，防止大会话卡顿）
+  fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => {
     document.getElementById('messages').innerHTML = '';
-    (d.messages || []).forEach(function(m) {
+    var msgs = d.messages || [];
+    msgs.forEach(function(m) {
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content);
     });
+    // 如果还有更多历史消息，显示加载提示
+    if (d.total && d.total > msgs.length) {
+      var moreDiv = document.createElement('div');
+      moreDiv.className = 'more-msgs-hint';
+      moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">📜 显示全部 ' + d.total + ' 条消息 (当前显示最近 ' + msgs.length + ' 条)</span>';
+      document.getElementById('messages').insertBefore(moreDiv, document.getElementById('messages').firstChild);
+    }
     refreshTodos();
-    refreshResults();  // 切换会话时刷新分析结果面板
+    refreshResults();
     // 加载消息后从缓存 HTML 重建进度时间线
     if (cached.timelineHtml) {
       var tmp = document.createElement('div');
