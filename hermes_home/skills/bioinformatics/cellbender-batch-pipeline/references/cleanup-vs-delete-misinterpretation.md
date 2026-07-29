@@ -34,7 +34,7 @@ Agent: [误解为"删除输出目录+从头重跑"]
 
 ## 铁律
 
-> **任何删除操作（`rm -rf` / `del` / `shutil.rmtree` / 覆盖输出目录）→ 必须先向用户确认并等待明确批准。**
+> **任何删除操作（`rm -rf` / `del` / `shutil.rmtree` / 覆盖输出目录）→ 必须先弹出确认询问（列出具体文件+原因），等用户明确批准后才能执行。**
 >
 > Agent 可以杀进程、清理 temp、重启服务。
 > Agent 不能删除 cellbender_output/、results/、filtered.h5、posterior.h5、ckpt.tar.gz 等分析产出物。
@@ -46,7 +46,9 @@ Agent: [误解为"删除输出目录+从头重跑"]
 ```
 rm -rf / del / shutil.rmtree → 检查目标路径
   ├─ 包含 filtered.h5 / posterior.h5 / ckpt.tar.gz / output.h5
-  │   → 拦截 + 要求用户确认
-  └─ 仅包含 temp 文件 / __pycache__ / .pyc
-      → 允许
+  │   → 弹出确认询问："我要删除 [路径]，原因：[…]，可以吗？"
+  │   → 等用户批准后才执行
+  ├─ 仅包含 temp 文件 / __pycache__ / .pyc
+  │   → 自动允许（但需在回复中注明"已自动清理 [文件]"）
+  └─ 不确定归属 → 弹出询问
 ```

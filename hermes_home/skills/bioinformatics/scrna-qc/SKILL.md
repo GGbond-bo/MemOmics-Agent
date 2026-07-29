@@ -237,3 +237,47 @@ Before writing QC code, determine whether `adata.X` contains **raw counts** or *
 
 - **Source**: `skills/external/29_scrnaseq-seurat-core-analysis/scripts/`
 - **Imported scripts**: qc.R, filter_cells.R
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+**本 skill 只执行一个分析步骤。terminal 返回后，你必须立即按顺序完成 5 件事：**
+
+```
+1. rail_review(phase='post', code_executed=<用 read_file 读脚本文件，传入完整代码>)
+   审查：QC图是否生成？过滤后细胞数合理？MT%/ribo%/doublet比例是否在正常范围？
+
+2. debate_analysis(
+     topic="scRNA QC 过滤参数与质量 —— {样本信息}",
+     context="数据: {物种} {组织} 原始{细胞数}cells | 参数: MT<{x}% gene>{y} doublet_method={z} | 结果: 过滤后{保留数}cells ({保留率}%)",
+     knowledge_base_info=<预查的 KB 内容>,
+   )
+   辩论维度：
+   - 参数: MT阈值合适吗？gene数阈值合适吗？doublet方法选对了吗？
+   - 质量: 过滤后细胞质量分布合理吗？有没有过度过滤？
+   - 场景: 衰老/疾病样本是否用了更宽松的阈值？
+
+3. save_conclusions(
+     module="01_decontamination" (或"02_basic"，取决于QC的位置),
+     topic="scRNA QC",
+     debate_json=<debate_analysis 返回的完整 JSON>,
+     output_dir=<session results_dir>
+   )
+   → 写入 {module}/conclusions.md + conclusions.json
+
+4. skill_evolution(action="record_run",
+     skill="scrna-qc",
+     script=<脚本路径>,
+     params_json=<实际过滤参数 JSON>,
+     result_summary=<过滤前后细胞数 + MT%/ribo%分布 + 辩论结论>,
+     quality_score=<1-10>
+   )
+
+5. 更新 task_plan.md: QC Phase 标记完成
+```
+
+**⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。**
+**⛔ 禁止在同一个 terminal 中跑完 QC + 归一化 + 聚类。每次只跑一个分析。**
+**⛔ 如果 debate 裁判给出 confidence=low，必须先调整参数重跑，再 record_run。**

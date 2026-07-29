@@ -249,3 +249,21 @@ results/trajectory_monocle3_{date}/
 └── data/
     └── cds.rds
 ```
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="{当前分析} 参数与结果 —— {样本}",
+     context="参数: {实际参数} | 结果: {输出摘要}",
+     knowledge_base_info=<KB内容>,
+   )
+3. save_conclusions(module="{模块}", topic="{分析名}", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```
+
+⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。
+⛔ debate confidence=low → 调整参数重跑。

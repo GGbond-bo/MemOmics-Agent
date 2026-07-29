@@ -119,4 +119,21 @@ except Exception as e:
 - 潜在问题: [batch 效应 / 高稀疏度 / 死细胞多 / 低深度样本]
 - 推荐 QC 阈值: min_genes={}, max_mito={}
 - 下一步: scrna-qc → scrna-seurat-core-analysis
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="EDA 数据质量评估 —— {样本}",
+     context="数据: {细胞数} cells {基因数} genes | MT%={x} ribo%={y} | 稀疏度={z}",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 数据质量评估准确吗？QC阈值建议合理吗？有batch效应吗？
+3. save_conclusions(module="01_decontamination", topic="EDA", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md → 推荐下一步
 ```

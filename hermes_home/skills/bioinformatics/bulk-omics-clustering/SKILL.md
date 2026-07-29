@@ -638,3 +638,22 @@ After completing clustering:
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="Bulk RNA-seq {DE/富集} 参数与结果 —— {对比组}",
+     context="方法: {DESeq2/edgeR/limma} | 参数: FDR<{x} logFC>{y} | 结果: {n} DEGs",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 方法选对了吗？FDR/logFC阈值合理？DEG量在正常范围？p值校正方法对吗？
+3. save_conclusions(module="02_basic"或"03_advanced", topic="Bulk DEG", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```
+
+⛔ 不准一次跑完所有对比组。每对对比单独跑，单独辩论。
+⛔ debate confidence=low → 调整参数重跑。

@@ -142,8 +142,29 @@ When you need annotate celltype scRNA analysis
 |-------|-------|----------|
 | *(accumulated from runs)* | | |
 
-## References
-
-- Source: Biomni
+- **Source**: Biomni
 - Category: genomics
 - Language: Python
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+```
+1. rail_review(phase='post', code_executed=<完整脚本代码>)
+
+2. debate_analysis(
+     topic="细胞注释结果 —— {样本}",
+     context="方法: {SingleR/scType/scCATCH/手动marker} | 参考: {参考数据集} | 结果: {n}种细胞类型",
+     knowledge_base_info=<KB中的marker基因知识>,
+   )
+   辩论: 注释方法选对了吗？marker基因表达支持注释结果吗？
+   有新颖/未知群体吗？跟KB已知细胞类型一致吗？注释置信度如何？
+
+3. save_conclusions(module="02_basic", topic="Cell Annotation", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+
+⛔ 新亚群/未知群体 → 必须深入辩论：是否独立细胞类型还是亚群？
+⛔ 注释结果必须跟 KB 生物学知识交叉验证。

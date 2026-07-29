@@ -125,3 +125,20 @@ When you need docking autodock vina analysis
     - **不通过 → 修复后重跑 → 成功后调 skill_evolution(action="record_run")**；如果是脚本报错 → **调 skill_evolution(action="record_error")** 记录根因+修复方案
 - 失败时调用  记录错误
 - 修复成功后调用  +  替换脚本
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="分子对接结果 —— {靶点} vs {配体}",
+     context="方法: AutoDock Vina | 参数: exhaustiveness={x} | 结果: best affinity={y} kcal/mol",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 对接分数合理吗？结合位点跟文献一致吗？pose聚类有意义吗？
+3. save_conclusions(module="{模块}", topic="Docking", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

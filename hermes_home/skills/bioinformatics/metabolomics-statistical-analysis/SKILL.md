@@ -210,3 +210,19 @@ Tool: terminal (Rscript)
 - Sumner LW, et al. "Proposed minimum reporting standards for chemical analysis." *Metabolomics*. 2007;3(3):211-221. DOI:10.1007/s11306-007-0070-6 — **MSI 鉴定标准**
 - MetaboAnalystR GitHub: https://github.com/xia-lab/MetaboAnalystR (v4.3.0)
 - MetaboAnalyst 官网: https://www.metaboanalyst.ca/
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="代谢组学分析 —— {样本}",
+     context="方法: {PLS-DA/LIMMA/OPLS-DA} | 参数: VIP>{x} p<{y} | 结果: {n}差异代谢物",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 方法对吗？VIP/p值阈值合理？代谢物鉴定可信度？富集通路跟生物学一致？
+3. save_conclusions(module="03_advanced", topic="Metabolomics", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

@@ -223,3 +223,19 @@ ls E:/专利/ArchR_Output/GroupCoverages/Clusters/ | wc -l
 - 正在写的 RDS（mtime 活跃）→ 等待当前 Phase 完成
 
 详见 `windows-bioinformatics-batch-processing` skill 的 `references/session-resumption-stale-taskplan.md`。
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="ATAC-seq 分析 —— {样本}",
+     context="方法: {ArchR/Signac} | 参数: {peak calling参数} | 结果: {n} peaks {m} motifs",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: peak质量如何？FRiP分数？motif富集合理吗？与RNA数据一致吗？
+3. save_conclusions(module="03_advanced", topic="ATAC", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

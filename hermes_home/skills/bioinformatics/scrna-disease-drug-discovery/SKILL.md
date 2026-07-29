@@ -556,3 +556,20 @@ See [references/target_scoring_methodology.md](references/target_scoring_methodo
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="疾病药物靶点发现 —— {疾病}",
+     context="数据: {细胞数} cells | 方法: {scRNA+遗传证据整合} | 结果: {n}个候选靶点",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 靶点优先级排序合理吗？遗传证据支持吗？与文献已知靶点一致吗？
+3. save_conclusions(module="03_advanced", topic="Drug Target Discovery", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

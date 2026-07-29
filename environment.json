@@ -1,0 +1,59 @@
+{
+  "_version": "1.0",
+  "_description": "MemOmics 全局环境 — 所有分析共享。启动时 validate_env.py 自动读→验→修。",
+  "_last_updated": "2026-07-29T22:00:00",
+  "paths": {
+    "python": {
+      "memomics_venv": "E:/MemOmics-Agent/.venv/Scripts/python.exe",
+      "system_python312": "C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe",
+      "default": "E:/MemOmics-Agent/.venv/Scripts/python.exe"
+    },
+    "r": {
+      "R-4.5.3": {
+        "bin": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
+        "lib_site": "C:/Program Files/R/R-4.5.3/library",
+        "lib_user": "C:/Users/23136/R/R-4.5.3-library",
+        "pkg_count": 30,
+        "note": "仅base包，Seurat/harmony等在R-4.6.1"
+      },
+      "R-4.6.1": {
+        "bin": "C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe",
+        "lib_site": "C:/Program Files/R/R-4.6.1/library",
+        "lib_user": "C:/Users/23136/R/R-4.6.1-library",
+        "pkg_count": 245,
+        "key_pkgs": ["Seurat", "SeuratObject", "harmony", "ArchR", "ggplot2", "dplyr", "devtools", "pak", "BiocManager", "data.table", "ComplexHeatmap", "circlize", "Rsamtools", "GenomicRanges", "BSgenome", "TFBSTools", "motifmatchr", "chromVAR", "patchwork", "ggrepel", "future", "future.apply", "RhpcBLASctl"],
+        "note": "主力分析环境 — scRNA/ATAC/空间组学全栈"
+      },
+      "default": "C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe"
+    },
+    "cli_tools": {
+      "cellbender": {
+        "exe": "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/cellbender.exe",
+        "python": "C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe",
+        "note": "需要TMPDIR=/e/tmp避免C盘空间不足"
+      },
+      "ptrepack": {
+        "exe": "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe",
+        "note": "HDF5压缩工具，CellBender → Seurat h5转换"
+      },
+      "pip": {
+        "conda": "C:/Users/23136/miniconda3/Scripts/pip",
+        "memomics_venv": "E:/MemOmics-Agent/.venv/Scripts/pip.exe"
+      }
+    }
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5070 Ti",
+    "memory_mb": 16303,
+    "cuda_available": true,
+    "pytorch_version": "2.11.0+cu128",
+    "note": "Blackwell sm_120, needs PyTorch>=2.8.0 cu128"
+  },
+  "known_issues": {
+    "cellbender_cuda": "必须传 --cuda 和 --total-droplets-included，否则GPU不工作/全量液滴拖死",
+    "cellbender_tmpdir": "需要 TMPDIR=/e/tmp，C盘空间不足",
+    "r_package_install": "R 4.5.3无RTools45，编译包用type='win.binary'",
+    "h5ad_to_seurat_windows": "SeuratDisk::Convert()在Windows上频繁失败，回退MTX导出方案",
+    "cellbender_checkpoint": "checkpoint恢复有hash不匹配bug，不可靠"
+  }
+}

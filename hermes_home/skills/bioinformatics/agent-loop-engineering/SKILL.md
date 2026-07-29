@@ -1,7 +1,7 @@
 ---
 name: agent-loop-engineering
-description: "防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，知识问题错误触发分析流程，长任务模式误判，意图混淆。已部署 13 层纵深防御：Guardian 快照回滚 + Planner/Executor 双阶段 + 三层意图路由（前导码/工具门禁/自审计）+ Phase 启动门禁。"
-version: "3.0.0"
+description: "防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，知识问题错误触发分析流程，长任务模式误判，意图混淆。已部署 15 层纵深防御：Guardian 快照回滚 + Planner/Executor 双阶段 + 三层意图路由（前导码/工具门禁/自审计）+ Phase 启动门禁 + 自动沉淀门禁 + 环境持久化。"
+version: "3.1.0"
 trigger_keywords:
   - "loop engineering"
   - "agent reliability"
@@ -18,6 +18,8 @@ trigger_keywords:
   - "铁律 21"
   - "铁律 22"
   - "铁律 23"
+  - "铁律 24"
+  - "铁律 25"
   - "多源验证"
   - "产出物验证"
   - "动作承诺"
@@ -31,6 +33,8 @@ trigger_keywords:
   - "工具权限"
   - "自审计"
   - "Phase 门禁"
+  - "自动沉淀"
+  - "环境持久化"
   - "intent routing"
 trigger_level: "YEL 讨论触发"
 category: "sys_internal"
@@ -205,6 +209,31 @@ Estimated >600min → Popen+heartbeat+error_scanner
 **文件位置**：`hermes_home/SOUL.md` 铁律 21 + task_plan.md 模板
 **防什么**：Agent 说"这个很快，30 秒"→ foreground → 实际跑了 60 分钟 → 无心跳、无监控、卡死无人知。强制声明耗时后，Agent 无法用"很快"来跳过长任务设施。
 
+### 🔒 第 14 层：铁律 24 — 自动沉淀门禁（自进化级）【v3.1 新增】
+```
+terminal(分析脚本) 完成 → _pending_record = True
+    ↓
+agent 想跑下一个 terminal → 阻断 ⛔ "先 skill_evolution(action='record_run')!"
+    ↓
+record_run 完成 → _pending_record = False → 放行
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 24
+**防什么**：铁律 7 是执行后收尾无门禁——LLM 经常跳过。铁律 24 升级为与铁律 22/23 同级的三级门禁（执行前拦截 → 执行中监控 → 执行后沉淀）。磁盘上的 `run_log.json`（pipeline 脚本自动生成）即使 LLM 跳过也是永久记录。
+**案例**：CellBender 6 脑样本 2026-07-29 — 6 样本全部跑完但 `skill_evolution(record_run)` 从未调用。
+**设计文档**：`references/iron-law-24-25-self-evolution.md`
+
+### 🔒 第 15 层：铁律 25 — 环境持久化门禁（基础设施级）【v3.1 新增】
+```
+每次分析启动:
+  1. read_file("E:/MemOmics-Agent/environment.json")   ← 全局文件，所有分析共享
+  2. terminal("python E:/MemOmics-Agent/scripts/validate_env.py --verbose")
+  3. exit 0 → 继续 | exit 1 → 已自动修复 | exit 2 → 阻断，提示安装
+```
+**文件位置**：`hermes_home/SOUL.md` 铁律 25
+**防什么**：每次分析都重新 `shutil.which + sysconfig` 探测工具路径（浪费时间且不可靠）；`environment.json` 被放在 per-skill 目录（其他分析无法访问）。全局持久化 + 启动时自动验证修复，禁止硬编码路径。
+**案例**：CellBender 6 脑样本 2026-07-29 — `environment.json` 最初被放在 `cellbender-batch-pipeline/` 下，scRNA/ATAC 等其他分析用不了。
+**设计文档**：`references/iron-law-24-25-self-evolution.md`
+
 ### 三层意图路由纵深防御（v3.0 架构总结）
 
 ```
@@ -281,6 +310,8 @@ L3: 自审计协议 (铁律 23)
 - [ ] SOUL.md 铁律 13 是否已加载？（连续无工具自检）
 - [ ] SOUL.md 铁律 14 是否已加载？（Guardian 快照回滚）
 - [ ] SOUL.md 铁律 15 是否已加载？（Planner/Executor 双阶段）
+- [ ] SOUL.md 铁律 24 是否已加载？（自动沉淀门禁 — terminal 完成 → 强制 record_run）
+- [ ] SOUL.md 铁律 25 是否已加载？（环境持久化 — environment.json 全局文件）
 - [ ] `memomics/bio_tools/guardian.py` 是否存在并可导入？
 - [ ] `memomics/config/guardian_state.json` 是否存在？
 - [ ] 上一轮是否有 `todo completed` 但产出文件缺失？
@@ -292,6 +323,8 @@ L3: 自审计协议 (铁律 23)
 - [ ] 所有工具调用是否在当前 type 白名单内？（铁律 22 + 铁律 23 tools_in_matrix）
 - [ ] Phase 启动前：Estimated + Mode 是否已声明？（铁律 21）
 - [ ] task_plan.md Environment 段是否已探测工具路径？（三级探测）
+- [ ] 上次 terminal(分析脚本) 完成后是否有 record_run pending？（铁律 24）
+- [ ] environment.json 是否通过 validate_env.py 验证？（铁律 25）
 
 ## 验证模式：hermes-verify-*.py
 
@@ -313,6 +346,6 @@ L3: 自审计协议 (铁律 23)
 - TeLLAgent 双 Agent 框架：PMC13213623 (2026) — Validator 校验 Tool Plan + 执行结果
 - Claude Code 系统提示：`"Never end your turn with a promise — execute now"`
 - `memomics/bio_tools/guardian.py` — 已部署的 Guardian 实现
-- `hermes_home/SOUL.md` — 23 条核心铁律（v3.0）
+- `hermes_home/SOUL.md` — 25 条核心铁律（v3.1）
 - `references/guardian-architecture.md` — Guardian 快照回滚架构（状态机图 + 集成点）
 - `references/hermes-verify-pattern.md` — ad-hoc 验证脚本模式（`%TEMP%/hermes-verify-*.py`）

@@ -411,6 +411,51 @@ For full patch details: `E:/cellbender/wiki/patches.md`
 
 | 版本 | 日期 | 改动 |
 |------|------|------|
+| v3.1 | 2026-07-29 | 新增 Terminal 完成后强制协议（铁律 26）：辩论→结论→记录→更新主线 |
 | v3.0 | 2026-07-26 | **4 脚本大重构**：新增 `stage1_to_h5ad.py`（BGI 1列兼容+int32转换+argparse）、`run_pipeline.py`（完整 watchdog 流水线）、`ptrepack_all.py`（批量压缩）、`stats_summary.py`（前后对比统计表）。SKILL.md 重写 Pipeline 节为完整数据流图+快速启动+独立运行示例 |
 | v2.0 | 2026-07-24 | 修正 `learning_rate` 从 `0.001` → `1e-4`（与官方源码对齐）；新增 `--model`/`--total-droplets`/`--low-count-threshold` 等缺失参数；新增 OneCycle 调度说明 + 内部常量表 + 源码引用；新增 Quality Check 表 + Changelog |
 | v1.0 | 2025-06 | 初始版本，含场景自适应参数和 4-Stage Pipeline |
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+**本 skill 只执行一个分析步骤。terminal 返回后，你必须立即按以下顺序完成 5 件事，缺一不可：**
+
+```
+1. rail_review(phase='post', code_executed=<用 read_file 读脚本文件，传入完整代码>)
+   审查：输出文件存在？大小正常？参数与 skill 文档一致？
+
+2. debate_analysis(
+     topic="CellBender 去污染参数与收敛 —— {样本信息}",
+     context="数据: {物种} {组织} {细胞数} | 参数: fpr={x} epochs={y} lr={z} | 结果: 去除{比例}%细胞, 训练loss从{start}→{end}",
+     knowledge_base_info=<预查的 KB 内容>,
+   )
+   辩论维度：
+   - 参数: fpr 选得合理吗？learning_rate 对吗？epochs 够吗？
+   - 收敛: loss 曲线是否收敛？有震荡吗？
+   - 效果: 去除比例在正常范围吗？（5-30%）残留噪声多吗？
+   - 场景适配: 衰老样本用 fpr=0.02 了吗？大数据加 epochs 了吗？
+
+3. save_conclusions(
+     module="01_decontamination",
+     topic="CellBender 去污染",
+     debate_json=<debate_analysis 返回的完整 JSON>,
+     output_dir=<session results_dir>
+   )
+   → 写入 01_decontamination/conclusions.md + conclusions.json
+
+4. skill_evolution(action="record_run",
+     skill="cellbender-remove-background",
+     script=<脚本路径>,
+     params_json=<实际使用的参数 JSON>,
+     result_summary=<去除比例 + 收敛状态 + 辩论结论摘要>,
+     quality_score=<1-10>
+   )
+
+5. 更新 task_plan.md: Phase 1 标记完成, Current Phase 指向 Phase 2
+```
+
+**⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。**
+**⛔ 禁止一次性撰写多个步骤的代码。每次只跑一个分析。**
+**⛔ 如果 debate 裁判给出 confidence=low 或 verdict=modify，必须先修改参数重跑，再 record_run。**

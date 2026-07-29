@@ -1,18 +1,17 @@
 """Knowledge base search tool — searches the MemOmics knowledge base.
 
-v3: 全面增强
-- 按 species/tissue/direction 定位目录
-- 同义词扩展覆盖英文关键词 + 疾病/表型术语
-- 词边界匹配（防止短词误命中）
-- 动态路径检测（不硬编码）
-- 文件内容缓存（避免每次 os.walk 重新读取）
-- 返回完整参数而非片段
-- 知识库不存在时返回建议
+v4: FTS5 + trigram upgrade
+- SQLite FTS5 with trigram tokenizer for fast indexed search
+- Native Chinese support ("细胞通讯" matches "CellChat" via trigram)
+- BM25-based ranking (FTS5 'rank')
+- Retained: path boosting, synonym expansion, file caching
+- Fallback to os.walk if FTS5 unavailable
 """
 import json
 import os
 import re
 import time
+import sqlite3
 import logging
 import threading
 from pathlib import Path
@@ -345,6 +344,65 @@ def _normalize_direction(direction: str) -> list:
     return list(variants)
 
 
+# === FTS5 索引 (in-memory, built once at first search) ===
+_fts_conn = None
+_fts_lock = threading.Lock()
+_fts_initialized = threading.Event()
+_fts_file_map = {}  # rowid → {path, content}
+
+
+def _init_fts() -> bool:
+    """Build FTS5 index from KB files. Thread-safe, idempotent."""
+    global _fts_conn, _fts_file_map
+    if _fts_initialized.is_set() and _fts_conn is not None:
+        return True
+
+    with _fts_lock:
+        if _fts_initialized.is_set():
+            return _fts_conn is not None
+
+        kb_root = _find_kb_root()
+        if kb_root is None:
+            _fts_initialized.set()
+            return False
+
+        try:
+            conn = sqlite3.connect(":memory:")
+            conn.execute("CREATE VIRTUAL TABLE kb_fts USING fts5(path, content, tokenize='trigram')")
+
+            rowid = 0
+            file_map = {}
+            for root, dirs, files in os.walk(kb_root):
+                for fname in files:
+                    if not fname.endswith(('.yaml', '.yml', '.json', '.md')):
+                        continue
+                    fpath = Path(root) / fname
+                    try:
+                        rel_path = str(fpath.relative_to(kb_root))
+                    except ValueError:
+                        continue
+                    content = _read_file_cached(fpath)
+                    if not content or len(content) < 10:
+                        continue
+                    rowid += 1
+                    conn.execute(
+                        "INSERT INTO kb_fts(rowid, path, content) VALUES (?, ?, ?)",
+                        (rowid, rel_path, content)
+                    )
+                    file_map[rowid] = {"path": rel_path, "content": content}
+
+            _fts_conn = conn
+            _fts_file_map = file_map
+            _fts_initialized.set()
+            logger.info(f"kb_search FTS5 index built: {rowid} documents")
+            return True
+        except Exception as e:
+            logger.warning(f"kb_search FTS5 init failed: {e}, falling back to os.walk")
+            _fts_conn = None
+            _fts_initialized.set()
+            return False
+
+
 def _search_kb(query: str, species: str = "", tissue: str = "", direction: str = "") -> dict:
     """Search knowledge base files with enhanced logic (v3)."""
     kb_root = _find_kb_root()
@@ -361,6 +419,64 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
     tissue_variants = _normalize_tissue(tissue)
     direction_variants = _normalize_direction(direction)
 
+    # === v4: Try FTS5 first ===
+    if _init_fts() and _fts_conn is not None:
+        fts_terms = []
+        for q in queries:
+            q_clean = q.strip().replace('"', '').replace("'", "")
+            if q_clean and len(q_clean) >= 1:
+                if q_clean.lower() in _SHORT_WORD_BLACKLIST:
+                    fts_terms.append(f'"{q_clean}"')
+                else:
+                    fts_terms.append(q_clean)
+        if fts_terms:
+            fts_query = " OR ".join(fts_terms)
+            try:
+                rows = _fts_conn.execute(
+                    "SELECT rowid, rank FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT 30",
+                    (fts_query,)
+                ).fetchall()
+                for row in rows:
+                    rowid, rank = row
+                    info = _fts_file_map.get(rowid, {})
+                    rel_path = info.get("path", "")
+                    content = info.get("content", "")
+                    # Path boosting
+                    path_boost = 0
+                    if species_variants:
+                        for sv in species_variants:
+                            if sv.lower() in rel_path.lower():
+                                path_boost += 25; break
+                    if tissue_variants:
+                        for tv in tissue_variants:
+                            if tv.lower() in rel_path.lower():
+                                path_boost += 15; break
+                    if direction_variants:
+                        for dv in direction_variants:
+                            if dv.lower() in rel_path.lower():
+                                path_boost += 10; break
+                    fts_score = max(0, 100 + int(rank))
+                    content_lower = content.lower()
+                    matched_terms = [q for q in queries if _word_match(q, content_lower)][:5]
+                    snippet = content[:2000]
+                    results.append({
+                        "file": rel_path, "score": fts_score + path_boost,
+                        "matched_terms": matched_terms, "path_boost": path_boost,
+                        "snippet": snippet[:1500]
+                    })
+                # Deduplicate and sort
+                seen = {}
+                for r in results:
+                    key = r["file"]
+                    if key not in seen or r["score"] > seen[key]["score"]:
+                        seen[key] = r
+                results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+                return {"query": query, "species": species, "tissue": tissue, "direction": direction,
+                        "total": len(results), "results": results[:15], "engine": "fts5"}
+            except sqlite3.OperationalError:
+                logger.debug("FTS5 query failed, falling back to os.walk")
+
+    # === v3 fallback: os.walk ===
     for root, dirs, files in os.walk(kb_root):
         for fname in files:
             if not fname.endswith(('.yaml', '.yml', '.json', '.md')):

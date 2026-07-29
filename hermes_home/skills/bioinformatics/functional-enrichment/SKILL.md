@@ -201,3 +201,20 @@ For subcluster-level enrichment with ≤15 entries across GO+KEGG. One PDF per s
 
 - **Source**: `skills/external/11_functional-enrichment-from-degs/scripts/`
 - **Imported scripts**: run_enrichment.R
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="富集分析结果 —— {对比组}",
+     context="方法: {clusterProfiler/enrichR/GSEA} | 参数: p<{x} q<{y} | DB: {GO/KEGG/Reactome} | 结果: {n}条显著通路",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 通路跟实验背景吻合吗？top通路合理吗？p值校正方法对吗？
+3. save_conclusions(module="03_advanced", topic="Functional Enrichment", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md

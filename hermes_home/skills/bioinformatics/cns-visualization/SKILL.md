@@ -112,3 +112,21 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 ### 不触发场景
 - 参数有明确知识库推荐且无争议时
 - 纯计算步骤（如保存文件、读取数据）
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+   审查: 图是否生成？分辨率是否发表级(300dpi)？配色是否符合期刊规范？
+2. debate_analysis(
+     topic="可视化图表质量 —— {图表类型}",
+     context="类型: {UMAP/Volcano/Heatmap/DotPlot} | 分辨率: 300dpi | 配色: {期刊要求}",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 图表类型选对了吗？信息密度合理吗？配色无障碍友好吗？
+3. save_conclusions(module="{模块}", topic="Visualization", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

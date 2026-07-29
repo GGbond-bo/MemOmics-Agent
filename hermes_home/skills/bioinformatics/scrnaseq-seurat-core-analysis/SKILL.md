@@ -760,3 +760,41 @@ After completing core scRNA-seq analysis:
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+**Seurat 核心分析包含多个子步骤（归一化→HVG→PCA→聚类→UMAP）。每个子步骤 terminal 返回后，必须立即：**
+
+```
+1. rail_review(phase='post', code_executed=<用 read_file 读脚本文件，传入完整代码>)
+
+2. debate_analysis(
+     topic="{当前步骤} 参数与结果 —— {样本信息}",
+     context="数据: {物种} {组织} {细胞数} | 参数: {实际参数} | 结果: {输出摘要}",
+     knowledge_base_info=<预查的 KB 内容>,
+   )
+   关键辩论点：
+   - 归一化: SCT vs LogNormalize 选对了吗？regress 了什么变量？
+   - HVG: nfeatures=2000/3000？SelectionMethod=vst？
+   - PCA: dims=30 够吗？ElbowPlot 拐点在哪？
+   - 聚类: resolution 选了什么？用 clustree 验证稳定性了吗？
+   - UMAP: dims 和 PCA 一致吗？
+
+3. save_conclusions(
+     module="02_basic",
+     topic="{当前步骤}",
+     debate_json=<debate_analysis 返回的完整 JSON>,
+     output_dir=<session results_dir>
+   )
+
+4. skill_evolution(action="record_run", skill="scrnaseq-seurat-core-analysis", ...)
+
+5. 更新 task_plan.md
+```
+
+**⛔ Seurat 步骤必须逐个执行：不准在一次 terminal 中跑完 归一化+PCA+聚类+UMAP。**
+**⛔ 每个子步骤都要辩论参数。不确定的参数 → 调 debate_analysis。**
+**⛔ 如果 debate 裁判给出 confidence=low，必须先调整参数重跑。**

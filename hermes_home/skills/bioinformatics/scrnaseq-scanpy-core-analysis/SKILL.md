@@ -411,3 +411,23 @@ Exports: H5AD, expression matrices (raw + normalized CSV), cell metadata, UMAP/P
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+**Scanpy 核心分析各子步骤 terminal 返回后，必须立即：**
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="{步骤} 参数与结果 —— {样本}",
+     context="数据: {细胞数}cells | 参数: {实际参数} | 结果: {输出摘要}",
+     knowledge_base_info=<KB内容>,
+   )
+3. save_conclusions(module="02_basic", topic="{步骤}", ...)
+4. skill_evolution(action="record_run", skill="scrnaseq-scanpy-core-analysis", ...)
+5. 更新 task_plan.md
+```
+
+⛔ Scanpy 步骤必须逐个执行：不准在一次 terminal 中跑完所有步骤。
+⛔ 每个子步骤都要辩论参数。

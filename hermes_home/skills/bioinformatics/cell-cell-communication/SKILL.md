@@ -329,3 +329,20 @@ After cell-cell communication analysis, consider:
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="细胞通讯分析 —— {样本}",
+     context="方法: CellChat/LIANA/NicheNet | DB: {数据库} | 结果: {n}条配受体对",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 关键L-R对跟已知生物学一致吗？sender-receiver模式合理吗？
+3. save_conclusions(module="03_advanced", topic="Cell Communication", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

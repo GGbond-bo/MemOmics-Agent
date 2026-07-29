@@ -153,6 +153,26 @@ After all samples complete, extract metrics from `*_raw_output_metrics.csv` file
 - **Markdown 汇总**: 模板和提取脚本 → `references/post-cellbender-summary.md`
 - **Excel 汇总** (用户偏好): 包含 3 个 Sheet（细胞保留 / UMI 去除 / 运行参数），带颜色标注。生成模板 → `references/excel-summary-post-cellbender.md`
 - **`--total-droplets-included` 比例调查** (2026-07-29, 用户质疑后深度调查): 官方 Tutorial 4:1 比例 + GitHub Issue #414 + 实际日志验证 → `references/total-droplets-included-ratio-investigation.md`
+- **收敛指标解读** (2026-07-29, 源码级): `convergence_indicator` 计算公式 + 阈值解释（<1/1-5/>5）→ `references/convergence-indicator.md`
+- **HTML Report 修复** (2026-07-29, Bug #4): `os.replace` 跨盘符失败 → `shutil.move` 修复 → `references/html-report-fix.md`
+
+## 🔧 环境持久化（自进化基础设施，铁律 25）
+
+> **环境文件是全局的** — `E:/MemOmics-Agent/environment.json`，所有分析（scRNA/ATAC/空间/Bulk）共享。不是 per-skill。
+> 本 skill 的 `scripts/validate_env.py` 和 `scripts/auto_record_hook.py` 是 skill 专属实现，但环境数据从全局文件读取。
+
+每次分析启动前，必须先执行三阶段环境验证（SOUL.md 铁律 25）:
+
+```
+Level 1: read_file("E:/MemOmics-Agent/environment.json") → 全局环境
+Level 2: validate each path → os.path.exists()
+Level 3: auto-fix broken paths → update environment.json
+```
+
+- **全局环境文件**: `E:/MemOmics-Agent/environment.json` — tools (python/cellbender/ptrepack/Rscript/pip) + GPU + known_issues
+- **全局验证脚本**: `E:/MemOmics-Agent/scripts/validate_env.py` (exit 0/1/2)
+- **自进化钩子** (本 skill): `scripts/auto_record_hook.py` — 每样本完成后自动写 `run_log.json`（参数+耗时+收敛+产出）
+- **环境内容**: R 4.6.1 (245 pkgs, 主力) + R 4.5.3 (30 base) + Python 3.12 + CellBender + ptrepack + GPU RTX 5070 Ti
 
 ---
 
@@ -166,6 +186,7 @@ After all samples complete, extract metrics from `*_raw_output_metrics.csv` file
 | **🆕 RAM 可用** | > 10 GB free | < 5 GB → 有僵尸进程，杀 `cellbender.exe` 残留 |
 | **🆕 产出文件统计** | `dir *_filtered.h5` 与实际一致 | `done=N/26` 不可信，直接统计磁盘文件数 |
 | **🆕🔥 心跳存活验证** | `stat monitor.log` 最后修改 < 2×interval + `tasklist` 进程存活 | 超过 2×interval 无更新 → 心跳已死 → 立即重新部署 + 执行验证协议。详见 `references/heartbeat-3x-death-timeline.md` |
+| **🆕 convergence_indicator** | < 5（全部样本） | > 5 → 未收敛，延长 epochs 重跑。0-5 = 正常。详见 `references/convergence-indicator.md` |
 
 > ⚠️ 不要信任 `_pipeline_progress.json` 的 `done_count`。直接统计 `cellbender_output/*/cellbender_output_filtered.h5` 文件数。详见 `references/windows-ckpt-oom-fixes.md`。
 
@@ -559,3 +580,25 @@ After all samples complete, extract metrics from `*_raw_output_metrics.csv` file
     - **根因**: Agent 凭记忆判断参数合法性。CellBender 参数多、版本间有变化，记忆不可靠。`--projected-ambient-count-threshold` 控制"基因预期环境计数<阈值就排除"，是可大幅加速的正规参数
     - **正确做法**: 用户提供参数列表 → 第一步是 `cellbender remove-background --help | grep <param>` 或查官方 GitHub README，而不是凭记忆说"不合法"。对所有工具通用——`--help` 是权威信源，LLM 记忆不是
     - **规则**: 对任何工具参数进行"合法性"断言前，必须查官方文档（--help / GitHub README / 官方 vignette）。不查 → 不开口
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="{当前分析} 参数与结果 —— {样本}",
+     context="参数: {实际参数} | 结果: {输出摘要}",
+     knowledge_base_info=<预查的 KB 内容>,
+   )
+   辩论维度：参数合理性、方法选择正确性、与KB生物学知识一致性、统计方法正确性
+3. save_conclusions(module="{模块}", topic="{分析名}", debate_json=<debate返回JSON>, output_dir=<session results_dir>)
+   → 写入 {module}/conclusions.md + conclusions.json
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```
+
+⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。
+⛔ debate confidence=low → 调整参数重跑。

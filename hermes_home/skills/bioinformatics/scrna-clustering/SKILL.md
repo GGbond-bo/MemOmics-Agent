@@ -204,3 +204,27 @@ results/<模块>/<方法>/
 
 - **Source**: `skills/external/29_scrnaseq-seurat-core-analysis/scripts/`
 - **Imported scripts**: cluster_cells.R
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+```
+1. rail_review(phase='post', code_executed=<完整脚本代码>)
+   审查: 聚类数合理？Silhouette分数？clustree稳定性？UMAP分离度？
+
+2. debate_analysis(
+     topic="聚类参数与质量 —— {样本}",
+     context="参数: resolution={x} dims={y} algorithm={Leiden/Louvain} | 结果: {n}个cluster | Silhouette={s}",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: resolution选对了吗？用clustree验证过吗？聚类数跟KB一致吗？
+   是否过度聚类？是否需要harmony/scVI整合后再聚？
+
+3. save_conclusions(module="02_basic", topic="Clustering", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+
+⛔ resolution 至少试 3 个值（如 0.3/0.5/0.8），用 clustree 验证。
+⛔ 每个 resolution 单独辩论。选最优参数后继续。

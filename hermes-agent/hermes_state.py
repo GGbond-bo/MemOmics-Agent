@@ -1077,6 +1077,7 @@ class SessionDB:
                 self._conn.row_factory = sqlite3.Row
                 apply_wal_with_fallback(self._conn, db_label="state.db")
                 self._conn.execute("PRAGMA foreign_keys=ON")
+                self._conn.execute("PRAGMA wal_autocheckpoint=100")  # 默认1000→100，10×更频繁合并WAL
                 self._init_schema()
 
             try:

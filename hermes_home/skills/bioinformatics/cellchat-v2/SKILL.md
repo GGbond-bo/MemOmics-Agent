@@ -265,3 +265,21 @@ for (col in colnames(seurat_obj@meta.data)) {
 
 - **Source**: `skills/external/03_cell-cell-communication/scripts/`
 - **Imported scripts**: run_cellchat.R
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="CellChat 细胞通讯结果 —— {样本}",
+     context="方法: CellChat v2 | DB: {SecretedSignaling/ECM-Receptor/Cell-Cell Contact} | 结果: {n}条显著配受体对",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 关键L-R对跟已知生物学一致吗？通讯网络拓扑合理吗？
+   不同条件下通讯差异显著吗？outgoing/incoming pattern 符合预期？
+3. save_conclusions(module="03_advanced", topic="CellChat", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md

@@ -337,3 +337,20 @@ results/trajectory_monocle3_{date}/
 | 伪时间值和生物学方向相反 | 根节点选错了 | 把 `group_val` 参数改成预期的起点组 |
 | `graph_test()` 结果全部不显著 | 轨迹太短或细胞太少 | 每个分支至少 200 个细胞 |
 | scVelo `recover_dynamics` 耗时过长 | 基因数太多 | `n_top_genes=2000` |
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="轨迹推断结果 —— {样本}",
+     context="方法: {Monocle3/Slingshot/scVelo} | 参数: 根节点={root} | 结果: {n}个分支",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 轨迹方向跟生物学一致吗？根节点选对了吗？分支点有意义吗？
+3. save_conclusions(module="03_advanced", topic="Trajectory", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md

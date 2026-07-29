@@ -267,6 +267,7 @@ def _auto_create_task_plan(session, plan_path):
     plan_path = os.path.join(session["results_dir"], "task_plan.md")
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    rd = session.get("results_dir", "")
     content = f"""# Task Plan: {goal}
 
 ## Goal
@@ -286,7 +287,7 @@ Phase 1
 |-------|-------|
 | current_pid | 待填充 |
 | log_path | 待填充 |
-| alerts_path | {analysis_dir}/alerts.json |
+| alerts_path | {rd}/alerts.json |
 | started_at | {now} |
 
 ## Verification Checklist
@@ -576,8 +577,16 @@ def _build_task_plan_context(session):
     _has_messages = len(session.get("messages", [])) >= 2
 
     if not os.path.isfile(plan_path):
-        # 自动创建：分析意图 + 有对话内容 → 防止用户不知道 task_plan.md
-        if _is_analysis and _has_messages:
+        # 自动创建 task_plan.md：需要 ①数据路径 + ②执行意图 两者同时满足
+        # 仅"帮我看看 E:/data/xxx" → 不创建（用户只是给路径）
+        # "帮我分析/跑/执行 E:/data/xxx" → 创建
+        _msgs = session.get("messages", [])
+        _last_msg = _msgs[-1].get("content", "") if _msgs else ""
+        _has_data_path = bool(re.search(r'[A-Za-z]:[/\\]\S+', _last_msg))
+        _has_exec_kw = any(kw in _last_msg for kw in 
+                          ("跑", "执行", "开始", "分析", "启动", "运行", "run", "start", "analyze"))
+        _is_exec = _intent in ("analysis_exec", "direct_exec")
+        if (_is_exec or (_has_data_path and _has_exec_kw)) and len(_msgs) >= 2:
             return _auto_create_task_plan(session, plan_path)
         return None
     try:
@@ -989,6 +998,66 @@ def ascii_lang_ratio(text):
     if total == 0:
         return 0
     return len(_re_mod.findall(r'[a-zA-Z]', text)) / total
+
+
+def _auto_search_knowledge(user_text: str) -> str:
+    """分析任务启动时自动预查知识库。从 user_text 提取物种/组织/方向，调用 search_knowledge。
+    返回 JSON 或空字符串。失败时返回空，不阻断分析流程。
+    """
+    try:
+        from memomics.bio_tools.kb_search import search_knowledge
+        t = user_text.lower()
+        # 提取物种
+        species = ""
+        for s in ["human", "人", "mouse", "小鼠", "rat", "大鼠", "zebrafish", "斑马鱼",
+                   "drosophila", "果蝇", "c.elegans", "线虫", "arabidopsis", "拟南芥",
+                   "pig", "猪", "monkey", "猴子", "macaque", "猕猴"]:
+            if s in t or s.lower() in t:
+                species = s
+                break
+        # 提取组织
+        tissue = ""
+        for ti in ["liver", "肝脏", "肝", "brain", "脑", "大脑", "lung", "肺", "heart", "心脏",
+                    "kidney", "肾脏", "肾", "blood", "血液", "血", "spleen", "脾", "脾脏",
+                    "intestine", "肠道", "肠", "skin", "皮肤", "muscle", "肌肉", "bone", "骨",
+                    "marrow", "骨髓", "pancreas", "胰腺", "tumor", "肿瘤", "癌"]:
+            if ti in t:
+                tissue = ti
+                break
+        # 提取方向
+        direction = ""
+        for d in ["aging", "衰老", "cancer", "癌症", "development", "发育", "分化", "differentiation",
+                   "immunity", "免疫", "inflammation", "炎症", "infection", "感染", "metabolism", "代谢",
+                   "regeneration", "再生", "fibrosis", "纤维化", "apoptosis", "凋亡", "autophagy", "自噬",
+                   "senescence", "衰老", "氧化应激", "oxidative stress"]:
+            if d in t:
+                direction = d
+                break
+        # 从方向再修一下 species（如"小鼠肝脏衰老"中"小鼠"可能被"衰老"的 sen- 部分匹配到 species）
+        if not species:
+            for s in ["human", "mouse", "小鼠", "rat", "大鼠"]:
+                if s in t:
+                    species = s
+                    break
+        
+        query = user_text[:200]  # 截取前 200 字符
+        result_json = search_knowledge(query=query, species=species, tissue=tissue, direction=direction)
+        result = json.loads(result_json)
+        if result.get("total", 0) == 0:
+            return ""  # 无 KB 匹配，不注入空内容
+        # 格式化 KB 结果为可读文本
+        lines = [f"物种={species or '未识别'}, 组织={tissue or '未识别'}, 方向={direction or '未识别'}",
+                 f"匹配条目: {result.get('total', 0)}"]
+        for item in result.get("results", [])[:5]:
+            fname = item.get("file", "")
+            snippet = item.get("snippet", "")
+            if fname:
+                lines.append(f"\n### {fname}")
+            if snippet:
+                lines.append(str(snippet)[:500])
+        return "\n".join(lines)
+    except Exception:
+        return ""  # 失败不阻断
 
 
 def _detect_domain_from_text(text: str) -> str:
@@ -4646,11 +4715,64 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 注入 results_dir 到 Agent 系统提示词，确保输出文件写到正确位置
                 rd = session.get("results_dir", "")
-                if rd:
+                # 🔧 按意图裁剪 system prompt：
+                #   无数据路径 → SOUL.md only (~15KB) 轻量响应
+                #   有数据路径 + 分析执行 → SOUL.md + detail + skills_index + PLANNING
+                import re as _re_path
+                _has_data_path = bool(_re_path.search(r'[A-Za-z]:[/\\]\S+', user_text)) if user_text else False
+                _is_heavy = (_intent in ("analysis_exec", "direct_exec")) or (_has_data_path and _intent not in ("chat", "self_intro"))
+                if not _is_heavy:
+                    # 轻量：闲聊/知识/进度/无数据路径的分析讨论 → 不注入 skills 和 detail
                     agent.ephemeral_system_prompt = (
-                        (agent.ephemeral_system_prompt or "")
-                        + f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+                        f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+                        if rd else ""
                     )
+                else:
+                    # 重量：有数据路径 + 分析执行 → 注入全量
+                    _soul_detail = ""
+                    try:
+                        _detail_path = os.path.join(HERMES_HOME_DIR, "SOUL-detail.md")
+                        if os.path.isfile(_detail_path):
+                            with open(_detail_path, encoding="utf-8") as _f:
+                                _soul_detail = _f.read()
+                    except Exception:
+                        pass
+                    _skills = _read_skills_index()
+                    agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                    if rd:
+                        agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+
+                    # 🔧 分析任务自动预查知识库 + 方法路线引导
+                    _kb_result = _auto_search_knowledge(user_text)
+                    if _kb_result and '"total": 0' not in _kb_result.split('\n')[0] if _kb_result else False:
+                        # KB 有匹配 → 注入背景知识
+                        agent.ephemeral_system_prompt += (
+                            "\n\n## 📚 知识库预查询（线索，非文献来源）\n"
+                            "以下是系统自动从知识库检索的内容，**仅作为分析线索和背景参考**。\n"
+                            "⚠️ KB 中的文献引用可能缺少 PMID/DOI，**不可直接作为辩论引用来源**。\n\n"
+                            "**铁律 5 强制要求**：\n"
+                            "1. 辩论前必须先调 `search_papers()` 获取带 PMID/DOI 的真实文献\n"
+                            "2. KB 内容作为 `knowledge_base_info` 传入辩论，提供生物学背景\n"
+                            "3. 辩论中**只能引用 search_papers 返回的真实文献**\n\n"
+                            + _kb_result
+                        )
+                    elif _intent in ("analysis", "research_plan", "analysis_plan"):
+                        # KB 无匹配 → 引导使用 skill 体系构建分析路线
+                        # 🔑 关键：限定领域，不让 RNA 问题搜到空间组
+                        _detected_domain = _detect_domain_from_text(user_text)
+                        _domain_hint = f"（系统推断领域: {_detected_domain}）" if _detected_domain else ""
+                        _domain_list = f"skill_list_by_domain(domain=\"{_detected_domain}\")" if _detected_domain else "skill_list_by_domain(domain=<推断的领域>)"
+                        agent.ephemeral_system_prompt += (
+                            f"\n\n## 📋 分析路线引导（KB 无精确匹配，请使用 Skill 体系）{_domain_hint}\n"
+                            "当前知识库中未找到精确匹配。请**不要用预训练知识编造**，按以下步骤从 skill 体系构建路线：\n\n"
+                            f"1. **按领域精确查询**：调用 `{_domain_list}` 列出该领域所有技能\n"
+                            "2. **关键词搜索**：调用 `skill_search(query=\"<用户问题核心词>\")` 补充搜索\n"
+                            "3. **加载关键 skill**：对匹配的 skill 调用 `skill_view(name=\"skill名\")` 获取方法论、参数、参考文献\n"
+                            "4. **从 skill 构建路线图**：skill 中的 Pipeline/Workflow 节 = 分析路线图；References 节 = 文献支撑\n"
+                            "5. **必要时补充文献**：skill 中的 References 可能不够新 → 调 `search_papers()` 补充最新文献\n\n"
+                            f"⛔ 领域限定：用户问题推断为 {_detected_domain or '通用'} 领域，请只查询该领域相关 skill。\n"
+                            "⛔ 不要用 LLM 预训练知识凭空编造分析路线。skill_index 里的 368 个 skill 是权威来源。"
+                        )
 
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail=""):
@@ -5403,7 +5525,7 @@ async def ws_endpoint(ws: WebSocket):
                             did_call = any(t for t in _tool_call_log if t.get("tool") == "memomics_pipeline")
                             if not did_call:
                                 try:
-                                    import sys, os
+                                    import sys
                                     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "agent"))
                                     from memomics_pipeline import modules_to_todos
                                     default_ids = ["02", "03", "04"]
@@ -5475,6 +5597,7 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(session, {"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                         _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
                     except Exception as e:
+                        import traceback
                         _session_emit(session, {"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": session["id"]})
                     finally:
                         session["running_agent"] = None

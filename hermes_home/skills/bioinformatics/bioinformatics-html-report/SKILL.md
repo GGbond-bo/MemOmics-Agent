@@ -428,3 +428,28 @@ parameter sources, use `"标准分析方法"` or `"standard workflow"`.
 - post 不通过 → **阻断下一步**，修正后重跑，直到通过
 - 失败时调用  记录错误
 - 修复成功后调用  +  替换脚本
+
+
+---
+
+## 📂 读取分析结论与辩论记录（铁律 26 配套）
+
+**生成 HTML 报告前，必须先读取各分析模块的 conclusion 和 debate 文件：**
+
+```
+1. 列出 results/{session_dir}/ 下所有子目录
+2. 对每个分析模块（01_decontamination/ 02_basic/ 03_advanced/...）:
+   a. read_file("{module}/conclusions.md") — 读取辩论结论（参数/方法/结果/建议）
+   b. read_file("{module}/conclusions.json") — 读取结构化结论（供程序化填充）
+   c. 列出 "{module}/log/debate_*.json" — 读取完整辩论记录
+3. read_file("results/{session_dir}/summary_conclusions.md") — 读取汇总结论（如有）
+```
+
+**报告中的辩论结论 section 必须包含：**
+- 每个分析步骤的结论摘要（从 conclusions.md 提取）
+- 辩论裁判裁决（从 debate_*.json 的 judge_verdict 提取）
+- 推荐参数和置信度
+- 未解决问题和建议
+
+**⛔ 禁止手工整理辩论内容。必须从 conclusions.md + debate_*.json 读取。**
+**⛔ 如果 conclusions.md 不存在 → 提示用户先完成分析步骤的辩论，再生成报告。**

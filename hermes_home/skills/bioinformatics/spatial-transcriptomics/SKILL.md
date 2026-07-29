@@ -378,3 +378,19 @@ When presenting results to the user, the agent should:
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="空间转录组 —— {样本}",
+     context="技术: {Visium/MERFISH/Xenium} | 参数: {spot数} | 结果: {n}个空间域",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 空间域跟组织学一致吗？marker基因空间表达模式合理吗？
+3. save_conclusions(module="03_advanced", topic="Spatial", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```

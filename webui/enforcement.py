@@ -62,6 +62,8 @@ class EnforcementState:
         self.rail_post_done: bool = False
         self.debate_done: bool = False
         self.analysis_level: str = "chat"
+        self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
+        self._last_terminal_result: str = ""  # 最近 terminal 输出（提取参数用）
         self.terminal_count: int = 0
         self.tool_history: list = []
         self.warnings: list = []
@@ -186,6 +188,12 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
         elif tool_name == "terminal":
             es.terminal_count += 1
+            # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 阻断
+            if es._pending_record and es.analysis_level != "chat":
+                es.warnings.append(f"terminal#{es.terminal_count}: 上一步未完成 record_run")
+                _emit("enforcement", action="blocked",
+                      message="⛔ 上一步 terminal 完成后未记录经验！请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。",
+                      require=["skill_evolution"])
             # 分析级操作且未加载 skill → 警告
             if es.analysis_level in ("analysis", "statistical") and not es.skills_loaded:
                 es.warnings.append(f"terminal#{es.terminal_count}: 未加载任何 skill")
@@ -210,10 +218,15 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         es.tool_history.append({"tool": tool_name, "args": str(args)[:200], "time": time.time(), "phase": "complete"})
 
         if tool_name == "terminal":
-            es.rail_post_done = False  # 新 terminal → 需要新的 post 审查
+            es.rail_post_done = False
+            # 保存结果用于后续参数提取
+            es._last_terminal_result = str(result)[:1000] if result else ""
+            # 设置 pending 标记：所有非闲聊级别都需要 record
+            if es.analysis_level != "chat":
+                es._pending_record = True
 
             # 自动提示：需要 rail_review(post)
-            if es.analysis_level in ("analysis", "statistical"):
+            if es.analysis_level in ("analysis", "statistical", "lightweight"):
                 _emit("enforcement", action="require",
                       message="🔍 terminal 执行完毕。请调用 rail_review(post) 进行执行后审查。",
                       require=["rail_review(post)"])
@@ -248,11 +261,11 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
             # rail_review(post) 完成后 → 自动 record_run + 触发 debate
             if es.rail_post_done:
-                # 自动记录成功运行到 skill（自进化）
-                if es.analysis_level in ("analysis", "statistical") and es.skills_loaded:
+                # 自动记录成功运行到 skill（自进化）— 扩展到所有非闲聊级别
+                if es.analysis_level != "chat" and es.skills_loaded:
                     try:
                         import importlib.util as _iu2
-                        import os as _os2
+                        import os as _os2, re as _re
                         _sep2 = _iu2.spec_from_file_location(
                             "skill_evolution",
                             _os2.join(_os2.dirname(_os2.abspath(__file__)),
@@ -260,18 +273,29 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         )
                         _se = _iu2.module_from_spec(_sep2)
                         _sep2.loader.exec_module(_se)
+                        # 尝试从 terminal 输出提取参数
+                        _params = "{}"
+                        _species, _tissue, _direction = "", "", ""
+                        _tr = es._last_terminal_result.lower()
+                        for _kw, _f in [("human", "human"), ("mouse", "mouse"), ("monkey", "monkey"), ("macaque", "macaque")]:
+                            if _kw in _tr: _species = _f; break
+                        for _kw, _f in [("muscle", "muscle"), ("brain", "brain"), ("liver", "liver"), ("blood", "blood"), ("lung", "lung")]:
+                            if _kw in _tr: _tissue = _f; break
+                        _m = _re.search(r'(\d+)\s*(?:cells|细胞)', _tr)
+                        if _m: _params = f'{{"cell_count": {_m.group(1)}}}'
                         for _sk in es.skills_loaded:
                             _se.skill_evolution(
                                 action="record_run",
                                 skill_name=_sk,
                                 script_name=f"session_{sid}_terminal{es.terminal_count}",
-                                species="", tissue="", direction="",
-                                params_used="{}",
-                                result_summary=f"rail_review(post) passed. session={sid}, terminal_count={es.terminal_count}",
+                                species=_species, tissue=_tissue, direction=_direction,
+                                params_used=_params,
+                                result_summary=f"rail_review(post) passed. session={sid}",
                                 score=7
                             )
                         _emit("enforcement", action="recorded",
-                              message=f"🧬 自动 record_run: {', '.join(es.skills_loaded)}")
+                              message=f"🧬 自动 record_run: {', '.join(es.skills_loaded)} species={_species} tissue={_tissue}")
+                        es._pending_record = False  # 已记录，清除标记
                     except Exception as _e:
                         _emit("enforcement", action="warning",
                               message=f"⚠️ record_run 失败: {_e}")

@@ -59,6 +59,21 @@ prerequisites:
 ### 规则2.5: 创建新 skill 时**必须同时生成 `skill.json`**
 > **⚠️ 历史教训**：`skill_evolution(action="record_run")` 的 `_record_success` 函数依赖 `skill.json` 存储 proven_params。如果 `skill.json` 不存在，`record_run` 会**静默失败**——返回 Success 但不落盘。这是所有新 skill 的共性缺陷源。2026-07-08 会话中 `sctour-trajectory-inference` 的 4 次 record_run 均因缺少 skill.json 而静默丢失。
 
+### Step 7.5: 注册触发场景到 SOUL.md 和 SOUL-detail.md
+
+新 skill 创建后，必须注册触发关键词以保证下次触发：
+
+1. **SOUL.md 必触发列表**: 在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 前插入:
+   `| "<触发词>" | skill_view("<skill-name>") |`
+
+2. **SOUL-detail.md 领域表**: 如果新 skill 属于已有领域，确认领域表覆盖
+
+3. **SOUL-detail.md 场景触发表**: 如果有特定触发场景，追加到场景表
+
+⛔ 未注册触发场景 → 后续分析无法自动触发此 skill。
+
+---
+
 创建 SKILL.md 后，**必须立即在同目录下创建 `skill.json`**，格式如下：
 
 ```json
@@ -130,7 +145,10 @@ prerequisites:
 | 3 | **安装包完整** | prerequisites 的 r_packages/python_packages 是否覆盖了所有依赖？是否包含隐式依赖（如 scTour 需要 scikit-misc 但不自动安装）？用 `check_env` 验证 | 缺失 → 补全到 prerequisites，在 Common Issues 中说明隐式依赖的安装方法 |
 | 4 | **使用场景说明** | When to Use 是否明确写了「应该使用」和「不应该使用」两种场景？是否有量化阈值（如最小细胞数、最小基因数）？ | 不完整 → 补充「不应该使用」场景和量化阈值 |
 | 5 | **查询官网留痕** | Step 1 查询的官网 URL 是否记录在 References 中？是否有 `web_search` + `web_extract` 的调用证据？ | 未留痕 → 补录官方文档 URL 到 References |
-| 6 | **🔴 SOUL.md 注册** | 新 skill 是否已注册到 `hermes_home/SOUL.md` 的技能匹配表中？用 `grep` 搜索 skill name 确认存在。**这是最关键的一项**：未注册 → 后续分析无法自动触发 skill_view | 未注册 → 按 Step 7 格式在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 上方插入新行 |
+| 6 | **🔴 SOUL.md 注册** | 新 skill 是否已注册到 SOUL.md 技能匹配表？用 grep 确认。未注册 → 后续分析无法自动触发 skill_view | 未注册 → 在 AUTO_SKILL_INSERT_MARKER 上方插入 |
+| 7 | **🔴 铁律 26 协议块** | 新 SKILL.md 末尾是否有终端完成后强制协议块？ | 缺失 → 追加协议块 |
+| 8 | **🔴 SOUL-detail.md 注册** | 触发场景是否注册到 SOUL.md 必触发列表或 SOUL-detail.md？ | 缺失 → 追加触发条目 |
+| 9 | **🔴 SOUL.md 注册** | 新 skill 是否已注册到 `hermes_home/SOUL.md` 的技能匹配表中？用 `grep` 搜索 skill name 确认存在。**这是最关键的一项**：未注册 → 后续分析无法自动触发 skill_view | 未注册 → 按 Step 7 格式在 `<!-- AUTO_SKILL_INSERT_MARKER -->` 上方插入新行 |
 
 **审核执行方式**：
 - 在 terminal 中逐项执行检查，每项检查输出 ✅ 通过 / ❌ 不通过 + 原因
@@ -519,6 +537,21 @@ results/<模块>/<方法>/
 
 ## References
 <文献引用>
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 新 skill 模板自带）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(topic="{分析描述}", context="参数+结果", knowledge_base_info=<KB>)
+3. save_conclusions(module="{模块}", topic="{分析名}", ...)
+   → 写入 {module}/conclusions.md + conclusions.json
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```
+
+⛔ 创建新 skill 时，此协议块自动包含在 SKILL.md 末尾。
 ```
 
 ---

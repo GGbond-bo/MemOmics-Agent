@@ -234,3 +234,25 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 - DEG 过少 → 放宽 FDR / 降低 logFC 阈值 / 检查分组对比设计
 - DEG 过多 → 收紧 FDR / 提高 logFC 阈值 / 检查是否未校正批次
 - MA 不对称 → 检查归一化 / 可能需 TMM/quantile 替代
+
+
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26 · 读完本 skill 即生效）
+
+```
+1. rail_review(phase='post', code_executed=<完整脚本代码>)
+
+2. debate_analysis(
+     topic="DEG 参数与结果 —— {对比组}",
+     context="对比: {A} vs {B} | 方法: {DESeq2/limma/Wilcox} | 参数: FDR<{x} logFC>{y} | 结果: {up}个上调 {down}个下调",
+     knowledge_base_info=<预查的 KB 内容>,
+   )
+   辩论: FDR/logFC阈值合理？方法假设满足？DEG数量合理？跟KB已知marker一致？
+
+3. save_conclusions(module="02_basic"或"03_advanced", topic="DEG", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+
+⛔ 不准一次跑完所有对比组。每对对比单独跑，单独辩论。
+⛔ debate confidence=low → 调整参数重跑。

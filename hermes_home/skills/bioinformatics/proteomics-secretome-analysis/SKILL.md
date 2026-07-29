@@ -157,3 +157,19 @@ results/{session_dir}/
 - 本 skill 创建于 hES-4CL-EB 上清分泌蛋白组分析
 - 抗衰老证据体系参考 `references/anti-aging-evidence-tiers.md`
 - 分类逻辑细节参考 `references/classification-logic.md`
+---
+
+## ⛔ Terminal 完成后强制协议（铁律 26）
+
+```
+1. rail_review(phase='post')
+2. debate_analysis(
+     topic="蛋白组学分析 —— {样本}",
+     context="方法: {limma/DEP/MSstats} | 参数: FDR<{x} | 结果: {n}差异蛋白",
+     knowledge_base_info=<KB内容>,
+   )
+   辩论: 方法选对了吗？阈值合理？差异蛋白跟RNA一致吗？富集通路合理？
+3. save_conclusions(module="03_advanced", topic="Proteomics", ...)
+4. skill_evolution(action="record_run")
+5. 更新 task_plan.md
+```
