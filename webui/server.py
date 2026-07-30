@@ -5460,7 +5460,7 @@ async def ws_endpoint(ws: WebSocket):
                                 except Exception:
                                     pass
 
-                                # 🔧 Layer2.5: 读取 cron agent 写入的 PROGRESS.md + alerts.json
+                                # 🔧 Layer2.5: 读取 cron agent 写入的 PROGRESS.md + alerts.json + .heartbeat_stop
                                 # 路径优先级：analysis_dir > results_dir
                                 try:
                                     _scan_dirs_for_progress = []
@@ -5471,6 +5471,12 @@ async def ws_endpoint(ws: WebSocket):
                                     if _rd and os.path.isdir(_rd) and _rd not in _scan_dirs_for_progress:
                                         _scan_dirs_for_progress.append(_rd)
                                     for _scan_dir in _scan_dirs_for_progress:
+                                        # 检测 .heartbeat_stop 标记（cron agent 自检完成）
+                                        _stop_path = os.path.join(_scan_dir, ".heartbeat_stop")
+                                        if os.path.isfile(_stop_path):
+                                            _report_parts.append("🏁 cron: 任务完成，心跳已停止")
+                                            session["_urgent_wakeup"] = True
+                                            break
                                         # 读 PROGRESS.md（cron agent 写入的进度摘要）
                                         _progress_path = os.path.join(_scan_dir, "PROGRESS.md")
                                         if os.path.isfile(_progress_path):
