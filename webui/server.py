@@ -1226,11 +1226,12 @@ def _classify_intent(text: str):
                  "cancel", "abort", "stop the task", "stop task",
                  "stop the analysis", "stop analysis",
                  "kill the job", "terminate",
+                 "不要跑", "别跑",     # ← "不要跑cellbender了" 的关键
                  ]
     if any(kw in t for kw in CANCEL_KW):
         return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
-    # 停止/暂停 + 任务相关词 → cancel
-    if ("停止" in t or "暂停" in t) and any(kw in t for kw in 
+    # 停止/暂停/取消/不要/别 + 任务相关词 → cancel
+    if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and any(kw in t for kw in 
         ["任务", "分析", "跑", "cellbender", "训练", "计算", "进程", "job"]):
         return ("cancel_task", 0.85, {"reason": "stop_with_context"})
     # 取消 + 任务相关词 → cancel（排除问句）
