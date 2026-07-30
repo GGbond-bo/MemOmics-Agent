@@ -14,6 +14,23 @@ related_skills:
 
 # CellBender 批量样本 Pipeline
 
+## 🔴 CRITICAL: AUTO-START FORBIDDEN
+
+**NEVER auto-start CellBender without the user's explicit, unambiguous request.** 
+
+The agent has repeatedly made this catastrophic error: reading stale `task_plan.md` from a wrong session and auto-restarting CellBender pipelines. User has been furious 5+ times.
+
+**Before ANY CellBender action:**
+1. Verify the `task_plan.md` Goal matches what the user actually said in the **current** conversation
+2. If Goal is a placeholder ("你是谁？") or references tasks the user never mentioned → **ABORT immediately**
+3. If ANY doubt about whether the user asked for CellBender → **ASK**, do not assume
+4. When user says "cancel" / "don't run" / "didn't ask for this" → **in the SAME response (do NOT wait for the next wake-up):**
+   - (a) kill ALL CellBender processes (taskkill /F /PID, never /IM python.exe)
+   - (b) remove pipeline scripts (`run_remaining.py`, `_heartbeat.py`, `_pipeline_progress.json`, `_heartbeat.json`, `monitor_v2.log`)
+   - (c) **IMMEDIATELY rewrite task_plan.md** with Goal set to actual session tasks, all CellBender phases removed, and a `⛔ BLOCKED_KEYWORDS` section explicitly listing: CellBender, Monkey, any task the user explicitly cancelled
+   - ⛔ **If task_plan.md is NOT rewritten NOW, the next system wake-up WILL re-read the stale task_plan and restart the pipeline — causing the user to have to say "cancel" yet again**
+5. Cross-session contamination: `system_log.jsonl` from other sessions (memomics-1c1890da) is NOT a valid source of tasks for the current session
+
 ## When to Use
 
 - 10+ 样本需要串行跑 CellBender（总时长 > 1 小时）

@@ -1606,19 +1606,21 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     elif intent in ("progress_check",):
         lines += [
             "用户正在查询进度/状态。只做三源交叉验证，不做分析。",
-            "1. terminal('nvidia-smi') 或 terminal('tasklist') — 检查GPU/进程",
-            "2. search_files 或 terminal('dir <输出目录>') — 检查磁盘产出",
-            "3. read_file('<pipeline.log>', offset=-50) — 检查日志尾部",
-            "三个查完 → 交叉验证一致 → 汇报状态",
-            "⛔ 不要新建 task_plan。不要启动新任务。不要追问主线。",
+            "⛔ 即使你认为答案显而易见（如'没有后台任务'），也必须调工具验证！",
+            "⛔ 不调工具直接说'没有' = 违反铁律-2（不查就答=撒谎）。",
+            "1. terminal('nvidia-smi') — GPU状态",
+            "2. terminal('tasklist | findstr cellbender') 或 process(action='list') — 进程",
+            "3. search_files 或 terminal('dir <输出目录>') — 磁盘产出",
+            "三个查完 → 交叉验证一致 → 才能开口汇报。",
+            "⛔ 不要新建 task_plan。不要启动新任务。",
             "",
         ] if zh else [
-            "User is checking progress/status. Three-source verification only.",
-            "1. terminal('nvidia-smi') or terminal('tasklist') — check GPU/processes",
-            "2. search_files or terminal('dir <output_dir>') — check disk output",
-            "3. read_file('<pipeline.log>', offset=-50) — check latest logs",
-            "Verify all three sources → cross-validate → report status",
-            "⛔ Do NOT create task_plan. Do NOT start new tasks.",
+            "User is checking progress. Three-source verification REQUIRED.",
+            "⛔ Even if the answer seems obvious (e.g. 'no tasks'), you MUST call tools!",
+            "1. terminal('nvidia-smi') — GPU",
+            "2. terminal('tasklist') or process(action='list') — processes",
+            "3. search_files or terminal('dir <dir>') — disk output",
+            "Verify all three → then report. Never answer without tools.",
             "",
         ]
     
