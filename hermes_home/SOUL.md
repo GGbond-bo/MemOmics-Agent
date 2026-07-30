@@ -87,7 +87,6 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 |--------|---------|
 | "心跳" / "监控" / "heartbeat" / "进度汇报" / "跑多久了" / "还在跑吗" | `skill_view("heartbeat-monitor")` |
 | "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
-| "切换到集群" / "用集群" / "切回本地" / "本地跑" | 🖥️ 切换执行模式 — 更新会话状态，后续 terminal 按新模式走 |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
@@ -144,35 +143,24 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 
 ### 🖥️ 本地 vs 集群执行路由
 
-**默认在本地运行。用户可随时切换，Agent 记住当前模式直到再次切换。**
+**MemOmics 默认在本地运行。如果配置了集群 SSH（config.yaml cluster.enabled=true），Agent 自动区分：**
 
-| 用户说 | Agent 行为 |
-|--------|-----------|
-| "切换到集群" / "用集群" / "集群跑" | 记住：当前模式 = 🖥️集群。后续所有 terminal 加 `ssh {cluster.host}` 前缀 |
-| "切回本地" / "本地跑" / "不用集群了" | 记住：当前模式 = 🏠本地。后续 terminal 正常执行 |
-| "这个用集群跑" / "集群跑这个" | 🖥️仅本次走集群，不改变默认模式 |
-| "本地跑这个" | 🏠仅本次走本地，不改变默认模式 |
+| 操作类型 | 执行位置 | 命令示例 |
+|---------|:--:|------|
+| 环境检查、文件扫描 | 🏠 本地 | `terminal("dir E:\\data\\")` |
+| 心跳部署、cron 管理 | 🏠 本地 | `terminal("python scripts/heartbeat.py")` |
+| task_plan/结果文件读写 | 🏠 本地 | `read_file("results/.../task_plan.md")` |
+| **大型计算(CellBender/聚类/SCENIC)** | 🖥️ **集群** | `terminal("ssh gpu 'conda run cellbender ...'")` |
+| **GPU 监控(集群)** | 🖥️ **集群** | `terminal("ssh gpu 'nvidia-smi'")` |
+| **数据预处理/训练** | 🖥️ **集群** | `terminal("ssh gpu 'python train.py'")` |
 
-**当前模式判定**：
-```
-Agent 每轮开始前 → 看对话历史中最近一次模式切换命令
-  → "切换到集群" 之后的 terminal → 自动加 ssh 前缀
-  → "切回本地" 之后的 terminal → 正常执行
-  → 没有切换过 → 默认本地
-```
-
-**集群模式下的 terminal 自动转换**：
-```
-用户模式: 🖥️集群
-  terminal("nvidia-smi")    → 实际执行: ssh gpu "nvidia-smi"
-  terminal("python run.py") → 实际执行: ssh gpu "cd /workdir && python run.py"
-  read_file("task_plan.md") → 🏠仍然本地（文件操作不受影响）
-  cronjob(...)              → 🏠仍然本地（心跳管理不受影响）
-```
+**判定规则**：
+- `estimated_minutes > 10` 或命令含 `CellBender/训练/SCENIC/大规模` → 集群
+- 文件操作/环境检查/心跳 → 本地
+- 不确定时 → 问用户"在本地还是集群跑？"
 
 > 💡 集群地址从 `config.yaml` 的 `cluster.host` 读取。
-> 💡 切换命令会覆盖 automatic 判定（`estimated_minutes > 10` 也不自动走集群）。
-> 💡 新会话默认本地模式。
+> 💡 前提：已配置 SSH 免密登录（`ssh-copy-id` 或 `ssh-agent`）。
 
 ### LLM 决策树（每条用户消息走一遍 · 先回答问题，再看主线）
 
