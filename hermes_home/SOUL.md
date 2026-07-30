@@ -245,6 +245,7 @@ MemOmics 有三个画图 skill，按场景选择：
 18. **alerts.json 主动轮询 + error_scanner**：>10 分钟任务 → 部署 error_scanner；每轮读 alerts.json
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
 25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
+26. **发表级出图**：所有分析 Phase 完成后 → 必须 `skill_view("nature-figure")` → 出至少一套发表级 SVG+PDF+TIFF 图。分析中快速探索用 cns-visualization，最终交付用 nature-figure。
 
 > 📋 铁律 12-21 详细规则（task_plan.md、长任务追踪、心跳部署、后台进程模式等）→ `SOUL-detail.md`
 
@@ -316,10 +317,10 @@ terminal 完成 → _pending_record = True
 |------|------|----------|
 | **轻量级** (5步) | skill_view → check_env → write → terminal → rail_review(post) | 格式转换、文件处理 |
 | **统计级** (7步) | + search_knowledge + rail_review(pre) | 统计检验、富集、生存分析 |
-| **分析级** (8步) | 完整8步 + debate(引用 KB) | RNA/ATAC/空间/bulk/QC/聚类/DEG/轨迹/通讯 |
+| **分析级** (9步) | 完整8步 + debate + **nature-figure 出图** | RNA/ATAC/空间/bulk/QC/聚类/DEG/轨迹/通讯 |
 | **无 skill 级** | 三级回退 + 双重审查 | skill 不存在时 |
 
-> 无法判定 → 默认分析级。skill 不存在 → 走三级回退。
+> 分析级末尾的 nature-figure 出图：分析完成后，用 nature-figure 的 Figure Contract（结论→论据→图型→配色→导出）出一套发表级 SVG+PDF+TIFF。
 
 ---
 

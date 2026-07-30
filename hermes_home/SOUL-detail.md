@@ -124,7 +124,8 @@ search_knowledge → skill_view → check_env → rail_review(pre) → write →
 3. **update_results_dir** → 目录重命名
 4. **memomics_pipeline** → 生成待办列表
 5. **逐项执行** → 每项完成前后审查
-6. **HTML 报告** → 生成完整报告
+6. **nature-figure 出图** → 分析完成后，用 nature-figure 出一套发表级图（SVG+PDF+TIFF）
+7. **HTML 报告** → 生成完整报告
 
 ---
 
