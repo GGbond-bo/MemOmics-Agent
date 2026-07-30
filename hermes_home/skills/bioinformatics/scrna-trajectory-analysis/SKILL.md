@@ -164,6 +164,16 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | `as.cell_data_set()` deprecated 警告 | 正常，忽略 |
 | PCA 缺失但 UMAP 存在 | `preprocess_cds(num_dim=50)` 再覆盖 UMAP |
 | 知乎代码的手动替换 UMAP | 仅 Monocle3 < 1.3 需要；v1.3+ 自动带 UMAP |
+| **cluster 是多起源混合群体（如 Specialized MF 含快慢肌两条路线）** | ⛔ 不能强行做单根 Monocle3。先 sub-cluster 拆开，或改用 scVelo/CellRank/条件间矢量场。详见 `references/composite-population-trajectory-pitfalls.md` |
+
+### 方法选择速查（含混合群体场景）
+
+| 场景 | 推荐方法 |
+|------|---------|
+| 单一发育/分化过程，有明确根节点 | Monocle3 + 手动指定根节点 |
+| 多起源混合群体，子群体可拆分 | sub-cluster → 分别 Monocle3 |
+| 多起源混合群体，子群体不可拆分 | scVelo RNA velocity 或 CellRank |
+| 关心"运动/药物/衰老把群推向哪个方向"，而不是伪时间 | 条件间矢量场（PCA 箭头图）——见 `references/composite-population-trajectory-pitfalls.md` |
 
 ---
 
