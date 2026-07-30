@@ -174,16 +174,15 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 
 | 预计耗时 | 模式 | 心跳 |
 |---------|------|------|
-| < 10 min | `terminal(command)` foreground | 不需要（MemOmics 自检足够） |
-| 10 min - 30 min | `terminal(command, background=True, notify_on_complete=True)` | MemOmics `_schedule_self_check` |
-| > 30 min | `terminal(command, background=True, notify_on_complete=True)` | **必须部署 Hermes cron 心跳** |
+| < 60 min | `terminal(command)` foreground 或 background | 不需要 cron（MemOmics 自检足够） |
+| > 60 min | `terminal(command, background=True, notify_on_complete=True)` | **必须部署 Hermes cron 心跳** |
 
 ⛔ 禁止 foreground 跑 CellBender（必须 background=True）
 ⛔ background=True 必须同时设 notify_on_complete=True
 
 ### 规则 17: 长任务必须部署 Hermes Cron 心跳
 
-**>30 分钟任务 → 必须部署 cron 心跳监控**（不再使用独立 heartbeat.py 脚本）。
+**>60 分钟任务 → 必须部署 cron 心跳监控**（不再使用独立 heartbeat.py 脚本）。
 
 部署步骤：
 ```
@@ -254,13 +253,29 @@ MemOmics _heartbeat_loop（30s 间隔）
 | 层 | 触发条件 | 执行者 | 说明 |
 |----|---------|--------|------|
 | 1️⃣ Agent 主动 | 任务完成，Agent 被唤醒 | `cronjob(action="remove")` | 正常路径 |
-| 2️⃣ 心跳自检 | cron agent 读 task_plan.md → 所有 Phase complete | 写 `.heartbeat_stop` → MemOmics 唤醒 Agent | 最可靠 |
+| 2️⃣ 心跳自检 | cron agent 扫描磁盘验证三个硬指标 | 写 `.heartbeat_stop` → MemOmics 唤醒 Agent | 最可靠 |
 | 3️⃣ MemOmics 清理 | `_heartbeat_loop` 检测 stop 标记或 completion alert | `/api/wakeup` → Agent remove cron job | 30s 内 |
-| 4️⃣ 无产出超时 | 连续 N 次无新产出 + 进程已死 | alerts.json(HIGH) → Agent 确认 | 防僵死，不自动停止 |
+| 4️⃣ 无产出超时 | 连续 N 次无新产出 + 进程已死 | alerts.json(HIGH) → Agent 确认 | 防僵死 |
 
 > ⛔ **不设 repeat 硬限制**。生信任务可能跑数天甚至一周。
 > ⛔ Agent 在任务完成后**必须**调用 `cronjob(action="remove")`。
-> 即使忘记，心跳自检（读 task_plan.md 所有 Phase complete）是最可靠的兜底。
+
+### Agent 最终验证（唤醒后必做）
+
+**Agent 被心跳唤醒后，不能只信报告，必须自己扫描确认：**
+
+```
+Agent 被唤醒 →
+  1. read_file("{workdir}/PROGRESS.md") — 看心跳的进度摘要
+  2. read_file("{workdir}/alerts.json") — 看心跳的警报
+  3. read_file("{workdir}/task_plan.md") — 看 Phase 状态
+  4. search_files(pattern="*_filtered.h5", directory="{analysis_dir}") — 自己扫描磁盘
+  5. 对比 task_plan 预期 vs 实际产出 → 确认一致
+  6. 一致 → cronjob(action="remove") + 更新 task_plan + 生成报告
+  7. 不一致 → 调查差异 → 决定重跑/跳过/标记失败
+```
+
+> ⛔ 心跳的报告是"线索"，Agent 的扫描是"最终判决"。
 
 ### 规则 20: 长任务进程模式决策树（已整合到规则16）
 
@@ -280,9 +295,8 @@ MemOmics _heartbeat_loop（30s 间隔）
 
 ```
 Phase 启动门禁:
-  Estimated ≤ 10 min     → foreground（MemOmics 自检）
-  Estimated 10-30 min    → background=True + notify_on_complete + MemOmics 自检
-  Estimated > 30 min     → background=True + notify_on_complete + cron heartbeat（必须！）
+  Estimated ≤ 60 min     → foreground 或 background（MemOmics 自检，不需要 cron）
+  Estimated > 60 min     → background=True + notify_on_complete + cron heartbeat（必须！）
   未声明 Estimated        → 🚫 禁止启动 Phase
 ```
 

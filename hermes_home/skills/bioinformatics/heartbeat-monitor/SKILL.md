@@ -2,21 +2,23 @@
 
 ## 何时触发
 
-Agent 启动任何预计 >10 分钟的分析任务时，**必须**同步部署心跳监控。
+Agent 启动任何预计 **> 60 分钟** 的分析任务时，**必须**同步部署心跳监控。
 
 触发条件（满足任一）：
-- `estimated_minutes > 10`
-- 命令包含 CellBender / 大规模聚类 / 训练 / 批量处理
+- `estimated_minutes > 60`
+- 命令包含 CellBender / 大规模聚类 / 训练 / 批量处理（通常 >1h）
 - task_plan Phase 的 Mode 声明为 `background+heartbeat`
+
+> ⛔ ≤ 60 分钟的任务**不需要** cron 心跳。foreground + MemOmics `_schedule_self_check` 足够。
 
 ## 心跳间隔选择
 
 | 任务预计时长 | 心跳间隔 | 原因 |
 |-------------|---------|------|
-| 10-30 min | **不部署 cron**（foreground + MemOmics 自检足够） | 短任务不需要独立心跳 |
-| 30 min - 2 h | `schedule="15m"` | 中等任务，15分钟检查一次 |
-| 2 h - 6 h | `schedule="30m"` | 长任务，半小时检查一次 |
-| > 6 h（过夜） | `schedule="1h"` | 超长任务，每小时检查一次 |
+| < 1 h | **不部署 cron** | foreground + MemOmics 自检足够 |
+| 1 h - 6 h | `schedule="15m"` | 每小时 4 次检查 |
+| 6 h - 24 h | `schedule="30m"` | 每天 48 次检查 |
+| > 24 h（过夜/多天） | `schedule="1h"` | 每天 24 次检查，省 token |
 
 ## 部署步骤
 
