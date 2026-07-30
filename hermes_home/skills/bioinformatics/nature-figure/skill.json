@@ -1,0 +1,11 @@
+{
+  "name": "nature-figure",
+  "description": "Submission-grade Nature/high-impact journal figure workflow for Python or R. Publication-quality scientific figures with editable SVG/PDF/TIFF output. Supports matplotlib/seaborn and ggplot2/patchwork/ComplexHeatmap. Figure contract before plotting: claim → evidence chain → archetype → backend → journal contract.",
+  "domain": "08_Visualization",
+  "trigger_keywords": ["发表", "投稿", "Nature", "Science", "Cell", "manuscript", "publication figure", "期刊", "SCI", "paper figure", "figure contract", "SVG editable", "TIFF 600dpi"],
+  "when_to_use": "User needs publication-ready figures for journals. Not for EDA or quick exploration plots.",
+  "dependencies": {
+    "python": ["matplotlib", "seaborn", "numpy"],
+    "r": ["ggplot2", "patchwork", "ComplexHeatmap", "svglite", "ragg"]
+  }
+}
