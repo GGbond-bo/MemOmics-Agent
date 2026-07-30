@@ -52,6 +52,31 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "画个箱线图" | CSV/临床信息 | `scipilot-figure-skill` | 先检查样本量/分布 |
 | "帮我画图，不知道画什么" | 任何 | `scipilot-figure-skill` | 先做数据剖析 |
 
+**🔴 组合场景：CNS/发表级 + 多种图表 + 数据路径**
+
+| 用户说 | 处理流程 |
+|--------|---------|
+| "CNS级别的热图" | ① cns-visualization 快速出图看效果 → ② nature-figure 发表级重做 |
+| "发表级小提琴图+热图+箱线图" | ① scan_data 确认数据类型 → ② 生信数据用 cns-visualization 快速出 → ③ 通用数据用 scipilot-figure-skill → ④ nature-figure 统一打磨 |
+| "Nature级别，用 E:/data/xxx 画图" | ① read_file/scan_data → ② 确定数据格式 → ③ cns-visualization 出草稿 → ④ nature-figure 最终版 |
+| "投稿用图，数据在 E:/results/" | ① search_files 找到分析产出 → ② 读 task_plan 确认哪些 Phase 完成 → ③ nature-figure 直接出发表级全套 |
+
+**组合场景核心原则**：
+```
+"发表级" + 生信图 → 两阶段：
+  Phase 1: cns-visualization 快速出图（确认数据正确、参数合理、图表可读）
+  Phase 2: nature-figure 发表级重做（期刊配色 + SVG/PDF/TIFF + Figure Contract）
+  
+"发表级" + 通用图 → 两步：
+  Step 1: scipilot-figure-skill 数据剖析 + 快速出图
+  Step 2: nature-figure 最终打磨
+  
+"发表级" + 不知道什么数据 → 三步：
+  Step 1: scan_data / read_file 确认格式
+  Step 2: 对应 skill 快速出图
+  Step 3: nature-figure 最终版
+```
+
 > 💡 **纯出图 = 轻量级**：skill_view → check_env → write → terminal → rail_review(post)。不创建 task_plan，不跑 debate。
 > 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
 > 💡 分析完成 = 铁律 26 自动触发 nature-figure。
@@ -66,7 +91,8 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 根据数据类型选择：Seurat/AnnData→`cns-visualization`，CSV/metadata→`scipilot-figure-skill` |
-| "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 发表级最终出图 |
+| "CNS级别" / "发表级" + 任何图表名 | 两阶段：① 对应 skill 快速出图 → ② `skill_view("nature-figure")` 发表级重做 |
+| "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 单独说"发表级"直接 nature-figure |
 | "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
 | "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
 | "CellBender" / "去背景" / "ambient RNA" / "filtered.h5" / "ptrepack" | `skill_view("cellbender-remove-background")` |
