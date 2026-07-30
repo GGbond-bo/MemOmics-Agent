@@ -1263,7 +1263,12 @@ def _classify_intent(text: str):
               "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物",
               "umap", "tsne", "可视化", "热图", "火山图", "小提琴图", "散点图",
               "轨迹", "通路", "通讯", "调控", "模块",
-              "结果", "输出", "文献", "文献综述", "专利", "patent", "法律", "申报"]
+              "结果", "输出", "文献", "文献综述", "专利", "patent", "法律", "申报",
+              # 画图/出图相关
+              "画", "图", "柱状图", "箱线图", "折线图", "分布图", "相关性矩阵",
+              "dotplot", "featureplot", "spatialplot", "sankey", "violin",
+              "figure", "投稿", "发表", "期刊", "cns", "nature",
+              "配色", "legend", "坐标轴", "字体", "分辨率", "dpi"]
     has_chat = any(kw in t for kw in CHAT_KW)
     has_bio = any(kw in t for kw in BIO_KW)
     if has_chat and not has_bio:
@@ -1378,7 +1383,11 @@ def _classify_intent(text: str):
     kb_s = sum(1 for kw in kb_kw if kw in t)
     
     if rpt_s >= 1:
-        return ("report", min(rpt_s * 0.3, 1.0), {})
+        # 如果同时有分析+数据路径，不是纯报告请求
+        _has_analysis_kw = any(kw in t for kw in ["分析", "执行", "跑", "流程", "analyze", "pipeline"])
+        _has_data = bool(_re_mod.search(r'[A-Za-z]:[/\\]\S+', t))
+        if not (_has_analysis_kw and _has_data):
+            return ("report", min(rpt_s * 0.3, 1.0), {})
     if lit_s >= 2 or (lit_s >= 1 and ins_s == 0):
         return ("literature", min(lit_s * 0.4, 1.0), {})
     if lit_s >= 1:
@@ -1386,7 +1395,11 @@ def _classify_intent(text: str):
     if ins_s >= 1:
         return ("install", min(ins_s * 0.4, 1.0), {})
     if kb_s >= 1:
-        return ("knowledge", min(kb_s * 0.3, 1.0), {})
+        # 如果有数据路径+分析关键词，不是纯知识库查询
+        _has_path = bool(_re_mod.search(r'[A-Za-z]:[/\\]\S+', t))
+        _has_analysis = any(kw in t for kw in ["分析", "执行", "跑", "流程", "analyze", "pipeline", "处理", "测序"])
+        if not (_has_path and _has_analysis):
+            return ("knowledge", min(kb_s * 0.3, 1.0), {})
 
     # === Default: analysis (standard bioinfo flow) ===
     analysis_kw = [
@@ -1407,13 +1420,20 @@ def _classify_intent(text: str):
         "火山图", "volcano", "小提琴", "violin", "cns", "nature",
         "探索一下", "探索这个数据", "结果怎么样", "结果如何",
         "看看结果", "结果", "出结果", "跑完", "跑得",
+        # 画图出图
+        "画", "图", "figure", "plot", "chart", "graph",
+        "柱状图", "箱线图", "散点图", "折线图",
+        "dotplot", "featureplot", "sankey", "配色",
+        "投稿", "发表", "期刊", "manuscript",
     ]
     analysis_s = sum(1 for kw in analysis_kw if kw in t)
     if analysis_s >= 2:
         return ("analysis", min(analysis_s * 0.15, 1.0), {})
     if analysis_s >= 1:
         # 边界情况：单独一个分析关键词 + 情绪词 → chat（如"分析跑崩了 好烦"）
-        EMOTION_KW = ["好烦", "烦死了", "气死", "无语", "崩溃", "心态", "加油", "辛苦了"]
+        EMOTION_KW = ["好烦", "烦死了", "气死", "无语", "崩溃", "心态", "加油", "辛苦了",
+                      "好看", "好美", "漂亮", "厉害", "牛逼", "太棒了", "nice", "good job",
+                      "好好看", "好漂亮", "好厉害", "太强了"]
         _has_emotion = any(kw in t for kw in EMOTION_KW)
         if _has_emotion and analysis_s == 1:
             return ("chat", 0.60, {"reason": "analysis_ref_with_emotion"})
