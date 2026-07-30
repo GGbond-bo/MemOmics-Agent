@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "session_id": "proc_d9d7b1f3d224",
+    "command": "cd /e/monkey/cellbender && TMPDIR=/e/tmp PYTHONPATH=\"\" \"C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe\" run_remaining.py",
+    "pid": 16192,
+    "pid_scope": "host",
+    "host_start_time": 178540763909,
+    "cwd": "E:\\MemOmics-Agent",
+    "started_at": 1785407639.0780315,
+    "task_id": "default",
+    "session_key": "d3c19568-796b-4091-85c1-631cfd87b0bb",
+    "watcher_platform": "",
+    "watcher_chat_id": "",
+    "watcher_user_id": "",
+    "watcher_user_name": "",
+    "watcher_thread_id": "",
+    "watcher_message_id": "",
+    "watcher_interval": 0,
+    "notify_on_complete": true,
+    "watch_patterns": []
+  },
+  {
+    "session_id": "proc_ee8bc64d1a7a",
+    "command": "cmd.exe /c start /B \"C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe\" \"E:/MemOmics-Agent/hermes_home/skills/bioinformatics/cellbender-batch-pipeline/scripts/heartbeat_v2.py\" --task \"Monkey_13samples\" --output-dir \"E:/monkey/cellbender\" --interval 120 --output \"E:/monkey/cellbender/monitor_v2.log\"",
+    "pid": 29900,
+    "pid_scope": "host",
+    "host_start_time": 178540766442,
+    "cwd": "E:\\MemOmics-Agent",
+    "started_at": 1785407664.4083958,
+    "task_id": "default",
+    "session_key": "d3c19568-796b-4091-85c1-631cfd87b0bb",
+    "watcher_platform": "",
+    "watcher_chat_id": "",
+    "watcher_user_id": "",
+    "watcher_user_name": "",
+    "watcher_thread_id": "",
+    "watcher_message_id": "",
+    "watcher_interval": 0,
+    "notify_on_complete": false,
+    "watch_patterns": []
+  }
+]

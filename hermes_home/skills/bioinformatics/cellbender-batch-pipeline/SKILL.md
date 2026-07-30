@@ -619,6 +619,7 @@ Level 3: auto-fix broken paths → update environment.json
     - **恢复**: `cp _TRASH/run_remaining.py .` 恢复脚本 → 启动 `terminal(background=true)` → 15s 后验证 GPU 利用率 + `_pipeline_progress.json` 写入 → 更新 task_plan.md Phase 2 为真实状态
     - **预防**: 清理操作后在 task_plan.md 的 Errors Encountered 表记录"哪些文件被移到了 _TRASH"。下次恢复时先查此表。
     - **铁律**: **永远不要仅凭 task_plan.md 的 checkbox 状态判断任务进度。** 每次恢复必须先做磁盘验证：`search_files` 确认脚本存在 + `ls` 确认产出目录 + `nvidia-smi` 确认进程状态。三源交叉验证一致才能下结论。
+    - 📄 跨会话恢复完整清单: `references/cross-session-pipeline-recovery.md` — 8 步恢复协议（读 task_plan → 磁盘验证 → 查找 _TRASH → 清理残缺 → 确认脚本 → 重启验证 → 部署心跳 → 更新 task_plan）
 
 
 ---

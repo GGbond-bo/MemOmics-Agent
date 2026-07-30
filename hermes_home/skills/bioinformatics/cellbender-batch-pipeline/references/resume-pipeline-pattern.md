@@ -47,3 +47,4 @@ for i, sample in enumerate(pending):
 - `glob("*.h5ad")` 在跨平台目录中会匹配 macOS `._*` 资源分支文件 → 加 size 过滤（h5ad < 100MB = 垃圾）
 - 不要用 `_pipeline_progress.json` 判断完成状态 → 直接 stat filtered.h5
 - Pipeline 日志的 mtime 是判断"是否还在跑"的最可靠信号
+- 跨会话恢复时（脚本被移入 _TRASH、心跳死亡、产出丢失）→ 完整 8 步协议见 `references/cross-session-pipeline-recovery.md`
