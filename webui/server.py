@@ -5461,11 +5461,18 @@ async def ws_endpoint(ws: WebSocket):
                                     pass
 
                                 # 🔧 Layer2.5: 读取 cron agent 写入的 PROGRESS.md + alerts.json
+                                # 路径优先级：analysis_dir > results_dir
                                 try:
-                                    _analysis_dir = session.get("analysis_dir", "")
-                                    if _analysis_dir and os.path.isdir(_analysis_dir):
+                                    _scan_dirs_for_progress = []
+                                    _ad = session.get("analysis_dir", "")
+                                    _rd = session.get("results_dir", "")
+                                    if _ad and os.path.isdir(_ad):
+                                        _scan_dirs_for_progress.append(_ad)
+                                    if _rd and os.path.isdir(_rd) and _rd not in _scan_dirs_for_progress:
+                                        _scan_dirs_for_progress.append(_rd)
+                                    for _scan_dir in _scan_dirs_for_progress:
                                         # 读 PROGRESS.md（cron agent 写入的进度摘要）
-                                        _progress_path = os.path.join(_analysis_dir, "PROGRESS.md")
+                                        _progress_path = os.path.join(_scan_dir, "PROGRESS.md")
                                         if os.path.isfile(_progress_path):
                                             _pmtime = os.path.getmtime(_progress_path)
                                             if _pmtime > _heartbeat_last_report.get("progress_ts", 0):
@@ -5480,7 +5487,7 @@ async def ws_endpoint(ws: WebSocket):
                                                 if _last_entry:
                                                     _report_parts.append(f"📊 cron: {_last_entry}")
                                         # 读 alerts.json（cron agent 写入的警报）
-                                        _alerts_path = os.path.join(_analysis_dir, "alerts.json")
+                                        _alerts_path = os.path.join(_scan_dir, "alerts.json")
                                         if os.path.isfile(_alerts_path):
                                             _amtime = os.path.getmtime(_alerts_path)
                                             if _amtime > _heartbeat_last_report.get("alerts_ts", 0):
@@ -5493,6 +5500,7 @@ async def ws_endpoint(ws: WebSocket):
                                                     _a = _unhandled_high[0]
                                                     _report_parts.append(f"🚨 cron告警: {_a.get('type','?')} — {_a.get('msg','?')[:80]}")
                                                     session["_urgent_wakeup"] = True
+                                                    break  # 找到 HIGH alert 就停，优先唤醒
                                 except Exception:
                                     pass
 

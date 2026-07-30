@@ -20,18 +20,18 @@ Agent 启动任何预计 >10 分钟的分析任务时，**必须**同步部署�
 
 ## 部署步骤
 
+### Step 0: 确认路径
+
+MemOmics 有两个关键目录：
+- **会话路径** (`results_dir`): `results/{session_dir}/` — task_plan.md、PROGRESS.md、alerts.json 都在这里
+- **分析目录** (`analysis_dir`): 用户指定的数据路径（如 `F:/CellBender_v2`）— 实际数据产出在这里
+
+> ⛔ **路径铁律**：PROGRESS.md、alerts.json **必须在会话路径下**，除非用户明确指定了分析目录。
+> 这样所有会话文件在一个地方，便于归档和清理。
+
 ### Step 1: 确定预期产出文件
 
-**每个分析 skill 的 SKILL.md 都明确写了 Expected Outputs / 产出文件**。
-部署心跳前，先从 skill 中提取预期产出列表：
-
-```
-从 skill_view() 输出中提取：
-  - 文件类型（如 *_filtered.h5、*_clustered.h5ad、*_deg.csv）
-  - 产出目录（如 cellbender_output/、figures/、results/）
-  - 预期数量（如"26个样本各产出1个filtered.h5"）
-  - 最小文件大小（如"> 10MB"）
-```
+（不变）从 skill_view() 输出中提取预期产出文件列表。
 
 ### Step 2: 创建 cron job
 
@@ -42,18 +42,48 @@ cronjob(
     schedule="15m",           # 根据上表选择
     prompt=HEARTBEAT_PROMPT,  # 从本 SKILL.md 的 Prompt 模板中复制
     skills=["heartbeat-monitor"],
-    workdir="{analysis_dir}", # 分析目录，让 cron agent 能读写 task_plan.md
-    deliver="local",          # 只保存输出，不推送到聊天
+    workdir="{results_dir}",  # ⚠️ 会话路径！不是 analysis_dir
+    deliver="local",
 )
 ```
 
+> ⛔ workdir 必须设为 `{results_dir}`（会话路径），因为 task_plan.md 在这里。
+> cron agent 需要通过 analysis_dir 变量知道去哪里扫描数据产出。
+
 ### Step 3: 更新 task_plan.md
 
-在 task_plan.md 的 Phase 表中记录：
 ```
 | **Cron Job ID** | {job_id} |
 | **Heartbeat Interval** | 15m |
+| **Cron workdir** | {results_dir} |
+| **Scan target** | {analysis_dir} |
 ```
+
+---
+
+## Cron Ticker 生命周期
+
+### 何时启动？
+**自动启动**。`start.bat` 启动 MemOmics 时，`@app.on_event("startup")` 自动启动 Hermes cron ticker（60s daemon thread）。
+启动日志：`[MemOmics] Cron ticker started`
+
+### 何时创建心跳 job？
+**按需创建**。Agent 判断长任务（>30 min 或 estimated_minutes > 30）时，调用 `cronjob(action="create")`。
+短任务不创建 cron job — 用 MemOmics 自带的 `_schedule_self_check` 足够。
+
+### 何时停止单个 job？
+- **自动**：Agent 在任务完成后调用 `cronjob(action="remove", job_id="...")`
+- **手动**：用户说"停止监控" → Agent 调用 `cronjob(action="pause"|"remove")`
+- **完成**：所有 Phase 标记 complete → Agent 自动 remove
+
+### 何时停止 ticker？
+- **自动**：关闭 MemOmics 进程 → daemon thread 自动终止
+- 日志：`[MemOmics] Cron ticker stopped`
+
+### 服务重启后？
+- ticker 自动重启（startup 事件）
+- 遗留的 cron job 被 catchup 机制处理：已过期的 job 被 fast-forward，不 burst-fire
+- 未完成的 job 继续执行
 
 ---
 
@@ -64,10 +94,17 @@ cronjob(
 ```
 你是一个分析任务监控 Agent。你的唯一职责是检查分析进度并汇报。
 
+## 路径约定
+- **工作目录（当前）**: {workdir}  ← cron job 的 workdir，即会话路径
+- **task_plan 路径**: {workdir}/task_plan.md
+- **PROGRESS.md**: {workdir}/PROGRESS.md  ← 进度摘要写在这里
+- **alerts.json**: {workdir}/alerts.json    ← 警报写在这里
+- **数据产出目录**: {analysis_dir}          ← 扫描产出文件的地方
+
+> ⛔ PROGRESS.md 和 alerts.json 必须写在 workdir（会话路径）下，不要写到别处。
+
 ## 任务信息
 - **任务名称**: {task_name}
-- **分析目录**: {analysis_dir}
-- **task_plan 路径**: {analysis_dir}/task_plan.md
 - **预期产出**: {expected_outputs}
 - **预期文件数**: {expected_count}
 - **最小文件大小**: {min_file_size}
