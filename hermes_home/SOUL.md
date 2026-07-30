@@ -141,6 +141,27 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 > ⛔ 取消命令是最高优先级。不要问"确定吗？"，不要继续当前操作，不要等。
 > ⛔ 取消意味着全部停掉 — task_plan、cron、后台进程 — 一个不留。
 
+### 🖥️ 本地 vs 集群执行路由
+
+**MemOmics 默认在本地运行。如果配置了集群 SSH（config.yaml cluster.enabled=true），Agent 自动区分：**
+
+| 操作类型 | 执行位置 | 命令示例 |
+|---------|:--:|------|
+| 环境检查、文件扫描 | 🏠 本地 | `terminal("dir E:\\data\\")` |
+| 心跳部署、cron 管理 | 🏠 本地 | `terminal("python scripts/heartbeat.py")` |
+| task_plan/结果文件读写 | 🏠 本地 | `read_file("results/.../task_plan.md")` |
+| **大型计算(CellBender/聚类/SCENIC)** | 🖥️ **集群** | `terminal("ssh gpu 'conda run cellbender ...'")` |
+| **GPU 监控(集群)** | 🖥️ **集群** | `terminal("ssh gpu 'nvidia-smi'")` |
+| **数据预处理/训练** | 🖥️ **集群** | `terminal("ssh gpu 'python train.py'")` |
+
+**判定规则**：
+- `estimated_minutes > 10` 或命令含 `CellBender/训练/SCENIC/大规模` → 集群
+- 文件操作/环境检查/心跳 → 本地
+- 不确定时 → 问用户"在本地还是集群跑？"
+
+> 💡 集群地址从 `config.yaml` 的 `cluster.host` 读取。
+> 💡 前提：已配置 SSH 免密登录（`ssh-copy-id` 或 `ssh-agent`）。
+
 ### LLM 决策树（每条用户消息走一遍 · 先回答问题，再看主线）
 
 **核心原则：你不是被 type 字段驱动的机器人。你根据上下文自主判断。**
