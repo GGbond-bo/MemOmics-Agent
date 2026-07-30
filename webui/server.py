@@ -116,6 +116,42 @@ async def _warm_skills_snapshot():
     except Exception as e:
         logger.warning(f"[MemOmics] 微信自动重连调度失败: {e}")
 
+# === Hermes Cron Ticker — 在 MemOmics 进程中启动原生 cron 调度器 ===
+import threading as _threading
+_cron_stop_event = _threading.Event()
+
+@app.on_event("startup")
+async def _start_hermes_cron_ticker():
+    """在 MemOmics FastAPI 进程中启动 Hermes 原生 cron ticker。
+    
+    cron ticker 每 60 秒扫描一次 hermes_home/cron/jobs.json，
+    执行到期的 cron job。这是长任务心跳监控的核心引擎。
+    """
+    try:
+        from cron.scheduler_provider import InProcessCronScheduler
+        # 确保 HERMES_HOME 正确：cron 数据存在 hermes_home/cron/ 下
+        os.environ.setdefault("HERMES_HOME", HERMES_HOME_DIR)
+        _ticker_thread = _threading.Thread(
+            target=lambda: InProcessCronScheduler().start(
+                _cron_stop_event,
+                adapters=None,   # 不需要消息平台投递
+                loop=None,       # 不需要 live adapter
+                interval=60,     # 60s tick，与 Hermes 默认一致
+            ),
+            daemon=True,
+            name="memomics-cron-ticker",
+        )
+        _ticker_thread.start()
+        logger.info("[MemOmics] Cron ticker started — hermes_home/cron/jobs.json, interval=60s")
+    except Exception as e:
+        logger.warning(f"[MemOmics] Cron ticker 启动失败（长任务心跳不可用）: {e}")
+
+@app.on_event("shutdown")
+async def _stop_hermes_cron_ticker():
+    """优雅停止 cron ticker。"""
+    _cron_stop_event.set()
+    logger.info("[MemOmics] Cron ticker stopped")
+
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
