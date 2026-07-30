@@ -2145,7 +2145,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=cfg.get("provider", "openai"),
         model=cfg["model"],
         max_iterations=300,
-        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use"],
+        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob"],
         ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
         quiet_mode=True,
         tool_progress_mode="all",
@@ -4492,6 +4492,22 @@ async def get_progress(sid: str):
     }
 
 
+@app.post("/api/sessions/{sid}/wakeup")
+async def wakeup_session(sid: str):
+    """外部唤醒端点 — cron agent / 心跳进程完成后调用，激活 MemOmics Agent。
+    
+    请求体可选：{"reason": "completion|error|progress", "msg": "..."}
+    """
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found", "wakeup": False}, status_code=404)
+    session = _sessions[sid]
+    session["_urgent_wakeup"] = True
+    logger.info(f"[Wakeup] session {sid[:12]}: external wakeup triggered")
+    return {"wakeup": True, "session_id": sid, "msg": "Wakeup signal received. Agent will be activated on next tick."}
+
+
 # --- 外置记忆 (跨会话) ---
 
 @app.get("/api/memory")
@@ -5405,6 +5421,42 @@ async def ws_endpoint(ws: WebSocket):
                                                     "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                                             except Exception:
                                                 pass
+                                except Exception:
+                                    pass
+
+                                # 🔧 Layer2.5: 读取 cron agent 写入的 PROGRESS.md + alerts.json
+                                try:
+                                    _analysis_dir = session.get("analysis_dir", "")
+                                    if _analysis_dir and os.path.isdir(_analysis_dir):
+                                        # 读 PROGRESS.md（cron agent 写入的进度摘要）
+                                        _progress_path = os.path.join(_analysis_dir, "PROGRESS.md")
+                                        if os.path.isfile(_progress_path):
+                                            _pmtime = os.path.getmtime(_progress_path)
+                                            if _pmtime > _heartbeat_last_report.get("progress_ts", 0):
+                                                _heartbeat_last_report["progress_ts"] = _pmtime
+                                                with open(_progress_path, "r", encoding="utf-8") as _pf:
+                                                    _plines = _pf.read().strip().split("\n")
+                                                _last_entry = ""
+                                                for _l in reversed(_plines):
+                                                    if _l.startswith("## "):
+                                                        _last_entry = _l.strip("## ")
+                                                        break
+                                                if _last_entry:
+                                                    _report_parts.append(f"📊 cron: {_last_entry}")
+                                        # 读 alerts.json（cron agent 写入的警报）
+                                        _alerts_path = os.path.join(_analysis_dir, "alerts.json")
+                                        if os.path.isfile(_alerts_path):
+                                            _amtime = os.path.getmtime(_alerts_path)
+                                            if _amtime > _heartbeat_last_report.get("alerts_ts", 0):
+                                                _heartbeat_last_report["alerts_ts"] = _amtime
+                                                import json as _json_alerts
+                                                with open(_alerts_path, "r", encoding="utf-8") as _af:
+                                                    _alerts_data = _json_alerts.load(_af)
+                                                _unhandled_high = [a for a in _alerts_data if not a.get("handled") and a.get("urgency") == "HIGH"]
+                                                if _unhandled_high:
+                                                    _a = _unhandled_high[0]
+                                                    _report_parts.append(f"🚨 cron告警: {_a.get('type','?')} — {_a.get('msg','?')[:80]}")
+                                                    session["_urgent_wakeup"] = True
                                 except Exception:
                                     pass
 

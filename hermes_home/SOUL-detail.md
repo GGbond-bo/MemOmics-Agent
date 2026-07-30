@@ -170,29 +170,61 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 - ⛔ 不凭记忆恢复。不重新执行已标记 complete 的 Phase
 - ⛔ 同一错误不用相同方法重试 >3 次
 
-### 规则 16: 长时间命令必须后台运行
+### 规则 16: 按预估时长选择运行模式
 
-| 预计耗时 | 模式 |
-|---------|------|
-| < 5 分钟 | `terminal(command)` foreground |
-| 5-600 分钟 | `terminal(command, background=True, notify_on_complete=True, timeout=...)` |
-| > 600 分钟 | Popen + CREATE_NO_WINDOW + heartbeat + error_scanner |
+| 预计耗时 | 模式 | 心跳 |
+|---------|------|------|
+| < 10 min | `terminal(command)` foreground | 不需要（MemOmics 自检足够） |
+| 10 min - 30 min | `terminal(command, background=True, notify_on_complete=True)` | MemOmics `_schedule_self_check` |
+| > 30 min | `terminal(command, background=True, notify_on_complete=True)` | **必须部署 Hermes cron 心跳** |
 
 ⛔ 禁止 foreground 跑 CellBender（必须 background=True）
 ⛔ background=True 必须同时设 notify_on_complete=True
 
-### 规则 17: 长任务必须部署心跳监控
+### 规则 17: 长任务必须部署 Hermes Cron 心跳
 
->10 分钟任务 → 部署独立心跳进程：
+**>30 分钟任务 → 必须部署 cron 心跳监控**（不再使用独立 heartbeat.py 脚本）。
+
+部署步骤：
 ```
-terminal(command="python scripts/heartbeat.py --task 'CellBender 26样本' --dir F:/CellBender_v2 --interval 120 &", background=True)
+1. skill_view("heartbeat-monitor")  ← 加载心跳监控 skill
+2. 从分析 skill 的 Expected Outputs 节提取预期产出文件列表
+3. cronjob(action="create",
+     name="监控-{任务名}",
+     schedule="15m",    ← 根据下表选择
+     prompt="{HEARTBEAT_PROMPT}",  ← 从 heartbeat-monitor SKILL.md 复制模板
+     skills=["heartbeat-monitor"],
+     workdir="{analysis_dir}",
+     deliver="local")
 ```
 
-汇报时读 monitor.log，不需要重新调 nvidia-smi。
+**心跳间隔自动选择：**
+
+| 任务预计时长 | schedule | 说明 |
+|-------------|----------|------|
+| 30 min - 2 h | `"15m"` | 15分钟检查一次 |
+| 2 h - 6 h | `"30m"` | 30分钟检查一次 |
+| > 6 h（过夜） | `"1h"` | 1小时检查一次 |
+
+**心跳检查流程（每次触发）：**
+```
+❶ 磁盘扫描 — terminal("dir <output_dir> /s /b") 数产出文件
+❷ 进程检查 — terminal("tasklist | findstr cellbender/python") 
+❸ 日志扫描 — read_file("pipeline.log", offset=-30) 找 error/traceback
+❹ 三源验证 — 磁盘+进程+日志 → 交叉验证
+❺ 更新 PROGRESS.md（进度摘要）
+❻ 异常 → alerts.json (urgency=HIGH) → MemOmics 自动唤醒 Agent
+❼ 一切正常无新产出 → 返回 [SILENT]（省 token）
+```
+
+**产出文件验证规则：**
+- 每个分析 skill 的 Expected Outputs 节声明了产出文件名模式
+- 心跳必须检查：文件是否存在 + 文件大小 > 0（非空文件）
+- 空文件 = 产出异常 → 写 alerts.json
 
 ### 规则 18: 删除数据必须用户确认
 
-删除分析产出前 → 列出文件+原因 → 弹窗确认 → 等用户批准后才能执行
+（不变）删除分析产出前 → 列出文件+原因 → 弹窗确认 → 等用户批准后才能执行
 ⛔ 禁止 `rm -rf`、禁止静默跳过确认
 
 ### 规则 19: 每轮先读 alerts.json
@@ -200,13 +232,22 @@ terminal(command="python scripts/heartbeat.py --task 'CellBender 26样本' --dir
 每次新 turn → 检查 `alerts.json` → 有未处理错误 → 主动汇报
 ⛔ 不等用户问"有没有报错"
 
-### 规则 20: 长任务进程模式决策树
+### 唤醒链路（cron → MemOmics Agent）
 
-| 预计耗时 | 模式 | 命令 |
-|---------|------|------|
-| < 5 min | foreground | `terminal("cmd")` |
-| 5-600 min | background=True | `terminal("cmd", background=True, notify_on_complete=True)` |
-| > 600 min | Popen 独立 | `subprocess.Popen(['cmd'], creationflags=0x08000000)` |
+```
+cron agent 发现异常/完成
+  → 写入 alerts.json (urgency=HIGH)
+  → 或 HTTP POST /api/sessions/{sid}/wakeup
+
+MemOmics _heartbeat_loop（30s 间隔）
+  → 读取 PROGRESS.md + alerts.json
+  → 检测 HIGH urgency
+  → session["_urgent_wakeup"] = True
+  → _schedule_self_check(delay=3s)
+  → Agent 被立即唤醒，读 PROGRESS.md + alerts.json → 汇报用户
+```
+
+### 规则 20: 长任务进程模式决策树（已整合到规则16）
 
 ### 规则 15: 使用 headroom 压缩上下文
 
@@ -224,9 +265,9 @@ terminal(command="python scripts/heartbeat.py --task 'CellBender 26样本' --dir
 
 ```
 Phase 启动门禁:
-  Estimated ≤ 5 min      → foreground
-  Estimated 5-600 min    → background=True + notify_on_complete + heartbeat
-  Estimated > 600 min    → Popen + CREATE_NO_WINDOW + heartbeat + error_scanner
+  Estimated ≤ 10 min     → foreground（MemOmics 自检）
+  Estimated 10-30 min    → background=True + notify_on_complete + MemOmics 自检
+  Estimated > 30 min     → background=True + notify_on_complete + cron heartbeat（必须！）
   未声明 Estimated        → 🚫 禁止启动 Phase
 ```
 
