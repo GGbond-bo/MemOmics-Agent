@@ -155,6 +155,7 @@ After all samples complete, extract metrics from `*_raw_output_metrics.csv` file
 - **`--total-droplets-included` 比例调查** (2026-07-29, 用户质疑后深度调查): 官方 Tutorial 4:1 比例 + GitHub Issue #414 + 实际日志验证 → `references/total-droplets-included-ratio-investigation.md`
 - **收敛指标解读** (2026-07-29, 源码级): `convergence_indicator` 计算公式 + 阈值解释（<1/1-5/>5）→ `references/convergence-indicator.md`
 - **HTML Report 修复** (2026-07-29, Bug #4): `os.replace` 跨盘符失败 → `shutil.move` 修复 → `references/html-report-fix.md`
+- **轻量心跳模板 v3** (2026-07-30): `_heartbeat.py` — 60s 间隔读 GPU+epoch+ELBO 写 `_heartbeat.json`，零依赖，一次 `read_file` 即可查询。与 `heartbeat_v2.py` 互补（v2=自动发现+多边缘情况，v3=快速部署+简单审计）→ `references/simple-heartbeat-template.md`
 
 ## 🔧 环境持久化（自进化基础设施，铁律 25）
 
@@ -592,6 +593,14 @@ Level 3: auto-fix broken paths → update environment.json
     - **铁律**: 进度检查的**唯一信源**是 raw CellBender 产出目录（`cellbender/*/cellbender_output_filtered.h5`）。ptrepack 输出、seurat_h5、monitor.log、_pipeline_progress.json 都是衍生品，可能来自旧跑。做任何"完成 N/M"断言前，必须先 `ls -lt` 确认文件日期，排除上次跑的遗留。
     - **适用场景**: 任何有多阶段产出的 pipeline（CellBender→ptrepack→统计表、QC→聚类→DEG）。每次进度检查都统计 raw 产出 + 日期验证。
 
+43. **🔥🔥🔥 跨会话任务污染 — 从其他 session 日志推断当前任务 (2026-07-30 实锤, 用户激烈纠正)**：
+    - **症状**: 新 session `memomics-3c672f0a` 的 task_plan.md 是空壳模板（Goal=\"你是谁？\"），用户只要求了 RNA/ATAC 路线图 + 人海马 ATAC 数据搜索。Agent 读 system_log.jsonl 时发现另一个 session（`memomics-1c1890da`）的 CellBender 批量记录 → 在用户不知情的情况下启动了 13 个样本的 CellBender 批量训练。
+    - **用户**: \"我什么时候要跑cellbender了？\"
+    - **根因**: `system_log.jsonl` 记录的是**所有** session 的工具调用历史，不是当前 session 的待办。当 task_plan.md Goal 是占位符（\"你是谁？\"）时，意味着此 session 从未被赋予真实任务。从其他 session 的日志中推断\"应该跑什么\" = 跨会话污染。
+    - **铁律**: task_plan.md Goal 是占位符 → 此 session 无任务。禁止从其他 session 的 system_log.jsonl / task_plan.md / 磁盘残留推断任务。唯一信源是用户在**本轮对话**中的明确指令。
+    - **检测**: `task_plan.md` 开头是 \"Goal: 你是谁？\" 或 \"执行用户任务\" → 空模板 → 立即停止所有 pipeline 启动逻辑，询问用户。
+    - 📄 完整时间线与防护规则: `windows-bioinformatics-batch-processing` skill 的 `references/empty-template-taskplan-no-resume.md`
+
 42. **🔥 跨会话恢复 — task_plan.md 路径可能已失效 (2026-07-30 验证)**：
     - **症状**: task_plan.md 记录的路径（如 `F:/CellBender_v2`）在当前会话完全不存在。`ls` 返回空。
     - **根因**: 磁盘挂载变化、路径重命名、task_plan.md 本身写错、或跨机器迁移。CellBender pipelines 常跨天/跨会话，路径腐化是高频事件。
@@ -602,6 +611,14 @@ Level 3: auto-fix broken paths → update environment.json
       4. 找到实际数据后更新 task_plan.md，再继续执行
     - **规则**: 恢复任何跨会话任务时，第一个动作是验证 task_plan.md 中所有路径是否存在。路径不存在 ≠ 任务不需要做 — 数据可能在别处。
     - **验证**: 本 session 从 `F:/CellBender_v2`（不存在）→ `E:/monkey/cellbender/`（15 样本，2 done，13 pending）→ 顺利续跑
+
+44. **🔥 _TRASH 脚本恢复 + 串行批处理验证协议 (2026-07-30, monkey 15样本验证)**：
+    - **症状**: task_plan.md Phase 1 标记"写 run_remaining.py"为 ✅ completed，Phase 2 标记"后台启动 run_remaining.py"为 ⏳ pending。实际检查发现 `run_remaining.py` 在 `_TRASH/` 子目录（之前的清理操作误移），GPU 4% 空闲，无任何 CellBender 进程在跑。Phase 1 的 ✅ 是假完成——脚本被移走了但 task_plan.md 从未更新。
+    - **根因**: task_plan.md 的 checkbox 状态是 LLM 手动维护的，不与磁盘实际状态同步。脚本被外部操作移走后，checkbox 仍是 ✅。**task_plan 的 ✅ 不代表磁盘上文件存在**——必须用 `search_files` / `ls` 验证。
+    - **检测**: 每个 Phase 标记 completed 后，下一个 Phase 启动前：(a) 用 `search_files` 验证关键脚本是否存在 (b) `ls <output_dir>` 确认预期产出目录存在 (c) 如果有 `_TRASH` 或 `_DEL_` 目录，检查其中是否有被误移的脚本/产出 (d) 三源交叉验证：GPU + 进程 + 日志 → 确认"真的没在跑"
+    - **恢复**: `cp _TRASH/run_remaining.py .` 恢复脚本 → 启动 `terminal(background=true)` → 15s 后验证 GPU 利用率 + `_pipeline_progress.json` 写入 → 更新 task_plan.md Phase 2 为真实状态
+    - **预防**: 清理操作后在 task_plan.md 的 Errors Encountered 表记录"哪些文件被移到了 _TRASH"。下次恢复时先查此表。
+    - **铁律**: **永远不要仅凭 task_plan.md 的 checkbox 状态判断任务进度。** 每次恢复必须先做磁盘验证：`search_files` 确认脚本存在 + `ls` 确认产出目录 + `nvidia-smi` 确认进程状态。三源交叉验证一致才能下结论。
 
 
 ---

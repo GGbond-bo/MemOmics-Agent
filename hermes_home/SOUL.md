@@ -86,6 +86,7 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | 用户说 | 立即调用 |
 |--------|---------|
 | "心跳" / "监控" / "heartbeat" / "进度汇报" / "跑多久了" / "还在跑吗" | `skill_view("heartbeat-monitor")` |
+| "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
@@ -125,6 +126,20 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" | `skill_evolution(action="query_logs") + recall_experience()` |
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
+
+### ⛔ 取消/停止命令处理（最高优先级，先于决策树）
+
+**用户说"取消"/"停止"/"暂停" → 立即执行以下操作，不等、不问、不继续：**
+
+```
+1. task_plan.md → 所有 in_progress 的 Phase → 改为 **Status:** cancelled
+2. cronjob → cronjob(action="pause"|"remove", job_id="...") — 停止心跳
+3. 后台进程 → terminal("taskkill /F /PID <PID>") — 杀掉计算进程
+4. 回复用户 → "已停止。task_plan 已标记 cancelled，心跳已停，进程已杀。"
+```
+
+> ⛔ 取消命令是最高优先级。不要问"确定吗？"，不要继续当前操作，不要等。
+> ⛔ 取消意味着全部停掉 — task_plan、cron、后台进程 — 一个不留。
 
 ### LLM 决策树（每条用户消息走一遍 · 先回答问题，再看主线）
 

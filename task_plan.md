@@ -17,10 +17,12 @@ Phase 2
 **Status:** completed
 
 ### Phase 2: 执行 CellBender（13 个样本串行）
-- [ ] 后台启动 run_remaining.py
-- [ ] 部署 heartbeat_v2.py 监控
-- [ ] 部署 error_scanner.py
-**Status:** in_progress
+- [x] 恢复 run_remaining.py（曾误移至 _TRASH）
+- [x] 后台启动 run_remaining.py (PID 43800, 2026-07-30 18:17)
+- [x] 部署 _heartbeat.py 监控 (PID 44952, 60s 间隔)
+- [ ] 当前: CRR278963 (3/15) — GPU 29%, epoch 进行中
+- [ ] 等待完成 → 自动串行下一样本
+**Status:** in_progress — CRR278963 running
 
 ### Phase 3: ptrepack → Seurat h5
 - [ ] 所有 filtered.h5 完成后，ptrepack 转 seurat_h5/

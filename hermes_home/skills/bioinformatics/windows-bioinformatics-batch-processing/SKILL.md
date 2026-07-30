@@ -20,6 +20,8 @@ metadata:
 
 **⚠️ task_plan.md 跨会话残留陷阱**：恢复会话时，task_plan.md 可能描述的是已完成的旧任务（如 CellBender），而实际运行的是完全不同的新任务（如 ArchR ATAC-seq）。四源交叉验证（进程+GPU+文件+日志）必须在读取 task_plan.md 后立即执行。当 task_plan.md 与系统状态矛盾时 → 以系统状态为准 → 更新 task_plan.md。详见 `references/session-resumption-stale-taskplan.md`。
 
+**⚠️🔥 空模板 task_plan.md — 严禁从其他 session 推断任务 (2026-07-30 实锤)**：当 task_plan.md 的 Goal 是占位符（如 "你是谁？"、"执行用户任务"），Phase 待办是泛化描述（"直接开始执行"）时 → **此 session 从未被赋予真实任务**。禁止：读取其他 session 的 system_log.jsonl 来推断"应该跑什么"、扫描其他 session 的 pending batch job 来自动启动。当前 session 的唯一信源是用户在**本轮对话中**的明确指令。详见 `references/empty-template-taskplan-no-resume.md`。
+
 **⚠️ 关键误区**：这不是跨会话问题。即使在同一连续会话中，Agent 也可能因为信任"历史失败记录"（如日志里写着前 6 个失败了）而推断"整个 pipeline 停了"，不查实时状态就下结论。**三连击不是"跨会话时要做"，是"每次回答系统状态前必须做"。**
 
 ### 三连击检查法（回答系统状态问题前必须全做）

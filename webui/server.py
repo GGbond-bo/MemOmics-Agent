@@ -459,7 +459,8 @@ def _build_task_resume_prompt(session):
 
 
 def _schedule_self_check(session, agent, loop):
-    """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。"""
+    """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
+    但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
     if not agent or not loop:
         return
     has_todos = any(t.get("status") not in ("completed", "cancelled") 
@@ -468,6 +469,16 @@ def _schedule_self_check(session, agent, loop):
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         return
+    # ⛔ 检查 task_plan 是否被取消/暂停
+    if has_plan:
+        try:
+            with open(os.path.join(results_dir, "task_plan.md"), "r", encoding="utf-8") as f:
+                plan_text = f.read()
+            if "cancelled" in plan_text.lower() or "**Status:** paused" in plan_text:
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: task_plan is cancelled/paused, skipping self-check")
+                return
+        except Exception:
+            pass
     _sc = session.setdefault("_self_check_count", 0)
     if _sc >= 20:
         return
