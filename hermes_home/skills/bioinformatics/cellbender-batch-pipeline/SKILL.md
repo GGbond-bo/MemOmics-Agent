@@ -406,11 +406,17 @@ Level 3: auto-fix broken paths → update environment.json
     - **铁律**: GPU 读取只是三源之一，不能单独下结论。必须三源交叉验证（GPU + 进程存活 + 真实日志行尾时间戳）全部一致才能下结论。任何单一数据源异常 → 必须先查另外两个再判断。
     - **违规检测**: "GPU=X% → 卡死/没在跑" 这种单一源推断视为违规。
 
-22. **🔥🔥 MCKP estimator CPU 独占期 — GPU 掉到 2% 不代表卡死 (2026-07-25, 26样本证实)**：
+22. **🔥🔥 MCKP estimator CPU 独占期 — GPU 掉到 2% 不代表卡死 (2026-07-25, 26样本证实; 2026-07-30 补充 timing 校准)**：
     - **症状**: CellBender 训练 150/150 epochs 完成，写了 posterior.h5 + PDF + cell_barcodes.csv，日志最后一行 `Computing target noise counts per gene for MCKP estimator`，但 `output.h5` 和 `output_filtered.h5` 还没出现。GPU 从 60% 掉到 2%，VRAM 还在 5GB。看起来像"卡死了"。
-    - **根因**: MCKP estimator 是纯 CPU 计算（每基因算噪声计数），GPU 空转但进程活着（16GB 内存，CPU 时间持续累加）。这一步完成后才会写 `output.h5` → 应用 FPR → 生成 `output_filtered.h5`。大样本（5 万基因）MCKP 可在 3-5 分钟内完成。
-    - **检测**: (a) `tasklist` 确认进程存活 (b) `stat ckpt.tar.gz` 检查修改时间 (c) 等待 5 分钟后 `ls output.h5` 重检。**不要因为 GPU=2% 就 kill 重跑——已经在最后一步，kill 就真白跑了。**
-    - **区别僵死**: 真的僵死 = 进程 0% CPU + 日志不再增长 > 10 分钟。MCKP 正常 = CPU 持续 + 日志可能在 MCKP 段无输出（单行无换行）。
+    - **根因**: epoch 150 后还有两个纯 CPU 阶段：(1) `Computing posterior noise count probabilities` — 92 chunks at ~0.01 min/chunk (~0.6s/chunk) (2) `MCKP estimation` — 6 chunks at ~0.15 min/chunk (~9s/chunk)。总计 ~1.5 分钟（7.5K 特征）到 3-5 分钟（50K 特征大样本）。GPU 空转但进程活着（CPU 时间持续累积）。完成后再写 `output.h5` → FPR → `output_filtered.h5`。
+    - **Timing 校准** (2026-07-30, CRR278963, 7,578 features, 41K empty droplets):
+      | 阶段 | chunks | 速度 | 总耗时 |
+      |------|--------|------|--------|
+      | Posterior computation | 92 | ~0.6s/chunk | ~55s |
+      | MCKP estimation | 6 | ~9s/chunk | ~45s |
+      | **Total post-epoch** | — | — | **~1.5 min** |
+    - **检测**: (a) `tasklist` 确认进程存活 (b) 看日志是否写 "Succeeded in writing" (c) 等待 3 分钟后 `ls output.h5` 重检。**不要因为 GPU=2% 就 kill 重跑——已经在最后一步，kill 就真白跑了。**
+    - **区别僵死**: 真的僵死 = 进程 0% CPU + 日志不再增长 > 10 分钟。Posterior/MCKP 正常 = CPU 持续 + chunk 计数逐增。
 
 23. **🔥 ptrepack 输出目录 + nbconvert HTML 非关键 (2026-07-25, 用户纠正)**：
     - **ptrepack 输出**: `F:/CellBender_v2/seurat_h5/`（不是 `ptrepack_output/`）。文件名格式: `{sample}_filtered_seurat.h5`。
@@ -579,7 +585,23 @@ Level 3: auto-fix broken paths → update environment.json
     - **症状**: Agent 看到用户提供的 `--projected-ambient-count-threshold 5` → 说"这不是 remove-background 的标准参数，可能报 unrecognized arguments"。用户说"你先去 github 看看官方怎么说的"→ 一查 `cellbender remove-background --help`，发现这是**正规参数**，默认值 0.1
     - **根因**: Agent 凭记忆判断参数合法性。CellBender 参数多、版本间有变化，记忆不可靠。`--projected-ambient-count-threshold` 控制"基因预期环境计数<阈值就排除"，是可大幅加速的正规参数
     - **正确做法**: 用户提供参数列表 → 第一步是 `cellbender remove-background --help | grep <param>` 或查官方 GitHub README，而不是凭记忆说"不合法"。对所有工具通用——`--help` 是权威信源，LLM 记忆不是
-    - **规则**: 对任何工具参数进行"合法性"断言前，必须查官方文档（--help / GitHub README / 官方 vignette）。不查 → 不开口
+41. **🔥 旧跑遗留产物造成假完成信号 — 多目录交叉对比必须做 (2026-07-30, monkey 15样本验证)**：
+    - **症状**: 心跳/监控显示 `cellbender_seurat/` 有 15 个 filtered_seurat.h5 → 初步判断"全部完成"。但实际 raw CellBender 输出目录只有 3 个 filtered.h5，当前只完成了 3/15。`ls -lt` 发现 seurat_h5 全是 6 月 25-26 旧文件（上次跑同一批样本的遗留）。
+    - **根因**: 多次跑同一批样本时，下游目录（ptrepack 输出、seurat_h5）保留上次的完整产出。只看下游目录 → 误判所有样本已完成。只有 raw CellBender `*/cellbender_output_filtered.h5` 才是**真实完成状态的信源**。
+    - **检测三步**: (a) `ls -lt` 查文件修改日期 — 旧文件集中在某一天，新产出的日期分散 (b) 交叉对比 raw 输出目录和 ptrepack 目录的文件数 — 不一致 = 旧遗留 (c) 统计时用 mtime 过滤 — 只统计今天/本次跑的文件
+    - **铁律**: 进度检查的**唯一信源**是 raw CellBender 产出目录（`cellbender/*/cellbender_output_filtered.h5`）。ptrepack 输出、seurat_h5、monitor.log、_pipeline_progress.json 都是衍生品，可能来自旧跑。做任何"完成 N/M"断言前，必须先 `ls -lt` 确认文件日期，排除上次跑的遗留。
+    - **适用场景**: 任何有多阶段产出的 pipeline（CellBender→ptrepack→统计表、QC→聚类→DEG）。每次进度检查都统计 raw 产出 + 日期验证。
+
+42. **🔥 跨会话恢复 — task_plan.md 路径可能已失效 (2026-07-30 验证)**：
+    - **症状**: task_plan.md 记录的路径（如 `F:/CellBender_v2`）在当前会话完全不存在。`ls` 返回空。
+    - **根因**: 磁盘挂载变化、路径重命名、task_plan.md 本身写错、或跨机器迁移。CellBender pipelines 常跨天/跨会话，路径腐化是高频事件。
+    - **正确做法**（本 session 验证流程）:
+      1. 读 task_plan.md → 获取任务上下文和预期样本列表
+      2. `ls <记录路径>` → 不存在 → **不报错停下**，而是扩大搜索
+      3. `search_files(pattern="*cellbender*", path=/e)` + `ls /d/... /f/... /c/...` 多盘搜索
+      4. 找到实际数据后更新 task_plan.md，再继续执行
+    - **规则**: 恢复任何跨会话任务时，第一个动作是验证 task_plan.md 中所有路径是否存在。路径不存在 ≠ 任务不需要做 — 数据可能在别处。
+    - **验证**: 本 session 从 `F:/CellBender_v2`（不存在）→ `E:/monkey/cellbender/`（15 样本，2 done，13 pending）→ 顺利续跑
 
 
 ---

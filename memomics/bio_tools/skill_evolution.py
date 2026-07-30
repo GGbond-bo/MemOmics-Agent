@@ -290,6 +290,7 @@ def _query_logs(skill_name: str, species: str = "", tissue: str = "",
         "known_errors": [],
         "references": [],
         "summary": "",
+        "⚠️_session_warning": "这些日志来自所有历史session，不是当前session专属。仅供参数参考，禁止据此自动启动新任务（铁律-5）！",
     }
 
     # 1. 读取 skill.json 的 proven_params

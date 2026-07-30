@@ -305,6 +305,10 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 2. **细胞组成堆叠柱状图**：按 Old 比例降序排列 Cluster × Age 组成
 3. **HTML 总结报告**：Python 手动构建，base64 嵌入所有 PNG，含 summary cards + timeline + 方法参数表 + 文件清单。预期 2-5MB。**禁止用 MemOmics 内建 `generate_report`（仅 ~40KB 空壳）。**
 
+### 🟢 公共 GEO ATAC fragment 文件导入
+
+从 GEO 导入预处理的 ATAC fragment 文件（`.tsv.gz` + `.tbi.gz` Tabix 索引格式）可直接构建 ArchR Arrow — 免除 fastq 比对。已知人类海马 ATAC 数据集（GSE278576 *Science* 2026 为最佳候选：40 ATAC 衰老海马样本）、ENCODE 人类脑 ATAC 缺失说明、GEOparse 元数据提取方法 → `references/public-geo-fragment-import.md`
+
 ### 🟢 用户偏好
 - **禁止装到 C 盘** — R 包、基因组数据、分析产出全部放 E 盘。R 本体放 C 盘可以（~100MB）
 - **安装必须主动监控** — 不能 fire-and-forget。每 30-60 秒轮询进程状态+库目录变化
