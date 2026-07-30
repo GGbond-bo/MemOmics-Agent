@@ -421,7 +421,7 @@ def _build_task_resume_prompt(session):
     
     # 检查当前意图：知识问答/进度查询/方案讨论 → 轻量提示
     _intent = session.get("intent", "")
-    _is_light_question = _intent in ("knowledge_ask", "progress_check", "analysis_plan", "chat")
+    _is_light_question = _intent in ("knowledge_ask", "progress_check", "analysis_plan", "chat", "cancel_task")
     
     if _is_light_question:
         # 轻量：只提醒有任务在后台，不强制推进
@@ -1200,6 +1200,20 @@ def _classify_intent(text: str):
     if any(kw in t for kw in SELF_INTRO_KW):
         return ("self_intro", 0.99, {})
 
+    # === Priority 1.3: cancel_task (用户明确要求取消/停止任务) ===
+    CANCEL_KW = ["取消任务", "取消分析", "停止任务", "停止分析", "不要跑了",
+                 "停掉", "取消吧", "不跑了", "停下来", "暂停任务",
+                 "cancel", "abort", "stop the task", "stop task",
+                 "kill the job", "terminate",
+                 # 宽松匹配：含"停止"+"任务/分析/跑/CellBender"等
+                 ]
+    if any(kw in t for kw in CANCEL_KW):
+        return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
+    # 停止/暂停 + 任务相关词 → cancel
+    if ("停止" in t or "暂停" in t) and any(kw in t for kw in 
+        ["任务", "分析", "跑", "cellbender", "训练", "计算", "进程", "job"]):
+        return ("cancel_task", 0.85, {"reason": "stop_with_context"})
+
     # === 工具名常量（多处复用）===
     TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
                   "cellchat", "cellbender", "harmony", "scenic", "sctransform",
@@ -1515,7 +1529,29 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     lines = ["【系统指令：自动路由 - 必须遵守】",
              f"意图类型：{intent} | 领域：{domain or '自动检测'}", ""]
     
-    if intent in ("knowledge_ask",):
+    if intent in ("cancel_task",):
+        lines += [
+            "⛔ 用户要求取消/停止任务。这是最高优先级指令。",
+            "你必须立即执行以下操作（不等、不问、不继续当前工作）：",
+            "1. 确认目标：回复用户正在停止的任务名称",
+            "2. task_plan.md → 所有 in_progress 的 Phase → 改为 **Status:** cancelled",
+            "3. cronjob(action='pause'|'remove') — 停止心跳监控",
+            "4. terminal('taskkill /F /PID <PID>') — 杀掉后台计算进程",
+            "5. 回复用户：'已停止。<任务名>的 task_plan 已标记 cancelled，心跳已停，进程已杀。'",
+            "⛔ 不要问'确定吗？'。用户已经说取消了，直接执行。",
+            "⛔ 如果有多个任务在跑，先确认用户要停哪个，再停。",
+            "",
+        ] if zh else [
+            "⛔ User requested task cancellation. Highest priority.",
+            "1. Confirm which task to stop",
+            "2. task_plan.md → mark all in_progress as cancelled",
+            "3. cronjob(action='pause'|'remove') — stop heartbeat",
+            "4. terminal('taskkill /F /PID <PID>') — kill background processes",
+            "5. Report: 'Stopped. task_plan cancelled, heartbeat stopped, processes killed.'",
+            "",
+        ]
+    
+    elif intent in ("knowledge_ask",):
         lines += [
             "用户正在询问知识/参数问题。这不是分析任务执行。",
             "🔴 铁律 -4：涉及生信/生物/医学的专业知识，禁止仅靠预训练知识回答！",
@@ -4950,7 +4986,7 @@ async def ws_endpoint(ws: WebSocket):
                 import re as _re_path
                 _has_data_path = bool(_re_path.search(r'[A-Za-z]:[/\\]\S+', user_text)) if user_text else False
                 # 轻量意图：永远不注入 SOUL-detail + skills_index（省 40%+ 上下文）
-                _LIGHT_INTENTS = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan")
+                _LIGHT_INTENTS = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan", "cancel_task")
                 # 重量意图：仅 explicit execution 或 analysis + 数据路径 + 执行关键词
                 _has_exec_kw = any(kw in user_text for kw in
                     ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze")) if user_text else False

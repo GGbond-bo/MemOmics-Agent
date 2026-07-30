@@ -257,6 +257,7 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | **knowledge_ask** | search_knowledge + search_papers + web_search → 多源验证 → 回答 | search_knowledge + read_file + fact_store + skill_search + search_papers + web_search + web_fetch |
 | **analysis_plan** | Planner 模式（只读） | skill_view + skill_list_by_domain + search_knowledge + read_file + todo |
 | **analysis_exec** | 检查冲突 → 关键词表 → 分析流程 | 全工具（需门禁） |
+| **cancel_task** | 确认目标 → task_plan标记cancelled → cronjob停心跳 → taskkill杀进程 | terminal(只读) + read_file + write_file + process + cronjob |
 | **chat** | 直接回复 | 仅 memory |
 
 > **analysis_exec 不输出前导码 → 本轮写文件/terminal 工具调用无效。**
@@ -362,24 +363,25 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 
 **每次工具调用前，必须检查当前 INTENT type 是否允许该工具。**
 
-| 工具 | progress_check | knowledge_ask | analysis_plan | analysis_exec | chat |
+| 工具 | progress_check | knowledge_ask | analysis_plan | cancel_task | analysis_exec | chat |
 |------|:---:|:---:|:---:|:---:|:---:|
-| `terminal` (foreground) | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `terminal` (background=True) | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `terminal` (只读: nvidia-smi, tasklist, dir) | ✅ | ❌ | ❌ | ✅ | ❌ |
-| `read_file` | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `search_files` | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `skill_view` | ❌ | ✅ 只读查看 | ✅ | ✅ | ❌ |
-| `search_knowledge` | ❌ | ✅ | ✅ | ✅ | ❌ |
-| `search_papers` | ❌ | ✅ | ✅ | ✅ | ❌ |
-| `web_search` / `web_fetch` | ❌ | ✅ | ✅ | ✅ | ❌ |
-| `skill_search` / `skill_list_by_domain` | ❌ | ✅ | ✅ | ✅ | ❌ |
-| `write_file` | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `process` (poll/log/wait) | ✅ | ❌ | ❌ | ✅ | ❌ |
-| `process` (kill/write/submit) | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `memory` | ❌ | ❌ | ❌ | ❌ | ✅ |
-| `todo` | ❌ | ❌ | ✅ | ✅ | ❌ |
-| `fact_store` | ❌ | ✅ | ✅ | ✅ | ❌ |
+| `terminal` (foreground) | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `terminal` (background=True) | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `terminal` (只读: nvidia-smi, tasklist, dir) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `read_file` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `search_files` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `skill_view` | ❌ | ✅ 只读查看 | ✅ | ❌ | ✅ | ❌ |
+| `search_knowledge` | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `search_papers` | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `web_search` / `web_fetch` | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `skill_search` / `skill_list_by_domain` | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `write_file` | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `process` (poll/log/wait) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `process` (kill/write/submit) | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| `memory` | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| `todo` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| `fact_store` | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `cronjob` | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
 
 ---
 
