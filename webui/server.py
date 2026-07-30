@@ -640,15 +640,8 @@ def _build_alerts_context(session):
 
 
 def _build_task_plan_context(session):
-    """读取 task_plan.md 并提取状态摘要，注入到每轮对话中。
-
-    上下文压缩后 LLM 会丢失长任务目标。此函数从磁盘读取 task_plan.md，
-    提取 Goal + Current Phase + 各 Phase 状态，生成精简的系统消息注入。
-    token 预算控制在 ~500 以内，避免挤压对话空间。
-
-    如果 task_plan.md 不存在但检测到分析意图 → 自动创建初始版本，
-    确保即使用户不知道 task_plan.md 也能受到长任务保护。
-    """
+    """读取 task_plan.md 并提取状态摘要，注入到每轮对话中。"""
+    import re
     results_dir = session.get("results_dir", "")
     if not results_dir:
         return None
@@ -3184,6 +3177,7 @@ def _save_weixin_session_map():
 
 def _rebuild_weixin_session_map():
     """启动时从 state.db 恢复微信会话映射"""
+    import re
     global _weixin_session_map
     try:
         db = _get_session_db()
