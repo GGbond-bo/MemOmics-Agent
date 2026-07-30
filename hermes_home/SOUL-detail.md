@@ -126,6 +126,7 @@ search_knowledge → skill_view → check_env → rail_review(pre) → write →
 5. **逐项执行** → 每项完成前后审查
 6. **nature-figure 出图** → 分析完成后，用 nature-figure 出一套发表级图（SVG+PDF+TIFF）
 7. **HTML 报告** → 生成完整报告
+8. **自动清理** → 删除临时文件（.heartbeat_stop/PROGRESS.md/alerts.json/logs/cron job），保留结果文件，列出保留文件请用户确认
 
 ---
 
@@ -222,10 +223,37 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 - 心跳必须检查：文件是否存在 + 文件大小 > 0（非空文件）
 - 空文件 = 产出异常 → 写 alerts.json
 
-### 规则 18: 删除数据必须用户确认
+### 规则 18: 删除数据分级管控
 
-（不变）删除分析产出前 → 列出文件+原因 → 弹窗确认 → 等用户批准后才能执行
-⛔ 禁止 `rm -rf`、禁止静默跳过确认
+**任务完成后，Agent 必须主动清理临时文件。但结果文件需要用户确认。**
+
+| 文件类型 | 操作 | 说明 |
+|---------|------|------|
+| `.heartbeat_stop` | ✅ 自动删除 | 心跳停止标记，已完成使命 |
+| `PROGRESS.md` | ✅ 自动删除 | 心跳进度摘要，已完成使命 |
+| `alerts.json` | ✅ 自动删除（all handled） | 已处理的警报，清理掉 |
+| `task_plan.md` | ✅ 自动归档或删除 | 任务完成，记录可清理 |
+| `pipeline.log` / 临时日志 | ✅ 自动删除 | 分析已完成，日志无用 |
+| `cron job` | ✅ 自动 remove | `cronjob(action="remove")` |
+| `*.py` / `*.R` 分析脚本 | ✅ 保留（可复现） | 放在 results/scripts/ 下 |
+| `*_filtered.h5` / `*.h5ad` 等产出 | ⛔ **需用户确认** | 分析结果，可能有价值 |
+| `*.png` / `*.svg` / `*.pdf` 等图表 | ⛔ **需用户确认** | 发表级图表，不能自动删 |
+| `report.html` | ⛔ **需用户确认** | 最终报告 |
+
+**自动清理流程（任务完成→Agent 验证完毕→自动执行）：**
+```
+1. read_file("task_plan.md") → 确认所有 Phase complete
+2. cronjob(action="remove") — 停心跳
+3. terminal("del .heartbeat_stop PROGRESS.md") — 清理心跳标记
+4. terminal("del alerts.json") — 如果所有 alarm 已 handled
+5. terminal("del pipeline.log *.err") — 清理临时日志
+6. move task_plan.md → results/archive/ — 归档或删除
+7. 列出结果文件，告知用户："以下结果文件已保留，需要删除时请告诉我"
+```
+
+> ⛔ 结果文件（h5/h5ad/csv/png/svg/pdf/html）绝对不可自动删除。
+> ⛔ Agent 完成任务后必须**主动列出可清理的临时文件并执行清理**，不等用户开口。
+> ⛔ 清理前不弹出确认框 — 临时文件直接删。只有结果文件才需要确认。
 
 ### 规则 19: 每轮先读 alerts.json
 

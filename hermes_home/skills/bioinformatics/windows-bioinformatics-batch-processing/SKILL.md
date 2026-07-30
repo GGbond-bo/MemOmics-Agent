@@ -153,6 +153,8 @@ done
 
 **⚠️ execute_code 超时陷阱**：`execute_code` 内 `time.sleep(120)` + terminal 调用 → 300s 后 stdout 全部丢失。不要用 execute_code 做长时间轮询。
 
+**⚠️ MSYS bash `sleep && tail` 缓冲区陈旧陷阱 (2026-07-30 验证)**：Windows 原生进程（如 CellBender `subprocess.Popen`）写日志时，MSYS bash 的管道层不一定实时看到新写入的内容。`sleep 120 && tail -5 log` 可能返回 3 分钟前的旧行——因为 bash 的文件描述符在 sleep 期间持有的是旧缓冲区快照。**正确做法**：用 `read_file` 直接读文件（绕过 bash 管道层），或分开两个 terminal 调用（不用 sleep 串联），或直接读心跳 monitor 日志。
+
 **⚠️ 文件名陷阱**：CellBender 产出是 `cellbender_output_filtered.h5`，不是 `filtered.h5`。`ls */filtered.h5` 永远返回空。
 
 **汇报模板**: `| 样本 | epoch | 进度 | GPU | 已完成 |`

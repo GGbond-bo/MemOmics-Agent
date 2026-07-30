@@ -64,6 +64,83 @@ User corrects → Stop all processes → Clean up outputs → REWRITE task_plan.
                                                          DO NOT SKIP THIS STEP
 ```
 
+## Third Occurrence — Multi-Copy task_plan.md Contamination
+
+After the second correction, the agent wrote a clean `task_plan.md` to `results/memomics-3c672f0a/task_plan.md` with explicit red lines:
+
+```
+## 红线（本 session 绝对不做）
+- ❌ CellBender
+- ❌ Monkey 数据处理
+- ❌ 任何未经用户明确指令的分析任务
+```
+
+However, on the next system wake-up, the agent **found and acted on a SECOND copy** of `task_plan.md` at `E:/monkey/cellbender/task_plan.md` — a copy that the pipeline had written to the data directory during the unauthorized run. This copy still contained the old CellBender Phase 2 tasks, and the agent started executing from it, bypassing the clean copy in `results/`.
+
+**The user had to issue a THIRD correction: "你怎么又跑cellbender了？"**
+
+### Root Cause
+
+1. **Multi-copy problem**: Pipeline scripts (like `run_remaining.py`) write their own `task_plan.md` to the data directory (`E:/monkey/cellbender/`). When cleaning up, the agent only fixed the main `results/` copy — data-directory copies survived.
+2. **System injection**: The Hermes framework can inject stale `task_plan.md` content into the system prompt (visible in system messages: "以下是磁盘上 task_plan.md 的当前状态摘要"). If a stale copy exists anywhere, it can be injected as context.
+3. **Weak copy**: Even after writing a clean `task_plan.md`, the agent's correction was fragile — it lived in only one location and could be bypassed by any other copy.
+
+### Prevention Rule #6 (added after third occurrence)
+
+**After correction, scavenge ALL `task_plan.md` copies across the filesystem, not just the one in `results/`.** Pipeline scripts, data directories, and work directories may all contain stale copies. Clean them all.
+
+```
+Step: search_files(pattern="task_plan.md", target="files", path="E:/")
+    → For each copy found outside results/memomics-*:
+      → If it contains CellBender/monkey tasks: delete or overwrite with clean version
+```
+
+## Fourth Occurrence — System-Level Context Injection
+
+Even with clean `task_plan.md` in all disk locations, the **system message itself** injected stale task content:
+
+```
+[SYSTEM] 以下是磁盘上 task_plan.md 的当前状态摘要。你正在进行一个长任务...
+## Goal
+3. **支线**: 完成 E:/monkey/ 下 15 个 CRR 样本的 CellBender remove-background
+```
+
+This means the Hermes framework cached the old task_plan content and injected it into the system prompt, bypassing the agent's clean write. The agent correctly identified this as stale but the injected content contaminated the initial context.
+
+### Prevention Rule #7 (system-level defense)
+
+**When the system prompt contains a task summary that contradicts the current session's actual tasks, trust the user's conversation history over the system injection.** Add an explicit override in the agent's response acknowledging the contradiction.
+
+**Detection signal**: System prompt says "你正在进行一个长任务" but the most recent user messages don't mention that task → flag as stale context injection.
+
+---
+
+## Summary: Complete Defense Stack
+
+| Layer | Defense | When Deployed |
+|-------|---------|---------------|
+| Prevention #1 | Cross-session ID verification | First incident |
+| Prevention #2 | Empty task_plan → ask, don't fabricate | First incident |
+| Prevention #3 | Verify user authorization in THIS session | First incident |
+| Prevention #4 | Cross-reference system_log session IDs | First incident |
+| Prevention #5 | Rewrite task_plan.md IMMEDIATELY after correction | Second incident |
+| Prevention #6 | Scavenge ALL task_plan.md copies (not just results/) | Third incident |
+| Prevention #7 | Trust conversation history over system prompt injection | Fourth incident |
+
+---
+
+## Corrected Cleanup Workflow (Final)
+
+```
+User corrects →
+  1. Stop ALL processes (taskkill /PID, never /IM python.exe)
+  2. Delete ALL pipeline artifacts (scripts, heartbeat, progress files)
+  3. Search for ALL task_plan.md copies: search_files(pattern="task_plan.md", target="files", path="E:/")
+  4. Overwrite EVERY copy with clean version containing explicit 红线
+  5. Verify GPU idle + no pipeline processes
+  6. Report clean state to user
+```
+
 ## Date
 
 2026-07-30, session `memomics-3c672f0a`

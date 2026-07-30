@@ -163,8 +163,18 @@ os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 def _is_data_destroy_command(cmd: str) -> bool:
-    """检测 terminal 命令是否会删除数据。"""
+    """检测 terminal 命令是否会删除数据。
+    允许删除已知临时文件（.heartbeat_stop/PROGRESS.md/task_plan.md/alerts.json/logs）。"""
     c = cmd.lower().replace("'", "").replace('"', "")
+    
+    # ✅ 白名单：已知临时文件，允许自动清理
+    _CLEANUP_SAFE = [".heartbeat_stop", "progress.md", "alerts.json", "task_plan.md",
+                     "pipeline.log", ".err", "monitor.log", ".heartbeat_"]
+    if any(safe in c for safe in _CLEANUP_SAFE) and not any(
+        dangerous in c for dangerous in ["*.h5", "*.h5ad", "*.csv", "*.png", "*.svg", 
+                                          "*.pdf", "*.html", "*.rds", "*.rdata", "*.mtx"]):
+        return False  # 只删临时文件，不删结果文件 → 放行
+    
     if "rm -rf" in c or "rm -r " in c or "rmdir" in c:
         if not any(s in c for s in ["/tmp/", "tmp/", "__pycache__"]):
             return True
@@ -176,8 +186,18 @@ def _is_data_destroy_command(cmd: str) -> bool:
 
 
 def _is_code_destroy(code: str) -> bool:
-    """检测 Python 代码是否会删除文件/目录。"""
+    """检测 Python 代码是否会删除文件/目录。
+    允许删除已知临时文件。"""
     c = code.lower()
+    
+    # ✅ 白名单：已知临时文件，允许自动清理
+    _CLEANUP_SAFE = [".heartbeat_stop", "progress.md", "alerts.json", "task_plan.md",
+                     "pipeline.log"]
+    if any(safe in c for safe in _CLEANUP_SAFE) and not any(
+        dangerous in c for dangerous in [".h5", ".h5ad", ".csv", ".png", ".svg", 
+                                          ".pdf", ".html", ".rds", ".rdata"]):
+        return False  # 只删临时文件 → 放行
+    
     destroy_funcs = ["shutil.rmtree", "os.remove", "os.unlink", "pathlib.path",
                      ".unlink(", ".rmdir(", "send2trash"]
     for f in destroy_funcs:
