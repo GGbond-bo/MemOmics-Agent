@@ -163,11 +163,48 @@ terminal("findstr /i \"error traceback fail\" {analysis_dir}\\*.log 2>nul")
 - 状态: {normal/error/complete}
 ```
 
-### 6. 判定完成/异常
-- 所有文件产出 + 大小合格 + 进程已退出 → 写 alerts.json (type=completion)
-- 发现错误 → 写 alerts.json (type=error, urgency=HIGH)
-- 进程死了但未完成 → 写 alerts.json (type=process_died, urgency=HIGH)
-- 一切正常 → 写 alerts.json (urgency=LOW) 或跳过
+### 6. 判定完成/异常 — 硬指标
+
+**只有三个客观指标全部满足，才判定完成：**
+
+```
+✅ 指标1: 磁盘产出数 == 预期文件数
+   terminal("dir {analysis_dir}\{output_subdir} /s /b 2>nul | find /c /v \"\"")
+   → 返回的数字必须 >= {expected_count}
+
+✅ 指标2: 每个文件大小 > 0
+   terminal("for %f in ({analysis_dir}\{output_subdir}\*) do @echo %~zf")
+   → 所有文件 size > 0，不能有空文件
+
+✅ 指标3: 计算进程已正常退出
+   terminal("tasklist /FI \"IMAGENAME eq python.exe\" | find /c \"cellbender\"")
+   → 返回 0（进程已退出）
+   → 同时检查退出码：read_file("{analysis_dir}/exit_code.txt") 或日志中 "completed successfully"
+```
+
+**三个都满足 → 任务完成 → 写 alerts.json (type=completion, urgency=HIGH)**
+**进程退出但产出不足 → 进程崩溃 → 写 alerts.json (type=process_died, urgency=HIGH)**
+**一小时后仍无变化 → 写 alerts.json (type=stalled, urgency=HIGH)**
+
+> ⛔ 判定完成**不是**读 task_plan.md 的 Phase 状态（那是 Agent 写的，可能不准确）。
+> ⛔ 判定完成**是**扫描磁盘 + 检查进程 + 检查文件大小。**硬证据，不靠标记。**
+
+### 7. 判定完成后做什么
+
+```
+cron agent 判定完成 →
+  1. write_file("{workdir}/.heartbeat_stop", "completed: {count}/{expected} files\n")
+  2. write alerts.json (type=completion, urgency=HIGH)
+  3. write PROGRESS.md 最后一条："任务完成。{count}/{expected} 文件产出，进程已退出。"
+  4. 返回 "任务完成。心跳监控自动终止。"
+```
+
+MemOmics `_heartbeat_loop` 30s 内检测到 `.heartbeat_stop` →
+  1. `session["_urgent_wakeup"] = True`
+  2. 3 秒后 Agent 被唤醒
+  3. Agent 读 PROGRESS.md + alerts.json → **现在 Agent 知道任务完成了**
+  4. Agent 调用 `cronjob(action="remove")` → 心跳正式停止
+  5. Agent 更新 task_plan.md → 生成报告 → 通知用户
 
 ## alerts.json 格式
 写入 {analysis_dir}/alerts.json：
