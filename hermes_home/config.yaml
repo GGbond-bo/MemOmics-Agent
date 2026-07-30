@@ -21,14 +21,3 @@ plugins:
     auto_extract: true
     default_trust: 0.5
     min_trust_threshold: 0.2
-
-# ============ 集群 SSH 配置（可选） ============
-# 配置后，Agent 可通过 terminal("ssh $CLUSTER 'cmd'") 在集群上执行命令
-# 前提：已配置 SSH 免密登录（ssh-copy-id 或 ssh-agent）
-cluster:
-  enabled: false           # 改为 true 启用
-  host: "gpu-cluster"      # 集群地址（可用 ~/.ssh/config 中的别名）
-  user: "your_username"    # SSH 用户名
-  port: 22
-  data_dir: "/data/"       # 集群上的数据目录
-  work_dir: "/home/your_username/"  # 集群上的工作目录
