@@ -1204,8 +1204,8 @@ def _classify_intent(text: str):
     CANCEL_KW = ["取消任务", "取消分析", "停止任务", "停止分析", "不要跑了",
                  "停掉", "取消吧", "不跑了", "停下来", "暂停任务",
                  "cancel", "abort", "stop the task", "stop task",
+                 "stop the analysis", "stop analysis",
                  "kill the job", "terminate",
-                 # 宽松匹配：含"停止"+"任务/分析/跑/CellBender"等
                  ]
     if any(kw in t for kw in CANCEL_KW):
         return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
@@ -1213,6 +1213,10 @@ def _classify_intent(text: str):
     if ("停止" in t or "暂停" in t) and any(kw in t for kw in 
         ["任务", "分析", "跑", "cellbender", "训练", "计算", "进程", "job"]):
         return ("cancel_task", 0.85, {"reason": "stop_with_context"})
+    # 取消 + 任务相关词 → cancel（排除问句）
+    if "取消" in t and not any(kw in t for kw in ["怎么", "如何", "什么", "为什么", "哪里"]):
+        if any(kw in t for kw in ["任务", "分析", "跑", "之前", "正在", "全部"]):
+            return ("cancel_task", 0.83, {"reason": "cancel_with_context"})
 
     # === 工具名常量（多处复用）===
     TOOL_NAMES = ["seurat", "scanpy", "deseq2", "edger", "limma", "monocle",
