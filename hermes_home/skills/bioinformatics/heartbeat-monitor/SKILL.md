@@ -36,8 +36,6 @@ MemOmics 有两个关键目录：
 ### Step 2: 创建 cron job
 
 ```python
-# 计算 repeat：ceil(estimated_minutes / interval_minutes) + 10（安全余量）
-# 示例：360min 任务 / 30min 间隔 + 10 = 22 次
 cronjob(
     action="create",
     name="监控-{任务名}",
@@ -45,8 +43,8 @@ cronjob(
     prompt=HEARTBEAT_PROMPT,  # 从本 SKILL.md 的 Prompt 模板中复制
     skills=["heartbeat-monitor"],
     workdir="{results_dir}",  # ⚠️ 会话路径！不是 analysis_dir
-    repeat={repeat},          # ⚠️ 硬上限！公式见上
-    deliver="local",
+    deliver="local",          # 只保存输出，不推送到聊天
+    # 不设 repeat — 生信任务可能跑数天/一周，由心跳自检+Agent 主动关闭
 )
 ```
 
@@ -76,44 +74,30 @@ cronjob(
 
 ### 何时停止单个 job？
 
-**四层保险机制**（从快到慢）：
+**四层保险机制**（不设时间硬限，适应长达一周的生信任务）：
 
-| 层 | 触发条件 | 执行者 | 延迟 |
+| 层 | 触发条件 | 执行者 | 说明 |
 |----|---------|--------|------|
-| 1️⃣ Agent 主动关闭 | 任务完成，Agent 被唤醒 | Agent 调用 `cronjob(action="remove")` | 立即 |
-| 2️⃣ 心跳自检关闭 | cron agent 读 task_plan.md → 所有 Phase `complete` | cron agent 写入 `.heartbeat_stop` + alerts.json | 下次心跳 |
-| 3️⃣ MemOmics 清理 | `_heartbeat_loop` 检测到 `.heartbeat_stop` 或 completion alert | MemOmics 调用 `/api/wakeup` 唤醒 Agent | 30s 内 |
-| 4️⃣ repeat 硬限制 | `repeat=N` 次心跳执行完毕 | Hermes cron scheduler 自动停止 | 最终保险 |
+| 1️⃣ Agent 主动 | 任务完成，Agent 被唤醒 | `cronjob(action="remove")` | 正常路径 |
+| 2️⃣ 心跳自检 | cron agent 读 task_plan.md → 所有 Phase `complete` | 写 `.heartbeat_stop` → MemOmics 唤醒 Agent | 最可靠 |
+| 3️⃣ MemOmics 清理 | `_heartbeat_loop` 检测 `.heartbeat_stop` 或 completion alert | 唤醒 Agent remove | 30s 内 |
+| 4️⃣ 无产出超时 | 连续 N 次心跳无新产出 + 进程已死 | 写 alerts.json (urgency=HIGH) → Agent 确认 | 防僵死 |
 
-**repeat 参数计算**：
-```
-repeat = ceil(estimated_minutes / heartbeat_interval_minutes) + 10
+> ⛔ **不设 repeat 硬限制**。生信任务（CellBender、大规模聚类、scVI）可能跑数天甚至一周。
+> 硬限会中途杀死心跳，导致长任务失去监控。
 
-示例：CellBender 6h = 360min，心跳间隔 30min
-  → repeat = ceil(360/30) + 10 = 22 次
-  → 最多执行 22 次心跳后自动停止（11h 硬上限）
-```
+### 无产出超时计算（第 4 层）
 
-**心跳自检关闭逻辑**（cron agent 每次心跳执行）：
 ```
-1. read_file("{workdir}/task_plan.md") — 读取所有 Phase 状态
-2. 如果所有 Phase Status = complete → 
-   a. write_file("{workdir}/.heartbeat_stop", "reason: all phases complete\n")
-   b. write alerts.json (type=completion, urgency=HIGH)
-   c. 返回 "任务完成。心跳监控自动终止。"
-3. 如果发现 process_died + 产出未完成 →
-   a. write alerts.json (type=process_died, urgency=HIGH)
-   b. 返回 "进程异常终止，已通知主 Agent。"
+连续无产出心跳数阈值 = max(6, 任务预计小时数)
+示例：
+  - 6h 任务 → 连续 6 次心跳无新文件 + 进程死 → 警告
+  - 72h 任务 → 连续 72 次心跳无新文件 + 进程死 → 警告
+  - 7天任务 → 连续 168 次无新文件 + 进程死 → 警告
 ```
 
-### 何时停止 ticker？
-- **自动**：关闭 MemOmics 进程 → daemon thread 自动终止
-- 日志：`[MemOmics] Cron ticker stopped`
-
-### 服务重启后？
-- ticker 自动重启（startup 事件）
-- 遗留的 cron job 被 catchup 机制处理
-- 如果有 `.heartbeat_stop` 标记 → ticker 跳过该 job → Agent 下次被唤醒时 remove
+> ⛔ 只有"无新产出 **且** 进程已死"才触发。单独无新产出不警告（CellBender 一个样本可能跑 2 小时）。
+> ⛔ 触发后写 alerts.json (urgency=HIGH)，**不自动停止** — 等 Agent 确认后再决定。
 
 ---
 

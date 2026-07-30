@@ -195,7 +195,6 @@ results/{模块名}_{方法名}_{日期}_{sid}/
      prompt="{HEARTBEAT_PROMPT}",  ← 从 heartbeat-monitor SKILL.md 复制模板
      skills=["heartbeat-monitor"],
      workdir="{results_dir}",  # ⚠️ 会话路径！
-     repeat={repeat},
      deliver="local")
 ```
 
@@ -252,15 +251,16 @@ MemOmics _heartbeat_loop（30s 间隔）
 
 **cron job 不会永远跑下去。四层保险保证它最终停止：**
 
-| 层 | 触发条件 | 执行者 | 延迟 |
+| 层 | 触发条件 | 执行者 | 说明 |
 |----|---------|--------|------|
-| 1️⃣ Agent 主动 | 任务完成，Agent 被唤醒 | `cronjob(action="remove")` | 立即 |
-| 2️⃣ 心跳自检 | cron agent 读 task_plan.md → 所有 Phase complete | 写入 `.heartbeat_stop` → MemOmics 唤醒 Agent | 下次心跳 |
-| 3️⃣ MemOmics 清理 | `_heartbeat_loop` 检测到 stop 标记 | `/api/wakeup` → Agent remove cron job | 30s 内 |
-| 4️⃣ repeat 硬限 | `repeat=N` 次心跳执行完毕 | Hermes cron scheduler 自动停止 | 最终保险 |
+| 1️⃣ Agent 主动 | 任务完成，Agent 被唤醒 | `cronjob(action="remove")` | 正常路径 |
+| 2️⃣ 心跳自检 | cron agent 读 task_plan.md → 所有 Phase complete | 写 `.heartbeat_stop` → MemOmics 唤醒 Agent | 最可靠 |
+| 3️⃣ MemOmics 清理 | `_heartbeat_loop` 检测 stop 标记或 completion alert | `/api/wakeup` → Agent remove cron job | 30s 内 |
+| 4️⃣ 无产出超时 | 连续 N 次无新产出 + 进程已死 | alerts.json(HIGH) → Agent 确认 | 防僵死，不自动停止 |
 
+> ⛔ **不设 repeat 硬限制**。生信任务可能跑数天甚至一周。
 > ⛔ Agent 在任务完成后**必须**调用 `cronjob(action="remove")`。
-> 即使忘记，心跳自检 + `.heartbeat_stop` 标记 + repeat 硬限也会兜底。
+> 即使忘记，心跳自检（读 task_plan.md 所有 Phase complete）是最可靠的兜底。
 
 ### 规则 20: 长任务进程模式决策树（已整合到规则16）
 
