@@ -19,6 +19,7 @@ import json
 import asyncio
 import traceback
 import uuid
+import re
 import time
 import shutil
 from pathlib import Path
@@ -641,7 +642,6 @@ def _build_alerts_context(session):
 
 def _build_task_plan_context(session):
     """读取 task_plan.md 并提取状态摘要，注入到每轮对话中。"""
-    import re
     results_dir = session.get("results_dir", "")
     if not results_dir:
         return None
@@ -3177,7 +3177,6 @@ def _save_weixin_session_map():
 
 def _rebuild_weixin_session_map():
     """启动时从 state.db 恢复微信会话映射"""
-    import re
     global _weixin_session_map
     try:
         db = _get_session_db()
