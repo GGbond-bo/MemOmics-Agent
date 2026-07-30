@@ -30,17 +30,31 @@
 
 ### 画图 Skill 选择策略
 
-MemOmics 有三个画图 skill，按场景选择：
+MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自动选择：**
 
-| 场景 | 用哪个 | 说明 |
-|------|--------|------|
-| 生信分析中快速出图（UMAP/火山图/热图/DotPlot等） | `cns-visualization` | 专注生信图表，参数预配好 |
-| 通用画图（柱状图/折线图/散点图/拼图等） | `scipilot-figure-skill` | 通用科学图表 |
-| **发表/投稿前最终出图** | **`nature-figure`** | SVG editable text + PDF/TIFF 600dpi + Nature 期刊配色 |
+| 用户给什么 | 要画什么 | 用哪个 skill | 分析级别 |
+|-----------|---------|-------------|:--:|
+| Seurat/AnnData/SCE 对象 | UMAP / 热图 / DotPlot / 小提琴 / FeaturePlot / Sankey | `cns-visualization` | 轻量级 |
+| CSV/Excel/临床信息/metadata | 柱状图 / 箱线图 / 散点图 / 折线图 / 分布图 | `scipilot-figure-skill` | 轻量级 |
+| 任何数据 + "发表"/"投稿"/"Nature"/"manuscript" | 发表级最终图 | `nature-figure` | 统计级 |
+| 分析完成后的最终出图（铁律 26） | 全套发表级图 | `nature-figure` | 分析级末尾 |
 
-> 💡 分析过程中用 cns-visualization 快速看结果。
-> 💡 分析完成后，用 nature-figure 做发表级最终出图。
-> 💡 nature-figure 的特色：Figure Contract（先论证后画图）、Nature/Science/Cell 期刊配色、可编辑 SVG 文本、多面板拼图。
+**快速出图场景速查（给数据→直接画图，不走完整分析）：**
+
+| 用户说 | 数据源 | → 触发 skill | 说明 |
+|--------|--------|-------------|------|
+| "画个热图" | Seurat/AnnData | `cns-visualization` | 知道 DoHeatmap/ComplexHeatmap |
+| "画个小提琴图" | Seurat/AnnData | `cns-visualization` | 知道 VlnPlot/scanpy.pl.violin |
+| "画个UMAP" | Seurat/AnnData | `cns-visualization` | 知道 DimPlot/sc.pl.umap |
+| "画个DotPlot" | Seurat/AnnData | `cns-visualization` | 知道 DotPlot/sc.pl.dotplot |
+| "画个火山图" | DEG结果CSV | `cns-visualization` | 知道 EnhancedVolcano |
+| "画个柱状图" | CSV/metadata | `scipilot-figure-skill` | 先剖析数据→推荐图型 |
+| "画个箱线图" | CSV/临床信息 | `scipilot-figure-skill` | 先检查样本量/分布 |
+| "帮我画图，不知道画什么" | 任何 | `scipilot-figure-skill` | 先做数据剖析 |
+
+> 💡 **纯出图 = 轻量级**：skill_view → check_env → write → terminal → rail_review(post)。不创建 task_plan，不跑 debate。
+> 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
+> 💡 分析完成 = 铁律 26 自动触发 nature-figure。
 
 ### 必触发列表（🔴，用户说这些词立刻 skill_view）
 
@@ -51,9 +65,10 @@ MemOmics 有三个画图 skill，按场景选择：
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
-| "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | `skill_view("scipilot-figure-skill")` 或 `skill_view("nature-figure")` |
-| "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" / "paper figure" | `skill_view("nature-figure")` ← 发表级最终出图 |
-| "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信快速出图 |
+| "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 根据数据类型选择：Seurat/AnnData→`cns-visualization`，CSV/metadata→`scipilot-figure-skill` |
+| "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 发表级最终出图 |
+| "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
+| "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
 | "CellBender" / "去背景" / "ambient RNA" / "filtered.h5" / "ptrepack" | `skill_view("cellbender-remove-background")` |
 | "DEG" / "差异分析" / "差异基因" | `skill_view("deg-analysis")` |
 | "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
