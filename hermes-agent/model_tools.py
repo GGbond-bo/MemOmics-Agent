@@ -187,6 +187,14 @@ def _run_async(coro):
 
 discover_builtin_tools()
 
+# === MemOmics bioinformatics tools ===
+# MemOmics 运行在独立的 FastAPI 进程中，不走 Hermes gateway。
+# 需要显式导入 memomics.bio_tools 来注册 search_knowledge/search_papers 等工具。
+try:
+    from memomics import bio_tools  # noqa: F401
+except Exception:
+    pass
+
 # MCP tool discovery (external MCP servers from config) used to run here as
 # a module-level side effect.  It was removed because discover_mcp_tools()
 # internally uses a blocking future.result(timeout=120) wait, and the

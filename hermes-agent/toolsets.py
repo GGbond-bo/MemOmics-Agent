@@ -188,6 +188,30 @@ TOOLSETS = {
         "includes": []
     },
     
+    # === MemOmics bioinformatics tools ===
+    # 通过 model_tools.py 中的 `from memomics import bio_tools` 自动注册。
+    # 工具集名 "memomics" 在 enabled_toolsets 中指定后启用。
+    "memomics": {
+        "description": "MemOmics bioinformatics analysis tools: data scanning, knowledge search, literature search, environment check, rail review, debate analysis, and pipeline orchestration",
+        "tools": [
+            "scan_data",
+            "search_knowledge",
+            "search_papers",
+            "search_papers_by_context",
+            "guide_analysis",
+            "check_env",
+            "rail_review",
+            "debate_analysis",
+            "todo_manage",
+            "memomics_pipeline",
+            "update_results_dir",
+            "skill_evolution",
+            "send_message",
+            "screenshot",
+        ],
+        "module": "tools.memomics_tools",
+        "includes": []
+    },
 
     "file": {
         "description": "File manipulation tools: read, write, patch (with fuzzy matching), and search (content + files)",
