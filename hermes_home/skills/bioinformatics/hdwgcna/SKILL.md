@@ -91,10 +91,15 @@ WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | skeletal_muscle | aging | 2026-08-01 | run_step4.R + run_step5.R + run_step6.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-01 | run_hdwgcna_official_full.R + resume.R + resume2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-01 | build_hdwgcna_figure.R + run_hdwgcna_official_*.R + go_kegg_official.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-01 | - | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| hdWGCNA/WGCNA 在 MF 亚群数据上拆不出模块：soft threshold R2 最高 | MF（终末分化肌纤维）的转录程序高度协调——慢肌/快肌/代谢基因共享一个主轴，共 | 改用 NMF（RcppML/nmf 包）做基因程序分解——已在同数据上成功拆出 6 个程序（快肌 P |
 | `remotes::install_github("smorabit/hdWGCNA")` 超时/连接失败 | GitHub API 限流或网络不可达 | **优先用 `pak::pak("smorabit/hdWGCNA")`** — `pak` 使用独立 GitHub 认证通道，通常能绕过限流。本环境 pak v0.9.4 已预装。详见 `references/pak-github-fallback.md` |
 | hdWGCNA 依赖 WGCNA 编译失败 | 缺少系统编译工具（Windows 需 Rtools） | Windows 先装 Rtools；或从 CRAN 装 WGCNA 预编译二进制包后再装 hdWGCNA |
 | `FindWGCNAModules` 内存溢出 | 细胞数过多 (>50K) | subset 到 10-20K 细胞，或用 metacells 聚合 |

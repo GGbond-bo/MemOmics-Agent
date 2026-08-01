@@ -1,0 +1,62 @@
+{
+  "id": "scrna-cns-figure-design",
+  "name": "scRNA-seq CNS Figure Design",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 scRNA-seq CNS Figure Design 进行分析",
+  "source_dir": "skills/bioinformatics/scrna-cns-figure-design",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [],
+  "success_count": 3,
+  "proven_script": "phase4_rss_perturbation.R",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "nmf_step1.R + nmf_step2_visualize.R + nmf_step3_enrichment.R",
+      "params": "{\"k_range\": \"4:7\", \"k_main\": 6, \"hvg\": 2936, \"excluded\": \"MT/RPL/RPS/MALAT1/TTN/NEB/DMD (64 genes)\", \"method\": \"RcppML::nmf\", \"tol\": \"1e-5\", \"maxit\": 500, \"seed\": 42, \"input\": \"SCT data, 20000 cells (10 MF subtypes × 2000)\", \"type_col\": \"type (Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post)\"}",
+      "date": "2026-07-31",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "10 MF亚群各2000细胞(20K) SCT数据 RcppML NMF k=6: P1快肌(ATP2A1/RYR1) P2慢肌(MYH7/ATP2A2) P3 RSS/衰老(BMPR1B) P4应激(FKBP5/SESN1) P5骨架(PALLD/XIRP2) P6翻译(ACTA1/CKM/MB)。RSS程序P3验证: 衰老递增(Y 3.6e-5→O 5.0e-5→OD 6.4e-5)且运动不响"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "specializedMF_dual_origin.R",
+      "params": "{\"method\": \"AddModuleScore 双轴 + Hartigan dip test + 象限分析 + NMF关联\", \"denerv_module\": \"CHRNG/CHRNA1/CHRND/NCAM1/GDNF/ERBB3/NTF3/NGF/NTRK2 (9 genes)\", \"devel_module\": \"MYH3/MYH8/MYOG/MYOD1/DLK1/ACTC1 (6 genes)\", \"input\": \"SCT data, 20000 cells (10 MF subtypes × 2000)\", \"k6_NMF\": \"meta_with_nmf_loadings_k6.rds\"}",
+      "date": "2026-07-31",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF 双起源证据链: SP 是唯一去神经轴均值>0的群(denerv=+0.076 vs PureI -0.016/IIA -0.027), devel也最高(+0.033)。CHRNG SP=29.8% vs IIA 5.9%, NCAM1 SP=13.6% vs 5%, MYH3 16.7%, MYH8 2.5% vs 0.7%, MYOG 21%。dip test 单"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "phase4_rss_perturbation.R",
+      "params": "{\"NMF_loading\": \"nmf/meta_with_nmf_loadings_k6.rds (NMF_1..NMF_6→P1..P6)\", \"RSS_P3_aging\": \"Y_Pre 6.22e-5 → O_Pre 1.03e-4 → OD_Pre 1.11e-4 (1.65x)\", \"RSS_exercise_response\": \"O_Pre→O_Post delta -6.7e-7 (不响应)\", \"RSS_vs_others_fold\": \"Y 1.70 → O_Pre 2.45\", \"perturbation_RSS\": \"aging 8.08e-5, ex_old 6.15e-5, rev -0.107\", \"perturbation_SP\": \"aging 9.71e-5, ex_old 1.05e-4, rev +0.025\"}",
+      "date": "2026-07-31",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Phase 4 RSS 衰老特异证据链完成：P3 loading 衰老递增 1.65x（Y 6.22e-5→O 1.03e-4→OD 1.11e-4），运动不响应（delta -6.7e-7），RSS vs 其余群 fold 随衰老扩大（1.70→2.45）；扰动向量场显示 RSS reversibility -0.107（运动不逆转），SP +0.025（运动不逆转轻微同向）。产出 4 图 + "
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "phase4_rss_perturbation.R"
+  }
+}

@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (30 skills)
+## 08_报告 - 报告/可视化 (31 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -232,6 +232,7 @@
 | archr-atac-analysis | > |  | YEL 讨论触发 |
 | nature-figure | >- |  | YEL 讨论触发 |
 | public-data-download | 精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。 |  | YEL 讨论触发 |
+| scrna-cns-figure-design | >- |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

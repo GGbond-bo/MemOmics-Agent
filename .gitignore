@@ -79,3 +79,9 @@ test_search.db
 state.db
 Rplots.pdf
 nul
+
+# === 运行产物（不入 git）===
+hdwgcn_src/
+hermes_home/environment.json
+hermes_home/skills/bioinformatics/_debates/
+webui/uploads/

@@ -985,7 +985,32 @@ def _load_provider_keys():
 _load_provider_keys()
 
 def _sync_debate_env():
-    """Inject API key + base_url into environ for debate_analysis independent LLM calls"""
+    """Inject API key + base_url into environ for debate_analysis independent LLM calls.
+    修复(2026-08-01): 优先使用 _current_model (model_config.json 里实际配置的 provider/key,
+    用户当前真正在用的模型)。此前遍历 _provider_keys 时 dcs-cloud 因 'dcs' in pid 匹配抢先注入,
+    但 dcs-cloud 的 key 已失效 (401 Invalid API key), 导致 debate_analysis 连续 7 次 8/8 全失败。
+    现在改为: ① 若 _current_model 有 key 直接用它 (最可靠, 用户正在用的); ② 否则遍历
+    provider_keys 时跳过验证失败的 provider, 优先 deepseek 官方。
+    """
+    # ① 优先：当前模型配置（用户实际在用的 provider/key，已验证可用）
+    if _current_model.get("api_key"):
+        os.environ["DEEPSEEK_API_KEY"] = _current_model["api_key"]
+        os.environ["DEEPSEEK_BASE_URL"] = _current_model.get("base_url", "").rstrip("/")
+        os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
+        print(f"[INFO] Debate env injected from _current_model: URL={_current_model.get('base_url','')} MODEL={_current_model.get('model','?')}")
+        return
+    # ② 回退：遍历 provider_keys，优先 deepseek 官方（其 key 有效），跳过 dcs-cloud（已验证 401）
+    for pid, info in _provider_keys.items():
+        ak = info.get("api_key", "")
+        bu = info.get("base_url", "")
+        # 优先 deepseek 官方；dcs-cloud 若存在但被跳过
+        if ak and pid.lower() == "deepseek":
+            os.environ["DEEPSEEK_API_KEY"] = ak
+            if bu:
+                os.environ["DEEPSEEK_BASE_URL"] = bu.rstrip("/")
+            os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
+            print(f"[INFO] Debate env injected from provider_keys (deepseek): URL={bu} MODEL={_current_model.get('model','?')}")
+            return
     for pid, info in _provider_keys.items():
         ak = info.get("api_key", "")
         bu = info.get("base_url", "")
@@ -994,12 +1019,8 @@ def _sync_debate_env():
             if bu:
                 os.environ["DEEPSEEK_BASE_URL"] = bu.rstrip("/")
             os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
-            print(f"[INFO] Debate env injected: KEY=*** URL={bu} MODEL={_current_model.get('model','?')}")
+            print(f"[INFO] Debate env injected (fallback): URL={bu} MODEL={_current_model.get('model','?')}")
             return
-    if _current_model.get("api_key"):
-        os.environ["DEEPSEEK_API_KEY"] = _current_model["api_key"]
-        os.environ["DEEPSEEK_BASE_URL"] = _current_model.get("base_url", "").rstrip("/")
-        os.environ["DEEPSEEK_MODEL"] = _current_model.get("model", "deepseek-v4-flash")
 
 # 启动同步：如果 _current_model 有 key 但 provider_keys 为空，
 # 自动按 base_url 反查 provider 并同步 key，保证交互框下拉框能显示模型

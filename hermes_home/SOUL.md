@@ -285,6 +285,32 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 
 ---
 
+## 🔴 铁律 -6 — 辩论/多角色 LLM 调用必须串行
+
+**debate_analysis 及任何多角色并行 LLM 调用：禁止 ThreadPoolExecutor 并发。**
+
+```
+根因（2026-08-01 实测）：
+  ThreadPoolExecutor(max_workers=8) 8路并发打 API
+  → 触发 provider 并发/配额限制 → 7次 8/8 全失败
+  
+修复：
+  for 循环串行调用（先 pro 3角色 → con 4角色 → judge 最后）
+  → 8/8 全部成功（302.7s）
+```
+
+| 规则 | 说明 |
+|------|------|
+| ⛔ 禁止 `ThreadPoolExecutor` 并行调用 LLM | 8路并发=触发限流 |
+| ✅ 用 for 循环串行 | 逐个调用，稳 |
+| ✅ 顺序：pro → con → judge | judge 最后（需要拼接全部论据） |
+| ✅ `reasoning_content` fallback | flash 模型 content 可能为空，从 reasoning_content 取 |
+
+> 为什么串行反而更稳？provider 对并发请求限流（rate limit），8 路同时打=全部被限。
+> 串行=每个请求单独通过，只是慢一点（300s vs 60s），但成功率高得多。
+
+---
+
 ## 🔴 铁律 -5 — Session 隔离（最高优先级）
 
 **你只能操作当前 session 的数据和任务。禁止跨 session 执行。**
