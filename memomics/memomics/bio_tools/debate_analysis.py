@@ -418,31 +418,25 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
 # ==================== 并行调用工具 ====================
 
 def _call_role_parallel(tasks: list, api_key: str, base_url: str, model: str) -> dict:
-    """并行调用多个角色，返回 {label: result_dict}。
+    """调用多个角色，返回 {label: result_dict}。
 
-    每个 task = (label, prompt)。
-    使用 ThreadPoolExecutor 并行调用，每个角色仍是独立 HTTP 调用（上下文隔离不变）。
-    正方角色互相看不到（各自的 messages 只有自己的 prompt），并行不破坏隔离性。
+    串行执行（2026-08-01 修复）：之前用 ThreadPoolExecutor 8 路并发，
+    实测触发 provider 并发/配额限制导致 7 次 8/8 全失败。改为串行更稳。
+    每个 task = (label, prompt)。每个角色仍是独立 HTTP 调用（上下文隔离不变）。
     """
     results = {}
-    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-        futures = {
-            executor.submit(_call_llm_sync, prompt, label, api_key, base_url, model): label
-            for label, prompt in tasks
-        }
-        for future in as_completed(futures):
-            label = futures[future]
-            try:
-                results[label] = future.result()
-            except Exception as e:
-                logger.warning(f"debate {label} parallel call failed: {e}")
-                results[label] = {
-                    "content": f"[{label} 辩论生成失败]",
-                    "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
-                    "isolation_verified": True,
-                    "messages_count": 1,
-                    "error": True,
-                }
+    for label, prompt in tasks:
+        try:
+            results[label] = _call_llm_sync(prompt, label, api_key, base_url, model)
+        except Exception as e:
+            logger.warning(f"debate {label} call failed: {e}")
+            results[label] = {
+                "content": f"[{label} 辩论生成失败]",
+                "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
+                "isolation_verified": True,
+                "messages_count": 1,
+                "error": True,
+            }
     return results
 
 
