@@ -122,9 +122,27 @@ terminal(command='cmd.exe /c "E:\\path\\to\\run.bat"', background=True, notify_o
 - `addGroupCoverages()` → **静默崩溃** exit_code=1，无报错信息，只完成了部分组（如 21/57）
 - `addArchRGenome("hg38")` 调用时不报错，但所有下游函数失败
 
-**根因**：Arrow 文件使用 NCBI RefSeq 染色体命名（如猕猴 T2T 组装的 `NC_088375.1`），而 `addArchRGenome("hg38")` 构建 UCSC 命名（`chr1`）。染色体名不匹配 → ArchR 找不到数据。
+**根因**：Arrow 文件使用 NCBI RefSeq 染色体命名（如食蟹猴 T2T 组装的 `NC_088375.1`），而 `addArchRGenome("hg38")` 构建 UCSC 命名（`chr1`）。染色体名不匹配 → ArchR 找不到数据。
 
-**修复（最小侵入式 — 2026-07-29 猕猴 scATAC 验证）**：
+### 🔴 物种身份验证（染色体 accession → NCBI 查证）— 2026-08-02 已验证
+
+**现象**：分析全程假设猴数据是 *Macaca mulatta*（猕猴），但 `query_ncbi(db="nuccore", query="NC_088375.1[Accession]")` 返回 **Macaca fascicularis**（食蟹猴）isolate 582-1 chromosome 1, **T2T-MFA8v1.1**，length 234,122,563。文件名/目录名/旧记忆都可能误导物种假设。
+
+**影响**（跨物种专利/分析致命）：
+- **LiftOver chain 选择错误** — rheMac10/rheMac8 是 *mulatta* 的 chain；*fascicularis* 需要 T2T-MFA8v1.1 → hg38 的 chain（UCSC 需按 MFA8 组装找）。用错 chain = 坐标映射全错。
+- **直系同源映射错误** — ortholog 配对表按物种选择（human↔mulatta vs human↔fascicularis），用错物种丢失/错配直系同源 CRE。
+- **专利权利要求物种错误** — 交底书/权利要求写"猕猴"而数据是"食蟹猴"→ 实施例与权要不一致，审查员可质疑。
+
+**验证方法（每批新数据必须先做，<1 min）**：
+```
+query_ncbi(db="nuccore", query="<任意染色体 accession>[Accession]")
+# 例: query="NC_088375.1[Accession]" → 返回 organism + assembly 名 + length
+# 与 macaque_chrom_sizes.json / Arrow TileMatrix params 中的 length 对比确认同一组装
+```
+
+> ⚠️ **铁律**：**任何跨物种分析的物种身份，必须用染色体 accession 查 NCBI nuccore 确认**，不能靠文件夹名、GEO 摘要、旧记忆假设。物种错了，下游 chain/ortholog/权利要求全错。
+
+**修复（最小侵入式 — 2026-07-29 食蟹猴 scATAC 验证）**：
 
 ```r
 # ❌ 不要用 createGenomeAnnotation — 强制 BSgenome lookup → 报错退出
@@ -194,7 +212,7 @@ for(cl in unique(proj$Clusters)) {
 
 ### 🟢 getMarkerFeatures 结果验收基准 — 2026-07-29 猕猴海马验证
 
-**正常产出（猕猴 3 样本/36K cells/21 clusters，基因组修复后）**：
+**正常产出（食蟹猴 3 样本/36K cells/21 clusters，基因组修复后）**：
 | 指标 | 值 |
 |------|-----|
 | TileMatrix tiles | 6,085,841 (500bp × 21 chr × 3 samples) |
@@ -205,6 +223,24 @@ for(cl in unique(proj$Clusters)) {
 
 > 如果 `getMarkerFeatures` 返回全零且你确认基因组正确 → 仍需排查。下面是全零诊断流程：
 
+### 🟡 getMarkers 输出结构（DFrame 而非 GRanges）— BED 导出陷阱 — 2026-08-02 已验证
+
+**现象**：`getMarkers(markers_age, cutOff=...)` 返回 `list(loose, strict)` → 每项是 `SimpleList(Old, Young)` → 元素是 **DFrame**（非 GRanges！），列为 `seqnames, idx, start, Log2FC, FDR, MeanDiff`。`as.data.frame(gr)[, c("seqnames","start","end")]` 会报错 — **没有 `end` 列**。
+
+**正确的 BED 导出（跨物种 LiftOver 输入）**：
+```r
+da <- readRDS("da_tiles.rds")
+loose <- da$loose                    # SimpleList
+df <- as.data.frame(loose[["Old"]]) # DFrame → data.frame
+# TileMatrix 500bp: end = start + 500 - 1
+bed <- data.frame(chr=as.character(df$seqnames),
+                  start=df$start - 1,   # BED 是 0-based
+                  end=df$start + 500 - 1)
+write.table(bed, "da_tiles_Old.bed", sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+```
+
+> ⚠️ `da$loose[[grp]]` 这种链式 `$`+`[[` 在 SimpleList 上会报 "this S4 class is not subsettable" — 必须先 `loose <- da$loose` 再 `loose[[grp]]`。
+
 ### 🔴 getMarkerFeatures 全零结果诊断 — 2026-07-29 已验证
 
 **现象**：`getMarkerFeatures(useMatrix="TileMatrix", groupBy="AgeGroup")` 返回**所有 tile log2FC=0, FDR=1, pval=1**，稀疏矩阵 5×5 全为空（`.`）。总 tile 数正常（25 万/染色体），但无任何差异可及性。
@@ -213,7 +249,7 @@ for(cl in unique(proj$Clusters)) {
 - 3 样本: Old=1 (O1_Hip_1), Young=2 (Y3_Hip_1, Y3_Hip_2)
 - 35,879 cells, 21 clusters, nFrags>1000+TSS≥4
 - `addTileMatrix(tileSize=500)` → `getMarkerFeatures(groupBy="AgeGroup", testMethod="wilcoxon")`
-- 猕猴 T2T 基因组 (NCBI NC_088xxx), 非 UCSC 命名
+- 食蟹猴 T2T 基因组 (NCBI NC_088xxx), 非 UCSC 命名
 
 **根因分析（3 种可能，按概率排序）**：
 
@@ -296,6 +332,8 @@ DA tiles 数量少（<100）时，Fisher 检验对 633 个 JASPAR motif 无统�
 - **NCBI→UCSC 映射 + BSgenome 边界检查** — T2T 坐标可超出 rheMac10 染色体末端
 - **`name(motifs[[id]])` 将 MA 编号转 TF 名**
 - 2026-07-29 验证：CEBPB (FC 5.28) Old 富集，HOXB8 (FC 8.38) Young 富集
+- **跑完 ≠ 收尾**（2026-08-02 教训）：motif 分析完成后必须出 Top-TF 柱状图（Old 红 #E64B35 / Young 蓝 #4DBBD5）+ 用 anchor 插入法整合进已有 HTML 报告 + 更新 task_plan + record_run。可视化配方/HTML 追加代码/收尾协议见同一 reference 的 "Visualization + HTML Report Integration" 一节
+- **跑完 ≠ 下一步可自动启动**（2026-08-02 唤醒验证）：Phase 全 complete 后系统唤醒/用户问进度时，必须走"停止命令检查 + 外部依赖门控 + 三源验证 + 汇报给选项"的唤醒门控协议，不自动启动跨物种对比等新任务。完整协议见 `references/post-completion-wakeup-gate.md`
 
 ### 🟢 可视化与 HTML 报告 (Phase 5)
 
@@ -308,6 +346,8 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 ### 🟢 公共 GEO ATAC fragment 文件导入
 
 从 GEO 导入预处理的 ATAC fragment 文件（`.tsv.gz` + `.tbi.gz` Tabix 索引格式）可直接构建 ArchR Arrow — 免除 fastq 比对。已知人类海马 ATAC 数据集（GSE278576 *Science* 2026 为最佳候选：40 ATAC 衰老海马样本）、ENCODE 人类脑 ATAC 缺失说明、GEOparse 元数据提取方法 → `references/public-geo-fragment-import.md`
+
+**⚠️ bigwig vs fragments 粒度选择（2026-08-02）**：GSE278576 suppl 同时提供①亚群聚合 bigwig（细胞类型×年龄组，~100-350MB，够做 L2 可及性比较）和②GSM 级单细胞 fragments（~1.3GB/样本，才能做 L3 真 footprinting）。**GSM 级 fragments 单独可下，不需要 89GB 的 GSE278576_RAW.tar。** 下载后用 HTTP HEAD 对比 Content-Length 验证完整性（用户此前下载的 hc77/hc78 只有 2MB/0.7MB，真实是 1.31GB = 0.15% 完成度）。完整决策树（L2→bigwig / L3→fragments / 带宽现实）→ 同上 reference 的 "bigwig vs fragments" 一节。
 
 ### 🟢 用户偏好
 - **禁止装到 C 盘** — R 包、基因组数据、分析产出全部放 E 盘。R 本体放 C 盘可以（~100MB）
@@ -349,3 +389,11 @@ saveRDS(markers, "markers.rds")            # ← 必须
 4. skill_evolution(action="record_run")
 5. 更新 task_plan.md
 ```
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| macaca | hippocampus | aging | 2026-08-02 |  run_motif_figs.R | - | - |  |

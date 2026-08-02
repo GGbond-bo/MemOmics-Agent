@@ -71,6 +71,8 @@ for (grp in groups) {
 3. **PDF 为 0 byte 时用 PNG 替代** — HTML 报告 base64 嵌入 PNG 不影响质量
 4. **抽样减少点**：`idx <- sample(N, min(500000, N))` 后再试 PDF
 
+> ⚠️ **0-byte 是确定性的，重跑修复脚本无效（2026-08-02 验证）**：为恢复 `Volcano_Young_vs_Old.pdf` / `Volcano_plot.png` / `MA_plot_Young.pdf` 专门写的修复脚本（`18_fix_plots.R`）失败，文件仍为 0 byte。结论：某个对比方向一旦产出 0-byte PDF，**不要反复重试**——直接把 PNG 当最终交付，在 task_plan 记入 "Issues: 0-byte（已知遗留，不阻塞）"，后续唤醒/汇报把它列为已知遗留并给\"可选修复\"而不是自动重跑。
+
 ```r
 # 防御性 PDF 生成
 n_sig <- sum(fdr < 0.05 & abs(log2fc) > 0.5)

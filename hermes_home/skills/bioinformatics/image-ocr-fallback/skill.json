@@ -1,0 +1,16 @@
+{
+  "id": "image-ocr-fallback",
+  "name": "Image OCR Fallback (No-Vision Models)",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 Image OCR Fallback (No-Vision Models) 进行分析",
+  "source_dir": "skills/bioinformatics/image-ocr-fallback",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

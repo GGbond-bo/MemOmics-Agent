@@ -126,3 +126,38 @@ echo "=== Done ==="
 - **Download speed**: NCBI FTP may be rate-limited (observed ~6 KB/s from some regions). Use VPN or cloud VM if needed.
 - **Resume support**: `curl -C -` enables resume for interrupted downloads.
 - **File verification**: Fragment files should be 500 MB - 3 GB. Files < 10 MB are likely error pages.
+
+## ⚠️ bigwig vs fragments — 选哪个（2026-08-02 用户问"为什么都是亚群的ATAC"后明确）
+
+**GSE278576 的 suppl 目录同时提供两种粒度的数据，用途完全不同：**
+
+| 格式 | 粒度 | 能做什么 | 大小 | 适用 |
+|------|------|---------|------|------|
+| `*_ATAC_<CellType>_age<group>.bw` | **亚群聚合**（按细胞类型×年龄组聚合的信号） | L2 可及性比较（peak overlap + 信号强度 + 年龄动态） | ~100-350MB/文件 | 跨物种可及性保守性比较（够用） |
+| `*_atac_fragments.tsv.gz`（GSM 级） | **单细胞原始**（每个 barcode 的插入片段） | L2 + L3 真 TF footprinting | **~1.3GB/样本** | 需要 footprinting 时 |
+
+**用户对"亚群聚合"数据的反应**：当用户问"为什么你给我的都是亚群的ATAC呢？"——指的是 bigwig（细胞类型×年龄组聚合信号）。要摆脱亚群粒度必须用 fragments（单细胞级）。**回答数据选择问题前先分清用户要的是哪个粒度。**
+
+**⚠️ GSM 级 fragments 单独可下 — 不需要 89GB 的 GSE278576_RAW.tar！**
+
+每个样本的 fragments 在**独立的 GSM suppl 目录**（不需要下载系列级的 RAW.tar）：
+
+```
+https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8549nnn/GSM8549615/suppl/
+├── GSM8549615_hc77_atac_fragments.tsv.gz        (~1.3GB)
+└── GSM8549615_hc77_atac_fragments.tsv.gz.tbi.gz
+```
+
+GSM→文件 URL 生成规则：`https://ftp.ncbi.nlm.nih.gov/geo/samples/{gsm[0:8]}nnn/{gsm}/suppl/{gsm}_{donor}_atac_fragments.tsv.gz`
+
+**⚠️ 下载完整性验证（2026-08-02 实锤）**：用户此前"下载"的 hc77/hc78 只有 2.0MB / 0.7MB，而服务器真实大小是 **1.31GB**（完成度 0.15%）。**下载后用 HTTP HEAD 对比 Content-Length，<50% 视为未完成**：
+
+```bash
+curl -k -sI "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8549nnn/GSM8549615/suppl/GSM8549615_hc77_atac_fragments.tsv.gz" | grep -i content-length
+# 对比本地文件大小；差异 >10 倍 = 断点未续传/下载失败
+```
+
+**带宽现实（~6KB/s 时）**：1.31GB/样本 ≈ 60 小时；40 样本 ≈ 100 天 → 不可行。决策树：
+- 只做 L2（可及性比较）→ 下 bigwig（~1GB 核心 8 个文件，2 天）
+- 必须做 L3（真 footprinting）→ fragments，但需换高速网络（学校/机房服务器）或放弃人侧 footprinting 用 motif 代理
+- **专利 3 个月受理时限下推荐**：先下 bigwig 跑通 L2 核心方法，L3 用 motif 代理 + 从权留位（见 SKILL.md motif 小节）

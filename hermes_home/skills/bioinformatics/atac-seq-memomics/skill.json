@@ -12,5 +12,25 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [],
+  "success_count": 1,
+  "proven_script": "run_motif_v6.R / run_motif_figs.R",
+  "proven_params": [
+    {
+      "species": "macaca",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "run_motif_v6.R / run_motif_figs.R",
+      "params": "JASPAR2020 CORE human 633 motifs; GC-matched random background 3600 tiles (200/chr × 18 chr); matchMotifs out=scores; ranking by mean score fold-change (fg/bg); Old=48 tiles, Young=60 tiles",
+      "date": "2026-08-02",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Phase 6 motif 富集完成并收尾: Old DA tiles 富集 ZFP57(FC=6.14)/CEBPB(5.28)/MLX(4.41)/VENTX(4.39)/PITX1(3.73); Young 富集 HOXB8(8.38)/PITX1(4.44)/BHLHE41(3.63)/FOSL1::JUND(3.40)。PITX1/ZFP57/GBX1 两侧共享。产出 motif_enr"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "run_motif_v6.R / run_motif_figs.R"
+  }
 }
