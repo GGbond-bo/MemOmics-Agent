@@ -514,6 +514,24 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
         try:
             with open(skill_json_path, "r", encoding="utf-8") as f:
                 sj = json.load(f)
+            # 🔧 P2-3 修复(2026-08-01): 去重 — 同一天+同脚本+同物种/组织/方向不重复记录
+            # 之前: deg-analysis 同一 MAST 错误被记录3次
+            existing = sj.get("proven_params") or []
+            dup = any(
+                e.get("script") == script_name
+                and e.get("date") == timestamp
+                and e.get("species") == species
+                and e.get("tissue") == tissue
+                and e.get("direction") == direction
+                for e in existing
+            )
+            if dup:
+                logger.info(f"skill_evolution: duplicate run for {skill_name} {script_name} {timestamp}, skipped")
+                return {
+                    "success": True, "action": "record_run", "skill": skill_name,
+                    "summary": f"重复运行记录已跳过 (同一天+同脚本+同参数): {script_name}",
+                    "deduplicated": True,
+                }
             # 🆕 记录 auto_score + approved + user_prefs
             sj["success_count"] = sj.get("success_count", 0) + 1
             sj["proven_script"] = script_name

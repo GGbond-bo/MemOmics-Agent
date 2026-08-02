@@ -394,12 +394,16 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
                 content = msg.get("content") or ""
                 if (not content or len(content.strip()) < 10) and msg.get("reasoning_content"):
                     content = msg["reasoning_content"]
+                    # 🔧 P2-2 修复(2026-08-01): reasoning_content 是思维链草稿，不是精炼论点
+                    # 标记为草稿，让辩论使用方知道这是 fallback 内容
+                    content = "[reasoning草稿(非精炼论点)] " + content[:2000]
                 if content and len(content.strip()) > 10:
                     return {
                         "content": content,
                         "call_id": call_id,
                         "isolation_verified": True,
                         "messages_count": 1,  # 只有 1 条消息 = 上下文已隔离
+                        "used_reasoning_fallback": bool(not msg.get("content") or len(msg.get("content", "").strip()) < 10),
                     }
                 time.sleep(2)
         except Exception as e:
@@ -504,6 +508,11 @@ def _load_debate(topic: str, context: str, max_age_hours: int = 72) -> dict | No
         age_hours = (time.time() - time.mktime(saved_time)) / 3600
         if age_hours > max_age_hours:
             logger.info(f"debate {h} expired ({age_hours:.1f}h > {max_age_hours}h)")
+            return None
+        # 🔧 P0-1 修复: 缓存中的失败结果(含error标记或占位符)不返回
+        _cached_result = record.get("result", {})
+        if _cached_result.get("error") or "辩论生成失败" in str(_cached_result.get("judge_verdict", "")):
+            logger.warning(f"debate {h} cached result is FAILED, ignoring")
             return None
         return record
     except Exception as e:
@@ -644,6 +653,22 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         )
         judge = _call_llm_sync(judge_prompt, "judge", api_key, base_url, model)
 
+        # 🔧 P0-1 修复(2026-08-01): 失败检测 — 8个角色任一失败则不缓存不归档
+        # 之前: 401/超时失败占位符仍被 _save_debate 缓存72h → 相同topic+context再命中返回占位符
+        _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge]
+        _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
+        if _failed_roles:
+            logger.warning(f"debate FAILED {len(_failed_roles)}/8 roles: {_failed_roles[:3]}... 不缓存不归档")
+            return json.dumps({
+                "topic": topic,
+                "debate_format": "多角色对抗（v3）",
+                "error": True,
+                "failed_roles": len(_failed_roles),
+                "failed_role_ids": _failed_roles,
+                "judge_verdict": judge.get("content", "") if not judge.get("error") else "裁判也失败",
+                "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档，Agent 应重试或检查 API key/base_url。",
+            }, ensure_ascii=False, indent=2)
+
         # ========== 组装结果（含隔离验证信息） ==========
         result = {
             "topic": topic,
@@ -694,6 +719,25 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 "general_kb_used_as_fallback": not (biology_kb or statistics_kb or bioinfo_kb),
             },
         }
+        result_json = json.dumps(result, ensure_ascii=False, indent=2)
+        # 🔧 P1-2 修复(2026-08-01): 解析 judge JSON → 结构化 verdict 供 Agent 直接使用
+        # 之前: judge_verdict 是原始文本(含```json围栏)，verdict=modify 的 recommended_params 无法结构化回传
+        try:
+            _judge_text = judge["content"]
+            _judge_clean = _judge_text.replace("```json", "").replace("```", "").strip()
+            _judge_start = _judge_clean.find("{")
+            _judge_end = _judge_clean.rfind("}")
+            if _judge_start >= 0 and _judge_end > _judge_start:
+                _judge_obj = json.loads(_judge_clean[_judge_start:_judge_end+1])
+                result["verdict"] = _judge_obj.get("verdict", "need_more_info")
+                result["confidence"] = _judge_obj.get("confidence", "low")
+                result["recommended_params"] = _judge_obj.get("recommended_params", {})
+                result["scores"] = _judge_obj.get("scores", {})
+        except Exception as _je:
+            result["verdict"] = "need_more_info"
+            result["confidence"] = "low"
+            result["recommended_params"] = {}
+            result["verdict_parse_error"] = str(_je)[:100]
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重）
         _save_debate(topic, context, result_json)

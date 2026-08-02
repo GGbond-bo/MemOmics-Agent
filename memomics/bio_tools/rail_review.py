@@ -261,7 +261,7 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
         "result_files": result_files,
         "debate_reminder": debate_reminder,
         "evolution_reminder": evolution_reminder,
-        "code_packages": list(code_packages) if code_packages else [],
+        "code_packages": list(code_packages) if 'code_packages' in dir() and code_packages else [],
         "unregistered_packages": unregistered,
     }
 
