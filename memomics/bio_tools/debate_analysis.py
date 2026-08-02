@@ -712,15 +712,16 @@ def _auto_load_kb(context: str, topic: str) -> str:
     text = (topic + " " + context).lower()
     
     species_map = {
-        "homo_sapiens": ["人", "human", "患者", "homo sapiens", "病人"],
-        "mus_musculus": ["小鼠", "mouse", "mus musculus", "c57", "balb"],
+        "Homo_sapiens": ["人", "human", "患者", "homo sapiens", "病人", "clinical"],
+        "Macaca_mulatta": ["猕猴", "恒河猴", "猴", "macaque", "rhesus", "macaca", "monkey"],
+        "Mus_musculus": ["小鼠", "mouse", "mus musculus", "c57", "balb"],
         "rattus_norvegicus": ["大鼠", "rat", "rattus"],
         "danio_rerio": ["斑马鱼", "zebrafish", "danio"],
     }
     tissue_map = {
         "liver": ["肝脏", "liver", "肝", "hepatocyte"],
         "skeletal_muscle": ["骨骼肌", "skeletal muscle", "肌肉", "myofiber"],
-        "brain": ["脑", "brain", "neuron", "cortex"],
+        "brain": ["脑", "brain", "neuron", "cortex", "hippocampus", "海马"],
         "kidney": ["肾", "kidney", "renal"],
         "heart": ["心脏", "heart", "cardiac"],
         "lung": ["肺", "lung", "pulmonary"],
@@ -734,27 +735,69 @@ def _auto_load_kb(context: str, topic: str) -> str:
     direction_map = {
         "aging": ["衰老", "aging", "ageing", "老化", "年龄", "增龄"],
         "development": ["发育", "development", "胚胎", "分化", "再生", "regeneration"],
-        "disease": ["疾病", "disease", "癌症", "cancer", "肿瘤", "tumor"],
+        "disease": ["疾病", "disease", "癌症", "cancer", "肿瘤", "tumor", "ad", "alzheimer", "阿尔茨海默", "帕金森", "parkinson"],
     }
     
     sp = next((k for k, vs in species_map.items() if any(v in text for v in vs)), None)
     ts = next((k for k, vs in tissue_map.items() if any(v in text for v in vs)), None)
     dr = next((k for k, vs in direction_map.items() if any(v in text for v in vs)), "general")
     
-    if not sp or not ts:
+    # 🔧 放宽双锁：物种/组织缺一时按已匹配维度搜索（2026-08-01）
+    # 之前: if not sp or not ts: return ""  ← 双锁导致只提物种/只提组织都失败
+    if not sp and not ts:
         return ""
+    
+    # 🔧 优先使用 search_knowledge v3/v4 引擎（2026-08-01）
+    # FTS5 全文搜索 + 同义词扩展 + 词边界，比文件系统扫描更准
+    try:
+        from memomics.bio_tools.kb_search import _search_kb
+        _kb_result = _search_kb(topic, sp or "", ts or "", dr if dr != "general" else "")
+        if _kb_result.get("total", 0) > 0:
+            _kb_hits = _kb_result.get("results", [])
+            _parts = []
+            for hit in _kb_hits[:6]:
+                _fn = hit.get("file", "kb")
+                _content = hit.get("snippet") or hit.get("content") or ""
+                if _content:
+                    _parts.append("## " + _fn + "\n" + str(_content)[:3000])
+            if _parts:
+                header = "[auto-loaded KB via search_knowledge] " + (sp or "?") + "/" + (ts or "?") + "/" + dr + "\n\n"
+                return header + "\n\n".join(_parts)
+    except Exception:
+        pass  # 回退到文件扫描
     
     kb_root = os.path.join(
         os.path.dirname(__file__), "..", "..", "memomics", "knowledge_base"
     )
-    kb_dir = os.path.join(kb_root, sp, ts, dr)
-    if not os.path.isdir(kb_dir):
-        kb_dir = os.path.join(kb_root, sp, ts, "general")
-    if not os.path.isdir(kb_dir):
+    # 🔧 放宽搜索路径：支持物种/组织部分匹配（2026-08-01）
+    # 之前: kb_dir = os.path.join(kb_root, sp, ts, dr)  ← 必须全部匹配
+    # 现在: 按已匹配维度逐级放宽，找到存在的目录
+    candidate_dirs = []
+    if sp and ts:
+        candidate_dirs += [
+            os.path.join(kb_root, sp, ts, dr),
+            os.path.join(kb_root, sp, ts, "general"),
+            os.path.join(kb_root, sp, ts),
+        ]
+    if sp:
+        candidate_dirs.append(os.path.join(kb_root, sp))
+    if ts:
+        candidate_dirs.append(os.path.join(kb_root, ts))
+    # 去重并保留存在的
+    seen = set()
+    kb_dir = ""
+    for cd in candidate_dirs:
+        if cd not in seen:
+            seen.add(cd)
+            if os.path.isdir(cd):
+                kb_dir = cd
+                break
+    if not kb_dir:
         return ""
     
     parts = []
-    # Collect with mtime, prioritize newest files
+    # Collect with relevance score (keyword hits) + mtime tiebreak
+    keywords = [kw for kws in (species_map.values(), tissue_map.values(), direction_map.values()) for kw in kws if kw in text]
     candidates = []
     for dirpath, dirnames, filenames in os.walk(kb_dir):
         for fn in filenames:
@@ -764,20 +807,23 @@ def _auto_load_kb(context: str, topic: str) -> str:
                     with open(fp, "r", encoding="utf-8") as fh:
                         content = fh.read()
                     if len(content) > 100:
+                        # 相关性 = 文件名命中 + 内容关键词命中数
+                        score = sum(1 for kw in keywords if kw in fn.lower())
+                        score += min(5, sum(1 for kw in keywords if kw in content.lower()))
                         mtime = os.path.getmtime(fp)
-                        candidates.append((mtime, fn, content))
+                        candidates.append((score, mtime, fn, content))
                 except Exception:
                     pass
-    # Sort by mtime descending (newest first), take top 8
-    candidates.sort(reverse=True, key=lambda x: x[0])
-    for mtime, fn, content in candidates[:8]:
+    # Sort by relevance score descending, then mtime descending
+    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    for score, mtime, fn, content in candidates[:8]:
         label = "## " + fn + "\n"
         parts.append(label + content[:3000])
     
     if not parts:
         return ""
     
-    header = "[auto-loaded KB] " + sp + "/" + ts + "/" + dr + "\n\n"
+    header = "[auto-loaded KB] " + (sp or "?") + "/" + (ts or "?") + "/" + dr + "\n\n"
     return header + "\n\n".join(parts[:6])
 
 def _fallback_debate(topic: str, context: str, kb_info: str, history_errors: str) -> str:
