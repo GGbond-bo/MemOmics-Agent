@@ -202,6 +202,32 @@ User asked "hdWGCNA真的不行吗?" after finding NMF uninformative. **Updated 
 - **⛔ GO/KEGG must be re-run on the OFFICIAL module assignment, never reused from an earlier run.** In the muscle session the leftover `module_go.rds` was from the superseded bottom-level run (only 6 modules) — enrichment computed on wrong modules is misleading. Re-run `enrichGO`(BP)/`enrichKEGG` per official module with `bitr(SYMBOL→ENTREZID)`; capture the enriched terms per module into one CSV. A module with ZERO GO terms (purple, n=60) is not a failure — it is a genuinely uncharacterized condition-specific module and should be described as such (mirrors the NMF "GO-empty = novel state" rule).
 - **Figure composition without magick**: `cowplot::draw_image()` requires the magick package (not installed on this Windows R by default). For multi-panel composition of existing PNGs use base graphics: `png::readPNG` → `grid.raster` inside `viewport()`s (one viewport per panel + label) → `dev.off()` to PNG/PDF/TIFF. Works with zero extra dependencies; panels + a text-conclusions strip (grid.text) is exactly how the final hdWGCNA figure was built. If the user asks for "conclusion + debate info" inside the figure, put a plain-language conclusions text block at the bottom and the debate verdict separately.
 
+## 🗣️ debate_analysis 8/8 全失败 → 串行辩论回退协议（2026-08-01 验证）
+
+⛔ **症状**：`debate_analysis` 连续多次全部失败：8 个角色（pro 3 + con 4 + judge）全返回"辩论生成失败"，无归档。
+
+**根因（本环境实测）**：`webui/server.py` 的 `_sync_debate_env()` 遍历 `provider_keys` 时被 `"dcs" in pid.lower()` 抢先注入 dcs-cloud 的**失效 key（401）**；有效 deepseek key 在 `_current_model` 里但被放最后 fallback。8 路 `ThreadPoolExecutor` 并发又放大限流风险。**不是辩论设计问题，是 API key 注入 bug。**
+
+**修复**（用户建议"先正方→再反方→LLM 判决"，串行化 = 更稳 + 同样隔离）：
+1. `_sync_debate_env()` 优先 `_current_model` 的 provider key（用户正在用的必然有效）→ 回退 deepseek 官方 → 最后 fallback
+2. 串行调用替代 8 路并发：pro 3 → con 4（prompt 互不可见）→ judge 看全部
+3. deepseek-v4-flash 回答在 `reasoning_content`，`content` 空 → fallback 读 `reasoning_content`
+4. **独立脚本 `run_serial_debate.py`**（直接读 model_config.json 的 key，绕过 server 注入 bug）——不重启 webui 也能跑通辩论；重启后才让 `debate_analysis` 工具本身生效
+
+实测：7 次 8/8 全失败 → 修复后 8/8 成功（302.7s），归档含裁判裁决（verdict=modify, confidence=high）。
+
+> 完整诊断路径 + 可交付给其他 agent 的修复代码 + 验证方法：`references/debate-serial-fallback-fix.md`
+> 辩论机制是跨 skill 公共基础设施，此协议适用于所有需要多角色辩论的分析（hdWGCNA/NMF/注释/参数），不限于本 skill。
+
+## ⛔ 停止系统唤醒心跳（user: "停止，心跳停掉"）— 平台级 teardown
+
+用户说"停止，心跳停掉"/"不需要task_plan了"后唤醒仍在跑，根因是
+`webui/server.py` 的 `_schedule_self_check()` 跳过条件只认
+`cancelled`/`paused`、**不认 `CLOSED`/`已停止`**。立即生效=重命名
+`task_plan.md`→`.bak`（has_plan=False）；长期生效=patch 跳过条件后重启 webui。
+完整诊断 + patch 代码 + 验证脚本模式：
+`references/stop-self-check-heartbeat.md`
+
 ## Monocle3 Trajectory: Contraindicated for Myofibers (root uncertainty + snRNA velocity bias)
 
 User wants trajectory to show "aging → diabetes → exercise reversal" flow. Three hard problems:

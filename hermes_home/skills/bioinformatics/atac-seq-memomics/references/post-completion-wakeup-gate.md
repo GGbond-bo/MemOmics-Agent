@@ -75,6 +75,24 @@ task_plan 的 Issues 段记录过、且修复尝试已失败的产出（如 `Vol
 - **修复作为"可选下一步"给出**（如"补 Volcano 0 字节文件"），**不自动重跑**——0-byte 对低信号对比方向是确定性的，重跑无效（见 da-plotting-fallback.md）
 - 关键：与挂起原因分开列——遗留文件不阻塞主线完成，但要在汇报里透明呈现，不能藏
 
+## Step 4c: 停止命令后清理残留守护进程 — 2026-08-02 唤醒 #13 验证
+
+**用户质疑："怎么还在跑呢？心跳机制不应该结束了吗？"** → 三源验证发现真正在跑的不是当前分析进程，而是**历史 session 遗留的守护脚本**（cellbender_guardian.py ×2，7-30 启动后未清）。
+
+**根因**：每次部署 heartbeat/guardian 用 `subprocess.Popen` + `CREATE_NO_WINDOW`（脱离 Agent 生命周期）后，**停止命令只 kill 了主分析进程，没清理这些守护脚本**。它们会一直挂到系统重启。
+
+**修复协议**（用户说"停止/清理后台"时，除了 task_plan 标记 + cronjob 暂停 + 主进程 kill，还必须）：
+1. `process(action='list')` 查 Hermes 后台进程
+2. `tasklist | grep -i python` 查 python 守护（guardian/heartbeat 通常是 python）
+3. 区分：`webui/server.py` = Hermes 框架自身（**不能杀**）；`*_guardian.py` / `*_heartbeat*.py` = 任务守护（**杀**）
+4. `taskkill /F /PID <pid>` 逐个清理，**按文件名核对后再杀**（避免误杀框架服务）
+
+**用户问"为什么你不监督"的诚实回答模板**（不是借口，是架构说明）：
+- Agent 是 turn-based 请求-响应模型：你发消息→我响应→回合结束，两次消息之间不"活着"
+- `notify_on_complete` 通知在用户新消息触发的全新 turn 里可能被吞掉
+- 正确姿态：**每个 turn 开头先 `process(action='list')` + 查进程**，不等通知；主动轮询是唯一可靠方式
+- 用户要的不是道歉，是根因 + 修复 + 下次不再犯
+
 ## 本次验证案例（2026-08-02）
 
 - task_plan: Phase 1-6 complete ✅（环境→QC→LSI/UMAP/聚类→TileMatrix+DA→可视化报告→Motif）

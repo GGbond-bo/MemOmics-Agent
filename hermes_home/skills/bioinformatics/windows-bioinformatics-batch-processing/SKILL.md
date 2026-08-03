@@ -2,7 +2,7 @@
 name: windows-bioinformatics-batch-processing
 description: "Windows生信批量任务执行规程：进程生命周期管理、GPU内存、进度监控、错误恢复。适用于CellBender/scanpy/Seurat等需要在Windows上用GPU跑大批量样本的场景"
 when_to_use: "在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度"
-version: 1.4.0
+version: 1.6.0
 author: MemOmics
 license: MIT
 platforms: [windows]
@@ -57,6 +57,39 @@ def check_system_state() -> dict:
 
 **执行顺序**: 用户问系统状态问题 → 执行三连击 → 根据数据回答 → 绝不说"我不知道"或"应该没有"。
 
+**⚠️ git-bash (MSYS) 下 tasklist 参数必须双斜杠 `//FI //FO`（2026-08-02 唤醒实证）**：在 bash 里写 `tasklist /FI "IMAGENAME eq Rscript.exe"` 会被 MSYS 路径转换把 `/FI` 当成路径处理 → tasklist 报错或返回空。正确写法是双斜杠：
+```bash
+tasklist //FI "IMAGENAME eq Rscript.exe" //FO CSV 2>/dev/null | head -20
+# 也适用于 //IM //NH //V 等所有 tasklist 开关
+```
+Python `subprocess.run(["tasklist", "/FI", ...])` 不受影响（列表参数不经过 MSYS 转换）。skill 中所有 bash 一行的 tasklist 示例均按此双斜杠写法执行。
+
+### ⚠️ python.exe ≠ 分析在跑 — 平台常驻服务区分（2026-08-03 唤醒 #21 实证）
+
+三连击查 tasklist 时，**看到 python.exe 不代表分析在跑**。MemOmics 平台自身以 python.exe 常驻：
+- `E:\MemOmics-Agent\.venv\Scripts\python.exe webui\server.py`（webui 服务）
+- 其它 Hermes 框架运行时进程（`webui\..\cellbender` 等服务）
+
+**判定方法**：查 CommandLine 区分平台服务 vs 分析任务：
+
+```powershell
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | ForEach-Object { Write-Output ('PID=' + $_.ProcessId + ' | ' + $_.CommandLine) }"
+```
+
+**分类规则**：
+- ✅ **平台服务**：CommandLine 含 `webui\server.py` / `.venv\Scripts\python.exe` / MemOmics 框架路径 → 常驻正常，**不是分析任务**
+- 🔴 **分析任务**：CommandLine 含分析脚本名（cellbender/scanpy/archr/run_pipeline 等）或对应 Rscript.exe / GPU 高占用
+
+**⚠️ CommandLine 查询可能返回空 — 间接判定回退（2026-08-03 唤醒 #7 实证）**：git-bash 环境下 `wmic process where ... get commandline` 和 `powershell Get-CimInstance ... Select CommandLine` 都可能**静默返回空**（exit 0 但无内容），此时无法靠 CommandLine 区分服务/任务。改用**四条件间接判定**：
+1. `tasklist` grep 分析特征进程名（Rscript/cellbender/ptrepack/run_pipeline）— 有 = 分析在跑
+2. `nvidia-smi` GPU 占用 — CellBender 等训练任务会占满 ~16GB VRAM；平台 webui 常驻 ~4GB 属正常
+3. `find results/{session}/ -newermt "YYYY-MM-DD" -type f` — 24h 内无新分析产出 = 无进行中任务
+4. `alerts.json` 不存在 = 无告警
+**四条件齐备（无特征进程 + GPU 低占用 + 24h 无新产出 + 无 alerts）才判定"无任务在跑"**，再汇报。
+
+**GPU 判定注意**：平台 webui 常驻可占 ~4GB VRAM（唤醒 #21 实测 GPU 21%/4.2GB/16.3GB 实为空闲）。**显存/低占用率单独不能证明分析在跑**——以进程 CommandLine 为准：无分析脚本进程 + 低利用率 = 空闲，正常汇报，不要误报"有任务在跑"。
+- ⚠️ **`nvidia-smi --query-compute-apps` 大量 PID 全 N/A ≠ 分析在跑（2026-08-02 唤醒 #11 实测）**：git-bash 下该查询可能返回几十个 PID 但 `used_memory` 全是 `[N/A]`——这些是常驻进程/驱动上下文，不是计算负载证据。**判定口诀：compute-apps 的 N/A 列表不可用作"有任务在跑"的证据**；真正有效的是 ① GPU 利用率%（低=空闲）② CommandLine 是否含分析脚本名 ③ 24h 内磁盘新产出。三个都不满足 → 空闲，即使 compute-apps 列了 40+ PID。
+
 ### 汇报模板
 
 ```markdown
@@ -89,12 +122,23 @@ PID   RAM        推测
 ### 唤醒必做 7 步（顺序执行）
 
 1. **核对 session ID** — `search_files(results, task_plan.md)` 可能返回多个 task_plan。只读**当前 session 目录**（`results/{session_dir}/`）下的那份。其他 session 的 task_plan 是参考不是指令（跨 session 污染铁律）。
+   - **⚠️ 根目录 task_plan 可能是其他 session 残留（2026-08-03 唤醒 #7 实证）**：`E:/MemOmics-Agent/task_plan.md`（根目录）描述的是 Monkey CellBender 批处理任务，但当前 session（memomics-2f229850）的真实主线是 hdWGCNA/F2 分析。**判定方法**：① `search_files(results, task_plan*.md)` 列出所有 task_plan；② 对照当前 session 目录（system_log.jsonl 位置 + 产出文件）确定真正归属；③ session 的任务可能记录在 `task_plan_CLOSED.md.bak`（用户"停止，不需要task_plan了"后归档改名）——读到 CLOSED 标记 = 主线已结束，只汇报不续跑。
 2. **核对 Goal 字段** — task_plan 的 Goal 必须与当前会话用户实际要求一致。占位 Goal（"你是谁？"）或空模板 → 不自动执行（详见 `references/empty-template-taskplan-no-resume.md`）。
 3. **读 Current Phase + Phases 状态** — 完成/待办一目了然。
 4. **产物完整性复查** — `search_files` 每个已完成 Phase 的输出目录 + 读 verify 状态文件（如 `verify_xxx_status.txt`，注意是磁盘产出，不是 task_plan 自述）。
 5. **查 alerts.json** — 存在 → 按 urgency 处理；不存在 = 无异常（直接列在汇报里）。
 6. **查后台进程/日志** — Runtime State 里 current_pid=N/A 则确认无后台任务；有 PID 则三源验证。再 `read_file(log/system_log.jsonl, offset=-30)` 读尾部 → **确认无用户新指令**（**只有显式用户消息才是响应触发器；工具调用条目不是**——每次唤醒自己都会在日志尾部追加 search_files/read_file/patch 等工具调用记录，这些是本轮/上轮唤醒的簿记，不是指令；无则只汇报状态，不把历史日志自行解读为任务指令）。唤醒 #18 实证：日志尾部出现上一轮唤醒自身的 read_file/patch 条目 → 判定"无新用户指令"，仅汇报状态。
 7. **报告 + 给选项（A/B/C/D），不做任何自动启动**。
+
+### ⛔ task_plan 滞后于用户在场期间的追加执行（2026-08-03 唤醒 #20 实证）
+
+唤醒时发现 task_plan 停留在 07-31，但 08-01 用户在场期间实际完成了 5 项追加执行（hdWGCNA 官方重跑成功、debate 服务修复、正式辩论归档、teaching 脚本、CNS 图）——**全部未回写 task_plan**。且 task_plan 记录的"hdWGCNA 在 MF 不可行"负面结论已被官方全基因集重跑推翻（power=10 R²=0.982, 11 模块；首次失败根因是 top3000 HVG 子集参数问题，不是方法问题）。
+
+**判别要点**：
+- ⛔ 引用 task_plan 的 Phase 状态或"负面结果/失败"前，必须用文件系统证据交叉验证：`verify_*.txt` 时间戳或产出文件 mtime **晚于 task_plan 最后更新时间** = 未回写证据
+- ⛔ task_plan 记录的负面结论不是永久事实——后续重跑可能成功；引用前先查产出目录是否有更新的 verify 文件
+- ✅ 唤醒发现滞后 → **先回写 task_plan（补录遗漏 Phase/追加记录），再汇报**；禁止基于过时 task_plan 自动执行下一步
+- ✅ 唤醒汇报 = 三源验证结果 + task_plan 滞后情况 + 修正后的真实状态，而不是 task_plan 的复述
 
 ### ⛔ 唤醒记录追加格式（审计链）
 
@@ -130,7 +174,10 @@ task_plan 中标注 **「待用户确认后执行」** 的 Phase，**任何唤�
 
 1. **停止标记是硬门禁**，与"待用户确认"同一级别——即使 `> ⏭️ 后续（等待数据/等待用户）` 注释里写了下一步（如"跨物种对比"），那只是**备忘，不是执行指令**。只有用户当前在场明确说"继续/开始下一步"才能推进。
 2. **汇报格式应明确终态**：Phase 状态表 + 关键产出验证 + 明确结论（"无未完成待办 / 无运行中进程 / 不需要继续执行"），然后列下一步选项等待用户。
-3. **顺手关心跳**：若该任务还挂着 heartbeat cron（`cronjob(action="list")` 检查），全部 complete 后应 `cronjob(action="remove")` 关闭——否则每 15m/30m 空唤醒烧 token。这是心跳的**主 Agent 侧关闭路径**（正常完成路径，不是用户取消路径）。
+3. **顺手关心跳（终态唤醒每次必查，不只完成那一刻）**：若该任务还挂着 heartbeat cron（`cronjob(action="list")` 检查），全部 complete 后应 `cronjob(action="remove")` 关闭——否则每 15m/30m 空唤醒烧 token。这是心跳的**主 Agent 侧关闭路径**（正常完成路径，不是用户取消路径）。
+   - ⚠️ **2026-08-02 唤醒 #11（memomics-1c1890da ArchR 会话）实证**：task_plan 显示 Phase 1-6 全部完成 + 停止标记已就位，但唤醒只做了产物复查+三源验证就汇报，**没有执行 `cronjob(action="list")`**。若该会话还挂着心跳，后续每 15m/30m 仍在空唤醒烧 token。**判别口诀：只要读到"全部 complete + 停止/等待标记"，本轮就必须执行 `cronjob(action="list")`**——有残留→remove；无→把"无残留 cron"写进汇报。跨唤醒漏关是常态（完成时刻没关、后续唤醒也没补查），所以每次终态唤醒都要重新确认，不能只在任务完成那一刻检查一次。
+   - ⚠️ **2026-08-02 唤醒 #16（同一 memomics-1c1890da 会话）复犯实证**：再次读到"Phase 1-6 全部完成 + 停止命令"终态，根目录 task_plan 识别正确（根目录是 Monkey CellBender 别的 session 的任务，不是本 session）、三源验证正确、终态汇报正确——**但仍然漏掉 `cronjob(action="list")`**。skill 已明确记录 #11 的教训却再次跳过，说明"顺手关心跳"的措辞强度不够。**升级为硬顺序：终态唤醒的第 1 个工具调用就应该是 `cronjob(action="list")`（与"读本 session task_plan"并列，先于产物复查）**。汇报模板同步升级：终态汇报必须包含一行 `cron 检查：有残留→已 remove / 无残留`。
+   - 🔴 **2026-08-02 唤醒 #18（同一 memomics-1c1890da 会话）第三次复犯实证 — 规则在磁盘 ≠ 规则生效**：升级为"硬顺序"后 #18 仍只做"读 task_plan + search_files + tasklist/nvidia-smi"就汇报，**汇报里依然没有 `cron 检查` 字段**。根因：**唤醒时 Agent 未加载本 skill**——规则躺在 skill 文件里，而唤醒 prompt 只说"读 task_plan → 看产出 → 继续待办"，不会自动带出这条规则。三次漏查（#11/#16/#18）证明：**只写进 skill 不够，必须在记忆层有兜底**（本规则已同步写入 memory 的跨 session 污染铁律条目）。唤醒 Agent 强制自检：终态汇报发出前逐字段核对——`cron 检查` 字段缺失 = 汇报不完整 = 禁止发出。同理 `下载进度数字` 必须磁盘实测（#18 又引用了 task_plan 文本的"2/40"而未 search_files 实测 GSE278576 目录——#7 教训复犯）；实测失败时在汇报中明确写"未实测"而不是引用旧文本。
 4. **不要因"全完成"跳过状态验证**：仍应快速核验产物（search_files）+ 确认无后台进程残留，汇报里给出证据，而不是只报"完成"。
 
 ### ⛔ 已完成 Phase 清理偏好 — 用户明确要求"完成的就删除掉"（2026-08-02 实证）
@@ -149,6 +196,18 @@ debate_analysis（或依赖 LLM API 的裁决类工具）连续失败 ≥3-4 次
 - 在 task_plan Decisions/Errors 记录："debate 裁决第 N 次失败（API 层故障），停止自动重试，待用户在场时手动触发"
 - API 故障是环境态，重试不会因次数增加而变好 → 只会烧 token + 阻塞主流程
 - 不要编码成"debate_analysis 不可用"（负面断言）——是**重试策略**：封顶、记录、交还用户触发
+
+### ⛔ 阻塞 Phase 的前置数据检查 — 唤醒汇报必须含数据下载进度（唤醒 #4 实证）
+
+当 task_plan 显示 Phase 1-N 全部完成、下一 Phase（如猴-人跨物种对比）处于 **pending 且阻塞原因为"数据下载中（用户手动）"** 时，唤醒检查必须在汇报中包含**前置数据下载进度**——阻塞原因本身就是"数据未齐"，汇报不含下载进度 = 汇报不完整：
+
+1. **数文件** — `search_files(pattern="*", path="<数据下载目录>")` 统计已下载样本数（如实测 2/40）
+   > ⛔ **进度数字必须磁盘实测，勿直接引用 task_plan 文本（唤醒 #7 复盘）**：task_plan 自述的"当前 2/40"是**上次更新时的快照**，用户可能已继续下载/续传。唤醒汇报里的下载进度数字必须以 `search_files` 实测目录为准；task_plan 文本只作线索不作证据。同一原则适用于任何 task_plan 自述的计数（产出文件数、已完成样本数）——磁盘证据优先于文本复述。
+2. **检查每样本完整性** — 配套文件是否齐全。ATAC 例：`fragments.tsv.gz` 主文件 + `.tbi.gz` 索引**必须成对**；主文件在但索引缺失 = 下载未完成/不完整 → 该样本暂不可直接喂 createArrowFiles
+3. **汇报格式** — 下载进度表 + 每样本完整/不完整标记（hc77 ✅含索引 / hc78 ⚠️缺索引），让用户一眼看出"还差什么"
+4. **选项给出** — 基于进度给可执行选项（如"继续下载剩余样本" vs "用已就位的 hc77/hc78 先做小规模试跑"），**由用户拍板，唤醒不代启动**
+
+> 前置数据检查与已完成 Phase 的产物复查同等重要。已完成的 Phase 复核 + 阻塞 Phase 的前置缺口 + 三源验证，三者齐备才是完整的唤醒终态汇报。
 
 ### 唤醒汇报模板（精简）
 
@@ -636,6 +695,57 @@ cmd.exe /c "set PATH=D:\rtools45\x86_64-w64-mingw32.static.posix\bin;D:\rtools45
 R 4.4.2 没有 RcppArmadillo 15.x+ 的某些内存对齐要求，恰好在 MSYS 下幸存。
 R 4.5+ 引入了更严格的 C++17 内存模型 → 与 MSYS 的 POSIX 模拟冲突 → segfault。
 这不是 bug，是两个世界的边界条件——R 在 Windows 上用 ucrt64 工具链，bash 用 MSYS，两者不可混用。
+
+---
+
+## 🔴 铁规 16.5: MSYS 临时路径 ≠ Windows 原生路径 — 临时脚本必须写真实 Windows 路径【v1.6】
+
+**2026-08-02 实测（MeSH 语义索引验证脚本）**：`$(cygpath -u "$TEMP")` 解析为 MSYS 虚拟路径 `/tmp`。bash 里 `cat > /tmp/script.py` 写盘成功、`ls /tmp/script.py` 看得到，但 Windows 原生 Python 打开时报：
+
+```
+python: can't open file 'E:\\tmp\\hermes-verify-193.py': [Errno 2] No such file or directory
+```
+
+原生 Python 把 `/tmp/xxx.py` 按 Windows 路径规则解析成 `E:\tmp\xxx.py`（MSYS 的 /tmp 映射），而文件实际写在 MSYS 虚拟 /tmp（可能映射到别的真实目录）→ **路径不一致，打不开**。
+
+### ✅ 唯一正确做法
+
+临时脚本（要被原生 Python/Rscript 执行的）一律写**真实 Windows 路径**：
+
+```bash
+# ❌ 不对 — MSYS 虚拟路径，原生解释器打不开
+cat > "$(cygpath -u "$TEMP")/verify.py" << 'EOF' ...
+python "$(cygpath -u "$TEMP")/verify.py"   # → E:\tmp\verify.py 不存在
+
+# ✅ 正确 — 真实 Windows 路径
+write_file(path="C:/Users/<user>/AppData/Local/Temp/verify.py", content=...)
+python "C:/Users/<user>/AppData/Local/Temp/verify.py"
+```
+
+或直接用 `write_file` 工具写盘（它处理真实路径），避免 heredoc + cygpath 组合。
+
+### 判定规则
+
+| 写入位置 | bash 能看到? | 原生 Python/Rscript 能开? |
+|---------|:---:|:---:|
+| MSYS `/tmp`（`$(cygpath -u "$TEMP")`） | ✅ | ❌ 解析成 E:\tmp 打不开 |
+| 真实 Windows 路径 `C:/Users/<user>/AppData/Local/Temp` | ✅ | ✅ |
+| 项目结果目录 `results/.../` | ✅ | ✅ |
+
+> 同一原理已记入 `pubmed-mesh-annotation` skill 的 Pitfalls 表（MeSH 验证脚本场景）。
+
+---
+
+## 🔴 铁规 17.5: hdWGCNA 结果验证 — 首次失败≠不可行，审稿人五问必答【v1.7 新增】
+
+WGCNA/hdWGCNA 分析完成**不是终点**——本环境已踩过"task_plan 记录负面结论但官方 workflow 重跑成功"的坑（power=10 R²=0.982, 11 模块 vs 首次 R² max 0.72 全落单一模块）。
+
+引用任何 task_plan/日志里的"XX 方法不可行"负面结论前：
+1. **查产出目录是否有更新的 verify 文件**（mtime 晚于 task_plan = 未回写证据）
+2. **确认失败参数**——多数"不可行"是参数子集问题（如 top3000 HVG 而非全基因集），不是方法问题
+3. **审稿人五问**（metacell 伪重复→个体级 n 复核 / 纤维类型混杂→组成校正 / 0-GO 模块→独立基因集验证 / hub-DEG 重叠>30% / 效应亚群特异性）全部落实后才算结论闭环
+
+> 完整清单与参数对比见 `references/hdwgcna-validation-checklist.md`
 
 ---
 

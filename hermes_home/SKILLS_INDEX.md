@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (34 skills)
+## 08_报告 - 报告/可视化 (36 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -236,6 +236,8 @@
 | hdwgcna-official-workflow | hdWGCNA 官方 workflow 端到端运行：SetupForWGCNA→Metacells→SetDatExpr→TestSoftPowers→ConstructNetwork→ModuleE |  | YEL 讨论触发 |
 | image-ocr-fallback | >- |  | YEL 讨论触发 |
 | multi-role-debate | >- |  | YEL 讨论触发 |
+| mesh-decs-tag-extraction | 从文献（title/abstract/PMID）提取 MeSH/DeCS 受控词表标签，用于语义索引类任务与 benchmarker 试卷（TaskA 语义索引 / MESINESP 多语言检索）。触 |  | YEL 讨论触发 |
+| pubmed-mesh-indexing | 从 NCBI E-utilities 检索官方 MeSH 标签与 DeCS 编码。使用场景：为文献输出 MeSH 主要标签（语义索引 benchmark）、西班牙语文献输出 DeCS 编码（MESIN |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

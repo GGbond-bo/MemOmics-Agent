@@ -495,8 +495,8 @@ def _schedule_self_check(session, agent, loop):
         try:
             with open(os.path.join(results_dir, "task_plan.md"), "r", encoding="utf-8") as f:
                 plan_text = f.read()
-            if "cancelled" in plan_text.lower() or "**Status:** paused" in plan_text:
-                logger.info(f"[SelfCheck] session {session['id'][:12]}: task_plan is cancelled/paused, skipping self-check")
+            if "cancelled" in plan_text.lower() or "**Status:** paused" in plan_text or "**Status:** closed" in plan_text.lower() or "🔒 CLOSED" in plan_text or "已停止" in plan_text or "停止" in plan_text and "task_plan" in plan_text.lower():
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: task_plan is cancelled/paused/closed, skipping self-check")
                 return
         except Exception:
             pass
