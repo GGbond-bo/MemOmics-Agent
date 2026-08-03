@@ -5908,7 +5908,7 @@ async def ws_endpoint(ws: WebSocket):
                 # 是否后台运行
                 is_bg = msg.get("background", False)
 
-                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx):
+                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx, _session=session):
                     """在 executor 中运行 agent — 用 run_conversation + conversation_history"""
                     try:
                         # 从 state.db 加载 conversation_history（排除当前消息，run_conversation 会加）
@@ -5916,7 +5916,7 @@ async def ws_endpoint(ws: WebSocket):
                         db = _get_session_db()
                         if db:
                             try:
-                                all_msgs = db.get_messages_as_conversation(session["id"])
+                                all_msgs = db.get_messages_as_conversation(_session["id"])
                                 # 排除最后一条（当前用户消息，run_conversation 会自动加）
                                 history = all_msgs[:-1] if all_msgs else []
                                 # 只保留 user/assistant 消息，且 content 强制为 string
@@ -5939,7 +5939,7 @@ async def ws_endpoint(ws: WebSocket):
                                 pass
 
                         # 🔧 每轮开头：检查上一轮是否有未完成的后台进程
-                        _bg_check = _build_background_process_check(session, agent)
+                        _bg_check = _build_background_process_check(_session, agent)
                         if _bg_check:
                             conversation_history.insert(0, {"role": "system", "content": _bg_check})
 
@@ -5956,7 +5956,7 @@ async def ws_endpoint(ws: WebSocket):
                             conversation_history.append({"role": "system", "content": _skill_ctx})
 
                         # 🔧 长任务记忆锚点 + 强制执行指令（合并为一条，避免被稀释）
-                        _plan_ctx = _build_task_plan_context(session)
+                        _plan_ctx = _build_task_plan_context(_session)
                         if _plan_ctx:
                             # 把所有关键指令合并成一条 system 消息
                             _merged = (
@@ -5972,12 +5972,12 @@ async def ws_endpoint(ws: WebSocket):
                             conversation_history.append({"role": "system", "content": _merged})
 
                         # P0-1: Agent 启动协议 — 每轮自动读 alerts.json
-                        _alerts_ctx = _build_alerts_context(session)
+                        _alerts_ctx = _build_alerts_context(_session)
                         if _alerts_ctx:
                             conversation_history.append({"role": "system", "content": _alerts_ctx})
 
                         # 🔧 主线任务恢复：回答完用户问题后必须继续主线
-                        _resume_ctx = _build_task_resume_prompt(session)
+                        _resume_ctx = _build_task_resume_prompt(_session)
                         if _resume_ctx:
                             conversation_history.append({"role": "system", "content": _resume_ctx})
 
@@ -6013,7 +6013,7 @@ async def ws_endpoint(ws: WebSocket):
                                 result = agent.checkpoint.read_partial() if hasattr(agent, "checkpoint") else ""
                                 if not result:
                                     result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
-                                _session_emit(session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": session["id"]})
+                                _session_emit(_session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": _session["id"]})
                         else:
                             result = await loop.run_in_executor(None, _do_run)
 
@@ -6066,29 +6066,29 @@ async def ws_endpoint(ws: WebSocket):
                                     if pipe_todos:
                                         for td in pipe_todos:
                                             agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
-                                        _session_emit(session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                                        _session_emit(session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                        _session_emit(_session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
+                                        _session_emit(_session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
                         # Hermes 中断是优雅的：run_conversation() 正常返回
                         if getattr(agent, "_interrupt_requested", False):
                             agent.clear_interrupt()
-                            _session_emit(session, {"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                            _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
+                            _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
+                            _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                             return
-                        # 记录助手回复到 session + state.db
-                        session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
-                        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        _persist_session_message(session, "assistant", result)
+                        # 记录助手回复到 _session + state.db
+                        _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
+                        _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        _persist_session_message(_session, "assistant", result)
                         # 尝试提取 todo
                         try:
                             todos = agent.get_todos() if hasattr(agent, "get_todos") else []
                             if todos:
-                                session["todos"] = todos if isinstance(todos, list) else []
+                                _session["todos"] = todos if isinstance(todos, list) else []
                         except Exception:
                             pass
                         # 发送进度完成
-                        _session_emit(session, {"type": "progress", "step": _pt(session, "complete"), "status": "done", "detail": _pt(session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_session, {"type": "progress", "step": _pt(_session, "complete"), "status": "done", "detail": _pt(_session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                         # 聊天框内容：有文本回复就用文本，纯工具调用时生成操作摘要
                         if has_delta:
                             _chat_content = ""  # 已通过 delta 流式发送，不重复
@@ -6100,7 +6100,7 @@ async def ws_endpoint(ws: WebSocket):
                             _chat_content = "✅ 已完成: " + " → ".join(_unique[:6])
                         else:
                             _chat_content = ""
-                        _session_emit(session, {"type": "complete", "content": _chat_content, "session_id": session["id"]})
+                        _session_emit(_session, {"type": "complete", "content": _chat_content, "session_id": _session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
                         _action_words = ["启动", "运行", "执行", "开始", "跑", "启动pipeline", "launch", "run ", "start",
@@ -6108,15 +6108,15 @@ async def ws_endpoint(ws: WebSocket):
                         _has_action_promise = any(w in result.lower() for w in _action_words) if result else False
                         _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
                                        for t in _tool_call_log) if _tool_call_log else False
-                        _has_plan = bool(session.get("plan_path") or
-                                         os.path.isfile(os.path.join(session.get("results_dir", ""), "task_plan.md")))
+                        _has_plan = bool(_session.get("plan_path") or
+                                         os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
                         if _has_action_promise and not _has_exec:
                             logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 立即触发自唤醒")
-                            _session_emit(session, {"type": "info",
+                            _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 检测到说而不做——系统将立即触发新一轮检查，强制调用工具",
-                                "session_id": session["id"]})
-                            session["_urgent_wakeup"] = True
-                            session["_force_tool_check"] = True
+                                "session_id": _session["id"]})
+                            _session["_urgent_wakeup"] = True
+                            _session["_force_tool_check"] = True
                         # 🔧 空响应检测：只有模型真正返回空（无任何文本且无工具调用）才重试。
                         # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
                         if not _tool_call_log and (not result or not result.strip()):
