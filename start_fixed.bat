@@ -54,6 +54,17 @@ echo [OK] Virtual environment created
 
 :have_venv
 echo [OK] Using .venv
+
+REM --- 环境校准: validate_env 校验/修复路径 + R 默认版本对齐 ---
+.venv\Scripts\python.exe scripts\validate_env.py >nul 2>&1
+.venv\Scripts\python.exe scripts\validate_env.py --r-bin > "%TEMP%\memomics_rbin.txt" 2>nul
+for /f "usebackq delims=" %%r in ("%TEMP%\memomics_rbin.txt") do set "R_BIN=%%r"
+del "%TEMP%\memomics_rbin.txt" >nul 2>&1
+if exist "%R_BIN%\Rscript.exe" (
+    set "PATH=%R_BIN%;%PATH%"
+    echo [OK] R: %R_BIN%\Rscript.exe
+)
+
 .venv\Scripts\python.exe -c "import fastapi" >nul 2>&1
 if !errorlevel! neq 0 (
     echo [INSTALL] Installing dependencies (2-3 minutes)...

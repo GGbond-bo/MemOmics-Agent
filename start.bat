@@ -56,6 +56,16 @@ exit /b 1
 
 :check_deps
 echo [CHECK] Python: "%PYTHON%"
+
+REM --- 环境校准: validate_env 校验/修复路径 + R 默认版本对齐 ---
+"%PYTHON%" "%~dp0scripts\validate_env.py" >nul 2>&1
+"%PYTHON%" "%~dp0scripts\validate_env.py" --r-bin > "%TEMP%\memomics_rbin.txt" 2>nul
+for /f "usebackq delims=" %%r in ("%TEMP%\memomics_rbin.txt") do set "R_BIN=%%r"
+del "%TEMP%\memomics_rbin.txt" >nul 2>&1
+if exist "%R_BIN%\Rscript.exe" (
+    set "PATH=%R_BIN%;%PATH%"
+    echo [CHECK] R: %R_BIN%\Rscript.exe
+)
 "%PYTHON%" -c "import fastapi" >nul 2>&1
 if %errorlevel% equ 0 (
     echo [OK] Dependencies ready

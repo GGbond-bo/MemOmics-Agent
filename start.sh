@@ -175,6 +175,20 @@ PY_VERSION=$($PYTHON -c "import sys; print('{}.{}'.format(sys.version_info.major
 PY_FULL=$($PYTHON --version 2>&1)
 echo "🐍 Python: $PY_VERSION ($PY_FULL) [$PYTHON]"
 
+# === 环境校准: validate_env 校验/修复路径 + R 默认版本对齐 ===
+"$PYTHON" "$SCRIPT_DIR/scripts/validate_env.py" >/dev/null 2>&1 || true
+R_BIN=$("$PYTHON" "$SCRIPT_DIR/scripts/validate_env.py" --r-bin 2>/dev/null | tail -1 || true)
+if [ -n "$R_BIN" ] && [ -x "$R_BIN/Rscript.exe" ]; then
+    # Git Bash 需要 POSIX 格式路径才能进 PATH
+    if command -v cygpath >/dev/null 2>&1; then
+        R_BIN_POSIX=$(cygpath -u "$R_BIN")
+    else
+        R_BIN_POSIX="$R_BIN"
+    fi
+    export PATH="$R_BIN_POSIX:$PATH"
+    echo "🔬 R: $R_BIN/Rscript.exe"
+fi
+
 # === Create venv if needed ===
 if [ ! -d "$VENV_DIR" ]; then
     echo "📦 Creating virtual environment..."

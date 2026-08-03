@@ -21,10 +21,16 @@ def check_exists(path_str):
     return p.exists()
 
 def find_r_installations():
-    """自动探测所有R安装"""
+    """自动探测所有R安装（Program Files + AppData/Local，覆盖用户级安装）"""
     results = {}
-    r_base = Path("C:/Program Files/R")
-    if r_base.exists():
+    import os as _os
+    candidates = [
+        Path("C:/Program Files/R"),
+        Path(_os.path.expandvars(r"%LOCALAPPDATA%\R")),
+    ]
+    for r_base in candidates:
+        if not r_base.exists():
+            continue
         for d in r_base.iterdir():
             if d.is_dir() and d.name.startswith("R-"):
                 rscript = d / "bin/x64/Rscript.exe"
@@ -191,4 +197,13 @@ def main():
         sys.exit(0)
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--r-bin":
+        # 输出 environment.json 中 default R 的 bin 目录（供启动脚本对齐 PATH）
+        try:
+            data = json.load(open(ENV_FILE, encoding="utf-8"))
+            rscript = data["paths"]["r"]["default"]
+            print(os.path.dirname(rscript))
+            sys.exit(0)
+        except Exception:
+            sys.exit(1)
     main()
