@@ -1202,6 +1202,32 @@ async function send(background) {
   if ((!text && !pendingImages.length) || !ws || ws.readyState !== 1) return;
   input.value = '';
   input.style.height = 'auto';
+  // currentSid 为空时先创建会话（修复：newSession 后直接输入，回复会因 session_id=null 丢失）
+
+  if (!currentSid) {
+
+    try {
+
+      var _r = await fetch('/api/sessions/new', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
+
+      var _d = await _r.json();
+
+      if (_d && _d.id) {
+
+        currentSid = _d.id;
+
+        document.getElementById('chat-title').textContent = _d.title || '新会话';
+
+        updateSessionList();
+
+        refreshResults();
+
+      }
+
+    } catch(e) { console.error('create session failed', e); }
+
+  }
+
   // 先上传图片获取 URL
   var imageUrls = [];
   if (pendingImages.length) {
@@ -1209,7 +1235,8 @@ async function send(background) {
     imageUrls = await uploadPendingImages();
   }
   // 检查 agent 是否正在运行 — 如果在运行，走 steer 中途引导
-  if (typeof agentRunning !== 'undefined' && agentRunning && !background) {
+  if (typeof agentRunning !== 'undefined' && agentRunning && currentSid && !background) {
+
     // agent 运行中，发 steer 引导消息
     addUserMsg(text, imageUrls);
     ws.send(JSON.stringify({ type: 'steer', content: text, session_id: currentSid, images: imageUrls }));
@@ -1737,6 +1764,32 @@ function renderMermaidNode(el) {
 function newSession() {
 
   currentSid = null;
+  // 重置运行状态（修复：会话1运行时新建会话，steer-hint/按钮/进度残留）
+
+  agentRunning = false;
+
+  _currentRunningSid = null;
+
+  fullText = '';
+
+  reasoningText = '';
+
+  currentAssistantEl = null;
+
+  currentBubble = null;
+
+  progressTimelineEl = null;
+
+  progressItems = [];
+
+  document.getElementById('send').disabled = false;
+
+  document.getElementById('stop').classList.remove('active');
+
+  document.getElementById('steer-hint').style.display = 'none';
+
+  document.querySelectorAll('.progress-timeline').forEach(function(el) { el.remove(); });
+
   document.getElementById('messages').innerHTML = '';
   clearPendingImages();
   // 欢迎画面 — 企鹅服小女孩 + 极简问候 (学 hermes 风格)
