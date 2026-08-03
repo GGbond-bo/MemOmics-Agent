@@ -5112,7 +5112,7 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "done", "detail": _pt(session, "completed"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "complete", "content": _intro}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "complete", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
                     continue  # 跳过 agent 调用
 
                 # 发送 session_id（thinking 已在消息到达时即时发送）
