@@ -815,6 +815,14 @@ def _register_job_limits(session, req):
         logger.warning(f"[MemOmics] job limits injection failed: {e}")
 
 
+def _clear_session_running(sid):
+    """按会话 id 精确清理运行状态（done_callback 用，绕过闭包变量陷阱）"""
+    s = _sessions.get(sid)
+    if s is not None:
+        s["running_agent"] = None
+        s["running_task"] = None
+
+
 def _release_lease(session_id, lease):
     """任务结束后释放资源租约（线程安全，不阻塞回调）"""
     if lease is None:
@@ -4996,7 +5004,20 @@ async def ws_endpoint(ws: WebSocket):
                 current_sid = session["id"]
                 # 发送进度日志重放
                 progress_log = session.get("progress_log", [])
-                is_running = bool(session.get("running_agent") or session.get("running_task"))
+                # 运行状态用 task.done() 判定：已完成但引用未清的任务不算运行中
+                # （修复：run_agent 闭包 finally 可能因循环变量指向错会话而漏清理，
+                #   导致会话显示"Agent 运行中"且输入被当 steer）
+                _rt = session.get("running_task")
+                if isinstance(_rt, str):
+                    _task_alive = bool(_rt)
+                elif _rt is None:
+                    _task_alive = False
+                else:
+                    try:
+                        _task_alive = not _rt.done()
+                    except Exception:
+                        _task_alive = False
+                is_running = bool(session.get("running_agent")) and _task_alive
                 await ws.send_text(json.dumps({
                     "type": "progress_replay",
                     "progress_log": progress_log,
@@ -6096,9 +6117,10 @@ async def ws_endpoint(ws: WebSocket):
                                 "session_id": session["id"]})
                             session["_urgent_wakeup"] = True
                             session["_force_tool_check"] = True
-                        # 🔧 空响应检测：模型返回空或极短文本且无工具调用 → 自动重试
-                        if not _tool_call_log and result and len(result.strip()) < 20:
-                            logger.info(f"[MemOmics] 检测到空响应(len={len(result.strip())}) → 触发自唤醒重试")
+                        # 🔧 空响应检测：只有模型真正返回空（无任何文本且无工具调用）才重试。
+                        # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
+                        if not _tool_call_log and (not result or not result.strip()):
+                            logger.info(f"[MemOmics] 检测到空响应(len={len(result.strip()) if result else 0}) → 触发自唤醒重试")
                             _session_emit(session, {"type": "info",
                                 "content": "⚠️ 模型返回空响应，系统将在3秒后自动重试",
                                 "session_id": session["id"]})
@@ -6138,7 +6160,7 @@ async def ws_endpoint(ws: WebSocket):
                     _register_job_limits(session, _res_req)
                     task = asyncio.ensure_future(run_agent())
                     session["running_task"] = task
-                    task.add_done_callback(lambda _t: _release_lease(session["id"], _lease))
+                    task.add_done_callback(lambda _t, _sid=session["id"], _ls=_lease: (_release_lease(_sid, _ls), _clear_session_running(_sid)))
                     try:
                         _task_supervisor.register(session["id"], task, label="agent_conversation")
                     except RuntimeError:
