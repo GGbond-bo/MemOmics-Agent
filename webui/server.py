@@ -2392,6 +2392,19 @@ def _create_agent(model_config=None, session_id=None, session=None):
         agent.tool_complete_callback = cbs["tool_complete_callback"]
         if not agent.tool_progress_callback:
             agent.tool_progress_callback = cbs.get("tool_progress_callback")
+    # 统一注入任务级隔离 env（默认 1 核 / 2 GB Job 限制）——覆盖微信/self_check/steer 等
+    # 所有创建路径，防止 terminal 环境 collapse 到共享 "default"（会话间互相干扰的根因）
+    if session_id:
+        try:
+            from tools.terminal_tool import register_task_env_overrides
+            host_cpu = max(1, os.cpu_count() or 1)
+            register_task_env_overrides(session_id, {"env": {
+                "MEMOMICS_INTERNAL_JOB_SESSION_ID": session_id,
+                "MEMOMICS_INTERNAL_JOB_MEMORY_BYTES": str(int(2.0 * 1024 ** 3)),
+                "MEMOMICS_INTERNAL_JOB_CPU_RATE": str(max(1, min(10000, round(1 / host_cpu * 10000)))),
+            }})
+        except Exception:
+            pass
     return agent
 
 @app.get("/api/sessions")
@@ -5093,12 +5106,12 @@ async def ws_endpoint(ws: WebSocket):
                     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     _persist_session_message(session, "assistant", _intro)
                     await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "..."}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
                     await asyncio.sleep(1.0)  # 让前端有时间渲染思考状态
                     await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "done", "detail": _pt(session, "completed"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "delta", "content": _intro}, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "complete", "content": _intro}, ensure_ascii=False))
                     continue  # 跳过 agent 调用
 

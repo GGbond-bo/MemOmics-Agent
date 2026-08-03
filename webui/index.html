@@ -858,8 +858,12 @@ function handleMessage(msg) {
   }
 
   // 以下只处理当前会话的消息
-  // 防御：再次确认 session_id 匹配，防止竞态条件
-  if (msg.session_id && msg.session_id !== currentSid) {
+  // 防御：session_id 缺失或与当前会话不匹配的消息一律拒绝，防止竞态串扰
+
+  // （后端 _session_emit 自动注入 session_id，直发的 thinking/delta 已补全）
+
+  if (!msg.session_id || msg.session_id !== currentSid) {
+
     return;
   }
 
@@ -1908,6 +1912,8 @@ function switchSession(sid) {
       items: progressItems.slice(),
       agentRunning: agentRunning,
       runningSid: _currentRunningSid,
+      reasoningText: reasoningText,
+
       // currentBubble/currentAssistantEl/fullText/reasoningText 不缓存 —
       // DOM 元素在 innerHTML='' 后失效，缓存了也是野指针
     };
@@ -1928,7 +1934,8 @@ function switchSession(sid) {
   currentAssistantEl = null;  // 重置 — 不指向旧 DOM
   currentBubble = null;       // 重置
   fullText = '';              // 重置
-  reasoningText = '';         // 重置
+  reasoningText = cached.reasoningText || '';  // 恢复该会话的思考内容
+
   agentRunning = cached.agentRunning || false;
   _currentRunningSid = cached.runningSid || null;
 
