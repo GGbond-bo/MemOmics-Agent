@@ -15,6 +15,7 @@ from pathlib import Path
 
 from tools.environments.base import BaseEnvironment, _pipe_stdin
 from hermes_cli._subprocess_compat import windows_hide_flags
+from tools.windows_job import attach_windows_job, terminate_attached_job
 
 _IS_WINDOWS = platform.system() == "Windows"
 
@@ -1395,6 +1396,9 @@ class LocalEnvironment(BaseEnvironment):
             except ProcessLookupError:
                 pass
 
+        if _IS_WINDOWS:
+            attach_windows_job(proc, run_env)
+
         if stdin_data is not None:
             _pipe_stdin(proc, stdin_data)
 
@@ -1434,6 +1438,12 @@ class LocalEnvironment(BaseEnvironment):
 
         try:
             if _IS_WINDOWS:
+                if terminate_attached_job(proc):
+                    try:
+                        proc.wait(timeout=2.0)
+                    except (subprocess.TimeoutExpired, OSError):
+                        pass
+                    return
                 try:
                     from gateway.status import terminate_pid
 

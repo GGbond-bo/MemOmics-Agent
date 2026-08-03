@@ -1198,7 +1198,7 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
     """
     _ISOLATION_KEYS = frozenset({
         "docker_image", "modal_image", "singularity_image",
-        "daytona_image", "env_type",
+        "daytona_image", "env_type", "env",
     })
     if task_id and task_id in _task_env_overrides:
         overrides = _task_env_overrides[task_id]
@@ -1515,7 +1515,7 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
     docker_network = cc.get("docker_network", True)
 
     if env_type == "local":
-        return _LocalEnvironment(cwd=cwd, timeout=timeout)
+        return _LocalEnvironment(cwd=cwd, timeout=timeout, env=(local_config or {}).get("env") or None)
     
     elif env_type == "docker":
         # One-shot orphan reaper: clean up labeled containers left behind by
@@ -2311,6 +2311,7 @@ def terminal_tool(
                         if env_type == "local":
                             local_config = {
                                 "persistent": config.get("local_persistent", False),
+                                "env": overrides.get("env") or {},
                             }
 
                         new_env = _create_environment(

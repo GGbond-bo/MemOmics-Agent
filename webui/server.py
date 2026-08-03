@@ -771,6 +771,62 @@ def _load_model_config():
 # 启动时加载
 _load_model_config()
 
+# === 任务账本 + 资源治理（借鉴重构版：JobStore/TaskSupervisor/ResourceScheduler）===
+try:
+    from webui.runtime import JobStore, TaskSupervisor, ResourceScheduler, ResourceCapacity
+except ImportError:
+    from runtime import JobStore, TaskSupervisor, ResourceScheduler, ResourceCapacity
+
+_job_store = JobStore(os.path.join(HERMES_HOME_DIR, "runtime", "jobs.json"))
+_task_supervisor = TaskSupervisor(store=_job_store)
+_resource_scheduler = ResourceScheduler(ResourceCapacity.detect())
+
+
+def _session_resource_request(session):
+    """会话资源配额（默认 1 核 / 2 GB / 0 GPU，宽松满足）"""
+    try:
+        from webui.runtime import ResourceRequest
+    except ImportError:
+        from runtime import ResourceRequest
+    cfg = session.get("resource_request") or {}
+    try:
+        return ResourceRequest(
+            cpu_cores=max(1, int(cfg.get("cpu_cores", 1))),
+            memory_gb=max(0.5, float(cfg.get("memory_gb", 2.0))),
+            gpu_slots=max(0, int(cfg.get("gpu_slots", 0))),
+        )
+    except (TypeError, ValueError):
+        return ResourceRequest()
+
+
+def _register_job_limits(session, req):
+    """把 Job Object 硬限制注入会话 terminal 环境（不碰全局 os.environ）"""
+    try:
+        from tools.terminal_tool import register_task_env_overrides
+        host_cpu = max(1, os.cpu_count() or 1)
+        cpu_rate = max(1, min(10000, round(req.cpu_cores / host_cpu * 10000)))
+        limits = {
+            "MEMOMICS_INTERNAL_JOB_SESSION_ID": session["id"],
+            "MEMOMICS_INTERNAL_JOB_MEMORY_BYTES": str(int(req.memory_gb * 1024 ** 3)),
+            "MEMOMICS_INTERNAL_JOB_CPU_RATE": str(cpu_rate),
+        }
+        register_task_env_overrides(session["id"], {"env": limits})
+    except Exception as e:
+        logger.warning(f"[MemOmics] job limits injection failed: {e}")
+
+
+def _release_lease(session_id, lease):
+    """任务结束后释放资源租约（线程安全，不阻塞回调）"""
+    if lease is None:
+        return
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            return
+        loop.create_task(_resource_scheduler.release(lease))
+    except Exception:
+        pass
+
 # === 国内/国际 Provider 列表 + 热门模型 ===
 # 每个 provider: id, name, api(base_url), env_var, group, models[]
 _CHINA_PROVIDERS = [
@@ -2475,6 +2531,16 @@ async def get_messages(sid: str, limit: int = 100):
 
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid: str):
+    try:
+        from tools.terminal_tool import clear_task_env_overrides
+        clear_task_env_overrides(sid)
+    except Exception:
+        pass
+    # 取消活动任务（TaskSupervisor 触发 task.cancel，租约随 done_callback 释放）
+    try:
+        _task_supervisor.cancel(sid)
+    except Exception:
+        pass
     """删除会话：内存 + state.db + agent 资源（真正杀死 agent）"""
     session = _sessions.get(sid)
     if session:
@@ -2771,6 +2837,18 @@ async def upload_image(file: UploadFile = File(...)):
         f.write(contents)
     url = f"/uploads/{fname}"
     return {"url": url, "name": fname, "size": len(contents)}
+
+@app.get("/api/runtime")
+async def runtime_status():
+    """任务账本快照：活动任务 + 内存历史 + 持久历史（重启后遗留任务为 interrupted）"""
+    return _task_supervisor.snapshot()
+
+
+@app.get("/api/resources")
+async def resource_status():
+    """资源准入快照：容量 / 已用 / 可用 / 活动租约 / 排队"""
+    return _resource_scheduler.snapshot()
+
 
 @app.get("/api/health")
 async def health():
@@ -6010,9 +6088,28 @@ async def ws_endpoint(ws: WebSocket):
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
-                session["running_agent"] = agent
-                task = asyncio.ensure_future(run_agent())
-                session["running_task"] = task
+                # 任务账本 + 资源租约 + Job Object 硬限制（借鉴重构版）
+                if _task_supervisor.is_running(session["id"]):
+                    _session_emit(session, {"type": "info", "content": "该会话已有任务在运行，请先发送取消后再试", "session_id": session["id"]})
+                else:
+                    session["running_agent"] = agent
+                    _res_req = _session_resource_request(session)
+                    try:
+                        _lease = await asyncio.wait_for(_resource_scheduler.acquire(session["id"], _res_req), timeout=60)
+                    except Exception:
+                        # 排队超时/容量不足 → 无租约降级运行（不阻塞聊天）
+                        _lease = None
+                        logger.warning(f"[MemOmics] resource acquire failed for session {session['id'][:12]}, running without lease")
+                    _register_job_limits(session, _res_req)
+                    task = asyncio.ensure_future(run_agent())
+                    session["running_task"] = task
+                    task.add_done_callback(lambda _t: _release_lease(session["id"], _lease))
+                    try:
+                        _task_supervisor.register(session["id"], task, label="agent_conversation")
+                    except RuntimeError:
+                        # 极端竞态：已有活动任务 → 取消本次并释放
+                        task.cancel()
+                        _release_lease(session["id"], _lease)
 
 
             elif msg_type == "get_context_usage":
@@ -6060,6 +6157,10 @@ async def ws_endpoint(ws: WebSocket):
             elif msg_type == "cancel":
                 # 强制停止当前运行的 agent
                 session["bg_running"] = False
+                try:
+                    _task_supervisor.cancel(session["id"])
+                except Exception:
+                    pass
                 agent_ref = session.get("running_agent")
                 task_ref = session.get("running_task")
                 if agent_ref and hasattr(agent_ref, "interrupt"):

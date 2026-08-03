@@ -43,6 +43,7 @@ import uuid
 _IS_WINDOWS = platform.system() == "Windows"
 from tools.environments.local import _find_shell, _resolve_safe_cwd, _sanitize_subprocess_env
 from hermes_cli._subprocess_compat import windows_hide_flags
+from tools.windows_job import attach_windows_job, terminate_attached_job
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -781,6 +782,9 @@ class ProcessRegistry:
             start_new_session=True,
             **_popen_kwargs,
         )
+
+        if _IS_WINDOWS:
+            attach_windows_job(proc, bg_env)
 
         session.process = proc
         session.pid = proc.pid
@@ -1546,7 +1550,10 @@ class ProcessRegistry:
                 # Local process -- kill the process tree. On Windows this
                 # must be taskkill /T /F; Popen.terminate() only kills the
                 # shell wrapper and leaves Git Bash descendants behind.
-                self._terminate_host_pid(session.process.pid, session.host_start_time)
+                # Prefer the attached Job Object when present (kills the
+                # complete process tree in one call).
+                if not (_IS_WINDOWS and terminate_attached_job(session.process)):
+                    self._terminate_host_pid(session.process.pid, session.host_start_time)
             elif session.env_ref and session.pid:
                 # Non-local -- kill inside sandbox
                 session.env_ref.execute(f"kill {session.pid} 2>/dev/null", timeout=5)
