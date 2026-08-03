@@ -829,10 +829,15 @@ function handleMessage(msg) {
   // 首次发消息时 currentSid 是 null，后端返回 {type:"session", session_id:"memomics-xxx"}
   // 如果不在这里先设置 currentSid，后续所有消息都会被分流拦截
   if (msg.type === 'session') {
-    currentSid = msg.session_id;
-    if (msg.title) document.getElementById('chat-title').textContent = msg.title;
-    updateSessionList();
-    refreshResults();  // 刷新结果面板以匹配新会话
+    // 只在还没有当前会话时接受 — 防止运行中会话的 session 消息劫持 currentSid
+    // （场景：会话A运行中新建会话B，A 的 intro 流程 session 消息到达会把 currentSid 改回 A，
+    //   A 的后续消息 sid 匹配被劫持的 currentSid → 渲染进 B 界面）
+    if (!currentSid) {
+      currentSid = msg.session_id;
+      if (msg.title) document.getElementById('chat-title').textContent = msg.title;
+      updateSessionList();
+      refreshResults();  // 刷新结果面板以匹配新会话
+    }
     return;
   }
 
@@ -1956,7 +1961,10 @@ function loadAllMessages(sid) {
   });
 }
 
+// 切换序号：防止旧切换的异步渲染（fetch 回调）覆盖新会话界面
+var _switchSeq = 0;
 function switchSession(sid) {
+  var _seq = ++_switchSeq;
   clearPendingImages();
   // === 保存旧会话的全部渲染状态 ===
   if (currentSid) {
@@ -2013,6 +2021,7 @@ function switchSession(sid) {
 
   // 加载消息历史（只加载最近100条，防止大会话卡顿）
   fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => {
+    if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
     document.getElementById('messages').innerHTML = '';
     var msgs = d.messages || [];
     msgs.forEach(function(m) {
@@ -2042,6 +2051,7 @@ function switchSession(sid) {
 
   // 拉取进度日志（如果 WS 的 progress_replay 没收到，用 HTTP 兜底）
   fetch('/api/sessions/' + sid + '/progress').then(r => r.json()).then(d => {
+    if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
     // 只有本地缓存为空且 WS progress_replay 也没填进度时才用 HTTP 重放
     if (d.progress_log && d.progress_log.length > 0 && !cached.items && !progressTimelineEl && progressItems.length === 0) {
       // 只有本地缓存为空时才用服务器进度重放

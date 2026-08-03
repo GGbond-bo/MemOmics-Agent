@@ -5240,32 +5240,32 @@ async def ws_endpoint(ws: WebSocket):
                         )
 
                 # 进度发送辅助函数
-                def _send_progress(step, status, detail=""):
+                def _send_progress(step, status, detail="", _s=session):
                     """发送进度时间线条目 - 同时存储到 progress_log"""
-                    _session_emit(session, {"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                    _session_emit(_s, {"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
 
                 # 回调
                 has_delta = False  # 追踪是否已通过流式发送过文本
 
-                def stream_cb(delta):
+                def stream_cb(delta, _s=session):
                     nonlocal has_delta
                     try:
                         if delta is None: return
                         has_delta = True
-                        _session_emit(session, {"type": "delta", "content": str(delta), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "delta", "content": str(delta), "session_id": _s["id"]})
                     except Exception:
                         pass
 
-                def reasoning_cb(text):
+                def reasoning_cb(text, _s=session):
                     try:
                         if text is None: return
-                        _session_emit(session, {"type": "reasoning", "content": str(text), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "reasoning", "content": str(text), "session_id": _s["id"]})
                     except Exception:
                         pass
 
                 _tool_call_log = []
                 
-                def tool_start_cb(tool_id, tool_name, args=None):
+                def tool_start_cb(tool_id, tool_name, args=None, _s=session):
                     try:
                         # 强制保护：禁止自杀命令 + 禁止删除数据
                         if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
@@ -5275,9 +5275,9 @@ async def ws_endpoint(ws: WebSocket):
                                     logger.warning(f"[MemOmics] 拦截自杀命令: {_cmd[:100]}")
                                     args["command"] = "echo '⛔ 此命令已被拦截——它会杀死 MemOmics 自己。请用 taskkill /F /PID <具体PID>'"
                                     args["code"] = "print('⛔ 此代码已被拦截——它会杀死 MemOmics 自己')"
-                                    _session_emit(session, {"type": "error",
+                                    _session_emit(_s, {"type": "error",
                                         "content": "⛔ 自杀命令已拦截！请用 taskkill /F /PID <具体PID> 指定精确进程",
-                                        "session_id": session["id"]})
+                                        "session_id": _s["id"]})
                                 if _is_data_destroy_command(_cmd) or _is_code_destroy(_cmd):
                                     logger.warning(f"[MemOmics] 拦截删除操作: {_cmd[:100]}")
                                     # 不直接阻断，改为引导 Agent 向用户展示删除内容并请求确认
@@ -5300,32 +5300,33 @@ async def ws_endpoint(ws: WebSocket):
                                         "print()\n"
                                         "print('⛔ 此操作未被直接执行。请先向用户展示要删除的具体文件和原因，等待用户确认后再执行。')"
                                     )
-                                    _session_emit(session, {"type": "warning",
+                                    _session_emit(_s, {"type": "warning",
                                         "content": f"⚠️ Agent 尝试删除文件：{_cmd[:200]}\n\n操作已暂停。请 Agent 先向用户列出要删除的内容并等待确认。",
-                                        "session_id": session["id"]})
+                                        "session_id": _s["id"]})
                         # 文件产出型工具 — 首次调用时按需创建 results_dir
                         _PRODUCING_TOOLS = {
                             "scan_data", "execute_r", "execute_python", "terminal",
                             "execute_code", "update_results_dir", "add_figure",
                             "generate_report", "debate_analysis", "run_command",
                         }
-                        if tool_name in _PRODUCING_TOOLS and not session.get("_dir_created"):
-                            _ensure_results_dir(session)
-                            session["_dir_created"] = True
+                        if tool_name in _PRODUCING_TOOLS and not _s.get("_dir_created"):
+                            _ensure_results_dir(_s)
+                            _s["_dir_created"] = True
                         _tool_call_log.append({"tool": tool_name, "id": tool_id})
-                        _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
-                        _send_progress(_pt(session, "executing") + ": " + tool_name, "pending", tool_name)
+                        _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", tool_name)
                     except Exception:
                         pass
 
                 # 跟踪已知的图片文件，用于检测新图
                 _known_figures = set()
 
-                def _scan_new_figures():
+                def _scan_new_figures(_s=session):
                     """扫描 results_dir 下的新图片，返回新增列表"""
                     new_figs = []
-                    base = session.get("results_dir", "")
+                    base = _s.get("results_dir", "")
                     if not base or not os.path.isdir(base):
                         return new_figs
                     img_exts = {'.png', '.jpg', '.jpeg', '.svg'}
@@ -5338,7 +5339,7 @@ async def ws_endpoint(ws: WebSocket):
                                     new_figs.append({
                                         "name": p.name,
                                         "rel_path": str(p.relative_to(base)).replace("\\", "/"),
-                                        "url": f"/api/results/{session['id']}/figure?path={str(p.relative_to(base)).replace(chr(92), '/')}",
+                                        "url": f"/api/results/{_s['id']}/figure?path={str(p.relative_to(base)).replace(chr(92), '/')}",
                                         "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%H:%M:%S"),
                                     })
                     except Exception:
@@ -5347,16 +5348,16 @@ async def ws_endpoint(ws: WebSocket):
 
                 _main_loop = asyncio.get_running_loop()  # for thread-safe async scheduling
 
-                def tool_complete_cb(tool_id, tool_name, args=None, result=None):
+                def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session):
                     try:
                         result_str = str(result or "")
-                        _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
-                        _send_progress(_pt(session, "tool_completed") + ": " + tool_name, "done", tool_name)
+                        _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
                         # 强制验证：如果 terminal 命令是启动类操作，二次确认进程存活
                         if tool_name in ("terminal", "execute_code", "execute_python") and _is_launch_command(str(args)):
-                            _session_emit(session, {"type": "progress", "step": "verify_launch", "status": "pending",
-                                "detail": "验证启动状态...", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            _session_emit(_s, {"type": "progress", "step": "verify_launch", "status": "pending",
+                                "detail": "验证启动状态...", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             try:
                                 import time as _t
                                 _t.sleep(3)  # 等进程启动
@@ -5367,13 +5368,13 @@ async def ws_endpoint(ws: WebSocket):
                                     shell=True, capture_output=True, text=True, timeout=5)
                                 _proc = _check2.stdout.strip()
                                 if "0 %" in _gpu and not _proc:
-                                    _session_emit(session, {"type": "error",
+                                    _session_emit(_s, {"type": "error",
                                         "content": "⚠️ 启动命令已执行但 GPU 0%、无 CellBender 进程——可能启动失败！请检查命令和日志。",
-                                        "session_id": session["id"]})
+                                        "session_id": _s["id"]})
                                     logger.warning(f"[MemOmics] Launch verify FAILED: GPU={_gpu}, proc={_proc}")
                                 else:
-                                    _session_emit(session, {"type": "progress", "step": "verify_launch", "status": "done",
-                                        "detail": f"GPU {_gpu} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                    _session_emit(_s, {"type": "progress", "step": "verify_launch", "status": "done",
+                                        "detail": f"GPU {_gpu} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             except Exception:
                                 pass
                         # 持久化工具调用到 state.db 的 tool_calls_log 表
@@ -5389,7 +5390,7 @@ async def ws_endpoint(ws: WebSocket):
                             _conn.execute("PRAGMA busy_timeout=2000")
                             _conn.execute(
                                 "INSERT INTO tool_calls_log (session_id, tool_name, tool_id, args_json, result_text, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                                (session["id"], tool_name, str(tool_id or ""), _args_json, _result_trunc, _tcl_time.time())
+                                (_s["id"], tool_name, str(tool_id or ""), _args_json, _result_trunc, _tcl_time.time())
                             )
                             _conn.commit()
                             _conn.close()
@@ -5403,7 +5404,7 @@ async def ws_endpoint(ws: WebSocket):
                                 result_obj = _json.loads(result_str) if isinstance(result_str, str) else result_str
                                 if isinstance(result_obj, dict) and result_obj.get("_evolution_event"):
                                     evt = result_obj["_evolution_event"]
-                                    _session_emit(session, {"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                    _session_emit(_s, {"type": "evolution", "event": evt, "skill": result_obj.get("skill", ""), "script": result_obj.get("script", ""), "tag": result_obj.get("tag", ""), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             except Exception:
                                 pass
                         # todo/todo_manage/memomics_pipeline 完成后同步待办到前端
@@ -5415,7 +5416,7 @@ async def ws_endpoint(ws: WebSocket):
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
                                         if isinstance(result_obj, dict):
                                             # 缓存 pipeline 结果供后续合并
-                                            session["_pipeline_todos"] = result_obj.get("todos", result_obj.get("modules", []))
+                                            _s["_pipeline_todos"] = result_obj.get("todos", result_obj.get("modules", []))
                                             # 如果有 todos，写入 store
                                             if result_obj.get("todos"):
                                                 for td in result_obj["todos"]:
@@ -5442,7 +5443,7 @@ async def ws_endpoint(ws: WebSocket):
                                                 })
                                             agent._todo_store.write(hermes_todos)
                                             # 同时缓存为 pipeline_todos 供 skill 映射
-                                            session["_pipeline_todos"] = result_obj["todos"]
+                                            _s["_pipeline_todos"] = result_obj["todos"]
                                         # 兜底: todo_manage 未传 modules → 0个todo → 自动生成默认待办
                                         elif isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and not result_obj.get("todos"):
                                             if not agent._todo_store.has_items():
@@ -5908,8 +5909,8 @@ async def ws_endpoint(ws: WebSocket):
                 # 是否后台运行
                 is_bg = msg.get("background", False)
 
-                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx, _session=session):
-                    """在 executor 中运行 agent — 用 run_conversation + conversation_history"""
+                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx, _session=session, _agent=agent):
+                    """在 executor 中运行 _agent — 用 run_conversation + conversation_history"""
                     try:
                         # 从 state.db 加载 conversation_history（排除当前消息，run_conversation 会加）
                         conversation_history = []
@@ -5939,7 +5940,7 @@ async def ws_endpoint(ws: WebSocket):
                                 pass
 
                         # 🔧 每轮开头：检查上一轮是否有未完成的后台进程
-                        _bg_check = _build_background_process_check(_session, agent)
+                        _bg_check = _build_background_process_check(_session, _agent)
                         if _bg_check:
                             conversation_history.insert(0, {"role": "system", "content": _bg_check})
 
@@ -5983,20 +5984,20 @@ async def ws_endpoint(ws: WebSocket):
 
                         # plan_refine 模式：临时屏蔽 todo/todo_manage 工具，强制走 memomics_pipeline
                         _saved_tools = None
-                        if _intent == "plan_refine" and agent.tools:
-                            _saved_tools = agent.tools
+                        if _intent == "plan_refine" and _agent.tools:
+                            _saved_tools = _agent.tools
                                                         # DEBUG: 打印所有可用工具
-                            all_tool_names = sorted([t.get('function',{}).get('name','') for t in agent.tools]) if agent.tools else []
+                            all_tool_names = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[ALL-TOOLS] ({len(all_tool_names)}): {all_tool_names}")
                             # 白名单：plan_refine 只允许规划+文献+方案工具
                             
                             PLAN_ONLY = ("memomics_pipeline", "skill_view", "skill_search", "search_knowledge", "search_papers", "search_papers_by_context", "web_search", "web_fetch")
-                            agent.tools = [t for t in agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
-                            before = sorted([t.get('function',{}).get('name','') for t in agent.tools]) if agent.tools else []
+                            _agent.tools = [t for t in _agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
+                            before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
 
                         def _do_run():
-                            result = agent.run_conversation(
+                            result = _agent.run_conversation(
                                 user_text,
                                 conversation_history=conversation_history if conversation_history else None,
                             )
@@ -6010,7 +6011,7 @@ async def ws_endpoint(ws: WebSocket):
                                     timeout=480
                                 )
                             except asyncio.TimeoutError:
-                                result = agent.checkpoint.read_partial() if hasattr(agent, "checkpoint") else ""
+                                result = _agent.checkpoint.read_partial() if hasattr(_agent, "checkpoint") else ""
                                 if not result:
                                     result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
                                 _session_emit(_session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": _session["id"]})
@@ -6051,7 +6052,7 @@ async def ws_endpoint(ws: WebSocket):
 
                         # 恢复原始工具列表
                         if _saved_tools is not None:
-                            agent.tools = _saved_tools
+                            _agent.tools = _saved_tools
                         # 兜底：plan_refine 结束后若未调用 memomics_pipeline，自动触发生成待办
 # 兜底：plan_refine 结束后若未调用 memomics_pipeline，直接调用 Python 函数生成待办
                         if _intent == "plan_refine":
@@ -6059,20 +6060,20 @@ async def ws_endpoint(ws: WebSocket):
                             if not did_call:
                                 try:
                                     import sys
-                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "agent"))
+                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-_agent", "_agent"))
                                     from memomics_pipeline import modules_to_todos
                                     default_ids = ["02", "03", "04"]
                                     pipe_todos = modules_to_todos(default_ids)
                                     if pipe_todos:
                                         for td in pipe_todos:
-                                            agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
+                                            _agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
                                         _session_emit(_session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                         _session_emit(_session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
                         # Hermes 中断是优雅的：run_conversation() 正常返回
-                        if getattr(agent, "_interrupt_requested", False):
-                            agent.clear_interrupt()
+                        if getattr(_agent, "_interrupt_requested", False):
+                            _agent.clear_interrupt()
                             _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                             _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                             return
@@ -6082,7 +6083,7 @@ async def ws_endpoint(ws: WebSocket):
                         _persist_session_message(_session, "assistant", result)
                         # 尝试提取 todo
                         try:
-                            todos = agent.get_todos() if hasattr(agent, "get_todos") else []
+                            todos = _agent.get_todos() if hasattr(_agent, "get_todos") else []
                             if todos:
                                 _session["todos"] = todos if isinstance(todos, list) else []
                         except Exception:
@@ -6121,27 +6122,27 @@ async def ws_endpoint(ws: WebSocket):
                         # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
                         if not _tool_call_log and (not result or not result.strip()):
                             logger.info(f"[MemOmics] 检测到空响应(len={len(result.strip()) if result else 0}) → 触发自唤醒重试")
-                            _session_emit(session, {"type": "info",
+                            _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 模型返回空响应，系统将在3秒后自动重试",
-                                "session_id": session["id"]})
-                            session["_urgent_wakeup"] = True
+                                "session_id": _session["id"]})
+                            _session["_urgent_wakeup"] = True
                     except asyncio.CancelledError:
-                        if not getattr(agent, "_interrupt_requested", False):
-                            agent.interrupt()
-                        _session_emit(session, {"type": "progress", "step": _pt(session, "stopped"), "status": "done", "detail": _pt(session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
-                        _session_emit(session, {"type": "cancelled", "session_id": session["id"]})
+                        if not getattr(_agent, "_interrupt_requested", False):
+                            _agent.interrupt()
+                        _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
+                        _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                     except Exception as e:
                         import traceback
-                        _session_emit(session, {"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": session["id"]})
+                        _session_emit(_session, {"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": _session["id"]})
                     finally:
-                        session["running_agent"] = None
-                        session["running_task"] = None
+                        _session["running_agent"] = None
+                        _session["running_task"] = None
                         # 停止本轮心跳
                         _heartbeat_active["on"] = False
                         if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
                             _heartbeat_task.cancel()
                         # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
-                        _schedule_self_check(session, agent, loop)
+                        _schedule_self_check(_session, _agent, loop)
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
