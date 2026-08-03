@@ -1110,6 +1110,20 @@ KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
 _lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
 WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
 RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
+
+# === 生信契约（借鉴重构版：输入检查/工作流验证/QC/参考资源注册表）===
+from webui.bioinformatics import ReferenceRegistry
+try:
+    from webui.api.bioinformatics import create_bioinformatics_router
+except ImportError:
+    create_bioinformatics_router = None
+
+_bio_reference_registry = ReferenceRegistry(
+    os.path.join(HERMES_HOME_DIR, "bioinformatics", "references.json"),
+    allowed_roots=[MEMOMICS_DIR, RESULTS_DIR, _uploads_dir],
+)
+if create_bioinformatics_router is not None:
+    app.include_router(create_bioinformatics_router(_bio_reference_registry, [MEMOMICS_DIR, RESULTS_DIR, _uploads_dir]))
 SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
 SKILLS_INDEX_PATH = os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md")
 _SKILLS_INDEX_CACHE = None  # 模块级缓存：服务器启动后只读一次，所有会话共享
@@ -3975,8 +3989,11 @@ async def list_files(path: str = ""):
 
 @app.get("/api/file/read")
 async def read_file_api(path: str):
-    """读取文件内容"""
+    """读取文件内容（限制在 work/results/项目内，防任意文件读取）"""
     try:
+        from webui.security import resolve_within_roots, UnsafePathError
+        _p = resolve_within_roots(path, [WORK_DIR, RESULTS_DIR, MEMOMICS_DIR])
+        path = str(_p)
         size = os.path.getsize(path)
         with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read(200000)  # 最多 200KB
@@ -3987,7 +4004,12 @@ async def read_file_api(path: str):
 
 @app.get("/api/file/download")
 async def download_file(path: str):
-    """下载文件"""
+    """下载文件（限制在 work/results/项目内，防任意文件下载）"""
+    try:
+        from webui.security import resolve_within_roots, UnsafePathError
+        path = str(resolve_within_roots(path, [WORK_DIR, RESULTS_DIR, MEMOMICS_DIR]))
+    except UnsafePathError as e:
+        return JSONResponse({"error": str(e)}, status_code=403)
     if not os.path.isfile(path):
         return JSONResponse({"error": "File not found"}, status_code=404)
     return FileResponse(path, filename=os.path.basename(path))
