@@ -13,7 +13,7 @@ echo.
 set "HERMES_HOME=%~dp0hermes_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
-set "MEMOMICS_HOST=0.0.0.0"
+REM 默认仅监听本机（127.0.0.1）。如需局域网访问：set "MEMOMICS_HOST=0.0.0.0"
 
 REM --- Find Python ---
 set "PYTHON="

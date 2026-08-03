@@ -737,11 +737,19 @@ _current_model = {   # 默认模型配置 (打包后为空, 首次启动配置)
 # === 模型配置持久化 ===
 _MODEL_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "model_config.json")
 
+def _atomic_write_json(path: str, obj) -> None:
+    """原子写 JSON：临时文件 + fsync + os.replace，避免进程中止留下半个文件"""
+    tmp = os.path.join(os.path.dirname(path) or ".", f".{os.path.basename(path)}.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
 def _save_model_config():
-    """保存当前模型配置到文件"""
+    """保存当前模型配置到文件（原子写）"""
     try:
-        with open(_MODEL_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(_current_model, f, ensure_ascii=False, indent=2)
+        _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)
     except Exception as e:
         print(f"[WARN] 保存模型配置失败: {e}")
 
@@ -968,8 +976,7 @@ _provider_keys = {}  # provider_id -> {api_key, base_url}
 
 def _save_provider_keys():
     try:
-        with open(_PROVIDER_KEYS_FILE, "w", encoding="utf-8") as f:
-            json.dump(_provider_keys, f, ensure_ascii=False, indent=2)
+        _atomic_write_json(_PROVIDER_KEYS_FILE, _provider_keys)
     except Exception as e:
         print(f"[WARN] 保存 provider keys 失败: {e}")
 
@@ -2568,10 +2575,18 @@ async def put_skills_manage(request: Request):
     _save_skills_disabled(disabled_list)
     return {"ok": True, "disabled_count": len(disabled_list)}
 
+def _public_model_config() -> dict:
+    """对浏览器脱敏的模型配置：不含 api_key 明文，只带 has_key 状态"""
+    cfg = dict(_current_model)
+    cfg["has_key"] = bool(cfg.get("api_key"))
+    cfg.pop("api_key", None)
+    return cfg
+
+
 @app.get("/api/models")
 async def list_models():
     """列出预设模型 + 当前模型"""
-    return {"presets": _preset_models, "current": _current_model}
+    return {"presets": _preset_models, "current": _public_model_config()}
 
 
 @app.post("/api/models/switch")
@@ -2594,7 +2609,7 @@ async def switch_model(payload: dict):
             s["agent"] = None
     # 持久化到文件 (重启后自动恢复)
     _save_model_config()
-    return {"ok": True, "current": _current_model}
+    return {"ok": True, "current": _public_model_config()}
 
 
 # --- Provider 列表 (国内 + 国际热门) ---
@@ -6120,7 +6135,7 @@ if __name__ == "__main__":
     _crash_count = 0
     while True:
         try:
-            uvicorn.run(app, host="0.0.0.0", port=port)
+            uvicorn.run(app, host=os.environ.get("MEMOMICS_HOST", "127.0.0.1"), port=port)
         except Exception as e:
             _crash_count += 1
             if _crash_count > 20:

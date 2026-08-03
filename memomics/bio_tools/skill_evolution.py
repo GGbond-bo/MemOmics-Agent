@@ -802,10 +802,6 @@ def _register_skill(skill_name: str, keywords: str = "",
 
 # ─── SYNC ─────────────────────────────────────────
 
-def _sync_to_hermes_home(skill_name: str, skill_dir: str):
-    """同步更新到 hermes_home/skills/bioinformatics/<skill_name>/ — 动态推导路径"""
-    memomics_root = _get_memomics_root()
-    target = os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name)
 def _copy_with_retry(src, dst, max_retries=3, delay=0.5):
     """带重试的文件复制，处理 Windows 文件锁"""
     for attempt in range(max_retries):
@@ -818,12 +814,17 @@ def _copy_with_retry(src, dst, max_retries=3, delay=0.5):
             else:
                 raise
 
-    # 🆕 如果 hermes_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.hermes 的 bug）
-    if not os.path.isdir(target) and os.path.isdir(skill_dir):
-        shutil.copytree(skill_dir, target)
-        return
-    if os.path.isdir(target) and os.path.isdir(skill_dir):
-        try:
+
+def _sync_to_hermes_home(skill_name: str, skill_dir: str):
+    """同步更新到 hermes_home/skills/bioinformatics/<skill_name>/ — 动态推导路径"""
+    try:
+        memomics_root = _get_memomics_root()
+        target = os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name)
+        # 如果 hermes_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.hermes 的 bug）
+        if not os.path.isdir(target) and os.path.isdir(skill_dir):
+            shutil.copytree(skill_dir, target)
+            return
+        if os.path.isdir(target) and os.path.isdir(skill_dir):
             # 只同步 .md, .json, logs/ — 添加重试机制处理 Windows 文件锁
             for item in ["SKILL.md", "skill.json"]:
                 src = os.path.join(skill_dir, item)
@@ -846,9 +847,9 @@ def _copy_with_retry(src, dst, max_retries=3, delay=0.5):
                 for f in os.listdir(src_scripts):
                     if not f.startswith("."):
                         shutil.copy2(os.path.join(src_scripts, f), os.path.join(dst_scripts, f))
-        except Exception as e:
-            import sys
-            print(f"[skill_evolution] WARNING: sync to hermes_home failed for '{skill_name}': {e}", file=sys.stderr)
+    except Exception as e:
+        import sys
+        print(f"[skill_evolution] WARNING: sync to hermes_home failed for '{skill_name}': {e}", file=sys.stderr)
 
 
 # ─── MAIN ENTRY ───────────────────────────────────

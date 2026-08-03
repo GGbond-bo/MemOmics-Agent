@@ -175,6 +175,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             _cmd_lower = _cmd.lower()
             _danger = [
                 ("taskkill", "/im python", "禁止 /IM python.exe，会把 MemOmics 自己杀掉！请用 /F /PID <具体PID>"),
+                ("taskkill", "/im python3", "禁止 /IM python3.exe，会把 MemOmics 自己杀掉！请用 /F /PID <具体PID>"),
                 ("killall", "python", "禁止 killall python！请用 kill <具体PID>"),
                 ("pkill", "python", "禁止 pkill python！请用 kill <具体PID>"),
             ]

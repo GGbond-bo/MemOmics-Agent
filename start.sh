@@ -258,8 +258,8 @@ fi
 export HERMES_HOME="$SCRIPT_DIR/hermes_home"
 export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
 export MEMOMICS_PORT="$PORT"
-# Bind to 0.0.0.0 on servers (accessible remotely), localhost on desktop
-export MEMOMICS_HOST="${MEMOMICS_HOST:-0.0.0.0}"
+# 默认仅监听本机（127.0.0.1）。服务器/局域网访问时：export MEMOMICS_HOST=0.0.0.0
+export MEMOMICS_HOST="${MEMOMICS_HOST:-127.0.0.1}"
 
 # === Detect if running on server (SSH session) ===
 if [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_TTY" ]; then
