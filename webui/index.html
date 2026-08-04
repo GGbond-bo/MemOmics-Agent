@@ -1968,7 +1968,9 @@ function renderSessionList(sessions) {
 }
 
 function deleteSession(sid) {
-  if (!confirm('确定删除这个会话吗？所有消息历史将被清除。')) return;
+  if (!confirm('确定删除这个会话吗？
+将同时清除：消息历史、结果目录（图表/报告/中间产物）、转录文件。
+此操作不可恢复！')) return;
   fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(r => r.json()).then(function() {
     // 立即从本地移除，再同步服务器（避免空响应 guard 阻止更新）
     _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });

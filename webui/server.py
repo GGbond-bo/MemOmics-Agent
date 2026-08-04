@@ -2566,6 +2566,9 @@ async def get_messages(sid: str, limit: int = 100):
 
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid: str):
+    # sid 校验（防路径穿越：只接受 memomics-xxxxxxx 格式）
+    if not re.fullmatch(r"memomics-[0-9a-f]{8}", sid or ""):
+        return {"ok": False, "error": "invalid sid"}
     try:
         from tools.terminal_tool import clear_task_env_overrides
         clear_task_env_overrides(sid)
@@ -2589,6 +2592,23 @@ async def delete_session(sid: str):
             db.delete_session(sid)
         except Exception:
             pass
+    # 删除结果目录（results/{sid}/，含全部图表/报告/中间产物）
+    _res_dir = os.path.join(RESULTS_DIR, sid)
+    if os.path.isdir(_res_dir):
+        try:
+            shutil.rmtree(_res_dir, ignore_errors=True)
+        except Exception:
+            pass
+    # 删除 Hermes 会话转录文件（hermes_home/sessions/ 下的 request_dump_*）
+    try:
+        import glob as _glob
+        for _f in _glob.glob(os.path.join(HERMES_HOME_DIR, "sessions", f"*{sid}*")):
+            try:
+                os.remove(_f)
+            except Exception:
+                pass
+    except Exception:
+        pass
     return {"ok": True}
 
 
