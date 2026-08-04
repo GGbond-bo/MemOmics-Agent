@@ -1045,6 +1045,11 @@ function handleMessage(msg) {
   } else if (msg.type === 'complete') {
     var completeContent = msg.content || '';
     if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
+    else if (currentBubble && completeContent && completeContent.length > fullText.length) {
+      // 切换恢复场景：complete 是最终完整内容，补全切走期间丢失的流式 delta
+      fullText = completeContent;
+      currentBubble.innerHTML = renderMarkdown(fullText); initMermaid();
+    }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
     finalizeProgressTimeline();
@@ -1974,6 +1979,7 @@ function switchSession(sid) {
       agentRunning: agentRunning,
       runningSid: _currentRunningSid,
       reasoningText: reasoningText,
+      fullText: fullText,
 
       // currentBubble/currentAssistantEl/fullText/reasoningText 不缓存 —
       // DOM 元素在 innerHTML='' 后失效，缓存了也是野指针
@@ -2046,6 +2052,27 @@ function switchSession(sid) {
         document.getElementById('messages').insertBefore(restored, document.getElementById('messages').firstChild);
         progressTimelineEl = restored;
       }
+    }
+    // === 恢复流式输出中的内容（agent 运行中切换再切回） ===
+    // fullText/reasoningText 是纯文本（非 DOM 引用），可安全缓存；
+    // 切走时正在输出的 delta/reasoning 未持久化，切回时必须重建 DOM
+    // 让后续 delta 能继续 append，否则内容从半路开始/消失
+    if (cached.fullText || cached.reasoningText) {
+      if (!currentAssistantEl) {
+        currentAssistantEl = addAssistantMsg('');
+      }
+      currentBubble = currentAssistantEl.querySelector('.bubble');
+      if (cached.fullText) {
+        fullText = cached.fullText;
+        if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      } else {
+        fullText = '';
+      }
+      if (cached.reasoningText) {
+        reasoningText = cached.reasoningText;
+        updateReasoningBlock();
+      }
+      scrollBottom();
     }
   });
 
