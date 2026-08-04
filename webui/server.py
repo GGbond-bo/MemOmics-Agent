@@ -2592,13 +2592,7 @@ async def delete_session(sid: str):
             db.delete_session(sid)
         except Exception:
             pass
-    # 删除结果目录（results/{sid}/，含全部图表/报告/中间产物）
-    _res_dir = os.path.join(RESULTS_DIR, sid)
-    if os.path.isdir(_res_dir):
-        try:
-            shutil.rmtree(_res_dir, ignore_errors=True)
-        except Exception:
-            pass
+    # 注：结果目录（results/{sid}/ 分析产出）按用户要求保留，不删除
     # 删除 Hermes 会话转录文件（hermes_home/sessions/ 下的 request_dump_*）
     try:
         import glob as _glob
