@@ -13,7 +13,7 @@ echo.
 set "HERMES_HOME=%~dp0hermes_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
-REM é»˜è®¤ä»…ç›‘å¬æœ¬æœºï¼ˆ127.0.0.1ï¼‰ã€‚å¦‚éœ€å±€åŸŸç½‘è®¿é—®ï¼šset "MEMOMICS_HOST=0.0.0.0"
+REM Ä¬ÈÏ½ö¼àÌý±¾»ú£¨127.0.0.1£©¡£ÈçÐè¾ÖÓòÍø·ÃÎÊ£ºset "MEMOMICS_HOST=0.0.0.0"
 
 REM === Step 1: Check .venv ===
 if exist ".venv\Scripts\python.exe" goto :have_venv
@@ -55,7 +55,7 @@ echo [OK] Virtual environment created
 :have_venv
 echo [OK] Using .venv
 
-REM --- çŽ¯å¢ƒæ ¡å‡†: validate_env æ ¡éªŒ/ä¿®å¤è·¯å¾„ + R é»˜è®¤ç‰ˆæœ¬å¯¹é½ ---
+REM --- »·¾³Ð£×¼: validate_env Ð£Ñé/ÐÞ¸´Â·¾¶ + R Ä¬ÈÏ°æ±¾¶ÔÆë ---
 .venv\Scripts\python.exe scripts\validate_env.py >nul 2>&1
 .venv\Scripts\python.exe scripts\validate_env.py --r-bin > "%TEMP%\memomics_rbin.txt" 2>nul
 for /f "usebackq delims=" %%r in ("%TEMP%\memomics_rbin.txt") do set "R_BIN=%%r"
@@ -99,6 +99,8 @@ echo.
 echo [START] MemOmics on port %PORT%...
 echo    URL: http://localhost:%PORT%
 echo.
+REM ×Ô¶¯´ò¿ªä¯ÀÀÆ÷£¨ÑÓ³Ù 2 ÃëµÈ·þÎñ¾ÍÐ÷£©
+start "" "http://localhost:%PORT%"
 "%PYTHON%" webui\server.py
 echo.
 echo MemOmics stopped.
