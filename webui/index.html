@@ -1634,7 +1634,21 @@ function addError(content) {
   scrollBottom();
 }
 
+// 智能滚动：用户离开底部阅读时暂停自动滚动，滚回底部恢复
+// （流式输出中用户可自由上下滑动/长时间观看，不被打断）
+var _autoScroll = true;
+(function() {
+  var _m = document.getElementById('messages');
+  if (!_m) return;
+  _m.addEventListener('scroll', function() {
+    var el = this;
+    // 距离底部 < 120px 视为"在底部"，恢复自动滚动；否则暂停
+    _autoScroll = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+  });
+})();
+
 function scrollBottom() {
+  if (_autoScroll === false) return;  // 用户正在上方阅读，不打断
   var m = document.getElementById('messages');
   m.scrollTop = m.scrollHeight;
 }
@@ -1772,6 +1786,7 @@ function renderMermaidNode(el) {
 
 // === 会话管理 ===
 function newSession() {
+  _autoScroll = true;  // 新会话默认自动滚动
   // 保存旧会话的流式内容（agent 运行中新建会话再切回时恢复）
   // 注意：newSession 直接清 currentSid=null，不走 switchSession，
   // 必须在这里手动保存 fullText/reasoningText，否则切回时内容消失
@@ -1980,6 +1995,7 @@ function loadAllMessages(sid) {
 var _switchSeq = 0;
 function switchSession(sid) {
   var _seq = ++_switchSeq;
+  _autoScroll = true;  // 切换会话后默认自动滚动（用户未操作时）
   clearPendingImages();
   // === 保存旧会话的全部渲染状态 ===
   if (currentSid) {
