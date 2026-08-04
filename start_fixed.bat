@@ -100,7 +100,7 @@ echo [START] MemOmics on port %PORT%...
 echo    URL: http://localhost:%PORT%
 echo.
 REM 自动打开浏览器（延迟 2 秒等服务就绪）
-start "" "http://localhost:%PORT%"
+explorer.exe "http://localhost:%PORT%"
 "%PYTHON%" webui\server.py
 echo.
 echo MemOmics stopped.

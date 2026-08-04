@@ -84,7 +84,7 @@ echo.
 echo [START] http://localhost:%PORT%
 echo.
 REM 自动打开浏览器（延迟 2 秒等服务就绪）
-start "" "http://localhost:%PORT%"
+explorer.exe "http://localhost:%PORT%"
 
 REM Launch CellBender monitor daemon (if present)
 if exist "F:\CellBender_v2\heartbeat_v2.py" (
