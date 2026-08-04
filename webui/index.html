@@ -1772,7 +1772,17 @@ function renderMermaidNode(el) {
 
 // === 会话管理 ===
 function newSession() {
-
+  // 保存旧会话的流式内容（agent 运行中新建会话再切回时恢复）
+  // 注意：newSession 直接清 currentSid=null，不走 switchSession，
+  // 必须在这里手动保存 fullText/reasoningText，否则切回时内容消失
+  if (currentSid) {
+    if (!_sessionProgressCache[currentSid]) _sessionProgressCache[currentSid] = { items: [], running: false };
+    var _c = _sessionProgressCache[currentSid];
+    _c.fullText = fullText;
+    _c.reasoningText = reasoningText;
+    _c.agentRunning = agentRunning;
+    _c.runningSid = _currentRunningSid;
+  }
   currentSid = null;
   // 重置运行状态（修复：会话1运行时新建会话，steer-hint/按钮/进度残留）
 
@@ -2054,9 +2064,6 @@ function switchSession(sid) {
       }
     }
     // === 恢复流式输出中的内容（agent 运行中切换再切回） ===
-    // fullText/reasoningText 是纯文本（非 DOM 引用），可安全缓存；
-    // 切走时正在输出的 delta/reasoning 未持久化，切回时必须重建 DOM
-    // 让后续 delta 能继续 append，否则内容从半路开始/消失
     if (cached.fullText || cached.reasoningText) {
       if (!currentAssistantEl) {
         currentAssistantEl = addAssistantMsg('');
