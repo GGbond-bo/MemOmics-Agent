@@ -5348,7 +5348,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 _main_loop = asyncio.get_running_loop()  # for thread-safe async scheduling
 
-                def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session):
+                def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session, _agent=agent):
                     try:
                         result_str = str(result or "")
                         _session_emit(_s, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
@@ -5411,7 +5411,7 @@ async def ws_endpoint(ws: WebSocket):
                         if tool_name in ("todo", "todo_manage", "memomics_todo_manage", "memomics_pipeline"):
                             try:
                                 # memomics_pipeline 返回的 todos 写入 store
-                                if tool_name == "memomics_pipeline" and hasattr(agent, "_todo_store"):
+                                if tool_name == "memomics_pipeline" and hasattr(_agent, "_todo_store"):
                                     try:
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
                                         if isinstance(result_obj, dict):
@@ -5420,7 +5420,7 @@ async def ws_endpoint(ws: WebSocket):
                                             # 如果有 todos，写入 store
                                             if result_obj.get("todos"):
                                                 for td in result_obj["todos"]:
-                                                    agent._todo_store.add({
+                                                    _agent._todo_store.add({
                                                         "title": td.get("title", td.get("name", "")),
                                                         "module": td.get("module", td.get("id", "")),
                                                         "skill": td.get("skill", ""),
@@ -5429,8 +5429,8 @@ async def ws_endpoint(ws: WebSocket):
                                                     })
                                     except Exception:
                                         pass
-                                # ⚡ 桥接: todo_manage → agent._todo_store
-                                if tool_name == "todo_manage" and hasattr(agent, "_todo_store"):
+                                # ⚡ 桥接: todo_manage → _agent._todo_store
+                                if tool_name == "todo_manage" and hasattr(_agent, "_todo_store"):
                                     try:
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
                                         if isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and result_obj.get("todos"):
@@ -5441,15 +5441,15 @@ async def ws_endpoint(ws: WebSocket):
                                                     "content": f"[{td.get('module_id','')}] {td.get('substep_name','')}",
                                                     "status": td.get("status", "pending"),
                                                 })
-                                            agent._todo_store.write(hermes_todos)
+                                            _agent._todo_store.write(hermes_todos)
                                             # 同时缓存为 pipeline_todos 供 skill 映射
                                             _s["_pipeline_todos"] = result_obj["todos"]
                                         # 兜底: todo_manage 未传 modules → 0个todo → 自动生成默认待办
                                         elif isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and not result_obj.get("todos"):
-                                            if not agent._todo_store.has_items():
+                                            if not _agent._todo_store.has_items():
                                                 try:
                                                     import sys, os
-                                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-agent", "agent"))
+                                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-_agent", "_agent"))
                                                     from memomics_pipeline import modules_to_todos
                                                     default_ids = ["01","02","03","04","05"]
                                                     pipe_todos = modules_to_todos(default_ids)
@@ -5460,7 +5460,7 @@ async def ws_endpoint(ws: WebSocket):
                                                             "content": td.get("title", td.get("name", f"Module {td.get('module','')}-{td.get('substep','')}")),
                                                             "status": "pending",
                                                         })
-                                                    agent._todo_store.write(hermes_todos)
+                                                    _agent._todo_store.write(hermes_todos)
                                                     session["_pipeline_todos"] = pipe_todos
                                                     logger.info(f"[TODO-FALLBACK] 自动生成 {len(pipe_todos)} 个默认待办")
                                                 except Exception:
@@ -5468,7 +5468,7 @@ async def ws_endpoint(ws: WebSocket):
                                     except Exception:
                                         pass
                                 # 规范化 store_todos: 字符串→字典；模糊匹配补充 skill
-                                store_todos_raw = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") and agent._todo_store else []
+                                store_todos_raw = list(_agent._todo_store.read()) if hasattr(_agent, "_todo_store") and _agent._todo_store else []
                                 store_todos = []
                                 for t in store_todos_raw:
                                     if isinstance(t, str):
@@ -5566,48 +5566,48 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception:
                         pass
 
-                def status_cb(category, message):
+                def status_cb(category, message, _s=session):
                     try:
-                        _session_emit(session, {"type": "status", "category": category, "content": message, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "status", "category": category, "content": message, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
 
-                def notice_cb(notice):
+                def notice_cb(notice, _s=session):
                     try:
                         # 提取 notice 的关键字段（AgentNotice 对象）
                         notice_text = getattr(notice, 'text', None) or str(notice)
                         notice_key = getattr(notice, 'key', None) or ''
                         notice_level = getattr(notice, 'level', None) or 'info'
-                        _session_emit(session, {"type": "notice", "content": notice_text[:500], "key": notice_key, "level": notice_level, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "notice", "content": notice_text[:500], "key": notice_key, "level": notice_level, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
 
-                def notice_clear_cb(key):
+                def notice_clear_cb(key, _s=session):
                     """Hermes notice_clear_callback: 清除前端对应的通知"""
                     try:
-                        _session_emit(session, {"type": "notice_clear", "key": str(key), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "notice_clear", "key": str(key), "session_id": _s["id"]})
                     except Exception:
                         pass
 
-                def tool_gen_cb(tool_name, partial_args=""):
+                def tool_gen_cb(tool_name, partial_args="", _s=session):
                     """Hermes tool_gen_callback: 工具参数生成中实时回调"""
                     try:
-                        _session_emit(session, {"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
 
-                def tool_progress_cb(tool_name, progress_msg, percent=None):
+                def tool_progress_cb(tool_name, progress_msg, percent=None, _s=session):
                     """Hermes tool_progress_callback: 工具执行进度更新"""
                     try:
                         # 问题9: 翻译英文事件名为会话语言
                         msg_str = str(progress_msg)
                         if msg_str == "tool.started":
-                            msg_str = _pt(session, "tool_started")
+                            msg_str = _pt(_s, "tool_started")
                         elif msg_str == "tool.completed":
-                            msg_str = _pt(session, "tool_completed")
-                        _session_emit(session, {"type": "tool_progress", "tool": tool_name, "content": msg_str[:500], "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                            msg_str = _pt(_s, "tool_completed")
+                        _session_emit(_s, {"type": "tool_progress", "tool": tool_name, "content": msg_str[:500], "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                         # 问题4: 同步推送到进度时间线
-                        _send_progress(_pt(session, "executing") + ": " + tool_name, "pending", msg_str[:200])
+                        _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", msg_str[:200])
                     except Exception:
                         pass
 
@@ -5622,12 +5622,12 @@ async def ws_endpoint(ws: WebSocket):
                 agent.tool_progress_callback = tool_progress_cb
 
                 # 问题4: 接通 clarify_callback — agent 提问时不中断进度，改为 waiting 状态
-                def clarify_cb(question=None, **kwargs):
+                def clarify_cb(question=None, _s=session, **kwargs):
                     try:
                         q_text = str(question) if question else "Please confirm"
                         # 进度不停，只改为 waiting 状态
-                        _send_progress(_pt(session, "waiting"), "waiting", q_text[:200])
-                        _session_emit(session, {"type": "clarify", "content": q_text[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _send_progress(_pt(_s, "waiting"), "waiting", q_text[:200])
+                        _session_emit(_s, {"type": "clarify", "content": q_text[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
                 agent.clarify_callback = clarify_cb
@@ -5636,11 +5636,11 @@ async def ws_endpoint(ws: WebSocket):
                 _heartbeat_active = {"on": True}
                 _heartbeat_last_report = {"ts": 0}
 
-                async def _heartbeat_loop():
+                async def _heartbeat_loop(_s=session, _agent=agent):
                     while _heartbeat_active["on"]:
                         await asyncio.sleep(30)
                         try:
-                            _results_dir = session.get("results_dir", "")
+                            _results_dir = _s.get("results_dir", "")
                             _report_parts = []
 
                             # 1. 读取 task_plan.md 提取当前 Phase 状态
@@ -5671,7 +5671,7 @@ async def ws_endpoint(ws: WebSocket):
                                     _recent_files = []
                                     _scan_dirs = []
                                     # 用户指定的分析目录（如 F:/CellBender_v2）
-                                    _analysis_dir = session.get("analysis_dir", "")
+                                    _analysis_dir = _s.get("analysis_dir", "")
                                     if _analysis_dir and os.path.isdir(_analysis_dir):
                                         _scan_dirs.append(_analysis_dir)
                                         for _sub in ["cellbender_output", "output", "figures"]:
@@ -5701,9 +5701,9 @@ async def ws_endpoint(ws: WebSocket):
                                         _report_parts.append(f"📄 新产出: {', '.join(f[1] for f in _newest)}")
                                         
                                         # 🔧 Layer3: 文件产出自动匹配待办
-                                        if hasattr(agent, "_todo_store"):
+                                        if hasattr(_agent, "_todo_store"):
                                             try:
-                                                _todos = list(agent._todo_store.read())
+                                                _todos = list(_agent._todo_store.read())
                                                 for _tf in _recent_files[:5]:
                                                     _fname = _tf[1].lower()
                                                     for _i, _td in enumerate(_todos):
@@ -5713,37 +5713,37 @@ async def ws_endpoint(ws: WebSocket):
                                                         if any(kw in _title for kw in _keywords if len(kw) > 2):
                                                             if _td.get("status") not in ("completed", "cancelled"):
                                                                 _td["status"] = "completed"
-                                                                agent._todo_store._items[_i] = _td
+                                                                _agent._todo_store._items[_i] = _td
                                                                 logger.info(f"[Heartbeat] todo matched: {_td.get('title','')[:40]} -> completed (file: {_tf[1]})")
                                                                 break
                                                 # 推送更新
                                                 _updated = [{"title": t.get("title", t.get("content", "")), "status": t.get("status", "pending")} 
-                                                           for t in agent._todo_store.read() if isinstance(t, dict)]
-                                                _session_emit(session, {"type": "todos_update", "todos": _updated, 
-                                                    "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                                           for t in _agent._todo_store.read() if isinstance(t, dict)]
+                                                _session_emit(_s, {"type": "todos_update", "todos": _updated, 
+                                                    "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                                             except Exception:
                                                 pass
                                 except Exception:
                                     pass
 
-                                # 🔧 Layer2.5: 读取 cron agent 写入的 PROGRESS.md + alerts.json + .heartbeat_stop
+                                # 🔧 Layer2.5: 读取 cron _agent 写入的 PROGRESS.md + alerts.json + .heartbeat_stop
                                 # 路径优先级：analysis_dir > results_dir
                                 try:
                                     _scan_dirs_for_progress = []
-                                    _ad = session.get("analysis_dir", "")
-                                    _rd = session.get("results_dir", "")
+                                    _ad = _s.get("analysis_dir", "")
+                                    _rd = _s.get("results_dir", "")
                                     if _ad and os.path.isdir(_ad):
                                         _scan_dirs_for_progress.append(_ad)
                                     if _rd and os.path.isdir(_rd) and _rd not in _scan_dirs_for_progress:
                                         _scan_dirs_for_progress.append(_rd)
                                     for _scan_dir in _scan_dirs_for_progress:
-                                        # 检测 .heartbeat_stop 标记（cron agent 自检完成）
+                                        # 检测 .heartbeat_stop 标记（cron _agent 自检完成）
                                         _stop_path = os.path.join(_scan_dir, ".heartbeat_stop")
                                         if os.path.isfile(_stop_path):
                                             _report_parts.append("🏁 cron: 任务完成，心跳已停止")
-                                            session["_urgent_wakeup"] = True
+                                            _s["_urgent_wakeup"] = True
                                             break
-                                        # 读 PROGRESS.md（cron agent 写入的进度摘要）
+                                        # 读 PROGRESS.md（cron _agent 写入的进度摘要）
                                         _progress_path = os.path.join(_scan_dir, "PROGRESS.md")
                                         if os.path.isfile(_progress_path):
                                             _pmtime = os.path.getmtime(_progress_path)
@@ -5758,7 +5758,7 @@ async def ws_endpoint(ws: WebSocket):
                                                         break
                                                 if _last_entry:
                                                     _report_parts.append(f"📊 cron: {_last_entry}")
-                                        # 读 alerts.json（cron agent 写入的警报）
+                                        # 读 alerts.json（cron _agent 写入的警报）
                                         _alerts_path = os.path.join(_scan_dir, "alerts.json")
                                         if os.path.isfile(_alerts_path):
                                             _amtime = os.path.getmtime(_alerts_path)
@@ -5771,7 +5771,7 @@ async def ws_endpoint(ws: WebSocket):
                                                 if _unhandled_high:
                                                     _a = _unhandled_high[0]
                                                     _report_parts.append(f"🚨 cron告警: {_a.get('type','?')} — {_a.get('msg','?')[:80]}")
-                                                    session["_urgent_wakeup"] = True
+                                                    _s["_urgent_wakeup"] = True
                                                     break  # 找到 HIGH alert 就停，优先唤醒
                                 except Exception:
                                     pass
@@ -5790,16 +5790,16 @@ async def ws_endpoint(ws: WebSocket):
                                                 break
                                     # 完成标记：大文件产出（聚类结果/报告等）
                                     if not _urgent:
-                                        _todos = list(agent._todo_store.read()) if hasattr(agent, "_todo_store") else []
+                                        _todos = list(_agent._todo_store.read()) if hasattr(_agent, "_todo_store") else []
                                         _has_waiting = any(t.get("status") == "waiting_review" for t in _todos)
                                         if _has_waiting and _recent_files:
                                             _urgent = True
                                             _report_parts.append("🔔 待审阅任务，触发立即唤醒")
                                     if _urgent:
-                                        session["_urgent_wakeup"] = True
-                                        _session_emit(session, {"type": "notice", 
+                                        _s["_urgent_wakeup"] = True
+                                        _session_emit(_s, {"type": "notice", 
                                             "content": "🚨 检测到紧急事件，系统将立即唤醒 Agent 检查",
-                                            "session_id": session["id"]})
+                                            "session_id": _s["id"]})
                                 except Exception:
                                     pass
 
@@ -5807,19 +5807,19 @@ async def ws_endpoint(ws: WebSocket):
 
                             if _report_parts:
                                 _detail = " | ".join(_report_parts)
-                                _send_progress(_pt(session, "monitoring"), "pending",
+                                _send_progress(_pt(_s, "monitoring"), "pending",
                                                f"🕐 {datetime.now().strftime('%H:%M')} {_detail}")
                             else:
-                                _send_progress(_pt(session, "thinking"), "pending", _pt(session, "running_task"))
+                                _send_progress(_pt(_s, "thinking"), "pending", _pt(_s, "running_task"))
                         except Exception:
                             pass
                 _heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
 
                 # 统一事件流：Hermes event_callback 转发所有结构化事件到 WebSocket
-                def event_cb(event_type, data):
+                def event_cb(event_type, data, _s=session):
                     """Hermes event_callback(event_type, data) — 统一事件流"""
                     try:
-                        _session_emit(session, {"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                        _session_emit(_s, {"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
                 agent.event_callback = event_cb
