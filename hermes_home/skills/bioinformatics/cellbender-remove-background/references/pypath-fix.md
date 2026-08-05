@@ -28,7 +28,7 @@ conda run -n cellbender cellbender remove-background --input ... --output ...
 
 ```bash
 unset PYTHONPATH
-source /c/Users/<user>/miniconda3/etc/profile.d/conda.sh
+source /e/miniconda3/etc/profile.d/conda.sh
 conda activate cellbender
 cellbender remove-background --input "..." --output "..." --cuda > run.log 2>&1
 ```

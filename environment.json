@@ -37,7 +37,7 @@
         "note": "HDF5压缩工具，CellBender → Seurat h5转换"
       },
       "pip": {
-        "conda": "C:/Users/23136/miniconda3/Scripts/pip",
+        "conda": "E:/miniconda3/Scripts/pip",
         "memomics_venv": "E:/MemOmics-Agent/.venv/Scripts/pip.exe"
       }
     }

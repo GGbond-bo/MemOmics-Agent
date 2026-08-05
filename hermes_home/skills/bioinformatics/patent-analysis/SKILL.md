@@ -101,6 +101,8 @@ for page in doc:
 | 用学术语言写商业专利 | 🔑 专利必须回答"企业为什么用？"而非"方法怎么算？"。企业不关心IRS公式，关心"能帮我省多少钱/避开哪个坑"。每个专利方案必须先写场景A（企业具体怎么用），再写技术细节 |
 | 没有澄清"可代替性"的本体论 | 🔑 "可代替性"容易误解为器官替代而非研究结论转移。必须在说明书第一段精确定义：本方法评估的是"用动物模型做实验得到的结论能否预测人类结果"，而非器官或物种的物理替代 |
 | 🔴 生成专利方案前未加载 skill | 用户说"专利方案"/"交底书"/"写专利"时，Agent 必须先 skill_view("patent-analysis") + skill_view("research-plan") 加载后再生成方案。本会话中 Agent 凭内生知识直接生成，用户主动追问"你触发 skill 了吗？"才暴露遗漏。漏掉的后果：独权不按公式、A25 防御不到位、专利检索三轮未执行、"可代替性"未精确定义。铁律：写专利方案前必须加载 patent-analysis + research-plan 两个 skill |
+| 🔴 评估方案"真的可以吗"时不检索最新高影响论文 | 2026-08-04 评估跨物种 ATAC CRE 方案时，第1轮检索发现 Phan et al. Nat Genet 2025（PMID 40425826）已公开 TFBS shuffling + 跨物种 footprinting + IC 元件概念，直接部分占位"B类CRE检出"核心创新。专利数据库滞后，**最强现有技术往往是最新高影响论文（近2年 Nat Genet/Nature Methods/Science）**。评估新颖性/创造性前必须把"最新论文检索"加进第1轮，不能只看专利库；关键论文要下载全文逐页核实，不能只看摘要 |
+| 🔴 只算细胞数不算个体数 | 混合效应模型类独权（如 species×age 交互）的实施例可行性看**个体数×年龄组数**，不看细胞总数。3 个 Arrow（1Old+2Young）无论细胞多少都支撑不了交互项 → 审查员按 A26.3 打"实施例无法证明技术效果"。用户说"数据有几十万细胞"时必追问：多少个体？多少年龄组？ |
 
 ---
 
@@ -131,6 +133,7 @@ for page in doc:
 | 2 | 抽象方法圈 | 去掉技术词，搜"跨物种 可代替性 评估" — 比第1轮更重要 |
 | 3 | IPC分类号 | G16B 40/00, G16B 20/00 — 找关键词漏网的 |
 | + | 软著库 | 国家版权保护中心 |
+| 0 | **最新高影响论文（近2年）** | ⚠️ 最重要：专利库滞后，最强现有技术常是最新论文（Nat Genet/Nature Methods/Science）。2026-08 Phan 2025 Nat Genet 部分占位 B 类 CRE 概念即为例证。评估方案前先做这一轮，关键论文下载全文核实 |
 
 ### 权利要求撰写公式
 
@@ -153,3 +156,4 @@ for page in doc:
 - `references/patent-architecture-a-plus-c.md` — A+C 双专利架构与同日提交策略（3个月受理时间线）
 - `references/multi-llm-patent-evaluation.md` — 多LLM专利方案评审框架（Kimi K3 + DeepSeek + MemOmics 三方裁决模式）
 - `references/atac-crecs-methodology.md` — 🔑 纯 ATAC-seq 跨物种 CRE 保守性评估三层框架（L1 序列→L2 可及性→L3 TF 结合→L4 CRECS）。用户说"只要 ATAC/不需要 RNA/纯 ATAC 专利"时启用。不需要 scRNA-seq，用 GeneScore 做细胞类型注释
+- `references/atac-crecs-plan-evaluation-2026-08.md` — 🔴 跨物种 ATAC CRE 方案"真的可以吗"评估实录：Phan 2025 Nat Genet 现有技术警报、判定表、独权重心调整、数据功效核查（详见 cross-species-atac-conservation skill references/prior-art-2025-plan-evaluation.md）

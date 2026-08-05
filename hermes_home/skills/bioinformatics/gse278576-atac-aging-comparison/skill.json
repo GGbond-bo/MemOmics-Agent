@@ -1,0 +1,16 @@
+{
+  "id": "gse278576-atac-aging-comparison",
+  "name": "GSE278576 人海马衰老 ATAC 对比流程（官方复现）",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 GSE278576 人海马衰老 ATAC 对比流程（官方复现） 进行分析",
+  "source_dir": "skills/bioinformatics/gse278576-atac-aging-comparison",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED 必触发",
+  "trigger_keywords": []
+}

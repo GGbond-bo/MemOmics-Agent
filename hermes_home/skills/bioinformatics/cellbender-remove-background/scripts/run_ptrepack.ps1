@@ -3,7 +3,7 @@
 # Source: User's actual production run
 # =============================================================================
 $ErrorActionPreference = "Continue"
-$ptrepack = "C:\Users\23136\miniconda3\envs\cellbender\Scripts\ptrepack.exe"
+$ptrepack = "C:\Users\23136\AppData\Local\Programs\Python\Python312\Scripts\ptrepack.exe"
 $cbDir    = "E:\monkey\cellbender"
 $outDir   = "E:\monkey\cellbender_seurat"
 

@@ -40,13 +40,13 @@ It CANNOT interpret figures, photos, heatmaps, UMAPs, or graphs.
 # CRITICAL: pip may install to a different python than the one you run.
 # On this machine: `pip` → D:\Python (3.13), system python → Python312,
 # but the package landed in miniconda3. Use the interpreter that has it:
-/c/Users/23136/miniconda3/python.exe -m pip install rapidocr_onnxruntime -q
+/e/miniconda3/python.exe -m pip install rapidocr_onnxruntime -q
 ```
 
 ### 2. Run
 
 ```bash
-/c/Users/23136/miniconda3/python.exe -c "
+/e/miniconda3/python.exe -c "
 from rapidocr_onnxruntime import RapidOCR
 ocr = RapidOCR()
 result, elapse = ocr('E:/path/to/image.png')

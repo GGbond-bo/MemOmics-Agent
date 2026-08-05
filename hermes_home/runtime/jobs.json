@@ -1,0 +1,1455 @@
+{
+  "schema_version": 1,
+  "jobs": [
+    {
+      "job_id": "job-721af35f126f4c0f",
+      "session_id": "crash-test-session",
+      "label": "agent_conversation",
+      "state": "interrupted",
+      "created_at": "2026-08-03T15:05:00.414766+00:00",
+      "finished_at": "2026-08-03T15:05:08.070726+00:00",
+      "error": "MemOmics stopped before the task reached a terminal state",
+      "termination_source": "runtime_restart"
+    },
+    {
+      "job_id": "job-8ea064573bc14bc8",
+      "session_id": "memomics-bde700a1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:05:28.519705+00:00",
+      "finished_at": "2026-08-03T15:05:37.995151+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-21eaaf524cd241d4",
+      "session_id": "memomics-1c1890da",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:28:25.011204+00:00",
+      "finished_at": "2026-08-03T15:29:06.111988+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-84f0f5511edd4239",
+      "session_id": "memomics-f3a74d7a",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:31:13.346601+00:00",
+      "finished_at": "2026-08-03T15:31:17.128369+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-5ea4abfc0d3241ad",
+      "session_id": "memomics-d81fefd2",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:31:13.981704+00:00",
+      "finished_at": "2026-08-03T15:31:16.668331+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-100e7511cfab4a8d",
+      "session_id": "memomics-0fee9d6b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:32:28.945618+00:00",
+      "finished_at": "2026-08-03T15:32:31.766008+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-afde6b030d094d0d",
+      "session_id": "memomics-fe53703d",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:32:29.607784+00:00",
+      "finished_at": "2026-08-03T15:32:32.289877+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-94b17ff5d3dd4449",
+      "session_id": "memomics-7c485ff7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:46:58.535151+00:00",
+      "finished_at": "2026-08-03T15:47:14.199190+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-cfe91c6131264d4a",
+      "session_id": "memomics-aa08611f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:47:14.173150+00:00",
+      "finished_at": "2026-08-03T15:47:24.266419+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-a7a4b76e9a004ef1",
+      "session_id": "memomics-1c1890da",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T15:59:54.373516+00:00",
+      "finished_at": "2026-08-03T16:00:05.083216+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-005089bf04694be4",
+      "session_id": "memomics-1c1890da",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:00:50.232346+00:00",
+      "finished_at": "2026-08-03T16:01:26.631607+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-4de1c6d7f9504165",
+      "session_id": "memomics-c7fd40af",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:18:32.499261+00:00",
+      "finished_at": "2026-08-03T16:19:01.173334+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-473545674840421b",
+      "session_id": "memomics-c7fd40af",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:37:23.654766+00:00",
+      "finished_at": "2026-08-03T16:42:16.879380+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-fb77ac6980bc41ed",
+      "session_id": "memomics-e186d921",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:39:32.274274+00:00",
+      "finished_at": "2026-08-03T16:39:59.089484+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-8cc977e6edfa45ec",
+      "session_id": "memomics-6352776b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:39:36.145874+00:00",
+      "finished_at": "2026-08-03T16:39:39.569149+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ebdd0496b25640c2",
+      "session_id": "memomics-364427c2",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:41:19.964559+00:00",
+      "finished_at": "2026-08-03T16:41:40.820221+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-c23b3c080e484f61",
+      "session_id": "memomics-038417e7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:41:28.079683+00:00",
+      "finished_at": "2026-08-03T16:41:30.719267+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-c07f7fe9a7eb43eb",
+      "session_id": "memomics-900aabaa",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:41:43.485112+00:00",
+      "finished_at": "2026-08-03T16:42:05.155546+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6116ddb303cb44b9",
+      "session_id": "memomics-1a0266f8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:41:51.616102+00:00",
+      "finished_at": "2026-08-03T16:41:53.352355+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-b45d26224e9242ac",
+      "session_id": "memomics-382d46e4",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:50:02.942943+00:00",
+      "finished_at": "2026-08-03T16:50:40.163928+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9ef52d67b5224278",
+      "session_id": "memomics-c7fd40af",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:50:05.873365+00:00",
+      "finished_at": "2026-08-03T16:50:07.258372+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-86c623f6632748ef",
+      "session_id": "memomics-05382e2f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:50:27.670031+00:00",
+      "finished_at": "2026-08-03T16:51:05.416894+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-572ad8e60d78407c",
+      "session_id": "memomics-c7fd40af",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:50:32.795138+00:00",
+      "finished_at": "2026-08-03T16:50:34.596961+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ebcaf85a48d34a14",
+      "session_id": "memomics-09eadfaa",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:53:29.629559+00:00",
+      "finished_at": "2026-08-03T16:54:02.356416+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2532f12b89294f36",
+      "session_id": "memomics-05382e2f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:53:32.946406+00:00",
+      "finished_at": "2026-08-03T16:53:34.686935+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-eb4c9c0297aa4193",
+      "session_id": "memomics-05382e2f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:54:34.482164+00:00",
+      "finished_at": "2026-08-03T16:54:36.182043+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-d46dbb839c574bf6",
+      "session_id": "memomics-578f245e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:56:23.508446+00:00",
+      "finished_at": "2026-08-03T16:56:34.266393+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-dbc73307d9e94ff8",
+      "session_id": "memomics-95f4d91c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:56:36.568328+00:00",
+      "finished_at": "2026-08-03T16:56:39.237779+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-33a2666b3331442d",
+      "session_id": "memomics-95f4d91c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:56:39.556025+00:00",
+      "finished_at": "2026-08-03T16:56:45.425011+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-e24c2799daf64045",
+      "session_id": "memomics-c2b4b72a",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:57:00.158419+00:00",
+      "finished_at": "2026-08-03T16:57:04.189789+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-3eeb041e0caf4632",
+      "session_id": "memomics-c2b4b72a",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T16:57:11.708864+00:00",
+      "finished_at": "2026-08-03T16:57:14.526087+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-cb194d8f2bd04cab",
+      "session_id": "memomics-1c1890da",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:04:56.269786+00:00",
+      "finished_at": "2026-08-03T17:05:38.824322+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-abac778d5b484baa",
+      "session_id": "memomics-35809589",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:05:22.473346+00:00",
+      "finished_at": "2026-08-03T17:05:34.068137+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-a07fd2b95b6f478d",
+      "session_id": "memomics-72f1f6da",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:08:29.434042+00:00",
+      "finished_at": "2026-08-03T17:09:00.891689+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ec78525cdd3d415c",
+      "session_id": "memomics-fc673a27",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:08:30.088377+00:00",
+      "finished_at": "2026-08-03T17:08:33.041504+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-337253cd23864e79",
+      "session_id": "memomics-601b2d81",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:08:58.061452+00:00",
+      "finished_at": "2026-08-03T17:09:34.268242+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-95bae9827dc34283",
+      "session_id": "memomics-7a73fa7d",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T17:09:02.549854+00:00",
+      "finished_at": "2026-08-03T17:09:04.623814+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-98d4037de9e54cf7",
+      "session_id": "memomics-87fbe372",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T18:55:57.595757+00:00",
+      "finished_at": "2026-08-03T18:56:00.894491+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-a4bda06cb43b4195",
+      "session_id": "memomics-f9c9fdde",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T18:58:11.707318+00:00",
+      "finished_at": "2026-08-03T18:58:40.595260+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2445273344e648ed",
+      "session_id": "memomics-a97c76d9",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T18:58:12.780181+00:00",
+      "finished_at": "2026-08-03T18:58:16.893782+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-58552125c76741ba",
+      "session_id": "memomics-a62e27e0",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:01:42.234308+00:00",
+      "finished_at": "2026-08-03T19:02:13.278074+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2e5c5cf1015f490d",
+      "session_id": "memomics-ac156b89",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:01:45.707123+00:00",
+      "finished_at": "2026-08-03T19:01:48.395049+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-21025a5bd56d4396",
+      "session_id": "memomics-0070cefa",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:02:53.588542+00:00",
+      "finished_at": "2026-08-03T19:03:35.216932+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-fc7551dbeee540b3",
+      "session_id": "memomics-c8c68e4b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:02:57.138156+00:00",
+      "finished_at": "2026-08-03T19:02:59.776335+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-d4571806bc224303",
+      "session_id": "memomics-9d93664a",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:03:35.180707+00:00",
+      "finished_at": "2026-08-03T19:04:07.869339+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-fc5667681cc0474d",
+      "session_id": "memomics-f061d93f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:03:51.243201+00:00",
+      "finished_at": "2026-08-03T19:03:53.856559+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ac27a86a9ffa4850",
+      "session_id": "memomics-59b75a9b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:04:31.490324+00:00",
+      "finished_at": "2026-08-03T19:05:01.667535+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-26b1da01f2f94046",
+      "session_id": "memomics-158b8646",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:04:47.536256+00:00",
+      "finished_at": "2026-08-03T19:04:50.431766+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6ba206b397f84938",
+      "session_id": "memomics-960e63a3",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:05:55.363414+00:00",
+      "finished_at": "2026-08-03T19:06:27.466664+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-5cfec2560f924d6b",
+      "session_id": "memomics-0093652c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:07:36.649260+00:00",
+      "finished_at": "2026-08-03T19:08:07.291713+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-f2e65dc571614642",
+      "session_id": "memomics-febf52e8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:08:07.262551+00:00",
+      "finished_at": "2026-08-03T19:08:09.732144+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-1e3929669a89465f",
+      "session_id": "memomics-c559aed7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:08:40.316291+00:00",
+      "finished_at": "2026-08-03T19:09:10.960815+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-cd1588a59c554cfa",
+      "session_id": "memomics-26c70a1e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:09:10.928278+00:00",
+      "finished_at": "2026-08-03T19:09:44.384306+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ed07532b753f4968",
+      "session_id": "memomics-a55c4343",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:09:44.345130+00:00",
+      "finished_at": "2026-08-03T19:10:15.153288+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-681c98ac03a44375",
+      "session_id": "memomics-76237913",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:10:15.114322+00:00",
+      "finished_at": "2026-08-03T19:10:17.714497+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-c90dda15004842a8",
+      "session_id": "memomics-ecf3cb6e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:11:20.015997+00:00",
+      "finished_at": "2026-08-03T19:11:48.586178+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9a079450ecdb4443",
+      "session_id": "memomics-d73c0869",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:11:21.899668+00:00",
+      "finished_at": "2026-08-03T19:11:24.893570+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-fc2fb01478544cd3",
+      "session_id": "memomics-52581bd3",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:14:05.871136+00:00",
+      "finished_at": "2026-08-03T19:14:33.456392+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-900bbdcf3f204241",
+      "session_id": "memomics-81e0abca",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:14:06.904359+00:00",
+      "finished_at": "2026-08-03T19:14:10.136830+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-d5a5fbe3f4a54782",
+      "session_id": "memomics-6f55b5e9",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:15:27.875820+00:00",
+      "finished_at": "2026-08-03T19:15:56.238263+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-4da26c13edb04cea",
+      "session_id": "memomics-24890d09",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:15:28.943689+00:00",
+      "finished_at": "2026-08-03T19:15:32.527866+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-29bedb0ddb1949ac",
+      "session_id": "memomics-6bc3fe67",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:21:00.412097+00:00",
+      "finished_at": "2026-08-03T19:21:28.925874+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7341cdc19c6f4bed",
+      "session_id": "memomics-f010d2cf",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:21:01.514126+00:00",
+      "finished_at": "2026-08-03T19:21:05.201835+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-26d4be5e6a584eda",
+      "session_id": "memomics-eacab4d1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:21:14.193888+00:00",
+      "finished_at": "2026-08-03T19:21:40.279177+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-f538c1c6ab964cb7",
+      "session_id": "memomics-619d126f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:21:18.656567+00:00",
+      "finished_at": "2026-08-03T19:21:21.794177+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-e3d3388167024c2c",
+      "session_id": "memomics-259d0f8b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:22:31.957164+00:00",
+      "finished_at": "2026-08-03T19:22:59.293671+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-08907a26e7c4497d",
+      "session_id": "memomics-538cca92",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:22:36.457822+00:00",
+      "finished_at": "2026-08-03T19:22:40.220422+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-1c6f961513f74b05",
+      "session_id": "memomics-3f689ffc",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:24:01.312475+00:00",
+      "finished_at": "2026-08-03T19:24:27.654223+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ef7031b6fd9d4694",
+      "session_id": "memomics-3e1d12f7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:24:05.721357+00:00",
+      "finished_at": "2026-08-03T19:24:09.111794+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9f8871f96d1d4169",
+      "session_id": "memomics-b406a54e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:25:23.926650+00:00",
+      "finished_at": "2026-08-03T19:25:51.061759+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-3a48aea035204954",
+      "session_id": "memomics-c0937875",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:25:28.454175+00:00",
+      "finished_at": "2026-08-03T19:25:30.736467+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7b269c174a5448b4",
+      "session_id": "memomics-a48b260e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:27:02.033567+00:00",
+      "finished_at": "2026-08-03T19:27:33.012423+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-36f4b0fb838c4d21",
+      "session_id": "memomics-47ceae23",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:27:32.966499+00:00",
+      "finished_at": "2026-08-03T19:27:35.666352+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-bebd45758cde419b",
+      "session_id": "memomics-5619aecd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:28:22.899367+00:00",
+      "finished_at": "2026-08-03T19:28:53.931737+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9a14c7db485c4a27",
+      "session_id": "memomics-6b907ce0",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:28:53.882176+00:00",
+      "finished_at": "2026-08-03T19:28:56.477662+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-509e922f9b644ec2",
+      "session_id": "memomics-cd2c3c86",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:29:02.117792+00:00",
+      "finished_at": "2026-08-03T19:29:28.564850+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-42217cef7dd54261",
+      "session_id": "memomics-758a7c4c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:29:05.902692+00:00",
+      "finished_at": "2026-08-03T19:29:08.637965+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-1aa5f6dbe55049a7",
+      "session_id": "memomics-0423290d",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:31:50.487906+00:00",
+      "finished_at": "2026-08-03T19:32:24.662227+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9e04a26e55c443ed",
+      "session_id": "memomics-bf9c5566",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:31:54.572648+00:00",
+      "finished_at": "2026-08-03T19:32:00.370171+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6de0f639b935431c",
+      "session_id": "memomics-6a8d579b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:34:33.388281+00:00",
+      "finished_at": "2026-08-03T19:35:08.008101+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-220599b3d3694bd8",
+      "session_id": "memomics-9bedb0bc",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-03T19:34:37.338272+00:00",
+      "finished_at": "2026-08-03T19:34:43.453337+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-fc127c7ebde14846",
+      "session_id": "memomics-fead994e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:42:53.239364+00:00",
+      "finished_at": "2026-08-04T02:43:05.272011+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-dedc6ae6134446fe",
+      "session_id": "memomics-8c0dea60",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:43:14.268243+00:00",
+      "finished_at": "2026-08-04T02:45:28.496965+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-b41adaba9547404d",
+      "session_id": "memomics-ca326c94",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:47:08.380244+00:00",
+      "finished_at": "2026-08-04T02:47:48.166000+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2c5e4102304045d1",
+      "session_id": "memomics-464f6d57",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:47:16.866883+00:00",
+      "finished_at": "2026-08-04T02:47:29.451150+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-248a4000d19e4f41",
+      "session_id": "memomics-f39fd95c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:49:21.238667+00:00",
+      "finished_at": "2026-08-04T02:50:17.730413+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2578613b789f4410",
+      "session_id": "memomics-90792763",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:49:31.068360+00:00",
+      "finished_at": "2026-08-04T02:49:34.830485+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-a7069fa638794c21",
+      "session_id": "memomics-583ad018",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:50:31.425147+00:00",
+      "finished_at": "2026-08-04T02:51:01.105623+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-8599a3f143ef4aad",
+      "session_id": "memomics-3e429984",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:50:35.915981+00:00",
+      "finished_at": "2026-08-04T02:50:39.240422+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-87b74d82e9f54b93",
+      "session_id": "memomics-8c0dea60",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:53:21.427407+00:00",
+      "finished_at": "2026-08-04T02:53:54.143471+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-15c0700e80f14042",
+      "session_id": "memomics-fead994e",
+      "label": "agent_conversation",
+      "state": "interrupted",
+      "created_at": "2026-08-04T02:53:39.369436+00:00",
+      "finished_at": "2026-08-04T02:57:25.761206+00:00",
+      "error": "MemOmics stopped before the task reached a terminal state",
+      "termination_source": "runtime_restart"
+    },
+    {
+      "job_id": "job-bca867f336f94d0d",
+      "session_id": "memomics-39ce3106",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:56:02.829180+00:00",
+      "finished_at": "2026-08-04T02:56:55.862809+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-4bc291c774ed4de4",
+      "session_id": "memomics-6096fe7b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:56:15.314597+00:00",
+      "finished_at": "2026-08-04T02:56:26.219276+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-06512594c15c4c42",
+      "session_id": "memomics-20be29b7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:57:50.338452+00:00",
+      "finished_at": "2026-08-04T02:58:23.723966+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ea2479173d0942ef",
+      "session_id": "memomics-a0ff833e",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:58:02.398416+00:00",
+      "finished_at": "2026-08-04T02:58:08.745218+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-3bfbfc3f1e1b42ca",
+      "session_id": "memomics-b562302f",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:58:15.909169+00:00",
+      "finished_at": "2026-08-04T02:59:12.909687+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-756db3f14d5d4636",
+      "session_id": "memomics-701d2caa",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:58:45.257912+00:00",
+      "finished_at": "2026-08-04T02:59:04.383236+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-e7a1f4f412ae4023",
+      "session_id": "memomics-7f35969c",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T02:58:55.899143+00:00",
+      "finished_at": "2026-08-04T02:59:08.561741+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-eac22fb52e9344dc",
+      "session_id": "memomics-2f229850",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T03:30:36.978847+00:00",
+      "finished_at": "2026-08-04T03:31:10.463525+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-df63376cbdfe4902",
+      "session_id": "memomics-2f229850",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T05:02:54.146135+00:00",
+      "finished_at": "2026-08-04T05:04:17.800383+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-d9d23ced8a944c1d",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:14:36.696511+00:00",
+      "finished_at": "2026-08-04T07:15:31.496763+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-535c9c6b6304446d",
+      "session_id": "memomics-3d534527",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:15:04.471262+00:00",
+      "finished_at": "2026-08-04T07:15:52.758451+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-88004446e4084e7b",
+      "session_id": "memomics-b891a4e7",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:20:36.776431+00:00",
+      "finished_at": "2026-08-04T07:21:19.719553+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-15d1d74f3342430e",
+      "session_id": "memomics-d2fd1c1d",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:20:48.635806+00:00",
+      "finished_at": "2026-08-04T07:20:51.324433+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-4a9f4991bd82461a",
+      "session_id": "memomics-99476b7b",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:21:15.507101+00:00",
+      "finished_at": "2026-08-04T07:22:01.176074+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-466a87b25b28444e",
+      "session_id": "memomics-c5d645b2",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:21:25.994052+00:00",
+      "finished_at": "2026-08-04T07:21:29.178469+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-75e24d13ac2c4ec1",
+      "session_id": "memomics-723a1ed8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T07:31:09.944419+00:00",
+      "finished_at": "2026-08-04T07:32:18.055150+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-215eeb3f5eb44308",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T08:32:15.002401+00:00",
+      "finished_at": "2026-08-04T08:32:56.686550+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-a810ceae825349b6",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T08:43:19.699758+00:00",
+      "finished_at": "2026-08-04T08:44:18.643170+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7511a4d9d20b4cad",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T08:44:55.925767+00:00",
+      "finished_at": "2026-08-04T08:50:25.808682+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-b28b4fe8c9084d94",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T08:57:27.532732+00:00",
+      "finished_at": "2026-08-04T09:00:26.516094+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ea28dbc5c8b549bc",
+      "session_id": "memomics-552311bd",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T09:05:57.578271+00:00",
+      "finished_at": "2026-08-04T09:06:04.575709+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-09cb6d4176c64f60",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T14:09:41.893716+00:00",
+      "finished_at": "2026-08-04T14:19:25.609466+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ae2717f3d8e64554",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T14:22:38.057898+00:00",
+      "finished_at": "2026-08-04T15:13:15.334789+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6b397c7a35a7493e",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:25:53.295298+00:00",
+      "finished_at": "2026-08-04T15:26:14.564709+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-905b333523944caf",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:27:39.278413+00:00",
+      "finished_at": "2026-08-04T15:29:07.210581+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7fc89a4fc33e4d75",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:31:10.406594+00:00",
+      "finished_at": "2026-08-04T15:32:08.819135+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6dea9539eb8e41bf",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:33:47.828283+00:00",
+      "finished_at": "2026-08-04T15:35:04.627387+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-2921b029b2da402f",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:51:18.011622+00:00",
+      "finished_at": "2026-08-04T15:51:21.891392+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-3a851930d8c54cbc",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:52:11.518292+00:00",
+      "finished_at": "2026-08-04T15:52:43.175823+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-4111d611a5b44fc0",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:56:12.841403+00:00",
+      "finished_at": "2026-08-04T15:56:24.710914+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-6faa5c20f4564ba6",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-04T15:59:02.136853+00:00",
+      "finished_at": "2026-08-04T15:59:27.479076+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7d79588155064ba4",
+      "session_id": "memomics-8857f1c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T03:32:55.843041+00:00",
+      "finished_at": "2026-08-05T03:33:16.691240+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-8f1a0cb04d184c47",
+      "session_id": "memomics-bf5e6cb8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T12:50:42.908964+00:00",
+      "finished_at": "2026-08-05T12:54:24.349268+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ec2c85cd3d884d28",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "interrupted",
+      "created_at": "2026-08-05T12:51:25.196687+00:00",
+      "finished_at": "2026-08-05T13:00:03.331985+00:00",
+      "error": "MemOmics stopped before the task reached a terminal state",
+      "termination_source": "runtime_restart"
+    },
+    {
+      "job_id": "job-0442a71199424565",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T13:00:40.305825+00:00",
+      "finished_at": "2026-08-05T13:02:10.458932+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-8e49afe172b94d4e",
+      "session_id": "memomics-bf5e6cb8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T13:00:42.104811+00:00",
+      "finished_at": "2026-08-05T13:05:30.750636+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-5a14dccece3b4bb8",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "interrupted",
+      "created_at": "2026-08-05T13:10:46.732136+00:00",
+      "finished_at": "2026-08-05T13:16:52.982542+00:00",
+      "error": "MemOmics stopped before the task reached a terminal state",
+      "termination_source": "runtime_restart"
+    },
+    {
+      "job_id": "job-ce5870f0439449a9",
+      "session_id": "memomics-e72b57c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T13:10:48.352404+00:00",
+      "finished_at": "2026-08-05T13:12:23.155534+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-99c63eddd9044d3c",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T13:17:12.159106+00:00",
+      "finished_at": "2026-08-05T13:25:13.133385+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-ff1b969f9468454a",
+      "session_id": "memomics-e72b57c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T13:17:13.820974+00:00",
+      "finished_at": "2026-08-05T13:18:43.097018+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-dea2ebcaff824c10",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:31:29.058285+00:00",
+      "finished_at": "2026-08-05T14:31:58.213568+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-bb661c4206724b40",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:32:16.055097+00:00",
+      "finished_at": "2026-08-05T14:36:10.460764+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-70038df1b658410a",
+      "session_id": "memomics-bf5e6cb8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:35:10.768192+00:00",
+      "finished_at": "2026-08-05T14:36:05.032029+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-9f6de52b4d5046bb",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:47:34.075143+00:00",
+      "finished_at": "2026-08-05T14:48:13.005052+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-c48d71a21d1b42ec",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:50:39.747266+00:00",
+      "finished_at": "2026-08-05T14:52:08.749956+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-f393ac2fe84a4ca8",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "interrupted",
+      "created_at": "2026-08-05T14:56:17.328271+00:00",
+      "finished_at": "2026-08-05T14:57:52.987531+00:00",
+      "error": "MemOmics stopped before the task reached a terminal state",
+      "termination_source": "runtime_restart"
+    },
+    {
+      "job_id": "job-60ebd55d9bf649ff",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:58:12.627386+00:00",
+      "finished_at": "2026-08-05T14:58:16.550308+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-cef1bd2fd7f14429",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:58:28.067345+00:00",
+      "finished_at": "2026-08-05T14:58:30.239141+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7273b4f371f644c8",
+      "session_id": "memomics-e72b57c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:58:29.821722+00:00",
+      "finished_at": "2026-08-05T14:58:32.126942+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-e23da692bcff4e44",
+      "session_id": "memomics-38bb64ec",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:58:44.050243+00:00",
+      "finished_at": "2026-08-05T14:58:45.560304+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-cb15cbb610694ce0",
+      "session_id": "memomics-e72b57c1",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:58:45.077188+00:00",
+      "finished_at": "2026-08-05T14:58:46.758785+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-1997df4d28ee4e83",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T14:59:50.899734+00:00",
+      "finished_at": "2026-08-05T15:00:00.078628+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-11d4837ca8154f24",
+      "session_id": "memomics-4c53fc46",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T15:00:10.555438+00:00",
+      "finished_at": "2026-08-05T15:05:48.430030+00:00",
+      "error": null,
+      "termination_source": null
+    },
+    {
+      "job_id": "job-7123e403d20244eb",
+      "session_id": "memomics-bf5e6cb8",
+      "label": "agent_conversation",
+      "state": "succeeded",
+      "created_at": "2026-08-05T15:00:51.478726+00:00",
+      "finished_at": "2026-08-05T15:01:12.519648+00:00",
+      "error": null,
+      "termination_source": null
+    }
+  ]
+}

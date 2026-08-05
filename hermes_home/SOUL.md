@@ -500,4 +500,5 @@ terminal 完成 → _pending_record = True
 > 📚 **SKILLS_INDEX.md**：368 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`E:/MemOmics-Agent/environment.json` 全局环境文件
 
+| "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
 <!-- AUTO_SKILL_INSERT_MARKER -->

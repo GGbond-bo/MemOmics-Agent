@@ -116,6 +116,7 @@ fasterq-dump SRR_ACCESSION
 - `references/human-hippocampus-atac-search-case.md` — 人海马 ATAC 候选数据集搜索案例
 - `references/gse278576-human-hippocampus-atac-case.md` — GSE278576 实战：GEO suppl 文件类型地图、海马亚区命名(CA1/DG/SUB)、fragments vs bw 决策、下载清单模板
 - `references/gse278576-gsm-fragments-map.md` — GSE278576 的 40 个 ATAC 样本 GSM 映射表（已验证）+ GSM 级 fragments URL 模板 + curl -sI 验证协议
+- `references/gse278576-analysis-pipeline.md` — GSE278576 论文官方分析管线：cellranger-arc→SnapATAC2 QC→MACS2(SPM≥4)→pseudobulk 连续年龄 Pearson(FDR<0.1)→HOMER/chromVAR→ABC。用户问"这篇论文用什么方法/对比流程"时直接查此文件；注意 bioRxiv 详细 M&M 在补充材料 DC1/DC2（不在主 PDF），需从 supplementary-material 页面解析 embed 链接
 
 ## Pitfalls
 
@@ -131,3 +132,9 @@ fasterq-dump SRR_ACCESSION
    每个样本要配套 `.tbi.gz` 索引（ArchR 必需）。给下载清单前必须先 `query_ncbi(db="gds", query="GSE278576[ACCN] AND ATAC")` 拉全 40 个 GSM。
 7. **🔴 下载清单必须先 curl -sI 验证（用户会审计）**：给用户下载清单前，对每个 URL 跑 `curl -k -sI <url>` 确认 `200 OK` + `Content-Length` 合理（几百 MB-几 GB）。不验证就交付清单 = 用户一打开就发现文件不存在，信任崩塌。验证通过后还要说明"每个样本 2 个文件（.tsv.gz + .tbi.gz）"。
 8. **bw vs fragments 用途不同，先问清分析目标**：bigWig = 聚合信号轨道（按细胞类型/年龄组），能做 peak 比较/差异可及性，**不能做 TF footprinting**；fragments = 单细胞原始数据，才能做 L3 footprinting。方法验证 → bw 够；专利实施例完整（含 footprinting）→ 必须补 fragments。
+9. **🔴 论文"用什么方法/对比流程"必须下 bioRxiv 补充材料（2026-08-04 实战）**：bioRxiv 主 PDF 通常**不含详细 M&M**（只有正文+图注+参考文献），详细参数（cellranger 版本、MACS2 命令、QC 阈值、Pearson FDR 阈值）在补充材料 DC1/DC2：
+   - 入口: `https://www.biorxiv.org/content/10.1101/<doi>v1.supplementary-material`
+   - 正则提取页面内 embed 链接: `href="([^"]*(?:supplement|suppl|download)[^"]*)"`
+   - DC1 = media-1.pdf（补充图 + M&M 文本）；DC2 = media-2.zip（补充表 S1-S24）
+   - curl 对 bioRxiv 偶发 SSL error 35 → 用 Python urllib + unverified SSL context
+   - Science 正式版付费墙(403) → bioRxiv 预印本 + 补充材料是免费替代（内容一致）

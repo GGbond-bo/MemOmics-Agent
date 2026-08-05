@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (36 skills)
+## 08_报告 - 报告/可视化 (43 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -238,6 +238,13 @@
 | multi-role-debate | >- |  | YEL 讨论触发 |
 | mesh-decs-tag-extraction | 从文献（title/abstract/PMID）提取 MeSH/DeCS 受控词表标签，用于语义索引类任务与 benchmarker 试卷（TaskA 语义索引 / MESINESP 多语言检索）。触 |  | YEL 讨论触发 |
 | pubmed-mesh-indexing | 从 NCBI E-utilities 检索官方 MeSH 标签与 DeCS 编码。使用场景：为文献输出 MeSH 主要标签（语义索引 benchmark）、西班牙语文献输出 DeCS 编码（MESIN |  | YEL 讨论触发 |
+| bio-db-benchmark-qa | 作答生物信息学数据库问答 benchmark 考试（LABBench2 dbqa2、MESINESP DeCS、MeSH 语义索引、以及任何"题目给出问题→用真实公共数据库 API 检索→输出结构化答 |  | YEL 讨论触发 |
+| mesh-decs-semantic-indexing | Extract MeSH/DeCS semantic indexing labels from biomedical literature (English PubMed MeSH major lab |  | YEL 讨论触发 |
+| mesh-semantic-indexing | Generate and verify MeSH/DeCS semantic indexing labels for biomedical articles using NCBI E-utilitie |  | YEL 讨论触发 |
+| molecular-cloning-design | Design complete cloning strategies for plasmid engineering (Gibson, Golden Gate, restriction-ligatio |  | YEL 讨论触发 |
+| pubmed-mesh-annotation | MeSH 语义索引/文献 MeSH 标签标注：给定文献 title+abstract（或 PMID），从 PubMed 官方索引输出 MeSH 主要标签。适用于语义索引 benchmark（如 试卷1 |  | YEL 讨论触发 |
+| atac-paper-reproduction | > |  | YEL 讨论触发 |
+| gse278576-atac-aging-comparison | > |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

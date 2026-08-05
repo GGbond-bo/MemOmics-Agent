@@ -145,6 +145,10 @@ strip) was REJECTED. CNS-level assembly rules:
 
 > Detailed accepted-figure recipe (panels, sizes, debate-info handling, verify anchor):
 > `references/cns-multipanel-composition-hdwgcna-figure.md`
+> **Complete 8-panel CNS hdWGCNA figure builder template** (softpower + dendrogram +
+> module×effect hero + GO/KEGG + hub + module-gene DotPlot w/ color strip + conclusion
+> strip + SVG/PDF/TIFF/PNG export + source CSVs; includes `.libPaths()` bootstrap):
+> `templates/build_cns_hdwgcna_figure.R`
 > Official-workflow runtime pitfalls (traits-as-char-vector, future::plan sequential,
 > TOM path fix, loadNamespace bypass, GO/KEGG re-run per official module):
 > `references/hdwgcna-official-workflow-runtime-pitfalls.md`
@@ -162,6 +166,8 @@ strip) was REJECTED. CNS-level assembly rules:
 4. **ComplexHeatmap cell_fun 下标**：`Heatmap(t(mcor))` 转置后 cell_fun 里 `i`=行、`j`=列，但矩阵引用要用原始方向 `mcor[j,i]`、星标表 `lab[j,i]`——写反就报"下标出界"。
 5. **无视觉模型的排版 QA**：纯文本模型看不到图，用 PIL 按行分块测"非白像素比例"验证布局是否正确渲染（每行应有内容、hero panel 内容占比最高）；红/蓝像素分布确认热图方向正确（正相关红多、负相关蓝多）。布局测试代码见 `references/cns-multipanel-composition-hdwgcna-figure.md`。
 6. **ComplexHeatmap 是 grid 对象**：合成时用 `grid.grabExpr(draw(ht, ...))` 包成 grob 再进 grid.arrange；单跑时 open device → draw → dev.off（不能 ggsave）。
+7. **Windows Seurat 出图脚本必须显式 `.libPaths()` 引导（2026-08-04 实测）**：PATH 上的 `Rscript` 可能是新装版本（本机 R-4.6.1）库里**没有 Seurat**；`--vanilla` 又不读用户库 → 包检查全 FAIL 但代码没错。本机验证可用组合：`"/c/Program Files/R/R-4.5.3/bin/x64/Rscript"` + 脚本顶部 `.libPaths(c("E:/R-libs/R-4.5.3", .libPaths()))` → Seurat v5.5.1 + ComplexHeatmap + circlize + gridExtra + ggplot2 + png 全部加载。出图脚本第一行就放 `.libPaths()`，不要等到 library() 报错。
+8. **重图构建前先跑 pre-flight 快速验证（~30s，避免 10 分钟后台任务中途炸）**：加载 883MB Seurat 前，先写临时 `hermes-verify-*.R` 断言：① 语法 parse ② 输入文件都存在（trait_cor/trait_p/softpower/hub/go_kegg/dendrogram.png/Seurat rds）③ 包在 `.libPaths()` 引导下可加载 ④ CSV 数据契约（trait_cor 含 `^all_cells.<module>` 列 + Aging/T2D/ExYoung/ExOld/ExT2D 行、cor/p 同维、hub 含 gene_name/module/kME、go_kegg rds 含 `red$go`/`red$kegg`）⑤ DotPlot 基因提取逻辑（期望数 = length(mods_show)*k_per_module **动态计算**，不是硬编码——本次会话把 36 写死结果误报 FAIL，实际 hub 表 10 模块×6=60；无 NA、无跨模块重复、全部基因 %in% rownames(Seurat)）。全部 PASS 再启动后台全量出图，日志 + notify_on_complete 收尾。
 
 ## Method–Problem Matching: When the User Says "NMF 没看出什么" (2026-07-31 correction)
 
@@ -293,6 +299,32 @@ RSS-blunted-response finding + dual-matrix/mirror-test figures:
 > modules + debate record), then offer alternatives only as a separate next step.
 > "是不是还要展示GO/KEGG呢？" — yes, functional enrichment of condition-associated
 > modules IS part of the deliverable; a module without GO/KEGG is just a color label.
+
+> ⛔ **Code-first delivery rule** (user correction 2026-08-04): when the user pastes
+> working code and asks "怎么把它做成CNS级别的图" / "给我CNS级别的代码" — they want the
+> COMPLETE runnable script NOW, not a figure-contract lecture or a "要不要我帮你写？"
+> offer. Delivering an architecture plan + panel table + "can I write it for you?"
+> when the user explicitly asked for code reads as stalling ("你为什么不完成给我的任务呢？
+> 我就要"). The correct move: write the full script immediately (the 8-panel template
+> in `templates/build_cns_hdwgcna_figure.R` is the known-good starting point),
+> run the pre-flight verify below, and hand over the complete file — then optionally
+> launch it in background. A one-line figure contract in chat is fine; the artifact
+> is the code, not the plan.
+>
+> ⛔ **Single-plot scoping sub-rule** (user correction 2026-08-04, same session): when the
+> user pastes ONE plot's code (e.g. a DotPlot) and asks "这个图的CNS级别代码", the scope is
+> THAT PLOT ONLY. Deliver a standalone single-plot script (standalone template:
+> `templates/cns_dotplot_module_hub_genes.R`) — do NOT expand it into the full 8-panel
+> composite. Over-scoping was rejected twice with "我只要这个图的CNS级别代码". Escalation
+> seen: plan → full-figure architecture → finally single-plot code. The single-plot CNS
+> upgrades that matter (validated on module-hub DotPlot): ① genes on Y-axis via
+> `coord_flip()` (60 genes on X-axis unreadable) ② left module color strip aligned to gene
+> order (strip factor levels = rev(features)) ③ genes ordered module-by-module by kME desc,
+> `head(g, k)` per module, filtered to `%in% rownames(obj)` ④ groups factorized to logical
+> order (Y_Pre→Y_Post→O_Pre→O_Post→OD_Pre→OD_Post) ⑤ diverging palette
+> `scale_color_gradient2(midpoint=0, high="#B2182B", mid="#F7F7F7", low="#2166AC")`
+> ⑥ theme_classic(base_size=7) + 0.4 thin axes + family="sans" (never bare "Arial")
+> ⑦ export SVG+PDF+PNG(300dpi)+TIFF(600dpi) via ggsave on the grid.arrange result.
 
 ## Five-Effect-Axes Matrix (paired multi-condition design — validated)
 

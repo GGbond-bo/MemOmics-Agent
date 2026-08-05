@@ -9,7 +9,7 @@
 # =============================================================================
 
 $ErrorActionPreference = "Continue"
-$cellbender = "C:\Users\23136\miniconda3\envs\cellbender\Scripts\cellbender.exe"
+$cellbender = "C:\Users\23136\AppData\Local\Programs\Python\Python312\Scripts\cellbender.exe"
 $h5adDir = "E:\monkey\h5ad"
 $cbDir   = "E:\monkey\cellbender"
 
