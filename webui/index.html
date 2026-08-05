@@ -73,6 +73,12 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .session-item .del-btn { position:absolute; right:8px; top:50%; transform:translateY(-50%); opacity:0; background:rgba(220,53,69,0.15); color:#dc3545; border:none; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; transition:opacity 0.15s; }
 .session-item:hover .del-btn { opacity:1; }
 .session-item .del-btn:hover { background:rgba(220,53,69,0.3); }
+.session-item.selected { background:rgba(74,144,217,0.15); }
+.session-cb { margin:0 6px 0 0; cursor:pointer; flex-shrink:0; }
+.session-batch-bar { display:flex; gap:6px; padding:0 12px 6px; align-items:center; }
+.session-batch-bar button { font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
+.session-batch-bar button:hover { border-color:var(--primary); color:var(--primary); }
+.session-batch-bar button:disabled { opacity:0.4; cursor:not-allowed; }
 .sidebar-nav { padding:4px 0; border-top:1px solid var(--border); }
 .nav-item { padding:9px 18px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); transition:background 0.2s; border-left:3px solid transparent; }
 .nav-item:hover { background:var(--primary-light); }
@@ -412,6 +418,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
 
     <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="session-search" />
+    <div class="session-batch-bar" id="session-batch-bar">
+      <button id="batch-btn" onclick="toggleBatchMode()">☑ 批量管理</button>
+      <button id="batch-delete-btn" style="display:none;" onclick="batchDeleteSelected()" disabled>🗑 删除选中</button>
+      <button id="batch-cancel-btn" style="display:none;" onclick="toggleBatchMode(false)">✕ 取消</button>
+    </div>
 
     <div class="session-list" id="session-list"></div>
     <div class="sidebar-nav">
@@ -1894,7 +1905,68 @@ function filterSessions() {
     return (s.title || '').toLowerCase().indexOf(kw) >= 0
         || (s.id || '').toLowerCase().indexOf(kw) >= 0;
   });
+  if (!filtered.length) {
+    document.getElementById('session-list').innerHTML = '<div style="padding:8px 18px;font-size:12px;color:var(--text-light);">🔍 无匹配会话</div>';
+    return;
+  }
   renderSessionList(filtered);
+}
+
+// === 批量管理（多选删除） ===
+var _batchMode = false;
+var _selectedSessions = {};
+
+function toggleBatchMode(force) {
+  _batchMode = (force === undefined) ? !_batchMode : !!force;
+  document.getElementById('batch-btn').style.display = _batchMode ? 'none' : '';
+  document.getElementById('batch-delete-btn').style.display = _batchMode ? '' : 'none';
+  document.getElementById('batch-cancel-btn').style.display = _batchMode ? '' : 'none';
+  if (!_batchMode) _selectedSessions = {};
+  _lastSessionFingerprint = '';  // 强制重建列表（显示/隐藏 checkbox）
+  renderSessionList(_allSessions);
+  updateBatchCount();
+}
+
+function toggleSelect(sid) {
+  if (_selectedSessions[sid]) delete _selectedSessions[sid];
+  else _selectedSessions[sid] = true;
+  var item = document.querySelector('.session-item[data-sid="' + sid + '"]');
+  if (item) {
+    item.classList.toggle('selected', !!_selectedSessions[sid]);
+    var cb = item.querySelector('.session-cb');
+    if (cb) cb.checked = !!_selectedSessions[sid];
+  }
+  updateBatchCount();
+}
+
+function updateBatchCount() {
+  var n = Object.keys(_selectedSessions).length;
+  var b = document.getElementById('batch-delete-btn');
+  if (b) { b.textContent = '🗑 删除选中 (' + n + ')'; b.disabled = n === 0; }
+}
+
+function batchDeleteSelected() {
+  var ids = Object.keys(_selectedSessions);
+  if (!ids.length) return;
+  if (!confirm('确定删除选中的 ' + ids.length + ' 个会话？\n将清除：会话消息与记录、agent 资源（结果目录会保留）。\n此操作不可恢复！')) return;
+  var delCurrent = false;
+  var done = 0;
+  ids.forEach(function(sid) {
+    fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(function() {
+      done++;
+      _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
+      if (currentSid === sid) { currentSid = null; delCurrent = true; }
+      if (done === ids.length) {
+        _selectedSessions = {};
+        toggleBatchMode(false);
+        loadSessions();
+        if (delCurrent) {
+          document.getElementById('messages').innerHTML = '';
+          newSession();
+        }
+      }
+    }).catch(function(e) { console.error('batch delete failed:', e); });
+  });
 }
 
 var _lastSessionFingerprint = '';
@@ -1919,8 +1991,7 @@ function renderSessionList(sessions) {
     // 只更新 active 样式，不重建整个列表
     var items = el.querySelectorAll('.session-item');
     for (var i = 0; i < items.length; i++) {
-      var sid = items[i].getAttribute('onclick') || '';
-      sid = sid.replace(/^switchSession\('|'\).*$/g, '');
+      var sid = items[i].getAttribute('data-sid') || '';
       if (sid === currentSid) items[i].classList.add('active');
       else items[i].classList.remove('active');
     }
@@ -1930,6 +2001,10 @@ function renderSessionList(sessions) {
   var scrollTop = el.scrollTop;
   el.innerHTML = sessions.map(function(s) {
     var active = s.id === currentSid ? ' active' : '';
+    var selected = _batchMode && _selectedSessions[s.id] ? ' selected' : '';
+    var clickHandler = _batchMode ? 'toggleSelect(\'' + s.id + '\')' : 'switchSession(\'' + s.id + '\')';
+    var cb = _batchMode ? '<input type="checkbox" class="session-cb" ' + (_selectedSessions[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleSelect(\'' + s.id + '\')" />' : '';
+    var delBtn = _batchMode ? '' : '<button class="del-btn" onclick="event.stopPropagation();deleteSession(\'' + s.id + '\')" title="删除会话">🗑</button>';
     var runningBadge = s.is_running ? '<span style="color:#2d8659;font-size:10px;margin-right:4px;animation:pulse 1.5s infinite;" title="分析中">●</span>' : '';
     var bg = s.bg_running ? '<span class="bg-dot"></span>' : '';
     var restored = s.restored ? '<span style="font-size:10px;color:var(--text-light);margin-left:4px;" title="从快照恢复">↩</span>' : '';
@@ -1938,7 +2013,7 @@ function renderSessionList(sessions) {
     var dateStr = (s.created || '').slice(5, 10);
     var previewText = s.first_message || s.last_message || '';
     var preview = previewText ? '<div style="font-size:10px;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">' + escapeHtml(previewText) + '</div>' : '';
-    return '<div class="session-item' + active + '" onclick="switchSession(\'' + s.id + '\')">' + bg + runningBadge + '<div style="flex:1;min-width:0;">' + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + srcBadge + '<span style="font-size:10px;color:var(--text-light);margin-right:4px;">' + dateStr + '</span>' + escapeHtml(s.title) + '</div>' + preview + '</div>' + restored + msgCount + '<button class="del-btn" onclick="event.stopPropagation();deleteSession(\'' + s.id + '\')" title="删除会话">🗑</button></div>';
+    return '<div class="session-item' + active + selected + '" data-sid="' + s.id + '" onclick="' + clickHandler + '">' + cb + bg + runningBadge + '<div style="flex:1;min-width:0;">' + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + srcBadge + '<span style="font-size:10px;color:var(--text-light);margin-right:4px;">' + dateStr + '</span>' + escapeHtml(s.title) + '</div>' + preview + '</div>' + restored + msgCount + delBtn + '</div>';
   }).join('');
   el.scrollTop = scrollTop;  // 恢复滚动位置
   // 确保当前活跃会话在可视区内
