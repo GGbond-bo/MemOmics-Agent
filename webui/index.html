@@ -1962,6 +1962,7 @@ function deleteSession(sid) {
 
 function loadAllMessages(sid) {
   fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
+    if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
     (d.messages || []).forEach(function(m) {
       if (m.role === 'user') addUserMsg(m.content);
