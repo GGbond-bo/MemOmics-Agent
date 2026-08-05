@@ -513,6 +513,28 @@ def _build_task_resume_prompt(session):
     return "\n".join(parts)
 
 
+def _marker_belongs_to_session(marker_path, session):
+    """判定磁盘标记文件（.heartbeat_stop/PROGRESS.md/alerts.json）是否属于本会话。
+
+    多会话共用同一 analysis_dir 时，会话 A 的心跳会扫到会话 B 写的标记文件。
+    归属规则：路径在本会话专属 results_dir 下 → 属于；否则文件内容含本会话
+    sid → 属于；都不满足 → 不归因（跳过，避免串会话误报/误唤醒）。
+    """
+    try:
+        _p = os.path.abspath(marker_path)
+        _rd = os.path.abspath(session.get("results_dir", "") or "")
+        if _rd and (_p == _rd or _p.startswith(_rd + os.sep)):
+            return True
+        if os.path.isfile(_p):
+            with open(_p, "r", encoding="utf-8", errors="ignore") as _f:
+                _c = _f.read(2000)
+            sid = session.get("id", "")
+            return bool(sid and sid in _c)
+    except Exception:
+        pass
+    return False
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -524,6 +546,21 @@ def _schedule_self_check(session, agent, loop):
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         return
+    # 🔧 任务完成 → 清除 task_plan.md 并停止自检（心跳随之关闭）
+    # 判定：待办全部完成/取消 + task_plan 中无 in_progress/pending 标记 + 出现完成标记
+    if not has_todos and has_plan:
+        _plan_path = os.path.join(results_dir, "task_plan.md")
+        try:
+            with open(_plan_path, "r", encoding="utf-8") as f:
+                _plan_text = f.read()
+            _pt_lower = _plan_text.lower()
+            if "in_progress" not in _pt_lower and "pending" not in _pt_lower and \
+                    any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止")):
+                os.remove(_plan_path)
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已清除 task_plan.md，停止自检（心跳关闭）")
+                return
+        except Exception:
+            pass
     # ⛔ 检查 task_plan 是否被取消/暂停
     if has_plan:
         try:
@@ -650,6 +687,9 @@ def _build_alerts_context(session):
         return None
     alerts_path = os.path.join(analysis_dir, "alerts.json")
     if not os.path.isfile(alerts_path):
+        return None
+    # 归属校验：共享 analysis_dir 时其他会话的告警不得注入本会话
+    if not _marker_belongs_to_session(alerts_path, session):
         return None
     try:
         import json
@@ -5960,13 +6000,18 @@ async def ws_endpoint(ws: WebSocket):
                                     for _scan_dir in _scan_dirs_for_progress:
                                         # 检测 .heartbeat_stop 标记（cron _agent 自检完成）
                                         _stop_path = os.path.join(_scan_dir, ".heartbeat_stop")
-                                        if os.path.isfile(_stop_path):
+                                        if os.path.isfile(_stop_path) and _marker_belongs_to_session(_stop_path, _s):
                                             _report_parts.append("🏁 cron: 任务完成，心跳已停止")
                                             _s["_urgent_wakeup"] = True
+                                            # 一次性标记：处理完即删，防止每轮心跳重复唤醒
+                                            try:
+                                                os.remove(_stop_path)
+                                            except Exception:
+                                                pass
                                             break
                                         # 读 PROGRESS.md（cron _agent 写入的进度摘要）
                                         _progress_path = os.path.join(_scan_dir, "PROGRESS.md")
-                                        if os.path.isfile(_progress_path):
+                                        if os.path.isfile(_progress_path) and _marker_belongs_to_session(_progress_path, _s):
                                             _pmtime = os.path.getmtime(_progress_path)
                                             if _pmtime > _heartbeat_last_report.get("progress_ts", 0):
                                                 _heartbeat_last_report["progress_ts"] = _pmtime
@@ -5981,7 +6026,7 @@ async def ws_endpoint(ws: WebSocket):
                                                     _report_parts.append(f"📊 cron: {_last_entry}")
                                         # 读 alerts.json（cron _agent 写入的警报）
                                         _alerts_path = os.path.join(_scan_dir, "alerts.json")
-                                        if os.path.isfile(_alerts_path):
+                                        if os.path.isfile(_alerts_path) and _marker_belongs_to_session(_alerts_path, _s):
                                             _amtime = os.path.getmtime(_alerts_path)
                                             if _amtime > _heartbeat_last_report.get("alerts_ts", 0):
                                                 _heartbeat_last_report["alerts_ts"] = _amtime
