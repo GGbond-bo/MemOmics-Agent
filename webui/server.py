@@ -2055,6 +2055,16 @@ def _session_emit(session, msg_dict):
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
     msg_type = msg_dict.get("type", "")
+    # reasoning 流式文本：按 turn 合并持久化（刷新/重连后恢复 💭 思考过程）
+    if msg_type == "reasoning":
+        rlog = session.setdefault("reasoning_log", [])
+        if rlog and rlog[-1].get("_open"):
+            rlog[-1]["content"] += msg_dict.get("content", "")
+        else:
+            rlog.append({"content": msg_dict.get("content", ""), "_open": True})
+        # 上限 10 个 turn，超出删最早的
+        if len(rlog) > 10:
+            del rlog[:len(rlog) - 10]
     # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
     if msg_type not in ("delta", "reasoning", "tool_gen"):
         progress_log = session.setdefault("progress_log", [])
@@ -2062,6 +2072,11 @@ def _session_emit(session, msg_dict):
         # 上限 500 条，超出删最早的
         if len(progress_log) > 500:
             del progress_log[:len(progress_log) - 500]
+    # 结束型事件关闭 reasoning 累积段（下一个 turn 自动新开一段）
+    if msg_type in ("complete", "cancelled", "error"):
+        rlog = session.get("reasoning_log")
+        if rlog and rlog[-1].get("_open"):
+            rlog[-1]["_open"] = False
     # 通过 WS 发送（如果已连接）
     ws_ref = session.get("ws_ref")
     loop_ref = session.get("loop_ref")
@@ -2094,6 +2109,7 @@ def _create_session(title="新会话"):
         "running_task": None,
         "lang": "zh",  # 问题9: 会话语言，首条用户消息后更新
         "progress_log": [],   # 进度事件持久化（切换会话后可重放）
+        "reasoning_log": [],  # 思考文本按 turn 持久化（刷新/重连后可恢复）
         "ws_attached": True,  # 当前是否有 WebSocket 连接监听此会话
     }
     # 结果目录延迟创建：仅在首次分析（scan_data/update_results_dir）时创建
@@ -2225,6 +2241,7 @@ def _restore_single_session(sid):
                 "last_active": active_str,
                 "source": "",
                 "progress_log": [],
+                "reasoning_log": [],
                 "ws_attached": False,
                 "ws_ref": None,
                 "loop_ref": None,
@@ -2316,6 +2333,7 @@ def _load_persisted_sessions():
                 "running_task": None,
                 "restored": True,
                 "progress_log": [],
+                "reasoning_log": [],
                 "ws_attached": False,
                 "ws_ref": None,
                 "loop_ref": None,
@@ -5136,6 +5154,7 @@ async def ws_endpoint(ws: WebSocket):
                 await ws.send_text(json.dumps({
                     "type": "progress_replay",
                     "progress_log": progress_log,
+                    "reasoning_log": [r.get("content", "") for r in session.get("reasoning_log", []) if r.get("content")],
                     "is_running": is_running,
                     "session_id": session["id"],
                 }, ensure_ascii=False))

@@ -777,12 +777,21 @@ let pendingImages = [];  // 待发送图片 [{dataUrl, file, uploadedUrl}]
 // === 会话级进度缓存（切换会话时保存/恢复） ===
 let _sessionProgressCache = {};  // sid -> { timelineEl, items }
 let _currentRunningSid = null;   // 当前正在运行的会话 ID
+let _newSessionPromise = null;   // 同一浏览器只允许一个建会话请求在途
+let _sessionTransitioning = false;
+const _sessionScopedEventTypes = new Set([
+  'thinking', 'progress', 'progress_replay', 'reasoning', 'delta',
+  'agent_running', 'complete', 'cancelled', 'tool_start', 'tool_complete',
+  'tool_progress', 'tool_gen', 'status', 'notice', 'notice_clear',
+  'new_figure', 'event', 'steer_sent', 'clarify', 'todos', 'todos_update',
+  'context_usage', 'resource_state', 'timeout'
+]);
 
 // === WebSocket ===
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -798,6 +807,12 @@ function handleMessage(msg) {
   // === 微信消息分发 ===
   if (msg.type === 'weixin_message' || msg.type === 'weixin_list' || msg.type === 'weixin_status') {
     handleWeixinMessage(msg);
+    return;
+  }
+  // 会话事件没有 ID 时无法安全分流。宁可拒绝一条坏事件，也不能把它写入
+  // 用户此刻正在查看的另一个会话。
+  if (_sessionScopedEventTypes.has(msg.type) && !msg.session_id) {
+    console.error('Dropped session-scoped event without session_id:', msg);
     return;
   }
   // 微信会话更新通知（自动切换+刷新列表，防抖3秒）
@@ -845,18 +860,16 @@ function handleMessage(msg) {
   // _replay 标记表示这是服务器重放的历史进度，session_id 可能是旧会话的
   if (msg.session_id && msg.session_id !== currentSid && !msg._replay) {
     // 非当前会话的消息 — 存到缓存，不劫持 currentSid
-    if (!_sessionProgressCache[msg.session_id]) {
-      _sessionProgressCache[msg.session_id] = { items: [], running: false };
-    }
-    _sessionProgressCache[msg.session_id].items.push(msg);
+    var backgroundCache = _ensureSessionRenderCache(msg.session_id);
+    _bufferSessionEvent(backgroundCache, msg);
     if (msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
-      _sessionProgressCache[msg.session_id].running = false;
+      backgroundCache.running = false;
       // 任务完成 → 自动刷新结果面板
       if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
         refreshResults();
       }
     } else if (msg.type === 'thinking' || msg.type === 'agent_running') {
-      _sessionProgressCache[msg.session_id].running = true;
+      backgroundCache.running = true;
     }
     updateSessionListThrottled();  // 节流刷新，避免高频事件反复重建 DOM
     return;  // 不渲染到 UI
@@ -894,6 +907,11 @@ function handleMessage(msg) {
     progressTimelineEl = null;
     progressItems = [];
     document.querySelectorAll('.progress-timeline').forEach(function(el) { el.remove(); });
+    // 服务端持久化的思考文本（刷新/重连后恢复 💭 思考过程）
+    if (msg.reasoning_log && msg.reasoning_log.length) {
+      reasoningText = msg.reasoning_log.join('\n\n');
+      updateReasoningBlock();
+    }
     var log = msg.progress_log || [];
     log.forEach(function(item) {
       item._replay = true;
@@ -1210,34 +1228,23 @@ async function send(background) {
   var text = input.value.trim();
   // 允许仅图片无文字（但至少要有一样）
   if ((!text && !pendingImages.length) || !ws || ws.readyState !== 1) return;
+
+  // 首屏自动创建和“新建会话”可能仍在请求中。发送前必须拿到唯一、真实的
+  // session_id，禁止用 null 让 WebSocket 后端隐式再创建一个会话。
+  try {
+    if (_sessionTransitioning && _newSessionPromise) await _newSessionPromise;
+    if (!currentSid) await newSession();
+  } catch (error) {
+    addError('会话尚未创建，消息未发送：' + error.message);
+    return;
+  }
+  if (!currentSid) {
+    addError('会话尚未创建，消息未发送。');
+    return;
+  }
+  var targetSid = currentSid;
   input.value = '';
   input.style.height = 'auto';
-  // currentSid 为空时先创建会话（修复：newSession 后直接输入，回复会因 session_id=null 丢失）
-
-  if (!currentSid) {
-
-    try {
-
-      var _r = await fetch('/api/sessions/new', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
-
-      var _d = await _r.json();
-
-      if (_d && _d.id) {
-
-        currentSid = _d.id;
-
-        document.getElementById('chat-title').textContent = _d.title || '新会话';
-
-        updateSessionList();
-
-        refreshResults();
-
-      }
-
-    } catch(e) { console.error('create session failed', e); }
-
-  }
-
   // 先上传图片获取 URL
   var imageUrls = [];
   if (pendingImages.length) {
@@ -1245,18 +1252,18 @@ async function send(background) {
     imageUrls = await uploadPendingImages();
   }
   // 检查 agent 是否正在运行 — 如果在运行，走 steer 中途引导
-  if (typeof agentRunning !== 'undefined' && agentRunning && currentSid && !background) {
+  if (typeof agentRunning !== 'undefined' && agentRunning && targetSid && !background) {
 
     // agent 运行中，发 steer 引导消息
-    addUserMsg(text, imageUrls);
-    ws.send(JSON.stringify({ type: 'steer', content: text, session_id: currentSid, images: imageUrls }));
+    if (currentSid === targetSid) addUserMsg(text, imageUrls);
+    ws.send(JSON.stringify({ type: 'steer', content: text, session_id: targetSid, images: imageUrls }));
     clearPendingImages();
     var hint = document.getElementById('steer-hint');
     hint.innerHTML = '↳ 已发送引导: ' + (text || '[图片]').substring(0, 60);
     hint.style.display = '';
     return;
   }
-  addUserMsg(text, imageUrls);
+  if (currentSid === targetSid) addUserMsg(text, imageUrls);
   clearPendingImages();
   fullText = '';
   reasoningText = '';
@@ -1268,7 +1275,7 @@ async function send(background) {
   document.getElementById('stop').classList.add('active');
   agentRunning = true;
   document.getElementById('steer-hint').style.display = '';
-  ws.send(JSON.stringify({ type: 'chat', message: text, session_id: currentSid, background: background, images: imageUrls }));
+  ws.send(JSON.stringify({ type: 'chat', message: text, session_id: targetSid, background: background, images: imageUrls }));
 }
 
 // === 停止 agent ===
@@ -1785,65 +1792,37 @@ function renderMermaidNode(el) {
 }
 
 // === 会话管理 ===
-function newSession() {
+async function newSession() {
+  // 先在服务端创建真实会话，再切换 UI。旧实现只把 currentSid 设为 null，
+  // 导致仍在运行的旧会话把下一条消息误判成 steer，并出现串话。
   _autoScroll = true;  // 新会话默认自动滚动
-  // 保存旧会话的流式内容（agent 运行中新建会话再切回时恢复）
-  // 注意：newSession 直接清 currentSid=null，不走 switchSession，
-  // 必须在这里手动保存 fullText/reasoningText，否则切回时内容消失
-  if (currentSid) {
-    if (!_sessionProgressCache[currentSid]) _sessionProgressCache[currentSid] = { items: [], running: false };
-    var _c = _sessionProgressCache[currentSid];
-    _c.fullText = fullText;
-    _c.reasoningText = reasoningText;
-    _c.agentRunning = agentRunning;
-    _c.runningSid = _currentRunningSid;
+  if (_newSessionPromise) return _newSessionPromise;
+  _sessionTransitioning = true;
+  var sendButton = document.getElementById('send');
+  if (sendButton) sendButton.disabled = true;
+  _newSessionPromise = (async function() {
+    var response = await fetch('/api/sessions/new', { method: 'POST' });
+    var created = await response.json();
+    if (!response.ok || !created.id) throw new Error(created.error || '创建会话失败');
+    _ensureSessionRenderCache(created.id);
+    if (!_allSessions.some(function(item) { return item.id === created.id; })) {
+      _allSessions.unshift({ id: created.id, title: created.title || '新会话', messages: [], msg_count: 0 });
+    }
+    _lastSessionFingerprint = '';
+    renderSessionList(_allSessions);
+    switchSession(created.id);
+    return created.id;
+  })();
+  try {
+    return await _newSessionPromise;
+  } catch (error) {
+    addError('新建会话失败：' + error.message);
+    throw error;
+  } finally {
+    _newSessionPromise = null;
+    _sessionTransitioning = false;
+    if (sendButton && !agentRunning) sendButton.disabled = false;
   }
-  currentSid = null;
-  // 重置运行状态（修复：会话1运行时新建会话，steer-hint/按钮/进度残留）
-
-  agentRunning = false;
-
-  _currentRunningSid = null;
-
-  fullText = '';
-
-  reasoningText = '';
-
-  currentAssistantEl = null;
-
-  currentBubble = null;
-
-  progressTimelineEl = null;
-
-  progressItems = [];
-
-  document.getElementById('send').disabled = false;
-
-  document.getElementById('stop').classList.remove('active');
-
-  document.getElementById('steer-hint').style.display = 'none';
-
-  document.querySelectorAll('.progress-timeline').forEach(function(el) { el.remove(); });
-
-  document.getElementById('messages').innerHTML = '';
-  clearPendingImages();
-  // 欢迎画面 — 企鹅服小女孩 + 极简问候 (学 hermes 风格)
-  var welcome = document.createElement('div');
-  welcome.className = 'message assistant';
-  welcome.innerHTML = '<div class="bubble" style="border:none; padding:0; background:transparent;">' +
-    '<div style="text-align:center; padding:48px 20px 32px;">' +
-    // 企鹅形象
-    '<img src="assets/penguin.png" width="120" height="146" style="margin:0 auto 16px; display:block; border-radius:12px;" />' +
-    '<div style="font-size:28px; font-weight:800; color:var(--primary); letter-spacing:0.08em; margin-bottom:6px;">MEMOMICS</div>' +
-    '<div style="font-size:13px; color:var(--text-light); line-height:1.6;">' +
-    _introLines[Math.floor(Math.random()*_introLines.length)] +
-    '</div>' +
-    '</div>' +
-    '</div>';
-  document.getElementById('messages').appendChild(welcome);
-  document.getElementById('chat-title').textContent = '新会话';
-  updateSessionList();
-  refreshResults();  // 清除旧会话的分析结果面板
 }
 
 // 首次加载：优先恢复到最近活跃会话，没有历史会话时才显示企鹅欢迎画面
@@ -1991,26 +1970,99 @@ function loadAllMessages(sid) {
   });
 }
 
+// === 会话级渲染快照系统（切换会话不丢内容的完整方案） ===
+// 每个会话缓存：消息区 HTML 快照 + 流式状态 + 切走期间的事件缓冲。
+// 切回时先整块还原 DOM（含正在流式输出的内容），再重放缓冲事件。
+function _ensureSessionRenderCache(sid) {
+  var cache = _sessionProgressCache[sid];
+  if (!cache) {
+    cache = {
+      items: [], running: false, runningSid: null, pendingEvents: [],
+      hasSnapshot: false, messageHtml: '', fullText: '', reasoningText: '',
+      streamingAssistant: false, scrollTop: 0
+    };
+    _sessionProgressCache[sid] = cache;
+  }
+  if (!Array.isArray(cache.items)) cache.items = [];
+  if (!Array.isArray(cache.pendingEvents)) cache.pendingEvents = [];
+  return cache;
+}
+
+function _bufferSessionEvent(cache, msg) {
+  if (msg.type === 'progress_replay' || msg.type === 'session') return;
+  var events = cache.pendingEvents;
+  var last = events.length ? events[events.length - 1] : null;
+  // 流式 token 合并保存，避免长回答产生数千个小对象。
+  if (last && (msg.type === 'delta' || msg.type === 'reasoning') && last.type === msg.type) {
+    last.content = (last.content || '') + (msg.content || '');
+  } else {
+    events.push(Object.assign({}, msg));
+  }
+  if (events.length > 1000) events.splice(0, events.length - 1000);
+}
+
+function _snapshotCurrentSession() {
+  if (!currentSid) return;
+  var cache = _ensureSessionRenderCache(currentSid);
+  var messagesEl = document.getElementById('messages');
+  cache.hasSnapshot = true;
+  cache.messageHtml = messagesEl.innerHTML;
+  cache.fullText = fullText;
+  cache.reasoningText = reasoningText;
+  cache.items = progressItems.slice();
+  cache.running = agentRunning;
+  cache.runningSid = _currentRunningSid;
+  cache.streamingAssistant = !!(currentAssistantEl && currentBubble);
+  cache.scrollTop = messagesEl.scrollTop;
+}
+
+function _restoreSessionSnapshot(cache) {
+  if (!cache || !cache.hasSnapshot) return false;
+  var messagesEl = document.getElementById('messages');
+  messagesEl.innerHTML = cache.messageHtml || '';
+  fullText = cache.fullText || '';
+  reasoningText = cache.reasoningText || '';
+  progressItems = cache.items.slice();
+  progressTimelineEl = messagesEl.querySelector('.progress-timeline');
+  currentAssistantEl = null;
+  currentBubble = null;
+  if (cache.streamingAssistant) {
+    var assistants = messagesEl.querySelectorAll('.message.assistant');
+    currentAssistantEl = assistants.length ? assistants[assistants.length - 1] : null;
+    currentBubble = currentAssistantEl ? currentAssistantEl.querySelector('.bubble') : null;
+  }
+  messagesEl.scrollTop = cache.scrollTop || messagesEl.scrollHeight;
+  initMermaid();
+  return true;
+}
+
+function _drainSessionEvents(cache, sid) {
+  if (!cache || !cache.pendingEvents.length || currentSid !== sid) return;
+  var events = cache.pendingEvents.splice(0);
+  events.forEach(function(event) { handleMessage(event); });
+  _snapshotCurrentSession();
+}
+
+function showNewSessionWelcome() {
+  var welcome = document.createElement('div');
+  welcome.className = 'message assistant';
+  welcome.innerHTML = '<div class="bubble" style="border:none;padding:0;background:transparent;">' +
+    '<div style="text-align:center;padding:48px 20px 32px;">' +
+    '<img src="assets/penguin.png" width="120" height="146" style="margin:0 auto 16px;display:block;border-radius:12px;" />' +
+    '<div style="font-size:28px;font-weight:800;color:var(--primary);letter-spacing:.08em;margin-bottom:6px;">MEMOMICS</div>' +
+    '<div style="font-size:13px;color:var(--text-light);line-height:1.6;">' +
+    _introLines[Math.floor(Math.random() * _introLines.length)] + '</div></div></div>';
+  document.getElementById('messages').appendChild(welcome);
+}
+
 // 切换序号：防止旧切换的异步渲染（fetch 回调）覆盖新会话界面
 var _switchSeq = 0;
 function switchSession(sid) {
   var _seq = ++_switchSeq;
   _autoScroll = true;  // 切换会话后默认自动滚动（用户未操作时）
   clearPendingImages();
-  // === 保存旧会话的全部渲染状态 ===
-  if (currentSid) {
-    _sessionProgressCache[currentSid] = {
-      timelineHtml: progressTimelineEl ? progressTimelineEl.outerHTML : null,
-      items: progressItems.slice(),
-      agentRunning: agentRunning,
-      runningSid: _currentRunningSid,
-      reasoningText: reasoningText,
-      fullText: fullText,
-
-      // currentBubble/currentAssistantEl/fullText/reasoningText 不缓存 —
-      // DOM 元素在 innerHTML='' 后失效，缓存了也是野指针
-    };
-  }
+  // === 保存旧会话的全部渲染状态（消息区 HTML 快照 + 流式状态 + 滚动位置） ===
+  _snapshotCurrentSession();
 
   currentSid = sid;
 
@@ -2021,19 +2073,24 @@ function switchSession(sid) {
   document.getElementById('results-list').innerHTML = '';
 
   // === 恢复新会话的渲染状态 ===
-  var cached = _sessionProgressCache[sid] || {};
+  var cached = _ensureSessionRenderCache(sid);
   progressTimelineEl = null;  // 会在消息历史加载后重建
-  progressItems = cached.items ? cached.items.slice() : [];
+  progressItems = [];
   currentAssistantEl = null;  // 重置 — 不指向旧 DOM
   currentBubble = null;       // 重置
   fullText = '';              // 重置
-  reasoningText = cached.reasoningText || '';  // 恢复该会话的思考内容
-
-  agentRunning = cached.agentRunning || false;
+  reasoningText = '';         // 重置
+  agentRunning = cached.running || false;
   _currentRunningSid = cached.runningSid || null;
 
-  // 清空进度时间线（消息历史加载后再从缓存重建）
-  document.querySelectorAll('.progress-timeline').forEach(function(el) { el.remove(); });
+  // 先同步恢复上次离开时的完整页面，再回放离开期间收到的流式事件。
+  // HTTP 历史稍后只在任务已结束时覆盖它。
+  var restoredLiveSnapshot = _restoreSessionSnapshot(cached);
+  if (restoredLiveSnapshot && cached.running) {
+    _drainSessionEvents(cached, sid);
+  } else if (!cached.running) {
+    cached.pendingEvents.length = 0;
+  }
 
   // 重置 UI 状态
   if (agentRunning) {
@@ -2054,14 +2111,18 @@ function switchSession(sid) {
   // 加载消息历史（只加载最近100条，防止大会话卡顿）
   fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
-    document.getElementById('messages').innerHTML = '';
+    var preserveLiveSnapshot = cached.hasSnapshot && cached.running;
+    if (!preserveLiveSnapshot) document.getElementById('messages').innerHTML = '';
     var msgs = d.messages || [];
-    msgs.forEach(function(m) {
-      if (m.role === 'user') addUserMsg(m.content);
-      else addAssistantMsg(m.content);
-    });
+    if (!preserveLiveSnapshot) {
+      if (!msgs.length) showNewSessionWelcome();
+      msgs.forEach(function(m) {
+        if (m.role === 'user') addUserMsg(m.content);
+        else addAssistantMsg(m.content);
+      });
+    }
     // 如果还有更多历史消息，显示加载提示
-    if (d.total && d.total > msgs.length) {
+    if (!preserveLiveSnapshot && d.total && d.total > msgs.length) {
       var moreDiv = document.createElement('div');
       moreDiv.className = 'more-msgs-hint';
       moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">📜 显示全部 ' + d.total + ' 条消息 (当前显示最近 ' + msgs.length + ' 条)</span>';
@@ -2069,41 +2130,13 @@ function switchSession(sid) {
     }
     refreshTodos();
     refreshResults();
-    // 加载消息后从缓存 HTML 重建进度时间线
-    if (cached.timelineHtml) {
-      var tmp = document.createElement('div');
-      tmp.innerHTML = cached.timelineHtml;
-      var restored = tmp.firstElementChild;
-      if (restored) {
-        document.getElementById('messages').insertBefore(restored, document.getElementById('messages').firstChild);
-        progressTimelineEl = restored;
-      }
-    }
-    // === 恢复流式输出中的内容（agent 运行中切换再切回） ===
-    if (cached.fullText || cached.reasoningText) {
-      if (!currentAssistantEl) {
-        currentAssistantEl = addAssistantMsg('');
-      }
-      currentBubble = currentAssistantEl.querySelector('.bubble');
-      if (cached.fullText) {
-        fullText = cached.fullText;
-        if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
-      } else {
-        fullText = '';
-      }
-      if (cached.reasoningText) {
-        reasoningText = cached.reasoningText;
-        updateReasoningBlock();
-      }
-      scrollBottom();
-    }
   });
 
   // 拉取进度日志（如果 WS 的 progress_replay 没收到，用 HTTP 兜底）
   fetch('/api/sessions/' + sid + '/progress').then(r => r.json()).then(d => {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
     // 只有本地缓存为空且 WS progress_replay 也没填进度时才用 HTTP 重放
-    if (d.progress_log && d.progress_log.length > 0 && !cached.items && !progressTimelineEl && progressItems.length === 0) {
+    if (d.progress_log && d.progress_log.length > 0 && !cached.hasSnapshot && !progressTimelineEl && progressItems.length === 0) {
       // 只有本地缓存为空时才用服务器进度重放
       progressTimelineEl = null;
       progressItems = [];
