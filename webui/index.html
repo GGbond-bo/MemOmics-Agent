@@ -417,7 +417,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     </div>
     <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
 
-    <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="memomics-session-filter" />
+    <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="memomics-session-filter" readonly onfocus="this.removeAttribute('readonly')" />
     <div class="session-batch-bar" id="session-batch-bar">
       <button id="batch-btn" onclick="toggleBatchMode()">☑ 批量管理</button>
       <button id="batch-delete-btn" style="display:none;" onclick="batchDeleteSelected()" disabled>🗑 删除选中</button>
@@ -776,6 +776,11 @@ var mermaidIdx = 0;  // Mermaid 渲染计数器
   var _ss = document.getElementById('session-search');
   if (_ss && _ss.value && document.activeElement !== _ss) _ss.value = '';
 })();
+// Chrome autofill 在页面加载完成后才异步填充，这里再兜底清一次
+setTimeout(function() {
+  var _ss2 = document.getElementById('session-search');
+  if (_ss2 && _ss2.value && document.activeElement !== _ss2) _ss2.value = '';
+}, 1200);
 
 // 欢迎问候语 (学 hermes intro-copy 风格)
 const _introLines = [
