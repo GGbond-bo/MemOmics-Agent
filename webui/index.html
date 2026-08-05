@@ -417,7 +417,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     </div>
     <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
 
-    <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="session-search" />
+    <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="memomics-session-filter" />
     <div class="session-batch-bar" id="session-batch-bar">
       <button id="batch-btn" onclick="toggleBatchMode()">☑ 批量管理</button>
       <button id="batch-delete-btn" style="display:none;" onclick="batchDeleteSelected()" disabled>🗑 删除选中</button>
@@ -769,6 +769,13 @@ let fullText = '';
 let reasoningText = '';
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
 var mermaidIdx = 0;  // Mermaid 渲染计数器
+
+// 清掉浏览器 autofill 填进搜索框的残留值（如设置页输入过的 API 地址会被
+// Chrome 自动填充到 type=search 的会话搜索框，导致列表被过滤为空）
+(function() {
+  var _ss = document.getElementById('session-search');
+  if (_ss && _ss.value && document.activeElement !== _ss) _ss.value = '';
+})();
 
 // 欢迎问候语 (学 hermes intro-copy 风格)
 const _introLines = [
