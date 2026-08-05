@@ -4106,8 +4106,10 @@ class AIAgent:
             )
 
             # Timeouts: generous read=None for SSE streaming endpoints.
+            # connect 15s → 60s：聚合网关（opencode.ai 等）并发时连接排队，
+            # 15s 连接超时导致多会话并发时 API 失败（"Request timed out"）。
             _timeout = _httpx.Timeout(
-                connect=15.0,
+                connect=60.0,
                 read=None,
                 write=15.0,
                 pool=10.0,

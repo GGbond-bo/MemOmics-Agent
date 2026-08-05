@@ -727,6 +727,13 @@ def _build_task_plan_context(session):
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
 _bg_tasks = {}       # session_id -> background task info
+# === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
+# 旧实现每会话单 ws_ref，switch_session 会把切走会话的 ws_ref 置 None，
+# 导致切走会话的 agent 事件发不出去（表现为"另一个会话不动"）。
+# 现在每个会话可挂多个 (ws, loop)，_session_emit 广播到全部，前端按
+# session_id 分流缓冲（快照系统切回时重放）。
+_ws_clients_by_session: dict = {}  # sid -> set[(ws, loop)]
+_ws_sessions_by_ws: dict = {}      # ws -> set[sid]（断开时反向清理）
 _current_model = {   # 默认模型配置 (打包后为空, 首次启动配置)
     "provider": "openai",
     "base_url": os.environ.get("MEMOMICS_BASE_URL", ""),
@@ -2041,6 +2048,41 @@ def _pt(session, key, default=None):
     return _PROGRESS_TEXT.get(lang, _PROGRESS_TEXT["zh"]).get(key, default or key)
 
 
+# === WebSocket 连接注册（多会话共享一个浏览器连接） ===
+def _attach_ws(session, ws, loop):
+    """把一个浏览器连接挂到会话上（不注销其他会话的连接）。
+
+    多会话并发时，同一 ws 连接会同时挂到 A、B 两个会话；A 的 agent
+    事件继续推给浏览器，前端 handleMessage 按 session_id 分流缓冲。
+    """
+    sid = session["id"]
+    _ws_clients_by_session.setdefault(sid, set()).add((ws, loop))
+    _ws_sessions_by_ws.setdefault(ws, set()).add(sid)
+    # 兼容旧代码（微信桥接等直接读 ws_ref）
+    session["ws_ref"] = ws
+    session["loop_ref"] = loop
+    session["ws_attached"] = True
+
+
+def _detach_ws(ws):
+    """ws 断开时从所有挂过的会话移除该连接（agent 不杀，继续后台跑）"""
+    sids = _ws_sessions_by_ws.pop(ws, set())
+    for sid in sids:
+        clients = _ws_clients_by_session.get(sid)
+        if not clients:
+            continue
+        clients = {c for c in clients if c[0] is not ws}
+        if clients:
+            _ws_clients_by_session[sid] = clients
+        else:
+            _ws_clients_by_session.pop(sid, None)
+            s = _sessions.get(sid)
+            if s is not None:
+                s["ws_ref"] = None
+                s["loop_ref"] = None
+                s["ws_attached"] = False
+
+
 # === 会话级消息发射器（支持 WS 断开后进度持久化） ===
 def _session_emit(session, msg_dict):
     """存储消息到 progress_log 并通过 WS 发送（如果已连接）。
@@ -2077,15 +2119,25 @@ def _session_emit(session, msg_dict):
         rlog = session.get("reasoning_log")
         if rlog and rlog[-1].get("_open"):
             rlog[-1]["_open"] = False
-    # 通过 WS 发送（如果已连接）
-    ws_ref = session.get("ws_ref")
-    loop_ref = session.get("loop_ref")
-    if ws_ref and loop_ref:
-        try:
-            asyncio.run_coroutine_threadsafe(
-                ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
-        except Exception:
-            pass
+    # 通过连接注册表广播到该会话的全部浏览器连接（多会话并发互不覆盖）
+    recipients = list(_ws_clients_by_session.get(session.get("id", ""), set()))
+    if recipients:
+        for _w, _l in recipients:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    _w.send_text(json.dumps(msg_dict, ensure_ascii=False)), _l)
+            except Exception:
+                pass
+    else:
+        # 兼容尚未接入注册表的入口（微信桥接等直接写 ws_ref）
+        ws_ref = session.get("ws_ref")
+        loop_ref = session.get("loop_ref")
+        if ws_ref and loop_ref:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    ws_ref.send_text(json.dumps(msg_dict, ensure_ascii=False)), loop_ref)
+            except Exception:
+                pass
 
 
 def _create_session(title="新会话"):
@@ -2704,6 +2756,12 @@ async def delete_session(sid: str):
         # 清理 agent 资源（真正杀死 agent）
         _cleanup_session_agent(session, kill_agent=True)
         del _sessions[sid]
+    # 从连接注册表移除该会话（浏览器连接保留，其他会话继续服务）
+    clients = _ws_clients_by_session.pop(sid, set())
+    for _w, _l in clients:
+        sids = _ws_sessions_by_ws.get(_w)
+        if sids:
+            sids.discard(sid)
     # 从 state.db 删除
     db = _get_session_db()
     if db:
@@ -5124,16 +5182,10 @@ async def ws_endpoint(ws: WebSocket):
             current_sid = session["id"]
 
             if msg_type == "switch_session":
-                # 前端切换会话 - 不中断旧会话的 agent，只重定向 WS
-                old_sid = prev_sid  # ← 修复：用切换前的 sid，不是新的
-                if old_sid and old_sid in _sessions and old_sid != session["id"]:
-                    _sessions[old_sid]["ws_ref"] = None
-                    _sessions[old_sid]["loop_ref"] = None
-                    _sessions[old_sid]["ws_attached"] = False
-                # 连接新会话的 WS
-                session["ws_ref"] = ws
-                session["loop_ref"] = loop
-                session["ws_attached"] = True
+                # 前端切换会话 - 不中断旧会话的 agent，也不注销旧会话的 WS。
+                # 同一浏览器连接同时服务多个会话：切走会话的事件继续推送，
+                # 前端按 session_id 分流缓冲（快照系统切回时重放）。
+                _attach_ws(session, ws, loop)
                 current_sid = session["id"]
                 # 发送进度日志重放
                 progress_log = session.get("progress_log", [])
@@ -5194,9 +5246,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 注册 WebSocket 引用 + 立即发送 thinking（在意图分类之前，消除初始空白）
                 loop = asyncio.get_event_loop()
-                session["ws_ref"] = ws
-                session["loop_ref"] = loop
-                session["ws_attached"] = True
+                _attach_ws(session, ws, loop)
                 # 直接用 await ws.send_text() 而非 _session_emit——确保立刻发送到前端，
                 # 不受事件循环排队影响（_session_emit 用 run_coroutine_threadsafe 排队）
                 await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
@@ -6150,7 +6200,23 @@ async def ws_endpoint(ws: WebSocket):
                                     result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
                                 _session_emit(_session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": _session["id"]})
                         else:
-                            result = await loop.run_in_executor(None, _do_run)
+                            try:
+                                # 绝对超时防护：Windows 上 ssl 握手被网关挂起时
+                                # connect/read 超时可能失效，线程永久卡死。
+                                # 15 分钟上限 → 超时中断 agent 并报错（daemon 线程
+                                # 泄漏不阻塞进程，但避免任务永久挂起）。
+                                result = await asyncio.wait_for(
+                                    loop.run_in_executor(None, _do_run),
+                                    timeout=900
+                                )
+                            except asyncio.TimeoutError:
+                                try:
+                                    if hasattr(_agent, "interrupt"):
+                                        _agent.interrupt()
+                                except Exception:
+                                    pass
+                                result = ""
+                                _session_emit(_session, {"type": "error", "content": "AI 响应超时（15 分钟）。网关连接可能被挂起，请重试或切换模型。", "session_id": _session["id"]})
 
                         # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
                         if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
@@ -6391,6 +6457,7 @@ async def ws_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         # WS 断开 - 只断开 WS 引用，不杀 agent（agent 继续在后台运行）
+        _detach_ws(ws)
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:
@@ -6401,6 +6468,7 @@ async def ws_endpoint(ws: WebSocket):
             await ws.send_text(json.dumps({"type": "error", "content": f"WebSocket 错误: {e}"}, ensure_ascii=False))
         except Exception:
             pass
+        _detach_ws(ws)
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
 

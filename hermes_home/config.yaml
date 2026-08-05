@@ -1,3 +1,11 @@
+providers:
+  openai:
+    request_timeout_seconds: 900
+    stale_timeout_seconds: 300
+  dcs-cloud:
+    request_timeout_seconds: 900
+    stale_timeout_seconds: 300
+
 api_base: https://dcsapi.dcs.cloud/api/aigress/unified/v1
 api_key: sk-H9xYcOay-hMPrIO8bQeHibl3ToEDMyjte22IktUWvVfQ6w3D
 max_turns: 200
