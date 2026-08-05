@@ -122,6 +122,40 @@ import threading as _threading
 _cron_stop_event = _threading.Event()
 
 @app.on_event("startup")
+async def _start_agent_stall_watchdog():
+    """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
+
+    opencode.ai 等聚合网关会间歇性挂起新连接的 TLS 握手（Windows 上
+    ssl do_handshake 卡死时 connect 超时失效），agent 永久卡在"思考"，
+    用户只能干等或手动停止。watchdog 每 20s 扫描，自动中断并提示重试。
+    """
+    async def _watch():
+        while True:
+            await asyncio.sleep(20)
+            now = time.time()
+            for sid, s in list(_sessions.items()):
+                agent_ref = s.get("running_agent")
+                if not agent_ref:
+                    continue
+                last_ts = s.get("_last_event_ts") or now
+                if now - last_ts > 300:  # 5 分钟无任何事件输出
+                    try:
+                        if hasattr(agent_ref, "interrupt"):
+                            agent_ref.interrupt()
+                    except Exception:
+                        pass
+                    try:
+                        _session_emit(s, {"type": "error", "content": "Agent 长时间无响应（5 分钟无输出），已自动中断。可能是模型网关连接挂起，请重试或切换模型。", "session_id": sid})
+                    except Exception:
+                        pass
+                    _clear_session_running(sid)
+    try:
+        asyncio.create_task(_watch())
+        logger.info("[MemOmics] Agent stall watchdog started — 5min no-event auto-interrupt")
+    except Exception as e:
+        logger.warning(f"[MemOmics] stall watchdog start failed: {e}")
+
+@app.on_event("startup")
 async def _start_hermes_cron_ticker():
     """在 MemOmics FastAPI 进程中启动 Hermes 原生 cron ticker。
     
@@ -2097,6 +2131,8 @@ def _session_emit(session, msg_dict):
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
     msg_type = msg_dict.get("type", "")
+    # 记录最后事件时间（stall watchdog 用：5 分钟无事件 = LLM 卡死）
+    session["_last_event_ts"] = time.time()
     # reasoning 流式文本：按 turn 合并持久化（刷新/重连后恢复 💭 思考过程）
     if msg_type == "reasoning":
         rlog = session.setdefault("reasoning_log", [])
@@ -2162,6 +2198,7 @@ def _create_session(title="新会话"):
         "lang": "zh",  # 问题9: 会话语言，首条用户消息后更新
         "progress_log": [],   # 进度事件持久化（切换会话后可重放）
         "reasoning_log": [],  # 思考文本按 turn 持久化（刷新/重连后可恢复）
+        "_last_event_ts": time.time(),  # stall watchdog 用
         "ws_attached": True,  # 当前是否有 WebSocket 连接监听此会话
     }
     # 结果目录延迟创建：仅在首次分析（scan_data/update_results_dir）时创建
