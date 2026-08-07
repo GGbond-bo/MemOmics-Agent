@@ -104,32 +104,11 @@ if exist "F:\CellBender_v2\error_scanner.py" (
     start "CellBender-ErrorScanner" /MIN python "F:\CellBender_v2\error_scanner.py"
 )
 
-REM --- 修复 2026-08-08：先启动 server（独立最小化窗口），再轮询等它就绪，最后开浏览器 ---
-REM 原实现浏览器先于 server 打开（server 冷启动要 30-45s），用户看到"无法访问"以为打不开。
-start "MemOmics-Server" /MIN "%PYTHON%" webui\server.py
-
-echo [WAIT] Waiting for server to be ready on port %PORT% (up to 120s)...
-set "READY="
-for /L %%i in (1,1,60) do (
-    "%PYTHON%" -c "import socket;s=socket.create_connection(('127.0.0.1',%PORT%),2);s.close()" >nul 2>nul
-    if not errorlevel 1 (
-        set "READY=1"
-        goto :server_ready
-    )
-    timeout /t 2 /nobreak >nul
-)
-
-:server_ready
-if defined READY (
-    echo [OK] Server is ready. Opening browser...
-) else (
-    echo [WARN] Server did not respond within 120s. Opening browser anyway...
-)
-REM 修复 2026-08-08：必须用 127.0.0.1 而非 localhost —— Windows 上 localhost
-REM 优先解析为 IPv6 ::1，而 server 只监听 IPv4 127.0.0.1，浏览器会报"找不到接口"。
-explorer.exe "http://127.0.0.1:%PORT%"
-
+REM 前台运行 server（2026-08-08 恢复单窗口模式）。
+REM server 就绪后由 server.py 自己自动打开浏览器（webbrowser 调用默认浏览器，
+REM 不会像 explorer.exe 那样弹"找不到"错误框），本窗口显示运行日志。
+"%PYTHON%" webui\server.py
 echo.
-echo Server is running in the "MemOmics-Server" window (close it to stop).
+echo Exit code: %errorlevel%
 pause
 exit /b 0
