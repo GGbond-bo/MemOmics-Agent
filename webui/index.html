@@ -814,7 +814,7 @@ const _sessionScopedEventTypes = new Set([
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); refreshContextUsage(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -2154,6 +2154,14 @@ function switchSession(sid) {
 
   currentSid = sid;
 
+  // === 会话级独立模型：切换会话时更新模型徽章 + 刷新上下文窗口 ===
+  var _sessMeta = (_allSessions || []).find(function(_s) { return _s.id === sid; });
+  if (_sessMeta && _sessMeta.model) {
+    var _badge = document.getElementById('model-badge');
+    if (_badge) _badge.textContent = _sessMeta.model;
+  }
+  refreshContextUsage();
+
   // === 立即清除旧会话的 DOM（不等 fetch，防止残留） ===
   document.getElementById('messages').innerHTML = '';
   document.getElementById('todo-list').innerHTML = '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>';
@@ -2286,13 +2294,15 @@ let currentProviderModels = [];
 
 async function loadModels() {
   try {
-    var r = await fetch('/api/models');
+    var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
+    var r = await fetch('/api/models' + qs);
     var d = await r.json();
     models = d.presets || [];
     currentModel = d.current || {};
-    // 填充输入框下方的快速模型选择 (仅 DCS 预设)
+    // 填充输入框下方的快速模型选择 (option value = id + 字面"\\u0001" + provider_id，
+    // 与 onModelSelect 的 split('\\u0001') 一致；修复 2026-08-08：原来只有 id，切换永远匹配不到)
     var sel = document.getElementById('model-select');
-    sel.innerHTML = models.map(function(m) { return '<option value="' + m.id + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>'; }).join('');
+    sel.innerHTML = models.map(function(m) { return '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>'; }).join('');
     // 加载 provider 列表到设置页
     await loadProviders();
     document.getElementById('model-badge').textContent = currentModel.model || '未设置';
@@ -2328,7 +2338,14 @@ async function loadProviders() {
     delete groups['★ DCS Cloud (推荐)']; delete groups['国内服务']; delete groups['国际大厂'];
     Object.keys(groups).sort().forEach(function(g) { html += renderGroup(g); });
     sel.innerHTML = html;
-    sel.value = 'dcs-cloud';
+    // 恢复当前模型对应的 provider（不硬编码 dcs-cloud）：优先记忆，其次按 base_url 匹配当前模型
+    var curPid = localStorage.getItem('memomics_last_provider') || 'dcs-cloud';
+    if (currentModel && currentModel.base_url) {
+      var baseMatch = allProviders.find(function(p) { return p.api === currentModel.base_url; });
+      if (baseMatch) curPid = baseMatch.id;
+    }
+    if (!allProviders.some(function(p) { return p.id === curPid; })) curPid = 'dcs-cloud';
+    sel.value = curPid;
     await onProviderSelect();
     if (currentModel && currentModel.base_url) {
       var curUrl = currentModel.base_url.toLowerCase().replace(/\/$/, '');
@@ -2352,6 +2369,7 @@ async function loadProviders() {
 async function onProviderSelect() {
   var pid = document.getElementById('settings-provider-select').value;
   if (!pid) return;
+  localStorage.setItem('memomics_last_provider', pid);
   var provider = allProviders.find(function(p) { return p.id === pid; });
   if (!provider) return;
   var statusEl = document.getElementById('settings-api-key-status');
@@ -2484,18 +2502,25 @@ function onModelSelect() {
   var modelId = parts[0];
   var providerId = parts[1] || '';
   fetch('/api/models/available').then(r => r.json()).then(d => {
-    var m = (d.models || []).find(function(x) { return x.id === modelId && x.provider_id === providerId; });
-    if (m) {
-      fetch('/api/models/switch', {
+    var list = d.models || [];
+    var m = providerId
+      ? list.find(function(x) { return x.id === modelId && x.provider_id === providerId; })
+      : list.find(function(x) { return x.id === modelId; });
+    if (!m) {
+      alert('\u26a0\ufe0f 模型 "' + modelId + '" 未配置 API Key，请先到设置页选择 Provider 并保存 Key，或在设置页直接切换。');
+      refreshModelSelect();
+      return;
+    }
+    fetch('/api/models/switch', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ model: m.id, base_url: m.base_url, provider: 'openai', api_key: m.api_key })
+        body: JSON.stringify({ model: m.id, base_url: m.base_url, provider: 'openai', api_key: m.api_key, session_id: currentSid })
       }).then(r => r.json()).then(d2 => {
         currentModel = d2.current;
-        document.getElementById('model-badge').textContent = currentModel.model;
+        document.getElementById('model-badge').textContent = (d2.current && d2.current.model) || currentModel.model;
         document.getElementById('footer-info').innerHTML = 'MemOmics v1';
         refreshModelSelect();
+        refreshContextUsage();
       });
-    }
   });
 }
 
@@ -2531,17 +2556,24 @@ async function saveModel() {
       body: JSON.stringify({ api_key: apiKey })
     });
   } catch(e) {}
-  var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey }) });
+  var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey, session_id: currentSid }) });
   var d = await r.json();
   currentModel = d.current;
   document.getElementById('model-badge').textContent = currentModel.model;
   document.getElementById('footer-info').innerHTML = 'MemOmics v1';
   var sel = document.getElementById('model-select');
-  if (sel) sel.value = currentModel.model;
+  if (sel) {
+    // option value 为 id+字面"\\u0001"+provider_id 格式，按 id 前缀匹配回显
+    var opts = sel.options;
+    for (var oi = 0; oi < opts.length; oi++) {
+      if (opts[oi].value.split('\\u0001')[0] === currentModel.model) { sel.selectedIndex = oi; break; }
+    }
+  }
   var p = allProviders.find(function(x) { return x.id === pid; });
   alert('\u2705 模型已切换为: ' + currentModel.model + (p ? '\\n\ud83d\udce1 Provider: ' + p.name : ''));
   await refreshModelSelect();
   await refreshConnectedModels();
+  await loadProviders();
 }
 
 // === 微信 iLink 连接 ===

@@ -1667,7 +1667,7 @@ _sync_debate_env()
 _preset_models = []
 for p in _CHINA_PROVIDERS:
     for m in p.get("models", []):
-        _preset_models.append({"id": m["id"], "name": m["name"] + " (" + p["name"].split("(")[0].strip() + ")", "provider": "openai", "base_url": p["api"]})
+        _preset_models.append({"id": m["id"], "name": m["name"] + " (" + p["name"].split("(")[0].strip() + ")", "provider": "openai", "provider_id": p["id"], "base_url": p["api"]})
 
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
