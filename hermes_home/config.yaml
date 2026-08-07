@@ -5,11 +5,10 @@ providers:
   dcs-cloud:
     request_timeout_seconds: 900
     stale_timeout_seconds: 300
-
-api_base: https://dcsapi.dcs.cloud/api/aigress/unified/v1
-api_key: sk-H9xYcOay-hMPrIO8bQeHibl3ToEDMyjte22IktUWvVfQ6w3D
+api_base: https://api.deepseek.com/v1
+api_key: sk-5f65c79ab75f41588888d7288a16a464
 max_turns: 200
-model: deepseek-v4-pro
+model: deepseek-v4-flash
 provider: openai
 sessions:
   write_json_snapshots: true
@@ -29,3 +28,119 @@ plugins:
     auto_extract: true
     default_trust: 0.5
     min_trust_threshold: 0.2
+custom_providers:
+  - id: dcs-cloud
+    name: DCS Cloud (一个 key 切换所有模型)
+    api_base: https://dcsapi.dcs.cloud/api/aigress/unified/v1
+    api_key: sk-H9xYcOay-hMPrIO8bQeHibl3ToEDMyjte22IktUWvVfQ6w3D
+    models:
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro (旗舰 1.6T MoE)
+        reasoning: true
+        tool_call: true
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash (快速 284B MoE)
+        reasoning: true
+        tool_call: true
+      - id: glm-5.2
+        name: GLM-5.2 (智谱旗舰)
+        reasoning: true
+        tool_call: true
+      - id: glm-5.1
+        name: GLM-5.1
+        reasoning: true
+        tool_call: true
+      - id: kimi-k3
+        name: Kimi K3 (月之暗面旗舰)
+        reasoning: true
+        tool_call: true
+      - id: kimi-k2.7-code
+        name: Kimi K2.7 Code (最强 Coding)
+        reasoning: true
+        tool_call: true
+      - id: kimi-k2.6
+        name: Kimi K2.6 (多模态智能体)
+        reasoning: true
+        tool_call: true
+      - id: qwen3.8-max
+        name: Qwen3.8-Max (通义旗舰)
+        reasoning: true
+        tool_call: true
+      - id: qwen3.7-max
+        name: Qwen3.7-Max (通义)
+        reasoning: true
+        tool_call: true
+      - id: MiniMax-M3
+        name: MiniMax M3 (1M 上下文 原生多模态)
+        reasoning: true
+        tool_call: true
+  - id: opencode-go
+    name: OpenCode Go (聚合, Reasonix 同款)
+    api_base: https://opencode.ai/zen/go/v1
+    api_key: sk-rbpDmbJemloMxy3tMwJFpK7ny3mX38lvxONYKfdabNgolPjAl0Ub6Dp7SCfKib8n
+    models:
+      - id: glm-5.2
+        name: GLM-5.2 (智谱旗舰)
+        reasoning: true
+        tool_call: true
+      - id: glm-5.1
+        name: GLM-5.1
+        reasoning: true
+        tool_call: true
+      - id: kimi-k3
+        name: Kimi K3 (旗舰)
+        reasoning: true
+        tool_call: true
+      - id: kimi-k2.7-code
+        name: Kimi K2.7 Code
+        reasoning: true
+        tool_call: true
+      - id: kimi-k2.6
+        name: Kimi K2.6
+        reasoning: true
+        tool_call: true
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro
+        reasoning: true
+        tool_call: true
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash
+        reasoning: true
+        tool_call: true
+      - id: qwen3.8-max
+        name: Qwen3.8-Max (通义旗舰)
+        reasoning: true
+        tool_call: true
+      - id: mimo-v2.5-pro
+        name: MiMo V2.5 Pro (小米)
+        reasoning: true
+        tool_call: true
+      - id: mimo-v2.5
+        name: MiMo V2.5 (小米)
+        reasoning: true
+        tool_call: true
+  - id: deepseek
+    name: DeepSeek (官方)
+    api_base: https://api.deepseek.com/v1
+    api_key: sk-5f65c79ab75f41588888d7288a16a464
+    models:
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro (旗舰 1.6T MoE)
+        reasoning: true
+        tool_call: true
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash (快速 284B MoE)
+        reasoning: true
+        tool_call: true
+      - id: deepseek-v3.2
+        name: DeepSeek V3.2 (通用)
+        reasoning: false
+        tool_call: true
+      - id: deepseek-chat
+        name: DeepSeek Chat (通用)
+        reasoning: false
+        tool_call: true
+      - id: deepseek-reasoner
+        name: DeepSeek R1 (推理)
+        reasoning: true
+        tool_call: true

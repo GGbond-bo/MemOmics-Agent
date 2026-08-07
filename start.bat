@@ -13,6 +13,16 @@ echo.
 set "HERMES_HOME=%~dp0hermes_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
+
+REM --- 首次安装检测：config.yaml 不存在时从模板生成（升级保留用户已有配置）---
+if not exist "%HERMES_HOME%\config.yaml" (
+    if exist "%HERMES_HOME%\config.yaml.example" (
+        copy /y "%HERMES_HOME%\config.yaml.example" "%HERMES_HOME%\config.yaml" >nul
+        echo [INFO] 已生成默认 config.yaml（首次安装）。API Key 请在 WebUI 设置页填写。
+    )
+)
+REM P1-A: 任务完成闸门（防老任务被自动重启）——默认开启，出问题可删此行回退
+set "MEMOMICS_RUN_GATE=1"
 REM 默认仅监听本机（127.0.0.1）。如需局域网访问：set "MEMOMICS_HOST=0.0.0.0"
 
 REM --- Find Python ---
@@ -83,8 +93,6 @@ if %errorlevel% neq 0 (
 echo.
 echo [START] http://localhost:%PORT%
 echo.
-REM 自动打开浏览器（延迟 2 秒等服务就绪）
-explorer.exe "http://localhost:%PORT%"
 
 REM Launch CellBender monitor daemon (if present)
 if exist "F:\CellBender_v2\heartbeat_v2.py" (
@@ -96,8 +104,30 @@ if exist "F:\CellBender_v2\error_scanner.py" (
     start "CellBender-ErrorScanner" /MIN python "F:\CellBender_v2\error_scanner.py"
 )
 
-"%PYTHON%" webui\server.py
+REM --- 修复 2026-08-08：先启动 server（独立最小化窗口），再轮询等它就绪，最后开浏览器 ---
+REM 原实现浏览器先于 server 打开（server 冷启动要 30-45s），用户看到"无法访问"以为打不开。
+start "MemOmics-Server" /MIN "%PYTHON%" webui\server.py
+
+echo [WAIT] Waiting for server to be ready on port %PORT% (up to 120s)...
+set "READY="
+for /L %%i in (1,1,60) do (
+    "%PYTHON%" -c "import socket;s=socket.create_connection(('127.0.0.1',%PORT%),2);s.close()" >nul 2>nul
+    if not errorlevel 1 (
+        set "READY=1"
+        goto :server_ready
+    )
+    timeout /t 2 /nobreak >nul
+)
+
+:server_ready
+if defined READY (
+    echo [OK] Server is ready. Opening browser...
+) else (
+    echo [WARN] Server did not respond within 120s. Opening browser anyway...
+)
+explorer.exe "http://localhost:%PORT%"
+
 echo.
-echo Exit code: %errorlevel%
+echo Server is running in the "MemOmics-Server" window (close it to stop).
 pause
 exit /b 0

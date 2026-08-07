@@ -32,7 +32,10 @@ import requests
 logger = logging.getLogger(__name__)
 
 MODELS_DEV_URL = "https://models.dev/api.json"
-_MODELS_DEV_CACHE_TTL = 3600  # 1 hour in-memory
+# models.dev 注册表变更频率极低（provider 新增模型才会变）。磁盘缓存按 7 天
+# 计龄：即使网络完全不可达，冷启动进程也能秒级命中磁盘缓存，避免每次
+# _create_agent() 卡 30s 网络超时（修复 2026-08-08：启动"打不开"根因）。
+_MODELS_DEV_CACHE_TTL = 604800  # 7 days in-memory/disk
 
 # In-memory cache
 _models_dev_cache: Dict[str, Any] = {}
@@ -290,7 +293,10 @@ def fetch_models_dev(force_refresh: bool = False) -> Dict[str, Any]:
 
     # Stage 3: network fetch.
     try:
-        response = requests.get(MODELS_DEV_URL, timeout=15)
+        # 连接阶段 3.05s 封顶（IPv4/IPv6 双栈最坏 ~6s），读取 10s。原 timeout=15
+        # 会让双栈各试 15s → 网络不可达时每次 _create_agent() 卡 30s（启动/切模型
+        # 全卡）。收紧后失败快速落入 Stage 4 磁盘缓存兜底。
+        response = requests.get(MODELS_DEV_URL, timeout=(3.05, 10))
         response.raise_for_status()
         data = response.json()
         if isinstance(data, dict) and data:

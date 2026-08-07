@@ -122,6 +122,60 @@ import threading as _threading
 _cron_stop_event = _threading.Event()
 
 @app.on_event("startup")
+async def _seed_self_check_startup():
+    """故障自愈播种（修复 2026-08-07）：
+    自检原本只在 agent 回合结束时调度 —— 服务重启/agent 断连后没有新回合，
+    唤醒链永不恢复（用户必须手动发消息才重新触发）。
+    启动时为"有活跃工作"的会话（task_plan.md 或 batch 批处理活跃）重建 agent
+    并播种自检调度，唤醒链自动恢复，无需任何用户交互。
+
+    修复 2026-08-08：原实现直接在 startup 钩子里同步 _create_agent()。
+    _create_agent() 内含 models.dev 网络探测 + env_probe 子进程（最坏 ~35s），
+    且是同步阻塞函数——即使放进 async 钩子也会卡死整个事件循环，
+    uvicorn 停在 "Waiting for application startup"，浏览器打开时 server
+    未就绪 → 用户看到"打不开"。现改为后台线程播种，startup 立即返回。
+    """
+    try:
+        _loop = asyncio.get_event_loop()
+    except Exception:
+        return
+
+    def _seed_worker():
+        try:
+            time.sleep(2)  # 等会话状态稳定
+            _seeded = 0
+            for sid, s in list(_sessions.items()):
+                if s.get("running_agent") or s.get("running_task"):
+                    continue
+                _rd = s.get("results_dir", "") or ""
+                _active = (_rd and os.path.isfile(os.path.join(_rd, "task_plan.md"))) or _session_has_active_work(s)
+                if not _active:
+                    continue
+                _agent = s.get("agent")
+                if _agent is None:
+                    try:
+                        _agent = _create_agent(s.get("model_config") or _current_model, session_id=sid, session=s)
+                        s["agent"] = _agent
+                    except Exception as _e:
+                        print(f"[MemOmics] 播种 agent 失败 {sid[:12]}: {_e}", flush=True)
+                        continue
+                # _schedule_self_check 内部用 asyncio.ensure_future 调度，
+                # 只能在主事件循环线程安全地调用
+                try:
+                    _loop.call_soon_threadsafe(_schedule_self_check, s, _agent, _loop)
+                    _seeded += 1
+                    print(f"[MemOmics] 自愈播种自检: {sid[:12]}", flush=True)
+                except Exception as _e:
+                    print(f"[MemOmics] 播种调度失败 {sid[:12]}: {_e}", flush=True)
+            if _seeded:
+                print(f"[MemOmics] 自愈播种完成: {_seeded} 个活跃会话", flush=True)
+        except Exception as e:
+            print(f"[MemOmics] 自愈播种失败: {e}", flush=True)
+
+    _threading.Thread(target=_seed_worker, daemon=True, name="self-check-seed").start()
+
+
+@app.on_event("startup")
 async def _start_agent_stall_watchdog():
     """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
 
@@ -284,36 +338,117 @@ def _get_session_db():
     return _session_db
 
 
-def _build_session_stats(session_id, agent=None):
-    """构建 session token 统计：优先 agent 内存值，回退 state.db 聚合查询。"""
-    stats = {
-        "prompt_tokens": getattr(agent, "session_prompt_tokens", 0) if agent else 0,
-        "input_tokens": getattr(agent, "session_input_tokens", 0) if agent else 0,
-        "output_tokens": getattr(agent, "session_output_tokens", 0) if agent else 0,
-        "cache_read_tokens": getattr(agent, "session_cache_read_tokens", 0) if agent else 0,
-        "cache_write_tokens": getattr(agent, "session_cache_write_tokens", 0) if agent else 0,
-        "reasoning_tokens": getattr(agent, "session_reasoning_tokens", 0) if agent else 0,
-    }
-    total_mem = sum(v for v in stats.values())
-    if total_mem == 0:
+def _restore_session_model_config(sid, base_cfg):
+    """从 Hermes state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
+
+    只认 sessions.model_config 列（会话级切换时写入的完整 JSON，含 api_key）；
+    该列没有值 = 该会话从未做过会话级切换 → 跟随全局 base_cfg。
+    不回退 model/billing 列：那两列是 Hermes 首次调用时自动填的，
+    可能过时（全局切换后未更新），会导致重启后会话用了旧模型。
+    """
+    try:
         db = _get_session_db()
-        if db and hasattr(db, "_conn"):
-            try:
-                row = db._conn.execute(
-                    "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens), "
-                    "SUM(cache_write_tokens), SUM(reasoning_tokens), SUM(api_call_count) "
-                    "FROM session_model_usage WHERE session_id = ?",
-                    (session_id,),
-                ).fetchone()
-                if row and row[0] is not None:
-                    stats["input_tokens"] = row[0] or 0
-                    stats["output_tokens"] = row[1] or 0
-                    stats["cache_read_tokens"] = row[2] or 0
-                    stats["cache_write_tokens"] = row[3] or 0
-                    stats["reasoning_tokens"] = row[4] or 0
-            except Exception:
-                pass
+        if not db or not db._conn:
+            return dict(base_cfg)
+        row = db._conn.execute(
+            "SELECT model_config FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        if row and row[0]:
+            import json as _json
+            parsed = _json.loads(row[0])
+            if isinstance(parsed, dict) and parsed.get("model") and parsed.get("base_url"):
+                return dict(parsed)
+    except Exception:
+        pass
+    return dict(base_cfg)
+
+
+def _build_session_stats(session_id, agent=None):
+    """构建 session token 统计：以 state.db 持久化累计为准（Hermes 每轮 API 调用后
+    自动 update_token_counts 增量写入 sessions 表）。
+
+    修复(2026-08-07)：原实现优先 agent 内存（session_*_tokens），切换模型重建 agent
+    后内存归零/变小，累计 token 显示会丢；现在 DB 是唯一权威，重启/重连/切模型都不丢。
+    """
+    stats = {
+        "prompt_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+    }
+    db = _get_session_db()
+    if db and hasattr(db, "_conn"):
+        try:
+            row = db._conn.execute(
+                "SELECT input_tokens, output_tokens, cache_read_tokens, "
+                "cache_write_tokens, reasoning_tokens FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if row:
+                stats["input_tokens"] = row[0] or 0
+                stats["output_tokens"] = row[1] or 0
+                stats["cache_read_tokens"] = row[2] or 0
+                stats["cache_write_tokens"] = row[3] or 0
+                stats["reasoning_tokens"] = row[4] or 0
+        except Exception:
+            pass
+    stats["prompt_tokens"] = stats["input_tokens"]
     return stats
+
+
+_TOKEN_USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_tokens",
+                       "cache_write_tokens", "reasoning_tokens")
+
+
+def _persist_token_usage(session, turn_kind="user"):
+    """回合级 token 消耗持久化：追加写入 <results_dir>/token_usage.jsonl（永不覆盖）。
+
+    - 源数据：state.db sessions 表累计（_build_session_stats，重启/切模型不丢）。
+    - 差分：本回合消耗 = 当前累计 - 文件最后一行累计（首次记录 = 当前累计，历史并入首笔）。
+    - 文件：JSON Lines 追加，每行一个回合；断连/重启/更新模型均不覆盖历史。
+    """
+    import json as _json
+    try:
+        sid = session.get("id", "")
+        results_dir = session.get("results_dir", "") or ""
+        if not sid or not results_dir:
+            return None
+        stats = _build_session_stats(sid, session.get("agent"))
+        cur = {f: int(stats.get(f) or 0) for f in _TOKEN_USAGE_FIELDS}
+        path = os.path.join(results_dir, "token_usage.jsonl")
+        prev = None
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            prev = _json.loads(line)
+            except Exception:
+                prev = None
+        prev = prev or {}
+        prev_cum = prev.get("cumulative") or {}
+        deltas = {f: cur[f] - int(prev_cum.get(f) or 0) for f in _TOKEN_USAGE_FIELDS}
+        total_delta = deltas["input_tokens"] + deltas["output_tokens"]
+        cumulative_total = cur["input_tokens"] + cur["output_tokens"]
+        record = {
+            "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "session_id": sid,
+            "turn_kind": turn_kind,
+            "model": (session.get("model_config") or {}).get("model", ""),
+            "deltas": deltas,
+            "total_delta": total_delta,
+            "cumulative": cur,
+            "cumulative_total": cumulative_total,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(record, ensure_ascii=False) + "\n")
+            f.flush()
+        return record
+    except Exception:
+        return None
 
 
 def _get_headroom_stats():
@@ -535,6 +670,42 @@ def _marker_belongs_to_session(marker_path, session):
     return False
 
 
+def _session_has_active_work(session):
+    """会话是否有活跃批处理任务（长任务监督用，修复 2026-08-07）。
+
+    task_plan.md 可能被清/未创建（如 40 样本 ArchR 管线由独立脚本驱动），
+    此时自检因 has_plan=False 永不调度 → 长任务无主动唤醒。
+    判定：results_dir/batch 目录存在且 monitor.log 未写 COMPLETE，
+    且 2 小时内有文件活动 → 视为活跃，持续监督。
+    """
+    _rd = session.get("results_dir", "") or ""
+    if not _rd or not os.path.isdir(_rd):
+        return False
+    _batch = os.path.join(_rd, "batch")
+    if not os.path.isdir(_batch):
+        return False
+    # 批处理完成标记：monitor.log 尾部 COMPLETE / ALL DONE
+    _mon = os.path.join(_batch, "monitor.log")
+    if os.path.isfile(_mon):
+        try:
+            with open(_mon, "r", encoding="utf-8", errors="ignore") as f:
+                _tail = f.read()[-3000:]
+            if "COMPLETE: all" in _tail or "ALL 40 SAMPLES COMPLETE" in _tail:
+                return False
+        except Exception:
+            pass
+    # 最近 2 小时有文件活动
+    _now = time.time()
+    try:
+        for _name in os.listdir(_batch):
+            _p = os.path.join(_batch, _name)
+            if os.path.isfile(_p) and (_now - os.path.getmtime(_p)) < 7200:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -545,7 +716,10 @@ def _schedule_self_check(session, agent, loop):
     results_dir = session.get("results_dir", "")
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
-        return
+        # 修复(2026-08-07): task_plan.md 被清/未创建但 batch 批处理仍活跃
+        # （40 样本 ArchR 管线由独立脚本驱动）→ 持续监督唤醒，不静默
+        if not _session_has_active_work(session):
+            return
     # 🔧 任务完成 → 清除 task_plan.md 并停止自检（心跳随之关闭）
     # 判定：待办全部完成/取消 + task_plan 中无 in_progress/pending 标记 + 出现完成标记
     if not has_todos and has_plan:
@@ -571,7 +745,36 @@ def _schedule_self_check(session, agent, loop):
                 return
         except Exception:
             pass
+    # ── LoopX 融合（2026-08-07）：quota 状态机决定"该不该继续唤醒" ──
+    # 注意：LoopX quota 深度绑定 Codex 工作项模型（无 Codex 工作 → waiting/skip），
+    # MemOmics 无 Codex 工作项，waiting/operator_gate 类判定不适用——只尊重
+    # 明确硬停止状态（blocked/paused/throttled 等 BLOCKED_QUOTA_STATES 子集）；
+    # 其余（waiting/operator_gate/eligible）继续唤醒（MemOmics 交互式轻量监督）。
+    try:
+        from memomics.loopx_bridge import LoopXBridge
+        _rd2 = session.get("results_dir", "") or ""
+        if _rd2:
+            _bridge = LoopXBridge(session["id"], _rd2, user_online=True)
+            _dec = _bridge.should_run()
+            _state = str(_dec.get("state") or "")
+            _HARD_STOP = {"blocked", "blocked_health", "paused", "throttled"}
+            if not _dec.get("should_run") and _state in _HARD_STOP:
+                _reason = str(_dec.get("reason") or "loopx quota 判定停止")[:80]
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: LoopX {_state} 停止唤醒 ({_reason})")
+                return
+    except Exception:
+        pass
     _sc = session.setdefault("_self_check_count", 0)
+    # 修复(2026-08-07): 原上限 20 次 ≈ 40 分钟，长任务（40 样本管线）监督窗口耗尽后
+    # 永久静默。改为"无进展才累计"：监督目录有进展（样本日志在写/task_plan 更新）
+    # → 重置计数持续唤醒；真卡死（20 轮无进展）→ 停止，防无限烧 token。
+    try:
+        _sig = _session_progress_signature(session)
+        if _sig > session.get("_self_check_last_sig", 0.0):
+            _sc = 0
+        session["_self_check_last_sig"] = _sig
+    except Exception:
+        pass
     if _sc >= 20:
         return
     session["_self_check_count"] = _sc + 1
@@ -596,8 +799,20 @@ def _schedule_self_check(session, agent, loop):
             in_progress = [t for t in todos if t.get("status") == "in_progress"]
             waiting_review = [t for t in todos if t.get("status") == "waiting_review"]
             
+            # ── LoopX 融合（2026-08-07）：心跳汇报带结构化状态（goal/todo/quota）──
+            _loopx_ctx = ""
+            try:
+                from memomics.loopx_bridge import LoopXBridge
+                _lrd = s.get("results_dir", "") or ""
+                if _lrd:
+                    _lctx = LoopXBridge(sid, _lrd, user_online=True).heartbeat_prompt(mode="compact")
+                    if _lctx:
+                        _loopx_ctx = f"📊 LoopX 状态：\n{_lctx}\n\n"
+            except Exception:
+                pass
             if waiting_review:
                 wake_msg = (
+                    _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 有待审阅任务！\n"
                     f"以下步骤已完成，等待辩论/审查：\n" +
                     "\n".join(f"  - {t.get('title','')[:60]}" for t in waiting_review[:5]) +
@@ -611,6 +826,7 @@ def _schedule_self_check(session, agent, loop):
             elif in_progress:
                 titles = ", ".join(t.get("title","")[:40] for t in in_progress[:3])
                 wake_msg = (
+                    _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 主线任务进行中: {titles}\n"
                     "请执行以下检查：\n"
                     "1. process(action='list') 检查后台进程\n"
@@ -622,6 +838,7 @@ def _schedule_self_check(session, agent, loop):
                 )
             else:
                 wake_msg = (
+                    _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
                     "1. 读 task_plan.md 看当前 Phase\n"
                     "2. search_files 看最新产出\n"
@@ -641,10 +858,51 @@ def _schedule_self_check(session, agent, loop):
         asyncio.ensure_future(_wakeup())
 
 
+def _session_progress_signature(session):
+    """会话进展签名：task_plan.md mtime + batch/logs 最新日志 mtime。
+
+    长任务监督用（修复 2026-08-07）：自检计数据此重置——
+    样本日志持续写入（Rscript 输出）或 agent 更新 task_plan → 签名变化
+    → 有进展的长任务（如 40 样本 ArchR 管线）持续唤醒；
+    真卡死（日志/计划都停更）→ 签名不变 → 20 轮后停止，防无限烧 token。
+    """
+    _sig = 0.0
+    _rd = session.get("results_dir", "") or ""
+    _plan = os.path.join(_rd, "task_plan.md") if _rd else ""
+    if _plan and os.path.isfile(_plan):
+        try:
+            _sig = max(_sig, os.path.getmtime(_plan))
+        except Exception:
+            pass
+    _logs = os.path.join(_rd, "batch", "logs") if _rd else ""
+    if _logs and os.path.isdir(_logs):
+        try:
+            _m = max(os.path.getmtime(os.path.join(_logs, f)) for f in os.listdir(_logs))
+            _sig = max(_sig, _m)
+        except Exception:
+            pass
+    return _sig
+
+
 def _calc_self_check_delay(session):
-    """根据当前待办的预估时间计算下次自检延迟。
-    默认5分钟。如果有 in_progress 待办带 estimated_minutes，
-    延迟 = estimated_minutes * 0.8（提前20%检查）。最小30秒，最大15分钟。"""
+    """计算下次自检延迟（秒）。
+
+    优先 LoopX 调度退避（memomics/loopx_bridge.py，2026-08-07 接入）：
+      run_now（有活干）→ 60s 勤查；backoff/waiting → 翻倍退避封顶 40min；
+      normal/checkpoint → 默认。比固定延迟更省 token：没事干自动拉长间隔。
+    降级（vendor 不可用/异常）→ 回退到原逻辑：in_progress 待办预估时间×0.8。
+    """
+    try:
+        from memomics.loopx_bridge import LoopXBridge
+        _rd = session.get("results_dir", "") or ""
+        if _rd:
+            _bridge = LoopXBridge(session["id"], _rd, user_online=True)
+            _iv = _bridge.next_poll_interval(default_seconds=300)
+            if isinstance(_iv, (int, float)) and _iv >= 30:
+                return int(_iv)
+    except Exception:
+        pass
+    # ── 原逻辑（降级）──
     todos = session.get("todos", [])
     for t in todos:
         if t.get("status") == "in_progress":
@@ -662,6 +920,10 @@ async def _trigger_agent_turn(session, message):
         if getattr(agent, "_interrupt_requested", False):
             agent.clear_interrupt()
         session["running_agent"] = agent
+        # 修复(2026-08-07): 立即 emit 事件刷新 _last_event_ts —— 否则 stall watchdog
+        # 用很久前的最后事件时间判定"5分钟无事件"→ 误杀刚启动的唤醒回合
+        # （实测：唤醒回合 4.9s 就被 interrupt "waiting for model response"）。
+        _session_emit(session, {"type": "thinking", "content": "⏰ 系统唤醒中...", "session_id": session["id"]})
         loop = asyncio.get_event_loop()
         def _run():
             return agent.run_conversation(message)
@@ -677,6 +939,25 @@ async def _trigger_agent_turn(session, message):
     finally:
         session["running_agent"] = None
         session["running_task"] = None
+        # ── LoopX 执行层（2026-08-07）：回合交付记录 → cadence 退避真实生效 ──
+        try:
+            from memomics.loopx_bridge import LoopXBridge
+            _rd = session.get("results_dir", "") or ""
+            if _rd:
+                _final = locals().get("final", "") or ""
+                _outcome = "primary_goal_outcome" if _final and "completed" in str(_final).lower() else "outcome_progress"
+                LoopXBridge(session["id"], _rd, user_online=True).record_turn_delivery(
+                    outcome=_outcome,
+                    summary=str(_final)[:150],
+                    model=(session.get("model_config") or {}).get("model", ""),
+                )
+        except Exception:
+            pass
+        # ── token 消耗持久化（2026-08-07）：回合级追加写入 token_usage.jsonl，永不覆盖 ──
+        try:
+            _persist_token_usage(session, turn_kind="self_check")
+        except Exception:
+            pass
         _schedule_self_check(session, agent, asyncio.get_event_loop())
 
 
@@ -834,20 +1115,113 @@ def _save_model_config():
     except Exception as e:
         print(f"[WARN] 保存模型配置失败: {e}")
 
-def _load_model_config():
-    """从文件加载模型配置 (覆盖默认值)"""
-    global _current_model
+def _hermes_config_read():
+    """读取 Hermes 底座 config.yaml（真相源）。
+
+    用 Hermes 自己的 load_config()（展开 env 引用、deep-merge 默认值），
+    另用 read_raw_config() 判断键是否真的在磁盘上设置过。
+    """
     try:
-        if os.path.exists(_MODEL_CONFIG_FILE):
+        from hermes_cli.config import load_config, read_raw_config
+        return load_config() or {}, read_raw_config() or {}
+    except Exception as e:
+        print(f"[WARN] 读取 hermes config.yaml 失败: {e}")
+        return {}, {}
+
+
+def _hermes_config_write(updates: dict) -> bool:
+    """原子合并写 Hermes config.yaml（用 Hermes 自己的 atomic_config_write）。"""
+    try:
+        from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
+        cfg = read_raw_config() or {}
+        cfg.update(updates)
+        atomic_config_write(get_config_path(), cfg)
+        return True
+    except Exception as e:
+        print(f"[WARN] 写入 hermes config.yaml 失败: {e}")
+        return False
+
+
+def _load_model_config():
+    """从 Hermes 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
+
+    原来 MemOmics 维护自己的 model_config.json，与 Hermes 底座的 config.yaml
+    各自独立 → 两套配置漂移（UI 显示 A、底座实际用 B）。现统一：
+    1. config.yaml 有 api_key+api_base → 以其为准（load_config 已展开 env 引用）
+    2. 没有 → 回退旧 model_config.json 并一次性迁移回写 config.yaml
+    """
+    global _current_model
+    # ── 迁移方向（2026-08-08）：以 model_config.json 为准（用户在 UI 最近设置的
+    # 实际生效配置），并回写 Hermes config.yaml —— 一次迁移后 config.yaml 成为
+    # 唯一真相源，两套配置不再漂移。model_config.json 缺失时才读 config.yaml。
+    _legacy = None
+    if os.path.exists(_MODEL_CONFIG_FILE):
+        try:
+            with open(_MODEL_CONFIG_FILE, "r", encoding="utf-8") as f:
+                _legacy = json.load(f)
+        except Exception:
+            _legacy = None
+    if _legacy and _legacy.get("api_key") and _legacy.get("base_url") and _legacy.get("model"):
+        for k in ("provider", "base_url", "api_key", "model"):
+            if _legacy.get(k):
+                _current_model[k] = _legacy[k]
+        print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 Hermes config.yaml)")
+        _save_model_config()
+        return
+    # 回退：Hermes config.yaml（load_config 会把 model 规范化为 dict:
+    # {default, provider, base_url}，此处兼容两种形态）
+    _full, _raw = _hermes_config_read()
+    if _raw.get("api_key") and _raw.get("api_base"):
+        _m = _full.get("model")
+        _m_dict = _m if isinstance(_m, dict) else {}
+        _model_name = _m_dict.get("default") or (None if isinstance(_m, dict) else _m)
+        _model_provider = _m_dict.get("provider") or _full.get("provider")
+        _model_base = _m_dict.get("base_url") or _full.get("api_base")
+        _model_key = _full.get("api_key")
+        if _model_name:
+            _current_model["model"] = _model_name
+        if _model_base:
+            _current_model["base_url"] = _model_base
+        if _model_key:
+            _current_model["api_key"] = _model_key
+        _current_model["provider"] = _model_provider or _current_model.get("provider", "openai")
+        print(f"[INFO] 已从 Hermes config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
+        try:
+            _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)  # 镜像同步（兼容）
+        except Exception:
+            pass
+        return
+    # 回退：旧 model_config.json（一次性迁移）
+    if os.path.exists(_MODEL_CONFIG_FILE):
+        try:
             with open(_MODEL_CONFIG_FILE, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-            # 只覆盖非空字段, 保留 env 默认作为 fallback
             for k in ("provider", "base_url", "api_key", "model"):
                 if saved.get(k):
                     _current_model[k] = saved[k]
-            print(f"[INFO] 已加载保存的模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
-    except Exception as e:
-        print(f"[WARN] 加载模型配置失败: {e}")
+            print(f"[INFO] 已加载旧 model_config.json（迁移回写 Hermes config.yaml）: model={_current_model['model']}")
+            _hermes_config_write({
+                "provider": _current_model["provider"],
+                "api_base": _current_model["base_url"],
+                "api_key": _current_model["api_key"],
+                "model": _current_model["model"],
+            })
+        except Exception as e:
+            print(f"[WARN] 加载模型配置失败: {e}")
+
+
+def _save_model_config():
+    """写 Hermes config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
+    _hermes_config_write({
+        "provider": _current_model.get("provider", "openai"),
+        "api_base": _current_model.get("base_url", ""),
+        "api_key": _current_model.get("api_key", ""),
+        "model": _current_model.get("model", ""),
+    })
+    try:
+        _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)
+    except Exception:
+        pass
 
 # 启动时加载
 _load_model_config()
@@ -939,7 +1313,7 @@ _CHINA_PROVIDERS = [
     },
     # === 聚合平台 ===
     {
-        "id": "opencode-go", "name": "OpenCode Zen (聚合, Reasonix 同款)",
+        "id": "opencode-go", "name": "OpenCode Go (聚合, Reasonix 同款)",
         "api": "https://opencode.ai/zen/go/v1", "env_var": "OPENCODE_GO_API_KEY",
         "group": "聚合平台",
         "models": [
@@ -2360,7 +2734,7 @@ def _restore_single_session(sid):
                 "created": created_str,
                 "last_active": active_str,
                 "messages": messages,
-                "model_config": _current_model,
+                "model_config": _restore_session_model_config(sid, _current_model),
                 "results_dir": results_dir,
                 "todos": [],
                 "bg_running": False,
@@ -2454,7 +2828,7 @@ def _load_persisted_sessions():
                 "created": created_str,
                 "last_active": active_str,
                 "messages": messages,
-                "model_config": _current_model,
+                "model_config": _restore_session_model_config(sid, _current_model),
                 "results_dir": results_dir,
                 "todos": [],
                 "bg_running": False,
@@ -2671,6 +3045,7 @@ async def list_sessions():
                           "is_running": bool(s.get("running_agent") or s.get("running_task")),
                           "restored": s.get("restored", False),
                           "msg_count": len(s.get("messages", [])),
+                          "model": (s.get("model_config") or {}).get("model", ""),
                           "last_active": s.get("last_active", s["created"]),
                           "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
                           "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
@@ -2953,15 +3328,75 @@ def _public_model_config() -> dict:
 
 
 @app.get("/api/models")
-async def list_models():
-    """列出预设模型 + 当前模型"""
-    return {"presets": _preset_models, "current": _public_model_config()}
+async def list_models(session_id: str = ""):
+    """列出预设模型 + 当前模型
+
+    - 带 session_id：current 返回该会话的 model_config（会话级切换后前端显示真实当前模型）。
+    - 不带 session_id：返回全局 _current_model（兼容旧行为）。
+    """
+    cur = dict(_current_model)
+    if session_id:
+        s = _sessions.get(session_id)
+        if s and s.get("model_config"):
+            cur = dict(s["model_config"])
+    return {"presets": _preset_models, "current": cur}
 
 
 @app.post("/api/models/switch")
 async def switch_model(payload: dict):
-    """切换模型"""
+    """切换模型
+
+    - 带 session_id：会话级切换 — 只影响该会话（独立 model_config + 重建该会话 agent），
+      持久化到 Hermes state.db（update_session_model / update_session_billing_route），
+      重启/重连后自动恢复；不影响其他会话和全局 _current_model。
+    - 不带 session_id：全局切换（兼容旧行为）— 广播所有会话 + 写 model_config.json。
+    """
     global _current_model
+    sid = payload.get("session_id") or ""
+    model = payload.get("model", "")
+    base_url = payload.get("base_url", "")
+    api_key = payload.get("api_key", "")
+    provider = payload.get("provider", "")
+
+    if sid:
+        # ── 会话级切换 ──
+        s = _sessions.get(sid)
+        if s is None:
+            return JSONResponse({"error": f"Session '{sid}' 不存在"}, status_code=404)
+        new_cfg = dict(s.get("model_config") or _current_model)
+        if model:
+            new_cfg["model"] = model
+        if base_url:
+            new_cfg["base_url"] = base_url
+        if api_key:
+            new_cfg["api_key"] = api_key
+        if provider:
+            new_cfg["provider"] = provider
+        s["model_config"] = new_cfg
+        # 清除该会话缓存的 agent — 下次发消息时用新模型重建
+        if s.get("agent"):
+            try:
+                s["agent"].close()
+            except Exception:
+                pass
+            s["agent"] = None
+        # 持久化到 Hermes state.db（重启后自动恢复会话级模型）
+        try:
+            db = _get_session_db()
+            if db:
+                import json as _json
+                db.update_session_meta(sid, _json.dumps(new_cfg, ensure_ascii=False), model or new_cfg.get("model"))
+                if provider or base_url:
+                    db.update_session_billing_route(
+                        sid,
+                        provider=provider or new_cfg.get("provider", "openai"),
+                        base_url=base_url or new_cfg.get("base_url", ""),
+                    )
+        except Exception as e:
+            print(f"[MemOmics] 会话模型持久化失败: {e}", flush=True)
+        return {"ok": True, "session_id": sid, "current": dict(new_cfg)}
+
+    # ── 全局切换（原行为） ──
     _current_model["model"] = payload.get("model", _current_model["model"])
     _current_model["api_key"] = payload.get("api_key", _current_model["api_key"])
     _current_model["base_url"] = payload.get("base_url", _current_model["base_url"])
@@ -3022,9 +3457,52 @@ async def get_provider_models(pid: str):
     return {"provider": pid, "models": models, "base_url": p["api"]}
 
 
+def _sync_custom_providers_to_hermes(pid=None):
+    """把「有 key 的 provider」同步为 Hermes config.yaml 的 custom_providers。
+
+    修复 2026-08-08：provider key 原来只存 MemOmics 的 provider_keys.json，
+    Hermes 底座（config.yaml）看不到 → 底座侧模型路由/校验对不上。现每个
+    保存/删除 key 的操作都同步一份到 config.yaml，与底座本地配置一致。
+    """
+    try:
+        from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
+        cfg = read_raw_config() or {}
+        existing = {}
+        for c in cfg.get("custom_providers") or []:
+            if isinstance(c, dict) and c.get("id"):
+                existing[c["id"]] = c
+        if pid is None:
+            for p in _CHINA_PROVIDERS:
+                saved = _provider_keys.get(p["id"])
+                if saved and saved.get("api_key"):
+                    existing[p["id"]] = {
+                        "id": p["id"], "name": p["name"],
+                        "api_base": saved.get("base_url") or p["api"],
+                        "api_key": saved["api_key"],
+                        "models": p.get("models", []),
+                    }
+        elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
+            p = _PROVIDERS_INDEX.get(pid) or {}
+            saved = _provider_keys[pid]
+            existing[pid] = {
+                "id": pid, "name": p.get("name", pid),
+                "api_base": saved.get("base_url") or p.get("api", ""),
+                "api_key": saved["api_key"],
+                "models": p.get("models", []),
+            }
+        else:
+            existing.pop(pid, None)
+        cfg["custom_providers"] = list(existing.values())
+        atomic_config_write(get_config_path(), cfg)
+        return True
+    except Exception as e:
+        print(f"[WARN] 同步 custom_providers 到 config.yaml 失败: {e}")
+        return False
+
+
 @app.post("/api/providers/{pid}/key")
 async def save_provider_key(pid: str, payload: dict):
-    """保存指定 provider 的 API Key"""
+    """保存指定 provider 的 API Key（同时同步 Hermes config.yaml custom_providers）"""
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
@@ -3032,15 +3510,17 @@ async def save_provider_key(pid: str, payload: dict):
         return JSONResponse({"error": "api_key is required"}, status_code=400)
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
     _save_provider_keys()
+    _sync_custom_providers_to_hermes(pid)
     return {"ok": True, "provider": pid, "has_key": True}
 
 
 @app.delete("/api/providers/{pid}/key")
 async def delete_provider_key(pid: str):
-    """删除指定 provider 的 API Key"""
+    """删除指定 provider 的 API Key（同步移除 Hermes config.yaml custom_providers 条目）"""
     if pid in _provider_keys:
         del _provider_keys[pid]
         _save_provider_keys()
+        _sync_custom_providers_to_hermes(pid)
     return {"ok": True}
 
 
@@ -6419,6 +6899,24 @@ async def ws_endpoint(ws: WebSocket):
                     finally:
                         _session["running_agent"] = None
                         _session["running_task"] = None
+                        # LoopX 执行层：用户回合交付记录（cadence 数据源）
+                        try:
+                            from memomics.loopx_bridge import LoopXBridge
+                            _rd3 = _session.get("results_dir", "") or ""
+                            if _rd3:
+                                _final3 = locals().get("result", "") or ""
+                                LoopXBridge(_session["id"], _rd3, user_online=True).record_turn_delivery(
+                                    outcome="primary_goal_outcome" if _final3 and "完成" in str(_final3) else "outcome_progress",
+                                    summary=str(_final3)[:150],
+                                    model=(_session.get("model_config") or {}).get("model", ""),
+                                )
+                        except Exception:
+                            pass
+                        # ── token 消耗持久化（2026-08-07）：用户回合追加写入 token_usage.jsonl ──
+                        try:
+                            _persist_token_usage(_session, turn_kind="user")
+                        except Exception:
+                            pass
                         # 停止本轮心跳
                         _heartbeat_active["on"] = False
                         if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
@@ -6456,7 +6954,20 @@ async def ws_endpoint(ws: WebSocket):
                 # 返回当前会话的上下文窗口使用情况
                 agent = session.get("agent")
                 if agent is None:
-                    _session_emit(session, {"type": "context_usage", "error": "Agent 未初始化", "session_id": session["id"]})
+                    # agent 未初始化（重启/重连后还没发消息）：仍返回 DB 持久化的累计 token，
+                    # 让上下文窗口不因 agent 未创建而丢失历史统计
+                    _ss = _build_session_stats(session["id"])
+                    _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
+                    _session_emit(session, {"type": "context_usage", "data": {
+                        "categories": [],
+                        "context_max": 0,
+                        "context_used": 0,
+                        "context_percent": 0,
+                        "cumulative_tokens": _cumulative,
+                        "model": (session.get("model_config") or {}).get("model", ""),
+                        "session_stats": _ss,
+                        "headroom_stats": _get_headroom_stats(),
+                    }, "session_id": session["id"]})
                 else:
                     try:
                         from agent.context_breakdown import compute_session_context_breakdown

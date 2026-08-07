@@ -36,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,53 @@ _PROBE_THREAD: Optional[threading.Thread] = None
 # Generation counter — bumped on every reset so a stale worker (started
 # before a test reset) can't publish its result into the fresh generation.
 _PROBE_GEN = 0
+
+# --- 磁盘缓存（2026-08-08 新增）---
+# 探测结果（Python/pip/uv 工具链状态）在一天内几乎不可能变化。冷启动进程
+# 直接读磁盘缓存秒级返回，后台线程再异步复测。修复：每次 _create_agent()
+# 构造系统提示时等待 probe 子进程 ~6.3s，导致 MemOmics 启动/切模型变慢。
+_ENV_PROBE_CACHE_FILE = "env_probe_cache.json"
+_ENV_PROBE_CACHE_TTL = 86400  # 1 day
+
+
+def _env_probe_cache_path() -> Optional[str]:
+    try:
+        from hermes_constants import get_hermes_home
+        return str(get_hermes_home() / _ENV_PROBE_CACHE_FILE)
+    except Exception:
+        return None
+
+
+def _env_probe_load_disk() -> Optional[str]:
+    """Return cached probe line if fresh (≤1 day), else None. Never raises."""
+    try:
+        path = _env_probe_cache_path()
+        if not path or not os.path.isfile(path):
+            return None
+        import json
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return None
+        age = time.time() - float(data.get("ts", 0))
+        if age < 0 or age > _ENV_PROBE_CACHE_TTL:
+            return None
+        return data.get("line", "") or ""
+    except Exception:
+        return None
+
+
+def _env_probe_save_disk(line: str) -> None:
+    """Persist the probe result to disk (best-effort, never raises)."""
+    try:
+        path = _env_probe_cache_path()
+        if not path:
+            return
+        import json
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"line": line, "ts": time.time()}, f, ensure_ascii=False)
+    except Exception:
+        pass
 
 # Upper bound a prompt build will wait for the probe.  Generous vs the
 # ~0.5s healthy runtime (6 subprocesses × 3s timeout ≈ 18s pathological
@@ -283,6 +331,16 @@ def get_environment_probe_line(*, force_refresh: bool = False) -> str:
     if _PROBE_DONE.is_set():
         return _CACHED_LINE or ""
 
+    # 冷启动：先试磁盘缓存（≤1 天直接秒回，跳过 6.3s 子进程探测）。
+    # probe 结果进程内不变，磁盘缓存与真实探测等价；缓存过期后
+    # _env_probe_load_disk() 返回 None，自然落入完整探测路径。
+    disk_line = _env_probe_load_disk()
+    if disk_line is not None:
+        with _CACHE_LOCK:
+            _CACHED_LINE = disk_line
+            _PROBE_DONE.set()
+        return _CACHED_LINE or ""
+
     _ensure_probe_started()
     wait_timeout = 0.05 if _WAIT_ALREADY_TIMED_OUT else _PROBE_WAIT_TIMEOUT
     if not _PROBE_DONE.wait(timeout=wait_timeout):
@@ -313,6 +371,7 @@ def _probe_worker(gen: int) -> None:
             return  # superseded by a reset (tests) — discard stale result
         _CACHED_LINE = line
         _PROBE_DONE.set()
+    _env_probe_save_disk(line)  # 落盘，供下次冷启动秒回
 
 
 def _ensure_probe_started() -> None:
