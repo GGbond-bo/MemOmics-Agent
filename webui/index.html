@@ -2156,9 +2156,19 @@ function switchSession(sid) {
 
   // === 会话级独立模型：切换会话时更新模型徽章 + 刷新上下文窗口 ===
   var _sessMeta = (_allSessions || []).find(function(_s) { return _s.id === sid; });
-  if (_sessMeta && _sessMeta.model) {
+  var _sessModel = (_sessMeta && _sessMeta.model) || '';
+  if (_sessModel) {
     var _badge = document.getElementById('model-badge');
-    if (_badge) _badge.textContent = _sessMeta.model;
+    if (_badge) _badge.textContent = _sessModel;
+    // 修复 2026-08-08：切换会话只更新徽章不更新下拉框 → 下拉框一直显示
+    // 页面加载时的全局默认模型（DeepSeek V4 Flash）。这里同步选中下拉框。
+    var _sel = document.getElementById('model-select');
+    if (_sel) {
+      var _opts = _sel.options;
+      for (var _oi = 0; _oi < _opts.length; _oi++) {
+        if (_opts[_oi].value.split('\u0001')[0] === _sessModel) { _sel.selectedIndex = _oi; break; }
+      }
+    }
   }
   refreshContextUsage();
 
@@ -2406,7 +2416,13 @@ async function onProviderSelect() {
       if (m.tool_call) label += ' [工具]';
       return '<option value="' + m.id + '">' + label + '</option>';
     }).join('');
-    if (currentProviderModels.length) sel.value = currentProviderModels[0].id;
+    // 修复 2026-08-08：按当前模型选中，而不是永远选第一个（第一个可能是 Flash）
+    var curModel = (currentModel && currentModel.model) || '';
+    if (curModel && currentProviderModels.some(function(x) { return x.id === curModel; })) {
+      sel.value = curModel;
+    } else if (currentProviderModels.length) {
+      sel.value = currentProviderModels[0].id;
+    }
   } catch(e) {
     document.getElementById('settings-model').innerHTML = '<option value="">(无法加载模型)</option>';
   }
@@ -2524,6 +2540,13 @@ function onModelSelect() {
         document.getElementById('footer-info').innerHTML = 'MemOmics v1';
         refreshModelSelect();
         refreshContextUsage();
+        // 修复 2026-08-08：切换后同步会话列表数据（否则切到别的会话再切回来，
+        // switchSession 用旧的 _allSessions.model 把徽章/下拉框又改回旧值）
+        if (currentSid && _allSessions) {
+          var _target = _allSessions.find(function(x) { return x.id === currentSid; });
+          if (_target) _target.model = currentModel.model;
+        }
+        loadSessions();
       }).catch(e => {
         alert('\u26a0\ufe0f 切换模型请求失败：' + e);
       });
@@ -2568,6 +2591,12 @@ async function saveModel() {
   currentModel = d.current;
   document.getElementById('model-badge').textContent = currentModel.model;
   document.getElementById('footer-info').innerHTML = 'MemOmics v1';
+  // 同步会话列表（切走再切回时 switchSession 显示最新模型）
+  if (currentSid && _allSessions) {
+    var _t2 = _allSessions.find(function(x) { return x.id === currentSid; });
+    if (_t2) _t2.model = currentModel.model;
+  }
+  loadSessions();
   var sel = document.getElementById('model-select');
   if (sel) {
     // option value 为 id+字面"\\u0001"+provider_id 格式，按 id 前缀匹配回显
