@@ -3395,6 +3395,35 @@ async def switch_model(payload: dict):
     api_key = payload.get("api_key", "")
     provider = payload.get("provider", "")
 
+    # ── 自动补全（2026-08-08 重新设计）：前端只需传 model id（+可选 provider_id）。
+    # 原来要求前端把 base_url/api_key 都传全，旧页面/简化调用方缺字段时切换
+    # 静默失败或串 key。现在后端按 model id 在已配置的 provider 里查补。
+    if model and not base_url:
+        _prov_hint = payload.get("provider_id") or ""
+        _found = False
+        for _pid, _saved in _provider_keys.items():
+            if not (_saved or {}).get("api_key"):
+                continue
+            _p = _PROVIDERS_INDEX.get(_pid)
+            if not _p:
+                continue
+            if _prov_hint and _pid != _prov_hint:
+                continue
+            for _m in _p.get("models", []):
+                if _m["id"] == model:
+                    base_url = _p["api"]
+                    api_key = _saved["api_key"]
+                    provider = provider or "openai"
+                    _found = True
+                    break
+            if _found:
+                break
+        if not _found:
+            return JSONResponse(
+                {"error": f"模型 '{model}' 未配置 API Key，请先到设置页选择 Provider 并保存 Key"},
+                status_code=400,
+            )
+
     if sid:
         # ── 会话级切换 ──
         s = _sessions.get(sid)

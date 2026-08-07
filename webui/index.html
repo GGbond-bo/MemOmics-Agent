@@ -2521,40 +2521,32 @@ function onModelSelect() {
   var parts = selVal.split('\\u0001');
   var modelId = parts[0];
   var providerId = parts[1] || '';
-  fetch('/api/models/available').then(r => r.json()).then(d => {
-    var list = d.models || [];
-    var m = providerId
-      ? list.find(function(x) { return x.id === modelId && x.provider_id === providerId; })
-      : list.find(function(x) { return x.id === modelId; });
-    if (!m) {
-      alert('\u26a0\ufe0f 模型 "' + modelId + '" 未配置 API Key，请先到设置页选择 Provider 并保存 Key，或在设置页直接切换。');
+  // 2026-08-08 重新设计：不依赖 /api/models/available 查找（旧页面/数据异常时
+  // 静默失败），直接把 model id + provider_id 交给后端，由后端自动补全
+  // base_url/api_key（switch 处理器内按已配置 provider 匹配）。
+  fetch('/api/models/switch', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ model: modelId, provider_id: providerId, session_id: currentSid })
+    }).then(r => r.json()).then(d2 => {
+      if (d2 && d2.error) {
+        alert('\u26a0\ufe0f 切换失败：' + d2.error + '\n\n请刷新页面后重试（会话列表需重新加载）。');
+        return;
+      }
+      currentModel = d2.current;
+      document.getElementById('model-badge').textContent = (d2.current && d2.current.model) || currentModel.model;
+      document.getElementById('footer-info').innerHTML = 'MemOmics v1';
       refreshModelSelect();
-      return;
-    }
-    fetch('/api/models/switch', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ model: m.id, base_url: m.base_url, provider: 'openai', api_key: m.api_key, session_id: currentSid })
-      }).then(r => r.json()).then(d2 => {
-        if (d2 && d2.error) {
-          alert('\u26a0\ufe0f 切换失败：' + d2.error + '\n\n请刷新页面后重试（会话列表需重新加载）。');
-          return;
-        }
-        currentModel = d2.current;
-        document.getElementById('model-badge').textContent = (d2.current && d2.current.model) || currentModel.model;
-        document.getElementById('footer-info').innerHTML = 'MemOmics v1';
-        refreshModelSelect();
-        refreshContextUsage();
-        // 修复 2026-08-08：切换后同步会话列表数据（否则切到别的会话再切回来，
-        // switchSession 用旧的 _allSessions.model 把徽章/下拉框又改回旧值）
-        if (currentSid && _allSessions) {
-          var _target = _allSessions.find(function(x) { return x.id === currentSid; });
-          if (_target) _target.model = currentModel.model;
-        }
-        loadSessions();
-      }).catch(e => {
-        alert('\u26a0\ufe0f 切换模型请求失败：' + e);
-      });
-  });
+      refreshContextUsage();
+      // 修复 2026-08-08：切换后同步会话列表数据（否则切到别的会话再切回来，
+      // switchSession 用旧的 _allSessions.model 把徽章/下拉框又改回旧值）
+      if (currentSid && _allSessions) {
+        var _target = _allSessions.find(function(x) { return x.id === currentSid; });
+        if (_target) _target.model = currentModel.model;
+      }
+      loadSessions();
+    }).catch(e => {
+      alert('\u26a0\ufe0f 切换模型请求失败：' + e);
+    });
 }
 
 function onSettingsModelSelect() {
