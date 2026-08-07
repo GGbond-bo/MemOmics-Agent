@@ -91,7 +91,7 @@ if %errorlevel% neq 0 (
 
 :start_server
 echo.
-echo [START] http://localhost:%PORT%
+echo [START] http://127.0.0.1:%PORT%
 echo.
 
 REM Launch CellBender monitor daemon (if present)
@@ -125,7 +125,9 @@ if defined READY (
 ) else (
     echo [WARN] Server did not respond within 120s. Opening browser anyway...
 )
-explorer.exe "http://localhost:%PORT%"
+REM 修复 2026-08-08：必须用 127.0.0.1 而非 localhost —— Windows 上 localhost
+REM 优先解析为 IPv6 ::1，而 server 只监听 IPv4 127.0.0.1，浏览器会报"找不到接口"。
+explorer.exe "http://127.0.0.1:%PORT%"
 
 echo.
 echo Server is running in the "MemOmics-Server" window (close it to stop).
