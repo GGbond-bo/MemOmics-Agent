@@ -2454,7 +2454,11 @@ async function saveProviderKey() {
 // 刷新已连接模型列表 (设置面板)
 async function refreshConnectedModels() {
   try {
-    var r = await fetch('/api/models/available');
+    // 修复 2026-08-08：带 session_id，让后端按当前会话判定 ●当前
+    // （原来不带 → 后端用全局 _current_model → 会话实际用 kimi/GLM 时
+    //  "已连接的模型" 却把 ●当前 标在全局默认 Flash 上）
+    var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
+    var r = await fetch('/api/models/available' + qs);
     var d = await r.json();
     var el = document.getElementById('connected-models-list');
     if (!el) return;

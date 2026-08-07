@@ -3562,8 +3562,20 @@ async def delete_provider_key(pid: str):
 
 
 @app.get("/api/models/available")
-async def list_available_models():
-    """列出所有已配置 key 的 provider 的模型 — 用于交互框快速切换"""
+async def list_available_models(session_id: str = ""):
+    """列出所有已配置 key 的 provider 的模型 — 用于交互框快速切换
+
+    2026-08-08 修复：is_current 优先按会话级模型判定（带 session_id 且该会话
+    做过会话级切换时），否则退回全局 _current_model。原来只认全局 → 用户会话
+    实际用 kimi/GLM，设置页"已连接的模型"却把 ●当前 标在全局默认 Flash 上。
+    """
+    # 会话级当前模型（用于 is_current 判定）
+    sess_cfg = None
+    if session_id:
+        s = _sessions.get(session_id)
+        if s and s.get("model_config"):
+            sess_cfg = s["model_config"]
+    cur_cfg = sess_cfg or _current_model
     models = []
     for pid, saved in _provider_keys.items():
         if not saved.get("api_key"):
@@ -3571,8 +3583,8 @@ async def list_available_models():
         p = _PROVIDERS_INDEX.get(pid)
         if not p:
             continue
-        is_current = (_current_model.get("api_key") == saved.get("api_key") and
-                      _current_model.get("base_url") == p["api"])
+        is_current = (cur_cfg.get("api_key") == saved.get("api_key") and
+                      cur_cfg.get("base_url") == p["api"])
         for m in p.get("models", []):
             models.append({
                 "id": m["id"], "name": m["name"],
@@ -3580,7 +3592,7 @@ async def list_available_models():
                 "base_url": p["api"], "api_key": saved["api_key"],
                 "reasoning": m.get("reasoning", False),
                 "tool_call": m.get("tool_call", False),
-                "is_current": is_current and _current_model.get("model") == m["id"],
+                "is_current": is_current and cur_cfg.get("model") == m["id"],
             })
     return {"models": models, "total": len(models)}
 
