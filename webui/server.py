@@ -1667,8 +1667,9 @@ _sync_debate_env()
 # 预设模型 (兼容旧 API, 从 _CHINA_PROVIDERS 生成)
 _preset_models = []
 for p in _CHINA_PROVIDERS:
+    _pname = p["name"].split("(")[0].strip()
     for m in p.get("models", []):
-        _preset_models.append({"id": m["id"], "name": m["name"] + " (" + p["name"].split("(")[0].strip() + ")", "provider": "openai", "provider_id": p["id"], "base_url": p["api"]})
+        _preset_models.append({"id": m["id"], "name": m["name"] + " (" + _pname + ")", "provider": "openai", "provider_id": p["id"], "base_url": p["api"], "provider_name": _pname})
 
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")

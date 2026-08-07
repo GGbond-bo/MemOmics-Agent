@@ -2306,15 +2306,38 @@ let currentProviderModels = [];
 // 切会话/切换模型后各展示点各改各的、残留旧值 → 下拉框永远显示 Flash。
 async function refreshModelUI() {
   var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
+  // currentModel：会话级真实当前模型（徽章 + 下拉框选中依据）
   var r = await fetch('/api/models' + qs);
   var d = await r.json();
   models = d.presets || [];
   currentModel = d.current || {};
   var sel = document.getElementById('model-select');
   if (sel) {
-    sel.innerHTML = models.map(function(m) {
-      return '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>';
-    }).join('');
+    // 2026-08-08：下拉框只列"已连接（有 key）"的模型，按供应商分组（optgroup），
+    // 不再把未配置 key 的供应商（OpenAI/Anthropic 等）也堆进来。
+    var av = await fetch('/api/models/available' + qs);
+    var ad = await av.json();
+    var availModels = (ad && ad.models) || [];
+    var groups = {};
+    availModels.forEach(function(m) {
+      var gk = m.provider_id || '其他';
+      if (!groups[gk]) groups[gk] = { name: m.provider_name || gk, items: [] };
+      groups[gk].items.push(m);
+    });
+    var html = '';
+    Object.keys(groups).forEach(function(g) {
+      html += '<optgroup label="' + escapeHtml(groups[g].name) + '">';
+      groups[g].items.forEach(function(m) {
+        html += '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>';
+      });
+      html += '</optgroup>';
+    });
+    // 当前模型不在已连接列表时（全局默认未配 key 等极端情况）追加一项保证可显示
+    var hasCur = availModels.some(function(m) { return m.id === currentModel.model; });
+    if (!hasCur && currentModel.model) {
+      html += '<optgroup label="当前模型"><option value="' + currentModel.model + '\\u0001" selected>' + currentModel.model + '</option></optgroup>';
+    }
+    sel.innerHTML = html;
   }
   var badge = document.getElementById('model-badge');
   if (badge) badge.textContent = currentModel.model || '未设置';
