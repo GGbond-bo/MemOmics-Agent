@@ -115,9 +115,9 @@ if exist "F:\CellBender_v2\error_scanner.py" (
     start "CellBender-ErrorScanner" /MIN python "F:\CellBender_v2\error_scanner.py"
 )
 
-REM 前台运行 server（2026-08-08 恢复单窗口模式）。
-REM server 就绪后由 server.py 自己自动打开浏览器（webbrowser 调用默认浏览器，
-REM 不会像 explorer.exe 那样弹"找不到"错误框），本窗口显示运行日志。
+REM 前台运行 server（2026-08-08 单窗口模式）。
+REM 不再自动打开浏览器（用户手动输入地址，避免重复标签页）。
+REM 启动后请在浏览器访问 http://127.0.0.1:%PORT%
 "%PYTHON%" webui\server.py
 echo.
 echo Exit code: %errorlevel%

@@ -7201,28 +7201,10 @@ if __name__ == "__main__":
     except Exception:
         pass
     
-    print(f"MemOmics WebUI v2 starting on http://localhost:{port}")
-    # 后台线程：server 就绪后自动打开浏览器（2026-08-08）。
-    # 替代 start.bat 的 explorer.exe —— Windows 上 explorer 打开 URL 会弹
-    # "找不到"错误框；且轮询保证在 server 就绪后才打开，不会"打不开"。
-    def _open_browser_when_ready():
-        try:
-            import socket as _socket
-            for _ in range(90):  # 最多等 180s
-                try:
-                    with _socket.create_connection(("127.0.0.1", port), 2):
-                        break
-                except OSError:
-                    _time.sleep(2)
-            import webbrowser
-            webbrowser.open(f"http://127.0.0.1:{port}")
-            print(f"[MemOmics] 浏览器已自动打开 http://127.0.0.1:{port}")
-        except Exception as _be:
-            print(f"[WARN] 自动打开浏览器失败: {_be}")
-    try:
-        _threading.Thread(target=_open_browser_when_ready, daemon=True, name="open-browser").start()
-    except Exception:
-        pass
+    print(f"MemOmics WebUI v2 starting on http://127.0.0.1:{port}")
+    # 2026-08-08：不再自动打开浏览器（用户要求手动输入地址，
+    # 避免每次启动/重启都新开标签页）。请在浏览器手动访问：
+    print(f"[MemOmics] 请在浏览器手动打开: http://127.0.0.1:{port}")
     # 自动重启：DeepSeek API 空响应等非致命错误不应杀死整个服务
     _crash_count = 0
     while True:
