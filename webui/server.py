@@ -7173,9 +7173,22 @@ async def ws_endpoint(ws: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     import time as _time
+    import socket as _sock
     port = int(os.environ.get("MEMOMICS_PORT", "8899"))
     _load_persisted_sessions()
-    
+
+    # 2026-08-08：端口已被占用 = 已有实例在运行。
+    # 直接退出（不开第二个 server、不开新浏览器标签）——用户已打开的
+    # WebUI 页面继续使用（WS 自动重连），避免每次点 start.bat 都多一个标签页。
+    try:
+        with _sock.create_connection(("127.0.0.1", port), 1):
+            print(f"[MemOmics] 端口 {port} 已被占用 — 已有实例在运行。", flush=True)
+            print(f"[MemOmics] 请直接使用已打开的 http://127.0.0.1:{port} 页面", flush=True)
+            print(f"[MemOmics] （如需重启：先关闭原 MemOmics 窗口，再重新启动）", flush=True)
+            raise SystemExit(0)
+    except OSError:
+        pass  # 端口空闲，正常启动
+
     # 启动 CellBender 监控守护（独立进程，不随 server 崩溃）
     try:
         import subprocess as _sp

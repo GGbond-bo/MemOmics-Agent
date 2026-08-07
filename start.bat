@@ -10,6 +10,17 @@ echo         MemOmics-Agent v2.0
 echo ============================================================
 echo.
 
+REM --- 2026-08-08: 端口占用检测（已有实例运行则不重复启动/不重复开浏览器）---
+netstat -ano | findstr /r /c:":%PORT% .*LISTENING" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [INFO] MemOmics is already running at http://127.0.0.1:%PORT%
+    echo        Use the already-open WebUI page. No new browser tab will be opened.
+    echo        To restart: close the old MemOmics window first, then run this again.
+    echo.
+    pause
+    exit /b 0
+)
+
 set "HERMES_HOME=%~dp0hermes_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
