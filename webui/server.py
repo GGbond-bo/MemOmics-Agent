@@ -2757,6 +2757,86 @@ def _restore_single_session(sid):
     return None
 
 
+def _restore_one_persisted_session(db, s):
+    """恢复单个会话到内存（从 _load_persisted_sessions 抽出，单条失败不影响整体）。"""
+    sid = s.get("session_id") or s.get("id")
+    if not sid or sid in _sessions:
+        return False
+    # 只加载 memomics 开头的会话
+    if not sid.startswith("memomics-"):
+        return False
+    msgs = db.get_messages_as_conversation(sid) or []
+    # 转成 MemOmics 格式
+    messages = []
+    for m in msgs:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": str(content), "time": ""})
+    # 空会话也恢复（用户可能创建了但还没发消息）
+    # 恢复 results_dir：优先从 state.db 的 cwd 字段读，没有就用 sid
+    persisted_cwd = s.get("cwd") or ""
+    # list_sessions_rich 不返回 cwd 字段，需要单独查询
+    if not persisted_cwd:
+        try:
+            row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
+            if row and row[0]:
+                persisted_cwd = row[0]
+        except Exception:
+            pass
+    if persisted_cwd and os.path.isdir(persisted_cwd):
+        # 安全验证：cwd 必须在 results/ 下（防止被外部路径污染）
+        _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
+        cwd_abs = os.path.abspath(persisted_cwd.replace("/", os.sep))
+        if cwd_abs.startswith(_results_base + os.sep) or cwd_abs == _results_base:
+            results_dir = persisted_cwd.replace("/", os.sep)
+        else:
+            results_dir = os.path.join(RESULTS_DIR, sid)
+    else:
+        # 尝试 RESULTS_DIR/sid
+        default_dir = os.path.join(RESULTS_DIR, sid)
+        if os.path.isdir(default_dir):
+            contents = os.listdir(default_dir)
+            if contents == ["log"] or contents == []:
+                # 空壳目录 — 扫描找到实际分析结果目录
+                results_dir = _scan_results_dir_for_session(sid, default_dir)
+            else:
+                results_dir = default_dir
+        else:
+            results_dir = _scan_results_dir_for_session(sid, default_dir)
+    ts_started = s.get("started_at")
+    ts_active = s.get("last_active")
+    try:
+        created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
+    except Exception:
+        active_str = created_str
+    session = {
+        "id": sid,
+        "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
+        "created": created_str,
+        "last_active": active_str,
+        "messages": messages,
+        "model_config": _restore_session_model_config(sid, _current_model),
+        "results_dir": results_dir,
+        "todos": [],
+        "bg_running": False,
+        "running_agent": None,
+        "running_task": None,
+        "restored": True,
+        "progress_log": [],
+        "reasoning_log": [],
+        "ws_attached": False,
+        "ws_ref": None,
+        "loop_ref": None,
+    }
+    _sessions[sid] = session
+    return True
+
+
 def _load_persisted_sessions():
     """启动时从 Hermes state.db 恢复历史会话"""
     db = _get_session_db()
@@ -2764,85 +2844,32 @@ def _load_persisted_sessions():
         print("[MemOmics] SessionDB 不可用，跳过会话恢复", flush=True)
         return
     try:
+        # 自愈（2026-08-08）：清理 sessions.model_config 里的空串/坏 JSON。
+        # 空串 '' 不是合法 JSON，Hermes 的 list_sessions_rich 内部对
+        # model_config 做 json_extract 时抛 "malformed JSON" → 整个会话恢复
+        # 中断（内存 0 会话）→ 前端所有会话级操作（切模型等）404 静默失败。
+        # 坏数据的来源：任何把 model_config 写成 '' 而非 NULL 的路径。
+        try:
+            if db._conn:
+                db._conn.execute(
+                    "UPDATE sessions SET model_config = NULL "
+                    "WHERE model_config IS NOT NULL AND json_valid(model_config) = 0"
+                )
+                db._conn.commit()
+        except Exception:
+            pass
         sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
         count = 0
         for s in sessions:
-            sid = s.get("session_id") or s.get("id")
-            if not sid or sid in _sessions:
-                continue
-            # 只加载 memomics 开头的会话
-            if not sid.startswith("memomics-"):
-                continue
-            msgs = db.get_messages_as_conversation(sid) or []
-            # 转成 MemOmics 格式
-            messages = []
-            for m in msgs:
-                role = m.get("role", "")
-                content = m.get("content", "")
-                if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content), "time": ""})
-            # 空会话也恢复（用户可能创建了但还没发消息）
-            # 恢复 results_dir：优先从 state.db 的 cwd 字段读，没有就用 sid
-            persisted_cwd = s.get("cwd") or ""
-            # list_sessions_rich 不返回 cwd 字段，需要单独查询
-            if not persisted_cwd:
-                try:
-                    row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
-                    if row and row[0]:
-                        persisted_cwd = row[0]
-                except Exception:
-                    pass
-            if persisted_cwd and os.path.isdir(persisted_cwd):
-                # 安全验证：cwd 必须在 results/ 下（防止被外部路径污染）
-                _results_base = os.path.abspath(RESULTS_DIR).rstrip(os.sep)
-                cwd_abs = os.path.abspath(persisted_cwd.replace("/", os.sep))
-                if cwd_abs.startswith(_results_base + os.sep) or cwd_abs == _results_base:
-                    results_dir = persisted_cwd.replace("/", os.sep)
-                else:
-                    results_dir = os.path.join(RESULTS_DIR, sid)
-            else:
-                # 尝试 RESULTS_DIR/sid
-                default_dir = os.path.join(RESULTS_DIR, sid)
-                if os.path.isdir(default_dir):
-                    contents = os.listdir(default_dir)
-                    if contents == ["log"] or contents == []:
-                        # 空壳目录 — 扫描找到实际分析结果目录
-                        results_dir = _scan_results_dir_for_session(sid, default_dir)
-                    else:
-                        results_dir = default_dir
-                else:
-                    results_dir = _scan_results_dir_for_session(sid, default_dir)
-            ts_started = s.get("started_at")
-            ts_active = s.get("last_active")
             try:
-                created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-            try:
-                active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
-            except Exception:
-                active_str = created_str
-            session = {
-                "id": sid,
-                "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
-                "created": created_str,
-                "last_active": active_str,
-                "messages": messages,
-                "model_config": _restore_session_model_config(sid, _current_model),
-                "results_dir": results_dir,
-                "todos": [],
-                "bg_running": False,
-                "running_agent": None,
-                "running_task": None,
-                "restored": True,
-                "progress_log": [],
-                "reasoning_log": [],
-                "ws_attached": False,
-                "ws_ref": None,
-                "loop_ref": None,
-            }
-            _sessions[sid] = session
-            count += 1
+                _loaded = _restore_one_persisted_session(db, s)
+                if _loaded:
+                    count += 1
+            except Exception as e:
+                # 单条会话恢复失败不影响其他会话（原来整个 for 循环被一个
+                # except 包住，一条坏数据 → 全部恢复失败 → 内存 0 会话）
+                print(f"[MemOmics] 会话 {s.get('session_id') or s.get('id')} 恢复失败: {e}", flush=True)
+                continue
         if count:
             print(f"[MemOmics] 从 state.db 恢复了 {count} 个历史会话", flush=True)
             # 恢复微信会话映射

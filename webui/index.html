@@ -2515,11 +2515,17 @@ function onModelSelect() {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ model: m.id, base_url: m.base_url, provider: 'openai', api_key: m.api_key, session_id: currentSid })
       }).then(r => r.json()).then(d2 => {
+        if (d2 && d2.error) {
+          alert('\u26a0\ufe0f 切换失败：' + d2.error + '\n\n请刷新页面后重试（会话列表需重新加载）。');
+          return;
+        }
         currentModel = d2.current;
         document.getElementById('model-badge').textContent = (d2.current && d2.current.model) || currentModel.model;
         document.getElementById('footer-info').innerHTML = 'MemOmics v1';
         refreshModelSelect();
         refreshContextUsage();
+      }).catch(e => {
+        alert('\u26a0\ufe0f 切换模型请求失败：' + e);
       });
   });
 }
@@ -2558,6 +2564,7 @@ async function saveModel() {
   } catch(e) {}
   var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey, session_id: currentSid }) });
   var d = await r.json();
+  if (d && d.error) { alert('\u26a0\ufe0f 切换失败：' + d.error); return; }
   currentModel = d.current;
   document.getElementById('model-badge').textContent = currentModel.model;
   document.getElementById('footer-info').innerHTML = 'MemOmics v1';
