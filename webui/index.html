@@ -2154,22 +2154,10 @@ function switchSession(sid) {
 
   currentSid = sid;
 
-  // === 会话级独立模型：切换会话时更新模型徽章 + 刷新上下文窗口 ===
-  var _sessMeta = (_allSessions || []).find(function(_s) { return _s.id === sid; });
-  var _sessModel = (_sessMeta && _sessMeta.model) || '';
-  if (_sessModel) {
-    var _badge = document.getElementById('model-badge');
-    if (_badge) _badge.textContent = _sessModel;
-    // 修复 2026-08-08：切换会话只更新徽章不更新下拉框 → 下拉框一直显示
-    // 页面加载时的全局默认模型（DeepSeek V4 Flash）。这里同步选中下拉框。
-    var _sel = document.getElementById('model-select');
-    if (_sel) {
-      var _opts = _sel.options;
-      for (var _oi = 0; _oi < _opts.length; _oi++) {
-        if (_opts[_oi].value.split('\u0001')[0] === _sessModel) { _sel.selectedIndex = _oi; break; }
-      }
-    }
-  }
+  // === 会话级独立模型：切会话时实时从后端拉会话级 current 刷新下拉框+徽章 ===
+  // （2026-08-08 重构：原来用 _allSessions 列表缓存的 model 字段猜测，
+  //   列表数据滞后/为空时展示残留旧值 → 下拉框永远 Flash）
+  refreshModelUI();
   refreshContextUsage();
 
   // === 立即清除旧会话的 DOM（不等 fetch，防止残留） ===
@@ -2302,21 +2290,38 @@ function switchView(view) {
 let allProviders = [];
 let currentProviderModels = [];
 
+// 统一模型展示刷新（2026-08-08 重构）：
+// 实时从后端拉当前（会话级）模型，重建下拉框 + 徽章。
+// 原来 loadModels 只在页面加载时跑一次（当时 currentSid 为空 → 全局默认 Flash），
+// 切会话/切换模型后各展示点各改各的、残留旧值 → 下拉框永远显示 Flash。
+async function refreshModelUI() {
+  var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
+  var r = await fetch('/api/models' + qs);
+  var d = await r.json();
+  models = d.presets || [];
+  currentModel = d.current || {};
+  var sel = document.getElementById('model-select');
+  if (sel) {
+    sel.innerHTML = models.map(function(m) {
+      return '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>';
+    }).join('');
+  }
+  var badge = document.getElementById('model-badge');
+  if (badge) badge.textContent = currentModel.model || '未设置';
+  return d;
+}
+
 async function loadModels() {
   try {
-    var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
-    var r = await fetch('/api/models' + qs);
-    var d = await r.json();
-    models = d.presets || [];
-    currentModel = d.current || {};
-    // 填充输入框下方的快速模型选择 (option value = id + 字面"\\u0001" + provider_id，
-    // 与 onModelSelect 的 split('\\u0001') 一致；修复 2026-08-08：原来只有 id，切换永远匹配不到)
-    var sel = document.getElementById('model-select');
-    sel.innerHTML = models.map(function(m) { return '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>'; }).join('');
+    await refreshModelUI();
+    // footer 显示版本（git commit + server 启动时间），确认加载的是新代码
+    try {
+      var vr = await fetch('/api/version');
+      var vd = await vr.json();
+      document.getElementById('footer-info').innerHTML = 'MemOmics v1 · ' + (vd.version || '?') + ' · ' + (vd.started || '');
+    } catch(e) {}
     // 加载 provider 列表到设置页
     await loadProviders();
-    document.getElementById('model-badge').textContent = currentModel.model || '未设置';
-    document.getElementById('footer-info').innerHTML = 'MemOmics v1';
   } catch(e) { console.error('loadModels error', e); }
 }
 
@@ -2527,15 +2532,15 @@ function onModelSelect() {
   fetch('/api/models/switch', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ model: modelId, provider_id: providerId, session_id: currentSid })
-    }).then(r => r.json()).then(d2 => {
+    }).then(r => r.json()).then(async d2 => {
       if (d2 && d2.error) {
         alert('\u26a0\ufe0f 切换失败：' + d2.error + '\n\n请刷新页面后重试（会话列表需重新加载）。');
         return;
       }
       currentModel = d2.current;
-      document.getElementById('model-badge').textContent = (d2.current && d2.current.model) || currentModel.model;
       document.getElementById('footer-info').innerHTML = 'MemOmics v1';
-      refreshModelSelect();
+      // 统一刷新所有模型展示（下拉框/徽章从后端实时拉，保证一致）
+      await refreshModelUI();
       refreshContextUsage();
       // 修复 2026-08-08：切换后同步会话列表数据（否则切到别的会话再切回来，
       // switchSession 用旧的 _allSessions.model 把徽章/下拉框又改回旧值）
@@ -2585,22 +2590,15 @@ async function saveModel() {
   var d = await r.json();
   if (d && d.error) { alert('\u26a0\ufe0f 切换失败：' + d.error); return; }
   currentModel = d.current;
-  document.getElementById('model-badge').textContent = currentModel.model;
   document.getElementById('footer-info').innerHTML = 'MemOmics v1';
+  // 统一刷新所有模型展示（下拉框/徽章从后端实时拉）
+  await refreshModelUI();
   // 同步会话列表（切走再切回时 switchSession 显示最新模型）
   if (currentSid && _allSessions) {
     var _t2 = _allSessions.find(function(x) { return x.id === currentSid; });
     if (_t2) _t2.model = currentModel.model;
   }
   loadSessions();
-  var sel = document.getElementById('model-select');
-  if (sel) {
-    // option value 为 id+字面"\\u0001"+provider_id 格式，按 id 前缀匹配回显
-    var opts = sel.options;
-    for (var oi = 0; oi < opts.length; oi++) {
-      if (opts[oi].value.split('\\u0001')[0] === currentModel.model) { sel.selectedIndex = oi; break; }
-    }
-  }
   var p = allProviders.find(function(x) { return x.id === pid; });
   alert('\u2705 模型已切换为: ' + currentModel.model + (p ? '\\n\ud83d\udce1 Provider: ' + p.name : ''));
   await refreshModelSelect();

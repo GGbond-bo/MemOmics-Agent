@@ -1081,6 +1081,7 @@ def _build_task_plan_context(session):
 
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
+_SERVER_STARTED_STR = datetime.now().strftime("%m-%d %H:%M")
 _bg_tasks = {}       # session_id -> background task info
 # === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
 # 旧实现每会话单 ws_ref，switch_session 会把切走会话的 ws_ref 置 None，
@@ -3709,6 +3710,22 @@ async def runtime_status():
 async def resource_status():
     """资源准入快照：容量 / 已用 / 可用 / 活动租约 / 排队"""
     return _resource_scheduler.snapshot()
+
+
+@app.get("/api/version")
+async def api_version():
+    """前端版本标识：git commit + server 启动时间。
+    用于排查"刷新没用"——footer 显示版本，用户/开发者一眼确认加载的是新代码。"""
+    import subprocess as _sp
+    rev = "unknown"
+    try:
+        _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
+                     capture_output=True, text=True, timeout=3)
+        if _r.returncode == 0:
+            rev = _r.stdout.strip()
+    except Exception:
+        pass
+    return {"version": rev, "started": _SERVER_STARTED_STR}
 
 
 @app.get("/api/health")
