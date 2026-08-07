@@ -148,7 +148,7 @@ async def _seed_self_check_startup():
                 if s.get("running_agent") or s.get("running_task"):
                     continue
                 _rd = s.get("results_dir", "") or ""
-                _active = (_rd and os.path.isfile(os.path.join(_rd, "task_plan.md"))) or _session_has_active_work(s)
+                _active = _task_plan_active(_rd) or _session_has_active_work(s)
                 if not _active:
                     continue
                 _agent = s.get("agent")
@@ -668,6 +668,36 @@ def _marker_belongs_to_session(marker_path, session):
     except Exception:
         pass
     return False
+
+
+def _task_plan_active(rd):
+    """task_plan.md 是否表示"还有进行中的工作"（内容级判定，修复 2026-08-08）。
+
+    原判定只看 task_plan.md 是否存在——任务已完成/被停止的会话（如
+    "Phase 1-6 全部完成"、"用户下达停止命令"）也被误判活跃 → 每次重启
+    都重新播种自检、持续唤醒，浪费 token 且打扰用户。
+    """
+    tp = os.path.join(rd, "task_plan.md")
+    if not os.path.isfile(tp):
+        return False
+    try:
+        with open(tp, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+    except Exception:
+        return True  # 读不了保守视为活跃
+    # 完成/停止/取消标记（命中任一 → 不活跃）
+    _done_marks = [
+        "全部完成", "已完成", "✅", "⛔", "停止", "cancelled", "paused",
+        "等待用户指示", "COMPLETE", "ALL DONE", "Status: completed",
+        "## 完成情况", "任务已完成",
+    ]
+    for _m in _done_marks:
+        if _m in content:
+            return False
+    # 所有任务项都已勾选（无未完成 checkbox）→ 完成
+    if "[" in content and "- [ ]" not in content and ("- [x]" in content or "- [X]" in content):
+        return False
+    return True
 
 
 def _session_has_active_work(session):
