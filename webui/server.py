@@ -2997,11 +2997,21 @@ def _create_agent(model_config=None, session_id=None, session=None):
     from run_agent import AIAgent
     from webui import enforcement as _enf
     cfg = model_config or _current_model
+    # 2026-08-08：provider 名按 base_url 智能映射。MemOmics 统一存 provider='openai'，
+    # 但 Hermes 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
+    # TLS 间歇性挂起需要短超时（60s）让外层 loop 重试，不能吃 openai 的 900s。
+    _provider = cfg.get("provider", "openai")
+    try:
+        from utils import base_url_host_matches as _host_matches
+        if _host_matches(cfg.get("base_url", ""), "opencode.ai"):
+            _provider = "opencode-go"
+    except Exception:
+        pass
     skills_index = _read_skills_index()
     agent = AIAgent(
         base_url=cfg["base_url"],
         api_key=cfg["api_key"],
-        provider=cfg.get("provider", "openai"),
+        provider=_provider,
         model=cfg["model"],
         max_iterations=300,
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob"],

@@ -4105,31 +4105,27 @@ class AIAgent:
                 keepalive_expiry=20.0,
             )
 
-            # Timeouts: generous read=None for SSE streaming endpoints.
-            # connect 15s → 60s：聚合网关（opencode.ai 等）并发时连接排队，
-            # 15s 连接超时导致多会话并发时 API 失败（"Request timed out"）。
+            # Timeouts: read 300s 上限（原 read=None 无限）——
+            # 聚合网关（opencode.ai 等）TLS 握手挂起时属于 read 阶段，
+            # connect 超时管不到，read=None 导致永久卡死（"思考"无响应）。
+            # 300s 对 SSE 流式无影响（事件间隔远小于此），TLS 挂起 5 分钟必超时→重试→明确报错。
             _timeout = _httpx.Timeout(
                 connect=60.0,
-                read=None,
+                read=300.0,
                 write=15.0,
                 pool=10.0,
             )
 
-            # When _proxy is None (NO_PROXY bypass or no proxy configured),
-            # mount plain transports to prevent httpx from reading env proxy
-            # vars and creating an HTTPProxy mount that would bypass our
-            # NO_PROXY resolution.
-            _mounts = {}
-            if _proxy is None:
-                _mounts = {
-                    "http://": _httpx.HTTPTransport(verify=verify),
-                    "https://": _httpx.HTTPTransport(verify=verify),
-                }
+            # 2026-08-08 修复：不再显式挂载 HTTPTransport。实测 httpx 0.28.1 中
+            # `mounts={"https://": HTTPTransport(verify=True)}` 会使 opencode.ai 等
+            # Cloudflare 网关的 TLS 握手挂起（_ssl.c:993 handshake timed out，
+            # 纯 httpx.Client() 默认 transport 1.8s 成功，挂载后 46s 超时）。
+            # 无代理时 mounts 是空 dict → `mounts or None` → 显式挂载 → 触发 bug。
+            # 默认 transport + proxy 参数已足够（无代理时直连，有代理时走 proxy）。
             return _httpx.Client(
                 limits=_limits,
                 timeout=_timeout,
                 proxy=_proxy,
-                mounts=_mounts or None,
                 verify=verify,
             )
         except Exception:
@@ -4683,6 +4679,15 @@ class AIAgent:
             self._client_kwargs["default_headers"] = _codex_cloudflare_headers(
                 self._client_kwargs.get("api_key", "")
             )
+        elif base_url_host_matches(base_url, "opencode.ai"):
+            # opencode.ai 的 API 网关有 Cloudflare 风控：Python 默认 UA 会被
+            # 403 error code 1010 拦截（2026-08-08 实测），必须带浏览器特征 headers。
+            self._client_kwargs["default_headers"] = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://opencode.ai",
+                "Referer": "https://opencode.ai/",
+            }
         else:
             # No URL-specific headers — check profile.default_headers before clearing.
             _ph_headers = None

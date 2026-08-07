@@ -990,6 +990,15 @@ def init_agent(
             elif base_url_host_matches(effective_base, "chatgpt.com"):
                 from agent.auxiliary_client import _codex_cloudflare_headers
                 client_kwargs["default_headers"] = _codex_cloudflare_headers(api_key)
+            elif base_url_host_matches(effective_base, "opencode.ai"):
+                # opencode.ai 的 API 网关有 Cloudflare 风控：Python 默认 UA 会被
+                # 403 error code 1010 拦截（2026-08-08 实测），必须带浏览器特征 headers。
+                client_kwargs["default_headers"] = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Origin": "https://opencode.ai",
+                    "Referer": "https://opencode.ai/",
+                }
             elif "default_headers" not in client_kwargs:
                 # Fall back to profile.default_headers for providers that
                 # declare custom headers (e.g. Kimi User-Agent on non-kimi.com
