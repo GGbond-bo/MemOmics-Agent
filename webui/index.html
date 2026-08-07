@@ -534,13 +534,25 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
     <!-- 知识库面板 -->
     <div id="panel-kb" style="display:none;">
-      <div class="info-header">知识库</div>
+      <div class="info-header">知识库
+        <span style="float:right;display:flex;gap:4px;align-items:center;">
+          <input id="kb-search-input" type="text" placeholder="🔍 搜索..." style="width:150px;font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);" oninput="onKbSearch(this.value)">
+          <button onclick="switchKbView('browse')" id="kb-btn-browse" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">浏览</button>
+          <button onclick="switchKbView('graph')" id="kb-btn-graph" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">图谱</button>
+        </span>
+      </div>
+      <div id="kb-search-results" style="display:none;max-height:60%;overflow-y:auto;padding:8px;"></div>
       <div class="file-path-bar" id="kb-path"></div>
       <div class="file-browser" id="kb-list"></div>
       <div class="file-preview" id="kb-preview" style="display:none;">
-        <button class="back-btn" onclick="closeKbPreview()">← 返回</button>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+          <button class="back-btn" onclick="closeKbPreview()">← 返回</button>
+          <button id="kb-raw-toggle" style="display:none;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;" onclick="toggleKbRaw()">查看原文</button>
+        </div>
+        <div id="kb-preview-render" style="padding:8px 4px;"></div>
         <pre id="kb-preview-content"></pre>
       </div>
+      <div id="kb-graph" style="display:none;height:70vh;"></div>
     </div>
 
     <!-- Skill 面板 -->
@@ -2884,17 +2896,185 @@ async function browseKb(path) {
   }).join('');
 }
 
+var _kbParsed = null;
+var _kbRawMode = false;
+var _kbSearchTimer = null;
+var _kbGraphLoaded = false;
+
 async function previewKb(path) {
-  var r = await fetch('/api/file/read?path=' + encodeURIComponent(path));
+  var r = await fetch('/api/kb/file?path=' + encodeURIComponent(path));
   var d = await r.json();
   document.getElementById('kb-list').style.display = 'none';
+  document.getElementById('kb-search-results').style.display = 'none';
+  document.getElementById('kb-path').style.display = 'none';
   document.getElementById('kb-preview').style.display = '';
   document.getElementById('kb-preview-content').textContent = d.content || '';
+  _kbParsed = d.parsed || null;
+  _kbRawMode = false;
+  var renderEl = document.getElementById('kb-preview-render');
+  var toggle = document.getElementById('kb-raw-toggle');
+  var pre = document.getElementById('kb-preview-content');
+  if (_kbParsed && typeof _kbParsed === 'object') {
+    renderEl.innerHTML = renderKbYaml(_kbParsed, 0);
+    pre.style.display = 'none';
+    toggle.style.display = '';
+    toggle.textContent = '查看原文';
+  } else {
+    renderEl.innerHTML = '';
+    pre.style.display = '';
+    toggle.style.display = 'none';
+  }
+}
+
+function toggleKbRaw() {
+  _kbRawMode = !_kbRawMode;
+  document.getElementById('kb-preview-render').style.display = _kbRawMode ? 'none' : '';
+  document.getElementById('kb-preview-content').style.display = _kbRawMode ? '' : 'none';
+  document.getElementById('kb-raw-toggle').textContent = _kbRawMode ? '查看结构化' : '查看原文';
+}
+
+function renderKbYaml(obj, depth) {
+  var out = '';
+  if (obj === null) return '<span style="color:var(--text-light);">null</span>';
+  if (typeof obj === 'boolean') return '<span style="color:#e67e22;">' + obj + '</span>';
+  if (typeof obj === 'number') return '<span style="color:#3498db;">' + obj + '</span>';
+  if (typeof obj === 'string') {
+    if (obj.indexOf('\n') >= 0) return '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;overflow-x:auto;margin:4px 0;white-space:pre-wrap;">' + escapeHtml(obj) + '</pre>';
+    return '<span>' + escapeHtml(obj) + '</span>';
+  }
+  if (Array.isArray(obj)) {
+    if (obj.length && obj.every(function(x) { return typeof x === 'string'; })) {
+      return '<div style="margin:4px 0;">' + obj.map(function(x) {
+        return '<span style="display:inline-block;background:rgba(52,152,219,0.15);color:var(--text);border-radius:4px;padding:1px 8px;margin:2px;font-size:11px;">' + escapeHtml(x) + '</span>';
+      }).join('') + '</div>';
+    }
+    out += '<div style="margin:4px 0;">';
+    obj.forEach(function(x) { out += '<div style="padding-left:' + (depth * 12 + 8) + 'px;">' + renderKbYaml(x, depth + 1) + '</div>'; });
+    return out + '</div>';
+  }
+  var keys = Object.keys(obj);
+  var scalars = keys.filter(function(k) { var v = obj[k]; return typeof v !== 'object' || v === null; });
+  if (scalars.length && depth === 0) {
+    out += '<table style="border-collapse:collapse;margin:6px 0;font-size:11px;">';
+    scalars.forEach(function(k) {
+      out += '<tr><td style="padding:2px 10px 2px 0;color:var(--text-light);white-space:nowrap;">' + escapeHtml(k) + '</td><td style="padding:2px 0;word-break:break-all;">' + renderKbYaml(obj[k], depth + 1) + '</td></tr>';
+    });
+    out += '</table>';
+  }
+  keys.filter(function(k) { var v = obj[k]; return typeof v === 'object' && v !== null; }).forEach(function(k) {
+    var v = obj[k];
+    out += '<details ' + (depth < 1 ? 'open' : '') + ' style="margin:6px 0;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:rgba(127,127,127,0.05);">';
+    out += '<summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--primary);">' + escapeHtml(k) +
+      ' <span style="color:var(--text-light);font-weight:400;font-size:10px;">' +
+      (Array.isArray(v) ? v.length + ' 项' : Object.keys(v).length + ' 字段') + '</span></summary>';
+    out += '<div style="margin-top:4px;">' + renderKbYaml(v, depth + 1) + '</div></details>';
+  });
+  return out;
+}
+
+function onKbSearch(v) {
+  clearTimeout(_kbSearchTimer);
+  _kbSearchTimer = setTimeout(function() { doKbSearch(v); }, 300);
+}
+
+async function doKbSearch(q) {
+  var box = document.getElementById('kb-search-results');
+  if (!q || !q.trim()) { box.style.display = 'none'; return; }
+  var r = await fetch('/api/kb/search?q=' + encodeURIComponent(q.trim()));
+  var d = await r.json();
+  var html = '<div style="font-size:11px;color:var(--text-light);margin-bottom:6px;">命中 ' + (d.total || 0) + ' 个文件</div>';
+  (d.results || []).forEach(function(res) {
+    var rel = res.path.split('knowledge_base/')[1] || res.path;
+    var name = rel.split('/').pop();
+    html += '<div class="file-item" onclick="previewKb(\'' + res.path.replace(/'/g, "\\'") + '\')">';
+    html += '<span class="file-icon">📚</span><span class="file-name">' + escapeHtml(name) +
+      ' <span style="color:var(--text-light);font-size:10px;">(' + res.hit_count + ' 处) ' + escapeHtml(rel.split('/').slice(0, -1).join('/')) + '</span></span></div>';
+    html += '<div style="font-size:10px;color:var(--text-light);padding:0 8px 6px 30px;white-space:pre-wrap;word-break:break-all;">' + escapeHtml(res.hits[0].snippet) + '</div>';
+  });
+  box.innerHTML = html;
+  box.style.display = '';
+  document.getElementById('kb-list').style.display = 'none';
+  document.getElementById('kb-path').style.display = 'none';
+  document.getElementById('kb-preview').style.display = 'none';
+}
+
+function switchKbView(mode) {
+  var browse = mode === 'browse';
+  document.getElementById('kb-list').style.display = browse ? '' : 'none';
+  document.getElementById('kb-path').style.display = browse ? '' : 'none';
+  document.getElementById('kb-search-results').style.display = 'none';
+  document.getElementById('kb-preview').style.display = 'none';
+  document.getElementById('kb-graph').style.display = browse ? 'none' : '';
+  var bb = document.getElementById('kb-btn-browse');
+  var bg = document.getElementById('kb-btn-graph');
+  bb.style.background = browse ? 'var(--primary)' : 'var(--border)';
+  bb.style.color = browse ? '#fff' : 'var(--text)';
+  bg.style.background = browse ? 'var(--border)' : 'var(--primary)';
+  bg.style.color = browse ? 'var(--text)' : '#fff';
+  if (!browse) loadKbGraph();
+}
+
+function loadCytoscape(cb) {
+  if (window.cytoscape) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js';
+  s.onload = function() { cb(); };
+  s.onerror = function() { cb(); };
+  document.head.appendChild(s);
+}
+
+function loadKbGraph() {
+  var el = document.getElementById('kb-graph');
+  if (_kbGraphLoaded) return;
+  _kbGraphLoaded = true;
+  fetch('/api/kb/graph').then(function(r) { return r.json(); }).then(function(d) {
+    el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;">节点：物种🟣 组织🔵 方向🟢 分类🟠 文件⚪ ｜ 灰线=层级 红虚线=方法共享 ｜ 点击文件节点查看内容</div><div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);"></div>';
+    loadCytoscape(function() {
+      if (typeof cytoscape === 'undefined') { renderKbGraphFallback(el, d); return; }
+      var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
+      var nodes = d.nodes.map(function(n) {
+        var depth = n.id.split('/').length - 1;
+        return { data: { id: n.id, label: n.label, color: colors[Math.min(depth, 4)], weight: n.type === 'file' ? 1 : 3, path: n.path, ntype: n.type } };
+      });
+      var edges = d.edges.map(function(e, i) {
+        return { data: { id: 'e' + i, source: e.source, target: e.target, type: e.type } };
+      });
+      var cy = cytoscape({
+        container: document.getElementById('kb-graph-canvas'),
+        elements: { nodes: nodes, edges: edges },
+        style: [
+          { selector: 'node', style: { 'label': 'data(label)', 'font-size': 9, 'text-valign': 'bottom', 'text-margin-y': 2, 'width': 'mapData(weight,1,3,12,30)', 'height': 'mapData(weight,1,3,12,30)', 'background-color': 'data(color)', 'border-width': 1, 'border-color': '#555', 'text-wrap': 'ellipsis', 'text-max-width': '90px' } },
+          { selector: 'edge', style: { 'width': 1, 'line-color': '#888', 'opacity': 0.5, 'curve-style': 'bezier' } },
+          { selector: 'edge[type="related"]', style: { 'line-color': '#e74c3c', 'line-style': 'dashed', 'opacity': 0.7 } }
+        ],
+        layout: { name: 'cose', animate: false, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }
+      });
+      cy.on('tap', 'node', function(evt) {
+        var n = evt.target.data();
+        if (n.ntype === 'file' && n.path) previewKb(n.path);
+      });
+    });
+  }).catch(function(err) {
+    el.innerHTML = '<div style="padding:12px;color:#e74c3c;font-size:12px;">图谱加载失败：' + escapeHtml(err.message || err) + '</div>';
+  });
+}
+
+function renderKbGraphFallback(el, d) {
+  var html = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;">图谱渲染库不可用（离线环境），降级为文件列表：</div>';
+  d.nodes.filter(function(n) { return n.type === 'file'; }).forEach(function(n) {
+    html += '<div class="file-item" onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')"><span class="file-icon">📚</span><span class="file-name">' + escapeHtml(n.label) + ' <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(n.id) + '</span></span></div>';
+  });
+  el.innerHTML = html;
 }
 
 function closeKbPreview() {
   document.getElementById('kb-preview').style.display = 'none';
-  document.getElementById('kb-list').style.display = '';
+  var q = document.getElementById('kb-search-input').value;
+  if (q && q.trim()) { doKbSearch(q); }
+  else {
+    document.getElementById('kb-list').style.display = '';
+    document.getElementById('kb-path').style.display = '';
+  }
 }
 
 // === Skill 浏览 ===
