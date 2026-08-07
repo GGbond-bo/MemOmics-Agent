@@ -1852,7 +1852,15 @@ async function newSession() {
 function autoSelectLatestSession() {
   // 如果有历史会话，自动切换到最近活跃的（列表按 last_active 降序排列）
   if (_allSessions && _allSessions.length > 0) {
-    switchSession(_allSessions[0].id);
+    // 2026-08-08：优先恢复上次会话（localStorage 记忆），否则选最近活跃的。
+    // 原来永远选 _allSessions[0]（可能是一个空配置的自检/新会话）→ 刷新后
+    // 下拉框显示全局默认 Flash，用户切过模型的会话反而选不中。
+    var _last = localStorage.getItem('memomics_last_session');
+    if (_last && _allSessions.some(function(s) { return s.id === _last; })) {
+      switchSession(_last);
+    } else {
+      switchSession(_allSessions[0].id);
+    }
   } else {
     newSession();  // 真的没有任何历史会话才新建
   }
@@ -2153,6 +2161,8 @@ function switchSession(sid) {
   _snapshotCurrentSession();
 
   currentSid = sid;
+  // 记住当前会话（2026-08-08：刷新后 autoSelectLatestSession 优先恢复它）
+  try { localStorage.setItem('memomics_last_session', sid); } catch(e) {}
 
   // === 会话级独立模型：切会话时实时从后端拉会话级 current 刷新下拉框+徽章 ===
   // （2026-08-08 重构：原来用 _allSessions 列表缓存的 model 字段猜测，

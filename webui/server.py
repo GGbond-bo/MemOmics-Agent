@@ -3077,7 +3077,11 @@ def _create_agent(model_config=None, session_id=None, session=None):
 
 @app.get("/api/sessions")
 async def list_sessions():
-    """列出所有会话"""
+    """列出所有会话（按 last_active 降序 — 切换模型会更新 last_active，
+    让最近操作的会话排最前，刷新后 autoSelectLatestSession 选中的是它）"""
+    ordered = sorted(_sessions.values(),
+                     key=lambda s: s.get("last_active", s["created"]),
+                     reverse=True)
     return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
                           "bg_running": s.get("bg_running", False),
                           "is_running": bool(s.get("running_agent") or s.get("running_task")),
@@ -3088,7 +3092,7 @@ async def list_sessions():
                           "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
                           "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
                           "last_message": (s.get("messages", [{}])[-1].get("content") or s.get("messages", [{}])[-1].get("text", ""))[:80] if s.get("messages") else ""
-                         } for s in _sessions.values()]}
+                         } for s in ordered]}
 
 
 @app.post("/api/sessions/new")
@@ -3440,6 +3444,10 @@ async def switch_model(payload: dict):
         if provider:
             new_cfg["provider"] = provider
         s["model_config"] = new_cfg
+        # 2026-08-08：切换模型 = 用户活跃操作 → 更新 last_active，
+        # 让该会话在 /api/sessions 列表排到最前（刷新后 autoSelectLatestSession
+        # 选中的是它，而不是某个空配置的自检/新会话 → 下拉框显示切过的模型）。
+        s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
         # 清除该会话缓存的 agent — 下次发消息时用新模型重建
         if s.get("agent"):
             try:
