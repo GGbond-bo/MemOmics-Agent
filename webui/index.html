@@ -665,6 +665,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <div class="settings-group">
           <label>已连接的模型 (交互框可切换)</label>
           <div id="connected-models-list" style="font-size:12px;"></div>
+          <div style="margin-top:6px;font-size:11px;color:var(--text-light);">
+            <button onclick="detectLocalModels()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔍 检测本地模型 (Ollama/LM Studio/vLLM)</button>
+            <span id="local-models-hint" style="margin-left:6px;"></span>
+          </div>
+          <div id="local-models-list" style="font-size:11px;margin-top:4px;"></div>
         </div>
         <hr style="margin:12px 0;border:none;border-top:1px solid var(--border);">
         <!-- 添加新 Provider Key -->
@@ -2578,6 +2583,43 @@ async function refreshConnectedModels() {
     });
     el.innerHTML = html;
   } catch(e) { console.error('refreshConnectedModels error', e); }
+}
+
+// P2：检测本地 OpenAI 兼容推理服务器（Ollama/LM Studio/vLLM/llama.cpp）
+async function detectLocalModels() {
+  var hint = document.getElementById('local-models-hint');
+  var box = document.getElementById('local-models-list');
+  if (hint) hint.textContent = '检测中...';
+  try {
+    var r = await fetch('/api/models/local');
+    var d = await r.json();
+    if (hint) hint.textContent = d.count > 0 ? ('发现 ' + d.count + ' 个本地模型') : '未发现本地模型（Ollama/LM Studio/vLLM 未运行）';
+    if (!box) return;
+    if (!d.models || !d.models.length) { box.innerHTML = ''; return; }
+    box.innerHTML = d.models.map(function(m) {
+      return '<div style="padding:2px 0;">' + escapeHtml(m.name) +
+        ' <span style="color:var(--text-light);font-size:10px;">(' + escapeHtml(m.server) + ')</span>' +
+        ' <button onclick="saveLocalModel(\'' + escapeHtml(m.id).replace(/'/g, "\\'") + '\',\'' + m.base_url + '\',\'' + m.server + '\')" style="font-size:10px;padding:0 6px;border-radius:3px;background:var(--primary);color:#fff;border:none;cursor:pointer;">添加</button></div>';
+    }).join('');
+  } catch(e) {
+    if (hint) hint.textContent = '检测失败: ' + e.message;
+  }
+}
+
+// 保存本地模型为 provider（免 key，loopback）
+async function saveLocalModel(modelId, baseUrl, serverName) {
+  try {
+    var r = await fetch('/api/provider/local', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model: modelId, base_url: baseUrl, server: serverName})
+    });
+    var d = await r.json();
+    if (!d.ok) { alert(d.error || '保存失败'); return; }
+    alert('已添加本地模型 ' + modelId + '（免 API Key）');
+    await refreshConnectedModels();
+    await refreshModelSelect();
+  } catch(e) { alert('保存失败: ' + e.message); }
 }
 
 // 刷新交互框下拉框

@@ -59,3 +59,70 @@ def test_models_switch_unknown_400(client, new_session):
     sid = new_session
     r = client.post("/api/models/switch", json={"model": "no-such-model-xyz", "session_id": sid})
     assert r.status_code == 400
+
+
+# ==================== P2 本地模型自动发现 ====================
+
+def test_local_models_structure(client):
+    """探测端点返回结构（无本地服务器时 count=0 也合法）"""
+    r = client.get("/api/models/local")
+    assert r.status_code == 200
+    d = r.json()
+    assert "models" in d and "count" in d
+    assert d["count"] == len(d["models"])
+
+
+def test_local_models_detection(client, monkeypatch):
+    """模拟 Ollama 在 11434 响应 → 探测到模型 + base_url 正确"""
+    import io
+    import json as _json
+
+    class FakeResp:
+        def __init__(self, data):
+            self._data = data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return self._data
+
+    def fake_urlopen(req, timeout=2):
+        url = req.full_url if hasattr(req, "full_url") else str(req)
+        if "11434" in url:
+            return FakeResp(_json.dumps({"data": [{"id": "qwen3:8b"}, {"id": "llama3"}]}).encode())
+        raise OSError("not listening")
+
+    import urllib.request as _ur
+    monkeypatch.setattr(_ur, "urlopen", fake_urlopen)
+    d = client.get("/api/models/local").json()
+    assert d["count"] == 2
+    ids = [m["id"] for m in d["models"]]
+    assert "qwen3:8b" in ids
+    assert d["models"][0]["server"] == "ollama"
+    assert d["models"][0]["base_url"] == "http://127.0.0.1:11434/v1"
+
+
+def test_add_local_provider(client, tmp_path, monkeypatch):
+    """保存本地模型 provider：loopback 校验 + 免 key 出现在 available"""
+    import server as _srv
+    monkeypatch.setattr(_srv, "_PROVIDER_KEYS_FILE", str(tmp_path / "keys.json"))
+    r = client.post("/api/provider/local", json={
+        "model": "qwen3:8b", "base_url": "http://127.0.0.1:11434/v1", "server": "ollama"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok"] and d["provider_id"] == "local-ollama"
+    # 免 key 模型出现在 available
+    avail = client.get("/api/models/available").json()["models"]
+    local = [m for m in avail if m["provider_id"] == "local-ollama"]
+    assert local and local[0]["id"] == "qwen3:8b"
+    # 非 loopback 拒绝
+    r2 = client.post("/api/provider/local", json={
+        "model": "x", "base_url": "http://evil.com/v1", "server": "evil"})
+    assert r2.status_code == 400
+    # 清理（恢复原 provider_keys）
+    _srv._provider_keys.pop("local-ollama", None)
+    _srv._PROVIDERS_INDEX.pop("local-ollama", None)

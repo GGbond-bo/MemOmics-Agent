@@ -3440,7 +3440,7 @@ async def switch_model(payload: dict):
         _prov_hint = payload.get("provider_id") or ""
         _found = False
         for _pid, _saved in _provider_keys.items():
-            if not (_saved or {}).get("api_key"):
+            if not (_saved or {}).get("api_key") and not (_saved or {}).get("local"):
                 continue
             _p = _PROVIDERS_INDEX.get(_pid)
             if not _p:
@@ -3632,6 +3632,67 @@ async def delete_provider_key(pid: str):
     return {"ok": True}
 
 
+@app.post("/api/provider/local")
+async def add_local_provider(payload: dict):
+    """保存本地 OpenAI 兼容模型为免 key provider（P2，仅 loopback）"""
+    model = payload.get("model") or ""
+    base_url = payload.get("base_url") or ""
+    server_name = payload.get("server") or "local"
+    if not model or not base_url:
+        return JSONResponse({"error": "model and base_url required"}, status_code=400)
+    import urllib.parse as _up
+    host = _up.urlparse(base_url).hostname or ""
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        return JSONResponse({"error": "仅允许本地 loopback 地址"}, status_code=400)
+    pid = f"local-{_sanitize_dir_name(server_name)}"
+    if pid not in _PROVIDERS_INDEX:
+        _PROVIDERS_INDEX[pid] = {"id": pid, "name": f"本地 {server_name}",
+                                 "api": base_url, "models": []}
+    _p = _PROVIDERS_INDEX[pid]
+    if not any(m.get("id") == model for m in _p.get("models", [])):
+        _p.setdefault("models", []).append({"id": model, "name": model})
+    _provider_keys[pid] = {"api_key": "", "local": True, "base_url": base_url}
+    _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes()
+    except Exception:
+        pass
+    return {"ok": True, "provider_id": pid, "model": model}
+
+
+@app.get("/api/models/local")
+async def detect_local_models():
+    """扫描本地 OpenAI 兼容推理服务器（P2）：Ollama / LM Studio / vLLM / llama.cpp
+
+    只读探测 loopback 常见端口，不修改任何配置；前端可展示/一键添加。
+    """
+    import json as _json
+    import urllib.request
+    candidates = [
+        ("ollama", "http://127.0.0.1:11434/v1/models"),
+        ("lm-studio", "http://127.0.0.1:1234/v1/models"),
+        ("vllm", "http://127.0.0.1:8000/v1/models"),
+        ("llama.cpp", "http://127.0.0.1:8080/v1/models"),
+    ]
+    found = []
+    for name, url in candidates:
+        try:
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=2) as r:
+                d = _json.loads(r.read().decode("utf-8"))
+            for m in d.get("data", []):
+                mid = m.get("id") or m.get("model") or ""
+                if not mid:
+                    continue
+                found.append({
+                    "id": mid, "name": mid, "provider": "local",
+                    "server": name, "base_url": url.rsplit("/v1", 1)[0] + "/v1",
+                })
+        except Exception:
+            continue
+    return {"models": found, "count": len(found)}
+
+
 @app.get("/api/models/available")
 async def list_available_models(session_id: str = ""):
     """列出所有已配置 key 的 provider 的模型 — 用于交互框快速切换
@@ -3649,7 +3710,7 @@ async def list_available_models(session_id: str = ""):
     cur_cfg = sess_cfg or _current_model
     models = []
     for pid, saved in _provider_keys.items():
-        if not saved.get("api_key"):
+        if not saved.get("api_key") and not saved.get("local"):
             continue
         p = _PROVIDERS_INDEX.get(pid)
         if not p:
