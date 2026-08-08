@@ -2344,7 +2344,8 @@ function switchView(view) {
   document.getElementById(panelMap[view]).style.display = '';
 
   if (view === 'files') browseFiles('');
-  if (view === 'kb') browseKb('');
+  if (view === 'kb') { switchKbView(_kbMode || 'browse'); browseKb(currentPath.kb || ''); }
+  else { pauseKbGraph3D(); }
   if (view === 'skills') { loadSkills(); loadSkillMgr(); }
   if (view === 'results') refreshResults();
   if (view === 'settings') loadSettings();
@@ -2937,7 +2938,7 @@ async function browseKb(path) {
   var totalNote = (!path && d.total_files) ? ' <span style="font-size:10px;color:var(--text-light);">(共 ' + d.total_files + ' 个文件，分布在下方目录中)</span>' : '';
   document.getElementById('kb-path').textContent = (d.path || '/') + totalNote;
   document.getElementById('kb-preview').style.display = 'none';
-  document.getElementById('kb-list').style.display = '';
+  document.getElementById('kb-list').style.display = _kbMode === 'graph' ? 'none' : '';
   var parentPath = '';
   if (path) {
     var parts = path.split('/').filter(function(p){return p;});
@@ -2957,6 +2958,7 @@ var _kbSearchTimer = null;
 var _kbGraphLoaded = false;
 var _kbCy = null;
 var _kbCurrentNode = null;
+var _kbMode = 'browse';
 var _kbMode3D = false;
 var _kbGraphData = null;
 var _kb3D = null;
@@ -2966,6 +2968,10 @@ var _kbLastSig = null;
 var _kbWatcher = null;
 
 async function previewKb(path) {
+  _kbMode = 'browse';
+  document.getElementById('kb-graph').style.display = 'none';
+  setKbModeButtons(true);
+  pauseKbGraph3D();
   var r = await fetch('/api/kb/file?path=' + encodeURIComponent(path));
   var d = await r.json();
   document.getElementById('kb-list').style.display = 'none';
@@ -3044,6 +3050,10 @@ function onKbSearch(v) {
 async function doKbSearch(q) {
   var box = document.getElementById('kb-search-results');
   if (!q || !q.trim()) { box.style.display = 'none'; return; }
+  _kbMode = 'browse';
+  document.getElementById('kb-graph').style.display = 'none';
+  setKbModeButtons(true);
+  pauseKbGraph3D();
   var r = await fetch('/api/kb/search?q=' + encodeURIComponent(q.trim()));
   var d = await r.json();
   var html = '<div style="font-size:11px;color:var(--text-light);margin-bottom:6px;">命中 ' + (d.total || 0) + ' 个文件</div>';
@@ -3062,20 +3072,31 @@ async function doKbSearch(q) {
   document.getElementById('kb-preview').style.display = 'none';
 }
 
+function setKbModeButtons(browse) {
+  var bb = document.getElementById('kb-btn-browse');
+  var bg = document.getElementById('kb-btn-graph');
+  if (!bb || !bg) return;
+  bb.style.background = browse ? 'var(--primary)' : 'var(--border)';
+  bb.style.color = browse ? '#fff' : 'var(--text)';
+  bg.style.background = browse ? 'var(--border)' : 'var(--primary)';
+  bg.style.color = browse ? 'var(--text)' : '#fff';
+}
+
 function switchKbView(mode) {
   var browse = mode === 'browse';
+  _kbMode = browse ? 'browse' : 'graph';
   document.getElementById('kb-list').style.display = browse ? '' : 'none';
   document.getElementById('kb-path').style.display = browse ? '' : 'none';
   document.getElementById('kb-search-results').style.display = 'none';
   document.getElementById('kb-preview').style.display = 'none';
   document.getElementById('kb-graph').style.display = browse ? 'none' : '';
-  var bb = document.getElementById('kb-btn-browse');
-  var bg = document.getElementById('kb-btn-graph');
-  bb.style.background = browse ? 'var(--primary)' : 'var(--border)';
-  bb.style.color = browse ? '#fff' : 'var(--text)';
-  bg.style.background = browse ? 'var(--border)' : 'var(--primary)';
-  bg.style.color = browse ? 'var(--text)' : '#fff';
-  if (!browse) loadKbGraph();
+  setKbModeButtons(browse);
+  if (!browse) {
+    loadKbGraph();
+    if (_kbMode3D) resumeKbGraph3D();
+  } else {
+    pauseKbGraph3D();
+  }
 }
 
 function loadCytoscape(cb) {
@@ -3759,8 +3780,8 @@ function closeKbPreview() {
   var q = document.getElementById('kb-search-input').value;
   if (q && q.trim()) { doKbSearch(q); }
   else {
-    document.getElementById('kb-list').style.display = '';
-    document.getElementById('kb-path').style.display = '';
+    document.getElementById('kb-list').style.display = _kbMode === 'graph' ? 'none' : '';
+    document.getElementById('kb-path').style.display = _kbMode === 'graph' ? 'none' : '';
   }
 }
 
