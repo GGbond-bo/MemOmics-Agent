@@ -5646,6 +5646,14 @@ def _save_result_manifest(results_dir: str, manifest: dict) -> int:
             prov["git"] = {"commit": _r.stdout.strip() or "unknown", "dirty": bool(_d.stdout.strip())}
         except Exception:
             prov["git"] = {"commit": "unknown", "dirty": False}
+    if "env" not in prov:
+        # P1-5：环境指纹自动补全（当前 conda 环境的包版本清单，供复现）
+        try:
+            from tools.env_manager import fingerprint
+            _cur = os.environ.get("CONDA_DEFAULT_ENV", "")
+            prov["env"] = fingerprint(_cur) if _cur else {"conda_env": "", "packages": {}, "note": "未检测到 conda 环境"}
+        except Exception:
+            prov["env"] = {"conda_env": "", "packages": {}}
     body = json.dumps(manifest, ensure_ascii=False, indent=2)
     with open(os.path.join(results_dir, f"analysis_manifest.v{ver}.json"), "w", encoding="utf-8") as f:
         f.write(body)
