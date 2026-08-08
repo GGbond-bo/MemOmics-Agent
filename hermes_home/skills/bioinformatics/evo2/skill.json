@@ -1,0 +1,19 @@
+{
+  "id": "evo2",
+  "name": "Evo 2 — DNA Language Model",
+  "category": "genomics",
+  "language": "Python",
+  "description": "Score, embed, and generate DNA sequences with Evo 2, a long-context genomic foundation model. Use this skill when: (1) Computing per-nucleotide or per-sequence likelihoods for variant effect scoring, ",
+  "starting_prompt": "使用 Evo 2 — DNA Language Model 进行分析",
+  "source_dir": "skills/bioinformatics/evo2",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "evo2"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

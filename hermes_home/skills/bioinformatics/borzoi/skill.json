@@ -1,0 +1,19 @@
+{
+  "id": "borzoi",
+  "name": "Borzoi — DNA → Functional Track Prediction",
+  "category": "genomics",
+  "language": "Python",
+  "description": "Predict genome-wide functional tracks (RNA-seq, CAGE, DNase, ChIP) from DNA sequence with Borzoi. Use this skill when: (1) Scoring the regulatory effect of a variant on expression/accessibility, (2) G",
+  "starting_prompt": "使用 Borzoi — DNA → Functional Track Prediction 进行分析",
+  "source_dir": "skills/bioinformatics/borzoi",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "borzoi"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

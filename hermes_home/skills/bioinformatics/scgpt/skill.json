@@ -1,0 +1,19 @@
+{
+  "id": "scgpt",
+  "name": "scGPT — Single-Cell Foundation Model",
+  "category": "single-cell",
+  "language": "Python",
+  "description": "Embed and annotate single-cell expression data with scGPT, a foundation model for single-cell biology. Use this skill when: (1) Producing cell embeddings from an AnnData for clustering/integration, (2",
+  "starting_prompt": "使用 scGPT — Single-Cell Foundation Model 进行分析",
+  "source_dir": "skills/bioinformatics/scgpt",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "scgpt"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

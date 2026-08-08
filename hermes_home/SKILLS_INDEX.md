@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (43 skills)
+## 08_报告 - 报告/可视化 (53 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -245,6 +245,16 @@
 | pubmed-mesh-annotation | MeSH 语义索引/文献 MeSH 标签标注：给定文献 title+abstract（或 PMID），从 PubMed 官方索引输出 MeSH 主要标签。适用于语义索引 benchmark（如 试卷1 |  | YEL 讨论触发 |
 | atac-paper-reproduction | > |  | YEL 讨论触发 |
 | gse278576-atac-aging-comparison | > |  | YEL 讨论触发 |
+| competitor-agent-research | 调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biom |  | YEL 讨论触发 |
+| wakeup-progress-check | 系统唤醒/进度询问时的任务状态核查规程。定位活跃 task_plan → 终态验证 → 三源交叉验证 → 汇报。触发："[系统唤醒]"、"还在跑吗"、"进度"、cron 唤醒、跨会话恢复。 |  | YEL 讨论触发 |
+| alphafold2 | Predict protein structure for monomers and multimers with AlphaFold2 via the ColabFold runner (Mirdi |  | YEL 讨论触发 |
+| boltz | Structure prediction for protein, nucleic-acid, and small-molecule complexes with Boltz-2 (Passaro & |  | YEL 讨论触发 |
+| borzoi | Predict genome-wide functional tracks (RNA-seq, CAGE, DNase, ChIP) from DNA sequence with Borzoi. Us |  | YEL 讨论触发 |
+| chai1 | Structure prediction for protein, nucleic-acid, and small-molecule complexes with the Chai-1 foundat |  | YEL 讨论触发 |
+| evo2 | Score, embed, and generate DNA sequences with Evo 2, a long-context genomic foundation model. Use th |  | YEL 讨论触发 |
+| openfold3 | Structure prediction using OpenFold3, an open-weights PyTorch reproduction of AlphaFold3 from the Al |  | YEL 讨论触发 |
+| proteinmpnn | Inverse-fold a protein backbone (PDB structure) into amino-acid sequence with ProteinMPNN (Dauparas  |  | YEL 讨论触发 |
+| scgpt | Embed and annotate single-cell expression data with scGPT, a foundation model for single-cell biolog |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 
