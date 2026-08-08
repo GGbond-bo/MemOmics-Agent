@@ -492,7 +492,7 @@ def _auto_create_task_plan(session, plan_path):
     # task_plan.md 写入 results_dir（此时已对齐到用户指定目录）
     plan_path = os.path.join(session["results_dir"], "task_plan.md")
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     rd = session.get("results_dir", "")
     content = f"""# Task Plan: {goal}
 
@@ -876,7 +876,7 @@ def _schedule_self_check(session, agent, loop):
                 )
             s.setdefault("messages", []).append(
                 {"role": "system", "content": wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
-            s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             await _trigger_agent_turn(s, wake_msg)
         except Exception:
             pass
@@ -2632,8 +2632,8 @@ def _create_session(title="新会话"):
     session = {
         "id": sid,
         "title": title,
-        "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "last_active": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "messages": [],
         "model_config": dict(_current_model),
         "results_dir": os.path.join(RESULTS_DIR, sid),
@@ -2753,11 +2753,11 @@ def _restore_single_session(sid):
             ts_started = s.get("started_at")
             ts_active = s.get("last_active")
             try:
-                created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
+                created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M:%S") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             except Exception:
-                created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                created_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
-                active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
+                active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M:%S") if ts_active else created_str
             except Exception:
                 active_str = created_str
             session = {
@@ -2839,11 +2839,11 @@ def _restore_one_persisted_session(db, s):
     ts_started = s.get("started_at")
     ts_active = s.get("last_active")
     try:
-        created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M")
+        created_str = datetime.fromtimestamp(ts_started).strftime("%Y-%m-%d %H:%M:%S") if ts_started else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
-        created_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        created_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M") if ts_active else created_str
+        active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M:%S") if ts_active else created_str
     except Exception:
         active_str = created_str
     session = {
@@ -3111,7 +3111,7 @@ async def list_sessions():
     """列出所有会话（按 last_active 降序 — 切换模型会更新 last_active，
     让最近操作的会话排最前，刷新后 autoSelectLatestSession 选中的是它）"""
     ordered = sorted(_sessions.values(),
-                     key=lambda s: s.get("last_active", s["created"]),
+                     key=lambda s: (s.get("last_active", s["created"]), s.get("created", "")),
                      reverse=True)
     return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
                           "bg_running": s.get("bg_running", False),
@@ -3478,7 +3478,7 @@ async def switch_model(payload: dict):
         # 2026-08-08：切换模型 = 用户活跃操作 → 更新 last_active，
         # 让该会话在 /api/sessions 列表排到最前（刷新后 autoSelectLatestSession
         # 选中的是它，而不是某个空配置的自检/新会话 → 下拉框显示切过的模型）。
-        s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 清除该会话缓存的 agent — 下次发消息时用新模型重建
         if s.get("agent"):
             try:
@@ -4257,7 +4257,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     session.setdefault("messages", []).append({"role": "user", "content": text, "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin"})
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
-    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # Persist user message to DB
     try:
         db = _get_session_db()
@@ -4408,7 +4408,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             session["messages"].append({"role": "assistant", "content": result_text.strip(), "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin-agent"})
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
-            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
                 db = _get_session_db()
                 if db and hasattr(db, "append_message"):
@@ -4687,7 +4687,7 @@ async def _hermes_weixin_message_handler(event):
                 "type": "session_update",
                 "session_id": session["id"],
                 "title": session.get("title", ""),
-                "last_active": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "source": "weixin",
                 "msg_count": len(session.get("messages", [])),
             }, ensure_ascii=False)
@@ -4699,7 +4699,7 @@ async def _hermes_weixin_message_handler(event):
                     dead.add(ws_cli)
             _WEIXIN_WS_CLIENTS -= dead
             # 更新 last_active
-            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # 消息持久化
             try:
                 db = _get_session_db()
@@ -5682,7 +5682,7 @@ async def list_all_results():
             if not has_content:
                 continue
             file_count = sum(1 for _ in p.rglob("*") if _.is_file())
-            mtime = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            mtime = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             sessions_with_results.append({
                 "session_id": sid,
                 "title": sid,
@@ -6081,7 +6081,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
-                session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 _persist_session_message(session, "user", user_text)
 
                 # 注册 WebSocket 引用 + 立即发送 thinking（在意图分类之前，消除初始空白）
@@ -6148,7 +6148,7 @@ async def ws_endpoint(ws: WebSocket):
                     )
                     _intro = _intro_en if session.get("lang") == "en" else _intro_zh
                     session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
-                    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     _persist_session_message(session, "assistant", _intro)
                     await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
@@ -7124,7 +7124,7 @@ async def ws_endpoint(ws: WebSocket):
                             return
                         # 记录助手回复到 _session + state.db
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
-                        _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         _persist_session_message(_session, "assistant", result)
                         # 尝试提取 todo
                         try:
