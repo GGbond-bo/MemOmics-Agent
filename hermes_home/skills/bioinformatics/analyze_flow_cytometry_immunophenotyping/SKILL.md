@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: scRNA
+    category: Immunology
 prerequisites:
   r_packages: []
   python_packages: []

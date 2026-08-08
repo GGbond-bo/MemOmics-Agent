@@ -3,7 +3,7 @@ id: "skill_019caa158c8a4011b19285967639a364"
 name: "bulk-rnaseq-counts-to-de-deseq2"
 when_to_use: "[bulk-rnaseq-counts-to-de-deseq2] 有raw counts矩阵(从featureCounts/HTSeq输出)，仅需用DESeq2做差异(不包含后续富集/可视化)，作为pipeline的第一步"
 display-name: "Bulk RNAseq differential expression (DeSeq2)"
-category: scRNA
+category: Bulk RNA
 short-description: Perform differential expression analysis using DESeq2 on RNA-seq raw count data.
 detailed-description: Perform differential expression analysis using DESeq2 on RNA-seq raw count data. Use when you have integer count matrices with biological replicates (n≥2 per group), need log fold change shrinkage for gene ranking, or want conservative p-value estimates. Best for medium to large sample sizes (n≥4 recommended). Creates DESeqDataSet objects, performs size factor normalization, estimates dispersions, and tests for differential expression using the Wald test or likelihood ratio test.
 starting-prompt: Perform differential expression analysis using DESeq2 on my RNA-seq raw count data . . 

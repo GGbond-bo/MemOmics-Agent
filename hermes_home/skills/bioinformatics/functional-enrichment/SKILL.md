@@ -11,7 +11,7 @@ metadata:
     tags: [03_高级分析]
     difficulty: basic
     language: R+Python
-    category: scRNA
+    category: Bulk RNA
 prerequisites:
   r_packages: []
   python_packages: []

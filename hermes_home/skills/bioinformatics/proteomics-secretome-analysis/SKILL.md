@@ -13,6 +13,9 @@ triggers:
 when_to_use: >
   用户提供 LC-MS/MS 蛋白质组学 Excel 报告（含蛋白ID、丰度列），需要按存在形式分类蛋白、
   筛选功能候选、建立衰老/功能证据链时触发。
+metadata:
+  hermes:
+    category: Proteomics
 ---
 
 # Proteomics Secretome Analysis — 分泌蛋白组全流程

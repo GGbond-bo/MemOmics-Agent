@@ -1,0 +1,16 @@
+{
+  "id": "wakeup-progress-check",
+  "name": "Wakeup Progress Check — 唤醒/进度核查规程",
+  "category": "general",
+  "language": "Python",
+  "description": "系统唤醒/进度询问时的任务状态核查规程。定位活跃 task_plan → 终态验证 → 三源交叉验证 → 汇报。触发：\"[系统唤醒]\"、\"还在跑吗\"、\"进度\"、cron 唤醒、跨会话恢复。",
+  "starting_prompt": "使用 Wakeup Progress Check — 唤醒/进度核查规程 进行分析",
+  "source_dir": "skills/bioinformatics/wakeup-progress-check",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

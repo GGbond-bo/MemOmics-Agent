@@ -21,18 +21,47 @@
   非 Macaca mulatta 恒河猴！21 chr NC_088375.1–NC_088395.1, ~3.04GB），需手动建 genomeAnnotation。
   跨物种 chain 必须用 fascicularis T2T-MFA8v1.1 → hg38，不能用 rheMac10 (mulatta)。
 
-### 人侧 ⏳ 下载中（用户手动下载, 阻塞点）
+### 人侧 ✅ 测试版 4 样本已到位（2026-08-08 更新）
 - **选定数据集: GSE278576** (Science 2026, "Epigenetic and 3D genome reprogramming
   during aging of human hippocampus") — 40 ATAC + 40 RNA 样本, 40 独立供体, 4 年龄组 (20-40/40-60/60-80/80-100)
 - 文件: fragments.tsv.gz + .tbi.gz 可直喂 ArchR createArrowFiles()（无需 bam）
 - 命名模式: GSM8549615_hc77_atac_fragments.tsv.gz
-- **下载进度: 9/40 已下** (hc77/hc78/hc5579/hc76/hc29/hc6052/hc5614/hc13344/hc935)
-- **⚠️ 9 个已下样本全部在 20-38 岁 Young 组**（Table_S1: 20/20/25/26/28/28/31/33/38）→
-  无老年样本 → 对比流程跑通但 FDR 全空（预期结果，无统计力）
-- 下载目录: E:/专利/Human_Hippocampus_ATAC/fragments/
+- **40/40 全下齐 + 40/40 QC Filtered Arrow 全在**: E:/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered/
+- **测试版选定 4 样本**: hc78=20M + hc5579=25F (Young) / hc98=82F + hc9=95F (Old)
+  → merge 后 35,787 cells, 17 clusters, 8 大类注释 (OPC 12032/ODC 7752/Ex 7001/Astro 4557/Micro 1661/Inh 1321/VS 887/ChP 576)
+- 下载目录: E:/专利/Human_Hippocampus_ATAC/fragments/ + ArchR_Arrow_QC_Filtered/
 - 官方脚本克隆: E:/专利/Human_Hippocampus_ATAC/official_scripts/aging_human_hippocampus-main/
 - 论文+补充材料: E:/专利/Human_Hippocampus_ATAC/papers/
-- ⚠️ 带宽 ~6KB/s → Agent 无法自动下载, 必须用户手动下载
+
+### 测试版执行状态（2026-08-08, session memomics-1c1890da）
+- P0 人侧 merge+LSI+UMAP+聚类+注释 ✅ (22:18, human_proj_annotated.rds)
+- P1 人侧 Young vs Old DA ✅ (22:32, PID 17648 EXIT=0)
+  - strict (FDR≤0.05, |log2FC|≥0.5): **Old 2,955 / Young 563** tiles (5.2:1)
+  - loose (FDR≤0.1, |log2FC|≥0.25): Old 5,037 / Young 972
+  - 产出: results/memomics-1c1890da/patent_test/markers_age_tiles.rds (348MB)
+    + da_tiles_strict_{Old,Young}.bed + volcano_{Young,Old}_DA.png + da_summary.csv
+  - 方向: 人海马衰老打开远多于关闭 → **与猴侧一致**（交叉验证有效）
+- P3 (L1/L2/L3) pending — 阻塞点见下
+- **P3 L1 数据准备已启动 (22:44-22:47, E:/专利/P3_L1_data/)**: 后续会话直接从这续跑，勿重新导出
+  - 猴 GTF 已下载: GCF_037993035.2_T2T-MFA8v1.1_genomic.gtf.gz (442KB)
+  - 猴 DA tiles 已导出 CSV: macaque_da_strict/loose_{Old,Young}.csv (strict Old 50 行, NC_088xxx.1 500bp tile 坐标)
+    - 列 schema: `seqnames, idx, start, Log2FC, FDR, MeanDiff`（idx=tile 索引, start=tile 起点坐标）→ liftover 时按 seqnames+start 映射即可
+  - 脚本: download_gtf.sh / export_macaque_da.R / probe_motif.R / probe_motif2.R
+- **猴 motif_enrichment_results.rds 结构已探明 (2026-08-08 22:49 probe 实测)**:
+  `list(old, young, n_old, n_young, n_bg)`; old/young = data.frame **633×4** (motif | fg_mean | bg_mean | fc)，
+  fc 是 fold-change 排名（GC-matched 背景）。→ P3 L3 猴侧 motif 输入直接用，无需重新探结构。
+
+### 🔴 P3 阻塞: 食蟹猴 T2T-MFA8v1.1 → hg38 liftover chain 获取路径实测（2026-08-08）
+**结论: 目前无现成 chain，需要备选方案。** 逐路径实测:
+- UCSC goldenPath: `mfa8ToHg38.over.chain.gz` → **404**（UCSC 无 T2T-MFA8v1.1 组装链）
+- UCSC 仅有食蟹猴旧组装: `hg38ToMacFas5.over.chain.gz`（200 OK, 但猴侧 Arrow 是 T2T 坐标，不匹配）
+- UCSC 恒河猴链 `rheMac10ToHg38`（200 OK, 但 = Macaca mulatta，**禁止用于食蟹猴**）
+- NCBI GRS API `api.ncbi.nlm.nih.gov/genome/remap/*` → **410 Gone / 404**（已废弃）
+- NCBI Datasets v2alpha remap → 404
+- UCSC genArk → 无 fascicularis 条目
+- MFA8v1.1 的 NCBI accession 已确认: **GCF_037993035.2** (RefSeq reference, 22 chr, 注释 RS_2025_03)
+- 备选方向（未实测）: 自建 chain（minimap2/lastz + chain 工具，需 3GB 基因组下载）、
+  NCBI Remap 网页版手动提交、Ensembl 组装转换（若已收录 T2T）、或用 JASPAR motif 序列比对绕开 liftover
 
 ## 对比流程状态（2026-08-04 完成 pilot）
 

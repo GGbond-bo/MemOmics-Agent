@@ -11,7 +11,7 @@ metadata:
     tags: [infercnv, cnv, tumor, malignant, 05_基因组学]
     difficulty: basic
     language: R
-    category: GWAS/Genetics
+    category: scRNA
 prerequisites:
   r_packages: []
   python_packages: []

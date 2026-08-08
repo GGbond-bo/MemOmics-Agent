@@ -2865,6 +2865,152 @@ async def list_kb(path: str = ""):
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+@app.get("/api/kb/file")
+async def kb_file_api(path: str = ""):
+    """读取知识库文件 + YAML 结构化解析（只读，防路径穿越）"""
+    if not path:
+        return JSONResponse({"error": "path required"}, status_code=400)
+    full = os.path.normpath(path if os.path.isabs(path) else os.path.join(KB_DIR, path))
+    kb_root = os.path.normpath(KB_DIR)
+    if not (full == kb_root or full.startswith(kb_root + os.sep)):
+        return JSONResponse({"error": "path outside KB"}, status_code=403)
+    if not os.path.isfile(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    try:
+        size = os.path.getsize(full)
+        with open(full, encoding="utf-8", errors="replace") as f:
+            content = f.read(200000)
+        parsed = None
+        parse_error = None
+        if full.lower().endswith((".yaml", ".yml")):
+            try:
+                import yaml
+                parsed = yaml.safe_load(content)
+            except Exception as e:
+                parse_error = str(e)
+        return {"path": full.replace("\\", "/"), "content": content, "size": size,
+                "truncated": size > 200000, "parsed": parsed, "parse_error": parse_error}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/kb/search")
+async def kb_search_api(q: str = "", path: str = ""):
+    """知识库全文搜索（线性扫 YAML/MD，毫秒级；CSV 只读头部）"""
+    if not q or not q.strip():
+        return {"query": q, "results": [], "total": 0}
+    root = path if path and os.path.isdir(path) else KB_DIR
+    q_lower = q.strip().lower()
+    results = []
+    try:
+        for p in sorted(Path(root).rglob("*")):
+            if not p.is_file():
+                continue
+            if p.suffix.lower() not in (".yaml", ".yml", ".md", ".csv"):
+                continue
+            limit = 4096 if p.suffix.lower() == ".csv" else 200000
+            try:
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    lines = f.read(limit).splitlines()
+            except Exception:
+                continue
+            hits = []
+            for i, line in enumerate(lines):
+                if q_lower in line.lower():
+                    start = max(0, i - 1)
+                    end = min(len(lines), i + 2)
+                    hits.append({"line": i + 1, "snippet": "\n".join(lines[start:end])})
+            if hits:
+                results.append({"path": str(p).replace("\\", "/"),
+                                "hits": hits[:5], "hit_count": len(hits)})
+        results.sort(key=lambda r: -r["hit_count"])
+        return {"query": q, "results": results[:30], "total": len(results)}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/kb/graph")
+async def kb_graph_api():
+    """知识库图谱：路径层级节点（物种/组织/方向/分类/文件）+ auto_trigger 内容关联边（只读）"""
+    try:
+        import yaml
+    except Exception:
+        yaml = None
+    nodes, node_ids, edges = [], {}, {}
+    def add_node(nid, label, ntype, path):
+        if nid not in node_ids:
+            node_ids[nid] = len(nodes)
+            nodes.append({"id": nid, "label": label, "type": ntype, "path": path})
+        return node_ids[nid]
+    def add_edge(src, dst, etype):
+        key = (src, dst, etype)
+        if key not in edges:
+            edges[key] = len(edges)
+        return edges[key]
+    try:
+        root = Path(KB_DIR)
+        for p in sorted(root.rglob("*")):
+            if p.is_file() and p.suffix.lower() not in (".yaml", ".yml", ".md"):
+                continue
+            rel = p.relative_to(root)
+            parts = list(rel.parts)
+            parent_id = None
+            for depth, part in enumerate(parts):
+                is_file = depth == len(parts) - 1 and p.is_file()
+                ntype = "file" if is_file else "dir"
+                label = p.stem if is_file else part
+                nid = "/".join(parts[: depth + 1])
+                add_node(nid, label, ntype, str(p).replace("\\", "/") if is_file else "")
+                if parent_id is not None:
+                    add_edge(parent_id, nid, "hierarchy")
+                parent_id = nid
+        if yaml is not None:
+            kw_map = {}
+            for n in nodes:
+                if n["type"] != "file":
+                    continue
+                try:
+                    with open(n["path"], encoding="utf-8", errors="replace") as f:
+                        data = yaml.safe_load(f.read(200000))
+                except Exception:
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                # auto_trigger / pipeline method / package 可能嵌套在任意层级，递归提取共享关键词
+                def _collect_triggers(obj, out):
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if k in ("auto_trigger", "method", "package") and isinstance(v, (str, list)):
+                                if isinstance(v, str):
+                                    out.append(v)
+                                else:
+                                    out.extend(x for x in v if isinstance(x, str))
+                            else:
+                                _collect_triggers(v, out)
+                    elif isinstance(obj, list):
+                        for v in obj:
+                            _collect_triggers(v, out)
+                triggers = []
+                _collect_triggers(data, triggers)
+                seen = set()
+                for kw in triggers:
+                    kw = kw.strip().split("—")[0].strip()[:30]
+                    if not kw or kw in seen:
+                        continue
+                    seen.add(kw)
+                    kw_map.setdefault(kw, []).append(n["id"])
+            for kw, ids in kw_map.items():
+                if len(ids) >= 2:
+                    for i in range(len(ids) - 1):
+                        add_edge(ids[i], ids[i + 1], "related")
+        edge_list = [{"source": s, "target": t, "type": et} for (s, t, et) in edges]
+        return {"nodes": nodes, "edges": edge_list,
+                "counts": {"nodes": len(nodes), "edges": len(edges),
+                           "related": sum(1 for e in edge_list if e["type"] == "related")}}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
 # --- Skill 浏览 ---
 
 @app.get("/api/skills")

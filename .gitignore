@@ -87,3 +87,17 @@ hdwgcn_src/
 hermes_home/environment.json
 hermes_home/skills/bioinformatics/_debates/
 webui/uploads/
+
+# === 运行态噪音（每次运行自动变化，不入库） ===
+hermes_home/cron/ticker_*
+hermes_home/cron/.hb_*.tmp
+hermes_home/gateway_state.json
+hermes_home/logs/
+hermes_home/skills/bioinformatics/atac-seq-memomics/logs/
+hermes_home/models_dev_cache.json
+hermes_home/env_probe_cache.json
+hermes_home/runtime/jobs.json
+hermes_home/session_usage/
+hermes_home/processes.json
+hermes_home/lsp/bin/
+.backups/

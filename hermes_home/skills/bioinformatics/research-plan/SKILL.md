@@ -1,6 +1,6 @@
 ---
 name: research-plan
-category: bioinformatics
+category: General Utility
 description: 根据研究问题自动生成Mermaid技术路线图+对照表，支持scRNA/ATAC/空间/bulk/多组学/跨物种比较/专利导向
 trigger:
   when:

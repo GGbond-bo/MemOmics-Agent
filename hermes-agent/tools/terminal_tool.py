@@ -2895,6 +2895,19 @@ def terminal_tool(
             if sudo_cache_cleared:
                 result_dict["sudo_cache_cleared"] = True
 
+            # P1-B 结构化纠错：非零退出码且非语义退出（grep=1 等）→ 注入结构化错误块
+            # （连续失败计数 + 换方案提示），让 LLM 直接拿到可行动的错误信息
+            if returncode not in (0, None) and exit_note is None:
+                try:
+                    from tools.structured_failure import inject_failure_note
+                    result_dict = inject_failure_note(
+                        result_dict, command, returncode,
+                        effective_task_id or task_id or "default",
+                        meaning=exit_note,
+                    )
+                except Exception:
+                    pass  # 注入失败绝不影响原结果
+
             return json.dumps(result_dict, ensure_ascii=False)
 
     except Exception as e:

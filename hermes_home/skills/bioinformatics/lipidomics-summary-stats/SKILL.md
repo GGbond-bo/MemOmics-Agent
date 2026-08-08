@@ -1,7 +1,7 @@
 ---
 name: Lipidomics Summary Statistics
 description: Statistical analysis of lipidomics data
-category: Drug Discovery
+category: Proteomics
 tags: [lipidomics, statistics, summary]
 when_to_use: "脂质组学统计汇总：脂质定量数据→描述统计→差异分析→脂质类别分布→可视化"
 ---

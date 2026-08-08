@@ -1,6 +1,9 @@
 ---
 name: pubmed-mesh-indexing
 description: 从 NCBI E-utilities 检索官方 MeSH 标签与 DeCS 编码。使用场景：为文献输出 MeSH 主要标签（语义索引 benchmark）、西班牙语文献输出 DeCS 编码（MESINESP 式多语言检索）、查询 MeSH 树号构建知识特征。触发词："MeSH" / "DeCS" / "语义索引" / "主要标签" / "mesh tags" / "MESINESP" / "DeCS 编码"。
+metadata:
+  hermes:
+    category: Literature
 ---
 
 # PubMed MeSH 索引 / DeCS 编码检索

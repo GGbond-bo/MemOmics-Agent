@@ -1,6 +1,6 @@
 ---
 name: cross-species-cre-conservation
-category: bioinformatics
+category: GWAS/Genetics
 description: >
   Cross-species cis-regulatory element (CRE) conservation assessment framework.
   Five-layer pipeline (sequence → epigenetic → 3D structure → functional →

@@ -12,5 +12,25 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "RED 必触发",
-  "trigger_keywords": []
+  "trigger_keywords": [],
+  "success_count": 1,
+  "proven_script": "p4_crecs_scores.py",
+  "proven_params": [
+    {
+      "species": "macaca",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "p4_crecs_scores.py",
+      "params": "CRECS=0.4L1+0.3L2+0.3L3 (L1=phyloP>0, L2=猴/人DA密度, L3=group Jaccard), 分类A>=0.8/B=L1=1&L3<0.5/D=L1=0",
+      "date": "2026-08-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "P4-P6 完成：26 tiles 分类 B=17/D=9（B=序列保守+TF结合分歧=专利核心检出）；BNIP3 正向对照 PASS（TSS±1kb phyloP=0.185）；专利文档3份（交底书/独权草案/实施例数据）落盘 patent/"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "p4_crecs_scores.py"
+  }
 }

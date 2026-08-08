@@ -1,6 +1,6 @@
 ---
 name: public-data-download
-category: bioinformatics
+category: Data Query
 description: "精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。"
 trigger:
   when:

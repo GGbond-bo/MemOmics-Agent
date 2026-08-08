@@ -156,6 +156,21 @@ comb$Age_Correlated[comb$fdr < 0.1 & comb$cor < 0] <- "Down"
 - [ ] Pearson + FDR 结果表（Up/Down cCRE）
 - [ ] 3 张核心图（密度/火山/热图）
 
+## Common Issues / Pitfalls
+
+### ⛔ ArchR Windows 多实例 tmp 目录竞争（2026-08-07 实测，40 样本批量）
+- **症状**: 并发 3 跑 createArrowFiles → 5/7 样本在 `.filterCellsFromArrow` 阶段失败，错误 `Cannot open file 'E:\...\tmp\tmp-<hash>.arrow' does not exist`
+- **根因**: ArchR 1.0.3 所有实例共享同一 `outputDirectory/tmp/`，多进程竞争清理临时 Arrow 文件
+- **修复**: **必须串行跑**（并发 1）。`batch/run_serial.sh` 逐个样本跑，完成检查 `ArchR_Arrow_QC_Filtered/{s}/{s}_filtered_cells.csv`
+- **验证**: hc77 单例成功（3841 cells QC → 3546 after doublet），hc78 并发失败后串行重跑成功
+- **教训**: 60GB RAM 能撑并发 ≠ ArchR 能并发。ArchR 1.0.3 Windows 版单实例串行是唯一稳定模式
+
+### ⛔ filterDoublets 后 DoubletFilter 列消失（统计 bug）
+- **症状**: `sum(proj$DoubletFilter == "Doublet")` 恒返回 0，doublet_rate 显示 0%（实际过滤了 295 cells）
+- **根因**: `filterDoublets()` 返回的 proj 只含 Keep 细胞，DoubletFilter 列已被移除，select 该列返回 NULL
+- **修复**: 用过滤前后细胞数差计算 `n_doublet = n_before_doublet - n_cells_after`
+- **注意**: filtered_cells.csv 中手动补 `DoubletFilter="Keep"` 列供 P4 使用，但该列不在 ArchR 元数据中
+
 ## Proven Scripts
 
 > Auto-generated from actual analysis runs. Each row records a successful execution.
@@ -163,3 +178,5 @@ comb$Age_Correlated[comb$fdr < 0.1 & comb$cor < 0] <- "Down"
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
 | human | hippocampus | aging | 2026-08-04 | - | - | - |  |
+| macaca | hippocampus | aging | 2026-08-09 | l1_phylop_fill_v3.py | - | - |  |
+| human | hippocampus | aging | 2026-08-09 |  l3_motif_compare.R | - | - |  |

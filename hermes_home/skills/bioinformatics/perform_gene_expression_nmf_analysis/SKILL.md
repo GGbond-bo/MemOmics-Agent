@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: Drug Discovery
+    category: Bulk RNA
 prerequisites:
   r_packages: []
   python_packages: []

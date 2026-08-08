@@ -19,6 +19,13 @@ export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
 export MEMOMICS_PORT="$PORT"
 export MEMOMICS_HOST="0.0.0.0"
 
+# === 首次安装检测：config.yaml 不存在时从模板生成 ===
+# （升级覆盖解压时保留用户已有 config.yaml/API Key，不被覆盖）
+if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$HERMES_HOME/config.yaml.example" ]; then
+    cp "$HERMES_HOME/config.yaml.example" "$HERMES_HOME/config.yaml"
+    echo "[INFO] 已生成默认 config.yaml（首次安装）。API Key 请在 WebUI 设置页填写。"
+fi
+
 # === Step 1: Find Python ===
 PYTHON=""
 for c in python3 python python3.13 python3.12 python3.11 \

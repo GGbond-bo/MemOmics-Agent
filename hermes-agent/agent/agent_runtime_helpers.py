@@ -1195,6 +1195,12 @@ def try_recover_primary_transport(
             f"rebuilt client, waiting {wait_time}s before one last primary attempt.",
             force=True,
         )
+        # 发状态事件 → server 刷新 _last_event_ts，stall watchdog 不会误杀重试中的 agent
+        try:
+            if hasattr(agent, "_emit_status"):
+                agent._emit_status(f"🔁 {error_type}：已重建连接，{wait_time}s 后重试（第 {retry_count + 1} 次）…")
+        except Exception:
+            pass
         time.sleep(wait_time)
         return True
     except Exception as e:

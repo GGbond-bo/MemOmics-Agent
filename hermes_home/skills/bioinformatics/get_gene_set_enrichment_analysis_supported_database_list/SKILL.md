@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: GWAS/Genetics
+    category: Data Query
 prerequisites:
   r_packages: []
   python_packages: []

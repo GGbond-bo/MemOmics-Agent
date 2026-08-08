@@ -7,7 +7,7 @@ description: >-
   provider-key injection debugging (DEEPSEEK_API_KEY), and deepseek-v4-flash
   reasoning_content quirk. Use whenever debate_analysis is required by a skill's
   iron rules or when a debate comes back 8/8 "辩论生成失败".
-category: bioinformatics
+category: General Utility
 tags: [debate, multi-agent, review, quality, llm]
 when_to_use: >-
   [multi-role-debate] 需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要

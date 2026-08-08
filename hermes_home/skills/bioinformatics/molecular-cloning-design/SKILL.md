@@ -3,7 +3,7 @@ id: skill_molecular_cloning_design
 name: molecular-cloning-design
 description: Design complete cloning strategies for plasmid engineering (Gibson, Golden Gate, restriction-ligation) including backbone linearization, primer/overhang design, long-insert splitting, mutation introduction, and verification. Covers lentiviral, bacterial, yeast, and IVT expression backbones and Addgene plasmid swaps. Also the playbook for LABBench2 cloning-style exam questions.
 when_to_use: "[molecular cloning] 克隆策略设计：Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试"
-category: bioinformatics
+category: Mol Bio
 short-description: Design complete cloning strategies for plasmid engineering (Gibson, Golden Gate, restriction-ligation).
 detailed-description: >
   End-to-end cloning strategy design: identify fragments from Addgene/Ensembl/NCBI sources,

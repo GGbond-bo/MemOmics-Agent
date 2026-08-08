@@ -4,7 +4,7 @@ name: "bulk-rnaseq-differential-expression"
 when_to_use: "[bulk-rnaseq-differential-expression] 有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图)"
 display-name: "Best practices for RNA-seq Differential Expression Analysis"
 short-description: "Best practices on differential expression analysis for bulk RNA-seq data."
-category: scRNA
+category: Bulk RNA
 visibility: "internal"
 keywords: "RNA-seq, differential expression, DESeq2, padj, FDR, fold change"
 version: "1.0"

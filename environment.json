@@ -13,18 +13,22 @@
         "bin": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
         "lib_site": "C:/Program Files/R/R-4.5.3/library",
         "lib_user": "C:/Users/23136/R/R-4.5.3-library",
-        "pkg_count": 30,
-        "note": "仅base包，Seurat/harmony等在R-4.6.1"
+        "pkg_count": 251,
+        "key_pkgs": ["Seurat", "SeuratObject", "harmony", "ArchR", "ggplot2", "dplyr", "ComplexHeatmap", "circlize", "patchwork", "ggrepel", "future", "future.apply", "pak", "BiocManager", "data.table", "TFBSTools", "motifmatchr", "chromVAR", "BSgenome", "GenomicRanges", "Rsamtools"],
+        "note": "主力分析环境 — 2026-08-07实测: Seurat 5.5.1/SeuratObject 5.4.0/harmony 2.0.5/ArchR 1.0.3/ComplexHeatmap 2.26.1/ggplot2 4.0.3 全栈可用。CellChat/monocle3 缺失需按需装。脚本顶部必须 .libPaths(c('E:/R-libs/R-4.5.3',.libPaths()))"
       },
       "R-4.6.1": {
         "bin": "C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe",
         "lib_site": "C:/Program Files/R/R-4.6.1/library",
         "lib_user": "C:/Users/23136/R/R-4.6.1-library",
-        "pkg_count": 245,
-        "key_pkgs": ["Seurat", "SeuratObject", "harmony", "ArchR", "ggplot2", "dplyr", "devtools", "pak", "BiocManager", "data.table", "ComplexHeatmap", "circlize", "Rsamtools", "GenomicRanges", "BSgenome", "TFBSTools", "motifmatchr", "chromVAR", "patchwork", "ggrepel", "future", "future.apply", "RhpcBLASctl"],
-        "note": "主力分析环境 — scRNA/ATAC/空间组学全栈"
+        "pkg_count": 216,
+        "note": "⚠️ 失效环境(2026-08-07实测): 用户库216包但 Seurat/harmony/ggplot2/ArchR requireNamespace 全部失败，仅 ComplexHeatmap 2.28.0 可加载。不再作为 default"
       },
-      "default": "C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe"
+      "R-4.4.2": {
+        "bin": "C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe",
+        "note": "⚠️ PATH 默认 Rscript (execute_r 工具误用此版本)。无法加载 R-4.5.3 编译的包。任何 R 分析必须显式调用 R-4.5.3 全路径"
+      },
+      "default": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe"
     },
     "cli_tools": {
       "cellbender": {

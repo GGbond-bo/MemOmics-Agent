@@ -25,6 +25,9 @@ trigger_keywords:
   - "ArchR跨物种"
 version: 1.0.0
 author: MemOmics
+metadata:
+  hermes:
+    category: GWAS/Genetics
 ---
 
 # Cross-Species Regulatory Element Conservation Assessment (CRCA)

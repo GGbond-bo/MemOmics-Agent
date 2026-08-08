@@ -10,7 +10,7 @@ metadata:
     tags: [metabolomics, enrichment, MSEA, MetPA, mummichog, pathway, KEGG, HMDB, 代谢通路, 功能富集, 代谢物集富集]
     difficulty: intermediate
     language: R
-    category: Metabolomics
+    category: Proteomics
 prerequisites:
   r_packages: [MetaboAnalystR, igraph, RSQLite, KEGGgraph, fgsea, ggplot2, ggprism, plotly]
   python_packages: []

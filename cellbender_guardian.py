@@ -12,7 +12,7 @@ CHECK_INTERVAL = 60  # 每60秒检查一次进程存活
 def is_running(script_name):
     try:
         r = subprocess.run(['tasklist', '/FI', f'IMAGENAME eq python.exe'], 
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, errors="replace")
         return script_name in r.stdout
     except:
         return False

@@ -4,7 +4,7 @@ name: "pathway-enrichment"
 when_to_use: "[pathway-enrichment] 需使用pathway enrichment功能，适用于相关生信分析场景"
 display-name: "Pathway Enrichment Analysis"
 short-description: "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly."
-category: scRNA
+category: Bulk RNA
 visibility: "internal"
 keywords: "ORA, GSEA, enrichment, pathway, KEGG, Reactome, enrichr, clusterProfiler"
 version: "1.0"

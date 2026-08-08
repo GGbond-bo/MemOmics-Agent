@@ -3,7 +3,7 @@ id: "skill_aaafb560ba89480dbb01b2979f49630d"
 name: "chip-atlas-target-genes"
 when_to_use: "[chip-atlas-target-genes] 有ChIP-Atlas peak坐标或transcription factor名，需查询这些peak调控的靶基因列表，输出TF→target调控表"
 display-name: "ChIP-Atlas Target Genes"
-category: scATAC
+category: Data Query
 short-description: "Retrieve pre-computed target genes for any transcription factor from ChIP-Atlas public ChIP-seq data."
 detailed-description: "Downloads binding score data across all public ChIP-seq experiments for a specified protein/TF, ranking genes by MACS2 scores with cell-type-specific filtering and STRING protein interaction integration. Supports 10 genomes - human (hg38, hg19), mouse (mm10, mm9), rat (rn6), fly (dm6, dm3), worm (ce11, ce10), yeast (sacCer3)."
 starting-prompt: Find target genes for a transcription factor using ChIP-Atlas public ChIP-seq data . .

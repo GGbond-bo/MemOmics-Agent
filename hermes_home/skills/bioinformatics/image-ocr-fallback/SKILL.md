@@ -7,7 +7,7 @@ description: >-
   failure chain of pytesseract (needs tesseract binary) and easyocr (needs
   ~100MB network model download). Use when user uploads an image asking
   "能识图吗" / "read this image" / scanned-PDF text extraction returns empty.
-category: bioinformatics
+category: General Utility
 trigger:
   when:
     - User uploads image and asks "能识图吗" / "can you read this image" / "看看这个图"

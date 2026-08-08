@@ -3,7 +3,7 @@ id: "skill_546a8868863342c093eb2570dcd538f4"
 name: "clinicaltrials-landscape"
 when_to_use: "[clinicaltrials-landscape] 需使用clinicaltrials landscape功能，适用于相关生信分析场景"
 display-name: "ClinicalTrials.gov Disease Landscape Scanner"
-category: Literature
+category: Clinical
 short-description: "Query ClinicalTrials.gov API v2 to map the clinical trial landscape for any disease area by mechanism, phase, and sponsor."
 detailed-description: "Programmatically query the free ClinicalTrials.gov API v2 to pull all active clinical trials for a disease area, classify by therapeutic mechanism of action, and generate competitive landscape visualizations. Supports any disease with pre-built configs for IBD (Crohn's, UC). Generic mode classifies by intervention type when no disease config exists. Supports filtering by mechanism, phase, sponsor, and status. Exports structured CSVs, publication-quality plots, and pickle objects for downstream analysis. No API key required."
 starting-prompt: Show me the current clinical trial landscape for IBD

@@ -11,7 +11,7 @@ metadata:
     tags: []
     difficulty: basic
     language: Python
-    category: GWAS/Genetics
+    category: Bulk RNA
 prerequisites:
   r_packages: []
   python_packages: []

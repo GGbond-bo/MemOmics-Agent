@@ -18,6 +18,13 @@
 - **Table_S1.tsv = donor→age 映射**（供体年龄分组核对用）
 - 本地 fragments：`E:\专利\Human_Hippocampus_ATAC\fragments\`（9 样本 tsv.gz + tbi）
 
+## donor→age 提取（2026-08-08 实测：series matrix 不含 age！）
+- ⚠️ `GSE278576_series_matrix.txt.gz` 的 `!Sample_characteristics` 只有 `tissue: hippocampus` + `donor id: hcXX` 两列，**没有 age/sex**
+- 正确来源：`GSE278576_hippocampus_RNA_seurat_object_filtered_cells_metadata.tsv.gz`（GSE suppl 页，12MB，295,034 细胞级行）列含 `orig.ident` / `Age` / `Gender` / `age_group` / `subclass`
+- 提取法：按 `orig.ident` 分组取 `Age` 唯一值 → donor→age 映射（40 donor，age 20-95，4 年龄组全）
+- 完整映射已存：`results/memomics-1c1890da/donor_age_map.json`（挑测试样本/分组核对直接读，不用再下 metadata）
+- 挑测试样本规则（跨物种 pilot）：2 年轻 + 2 老年，年龄跨 ≥60 年（如 hc78=20 + hc5579=25 vs hc98=82 + hc9=95），QC 后细胞数 5,800-9,000 稳健优先
+
 ## 官方流程参数速查
 1. **QC/聚类**：cellranger-arc v2.0.0 → SnapATAC2 (min_num_fragments=500, min_counts=500, min_tsse=5) → tile matrix + select_features n=250000 → scrublet → spectral → umap → leiden；RNA 侧 Seurat SCTransform → rPCA → Leiden res 0.3 → marker+reference 注释 18 亚类
 2. **Peak calling（官方代码用 MACS3，论文写 MACS2）**：`macs3 callpeak --ext 150 --shift -75 --nomodel -g hs -q 0.1 --call-summits -f BED` → summit 过滤 `_alt` → iterative_overlap_peak_merging → union 500bp（summit ±250bp）

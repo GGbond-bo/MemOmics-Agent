@@ -272,6 +272,8 @@ fi
 export HERMES_HOME="$SCRIPT_DIR/hermes_home"
 export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
 export MEMOMICS_PORT="$PORT"
+# P1-A: 任务完成闸门（防老任务被自动重启）——默认开启，出问题可注释此行回退
+export MEMOMICS_RUN_GATE="${MEMOMICS_RUN_GATE:-1}"
 # 默认仅监听本机（127.0.0.1）。服务器/局域网访问时：export MEMOMICS_HOST=0.0.0.0
 export MEMOMICS_HOST="${MEMOMICS_HOST:-127.0.0.1}"
 
