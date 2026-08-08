@@ -4939,7 +4939,8 @@ async def list_kb(path: str = ""):
                 "size": p.stat().st_size if p.is_file() else 0,
                 "ext": p.suffix.lower() if p.is_file() else "",
             })
-        return {"path": str(path).replace("\\", "/"), "items": items, "kb_root": KB_DIR.replace("\\", "/")}
+        return {"path": str(path).replace("\\", "/"), "items": items, "kb_root": KB_DIR.replace("\\", "/"),
+                "total_files": sum(1 for _ in Path(KB_DIR).rglob("*") if _.is_file())}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

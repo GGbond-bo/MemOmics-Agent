@@ -2887,7 +2887,10 @@ async function browseKb(path) {
   currentPath.kb = path;
   var r = await fetch('/api/kb?path=' + encodeURIComponent(path));
   var d = await r.json();
-  document.getElementById('kb-path').textContent = d.path || '/';
+  // 2026-08-08：根目录显示文件总数（知识分布在物种/组织子目录里，
+  // 避免用户以为"知识没了"）
+  var totalNote = (!path && d.total_files) ? ' <span style="font-size:10px;color:var(--text-light);">(共 ' + d.total_files + ' 个文件，分布在下方目录中)</span>' : '';
+  document.getElementById('kb-path').textContent = (d.path || '/') + totalNote;
   document.getElementById('kb-preview').style.display = 'none';
   document.getElementById('kb-list').style.display = '';
   var parentPath = '';
