@@ -210,10 +210,12 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
 
 /* === 右侧面板 === */
-.info-panel { width:380px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+.info-panel { width:clamp(320px, 30vw, 560px); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 /* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原 380px） */
 .info-panel-resizer { width:6px; flex-shrink:0; cursor:ew-resize; background:linear-gradient(90deg, transparent 2px, rgba(149,165,166,0.45) 2px, rgba(149,165,166,0.45) 4px, transparent 4px); transition:background 0.15s; position:relative; z-index:20; }
 .info-panel-resizer:hover { background:linear-gradient(90deg, transparent 1px, var(--primary) 1px, var(--primary) 5px, transparent 5px); }
+.kb-sp-btn { font-size:11px; padding:2px 9px; border-radius:4px; background:var(--border); color:var(--text); border:none; cursor:pointer; white-space:nowrap; }
+.kb-sp-btn:hover { filter:brightness(1.12); }
 .info-panel > div[id^="panel-"] { flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
 .info-header { padding:12px 20px; border-bottom:1px solid var(--border); font-size:15px; font-weight:500; display:flex; justify-content:space-between; align-items:center; }
 .info-tabs { display:flex; border-bottom:1px solid var(--border); }
@@ -2959,6 +2961,9 @@ var _kbMode3D = false;
 var _kbGraphData = null;
 var _kb3D = null;
 var _kbPending3D = false;
+var _kbFocusSpecies = null;
+var _kbLastSig = null;
+var _kbWatcher = null;
 
 async function previewKb(path) {
   var r = await fetch('/api/kb/file?path=' + encodeURIComponent(path));
@@ -3101,10 +3106,14 @@ function loadKbGraph() {
       '<span>节点：物种🟣 组织🔵 方向🟢 分类🟠 文件⚪ ｜ 灰线=层级 红虚线=方法共享 ｜ 点击节点查看内容</span>' +
       '<span style="white-space:nowrap;">' +
       '<button id="kb-btn-3d" onclick="toggleKbGraph3D()" title="3D 星球视图：节点分布在球面，可像地球一样拖拽旋转" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐 星球视图</button>' +
+      ' <button onclick="reloadKbGraphData()" title="重新加载知识库数据（知识库新增内容后点击，也可等待自动检测）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📥 重新加载</button>' +
       ' <button onclick="refreshKbGraph()" title="重新布局并居中" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🔄 刷新布局</button>' +
       '</span></div>' +
+      '<div id="kb-species-bar" style="padding:3px 8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;border-bottom:1px solid var(--border);"></div>' +
       '<div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);background:#ffffff;border:1px solid #dde2ea;border-radius:6px;"></div>' +
       '<div id="kb-graph-3d" style="display:none;width:100%;height:100%;"></div>';
+    _kbLastSig = kbGraphSig(d);
+    renderKbSpeciesBar(d);
     loadCytoscape(function() {
       if (typeof cytoscape === 'undefined') { renderKbGraphFallback(el, d); return; }
       var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
@@ -3126,6 +3135,7 @@ function loadKbGraph() {
         layout: { name: 'cose', animate: false, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }
       });
       _kbCy = cy;
+      if (_kbFocusSpecies) applyFocusKb2D();
       initKbDetailResizer();
       cy.on('tap', 'node', function(evt) {
         var n = evt.target.data();
@@ -3148,6 +3158,109 @@ function renderKbGraphFallback(el, d) {
     html += '<div class="file-item" onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')"><span class="file-icon">📚</span><span class="file-name">' + escapeHtml(n.label) + ' <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(n.id) + '</span></span></div>';
   });
   el.innerHTML = html;
+}
+
+/* ================= 知识图谱 物种聚焦 + 自动更新 ================= */
+var _SP_NAMES = { 'Homo_sapiens': '人', 'Mus_musculus': '小鼠', 'Macaca_mulatta': '猕猴', 'monkey': '猴', 'zebrafish': '斑马鱼', 'common': '通用', 'error_memory': '错误记忆' };
+
+function isKbSpeciesNode(id, sp) {
+  return id === sp || id.indexOf(sp + '/') === 0;
+}
+
+function renderKbSpeciesBar(d) {
+  var bar = document.getElementById('kb-species-bar');
+  if (!bar) return;
+  var tops = (d.nodes || []).filter(function(n) { return n.id.indexOf('/') === -1 && n.type === 'dir'; });
+  var html = '<span style="font-size:10px;color:var(--text-light);white-space:nowrap;">🧭 物种：</span>';
+  html += '<button class="kb-sp-btn" data-sp="all" onclick="focusKbSpecies(\'all\')">🌍 全部</button>';
+  tops.forEach(function(t) {
+    var name = _SP_NAMES[t.id] || t.id;
+    var cnt = 0;
+    d.nodes.forEach(function(n) { if (isKbSpeciesNode(n.id, t.id)) cnt++; });
+    html += '<button class="kb-sp-btn" data-sp="' + t.id + '" onclick="focusKbSpecies(\'' + t.id + '\')" title="' + t.id + '（' + cnt + ' 节点）">' + name + '</button>';
+  });
+  bar.innerHTML = html;
+  syncKbSpeciesButtons();
+}
+
+function syncKbSpeciesButtons() {
+  var bar = document.getElementById('kb-species-bar');
+  if (!bar) return;
+  var cur = _kbFocusSpecies || 'all';
+  bar.querySelectorAll('.kb-sp-btn').forEach(function(b) {
+    var on = b.getAttribute('data-sp') === cur;
+    b.style.background = on ? 'var(--primary)' : 'var(--border)';
+    b.style.color = on ? '#fff' : 'var(--text)';
+    b.style.fontWeight = on ? '600' : 'normal';
+  });
+}
+
+function focusKbSpecies(sp) {
+  _kbFocusSpecies = (sp === 'all' || !sp) ? null : sp;
+  syncKbSpeciesButtons();
+  if (_kbMode3D) applyFocusKb3D();
+  else applyFocusKb2D();
+}
+
+function applyFocusKb2D() {
+  var cy = _kbCy; if (!cy) return;
+  var sp = _kbFocusSpecies;
+  cy.elements().style('display', 'element');
+  if (!sp) {
+    cy.layout({ name: 'cose', animate: true, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }).run();
+    cy.center();
+    return;
+  }
+  var keep = {};
+  cy.nodes().forEach(function(n) { if (isKbSpeciesNode(n.id(), sp)) keep[n.id()] = true; });
+  cy.edges().forEach(function(e) {
+    if (!keep[e.source().id()] || !keep[e.target().id()]) e.style('display', 'none');
+  });
+  cy.nodes().forEach(function(n) { if (!keep[n.id()]) n.style('display', 'none'); });
+  cy.layout({ name: 'cose', animate: true, padding: 20, nodeRepulsion: 4000, idealEdgeLength: 50 }).run();
+  cy.center();
+}
+
+function applyFocusKb3D() {
+  if (!_kb3D) return;
+  var sp = _kbFocusSpecies;
+  _kb3D.nodes.forEach(function(m) {
+    var on = !sp || isKbSpeciesNode(m.userData.node.id, sp);
+    m.visible = on;
+    if (m.userData.sprite) m.userData.sprite.visible = on;
+  });
+  _kb3D.edges.forEach(function(m) {
+    var on = !sp || (isKbSpeciesNode(m.userData.source, sp) && isKbSpeciesNode(m.userData.target, sp));
+    m.visible = on;
+  });
+}
+
+function reloadKbGraphData() {
+  if (_kbMode3D) { disposeKbGraph3D(); _kbMode3D = false; _kbPending3D = true; }
+  _kbGraphLoaded = false;
+  _kbGraphData = null;
+  loadKbGraph();
+}
+
+function kbGraphSig(d) {
+  var h = 5381;
+  (d.nodes || []).forEach(function(n) { h = ((h * 33) ^ n.id.length) >>> 0; });
+  (d.edges || []).forEach(function(e) { h = ((h * 33) ^ (e.source.length + e.target.length)) >>> 0; });
+  return (d.counts ? d.counts.nodes + '-' + d.counts.edges : '') + '#' + h;
+}
+
+function startKbWatcher() {
+  if (_kbWatcher) return;
+  _kbWatcher = setInterval(function() {
+    fetch('/api/kb/graph').then(function(r) { return r.json(); }).then(function(d) {
+      var sig = kbGraphSig(d);
+      if (_kbLastSig && sig !== _kbLastSig && _kbGraphLoaded) {
+        console.log('[kb] 检测到知识库更新，自动刷新图谱');
+        reloadKbGraphData();
+      }
+      _kbLastSig = sig;
+    }).catch(function() {});
+  }, 30000);
 }
 
 /* ================= 知识图谱 3D 星球/星空模式（2026-08-06 版恢复） ================= */
@@ -3521,7 +3634,8 @@ function buildKbGraph3D(data) {
     renderer.render(scene, camera);
   }
 
-  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp };
+  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp, nodes: nodeMeshes, edges: edgeMeshes };
+  applyFocusKb3D();
   resumeKbGraph3D();
 }
 
@@ -3665,7 +3779,7 @@ function initInfoPanelResizer() {
       _kbCy.center();
     }
   }
-  rz.addEventListener('dblclick', function() { panel.style.width = MIN_W + 'px'; recenterGraph(); });
+  rz.addEventListener('dblclick', function() { panel.style.width = ''; recenterGraph(); });
   rz.addEventListener('mousedown', function(e) {
     e.preventDefault();
     var startX = e.clientX;
@@ -3689,6 +3803,7 @@ function initInfoPanelResizer() {
   });
 }
 initInfoPanelResizer();
+startKbWatcher();
 
 // === 窗口尺寸变化：图谱自适应（防抖 150ms） ===
 var _winResizeTimer = null;
