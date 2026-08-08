@@ -76,3 +76,36 @@ def test_fresh_escape_hatch(monkeypatch):
     """MEMOMICS_KERNEL_FRESH=1 强制走旧路径"""
     monkeypatch.setenv("MEMOMICS_KERNEL_FRESH", "1")
     assert try_persistent_kernel("1 + 1", "pool-task-1", 15) is None
+
+
+# ==================== R kernel（P0-1） ====================
+
+def test_r_state_persists_across_calls():
+    """R 同 task 两次调用：变量保留"""
+    r1 = KERNEL_POOL.execute("x <- 42", "r-task-1", timeout=20, language="r")
+    assert r1["status"] == "ok", r1
+    r2 = KERNEL_POOL.execute("x * 2", "r-task-1", timeout=20, language="r")
+    assert r2["status"] == "ok", r2
+    assert "84" in r2["output"]
+
+
+def test_r_print_capture():
+    r = KERNEL_POOL.execute("cat('hello-r\n'); print(1 + 1)", "r-task-1", timeout=20, language="r")
+    assert r["status"] == "ok", r
+    assert "hello-r" in r["output"]
+    assert "2" in r["output"]
+
+
+def test_r_error_semantics():
+    r = KERNEL_POOL.execute("stop('boom-r')", "r-task-1", timeout=20, language="r")
+    assert r["status"] == "error"
+    assert "boom-r" in (r.get("error") or "")
+
+
+def test_r_timeout_kill_and_recover():
+    """R 卡死 worker 被 kill，下次调用自动重建"""
+    r1 = KERNEL_POOL.execute("Sys.sleep(100)", "r-task-t", timeout=2, language="r")
+    assert r1["status"] == "timeout"
+    r2 = KERNEL_POOL.execute("40 + 2", "r-task-t", timeout=20, language="r")
+    assert r2["status"] == "ok"
+    assert "42" in r2["output"]

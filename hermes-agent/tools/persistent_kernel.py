@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""持久 Python kernel 池（P0-1）
+"""持久 kernel 池（P0-1）：Python + R
 
-借鉴 OpenAI4S 持久内核理念：跨 execute_code 调用复用子进程，保留变量/
-模块状态，避免每次解释器启动 + 依赖 import 的开销（生信分析 load
-pandas/scanpy 数秒级）。
+借鉴 OpenAI4S 持久内核理念：跨 execute_code/execute_r 调用复用子进程，
+保留变量/模块状态，避免每次解释器启动 + 依赖 import 的开销。
 
 - 状态隔离：task_id → 独立 worker（不同任务互不干扰）
 - 超时：kill 卡死 worker，下次调用自动重建
@@ -22,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 _IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "1800"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
-_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
+_PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
+_R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
 
 
 def _truncate(text, max_bytes=_MAX_OUTPUT_BYTES):
@@ -35,12 +35,11 @@ def _truncate(text, max_bytes=_MAX_OUTPUT_BYTES):
     return head + f"\n... [输出截断，共 {len(data)} 字节] ...\n" + tail, {"truncated": True}
 
 
-class _Worker:
-    """单个持久 worker 进程（task_id 级隔离）"""
+class _ProtoWorker:
+    """协议通用部分：reader / stderr / 超时语义（子类实现 _spawn）"""
 
-    def __init__(self, task_id, python_path, env, cwd):
+    def __init__(self, task_id, env, cwd):
         self.task_id = task_id
-        self.python_path = python_path
         self.env = env
         self.cwd = cwd
         self.proc = None
@@ -53,20 +52,8 @@ class _Worker:
         self._stderr_buf = []
         self._spawn()
 
-    def _spawn(self):
-        self.proc = subprocess.Popen(
-            [self.python_path, "-u", _WORKER_PATH],
-            cwd=self.cwd,
-            env=self.env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-        self._reader_stop.clear()
-        threading.Thread(target=self._reader_loop, daemon=True).start()
-        threading.Thread(target=self._stderr_loop, daemon=True).start()
+    def _spawn(self):  # pragma: no cover - 子类实现
+        raise NotImplementedError
 
     def _reader_loop(self):
         while not self._reader_stop.is_set():
@@ -143,6 +130,48 @@ class _Worker:
         self._kill()
 
 
+class _PyWorker(_ProtoWorker):
+    def __init__(self, task_id, python_path, env, cwd):
+        self.python_path = python_path
+        super().__init__(task_id, env, cwd)
+
+    def _spawn(self):
+        self.proc = subprocess.Popen(
+            [self.python_path, "-u", _PY_WORKER_PATH],
+            cwd=self.cwd,
+            env=self.env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        self._reader_stop.clear()
+        threading.Thread(target=self._reader_loop, daemon=True).start()
+        threading.Thread(target=self._stderr_loop, daemon=True).start()
+
+
+class _RWorker(_ProtoWorker):
+    def __init__(self, task_id, rscript_path, env, cwd):
+        self.rscript_path = rscript_path
+        super().__init__(task_id, env, cwd)
+
+    def _spawn(self):
+        self.proc = subprocess.Popen(
+            [self.rscript_path, "--vanilla", _R_WORKER_PATH],
+            cwd=self.cwd,
+            env=self.env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        self._reader_stop.clear()
+        threading.Thread(target=self._reader_loop, daemon=True).start()
+        threading.Thread(target=self._stderr_loop, daemon=True).start()
+
+
 class KernelPool:
     def __init__(self):
         self._workers = {}
@@ -155,6 +184,17 @@ class KernelPool:
             return _resolve_child_python(_get_execution_mode())
         except Exception:
             return sys.executable
+
+    @staticmethod
+    def _rscript_path():
+        for cand in (os.environ.get("RSCRIPT_PATH"), "Rscript"):
+            if not cand:
+                continue
+            import shutil
+            found = shutil.which(cand)
+            if found:
+                return found
+        return "Rscript"
 
     @staticmethod
     def _child_env():
@@ -171,16 +211,21 @@ class KernelPool:
         env["PYTHONPATH"] = _root if not _pp else _root + os.pathsep + _pp
         return env
 
-    def execute(self, code, task_id, timeout=120):
+    def execute(self, code, task_id, timeout=120, language="python"):
+        lang = language or "python"
+        key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
         with self._lock:
-            for tid in [t for t, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
-                self._workers[tid].close()
-                del self._workers[tid]
-            w = self._workers.get(task_id)
+            for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
+                self._workers[k].close()
+                del self._workers[k]
+            w = self._workers.get(key)
             if w is None:
-                w = _Worker(task_id, self._python_path(), self._child_env(), cwd=os.getcwd())
-                self._workers[task_id] = w
+                if lang == "r":
+                    w = _RWorker(task_id or "default", self._rscript_path(), self._child_env(), cwd=os.getcwd())
+                else:
+                    w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=os.getcwd())
+                self._workers[key] = w
         try:
             return w.execute(code, timeout)
         except Exception as e:
@@ -197,7 +242,7 @@ class KernelPool:
 KERNEL_POOL = KernelPool()
 
 
-def try_persistent_kernel(code, task_id, timeout):
+def try_persistent_kernel(code, task_id, timeout, language="python"):
     """持久 kernel 快速路径；不适用时返回 None（调用方走旧路径）"""
     if os.environ.get("MEMOMICS_KERNEL_FRESH") == "1":
         return None
@@ -207,7 +252,7 @@ def try_persistent_kernel(code, task_id, timeout):
     if any(tok in code for tok in ("hermes_tools", "subprocess", "Popen", "os.system", "__import__", "importlib")):
         return None
     try:
-        res = KERNEL_POOL.execute(code, task_id or "default", timeout=timeout)
+        res = KERNEL_POOL.execute(code, task_id or "default", timeout=timeout, language=language)
     except Exception:
         return None
     return json.dumps(res, ensure_ascii=False)
