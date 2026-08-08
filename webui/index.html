@@ -2367,11 +2367,18 @@ let currentProviderModels = [];
 // 实时从后端拉当前（会话级）模型，重建下拉框 + 徽章。
 // 原来 loadModels 只在页面加载时跑一次（当时 currentSid 为空 → 全局默认 Flash），
 // 切会话/切换模型后各展示点各改各的、残留旧值 → 下拉框永远显示 Flash。
+// 统一模型展示刷新（2026-08-08 重构）：
+// 实时从后端拉当前（会话级）模型，重建下拉框 + 徽章。
+// 原来 loadModels 只在页面加载时跑一次（当时 currentSid 为空 → 全局默认 Flash），
+// 切会话/切换模型后各展示点各改各的、残留旧值 → 下拉框永远显示 Flash。
+var _modelUICtl = 0;  // 请求序号守卫：只允许最新一次 refreshModelUI 落地
 async function refreshModelUI() {
+  var _mySeq = ++_modelUICtl;
   var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
   // currentModel：会话级真实当前模型（徽章 + 下拉框选中依据）
   var r = await fetch('/api/models' + qs);
   var d = await r.json();
+  if (_mySeq !== _modelUICtl) return;  // 过期结果丢弃
   models = d.presets || [];
   currentModel = d.current || {};
   var sel = document.getElementById('model-select');
@@ -2380,6 +2387,7 @@ async function refreshModelUI() {
     // 不再把未配置 key 的供应商（OpenAI/Anthropic 等）也堆进来。
     var av = await fetch('/api/models/available' + qs);
     var ad = await av.json();
+    if (_mySeq !== _modelUICtl) return;  // 过期结果丢弃
     var availModels = (ad && ad.models) || [];
     var groups = {};
     availModels.forEach(function(m) {
@@ -2402,6 +2410,7 @@ async function refreshModelUI() {
     }
     sel.innerHTML = html;
   }
+  if (_mySeq !== _modelUICtl) return;  // 过期结果丢弃
   var badge = document.getElementById('model-badge');
   if (badge) badge.textContent = currentModel.model || '未设置';
   return d;
@@ -2473,7 +2482,7 @@ async function loadProviders() {
     var pSel = document.getElementById('settings-provider');
     if (pSel && currentModel.provider) pSel.value = currentModel.provider;
     await refreshConnectedModels();
-    await refreshModelSelect();
+    await refreshModelUI();
   } catch(e) { console.error('loadProviders error', e); }
 }
 
@@ -2618,39 +2627,8 @@ async function saveLocalModel(modelId, baseUrl, serverName) {
     if (!d.ok) { alert(d.error || '保存失败'); return; }
     alert('已添加本地模型 ' + modelId + '（免 API Key）');
     await refreshConnectedModels();
-    await refreshModelSelect();
+    await refreshModelUI();
   } catch(e) { alert('保存失败: ' + e.message); }
-}
-
-// 刷新交互框下拉框
-async function refreshModelSelect() {
-  try {
-    var r = await fetch('/api/models/available');
-    var d = await r.json();
-    var sel = document.getElementById('model-select');
-    if (!sel) return;
-    var models = d.models || [];
-    if (!models.length) {
-      sel.innerHTML = '<option value="">请先在设置中添加 Key</option>';
-      return;
-    }
-    var byProvider = {};
-    var order = [];
-    models.forEach(function(m) {
-      if (!byProvider[m.provider_name]) { byProvider[m.provider_name] = []; order.push(m.provider_name); }
-      byProvider[m.provider_name].push(m);
-    });
-    var html = '';
-    order.forEach(function(pn) {
-      html += '<optgroup label="' + escapeHtml(pn) + '">';
-      byProvider[pn].forEach(function(m) {
-        var selected = m.is_current ? ' selected' : '';
-        html += '<option value="' + m.id + '\\u0001' + m.provider_id + '"' + selected + '>' + escapeHtml(m.name) + '</option>';
-      });
-      html += '</optgroup>';
-    });
-    sel.innerHTML = html;
-  } catch(e) { console.error('refreshModelSelect error', e); }
 }
 
 function onModelSelect() {
@@ -2734,7 +2712,7 @@ async function saveModel() {
   loadSessions();
   var p = allProviders.find(function(x) { return x.id === pid; });
   alert('\u2705 模型已切换为: ' + currentModel.model + (p ? '\\n\ud83d\udce1 Provider: ' + p.name : ''));
-  await refreshModelSelect();
+  await refreshModelUI();
   await refreshConnectedModels();
   await loadProviders();
 }
@@ -4484,7 +4462,7 @@ async function submitSetup() {
     if (d.ok) {
       document.getElementById('setup-modal').remove();
       loadModels();
-      refreshModelSelect();
+      refreshModelUI();
     } else {
       err.textContent = d.error || '保存失败'; err.style.display = 'block';
     }
