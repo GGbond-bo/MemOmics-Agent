@@ -552,7 +552,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <div id="kb-preview-render" style="padding:8px 4px;"></div>
         <pre id="kb-preview-content"></pre>
       </div>
-      <div id="kb-graph" style="display:none;height:70vh;"></div>
+      <div id="kb-graph" style="display:none;height:70vh;position:relative;">
+        <div id="kb-graph-3d" style="display:none;width:100%;height:100%;"></div>
+        <div id="kb-node-detail" style="display:none;position:absolute;top:28px;right:8px;width:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.35);z-index:50;">
+          <div id="kb-node-detail-resizer" title="按住左右拖动调整宽度（双击还原 320px）" style="position:absolute;left:-5px;top:0;bottom:0;width:10px;cursor:ew-resize;background:linear-gradient(90deg, transparent 4px, rgba(149,165,166,0.6) 4px, rgba(149,165,166,0.6) 6px, transparent 6px);"></div>
+          <div id="kb-node-detail-header"></div>
+          <div id="kb-node-detail-body" style="padding:8px 10px;font-size:11px;overflow-y:auto;max-height:55vh;">点击节点查看详情</div>
+        </div>
+      </div>
     </div>
 
     <!-- Skill 面板 -->
@@ -2900,6 +2907,12 @@ var _kbParsed = null;
 var _kbRawMode = false;
 var _kbSearchTimer = null;
 var _kbGraphLoaded = false;
+var _kbCy = null;
+var _kbCurrentNode = null;
+var _kbMode3D = false;
+var _kbGraphData = null;
+var _kb3D = null;
+var _kbPending3D = false;
 
 async function previewKb(path) {
   var r = await fetch('/api/kb/file?path=' + encodeURIComponent(path));
@@ -3028,7 +3041,14 @@ function loadKbGraph() {
   if (_kbGraphLoaded) return;
   _kbGraphLoaded = true;
   fetch('/api/kb/graph').then(function(r) { return r.json(); }).then(function(d) {
-    el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;">节点：物种🟣 组织🔵 方向🟢 分类🟠 文件⚪ ｜ 灰线=层级 红虚线=方法共享 ｜ 点击文件节点查看内容</div><div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);"></div>';
+    _kbGraphData = d;
+    el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;display:flex;align-items:center;justify-content:space-between;">' +
+      '<span>节点：物种🟣 组织🔵 方向🟢 分类🟠 文件⚪ ｜ 灰线=层级 红虚线=方法共享 ｜ 点击节点查看内容</span>' +
+      '<span style="white-space:nowrap;">' +
+      '<button id="kb-btn-3d" onclick="toggleKbGraph3D()" title="3D 星球视图：节点分布在球面，可像地球一样拖拽旋转" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐 星球视图</button>' +
+      ' <button onclick="refreshKbGraph()" title="重新布局并居中" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🔄 刷新布局</button>' +
+      '</span></div>' +
+      '<div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);background:#ffffff;border:1px solid #dde2ea;border-radius:6px;"></div>';
     loadCytoscape(function() {
       if (typeof cytoscape === 'undefined') { renderKbGraphFallback(el, d); return; }
       var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
@@ -3049,10 +3069,17 @@ function loadKbGraph() {
         ],
         layout: { name: 'cose', animate: false, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }
       });
+      _kbCy = cy;
+      initKbDetailResizer();
       cy.on('tap', 'node', function(evt) {
         var n = evt.target.data();
-        if (n.ntype === 'file' && n.path) previewKb(n.path);
+        highlightKbNeighbors(cy, evt.target);
+        showKbNodeDetail(n);
       });
+      cy.on('tap', function(evt) {
+        if (evt.target === cy) { hideKbNodeDetail(); resetKbHighlight(cy); }
+      });
+      if (_kbPending3D) { _kbPending3D = false; enterKbGraph3D(); }
     });
   }).catch(function(err) {
     el.innerHTML = '<div style="padding:12px;color:#e74c3c;font-size:12px;">图谱加载失败：' + escapeHtml(err.message || err) + '</div>';
@@ -3065,6 +3092,425 @@ function renderKbGraphFallback(el, d) {
     html += '<div class="file-item" onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')"><span class="file-icon">📚</span><span class="file-name">' + escapeHtml(n.label) + ' <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(n.id) + '</span></span></div>';
   });
   el.innerHTML = html;
+}
+
+/* ================= 知识图谱 3D 星球/星空模式（2026-08-06 版恢复） ================= */
+function loadThreeLib(cb) {
+  if (window.THREE && THREE.OrbitControls) { cb(); return; }
+  // 本地 vendor 优先（Linux/离线环境可用），失败回退 CDN
+  var s = document.createElement('script');
+  s.src = '/assets/vendor/three.min.js';
+  s.onload = function() {
+    if (window.THREE && THREE.OrbitControls) { cb(); return; }
+    if (window.THREE) { loadThreeOrbitControlsCdn(cb); return; }
+    loadThreeCdn(cb);
+  };
+  s.onerror = function() { loadThreeCdn(cb); };
+  document.head.appendChild(s);
+}
+
+function loadThreeCdn(cb) {
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+  s.onload = function() {
+    if (window.THREE && THREE.OrbitControls) { cb(); return; }
+    loadThreeOrbitControlsCdn(cb);
+  };
+  s.onerror = function() { cb(); };
+  document.head.appendChild(s);
+}
+
+function loadThreeOrbitControlsCdn(cb) {
+  var o = document.createElement('script');
+  o.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+  o.onload = function() { cb(); };
+  o.onerror = function() { cb(); };
+  document.head.appendChild(o);
+}
+
+function toggleKbGraph3D() {
+  if (_kbMode3D) exitKbGraph3D();
+  else enterKbGraph3D();
+}
+
+function enterKbGraph3D() {
+  var data = _kbGraphData;
+  if (!data || !data.nodes || !data.nodes.length) {
+    if (_kbGraphLoaded) { alert('知识库为空，暂无可展示的图谱'); return; }
+    _kbPending3D = true;
+    loadKbGraph();
+    return;
+  }
+  _kbMode3D = true;
+  var btn = document.getElementById('kb-btn-3d');
+  if (btn) btn.textContent = '🗺 平面视图';
+  var c2 = document.getElementById('kb-graph-canvas');
+  var c3 = document.getElementById('kb-graph-3d');
+  if (c2) c2.style.display = 'none';
+  if (c3) c3.style.display = '';
+  hideKbNodeDetail();
+  loadThreeLib(function() {
+    if (!window.THREE || !THREE.OrbitControls) {
+      _kbMode3D = false;
+      if (btn) btn.textContent = '🌐 星球视图';
+      if (c2) c2.style.display = '';
+      if (c3) c3.style.display = 'none';
+      alert('3D 星球视图库加载失败，请检查网络连接');
+      return;
+    }
+    if (!_kb3D) buildKbGraph3D(data);
+    else resumeKbGraph3D();
+  });
+}
+
+function exitKbGraph3D() {
+  _kbMode3D = false;
+  var btn = document.getElementById('kb-btn-3d');
+  if (btn) btn.textContent = '🌐 星球视图';
+  var c2 = document.getElementById('kb-graph-canvas');
+  var c3 = document.getElementById('kb-graph-3d');
+  if (c2) c2.style.display = '';
+  if (c3) c3.style.display = 'none';
+  disposeKbGraph3D();
+  if (window._kbCy) { _kbCy.resize(); _kbCy.center(); }
+}
+
+function pauseKbGraph3D() {
+  if (_kb3D && _kb3D.raf) { cancelAnimationFrame(_kb3D.raf); _kb3D.raf = 0; }
+}
+
+function resumeKbGraph3D() {
+  if (!_kb3D || _kb3D.raf) return;
+  var obj = _kb3D;
+  var step = function() { obj.raf = requestAnimationFrame(step); obj.tick(); };
+  step();
+}
+
+function disposeKbGraph3D() {
+  if (!_kb3D) return;
+  pauseKbGraph3D();
+  if (_kb3D.renderer) {
+    _kb3D.renderer.domElement.removeEventListener('pointerdown', _kb3D.onPointerDown);
+    _kb3D.renderer.domElement.removeEventListener('pointerup', _kb3D.onPointerUp);
+    if (_kb3D.renderer.domElement.parentNode) _kb3D.renderer.domElement.parentNode.removeChild(_kb3D.renderer.domElement);
+    _kb3D.renderer.dispose();
+  }
+  if (_kb3D.scene) {
+    _kb3D.scene.traverse(function(o) {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+  }
+  _kb3D = null;
+}
+
+function makeLabelSprite(text) {
+  var t = String(text == null ? '' : text);
+  var canvas = document.createElement('canvas');
+  var fontSize = 28;
+  var pad = 4;
+  var ctx = canvas.getContext('2d');
+  ctx.font = 'bold ' + fontSize + 'px sans-serif';
+  var lines = t.split('\n');
+  var maxW = 0;
+  lines.forEach(function(l) { maxW = Math.max(maxW, ctx.measureText(l).width); });
+  canvas.width = Math.ceil(maxW) + pad * 2;
+  canvas.height = fontSize * lines.length + pad * 2 + 6;
+  ctx.font = 'bold ' + fontSize + 'px sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(8,12,28,0.9)';
+  lines.forEach(function(l, i) { ctx.strokeText(l, pad, pad + i * fontSize); });
+  ctx.fillStyle = '#ffffff';
+  lines.forEach(function(l, i) { ctx.fillText(l, pad, pad + i * fontSize); });
+  var tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  var mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, opacity: 1 });
+  var sprite = new THREE.Sprite(mat);
+  var k = 0.14;
+  sprite.scale.set(canvas.width * k, canvas.height * k, 1);
+  return sprite;
+}
+
+function buildKbGraph3D(data) {
+  if (_kb3D) return;
+  var container = document.getElementById('kb-graph-3d');
+  if (!container) return;
+  var W = container.clientWidth || 600;
+  var H = container.clientHeight || 400;
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1026);
+  var camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 2000);
+  camera.position.set(0, 70, 190);
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(W, H);
+  renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;';
+  container.appendChild(renderer.domElement);
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.rotateSpeed = 0.7;
+  controls.minDistance = 60;
+  controls.maxDistance = 500;
+
+  // 星空背景
+  var starGeo = new THREE.BufferGeometry();
+  var starN = 600, starArr = new Float32Array(starN * 3);
+  for (var i = 0; i < starN; i++) {
+    var r = 260 + Math.random() * 380;
+    var th = Math.random() * Math.PI * 2;
+    var ph = Math.acos(2 * Math.random() - 1);
+    starArr[i*3] = r * Math.sin(ph) * Math.cos(th);
+    starArr[i*3+1] = r * Math.cos(ph);
+    starArr[i*3+2] = r * Math.sin(ph) * Math.sin(th);
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starArr, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.3, transparent: true, opacity: 0.75 })));
+
+  // 淡色球壳线框，勾勒星球轮廓
+  scene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(72, 48, 24),
+    new THREE.MeshBasicMaterial({ color: 0x88aaff, wireframe: true, transparent: true, opacity: 0.06 })
+  ));
+
+  // 灯光
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  var dl = new THREE.DirectionalLight(0xffffff, 0.7);
+  dl.position.set(80, 120, 160);
+  scene.add(dl);
+
+  // 球面布局（fibonacci sphere，节点均匀分布在球面）
+  var nodes = data.nodes || [];
+  var edges = data.edges || [];
+  var R = 70;
+  var Nn = nodes.length || 1;
+  var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
+  var nodeMeshes = [];
+  var meshByNode = {};
+  var adj = {};
+  edges.forEach(function(e) {
+    (adj[e.source] = adj[e.source] || []).push(e.target);
+    (adj[e.target] = adj[e.target] || []).push(e.source);
+  });
+  nodes.forEach(function(n, i) {
+    var golden = Math.PI * (3 - Math.sqrt(5));
+    var y = 1 - (i / (Nn - 1)) * 2;
+    var rad = Math.sqrt(Math.max(0, 1 - y * y));
+    var th = golden * i;
+    var pos = new THREE.Vector3(Math.cos(th) * rad * R, y * R, Math.sin(th) * rad * R);
+    var depth = String(n.id).split('/').length - 1;
+    var color = n.color || colors[Math.min(depth, 4)] || '#bdc3c7';
+    // 球体大小按层级分级：物种(最顶层)最大 → 组织 → 方向 → 分类 → 文件最小，同级一致
+    var size = Math.max(1.15, 2.6 - (depth || 0) * 0.35);
+    var mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(size, 20, 20),
+      new THREE.MeshPhongMaterial({ color: new THREE.Color(color), emissive: new THREE.Color(color).multiplyScalar(0.22), shininess: 40 })
+    );
+    mesh.position.copy(pos);
+    mesh.userData.node = { id: n.id, label: n.label, path: n.path, ntype: n.type };
+    scene.add(mesh);
+    nodeMeshes.push(mesh);
+    meshByNode[n.id] = mesh;
+    var sprite = makeLabelSprite(n.label);
+    sprite.position.copy(pos);
+    sprite.position.y += size + 2.6;
+    scene.add(sprite);
+    mesh.userData.sprite = sprite;
+  });
+
+  // 边：沿球面拱起的弧线（红 = 方法共享，灰 = 层级）
+  var edgeMeshes = [];
+  edges.forEach(function(e) {
+    var a = meshByNode[e.source], b = meshByNode[e.target];
+    if (!a || !b) return;
+    var p1 = a.position, p2 = b.position;
+    var mid = p1.clone().add(p2).multiplyScalar(0.5);
+    var lift = (mid.length() > 0.01 ? mid.clone().normalize() : new THREE.Vector3(0, 1, 0));
+    var ctrl = lift.multiplyScalar(R * 1.22);
+    var pts = new THREE.QuadraticBezierCurve3(p1, ctrl, p2).getPoints(28);
+    var geo = new THREE.BufferGeometry().setFromPoints(pts);
+    var mat = new THREE.LineBasicMaterial({
+      color: e.type === 'related' ? 0xff5252 : 0x8899aa,
+      transparent: true, opacity: 0.55
+    });
+    var line = new THREE.Line(geo, mat);
+    line.userData.source = e.source;
+    line.userData.target = e.target;
+    scene.add(line);
+    edgeMeshes.push(line);
+  });
+
+  // 点击选中：高亮节点与邻居，点空白恢复
+  var selNode = null;
+  var raycaster = new THREE.Raycaster();
+  var mouse = new THREE.Vector2();
+  var downPos = null;
+  function onPointerDown(ev) { downPos = [ev.clientX, ev.clientY]; }
+  function onPointerUp(ev) {
+    if (downPos && Math.abs(ev.clientX - downPos[0]) + Math.abs(ev.clientY - downPos[1]) > 6) { downPos = null; return; }
+    downPos = null;
+    var rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    var hits = raycaster.intersectObjects(nodeMeshes, false);
+    if (hits.length) {
+      var m = hits[0].object;
+      selNode = m.userData.node;
+      var nid = selNode.id;
+      var nb = adj[nid] || [];
+      nodeMeshes.forEach(function(mm) {
+        var on = (mm === m || nb.indexOf(mm.userData.node.id) >= 0);
+        mm.material.opacity = on ? 1 : 0.12;
+        if (mm.userData.sprite) mm.userData.sprite.material.opacity = on ? 1 : 0.15;
+      });
+      edgeMeshes.forEach(function(mm) {
+        mm.material.opacity = (mm.userData.source === nid || mm.userData.target === nid) ? 0.95 : 0.08;
+      });
+      showKbNodeDetail(selNode);
+    } else {
+      selNode = null;
+      hideKbNodeDetail();
+      nodeMeshes.forEach(function(mm) { mm.material.opacity = 1; if (mm.userData.sprite) mm.userData.sprite.material.opacity = 1; });
+      edgeMeshes.forEach(function(mm) { mm.material.opacity = 0.55; });
+    }
+  }
+  renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+  function tick() {
+    controls.update();
+    var cw = container.clientWidth, ch = container.clientHeight;
+    if (cw > 0 && ch > 0 && (Math.abs(cw - W) > 4 || Math.abs(ch - H) > 4)) {
+      W = cw; H = ch;
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+      renderer.setSize(W, H);
+    }
+    renderer.render(scene, camera);
+  }
+
+  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp };
+  resumeKbGraph3D();
+}
+
+function refreshKbGraph() {
+  if (_kbMode3D) {
+    disposeKbGraph3D();
+    if (_kbGraphData) buildKbGraph3D(_kbGraphData);
+    return;
+  }
+  if (!window._kbCy) { loadKbGraph(); return; }
+  _kbCy.layout({ name: 'cose', animate: true, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }).run();
+  _kbCy.center();
+}
+
+function refreshKbDetail() {
+  if (_kbCurrentNode) showKbNodeDetail(_kbCurrentNode);
+}
+
+function resetKbDetailWidth() {
+  var p = document.getElementById('kb-node-detail');
+  if (p) p.style.width = '320px';
+}
+
+function highlightKbNeighbors(cy, node) {
+  cy.elements().style({ 'opacity': 0.12 });
+  node.style({ 'opacity': 1 });
+  node.neighborhood().style({ 'opacity': 1 });
+}
+
+function resetKbHighlight(cy) {
+  cy.elements().style({ 'opacity': 1 });
+}
+
+function maximizeKbDetail() {
+  var panel = document.getElementById('kb-node-detail');
+  if (!panel) return;
+  var graph = document.getElementById('kb-graph');
+  var maxW = (graph ? graph.clientWidth : window.innerWidth) - 16;
+  if (panel.offsetWidth >= maxW - 40) { panel.style.width = '320px'; }
+  else { panel.style.width = maxW + 'px'; }
+}
+
+function initKbDetailResizer() {
+  var rz = document.getElementById('kb-node-detail-resizer');
+  var panel = document.getElementById('kb-node-detail');
+  if (!rz || !panel || rz._bound) return;
+  rz._bound = true;
+  rz.addEventListener('mouseenter', function() {
+    rz.style.background = 'linear-gradient(90deg, transparent 3px, rgba(52,152,219,0.9) 3px, rgba(52,152,219,0.9) 7px, transparent 7px)';
+  });
+  rz.addEventListener('mouseleave', function() {
+    rz.style.background = 'linear-gradient(90deg, transparent 4px, rgba(149,165,166,0.6) 4px, rgba(149,165,166,0.6) 6px, transparent 6px)';
+  });
+  rz.addEventListener('dblclick', function() {
+    panel.style.width = '320px';
+  });
+  rz.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    var startX = e.clientX;
+    var startW = panel.offsetWidth;
+    var graph = document.getElementById('kb-graph');
+    var maxW = (graph ? graph.clientWidth : window.innerWidth) - 16;
+    function onMove(ev) {
+      var w = startW + (ev.clientX - startX);
+      w = Math.max(240, Math.min(w, maxW));
+      panel.style.width = w + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function hideKbNodeDetail() {
+  var panel = document.getElementById('kb-node-detail');
+  if (panel) panel.style.display = 'none';
+}
+
+function showKbNodeDetail(n) {
+  var panel = document.getElementById('kb-node-detail');
+  if (!panel) return;
+  var header = document.getElementById('kb-node-detail-header');
+  var body = document.getElementById('kb-node-detail-body');
+  if (!header || !body) return;
+  _kbCurrentNode = n;
+  var icon = n.ntype === 'file' ? '📚' : '📁';
+  var tname = n.ntype === 'file' ? '文件' : '目录';
+  header.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);">' +
+    '<b>' + icon + ' ' + escapeHtml(n.label) + ' <span style="font-size:10px;color:var(--text-light);font-weight:400;">(' + tname + ')</span></b>' +
+    '<span style="white-space:nowrap;">' +
+    '<button onclick="refreshKbDetail()" title="刷新内容" style="border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-light);padding:0 6px;">↻</button>' +
+    '<button onclick="maximizeKbDetail()" title="最大化/还原" style="border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-light);padding:0 6px;">⛶</button>' +
+    '<button onclick="resetKbDetailWidth()" title="重置宽度 320px" style="border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-light);padding:0 6px;">↺</button>' +
+    '<button onclick="hideKbNodeDetail()" title="关闭" style="border:none;background:none;cursor:pointer;font-size:14px;color:var(--text-light);padding:0;">✕</button>' +
+    '</span></div>' +
+    '<div style="padding:4px 10px;font-size:10px;color:var(--text-light);border-bottom:1px solid var(--border);word-break:break-all;">' + escapeHtml(n.path || n.id) + '</div>';
+  body.innerHTML = '加载中...';
+  panel.style.display = '';
+  if (n.ntype === 'file') {
+    fetch('/api/kb/file?path=' + encodeURIComponent(n.path)).then(function(r) { return r.json(); }).then(function(d) {
+      if (!body) return;
+      if (d.parsed && typeof d.parsed === 'object') {
+        body.innerHTML = renderKbYaml(d.parsed, 0) + '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">打开完整预览</button></div>';
+      } else {
+        var c = d.content || '';
+        body.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;margin:0;">' + escapeHtml(c.slice(0, 600)) + (c.length > 600 ? '...' : '') + '</pre>' +
+          '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">打开完整预览</button></div>';
+      }
+    }).catch(function() { if (body) body.innerHTML = '加载失败'; });
+  } else {
+    body.innerHTML = '<div style="color:var(--text-light);">目录节点：' + escapeHtml(n.id) + '</div>';
+  }
 }
 
 function closeKbPreview() {
