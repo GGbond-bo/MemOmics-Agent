@@ -101,3 +101,5 @@ hermes_home/session_usage/
 hermes_home/processes.json
 hermes_home/lsp/bin/
 .backups/
+# 备份文件不入库
+*.bak*
