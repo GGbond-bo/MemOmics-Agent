@@ -110,12 +110,50 @@ def _apply_sct_rail(code: str) -> str:
     return code
 
 
-def execute_r(code: str, working_dir: str = "", timeout: int = 600) -> str:
-    """Execute R code with OOM detection and auto-retry."""
+def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str = "") -> str:
+    """Execute R code with OOM detection and auto-retry.
+
+    P0-1 持久 kernel 优先：跨调用保留变量/已加载包（热调用免解释器启动
+    + 包加载，Seurat/ArchR 类 2000x+）；持久不可用/报错时回退
+    每次 Rscript 新进程（保留 OOM 检测 + 自动重试 + SCTransform 特判）。
+    """
     timeout = min(max(int(timeout), 30), 900)
 
     if 'SCTransform' in code:
         code = _apply_sct_rail(code)
+
+    # ── 沙箱 fail-closed：degraded 模式写白名单外路径直接拒绝 ──
+    try:
+        from tools.sandbox_probe import probe_sandbox_capability, is_write_path_allowed
+        import re as _re
+        _write_re = _re.compile(
+            r"""(?:write\.csv|write\.table|write\.rds|write\.tsv|saveRDS|ggsave|pdf|png|jpeg|tiff|bmp|writeLines|save)\s*\([^)]*?["']([^"']+)["']""")
+        if probe_sandbox_capability().get("degraded"):
+            _violations = []
+            for _m in _write_re.finditer(code):
+                _p = _m.group(1).strip()
+                if _p and not is_write_path_allowed(_p):
+                    _violations.append(_p)
+            if _violations:
+                return (f"Error: 沙箱 degraded 模式：写入白名单外路径被拒绝: {_violations[:3]}. "
+                        "配置 MEMOMICS_ALLOWED_WRITE_ROOTS 可放行特定目录。")
+    except Exception:
+        pass
+
+    # ── P0-1 持久 kernel 优先（状态保持 + 免包加载） ──
+    try:
+        from tools.persistent_kernel import KERNEL_POOL
+        _res = KERNEL_POOL.execute(
+            code,
+            task_id or os.environ.get("MEMOMICS_SESSION_ID") or "default",
+            timeout=min(timeout, 600), language="r")
+        if _res.get("status") == "ok":
+            return (_res.get("output", "") or "(no output)")[:15000]
+        if _res.get("status") == "timeout":
+            return f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
+        # status == error → 回退旧路径（OOM 检测 + 重试）
+    except Exception:
+        pass
 
     max_attempts = 2
     for attempt in range(1, max_attempts + 1):
@@ -197,6 +235,7 @@ def _register():
             args.get("code", ""),
             args.get("working_dir", ""),
             args.get("timeout", 600),
+            kw.get("task_id", ""),
         ),
         emoji="📊",
         max_result_size_chars=50_000,
