@@ -52,6 +52,8 @@ batch_inject_*.py
 apply_nav.py
 fix_*.py
 test_*.py
+!webui/tests/
+!webui/tests/test_*.py
 verify_*.py
 
 # === 敏感/个人数据（不进 git）===

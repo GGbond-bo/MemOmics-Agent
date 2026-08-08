@@ -5583,9 +5583,93 @@ async def list_results(sid: str, path: str = ""):
                 "ext": p.suffix.lower() if p.is_file() else "",
                 "rel_path": str(p.relative_to(base)).replace("\\", "/"),
             })
-        return {"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base)}
+        return {"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base),
+                "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ============ 结果完成契约（P0-2）：analysis_manifest 协议 ============
+MANIFEST_SCHEMA = "memomics.analysis_manifest.v1"
+
+
+def _list_manifest_versions(results_dir: str) -> list:
+    """列出结果目录中已保存的 manifest 版本号（升序）"""
+    versions = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return versions
+    try:
+        for fn in os.listdir(results_dir):
+            m = re.match(r"^analysis_manifest\.v(\d+)\.json$", fn)
+            if m:
+                versions.append(int(m.group(1)))
+    except Exception:
+        pass
+    return sorted(versions)
+
+
+def _load_result_manifest(results_dir: str, version: int = 0):
+    """读取最新（version=0）或指定版本的 manifest；无则返回 None"""
+    if not results_dir:
+        return None
+    p = os.path.join(results_dir, f"analysis_manifest.v{version}.json") if version else os.path.join(results_dir, "analysis_manifest.json")
+    if not os.path.isfile(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _save_result_manifest(results_dir: str, manifest: dict) -> int:
+    """保存 manifest：版本递增，写 .v{n} + 更新最新文件。返回版本号。"""
+    if not results_dir:
+        raise ValueError("results_dir is empty")
+    os.makedirs(results_dir, exist_ok=True)
+    versions = _list_manifest_versions(results_dir)
+    ver = (versions[-1] + 1) if versions else 1
+    manifest["schema"] = MANIFEST_SCHEMA
+    manifest["version"] = ver
+    if not manifest.get("created_at"):
+        manifest["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if "model" not in manifest:
+        manifest["model"] = {"provider": _current_model.get("provider", ""), "model": _current_model.get("model", "")}
+    prov = manifest.setdefault("provenance", {})
+    if "git" not in prov:
+        try:
+            import subprocess as _sp
+            _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR, capture_output=True, text=True, timeout=3)
+            _d = _sp.run(["git", "status", "--porcelain"], cwd=MEMOMICS_DIR, capture_output=True, text=True, timeout=3)
+            prov["git"] = {"commit": _r.stdout.strip() or "unknown", "dirty": bool(_d.stdout.strip())}
+        except Exception:
+            prov["git"] = {"commit": "unknown", "dirty": False}
+    body = json.dumps(manifest, ensure_ascii=False, indent=2)
+    with open(os.path.join(results_dir, f"analysis_manifest.v{ver}.json"), "w", encoding="utf-8") as f:
+        f.write(body)
+    with open(os.path.join(results_dir, "analysis_manifest.json"), "w", encoding="utf-8") as f:
+        f.write(body)
+    return ver
+
+
+@app.post("/api/results/manifest")
+async def submit_result_manifest(payload: dict):
+    """结果完成契约：保存 analysis_manifest（版本化 + 溯源自动补全）"""
+    sid = payload.get("session_id") or ""
+    if not sid:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+    manifest = payload.get("manifest")
+    if not isinstance(manifest, dict):
+        return JSONResponse({"error": "manifest must be an object"}, status_code=400)
+    base = _find_best_results_dir(sid)
+    if not base or not os.path.isdir(base):
+        base = os.path.join(RESULTS_DIR, sid)
+        os.makedirs(base, exist_ok=True)
+    try:
+        ver = _save_result_manifest(base, manifest)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    return {"ok": True, "version": ver, "path": base.replace("\\", "/")}
 
 
 def _find_best_results_dir(sid: str) -> str:
@@ -5666,6 +5750,8 @@ async def list_all_results():
                 "created": s["created"],
                 "results_dir": rdir.replace("\\", "/"),
                 "file_count": file_count,
+                "has_manifest": bool(_load_result_manifest(rdir)),
+                "manifest_versions": _list_manifest_versions(rdir),
             })
     # 2. 磁盘上有但内存中没有的旧会话目录
     if os.path.isdir(RESULTS_DIR):
@@ -5689,6 +5775,8 @@ async def list_all_results():
                 "created": mtime,
                 "results_dir": str(p).replace("\\", "/"),
                 "file_count": file_count,
+                "has_manifest": bool(_load_result_manifest(str(p))),
+                "manifest_versions": _list_manifest_versions(str(p)),
             })
     # 按修改时间倒序排列（最新在最上面）
     sessions_with_results.sort(key=lambda x: x.get("results_dir", ""), reverse=True)

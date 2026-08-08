@@ -32,6 +32,20 @@ def cleanup_session(sid):
             db.delete_session(sid)
     except Exception:
         pass
+    # 清理测试结果目录（results/<sid> 或含短 id 的目录）
+    try:
+        import shutil as _sh
+        _shutil = _sh
+        for cand in (os.path.join(server.RESULTS_DIR, sid),):
+            if os.path.isdir(cand):
+                _shutil.rmtree(cand, ignore_errors=True)
+        short = sid.split("-")[-1] if "-" in sid else ""
+        if short and os.path.isdir(server.RESULTS_DIR):
+            for p in os.listdir(server.RESULTS_DIR):
+                if short in p and os.path.isdir(os.path.join(server.RESULTS_DIR, p)):
+                    _shutil.rmtree(os.path.join(server.RESULTS_DIR, p), ignore_errors=True)
+    except Exception:
+        pass
 
 
 @pytest.fixture()
