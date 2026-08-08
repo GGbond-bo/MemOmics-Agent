@@ -5682,6 +5682,24 @@ async def submit_result_manifest(payload: dict):
     return {"ok": True, "version": ver, "path": base.replace("\\", "/")}
 
 
+@app.get("/api/science/search")
+async def science_search(q: str = "", source: str = "arxiv", limit: int = 5):
+    """科学文献检索（P1-6，带溯源）：arxiv / openalex
+
+    每条记录携带 {source, query, fetched_at} 溯源元数据，
+    入库/引用时保留 provenance（知识库验证铁轨配套）。
+    """
+    if not q or not q.strip():
+        return JSONResponse({"error": "q required"}, status_code=400)
+    try:
+        from tools.science_connectors import arxiv_search, openalex_search
+    except Exception:
+        return JSONResponse({"error": "science_connectors 不可用"}, status_code=500)
+    if source == "openalex":
+        return openalex_search(q.strip(), limit=limit)
+    return arxiv_search(q.strip(), limit=limit)
+
+
 def _find_best_results_dir(sid: str) -> str:
     """每次实时扫描 results/，找到当前会话的确定分析结果目录。
     
