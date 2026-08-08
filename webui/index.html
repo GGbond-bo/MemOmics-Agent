@@ -438,6 +438,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin">💬 微信消息</div>
+      <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
@@ -1790,29 +1791,57 @@ function initMermaid() {
   for (var pj = 0; pj < pending.length; pj++) _mermaidQueue.push(pending[pj]);
   // 如果正在加载，等待回调
   if (_mermaidLoading) return;
-  // 开始加载 Mermaid CDN
+  // 开始加载 Mermaid（2026-08-08 恢复 8-06 设计：本地 vendor 优先 → CDN 回退 → 降级）
   _mermaidLoading = true;
   var script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js';
+  script.src = '/assets/vendor/mermaid.min.js';
   script.onload = function() {
-    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
-    _mermaidLoaded = true;
-    _mermaidLoading = false;
-    // 批量渲染所有排队的节点
-    var queue = _mermaidQueue.slice();
-    _mermaidQueue = [];
-    for (var qi = 0; qi < queue.length; qi++) renderMermaidNode(queue[qi]);
+    if (typeof mermaid === 'undefined') { loadMermaidCdn(pending); return; }
+    mermaidReady(pending);
   };
-  script.onerror = function() {
-    _mermaidLoading = false;
-    _mermaidQueue = [];
-    for (var ei = 0; ei < pending.length; ei++) {
-      var el = pending[ei];
-      el.className = 'mermaid-error';
-      el.innerHTML = '⚠ Mermaid CDN 加载失败，请检查网络连接';
-    }
-  };
+  script.onerror = function() { loadMermaidCdn(pending); };
   document.head.appendChild(script);
+}
+
+function mermaidReady(pending) {
+  mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  _mermaidLoaded = true;
+  _mermaidLoading = false;
+  // 批量渲染所有排队的节点
+  var queue = _mermaidQueue.slice();
+  _mermaidQueue = [];
+  for (var qi = 0; qi < queue.length; qi++) renderMermaidNode(queue[qi]);
+}
+
+function loadMermaidCdn(pending) {
+  // 本地 vendor 不可用 → 回退 CDN
+  var s2 = document.createElement('script');
+  s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js';
+  s2.onload = function() {
+    if (typeof mermaid === 'undefined') { mermaidFallbackAll(pending); return; }
+    mermaidReady(pending);
+  };
+  s2.onerror = function() { mermaidFallbackAll(pending); };
+  document.head.appendChild(s2);
+}
+
+function mermaidFallbackAll(pending) {
+  // 本地与 CDN 都不可用 → 降级显示原始代码 + 在线渲染入口（mermaid.ink）
+  _mermaidLoading = false;
+  var all = (pending || []).concat(_mermaidQueue);
+  _mermaidQueue = [];
+  for (var fi = 0; fi < all.length; fi++) mermaidFallbackRender(all[fi]);
+}
+
+function mermaidFallbackRender(el) {
+  var code;
+  try { code = el.textContent || ''; } catch(e) { code = el.innerText || ''; }
+  el.className = 'mermaid-error';
+  var state = '⚠ Mermaid 本地与 CDN 均加载失败，已显示原始代码：\n\n' + code;
+  try {
+    state += '\n\n可复制到 https://mermaid.live 在线渲染';
+  } catch(e) {}
+  el.textContent = state;
 }
 
 function renderMermaidNode(el) {
@@ -2833,6 +2862,13 @@ function setTheme(theme) {
   document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
   try { localStorage.setItem('memomics-theme', theme); } catch(e) {}
 }
+function cycleTheme() {
+  var cur = document.documentElement.getAttribute('data-theme') || 'light';
+  var order = ['light', 'dark', 'blue'];
+  var i = order.indexOf(cur);
+  var next = order[(i + 1) % order.length];
+  setTheme(next);
+}
 
 // === 文件浏览 ===
 async function browseFiles(path) {
@@ -3038,6 +3074,15 @@ function switchKbView(mode) {
 
 function loadCytoscape(cb) {
   if (window.cytoscape) { cb(); return; }
+  // 2026-08-08 恢复 8-06 设计：本地 vendor 优先（离线可用），失败回退 CDN
+  var s = document.createElement('script');
+  s.src = '/assets/vendor/cytoscape.min.js';
+  s.onload = function() { if (window.cytoscape) { cb(); return; } loadCytoscapeCdn(cb); };
+  s.onerror = function() { loadCytoscapeCdn(cb); };
+  document.head.appendChild(s);
+}
+
+function loadCytoscapeCdn(cb) {
   var s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js';
   s.onload = function() { cb(); };
