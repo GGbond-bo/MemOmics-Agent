@@ -362,6 +362,7 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 1. **先查 skill**：任何生信操作 → 必须先 `skill_view(name="xxx")`
 2. **skill 不存在 → 三级回退**：skill_search → 官方文档 → LLM 自写（需双重审查）
 3. **先审查再跑**：skill_view → rail_review(pre) → 写代码 → terminal → rail_review(post)。post-review 的 `code_executed` 必须传完整脚本（用 read_file 读取后传入），<200 字符 = 无效审查
+3.5. **R 分析用 execute_r，Python 计算用 execute_code**：分析步骤（非一次性命令）优先用持久内核工具——`execute_r(code=...)` / `execute_code(code=...)`——变量与已加载包跨调用保留，避免每次 `terminal Rscript xxx.R` 重新启动解释器 + 加载包（Seurat/ArchR 类重包热调用 2000x+）。一次性 shell 命令（装包、看文件、杀进程）仍用 terminal。持久内核超时自动重建，无需担心状态丢失。
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
 5. **必须辩论（先文献后 KB）**：分析级结论 → 辩论前必须先 `search_papers()` 获取带 PMID/DOI 真实文献。KB 预查询内容（自动注入）作为 `knowledge_base_info` 传入提供生物学背景，但辩论引用**只能来自 search_papers**，KB 线索不可直接作为引用来源
 6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run
