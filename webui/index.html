@@ -210,6 +210,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
 /* === 右侧面板 === */
 .info-panel { width:380px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+/* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原 380px） */
+.info-panel-resizer { width:6px; flex-shrink:0; cursor:ew-resize; background:linear-gradient(90deg, transparent 2px, rgba(149,165,166,0.45) 2px, rgba(149,165,166,0.45) 4px, transparent 4px); transition:background 0.15s; position:relative; z-index:20; }
+.info-panel-resizer:hover { background:linear-gradient(90deg, transparent 1px, var(--primary) 1px, var(--primary) 5px, transparent 5px); }
 .info-panel > div[id^="panel-"] { flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
 .info-header { padding:12px 20px; border-bottom:1px solid var(--border); font-size:15px; font-weight:500; display:flex; justify-content:space-between; align-items:center; }
 .info-tabs { display:flex; border-bottom:1px solid var(--border); }
@@ -473,6 +476,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
       </div>
     </div>
   </div>
+
+  <!-- === 右侧栏拖拽手柄（2026-08-08 恢复：按住左右拖动调整宽度，双击还原 380px） === -->
+  <div class="info-panel-resizer" id="info-panel-resizer" title="按住左右拖动调整右侧栏宽度（双击还原 380px）"></div>
 
   <!-- === 右侧面板 === -->
   <div class="info-panel" id="info-panel">
@@ -3525,6 +3531,55 @@ function closeKbPreview() {
     document.getElementById('kb-path').style.display = '';
   }
 }
+
+// === 右侧栏宽度拖拽（2026-08-08 从 8-06 版恢复） ===
+// 右侧（图谱/信息栏）最小 380px；往左拖时交互框（左侧）至少保持 380px；
+// 拖拽结束自动居中图谱；双击还原 380px 并居中；刷新后回到自适应默认宽度。
+function initInfoPanelResizer() {
+  var rz = document.getElementById('info-panel-resizer');
+  var panel = document.getElementById('info-panel');
+  if (!rz || !panel || rz._bound) return;
+  rz._bound = true;
+  var MIN_W = 380;  // 右侧面板最小宽度
+  function recenterGraph() {
+    if (window._kbCy) {
+      _kbCy.resize();
+      _kbCy.center();
+    }
+  }
+  rz.addEventListener('dblclick', function() { panel.style.width = MIN_W + 'px'; recenterGraph(); });
+  rz.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    var startX = e.clientX;
+    var startW = panel.offsetWidth;
+    var sidebar = document.querySelector('.sidebar');
+    var sidebarW = sidebar ? sidebar.offsetWidth : 300;
+    // 左侧（交互框）至少保留 380px
+    var maxW = Math.max(MIN_W, window.innerWidth - sidebarW - 380);
+    function onMove(ev) {
+      var w = startW - (ev.clientX - startX);
+      w = Math.max(MIN_W, Math.min(w, maxW));
+      panel.style.width = w + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      recenterGraph();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+initInfoPanelResizer();
+
+// === 窗口尺寸变化：图谱自适应（防抖 150ms） ===
+var _winResizeTimer = null;
+window.addEventListener('resize', function() {
+  clearTimeout(_winResizeTimer);
+  _winResizeTimer = setTimeout(function() {
+    if (window._kbCy) { _kbCy.resize(); _kbCy.center(); }
+  }, 150);
+});
 
 // === Skill 浏览 ===
 var _allSkills = [];
