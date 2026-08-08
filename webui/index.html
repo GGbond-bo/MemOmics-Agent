@@ -3156,7 +3156,18 @@ function loadThreeLib(cb) {
   s.src = '/assets/vendor/three.min.js';
   s.onload = function() {
     if (window.THREE && THREE.OrbitControls) { cb(); return; }
-    if (window.THREE) { loadThreeOrbitControlsCdn(cb); return; }
+    if (window.THREE) {
+      // 本地 three 已就绪，继续加载本地 OrbitControls（vendor 优先），失败再回退 CDN
+      var o = document.createElement('script');
+      o.src = '/assets/vendor/OrbitControls.js';
+      o.onload = function() {
+        if (window.THREE && THREE.OrbitControls) { cb(); return; }
+        loadThreeOrbitControlsCdn(cb);
+      };
+      o.onerror = function() { loadThreeOrbitControlsCdn(cb); };
+      document.head.appendChild(o);
+      return;
+    }
     loadThreeCdn(cb);
   };
   s.onerror = function() { loadThreeCdn(cb); };
@@ -3298,12 +3309,25 @@ function buildKbGraph3D(data) {
   // 2026-08-08：R 随节点数自适应（210 节点时原固定 R=70 太挤，标签大面积重叠）
   var Nn = (data.nodes || []).length || 1;
   var R = Math.max(65, 48 + Math.sqrt(Nn) * 5.5);
-  var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1026);
-  var camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 2000);
-  // 相机距离随 R 自适应（保持原比例 2.7R，节点多球变大时视角自动拉远）
-  camera.position.set(0, R * 1.0, R * 2.7);
-  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  var scene, camera, renderer;
+  try {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1026);
+    camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 2000);
+    // 相机距离随 R 自适应（保持原比例 2.7R，节点多球变大时视角自动拉远）
+    camera.position.set(0, R * 1.0, R * 2.7);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+  } catch (e) {
+    _kbMode3D = false;
+    var _b3 = document.getElementById('kb-btn-3d');
+    if (_b3) _b3.textContent = '🌐 星球视图';
+    var _c2 = document.getElementById('kb-graph-canvas');
+    var _c3 = document.getElementById('kb-graph-3d');
+    if (_c2) _c2.style.display = '';
+    if (_c3) _c3.style.display = 'none';
+    alert('3D 星球视图初始化失败（浏览器 WebGL 不可用）：' + (e.message || e));
+    return;
+  }
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(W, H);
   renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;';
