@@ -9,6 +9,8 @@ import sys
 import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# hermes-agent（tools/ 模块）
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "hermes-agent"))
 
 import pytest
 from fastapi.testclient import TestClient

@@ -1242,6 +1242,13 @@ def execute_code(
     timeout = _cfg.get("timeout", DEFAULT_TIMEOUT)
     max_tool_calls = _cfg.get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS)
 
+    # --- P0-1 持久 kernel 快速路径：纯计算代码复用持久进程（保留状态，
+    #     省去每次解释器启动 + 依赖 import；不适用/失败自动回退旧路径） ---
+    from tools.persistent_kernel import try_persistent_kernel
+    _persist = try_persistent_kernel(code, task_id or "", timeout)
+    if _persist is not None:
+        return _persist
+
     # Determine which tools the sandbox can call
     session_tools = set(enabled_tools) if enabled_tools else set()
     sandbox_tools = frozenset(SANDBOX_ALLOWED_TOOLS & session_tools)
