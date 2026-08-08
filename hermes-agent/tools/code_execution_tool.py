@@ -1211,6 +1211,23 @@ def execute_code(
         code, env_type,
         has_host_access=_docker_has_host_access(_env_config),
     )
+    # --- P1-4 fail-closed：degraded（无沙箱）时写白名单外路径直接拒绝 ---
+    # 无条件检查（与 guard 是否 approved 无关）：本地默认放行是历史契约，
+    # 但"写系统目录/白名单外"在任何模式下都不该放行。
+    from tools.sandbox_probe import probe_sandbox_capability, check_script_write_roots
+    _probe = probe_sandbox_capability()
+    if _probe.get("degraded"):
+        _write_violations = check_script_write_roots(code)
+        if _write_violations:
+            _probe_detail = _probe.get("detail", "")
+            return json.dumps({
+                "status": "error",
+                "error": f"沙箱 degraded 模式：写入白名单外路径被拒绝: {_write_violations[:3]}. {_probe_detail}. "
+                         "配置 MEMOMICS_ALLOWED_WRITE_ROOTS 可放行特定目录。",
+                "output": "",
+                "tool_calls_made": 0,
+                "duration_seconds": 0,
+            }, ensure_ascii=False)
     if not _guard.get("approved", False):
         return json.dumps({
             "status": "error",

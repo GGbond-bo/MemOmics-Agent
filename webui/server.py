@@ -1706,6 +1706,8 @@ KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
 _lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
 WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
 RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
+# P1-4：注入可写路径白名单（沙箱 degraded 模式拦截用；可被外部 env 覆盖）
+os.environ.setdefault("MEMOMICS_ALLOWED_WRITE_ROOTS", ";".join([RESULTS_DIR, _uploads_dir]))
 
 # === 生信契约（借鉴重构版：输入检查/工作流验证/QC/参考资源注册表）===
 from webui.bioinformatics import ReferenceRegistry
