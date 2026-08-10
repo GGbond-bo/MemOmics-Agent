@@ -166,5 +166,7 @@ Tool: terminal
 2. 归一化后全 0 → 先过滤。
 ## References
 
-- MetaboAnalyst 5.0: https://www.metaboanalyst.ca
-- Chong et al. 2019 NAR
+- MetaboAnalyst 5.0 官方文档: https://www.metaboanalyst.ca
+- Chong J, Wishart DS, Xia J. Using MetaboAnalyst 4.0 for Comprehensive and Integrative Metabolomics Data Analysis. Curr Protoc Bioinformatics. 2019.
+- Pang Z, et al. MetaboAnalystR 3.0. Metabolites. 2020.
+- 参数对照: `references/metaboanalyst-params.md`（本 skill 与 MetaboAnalyst 的步骤/参数对应表）

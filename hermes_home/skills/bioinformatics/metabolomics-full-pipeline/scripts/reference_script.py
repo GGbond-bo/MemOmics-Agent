@@ -57,6 +57,20 @@ def differential(df: pd.DataFrame, group_a: list, group_b: list,
     res["significant"] = (res["fdr"] < fdr_threshold) & (res["log2fc"].abs() > log2fc_threshold)
     return res
 
+
+def heatmap_plot(df: pd.DataFrame, res: pd.DataFrame, group_a: list, group_b: list, out_path: str, top_n: int = 25):
+    """差异热图：取 top_n 显著代谢物，样本按组排序。"""
+    sig = res[res["significant"] == True].sort_values("fdr")
+    if len(sig) == 0:
+        sig = res.sort_values("pvalue").head(top_n)
+    top = sig.head(top_n).index.tolist()
+    sub = df.loc[top, group_a + group_b]
+    sub = sub.apply(lambda r: (r - r.mean()) / (r.std() + 1e-9), axis=1)  # z-score 每代谢物
+    plt.figure(figsize=(max(6, len(sub.columns) * 0.4), max(4, len(sub) * 0.35)))
+    sns.heatmap(sub, cmap="RdBu_r", center=0, cbar_kws={"label": "z-score"})
+    plt.title(f"Top {len(sub)} Differential Metabolites (heatmap)")
+    plt.tight_layout(); plt.savefig(out_path, dpi=150); plt.close()
+
 def volcano_plot(res: pd.DataFrame, out_path: str):
     plt.figure(figsize=(7, 6))
     sns.scatterplot(x=res["log2fc"], y=-np.log10(res["pvalue"]), hue=res["significant"], palette={True: "red", False: "gray"})
@@ -80,4 +94,5 @@ if __name__ == "__main__":
     res = differential(df, a, b)
     res.to_csv(os.path.join(out_dir, "differential_results.tsv"), sep="\t")
     volcano_plot(res, os.path.join(out_dir, "volcano.png"))
+    heatmap_plot(df, res, a, b, os.path.join(out_dir, "heatmap.png"))
     print(f"Done. {len(res)} metabolites, {int(res['significant'].sum())} significant.")
