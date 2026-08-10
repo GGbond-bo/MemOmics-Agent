@@ -129,6 +129,12 @@ SCHEMA = {
                 "type": "object",
                 "description": "角色级模型覆盖 {角色名: {model, provider}}，角色名 ∈ pro_biology/pro_statistics/pro_bioinformatics/con_biology/con_statistics/con_bioinformatics/con_history/judge。优先级最高。",
                 "default": {}
+            },
+            "level": {
+                "type": "string",
+                "enum": ["L1", "L2"],
+                "description": "辩论级别（门控判定，2026-08-11）: L2=完整 8 角色辩论（默认，结论合成/入库前） | L1=轻量采样辩论（默认模型上下文切断正反采样 N 组 + 裁判总结，成本约 1/3，脚本设计/统计级结论用）。",
+                "default": "L2"
             }
         },
         "required": ["topic", "context"]
@@ -376,7 +382,7 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 
 
 def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
-                    temperature: float = 0.7) -> dict:
+                    temperature: float = 0.7, max_tokens: int = 4096) -> dict:
     """独立 LLM 调用 — 每个角色一个独立的 messages 数组，切断上下文。
 
     返回 dict: {content, call_id, isolation_verified}
@@ -395,7 +401,7 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "temperature": temperature,
     }
     call_id = f"{label}_{int(time.time() * 1000) % 1000000}"
@@ -508,6 +514,9 @@ def _load_debate_config() -> dict:
         "judge": {}, "pro": {}, "con": {},
         "role_model_map": {},
         "cache_ttl_hours": 72,
+        # C2/C3(2026-08-11): L1 轻量采样 + token 预算
+        "l1": {"samples": 3, "strategy": "sampling"},
+        "token_budget": 0,  # 0=不限；>0 为单会话辩论 token 预算
     }
     try:
         import yaml
@@ -541,14 +550,19 @@ def _load_provider_keys() -> dict:
         return {}
 
 
-def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None) -> str:
-    """模式指纹 — 参与缓存 key，防止不同架构的辩论结果互相污染（P0 级）。
+def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None,
+                        level: str = "L2") -> str:
+    """模式指纹 — 参与缓存 key，防止不同辩论架构/级别的结果互相污染（P0 级）。
 
-    任何影响辩论产出的配置（mode/rounds/角色模型分配/分组模型）变化 → 指纹变化 → 新缓存条目。
+    任何影响辩论产出的配置（mode/rounds/角色模型分配/分组模型/门控级别）变化 → 指纹变化 → 新缓存条目。
     P0-5(2026-08-10): 增加 cfg 参数，judge/pro/con 分组配置也计入指纹——
     真实数据测试发现：改了 judge 模型但 mode 不变时，旧缓存（坏结果）仍会命中。
+    C3(2026-08-11): 增加 level 参数（默认 L2 = 现状指纹，向后兼容）——
+    L1 轻量采样与 L2 完整辩论的结果必须隔离，否则脚本阶段的 L1 结果污染结论阶段的 L2。
     """
     parts = [f"mode={mode}", f"rounds={rounds}"]
+    if level and level != "L2":
+        parts.append(f"level={level}")
     if cfg:
         for grp in ("judge", "pro", "con"):
             gc = (cfg.get(grp) or {})
@@ -675,11 +689,20 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
             "temperature": 0.7, "provider": "env"}
 
 
+# C1(2026-08-11): token 分级 — 论点角色不需要 4096，judge 需要综合 7 方给结构化裁决
+_ROLE_MAX_TOKENS = {"judge": 2048}  # 其余角色（pro/con）默认 1024
+_ROLE_MAX_TOKENS_DEFAULT = 1024
+
+
+def _role_max_tokens(label: str) -> int:
+    return _ROLE_MAX_TOKENS.get(label, _ROLE_MAX_TOKENS_DEFAULT)
+
+
 def _call_llm_role(label: str, prompt: str, cfg: dict) -> dict:
     """按角色解析模型后调用 _call_llm_sync（隔离性不变：messages 只有该角色自己的 prompt）。"""
     rc = _resolve_role_llm(label, cfg)
     return _call_llm_sync(prompt, label, rc["api_key"], rc["base_url"], rc["model"],
-                          temperature=rc["temperature"])
+                          temperature=rc["temperature"], max_tokens=_role_max_tokens(label))
 
 
 def _role_model_id(label: str, cfg: dict) -> str:
@@ -809,6 +832,70 @@ def _get_results_log_dir() -> Path:
     return log_dir
 
 
+def _extract_json_candidates(text: str) -> list:
+    """括号平衡扫描提取所有顶层 JSON 对象候选（支持任意嵌套）。"""
+    cands, i, n = [], 0, len(text)
+    while i < n:
+        if text[i] != '{':
+            i += 1
+            continue
+        depth, j = 0, i
+        while j < n:
+            if text[j] == '{':
+                depth += 1
+            elif text[j] == '}':
+                depth -= 1
+                if depth == 0:
+                    cands.append(text[i:j + 1])
+                    break
+            j += 1
+        if j >= n:
+            break
+        i = j + 1
+    return cands
+
+
+def _parse_judge_json(text: str) -> dict:
+    """解析 judge 输出为结构化裁决 dict（A3 抽取，2026-08-11）。
+
+    P0-3(2026-08-10): 真实数据测试发现 deepseek-v4-flash 的 content 常为空，
+    fallback 的 reasoning_content 是思维链草稿，其中 JSON 片段可能残缺/含 "verdict": null。
+    A3(2026-08-11): 正则 [^{}]* 无法匹配嵌套 recommended_params → 改括号平衡扫描。
+    策略: 扫描全部顶层 JSON 对象 → 取首个 verdict 非空的 → 否则 ValueError。
+
+    Returns: dict 含 verdict（非空）
+    Raises: ValueError 无有效裁决
+    """
+    clean = text.replace("```json", "").replace("```", "").strip()
+    for cand in _extract_json_candidates(clean):
+        try:
+            o = json.loads(cand)
+        except Exception:
+            continue
+        if isinstance(o, dict) and o.get("verdict") not in (None, ""):
+            return o
+    raise ValueError("judge JSON 中无有效 verdict")
+
+
+def _check_consistency(result: dict) -> list:
+    """B1(2026-08-11): 裁决一致性校验 — 返回矛盾点列表（空=一致）。
+
+    实证 bug：_debates/ 中 3 条 need_more_info+high（信息不足却高置信）。
+    矛盾裁决不得回流 skill_evolution（B2）。
+    """
+    issues = []
+    verdict = str(result.get("verdict", "")).lower()
+    conf = str(result.get("confidence", "")).lower()
+    if verdict == "need_more_info" and conf == "high":
+        issues.append("verdict=need_more_info 但 confidence=high（信息不足不可能高置信）")
+    if verdict == "modify" and not (result.get("recommended_params") or {}):
+        issues.append("verdict=modify 但 recommended_params 为空（要求修改却无建议）")
+    scores = result.get("scores") or {}
+    if scores and all((v or 0) == 0 for v in scores.values()) and conf != "low":
+        issues.append("scores 全为 0 但 confidence 非 low")
+    return issues
+
+
 def _archive_debate_to_results(topic: str, context: str, result_json: str):
     """将辩论结果归档到 results/.../log/debate_{timestamp}.json"""
     try:
@@ -887,6 +974,10 @@ def _reflow_verdict(result: dict) -> None:
         conf = str(result.get("confidence", "low")).lower()
         if conf == "low":
             return
+        # B2(2026-08-11): 矛盾裁决禁止回流（垃圾不得入库）
+        if _check_consistency(result):
+            logger.warning("Debate verdict inconsistent, skip reflow")
+            return
         cfg = _load_debate_config()
         skill_name = cfg.get("reflow_skill") or ""
         if not skill_name:
@@ -917,11 +1008,117 @@ def _reflow_verdict(result: dict) -> None:
         logger.warning(f"Debate verdict reflow failed (non-blocking): {e}")
 
 
+_L1_PRO_PROMPT = """你是生信分析评审中的**正方编辑**。请就以下决策给出简洁的支持论证（150字以内）。
+
+主题：{topic}
+背景：{context}
+知识库参考：{kb_info}
+
+输出格式（严格 JSON）：
+{{"argument": "支持理由（含具体参数/阈值建议）", "recommended_params": {{}} }}"""
+
+_L1_CON_PROMPT = """你是生信分析评审中的**反方编辑**。请就以下决策给出简洁的质疑论证（150字以内）。
+
+主题：{topic}
+背景：{context}
+知识库参考：{kb_info}
+
+输出格式（严格 JSON）：
+{{"argument": "质疑理由（含风险点）", "risk_params": {{}} }}"""
+
+_L1_JUDGE_PROMPT = """你是生信分析评审的**裁判**。{n}组正反方编辑（独立评审、互不可见）对以下决策给出了意见，请总结双方并裁决。
+
+主题：{topic}
+背景：{context}
+
+{debates}
+
+输出格式（严格 JSON）：
+{{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "reasoning": "50字内总结"}}"""
+
+
+def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str) -> str:
+    """C2(2026-08-11): L1 轻量采样辩论。
+
+    架构（按用户要求）：使用当前选择的默认模型，正方与反方**上下文切断**独立采样，
+    最后裁判总结双方裁决——全部同一模型，但每次调用 messages 独立（切断上下文）。
+    N 次采样用温度梯度制造多样性（成本约 L2 的 1/3：2N+1 次短调用 vs 8 次长调用）。
+    """
+    l1_cfg = cfg.get("l1") or {}
+    n_samples = max(1, min(5, int(l1_cfg.get("samples", 3))))
+    rc = _default_role_llm(os.environ.get("DEEPSEEK_API_KEY", ""),
+                           os.environ.get("DEEPSEEK_BASE_URL", ""),
+                           os.environ.get("DEEPSEEK_MODEL", ""),
+                           _load_provider_keys())
+    if not rc["api_key"]:
+        return _fallback_debate(topic, context, kb, "")
+
+    debates_text = []
+    sample_records = []
+    for i in range(n_samples):
+        temp = _TEMP_POOL[i % len(_TEMP_POOL)]
+        pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
+        con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
+        pro = _call_llm_sync(pro_prompt, f"l1_pro_{i}", rc["api_key"], rc["base_url"],
+                             rc["model"], temperature=temp, max_tokens=512)
+        con = _call_llm_sync(con_prompt, f"l1_con_{i}", rc["api_key"], rc["base_url"],
+                             rc["model"], temperature=temp + 0.1, max_tokens=512)
+        if pro.get("error") or con.get("error"):
+            continue
+        debates_text.append(f"### 第{i+1}组（采样温度 {temp:.1f}）\n"
+                            f"正方：{pro['content'][:400]}\n反方：{con['content'][:400]}")
+        sample_records.append({"pro": pro["content"][:500], "con": con["content"][:500],
+                               "pro_call_id": pro["call_id"], "con_call_id": con["call_id"]})
+
+    if not debates_text:
+        return _fallback_debate(topic, context, kb, "")
+
+    judge_prompt = _L1_JUDGE_PROMPT.format(n=len(debates_text), topic=topic,
+                                           context=context, debates="\n\n".join(debates_text))
+    judge = _call_llm_sync(judge_prompt, "l1_judge", rc["api_key"], rc["base_url"],
+                           rc["model"], temperature=0.3, max_tokens=1024)
+
+    result = {
+        "topic": topic,
+        "debate_format": f"L1 轻量采样辩论（{len(debates_text)} 组正反采样 + 裁判）",
+        "level": "L1",
+        "model": f"{rc['provider']}/{rc['model']}",
+        "samples": sample_records,
+        "judge_verdict": judge.get("content", "")[:3000],
+        "verdict": "need_more_info", "confidence": "low",
+        "recommended_params": {},
+        "isolation_verification": {
+            "pro_con_isolated": True, "messages_count": 1,
+            "note": "每组正反方独立调用（上下文切断），裁判最后总结双方裁决，全部同一模型。",
+        },
+    }
+    if not judge.get("error"):
+        try:
+            obj = _parse_judge_json(judge["content"])
+            result["verdict"] = obj.get("verdict") or "need_more_info"
+            result["confidence"] = obj.get("confidence") or "low"
+            result["recommended_params"] = obj.get("recommended_params", {}) or {}
+        except Exception as e:
+            result["verdict_parse_error"] = str(e)[:100]
+
+    # B2 一致性门禁（与 L2 同规则）
+    issues = _check_consistency(result)
+    if issues:
+        result["confidence"] = "low"
+        result["consistency_issues"] = issues
+
+    result_json = json.dumps(result, ensure_ascii=False, indent=2)
+    _save_debate(topic, context, result_json, fingerprint=fingerprint)
+    _archive_debate_to_results(topic, context, result_json)
+    _reflow_verdict(result)
+    return result_json
+
+
 def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     history_errors: str = "", biology_kb: str = "",
                     statistics_kb: str = "", bioinfo_kb: str = "",
                     mode: str = None, rounds: int = None,
-                    role_model_map: dict = None) -> str:
+                    role_model_map: dict = None, level: str = "L2") -> str:
     """多角色辩论 — 正方3专业编辑 + 反方4专业编辑 + 裁判编辑，全部独立 LLM 调用。
 
     上下文隔离实现：
@@ -936,6 +1133,11 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     - rounds: 辩论轮数（>1 时第 2 轮起向 pro/con 注入上一轮裁判摘要）
     - role_model_map: {角色: {model, provider}} 最细粒度覆盖
     - 不传时全部从 config.yaml 的 debate: 段读取；无配置 = 现状行为
+
+    C2(2026-08-11): level 门控级别
+    - "L2"(默认): 完整 8 角色辩论（现状）
+    - "L1": 轻量采样辩论 — 默认模型 N 次独立采样（温度梯度，上下文切断），
+      裁判总结双方裁决。成本约为 L2 的一半，用于脚本设计/统计级结论。
     """
     # ========== 配置解析（参数优先，config 次之，默认=现状） ==========
     cfg = _load_debate_config()
@@ -948,7 +1150,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     mode = str(cfg.get("mode", "homogeneous")).lower()
     rounds = max(1, int(cfg.get("rounds", 1) or 1))
     rmm = cfg.get("role_model_map") or {}
-    fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg)
+    level = str(level or "L2").upper()
+    if level not in ("L1", "L2"):
+        level = "L2"
+    fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg, level=level)
 
     # 检查至少有一个可用 key（judge 能跑即可；role_model_map/分组配置的 key 也算）
     judge_rc = _resolve_role_llm("judge", cfg)
@@ -987,6 +1192,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     bio_kb = biology_kb or kb
     stat_kb = statistics_kb or kb
     bioinfo_kb_val = bioinfo_kb or kb
+
+    # ========== C2(2026-08-11): L1 轻量采样辩论（默认模型上下文切断正反采样 + 裁判总结） ==========
+    if level == "L1":
+        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint)
 
     try:
         # ========== 辩论轮次循环（P0：rounds>1 时轮间注入上一轮裁判摘要） ==========
@@ -1128,27 +1337,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         # 修复: 优先用正则找含非空 verdict 的 JSON 对象；全部失败才降级默认值。
         try:
             _judge_text = judge["content"]
-            _judge_clean = _judge_text.replace("```json", "").replace("```", "").strip()
-            _judge_obj = None
-            # ① 正则优先：找含 verdict 键且值非 null/空的 JSON 对象（处理 reasoning 草稿多片段）
-            for _cand in re.findall(r'\{[^{}]*"verdict"[^{}]*\}', _judge_clean):
-                try:
-                    _o = json.loads(_cand)
-                    if _o.get("verdict") not in (None, ""):
-                        _judge_obj = _o
-                        break
-                except Exception:
-                    continue
-            # ② 回退：全文首个 { 到最后一个 }
-            if _judge_obj is None:
-                _judge_start = _judge_clean.find("{")
-                _judge_end = _judge_clean.rfind("}")
-                if _judge_start >= 0 and _judge_end > _judge_start:
-                    _o2 = json.loads(_judge_clean[_judge_start:_judge_end + 1])
-                    if _o2.get("verdict") not in (None, ""):
-                        _judge_obj = _o2
-            if _judge_obj is None:
-                raise ValueError("judge JSON 中无有效 verdict")
+            _judge_obj = _parse_judge_json(_judge_text)
             result["verdict"] = _judge_obj.get("verdict", "need_more_info") or "need_more_info"
             result["confidence"] = _judge_obj.get("confidence", "low") or "low"
             result["recommended_params"] = _judge_obj.get("recommended_params", {}) or {}
@@ -1158,6 +1347,33 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             result["confidence"] = "low"
             result["recommended_params"] = {}
             result["verdict_parse_error"] = str(_je)[:100]
+
+        # ========== B2(2026-08-11): 裁决一致性门禁 ==========
+        # 实证 bug：_debates/ 中 3 条 need_more_info+high 矛盾裁决已进入缓存。
+        # 矛盾裁决 → judge 独立重裁一次（上下文切断）→ 仍矛盾则强制降级 low，
+        # 且禁止回流 skill_evolution（垃圾不得入库）。
+        _issues = _check_consistency(result)
+        if _issues:
+            logger.warning(f"debate verdict inconsistent {_issues}; judge 重裁一次")
+            try:
+                _judge2 = _call_llm_role("judge", judge_prompt, cfg)
+                if not _judge2.get("error") and "辩论生成失败" not in str(_judge2.get("content", "")):
+                    _obj2 = _parse_judge_json(_judge2["content"])
+                    result["verdict"] = _obj2.get("verdict") or result["verdict"]
+                    result["confidence"] = _obj2.get("confidence") or result["confidence"]
+                    result["recommended_params"] = _obj2.get("recommended_params", {}) or {}
+                    result["scores"] = _obj2.get("scores", {}) or {}
+                    result["judge_rejudged"] = True
+                    result["judge_verdict"] = _judge2["content"][:3000]
+                    judge = _judge2
+            except Exception as _re:
+                logger.warning(f"judge re-judge failed: {_re}")
+            _issues = _check_consistency(result)
+        if _issues:
+            result["confidence"] = "low"  # 仍矛盾 → 强制降级，禁止回流
+            result["consistency_issues"] = _issues
+            logger.warning(f"debate verdict still inconsistent after re-judge: {_issues} → confidence=low, 禁止回流")
+
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
         _save_debate(topic, context, result_json, fingerprint=fingerprint)
@@ -1343,6 +1559,7 @@ def _register():
                 mode=args.get("mode"),
                 rounds=args.get("rounds"),
                 role_model_map=args.get("role_model_map"),
+                level=args.get("level") or "L2",
             ),
             emoji="🎭",
             max_result_size_chars=120_000,

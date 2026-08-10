@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (53 skills)
+## 08_报告 - 报告/可视化 (55 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -255,6 +255,8 @@
 | openfold3 | Structure prediction using OpenFold3, an open-weights PyTorch reproduction of AlphaFold3 from the Al |  | YEL 讨论触发 |
 | proteinmpnn | Inverse-fold a protein backbone (PDB structure) into amino-acid sequence with ProteinMPNN (Dauparas  |  | YEL 讨论触发 |
 | scgpt | Embed and annotate single-cell expression data with scGPT, a foundation model for single-cell biolog |  | YEL 讨论触发 |
+| debate-core | >- |  | YEL 讨论触发 |
+| metabolomics-full-pipeline | 代谢组学全流程分析：LC-MS/GC-MS 峰表 QC → 归一化 → 缺失值填充 → 差异代谢物（t检验/火山图）→ 通路富集（MetaboAnalyst 风格）→ 可视化。输入 peak inte |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

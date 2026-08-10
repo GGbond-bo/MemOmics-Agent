@@ -129,6 +129,11 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
         level = DEBATE_L1
         reasons.append(f"预算护栏：本会话已辩论 {es.debate_count} 次 ≥ budget={es.debate_budget}，降级 L1")
 
+    # C3(2026-08-11): token 预算护栏（cost 治理）— token_budget>0 时生效
+    if not force and level >= DEBATE_L1 and es.token_budget > 0 and es.token_used >= es.token_budget:
+        level = DEBATE_L0
+        reasons.append(f"token 预算耗尽：已用 {es.token_used} ≥ budget={es.token_budget}，降级 L0")
+
     return level, reasons, force
 
 
@@ -146,6 +151,8 @@ class EnforcementState:
         self.debated_topics: set = set()  # P2: topic 级去重 — 同一主题只辩一次
         self.debate_count: int = 0  # P2: 单会话辩论次数（预算护栏）
         self.debate_budget: int = 3  # P2: 预算上限（config debate.budget 可覆盖）
+        self.token_used: int = 0  # C3(2026-08-11): 本会话辩论累计 token（usage 统计）
+        self.token_budget: int = 0  # C3: token 预算上限（config debate.token_budget，0=不限）
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
@@ -176,6 +183,8 @@ class EnforcementState:
             "debated_topics": list(self.debated_topics),  # P2
             "debate_count": self.debate_count,  # P2
             "debate_budget": self.debate_budget,  # P2
+            "token_used": self.token_used,  # C3
+            "token_budget": self.token_budget,  # C3
             "analysis_level": self.analysis_level,
             "terminal_count": self.terminal_count,
             "warnings": self.warnings[-5:],
@@ -479,8 +488,9 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 es._pending_high_impact = False
                 if _g_level >= DEBATE_L1:
                     _mode_hint = {
-                        DEBATE_L1: "mode='homogeneous', rounds=1（轻量：可用 role_model_map 或 sampling 降成本）",
-                        DEBATE_L2: "mode='homogeneous', rounds=1（完整 8 角色；异构可选 adversarial）",
+                        # C2(2026-08-11): L1 轻量采样 / L2 完整 8 角色，都默认单模型上下文切断
+                        DEBATE_L1: "level='L1'（轻量采样辩论，成本约 1/3）",
+                        DEBATE_L2: "level='L2'（完整 8 角色辩论）",
                     }[_g_level]
                     _emit("enforcement", action="require",
                           level=DEBATE_LEVEL_NAMES[_g_level],
@@ -492,6 +502,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             es.debate_done = True
             # 保存辩论结论
             _save_debate_conclusion(es, result, args)
+            # C3(2026-08-11): token 用量回收 — 辩论结果的 usage 累加到会话级预算
+            try:
+                _r = json.loads(result) if isinstance(result, str) else result
+                _u = (_r.get("usage") or {}).get("total", 0) if isinstance(_r, dict) else 0
+                es.token_used += int(_u or 0)
+            except Exception:
+                pass
     def tool_progress_cb(event_type: str, **kwargs):
         """工具进度回调 — 用于心跳和状态同步"""
         if event_type == "tool.started":

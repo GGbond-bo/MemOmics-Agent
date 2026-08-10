@@ -147,28 +147,11 @@ custom_providers:
         name: DeepSeek R1 (推理)
         reasoning: true
         tool_call: true
-
-# ==================== 辩论引擎（P0/P1/P2 参数化，2026-08-10） ====================
-# 详见 docs/debate-core-design.md
-# mode: homogeneous=单模型8角色(默认/现状) | adversarial=正反判三组异构 | multi_model=全角色异构 | temperature=同模型多温度采样
-# rounds: 辩论轮数（>1 时第 2 轮起向正反方注入上一轮裁判摘要）
-# budget: 单会话辩论次数预算护栏（enforcement.py debate_gate 消费；高影响不降级）
-# reflow_skill: 裁决回流目标 skill（缺省空=只归档不写 skill.json）
 debate:
   mode: homogeneous
   rounds: 1
   budget: 3
-  reflow_skill: ""
-  # judge 用 content 稳定的模型（真实数据测试 2026-08-10：deepseek-v4-flash
-  # 在长 prompt 下 content 为空、答案全进 reasoning_content → 结构化 JSON 解析失败）
+  reflow_skill: ''
   judge:
     provider: opencode-go
     model: deepseek-v4-pro
-  # judge/pro/con: adversarial 模式的模型分组（provider 取 provider_keys.json 里的 id）
-  # judge: {provider: opencode-go, model: deepseek-v4-flash}
-  # pro:   {provider: opencode-go, model: glm-5.2}
-  # con:   {provider: deepseek, model: deepseek-v4-flash}
-  # role_model_map: 角色级覆盖（优先级最高）示例：
-  #   role_model_map:
-  #     pro_biology: {provider: opencode-go, model: glm-5.2}
-  #     judge:       {provider: opencode-go, model: deepseek-v4-flash}
