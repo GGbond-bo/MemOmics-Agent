@@ -15,6 +15,7 @@ metadata:
 prerequisites:
   r_packages: []
   python_packages: []
+---
 ### 规则N: 运行记录只是参考，不能跳过审查
 - skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
 - 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)

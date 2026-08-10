@@ -4,13 +4,14 @@ description: "代谢组学功能富集分析：输入差异代谢物列表 → M
 version: 1.0.0
 author: MemOmics
 license: MIT
+category: Metabolomics
 platforms: [windows, linux, macos]
 metadata:
   hermes:
     tags: [metabolomics, enrichment, MSEA, MetPA, mummichog, pathway, KEGG, HMDB, 代谢通路, 功能富集, 代谢物集富集]
     difficulty: intermediate
     language: R
-    category: Proteomics
+    category: Metabolomics
 prerequisites:
   r_packages: [MetaboAnalystR, igraph, RSQLite, KEGGgraph, fgsea, ggplot2, ggprism, plotly]
   python_packages: []

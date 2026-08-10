@@ -138,6 +138,64 @@ prerequisites:
 
 创建 skill 后，必须对照以下 **6 项审核清单** 逐项检查。任何一项不通过 → 修正后重审，全部通过才能交付。
 
+### 规则4c: 🔴 试运行门禁（真实数据验证 — 2026-08-10 新增）
+
+> **规则4a/4b 全是静态检查，防不了"脚本写得规范但跑不出结果"。**
+> 静态检查通过 ≠ skill 合格。**必须真实运行一次**。
+
+创建后**必须**执行（不可跳过，任何一步失败 → 修正后重跑）：
+
+```
+Tool: execute_r / execute_python
+1. 生成 synthetic 小数据（R: data.frame / Python: pandas.DataFrame，覆盖典型输入格式）
+2. 执行 scripts/reference_script.*（真实调用）
+3. 检查输出：
+   a. 退出码 = 0（无报错）
+   b. 产出物存在（图/表/结果文件，大小 > 0KB）
+   c. 图非空白（rail_review 强制项）
+4. 失败 → 修正脚本 → 重跑，直到通过
+```
+
+**通过标准**：输出文件真实存在 + 内容非空。**不通过 → skill 标记 `_UNTESTED_`，禁止交付**。
+
+### 规则4d: 🔴 frontmatter 自动校验（防错分 — 2026-08-10 新增）
+
+> **历史教训**：2026-08-06 审查发现 51/308 个 skill 的 frontmatter `category` 写错（scRNA 写成 GWAS、bulk 写成 scRNA、代谢组写成 Proteomics），根因是 LLM 套模板不填。静态审核单靠"自觉"不可靠。
+
+创建后**必须**用脚本校验 frontmatter：
+
+```
+Tool: terminal（python 校验脚本）
+1. 解析 SKILL.md frontmatter（yaml）
+2. 校验规则：
+   a. name 与目录名一致（小写）
+   b. description 非空且含具体分析内容（>20 字符，非模板默认值）
+   c. category ∈ 规则引擎合法集：
+      {Transcriptomics, Proteomics, Metabolomics, Epigenomics, Genomics, Genetics,
+       Spatial, Immunology, Microbiology, Drug Discovery, General Utility, ...}
+      —— 按测序类型判定：代谢组(LC-MS/GC-MS/NMR)→Metabolomics；
+      RNA→Transcriptomics；蛋白→Proteomics；ATAC→Epigenomics
+   d. metadata.hermes.tags 含 ≥4 个关键词（包名/中文/英文/同义词）
+3. 任一失败 → 自动修正后重验；修正不了 → 打回重写
+```
+
+**通过标准**：脚本输出 4 项全 ✅。
+
+### 规则3.5: 必须使用 skill_template_generator.py 生成（2026-08-10 新增）
+
+> **历史教训**：`scripts/skill_template_generator.py` 已存在但创建时从未被调用——LLM 手写导致 frontmatter 错分/结构缺失。
+
+创建 SKILL.md 时**必须**：
+
+```
+Tool: terminal（python 调用）
+from scripts.skill_template_generator import generate_skill_md, register_to_soul_md
+content = generate_skill_md(name=..., description=..., category=..., ...)
+# → 用生成的 content 作为 SKILL.md 基础，再按官方文档补全
+```
+
+禁止纯手写 frontmatter（category/tags 由函数参数显式传入，防止模板默认值泄漏）。
+
 | # | 审核项 | 检查内容 | 不通过 → 修正动作 |
 |---|--------|----------|-------------------|
 | 1 | **官网一致性** | SKILL.md 中的函数名、参数名、默认值是否与官方文档/API 完全一致？用 `web_extract` 重新拉取官方 API 页面逐条比对 | 不一致 → 修正 SKILL.md 和脚本中的函数/参数，重新 `skill_manage` 更新 |

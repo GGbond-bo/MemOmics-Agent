@@ -221,6 +221,7 @@ version: 1.0.0
 author: MemOmics (auto-created)
 license: MIT
 platforms: [windows, linux, macos]
+category: {category}
 metadata:
   hermes:
     tags: {tags}
@@ -254,7 +255,17 @@ prerequisites:
     body += "\n"
 
     # Proven Scripts
+    # P2-15(2026-08-10): 必须生成有效 markdown 空表格（规则2.6）——
+    # _record_success 用正则匹配 `|:----` 分隔行追加记录，纯列表会导致
+    # record_run 静默失败。生成器之前只输出列表 → 所有新 skill 的
+    # record_run 都静默丢。现在输出标准空表格。
     body += "## Proven Scripts\n\n"
+    body += ("> 经实际运行验证成功的脚本记录。`skill_evolution(action=\"record_run\")` 自动追加至此表。\n"
+             ">\n"
+             "> 评分规则：`auto` 来自 rail_review 技术审查，`user` 来自用户认可。\n\n")
+    body += "| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |\n"
+    body += "|:----|:----|:----|:----:|:-----|:----:|:----:|:-:|\n"
+    body += "| <!-- 首次运行后自动填充 --> | | | | | | | |\n\n"
     body += f"- `scripts/run.py` — 主脚本模板（含 MemOmics 审查辩论铁律头）\n"
     if language in ("R", "R+Python"):
         body += f"- `scripts/reference_script.R` — R 参考实现\n"
