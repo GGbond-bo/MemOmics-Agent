@@ -150,5 +150,15 @@
   ],
   "user_prefs": {
     "last_used_script": ""
-  }
+  },
+  "debate_verdicts": [
+    {
+      "topic": "hdWGCNA 模块-性状关联分析：软阈值选择",
+      "verdict": "建议 power=9",
+      "recommended_params": "{\"power\": 9}",
+      "confidence": 0.7,
+      "evidence": "{\"call_ids\": [\"\", \"\", \"\"], \"scores\": {}, \"kb_used\": {}}",
+      "date": "2026-08-10 20:51:12"
+    }
+  ]
 }

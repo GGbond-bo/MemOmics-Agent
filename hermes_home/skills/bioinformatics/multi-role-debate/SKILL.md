@@ -57,10 +57,16 @@ it fails, and how to run it so it actually produces a verdict.
    ```
    Your own ad-hoc test scripts must apply the same fallback or they'll report
    "content empty" falsely.
-4. **8-way parallel can hit provider limits.** `_call_role_parallel` uses
-   `ThreadPoolExecutor(max_workers=len(tasks))` = 8 simultaneous HTTP calls.
-   When that keeps failing, switch to the serial pattern below — the user's own
-   recommendation ("能不能先上传正方，再上传反方？隔离上下文，最好LLM做判决").
+4. **Serial execution is now the default.** `_call_role_parallel` was changed
+   from 8-way `ThreadPoolExecutor` concurrency to serial (2026-08-01): parallel
+   calls hit provider quota limits and caused 7× 8/8 full failures. Roles are
+   still isolated (each has its own single-message prompt); serial order
+   preserves isolation. Context isolation, NOT parallelism, is what matters.
+5. **P0 (2026-08-10): the engine is parameterized.** `debate_analysis()` now
+   accepts `mode` (homogeneous/adversarial/multi_model/temperature), `rounds`,
+   and `role_model_map`, sourced from `config.yaml` → `debate:` section.
+   Cache keys include a mode fingerprint — different architectures never share
+   cached verdicts. See `docs/debate-core-design.md` for the full design.
 
 ## Serial pro→con→judge fallback (validated, 8/8 success)
 

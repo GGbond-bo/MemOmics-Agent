@@ -355,6 +355,24 @@ GET https://api.genome.ucsc.edu/getData/track?genome=hg38;track=phyloP100way;chr
 
 > 📑 测试版 P3-P6 完整执行记录（脚本/结果/文件清单/专利文档路径）→ `references/test-version-p3-p6-execution-2026-08.md`
 
+## 🔴 集群交接：QC 过滤后上传什么（2026-08-09 用户问"是不是只要把质控过滤后的箭头文件上传集群"）
+
+**用户把本机 `ArchR_Arrow_QC_Filtered/` 传到集群继续往下跑时，答案 = 可以，但两个文件都要传、且 merge 前必须 subset。**
+
+**目录结构（每个样本子目录内）**：
+```
+GSM8549615_hc77/
+├── GSM8549615_hc77.arrow              ← 1.1-2.5GB（HDF5 自包含，可跨机器移植）
+└── GSM8549615_hc77_filtered_cells.csv ← doublet 过滤后的细胞名单（Keep）
+```
+- 只传 `.arrow` 不够——`filterDoublets()` **不修改 Arrow**（实测 `ArchR_Arrow_QC_Filtered/` 与 QC 目录 Arrow **字节数完全一致**，如 1,699,339,637），doublet 剔除结果只记在 CSV 名单里
+- 集群 merge 前必须用 CSV 名单 subset：`proj <- subsetArchRProject(proj, cells=read.csv("<样本>_filtered_cells.csv")$cellNames, ...)`——否则 doublet 一起 merge 进去（测试版实测 4 样本 merge 出 35,787 而非预期 29,357，多 ~18%）
+- **不要传**：原始 `fragments.tsv.gz`（Arrow 已含全部片段信息）、`QC_summary_all40.csv`（只是汇总表）
+- 集群环境必须一致：R 4.5.3 + ArchR 同版本 + hg38 BSgenome，否则 Arrow 打不开
+- 完整目录核对命令：`ls -d <dir>/*/ | wc -l` 数 40 个子目录；每个子目录用 `ls <dir>/<样本>/` 确认 `.arrow` + `_filtered_cells.csv` 双文件都在
+
+> 📑 详细目录实测 + 上传清单 + 集群 merge 脚本骨架 → `references/cluster-handoff-qc-arrow.md`
+
 ## 项目结构
 
 ```

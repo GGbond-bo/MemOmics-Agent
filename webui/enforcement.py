@@ -50,6 +50,88 @@ def detect_analysis_level(user_message: str) -> str:
     return "chat"
 
 
+# ==================== P2 辩论门控 (2026-08-10) ====================
+# 设计依据: docs/debate-core-design.md §5.5 — 全量辩论有害（iMAD, AAAI 2026 Oral）,
+# 选择性触发省 92% token 且准确率反升 13.5%。三级门控:
+#   L0 跳过 | L1 轻量（单对正反+裁判 或 3采样投票，≈1/4 成本）| L2 完整 8 角色
+
+DEBATE_L0, DEBATE_L1, DEBATE_L2 = 0, 1, 2
+DEBATE_LEVEL_NAMES = {0: "L0-跳过", 1: "L1-轻量辩论", 2: "L2-完整辩论"}
+
+# 高影响工具：命中即强制 L2（入库/报告/结论产物，不可降级）
+_DEBATE_HIGH_IMPACT_TOOLS = {
+    "generate_report", "add_figure", "save_knowledge", "submit_skill",
+    "knowledge_write", "conclusion_save", "write_report", "deliver",
+}
+# 失败信号工具（terminal/脚本执行，重试≥2 或报错 → 升级 L2）
+_DEBATE_EXEC_TOOLS = {"terminal", "execute_r", "execute_python", "execute_code", "run_script"}
+
+
+def debate_gate(es: "EnforcementState", stage: str = "conclusion",
+                signals: dict = None) -> tuple:
+    """三级门控判定 — 什么时候该辩论。
+
+    Args:
+        es: EnforcementState（读取 analysis_level / debate_count / debated_topics / budget）
+        stage: "before_script" | "after_script" | "conclusion"
+        signals: dict，可含
+            - high_impact: bool  命中入库/报告/结论工具 → 强制 L2 不可降级
+            - failed_retries: int 同命令重试次数（≥2 升级）
+            - last_error: bool    最近一次执行报错
+            - conflict: bool      rail_review(post) 未通过 / 与上次结果冲突
+            - uncertainty: bool   候选参数≥2 / 犹豫措辞 / 自评低置信
+
+    Returns:
+        (level: int, reasons: list[str], force: bool)
+        force=True 表示不可降级（高影响），预算护栏不得削减
+    """
+    signals = signals or {}
+    reasons = []
+    level = DEBATE_L0
+    force = False
+
+    if es.analysis_level in ("chat", "lightweight"):
+        return DEBATE_L0, ["chat/lightweight 级：无分析对象，跳过辩论"], force
+
+    impact = bool(signals.get("high_impact"))
+    if impact:
+        reasons.append("高影响（入库/报告/结论产物）：强制 L2")
+        level = DEBATE_L2
+        force = True
+
+    if not force:
+        if es.analysis_level == "statistical":
+            level = DEBATE_L1
+            reasons.append("statistical 级：默认 L1 轻量辩论")
+        else:  # analysis
+            failures = int(signals.get("failed_retries", 0)) + (1 if signals.get("last_error") else 0)
+            conflict = bool(signals.get("conflict"))
+            uncertainty = bool(signals.get("uncertainty"))
+            if failures >= 2:
+                level = DEBATE_L2
+                reasons.append(f"失败重试≥2（retries={failures}）：升级 L2")
+            elif conflict:
+                level = DEBATE_L2
+                reasons.append("rail_review(post) 未通过/结果冲突：升级 L2")
+            elif stage == "conclusion":
+                level = DEBATE_L2
+                reasons.append("analysis 级结论合成前：默认 L2")
+            elif uncertainty:
+                level = DEBATE_L2
+                reasons.append("高不确定性：升级 L2")
+            else:
+                level = DEBATE_L1
+                reasons.append("analysis 级脚本设计/执行后：L1 轻量辩论")
+
+    # 预算护栏：单会话辩论次数上限（config debate.budget，默认 3）
+    # 强制（高影响）不降级；超预算的非强制降为 L1 并提示
+    if not force and level == DEBATE_L2 and es.debate_count >= es.debate_budget:
+        level = DEBATE_L1
+        reasons.append(f"预算护栏：本会话已辩论 {es.debate_count} 次 ≥ budget={es.debate_budget}，降级 L1")
+
+    return level, reasons, force
+
+
 class EnforcementState:
     """会话级强制执行状态追踪"""
 
@@ -60,10 +142,16 @@ class EnforcementState:
         self.knowledge_searched: bool = False
         self.rail_pre_done: bool = False
         self.rail_post_done: bool = False
-        self.debate_done: bool = False
+        self.debate_done: bool = False  # 🔧 P2(2026-08-10): 保留兼容字段，新逻辑用 debated_topics
+        self.debated_topics: set = set()  # P2: topic 级去重 — 同一主题只辩一次
+        self.debate_count: int = 0  # P2: 单会话辩论次数（预算护栏）
+        self.debate_budget: int = 3  # P2: 预算上限（config debate.budget 可覆盖）
+        self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
         self._last_terminal_result: str = ""  # 最近 terminal 输出（提取参数用）
+        self._exec_retries: dict = {}  # P2: 命令/脚本重试计数 {cmd: n}
+        self._last_exec_error: bool = False  # P2: 最近一次执行是否报错
         self.terminal_count: int = 0
         self.tool_history: list = []
         self.warnings: list = []
@@ -85,6 +173,9 @@ class EnforcementState:
             "rail_pre_done": self.rail_pre_done,
             "rail_post_done": self.rail_post_done,
             "debate_done": self.debate_done,
+            "debated_topics": list(self.debated_topics),  # P2
+            "debate_count": self.debate_count,  # P2
+            "debate_budget": self.debate_budget,  # P2
             "analysis_level": self.analysis_level,
             "terminal_count": self.terminal_count,
             "warnings": self.warnings[-5:],
@@ -121,6 +212,17 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
     es = get_enforcement(sid)
     es.results_dir = session.get("results_dir", "")
     es.conclusions_dir = ""
+    # P2(2026-08-10): 预算护栏从 config.yaml debate.budget 读取（缺省 3）
+    try:
+        import yaml as _y
+        _cfg_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hermes_home", "config.yaml")
+        if os.path.exists(_cfg_p):
+            _d = _y.safe_load(open(_cfg_p, encoding="utf-8")) or {}
+            _b = ((_d.get("debate") or {}).get("budget")) or None
+            if isinstance(_b, int) and _b > 0:
+                es.debate_budget = _b
+    except Exception:
+        pass
 
     def _detect_tool_name(args_str: str) -> str:
         """从工具调用参数中提取技能/工具名"""
@@ -137,8 +239,27 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             msg = {"type": etype, "session_id": sid, "ts": datetime.now().strftime("%H:%M:%S")}
             msg.update(kwargs)
             session_emit_fn(session, msg)
+            # P2-6(2026-08-10): 门控提示注入 agent 上下文 —
+            # require 事件通过 Hermes 原生 _pending_steer 通道注入，
+            # 下一批工具调用后 LLM 就能看到（零底座改动，运行中即时生效）
+            if etype == "enforcement" and kwargs.get("action") == "require" and agent_ref:
+                _inject_agent_hint(agent_ref[0], "【系统强制提示】" + str(kwargs.get("message", "")))
         except Exception:
             pass
+
+    def _inject_agent_hint(agent, text: str) -> bool:
+        """把提示注入 agent 上下文（Hermes 原生 _pending_steer 通道）。"""
+        try:
+            lock = getattr(agent, "_pending_steer_lock", None)
+            if lock is not None:
+                with lock:
+                    agent._pending_steer = (agent._pending_steer + "\n" + text) if agent._pending_steer else text
+            else:
+                existing = getattr(agent, "_pending_steer", None)
+                agent._pending_steer = (existing + "\n" + text) if existing else text
+            return True
+        except Exception:
+            return False
 
     def tool_start_cb(tool_call_id: str, tool_name: str, args):
         """工具执行前拦截"""
@@ -167,12 +288,57 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
         elif tool_name == "debate_analysis":
             es.debate_done = True
+            # P2(2026-08-10): topic 级去重 — 记录辩论主题
+            try:
+                a = json.loads(str(args)) if isinstance(args, str) else args
+                t = str(a.get("topic", ""))[:120]
+            except Exception:
+                t = ""
+            if t:
+                es.debated_topics.add(t)
+            es.debate_count += 1
+            _emit("enforcement", action="debate_started",
+                  topic=t, count=es.debate_count,
+                  message=f"💬 辩论 #{es.debate_count} 开始" + (f": {t}" if t else ""))
+
+        elif tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal":
+            # P2(2026-08-10): 失败重试信号 — execute_r/python/code 同命令重试计数
+            # 参数键兼容 command/code/script（execute_r/python 用 code，terminal 用 command）
+            _cmd = ""
+            if isinstance(args, dict):
+                _cmd = str(args.get("command") or args.get("code") or args.get("script") or "")
+            else:
+                _cmd = str(args)
+            _key = _cmd.strip()[:100]
+            es._exec_retries[_key] = es._exec_retries.get(_key, 0) + 1
+            es._last_exec_error = False  # 由 complete 分支更新
+            # P2-7(2026-08-10): 钩子① — 执行前脚本设计辩论。
+            # analysis 级 + 该命令首次执行 + 门控判定 L1/L2 → 提示先辩脚本设计
+            if (es.analysis_level == "analysis" and es._exec_retries[_key] == 1
+                    and not es.debated_topics):
+                _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals={})
+                if _b_level >= DEBATE_L1:
+                    _emit("enforcement", action="require",
+                          level=DEBATE_LEVEL_NAMES[_b_level],
+                          reasons=_b_reasons,
+                          message=f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。先 debate_analysis 辩脚本设计与参数选择，再执行。",
+                          require=["debate_analysis"])
+
+        elif tool_name in _DEBATE_HIGH_IMPACT_TOOLS:
+            # P2(2026-08-10): 高影响工具 — 记录待触发信号（强制 L2）
+            es._pending_high_impact = True
+            _emit("enforcement", action="info",
+                  message=f"📌 高影响工具 {tool_name}：结论将入库/出报告 → 辩论强制 L2（不可降级）")
 
         elif tool_name == "terminal":
             # 🔧 bug③ 修复(2026-08-01): 合并自杀检测到主分支
             # 之前: 此处有独立的 elif terminal 分支(153行)在前面，导致这里整个不可达
             _cmd = str(args.get("command", "")) if isinstance(args, dict) else str(args)
             _cmd_lower = _cmd.lower()
+            # P2(2026-08-10): terminal 也计入重试信号
+            _key = _cmd.strip()[:100]
+            es._exec_retries[_key] = es._exec_retries.get(_key, 0) + 1
+            es._last_exec_error = False
             _danger = [
                 ("taskkill", "/im python", "禁止 /IM python.exe，会把 MemOmics 自己杀掉！请用 /F /PID <具体PID>"),
                 ("taskkill", "/im python3", "禁止 /IM python3.exe，会把 MemOmics 自己杀掉！请用 /F /PID <具体PID>"),
@@ -214,10 +380,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         """工具执行后拦截 — 自动触发后续动作"""
         es.tool_history.append({"tool": tool_name, "args": str(args)[:200], "time": time.time(), "phase": "complete"})
 
-        if tool_name == "terminal":
+        if tool_name == "terminal" or (tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal"):
             es.rail_post_done = False
             # 保存结果用于后续参数提取
             es._last_terminal_result = str(result)[:1000] if result else ""
+            # P2(2026-08-10): 报错信号 — 结果含错误标记
+            _rstr = str(result).lower() if result else ""
+            es._last_exec_error = any(k in _rstr for k in ("traceback", "error:", "exception", "exit code 1", "nonzero", "not found"))
             # 设置 pending 标记：所有非闲聊级别都需要 record
             if es.analysis_level != "chat":
                 es._pending_record = True
@@ -298,17 +467,31 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                     except Exception as _e:
                         _emit("enforcement", action="warning",
                               message=f"⚠️ record_run 失败: {_e}")
-                # 触发 debate
-                if not es.debate_done and es.analysis_level == "analysis":
+                # 触发 debate（P2(2026-08-10): 三级门控替代固定布尔触发）
+                _g_signals = {
+                    "high_impact": getattr(es, "_pending_high_impact", False),
+                    "failed_retries": max(es._exec_retries.values()) if es._exec_retries else 0,
+                    "last_error": es._last_exec_error,
+                    "conflict": not should_proceed if es.rail_post_done else False,
+                    "uncertainty": False,
+                }
+                _g_level, _g_reasons, _g_force = debate_gate(es, stage="after_script", signals=_g_signals)
+                es._pending_high_impact = False
+                if _g_level >= DEBATE_L1:
+                    _mode_hint = {
+                        DEBATE_L1: "mode='homogeneous', rounds=1（轻量：可用 role_model_map 或 sampling 降成本）",
+                        DEBATE_L2: "mode='homogeneous', rounds=1（完整 8 角色；异构可选 adversarial）",
+                    }[_g_level]
                     _emit("enforcement", action="require",
-                          message="💬 rail_review(post) 通过。请调用 debate_analysis 进行多专家辩证审查。",
+                          level=DEBATE_LEVEL_NAMES[_g_level],
+                          reasons=_g_reasons,
+                          message=f"💬 辩论门控 → {DEBATE_LEVEL_NAMES[_g_level]}：{'；'.join(_g_reasons[:2])}。请调用 debate_analysis（{_mode_hint}）。",
                           require=["debate_analysis"])
 
         elif tool_name == "debate_analysis":
             es.debate_done = True
             # 保存辩论结论
             _save_debate_conclusion(es, result, args)
-
     def tool_progress_cb(event_type: str, **kwargs):
         """工具进度回调 — 用于心跳和状态同步"""
         if event_type == "tool.started":

@@ -62,7 +62,8 @@ def _archive_to_results_log(record: dict, action: str):
         log_dir = Path(results_dir) / "log"
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
-        action_tag = "run" if action in ("record_success", "record_run") else "error"
+        action_tag = "verdict" if action == "record_verdict" else (
+            "run" if action in ("record_success", "record_run") else "error")
         archive_path = log_dir / f"run_record_{ts}_{action_tag}.json"
         with open(archive_path, "w", encoding="utf-8") as f:
             json.dump(record, f, ensure_ascii=False, indent=2)
@@ -600,6 +601,61 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
 
 # ─── 3. UPDATE SCRIPT ─────────────────────────────
 
+def _record_verdict(skill_name: str = "", topic: str = "",
+                    verdict: str = "", recommended_params: str = "",
+                    confidence: float = 0.0, evidence: str = "") -> dict:
+    """P1(2026-08-10): 辩论裁决回流 — verdict → skill.json debate_verdicts 沉淀。
+
+    由 debate_analysis 成功返回后自动调用，也可由 agent 手动触发。
+    - skill_name 非空时：写入 skill_dir/skill.json 的 debate_verdicts 数组（带 evidence）
+    - 无论 skill_name 是否为空，都会归档到 results/.../log/run_record_*_verdict.json
+    - 去重：同一 topic+verdict 摘要前 50 字不重复追加
+    """
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    entry = {
+        "topic": topic,
+        "verdict": (verdict or "")[:500],
+        "recommended_params": recommended_params,
+        "confidence": confidence,
+        "evidence": (evidence or "")[:300],
+        "date": timestamp,
+    }
+    skill_updated = False
+    if skill_name:
+        skill_dir = _get_skill_dir(skill_name)
+        if skill_dir:
+            skill_json_path = os.path.join(skill_dir, "skill.json")
+            try:
+                if os.path.exists(skill_json_path):
+                    with open(skill_json_path, "r", encoding="utf-8") as f:
+                        sj = json.load(f)
+                else:
+                    sj = {}
+                verdicts = sj.get("debate_verdicts") or []
+                dup = any(
+                    e.get("topic") == topic
+                    and e.get("verdict", "")[:50] == entry["verdict"][:50]
+                    for e in verdicts
+                )
+                if not dup:
+                    verdicts.append(entry)
+                    sj["debate_verdicts"] = verdicts
+                    with open(skill_json_path, "w", encoding="utf-8") as f:
+                        json.dump(sj, f, indent=2, ensure_ascii=False)
+                    skill_updated = True
+            except Exception as e:
+                logger.warning(f"record_verdict: skill.json update failed: {e}")
+    return {
+        "success": True,
+        "action": "record_verdict",
+        "skill": skill_name,
+        "skill_json_updated": skill_updated,
+        "verdict_archived": True,
+        "entry": entry,
+        "note": "裁决已归档（run_record_*_verdict.json）；skill_name 非空且 skill.json 存在时同步沉淀到 debate_verdicts。",
+    }
+
+
 def _update_script(skill_name: str, script_name: str, fixed_script_path: str,
                    reason: str = "") -> Dict[str, Any]:
     """用修复后的脚本覆盖原脚本，备份旧版本"""
@@ -873,7 +929,8 @@ def skill_evolution(action: str = "record_error",
                     reason: str = "",
                     keywords: str = "",
                     trigger_level: str = "RED 必触发",
-                    category: str = "") -> str:
+                    category: str = "",
+                    topic: str = "") -> str:
     """
     MemOmics Skill 自进化引擎
 
@@ -943,6 +1000,17 @@ def skill_evolution(action: str = "record_error",
             fixed_script_path=fixed_script_path,
             reason=reason,
         )
+    elif action == "record_verdict":
+        # P1(2026-08-10): 辩论裁决回流 — verdict → skill.json debate_verdicts 沉淀
+        # 由 debate_analysis 成功返回后自动调用（带 evidence），也可由 agent 手动触发
+        result = _record_verdict(
+            skill_name=skill_name,
+            topic=topic,
+            verdict=result_summary,
+            recommended_params=params_used,
+            confidence=score,
+            evidence=reason,
+        )
     elif action == "verify_delivery_gate":
         result = _verify_delivery_gate(
             skill_name=args.get("skill_name", args.get("skill", "")),
@@ -977,15 +1045,16 @@ SCHEMA = {
         "1. 跑脚本前 → query_logs（查同类运行日志，参考已有经验，避免重复踩坑）\n"
         "2. rail_review(post) 通过 → record_run（记录成功运行日志：参数/结果/质量）\n"
         "3. rail_review(post) 失败 → record_error（记录错误日志：报错/根因/修复方案）\n"
-        "Actions: record_error, record_success/record_run, query_logs, update_script。"
+        "Actions: record_error, record_success/record_run, query_logs, update_script, record_verdict。"
+        "record_verdict 由辩论引擎自动触发（裁决回流），也可手动调用：把辩论裁判的裁决/推荐参数/置信度沉淀到 skill.json 的 debate_verdicts 数组（带 evidence）。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["record_error", "record_success", "record_run", "query_logs", "update_script", "register_skill"],
-                "description": "record_error: 记录错误+根因+修复方案到skill; record_success/record_run: 记录成功脚本+参数到proven scripts; query_logs: 查同类运行日志拿历史经验; update_script: 用修复后的脚本覆盖原脚本并备份; register_skill: 注册新skill到SOUL.md使下次可自动触发",
+                "enum": ["record_error", "record_success", "record_run", "query_logs", "update_script", "register_skill", "record_verdict"],
+                "description": "record_error: 记录错误+根因+修复方案到skill; record_success/record_run: 记录成功脚本+参数到proven scripts; query_logs: 查同类运行日志拿历史经验; update_script: 用修复后的脚本覆盖原脚本并备份; register_skill: 注册新skill到SOUL.md使下次可自动触发; record_verdict: 辩论裁决回流（topic+verdict+推荐参数+置信度+evidence 沉淀到 skill.json debate_verdicts）",
             },
             "skill_name": {
                 "type": "string",
@@ -1006,13 +1075,14 @@ SCHEMA = {
             "tissue": {"type": "string", "description": "组织, 如 skeletal_muscle"},
             "direction": {"type": "string", "description": "研究方向, 如 aging"},
             "result_summary": {"type": "string", "description": "结果摘要 (record_success/record_run)"},
-            "score": {"type": "number", "description": "质量评分 0-10 (record_success/record_run)"},
+            "score": {"type": "number", "description": "质量评分 0-10 (record_success/record_run)；record_verdict 时=裁判置信度 0-1"},
             "severity": {
                 "type": "string",
                 "enum": ["critical", "high", "medium", "low"],
                 "description": "严重程度",
             },
-            "reason": {"type": "string", "description": "更新原因 (update_script)"},
+            "reason": {"type": "string", "description": "更新原因 (update_script)；record_verdict 时=evidence（文献/知识库证据）"},
+            "topic": {"type": "string", "description": "辩论主题 (record_verdict)，如 'hdWGCNA 软阈值选择'"},
             "keywords": {"type": "string", "description": "SOUL.md 命中关键词 (register_skill), 如 '\"scTour\" / \"深度伪时间\"'"},
             "trigger_level": {
                 "type": "string",

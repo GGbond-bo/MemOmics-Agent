@@ -1578,6 +1578,25 @@ def skill_view(
         if isinstance(metadata, dict):
             result["metadata"] = metadata
 
+        # P2-11(2026-08-10): 裁决回流注入 — skill.json 的 debate_verdicts 附加到返回。
+        # 自进化闭环：辩论裁决 → record_verdict 沉淀到 skill.json → 下次 skill_view
+        # 时 agent 自动看到历史裁决（含推荐参数），参数选择更稳。
+        try:
+            if skill_dir:
+                _sj_path = Path(skill_dir) / "skill.json"
+                if _sj_path.exists():
+                    _sj = json.loads(_sj_path.read_text(encoding="utf-8"))
+                    _verdicts = _sj.get("debate_verdicts") or []
+                    if _verdicts:
+                        result["debate_verdicts"] = _verdicts[-5:]  # 最近 5 条裁决
+                        result["debate_verdicts_hint"] = (
+                            "该 skill 有历史辩论裁决（debate_verdicts 字段）："
+                            "涉及参数/结论时先参考这些裁决（evidence 含文献/得分），"
+                            "若与本次场景匹配可直接采用推荐参数。"
+                        )
+        except Exception:
+            logger.debug("Could not attach debate_verdicts for %s", skill_name, exc_info=True)
+
         return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:

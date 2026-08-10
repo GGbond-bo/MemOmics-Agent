@@ -1654,7 +1654,8 @@ function updateToolBlock(tool, result) {
     if (b.classList.contains('debate-tool') || tool === 'debate_analysis') {
       try {
         var debate = JSON.parse(resultStr);
-        if (debate.pro_argument || debate.con_argument) {
+        if (debate.pro_argument || debate.con_argument ||
+            debate.pro_arguments || debate.con_arguments || debate.judge_verdict) {
           renderDebateBlock(b, debate);
         }
       } catch(e) {}
@@ -1666,17 +1667,50 @@ function updateToolBlock(tool, result) {
 function renderDebateBlock(toolBlock, debate) {
   var html = '<div class="debate-block">';
   html += '<div class="debate-header">🎭 辩论结果</div>';
-  if (debate.pro_argument) {
-    html += '<div class="debate-side pro"><span class="side-label">✅ 正方:</span> ' + escapeHtml(debate.pro_argument.substring(0, 300)) + '</div>';
+
+  // P2-13(2026-08-10): 适配引擎真实输出结构 —
+  // pro_arguments/con_arguments 是 {biology:{argument:..}, statistics:{..}, bioinformatics:{..}}，
+  // 旧代码期望 pro_argument（单数字符串）→ 永远不渲染。兼容两种结构。
+  function sideHtml(prefix, label, sides) {
+    var out = '';
+    if (!sides) return out;
+    if (typeof sides === 'string') {
+      return '<div class="debate-side ' + prefix + '"><span class="side-label">' + label + ':</span> ' + escapeHtml(sides.substring(0, 300)) + '</div>';
+    }
+    var keys = Object.keys(sides);
+    for (var i = 0; i < keys.length; i++) {
+      var role = keys[i];
+      var arg = sides[role];
+      var argText = '';
+      if (typeof arg === 'string') argText = arg;
+      else if (arg && typeof arg === 'object') argText = arg.argument || arg.content || JSON.stringify(arg);
+      if (argText) {
+        out += '<div class="debate-side ' + prefix + '"><span class="side-label">' + label + '·' + escapeHtml(role) + ':</span> ' + escapeHtml(argText.substring(0, 200)) + '</div>';
+      }
+    }
+    return out;
   }
-  if (debate.con_argument) {
-    html += '<div class="debate-side con"><span class="side-label">❌ 反方:</span> ' + escapeHtml(debate.con_argument.substring(0, 300)) + '</div>';
-  }
+  html += sideHtml('pro', '✅ 正方', debate.pro_arguments || debate.pro_argument);
+  html += sideHtml('con', '❌ 反方', debate.con_arguments || debate.con_argument);
+
   if (debate.judge_verdict || debate.verdict) {
-    html += '<div class="debate-verdict"><strong>⚖️ 裁决:</strong> ' + escapeHtml((debate.judge_verdict || debate.verdict).substring(0, 400)) + '</div>';
+    var v = debate.verdict ? ('[' + debate.verdict + (debate.confidence ? '/' + debate.confidence : '') + '] ') : '';
+    html += '<div class="debate-verdict"><strong>⚖️ 裁决:</strong> ' + escapeHtml(v) + escapeHtml(String(debate.judge_verdict || debate.verdict).substring(0, 400)) + '</div>';
   }
-  if (debate.pro_score != null) {
-    html += '<div style="margin-top:4px;font-size:11px;color:var(--text-light);">正方 ' + debate.pro_score + ' vs 反方 ' + (debate.con_score || '?') + '</div>';
+  // 推荐参数（structured verdict）
+  if (debate.recommended_params && Object.keys(debate.recommended_params).length) {
+    html += '<div style="margin-top:4px;font-size:11px;color:var(--success);">📌 推荐参数: ' + escapeHtml(JSON.stringify(debate.recommended_params, null, 1).substring(0, 500)) + '</div>';
+  }
+  // 双方得分
+  if (debate.scores && typeof debate.scores === 'object') {
+    var proKeys = ['pro_biology', 'pro_statistics', 'pro_bioinformatics'];
+    var conKeys = ['con_biology', 'con_statistics', 'con_bioinformatics', 'con_history'];
+    var ps = 0, pc = 0, pn = 0, cn = 0;
+    for (var k in debate.scores) { if (k.indexOf('pro_') === 0) { ps += Number(debate.scores[k]) || 0; pn++; } }
+    for (var k2 in debate.scores) { if (k2.indexOf('con_') === 0) { pc += Number(debate.scores[k2]) || 0; cn++; } }
+    if (pn || cn) {
+      html += '<div style="margin-top:4px;font-size:11px;color:var(--text-light);">正方 ' + (pn ? (ps / pn).toFixed(1) : '?') + ' vs 反方 ' + (cn ? (pc / cn).toFixed(1) : '?') + ' (平均分)</div>';
+    }
   }
   html += '</div>';
   toolBlock.insertAdjacentHTML('beforeend', html);

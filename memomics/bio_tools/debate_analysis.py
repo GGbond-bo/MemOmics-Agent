@@ -40,6 +40,7 @@ import os
 import logging
 import time
 import hashlib
+import re
 import threading
 import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -113,6 +114,21 @@ SCHEMA = {
                 "type": "string",
                 "description": "Historical error records from error_memory/errors.jsonl relevant to this topic. Used by con-side history agent.",
                 "default": ""
+            },
+            "mode": {
+                "type": "string",
+                "description": "辩论架构（P0 参数化，2026-08-10）: homogeneous=单模型8角色(默认/现状) | adversarial=正方反方裁判三组异构模型 | multi_model=每个角色独立模型 | temperature=同模型多温度采样。留空用 config.yaml debate.mode。",
+                "default": ""
+            },
+            "rounds": {
+                "type": "integer",
+                "description": "辩论轮数，默认 1。>1 时第 2 轮起向正反方注入上一轮裁判摘要（轮间隔离：角色依然看不到彼此原始论点）。",
+                "default": 1
+            },
+            "role_model_map": {
+                "type": "object",
+                "description": "角色级模型覆盖 {角色名: {model, provider}}，角色名 ∈ pro_biology/pro_statistics/pro_bioinformatics/con_biology/con_statistics/con_bioinformatics/con_history/judge。优先级最高。",
+                "default": {}
             }
         },
         "required": ["topic", "context"]
@@ -359,7 +375,8 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 """
 
 
-def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str) -> dict:
+def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
+                    temperature: float = 0.7) -> dict:
     """独立 LLM 调用 — 每个角色一个独立的 messages 数组，切断上下文。
 
     返回 dict: {content, call_id, isolation_verified}
@@ -367,6 +384,7 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
     - isolation_verified: True 表示这是独立调用（messages 只有 1 条）
 
     线程安全：每次调用创建独立的 httpx.Client，不共享状态，可安全并行。
+    P0(2026-08-10): temperature 可配置（temperature 模式按角色分配采样温度）。
     """
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -378,7 +396,7 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 4096,
-        "temperature": 0.7,
+        "temperature": temperature,
     }
     call_id = f"{label}_{int(time.time() * 1000) % 1000000}"
 
@@ -421,18 +439,21 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
 
 # ==================== 并行调用工具 ====================
 
-def _call_role_parallel(tasks: list, api_key: str, base_url: str, model: str) -> dict:
+def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     """调用多个角色，返回 {label: result_dict}。
 
     串行执行（2026-08-01 修复）：之前用 ThreadPoolExecutor 8 路并发，
     实测触发 provider 并发/配额限制导致 7 次 8/8 全失败。改为串行更稳。
-    每个 task = (label, prompt)。每个角色仍是独立 HTTP 调用（上下文隔离不变）。
+    每个 task = (label, prompt)。每个角色仍是独立 HTTP 调用（上下文隔离不变），
     正方角色互相看不到（各自的 messages 只有自己的 prompt），串行不破坏隔离性。
+
+    P0(2026-08-10): cfg 可传辩论配置，每个角色按 _resolve_role_llm 独立解析模型
+    （异构/对抗/温度模式）。cfg=None 时行为=现状（环境变量单模型）。
     """
     results = {}
     for label, prompt in tasks:
         try:
-            results[label] = _call_llm_sync(prompt, label, api_key, base_url, model)
+            results[label] = _call_llm_role(label, prompt, cfg)
         except Exception as e:
             logger.warning(f"debate {label} call failed: {e}")
             results[label] = {
@@ -443,6 +464,228 @@ def _call_role_parallel(tasks: list, api_key: str, base_url: str, model: str) ->
                 "error": True,
             }
     return results
+
+
+# ==================== 辩论配置（P0 参数化 2026-08-10） ====================
+
+ALL_ROLES = ["pro_biology", "pro_statistics", "pro_bioinformatics",
+             "con_biology", "con_statistics", "con_bioinformatics",
+             "con_history", "judge"]
+
+# temperature 模式下按角色哈希分配的采样温度池（L1 对照组用）
+_TEMP_POOL = [0.3, 0.5, 0.7, 0.9, 1.1]
+
+
+def _get_config_path() -> Path:
+    """定位 hermes_home/config.yaml（与 _get_debates_dir 同源）。"""
+    try:
+        for p in list(sys.path):
+            if p.endswith('hermes-agent') or p.endswith('hermes-agent\\') or p.endswith('hermes-agent/'):
+                break
+        from hermes_constants import get_hermes_home
+        base = Path(get_hermes_home())
+    except Exception:
+        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+    return base / "config.yaml"
+
+
+def _load_debate_config() -> dict:
+    """读取 config.yaml 的 debate: 段。缺省返回默认值（行为=现状 homogeneous）。
+
+    config 结构（详见 docs/debate-core-design.md）:
+      debate:
+        mode: homogeneous | adversarial | multi_model | temperature
+        rounds: 1
+        judge: {model, provider}
+        pro:   {model, provider}
+        con:   {model, provider}
+        role_model_map: {"pro_biology": {model, provider}, ...}
+        cache_ttl_hours: 72
+    """
+    default = {
+        "mode": "homogeneous",
+        "rounds": 1,
+        "judge": {}, "pro": {}, "con": {},
+        "role_model_map": {},
+        "cache_ttl_hours": 72,
+    }
+    try:
+        import yaml
+        cfg_path = _get_config_path()
+        if not cfg_path.exists():
+            return default
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        debate_cfg = data.get("debate") or {}
+        if not isinstance(debate_cfg, dict):
+            return default
+        merged = dict(default)
+        merged.update({k: v for k, v in debate_cfg.items() if v is not None})
+        return merged
+    except Exception as e:
+        logger.warning(f"Failed to load debate config, using defaults: {e}")
+        return default
+
+
+def _load_provider_keys() -> dict:
+    """读取 hermes_home/provider_keys.json: {provider_id: {api_key, base_url}}。"""
+    try:
+        keys_path = _get_config_path().parent / "provider_keys.json"
+        if not keys_path.exists():
+            return {}
+        with open(keys_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.warning(f"Failed to load provider_keys.json: {e}")
+        return {}
+
+
+def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None) -> str:
+    """模式指纹 — 参与缓存 key，防止不同架构的辩论结果互相污染（P0 级）。
+
+    任何影响辩论产出的配置（mode/rounds/角色模型分配/分组模型）变化 → 指纹变化 → 新缓存条目。
+    P0-5(2026-08-10): 增加 cfg 参数，judge/pro/con 分组配置也计入指纹——
+    真实数据测试发现：改了 judge 模型但 mode 不变时，旧缓存（坏结果）仍会命中。
+    """
+    parts = [f"mode={mode}", f"rounds={rounds}"]
+    if cfg:
+        for grp in ("judge", "pro", "con"):
+            gc = (cfg.get(grp) or {})
+            if gc:
+                parts.append(f"{grp}={gc.get('provider','?')}/{gc.get('model','?')}")
+    if role_model_map:
+        for k in sorted(role_model_map):
+            v = role_model_map[k] or {}
+            parts.append(f"{k}={v.get('provider','?')}/{v.get('model','?')}")
+    return "|".join(parts)
+
+
+def _resolve_role_llm(label: str, cfg: dict) -> dict:
+    """解析某个角色的 (api_key, base_url, model, temperature)。
+
+    优先级：
+    1. role_model_map[label]（最细粒度，可覆盖一切）
+    2. mode 分组：adversarial → pro/con/judge 三组；multi_model → 按角色从模型池稳定分配
+    3. 默认：环境变量 DEEPSEEK_API_KEY/BASE_URL/MODEL（现状行为 = homogeneous）
+    返回 dict {api_key, base_url, model, temperature, provider}
+    """
+    mode = (cfg or {}).get("mode", "homogeneous")
+    provider_keys = _load_provider_keys()
+    env_key = os.environ.get("DEEPSEEK_API_KEY", "")
+    env_url = os.environ.get("DEEPSEEK_BASE_URL", "https://dcsapi.dcs.cloud/api/aigress/unified/v1")
+    env_model = os.environ.get("DEEPSEEK_MODEL", "glm-5.2")
+
+    def _from_provider(pid: str, model: str):
+        if pid and pid in provider_keys:
+            info = provider_keys[pid]
+            return {
+                "api_key": info.get("api_key", ""),
+                "base_url": (info.get("base_url") or "").rstrip("/"),
+                "model": model or env_model,
+                "temperature": 0.7,
+                "provider": pid,
+            }
+        return None
+
+    # ① role_model_map 细粒度覆盖
+    rmm = (cfg or {}).get("role_model_map") or {}
+    if label in rmm and rmm[label]:
+        rv = _from_provider(rmm[label].get("provider", ""), rmm[label].get("model", ""))
+        if rv and rv["api_key"]:
+            return rv
+
+    # ② 分组配置（judge/pro/con）在任何 mode 下都生效（P0-4 修复 2026-08-10：
+    #    真实数据测试发现 homogeneous 模式下 judge 用 deepseek-v4-flash 长 prompt
+    #    content 为空 → 配了 judge 模型却不生效。分组配置 = 按角色指定模型。）
+    _group = "judge" if label == "judge" else ("pro" if label.startswith("pro_") else "con")
+    _gc = (cfg or {}).get(_group) or {}
+    if _gc:
+        rv = _from_provider(_gc.get("provider", ""), _gc.get("model", ""))
+        if rv and rv["api_key"]:
+            return rv
+        # 分组配置缺 key → 回退环境变量（但保留分组模型名）
+        if _gc.get("model") and env_key:
+            return {"api_key": env_key, "base_url": env_url, "model": _gc["model"],
+                    "temperature": 0.7, "provider": "env"}
+
+    # ③ mode 分组（adversarial 的分组已由 ② 覆盖；此处只剩 multi_model/temperature）
+    if mode == "multi_model":
+        # 按角色名哈希从可用 provider 稳定分配（同一角色永远同一模型）
+        # P2-9(2026-08-10): 跳过已验证 401 的 dcs-cloud（与默认回退策略一致），
+        # 否则按哈希分配到 dcs-cloud 的角色必然失败。
+        candidates = []
+        for pid, info in provider_keys.items():
+            if pid == "dcs-cloud":
+                continue
+            if info.get("api_key") and info.get("base_url"):
+                candidates.append(pid)
+        if candidates:
+            import hashlib as _hl
+            idx = int(_hl.md5(label.encode("utf-8")).hexdigest(), 16) % len(candidates)
+            pid = candidates[idx]
+            # P2-10(2026-08-10): model 按 provider 用默认模型（deepseek 官方无 glm 系列，
+            # 原来用 env_model="glm-5.2" 直接 400 Bad Request）
+            _prov_default_model = {"deepseek": "deepseek-v4-flash"}
+            return {"api_key": provider_keys[pid]["api_key"],
+                    "base_url": provider_keys[pid]["base_url"].rstrip("/"),
+                    "model": _prov_default_model.get(pid, env_model),
+                    "temperature": 0.7, "provider": pid}
+
+    elif mode == "temperature":
+        # 同模型多温度采样（对照实验：多样性是否必须来自异构）
+        # P2-8(2026-08-10): 修复——之前直接返回 env_key，无环境变量时
+        # api_key 为空 → "Illegal header value b'Bearer '" 8/8 全失败。
+        # 现在复用默认回退（env → provider_keys），只覆盖 temperature。
+        import hashlib as _hl
+        _base = _default_role_llm(env_key, env_url, env_model, provider_keys)
+        idx = int(_hl.md5(label.encode("utf-8")).hexdigest(), 16) % len(_TEMP_POOL)
+        _base["temperature"] = _TEMP_POOL[idx]
+        return _base
+
+    # ③ 默认（homogeneous / 无配置）
+    return _default_role_llm(env_key, env_url, env_model, provider_keys)
+
+
+def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys: dict) -> dict:
+    """默认模型解析：环境变量优先，缺失时回退 provider_keys.json。
+
+    与 webui/server.py 策略对齐 — 跳过已验证 401 的 dcs-cloud，优先 deepseek 官方，其余兜底。
+    P2-8(2026-08-10): 抽成独立函数供 temperature 模式复用（原 temperature 直接返回 env_key，
+    无环境变量时 api_key 为空 → 8/8 全失败 "Illegal header value b'Bearer '"）。
+    """
+    if env_key:
+        return {"api_key": env_key, "base_url": env_url, "model": env_model,
+                "temperature": 0.7, "provider": "env"}
+    # 环境变量缺失（如直接命令行调用、不经 server 的 _sync_debate_env）→
+    # 回退 provider_keys.json
+    _known_dead = {"dcs-cloud"}
+    _fallback_order = sorted(provider_keys.keys(),
+                             key=lambda pid: (pid in _known_dead, pid != "deepseek"))
+    for pid in _fallback_order:
+        info = provider_keys[pid]
+        if info.get("api_key") and info.get("base_url"):
+            # 各 provider 默认模型（与 webui/server.py 默认一致；deepseek 官方无 glm 系列）
+            _prov_default_model = {"deepseek": "deepseek-v4-flash"}
+            return {"api_key": info["api_key"],
+                    "base_url": info["base_url"].rstrip("/"),
+                    "model": _prov_default_model.get(pid, env_model),
+                    "temperature": 0.7, "provider": pid}
+    return {"api_key": env_key, "base_url": env_url, "model": env_model,
+            "temperature": 0.7, "provider": "env"}
+
+
+def _call_llm_role(label: str, prompt: str, cfg: dict) -> dict:
+    """按角色解析模型后调用 _call_llm_sync（隔离性不变：messages 只有该角色自己的 prompt）。"""
+    rc = _resolve_role_llm(label, cfg)
+    return _call_llm_sync(prompt, label, rc["api_key"], rc["base_url"], rc["model"],
+                          temperature=rc["temperature"])
+
+
+def _role_model_id(label: str, cfg: dict) -> str:
+    """角色的实际模型标识（provider/model），写入结果供实验记录。"""
+    rc = _resolve_role_llm(label, cfg)
+    return f"{rc['provider']}/{rc['model']}"
 
 
 # ==================== 辩论结果持久化 ====================
@@ -465,21 +708,33 @@ def _get_debates_dir() -> Path:
     return debates_dir
 
 
-def _topic_hash(topic: str, context: str) -> str:
-    """生成 topic+context 的 hash，用于历史辩论匹配。"""
-    combined = (topic.strip().lower() + "||" + context.strip().lower()).encode("utf-8")
+def _topic_hash(topic: str, context: str, fingerprint: str = "") -> str:
+    """生成 topic+context 的 hash，用于历史辩论匹配。
+
+    P0(2026-08-10): 增加 fingerprint 参数（mode/rounds/角色模型指纹）——
+    不同架构的辩论结果必须使用不同缓存 key，防止互相污染。
+    不传 fingerprint 时保持旧行为（旧存档仍可读）。
+    """
+    combined = (topic.strip().lower() + "||" + context.strip().lower() + "||" + fingerprint).encode("utf-8")
     return hashlib.md5(combined).hexdigest()[:16]
 
 
-def _save_debate(topic: str, context: str, result_json: str) -> None:
-    """将辩论结果保存到 _debates/ 目录，文件名 = topic_hash.json。"""
+def _topic_hash_legacy(topic: str, context: str) -> str:
+    """旧版 hash（2026-07 及以前存档）：lower() 但无 strip()。仅供 _load_debate 读取兼容。"""
+    combined = (topic.lower() + "||" + context.lower()).encode("utf-8")
+    return hashlib.md5(combined).hexdigest()[:16]
+
+
+def _save_debate(topic: str, context: str, result_json: str, fingerprint: str = "") -> None:
+    """将辩论结果保存到 _debates/ 目录，文件名 = topic_hash(fingerprint).json。"""
     try:
-        h = _topic_hash(topic, context)
+        h = _topic_hash(topic, context, fingerprint)
         path = _get_debates_dir() / f"{h}.json"
         record = {
             "topic": topic,
             "context": context,
             "hash": h,
+            "fingerprint": fingerprint,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "result": json.loads(result_json),
         }
@@ -490,15 +745,21 @@ def _save_debate(topic: str, context: str, result_json: str) -> None:
         logger.warning(f"Failed to save debate: {e}")
 
 
-def _load_debate(topic: str, context: str, max_age_hours: int = 72) -> dict | None:
+def _load_debate(topic: str, context: str, max_age_hours: int = 72, fingerprint: str = "") -> dict | None:
     """查询历史辩论结果。返回 dict 或 None。
 
-    匹配条件：topic+context 的 hash 完全匹配。
+    匹配条件：topic+context+fingerprint 的 hash 完全匹配（P0：指纹隔离架构）。
     过期条件：超过 max_age_hours 小时的记录不返回（默认 72 小时）。
     """
     try:
-        h = _topic_hash(topic, context)
+        h = _topic_hash(topic, context, fingerprint)
         path = _get_debates_dir() / f"{h}.json"
+        if not path.exists() and not fingerprint:
+            # 读取兼容（P0 2026-08-10）：2026-07 及以前存档用无 lower() 的旧 hash 算法
+            h_legacy = _topic_hash_legacy(topic, context)
+            path_legacy = _get_debates_dir() / f"{h_legacy}.json"
+            if path_legacy.exists():
+                path = path_legacy
         if not path.exists():
             return None
         with open(path, "r", encoding="utf-8") as f:
@@ -564,9 +825,103 @@ def _archive_debate_to_results(topic: str, context: str, result_json: str):
         logger.warning(f"Failed to archive debate to results: {e}")
 
 
+def _auto_match_skill(topic: str) -> str:
+    """P2-12(2026-08-10): 从 topic 自动匹配 skill 名 — 断点 A 修复。
+
+    reflow_skill 未配置时，扫描 hermes_home/skills/bioinformatics/ 下各 skill
+    的 SKILL.md frontmatter name + skill.json name，若 topic（小写）包含
+    skill 名或其中文名，选最长匹配项。让裁决能自动沉淀到正确的 skill.json。
+    匹配不到返回 ""（只归档不写 skill.json，保持安全默认）。
+    """
+    try:
+        base = _get_config_path().parent / "skills" / "bioinformatics"
+        if not base.exists():
+            return ""
+        text = (topic or "").lower()
+        best, best_len = "", 0
+        for sk_dir in base.iterdir():
+            if not sk_dir.is_dir():
+                continue
+            names = []
+            for fname in ("SKILL.md", "skill.json"):
+                fp = sk_dir / fname
+                if not fp.exists():
+                    continue
+                try:
+                    content = fp.read_text(encoding="utf-8")[:2000]
+                except Exception:
+                    continue
+                m = re.search(r'^name:\s*(.+)$', content, re.M)
+                if m:
+                    names.append(m.group(1).strip().strip('"\' '))
+                if fname == "skill.json":
+                    try:
+                        sj = json.loads(content)
+                        if sj.get("name"):
+                            names.append(str(sj["name"]))
+                    except Exception:
+                        pass
+            for n in names:
+                nl = n.lower()
+                if nl and nl in text and len(nl) > best_len:
+                    best, best_len = n, len(nl)
+        return best
+    except Exception as e:
+        logger.warning(f"auto_match_skill failed: {e}")
+        return ""
+
+
+def _reflow_verdict(result: dict) -> None:
+    """P1(2026-08-10): 辩论裁决回流 — verdict → skill_evolution.record_verdict。
+
+    规则（与设计文档 L4 一致）:
+    - 仅成功辩论（无 error）且 judge 裁决已结构化时触发
+    - confidence 为 low 时不沉淀（结果不可靠，留给 agent 判断）
+    - skill_name 从 config.yaml debate.reflow_skill 读取；缺省为空 →
+      只归档 run_record_*_verdict.json，不写 skill.json（避免误入无关 skill）
+    - 失败静默：回流失败不阻断主流程
+    """
+    try:
+        if result.get("error") or not result.get("verdict"):
+            return
+        conf = str(result.get("confidence", "low")).lower()
+        if conf == "low":
+            return
+        cfg = _load_debate_config()
+        skill_name = cfg.get("reflow_skill") or ""
+        if not skill_name:
+            # P2-12(2026-08-10): 断点 A — 未配置 reflow_skill 时自动匹配
+            skill_name = _auto_match_skill(str(result.get("topic", "")))
+        evidence = json.dumps({
+            "call_ids": [r.get("call_id", "") for r in [
+                result.get("pro_bio", {}), result.get("con_bio", {}),
+                result.get("judge", {})] if isinstance(r, dict)],
+            "scores": result.get("scores", {}),
+            "kb_used": result.get("knowledge_base", {}),
+        }, ensure_ascii=False)[:300]
+        try:
+            from bio_tools.skill_evolution import skill_evolution
+        except ImportError:
+            from memomics.bio_tools.skill_evolution import skill_evolution
+        skill_evolution(
+            action="record_verdict",
+            skill_name=skill_name,
+            topic=str(result.get("topic", ""))[:100],
+            result_summary=str(result.get("judge_verdict", ""))[:500],
+            params_used=json.dumps(result.get("recommended_params", {}), ensure_ascii=False)[:300],
+            score=float(result.get("confidence_score", 0.7)),
+            reason=evidence,
+        )
+        logger.info("Debate verdict reflowed to skill_evolution.record_verdict")
+    except Exception as e:
+        logger.warning(f"Debate verdict reflow failed (non-blocking): {e}")
+
+
 def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     history_errors: str = "", biology_kb: str = "",
-                    statistics_kb: str = "", bioinfo_kb: str = "") -> str:
+                    statistics_kb: str = "", bioinfo_kb: str = "",
+                    mode: str = None, rounds: int = None,
+                    role_model_map: dict = None) -> str:
     """多角色辩论 — 正方3专业编辑 + 反方4专业编辑 + 裁判编辑，全部独立 LLM 调用。
 
     上下文隔离实现：
@@ -575,12 +930,29 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     - 反方编辑之间不知道彼此（各自独立调用）
     - 正方不知道反方（各自独立调用）
     - 裁判是唯一看到所有角色的（裁判的 prompt 包含所有角色的输出）
-    """
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://dcsapi.dcs.cloud/api/aigress/unified/v1")
-    model = os.environ.get("DEEPSEEK_MODEL", "glm-5.2")
 
-    if not api_key:
+    P0 参数化(2026-08-10):
+    - mode: homogeneous(现状单模型) | adversarial(正反判三组异构) | multi_model(全角色异构) | temperature(同模型多温度采样)
+    - rounds: 辩论轮数（>1 时第 2 轮起向 pro/con 注入上一轮裁判摘要）
+    - role_model_map: {角色: {model, provider}} 最细粒度覆盖
+    - 不传时全部从 config.yaml 的 debate: 段读取；无配置 = 现状行为
+    """
+    # ========== 配置解析（参数优先，config 次之，默认=现状） ==========
+    cfg = _load_debate_config()
+    if mode is not None:
+        cfg["mode"] = mode
+    if rounds is not None:
+        cfg["rounds"] = int(rounds) if str(rounds).isdigit() else 1
+    if role_model_map is not None:
+        cfg["role_model_map"] = role_model_map
+    mode = str(cfg.get("mode", "homogeneous")).lower()
+    rounds = max(1, int(cfg.get("rounds", 1) or 1))
+    rmm = cfg.get("role_model_map") or {}
+    fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg)
+
+    # 检查至少有一个可用 key（judge 能跑即可；role_model_map/分组配置的 key 也算）
+    judge_rc = _resolve_role_llm("judge", cfg)
+    if not judge_rc["api_key"]:
         return _fallback_debate(topic, context, knowledge_base_info, history_errors)
 
     kb = knowledge_base_info or "无知识库参考"
@@ -598,15 +970,16 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             if not bioinfo_kb:
                 bioinfo_kb = auto_kb
 
-    # ========== 查询历史辩论（优化2：持久化复用） ==========
-    cached = _load_debate(topic, context)
+    # ========== 查询历史辩论（优化2：持久化复用；P0：指纹隔离架构） ==========
+    cached = _load_debate(topic, context, fingerprint=fingerprint)
     if cached:
         cached_result = cached.get("result", {})
         cached_result["reused_from_cache"] = True
         cached_result["cache_timestamp"] = cached.get("timestamp", "")
         cached_result["note"] = (
-            "多角色辩论（v3）+ 并行调用 + 历史复用：本次辩论与历史记录的 topic+context 完全匹配，"
+            "多角色辩论（v3）+ 并行调用 + 历史复用：本次辩论与历史记录的 topic+context+架构指纹完全匹配，"
             f"直接复用 {cached.get('timestamp', '')} 的辩论结果（72小时内有效）。"
+            f"架构: mode={mode}, rounds={rounds}"
         )
         return json.dumps(cached_result, ensure_ascii=False, indent=2)
 
@@ -616,58 +989,75 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     bioinfo_kb_val = bioinfo_kb or kb
 
     try:
-        # ========== 正方 3 专业编辑（并行调用，互相不知道，各用专属知识库） ==========
-        pro_tasks = [
-            ("pro_biology", PRO_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb)),
-            ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb)),
-            ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val)),
-        ]
-        pro_results = _call_role_parallel(pro_tasks, api_key, base_url, model)
-        pro_bio = pro_results["pro_biology"]
-        pro_stat = pro_results["pro_statistics"]
-        pro_bioinfo = pro_results["pro_bioinformatics"]
+        # ========== 辩论轮次循环（P0：rounds>1 时轮间注入上一轮裁判摘要） ==========
+        prev_round_summary = ""
+        final_judge = None
+        for round_no in range(1, rounds + 1):
+            round_note = ""
+            if round_no > 1 and prev_round_summary:
+                round_note = (
+                    f"\n\n## 上一轮辩论摘要（第 {round_no - 1} 轮裁判结论，供本轮参考）\n"
+                    f"{prev_round_summary}"
+                )
 
-        # ========== 反方 4 专业编辑（并行调用，互相不知道，也看不到正方，各用专属知识库） ==========
-        con_tasks = [
-            ("con_biology", CON_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb)),
-            ("con_statistics", CON_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb)),
-            ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val)),
-            ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist)),
-        ]
-        con_results = _call_role_parallel(con_tasks, api_key, base_url, model)
-        con_bio = con_results["con_biology"]
-        con_stat = con_results["con_statistics"]
-        con_bioinfo = con_results["con_bioinformatics"]
-        con_history = con_results["con_history"]
+            # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
+            pro_tasks = [
+                ("pro_biology", PRO_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
+                ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
+                ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
+            ]
+            pro_results = _call_role_parallel(pro_tasks, cfg)
+            pro_bio = pro_results["pro_biology"]
+            pro_stat = pro_results["pro_statistics"]
+            pro_bioinfo = pro_results["pro_bioinformatics"]
 
-        # ========== 裁判（唯一看到所有角色论点的，单独调用） ==========
-        judge_prompt = JUDGE_PROMPT.format(
-            topic=topic, context=context,
-            pro_bio=pro_bio["content"],
-            pro_stat=pro_stat["content"],
-            pro_bioinfo=pro_bioinfo["content"],
-            con_bio=con_bio["content"],
-            con_stat=con_stat["content"],
-            con_bioinfo=con_bioinfo["content"],
-            con_history=con_history["content"],
-        )
-        judge = _call_llm_sync(judge_prompt, "judge", api_key, base_url, model)
+            # ========== 反方 4 专业编辑（互相不知道，也看不到正方，各用专属知识库） ==========
+            con_tasks = [
+                ("con_biology", CON_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
+                ("con_statistics", CON_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
+                ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
+                ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist) + round_note),
+            ]
+            con_results = _call_role_parallel(con_tasks, cfg)
+            con_bio = con_results["con_biology"]
+            con_stat = con_results["con_statistics"]
+            con_bioinfo = con_results["con_bioinformatics"]
+            con_history = con_results["con_history"]
 
-        # 🔧 P0-1 修复(2026-08-01): 失败检测 — 8个角色任一失败则不缓存不归档
-        # 之前: 401/超时失败占位符仍被 _save_debate 缓存72h → 相同topic+context再命中返回占位符
-        _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge]
-        _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
-        if _failed_roles:
-            logger.warning(f"debate FAILED {len(_failed_roles)}/8 roles: {_failed_roles[:3]}... 不缓存不归档")
-            return json.dumps({
-                "topic": topic,
-                "debate_format": "多角色对抗（v3）",
-                "error": True,
-                "failed_roles": len(_failed_roles),
-                "failed_role_ids": _failed_roles,
-                "judge_verdict": judge.get("content", "") if not judge.get("error") else "裁判也失败",
-                "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档，Agent 应重试或检查 API key/base_url。",
-            }, ensure_ascii=False, indent=2)
+            # ========== 裁判（唯一看到所有角色论点的，单独调用） ==========
+            judge_prompt = JUDGE_PROMPT.format(
+                topic=topic, context=context,
+                pro_bio=pro_bio["content"],
+                pro_stat=pro_stat["content"],
+                pro_bioinfo=pro_bioinfo["content"],
+                con_bio=con_bio["content"],
+                con_stat=con_stat["content"],
+                con_bioinfo=con_bioinfo["content"],
+                con_history=con_history["content"],
+            )
+            judge = _call_llm_role("judge", judge_prompt, cfg)
+            final_judge = judge
+
+            # 🔧 P0-1 修复(2026-08-01): 失败检测 — 8个角色任一失败则不缓存不归档
+            # 之前: 401/超时失败占位符仍被 _save_debate 缓存72h → 相同topic+context再命中返回占位符
+            _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge]
+            _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
+            if _failed_roles:
+                logger.warning(f"debate FAILED {len(_failed_roles)}/8 roles: {_failed_roles[:3]}... 不缓存不归档")
+                return json.dumps({
+                    "topic": topic,
+                    "debate_format": "多角色对抗（v3）",
+                    "error": True,
+                    "failed_roles": len(_failed_roles),
+                    "failed_role_ids": _failed_roles,
+                    "judge_verdict": judge.get("content", "") if not judge.get("error") else "裁判也失败",
+                    "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档，Agent 应重试或检查 API key/base_url。",
+                }, ensure_ascii=False, indent=2)
+
+            # 轮间摘要（供下一轮 pro/con 参考；rounds=1 时不生效）
+            prev_round_summary = (judge.get("content") or "")[:1500]
+
+        judge = final_judge
 
         # ========== 组装结果（含隔离验证信息） ==========
         result = {
@@ -705,12 +1095,23 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             "note": (
                 "多角色辩论（v3）+ 并行调用 + 分科知识库：正方3专业编辑并行 + 反方4专业编辑并行 + 裁判单独调用，"
                 "每个编辑独立 LLM 调用（切断上下文），各学科使用专属知识库，裁判综合7方给出裁决+置信度。\n"
+                f"架构参数: mode={mode}, rounds={rounds}。\n"
                 "辩论结果已归档到 results/.../log/debate_*.json（通过线程级 results_dir 自动定位）。"
             ),
+            "debate_config": {
+                "mode": mode,
+                "rounds": rounds,
+                "fingerprint": fingerprint,
+                "role_models": {
+                    label: _role_model_id(label, cfg) for label in ALL_ROLES
+                },
+                "note": "mode: homogeneous=单模型8角色 | adversarial=正反判三组异构 | multi_model=全角色异构 | temperature=同模型多温度。role_models 记录每个角色实际使用的 provider/model，供实验分析。",
+            },
             "timing": {
                 "parallel": True,
-                "rounds": 3,
-                "round_description": "轮1: 正方3专业编辑并行 | 轮2: 反方4专业编辑并行 | 轮3: 裁判单独调用",
+                "rounds": rounds,
+                "round_description": "每轮: 正方3专业编辑并行 → 反方4专业编辑并行 → 裁判单独调用"
+                                   + ("；轮间注入上一轮裁判摘要" if rounds > 1 else ""),
             },
             "knowledge_base": {
                 "biology_kb_provided": bool(biology_kb),
@@ -722,27 +1123,48 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 🔧 P1-2 修复(2026-08-01): 解析 judge JSON → 结构化 verdict 供 Agent 直接使用
         # 之前: judge_verdict 是原始文本(含```json围栏)，verdict=modify 的 recommended_params 无法结构化回传
+        # P0-3 增强(2026-08-10): 真实数据测试发现 deepseek-v4-flash 的 content 常为空，
+        # fallback 的 reasoning_content 是思维链草稿，其中 JSON 片段可能残缺/含 "verdict": null。
+        # 修复: 优先用正则找含非空 verdict 的 JSON 对象；全部失败才降级默认值。
         try:
             _judge_text = judge["content"]
             _judge_clean = _judge_text.replace("```json", "").replace("```", "").strip()
-            _judge_start = _judge_clean.find("{")
-            _judge_end = _judge_clean.rfind("}")
-            if _judge_start >= 0 and _judge_end > _judge_start:
-                _judge_obj = json.loads(_judge_clean[_judge_start:_judge_end+1])
-                result["verdict"] = _judge_obj.get("verdict", "need_more_info")
-                result["confidence"] = _judge_obj.get("confidence", "low")
-                result["recommended_params"] = _judge_obj.get("recommended_params", {})
-                result["scores"] = _judge_obj.get("scores", {})
+            _judge_obj = None
+            # ① 正则优先：找含 verdict 键且值非 null/空的 JSON 对象（处理 reasoning 草稿多片段）
+            for _cand in re.findall(r'\{[^{}]*"verdict"[^{}]*\}', _judge_clean):
+                try:
+                    _o = json.loads(_cand)
+                    if _o.get("verdict") not in (None, ""):
+                        _judge_obj = _o
+                        break
+                except Exception:
+                    continue
+            # ② 回退：全文首个 { 到最后一个 }
+            if _judge_obj is None:
+                _judge_start = _judge_clean.find("{")
+                _judge_end = _judge_clean.rfind("}")
+                if _judge_start >= 0 and _judge_end > _judge_start:
+                    _o2 = json.loads(_judge_clean[_judge_start:_judge_end + 1])
+                    if _o2.get("verdict") not in (None, ""):
+                        _judge_obj = _o2
+            if _judge_obj is None:
+                raise ValueError("judge JSON 中无有效 verdict")
+            result["verdict"] = _judge_obj.get("verdict", "need_more_info") or "need_more_info"
+            result["confidence"] = _judge_obj.get("confidence", "low") or "low"
+            result["recommended_params"] = _judge_obj.get("recommended_params", {}) or {}
+            result["scores"] = _judge_obj.get("scores", {}) or {}
         except Exception as _je:
             result["verdict"] = "need_more_info"
             result["confidence"] = "low"
             result["recommended_params"] = {}
             result["verdict_parse_error"] = str(_je)[:100]
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
-        # 持久化辩论结果（优化2：全局缓存用于去重）
-        _save_debate(topic, context, result_json)
+        # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
+        _save_debate(topic, context, result_json, fingerprint=fingerprint)
         # 归档到结果目录（需求1b：强制保留到 results/.../log/）
         _archive_debate_to_results(topic, context, result_json)
+        # P1(2026-08-10): 裁决回流 — verdict → skill_evolution.record_verdict（skill.json debate_verdicts + run_record 归档）
+        _reflow_verdict(result)
         return result_json
 
     except Exception as e:
@@ -918,6 +1340,9 @@ def _register():
                 args.get("biology_kb", ""),
                 args.get("statistics_kb", ""),
                 args.get("bioinfo_kb", ""),
+                mode=args.get("mode"),
+                rounds=args.get("rounds"),
+                role_model_map=args.get("role_model_map"),
             ),
             emoji="🎭",
             max_result_size_chars=120_000,
