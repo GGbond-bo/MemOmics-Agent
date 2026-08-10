@@ -441,9 +441,13 @@ def register_to_soul_md(
             "already_registered": True,
         }
 
-    # 构造新行
-    trigger_part = f"。用户说\"{trigger_keywords}\"时触发" if trigger_keywords else ""
-    new_row = f"| **{step_name}** | {skill_name} | {description}{trigger_part} |\n"
+    # 构造新行 — P2-16(2026-08-10): 必须用触发表管道式格式
+    # 旧格式: | **名称** | skill | 描述。用户说"kw"时触发 |
+    #   → agent 的触发解析不认！现有触发表全部是:
+    #     | "kw1" / "kw2" / ... | `skill_view("skill-name")` |
+    # 意图测试(verify_skill_trigger.py)实测旧格式无法命中关键词 → 改成管道式
+    kw_list = " / ".join(f'"{k.strip()}"' for k in trigger_keywords.split("/") if k.strip()) if trigger_keywords else ""
+    new_row = f'| {kw_list} | `skill_view("{skill_name}")` |\n'
 
     # 在 marker 上方插入
     lines.insert(marker_idx, new_row)

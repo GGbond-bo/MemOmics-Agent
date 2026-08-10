@@ -502,5 +502,5 @@ terminal 完成 → _pending_record = True
 > 🔧 **environment.json**：`E:/MemOmics-Agent/environment.json` 全局环境文件
 
 | "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
-| **代谢组学全流程** | metabolomics-full-pipeline | LC-MS/GC-MS 峰表 QC→归一化→差异→富集→可视化。用户说"代谢组学/metabolomics/LC-MS/GC-MS/峰表/peak table/差异代谢物/代谢通路富集"时触发 |
+| "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
 <!-- AUTO_SKILL_INSERT_MARKER -->

@@ -181,6 +181,34 @@ Tool: terminal（python 校验脚本）
 
 **通过标准**：脚本输出 4 项全 ✅。
 
+### 规则4e: 🔴 注册 + 意图测试门禁（触发保障 — 2026-08-10 新增）
+
+> **历史教训**：注册 ≠ 可触发。实测发现 `register_to_soul_md` 旧格式
+> `| **名称** | skill | 描述。用户说"kw"时触发 |` 与触发表真实格式
+> `| "kw1" / "kw2" | skill_view("skill") |` 不一致 → agent 触发解析不认。
+> 且"画火山图"类常见意图未进关键词 → 用户意图命不中。静态注册不够，
+> **必须用真实意图模拟测试**。
+
+创建 skill 后**必须**运行意图测试（不可跳过）：
+
+```
+Tool: terminal
+python scripts/verify_skill_trigger.py <skill-name> \
+  --intents "典型用户意图1|意图2|意图3|...（≥5 条，覆盖：分析意图/画图意图/英文意图）"
+
+通过标准（4 项全 ✅）：
+  1. SOUL.md 注册行存在（管道式格式）
+  2. 触发关键词 ≥ 4 个
+  3. 意图命中 100%（未命中 → 补关键词到 SOUL.md 注册行，重测）
+  4. SKILL.md name 与目录一致 + description ≥ 20 字
+失败 → 修正注册行/关键词后重测，直到全过才能交付。
+```
+
+**注册格式（必须管道式）**：
+```markdown
+| "关键词1" / "关键词2" / "..." | `skill_view("<skill-name>")` |
+```
+
 ### 规则3.5: 必须使用 skill_template_generator.py 生成（2026-08-10 新增）
 
 > **历史教训**：`scripts/skill_template_generator.py` 已存在但创建时从未被调用——LLM 手写导致 frontmatter 错分/结构缺失。
