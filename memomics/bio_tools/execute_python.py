@@ -81,8 +81,30 @@ def _kill_process_group(proc):
 
 def execute_python(code: str, working_dir: str = "", timeout: int = 300,
                    conda_env: str = "") -> str:
-    """Execute Python code with process-group kill on timeout."""
+    """Execute Python code with process-group kill on timeout.
+
+    P2-14(2026-08-10): 持久 kernel 优先 — 与 execute_r 对齐。
+    之前每次新建子进程，第二次交互变量全丢（画图/加载的包不保留）。
+    现在优先走 KERNEL_POOL（按 {lang}:{task_id} 缓存，空闲 30 分钟惰性关闭，
+    同会话跨调用保留变量/已加载包）；持久不可用/报错时回退旧路径。
+    """
     timeout = min(max(int(timeout), 10), 600)
+
+    # ── P2-14: 持久 kernel 优先（状态保持 + 免包加载） ──
+    try:
+        from tools.persistent_kernel import KERNEL_POOL
+        import os as _os
+        _task = _os.environ.get("MEMOMICS_SESSION_ID") or "default"
+        _res = KERNEL_POOL.execute(
+            code, _task, timeout=min(timeout, 600), language="python")
+        if _res.get("status") == "ok":
+            return (_res.get("output", "") or "(no output)")[:15000]
+        if _res.get("status") == "timeout":
+            return f"Error: Python execution timed out after {timeout}s. Kernel killed; next call starts fresh."
+        # status == error → 回退旧路径
+    except Exception:
+        pass
+
     proc = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".py", mode="w",
