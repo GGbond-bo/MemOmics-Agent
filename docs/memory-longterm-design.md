@@ -332,3 +332,10 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 | on_memory_write | ✅ | 内置记忆写入镜像为 facts |
 | shutdown | ✅ | refcount 共享连接安全关闭 |
 | save_config/get_config_schema | ✅ | config schema 暴露 |
+
+### auto_extract 增强（2026-08-11 追加）
+
+- `hermes_home/config.yaml` 的 `plugins.hermes-memory-store.auto_extract` 已是 `true`（配置层已开）
+- 原 `_auto_extract_facts` 只有英文正则（I prefer / we decided…），中文会话零命中 → 补充**中文偏好/决策模式**（我习惯/我喜欢/以后都用/记住：/我们决定/项目统一用…），保守匹配防噪音（普通分析句不提取），内容长度门槛 10→6
+- `get_config_schema` 默认值对齐 `true`
+- 验证：中文偏好 3 类提取 + 噪音控制 + 去重（add_fact UNIQUE）+ 英文模式保留；45 用例全绿，全量 218 passed

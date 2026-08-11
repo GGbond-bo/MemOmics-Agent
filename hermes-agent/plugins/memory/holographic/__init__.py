@@ -257,7 +257,7 @@ class HolographicMemoryProvider(MemoryProvider):
         _default_db = f"{display_hermes_home()}/memory_store.db"
         return [
             {"key": "db_path", "description": "SQLite database path", "default": _default_db},
-            {"key": "auto_extract", "description": "Auto-extract facts at session end", "default": "false", "choices": ["true", "false"]},
+            {"key": "auto_extract", "description": "Auto-extract facts at session end", "default": "true", "choices": ["true", "false"]},
             {"key": "default_trust", "description": "Default trust score for new facts", "default": "0.5"},
             {"key": "hrr_dim", "description": "HRR vector dimensions", "default": "1024"},
         ]
@@ -612,6 +612,19 @@ class HolographicMemoryProvider(MemoryProvider):
             re.compile(r'\bmy\s+(?:favorite|preferred|default)\s+\w+\s+is\s+(.+)', re.IGNORECASE),
             re.compile(r'\bI\s+(?:always|never|usually)\s+(.+)', re.IGNORECASE),
         ]
+        # Chinese preference / decision patterns (MemOmics UI is Chinese).
+        # Conservative: only explicit preference / decision wording triggers;
+        # ordinary analysis requests (e.g. 'continue the heatmap') never match.
+        _CN_PREF_PATTERNS = [
+            re.compile(r"(?:我|本人)(?:喜欢|偏好|习惯|通常|一直|从来|希望|想要|更愿意|倾向于)(?:用|用|以|把|按|的)?", re.IGNORECASE),
+            re.compile(r"(?:以后|今后|之后|后续)(?:都|就|一律|默认|统一)(?:用|按|以|选)", re.IGNORECASE),
+            re.compile(r"(?:请)?(?:记住|记得|牢记)[:：]?", re.IGNORECASE),
+        ]
+        _CN_DECISION_PATTERNS = [
+            re.compile(r"我们(?:决定|确定|商定|选择|统一)(?:用|了|的|按|以)?", re.IGNORECASE),
+            re.compile(r"(?:这个|本)?项目(?:统一|一律)?(?:用|需要|要求|采用|基于)", re.IGNORECASE),
+        ]
+
         _DECISION_PATTERNS = [
             re.compile(r'\bwe\s+(?:decided|agreed|chose)\s+(?:to\s+)?(.+)', re.IGNORECASE),
             re.compile(r'\bthe\s+project\s+(?:uses|needs|requires)\s+(.+)', re.IGNORECASE),
@@ -622,13 +635,31 @@ class HolographicMemoryProvider(MemoryProvider):
             if msg.get("role") != "user":
                 continue
             content = msg.get("content", "")
-            if not isinstance(content, str) or len(content) < 10:
+            if not isinstance(content, str) or len(content) < 6:
                 continue
 
             for pattern in _PREF_PATTERNS:
                 if pattern.search(content):
                     try:
                         self._store.add_fact(content[:400], category="user_pref")
+                        extracted += 1
+                    except Exception:
+                        pass
+                    break
+
+            for pattern in _CN_PREF_PATTERNS:
+                if pattern.search(content):
+                    try:
+                        self._store.add_fact(content[:400], category="user_pref")
+                        extracted += 1
+                    except Exception:
+                        pass
+                    break
+
+            for pattern in _CN_DECISION_PATTERNS:
+                if pattern.search(content):
+                    try:
+                        self._store.add_fact(content[:400], category="project")
                         extracted += 1
                     except Exception:
                         pass

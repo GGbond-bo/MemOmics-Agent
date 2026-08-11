@@ -369,7 +369,85 @@ class TestTopicSwitch:
 
 
 # ---------------------------------------------------------------------------
-# 5) 生产兼容：真实 memory_store.db 补表无损（只读验证）
+# 5) auto_extract 会话结束自动提炼（中文模式 + 默认开）
+# ---------------------------------------------------------------------------
+
+class TestAutoExtract:
+    @pytest.fixture
+    def provider(self, tmp_path):
+        p = HolographicMemoryProvider(
+            config={"auto_extract": True, "db_path": str(tmp_path / "mem.db")}
+        )
+        p.initialize(session_id="sess-ae-1")
+        yield p
+        p.shutdown()
+
+    def test_cn_preference_extracted(self, provider):
+        provider.on_session_end([
+            {"role": "user", "content": "我习惯用 Seurat 做整合分析，以后都用这个"},
+        ])
+        facts = provider._store.list_facts(limit=10)
+        assert any("Seurat" in f["content"] and f["category"] == "user_pref" for f in facts)
+
+    def test_cn_decision_extracted(self, provider):
+        provider.on_session_end([
+            {"role": "user", "content": "我们决定项目统一用 pheatmap 出图"},
+        ])
+        facts = provider._store.list_facts(limit=10)
+        assert any("pheatmap" in f["content"] and f["category"] == "project" for f in facts)
+
+    def test_cn_remember_extracted(self, provider):
+        provider.on_session_end([
+            {"role": "user", "content": "记住：配色用蓝白色"},
+        ])
+        facts = provider._store.list_facts(limit=10)
+        assert any("蓝白色" in f["content"] for f in facts)
+
+    def test_noise_not_extracted(self, provider):
+        provider.on_session_end([
+            {"role": "user", "content": "继续跑热图，帮我看看 QC 结果"},
+            {"role": "user", "content": "好的谢谢"},
+            {"role": "assistant", "content": "好的，我记住了"},
+        ])
+        facts = provider._store.list_facts(limit=10)
+        assert all("继续跑热图" not in f["content"] for f in facts)
+        assert all("好的谢谢" not in f["content"] for f in facts)
+
+    def test_dedup_on_repeat(self, provider):
+        msgs = [{"role": "user", "content": "我习惯用 Seurat 做整合"}]
+        provider.on_session_end(msgs)
+        provider.on_session_end(msgs)
+        assert len(provider._store.list_facts(limit=10)) == 1
+
+    def test_en_patterns_still_work(self, provider):
+        provider.on_session_end([
+            {"role": "user", "content": "I prefer dark theme for all plots please"},
+        ])
+        facts = provider._store.list_facts(limit=10)
+        assert any("dark theme" in f["content"] for f in facts)
+
+    def test_schema_default_true(self, provider):
+        schema = provider.get_config_schema()
+        ae = [s for s in schema if s.get("key") == "auto_extract"][0]
+        assert ae["default"] == "true"
+
+    def test_yaml_config_reads_true(self):
+        """真实 hermes_home/config.yaml 的 auto_extract 已是 true（配置链路生效）。"""
+        import pathlib
+        import hermes_constants
+        _orig = hermes_constants.get_hermes_home
+        root = pathlib.Path(__file__).resolve().parent.parent.parent  # 项目根
+        hermes_constants.get_hermes_home = lambda: root / "hermes_home"
+        try:
+            p = HolographicMemoryProvider(config={})
+            assert p._config.get("auto_extract") is True
+            p.shutdown()
+        finally:
+            hermes_constants.get_hermes_home = _orig
+
+
+# ---------------------------------------------------------------------------
+# 6) 生产兼容：真实 memory_store.db 补表无损（只读验证）
 # ---------------------------------------------------------------------------
 
 class TestProdCompat:
