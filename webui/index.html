@@ -2121,6 +2121,7 @@ function renderSessionList(sessions) {
     var clickHandler = _batchMode ? 'toggleSelect(\'' + s.id + '\')' : 'switchSession(\'' + s.id + '\')';
     var cb = _batchMode ? '<input type="checkbox" class="session-cb" ' + (_selectedSessions[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleSelect(\'' + s.id + '\')" />' : '';
     var delBtn = _batchMode ? '' : '<button class="del-btn" onclick="event.stopPropagation();deleteSession(\'' + s.id + '\')" title="删除会话">🗑</button>';
+    var renameBtn = _batchMode ? '' : '<button class="del-btn" style="margin-right:2px;" onclick="event.stopPropagation();renameSession(\'' + s.id + '\')" title="重命名会话">✏️</button>';
     var runningBadge = s.is_running ? '<span style="color:#2d8659;font-size:10px;margin-right:4px;animation:pulse 1.5s infinite;" title="分析中">●</span>' : '';
     var bg = s.bg_running ? '<span class="bg-dot"></span>' : '';
     var restored = s.restored ? '<span style="font-size:10px;color:var(--text-light);margin-left:4px;" title="从快照恢复">↩</span>' : '';
@@ -2129,7 +2130,7 @@ function renderSessionList(sessions) {
     var dateStr = (s.created || '').slice(5, 10);
     var previewText = s.first_message || s.last_message || '';
     var preview = previewText ? '<div style="font-size:10px;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">' + escapeHtml(previewText) + '</div>' : '';
-    return '<div class="session-item' + active + selected + '" data-sid="' + s.id + '" onclick="' + clickHandler + '">' + cb + bg + runningBadge + '<div style="flex:1;min-width:0;">' + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + srcBadge + '<span style="font-size:10px;color:var(--text-light);margin-right:4px;">' + dateStr + '</span>' + escapeHtml(s.title) + '</div>' + preview + '</div>' + restored + msgCount + delBtn + '</div>';
+    return '<div class="session-item' + active + selected + '" data-sid="' + s.id + '" onclick="' + clickHandler + '">' + cb + bg + runningBadge + '<div style="flex:1;min-width:0;">' + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + srcBadge + '<span style="font-size:10px;color:var(--text-light);margin-right:4px;">' + dateStr + '</span>' + escapeHtml(s.title) + '</div>' + preview + '</div>' + restored + msgCount + renameBtn + delBtn + '</div>';
   }).join('');
   el.scrollTop = scrollTop;  // 恢复滚动位置
   // 确保当前活跃会话在可视区内
@@ -2149,6 +2150,34 @@ function deleteSession(sid) {
     }
     loadSessions();
   }).catch(function(e) { console.error('delete failed:', e); });
+}
+
+function renameSession(sid) {
+  var cur = '';
+  for (var i = 0; i < _allSessions.length; i++) {
+    if (_allSessions[i].id === sid) { cur = _allSessions[i].title || ''; break; }
+  }
+  var newTitle = prompt('重命名会话：', cur);
+  if (newTitle === null) return;            // 取消
+  newTitle = newTitle.trim();
+  if (!newTitle) return;
+  fetch('/api/sessions/' + sid + '/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: newTitle })
+  }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); }).then(function(res) {
+    if (res.ok && res.d.ok) {
+      // 本地列表同步 + 强制重建 DOM（不改 sid/目录/WS——名字只是投影）
+      for (var i = 0; i < _allSessions.length; i++) {
+        if (_allSessions[i].id === sid) { _allSessions[i].title = res.d.title; break; }
+      }
+      _lastSessionFingerprint = '';
+      renderSessionList(_allSessions);
+      if (currentSid === sid) document.getElementById('chat-title').textContent = res.d.title;
+    } else {
+      alert('改名失败：' + (res.d.error || '未知错误'));
+    }
+  }).catch(function(e) { console.error('rename failed:', e); });
 }
 
 function loadAllMessages(sid) {

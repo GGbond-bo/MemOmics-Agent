@@ -3242,6 +3242,78 @@ async def rename_results_dir(sid: str, body: dict = None):
     }
 
 
+def _sync_meta_display_name(session, title):
+    """改名投影同步：results_dir 下 session.meta.json 存在才写 display_name。
+
+    目录名永不变（改名只写 meta，避免 os.rename 运行中目录的句柄/引用断链），
+    state.db 的 title 是 canonical，meta 只是投影——失败不阻断改名。
+    """
+    try:
+        rdir = (session or {}).get("results_dir") or ""
+        if not rdir:
+            return
+        meta_path = os.path.join(rdir, "session.meta.json")
+        if not os.path.isfile(meta_path):
+            return
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        meta["display_name"] = title
+        meta["renamed_at"] = datetime.now().isoformat(timespec="seconds")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # 投影失败不阻断（DB 是权威）
+
+
+def _append_rename_event(sid, old_title, new_title):
+    """改名审计：只追加 JSONL（学 OpenAI4S Action Ledger），可追溯可回滚。"""
+    try:
+        events_dir = os.path.join(HERMES_HOME_DIR, "sessions")
+        os.makedirs(events_dir, exist_ok=True)
+        with open(os.path.join(events_dir, "rename_events.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": datetime.now().isoformat(timespec="seconds"),
+                "session_id": sid,
+                "old_title": old_title,
+                "new_title": new_title,
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+@app.post("/api/sessions/{sid}/rename")
+async def rename_session(sid: str, body: dict = None):
+    """用户改名：只写 title 字段（内存 + state.db + meta.json + 审计）。
+
+    六条链路（会话恢复 / 结果目录 / 模型绑定 / 心跳 / 后台任务 / WebSocket 分流）
+    全部按 sid 寻址，与 title 无关——改名天然不断链。
+    铁律：目录名永不变；state.db 是 canonical；改名可审计。
+    """
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    body = body or {}
+    raw = (body.get("title") or "").strip()
+    if not raw:
+        return {"ok": False, "error": "名称不能为空"}
+    db = _get_session_db()
+    try:
+        new_title = db.sanitize_title(raw) if db else raw
+        if not new_title:
+            return {"ok": False, "error": "名称无效（含非法字符）"}
+        if db:
+            # title 在 sessions 表有唯一约束，同名抛 ValueError
+            db.set_session_title(sid, new_title)
+    except ValueError:
+        return {"ok": False, "error": "该名称已被其他会话使用，请换一个"}
+    except Exception as e:
+        return {"ok": False, "error": f"写入失败: {e}"}
+    old_title = _sessions[sid].get("title")
+    _sessions[sid]["title"] = new_title
+    _sync_meta_display_name(_sessions[sid], new_title)
+    _append_rename_event(sid, old_title, new_title)
+    return {"ok": True, "title": new_title, "session_id": sid}
+
+
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str, limit: int = 100):
     """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿"""
@@ -6269,15 +6341,20 @@ async def ws_endpoint(ws: WebSocket):
                 await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
                 await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
 
-                # 如果是第一条消息, 更新标题
+                # 如果是第一条消息, 更新标题（自动命名：同名自动续号 "xxx #2"，
+                # 避免 set_session_title 唯一约束抛 ValueError 被吞导致仍叫"新会话"）
                 if len(session["messages"]) == 1:
-                    session["title"] = user_text[:30]
+                    base_title = user_text[:30]
                     db = _get_session_db()
                     if db:
                         try:
-                            db.set_session_title(session["id"], session["title"])
+                            next_title = db.get_next_title_in_lineage(base_title)
+                            db.set_session_title(session["id"], next_title)
+                            session["title"] = next_title
                         except Exception:
                             pass
+                    else:
+                        session["title"] = base_title
                 
                 # 图路由：每条消息检测领域 + 意图（不仅是第一条消息，随时切换）
                 domain = _detect_domain_from_text(user_text)
