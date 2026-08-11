@@ -466,6 +466,30 @@ class HolographicMemoryProvider(MemoryProvider):
             except Exception as e:
                 logger.debug("Holographic memory_write mirror failed: %s", e)
 
+    def on_delegation(self, task: str, result: str, *,
+                      child_session_id: str = "", **kwargs) -> None:
+        """Persist subagent outcomes as facts (category='delegation').
+
+        Called by the parent agent when a delegate_task child completes,
+        so subagent conclusions survive even if the parent never summarises
+        them inline. add_fact deduplicates on content, so identical
+        outcomes are never written twice.
+        """
+        if not self._store or not result:
+            return
+        try:
+            snippet = str(result).strip()[:300]
+            if not snippet:
+                return
+            content = "[子代理结论] " + snippet
+            if task:
+                content = "[子代理结论][任务: " + str(task)[:80] + "] " + snippet
+            if child_session_id:
+                content = content + "（子代理会话: " + child_session_id[:16] + "）"
+            self._store.add_fact(content, category="delegation", tags="subagent")
+        except Exception as e:
+            logger.debug("Holographic on_delegation failed: %s", e)
+
     def shutdown(self) -> None:
         # Release the shared SQLite connection deterministically on the
         # caller's thread. Dropping the reference alone leaves fd finalization

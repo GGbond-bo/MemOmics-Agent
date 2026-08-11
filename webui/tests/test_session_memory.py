@@ -447,7 +447,74 @@ class TestAutoExtract:
 
 
 # ---------------------------------------------------------------------------
-# 6) 生产兼容：真实 memory_store.db 补表无损（只读验证）
+# 6) delegation 子代理：on_delegation 结论沉淀 + 工具集启用
+# ---------------------------------------------------------------------------
+
+class TestDelegation:
+    @pytest.fixture
+    def provider(self, tmp_path):
+        p = HolographicMemoryProvider(
+            config={"db_path": str(tmp_path / "mem.db")}
+        )
+        p.initialize(session_id="sess-parent-1")
+        yield p
+        p.shutdown()
+
+    def test_on_delegation_writes_fact(self, provider):
+        provider.on_delegation(
+            task="跑 marker 分析",
+            result="发现 MS4A1 是 B 细胞 marker，log2FC=4.2",
+            child_session_id="sa_child_0001",
+        )
+        facts = provider._store.list_facts(category="delegation", limit=10)
+        assert len(facts) == 1
+        f = facts[0]
+        assert f["category"] == "delegation" and f["tags"] == "subagent"
+        assert "[子代理结论]" in f["content"] and "MS4A1" in f["content"]
+        assert "跑 marker 分析" in f["content"] and "sa_child_0001" in f["content"]
+
+    def test_on_delegation_dedup(self, provider):
+        kw = dict(task="t", result="同样的结论", child_session_id="sa_c1")
+        provider.on_delegation(**kw)
+        provider.on_delegation(**kw)
+        assert len(provider._store.list_facts(category="delegation", limit=10)) == 1
+
+    def test_on_delegation_empty_result_noop(self, provider):
+        provider.on_delegation(task="x", result="")
+        provider.on_delegation(task="x", result=None)
+        assert provider._store.list_facts(category="delegation", limit=10) == []
+
+    def test_on_delegation_truncates_long(self, provider):
+        provider.on_delegation(task="y", result="很长的结论" * 500)
+        f = provider._store.list_facts(category="delegation", limit=10)[-1]
+        assert len(f["content"]) <= 500
+
+    def test_on_delegation_failure_silent(self, provider):
+        provider._store = None
+        provider.on_delegation(task="z", result="abc")  # 不抛异常
+
+    def test_delegation_toolset_registered(self):
+        """Hermes TOOLSETS 注册表含 delegation（tools=[delegate_task]）。"""
+        from toolsets import TOOLSETS
+        assert "delegation" in TOOLSETS
+        assert "delegate_task" in TOOLSETS["delegation"]["tools"]
+
+    def test_server_enables_delegation_toolset(self):
+        """MemOmics _create_agent 的 enabled_toolsets 必须含 delegation。"""
+        import re as _re
+        src = open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "server.py"),
+            encoding="utf-8",
+        ).read()
+        m = _re.search(r"enabled_toolsets=\[([^\]]*)\]", src)
+        assert m, "enabled_toolsets not found"
+        toolsets = [t.strip().strip('"\'') for t in m.group(1).split(",") if t.strip()]
+        assert "delegation" in toolsets
+
+
+# ---------------------------------------------------------------------------
+# 7) 生产兼容：真实 memory_store.db 补表无损（只读验证）
 # ---------------------------------------------------------------------------
 
 class TestProdCompat:

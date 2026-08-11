@@ -339,3 +339,25 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 - 原 `_auto_extract_facts` 只有英文正则（I prefer / we decided…），中文会话零命中 → 补充**中文偏好/决策模式**（我习惯/我喜欢/以后都用/记住：/我们决定/项目统一用…），保守匹配防噪音（普通分析句不提取），内容长度门槛 10→6
 - `get_config_schema` 默认值对齐 `true`
 - 验证：中文偏好 3 类提取 + 噪音控制 + 去重（add_fact UNIQUE）+ 英文模式保留；45 用例全绿，全量 218 passed
+
+---
+
+## 第 10 章 子代理（delegation）接入（2026-08-11）
+
+### 启用方式
+- `server.py` `_create_agent` 的 `enabled_toolsets` 加入 `"delegation"`（Hermes TOOLSETS 注册：`tools=["delegate_task"]`，子代理继承父工具集、剥离黑名单：delegate_task/clarify/memory/send_message/execute_code/cronjob）
+- 子代理是**独立上下文的纯执行单元**（system prompt 只有 task/context/workspace，无 SOUL 铁律），深度默认 1（父→子扁平，MAX_DEPTH=1）
+
+### 何时启用子代理（SOUL.md 铁律 -7）
+- ✅ 并行独立任务（tasks 数组一次派发）、长耗时后台任务（background=true）、批量同构任务、上下文隔离
+- ❌ 辩论、需要本会话记忆/诉求/资产的任务、需要用户确认的操作、单步小任务、需走完整铁律链的分析主流程
+- 子代理结论只作参考，仍需主代理按铁律 -2/-4 验证后才可入库/报告
+
+### 辩论不启用 delegation（决策）
+辩论保持 debate_analysis 引擎（8 角色串行、上下文切断、共享知识库、指纹缓存、裁决回流——铁律 -6），子代理没有这些机制；multi_model 模式已由 role_model_map 直接指定模型，无需子代理。子代理并行与辩论串行互不冲突。
+
+### on_delegation 结论沉淀（闭环）
+- holographic 实现 `on_delegation(task, result, child_session_id)`：写 facts（category=`delegation`、tags=`subagent`、content 带 `[子代理结论][任务: ...]` 标记 + 子代理会话 id，result 截断 300 字符）
+- 调用链：delegate_tool.py:2785（子代理完成汇总）→ memory_manager.on_delegation → provider.on_delegation（异常静默）
+- add_fact UNIQUE 去重，同结论不重复写
+- 测试：TestDelegation 7 用例（沉淀/标记/去重/空 noop/截断/异常静默/toolset 注册/server 启用），共 52；全量 225 passed

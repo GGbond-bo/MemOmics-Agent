@@ -3082,7 +3082,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=_provider,
         model=cfg["model"],
         max_iterations=300,
-        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob"],
+        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation"],
         ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
         quiet_mode=True,
         tool_progress_mode="all",
