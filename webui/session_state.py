@@ -35,6 +35,7 @@ ENTITY_KEYWORDS = [
     "双细胞", "归一化", "批次", "整合", "harmony", "seurat", "scanpy", "monocle",
     "cellchat", "wgcna", "染色质", "atac", "motif", "peak", "热力图", "瀑布图",
     "森林图", "venn", "桑基图", "网络图", "gsva", "ssgsea", "aucell", "cytotrace",
+    "文献", "下载", "调研", "数据库",
 ]
 
 _RE_ENTITY = re.compile(
