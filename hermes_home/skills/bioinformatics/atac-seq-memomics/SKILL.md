@@ -533,7 +533,9 @@ gene_tile_idx <- function(gene_symbols, geneAnno, tile_gr) {
 1. 直接重跑 R 脚本——内部 `force=TRUE` 覆盖 + `saveRDS` 同名覆盖，不需要先删
 2. 若确需清理旧产物（如嵌套 FilteredProjects 目录），先列出要删的文件/目录向用户确认，不要塞进重跑命令
 
-### 🔴 addClusters 必须用 `input=` 参数（ArchR 1.0.3，2026-08-08 已验证）
+### 🔴 addClusters 必须用 `input=` 参数 + 顺序在 addUMAP 之前（ArchR 1.0.3，2026-08-08/09 已验证）
+
+**顺序坑（2026-08-09 用户对照官网教程纠正）**：官方 tutorial 是 **`addClusters(input=proj, reducedDims="IterativeLSI")` 在前，`addUMAP()` 在后**——聚类在 LSI 空间完成，不依赖 UMAP；UMAP 只是把聚类结果投影到 2D 供可视化。不要先 addUMAP 再 addClusters（我 08-09 给反过一次，用户对照官网指出"为什么你反了"）。给用户集群代码时若与官网顺序不同，用户会逐行对照官方 tutorial 检查。
 
 **现象**：`addClusters(ArchRProj = proj, ...)` 报错 `错误: 'ArchRProj'的值没有`（object 'ArchRProj' not found），进程退出，但 UMAP 等前置步骤都成功。
 
