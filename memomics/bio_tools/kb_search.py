@@ -367,7 +367,7 @@ def _init_fts() -> bool:
             return False
 
         try:
-            conn = sqlite3.connect(":memory:")
+            conn = sqlite3.connect(":memory:", check_same_thread=False)
             conn.execute("CREATE VIRTUAL TABLE kb_fts USING fts5(path, content, tokenize='trigram')")
 
             rowid = 0
@@ -431,6 +431,8 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                     fts_terms.append(q_clean)
         if fts_terms:
             fts_query = " OR ".join(fts_terms)
+            # 查询串行化：_fts_conn 是跨线程共享的内存库连接
+            _fts_lock.acquire()
             try:
                 rows = _fts_conn.execute(
                     "SELECT rowid, rank FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT 30",
@@ -475,6 +477,8 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                         "total": len(results), "results": results[:15], "engine": "fts5"}
             except sqlite3.OperationalError:
                 logger.debug("FTS5 query failed, falling back to os.walk")
+            finally:
+                _fts_lock.release()
 
     # === v3 fallback: os.walk ===
     for root, dirs, files in os.walk(kb_root):

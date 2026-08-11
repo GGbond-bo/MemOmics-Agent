@@ -514,7 +514,39 @@ class TestDelegation:
 
 
 # ---------------------------------------------------------------------------
-# 7) 生产兼容：真实 memory_store.db 补表无损（只读验证）
+# 7) 并发安全：knowledge base 搜索跨线程（子代理并发暴露的 bug 回归）
+# ---------------------------------------------------------------------------
+
+class TestKbSearchConcurrency:
+    def test_concurrent_searches_no_cross_thread_error(self, tmp_path):
+        """6 线程并发 search_knowledge 不得抛 ProgrammingError（跨线程 SQLite）。
+
+        回归：delegation 冒烟时 agent+子代理并发查知识库触发
+        'SQLite objects created in a thread can only be used in the same thread'。
+        """
+        import threading
+        import sys as _sys
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        _sys.path.insert(0, os.path.join(root, "memomics"))
+        from bio_tools.kb_search import search_knowledge
+
+        errors = []
+        def worker(i):
+            try:
+                search_knowledge("热图" if i % 2 == 0 else "ATAC", species="", tissue="")
+            except Exception as e:
+                errors.append((i, repr(e)))
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors, f"concurrent kb search failed: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# 8) 生产兼容：真实 memory_store.db 补表无损（只读验证）
 # ---------------------------------------------------------------------------
 
 class TestProdCompat:
