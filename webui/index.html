@@ -87,7 +87,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .sidebar-footer { padding:10px 18px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
 
 /* === 中间聊天区 === */
-.chat-area { flex:1; display:flex; flex-direction:column; min-width:0; }
+.chat-area { flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
 .chat-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
 .chat-header .title { font-size:15px; font-weight:500; }
 .chat-header .model-badge { font-size:12px; padding:3px 10px; border-radius:10px; background:var(--primary-light); color:var(--primary); }
@@ -180,15 +180,22 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 /* 输入区 */
 .chat-input { padding:12px 20px; border-top:1px solid var(--border); }
 .chat-input .input-row { display:flex; gap:8px; align-items:flex-end; }
-.chat-input .input-grip { height:6px; cursor:ns-resize; background:var(--border); border-radius:3px; margin-bottom:2px; transition:background 0.15s; }
-.chat-input .input-grip:hover { background:var(--primary); }
-.chat-input textarea { flex:1; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:14px; font-family:inherit; resize:none; height:100px; transition:border-color 0.2s; background:var(--panel); color:var(--text); }
+.chat-input .input-grip { height:12px; cursor:ns-resize; display:flex; align-items:center; justify-content:center; font-size:9px; letter-spacing:3px; color:var(--text-light); user-select:none; margin-bottom:2px; transition:background 0.15s,color 0.15s; }
+.chat-input .input-grip::before { content:'⋮⋮'; }
+.chat-input .input-grip:hover { background:var(--primary); color:#fff; }
+.chat-input textarea { flex:1; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:14px; font-family:inherit; resize:none; height:100px; min-height:100px; max-height:400px; transition:border-color 0.2s; background:var(--panel); color:var(--text); }
 .chat-input textarea:focus { outline:none; border-color:var(--primary); }
 .chat-input button { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:0 20px; font-size:14px; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
 .chat-input button:hover { opacity:0.9; }
 .chat-input button:disabled { opacity:0.5; cursor:not-allowed; }
 .chat-input button.stop-btn { background:var(--danger, #e74c3c); opacity:0.4; cursor:not-allowed; transition:opacity 0.2s; }
 .chat-input button.stop-btn.active { opacity:1; cursor:pointer; }
+/* 输出中悬浮控制条（2026-08-11）：停止生成常驻可视 + 回到底部 */
+.chat-float-bar { position:absolute; right:24px; bottom:118px; display:flex; gap:8px; z-index:50; }
+.chat-float-bar button { border:none; border-radius:20px; padding:8px 16px; font-size:13px; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.18); transition:opacity 0.2s,transform 0.15s; }
+.chat-float-bar button:hover { transform:translateY(-1px); }
+.float-stop-btn { background:var(--danger,#e74c3c); color:#fff; }
+.float-goto-bottom { background:var(--primary,#4A90D9); color:#fff; }
 .chat-input .input-info { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--text-light); }
 .chat-input .model-select { font-size:11px; padding:2px 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); }
 
@@ -459,8 +466,13 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <div class="chat-messages" id="messages">
       <!-- 欢迎画面由 newSession() 动态生成 -->
     </div>
+    <!-- 输出中悬浮控制条：停止生成 / 回到底部 -->
+    <div class="chat-float-bar" id="chat-float-bar" style="display:none;">
+      <button class="float-stop-btn" id="float-stop" onclick="stopAgent()" title="强制停止当前运行">⏹ 停止生成</button>
+      <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出">▼ 回到底部</button>
+    </div>
     <div class="chat-input" id="chat-input">
-      <div class="input-grip" id="input-grip" title="拖拽调整输入框高度"></div>
+      <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）"></div>
       <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
       <div class="input-row">
         <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)">
@@ -1037,7 +1049,16 @@ function handleMessage(msg) {
     } else {
       fullText += (msg.content || '');
     }
-    if (currentBubble) { currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); scrollBottom(); }
+    if (currentBubble) {
+      // 防跳动：用户在上方阅读时，重渲染后补偿滚动位置，保证阅读点不漂移
+      var _msgs = document.getElementById('messages');
+      var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
+      currentBubble.innerHTML = renderMarkdown(fullText);
+      // Mermaid 内容未变化时不重绘，避免闪烁
+      var _mermaidSrc = (fullText.match(/```mermaid[\s\S]*?```/g) || []).join('');
+      if (_mermaidSrc !== _lastMermaidHash) { if (typeof initMermaid === 'function') initMermaid(); _lastMermaidHash = _mermaidSrc; }
+      if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
+    }
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
@@ -1153,6 +1174,7 @@ function handleMessage(msg) {
     agentRunning = false;
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
+    setFloatBar(false);
     scrollBottom();
     refreshTodos();
     updateSessionList();
@@ -1162,6 +1184,7 @@ function handleMessage(msg) {
     finalizeProgressTimeline();
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
+    setFloatBar(false);
     agentRunning = false;
     document.getElementById('steer-hint').style.display = 'none';
   } else if (msg.type === 'todos') {
@@ -1173,6 +1196,7 @@ function handleMessage(msg) {
     addError('任务已取消');
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
+    setFloatBar(false);
     agentRunning = false;
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
@@ -1321,7 +1345,8 @@ async function send(background) {
   }
   var targetSid = currentSid;
   input.value = '';
-  input.style.height = 'auto';
+  // 发送后恢复固化高度（若用户拖拽过则保留，否则默认 100px）
+  input.style.height = (typeof window._getInputHeight === 'function' ? window._getInputHeight() : 100) + 'px';
   // 先上传图片获取 URL
   var imageUrls = [];
   if (pendingImages.length) {
@@ -1348,8 +1373,10 @@ async function send(background) {
   currentBubble = null;
   progressTimelineEl = null;
   progressItems = [];
+  _lastMermaidHash = '';
   if (!background) document.getElementById('send').disabled = true;
   document.getElementById('stop').classList.add('active');
+  setFloatBar(true);
   agentRunning = true;
   document.getElementById('steer-hint').style.display = '';
   ws.send(JSON.stringify({ type: 'chat', message: text, session_id: targetSid, background: background, images: imageUrls }));
@@ -1362,6 +1389,7 @@ function stopAgent() {
   ws.send(JSON.stringify({ type: 'cancel', session_id: currentSid }));
   document.getElementById('stop').classList.remove('active');
   document.getElementById('steer-hint').style.display = 'none';
+  setFloatBar(false);
   agentRunning = false;
   // 在当前 assistant 气泡末尾追加停止提示
   if (currentBubble) {
@@ -1373,11 +1401,24 @@ function stopAgent() {
   }
 }
 
-// === 输入框拖拽拉伸 ===
+// === 输入框拖拽拉伸（2026-08-11 重构：向上拉变大 + localStorage 固化 + 发送后保留） ===
 (function() {
   var grip = document.getElementById('input-grip');
   var textarea = document.getElementById('input');
   if (!grip || !textarea) return;
+  var KEY = 'memomics_input_height';
+  var DEFAULT_H = 100, MIN_H = 100, MAX_H = 400;
+  function clamp(h) { return Math.max(MIN_H, Math.min(MAX_H, h)); }
+  function apply(h) { textarea.style.height = clamp(h) + 'px'; }
+  function save() {
+    try { localStorage.setItem(KEY, String(clamp(textarea.offsetHeight))); } catch(e) {}
+  }
+  // 恢复固化高度（刷新/重开页面后保持用户设定的输入框大小）
+  try {
+    var saved = parseInt(localStorage.getItem(KEY), 10);
+    if (saved >= MIN_H && saved <= MAX_H) apply(saved);
+  } catch(e) {}
+  // 向上拖动 → 高度增大（用户直觉：往上拉输入框变大）
   var startY, startH;
   grip.addEventListener('mousedown', function(e) {
     e.preventDefault();
@@ -1386,19 +1427,32 @@ function stopAgent() {
     document.body.style.cursor = 'ns-resize';
     document.body.style.userSelect = 'none';
     function onMove(ev) {
-      var dy = ev.clientY - startY;
-      var newH = Math.max(48, Math.min(400, startH + dy));
-      textarea.style.height = newH + 'px';
+      // clientY 减小（向上拖）→ startH - dy 增大
+      apply(startH - (ev.clientY - startY));
     }
     function onUp() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      save();
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+  // 双击还原默认高度
+  grip.addEventListener('dblclick', function() {
+    apply(DEFAULT_H);
+    save();
+  });
+  // 供 send() 发送后恢复固化高度；min 即默认高度 100px
+  window._getInputHeight = function() {
+    try {
+      var saved = parseInt(localStorage.getItem(KEY), 10);
+      if (saved >= MIN_H && saved <= MAX_H) return saved;
+    } catch(e) {}
+    return DEFAULT_H;
+  };
 })();
 function copyMessage(el) {
   var bubble = el.closest('.message').querySelector('.bubble');
@@ -1755,15 +1809,39 @@ function addError(content) {
 // 智能滚动：用户离开底部阅读时暂停自动滚动，滚回底部恢复
 // （流式输出中用户可自由上下滑动/长时间观看，不被打断）
 var _autoScroll = true;
+var _lastMermaidHash = '';
 (function() {
   var _m = document.getElementById('messages');
   if (!_m) return;
   _m.addEventListener('scroll', function() {
     var el = this;
     // 距离底部 < 120px 视为"在底部"，恢复自动滚动；否则暂停
-    _autoScroll = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+    var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+    _autoScroll = atBottom;
+    // 离开底部时显示"回到底部"浮条，回到底部隐藏
+    var gb = document.getElementById('float-goto-bottom');
+    if (gb) gb.style.display = (!atBottom && agentRunning) ? '' : 'none';
   });
 })();
+
+// 悬浮控制条：输出中显示"停止生成"，离开底部追加"回到底部"
+function setFloatBar(show) {
+  var bar = document.getElementById('chat-float-bar');
+  if (!bar) return;
+  bar.style.display = show ? '' : 'none';
+  if (!show) {
+    var gb = document.getElementById('float-goto-bottom');
+    if (gb) gb.style.display = 'none';
+  }
+}
+
+// 点击"回到底部"：恢复自动滚动并立刻滚到最新输出
+function resumeAutoScroll() {
+  _autoScroll = true;
+  scrollBottom();
+  var gb = document.getElementById('float-goto-bottom');
+  if (gb) gb.style.display = 'none';
+}
 
 function scrollBottom() {
   if (_autoScroll === false) return;  // 用户正在上方阅读，不打断
@@ -2399,6 +2477,7 @@ function switchSession(sid) {
       agentRunning = true;
       document.getElementById('send').disabled = true;
       document.getElementById('stop').classList.add('active');
+      setFloatBar(true);
       document.getElementById('steer-hint').style.display = '';
       _currentRunningSid = sid;
     }
