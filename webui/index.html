@@ -53,7 +53,102 @@
   --danger: #c62828;
   --tool-bg: #e8f5e9;
 }
+[data-theme="eye"] {
+  --bg: #e8f3e8; --panel: #f7fbf7; --border: #cfe3cf; --text: #2f4f2f; --text-light: #6b8f6b;
+  --primary: #2e7d32; --primary-light: #d7eed7; --accent: #66bb6a; --success: #388e3c;
+  --warning: #ef6c00; --danger: #c62828; --tool-bg: #f0f7f0; --code-bg: #1f3a1f; --code-fg: #e8f5e9;
+}
+[data-theme="parchment"] {
+  --bg: #f2e3c6; --panel: #faf0dc; --border: #d4b98a; --text: #4a3728; --text-light: #8a7257;
+  --primary: #8d5524; --primary-light: #f0e0c0; --accent: #c49a5c; --success: #5d8a3c;
+  --warning: #b06a00; --danger: #a33a2a; --tool-bg: #f7ecd6; --code-bg: #3a2a1a; --code-fg: #f5e6c8;
+}
+[data-theme="anime"] {
+  --bg: #fff0f5; --panel: rgba(255,255,255,0.92); --border: #f0c4d8; --text: #5b3a5e; --text-light: #9a7a9e;
+  --primary: #c94f9b; --primary-light: #fde3f2; --accent: #7c6bd6; --success: #3d9a6e;
+  --warning: #e67e22; --danger: #e04f5f; --tool-bg: rgba(255,240,248,0.9); --code-bg: #3b2b4a; --code-fg: #f3e8ff;
+}
+[data-theme="sci"] {
+  --bg: #0f172a; --panel: #1e293b; --border: #334155; --text: #e2e8f0; --text-light: #94a3b8;
+  --primary: #38bdf8; --primary-light: #0c4a6e; --accent: #22d3ee; --success: #34d399;
+  --warning: #fbbf24; --danger: #f87171; --tool-bg: #0b1120; --code-bg: #020617; --code-fg: #e2e8f0;
+}
+[data-theme="sunset"] {
+  --bg: #fdf0e2; --panel: #fffaf2; --border: #f0d3ae; --text: #5b3a1e; --text-light: #a08050;
+  --primary: #d96b2b; --primary-light: #fde8d0; --accent: #f59e0b; --success: #5d8a3c;
+  --warning: #e67e22; --danger: #c0392b; --tool-bg: #fdf3e4; --code-bg: #3a2412; --code-fg: #fbe8d0;
+}
+[data-theme="dusk"] {
+  --bg: #1e1b3a; --panel: #2a2650; --border: #45407a; --text: #e4e0ff; --text-light: #9d95d8;
+  --primary: #8b7cf6; --primary-light: #3a3470; --accent: #b39ddb; --success: #6fbf73;
+  --warning: #f0a35e; --danger: #ef6a7a; --tool-bg: #16142c; --code-bg: #100e22; --code-fg: #e8e4ff;
+}
+
+/* === 背景纹理层（body::before，z-index 在内容之下） === */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background: var(--bg-image, none);
+  background-size: cover; background-position: center;
+}
+html[data-theme="anime"] body::before {
+  background-image: linear-gradient(135deg, #ffe4ef 0%, #e8e0ff 55%, #d4f0ff 100%);
+  animation: bg-kenburns 26s ease-in-out infinite alternate;
+}
+html[data-theme="sci"] body::before {
+  background-image:
+    radial-gradient(rgba(148,163,184,0.12) 1px, transparent 1.5px),
+    linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+  background-size: 26px 26px, cover;
+}
+html[data-theme="parchment"] body::before {
+  background-image:
+    repeating-radial-gradient(circle at 17% 32%, rgba(139,105,54,0.05) 0 2px, transparent 3px 7px),
+    repeating-radial-gradient(circle at 82% 68%, rgba(139,105,54,0.045) 0 2px, transparent 3px 8px),
+    linear-gradient(160deg, #f6e9ce 0%, #efdcb8 60%, #e9d2a8 100%);
+}
+html[data-theme="sunset"] body::before {
+  background-image: linear-gradient(180deg, #ffe9c9 0%, #ffd9a8 45%, #ffc9a0 100%);
+}
+html[data-theme="dusk"] body::before {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(255,255,255,0.7) 0 100%, transparent),
+    radial-gradient(1px 1px at 33% 68%, rgba(255,255,255,0.5) 0 100%, transparent),
+    radial-gradient(1.5px 1.5px at 56% 14%, rgba(255,255,255,0.6) 0 100%, transparent),
+    radial-gradient(1px 1px at 74% 52%, rgba(255,255,255,0.45) 0 100%, transparent),
+    radial-gradient(1.5px 1.5px at 91% 30%, rgba(255,255,255,0.55) 0 100%, transparent),
+    linear-gradient(180deg, #231f45 0%, #171433 100%);
+}
+html[data-theme="eye"] body::before {
+  background-image: linear-gradient(180deg, #eef7ee 0%, #e2efe2 100%);
+}
+@keyframes bg-kenburns { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+/* === anime 专属装饰（吉祥物漂浮 + 光晕） === */
+#anime-deco { display:none; position:fixed; right:3%; bottom:4%; z-index:-1; pointer-events:none; opacity:0.35; }
+html[data-theme="anime"] #anime-deco { display:block; }
+#anime-deco img { width:150px; height:auto; animation:deco-float 6s ease-in-out infinite; filter:drop-shadow(0 4px 14px rgba(201,79,155,0.35)); }
+html[data-theme="anime"] body.thinking #anime-deco img { animation-duration:2.4s; }
+@keyframes deco-float { 0%,100% { transform:translateY(0) rotate(-2deg);} 50% { transform:translateY(-16px) rotate(2deg);} }
+
+/* 粒子 canvas（anime 专属，位于背景与内容之间） */
+#bg-particles { display:none; position:fixed; inset:0; z-index:-1; pointer-events:none; }
+html[data-theme="anime"] #bg-particles { display:block; }
+
+/* === 思考状态：背景呼吸光晕 + 角标 === */
+html[data-theme="anime"] body.thinking::before { animation:bg-kenburns 26s ease-in-out infinite alternate, think-pulse 3s ease-in-out infinite; }
+@keyframes think-pulse { 0%,100% { filter:brightness(1) saturate(1);} 50% { filter:brightness(1.07) saturate(1.15);} }
+#thinking-badge {
+  display:none; position:fixed; top:14px; right:16px; z-index:999;
+  background:rgba(201,79,155,0.9); color:#fff; padding:6px 14px; border-radius:999px;
+  font-size:12px; box-shadow:0 4px 14px rgba(201,79,155,0.4);
+  animation:badge-breathe 1.6s ease-in-out infinite;
+}
+html[data-theme="anime"] body.thinking #thinking-badge { display:block; }
+@keyframes badge-breathe { 0%,100% { transform:scale(1);} 50% { transform:scale(1.06);} }
 body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; transition:background 0.3s; }
+<canvas id="bg-particles"></canvas>
+<div id="anime-deco"><img src="/assets/penguin.png" alt="" draggable="false"></div>
+<div id="thinking-badge">💭 思考中…</div>
 .app { display:flex; height:100vh; }
 
 /* === 左侧栏 === */
@@ -243,8 +338,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .settings-group label { display:block; font-size:12px; color:var(--text-light); margin-bottom:4px; }
 .settings-group select, .settings-group input { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:var(--panel); color:var(--text); }
 .settings-group input:focus, .settings-group select:focus { outline:none; border-color:var(--primary); }
-.theme-options { display:flex; gap:8px; }
-.theme-btn { flex:1; padding:8px; border:2px solid var(--border); border-radius:6px; cursor:pointer; text-align:center; font-size:12px; }
+.theme-options { display:flex; gap:6px; flex-wrap:wrap; }
+.theme-btn { flex:1 1 calc(33% - 6px); min-width:72px; padding:8px; border:2px solid var(--border); border-radius:6px; cursor:pointer; text-align:center; font-size:12px; }
 .theme-btn.active { border-color:var(--primary); background:var(--primary-light); }
 .theme-btn.light { background:#fff; color:#333; }
 .theme-btn.dark { background:#1a1a2e; color:#e2e8f0; }
@@ -735,10 +830,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">;
         <div class="settings-group">
           <label>配色主题</label>
-          <div class="theme-options">
-            <div class="theme-btn light active" onclick="setTheme('light')" data-theme="light">☀️ 浅白</div>
-            <div class="theme-btn dark" onclick="setTheme('dark')" data-theme="dark">🌙 深色</div>
-            <div class="theme-btn blue" onclick="setTheme('blue')" data-theme="blue">🔵 蓝色</div>
+          <div class="theme-options" id="theme-options"><!-- 动态渲染（THEME_PRESETS） --></div>
+          <div style="display:flex;gap:8px;margin-top:6px;align-items:center;">
+            <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="checkbox" id="bg-anim-toggle" checked onchange="setBgAnim(this.checked)"> 动态效果
+            </label>
           </div>
         </div>
       </div>
@@ -951,12 +1047,14 @@ function handleMessage(msg) {
     _bufferSessionEvent(backgroundCache, msg);
     if (msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
       backgroundCache.running = false;
+      setThinking(false);
       // 任务完成 → 自动刷新结果面板
       if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
         refreshResults();
       }
     } else if (msg.type === 'thinking' || msg.type === 'agent_running') {
       backgroundCache.running = true;
+      setThinking(true);
     }
     updateSessionListThrottled();  // 节流刷新，避免高频事件反复重建 DOM
     return;  // 不渲染到 UI
@@ -1025,6 +1123,7 @@ function handleMessage(msg) {
   }
 
   if (msg.type === 'thinking') {
+    setThinking(true);
     // 不重复创建 thinking, 只在首次创建进度时间线
     if (!progressTimelineEl) {
       initProgressTimeline();
@@ -1058,6 +1157,7 @@ function handleMessage(msg) {
       if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
     }
   } else if (msg.type === 'tool_start') {
+    setThinking(true);
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
   } else if (msg.type === 'tool_complete') {
@@ -1157,6 +1257,7 @@ function handleMessage(msg) {
       currentBubble.appendChild(infoEl);
     }
   } else if (msg.type === 'complete') {
+    setThinking(false);
     var completeContent = msg.content || '';
     if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
     else if (currentBubble && completeContent && completeContent.length > fullText.length) {
@@ -3049,17 +3150,126 @@ async function checkWeixinStatus() {
 }
 
 // === 配色 ===
+// === 主题/背景 ===
+var THEME_PRESETS = [
+  {id:'light', label:'☀️ 浅白', bg:'#f5f7fa'},
+  {id:'dark',  label:'🌙 深色', bg:'#1a1a2e'},
+  {id:'blue',  label:'🔵 蓝色', bg:'#e3f2fd'},
+  {id:'eye',   label:'🌿 护眼', bg:'#e8f3e8'},
+  {id:'parchment', label:'📜 羊皮纸', bg:'#f2e3c6'},
+  {id:'anime', label:'🌸 二次元', bg:'#ffe4ef'},
+  {id:'sci',   label:'🔬 科研', bg:'#0f172a'},
+  {id:'sunset',label:'🌅 暖阳', bg:'#fdf0e2'},
+  {id:'dusk',  label:'🌃 暮色', bg:'#1e1b3a'},
+];
+var bgAnimEnabled = true;
+try { bgAnimEnabled = localStorage.getItem('memomics-bg-anim') !== 'off'; } catch(e) {}
+function renderThemeButtons() {
+  var box = document.getElementById('theme-options');
+  if (!box) return;
+  box.innerHTML = '';
+  var cur = document.documentElement.getAttribute('data-theme') || 'light';
+  THEME_PRESETS.forEach(function(p) {
+    var b = document.createElement('div');
+    b.className = 'theme-btn' + (cur === p.id ? ' active' : '');
+    b.dataset.theme = p.id;
+    b.title = p.label;
+    b.style.background = p.bg;
+    b.style.color = (p.id === 'dark' || p.id === 'sci' || p.id === 'dusk') ? '#e2e8f0' : '#333';
+    b.textContent = p.label;
+    b.onclick = function() { setTheme(p.id); };
+    box.appendChild(b);
+  });
+}
 function setTheme(theme) {
+  var valid = THEME_PRESETS.some(function(p) { return p.id === theme; });
+  if (!valid) theme = 'light';  // 白名单校验，未知值回退
   document.documentElement.setAttribute('data-theme', theme);
   document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
   try { localStorage.setItem('memomics-theme', theme); } catch(e) {}
+  if (theme === 'anime') { startParticles(); } else { stopParticles(); }
 }
 function cycleTheme() {
   var cur = document.documentElement.getAttribute('data-theme') || 'light';
-  var order = ['light', 'dark', 'blue'];
-  var i = order.indexOf(cur);
-  var next = order[(i + 1) % order.length];
-  setTheme(next);
+  var ids = THEME_PRESETS.map(function(p) { return p.id; });
+  var i = Math.max(0, ids.indexOf(cur));
+  setTheme(ids[(i + 1) % ids.length]);
+}
+function setBgAnim(on) {
+  bgAnimEnabled = !!on;
+  try { localStorage.setItem('memomics-bg-anim', bgAnimEnabled ? 'on' : 'off'); } catch(e) {}
+  if (bgAnimEnabled) { startParticles(); } else { stopParticles(); }
+}
+
+// === 二次元粒子层（anime 主题专属，樱花/星点漂浮） ===
+var _particleCtx = null, _particleRaf = 0, _particles = [], _particleSpeed = 1;
+function startParticles() {
+  if (!bgAnimEnabled) return;
+  var cv = document.getElementById('bg-particles');
+  if (!cv || _particleCtx) return;
+  _particleCtx = cv.getContext('2d');
+  function resize() {
+    cv.width = window.innerWidth; cv.height = window.innerHeight;
+    var n = window.innerWidth < 768 ? 22 : 46;  // 移动端减半
+    _particles = [];
+    for (var i = 0; i < n; i++) {
+      _particles.push({
+        x: Math.random() * cv.width,
+        y: Math.random() * cv.height,
+        r: 1.5 + Math.random() * 3.5,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: 0.25 + Math.random() * 0.55,
+        a: 0.25 + Math.random() * 0.45,
+        hue: Math.random() < 0.65 ? 330 : 260,  // 粉/紫
+      });
+    }
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  function tick() {
+    if (!_particleCtx) return;
+    _particleCtx.clearRect(0, 0, cv.width, cv.height);
+    var sp = _particleSpeed;
+    for (var i = 0; i < _particles.length; i++) {
+      var p = _particles[i];
+      p.x += p.vx * sp; p.y += p.vy * sp;
+      if (p.y > cv.height + 6) { p.y = -6; p.x = Math.random() * cv.width; }
+      if (p.x > cv.width + 6) p.x = -6; if (p.x < -6) p.x = cv.width + 6;
+      _particleCtx.beginPath();
+      _particleCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      _particleCtx.fillStyle = 'hsla(' + p.hue + ', 70%, 70%, ' + p.a + ')';
+      _particleCtx.fill();
+    }
+    _particleRaf = requestAnimationFrame(tick);
+  }
+  _particleRaf = requestAnimationFrame(tick);
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) { cancelAnimationFrame(_particleRaf); _particleRaf = 0; }
+    else if (_particleCtx && !_particleRaf) { _particleRaf = requestAnimationFrame(tick); }
+  });
+}
+function stopParticles() {
+  if (_particleRaf) { cancelAnimationFrame(_particleRaf); _particleRaf = 0; }
+  _particleCtx = null; _particles = [];
+  var cv = document.getElementById('bg-particles');
+  if (cv) cv.getContext('2d').clearRect(0, 0, cv.width || 0, cv.height || 0);
+}
+
+// === 思考联动：agent thinking/工具执行 → 背景加速 + 角标 ===
+var _thinkCount = 0;
+function setThinking(on) {
+  var body = document.body;
+  if (on) {
+    _thinkCount++;
+    body.classList.add('thinking');
+    _particleSpeed = 2.5;
+  } else {
+    _thinkCount = Math.max(0, _thinkCount - 1);
+    if (_thinkCount === 0) {
+      body.classList.remove('thinking');
+      _particleSpeed = 1;
+    }
+  }
 }
 
 // === 文件浏览 ===
@@ -4489,6 +4699,9 @@ document.getElementById('input').addEventListener('input', function() {
 
 // 恢复配色
 try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) setTheme(savedTheme); } catch(e) {}
+renderThemeButtons();
+var _animToggle = document.getElementById('bg-anim-toggle');
+if (_animToggle) { _animToggle.checked = bgAnimEnabled; }
 
 // === 图片粘贴/拖拽事件监听 ===
 var chatInputEl = document.getElementById('chat-input');
