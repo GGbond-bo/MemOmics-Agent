@@ -89,6 +89,11 @@ def _get_db_path() -> str:
     return str(cur / "hermes_home" / "memory_store.db")
 
 
+def get_store():
+    """公开的 MemoryStore 单例访问（供 server.py 等外部调用）。"""
+    return _get_store()
+
+
 def _now_ts() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 

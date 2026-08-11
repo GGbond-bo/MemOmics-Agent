@@ -90,6 +90,25 @@ FACT_FEEDBACK_SCHEMA = {
 }
 
 
+
+SEARCH_HISTORY_SCHEMA = {
+    "name": "search_history",
+    "description": (
+        "Full-text search over the CURRENT session past user messages (including compaction-archived turns). "
+        "Use when the user refers back to something said earlier in this conversation - scripts, paths, parameters, earlier conclusions. "
+        "Results are historical context only; confirm with the user before acting on them."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search keywords (Chinese ok; verbs are stripped automatically)."},
+            "limit": {"type": "integer", "description": "Max results (default: 5, max 10)."},
+            "session_id": {"type": "string", "description": "Optional session id to search (default: current session)."},
+        },
+        "required": ["query"],
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -118,6 +137,69 @@ def _extract_query_keywords(query: str) -> str:
     if not cleaned:
         return q
     return cleaned
+
+
+def _search_session_messages(sid: str, query: str, limit: int = 3):
+    """Read-only FTS over ONE session user messages (trigram + LIKE fallback).
+
+    Returns list of (timestamp, snippet). Returns [] on any error. Includes compaction-archived turns (active=1 OR compacted=1).
+    """
+    if not sid or not query:
+        return []
+    kw = _extract_query_keywords(query)
+    if not kw:
+        return []
+    import sqlite3 as _sqlite3
+    from hermes_constants import get_hermes_home
+    try:
+        conn = _sqlite3.connect(f"file:{str(get_hermes_home() / 'state.db')}?mode=ro", uri=True, timeout=5.0)
+    except Exception:
+        return []
+    try:
+        rows = []
+        # trigram FTS needs >=3 chars; CJK substring works natively.
+        if len(kw) >= 3:
+            try:
+                rows = conn.execute(
+                    """SELECT m.id, m.timestamp,
+                              snippet(messages_fts_trigram, 0, '>>>', '<<<', '...', 40) AS snippet
+                       FROM messages m
+                       JOIN messages_fts_trigram ON messages_fts_trigram.rowid = m.id
+                       WHERE messages_fts_trigram MATCH ?
+                         AND m.session_id = ?
+                         AND m.role IN ('user', 'human')
+                         AND (m.active = 1 OR m.compacted = 1)
+                       ORDER BY m.timestamp DESC
+                       LIMIT ?""",
+                    (kw, sid, limit),
+                ).fetchall()
+            except Exception:
+                rows = []
+        if not rows:
+            like = f"%{kw}%"
+            rows = conn.execute(
+                """SELECT m.id, m.timestamp, m.content AS snippet
+                   FROM messages m
+                   WHERE m.session_id = ?
+                     AND m.role IN ('user', 'human')
+                     AND (m.active = 1 OR m.compacted = 1)
+                     AND m.content LIKE ?
+                   ORDER BY m.timestamp DESC
+                   LIMIT ?""",
+                (sid, like, limit),
+            ).fetchall()
+        out = []
+        for r in rows:
+            snip = str(r[2] or '')[:120].replace('\n', ' ')
+            out.append((r[1], snip))
+        return out
+    except Exception:
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def _load_plugin_config() -> dict:
     from hermes_constants import get_hermes_home
@@ -278,67 +360,15 @@ class HolographicMemoryProvider(MemoryProvider):
             except Exception as e:
                 logger.debug("Holographic asset prefetch failed: %s", e)
 
-            # Source 3: session message history (FTS over the session DB,
-            # including compaction-archived turns). Queries the shared
-            # state.db read-only and filters by session_id directly —
-            # SessionDB.search_messages() filters by channel *source*, not
-            # session id, so it cannot scope history to the current session.
+            # Source 3: session message history (shared helper; includes
+            # compaction-archived turns).
             try:
-                if sid and query:
-                    import sqlite3 as _sqlite3
-                    from hermes_constants import get_hermes_home
-                    _kw = _extract_query_keywords(query)
-                    if _kw:
-                        _sdb_path = str(get_hermes_home() / "state.db")
-                        _conn = _sqlite3.connect(
-                            f"file:{_sdb_path}?mode=ro", uri=True, timeout=5.0
-                        )
-                        try:
-                            _rows = []
-                            # trigram FTS needs >=3 chars; CJK substring works natively.
-                            if len(_kw) >= 3:
-                                try:
-                                    _rows = _conn.execute(
-                                        """SELECT m.id, m.timestamp,
-                                                  snippet(messages_fts_trigram, 0, '>>>', '<<<', '...', 40) AS snippet
-                                           FROM messages m
-                                           JOIN messages_fts_trigram ON messages_fts_trigram.rowid = m.id
-                                           WHERE messages_fts_trigram MATCH ?
-                                             AND m.session_id = ?
-                                             AND m.role IN ('user', 'human')
-                                             AND (m.active = 1 OR m.compacted = 1)
-                                           ORDER BY m.timestamp DESC
-                                           LIMIT 3""",
-                                        (_kw, sid),
-                                    ).fetchall()
-                                except Exception:
-                                    _rows = []
-                            if not _rows:
-                                like = f"%{_kw}%"
-                                _rows = _conn.execute(
-                                    """SELECT m.id, m.timestamp, m.content AS snippet
-                                       FROM messages m
-                                       WHERE m.session_id = ?
-                                         AND m.role IN ('user', 'human')
-                                         AND (m.active = 1 OR m.compacted = 1)
-                                         AND m.content LIKE ?
-                                       ORDER BY m.timestamp DESC
-                                       LIMIT 3""",
-                                    (sid, like),
-                                ).fetchall()
-                            if _rows:
-                                hlines = []
-                                for _r in _rows:
-                                    _snip = str(_r[2] or "")[:120].replace("\n", " ")
-                                    hlines.append(f"- {_snip}")
-                                parts.append(
-                                    "## Related History（本会话历史对话 · 仅供参考）\n" + "\n".join(hlines)
-                                )
-                        finally:
-                            try:
-                                _conn.close()
-                            except Exception:
-                                pass
+                hist = _search_session_messages(sid, query, 3) if sid else []
+                if hist:
+                    hlines = [f"- {snip}" for _ts, snip in hist]
+                    parts.append(
+                        "## Related History（本会话历史对话 · 仅供参考）\n" + "\n".join(hlines)
+                    )
             except Exception as e:
                 logger.debug("Holographic history prefetch failed: %s", e)
 
@@ -359,6 +389,10 @@ class HolographicMemoryProvider(MemoryProvider):
                         parts_t.append(f"- 进度：第 {t_step} 步" + (f"/共 {t_total} 步" if t_total else ""))
                     if t_script:
                         parts_t.append(f"- 正在使用：{t_script}")
+                    if task.get("switched_from") and task.get("entity"):
+                        parts_t.append(
+                            f"- ⚠️ 话题已切换：{task['switched_from']} → {task['entity']}（旧任务暂停，以用户最新诉求为准）"
+                        )
                     if t_concl:
                         parts_t.append(f"- 最近结论：{t_concl}")
                     sblocks.append("📌 当前任务状态（会话内跟踪，仅供参考）\n" + "\n".join(parts_t))
@@ -382,15 +416,38 @@ class HolographicMemoryProvider(MemoryProvider):
         # Holographic memory stores explicit facts via tools, not auto-sync.
         # The on_session_end hook handles auto-extraction if configured.
         pass
+        # The on_session_end hook handles auto-extraction if configured.
+        pass
+
+    def on_session_switch(
+        self,
+        new_session_id: str,
+        *,
+        parent_session_id: str = "",
+        reset: bool = False,
+        rewound: bool = False,
+        **kwargs,
+    ) -> None:
+        """Re-bind per-session state when the agent switches sessions mid-process.
+
+        Without this, ``_session_id`` keeps pointing at the old session after
+        /new, /resume, /reset or context compression, so the session asset
+        block and prefetch session-state lookups would target the wrong
+        session's records.
+        """
+        self._session_id = new_session_id or ""
+        logger.debug("Holographic session switched to %r", self._session_id)
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
-        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA]
+        return [FACT_STORE_SCHEMA, FACT_FEEDBACK_SCHEMA, SEARCH_HISTORY_SCHEMA]
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
         if tool_name == "fact_store":
             return self._handle_fact_store(args)
         elif tool_name == "fact_feedback":
             return self._handle_fact_feedback(args)
+        elif tool_name == "search_history":
+            return self._handle_search_history(args)
         return tool_error(f"Unknown tool: {tool_name}")
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
@@ -512,6 +569,29 @@ class HolographicMemoryProvider(MemoryProvider):
             return tool_error(f"Missing required argument: {exc}")
         except Exception as exc:
             return tool_error(str(exc))
+
+    def _handle_search_history(self, args: dict) -> str:
+        """Tool handler: full-text search over session user messages."""
+        try:
+            query = (args.get("query") or "").strip()
+            if not query:
+                return "search_history: query is required"
+            try:
+                limit = min(max(int(args.get("limit", 5)), 1), 10)
+            except (TypeError, ValueError):
+                limit = 5
+            sid = (args.get("session_id") or "").strip() or (self._session_id or "")
+            if not sid:
+                return "search_history: no session bound (session_id is empty)"
+            hist = _search_session_messages(sid, query, limit)
+            if not hist:
+                return "search_history: no matching historical messages in this session"
+            lines = []
+            for _ts, snip in hist:
+                lines.append("- " + snip)
+            return "本会话历史对话（仅供参考，用前请与用户确认）：\n" + "\n".join(lines)
+        except Exception as e:
+            return "search_history failed: %s" % e
 
     def _handle_fact_feedback(self, args: dict) -> str:
         try:

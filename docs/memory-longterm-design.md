@@ -297,3 +297,38 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 - `webui/tests/test_session_memory.py`：25 用例（store 层 / 模块层 / 注入层 / 生产兼容），全绿
 - 全量回归：`198 passed, 1 skipped, 3 deselected`，exit 0（未破坏既有功能）
 - 生产库补表无损：真实 `hermes_home/memory_store.db` 打开自动补 assets/session_state，68 条 facts 原样保留
+
+---
+
+## 第 9 章 实施记录 2（2026-08-11，P1-3/P1-4 + 记忆能力连接盘点）
+
+### P1-3 search_history 工具（已实施）
+
+- `SEARCH_HISTORY_SCHEMA` 加入 `get_tool_schemas`（query/limit/session_id 参数）
+- `_handle_search_history`：检索本会话（或指定会话）用户消息，返回带"仅供参考，用前请与用户确认"标记
+- 查询逻辑抽成模块级 `_search_session_messages(sid, query, limit)`（trigram FTS ≥3 字符 + LIKE 兜底 + `(active=1 OR compacted=1)` 含压缩归档），prefetch Source 3 也改用它——单一实现
+
+### P1-4 话题切换旁路（已实施）
+
+- server.py ws chat 分支：analysis/research_plan/direct_exec 意图 + 实体变化 → `update_task_state(entity=新实体, switched_from=旧实体)`
+- holographic Source 4 渲染："⚠️ 话题已切换：热图 → umap（旧任务暂停，以用户最新诉求为准）"
+- 每轮 prefetch 注入，agent 感知切换不继续旧任务
+
+### Hermes 记忆能力连接盘点（14 个 Provider 接口）
+
+| 接口 | 连接状态 | 说明 |
+|---|---|---|
+| system_prompt_block | ✅ | facts 提示 + 会话资产清单（volatile 压缩免疫） |
+| prefetch | ✅ | 四源：facts/assets/会话历史/任务状态+诉求 |
+| queue_prefetch | ⚠️ 未实现 | 异步预取优化路径；同步 prefetch 已连，影响小 |
+| sync_turn | ✅ | 显式工具模式（不自动同步，设计如此） |
+| get_tool_schemas | ✅ | fact_store + fact_feedback + search_history |
+| handle_tool_call | ✅ | 三个工具分发 |
+| on_turn_start | ⚠️ 未实现 | turn 计数/周期维护，非核心 |
+| on_session_end | ✅（默认关） | auto_extract=false（防噪音），config 可开 |
+| **on_session_switch** | ✅ **本次修复** | 重绑 `_session_id`——此前会话切换/压缩后资产清单与 session_state 错绑旧会话 |
+| on_pre_compress | ⚠️ 未实现 | 新版已把返回值拼入压缩摘要（memory_context 参数，旧"被丢弃"认知已过时）；资产靠 volatile 重建免疫压缩，摘要不叠加资产（防双份） |
+| on_delegation | ⚠️ 未实现 | 子代理任务观察，非核心 |
+| on_memory_write | ✅ | 内置记忆写入镜像为 facts |
+| shutdown | ✅ | refcount 共享连接安全关闭 |
+| save_config/get_config_schema | ✅ | config schema 暴露 |

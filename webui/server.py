@@ -6530,6 +6530,24 @@ async def ws_endpoint(ws: WebSocket):
                         import session_state as _ss
                     _ss.capture_user_request(session["id"], user_text, intent=_intent or "chat")
                     _ss.extract_assets(session["id"], user_text)
+
+                    # === 话题切换检测旁路（P1-4）：analysis 意图且实体变化 → 更新任务状态块 ===
+                    try:
+                        _ent = _ss.extract_entity(user_text)
+                        if _ent and _intent in ("analysis", "research_plan", "direct_exec"):
+                            _st = _ss.get_store().get_session_state(session["id"])
+                            _task = json.loads(_st.get("task_json") or "{}")
+                            _old = _task.get("entity") or ""
+                            _sw = _old if (_old and _old != _ent) else ""
+                            if _old != _ent:
+                                _ss.update_task_state(
+                                    session["id"],
+                                    entity=_ent,
+                                    switched_from=_sw,
+                                    last_topic_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+                                )
+                    except Exception as _sw_err:
+                        logger.debug("topic-switch detection failed: %s", _sw_err)
                 except Exception as _ss_err:
                     logger.warning("session_state capture failed: %s", _ss_err)
 

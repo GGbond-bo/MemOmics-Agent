@@ -252,7 +252,124 @@ class TestHolographicInjection:
 
 
 # ---------------------------------------------------------------------------
-# 4) 生产兼容：真实 memory_store.db 补表无损（只读验证）
+# 4) P1-3 search_history 工具 + P1-4 话题切换旁路
+# ---------------------------------------------------------------------------
+
+class TestSearchHistoryTool:
+    @pytest.fixture
+    def provider(self, tmp_path, monkeypatch):
+        p = HolographicMemoryProvider(config={})
+        p._config["db_path"] = str(tmp_path / "mem.db")
+        p.initialize(session_id="sess-tool-1")
+        yield p
+        p.shutdown()
+
+    @pytest.fixture
+    def history_db(self, tmp_path, monkeypatch):
+        from hermes_state import SessionDB
+        db_path = tmp_path / "state.db"
+        sdb = SessionDB(db_path=db_path)
+        sdb.create_session("sess-tool-1", source="webui")
+        sdb.append_message("sess-tool-1", role="user",
+                           content="帮我用 pheatmap 画一个表达热图，样本分组标记一下")
+        sdb.append_message("sess-tool-1", role="user", content="QC 过滤后重新跑一遍")
+        sdb.create_session("sess-other-888", source="webui")
+        sdb.append_message("sess-other-888", role="user", content="完全无关的火山图话题")
+        sdb.close()
+        monkeypatch.setattr("hermes_constants.get_hermes_home", lambda: tmp_path)
+        return tmp_path
+
+    def test_schema_exposed(self, provider):
+        names = [s["name"] for s in provider.get_tool_schemas()]
+        assert "search_history" in names
+        assert "fact_store" in names  # 原有工具保留
+
+    def test_tool_hit(self, provider, history_db):
+        r = provider.handle_tool_call("search_history", {"query": "继续跑热图"})
+        assert "pheatmap" in r and "仅供参考" in r
+
+    def test_tool_miss(self, provider, history_db):
+        r = provider.handle_tool_call("search_history", {"query": "不存在的词xyz"})
+        assert "no matching" in r
+
+    def test_tool_empty_query(self, provider):
+        r = provider.handle_tool_call("search_history", {"query": ""})
+        assert "required" in r
+
+    def test_tool_explicit_session(self, provider, history_db):
+        r = provider.handle_tool_call("search_history",
+                                      {"query": "火山图", "session_id": "sess-other-888"})
+        assert "火山图" in r
+
+    def test_tool_unknown_falls_back(self, provider):
+        r = provider.handle_tool_call("no_such_tool", {})
+        assert "Unknown tool" in r
+
+    def test_on_session_switch_rebind(self, provider, history_db):
+        provider.on_session_switch("sess-other-888")
+        assert provider._session_id == "sess-other-888"
+        out = provider.prefetch("火山图")
+        assert "火山图" in out  # 切换后按新会话检索
+
+
+class TestTopicSwitch:
+    @pytest.fixture
+    def store(self, tmp_path):
+        st = MemoryStore(db_path=str(tmp_path / "m.db"))
+        yield st
+        st.close()
+
+    def _detect(self, store, sid, text, intent):
+        """与 server.py 内嵌逻辑一致的检测实现。"""
+        ent = ss.extract_entity(text)
+        if ent and intent in ("analysis", "research_plan", "direct_exec"):
+            st = store.get_session_state(sid)
+            task = json.loads(st.get("task_json") or "{}")
+            old = task.get("entity") or ""
+            sw = old if (old and old != ent) else ""
+            if old != ent:
+                ss.update_task_state(sid, store=store, entity=ent, switched_from=sw,
+                                     last_topic_at="t")
+            return ent
+        return ""
+
+    def test_first_topic_no_switch(self, store):
+        self._detect(store, "s1", "继续跑热图", "analysis")
+        t = json.loads(store.get_session_state("s1")["task_json"])
+        assert t["entity"] == "热图" and not t.get("switched_from")
+
+    def test_same_topic_no_switch(self, store):
+        self._detect(store, "s1", "继续跑热图", "analysis")
+        self._detect(store, "s1", "热图换个配色再看看", "analysis")
+        t = json.loads(store.get_session_state("s1")["task_json"])
+        assert t["entity"] == "热图" and not t.get("switched_from")
+
+    def test_topic_change_marks_switch(self, store):
+        self._detect(store, "s1", "继续跑热图", "analysis")
+        self._detect(store, "s1", "换个方向，帮我做 UMAP 聚类", "analysis")
+        t = json.loads(store.get_session_state("s1")["task_json"])
+        assert t["entity"] == "umap" and t["switched_from"] == "热图"
+
+    def test_chat_intent_does_not_switch(self, store):
+        self._detect(store, "s1", "继续跑热图", "analysis")
+        self._detect(store, "s1", "好的谢谢", "chat")
+        t = json.loads(store.get_session_state("s1")["task_json"])
+        assert t["entity"] == "热图"
+
+    def test_switch_rendered_in_prefetch(self, store, tmp_path):
+        self._detect(store, "s1", "继续跑热图", "analysis")
+        self._detect(store, "s1", "换个方向，帮我做 UMAP 聚类", "analysis")
+        p = HolographicMemoryProvider(config={})
+        p._config["db_path"] = str(tmp_path / "mem.db")
+        p.initialize(session_id="s1")
+        p._store = store
+        out = p.prefetch("随便", session_id="s1")
+        assert "话题已切换" in out and "热图" in out and "umap" in out
+        p.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 5) 生产兼容：真实 memory_store.db 补表无损（只读验证）
 # ---------------------------------------------------------------------------
 
 class TestProdCompat:
