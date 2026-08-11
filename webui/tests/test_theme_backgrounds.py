@@ -38,10 +38,19 @@ class TestThemeColors:
         assert set(NEW_THEMES) <= set(ids)
         assert len(ids) == 6, "expected 6 themes, got %d" % len(ids)
 
-    def test_no_fancy_stuff(self):
-        """简化版：无粒子/装饰/角标/背景纹理层。"""
+    def test_parchment_has_texture_only(self):
+        """羊皮纸有质感层；其他主题无背景层；无粒子/装饰/角标。"""
         src = _html()
-        for junk in ["bg-particles", "thinking-badge", "anime-deco", "body::before"]:
+        # parchment 专属纹理
+        assert 'html[data-theme="parchment"] body::before' in src
+        assert "repeating-radial-gradient" in src  # 纸纹噪点
+        assert "radial-gradient(ellipse" in src    # 边缘暗角
+        # 其他主题不应有背景层规则
+        for t in ["light", "dark", "blue", "eye", "sci"]:
+            assert 'html[data-theme="%s"] body::before' % t not in src, \
+                "%s should have no bg layer" % t
+        # 无花活
+        for junk in ["bg-particles", "thinking-badge", "anime-deco"]:
             assert junk not in src, "%s should be removed (keep it simple)" % junk
 
 

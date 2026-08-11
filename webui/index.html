@@ -68,6 +68,26 @@
   --primary: #8d5524; --primary-light: #f0e0c0; --accent: #c49a5c; --success: #5d8a3c;
   --warning: #b06a00; --danger: #a33a2a; --tool-bg: #f7ecd6; --code-bg: #3a2a1a; --code-fg: #f5e6c8;
 }
+
+/* === 羊皮纸质感层（仅 parchment 主题；其他主题默认隐藏，零影响） === */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; display:none;
+}
+html[data-theme="parchment"] body::before {
+  display:block;
+  background:
+    /* 纸纤维横纹（极淡） */
+    repeating-linear-gradient(0deg, rgba(139,105,54,0.028) 0 1px, transparent 1px 3px),
+    /* 纸纤维纵纹（极淡） */
+    repeating-linear-gradient(90deg, rgba(139,105,54,0.022) 0 1px, transparent 1px 4px),
+    /* 纸张噪点颗粒 */
+    repeating-radial-gradient(circle at 17% 32%, rgba(139,105,54,0.05) 0 2px, transparent 3px 7px),
+    repeating-radial-gradient(circle at 82% 68%, rgba(139,105,54,0.045) 0 2px, transparent 3px 8px),
+    /* 边缘暗角（中心亮、四角微暗，模拟纸张受光） */
+    radial-gradient(ellipse at center, transparent 55%, rgba(101,71,33,0.13) 100%),
+    /* 泛黄底色渐变 */
+    linear-gradient(160deg, #f6e9ce 0%, #efdcb8 60%, #e9d2a8 100%);
+}
 body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; transition:background 0.3s; }
 .app { display:flex; height:100vh; }
 
