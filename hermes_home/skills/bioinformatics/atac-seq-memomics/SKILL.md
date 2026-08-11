@@ -38,6 +38,8 @@ ArchR 依赖 TFMPvalue → 需要 R ≥ 4.5.0。但版本选择有讲究：
 
 > 跨物种 CRE 保守性评估需要共可及性 → 必须用 ArchR。
 
+> 📑 ArchR vs SnapATAC/SnapATAC2 完整对比（Luo 2024 Genome Biol benchmark + 选择指南）→ `references/archr-vs-snapatac-comparison.md`（聚类精度 ArchR 垫底但 co-accessibility 独占；SnapATAC v1 已过时；混合方案 = SnapATAC2 聚类 + ArchR 下游）
+
 ## 已知问题
 
 > 📑 本会话（2026-08-08 P0/P1/P3）踩坑速查 → `references/archr-windows-pitfalls-2026-08.md`（addClusters input= / addGeneScoreMatrix 崩溃 / TileMatrix CSC 直读 / cellNames 前缀 / filtered Arrow 未剔除 doublet 的 8 条快查）

@@ -81,12 +81,14 @@ p.adjust(pval, "fdr") → FDR < 0.1 → Up (cor>0) / Down (cor<0)
 
 ## 已知陷阱
 
+0. **🔴 用户指定脚本路径 ≠ 目标任务脚本（2026-08-11 实测）** — 用户说"继续跑热图，用 `E:\...\webui\session_state.py` 那个脚本，配色换蓝白"，但 session_state.py 是 webui 会话状态捕获模块（capture_user_request/extract_assets），**不含任何绘图逻辑**。用户凭记忆给路径容易把基础设施文件误当分析脚本。**修复**：拿到用户指定的脚本路径先 `read_file` 确认内容匹配任务（含目标图型绘图代码），不匹配就按已知产出物反查——`search_files(target='files', pattern='*heatmap*', path='results/')` 找到目标 figure → 看同目录 `scripts/` 找真正脚本 → 确认后再跑。**用户给的路径是线索不是事实。**
 1. **官方代码 vs 论文 M&M 可能不一致**（GSE278576：代码 MACS3 vs 论文 MACS2）——以官方代码仓库为准，标注差异
 2. **细胞注释是 RNA-based**（Multiome）——只有 ATAC fragments 时无法直接复现原文 18 亚类，用 marker 基因 TSS 可及性近似（海马 marker: SLC17A7/GAD1/GFAP/AIF1/MOG/PDGFRA/CLDN5）
 3. **git clone 被墙** → 用 `https://codeload.github.com/<user>/<repo>/zip/refs/heads/main` 或 Python requests 下载 zip
-4. **MSYS bash 路径转换坑**：`E:\` 会被加前缀 → 用 `/e/` 格式或在 execute_code 里用 Windows 路径
+4. **MSYS bash 路径转换坑**：`E:\\` 会被加前缀 → 用 `/e/` 格式或在 execute_code 里用 Windows 路径
 5. **execute_code 的 .venv 可能有包冲突**（PIL）→ 绘图用系统 python3 直接跑
 6. **rail_review(post) 传摘要字符串会误判"代码过短"** → 产出物齐全（图+TSV 存在）即视为通过，直接 record_run
+7. **改 results 目录分析脚本后全量 pytest 会超时**（600s 跑 57 个测试未完）——分析产出脚本不在 pytest 覆盖内，验证 = ① 直接运行被改脚本（exit 0 + 产出物存在）→ ② 最小相关 pytest 子集（如 `webui/tests/test_session_memory.py` → 45 passed）→ ③ 全量后台跑。只改 matplotlib 配色等不碰仓库核心逻辑时全量非必需
 
 ## 验证方式
 

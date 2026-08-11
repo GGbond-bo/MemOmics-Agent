@@ -171,6 +171,16 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 - 首选 ArchR（Arrow 兼容 + 共可及性）
 - 备选 Signac（R 4.4.2 已装，无需额外 R 环境）
 
+### ArchR vs SnapATAC/SnapATAC2（2026-08 调研，中立 benchmark 证据）
+- 聚类精度：**SnapATAC2 > ArchR**（尤其复杂脑组织亚型、稀有类型；Luo 2024 Genome Biol benchmark）
+- 速度：SnapATAC2 最快；内存：ArchR 最省；SnapATAC v1 >2万细胞内存爆炸不可扩展
+- **库大小偏差**：LSI（ArchR/Signac）嵌入与测序深度强相关，跨样本/跨年龄比较需警惕混杂；SnapATAC 系（Jaccard）几乎不受影响
+- footprinting/共可及性：ArchR 独占强项；跨物种 CRE 专利实施例建立在 ArchR 输出上，勿轻易换管线
+- 详见 `references/archr-vs-snapatac-benchmark.md`（全文证据 + Europe PMC 抓取路径）
+- **引用核实（2026-08-11 实测）**：任务委托给的 PMID 31072930（实为 PNAS 纹状体论文）与 31061468（实为 Sci Rep 植物 RNAi 论文）均与 ArchR/SnapATAC 无关。正确引用：ArchR=PMID 33633365（Nat Genet 2021, DOI 10.1038/s41588-021-00790-6）；SnapATAC=PMID 33637727（Nat Commun 2021, DOI 10.1038/s41467-021-21583-9）；SnapATAC2=PMID 38191932（Nat Methods 2024, DOI 10.1038/s41592-023-02139-9，委托给的 10.1038/s41592-024-02229-8 无法匹配）；Luo benchmark=PMID 39152456。**铁律：委托中的 PMID/DOI 引用前必须先 query_ncbi/pubmed 核实**，报告中附勘误说明
+- SnapATAC v1 确认 EOL（GitHub 最后 push 2023-04-27，README 自 2019-09 起推荐 v2）；SnapATAC2 无 Windows wheel、缺 footprinting/chromVAR deviations/co-accessibility 模块
+- 完整 15 维度对比报告（含总览表+选择建议+对跨物种项目的专项建议）：`results/memomics-1f916507/archr_vs_snapatac_report.md`
+
 ---
 
 ## 常见错误速查

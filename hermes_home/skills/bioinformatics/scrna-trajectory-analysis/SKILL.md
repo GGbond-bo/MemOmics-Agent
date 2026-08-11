@@ -47,6 +47,8 @@ prerequisites:
 
 ---
 
+> 📚 **Monocle3 vs Slingshot 选型对比**（算法原理/拓扑假设/参数语义/适用场景/已核实 PMID+DOI 文献表/官方文档核实路径）：见 `references/monocle3-vs-slingshot.md`。做工具对比调研或写方法学部分时直接引用。
+
 ## 📌 通用铁律（所有路径适用）
 
 | 规则 | 说明 |
@@ -241,7 +243,11 @@ g.plot_fate_probabilities(same_plot=False, basis="umap")
 | `learn_graph()` 轨迹乱线 | resolution 太大 | `cluster_cells(1e-5)` |
 | 伪时间方向反向 | 根节点选错 | 改 `group_val` |
 | `graph_test()` 全不显著 | 细胞太少 | 每分支 ≥200 cells |
+| 想用 BEAM 做分支分析 | ⚠️ BEAM 是 Monocle2 的函数（Qiu 2017, PMID 28825705），Monocle3 没有 | 用 `graph_test(neighbor_graph="principal_graph")` + `choose_graph_segments()`（详见 `references/monocle3-vs-slingshot.md`） |
 | scVelo `recover_dynamics` 慢 | 基因太多 | `n_top_genes=2000` |
+| 查 Monocle3 官方文档 URL 404 | 旧 `/monocle3/reference/*.html` 已失效 | 新站为 `/monocle3/docs/{trajectories,clustering,differential,getting_started}/`（从页面 nav 链接找路径） |
+| Windows 下 curl 抓 GitHub Pages 报 SSL error 35 | Schannel TLS 握手失败（`-k`/`--tlsv1.2` 无效，bioconductor.org 正常） | 改用 Python urllib + 关闭校验的 SSL context（OpenSSL 栈），见 `references/monocle3-vs-slingshot.md` |
+| 需核实论文方法细节/PMID | 凭记忆不可靠 | Europe PMC fullTextXML REST + NCBI efetch 摘要核实（命令见 `references/monocle3-vs-slingshot.md`） |
 
 ## 输出目录结构
 

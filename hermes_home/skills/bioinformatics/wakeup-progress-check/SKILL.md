@@ -373,3 +373,16 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 
 - 长任务心跳监控（Agent 不在场时的自动检测）：`heartbeat-monitor` skill
 - ATAC 专项的唤醒门禁细节：`atac-seq-memomics` references/post-completion-wakeup-gate.md
+
+## 用户说"继续跑 X"时的重复会话检测（2026-08-11 实测）
+
+用户连发两次相同请求（21:23 / 21:24）→ 生成两个 session（memomics-1f69ab58 先执行、memomics-25ccfed5 后到）。后到的会话若直接重跑 = 重复劳动。
+
+**处理流程**（"继续跑/接着做/上次的 X"类请求必做，先查再跑）：
+1. 先查 `session_state` 数据库 requests_json：`python -c` 连 `hermes_home/memory_store.db` → `SELECT session_id, requests_json FROM session_state` — 确认该请求是否已由别的会话实例收到
+2. 再查**最新会话**的 `log/system_log.jsonl`（`ls -lt results/*/log/system_log.jsonl` 取最新）：看是否有 `patch` + `execute_python/R` + `rail_review` + `skill_evolution` 完整执行链 → 有 = 任务已执行，直接核对磁盘产出（产出文件 mtime）汇报即可，**不要重跑**
+3. 只有确认无执行记录/执行失败/产出缺失时才真正开跑
+
+**辅助判定**：
+- 用户引用的"那个脚本"路径可能是**误记**（本会话用户引用 `webui/session_state.py`，实际是会话状态模块不是热图脚本——因"文件存在"被 `extract_assets` 自动入库为 asset 造成误导）。判断标准：脚本内容是否与分析任务匹配（session_state.py 是 `capture_user_request`/`extract_assets` 模块）；不匹配 → 用 `find E:/MemOmics-Agent -newermt "20分钟前" -name "*.py"` 找最近修改的真实分析脚本
+- 用户改配色偏好（如 GSE278576 热图蓝白色 `cmap="Blues"`）可能已由前一实例落在脚本里——核对脚本当前 cmap 行再决定要不要动

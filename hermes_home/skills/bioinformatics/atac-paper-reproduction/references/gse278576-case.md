@@ -41,6 +41,13 @@
 - `scripts/core_age_correlation.py` —— 官方 cCRE → fragments 计数 → log2CPM → Pearson+FDR 一步完成（pilot 已跑通，9 样本 ~15min 并行）
 - 后续 40 样本下齐：同一脚本直接全量重跑即可
 
+## 可视化脚本（2026-08-11 定位）
+- **脚本**：`results/memomics-8857f1c1/gse278576_comparison/scripts/visualize_results.py`（纯 matplotlib，无 R）
+- **输入**：`age_correlation/cpm_matrix.tsv`（92MB，行=cCRE 列=donor）+ `all_celltypes_pcc_full.tsv`（71MB）
+- **输出**：`figures/` 共 5 张（pcc_density / volcano / heatmap_top2000 / cor_by_celltype_boxplot / sample_fragments）
+- **热图配方（heatmap_top2000.png）**：按行方差取 Top 2000 变异性 cCRE → 行 z-score（`scipy.stats.zscore(axis=1)`）→ donor 列按年龄升序排序（age_lut 硬编码 9 供体年龄）→ `imshow(aspect="auto", cmap=..., vmin=-2, vmax=2)` → 200dpi
+- **配色偏好**：用户 2026-08-11 要求蓝白色 → `cmap="Blues"`（白→蓝渐变），此前默认 `RdBu_r`。改配色只需 patch 脚本第 ~68 行 cmap 后重跑，无需重算数据（TSV 现成，单脚本重跑 <2min）
+
 ## 陷阱回顾（本案例实测）
 1. snapatac2 全版本无 Windows wheel（macOS/Linux only）→ 2.10.0 源码编译缺 MSVC 必失败；2.9.0 也仅有 mac/linux wheel。**结论：Windows 上不要尝试装 snapatac2，直接官方 cCRE 复用路径**
 2. git clone 被墙 → `https://codeload.github.com/nrzemke/aging_human_hippocampus/zip/refs/heads/main` 或 Python requests 下载 zip（20.3MB）
