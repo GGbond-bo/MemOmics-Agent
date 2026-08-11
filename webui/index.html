@@ -194,7 +194,6 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-float-bar { position:absolute; right:24px; bottom:118px; display:flex; gap:8px; z-index:50; }
 .chat-float-bar button { border:none; border-radius:20px; padding:8px 16px; font-size:13px; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.18); transition:opacity 0.2s,transform 0.15s; }
 .chat-float-bar button:hover { transform:translateY(-1px); }
-.float-stop-btn { background:var(--danger,#e74c3c); color:#fff; }
 .float-goto-bottom { background:var(--primary,#4A90D9); color:#fff; }
 .chat-input .input-info { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--text-light); }
 .chat-input .model-select { font-size:11px; padding:2px 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); }
@@ -466,9 +465,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <div class="chat-messages" id="messages">
       <!-- 欢迎画面由 newSession() 动态生成 -->
     </div>
-    <!-- 输出中悬浮控制条：停止生成 / 回到底部 -->
+    <!-- 输出中悬浮浮条：仅"回到底部"（停止按钮在底部输入区，不重复） -->
     <div class="chat-float-bar" id="chat-float-bar" style="display:none;">
-      <button class="float-stop-btn" id="float-stop" onclick="stopAgent()" title="强制停止当前运行">⏹ 停止生成</button>
       <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出">▼ 回到底部</button>
     </div>
     <div class="chat-input" id="chat-input">
@@ -1810,29 +1808,32 @@ function addError(content) {
 // （流式输出中用户可自由上下滑动/长时间观看，不被打断）
 var _autoScroll = true;
 var _lastMermaidHash = '';
+var _floatBarActive = false;  // 运行状态开关（仅"回到底部"浮条；停止按钮在底部输入区，不重复）
 (function() {
   var _m = document.getElementById('messages');
   if (!_m) return;
   _m.addEventListener('scroll', function() {
     var el = this;
     // 距离底部 < 120px 视为"在底部"，恢复自动滚动；否则暂停
-    var atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
-    _autoScroll = atBottom;
-    // 离开底部时显示"回到底部"浮条，回到底部隐藏
-    var gb = document.getElementById('float-goto-bottom');
-    if (gb) gb.style.display = (!atBottom && agentRunning) ? '' : 'none';
+    _autoScroll = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+    _refreshGotoBottom();
   });
 })();
 
-// 悬浮控制条：输出中显示"停止生成"，离开底部追加"回到底部"
+// 悬浮浮条：运行中离开底部时显示"▼ 回到底部"，回到底部/运行结束隐藏
+function _refreshGotoBottom() {
+  var gb = document.getElementById('float-goto-bottom');
+  if (!gb) return;
+  if (!_floatBarActive) { gb.style.display = 'none'; return; }
+  var m = document.getElementById('messages');
+  var atBottom = m ? (m.scrollHeight - m.scrollTop - m.clientHeight) < 120 : true;
+  gb.style.display = atBottom ? 'none' : '';
+}
+
+// 运行状态开关：send 置 true（运行中），complete/error/cancelled/stopAgent/切换 置 false
 function setFloatBar(show) {
-  var bar = document.getElementById('chat-float-bar');
-  if (!bar) return;
-  bar.style.display = show ? '' : 'none';
-  if (!show) {
-    var gb = document.getElementById('float-goto-bottom');
-    if (gb) gb.style.display = 'none';
-  }
+  _floatBarActive = !!show;
+  _refreshGotoBottom();
 }
 
 // 点击"回到底部"：恢复自动滚动并立刻滚到最新输出

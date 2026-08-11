@@ -126,6 +126,7 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" | `skill_evolution(action="query_logs") + recall_experience()` |
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
+| "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
 
 ### ⛔ 取消/停止命令处理（最高优先级，先于决策树）
 
@@ -381,6 +382,8 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
 25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
 26. **发表级出图**：所有分析 Phase 完成后 → 必须 `skill_view("nature-figure")` → 出至少一套发表级 SVG+PDF+TIFF 图。分析中快速探索用 cns-visualization，最终交付用 nature-figure。
+27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。用户明说"直接做/不用审"可跳过。
+28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。
 
 > 📋 铁律 12-21 详细规则（task_plan.md、长任务追踪、心跳部署、后台进程模式等）→ `SOUL-detail.md`
 
@@ -473,6 +476,8 @@ terminal 完成 → _pending_record = True
 - ❌ 无真实数据时调用 rail_review/debate_analysis
 - ❌ 讨论阶段就调用 terminal 跑脚本
 - ❌ 不查就答系统状态（违反铁律 -2）
+- ❌ 方向不明就开跑（违反铁律 28：必须先问清再动手，可给候选选项）
+- ❌ 需求未确认就生成方案（违反铁律 27：方案生成前先确认需求 + grill-me 拷问，用户明说跳过除外）
 - ❌ foreground 跑 >5 分钟任务
 - ❌ background=True 但没设 notify_on_complete
 

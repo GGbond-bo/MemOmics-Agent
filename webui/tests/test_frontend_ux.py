@@ -115,16 +115,18 @@ class TestSendKeepsHeight:
         assert "? window._getInputHeight() : 100) + 'px'" in HTML
 
 
-# ---------------------------------------------------------------- 场景5：悬浮控制条结构
+# ---------------------------------------------------------------- 场景5：悬浮浮条结构（仅"回到底部"，无重复停止按钮）
 class TestFloatBarStructure:
-    """多角度：HTML 三元素、onclick 绑定、CSS 定位"""
+    """多角度：唯一元素、onclick 绑定、CSS 定位、停止按钮不重复"""
 
-    def test_three_elements_exist(self):
-        for eid in ("chat-float-bar", "float-stop", "float-goto-bottom"):
-            assert 'id="%s"' % eid in HTML
+    def test_goto_bottom_exists(self):
+        assert 'id="float-goto-bottom"' in HTML
+        assert 'id="chat-float-bar"' in HTML
 
-    def test_stop_binds_stop_agent(self):
-        assert 'onclick="stopAgent()"' in HTML
+    def test_stop_button_removed(self):
+        # 停止按钮在底部输入区已有，悬浮条不重复：无 float-stop 元素/样式/绑定
+        assert 'id="float-stop"' not in HTML
+        assert "float-stop-btn" not in HTML
 
     def test_goto_bottom_binds_resume(self):
         assert 'onclick="resumeAutoScroll()"' in HTML
@@ -134,7 +136,7 @@ class TestFloatBarStructure:
         assert "z-index:50" in HTML
 
     def test_float_bar_hidden_by_default(self):
-        # 初始 display:none，且 setFloatBar 可控制
+        # 初始 display:none，运行中才按需显示
         assert 'id="chat-float-bar" style="display:none;"' in HTML
 
     def test_goto_bottom_hidden_by_default(self):
@@ -172,8 +174,9 @@ class TestFloatBarStateMachine:
         assert "setFloatBar(true);" in seg
 
     def test_hide_also_hides_goto_bottom(self):
-        assert "if (!show) {" in HTML
-        assert "gb.style.display = 'none'" in HTML
+        # 运行状态关闭时 _refreshGotoBottom 强制隐藏
+        assert "_floatBarActive = !!show" in HTML
+        assert "if (!_floatBarActive) { gb.style.display = 'none'; return; }" in HTML
 
 
 # ---------------------------------------------------------------- 场景7：流式防跳动
@@ -226,8 +229,10 @@ class TestGotoBottom:
         assert "scrollBottom();" in seg
 
     def test_shown_when_scrolled_away_during_run(self):
-        # 离开底部且 agent 运行中 → 显示
-        assert "!atBottom && agentRunning" in HTML
+        # 运行中（_floatBarActive）离开底部 → _refreshGotoBottom 显示；回到底部隐藏
+        assert "function _refreshGotoBottom()" in HTML
+        assert "if (!_floatBarActive) { gb.style.display = 'none'; return; }" in HTML
+        assert "gb.style.display = atBottom ? 'none' : '';" in HTML
 
     def test_grip_affordance(self):
         # grip 视觉可发现性（⋮⋮ 符号 + hover 高亮）
@@ -266,8 +271,8 @@ class TestScriptIntegrity:
             ("// === 输入框拖拽拉伸（2026-08-11", "})();"),
             # 区块2：流式 delta 防跳动
             ("// 防跳动：用户在上方阅读时", "} else { scrollBottom(); }"),
-            # 区块3：智能滚动 + 悬浮条 + 回到底部
-            ("// 悬浮控制条：输出中显示", "m.scrollTop = m.scrollHeight;\n}"),
+            # 区块3：智能滚动 + 回到底部浮条
+            ("// 智能滚动：用户离开底部阅读时", "m.scrollTop = m.scrollHeight;\n}"),
         ]
         for start, end in segments:
             t = seg(start, end)
