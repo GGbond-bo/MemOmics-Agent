@@ -174,9 +174,9 @@ class TestFloatBarStateMachine:
         assert "setFloatBar(true);" in seg
 
     def test_hide_also_hides_goto_bottom(self):
-        # 运行状态关闭时 _refreshGotoBottom 强制隐藏
+        # 运行状态关闭时 _refreshGotoBottom 强制隐藏容器与按钮
         assert "_floatBarActive = !!show" in HTML
-        assert "if (!_floatBarActive) { gb.style.display = 'none'; return; }" in HTML
+        assert "if (!_floatBarActive) { bar.style.display = 'none'; gb.style.display = 'none'; return; }" in HTML
 
 
 # ---------------------------------------------------------------- 场景7：流式防跳动
@@ -231,8 +231,25 @@ class TestGotoBottom:
     def test_shown_when_scrolled_away_during_run(self):
         # 运行中（_floatBarActive）离开底部 → _refreshGotoBottom 显示；回到底部隐藏
         assert "function _refreshGotoBottom()" in HTML
-        assert "if (!_floatBarActive) { gb.style.display = 'none'; return; }" in HTML
+        assert "if (!_floatBarActive) { bar.style.display = 'none'; gb.style.display = 'none'; return; }" in HTML
         assert "gb.style.display = atBottom ? 'none' : '';" in HTML
+
+    def test_container_released_with_button(self):
+        # 回归：容器 chat-float-bar 初始 display:none，显示按钮时必须同步放开容器
+        # （历史 bug：只放按钮 display 不放容器 → 按钮永远不可见）
+        idx = HTML.find("function _refreshGotoBottom")
+        assert idx != -1
+        seg = HTML[idx:idx + 700]
+        assert "bar.style.display = atBottom ? 'none' : '';" in seg
+        assert "gb.style.display = atBottom ? 'none' : '';" in seg
+
+    def test_resume_hides_container_too(self):
+        # 点击"回到底部"后容器与按钮一起隐藏
+        idx = HTML.find("function resumeAutoScroll")
+        assert idx != -1
+        seg = HTML[idx:idx + 400]
+        assert "bar.style.display = 'none'" in seg
+        assert "gb.style.display = 'none'" in seg
 
     def test_grip_affordance(self):
         # grip 视觉可发现性（⋮⋮ 符号 + hover 高亮）

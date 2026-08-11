@@ -1822,11 +1822,14 @@ var _floatBarActive = false;  // 运行状态开关（仅"回到底部"浮条；
 
 // 悬浮浮条：运行中离开底部时显示"▼ 回到底部"，回到底部/运行结束隐藏
 function _refreshGotoBottom() {
+  var bar = document.getElementById('chat-float-bar');
   var gb = document.getElementById('float-goto-bottom');
-  if (!gb) return;
-  if (!_floatBarActive) { gb.style.display = 'none'; return; }
+  if (!bar || !gb) return;
+  if (!_floatBarActive) { bar.style.display = 'none'; gb.style.display = 'none'; return; }
   var m = document.getElementById('messages');
   var atBottom = m ? (m.scrollHeight - m.scrollTop - m.clientHeight) < 120 : true;
+  // 容器与按钮同步显隐（容器初始 display:none，必须一起放开）
+  bar.style.display = atBottom ? 'none' : '';
   gb.style.display = atBottom ? 'none' : '';
 }
 
@@ -1840,7 +1843,9 @@ function setFloatBar(show) {
 function resumeAutoScroll() {
   _autoScroll = true;
   scrollBottom();
+  var bar = document.getElementById('chat-float-bar');
   var gb = document.getElementById('float-goto-bottom');
+  if (bar) bar.style.display = 'none';
   if (gb) gb.style.display = 'none';
 }
 
