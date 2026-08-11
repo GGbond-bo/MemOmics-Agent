@@ -671,6 +671,45 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 - **禁止装到 C 盘** — R 包、基因组数据、分析产出全部放 E 盘。R 本体放 C 盘可以（~100MB）
 - **安装必须主动监控** — 不能 fire-and-forget。每 30-60 秒轮询进程状态+库目录变化
 - **优先使用 `pak::pak()` 装 GitHub 包**（而非 `devtools::install_github()` 或 `remotes::install_github()`）
+- **交付集群脚本 = 极简三步式，直接贴对话（2026-08-09 用户原话"我让你写简单一点，脚本就写在交互框上，要什么包，怎么读文件，怎么过滤，干净一点"）** — 用户在自己 Linux 集群跑正式版时，要求：①只给 `library()` 装包行 ②`list.files()` 读文件 ③过滤/统计逻辑，**三段式干净脚本直接贴在回复里**，不要 write_file 保存、不要长篇解释背景、不要完整管线大包。用户逐模块执行、每步把输出贴回来核对，Agent 再给下一步。
+- **用户亲自验证数据** — 用户会自己打开 `_filtered_cells.csv` 看内容、数 `length(arrow_files)`、核对样本数。给脚本时必须考虑"用户会在集群上肉眼检查输出"，关键行加 `length()` / `sum()` / 验证注释。
+
+### 🔴 集群正式版：40 样本 Arrow 读取陷阱（2026-08-09 Linux 集群实测）
+
+用户在 Linux 集群（如 `/hwfssz3/PS_JLU/zhangbo/patent/`）跑正式版时踩到的 4 个坑，与 Windows 环境无关、纯 R/ArchR API 层面：
+
+1. **`ArchRProject()` 参数名是大写 `ArrowFiles`，不是 `arrowFiles`** — 用户报 `Error in ArchRProject(arrowFiles = arrow_files): unused argument`。R 大小写敏感，正确写法：`proj <- ArchRProject(ArrowFiles = arrow_files)`（位置参数 `ArchRProject(arrow_files)` 也可，兼容旧版）。
+2. **`list.files()` 不支持 shell glob**（`list.files("dir/*/*.arrow")` 返回空/不工作）— 用 `pattern = "\\.arrow$"` + `recursive = TRUE` + `full.names = TRUE`。全目录只要一个根路径。
+3. **`recursive=TRUE` 会扫出嵌套副本** — 本地测试版遗留的 `FilteredProjects/` / `ArrowFiles/` 嵌套目录里每层都有同一样本的重复 `.arrow`，40 样本扫出 46 个。**必须先 grep 掉**：
+   ```r
+   arrow_files <- grep("FilteredProjects",
+     list.files(dir, pattern = "\\.arrow$", recursive = TRUE, full.names = TRUE),
+     invert = TRUE, value = TRUE)
+   # 每样本仍可能有 2 个副本（根目录 + ArrowFiles/）→ 按样本名去重
+   samp <- sub(".*/(GSM[0-9]+_hc[0-9]+)/.*", "\\1", arrow_files)
+   arrow_files <- arrow_files[match(unique(samp), samp)]
+   length(arrow_files)  # 应 = 40
+   ```
+   集群上清理命令：`find . -depth -type d \( -name "FilteredProjects" -o -name "ArrowFiles" \) -exec rm -rf {} \;`（先 `head` 预览再删；只删精确匹配目录名，不碰根目录 `.arrow` 和 `_filtered_cells.csv`）。
+4. **`Save-ArchR-Project.rds` 是项目元数据索引卡（几 MB），不是 bug** — 每次 `subsetArchRProject`/`saveArchRProject` 自动生成，记录样本列表、细胞 metadata、指向哪些 Arrow。几百 MB 的 `.arrow` 才是数据本体。要省磁盘加 `copyArrows = FALSE`（硬链接，不复制 Arrow）。
+
+> ⚠️ 正式版 merge 前**仍必须**按 `_filtered_cells.csv` 的 `cellNames[DoubletFilter=="Keep"]` 子集剔除 doublet（见上方 P4 merge 条目）——用户集群上传的就是 `ArchR_Arrow_QC_Filtered/` 目录，doublet 只在 CSV 名单里，不在 Arrow 里。
+
+### 🟢 过滤前后细胞数统计（用户要的表）
+
+```r
+# before = Arrow 内细胞数（含 doublet）；after = CSV Keep 行数；removed = 差值
+n_before <- data.frame(sample = as.character(unique(proj$Sample)),
+                       before = as.numeric(table(proj$Sample)))
+n_after <- do.call(rbind, lapply(csvs, function(c) {
+  data.frame(sample = sub(".*/(GSM[0-9]+_hc[0-9]+)_.*", "\\1", c),
+             after = sum(read.csv(c)$DoubletFilter == "Keep"))
+}))
+res <- merge(n_before, n_after, by = "sample", all = TRUE)
+res$removed <- res$before - res$after
+# sum(res$after) 应 = QC 汇总表 Keep 总数（40 样本 = 265,909）
+```
+> ⚠️ 提示用户：此段只统计不删除；真正剔除 doublet 要 `subsetArchRProject`（见上）。
 
 ### 🟢 分步保存铁律
 
