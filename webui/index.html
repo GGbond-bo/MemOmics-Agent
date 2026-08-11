@@ -53,6 +53,21 @@
   --danger: #c62828;
   --tool-bg: #e8f5e9;
 }
+[data-theme="eye"] {
+  --bg: #e8f3e8; --panel: #f7fbf7; --border: #cfe3cf; --text: #2f4f2f; --text-light: #6b8f6b;
+  --primary: #2e7d32; --primary-light: #d7eed7; --accent: #66bb6a; --success: #388e3c;
+  --warning: #ef6c00; --danger: #c62828; --tool-bg: #f0f7f0; --code-bg: #1f3a1f; --code-fg: #e8f5e9;
+}
+[data-theme="sci"] {
+  --bg: #f4f6f8; --panel: #ffffff; --border: #d7dde3; --text: #26323e; --text-light: #6b7a89;
+  --primary: #1a6fb5; --primary-light: #e3eef8; --accent: #2aa5a0; --success: #2f855a;
+  --warning: #d97706; --danger: #c0392b; --tool-bg: #eef2f5; --code-bg: #1f2937; --code-fg: #e5e7eb;
+}
+[data-theme="parchment"] {
+  --bg: #f2e3c6; --panel: #faf0dc; --border: #d4b98a; --text: #4a3728; --text-light: #8a7257;
+  --primary: #8d5524; --primary-light: #f0e0c0; --accent: #c49a5c; --success: #5d8a3c;
+  --warning: #b06a00; --danger: #a33a2a; --tool-bg: #f7ecd6; --code-bg: #3a2a1a; --code-fg: #f5e6c8;
+}
 body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; transition:background 0.3s; }
 .app { display:flex; height:100vh; }
 
@@ -243,8 +258,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .settings-group label { display:block; font-size:12px; color:var(--text-light); margin-bottom:4px; }
 .settings-group select, .settings-group input { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:var(--panel); color:var(--text); }
 .settings-group input:focus, .settings-group select:focus { outline:none; border-color:var(--primary); }
-.theme-options { display:flex; gap:8px; }
-.theme-btn { flex:1; padding:8px; border:2px solid var(--border); border-radius:6px; cursor:pointer; text-align:center; font-size:12px; }
+.theme-options { display:flex; gap:6px; flex-wrap:wrap; }
+.theme-btn { flex:1 1 calc(33% - 6px); min-width:72px; padding:8px; border:2px solid var(--border); border-radius:6px; cursor:pointer; text-align:center; font-size:12px; }
 .theme-btn.active { border-color:var(--primary); background:var(--primary-light); }
 .theme-btn.light { background:#fff; color:#333; }
 .theme-btn.dark { background:#1a1a2e; color:#e2e8f0; }
@@ -735,11 +750,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">;
         <div class="settings-group">
           <label>配色主题</label>
-          <div class="theme-options">
-            <div class="theme-btn light active" onclick="setTheme('light')" data-theme="light">☀️ 浅白</div>
-            <div class="theme-btn dark" onclick="setTheme('dark')" data-theme="dark">🌙 深色</div>
-            <div class="theme-btn blue" onclick="setTheme('blue')" data-theme="blue">🔵 蓝色</div>
-          </div>
+          <div class="theme-options" id="theme-options"><!-- 动态渲染（THEME_PRESETS） --></div>
         </div>
       </div>
     </div>
@@ -3049,17 +3060,44 @@ async function checkWeixinStatus() {
 }
 
 // === 配色 ===
+// === 主题（背景配色） ===
+var THEME_PRESETS = [
+  {id:'light', label:'☀️ 浅白', bg:'#f5f7fa', dark:false},
+  {id:'dark',  label:'🌙 深色', bg:'#1a1a2e', dark:true},
+  {id:'blue',  label:'🔵 蓝色', bg:'#e3f2fd', dark:false},
+  {id:'eye',   label:'🌿 护眼', bg:'#e8f3e8', dark:false},
+  {id:'sci',   label:'🔬 科研', bg:'#f4f6f8', dark:false},
+  {id:'parchment', label:'📜 羊皮纸', bg:'#f2e3c6', dark:false},
+];
+function renderThemeButtons() {
+  var box = document.getElementById('theme-options');
+  if (!box) return;
+  box.innerHTML = '';
+  var cur = document.documentElement.getAttribute('data-theme') || 'light';
+  THEME_PRESETS.forEach(function(p) {
+    var b = document.createElement('div');
+    b.className = 'theme-btn' + (cur === p.id ? ' active' : '');
+    b.dataset.theme = p.id;
+    b.title = p.label;
+    b.style.background = p.bg;
+    b.style.color = p.dark ? '#e2e8f0' : '#333';
+    b.textContent = p.label;
+    b.onclick = function() { setTheme(p.id); };
+    box.appendChild(b);
+  });
+}
 function setTheme(theme) {
+  var valid = THEME_PRESETS.some(function(p) { return p.id === theme; });
+  if (!valid) theme = 'light';  // 白名单校验，未知值回退
   document.documentElement.setAttribute('data-theme', theme);
   document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
   try { localStorage.setItem('memomics-theme', theme); } catch(e) {}
 }
 function cycleTheme() {
   var cur = document.documentElement.getAttribute('data-theme') || 'light';
-  var order = ['light', 'dark', 'blue'];
-  var i = order.indexOf(cur);
-  var next = order[(i + 1) % order.length];
-  setTheme(next);
+  var ids = THEME_PRESETS.map(function(p) { return p.id; });
+  var i = Math.max(0, ids.indexOf(cur));
+  setTheme(ids[(i + 1) % ids.length]);
 }
 
 // === 文件浏览 ===
@@ -4489,6 +4527,7 @@ document.getElementById('input').addEventListener('input', function() {
 
 // 恢复配色
 try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) setTheme(savedTheme); } catch(e) {}
+renderThemeButtons();
 
 // === 图片粘贴/拖拽事件监听 ===
 var chatInputEl = document.getElementById('chat-input');
