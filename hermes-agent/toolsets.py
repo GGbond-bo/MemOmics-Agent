@@ -208,6 +208,7 @@ TOOLSETS = {
             "skill_evolution",
             "send_message",
             "screenshot",
+            "asset_manage",
         ],
         "module": "tools.memomics_tools",
         "includes": []

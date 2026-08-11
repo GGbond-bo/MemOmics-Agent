@@ -452,6 +452,46 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
   .wx-msg-time { font-size:10px; color:var(--text-light); }
   .wx-msg-text { line-height:1.5; word-break:break-word; }
   .wx-empty { text-align:center; padding:40px 20px; color:var(--text-light); }
+/* 代码块复制按钮 */
+.code-block {
+  background: var(--code-bg, #263238);
+  border: 1px solid var(--border, #334155);
+  border-radius: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.code-block pre {
+  margin: 0;
+  padding: 10px;
+  overflow-x: auto;
+}
+.code-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(128, 128, 128, 0.14);
+  font-size: 11px;
+  color: var(--text-dim, #9aa4b2);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+}
+.code-lang {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.code-copy {
+  background: transparent;
+  border: 1px solid var(--border, #556);
+  color: inherit;
+  border-radius: 4px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.code-copy:hover {
+  background: rgba(128, 128, 128, 0.28);
+}
 </style>
 </head>
 <body>
@@ -1913,7 +1953,7 @@ function renderMarkdown(text) {
   if (tickCount >= 2 && tickCount % 2 === 0) {
     var blocks = [];
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
-      blocks.push('<pre><code>' + code + '</code></pre>');
+      blocks.push('<div class="code-block"><div class="code-head"><span class="code-lang">' + (lang || 'code') + '</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + code + '</code></pre></div>');
       return '\x00CODE' + (blocks.length - 1) + '\x00';
     });
   }
@@ -1942,6 +1982,36 @@ function renderMarkdown(text) {
     return blocks[parseInt(idx)] || '';
   });
   return html;
+}
+
+// === 代码块复制按钮 ===
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+}
+function copyCodeBlock(btn) {
+  var pre = btn.closest('.code-block');
+  if (!pre) return;
+  var codeEl = pre.querySelector('pre code');
+  if (!codeEl) return;
+  var text = codeEl.textContent;
+  var old = btn.textContent;
+  function done() {
+    btn.textContent = '✓ 已复制';
+    setTimeout(function() { btn.textContent = old; }, 1200);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(function() { fallbackCopy(text); done(); });
+  } else {
+    fallbackCopy(text);
+    done();
+  }
 }
 
 // === Mermaid 图表渲染（懒加载 CDN → mermaid.render() API） ===

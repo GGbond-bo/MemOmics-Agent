@@ -1189,3 +1189,82 @@ registry.register(
     handler=lambda args, **kw: _handle_screenshot(args),
     emoji="📸", max_result_size_chars=2_000,
 )
+
+# ============================================================================
+# asset_manage — 会话级记忆资产确认闭环（pending → confirmed/rejected）
+# 资产由 extract_assets 从用户消息自动提取入库（脚本/数据路径，status=pending）。
+# 分析开始前 agent 应 list 查看待确认资产，逐一 confirm/reject。
+# ============================================================================
+ASSET_MANAGE_SCHEMA = {
+    "name": "asset_manage",
+    "description": (
+        "管理会话级记忆中的资产（用户消息里提到的脚本/数据文件路径，已自动提取入库，status=pending）。\n"
+        "使用时机：分析任务开始前，先 action=list 查看本会话待确认资产，确认可用的用 action=confirm "
+        "（确认后计入 use_count，后续记忆检索优先复用），不可用的用 action=reject。"
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["list", "confirm", "reject"],
+                "description": "list=列出本会话 pending 资产; confirm=确认资产可用; reject=拒绝该资产"
+            },
+            "asset_id": {
+                "type": "integer",
+                "description": "[confirm/reject 必填] 资产的 asset_id，来自 list 结果"
+            }
+        },
+        "required": ["action"]
+    }
+}
+
+
+def _asset_manage_handler(args, **kw):
+    import json as _json
+    action = args.get("action", "list")
+    sid = kw.get("session_id", "")
+    try:
+        from webui.session_state import get_store, confirm_asset
+        store = get_store()
+        if action == "list":
+            assets = store.list_assets(session_id=sid or None, status="pending", limit=50)
+            if not assets:
+                return _json.dumps(
+                    {"ok": True, "pending": [], "note": "无待确认资产"},
+                    ensure_ascii=False,
+                )
+            return _json.dumps(
+                {
+                    "ok": True,
+                    "pending": [
+                        {
+                            "asset_id": a["asset_id"],
+                            "name": a["name"],
+                            "path": a["path"],
+                            "kind": a["kind"],
+                            "purpose": a.get("purpose", ""),
+                        }
+                        for a in assets
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        asset_id = args.get("asset_id")
+        if asset_id is None:
+            return _json.dumps(
+                {"ok": False, "error": "confirm/reject 需要 asset_id（先 action=list 查看）"},
+                ensure_ascii=False,
+            )
+        status = "confirmed" if action == "confirm" else "rejected"
+        ok = confirm_asset(int(asset_id), store=store, status=status)
+        return _json.dumps({"ok": bool(ok), "asset_id": int(asset_id), "status": status}, ensure_ascii=False)
+    except Exception as e:
+        return _json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+
+registry.register(
+    name="asset_manage", toolset="memomics", schema=ASSET_MANAGE_SCHEMA,
+    handler=_asset_manage_handler,
+    emoji="🔖", max_result_size_chars=5_000,
+)
