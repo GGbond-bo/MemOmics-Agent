@@ -744,24 +744,53 @@ def _schedule_self_check(session, agent, loop):
     has_todos = any(t.get("status") not in ("completed", "cancelled") 
                     for t in session.get("todos", []))
     results_dir = session.get("results_dir", "")
+    # ── RunGate 退役闸门（P1-A 接线，2026-08-12）：task_state == done/cancelled
+    #    → 自动唤醒一律拦截（防"唤醒→写记录→签名变→再唤醒"死循环的最终兜底）──
+    try:
+        from webui.runtime.run_gate import check_gate
+        if results_dir:
+            _verdict, _reason = check_gate(results_dir, is_auto_wake=True)
+            if _verdict == "stop":
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: RunGate 拦截自动唤醒 ({_reason})")
+                return
+    except Exception:
+        pass
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         # 修复(2026-08-07): task_plan.md 被清/未创建但 batch 批处理仍活跃
         # （40 样本 ArchR 管线由独立脚本驱动）→ 持续监督唤醒，不静默
         if not _session_has_active_work(session):
             return
-    # 🔧 任务完成 → 清除 task_plan.md 并停止自检（心跳随之关闭）
-    # 判定：待办全部完成/取消 + task_plan 中无 in_progress/pending 标记 + 出现完成标记
+    # 🔧 任务完成 → 归档 task_plan.md + mark_done，停止自检（心跳随之关闭）
+    # 判定：待办全部完成/取消 + 主线区（🏁 唤醒记录区之前）无 in_progress/pending + 出现完成标记。
+    # 修复(2026-08-12)：旧版扫全文被唤醒记录里的"无 in_progress Phase"字样锁死（自写词阻止完成判定）；
+    # 旧版 os.remove 丢主线文档 → 改为归档 task_plan.done.md + RunGate mark_done。
     if not has_todos and has_plan:
         _plan_path = os.path.join(results_dir, "task_plan.md")
         try:
             with open(_plan_path, "r", encoding="utf-8") as f:
                 _plan_text = f.read()
-            _pt_lower = _plan_text.lower()
+            # 只统计主线任务区：唤醒记录区（## 🏁）之前；无 🏁 则全文
+            _main = _plan_text.split("## 🏁")[0]
+            _pt_lower = _main.lower()
             if "in_progress" not in _pt_lower and "pending" not in _pt_lower and \
                     any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止")):
-                os.remove(_plan_path)
-                logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已清除 task_plan.md，停止自检（心跳关闭）")
+                try:
+                    from webui.runtime.run_gate import mark_done
+                    mark_done(results_dir, "task completed (self-check)")
+                except Exception:
+                    pass
+                try:
+                    _done_path = os.path.join(results_dir, "task_plan.done.md")
+                    if os.path.exists(_done_path):
+                        os.remove(_done_path)
+                    os.rename(_plan_path, _done_path)
+                except Exception:
+                    try:
+                        os.remove(_plan_path)
+                    except Exception:
+                        pass
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已归档 task_plan.done.md + mark_done，停止自检（心跳关闭）")
                 return
         except Exception:
             pass
@@ -889,21 +918,29 @@ def _schedule_self_check(session, agent, loop):
 
 
 def _session_progress_signature(session):
-    """会话进展签名：task_plan.md mtime + batch/logs 最新日志 mtime。
+    """会话进展签名：task_plan.md 主线区内容哈希 + batch/logs 最新日志 mtime。
 
     长任务监督用（修复 2026-08-07）：自检计数据此重置——
-    样本日志持续写入（Rscript 输出）或 agent 更新 task_plan → 签名变化
+    样本日志持续写入（Rscript 输出）或 agent 更新主线区 → 签名变化
     → 有进展的长任务（如 40 样本 ArchR 管线）持续唤醒；
     真卡死（日志/计划都停更）→ 签名不变 → 20 轮后停止，防无限烧 token。
+
+    修复(2026-08-12)：task_plan 用"主线区内容哈希"代替文件 mtime——
+    agent 每次唤醒都向 🏁 唤醒记录区追加记录（改 mtime 但主线区不变），
+    旧版 mtime 导致"唤醒→写记录→签名变→计数清零→再唤醒"自食其果死循环。
     """
     _sig = 0.0
     _rd = session.get("results_dir", "") or ""
     _plan = os.path.join(_rd, "task_plan.md") if _rd else ""
     if _plan and os.path.isfile(_plan):
         try:
-            _sig = max(_sig, os.path.getmtime(_plan))
+            with open(_plan, "r", encoding="utf-8") as f:
+                _text = f.read()
+            # 只统计主线任务区（## 🏁 之前；无 🏁 则全文）
+            _main = _text.split("## 🏁")[0]
+            _sig = float(hash(_main) % (2 ** 31))
         except Exception:
-            pass
+            _sig = max(_sig, os.path.getmtime(_plan))
     _logs = os.path.join(_rd, "batch", "logs") if _rd else ""
     if _logs and os.path.isdir(_logs):
         try:
@@ -6482,6 +6519,19 @@ async def ws_endpoint(ws: WebSocket):
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 _persist_session_message(session, "user", user_text)
+
+                # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
+                # 退役任务（done/cancelled）重置为 pending（命中"继续"词表由 check_gate 内部处理；
+                # 未命中返回 ask_user → 用户发消息本身即新指令，保守重置为新任务）
+                try:
+                    from webui.runtime.run_gate import check_gate, save_state
+                    _rd_g = session.get("results_dir", "") or ""
+                    if _rd_g:
+                        _verdict, _reason = check_gate(_rd_g, is_auto_wake=False, user_message=user_text)
+                        if _verdict == "ask_user":
+                            save_state(_rd_g, "pending", "user message (ask_user -> new task)")
+                except Exception:
+                    pass
 
                 # 注册 WebSocket 引用 + 立即发送 thinking（在意图分类之前，消除初始空白）
                 loop = asyncio.get_event_loop()
