@@ -6521,6 +6521,18 @@ async def ws_endpoint(ws: WebSocket):
                 session["intent"] = _intent
                 session["intent_conf"] = _intent_conf
                 session["intent_meta"] = _intent_meta
+
+                # === 会话级状态捕获（诉求 + 资产候选，故障静默不阻塞主流程）===
+                try:
+                    try:
+                        from webui import session_state as _ss
+                    except ImportError:
+                        import session_state as _ss
+                    _ss.capture_user_request(session["id"], user_text, intent=_intent or "chat")
+                    _ss.extract_assets(session["id"], user_text)
+                except Exception as _ss_err:
+                    logger.warning("session_state capture failed: %s", _ss_err)
+
                 if _intent not in ("chat", "self_intro"):
                     _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
                 else:

@@ -73,6 +73,58 @@ CREATE TABLE IF NOT EXISTS memory_banks (
     fact_count INTEGER DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- User-provided assets (scripts / data files / paths) captured per session.
+-- status: pending (needs user confirmation) -> confirmed / rejected.
+CREATE TABLE IF NOT EXISTS assets (
+    asset_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT NOT NULL,
+    path         TEXT DEFAULT '',
+    kind         TEXT DEFAULT 'file',
+    purpose      TEXT DEFAULT '',
+    session_id   TEXT DEFAULT '',
+    project      TEXT DEFAULT '',
+    status       TEXT DEFAULT 'pending',
+    source       TEXT DEFAULT 'user',
+    content_hash TEXT DEFAULT '',
+    use_count    INTEGER DEFAULT 0,
+    last_used_at TEXT DEFAULT '',
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_status  ON assets(status);
+CREATE INDEX IF NOT EXISTS idx_assets_session ON assets(session_id);
+CREATE INDEX IF NOT EXISTS idx_assets_purpose ON assets(purpose);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts
+    USING fts5(name, path, purpose, content=assets, content_rowid=asset_id);
+
+CREATE TRIGGER IF NOT EXISTS assets_ai AFTER INSERT ON assets BEGIN
+    INSERT INTO assets_fts(rowid, name, path, purpose)
+        VALUES (new.asset_id, new.name, new.path, new.purpose);
+END;
+
+CREATE TRIGGER IF NOT EXISTS assets_ad AFTER DELETE ON assets BEGIN
+    INSERT INTO assets_fts(assets_fts, rowid, name, path, purpose)
+        VALUES ('delete', old.asset_id, old.name, old.path, old.purpose);
+END;
+
+CREATE TRIGGER IF NOT EXISTS assets_au AFTER UPDATE ON assets BEGIN
+    INSERT INTO assets_fts(assets_fts, rowid, name, path, purpose)
+        VALUES ('delete', old.asset_id, old.name, old.path, old.purpose);
+    INSERT INTO assets_fts(rowid, name, path, purpose)
+        VALUES (new.asset_id, new.name, new.path, new.purpose);
+END;
+
+-- Per-session ephemeral state: current task block + recent user requests.
+-- Written by the webui side, read by the holographic provider for injection.
+CREATE TABLE IF NOT EXISTS session_state (
+    session_id    TEXT PRIMARY KEY,
+    task_json     TEXT DEFAULT '{}',
+    requests_json TEXT DEFAULT '[]',
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 # Trust adjustment constants
@@ -569,6 +621,216 @@ class MemoryStore:
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Assets (user-provided scripts / data files / paths)
+    # ------------------------------------------------------------------
+
+    def has_asset(self, name: str, path: str = "", session_id: str = "") -> bool:
+        """True if an asset with the same (name, path, session_id) exists."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM assets WHERE name = ? AND path = ? AND session_id = ? LIMIT 1",
+                (name, path, session_id),
+            ).fetchone()
+            return row is not None
+
+    def add_asset(
+        self,
+        name: str,
+        path: str = "",
+        kind: str = "file",
+        purpose: str = "",
+        session_id: str = "",
+        project: str = "",
+        status: str = "pending",
+        source: str = "user",
+        content_hash: str = "",
+    ) -> int:
+        """Register a user-provided asset (script / data file / path).
+
+        Deduplicates on (name, path): if the same asset already exists for
+        the same session, returns its existing asset_id instead of inserting
+        a duplicate.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT asset_id FROM assets WHERE name = ? AND path = ? AND session_id = ? LIMIT 1",
+                (name, path, session_id),
+            ).fetchone()
+            if row is not None:
+                return int(row[0])
+            cur = self._conn.execute(
+                """INSERT INTO assets
+                   (name, path, kind, purpose, session_id, project, status, source, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (name, path, kind, purpose, session_id, project, status, source, content_hash),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
+
+    def search_assets(
+        self,
+        query: str,
+        session_id: str | None = None,
+        project: str | None = None,
+        status: str | None = "confirmed",
+        limit: int = 5,
+    ) -> list[dict]:
+        """Full-text search over assets (name / path / purpose).
+
+        Only ``status``-matching assets are returned (default confirmed).
+        Falls back to a LIKE scan when FTS5 yields nothing (e.g. very short
+        CJK queries the trigram tokenizer cannot serve). Sorted by
+        last_used_at DESC (most recently used first).
+        """
+        with self._lock:
+            query = query.strip()
+            if not query:
+                return []
+            params: list = []
+            clause = ""
+            if status is not None:
+                clause += " AND a.status = ?"
+                params.append(status)
+            if session_id:
+                clause += " AND a.session_id = ?"
+                params.append(session_id)
+            if project:
+                clause += " AND a.project = ?"
+                params.append(project)
+
+            # FTS5 first
+            try:
+                match_q = query.replace('"', " ")
+                rows = self._conn.execute(
+                    f"""SELECT a.asset_id, a.name, a.path, a.kind, a.purpose,
+                               a.session_id, a.project, a.status, a.source,
+                               a.content_hash, a.use_count, a.last_used_at,
+                               a.created_at, a.updated_at
+                        FROM assets a
+                        JOIN assets_fts fts ON fts.rowid = a.asset_id
+                        WHERE assets_fts MATCH ?
+                          {clause}
+                        ORDER BY (a.last_used_at IS NULL), a.last_used_at DESC, a.asset_id DESC
+                        LIMIT ?""",
+                    [match_q] + params + [limit],
+                ).fetchall()
+            except Exception:
+                rows = []
+
+            if not rows:
+                # LIKE fallback (single token)
+                like = f"%{query}%"
+                rows = self._conn.execute(
+                    f"""SELECT a.asset_id, a.name, a.path, a.kind, a.purpose,
+                               a.session_id, a.project, a.status, a.source,
+                               a.content_hash, a.use_count, a.last_used_at,
+                               a.created_at, a.updated_at
+                        FROM assets a
+                        WHERE (a.name LIKE ? OR a.path LIKE ? OR a.purpose LIKE ?)
+                          {clause}
+                        ORDER BY (a.last_used_at IS NULL), a.last_used_at DESC, a.asset_id DESC
+                        LIMIT ?""",
+                    [like, like, like] + params + [limit],
+                ).fetchall()
+
+            return [self._row_to_dict(r) for r in rows]
+
+    def confirm_asset(self, asset_id: int, status: str = "confirmed") -> bool:
+        """Set asset status (pending -> confirmed / rejected)."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE assets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE asset_id = ?",
+                (status, asset_id),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def mark_asset_used(self, asset_id: int) -> None:
+        """Bump use_count and refresh last_used_at."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE assets SET use_count = use_count + 1, last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE asset_id = ?",
+                (asset_id,),
+            )
+            self._conn.commit()
+
+    def list_assets(
+        self,
+        session_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List assets, newest first, optionally filtered."""
+        with self._lock:
+            params: list = []
+            clause = "WHERE 1=1"
+            if session_id:
+                clause += " AND session_id = ?"
+                params.append(session_id)
+            if status:
+                clause += " AND status = ?"
+                params.append(status)
+            params.append(limit)
+            rows = self._conn.execute(
+                f"""SELECT asset_id, name, path, kind, purpose, session_id,
+                           project, status, source, content_hash, use_count,
+                           last_used_at, created_at, updated_at
+                    FROM assets
+                    {clause}
+                    ORDER BY asset_id DESC
+                    LIMIT ?""",
+                params,
+            ).fetchall()
+            return [self._row_to_dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Session state (current task block + recent user requests)
+    # ------------------------------------------------------------------
+
+    def get_session_state(self, session_id: str) -> dict:
+        """Return {task_json, requests_json} for a session (empty defaults)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT task_json, requests_json FROM session_state WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return {"task_json": "{}", "requests_json": "[]"}
+            return {"task_json": row[0], "requests_json": row[1]}
+
+    def update_session_state(
+        self,
+        session_id: str,
+        task_json: str | None = None,
+        requests_json: str | None = None,
+    ) -> None:
+        """Upsert per-session state (task block / user requests JSON)."""
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT 1 FROM session_state WHERE session_id = ?", (session_id,)
+            ).fetchone()
+            if existing is None:
+                self._conn.execute(
+                    "INSERT INTO session_state (session_id, task_json, requests_json) VALUES (?, ?, ?)",
+                    (session_id, task_json or "{}", requests_json or "[]"),
+                )
+            else:
+                sets, params = [], []
+                if task_json is not None:
+                    sets.append("task_json = ?")
+                    params.append(task_json)
+                if requests_json is not None:
+                    sets.append("requests_json = ?")
+                    params.append(requests_json)
+                if sets:
+                    sets.append("updated_at = CURRENT_TIMESTAMP")
+                    self._conn.execute(
+                        f"UPDATE session_state SET {', '.join(sets)} WHERE session_id = ?",
+                        params + [session_id],
+                    )
+            self._conn.commit()
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict:
         """Convert a sqlite3.Row to a plain dict."""

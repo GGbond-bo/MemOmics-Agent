@@ -94,6 +94,31 @@ FACT_FEEDBACK_SCHEMA = {
 # Config
 # ---------------------------------------------------------------------------
 
+# Verbs / filler words stripped before asset & history search, so that a
+# full user sentence like "继续跑热图" degrades to its content keyword 热图.
+_RE_NOISE_WORDS = re.compile(
+    r"(继续|接着|然后|再|帮我|请|给我|麻烦|跑|做|画|看|计算|执行|整理|总结|生成|"
+    r"更新|修改|优化|用|把|将|对|一下|看看|一下|一遍|要|想|希望|现在|重新|开始|停止|"
+    r"能不能|可以|怎么|如何|什么|哪些|那个|这个|还是|都|也|了|呢|吗|啊|吧|的|是|"
+    r"然后|之后|先|后|每|各|所有|全部|刚才|上次|之前|继续跑|接着跑|重新跑|帮我跑)"
+)
+
+def _extract_query_keywords(query: str) -> str:
+    """Strip verbs/filler from a user query to get search keywords.
+
+    Preserves file paths (drive-letter prefixes, backslashes, dots) and
+    CJK content words. Falls back to the original query when nothing
+    substantive remains.
+    """
+    if not query:
+        return ""
+    q = query.strip()
+    cleaned = _RE_NOISE_WORDS.sub(" ", q)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return q
+    return cleaned
+
 def _load_plugin_config() -> dict:
     from hermes_constants import get_hermes_home
     config_path = get_hermes_home() / "config.yaml"
@@ -189,32 +214,166 @@ class HolographicMemoryProvider(MemoryProvider):
             ).fetchone()[0]
         except Exception:
             total = 0
+        blocks = []
         if total == 0:
-            return (
+            blocks.append(
                 "# Holographic Memory\n"
                 "Active. Empty fact store — proactively add facts the user would expect you to remember.\n"
                 "Use fact_store(action='add') to store durable structured facts about people, projects, preferences, decisions.\n"
                 "Use fact_feedback to rate facts after using them (trains trust scores)."
             )
-        return (
-            f"# Holographic Memory\n"
-            f"Active. {total} facts stored with entity resolution and trust scoring.\n"
-            f"Use fact_store to search, probe entities, reason across entities, or add facts.\n"
-            f"Use fact_feedback to rate facts after using them (trains trust scores)."
-        )
+        else:
+            blocks.append(
+                f"# Holographic Memory\n"
+                f"Active. {total} facts stored with entity resolution and trust scoring.\n"
+                f"Use fact_store to search, probe entities, reason across entities, or add facts.\n"
+                f"Use fact_feedback to rate facts after using them (trains trust scores)."
+            )
+
+        # --- Session asset inventory (compression-immune: rebuilt with the
+        # --- volatile system prompt section on every system prompt rebuild).
+        try:
+            assets = self._store.list_assets(session_id=self._session_id or None, status="confirmed", limit=10)
+            if assets:
+                lines = [f"- {a['name']} → {a['path'] or '(no path)'}" + (f"（用途：{a['purpose']}）" if a["purpose"] else "")
+                         for a in assets]
+                blocks.append("📌 会话资产清单（用户在本会话提供的脚本/文件/路径，压缩后依然有效，可直接引用）\n" + "\n".join(lines))
+        except Exception as e:
+            logger.debug("Holographic asset block failed: %s", e)
+
+        return "\n\n".join(blocks)
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
         if not self._retriever or not query:
             return ""
+        sid = session_id or self._session_id or ""
         try:
+            parts = []
+            # Source 1: facts (existing)
             results = self._retriever.search(query, min_trust=self._min_trust, limit=5)
-            if not results:
+            if results:
+                lines = []
+                for r in results:
+                    trust = r.get("trust_score", r.get("trust", 0))
+                    lines.append(f"- [{trust:.1f}] {r.get('content', '')}")
+                parts.append("## Holographic Memory\n" + "\n".join(lines))
+
+            # Source 2: confirmed assets (cross-session; scoped to session when
+            # the session_id is known and the query is short).
+            try:
+                assets = self._store.search_assets(
+                    _extract_query_keywords(query), session_id=None, status="confirmed", limit=3
+                )
+                if assets:
+                    alines = []
+                    for a in assets:
+                        alines.append(
+                            f"- [{a['name']}] {a['path'] or '(no path)'}"
+                            + (f"（用途：{a['purpose']}）" if a["purpose"] else "")
+                            + (f"，来自会话 {a['session_id']}" if a["session_id"] and a["session_id"] != sid else "")
+                        )
+                    parts.append(
+                        "## Related Assets（历史会话资产 · 仅供参考，用前请与用户确认）\n" + "\n".join(alines)
+                    )
+            except Exception as e:
+                logger.debug("Holographic asset prefetch failed: %s", e)
+
+            # Source 3: session message history (FTS over the session DB,
+            # including compaction-archived turns). Queries the shared
+            # state.db read-only and filters by session_id directly —
+            # SessionDB.search_messages() filters by channel *source*, not
+            # session id, so it cannot scope history to the current session.
+            try:
+                if sid and query:
+                    import sqlite3 as _sqlite3
+                    from hermes_constants import get_hermes_home
+                    _kw = _extract_query_keywords(query)
+                    if _kw:
+                        _sdb_path = str(get_hermes_home() / "state.db")
+                        _conn = _sqlite3.connect(
+                            f"file:{_sdb_path}?mode=ro", uri=True, timeout=5.0
+                        )
+                        try:
+                            _rows = []
+                            # trigram FTS needs >=3 chars; CJK substring works natively.
+                            if len(_kw) >= 3:
+                                try:
+                                    _rows = _conn.execute(
+                                        """SELECT m.id, m.timestamp,
+                                                  snippet(messages_fts_trigram, 0, '>>>', '<<<', '...', 40) AS snippet
+                                           FROM messages m
+                                           JOIN messages_fts_trigram ON messages_fts_trigram.rowid = m.id
+                                           WHERE messages_fts_trigram MATCH ?
+                                             AND m.session_id = ?
+                                             AND m.role IN ('user', 'human')
+                                             AND (m.active = 1 OR m.compacted = 1)
+                                           ORDER BY m.timestamp DESC
+                                           LIMIT 3""",
+                                        (_kw, sid),
+                                    ).fetchall()
+                                except Exception:
+                                    _rows = []
+                            if not _rows:
+                                like = f"%{_kw}%"
+                                _rows = _conn.execute(
+                                    """SELECT m.id, m.timestamp, m.content AS snippet
+                                       FROM messages m
+                                       WHERE m.session_id = ?
+                                         AND m.role IN ('user', 'human')
+                                         AND (m.active = 1 OR m.compacted = 1)
+                                         AND m.content LIKE ?
+                                       ORDER BY m.timestamp DESC
+                                       LIMIT 3""",
+                                    (sid, like),
+                                ).fetchall()
+                            if _rows:
+                                hlines = []
+                                for _r in _rows:
+                                    _snip = str(_r[2] or "")[:120].replace("\n", " ")
+                                    hlines.append(f"- {_snip}")
+                                parts.append(
+                                    "## Related History（本会话历史对话 · 仅供参考）\n" + "\n".join(hlines)
+                                )
+                        finally:
+                            try:
+                                _conn.close()
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.debug("Holographic history prefetch failed: %s", e)
+
+            # Source 4: current task block + recent user requests (per-session state)
+            try:
+                st = self._store.get_session_state(sid)
+                task = json.loads(st.get("task_json") or "{}")
+                reqs = json.loads(st.get("requests_json") or "[]")
+                sblocks = []
+                if task:
+                    t_title = task.get("title") or ""
+                    t_step = task.get("step")
+                    t_total = task.get("total_steps")
+                    t_script = task.get("current_script") or ""
+                    t_concl = task.get("last_conclusion") or ""
+                    parts_t = [f"- 当前任务：{t_title}"]
+                    if t_step:
+                        parts_t.append(f"- 进度：第 {t_step} 步" + (f"/共 {t_total} 步" if t_total else ""))
+                    if t_script:
+                        parts_t.append(f"- 正在使用：{t_script}")
+                    if t_concl:
+                        parts_t.append(f"- 最近结论：{t_concl}")
+                    sblocks.append("📌 当前任务状态（会话内跟踪，仅供参考）\n" + "\n".join(parts_t))
+                recent = [r for r in reqs if r.get("ts")][-3:]
+                if recent:
+                    rlines = [f"- {r.get('text', '')}" for r in recent]
+                    sblocks.append("📌 用户最近诉求（本会话 · 仅供参考，需用户确认）\n" + "\n".join(rlines))
+                if sblocks:
+                    parts.append("\n\n".join(sblocks))
+            except Exception as e:
+                logger.debug("Holographic session-state prefetch failed: %s", e)
+
+            if not parts:
                 return ""
-            lines = []
-            for r in results:
-                trust = r.get("trust_score", r.get("trust", 0))
-                lines.append(f"- [{trust:.1f}] {r.get('content', '')}")
-            return "## Holographic Memory\n" + "\n".join(lines)
+            return "\n\n".join(parts)
         except Exception as e:
             logger.debug("Holographic prefetch failed: %s", e)
             return ""
