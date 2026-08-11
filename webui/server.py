@@ -2634,6 +2634,7 @@ def _create_session(title="新会话"):
     session = {
         "id": sid,
         "title": title,
+        "title_source": "auto",  # auto=自动总结可覆盖 / manual=用户手动改名，永不自动覆盖
         "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "messages": [],
@@ -2765,6 +2766,7 @@ def _restore_single_session(sid):
             session = {
                 "id": sid,
                 "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
+                "title_source": _load_title_source(sid),
                 "created": created_str,
                 "last_active": active_str,
                 "messages": messages,
@@ -3057,6 +3059,11 @@ def _create_agent(model_config=None, session_id=None, session=None):
     """
     from run_agent import AIAgent
     from webui import enforcement as _enf
+    # 挂自动标题总结钩子：rail_review(post) 完成（分析里程碑）时回调 server 侧调度
+    try:
+        _enf._title_summary_hook = _schedule_title_summary
+    except Exception:
+        pass
     cfg = model_config or _current_model
     # 2026-08-08：provider 名按 base_url 智能映射。MemOmics 统一存 provider='openai'，
     # 但 Hermes 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
@@ -3265,7 +3272,7 @@ def _sync_meta_display_name(session, title):
         pass  # 投影失败不阻断（DB 是权威）
 
 
-def _append_rename_event(sid, old_title, new_title):
+def _append_rename_event(sid, old_title, new_title, source="manual"):
     """改名审计：只追加 JSONL（学 OpenAI4S Action Ledger），可追溯可回滚。"""
     try:
         events_dir = os.path.join(HERMES_HOME_DIR, "sessions")
@@ -3276,9 +3283,150 @@ def _append_rename_event(sid, old_title, new_title):
                 "session_id": sid,
                 "old_title": old_title,
                 "new_title": new_title,
+                "source": source,  # manual=用户改名 / auto=自动总结
             }, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+# 正在运行的自动标题总结线程（防重入：同一会话同时只跑一个）
+_title_summary_locks = set()
+
+
+def _persist_title_source(sid, source):
+    """持久化标题来源标记（auto/manual）到 state.db kv 表。"""
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, "_conn"):
+            db._conn.execute(
+                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                (f"title_source:{sid}", source),
+            )
+            db._conn.commit()
+    except Exception:
+        pass
+
+
+def _load_title_source(sid):
+    """从 state.db 恢复标题来源标记；缺省 auto（未标记的历史会话允许自动总结）。"""
+    try:
+        db = _get_session_db()
+        if db and hasattr(db, "_conn"):
+            row = db._conn.execute(
+                "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+            ).fetchone()
+            if row and row[0] in ("auto", "manual"):
+                return row[0]
+    except Exception:
+        pass
+    return "auto"
+
+
+def _schedule_title_summary(sid):
+    """自动标题总结调度（幂等）：手动改名的会话跳过；防抖；防重入。
+
+    触发点：① WS chat 每 5 条用户消息 ② rail_review(post) 完成（分析里程碑）。
+    实际总结在后台线程执行，不阻塞消息响应。
+    """
+    try:
+        s = _sessions.get(sid)
+        if not s:
+            return
+        if s.get("title_source") == "manual":
+            return  # 用户手动改过名 → 尊重用户，永不自动覆盖
+        if sid in _title_summary_locks:
+            return  # 已有总结线程在跑
+        # 防抖：距上次总结至少新增 4 条用户消息
+        user_msgs = [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+        if len(user_msgs) - int(s.get("_title_summary_at_msg", 0)) < 4:
+            return
+        _title_summary_locks.add(sid)
+        _threading.Thread(target=_auto_summarize_title, args=(sid,), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _auto_summarize_title(sid):
+    """后台线程：用 LLM 总结会话主要内容 → 生成 ≤20 字标题。
+
+    材料 = 最近用户消息（最多 20 条）；一次轻量 chat completion（httpx 直连）；
+    失败/超时/输出无效 → 静默保留旧名（总结是增强，不能成为故障点）。
+    写回：state.db（撞名自动续号）+ 内存 + kv 来源标记 + meta 投影 + 审计 + WS 推送。
+    """
+    try:
+        import httpx
+        s = _sessions.get(sid)
+        if not s or s.get("title_source") == "manual":
+            return
+        # 收集用户消息（最多 20 条，每条截 120 字）
+        msgs = [
+            (m.get("content") or m.get("text") or "").replace("\n", " ").strip()
+            for m in s.get("messages", [])
+            if m.get("role") in ("user", "human") and (m.get("content") or m.get("text") or "").strip()
+        ][-20:]
+        if len(msgs) < 4:
+            return  # 消息太少，总结没有意义
+        # 模型配置：会话级优先，全局兜底
+        cfg = s.get("model_config") or _current_model
+        base_url = str(cfg.get("base_url", "")).rstrip("/")
+        if not base_url or not cfg.get("api_key") or not cfg.get("model"):
+            return
+        url = base_url + "/chat/completions" if not base_url.endswith("/chat/completions") else base_url
+        digest = "\n".join("- " + m[:120] for m in msgs)
+        prompt = (
+            "你是一个会话命名助手。根据以下对话要点，用不超过 20 个汉字概括本会话的核心主题。\n"
+            "要求：具体（如'hdWGCNA 网络构建参数选择'），不要空泛（如'生信分析'）。\n"
+            "只输出标题本身，不要引号、不要解释、不要编号。\n\n对话要点：\n" + digest
+        )
+        resp = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {cfg['api_key']}"},
+            json={
+                "model": cfg["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 60,
+                "temperature": 0.3,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        title = ((resp.json().get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
+        # 清理：去引号/破折号/换行/编号，截断 30 字
+        title = title.split("\n")[0].strip(' \"\'“”\u300c\u300d')
+        title = re.sub(r"^[-–—:*\d.、\s]+\s*", "", title).strip()
+        title = (title or "")[:30].strip()
+        if len(title) < 2:
+            return  # 输出无效，静默放弃
+        if title == s.get("title"):
+            return  # 与现名相同，不写
+        # 写回 state.db（title 唯一约束：撞名 → 自动续号 "xxx #2"）
+        new_title = title
+        db = _get_session_db()
+        if db:
+            try:
+                db.set_session_title(sid, title)
+            except ValueError:
+                try:
+                    new_title = db.get_next_title_in_lineage(title)
+                    db.set_session_title(sid, new_title)
+                except Exception:
+                    return
+            except Exception:
+                return
+        old_title = s.get("title")
+        s["title"] = new_title
+        s["title_source"] = "auto"
+        s["_title_summary_at_msg"] = len(
+            [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+        )
+        _sync_meta_display_name(s, new_title)
+        _append_rename_event(sid, old_title, new_title, source="auto")
+        _session_emit(s, {"type": "session_title", "title": new_title, "session_id": sid})
+        logger.info(f"Session {sid}: auto title '{old_title}' -> '{new_title}'")
+    except Exception as e:
+        logger.debug(f"Session {sid}: auto title summary skipped: {e}")
+    finally:
+        _title_summary_locks.discard(sid)
 
 
 @app.post("/api/sessions/{sid}/rename")
@@ -3309,8 +3457,10 @@ async def rename_session(sid: str, body: dict = None):
         return {"ok": False, "error": f"写入失败: {e}"}
     old_title = _sessions[sid].get("title")
     _sessions[sid]["title"] = new_title
+    _sessions[sid]["title_source"] = "manual"  # 用户手动改名 → 自动总结永不覆盖
+    _persist_title_source(sid, "manual")
     _sync_meta_display_name(_sessions[sid], new_title)
-    _append_rename_event(sid, old_title, new_title)
+    _append_rename_event(sid, old_title, new_title, source="manual")
     return {"ok": True, "title": new_title, "session_id": sid}
 
 
@@ -6356,6 +6506,11 @@ async def ws_endpoint(ws: WebSocket):
                     else:
                         session["title"] = base_title
                 
+                # 自动标题总结：每 5 条用户消息触发一次（内容感知，后台异步，不阻塞）
+                _user_msg_count = sum(1 for m in session["messages"] if m.get("role") in ("user", "human"))
+                if _user_msg_count >= 5 and _user_msg_count % 5 == 0:
+                    _schedule_title_summary(session["id"])
+
                 # 图路由：每条消息检测领域 + 意图（不仅是第一条消息，随时切换）
                 domain = _detect_domain_from_text(user_text)
                 if domain:

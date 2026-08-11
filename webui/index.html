@@ -883,6 +883,26 @@ function handleMessage(msg) {
     }
     return;
   }
+  // 自动总结出的会话标题（后台线程完成，异步刷新列表 + 当前标题）
+  if (msg.type === 'session_title' && msg.session_id) {
+    var found = false;
+    for (var i = 0; i < _allSessions.length; i++) {
+      if (_allSessions[i].id === msg.session_id) {
+        _allSessions[i].title = msg.title;
+        found = true;
+        break;
+      }
+    }
+    if (!window._sessionTitleTimer) {
+      updateSessionList();
+      window._sessionTitleTimer = setTimeout(function() { window._sessionTitleTimer = null; }, 3000);
+    }
+    if (currentSid === msg.session_id) {
+      var tEl = document.getElementById('chat-title');
+      if (tEl && tEl.textContent !== msg.title) tEl.textContent = msg.title;
+    }
+    return;
+  }
   // 微信消息同步到聊天面板
   if (msg.type === 'chat' && msg.message && msg.session_id) {
     var m = msg.message;

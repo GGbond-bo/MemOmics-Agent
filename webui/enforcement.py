@@ -137,6 +137,10 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     return level, reasons, force
 
 
+# 自动标题总结钩子：由 server.py 在 import 本模块后注入（rail_review(post) 完成时回调）
+_title_summary_hook = None
+
+
 class EnforcementState:
     """会话级强制执行状态追踪"""
 
@@ -438,6 +442,12 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
             # rail_review(post) 完成后 → 自动 record_run + 触发 debate
             if es.rail_post_done:
+                # 自动标题总结钩子（分析完成 = 项目进度里程碑 → server 侧后台总结会话主题）
+                if _title_summary_hook:
+                    try:
+                        _title_summary_hook(sid)
+                    except Exception:
+                        pass
                 # 自动记录成功运行到 skill（自进化）— 扩展到所有非闲聊级别
                 if es.analysis_level != "chat" and es.skills_loaded:
                     try:
