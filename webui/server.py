@@ -4826,13 +4826,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Persist user message to DB
-    try:
-        db = _get_session_db()
-        if db and hasattr(db, "append_message"):
-            db.append_message(sid, role="user", content=text)
-    except Exception:
-        pass
+    # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
 
     # 更新会话标题（首次消息）
     phone_icon = "\U0001f4f1"
@@ -4977,12 +4971,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                db = _get_session_db()
-                if db and hasattr(db, "append_message"):
-                    db.append_message(sid, role="assistant", content=result_text.strip())
-            except Exception:
-                pass
+            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
 
             _session_emit(session, {"type": "complete", "session_id": sid})
             _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
@@ -5268,13 +5257,7 @@ async def _hermes_weixin_message_handler(event):
             _WEIXIN_WS_CLIENTS -= dead
             # 更新 last_active
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # 消息持久化
-            try:
-                db = _get_session_db()
-                if db and hasattr(db, "append_message"):
-                    db.append_message(session_id=session["id"], role="user", content=text)
-            except Exception:
-                pass
+            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
 
         print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
 
@@ -6770,7 +6753,8 @@ async def ws_endpoint(ws: WebSocket):
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                _persist_session_message(session, "user", user_text)
+                # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
+                # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
                 # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
                 # 退役任务（done/cancelled）重置为 pending（命中"继续"词表由 check_gate 内部处理；
@@ -7866,10 +7850,9 @@ async def ws_endpoint(ws: WebSocket):
                             _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                             _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                             return
-                        # 记录助手回复到 _session + state.db
+                        # 记录助手回复到 _session（state.db 由 Hermes 框架 _persist_session 自动写）
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        _persist_session_message(_session, "assistant", result)
                         # 尝试提取 todo
                         try:
                             todos = _agent.get_todos() if hasattr(_agent, "get_todos") else []
