@@ -534,6 +534,20 @@ terminal 完成 → _pending_record = True
 | 跑通过后 | `skill_evolution(action="record_run", skill=..., script=..., params_json=...)` |
 | 跑失败后 | `skill_evolution(action="record_error", skill=..., error_msg=...)` |
 
+## 用户 Skill 使用铁律
+
+| 时机 | 动作 |
+|------|------|
+| 任何不确定/疑惑时 | **先问用户，禁止猜测**；确定用户需求后再动手（疑惑必问） |
+| 用户提供脚本/经验时 | 先运行验证（报错→修复→再验证）→ **询问用户**是否沉淀 → 用户确认才写入 `skills/plotting/`；未询问 = 不沉淀 |
+| 画图且用户指定脚本 | 按用户脚本执行（仅参数/小修优化，不改风格）；结束后**立即询问**是否沉淀 |
+| 画图且未指定脚本 | 用 CNS 画图 skill（nature-figure / cns-visualization / scrna-cns-figure-design）；结束后**立即询问**是否沉淀 |
+| 新会话画图且匹配到用户脚本 | **绝不自动使用**：向用户说明"发现你之前用过的脚本 XX"，询问用旧脚本 / CNS 标准版 / 出两版，按用户选择执行 |
+| 沉淀写入时 | 只写 `skills/plotting/`（不得触碰 bioinformatics 等其他 skill）；frontmatter 标 `category: user-skill` + `source: user`；场景描述精准（禁"画图/好看"等泛词） |
+| 数据流分流 | 用户提供的脚本/经验 → user-skill 库（询问确认）；**skill 被触发运行产生的记录** → 该 skill 自身目录走自进化（`record_run` → skill.json proven + 归档；`record_error` → logs/error_log.md），**严禁**把 skill 运行记录写入 user-skill 库，也**严禁**把用户脚本塞进触发 skill 的 log |
+
+---
+
 ## 经验沉淀规则
 
 | 时机 | 动作 |

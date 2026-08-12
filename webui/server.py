@@ -5435,6 +5435,7 @@ async def list_skills():
         "Data Query": "Data Query", "data query": "Data Query",
         "Literature": "Literature", "literature": "Literature",
         "Visualization": "Visualization", "visualization": "Visualization",
+        "user-skill": "用户技能", "user-plotting": "用户画图",
         "General Utility": "General Utility", "general utility": "General Utility",
         "Immunology": "Immunology", "immunology": "Immunology",
         "Mol Bio": "Mol Bio", "mol bio": "Mol Bio",
@@ -5588,6 +5589,11 @@ async def list_skills():
     bio_dir = Path(HERMES_HOME_DIR) / "skills" / "bioinformatics"
     if bio_dir.exists() and bio_dir not in scan_dirs:
         scan_dirs.append(bio_dir)
+    # 用户专属 skill 库（画图等用户提供脚本沉淀，category: user-skill）
+    # 未来新增 user-skill-<类别> 分类目录时在此登记
+    user_plot_dir = Path(HERMES_HOME_DIR) / "skills" / "plotting"
+    if user_plot_dir.exists() and user_plot_dir not in scan_dirs:
+        scan_dirs.append(user_plot_dir)
 
     items = []
     seen_names = set()
