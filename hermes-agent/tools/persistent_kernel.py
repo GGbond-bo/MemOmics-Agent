@@ -19,7 +19,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "1800"))
+_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "600"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
 _PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
 _R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
@@ -176,6 +176,44 @@ class KernelPool:
     def __init__(self):
         self._workers = {}
         self._lock = threading.Lock()
+        self._sweeper_started = False
+        self._sweeper_lock = threading.Lock()
+
+    def _ensure_sweeper(self):
+        """启动后台空闲清扫线程（幂等）。
+
+        惰性回收只在 execute() 时发生：长时间没有新执行 → 永不触发检查，
+        空闲 worker 堆积（2026-08-13 实测 40 个 R kernel 常驻 ~2-4GB）。
+        清扫线程每 60s 检查一次，回收超过 idle 阈值的 worker。"""
+        with self._sweeper_lock:
+            if self._sweeper_started:
+                return
+            self._sweeper_started = True
+
+        def _sweep():
+            while True:
+                try:
+                    time.sleep(60)
+                    self._reap_idle()
+                except Exception:
+                    pass  # 清扫失败不影响主流程
+
+        threading.Thread(target=_sweep, daemon=True, name="kernel-pool-sweeper").start()
+
+    def _reap_idle(self):
+        now = time.monotonic()
+        with self._lock:
+            stale = [k for k, w in self._workers.items()
+                     if now - w.last_use > _IDLE_TIMEOUT]
+            for k in stale:
+                try:
+                    self._workers[k].close()
+                except Exception:
+                    pass
+                del self._workers[k]
+        if stale:
+            logger.info("kernel pool: reaped %d idle worker(s), %d remaining",
+                        len(stale), len(self._workers))
 
     @staticmethod
     def _python_path():
@@ -215,6 +253,7 @@ class KernelPool:
         lang = language or "python"
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
+        self._ensure_sweeper()  # 幂等：首个 worker 创建时启动后台空闲清扫
         with self._lock:
             for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
                 self._workers[k].close()
