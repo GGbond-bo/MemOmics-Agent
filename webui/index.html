@@ -4611,8 +4611,11 @@ document.getElementById('input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false); }
 });
 document.getElementById('input').addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  // 只增不减：内容超过当前高度才增高（上限 400px，与 grip 拖拽一致）
+  // 用户手动拉大（grip）的高度不被输入文字重置
+  if (this.scrollHeight > this.clientHeight) {
+    this.style.height = Math.min(this.scrollHeight, 400) + 'px';
+  }
 });
 
 // 恢复配色
