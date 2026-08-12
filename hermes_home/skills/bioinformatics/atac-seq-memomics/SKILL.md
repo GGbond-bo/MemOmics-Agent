@@ -43,6 +43,7 @@ ArchR 依赖 TFMPvalue → 需要 R ≥ 4.5.0。但版本选择有讲究：
 ## 已知问题
 
 > 📑 本会话（2026-08-08 P0/P1/P3）踩坑速查 → `references/archr-windows-pitfalls-2026-08.md`（addClusters input= / addGeneScoreMatrix 崩溃 / TileMatrix CSC 直读 / cellNames 前缀 / filtered Arrow 未剔除 doublet 的 8 条快查）
+> 📑 集群正式版 40 样本端到端 playbook（用户 Linux 集群交付用：极简三段式脚本 + 过滤统计 + 聚类 + 注释）→ `references/cluster-40-samples-archr.md`
 
 ### 🔴 安装相关
 - **Rtools45 安装器有 bug** — exit code 2/5，无法静默安装。**解决方案**：复用 Rtools44，在 ucrt64 目录创建 gcc/g++/gfortran 符号链接指向 x86_64-w64-mingw32.static.posix/bin/
@@ -99,9 +100,11 @@ BiocManager::install(c("Biobase", "S4Vectors", "GenomicRanges", "SummarizedExper
 |------|------|:---:|
 | 路径纯 ASCII，单样本/少量样本 | cmd.exe /c + .bat（纯 ASCII）| ✅ 最高（绕过 bash segfault） |
 | 路径含中文（`E:\专利\...`），批量 40 样本需幂等重试 | bash 直接调 Rscript.exe | ✅ 可行（偶发 segfault 可幂等重试，优于 cmd GBK 确定性失败） |
-| 完全不用 shell | `execute_r()` 工具 | ✅ 最安全（Hermes 内部直接调 R，不走终端 shell） |
+| 完全不用 shell | `execute_r()` 工具 | ✅ 最安全（Hermes 内部直接调 R，不走终端 shell）；⚠️ 重负载 ArchR 加载（readRDS 大 project + getCellColData）实测 300s 超时被 kill——给 timeout≥600 或直接改 .bat 后台（实测 ~2min） |
 
 > ⚠️ **cmd.exe /c 的铁律（2026-08-07 40 样本批量实测）**：.bat 文件内容**必须纯 ASCII**。中文路径放 R 脚本内部处理（R UTF-8 无碍），bat 只传 ASCII sample_id 参数。违反此条 → `'tarted:' 不是内部或外部命令` / EXIT_CODE=9009。详见下方 `.bat 文件含中文路径` 条目。
+
+**⛔ 不要 inline 带空格路径进 cmd.exe /c（2026-08-12 实测）**：bash 里直接 `cmd.exe /c "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe" script.R` → 路径被空格拆开（`'C:/Program' 不是内部或外部命令`）；改嵌套引号 `cmd.exe /c '\"\"C:\Program Files\...\Rscript.exe" script.R\"'` → 仍失败（`找不到指定路径`）。**唯一可靠方式 = write_file 写 .bat（内部全路径带引号）+ `cmd.exe /c run.bat`**。快速只读 ArchR 查询（readRDS + getCellColData 列名）用此模式后台跑实测 ~2min 完成。
 
 **方案 A：cmd.exe /c + 纯 ASCII .bat（首选，路径无中文时）**：
 
@@ -429,6 +432,8 @@ proj <- proj[keep_cells, ]   # cellNames 格式 sample#barcode，与 ArchR 一�
 
 > ⚠️ 这是 QC 设计约定（copy Arrow + CSV 记录过滤名单），不是 bug，但 merge 漏子集 = doublet 混入聚类 → 下游 DA/跨物种对比污染。**所有 merge 前必须做此子集。**
 
+**正式版集群模板（2026-08-11 生成 `patent_test/00_read40_filter.R`）**：该逻辑已固化为正式版 M2 第一步脚本——读 40 个 QC 后 Arrow → 逐样本读 `{s}_filtered_cells.csv` 取 `DoubletFilter=="Keep"` → `proj[keep_cells, ]` → 存 `human_proj_40_filtered.rds` + `sample_keep_summary.csv` + `all_cells_kept.txt`。防错要点：`stopifnot(length(sample_dirs) >= 30)` 防目录发现失败（40 样本时）；`list.files(d, pattern="\\.arrow$")` 单样本单 Arrow 校验；`n_keep <- sum(df$DoubletFilter == "Keep")` 逐样本统计。给用户集群交付时**直接贴三段式**（library / list.files / 过滤统计，用户偏好，见下）而不落盘。
+
 ### 🟢 addGeneScoreMatrix 耗时 ~10-20min（35K cells）— 必须 background + checkpoint（2026-08-08 实测）
 
 **现象**：注释前加 GeneScoreMatrix，foreground terminal 600s 超时被杀（实际日志显示 7.7min 还在 "Computing Gene Scores"，计算未完成）。
@@ -536,6 +541,13 @@ gene_tile_idx <- function(gene_symbols, geneAnno, tile_gr) {
 2. 若确需清理旧产物（如嵌套 FilteredProjects 目录），先列出要删的文件/目录向用户确认，不要塞进重跑命令
 
 ### 🔴 addClusters 必须用 `input=` 参数 + 顺序在 addUMAP 之前（ArchR 1.0.3，2026-08-08/09 已验证）
+
+**⚠️ 用户会逐行对照 ArchR 官方 tutorial（archrproject.com/articles/Articles/tutorial.html）检查给集群的代码（2026-08-09/12 三次实测）**：交付 ArchR 代码时：① **顺序必须与官网一致**（`addClusters` 在 `addUMAP` 前，聚类在 LSI 空间完成、UMAP 只做 2D 投影——给反了用户立刻指出"官网不是先这样的吗"）；② **省略/修改官网默认参数必须说明理由**——如 `dimsToUse=1:30` vs 官网默认 `2:30`（默认跳过第 1 维，与测序深度相关非生物学信号），最稳做法是直接用官网默认（`addIterativeLSI(ArchRProj=proj, useMatrix="TileMatrix", name="IterativeLSI")`）并说明省略了哪些默认值；③ 用户自己在集群肉眼检查每一步输出（`length(arrow_files)`、`table(proj$Clusters)` 贴回来核对），给脚本关键行加验证注释；④ **不要添加官网没有的步骤**（2026-08-12 用户质疑"`addGeneScoreMatrix`官方没有这一步吧？"）——GeneScoreMatrix 由 `createArrowFiles()` 默认（参数名是 **`addGeneScoreMat=TRUE`**，不是 `geneScores`）**自动添加**，官方第 9 章 "Gene Scores and Marker Genes with ArchR"（9.1 计算 → 9.4 可视化 marker → 9.5 MAGIC 插补；用户口称的 "Assigning Clusters with Gene Scores" 是教程流程描述、非章节名）直接从 `addImputeWeights(proj)`（MAGIC 平滑 dropout）开始，随后用 `plotEmbedding(colorBy="GeneScoreMatrix", name=marker)` 可视化或 `getMarkerFeatures(useMatrix="GeneScoreMatrix", groupBy="Clusters")` 做 marker 检验。给注释流程前先 `getAvailableMatrices(proj)` 确认 GeneScoreMatrix 已在 Arrow 里，**不需要**显式 `addGeneScoreMatrix()`（下方"addGeneScoreMatrix 耗时/Windows 崩溃"条目只适用于基因分数确实缺失或必须重算的场景）。
+   - 📚 **官方文档证据（2026-08-12 curl 实测，回答用户时的引用锚点）**：
+     - §3.6 `creating-arrow-files.html`：`createArrowFiles(..., addTileMat = TRUE, addGeneScoreMat = TRUE)`（默认即生成 GeneScoreMatrix）
+     - §9.1 `calculating-gene-scores-in-archr.html` 原文：*"Gene scores are calculated for each Arrow file at the time of creation if the parameter `addGeneScoreMat` is set to TRUE - this is the default behavior. ... gene scores can be added to Arrow files at any time by using the `addGeneScoreMatrix()` function."* — 即 `addGeneScoreMatrix()` 是**备用函数**，仅当创建 Arrow 时设了 `addGeneScoreMat=FALSE` 才需事后手动调用
+     - 完整 URL：`https://www.archrproject.com/bookdown/calculating-gene-scores-in-archr.html` + `https://www.archrproject.com/bookdown/creating-arrow-files.html`（旧 article URL `archrproject.com/articles/Articles/tutorial.html` 已迁入 bookdown，用新址）
+     - ⚠️ 官方教程 index 页面（`bookdown/index.html`）可按 href 列表定位章节页，curl 后 `grep -io 'addGeneScoreMatrix[^<]*'` 即可快速验证任一版本说法
 
 **顺序坑（2026-08-09 用户对照官网教程纠正）**：官方 tutorial 是 **`addClusters(input=proj, reducedDims="IterativeLSI")` 在前，`addUMAP()` 在后**——聚类在 LSI 空间完成，不依赖 UMAP；UMAP 只是把聚类结果投影到 2D 供可视化。不要先 addUMAP 再 addClusters（我 08-09 给反过一次，用户对照官网指出"为什么你反了"）。给用户集群代码时若与官网顺序不同，用户会逐行对照官方 tutorial 检查。
 
@@ -672,6 +684,8 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 **⚠️ bigwig vs fragments 粒度选择（2026-08-02）**：GSE278576 suppl 同时提供①亚群聚合 bigwig（细胞类型×年龄组，~100-350MB，够做 L2 可及性比较）和②GSM 级单细胞 fragments（~1.3GB/样本，才能做 L3 真 footprinting）。**GSM 级 fragments 单独可下，不需要 89GB 的 GSE278576_RAW.tar。** 下载后用 HTTP HEAD 对比 Content-Length 验证完整性（用户此前下载的 hc77/hc78 只有 2MB/0.7MB，真实是 1.31GB = 0.15% 完成度）。完整决策树（L2→bigwig / L3→fragments / 带宽现实）→ 同上 reference 的 "bigwig vs fragments" 一节。
 
 ### 🟢 用户偏好
+- **写 ArchR 代码前必须先 `skill_view` 本 skill（2026-08-12 用户审计实锤）**：用户问\"你写代码的时候，不调用一下skill吗？\"——交付 ArchR 聚类/注释/过滤代码前，先 skill_view(atac-seq-memomics) 核对参数签名与坑（addClusters input=、ArrowFiles 大写、官方 tutorial 顺序），不要凭记忆直接贴代码。用户会逐行对照官网 + 检查是否加载了 skill。
+- **用户问代码问题时，只回答代码问题，不要 dump 唤醒进度汇报（2026-08-12 用户原话\"我有问你这些进度吗？你一直回我这些干什么呢？我不是问你代码吗？\"）**：唤醒消息是系统自动心跳，用户消息才是真实诉求。用户贴代码/问 ArchR API → 直接回答该问题（给极简可直接运行的代码段）；不要在同一回复里堆 P0-P6 状态表/三源验证摘要。进度汇报只在用户明确问进度时给。
 - **禁止装到 C 盘** — R 包、基因组数据、分析产出全部放 E 盘。R 本体放 C 盘可以（~100MB）
 - **安装必须主动监控** — 不能 fire-and-forget。每 30-60 秒轮询进程状态+库目录变化
 - **优先使用 `pak::pak()` 装 GitHub 包**（而非 `devtools::install_github()` 或 `remotes::install_github()`）
@@ -696,6 +710,8 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
    ```
    集群上清理命令：`find . -depth -type d \( -name "FilteredProjects" -o -name "ArrowFiles" \) -exec rm -rf {} \;`（先 `head` 预览再删；只删精确匹配目录名，不碰根目录 `.arrow` 和 `_filtered_cells.csv`）。
 4. **`Save-ArchR-Project.rds` 是项目元数据索引卡（几 MB），不是 bug** — 每次 `subsetArchRProject`/`saveArchRProject` 自动生成，记录样本列表、细胞 metadata、指向哪些 Arrow。几百 MB 的 `.arrow` 才是数据本体。要省磁盘加 `copyArrows = FALSE`（硬链接，不复制 Arrow）。
+5. **手动循环 subset 后合并 → `h5checktypeOrOpenLoc: Cannot open file '...ArrowFiles/.arrow' does not exist`（2026-08-12 用户 Linux 集群实测）** — 用户照"每样本循环 subset 到独立目录 + `list.dirs` + `list.files` 拼 `sub_arrows` 再 `ArchRProject(ArrowFiles=sub_arrows)`"跑 → 路径拼接出错混入空路径（`.arrow` 前无文件名）→ ArchR 打不开。**修复 = 放弃循环+手动合并**：① 已过滤完成时**只合并**：`list.files("Human_ATAC/archr_out", "\\.arrow$", recursive=TRUE, full.names=TRUE)` 找 arrow → `ArchRProject(ArrowFiles=af)` → saveRDS；② 未过滤时**单次 subset 全部细胞**（读全部 CSV 拼一个大 `cells` 向量 → 一次 `subsetArchRProject`），不做 per-sample 循环。两种都规避路径拼接。
+6. **用户已完成过滤步骤后，给"合并 rds"代码时不要再让他重读 CSV**（2026-08-12 用户原话"为什么还要读取CSV？这一步已经完成了，我需要的是合并40个样本的rds"）— 交付脚本前先问/判断用户已执行到哪一步：过滤完 = 只给 `list.files` 找 arrow + `ArchRProject` + `saveRDS` 三行；过滤前 = 才给 CSV 子集步骤。
 
 > ⚠️ 正式版 merge 前**仍必须**按 `_filtered_cells.csv` 的 `cellNames[DoubletFilter=="Keep"]` 子集剔除 doublet（见上方 P4 merge 条目）——用户集群上传的就是 `ArchR_Arrow_QC_Filtered/` 目录，doublet 只在 CSV 名单里，不在 Arrow 里。
 
@@ -736,6 +752,54 @@ saveRDS(markers, "markers.rds")            # ← 必须
 ```
 ---
 
+### 🟢 查看 project 元数据 (cellColData) — 2026-08-12 实测
+
+用户问"proj 的 meta.data 怎么看"→ **ArchR 里不叫 meta.data（那是 Seurat 的叫法），叫 cellColData**，等价物是 `getCellColData()`。
+
+**API**：
+```r
+getCellColData(proj)                # 推荐，返回 DataFrame
+proj@cellColData                    # 等价槽访问
+head(getCellColData(proj))          # 预览前几行
+colnames(getCellColData(proj))      # 列名
+proj$Sample                         # 单列访问（getCellColData(proj, "Sample") 同效）
+as.data.frame(getCellColData(proj)) # 转普通 data.frame
+```
+
+**plotEmbedding name= 陷阱**：`name=` 必须**精确匹配** cellColData 列名，不是模糊匹配。用户写 `name="samples"`（复数）会报错——实际列是 `Sample`（单数）。同理 `name="clusters"` 应写 `name="Clusters"`。
+
+**⚠️ 猴侧没有 `CellType` 列（2026-08-12 实测，用户第二个坑）**：`plotEmbedding(name="CellType")` 对猴 `project_clustered.rds` 会报错——CellType 只在人侧 P0 注释时加过。要画猴侧注释色需先把 Phase 6 注释结果 merge 进 cellColData（如 `proj$CellType <- anno$CellType[match(rownames(ccd), anno$cellNames)]`），merge 前核对 cellNames 顺序。
+
+**两项目实测列名（2026-08-12 加载 rds 逐列打印，勿猜）**：
+- 猴 `E:/专利/ArchR_Output/project_clustered.rds`（3 样本）：17 列 = `Sample, TSSEnrichment, ReadsInTSS, ReadsInPromoter, ReadsInBlacklist, PromoterRatio, PassQC, NucleosomeRatio, nMultiFrags, nMonoFrags, nFrags, nDiFrags, DoubletScore, DoubletEnrichment, BlacklistRatio, AgeGroup, Clusters`（C18/C2/C17 等 21 簇）
+- 人 `results/memomics-1c1890da/patent_test/human_proj_annotated.rds`（35,787 cells）：18 列 = 猴 17 列 + `CellType`（factor，8 大类：OPC/ODC/Ex/Astro/Micro/Inh/VS/ChP）
+
+**验证模式**（回答"列名有哪些"类问题时直接跑，铁律 -4 不凭记忆）：
+```r
+proj <- readRDS(path)
+ccd <- getCellColData(proj)
+colnames(ccd); head(as.data.frame(ccd), 3); sapply(ccd, class)
+```
+复用脚本：`results/memomics-1c1890da/patent_test/check_cellcoldata_columns.R`
+
+### 🔴 细胞类型 marker 来源必须逐篇验证物种（2026-08-12 用户质疑"这些数据有来源吗？"实测）
+
+给用户 cell-type marker 列表时，**必须用 search_papers 验证每篇引用文献的物种/组织是否真的匹配**——知识库/记忆里现成的"来源标注"可能是错的：
+
+- **实测踩坑**：我给了"人海马 marker"表，标注 Xiong 2025 Mol Biol Evol + He 2024 PLoS One 为来源 → 用户问"这些数据有来源吗？有文章吗？" → search_papers 验证发现 **Xiong 2025 是树鼩海马（不是人）**、**He 2024 是小鼠小胶质（不是人）**——物种错了，专利实施例引用会出硬伤。
+- **验证命令**：`search_papers(query="<作者> <年份> <期刊> <主题>")` 看返回的标题/摘要，确认 species 匹配；或直接 query_ncbi 查 PMID 摘要。
+- **正确做法**：人海马 marker 的权威文献锚点 = **Franjic 2022 Neuron (PMID 34798047)**（人/猕猴/猪海马跨物种图谱，InN=SST/PVALB/VIP/LAMP5、EC=CUX2/RELN vs TLE4/ADRA1A、免疫=C1QB/F13A1/LYZ/SKAP1、少突=PDGFRA/GPR17/MOBP、血管=DKK2/CLDN5/VWF/ABCC9）+ Yao 2024 eLife + Zhou 2022 Nature；树鼩/小鼠文献只能作"跨物种参照"，不能当"人海马来源"。
+- 更新知识库后**同会话内用户仍可能追问来源**——回答时直接给 PMID/DOI，不要把"知识库里有"当证据链终点。
+
+### 📚 知识库多篇文献补强（2026-08-12 用户原话"多下几篇，一片一片的不足知识库"）
+
+用户要求知识库更新时**不要只依赖单篇文献**——至少下载 3-5 篇核心文献交叉验证 marker/参数后再写入：
+- 本会话实际下载：Zhang 2021 Protein&Cell（灵长类海马衰老 12 类图谱，TAPC 核心）+ Wang 2022 Cell Res（猕猴 13 类，ETNPPL=灵长类 NSC marker，STMN1/2=未成熟神经元 marker）+ Zhou 2022 Nature（人未成熟神经元）+ Franjic 2022 Neuron（PMC XML 全文）——人海马 marker 由 4 篇交叉支撑。
+- **扩批（2026-08-12 二次执行，用户嫌 4 篇不够）**：一次并行下载 12 篇 = 生物学 7（Thompson 2025 Nat Neurosci 人海马整合图谱 34MB、Su 2022 Cell Stem Cell 胶质图谱、Yang 2022 Nature 脑血管图谱、Sinnamon 2019 Genome Res 小鼠海马 scATAC、Zhong 2020 Nature 发育、Chen 2024 Nat Med 跨脑区图谱、Tosoni 2023 Neuron 神经发生综述）+ 生信方法 4（MAESTRO 2020 Genome Biol、scAGDE 2025 Nat Commun、hECA 2025 Sci Data、Acera-Mateos 2026 Genome Biol）。完整解读 → 知识库 `Homo_sapiens/hippocampus/aging/01_生物学知识/literature_review_20260812.md`；主 YAML literature 段扩到 18 篇 + patent_notes 7 条。下载时**生物学与生信方法两类文献都要补**（用户明确要求），不要只补生物类。
+- 下载被 Cloudflare 拦时走 **NCBI efetch db=pmc 全文 XML**（`eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=<PMCID>&rettype=xml`，实测 340KB 完整正文），比欧洲 PMC fullTextXML REST（0 字节）可靠；解析用 `re.sub(r'<[^>]+>',' ',xml)` 后按 marker 关键词搜。
+- 🔴 **Nature/Elsevier PDF "下载成功"但只有 3 页 reporting summary（2026-08-12 实测 Zhong 2020 / Yang 2022）**：`download_pdf` 返回 file_size 96KB/89KB 且 exit success，但打开只有 Nature Research Reporting Summary（无正文）——**大小 <200KB 的 Nature PDF = 只有摘要页，不是全文**。修复：先用 `esearch.fcgi?db=pmc&term={pmid}[pmid]&retmode=json` 拿 PMCID → 再 `efetch.fcgi?db=pmc&id={PMCID}&rettype=xml` 拿全文。⚠️ PMC ID 不能凭猜（Su 2022 猜 PMC9608155 是错文章，esearch 正确返回 PMC9844262）；⚠️ 有的文章（Zhong 2020）**无 PMC**（esearch 返回空）→ 只能摘要级收录并在 YAML 标注"PDF 仅 reporting summary"。
+- 知识库 YAML 写入位置：`memomics/knowledge_base/{species}/{tissue}/{direction}/01_生物学知识/cell_types.yaml`（人海马 = Homo_sapiens/hippocampus/aging/）；更新后必须 `yaml.safe_load` 验证语法 + 双侧同步（人侧 + Macaca_mulatta 猴侧）。YAML 数据文件不在 pytest 收集范围（`pytest --collect-only` 实测 0 collected）——验证方式 = yaml.safe_load + 结构断言（cell_types/literature 计数、每篇 pmid/title/journal/year 字段、每类 markers 非空）。
+
 ## ⛔ Post-Completion 唤醒门控（快速版）— 2026-08-08 唤醒 #11 再次验证
 
 **场景**：`⏰ [系统唤醒 #N]` 或用户问进度，且 task_plan Phase 全部 complete / pending 被用户红线阻塞（如本项目的 P4 merge、P7 跨物种）。**唤醒 ≠ 执行入口。默认姿态 = 汇报 + 等指示。**
@@ -743,6 +807,7 @@ saveRDS(markers, "markers.rds")            # ← 必须
 1. **定位 task_plan**：`ls -lt E:/MemOmics-Agent/results/*/task_plan.md | head` 取 mtime 最新（勿读旧 session 的 plan）
 2. **三源验证**：tasklist（Rscript/python 残留）+ search_files 实查产出 + task_plan 的 ⛔ 标记。⚠️ **产出可能跨目录**：task_plan 声明的 Output 路径只覆盖部分产出（实测 P3-P5 写到项目区兄弟目录如 `E:/专利/P3_L1_data/`）——声明路径查不到 ≠ 产出缺失，先 `find <项目区> -name "<关键文件名>*"` 跨目录找再下结论
 3. **红线检查**：有"等待用户指示/停止命令/不自动执行" → **绝不自动启动**，即使数据全齐
+3.5 **追加记录前读 task_plan 自文档规则（2026-08-12 起，唤醒 #123 实测违规后固化）**：task_plan 若含"不再逐次追加重复记录 / RunGate 合并"类自文档说明 → 终态唤醒**只三源验证 + 汇报，不追加任何记录**（终态结论已沉淀在红线区/计划文件）；无自文档规则才按 #94 模式追加单行极简记录。详见 `references/post-completion-wakeup-gate.md` #123 案例
 4. **选项菜单自检（#7 和 #11 都漏过②，强制逐项勾选）**：
    - ① 越线动作（P4 直启 / P7 直启）
    - ② **不越线 prep 中间档**（P7 前置 ortholog 映射 / chain 文件准备 — 可先放行，用户不必全盘确认）

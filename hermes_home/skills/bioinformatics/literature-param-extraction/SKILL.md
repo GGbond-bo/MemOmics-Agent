@@ -389,3 +389,11 @@ doc.close()
 ### 不触发场景
 - 参数有明确知识库推荐且无争议时
 - 纯计算步骤（如保存文件、读取数据）
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | hippocampus | aging | 2026-08-12 | - | - | - |  |

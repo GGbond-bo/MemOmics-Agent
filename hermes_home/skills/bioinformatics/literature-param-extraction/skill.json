@@ -12,8 +12,25 @@
     "kb_dir": "[Required] 知识库根目录 (str)",
     "method": "[Optional] 提取方法: auto/pymupdf/markitdown (default: auto)"
   },
-  "proven_params": [],
-  "proven_script": null,
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "",
+      "params": "下载6篇候选→成功4篇(Franjic 2022 PMC XML / Zhang 2021 / Wang 2022 / Zhou 2022) + Su 2022/Trans 2021被Cloudflare拦截; extract_pdf.py脚本参数仅pdf_path; 知识库路径=memomics/knowledge_base/Homo_sapiens/hippocampus/aging/01_生物学知识/cell_types.yaml",
+      "date": "2026-08-12",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人海马知识库更新：新增Zhang 2021(灵长类12类衰老图谱,TAPC核心)/Wang 2022(猕猴13类,ETNPPL灵长类NSC marker,STMN1/2未成熟神经元)/Zhou 2022(Nature未成熟神经元)/Su 2022(胶质图谱,摘要级); 修正Franjic 2022 DOI(10.1016/j.neuron.2021.10.036)和标题; 补充原文级精细marke"
+    }
+  ],
+  "proven_script": "",
   "error_count": 0,
-  "success_count": 0
+  "success_count": 1,
+  "user_prefs": {
+    "last_used_script": ""
+  }
 }
