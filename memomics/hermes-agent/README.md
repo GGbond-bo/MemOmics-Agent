@@ -1,3 +1,17 @@
+> ## ⚠️ MemOmics 内嵌副本（Vendored Copy）
+>
+> 本目录是 **MemOmics（`E:\MemOmics-Agent`）内嵌的 Hermes 源码副本**，由 MemOmics
+> 通过 `sys.path.insert(0, ...)` 直接引用（`webui/server.py` L48-52），**不是**独立安装的
+> Hermes，也不与独立 Hermes（如 Hermes Agent CN 桌面版 / pip 版）共享任何代码或数据。
+>
+> **请勿在此目录内执行 `git pull` / `git clone` 外部仓库**，也勿将独立 Hermes 的
+> 源码、配置或数据（HERMES_HOME / state.db）放入本目录——会导致 MemOmics 静默加载
+> 错误版本。独立 Hermes 请安装到独立目录并使用独立 HERMES_HOME。
+>
+> 本目录下方的文档为上游 Hermes 原始文档，仅供了解底座能力，不代表 MemOmics 当前版本状态。
+>
+> ---
+
 <p align="center">
   <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>
