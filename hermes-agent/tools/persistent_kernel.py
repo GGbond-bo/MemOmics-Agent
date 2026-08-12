@@ -92,11 +92,11 @@ class _ProtoWorker:
                 self.proc.stdin.flush()
             except Exception:
                 self._pending.pop(rid, None)
-                self._kill()
+                self._kill(grace=0.5)
                 return {"status": "error", "error": "worker write failed", "output": "", "tool_calls_made": 0, "duration_seconds": 0}
             if not ev.wait(timeout):
                 self._pending.pop(rid, None)
-                self._kill()
+                self._kill(grace=0.5)
                 return {"status": "timeout",
                         "error": f"Kernel timed out after {timeout}s and was killed.",
                         "output": f"⏰ Kernel timed out after {timeout}s and was killed.",
@@ -117,14 +117,49 @@ class _ProtoWorker:
             result.update(meta)
             return result
 
-    def _kill(self):
+    def _kill(self, grace=3.0):
+        """阶梯关闭：shutdown 帧 → 等待自行退出 → 进程树强杀兜底。
+
+        防孤儿（对齐 OpenAI4S 三层防线）：
+        1) 发 {"type":"shutdown"} 帧，worker 收到后 break 退出（正常路径）；
+        2) 卡死时（不读帧）等待 grace 秒后强杀整个进程树——
+           Windows 用 taskkill /T /F，POSIX 用进程组 SIGKILL，不留子进程；
+        3) 树杀失败再退回 proc.kill()。
+        """
         self._reader_stop.set()
+        proc = self.proc
+        self.proc = None
+        if proc is None or proc.poll() is not None:
+            return
         try:
-            if self.proc is not None:
-                self.proc.kill()
+            proc.stdin.write(b'{"type": "shutdown"}\n')
+            proc.stdin.flush()
         except Exception:
             pass
-        self.proc = None
+        try:
+            proc.wait(timeout=grace)
+            return
+        except Exception:
+            pass
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    capture_output=True, timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                import signal
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
 
     def close(self):
         self._kill()

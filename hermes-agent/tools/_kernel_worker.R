@@ -11,9 +11,14 @@ run <- function() {
   on.exit(close(con))
   while (TRUE) {
     line <- readLines(con, n = 1, warn = FALSE)
-    if (length(line) == 0 || is.na(line) || nchar(line) == 0) next
+    # EOF：宿主关闭管道 → 立即退出（防孤儿忙循环：旧代码 next 空转烧 CPU 且永不退出）
+    if (length(line) == 0) break
+    if (is.na(line) || nchar(line) == 0) next
     req <- tryCatch(fromJSON(line, simplifyVector = TRUE), error = function(e) NULL)
-    if (is.null(req) || is.null(req$id)) next
+    if (is.null(req)) next
+    # 宿主优雅关闭帧 {"type":"shutdown"} → 退出
+    if (!is.null(req$type) && identical(req$type, "shutdown")) break
+    if (is.null(req$id)) next
     rid <- req$id
     code <- req$code
     out <- ""

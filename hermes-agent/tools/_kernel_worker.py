@@ -29,6 +29,7 @@ def _execute(code, out, err):
 
 
 def _run():
+    # EOF：宿主关闭管道 → for 循环自然结束 → 进程退出（已正确处理，不会成孤儿）
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -37,6 +38,9 @@ def _run():
             req = json.loads(line)
         except Exception:
             continue
+        # 宿主优雅关闭帧 {"type": "shutdown"} → 退出
+        if req.get("type") == "shutdown":
+            break
         code = req.get("code", "")
         rid = req.get("id", "")
         out, err = io.StringIO(), io.StringIO()
