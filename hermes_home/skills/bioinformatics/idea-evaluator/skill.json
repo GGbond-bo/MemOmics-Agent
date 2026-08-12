@@ -1,0 +1,26 @@
+{
+  "id": "idea-evaluator",
+  "name": "Idea Evaluator",
+  "category": "general",
+  "language": "Python",
+  "description": "研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决；触发词：评估研究想法、这个想法值得做吗、novelty check、idea evaluation",
+  "starting_prompt": "使用 Idea Evaluator 进行分析",
+  "source_dir": "skills/bioinformatics/idea-evaluator",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "评估研究想法",
+    "这个想法值得做吗",
+    "研究方向评估",
+    "novelty check",
+    "评估可行性",
+    "score this idea",
+    "is this a good research direction",
+    "idea evaluation",
+    "research idea"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "nature-reviewer",
+  "name": "Nature Reviewer Assessment Skill",
+  "category": "general",
+  "language": "Python",
+  "description": "Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking；触发词：Nature审稿、预审、投稿前自审、审稿人视角、mock peer review",
+  "starting_prompt": "使用 Nature Reviewer Assessment Skill 进行分析",
+  "source_dir": "skills/bioinformatics/nature-reviewer",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "Nature审稿",
+    "预审",
+    "投稿前自审",
+    "审稿人视角",
+    "审稿意见模拟",
+    "帮我审一下论文",
+    "referee",
+    "mock peer review",
+    "manuscript critique",
+    "novelty assessment"
+  ]
+}

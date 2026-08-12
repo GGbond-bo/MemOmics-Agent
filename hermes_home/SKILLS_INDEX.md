@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (56 skills)
+## 08_报告 - 报告/可视化 (66 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -258,6 +258,11 @@
 | debate-core | >- |  | YEL 讨论触发 |
 | metabolomics-full-pipeline | 代谢组学全流程分析：LC-MS/GC-MS 峰表 QC → 归一化 → 缺失值填充 → 差异代谢物（t检验/火山图）→ 通路富集（MetaboAnalyst 风格）→ 可视化。输入 peak inte |  | YEL 讨论触发 |
 | grill-me | >- | grill, 拷问, 面试方案, 挑毛病, 方案打磨 | RED 必触发 |
+| academic-paper-reviewer | Multi-perspective academic paper review with dynamic reviewer personas. Simulates 5 independent revi | 审稿, 论文审稿, 同行评审, 审稿意见, 帮我审论文 | RED 必触发 |
+| idea-evaluator | 研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决；触发词：评估研究想法、这个想法值得做吗、 | 评估研究想法, 这个想法值得做吗, 研究方向评估, novelty check, 评估可行性 | RED 必触发 |
+| nature-response | Nature风格修回信套件：逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿；触发词：修回信、返修、rebuttal、response to rev | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复 | RED 必触发 |
+| nature-reviewer | Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking；触发词：Nature审稿、预审、投稿前自审、审 | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟 | RED 必触发 |
+| paper-polish | 学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张；触发词：润色、论文润色、去AI腔、中译英、polish | 润色, 论文润色, 去AI腔, 去除AI味, AI味 | RED 必触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 
