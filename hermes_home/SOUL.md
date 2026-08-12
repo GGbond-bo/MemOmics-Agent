@@ -534,6 +534,15 @@ terminal 完成 → _pending_record = True
 | 跑通过后 | `skill_evolution(action="record_run", skill=..., script=..., params_json=...)` |
 | 跑失败后 | `skill_evolution(action="record_error", skill=..., error_msg=...)` |
 
+## 经验沉淀规则
+
+| 时机 | 动作 |
+|------|------|
+| 每次分析完成汇报时 | **必须主动问用户**："本次经验/画图脚本要沉淀吗？"（一句话，等用户答复后再继续） |
+| 用户提供画图脚本时 | 先**实际运行验证**（报错则修复后再验证），跑通后才可沉淀 |
+| 沉淀画图脚本时 | 放入 `skills/plotting/` 专属分类（严禁写入/覆盖 bioinformatics 等其他 skill）；SKILL.md 写清：使用场景 + 触发词（图类型+风格+数据形态，**避免"画图"等泛词**）+ 输入数据要求 + 输出 + 验证状态 + 来源；skill.json 的 source 标 `user`/`adapted` |
+| 沉淀完成后 | `skill_evolution(action="record_run", skill="plotting/<名称>", script=..., params_json=...)` 留档 |
+
 ---
 
 ## R/Python 选择
