@@ -1,0 +1,16 @@
+{
+  "id": "celltype-proportion-comparison",
+  "name": "细胞类型比例跨组比较（Cell Type Proportion Comparison）",
+  "category": "general",
+  "language": "Python",
+  "description": "细胞类型/亚群比例跨组比较箱线图全流程（配对前后 + 独立跨组）。触发词：\"亚群比例\"、\"L3 boxplot\"、\"Proportion (%)\"、\"6组箱线图\"、\"FDR标注\"、\"p值标注\"、\"画哪几组\"、\"逆转衰老\"。使用场景：scRNA-seq 注释后比较各亚群在 6 组（3 条件×Pre/Post，个体配对）中的比例变化，判断\"逆转衰老/逆转糖尿病/运动共同趋势\"。包含：分组映射、base",
+  "starting_prompt": "使用 细胞类型比例跨组比较（Cell Type Proportion Comparison） 进行分析",
+  "source_dir": "skills/bioinformatics/celltype-proportion-comparison",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

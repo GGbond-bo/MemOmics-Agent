@@ -198,3 +198,4 @@ save_pub_r <- function(plot, filename, width_mm = 183, height_mm = 120, dpi = 60
 |------|------|------|------|------|------|------|----|
 | human | skeletal_muscle | aging | 2026-07-31 | phase5_nature_figures.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-01 | - | - | - |  |
+| human | skeletal_muscle | aging_diabetes_exercise | 2026-08-13 | run_plot_PureTypeI_4grp_CNS.R | - | - |  |

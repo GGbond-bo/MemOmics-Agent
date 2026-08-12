@@ -374,6 +374,125 @@ panel reviewers want.
 
 > Detailed decision matrix + implementation params: `references/nmf-vs-hdwgcna-vs-hotspot.md`
 
+## L3 Cell-Type Proportion Boxplots (annotation-level composition, 6-group paired design)
+
+When the user's deliverable is per-celltype proportion (%) boxplots across the 6 groups
+(Y/O/OD × Pre/Post) with significance brackets (validated on muscle MF, 2026-08-12):
+
+**User workflow (mandatory, in this order):**
+1. **Compute significance for ALL subtypes first — including subtypes excluded from
+   plotting.** User explicit: "跑显著性的时候不要抛开RSS和SMF这两个群，先算显著性". The
+   excluded subtypes still feed the global FDR pool and may be the strongest signal
+   (muscle: RSS Y vs O FDR=0.001 was the most significant of all 50 comparisons).
+2. **Plot ONE subtype at a time**, present the figure + significance table, let the user
+   judge "逆转衰老 / 逆转糖尿病 / 运动共同趋势" and decide which groups to draw — THEN
+   finalize. Never batch-plot all 8 subtypes without per-subtype confirmation.
+3. **Panel width rule (user-specified)**: 6 bars → 30 mm, 5 bars → 28 mm, each bar fewer
+   −2 mm; height fixed 32 mm. `egg::set_panel_size(width=unit(30,"mm"), height=unit(32,"mm"))`.
+4. **Annotation column is selectable**: exploration uses raw `p.value` (more bars survive);
+   final paper version should use FDR. When the user says "改成p值", swap the annotation
+   column in THEIR script — do not invent a new visualization (see scipilot-figure-skill).
+5. Direction convention: full table rows must say "OD_Pre 低于 O_Pre" explicitly, never
+   rely on the sign of a delta.
+
+**⛔ Effect-size sign-convention trap (root cause of a direction misreport, 2026-08-12):**
+The user's script computed paired comparisons as `median(v2 - v1)` (positive = second
+group higher) but unpaired as `cliffs_delta(x, y)` with x = pair[1] (positive = FIRST group
+higher). The two conventions are OPPOSITE, and interpreting +0.84 as "OD higher" when the
+code meant "O higher" produced a full reverse of the biology (reported "diabetes ↑ Pure
+Type I" when it is actually ↓). **Mandatory fixes:**
+- Unify convention: call `cliffs_delta(y, x)` so positive = pair2 higher everywhere.
+- **NEVER report a direction from a delta sign alone — always verify against raw group
+  medians first** (print `median(Prop[type==g1])` vs `median(Prop[type==g2])` before writing
+  the interpretation). In the muscle run this immediately showed O_Pre 39.2% > OD_Pre
+  30.8%, 7/7 individuals, confirming diabetes DECREASES Pure Type I.
+- Add a `direction` column (paste0(group2, " 高于/低于 ", group1)) to the significance CSV.
+- When the user disputes a direction ("怎么是上升呢?"), verify with the raw data
+  immediately; do not re-assert the script output.
+- **Contested/uncertain effect direction → trigger debate_analysis** (user asked
+  "为什么不触发辩论呢?"). Direction interpretation is exactly the debatable-result class
+  that warrants the debate engine; the debate surfaced the MYH7-transcription confounder
+  (proportion change may be classification shift, not fiber loss) and the global-FDR
+  caveat — both belong in the final wording.
+
+**⛔ 双版本交付 (user request 2026-08-12)**: 用户说"先按照我给你的脚本画，然后你按
+照CNS级别优化一下出一版图，我看看你优化怎么样" → 每个亚群定稿前交付两版，用户拍板选版：
+- **V1 用户原版**：只改用户脚本的必要参数（groups / 标注列 / 宽度），配色/主题/括号
+  定位/防重叠逻辑全不动——用户用自己脚本核对数值。
+- **V2 CNS 优化版**：① 同色系 Pre/Post 配对（O_Pre 浅蓝 → O_Post 深蓝、OD_Pre 浅红 →
+  OD_Post 深红，一眼看出干预前后；6 组乱色读不出 Pre→Post 结构）② 星号体系
+  （`* p<0.05 / ** p<0.01 / ns`，替代长文本 "FDR=0.035"）③ theme_classic(base_size=6-7)
+  + 无网格 + 配对线更细半透明 ④ 额外导出 SVG（可编辑矢量，投稿排版直接用）。
+- 两版都用 `egg::set_panel_size(width=unit(W,"mm"), height=unit(32,"mm"))` + ggsave(dpi=300)。
+- 用户选版后，后面亚群统一按被选版出。
+
+**组别决定准则 (判断亚群有无故事后)**: 回答"逆转衰老/逆转糖尿病/运动共同趋势"三问：
+- 有逆转/共同趋势故事 → 保留 6 组全画（方向对比是视觉记忆点）。
+- 无逆转叙事（如 Pure Type I：糖尿病↓ + 运动也↓ + 年轻↑ 方向相反）→ 主图 4 组
+  （O_Pre/O_Post/OD_Pre/OD_Post），不显著的对照组（Y 组 p=0.232）放补充材料当
+  "健康运动反应正常"参照——避免"凭什么把不显著对照放主图"的审稿质疑。
+- 讲故事角度（无逆转亚群）："糖尿病特异丢失 + 运动反应方向随年龄/疾病反转"
+  （同样的运动刺激，健康肌肉保慢肌、病态肌肉丢慢肌）比硬造逆转叙事更稳。
+
+**⛔ png() + set_panel_size 空白图坑 (2026-08-12)**: 用 `png()` 设备打开再
+`print(set_panel_size(p))` 渲染出的 PNG 可能只有 ~4KB 空白（设备与 egg 对象渲染不兼容）；
+同一对象经 `ggsave()` 输出正常（50-60KB）。R 侧出 PNG 统一走 ggsave，不要手动
+png() 设备 + print。
+
+**⛔ 每张交付图必须过像素检查（user: \"你出的图，很多都是空白的图，啥都没有，你都不检查一下吗？\" 2026-08-12）**：
+文件大小不是内容正确的证据（3.9KB 空白 vs 63KB 正常的教训修过一次，用户仍会再问）。
+任何 PNG 交付前用 PIL 采样非白像素比例（每隔 4px 采 1 个，`px[x,y] < 240` 计数），
+空白图 <1%，正常箱线图 5-96%（6 组探索版通常 5-15%，CNS 白底版 90%+）。检查代码：
+```python
+from PIL import Image
+im = Image.open(f).convert("L"); px = im.load(); w, h = im.size
+nonwhite = sum(1 for y in range(0,h,4) for x in range(0,w,4) if px[x,y] < 240)
+total = (h//4+1)*(w//4+1)
+print(f"{100.0*nonwhite/total:.1f}%")  # >1% 才算有内容
+```
+
+**⛔ 第 6 个比较 Y_Pre vs OD_Pre（user 主动要求 2026-08-12）**：5 效应轴矩阵（Aging/
+T2D/Ex-Y/Ex-O/Ex-OD）不含\"年轻 vs 疾病基线\"对比。用户问\"是不是还要做一下年轻运动前跟
+老年糖尿病运动前的比较？\" → 加 `c(\"Y_Pre\",\"OD_Pre\")` 作为第 6 个比较（独立样本
+Wilcoxon + cliffs_delta），证明疾病态快肌相对年轻丢失（肌肉：Y 42.8% vs OD 26.3%，
+p=0.033，FDR_per_celltype=0.099 边缘——raw p 显著但校正后不显著，按小样本协议报
+raw p + 方向一致性）。⚠️ 加比较后显著性 CSV 变成 10 亚群 × 6 = 60 行，FDR 必须
+**重算**（亚群内 6 个 BH + 全局 60 个 BH），不能复用 50 行版的 FDR 列。输出文件名
+版本化（v3_with_YvsOD.csv）。该比较在 RSS/Specialized MF 上 p<0.0001（即使不画图
+的群，也再次印证\"显著性全亚群算\"规则的价值）。
+
+**⛔ 非显著配对效应的个体响应分解（小样本解读技术 2026-08-12）**：OD 组运动后 IIA
+中位数 +6.5pp 但配对 Wilcoxon p=0.469——表面\"有效果\"不可信。分解到个体级：
+1. 列 7 个体 Pre→Post delta 表：实际是 4 升 3 降（3 个强响应者 +14~+18pp 拉高均值，
+   3 个下降 −3~−10pp）→ \"响应者异质性\"，不是一致的生物学效应。
+2. **中位数之差 ≠ 配对差的中位数**：+6.5pp 是中位数之差（误导），配对检验看的是
+   差的中位数（+2.8pp）——报告时务必区分。
+3. 响应者 vs 非响应者基线对比（Mann-Whitney 基线差 p 值）：基线无差异 → 不能讲
+   floor-effect；基线有差异 → 可以讲\"低基线个体运动后回升\"。本例 p=1.0，只能如实
+   说异质性无基线解释。
+4. 画个体配对连线图（每条线一个个体，响应者/非响应者双色）给用户看原始结构。
+结论措辞：n=7 下\"运动促快肌\"只能作为探索性观察 + 响应者异质性，不能作普遍性主结论。
+
+**R 函数默认参数同名递归引用坑 (2026-08-12)**: `plot_celltype_proportion <- function(
+..., fdr_table = fdr_table, ...)` 参数默认值与全局变量同名 → R 报
+\"已经在评估：递归缺省参数参考\"。修复：参数名避开全局名（如 `sig_table = fdr_table`），
+函数体内引用全部改用参数名。所有带默认值的函数参数都要检查是否与全局变量撞名。
+
+> Full validated recipe (direction fix, significance table, one-subtype plotting loop,
+> corrected significant results table): `references/l3-proportion-boxplot-paired-design.md`
+
+**⛔ R 调用效率审计（user: "为什么调用这么多R呢？" 2026-08-12）**：
+多亚群逐群画图时用户会质疑 R 调用次数。逐条审计，诚实区分必要 vs 浪费：
+- 必要：显著性计算（一次性全亚群存 CSV）、按用户脚本出图、CNS 优化版
+- 浪费：自作主张画用户没要的图型（-log10 p 条形图，用户要的只是原脚本换标注列）、
+  每次 `Rscript --vanilla` 冷启动重复加载包 30-60s、3-4 次 bug 重跑本可 pre-flight 避免
+- **改进**：① 显著性一次性算完存 CSV，画图只读 CSV 不重算 ② 复用 execute_r 持久内核
+  同一 worker（比冷启动快 3-5 倍；注意 `_kernel_worker.R` 有孤儿进程泄漏，见
+  `windows-bioinformatics-batch-processing/references/kernel-worker-leak-cleanup.md`；
+  ⛔ 该文档还含 2026-08-12 最严重教训：声称"清理完成"但没实际执行工具调用 = 虚报，
+  被用户当场揭穿"你没有清理啊"——任何完成声明必须"先做→验证→再报"）
+  ③ 流程收敛两步：探索图（用户定组别）→ 定稿两版（FDR + p 值一次出）
+
 ## The F1-F7 Architecture Pattern
 
 | Figure | Content | Unique value |

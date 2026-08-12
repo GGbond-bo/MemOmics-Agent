@@ -355,7 +355,56 @@ GET https://api.genome.ucsc.edu/getData/track?genome=hg38;track=phyloP100way;chr
 
 > 📑 测试版 P3-P6 完整执行记录（脚本/结果/文件清单/专利文档路径）→ `references/test-version-p3-p6-execution-2026-08.md`
 
-## 🔴 集群交接：QC 过滤后上传什么（2026-08-09 用户问"是不是只要把质控过滤后的箭头文件上传集群"）
+### 🔴 人侧注释首选方案：用猴侧已验证的 marker 列表标签迁移（2026-08-12 用户问根据猴子来注释可以吗）
+
+用户猴侧已注释好（8 大类 scRNA marker），问能否根据猴子来注释人——答案：可以，且推荐。实现方式 = marker 列表迁移（label transfer via markers），不是直接搬细胞标签。
+
+```
+猴侧 scRNA 注释 → 提取 8 大类 marker 基因（Ex: SLC17A7 / Astro: GFAP / Micro: P2RY12 ...）
+→ 这些 marker 是保守基因（人猴 ortholog 存在）
+→ 人侧 ATAC GeneScoreMatrix 对同一套 marker 打分（或 TSS±2kb 覆盖度）
+→ 每 cluster 取最高分类型 = 注释
+→ 这本身就是跨物种保守性的证据（专利卖点：猴 marker 在人侧也成立）
+```
+
+关键前提（回答根据猴子来注释可以吗必须先确认）：
+1. 猴侧注释是 scRNA 还是 scATAC 做的：scRNA（232K cells 那套）→ marker 是基因表达层面，用于 ATAC GeneScore 是近似但可行；scATAC 有 CellType 列 → 直接提取 cluster→celltype 映射更快
+2. 粒度必须统一：猴侧 8 大类（Ex/Inh/Astro/Micro/OPC/ODC/VS/ChP）↔ 人侧官方 18 亚类——专利对比必须用同一套标签体系，建议都用 8 大类，否则对比无效
+3. 人侧纯 ATAC 无配对 RNA：无法复刻官方 Multiome RNA 注释（见下条），marker 迁移是 ATAC-only 数据最合理的注释路径
+
+代码骨架（人侧跑）：
+```r
+# 猴侧：从已注释对象提取每类 marker（FindAllMarkers / 已有 marker 表）
+# 人侧：用猴 marker 打分
+monkey_markers <- read.csv("monkey_celltype_markers.csv")
+marker_list <- lapply(split(monkey_markers$gene, monkey_markers$cluster), head, 20)
+gs <- getMatrixFromProject(proj, useMatrix = "GeneScoreMatrix")
+score_mat <- sapply(names(marker_list), function(ct) {
+  genes <- intersect(marker_list[[ct]], rownames(gs))
+  if (length(genes) == 0) return(rep(0, ncol(gs)))
+  colMeans(assay(gs[genes, ]))
+})
+cluster_scores <- aggregate(score_mat, by = list(cluster = proj$Clusters), FUN = mean)
+cluster_scores$CellType <- names(marker_list)[max.col(cluster_scores[, -1])]
+```
+
+### 🔴 GSE278576 官方注释方法（2026-08-12 用户问这40个样本文章怎么注释的）— 数据是 Multiome 不能只当 ATAC
+
+GSE278576 = Zemke, Lee, Mamde et al.（Science 2026; bioRxiv 2024, doi 10.1101/2024.10.14.618338）：40 供体 × 80 样本（Multiome：RNA + ATAC + 甲基化 + 3D 基因组）。
+
+官方注释流程（两步，ATAC 侧只聚类、RNA 侧才是真注释）：
+```
+① ATAC 侧（SnapATAC2）：fragments → QC → tile matrix → spectral → umap → leiden（min_frags=500, min_tsse=5, scrublet）
+② RNA 侧（Seurat）：SCTransform → rPCA → Leiden res 0.3 → marker + reference 注释 → 18 亚类
+→ Multiome 同核 RNA↔ATAC 配对 → 把 RNA 标签 transfer 到 ATAC 细胞
+```
+
+对我们的意义：
+- 官方注释靠 RNA 层 + Multiome 配对，我们人侧只有 ATAC fragments、无配对 RNA → 无法复刻 18 亚类注释质量 → 8 大类 marker 迁移（上一条）是最实际路径
+- 官方补充表 Table_S7.tsv（20.8MB，472,859 cCRE + 18 亚类归属）是注释对齐的高质量资源：能拿到就把官方 18 亚类标签映射到我们的细胞，比 ATAC marker 近似准得多
+- 专利人侧注释粒度与猴侧必须一致（8 大类），不要照抄官方 18 亚类（对比基准是猴侧）
+
+### 🔴 集群交接：QC 过滤后上传什么（2026-08-09 用户问是不是只要把质控过滤后的箭头文件上传集群）
 
 **用户把本机 `ArchR_Arrow_QC_Filtered/` 传到集群继续往下跑时，答案 = 可以，但两个文件都要传、且 merge 前必须 subset。**
 

@@ -7,10 +7,50 @@
   "starting_prompt": "帮我画论文图",
   "source_dir": "skills/bioinformatics/scipilot-figure-skill",
   "memomics_module": "07_可视化",
-  "chains_from": ["deg-analysis", "scrna-seurat-core", "cellchat-v2", "trajectory-analysis", "functional-enrichment"],
-  "chains_to": ["bioinformatics-html-report", "pdf-report-generation"],
-  "tags": ["figure", "visualization", "plot", "chart", "publication", "CNS", "期刊", "画图", "可视化", "scipilot"],
-  "aliases": ["scipilot-figure"],
+  "chains_from": [
+    "deg-analysis",
+    "scrna-seurat-core",
+    "cellchat-v2",
+    "trajectory-analysis",
+    "functional-enrichment"
+  ],
+  "chains_to": [
+    "bioinformatics-html-report",
+    "pdf-report-generation"
+  ],
+  "tags": [
+    "figure",
+    "visualization",
+    "plot",
+    "chart",
+    "publication",
+    "CNS",
+    "期刊",
+    "画图",
+    "可视化",
+    "scipilot"
+  ],
+  "aliases": [
+    "scipilot-figure"
+  ],
   "trigger_level": "RED",
-  "trigger_keywords": ["画图", "可视化", "figure", "plot", "发表级", "作图", "出图"]
+  "trigger_keywords": [
+    "画图",
+    "可视化",
+    "figure",
+    "plot",
+    "发表级",
+    "作图",
+    "出图"
+  ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.0,
+      "evidence": "辩论7方论点(正方: 文献T2D慢肌减少PMID 23515448/17284623/39634609 + 7/7一致 + FDR_per_celltype=0.035; 反方: FDR_global=0.117不显著 + n=7功效低 + MYH7转录下调可致假比例下降 + O运动后也下降与运动增I型常识相悖 + 符号约定陷阱重现风险)。judge JSON解析失败→need_more_info/low。",
+      "date": "2026-08-12 23:12:16"
+    }
+  ]
 }

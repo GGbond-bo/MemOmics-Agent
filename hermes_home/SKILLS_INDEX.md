@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (69 skills)
+## 08_报告 - 报告/可视化 (70 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -266,6 +266,7 @@
 | nature-paper-card | 单篇论文深度拆解卡片（固定01-16节：文献定位/研究问题/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/批判分析/知识连接/可测试研究想法）；触发词：拆解文献、文献拆解、paper  | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, critical analysis of paper, 拆解这篇文献, 拆一下, 帮我拆 | RED 必触发 |
 | nature-reader | 全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读 | 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 帮我读这篇, 帮我读一下, 读一下这篇, 翻译这篇paper, 全文对照, paper translation, read this paper, deep reading, read this | RED 必触发 |
 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-rea |  | YEL 讨论触发 |
+| celltype-proportion-comparison | 细胞类型/亚群比例跨组比较箱线图全流程（配对前后 + 独立跨组）。触发词："亚群比例"、"L3 boxplot"、"Proportion (%)"、"6组箱线图"、"FDR标注"、"p值标注"、"画哪 |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

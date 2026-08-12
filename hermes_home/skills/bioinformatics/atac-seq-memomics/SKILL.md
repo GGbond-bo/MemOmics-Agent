@@ -132,6 +132,82 @@ terminal(command='cmd.exe /c "E:\\path\\to\\run.bat"', background=True, notify_o
 
 > ⚠️ `terminal(background=True)` 仍走 bash → Rscript，segfault 照旧。**必须** cmd.exe 包装。
 
+### ✅ 非 UCSC 基因组标准做法 = 显式传注释 RDS（其他人/师兄脚本模式，2026-08-12 用户问"addArchRGenome 这步其他人怎么做"实测）
+
+**回答模板**：猴子（食蟹猴 T2T-MFA8v1.1）的标准做法是**不调 `addArchRGenome()`**，改成显式加载/构建 genomeAnnotation + geneAnnotation 对象传给 `createArrowFiles()` / `ArchRProject()`——`addArchRGenome` 只认识 UCSC 命名的标准基因组（hg38/mm10/rheMac10），食蟹猴 NCBI 命名（NC_088xxx.1）必然失败或静默错配。
+
+**报错签名**：`ArchRProject(ArrowFiles = arrow_files, ...)` 不传注释 → `Error in getGeneAnnotation(): ArchRPRoj is NULL and there is no genome set with addArchRGenome!`（`ArchRProject()` 默认调 getGeneAnnotation 校验，必须显式给注释或先 addArchRGenome）。
+
+**标准做法（师兄 create_archr_project 脚本实测模式）**：
+```r
+library(BSgenome.Mfascicularis.NCBI.T2TMFA8v1)   # 食蟹猴 T2T BSgenome 包
+genomeAnnotation <- readRDS(".../genomeAnnotation.rds")   # 手动加载 pre-built 注释
+geneAnnotation   <- readRDS(".../geneAnnotation.rds")
+# 建 Arrow 时传：
+createArrowFiles(..., geneAnnotation = geneAnnotation, genomeAnnotation = genomeAnnotation)
+# 建项目/重读 Arrow 时传：
+proj <- ArchRProject(ArrowFiles = arrow_files, outputDirectory = "...", copyArrows = FALSE,
+                     geneAnnotation = geneAnnotation, genomeAnnotation = genomeAnnotation)
+```
+
+三选一：① 有 pre-built RDS（师兄/上游给的）→ 直接 readRDS 传参（**最省、功能最全**，含基因注释可做 ChIPseeker）；② 无 RDS → 按 `references/custom-genome-non-ucsc.md` 手动 SimpleList（⚠️ 空 geneAnnotation 只够 TileMatrix/降维/聚类，做不了 peak 注释）；③ 已保存的 ArchR 项目 → `loadArchRProject(..., force=TRUE)` 直接读，不用碰 Arrow/注释（rds 自带注释）。⛔ 不要用 `createGenomeAnnotation(genome="自定义")`——它会去搜 BSgenome 包失败。
+
+### 🟢 跨物种管线一致性检查清单（2026-08-12 猴 63 样本 vs 人 40 样本对比实测）
+
+跨物种可及性对比前，**两侧 ArchR 处理参数必须逐项核对一致**，否则差异被处理差异污染（审查员/审稿人必问"QC 是否一致"）。对照猴侧官方脚本（create_archr_project.R，63 样本 / 161,497 cells / 4 年龄组）总结：
+
+| 环节 | 猴侧（官方参数）| 人侧必须对齐 |
+|------|----------------|--------------|
+| QC 阈值 | minTSS=4, minFrags=3000 | ✅ 已一致 |
+| doublet | filterDoublets(filterRatio=2) | ✅ 一致（记录方式不同：猴侧就地删无列 / 人侧 CSV 名单） |
+| GeneScore | createArrowFiles 默认 addGeneScoreMat=TRUE | ✅ 一致 |
+| LSI | iterations=**5**, varFeatures=25000, dimsToUse=**1:30** | 🔴 默认 2 轮必须改 5 |
+| Harmony | ✅ addHarmony(groupBy="Sample", theta=10, lambda=10) | 🔴 人侧必须补（40 donor 批次效应大） |
+| 聚类 | resolution=**0.8**, reducedDims="Harmony" | 🔴 默认 0.5 必须改 0.8 |
+| UMAP | name="UMAPHarmony", nNeighbors=30, minDist=0.5 | ⚠️ 建议同名 |
+| ImputeWeights | 跑了（td=3, ka=4, k=15） | ⚠️ 补上 |
+
+**完整猴侧统一流程**（LSI 5 轮 → Harmony → Clusters res 0.8 → UMAPHarmony → ImputeWeights）见本次会话人侧修正版（`00_read40_filter.R` 之后的 M2 聚类段），要点：`addIterativeLSI(iterations=5, dimsToUse=1:30)` → `addHarmony(reducedDims="IterativeLSI", groupBy="Sample", theta=10, lambda=10)` → `addClusters(input=proj, reducedDims="Harmony", resolution=0.8)` → `addUMAP(reducedDims="Harmony", name="UMAPHarmony")` → `addImputeWeights(reducedDims="Harmony")`。
+
+**Harmony 项目画图必须用 `embedding="UMAPHarmony"`（2026-08-12 实测）**：项目做过 `addHarmony` 后，`plotEmbedding(..., embedding="UMAP")` 报 `Error in getEmbedding: Embedding not in computed embeddings, Current ones are : UMAPHarmony`——embedding 名由 addUMAP 的 name 参数决定（Harmony 流程 = "UMAPHarmony"），画图前先 `names(proj@embeddings)` 看实际名再传。
+
+**doublet 是否真正剔除的验证（猴侧无 DoubletFilter 列时，2026-08-12 实测）**：`filterDoublets` 就地删细胞、不加标记列（见上方 filterDoublets 条目）——确认剔除是否生效 = 对比 `nrow(getCellColData(proj))`（过滤后 161,497）vs 原始 Arrow 内细胞总数（h5py/rhdf5 读每个 Arrow `Metadata/cellNames` 求和）→ 差 >10% 说明 filterDoublets 确实删了；≈0 说明没生效需补跑。⚠️ 回答"有没有 DoubletFilter 列"前先跑 `"DoubletFilter" %in% colnames(getCellColData(proj))` 实测，不要凭对方贴的列名猜（本会话先误判"没有"，用户纠正后实测确认）。
+
+### 🔴 GeneScoreMatrix marker 注释的假阳性家族过滤（2026-08-12 40 样本 human_40_markerList.csv 实测）
+
+ATAC GeneScoreMatrix 的 top marker 会被**已知假阳性基因家族**污染，注释前必须过滤：
+
+- **KRTAP（角蛋白相关蛋白）/ OR（嗅觉受体）/ MIR（miRNA）/ SNORD（小核仁 RNA）**——ATAC GeneScore 分析的标准污染家族（基因组重复/多拷贝区域假信号）
+- **HBB（血红蛋白）/ STATH（唾液）/ AMELX（牙釉质）**——样本污染或 doublet 信号（脑组织不应出现）
+- **HOXB 发育基因**——可能是 cluster 未注释完全（胚胎发育程序残留），也可能污染
+
+**过滤代码模式**：
+```r
+artifact_pat <- "^(KRTAP|OR[0-9]|MIR[0-9]|SNORD|SNORA|HBB|HBA|STATH|AMELX|MUC|DEFB)"
+markers_clean <- markers[!grepl(artifact_pat, markers$gene), ]
+```
+过滤后 top marker 才代表真实细胞类型（本会话 40 样本实测：过滤后 C18=GFAP/AQP4 Astro、C19=DLX1/SLC32A1 Inh、C20/C21=NEUROD2/NRGN Ex、C22/C24=CCL3/P2RY13 Micro，与海马预期一致；未过滤时前几名全是 KRTAP/OR/MIR）。注释后仍需做 CellType 分布组织预期验证门（见上方验证门）。
+
+**跨物种注释统一粒度铁律（2026-08-12 用户问"根据猴子来注释可以吗"实测）**：可以且推荐——用**猴侧已验证的 marker 列表**给人侧打分（label transfer via marker lists，正是专利"跨物种保守性"论证），但两侧必须**同一套标签体系**（都用 8 大类 Ex/Inh/Astro/Micro/OPC/ODC/VS/ChP，不要人侧 18 亚类 vs 猴侧 8 大类），否则跨物种对比无法进行。实现：猴侧 `FindAllMarkers` 提取每类 top 20 → 人侧 GeneScoreMatrix 对同样 marker 打分 → cluster 级 argmax。⚠️ 前提确认：猴侧注释是 scRNA（marker=基因表达）还是 scATAC（marker=GeneScore）——scRNA marker 用于 ATAC GeneScore 是近似但可行。
+
+### 🔴 猴侧 predictedAnno 16 类 vs 人侧官方 18 亚类——命名体系不同，非一一对应（2026-08-12 用户贴猴侧 predictedAnno 实测）
+
+用户猴侧 63 样本项目 `cellColData` 有 **16 类 predictedAnno**（label transfer 预测注释，列名含 `predictedAnno` = 用参考图谱迁移的标签）：`CA1_SUB / s_f_Ex / CAE_SUB deep Ex / Microglia / EC L6 EX / MGE SST / CGE LAMP5 / Astrocyte / MGE PVALB / EC L3_5 EX / DG Ex / CGE CNR1 / OPC / CA2_4 / Ependymal / ODC / VS / Choroid Plexus / EC L2 EX`（含 EC 内嗅皮层分层 + MGE/CGE 发育起源命名）。
+
+**人侧 GSE278576 官方 18 亚类（2026-08-12 从本地 Table_S7 提取唯一值实测确认）**：`CA1, CA2-CA3, DG, SUB, SST, VIP, Astro, Chandelier, LAMP5, Macro, Microglia, NR2F2, Oligo, OPC, PVALB, Endo, T-Cell, VLMC`。本地路径：`E:\专利\Human_Hippocampus_ATAC\papers\suppl_media2\Supplemental Tables S1-S24\Table_S7.tsv`（472,860 行，列 = coordinates + celltype，celltype 列逗号分隔多亚类，`pd.read_csv(...sep="\t")` 拆分 set 去重即可拿全名单）。
+
+**核心差别（4 点，回答"跟人的注释有什么差别"时用）**：
+1. **命名体系不同**：人侧官方 = 海马亚区（CA1/CA2-CA3/DG/SUB）+ marker 型 Inh（SST/PVALB/VIP/LAMP5/NR2F2/Chandelier）；猴侧 = 海马亚区 + **皮层分层（EC L2/L3_5/L6）+ 发育起源（MGE/CGE）**。两套不是一一对应（猴侧 EC 系列在人侧不存在；人侧 VIP/NR2F2/Chandelier/Macro/T-Cell 猴侧没有）。
+2. **覆盖度差异**：人侧有 Macro/T-Cell/Chandelier/VIP/NR2F2（猴侧无）；猴侧有 EC/Ependymal/ChP（人侧官方无或归入 Endo/VLMC）。
+3. **标签对齐困难**：`MGE PVALB lnh ≈ PVALB`（粗略），`EC L3_5 EX ≈ ???`（人侧无 EC 类），`s_f_Ex/CAE_SUB ≈ SUB/CA1`（难精确映射）。
+4. **⚠️ 专利循环论证风险**：猴侧 predictedAnno 若**用人类参考图谱 label transfer 预测**而来，再用它做"猴-人保守性对比" = 循环论证（用人标猴、再比猴人）。专利方法里必须注明"label transfer 仅用于对齐，保守性评估基于独立信号（序列/可及性/TF）"。
+
+**处理建议（三选一）**：A. 归并到 8 大类做专利主分析（推荐，测试版已验证，独权只写"细胞类型特异"够支撑）；B. 亚区水平对齐（CA1/CA2-CA3/DG/SUB + SST/PVALB/LAMP5 + 胶质）做补充分析（实施例亮点）；C. 用猴侧 16 类 marker 重注释人侧（同体系但人侧缺 MGE/CGE 信号，质量未知）。两侧跨物种对比前必须归并到同一套标签——粒度不一致直接导致对比无法进行或结果失真。
+
+### 🔴 NCBI 组装版本号会更新：GTF/目录名 .1 → .2（2026-08-12 用户查 GCF_037993035 实测）
+
+用户集群 GTF 路径 `ncbi_dataset/data/GCF_037993035.1/genomic.gtf` → NCBI 检索确认 **GCF_037993035.2 是当前版本**（Macaca fascicularis T2T-MFA8v1.1, isolate 582-1, Complete Genome），`.1` 已不存在。**验证 accession 用 `query_ncbi(db="nuccore", query="GCF_037993035.2[Assembly]")` 或 nuccore 检索；目录名 .1 可能是下载时的旧版本，文件本身仍可用**——用 GTF 头几行验证染色体命名（应 NC_088xxx.1）确认基因组身份，比纠结目录版本号更可靠。⚠️ 但师兄脚本用的是 pre-built RDS 注释（genomeAnnotation.rds/geneAnnotation.rds），不是 GTF——交付代码时先确认用户走哪条路（RDS 直用 vs GTF 自建）。
+
 ### 🔴 非人类基因组 / NCBI 染色体命名 — 2026-07-29 已验证
 
 **现象**：
@@ -751,6 +827,24 @@ markers <- getMarkerFeatures(proj, ...)
 saveRDS(markers, "markers.rds")            # ← 必须
 ```
 ---
+
+### 🟢 getMarkerFeatures 必须带 bias 校正（2026-08-12 用户审计实锤：\"你确定这几步没有问题吗？\"）
+
+用户对照官方 tutorial 逐行检查时发现我给的 marker 检验缺 `bias` 参数。**官方默认写法必须带 bias**：
+
+```r
+markersGS <- getMarkerFeatures(
+    ArchRProj = proj,
+    useMatrix = "GeneScoreMatrix",
+    groupBy = "Clusters",
+    bias = c("TSSEnrichment", "log10(nFrags)"),   # ← 官方必有，漏了会产生假阳性 marker
+    testMethod = "wilcoxon"
+)
+```
+
+- **为什么重要**：bias 校正 cluster 间 TSS 富集分数 + 文库大小（nFrags）差异——不校正则高 nFrags 的 cluster 系统性富集更多\"marker\"（假阳性）。官方文档原话 \"correct for potential differences in TSS enrichment and library size\"。
+- **cutOff 阈值也按官方默认**：注释用 `cutOff = \"FDR <= 0.01 & Log2FC >= 1.25\"`（不是宽松的 0.05/1）。严格阈值 = 高特异性，找到\"每群独有的身份证\"，避免管家基因（线粒体/核糖体）污染注释；26 万细胞统计功效强，微小差异也显著，更必须严格。放宽场景：富集分析/通路用 FDR 0.05 & FC 1（宁多勿漏），FeaturePlot 不用 cutOff。
+- **用户问\"为什么这么严格\"时的解释模板**：FDR<=0.01 = \"确实富集不是碰巧\"（26 万细胞×2 万基因几百万次检验必须校正）；Log2FC>=1.25 ≈ 表达量差 2.4 倍 = \"这个群的身份证\"。小数据（几千细胞）才需要放宽；大样本严格阈值反而筛得更干净。
 
 ### 🟢 查看 project 元数据 (cellColData) — 2026-08-12 实测
 

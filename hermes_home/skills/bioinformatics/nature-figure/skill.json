@@ -32,8 +32,8 @@
       "ragg"
     ]
   },
-  "success_count": 2,
-  "proven_script": "",
+  "success_count": 3,
+  "proven_script": "run_plot_PureTypeI_4grp_CNS.R",
   "proven_params": [
     {
       "species": "human",
@@ -60,9 +60,22 @@
       "approved": false,
       "custom_script": false,
       "result": "hdWGCNA hub 基因网络图 + 发表级模块-性状热图。black hub=NUDT3/ERBB4/FILIP1L/GLUL/NDUFA10/RPL3L (衰老-0.51, ExYoung+0.27, ExOld-0.23 可逆靶点); magenta hub=SETX/USP54/N4BP2L2/DUSP10/SVIL (衰老+T2D上调, ExT2D压不住=不可逆损伤)。发表级热图 9 "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging_diabetes_exercise",
+      "script": "run_plot_PureTypeI_4grp_CNS.R",
+      "params": "groups=O_Pre/O_Post/OD_Pre/OD_Post; comparisons=O_Pre/O_Post, OD_Pre/OD_Post, O_Pre/OD_Pre; annot_col=FDR_per_celltype|p.value; egg::set_panel_size(26mm x 32mm); ggsave dpi=300",
+      "date": "2026-08-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Pure Type I 4组箱线图两版对比交付: (1)用户原脚本样式 FDR版+raw p值版 (2)CNS优化版(同色系Pre/Post配色+星号体系+theme_classic 6.5pt+配对虚线)。10文件齐全(PNG/PDF/SVG)。关键统计: O_Pre vs OD_Pre p=0.00699 FDR=0.035 糖尿病显著压低 Pure Type I (cliffs_delta="
     }
   ],
   "user_prefs": {
-    "last_used_script": ""
+    "last_used_script": "run_plot_PureTypeI_4grp_CNS.R"
   }
 }
