@@ -19,7 +19,12 @@ import time
 
 logger = logging.getLogger(__name__)
 
-_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "600"))
+# 0 = 不启用时间回收；>0 则空闲超过该秒数的 worker 被回收（与 LRU 容量回收并存）。
+# 默认 1800s = 30 分钟（2026-08-13 用户定：最多 2 个 R + 空闲 30 分钟关闭）
+_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "1800"))
+# 每种语言最多保留的 worker 数（LRU：超出时回收最久未用的）。
+# 默认 2：单任务分析隔多久回来都不重读数据，多任务切换也不爆内存。
+_MAX_WORKERS_PER_LANG = int(os.environ.get("MEMOMICS_KERNEL_MAX_WORKERS", "2"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
 _PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
 _R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
@@ -235,9 +240,10 @@ class KernelPool:
     def _ensure_sweeper(self):
         """启动后台空闲清扫线程（幂等）。
 
-        惰性回收只在 execute() 时发生：长时间没有新执行 → 永不触发检查，
-        空闲 worker 堆积（2026-08-13 实测 40 个 R kernel 常驻 ~2-4GB）。
-        清扫线程每 60s 检查一次，回收超过 idle 阈值的 worker。"""
+        仅当 _IDLE_TIMEOUT > 0 时启动（时间回收模式）；默认 LRU 容量回收
+        在 execute() 创建新 worker 时即时触发，不需要后台线程。"""
+        if _IDLE_TIMEOUT <= 0:
+            return
         with self._sweeper_lock:
             if self._sweeper_started:
                 return
@@ -252,6 +258,26 @@ class KernelPool:
                     pass  # 清扫失败不影响主流程
 
         threading.Thread(target=_sweep, daemon=True, name="kernel-pool-sweeper").start()
+
+    def _evict_lru(self, lang):
+        """LRU 容量回收：该语言 worker 数超过上限时，回收最久未用的。
+
+        语义（2026-08-13 用户定）：不限时间，最多保留 N 个最近使用的
+        worker——单任务分析隔多久回来都不重读数据，多任务切换不爆内存。
+        仅在创建新 worker 时触发。"""
+        with self._lock:
+            same_lang = {k: w for k, w in self._workers.items() if k.startswith(lang + ":")}
+            if len(same_lang) <= _MAX_WORKERS_PER_LANG:
+                return
+            overflow = len(same_lang) - _MAX_WORKERS_PER_LANG
+            for k in sorted(same_lang, key=lambda k: same_lang[k].last_use)[:overflow]:
+                try:
+                    same_lang[k].close()
+                except Exception:
+                    pass
+                del self._workers[k]
+            logger.info("kernel pool: LRU evicted %d %s worker(s), %d remaining",
+                        overflow, lang, len(self._workers))
 
     def _reap_idle(self):
         now = time.monotonic()
@@ -325,11 +351,12 @@ class KernelPool:
         lang = language or "python"
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
-        self._ensure_sweeper()  # 幂等：首个 worker 创建时启动后台空闲清扫
+        self._ensure_sweeper()  # 幂等：仅 _IDLE_TIMEOUT>0 时启动时间回收
         with self._lock:
-            for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
-                self._workers[k].close()
-                del self._workers[k]
+            if _IDLE_TIMEOUT > 0:
+                for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
+                    self._workers[k].close()
+                    del self._workers[k]
             w = self._workers.get(key)
             if w is None:
                 if lang == "r":
@@ -337,6 +364,7 @@ class KernelPool:
                 else:
                     w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=os.getcwd())
                 self._workers[key] = w
+        self._evict_lru(lang)  # LRU 容量回收：超出上限时回收最久未用的 worker
         try:
             return w.execute(code, timeout)
         except Exception as e:
