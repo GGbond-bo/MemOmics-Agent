@@ -1554,6 +1554,21 @@ def _handle_image_generate(args, **kw):
 
 _GENERIC_IMAGE_DESCRIPTION = IMAGE_GENERATE_SCHEMA["description"]
 
+# 使用场景边界（2026-08-12）：防止 LLM 把流程图/数据图等本可用代码
+# 精确完成的图也路由到 AI 图像生成。此段置于描述最前，是模型决策的第一依据。
+_SCENARIO_GUIDANCE = (
+    "SCOPE — use ONLY for true AI image generation: photorealistic pictures, "
+    "illustrations, art, concept art, book covers, wallpapers, character/"
+    "scene visuals, logos/mascots, or when the user explicitly asks to "
+    "\"generate / draw / create an image with AI\".\n"
+    "DO NOT use for diagrams that code produces more accurately: flowcharts, "
+    "data charts/plots, architecture diagrams, UML, mind maps, schematics, "
+    "gene/pathway diagrams, experimental-design figures. For those, use a "
+    "code/terminal tool instead (Mermaid, matplotlib/plotly/R, graphviz, "
+    "Bioconductor, etc.) — AI image models garble text/labels and cannot "
+    "render data faithfully."
+)
+
 
 def _active_image_capabilities() -> Dict[str, Any]:
     """Best-effort: return the active backend/model's image capabilities.
@@ -1610,12 +1625,12 @@ def _active_image_capabilities() -> Dict[str, Any]:
 
 def _build_dynamic_image_schema() -> Dict[str, Any]:
     """Build a description reflecting whether the active model supports editing."""
-    parts = [_GENERIC_IMAGE_DESCRIPTION]
+    parts = [_GENERIC_IMAGE_DESCRIPTION, _SCENARIO_GUIDANCE]
 
     try:
         info = _active_image_capabilities()
     except Exception:  # noqa: BLE001
-        return {"description": _GENERIC_IMAGE_DESCRIPTION}
+        return {"description": _SCENARIO_GUIDANCE + "\n\n" + _GENERIC_IMAGE_DESCRIPTION}
 
     provider = info.get("provider")
     model = info.get("model")
