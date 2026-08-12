@@ -2,7 +2,7 @@
 name: academic-paper-reviewer
 description: "多视角学术审稿：自动识别论文领域，动态配置5个独立审稿人（期刊匹配/方法学/领域专家/跨学科/魔鬼代言人）+主编合成，支持完整审稿/复审/快速评估/苏格拉底引导/校准模式；触发词：审稿、同行评审、帮我审论文、referee、peer review、simulate review"
 when_to_use: [academic-paper-reviewer] 多视角学术审稿：自动识别论文领域，动态配置5个独立审稿人（期刊匹配/方法学/领域专家/跨学科/魔鬼代言人）+主编合成，支持完整审稿/复审/快速评估/苏格拉底引导/校准模式
-trigger_keywords: ["审稿", "论文审稿", "同行评审", "审稿意见", "帮我审论文", "模拟审稿", "审稿人", "referee", "peer review", "review paper", "critique paper", "editorial review"]
+trigger_keywords: ["审稿", "论文审稿", "同行评审", "审稿意见", "帮我审论文", "帮我审一下", "审一下这篇", "模拟审稿", "审稿人", "帮我评评", "评一评", "referee", "peer review", "review paper", "review this", "review the", "critique paper", "editorial review", "manuscript review"]
 trigger_level: YEL 讨论触发
 
 description: "Multi-perspective academic paper review with dynamic reviewer personas. Simulates 5 independent reviewers (Journal-Fit Reviewer + 3 peer reviewers + Devil's Advocate) with field-specific expertise. Supports full review, re-review (verification), quick assessment, methodology focus, Socratic guided, and calibration modes. Triggers on: review paper, peer review, manuscript review, referee report, review my paper, critique paper, simulate review, editorial review, calibrate reviewer, reviewer calibration, measure reviewer accuracy, 審查論文, 論文審查, 模擬審查, 同儕審查, 幫我審這篇, 以審查人角度評估, 審查者校準, 논문 심사, 동료 심사, 모의 심사, 심사자 관점에서 평가, 심사자 보정."

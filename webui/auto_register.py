@@ -121,6 +121,7 @@ def _parse_skill_md(skill_dir: str) -> dict:
         'name': display_name or meta.get('name', os.path.basename(skill_dir)),
         'category': category,
         'description': str(description)[:200],
+        'when_to_use': str(meta.get('when_to_use', '') or '')[:300],
         'trigger_level': 'RED' if trigger_keywords else trigger_level,
         'trigger_keywords': trigger_keywords,
         'tags': meta.get('tags', []) if isinstance(meta.get('tags'), list) else [],
@@ -215,7 +216,7 @@ def auto_register_to_index(skill_dir: str) -> bool:
     trigger_level = meta.get('trigger_level', 'YEL')
     trigger_display = {'RED': 'RED 必触发', 'YEL': 'YEL 讨论触发', 'GRN': 'GRN 按需触发', 'WHT': 'WHT 系统级'}.get(trigger_level, 'YEL 讨论触发')
     desc = meta.get('description', '')[:100]
-    keywords = ', '.join(meta.get('trigger_keywords', meta.get('tags', []))[:5])
+    keywords = ', '.join(meta.get('trigger_keywords', meta.get('tags', []))[:10])
     
     entry = f'\n| {skill_name} | {desc} | {keywords} | {trigger_display} |'
     
@@ -313,6 +314,89 @@ def register_skill(skill_dir: str,
     return {"ok": True, "skill": skill_name, "actions": results}
 
 
+def rebuild_index_descriptions() -> dict:
+    """修复 SKILLS_INDEX.md 中描述为空的历史条目（只追加不更新导致）。
+
+    遍历 bioinformatics 下所有 skill 目录，重新解析 SKILL.md frontmatter，
+    把索引行里 Description / Keywords 为空的单元格补全。
+    不动已有内容的单元格（保留手工优化），不动 trigger_level。
+    """
+    if not SKILLS_BIO_DIR:
+        return {"ok": False, "error": "not initialized"}
+
+    with open(SKILLS_INDEX_PATH, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    filled_desc, filled_kw = 0, 0
+    for d in sorted(os.listdir(SKILLS_BIO_DIR)):
+        full = os.path.join(SKILLS_BIO_DIR, d)
+        if not os.path.isdir(full) or d.startswith('.') or d.startswith('_'):
+            continue
+        md = os.path.join(full, "SKILL.md")
+        if not os.path.exists(md):
+            continue
+        meta = _parse_skill_md(full)
+        desc = str(meta.get('description', '') or '')[:100]
+        if not desc:
+            # 兜底：从 when_to_use 提取（去掉 "[skillname] " 前缀）
+            wtu = str(meta.get('when_to_use', '') or '').strip()
+            if wtu:
+                if wtu.startswith('['):
+                    wtu = wtu.split(']', 1)[-1].strip()
+                desc = wtu[:100]
+        tks = meta.get('trigger_keywords', []) or []
+        tags = meta.get('tags', []) or []
+        if not desc and not tks:
+            continue  # 本身没有可补内容
+
+        # tags 兜底泛词（rna, scrna, scrnaseq 等）对触发识别无用；
+        # SKILL.md 有真实 trigger_keywords 时用真词覆盖
+        tag_fallback = ', '.join(tags[:10])
+
+        for i, line in enumerate(lines):
+            if not line.startswith('|') or line.startswith('| #') or line.startswith('|---'):
+                continue
+            cells = line.split('|')
+            # 两种行格式兼容（split 后首尾是空串，序号列在 cells[1]）：
+            #   老格式: | N | name | desc | keywords | trigger |   → cells[1] 数字
+            #   新格式: | name | desc | keywords | trigger |        → cells[1] 是名字
+            if len(cells) < 5:
+                continue
+            if cells[1].strip().isdigit():
+                # 老格式: | N | name | desc | kw | trigger |
+                if len(cells) < 7:
+                    continue
+                name_col, desc_col, kw_col = 2, 3, 4
+            else:
+                # 新格式: | name | desc | kw | trigger |
+                name_col, desc_col, kw_col = 1, 2, 3
+            name = cells[name_col].strip()
+            if name != d:
+                continue
+            updated = False
+            if not cells[desc_col].strip() and desc:
+                cells[desc_col] = f' {desc} '
+                filled_desc += 1
+                updated = True
+            cur_kw = cells[kw_col].strip()
+            if tks:
+                want_kw = ', '.join(tks)
+                cur_kw_n = len([k for k in cur_kw.split(',') if k.strip()]) if cur_kw else 0
+                # 覆盖条件：当前列为空 / 是 tags 兜底泛词 / 词数少于 SKILL.md 真触发词
+                # （历史条目多为 [:5] 截断或 tags 兜底，需升级为完整 trigger_keywords）
+                if not cur_kw or cur_kw == tag_fallback or cur_kw_n < len(tks):
+                    cells[kw_col] = f' {want_kw} '
+                    filled_kw += 1
+                    updated = True
+            if updated:
+                lines[i] = '|'.join(cells)
+
+    with open(SKILLS_INDEX_PATH, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+    print(f"[auto-register] Index rebuild: filled {filled_desc} descriptions, {filled_kw} keyword cells", flush=True)
+    return {"ok": True, "filled_desc": filled_desc, "filled_keywords": filled_kw}
+
+
 def scan_and_register_all():
     """启动时扫描所有 skill 目录，补全缺失的 skill.json + 索引条目"""
     if not SKILLS_BIO_DIR:
@@ -337,4 +421,7 @@ def scan_and_register_all():
             if auto_register_to_index(full):
                 results["index_added"] += 1
     
+    # 补全历史空描述条目（只追加不更新的历史缺陷）
+    rebuild = rebuild_index_descriptions()
+    results["desc_rebuilt"] = rebuild.get("filled_desc", 0)
     return results

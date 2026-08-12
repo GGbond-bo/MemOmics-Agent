@@ -2,7 +2,7 @@
 name: nature-paper-card
 description: "单篇论文深度拆解卡片（固定01-16节：文献定位/研究问题/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/批判分析/知识连接/可测试研究想法）；触发词：拆解文献、文献拆解、paper card、深度拆解、单篇论文分析"
 when_to_use: "[nature-paper-card] 单篇论文深度拆解卡片：固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法）"
-trigger_keywords: ["拆解文献", "文献拆解", "拆解论文", "paper card", "论文卡片", "深度拆解", "单篇论文分析", "evidence chain", "证据链分析", "critical analysis of paper", "拆解这篇文献"]
+trigger_keywords: ["拆解文献", "文献拆解", "拆解论文", "paper card", "论文卡片", "深度拆解", "单篇论文分析", "evidence chain", "证据链分析", "critical analysis of paper", "拆解这篇文献", "拆一下", "帮我拆"]
 trigger_level: RED 必触发
 ---
 

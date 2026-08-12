@@ -2,7 +2,7 @@
 name: nature-reviewer
 description: "Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking；触发词：Nature审稿、预审、投稿前自审、审稿人视角、mock peer review"
 when_to_use: [nature-reviewer] Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking
-trigger_keywords: ["Nature审稿", "预审", "投稿前自审", "审稿人视角", "审稿意见模拟", "帮我审一下论文", "referee", "mock peer review", "manuscript critique", "novelty assessment"]
+trigger_keywords: ["Nature审稿", "预审", "投稿前自审", "审稿人视角", "审稿意见模拟", "帮我审一下论文", "referee", "mock peer review", "manuscript critique", "novelty assessment", "pre-submission review", "review this paper"]
 trigger_level: YEL 讨论触发
 ---
 

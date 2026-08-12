@@ -2,7 +2,7 @@
 name: idea-evaluator
 description: "研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决；触发词：评估研究想法、这个想法值得做吗、novelty check、idea evaluation"
 when_to_use: [idea-evaluator] 研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决
-trigger_keywords: ["评估研究想法", "这个想法值得做吗", "研究方向评估", "novelty check", "评估可行性", "score this idea", "is this a good research direction", "idea evaluation", "research idea"]
+trigger_keywords: ["评估研究想法", "评估一下", "这个想法", "研究想法", "研究方向评估", "新点子", "靠不靠谱", "novelty check", "评估可行性", "score this idea", "is this a good research direction", "idea evaluation", "research idea", "evaluate this idea"]
 trigger_level: YEL 讨论触发
 
 

@@ -1855,6 +1855,7 @@ if create_bioinformatics_router is not None:
 SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
 SKILLS_INDEX_PATH = os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md")
 _SKILLS_INDEX_CACHE = None  # 模块级缓存：服务器启动后只读一次，所有会话共享
+_SKILLS_INDEX_MTIME = None  # 缓存对应的文件 mtime，用于热更新检测
 
 # 允许浏览的根目录
 _BROWSE_ROOTS = {
@@ -1868,15 +1869,79 @@ _BROWSE_ROOTS = {
 def _read_skills_index():
     """读取技能目录 (SKILLS_INDEX.md)，作为 ephemeral_system_prompt 注入。
     预加载缓存：首次调用时读取，后续返回缓存，避免每次会话都读 27KB 文件。
-    SOUL.md 由 Hermes 框架从 HERMES_HOME 自动加载，此处不重复加载。"""
-    global _SKILLS_INDEX_CACHE
-    if _SKILLS_INDEX_CACHE is None:
+    mtime 感知：SKILLS_INDEX.md 被外部修改（如 auto_register 重建）后自动重读，
+    无需重启 server。SOUL.md 由 Hermes 框架从 HERMES_HOME 自动加载，此处不重复加载。"""
+    global _SKILLS_INDEX_CACHE, _SKILLS_INDEX_MTIME
+    try:
+        cur = os.path.getmtime(SKILLS_INDEX_PATH) if os.path.isfile(SKILLS_INDEX_PATH) else -1
+    except OSError:
+        cur = -1
+    if _SKILLS_INDEX_CACHE is None or cur != _SKILLS_INDEX_MTIME:
         if os.path.isfile(SKILLS_INDEX_PATH):
             with open(SKILLS_INDEX_PATH, encoding="utf-8") as f:
                 _SKILLS_INDEX_CACHE = f.read()
         else:
             _SKILLS_INDEX_CACHE = ""
+        _SKILLS_INDEX_MTIME = cur
+        if cur != -1 and _SKILLS_INDEX_CACHE:
+            print(f"[skills-index] reloaded ({len(_SKILLS_INDEX_CACHE)} bytes, mtime={cur})", flush=True)
     return _SKILLS_INDEX_CACHE
+
+
+# RED 必触发 skill 触发词缓存（解析自 SKILLS_INDEX.md）
+_RED_TRIGGER_CACHE = None  # [(skill_name, [triggers...]), ...]
+
+
+def _match_red_skill_triggers(user_text: str) -> list:
+    """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做子串匹配。
+    返回命中的 skill 名列表（按索引顺序）。空消息/无命中 → []。
+    缓存随 SKILLS_INDEX mtime 失效（由 _read_skills_index 的重读隐式保证：
+    这里每次直接重新解析，索引 50KB 解析开销 < 1ms，可忽略）。"""
+    global _RED_TRIGGER_CACHE
+    if not user_text:
+        return []
+    idx = _read_skills_index()
+    if _RED_TRIGGER_CACHE is None:
+        _RED_TRIGGER_CACHE = []
+        for line in idx.splitlines():
+            if not line.startswith("|"):
+                continue
+            cells = line.split("|")
+            if len(cells) < 6:
+                continue
+            # 兼容两种格式：老 | N | name | desc | kw | trigger |，新 | name | desc | kw | trigger |
+            if cells[1].strip().isdigit():
+                name, kw_cell, trig = cells[2].strip(), cells[4].strip(), cells[5].strip()
+            else:
+                name, kw_cell, trig = cells[1].strip(), cells[3].strip(), cells[4].strip()
+            if "RED" not in trig:
+                continue
+            triggers = [k.strip() for k in kw_cell.split(",") if k.strip()]
+            if triggers:
+                _RED_TRIGGER_CACHE.append((name, triggers))
+    t = user_text.lower()
+    t_words = set(t.split())  # 英文词级匹配用
+    hits = []
+    for name, triggers in _RED_TRIGGER_CACHE:
+        matched = False
+        for kw in triggers:
+            kw_l = kw.lower()
+            if len(kw_l) >= 2:
+                if kw_l in t:
+                    matched = True
+                    break
+                # 英文触发词：词级交集（"review paper" 命中 "Can you review this manuscript?" 的 review）
+                if " " in kw_l and t_words:
+                    _STOP = {"this", "that", "the", "a", "an", "for", "to", "with",
+                             "is", "are", "of", "and", "or", "in", "on", "my", "me",
+                             "i", "you", "can", "do", "does", "be", "it", "its", "as"}
+                    kw_words = set(w for w in kw_l.split() if w not in _STOP)
+                    if kw_words and any(w in t_words for w in kw_words):
+                        matched = True
+                        break
+        if matched:
+            hits.append(name)
+    return hits
 
 
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
@@ -2340,8 +2405,36 @@ def _detect_modalities_from_text(text: str) -> list:
 
 def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "") -> str:
     """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
+    # === RED 必触发预检：用户消息命中 RED skill 触发词 → 前置强约束先 skill_view ===
+    # 审稿/润色/拆解等文献类任务常被意图分类器分到弱约束分支（literature/chat），
+    # agent 会跳过 skill_view 直接按固有知识处理。这里在意图注入之外兜底：
+    # 命中 RED 触发词 → 注入最高优先级指令，强制先加载对应 skill。
+    # 注意：不覆盖原意图注入，作为前置段拼接。
+    red_prefix = ""
+    red_hits = _match_red_skill_triggers(user_text)
+    if red_hits:
+        zh = session_lang == "zh"
+        red_prefix = "\n".join([
+            "【系统指令：RED 必触发 skill 检测 — 最高优先级，不可跳过】",
+            f"检测到用户消息命中以下必触发技能：{', '.join(red_hits)}",
+            "你必须按以下顺序执行：",
+            "1. 立即调用 skill_view(name='<命中的技能名>') 加载该技能的完整指令（Pipeline/Workflow/规则段），禁止跳过、禁止凭固有知识直接处理！",
+            "2. 严格按 skill 指令执行任务。",
+            "3. 若需要材料（文件/文本）而用户未提供，先向用户索要，不要自行猜测或跳过。",
+            "⛔ 禁止在 skill_view 之前调用 OCR/搜索/terminal 等替代手段绕开本指令。",
+            "",
+        ] if zh else [
+            "【SYSTEM: RED mandatory skill detected — highest priority, do not skip】",
+            f"User message matches mandatory skills: {', '.join(red_hits)}",
+            "You MUST execute in this order:",
+            "1. Immediately call skill_view(name='<matched skill>') to load its full instructions (Pipeline/Workflow/rules). Do NOT skip it or rely on your own knowledge!",
+            "2. Follow the skill instructions strictly.",
+            "3. If materials (files/text) are needed but not provided, ask the user — do not guess or skip.",
+            "⛔ Do NOT call OCR/search/terminal as a workaround BEFORE skill_view.",
+            "",
+        ]) + "\n"
     if intent == "chat":
-        return ""
+        return red_prefix
     if intent == "self_intro":
         # 硬注入固定自我介绍，LLM 禁止自由发挥
         return (
@@ -2592,7 +2685,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return "\n".join(lines)
+            return red_prefix + "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -2615,7 +2708,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return "\n".join(lines)
+    return red_prefix + "\n".join(lines)
 
 
 # Progress text map (moved down from above)
@@ -6760,10 +6853,13 @@ async def ws_endpoint(ws: WebSocket):
                 except Exception as _ss_err:
                     logger.warning("session_state capture failed: %s", _ss_err)
 
-                if _intent not in ("chat", "self_intro"):
-                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
-                else:
+                # RED 必触发预检在 _build_skill_injection 内部完成：
+                # chat/self_intro 意图也调用（命中 RED 触发词 → 返回强约束注入；
+                # 未命中 → chat 返回空字符串，self_intro 由下方快速回复处理）
+                if _intent == "self_intro":
                     _skill_ctx = None
+                else:
+                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
                 # === 自我介绍快速回复（绕过 agent LLM）===
