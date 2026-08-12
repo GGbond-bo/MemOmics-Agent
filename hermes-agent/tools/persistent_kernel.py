@@ -300,6 +300,25 @@ class KernelPool:
         _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hermes-agent/
         _pp = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = _root if not _pp else _root + os.pathsep + _pp
+        # R 用户库：environment.json 里 default R 的 lib_user/lib_site 不在 scrub
+        # 白名单（scrub 会删 R_LIBS_USER），但主力分析 R 的 251 个包（含
+        # jsonlite）都在自定义 lib_user 里。R 启动时读取 R_LIBS_USER 环境变量
+        # 并自动加入 .libPaths()——不设的话 worker 找不到 jsonlite 立即死亡
+        # （2026-08-13 实测 R-4.5.3 无此变量时 execute_r 卡满 600s）。
+        try:
+            import json as _json
+            _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
+            _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8"))
+            _r_section = _env_json.get("paths", {}).get("r", {})
+            _def_rscript = _r_section.get("default", "")
+            _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
+            _r_info = _r_section.get(_r_ver, {})
+            if _r_info.get("lib_user") and not env.get("R_LIBS_USER"):
+                env["R_LIBS_USER"] = _r_info["lib_user"]
+            if _r_info.get("lib_site") and not env.get("R_LIBS_SITE"):
+                env["R_LIBS_SITE"] = _r_info["lib_site"]
+        except Exception:
+            pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
         return env
 
     def execute(self, code, task_id, timeout=120, language="python"):
