@@ -8,8 +8,8 @@ providers:
   opencode-go:
     request_timeout_seconds: 60
     stale_timeout_seconds: 30
-api_base: https://api.deepseek.com/v1
-api_key: sk-5f65c79ab75f41588888d7288a16a464
+api_base: https://opencode.ai/zen/go/v1
+api_key: sk-rbpDmbJemloMxy3tMwJFpK7ny3mX38lvxONYKfdabNgolPjAl0Ub6Dp7SCfKib8n
 max_turns: 200
 model: deepseek-v4-flash
 provider: openai
@@ -155,3 +155,5 @@ debate:
   judge:
     provider: opencode-go
     model: deepseek-v4-pro
+image_gen:
+  provider: dashscope
