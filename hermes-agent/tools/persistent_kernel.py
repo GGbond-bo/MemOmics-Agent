@@ -94,8 +94,26 @@ class _ProtoWorker:
                 self._pending.pop(rid, None)
                 self._kill(grace=0.5)
                 return {"status": "error", "error": "worker write failed", "output": "", "tool_calls_made": 0, "duration_seconds": 0}
-            if not ev.wait(timeout):
+            # 轮询等待响应，同时监控 worker 存活：worker 若中途死亡（如 R 缺
+            # jsonlite 启动即退），空等 ev.wait(timeout) 会白烧整个超时窗口
+            # （2026-08-13 实测 R-4.5.3 无 jsonlite 时每个 R 执行卡满 600s）。
+            deadline = time.monotonic() + timeout
+            while not ev.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if self.proc is not None and self.proc.poll() is not None:
+                    break  # worker 死了：立即失败，让上层回退
+                ev.wait(min(remaining, 0.5))
+            if not ev.is_set():
                 self._pending.pop(rid, None)
+                if self.proc is not None and self.proc.poll() is not None:
+                    # 明确报告 worker 死亡（区别于超时），上层据此回退旧路径
+                    self.proc = None
+                    return {"status": "error",
+                            "error": "kernel worker died unexpectedly (missing runtime dep, e.g. jsonlite?)",
+                            "output": "".join(self._stderr_buf[-5:]) if getattr(self, "_stderr_buf", None) else "",
+                            "tool_calls_made": 0, "duration_seconds": round(time.monotonic() - (deadline - timeout), 1)}
                 self._kill(grace=0.5)
                 return {"status": "timeout",
                         "error": f"Kernel timed out after {timeout}s and was killed.",
