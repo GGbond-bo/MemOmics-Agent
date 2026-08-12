@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (66 skills)
+## 08_报告 - 报告/可视化 (69 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -263,6 +263,9 @@
 | nature-response | Nature风格修回信套件：逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿；触发词：修回信、返修、rebuttal、response to rev | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复 | RED 必触发 |
 | nature-reviewer | Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking；触发词：Nature审稿、预审、投稿前自审、审 | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟 | RED 必触发 |
 | paper-polish | 学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张；触发词：润色、论文润色、去AI腔、中译英、polish | 润色, 论文润色, 去AI腔, 去除AI味, AI味 | RED 必触发 |
+| nature-paper-card | 单篇论文深度拆解卡片（固定01-16节：文献定位/研究问题/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/批判分析/知识连接/可测试研究想法）；触发词：拆解文献、文献拆解、paper  | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片 | RED 必触发 |
+| nature-reader | 全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读 | 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读 | RED 必触发 |
+| nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-rea |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

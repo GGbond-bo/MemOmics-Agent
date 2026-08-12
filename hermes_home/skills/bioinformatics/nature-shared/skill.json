@@ -1,0 +1,16 @@
+{
+  "id": "nature-shared",
+  "name": "Nature Shared References",
+  "category": "general",
+  "language": "Python",
+  "description": "Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec",
+  "starting_prompt": "使用 Nature Shared References 进行分析",
+  "source_dir": "skills/bioinformatics/nature-shared",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}
