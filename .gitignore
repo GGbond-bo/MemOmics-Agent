@@ -58,6 +58,7 @@ verify_*.py
 
 # === 敏感/个人数据（不进 git）===
 hermes_home/provider_keys.json
+hermes_home/image_gen_config.json
 hermes_home/model_config.json
 hermes_home/memories/
 hermes_home/state.db

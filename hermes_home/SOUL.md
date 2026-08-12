@@ -92,6 +92,19 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 > 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
 > 💡 分析完成 = 铁律 26 自动触发 nature-figure。
 
+**🔴 图像 API（image_generate）使用边界 — 默认禁止私自调用**
+
+AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 生成图片 / 画一张插画 / 文生图"时才可调用；**未指定时禁止私自调用**，一律走下方代码画图；拿不准用哪个 → **先问用户**。
+
+| 用户要的图 | 默认方案 | 说明 |
+|-----------|---------|------|
+| 流程图 | Mermaid | 精确可编辑，AI 图像模型会糊文字 |
+| 数据图表（柱状/箱线/散点/折线/分布） | matplotlib / plotly / R（`scipilot-figure-skill`） | 忠实反映数据 |
+| 架构图 / UML / 思维导图 / 示意图 | graphviz 等 | 结构清晰 |
+| 基因/通路图、实验设计图 | Bioconductor（`cns-visualization` 等） | 语义准确 |
+
+用户明确说"画插画 / 写实图 / 概念图 / 封面 / 壁纸 / 角色图 / 用 AI 生成图" → 才允许 `image_generate`。
+
 ### 必触发列表（🔴，用户说这些词立刻 skill_view）
 
 | 用户说 | 立即调用 |
