@@ -6,6 +6,7 @@ from . import env_check
 from . import rail_review
 from . import execute_r
 from . import execute_python
+from . import kernel_restart
 from . import debate_analysis
 from . import generate_report
 from . import skill_evolution

@@ -377,6 +377,38 @@ class KernelPool:
                 w.close()
             self._workers.clear()
 
+    def restart(self, language=None, task_id=None):
+        """重启 worker 释放全部内存（OpenAI4S "换 kernel" 的等价物）。
+
+        关闭匹配的 worker（shutdown 帧优雅退出 + grace 树杀兜底），下次
+        execute 自动重建全新 worker。内存密集管线阶段切换时调用：
+        上一阶段所有对象/变量全部释放，下一阶段从磁盘重新加载最小输入。
+
+        Args:
+            language: 只重启该语言（"r"/"python"），None = 全部语言
+            task_id: 只重启该任务，None = 该语言全部任务
+        Returns:
+            可 JSON 序列化的结果字符串
+        """
+        with self._lock:
+            keys = [k for k in self._workers.keys()
+                    if (language is None or k.startswith(language + ":"))
+                    and (task_id is None or k.endswith(":" + task_id))]
+            closed = 0
+            for k in keys:
+                try:
+                    self._workers[k].close()
+                    closed += 1
+                except Exception:
+                    pass
+                del self._workers[k]
+        return json.dumps({
+            "ok": True,
+            "closed_workers": closed,
+            "remaining_workers": len(self._workers),
+            "note": "workers closed; next execute spawns a fresh worker — all in-memory objects are gone, reload from disk as needed",
+        }, ensure_ascii=False)
+
 
 KERNEL_POOL = KernelPool()
 
