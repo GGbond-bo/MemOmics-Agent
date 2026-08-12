@@ -1679,6 +1679,60 @@ def _load_provider_keys():
 
 _load_provider_keys()
 
+# === 图像生成配置（image_gen_config.json，独立于 Hermes 主配置） ===
+_IMAGE_GEN_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "image_gen_config.json")
+_IMAGE_GEN_DEFAULTS = {
+    "provider": "openai-compatible",
+    "openai_compatible": {
+        "base_url": "",
+        "api_key": "",
+        "model": "",
+        "size": "1024x1024",
+        "landscape_size": "2K",
+        "portrait_size": "2K",
+    },
+    "dashscope": {
+        "api_key": "",
+        "model": "qwen-image-3.0",
+        "size": "1024*1024",
+        "landscape_size": "1280*720",
+        "portrait_size": "720*1280",
+    },
+}
+
+_image_gen_config: dict = {}
+
+
+def _load_image_gen_config():
+    global _image_gen_config
+    try:
+        if os.path.exists(_IMAGE_GEN_CONFIG_FILE):
+            with open(_IMAGE_GEN_CONFIG_FILE, "r", encoding="utf-8") as f:
+                _image_gen_config = json.load(f) or {}
+    except Exception:
+        _image_gen_config = {}
+    if not isinstance(_image_gen_config, dict):
+        _image_gen_config = {}
+    for _k, _v in _IMAGE_GEN_DEFAULTS.items():
+        if _k not in _image_gen_config:
+            _image_gen_config[_k] = _v
+        elif isinstance(_v, dict) and isinstance(_image_gen_config[_k], dict):
+            for _kk, _vv in _v.items():
+                _image_gen_config[_k].setdefault(_kk, _vv)
+    if _image_gen_config.get("provider") not in ("openai-compatible", "dashscope"):
+        _image_gen_config["provider"] = "openai-compatible"
+
+
+def _save_image_gen_config():
+    try:
+        _atomic_write_json(_IMAGE_GEN_CONFIG_FILE, _image_gen_config)
+    except Exception as e:
+        print(f"[WARN] 保存图像生成配置失败: {e}")
+
+
+_load_image_gen_config()
+
+
 def _sync_debate_env():
     """Inject API key + base_url into environ for debate_analysis independent LLM calls.
     修复(2026-08-01): 优先使用 _current_model (model_config.json 里实际配置的 provider/key,
@@ -3119,7 +3173,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=_provider,
         model=cfg["model"],
         max_iterations=300,
-        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation"],
+        enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen"],
         ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
         quiet_mode=True,
         tool_progress_mode="all",
@@ -3806,6 +3860,65 @@ async def list_providers():
         g = it["group"]
         groups[g] = groups.get(g, 0) + 1
     return {"providers": items, "total": len(items), "groups": groups}
+
+
+def _mask_key(k):
+    """API key 脱敏显示：只露首尾 4 位"""
+    if not k:
+        return ""
+    if len(k) <= 10:
+        return "****"
+    return k[:4] + "…" + k[-4:]
+
+
+@app.get("/api/imagegen/config")
+async def get_imagegen_config():
+    """读取图像生成配置（key 脱敏）"""
+    cfg = {"provider": _image_gen_config.get("provider", "openai-compatible")}
+    for section in ("openai_compatible", "dashscope"):
+        sub = _image_gen_config.get(section, {}) or {}
+        shown = dict(sub)
+        if shown.get("api_key"):
+            shown["api_key"] = _mask_key(shown["api_key"])
+            shown["has_key"] = True
+        else:
+            shown["has_key"] = False
+        cfg[section] = shown
+    p = cfg["provider"]
+    section_key = {"openai-compatible": "openai_compatible"}.get(p, p)
+    sub = _image_gen_config.get(section_key, {}) or {}
+    ready = False
+    if sub.get("api_key"):
+        if p == "dashscope":
+            ready = bool(sub.get("model"))
+        else:
+            ready = bool(sub.get("base_url") and sub.get("model"))
+    cfg["ready"] = ready
+    return cfg
+
+
+@app.post("/api/imagegen/config")
+async def save_imagegen_config(body: dict):
+    """保存图像生成配置（provider 下拉 + 各 section 字段）"""
+    try:
+        payload = body or {}
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": "请求体必须是 JSON 对象"}, status_code=400)
+        if "provider" in payload and payload["provider"] in ("openai-compatible", "dashscope"):
+            _image_gen_config["provider"] = payload["provider"]
+        for section in ("openai_compatible", "dashscope"):
+            if section in payload and isinstance(payload[section], dict):
+                sub = _image_gen_config.setdefault(section, {})
+                for k, v in payload[section].items():
+                    if v is None:
+                        continue
+                    if k == "api_key" and isinstance(v, str) and (v == "****" or "…" in v):
+                        continue  # 脱敏值不回写
+                    sub[k] = v
+        _save_image_gen_config()
+        return {"ok": True, "provider": _image_gen_config.get("provider")}
+    except Exception as exc:
+        return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
 
 
 @app.get("/api/providers/{pid}/models")

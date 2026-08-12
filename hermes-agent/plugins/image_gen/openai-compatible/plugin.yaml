@@ -1,0 +1,6 @@
+name: openai-compatible
+version: 1.0.0
+description: "OpenAI-images-compatible image generation backend (BYO base_url): Volcengine Seedream / Zhipu GLM-Image / OpenAI official / any compatible gateway."
+author: MemOmics
+kind: backend
+requires_env: []

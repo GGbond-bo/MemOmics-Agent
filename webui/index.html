@@ -793,6 +793,38 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         </div>
         <button class="save-btn" onclick="saveModel()">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+        <!-- 图像生成配置 -->
+        <div class="settings-group">
+          <label>🖼️ 图像生成 (聊天里说「画一张…」即可用)</label>
+          <div id="imagegen-status" style="font-size:11px;color:var(--text-light);margin-bottom:6px;">读取中…</div>
+          <select id="imagegen-provider" onchange="onImageGenProviderSelect()" style="width:100%;">
+            <option value="openai-compatible">OpenAI 兼容（火山 Seedream / 智谱 / 自定义端点）</option>
+            <option value="dashscope">阿里 DashScope（千问 qwen-image / 万相）</option>
+          </select>
+        </div>
+        <div class="settings-group" id="imagegen-group-openai-compatible">
+          <label>Base URL</label>
+          <input type="text" id="imagegen-base-url" placeholder="https://ark.cn-beijing.volces.com/api/v3">
+          <label style="margin-top:6px;">模型 ID</label>
+          <input type="text" id="imagegen-model" placeholder="doubao-seedream-5-0-260628 / glm-image-4.3">
+          <label style="margin-top:6px;">默认尺寸 (横屏/竖屏在 config 里可另配)</label>
+          <input type="text" id="imagegen-size" placeholder="1024x1024 或 2K">
+        </div>
+        <div class="settings-group" id="imagegen-group-dashscope" style="display:none;">
+          <label>模型 ID</label>
+          <input type="text" id="imagegen-model-dash" placeholder="qwen-image-3.0 / wan2.7-image">
+          <label style="margin-top:6px;">默认尺寸</label>
+          <input type="text" id="imagegen-size-dash" placeholder="1024*1024">
+        </div>
+        <div class="settings-group">
+          <label>API Key</label>
+          <div style="display:flex;gap:4px;">
+            <input type="password" id="imagegen-api-key" placeholder="sk-..." style="flex:1;">
+            <button onclick="saveImageGenConfig()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">保存</button>
+          </div>
+          <div id="imagegen-hint" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
+        </div>
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
         <!-- 微信 iLink 连接 -->
         <div class="settings-group">
           <label>📱 微信连接</label>
@@ -2622,7 +2654,7 @@ function switchView(view) {
   else { pauseKbGraph3D(); }
   if (view === 'skills') { loadSkills(); loadSkillMgr(); }
   if (view === 'results') refreshResults();
-  if (view === 'settings') loadSettings();
+  if (view === 'settings') { loadSettings(); loadImageGenConfig(); }
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
   if (view === 'weixin') weixinRefresh();
@@ -2825,6 +2857,69 @@ async function saveProviderKey() {
     document.getElementById('settings-api-key').value = '';
     document.getElementById('settings-api-key').placeholder = '\u2713 已保存';
     await loadProviders();
+  } else {
+    alert('\u274c 保存失败: ' + (d.error || ''));
+  }
+}
+
+// === 图像生成配置 (image_gen) ===
+async function loadImageGenConfig() {
+  var statusEl = document.getElementById('imagegen-status');
+  try {
+    var r = await fetch('/api/imagegen/config');
+    var d = await r.json();
+    if (d.error) throw new Error(d.error);
+    document.getElementById('imagegen-provider').value = d.provider || 'openai-compatible';
+    onImageGenProviderSelect();
+    var oc = d.openai_compatible || {}, ds = d.dashscope || {};
+    document.getElementById('imagegen-base-url').value = oc.base_url || '';
+    document.getElementById('imagegen-model').value = oc.model || '';
+    document.getElementById('imagegen-size').value = oc.size || '1024x1024';
+    document.getElementById('imagegen-model-dash').value = ds.model || 'qwen-image-3.0';
+    document.getElementById('imagegen-size-dash').value = ds.size || '1024*1024';
+    document.getElementById('imagegen-api-key').value = '';
+    document.getElementById('imagegen-api-key').placeholder = oc.has_key ? '\u2713 已保存 (' + oc.api_key + ')，留空不修改' : 'sk-...';
+    statusEl.textContent = d.ready ? '\u2705 图像生成已就绪' : '\u26a0\ufe0f 未配置完整（选 provider 填 key 保存即可）';
+    statusEl.style.color = d.ready ? '#4caf50' : 'var(--text-light)';
+  } catch (e) {
+    statusEl.textContent = '读取失败: ' + e.message;
+  }
+}
+
+function onImageGenProviderSelect() {
+  var p = document.getElementById('imagegen-provider').value;
+  document.getElementById('imagegen-group-openai-compatible').style.display = (p === 'openai-compatible') ? '' : 'none';
+  document.getElementById('imagegen-group-dashscope').style.display = (p === 'dashscope') ? '' : 'none';
+  document.getElementById('imagegen-api-key').placeholder = 'sk-...';
+}
+
+async function saveImageGenConfig() {
+  var p = document.getElementById('imagegen-provider').value;
+  var key = document.getElementById('imagegen-api-key').value.trim();
+  var payload = { provider: p };
+  if (p === 'openai-compatible') {
+    payload.openai_compatible = {
+      base_url: document.getElementById('imagegen-base-url').value.trim(),
+      model: document.getElementById('imagegen-model').value.trim(),
+      size: document.getElementById('imagegen-size').value.trim() || '1024x1024'
+    };
+  } else {
+    payload.dashscope = {
+      model: document.getElementById('imagegen-model-dash').value.trim(),
+      size: document.getElementById('imagegen-size-dash').value.trim() || '1024*1024'
+    };
+  }
+  if (key && key.indexOf('\u2026') === -1) {
+    (p === 'openai-compatible' ? payload.openai_compatible : payload.dashscope).api_key = key;
+  }
+  var r = await fetch('/api/imagegen/config', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  var d = await r.json();
+  if (d.ok) {
+    document.getElementById('imagegen-api-key').value = '';
+    await loadImageGenConfig();
   } else {
     alert('\u274c 保存失败: ' + (d.error || ''));
   }
