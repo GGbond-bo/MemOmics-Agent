@@ -3323,19 +3323,9 @@ def _create_agent(model_config=None, session_id=None, session=None):
         agent.tool_complete_callback = cbs["tool_complete_callback"]
         if not agent.tool_progress_callback:
             agent.tool_progress_callback = cbs.get("tool_progress_callback")
-    # 统一注入任务级隔离 env（默认 1 核 / 2 GB Job 限制）——覆盖微信/self_check/steer 等
-    # 所有创建路径，防止 terminal 环境 collapse 到共享 "default"（会话间互相干扰的根因）
-    if session_id:
-        try:
-            from tools.terminal_tool import register_task_env_overrides
-            host_cpu = max(1, os.cpu_count() or 1)
-            register_task_env_overrides(session_id, {"env": {
-                "MEMOMICS_INTERNAL_JOB_SESSION_ID": session_id,
-                "MEMOMICS_INTERNAL_JOB_MEMORY_BYTES": str(int(2.0 * 1024 ** 3)),
-                "MEMOMICS_INTERNAL_JOB_CPU_RATE": str(max(1, min(10000, round(1 / host_cpu * 10000)))),
-            }})
-        except Exception:
-            pass
+    # 注：不注入 CPU/内存 Job 限制（方案 A，2026-08-13）：
+    # windows_job.py 的 Job Object 限制因 task_id 断链从未生效，且用户要求
+    # “不管 CPU”——单细胞多核任务（plan(multisession)）需要整机算力自由。
     return agent
 
 @app.get("/api/sessions")
@@ -7948,7 +7938,8 @@ async def ws_endpoint(ws: WebSocket):
                         # 排队超时/容量不足 → 无租约降级运行（不阻塞聊天）
                         _lease = None
                         logger.warning(f"[MemOmics] resource acquire failed for session {session['id'][:12]}, running without lease")
-                    _register_job_limits(session, _res_req)
+                    # 注：不再 _register_job_limits（方案 A，2026-08-13）——Job Object
+                    # CPU/内存硬限制因 task_id 断链从未生效，用户要求多核自由。
                     task = asyncio.ensure_future(run_agent())
                     session["running_task"] = task
                     task.add_done_callback(lambda _t, _sid=session["id"], _ls=_lease: (_release_lease(_sid, _ls), _clear_session_running(_sid)))
