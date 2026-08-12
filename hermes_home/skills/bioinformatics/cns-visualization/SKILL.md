@@ -15,18 +15,19 @@ metadata:
 prerequisites:
   r_packages: []
   python_packages: []
-### 规则N: 运行记录只是参考，不能跳过审查
-- skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
-- 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
-- 禁止因"之前跑过"而跳过任何审查步骤
-- 禁止直接用历史日志里的脚本运行而不经本次审查
-- 运行日志是"参考"不是"免审凭证"
 
 ---
 
 # CNS级可视化
 
 Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
+
+> ### 规则N: 运行记录只是参考，不能跳过审查
+> - skill_evolution(action="query_logs") 返回的历史运行日志仅供参数参考
+> - 即使有 quality_score=9.0 的历史日志，仍必须执行 rail_review(pre)、debate_analysis、rail_review(post)
+> - 禁止因"之前跑过"而跳过任何审查步骤
+> - 禁止直接用历史日志里的脚本运行而不经本次审查
+> - 运行日志是"参考"不是"免审凭证"
 
 分析步骤:
   - UMAP FeaturePlot (Nature): Unified palette + hi-res
