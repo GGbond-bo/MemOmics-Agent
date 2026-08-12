@@ -34,7 +34,7 @@ def probe_sandbox_capability() -> dict:
     _docker = shutil.which("docker")
     if _docker:
         try:
-            r = subprocess.run([_docker, "info"], capture_output=True, text=True, timeout=5)
+            r = subprocess.run([_docker, "info"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
             if r.returncode == 0:
                 backends.append("docker")
         except Exception:
@@ -44,7 +44,7 @@ def probe_sandbox_capability() -> dict:
         for cand in (shutil.which("wsl"), r"C:\Windows\System32\wsl.exe"):
             if cand:
                 try:
-                    r = subprocess.run([cand, "--status"], capture_output=True, text=True, timeout=5)
+                    r = subprocess.run([cand, "--status"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                     if r.returncode == 0 or "Default" in r.stdout or "默认" in r.stdout:
                         backends.append("wsl2")
                 except Exception:
