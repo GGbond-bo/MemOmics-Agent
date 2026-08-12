@@ -81,6 +81,21 @@ async def _warm_skills_snapshot():
     此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
     同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。
     自动注册新 skill：补全缺失的 skill.json + SKILLS_INDEX 条目。"""
+    # === Hermes 插件发现（image_gen 等 backend 插件） ===
+    # 插件发现默认只在 CLI/gateway 启动时执行（gateway/run.py:7550）；
+    # MemOmics 进程内集成必须手动触发，否则 image_gen_registry 为空，
+    # image_generate 工具没有可用后端，agent 感知不到图像生成能力。
+    try:
+        from hermes_cli.plugins import PluginManager
+        PluginManager().discover_and_load()
+        from agent import image_gen_registry as _igr
+        _n = len(_igr.list_providers())
+        logger.info(f"[MemOmics] Hermes 插件发现完成，image_gen 后端 {_n} 个已注册")
+    except Exception as e:
+        logger.warning(f"[MemOmics] Hermes 插件发现失败: {e}（图像生成功能将不可用）")
+    # 已保存过图像生成配置的用户：启动时把 provider 同步进 config.yaml，
+    # 否则 image_generate 工具 check_fn 判定不可用（修复 2026-08-12 之前保存的配置没有这一步）
+    _sync_imagegen_provider_to_hermes()
     try:
         from webui import auto_register
         auto_register.init(
@@ -1728,6 +1743,30 @@ def _save_image_gen_config():
         _atomic_write_json(_IMAGE_GEN_CONFIG_FILE, _image_gen_config)
     except Exception as e:
         print(f"[WARN] 保存图像生成配置失败: {e}")
+
+
+def _sync_imagegen_provider_to_hermes():
+    """把图像生成配置同步为 Hermes config.yaml 的 image_gen.provider。
+
+    修复 2026-08-12：image_generate 工具的 check_fn
+    （check_image_generation_requirements）只认 config.yaml 的 image_gen.provider
+    —— 不写这里，工具永远不会被收集（check_fn 返回 False），agent 感知不到
+    图像生成能力，即使设置页已保存 key。保存配置时同步一份到 config.yaml，
+    与 _sync_custom_providers_to_hermes 同一范式。
+    """
+    try:
+        from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
+        provider = _image_gen_config.get("provider") or "openai-compatible"
+        cfg = read_raw_config() or {}
+        section = cfg.get("image_gen")
+        if not isinstance(section, dict):
+            section = {}
+        section["provider"] = provider
+        cfg["image_gen"] = section
+        atomic_config_write(get_config_path(), cfg)
+        logger.info(f"[MemOmics] 已同步 image_gen.provider={provider} 到 Hermes config.yaml")
+    except Exception as exc:
+        logger.warning(f"[WARN] 同步 image_gen.provider 到 config.yaml 失败: {exc}")
 
 
 _load_image_gen_config()
@@ -3916,6 +3955,7 @@ async def save_imagegen_config(body: dict):
                         continue  # 脱敏值不回写
                     sub[k] = v
         _save_image_gen_config()
+        _sync_imagegen_provider_to_hermes()  # image_generate 工具可见性依赖 config.yaml 的 image_gen.provider
         return {"ok": True, "provider": _image_gen_config.get("provider")}
     except Exception as exc:
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
