@@ -152,7 +152,8 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
         _res = KERNEL_POOL.execute(
             code,
             task_id or os.environ.get("MEMOMICS_SESSION_ID") or "default",
-            timeout=min(timeout, 600), language="r")
+            timeout=min(timeout, 600), language="r",
+            cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
             _out = (_res.get("output", "") or "(no output)")[:15000]
             return json.dumps({"status": "success", "output": _out, "exit_code": 0,

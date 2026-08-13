@@ -83,11 +83,20 @@ class _ProtoWorker:
             if len(self._stderr_buf) > 20:
                 self._stderr_buf.pop(0)
 
-    def execute(self, code, timeout):
+    def _cwd_preamble(self, cwd):  # pragma: no cover - 子类实现
+        return ""
+
+    def execute(self, code, timeout, cwd=None):
         with self.lock:
             if self.proc is None or self.proc.poll() is not None:
                 self._spawn()
             self.last_use = time.monotonic()
+            # P1-5(2026-08-13): working_dir 接线 — 复用 worker 时若 cwd 变化，
+            # 执行前先切换目录（R: setwd / Python: os.chdir）
+            if cwd and os.path.abspath(str(cwd)) != os.path.abspath(str(self.cwd)):
+                _norm = os.path.abspath(str(cwd)).replace("\\", "/")
+                code = self._cwd_preamble(_norm) + "\n" + code
+                self.cwd = cwd
             self._seq += 1
             rid = str(self._seq)
             ev = threading.Event()
@@ -208,6 +217,9 @@ class _PyWorker(_ProtoWorker):
         threading.Thread(target=self._reader_loop, daemon=True).start()
         threading.Thread(target=self._stderr_loop, daemon=True).start()
 
+    def _cwd_preamble(self, cwd):
+        return f'import os; os.chdir(r"{cwd}")'
+
 
 class _RWorker(_ProtoWorker):
     def __init__(self, task_id, rscript_path, env, cwd):
@@ -228,6 +240,9 @@ class _RWorker(_ProtoWorker):
         self._reader_stop.clear()
         threading.Thread(target=self._reader_loop, daemon=True).start()
         threading.Thread(target=self._stderr_loop, daemon=True).start()
+
+    def _cwd_preamble(self, cwd):
+        return f'setwd("{cwd}")'
 
 
 class KernelPool:
@@ -347,7 +362,7 @@ class KernelPool:
             pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
         return env
 
-    def execute(self, code, task_id, timeout=120, language="python"):
+    def execute(self, code, task_id, timeout=120, language="python", cwd=None):
         lang = language or "python"
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
@@ -360,13 +375,13 @@ class KernelPool:
             w = self._workers.get(key)
             if w is None:
                 if lang == "r":
-                    w = _RWorker(task_id or "default", self._rscript_path(), self._child_env(), cwd=os.getcwd())
+                    w = _RWorker(task_id or "default", self._rscript_path(), self._child_env(), cwd=cwd or os.getcwd())
                 else:
-                    w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=os.getcwd())
+                    w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=cwd or os.getcwd())
                 self._workers[key] = w
         self._evict_lru(lang)  # LRU 容量回收：超出上限时回收最久未用的 worker
         try:
-            return w.execute(code, timeout)
+            return w.execute(code, timeout, cwd=cwd)
         except Exception as e:
             logger.exception("kernel execute error")
             return {"status": "error", "error": str(e), "output": "", "tool_calls_made": 0, "duration_seconds": 0}
