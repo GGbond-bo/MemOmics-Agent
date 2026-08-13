@@ -74,6 +74,11 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
   - Pure Type IIX：Y_Pre vs O_Pre / Y_Pre vs OD_Pre / O_Pre vs OD_Pre / O_Pre vs O_Post（4 个）→ 用户中途补 OD_Pre vs OD_Post 变 5 个
 - **脚本必须支持参数化比较子集**（`comp_mode` 参数 + 预定义列表，如 `COMP_SUBSET <- list('all'=..., 'IIA3'=..., 'LRP1B4'=..., 'OTUD4'=..., 'IIX4'=..., 'IIX5'=...)`），不能硬编码全部 6 比较
 - 用户可能中途追加比较（"type IIX 再补一个老年糖尿病运动前后的显著性"）→ 加新 mode 重跑，**旧图删除替换**
+- **用户也可能中途删除比较**（2026-08-13 RP_high(II)：去掉 Y_Pre vs OD_Pre 的显著性）→ 定义只含剩余比较的
+  新 mode（如 RPHIGH2 = YvsO + OvsOD 两个）重跑替换，**不要保留已删比较的旧图**
+- **宽度随柱数自动适配（通用脚本标准实现）**：`width_mm <- 30 - (6 - n_groups) * 2`（6柱=30mm，每少1柱−2mm），
+  `egg::set_panel_size(p, width=unit(width_mm,'mm'), height=unit(32,'mm'))`——不要硬编码 30mm，3 组=24mm、
+  2 组=22mm 会出错
 - 交付前用 R 侧核对**标注比较数 = 用户要求的数量**（如 5/5），不要只信图"看起来对"
 - 括号按 p 值从小到大排列（防重叠逻辑），**顺序 ≠ 用户列表顺序**，但每个比较的值必须正确
 
@@ -112,7 +117,8 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
 - **多亚群流程避免重复冷启动（用户："为什么调用这么多 R？" / "kernel 不持久化吗？" 2026-08-12）**：
   metadata 314MB 每次 Rscript 冷启动重载 = 浪费。方案：① 计算一次存 `percentage_data.rds`（比例表），
   后续每亚群脚本 `readRDS` 直接画图（最稳）；② 或 `execute_r` 持久内核复用 worker（注意 execute_r worker
-  是 R-4.4.2，本项目分析须 R-4.5.3 全路径 + `.libPaths('E:/R-libs/R-4.5.3')`——用 RDS 缓存更省事）
+  实际是 **R-4.5.3**（2026-08-13 实测确认，非 R-4.4.2），本项目分析须 R-4.5.3 全路径 +
+  `.libPaths('E:/R-libs/R-4.5.3')`——但画图场景不可靠，用 RDS 缓存更省事）
 - `Rplots.pdf` 是 R 空设备残留文件（png()/print 组合产生），无内容，交付前忽略/删除，不要当产出物
 - **⛔ execute_r 持久内核画图场景不可靠（2026-08-12 实测）**：纯计算（定义变量/读 RDS）跨调用保留
   （同一 PID 复用 ✅），但**绘图函数内 `print(p)` 会触发内核崩溃 → execute_r 静默回退新 Rscript 进程 →
