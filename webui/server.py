@@ -8231,20 +8231,12 @@ if __name__ == "__main__":
         pass  # 端口空闲，正常启动
 
     # 启动通用长任务守护（独立进程，不随 server 崩溃）
-    # P1-14(2026-08-13): 平台守卫 — POSIX 用 start_new_session；
-    # guardian 内部自检项目目录，未配置时静默退出
+    # P1-14(2026-08-13): 走 platform_runtime 单入口薄层（平台差异收敛一处）
     try:
-        import subprocess as _sp
         _guardian_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "task_guardian.py")
         if os.path.exists(_guardian_path):
-            _gkwargs = {}
-            if os.name == "nt":
-                _gkwargs["creationflags"] = _sp.CREATE_NEW_PROCESS_GROUP
-            else:
-                _gkwargs["start_new_session"] = True
-            _sp.Popen([sys.executable, _guardian_path],
-                      **_gkwargs,
-                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+            from memomics.platform_runtime import spawn_detached
+            spawn_detached([sys.executable, _guardian_path])
             print(f"[MemOmics] Task guardian started")
     except Exception:
         pass

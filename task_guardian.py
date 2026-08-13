@@ -24,8 +24,16 @@ server.py 启动时自动拉起本守护（独立进程，不随 server 崩溃�
 """
 import subprocess, sys, time, os, json
 
+# P1-14: 优先走平台薄层（散点 os.name 判断收敛到 memomics.platform_runtime）；
+# 独立部署（无 memomics 包）时降级为本地平台分支
+try:
+    from memomics.platform_runtime import is_windows as _is_windows
+    _HAVE_PLATFORM_RUNTIME = True
+except ImportError:
+    _HAVE_PLATFORM_RUNTIME = False
+
 CHECK_INTERVAL = 60  # 默认每 60 秒检查一次进程存活
-IS_WINDOWS = os.name == "nt"
+IS_WINDOWS = _is_windows() if _HAVE_PLATFORM_RUNTIME else os.name == "nt"
 
 def _config() -> dict:
     """读 environment.json 的 task_guardian 段（兼容 cellbender_project_dir）。"""
@@ -67,7 +75,10 @@ def is_running(script_name: str) -> bool:
         return False
 
 def _detach_kwargs() -> dict:
-    """脱离式启动参数 — 平台分支。"""
+    """脱离式启动参数 — 平台分支（优先走平台薄层）。"""
+    if _HAVE_PLATFORM_RUNTIME:
+        from memomics.platform_runtime import detach_options
+        return detach_options()
     if IS_WINDOWS:
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
