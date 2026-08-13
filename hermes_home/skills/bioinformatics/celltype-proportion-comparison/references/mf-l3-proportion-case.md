@@ -82,3 +82,45 @@
   - Y Pre→Post p=0.846、O Pre→Post p=0.219 均不显著
 - 故事候选：衰老↑ + 糖尿病运动↓ = "运动把衰老相关升高的 LRP1B+ 压回去"方向，但 FDR 边缘需谨慎
 - 定稿时用户原版样式 × {FDR, p 值} 两版（若用户确认组别）
+
+## OTUD1+(II) 定稿（2026-08-13，6 组，用户指定 4 比较）
+- 用户指定标注：Y_Pre vs Y_Post / O_Pre vs O_Post / Y_Pre vs OD_Pre / O_Pre vs OD_Pre（OTUD4 mode）
+- 显著性（v4）：Y运动 p=0.084 FDR=0.126（↑边缘）、O运动 p=0.047 FDR=0.106（↑显著，+5.05pp 全亚群最大运动效应）、
+  YvsOD p=0.025 FDR=0.106（OD 高于 Y，显著）、OvsOD p=0.053 FDR=0.106（OD 高于 O，边缘）
+- 故事：糖尿病↑ OTUD1+(II) + 三组运动全部↑ = "运动/代谢应激响应亚群"，老年运动尤其敏感
+- 定稿文件：`OTUD1__II__6grp_p.value.png/.pdf` + `OTUD1__II__6grp_FDR_per_celltype.png/.pdf`（30×32mm）
+
+## Pure Type IIX 定稿（2026-08-13，6 组，用户先 4 比较后追加 1 个）
+- 用户初始指定：Y_Pre vs O_Pre / Y_Pre vs OD_Pre / O_Pre vs OD_Pre / O_Pre vs O_Post（IIX4 mode）
+- 用户中途追加：OD_Pre vs OD_Post（"再补一个老年糖尿病运动前后的显著性"）→ IIX5 mode，旧 4 文件删除替换
+- 显著性（v4）：YvsO p=0.133 FDR=0.200（n.s.）、YvsOD p=0.0185 FDR=0.094（OD 高于 Y，raw 显著）、
+  OvsOD p=0.259 FDR=0.275（n.s.）、O运动 p=0.0312 FDR=0.094（↓，raw 显著）、OD运动 p=0.109 FDR=0.200（↓，n.s.）
+- 故事候选：糖尿病↑ IIX + 两个运动都↓ = "运动逆转糖尿病相关 IIX 升高"方向，raw 显著 FDR 边缘
+- 定稿文件：`Pure_Type_IIX_6grp_p.value.png/.pdf` + `Pure_Type_IIX_6grp_FDR_per_celltype.png/.pdf`
+
+## 文件名修正（2026-08-13 用户抓住）
+- Agent 曾无条件给所有亚群加 `Pure_Type_` 前缀 → OTUD1+(II) 变成 `Pure_Type_OTUD1__II__...`（错误，原名不带 Pure Type）
+- 修复：`cell_clean <- gsub('[+() ]', '_', celltype)` 直接用原始 annotation_L3 名称
+  - 带 Pure Type（Pure Type I/IIA/IIX）→ `Pure_Type_IIA_...` 保留
+  - 不带（OTUD1+/LRP1B+/RP_high）→ `OTUD1__II_...` / `LRP1B__I_...` / `RP_high_I_...`
+- 受影响旧文件全部删除重出，交付清单说明"旧图已删"
+
+## 目录组织（2026-08-13 用户要求）
+- 结果目录分三个子目录：`figures/`（全部图）、`scripts/`（R/Python 脚本）、`data/`（显著性 CSV + RDS 缓存）
+- 用户原话："把图片和脚本各种建一个图片目录和脚本目录，不要放在一起"
+- 通用脚本结构：`01_build_cache.R`（一次性构建 percentage_data.rds + sig_table_v4.rds）→
+  `02_plot_celltype.R "celltype" 6 p.value p.value final IIX5`（参数化：亚群/组数/标注列/tag/模式/comp_mode）
+- `verify_xxx.R` 交付前核对标注比较数 + p/FDR 值（写 .R 文件跑，勿用 bash -e 内联）
+
+## execute_r 持久内核实测结论（2026-08-13）
+- **纯计算跨调用保留 ✅**：`execute_r` 定义变量 test_var=12345，第二次调用同一 PID 仍存在（worker 复用）
+- **画图场景不可靠 ❌**：绘图函数内 `print(p)`（用户脚本自带）→ ggplot print 需要图形设备，kernel worker
+  无设备 → 内核错误 → execute_r 静默回退新 Rscript 进程 → 变量全丢
+- **结论：本类任务首选 RDS 缓存方案**（01_build_cache → 02_plot_celltype readRDS），不依赖 execute_r 持久内核
+- 若必须用 kernel：删除函数内 `print(p)`（ggsave 保存已足够）；execute_r.py 已加 logger 记录 kernel error
+  （不再静默吞掉，便于诊断）
+
+## bash `$` 展开坑（2026-08-13 两次踩坑）
+- `Rscript -e "paste(sub$group1, sub$group2)"` 在 bash 双引号里 `$group1` 被展开为空 → `paste(sub, sub)`
+  → 匹配失败误报 "NOT FOUND"（浪费 2 轮诊断）
+- **R 验证/调试代码一律 write_file 成 .R 脚本再跑**，不用 -e 内联；或内联时 `\$` 转义

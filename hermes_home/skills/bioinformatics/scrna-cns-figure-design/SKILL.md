@@ -470,6 +470,19 @@ colored = ((mx-mn) > 30).mean()*100        # 有颜色（箱体/点）像素比�
 ```
 任何 PNG 交付前都跑：① dark% <10 ② colored% >1（CNS 白底版常 >90% 非白但彩色 >1）③ 内容边界框存在。遇到黑底图 → 查是不是 `egg::set_panel_size` + ggsave 缺 `bg="white"`（见上条）。
 
+**⛔ 像素检查分母 bug（2026-08-12 实测，导致把好图误报成"空白"）**：带步长的采样循环里
+`bb_total = (x1-x0)*(y1-y0)`（区域总像素）但实际只采样了 `(x1-x0)/step*(y1-y0)/step` 个点 →
+nonwhite% 被低估 step² 倍（步长 3 → 低估 9×，0.2% 实为 1.8%），把 egg 面板正常的图误判成空白，
+差点触发不必要的重跑。**修复：分母 = 实际采样点数（计数器 n++），不是区域总像素**。采样前先想清楚
+分母是什么。
+
+**⛔ egg 面板图采样区域（2026-08-12 实测）**：`egg::set_panel_size(30mm×32mm)` 在 2099×2099px
+（7×7in@300dpi）画布上只占中央 ~3% 面积（354×378px），中央 60% 区域的 nonwhite 会被白边稀释到
+2% 左右——**采样要命中精确面板区域**：`pw, ph = 354, 378`（mm×300/25.4），`x0,y0 = (w-pw)//2,
+(h-ph)//2`，逐像素全采样（面板小）→ 正常图 nonwhite 17-18%、colored 6%。若不确定内容在哪，
+先跑 **3×3 网格诊断**（每格报 nonwhite/colored%，内容应集中在中央 G11）定位，再决定采样区域。
+本会话实测值可作基准：正常 egg 面板（6 组箱线图）nonwhite 17.8-18.0%、colored 6.2%、black 5.7%。
+
 **⛔ 第 6 个比较 Y_Pre vs OD_Pre（user 主动要求 2026-08-12）**：5 效应轴矩阵（Aging/
 T2D/Ex-Y/Ex-O/Ex-OD）不含\"年轻 vs 疾病基线\"对比。用户问\"是不是还要做一下年轻运动前跟
 老年糖尿病运动前的比较？\" → 加 `c(\"Y_Pre\",\"OD_Pre\")` 作为第 6 个比较（独立样本
@@ -511,6 +524,47 @@ raw p + 方向一致性）。⚠️ 加比较后显著性 CSV 变成 10 亚群 �
   ⛔ 该文档还含 2026-08-12 最严重教训：声称"清理完成"但没实际执行工具调用 = 虚报，
   被用户当场揭穿"你没有清理啊"——任何完成声明必须"先做→验证→再报"）
   ③ 流程收敛两步：探索图（用户定组别）→ 定稿两版（FDR + p 值一次出）
+
+**⛔ execute_r 持久内核实测（2026-08-12，修正上面\"复用 execute_r 持久内核\"的旧建议）**：
+用户选\"切换 execute_r 持久内核\"后做了真实探测（git 历史证明框架层确实有 kernel 池：
+1f9d5bec Python 池 / a5617876 R worker / c532f984 R_LIBS_USER / ca4cd85e LRU+30min idle）：
+- **纯计算场景可用**：连续两次 execute_r 打印 PID 相同（40108 复用），test_var 跨调用保留 ✅
+- **画图场景不可靠**：绘图函数含 `print(p)`（用户脚本自带）时——ggplot 对象 print 需要图形
+  设备，kernel worker 无设备 → print 报错 → KERNEL_POOL 返回 error → execute_r **静默回退**
+  到新 Rscript 进程（PID 每次不同）→ 已加载的 percentage_data/函数全部丢失。规律：纯计算
+  复用 worker，画图就回退新进程，跨调用持久失效。
+- **修复**：① 绘图函数去掉 `print(p)`（保存用 ggsave 足够）② execute_r.py 静默回退加 logger
+  记录（不吞 error）——完整 task_id 稳定化属框架层改动，单独开任务。
+- **R 库混用崩溃**：R-4.5.3 worker 里 `.libPaths` 指向 R-4.4.2 库 → 加载即崩 → worker 异常
+  退出 → 下次新建。worker 的 R 版本必须与库版本匹配。
+- **✅ 最终采用：RDS 缓存方案**（等效\"数据加载一次\"且更稳、零进程残留、不依赖框架）：
+  一次性读 314MB CSV → 构建 percentage_data + sig_table → `saveRDS`（KB 级）→ 每个亚群脚本
+  `readRDS`（秒级）→ 只换 celltype/组数/标注列/比较子集参数画图。通用参数化脚本：
+  `Rscript 02_plot_celltype.R "<celltype>" <n_groups> <annot_col> [out_tag] [out_mode] [comp_mode]`，
+  out_mode = explore(全幅 140×110mm) | final(egg 30×32mm)，comp_mode = all|IIA3|LRP1B4|OTUD4|IIX4|IIX5|OTUD1I1
+  （逐亚群比较子集映射表；OTUD1I1 = 只标 O_Pre vs O_Post 单个比较）。详见 `references/execute-r-persistent-kernel-rds-cache.md`。
+
+**⛔ explore/final 同名覆盖坑（2026-08-12 实测）**：通用脚本的 out_tag 默认 = annot_col
+（p.value / FDR_per_celltype），explore 与 final 共用同一 out_tag 时**后者覆盖前者同名 PNG**
+（跑 explore 把 final 定稿图覆盖成 1653×1299 全幅版）。修复：explore 阶段显式传 `_explore` 后缀
+（如 out_tag=`pval_explore`），final 定稿用干净 out_tag；覆盖后务必确认最终文件尺寸是 final 的
+（2099×2099 = 7×7in，不是 explore 的 1653×1299）。
+
+**⛔ 结果目录组织（user 明确要求 2026-08-12）**：分析产出目录下分 `figures/`（图）、
+`scripts/`（脚本）、`data/`（显著性 CSV + RDS 缓存）三个子目录，图与脚本不要混放。
+交付时按子目录列文件。
+
+**⛔ 文件名必须用原始 annotation_L3 名（2026-08-12 bug）**：加前缀前先检查亚群原名是否
+已含该词——`Pure_Type_OTUD1__II__6grp_...` 是错的（OTUD1+(II) 原名不带 \"Pure Type\"），
+正确是 `OTUD1__II__6grp_...`。文件名生成一律用原始 celltype 名，不要无条件加前缀。
+
+**⛔ 显著性标注的比较子集逐亚群定制（2026-08-12）**：用户会为每个亚群指定**标注哪几个
+比较**（IIA：YvsO/YvsOD/OD运动；LRP1B：YvsO/YvsOD/OvsOD/OD运动；OTUD1+(II)：Y运动/O运动/
+YvsOD/OvsOD；IIX：YvsO/YvsOD/OvsOD/O运动±OD运动；OTUD1+(I)：只标 O运动——弱信号亚群用户
+选择只展示唯一显著的比较）——不是全标也不是只标显著。绘图函数
+必须有 comp_mode 参数（比较子集映射表），用户报完组合即锁定该亚群，不再反复改版。用户把
+同一比较说两次（\"老年运动前后，老年运动前后\"）按一个比较处理（同一对比较标两次无意义），
+交付时说明这一点。
 
 ## The F1-F7 Architecture Pattern
 

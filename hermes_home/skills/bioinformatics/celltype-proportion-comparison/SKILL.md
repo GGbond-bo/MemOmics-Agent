@@ -65,6 +65,32 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
 5. 定稿后检查 PNG 非空白（**三指标像素级验证**，见 Pitfalls；不要只信文件大小或"非白%"）
 6. 定稿交付前核对尺寸规则（每柱 mm 数，见上节）
 
+## 比较子集选择（comp_mode，2026-08-12 用户逐亚群指定）
+
+- 用户对每个亚群会**明确指定画哪些比较的显著性**，且逐亚群不同。例如本会话：
+  - Pure Type IIA：只标 Y_Pre vs O_Pre / Y_Pre vs OD_Pre / OD_Pre vs OD_Post（3 个）
+  - LRP1B+(I)：Y_Pre vs O_Pre / Y_Pre vs OD_Pre / O_Pre vs OD_Pre / OD_Pre vs OD_Post（4 个）
+  - OTUD1+(II)：Y_Pre vs Y_Post / O_Pre vs O_Post / Y_Pre vs OD_Pre / O_Pre vs OD_Pre（4 个）
+  - Pure Type IIX：Y_Pre vs O_Pre / Y_Pre vs OD_Pre / O_Pre vs OD_Pre / O_Pre vs O_Post（4 个）→ 用户中途补 OD_Pre vs OD_Post 变 5 个
+- **脚本必须支持参数化比较子集**（`comp_mode` 参数 + 预定义列表，如 `COMP_SUBSET <- list('all'=..., 'IIA3'=..., 'LRP1B4'=..., 'OTUD4'=..., 'IIX4'=..., 'IIX5'=...)`），不能硬编码全部 6 比较
+- 用户可能中途追加比较（"type IIX 再补一个老年糖尿病运动前后的显著性"）→ 加新 mode 重跑，**旧图删除替换**
+- 交付前用 R 侧核对**标注比较数 = 用户要求的数量**（如 5/5），不要只信图"看起来对"
+- 括号按 p 值从小到大排列（防重叠逻辑），**顺序 ≠ 用户列表顺序**，但每个比较的值必须正确
+
+## 文件名与目录组织（2026-08-12 用户要求）
+
+- **文件名必须用 `annotation_L3` 原始名称**：`gsub('[+() ]', '_', celltype)`，**不要强制加前缀**
+  - 原名称带 "Pure Type"（Pure Type I/IIA/IIX）→ 保留 `Pure_Type_IIA_...`
+  - 原名称不带（OTUD1+(II)/LRP1B+(I)/RP_high(II)）→ `OTUD1__II_...` / `LRP1B__I_...`（错误示例：强加前缀成 `Pure_Type_OTUD1__II_...` 被用户抓住）
+- **结果目录分三个子目录**（用户明确要求"图片和脚本各种建一个目录，不要放在一起"）：
+  ```
+  L3_boxplot_explore/
+  ├── figures/   ← 全部图（PNG+PDF）
+  ├── scripts/   ← 全部 R/Python 脚本（含通用画图脚本 02_plot_celltype.R + 像素检查脚本）
+  └── data/      ← 显著性 CSV + percentage_data.rds + sig_table_v4.rds 缓存
+  ```
+- 替换旧图时先 `rm` 旧文件再重跑，交付清单里说明"旧图已删"
+
 ## 响应者/非响应者分析（用户关注点）
 - 配对组运动后检查个体级响应：逐个体 Pre→Post 变化，数升/降个数（如 OD 组 4 升 3 降）
 - **配对 Wilcoxon p 是"差的中位数"，与"中位数之差"不同**——表面上升可能是少数强响应个体拉动
@@ -88,6 +114,17 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
   后续每亚群脚本 `readRDS` 直接画图（最稳）；② 或 `execute_r` 持久内核复用 worker（注意 execute_r worker
   是 R-4.4.2，本项目分析须 R-4.5.3 全路径 + `.libPaths('E:/R-libs/R-4.5.3')`——用 RDS 缓存更省事）
 - `Rplots.pdf` 是 R 空设备残留文件（png()/print 组合产生），无内容，交付前忽略/删除，不要当产出物
+- **⛔ execute_r 持久内核画图场景不可靠（2026-08-12 实测）**：纯计算（定义变量/读 RDS）跨调用保留
+  （同一 PID 复用 ✅），但**绘图函数内 `print(p)` 会触发内核崩溃 → execute_r 静默回退新 Rscript 进程 →
+  变量全丢**（ggplot print 需要图形设备，kernel worker 无设备）。结论：本类绘图任务**首选 RDS 缓存方案**
+  （01_build_cache.R 构建 percentage_data.rds 一次性 → 02_plot_celltype.R 每个亚群 readRDS 秒级画图），
+  不要依赖 execute_r 持久内核画图。若一定要用 kernel，去掉函数里的 `print(p)`（ggsave 足够）。
+- **⛔ bash 双引号内 `Rscript -e "..."` 的 `$` 变量展开坑（2026-08-12 两次踩坑）**：`-e "paste(sub$group1, sub$group2)"`
+  在 bash 双引号里 `$group1` 被 bash 展开为空 → 变成 `paste(sub, sub)` → 匹配全部失败返回 "NOT FOUND"，
+  误判"数据缺失"。**R 验证/调试代码一律 write_file 写成 .R 脚本再 Rscript --vanilla 跑**，不要用 -e 内联，
+  或内联时全部 `\$` 转义。
+- **出图前核对用户指定的比较子集数量（comp_mode）**：交付前用 R 侧 `verify_xxx.R` 检查标注数 =
+  用户要求数（如 5/5），且每个比较的 p/FDR 值从 sig_table 核对（bash $ 坑：验证脚本用 write_file）
 
 ## 支持文件
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
