@@ -66,6 +66,35 @@ _DEBATE_HIGH_IMPACT_TOOLS = {
 # 失败信号工具（terminal/脚本执行，重试≥2 或报错 → 升级 L2）
 _DEBATE_EXEC_TOOLS = {"terminal", "execute_r", "execute_python", "execute_code", "run_script"}
 
+# 参数核查清单规则（2026-08-13）：按代码关键词定向注入核查项——零 token
+# 成本（纯字符串匹配，不跑 R、不调 LLM），意图识别=关键词命中。只在该
+# 类代码执行前出现在辩论门控消息里，引导 agent 辩脚本设计时逐项核查，
+# 提前拦截参数语义错误（如 Harmony 的 sample 列实为 cells）→ 正确一遍过。
+_PARAM_CHECK_RULES = [
+    (("harmony", "runharmony", "group.by.vars", "vars.to.regress", "integrat"),
+     "batch/整合变量语义：该列是样本级还是细胞级？唯一值数≈细胞总数 = 疑似 cells 当 sample（必须实查唯一值数与每水平平均细胞数）"),
+    (("findallmarkers", "findmarkers", "deg", "wilcox"),
+     "marker/DEG 参数：分组列正确性、only.pos/min.pct/logfc.threshold 取值依据、多重检验校正方法"),
+    (("resolution", "findclusters", "leiden"),
+     "聚类 resolution：与细胞数的匹配度（细胞越多 resolution 越要低），取值是否有依据"),
+    (("doubletfinder", "doublets", "scds", "scrublet"),
+     "双联体参数：预期 doublet 率是否按上样细胞数推算（~0.8%/1000 细胞）"),
+    (("percent.mt", "percent.mito", "nfeature", "ncount", "subset"),
+     "QC 过滤阈值：MT%/nFeature/nCount 阈值是否有本数据依据（默认值未必合适，需看分布再定）"),
+    (("sctransform", "normalize", "log10"),
+     "归一化方法：SCTransform vs LogNormalize 选择依据、vars.to.regress 是否必要且正确"),
+]
+
+
+def _param_checklist(code: str) -> list:
+    """按代码内容生成定向参数核查清单（零成本；无命中返回空列表）。"""
+    cl = (code or "").lower()
+    checks = []
+    for keywords, item in _PARAM_CHECK_RULES:
+        if any(k in cl for k in keywords):
+            checks.append(item)
+    return checks
+
 
 def debate_gate(es: "EnforcementState", stage: str = "conclusion",
                 signals: dict = None) -> tuple:
@@ -331,10 +360,16 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                     and not es.debated_topics):
                 _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals={})
                 if _b_level >= DEBATE_L1:
+                    _checks = _param_checklist(_cmd)
+                    _check_txt = ""
+                    if _checks:
+                        _check_txt = ("\n🔍 参数核查清单（辩脚本设计时必逐项核查，用工具实查，不许猜）：\n"
+                                      + "\n".join(f"  • {c}" for c in _checks))
                     _emit("enforcement", action="require",
                           level=DEBATE_LEVEL_NAMES[_b_level],
                           reasons=_b_reasons,
-                          message=f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。先 debate_analysis 辩脚本设计与参数选择，再执行。",
+                          message=(f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。"
+                                   f"先 debate_analysis 辩脚本设计与参数选择，再执行。{_check_txt}"),
                           require=["debate_analysis"])
 
         elif tool_name in _DEBATE_HIGH_IMPACT_TOOLS:
