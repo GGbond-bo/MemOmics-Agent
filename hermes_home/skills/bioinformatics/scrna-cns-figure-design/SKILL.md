@@ -263,6 +263,15 @@ existence means annotation-only F2 would be rejected by reviewers.
 
 ## Functional-Score Reversal Matrix (when user already has module scores)
 
+> ⛔ **基因集/打分设计必须给真实文献来源（user: "我要真实文献和数据库的，你看我都提供了来源" 2026-08-12）**：
+> 用户自己的 pathway_score.xlsx 里每个打分都标了 PMID 或数据库链接（Machado PMID 33609440 / Murgia
+> PMID 34727990 / MSigDB hallmark / WikiPathways 等），Agent 建议新打分时**必须同样标准**：先
+> search_papers + query_ncbi 查证，给真实 PMID/DOI/数据库链接，绝不凭预训练知识编来源；用户会拿
+> 自己找的来源对照。评估用户自拟基因集的套路：逐基因判定（黄金标准/经典/合理/弱/与已有打分重叠）
+> → 找出最经典却缺失的 marker（去神经化缺 NCAM1 是典型案例，PMID 3892537 奠基文献）→ 给出修正版。
+> 完整 14 打分来源表 + 去神经化 16 基因逐条评估 + 缺口分析（糖酵解最缺，与 OxPhos 对称）+ 9 篇
+> PMC 可下载文献清单：`references/skeletal-muscle-gene-score-sources.md`
+
 If the dataset already carries AUCell/AddModuleScore columns across a
 multi-condition design (especially paired Pre/Post), run this BEFORE or
 ALONGSIDE NMF — it often delivers the main biological story faster and
