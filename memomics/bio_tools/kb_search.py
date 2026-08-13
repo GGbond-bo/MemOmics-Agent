@@ -422,14 +422,21 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
     # === v4: Try FTS5 first ===
     if _init_fts() and _fts_conn is not None:
         fts_terms = []
+        short_terms = []
         for q in queries:
             q_clean = q.strip().replace('"', '').replace("'", "")
-            if q_clean and len(q_clean) >= 1:
-                if q_clean.lower() in _SHORT_WORD_BLACKLIST:
-                    fts_terms.append(f'"{q_clean}"')
-                else:
-                    fts_terms.append(q_clean)
-        if fts_terms:
+            if not q_clean:
+                continue
+            if len(q_clean) < 3:
+                # P1-9(2026-08-13): trigram tokenizer 对 <3 字符的词（中文双字词
+                # 如"质控/聚类"、英文缩写如"qc"）生成不了 token，MATCH 静默零命中。
+                # 短词不能进 FTS —— 记录并让整条查询回落 v3 os.walk 子串匹配。
+                short_terms.append(q_clean)
+            elif q_clean.lower() in _SHORT_WORD_BLACKLIST:
+                fts_terms.append(f'"{q_clean}"')
+            else:
+                fts_terms.append(q_clean)
+        if fts_terms and not short_terms:
             fts_query = " OR ".join(fts_terms)
             # 查询串行化：_fts_conn 是跨线程共享的内存库连接
             _fts_lock.acquire()
