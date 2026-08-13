@@ -43,7 +43,9 @@ check("失败返回 JSON", d is not None, f"raw={r!r}")
 check("失败 status=error", d and d.get("status") == "error", f"d={d}")
 check("失败 exit_code 非零", d and d.get("exit_code") != 0, f"d={d}")
 check("失败 error 字段存在", d and bool(d.get("error")), f"d={d}")
-check("失败 output 保留 [Exit code] 兼容标记", d and "[Exit code:" in str(d.get("output", "")), f"d={d}")
+# 失败 output 保留错误标记（kernel 路径 [Kernel error] / Rscript 路径 [Exit code]）
+_out_txt = str(d.get("output", ""))
+check("失败 output 保留错误标记", "[Exit code:" in _out_txt or "[Kernel error" in _out_txt, f"d={d}")
 
 # 3. stderr 场景（warning 但退出码 0 → 仍算 success，stderr 在 output）
 r = execute_r('warning("just a warning")\ncat("done\\n")\n', timeout=120)

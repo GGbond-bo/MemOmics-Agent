@@ -162,10 +162,20 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
             _msg = f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
             return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
-        # status == error → 回退旧路径；记录原因避免静默失败（2026-08-13：
-        # 曾因 ggplot print 无图形设备在 kernel 内报错而静默回退，导致持久变量丢失）
+        # status == error → 分类处理（P1-4 修复，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
-        logger.warning("persistent kernel R execute failed, falling back to fresh Rscript: %s", _err)
+        _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
+        if _infra_fail:
+            # 基础设施失败（worker 启动即死/管道断裂）：代码大概率未送达 →
+            # 回退 Rscript 重跑相对安全；记录原因避免静默失败。
+            logger.warning("persistent kernel R infra failure, falling back to fresh Rscript: %s", _err)
+        else:
+            # 代码运行时错误：kernel 内已执行（可能有部分副作用）→ 不回退，
+            # 直接返回 error，防止 Rscript 把整脚本再跑一遍造成双写/重复副作用。
+            _out = (_res.get("output", "") or "")[:15000]
+            _out += chr(10) + f"[Kernel error: {_err}]"
+            return json.dumps({"status": "error", "output": _out, "error": _err,
+                               "exit_code": 1, "mode": "persistent_kernel"}, ensure_ascii=False)
     except Exception:
         pass
 

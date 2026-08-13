@@ -4,6 +4,7 @@
 """
 import os
 import re
+import json
 import subprocess
 import tempfile
 import logging
@@ -102,7 +103,17 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
             return (_res.get("output", "") or "(no output)")[:15000]
         if _res.get("status") == "timeout":
             return f"Error: Python execution timed out after {timeout}s. Kernel killed; next call starts fresh."
-        # status == error → 回退旧路径
+        # status == error → 分类处理（P1-4，2026-08-13：防副作用双跑）
+        _err = _res.get("error", "unknown kernel error")
+        _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
+        if _infra_fail:
+            # 基础设施失败：代码大概率未送达 → 回退旧路径相对安全
+            pass
+        else:
+            # 代码运行时错误：不回退，防整脚本重跑双写
+            return json.dumps({"status": "error", "output": (_res.get("output", "") or "")[:15000],
+                               "error": _err, "exit_code": 1,
+                               "mode": "persistent_kernel"}, ensure_ascii=False)
     except Exception:
         pass
 
