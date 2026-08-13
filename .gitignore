@@ -104,3 +104,4 @@ hermes_home/lsp/bin/
 .backups/
 # 备份文件不入库
 *.bak*
+memory_api_token
