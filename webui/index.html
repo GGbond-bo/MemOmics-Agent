@@ -4631,10 +4631,12 @@ function loadSettings() {
 }
 
 // === 外置记忆 ===
+var memoryApiToken = '';  // P1-10: GET /api/memory 返回的写 API token
 async function loadMemory() {
   try {
     var r = await fetch('/api/memory');
     var d = await r.json();
+    if (d.api_token) { memoryApiToken = d.api_token; }
     var entries = d.entries || [];
     var html = '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">记忆文件:</div>';
     entries.forEach(function(e) {
@@ -4675,7 +4677,8 @@ async function writeMemory(mode) {
   result.style.color = 'var(--text-light)';
   try {
     var r = await fetch('/api/memory/write', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-Memory-Token': memoryApiToken},
       body: JSON.stringify({ target: target, content: content, mode: mode })
     });
     var d = await r.json();

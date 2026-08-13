@@ -6547,11 +6547,38 @@ async def wakeup_session(sid: str):
 
 # --- 外置记忆 (跨会话) ---
 
+def _memory_api_token() -> str:
+    """P1-10(2026-08-13): 记忆写 API 轻量鉴权 token。
+
+    服务首次启动时生成随机 token 持久化到 hermes_home/memory_api_token。
+    同源 WebUI 通过 GET /api/memory 拿到 token 后随写请求携带。
+    """
+    _tok_path = os.path.join(HERMES_HOME_DIR, "memory_api_token")
+    try:
+        if os.path.exists(_tok_path):
+            with open(_tok_path, encoding="utf-8") as f:
+                _tok = f.read().strip()
+            if len(_tok) >= 16:
+                return _tok
+    except OSError:
+        pass
+    _tok = uuid.uuid4().hex + uuid.uuid4().hex[:8]  # 40 hex chars
+    try:
+        with open(_tok_path, "w", encoding="utf-8") as f:
+            f.write(_tok)
+    except OSError:
+        pass
+    return _tok
+
+# 记忆文件限额（与 hermes_home/config.yaml memory 段保持一致）
+_MEMORY_CHAR_LIMITS = {"USER.md": 10000, "MEMORY.md": 10000}
+
+
 @app.get("/api/memory")
 async def get_memory():
-    """读取外置记忆内容"""
+    """读取外置记忆内容（响应携带写 API token，供同源页面使用）"""
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
-    result = {"entries": []}
+    result = {"entries": [], "api_token": _memory_api_token()}
     # MEMORY.md — agent 自己的记忆
     memory_md = os.path.join(mem_dir, "MEMORY.md")
     if os.path.exists(memory_md):
@@ -6570,8 +6597,12 @@ async def get_memory():
 
 
 @app.post("/api/memory/write")
-async def write_memory(payload: dict):
-    """写入外置记忆"""
+async def write_memory(payload: dict, request: Request):
+    """写入外置记忆 — P1-10(2026-08-13): token 鉴权 + 限额检查"""
+    # 鉴权：写操作必须携带 token（读操作不受限，页面需展示）
+    _token = request.headers.get("x-memory-token", "") or str(payload.get("token", ""))
+    if _token != _memory_api_token():
+        return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
     os.makedirs(mem_dir, exist_ok=True)
     target = payload.get("target", "MEMORY.md")  # MEMORY.md or USER.md
@@ -6581,6 +6612,18 @@ async def write_memory(payload: dict):
     if not target.endswith(".md"):
         return JSONResponse({"error": "Only .md files allowed"}, status_code=400)
     file_path = os.path.join(mem_dir, os.path.basename(target))
+    # 限额检查（防记忆无限膨胀，对齐 MemoryStore char limit）
+    _limit = _MEMORY_CHAR_LIMITS.get(os.path.basename(target), 10000)
+    _existing = ""
+    if mode != "overwrite" and os.path.exists(file_path):
+        with open(file_path, encoding="utf-8", errors="replace") as f:
+            _existing = f.read()
+    _new_total = len((_existing + "\n\n" + content) if _existing else content)
+    if _new_total > _limit:
+        return JSONResponse({
+            "error": f"超出记忆限额：{_new_total}/{_limit} 字符。请先删除/压缩旧条目再写入。",
+            "current": len(_existing), "limit": _limit,
+        }, status_code=413)
     if mode == "overwrite":
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -6591,8 +6634,11 @@ async def write_memory(payload: dict):
 
 
 @app.delete("/api/memory/{filename}")
-async def delete_memory(filename: str):
-    """删除记忆文件"""
+async def delete_memory(filename: str, request: Request):
+    """删除记忆文件 — P1-10: token 鉴权"""
+    _token = request.headers.get("x-memory-token", "")
+    if _token != _memory_api_token():
+        return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
     if not filename.endswith(".md"):
         return JSONResponse({"error": "Only .md files"}, status_code=400)
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
