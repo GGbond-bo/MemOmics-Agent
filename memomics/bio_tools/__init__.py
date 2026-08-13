@@ -1,6 +1,7 @@
 """MemOmics bioinformatics tools — registers with Hermes tool registry."""
 from . import data_scanner
 from . import kb_search
+from . import save_knowledge
 from . import module_selector
 from . import env_check
 from . import rail_review
