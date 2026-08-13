@@ -496,6 +496,14 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 }
                 _g_level, _g_reasons, _g_force = debate_gate(es, stage="after_script", signals=_g_signals)
                 es._pending_high_impact = False
+                # 钩子③ 结论辩论（对齐 docs/debate-core-design.md §钩子③）：
+                # rail_review(post) 后 + analysis 级 → 结论合成前默认 L2（最终结论
+                # 比过程更重要）。与钩子②取最高级：无异常信号的 analysis 任务
+                # after=L1（轻量）、conclusion=L2（完整）→ 升级 L2；statistical
+                # 两者都 L1；chat 都 L0。共享 es.debated_topics 去重，不重复辩。
+                _c_level, _c_reasons, _c_force = debate_gate(es, stage="conclusion", signals=_g_signals)
+                if _c_level > _g_level:
+                    _g_level, _g_reasons, _g_force = _c_level, _c_reasons, _c_force
                 if _g_level >= DEBATE_L1:
                     _mode_hint = {
                         # C2(2026-08-11): L1 轻量采样 / L2 完整 8 角色，都默认单模型上下文切断
