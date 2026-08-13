@@ -1,5 +1,9 @@
 # hdWGCNA Windows 安装 + release v0.4.12 API 实战记录
 
+> 安装方式（2026-08-13 补充）：
+> **首选（任何机器通用）**：`remotes::install_github("smorabit/hdWGCNA", ref="v0.4.12")`
+> 备选（本机有源码时）：本地 install.packages（见下方原记录，路径按实际机器调整）。
+
 > 2026-08-01 人骨骼肌 MF 20K 细胞（10 亚群 × 2000，6 条件 Y/O/OD × Pre/Post）实测。
 > **本记录推翻了 `hdwgcna-mf-validated-negative-result.md` 的旧结论**（旧结论说 MF 数据 hdWGCNA R²=0.719 单模块不可用——那是 dev 分支 bug + 过期 datExpr 的产物）。
 
