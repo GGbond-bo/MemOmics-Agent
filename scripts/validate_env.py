@@ -11,7 +11,14 @@ exit 2: 有关键缺失无法修复
 import json, os, sys, shutil, subprocess
 from pathlib import Path
 
-ENV_FILE = Path("E:/MemOmics-Agent/environment.json")
+# P1-16(2026-08-13): 路径相对化 — 打包/分发版不再依赖 E:/MemOmics-Agent 写死路径
+ENV_FILE = Path(__file__).resolve().parent.parent / "environment.json"
+if not ENV_FILE.exists():
+    # 兼容旧布局：环境文件可能在 memomics/ 或当前目录
+    for _cand in (Path("environment.json"), Path("memomics/environment.json")):
+        if _cand.exists():
+            ENV_FILE = _cand.resolve()
+            break
 
 def check_exists(path_str):
     """检查文件/目录是否存在"""
@@ -21,21 +28,41 @@ def check_exists(path_str):
     return p.exists()
 
 def find_r_installations():
-    """自动探测所有R安装（Program Files + AppData/Local，覆盖用户级安装）"""
+    """自动探测所有 R 安装 — 平台分支（P1-16 跨平台）。
+
+    Windows: Program Files + AppData/Local；POSIX: which Rscript + 常见前缀。
+    """
     results = {}
     import os as _os
-    candidates = [
-        Path("C:/Program Files/R"),
-        Path(_os.path.expandvars(r"%LOCALAPPDATA%\R")),
-    ]
-    for r_base in candidates:
-        if not r_base.exists():
-            continue
-        for d in r_base.iterdir():
-            if d.is_dir() and d.name.startswith("R-"):
-                rscript = d / "bin/x64/Rscript.exe"
-                if rscript.exists():
-                    results[d.name] = str(rscript)
+    if os.name == "nt":
+        candidates = [
+            Path("C:/Program Files/R"),
+            Path(_os.path.expandvars(r"%LOCALAPPDATA%\R")),
+        ]
+        for r_base in candidates:
+            if not r_base.exists():
+                continue
+            for d in r_base.iterdir():
+                if d.is_dir() and d.name.startswith("R-"):
+                    rscript = d / "bin/x64/Rscript.exe"
+                    if rscript.exists():
+                        results[d.name] = str(rscript)
+    else:
+        # Linux/macOS: 命令路径优先，再扫常见前缀
+        rscript = shutil.which("Rscript")
+        if rscript:
+            results["system"] = rscript
+        for r_base in (
+            Path("/usr/lib/R"), Path("/usr/local/lib/R"),
+            Path("/opt/R"), Path(_os.path.expanduser("~/R")),
+        ):
+            if not r_base.exists():
+                continue
+            for d in r_base.iterdir():
+                if d.is_dir() and d.name.startswith("R-"):
+                    _rs = d / "bin/Rscript"
+                    if _rs.exists():
+                        results[d.name] = str(_rs)
     return results
 
 def find_cellbender():

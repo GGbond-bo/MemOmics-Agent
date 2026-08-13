@@ -7218,20 +7218,34 @@ async def ws_endpoint(ws: WebSocket):
                             try:
                                 import time as _t
                                 _t.sleep(3)  # 等进程启动
-                                _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader", 
-                                    shell=True, capture_output=True, text=True, timeout=10)
-                                _gpu = _check.stdout.strip()
-                                _check2 = subprocess.run("tasklist | findstr cellbender", 
-                                    shell=True, capture_output=True, text=True, timeout=5)
-                                _proc = _check2.stdout.strip()
-                                if "0 %" in _gpu and not _proc:
+                                # P1-16(2026-08-13): 平台守卫 — Windows 用 tasklist；
+                                # POSIX 用 ps -ef（nvidia-smi 缺失时静默跳过 GPU 检查）
+                                if os.name == "nt":
+                                    _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader",
+                                        shell=True, capture_output=True, text=True, timeout=10)
+                                    _gpu = _check.stdout.strip()
+                                    _check2 = subprocess.run("tasklist | findstr cellbender",
+                                        shell=True, capture_output=True, text=True, timeout=5)
+                                    _proc = _check2.stdout.strip()
+                                    _failed = ("0 %" in _gpu and not _proc)
+                                else:
+                                    _gpu = ""
+                                    _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader",
+                                        shell=True, capture_output=True, text=True, timeout=5)
+                                    if _check.returncode == 0:
+                                        _gpu = _check.stdout.strip()
+                                    _check2 = subprocess.run("ps -ef | grep -E 'cellbender|rscript|python' | grep -v grep",
+                                        shell=True, capture_output=True, text=True, timeout=5)
+                                    _proc = _check2.stdout.strip()
+                                    _failed = ("0 %" in _gpu and not _proc) if _gpu else False
+                                if _failed:
                                     _session_emit(_s, {"type": "error",
                                         "content": "⚠️ 启动命令已执行但 GPU 0%、无 CellBender 进程——可能启动失败！请检查命令和日志。",
                                         "session_id": _s["id"]})
                                     logger.warning(f"[MemOmics] Launch verify FAILED: GPU={_gpu}, proc={_proc}")
                                 else:
                                     _session_emit(_s, {"type": "progress", "step": "verify_launch", "status": "done",
-                                        "detail": f"GPU {_gpu} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                                        "detail": f"GPU {_gpu or 'n/a'} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             except Exception:
                                 pass
                         # 持久化工具调用到 state.db 的 tool_calls_log 表
