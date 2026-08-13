@@ -95,19 +95,35 @@ def _kill_process_group(proc):
         pass
 
 
-def _apply_sct_rail(code: str) -> str:
-    """SCTransform 铁轨: 强制 workers=1 + sequential + conserve.memory."""
-    code = re.sub(r'plan\s*\(\s*"multisession"[^)]*\)', 'plan("sequential")', code)
-    code = re.sub(r'plan\s*\(\s*"multicore"[^)]*\)', 'plan("sequential")', code)
+def _apply_sct_rail(code: str):
+    """SCTransform 铁轨: 强制 workers=1 + sequential + conserve.memory.
+
+    P1-6(2026-08-13): 返回 (code, changes) — 改写不再静默，
+    变更明细随执行结果返回给 agent（之前 agent 不知道自己代码被改）。
+    """
+    changes = []
+    _new = re.sub(r'plan\s*\(\s*"multisession"[^)]*\)', 'plan("sequential")', code)
+    if _new != code:
+        changes.append('plan("multisession")→plan("sequential")')
+        code = _new
+    _new = re.sub(r'plan\s*\(\s*"multicore"[^)]*\)', 'plan("sequential")', code)
+    if _new != code:
+        changes.append('plan("multicore")→plan("sequential")')
+        code = _new
     if 'SCTransform' in code:
         if 'glmGamPoi' not in code and 'method' not in code:
             code = code.replace('SCTransform(',
                                 'SCTransform(method="glmGamPoi", conserve.memory=TRUE, ', 1)
+            changes.append('SCTransform 注入 method="glmGamPoi" + conserve.memory=TRUE')
         elif 'conserve.memory' not in code:
             code = code.replace('SCTransform(',
                                 'SCTransform(conserve.memory=TRUE, ', 1)
-    code = re.sub(r'workers\s*=\s*\d+', 'workers=1', code)
-    return code
+            changes.append('SCTransform 注入 conserve.memory=TRUE')
+    _new = re.sub(r'workers\s*=\s*\d+', 'workers=1', code)
+    if _new != code:
+        changes.append('workers=N→workers=1')
+        code = _new
+    return code, changes
 
 
 def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str = "") -> str:
@@ -123,16 +139,21 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
     """
     timeout = min(max(int(timeout), 30), 900)
 
+    _sct_changes = []
     if 'SCTransform' in code:
-        code = _apply_sct_rail(code)
+        code, _sct_changes = _apply_sct_rail(code)
+    _sct_note = ("" if not _sct_changes else
+                 "[SCTransform铁轨] 代码已自动调整: " + "; ".join(_sct_changes) + chr(10))
 
-    # ── 沙箱 fail-closed：degraded 模式写白名单外路径直接拒绝 ──
+    # ── 沙箱探测：degraded 模式写白名单外路径直接拒绝 ──
+    # P1-7(2026-08-13): 探测异常时 fail-open 但显式告警（原注释误导称 fail-closed）
     try:
         from tools.sandbox_probe import probe_sandbox_capability, is_write_path_allowed
         import re as _re
         _write_re = _re.compile(
             r"""(?:write\.csv|write\.table|write\.rds|write\.tsv|saveRDS|ggsave|pdf|png|jpeg|tiff|bmp|writeLines|save)\s*\([^)]*?["']([^"']+)["']""")
-        if probe_sandbox_capability().get("degraded"):
+        _probe = probe_sandbox_capability()
+        if _probe.get("degraded"):
             _violations = []
             for _m in _write_re.finditer(code):
                 _p = _m.group(1).strip()
@@ -143,8 +164,8 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                         "配置 MEMOMICS_ALLOWED_WRITE_ROOTS 可放行特定目录。")
                 return json.dumps({"status": "error", "output": _msg, "error": _msg,
                                    "exit_code": 1}, ensure_ascii=False)
-    except Exception:
-        pass
+    except Exception as _probe_err:
+        logger.warning("sandbox probe failed, write restrictions NOT enforced (fail-open): %s", _probe_err)
 
     # ── P0-1 持久 kernel 优先（状态保持 + 免包加载） ──
     try:
@@ -155,12 +176,12 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
             timeout=min(timeout, 600), language="r",
             cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
-            _out = (_res.get("output", "") or "(no output)")[:15000]
+            _out = _sct_note + ((_res.get("output", "") or "(no output)")[:15000])
             return json.dumps({"status": "success", "output": _out, "exit_code": 0,
                                "mode": "persistent_kernel"}, ensure_ascii=False)
         if _res.get("status") == "timeout":
             _msg = f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
-            return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+            return json.dumps({"status": "timeout", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
         # status == error → 分类处理（P1-4 修复，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
@@ -174,7 +195,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
             # 直接返回 error，防止 Rscript 把整脚本再跑一遍造成双写/重复副作用。
             _out = (_res.get("output", "") or "")[:15000]
             _out += chr(10) + f"[Kernel error: {_err}]"
-            return json.dumps({"status": "error", "output": _out, "error": _err,
+            return json.dumps({"status": "error", "output": _sct_note + _out, "error": _err,
                                "exit_code": 1, "mode": "persistent_kernel"}, ensure_ascii=False)
     except Exception:
         pass
@@ -210,7 +231,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 except OSError:
                     pass
                 _msg = f"Error: R execution timed out after {timeout}s (attempt {attempt}/{max_attempts}). Process killed."
-                return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+                return json.dumps({"status": "timeout", "output": _sct_note + _msg, "error": _msg,
                                    "exit_code": None}, ensure_ascii=False)
 
             try:
@@ -233,7 +254,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 if is_oom and attempt < max_attempts:
                     output += chr(10) + f"[OOM检测] R进程内存不足(尝试{attempt}/{max_attempts})"
                     output += chr(10) + "[自动修复] 强制plan('sequential') + conserve.memory=TRUE"
-                    code = _apply_sct_rail(code)
+                    code, _sct_changes = _apply_sct_rail(code)
                     continue
                 output += chr(10) + f"[Exit code: {proc.returncode}]"
                 if is_oom:
@@ -244,26 +265,26 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                     _st = stderr_data.decode("utf-8", errors="replace").strip()
                     if _st:
                         _err = _st.splitlines()[-1] if _st.splitlines() else _err
-                return json.dumps({"status": "error", "output": output[:15000],
+                return json.dumps({"status": "error", "output": _sct_note + output[:15000],
                                    "error": _err, "exit_code": proc.returncode},
                                   ensure_ascii=False)
 
-            return json.dumps({"status": "success", "output": output[:15000] or "(no output)",
+            return json.dumps({"status": "success", "output": _sct_note + (output[:15000] or "(no output)"),
                                "exit_code": 0}, ensure_ascii=False)
 
         except FileNotFoundError:
             _msg = "Error: R is not installed or not in PATH"
-            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+            return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
         except Exception as e:
             if proc:
                 _kill_process_group(proc)
             _msg = f"Error executing R: {e}"
-            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+            return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
 
     _msg = "Error: R execution failed after retries"
-    return json.dumps({"status": "error", "output": _msg, "error": _msg,
+    return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                        "exit_code": 1}, ensure_ascii=False)
 
 
