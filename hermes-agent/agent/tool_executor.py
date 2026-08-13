@@ -177,8 +177,18 @@ def _emit_terminal_post_tool_call(
         pass
 
 
-def _cancelled_tool_result(reason: str = "user interrupt") -> str:
-    return json.dumps(
+def _callback_block_result(cb_result: Any) -> str | None:
+    """P0-1(2026-08-13): 解析 tool_start_callback 返回值。
+
+    回调返回 {"blocked": True, "message": "..."} 表示硬阻断（enforcement 审查未通过等），
+    返回阻断原因；其余（None / 非 dict / blocked 非真）表示放行。
+    """
+    if isinstance(cb_result, dict) and cb_result.get("blocked"):
+        return str(cb_result.get("message") or "⛔ 工具执行被拦截（enforcement 回调）")
+    return None
+
+
+def _cancelled_tool_result(reason: str = "user interrupt") -> str:return json.dumps(
         {
             "error": f"Tool execution cancelled by {reason}",
             "status": "cancelled",
@@ -548,13 +558,17 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             except Exception as cb_err:
                 logging.debug(f"Tool progress callback error: {cb_err}")
 
-    for tc, name, args, middleware_trace, block_result, blocked_by_guardrail in parsed_calls:
+    for idx, (tc, name, args, middleware_trace, block_result, blocked_by_guardrail) in enumerate(parsed_calls):
         if block_result is not None:
             continue
         if agent.tool_start_callback:
             try:
                 display_args = _redact_tool_args_for_display(name, args) or args
-                agent.tool_start_callback(tc.id, name, display_args)
+                # P0-1(2026-08-13): 检查回调返回值 — enforcement 硬阻断（es.blocked / 自杀命令 / record_run 门禁）
+                _cb_block = _callback_block_result(agent.tool_start_callback(tc.id, name, display_args))
+                if _cb_block is not None:
+                    _blocked_result = json.dumps({"error": _cb_block}, ensure_ascii=False)
+                    parsed_calls[idx] = (tc, name, args, middleware_trace, _blocked_result, True)
             except Exception as cb_err:
                 logging.debug(f"Tool start callback error: {cb_err}")
 
@@ -1181,7 +1195,12 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         if not _execution_blocked and agent.tool_start_callback:
             try:
                 display_args = _redact_tool_args_for_display(function_name, function_args) or function_args
-                agent.tool_start_callback(tool_call.id, function_name, display_args)
+                # P0-1(2026-08-13): 检查回调返回值 — enforcement 硬阻断（es.blocked / 自杀命令 / record_run 门禁）
+                _cb_block = _callback_block_result(agent.tool_start_callback(tool_call.id, function_name, display_args))
+                if _cb_block is not None:
+                    _block_msg = _cb_block
+                    _block_error_type = "enforcement_block"
+                    _execution_blocked = True
             except Exception as cb_err:
                 logging.debug(f"Tool start callback error: {cb_err}")
 

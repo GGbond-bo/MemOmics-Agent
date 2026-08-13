@@ -210,6 +210,8 @@ class EnforcementState:
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
+        self._block_kind: str = ""  # P0-1(2026-08-13): 阻断原因类别 rail_pre/rail_post/""
+        self._block_reason: str = ""  # P0-1: 阻断原因描述（注入被拦工具的错误消息）
         self._last_terminal_result: str = ""  # 最近 terminal 输出（提取参数用）
         self._exec_retries: dict = {}  # P2: 命令/脚本重试计数 {cmd: n}
         self._last_exec_error: bool = False  # P2: 最近一次执行是否报错
@@ -325,8 +327,21 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             return False
 
     def tool_start_cb(tool_call_id: str, tool_name: str, args):
-        """工具执行前拦截"""
+        """工具执行前拦截。
+
+        P0-1(2026-08-13) 硬阻断接线：返回值协议 —
+          None                                = 放行
+          {"blocked": True, "message": str}   = 阻断（tool_executor 会检查并拦截执行）
+        修复类工具（rail_review/skill_evolution/debate_analysis 等）永远放行，避免死锁。
+        """
         es.tool_history.append({"tool": tool_name, "args": str(args)[:200], "time": time.time(), "phase": "start"})
+
+        # P0-1: es.blocked 置位（rail_review pre/post 未通过）→ 拦截执行类工具
+        # 修复类工具不在 _DEBATE_EXEC_TOOLS，天然放行。
+        if es.blocked and tool_name in _DEBATE_EXEC_TOOLS:
+            return {"blocked": True,
+                    "message": (es._block_reason or "⛔ 执行被拦截：前序审查未通过。")
+                    + "（提示：rail_review 通过后自动解除阻断）"}
 
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
@@ -418,14 +433,19 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 if _tool in _cmd_lower and _pattern in _cmd_lower:
                     es.warnings.append(f"terminal: 自杀命令被拦截 - {_cmd[:80]}")
                     _emit("enforcement", action="blocked", message=f"⛔ 拦截：{_msg}")
+                    # P0-1: 自杀命令硬阻断（一次性，不置位 es.blocked）
+                    return {"blocked": True, "message": f"⛔ 拦截：{_msg}"}
 
             es.terminal_count += 1
-            # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 阻断
+            # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 硬阻断（P0-1 接线）
             if es._pending_record and es.analysis_level != "chat":
                 es.warnings.append(f"terminal#{es.terminal_count}: 上一步未完成 record_run")
                 _emit("enforcement", action="blocked",
                       message="⛔ 上一步 terminal 完成后未记录经验！请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。",
                       require=["skill_evolution"])
+                return {"blocked": True,
+                        "message": "⛔ 上一步 terminal 完成后未记录经验（铁律）。"
+                                   "请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。"}
             # 分析级操作且未加载 skill → 警告
             if es.analysis_level in ("analysis", "statistical") and not es.skills_loaded:
                 es.warnings.append(f"terminal#{es.terminal_count}: 未加载任何 skill")
@@ -482,8 +502,15 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         should_proceed = r.get("should_proceed", True)
                         if not should_proceed:
                             issues = r.get("issues", [])
-                            _emit("enforcement", action="blocked",
-                                  message=f"🛡️ rail_review(pre) 发现问题: {'; '.join(issues[:3])}")
+                            es.blocked = True  # P0-1: 硬阻断接线 — 后续执行类工具被拦
+                            es._block_kind = "rail_pre"
+                            es._block_reason = (f"🛡️ rail_review(pre) 发现问题: {'; '.join(issues[:3])}。"
+                                                "请修复后重新 rail_review(phase='pre') 通过再执行。")
+                            _emit("enforcement", action="blocked", message=es._block_reason)
+                        elif es._block_kind == "rail_pre":
+                            es.blocked = False  # P0-1: 通过后解除
+                            es._block_kind = ""
+                            es._block_reason = ""
                     elif phase == "post" or r.get("phase") == "post":
                         es.rail_post_done = True
                         # 🔧 bug② 修复(2026-08-01): rail_review 返回键是 "passed" 不是 "should_proceed"
@@ -491,8 +518,15 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         should_proceed = r.get("passed", r.get("should_proceed", True))
                         if not should_proceed:
                             issues = r.get("issues", [])
-                            _emit("enforcement", action="blocked",
-                                  message=f"🛡️ rail_review(post) 发现问题: {'; '.join(issues[:3])}")
+                            es.blocked = True  # P0-1: 硬阻断接线
+                            es._block_kind = "rail_post"
+                            es._block_reason = (f"🛡️ rail_review(post) 发现问题: {'; '.join(issues[:3])}。"
+                                                "请修复后重新 rail_review(phase='post') 通过。")
+                            _emit("enforcement", action="blocked", message=es._block_reason)
+                        elif es._block_kind == "rail_post":
+                            es.blocked = False  # P0-1: 通过后解除
+                            es._block_kind = ""
+                            es._block_reason = ""
             except Exception:
                 pass
 
@@ -581,6 +615,15 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 _r = json.loads(result) if isinstance(result, str) else result
                 _u = (_r.get("usage") or {}).get("total", 0) if isinstance(_r, dict) else 0
                 es.token_used += int(_u or 0)
+            except Exception:
+                pass
+
+        elif tool_name == "skill_evolution":
+            # P0-1(2026-08-13): agent 手动调 skill_evolution(record_run) → 解除 pending_record 门禁
+            try:
+                a = json.loads(str(args)) if isinstance(args, str) else args
+                if isinstance(a, dict) and a.get("action") in ("record_run", "record_success"):
+                    es._pending_record = False
             except Exception:
                 pass
     def tool_progress_cb(event_type: str, **kwargs):

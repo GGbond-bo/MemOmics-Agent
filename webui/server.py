@@ -4921,9 +4921,15 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         _enf_progress = agent.tool_progress_callback
         
         def _merged_tool_start(tool_call_id, tool_name, args):
+            # P0-1(2026-08-13): 透传 enforcement 硬阻断返回值
+            _block = None
             if _enf_tool_start:
-                _enf_tool_start(tool_call_id, tool_name, args)
+                try:
+                    _block = _enf_tool_start(tool_call_id, tool_name, args)
+                except Exception:
+                    pass
             _wx_tool_start_cb(tool_name, args)
+            return _block
         
         def _merged_tool_complete(tool_call_id, tool_name, args, result):
             if _enf_tool_complete:
@@ -7355,8 +7361,29 @@ async def ws_endpoint(ws: WebSocket):
 
                 agent.stream_delta_callback = stream_cb
                 agent.reasoning_callback = reasoning_cb
-                agent.tool_start_callback = tool_start_cb
-                agent.tool_complete_callback = tool_complete_cb
+                # P0-1(2026-08-13): 合并 enforcement 回调（_create_agent 已注册）——
+                # 之前本地回调直接覆盖，导致审查硬阻断（es.blocked / 自杀命令 / record_run 门禁）在主聊天路径失效。
+                # enforcement 回调返回 {"blocked": True, "message": ...} 时透传给 tool_executor 硬拦截。
+                _enf_tool_start = getattr(agent, "tool_start_callback", None)
+                _enf_tool_complete = getattr(agent, "tool_complete_callback", None)
+                def _merged_tool_start(tool_id, tool_name, args=None, _s=session):
+                    _block = None
+                    if _enf_tool_start:
+                        try:
+                            _block = _enf_tool_start(tool_id, tool_name, args)
+                        except Exception:
+                            pass
+                    tool_start_cb(tool_id, tool_name, args)
+                    return _block
+                def _merged_tool_complete(tool_id, tool_name, args=None, result=None, _s=session):
+                    if _enf_tool_complete:
+                        try:
+                            _enf_tool_complete(tool_id, tool_name, args, result)
+                        except Exception:
+                            pass
+                    tool_complete_cb(tool_id, tool_name, args, result)
+                agent.tool_start_callback = _merged_tool_start
+                agent.tool_complete_callback = _merged_tool_complete
                 agent.status_callback = status_cb
                 agent.notice_callback = notice_cb
                 agent.notice_clear_callback = notice_clear_cb
