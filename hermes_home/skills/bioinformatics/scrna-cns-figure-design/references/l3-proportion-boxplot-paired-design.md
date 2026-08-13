@@ -106,6 +106,15 @@ for each subtype (one at a time, user confirms before next):
 - 实现：plot_celltype_proportion 加 use_p_value 参数；sig_col <- if(use_p_value)
   "p.value" else "FDR_per_celltype"；label 前缀由 sig_col 决定（"p=" / "FDR="）。
 
+## ⛔ FDR 版全标注规则（user: "FDR 版标注，都标记吧，然后这版图就这6个" 2026-08-12）
+
+用户要 FDR 版时**不要只标 FDR<0.05 的比较**——全部比较的括号都标注（含 O vs OD
+FDR=1.000 这类非显著行），显著性判断交给读者。实现：sig_data 只过滤
+`!is.na(.data[[sig_col]])`，**不加 `< 0.05` 条件**；label 前缀按 sig_col 切换
+（`FDR_per_celltype`→"FDR="，`p.value`→"p="）。\n
+定稿流程：用户确认组别（Pure Type IIA 最终 = 6 组全画）后即锁定该亚群，不再改版；
+每亚群定稿 = 用户原版脚本 × 两个标注列（FDR 版 + p 值版）各 PNG+PDF。
+
 ## ⛔ 非显著配对效应的个体响应分解 (2026-08-12)
 
 OD 组运动后 IIA 中位数 +6.5pp 但配对 Wilcoxon p=0.469 — 表面"有效果"不可信。
@@ -147,26 +156,34 @@ young exercise rises), do NOT force a reversal story. Valid angles:
   - 导出 SVG（可编辑）+ PDF + PNG(300dpi)，egg::set_panel_size 固定面板
 - 用户拍板选版 → 下一亚群统一按被选版出。
 
-## 每张交付图必须过像素检查 (2026-08-12)
+## 每张交付图必须过像素检查 (2026-08-12 二次纠正)
 
-用户："你出的图，很多都是空白的图，啥都没有，你都不检查一下吗？"
-文件大小不是内容正确的证据（3.9KB 空白 vs 63KB 正常修过一次，用户仍会再问）。
-交付前用 PIL 采样非白像素比例（每隔 4px 采 1 个，`px[x,y] < 240` 计数），
-空白图 <1%，正常箱线图 5-96%（6 组探索版通常 5-15%，CNS 白底版 90%+）。
+用户："你画的好多图都是空的，你都不检查"（第二次）——第一次的教训（文件大小≠内容）修完，
+第二次暴露**"非白像素%"单指标本身有漏洞：纯黑背景 100% 非白，会被误判成"有内容"**。
+黑底假图（egg::set_panel_size + ggsave 缺 bg="white"）实测 94.8% 纯黑 [0,0,0] + 4% 灰线，
+非白检查全过但视觉=黑屏。正确三指标检查（PIL）：
 ```python
 from PIL import Image
-im = Image.open(f).convert("L"); px = im.load(); w, h = im.size
-nonwhite = sum(1 for y in range(0,h,4) for x in range(0,w,4) if px[x,y] < 240)
-total = (h//4+1)*(w//4+1)
-print(f"{100.0*nonwhite/total:.1f}%")  # >1% 才算有内容
+import numpy as np
+arr = np.array(Image.open(f).convert("RGB")).astype(int)
+r, g, b = arr[...,0], arr[...,1], arr[...,2]
+mx = np.maximum(np.maximum(r,g),b); mn = np.minimum(np.minimum(r,g),b)
+dark    = (mx < 100).mean()*100      # 黑底判定：>50% = 黑底图 ❌（必须 <10）
+colored = ((mx-mn) > 30).mean()*100  # 彩色（箱体/点）比例：正常箱线图 >1%
+# 内容边界框：非白像素的 y/x 范围；空图 bbox 为 0 或极小
+# 判定：dark<10 且 colored>1 且 bbox 合理 → ✅
 ```
+任何 PNG 交付前都跑三指标；黑底图第一眼被 dark% 抓出，直接查 ggsave 是否缺 bg="white"。
 
 ## Windows R 出图坑（本会话实测）
 
 - `theme(base_family="Arial")` / `gpar(fontfamily="Arial")` 报"字体类别出错"（grid
   不认裸名 Arial）→ 删掉 family 参数用默认 sans。
 - **png() 设备 + `print(set_panel_size(p))` → 3.9KB 空白 PNG**；同一对象走
-  `ggsave()` 正常（50-60KB）。出 PNG 统一用 ggsave。
+  `ggsave()` **若不加 `bg="white"` 会出 94.8% 纯黑背景的"假图"**（黑底 + 4% 灰线，
+  视觉=黑屏，用户判"图是空的"；文件 50-60KB 照样黑）。**修复：ggsave 三处（PNG/PDF/
+  SVG）一律显式 `bg = "white"`**，或 pdf() 设备 + `grid::grid.draw(p_scaled)`。
+  黑底修复后用像素三指标验证（见下节），不能只看文件大小。
 - **函数默认参数同名递归引用**：`f <- function(..., fdr_table = fdr_table, ...)`
   参数默认值与全局变量同名 → R 报"递归缺省参数参考"。参数名避开全局名
   （`sig_table = fdr_table`），函数体内全部改用参数名。

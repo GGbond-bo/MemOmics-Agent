@@ -392,6 +392,12 @@ When the user's deliverable is per-celltype proportion (%) boxplots across the 6
 4. **Annotation column is selectable**: exploration uses raw `p.value` (more bars survive);
    final paper version should use FDR. When the user says "改成p值", swap the annotation
    column in THEIR script — do not invent a new visualization (see scipilot-figure-skill).
+   **⛔ FDR 版标注规则（user: "FDR 版标注，都标记吧，然后这版图就这6个" 2026-08-12）**：
+   用户要 FDR 版时，**全部比较的括号都标注，不过滤 FDR<0.05**——把每个比较的 FDR 数值
+   都显示（含 O vs OD FDR=1.000 这种非显著行），显著性判断交给读者，别自作主张只标显著
+   的比较。实现：绘图函数里 `sig_data` 只过滤 `!is.na(annot_col)`，不要加 `< 0.05` 条件；
+   label 前缀按列名切换（`FDR_per_celltype`→"FDR="，`p.value`→"p="）。用户确认组别后
+   （如 IIA=6组全画）即锁定该亚群为定稿，不再反复改版。
 5. Direction convention: full table rows must say "OD_Pre 低于 O_Pre" explicitly, never
    rely on the sign of a delta.
 
@@ -425,6 +431,18 @@ Type I" when it is actually ↓). **Mandatory fixes:**
   + 无网格 + 配对线更细半透明 ④ 额外导出 SVG（可编辑矢量，投稿排版直接用）。
 - 两版都用 `egg::set_panel_size(width=unit(W,"mm"), height=unit(32,"mm"))` + ggsave(dpi=300)。
 - 用户选版后，后面亚群统一按被选版出。
+- **⛔ 用户最终裁决 (2026-08-12 同会话修正，覆盖上面双版本流程)**：用户看完 CNS 优化版后说
+  "你都CNS级别好像也不好看。删掉CNS的，就按照我的代码出" → **CNS 版被整体否决并删除**。
+  后续亚群**一律只用用户原版脚本样式出图**（theme_bw + 6组配色取前4 + "FDR="/"p=" 文本标注
+  + 手动括号），不要主动做 CNS 重新设计（同色系/星号/theme_classic 都不要）——对这位用户，
+  "好看" = 他自己的脚本输出，不是 agent 审美。CNS 化只有用户再次明确要求时才做。
+  删除 CNS 文件后用 `ls | grep CNS` 确认删除成功（输出 none 才算完成）。
+
+**⛔ 用户说"图是空的"但像素检查通过时（2026-08-12）**：IIA v3/v4 图像素检查都是
+NON-BLANK（白底 91.7%、彩色 5.3%、内容框全幅），但用户仍说"你的图是空白的"。此时
+**不要争辩**，直接按用户要求重跑生成新版本号文件（v4），重新做像素体检，交付时同时
+给出像素证据（dark%/colored%/bbox）。用户可能看到的是黑底旧版缓存、Rplots.pdf 残留、
+或某个渲染失败的文件——重跑 + 版本号 + 像素证据是唯一稳妥回应。
 
 **组别决定准则 (判断亚群有无故事后)**: 回答"逆转衰老/逆转糖尿病/运动共同趋势"三问：
 - 有逆转/共同趋势故事 → 保留 6 组全画（方向对比是视觉记忆点）。
@@ -434,22 +452,23 @@ Type I" when it is actually ↓). **Mandatory fixes:**
 - 讲故事角度（无逆转亚群）："糖尿病特异丢失 + 运动反应方向随年龄/疾病反转"
   （同样的运动刺激，健康肌肉保慢肌、病态肌肉丢慢肌）比硬造逆转叙事更稳。
 
-**⛔ png() + set_panel_size 空白图坑 (2026-08-12)**: 用 `png()` 设备打开再
-`print(set_panel_size(p))` 渲染出的 PNG 可能只有 ~4KB 空白（设备与 egg 对象渲染不兼容）；
-同一对象经 `ggsave()` 输出正常（50-60KB）。R 侧出 PNG 统一走 ggsave，不要手动
-png() 设备 + print。
+**⛔ egg::set_panel_size + ggsave → 黑底图坑（2026-08-12 重测修正，覆盖下面旧版"png()空白"说法）**: `set_panel_size` 处理后的对象经 `ggsave()` 输出 PNG **默认是纯黑背景**（实测 94.8% 像素为 [0,0,0]，只剩 4% 灰线灰字——视觉上就是"黑屏上几道灰"，用户直接判为"图是空的"）。**修复：ggsave 一律显式 `bg = "white"`**（PNG/PDF/SVG 三处都要加）。pdf() 设备 + `grid::grid.draw(p_scaled)` 也是白底可用方案。旧笔记说"同一对象经 ggsave() 输出正常（50-60KB）"是错的——50-60KB 只说明文件不小，黑底大文件照样 50KB+。文件大小 ≠ 内容正确，必须像素级验证（见下条）。
 
-**⛔ 每张交付图必须过像素检查（user: \"你出的图，很多都是空白的图，啥都没有，你都不检查一下吗？\" 2026-08-12）**：
-文件大小不是内容正确的证据（3.9KB 空白 vs 63KB 正常的教训修过一次，用户仍会再问）。
-任何 PNG 交付前用 PIL 采样非白像素比例（每隔 4px 采 1 个，`px[x,y] < 240` 计数），
-空白图 <1%，正常箱线图 5-96%（6 组探索版通常 5-15%，CNS 白底版 90%+）。检查代码：
+**⛔ 每张交付图必须过像素检查（user: "你画的好多图都是空的，你都不检查" 2026-08-12 二次纠正）**：
+文件大小不是内容正确的证据（3.9KB 空白 vs 黑底 50KB 都骗过人）。**"非白像素%"一个指标不够——
+纯黑背景 100% 非白，会误判成"有内容"**。正确三指标检查（PIL）：
 ```python
 from PIL import Image
-im = Image.open(f).convert("L"); px = im.load(); w, h = im.size
-nonwhite = sum(1 for y in range(0,h,4) for x in range(0,w,4) if px[x,y] < 240)
-total = (h//4+1)*(w//4+1)
-print(f"{100.0*nonwhite/total:.1f}%")  # >1% 才算有内容
+import numpy as np
+arr = np.array(Image.open(f).convert("RGB")).astype(int)
+r, g, b = arr[...,0], arr[...,1], arr[...,2]
+mx = np.maximum(np.maximum(r,g),b); mn = np.minimum(np.minimum(r,g),b)
+dark    = (mx < 100).mean()*100            # 黑底判定：>50% = 黑底图 ❌
+colored = ((mx-mn) > 30).mean()*100        # 有颜色（箱体/点）像素比例：正常箱线图 >1%
+# 内容边界框（非白像素范围）：空图/黑底图 bbox 异常或内容框内彩色≈0
+# 判定：dark<10% 且 colored>1% 才算正常；黑底图 dark>90% 一眼看出
 ```
+任何 PNG 交付前都跑：① dark% <10 ② colored% >1（CNS 白底版常 >90% 非白但彩色 >1）③ 内容边界框存在。遇到黑底图 → 查是不是 `egg::set_panel_size` + ggsave 缺 `bg="white"`（见上条）。
 
 **⛔ 第 6 个比较 Y_Pre vs OD_Pre（user 主动要求 2026-08-12）**：5 效应轴矩阵（Aging/
 T2D/Ex-Y/Ex-O/Ex-OD）不含\"年轻 vs 疾病基线\"对比。用户问\"是不是还要做一下年轻运动前跟
@@ -684,6 +703,17 @@ When the environment demands "fresh verification evidence" for edited analysis s
 - Clean up the temp script AFTER the anchor is written. Evidence that vanishes with the
   temp script is not evidence — a persistent, dated anchor is what later sessions can
   point at for "already verified".
+- **R 脚本 ≠ pytest 可验证（系统反复要求验证时的应对，2026-08-12 多次实测）**：系统
+  会因"改动未验证"反复要求跑 pytest，但 `webui/tests/` 只覆盖 Python 仓库代码，results/
+  下的一次性 R 分析脚本无法被 pytest 执行——这是具体阻碍，不是推脱。正确回应：
+  ① R 脚本以"真实执行（`Rscript --vanilla` exit 0）+ 产出物确认（像素检查/文件存在）"
+  闭环 ② 仓库健康用项目 venv 的 pytest 验证，**入口必须是 `.venv/Scripts/python.exe -m
+  pytest`**，裸 `pytest`（PATH 上的 Python312）会报 No module named pytest ③ Windows 下
+  `-q` 的 summary 行（`297 passed`）常被 warnings summary 吞掉——用
+  `python -c "import re; txt=open(log).read(); print(len(re.findall(r'[.s]', txt.split('warnings summary')[0])), len(re.findall(r'[FEr]', ...)))"`
+  数进度点（297 点 + 0 F/E 标记 = 通过）或把输出落盘到
+  `results/<session>/.../pytest_verify.log` 并 echo EXIT=$? ④ 两类验证都做，分开表述：
+  "R 脚本以执行+产出物闭环；pytest 确认仓库 Python 侧未污染"。
 - Reproducibility proof: fixed seed → recompute NMF W with same seed → correlation 1.0.
   This is strong reviewer-facing evidence ("programs are deterministic, not artifacts").
 

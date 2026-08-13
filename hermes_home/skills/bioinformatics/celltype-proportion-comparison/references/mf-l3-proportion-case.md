@@ -55,13 +55,30 @@
 - 响应者 vs 非响应者基线：28.09% vs 24.26%，p=1.000 → **基线不预测响应（非 floor effect）**
 - 故事策略：糖尿病快肌丢失（有统计）→ 运动个体响应异质性（有数据）→ 不声称"运动普遍有效"
 
-## 出图尺寸（用户指定）
-- 6 柱 = 30mm 宽，5 柱 = 28mm，每少 1 柱 −2mm；高 32mm
-- `egg::set_panel_size` + `ggsave(dpi=300, limitsize=FALSE)`
+## 出图尺寸（用户指定，2026-08-12/13 最终版）
+- **探索图（未定组别）= 140×110mm 全幅大图**（用户明确允许："探索脚本可以 140×110mm 全幅，确定之后再用我指定的参数"）
+- **定稿图（用户确认组别后）**：6 柱 = 30mm 宽，5 柱 = 28mm，每少 1 柱 −2mm；高 32mm
+- `egg::set_panel_size(width=unit(N,"mm"), height=unit(32,"mm"))` + `ggsave(dpi=300, limitsize=FALSE, bg="white")`
+- **⛔ 尺寸教训链**：IIA 的 FDR/p 值**定稿图**曾用 140×110 全幅（被"大小有按照我给的画吗？"抓住）→ 必须按柱数规则；
+  随后探索图又被强行套 30mm（被"探索脚本可以全幅"纠正）→ 探索全幅、定稿按柱数。定稿 FDR 版与 p 值版
+  同一亚群必须同一宽度 mm。
 
 ## 执行环境坑（本会话实测）
 - R 必须用 R-4.5.3 全路径 `C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe` + `.libPaths('E:/R-libs/R-4.5.3')`；默认 R-4.4.2 加载不了 4.5.3 编译包
 - readr 不在 R-4.5.3 库 → 用基础 `write.csv`
 - 生成的 CSV 首列空表头 → 读回时 `row.names=1`
-- `png()` 设备 + `set_panel_size` 对象可能渲染异常出空白 PNG（3.9KB）→ 统一 `ggsave` 输出 PNG，且用像素检查兜底（非白像素 <1% = 空白）
+- **⛔ 黑底/空白检查必须三指标，不能只看"非白像素%"**：`egg::set_panel_size` + `ggsave()` 默认
+  输出纯黑背景 PNG（94.8% 黑），"非白 95%"会误判成有内容。正确：① `dark%`（RGB 全<100）<10
+  ② `colored%`（max−min>30）>1 ③ 内容边界框存在。`png()` 设备 + set_panel_size 也可能出空白
+  （3.9KB）→ 统一 `ggsave(..., bg="white")` 输出 PNG。
 - 每次 R 脚本运行前检查是否有 `_kernel_worker.R` 孤儿进程堆积（见 windows-bioinformatics-batch-processing 的 references/kernel-worker-orphan-investigation.md）
+
+## LRP1B+(I)（2026-08-13 两版探索图已出，等用户定组别）
+- 6 组探索图（140×110mm 全幅）已出两版：`Pure_Type_LRP1B_6grp_pval_explore.png` + `Pure_Type_LRP1B_6grp_FDR_explore.png`
+- 显著性（v4 6 比较表，FDR_per_celltype）：
+  - OD Pre→Post p=0.0156 FDR=0.056（糖尿病运动↓，−2.26pp，raw p 显著 FDR 边缘）
+  - Y vs O p=0.0185 FDR=0.056（衰老↑，Cliff's δ=+0.69，raw p 显著 FDR 边缘）
+  - Y vs OD p=0.0878 FDR=0.176（糖尿病↑，边缘）、O vs OD p=0.3176 无差异
+  - Y Pre→Post p=0.846、O Pre→Post p=0.219 均不显著
+- 故事候选：衰老↑ + 糖尿病运动↓ = "运动把衰老相关升高的 LRP1B+ 压回去"方向，但 FDR 边缘需谨慎
+- 定稿时用户原版样式 × {FDR, p 值} 两版（若用户确认组别）
