@@ -23,7 +23,7 @@ def _load_env_cache():
         return _ENV_CACHE
     try:
         if os.path.exists(_ENV_CACHE_PATH):
-            with open(_ENV_CACHE_PATH, "r", encoding="utf-8") as f:
+            with open(_ENV_CACHE_PATH, "r", encoding="utf-8-sig") as f:
                 _ENV_CACHE = json.load(f)
             age = time.time() - _ENV_CACHE.get("cached_at", 0)
             if age < _CACHE_TTL:

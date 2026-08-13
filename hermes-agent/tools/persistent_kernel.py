@@ -349,7 +349,7 @@ class KernelPool:
         try:
             import json as _json
             _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
-            _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8"))
+            _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
             _r_section = _env_json.get("paths", {}).get("r", {})
             _def_rscript = _r_section.get("default", "")
             _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
