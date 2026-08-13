@@ -685,6 +685,48 @@ def _marker_belongs_to_session(marker_path, session):
     return False
 
 
+def _contract_output_paths(plan_text: str, results_dir: str):
+    """P0-2(2026-08-13): 从 task_plan 主线区提取声明的产出文件路径。
+
+    返回 (绝对路径列表, 相对路径列表)。只认分析产出扩展名（排除 .exe/.bat
+    等工具路径，避免 Environment 表误伤）。
+    """
+    _ext = (r"\.(?:rds|h5ad|h5|h5seurat|rdata|rda|csv|tsv|xlsx?|png|jpe?g|svg|pdf|"
+            r"html?|txt|mtx|gz|loom|arrow|parquet)")
+    _abs_pat = r"[A-Za-z]:[\\/][^\s\)\]，。;；\n\"']+" + _ext + r"\b"
+    _abs = re.findall(_abs_pat, plan_text)
+    # 先从文本移除绝对路径，避免大小写不敏感匹配把 AppData/Local/... 误当相对路径
+    _rest = re.sub(_abs_pat, " ", plan_text)
+    _rel = re.findall(r"(?:data|results|output|figures?|plots?)[\\/][^\s\)\]，。;；\n\"']+" + _ext + r"\b",
+                      _rest, re.IGNORECASE)
+    return _abs, _rel
+
+
+def _completion_contract_check(plan_main_text: str, results_dir: str) -> bool:
+    """P0-2(2026-08-13) 完成契约：提交即校验。
+
+    ① 主线区不得有未勾选复选框（- [ ]）；
+    ② 主线区声明的产出文件（E:/ 绝对路径或 data/、results/、output/ 相对路径）
+       必须存在且非空。
+    任一不满足 → False（词法"完成"不算数，继续自检，不归档）。
+    """
+    try:
+        if re.search(r"-\s*\[ \]", plan_main_text):
+            return False
+        _abs, _rel = _contract_output_paths(plan_main_text, results_dir)
+        for _p in _abs:
+            _fp = _p.replace("\\", "/").strip()
+            if not (os.path.isfile(_fp) and os.path.getsize(_fp) > 0):
+                return False
+        for _p in _rel:
+            _fp = os.path.join(results_dir, _p.replace("\\", "/").strip())
+            if not (os.path.isfile(_fp) and os.path.getsize(_fp) > 0):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def _task_plan_active(rd):
     """task_plan.md 是否表示"还有进行中的工作"（内容级判定，修复 2026-08-08）。
 
@@ -708,6 +750,10 @@ def _task_plan_active(rd):
     ]
     for _m in _done_marks:
         if _m in content:
+            # P0-2(2026-08-13): 词法完成标记命中仍需契约校验——存在未勾选复选框
+            # → 任务实际未完成，不算完成（继续判定，避免重启后丢自检）
+            if "- [ ]" in content:
+                break
             return False
     # 所有任务项都已勾选（无未完成 checkbox）→ 完成
     if "[" in content and "- [ ]" not in content and ("- [x]" in content or "- [X]" in content):
@@ -790,23 +836,28 @@ def _schedule_self_check(session, agent, loop):
             _pt_lower = _main.lower()
             if "in_progress" not in _pt_lower and "pending" not in _pt_lower and \
                     any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止")):
-                try:
-                    from webui.runtime.run_gate import mark_done
-                    mark_done(results_dir, "task completed (self-check)")
-                except Exception:
-                    pass
-                try:
-                    _done_path = os.path.join(results_dir, "task_plan.done.md")
-                    if os.path.exists(_done_path):
-                        os.remove(_done_path)
-                    os.rename(_plan_path, _done_path)
-                except Exception:
+                # P0-2(2026-08-13) 完成契约：提交即校验 — 复选框全勾 + 产出文件存在且非空。
+                # 契约未满足 → 不归档不 mark_done，继续自检（唤醒 agent 补齐）。
+                if not _completion_contract_check(_main, results_dir):
+                    logger.info(f"[SelfCheck] session {session['id'][:12]}: 词法判定完成但完成契约未满足（未勾选复选框或产出文件缺失/为空）→ 继续自检")
+                else:
                     try:
-                        os.remove(_plan_path)
+                        from webui.runtime.run_gate import mark_done
+                        mark_done(results_dir, "task completed (self-check)")
                     except Exception:
                         pass
-                logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已归档 task_plan.done.md + mark_done，停止自检（心跳关闭）")
-                return
+                    try:
+                        _done_path = os.path.join(results_dir, "task_plan.done.md")
+                        if os.path.exists(_done_path):
+                            os.remove(_done_path)
+                        os.rename(_plan_path, _done_path)
+                    except Exception:
+                        try:
+                            os.remove(_plan_path)
+                        except Exception:
+                            pass
+                    logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已归档 task_plan.done.md + mark_done，停止自检（心跳关闭）")
+                    return
         except Exception:
             pass
     # ⛔ 检查 task_plan 是否被取消/暂停
