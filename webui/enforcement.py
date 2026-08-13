@@ -210,6 +210,7 @@ class EnforcementState:
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
+        self._error_recorded: int = 0  # P1-11: 本会话自动 record_error 次数（限 2 防刷屏）
         self._block_kind: str = ""  # P0-1(2026-08-13): 阻断原因类别 rail_pre/rail_post/""
         self._block_reason: str = ""  # P0-1: 阻断原因描述（注入被拦工具的错误消息）
         self._last_terminal_result: str = ""  # 最近 terminal 输出（提取参数用）
@@ -475,7 +476,9 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             es._last_terminal_result = str(result)[:1000] if result else ""
             # P2(2026-08-10): 报错信号 — 结果含错误标记
             _rstr = str(result).lower() if result else ""
-            es._last_exec_error = any(k in _rstr for k in ("traceback", "error:", "exception", "exit code 1", "nonzero", "not found"))
+            es._last_exec_error = any(k in _rstr for k in (
+                "traceback", "error:", "exception", "exit code 1", "nonzero",
+                "not found", '"status": "error"', '"status":"error"', "kernel error"))
             # 设置 pending 标记：所有非闲聊级别都需要 record
             if es.analysis_level != "chat":
                 es._pending_record = True
@@ -545,7 +548,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         import os as _os2, re as _re
                         _sep2 = _iu2.spec_from_file_location(
                             "skill_evolution",
-                            _os2.join(_os2.dirname(_os2.abspath(__file__)),
+                            _os2.path.join(_os2.path.dirname(_os2.path.abspath(__file__)),
                                       "..", "memomics", "bio_tools", "skill_evolution.py")
                         )
                         _se = _iu2.module_from_spec(_sep2)
@@ -560,6 +563,45 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                             if _kw in _tr: _tissue = _f; break
                         _m = _re.search(r'(\d+)\s*(?:cells|细胞)', _tr)
                         if _m: _params = f'{{"cell_count": {_m.group(1)}}}'
+
+                        # P1-11(2026-08-13): query_logs 接线 — 查历史 proven 参数兜底
+                        if _params == "{}":
+                            try:
+                                _ql = _se.skill_evolution(action="query_logs",
+                                                          skill_name=es.skills_loaded[0])
+                                if isinstance(_ql, str):
+                                    _ql = json.loads(_ql) if _ql.strip().startswith("{") else {}
+                                if isinstance(_ql, dict):
+                                    _proven = _ql.get("proven_runs", []) or []
+                                    for _pr in _proven:
+                                        if isinstance(_pr, dict) and _pr.get("params_used"):
+                                            _params = str(_pr["params_used"])
+                                            break
+                            except Exception:
+                                pass
+
+                        # P1-11(2026-08-13): record_error 接线 — 本步骤有执行错误 →
+                        # 沉淀错误经验（每会话限 2 次防刷屏）
+                        if es._last_exec_error and es._error_recorded < 2:
+                            es._error_recorded += 1
+                            try:
+                                _err_snip = (es._last_terminal_result or "")[-800:]
+                                _se.skill_evolution(
+                                    action="record_error",
+                                    skill_name=es.skills_loaded[0],
+                                    error_message=_err_snip,
+                                    error_type="execution",
+                                    root_cause="see error message",
+                                    fix_applied="",
+                                    species=_species, tissue=_tissue,
+                                    direction=_direction,
+                                    script_name=f"session_{sid}_terminal{es.terminal_count}",
+                                )
+                            except Exception:
+                                pass
+
+                        # P1-11(2026-08-13): score 去硬编码 — 自动记录未经用户批准，
+                        # user score=0（不假装认可），auto_score 由 rail_review 提供（无则 0）
                         for _sk in es.skills_loaded:
                             _se.skill_evolution(
                                 action="record_run",
@@ -568,7 +610,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                                 species=_species, tissue=_tissue, direction=_direction,
                                 params_used=_params,
                                 result_summary=f"rail_review(post) passed. session={sid}",
-                                score=7
+                                score=0, approved=False, auto_score=0.0
                             )
                         _emit("enforcement", action="recorded",
                               message=f"🧬 自动 record_run: {', '.join(es.skills_loaded)} species={_species} tissue={_tissue}")

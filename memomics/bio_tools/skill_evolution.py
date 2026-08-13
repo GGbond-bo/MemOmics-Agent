@@ -925,6 +925,8 @@ def skill_evolution(action: str = "record_error",
                     direction: str = "",
                     result_summary: str = "",
                     score: float = 0.0,
+                    auto_score: float = 0.0,
+                    approved: bool = False,
                     severity: str = "medium",
                     reason: str = "",
                     keywords: str = "",
@@ -949,7 +951,9 @@ def skill_evolution(action: str = "record_error",
         tissue: 组织
         direction: 研究方向
         result_summary: 结果摘要 (record_success)
-        score: 质量评分 0-10 (record_success)
+        score: 质量评分 0-10 (record_success) — user score，只有 approved=True 才入表
+        auto_score: rail_review 自动技术分 0-10 (record_success)，0=未评分
+        approved: 用户是否确认认可
         severity: 严重程度 critical/high/medium/low
         reason: 更新原因 (update_script)
         keywords: SOUL.md 命中关键词 (register_skill), 如 '"scTour" / "深度伪时间"'
@@ -984,6 +988,8 @@ def skill_evolution(action: str = "record_error",
             direction=direction,
             result_summary=result_summary,
             score=score,
+            auto_score=auto_score,
+            approved=approved,
         )
     elif action == "query_logs":
         result = _query_logs(
