@@ -17,6 +17,12 @@ ANALYSIS_KEYWORDS = {
         "细胞通讯", "CellChat", "cellchat", "转录因子", "SCENIC", "空间转录组", "spatial",
         "富集分析", "GO", "KEGG", "pathway", "生存分析", "survival",
         "整合", "integration", "multi-omics", "多组学", "bulk", "ATAC",
+        # 多组学覆盖（2026-08-13 补：代谢/蛋白/微生物/表观也要进辩论门控）
+        "代谢", "代谢组", "metabolomics", "metabolite", "脂质", "lipid", "lc-ms", "lcms",
+        "质谱", "mass spec", "xcms", "msdial", "蛋白", "蛋白组", "proteomics", "maxquant",
+        "dia-nn", "diann", "磷酸化", "phospho", "微生物", "microbiome", "16s",
+        "宏基因组", "metagenome", "otu", "asv", "qiime", "甲基化", "methylation",
+        "chip-seq", "chipseq", "cut&tag", "cuttag", "dmr", "表观",
         "画图", "可视化", "figure", "plot", "chart", "graph", "volcano", "heatmap", "generate", "create", "draw",
         "报告", "report", "html",
         "差异表达", "differential expression", "deg",
@@ -83,6 +89,21 @@ _PARAM_CHECK_RULES = [
      "QC 过滤阈值：MT%/nFeature/nCount 阈值是否有本数据依据（默认值未必合适，需看分布再定）"),
     (("sctransform", "normalize", "log10"),
      "归一化方法：SCTransform vs LogNormalize 选择依据、vars.to.regress 是否必要且正确"),
+    # 多组学核查（2026-08-13 扩展：ATAC/空间/bulk/代谢/蛋白/微生物/表观）
+    (("deseq2", "edger", "limma", "design", "contrast"),
+     "bulk 设计矩阵：design 公式与因子水平是否正确（对照/处理命名、交互项——设计错了结论全错，必须与用户确认）"),
+    (("macs2", "callpeak", "fragments", "tss", "motif"),
+     "ATAC/ChIP：fragment 数过滤阈值（<1000 低质量）、peak calling q 值、TSS 富集 QC、input 对照/motif 背景选择"),
+    (("spatial", "spot", "deconvol", "cell2location", "stlearn"),
+     "空间组：spot 分辨率与组织切片匹配度、空间聚类参数、去卷积方法选择依据"),
+    (("metabol", "代谢", "xcms", "msdial", "lipid", "m/z", "peakpicking"),
+     "代谢组：归一化方法（内标/TIC/quantile）选择、QC 样本 RSD 过滤、log2 转换、单变量 vs 多变量检验适用性"),
+    (("proteom", "蛋白", "maxquant", "diann", "lfq", "imputation"),
+     "蛋白组：缺失值填补策略（低丰度=随机缺失 vs 高丰度=非随机）、归一化方法、差异检验适用性"),
+    (("microbiom", "微生物", "16s", "qiime", "dada2", "otu", "asv", "raref"),
+     "微生物组：抽平深度选择、相对丰度 vs 绝对丰度、多样性指数与距离矩阵选择的适用性"),
+    (("methylation", "甲基化", "dmr", "bisulfite", "cut&tag", "cuttag"),
+     "表观组：DMR 检验方法（bumphunter/DSS）适用性、对照组设置、低覆盖位点过滤"),
 ]
 
 
