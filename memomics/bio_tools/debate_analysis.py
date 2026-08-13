@@ -135,6 +135,26 @@ SCHEMA = {
                 "enum": ["L1", "L2"],
                 "description": "辩论级别（门控判定，2026-08-11）: L2=完整 8 角色辩论（默认，结论合成/入库前） | L1=轻量采样辩论（默认模型上下文切断正反采样 N 组 + 裁判总结，成本约 1/3，脚本设计/统计级结论用）。",
                 "default": "L2"
+            },
+            "species": {
+                "type": "string",
+                "description": "本次分析物种（human/mouse/猴 等）— 自动知识库注入按物种优先排序",
+                "default": ""
+            },
+            "tissue": {
+                "type": "string",
+                "description": "本次分析组织（muscle/brain/liver 等）— 自动注入的组织过滤",
+                "default": ""
+            },
+            "direction": {
+                "type": "string",
+                "description": "本次研究方向（aging/发育/疾病 等）— 自动注入的方向过滤",
+                "default": ""
+            },
+            "auto_kb": {
+                "type": "boolean",
+                "description": "自动检索知识库注入（默认 true）：biology_kb 按物种+组织+方向优先（其他物种降权参考），bioinfo_kb 按话题匹配（跨物种可参考），statistics_kb 不注入（LLM 自行判断）。显式传 kb 参数时自动注入跳过对应库。",
+                "default": True
             }
         },
         "required": ["topic", "context"]
@@ -1114,11 +1134,93 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
     return result_json
 
 
+def _auto_kb_injection(topic: str, context: str = "", species: str = "",
+                       tissue: str = "", direction: str = "",
+                       max_per_kb: int = 4, max_chars: int = 800) -> dict:
+    """自动检索知识库并按学科路由注入（2026-08-13 用户三例设计）。
+
+    - biology_kb：物种+组织+方向强匹配排第一（kb_search 的 path_boost 排序
+      已保证：物种 +25 / 组织 +15 / 方向 +10，同物种同组织同方向自然最前）；
+      匹配条目 <2 时补搜其他物种，标注 [其他物种·参考]（如人衰老可参考
+      小鼠衰老研究，但优先级靠后）
+    - bioinfo_kb：话题匹配为主（DEG/CellChat/bulk 等方法类知识跨物种可参考）；
+      同物种自然靠前，结果不足时放宽物种补搜，拓展思路
+    - statistics_kb：不注入——统计判断由 LLM 自行推理（不需要外部知识库）
+    """
+    out = {"biology_kb": "", "bioinfo_kb": "", "statistics_kb": "", "sources": []}
+    try:
+        from memomics.bio_tools.kb_search import _search_kb
+    except Exception:
+        try:
+            from kb_search import _search_kb
+        except Exception:
+            return out
+
+    def _fmt(items, tag):
+        parts, srcs = [], []
+        for it in items:
+            parts.append(f"[{tag}·{it.get('file', '')}]\n{it.get('snippet', '')[:max_chars]}")
+            srcs.append(it.get("file", ""))
+        return "\n\n".join(parts), srcs
+
+    # ① biology：同物种/组织/方向优先（物种按目录名精确匹配，不受
+    # tissue/direction 的 path_boost 干扰）
+    try:
+        r = _search_kb(topic, species=species, tissue=tissue, direction=direction)
+        results = r.get("results", [])
+        if species:
+            try:
+                from memomics.bio_tools.kb_search import _normalize_species as _ns
+            except Exception:
+                from kb_search import _normalize_species as _ns
+            _svs = _ns(species)
+            same = [x for x in results
+                    if any(sv.lower() in x.get("file", "").lower() for sv in _svs)][:max_per_kb]
+        else:
+            same = results[:max_per_kb]
+        others = []
+        if len(same) < 2:
+            try:
+                r2 = _search_kb(topic, species="", tissue=tissue, direction=direction)
+                seen = {s["file"] for s in same}
+                others = [x for x in r2.get("results", []) if x["file"] not in seen][:max_per_kb - len(same)]
+            except Exception:
+                pass
+        txt1, src1 = _fmt(same, "同物种·匹配")
+        txt2, src2 = _fmt(others, "其他物种·参考")
+        out["biology_kb"] = (txt1 + ("\n\n" + txt2 if txt2 else "")).strip()
+        out["sources"] += src1 + src2
+    except Exception as e:
+        logger.warning(f"auto biology_kb injection failed: {e}")
+
+    # ② bioinfo：话题匹配为主（方法类跨物种可参考）
+    try:
+        r = _search_kb(topic, species=species, tissue=tissue, direction=direction)
+        top = r.get("results", [])[:max_per_kb]
+        if len(top) < 2:
+            try:
+                r2 = _search_kb(topic, species="", tissue="", direction="")
+                seen = {t["file"] for t in top}
+                top += [x for x in r2.get("results", []) if x["file"] not in seen][:max_per_kb - len(top)]
+            except Exception:
+                pass
+        txt, src = _fmt(top, "方法知识")
+        out["bioinfo_kb"] = txt.strip()
+        out["sources"] += src
+    except Exception as e:
+        logger.warning(f"auto bioinfo_kb injection failed: {e}")
+
+    # ③ statistics：不注入（LLM 自行判断统计）
+    return out
+
+
 def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     history_errors: str = "", biology_kb: str = "",
                     statistics_kb: str = "", bioinfo_kb: str = "",
                     mode: str = None, rounds: int = None,
-                    role_model_map: dict = None, level: str = "L2") -> str:
+                    role_model_map: dict = None, level: str = "L2",
+                    species: str = "", tissue: str = "", direction: str = "",
+                    auto_kb: bool = True) -> str:
     """多角色辩论 — 正方3专业编辑 + 反方4专业编辑 + 裁判编辑，全部独立 LLM 调用。
 
     上下文隔离实现：
@@ -1153,6 +1255,15 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     level = str(level or "L2").upper()
     if level not in ("L1", "L2"):
         level = "L2"
+    # 自动知识库注入（2026-08-13 用户三例设计）：biology 按物种/组织/方向
+    # 强匹配优先（其他物种降权参考），bioinfo 按话题匹配（跨物种可参考），
+    # statistics 不注入（LLM 自行判断）。显式传入的 kb 参数优先不覆盖。
+    if auto_kb and not (biology_kb or bioinfo_kb):
+        _inj = _auto_kb_injection(topic, context, species, tissue, direction)
+        if not biology_kb and _inj.get("biology_kb"):
+            biology_kb = _inj["biology_kb"]
+        if not bioinfo_kb and _inj.get("bioinfo_kb"):
+            bioinfo_kb = _inj["bioinfo_kb"]
     fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg, level=level)
 
     # 检查至少有一个可用 key（judge 能跑即可；role_model_map/分组配置的 key 也算）
@@ -1560,6 +1671,10 @@ def _register():
                 rounds=args.get("rounds"),
                 role_model_map=args.get("role_model_map"),
                 level=args.get("level") or "L2",
+                species=args.get("species", ""),
+                tissue=args.get("tissue", ""),
+                direction=args.get("direction", ""),
+                auto_kb=args.get("auto_kb", True),
             ),
             emoji="🎭",
             max_result_size_chars=120_000,
