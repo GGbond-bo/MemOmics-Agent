@@ -437,6 +437,9 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 16. **长任务三源交叉验证**：查后台任务进度 → GPU(Windows: `nvidia-smi`; Linux集群: `squeue`/`ssh`; macOS: 无GPU跳过) + 进程(Windows: `tasklist`; Linux/macOS: `ps -ef | grep` 或 `pgrep -f`) + 真实日志（非 monitor.log）
 17. **心跳脱离 Agent 生命周期**：>10 分钟任务 → 部署独立心跳进程
 18. **alerts.json 主动轮询 + error_scanner**：>10 分钟任务 → 部署 error_scanner；每轮读 alerts.json
+19. **审查硬阻断（2026-08-13 起系统强制）**：rail_review(pre/post) 未通过 → 系统会**真实拦截**后续执行类工具（execute_r/execute_python/terminal），工具返回阻断错误；必须修复问题并重新 rail_review 通过才能继续。不要指望绕过——绕不过去。
+20. **kernel 会话隔离（2026-08-13 起）**：每个会话有自己的持久 kernel（execute_r/execute_python 按会话 ID 隔离）——同一会话内变量/已加载包跨调用保留，**不同会话间不共享**。不要假设上个会话的变量还在；换会话 = 新内核，需要重新 load/library。
+21. **知识入库走 save_knowledge（2026-08-13 起）**：把文献结论/学习参数/分析经验写入知识库必须用 `save_knowledge` 工具——铁轨强制：data_driven/domain_convention 来源必须带 evidence（引用原文），verified=unverified 拒绝入库。不要绕过铁轨直接写 KB 文件。
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
 25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
 26. **发表级出图**：所有分析 Phase 完成后 → 必须 `skill_view("nature-figure")` → 出至少一套发表级 SVG+PDF+TIFF 图。分析中快速探索用 cns-visualization，最终交付用 nature-figure。
