@@ -207,10 +207,10 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 | 2 h - 6 h | `"30m"` | 30分钟检查一次 |
 | > 6 h（过夜） | `"1h"` | 1小时检查一次 |
 
-**心跳检查流程（每次触发）：**
+**心跳检查流程（每次触发，命令按平台选）：**
 ```
-❶ 磁盘扫描 — terminal("dir <output_dir> /s /b") 数产出文件
-❷ 进程检查 — terminal("tasklist | findstr cellbender/python") 
+❶ 磁盘扫描 — Windows: dir <output_dir> /s /b；Linux/macOS: find <output_dir> -type f | wc -l（数产出文件）
+❷ 进程检查 — Windows: tasklist | findstr <脚本名>；Linux/macOS: ps -ef | grep <脚本名> 或 pgrep -f <脚本名>
 ❸ 日志扫描 — read_file("pipeline.log", offset=-30) 找 error/traceback
 ❹ 三源验证 — 磁盘+进程+日志 → 交叉验证
 ❺ 更新 PROGRESS.md（进度摘要）

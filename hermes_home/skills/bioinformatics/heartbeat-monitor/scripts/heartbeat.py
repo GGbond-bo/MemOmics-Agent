@@ -29,6 +29,13 @@ import os
 import re
 import subprocess
 import time
+
+def _detach_kwargs():
+    """P1-14(2026-08-13): 脱离式启动参数 — 平台分支（Linux/macOS 无 CREATE_NO_WINDOW）。"""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {"start_new_session": True}
+
 from datetime import datetime
 
 MONITOR_LOG = None
@@ -51,7 +58,7 @@ def get_gpu() -> tuple[str, str, str]:
             ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,temperature.gpu",
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            **_detach_kwargs()
         )
         if r.returncode == 0:
             parts = r.stdout.strip().split(", ")
@@ -65,7 +72,7 @@ def get_process_count() -> int:
     try:
         r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq python.exe"],
             capture_output=True, text=True, timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW)
+            **_detach_kwargs())
         return r.stdout.count("python.exe")
     except Exception:
         return -1

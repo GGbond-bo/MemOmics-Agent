@@ -22,6 +22,13 @@ import re
 import subprocess
 import sys
 import time
+
+def _detach_kwargs():
+    """P1-14(2026-08-13): 脱离式启动参数 — 平台分支（Linux/macOS 无 CREATE_NO_WINDOW）。"""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {"start_new_session": True}
+
 from datetime import datetime
 from glob import glob
 from pathlib import Path

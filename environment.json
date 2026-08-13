@@ -1,7 +1,21 @@
 {
-  "_version": "1.0",
+  "_version": "1.1",
   "_description": "MemOmics 全局环境 — 所有分析共享。启动时 validate_env.py 自动读→验→修。",
-  "_last_updated": "2026-07-29T22:00:00",
+  "_last_updated": "2026-08-13T12:00:00",
+  "platform": {
+    "_comment": "P1-14(2026-08-13): 平台标记。windows 版填 windows；Linux/macOS 版发行时改 linux/darwin，paths 段换成对应路径。",
+    "current": "windows",
+    "supported": ["windows", "linux", "darwin"]
+  },
+  "cellbender_project_dir": "F:/CellBender_v2",
+  "task_guardian": {
+    "_comment": "P1-14(2026-08-13): 通用长任务守护配置（heartbeat+error_scanner 存活守护）。project_dir 缺省则守护不启动。",
+    "project_dir": "F:/CellBender_v2",
+    "heartbeat_script": "heartbeat_v2.py",
+    "scanner_script": "error_scanner.py",
+    "task_name": "CellBender_26samples",
+    "check_interval": 60
+  },
   "paths": {
     "python": {
       "memomics_venv": "E:/MemOmics-Agent/.venv/Scripts/python.exe",

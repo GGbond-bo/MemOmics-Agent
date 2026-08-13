@@ -159,7 +159,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 ```
 1. task_plan.md → 所有 in_progress 的 Phase → 改为 **Status:** cancelled
 2. cronjob → cronjob(action="pause"|"remove", job_id="...") — 停止心跳
-3. 后台进程 → terminal("taskkill /F /PID <PID>") — 杀掉计算进程
+3. 后台进程 → 按平台杀进程树：Windows `taskkill /F /T /PID <PID>`（Git Bash 里用 `taskkill //F //T //PID`），Linux/macOS `kill -- -<PGID>` 或 `pkill -P <PID>`
 4. 回复用户 → "已停止。task_plan 已标记 cancelled，心跳已停，进程已杀。"
 ```
 
@@ -282,7 +282,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | **knowledge_ask** | search_knowledge + search_papers + web_search → 多源验证 → 回答 | search_knowledge + read_file + fact_store + skill_search + search_papers + web_search + web_fetch |
 | **analysis_plan** | Planner 模式（只读） | skill_view + skill_list_by_domain + search_knowledge + read_file + todo |
 | **analysis_exec** | 检查冲突 → 关键词表 → 分析流程 | 全工具（需门禁） |
-| **cancel_task** | 确认目标 → task_plan标记cancelled → cronjob停心跳 → taskkill杀进程 | terminal(只读) + read_file + write_file + process + cronjob |
+| **cancel_task** | 确认目标 → task_plan标记cancelled → cronjob停心跳 → 按平台杀进程(win: taskkill //F //T; posix: kill -- -PGID) | terminal(只读) + read_file + write_file + process + cronjob |
 | **chat** | 直接回复 | 仅 memory |
 
 > **analysis_exec 不输出前导码 → 本轮写文件/terminal 工具调用无效。**
@@ -296,7 +296,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 
 | 数据源 | 命令 |
 |--------|------|
-| ① GPU/进程 | `nvidia-smi` 或 `tasklist` |
+| ① GPU/进程 | Windows: `nvidia-smi` + `tasklist`；Linux: `nvidia-smi`/`squeue` + `ps -ef`；macOS: 无GPU→`ps -ef` |
 | ② 磁盘产出 | `dir <输出目录>` 检查文件大小/时间戳 |
 | ③ 日志文件 | `read_file(<pipeline.log>)` 最新 50 行 |
 
@@ -434,7 +434,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 13. **产出物存在性验证**：record_run 前必须验证产出文件真实存在（文件名、大小）
 14. **Guardian 快照回滚**：修改文件前先 snapshot；rail_review 连续 3 次失败 → 自动回滚
 15. **Planner/Executor 双阶段**：≥3 子步骤 → 先进 Planner（只读）→ plan_review 通过 → 进 Executor
-16. **长任务三源交叉验证**：查后台任务进度 → nvidia-smi + tasklist + 真实日志（非 monitor.log）
+16. **长任务三源交叉验证**：查后台任务进度 → GPU(Windows: `nvidia-smi`; Linux集群: `squeue`/`ssh`; macOS: 无GPU跳过) + 进程(Windows: `tasklist`; Linux/macOS: `ps -ef | grep` 或 `pgrep -f`) + 真实日志（非 monitor.log）
 17. **心跳脱离 Agent 生命周期**：>10 分钟任务 → 部署独立心跳进程
 18. **alerts.json 主动轮询 + error_scanner**：>10 分钟任务 → 部署 error_scanner；每轮读 alerts.json
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
