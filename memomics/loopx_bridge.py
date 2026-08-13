@@ -236,12 +236,17 @@ class LoopXBridge:
         return text[:1800]
 
     def next_poll_interval(self, default_seconds: int = 300) -> int:
-        """照搬 LoopX scheduler hint 的退避表 → 下次自检轮询间隔（秒）。
+        """LoopX scheduler hint → 下次自检轮询间隔（秒）。
 
-        映射（LoopX cadence_class → 秒）：
-          run_now → 60（有活干，勤查）
-          backoff_* / waiting → 加倍退避（300→600→1200→2400 封顶）
-          checkpoint / normal → default
+        P1-15(2026-08-13) 映射修正：读 vendor 真实契约字段
+        `local_scheduler.recommended_interval_minutes`（此前读幻觉字段
+        `interval_seconds`，永远落回 default=300s）。cadence_class 真实词汇：
+          active_work   → 勤查 60s（有活干）
+          unchanged_noop / agent_scope_wait / monitor_wait / quiet_wait
+                        → recommended 间隔（含 vendor 的 progression 退避）
+          human_gate    → 600s（等用户，别打扰）
+          quota_paused / terminal_no_followup / control_plane_repair
+          / agent_monitor_only → 2400s（暂停/终止态，交由自检完成判定收尾）
         """
         api = _load_loopx()
         if not api:
@@ -254,13 +259,22 @@ class LoopXBridge:
             if not isinstance(hint, dict):
                 return default_seconds
             cc = str(hint.get("cadence_class") or "")
-            base = hint.get("interval_seconds") or default_seconds
-            if cc.startswith("run_now"):
-                return max(30, min(int(base) if isinstance(base, (int, float)) else 60, 600))
-            if cc.startswith("backoff") or cc.startswith("waiting"):
-                # 退避：base 基础上翻倍，封顶 40 分钟
-                return max(300, min(int(base) * 2 if isinstance(base, (int, float)) else 600, 2400))
-            return max(30, min(int(base) if isinstance(base, (int, float)) else default_seconds, 900))
+            ls = hint.get("local_scheduler") or {}
+            rec_min = ls.get("recommended_interval_minutes") if isinstance(ls, dict) else None
+            if isinstance(rec_min, (int, float)) and rec_min > 0:
+                base_sec = int(rec_min * 60)
+            else:
+                base_sec = default_seconds
+            if cc == "active_work":
+                return max(60, min(base_sec, 600))
+            if cc in ("unchanged_noop", "agent_scope_wait", "monitor_wait", "quiet_wait"):
+                return max(60, min(base_sec, 2400))
+            if cc == "human_gate":
+                return 600
+            if cc in ("quota_paused", "terminal_no_followup",
+                      "control_plane_repair", "agent_monitor_only"):
+                return 2400
+            return max(30, min(base_sec, 900))
         except Exception:
             return default_seconds
 
