@@ -116,6 +116,10 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
     P0-1 持久 kernel 优先：跨调用保留变量/已加载包（热调用免解释器启动
     + 包加载，Seurat/ArchR 类 2000x+）；持久不可用/报错时回退
     每次 Rscript 新进程（保留 OOM 检测 + 自动重试 + SCTransform 特判）。
+
+    P0-3(2026-08-13) 失败语义：返回结构化 JSON（对齐 code_execution_tool），
+    status ∈ success/error/timeout，含 exit_code/error 字段；output 字段保留
+    纯文本（含 [STDERR]/[Exit code] 标记）兼容既有文本消费方。
     """
     timeout = min(max(int(timeout), 30), 900)
 
@@ -135,8 +139,10 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 if _p and not is_write_path_allowed(_p):
                     _violations.append(_p)
             if _violations:
-                return (f"Error: 沙箱 degraded 模式：写入白名单外路径被拒绝: {_violations[:3]}. "
+                _msg = (f"Error: 沙箱 degraded 模式：写入白名单外路径被拒绝: {_violations[:3]}. "
                         "配置 MEMOMICS_ALLOWED_WRITE_ROOTS 可放行特定目录。")
+                return json.dumps({"status": "error", "output": _msg, "error": _msg,
+                                   "exit_code": 1}, ensure_ascii=False)
     except Exception:
         pass
 
@@ -148,10 +154,17 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
             task_id or os.environ.get("MEMOMICS_SESSION_ID") or "default",
             timeout=min(timeout, 600), language="r")
         if _res.get("status") == "ok":
-            return (_res.get("output", "") or "(no output)")[:15000]
+            _out = (_res.get("output", "") or "(no output)")[:15000]
+            return json.dumps({"status": "success", "output": _out, "exit_code": 0,
+                               "mode": "persistent_kernel"}, ensure_ascii=False)
         if _res.get("status") == "timeout":
-            return f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
-        # status == error → 回退旧路径（OOM 检测 + 重试）
+            _msg = f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
+            return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+                               "exit_code": None}, ensure_ascii=False)
+        # status == error → 回退旧路径；记录原因避免静默失败（2026-08-13：
+        # 曾因 ggplot print 无图形设备在 kernel 内报错而静默回退，导致持久变量丢失）
+        _err = _res.get("error", "unknown kernel error")
+        logger.warning("persistent kernel R execute failed, falling back to fresh Rscript: %s", _err)
     except Exception:
         pass
 
@@ -185,7 +198,9 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                     os.unlink(script_path)
                 except OSError:
                     pass
-                return f"Error: R execution timed out after {timeout}s (attempt {attempt}/{max_attempts}). Process killed."
+                _msg = f"Error: R execution timed out after {timeout}s (attempt {attempt}/{max_attempts}). Process killed."
+                return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+                                   "exit_code": None}, ensure_ascii=False)
 
             try:
                 os.unlink(script_path)
@@ -212,17 +227,33 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 output += chr(10) + f"[Exit code: {proc.returncode}]"
                 if is_oom:
                     output += chr(10) + "[建议] 内存不足: 使用plan('sequential') + method='glmGamPoi' + conserve.memory=TRUE"
+                # P0-3: 非零退出码 → 结构化 error（工具层不再视为成功）
+                _err = f"R exited with code {proc.returncode}"
+                if stderr_data:
+                    _st = stderr_data.decode("utf-8", errors="replace").strip()
+                    if _st:
+                        _err = _st.splitlines()[-1] if _st.splitlines() else _err
+                return json.dumps({"status": "error", "output": output[:15000],
+                                   "error": _err, "exit_code": proc.returncode},
+                                  ensure_ascii=False)
 
-            return output[:15000] or "(no output)"
+            return json.dumps({"status": "success", "output": output[:15000] or "(no output)",
+                               "exit_code": 0}, ensure_ascii=False)
 
         except FileNotFoundError:
-            return "Error: R is not installed or not in PATH"
+            _msg = "Error: R is not installed or not in PATH"
+            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+                               "exit_code": None}, ensure_ascii=False)
         except Exception as e:
             if proc:
                 _kill_process_group(proc)
-            return f"Error executing R: {e}"
+            _msg = f"Error executing R: {e}"
+            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+                               "exit_code": None}, ensure_ascii=False)
 
-    return "Error: R execution failed after retries"
+    _msg = "Error: R execution failed after retries"
+    return json.dumps({"status": "error", "output": _msg, "error": _msg,
+                       "exit_code": 1}, ensure_ascii=False)
 
 
 def _register():
