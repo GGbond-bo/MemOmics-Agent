@@ -95,7 +95,12 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
     try:
         from tools.persistent_kernel import KERNEL_POOL
         import os as _os
-        _task = _os.environ.get("MEMOMICS_SESSION_ID") or "default"
+        # P1-13(2026-08-13): 会话识别 — 用 execute_r 同款隔离键（线程上下文 sid 优先）
+        try:
+            from memomics.bio_tools.execute_r import _session_task_id
+            _task = _session_task_id("")
+        except Exception:
+            _task = _os.environ.get("MEMOMICS_SESSION_ID") or "default"
         _res = KERNEL_POOL.execute(
             code, _task, timeout=min(timeout, 600), language="python",
             cwd=working_dir or None)  # P1-5: working_dir 接线

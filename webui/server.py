@@ -1059,6 +1059,12 @@ async def _trigger_agent_turn(session, message):
         _session_emit(session, {"type": "thinking", "content": "⏰ 系统唤醒中...", "session_id": session["id"]})
         loop = asyncio.get_event_loop()
         def _run():
+            # P1-13(2026-08-13): 自检唤醒 executor 线程内设置会话上下文（kernel 会话隔离）
+            try:
+                from memomics.bio_tools.debate_analysis import set_session_context
+                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+            except Exception:
+                pass
             return agent.run_conversation(message)
         result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
@@ -5008,6 +5014,12 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
 
         # === 不限时运行 ===（支持长任务，关机后Agent还在跑）
         def _do_run():
+            # P1-13(2026-08-13): 微信 executor 线程内设置会话上下文（kernel 会话隔离）
+            try:
+                from memomics.bio_tools.debate_analysis import set_session_context
+                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+            except Exception:
+                pass
             result = agent.run_conversation(text, conversation_history=history if history else None)
             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
@@ -7868,6 +7880,14 @@ async def ws_endpoint(ws: WebSocket):
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
 
                         def _do_run():
+                            # P1-13(2026-08-13): executor 线程内设置会话上下文 —
+                            # threading.local 不跨线程，须在工具执行线程内设定，
+                            # execute_r/execute_python 才能识别会话并隔离 kernel。
+                            try:
+                                from memomics.bio_tools.debate_analysis import set_session_context
+                                set_session_context(sid=_session["id"], results_dir=_session.get("results_dir", ""))
+                            except Exception:
+                                pass
                             result = _agent.run_conversation(
                                 user_text,
                                 conversation_history=conversation_history if conversation_history else None,

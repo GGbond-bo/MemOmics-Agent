@@ -95,19 +95,55 @@ def _kill_process_group(proc):
         pass
 
 
-def _apply_sct_rail(code: str) -> str:
-    """SCTransform 铁轨: 强制 workers=1 + sequential + conserve.memory."""
-    code = re.sub(r'plan\s*\(\s*"multisession"[^)]*\)', 'plan("sequential")', code)
-    code = re.sub(r'plan\s*\(\s*"multicore"[^)]*\)', 'plan("sequential")', code)
+def _apply_sct_rail(code: str):
+    """SCTransform 铁轨: 强制 workers=1 + sequential + conserve.memory.
+
+    P1-6(2026-08-13): 返回 (code, changes) — 改写不再静默，
+    变更明细随执行结果返回给 agent（之前 agent 不知道自己代码被改）。
+    """
+    changes = []
+    _new = re.sub(r'plan\s*\(\s*"multisession"[^)]*\)', 'plan("sequential")', code)
+    if _new != code:
+        changes.append('plan("multisession")→plan("sequential")')
+        code = _new
+    _new = re.sub(r'plan\s*\(\s*"multicore"[^)]*\)', 'plan("sequential")', code)
+    if _new != code:
+        changes.append('plan("multicore")→plan("sequential")')
+        code = _new
     if 'SCTransform' in code:
         if 'glmGamPoi' not in code and 'method' not in code:
             code = code.replace('SCTransform(',
                                 'SCTransform(method="glmGamPoi", conserve.memory=TRUE, ', 1)
+            changes.append('SCTransform 注入 method="glmGamPoi" + conserve.memory=TRUE')
         elif 'conserve.memory' not in code:
             code = code.replace('SCTransform(',
                                 'SCTransform(conserve.memory=TRUE, ', 1)
-    code = re.sub(r'workers\s*=\s*\d+', 'workers=1', code)
-    return code
+            changes.append('SCTransform 注入 conserve.memory=TRUE')
+    _new = re.sub(r'workers\s*=\s*\d+', 'workers=1', code)
+    if _new != code:
+        changes.append('workers=N→workers=1')
+        code = _new
+    return code, changes
+
+
+def _session_task_id(task_id: str) -> str:
+    """P1-13(2026-08-13): kernel 隔离键 — 会话识别，防跨会话 kernel 污染。
+
+    优先级：显式 task_id 参数 > 线程级会话上下文（set_session_context，由
+    server.py 在 executor 线程入口设置）> MEMOMICS_SESSION_ID 环境变量 > "default"。
+    每个会话拿到自己的 sid 作为 kernel 键 → 变量/已加载包互不串染，
+    会话回访还能命中自己的热 worker（LRU 2 个/30min 空闲）。
+    """
+    if task_id:
+        return str(task_id)
+    try:
+        from memomics.bio_tools.debate_analysis import get_session_sid
+        _sid = get_session_sid()
+        if _sid:
+            return _sid
+    except Exception:
+        pass
+    return os.environ.get("MEMOMICS_SESSION_ID") or "default"
 
 
 def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str = "") -> str:
@@ -123,16 +159,21 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
     """
     timeout = min(max(int(timeout), 30), 900)
 
+    _sct_changes = []
     if 'SCTransform' in code:
-        code = _apply_sct_rail(code)
+        code, _sct_changes = _apply_sct_rail(code)
+    _sct_note = ("" if not _sct_changes else
+                 "[SCTransform铁轨] 代码已自动调整: " + "; ".join(_sct_changes) + chr(10))
 
-    # ── 沙箱 fail-closed：degraded 模式写白名单外路径直接拒绝 ──
+    # ── 沙箱探测：degraded 模式写白名单外路径直接拒绝 ──
+    # P1-7(2026-08-13): 探测异常时 fail-open 但显式告警（原注释误导称 fail-closed）
     try:
         from tools.sandbox_probe import probe_sandbox_capability, is_write_path_allowed
         import re as _re
         _write_re = _re.compile(
             r"""(?:write\.csv|write\.table|write\.rds|write\.tsv|saveRDS|ggsave|pdf|png|jpeg|tiff|bmp|writeLines|save)\s*\([^)]*?["']([^"']+)["']""")
-        if probe_sandbox_capability().get("degraded"):
+        _probe = probe_sandbox_capability()
+        if _probe.get("degraded"):
             _violations = []
             for _m in _write_re.finditer(code):
                 _p = _m.group(1).strip()
@@ -143,28 +184,39 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                         "配置 MEMOMICS_ALLOWED_WRITE_ROOTS 可放行特定目录。")
                 return json.dumps({"status": "error", "output": _msg, "error": _msg,
                                    "exit_code": 1}, ensure_ascii=False)
-    except Exception:
-        pass
+    except Exception as _probe_err:
+        logger.warning("sandbox probe failed, write restrictions NOT enforced (fail-open): %s", _probe_err)
 
     # ── P0-1 持久 kernel 优先（状态保持 + 免包加载） ──
     try:
         from tools.persistent_kernel import KERNEL_POOL
         _res = KERNEL_POOL.execute(
             code,
-            task_id or os.environ.get("MEMOMICS_SESSION_ID") or "default",
-            timeout=min(timeout, 600), language="r")
+            _session_task_id(task_id),
+            timeout=min(timeout, 600), language="r",
+            cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
-            _out = (_res.get("output", "") or "(no output)")[:15000]
+            _out = _sct_note + ((_res.get("output", "") or "(no output)")[:15000])
             return json.dumps({"status": "success", "output": _out, "exit_code": 0,
                                "mode": "persistent_kernel"}, ensure_ascii=False)
         if _res.get("status") == "timeout":
             _msg = f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
-            return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+            return json.dumps({"status": "timeout", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
-        # status == error → 回退旧路径；记录原因避免静默失败（2026-08-13：
-        # 曾因 ggplot print 无图形设备在 kernel 内报错而静默回退，导致持久变量丢失）
+        # status == error → 分类处理（P1-4 修复，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
-        logger.warning("persistent kernel R execute failed, falling back to fresh Rscript: %s", _err)
+        _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
+        if _infra_fail:
+            # 基础设施失败（worker 启动即死/管道断裂）：代码大概率未送达 →
+            # 回退 Rscript 重跑相对安全；记录原因避免静默失败。
+            logger.warning("persistent kernel R infra failure, falling back to fresh Rscript: %s", _err)
+        else:
+            # 代码运行时错误：kernel 内已执行（可能有部分副作用）→ 不回退，
+            # 直接返回 error，防止 Rscript 把整脚本再跑一遍造成双写/重复副作用。
+            _out = (_res.get("output", "") or "")[:15000]
+            _out += chr(10) + f"[Kernel error: {_err}]"
+            return json.dumps({"status": "error", "output": _sct_note + _out, "error": _err,
+                               "exit_code": 1, "mode": "persistent_kernel"}, ensure_ascii=False)
     except Exception:
         pass
 
@@ -199,7 +251,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 except OSError:
                     pass
                 _msg = f"Error: R execution timed out after {timeout}s (attempt {attempt}/{max_attempts}). Process killed."
-                return json.dumps({"status": "timeout", "output": _msg, "error": _msg,
+                return json.dumps({"status": "timeout", "output": _sct_note + _msg, "error": _msg,
                                    "exit_code": None}, ensure_ascii=False)
 
             try:
@@ -222,7 +274,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 if is_oom and attempt < max_attempts:
                     output += chr(10) + f"[OOM检测] R进程内存不足(尝试{attempt}/{max_attempts})"
                     output += chr(10) + "[自动修复] 强制plan('sequential') + conserve.memory=TRUE"
-                    code = _apply_sct_rail(code)
+                    code, _sct_changes = _apply_sct_rail(code)
                     continue
                 output += chr(10) + f"[Exit code: {proc.returncode}]"
                 if is_oom:
@@ -233,26 +285,26 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                     _st = stderr_data.decode("utf-8", errors="replace").strip()
                     if _st:
                         _err = _st.splitlines()[-1] if _st.splitlines() else _err
-                return json.dumps({"status": "error", "output": output[:15000],
+                return json.dumps({"status": "error", "output": _sct_note + output[:15000],
                                    "error": _err, "exit_code": proc.returncode},
                                   ensure_ascii=False)
 
-            return json.dumps({"status": "success", "output": output[:15000] or "(no output)",
+            return json.dumps({"status": "success", "output": _sct_note + (output[:15000] or "(no output)"),
                                "exit_code": 0}, ensure_ascii=False)
 
         except FileNotFoundError:
             _msg = "Error: R is not installed or not in PATH"
-            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+            return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
         except Exception as e:
             if proc:
                 _kill_process_group(proc)
             _msg = f"Error executing R: {e}"
-            return json.dumps({"status": "error", "output": _msg, "error": _msg,
+            return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                                "exit_code": None}, ensure_ascii=False)
 
     _msg = "Error: R execution failed after retries"
-    return json.dumps({"status": "error", "output": _msg, "error": _msg,
+    return json.dumps({"status": "error", "output": _sct_note + _msg, "error": _msg,
                        "exit_code": 1}, ensure_ascii=False)
 
 

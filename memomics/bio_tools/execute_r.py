@@ -126,6 +126,26 @@ def _apply_sct_rail(code: str):
     return code, changes
 
 
+def _session_task_id(task_id: str) -> str:
+    """P1-13(2026-08-13): kernel 隔离键 — 会话识别，防跨会话 kernel 污染。
+
+    优先级：显式 task_id 参数 > 线程级会话上下文（set_session_context，由
+    server.py 在 executor 线程入口设置）> MEMOMICS_SESSION_ID 环境变量 > "default"。
+    每个会话拿到自己的 sid 作为 kernel 键 → 变量/已加载包互不串染，
+    会话回访还能命中自己的热 worker（LRU 2 个/30min 空闲）。
+    """
+    if task_id:
+        return str(task_id)
+    try:
+        from memomics.bio_tools.debate_analysis import get_session_sid
+        _sid = get_session_sid()
+        if _sid:
+            return _sid
+    except Exception:
+        pass
+    return os.environ.get("MEMOMICS_SESSION_ID") or "default"
+
+
 def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str = "") -> str:
     """Execute R code with OOM detection and auto-retry.
 
@@ -172,7 +192,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
         from tools.persistent_kernel import KERNEL_POOL
         _res = KERNEL_POOL.execute(
             code,
-            task_id or os.environ.get("MEMOMICS_SESSION_ID") or "default",
+            _session_task_id(task_id),
             timeout=min(timeout, 600), language="r",
             cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
