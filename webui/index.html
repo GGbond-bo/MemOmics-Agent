@@ -423,6 +423,10 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #lit-picker .lit-footer { display:flex; gap:6px; padding:10px 14px; border-top:1px solid var(--border); }
 #lit-picker .lit-footer button { flex:1; font-size:12px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 #lit-picker .lit-footer button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+#lit-summary-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:9997; }
+#lit-summary-modal .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:640px; max-width:94%; height:78vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; }
+#lit-summary-modal .lit-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; }
+#lit-summary-body { flex:1; overflow-y:auto; padding:10px 16px; }
 /* === 环境检测面板 === */
 #env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
 #env-check-panel h3 { margin:0 0 8px; font-size:14px; }
@@ -3886,26 +3890,135 @@ async function loadLiteratureLibrary() {
     if (!d.ok) { lib.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '加载失败') + '</span>'; return; }
     var items = d.library || [];
     if (!items.length) { lib.innerHTML = '<span style="color:var(--text-light);">文献库为空——可用下方输入框导入你自己的 PDF，或让 Agent 用 download_pdf 下载后自动入库。</span>'; return; }
-    var html = '<div style="font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;">📚 文献库共 ' + d.total + ' 篇' +
-      '<button onclick="extractAllPapers()" title="把全部文献逐篇提炼成知识库条目（参数/方法/结论，带DOI溯源）" style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🧬 一键提炼全部</button></div>' +
+    var nSum = items.filter(function(e) { return !e.summary_done; }).length;
+    var nKb = items.filter(function(e) { return !e.kb_done; }).length;
+    var html = '<div style="font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📚 文献库共 ' + d.total + ' 篇' +
+      '<span id="lit-binding-chip" style="font-size:10px;color:var(--text-light);">绑定加载中…</span>' +
+      '<span style="margin-left:auto;display:flex;gap:6px;">' +
+      '<button onclick="summarizeAllPapers()" title="只对未提炼的文章做 9 项全文提炼（思路/背景/问题/方法/结论/验证）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 一键全文提炼(未提炼 ' + nSum + ')</button>' +
+      '<button onclick="extractAllPapers()" title="只对未入库的文章提炼知识库条目（参数/方法/结论，给AI调用）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬 一键入库(未入库 ' + nKb + ')</button>' +
+      '</span></div>' +
       '<div id="lit-extract-progress" style="display:none;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;"></div>' +
-      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>年份</th><th>下载日期</th><th>分类标签</th><th>来源</th><th>操作</th></tr></thead><tbody>';
+      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>分类标签</th><th>📝全文</th><th>🧬知识库</th><th>操作</th></tr></thead><tbody>';
     items.forEach(function(e) {
-      var srcLabel = e.source === 'user_import' ? '📥 导入' : '🤖 下载';
       var tg = e.tags || {};
       var tagStr = [].concat(tg.species || []).join('/') + (tg.tissue && tg.tissue.length ? ' · ' + tg.tissue.join('/') : '') + (tg.direction && tg.direction.length ? ' · ' + tg.direction.join('/') : '') + (tg.assay ? ' · ' + tg.assay : '');
       if (!tagStr.trim()) tagStr = '—';
       var ref = (e.file || e.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      var sumBadge = e.summary_done
+        ? '<span style="color:var(--success);">✅ 已提炼</span>'
+        : '<span style="color:#e67e22;">⏳ 未提炼</span>';
+      var kbBadge = e.kb_done
+        ? '<span style="color:var(--success);">✅ 已入库</span>'
+        : '<span style="color:#e67e22;">⏳ 未入库</span>';
+      var ops = '<button onclick="' + (e.summary_done ? 'viewSummary(\'' + ref + '\')' : 'summarizePaper(\'' + ref + '\')') + '" title="' + (e.summary_done ? '查看 9 项全文思路摘要' : '提炼 9 项全文摘要（思路/背景/问题/方法/结论/验证）') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 ' + (e.summary_done ? '查看' : '提炼') + '</button> ';
+      if (!e.kb_done) {
+        ops += '<button onclick="extractPaper(\'' + ref + '\')" title="读这篇全文，把参数/方法/结论提炼进知识库（给AI调用）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬 入库</button>';
+      }
       html += '<tr><td>' + escapeHtml(e.title || e.file) + '</td><td>' + escapeHtml(e.journal || '—') + '</td>' +
-        '<td class="num">' + escapeHtml(e.year || '—') + '</td><td class="num">' + escapeHtml(e.downloaded_at || '—') + '</td>' +
         '<td style="font-size:10px;">' + escapeHtml(tagStr) + '</td>' +
-        '<td>' + srcLabel + '</td>' +
-        '<td><button onclick="extractPaper(\'' + ref + '\')" title="读这篇全文，把参数/方法/结论提炼进知识库" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🧬 提炼</button></td></tr>';
+        '<td>' + sumBadge + '</td><td>' + kbBadge + '</td>' +
+        '<td>' + ops + '</td></tr>';
     });
     html += '</tbody></table></div></div>';
     lib.innerHTML = html;
+    loadLitBinding();
   } catch(e) {
     lib.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+// 会话绑定：显示当前绑定 + 12h 自动换绑（批J 2026-08-16）
+async function loadLitBinding() {
+  var chip = document.getElementById('lit-binding-chip');
+  if (!chip) return;
+  try {
+    var r = await fetch('/api/literature/binding?session_id=' + encodeURIComponent(currentSid || ''));
+    var d = await r.json();
+    if (d.session_id) {
+      chip.innerHTML = '📎 绑定会话 <b>' + escapeHtml(d.session_id) + '</b> · 剩余 ' + d.remaining_hours + 'h' +
+        ' <button onclick="forceBindLit()" title="把文献库绑定到当前会话" style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;">换绑本会话</button>';
+    } else {
+      chip.textContent = '📎 未绑定（打开文献库即自动绑定当前会话，12h 有效）';
+    }
+  } catch(e) {
+    chip.textContent = '绑定查询失败';
+  }
+}
+
+async function forceBindLit() {
+  try {
+    await fetch('/api/literature/binding', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: currentSid || ''})
+    });
+    loadLitBinding();
+  } catch(e) {}
+}
+
+// 全文提炼（方向1，给人看）+ 查看摘要（批J）
+async function summarizePaper(ref) {
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交全文提炼任务…</span>'; }
+  try {
+    var r = await fetch('/api/literature/summarize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_or_title: ref})
+    });
+    var d = await r.json();
+    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
+    litPollExtract(d.job_id);
+  } catch(e) {
+    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function summarizeAllPapers() {
+  var n = 0;
+  try {
+    var d = await (await fetch('/api/literature/library')).json();
+    n = (d.library || []).filter(function(e) { return !e.summary_done; }).length;
+  } catch(e) {}
+  if (!confirm('将只对未提炼的 ' + n + ' 篇文章做 9 项全文提炼（思路/背景/问题/方法/结论/验证），需要几分钟。继续？')) return;
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键全文提炼任务…</span>'; }
+  try {
+    var r = await fetch('/api/literature/summarize-all', { method: 'POST' });
+    var d = await r.json();
+    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
+    litPollExtract(d.job_id);
+  } catch(e) {
+    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function viewSummary(ref) {
+  var modal = document.getElementById('lit-summary-modal');
+  if (!modal) { alert('摘要查看组件未加载'); return; }
+  modal.style.display = 'flex';
+  var body = document.getElementById('lit-summary-body');
+  body.innerHTML = '<span style="color:var(--text-light);">加载摘要…</span>';
+  try {
+    var r = await fetch('/api/literature/summary?file_or_title=' + encodeURIComponent(ref));
+    var d = await r.json();
+    if (!d.ok) { body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>'; return; }
+    var s = d.summary || {};
+    var labels = {idea: '💡 思路', background: '📖 背景', species: '🧬 物种', tissue: '🫀 组织',
+                  problem: '❓ 问题', solution: '🔧 怎么解决', methods: '⚙️ 方法',
+                  conclusion: '📌 结论', validation: '✅ 怎么验证'};
+    var html = '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">' + escapeHtml(d.title || d.file || '') +
+      (d.summary_done ? ' <span style="color:var(--success);font-size:11px;">✅ 已提炼</span>' : ' <span style="color:#e67e22;font-size:11px;">⏳ 未提炼</span>') +
+      (d.kb_done ? ' <span style="color:var(--success);font-size:11px;">🧬 已入库</span>' : '') + '</div>';
+    Object.keys(labels).forEach(function(k) {
+      html += '<div style="margin-bottom:8px;"><b>' + labels[k] + '</b><div style="color:var(--text);white-space:pre-wrap;font-size:12px;">' + escapeHtml(s[k] || '未提及') + '</div></div>';
+    });
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
   }
 }
 
@@ -3955,7 +4068,8 @@ async function litPollExtract(jobId) {
     if (st.status === 'running') {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
-      var phaseLabel = {read: '读取全文', extract: 'LLM 提炼', write: '写入知识库', paper: '逐篇提炼', done: '完成'}[st.phase] || st.phase;
+      var phaseLabel = {read: '读取全文', extract: 'LLM 提炼', write: '写入知识库', paper: '逐篇提炼',
+                         summarize: 'LLM 全文提炼(9项)', done: '完成'}[st.phase] || st.phase;
       prog.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧬 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
         '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
         '<div style="color:var(--text-light);font-size:11px;margin-top:4px;word-break:break-all;">' + escapeHtml(st.current || '') + '</div>';
@@ -3980,9 +4094,18 @@ function renderExtractResult(d, prog) {
     prog.innerHTML = '<div style="color:var(--danger);font-weight:600;">❌ ' + escapeHtml(d.error) + '</div>';
     return;
   }
+  // 单篇全文提炼结果（方向1）
+  if (d.summary && !d.results) {
+    var n = Object.keys(d.summary).filter(function(k) { return d.summary[k]; }).length;
+    prog.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">✅ 全文提炼完成（' + n + '/9 项）</div>' +
+      '<div style="display:flex;gap:6px;margin-top:4px;">' +
+      '<button onclick="viewSummary(\'' + (d.file || '').replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 查看摘要</button>' +
+      '<button onclick="loadLiteratureLibrary()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">刷新文献库</button></div>';
+    return;
+  }
   if (d.results) {
-    // 一键提炼全部：汇总
-    var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 一键提炼完成：' + (d.succeeded || 0) + '/' + (d.total || 0) + ' 篇成功，共写入 <b>' + (d.written_total || 0) + '</b> 条知识库条目</div>';
+    // 批量任务（一键入库 / 一键全文提炼）：汇总
+    var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 批量任务完成：' + (d.succeeded || 0) + '/' + (d.total || 0) + ' 篇成功' + (d.written_total != null ? '，共写入 <b>' + d.written_total + '</b> 条知识库条目' : '') + '</div>';
     html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
     (d.results || []).forEach(function(r) {
       var col = r.ok ? 'var(--success)' : 'var(--danger)';
@@ -5915,6 +6038,13 @@ async function litImportSelected() {
       <button id="lit-import-sel" onclick="litImportSelected()" style="display:none;">📥 导入选中 (0)</button>
       <button onclick="closeLitPicker()">取消</button>
     </div>
+  </div>
+</div>
+<!-- 文献全文摘要查看器（批J 2026-08-16）-->
+<div id="lit-summary-modal">
+  <div class="lit-box">
+    <div class="lit-header">📝 文献思路摘要 <button onclick="document.getElementById('lit-summary-modal').style.display='none'" style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button></div>
+    <div id="lit-summary-body"></div>
   </div>
 </div>
 </body>

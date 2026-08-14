@@ -213,6 +213,7 @@ TOOLSETS = {
             "save_reference",
             "literature_import",
             "kb_extract_from_paper",
+            "summarize_paper",
         ],
         "module": "tools.memomics_tools",
         "includes": []

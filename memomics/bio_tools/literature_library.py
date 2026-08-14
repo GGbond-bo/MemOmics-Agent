@@ -370,6 +370,7 @@ def list_library() -> str:
         if not idx_path or not os.path.isfile(idx_path):
             continue
         for e in _load_index(idx_path):
+            _s = e.get("summary") or {}
             out.append({
                 "source": label,
                 "file": e.get("file"), "title": e.get("title") or "",
@@ -378,6 +379,9 @@ def list_library() -> str:
                 "downloaded_at": e.get("downloaded_at") or e.get("imported_at") or "",
                 "path": e.get("path") or "",
                 "tags": e.get("tags") or {},
+                "summary_done": bool(e.get("summary_done")),
+                "kb_done": bool(e.get("kb_done")),
+                "summary_idea": str(_s.get("idea") or "")[:160],
             })
     return json.dumps({"ok": True, "total": len(out), "library": out,
                        "library_dir": _library_dir().replace("\\", "/")},
@@ -583,6 +587,17 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
         (written if r.get("status") == "success" else rejected).append(
             {k: r.get(k) for k in ("status", "name", "path", "error") if r.get(k)})
     _cb("done", 1, 1, f"提炼完成: 写入 {len(written)} 条")
+    # 标记 kb_done（方向2：给 AI 调用的知识库条目）
+    try:
+        _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+        _idx = _load_index(_idx_file)
+        for _e in _idx:
+            if _e.get("file") == hit.get("file") and written:
+                _e["kb_done"] = True
+                _e["kb_written_count"] = len(written)
+        _save_index(_idx_file, _idx)
+    except Exception as e:
+        logger.warning(f"kb_done mark failed: {e}")
     return json.dumps({
         "ok": bool(written), "paper": hit.get("title"), "doi": hit.get("doi"),
         "written": written, "rejected": rejected,
@@ -627,6 +642,215 @@ def extract_all_papers(progress_cb=None) -> str:
         "results": results,
         "note": "逐篇提炼进 knowledge_base 五级目录，每篇 1-3 条（参数/方法/结论），带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
+
+
+# ── 方向1：全文思路提炼（给人看，批J 2026-08-16）──
+_SUMMARY_FIELDS = ["idea", "background", "species", "tissue", "problem",
+                   "solution", "methods", "conclusion", "validation"]
+_SUMMARY_FIELD_LABELS = {
+    "idea": "思路", "background": "背景", "species": "物种", "tissue": "组织",
+    "problem": "问题", "solution": "怎么解决", "methods": "方法",
+    "conclusion": "结论", "validation": "怎么验证",
+}
+
+
+def _summaries_dir() -> str:
+    return os.path.join(_library_dir(), "summaries")
+
+
+def _load_summary_file(stem: str) -> str:
+    p = os.path.join(_summaries_dir(), f"{stem}.md")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+def get_summary(file_or_title: str) -> str:
+    """查看某篇文献的全文思路摘要（方向1）。"""
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    needle = (file_or_title or "").strip().lower()
+    hit = None
+    for e in lib:
+        if needle and (needle in (e.get("file") or "").lower()
+                       or needle in (e.get("title") or "").lower()):
+            hit = e
+            break
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    md = _load_summary_file(os.path.splitext(hit.get("file") or "")[0])
+    if not md and hit.get("summary"):
+        md = hit["summary"].get("markdown", "")
+    return json.dumps({"ok": True, "file": hit.get("file"), "title": hit.get("title"),
+                       "summary": hit.get("summary") or {}, "markdown": md,
+                       "summary_done": bool(hit.get("summary_done")),
+                       "kb_done": bool(hit.get("kb_done"))}, ensure_ascii=False)
+
+
+def summarize_paper(file_or_title: str, progress_cb=None) -> str:
+    """全文思路提炼（方向1，给人看）：9 项结构化摘要 + summaries/<名>.md 落盘。
+
+    独立调用 LLM API（deepseek-v4-flash），模板与 literature-full-summary skill 一致。
+    progress_cb(phase, done, total, detail)。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    needle = (file_or_title or "").strip().lower()
+    hit = None
+    for e in lib:
+        if needle and (needle in (e.get("file") or "").lower()
+                       or needle in (e.get("title") or "").lower()):
+            hit = e
+            break
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    pdf_path = hit.get("path", "")
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    _cb("read", 0, 1, f"读取全文: {hit.get('title') or hit.get('file')}")
+    text = _pdf_text(pdf_path, pages=200)[:30000]
+    _ocr_used = False
+    if not text.strip():
+        _cb("read", 0, 1, f"扫描版无文字层，OCR 识别中: {hit.get('file')}")
+        text = _pdf_ocr_text(pdf_path)
+        _ocr_used = bool(text.strip())
+    if not text.strip():
+        return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
+    _cb("summarize", 0, 1, f"LLM 全文提炼(9项): {hit.get('title') or hit.get('file')}")
+    from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
+    prompt = (
+        "你是生物医学文献解读员。按 literature-full-summary skill 的九问模板，"
+        "对下面这篇文献逐项提炼，输出 JSON 对象（不要其他文字）：\n"
+        '{"idea":"作者核心想法/切入点","background":"领域现状与空白","species":"human/mouse/...",'
+        '"tissue":"skeletal_muscle/liver/...","problem":"要回答的具体科学问题",'
+        '"solution":"如何设计实验/分析来回答","methods":"关键技术/算法/统计方法(含阈值)",'
+        '"conclusion":"主要发现与结论","validation":"如何验证(独立队列/实验/交叉方法)"}\n'
+        "规则：每项 2-6 句中文，忠实原文；缺项写'未提及'，禁止编造；物种/组织用英文小写。\n"
+        f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
+        + ("注意: 正文来自 OCR，忽略乱码。\n" if _ocr_used else "")
+        + "正文:\n" + text
+    )
+    try:
+        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
+        r = _call_llm_sync(prompt, "lit_summary", cfg["api_key"], cfg["base_url"],
+                           cfg["model"], temperature=0.3, max_tokens=2500)
+        txt = r.get("content", "")
+        m = re.search(r"\{.*\}", txt, re.S)
+        summary = json.loads(m.group(0)) if m else {}
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
+    if not summary or not any(summary.get(k) for k in _SUMMARY_FIELDS):
+        return json.dumps({"ok": False, "error": "未能提炼出摘要"}, ensure_ascii=False)
+    # 落盘 summaries/<stem>.md + 索引标记
+    _cb("write", 1, 1, "写入摘要文件 + 标记已提炼")
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    md_lines = [f"# {hit.get('title') or hit.get('file')}",
+                f"> 期刊 {hit.get('journal') or '—'} · {hit.get('year') or '—'} · DOI {hit.get('doi') or '—'} · 提炼于 {now}",
+                ""]
+    for k in _SUMMARY_FIELDS:
+        v = str(summary.get(k) or "").strip() or "未提及"
+        md_lines.append(f"## {_SUMMARY_FIELD_LABELS[k]}\n\n{v}\n")
+    md = "\n".join(md_lines)
+    os.makedirs(_summaries_dir(), exist_ok=True)
+    with open(os.path.join(_summaries_dir(), f"{stem}.md"), "w", encoding="utf-8") as f:
+        f.write(md)
+    try:
+        _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+        _idx = _load_index(_idx_file)
+        for _e in _idx:
+            if _e.get("file") == hit.get("file"):
+                _e["summary"] = dict(summary)
+                _e["summary"].update({"markdown_file": f"papers/summaries/{stem}.md",
+                                      "extracted_at": now})
+                _e["summary_done"] = True
+        _save_index(_idx_file, _idx)
+    except Exception as e:
+        logger.warning(f"summary mark failed: {e}")
+    _cb("done", 1, 1, "全文提炼完成")
+    return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
+                       "summary": summary, "markdown_file": f"hermes_home/papers/summaries/{stem}.md"},
+                      ensure_ascii=False, indent=2)
+
+
+def summarize_all_papers(progress_cb=None) -> str:
+    """一键全文提炼（方向1）：只处理未提炼（summary_done≠true）的文章。"""
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空"}, ensure_ascii=False)
+    pending = [e for e in lib if not e.get("summary_done")]
+    if not pending:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0,
+                           "results": [], "note": "全部文章都已提炼"},
+                          ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(pending)
+    results = []
+    for i, e in enumerate(pending):
+        name = e.get("file") or e.get("title") or ""
+        _cb("paper", i, n, f"[{i + 1}/{n}] 全文提炼: {e.get('title') or name}")
+        try:
+            r = json.loads(summarize_paper(name, progress_cb=(
+                lambda ph, d, t, det, _i=i: _cb(ph, _i + (d / max(t, 1)) * 0.9, n,
+                                                f"[{_i + 1}/{n}] {det}")
+            )))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
+                        "error": r.get("error", "")})
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"全文提炼完成: {ok_n}/{n} 篇成功")
+    return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
+                       "results": results,
+                       "note": "9 项摘要已写入 hermes_home/papers/summaries/，可在文献库查看。"},
+                      ensure_ascii=False, indent=2)
+
+
+# ── 会话绑定（12 小时自动换绑，批J 2026-08-16）──
+_BIND_TTL_SECONDS = 12 * 3600
+
+
+def get_binding() -> dict:
+    """当前文献库会话绑定：{session_id, bound_at, expired, remaining_hours}。"""
+    p = os.path.join(_library_dir(), ".binding.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            b = json.load(f)
+    except Exception:
+        return {"session_id": "", "expired": True, "remaining_hours": 0}
+    bound_at = b.get("bound_at_ts", 0)
+    remaining = max(0.0, _BIND_TTL_SECONDS - (time.time() - bound_at))
+    expired = remaining <= 0
+    return {"session_id": b.get("session_id", ""), "bound_at": b.get("bound_at", ""),
+            "expired": expired, "remaining_hours": round(remaining / 3600, 1)}
+
+
+def bind_session(session_id: str, force: bool = False) -> dict:
+    """绑定文献库到会话。未绑定/已过期(12h) 自动绑定新会话；force 强制换绑。"""
+    cur = get_binding()
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "session_id required", **cur}
+    if not force and cur.get("session_id") and not cur.get("expired"):
+        return {"ok": True, "auto": False, **cur}
+    b = {"session_id": sid, "bound_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+         "bound_at_ts": time.time()}
+    os.makedirs(_library_dir(), exist_ok=True)
+    with open(os.path.join(_library_dir(), ".binding.json"), "w", encoding="utf-8") as f:
+        json.dump(b, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "auto": not force, **get_binding()}
 
 
 SCHEMA = {
@@ -689,6 +913,31 @@ def _register():
             schema=EXTRACT_SCHEMA,
             handler=lambda args, **kw: kb_extract_from_paper(args.get("file_or_title", "")),
             emoji="🧬",
+            max_result_size_chars=20_000,
+        )
+        registry.register(
+            name="summarize_paper",
+            toolset="memomics",
+            schema={
+                "name": "summarize_paper",
+                "description": (
+                    "文献全文思路提炼（给人看的方向）：对文献库里一篇文章提取 9 项结构化摘要"
+                    "（思路/背景/物种/组织/问题/怎么解决/方法/结论/怎么验证），写入 "
+                    "hermes_home/papers/summaries/ 并标记已提炼。"
+                    "用户说'总结这篇文章/这篇文章的思路是什么/全文提炼'时使用。"
+                    "注意：给 AI 调用的参数/知识条目走 kb_extract_from_paper，两者分工不同。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_or_title": {"type": "string",
+                                          "description": "文献文件名或文章名（子串匹配）"}
+                    },
+                    "required": ["file_or_title"]
+                }
+            },
+            handler=lambda args, **kw: summarize_paper(args.get("file_or_title", "")),
+            emoji="📝",
             max_result_size_chars=20_000,
         )
     except Exception as e:

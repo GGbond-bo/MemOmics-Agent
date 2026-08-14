@@ -7534,6 +7534,92 @@ async def literature_extract_all():
     return {"job_id": job_id, "status": "running"}
 
 
+def _run_lit_summarize(job_id: str, file_or_title: str, do_all: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import summarize_paper, summarize_all_papers
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        if do_all:
+            _result = _json.loads(summarize_all_papers(progress_cb=_cb))
+        else:
+            _result = _json.loads(summarize_paper(file_or_title, progress_cb=_cb))
+        if _result.get("ok"):
+            _msg = (f"全文提炼完成：{_result.get('succeeded', 1)} 篇成功" if do_all
+                    else "全文提炼完成（9 项摘要已落盘）")
+        else:
+            _msg = f"全文提炼失败：{_result.get('error', '未知错误')[:120]}"
+        _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/summarize")
+async def literature_summarize(payload: dict):
+    """全文思路提炼（方向1，给人看，批J）：9 项摘要，异步任务化。"""
+    file_or_title = (payload.get("file_or_title") or "").strip()
+    if not file_or_title:
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "read",
+                         "done": 0, "total": 1, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_summarize, job_id, file_or_title, False))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/api/literature/summarize-all")
+async def literature_summarize_all():
+    """一键全文提炼：只处理未提炼（summary_done=false）的文章（批J）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_summarize, job_id, "", True))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/literature/summary")
+async def literature_summary(file_or_title: str = ""):
+    """查看某篇文献的 9 项全文摘要（方向1）。"""
+    if not file_or_title.strip():
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    try:
+        from memomics.bio_tools.literature_library import get_summary
+        import json as _json
+        return _json.loads(get_summary(file_or_title.strip()))
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
+@app.get("/api/literature/binding")
+async def literature_binding(session_id: str = ""):
+    """文献库会话绑定：未绑定或 12 小时过期时自动绑定到当前会话（批J）。"""
+    try:
+        from memomics.bio_tools.literature_library import get_binding, bind_session
+        cur = get_binding()
+        if session_id and (cur.get("expired") or not cur.get("session_id")):
+            cur = bind_session(session_id, force=False)
+        return {"ok": True, "auto_bind": cur.get("auto", False), **cur,
+                "ttl_hours": 12,
+                "note": "绑定 12 小时有效；过期后新会话打开文献库时自动换绑"}
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
+@app.post("/api/literature/binding")
+async def literature_binding_force(payload: dict):
+    """手动绑定文献库到指定会话（force 换绑）。"""
+    try:
+        from memomics.bio_tools.literature_library import bind_session
+        return bind_session(payload.get("session_id", ""), force=True)
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
 @app.get("/api/literature/library")
 async def literature_library_list():
     """列出全部文献（用户导入 + agent 下载），带期刊/文章名/下载日期标识。"""
