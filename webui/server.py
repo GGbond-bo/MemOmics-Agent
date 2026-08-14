@@ -869,6 +869,35 @@ def _session_has_active_work(session):
     return False
 
 
+def _session_no_live_work(session):
+    """外部工作是否确实已停（2026-08-14 完成判定增强信号3）。
+
+    无活跃后台进程 + results_dir 无近期文件活动（15 分钟窗口）。
+    仅当 task_plan 主线区无 in_progress/pending 时才参与完成判定，
+    所以不会把"步骤间等待唤醒"误判为完成。
+    """
+    try:
+        from tools.process_registry import process_registry
+        if process_registry.count_running() > 0:
+            return False
+    except Exception:
+        pass
+    _rd = session.get("results_dir", "") or ""
+    if _rd and os.path.isdir(_rd):
+        try:
+            _now = time.time()
+            for _root, _dirs, _files in os.walk(_rd):
+                for _f in _files:
+                    try:
+                        if _now - os.path.getmtime(os.path.join(_root, _f)) < 900:
+                            return False
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    return True
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -910,31 +939,37 @@ def _schedule_self_check(session, agent, loop):
             # 只统计主线任务区：唤醒记录区（## 🏁）之前；无 🏁 则全文
             _main = _plan_text.split("## 🏁")[0]
             _pt_lower = _main.lower()
-            if "in_progress" not in _pt_lower and "pending" not in _pt_lower and \
-                    any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止")):
-                # P0-2(2026-08-13) 完成契约：提交即校验 — 复选框全勾 + 产出文件存在且非空。
-                # 契约未满足 → 不归档不 mark_done，继续自检（唤醒 agent 补齐）。
-                # 2026-08-14: urgent 唤醒在完成归档闸门处放行（紧急介入优先）。
-                if not _completion_contract_check(_main, results_dir):
-                    logger.info(f"[SelfCheck] session {session['id'][:12]}: 词法判定完成但完成契约未满足（未勾选复选框或产出文件缺失/为空）→ 继续自检")
-                elif not urgent:
-                    try:
-                        from webui.runtime.run_gate import mark_done
-                        mark_done(results_dir, "task completed (self-check)")
-                    except Exception:
-                        pass
-                    try:
-                        _done_path = os.path.join(results_dir, "task_plan.done.md")
-                        if os.path.exists(_done_path):
-                            os.remove(_done_path)
-                        os.rename(_plan_path, _done_path)
-                    except Exception:
+            if "in_progress" not in _pt_lower and "pending" not in _pt_lower:
+                # 2026-08-14 增强完成信号：不再只靠完成关键词（LLM 忘写就多唤醒烧 token），
+                # 三种信号任一命中即进入完成契约校验：
+                # 1) 完成关键词（旧逻辑） 2) 复选框全勾 3) 外部工作确实停了（无进程+无近期产出）
+                _has_done_word = any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止", "done"))
+                _all_checked = ("- [x]" in _pt_lower or "- [X]" in _pt_lower) and "- [ ]" not in _pt_lower
+                _no_live_work = _session_no_live_work(session)
+                if _has_done_word or _all_checked or _no_live_work:
+                    # P0-2(2026-08-13) 完成契约：提交即校验 — 复选框全勾 + 产出文件存在且非空。
+                    # 契约未满足 → 不归档不 mark_done，继续自检（唤醒 agent 补齐）。
+                    # 2026-08-14: urgent 唤醒在完成归档闸门处放行（紧急介入优先）。
+                    if not _completion_contract_check(_main, results_dir):
+                        logger.info(f"[SelfCheck] session {session['id'][:12]}: 词法判定完成但完成契约未满足（未勾选复选框或产出文件缺失/为空）→ 继续自检")
+                    elif not urgent:
                         try:
-                            os.remove(_plan_path)
+                            from webui.runtime.run_gate import mark_done
+                            mark_done(results_dir, "task completed (self-check)")
                         except Exception:
                             pass
-                    logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已归档 task_plan.done.md + mark_done，停止自检（心跳关闭）")
-                    return
+                        try:
+                            _done_path = os.path.join(results_dir, "task_plan.done.md")
+                            if os.path.exists(_done_path):
+                                os.remove(_done_path)
+                            os.rename(_plan_path, _done_path)
+                        except Exception:
+                            try:
+                                os.remove(_plan_path)
+                            except Exception:
+                                pass
+                        logger.info(f"[SelfCheck] session {session['id'][:12]}: 任务完成，已归档 task_plan.done.md + mark_done，停止自检（心跳关闭）")
+                        return
         except Exception:
             pass
     # ⛔ 检查 task_plan 是否被取消/暂停
