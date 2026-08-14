@@ -25,6 +25,25 @@ clustering: map_to_existing_annotation
 ```
 执行内容 = QC 分布图（VlnPlot×3 + scatter）+ 按 type/sample 的 QC 统计表，不 subset。
 
+## 第二步半：KB 阈值审计——重过滤争议的标准裁决（2026-08-14 实测）
+
+当辩论双方在"是否重新过滤"上僵持（正方：已 QC 不重过滤；反方：nFeature>6000 超上限疑似双联体），**不要靠辩论定案**——跑一遍阈值审计量化争议，用数字裁决：
+
+```r
+# kb_threshold_audit 核心（用 meta.data 直接数，秒出）
+audit <- data.frame(
+  标准 = c("nFeature<200","nFeature>6000","nFeature>8000","nCount<500","nCount>50000","MT>5%"),
+  数量 = c(sum(md$nFeature_RNA<200), sum(md$nFeature_RNA>6000), sum(md$nFeature_RNA>8000),
+           sum(md$nCount_RNA<500), sum(md$nCount_RNA>50000), sum(md$percent.mt>5)))
+# 超上限细胞若全组/全亚群分布均匀且占比<0.5% → 双联体特征但无偏倚 → 不重过滤成立
+# 关键判据: nFeature>6000 的细胞 nCount 是否同比例升高(>15000) = 双联体特征
+#          MT>5% 恰好 0 且 max≈5.00 = 上游已硬截断, 验证性评估直接成立
+```
+
+MF_subset_2000 实测：nFeature>6000 仅 59/20000 (0.295%)，全部 nCount>15000（双联体特征），分布 6 组 9 亚群无偏倚，60 组合全齐 → **裁决"不重过滤 + 标注 59 个离群"**，L1/L2 辩论裁判均解析失败（need_more_info/low）但审计数字已给出确定性答案。
+
+**L1/L2 裁判 verdict 解析失败（deepseek-flash 常见，verdict_parse_error / need_more_info / low）** → 不要无限重辩：审计数字（超阈值计数、分布、占比）就是裁决依据，直接把审计结果作为结论交付，附辩论记录说明裁判解析失败。系统强制升 L2 时也照跑，但预期同样的解析结果。
+
 ## 第三步：注释可靠性统计闭环（L2 "need_more_info" 裁决的标准应答）
 
 当 L2 辩论对注释裁决 need_more_info（反方：缺效应量/阳性率/FDR）时，不要只靠 mean expression 辩护，跑两个数值证据：

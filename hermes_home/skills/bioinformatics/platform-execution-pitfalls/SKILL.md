@@ -26,7 +26,7 @@ metadata:
 | rail_review(post) 判 "代码过短" 但代码明明完整跑了 | `code_executed` 参数必须传**完整脚本文本**（read_file 读取后传入），摘要/短字符串一律判过短 | 脚本先落盘 → `read_file()` → 原文传给 code_executed；被拦就补注释、再传全文，通过后 execute 类工具自动放行 |
 | rail_review(post) 判 "代码使用 && 连接多步骤" 但代码里没有 && | 启发式误判（可能把 `&` 或长链表达式当 &&） | 把验证/审查代码写成分步注释清晰的完整脚本传全文；产出物齐全时以产出为准继续 |
 | rail_review(post) 未通过时 execute_r/terminal 被真实阻断 | 铁律 19 硬阻断：审查不过 → 执行类工具返回阻断错误 | 不要绕过；修复审查（传完整 code_executed）→ 重新 rail_review(post) 通过 → 自动解除。阻断信息里带提示，照做即可 |
-| readRDS 中文路径报 "cannot open the connection"（但 file.exists=TRUE） | setwd 到不存在的输出目录 → 会话上下文异常，后续读取失败 | 先 `dir.create(dirname, recursive=TRUE)` 建好输出目录，再用**绝对路径** readRDS；不要 setwd 到未创建目录 |
+| readRDS 中文路径报 "cannot open the connection"（但 file.exists=TRUE） | Windows R 无法直接读中文路径（如 `E:/骨骼肌锻炼/`），setwd/绝对路径均不稳 | **先 `terminal: cp "中文路径" "英文路径"`**（如 `E:/MemOmics-Agent/results/<session>/qc/data/`），再从英文路径 readRDS——实测最稳，一次成功；不要反复试 setwd |
 
 ## 使用要点
 
@@ -38,4 +38,4 @@ metadata:
 ## References
 
 - 关联：SOUL.md 铁律 19（审查硬阻断）、铁律 20（kernel 会话隔离）
-- `references/preqc-seurat-verify-not-rerun.md` — 用户给 pre-QC'd Seurat .rds 时的 verify-not-re-run 工作流：探测已预处理 → L1 裁决 report-only QC → L2 need_more_info 的 marker 阳性率+Wilcoxon 统计闭环（含 MF_subset_2000 实测数据）
+- `references/preqc-seurat-verify-not-rerun.md` — 用户给 pre-QC'd Seurat .rds 时的 verify-not-re-run 工作流：探测已预处理 → L1 裁决 report-only QC → **KB 阈值审计（重过滤争议用数字裁决，裁判解析失败时的兜底）** → L2 need_more_info 的 marker 阳性率+Wilcoxon 统计闭环（含 MF_subset_2000 实测数据）

@@ -138,11 +138,63 @@
       "approved": false,
       "custom_script": false,
       "result": "MF_subset_2000 QC 验证性报告完成：20,000 cells，nFeature median=2491，nCount median=5165，MT median=0.35%（max 4.99 提示上游已用5%阈值过滤），ribo median=0.35%。6组配对 Y_Pre 3767/Y_Post 2930/O_Pre 2923/O_Post 2901/OD_Pre 3636/O"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_qc_visualization.R",
+      "params": "{\"qc_strategy\": \"验证性评估-不重过滤\", \"nFeature_range\": \"501-7807\", \"mt_max\": 4.99, \"doublet\": \"skip-无raw counts\", \"thresholds_from\": \"KB snRNA-seq nFeature 200-6000 MT<5%\", \"audit\": \"nFeature>6000仅59cells(0.295%)且nCount均>15000(双联体特征), MT>5%:0, nCount<500/>50000:0\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000.rds (20,000 cells × 51,227 genes, 双assay RNA+SCT) QC验证性评估完成：KB阈值审计 nFeature<200:0, >6000:59(0.295%), >8000:0, nCount<500:0, >50000:0, MT>5%:0(上游已5%硬截断), 6组×10亚群60组合全齐完全平衡。Y_Pre nFeature"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "03_qc_visualization.R",
+      "params": "{\"verify_method\": \"R_parse_lint + 产出物完整性复核\", \"scripts_checked\": \"3个R脚本全部parse PASS\", \"outputs_checked\": \"4图+3表全部存在非空\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "QC分析脚本验证: 01/02/03_load/audit/visualization.R 全部 parse 通过, 4张图(143-1004KB)+3张表全部存在。R脚本不属于pytest可测范围(results/产出脚本), 用R语法解析+产出物存在性作为验证证据。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_collect_check",
+      "params": "{\"verify_method\": \"pytest collect-only 配置探测\", \"pytest_ini\": \"存在\", \"collect\": \"成功 exit_code=0\", \"note\": \"pytest.ini 存在, --co 收集通过, 输出仅 DeprecationWarning(server.py on_event)\"}",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MemOmics 仓库 pytest 配置探测: pytest.ini 存在, pytest --co 收集成功(exit_code 0), 只有 server.py 的 FastAPI on_event DeprecationWarning 非致命。下一步跑默认 offline 测试集。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_offline_run",
+      "params": "{\"verify_method\": \"pytest offline 默认测试集\", \"note\": \"exit_code=0, 输出尾部仅 DeprecationWarning, 需抓取 passed/failed 统计行\"}",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MemOmics 仓库默认 offline pytest 运行 exit_code=0, 无失败, 尾部仅 PytestRemovedIn10Warning(类级fixture弃用,非致命)。"
     }
   ],
-  "proven_script": "qc_report.R",
+  "proven_script": "pytest_offline_run",
   "error_count": 1,
-  "success_count": 6,
+  "success_count": 10,
   "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
   "doc_source": "official",
   "prerequisites": {
@@ -163,6 +215,16 @@
     }
   ],
   "user_prefs": {
-    "last_used_script": "qc_report.R"
-  }
+    "last_used_script": "pytest_offline_run"
+  },
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.8,
+      "evidence": "MF_subset_2000 QC策略裁决: 不重过滤(验证性评估)成立, 59个双联体特征细胞保留但标注",
+      "date": "2026-08-14 21:02:52"
+    }
+  ]
 }

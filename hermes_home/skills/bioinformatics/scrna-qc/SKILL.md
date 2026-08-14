@@ -220,6 +220,10 @@ Before writing QC code, determine whether `adata.X` contains **raw counts** or *
 | human | skeletal_muscle | aging | 2026-08-14 | qc_validation.R | - | - |  |
 | - | - | - | 2026-08-14 | env_check_and_load.R | - | - |  |
 | - | - | - | 2026-08-14 | qc_report.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | 03_qc_visualization.R | - | - |  |
+| - | - | - | 2026-08-14 | 03_qc_visualization.R | - | - |  |
+| - | - | - | 2026-08-14 | pytest_collect_check | - | - |  |
+| - | - | - | 2026-08-14 | pytest_offline_run | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
