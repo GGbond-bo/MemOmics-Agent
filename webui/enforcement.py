@@ -56,6 +56,39 @@ def detect_analysis_level(user_message: str) -> str:
     return "chat"
 
 
+# === 只读命令豁免（2026-08-14 循环/速度优化）===
+# 观察类命令不产出分析结果：不触发 铁律24 record_run 门禁、不要求 rail_review(post)，
+# 消除 terminal→record_run→rail_review 的三连开销（实测把单个命令的 API 往返放大 3 倍）。
+_READONLY_CMDS = (
+    "ls", "dir", "type", "cat", "head", "tail", "wc", "echo", "pwd", "cd",
+    "find", "where", "grep", "findstr", "which", "tasklist", "nvidia-smi",
+    "get-content", "get-childitem", "get-location", "test", "[ ",
+)
+_WRITE_SIGNALS = (" > ", ">>", "| tee ", "rm ", "rmdir", "del ", "move ", "copy ", "mkdir",
+                  "touch", "sed -i", "saveRDS", "write.csv", "write.table", "ggsave",
+                  "pdf(", "png(", "svg(", "open(", "write(")
+_READONLY_FORBIDDEN = ("rscript", "python", "pip ", "conda", "curl", "wget", "git clone", "npm", "node ")
+
+
+def _is_readonly_terminal(cmd: str) -> bool:
+    """判断 terminal 命令是否为纯观察（只读）命令。"""
+    try:
+        _c = (cmd or "").strip().lower()
+        if not _c:
+            return False
+        if any(w in _c for w in _WRITE_SIGNALS):
+            return False
+        if any(w in _c for w in _READONLY_FORBIDDEN):
+            return False
+        _first = _c.lstrip()
+        for _ro in _READONLY_CMDS:
+            if _first == _ro or _first.startswith(_ro + " "):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 # ==================== P2 辩论门控 (2026-08-10) ====================
 # 设计依据: docs/debate-core-design.md §5.5 — 全量辩论有害（iMAD, AAAI 2026 Oral）,
 # 选择性触发省 92% token 且准确率反升 13.5%。三级门控:
@@ -420,6 +453,8 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             # 之前: 此处有独立的 elif terminal 分支(153行)在前面，导致这里整个不可达
             _cmd = str(args.get("command", "")) if isinstance(args, dict) else str(args)
             _cmd_lower = _cmd.lower()
+            # 2026-08-14: 只读观察命令豁免（不触发 record_run 门禁 / rail_review(post) 要求）
+            _ro = _is_readonly_terminal(_cmd)
             # P2(2026-08-10): terminal 也计入重试信号
             _key = _cmd.strip()[:100]
             es._exec_retries[_key] = es._exec_retries.get(_key, 0) + 1
@@ -439,7 +474,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
             es.terminal_count += 1
             # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 硬阻断（P0-1 接线）
-            if es._pending_record and es.analysis_level != "chat":
+            if es._pending_record and es.analysis_level != "chat" and not _ro:
                 es.warnings.append(f"terminal#{es.terminal_count}: 上一步未完成 record_run")
                 _emit("enforcement", action="blocked",
                       message="⛔ 上一步 terminal 完成后未记录经验！请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。",
@@ -448,21 +483,21 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         "message": "⛔ 上一步 terminal 完成后未记录经验（铁律）。"
                                    "请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。"}
             # 分析级操作且未加载 skill → 警告
-            if es.analysis_level in ("analysis", "statistical") and not es.skills_loaded:
+            if es.analysis_level in ("analysis", "statistical") and not es.skills_loaded and not _ro:
                 es.warnings.append(f"terminal#{es.terminal_count}: 未加载任何 skill")
                 _emit("enforcement", action="warning",
                       message=f"⚠️ 未加载 skill 就执行 terminal。SOUL.md 铁律 #1 要求先 skill_view。",
                       missing=["skill_view"])
 
             # 分析级操作且未做 pre 审查 → 警告
-            if es.analysis_level in ("analysis", "statistical") and not es.rail_pre_done and es.terminal_count == 1:
+            if es.analysis_level in ("analysis", "statistical") and not es.rail_pre_done and es.terminal_count == 1 and not _ro:
                 es.warnings.append(f"terminal#{es.terminal_count}: 未执行 rail_review(pre)")
                 _emit("enforcement", action="warning",
                       message=f"⚠️ 未执行 rail_review(pre) 审查。铁律 #3 要求分析前先审查。",
                       missing=["rail_review(pre)"])
 
             # 无知识库搜索 → 温和提醒
-            if es.analysis_level in ("analysis",) and not es.knowledge_searched and es.terminal_count == 1:
+            if es.analysis_level in ("analysis",) and not es.knowledge_searched and es.terminal_count == 1 and not _ro:
                 _emit("enforcement", action="info",
                       message="💡 建议先 search_knowledge() 获取参数推荐。铁律 #2。")
 
@@ -472,6 +507,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
         if tool_name == "terminal" or (tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal"):
             es.rail_post_done = False
+            # 2026-08-14: 只读观察命令不进入沉淀/审查门禁
+            _cmd = ""
+            if isinstance(args, dict):
+                _cmd = str(args.get("command") or args.get("code") or args.get("script") or "")
+            else:
+                _cmd = str(args)
+            _ro = _is_readonly_terminal(_cmd)
             # 保存结果用于后续参数提取
             es._last_terminal_result = str(result)[:1000] if result else ""
             # P2(2026-08-10): 报错信号 — 结果含错误标记
@@ -480,13 +522,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 "traceback", "error:", "exception", "exit code 1", "nonzero",
                 "not found", '"status": "error"', '"status":"error"', "kernel error"))
             # 设置 pending 标记：所有非闲聊级别都需要 record
-            if es.analysis_level != "chat":
+            if es.analysis_level != "chat" and not _ro:
                 es._pending_record = True
 
             # 自动提示：需要 rail_review(post)
-            if es.analysis_level in ("analysis", "statistical", "lightweight"):
+            if es.analysis_level in ("analysis", "statistical", "lightweight") and not _ro:
                 _emit("enforcement", action="require",
-                      message="🔍 terminal 执行完毕。请调用 rail_review(post) 进行执行后审查。",
+                      message="🔍 terminal 执行完毕。请先调用 skill_evolution(action='record_run') 沉淀本次运行经验（否则下一个 terminal 会被铁律24拦截），再调用 rail_review(post) 进行执行后审查。",
                       require=["rail_review(post)"])
 
         elif tool_name == "rail_review":

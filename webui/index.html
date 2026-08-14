@@ -171,6 +171,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .progress-timeline .pt-header:hover { background:var(--primary-light); }
 .progress-timeline .pt-body { padding:4px 12px 8px 12px; max-height:400px; overflow-y:auto; }
 .progress-timeline.collapsed .pt-body { display:none; }
+#live-status { position: sticky; top: 0; z-index: 30; margin: 4px 0 8px 0; padding: 6px 12px; background: rgba(74,144,217,0.12); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text, #333); display: none; backdrop-filter: blur(2px); }
+#live-status.stalled { background: #fff4e5; border-color: #f0a020; color: #8a5a00; }
+#live-status.done { background: rgba(45,134,89,0.1); border-color: #2d8659; color: #2d8659; }
 .pt-item { display:flex; align-items:flex-start; gap:6px; padding:4px 0; font-size:12px; line-height:1.5; border-left:2px solid transparent; padding-left:10px; margin-left:4px; position:relative; }
 .pt-item::before { content:''; width:8px; height:8px; border-radius:50%; position:absolute; left:-5px; top:7px; }
 .pt-item.pending { border-left-color:var(--accent); }
@@ -1122,13 +1125,27 @@ function handleMessage(msg) {
     agentRunning = true;
     document.getElementById('send').disabled = true;
     document.getElementById('stop').classList.add('active');
+    if (!_runStartTs) _runStartTs = Date.now();
     document.getElementById('steer-hint').style.display = '';
     _currentRunningSid = msg.session_id || currentSid;
     return;
   }
 
+  if (msg.type === 'heartbeat') {
+    // 服务端运行状态心跳 — 实时显示"还在跑/跑了多久/在干什么"
+    _lastHeartbeatTs = Date.now();
+    _lastApiCalls = msg.api_calls;
+    _lastTool = msg.tool || '';
+    _lastStalled = !!msg.stalled;
+    if (msg.elapsed !== undefined && msg.elapsed !== null) _runStartTs = Date.now() - msg.elapsed * 1000;
+    updateLiveStatus(msg.elapsed, msg.api_calls, msg.tool, msg.stalled);
+    _startLiveStatusTicker();
+    return;
+  }
+
   if (msg.type === 'thinking') {
     // 不重复创建 thinking, 只在首次创建进度时间线
+    if (!_runStartTs) _runStartTs = Date.now();
     if (!progressTimelineEl) {
       initProgressTimeline();
     }
@@ -1188,6 +1205,7 @@ function handleMessage(msg) {
   } else if (msg.type === 'tool_gen') {
     // 工具参数生成中（可选显示）
   } else if (msg.type === 'tool_progress') {
+    if (msg.tool && msg.tool !== '_heartbeat') { _lastTool = msg.tool; _lastActivityTs = Date.now(); }
     // 工具执行进度更新
     if (msg.tool === '_heartbeat') {
       // 心跳消息 — 显示为独立的进度条目
@@ -1269,6 +1287,8 @@ function handleMessage(msg) {
     }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
+    hideLiveStatus('✅ 已完成' + (_runStartTs ? ' · 用时 ' + _fmtDur((Date.now() - _runStartTs) / 1000) : ''));
+    _stopLiveStatusTicker();
     finalizeProgressTimeline();
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
@@ -1281,6 +1301,8 @@ function handleMessage(msg) {
     updateSessionList();
   } else if (msg.type === 'error') {
     if (currentAssistantEl && currentAssistantEl.classList.contains('thinking')) currentAssistantEl.remove();
+    hideLiveStatus('❌ 运行出错');
+    _stopLiveStatusTicker();
     addError(msg.content);
     finalizeProgressTimeline();
     document.getElementById('send').disabled = false;
@@ -1294,6 +1316,8 @@ function handleMessage(msg) {
     // 来自 server 的实时待办同步
     renderTodos(msg.todos);
   } else if (msg.type === 'cancelled') {
+    hideLiveStatus('⏹️ 已停止');
+    _stopLiveStatusTicker();
     addError('任务已取消');
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
@@ -1480,6 +1504,11 @@ async function send(background) {
   setFloatBar(true);
   agentRunning = true;
   document.getElementById('steer-hint').style.display = '';
+    _runStartTs = Date.now();
+    _lastHeartbeatTs = 0;
+    _lastTool = '';
+    updateLiveStatus(0, 0, null, false);
+    _startLiveStatusTicker();
   ws.send(JSON.stringify({ type: 'chat', message: text, session_id: targetSid, background: background, images: imageUrls }));
 }
 
@@ -1488,6 +1517,8 @@ function stopAgent() {
   if (!ws || ws.readyState !== 1) return;
   if (!agentRunning) return;  // agent 未运行时不触发
   ws.send(JSON.stringify({ type: 'cancel', session_id: currentSid }));
+    hideLiveStatus('⏹️ 已请求停止');
+    _stopLiveStatusTicker();
   document.getElementById('stop').classList.remove('active');
   document.getElementById('steer-hint').style.display = 'none';
   setFloatBar(false);
@@ -1618,6 +1649,71 @@ function addAssistantMsg(text) {
 function _nowTs() {
   var d = new Date();
   return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
+}
+
+// === 运行状态条（实时可见"还在跑/跑了多久/在干什么"，2026-08-14）===
+var _runStartTs = null, _lastHeartbeatTs = 0, _lastApiCalls = 0, _lastTool = '', _lastStalled = false, _liveStatusTimer = null;
+
+function _fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (h > 0) return h + ':' + ('0' + m).slice(-2) + ':' + ('0' + s).slice(-2);
+  return m + ':' + ('0' + s).slice(-2);
+}
+
+function _ensureLiveStatus() {
+  var el = document.getElementById('live-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'live-status';
+    var m = document.getElementById('messages');
+    if (m) m.insertBefore(el, m.firstChild);
+  }
+  return el;
+}
+
+function updateLiveStatus(elapsed, apiCalls, tool, stalled) {
+  var el = _ensureLiveStatus();
+  if (!el) return;
+  el.style.display = 'block';
+  el.className = stalled ? 'stalled' : '';
+  var parts = ['🔄 运行中', '已用 ' + _fmtDur(elapsed)];
+  if (apiCalls !== undefined && apiCalls !== null) parts.push(apiCalls + ' 次工具调用');
+  if (tool) parts.push('当前: ' + tool);
+  if (stalled) parts.push('⚠️ 同一工具超过 3 分钟 — 可能卡住，可直接输入引导');
+  el.textContent = parts.join(' · ');
+}
+
+function hideLiveStatus(doneText) {
+  var el = document.getElementById('live-status');
+  if (el) {
+    if (doneText) {
+      el.className = 'done';
+      el.textContent = doneText;
+      el.style.display = 'block';
+      setTimeout(function () { if (el && el.parentNode) el.style.display = 'none'; }, 10000);
+    } else {
+      el.style.display = 'none';
+    }
+  }
+}
+
+function _stopLiveStatusTicker() {
+  if (_liveStatusTimer) { clearInterval(_liveStatusTimer); _liveStatusTimer = null; }
+  _runStartTs = null;
+  _lastHeartbeatTs = 0;
+}
+
+function _startLiveStatusTicker() {
+  if (_liveStatusTimer) return;
+  _liveStatusTimer = setInterval(function () {
+    if (!agentRunning || !_runStartTs) return;
+    var now = Date.now();
+    // 心跳丢失超过 60s 时用本地时钟兜底（WS 断流也能看出计时在走）
+    if (!_lastHeartbeatTs || now - _lastHeartbeatTs > 60000) {
+      updateLiveStatus((now - _runStartTs) / 1000, _lastApiCalls, _lastTool, _lastStalled);
+    }
+  }, 15000);
 }
 
 // 工具调用 → 友好的中文描述
@@ -2563,6 +2659,8 @@ function switchSession(sid) {
   currentBubble = null;       // 重置
   fullText = '';              // 重置
   reasoningText = '';         // 重置
+  hideLiveStatus();
+  _stopLiveStatusTicker();
   agentRunning = cached.running || false;
   _currentRunningSid = cached.runningSid || null;
 

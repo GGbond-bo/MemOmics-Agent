@@ -923,6 +923,21 @@ def _parse_judge_json(text: str) -> dict:
             continue
         if isinstance(o, dict) and o.get("verdict") not in (None, ""):
             return o
+    # B3(2026-08-14): 兜底解析 — 部分网关把思考链塞进 content，JSON 结构残缺，
+    # 但 verdict/confidence 字段本身完整。直接正则抓取，避免 L1→L2 无谓升级。
+    _m = re.search(r'"verdict"\s*:\s*"([a-zA-Z_]+)"', text)
+    if _m and _m.group(1).lower() in ("support", "modify", "need_more_info", "ok"):
+        _out = {"verdict": _m.group(1).lower()}
+        _c = re.search(r'"confidence"\s*:\s*"(high|medium|low)"', text, re.IGNORECASE)
+        if _c:
+            _out["confidence"] = _c.group(1).lower()
+        _r = re.search(r'"recommended_params"\s*:\s*(\{.*?\})\s*[,}\]]', text, re.DOTALL)
+        if _r:
+            try:
+                _out["recommended_params"] = json.loads(_r.group(1))
+            except Exception:
+                _out["recommended_params"] = {}
+        return _out
     raise ValueError("judge JSON 中无有效 verdict")
 
 

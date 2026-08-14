@@ -67,9 +67,38 @@ def _is_non_code_path(raw: str) -> bool:
     return False
 
 
+def _verify_excluded_prefixes() -> list[str]:
+    """Path prefixes excluded from verify-on-stop (e.g. runtime analysis artifacts).
+
+    Configured via ``HERMES_VERIFY_ON_STOP_EXCLUDE`` (``;`` or ``,`` separated,
+    forward/backslash tolerant). Matching is case-insensitive prefix matching on
+    the normalized path, so ``results/`` also excludes ``results/memomics-…/…``.
+    """
+    raw = os.environ.get("HERMES_VERIFY_ON_STOP_EXCLUDE", "") or ""
+    prefixes: list[str] = []
+    for part in raw.replace(",", ";").split(";"):
+        norm = part.strip().replace("\\", "/").strip("/").lower()
+        if norm:
+            prefixes.append(norm)
+    return prefixes
+
+
 def _filter_verifiable_paths(paths: Iterable[str]) -> list[str]:
-    """Drop documentation/prose paths; keep paths that could have verifiable behavior."""
-    return [p for p in paths if p and not _is_non_code_path(p)]
+    """Drop documentation/prose paths and configured exclude prefixes."""
+    _excl = _verify_excluded_prefixes()
+    kept: list[str] = []
+    for p in paths:
+        if not p:
+            continue
+        if _is_non_code_path(p):
+            continue
+        if _excl:
+            _np = str(p).replace("\\", "/").lower()
+            if any(_np.startswith(e + "/") or ("/" + e + "/") in _np or _np.endswith("/" + e)
+                   for e in _excl):
+                continue
+        kept.append(p)
+    return kept
 
 
 # Session identities (platform or source) that are NOT human conversational

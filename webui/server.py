@@ -36,6 +36,8 @@ except ModuleNotFoundError:
 MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERMES_HOME_DIR = os.path.join(MEMOMICS_DIR, "hermes_home")
 os.environ["HERMES_HOME"] = HERMES_HOME_DIR
+# 2026-08-14: verify-on-stop 排除运行时产物目录（results/ 下的分析脚本不触发 pytest 验证回路）
+os.environ.setdefault("HERMES_VERIFY_ON_STOP_EXCLUDE", "results/;.backups/;backups/;logs/")
 
 # === 启动时路径扫描：写入 .install_path 供 Agent 读取，避免硬编码路径 ===
 _install_path_file = os.path.join(HERMES_HOME_DIR, ".install_path")
@@ -1276,6 +1278,11 @@ async def _trigger_agent_turn(session, message):
         # 用很久前的最后事件时间判定"5分钟无事件"→ 误杀刚启动的唤醒回合
         # （实测：唤醒回合 4.9s 就被 interrupt "waiting for model response"）。
         _session_emit(session, {"type": "thinking", "content": "⏰ 系统唤醒中...", "session_id": session["id"]})
+        # 2026-08-14: 自检唤醒回合的运行基线（与主回合一致）
+        session["_turn_start_ts"] = time.time()
+        session["_api_calls"] = 0
+        session["_live_tool"] = ""
+        session["_live_tool_ts"] = time.time()
         loop = asyncio.get_event_loop()
         def _run():
             # P1-13(2026-08-13): 自检唤醒 executor 线程内设置会话上下文（kernel 会话隔离）
@@ -3157,7 +3164,7 @@ def _session_emit(session, msg_dict):
         if len(rlog) > 10:
             del rlog[:len(rlog) - 10]
     # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
-    if msg_type not in ("delta", "reasoning", "tool_gen"):
+    if msg_type not in ("delta", "reasoning", "tool_gen", "heartbeat"):
         progress_log = session.setdefault("progress_log", [])
         progress_log.append(msg_dict)
         # 上限 500 条，超出删最早的
@@ -5268,7 +5275,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                 g["tool_hist"].append((tool_name or "", _sig, now))
                 g["tool_hist"] = g["tool_hist"][-10:]
                 _hist = g["tool_hist"][-8:]
-                if len(_hist) >= 6:
+                if len(_hist) >= 4:
                     _pairs = 0
                     for _i in range(len(_hist)):
                         for _j in range(_i + 1, len(_hist)):
@@ -5285,7 +5292,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                                 if _t1 and _t2 and _t1 != _t2:
                                     continue
                                 _pairs += 1
-                    if _pairs >= 6:
+                    if _pairs >= 4:
                         triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
 
             elif event == "turn_end":
@@ -5294,22 +5301,22 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                     g["turn_texts"] = g["turn_texts"][-8:]
                 g["text_buf"] = ""
                 _texts = [t for t in g["turn_texts"] if len(t) >= 30]
-                if len(_texts) >= 6:
+                if len(_texts) >= 4:
                     _pairs = 0
                     for _i in range(len(_texts)):
                         for _j in range(_i + 1, len(_texts)):
                             if _SeqMatcher(None, _texts[_i], _texts[_j]).ratio() > 0.6:
                                 _pairs += 1
-                    if _pairs >= 6:
+                    if _pairs >= 4:
                         triggered = ("重复表述循环", "连续多轮输出几乎相同的监控话术")
 
             if not triggered:
                 return False
             _reason, _detail = triggered
             # 防抖：180s 内最多 1 次；单个用户回合累计 ≤3 次
-            if g["inject_count"] >= 3:
+            if g["inject_count"] >= 4:
                 return False
-            if now - g["last_inject_ts"] < 180:
+            if now - g["last_inject_ts"] < 90:
                 return False
             g["last_inject_ts"] = now
             g["inject_count"] += 1
@@ -7549,6 +7556,11 @@ async def ws_endpoint(ws: WebSocket):
                     pass
                 # 2026-08-14: 同步重置"说而不做"唤醒计数（每回合最多 2 次）
                 session.pop("_saying_wakeup_n", None)
+                # 2026-08-14: 运行状态基线（UI 心跳实时可见）
+                session["_turn_start_ts"] = time.time()
+                session["_api_calls"] = 0
+                session["_live_tool"] = ""
+                session["_live_tool_ts"] = time.time()
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
                     img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
@@ -7899,6 +7911,9 @@ async def ws_endpoint(ws: WebSocket):
                             _ensure_results_dir(_s)
                             _s["_dir_created"] = True
                         _tool_call_log.append({"tool": tool_name, "id": tool_id})
+                        _s["_api_calls"] = int(_s.get("_api_calls", 0)) + 1
+                        _s["_live_tool"] = tool_name
+                        _s["_live_tool_ts"] = time.time()
                         _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
 
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
@@ -8261,6 +8276,18 @@ async def ws_endpoint(ws: WebSocket):
                     while _heartbeat_active["on"]:
                         await asyncio.sleep(30)
                         try:
+                            # 2026-08-14: 运行状态心跳 — 用户实时可见"还在跑/跑了多久/在干什么"
+                            _turn_start = _s.get("_turn_start_ts") or time.time()
+                            _live_tool = _s.get("_live_tool", "") or ""
+                            _live_since = _s.get("_live_tool_ts") or 0
+                            _stalled = bool(_live_tool) and (time.time() - _live_since) > 180
+                            _session_emit(_s, {"type": "heartbeat",
+                                "elapsed": int(time.time() - _turn_start),
+                                "api_calls": int(_s.get("_api_calls", 0) or 0),
+                                "tool": _live_tool,
+                                "stalled": _stalled,
+                                "ts": datetime.now().strftime("%H:%M:%S"),
+                                "session_id": _s["id"]})
                             _results_dir = _s.get("results_dir", "")
                             _report_parts = []
 
@@ -8635,6 +8662,11 @@ async def ws_endpoint(ws: WebSocket):
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
 
+                        # 2026-08-14: 本轮回合运行基线（心跳计时起点）
+                        _session["_turn_start_ts"] = time.time()
+                        _session["_live_tool"] = ""
+                        _session["_live_tool_ts"] = time.time()
+                        
                         def _do_run():
                             # P1-13(2026-08-13): executor 线程内设置会话上下文 —
                             # threading.local 不跨线程，须在工具执行线程内设定，
@@ -8799,11 +8831,15 @@ async def ws_endpoint(ws: WebSocket):
                         _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
                                        for t in _tool_call_log) if _tool_call_log else False
                         _has_action_promise = False
-                        if result and not _has_exec and not _has_done_narr:
+                        if result and not _has_done_narr:
                             _tail = result[-300:]
                             for _w in _action_words:
                                 _i = _tail.find(_w)
                                 if _i >= 0:
+                                    # 条件式提议豁免："我可以/如需/如果…" 是征询而非承诺
+                                    _before = _tail[max(0, _i - 12):_i]
+                                    if any(_c in _before for _c in ("可以", "如需", "如果", "若要", "需要的话", "可随时", "随时", "能否", "要不要")):
+                                        continue
                                     _after = _tail[_i + len(_w):_i + len(_w) + 40]
                                     if any(_p in _after for _p in _prod_words):
                                         _has_action_promise = True
@@ -8812,9 +8848,9 @@ async def ws_endpoint(ws: WebSocket):
                                          os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
                         # 每用户回合最多紧急唤醒 2 次，防"做完了又不停"
                         _wake_n = _session.get("_saying_wakeup_n", 0)
-                        if _has_action_promise and not _has_exec and not _has_done_narr and _wake_n < 2:
+                        if _has_action_promise and not _has_done_narr and _wake_n < 2:
                             _session["_saying_wakeup_n"] = _wake_n + 1
-                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 立即触发自唤醒 (#{_wake_n + 1}/2)")
+                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec={_has_exec} → 立即触发自唤醒 (#{_wake_n + 1}/2)")
                             _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 检测到说而不做——系统将立即触发新一轮检查，强制调用工具",
                                 "session_id": _session["id"]})
