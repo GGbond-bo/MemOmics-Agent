@@ -395,8 +395,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .bubble code { background:rgba(0,0,0,0.06); padding:2px 5px; border-radius:3px; font-family:Consolas,monospace; font-size:13px; }
 .bubble pre { background:var(--code-bg); color:var(--code-fg); padding:12px; border-radius:6px; overflow-x:auto; margin:8px 0; }
 .bubble pre code { background:transparent; color:inherit; padding:0; }
-.bubble table { border-collapse:collapse; margin:8px 0; width:100%; }
-.bubble th,.bubble td { border:1px solid var(--border); padding:6px 10px; font-size:13px; }
+.bubble table { border-collapse:collapse; margin:8px 0; width:100%; min-width:300px; }
+.bubble .table-wrap { overflow-x:auto; max-width:100%; margin:8px 0; border:1px solid var(--border); border-radius:6px; background:transparent; }
+.bubble .table-wrap table { margin:0; border:none; }
+.bubble th,.bubble td { border:1px solid var(--border); padding:6px 10px; font-size:13px; text-align:left; }
+.bubble thead th { background:rgba(74,144,217,0.10); font-weight:600; white-space:nowrap; }
+.bubble td.num,.bubble th.num { text-align:right; font-variant-numeric:tabular-nums; font-family:Consolas,"Courier New",monospace; white-space:nowrap; }
+.bubble td.ctr,.bubble th.ctr { text-align:center; }
+.bubble tbody tr:nth-child(even) { background:rgba(0,0,0,0.03); }
 .bubble img { max-width:100%; border-radius:6px; margin:8px 0; }
 .bubble strong { font-weight:600; }
 /* === 首次配置弹窗 === */

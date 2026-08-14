@@ -119,3 +119,6 @@ memomics/hermes-agent/
 memomics/hermes_home/
 memomics/memomics/
 memomics/webui/
+
+# 会话锚点运行时文件（每会话一条，跨压缩持久）
+hermes_home/session_anchors/

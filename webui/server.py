@@ -1294,7 +1294,7 @@ async def _trigger_agent_turn(session, message):
             # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
             # 不带全量历史（67K input/次 → ~4K）
             _wake_history = _build_self_check_wake_history(session)
-            return agent.run_conversation(message, conversation_history=_wake_history or None, task_id=session["id"])
+            return agent.run_conversation(_inject_anchors(session, message), conversation_history=_wake_history or None, task_id=session["id"])
         result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
         session.setdefault("messages", []).append(
@@ -3625,6 +3625,43 @@ IMPORTANT:
 - The system will NOT time out your analysis steps. Only research_plan has a time limit.
 - Use the `todo` tool to update status in real-time — the user sees progress on the WebUI.
 """
+
+
+def _inject_anchors(session, text):
+    """每轮注入会话锚点摘要（跨压缩持久，2026-08-14）。失败静默降级为原文。"""
+    try:
+        from memomics.bio_tools import session_memory as _sm
+        _block = _sm.build_digest(session.get("id", ""), max_items=12, max_chars=700)
+        if _block:
+            return _block + "\n\n" + (text or "")
+    except Exception:
+        pass
+    return text
+
+
+def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
+    """系统级自动锚定：用户消息中的路径 + 本轮新产物文件（2026-08-14）。"""
+    try:
+        from memomics.bio_tools import session_memory as _sm
+        _sid = session.get("id", "")
+        if user_text:
+            _sm.auto_anchor_user_mentions(_sid, user_text)
+        if tool_name in ("terminal", "execute_r", "execute_python", "write_file", "scan_data"):
+            _rd = session.get("results_dir", "") or ""
+            _since = session.get("_turn_start_ts") or (time.time() - 120)
+            if _rd:
+                # 只读观察命令不扫产物（避免每 30s 的监控命令空转扫盘）
+                if tool_name == "terminal":
+                    _cmd = str((args or {}).get("command", "")) if isinstance(args, dict) else ""
+                    try:
+                        from webui import enforcement as _enfx
+                        if _cmd and _enfx._is_readonly_terminal(_cmd):
+                            return
+                    except Exception:
+                        pass
+                _sm.auto_anchor_recent_files(_sid, _rd, _since, max_files=6)
+    except Exception:
+        pass
 
 
 def _create_agent(model_config=None, session_id=None, session=None):
@@ -7576,6 +7613,9 @@ async def ws_endpoint(ws: WebSocket):
                 _es = _enf2.get_enforcement(session["id"])
                 _es.analysis_level = _level
                 _es.results_dir = session.get("results_dir", "")
+                # 2026-08-14: 会话锚点 — 用户点名的路径自动标记 + 注入锚点摘要
+                _auto_anchor_turn(session, user_text=user_text)
+                _run_text = _inject_anchors(session, user_text)
 
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
@@ -8249,6 +8289,8 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
                     tool_complete_cb(tool_id, tool_name, args, result)
+                    # 2026-08-14: 自动锚定本轮新产物文件（会话锚点）
+                    _auto_anchor_turn(_s, tool_name=tool_name, args=args)
                 agent.tool_start_callback = _merged_tool_start
                 agent.tool_complete_callback = _merged_tool_complete
                 agent.status_callback = status_cb
@@ -8677,7 +8719,7 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 pass
                             result = _agent.run_conversation(
-                                user_text,
+                                _run_text,
                                 conversation_history=conversation_history if conversation_history else None,
                                 task_id=_session["id"],
                             )
