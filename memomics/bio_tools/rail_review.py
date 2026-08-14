@@ -219,6 +219,14 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
         # 错误处理检查
         if 'tryCatch' not in code_executed and 'try:' not in code_executed and 'stopifnot' not in code_executed:
             warnings.append("No error handling in code (tryCatch/try)")
+        # 2026-08-14: 持久 kernel 复用提醒——非加载类步骤重复 readRDS 是浪费
+        # （同会话 kernel 保留 obj，900MB 级对象每步重读极慢）
+        if 'readRDS(' in code_executed and not _is_report_step(module_id, method_name):
+            warnings.append(
+                "检测到代码中 readRDS 重新加载数据。execute_r 持久 kernel 在同会话内保留变量（obj）"
+                "和已加载的包，后续步骤应直接复用 obj，无需每步 readRDS（大对象重读极慢）。"
+                "仅当报 object not found（kernel 超时/重启）时才重新加载。"
+            )
 
         # === 包检测：扫描代码中实际使用的包 vs skill 声明的 required_packages ===
         code_packages = _extract_packages(code_executed)

@@ -103,6 +103,12 @@ results/<模块>/<方法>/
 | 脚本成功+结果通过 rail_review | record_success | ✅ 分析步骤完成，图生成，审查通过 | ❌ 闲聊/方法咨询/非分析任务 |
 | 修复后脚本验证稳定有效 | update_script | ✅ 同一错误修复了，重跑成功 | ❌ 只改参数没改脚本；未验证就更新 |
 
+### 规则8: execute_r 持久 kernel 复用（防每步重读重存大对象）
+- execute_r 在同一会话复用同一个 R worker：变量（如 obj）和已加载的包**跨调用保留**
+- ✅ 第 1 步加载后，后续步骤直接复用 obj，禁止每步 readRDS 重新加载
+- ❌ 禁止每步 saveRDS 写中间副本（900MB 级对象反复落盘极慢）
+- ⚠️ 仅当报 `object 'obj' not found`（kernel 超时/重启）时才重新 readRDS
+
 ---
 
 # scRNA-seq聚类分析
@@ -179,6 +185,13 @@ results/<模块>/<方法>/
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | skeletal_muscle | aging | 2026-08-14 | phase3_5_dimred_cluster_annotation.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | qc_validation.R + phase3_5_dimred_cluster_annotation.R | - | - |  |
+| - | - | - | 2026-08-14 | env_check | - | - |  |
+| - | - | - | 2026-08-14 | dimred_cluster_check.R | - | - |  |
+| - | - | - | 2026-08-14 | step5_marker_annotation.R | - | - |  |
+| - | - | - | 2026-08-14 | step5b_marker_stats_validation.R | - | - |  |
+| - | - | - | 2026-08-14 | verify_outputs.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
