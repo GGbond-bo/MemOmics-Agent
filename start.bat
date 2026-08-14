@@ -1,21 +1,20 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 set "PORT=%~1"
 if "%PORT%"=="" set "PORT=8899"
 
 echo ============================================================
-echo         MemOmics-Agent v2.0
+echo         MemOmics-Agent v2.0  —  解压即用一键启动
 echo ============================================================
 echo.
 
-REM --- 2026-08-08: 端口占用检测（已有实例运行则不重复启动/不重复开浏览器）---
+REM --- 端口占用检测（已有实例运行则不重复启动/不重复开浏览器）---
 netstat -ano | findstr /r /c:":%PORT% .*LISTENING" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [INFO] MemOmics is already running at http://127.0.0.1:%PORT%
-    echo        Use the already-open WebUI page. No new browser tab will be opened.
-    echo        To restart: close the old MemOmics window first, then run this again.
+if not errorlevel 1 (
+    echo [INFO] MemOmics 已在运行 http://127.0.0.1:%PORT%
+    echo        请使用已打开的页面，不重复启动。
     echo.
     pause
     exit /b 0
@@ -25,60 +24,67 @@ set "HERMES_HOME=%~dp0hermes_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
 
-REM --- 首次安装检测：config.yaml 不存在时从模板生成（升级保留用户已有配置）---
+REM --- 首次安装：config.yaml 不存在时从模板生成（升级保留用户配置）---
 if not exist "%HERMES_HOME%\config.yaml" (
     if exist "%HERMES_HOME%\config.yaml.example" (
         copy /y "%HERMES_HOME%\config.yaml.example" "%HERMES_HOME%\config.yaml" >nul
-        echo [INFO] 已生成默认 config.yaml（首次安装）。API Key 请在 WebUI 设置页填写。
+        echo [INFO] 已生成默认 config.yaml。API Key 请在 WebUI 设置页填写。
     )
 )
-REM P1-A: 任务完成闸门（防老任务被自动重启）——默认开启，出问题可删此行回退
 set "MEMOMICS_RUN_GATE=1"
-REM 默认仅监听本机（127.0.0.1）。如需局域网访问：set "MEMOMICS_HOST=0.0.0.0"
 
-REM --- Find Python ---
+REM ============================================================
+REM  1. 定位 Python（.venv 优先；没有就找系统 Python 自动创建）
+REM ============================================================
 set "PYTHON="
 
-REM Check .venv first
 if exist ".venv\Scripts\python.exe" (
     set "PYTHON=%~dp0.venv\Scripts\python.exe"
     goto :check_deps
 )
 
-REM Check system python3 / python
-python3 --version >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "delims=" %%p in ('python3 -c "import sys; print(sys.executable)"') do set "PYTHON=%%p"
-    goto :check_deps
-)
-
-python --version >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "delims=" %%p in ('python -c "import sys; print(sys.executable)"') do set "PYTHON=%%p"
-    goto :check_deps
-)
-
-REM Check explicit paths
-for %%d in (
-    "%LOCALAPPDATA%\Programs\Python\Python312"
-    "%LOCALAPPDATA%\Programs\Python\Python311"
-    "C:\Program Files\Python312"
-    "C:\Python312"
-) do (
-    if exist "%%~d\python.exe" (
-        set "PYTHON=%%~d\python.exe"
-        goto :check_deps
+set "BASE_PYTHON="
+for %%c in (python3.12 python3.11 python3.13 python3 python) do (
+    where %%c >nul 2>&1
+    if not errorlevel 1 (
+        for /f "delims=" %%p in ('where %%c 2^>nul') do (
+            if not defined BASE_PYTHON set "BASE_PYTHON=%%p"
+        )
     )
 )
+if not defined BASE_PYTHON (
+    for %%d in (
+        "%LOCALAPPDATA%\Programs\Python\Python312"
+        "%LOCALAPPDATA%\Programs\Python\Python311"
+        "%LOCALAPPDATA%\Programs\Python\Python313"
+        "C:\Program Files\Python312"
+        "C:\Python312"
+    ) do (
+        if not defined BASE_PYTHON if exist "%%~d\python.exe" set "BASE_PYTHON=%%~d\python.exe"
+    )
+)
+if not defined BASE_PYTHON (
+    echo [ERROR] 未找到 Python 3.11-3.13。
+    echo         方案1: 运行 install.bat（自动装 Miniconda）
+    echo         方案2: 手动安装 https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
 
-echo [ERROR] Python 3.11-3.13 not found.
-pause
-exit /b 1
+echo [SETUP] 首次运行：用 %BASE_PYTHON% 创建 .venv ...
+"%BASE_PYTHON%" -m venv ".venv"
+if errorlevel 1 (
+    echo [ERROR] 创建 .venv 失败
+    pause
+    exit /b 1
+)
+set "PYTHON=%~dp0.venv\Scripts\python.exe"
+echo [OK] .venv 创建完成
 
 :check_deps
 echo [CHECK] Python: "%PYTHON%"
 
-REM --- 环境校准: validate_env 校验/修复路径 + R 默认版本对齐 ---
+REM --- 环境校准 + R 检测 ---
 "%PYTHON%" "%~dp0scripts\validate_env.py" >nul 2>&1
 "%PYTHON%" "%~dp0scripts\validate_env.py" --r-bin > "%TEMP%\memomics_rbin.txt" 2>nul
 for /f "usebackq delims=" %%r in ("%TEMP%\memomics_rbin.txt") do set "R_BIN=%%r"
@@ -86,38 +92,65 @@ del "%TEMP%\memomics_rbin.txt" >nul 2>&1
 if exist "%R_BIN%\Rscript.exe" (
     set "PATH=%R_BIN%;%PATH%"
     echo [CHECK] R: %R_BIN%\Rscript.exe
-)
-"%PYTHON%" -c "import fastapi" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [OK] Dependencies ready
-    goto :start_server
+) else (
+    echo [INFO] R 未检测到（可选；R 分析如 Seurat 需要）
 )
 
-echo [INSTALL] Installing dependencies (first time, 3-8 min)...
+REM ============================================================
+REM  2. 依赖安装（两类独立标记，装成功一次就不再装）
+REM ============================================================
+set "DEPS_MARK=%~dp0.venv_deps_ok.txt"
+set "VISION_MARK=%~dp0.venv_vision_ok.txt"
+
+if exist "!DEPS_MARK!" goto :vision_install
+echo [INSTALL] 首次安装核心依赖（3-8 分钟，仅此一次）...
 "%PYTHON%" -m pip install --upgrade pip --quiet 2>nul
-"%PYTHON%" -m pip install -r requirements.txt
-if %errorlevel% neq 0 (
-    echo [WARN] Some packages failed to install. App may start with limited features.
+"%PYTHON%" -m pip install -r "%~dp0requirements.txt"
+if errorlevel 1 (
+    echo [WARN] 部分核心包安装失败（下次启动会自动重试）
+) else (
+    echo installed > "!DEPS_MARK!"
+    echo [OK] 核心依赖安装完成
 )
 
-:start_server
+:vision_install
+if exist "!VISION_MARK!" goto :deps_done
+echo [INSTALL] 安装读图组件（OCR 看图，约 200MB，仅此一次）...
+"%PYTHON%" -m pip install -r "%~dp0requirements-vision.txt"
+if errorlevel 1 (
+    echo [INFO] 读图组件未安装成功（可选，不影响其他功能；下次自动重试）
+) else (
+    echo installed > "!VISION_MARK!"
+    echo [OK] 读图组件安装完成
+)
+
+:deps_done
+echo [OK] 依赖就绪
+
+REM ============================================================
+REM  3. 启动（前台运行，关窗即停）
+REM ============================================================
+if "%MEMOMICS_SKIP_RUN%"=="1" (
+    echo [TEST] MEMOMICS_SKIP_RUN=1 — 环境就绪，跳过启动。
+    pause
+    exit /b 0
+)
+
 echo.
 echo [START] http://127.0.0.1:%PORT%
+echo         3 秒后自动打开浏览器（如未打开请手动访问）
+echo         关闭本窗口 = 停止 MemOmics
 echo.
 
-REM Launch CellBender monitor daemon (if present)
+REM 延迟自动开浏览器（不阻塞启动）
+start "" cmd /c "timeout /t 3 /nobreak >nul & start http://127.0.0.1:%PORT%"
+
+REM CellBender 心跳监控（仅当本机存在时启用，其他机器自动跳过）
 if exist "F:\CellBender_v2\heartbeat_v2.py" (
-    echo [MONITOR] Starting CellBender heartbeat monitor...
-    start "CellBender-Heartbeat" /MIN python "F:\CellBender_v2\heartbeat_v2.py" --task "CellBender_26samples" --output-dir "F:\CellBender_v2\cellbender_output" --seurat-dir "F:\CellBender_v2\seurat_h5" --interval 120 --output "F:\CellBender_v2\monitor_v2.log"
-)
-if exist "F:\CellBender_v2\error_scanner.py" (
-    echo [MONITOR] Starting CellBender error scanner...
-    start "CellBender-ErrorScanner" /MIN python "F:\CellBender_v2\error_scanner.py"
+    echo [MONITOR] CellBender heartbeat...
+    start "CellBender-Heartbeat" /MIN "%PYTHON%" "F:\CellBender_v2\heartbeat_v2.py" --task "CellBender_26samples" --output-dir "F:\CellBender_v2\cellbender_output" --seurat-dir "F:\CellBender_v2\seurat_h5" --interval 120 --output "F:\CellBender_v2\monitor_v2.log"
 )
 
-REM 前台运行 server（2026-08-08 单窗口模式）。
-REM 不再自动打开浏览器（用户手动输入地址，避免重复标签页）。
-REM 启动后请在浏览器访问 http://127.0.0.1:%PORT%
 "%PYTHON%" webui\server.py
 echo.
 echo Exit code: %errorlevel%

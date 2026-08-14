@@ -217,6 +217,8 @@ if [ "$NEED_INSTALL" = true ]; then
     echo "📦 Installing dependencies (first run, may take a few minutes)..."
     pip install --upgrade pip -q 2>/dev/null || true
     pip install -r requirements.txt 2>&1 | tail -5
+    echo "👁️ Installing vision components (OCR 看图, 可选)..."
+    pip install -r requirements-vision.txt 2>&1 | tail -3 || echo "⚠️  读图组件安装失败（可选，不影响主程序）"
     echo "✅ Dependencies installed."
     echo ""
 else
@@ -289,5 +291,10 @@ echo "🚀 Starting MemOmics WebUI on port $PORT..."
 echo "   URL: http://localhost:$PORT"
 echo "   Press Ctrl+C to stop"
 echo ""
+
+if [ "${MEMOMICS_SKIP_RUN:-}" = "1" ]; then
+    echo "[TEST] MEMOMICS_SKIP_RUN=1 — environment ready, skipping server start."
+    exit 0
+fi
 
 python webui/server.py

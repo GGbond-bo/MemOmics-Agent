@@ -86,6 +86,12 @@ if errorlevel 1 (
     echo [!] Some packages failed to install, but core may still work
 )
 
+echo [>>] Installing vision components (OCR 看图, optional)...
+"%~dp0.venv\Scripts\pip.exe" install -r "%~dp0requirements-vision.txt" 2>nul
+if errorlevel 1 (
+    echo [!] Vision components failed (optional, app still works)
+)
+
 echo [OK] Dependencies installed
 
 REM === STEP 4: Summary ===

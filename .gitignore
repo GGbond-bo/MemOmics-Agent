@@ -122,3 +122,7 @@ memomics/webui/
 
 # 会话锚点运行时文件（每会话一条，跨压缩持久）
 hermes_home/session_anchors/
+
+# start.bat 依赖安装标记（装过一次就跳过）
+.venv_deps_ok.txt
+.venv_vision_ok.txt
