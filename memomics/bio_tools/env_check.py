@@ -58,18 +58,18 @@ def _find_r_executable():
                 return cached
         except Exception:
             pass
-    # 搜索常见路径
-    candidates = [
-        r"C:\Program Files\R\R-4.3.2\bin\Rscript.exe",
-        r"C:\Program Files\R\R-4.3.3\bin\Rscript.exe",
-        r"C:\Program Files\R\R-4.4\bin\Rscript.exe",
-        r"C:\R\R-4.3.2\bin\Rscript.exe",
-    ]
-    for p in candidates:
-        if os.path.isfile(p):
-            cache.setdefault("paths", {})["R"] = p
+    # 2026-08-14 修复：优先读 environment.json 的 paths.r.default（主力 4.5.3），
+    # 旧硬编码 4.3.x/4.4 路径全是死路径，只能靠 PATH 兜底（碰巧=4.5.3）。
+    try:
+        _app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        _env = json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
+        _r_def = _env.get("paths", {}).get("r", {}).get("default", "")
+        if _r_def and os.path.isfile(_r_def):
+            cache.setdefault("paths", {})["R"] = _r_def
             _save_env_cache()
-            return p
+            return _r_def
+    except Exception:
+        pass
     # 回退 PATH
     return "Rscript"
 
@@ -187,10 +187,12 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("{pkg}", ask=FALSE, update=FALSE)
 '''
     else:
-        r_code = f'install.packages("{pkg}", repos="https://cloud.r-project.org")'
+        # 2026-08-14: 4.5.3 无 RTools45，编译源码包会失败 → 强制 type="win.binary"
+        r_code = f'install.packages("{pkg}", repos="https://cloud.r-project.org", type="win.binary")'
     try:
+        _r_bin = _find_r_executable()
         subprocess.run(
-            ["Rscript", "-e", r_code],
+            [_r_bin, "-e", r_code],
             capture_output=True, text=True, timeout=600,
             encoding="utf-8", errors="replace"
         )
