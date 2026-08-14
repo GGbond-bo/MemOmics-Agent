@@ -87,13 +87,21 @@ library(future); plan("sequential")
 obj@misc$MF_wgcna$wgcna_net$TOMFiles <- "E:/.../TOM_official/MF_wgcna_TOM.rda"
 ```
 
+### 8. 抓 hdWGCNA 源码/文档：默认分支是 dev，不是 main
+- 症状：`raw.githubusercontent.com/smorabit/hdWGCNA/main/...` 或 jsdelivr `@main` 全部 404 / "Couldn't find the requested file"
+- 根因：hdWGCNA 仓库默认分支为 **dev**（api.github.com/repos/smorabit/hdWGCNA → default_branch=dev）
+- 修复：`https://raw.githubusercontent.com/smorabit/hdWGCNA/dev/R/SoftPowers.R`、`.../dev/vignettes/basic_tutorial.Rmd`（vignettes 清单可用 `api.github.com/repos/smorabit/hdWGCNA/contents/vignettes` 列）
+- 抓取兜底路径（smorabit.github.io / UCLA 站点 curl 常 SSL reset exit 35）：GitHub API → raw.githubusercontent → cdn.jsdelivr.net → web.archive.org（python urllib 带 ssl 宽松 ctx 也行）
+- 核实参数默认值以**已装包为准**：`Rscript -e 'loadNamespace("hdWGCNA"); print(args(asNamespace("hdWGCNA")$SetDatExpr))'`——函数签名即文档，比查网页权威
+
 ## 关键教训：基因子集 ≠ 网络平坦
 - ⚠️ 用 top3000 高变基因子集跑 WGCNA 会得到假平坦网络（R²=0.72@power1、单一 turquoise 模块）→ 误判"数据不适合 WGCNA"
 - ✅ 改用**全部 WGCNA 基因（SetupForWGCNA fraction 0.05 → 10176）**后：power=10 R²=0.982，拆出 11 模块
 - 教训：WGCNA 必须用完整基因集（或至少 >5000 基因），子集实验只用于参数预探
+- ⚠️ 拆模块失败排查顺序：先换完整基因集重跑，再下"低异质性/均质"结论——NMF 可作互补验证（见 `references/limitations-and-literature.md`），但不可作为跳过完整基因集尝试的理由
 
 ## 环境备注（本机）
-- R 4.4.2 在 `C:/Users/23136/AppData/Local/R/R-4.4.2/`（execute_r 和 PATH 的 Rscript 用这个；Program Files 下只有 4.5.3/4.6.1）
+- R 4.4.2 在 `C:/Users/23136/AppData/Local/R/R-4.4.2/`（execute_r 和 PATH 的 Rscript 用这个；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `C:/Users/23136/AppData/Local/R/R-4.4.2/bin/Rscript.exe` 跑参数核实/诊断脚本）
 - hdWGCNA 0.4.12 + WGCNA 1.74 + enrichR 3.4（.onAttach 联网不可达）已装进 AppData 库
 - 网络：GitHub raw/codeload 有时可达，github.com 页面 curl 常 reset——R 包安装优先 pak 或已缓存
 
@@ -104,3 +112,5 @@ obj@misc$MF_wgcna$wgcna_net$TOMFiles <- "E:/.../TOM_official/MF_wgcna_TOM.rda"
 ## References
 - 官方 tutorial: https://smorabit.github.io/hdWGCNA/articles/basic_tutorial.html
 - hdWGCNA GitHub: https://github.com/smorabit/hdWGCNA
+- `references/limitations-and-literature.md` — WGCNA/hdWGCNA 局限性文献核实版（19 条已核实 PMID/DOI：dropout 伪共表达、伪重复、共表达≠因果、metacell 聚合局限、NMF 适用边界判据、Zsummary 假阳性控制阈值、关键文献速查；2026-08-14 调研产出）
+- `references/wgcna-vs-hdwgcna-parameters.md` — WGCNA vs hdWGCNA 官方参数默认值全量核实表（v1.74/0.4.12 已装包签名 + CRAN 手册 + 官方 vignettes/论文/FAQ）：含误区纠正（mergeCutHeight 0.15 非 0.25、minModuleSize min(20,ncol/2) 非 30、networkType unsigned vs signed、WGCNA 无 pickSoftThresholdFromBootstrap、metacell 数量无字面 >500 声明）、全参数对比表、适用场景速判、来源清单

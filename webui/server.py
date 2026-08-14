@@ -389,10 +389,12 @@ def _restore_session_model_config(sid, base_cfg):
             import json as _json
             parsed = _json.loads(row[0])
             if isinstance(parsed, dict) and parsed.get("model") and parsed.get("base_url"):
-                return dict(parsed)
+                # 该会话做过会话级切换 → locked=True，全局切换不再覆盖它
+                return dict(parsed), True
     except Exception:
         pass
-    return dict(base_cfg)
+    # 从未做过会话级切换 → 跟随全局
+    return dict(base_cfg), False
 
 
 def _build_session_stats(session_id, agent=None):
@@ -2183,6 +2185,34 @@ def _detect_domain_from_text(text: str) -> str:
     return best_domain
 
 
+# === 自我介绍文案（WebUI 与微信路径共用，绕过 LLM）===
+_SELF_INTRO_ZH = (
+    "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
+    "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
+    "## 核心能力\n\n"
+    "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
+    "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
+    "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
+    "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
+    "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
+    "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
+    "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
+    "有什么需要帮忙的，直接告诉我！"
+)
+_SELF_INTRO_EN = (
+    "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
+    "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
+    "## Core Capabilities\n\n"
+    "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
+    "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
+    "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
+    "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
+    "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
+    "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
+    "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
+    "What can I help you with? Just let me know!"
+)
+
 # === 图路由：意图分类 + 技能触发注入 ===
 # 五级意图：self_intro > chat > research_plan > direct_exec > analysis
 # SOUL.md 三级操作级别（轻量/统计/分析级）在 agent 内部独立判断，意图不覆盖
@@ -3000,6 +3030,7 @@ def _create_session(title="新会话"):
         "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "messages": [],
         "model_config": dict(_current_model),
+        "model_locked": False,  # 未做会话级切换 → 跟随全局模型
         "results_dir": os.path.join(RESULTS_DIR, sid),
         "todos": [],
         "bg_running": False,
@@ -3124,6 +3155,7 @@ def _restore_single_session(sid):
                 active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M:%S") if ts_active else created_str
             except Exception:
                 active_str = created_str
+            _mc, _mc_locked = _restore_session_model_config(sid, _current_model)
             session = {
                 "id": sid,
                 "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
@@ -3131,7 +3163,7 @@ def _restore_single_session(sid):
                 "created": created_str,
                 "last_active": active_str,
                 "messages": messages,
-                "model_config": _restore_session_model_config(sid, _current_model),
+                "model_config": _mc,
                 "results_dir": results_dir,
                 "todos": [],
                 "bg_running": False,
@@ -3147,6 +3179,8 @@ def _restore_single_session(sid):
                 "loop_ref": None,
             }
             _sessions[sid] = session
+            if _mc_locked:
+                session["model_locked"] = True  # 重启后保持会话级锁定，全局切换不覆盖
             print(f"[MemOmics] 按需恢复会话: {sid}", flush=True)
             return session
     except Exception as e:
@@ -3211,13 +3245,14 @@ def _restore_one_persisted_session(db, s):
         active_str = datetime.fromtimestamp(ts_active).strftime("%Y-%m-%d %H:%M:%S") if ts_active else created_str
     except Exception:
         active_str = created_str
+    _mc, _mc_locked = _restore_session_model_config(sid, _current_model)
     session = {
         "id": sid,
         "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
         "created": created_str,
         "last_active": active_str,
         "messages": messages,
-        "model_config": _restore_session_model_config(sid, _current_model),
+        "model_config": _mc,
         "results_dir": results_dir,
         "todos": [],
         "bg_running": False,
@@ -3231,6 +3266,8 @@ def _restore_one_persisted_session(db, s):
         "loop_ref": None,
     }
     _sessions[sid] = session
+    if _mc_locked:
+        session["model_locked"] = True  # 重启后保持会话级锁定，全局切换不覆盖
     return True
 
 
@@ -3425,7 +3462,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         _enf._title_summary_hook = _schedule_title_summary
     except Exception:
         pass
-    cfg = model_config or _current_model
+    cfg = model_config or (session or {}).get("model_config") or _current_model
     # 2026-08-08：provider 名按 base_url 智能映射。MemOmics 统一存 provider='openai'，
     # 但 Hermes 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
     # TLS 间歇性挂起需要短超时（60s）让外层 loop 重试，不能吃 openai 的 900s。
@@ -4062,6 +4099,8 @@ async def switch_model(payload: dict):
                 pass
             s["agent"] = None
         # 持久化到 Hermes state.db（重启后自动恢复会话级模型）
+        # 会话级锁定：此后全局模型切换不再覆盖本会话（互不影响）
+        s["model_locked"] = True
         try:
             db = _get_session_db()
             if db:
@@ -4082,8 +4121,11 @@ async def switch_model(payload: dict):
     _current_model["api_key"] = payload.get("api_key", _current_model["api_key"])
     _current_model["base_url"] = payload.get("base_url", _current_model["base_url"])
     _current_model["provider"] = payload.get("provider", _current_model["provider"])
-    # 同步到所有已存在 session 的 model_config (修复: 旧 session 用旧配置的 bug)
+    # 同步到所有跟随全局的 session（修复: 旧 session 用旧配置的 bug）
+    # 做过会话级切换（model_locked）的会话保持自己的模型，互不影响
     for s in _sessions.values():
+        if s.get("model_locked"):
+            continue
         s["model_config"] = dict(_current_model)
         # 清除缓存的 agent — 下次发消息时用新模型重建
         if s.get("agent"):
@@ -4252,6 +4294,17 @@ async def save_provider_key(pid: str, payload: dict):
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
     _save_provider_keys()
     _sync_custom_providers_to_hermes(pid)
+    # 联动：全局模型正在用这个 provider 时，同步新 key——
+    # 否则"设置页存 key + 设全局模型"的顺序反了就会用旧 key（微信/新会话都会中招）
+    if _current_model.get("provider") == pid or _current_model.get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
+        _current_model["api_key"] = key
+        _save_model_config()
+        for s in _sessions.values():
+            if s.get("model_locked"):
+                continue  # 会话级锁定的配置不联动
+            if s.get("model_config") and s["model_config"].get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
+                s["model_config"]["api_key"] = key
+        print(f"[MemOmics] provider {pid} 的 key 已同步到全局模型配置", flush=True)
     return {"ok": True, "provider": pid, "has_key": True}
 
 
@@ -5326,6 +5379,39 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             await ws_cli.send_text(session_update_msg)
         except Exception:
             pass
+
+    # === 自我介绍快速回复（绕过 agent LLM，与 WebUI 路径对齐）===
+    # 2026-08-14: 微信路径此前缺 self_intro 快回 → 模型限流时"你是谁"永远无回复
+    try:
+        _wx_intent, _wx_conf, _wx_extra = _classify_intent(text)
+    except Exception:
+        _wx_intent = "chat"
+    if _wx_intent == "self_intro":
+        _intro = _SELF_INTRO_EN if session.get("lang") == "en" else _SELF_INTRO_ZH
+        session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin-agent"})
+        if len(session["messages"]) > 200:
+            session["messages"] = session["messages"][-200:]
+        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session["running_agent"] = False
+        session["running_task"] = None
+        _persist_session_message(session, "assistant", _intro)
+        _session_emit(session, {"type": "delta", "content": _intro, "session_id": sid})
+        _session_emit(session, {"type": "complete", "content": _intro, "session_id": sid})
+        _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+        wx_msg = {"id": str(int(time.time() * 1000)), "sender_id": _weixin_state["account_id"], "sender_name": "Agent", "text": _intro, "context_token": "", "ts": int(time.time()), "direction": "out"}
+        _append_weixin_msg(wx_msg)
+        for ws_client in list(_WEIXIN_WS_CLIENTS):
+            try:
+                await ws_client.send_text(json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False))
+            except Exception:
+                pass
+        if _weixin_adapter:
+            try:
+                send_result = await _send_weixin_important(_intro, chat_id_override=sender_id)
+                print(f"[MemOmics] 微信Agent回复(自介快回): success={send_result}", flush=True)
+            except Exception as e:
+                print(f"[MemOmics] 微信自介回复发送失败: {e}", flush=True)
+        return
 
     try:
         # 分析级别检测
@@ -8492,17 +8578,44 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(_session, {"type": "complete", "content": _chat_content, "session_id": _session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
-                        # 2026-08-14 收紧：只认明确承诺句式（"现在运行/即将执行/开始跑"），
-                        # 单字词（看/查/读）误伤普通解释性回复 → 去掉；含结果性措辞的
-                        # 叙述（已完成/已生成/以上是）视为已交付，不再触发。
+                        # 2026-08-14 v3 三重 AND 判定：
+                        #   (1) 承诺短语命中（扩充词表，覆盖"先读回/把结果交付/我该查的是"等真实话术）
+                        #   (2) 承诺短语后 40 字符内出现产物词（结果/产物/文件/CSV/日志等）——防误伤
+                        #       纯解释性回复（"我先看看……"后面无产物词不触发）
+                        #   (3) 承诺短语位于回复末尾 300 字符内——开头提到承诺但正文已交付的不触发
+                        # 含结果性措辞的叙述（已完成/已生成/以上是/结果如下）视为已交付，不触发。
                         _action_words = ["现在运行", "即将执行", "马上执行", "开始运行", "开始执行",
-                                         "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本"]
+                                         "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本",
+                                         "先读回", "先读取", "先读一下", "先查", "先查一下",
+                                         "先看一下", "先跑", "先跑一下", "先执行", "先获取",
+                                         "先运行", "先打开", "先调用",
+                                         "我现在去", "我现在就", "这就去", "这就把", "这就来",
+                                         "接下来我会", "接下来就", "接下来把",
+                                         "马上把", "立刻把", "现在把",
+                                         "把结果读出来", "把结果给你", "把结果交付", "把结果贴",
+                                         "把结果整理", "把结果汇总", "把结果发", "把结果返回",
+                                         "我该查的是", "我该做的是", "我该读的是", "我该跑的是",
+                                         "我该调用的是", "我来查", "我来读", "我去读", "我去查",
+                                         "我去看", "我去跑", "我去把", "先把"]
                         _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
-                                       "输出如下", "见上图", "见下图"]
-                        _has_action_promise = any(w in result.lower() for w in _action_words) if result else False
+                                       "输出如下", "见上图", "见下图", "已读取", "已查到", "已确认",
+                                       "结果已"]
+                        _prod_words = ["结果", "产物", "输出", "文件", "CSV", "csv", "日志", "汇总",
+                                       "表格", "报告", "数据", "脚本", "terminal", "h5ad", "rds",
+                                       "png", "jpg", "pdf", "xlsx", "tsv", "txt"]
                         _has_done_narr = any(w in result for w in _done_words) if result else False
                         _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
                                        for t in _tool_call_log) if _tool_call_log else False
+                        _has_action_promise = False
+                        if result and not _has_exec and not _has_done_narr:
+                            _tail = result[-300:]
+                            for _w in _action_words:
+                                _i = _tail.find(_w)
+                                if _i >= 0:
+                                    _after = _tail[_i + len(_w):_i + len(_w) + 40]
+                                    if any(_p in _after for _p in _prod_words):
+                                        _has_action_promise = True
+                                        break
                         _has_plan = bool(_session.get("plan_path") or
                                          os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
                         # 每用户回合最多紧急唤醒 2 次，防"做完了又不停"
@@ -8655,7 +8768,7 @@ async def ws_endpoint(ws: WebSocket):
                         agent_ref.interrupt()
                     except Exception:
                         pass
-                if task_ref and not task_ref.done():
+                if task_ref and hasattr(task_ref, "done") and not task_ref.done():
                     task_ref.cancel()
                 # 不在此发 cancelled 消息 — 由 run_agent 的 except/finally 统一发送
                 # 如果 agent 引用为空（没有运行中的任务），直接回 cancelled

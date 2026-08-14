@@ -144,6 +144,10 @@ class _ProtoWorker:
                 return {"status": "error", "error": res["error"],
                         "output": (out + "\n--- stderr ---\n" + err) if err else out,
                         "tool_calls_made": 0, "duration_seconds": 0}
+            # 2026-08-16: ok 时也拼 stderr — 之前成功路径丢弃 stderr，
+            # warning / traceback.print_exc() 的输出 agent 完全看不到（实测复现）。
+            if err:
+                out = out + ("\n" if out and not out.endswith("\n") else "") + "--- stderr ---\n" + err
             out, meta = _truncate(out)
             result = {"status": "ok", "result": out, "output": out, "error": None,
                       "tool_calls_made": 0, "duration_seconds": 0}
@@ -319,7 +323,31 @@ class KernelPool:
             return sys.executable
 
     @staticmethod
+    def _env_json_r_section():
+        """读 environment.json 的 paths.r 段（失败返回 {}）。"""
+        try:
+            import json as _json
+            _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hermes-agent/
+            _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
+            _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
+            return _env_json.get("paths", {}).get("r", {}) or {}
+        except Exception:
+            return {}
+
+    @staticmethod
     def _rscript_path():
+        """解析主力 Rscript：environment.json 的 paths.r.default 优先。
+
+        2026-08-16 修复：之前只看 PATH 的 Rscript（机器上是 4.4.2），
+        而 libPaths 按 environment.json 的主力版本（4.5.3）注入 →
+        4.4.2 进程加载 4.5.3 的 DLL，Seurat 全线 LoadLibrary failure。
+        """
+        try:
+            _def = KernelPool._env_json_r_section().get("default", "")
+            if _def and os.path.isfile(_def):
+                return _def
+        except Exception:
+            pass
         for cand in (os.environ.get("RSCRIPT_PATH"), "Rscript"):
             if not cand:
                 continue
@@ -328,6 +356,31 @@ class KernelPool:
             if found:
                 return found
         return "Rscript"
+
+    @staticmethod
+    def _r_lib_env(env):
+        """从 environment.json 解析主力 R 的库路径，返回需注入的环境变量。
+
+        R_LIBS（优先级最高）+ R_LIBS_USER 指向主力库，R_LIBS_SITE 指向
+        site 库。2026-08-16 修复：environment.json 的 lib_user 曾指向
+        不含 Seurat 的旧库目录，主力库在 E:/R-libs/<ver>。
+        """
+        out = {}
+        try:
+            _r_section = KernelPool._env_json_r_section()
+            _def_rscript = _r_section.get("default", "")
+            _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
+            _r_info = _r_section.get(_r_ver, {})
+            _lib_user = _r_info.get("lib_user", "")
+            _lib_site = _r_info.get("lib_site", "")
+            if _lib_user:
+                out["R_LIBS"] = _lib_user
+                out["R_LIBS_USER"] = _lib_user
+            if _lib_site:
+                out["R_LIBS_SITE"] = _lib_site
+        except Exception:
+            pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
+        return out
 
     @staticmethod
     def _child_env():
@@ -342,25 +395,14 @@ class KernelPool:
         _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hermes-agent/
         _pp = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = _root if not _pp else _root + os.pathsep + _pp
-        # R 用户库：environment.json 里 default R 的 lib_user/lib_site 不在 scrub
-        # 白名单（scrub 会删 R_LIBS_USER），但主力分析 R 的 251 个包（含
-        # jsonlite）都在自定义 lib_user 里。R 启动时读取 R_LIBS_USER 环境变量
-        # 并自动加入 .libPaths()——不设的话 worker 找不到 jsonlite 立即死亡
-        # （2026-08-13 实测 R-4.5.3 无此变量时 execute_r 卡满 600s）。
-        try:
-            import json as _json
-            _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
-            _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
-            _r_section = _env_json.get("paths", {}).get("r", {})
-            _def_rscript = _r_section.get("default", "")
-            _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
-            _r_info = _r_section.get(_r_ver, {})
-            if _r_info.get("lib_user") and not env.get("R_LIBS_USER"):
-                env["R_LIBS_USER"] = _r_info["lib_user"]
-            if _r_info.get("lib_site") and not env.get("R_LIBS_SITE"):
-                env["R_LIBS_SITE"] = _r_info["lib_site"]
-        except Exception:
-            pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
+        # R 用户库：environment.json 里主力 R 的 lib_user/lib_site 不在 scrub
+        # 白名单（scrub 会删 R_LIBS_USER），但主力分析 R 的 200+ 个包（含
+        # jsonlite）都在自定义库目录。R 启动时读取 R_LIBS*/R_LIBS_USER 环境
+        # 变量并自动加入 .libPaths()——不设的话 worker 找不到 jsonlite
+        # 立即死亡（2026-08-13 实测 R-4.5.3 无此变量时 execute_r 卡满 600s）。
+        for _k, _v in KernelPool._r_lib_env(env).items():
+            if not env.get(_k):
+                env[_k] = _v
         return env
 
     def execute(self, code, task_id, timeout=120, language="python", cwd=None):

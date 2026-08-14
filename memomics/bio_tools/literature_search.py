@@ -624,17 +624,42 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
 
 # ============ extract_params_from_pdf ============
 
+def _find_extract_pdf_script() -> Path:
+    """动态定位 literature-param-extraction skill 的 extract_pdf.py。
+
+    运行环境不同（顶层 hermes_home / memomics 包内副本 / HERMES_HOME env），
+    静态相对路径会失效，这里按候选顺序探测。
+    """
+    here = Path(__file__).resolve().parent  # .../memomics/bio_tools
+    candidates = []
+    # 1. 顶层 hermes_home skills（标准运行环境）
+    candidates.append(here.parent.parent / "hermes_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    # 2. 包内 hermes_home 副本（memomics/hermes_home）
+    candidates.append(here.parent / "hermes_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    # 3. 旧静态路径（源码树根 skills，保留兼容）
+    candidates.append(here.parent.parent / "skills" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    # 4. HERMES_HOME 环境变量
+    _hh = os.environ.get("HERMES_HOME")
+    if _hh:
+        candidates.append(Path(_hh) / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return candidates[0]
+
+
 def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", direction: str = "") -> str:
     """从 PDF 提取生信参数."""
     try:
-        skill_script = Path(__file__).parent.parent.parent / "skills" / "literature-param-extraction" / "scripts" / "extract_pdf.py"
+        skill_script = _find_extract_pdf_script()
         if not skill_script.exists():
             return json.dumps({"success": False, "error": f"extract_pdf.py not found at {skill_script}"}, ensure_ascii=False)
 
         result = subprocess.run(
             [sys.executable, str(skill_script), pdf_path, "--method", "auto"],
             capture_output=True, text=True, timeout=120,
-            encoding="utf-8", errors="replace"
+            encoding="utf-8", errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
         )
 
         if result.returncode != 0:

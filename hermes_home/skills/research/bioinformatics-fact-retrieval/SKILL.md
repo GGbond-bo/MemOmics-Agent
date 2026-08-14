@@ -47,9 +47,15 @@ python 正则：去 `<script>/<style>` → 去标签 → `html.unescape` → `\s
 |---|---|
 | satijalab.org 部分文章页 404（如 integrate_rpca.html、harmony 教程） | 文章未发布但 GitHub `vignettes/` 目录有源 Rmd（已确认：seurat5_integration.Rmd / seurat5_integration_rpca.Rmd / seurat5_integration_large_datasets.Rmd / seurat5_integration_bridge.Rmd / seurat5_weighted_nearest_neighbor_analysis.Rmd）→ 走 jsdelivr |
 | raw.githubusercontent.com 拉取失败 | 网络屏蔽 → 换 jsdelivr CDN（同一路径格式） |
+| github.io 站点页面 curl 报 SSL error 35（如 smorabit.github.io） | 不是重试能解决的 → 改拉 `raw.githubusercontent.com/<org>/<repo>/<branch>/<path>` 源码/vignette Rmd（raw 失败再换 jsdelivr） |
+| web_extract 报 "search-only backend and cannot extract URL content" | 后端是 ddgs（仅搜索）→ 用 curl 下载 HTML 后 python 正则提取正文（去 script/style → 去标签 → html.unescape → 关键词窗口打印） |
+| download_pdf 的 pmc_fulltext 策略失败 | 手动 curl `europepmc.org/articles/PMC<id>?pdf=render` 直接拿 PDF（开放获取可用） |
+| 任务/需求描述中的期刊名/标题与实际不符（例："hdWGCNA 是 Nature Methods 2023"实为 Cell Reports Methods 2023;3(6):100498） | 引用前用 query_ncbi(pubmed, 作者+关键词) 核实卷期；查无此文就在报告"更正"段落如实标注，不顺着任务说法写 |
+| 大文件 write_file 流超时 | 内容拆 3 部分分别 write_file 再 `cat` 合并，单次调用控制在 ~8K token 内 |
 | scanpy readthedocs 个别生成页 404（scanpy.pp.combat 等） | 用已抓取页面的导航/API 索引确认函数确实存在；新版函数可能移位（pp.combat 曾属 external） |
 | search_papers 关键词搜索无结果 | 混合源漏检 → query_ncbi 按精确标题直查 |
 | terminal 连续 404 触发工具失败计数 | 每次换新 URL/新命令串，用 GitHub API/版本化 URL 换方案，不要原样重试 |
 
 ## References
 - `references/seurat-vs-scanpy-batch-integration.md` — Seurat vs Scanpy 批次整合对比知识库：快速选型表、方法原理速查、v5/scanpy API 要点、11 篇核验文献（PMID/DOI）、官方文档获取技巧（本次调研沉淀）
+- `references/hdwgcna-vs-wgcna-methodology.md` — hdWGCNA vs 经典 WGCNA 方法学要点（2026-08 核实）：文献引用更正（CRM 2023 非 Nature Methods）、metacell bagging+kNN 算法细节与聚合方式（仅 average/sum）、流程对比、eigengene/TOM 数学差异、论文 PDF/源码获取技巧

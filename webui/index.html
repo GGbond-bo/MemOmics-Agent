@@ -2312,10 +2312,18 @@ function batchDeleteSelected() {
       if (done === ids.length) {
         _selectedSessions = {};
         toggleBatchMode(false);
+        if (_allSessions.length === 0) renderSessionList([]); // 空响应 guard 会拦掉 loadSessions 的空列表，先本地渲染
         loadSessions();
         if (delCurrent) {
           document.getElementById('messages').innerHTML = '';
-          newSession();
+          try { localStorage.removeItem('memomics_last_session'); } catch(e) {}
+          if (_allSessions.length > 0) {
+            switchSession(_allSessions[0].id);
+          } else {
+            currentSid = null;
+            document.getElementById('chat-title').textContent = 'MEMOMICS';
+            showNewSessionWelcome();
+          }
         }
       }
     }).catch(function(e) { console.error('batch delete failed:', e); });
@@ -2383,8 +2391,17 @@ function deleteSession(sid) {
     if (currentSid === sid) {
       currentSid = null;
       document.getElementById('messages').innerHTML = '';
-      newSession();
+      try { localStorage.removeItem('memomics_last_session'); } catch(e) {}
+      if (_allSessions.length > 0) {
+        // 还有其他会话：切到最近活跃的，不自动新建
+        switchSession(_allSessions[0].id);
+      } else {
+        // 没有任何会话：回欢迎画面，不再自动新建"新会话"
+        document.getElementById('chat-title').textContent = 'MEMOMICS';
+        showNewSessionWelcome();
+      }
     }
+    if (_allSessions.length === 0) renderSessionList([]); // 空响应 guard 会拦掉 loadSessions 的空列表，先本地渲染
     loadSessions();
   }).catch(function(e) { console.error('delete failed:', e); });
 }
@@ -2553,6 +2570,10 @@ function switchSession(sid) {
   // HTTP 历史稍后只在任务已结束时覆盖它。
   var restoredLiveSnapshot = _restoreSessionSnapshot(cached);
   if (restoredLiveSnapshot && cached.running) {
+    _drainSessionEvents(cached, sid);
+  } else if (cached.pendingEvents && cached.pendingEvents.length) {
+    // 无快照但有缓冲事件（如微信会话首次被自动打开）：
+    // 先同步回放缓冲的用户消息/思考/流式事件，中间框立即跟上，再等 HTTP 历史补全
     _drainSessionEvents(cached, sid);
   } else if (!cached.running) {
     cached.pendingEvents.length = 0;

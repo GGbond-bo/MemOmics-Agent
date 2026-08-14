@@ -131,7 +131,10 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
         if conda_env:
             cmd = ["conda", "run", "-n", conda_env, "python", script_path]
         else:
-            cmd = ["python", script_path]
+            # 2026-08-16: 用当前进程解释器（.venv），不用 PATH 的 "python"
+            # （机器上是 WindowsApps stub，缺 scanpy 生态）。
+            import sys as _sys
+            cmd = [_sys.executable, script_path]
 
         kwargs = dict(
             args=cmd,

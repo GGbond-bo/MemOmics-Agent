@@ -98,6 +98,7 @@ hermes_home/skills/bioinformatics/atac-seq-memomics/logs/
 hermes_home/models_dev_cache.json
 hermes_home/env_probe_cache.json
 hermes_home/runtime/jobs.json
+hermes_home/runtime/weixin_messages.json
 hermes_home/session_usage/
 hermes_home/processes.json
 hermes_home/lsp/bin/

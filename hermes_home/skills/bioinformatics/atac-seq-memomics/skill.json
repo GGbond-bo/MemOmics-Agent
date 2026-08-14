@@ -81,5 +81,15 @@
       "script": "02e_annotate_human_tile2.R",
       "severity": "high"
     }
+  ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.8,
+      "evidence": "Luo et al. Genome Biol 2024 (PMID 39152456) benchmark + ArchR (PMID 33633365)/SnapATAC (PMID 33637727)/SnapATAC2 (PMID 38191932) 原论文 + 本项目 40 样本实战",
+      "date": "2026-08-14 15:14:43"
+    }
   ]
 }

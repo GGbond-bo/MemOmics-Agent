@@ -49,6 +49,18 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
   绝不说"我下一步会跑"就结束。
 - 分步长任务时每轮至少推进一个真实工具动作；纯叙述性回复（计划/解释）不被用户接受为"执行"。
 
+### 8. ⛔ 用户问"你到底跑了吗"——先查自己的工具执行记录再答，禁止凭空自认"没跑"（2026-08-14）
+- 用户原话："我都做到这里了，为什么没有跑呢？"（用户贴出 11:20 write_file + 11:28 terminal 输出证据）
+- 教训：用户质疑"跑了没有"时，Agent **凭空自认"我上一轮没跑"**，但用户贴的执行日志显示
+  实际上写脚本（write_file 3077B）和跑 terminal（输出"逆转候选汇总"）**都已发生**——Agent 犯了
+  **双重错误**：① 没有先查工具执行记录（search_files/read_file 看产物）就下结论 ② 把"没跑"这种
+  自我贬低当成了默认答案，反而无视了真实日志。
+- 正确流程：用户问"跑了没有/为什么没跑" → **先 read_file/search_files 查产出物和日志**（CSV/PNG/脚本
+  是否在盘、时间戳是否匹配）→ 用证据回答。产物在 = 跑了，直接交付结果；产物不在 = 没跑，立刻补跑。
+- 结果文件示例：逆转分析产物 `data/reversal_analysis.csv`（列：annotation_L3, aging_pp, diab_pp,
+  Oex_pp, ODex_pp, rev_aging_O, rev_aging_OD, rev_diab, aging_p/fdr, diab_p/fdr, Oex_p/fdr, ODex_p/fdr）
+- **交付"结果"永远优先于讨论"为什么没跑"**：先给用户结果表，再解释执行问题，不要反过来。
+
 ## 固定尺寸规则（用户指定）
 - `egg::set_panel_size(width=unit(N,"mm"), height=unit(32,"mm"))` + `ggsave(dpi=300, limitsize=FALSE, bg="white")`
 - **6 柱 = 30mm，5 柱 = 28mm，每少 1 柱 −2mm**；高度恒 32mm
@@ -108,6 +120,41 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
 - **配对 Wilcoxon p 是"差的中位数"，与"中位数之差"不同**——表面上升可能是少数强响应个体拉动
 - 响应者 vs 非响应者基线对比（基线比例是否预测响应；p=1.0 = 非 floor effect）→ 结论策略：不声称普遍效应，讲"个体响应异质性"
 
+## 逆转衰老/逆转糖尿病亚群识别（2026-08-14 用户定义标准 + 实测）
+
+用户问"如何定义逆转衰老/逆转糖尿病的亚群"——**标准 = 衰老/糖尿病把比例推向一个方向，运动把它拉回**：
+- 衰老效应 `aging_pp` = median(O_Pre) − median(Y_Pre)（pp）
+- 糖尿病效应 `diab_pp` = median(OD_Pre) − median(O_Pre)
+- 老年运动 `Oex_pp` = median(O_Post) − median(O_Pre)；糖尿病运动 `ODex_pp` = median(OD_Post) − median(OD_Pre)
+- `rev_aging_O` = (aging_pp>0 & Oex_pp<0) | (aging_pp<0 & Oex_pp>0)（方向相反 = 逆转候选）
+- `rev_aging_OD` = 同逻辑用 ODex_pp；`rev_diab` = (diab_pp>0 & ODex_pp<0) | (diab_pp<0 & ODex_pp>0)
+- **样本少（n=7/组）先看趋势（方向成立），再报 P/FDR**——用户原话："先找出有趋势的，再看看它的 P 值和 FDR"
+
+**结果分级交付（实测排序）**：
+- 🔴 **强逆转候选**：方向成立 + 至少一个 raw p<0.05（如 LRP1B+(I)：衰老↑ p=0.019 + OD 运动↓ p=0.016；Pure Type IIX：老年运动↓ p=0.031）
+- 🟡 **趋势候选**：方向成立但 p 不显著（如 Pure Type IIA：衰老显著↓ FDR=0.028 + 糖尿病运动回升 +6.5pp 但 p=0.47）
+- ⚫ **不逆转**：运动方向与衰老/糖尿病**同向**（如 RSS 衰老↑ p=0.0002 但运动继续↑；Specialized MF 运动同向大幅↑）——不能讲逆转故事
+- ⚠️ 注意"运动加深疾病效应"型：糖尿病↓ + 运动也↓（如 Pure Type I 糖尿病 FDR=0.042 显著 + 老年运动 p=0.047 继续↓）= 同向加深不是逆转，解读要分开
+- 产出：`data/reversal_analysis.csv`（全亚群 × 上述列），脚本 `scripts/13_reversal_analysis.R`
+
+### ⛔ 逆转板块隔离铁律（2026-08-14 用户发火级别纠正："你衰老逆转模块，放什么OD？尼玛的"）
+
+**两个板块的列/比较严格隔离，禁止跨板块混放：**
+- **衰老逆转板块**：只放 **Y_Pre vs O_Pre（衰老效应）** + **O_Pre vs O_Post（老年运动）**——**一个 OD 都不允许出现**
+- **糖尿病逆转板块**：只放 **O_Pre vs OD_Pre（糖尿病效应）** + **OD_Pre vs OD_Post（糖尿病运动）**
+- 教训：第一版把 LRP1B+(I) 的"糖尿病运动↓ p=0.016"写进衰老板块当证据（\"衰老↑+糖尿病运动↓\"），被用户怒斥——糖尿病运动信息属于糖尿病板块，混进衰老板块 = 概念污染
+- 交付表头必须能自证板块纯净：衰老板块列名 `aging_es/aging_p/aging_fdr/ex_es/ex_p/ex_fdr`，糖尿病板块列名 `es_diab/p_diab/fdr_diab/es_odex/p_odex/fdr_odex`，重跑脚本后自查无 OD 列混入衰老板块
+
+### 逆转板块出图模式（2026-08-14 用户拍板）
+
+用户要求"按照衰老逆转和糖尿病逆转分别出图，记得分好目录"：
+- **衰老逆转板块**：有趋势的亚群全部画 3 柱 **Y_Pre / O_Pre / O_Post**，比较子集 = YvsO + O运动
+- **糖尿病逆转板块**：3 柱 **O_Pre / OD_Pre / OD_Post**，比较子集 = OvsOD + OD运动
+- 每个亚群 p 值 + FDR 两版（PNG+PDF），3柱 = 24mm×32mm（宽度自适应公式）
+- **目录分离**：`figures/reversal_aging/` + `figures/reversal_diabetes/`（用户强调"分好目录"）
+- 亚群选择 = 上表"逆转判定 YES/方向成立"的亚群（实测：衰老逆转 6 个 = LRP1B+(I)/Pure Type IIX/RP_high(II)/RP_high(I)/Pure Type I/OTUD1+(II)；糖尿病逆转 2 个 = Pure Type IIX/Pure Type IIA）
+- 绘图脚本统一参数化：`plot_3grp(celltype, groups, comparisons, annot_col, out_tag, outdir)`，循环跑两个板块
+
 ## 打分分析（AUCell score 跨组比较，2026-08-13 扩展）
 
 metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配对框架**做打分差异分析，与比例分析并列两条腿：
@@ -140,6 +187,19 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   （Reactome 原始自带重复，95 条目→90 唯一）。msigdbr 26.1.0 API 变更：`category=`→`collection=`、
   KEGG 用 `CP:KEGG_LEGACY`（旧名）、KEGG_MEDICUS 碎片化不适合打分——详见
   `references/geneset-supplement-2026-08.md`
+
+### CNS 级"效应矩阵"图组（2026-08-14 实测：AUCell meta CSV → 三图架构）
+
+当用户要"CNS 级别/主刊审美"且数据集是**细胞级 meta CSV**（每行=细胞，含 samplename/type/annotation_L3 + 22 个 AUCell 打分列，50 万细胞级）时，用效应矩阵图组替代逐打分箱线图——一张图回答"哪些打分被衰老/运动/糖尿病改变"。实测成功案例：`MF_AUCell_meta.csv`（508,661 细胞 × 58 列）。
+
+- **统计设计（防伪重复）**：50 万细胞直接算 = 伪重复。先 `samplename × annotation_L3` 聚合打分均值（48样本×10亚群=479行）→ 每 打分×亚群×效应 组合算 **Cohen's d + Wilcoxon 秩和 p（BH 校正）**
+- **三效应**：Aging(O_Pre−Y_Pre) / Exercise_O(O_Post−O_Pre) / T2D(OD_Pre−O_Pre)
+- **逆转率**（仅对 Aging 显著组合）：`reversal = 1 - (O_Post − Y_Pre)/(O_Pre − Y_Pre)`；>0=向年轻回拉，<0=恶化
+- **Fig1 Hero 效应矩阵**：3 面板横排（Aging/Exercise/T2D 的 Cohen's d 热图）+ 左侧功能轴色条 + 右侧逆转率条；行=打分按功能轴分组（Metabolic/Identity/Senescence），列=亚群；红蓝 diverging（#2166AC→白→#B2182B）±3 截断，星号=p<0.05
+- **Fig2 配对个体响应**：Aging |d| top-4 组合画老年个体 Pre→Post 连线（samplename 去 `_Pre/_Post` 后缀配对），配对 wilcoxon p 标标题
+- **Fig3 效应散点**：x=Aging d、y=Exercise d，每点=打分×亚群，颜色=功能轴，加对角线——一眼看出"只有代谢轴在对角线（运动逆转衰老）、炎症轴贴 x 轴（运动无效）"
+- **结论模板**：逆转率按功能轴分层就是故事（实测：Metabolic 中位 +0.21、Identity +0.36、Senescence −0.07）→ "运动是衰老的镜子，只照见代谢-结构这一半"。交付时结论先行，图作为证据
+- 完整实现配方 + 可直接复用的 Python 代码 → `references/cns-effect-matrix-aucell.md`
 
 ## Pitfalls
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
@@ -177,9 +237,24 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   跨列逐行操作（如\"每亚群 top3 打分\"）改用 Python pandas（`df.rename` 后 `r[cols].sort_values()`）或显式
   `as.data.frame()` 转 base R 再索引，不要依赖 `..` 前缀语法在复杂循环里的行为。
 - **⛔ 用户已有基因集 xlsx 的追加/编辑格式铁律（2026-08-13 被用户两次抓住）**：\n  `pathway_score.xlsx` 这类用户手工维护的基因集表是**宽表格式**——每个基因占一列（D 列起逐列展开），\n  不是 TAB 分隔挤一个单元格！追加新基因集时必须保持同样格式（`Class | Signature | Annoation | 基因1 | 基因2 | ...`）。\n  教训链：① Agent 用 `write.xlsx` 把 8 个新基因集写成 `ABCB6\\tADORA2B\\tAGL...` 单格 → 用户\"一看就有问题\"；\n  ② Agent 改写成宽表但用 openxlsx 重写 → 生成损坏文件（zip 引用 `xl/drawings/drawing1.xml` 但文件缺失，\n  openpyxl 直接 KeyError / dims 1x1）→ 用户\"你都不调查吗\"。\n  **正确方案**：备份原文件后，用 **openpyxl 从零重建**（`Workbook()` 新建、按宽表写入、`wb.save`），\n  不要用 openxlsx 重写用户已有文件（写入会带损坏 drawing 引用）；原文件格式读取用 zipfile 直接解析\n  `xl/sharedStrings.xml` + `xl/worksheets/sheet1.xml`（sharedStrings 索引 + 行列坐标 → 基因宽表），\n  openpyxl 读损坏文件会崩但 zipfile 解析一定能拿到数据。写入前先备份，写入后重读验证行数/列数/基因数。\n  参考 `references/xlsx-geneset-wide-format.md`。
+- **⛔ `requireNamespace(p, quietly=TRUE)` 只查包描述元数据、不加载 DLL——坏包会显示 TRUE 假象（2026-08-14 实测）**：
+  E:/R-libs 批量 DLL 损坏时，`requireNamespace('digest')` 返回 TRUE 但 `library(digest)` 报
+  `LoadLibrary failure`。**真实验证包能否加载必须**：
+  `tryCatch({suppressPackageStartupMessages(library(p, character.only=TRUE)); TRUE}, error=function(e) FALSE)`
+- **⛔ R 库批量 DLL 损坏时：最多修一轮，再坏就转 Python（2026-08-14 突破性经验，当天靠它交付成功）**：
+  症状 = 多个包报 `LoadLibrary failure: 找不到指定的程序`（digest/cluster/Matrix/vctrs…）或
+  `lazy-load database ... is corrupt`（vctrs.rdb），且分布在多个库根目录（E:/R-libs/R-4.5.3、
+  C:/Program Files/R/R-4.5.3/library、C:/Users/<user>/R/R-4.5.3-library 三处）。
+  逐包重装是陷阱（修好 digest 冒出 cluster、修好 cluster 冒出 vctrs——无底洞）。**正确路径**：
+  中间结果（聚合表/效应表）**先落盘 CSV** → 用 Python（pandas+seaborn+matplotlib）直接读 CSV 出图，一次成功。
+  实测：R 端修 6+ 轮无产出后转 Python，立即交付三张 CNS 级图（seaborn 0.13.2 + matplotlib 3.11 本机健康）。
+- **⛔ 别在环境检查上打转（用户原话："你老是检查terminal干什么全是报错" / "为什么还在跑terminal呢？？？"）**：
+  连续 ≥2 轮没有任何图/文件/明确结果产出 = 已在打转。立即要么出图、要么换栈、要么如实报告阻塞点。用户说
+  "找原因，先不执行" = 只诊断不改，诊断完给根因，不要顺手执行修复。
 
 ## 支持文件
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
+- `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图"

@@ -206,9 +206,16 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
         # status == error → 分类处理（P1-4 修复，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
         _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
+        # 2026-08-16: kernel 环境性错误（R 版本/库错配等）也允许回退 —
+        # 包加载失败发生在脚本头部、无副作用，Rscript 新进程环境可能不同，
+        # 回退重跑安全；否则 R 环境一坏整条分析链全部失败（实测复现）。
+        if not _infra_fail:
+            _low = _err.lower()
+            _infra_fail = ("could not be loaded" in _low) or ("loadlibrary failure" in _low) \
+                or ("there is no package called" in _low) or ("namespace load failed" in _low)
         if _infra_fail:
-            # 基础设施失败（worker 启动即死/管道断裂）：代码大概率未送达 →
-            # 回退 Rscript 重跑相对安全；记录原因避免静默失败。
+            # 基础设施失败（worker 启动即死/管道断裂/R 环境错配）：代码大概率
+            # 未送达或未产生副作用 → 回退 Rscript 重跑相对安全；记录原因。
             logger.warning("persistent kernel R infra failure, falling back to fresh Rscript: %s", _err)
         else:
             # 代码运行时错误：kernel 内已执行（可能有部分副作用）→ 不回退，
@@ -221,6 +228,16 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
         pass
 
     max_attempts = 2
+    # 2026-08-16: fallback 也用 environment.json 的主力 Rscript（与 kernel 一致）。
+    # 之前用 PATH 的 "Rscript"（机器上是 4.4.2），与主力库（4.5.3）错配。
+    _rscript = "Rscript"
+    _r_lib_extra = {}
+    try:
+        from tools.persistent_kernel import KERNEL_POOL as _KP
+        _rscript = _KP._rscript_path()
+        _r_lib_extra = _KP._r_lib_env(dict(os.environ))
+    except Exception:
+        pass
     for attempt in range(1, max_attempts + 1):
         proc = None
         try:
@@ -229,11 +246,19 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
                 f.write(code)
                 script_path = f.name
 
+            _env = _ensure_win_env(dict(os.environ))
+            for _k, _v in _r_lib_extra.items():
+                if not _env.get(_k):
+                    _env[_k] = _v
+            # R_HOME 对齐实际使用的 Rscript（4.5.3 进程不能带 4.4.2 的 R_HOME）
+            _r_home = os.path.dirname(os.path.dirname(_rscript))
+            if os.path.isdir(_r_home):
+                _env["R_HOME"] = _r_home
             kwargs = dict(
-                args=["Rscript", script_path],
+                args=[_rscript, script_path],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 cwd=working_dir or None,
-                env=_ensure_win_env(dict(os.environ)),
+                env=_env,
             )
             if os.name == 'nt':
                 kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP

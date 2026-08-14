@@ -36,12 +36,17 @@ Verification-first comparison of two or more bioinformatics methods/tools, produ
    - `curl -sL <url> -o work/docs/<name>.html`，再用 Python 正则提取正文（去 script/style → 去标签 → html.unescape → 压缩空白）。文档里可直接搜关键词引用原文（如 "leaves the data matrix itself invariant"）。
    - **猜的 URL 404 时不要反复试**：下载教程/文档索引页，正则 `href="([^"]+)"` 提取真实链接再抓（本 skill 首次使用时 harmony 教程与 multi_tools 页面均 404，靠此方法定位到 `basics/integrating-data-using-ingest.html` 等正确 URL）。
 5. **写报告**：结构化中文报告，含一句话结论 → 核心对比表 → 各维度详细说明（每节标注来源）→ 参考来源列表（文献表带 PMID/DOI，官方文档带 URL）。发现引用错误立即修正（如 Squair 2021 PMID 由记忆值 34650260 核正为 34584091）。
+   - **查不到的引用 → 显式标注"待核实"**，绝不静默丢弃或编造：如用户点名某批评文献（"Hurlock 等"）检索无果时，在报告末尾列"待核实项"并注明所用检索词，正文不引用。这比假装没看见更专业，也保留后续补查入口。
+   - **全文核验模式（关键论断必须看原文）**：benchmark/局限性/阈值类论断（如 "Z<5 未保存"、"100 permutations"、"spurious correlations"）仅靠摘要不够时，抓全文 PDF 后本地关键词提取：
+     - `curl -sL -A "Mozilla/5.0" "https://europepmc.org/articles/PMC<id>?pdf=render" -o work/papers/<name>.pdf`（PMC 全文 PDF 的稳定直链，download_pdf/web_extract 失败时的兜底）
+     - Python PyMuPDF（`fitz`）逐页 `get_text()` 后正则搜关键词（如 "permutation"/"Zsummary"/"Limitations of the study"/"false positive"），把论断与原文逐字核对、记录页码/上下文。
 6. **交叉核对**：报告里的每个数字/结论至少有一个可验证来源；两来源矛盾时以 PubMed 摘要原文为准。
 7. **沉淀**：把带验证引用的领域知识写入本 skill 的 `references/`（见下），避免下次重新检索。
 
 ## Pitfalls
 
 - **记忆 PMID 必错**：所有 PMID/DOI 必须经 PubMed 关键词检索核实（见过 5/5 全错的实例）。
+- **search_papers 对方法学检索精度差**：返回结果多为"应用型"论文（用 WGCNA 做疾病研究的文章）且摘要常为空；方法学批评/基准类文献要用 `query_ncbi(db='pubmed', query='标题关键词+作者')` 精确检索，再用 `web_search` 交叉验证。搜到未知 PMID 后用 `query_ncbi(query='<PMID>[uid]')` 反查补全期刊/DOI。
 - **query_ncbi 无摘要**：摘要要走 efetch `rettype=abstract&retmode=text`。
 - **文档 URL 易 404**：readthedocs/satijalab 页面改版频繁；从索引页提取 href 定位真实链接。
 - **KB 工具故障 ≠ 免验证**：KB 不可用时用 PubMed + 官方文档双源验证兜底，报告须注明 KB 不可用及替代路径。
