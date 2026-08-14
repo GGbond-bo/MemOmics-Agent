@@ -180,7 +180,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 衰老轴（Y vs O）与糖尿病轴（O vs OD）是不同模式：衰老 = IIa+OxPhos+Sarcomeric 全面↓；糖尿病 = Type I 程序↓ + Type II 程序↑（向糖酵解倾斜）——分开讲
 - 运动唯一显著信号：老年运动回升 IIa 程序（FDR=0.031），这是"运动逆转"的关键证据点
 - **基因集评估要点**（去神经化等自定义基因集）：① 检查方向相反基因（如 SCN4A 去神经时**下调**，与 SCN5A 上调共存会互相抵消）② 补经典 marker（去神经必加 **NCAM1**，Lai 2024 Nature 用它定义去神经纤维）③ 查与已有打分重叠（Atrophy/RegMyon/Sarcomeric 重叠基因 → 共线性，不能都讲）④ 缺哪类打分按研究问题补齐（骨骼肌衰老+糖尿病运动最少要补：Glycolysis 与 OxPhos 配对、AMPK-PGC1α 运动开关、Autophagy、Adipogenesis、Fibrosis）——详见 `references/mf-score-analysis.md` 与 `references/geneset-supplement-2026-08.md`
-- **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。④ **用户质疑"你是不是算错了"→ 手动重算 + 展示原始均值表，并解释 Cohen's d 对低基线打分的放大效应**（见下方专项）。⑤ **用户采纳剔除重叠基因方案（2026-08-14）**：用户主动提议 Denervation 基因集改为 **8 基因** = CHRNA1/CHRNG/CHRND/SCN5A/KCNMB1/NCAM1/NGFR + RUNX1，**去掉 MYOG/MYH8/GAP43**——恰好是污染诊断③点名的 RegMyon 重叠基因，与建议一致。更新 `pathway_score_CLEAN.xlsx`（SuppTable3 宽表，Class/Signature/Annoation/Genes 四列 + 基因逐列展开）时按用户版本执行，并按 Class 分类整理；来源三篇：Covault & Sanes 1985 PNAS (PMID 3892537) / Tang et al. 2009 MBC (PMID 19109424) / Lai et al. 2024 Nature (PMID 38649488)。详见 `references/denervation-geneset-contamination.md`
+- **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。④ **用户质疑"你是不是算错了"→ 手动重算 + 展示原始均值表，并解释 Cohen's d 对低基线打分的放大效应**（见下方专项）。⑤ **用户采纳剔除重叠基因方案（2026-08-14）**：用户主动提议 Denervation 基因集改为 **8 基因** = CHRNA1/CHRNG/CHRND/SCN5A/KCNMB1/NCAM1/NGFR + RUNX1，**去掉 MYOG/MYH8/GAP43**。**⛔ 重叠基因 ≠ 一律剔除——逐基因查文献（2026-08-14 用户当场纠正 Agent 的倾向）**：用户说"RUNX1 也算上吧，我观察到它确实可能跟去神经有关"——这是对的，**RUNX1 有硬核去神经文献**：Zhu et al. 1994 MCB (PMID 7969143, AML1 受神经支配调控) + Wang et al. 2005 Genes Dev (PMID 16024660, Runx1 去神经后诱导、防萎缩)。所以只剔除**无去神经特异性的纯再生/施万标志**（MYH8=发育型肌球蛋白、MYOG=肌生成 TF、GAP43=施万细胞），**RUNX1 保留**（去神经应答 TF + 再生必需，双面基因，生物学上本就交织）。污染诊断的正确执行 = 先查每个重叠基因的单基因文献再决定去留，不是机械剔除。更新 `pathway_score_CLEAN.xlsx`（SuppTable3 宽表，Class/Signature/Annoation/Genes 四列 + 基因逐列展开）时按用户版本执行，并按 Class 分类整理（AChR 亚基 CHRNA1/CHRNG/CHRND | 离子通道 SCN5A/KCNMB1 | 粘附/神经营养受体 NCAM1/NGFR | 转录因子 RUNX1）；来源三篇：Covault & Sanes 1985 PNAS (PMID 3892537) / Tang et al. 2009 MBC (PMID 19109424) / Lai et al. 2024 Nature (PMID 38649488)。⑥ **净化后重算对比（2026-08-14 用户重跑验证）**：用户用 8 基因重跑 AUCell → 运动轴效应**回落但未消失**（ExOld +1.03→+0.96、ExT2D +0.82→+0.80），Aging 反而略升（+0.59→+0.73）= 剩余 8 基因本身参与 NMJ 重塑，**预期管理：净化 ≠ 运动轴归零**；T2D 轴仍无信号（d≈0）。详见 `references/denervation-geneset-contamination.md`
 - **⛔ 效应计算被质疑时的重算验证流程 + Cohen's d 低基线放大效应（2026-08-14 实测，用户问"你有没有算错"）**：
   - 场景：效应热图显示 Denervation 全亚群全效应正，但 6 组原始打分热图显示只有 SMF 绝对分高——用户质疑"是不是算错了"。
   - **响应顺序（先重算后解释）**：① 从 `effect5_d_table.csv` 抽出该打分行全部 50 个效应值 → ② 从 `agg_sample.csv`（样本级聚合表）**用 scipy.stats / pandas 手动重算 Cohen's d**（`d = (g2.mean − g1.mean)/pooled_sd`，逐亚群 × 逐效应）→ ③ 逐格比对与表值一致 → **先回答"没算错"（用重算表作证）** → ④ 再解释为什么数据本身就是这样。
@@ -272,6 +272,12 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - **⛔ 别在环境检查上打转（用户原话："你老是检查terminal干什么全是报错" / "为什么还在跑terminal呢？？？"）**：
   连续 ≥2 轮没有任何图/文件/明确结果产出 = 已在打转。立即要么出图、要么换栈、要么如实报告阻塞点。用户说
   "找原因，先不执行" = 只诊断不改，诊断完给根因，不要顺手执行修复。
+- **⛔ matplotlib 表格图列宽对齐 + CJK 字体（2026-08-14 用户抓"最上面的栏跟下面的数值栏，大小不统一"）**：
+  用 matplotlib 画**数据表格图**（行=亚群、列=效应值）时，表头列宽与数值列宽必须用**同一套显式列宽数组**
+  （`col_widths = [0.16] + [0.168]*5`，表头循环与数据行循环都 `x = sum(col_widths[:c])` 定位）——
+  若表头用 text 自由摆放、数值用 `ax.table`/自动列宽，两者会对不齐（用户一眼看出）。自查：OCR/截图核对
+  表头 x 坐标与数值列 x 坐标一致。另：**DejaVu Sans 无 CJK 字形**——图内注释/表头一律英文
+  （如 "red = positive effect" 而非中文），中文会变方框（Glyph missing 警告）。
 
 ## 用户上传图识别（2026-08-14 实测）
 - 用户上传项目产出图（如 Fig1_five_effects_matrix PNG）问"能识别这个图吗" → **不要只凭肉眼描述**，先 `vision_describe(image_path)` 拿 OCR + 元素检测 + ASCII 亮度图事实清单，再结合项目上下文（本 skill 的图格式约定）回答
