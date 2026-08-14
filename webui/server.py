@@ -680,6 +680,50 @@ def _build_background_process_check(session, agent):
     )
 
 
+def _maybe_switch_task_dir(session, user_text, intent):
+    """2026-08-14 同会话多任务隔离：新数据路径（非继续）→ 切新任务子目录。
+
+    之前同会话的新数据任务共用 results/<sid>，新任务会覆盖旧任务的
+    task_plan.md/产出。现在首个任务用 results/<sid>，后续新数据任务切到
+    results/<sid>/task<N>，各自 RunGate 状态与产出互不覆盖。
+    返回 True 表示已切换。
+    """
+    try:
+        _paths = re.findall(r'[A-Za-z]:[/\\]\S+', user_text or "")
+        if not _paths:
+            return False
+        _is_continue = any(w in user_text for w in
+            ("继续", "接着", "下一步", "然后", "继续跑", "接着跑", "继续做", "接着做"))
+        if _is_continue:
+            return False
+        _base = session.get("results_dir", "") or ""
+        if not _base:
+            return False
+        # 已存在旧任务的 task_plan.md 才切（纯聊天首问不切）
+        if not os.path.isfile(os.path.join(_base, "task_plan.md")):
+            return False
+        _n = session.get("_task_count", 2)
+        _new_dir = os.path.join(_base, "task%d" % _n)
+        session["_task_count"] = _n + 1
+        session["results_dir"] = _new_dir
+        try:
+            os.makedirs(_new_dir, exist_ok=True)
+        except Exception:
+            pass
+        try:
+            from webui.runtime.run_gate import save_state
+            save_state(_new_dir, "pending", "new data task switch (multi-task isolation)")
+        except Exception:
+            pass
+        session["todos"] = []
+        logger.info("[MultiTask] session %s: 新数据路径 → 切任务目录 %s",
+                    session["id"][:12], _new_dir)
+        return True
+    except Exception as e:
+        logger.warning("[MultiTask] switch failed: %s", e)
+        return False
+
+
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
     如果是知识问答/进度查询 → 只给轻量提示。如果是正常对话 → 给完整提醒。"""
@@ -7536,6 +7580,10 @@ async def ws_endpoint(ws: WebSocket):
                 session["intent"] = _intent
                 session["intent_conf"] = _intent_conf
                 session["intent_meta"] = _intent_meta
+
+                # 2026-08-14 同会话多任务隔离：新数据路径（非继续）→ 切新任务子目录，
+                # 防新任务覆盖旧任务的 task_plan.md/产出；RunGate 重置 pending。
+                _maybe_switch_task_dir(session, user_text, _intent)
 
                 # === 会话级状态捕获（诉求 + 资产候选，故障静默不阻塞主流程）===
                 try:
