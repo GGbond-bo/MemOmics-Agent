@@ -209,6 +209,9 @@ TOOLSETS = {
             "send_message",
             "screenshot",
             "asset_manage",
+            "save_knowledge",
+            "kb_coverage",
+            "session_memory",
         ],
         "module": "tools.memomics_tools",
         "includes": []

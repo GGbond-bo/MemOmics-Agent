@@ -580,6 +580,87 @@ def search_knowledge(query: str, species: str = "", tissue: str = "", direction:
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+def kb_coverage(species: str = "", tissue: str = "", direction: str = "", assay: str = "") -> str:
+    """知识库覆盖度自检（2026-08-14）。
+
+    检查 物种/组织/方向/类别/assay 五级目录的已有内容 vs 缺失，
+    缺失时给出补充建议（触发 literature-param-extraction 收集文献）。
+    """
+    kb_root = _find_kb_root()
+    if kb_root is None:
+        return json.dumps({"ok": False, "error": "知识库目录未找到"}, ensure_ascii=False)
+    _sp_parts = (species or "").strip().split()
+    if len(_sp_parts) > 1:
+        _seg_species = "_".join([_sp_parts[0].capitalize()] + [p.lower() for p in _sp_parts[1:]])
+    else:
+        _seg_species = (species or "").strip().lower()
+    _seg_tissue = (tissue or "").strip().lower().replace(" ", "_").replace("-", "_")
+    _seg_dir = (direction or "").strip().lower().replace(" ", "_").replace("-", "_")
+    _seg_assay = (assay or "RNA").strip().upper()
+
+    found = {"species": False, "tissue": False, "direction": False,
+             "categories": {}, "assay": {}, "path": ""}
+    suggestions = []
+
+    if _seg_species and os.path.isdir(os.path.join(kb_root, _seg_species)):
+        found["species"] = True
+        if _seg_tissue and os.path.isdir(os.path.join(kb_root, _seg_species, _seg_tissue)):
+            found["tissue"] = True
+            _dir_base = os.path.join(kb_root, _seg_species, _seg_tissue, _seg_dir) if _seg_dir else ""
+            if _seg_dir and os.path.isdir(_dir_base):
+                found["direction"] = True
+                found["path"] = _dir_base.replace("\\", "/")
+                for _cat in ("01_生物学知识", "02_质控参数", "03_测序方法"):
+                    _cd = os.path.join(_dir_base, _cat)
+                    _fs = []
+                    if os.path.isdir(_cd):
+                        if _cat == "03_测序方法":
+                            # 方法类目下按 assay 子目录组织 → 递归计数
+                            _fs = sorted(str(f.relative_to(_cd)).replace("\\", "/")
+                                         for f in Path(_cd).rglob("*.yaml") if f.is_file())
+                        else:
+                            _fs = sorted(f for f in os.listdir(_cd) if f.endswith((".yaml", ".yml", ".md")))
+                    found["categories"][_cat] = {"count": len(_fs), "sample": _fs[:6]}
+                _md = os.path.join(_dir_base, "03_测序方法", _seg_assay)
+                if os.path.isdir(_md):
+                    _fs = sorted(f for f in os.listdir(_md) if f.endswith((".yaml", ".yml")))
+                    found["assay"][_seg_assay] = {"count": len(_fs), "sample": _fs[:6]}
+
+    if not found["species"] and _seg_species:
+        suggestions.append(f"知识库中没有物种 {_seg_species} — 全新覆盖，建议触发 literature-param-extraction 从文献收集起步")
+    if found["species"] and not found["tissue"] and _seg_tissue:
+        try:
+            _tissues = sorted(d for d in os.listdir(os.path.join(kb_root, _seg_species))
+                              if os.path.isdir(os.path.join(kb_root, _seg_species, d)))
+        except OSError:
+            _tissues = []
+        suggestions.append(f"该物种下已有组织: {', '.join(_tissues)}；缺少 {_seg_tissue} — 建议触发文献收集补充")
+    if found["tissue"] and not found["direction"] and _seg_dir:
+        try:
+            _dirs = sorted(d for d in os.listdir(os.path.join(kb_root, _seg_species, _seg_tissue))
+                           if os.path.isdir(os.path.join(kb_root, _seg_species, _seg_tissue, d)))
+        except OSError:
+            _dirs = []
+        suggestions.append(f"该组织下已有方向: {', '.join(_dirs)}；缺少 {_seg_dir} — 建议触发文献收集补充")
+    _missing = [k for k, v in found["categories"].items() if v.get("count", 0) == 0]
+    if _seg_assay and _seg_assay not in found["assay"]:
+        _missing.append(f"03_测序方法/{_seg_assay}")
+    _covered = (found["direction"] and not _missing)
+    _total_files = sum(v.get("count", 0) for v in found["categories"].values())
+
+    return json.dumps({
+        "ok": True,
+        "species": _seg_species, "tissue": _seg_tissue, "direction": _seg_dir, "assay": _seg_assay,
+        "found": found,
+        "missing": _missing,
+        "covered": _covered,
+        "total_files_in_direction": _total_files,
+        "suggestions": suggestions,
+        "next": ("覆盖充分，可直接 search_knowledge 查参数" if _covered else
+                 "覆盖不足 → 触发 literature-param-extraction skill 收集文献补充知识库"),
+    }, ensure_ascii=False, indent=2)
+
+
 def _register():
     try:
         from tools.registry import registry
@@ -595,6 +676,35 @@ def _register():
             ),
             emoji="📚",
             max_result_size_chars=20_000,
+        )
+        registry.register(
+            name="kb_coverage",
+            toolset="memomics",
+            schema={
+                "name": "kb_coverage",
+                "description": (
+                    "知识库覆盖度自检：检查 物种/组织/方向/类别/assay 五级目录已有内容与缺失。"
+                    "新项目启动分析前调用，缺失时按建议触发文献收集补充知识库。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "species": {"type": "string", "description": "物种，如 'Homo sapiens'"},
+                        "tissue": {"type": "string", "description": "组织，如 'skeletal muscle'"},
+                        "direction": {"type": "string", "description": "方向，如 'aging'"},
+                        "assay": {"type": "string", "description": "测序方法: RNA/ATAC/spatial/bulk", "default": "RNA"},
+                    },
+                    "required": ["species", "tissue", "direction"],
+                },
+            },
+            handler=lambda args, **kw: kb_coverage(
+                args.get("species", ""),
+                args.get("tissue", ""),
+                args.get("direction", ""),
+                args.get("assay", "RNA"),
+            ),
+            emoji="🗺️",
+            max_result_size_chars=8_000,
         )
     except ImportError:
         pass  # 不在 Hermes 环境中时不注册

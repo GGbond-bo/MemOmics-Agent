@@ -643,6 +643,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <input id="kb-search-input" type="text" placeholder="🔍 搜索..." style="width:150px;font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);" oninput="onKbSearch(this.value)">
           <button onclick="switchKbView('browse')" id="kb-btn-browse" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">浏览</button>
           <button onclick="switchKbView('graph')" id="kb-btn-graph" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">图谱</button>
+          <button onclick="toggleKbMatrix()" title="物种×组织×方向×类别的知识库覆盖矩阵（含陈旧度）" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🗺️ 矩阵</button>
         </span>
       </div>
       <div id="kb-search-results" style="display:none;max-height:60%;overflow-y:auto;padding:8px;"></div>
@@ -656,6 +657,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <div id="kb-preview-render" style="padding:8px 4px;"></div>
         <pre id="kb-preview-content"></pre>
       </div>
+      <div id="kb-matrix" style="display:none;max-height:70vh;overflow-y:auto;padding:8px;"></div>
       <div id="kb-graph" style="display:none;height:70vh;position:relative;">
         <div id="kb-graph-3d" style="display:none;width:100%;height:100%;"></div>
         <div id="kb-node-detail" style="display:none;position:absolute;top:28px;right:8px;width:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.35);z-index:50;">
@@ -3607,9 +3609,54 @@ async function doKbSearch(q) {
   });
   box.innerHTML = html;
   box.style.display = '';
+  // 2026-08-14: 搜索命中在图谱中高亮（若图谱已加载）
+  highlightKbSearchPaths((d.results || []).map(function(r) { return r.path; }));
   document.getElementById('kb-list').style.display = 'none';
   document.getElementById('kb-path').style.display = 'none';
   document.getElementById('kb-preview').style.display = 'none';
+}
+
+// === 覆盖矩阵 + 搜索联动（2026-08-14）===
+function toggleKbMatrix() {
+  var el = document.getElementById('kb-matrix');
+  if (!el) return;
+  var show = el.style.display === 'none';
+  el.style.display = show ? '' : 'none';
+  document.getElementById('kb-graph').style.display = 'none';
+  document.getElementById('kb-list').style.display = show ? 'none' : '';
+  document.getElementById('kb-path').style.display = show ? 'none' : '';
+  document.getElementById('kb-preview').style.display = 'none';
+  document.getElementById('kb-search-results').style.display = 'none';
+  if (show) loadKbCoverage(); else switchKbView('browse');
+}
+
+function loadKbCoverage() {
+  var el = document.getElementById('kb-matrix');
+  fetch('/api/kb/coverage').then(function(r) { return r.json(); }).then(function(d) {
+    if (!d.rows || !d.rows.length) { el.innerHTML = '<div style="padding:10px;font-size:12px;">知识库为空</div>'; return; }
+    var html = '<div style="font-size:11px;color:var(--text-light);padding:4px 8px;">📊 知识库覆盖矩阵 · 共 ' + d.total_files + ' 个 YAML 条目 · 陈旧阈值 ' + d.stale_days + ' 天 · ' + escapeHtml(d.generated_at) + '</div>';
+    html += '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>物种</th><th>组织</th><th>方向</th><th>生物学</th><th>质控</th><th>方法</th><th>其他</th><th>Assay</th><th>条目</th><th>陈旧</th></tr></thead><tbody>';
+    d.rows.forEach(function(r) {
+      var assays = Object.keys(r.assays).map(function(k) { return k + ':' + r.assays[k]; }).join(' ') || '—';
+      var staleCell = r.stale > 0 ? ('<td class="num" style="color:#e67e22;font-weight:600;">⏰' + r.stale + '</td>') : '<td class="num">0</td>';
+      html += '<tr><td>' + escapeHtml(r.species) + '</td><td>' + escapeHtml(r.tissue) + '</td><td>' + escapeHtml(r.direction) + '</td>' +
+        '<td class="num">' + (r.cats['01_生物学知识'] || 0) + '</td><td class="num">' + (r.cats['02_质控参数'] || 0) + '</td><td class="num">' + (r.cats['03_测序方法'] || 0) + '</td><td class="num">' + (r.cats.other || 0) + '</td>' +
+        '<td>' + escapeHtml(assays) + '</td><td class="num">' + r.files + '</td>' + staleCell + '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+    el.innerHTML = html;
+  }).catch(function(err) { el.innerHTML = '<div style="padding:10px;color:#e74c3c;font-size:12px;">加载失败: ' + escapeHtml(err.message || err) + '</div>'; });
+}
+
+function highlightKbSearchPaths(paths) {
+  if (!_kbCy || !paths || !paths.length) return;
+  _kbCy.nodes().removeClass('search-hit');
+  var set = {};
+  paths.forEach(function(p) { set(String(p).replace(/\\/g, '/') || '') = true; });
+  _kbCy.nodes().forEach(function(n) {
+    var np = (n.data('path') || '').replace(/\\/g, '/');
+    if (np && set[np]) n.addClass('search-hit');
+  });
 }
 
 function setKbModeButtons(browse) {
@@ -3625,6 +3672,7 @@ function setKbModeButtons(browse) {
 function switchKbView(mode) {
   var browse = mode === 'browse';
   _kbMode = browse ? 'browse' : 'graph';
+  var mEl = document.getElementById('kb-matrix'); if (mEl) mEl.style.display = 'none';
   document.getElementById('kb-list').style.display = browse ? '' : 'none';
   document.getElementById('kb-path').style.display = browse ? '' : 'none';
   document.getElementById('kb-search-results').style.display = 'none';
@@ -3664,7 +3712,7 @@ function loadKbGraph() {
   fetch('/api/kb/graph').then(function(r) { return r.json(); }).then(function(d) {
     _kbGraphData = d;
     el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;display:flex;align-items:center;justify-content:space-between;">' +
-      '<span>节点：物种🟣 组织🔵 方向🟢 分类🟠 文件⚪ ｜ 灰线=层级 红虚线=方法共享 ｜ 点击节点查看内容</span>' +
+      '<span>物种🟣 组织🔵 方向🟢 分类🟠 ｜ 文件: 绿=已验证 浅绿=高质量 灰=普通 橙=未验证 ｜ 错误🔴 ｜ 灰线=层级 红虚线=方法共享</span>' +
       '<span style="white-space:nowrap;">' +
       '<button id="kb-btn-3d" onclick="toggleKbGraph3D()" title="3D 星球视图：节点分布在球面，可像地球一样拖拽旋转" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐 星球视图</button>' +
       ' <button onclick="reloadKbGraphData()" title="重新加载知识库数据（知识库新增内容后点击，也可等待自动检测）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📥 重新加载</button>' +
@@ -3680,7 +3728,15 @@ function loadKbGraph() {
       var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
       var nodes = d.nodes.map(function(n) {
         var depth = n.id.split('/').length - 1;
-        return { data: { id: n.id, label: n.label, color: colors[Math.min(depth, 4)], weight: Math.max(1.15, 2.6 - depth * 0.35), path: n.path, ntype: n.type } };
+        var color = colors[Math.min(depth, 4)];
+        if (n.type === 'error') color = '#e74c3c';
+        else if (n.type === 'file') {
+          if (n.quality === 'high' && n.verified === 'verified') color = '#27ae60';
+          else if (n.verified === 'unverified') color = '#e67e22';
+          else if (n.quality === 'high') color = '#2ecc71';
+          else color = '#95a5a6';
+        }
+        return { data: { id: n.id, label: n.label, color: color, weight: Math.max(1.15, 2.6 - depth * 0.35), path: n.path, ntype: n.type } };
       });
       var edges = d.edges.map(function(e, i) {
         return { data: { id: 'e' + i, source: e.source, target: e.target, type: e.type } };
@@ -3691,7 +3747,8 @@ function loadKbGraph() {
         style: [
           { selector: 'node', style: { 'label': 'data(label)', 'font-size': 9, 'text-valign': 'bottom', 'text-margin-y': 2, 'width': 'mapData(weight,1.15,2.6,13,30)', 'height': 'mapData(weight,1.15,2.6,13,30)', 'background-color': 'data(color)', 'border-width': 1, 'border-color': '#555', 'text-wrap': 'ellipsis', 'text-max-width': '90px' } },
           { selector: 'edge', style: { 'width': 1, 'line-color': '#888', 'opacity': 0.5, 'curve-style': 'bezier' } },
-          { selector: 'edge[type="related"]', style: { 'line-color': '#e74c3c', 'line-style': 'dashed', 'opacity': 0.7 } }
+          { selector: 'edge[type="related"]', style: { 'line-color': '#e74c3c', 'line-style': 'dashed', 'opacity': 0.7 } },
+          { selector: 'node.search-hit', style: { 'border-color': '#f39c12', 'border-width': 4, 'z-index': 10 } }
         ],
         layout: { name: 'cose', animate: false, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }
       });

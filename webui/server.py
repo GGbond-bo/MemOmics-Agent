@@ -314,6 +314,45 @@ async def _start_memory_governance():
                     from memomics.memory_governance.governor import init_index, run_governance
                     init_index(verbose=False)
                     _rep = run_governance(dry_run=False, verbose=False)
+                    # 2026-08-14: KB 陈旧度周检（每周一次，写报告 + 在线会话提示）
+                    _kb_marker = os.path.join(HERMES_HOME_DIR, "memories", ".kb_staleness_last")
+                    _kb_last = 0.0
+                    if os.path.isfile(_kb_marker):
+                        try:
+                            _kb_last = float(open(_kb_marker, "r", encoding="utf-8").read().strip() or "0")
+                        except Exception:
+                            pass
+                    if time.time() - _kb_last > 7 * 86400:
+                        try:
+                            from memomics.bio_tools.kb_search import _find_kb_root
+                            import yaml as _yaml
+                            _kbr = _find_kb_root()
+                            _stale_dirs = []
+                            if _kbr:
+                                for _p in Path(_kbr).rglob("*.yaml"):
+                                    try:
+                                        with open(_p, encoding="utf-8", errors="replace") as _pf:
+                                            _d = _yaml.safe_load(_pf.read(200000))
+                                        _lu = str((_d or {}).get("last_updated") or "")
+                                        if _lu:
+                                            _dt = datetime.strptime(_lu[:10], "%Y-%m-%d")
+                                            if (time.time() - _dt.timestamp()) > 90 * 86400:
+                                                _stale_dirs.append(str(_p.relative_to(_kbr)).replace("\\", "/"))
+                                    except Exception:
+                                        continue
+                            with open(os.path.join(HERMES_HOME_DIR, "memories", "kb_staleness.json"), "w", encoding="utf-8") as _sf:
+                                json.dump({"checked_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "stale": _stale_dirs[:50], "count": len(_stale_dirs)}, _sf, ensure_ascii=False, indent=2)
+                            with open(_kb_marker, "w", encoding="utf-8") as _mf:
+                                _mf.write(str(time.time()))
+                            if _stale_dirs:
+                                for _sid2, _ss2 in list(_sessions.items()):
+                                    try:
+                                        _session_emit(_ss2, {"type": "info", "content": f"📚 知识库周检: {len(_stale_dirs)} 个条目超过 90 天未更新（如 {_stale_dirs[0]}）。可在知识库面板查看覆盖矩阵。", "session_id": _ss2["id"]})
+                                    except Exception:
+                                        pass
+                            logger.info(f"[KB-Staleness] 周检完成: {len(_stale_dirs)} 个陈旧条目")
+                        except Exception as _ke:
+                            logger.warning(f"[KB-Staleness] 周检失败(非阻塞): {_ke}")
                     try:
                         with open(_marker, "w", encoding="utf-8") as _f:
                             _f.write(str(time.time()))
@@ -6440,6 +6479,66 @@ async def kb_search_api(q: str = "", path: str = ""):
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+@app.get("/api/kb/coverage")
+async def kb_coverage_api():
+    """知识库覆盖矩阵（2026-08-14）：物种×组织×方向×类别/assay 条目数 + 陈旧度。"""
+    try:
+        import yaml as _yaml
+    except Exception:
+        _yaml = None
+    rows = []
+    _now = time.time()
+    _stale_days = 90
+    try:
+        for _sp in sorted(Path(KB_DIR).iterdir()):
+            if not _sp.is_dir() or _sp.name.startswith("."):
+                continue
+            for _ti in sorted(_sp.iterdir()):
+                if not _ti.is_dir():
+                    continue
+                for _dr in sorted(_ti.iterdir()):
+                    if not _dr.is_dir():
+                        continue
+                    _cats = {"01_生物学知识": 0, "02_质控参数": 0, "03_测序方法": 0, "other": 0}
+                    _assays = {}
+                    _stale = 0
+                    _files = 0
+                    for _p in _dr.rglob("*.yaml"):
+                        _files += 1
+                        _lu = ""
+                        if _yaml is not None:
+                            try:
+                                with open(_p, encoding="utf-8", errors="replace") as _pf:
+                                    _d = _yaml.safe_load(_pf.read(200000))
+                                if isinstance(_d, dict):
+                                    _lu = str(_d.get("last_updated") or "")
+                            except Exception:
+                                pass
+                        if _lu:
+                            try:
+                                _dt = datetime.strptime(_lu[:10], "%Y-%m-%d")
+                                if (_now - _dt.timestamp()) > _stale_days * 86400:
+                                    _stale += 1
+                            except Exception:
+                                pass
+                        _rel = _p.relative_to(_dr).parts
+                        _rel0 = _rel[0] if _rel else ""
+                        if _rel0 in _cats:
+                            _cats[_rel0] += 1
+                        elif _rel0 and not _rel0.isdigit():
+                            _cats["other"] += 1
+                        if _rel0 == "03_测序方法" and len(_rel) >= 2:
+                            _assays[_rel[1]] = _assays.get(_rel[1], 0) + 1
+                    rows.append({
+                        "species": _sp.name, "tissue": _ti.name, "direction": _dr.name,
+                        "cats": _cats, "assays": _assays, "files": _files, "stale": _stale,
+                    })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return {"rows": rows, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "stale_days": _stale_days, "total_files": sum(r["files"] for r in rows)}
+
+
 @app.get("/api/kb/graph")
 async def kb_graph_api():
     """知识库图谱：路径层级节点（物种/组织/方向/分类/文件）+ auto_trigger 内容关联边（只读）"""
@@ -6487,6 +6586,22 @@ async def kb_graph_api():
                     continue
                 if not isinstance(data, dict):
                     continue
+                # 2026-08-14: quality/verified 挂到节点（递归查找嵌套字段，前端着色: 绿=verified+high, 橙=unverified）
+                def _find_meta(_obj, _key, _out):
+                    if isinstance(_obj, dict):
+                        for _k2, _v2 in _obj.items():
+                            if _k2 == _key and isinstance(_v2, (str, bool)):
+                                _out.append(_v2)
+                            else:
+                                _find_meta(_v2, _key, _out)
+                    elif isinstance(_obj, list):
+                        for _v2 in _obj:
+                            _find_meta(_v2, _key, _out)
+                _qs, _vs = [], []
+                _find_meta(data, "quality", _qs)
+                _find_meta(data, "verified", _vs)
+                n["quality"] = str(_qs[0]) if _qs else ""
+                n["verified"] = "verified" if (any(v is True for v in _vs) or any(str(v).lower() == "verified" for v in _vs)) else ""
                 # auto_trigger / method / package 可能嵌套在任意层级，递归提取共享关键词
                 def _collect_triggers(obj, out):
                     if isinstance(obj, dict):
@@ -6514,6 +6629,31 @@ async def kb_graph_api():
                 if len(ids) >= 2:
                     for i in range(len(ids) - 1):
                         add_edge(ids[i], ids[i + 1], "related")
+        # 2026-08-14: error_memory 节点（错误经验入库图谱，红色标识）
+        _em_root = add_node("error_memory", "错误记忆", "dir", "")
+        try:
+            _em_path = root / "error_memory" / "errors.jsonl"
+            if _em_path.is_file():
+                _em_seen = set()
+                for _line in _em_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                    _line = _line.strip()
+                    if not _line.startswith("{"):
+                        continue
+                    try:
+                        _e = json.loads(_line)
+                    except Exception:
+                        continue
+                    _et = str(_e.get("error_type") or "unknown")[:40]
+                    if _et in _em_seen:
+                        continue
+                    _em_seen.add(_et)
+                    _eid = "error_memory/" + _et
+                    _ei = add_node(_eid, _et, "error", "")
+                    nodes[_ei]["detail"] = str(_e.get("symptom") or "")[:100]
+                    add_edge(_em_root, _ei, "hierarchy")
+        except Exception:
+            pass
+
         edge_list = [{"source": s, "target": t, "type": et} for (s, t, et) in edges]
         return {"nodes": nodes, "edges": edge_list,
                 "counts": {"nodes": len(nodes), "edges": len(edges),

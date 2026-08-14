@@ -65,14 +65,19 @@
 import sys
 import argparse
 import subprocess
+import json
+import re
 
 
 def extract_with_pymupdf(pdf_path: str) -> str:
     """第一层: pymupdf 快速提取."""
     try:
-        import fitz  # pymupdf
+        import pymupdf as fitz  # 新包名（1.28 用 fitz 会向 stdout 打弃用警告污染 JSON 输出）
     except ImportError:
-        return ""
+        try:
+            import fitz  # noqa: F401 — 旧版兼容
+        except ImportError:
+            return ""
 
     doc = fitz.open(pdf_path)
     sections = []
@@ -127,14 +132,119 @@ def extract_pdf(pdf_path: str, method: str = "auto") -> str:
         return text
 
 
+# ============ 2026-08-14 升级: 章节拆分 + 参数对提取 ============
+# 修复: 旧版只回传 text_preview[:3000]，Methods 参数基本丢失。
+# 现在: 章节级拆分（Abstract/Introduction/Methods→小节/Results/...）
+#       + 确定性参数对提示（参数→值→出处句），供 LLM 结构化时对齐。
+
+_SECTION_RE = re.compile(
+    r"^\s*(?:(\d+(?:\.\d+)*)[\.\s]+)?(abstract|introduction|methods|materials and methods"
+    r"|results|discussion|conclusion|references|supplementary|background|summary)\b",
+    re.IGNORECASE,
+)
+_METHODS_SUB_RE = re.compile(
+    r"^\s*(?:(\d+(?:\.\d+)*)[\.\s]+)?(quality control|qc and|data quality|filtering|cell filtering"
+    r"|doublet|normalization|clustering|dimension|dimensionality|differential expression|deg|"
+    r"marker|trajectory|pseudotime|velocity|cell.?cell communication|integration|batch|"
+    r"annotation|cell type annotation|enrichment|gsea|go analysis|kegg|regulon|tf activity"
+    r"|rna velocity|sample preparation|library preparation|sequencing|alignment|mapping|quantification)\b",
+    re.IGNORECASE,
+)
+
+# 参数对提取模式: (参数名, 正则)
+_PARAM_PATTERNS = [
+    ("resolution", re.compile(r"resolution[\s=:：]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("min.cells/min_cells", re.compile(r"min[._]?cells[\s=:：><]*([0-9]+)", re.IGNORECASE)),
+    ("nFeature_RNA", re.compile(r"nFeature_RNA[\s><=:：-]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("nCount_RNA", re.compile(r"nCount_RNA[\s><=:：-]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("percent.mt / MT%", re.compile(r"(?:percent[._]?mt|mitochondrial (?:content|percentage)|MT\s*%?)[\s><=:：-]*([0-9]+(?:\.[0-9]+)?)\s*%?", re.IGNORECASE)),
+    ("dims", re.compile(r"dims[\s=:：]*1[:\-](\d+)", re.IGNORECASE)),
+    ("HVG nfeatures", re.compile(r"(?:variable features|HVGs?|hvf)[^.]{0,60}?([0-9]{3,5})", re.IGNORECASE)),
+    ("logfc.threshold", re.compile(r"logfc[._]?threshold[\s=:：]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("min.pct", re.compile(r"min[._]?pct[\s=:：]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("k.param", re.compile(r"k[._]?param[\s=:：]*([0-9]+)", re.IGNORECASE)),
+    ("p_val_adj", re.compile(r"(?:p_val_adj|padj|adjusted p)[\s=:：<]*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("doublet_rate", re.compile(r"doublet[^.]{0,40}?([0-9]+(?:\.[0-9]+)?)\s*%", re.IGNORECASE)),
+    ("harmony", re.compile(r"harmony", re.IGNORECASE)),
+    ("SCTransform", re.compile(r"sctransform|SCTransform", re.IGNORECASE)),
+    ("batch_vars", re.compile(r"(?:vars[._]to[._]regress|regress(?:ed)? out)[^\n]{0,80}", re.IGNORECASE)),
+]
+
+
+def _split_sections(full_text: str) -> list:
+    """把整篇文本拆成 摘要/引言/方法/结果/讨论/参考文献 等章节；无标题则整体一段。"""
+    lines = full_text.splitlines()
+    sections = []
+    cur_title = "Front matter"
+    cur_lines = []
+    in_methods = False
+    for line in lines:
+        m = _SECTION_RE.match(line)
+        if m and len(line.strip()) < 80:
+            if cur_lines:
+                sections.append({"title": cur_title, "text": "\n".join(cur_lines).strip()})
+            cur_title = (m.group(2) or "").strip() or "Section"
+            in_methods = cur_title.lower() in ("methods", "materials and methods")
+            cur_lines = []
+            continue
+        if in_methods:
+            ms = _METHODS_SUB_RE.match(line)
+            if ms and len(line.strip()) < 80:
+                if cur_lines:
+                    sections.append({"title": cur_title, "text": "\n".join(cur_lines).strip()})
+                cur_title = "Methods: " + (ms.group(2) or ms.group(1) or "subsection")
+                cur_lines = []
+                continue
+        cur_lines.append(line)
+    if cur_lines:
+        sections.append({"title": cur_title, "text": "\n".join(cur_lines).strip()})
+    return [s for s in sections if s["text"]]
+
+
+def _extract_param_hints(full_text: str, max_hints: int = 60) -> list:
+    """从全文确定性抓取 参数→值→出处句 提示（供 LLM 结构化提取时对齐）。"""
+    hints = []
+    seen = set()
+    for name, pat in _PARAM_PATTERNS:
+        for m in pat.finditer(full_text):
+            val = m.group(1) if m.lastindex else None
+            key = f"{name}={val}" if val is not None else f"{name}={m.group(0)[:24]}"
+            if key in seen:
+                continue
+            seen.add(key)
+            start = max(0, m.start() - 120)
+            end = min(len(full_text), m.end() + 120)
+            ctx = full_text[start:end].replace("\n", " ").strip()
+            hints.append({"param": name, "value": val, "context": ctx[:260]})
+            if len(hints) >= max_hints:
+                return hints
+    return hints
+
+
+def extract_pdf_structured(pdf_path: str, method: str = "auto") -> dict:
+    """结构化提取: 章节 + 参数对提示（供入库管线使用）。"""
+    text = extract_pdf(pdf_path, method)
+    return {
+        "full_text_length": len(text),
+        "sections": _split_sections(text),
+        "param_hints": _extract_param_hints(text),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="PDF 文献参数提取")
     parser.add_argument("pdf_path", help="PDF 文件路径")
     parser.add_argument("--method", choices=["auto", "pymupdf", "markitdown"], default="auto")
+    parser.add_argument("--sections", action="store_true",
+                        help="输出 JSON 结构化章节 + 参数对提示（供入库管线使用）")
     args = parser.parse_args()
 
-    text = extract_pdf(args.pdf_path, args.method)
-    print(text)
+    if args.sections:
+        out = extract_pdf_structured(args.pdf_path, args.method)
+        print(json.dumps(out, ensure_ascii=False))
+    else:
+        text = extract_pdf(args.pdf_path, args.method)
+        print(text)
 
 
 if __name__ == "__main__":

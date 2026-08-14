@@ -16,6 +16,11 @@ import re
 import logging
 from datetime import datetime
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 logger = logging.getLogger(__name__)
 
 SCHEMA = {
@@ -55,8 +60,28 @@ SCHEMA = {
             },
             "category": {
                 "type": "string",
-                "description": "KB category directory (default bioinformatics)",
-                "default": "bioinformatics"
+                "description": "KB category directory (default bioinformatics). 兼容旧版平铺目录；提供 species 时忽略。"
+            },
+            "species": {
+                "type": "string",
+                "description": "物种（如 Homo sapiens / Mus musculus）。提供后按五级目录入库: 物种/组织/方向/类别/assay。"
+            },
+            "tissue": {
+                "type": "string",
+                "description": "组织（如 skeletal muscle）。五级目录模式必填（提供 species 时）。"
+            },
+            "direction": {
+                "type": "string",
+                "description": "方向（如 aging / development / disease）。五级目录模式必填。"
+            },
+            "kb_category": {
+                "type": "string",
+                "description": "知识库类别目录: 01_生物学知识 | 02_质控参数 | 03_测序方法（默认 01_生物学知识）"
+            },
+            "assay_type": {
+                "type": "string",
+                "description": "测序方法: RNA | ATAC | spatial | bulk（默认 RNA，仅 03_测序方法 下使用）",
+                "default": "RNA"
             },
             "force": {
                 "type": "boolean",
@@ -70,6 +95,10 @@ SCHEMA = {
 
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$")
 _SAFE_CATEGORY_RE = re.compile(r"^[a-zA-Z0-9_\-]{0,32}$")
+# 五级目录模式的路径段白名单（2026-08-14）
+_SAFE_PATH_SEG_RE = re.compile(r"^[a-zA-Z0-9_\u4e00-\u9fff\-]{1,64}$")
+_KB_CATEGORIES = ("01_生物学知识", "02_质控参数", "03_测序方法")
+_KB_ASSAYS = ("RNA", "ATAC", "spatial", "bulk")
 
 
 def _kb_root():
@@ -97,7 +126,9 @@ def _kb_root():
 
 def save_knowledge(name: str = "", content: str = "", source: str = "manual",
                    evidence: str = "", verified: str = "partially_verified",
-                   category: str = "bioinformatics", force: bool = False) -> str:
+                   category: str = "bioinformatics", force: bool = False,
+                   species: str = "", tissue: str = "", direction: str = "",
+                   kb_category: str = "01_生物学知识", assay_type: str = "RNA") -> str:
     """知识入库 — 铁轨强制验证，不可绕过。"""
     name = (name or "").strip()
     content = (content or "").strip()
@@ -129,6 +160,61 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
     root = _kb_root()
     if not root:
         return _err("⛔ 入库失败：知识库根目录未找到（MEMOMICS_KB_DIR 未设置且无默认路径）")
+
+    # 五级目录模式（2026-08-14）：物种/组织/方向/类别/assay
+    # → knowledge_base/<Species>/<tissue>/<direction>/<category>/<assay>/<name>.yaml
+    species = (species or "").strip()
+    if species:
+        if not tissue or not direction:
+            return _err("⛔ 五级目录模式需要 tissue 和 direction（提供了 species 时必填）")
+        _sp_parts = species.split()
+        if len(_sp_parts) > 1:
+            _seg_species = "_".join([_sp_parts[0].capitalize()] + [p.lower() for p in _sp_parts[1:]])
+        else:
+            _seg_species = species.strip().lower()
+        _seg_tissue = tissue.strip().lower().replace(" ", "_").replace("-", "_")
+        _seg_dir = direction.strip().lower().replace(" ", "_").replace("-", "_")
+        _seg_cat = (kb_category or "01_生物学知识").strip()
+        _seg_assay = (assay_type or "RNA").strip().upper()
+        for _seg in (_seg_species, _seg_tissue, _seg_dir, _seg_cat, _seg_assay):
+            if not _SAFE_PATH_SEG_RE.match(_seg):
+                return _err(f"⛔ 入库拒绝：路径段 '{_seg}' 非法（仅字母/数字/下划线/中文，≤64 字符）")
+        if _seg_cat not in _KB_CATEGORIES:
+            return _err(f"⛔ 入库拒绝：kb_category 必须是 {_KB_CATEGORIES} 之一，收到 '{_seg_cat}'")
+        if _seg_assay not in _KB_ASSAYS:
+            return _err(f"⛔ 入库拒绝：assay_type 必须是 {_KB_ASSAYS} 之一，收到 '{_seg_assay}'")
+        entry_dir = os.path.join(root, _seg_species, _seg_tissue, _seg_dir, _seg_cat, _seg_assay)
+        entry_path = os.path.join(entry_dir, f"{name}.yaml")
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        entry = {
+            "type": "kb_entry",
+            "name": name,
+            "species": species,
+            "tissue": tissue.strip(),
+            "direction": direction.strip(),
+            "assay_type": _seg_assay,
+            "last_updated": ts,
+            "source": source,
+            "verified": verified,
+            "quality": "high" if verified == "verified" else "medium",
+            "auto_trigger": [name],
+            "content": content,
+        }
+        if evidence:
+            entry["evidence"] = evidence
+        if yaml is None:
+            return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
+        try:
+            os.makedirs(entry_dir, exist_ok=True)
+            with open(entry_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
+        except OSError as e:
+            return _err(f"⛔ 入库失败：写入 {entry_path} 失败: {e}")
+        logger.info("save_knowledge(五级): %s → %s (source=%s, verified=%s)", name, entry_path, source, verified)
+        return json.dumps({
+            "status": "success", "path": entry_path, "name": name,
+            "verified": verified, "source": source, "mode": "five_level_yaml",
+        }, ensure_ascii=False)
 
     category_dir = os.path.join(root, category) if category else root
     try:
@@ -178,7 +264,20 @@ def _register():
         name="save_knowledge",
         toolset="memomics",
         schema=SCHEMA,
-        handler=save_knowledge,
+        handler=lambda args, **kw: save_knowledge(
+            args.get("name", ""),
+            args.get("content", ""),
+            args.get("source", "manual"),
+            args.get("evidence", ""),
+            args.get("verified", "partially_verified"),
+            args.get("category", "bioinformatics"),
+            args.get("force", False),
+            args.get("species", ""),
+            args.get("tissue", ""),
+            args.get("direction", ""),
+            args.get("kb_category", "01_生物学知识"),
+            args.get("assay_type", "RNA"),
+        ),
     )
 
 

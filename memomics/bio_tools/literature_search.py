@@ -649,15 +649,20 @@ def _find_extract_pdf_script() -> Path:
 
 
 def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", direction: str = "") -> str:
-    """从 PDF 提取生信参数."""
+    """从 PDF 提取生信参数（2026-08-14 升级：章节级拆分 + 参数对提示）。
+
+    修复: 旧版只回传 text_preview[:3000]，Methods 参数基本丢失。
+    现在: 调用 extract_pdf.py --sections，按章节预算返回（Methods 30K +
+    其余各 4K），并附确定性抓取的参数对提示（参数→值→出处句）。
+    """
     try:
         skill_script = _find_extract_pdf_script()
         if not skill_script.exists():
             return json.dumps({"success": False, "error": f"extract_pdf.py not found at {skill_script}"}, ensure_ascii=False)
 
         result = subprocess.run(
-            [sys.executable, str(skill_script), pdf_path, "--method", "auto"],
-            capture_output=True, text=True, timeout=120,
+            [sys.executable, str(skill_script), pdf_path, "--method", "auto", "--sections"],
+            capture_output=True, text=True, timeout=180,
             encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
         )
@@ -665,6 +670,47 @@ def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", 
         if result.returncode != 0:
             return json.dumps({"success": False, "error": result.stderr[:500]}, ensure_ascii=False)
 
+        structured = None
+        try:
+            # 某些 pymupdf 版本向 stdout 打弃用警告 → 从首个 '{' 起解析 JSON
+            _stdout = result.stdout or ""
+            _idx = _stdout.find("{")
+            if _idx >= 0:
+                structured = json.loads(_stdout[_idx:])
+        except Exception:
+            structured = None
+
+        if isinstance(structured, dict) and "sections" in structured:
+            # 章节预算: Methods 小节优先完整，其余章节各 4K
+            _sections_out = []
+            _methods_budget = 30000
+            for s in structured.get("sections", []):
+                _title = str(s.get("title", ""))
+                _text = str(s.get("text", ""))
+                if _title.lower().startswith("methods"):
+                    _cap = _methods_budget
+                    _methods_budget -= min(len(_text), _cap)
+                    _cap = max(_cap, 0)
+                else:
+                    _cap = 4000
+                _sections_out.append({
+                    "title": _title,
+                    "text": _text[:_cap] if _cap else "",
+                    "truncated": len(_text) > _cap,
+                })
+            return json.dumps({
+                "success": True,
+                "full_text_length": structured.get("full_text_length", 0),
+                "sections": _sections_out,
+                "param_hints": structured.get("param_hints", [])[:60],
+                "species_hint": species,
+                "tissue_hint": tissue,
+                "direction_hint": direction,
+                "message": "PDF 已按章节拆分并抓取参数对提示。请优先用 Methods 章节 + param_hints 做结构化参数提取，"
+                           "每个参数必须注明出处句（context 字段）。",
+            }, ensure_ascii=False)
+
+        # 兜底: 旧版脚本无 --sections → 纯文本
         text = result.stdout
         return json.dumps({
             "success": True,
@@ -673,7 +719,7 @@ def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", 
             "species_hint": species,
             "tissue_hint": tissue,
             "direction_hint": direction,
-            "message": "PDF extracted. Pass this text to LLM for structured parameter extraction."
+            "message": "PDF extracted (plain). Pass this text to LLM for structured parameter extraction."
         }, ensure_ascii=False)
 
     except Exception as e:

@@ -16,9 +16,12 @@ import json
 import re
 import shutil
 import time
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger("memomics.skill_evolution")
 
 
 # Holographic memory bridge (lazy import to avoid __init__ chain)
@@ -910,6 +913,44 @@ def _sync_to_hermes_home(skill_name: str, skill_dir: str):
 
 # ─── MAIN ENTRY ───────────────────────────────────
 
+def _flow_run_params_to_kb(species: str = "", tissue: str = "", direction: str = "",
+                          skill_name: str = "", params_used: str = "",
+                          result_summary: str = "", quality_score: float = 0) -> str:
+    """record_run 成功后把高分实测参数回流知识库（2026-08-14，非阻塞）。
+
+    条件: 物种/组织/方向/参数齐全 + quality_score >= 8。
+    落点: knowledge_base/<Species>/<tissue>/<direction>/03_测序方法/RNA/<skill>_empirical.yaml
+    铁轨: source=data_driven + evidence=run log（save_knowledge 内部强制）。
+    """
+    try:
+        _score = 0.0
+        try:
+            _score = float(quality_score or 0)
+        except Exception:
+            pass
+        if _score < 8:
+            return "skipped: score<8"
+        if not (species and tissue and direction and skill_name and params_used):
+            return "skipped: missing context"
+        from memomics.bio_tools.save_knowledge import save_knowledge
+        _content = (
+            f"skill: {skill_name}\nquality_score: {_score}\n\n"
+            f"params_used:\n{params_used}\n\nresult_summary:\n{result_summary}"
+        )
+        _r = save_knowledge(
+            name=f"{skill_name}_empirical", content=_content,
+            source="data_driven", evidence=f"record_run({skill_name}): {str(result_summary)[:200]}",
+            verified="partially_verified",
+            species=species, tissue=tissue, direction=direction,
+            kb_category="03_测序方法", assay_type="RNA",
+        )
+        logger.info("[KB-FLOW] record_run 参数回流: %s", str(_r)[:200])
+        return _r
+    except Exception as e:
+        logger.warning(f"[KB-FLOW] 回流失败(非阻塞): {e}")
+        return "error"
+
+
 def skill_evolution(action: str = "record_error",
                     skill_name: str = "",
                     error_message: str = "",
@@ -991,6 +1032,14 @@ def skill_evolution(action: str = "record_error",
             auto_score=auto_score,
             approved=approved,
         )
+        # 2026-08-14: 高分实测参数自动回流知识库（非阻塞，失败不影响 record）
+        try:
+            _flow_run_params_to_kb(
+                species=species, tissue=tissue, direction=direction,
+                skill_name=skill_name, params_used=params_used,
+                result_summary=result_summary, quality_score=score or auto_score)
+        except Exception:
+            pass
     elif action == "query_logs":
         result = _query_logs(
             skill_name=skill_name,
