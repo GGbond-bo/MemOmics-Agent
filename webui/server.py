@@ -278,7 +278,10 @@ async def _start_agent_stall_watchdog():
                 agent_ref = s.get("running_agent")
                 if not agent_ref:
                     continue
-                last_ts = s.get("_last_event_ts") or now
+                # 2026-08-15: 心跳/监控进度不再喂活 watchdog — 模型挂起时 delta/reasoning/
+                # 工具事件都不更新 _turn_activity_ts，5 分钟即可自动中断恢复
+                _act = s.get("_turn_activity_ts")
+                last_ts = _act if _act else (s.get("_last_event_ts") or now)
                 if now - last_ts > 300:  # 5 分钟无任何事件输出
                     try:
                         if hasattr(agent_ref, "interrupt"):
@@ -1009,7 +1012,12 @@ def _session_no_live_work(session):
         try:
             _now = time.time()
             for _root, _dirs, _files in os.walk(_rd):
+                # 2026-08-15: 记账文件每次回合都写，不代表分析活跃 → 跳过
+                if ".loopx" in _root:
+                    continue
                 for _f in _files:
+                    if _f in ("token_usage.jsonl", ".task_state.json"):
+                        continue
                     try:
                         if _now - os.path.getmtime(os.path.join(_root, _f)) < 900:
                             return False
@@ -1048,6 +1056,10 @@ def _schedule_self_check(session, agent, loop):
         # （40 样本 ArchR 管线由独立脚本驱动）→ 持续监督唤醒，不静默
         # 2026-08-14: urgent 唤醒不受此闸门拦截
         if not _session_has_active_work(session) and not urgent:
+            return
+        # 2026-08-15 制动: 无计划/待办且外部确实无工作(无进程+15分钟无真实产出) → 停止唤醒
+        if not urgent and _session_no_live_work(session):
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无计划/待办/活跃工作 → 停止唤醒（制动）")
             return
     # 🔧 任务完成 → 归档 task_plan.md + mark_done，停止自检（心跳随之关闭）
     # 判定：待办全部完成/取消 + 主线区（🏁 唤醒记录区之前）无 in_progress/pending + 出现完成标记。
@@ -7829,6 +7841,7 @@ async def ws_endpoint(ws: WebSocket):
                 session["_api_calls"] = 0
                 session["_live_tool"] = ""
                 session["_live_tool_ts"] = time.time()
+                session["_turn_activity_ts"] = time.time()
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
                     img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
@@ -8120,6 +8133,7 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         if delta is None: return
                         has_delta = True
+                        _s["_turn_activity_ts"] = time.time()
                         _loop_check(_s, None, "delta", delta=delta)
                         _session_emit(_s, {"type": "delta", "content": str(delta), "session_id": _s["id"]})
                     except Exception:
@@ -8128,6 +8142,7 @@ async def ws_endpoint(ws: WebSocket):
                 def reasoning_cb(text, _s=session):
                     try:
                         if text is None: return
+                        _s["_turn_activity_ts"] = time.time()
                         _session_emit(_s, {"type": "reasoning", "content": str(text), "session_id": _s["id"]})
                     except Exception:
                         pass
@@ -8138,6 +8153,7 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
                         _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
+                        _s["_turn_activity_ts"] = time.time()
                         # 强制保护：禁止自杀命令 + 禁止删除数据
                         if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
                             _cmd = str(args.get("command", args.get("code", "")))
@@ -8485,6 +8501,10 @@ async def ws_endpoint(ws: WebSocket):
                         pass
 
                 def tool_progress_cb(tool_name, progress_msg, percent=None, _s=session):
+                    try:
+                        _s["_turn_activity_ts"] = time.time()
+                    except Exception:
+                        pass
                     """Hermes tool_progress_callback: 工具执行进度更新"""
                     try:
                         # 问题9: 翻译英文事件名为会话语言
