@@ -300,6 +300,13 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   ③ **列模块严格对齐 + label 全部在图形外**（行标签左侧、面板标题顶部、亚群标签底部斜排；不能挤进图形内部）
   ④ **交付前用 vision_describe 对比 v1/v2/v3 三张图**：OCR 查行标签完整性、主色查配色、ASCII 亮度图查格子
   是否画出来（全亮 = 白图）、亚群标签坐标查是否在图形内。先自查再交付，不要等用户说"你画的图有问题"。
+- **⛔ matplotlib `plt.tight_layout()` + `fig.add_axes()` 颜色条不兼容 → PNG/PDF 渲染分叉（2026-08-14 v5→v6 关键修复）**：
+  同一脚本里 `plt.tight_layout()` 与手动 `fig.add_axes([...])` 颜色条共存会触发 `UserWarning: Axes not compatible with tight_layout`，
+  后果 = **PNG 底部标签被裁剪/热图空白，而 PDF（矢量）正常**——用户看到"PNG 没变、PDF 对了"的诡异分叉，误以为是缓存。
+  修复 = 去掉 tight_layout，改用 `fig.subplots_adjust(left=,right=,bottom=,top=)` 手动布局，三种格式渲染一致。
+  **判断 PNG 是否真更新**：别只看文件大小/时间戳，用 vision_describe 看主色（热图区不应 60%+ 灰白 #e0e0e0）+ 裁剪底部 OCR 确认标签贴边。
+  亚群标签离热图太远的正确参数 = 底部 45° 斜排 `y=-0.15`（不是 -1.9）。详见 `references/cns-effect-matrix-aucell.md` v5→v6 节。
+- **⛔ Fig7 打分×亚群热图必须转置（2026-08-14 用户明确："y轴是基因集名字，亚群是x轴"）**：y=22 打分、x=10 亚群，不要默认行=亚群列=打分；行分组色带移左侧。
 
 ## 用户上传图识别（2026-08-14 实测）
 - 用户上传项目产出图（如 Fig1_five_effects_matrix PNG）问"能识别这个图吗" → **不要只凭肉眼描述**，先 `vision_describe(image_path)` 拿 OCR + 元素检测 + ASCII 亮度图事实清单，再结合项目上下文（本 skill 的图格式约定）回答
@@ -311,4 +318,4 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
-- `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图"
+- `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现 + **五效应扩展版 + 颜色语义问答三步核实 + v5→v6 定稿参数（tight_layout/add_axes 坑、亚群标签 y=-0.15、Fig7 转置）**。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图" / "PNG没变PDF对了"

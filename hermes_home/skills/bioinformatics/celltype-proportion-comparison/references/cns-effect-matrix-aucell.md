@@ -87,7 +87,7 @@ _, pv = wilcoxon(w['O_Post'], w['O_Pre'])
 
 ## 颜色语义问答（"红色代表谁上升"，2026-08-14 实测三步核实法）
 
-用户拿到五效应热图问颜色含义时，**不能凭记忆答**。保存的 `.R` 脚本可能是 33 行读数据 stub（`aucell_cns_figure.R` 实测只有读 CSV + 列名确认），真正的出图代码在 execute_code 调用里——**从 `log/system_log.jsonl` 提取**（`grep -a TwoSlopeNorm` / search_files pattern=`Fig1_five_effects_matrix` → 命中行 json 的 args.code 即完整脚本）。
+用户拿到五效应热图问颜色含义时，**不能凭记忆答**。保存的 `.R` 脚本可能是 33 行读数据 stub（`aucell_cns_figure.R` 实测只有读 CSV + 列名确认），真正的出图代码在 execute_code 调用里——**从 `log/system_log.jsonl` 提取**（`grep -a TwoSlopeNorm` / search_files pattern=`Fig1_five_effects_matrix` → 命中行 json 的 args.code 即完整脚本）。保存的 `.R` 脚本可能是 33 行读数据 stub（`aucell_cns_figure.R` 实测只有读 CSV + 列名确认），真正的出图代码在 execute_code 调用里——**从 `log/system_log.jsonl` 提取**（`grep -a TwoSlopeNorm` / search_files pattern=`Fig1_five_effects_matrix` → 命中行 json 的 args.code 即完整脚本）。
 
 **实测解码**（五效应版）：
 - 配色：`LinearSegmentedColormap.from_list('cns', ['#2166AC','#F7F7F7','#B2182B'])` + `TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)` → 蓝=负 d，白=0，红=正 d
@@ -96,3 +96,21 @@ _, pv = wilcoxon(w['O_Post'], w['O_Pre'])
 - 答案模板：**Aging 列红 = 老年组打分高（衰老上调）；T2D 列红 = 糖尿病组高（糖尿病上调）；Ex* 列红 = 运动后高（运动上调）；蓝 = 效应组更低**
 
 **验证步**：从 `effect5_d_table.csv` 抽生物学方向明确的行验证符号（如 scoreOxPhos_AUC 衰老应下降 → Aging 轴 d 全负，实测 −1.57~−4.73 ✅；scoreSenMayo_AUC 常规预期衰老上升，但实测 Aging 轴 d 全负 = 老年组 SenMayo 反而低于年轻组 ⚠️ 反直觉点，如实报告并建议确认打分方向/样本构成）。**符号约定随代码版本变**：Cliff's delta 约定正值=后者高（箱线图），Cohen's d 约定正=前项组高（效应矩阵）——两套并存，回答前必须读代码，不可套用。
+
+## v5→v6 迭代定稿：tight_layout 与 add_axes 颜色条不兼容 → PNG/PDF 渲染分叉（2026-08-14 关键修复）
+
+用户反馈链：v4 颜色对了但"亚群标签离热图太远"→ 改 y 后"PNG 没变，反倒是 PDF 是对的"。**根因不是缓存，是 matplotlib 布局系统**：
+
+- **`plt.tight_layout()` 与 `fig.add_axes([...])` 手动颜色条不兼容**。tight_layout 只识别自动创建的 axes，手动 add_axes 的 colorbar 会被忽略且触发 `UserWarning: This figure includes Axes that are not compatible with tight_layout`。后果：**PNG 渲染时 bbox 计算错乱 → 底部亚群标签被裁剪/热图区域空白，而 PDF（矢量）不受影响**——用户看到"PNG 没变、PDF 对了"的分叉。
+- **⛔ 修复：去掉 tight_layout，改用 `fig.subplots_adjust(left=, right=, bottom=, top=)` 手动布局**（v6 方案），再叠加 `bbox_inches="tight"` 时三种格式（PNG/PDF/SVG）渲染一致。同一脚本里同时用 `plt.tight_layout()` + `fig.add_axes()` = 埋雷。
+- **验证 PNG 是否真的更新/渲染正确（不要只看文件大小或时间戳）**：`vision_describe` 看主色分布（热图区域不应 60%+ 是 `#e0e0e0` 灰白）+ 裁剪底部区域 OCR 确认亚群标签在热图底边附近（v6 实测：热图最后彩色行 y≈2105，标签 y≈2143-2225，间距仅 40-120px = 贴紧）。
+
+**v6 最终布局参数（用户认可的 Fig1 五效应版）**：
+- 行分组间隙：三组（Metabolic 11 / Fiber Identity 4 / Senescence 7）之间各插 **0.6 行窄间隙**（`ri += 0.6`，不要插整空行——v4 整空行被批"隔开这么多"）
+- 面板间距：`PANEL_GAP = 1.8`（有距离但紧凑；v3 曾用 3.0 被批"隔开距离也大了"）
+- 亚群标签：底部 45° 斜排，`y = -0.15`（贴热图底边；v4 用 -1.9 被批"离热图太远"），`ha="right", va="top"`，fontsize=6.8
+- 行标签 = 22 个完整基因集名（scoreOxPhos…Fibrosis）+ 左侧三色分组带（Metabolic #2C7FB8 / Fiber Identity #F4A261 / Senescence #D64550）
+- 配色 = RdBu_r + TwoSlopeNorm(-3, 0, 3)，星号 `*` FDR<0.05（BH）
+- **Fig7（打分×亚群）必须转置：y 轴=22 个基因集名、x 轴=10 亚群**（用户明确："y轴是基因集名字，亚群是x轴"）——不要默认行=亚群列=打分
+- 迭代纪律：用户每版反馈只调一个维度（间隙→面板距→标签位置），**一次只改用户点名的那一处**，其他保持 v1 样式契约不动；每版用递增版本号 v3/v4/v5/v6 并存，用户对比后挑。
+- 中文注释/表头一律英文（DejaVu Sans 无 CJK，中文=方框）；交付汇报用中文。
