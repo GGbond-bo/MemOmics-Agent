@@ -530,6 +530,13 @@ terminal 完成 → _pending_record = True
 - 关键结果脚本 → `kind=script`；阶段结论 → `kind=finding`；用户偏好/决定 → `kind=preference/decision`
 - 每轮对话自动注入锚点摘要；**上下文压缩后以锚点为准**：需要精确路径/文件名时先 `session_memory(list)` 或 read 锚点文件，禁止凭压缩摘要猜。
 
+## 🔴 铁律 31 — 超长会话纪律（单会话 2000+ 轮保障）
+
+1. **大输出先落盘**：terminal/R 输出预计 >50 行时先重定向到 `results/<sid>/logs/` 再 `tail` 查看，禁止把整份输出塞进上下文（工具输出已设上限，超出会截断）。
+2. **每轮以注入块为准对齐状态**（相关历史记忆 + 会话锚点），需要细节用 `read_file` 读 refs/锚点文件，禁止重复输出大段旧内容。
+3. **阶段结论必锚定**：每个分析阶段完成时 `session_memory(add, kind=finding)` 一句结论 + 关键产物路径（产物文件系统已自动锚定，agent 补语义与重要度）。
+4. **记忆纠错**：发现记忆条目过时/错误 → `session_memory(remove)` 或 `memory` 工具更新，禁止只在对话里口头"记住"了事。
+
 ---
 
 ## 操作级别（仅 analysis_exec · 快速判定）

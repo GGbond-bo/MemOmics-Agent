@@ -297,6 +297,40 @@ async def _start_agent_stall_watchdog():
         logger.warning(f"[MemOmics] stall watchdog start failed: {e}")
 
 @app.on_event("startup")
+async def _start_memory_governance():
+    """记忆治理自动调度（2026-08-14）：每天一次 L1→L2 下沉 / L3 归档，
+    防止 MEMORY.md 在超长会话中无限膨胀（TencentDB L0-L3 分层的 MemOmics 版）。"""
+    async def _loop():
+        while True:
+            try:
+                _marker = os.path.join(HERMES_HOME_DIR, "memories", ".governance_last")
+                _last = 0.0
+                if os.path.isfile(_marker):
+                    try:
+                        _last = float(open(_marker, "r", encoding="utf-8").read().strip() or "0")
+                    except Exception:
+                        pass
+                if time.time() - _last > 86400:
+                    from memomics.memory_governance.governor import init_index, run_governance
+                    init_index(verbose=False)
+                    _rep = run_governance(dry_run=False, verbose=False)
+                    try:
+                        with open(_marker, "w", encoding="utf-8") as _f:
+                            _f.write(str(time.time()))
+                    except Exception:
+                        pass
+                    logger.info(f"[MemoryGovernor] 每日治理完成: L2下沉={len(_rep.get('moved_to_l2', []))} L3归档={len(_rep.get('moved_to_l3', []))}")
+            except Exception as _e:
+                logger.warning(f"[MemoryGovernor] 每日治理失败(非阻塞): {_e}")
+            await asyncio.sleep(6 * 3600)
+    try:
+        asyncio.create_task(_loop())
+        logger.info("[MemOmics] Memory governance scheduler started — daily L1→L2→L3")
+    except Exception as e:
+        logger.warning(f"[MemOmics] memory governance start failed: {e}")
+
+
+@app.on_event("startup")
 async def _start_hermes_cron_ticker():
     """在 MemOmics FastAPI 进程中启动 Hermes 原生 cron ticker。
     
@@ -3627,16 +3661,73 @@ IMPORTANT:
 """
 
 
+_FACT_RECALL_STOP = {
+    "的", "了", "和", "是", "在", "我", "你", "要", "与", "或", "一个", "这个", "那个",
+    "我们", "请", "帮", "怎么", "什么", "为什么", "如何", "这个", "进行", "一下",
+    "the", "a", "an", "of", "to", "in", "for", "and", "or", "is", "are", "on",
+}
+
+
+def _recall_facts(text, limit=6, max_chars=450):
+    """每轮自动召回相关历史记忆（memory_store.db facts，TencentDB L1-recall 的 MemOmics 版）。
+
+    关键字 LIKE 匹配 + trust_score/retrieval_count 排序；预算 ≤450 字符。失败静默返回空串。
+    """
+    try:
+        if not text:
+            return ""
+        import re as _re
+        _kws = [w for w in _re.findall(r"[\u4e00-\u9fffA-Za-z0-9_.-]{2,}", text)
+                if w.lower() not in _FACT_RECALL_STOP][:8]
+        if not _kws:
+            return ""
+        _db = os.path.join(HERMES_HOME_DIR, "memory_store.db")
+        if not os.path.isfile(_db):
+            return ""
+        import sqlite3 as _sq
+        _conds = " OR ".join(["f.content LIKE ?" for _ in _kws])
+        conn = _sq.connect(f"file:{_db}?mode=ro", uri=True, timeout=10)
+        try:
+            _rows = conn.execute(
+                f"SELECT f.content, f.trust_score FROM facts f WHERE {_conds} "
+                "ORDER BY f.trust_score DESC, f.retrieval_count DESC LIMIT ?",
+                tuple(f"%{k}%" for k in _kws) + (limit,)).fetchall()
+        finally:
+            conn.close()
+        if not _rows:
+            return ""
+        _lines = ["[相关历史记忆 · 若与当前问题无关请忽略]"]
+        _used = 0
+        for _c, _t in _rows:
+            _line = f"- {str(_c)[:110]}"
+            if _used + len(_line) > max_chars:
+                break
+            _lines.append(_line)
+            _used += len(_line)
+        return "\n".join(_lines) if len(_lines) > 1 else ""
+    except Exception:
+        return ""
+
+
 def _inject_anchors(session, text):
-    """每轮注入会话锚点摘要（跨压缩持久，2026-08-14）。失败静默降级为原文。"""
+    """每轮注入 历史记忆召回 + 会话锚点摘要（跨压缩持久，2026-08-14）。"""
+    _parts = []
+    try:
+        _facts = _recall_facts(text or "")
+        if _facts:
+            _parts.append(_facts)
+    except Exception:
+        pass
     try:
         from memomics.bio_tools import session_memory as _sm
         _block = _sm.build_digest(session.get("id", ""), max_items=12, max_chars=700)
         if _block:
-            return _block + "\n\n" + (text or "")
+            _parts.append(_block)
     except Exception:
         pass
-    return text
+    if not _parts:
+        return text
+    return "\n\n".join(_parts) + "\n\n" + (text or "")
 
 
 def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
@@ -7615,6 +7706,8 @@ async def ws_endpoint(ws: WebSocket):
                 _es.results_dir = session.get("results_dir", "")
                 # 2026-08-14: 会话锚点 — 用户点名的路径自动标记 + 注入锚点摘要
                 _auto_anchor_turn(session, user_text=user_text)
+                # 2026-08-14: 会话轮数计数（长会话可见性：第 N 轮）
+                session["_turn_count"] = int(session.get("_turn_count", 0)) + 1
                 _run_text = _inject_anchors(session, user_text)
 
                 # 记录用户消息到 session + state.db
@@ -8326,6 +8419,7 @@ async def ws_endpoint(ws: WebSocket):
                             _session_emit(_s, {"type": "heartbeat",
                                 "elapsed": int(time.time() - _turn_start),
                                 "api_calls": int(_s.get("_api_calls", 0) or 0),
+                                "turns": int(_s.get("_turn_count", 0) or 0),
                                 "tool": _live_tool,
                                 "stalled": _stalled,
                                 "ts": datetime.now().strftime("%H:%M:%S"),

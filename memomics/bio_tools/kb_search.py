@@ -594,7 +594,7 @@ def _register():
                 args.get("direction", "")
             ),
             emoji="📚",
-            max_result_size_chars=50_000,
+            max_result_size_chars=20_000,
         )
     except ImportError:
         pass  # 不在 Hermes 环境中时不注册

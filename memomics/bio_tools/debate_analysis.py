@@ -1735,7 +1735,7 @@ def _register():
                 auto_kb=args.get("auto_kb", True),
             ),
             emoji="🎭",
-            max_result_size_chars=120_000,
+            max_result_size_chars=40_000,
         )
 
         # 问题8: 新增图片结论 vs 模块结论一致性辩论模板
@@ -1805,7 +1805,7 @@ def _register():
             schema=FIGURE_CONCLUSION_DEBATE_SCHEMA,
             handler=debate_figure_conclusions_handler,
             emoji="🖼️",
-            max_result_size_chars=120_000,
+            max_result_size_chars=40_000,
         )
     except ImportError:
         pass  # 不在 Hermes 环境中时不注册
