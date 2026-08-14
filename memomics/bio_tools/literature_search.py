@@ -12,6 +12,7 @@
 注册为 hermes 工具。
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -19,6 +20,7 @@ import time
 import urllib.request
 import urllib.parse
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 
@@ -530,6 +532,83 @@ def _download_url_to_file(url: str, output_dir: Path, filename_hint: str = "") -
     }
 
 
+# ============ PDF 索引（批 C：文献库闭环） ============
+
+def _sha256_of(file_path: str) -> str:
+    h = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except Exception:
+        return ""
+    return h.hexdigest()
+
+
+def _index_downloaded_pdf(result: dict, output_dir: Path, doi: str, source_url: str) -> dict:
+    """把下载成功的 PDF 写入索引（.pdf_index.json），并可选收录进引用库。
+
+    - 索引文件与 PDF 同目录，记录 doi/来源 URL/大小/sha256/时间 → 支撑溯源与查重
+    - 若会话结果目录可用，同时调用 save_reference 收录为 BibTeX/RIS 条目
+    - 任何一步失败不影响下载结果本身
+    """
+    fp = result.get("file_path", "")
+    entry = {
+        "file": os.path.basename(fp),
+        "path": fp,
+        "doi": doi or "",
+        "source_url": source_url or "",
+        "size": result.get("file_size", 0),
+        "sha256": _sha256_of(fp) if fp else "",
+        "downloaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    index_file = output_dir / ".pdf_index.json"
+    try:
+        entries = []
+        if index_file.is_file():
+            try:
+                entries = json.loads(index_file.read_text(encoding="utf-8"))
+            except Exception:
+                entries = []
+        # 同文件去重（按 sha256 或文件名）
+        if not any(e.get("sha256") and e["sha256"] == entry["sha256"] or e.get("file") == entry["file"] for e in entries):
+            entries.append(entry)
+        index_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+        result["indexed"] = True
+        result["index_file"] = str(index_file)
+        result["sha256"] = entry["sha256"]
+    except Exception as e:
+        result["indexed"] = False
+        result["index_error"] = str(e)[:200]
+
+    # 引用库收录（会话级）
+    if doi or source_url:
+        try:
+            from memomics.bio_tools.reference_library import save_reference
+            meta = {
+                "title": (doi or os.path.splitext(entry["file"])[0]).replace("_", " "),
+                "doi": doi or "",
+                "url": source_url or "",
+                "entry_type": "article",
+                "note": f"local_pdf: {fp}",
+            }
+            r = json.loads(save_reference("add", meta))
+            result["reference_library"] = {"added": r.get("added"), "library": r.get("library"),
+                                           "bibtex_key": r.get("bibtex_key")}
+        except Exception:
+            result["reference_library"] = None
+    return result
+
+
+def _finish_download(result: dict, output_dir: Path, doi: str, source_url: str) -> str:
+    """成功返回前的统一收尾：PDF 索引 + 引用库收录。"""
+    try:
+        result = _index_downloaded_pdf(result, output_dir, doi, source_url)
+    except Exception:
+        pass
+    return json.dumps(result, ensure_ascii=False)
+
+
 def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str:
     """下载文献 PDF 到 work/papers/ 目录。强制多源尝试。
 
@@ -553,7 +632,7 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
         if url.startswith("http"):
             result = _download_url_to_file(url, output_dir)
             if result.get("success"):
-                return json.dumps(result, ensure_ascii=False)
+                return _finish_download(result, output_dir, doi, url)
             attempts.append({
                 "strategy": "direct_url",
                 "result": result.get("error", ""),
@@ -574,7 +653,7 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
                     pmc_pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/PMC{pmc_id}/pdf/"
                     result = _download_url_to_file(pmc_pdf_url, output_dir, filename_hint=f"PMID_{pmid}.pdf")
                     if result.get("success"):
-                        return json.dumps(result, ensure_ascii=False)
+                        return _finish_download(result, output_dir, doi, pmc_pdf_url)
                     attempts.append({
                         "strategy": "pmc_fulltext",
                         "result": result.get("error", ""),
@@ -590,7 +669,7 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
             for source, pdf_url in _doi_to_pdf_urls(doi):
                 result = _download_url_to_file(pdf_url, output_dir, filename_hint=f"{doi.replace('/', '_')}.pdf")
                 if result.get("success"):
-                    return json.dumps(result, ensure_ascii=False)
+                    return _finish_download(result, output_dir, doi, pdf_url)
                 attempts.append({
                     "strategy": source,
                     "result": result.get("error", ""),
@@ -602,7 +681,7 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
             for source, pdf_url in _doi_to_pdf_urls(url):
                 result = _download_url_to_file(pdf_url, output_dir, filename_hint=f"{url.replace('/', '_')}.pdf")
                 if result.get("success"):
-                    return json.dumps(result, ensure_ascii=False)
+                    return _finish_download(result, output_dir, doi, pdf_url)
                 attempts.append({
                     "strategy": source,
                     "result": result.get("error", ""),

@@ -549,6 +549,12 @@ terminal 完成 → _pending_record = True
 2. **纯文本输出**：自包含 HTML + 内联 SVG，保存到 `results/<sid>/diagrams/`；需要 PNG 时用 svglib 转换。禁止调用任何绘图 API/服务。
 3. **风格闸门**：首次为项目出图先定风格令牌（默认纸白+珊瑚橙可按用户偏好定制）；遵循 style-guide.md 的 4 倍数网格与密度 4/10 原则——【该删则删】，超过 9 个节点考虑拆成两张图。
 4. 出图后用 skill 的 self_check.py 对照 output-spec.md 自检（标签几何/对比度/语义完整）。
+## 🔴 铁律 34 — 文献引用库与数据清单（批 C 闭环）
+
+1. **写论文/报告前必须收录引用**：对最终引用的每一篇文献调用 `save_reference(action=add, metadata=...)`（metadata 直接取自 search_papers 结果），完成后 `save_reference(action=export)` 确认 .bib/.ris 文件路径，交付时把 references.bib 一并给出（Zotero/EndNote 可直接导入）。
+2. **download_pdf 会自动落索引**：下载成功的 PDF 自动写入同目录 .pdf_index.json（含 doi/sha256/时间）并收录进引用库，不要重复手工登记。
+3. **数据先落库再分析**：scan_data 扫描后自动登记到 `results/<sid>/datasets/`（sha256+维度+时间戳）；换数据/更新数据后要重新 scan 一次刷新指纹，交付前用 `scan_data(action=inventory)` 汇报数据清单。
+4. **环境复现**：交付分析时若用户要复现环境，提示 `requirements-lock.txt`（Python 精确锁）与 `R-packages.lock.txt`（R 包版本清单），刷新用 `python scripts/refresh_lock.py --with-r`。
 
 ---
 

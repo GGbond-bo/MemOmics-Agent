@@ -210,6 +210,7 @@ TOOLSETS = {
             "kb_coverage",
             "session_memory",
             "vision_describe",
+            "save_reference",
         ],
         "module": "tools.memomics_tools",
         "includes": []
