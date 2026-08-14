@@ -53,8 +53,8 @@
       "date": "2026-08-12 23:12:16"
     }
   ],
-  "success_count": 3,
-  "proven_script": "Fig1_five_effects_matrix.py",
+  "success_count": 4,
+  "proven_script": "update_denervation_gene_set.py",
   "proven_params": [
     {
       "species": "",
@@ -94,10 +94,23 @@
       "approved": false,
       "custom_script": false,
       "result": "五效应矩阵图完成，严格复刻用户认可的Figure1格式（1x5并排热图面板）。用户明确要求\"按Figure1格式出\"——从system_log.jsonl提取原始Fig1_effect_matrix生成代码作为格式基准，扩展为5效应。关键经验：用户认可格式要原样复用，不要自行创新布局。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "update_denervation_gene_set.py",
+      "params": "genes: CHRNA1 CHRNG CHRND SCN5A KCNMB1 MYOG RUNX1 NCAM1 NGFR GAP43 MYH8; classification: AChR/channels/TF/neural/embryonic myosin",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "按功能分类更新 Denervation 基因集（11 基因全保留）：[AChR] CHRNA1/CHRNG/CHRND (PMID 3949875/3892537), [离子通道] SCN5A/KCNMB1 (PMID 33803193/19109424), [转录因子] MYOG/RUNX1 (PMID 7969143/16024660/21465538), [神经/施万标志] NCAM1/NG"
     }
   ],
   "user_prefs": {
-    "last_used_script": "Fig1_five_effects_matrix.py"
+    "last_used_script": "update_denervation_gene_set.py"
   },
   "error_count": 1,
   "errors": [

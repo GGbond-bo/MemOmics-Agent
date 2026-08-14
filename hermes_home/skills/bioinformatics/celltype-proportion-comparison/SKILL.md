@@ -180,7 +180,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 衰老轴（Y vs O）与糖尿病轴（O vs OD）是不同模式：衰老 = IIa+OxPhos+Sarcomeric 全面↓；糖尿病 = Type I 程序↓ + Type II 程序↑（向糖酵解倾斜）——分开讲
 - 运动唯一显著信号：老年运动回升 IIa 程序（FDR=0.031），这是"运动逆转"的关键证据点
 - **基因集评估要点**（去神经化等自定义基因集）：① 检查方向相反基因（如 SCN4A 去神经时**下调**，与 SCN5A 上调共存会互相抵消）② 补经典 marker（去神经必加 **NCAM1**，Lai 2024 Nature 用它定义去神经纤维）③ 查与已有打分重叠（Atrophy/RegMyon/Sarcomeric 重叠基因 → 共线性，不能都讲）④ 缺哪类打分按研究问题补齐（骨骼肌衰老+糖尿病运动最少要补：Glycolysis 与 OxPhos 配对、AMPK-PGC1α 运动开关、Autophagy、Adipogenesis、Fibrosis）——详见 `references/mf-score-analysis.md` 与 `references/geneset-supplement-2026-08.md`
-- **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。④ **用户质疑"你是不是算错了"→ 手动重算 + 展示原始均值表，并解释 Cohen's d 对低基线打分的放大效应**（见下方专项）。详见 `references/denervation-geneset-contamination.md`
+- **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。④ **用户质疑"你是不是算错了"→ 手动重算 + 展示原始均值表，并解释 Cohen's d 对低基线打分的放大效应**（见下方专项）。⑤ **用户采纳剔除重叠基因方案（2026-08-14）**：用户主动提议 Denervation 基因集改为 **8 基因** = CHRNA1/CHRNG/CHRND/SCN5A/KCNMB1/NCAM1/NGFR + RUNX1，**去掉 MYOG/MYH8/GAP43**——恰好是污染诊断③点名的 RegMyon 重叠基因，与建议一致。更新 `pathway_score_CLEAN.xlsx`（SuppTable3 宽表，Class/Signature/Annoation/Genes 四列 + 基因逐列展开）时按用户版本执行，并按 Class 分类整理；来源三篇：Covault & Sanes 1985 PNAS (PMID 3892537) / Tang et al. 2009 MBC (PMID 19109424) / Lai et al. 2024 Nature (PMID 38649488)。详见 `references/denervation-geneset-contamination.md`
 - **⛔ 效应计算被质疑时的重算验证流程 + Cohen's d 低基线放大效应（2026-08-14 实测，用户问"你有没有算错"）**：
   - 场景：效应热图显示 Denervation 全亚群全效应正，但 6 组原始打分热图显示只有 SMF 绝对分高——用户质疑"是不是算错了"。
   - **响应顺序（先重算后解释）**：① 从 `effect5_d_table.csv` 抽出该打分行全部 50 个效应值 → ② 从 `agg_sample.csv`（样本级聚合表）**用 scipy.stats / pandas 手动重算 Cohen's d**（`d = (g2.mean − g1.mean)/pooled_sd`，逐亚群 × 逐效应）→ ③ 逐格比对与表值一致 → **先回答"没算错"（用重算表作证）** → ④ 再解释为什么数据本身就是这样。
@@ -273,10 +273,14 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   连续 ≥2 轮没有任何图/文件/明确结果产出 = 已在打转。立即要么出图、要么换栈、要么如实报告阻塞点。用户说
   "找原因，先不执行" = 只诊断不改，诊断完给根因，不要顺手执行修复。
 
+## 用户上传图识别（2026-08-14 实测）
+- 用户上传项目产出图（如 Fig1_five_effects_matrix PNG）问"能识别这个图吗" → **不要只凭肉眼描述**，先 `vision_describe(image_path)` 拿 OCR + 元素检测 + ASCII 亮度图事实清单，再结合项目上下文（本 skill 的图格式约定）回答
+- 识别要点：读标题（如 "AUcell pathway activity across myofiber subtypes... n=24"）、面板结构（1×5 并排 = Aging/T2D/ExYoung/ExOld/ExT2D）、行顺序（22 打分按功能轴分组）、图例（Cohen's d ±3 红蓝 diverging）
+- 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
+
 ## 支持文件
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
 - `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图"
-- `references/denervation-geneset-contamination.md` — **基因集语义污染诊断案例**（2026-08-14 Denervation）：反直觉"全亚群全效应升高" → 6 组原始打分热图诊断 → 实测原始均值表 → 根因=MYOG/RUNX1/NCAM1/MYH8 与 RegMyon 再生程序重叠（运动诱导再生被误捕为去神经）→ 修正方案 + 通用"污染三步诊断法"。触发词："去神经打分为什么高" / "打分全亚群都高" / "6组打分热图" / "基因集污染" / "semantic contamination"
