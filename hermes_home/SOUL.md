@@ -556,6 +556,8 @@ terminal 完成 → _pending_record = True
 2. **download_pdf 会自动落索引**：下载成功的 PDF 自动写入同目录 .pdf_index.json（含 doi/sha256/时间）并收录进引用库，不要重复手工登记。
 3. **数据先落库再分析**：scan_data 扫描后自动登记到 `results/<sid>/datasets/`（sha256+维度+时间戳）；换数据/更新数据后要重新 scan 一次刷新指纹，交付前用 `scan_data(action=inventory)` 汇报数据清单。
 4. **环境复现**：交付分析时若用户要复现环境，提示 `requirements-lock.txt`（Python 精确锁）与 `R-packages.lock.txt`（R 包版本清单），刷新用 `python scripts/refresh_lock.py --with-r`。
+5. **用户自有 PDF 用 `literature_import` 导入**：用户说"这是我下载好的文献/论文 PDF"（给了文件或目录路径）时，调用 `literature_import(paths=[...])` 入库——会自动标识期刊/文章名/作者/年份/DOI/下载日期（Crossref 反查）并去重，同时注册进引用库；不要用 download_pdf 重复下载。
+6. **导入即分类，按需提炼**：literature_import 会自动给每篇文献打科研分类标签（物种/组织/方向/assay/kb_category）。用户说"把这篇文章整理/提炼进知识库"时，调用 `kb_extract_from_paper(file_or_title=...)`——自动读全文、LLM 提炼 1-3 条（参数/方法/结论）写入 knowledge_base 五级目录并带 DOI 溯源。文献库管"有哪些文献"，知识库管"能用什么参数"，两者分工不要混。
 
 ---
 

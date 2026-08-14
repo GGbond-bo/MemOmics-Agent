@@ -211,6 +211,8 @@ TOOLSETS = {
             "session_memory",
             "vision_describe",
             "save_reference",
+            "literature_import",
+            "kb_extract_from_paper",
         ],
         "module": "tools.memomics_tools",
         "includes": []

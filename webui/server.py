@@ -7349,6 +7349,31 @@ async def science_search(q: str = "", source: str = "arxiv", limit: int = 5):
     return arxiv_search(q.strip(), limit=limit)
 
 
+@app.post("/api/literature/import")
+async def literature_import(payload: dict):
+    """导入本地 PDF 到全局文献库（批F 2026-08-16：期刊/文章名/下载日期标识）。"""
+    paths = payload.get("paths") or []
+    if not paths:
+        return JSONResponse({"error": "paths required"}, status_code=400)
+    try:
+        from memomics.bio_tools.literature_library import import_pdfs
+        import json as _json
+        return _json.loads(import_pdfs(paths))
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
+@app.get("/api/literature/library")
+async def literature_library_list():
+    """列出全部文献（用户导入 + agent 下载），带期刊/文章名/下载日期标识。"""
+    try:
+        from memomics.bio_tools.literature_library import list_library
+        import json as _json
+        return _json.loads(list_library())
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
 def _find_best_results_dir(sid: str) -> str:
     """每次实时扫描 results/，找到当前会话的确定分析结果目录。
     
