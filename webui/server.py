@@ -6434,8 +6434,89 @@ async def list_files(path: str = ""):
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@app.get("/api/file/read")
-async def read_file_api(path: str):
+@app.get("/api/lit/browse")
+async def lit_browse(path: str = ""):
+    """文献导入的目录浏览（批H 2026-08-16，跨平台）。
+
+    - 空 path → 默认打开 MemOmics 安装目录（MEMOMICS_DIR），首项为系统根虚拟项
+      （Windows:「💻 此电脑」→ __drives__ 盘符列表；Linux:「💻 根目录 /」→ /）
+    - path == "__drives__"（仅 Windows）→ 盘符列表
+    - 其他 → 该目录下的子目录 + PDF 文件
+    - parent 由服务端按平台计算（Windows 盘符根/ Linux / 之上无 parent），
+      前端直接用 d.parent 做「返回上一级」，不做任何平台路径字符串拼装。
+    仅本机回环服务使用（文献导入需要访问用户任意位置的 PDF）。
+    """
+    is_win = os.name == "nt"
+    # 系统根虚拟项
+    root_virtual = ({"name": "💻 此电脑", "path": "__drives__", "is_dir": True, "virtual": True}
+                    if is_win else
+                    {"name": "💻 根目录 /", "path": "/", "is_dir": True, "virtual": True})
+    if not path:
+        root_dir = MEMOMICS_DIR
+        try:
+            items = [root_virtual]
+            for p in sorted(Path(root_dir).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if p.name.startswith(".") or p.name == "__pycache__":
+                    continue
+                try:
+                    is_dir = p.is_dir()
+                except Exception:
+                    continue
+                if not is_dir and p.suffix.lower() != ".pdf":
+                    continue
+                items.append({
+                    "name": p.name,
+                    "path": str(p).replace("\\", "/"),
+                    "is_dir": is_dir,
+                    "size": p.stat().st_size if not is_dir else 0,
+                    "ext": p.suffix.lower() if not is_dir else "",
+                })
+            return {"path": root_dir.replace("\\", "/") + "  (MemOmics 安装目录)",
+                    "items": items, "is_root": True, "parent": None, "platform": os.name}
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    if path == "__drives__" and is_win:
+        drives = []
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            root = f"{letter}:\\"
+            if os.path.exists(root):
+                drives.append({"name": f"{letter}:\\", "path": f"{letter}:/", "is_dir": True})
+        return {"path": "💻 此电脑 — 选择盘符", "items": drives, "is_root": True,
+                "parent": "", "platform": os.name}
+    real = os.path.realpath(path)
+    if not os.path.isdir(real):
+        return JSONResponse({"error": f"目录不存在: {path}"}, status_code=400)
+    # 服务端计算上一级（跨平台）
+    if is_win:
+        norm = os.path.normpath(real).replace("\\", "/")
+        if norm.endswith("/"):
+            norm = norm.rstrip("/")
+        drive_root = bool(re.fullmatch(r"[A-Za-z]:", norm))
+        parent = "" if drive_root else (os.path.dirname(real).replace("\\", "/") or "")
+    else:
+        parent = "" if os.path.realpath(path) == "/" else (os.path.dirname(os.path.realpath(path)) or "/")
+    try:
+        items = [root_virtual]
+        for p in sorted(Path(real).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            if p.name.startswith(".") or p.name in ("$RECYCLE.BIN", "System Volume Information", "__pycache__"):
+                continue
+            try:
+                is_dir = p.is_dir()
+            except Exception:
+                continue
+            if not is_dir and p.suffix.lower() != ".pdf":
+                continue
+            items.append({
+                "name": p.name,
+                "path": str(p).replace("\\", "/"),
+                "is_dir": is_dir,
+                "size": p.stat().st_size if not is_dir else 0,
+                "ext": p.suffix.lower() if not is_dir else "",
+            })
+        return {"path": real.replace("\\", "/"), "items": items, "is_root": False,
+                "parent": parent, "platform": os.name}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     """读取文件内容（限制在 work/results/项目内，防任意文件读取）"""
     try:
         from webui.security import resolve_within_roots, UnsafePathError

@@ -415,6 +415,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #setup-modal .setup-btn { width:100%; padding:10px; background:var(--primary); color:#fff; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; margin-top:20px; }
 #setup-modal .setup-btn:hover { opacity:0.9; }
 #setup-modal .setup-err { color:var(--danger); font-size:12px; margin-top:8px; display:none; }
+#lit-picker { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:9998; }
+#lit-picker .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:580px; max-width:94%; height:72vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; }
+#lit-picker .lit-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; }
+#lit-picker .lit-path { font-size:11px; color:var(--text-light); padding:6px 14px; border-bottom:1px solid var(--border); word-break:break-all; }
+#lit-picker .lit-list { flex:1; overflow-y:auto; padding:6px 8px; }
+#lit-picker .lit-footer { display:flex; gap:6px; padding:10px 14px; border-top:1px solid var(--border); }
+#lit-picker .lit-footer button { flex:1; font-size:12px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
+#lit-picker .lit-footer button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
 /* === 环境检测面板 === */
 #env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
 #env-check-panel h3 { margin:0 0 8px; font-size:14px; }
@@ -664,8 +672,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <div id="science-results" style="flex:1;overflow-y:auto;padding:0 10px 10px;font-size:12px;">输入关键词后点击检索（结果来自 arXiv / OpenAlex，可点标题打开原文）</div>
         <div id="lit-library" style="display:none;flex:1;overflow-y:auto;padding:0 10px 10px;font-size:12px;"></div>
         <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;align-items:center;">
-          <input id="lit-import-path" type="text" placeholder="📥 导入本地 PDF：文件或目录绝对路径，如 E:\论文\xxx.pdf（多个用 ; 分隔）" style="flex:1;font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);" onkeydown="if(event.key==='Enter')importLocalPdfs()">
-          <button onclick="importLocalPdfs()" title="把你自己下载的 PDF 导入文献库（自动标识期刊/文章名/下载日期并去重）" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;white-space:nowrap;">导入</button>
+          <input id="lit-import-path" type="text" placeholder="或粘贴绝对路径（多个用 ; 分隔）" style="flex:1;font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);" onkeydown="if(event.key==='Enter')importLocalPdfs(null)">
+          <button onclick="openLitPicker()" title="弹出目录窗口选择要导入的 PDF（可浏览任意盘符）" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;white-space:nowrap;">📂 选择目录</button>
+          <button onclick="importLocalPdfs(null)" title="按输入框里的路径导入" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--border);color:var(--text);border:none;cursor:pointer;white-space:nowrap;">导入</button>
           <button onclick="loadLiteratureLibrary()" title="查看文献库（含 agent 下载的）" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--border);color:var(--text);border:none;cursor:pointer;white-space:nowrap;">📚 文献库</button>
         </div>
       </div>
@@ -3774,10 +3783,15 @@ function toggleScienceSearch() {
 }
 
 // === 本地 PDF 导入 + 文献库（批F 2026-08-16）===
-async function importLocalPdfs() {
-  var raw = document.getElementById('lit-import-path').value.trim();
-  if (!raw) { alert('请输入 PDF 文件或目录的绝对路径（多个用 ; 分隔）'); return; }
-  var paths = raw.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+async function importLocalPdfs(pathsOverride) {
+  var paths;
+  if (pathsOverride && pathsOverride.length) {
+    paths = pathsOverride;
+  } else {
+    var raw = document.getElementById('lit-import-path').value.trim();
+    if (!raw) { alert('请点击"选择目录"弹窗挑选，或输入 PDF 文件/目录的绝对路径（多个用 ; 分隔）'); return; }
+    paths = raw.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+  }
   var box = document.getElementById('science-results');
   box.innerHTML = '<span style="color:var(--text-light);">导入中（提取元数据 + Crossref 查期刊信息）…</span>';
   var lib = document.getElementById('lit-library');
@@ -5635,6 +5649,101 @@ function stopCtxPolling() {
     };
 })();
 
+// === 文献导入目录选择器（批H 2026-08-16）===
+var _litPickerPath = '';
+var _litSelected = {};
+
+function openLitPicker() {
+  document.getElementById('lit-picker').style.display = 'flex';
+  _litSelected = {};
+  litBrowse('');
+}
+
+function closeLitPicker() {
+  document.getElementById('lit-picker').style.display = 'none';
+}
+
+async function litBrowse(path) {
+  _litPickerPath = path;
+  var box = document.getElementById('lit-picker-list');
+  box.innerHTML = '<span style="color:var(--text-light);">加载中…</span>';
+  try {
+    var r = await fetch('/api/lit/browse?path=' + encodeURIComponent(path || ''));
+    var d = await r.json();
+    if (d.error) { box.innerHTML = '<div style="color:var(--danger);padding:10px;">' + escapeHtml(d.error) + '</div>'; return; }
+    document.getElementById('lit-picker-path').textContent = d.path || '';
+    var items = d.items || [];
+    // 上下级切换由服务端 parent 决定（Windows 盘符根/Linux / 之上无 parent），
+    // 前端不做平台路径拼装
+    var backBtn = '';
+    if (d.parent !== null && d.parent !== undefined) {
+      backBtn = '<div class="file-item" onclick="litBrowse(\'' + d.parent + '\')"><span class="file-icon">⬆️</span><span class="file-name">返回上一级</span></div>';
+    }
+    var html = backBtn + items.map(function(f) {
+      if (f.is_dir) {
+        var icon = f.virtual ? '💻' : '📁';
+        return '<div class="file-item" onclick="litBrowse(\'' + f.path.replace(/'/g, "\\'") + '\')"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span></div>';
+      }
+      var sel = _litSelected[f.path] ? ' style="background:var(--primary);color:#fff;"' : '';
+      return '<div class="file-item" onclick="litToggleSelect(\'' + f.path.replace(/'/g, "\\'") + '\', \'' + f.name.replace(/'/g, "\\'") + '\')"' + sel + '><span class="file-icon">📄</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + formatSize(f.size) + '</span></div>';
+    }).join('');
+    box.innerHTML = html || '<div style="padding:10px;color:var(--text-light);">（空目录）</div>';
+  } catch(e) {
+    box.innerHTML = '<div style="color:var(--danger);padding:10px;">加载失败: ' + escapeHtml(e.message || e) + '</div>';
+  }
+  litUpdateFooter();
+}
+
+function litToggleSelect(path, name) {
+  if (_litSelected[path]) delete _litSelected[path];
+  else _litSelected[path] = name;
+  litUpdateFooter();
+  // 重新渲染当前目录以刷新高亮
+  litBrowse(_litPickerPath);
+}
+
+function litUpdateFooter() {
+  var n = Object.keys(_litSelected).length;
+  var btn = document.getElementById('lit-import-sel');
+  if (btn) btn.textContent = '📥 导入选中 (' + n + ')';
+  if (btn) btn.style.display = n ? '' : 'none';
+  var dirBtn = document.getElementById('lit-import-dir');
+  if (dirBtn) {
+    // 虚拟视图（安装目录首页/此电脑）不能作为导入目标
+    var isVirtual = !_litPickerPath || _litPickerPath === '__drives__';
+    dirBtn.style.opacity = isVirtual ? '0.45' : '1';
+    dirBtn.disabled = isVirtual;
+    dirBtn.title = isVirtual ? '请先进入一个具体目录' : '把当前目录下所有 PDF（含子目录）导入文献库';
+  }
+}
+
+async function litImportDir() {
+  if (!_litPickerPath) return;
+  closeLitPicker();
+  await importLocalPdfs([_litPickerPath]);
+}
+
+async function litImportSelected() {
+  var paths = Object.keys(_litSelected);
+  if (!paths.length) return;
+  closeLitPicker();
+  await importLocalPdfs(paths);
+}
+
 </script>
+
+<!-- 文献导入目录选择器（批H 2026-08-16）-->
+<div id="lit-picker">
+  <div class="lit-box">
+    <div class="lit-header">📂 选择要导入的文献目录 <button onclick="closeLitPicker()" style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button></div>
+    <div class="lit-path" id="lit-picker-path">选择盘符</div>
+    <div class="lit-list" id="lit-picker-list"></div>
+    <div class="lit-footer">
+      <button id="lit-import-dir" onclick="litImportDir()" class="primary" title="把当前目录下所有 PDF（含子目录）导入文献库">📥 导入当前目录(含子目录)</button>
+      <button id="lit-import-sel" onclick="litImportSelected()" style="display:none;">📥 导入选中 (0)</button>
+      <button onclick="closeLitPicker()">取消</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -197,8 +197,13 @@ def _collect_pdfs(paths) -> list:
         p = str(p or "").strip().strip('"')
         if not p:
             continue
+        # 安全：拒绝导入文件系统根（盘符根 / 系统根），防全盘递归
+        if p == "/" or re.fullmatch(r"[A-Za-z]:[/\\]*", p):
+            continue
         if os.path.isdir(p):
             for root, _dirs, fs in os.walk(p):
+                # 跳过隐藏目录
+                _dirs[:] = [d for d in _dirs if not d.startswith(".")]
                 for f in fs:
                     if f.lower().endswith(".pdf"):
                         files.append(os.path.join(root, f))
