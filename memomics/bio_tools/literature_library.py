@@ -242,6 +242,85 @@ def _collect_pdfs(paths) -> list:
     return files[:200]
 
 
+def _balanced_slice(text: str, open_ch: str, close_ch: str) -> str:
+    """从第一个 open_ch 起按引号/转义感知的括号平衡切出完整片段。"""
+    i = text.find(open_ch)
+    if i < 0:
+        return ""
+    depth = 0
+    instr = False
+    esc = False
+    for j in range(i, len(text)):
+        c = text[j]
+        if instr:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                instr = False
+            continue
+        if c == '"':
+            instr = True
+            continue
+        if c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+    return ""
+
+
+def _repair_json_via_llm(bad_text: str, target: str) -> str:
+    """LLM 修复近似 JSON（转义换行/引号、删除多余解释）。"""
+    try:
+        from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
+        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
+        r = _call_llm_sync(
+            f"下面的内容不是严格的 JSON，请修正为严格的 JSON {target}"
+            "（字符串内的换行/引号要转义，删除任何解释性文字），只输出 JSON，不要其他文字:\n"
+            + (bad_text or "")[:6000],
+            "json_repair", cfg["api_key"], cfg["base_url"], cfg["model"],
+            temperature=0.0, max_tokens=3000)
+        return r.get("content", "")
+    except Exception as e:
+        logger.warning(f"json repair failed: {e}")
+        return ""
+
+
+def _parse_json_object(text: str) -> dict:
+    s = _balanced_slice(text or "", "{", "}")
+    if not s:
+        return {}
+    try:
+        return json.loads(s)
+    except Exception:
+        s2 = _balanced_slice(_repair_json_via_llm(s, "对象"), "{", "}")
+        if s2:
+            try:
+                return json.loads(s2)
+            except Exception:
+                return {}
+        return {}
+
+
+def _parse_json_array(text: str) -> list:
+    s = _balanced_slice(text or "", "[", "]")
+    if not s:
+        return []
+    try:
+        return json.loads(s)
+    except Exception:
+        s2 = _balanced_slice(_repair_json_via_llm(s, "数组"), "[", "]")
+        if s2:
+            try:
+                return json.loads(s2)
+            except Exception:
+                return []
+        return []
+
+
 def import_pdfs(paths, progress_cb=None) -> str:
     """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 分类标签 + 引用库注册）。
 
@@ -470,18 +549,16 @@ def _classify_papers(entries: list) -> dict:
         r = _call_llm_sync(prompt, "lit_classify", cfg["api_key"], cfg["base_url"],
                            cfg["model"], temperature=0.2, max_tokens=3000)
         txt = r.get("content", "")
-        m = re.search(r"\[.*\]", txt, re.S)
-        if m:
-            arr = json.loads(m.group(0))
-            for it in arr:
-                if isinstance(it, dict) and it.get("file"):
-                    tags[it["file"]] = {
-                        "species": it.get("species") or ["unknown"],
-                        "tissue": it.get("tissue") or [],
-                        "direction": it.get("direction") or [],
-                        "assay": it.get("assay") or "RNA",
-                        "kb_category": it.get("kb_category") or "01_生物学知识",
-                    }
+        arr = _parse_json_array(txt)
+        for it in arr:
+            if isinstance(it, dict) and it.get("file"):
+                tags[it["file"]] = {
+                    "species": it.get("species") or ["unknown"],
+                    "tissue": it.get("tissue") or [],
+                    "direction": it.get("direction") or [],
+                    "assay": it.get("assay") or "RNA",
+                    "kb_category": it.get("kb_category") or "01_生物学知识",
+                }
     except Exception as e:
         logger.warning(f"LLM classification failed, fallback to rules: {e}")
     for e in entries:
@@ -556,8 +633,7 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
         r = _call_llm_sync(prompt, "kb_extract", cfg["api_key"], cfg["base_url"],
                            cfg["model"], temperature=0.3, max_tokens=2500)
         txt = r.get("content", "")
-        m = re.search(r"\[.*\]", txt, re.S)
-        items = json.loads(m.group(0)) if m else []
+        items = _parse_json_array(txt)
     except Exception as e:
         return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
     if not items:
@@ -571,6 +647,16 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
         sp = (it.get("species") or (tags.get("species") or ["unknown"])[0]).lower()
         ti = (it.get("tissue") or (tags.get("tissue") or [""])[0]).lower().replace(" ", "_")
         dr = (it.get("direction") or (tags.get("direction") or [""])[0]).lower().replace(" ", "_")
+        # 清洗多值字段（如 "human;mouse" / "skeletal muscle, liver"）：取第一个合法值
+        def _first_seg(v: str) -> str:
+            for seg in re.split(r"[;,，、/；]", v):
+                seg = seg.strip().replace(" ", "_")
+                if re.fullmatch(r"[\w\u4e00-\u9fff_-]{1,64}", seg):
+                    return seg
+            return ""
+        sp = _first_seg(sp)
+        ti = _first_seg(ti)
+        dr = _first_seg(dr)
         if sp == "unknown" or not ti or not dr:
             rejected.append({"name": it.get("name"), "error": "物种/组织/方向缺失，无法定位五级目录"})
             continue
@@ -606,7 +692,8 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
 
 
 def extract_all_papers(progress_cb=None) -> str:
-    """一键提炼（批I 2026-08-16）：把文献库里全部文献逐一提炼进知识库。
+    """一键入库（批I 2026-08-16；批K 2026-08-16 只处理未入库）：
+    对文献库中未入库（kb_done≠true）的文献逐一提炼进知识库。
 
     progress_cb(phase, done, total, detail)。
     """
@@ -617,10 +704,15 @@ def extract_all_papers(progress_cb=None) -> str:
     if not lib:
         return json.dumps({"ok": False, "error": "文献库为空——先导入 PDF 再一键提炼"},
                           ensure_ascii=False)
+    pending = [e for e in lib if not e.get("kb_done")]
+    if not pending:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0,
+                           "results": [], "note": "全部文献都已入库"},
+                          ensure_ascii=False)
     _cb = progress_cb or (lambda *a, **k: None)
-    n = len(lib)
+    n = len(pending)
     results = []
-    for i, e in enumerate(lib):
+    for i, e in enumerate(pending):
         name = e.get("file") or e.get("title") or ""
         _cb("paper", i, n, f"[{i + 1}/{n}] 提炼: {e.get('title') or name}")
         try:
@@ -637,10 +729,10 @@ def extract_all_papers(progress_cb=None) -> str:
     ok_n = sum(1 for r in results if r["ok"])
     _cb("done", n, n, f"全部完成: {ok_n}/{n} 篇成功")
     return json.dumps({
-        "ok": ok_n > 0, "total": n, "succeeded": ok_n,
+        "ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
         "written_total": sum(r["written"] for r in results),
         "results": results,
-        "note": "逐篇提炼进 knowledge_base 五级目录，每篇 1-3 条（参数/方法/结论），带 DOI 溯源。"},
+        "note": "只处理未入库文献，逐篇提炼进 knowledge_base 五级目录，每篇 1-3 条（参数/方法/结论），带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
 
 
@@ -744,8 +836,7 @@ def summarize_paper(file_or_title: str, progress_cb=None) -> str:
         r = _call_llm_sync(prompt, "lit_summary", cfg["api_key"], cfg["base_url"],
                            cfg["model"], temperature=0.3, max_tokens=2500)
         txt = r.get("content", "")
-        m = re.search(r"\{.*\}", txt, re.S)
-        summary = json.loads(m.group(0)) if m else {}
+        summary = _parse_json_object(txt)
     except Exception as e:
         return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
     if not summary or not any(summary.get(k) for k in _SUMMARY_FIELDS):
