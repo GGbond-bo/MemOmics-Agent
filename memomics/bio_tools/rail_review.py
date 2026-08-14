@@ -120,6 +120,22 @@ def _extract_packages(code):
     return packages
 
 
+def _is_report_step(module_id, method_name=""):
+    """报告/加载类步骤判定（2026-08-14 死锁修复）。
+
+    纯"加载并报告结构"的步骤（如 scrna-load / Seurat_load_report）本身不产图、
+    代码天然短，不应被"必须 >=1 张图"和"代码 >=10 行"硬性阻断——否则会死锁：
+    过审要图 -> 产图要 execute_r -> execute_r 被未通过的审查全局阻断。
+    """
+    mid = (module_id or "").lower()
+    mname = (method_name or "").lower()
+    if mid.endswith("-load") or mid in ("load", "report", "data-load"):
+        return True
+    if "load_report" in mname or "overview" in mname or mname.endswith("_load") or "report" in mname:
+        return True
+    return False
+
+
 def _post_review(module_id, method_name, output_dir, code_executed, required_packages=None):
     """Post-analysis review."""
     issues = []
@@ -172,8 +188,8 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
                             figure_issues.append(f"图片可能损坏无法打开: {f} — 必须重新生成")
                 elif f.lower().endswith(('.csv', '.tsv', '.rds', '.h5ad', '.txt', '.json')):
                     result_files.append(f)
-        # 图片数量检查（强制）
-        if figure_count == 0:
+        # 图片数量检查（强制；报告/加载类步骤豁免——本身不产图，否则死锁）
+        if figure_count == 0 and not _is_report_step(module_id, method_name):
             figure_issues.append("未生成任何图片 — 每步至少 1 张图，必须重新执行")
         elif figure_count < 2 and module_id in ('clustering', 'deg', 'cellchat', 'trajectory', 'annotation', 'spatial', 'atac'):
             figure_issues.append(f"图片数量不足 ({figure_count} 张) — 关键步骤({module_id})至少需要 2-3 张图，必须补充")
@@ -188,8 +204,8 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
     # Check code quality (强化版)
     if code_executed:
         code_lines = code_executed.strip().split('\n')
-        # 代码行数检查
-        if len(code_lines) < 10:
+        # 代码行数检查（报告/加载类步骤豁免——天然短，否则死锁）
+        if len(code_lines) < 10 and not _is_report_step(module_id, method_name):
             issues.append(f"代码过短 ({len(code_lines)} 行) — 可能偷懒，必须写完整分析代码")
         if len(code_lines) > 500:
             warnings.append(f"代码过长 ({len(code_lines)} 行) — 建议拆分")

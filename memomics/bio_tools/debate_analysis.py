@@ -480,27 +480,44 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
 def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     """调用多个角色，返回 {label: result_dict}。
 
-    串行执行（2026-08-01 修复）：之前用 ThreadPoolExecutor 8 路并发，
-    实测触发 provider 并发/配额限制导致 7 次 8/8 全失败。改为串行更稳。
-    每个 task = (label, prompt)。每个角色仍是独立 HTTP 调用（上下文隔离不变），
-    正方角色互相看不到（各自的 messages 只有自己的 prompt），串行不破坏隔离性。
+    受控并发（2026-08-14 修复）：全串行最坏 8角色x3重试x120s=48min 卡死；
+    全并发 8 路又触发 provider 并发/配额限制导致 7 次 8/8 全失败。
+    折中：max_workers=3（可用 MEMOMICS_DEBATE_MAX_WORKERS 覆盖），
+    每角色仍独立 HTTP 调用（上下文隔离不变），_call_llm_sync 内部 3 次重试
+    兜底瞬时 429。
 
     P0(2026-08-10): cfg 可传辩论配置，每个角色按 _resolve_role_llm 独立解析模型
     （异构/对抗/温度模式）。cfg=None 时行为=现状（环境变量单模型）。
     """
-    results = {}
-    for label, prompt in tasks:
+    def _run_one(label, prompt):
         try:
-            results[label] = _call_llm_role(label, prompt, cfg)
+            return label, _call_llm_role(label, prompt, cfg)
         except Exception as e:
             logger.warning(f"debate {label} call failed: {e}")
-            results[label] = {
+            return label, {
                 "content": f"[{label} 辩论生成失败]",
                 "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
                 "isolation_verified": True,
                 "messages_count": 1,
                 "error": True,
             }
+
+    results = {}
+    try:
+        _mw = int(os.environ.get("MEMOMICS_DEBATE_MAX_WORKERS", "3"))
+    except Exception:
+        _mw = 3
+    max_workers = max(1, min(_mw, len(tasks) or 1))
+    if max_workers <= 1:
+        for label, prompt in tasks:
+            _l, _r = _run_one(label, prompt)
+            results[_l] = _r
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as _ex:
+            _futures = [_ex.submit(_run_one, label, prompt) for label, prompt in tasks]
+            for _f in _futures:
+                _l, _r = _f.result()
+                results[_l] = _r
     return results
 
 
@@ -1015,10 +1032,16 @@ def _reflow_verdict(result: dict) -> None:
         if not skill_name:
             # P2-12(2026-08-10): 断点 A — 未配置 reflow_skill 时自动匹配
             skill_name = _auto_match_skill(str(result.get("topic", "")))
+        # 2026-08-14 修复：旧代码取 pro_bio/con_bio/judge（不存在的 key），call_ids 恒为空。
+        # 正确结构是 pro_arguments/con_arguments（biology/statistics/bioinformatics/history 子键）。
+        _call_ids = []
+        for _grp in (result.get("pro_arguments", {}), result.get("con_arguments", {})):
+            if isinstance(_grp, dict):
+                for _v in _grp.values():
+                    if isinstance(_v, dict) and _v.get("call_id"):
+                        _call_ids.append(_v["call_id"])
         evidence = json.dumps({
-            "call_ids": [r.get("call_id", "") for r in [
-                result.get("pro_bio", {}), result.get("con_bio", {}),
-                result.get("judge", {})] if isinstance(r, dict)],
+            "call_ids": _call_ids[:10],
             "scores": result.get("scores", {}),
             "kb_used": result.get("knowledge_base", {}),
         }, ensure_ascii=False)[:300]
@@ -1032,7 +1055,10 @@ def _reflow_verdict(result: dict) -> None:
             topic=str(result.get("topic", ""))[:100],
             result_summary=str(result.get("judge_verdict", ""))[:500],
             params_used=json.dumps(result.get("recommended_params", {}), ensure_ascii=False)[:300],
-            score=float(result.get("confidence_score", 0.7)),
+            # 2026-08-14 修复：旧代码取 confidence_score（不存在的 key），score 恒为 0.7。
+            # 改为按 confidence 字符串映射数值分。
+            score=float({"high": 0.9, "medium": 0.6, "low": 0.3}.get(
+                str(result.get("confidence", "")).lower(), 0.7)),
             reason=evidence,
         )
         logger.info("Debate verdict reflowed to skill_evolution.record_verdict")
@@ -1140,7 +1166,10 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         result["consistency_issues"] = issues
 
     result_json = json.dumps(result, ensure_ascii=False, indent=2)
-    _save_debate(topic, context, result_json, fingerprint=fingerprint)
+    # 2026-08-14 修复：矛盾裁决（consistency_issues 非空）不入全局缓存，
+    # 否则下次同 topic+context 命中会直接返回 low 结果，污染 72h 复用。
+    if not result.get("consistency_issues"):
+        _save_debate(topic, context, result_json, fingerprint=fingerprint)
     _archive_debate_to_results(topic, context, result_json)
     _reflow_verdict(result)
     return result_json
@@ -1499,7 +1528,9 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
 
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
-        _save_debate(topic, context, result_json, fingerprint=fingerprint)
+        # 2026-08-14 修复：矛盾裁决不入缓存，否则下次命中直接返回 low 结果。
+        if not result.get("consistency_issues"):
+            _save_debate(topic, context, result_json, fingerprint=fingerprint)
         # 归档到结果目录（需求1b：强制保留到 results/.../log/）
         _archive_debate_to_results(topic, context, result_json)
         # P1(2026-08-10): 裁决回流 — verdict → skill_evolution.record_verdict（skill.json debate_verdicts + run_record 归档）
