@@ -6650,7 +6650,7 @@ async def kb_graph_api():
                     _eid = "error_memory/" + _et
                     _ei = add_node(_eid, _et, "error", "")
                     nodes[_ei]["detail"] = str(_e.get("symptom") or "")[:100]
-                    add_edge(_em_root, _ei, "hierarchy")
+                    add_edge("error_memory", _eid, "hierarchy")
         except Exception:
             pass
 

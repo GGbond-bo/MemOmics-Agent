@@ -3687,6 +3687,20 @@ function switchKbView(mode) {
   }
 }
 
+// 2026-08-14: 2D/3D 共享节点配色（文件按质量/验证状态，错误红色，目录按层级）
+function kbNodeColor(n) {
+  if (!n) return '#bdc3c7';
+  if (n.type === 'error') return '#e74c3c';
+  if (n.type === 'file') {
+    if (n.quality === 'high' && n.verified === 'verified') return '#27ae60';
+    if (n.verified === 'unverified') return '#e67e22';
+    if (n.quality === 'high') return '#2ecc71';
+    return '#95a5a6';
+  }
+  var d = String(n.id || '').split('/').length - 1;
+  return ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'][Math.min(d, 4)];
+}
+
 function loadCytoscape(cb) {
   if (window.cytoscape) { cb(); return; }
   // 2026-08-08 恢复 8-06 设计：本地 vendor 优先（离线可用），失败回退 CDN
@@ -3728,14 +3742,7 @@ function loadKbGraph() {
       var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
       var nodes = d.nodes.map(function(n) {
         var depth = n.id.split('/').length - 1;
-        var color = colors[Math.min(depth, 4)];
-        if (n.type === 'error') color = '#e74c3c';
-        else if (n.type === 'file') {
-          if (n.quality === 'high' && n.verified === 'verified') color = '#27ae60';
-          else if (n.verified === 'unverified') color = '#e67e22';
-          else if (n.quality === 'high') color = '#2ecc71';
-          else color = '#95a5a6';
-        }
+        var color = kbNodeColor(n);
         return { data: { id: n.id, label: n.label, color: color, weight: Math.max(1.15, 2.6 - depth * 0.35), path: n.path, ntype: n.type } };
       });
       var edges = d.edges.map(function(e, i) {
@@ -3992,6 +3999,8 @@ function disposeKbGraph3D() {
     _kb3D.renderer.domElement.removeEventListener('pointerup', _kb3D.onPointerUp);
     if (_kb3D.renderer.domElement.parentNode) _kb3D.renderer.domElement.parentNode.removeChild(_kb3D.renderer.domElement);
     _kb3D.renderer.dispose();
+    if (_kb3D.onPointerMove) _kb3D.renderer.domElement.removeEventListener('pointermove', _kb3D.onPointerMove);
+    if (_kb3D.controls && _kb3D.controls.dispose) { try { _kb3D.controls.dispose(); } catch (e) {} }
   }
   if (_kb3D.scene) {
     _kb3D.scene.traverse(function(o) {
@@ -4159,12 +4168,13 @@ function buildKbGraph3D(data) {
     var th = golden * i;
     var pos = new THREE.Vector3(Math.cos(th) * rad * R, y * R, Math.sin(th) * rad * R);
     var depth = String(n.id).split('/').length - 1;
-    var color = n.color || colors[Math.min(depth, 4)] || '#bdc3c7';
+    var color = kbNodeColor(n) || '#bdc3c7';
+    var isVerified = n.verified === 'verified';
     // 球体大小按层级分级：物种(最顶层)最大 → 组织 → 方向 → 分类 → 文件最小，同级一致
     var size = Math.max(1.15, 2.6 - (depth || 0) * 0.35);
     var mesh = new THREE.Mesh(
       new THREE.SphereGeometry(size, 20, 20),
-      new THREE.MeshPhongMaterial({ color: new THREE.Color(color), emissive: new THREE.Color(color).multiplyScalar(0.22), shininess: 40 })
+      new THREE.MeshPhongMaterial({ color: new THREE.Color(color), emissive: new THREE.Color(color).multiplyScalar(isVerified ? 0.5 : 0.22), shininess: 40 })
     );
     mesh.position.copy(pos);
     mesh.userData.node = { id: n.id, label: n.label, path: n.path, ntype: n.type };
@@ -4175,7 +4185,8 @@ function buildKbGraph3D(data) {
     sprite.position.copy(pos);
     sprite.position.y += size + 2.6;
     // 2026-08-08：标签默认淡显（防 210 个标签重叠成乱麻），点击高亮时恢复清晰
-    sprite.material.opacity = 0.35;
+    sprite.material.opacity = (depth >= 2) ? 0 : 0.35;
+    mesh.userData.labelHidden = depth >= 2;
     scene.add(sprite);
     mesh.userData.sprite = sprite;
   });
@@ -4233,12 +4244,44 @@ function buildKbGraph3D(data) {
     } else {
       selNode = null;
       hideKbNodeDetail();
-      nodeMeshes.forEach(function(mm) { mm.material.opacity = 1; if (mm.userData.sprite) mm.userData.sprite.material.opacity = 1; });
+      nodeMeshes.forEach(function(mm) { mm.material.opacity = 1; if (mm.userData.sprite) mm.userData.sprite.material.opacity = mm.userData.labelHidden ? 0 : 0.35; });
       edgeMeshes.forEach(function(mm) { mm.material.opacity = 0.55; });
     }
   }
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+  // 2026-08-14: 悬停显示标签（节流 40ms）
+  var hoverTimer = null;
+  function onPointerMove(ev) {
+    if (hoverTimer || selNode) return;
+    hoverTimer = setTimeout(function() {
+      hoverTimer = null;
+      var rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      var hits = raycaster.intersectObjects(nodeMeshes, false);
+      nodeMeshes.forEach(function(mm) {
+        if (!mm.userData.sprite) return;
+        var hover = hits.length > 0 && hits[0].object === mm;
+        mm.userData.sprite.material.opacity = hover ? 1 : (mm.userData.labelHidden ? 0 : 0.35);
+      });
+      renderer.domElement.style.cursor = hits.length ? 'pointer' : 'grab';
+    }, 40);
+  }
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
+
+  // 2026-08-14: 自动缓慢旋转，用户拖动后暂停 4 秒再恢复
+  var rotTimer = null;
+  function pauseRotate() {
+    controls.autoRotate = false;
+    if (rotTimer) clearTimeout(rotTimer);
+    rotTimer = setTimeout(function() { controls.autoRotate = true; }, 4000);
+  }
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.6;
+  renderer.domElement.addEventListener('pointerdown', pauseRotate);
 
   function tick() {
     controls.update();
@@ -4252,7 +4295,7 @@ function buildKbGraph3D(data) {
     renderer.render(scene, camera);
   }
 
-  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp, nodes: nodeMeshes, edges: edgeMeshes };
+  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp, onPointerMove: onPointerMove, nodes: nodeMeshes, edges: edgeMeshes };
   applyFocusKb3D();
   resumeKbGraph3D();
 }
