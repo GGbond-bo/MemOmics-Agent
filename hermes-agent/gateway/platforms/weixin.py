@@ -1902,7 +1902,18 @@ class WeixinAdapter(BasePlatformAdapter):
                     await asyncio.sleep(self._send_chunk_delay_seconds)
             return SendResult(success=True, message_id=last_message_id)
         except Exception as exc:
-            logger.error("[%s] send failed to=%s: %s", self.name, _safe_id(chat_id), exc)
+            # 降噪：iLink 限流错误在电路断路器打开期间会高频触发，
+            # 每次 logger.error 会刷屏（MemOmics 侧高频进度推送时）。
+            # rate limited 类错误 60s 内最多打一条 warning。
+            _err = str(exc)
+            if "rate limited" in _err or "cooldown active" in _err:
+                _now = time.monotonic()
+                _last = getattr(self, "_last_ratelimit_log_ts", 0.0)
+                if _now - _last > 60.0:
+                    self._last_ratelimit_log_ts = _now
+                    logger.warning("[%s] send rate limited (log throttled): %s", self.name, _safe_id(chat_id))
+            else:
+                logger.error("[%s] send failed to=%s: %s", self.name, _safe_id(chat_id), exc)
             return SendResult(success=False, error=str(exc))
 
     async def _ensure_typing_ticket(self, chat_id: str) -> Optional[str]:

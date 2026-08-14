@@ -81,6 +81,23 @@ async def _warm_skills_snapshot():
     此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
     同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。
     自动注册新 skill：补全缺失的 skill.json + SKILLS_INDEX 条目。"""
+    # === 记忆治理初始化（2026-08-14）：启动时生成索引 + 每日后台维护 ===
+    try:
+        from memomics.memory_governance import governor
+        governor.init_index(verbose=False)
+        logger.info("[MemOmics] 记忆治理索引初始化完成")
+
+        async def _memory_governor_loop():
+            while True:
+                try:
+                    await asyncio.sleep(24 * 3600)
+                    governor.init_index(verbose=False)
+                except Exception as e:
+                    logger.warning(f"[MemoryGovernor] 日循环异常: {e}")
+
+        asyncio.ensure_future(_memory_governor_loop())
+    except Exception as e:
+        logger.warning(f"[MemOmics] 记忆治理初始化失败: {e}")
     # === Hermes 插件发现（image_gen 等 backend 插件） ===
     # 插件发现默认只在 CLI/gateway 启动时执行（gateway/run.py:7550）；
     # MemOmics 进程内集成必须手动触发，否则 image_gen_registry 为空，
@@ -802,6 +819,9 @@ def _schedule_self_check(session, agent, loop):
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
     if not agent or not loop:
         return
+    # 2026-08-14 P0 修复：紧急标记提前 pop——六闸门在 urgent 时不得吞掉"说而不做/心跳错误"的唤醒
+    urgent = session.pop("_urgent_wakeup", False)
+    force_tool = session.pop("_force_tool_check", False)
     has_todos = any(t.get("status") not in ("completed", "cancelled") 
                     for t in session.get("todos", []))
     results_dir = session.get("results_dir", "")
@@ -811,16 +831,17 @@ def _schedule_self_check(session, agent, loop):
         from webui.runtime.run_gate import check_gate
         if results_dir:
             _verdict, _reason = check_gate(results_dir, is_auto_wake=True)
-            if _verdict == "stop":
+            if _verdict == "stop" and not urgent:
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: RunGate 拦截自动唤醒 ({_reason})")
                 return
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[SelfCheck] RunGate 检查失败(fail-open): {e}")
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         # 修复(2026-08-07): task_plan.md 被清/未创建但 batch 批处理仍活跃
         # （40 样本 ArchR 管线由独立脚本驱动）→ 持续监督唤醒，不静默
-        if not _session_has_active_work(session):
+        # 2026-08-14: urgent 唤醒不受此闸门拦截
+        if not _session_has_active_work(session) and not urgent:
             return
     # 🔧 任务完成 → 归档 task_plan.md + mark_done，停止自检（心跳随之关闭）
     # 判定：待办全部完成/取消 + 主线区（🏁 唤醒记录区之前）无 in_progress/pending + 出现完成标记。
@@ -838,9 +859,10 @@ def _schedule_self_check(session, agent, loop):
                     any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止")):
                 # P0-2(2026-08-13) 完成契约：提交即校验 — 复选框全勾 + 产出文件存在且非空。
                 # 契约未满足 → 不归档不 mark_done，继续自检（唤醒 agent 补齐）。
+                # 2026-08-14: urgent 唤醒在完成归档闸门处放行（紧急介入优先）。
                 if not _completion_contract_check(_main, results_dir):
                     logger.info(f"[SelfCheck] session {session['id'][:12]}: 词法判定完成但完成契约未满足（未勾选复选框或产出文件缺失/为空）→ 继续自检")
-                else:
+                elif not urgent:
                     try:
                         from webui.runtime.run_gate import mark_done
                         mark_done(results_dir, "task completed (self-check)")
@@ -883,12 +905,12 @@ def _schedule_self_check(session, agent, loop):
             _dec = _bridge.should_run()
             _state = str(_dec.get("state") or "")
             _HARD_STOP = {"blocked", "blocked_health", "paused", "throttled"}
-            if not _dec.get("should_run") and _state in _HARD_STOP:
+            if not _dec.get("should_run") and _state in _HARD_STOP and not urgent:
                 _reason = str(_dec.get("reason") or "loopx quota 判定停止")[:80]
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: LoopX {_state} 停止唤醒 ({_reason})")
                 return
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[SelfCheck] LoopX 检查失败(fail-open): {e}")
     _sc = session.setdefault("_self_check_count", 0)
     # 修复(2026-08-07): 原上限 20 次 ≈ 40 分钟，长任务（40 样本管线）监督窗口耗尽后
     # 永久静默。改为"无进展才累计"：监督目录有进展（样本日志在写/task_plan 更新）
@@ -900,15 +922,17 @@ def _schedule_self_check(session, agent, loop):
         session["_self_check_last_sig"] = _sig
     except Exception:
         pass
-    if _sc >= 20:
+    if _sc >= 20 and not urgent:
         return
+    # 2026-08-14: urgent 唤醒重置无进展计数（紧急介入不被"20 轮无进展"拦住）
+    if urgent:
+        _sc = 0
     session["_self_check_count"] = _sc + 1
     sid = session["id"]
     
     # 🔧 动态延迟：根据当前 in_progress 待办的预估时间
     delay = _calc_self_check_delay(session)
-    # 如果有紧急标记（心跳发现错误/完成），立即唤醒
-    urgent = session.pop("_urgent_wakeup", False)
+    # urgent 已在函数开头 pop：紧急唤醒 3 秒
     if urgent:
         delay = 3  # 3秒后立即唤醒
         logger.info(f"[SelfCheck] session {sid[:12]}: urgent wakeup triggered")
@@ -918,7 +942,17 @@ def _schedule_self_check(session, agent, loop):
         try:
             if sid not in _sessions: return
             s = _sessions[sid]
-            if s.get("running_agent") or s.get("running_task"): return
+            if s.get("running_agent") or s.get("running_task"):
+                # 2026-08-14 P0: 早退重排——被并发回合吞掉的唤醒重新调度（最多 3 次）
+                _retry_n = s.setdefault("_wakeup_retry_n", 0)
+                if _retry_n < 3:
+                    s["_wakeup_retry_n"] = _retry_n + 1
+                    s["_urgent_wakeup"] = True
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 唤醒遇运行中回合，重排 #{_retry_n + 1}/3")
+                    _schedule_self_check(s, agent, loop)
+                else:
+                    s.pop("_wakeup_retry_n", None)
+                return
             # 判断唤醒类型
             todos = s.get("todos", [])
             in_progress = [t for t in todos if t.get("status") == "in_progress"]
@@ -969,12 +1003,15 @@ def _schedule_self_check(session, agent, loop):
                     "2. search_files 看最新产出\n"
                     "3. 继续执行下一个待办"
                 )
+            # 2026-08-14: 唤醒成功——重排计数清零
+            s.pop("_wakeup_retry_n", None)
+            _force_prefix = "⛔ 强制工具调用（系统要求）：本轮必须先调用工具实际执行，禁止纯文本回复！\n\n" if force_tool else ""
             s.setdefault("messages", []).append(
-                {"role": "system", "content": wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+                {"role": "system", "content": _force_prefix + wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
             s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             await _trigger_agent_turn(s, wake_msg)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[SelfCheck] _wakeup 异常: {e}")
     
     # 使用传入的 event loop 调度，确保在正确的线程上执行
     if loop and loop.is_running():
@@ -1048,7 +1085,16 @@ def _calc_self_check_delay(session):
 async def _trigger_agent_turn(session, message):
     """从服务端触发一轮 agent 对话（不等用户消息），5分钟超时"""
     agent = session.get("agent")
-    if not agent: return
+    if not agent:
+        # 2026-08-14 P0: agent 为 None 时重建（会话恢复后 agent 可能被清理）
+        try:
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: agent 为 None，重建")
+            agent = _create_agent(session.get("model_config") or {}, session_id=session["id"], session=session)
+            session["agent"] = agent
+        except Exception as e:
+            logger.warning(f"[SelfCheck] 重建 agent 失败: {e}")
+            _session_emit(session, {"type": "error", "content": f"系统唤醒失败（agent 不可用）: {e}", "session_id": session["id"]})
+            return
     try:
         if getattr(agent, "_interrupt_requested", False):
             agent.clear_interrupt()
@@ -4652,25 +4698,34 @@ async def weixin_disconnect():
 
 
 async def _send_weixin_progress(message: str) -> bool:
-    """向微信发送进度消息 — 使用 Hermes 原生 WeixinAdapter.send()"""
+    """向微信发送进度消息 — 使用 Hermes 原生 WeixinAdapter.send()（带节流+熔断）"""
     if _weixin_adapter is None:
+        return False
+    if not _gate_weixin_send(message, min_interval=2.0):
+        _WEIXIN_SEND_GATE["dropped"] += 1
         return False
     try:
         chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
         # Ensure @im.wechat suffix for user IDs
         if chat_id and "@" not in chat_id:
             chat_id = chat_id + "@im.wechat"
-        print(f"[MemOmics] send to chat_id={chat_id if chat_id else 'EMPTY'}", flush=True)
         result = await _weixin_adapter.send(chat_id, message)
-        print(f"[MemOmics] send result: success={getattr(result,'success','?')}, error={getattr(result,'error','?')}, raw={repr(result)[:200]}", flush=True)
+        err = getattr(result, 'error', '') or ''
         if hasattr(result, 'error') and result.error and 'session' in str(result.error).lower():
             _weixin_state["connected"] = False
             _weixin_state["last_error"] = "微信会话已过期，请重新扫码"
             print(f"[MemOmics] 微信会话过期: {result.error}", flush=True)
+            _wx_fail_backoff(str(err), time.monotonic())
             return False
-        return result.success if hasattr(result, 'success') else bool(result)
+        ok = result.success if hasattr(result, 'success') else bool(result)
+        if ok:
+            _WEIXIN_SEND_GATE["last_ok_ts"] = time.monotonic()
+            _WEIXIN_SEND_GATE["last_text"] = message
+        else:
+            _wx_fail_backoff(str(err), time.monotonic())
+        return ok
     except Exception as e:
-        print(f"[MemOmics] 微信发送异常: {e}", flush=True)
+        _wx_fail_backoff(str(e), time.monotonic())
         return False
 
 
@@ -4681,16 +4736,23 @@ async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
     if not os.path.isfile(image_path):
         print(f"[MemOmics] 微信图片不存在: {image_path}", flush=True)
         return False
+    if not _gate_weixin_send(image_path, min_interval=5.0, dedup_window=60.0):
+        return False
     try:
         chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
         if chat_id and "@" not in chat_id:
             chat_id = chat_id + "@im.wechat"
-        print(f"[MemOmics] send_image to chat_id={chat_id}, path={image_path}", flush=True)
         result = await _weixin_adapter.send_image_file(chat_id, image_path, caption=caption)
-        print(f"[MemOmics] send_image result: success={getattr(result,'success','?')}", flush=True)
-        return result.success if hasattr(result, 'success') else bool(result)
+        err = getattr(result, 'error', '') or ''
+        ok = result.success if hasattr(result, 'success') else bool(result)
+        if ok:
+            _WEIXIN_SEND_GATE["last_ok_ts"] = time.monotonic()
+            _WEIXIN_SEND_GATE["last_text"] = image_path
+        else:
+            _wx_fail_backoff(str(err), time.monotonic())
+        return ok
     except Exception as e:
-        print(f"[MemOmics] 微信图片发送异常: {e}", flush=True)
+        _wx_fail_backoff(str(e), time.monotonic())
         return False
 
 
@@ -4701,16 +4763,55 @@ async def _send_weixin_document(file_path: str, caption: str = "") -> bool:
     if not os.path.isfile(file_path):
         print(f"[MemOmics] 微信文件不存在: {file_path}", flush=True)
         return False
+    if not _gate_weixin_send(file_path, min_interval=5.0, dedup_window=60.0):
+        return False
     try:
         chat_id = _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
         if chat_id and "@" not in chat_id:
             chat_id = chat_id + "@im.wechat"
-        print(f"[MemOmics] send_document to chat_id={chat_id}, path={file_path}", flush=True)
         result = await _weixin_adapter.send_document(chat_id, file_path, caption=caption)
-        print(f"[MemOmics] send_document result: success={getattr(result,'success','?')}", flush=True)
-        return result.success if hasattr(result, 'success') else bool(result)
+        err = getattr(result, 'error', '') or ''
+        ok = result.success if hasattr(result, 'success') else bool(result)
+        if ok:
+            _WEIXIN_SEND_GATE["last_ok_ts"] = time.monotonic()
+            _WEIXIN_SEND_GATE["last_text"] = file_path
+        else:
+            _wx_fail_backoff(str(err), time.monotonic())
+        return ok
     except Exception as e:
-        print(f"[MemOmics] 微信文件发送异常: {e}", flush=True)
+        _wx_fail_backoff(str(e), time.monotonic())
+        return False
+
+
+async def _send_weixin_important(message: str, chat_id_override: str = None, max_wait: float = 120.0) -> bool:
+    """重要消息（最终回复/错误通知/手动发送）：不被节流丢弃。
+    若处于 iLink 熔断期，等待冷却结束后再发送（最多 max_wait 秒）。"""
+    if _weixin_adapter is None:
+        return False
+    deadline = time.monotonic() + max_wait
+    while True:
+        now = time.monotonic()
+        if now >= _WEIXIN_SEND_GATE["cooldown_until"]:
+            break
+        if now >= deadline:
+            print(f"[MemOmics] 微信重要消息等待熔断超时，放弃发送", flush=True)
+            return False
+        await asyncio.sleep(min(5.0, _WEIXIN_SEND_GATE["cooldown_until"] - now))
+    try:
+        chat_id = chat_id_override or _weixin_state.get("chat_id") or _weixin_last_user_id or _weixin_state["account_id"]
+        if chat_id and "@" not in chat_id:
+            chat_id = chat_id + "@im.wechat"
+        result = await _weixin_adapter.send(chat_id, message)
+        err = getattr(result, 'error', '') or ''
+        ok = result.success if hasattr(result, 'success') else bool(result)
+        if ok:
+            _WEIXIN_SEND_GATE["last_ok_ts"] = time.monotonic()
+            _WEIXIN_SEND_GATE["last_text"] = message
+        else:
+            _wx_fail_backoff(str(err), time.monotonic())
+        return ok
+    except Exception as e:
+        _wx_fail_backoff(str(e), time.monotonic())
         return False
 
 
@@ -4757,6 +4858,284 @@ _weixin_poll_task = None     # 后台轮询 asyncio.Task
 _weixin_adapter = None
 _weixin_last_user_id = ""     # Last user who sent a message      # Hermes 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
+_WEIXIN_MSGS_FILE = os.path.join(HERMES_HOME_DIR, "runtime", "weixin_messages.json")
+
+# 2026-08-14: 跨入口共享去重 — server 轮询(_weixin_poll_loop)与 Hermes 适配器回调
+# (_hermes_weixin_message_handler) 各自拉同一条消息时，只处理一次，防双会话/双回复。
+_WEIXIN_SHARED_SEEN = set()
+_WEIXIN_SHARED_SEEN_MAX = 5000
+
+
+def _weixin_mark_seen(msg_id) -> bool:
+    """跨入口去重：未处理过返回 True 并登记；已处理返回 False。无 ID 不去重。"""
+    global _WEIXIN_SHARED_SEEN
+    if not msg_id:
+        return True
+    key = str(msg_id)
+    if key in _WEIXIN_SHARED_SEEN:
+        return False
+    _WEIXIN_SHARED_SEEN.add(key)
+    if len(_WEIXIN_SHARED_SEEN) > _WEIXIN_SHARED_SEEN_MAX:
+        _WEIXIN_SHARED_SEEN = set(list(_WEIXIN_SHARED_SEEN)[-_WEIXIN_SHARED_SEEN_MAX // 2:])
+    return True
+
+
+def _normalize_weixin_sender(sender_id: str) -> str:
+    """统一 sender_id 格式（补齐 @im.wechat 后缀），防双入口格式差异建出双会话。"""
+    sid = (sender_id or "").strip()
+    if sid and "@" not in sid:
+        sid = sid + "@im.wechat"
+    return sid
+
+
+def _append_weixin_msg(wx_msg: dict):
+    """追加微信消息到 store 并持久化（2026-08-14：防重启丢历史，前端刷新可见）。"""
+    _weixin_msg_store.append(wx_msg)
+    if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
+        _weixin_msg_store[:] = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+    try:
+        os.makedirs(os.path.dirname(_WEIXIN_MSGS_FILE), exist_ok=True)
+        with open(_WEIXIN_MSGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_weixin_msg_store[-_MAX_WEIXIN_MSGS:], f, ensure_ascii=False)
+    except Exception:
+        pass  # 持久化失败不影响实时推送
+
+
+def _load_weixin_msg_store():
+    """启动时恢复微信消息历史。"""
+    global _weixin_msg_store
+    try:
+        if os.path.isfile(_WEIXIN_MSGS_FILE):
+            with open(_WEIXIN_MSGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                _weixin_msg_store = data
+    except Exception:
+        _weixin_msg_store = []
+
+
+_load_weixin_msg_store()
+
+# === Agent 循环检测器（2026-08-14 修复终端监控死循环）===
+# 场景：agent 在长任务（如 git 依赖安装）中陷入
+# "继续监控 → tail 日志 → 仍在进行 → 继续监控" 的无限循环，
+# 上下文不断膨胀、注意力崩溃，stall watchdog 因 agent "一直在动" 无法触发。
+# 检测两类循环，命中后通过 Hermes 原生 _pending_steer 通道注入强制收尾提示：
+#   A. 工具调用循环：最近 8 次调用中 ≥6 对是同工具 + 相似命令
+#   B. 重复表述循环：最近 8 个回合文本片段中 ≥6 对高度相似
+from difflib import SequenceMatcher as _SeqMatcher
+import threading as _threading_mod
+
+_LOOP_SIG_TOOLS = {"terminal", "execute_code", "execute_python", "execute_r", "bash", "shell"}
+
+
+def _loop_tool_sig(tool_name: str, args) -> str:
+    """提取工具调用的命令特征签名（用于相似度比较）。"""
+    try:
+        if tool_name in _LOOP_SIG_TOOLS and isinstance(args, dict):
+            cmd = str(args.get("command", args.get("code", args.get("script", ""))))
+            return re.sub(r"\s+", " ", cmd)[:150]
+        if isinstance(args, dict):
+            for _k in ("path", "file", "name", "query", "target", "url"):
+                _v = args.get(_k)
+                if isinstance(_v, str) and _v:
+                    return re.sub(r"\s+", " ", _v)[:120]
+    except Exception:
+        pass
+    return ""
+
+
+# 写文件类调用（出图/导出）的输出目标文件名 — 用于"逐张出图"豁免：
+# 两次调用命令相似但输出文件不同 = 正常批量出图，不算循环。
+_OUT_TARGET_RE = re.compile(r"""["']([^"']+\.(?:png|jpe?g|pdf|svg|tiff|bmp|csv|tsv|rds|RData|html))["']""")
+
+
+def _loop_out_target(sig: str) -> str:
+    """提取签名里的输出文件名（无则空串）。"""
+    if not sig:
+        return ""
+    try:
+        _m = _OUT_TARGET_RE.search(sig)
+        return _m.group(1) if _m else ""
+    except Exception:
+        return ""
+
+
+def _sig_has_progress(sg1: str, sg2: str) -> bool:
+    """签名间的数字在单调推进（step0→step1→step2）→ 正常批处理，不算循环。"""
+    try:
+        _n1 = [int(x) for x in re.findall(r"\d+", sg1)]
+        _n2 = [int(x) for x in re.findall(r"\d+", sg2)]
+        if not _n1 or not _n2:
+            return False
+        # 所有相同位置数字严格递增，或首个数字递增
+        if len(_n1) == len(_n2) and all(b > a for a, b in zip(_n1, _n2)):
+            return True
+        return _n2[0] > _n1[0]
+    except Exception:
+        return False
+
+
+def _loop_check(session, agent, event: str, tool_name: str = None, args=None, delta: str = None) -> bool:
+    """循环检测主入口。event: 'delta' | 'tool_start' | 'turn_end'。返回 True=刚注入干预。"""
+    try:
+        if session is None:
+            return False
+        g = session.setdefault("_loop_guard", {
+            "lock": _threading_mod.Lock(),
+            "tool_hist": [],       # [(tool, sig, ts)]
+            "text_buf": "",        # 当前回合累积文本
+            "turn_texts": [],      # 最近 8 个回合文本片段
+            "last_inject_ts": 0.0,
+            "inject_count": 0,
+        })
+        with g["lock"]:
+            now = time.time()
+            triggered = None  # (reason, detail)
+
+            if event == "delta" and delta:
+                g["text_buf"] = (g["text_buf"] + str(delta))[-4000:]
+
+            elif event == "tool_start":
+                # 回合分段：上一段累积文本压栈
+                if len(g["text_buf"]) >= 25:
+                    g["turn_texts"].append(g["text_buf"][:800])
+                    g["turn_texts"] = g["turn_texts"][-8:]
+                g["text_buf"] = ""
+                _sig = _loop_tool_sig(tool_name, args)
+                g["tool_hist"].append((tool_name or "", _sig, now))
+                g["tool_hist"] = g["tool_hist"][-10:]
+                _hist = g["tool_hist"][-8:]
+                if len(_hist) >= 6:
+                    _pairs = 0
+                    for _i in range(len(_hist)):
+                        for _j in range(_i + 1, len(_hist)):
+                            _tn1, _sg1, _ = _hist[_i]
+                            _tn2, _sg2, _ = _hist[_j]
+                            if not _tn1 or _tn1 != _tn2:
+                                continue
+                            if not _sg1 and not _sg2:
+                                _pairs += 1  # 同名无参数工具 = 重复
+                            elif _sg1 and _sg2 and not _sig_has_progress(_sg1, _sg2) \
+                                    and _SeqMatcher(None, _sg1, _sg2).ratio() > 0.72:
+                                # 2026-08-14 出图/导出豁免：输出文件名不同 = 正常批量出图
+                                _t1, _t2 = _loop_out_target(_sg1), _loop_out_target(_sg2)
+                                if _t1 and _t2 and _t1 != _t2:
+                                    continue
+                                _pairs += 1
+                    if _pairs >= 6:
+                        triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
+
+            elif event == "turn_end":
+                if len(g["text_buf"]) >= 25:
+                    g["turn_texts"].append(g["text_buf"][:800])
+                    g["turn_texts"] = g["turn_texts"][-8:]
+                g["text_buf"] = ""
+                _texts = [t for t in g["turn_texts"] if len(t) >= 30]
+                if len(_texts) >= 6:
+                    _pairs = 0
+                    for _i in range(len(_texts)):
+                        for _j in range(_i + 1, len(_texts)):
+                            if _SeqMatcher(None, _texts[_i], _texts[_j]).ratio() > 0.6:
+                                _pairs += 1
+                    if _pairs >= 6:
+                        triggered = ("重复表述循环", "连续多轮输出几乎相同的监控话术")
+
+            if not triggered:
+                return False
+            _reason, _detail = triggered
+            # 防抖：180s 内最多 1 次；单个用户回合累计 ≤3 次
+            if g["inject_count"] >= 3:
+                return False
+            if now - g["last_inject_ts"] < 180:
+                return False
+            g["last_inject_ts"] = now
+            g["inject_count"] += 1
+            if _loop_inject_steer(session, agent, _reason, _detail):
+                try:
+                    _session_emit(session, {"type": "info",
+                        "content": f"🔁 循环检测：{_reason}（{_detail}）。已注入强制收尾提示。",
+                        "session_id": session["id"]})
+                except Exception:
+                    pass
+                return True
+            return False
+    except Exception:
+        return False
+
+
+def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
+    """通过 Hermes 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
+    try:
+        if agent is None and session is not None:
+            agent = session.get("running_agent")
+        if agent is None:
+            return False
+        _steer = (
+            "【系统循环检测·强制干预】检测到你已连续多轮重复几乎相同的操作和表述（" + reason + "：" + detail + "）。"
+            "判定为循环失控，请立即停止重复：\n"
+            "1. 停止再执行重复的监控/查看动作；\n"
+            "2. 若任务产物已生成（图/文件已保存、命令返回成功），直接视为完成，禁止再做任何验证/检查动作；"
+            "仅当确实不知道结果时才做一次状态确认；\n"
+            "3. 用 2-3 句话给用户明确结论：任务已完成 / 已失败 / 已卡死（附原因与产物路径）；\n"
+            "4. 结束本轮回复，禁止再次执行重复动作。"
+        )
+        _lock = getattr(agent, "_pending_steer_lock", None)
+        if _lock is not None:
+            with _lock:
+                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
+        else:
+            _cur = getattr(agent, "_pending_steer", "") or ""
+            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
+        return True
+    except Exception:
+        return False
+
+
+# === 微信发送门控（2026-08-14 修复限流死循环）===
+# 根因：agent 工具进度事件高频触发 _send_weixin_progress，iLink 限流后
+# adapter 电路断路器反复开合，日志三行一组无限刷屏且消息永远发不出去。
+# 修复：发送侧统一节流 + 去重 + 失败熔断（比 adapter 电路更长的静默期）。
+_WEIXIN_SEND_GATE = {
+    "cooldown_until": 0.0,     # 发送失败后的熔断截止（单调时钟）
+    "last_ok_ts": 0.0,         # 上次成功发送时间
+    "last_text": "",           # 上次发送文本（去重用）
+    "last_fail_log_ts": 0.0,   # 上次失败日志时间（日志降噪）
+    "dropped": 0,              # 节流丢弃计数（诊断）
+}
+
+def _gate_weixin_send(text: str = "", min_interval: float = 2.0, dedup_window: float = 5.0, reserve: bool = True) -> bool:
+    """同步预检：是否允许本次微信发送。在 create_task 之前调用，避免海量任务堆积。
+    - 熔断期内一律拒绝（静默）
+    - 距上次发送不足 min_interval 秒拒绝
+    - 相同文本在 dedup_window 秒内重复出现拒绝
+    reserve=True 时通过即预占时间槽（供真正的发送函数在内部调用，
+    保证并发 task 只有一个能实际发送）；外部快速预检用 reserve=False。
+    """
+    now = time.monotonic()
+    g = _WEIXIN_SEND_GATE
+    if now < g["cooldown_until"]:
+        return False
+    if now - g["last_ok_ts"] < min_interval:
+        return False
+    if text and text == g["last_text"] and now - g["last_ok_ts"] < dedup_window:
+        return False
+    if reserve:
+        g["last_ok_ts"] = now  # 预占时间槽
+    return True
+
+def _wx_fail_backoff(err_text: str, now: float) -> None:
+    """发送失败后的熔断：iLink 限流时静默更长时间（120s），
+    日志 60s 内最多打一次，避免刷屏。"""
+    g = _WEIXIN_SEND_GATE
+    if "rate limited" in err_text or "cooldown active" in err_text or "限流" in err_text:
+        g["cooldown_until"] = now + 120.0
+        if now - g["last_fail_log_ts"] > 60.0:
+            g["last_fail_log_ts"] = now
+            print(f"[MemOmics] 微信被 iLink 限流，熔断 120s（期间静默丢弃进度推送）", flush=True)
+    elif now - g["last_fail_log_ts"] > 60.0:
+        g["last_fail_log_ts"] = now
+        print(f"[MemOmics] 微信发送失败: {err_text[:150]}", flush=True)
 
 _WEIXIN_WS_CLIENTS: set = set()  # 已订阅微信消息的 WebSocket 连接
 _weixin_agent_enabled = True     # Agent 自动回复开关
@@ -4784,6 +5163,7 @@ def _extract_text_from_weixin_msg(msg: dict) -> str:
 def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
     """获取或创建微信用户关联的 MemOmics 会话（12h 超时自动新建）"""
     global _weixin_session_map
+    sender_id = _normalize_weixin_sender(sender_id)
     now = time.time()
     entry = _weixin_session_map.get(sender_id)
 
@@ -4837,7 +5217,7 @@ def _rebuild_weixin_session_map():
                 for uid, entry in stored.items():
                     sid = entry.get("session_id", "")
                     if sid in _sessions:
-                        cleaned[uid] = entry
+                        cleaned[_normalize_weixin_sender(uid)] = entry
                     else:
                         print(f"[MemOmics] 微信映射清理: {uid} → {sid} 会话不存在", flush=True)
                 _weixin_session_map = cleaned
@@ -4932,7 +5312,9 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if msg_text and _weixin_adapter:
                 try:
                     short_msg = "\u26a1 {}{}".format(f"{tool_name}: " if tool_name else "", msg_text[:80])
-                    asyncio.get_event_loop().create_task(_send_weixin_progress(short_msg))
+                    # 同步预检：熔断期/节流期直接丢弃，不再堆积 create_task（不预占时间槽）
+                    if _gate_weixin_send(short_msg, min_interval=2.0, reserve=False):
+                        asyncio.get_event_loop().create_task(_send_weixin_progress(short_msg))
                 except Exception:
                     pass
 
@@ -4955,14 +5337,17 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                                 _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
                                 # 📱 微信路径：新图片直接发微信
                                 try:
-                                    asyncio.get_event_loop().create_task(_send_weixin_image(str(p), f"🖼️ {p.name}"))
+                                    if _gate_weixin_send(str(p), min_interval=5.0, dedup_window=60.0, reserve=False):
+                                        asyncio.get_event_loop().create_task(_send_weixin_image(str(p), f"🖼️ {p.name}"))
                                 except Exception:
                                     pass
             except Exception:
                 pass
             if _weixin_adapter:
                 try:
-                    asyncio.get_event_loop().create_task(_send_weixin_progress("\u2705 {} 完成".format(tool_name)))
+                    # 同步预检：熔断期/节流期直接丢弃（不预占时间槽）
+                    if _gate_weixin_send("\u2705 {} 完成".format(tool_name), min_interval=3.0, reserve=False):
+                        asyncio.get_event_loop().create_task(_send_weixin_progress("\u2705 {} 完成".format(tool_name)))
                 except Exception:
                     pass
 
@@ -5035,22 +5420,21 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             _session_emit(session, {"type": "complete", "session_id": sid})
             _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
 
-            if _weixin_adapter:
-                try:
-                    send_result = await _weixin_adapter.send(sender_id, result_text.strip())
-                    print(f"[MemOmics] 微信Agent回复: success={send_result.success}", flush=True)
-                except Exception as e:
-                    print(f"[MemOmics] 微信Agent回复发送失败: {e}", flush=True)
-
             wx_msg = {"id": str(int(time.time() * 1000)), "sender_id": _weixin_state["account_id"], "sender_name": "Agent", "text": result_text.strip(), "context_token": "", "ts": int(time.time()), "direction": "out"}
-            _weixin_msg_store.append(wx_msg)
-            if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
-                _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+            _append_weixin_msg(wx_msg)
+            # 2026-08-14: 先推前端（回复即时可见），微信发送/熔断等待不再阻塞 UI
             for ws_client in list(_WEIXIN_WS_CLIENTS):
                 try:
                     await ws_client.send_text(json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False))
                 except Exception:
                     pass
+
+            if _weixin_adapter:
+                try:
+                    send_result = await _send_weixin_important(result_text.strip(), chat_id_override=sender_id)
+                    print(f"[MemOmics] 微信Agent回复: success={send_result}", flush=True)
+                except Exception as e:
+                    print(f"[MemOmics] 微信Agent回复发送失败: {e}", flush=True)
 
             # 注意：不再发送 type=chat 消息 — delta 已实时流式渲染全部文本
             # state.db 中已持久化，重连后通过消息历史加载
@@ -5063,7 +5447,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         _session_emit(session, {"type": "error", "session_id": sid, "message": str(e)})
         if _weixin_adapter:
             try:
-                await _weixin_adapter.send(sender_id, f"处理出错: {str(e)[:200]}")
+                await _send_weixin_important(f"处理出错: {str(e)[:200]}", chat_id_override=sender_id, max_wait=60.0)
             except Exception:
                 pass
 
@@ -5136,13 +5520,10 @@ async def _weixin_poll_loop():
                 msgs = result.get("msgs") or []
                 for msg in msgs:
                     msg_id = msg.get("message_id") or msg.get("msg_id") or ""
-                    if msg_id and msg_id in _weixin_seen_ids:
+                    if msg_id and not _weixin_mark_seen(msg_id):
                         continue
-                    if msg_id:
-                        _weixin_seen_ids.add(msg_id)
-                        # 限制去重集合大小
-                        if len(_weixin_seen_ids) > 5000:
-                            _weixin_seen_ids = set(list(_weixin_seen_ids)[-2000:])
+
+                    sender_id = msg.get("from_user_id") or msg.get("from") or ""
 
                     sender_id = msg.get("from_user_id") or msg.get("from") or ""
                     sender_name = msg.get("from_user_name") or msg.get("sender_name") or sender_id
@@ -5161,9 +5542,7 @@ async def _weixin_poll_loop():
                         "ts": int(ts) if isinstance(ts, (int, float)) else int(time.time()),
                         "direction": "in",
                     }
-                    _weixin_msg_store.append(wx_msg)
-                    if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
-                        _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+                    _append_weixin_msg(wx_msg)
 
                     # 推送到已订阅 WebSocket 客户端
                     ws_event = json.dumps({"type": "weixin_message", "message": wx_msg})
@@ -5245,6 +5624,9 @@ async def _hermes_weixin_message_handler(event):
     global _weixin_msg_store, _WEIXIN_WS_CLIENTS
     try:
         msg_id = event.message_id or str(int(time.time() * 1000))
+        # 2026-08-14: 共享去重 — 轮询路径已处理过则跳过（防双会话/双回复）
+        if not _weixin_mark_seen(msg_id):
+            return
         sender_id = event.source.user_id or ""
         _weixin_last_user_id = sender_id
         sender_name = event.source.user_name or sender_id
@@ -5271,9 +5653,7 @@ async def _hermes_weixin_message_handler(event):
             "ts": ts,
             "direction": "in",
         }
-        _weixin_msg_store.append(wx_msg)
-        if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
-            _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+        _append_weixin_msg(wx_msg)
 
         ws_event = json.dumps({"type": "weixin_message", "message": wx_msg})
         dead = set()
@@ -5412,7 +5792,7 @@ async def _disconnect_hermes_weixin_adapter():
 async def weixin_messages(since: str = ""):
     """获取微信消息列表"""
     if since:
-        # 返回 after 指定 ID 的新消息
+        # 返回 after 指定 ID 的新消息（按 ts 排序保证顺序）
         found = False
         result = []
         for m in _weixin_msg_store:
@@ -5420,8 +5800,10 @@ async def weixin_messages(since: str = ""):
                 result.append(m)
             if m["id"] == since:
                 found = True
+        result.sort(key=lambda m: m.get("ts", 0))
         return {"messages": result}
-    return {"messages": _weixin_msg_store[-50:]}  # 最近 50 条
+    _recent = sorted(_weixin_msg_store[-50:], key=lambda m: m.get("ts", 0))
+    return {"messages": _recent}  # 最近 50 条（按 ts 排序）
 
 
 @app.post("/api/weixin/send")
@@ -5439,8 +5821,8 @@ async def weixin_send(body: dict = None):
         return {"ok": False, "error": "消息不能为空"}
 
     try:
-        result = await _weixin_adapter.send(to_user, text)
-        ok = result.success if hasattr(result, 'success') else bool(result)
+        result = await _send_weixin_important(text, chat_id_override=to_user)
+        ok = bool(result)
         if ok:
             wx_msg = {
                 "id": str(int(time.time() * 1000)),
@@ -5451,9 +5833,16 @@ async def weixin_send(body: dict = None):
                 "ts": int(time.time()),
                 "direction": "out",
             }
-            _weixin_msg_store.append(wx_msg)
-            if len(_weixin_msg_store) > _MAX_WEIXIN_MSGS:
-                _weixin_msg_store = _weixin_msg_store[-_MAX_WEIXIN_MSGS:]
+            _append_weixin_msg(wx_msg)
+            # 2026-08-14: 手动回复成功后实时推前端（之前要手动刷新才可见）
+            ws_event = json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False)
+            dead = set()
+            for ws_cli in list(_WEIXIN_WS_CLIENTS):
+                try:
+                    await ws_cli.send_text(ws_event)
+                except Exception:
+                    dead.add(ws_cli)
+            _WEIXIN_WS_CLIENTS -= dead
             return {"ok": True}
         else:
             return {"ok": False, "error": "发送失败"}
@@ -6586,6 +6975,19 @@ def _memory_api_token() -> str:
 _MEMORY_CHAR_LIMITS = {"USER.md": 10000, "MEMORY.md": 10000}
 
 
+@app.post("/api/memory/govern")
+async def memory_govern():
+    """记忆治理：重新扫描打分并生成索引（2026-08-14）。
+
+    只读操作（不迁移条目）——L1/L2/L3 实际流转需显式 apply 才执行。"""
+    try:
+        from memomics.memory_governance import governor
+        idx = governor.init_index(verbose=False)
+        return {"ok": True, "stats": idx["stats"], "total": sum(idx["stats"].values())}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/api/memory")
 async def get_memory():
     """读取外置记忆内容（响应携带写 API token，供同源页面使用）"""
@@ -6839,6 +7241,19 @@ async def ws_endpoint(ws: WebSocket):
                 # 允许仅图片无文字
                 if not user_text and not image_urls:
                     continue
+                # 新一轮用户指令：重置循环守卫的检测窗口（保留注入计数）
+                try:
+                    _lg = session.get("_loop_guard")
+                    if _lg:
+                        with _lg["lock"]:
+                            _lg["tool_hist"] = []
+                            _lg["turn_texts"] = []
+                            _lg["text_buf"] = ""
+                            _lg["inject_count"] = 0
+                except Exception:
+                    pass
+                # 2026-08-14: 同步重置"说而不做"唤醒计数（每回合最多 2 次）
+                session.pop("_saying_wakeup_n", None)
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
                     img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
@@ -7015,6 +7430,18 @@ async def ws_endpoint(ws: WebSocket):
                 # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
                 if getattr(agent, "_interrupt_requested", False):
                     agent.clear_interrupt()
+                # 2026-08-14: 清空上回合残留的循环干预 steer——上一回合注入、
+                # 本回合首个 tool batch 后才送达的"停止重复"提示会干扰正常新任务，
+                # 造成"图已出完还在跑"。新回合开始即作废旧干预。
+                try:
+                    _st_lock = getattr(agent, "_pending_steer_lock", None)
+                    if _st_lock is not None:
+                        with _st_lock:
+                            agent._pending_steer = ""
+                    else:
+                        agent._pending_steer = ""
+                except Exception:
+                    pass
                 session["restored"] = False
                 # 问题2: 不再用环境变量传 sid（进程级变量会串会话），改用 agent 实例属性
                 agent.memomics_sid = session["id"]
@@ -7109,6 +7536,7 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         if delta is None: return
                         has_delta = True
+                        _loop_check(_s, None, "delta", delta=delta)
                         _session_emit(_s, {"type": "delta", "content": str(delta), "session_id": _s["id"]})
                     except Exception:
                         pass
@@ -7124,6 +7552,8 @@ async def ws_endpoint(ws: WebSocket):
                 
                 def tool_start_cb(tool_id, tool_name, args=None, _s=session):
                     try:
+                        # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
+                        _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
                         # 强制保护：禁止自杀命令 + 禁止删除数据
                         if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
                             _cmd = str(args.get("command", args.get("code", "")))
@@ -8008,6 +8438,9 @@ async def ws_endpoint(ws: WebSocket):
                                 _session["todos"] = todos if isinstance(todos, list) else []
                         except Exception:
                             pass
+                        # 回合结束：循环检测（重复表述）
+                        _loop_check(_session, None, "turn_end")
+
                         # 发送进度完成
                         _session_emit(_session, {"type": "progress", "step": _pt(_session, "complete"), "status": "done", "detail": _pt(_session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                         # 聊天框内容：有文本回复就用文本，纯工具调用时生成操作摘要
@@ -8024,15 +8457,24 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(_session, {"type": "complete", "content": _chat_content, "session_id": _session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
-                        _action_words = ["启动", "运行", "执行", "开始", "跑", "启动pipeline", "launch", "run ", "start",
-                                        "查", "检查", "看", "读", "监控", "poll", "list", "scan", "report", "汇报"]
+                        # 2026-08-14 收紧：只认明确承诺句式（"现在运行/即将执行/开始跑"），
+                        # 单字词（看/查/读）误伤普通解释性回复 → 去掉；含结果性措辞的
+                        # 叙述（已完成/已生成/以上是）视为已交付，不再触发。
+                        _action_words = ["现在运行", "即将执行", "马上执行", "开始运行", "开始执行",
+                                         "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本"]
+                        _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
+                                       "输出如下", "见上图", "见下图"]
                         _has_action_promise = any(w in result.lower() for w in _action_words) if result else False
+                        _has_done_narr = any(w in result for w in _done_words) if result else False
                         _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
                                        for t in _tool_call_log) if _tool_call_log else False
                         _has_plan = bool(_session.get("plan_path") or
                                          os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
-                        if _has_action_promise and not _has_exec:
-                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 立即触发自唤醒")
+                        # 每用户回合最多紧急唤醒 2 次，防"做完了又不停"
+                        _wake_n = _session.get("_saying_wakeup_n", 0)
+                        if _has_action_promise and not _has_exec and not _has_done_narr and _wake_n < 2:
+                            _session["_saying_wakeup_n"] = _wake_n + 1
+                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec=False → 立即触发自唤醒 (#{_wake_n + 1}/2)")
                             _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 检测到说而不做——系统将立即触发新一轮检查，强制调用工具",
                                 "session_id": _session["id"]})

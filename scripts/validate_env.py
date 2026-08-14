@@ -27,6 +27,32 @@ def check_exists(path_str):
     p = Path(path_str)
     return p.exists()
 
+
+# 2026-08-14: 关键 R 包清单 — 绘图/富集生态（agent 画图/富集分析必需，缺失会导致反复报错卡死）
+KEY_R_PACKAGES = [
+    "ggplot2", "dplyr", "tidyr", "scales", "RColorBrewer", "ggrepel",
+    "svglite", "ggpubr", "patchwork", "pheatmap",
+    "clusterProfiler", "enrichplot", "org.Hs.eg.db", "GSEABase", "fgsea",
+]
+
+
+def check_r_key_packages(rscript_bin, timeout=60):
+    """用给定 Rscript 检查关键包是否齐全。返回缺失包列表。"""
+    if not check_exists(rscript_bin):
+        return None  # R 本身不存在（调用方另行处理）
+    expr = ("pkgs <- c(" + ", ".join('"%s"' % p for p in KEY_R_PACKAGES) + "); "
+            "m <- vapply(pkgs, requireNamespace, logical(1), quietly=TRUE); "
+            "cat(paste(pkgs[!m], collapse=','))")
+    try:
+        r = subprocess.run([rscript_bin, "-e", expr],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout)
+        out = (r.stdout or "").strip()
+        missing = [p for p in out.split(",") if p.strip()] if out else []
+        return missing
+    except Exception:
+        return None  # 检查失败不阻断主流程
+
 def find_r_installations():
     """自动探测所有 R 安装 — 平台分支（P1-16 跨平台）。
 
@@ -142,6 +168,37 @@ def validate_and_fix(env_data, verbose=False, dry_run=False):
         else:
             critical_missing = True
             changes.append("default R: NOT FOUND — CRITICAL")
+
+    # --- 2026-08-14: 关键 R 包检查（绘图/富集生态，缺失会导致 agent 反复报错卡死） ---
+    _r_bin_for_pkg = ""
+    if check_exists(default_r):
+        _r_bin_for_pkg = default_r
+    else:
+        for r_ver, r_info in list(r_section.items()):
+            if r_ver != "default" and check_exists(r_info.get("bin", "")):
+                _r_bin_for_pkg = r_info["bin"]
+                break
+    if _r_bin_for_pkg:
+        _missing_pkgs = check_r_key_packages(_r_bin_for_pkg)
+        if _missing_pkgs is None:
+            changes.append("R 关键包检查失败（跳过）")
+        elif _missing_pkgs:
+            all_ok = False
+            _bioc = {"clusterProfiler", "enrichplot", "org.Hs.eg.db", "GSEABase", "fgsea"}
+            _cran = [p for p in _missing_pkgs if p not in _bioc]
+            _bio = [p for p in _missing_pkgs if p in _bioc]
+            _tips = []
+            if _cran:
+                _tips.append('"%s" -e \'options(repos=c(CRAN="https://mirrors.tuna.tsinghua.edu.cn/CRAN/")); install.packages(c(%s))\''
+                             % (_r_bin_for_pkg, ", ".join('"%s"' % p for p in _cran)))
+            if _bio:
+                _tips.append('"%s" -e \'if(!requireNamespace("BiocManager",quietly=TRUE))install.packages("BiocManager"); BiocManager::install(c(%s),ask=FALSE,update=FALSE)\''
+                             % (_r_bin_for_pkg, ", ".join('"%s"' % p for p in _bio)))
+            changes.append(f"R 缺关键包 {len(_missing_pkgs)} 个: {', '.join(_missing_pkgs)}")
+            if verbose:
+                print(f"[WARN] R 缺关键包 {len(_missing_pkgs)} 个: {', '.join(_missing_pkgs)}")
+                for t in _tips:
+                    print(f"  修复命令: {t}")
 
     # --- 验证 Python ---
     py_section = env_data.get("paths", {}).get("python", {})

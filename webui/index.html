@@ -251,8 +251,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
 
 /* === 右侧面板 === */
-.info-panel { width:clamp(320px, 30vw, 560px); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
-/* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原 380px） */
+.info-panel { width:clamp(320px, 380px, 60vw); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+/* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原默认 380px） */
 .info-panel-resizer { width:6px; flex-shrink:0; cursor:ew-resize; background:linear-gradient(90deg, transparent 2px, rgba(149,165,166,0.45) 2px, rgba(149,165,166,0.45) 4px, transparent 4px); transition:background 0.15s; position:relative; z-index:20; }
 .info-panel-resizer:hover { background:linear-gradient(90deg, transparent 1px, var(--primary) 1px, var(--primary) 5px, transparent 5px); }
 .kb-sp-btn { font-size:11px; padding:2px 9px; border-radius:4px; background:var(--border); color:var(--text); border:none; cursor:pointer; white-space:nowrap; }
@@ -3174,9 +3174,11 @@ function renderWeixinMessages(messages) {
     return;
   }
   if (empty) empty.style.display = 'none';
+  // 2026-08-14: 按 ts 排序后再渲染，保证列表/单条混合推送时顺序稳定
+  var sorted = messages.slice().sort(function(a, b) { return (a.ts || 0) - (b.ts || 0); });
   var html = '';
-  for (var i = 0; i < messages.length; i++) {
-    var m = messages[i];
+  for (var i = 0; i < sorted.length; i++) {
+    var m = sorted[i];
     var mid = m.id;
     if (_weixinMsgSeen[mid]) continue;
     _weixinMsgSeen[mid] = true;
@@ -4197,8 +4199,9 @@ function closeKbPreview() {
 }
 
 // === 右侧栏宽度拖拽（2026-08-08 从 8-06 版恢复） ===
-// 右侧（图谱/信息栏）最小 380px；往左拖时交互框（左侧）至少保持 380px；
-// 拖拽结束自动居中图谱；双击还原 380px 并居中；刷新后回到自适应默认宽度。
+// 默认 380px（2026-08-14：CSS 原为 30vw 自适应，用户确认正常应为 380，改为固定 380、
+// 超小窗口按 60vw 收缩至最小 320px）；往左拖时交互框（左侧）至少保持 380px；
+// 拖拽结束自动居中图谱；双击还原默认 380px 并居中；刷新后回到 380px。
 function initInfoPanelResizer() {
   var rz = document.getElementById('info-panel-resizer');
   var panel = document.getElementById('info-panel');

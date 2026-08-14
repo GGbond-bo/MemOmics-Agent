@@ -445,6 +445,9 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 26. **发表级出图**：所有分析 Phase 完成后 → 必须 `skill_view("nature-figure")` → 出至少一套发表级 SVG+PDF+TIFF 图。分析中快速探索用 cns-visualization，最终交付用 nature-figure。
 27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。用户明说"直接做/不用审"可跳过。
 28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。
+29. **缺包即装（2026-08-14 起）**：R/Python 报"不存在叫 X 这个名称的程序包" / "there is no package called 'X'" / "No module named 'X'" → 这是**环境缺包，不是脚本错误**：立即 `install.packages(...)`（R，清华镜像）或 `pip install X`（Python），**禁止重试原脚本**。装完验证 `requireNamespace("X", quietly=TRUE)` / import 成功后再继续。跑图前必查：ggplot2/dplyr/scales 在不在（`Rscript -e 'cat(requireNamespace("ggplot2", quietly=TRUE))'`）。
+30. **terminal 超时/长任务（2026-08-14 起）**：收到 `Command timed out after N seconds`（exit_code 124）→ **不要原样重试**：要么 timeout 调到 ≥300，要么 background=True 后轮询。安装包/跑分析脚本这类预计超过 60 秒的任务，**从一开始就** background=True 或 timeout≥300。Windows 下命令里路径必须用 `E:/...` 或 `E:\\...`，禁止用 `/e/...`（MSYS 风格在 cmd 里无效）。**画图/分析优先用 execute_r/execute_python（持久 kernel，变量/已加载包跨调用保留），不要用 terminal 跑 Rscript 重开进程**；批量出图在一个脚本里完成（ggsave 循环），或逐张调用时文件名带递增序号。
+31. **记忆治理语法（2026-08-14 起）**：写入 MEMORY.md/USER.md 时在内容开头标注元数据：用户明确强调"记住这个/这个很重要"的 → `[imp:0.9][pinned:1]`（pinned 条目永不降级）；环境坑/工具 bug → `[imp:0.7]`；项目事实/默认参数 → `[imp:0.5]`；一次性/临时信息 → `[imp:0.3]`。元数据会被系统剥离后写入文件（不进入注入视图），登记到记忆索引供分层治理。不得随意给 [pinned:1]——只有用户明确强调才可。
 
 > 📋 铁律 12-21 详细规则（task_plan.md、长任务追踪、心跳部署、后台进程模式等）→ `SOUL-detail.md`
 
