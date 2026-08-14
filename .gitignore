@@ -105,3 +105,10 @@ hermes_home/lsp/bin/
 # 备份文件不入库
 *.bak*
 memory_api_token
+
+# === 敏感/运行时（2026-08-14 停止跟踪）===
+hermes_home/config.yaml
+hermes_home/backup_plaintext_*/
+hermes_home/verification_evidence.db
+hermes_home/weixin/accounts/
+hermes_home/skills/**/logs/
