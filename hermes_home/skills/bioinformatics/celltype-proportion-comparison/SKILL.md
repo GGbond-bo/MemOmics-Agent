@@ -306,7 +306,12 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   修复 = 去掉 tight_layout，改用 `fig.subplots_adjust(left=,right=,bottom=,top=)` 手动布局，三种格式渲染一致。
   **判断 PNG 是否真更新**：别只看文件大小/时间戳，用 vision_describe 看主色（热图区不应 60%+ 灰白 #e0e0e0）+ 裁剪底部 OCR 确认标签贴边。
   亚群标签离热图太远的正确参数 = 底部 45° 斜排 `y=-0.15`（不是 -1.9）。详见 `references/cns-effect-matrix-aucell.md` v5→v6 节。
-- **⛔ Fig7 打分×亚群热图必须转置（2026-08-14 用户明确："y轴是基因集名字，亚群是x轴"）**：y=22 打分、x=10 亚群，不要默认行=亚群列=打分；行分组色带移左侧。
+- **⛔ Fig7 打分×亚群热图必须转置（2026-08-14 用户明确：y轴是基因集名字，亚群是x轴）**：y=22 打分、x=10 亚群，不要默认行=亚群列=打分；行分组色带移左侧。
+- **⛔ matplotlib 逐格热图白色间隙根因 = CELL<1.0（2026-08-14 用户抓 小色块之间不要有白色间隙 且以 v1 为基准）**：
+  用 `ax.add_patch(Rectangle((x,y), CELL, CELL, edgecolor=none))` 逐格画热图时，**CELL 必须 = 1.0 填满整个单元格**；
+  手滑改成 0.94/0.82 会在相邻格子间留 0.06/0.18 白色缝隙（与 edgecolor 无关，edgecolor=none 也留缝），用户一眼看出与 v1 的差异。
+  修复 = 格子宽/高 = 行/列间距 = 1.0 严格匹配。用户提列宽调小时改 figsize/xlim 收窄整体图宽，**不要用 CELL<1.0 制造更窄**（那会同时产生白缝）。
+  行分组间隙最终值 = `ri += 0.2`（用户明确指定），面板间距 PANEL_GAP=1.8 保持不变。最终可用脚本 `fig_v7_final.py`。详见 `references/cns-effect-matrix-aucell.md` v6→v7 节。
 
 ## 用户上传图识别（2026-08-14 实测）
 - 用户上传项目产出图（如 Fig1_five_effects_matrix PNG）问"能识别这个图吗" → **不要只凭肉眼描述**，先 `vision_describe(image_path)` 拿 OCR + 元素检测 + ASCII 亮度图事实清单，再结合项目上下文（本 skill 的图格式约定）回答
