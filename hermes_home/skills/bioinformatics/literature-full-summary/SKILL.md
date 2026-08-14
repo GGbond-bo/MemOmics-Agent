@@ -15,6 +15,8 @@ trigger:
     - "9 项摘要必须逐项给出，缺项写'未提及'，禁止编造"
     - "物种/组织必须与原文一致（human/mouse/rat...；skeletal_muscle/liver...）"
     - "摘要写入 hermes_home/papers/summaries/<文件名>.md 并标记 summary_done"
+    - "执行时直接调用 summarize_paper 工具（工具内已实现本 9 项模板与落盘）；禁止反复 skill_view 后手动复述模板"
+    - "skill_view 本 skill 最多一次；看到模板后立刻调用 summarize_paper"
 ---
 
 # 文献全文思路提炼 Skill（给人看的方向）
@@ -42,6 +44,6 @@ trigger:
 
 ## 使用方式
 
-- 直接调用工具 `summarize_paper(file_or_title=...)`（内部独立调用 LLM API）
-- 或手动按本模板逐项撰写后写入 `hermes_home/papers/summaries/`
-- 批量：`summarize_all_papers()` 只处理未提炼（summary_done=false）的文章
+- **执行 = 调用 `summarize_paper(file_or_title=...)`**（本 skill 的 9 项模板已内置在该工具里，含 OCR 兜底与落盘标记）。不要手工逐项撰写。
+- 批量：`summarize_all_papers()` 只处理未提炼（summary_done=false）的文章。
+- 本 skill 的作用是让 agent 理解"给人看的方向"的分工与 9 项定义；真正的执行全部走工具。

@@ -575,12 +575,13 @@ def _classify_single(title: str) -> dict:
         return _rule_classify(title)
 
 
-def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
+def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
     """把文献库中的一篇文献提炼成知识库 YAML 条目（批G 2026-08-16）。
 
     流程: 定位 PDF → 全文提取(≤30K字符) → LLM 提炼 1-3 个 KB 条目 →
           save_knowledge 五级目录落库（带 DOI/原文溯源 evidence）。
     progress_cb(phase, done, total, detail): 可选进度回调。
+    force=True 时即使已入库也重新提炼（默认幂等跳过，防并发重复调用）。
     """
     _cb = progress_cb or (lambda *a, **k: None)
     try:
@@ -599,6 +600,11 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
             f"文献库中未找到 '{file_or_title}'。可先用 literature_import 导入 PDF，"
             "或用 save_reference list / 文献库面板查看已入库文献。")},
             ensure_ascii=False)
+    if not force and hit.get("kb_done"):
+        return json.dumps({"ok": True, "skipped": True, "paper": hit.get("title"),
+                           "file": hit.get("file"),
+                           "note": "已入库（幂等跳过）。如需重新提炼，用 force=true。"},
+                          ensure_ascii=False)
     pdf_path = hit.get("path", "")
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
@@ -784,11 +790,12 @@ def get_summary(file_or_title: str) -> str:
                        "kb_done": bool(hit.get("kb_done"))}, ensure_ascii=False)
 
 
-def summarize_paper(file_or_title: str, progress_cb=None) -> str:
+def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
     """全文思路提炼（方向1，给人看）：9 项结构化摘要 + summaries/<名>.md 落盘。
 
     独立调用 LLM API（deepseek-v4-flash），模板与 literature-full-summary skill 一致。
-    progress_cb(phase, done, total, detail)。
+    progress_cb(phase, done, total, detail)。force=True 时即使已提炼也重新提炼
+    （默认幂等：已提炼直接返回，防并发重复调用烧 token）。
     """
     _cb = progress_cb or (lambda *a, **k: None)
     try:
@@ -804,6 +811,17 @@ def summarize_paper(file_or_title: str, progress_cb=None) -> str:
             break
     if not hit:
         return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    # 幂等守卫：直读索引原始条目（list_library 投影不含 summary 对象）
+    _raw = {}
+    for _e in _load_index(os.path.join(_library_dir(), ".pdf_index.json")):
+        if _e.get("file") == hit.get("file"):
+            _raw = _e
+            break
+    if not force and _raw.get("summary_done") and _raw.get("summary"):
+        return json.dumps({"ok": True, "skipped": True, "paper": hit.get("title"),
+                           "file": hit.get("file"),
+                           "note": "已提炼过（幂等跳过）。如需重新提炼，用 force=true。"},
                           ensure_ascii=False)
     pdf_path = hit.get("path", "")
     if not pdf_path or not os.path.isfile(pdf_path):
@@ -969,10 +987,11 @@ SCHEMA = {
 EXTRACT_SCHEMA = {
     "name": "kb_extract_from_paper",
     "description": (
-        "把文献库里的一篇文献（用户导入或 download_pdf 下载的）提炼成知识库 YAML 条目。"
-        "自动：定位 PDF → 全文提取 → LLM 提炼 1-3 条（参数/方法/结论）→ 写入 "
-        "knowledge_base 五级目录（物种/组织/方向/类别/assay），evidence 带 DOI 溯源。"
-        "用户说'把这篇文献整理进知识库/提炼这篇论文'时使用。"
+        "把文献库里的一篇文献（用户导入或 download_pdf 下载的）提炼成知识库 YAML 条目"
+        "（给 AI 调用：参数/方法/生物学知识/生信知识），写入 knowledge_base 五级目录"
+        "（物种/组织/方向/类别/assay），evidence 带 DOI 溯源。"
+        "用户说'把这篇文献的参数/知识提炼进知识库/入库'时使用。"
+        "【重要】用户要'总结文章思路/论文解读/全文提炼/9项摘要'时不要用本工具——那走 summarize_paper。"
     ),
     "parameters": {
         "type": "object",
@@ -1013,10 +1032,11 @@ def _register():
                 "name": "summarize_paper",
                 "description": (
                     "文献全文思路提炼（给人看的方向）：对文献库里一篇文章提取 9 项结构化摘要"
-                    "（思路/背景/物种/组织/问题/怎么解决/方法/结论/怎么验证），写入 "
+                    "（思路、背景、物种、组织、问题、怎么解决、方法、结论、怎么验证），写入 "
                     "hermes_home/papers/summaries/ 并标记已提炼。"
-                    "用户说'总结这篇文章/这篇文章的思路是什么/全文提炼'时使用。"
-                    "注意：给 AI 调用的参数/知识条目走 kb_extract_from_paper，两者分工不同。"
+                    "用户说'总结这篇文章/这篇文章的思路/讲了什么/论文解读/全文提炼/9项摘要'时使用。"
+                    "【重要】提炼生信参数/知识库条目（给 AI 调用）走 kb_extract_from_paper，"
+                    "两者分工不同，不要混用。"
                 ),
                 "parameters": {
                     "type": "object",

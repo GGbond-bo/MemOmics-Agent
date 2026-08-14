@@ -13,6 +13,7 @@ trigger:
   not_when:
     - 知识库已有充足的方法和参数
     - 只是普通聊天，不涉及分析
+    - 用户只要论文解读/思路总结/全文提炼（那走 literature-full-summary / summarize_paper，不写知识库）
   rules:
     - "skill_evolution(action='query_logs') 返回的历史运行日志仅供参数参考，不能替代任何审查步骤"
     - "禁止因'之前跑过'而跳过 rail_review(pre)、debate_analysis、rail_review(post)"

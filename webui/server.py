@@ -2376,6 +2376,14 @@ def _match_red_skill_triggers(user_text: str) -> list:
                         break
         if matched:
             hits.append(name)
+    # 批K(2026-08-16)：本地文献库操作豁免全局文献类 RED skills——
+    # "总结文献库里…" 不应被 literature-review(触发词'总结') / paper-summary(触发词'paper')
+    # 抢占 skill_view，本地文献库有专用工具（summarize_paper / kb_extract_from_paper / literature_import）。
+    _LOCAL_LIT_RED_EXEMPT = {"literature-review", "paper-summary", "paper-download",
+                             "paper-translate", "academic-paper-writing"}
+    if hits and ("文献库" in user_text or "文献库里" in user_text or "/papers" in user_text
+                 or ".pdf" in user_text.lower()):
+        hits = [h for h in hits if h not in _LOCAL_LIT_RED_EXEMPT]
     return hits
 
 
