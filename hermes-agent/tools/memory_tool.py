@@ -26,6 +26,7 @@ Design:
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 from contextlib import contextmanager
@@ -349,6 +350,22 @@ class MemoryStore:
         if not content:
             return {"success": False, "error": "Content cannot be empty."}
 
+        # 2026-08-14 记忆治理：识别条目前缀元数据（[imp:x] / [pinned:1]），
+        # 剥离后写入文件；元数据只登记到 memories/index.json（governor 维护），
+        # 不污染注入视图。语法由 SOUL.md 铁律定义。
+        meta_imp = 0.5
+        meta_pinned = False
+        _meta_m = re.match(r"^\[imp:([0-9.]+)\](?:\s*\[pinned:(1)\])?", content)
+        if _meta_m:
+            try:
+                meta_imp = float(_meta_m.group(1))
+            except Exception:
+                meta_imp = 0.5
+            meta_pinned = bool(_meta_m.group(2))
+            content = content[_meta_m.end():].strip()
+        if not content:
+            return {"success": False, "error": "Content cannot be empty."}
+
         # Scan for injection/exfiltration before accepting
         scan_error = _scan_memory_content(content)
         if scan_error:
@@ -392,6 +409,14 @@ class MemoryStore:
             entries.append(content)
             self._set_entries(target, entries)
             self.save_to_disk(target)
+
+        # 2026-08-14: 元数据登记到记忆索引（失败不影响写入）
+        try:
+            from memomics.memory_governance.governor import register_entry
+            register_entry("user" if target == "user" else "memory", content,
+                           importance=meta_imp, pinned=meta_pinned)
+        except Exception:
+            pass
 
         return self._success_response(target, "Entry added.")
 
