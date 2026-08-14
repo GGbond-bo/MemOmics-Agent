@@ -14,7 +14,7 @@
   "tools": [
     "web_search",
     "web_search_academic",
-    "web_fetch",
+    "web_extract",
     "web_browse"
   ],
   "python_requires": [],

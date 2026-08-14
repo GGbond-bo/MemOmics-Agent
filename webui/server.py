@@ -2928,7 +2928,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "🔴 铁律 -4：涉及生信/生物/医学的专业知识，禁止仅靠预训练知识回答！",
             "1. 先调用 search_knowledge() 搜索本地知识库",
             "2. 再调用 search_papers() 搜索 PubMed 文献（至少找 1-2 篇验证）",
-            "3. 必要时 web_search() 或 web_fetch() 查官方文档/最新资料",
+            "3. 必要时 web_search() 或 web_extract() 查官方文档/最新资料",
             "4. 交叉验证后给出准确答案，标注信息来源",
             "📚 回答格式：正文后附 '📚 参考来源：' 列出 KB/PMID/URL",
             "⛔ 不要创建 task_plan。不要输出触发检查清单。不要追问'要不要跑'。",
@@ -2940,7 +2940,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "🔴 Iron Law -4: For bioinformatics/biology/medicine questions, NEVER answer from pretrained knowledge alone!",
             "1. Call search_knowledge() to search the local knowledge base",
             "2. Call search_papers() to search PubMed (at least 1-2 papers for verification)",
-            "3. Use web_search()/web_fetch() for official docs/latest info if needed",
+            "3. Use web_search()/web_extract() for official docs/latest info if needed",
             "4. Cross-validate and cite your sources",
             "📚 Format: answer body + '📚 References:' with KB/PMID/URL",
             "⛔ Do NOT create task_plan. Do NOT output trigger checklist.",
@@ -8353,8 +8353,7 @@ async def ws_endpoint(ws: WebSocket):
                                             if not _agent._todo_store.has_items():
                                                 try:
                                                     import sys, os
-                                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-_agent", "_agent"))
-                                                    from memomics_pipeline import modules_to_todos
+                                                    from memomics.memomics_pipeline import modules_to_todos
                                                     default_ids = ["01","02","03","04","05"]
                                                     pipe_todos = modules_to_todos(default_ids)
                                                     hermes_todos = []
@@ -8953,7 +8952,7 @@ async def ws_endpoint(ws: WebSocket):
                             logger.info(f"[ALL-TOOLS] ({len(all_tool_names)}): {all_tool_names}")
                             # 白名单：plan_refine 只允许规划+文献+方案工具
                             
-                            PLAN_ONLY = ("memomics_pipeline", "skill_view", "skill_search", "search_knowledge", "search_papers", "search_papers_by_context", "web_search", "web_fetch")
+                            PLAN_ONLY = ("memomics_pipeline", "skill_view", "skill_search", "search_knowledge", "search_papers", "search_papers_by_context", "web_search", "web_extract")
                             _agent.tools = [t for t in _agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
@@ -9052,8 +9051,7 @@ async def ws_endpoint(ws: WebSocket):
                             if not did_call:
                                 try:
                                     import sys
-                                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hermes-_agent", "_agent"))
-                                    from memomics_pipeline import modules_to_todos
+                                    from memomics.memomics_pipeline import modules_to_todos
                                     default_ids = ["02", "03", "04"]
                                     pipe_todos = modules_to_todos(default_ids)
                                     if pipe_todos:

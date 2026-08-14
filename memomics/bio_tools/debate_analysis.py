@@ -636,8 +636,9 @@ def _resolve_role_llm(label: str, cfg: dict) -> dict:
     mode = (cfg or {}).get("mode", "homogeneous")
     provider_keys = _load_provider_keys()
     env_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    env_url = os.environ.get("DEEPSEEK_BASE_URL", "https://dcsapi.dcs.cloud/api/aigress/unified/v1")
-    env_model = os.environ.get("DEEPSEEK_MODEL", "glm-5.2")
+    # 2026-08-15: 移除已死默认端点(dcsapi 401)；空 URL 时按 key 匹配 provider_keys 回退
+    env_url = os.environ.get("DEEPSEEK_BASE_URL", "")
+    env_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
     def _from_provider(pid: str, model: str):
         if pid and pid in provider_keys:
@@ -718,7 +719,16 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
     无环境变量时 api_key 为空 → 8/8 全失败 "Illegal header value b'Bearer '"）。
     """
     if env_key:
-        return {"api_key": env_key, "base_url": env_url, "model": env_model,
+        # 2026-08-15: base_url 为空时按 key 匹配 provider_keys；再不行回退 deepseek 官方
+        _url = env_url or ""
+        if not _url:
+            for pid, info in provider_keys.items():
+                if info.get("api_key") == env_key and info.get("base_url"):
+                    _url = info["base_url"].rstrip("/")
+                    break
+        if not _url:
+            _url = "https://api.deepseek.com/v1"
+        return {"api_key": env_key, "base_url": _url, "model": env_model,
                 "temperature": 0.7, "provider": "env"}
     # 环境变量缺失（如直接命令行调用、不经 server 的 _sync_debate_env）→
     # 回退 provider_keys.json

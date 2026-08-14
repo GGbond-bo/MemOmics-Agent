@@ -121,7 +121,7 @@ search_knowledge → skill_view → check_env → rail_review(pre) → write →
 
 1. **scan_data** → 确认硬件 + 数据格式
 2. **用户确认 4 项**：物种、组织、方向、语言
-3. **update_results_dir** → 目录重命名
+3. **结果目录**：scan_data 自动创建；如需重命名为 物种_组织_方向_日期，请用户在 WebUI 结果面板操作（agent 无重命名工具）
 4. **memomics_pipeline** → 生成待办列表
 5. **逐项执行** → 每项完成前后审查
 6. **nature-figure 出图** → 分析完成后，用 nature-figure 出一套发表级图（SVG+PDF+TIFF）

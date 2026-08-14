@@ -191,6 +191,8 @@ TOOLSETS = {
     # === MemOmics bioinformatics tools ===
     # 通过 model_tools.py 中的 `from memomics import bio_tools` 自动注册。
     # 工具集名 "memomics" 在 enabled_toolsets 中指定后启用。
+    # 2026-08-15: 移除从未实现的幻影名(todo_manage/update_results_dir/asset_manage/
+    # send_message/screenshot) — 运行时目录以 registry 实际注册为准。
     "memomics": {
         "description": "MemOmics bioinformatics analysis tools: data scanning, knowledge search, literature search, environment check, rail review, debate analysis, and pipeline orchestration",
         "tools": [
@@ -202,13 +204,8 @@ TOOLSETS = {
             "check_env",
             "rail_review",
             "debate_analysis",
-            "todo_manage",
             "memomics_pipeline",
-            "update_results_dir",
             "skill_evolution",
-            "send_message",
-            "screenshot",
-            "asset_manage",
             "save_knowledge",
             "kb_coverage",
             "session_memory",

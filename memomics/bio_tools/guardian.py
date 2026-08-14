@@ -142,15 +142,37 @@ SCHEMA = {
 }
 
 
-def guardian(action: str, label: str = "", failure_count: int = 0) -> dict:
+def guardian(action: str, label: str = "", failure_count: int = 0) -> str:
+    """guardian 工具入口。返回 JSON 字符串（Hermes 工具契约）。"""
     if action == "snapshot":
-        return guardian_snapshot(label=label)
+        result = guardian_snapshot(label=label)
     elif action == "check":
-        return guardian_check(failure_count=failure_count)
+        result = guardian_check(failure_count=failure_count)
     elif action == "reset":
-        return guardian_reset_counters()
-    return {"ok": False, "error": f"unknown action: {action}"}
+        result = guardian_reset_counters()
+    else:
+        result = {"ok": False, "error": f"unknown action: {action}"}
+    return json.dumps(result, ensure_ascii=False)
 
 
-def register(registry):
-    registry.register(SCHEMA, guardian)
+def _register():
+    """2026-08-15 修复: 旧版 register(registry) 从未被调用且签名过时 → 工具从未注册。"""
+    try:
+        from tools.registry import registry
+        registry.register(
+            name="guardian",
+            toolset="memomics",
+            schema=SCHEMA,
+            handler=lambda args, **kw: guardian(
+                args.get("action", "snapshot"),
+                args.get("label", ""),
+                args.get("failure_count", 0),
+            ),
+            emoji="🛡️",
+            max_result_size_chars=4_000,
+        )
+    except Exception as e:
+        logger.warning(f"guardian register failed: {e}")
+
+
+_register()
