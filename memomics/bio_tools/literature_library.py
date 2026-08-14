@@ -289,6 +289,95 @@ def _repair_json_via_llm(bad_text: str, target: str) -> str:
         return ""
 
 
+def _llm_content(prompt: str, label: str, temperature: float = 0.3,
+                 max_tokens: int = 6000, retry_prefix: str = "") -> str:
+    """LLM 调用 + 推理占满自动重试（批N 2026-08-16）。
+
+    deepseek-v4-flash 是推理模型，偶尔把输出额度全花在 reasoning 上、
+    content 为空（_call_llm_sync 回退返回 reasoning 草稿）→ 检测到后
+    重试一次并要求直接输出最终结果。
+    """
+    from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
+    cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
+    r = _call_llm_sync(prompt, label, cfg["api_key"], cfg["base_url"], cfg["model"],
+                       temperature=temperature, max_tokens=max_tokens)
+    if r.get("used_reasoning_fallback"):
+        logger.warning(f"{label} reasoning 占满 → 重试直接输出")
+        r2 = _call_llm_sync((retry_prefix or "【重要：不要输出任何思考过程，立即输出最终结果】\n") + prompt,
+                            label + "_retry", cfg["api_key"], cfg["base_url"], cfg["model"],
+                            temperature=0.2, max_tokens=max_tokens)
+        return r2.get("content", "") or r.get("content", "")
+    return r.get("content", "")
+
+
+def _markdown_dir() -> str:
+    return os.path.join(_library_dir(), "markdown")
+
+
+def pdf_to_markdown(path: str, force: bool = False) -> str:
+    """PDF → Markdown 落盘（批N 2026-08-16）：hermes_home/papers/markdown/<名>.md。
+
+    pymupdf4llm 优先（标题/段落结构化）；失败回退纯文本；扫描版走 OCR。
+    已存在且非 force → 直接复用缓存。
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    os.makedirs(_markdown_dir(), exist_ok=True)
+    md_path = os.path.join(_markdown_dir(), f"{stem}.md")
+    if os.path.isfile(md_path) and os.path.getsize(md_path) > 100 and not force:
+        try:
+            with open(md_path, encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            pass
+    md = ""
+    try:
+        import pymupdf4llm
+        md = pymupdf4llm.to_markdown(path)
+    except Exception as e:
+        logger.warning(f"pymupdf4llm failed ({e}), fallback to raw text")
+    if not md or not md.strip():
+        md = _pdf_text(path, pages=200)
+        if not md.strip():
+            md = _pdf_ocr_text(path)
+            if md.strip():
+                md = "# (OCR 识别版)\n\n" + md
+    if md.strip():
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(md)
+    return md or ""
+
+
+def _split_md_sections(md: str) -> list:
+    """按 Markdown 标题切分节：[(标题, 内容), ...]。"""
+    sections = []
+    cur_title, cur = "", []
+    for ln in (md or "").splitlines():
+        if ln.startswith("#"):
+            if cur or cur_title:
+                sections.append((cur_title, "\n".join(cur).strip()))
+            cur_title, cur = ln.lstrip("#").strip(), []
+        else:
+            cur.append(ln)
+    if cur or cur_title:
+        sections.append((cur_title, "\n".join(cur).strip()))
+    return [(t, c) for t, c in sections if c.strip()]
+
+
+def _chunk_sections(sections: list, max_chars: int = 9000) -> list:
+    """分节合并成 ≤max_chars 的块（块内保留节标题）。"""
+    chunks, cur = [], ""
+    for title, content in sections:
+        piece = f"## {title}\n{content}\n\n"
+        if len(cur) + len(piece) > max_chars and cur:
+            chunks.append(cur)
+            cur = piece
+        else:
+            cur += piece
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def _parse_json_object(text: str) -> dict:
     s = _balanced_slice(text or "", "{", "}")
     if not s:
@@ -460,6 +549,7 @@ def list_library() -> str:
                 "tags": e.get("tags") or {},
                 "summary_done": bool(e.get("summary_done")),
                 "kb_done": bool(e.get("kb_done")),
+                "translated": bool(e.get("translated")),
                 "summary_idea": str(_s.get("idea") or "")[:160],
             })
     return json.dumps({"ok": True, "total": len(out), "library": out,
@@ -608,14 +698,8 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = Fa
     pdf_path = hit.get("path", "")
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
-    _cb("read", 0, 1, f"读取全文: {hit.get('title') or hit.get('file')}")
-    text = _pdf_text(pdf_path, pages=200)[:30000]
-    _ocr_used = False
-    if not text.strip():
-        # 扫描版 PDF：RapidOCR 逐页兜底
-        _cb("read", 0, 1, f"扫描版无文字层，OCR 识别中: {hit.get('file')}")
-        text = _pdf_ocr_text(pdf_path)
-        _ocr_used = bool(text.strip())
+    _cb("read", 0, 1, f"PDF → Markdown: {hit.get('title') or hit.get('file')}")
+    text = pdf_to_markdown(pdf_path)[:20000]
     if not text.strip():
         return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用（可尝试装 rapidocr_onnxruntime）"},
                           ensure_ascii=False)
@@ -629,17 +713,23 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = Fa
         "\"species\":\"human/mouse/...\",\"tissue\":\"英文小写下划线\",\"direction\":\"aging/exercise/...\"}]\n"
         f"文献: {hit.get('title')} | 期刊 {hit.get('journal')} | DOI {hit.get('doi')}\n"
         f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
-        + ("注意: 以下正文来自 OCR 识别，可能有识别噪声，忽略乱码部分。\n" if _ocr_used else "")
         + "优先提炼: ① 该文献特有的参数(阈值/基因集/统计方法) ② 物种组织方向特异结论 ③ 可被"
-        "search_knowledge 检索复用的方法要点。文献正文:\n" + text
+        "search_knowledge 检索复用的方法要点。文献 Markdown 正文（# 为标题）:\n" + text
     )
     _cb("extract", 0, 1, f"LLM 提炼: {hit.get('title') or hit.get('file')}")
     try:
         cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
         r = _call_llm_sync(prompt, "kb_extract", cfg["api_key"], cfg["base_url"],
-                           cfg["model"], temperature=0.3, max_tokens=2500)
+                           cfg["model"], temperature=0.3, max_tokens=6000)
         txt = r.get("content", "")
         items = _parse_json_array(txt)
+        if r.get("used_reasoning_fallback") or not items:
+            logger.warning(f"kb_extract reasoning 占满/解析为空 (len={len(txt)}) → 重试直接输出")
+            r2 = _call_llm_sync(
+                "【重要：不要输出任何思考过程，立即输出最终 JSON 数组，第一个字符必须是 [ 】\n" + prompt,
+                "kb_extract_retry", cfg["api_key"], cfg["base_url"], cfg["model"],
+                temperature=0.2, max_tokens=6000)
+            items = _parse_json_array(r2.get("content", "")) or items
     except Exception as e:
         return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
     if not items:
@@ -742,6 +832,76 @@ def extract_all_papers(progress_cb=None) -> str:
         ensure_ascii=False, indent=2)
 
 
+def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
+    """学术中文翻译（批N2 2026-08-16）：Markdown 分节分块 → LLM 直译 → translations/<名>.zh.md。
+
+    幂等：已翻译且非 force 直接返回（不重复花钱）。
+    progress_cb(phase, done, total, detail)。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    needle = (file_or_title or "").strip().lower()
+    hit = None
+    for e in lib:
+        if needle and (needle in (e.get("file") or "").lower()
+                       or needle in (e.get("title") or "").lower()):
+            hit = e
+            break
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    pdf_path = hit.get("path", "")
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    os.makedirs(_translations_dir(), exist_ok=True)
+    zh_path = os.path.join(_translations_dir(), f"{stem}.zh.md")
+    if not force and os.path.isfile(zh_path) and os.path.getsize(zh_path) > 100:
+        return json.dumps({"ok": True, "skipped": True, "paper": hit.get("title"),
+                           "file": hit.get("file"),
+                           "note": "已翻译过（幂等跳过）。force=true 可重新翻译。"},
+                          ensure_ascii=False)
+    _cb("convert", 0, 1, f"PDF → Markdown: {hit.get('file')}")
+    md = pdf_to_markdown(pdf_path)
+    if not md.strip():
+        return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
+    chunks = _chunk_sections(_split_md_sections(md), max_chars=9000) or [md[:9000]]
+    parts = []
+    for i, chunk in enumerate(chunks):
+        _cb("translate", i, len(chunks), f"翻译第 {i + 1}/{len(chunks)} 块")
+        out = _llm_content(
+            "你是生物医学文献翻译专家。把下面的英文文献 Markdown 翻译成**学术严谨的中文**：\n"
+            "规则：① 保留 Markdown 结构（# 标题/列表/表格）② 术语用规范译名，基因名/蛋白名/"
+            "阈值/数字/单位/统计量保持原文 ③ 人名、机构名保留英文 ④ 忠实原文不意译不增删。\n"
+            "只输出译文，不要任何解释。\n\n" + chunk,
+            f"lit_trans_{i}", temperature=0.2, max_tokens=6000,
+            retry_prefix="【不要思考，立即输出译文】\n")
+        parts.append(out.strip())
+    zh = "\n\n".join(p for p in parts if p)
+    if not zh.strip():
+        return json.dumps({"ok": False, "error": "翻译失败：LLM 未返回译文"}, ensure_ascii=False)
+    _cb("write", len(chunks), len(chunks), "写入 translations/<名>.zh.md")
+    with open(zh_path, "w", encoding="utf-8") as f:
+        f.write(zh)
+    # 索引标记 translated
+    try:
+        _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+        _idx = _load_index(_idx_file)
+        for _e in _idx:
+            if _e.get("file") == hit.get("file"):
+                _e["translated"] = True
+        _save_index(_idx_file, _idx)
+    except Exception as e:
+        logger.warning(f"translated mark failed: {e}")
+    _cb("done", len(chunks), len(chunks), "翻译完成")
+    return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
+                       "translation_file": f"hermes_home/papers/translations/{stem}.zh.md",
+                       "chars": len(zh)}, ensure_ascii=False, indent=2)
+
+
 # ── 方向1：全文思路提炼（给人看，批J 2026-08-16）──
 _SUMMARY_FIELDS = ["idea", "background", "species", "tissue", "problem",
                    "solution", "methods", "conclusion", "validation"]
@@ -754,6 +914,10 @@ _SUMMARY_FIELD_LABELS = {
 
 def _summaries_dir() -> str:
     return os.path.join(_library_dir(), "summaries")
+
+
+def _translations_dir() -> str:
+    return os.path.join(_library_dir(), "translations")
 
 
 def _load_summary_file(stem: str) -> str:
@@ -784,8 +948,27 @@ def get_summary(file_or_title: str) -> str:
     md = _load_summary_file(os.path.splitext(hit.get("file") or "")[0])
     if not md and hit.get("summary"):
         md = hit["summary"].get("markdown", "")
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    src_md = os.path.join(_markdown_dir(), f"{stem}.md")
+    zh_md = os.path.join(_translations_dir(), f"{stem}.zh.md")
+    # 引用信息（批N1 2026-08-16：详情页"引用"标签）
+    bibtex, ris = "", ""
+    try:
+        from memomics.bio_tools.reference_library import _to_bibtex, _to_ris
+        _meta = {"title": hit.get("title"), "authors": hit.get("authors") or "",
+                 "year": hit.get("year"), "doi": hit.get("doi"), "journal": hit.get("journal"),
+                 "url": hit.get("doi") and f"https://doi.org/{hit['doi']}" or "", "entry_type": "article"}
+        bibtex = _to_bibtex(_meta)
+        ris = _to_ris(_meta)
+    except Exception:
+        pass
     return json.dumps({"ok": True, "file": hit.get("file"), "title": hit.get("title"),
+                       "journal": hit.get("journal"), "year": hit.get("year"),
+                       "doi": hit.get("doi"), "authors": hit.get("authors") or [],
                        "summary": hit.get("summary") or {}, "markdown": md,
+                       "markdown_file": src_md.replace("\\", "/") if os.path.isfile(src_md) else "",
+                       "translation_file": zh_md.replace("\\", "/") if os.path.isfile(zh_md) else "",
+                       "bibtex": bibtex, "ris": ris,
                        "summary_done": bool(hit.get("summary_done")),
                        "kb_done": bool(hit.get("kb_done"))}, ensure_ascii=False)
 
@@ -826,42 +1009,69 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     pdf_path = hit.get("path", "")
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
-    _cb("read", 0, 1, f"读取全文: {hit.get('title') or hit.get('file')}")
-    text = _pdf_text(pdf_path, pages=200)[:30000]
-    _ocr_used = False
-    if not text.strip():
-        _cb("read", 0, 1, f"扫描版无文字层，OCR 识别中: {hit.get('file')}")
-        text = _pdf_ocr_text(pdf_path)
-        _ocr_used = bool(text.strip())
-    if not text.strip():
+    # 批N(2026-08-16)：PDF → Markdown 落盘 → 分节分块解读（替代 30K 字符一锅炖）
+    _cb("convert", 0, 1, f"PDF → Markdown: {hit.get('file')}")
+    md_text = pdf_to_markdown(pdf_path)
+    if not md_text.strip():
         return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
-    _cb("summarize", 0, 1, f"LLM 全文提炼(9项): {hit.get('title') or hit.get('file')}")
-    from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
-    prompt = (
-        "你是生物医学文献解读员。按 literature-full-summary skill 的九问模板，"
-        "对下面这篇文献逐项提炼，输出 JSON 对象（不要其他文字）：\n"
-        '{"idea":"作者核心想法/切入点","background":"领域现状与空白","species":"human/mouse/...",'
-        '"tissue":"skeletal_muscle/liver/...","problem":"要回答的具体科学问题",'
-        '"solution":"如何设计实验/分析来回答","methods":"关键技术/算法/统计方法(含阈值)",'
-        '"conclusion":"主要发现与结论","validation":"如何验证(独立队列/实验/交叉方法)"}\n'
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    md_path = os.path.join(_markdown_dir(), f"{stem}.md")
+    _cb("summarize", 0, 1, f"分节解读(9项): {hit.get('title') or hit.get('file')} (md {len(md_text)} 字符)")
+    base = (
+        "你是生物医学文献解读员。按 literature-full-summary skill 的九问模板逐项提炼：\n"
+        'JSON 字段：{"idea":"作者核心想法/切入点","background":"领域现状与空白",'
+        '"species":"human/mouse/...","tissue":"skeletal_muscle/liver/...",'
+        '"problem":"要回答的具体科学问题","solution":"如何设计实验/分析来回答",'
+        '"methods":"关键技术/算法/统计方法(含阈值)","conclusion":"主要发现与结论",'
+        '"validation":"如何验证(独立队列/实验/交叉方法)"}\n'
         "规则：每项 2-6 句中文，忠实原文；缺项写'未提及'，禁止编造；物种/组织用英文小写。\n"
         f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
-        + ("注意: 正文来自 OCR，忽略乱码。\n" if _ocr_used else "")
-        + "正文:\n" + text
     )
+    summary = {}
     try:
-        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-        r = _call_llm_sync(prompt, "lit_summary", cfg["api_key"], cfg["base_url"],
-                           cfg["model"], temperature=0.3, max_tokens=2500)
-        txt = r.get("content", "")
-        summary = _parse_json_object(txt)
+        if len(md_text) <= 18000:
+            # 短文献：单次调用（Markdown 结构化后质量更好）
+            txt = _llm_content(
+                base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
+                "lit_summary", temperature=0.3, max_tokens=6000,
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+            summary = _parse_json_object(txt)
+        else:
+            # 长文献：分节分块 → 每块提炼要点 → 合并成 9 项
+            _cb("summarize", 0, 1, f"长文献分块解读: {len(_split_md_sections(md_text))} 节")
+            chunks = _chunk_sections(_split_md_sections(md_text))
+            bullets = {k: [] for k in _SUMMARY_FIELDS}
+            for ci, chunk in enumerate(chunks):
+                _cb("summarize", ci, len(chunks), f"解读第 {ci + 1}/{len(chunks)} 块")
+                txt = _llm_content(
+                    "你是文献解读助手。对下面的文献片段，按 9 个字段各提炼 1-2 句要点，"
+                    '输出 JSON：{"idea":[],"background":[],"species":[],"tissue":[],'
+                    '"problem":[],"solution":[],"methods":[],"conclusion":[],"validation":[]}'
+                    "（值都是字符串数组；该片段没涉及的字段给空数组；不要其他文字）\n" + chunk,
+                    f"lit_chunk_{ci}", temperature=0.2, max_tokens=3000,
+                    retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 { 】\n")
+                part = _parse_json_object(txt)
+                for k in _SUMMARY_FIELDS:
+                    for v in (part.get(k) or []):
+                        if isinstance(v, str) and v.strip():
+                            bullets[k].append(v.strip())
+            merged = "\n".join(f"{k}: " + "；".join(bullets[k][:12]) for k in _SUMMARY_FIELDS)
+            txt = _llm_content(
+                base + "以下是从全文各节提炼出的要点（按字段聚合），请据此写出最终的 9 项摘要，"
+                "输出 JSON 对象（不要其他文字）:\n" + merged[:9000],
+                "lit_summary_merge", temperature=0.3, max_tokens=6000,
+                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+            summary = _parse_json_object(txt)
     except Exception as e:
         return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
     if not summary or not any(summary.get(k) for k in _SUMMARY_FIELDS):
-        return json.dumps({"ok": False, "error": "未能提炼出摘要"}, ensure_ascii=False)
+        logger.warning(f"lit_summary 最终失败: file={hit.get('file')}")
+        return json.dumps({"ok": False,
+                           "error": f"未能提炼出摘要（{hit.get('file')}：LLM 未输出有效 JSON，"
+                                    "已自动重试；可稍后再试）"},
+                          ensure_ascii=False)
     # 落盘 summaries/<stem>.md + 索引标记
     _cb("write", 1, 1, "写入摘要文件 + 标记已提炼")
-    stem = os.path.splitext(hit.get("file") or "")[0]
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     md_lines = [f"# {hit.get('title') or hit.get('file')}",
                 f"> 期刊 {hit.get('journal') or '—'} · {hit.get('year') or '—'} · DOI {hit.get('doi') or '—'} · 提炼于 {now}",

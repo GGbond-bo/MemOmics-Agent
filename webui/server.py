@@ -6568,6 +6568,30 @@ async def download_file(path: str):
     return FileResponse(path, filename=os.path.basename(path))
 
 
+@app.get("/api/papers")
+async def serve_papers(path: str = ""):
+    """文献原文/产物只读服务（批N1 2026-08-16）：仅限 hermes_home/papers/ 内。
+
+    - path 为相对路径（如 xxx.pdf / markdown/xxx.md / translations/xxx.zh.md）
+    - PDF → application/pdf（浏览器 iframe 原生阅读器）；md → text/markdown
+    """
+    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    try:
+        from webui.security import resolve_within_roots, UnsafePathError
+        # 相对路径拼到 papers 根后再校验（防 ../ 穿越）
+        full = str(resolve_within_roots(os.path.join(papers_root, path or ""), [papers_root]))
+    except UnsafePathError as e:
+        return JSONResponse({"error": str(e)}, status_code=403)
+    if not os.path.isfile(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    media = ("application/pdf" if full.lower().endswith(".pdf")
+             else "text/markdown; charset=utf-8" if full.lower().endswith((".md", ".markdown"))
+             else None)
+    if media is None:
+        return JSONResponse({"error": "仅支持 PDF / Markdown"}, status_code=400)
+    return FileResponse(full, media_type=media)
+
+
 # --- 知识库 ---
 
 @app.get("/api/kb")
@@ -7587,6 +7611,40 @@ async def literature_summarize_all():
     _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
                          "done": 0, "total": 0, "current": "任务已创建"}
     asyncio.create_task(asyncio.to_thread(_run_lit_summarize, job_id, "", True))
+    return {"job_id": job_id, "status": "running"}
+
+
+def _run_lit_translate(job_id: str, file_or_title: str):
+    import json as _json
+    from memomics.bio_tools.literature_library import translate_paper
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        _result = _json.loads(translate_paper(file_or_title, progress_cb=_cb))
+        if _result.get("ok"):
+            _msg = "翻译完成（学术中文，已落盘 translations/）" if not _result.get("skipped") \
+                else "该文献已翻译过（幂等跳过）"
+        else:
+            _msg = f"翻译失败：{_result.get('error', '未知错误')[:120]}"
+        _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/translate")
+async def literature_translate(payload: dict):
+    """学术中文翻译（批N2 2026-08-16）：按篇异步翻译，Markdown 分块直译。"""
+    file_or_title = (payload.get("file_or_title") or "").strip()
+    if not file_or_title:
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "convert",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_translate, job_id, file_or_title))
     return {"job_id": job_id, "status": "running"}
 
 

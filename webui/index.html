@@ -424,9 +424,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #lit-picker .lit-footer button { flex:1; font-size:12px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 #lit-picker .lit-footer button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
 #lit-summary-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:9997; }
-#lit-summary-modal .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:640px; max-width:94%; height:78vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; }
+#lit-summary-modal .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:760px; max-width:95%; height:84vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; }
 #lit-summary-modal .lit-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; }
 #lit-summary-body { flex:1; overflow-y:auto; padding:10px 16px; }
+#lit-summary-modal .lit-tabs { display:flex; gap:4px; padding:6px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+#lit-summary-modal .lit-tab { font-size:12px; padding:3px 10px; border-radius:5px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
+#lit-summary-modal .lit-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+#lit-pdf-frame { width:100%; height:100%; border:none; background:#525659; }
+#lit-md-pre { white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.7; margin:0; padding:10px; background:var(--code-bg); color:var(--code-fg); border-radius:6px; }
 /* === 环境检测面板 === */
 #env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
 #env-check-panel h3 { margin:0 0 8px; font-size:14px; }
@@ -3878,6 +3883,9 @@ function renderLitImportResult(d, box) {
   document.getElementById('lit-import-path').value = '';
 }
 
+var _litAllItems = [];
+var _litFilters = {kw: '', sp: '', dir: '', st: ''};
+
 async function loadLiteratureLibrary() {
   var box = document.getElementById('science-results');
   var lib = document.getElementById('lit-library');
@@ -3890,6 +3898,7 @@ async function loadLiteratureLibrary() {
     if (!d.ok) { lib.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '加载失败') + '</span>'; return; }
     var items = d.library || [];
     if (!items.length) { lib.innerHTML = '<span style="color:var(--text-light);">文献库为空——可用下方输入框导入你自己的 PDF，或让 Agent 用 download_pdf 下载后自动入库。</span>'; return; }
+    _litAllItems = items;
     var nSum = items.filter(function(e) { return !e.summary_done; }).length;
     var nKb = items.filter(function(e) { return !e.kb_done; }).length;
     var html = '<div style="font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📚 文献库共 ' + d.total + ' 篇' +
@@ -3899,33 +3908,87 @@ async function loadLiteratureLibrary() {
       '<button onclick="extractAllPapers()" title="只对未入库的文章提炼知识库条目（参数/方法/结论，给AI调用）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬 一键入库(未入库 ' + nKb + ')</button>' +
       '</span></div>' +
       '<div id="lit-extract-progress" style="display:none;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;"></div>' +
-      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>分类标签</th><th>📝全文</th><th>🧬知识库</th><th>操作</th></tr></thead><tbody>';
+      '<div style="display:flex;gap:6px;align-items:center;padding:4px 0 6px;flex-wrap:wrap;font-size:11px;">' +
+      '<input id="lit-f-kw" placeholder="🔍 标题关键字" style="width:150px;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);" oninput="litApplyFilter()">' +
+      '<select id="lit-f-sp" onchange="litApplyFilter()" style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--panel);color:var(--text);"><option value="">全部物种</option></select>' +
+      '<select id="lit-f-dir" onchange="litApplyFilter()" style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--panel);color:var(--text);"><option value="">全部方向</option></select>' +
+      '<select id="lit-f-st" onchange="litApplyFilter()" style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--panel);color:var(--text);">' +
+      '<option value="">全部状态</option><option value="sum_pending">未提炼</option><option value="sum_done">已提炼</option>' +
+      '<option value="kb_pending">未入库</option><option value="kb_done">已入库</option><option value="zh_pending">未翻译</option></select>' +
+      '</div>' +
+      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>分类标签</th><th>📝全文</th><th>🧬知识库</th><th>🌐翻译</th><th>操作</th></tr></thead><tbody id="lit-rows"></tbody></table></div></div>';
+    lib.innerHTML = html;
+    // 填充过滤下拉
+    var spSet = {}, dirSet = {};
     items.forEach(function(e) {
       var tg = e.tags || {};
-      var tagStr = [].concat(tg.species || []).join('/') + (tg.tissue && tg.tissue.length ? ' · ' + tg.tissue.join('/') : '') + (tg.direction && tg.direction.length ? ' · ' + tg.direction.join('/') : '') + (tg.assay ? ' · ' + tg.assay : '');
-      if (!tagStr.trim()) tagStr = '—';
-      var ref = (e.file || e.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      var sumBadge = e.summary_done
-        ? '<span style="color:var(--success);">✅ 已提炼</span>'
-        : '<span style="color:#e67e22;">⏳ 未提炼</span>';
-      var kbBadge = e.kb_done
-        ? '<span style="color:var(--success);">✅ 已入库</span>'
-        : '<span style="color:#e67e22;">⏳ 未入库</span>';
-      var ops = '<button onclick="' + (e.summary_done ? 'viewSummary(\'' + ref + '\')' : 'summarizePaper(\'' + ref + '\')') + '" title="' + (e.summary_done ? '查看 9 项全文思路摘要' : '提炼 9 项全文摘要（思路/背景/问题/方法/结论/验证）') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 ' + (e.summary_done ? '查看' : '提炼') + '</button> ';
-      if (!e.kb_done) {
-        ops += '<button onclick="extractPaper(\'' + ref + '\')" title="读这篇全文，把参数/方法/结论提炼进知识库（给AI调用）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬 入库</button>';
-      }
-      html += '<tr><td>' + escapeHtml(e.title || e.file) + '</td><td>' + escapeHtml(e.journal || '—') + '</td>' +
-        '<td style="font-size:10px;">' + escapeHtml(tagStr) + '</td>' +
-        '<td>' + sumBadge + '</td><td>' + kbBadge + '</td>' +
-        '<td>' + ops + '</td></tr>';
+      [].concat(tg.species || []).forEach(function(s) { if (s && s !== 'unknown') spSet[s] = 1; });
+      [].concat(tg.direction || []).forEach(function(s) { if (s) dirSet[s] = 1; });
     });
-    html += '</tbody></table></div></div>';
-    lib.innerHTML = html;
+    var spSel = document.getElementById('lit-f-sp');
+    Object.keys(spSet).sort().forEach(function(s) {
+      spSel.innerHTML += '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+    });
+    var dirSel = document.getElementById('lit-f-dir');
+    Object.keys(dirSet).sort().forEach(function(s) {
+      dirSel.innerHTML += '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+    });
+    litRenderRows();
     loadLitBinding();
   } catch(e) {
     lib.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
   }
+}
+
+function litApplyFilter() {
+  _litFilters.kw = (document.getElementById('lit-f-kw') || {}).value || '';
+  _litFilters.sp = (document.getElementById('lit-f-sp') || {}).value || '';
+  _litFilters.dir = (document.getElementById('lit-f-dir') || {}).value || '';
+  _litFilters.st = (document.getElementById('lit-f-st') || {}).value || '';
+  litRenderRows();
+}
+
+function litRenderRows() {
+  var tbody = document.getElementById('lit-rows');
+  if (!tbody) return;
+  var f = _litFilters;
+  var items = _litAllItems.filter(function(e) {
+    var tg = e.tags || {};
+    var sp = [].concat(tg.species || []);
+    var dir = [].concat(tg.direction || []);
+    if (f.kw && (e.title || e.file || '').toLowerCase().indexOf(f.kw.toLowerCase()) < 0) return false;
+    if (f.sp && sp.indexOf(f.sp) < 0) return false;
+    if (f.dir && dir.indexOf(f.dir) < 0) return false;
+    if (f.st === 'sum_pending' && e.summary_done) return false;
+    if (f.st === 'sum_done' && !e.summary_done) return false;
+    if (f.st === 'kb_pending' && e.kb_done) return false;
+    if (f.st === 'kb_done' && !e.kb_done) return false;
+    if (f.st === 'zh_pending' && e.translated) return false;
+    return true;
+  });
+  var html = '';
+  items.forEach(function(e) {
+    var tg = e.tags || {};
+    var tagStr = [].concat(tg.species || []).join('/') + (tg.tissue && tg.tissue.length ? ' · ' + tg.tissue.join('/') : '') + (tg.direction && tg.direction.length ? ' · ' + tg.direction.join('/') : '') + (tg.assay ? ' · ' + tg.assay : '');
+    if (!tagStr.trim()) tagStr = '—';
+    var ref = (e.file || e.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    var sumBadge = e.summary_done ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
+    var kbBadge = e.kb_done ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
+    var zhBadge = e.translated ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
+    var ops = '<button onclick="viewSummary(\'' + ref + '\', \'pdf\')" title="查看原文 PDF / Markdown / 翻译 / 引用" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📄</button> ' +
+      '<button onclick="' + (e.summary_done ? 'viewSummary(\'' + ref + '\', \'summary\')' : 'summarizePaper(\'' + ref + '\')') + '" title="' + (e.summary_done ? '查看 9 项全文思路摘要' : '提炼 9 项全文摘要') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝</button> ';
+    if (!e.kb_done) {
+      ops += '<button onclick="extractPaper(\'' + ref + '\')" title="把参数/方法/结论提炼进知识库（给AI调用）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬</button> ';
+    }
+    if (!e.translated) {
+      ops += '<button onclick="translatePaper(\'' + ref + '\')" title="学术中文翻译（分块直译，约3-10分钟）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐</button>';
+    }
+    html += '<tr><td style="cursor:pointer;" onclick="viewSummary(\'' + ref + '\', \'summary\')">' + escapeHtml(e.title || e.file) + '</td><td>' + escapeHtml(e.journal || '—') + '</td>' +
+      '<td style="font-size:10px;">' + escapeHtml(tagStr) + '</td>' +
+      '<td>' + sumBadge + '</td><td>' + kbBadge + '</td><td>' + zhBadge + '</td>' +
+      '<td>' + ops + '</td></tr>';
+  });
+  tbody.innerHTML = html || '<tr><td colspan="7" style="color:var(--text-light);">无匹配文献</td></tr>';
 }
 
 // 会话绑定：显示当前绑定 + 12h 自动换绑（批J 2026-08-16）
@@ -3996,29 +4059,199 @@ async function summarizeAllPapers() {
   }
 }
 
-async function viewSummary(ref) {
+var _litPaper = null;
+
+async function viewSummary(ref, tab) {
   var modal = document.getElementById('lit-summary-modal');
   if (!modal) { alert('摘要查看组件未加载'); return; }
+  // 批N(2026-08-16)：查看文献 → 跳转到文献库绑定的会话（用户要求）
+  var jumpNote = '';
+  try {
+    var b = await (await fetch('/api/literature/binding?session_id=' + encodeURIComponent(currentSid || ''))).json();
+    if (b && b.session_id && b.session_id !== currentSid) {
+      switchSession(b.session_id);
+      jumpNote = '已跳转到绑定会话 ' + b.session_id;
+    }
+  } catch(e) {}
   modal.style.display = 'flex';
   var body = document.getElementById('lit-summary-body');
-  body.innerHTML = '<span style="color:var(--text-light);">加载摘要…</span>';
+  body.innerHTML = '<span style="color:var(--text-light);">加载文献…</span>';
+  document.getElementById('lit-paper-title').textContent = '';
   try {
     var r = await fetch('/api/literature/summary?file_or_title=' + encodeURIComponent(ref));
     var d = await r.json();
     if (!d.ok) { body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>'; return; }
-    var s = d.summary || {};
-    var labels = {idea: '💡 思路', background: '📖 背景', species: '🧬 物种', tissue: '🫀 组织',
-                  problem: '❓ 问题', solution: '🔧 怎么解决', methods: '⚙️ 方法',
-                  conclusion: '📌 结论', validation: '✅ 怎么验证'};
-    var html = '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">' + escapeHtml(d.title || d.file || '') +
-      (d.summary_done ? ' <span style="color:var(--success);font-size:11px;">✅ 已提炼</span>' : ' <span style="color:#e67e22;font-size:11px;">⏳ 未提炼</span>') +
-      (d.kb_done ? ' <span style="color:var(--success);font-size:11px;">🧬 已入库</span>' : '') + '</div>';
-    Object.keys(labels).forEach(function(k) {
-      html += '<div style="margin-bottom:8px;"><b>' + labels[k] + '</b><div style="color:var(--text);white-space:pre-wrap;font-size:12px;">' + escapeHtml(s[k] || '未提及') + '</div></div>';
-    });
-    body.innerHTML = html;
+    _litPaper = d;
+    var tEl = document.getElementById('lit-paper-title');
+    tEl.textContent = (d.title || d.file || '') + (jumpNote ? ' · ' + jumpNote : '');
+    litPaperTab(tab || 'summary');
   } catch(e) {
     body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+function litSetTab(active) {
+  ['pdf', 'md', 'zh', 'summary', 'cite'].forEach(function(t) {
+    var b = document.getElementById('lit-tab-' + t);
+    if (b) b.classList.toggle('active', t === active);
+  });
+}
+
+async function litPaperTab(tab) {
+  if (!_litPaper) return;
+  litSetTab(tab);
+  var body = document.getElementById('lit-summary-body');
+  var d = _litPaper;
+  var stem = (d.file || '').replace(/\.pdf$/i, '');
+  body.style.overflowY = 'auto';
+  if (tab === 'pdf') {
+    body.style.overflowY = 'hidden';
+    body.style.padding = '0';
+    body.innerHTML = '<iframe id="lit-pdf-frame" src="/api/papers?path=' + encodeURIComponent(d.file || '') + '"></iframe>';
+    return;
+  }
+  body.style.padding = '10px 16px';
+  if (tab === 'md') {
+    if (!d.markdown_file) {
+      body.innerHTML = '<span style="color:var(--text-light);">尚无 Markdown——先点"📝 提炼"生成（提炼时会自动转换 PDF→Markdown 落盘）。</span>';
+      return;
+    }
+    body.innerHTML = '<span style="color:var(--text-light);">加载 Markdown…</span>';
+    try {
+      var r = await fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md'));
+      var txt = await r.text();
+      body.innerHTML = '<pre id="lit-md-pre">' + escapeHtml(txt) + '</pre>';
+    } catch(e) {
+      body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
+    }
+    return;
+  }
+  if (tab === 'zh') {
+    if (!d.translation_file) {
+      body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">这篇还没有中文翻译。' +
+        '<button onclick="translatePaper(\'' + (d.file || '').replace(/'/g, "\\'") + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
+        '<div style="font-size:11px;">学术严谨直译，分块进行，约 3-10 分钟（视篇幅），可关页面后台跑。</div></div>';
+      return;
+    }
+    body.innerHTML = '<span style="color:var(--text-light);">加载翻译…</span>';
+    try {
+      var r2 = await fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem + '.zh.md'));
+      var txt2 = await r2.text();
+      body.innerHTML = '<pre id="lit-md-pre">' + escapeHtml(txt2) + '</pre>';
+    } catch(e) {
+      body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
+    }
+    return;
+  }
+  if (tab === 'cite') {
+    var html = '<div style="font-weight:600;margin-bottom:8px;">📎 引用信息（Zotero/EndNote 可直接导入）</div>' +
+      '<div style="font-size:12px;margin-bottom:6px;">' + escapeHtml(d.title || '') + '<br>' +
+      escapeHtml(d.journal || '—') + ' · ' + escapeHtml(d.year || '—') + ' · DOI: ' + escapeHtml(d.doi || '—') + '</div>';
+    if (d.bibtex) {
+      html += '<div style="font-size:11px;color:var(--text-light);margin:6px 0 2px;">BibTeX <button onclick="litCopyCite(\'bib\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button></div>' +
+        '<pre style="white-space:pre-wrap;background:var(--code-bg);color:var(--code-fg);padding:8px;border-radius:6px;font-size:11px;">' + escapeHtml(d.bibtex) + '</pre>';
+    }
+    if (d.ris) {
+      html += '<div style="font-size:11px;color:var(--text-light);margin:6px 0 2px;">RIS <button onclick="litCopyCite(\'ris\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button></div>' +
+        '<pre style="white-space:pre-wrap;background:var(--code-bg);color:var(--code-fg);padding:8px;border-radius:6px;font-size:11px;">' + escapeHtml(d.ris) + '</pre>';
+    }
+    body.innerHTML = html;
+    return;
+  }
+  // summary（默认）
+  var s = d.summary || {};
+  var labels = {idea: '💡 思路', background: '📖 背景', species: '🧬 物种', tissue: '🫀 组织',
+                problem: '❓ 问题', solution: '🔧 怎么解决', methods: '⚙️ 方法',
+                conclusion: '📌 结论', validation: '✅ 怎么验证'};
+  var html2 = '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">' + escapeHtml(d.title || d.file || '') +
+    (d.summary_done ? ' <span style="color:var(--success);font-size:11px;">✅ 已提炼</span>' : ' <span style="color:#e67e22;font-size:11px;">⏳ 未提炼</span>') +
+    (d.kb_done ? ' <span style="color:var(--success);font-size:11px;">🧬 已入库</span>' : '') + '</div>';
+  if (d.markdown_file) html2 += '<div style="color:var(--text-light);font-size:11px;margin-bottom:6px;">📄 原文 Markdown: hermes_home/papers/markdown/' + escapeHtml(stem) + '.md（会话里可 read_file）</div>';
+  if (!d.summary_done) {
+    html2 += '<div style="color:var(--text-light);">这篇还没有提炼。' +
+      '<button onclick="summarizePaper(\'' + (d.file || '').replace(/'/g, "\\'") + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 立即提炼</button></div>';
+  } else {
+    Object.keys(labels).forEach(function(k) {
+      html2 += '<div style="margin-bottom:8px;"><b>' + labels[k] + '</b><div style="color:var(--text);white-space:pre-wrap;font-size:12px;">' + escapeHtml(s[k] || '未提及') + '</div></div>';
+    });
+  }
+  body.innerHTML = html2;
+}
+
+// 学术中文翻译（批N2 2026-08-16）：按篇异步 + 模态内进度条
+var _litTransTimer = null;
+
+async function translatePaper(ref) {
+  var modal = document.getElementById('lit-summary-modal');
+  if (modal) modal.style.display = 'flex';
+  var body = document.getElementById('lit-summary-body');
+  if (body) {
+    body.style.padding = '10px 16px';
+    body.style.overflowY = 'auto';
+    body.innerHTML = '<span style="color:var(--text-light);">提交翻译任务…</span>';
+  }
+  try {
+    var r = await fetch('/api/literature/translate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_or_title: ref})
+    });
+    var d = await r.json();
+    if (d.error) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litTransTimer) clearInterval(_litTransTimer);
+    _litTransTimer = setInterval(function() { litPollTranslate(d.job_id); }, 1500);
+    litPollTranslate(d.job_id);
+  } catch(e) {
+    if (body) body.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function litPollTranslate(jobId) {
+  var body = document.getElementById('lit-summary-body');
+  if (!body) return;
+  try {
+    var r = await fetch('/api/literature/import/' + encodeURIComponent(jobId));
+    var st = await r.json();
+    if (st.status === 'running') {
+      var total = st.total || 0;
+      var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
+      var phaseLabel = {convert: 'PDF → Markdown', translate: '分块直译', write: '写入译文', done: '完成'}[st.phase] || st.phase;
+      body.innerHTML = '<div style="padding:10px 4px;">' +
+        '<div style="font-weight:600;margin-bottom:8px;">🌐 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
+        '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
+        '<div style="color:var(--text-light);font-size:11px;margin-top:4px;">' + escapeHtml(st.current || '') + '</div></div>';
+      return;
+    }
+    clearInterval(_litTransTimer);
+    _litTransTimer = null;
+    if (st.status === 'error') {
+      body.innerHTML = '<span style="color:var(--danger);">❌ 翻译失败: ' + escapeHtml(st.error || '') + '</span>';
+      return;
+    }
+    var res = st.result || {};
+    if (!res.ok) {
+      body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(res.error || '翻译失败') + '</span>';
+      return;
+    }
+    if (_litPaper) _litPaper.translation_file = res.translation_file || _litPaper.translation_file;
+    litPaperTab('zh');
+  } catch(e) {
+    clearInterval(_litTransTimer);
+    _litTransTimer = null;
+    body.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+function litCopyCite(kind) {
+  var d = _litPaper;
+  if (!d) return;
+  var text = kind === 'bib' ? d.bibtex : d.ris;
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      alert('✅ 已复制到剪贴板');
+    });
+  } else {
+    alert('复制失败：浏览器不支持剪贴板 API\n\n' + text);
   }
 }
 
@@ -6040,10 +6273,19 @@ async function litImportSelected() {
     </div>
   </div>
 </div>
-<!-- 文献全文摘要查看器（批J 2026-08-16）-->
+<!-- 文献详情抽屉（批N1 2026-08-16：原文PDF/Markdown/翻译/9项摘要/引用）-->
 <div id="lit-summary-modal">
   <div class="lit-box">
-    <div class="lit-header">📝 文献思路摘要 <button onclick="document.getElementById('lit-summary-modal').style.display='none'" style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button></div>
+    <div class="lit-header">📚 文献详情 <span id="lit-paper-title" style="font-weight:500;color:var(--text-light);font-size:12px;"></span>
+      <button onclick="document.getElementById('lit-summary-modal').style.display='none'" style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button>
+    </div>
+    <div class="lit-tabs">
+      <button class="lit-tab" id="lit-tab-pdf" onclick="litPaperTab('pdf')">📄 原文PDF</button>
+      <button class="lit-tab" id="lit-tab-md" onclick="litPaperTab('md')">📝 Markdown</button>
+      <button class="lit-tab" id="lit-tab-zh" onclick="litPaperTab('zh')">🌐 翻译</button>
+      <button class="lit-tab" id="lit-tab-sum" onclick="litPaperTab('summary')">💡 9项摘要</button>
+      <button class="lit-tab" id="lit-tab-cite" onclick="litPaperTab('cite')">📎 引用</button>
+    </div>
     <div id="lit-summary-body"></div>
   </div>
 </div>
