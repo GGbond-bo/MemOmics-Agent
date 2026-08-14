@@ -1028,6 +1028,70 @@ def _session_no_live_work(session):
     return True
 
 
+# 代码级反"说而不做"：行动承诺检测（2026-08-14 v3 起，2026-08-16 v4 扩充）
+# v4 修复 memomics-2274ab75 案例：模型说"先并行扫描新文件…"后执行 2 个工具即停手，
+# "先并行/先扫描/先对比/先确认/先重跑/先出…" 等真实话术不在旧词表 → 刹车未触发，
+# 回合结束 3 分钟后才被常规自检唤醒续跑（用户看到"空闲"）。现增加：
+#   (a) 扩充行动词表（先+动词 组合、并行/重跑/重出/整理/更新/扫描/对比/核对…）
+#   (b) Tier B 编号计划承诺：回复尾部出现 ①②③… 计划 + 计划动词且无完成叙述 →
+#       视为"宣布多步计划却停手"（与是否已执行过工具无关）
+def _detect_action_promise(result: str, tool_call_log: list) -> bool:
+    if not result or not result.strip():
+        return False
+    _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
+                   "输出如下", "见上图", "见下图", "已读取", "已查到", "已确认",
+                   "结果已", "已出好", "已出图", "已写好", "已保存", "已交付"]
+    if any(w in result for w in _done_words):
+        return False
+    _tail = result[-300:]
+    # 征询式结尾（在问用户）不是承诺
+    if _tail.rstrip().endswith(("？", "?", "吗", "呢")):
+        return False
+    _action_words = ["现在运行", "即将执行", "马上执行", "开始运行", "开始执行",
+                     "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本",
+                     "先读回", "先读取", "先读一下", "先查", "先查一下",
+                     "先看一下", "先跑", "先跑一下", "先执行", "先获取",
+                     "先运行", "先打开", "先调用",
+                     "先并行", "先扫描", "先对比", "先确认", "先核对", "先核",
+                     "先重跑", "先重出", "先出", "先整理", "先更新", "先算",
+                     "先统计", "先画", "先作图", "先绘图", "先加载", "先导入",
+                     "先下载", "先找", "先搜索", "先检索", "先检查", "先验证",
+                     "先测试", "先重新", "先看看文件", "先看看数据", "先看看结果",
+                     "并行扫描", "并行跑", "并行执行",
+                     "我现在去", "我现在就", "这就去", "这就把", "这就来",
+                     "接下来我会", "接下来就", "接下来把",
+                     "马上把", "立刻把", "现在把",
+                     "把结果读出来", "把结果给你", "把结果交付", "把结果贴",
+                     "把结果整理", "把结果汇总", "把结果发", "把结果返回",
+                     "我该查的是", "我该做的是", "我该读的是", "我该跑的是",
+                     "我该调用的是", "我来查", "我来读", "我去读", "我去查",
+                     "我去看", "我去跑", "我去把", "先把"]
+    _prod_words = ["结果", "产物", "输出", "文件", "CSV", "csv", "日志", "汇总",
+                   "表格", "报告", "数据", "脚本", "terminal", "h5ad", "rds",
+                   "png", "jpg", "pdf", "xlsx", "tsv", "txt", "meta", "打分",
+                   "分数", "基线", "基因集", "矩阵", "热图", "图"]
+    _plan_verbs = ["先", "接下来", "然后", "我来", "我去", "我会", "现在", "马上",
+                   "立刻", "这就", "开始", "重跑", "重出", "扫描", "对比", "确认",
+                   "执行", "运行", "生成", "整理", "更新", "核对", "统计", "绘制"]
+    # Tier A: 行动词 + 40 字符内产物词（条件式提议豁免）
+    for _w in _action_words:
+        _i = _tail.find(_w)
+        while _i >= 0:
+            _before = _tail[max(0, _i - 12):_i]
+            if not any(_c in _before for _c in ("可以", "如需", "如果", "若要", "需要的话", "可随时", "随时", "能否", "要不要")):
+                _after = _tail[_i + len(_w):_i + len(_w) + 40]
+                if any(_p in _after for _p in _prod_words):
+                    return True
+            _i = _tail.find(_w, _i + 1)
+    # Tier B: 编号计划承诺（①②③/第N步/1. 2. 3.）+ 计划动词 + 无完成叙述
+    _has_numbered = any(m in _tail for m in ("①", "②", "③", "④", "⑤")) \
+        or any(f"第{n}步" in _tail for n in ("一", "二", "三", "四", "五")) \
+        or any(f"\n{n}." in _tail or f"\n{n}、" in _tail for n in ("1", "2", "3"))
+    if _has_numbered and any(v in _tail for v in _plan_verbs):
+        return True
+    return False
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -9096,55 +9160,16 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(_session, {"type": "complete", "content": _chat_content, "session_id": _session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
-                        # 2026-08-14 v3 三重 AND 判定：
-                        #   (1) 承诺短语命中（扩充词表，覆盖"先读回/把结果交付/我该查的是"等真实话术）
-                        #   (2) 承诺短语后 40 字符内出现产物词（结果/产物/文件/CSV/日志等）——防误伤
-                        #       纯解释性回复（"我先看看……"后面无产物词不触发）
-                        #   (3) 承诺短语位于回复末尾 300 字符内——开头提到承诺但正文已交付的不触发
-                        # 含结果性措辞的叙述（已完成/已生成/以上是/结果如下）视为已交付，不触发。
-                        _action_words = ["现在运行", "即将执行", "马上执行", "开始运行", "开始执行",
-                                         "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本",
-                                         "先读回", "先读取", "先读一下", "先查", "先查一下",
-                                         "先看一下", "先跑", "先跑一下", "先执行", "先获取",
-                                         "先运行", "先打开", "先调用",
-                                         "我现在去", "我现在就", "这就去", "这就把", "这就来",
-                                         "接下来我会", "接下来就", "接下来把",
-                                         "马上把", "立刻把", "现在把",
-                                         "把结果读出来", "把结果给你", "把结果交付", "把结果贴",
-                                         "把结果整理", "把结果汇总", "把结果发", "把结果返回",
-                                         "我该查的是", "我该做的是", "我该读的是", "我该跑的是",
-                                         "我该调用的是", "我来查", "我来读", "我去读", "我去查",
-                                         "我去看", "我去跑", "我去把", "先把"]
-                        _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
-                                       "输出如下", "见上图", "见下图", "已读取", "已查到", "已确认",
-                                       "结果已"]
-                        _prod_words = ["结果", "产物", "输出", "文件", "CSV", "csv", "日志", "汇总",
-                                       "表格", "报告", "数据", "脚本", "terminal", "h5ad", "rds",
-                                       "png", "jpg", "pdf", "xlsx", "tsv", "txt"]
-                        _has_done_narr = any(w in result for w in _done_words) if result else False
-                        _has_exec = any(t["tool"] in ("terminal", "execute_r", "execute_python", "execute_code")
-                                       for t in _tool_call_log) if _tool_call_log else False
-                        _has_action_promise = False
-                        if result and not _has_done_narr:
-                            _tail = result[-300:]
-                            for _w in _action_words:
-                                _i = _tail.find(_w)
-                                if _i >= 0:
-                                    # 条件式提议豁免："我可以/如需/如果…" 是征询而非承诺
-                                    _before = _tail[max(0, _i - 12):_i]
-                                    if any(_c in _before for _c in ("可以", "如需", "如果", "若要", "需要的话", "可随时", "随时", "能否", "要不要")):
-                                        continue
-                                    _after = _tail[_i + len(_w):_i + len(_w) + 40]
-                                    if any(_p in _after for _p in _prod_words):
-                                        _has_action_promise = True
-                                        break
+                        # 2026-08-14 v3 三重 AND 判定 → 2026-08-16 v4 提取为 _detect_action_promise
+                        # （扩充词表 + Tier B 编号计划承诺，修复 memomics-2274ab75 "先并行扫描"漏检）
+                        _has_action_promise = _detect_action_promise(result, _tool_call_log)
                         _has_plan = bool(_session.get("plan_path") or
                                          os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
                         # 每用户回合最多紧急唤醒 2 次，防"做完了又不停"
                         _wake_n = _session.get("_saying_wakeup_n", 0)
-                        if _has_action_promise and not _has_done_narr and _wake_n < 2:
+                        if _has_action_promise and _wake_n < 2:
                             _session["_saying_wakeup_n"] = _wake_n + 1
-                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True, exec={_has_exec} → 立即触发自唤醒 (#{_wake_n + 1}/2)")
+                            logger.info(f"[MemOmics] 检测到说而不做: action_promise=True → 立即触发自唤醒 (#{_wake_n + 1}/2)")
                             _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 检测到说而不做——系统将立即触发新一轮检查，强制调用工具",
                                 "session_id": _session["id"]})
