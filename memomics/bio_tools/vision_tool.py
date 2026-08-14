@@ -106,13 +106,40 @@ def _detect_chart_elements(img):
     return out
 
 
-def _ocr_text(img):
-    """RapidOCR 文本提取（服务器 Python312 已装；失败返回空列表）。"""
+_OCR_ENGINE = None
+_OCR_DISABLED = os.environ.get("MEMOMICS_VISION_NO_OCR") in ("1", "true", "yes")
+
+
+def _get_ocr_engine():
+    """OCR 引擎懒加载 + 全局缓存（首次调用才加载模型，之后复用）。
+
+    - 磁盘 ~200MB 一次性，CPU 推理每图 1-3 秒，无 GPU 依赖
+    - MEMOMICS_VISION_NO_OCR=1 可整体禁用
+    - rapidocr_onnxruntime/opencv 均为跨平台（Linux/macOS/Windows 同一套代码）
+    """
+    global _OCR_ENGINE
+    if _OCR_DISABLED:
+        return None
+    if _OCR_ENGINE is not None:
+        return _OCR_ENGINE
     try:
         from rapidocr_onnxruntime import RapidOCR
+        _OCR_ENGINE = RapidOCR()
+        logger.info("RapidOCR engine loaded (lazy, cached)")
+        return _OCR_ENGINE
+    except Exception as e:
+        logger.warning("OCR unavailable: %s", e)
+        _OCR_ENGINE = False  # 标记不可用，避免反复重试
+        return None
+
+
+def _ocr_text(img):
+    """RapidOCR 文本提取（懒加载+缓存；失败返回空列表）。"""
+    try:
+        engine = _get_ocr_engine()
+        if engine is None:
+            return []
         import tempfile
-        import numpy as np
-        engine = RapidOCR()
         fd, tmp = tempfile.mkstemp(suffix=".png")
         os.close(fd)
         img.convert("RGB").save(tmp)
