@@ -21,3 +21,4 @@ from . import query_ncbi
 from . import headroom_tool
 from . import guardian
 from . import session_memory
+from . import vision_tool

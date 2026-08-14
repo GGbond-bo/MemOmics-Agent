@@ -212,6 +212,7 @@ TOOLSETS = {
             "save_knowledge",
             "kb_coverage",
             "session_memory",
+            "vision_describe",
         ],
         "module": "tools.memomics_tools",
         "includes": []
