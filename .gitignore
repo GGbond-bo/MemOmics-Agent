@@ -113,3 +113,9 @@ hermes_home/backup_plaintext_*/
 hermes_home/verification_evidence.db
 hermes_home/weixin/accounts/
 hermes_home/skills/**/logs/
+
+# === 嵌套副本已归档（2026-08-14 收敛到 .backups/code_copies_20260814）===
+memomics/hermes-agent/
+memomics/hermes_home/
+memomics/memomics/
+memomics/webui/
