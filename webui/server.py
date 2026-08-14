@@ -2202,24 +2202,27 @@ def _classify_intent(text: str):
     meta = {}  # extra context for downstream handlers
 
     # === Priority 1: self-intro (fast-reply, no LLM) ===
-    SELF_INTRO_KW = ["你是谁", "介绍你自己", "介绍下自己", "你能做什么", "介绍一下", "自我介绍",
+    SELF_INTRO_KW = ["你是谁", "介绍你自己", "介绍下自己", "介绍你的", "你能做什么", "自我介绍",
                      "who are you", "what can you do", "introduce yourself"]
     if any(kw in t for kw in SELF_INTRO_KW):
+        return ("self_intro", 0.99, {})
+    # "介绍一下你自己/介绍一下你的功能"："绍"后跟"一"导致"介绍你自己"子串断链，
+    # 用 "介绍一下"+人称 组合补齐（2026-08-14 实测）；纯"介绍一下Seurat怎么用"仍落 knowledge
+    if "介绍一下" in t and any(x in t for x in ["你", "自己", "你们"]):
         return ("self_intro", 0.99, {})
 
     # === Priority 1.3: cancel_task (用户明确要求取消/停止任务) ===
     CANCEL_KW = ["取消任务", "取消分析", "停止任务", "停止分析", "不要跑了",
-                 "停掉", "取消吧", "不跑了", "停下来", "暂停任务",
+                 "停掉", "取消吧", "不跑了", "别跑了", "停下来", "暂停任务",
                  "cancel", "abort", "stop the task", "stop task",
                  "stop the analysis", "stop analysis",
                  "kill the job", "terminate",
-                 "不要跑", "别跑",     # ← "不要跑cellbender了" 的关键
                  ]
     if any(kw in t for kw in CANCEL_KW):
         return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
     # 停止/暂停/取消/不要/别 + 任务相关词 → cancel
     if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and any(kw in t for kw in 
-        ["任务", "分析", "跑", "cellbender", "训练", "计算", "进程", "job"]):
+        ["任务", "分析", "cellbender", "训练", "计算", "进程", "job"]):
         return ("cancel_task", 0.85, {"reason": "stop_with_context"})
     # 取消 + 任务相关词 → cancel（排除问句）
     if "取消" in t and not any(kw in t for kw in ["怎么", "如何", "什么", "为什么", "哪里"]):
@@ -2285,6 +2288,30 @@ def _classify_intent(text: str):
     if (_has_plan_query or _has_plan_regex) and not _has_data_path_early:
         return ("analysis_plan", 0.85, {"reason": "analysis_roadmap_query"})
 
+    # === Priority 1.8: install / kb 动作意图（先于 short_no_bio，避免短句误判为 chat）===
+    # 2026-08-14 实测："安装cellbender"/"创建一个新skill" 曾被 short_no_bio 误判为 chat
+    INSTALL_EARLY_KW = ["安装", "install", "配置环境", "setup", "依赖", "dependency",
+                        "创建skill", "create skill", "新skill", "新 skill", "注册skill"]
+    _is_install_q = any(kw in t for kw in ["怎么安装", "如何安装", "怎么装", "如何装",
+                                            "怎么配置", "如何配置", "怎么搭建", "如何搭建"])
+    if _is_install_q:
+        # "这个包怎么安装" → 问方法，不是装包动作（2026-08-14 实测）
+        return ("knowledge_ask", 0.84, {"reason": "install_method_question"})
+    if any(kw in t for kw in INSTALL_EARLY_KW):
+        return ("install", 0.88, {"reason": "install_action_early"})
+    if ("装" in t or "配置" in t) and any(tool in t for tool in TOOL_NAMES):
+        # "装cellbender" / "配置seurat" → install
+        return ("install", 0.86, {"reason": "install_tool_early"})
+    KB_EARLY_KW = ["知识库", "knowledge base", "knowledgebase"]
+    if any(kw in t for kw in KB_EARLY_KW):
+        return ("knowledge", 0.85, {"reason": "kb_action_early"})
+
+    # === Priority 1.9: 查看/检查类动作（有数据路径 → analysis，2026-08-14 实测）===
+    # "检查一下E:/data/里的表达矩阵" 原先无任何 kw 命中 → chat
+    VIEW_EARLY_KW = ["检查一下", "检查", "查看", "看看", "看一下", "打开"]
+    if any(kw in t for kw in VIEW_EARLY_KW) and _has_data_path_early:
+        return ("analysis", 0.85, {"reason": "view_inspect_with_data"})
+
     # === Priority 2: chat (non-bioinfo, casual) ===
     CHAT_KW = ["你好", "嗨", "hello", "hi", "谢谢", "感谢", "再见", "拜拜",
                "天气", "今天天气", "怎么样", "好吗",
@@ -2300,7 +2327,7 @@ def _classify_intent(text: str):
               "方案", "设计", "规划", "思路", "路线", "seq", "蛋白", "药物",
               "umap", "tsne", "可视化", "热图", "火山图", "小提琴图", "散点图",
               "轨迹", "通路", "通讯", "调控", "模块",
-              "结果", "输出", "文献", "文献综述", "专利", "patent", "法律", "申报",
+              "结果", "输出", "文献", "文献综述", "专利", "patent", "法律", "申报", "论文", "报告", "综述",
               # 画图/出图相关
               "画", "图", "柱状图", "箱线图", "折线图", "分布图", "相关性矩阵",
               "dotplot", "featureplot", "spatialplot", "sankey", "violin",
@@ -2319,7 +2346,10 @@ def _classify_intent(text: str):
                  "开始做", "开始方案",
                  "帮我写", "写成方案", "做方案", "生成完整", "出完整"]
     if any(kw in t for kw in REFINE_KW):
-        return ("plan_refine", 0.88, {"phase2": True})
+        if "论文" in t or "文献" in t or "报告" in t or "综述" in t:
+            pass  # 写作类落 P5 literature/report，不是方案（2026-08-14 实测"帮我写论文"）
+        else:
+            return ("plan_refine", 0.88, {"phase2": True})
     PLAN_KW = ["设计方案", "出个方案", "出方案", "规划一下", "规划",
                "查文献", "找文献", "文献调研",
                "实验设计", "研究设计", "研究思路", "分析路线", "分析策略",
@@ -2392,7 +2422,12 @@ def _classify_intent(text: str):
         "design an analysis", "make a plan", "create a plan",
     ]
     if any(kw in t for kw in ANALYSIS_INTENT_KW):
-        # 工具名+无方案关键词 → analysis（已在上方处理）
+        # 2026-08-14 实测：执行/查看动作 + 数据路径 → 直接 analysis，不再误判 research_plan
+        EXEC_ACTION_KW = ["跑一下", "跑分析", "做分析", "做个分析", "做数据分析",
+                          "预处理", "做预处理", "分析一下", "帮我分析", "给我分析",
+                          "帮我看看", "帮我看", "看看这个数据", "看一下数据", "探索数据", "数据探索"]
+        if any(kw in t for kw in EXEC_ACTION_KW) and _has_data_path_early:
+            return ("analysis", 0.85, {"reason": "exec_action_with_data"})
         meta["modalities"] = _detect_modalities_from_text(t)
         return ("research_plan", 0.82, meta)
     # Questions about HOW to analyze (must fire before lit/kb/report)
@@ -2411,7 +2446,7 @@ def _classify_intent(text: str):
                   "创建skill", "create skill", "新skill", "新 skill", "注册skill", "创建"]
     lit_kw = ["文献", "论文", "literature", "paper", "pubmed", "下载论文",
               "找文献", "查论文", "搜索文献", "search paper", "find paper",
-              "专利", "patent", "知识产权", "权利要求", "ip", "技术交底"]
+              "专利", "patent", "知识产权", "权利要求", "ip", "技术交底", "综述"]
     kb_kw = ["知识库", "knowledge", "搜索知识", "查找方法", "protocol", "流程"]
     
     rpt_s = sum(1 for kw in report_kw if kw in t)

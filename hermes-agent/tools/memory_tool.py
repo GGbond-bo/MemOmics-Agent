@@ -387,6 +387,33 @@ class MemoryStore:
             if content in entries:
                 return self._success_response(target, "Entry already exists (no duplicate added).")
 
+            # 2026-08-14: Reject near-duplicates（语义重复判重，无 embedding 的轻量方案）
+            # 规则：SequenceMatcher ratio >= 0.75 且 新文本核心字全部已存在于旧文本
+            # （"核心字"=去停用词后的中文字 + 非停用英文单词）。
+            # 保护实体替换："肺癌→肝癌" ratio 高但新核心字{肝}不在旧文本 → 放行。
+            # 拦截纯重复："...研究+了/吧" 新核心字为空 → 拦截。
+            if len(content) >= 8:
+                from difflib import SequenceMatcher
+                _STOP_CN = set("的地得了是在和与或都也很就还才只不我你他它她我们你们他们这那"
+                               "有个些之其及而于为被把让向从到对中上下里外前后左右了吧啊呢呀么吗")
+                _STOP_EN = {"the", "a", "an", "of", "to", "is", "are", "in", "on", "and",
+                            "or", "for", "with", "user", "does", "do", "research"}
+
+                def _content_sig(s: str) -> set:
+                    cn = {ch for ch in s if '\u4e00' <= ch <= '\u9fff' and ch not in _STOP_CN}
+                    en = {w.lower() for w in re.findall(r"[A-Za-z]+", s) if w.lower() not in _STOP_EN}
+                    return cn | en
+
+                _new_sig = _content_sig(content)
+                for _e in entries:
+                    if len(_e) >= 8:
+                        _ratio = SequenceMatcher(None, content, _e).ratio()
+                        if _ratio >= 0.75 and not (_new_sig - _content_sig(_e)):
+                            return self._success_response(
+                                target,
+                                "Entry too similar to an existing one "
+                                f"(similarity={_ratio:.2f}, no duplicate added).")
+
             # Calculate what the new total would be
             new_entries = entries + [content]
             new_total = len(ENTRY_DELIMITER.join(new_entries))

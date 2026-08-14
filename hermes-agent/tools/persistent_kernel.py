@@ -79,7 +79,8 @@ class _ProtoWorker:
             line = self.proc.stderr.readline()
             if not line:
                 break
-            self._stderr_buf.append(line[:500])
+            raw = line.decode("utf-8", "replace") if isinstance(line, bytes) else line
+            self._stderr_buf.append(raw[:500])
             if len(self._stderr_buf) > 20:
                 self._stderr_buf.pop(0)
 
@@ -126,7 +127,7 @@ class _ProtoWorker:
                     self.proc = None
                     return {"status": "error",
                             "error": "kernel worker died unexpectedly (missing runtime dep, e.g. jsonlite?)",
-                            "output": "".join(self._stderr_buf[-5:]) if getattr(self, "_stderr_buf", None) else "",
+                            "output": "".join((b.decode("utf-8", "replace") if isinstance(b, bytes) else str(b)) for b in (self._stderr_buf or [])[-5:]) if getattr(self, "_stderr_buf", None) else "",
                             "tool_calls_made": 0, "duration_seconds": round(time.monotonic() - (deadline - timeout), 1)}
                 self._kill(grace=0.5)
                 return {"status": "timeout",

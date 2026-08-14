@@ -167,7 +167,10 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
         if stderr_data:
             output += chr(10) + "[STDERR]" + chr(10) + stderr_data.decode("utf-8", errors="replace")
         if proc.returncode != 0:
-            output += chr(10) + f"[Exit code: {proc.returncode}]"
+            # 2026-08-14: 非零退出码 = 执行失败（不再伪装成功返回）
+            return json.dumps({"status": "error", "output": output[:10000],
+                               "error": f"Process exited with non-zero code {proc.returncode}",
+                               "exit_code": proc.returncode, "mode": "subprocess"}, ensure_ascii=False)
         return output[:10000] or "(no output)"
     except Exception as e:
         if proc:
