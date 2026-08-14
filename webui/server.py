@@ -400,6 +400,9 @@ def _is_suicide_command(cmd: str) -> bool:
     # killall / pkill python → Linux 下同样危险
     if ("killall" in c or "pkill" in c) and "python" in c:
         return True
+    # shutdown/重启命令（Windows: /s /r /p /h；Linux: -h -r now）→ 直接关机器
+    if "shutdown" in c and any(x in c for x in ("/s", "/r", "/p", "/h", "-h", "-r", " now")):
+        return True
     return False
 
 
@@ -1216,6 +1219,42 @@ def _calc_self_check_delay(session):
     return 300  # default 5 min
 
 
+def _build_self_check_wake_history(session):
+    """自检唤醒精简上下文（2026-08-14 成本优化）。
+
+    之前每次唤醒走 agent 内部全量对话历史（实测 67K input tokens/次，
+    占全部 token 消耗 66%）。改为只带：
+    1) task_plan.md 主线区摘要（含 Goal/Phase 状态）
+    2) 最近一条用户消息（原始诉求）
+    3) 最近一条助手回复（上次做到哪）
+    用户回合仍走 run_agent 的全量历史路径，不受影响。
+    """
+    history = []
+    _rd = session.get("results_dir", "") or ""
+    _plan = os.path.join(_rd, "task_plan.md") if _rd else ""
+    if _plan and os.path.isfile(_plan):
+        try:
+            with open(_plan, "r", encoding="utf-8", errors="ignore") as f:
+                _text = f.read()
+            _main = _text.split("## 🏁")[0]
+            _lines = [l for l in _main.split("\n") if l.strip()][:80]
+            if _lines:
+                history.append({"role": "system", "content":
+                    "[自检唤醒上下文：task_plan.md 主线区摘要（完整计划见磁盘）]\n" + "\n".join(_lines)})
+        except Exception:
+            pass
+    _msgs = session.get("messages", [])
+    for _m in reversed(_msgs[-10:]):
+        if _m.get("role") == "user" and isinstance(_m.get("content"), str) and _m.get("content").strip():
+            history.append({"role": "user", "content": _m["content"][:1000]})
+            break
+    for _m in reversed(_msgs[-10:]):
+        if _m.get("role") == "assistant" and isinstance(_m.get("content"), str) and _m.get("content").strip():
+            history.append({"role": "assistant", "content": _m["content"][:2000]})
+            break
+    return history
+
+
 async def _trigger_agent_turn(session, message):
     """从服务端触发一轮 agent 对话（不等用户消息），5分钟超时"""
     agent = session.get("agent")
@@ -1245,7 +1284,10 @@ async def _trigger_agent_turn(session, message):
                 set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
             except Exception:
                 pass
-            return agent.run_conversation(message, task_id=session["id"])
+            # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
+            # 不带全量历史（67K input/次 → ~4K）
+            _wake_history = _build_self_check_wake_history(session)
+            return agent.run_conversation(message, conversation_history=_wake_history or None, task_id=session["id"])
         result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
         session.setdefault("messages", []).append(
