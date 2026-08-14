@@ -1,7 +1,17 @@
 {
   "_version": "1.1",
   "_description": "MemOmics 全局环境 — 所有分析共享。启动时 validate_env.py 自动读→验→修。",
-  "_last_updated": "2026-08-13T12:00:00",
+  "_last_updated": "2026-08-14T17:30:00",
+  "_canonical": {
+    "_comment": "2026-08-14 环境唯一真源声明（此前多版本/多库路径混乱导致各种报错）",
+    "R": "4.5.3 @ C:/Program Files/R/R-4.5.3，库 = E:/R-libs/R-4.5.3（259 包含 Seurat/harmony/ArchR）",
+    "R_legacy": "C:/Users/23136/R/R-4.5.3-library 仅作 fallback（169 包无 Seurat，勿再写入）",
+    "R_deprecated": "4.4.2(已从 PATH 移除) / 4.6.0(D:/R 孤儿) / 4.6.1(失效) 勿再使用",
+    "python_app": "E:/MemOmics-Agent/.venv（scanpy/anndata/torch-cpu，无 scvi-tools/cellrank）",
+    "python_cellbender": "C:/Users/23136/AppData/Local/Programs/Python/Python312（cellbender + torch-cu128）",
+    "conda": "已损坏（zstandard 缺失，execute_python 已自动回退 venv），勿依赖 conda_env",
+    "rprofile": "C:/Users/23136/.Rprofile 已改为 E:/R-libs 优先（备份 .Rprofile.bak-20260814）"
+  },
   "platform": {
     "_comment": "P1-14(2026-08-13): 平台标记。windows 版填 windows；Linux/macOS 版发行时改 linux/darwin，paths 段换成对应路径。",
     "current": "windows",

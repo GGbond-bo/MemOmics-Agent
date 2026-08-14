@@ -15,7 +15,7 @@ SCHEMA = {
     "name": "execute_python",
     "description": (
         "Execute Python code with conda env support and timeout kill. "
-        "Use for scanpy/anndata/scvi-tools/cellrank analysis. "
+        "Use for scanpy/anndata analysis (scvi-tools/cellrank 未装，需先 pip 安装到 .venv). "
         "Returns stdout + stderr (truncated to 10000 chars)."
     ),
     "parameters": {
@@ -129,7 +129,26 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
             f.write(code)
             script_path = f.name
         if conda_env:
-            cmd = ["conda", "run", "-n", conda_env, "python", script_path]
+            # 2026-08-16 修复：conda 已损坏（zstandard 缺失 + conda-libmamba-solver 加载失败，
+            # 且只有 base 无命名 env），conda run -n 会直接报错。这里先探测 conda 可用性，
+            # 不可用则回退当前解释器（.venv），避免 execute_python 白报错。
+            _use_conda = False
+            try:
+                import shutil as _shutil
+                _ce = _shutil.which("conda")
+                if _ce:
+                    _p = subprocess.run(
+                        [_ce, "env", "list"], capture_output=True, text=True, timeout=15,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+                    )
+                    _use_conda = _p.returncode == 0
+            except Exception:
+                _use_conda = False
+            if _use_conda:
+                cmd = ["conda", "run", "-n", conda_env, "python", script_path]
+            else:
+                import sys as _sys
+                cmd = [_sys.executable, script_path]
         else:
             # 2026-08-16: 用当前进程解释器（.venv），不用 PATH 的 "python"
             # （机器上是 WindowsApps stub，缺 scanpy 生态）。
