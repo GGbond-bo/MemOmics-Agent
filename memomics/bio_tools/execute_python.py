@@ -81,7 +81,7 @@ def _kill_process_group(proc):
 
 
 def execute_python(code: str, working_dir: str = "", timeout: int = 300,
-                   conda_env: str = "") -> str:
+                   conda_env: str = "", task_id: str = "") -> str:
     """Execute Python code with process-group kill on timeout.
 
     P2-14(2026-08-10): 持久 kernel 优先 — 与 execute_r 对齐。
@@ -98,9 +98,9 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
         # P1-13(2026-08-13): 会话识别 — 用 execute_r 同款隔离键（线程上下文 sid 优先）
         try:
             from memomics.bio_tools.execute_r import _session_task_id
-            _task = _session_task_id("")
+            _task = _session_task_id(task_id)
         except Exception:
-            _task = _os.environ.get("MEMOMICS_SESSION_ID") or "default"
+            _task = task_id or _os.environ.get("MEMOMICS_SESSION_ID") or "default"
         _res = KERNEL_POOL.execute(
             code, _task, timeout=min(timeout, 600), language="python",
             cwd=working_dir or None)  # P1-5: working_dir 接线
@@ -192,6 +192,7 @@ def _register():
             args.get("working_dir", ""),
             args.get("timeout", 300),
             args.get("conda_env", ""),
+            kw.get("task_id", ""),
         ),
         emoji="🐍",
         max_result_size_chars=50_000,

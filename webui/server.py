@@ -1113,7 +1113,7 @@ async def _trigger_agent_turn(session, message):
                 set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
             except Exception:
                 pass
-            return agent.run_conversation(message)
+            return agent.run_conversation(message, task_id=session["id"])
         result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
         session.setdefault("messages", []).append(
@@ -5526,7 +5526,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                 set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
             except Exception:
                 pass
-            result = agent.run_conversation(text, conversation_history=history if history else None)
+            result = agent.run_conversation(text, conversation_history=history if history else None, task_id=session["id"])
             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
         result_text = await loop.run_in_executor(None, _do_run)
@@ -8404,8 +8404,21 @@ async def ws_endpoint(ws: WebSocket):
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
 
+                        # 2026-08-16 修复「问下一个问题被旧上下文占据」：
+                        # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，
+                        # 跳过 task_plan 恢复 + 主线续跑注入，先干净回答新问题。
+                        _new_data_task = False
+                        if user_text:
+                            try:
+                                _new_paths = re.findall(r'[A-Za-z]:[/\\]\S+', user_text)
+                                _is_continue = any(w in user_text for w in
+                                    ("继续", "接着", "下一步", "然后", "继续跑", "接着跑", "继续做", "接着做"))
+                                _new_data_task = bool(_new_paths) and not _is_continue
+                            except Exception:
+                                _new_data_task = False
+
                         # 🔧 长任务记忆锚点 + 强制执行指令（合并为一条，避免被稀释）
-                        _plan_ctx = _build_task_plan_context(_session)
+                        _plan_ctx = _build_task_plan_context(_session) if not _new_data_task else None
                         if _plan_ctx:
                             # 把所有关键指令合并成一条 system 消息
                             _merged = (
@@ -8426,7 +8439,7 @@ async def ws_endpoint(ws: WebSocket):
                             conversation_history.append({"role": "system", "content": _alerts_ctx})
 
                         # 🔧 主线任务恢复：回答完用户问题后必须继续主线
-                        _resume_ctx = _build_task_resume_prompt(_session)
+                        _resume_ctx = _build_task_resume_prompt(_session) if not _new_data_task else None
                         if _resume_ctx:
                             conversation_history.append({"role": "system", "content": _resume_ctx})
 
@@ -8456,6 +8469,7 @@ async def ws_endpoint(ws: WebSocket):
                             result = _agent.run_conversation(
                                 user_text,
                                 conversation_history=conversation_history if conversation_history else None,
+                                task_id=_session["id"],
                             )
                             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
@@ -8770,6 +8784,41 @@ async def ws_endpoint(ws: WebSocket):
                         pass
                 if task_ref and hasattr(task_ref, "done") and not task_ref.done():
                     task_ref.cancel()
+                # 2026-08-16 修复「中断后还在后台运行」：
+                # interrupt() 只设 _interrupt_requested flag，不杀子进程；executor 线程
+                # 也取消不掉。这里显式清理本会话的 terminal 后台进程 + R/Python kernel
+                # worker（task_id 已接线为 session["id"]，见 run_conversation 调用点）。
+                _kill_tids = {session["id"]}
+                if agent_ref is not None:
+                    try:
+                        _ctid = getattr(agent_ref, "_current_task_id", "")
+                        if _ctid:
+                            _kill_tids.add(_ctid)
+                    except Exception:
+                        pass
+                try:
+                    from tools.process_registry import process_registry
+                    for _t in _kill_tids:
+                        _killed = process_registry.kill_all(task_id=_t)
+                        if _killed:
+                            logger.info("[cancel] killed %d background processes (task_id=%s)", _killed, _t[:12])
+                except Exception as e:
+                    logger.warning("[cancel] process_registry kill failed: %s", e)
+                try:
+                    from tools.persistent_kernel import KERNEL_POOL
+                    KERNEL_POOL.restart(task_id=session["id"])
+                except Exception as e:
+                    logger.warning("[cancel] kernel restart failed: %s", e)
+                # 2026-08-16 修复「任务结束了还一直输出」：手动停止 → 落盘 mark_cancelled，
+                # RunGate 会拦截后续自检自动唤醒（check_gate is_auto_wake=True → stop），
+                # 否则 task_plan 还带 in_progress 时 _schedule_self_check 会继续唤醒。
+                try:
+                    from webui.runtime.run_gate import mark_cancelled
+                    _rd_c = session.get("results_dir", "") or ""
+                    if _rd_c:
+                        mark_cancelled(_rd_c, "user cancelled (stop button)")
+                except Exception as e:
+                    logger.warning("[cancel] mark_cancelled failed: %s", e)
                 # 不在此发 cancelled 消息 — 由 run_agent 的 except/finally 统一发送
                 # 如果 agent 引用为空（没有运行中的任务），直接回 cancelled
                 if not agent_ref:

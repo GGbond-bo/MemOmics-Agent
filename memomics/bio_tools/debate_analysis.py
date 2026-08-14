@@ -48,22 +48,34 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# === 线程级会话隔离（替代 os.environ，避免多会话竞态） ===
-# 每个 agent 在自己的线程里运行，threading.local() 天然线程隔离
-_session_local = threading.local()
+# === 会话级隔离（ContextVar，替代 threading.local） ===
+# 2026-08-16 修复：threading.local 不跨线程传播——Hermes 的 tool_executor 会把
+# 工具调用丢到 ThreadPoolExecutor worker 线程执行（tool_executor.py 的
+# _execute_tool_calls_concurrent），worker 线程拿不到 _do_run 线程里
+# set_session_context 设置的 threading.local 值，导致 execute_r/execute_python
+# 在工具线程里 get_session_sid() 返回空 → 全部退化到 "default" kernel（会话串染）。
+# ContextVar 会被 Hermes 的 propagate_context_to_thread（contextvars.copy_context）
+# 自动传播到 worker 线程，会话隔离才对工具执行真正生效。
+import contextvars as _contextvars
+
+_sid_var = _contextvars.ContextVar("memomics_session_sid", default="")
+_results_dir_var = _contextvars.ContextVar("memomics_session_results_dir", default="")
 
 def set_session_context(sid: str = "", results_dir: str = ""):
-    """设置当前线程的会话上下文（由 server.py 在 agent 启动时调用）。"""
-    _session_local.sid = sid
-    _session_local.results_dir = results_dir
+    """设置当前上下文（线程 + 其派生的工具 worker 线程）的会话上下文。
+
+    由 server.py 在 agent 启动 / executor 线程入口调用。
+    """
+    _sid_var.set(sid or "")
+    _results_dir_var.set(results_dir or "")
 
 def get_session_sid() -> str:
-    """获取当前线程的会话 ID（纯线程隔离，无 os.environ fallback）。"""
-    return getattr(_session_local, "sid", "")
+    """获取当前会话 ID（ContextVar，跨工具 worker 线程传播）。"""
+    return _sid_var.get()
 
 def get_session_results_dir() -> str:
-    """获取当前线程的结果目录（纯线程隔离，无 os.environ fallback）。"""
-    return getattr(_session_local, "results_dir", "")
+    """获取当前结果目录（ContextVar，跨工具 worker 线程传播）。"""
+    return _results_dir_var.get()
 
 SCHEMA = {
     "name": "debate_analysis",
