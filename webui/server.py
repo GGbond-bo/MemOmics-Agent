@@ -8508,6 +8508,43 @@ async def ws_endpoint(ws: WebSocket):
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
                         _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
                         _s["_turn_activity_ts"] = time.time()
+                        # 批M(2026-08-16) 工具调用爆炸护栏：
+                        # 事故 memomics-2274ab75 05:47:52 —— 模型一次响应并发发射 984 次
+                        # 相同的 execute_code（每个都在里面再跑一遍 python 出图脚本），
+                        # 机器被拖垮、用户被迫手动停止。两重保护：
+                        #   (1) 昂贵工具（execute_code/execute_python/execute_r）相同参数
+                        #       90 秒内只执行第一次，重复调用合并返回"已跳过"
+                        #   (2) 单回合工具调用总数上限 100 —— 超过后所有昂贵工具一律跳过
+                        _dedup = _s.setdefault("_tool_dedup", {})
+                        _now_d = time.time()
+                        if len(_dedup) > 300:
+                            _dedup = {k: v for k, v in _dedup.items()
+                                      if _now_d - v.get("ts", 0) < 90}
+                            _s["_tool_dedup"] = _dedup
+                        _expensive = tool_name in ("execute_code", "execute_python", "execute_r")
+                        if _expensive and isinstance(args, dict):
+                            try:
+                                import hashlib as _hl
+                                _key = tool_name + ":" + _hl.sha1(
+                                    json.dumps(args, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+                            except Exception:
+                                _key = ""
+                            _rec = _dedup.get(_key) if _key else None
+                            _over_cap = int(_s.get("_api_calls", 0)) >= 100
+                            if (_rec and _now_d - _rec.get("ts", 0) < 90) or _over_cap:
+                                _skip_msg = ("重复调用已合并：相同代码在 90 秒内已执行过，本次跳过"
+                                             if _rec else
+                                             "回合保护：本回合工具调用已超 100 次，暂停重复执行。请先总结已完成的步骤并交付结果。")
+                                args["code"] = ("print('[⛔ 执行保护] " + _skip_msg + "')"
+                                                if tool_name == "execute_code" else
+                                                "cat('[⛔ 执行保护] " + _skip_msg + "')\n")
+                                _dedup[_key] = {"ts": _now_d, "n": (_rec.get("n", 0) + 1) if _rec else 1}
+                                logger.warning(f"[MemOmics] 工具调用护栏: {tool_name} {_skip_msg} (n={_dedup[_key]['n']})")
+                                _session_emit(_s, {"type": "warning",
+                                    "content": f"⛔ {_skip_msg}（{tool_name}）",
+                                    "session_id": _s["id"]})
+                            else:
+                                _dedup[_key] = {"ts": _now_d, "n": 1}
                         # 强制保护：禁止自杀命令 + 禁止删除数据
                         if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
                             _cmd = str(args.get("command", args.get("code", "")))

@@ -21,6 +21,8 @@ SCHEMA = {
         "之前定义的变量（如 adata）和 import 的包在后续调用里仍可用。"
         "同一会话后续步骤直接复用 adata，不要每步重新 read_h5ad / 写中间副本。"
         "仅当变量丢失（kernel 超时/重启）时才重新加载。"
+        "【运行脚本文件（matplotlib 出图脚本等）也用本工具】exec(open('路径', encoding='utf-8').read())"
+        "——持久内核重跑秒级返回；禁止用 terminal 执行 python xx.py 冷启动。"
     ),
     "parameters": {
         "type": "object",
