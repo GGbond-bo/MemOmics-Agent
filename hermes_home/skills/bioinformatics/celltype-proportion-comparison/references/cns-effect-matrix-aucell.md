@@ -84,3 +84,15 @@ _, pv = wilcoxon(w['O_Post'], w['O_Pre'])
 ## 环境/执行教训（2026-08-14 当天血泪史）
 - **R 库批量 DLL 损坏时最多修一轮，再坏直接转 Python**：`requireNamespace(p, quietly=TRUE)` 只查元数据不加载 DLL，坏包显示 TRUE 假象；真验证必须 `tryCatch(library(p), error=...)`。症状 = 多个包 `LoadLibrary failure` / `lazy-load database is corrupt`（digest/cluster/Matrix/vctrs/S7），分布在 E:/R-libs、Program Files、Users 三处库根。逐包重装 = 无底洞。**正确路径：中间表落盘 CSV → Python 出图，一次成功**。
 - **⛔ 别在环境检查上打转（用户原话："你老是检查terminal干什么全是报错" / "你已经很久没有出图了"）**：连续 ≥2 轮无图/无文件/无明确结果 = 已在打转。立即要么出图、要么换栈、要么如实报阻塞点。用户说"找原因，先不执行" = 只诊断不改。
+
+## 颜色语义问答（"红色代表谁上升"，2026-08-14 实测三步核实法）
+
+用户拿到五效应热图问颜色含义时，**不能凭记忆答**。保存的 `.R` 脚本可能是 33 行读数据 stub（`aucell_cns_figure.R` 实测只有读 CSV + 列名确认），真正的出图代码在 execute_code 调用里——**从 `log/system_log.jsonl` 提取**（`grep -a TwoSlopeNorm` / search_files pattern=`Fig1_five_effects_matrix` → 命中行 json 的 args.code 即完整脚本）。
+
+**实测解码**（五效应版）：
+- 配色：`LinearSegmentedColormap.from_list('cns', ['#2166AC','#F7F7F7','#B2182B'])` + `TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)` → 蓝=负 d，白=0，红=正 d
+- 符号：`cohens_d(a, b) = (a.mean() - b.mean())/SDpooled`，调用 `a=eff_defs[eff][0]`（前项组）、`b=eff_defs[eff][1]`（后项组）→ **正 d = 前项组（效应组）更高 = 红色**
+- eff_defs：Aging=(O_Pre,Y_Pre)、T2D=(OD_Pre,O_Pre)、ExYoung=(Y_Post,Y_Pre)、ExOld=(O_Post,O_Pre)、ExT2D=(OD_Post,OD_Pre)
+- 答案模板：**Aging 列红 = 老年组打分高（衰老上调）；T2D 列红 = 糖尿病组高（糖尿病上调）；Ex* 列红 = 运动后高（运动上调）；蓝 = 效应组更低**
+
+**验证步**：从 `effect5_d_table.csv` 抽生物学方向明确的行验证符号（如 scoreOxPhos_AUC 衰老应下降 → Aging 轴 d 全负，实测 −1.57~−4.73 ✅；scoreSenMayo_AUC 常规预期衰老上升，但实测 Aging 轴 d 全负 = 老年组 SenMayo 反而低于年轻组 ⚠️ 反直觉点，如实报告并建议确认打分方向/样本构成）。**符号约定随代码版本变**：Cliff's delta 约定正值=后者高（箱线图），Cohen's d 约定正=前项组高（效应矩阵）——两套并存，回答前必须读代码，不可套用。

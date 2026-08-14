@@ -1,0 +1,22 @@
+{
+  "id": "platform-execution-pitfalls",
+  "name": "平台执行层坑（execute_r / skill_view / rail_review 实测）",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "MemOmics 平台执行层（execute_r/execute_code/skill_view/rail_review 交互）的实测坑与规避。触发：execute_r 报 could not find function、skill_view 报 Ambiguous skill name、rail_review(post) 判代码过短/使用 && 但代码明明正确、sprintf %d 报 inva",
+  "starting_prompt": "使用 平台执行层坑（execute_r / skill_view / rail_review 实测） 进行分析",
+  "source_dir": "skills/bioinformatics/platform-execution-pitfalls",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "platform",
+    "execute_r",
+    "rail_review",
+    "skill_view",
+    "persistent-kernel"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

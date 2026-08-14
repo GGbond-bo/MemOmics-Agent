@@ -368,6 +368,29 @@ reads as cherry-picking; the five-effect matrix on canonical fibers is the "impr
 panel reviewers want.
 
 **Statistical protocol (validated on muscle MF, Y=10/O=7/OD=7 individuals):**
+
+## ⛔ 五效应热图配色方向：面板标题 ≠ 计算方向（"红色代表谁上升"回答协议，2026-08-14）
+
+用户盯着五效应热图问 **"红色代表谁上升呢？"** 时，**禁止凭面板标题或直觉回答**——必须追溯到**实际生成该图（或该图数据表）的代码**核实 eff/d 计算方向，否则极可能答反。
+
+**核心坑：同一会话的 R 脚本与最终 Python 脚本可能对同名效应轴用相反方向。**
+
+- 面板标题 `Aging (O_Pre − Y_Pre)` 只声明"比较哪两组"，**不声明 `eff = g1 − g2` 还是 `g2 − g1`**
+- 本会话实证：R 版 `aucell_cns_figures.R` 写 `eff <- mean(x2) - mean(x1)`（x1=g1=O_Pre → eff=Y−O，**正=年轻高**）；最终 Python 版（生成 `effect5_d_table.csv`）写 `d = (a.mean() - b.mean())/sp`（a=g1=O_Pre → d=O−Y，**正=老年高**）——同名 Aging 轴，两个脚本的"红色=正值"生物学含义**完全相反**。用户看到的是最终 Python 版，若按早期 R 脚本回答就翻车。
+
+**回答前必做核实流程：**
+1. 从产出物清单找到**用户实际看到的那张图**（如 Fig1_five_effects_matrix.png），不是早期探索版
+2. 从 `log/system_log.jsonl` 检索生成该图/其数据表（如 `effect5_d_table.csv`）的 `execute_code` 调用，读出 `eff_defs`/`axes` 定义 + `cohens_d` 计算式
+3. **用生物学方向确定的锚点验证符号**：scoreIIa（快肌 IIa 已知随衰老下降）→ 若 Aging 面板该格为蓝（负），则约定为"正=老年高"=红色=衰老升高 ✅
+4. 输出逐面板速查表 + 图例细节（颜色深浅=|d|、±截断、`*`=FDR<0.05），如：
+   - Aging：红=O_Pre 高（打分随**衰老上升**）
+   - T2D：红=OD_Pre 高（随**糖尿病上升**）
+   - ExYoung/ExOld/ExT2D：红=Post 高（随**运动上升**）
+
+> 完整实证（R/Python 方向相反的代码摘录 + 锚点验证 + 速查表模板）：
+> `references/heatmap-color-direction-sign-convention.md`
+
+**Statistical protocol (validated on muscle MF, Y=10/O=7/OD=7 individuals):**
 1. **Individual-level pseudobulk FIRST**: aggregate score means per pair_id × type × cluster
    (pair_id = samplename minus `_Pre`/`_Post` suffix). Never test at cell level (pseudoreplication).
 2. Paired axes: `wilcox.test(post, pre, paired=TRUE)` on the common pair_ids.

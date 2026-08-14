@@ -180,6 +180,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 衰老轴（Y vs O）与糖尿病轴（O vs OD）是不同模式：衰老 = IIa+OxPhos+Sarcomeric 全面↓；糖尿病 = Type I 程序↓ + Type II 程序↑（向糖酵解倾斜）——分开讲
 - 运动唯一显著信号：老年运动回升 IIa 程序（FDR=0.031），这是"运动逆转"的关键证据点
 - **基因集评估要点**（去神经化等自定义基因集）：① 检查方向相反基因（如 SCN4A 去神经时**下调**，与 SCN5A 上调共存会互相抵消）② 补经典 marker（去神经必加 **NCAM1**，Lai 2024 Nature 用它定义去神经纤维）③ 查与已有打分重叠（Atrophy/RegMyon/Sarcomeric 重叠基因 → 共线性，不能都讲）④ 缺哪类打分按研究问题补齐（骨骼肌衰老+糖尿病运动最少要补：Glycolysis 与 OxPhos 配对、AMPK-PGC1α 运动开关、Autophagy、Adipogenesis、Fibrosis）——详见 `references/mf-score-analysis.md` 与 `references/geneset-supplement-2026-08.md`
+- **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。详见 `references/denervation-geneset-contamination.md`
 - **⛔ 交付 R 基因向量必须完整，程序化生成（2026-08-14 用户两次纠正）**：用户会数基因数
   （"那些基因，你怎么省略了？给我完整的啊"）。**从 CSV/数据文件程序化生成 R 代码**（读
   new_genesets_final.csv → 10 个/行分组 → 拼 `Name <- c(...)`），**不要手抄**（手抄=截断风险）；
@@ -200,8 +201,19 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - **Fig1 Hero 效应矩阵**：N 面板横排（Aging/Exercise/T2D 或五效应）+ 左侧功能轴色条 + 右侧逆转率条；行=打分按功能轴分组（Metabolic/Identity/Senescence），列=亚群；红蓝 diverging（#2166AC→白→#B2182B）±3 截断，星号=p<0.05
 - **Fig2 配对个体响应**：Aging |d| top-4 组合画老年个体 Pre→Post 连线（samplename 去 `_Pre/_Post` 后缀配对），配对 wilcoxon p 标标题
 - **Fig3 效应散点**：x=Aging d、y=Exercise d，每点=打分×亚群，颜色=功能轴，加对角线——一眼看出"只有代谢轴在对角线（运动逆转衰老）、炎症轴贴 x 轴（运动无效）"
+- **6 组原始打分热图（效应矩阵的诊断姐妹版，2026-08-14 用户点名要）**：效应矩阵只给差值、丢绝对水平；用户问"为什么这个打分全亚群都高"时直接出 6 组原始打分热图（列=6组×10亚群=60，行=22打分行内 z-score，组色带 Pre 浅/Post 深，RdBu ±2.2）→ 一眼区分"基线本来就高" vs "某组暴增"。**读单一行时看原始均值表（z-score 抹掉绝对尺度）**。Denervation 案例实证：Y_Pre 0.023 → O_Post 0.065 = 运动后暴增（基因集污染假信号）。配方见 `references/denervation-geneset-contamination.md`
 - **结论模板**：逆转率按功能轴分层就是故事（实测：Metabolic 中位 +0.21、Identity +0.36、Senescence −0.07）→ "运动是衰老的镜子，只照见代谢-结构这一半"。交付时结论先行，图作为证据
 - 完整实现配方 + 可直接复用的 Python 代码 + 五效应版布局细节 → `references/cns-effect-matrix-aucell.md`
+
+### ⛔ 用户问\"红色代表谁上升\"（效应矩阵颜色语义问答，2026-08-14 实测）
+
+用户拿到效应矩阵热图后问\"红色代表谁上升？\"——**禁止凭记忆/凭直觉答，必须三步核实后答**：
+
+1. **追溯真实生成代码**：保存的脚本可能是空壳 stub（实测 `aucell_cns_figure.R` 只有 33 行读数据代码，真正的热图代码在 execute_code 调用里）→ 从 `results/<session>/log/system_log.jsonl` 提取（search_files pattern=`Fig1_five_effects_matrix` 或 `TwoSlopeNorm` → 命中行 json 的 args.code）
+2. **解码配色 + 符号约定**：读出 `LinearSegmentedColormap.from_list(...)` 三色锚点 + `TwoSlopeNorm(vmin, vcenter=0, vmax)` + 效应定义（`eff_defs` 元组顺序）。**五效应版实测**：`['#2166AC','#F7F7F7','#B2182B']` = 蓝→白→红，`d = (g1.mean − g2.mean)/SDpooled`（**正 d = 元组前项组更高 = 红色**）。eff_defs：Aging=(O_Pre,Y_Pre)、T2D=(OD_Pre,O_Pre)、ExYoung=(Y_Post,Y_Pre)、ExOld=(O_Post,O_Pre)、ExT2D=(OD_Post,OD_Pre) → **Aging 列红 = 老年组打分高（衰老上调）；T2D 列红 = 糖尿病组高；Ex* 列红 = 运动后高（运动上调）**。蓝 = 负 d = 效应组更低
+3. **用真实数据验证符号**：从 `effect5_d_table.csv` 抽一个生物学上方向明确的行（如 OxPhos 衰老应下降 → Aging 轴 d 应为负）确认符号方向与预期一致，再答。若发现反直觉结果（如 SenMayo 在 Aging 轴 d 为负 = 老年组 SenMayo 反而低于年轻组，原始均值 Y_Pre=0.034 vs O_Pre=0.030）→ **如实报告反直觉点**并建议确认打分方向/样本构成，不要掩盖
+
+⚠️ 与比例箱线图 Cliff's delta 方向约定（正值=后者高）**不同**：效应矩阵 Cohen's d 约定为**前项组（效应组）高=正=红**——两套约定并存，回答前必须看代码，不能套用箱线图约定。
 
 ## Pitfalls
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
@@ -260,3 +272,4 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
 - `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图"
+- `references/denervation-geneset-contamination.md` — **基因集语义污染诊断案例**（2026-08-14 Denervation）：反直觉"全亚群全效应升高" → 6 组原始打分热图诊断 → 实测原始均值表 → 根因=MYOG/RUNX1/NCAM1/MYH8 与 RegMyon 再生程序重叠（运动诱导再生被误捕为去神经）→ 修正方案 + 通用"污染三步诊断法"。触发词："去神经打分为什么高" / "打分全亚群都高" / "6组打分热图" / "基因集污染" / "semantic contamination"

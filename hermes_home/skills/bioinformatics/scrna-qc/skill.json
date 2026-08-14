@@ -99,11 +99,50 @@
       "date": "2026-07-10",
       "score": 9,
       "result": "QC PASS: Upstream QC already applied. 324,434 cells, 0 filtered, 11 cell types. Young 125k, Old 199k. Raw counts available in layers['counts']."
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "qc_validation.R",
+      "params": "{\"qc_strategy\": \"验证性评估-不重过滤\", \"nFeature_range\": \"501-7807\", \"mt_max\": 4.99, \"doublet\": \"skip-无raw counts\", \"thresholds_from\": \"KB snRNA-seq nFeature 200-6000 MT<5%\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000.rds (20,000 cells) QC验证性评估：无任何离群细胞(nFeature<200:0,>8000:0,MT>5%:0)，上游已严格QC。Y_Pre median nFeature 2861最高，O_Pre 2167最低。产出QC_vln_by_type.png + QC_scatter.png + qc_summary_by_type.csv"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "env_check_and_load.R",
+      "params": "{\"language\": \"R\", \"seurat\": \"5.5.1\", \"note\": \"execute_r 持久内核不自动 library(Seurat)，必须显式调用 library(Seurat) 才能使用 Assays/DefaultAssay 等函数\"}",
+      "date": "2026-08-14",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Seurat 5.5.1 + SeuratObject 5.4.0 已装；持久内核需显式 library(Seurat)。readRDS 中文路径 E:/骨骼肌锻炼/MF_subset_2000.rds 报 cannot open the connection，需进一步排查路径。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "qc_report.R",
+      "params": "{\"mode\": \"report_only\", \"qc\": \"no_hard_filter\", \"figures\": \"01_QC_report.png\", \"table\": \"QC_by_type.csv\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000 QC 验证性报告完成：20,000 cells，nFeature median=2491，nCount median=5165，MT median=0.35%（max 4.99 提示上游已用5%阈值过滤），ribo median=0.35%。6组配对 Y_Pre 3767/Y_Post 2930/O_Pre 2923/O_Post 2901/OD_Pre 3636/O"
     }
   ],
-  "proven_script": "01_qc_metrics.py, 02_qc_visualization.py",
+  "proven_script": "qc_report.R",
   "error_count": 1,
-  "success_count": 3,
+  "success_count": 6,
   "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
   "doc_source": "official",
   "prerequisites": {
@@ -122,5 +161,8 @@
       "script": "01_subset_qc.py",
       "severity": "medium"
     }
-  ]
+  ],
+  "user_prefs": {
+    "last_used_script": "qc_report.R"
+  }
 }
