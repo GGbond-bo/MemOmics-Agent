@@ -7,9 +7,11 @@
     "R": "4.5.3 @ C:/Program Files/R/R-4.5.3，库 = E:/R-libs/R-4.5.3（259 包含 Seurat/harmony/ArchR）",
     "R_legacy": "C:/Users/23136/R/R-4.5.3-library 仅作 fallback（169 包无 Seurat，勿再写入）",
     "R_deprecated": "4.4.2(已从 PATH 移除) / 4.6.0(D:/R 孤儿) / 4.6.1(失效) 勿再使用",
-    "python_app": "E:/MemOmics-Agent/.venv（scanpy/anndata/torch-cpu，无 scvi-tools/cellrank）",
+    "python_app": "E:/MemOmics-Agent/.venv（scanpy/anndata/torch-cpu 自装；scvi-tools/cellrank 未装）",
     "python_cellbender": "C:/Users/23136/AppData/Local/Programs/Python/Python312（cellbender + torch-cu128）",
-    "conda": "已损坏（zstandard 缺失，execute_python 已自动回退 venv），勿依赖 conda_env",
+    "python_shared_lib": "PYTHONPATH=D:/Python/site-packages（全局共享库：scvelo/scrublet/leidenalg/igraph/umap 等；.venv 缺这些包，靠它补）",
+    "python_orphan": "D:/Python312（完整解释器但仅 6 包，孤儿）/ D:/Python（仅 site-packages 无解释器）勿新装依赖",
+    "conda": "已损坏（zstandard.backend_c 缺失，execute_python 已自动回退 venv），勿依赖 conda_env",
     "rprofile": "C:/Users/23136/.Rprofile 已改为 E:/R-libs 优先（备份 .Rprofile.bak-20260814）"
   },
   "platform": {
