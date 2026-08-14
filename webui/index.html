@@ -599,11 +599,16 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <div class="item"><span class="name">rail_review</span><span class="badge">就绪</span></div>
           <div class="item"><span class="name">debate_analysis</span><span class="badge">就绪</span></div>
           <div class="item"><span class="name">skill_evolution</span><span class="badge">就绪</span></div>
+          <div class="item"><span class="name">save_reference</span><span class="badge">就绪</span></div>
         </div>
         <div class="info-section">
           <h3>知识库</h3>
-          <div class="item"><span class="name">YAML 模板</span><span class="badge">87</span></div>
-          <div class="item"><span class="name">Skills</span><span class="badge">269</span></div>
+          <div class="item"><span class="name">YAML 模板</span><span class="badge" id="info-kb-count">…</span></div>
+          <div class="item"><span class="name">Skills</span><span class="badge" id="info-skill-count">…</span></div>
+        </div>
+        <div class="info-section">
+          <h3>运行健康 <button onclick="refreshRuntimePanel()" title="刷新运行状态" style="float:right;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄</button></h3>
+          <div id="runtime-panel" style="font-size:11px;color:var(--text-light);">点击 🔄 加载</div>
         </div>
       </div>
     </div>
@@ -644,7 +649,19 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <button onclick="switchKbView('browse')" id="kb-btn-browse" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">浏览</button>
           <button onclick="switchKbView('graph')" id="kb-btn-graph" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">图谱</button>
           <button onclick="toggleKbMatrix()" title="物种×组织×方向×类别的知识库覆盖矩阵（含陈旧度）" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🗺️ 矩阵</button>
+          <button onclick="toggleScienceSearch()" title="科学文献检索（arXiv/OpenAlex，带溯源）" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔬 文献</button>
         </span>
+      </div>
+      <div id="kb-science" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div style="padding:6px 10px;display:flex;gap:6px;">
+          <input id="science-q" type="text" placeholder="🔬 检索论文关键词，如 aging skeletal muscle single-cell" style="flex:1;font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);" onkeydown="if(event.key==='Enter')doScienceSearch()">
+          <select id="science-source" style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+            <option value="arxiv">arXiv</option>
+            <option value="openalex">OpenAlex</option>
+          </select>
+          <button onclick="doScienceSearch()" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">检索</button>
+        </div>
+        <div id="science-results" style="flex:1;overflow-y:auto;padding:0 10px 10px;font-size:12px;">输入关键词后点击检索（结果来自 arXiv / OpenAlex，可点标题打开原文）</div>
       </div>
       <div id="kb-search-results" style="display:none;max-height:60%;overflow-y:auto;padding:8px;"></div>
       <div class="file-path-bar" id="kb-path"></div>
@@ -728,7 +745,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
     <!-- 记忆面板 -->
     <div id="panel-memory" style="display:none;">
-      <div class="info-header">🧠 外置记忆 (跨会话)</div>
+      <div class="info-header">🧠 外置记忆 (跨会话)
+        <button onclick="governMemory()" title="重新扫描记忆条目并打分（L1/L2/L3 分级统计）" style="float:right;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧹 治理</button>
+      </div>
       <div style="padding:10px 14px;">
         <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">Agent 的记忆会跨会话保留。可查看/编辑/追加。</div>
         <div id="memory-entries" style="margin-bottom:10px;"></div>
@@ -786,6 +805,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <div style="display:flex;gap:4px;">
             <input type="password" id="settings-api-key" placeholder="sk-..." style="flex:1;">
             <button onclick="saveProviderKey()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">保存 Key</button>
+            <button onclick="deleteProviderKey()" title="删除该 Provider 已保存的 API Key" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--danger);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">删除 Key</button>
           </div>
           <div id="settings-api-key-hint" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
           <div id="settings-api-key-status" style="font-size:11px;margin-top:2px;"></div>
@@ -2787,6 +2807,66 @@ function switchView(view) {
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
   if (view === 'weixin') weixinRefresh();
+  if (view === 'chat') refreshInfoPanel();
+}
+
+// === 信息面板动态数据 + 运行健康（批D 2026-08-15，替代硬编码假数据）===
+async function refreshInfoPanel() {
+  try {
+    var k = await (await fetch('/api/kb')).json();
+    var el = document.getElementById('info-kb-count');
+    if (el) el.textContent = (k.total_files != null) ? k.total_files : '—';
+  } catch(e) {
+    var el2 = document.getElementById('info-kb-count'); if (el2) el2.textContent = '—';
+  }
+  try {
+    var s = await (await fetch('/api/skills')).json();
+    var el3 = document.getElementById('info-skill-count');
+    if (el3) el3.textContent = (s.total != null) ? s.total : '—';
+  } catch(e) {
+    var el4 = document.getElementById('info-skill-count'); if (el4) el4.textContent = '—';
+  }
+  refreshRuntimePanel();
+}
+
+async function refreshRuntimePanel() {
+  var el = document.getElementById('runtime-panel');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--text-light);">加载中…</span>';
+  var rows = [];
+  try {
+    var h = await (await fetch('/api/health')).json();
+    rows.push(['活跃会话', (h.sessions != null ? h.sessions : '—') + ' 个']);
+  } catch(e) {}
+  try {
+    var rt = await (await fetch('/api/runtime')).json();
+    var act = (rt && rt.active) ? Object.keys(rt.active).length : 0;
+    rows.push(['活动任务', act + ' 个']);
+  } catch(e) {}
+  try {
+    var rc = await (await fetch('/api/resources')).json();
+    if (rc && rc.capacity) {
+      rows.push(['资源 (CPU/内存)', rc.capacity.cpu_cores + ' 核 / ' + rc.capacity.memory_gb + ' GB']);
+      rows.push(['排队任务', (rc.waiting ? rc.waiting.length : 0) + ' 个']);
+    }
+  } catch(e) {}
+  try {
+    if (typeof currentSid !== 'undefined' && currentSid) {
+      var en = await (await fetch('/api/enforcement/' + encodeURIComponent(currentSid))).json();
+      if (en && en.checklist) {
+        var parts = ['rail_pre', 'rail_post', 'debate'].map(function(k) {
+          var label = {rail_pre: 'rail(pre)', rail_post: 'rail(post)', debate: 'debate'}[k];
+          var done = en.checklist['rail_review(pre)'] || en.checklist['rail_review(post)'] || en.checklist['debate_analysis'];
+          var on = (k === 'rail_pre') ? en.checklist['rail_review(pre)'] : (k === 'rail_post') ? en.checklist['rail_review(post)'] : en.checklist['debate_analysis'];
+          return '<span style="color:' + (on ? '#2d8659' : '#b0b0b0') + ';">' + label + (on ? '✓' : '○') + '</span>';
+        });
+        rows.push(['当前会话执法', parts.join(' ') + ' · 级别 ' + (en.analysis_level || '—')]);
+      }
+    }
+  } catch(e) {}
+  el.innerHTML = rows.length
+    ? rows.map(function(r) { return '<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join('')
+    : '<span style="color:var(--text-light);">暂无数据</span>';
 }
 
 // === 模型管理 ===
@@ -2988,6 +3068,24 @@ async function saveProviderKey() {
     await loadProviders();
   } else {
     alert('\u274c 保存失败: ' + (d.error || ''));
+  }
+}
+
+// 删除当前 Provider 的 Key（批D 2026-08-15）
+async function deleteProviderKey() {
+  var pid = document.getElementById('settings-provider-select').value;
+  if (!pid) { alert('请选择 Provider'); return; }
+  var provider = allProviders.find(function(p) { return p.id === pid; });
+  if (!provider || !provider.has_key) { alert('该 Provider 未保存 Key'); return; }
+  if (!confirm('确定删除 ' + (provider.name || pid) + ' 的 API Key？删除后需重新配置才能使用该 Provider。')) return;
+  var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/key', { method: 'DELETE' });
+  var d = await r.json();
+  if (d.ok) {
+    alert('✅ Key 已删除: ' + (provider.name || pid));
+    document.getElementById('settings-api-key').placeholder = 'sk-...';
+    await loadProviders();
+  } else {
+    alert('❌ 删除失败: ' + (d.error || ''));
   }
 }
 
@@ -3641,6 +3739,52 @@ async function doKbSearch(q) {
 }
 
 // === 覆盖矩阵 + 搜索联动（2026-08-14）===
+// === 科学文献检索（批D 2026-08-15，接入 /api/science/search）===
+function toggleScienceSearch() {
+  var el = document.getElementById('kb-science');
+  if (!el) return;
+  var show = el.style.display === 'none' || el.style.display === '';
+  // 首次点击从 none 切到 flex
+  if (el.style.display === 'none') show = true;
+  el.style.display = show ? 'flex' : 'none';
+  document.getElementById('kb-matrix').style.display = 'none';
+  document.getElementById('kb-graph').style.display = 'none';
+  document.getElementById('kb-list').style.display = show ? 'none' : '';
+  document.getElementById('kb-path').style.display = show ? 'none' : '';
+  document.getElementById('kb-preview').style.display = 'none';
+  document.getElementById('kb-search-results').style.display = 'none';
+}
+
+async function doScienceSearch() {
+  var q = document.getElementById('science-q').value.trim();
+  var src = document.getElementById('science-source').value;
+  var box = document.getElementById('science-results');
+  if (!q) { box.innerHTML = '<span style="color:var(--danger);">请输入检索关键词</span>'; return; }
+  box.innerHTML = '<span style="color:var(--text-light);">检索中…</span>';
+  try {
+    var r = await fetch('/api/science/search?q=' + encodeURIComponent(q) + '&source=' + encodeURIComponent(src) + '&limit=10');
+    var d = await r.json();
+    if (d.error) { box.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    var items = d.results || d.papers || [];
+    if (!items.length) { box.innerHTML = '<span style="color:var(--text-light);">无结果</span>'; return; }
+    box.innerHTML = items.map(function(it) {
+      var title = it.title || '(无标题)';
+      var link = it.url || it.doi || '';
+      var authors = (it.authors || []).slice(0, 3).join(', ');
+      var meta = [authors, it.year || it.published_date || it.published || ''].filter(Boolean).join(' · ');
+      var prov = it.source || src;
+      var t = '<div style="padding:6px 8px;border-bottom:1px solid var(--border);">';
+      if (link) t += '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">' + escapeHtml(title) + '</a>';
+      else t += '<span style="font-weight:600;">' + escapeHtml(title) + '</span>';
+      if (meta) t += '<div style="color:var(--text-light);font-size:11px;margin-top:2px;">' + escapeHtml(meta) + '</div>';
+      t += '<div style="color:var(--text-light);font-size:10px;margin-top:2px;">📎 ' + escapeHtml(prov) + (it.fetched_at ? ' · 溯源 ' + escapeHtml(it.fetched_at) : '') + '</div></div>';
+      return t;
+    }).join('');
+  } catch(e) {
+    box.innerHTML = '<span style="color:var(--danger);">检索失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
 function toggleKbMatrix() {
   var el = document.getElementById('kb-matrix');
   if (!el) return;
@@ -4896,7 +5040,8 @@ async function loadMemory() {
     entries.forEach(function(e) {
       html += '<div class="item" style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:4px;font-size:12px;cursor:pointer;" onclick="viewMemoryFile(\'' + e.name + '\')">' +
         '<span class="name">📄 ' + escapeHtml(e.name) + '</span>' +
-        '<span class="badge">' + formatSize(e.size) + '</span></div>';
+        '<span class="badge">' + formatSize(e.size) + '</span>' +
+        '<button onclick="event.stopPropagation();deleteMemoryFile(\'' + e.name + '\')" title="删除该记忆文件" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--danger);color:#fff;border:none;cursor:pointer;">删除</button></div>';
     });
     document.getElementById('memory-entries').innerHTML = html;
     // 显示 MEMORY.md 内容
@@ -4944,6 +5089,52 @@ async function writeMemory(mode) {
     } else {
       result.style.color = 'var(--danger)';
       result.textContent = '❌ ' + (d.error || '写入失败');
+    }
+  } catch(e) {
+    result.style.color = 'var(--danger)';
+    result.textContent = '❌ 网络错误: ' + e.message;
+  }
+}
+
+async function governMemory() {
+  var result = document.getElementById('memory-result');
+  result.textContent = '治理中…';
+  result.style.color = 'var(--text-light)';
+  try {
+    var r = await fetch('/api/memory/govern', { method: 'POST' });
+    var d = await r.json();
+    if (d.ok) {
+      result.style.color = 'var(--success)';
+      var stats = d.stats || {};
+      var statStr = Object.keys(stats).map(function(k) { return k + ':' + stats[k]; }).join(' ');
+      result.textContent = '✅ 治理完成 · 共 ' + d.total + ' 条 · ' + statStr;
+      loadMemory();
+    } else {
+      result.style.color = 'var(--danger)';
+      result.textContent = '❌ ' + (d.error || '治理失败');
+    }
+  } catch(e) {
+    result.style.color = 'var(--danger)';
+    result.textContent = '❌ 网络错误: ' + e.message;
+  }
+}
+
+async function deleteMemoryFile(name) {
+  if (!confirm('确定删除记忆文件 ' + name + ' ？此操作不可恢复。')) return;
+  var result = document.getElementById('memory-result');
+  try {
+    var r = await fetch('/api/memory/' + encodeURIComponent(name), {
+      method: 'DELETE',
+      headers: {'X-Memory-Token': memoryApiToken}
+    });
+    var d = await r.json();
+    if (d.ok) {
+      result.style.color = 'var(--success)';
+      result.textContent = '✅ 已删除 ' + name;
+      loadMemory();
+    } else {
+      result.style.color = 'var(--danger)';
+      result.textContent = '❌ ' + (d.error || '删除失败');
     }
   } catch(e) {
     result.style.color = 'var(--danger)';
