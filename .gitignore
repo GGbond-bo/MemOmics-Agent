@@ -126,3 +126,6 @@ hermes_home/session_anchors/
 # start.bat 依赖安装标记（装过一次就跳过）
 .venv_deps_ok.txt
 .venv_vision_ok.txt
+
+# 便携打包运行时（打包.bat 生成的内置 Python）
+runtime/
