@@ -208,6 +208,59 @@ async def _seed_self_check_startup():
 
 
 @app.on_event("startup")
+async def _start_process_completion_poller():
+    """notify_on_complete push 链（2026-08-16 修复）。
+
+    terminal(background=True, notify_on_complete=True) 的进程退出时，Hermes 把
+    完成事件写进 process_registry.completion_queue，但 MemOmics WebUI 从不消费
+    它 —— 之前只能靠自检轮询（60s~5min 延迟）才发现进程结束。这里起守护线程消费
+    队列，按 session_key（= session id，见 terminal_tool 的 session_key 接线）
+    路由回对应会话并立即唤醒 agent 处理结果。
+    """
+    try:
+        _loop = asyncio.get_event_loop()
+    except Exception:
+        return
+
+    def _poller():
+        from tools.process_registry import process_registry, format_process_notification
+        while True:
+            try:
+                evt = process_registry.completion_queue.get(timeout=0.5)
+            except Exception:
+                continue
+            try:
+                if evt.get("type") == "completion" and process_registry.is_completion_consumed(evt.get("session_id", "")):
+                    continue
+                _sid = str(evt.get("session_key") or "")
+                if not _sid or _sid not in _sessions:
+                    continue  # 无主/会话已关 → 丢弃
+                _s = _sessions[_sid]
+                text = format_process_notification(evt)
+                if not text:
+                    continue
+                if _s.get("running_agent") or _s.get("running_task"):
+                    # 会话忙 → 重排回队列，稍后再投递
+                    process_registry.completion_queue.put(evt)
+                    time.sleep(0.25)
+                    continue
+                _s.setdefault("messages", []).append({
+                    "role": "system",
+                    "content": "⏰ 后台进程完成通知，请立即查看结果并推进主线：\n\n" + text,
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "source": "process_completion",
+                })
+                _loop.call_soon_threadsafe(
+                    lambda _s=_s, _t=text: asyncio.ensure_future(_trigger_agent_turn(_s, _t))
+                )
+            except Exception as e:
+                logger.warning("[process-poller] dispatch failed: %s", e)
+
+    _threading.Thread(target=_poller, daemon=True, name="process-completion-poller").start()
+    logger.info("[MemOmics] process completion poller started")
+
+
+@app.on_event("startup")
 async def _start_agent_stall_watchdog():
     """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
 
@@ -8788,20 +8841,22 @@ async def ws_endpoint(ws: WebSocket):
                 # interrupt() 只设 _interrupt_requested flag，不杀子进程；executor 线程
                 # 也取消不掉。这里显式清理本会话的 terminal 后台进程 + R/Python kernel
                 # worker（task_id 已接线为 session["id"]，见 run_conversation 调用点）。
-                _kill_tids = {session["id"]}
-                if agent_ref is not None:
-                    try:
-                        _ctid = getattr(agent_ref, "_current_task_id", "")
-                        if _ctid:
-                            _kill_tids.add(_ctid)
-                    except Exception:
-                        pass
                 try:
                     from tools.process_registry import process_registry
-                    for _t in _kill_tids:
-                        _killed = process_registry.kill_all(task_id=_t)
-                        if _killed:
-                            logger.info("[cancel] killed %d background processes (task_id=%s)", _killed, _t[:12])
+                    # 2026-08-16: terminal 后台进程的 task_id 被 _resolve_container_task_id
+                    # 折叠为 "default"，但 session_key 保留了 session id。按 session_key 杀，
+                    # 否则 kill_all(task_id=session id) 永远匹配不到（进程 task_id 全是 default）。
+                    _killed = 0
+                    for _p in process_registry.list_sessions(session_key=session["id"]):
+                        if _p.get("status") != "running":
+                            continue
+                        try:
+                            process_registry.kill_process(_p["session_id"], source="cancel", consume_output=True)
+                            _killed += 1
+                        except Exception:
+                            pass
+                    if _killed:
+                        logger.info("[cancel] killed %d background processes (session_key=%s)", _killed, session["id"][:12])
                 except Exception as e:
                     logger.warning("[cancel] process_registry kill failed: %s", e)
                 try:
