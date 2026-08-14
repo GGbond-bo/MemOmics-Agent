@@ -6447,6 +6447,22 @@ async def lit_browse(path: str = ""):
     仅本机回环服务使用（文献导入需要访问用户任意位置的 PDF）。
     """
     is_win = os.name == "nt"
+
+    def _pdf_count(d: str) -> int:
+        """递归统计目录下 PDF 数量（上限 2000，防超深目录拖慢浏览）。"""
+        n = 0
+        try:
+            for _root, _dirs, _files in os.walk(d):
+                _dirs[:] = [x for x in _dirs if not x.startswith(".")]
+                for _f in _files:
+                    if _f.lower().endswith(".pdf"):
+                        n += 1
+                        if n >= 2000:
+                            return n
+        except Exception:
+            pass
+        return n
+
     # 系统根虚拟项
     root_virtual = ({"name": "💻 此电脑", "path": "__drives__", "is_dir": True, "virtual": True}
                     if is_win else
@@ -6472,7 +6488,8 @@ async def lit_browse(path: str = ""):
                     "ext": p.suffix.lower() if not is_dir else "",
                 })
             return {"path": root_dir.replace("\\", "/") + "  (MemOmics 安装目录)",
-                    "items": items, "is_root": True, "parent": None, "platform": os.name}
+                    "items": items, "is_root": True, "parent": None, "platform": os.name,
+                    "pdf_count": _pdf_count(root_dir)}
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     if path == "__drives__" and is_win:
@@ -6514,7 +6531,7 @@ async def lit_browse(path: str = ""):
                 "ext": p.suffix.lower() if not is_dir else "",
             })
         return {"path": real.replace("\\", "/"), "items": items, "is_root": False,
-                "parent": parent, "platform": os.name}
+                "parent": parent, "platform": os.name, "pdf_count": _pdf_count(real)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     """读取文件内容（限制在 work/results/项目内，防任意文件读取）"""
@@ -7430,18 +7447,91 @@ async def science_search(q: str = "", source: str = "arxiv", limit: int = 5):
     return arxiv_search(q.strip(), limit=limit)
 
 
+# 文献导入异步任务账本（批I 2026-08-16：导入在后台线程跑，前端轮询进度）
+_lit_jobs = {}
+
+
+def _run_lit_import(job_id: str, paths: list):
+    import json as _json
+    from memomics.bio_tools.literature_library import import_pdfs
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": done, "total": total, "current": str(detail)[:120],
+            })
+        _result = _json.loads(import_pdfs(paths, progress_cb=_cb))
+        _lit_jobs[job_id].update({"status": "done", "result": _result,
+                                  "current": f"完成：导入 {_result.get('imported', 0)} 篇"})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
 @app.post("/api/literature/import")
 async def literature_import(payload: dict):
-    """导入本地 PDF 到全局文献库（批F 2026-08-16：期刊/文章名/下载日期标识）。"""
+    """导入本地 PDF 到全局文献库（批F；批I 起异步化：立即返回 job_id，GET 轮询进度）。"""
     paths = payload.get("paths") or []
     if not paths:
         return JSONResponse({"error": "paths required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "collect",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_import, job_id, paths))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/literature/import/{job_id}")
+async def literature_import_status(job_id: str):
+    """导入进度查询：{status: running/done/error, phase, done, total, current, result}"""
+    return _lit_jobs.get(job_id, {"status": "unknown", "error": "job not found"})
+
+
+def _run_lit_extract(job_id: str, file_or_title: str, extract_all: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import kb_extract_from_paper, extract_all_papers
     try:
-        from memomics.bio_tools.literature_library import import_pdfs
-        import json as _json
-        return _json.loads(import_pdfs(paths))
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        if extract_all:
+            _result = _json.loads(extract_all_papers(progress_cb=_cb))
+        else:
+            _result = _json.loads(kb_extract_from_paper(file_or_title, progress_cb=_cb))
+        if _result.get("ok"):
+            _msg = f"提炼完成：写入 {_result.get('written_total', len(_result.get('written') or []))} 条"
+        else:
+            _msg = f"提炼失败：{_result.get('error', '未知错误')[:120]}"
+        _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
     except Exception as e:
-        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/extract")
+async def literature_extract(payload: dict):
+    """提炼单篇文献进知识库（批I：异步任务化，立即返回 job_id）。"""
+    file_or_title = (payload.get("file_or_title") or "").strip()
+    if not file_or_title:
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "read",
+                         "done": 0, "total": 1, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_extract, job_id, file_or_title, False))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/api/literature/extract-all")
+async def literature_extract_all():
+    """一键提炼全部文献进知识库（批I：异步任务化）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_extract, job_id, "", True))
+    return {"job_id": job_id, "status": "running"}
 
 
 @app.get("/api/literature/library")

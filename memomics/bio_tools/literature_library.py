@@ -64,6 +64,36 @@ def _pdf_text(path: str, pages: int = 2) -> str:
         return ""
 
 
+def _pdf_ocr_text(path: str, max_pages: int = 8, max_chars: int = 30000) -> str:
+    """扫描版 PDF 兜底：逐页渲染 → RapidOCR（vision_tool 同一引擎，跨平台）。"""
+    try:
+        import pymupdf as fitz
+        from memomics.bio_tools.vision_tool import _ocr_text
+        from PIL import Image
+        import io
+        doc = fitz.open(path)
+        parts = []
+        total = 0
+        for i in range(min(max_pages, doc.page_count)):
+            pix = doc[i].get_pixmap(dpi=150)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            for item in _ocr_text(img):
+                t = str(item.get("text") or "").strip()
+                if t:
+                    # 按 y 粗略分行：简单按原文顺序拼接
+                    parts.append(t)
+                    total += len(t)
+                    if total >= max_chars:
+                        break
+            if total >= max_chars:
+                break
+        doc.close()
+        return "\n".join(parts)
+    except Exception as e:
+        logger.warning(f"pdf ocr failed: {e}")
+        return ""
+
+
 def _pdf_title_guess(path: str) -> str:
     """第一页最大字号文本行作为标题猜测。"""
     try:
@@ -212,12 +242,18 @@ def _collect_pdfs(paths) -> list:
     return files[:200]
 
 
-def import_pdfs(paths) -> str:
-    """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 引用库注册）。"""
+def import_pdfs(paths, progress_cb=None) -> str:
+    """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 分类标签 + 引用库注册）。
+
+    progress_cb(phase, done, total, detail): 进度回调——
+    phase ∈ collect/file/classify/done；detail=当前文件名或说明。
+    """
     files = _collect_pdfs(paths)
     if not files:
         return json.dumps({"ok": False, "error": "未找到 PDF 文件（支持 .pdf 文件或目录路径）"},
                           ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    _cb("collect", 0, len(files), f"共发现 {len(files)} 个 PDF")
     lib_dir = _library_dir()
     os.makedirs(lib_dir, exist_ok=True)
     index_file = os.path.join(lib_dir, ".pdf_index.json")
@@ -226,10 +262,26 @@ def import_pdfs(paths) -> str:
     by_name = {(e.get("file"), e.get("size")) for e in index}
 
     imported, skipped, errors = [], [], []
+    _n_done = 0
     for src in files:
+        _cb("file", _n_done, len(files), os.path.basename(src))
         try:
+            # 校验：空文件 / 非 PDF 直接报错跳过
+            _sz = os.path.getsize(src)
+            if _sz == 0:
+                errors.append({"file": os.path.basename(src),
+                               "error": "文件为空(0字节)，可能是下载失败的残留，请重新下载"})
+                _n_done += 1
+                continue
+            with open(src, "rb") as _f:
+                _head = _f.read(5)
+            if not _head.startswith(b"%PDF-"):
+                errors.append({"file": os.path.basename(src),
+                               "error": "不是有效的 PDF 文件（文件头非 %PDF-）"})
+                _n_done += 1
+                continue
             sha = _sha256_of(src)
-            size = os.path.getsize(src)
+            size = _sz
             if sha and sha in by_sha:
                 skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
                 continue
@@ -283,9 +335,12 @@ def import_pdfs(paths) -> str:
                 logger.warning(f"reference library register failed: {e}")
         except Exception as e:
             errors.append({"file": os.path.basename(src), "error": str(e)[:200]})
+        _n_done += 1
+        _cb("file", _n_done, len(files), f"已处理 {_n_done}/{len(files)}")
     # 自动分类打标（物种/组织/方向/assay/kb_category）——仅对新导入的
     if index and any(not e.get("tags") for e in index):
         _new = [e for e in index if not e.get("tags")]
+        _cb("classify", _n_done, len(files), f"LLM 分类 {len(_new)} 篇文献…")
         try:
             _tags = _classify_papers(_new)
             for e in _new:
@@ -298,6 +353,7 @@ def import_pdfs(paths) -> str:
         for e in index:
             if e.get("file") == it.get("file") and e.get("tags"):
                 it["tags"] = e["tags"]
+    _cb("done", _n_done, len(files), f"完成：导入 {len(imported)} 篇")
     return json.dumps({
         "ok": True, "imported": len(imported), "skipped": len(skipped), "errors": errors,
         "entries": imported, "library_dir": lib_dir.replace("\\", "/"),
@@ -438,12 +494,14 @@ def _classify_single(title: str) -> dict:
         return _rule_classify(title)
 
 
-def kb_extract_from_paper(file_or_title: str) -> str:
+def kb_extract_from_paper(file_or_title: str, progress_cb=None) -> str:
     """把文献库中的一篇文献提炼成知识库 YAML 条目（批G 2026-08-16）。
 
     流程: 定位 PDF → 全文提取(≤30K字符) → LLM 提炼 1-3 个 KB 条目 →
           save_knowledge 五级目录落库（带 DOI/原文溯源 evidence）。
+    progress_cb(phase, done, total, detail): 可选进度回调。
     """
+    _cb = progress_cb or (lambda *a, **k: None)
     try:
         lib = json.loads(list_library()).get("library", [])
     except Exception:
@@ -463,9 +521,16 @@ def kb_extract_from_paper(file_or_title: str) -> str:
     pdf_path = hit.get("path", "")
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    _cb("read", 0, 1, f"读取全文: {hit.get('title') or hit.get('file')}")
     text = _pdf_text(pdf_path, pages=200)[:30000]
+    _ocr_used = False
     if not text.strip():
-        return json.dumps({"ok": False, "error": "PDF 文本提取为空（可能是扫描版，无 OCR）"},
+        # 扫描版 PDF：RapidOCR 逐页兜底
+        _cb("read", 0, 1, f"扫描版无文字层，OCR 识别中: {hit.get('file')}")
+        text = _pdf_ocr_text(pdf_path)
+        _ocr_used = bool(text.strip())
+    if not text.strip():
+        return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用（可尝试装 rapidocr_onnxruntime）"},
                           ensure_ascii=False)
     tags = hit.get("tags") or _classify_single(hit.get("title") or "")
     from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
@@ -477,9 +542,11 @@ def kb_extract_from_paper(file_or_title: str) -> str:
         "\"species\":\"human/mouse/...\",\"tissue\":\"英文小写下划线\",\"direction\":\"aging/exercise/...\"}]\n"
         f"文献: {hit.get('title')} | 期刊 {hit.get('journal')} | DOI {hit.get('doi')}\n"
         f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
-        "优先提炼: ① 该文献特有的参数(阈值/基因集/统计方法) ② 物种组织方向特异结论 ③ 可被"
+        + ("注意: 以下正文来自 OCR 识别，可能有识别噪声，忽略乱码部分。\n" if _ocr_used else "")
+        + "优先提炼: ① 该文献特有的参数(阈值/基因集/统计方法) ② 物种组织方向特异结论 ③ 可被"
         "search_knowledge 检索复用的方法要点。文献正文:\n" + text
     )
+    _cb("extract", 0, 1, f"LLM 提炼: {hit.get('title') or hit.get('file')}")
     try:
         cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
         r = _call_llm_sync(prompt, "kb_extract", cfg["api_key"], cfg["base_url"],
@@ -493,9 +560,10 @@ def kb_extract_from_paper(file_or_title: str) -> str:
         return json.dumps({"ok": False, "error": "未能提炼出条目"}, ensure_ascii=False)
     from memomics.bio_tools.save_knowledge import save_knowledge
     written, rejected = [], []
-    for it in items:
+    for _i, it in enumerate(items):
         if not isinstance(it, dict):
             continue
+        _cb("write", _i + 1, len(items), f"写入知识库: {it.get('name')}")
         sp = (it.get("species") or (tags.get("species") or ["unknown"])[0]).lower()
         ti = (it.get("tissue") or (tags.get("tissue") or [""])[0]).lower().replace(" ", "_")
         dr = (it.get("direction") or (tags.get("direction") or [""])[0]).lower().replace(" ", "_")
@@ -514,10 +582,50 @@ def kb_extract_from_paper(file_or_title: str) -> str:
         ))
         (written if r.get("status") == "success" else rejected).append(
             {k: r.get(k) for k in ("status", "name", "path", "error") if r.get(k)})
+    _cb("done", 1, 1, f"提炼完成: 写入 {len(written)} 条")
     return json.dumps({
         "ok": bool(written), "paper": hit.get("title"), "doi": hit.get("doi"),
         "written": written, "rejected": rejected,
         "note": "写入 knowledge_base 五级目录（物种/组织/方向/类别/assay），带 DOI 溯源。"},
+        ensure_ascii=False, indent=2)
+
+
+def extract_all_papers(progress_cb=None) -> str:
+    """一键提炼（批I 2026-08-16）：把文献库里全部文献逐一提炼进知识库。
+
+    progress_cb(phase, done, total, detail)。
+    """
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空——先导入 PDF 再一键提炼"},
+                          ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(lib)
+    results = []
+    for i, e in enumerate(lib):
+        name = e.get("file") or e.get("title") or ""
+        _cb("paper", i, n, f"[{i + 1}/{n}] 提炼: {e.get('title') or name}")
+        try:
+            r = json.loads(kb_extract_from_paper(name, progress_cb=(
+                lambda ph, d, t, det, _i=i: _cb(ph, _i + (d / max(t, 1)) * 0.9, n,
+                                                f"[{_i + 1}/{n}] {det}")
+            )))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
+                        "written": len(r.get("written") or []),
+                        "rejected": len(r.get("rejected") or []),
+                        "error": r.get("error", "")})
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"全部完成: {ok_n}/{n} 篇成功")
+    return json.dumps({
+        "ok": ok_n > 0, "total": n, "succeeded": ok_n,
+        "written_total": sum(r["written"] for r in results),
+        "results": results,
+        "note": "逐篇提炼进 knowledge_base 五级目录，每篇 1-3 条（参数/方法/结论），带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
 
 
