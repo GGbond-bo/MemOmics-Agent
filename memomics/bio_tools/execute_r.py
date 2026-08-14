@@ -18,7 +18,12 @@ SCHEMA = {
         "Automatically injects conserve.memory=TRUE, plan('sequential'), "
         "workers=1 for SCTransform calls. Detects OOM and retries with "
         "stricter memory settings. Use for Seurat/CellChat/monocle3/SCENIC "
-        "analysis. Returns stdout + stderr (truncated to 15000 chars)."
+        "analysis. Returns stdout + stderr (truncated to 15000 chars). "
+        "PERSISTENT KERNEL: 同一会话（同一 task_id）内会复用同一个 R worker，"
+        "之前定义的变量（如 obj）和已加载的包在后续调用里仍然可用。"
+        "因此同一会话的后续步骤直接复用 obj，不要每步 readRDS 重新加载、"
+        "也不要 saveRDS 写中间副本（900MB 级对象反复落盘极慢）。"
+        "只有当变量丢失（kernel 超时/重启报 object not found）时才 readRDS 重新加载。"
     ),
     "parameters": {
         "type": "object",

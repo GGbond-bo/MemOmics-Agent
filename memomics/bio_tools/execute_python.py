@@ -16,7 +16,11 @@ SCHEMA = {
     "description": (
         "Execute Python code with conda env support and timeout kill. "
         "Use for scanpy/anndata analysis (scvi-tools/cellrank 未装，需先 pip 安装到 .venv). "
-        "Returns stdout + stderr (truncated to 10000 chars)."
+        "Returns stdout + stderr (truncated to 10000 chars). "
+        "PERSISTENT KERNEL: 同一会话（同一 task_id）内复用同一 Python worker，"
+        "之前定义的变量（如 adata）和 import 的包在后续调用里仍可用。"
+        "同一会话后续步骤直接复用 adata，不要每步重新 read_h5ad / 写中间副本。"
+        "仅当变量丢失（kernel 超时/重启）时才重新加载。"
     ),
     "parameters": {
         "type": "object",
