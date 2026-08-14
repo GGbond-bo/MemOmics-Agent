@@ -67,3 +67,20 @@ _, pv = wilcoxon(w['O_Post'], w['O_Pre'])
 - 配对 wilcoxon 需要 Pre/Post 都有的个体（`.dropna()` 过滤），个体数不足会抛错 → `try/except` 返回 NaN
 - 图内标签用英文（CNS 惯例），避免中文字体配置；汇报用中文结论先行
 - 三图一次 `execute_code` 跑完，每图独立 tryCatch 式分段，单图失败不影响其他
+
+## 五效应扩展版（2026-08-14 用户拍板："我有六组，展示衰老效应、糖尿病效应、三个运动组一起的打分热图"）
+
+用户认可 Fig1（3 面板）后要求**五效应并排**：`Aging(O_Pre−Y_Pre) / T2D(OD_Pre−O_Pre) / ExYoung(Y_Post−Y_Pre) / ExOld(O_Post−O_Pre) / ExT2D(OD_Post−OD_Pre)`。核心科学问题 = 三运动组并排看"糖尿病是否拖累运动对衰老的逆转"。
+
+**⛔ 格式复用铁律（用户原话："按照Figure1的格式出啊"）**：
+- 用户说"按 XX 图格式出" = **原样复刻布局/配色/标注，只改用户要求的维度**（3面板→5面板）。**禁止自行创新布局**（曾自作主张改成"亚群×效应 50 列大宽图"被打回）。
+- **正确做法：从 `results/<session>/log/system_log.jsonl` 提取原图生成代码**（search_files pattern=`Fig1_effect_matrix` → 命中行 json 的 args.code 即完整脚本），在它基础上加面板，而不是凭记忆重写。
+- 用户认可的格式要素（五效应版实测）：1×6 gridspec `width_ratios=[0.26,1,1,1,1,1]`（左轴打分名 + 5 热图）；行分组色条（Metabolic 蓝 11 / Identity 黄 4 / Senescence 红 7）；`LinearSegmentedColormap.from_list('cns',['#2166AC','#F7F7F7','#B2182B'])` + `TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)`；星号 `*` FDR<0.05（BH）；面板标题含对比式（如 `O_Pre − Y_Pre`）；`png(dpi=300)+pdf+svg` 三格式导出。
+
+**统计与图矩阵**：样本级聚合（479 行）→ 每 打分×亚群×效应 算 Cohen's d + Welch t + BH → `effect5_d_table.csv` / `effect5_q_table.csv`（22×50 行名=score, 列名=`亚群|效应`）。出图时 `col_order = [f"{s}|{e}" for s in subs for e in effs]` 重塑为 5 个 22×10 面板。实测 1100 项检验、93 项 FDR<0.05，d 范围 −4.73~+3.36。
+
+**⚠️ 辩论裁决（L1，verdict=modify）**：样本级 Cohen's d + BH 适合展示效应方向/幅度；但 5 面板并排**缺乏组间差异检验**（ExOld vs ExT2D 未直接比较），**不能支撑"糖尿病拖累运动逆转"的因果推断**。热图定位=趋势展示，汇报措辞用"观察/提示"而非"证明"；若要因果结论需补交互项/置换检验 + Cohen's d 95%CI。产出 `Fig1_five_effects_matrix.png/pdf/svg`。
+
+## 环境/执行教训（2026-08-14 当天血泪史）
+- **R 库批量 DLL 损坏时最多修一轮，再坏直接转 Python**：`requireNamespace(p, quietly=TRUE)` 只查元数据不加载 DLL，坏包显示 TRUE 假象；真验证必须 `tryCatch(library(p), error=...)`。症状 = 多个包 `LoadLibrary failure` / `lazy-load database is corrupt`（digest/cluster/Matrix/vctrs/S7），分布在 E:/R-libs、Program Files、Users 三处库根。逐包重装 = 无底洞。**正确路径：中间表落盘 CSV → Python 出图，一次成功**。
+- **⛔ 别在环境检查上打转（用户原话："你老是检查terminal干什么全是报错" / "你已经很久没有出图了"）**：连续 ≥2 轮无图/无文件/无明确结果 = 已在打转。立即要么出图、要么换栈、要么如实报阻塞点。用户说"找原因，先不执行" = 只诊断不改。

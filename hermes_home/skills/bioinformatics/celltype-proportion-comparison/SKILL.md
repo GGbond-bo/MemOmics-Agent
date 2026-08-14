@@ -188,18 +188,20 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   KEGG 用 `CP:KEGG_LEGACY`（旧名）、KEGG_MEDICUS 碎片化不适合打分——详见
   `references/geneset-supplement-2026-08.md`
 
-### CNS 级"效应矩阵"图组（2026-08-14 实测：AUCell meta CSV → 三图架构）
+### CNS 级"效应矩阵"图组（2026-08-14 实测：AUCell meta CSV → 三图架构 + 五效应扩展版）
 
 当用户要"CNS 级别/主刊审美"且数据集是**细胞级 meta CSV**（每行=细胞，含 samplename/type/annotation_L3 + 22 个 AUCell 打分列，50 万细胞级）时，用效应矩阵图组替代逐打分箱线图——一张图回答"哪些打分被衰老/运动/糖尿病改变"。实测成功案例：`MF_AUCell_meta.csv`（508,661 细胞 × 58 列）。
 
+- **⛔ 格式复用铁律（用户原话"按照Figure1的格式出啊"）**：用户认可某图格式后要求扩展（如 3 面板→5 面板），必须**原样复刻布局/配色/标注，只改用户要求的维度**；**从 `results/<session>/log/system_log.jsonl` 提取原图生成代码**（search_files pattern=`输出文件名` → 命中行 args.code）在其上改，禁止凭记忆重写或自行创新布局（曾自作主张改成 50 列大宽图被打回）。
 - **统计设计（防伪重复）**：50 万细胞直接算 = 伪重复。先 `samplename × annotation_L3` 聚合打分均值（48样本×10亚群=479行）→ 每 打分×亚群×效应 组合算 **Cohen's d + Wilcoxon 秩和 p（BH 校正）**
 - **三效应**：Aging(O_Pre−Y_Pre) / Exercise_O(O_Post−O_Pre) / T2D(OD_Pre−O_Pre)
-- **逆转率**（仅对 Aging 显著组合）：`reversal = 1 - (O_Post − Y_Pre)/(O_Pre − Y_Pre)`；>0=向年轻回拉，<0=恶化
-- **Fig1 Hero 效应矩阵**：3 面板横排（Aging/Exercise/T2D 的 Cohen's d 热图）+ 左侧功能轴色条 + 右侧逆转率条；行=打分按功能轴分组（Metabolic/Identity/Senescence），列=亚群；红蓝 diverging（#2166AC→白→#B2182B）±3 截断，星号=p<0.05
+- **五效应扩展（用户拍板版）**：Aging / T2D / ExYoung(Y_Post−Y_Pre) / ExOld(O_Post−O_Pre) / ExT2D(OD_Post−OD_Pre) 五面板并排 → 回答"糖尿病是否拖累运动对衰老的逆转"。⚠️ L1 辩论 verdict=modify：并排面板无组间检验（ExOld vs ExT2D），**只能当趋势展示，不能下因果结论**
+- **逆转率**（仅对 Aging 显著组合）：`reversal = 1 - (O_Post − Y_Pre)/(O_Pre − Y_Pre)`；>0=向年轻回拉，<0=恶化。实测中位数：Metabolic +0.21 / Identity +0.36 / Senescence −0.07 → "运动是衰老的镜子，只照见代谢-结构这一半"。
+- **Fig1 Hero 效应矩阵**：N 面板横排（Aging/Exercise/T2D 或五效应）+ 左侧功能轴色条 + 右侧逆转率条；行=打分按功能轴分组（Metabolic/Identity/Senescence），列=亚群；红蓝 diverging（#2166AC→白→#B2182B）±3 截断，星号=p<0.05
 - **Fig2 配对个体响应**：Aging |d| top-4 组合画老年个体 Pre→Post 连线（samplename 去 `_Pre/_Post` 后缀配对），配对 wilcoxon p 标标题
 - **Fig3 效应散点**：x=Aging d、y=Exercise d，每点=打分×亚群，颜色=功能轴，加对角线——一眼看出"只有代谢轴在对角线（运动逆转衰老）、炎症轴贴 x 轴（运动无效）"
 - **结论模板**：逆转率按功能轴分层就是故事（实测：Metabolic 中位 +0.21、Identity +0.36、Senescence −0.07）→ "运动是衰老的镜子，只照见代谢-结构这一半"。交付时结论先行，图作为证据
-- 完整实现配方 + 可直接复用的 Python 代码 → `references/cns-effect-matrix-aucell.md`
+- 完整实现配方 + 可直接复用的 Python 代码 + 五效应版布局细节 → `references/cns-effect-matrix-aucell.md`
 
 ## Pitfalls
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：

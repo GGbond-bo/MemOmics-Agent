@@ -52,5 +52,65 @@
       "evidence": "辩论7方论点(正方: 文献T2D慢肌减少PMID 23515448/17284623/39634609 + 7/7一致 + FDR_per_celltype=0.035; 反方: FDR_global=0.117不显著 + n=7功效低 + MYH7转录下调可致假比例下降 + O运动后也下降与运动增I型常识相悖 + 符号约定陷阱重现风险)。judge JSON解析失败→need_more_info/low。",
       "date": "2026-08-12 23:12:16"
     }
+  ],
+  "success_count": 3,
+  "proven_script": "Fig1_five_effects_matrix.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "aucell_cns_figures.R",
+      "params": "AUCell五效应热图: Aging(O_Pre vs Y_Pre)/T2D(OD_Pre vs O_Pre)/ExYoung(Y paired)/ExOld(O paired)/ExT2D(OD paired), 22 scores x individual-level Wilcoxon + BH, ComplexHeatmap z-scored rows + star annotation, 600dpi PNG+PDF",
+      "date": "2026-08-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R-4.5.3 Rscript 直跑成功（绕开 execute_r 内核 DLL 问题）：Fig1_effect_matrix / Fig2_paired_response / Fig3_aging_vs_exercise 已生成。核心发现：代谢轴逆转率中位数+0.21 vs 衰老-炎症轴-0.07——运动只逆转代谢-结构轴，SenMayo/TNFA/Inflammatory 炎症程序无效。数据已"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig1b_five_effects_heatmap.py",
+      "params": "{\"five_effects\": [\"Aging=O_Pre vs Y_Pre\", \"T2D=OD_Pre vs O_Pre\", \"ExYoung=Y_Post vs Y_Pre\", \"ExOld=O_Post vs O_Pre\", \"ExT2D=OD_Post vs OD_Pre\"], \"statistics\": \"sample-level Cohen's d + Welch t-test + BH-FDR\", \"layout\": \"22 scores x 50 subtype-effect cells\", \"color\": \"RdBu_r TwoSlopeNorm clip ±3\", \"output\": \"Fig1b_five_effects_heatmap.png/pdf\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "五效应热图完成：1100项检验，BH-FDR<0.05 共93项显著。Aging 方向 d 最负在 Glycolysis/OxPhos（代谢程序衰老崩塌 d≈-4.7），T2D 附加效应相对温和，三运动组（ExYoung/ExOld/ExT2D）并排可直观比较糖尿病是否拖累运动逆转。R 环境 DLL 损坏（rlang/digest/cluster/Matrix/vctrs/cli 批量损坏）→ 改"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "Fig1_five_effects_matrix.py",
+      "params": "{\"format\": \"Figure1复刻：1x5并排面板(Aging/T2D/ExYoung/ExOld/ExT2D)，行=22打分(11代谢/4身份/7衰老)，列=10亚群，Cohen's d±3截断RdBu(#2166AC/#F7F7F7/#B2182B)，*FDR<0.05，png/pdf/svg三格式\", \"stats\": \"1100项检验，93项FDR<0.05\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "五效应矩阵图完成，严格复刻用户认可的Figure1格式（1x5并排热图面板）。用户明确要求\"按Figure1格式出\"——从system_log.jsonl提取原始Fig1_effect_matrix生成代码作为格式基准，扩展为5效应。关键经验：用户认可格式要原样复用，不要自行创新布局。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "Fig1_five_effects_matrix.py"
+  },
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-08-14 16:40",
+      "error_type": "missing_package",
+      "message": "library(ComplexHeatmap): 不存在叫'ComplexHeatmap'这个名称的程序包 — 但 requireNamespace 检查返回 TRUE",
+      "root_cause": "Rscript -e requireNamespace 用 R-4.5.3 主库能探测到 ComplexHeatmap，但 aucell_cns_figures.R 运行时 .libPaths(c('E:/R-libs/R-4.5.3', .libPaths())) 后 library() 失败——可能 E:/R-libs/R-4.5.3 下 ComplexHeatmap 目录损坏或缺失（该库此前",
+      "fix_applied": "",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    }
   ]
 }

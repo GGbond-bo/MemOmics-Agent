@@ -326,3 +326,21 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 ```
 
 可选依赖缺失时本技能仍能跑——会优雅降级并提示。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-14 | aucell_cns_figures.R | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-08-14 | fig1b_five_effects_heatmap.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | Fig1_five_effects_matrix.py | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| library(ComplexHeatmap): 不存在叫'ComplexHeatmap'这个名称的 | Rscript -e requireNamespace 用 R-4.5.3 主库 | - |
+
