@@ -3451,14 +3451,38 @@ async function browseFiles(path) {
   }).join('');
 }
 
+var _BINARY_EXTS = ['.rds', '.rdata', '.h5ad', '.h5', '.rda', '.feather', '.parquet', '.npy', '.npz', '.zip', '.gz', '.tar', '.7z', '.png', '.jpg', '.jpeg', '.pdf', '.svg', '.gif', '.webp', '.xlsx', '.xls', '.docx', '.pptx', '.bam', '.bai', '.mtx'];
+function _isBinaryFile(name) {
+  var n = (name || '').toLowerCase();
+  for (var i = 0; i < _BINARY_EXTS.length; i++) { if (n.endsWith(_BINARY_EXTS[i])) return true; }
+  return false;
+}
+
 async function previewFile(path) {
-  var r = await fetch('/api/file/read?path=' + encodeURIComponent(path));
-  var d = await r.json();
   document.getElementById('file-list').style.display = 'none';
   document.getElementById('file-preview').style.display = '';
+  var name = path.split('/').pop();
+  var lower = (name || '').toLowerCase();
+  var box = document.getElementById('file-preview-content');
+  // 2026-08-15: HTML 报告 → iframe 内联渲染（不再显示源码）
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+    box.innerHTML = '<iframe src="/api/file/download?path=' + encodeURIComponent(path) + '" style="width:100%;height:70vh;border:1px solid var(--border);border-radius:6px;background:#fff;"></iframe>';
+    return;
+  }
+  // 2026-08-15: 二进制/图片 → 下载提示（不再乱码）
+  if (_isBinaryFile(name)) {
+    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light);">'
+      + '<div style="font-size:40px;margin-bottom:8px;">📦</div>'
+      + '<div>二进制文件，无法文本预览</div>'
+      + '<button onclick="downloadFile(\'' + path.replace(/'/g, "\'") + '\')" style="margin-top:12px;padding:6px 16px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⬇ 下载文件</button>'
+      + '</div>';
+    return;
+  }
+  var r = await fetch('/api/file/read?path=' + encodeURIComponent(path));
+  var d = await r.json();
   var content = d.content || '';
   if (d.truncated) content += '\n\n... (文件已截断，完整大小: ' + formatSize(d.size) + ')';
-  document.getElementById('file-preview-content').textContent = content;
+  box.textContent = content;
 }
 
 function closeFilePreview() {
