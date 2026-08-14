@@ -1,0 +1,31 @@
+type: kb_entry
+name: training_micro_meso_macro_cycles
+species: Homo sapiens
+tissue: skeletal muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:29
+source: data_driven
+verified: verified
+quality: high
+auto_trigger:
+- training_micro_meso_macro_cycles
+content: '## 训练周期化：micro/meso/macro 三周期结构
+
+
+  Furrer & Handschin (2024) 综述中定义：训练按照微周期 (microcycle, 7–21天)、中周期 (mesocycle, 3–8周)、大周期
+  (macrocycle, 1个赛季或1年) 组织。所有训练模式（耐力/力量）都由四个通用原则描述：时长 duration (how long)、频率 frequency
+  (how often)、强度 intensity (how hard)、特异性 specificity (general vs discipline-specific)。这些原则在周期内被变化调整，以在比赛时达到表现峰值
+  (performance peak at the time of competition)。
+
+
+  - 耐力训练主要由强度定义（通常表示为百分比，如 %VO2max 或 %1RM）
+
+  - 力量/爆发力与耐力项目共享这些描述符，但评估和测试的性能参数不同
+
+  - 用途：骨骼肌锻炼项目分组设计、运动干预方案（如急性 vs 慢性训练分期）的生物学解释依据'
+evidence: '"Training is organized in micro- (7–21 days), meso- (3–8 weeks) and macrocycles
+  (1 season or year), in which these principles are varied to achieve a performance
+  peak at the time of competition." — Furrer R, Handschin C. Molecular aspects of
+  the exercise response and training adaptation in skeletal muscle. Free Radic Biol
+  Med. 2024. DOI: 10.1016/j.freeradbiomed.2024.07.026'

@@ -339,6 +339,9 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 | human | skeletal_muscle | aging | 2026-08-14 | fig1b_five_effects_heatmap.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-14 | Fig1_five_effects_matrix.py | - | - |  |
 | - | - | - | 2026-08-14 | update_denervation_gene_set.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-15 | fig_v4_final.py | - | - |  |
+| - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
+| - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

@@ -390,6 +390,34 @@ panel reviewers want.
 > 完整实证（R/Python 方向相反的代码摘录 + 锚点验证 + 速查表模板）：
 > `references/heatmap-color-direction-sign-convention.md`
 
+## ⛔ CNS 级打分热图样式规范（v1→v5 用户偏好定稿，2026-08-15）
+
+用户对 AUCell 打分热图（五效应矩阵 + 打分×亚群）有明确审美，**v3/v4 因违反被打回，v5 才通过**。样式要求固化如下（本会话用户逐条纠正过，违反必被否）：
+
+**硬性偏好：**
+1. **行标签必须完整名，禁止缩写/只写分组名**（用户原话："没有基因集的名字，要么就是简写，为啥偷懒？"）。22 个打分全部写全名（scoreOxPhos/Glycolysis/FattyAcidMetabolism/.../Denervation/scoreAtrophy/Fibrosis），分组名（Metabolic/Fiber Identity/Senescence）只作左侧色带标签，不能替代行标签。
+2. **配色必须 RdBu_r（红蓝白），正=红、负=蓝、白=0**，`TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)`。v2 混入青/黄杂色（#c0e0e0/#e0e0e0）被否："颜色也没有之前的好看"。
+3. **label 全部在图形外**：亚群标签底部 45°（y≈-1.9, ha=right, va=top）、行标签左侧、面板标题顶部。label 进图形内是硬伤（用户："label在图形里面"）。
+4. **亚群标签在底部，不在顶部**（v3 用 `ax.invert_yaxis()` 把底部标签翻到顶部被否："亚群你放在上面去了，放在下面呀"）。
+5. **行分组三类别之间留窄白色间隙**（组间空行 ≈0.6 行，不是整行 1.0——v4 用 1.0 被嫌"隔开这么多，稍微小一点"）。
+6. **五效应面板之间留小间距**（`PANEL_GAP ≈ 1.8`；v4 用 3.0 被嫌"隔开距离也大了，稍微有些距离就行"）——整体是"几张图拼起来"的拼图感，不是无缝大矩阵。
+7. **改版必须保留上一版样式骨架**（用户："脚本没有吗？历史记忆没有吗？"）——每次迭代脚本存 `results/*/scripts/fig_vN_final.py` 版本化，改版在旧版上小改不重写；用户认可的版本用 vision/OCR 反推样式基准。
+8. **Fig7 方向**：y=打分（22，左侧分组色带），x=亚群（10，底部 45°）——用户明确："figure7，y轴是基因集名字，亚群是x轴"。
+
+**实现级坑（本会话实测）：**
+- **meta CSV 打分列带 `_AUC` 后缀**：读入后 pivot 前先 `str.replace("_AUC$","",regex=True)`；groupby 聚合后**必须 `sub_agg.columns = score_names` 去掉后缀再转置**，否则 `ZT.loc['scoreOxPhos']` 报 KeyError（v5 首次运行就死在这）。
+- **交互框展示表格**：Markdown 管道表格在用户客户端渲染列宽错位（用户两次反馈"还是错位的"）→ 先用等宽代码块对齐；但用户最终偏好**图片表格**（表头带完整公式 Aging (O-Y)/ExYoung (Y_post-pre) + 红蓝单元格，`Denervation_5effects_table` 样式）。交付表格先问要哪种，不要默认 Markdown。
+- **R 环境 DLL 批量损坏**（rlang/digest/cluster/Matrix/vctrs/cli LoadLibrary failure）时**不要逐个修**——数据落盘 CSV 后直接转 Python（matplotlib）出图绕开 R 库地狱；`requireNamespace` 只查存在性不加载 DLL，坏包显示 TRUE 是假象，真测用 `tryCatch(library(p))`。
+- **rail_review(post) 传摘要被误判"代码过短"**：code_executed 应传完整脚本（read_file 读取）；或审查不过时核对产出物（文件存在+非空+图片大小正常）后直接 record_run。
+
+**⛔ 基因集净化实例：Denervation 打分"全亚群效应高"的真相（2026-08-14）**
+用户发现去神经打分在五效应图里**所有亚群都高**，但绝对水平只有 Specialized MF 高——这不是算错，是**基因集混杂 + 绝对水平 vs 相对变化混淆**：
+- **绝对水平 vs 效应量**：Aging 轴 d 全正 ≠ 绝对分高。Aging 效应其实极小（全亚群绝对差 +0.003~+0.036），真正把"全红"顶起来的是运动轴（O_Post 全亚群几乎翻倍 0.02→0.05~0.07）——运动诱导**再生程序**被 Denervation 基因集捕获（MYH8=胚胎肌球蛋白/MYOG/RUNX1 同时是再生标志，与 RegMyon 基因集 r=0.86）。
+- **净化结果**：11 基因版 → 剔除 MYOG/MYH8/GAP43（纯再生/施万细胞混杂）→ **8 基因终版**：`CHRNA1, CHRNG, CHRND, SCN5A, KCNMB1, NCAM1, NGFR, RUNX1`。RUNX1 **保留**——文献铁证它是去神经核心 TF（Zhu 1994 MCB PMID 7969143 AML1 受神经支配调控；Wang 2005 Genes Dev PMID 16024660 Runx1 去神经后上调防萎缩），用户判断正确。Aging 轴净化后更干净（全 10 亚群一致正、SMF 最高 d=+1.10）；运动轴回落但仍正（NCAM1/RUNX1 本身参与运动诱导 NMJ 重塑）；T2D 轴无信号（d≈0）。
+- **教训**：新基因集必须逐基因文献审计（search_papers 给真实 PMID），剔除与再生/其他打分重叠的基因；"打分高"先分绝对水平与效应量两个概念再解读。
+
+> 完整可复现 v5 脚本 + 样式参数 + 图型模板：`references/aucell-heatmap-style-v5.md`
+
 **Statistical protocol (validated on muscle MF, Y=10/O=7/OD=7 individuals):**
 1. **Individual-level pseudobulk FIRST**: aggregate score means per pair_id × type × cluster
    (pair_id = samplename minus `_Pre`/`_Post` suffix). Never test at cell level (pseudoreplication).

@@ -1,0 +1,37 @@
+type: kb_entry
+name: slow_twitch_fiber_shift_limit
+species: Homo sapiens
+tissue: skeletal muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:29
+source: data_driven
+verified: verified
+quality: high
+auto_trigger:
+- slow_twitch_fiber_shift_limit
+content: '## Ca²⁺ 信号驱动慢肌(氧化型)纤维程序及其限制
+
+
+  Furrer & Handschin (2024) 综述中的关键通路（Ca²⁺-CnA/CaMK-MEF2/PGC-1α 轴）：
+
+
+  1. **通路机制**：细胞内 Ca²⁺ 升高 → 激活钙调磷酸酶 CnA (calcineurin A) → 磷酸化并激活转录因子 NFAT → 转位入核 →
+  促进氧化型/慢肌纤维典型基因程序表达。CnA 和 CaMKII 介导 MEF2 激活 → 诱导 PGC-1α 转录 → 同样促进氧化型/慢肌纤维程序。长期低强度运动中，Ca²⁺
+  介导的 CaMKKβ 激活可在无能量亏空时提高 AMPK 活性；CaMKII 和 AMPK 通过增强 CREB/ATF2 转录活性促进 PGC-1α 表达。
+
+
+  2. **纤维类型差异**：虽然 [Ca²⁺]i 在所有肌肉收缩中都升高，但幅度和持续时间因运动模式与纤维类型而异——糖酵解/快肌 II 型纤维收缩期 [Ca²⁺]i
+  峰值显著高于氧化型/慢肌 I 型纤维。
+
+
+  3. **对分析的意义**：解释耐力运动 vs 抗阻运动的纤维类型转换/慢肌偏向时，应以 Ca²⁺ 信号通路（NFAT/MEF2/PGC-1α）为分子基础；区分
+  I 型/II 型纤维的 [Ca²⁺]i 动态差异可用于解读快肌/慢肌亚群对运动的差异化响应。'
+evidence: '"CnA phosphorylates and thereby activates the transcription factor nuclear
+  factor of activated T cells (NFAT), initiating its translocation to the nucleus
+  and promoting the expression of the oxidative/slow-twitch muscle fiber-typical gene
+  program. ... CaMKII and AMPK promote the expression of PGC-1α by enhancing the transcriptional
+  activity of the cAMP-response element binding protein (CREB) and activating transcription
+  factor 2 (ATF2). ... The peak amplitude of [Ca2+]i during muscle contraction is
+  substantially higher in glycolytic/fast-twitch type II fibers compared to oxidative/slow-twitch
+  type I fibers." — Furrer R, Handschin C. Free Radic Biol Med. 2024. DOI: 10.1016/j.freeradbiomed.2024.07.026'

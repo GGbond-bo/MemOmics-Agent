@@ -1,0 +1,29 @@
+type: kb_entry
+name: gh_response_to_exercise
+species: Homo sapiens
+tissue: skeletal muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:29
+source: data_driven
+verified: verified
+quality: high
+auto_trigger:
+- gh_response_to_exercise
+content: '## 运动诱导的 GH/IGF-1/睾酮内分泌反应
+
+
+  Furrer & Handschin (2024) 综述：运动中多种循环因子（来自各组织，统称 exerkines）影响肌肉表现。生长激素 (GH)、胰岛素样生长因子
+  1 (IGF-1)、睾酮 (testosterone) 水平在运动反应中均升高。
+
+
+  - GH 除刺激肝脏产生 IGF-1 外，还在肌肉内促进合成代谢信号 (anabolic signaling)，但确切机制尚不清楚
+
+  - IGF-1 及其剪接异构体机械生长因子 (MGF, mechano-growth factor) 也在收缩肌肉中合成
+
+  - 对骨骼肌锻炼项目的意义：运动干预后激素/循环因子变化是解释肌肉肥大与合成代谢适应的关键内分泌通路；做血清/血浆组学或蛋白组学时注意 exerkine 层面解读'
+evidence: '"the levels of growth hormone (GH), insulin-like growth factor 1 (IGF-1)
+  and testosterone are all increased in response to exercise. Besides the stimulation
+  of IGF-1 production in the liver, GH also promotes anabolic signaling within muscle.
+  However, the exact mechanism remains unclear." — Furrer R, Handschin C. Free Radic
+  Biol Med. 2024. DOI: 10.1016/j.freeradbiomed.2024.07.026'

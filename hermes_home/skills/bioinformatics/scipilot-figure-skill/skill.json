@@ -53,8 +53,8 @@
       "date": "2026-08-12 23:12:16"
     }
   ],
-  "success_count": 4,
-  "proven_script": "update_denervation_gene_set.py",
+  "success_count": 6,
+  "proven_script": "fig_v5_final.py",
   "proven_params": [
     {
       "species": "",
@@ -107,10 +107,36 @@
       "approved": false,
       "custom_script": false,
       "result": "按功能分类更新 Denervation 基因集（11 基因全保留）：[AChR] CHRNA1/CHRNG/CHRND (PMID 3949875/3892537), [离子通道] SCN5A/KCNMB1 (PMID 33803193/19109424), [转录因子] MYOG/RUNX1 (PMID 7969143/16024660/21465538), [神经/施万标志] NCAM1/NG"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_v4_final.py",
+      "params": "{\"Fig1\": \"RdBu_r, TwoSlopeNorm(-3,0,3), 5 panels, PANEL_GAP=3.0, 行分组间隙, 亚群底部45度, 22完整基因名\", \"Fig7\": \"z-score, TwoSlopeNorm(-2,0,2), 10亚群x22打分, 顶部色带, 完整基因名\", \"data\": \"effect5_d_v2.csv (1100项) + MF_AUCell_meta.csv (新8基因Denervation)\"}",
+      "date": "2026-08-15",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v4 最终版：修复 v3 亚群标签被 invert_yaxis 翻到顶部的 bug（改为行0在最上的坐标映射，亚群标签固定 y=-1.9 底部）、三类别行分组间加白色间隙（11+1+4+1+7=24行）、五面板间距 PANEL_GAP=3.0 拼图感、行标签22个完整基因名、RdBu_r 红蓝白。Fig1 463KB + Fig7 204KB 生成成功。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fig_v5_final.py",
+      "params": "PANEL_GAP=1.8, CELL=0.94, RdBu_r TwoSlopeNorm(-3,0,3), Fig7 y=score x=sub",
+      "date": "2026-08-15",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Fig1 五效应矩阵 v5 + Fig7 打分×亚群转置版。修复：新 meta 打分列带 _AUC 后缀，Z 转置前需 sub_agg.columns = score_names 统一列名，否则 ZT.loc 报 KeyError。Fig1 v5 保存成功 465KB（PANEL_GAP 3.0→1.8 缩小面板间距、行分组间隙 ri+=1→0.6）。Fig7 转置：y=22打分、x=10亚群，行"
     }
   ],
   "user_prefs": {
-    "last_used_script": "update_denervation_gene_set.py"
+    "last_used_script": "fig_v5_final.py"
   },
   "error_count": 1,
   "errors": [

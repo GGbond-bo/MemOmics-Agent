@@ -1,0 +1,17 @@
+type: kb_entry
+name: exercise_skeletal_muscle_acute_signaling_network
+species: Homo sapiens
+tissue: skeletal muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:25
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- exercise_skeletal_muscle_acute_signaling_network
+content: 急性运动激活骨骼肌多重信号通路：AMPK、mTORC1、PGC-1α、MAPK（p38/ERK/JNK）、Ca2+信号与机械传感通路在耐力和抗阻运动中均被激活，缺乏单一"主控因子"。肌肉适应依赖信号冗余与代偿网络——PGC-1α敲除小鼠训练后性能仍部分改善即为冗余证据。刺激特异性（耐力
+  vs 抗阻）的分子机制仍未知。综述（Free Radic Biol Med 2024, DOI 10.1016/j.freeradbiomed.2024.07.026）提出用多组学+多细胞（单细胞/单核）策略无偏解析急性运动回合与长期训练中的骨骼肌可塑性，以支持个体化训练方案设计。
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | Free Radical Biology and Medicine
+  2024

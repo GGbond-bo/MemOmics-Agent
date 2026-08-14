@@ -260,6 +260,26 @@ knowledge_base/{species}/{tissue}/{direction}/
 └── index.yaml                    ← 知识库索引
 ```
 
+## 五级目录路径约束（save_knowledge / kb_extract_from_paper 铁律）
+
+知识库按 `{species}/{tissue}/{direction}/{kb_category}/{assay}` 五级目录落库，路径段有硬性校验（2026-08-15 实测）：
+
+1. **species/tissue/direction 必须是单一值**：仅允许字母/数字/下划线/中文，≤64 字符
+   - ❌ `human;mouse`（多物种综述常见）→ 校验拒绝 `路径段 'human;mouse' 非法`
+   - ❌ `skeletal muscle, liver`、`aging/exercise`、`人；小鼠` → 同样拒绝
+   - ✅ 多值字段拆分**取第一个合法段**：`human;mouse → human`、`aging/exercise → aging`
+2. **kb_extract_from_paper 失败模式**（LLM 提炼自动入库工具）：
+   - `ok:false` + written/rejected **都为空**且无 error 字段 → LLM 输出 JSON 数组元素不是 dict，被 `isinstance` 静默跳过 → 重试一次；仍失败则走手动兜底
+   - rejected 报 `路径段 'human;mouse' 非法` → 多物种/多组织字段未清洗 → 工具已修复（2026-08-15 commit 53a0586e 增加 `_first_seg` 清洗）；旧版本/其他入库路径仍可能踩
+   - 底层提炼模型输出格式不稳定（deepseek-v4-flash 偶发），**不要无限重试**
+   - **快速诊断确认**（2026-08-15 实测）：grep `hermes_home/logs/agent.log` 与 `hermes_home/logs/errors.log` 中 `Tool kb_extract_from_paper` 记录——同日同文献多次相同输出（ok:false + 无 error + ~265 chars 短输出）即 LLM 解析问题，非文件/路径问题；`ok:true` 或含 error 字段才是其他故障。确认后立即切手动兜底，别再重试
+3. **可靠兜底：手动 save_knowledge**（铁律 21 正规入库）：
+   - 已确认 PDF 可读（如 summaries/ 已有摘要）时，直接基于摘要手动构造条目
+   - **素材来源（2026-08-15 实测）**：`hermes_home/papers/summaries/<文件名>.md` 是 summarize_paper 的 9 项结构化摘要（思路/背景/问题/方法/结论等），可直接作为 save_knowledge content 的编写基础——本会话即据此为 1 篇综述产出 2 条有效条目（01_生物学知识 + 03_测序方法 各 1）
+   - `save_knowledge(name, content, species=单一值, tissue=单一值, direction=单一值, kb_category, assay_type, evidence="DOI xxx | 标题 | PDF路径", verified="partially_verified", source="literature")`
+   - **`assay_type` 必须小写**（`RNA`/`ATAC`/`spatial`/`bulk`）：传大写（如 `BULK`）会被系统规范化校验拒绝（2026-08-15 实测 `ok:false`），改小写重试即过——转录调控类知识用 `RNA` 与默认值一致
+   - 逐字段验证 species/tissue/direction 均为合法单一段，写入后 `search_knowledge` 验证命中
+
 ## YAML 编写注意事项
 
 ### 常见错误
