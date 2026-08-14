@@ -3689,7 +3689,7 @@ def _recall_facts(text, limit=6, max_chars=450):
         conn = _sq.connect(f"file:{_db}?mode=ro", uri=True, timeout=10)
         try:
             _rows = conn.execute(
-                f"SELECT f.content, f.trust_score FROM facts f WHERE {_conds} "
+                f"SELECT f.content, f.trust_score FROM facts f WHERE ({_conds}) AND f.trust_score >= 0.5 "
                 "ORDER BY f.trust_score DESC, f.retrieval_count DESC LIMIT ?",
                 tuple(f"%{k}%" for k in _kws) + (limit,)).fetchall()
         finally:

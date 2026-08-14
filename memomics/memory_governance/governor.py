@@ -88,13 +88,29 @@ def init_index(verbose=True) -> dict:
     """扫描并生成索引（只读）。保留 register_entry 登记的 reg: 新条目。"""
     os.makedirs(MEMORIES_DIR, exist_ok=True)
     idx = build_index(MEMORY_FILE, USER_FILE, _facts_lookup())
-    # 2026-08-14: 合并 register_entry 写入的 reg: 条目（文件扫描看不到它们）
+    # 2026-08-14: 合并 register_entry 写入的 reg: 条目（文件扫描看不到它们）。
+    # 孤儿清理：preview 不在对应源文件中的 reg: 条目 = 已被删除/替换的旧登记 → 丢弃，
+    # 防止 memory 工具 remove/replace 后残留垃圾索引（实测积累了大量矛盾条目）。
     if os.path.isfile(INDEX_PATH):
         try:
             with open(INDEX_PATH, "r", encoding="utf-8") as f:
                 _old = json.load(f)
+            _file_texts = {}
             for _k, _v in _old.get("entries", {}).items():
-                if _k.startswith(("memory:reg:", "user:reg:")) and _k not in idx["entries"]:
+                if not _k.startswith(("memory:reg:", "user:reg:")):
+                    continue
+                if _k in idx["entries"]:
+                    continue
+                _src = "user" if _k.startswith("user:") else "memory"
+                if _src not in _file_texts:
+                    try:
+                        with open(USER_FILE if _src == "user" else MEMORY_FILE,
+                                  "r", encoding="utf-8") as _sf:
+                            _file_texts[_src] = _sf.read()
+                    except Exception:
+                        _file_texts[_src] = ""
+                _pv = str(_v.get("preview", ""))[:40]
+                if _pv and _pv in _file_texts[_src]:
                     idx["entries"][_k] = _v
         except Exception:
             pass
@@ -120,7 +136,12 @@ def run_governance(dry_run: bool = True, verbose: bool = True) -> dict:
         os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
     for key, ent in idx["entries"].items():
-        kind, num = key.split(":", 1)
+        # 2026-08-14 防御：reg: 等元数据登记键不是 "kind:int" 文件条目，
+        # int() 会 ValueError 导致整个治理崩溃（孤儿清理后本应消失，双保险）
+        _parts = key.split(":")
+        if len(_parts) != 2 or not _parts[1].isdigit():
+            continue
+        kind, num = _parts
         path = USER_FILE if kind == "user" else MEMORY_FILE
         entries = _read_entries(path)
         if int(num) >= len(entries):
