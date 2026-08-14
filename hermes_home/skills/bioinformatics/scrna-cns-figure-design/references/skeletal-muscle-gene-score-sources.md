@@ -61,7 +61,68 @@ KCNMB1` + **NCAM1** + 可加 `GAP43`；剔除与 Atrophy/RegMyon/Sarcomeric 重�
 **效率建议**：Autophagy/FAO/Anabolic 可以从已有 Insulin/OxPhos score 抽子集，
 不必新增基因集；只有 Glycolysis 和 Denervation 修正需要真新增。
 
-## 核心文献下载（PMC 开放获取，已验证可达）
+## 执行补充 8 个基因集（2026-08-13 实测，从建议到落地）
+
+用户要求"帮我下载缺失的基因集？然后按照 pathway_score.xlsx 这里的格式，补充进去"。
+**xlsx 格式确认**（read_file 提取）：sheet `Supplementary Table 3`，列 =
+`Class | Signature | Annoation | Genes`，Genes 列 TAB 分隔；来源列写 PMID 或
+gsea-msigdb/reactome 链接。第 1 行标题、第 2 行空、第 3 行表头、第 4 行起数据。
+**openxlsx read.xlsx(startRow=3) 会把第一行数据误当表头导致行数少 1（14→13），
+写入用 startRow = nrow(existing)+4 仍正确，验证以重读总行数 = 原行数+新增为准。**
+
+### msigdbr 26.1.0 新版 API（旧代码直接报错）
+
+```r
+# 旧: msigdbr(species="Homo sapiens", category="H")  → 弃用
+# 新: msigdbr(species="Homo sapiens", collection="H")
+# 旧: subcategory="CP:KEGG" → 报 Unknown subcollection！
+# 新: 先 msigdbr_collections() 查有效名，本机 2026.1.Hs:
+#   H=50 hallmark | CP:KEGG_LEGACY=186(旧版KEGG通路名, 与用户Insulin一致)
+#   | CP:KEGG_MEDICUS=658(2023新版, 通路名全部重构太碎不适合打分)
+#   | CP:REACTOME=1839 | CP:BIOCARTA=292 | CP:PID=196 | CP:WIKIPATHWAYS=925
+```
+
+**关键决策**：KEGG_LEGACY 没有 KEGG_AMPK_SIGNALING_PATHWAY / KEGG_AUTOPHAGY /
+KEGG_FATTY_ACID_DEGRADATION（返回 0 基因）；KEGG_MEDICUS 有但通路名变成
+`KEGG_MEDICUS_REFERENCE_AUTOPHAGY_VESICLE_...` 这种细分名，不适合 AUCell 打分。
+→ **AMPK/Autophagy 改用文献核心基因集（真实 PMID），FAO 用 HALLMARK_FATTY_ACID_
+METABOLISM 覆盖（更全，含合成+氧化）**。
+
+### 最终落地 8 个基因集（22 = 14 原有 + 8 新增）
+
+| Signature | Class | 来源 | 基因数 |
+|---|---|---|---|
+| Glycolysis score | Metabolism | MSigDB HALLMARK_GLYCOLYSIS | 200 |
+| Fatty acid metabolism score | Metabolism | MSigDB HALLMARK_FATTY_ACID_METABOLISM | 158 |
+| Denervation score | Muscle | 文献修正版（PMID 3892537/19109424/38649488）| 11 |
+| AMPK-PGC1a signaling score | Metabolism | Gundersen 2011 (PMID 21040371) | 16 |
+| Autophagy score | Metabolism | Chen 2022 JCSM (PMID 35434959) | 27 |
+| Adipogenesis score | Diabete | MSigDB HALLMARK_ADIPOGENESIS | 200 |
+| mTORC1 signaling score | Muscle | MSigDB HALLMARK_MTORC1_SIGNALING | 200 |
+| Fibrosis score | Aging | Reactome COLLAGEN_FORMATION (R-HSA-1650814) | 95 |
+
+Denervation 最终 11 基因（辩论共识：删 SCN4A + 去 Atrophy/RegMyon 重叠 + 加
+NCAM1/MYH8/NGFR/GAP43）：`CHRNA1 CHRNG CHRND MYOG RUNX1 SCN5A KCNMB1 NCAM1 MYH8 NGFR GAP43`
+注意：MYOG/RUNX1 与 RegMyon 仍重叠、CHRNA1 在 Atrophy 里也有——完全去重会把
+打分挖空，保留核心 + 在解读时说明共线性即可（辩论 verdict=need_more_info，
+反方警示：小样本 n=7 + 多重打分 → 加完后做共线性检查）。
+
+### openxlsx 追加流程（不破坏原文件）
+
+```r
+library(openxlsx); library(msigdbr); library(data.table)
+wb  <- loadWorkbook("E:/骨骼肌锻炼/pathway_score.xlsx")
+existing <- read.xlsx(wb, sheet="Supplementary Table 3", startRow=3)  # 行数会少1
+new_df <- data.frame(Class=..., Signature=..., Annoation=..., Genes=paste(genes, collapse="\t"))
+writeData(wb, sheet, x=new_df, startRow=nrow(existing)+4, colNames=FALSE)
+saveWorkbook(wb, "E:/骨骼肌锻炼/pathway_score.xlsx", overwrite=TRUE)
+# 验证: loadWorkbook 重读 startRow=3 → 总行数 == 原+8, 打印新增行 Signature + 基因数
+# 备份: 写入前 file.copy 到 pathway_score_backup_<timestamp>.xlsx（用户"不删数据"铁律）
+```
+
+**教训**：① 任何"按格式补充"任务先 read_file 确认确切格式再写代码 ② 修改用户
+文件前先备份 ③ 写入后重读验证（不是只信写入函数返回值）④ 数据库基因集用
+msigdbr 拉（免账号），文献基因集手写 + 真实 PMID，绝不编来源。
 
 自动 PDF 下载常被 Cloudflare/EuropePMC 反爬拦截（download_pdf 失败是外部阻碍，
 不要反复硬试）——给用户 PMC 链接自行下载即可：

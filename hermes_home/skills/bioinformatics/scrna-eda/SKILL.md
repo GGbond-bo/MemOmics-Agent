@@ -137,3 +137,26 @@ except Exception as e:
 4. skill_evolution(action="record_run")
 5. 更新 task_plan.md → 推荐下一步
 ```
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-13 | check_xlsx.R | - | - |  |
+| - | - | - | 2026-08-13 | check_xlsx.R | - | - |  |
+| - | - | - | 2026-08-13 | check_xlsx2.R | - | - |  |
+| - | - | - | 2026-08-13 | fix_xlsx_format.R | - | - |  |
+| - | - | - | 2026-08-13 | check_xlsx3.R | - | - |  |
+
+
+| - | - | - | 2026-08-13 | fix_xlsx_format.R | - | - |  |
+| - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
+| - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| write.xlsx 写回 E:/骨骼肌锻炼/pathway_score.xlsx 时 Permis | 目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下 | 改为输出修复版到独立新文件，用户关闭 Excel 后自行替换 |
+

@@ -155,10 +155,23 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-15 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-13 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | 10_go_term_barplot.py + go_term_selection 分析 | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | 10_go_term_barplot.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-14 | 10_go_term_barplot.py | - | - |  |
+| - | - | - | 2026-08-14 | 10_go_term_barplot.py | - | - |  |
+| - | - | - | 2026-08-14 | pytest_verify_go.log | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| msigdbr() 报错: The `category` argument of `msigdbr( | msigdbr 10.0.0+ 弃用了 category/subcategory | msigdbr 26.1.0 新版 API：category→collection、subcateg |
 | GO+KEGG混排气泡图误导 | KEGG基因集远大于GO CC/MF，统一用GeneCount做气泡大小导致KEGG视觉膨胀 | 按类别分面(facet_wrap)，气泡大小改用Rich Factor/Fold Enrichment；或GO和KEGG分两张图 |
 | 分析前未创建会话目录 | 直接在results/根目录输出文件，散乱无法溯源 | 分析开始前必须先 `update_results_dir` 创建 `results/{species}_{tissue}_{direction}_{date}/`，再建子目录 `figures/scripts/data/results/` |
 
