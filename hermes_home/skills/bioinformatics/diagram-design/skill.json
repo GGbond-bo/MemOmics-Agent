@@ -1,0 +1,23 @@
+{
+  "id": "diagram-design",
+  "name": "编辑级示意图设计",
+  "category": "visualization",
+  "language": "HTML+SVG",
+  "description": "27种编辑级示意图版式(架构/流程/时序/状态机/泳道/甘特/雷达等), 无阴影无Mermaid-slop, 纯文本生成自包含HTML+SVG, 无绘图API",
+  "starting_prompt": "帮我画一张示意图/流程图/技术路线图",
+  "source_dir": "skills/bioinformatics/diagram-design",
+  "memomics_module": "06_示意图",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": ["diagram", "flowchart", "architecture", "schematic", "svg", "示意图", "流程图", "路线图"],
+  "difficulty": "basic",
+  "when_to_use": "示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure)",
+  "prerequisites": {
+    "requires": [],
+    "description": "无前置依赖; 输出 HTML+SVG 文本, PNG 转换用 svglib"
+  },
+  "parameters": {
+    "output_dir": "results/<sid>/diagrams/",
+    "png_conversion": "svglib svg2rlg + reportlab renderPM"
+  }
+}

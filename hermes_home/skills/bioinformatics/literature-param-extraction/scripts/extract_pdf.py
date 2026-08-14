@@ -221,14 +221,87 @@ def _extract_param_hints(full_text: str, max_hints: int = 60) -> list:
     return hints
 
 
+def _local_vision_describe(image_path: str) -> str:
+    """调用 MemOmics 本地读图管道（OCR+结构+ASCII），失败返回空串。
+
+    借鉴 pdf-inspector 的"图表页→视觉"路由思想，但用纯本地管道实现，零新依赖。
+    """
+    try:
+        import os as _os
+        _repo = _os.environ.get("MEMOMICS_REPO_ROOT", "")
+        if not _repo and _os.environ.get("HERMES_HOME"):
+            _repo = _os.path.dirname(_os.environ["HERMES_HOME"])
+        if not _repo:
+            _repo = _os.path.abspath(_os.path.join(
+                _os.path.dirname(_os.path.abspath(__file__)), "..", "..", "..", "..", ".."))
+        import sys as _sys
+        for _p in (_repo, _os.path.join(_repo, "hermes-agent")):
+            if _p not in _sys.path:
+                _sys.path.insert(0, _p)
+        from memomics.bio_tools.vision_tool import _local_describe, _format_describe
+        return _format_describe(_local_describe(image_path))
+    except Exception:
+        return ""
+
+
+def _chart_pages(pdf_path: str, max_pages: int = 8) -> list:
+    """识别图表页（图多字少）→ 渲染 PNG → 本地视觉分析。
+
+    返回 [(page_no, describe_text)]。任何一步失败都静默跳过（图表分析是增强项）。
+    """
+    try:
+        import fitz as _fitz
+    except ImportError:
+        try:
+            import pymupdf as _fitz
+        except ImportError:
+            return []
+    try:
+        doc = _fitz.open(pdf_path)
+    except Exception:
+        return []
+    out = []
+    try:
+        for page_no, page in enumerate(doc, 1):
+            if len(out) >= max_pages:
+                break
+            text_len = len(page.get_text("text").strip())
+            images = page.get_images(full=True)
+            is_chart = bool(images) and (text_len < 250 or len(images) >= 3)
+            if not is_chart:
+                continue
+            try:
+                pix = page.get_pixmap(matrix=_fitz.Matrix(1.6, 1.6))
+                import tempfile
+                import os as _os
+                fd, tmp = tempfile.mkstemp(suffix=".png")
+                _os.close(fd)
+                pix.save(tmp)
+                _desc = _local_vision_describe(tmp)
+                _os.remove(tmp)
+                if _desc:
+                    out.append((page_no, _desc))
+            except Exception:
+                continue
+    finally:
+        doc.close()
+    return out
+
+
 def extract_pdf_structured(pdf_path: str, method: str = "auto") -> dict:
-    """结构化提取: 章节 + 参数对提示（供入库管线使用）。"""
+    """结构化提取: 章节 + 参数对提示 + 图表页本地视觉分析（供入库管线使用）。"""
     text = extract_pdf(pdf_path, method)
-    return {
+    structured = {
         "full_text_length": len(text),
         "sections": _split_sections(text),
         "param_hints": _extract_param_hints(text),
     }
+    # 2026-08-14: 图表页路由（借鉴 pdf-inspector，纯本地视觉管道）
+    if method in ("auto", "pymupdf"):
+        _charts = _chart_pages(pdf_path)
+        if _charts:
+            structured["chart_pages"] = [{"page": p, "analysis": d} for p, d in _charts]
+    return structured
 
 
 def main():

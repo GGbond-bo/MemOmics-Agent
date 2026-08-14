@@ -703,11 +703,13 @@ def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", 
                 "full_text_length": structured.get("full_text_length", 0),
                 "sections": _sections_out,
                 "param_hints": structured.get("param_hints", [])[:60],
+                "chart_pages": structured.get("chart_pages", [])[:8],
                 "species_hint": species,
                 "tissue_hint": tissue,
                 "direction_hint": direction,
-                "message": "PDF 已按章节拆分并抓取参数对提示。请优先用 Methods 章节 + param_hints 做结构化参数提取，"
-                           "每个参数必须注明出处句（context 字段）。",
+                "message": "PDF 已按章节拆分并抓取参数对提示；图表页已做本地视觉分析（chart_pages）。"
+                           "请优先用 Methods 章节 + param_hints 做结构化参数提取，"
+                           "每个参数必须注明出处句（context 字段）；图表页的定量信息以 chart_pages 的 OCR 为准。",
             }, ensure_ascii=False)
 
         # 兜底: 旧版脚本无 --sections → 纯文本

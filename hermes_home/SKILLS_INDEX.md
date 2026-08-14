@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (71 skills)
+## 08_报告 - 报告/可视化 (72 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -268,6 +268,7 @@
 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-rea |  | YEL 讨论触发 |
 | celltype-proportion-comparison | 细胞类型/亚群比例跨组比较箱线图全流程（配对前后 + 独立跨组）。触发词："亚群比例"、"L3 boxplot"、"Proportion (%)"、"6组箱线图"、"FDR标注"、"p值标注"、"画哪 |  | YEL 讨论触发 |
 | platform-execution-pitfalls | MemOmics 平台执行层（execute_r/execute_code/skill_view/rail_review 交互）的实测坑与规避。触发：execute_r 报 could not fin |  | YEL 讨论触发 |
+| diagram-design | Create branded architecture, IT current-state, flowchart, sequence, state machine, ER/data model, ti |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

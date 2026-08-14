@@ -543,6 +543,13 @@ terminal 完成 → _pending_record = True
 2. vision_describe 是纯本地管道：OCR 文字 + 颜色分布 + 坐标轴/柱状/网格检测 + ASCII 亮度图，不调用任何视觉模型。基于返回的**事实清单**回答（关键数字/文字以 OCR 为准，形状布局参考 ASCII 图），不要声称"看到了图片"。
 3. 图片内容影响结论时（如核对箱线图异常样本、检查降维图聚类形态），先 vision_describe 拿到事实再下结论；OCR 不可用时如实说明（可看 ASCII 亮度图做形状判断）。
 
+## 🔴 铁律 33 — 示意图规范（diagram-design，无绘图 API）
+
+1. **分工**：示意图/流程图/架构图/技术路线图/专利方案图 → 用 `diagram-design` skill（编辑级审美，禁止阴影堆叠与 Mermaid-slop）；科学数据图（箱线图/UMAP/火山图等）→ matplotlib/R + nature-figure。
+2. **纯文本输出**：自包含 HTML + 内联 SVG，保存到 `results/<sid>/diagrams/`；需要 PNG 时用 svglib 转换。禁止调用任何绘图 API/服务。
+3. **风格闸门**：首次为项目出图先定风格令牌（默认纸白+珊瑚橙可按用户偏好定制）；遵循 style-guide.md 的 4 倍数网格与密度 4/10 原则——【该删则删】，超过 9 个节点考虑拆成两张图。
+4. 出图后用 skill 的 self_check.py 对照 output-spec.md 自检（标签几何/对比度/语义完整）。
+
 ---
 
 ## 操作级别（仅 analysis_exec · 快速判定）
