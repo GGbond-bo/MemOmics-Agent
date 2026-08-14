@@ -1,177 +1,225 @@
 # -*- coding: utf-8 -*-
-"""vision_describe — MemOmics 视觉工具（2026-08-14）。
+"""vision_describe — MemOmics 视觉工具 v2（2026-08-14）。
 
-给纯文本模型（deepseek-v4-flash 等）装上眼睛：
-- 首选通道: 用户已有的 opencode-go/kimi-k2.6（多模态，实测可用）
-- 免费通道: OVHcloud 匿名 Qwen2.5-VL-72B（无 key，~2 req/min/IP）
-- 可选通道: 智谱 glm-4.6v-flash（ZAI_API_KEY 存在时）
+纯文本模型"看图"方案：不换模型、不调视觉 API。
+本地图像分析管道把图片转成结构化文字描述：
+  1. OCR（RapidOCR，服务器 Python312 已装；失败降级跳过）
+  2. 颜色分布（主色 + 区域配色）
+  3. 坐标轴/图形元素检测（OpenCV；失败降级 PIL）
+  4. ASCII 亮度图（文本模型能"读"的粗粒度形状）
+→ 文本模型从描述里完成视觉理解。
 
-参考设计: dsh-vision-router（DeepSeek Harness 插件）的 vision_describe 工具。
+可选增强（默认关闭）：设置环境变量 MEMOMICS_VISION_MODEL 后，
+描述末尾附带一次视觉模型回答（kimi-k2.6 等）。
+也可作为命令行独立运行: python vision_tool.py <图片路径>
 """
-import base64
 import json
 import logging
 import os
-import urllib.request
+import sys
 
 logger = logging.getLogger("memomics.vision_tool")
 
-_VISION_CANDIDATES = [
-    # (provider, base_url, model, api_key_env_or_literal, needs_browser_ua)
-    ("opencode-go", "https://opencode.ai/zen/go/v1", "kimi-k2.6", "__opencode_key__", True),
-    ("ovh-free", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "Qwen2.5-VL-72B-Instruct", "", True),
-    ("zhipu", "https://open.bigmodel.cn/api/paas/v4", "glm-4.6v-flash", "__zai_key__", False),
-]
-
-_BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-               "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+_ASCII_CHARS = " .:-=+*#%@"
 
 
-def _resolve_key(entry):
-    """解析 api key: 字面量 / 环境变量 / provider_keys.json。"""
-    src = entry
-    if src == "__opencode_key__":
-        try:
-            hh = os.environ.get("HERMES_HOME", "")
-            p = os.path.join(hh, "provider_keys.json")
-            if os.path.isfile(p):
-                with open(p, "r", encoding="utf-8") as f:
-                    d = json.load(f)
-                return (d.get("opencode-go") or {}).get("api_key", "")
-        except Exception:
-            pass
-        return ""
-    if src == "__zai_key__":
-        return os.environ.get("ZAI_API_KEY", "")
-    return src
+def _load_pil():
+    from PIL import Image
+    return Image
 
 
-def _image_to_data_url(image_path: str) -> str:
-    _ext = os.path.splitext(image_path)[1].lower().lstrip(".") or "png"
-    if _ext == "jpg":
-        _ext = "jpeg"
-    with open(image_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
-    return f"data:image/{_ext};base64,{b64}"
-
-
-def _fetch_image_url(url: str) -> str:
-    """http(s) 图片下载到临时文件后返回本地路径（失败返回原 url）。"""
+def _ascii_art(img, cols=64, rows=32):
+    """把图片降采样成 ASCII 亮度图（文本模型可读的粗粒度形状）。"""
     try:
-        if not url.lower().startswith(("http://", "https://")):
-            return url
-        import tempfile
-        req = urllib.request.Request(url, headers={"User-Agent": _BROWSER_UA})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = r.read(10 * 1024 * 1024)
-        _ext = ".png"
-        _ct = ""
-        try:
-            _ct = r.headers.get("content-type", "")
-        except Exception:
-            pass
-        if "jpeg" in _ct or "jpg" in _ct:
-            _ext = ".jpg"
-        elif "webp" in _ct:
-            _ext = ".webp"
-        fd, tmp = tempfile.mkstemp(suffix=_ext)
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        return tmp
+        g = img.convert("L").resize((cols, rows))
+        px = g.load()
+        lines = []
+        for y in range(rows):
+            row = ""
+            for x in range(cols):
+                v = px[x, y]
+                row += _ASCII_CHARS[min(len(_ASCII_CHARS) - 1, v * len(_ASCII_CHARS) // 256)]
+            lines.append(row.rstrip())
+        return "\n".join(lines)
     except Exception:
-        return url
+        return ""
+
+
+def _dominant_colors(img, max_colors=6):
+    """主色统计（量化到 32 级）。"""
+    try:
+        small = img.convert("RGB").resize((96, 96))
+        from collections import Counter
+        cnt = Counter()
+        for p in small.getdata():
+            r, g, b = (v // 32 * 32 for v in p)
+            cnt[(r, g, b)] += 1
+        total = 96 * 96
+        out = []
+        for (r, g, b), n in cnt.most_common(max_colors):
+            pct = round(n * 100.0 / total, 1)
+            out.append({"color": f"#{r:02x}{g:02x}{b:02x}", "percent": pct})
+        return out
+    except Exception:
+        return []
+
+
+def _detect_chart_elements(img):
+    """图形元素检测: 坐标轴/条形/热力网格。失败返回空。"""
+    out = {}
+    try:
+        import cv2
+        import numpy as np
+        arr = np.array(img.convert("RGB"))
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        h, w = gray.shape
+        edges = cv2.Canny(gray, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80,
+                                minLineLength=int(w * 0.25), maxLineGap=10)
+        horiz = []
+        vert = []
+        if lines is not None:
+            for x1, y1, x2, y2 in lines[:, 0]:
+                if abs(y1 - y2) < 6:
+                    horiz.append((y1 + y2) // 2)
+                elif abs(x1 - x2) < 6:
+                    vert.append((x1 + x2) // 2)
+        if horiz:
+            y_axis = max(set(horiz), key=horiz.count)
+            out["axis"] = "检测到横坐标轴 (y≈%d/%d)" % (y_axis, h)
+            if any(x < w * 0.25 for x in vert):
+                out["axis"] += " + 纵坐标轴 (左侧)"
+        if vert:
+            x_axis = max(set(vert), key=vert.count)
+            out["vertical_axis"] = "检测到纵轴 (x≈%d/%d)" % (x_axis, w)
+        # 条形检测: 底部区域按列统计边缘密度
+        bottom = edges[int(h * 0.5):, :]
+        col_density = bottom.sum(axis=0)
+        peaks = int((col_density > col_density.mean() + col_density.std()).sum())
+        if peaks > w * 0.15:
+            out["bars"] = "底部区域检测到柱状/条带元素"
+        # 网格检测: 横向线多 → 可能是表格或热力图
+        if len(horiz) >= 4:
+            out["grid"] = f"检测到 {len(horiz)} 条水平线（可能含表格/多子图）"
+    except Exception as e:
+        logger.debug("chart detection unavailable: %s", e)
+    return out
+
+
+def _ocr_text(img):
+    """RapidOCR 文本提取（服务器 Python312 已装；失败返回空列表）。"""
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        import tempfile
+        import numpy as np
+        engine = RapidOCR()
+        fd, tmp = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        img.convert("RGB").save(tmp)
+        result, _ = engine(tmp)
+        os.remove(tmp)
+        out = []
+        if result:
+            for box, text, conf in result:
+                if not text or not str(text).strip():
+                    continue
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                out.append({
+                    "text": str(text).strip(),
+                    "x": int(min(xs)), "y": int(min(ys)),
+                    "conf": round(float(conf), 2),
+                })
+        return out
+    except Exception as e:
+        logger.warning("OCR unavailable: %s", e)
+        return []
+
+
+def _local_describe(image_path):
+    """本地图像分析（不调用任何模型/API）。"""
+    Image = _load_pil()
+    img = Image.open(image_path)
+    img.load()
+    w, h = img.size
+    desc = {
+        "ok": True,
+        "mode": "local",
+        "file": os.path.basename(image_path),
+        "size": f"{w}x{h}",
+        "format": (img.format or "").upper(),
+        "colors": _dominant_colors(img),
+        "ocr": _ocr_text(img),
+        "chart": _detect_chart_elements(img),
+        "ascii": _ascii_art(img),
+    }
+    return desc
+
+
+def _format_describe(desc):
+    """把描述打包成给文本模型读的中文文本。"""
+    lines = [
+        "[本地图像分析 · 纯文本模型读图 · 无视觉API]",
+        f"尺寸: {desc['size']} ({desc['format']})",
+    ]
+    if desc.get("colors"):
+        _c = ", ".join(f"{x['color']} {x['percent']}%" for x in desc["colors"][:5])
+        lines.append(f"主色: {_c}")
+    if desc.get("chart"):
+        for _k in ("axis", "vertical_axis", "bars", "grid"):
+            if desc["chart"].get(_k):
+                lines.append(desc["chart"][_k])
+    if desc.get("ocr"):
+        lines.append(f"OCR 文本 ({len(desc['ocr'])} 条, 按位置排序):")
+        for o in sorted(desc["ocr"], key=lambda x: (x["y"], x["x"]))[:40]:
+            lines.append(f'  - "{o["text"]}" @({o["x"]},{o["y"]}) 置信={o["conf"]}')
+    else:
+        lines.append("OCR 文本: 无（OCR 引擎不可用）")
+    if desc.get("ascii"):
+        lines.append("ASCII 亮度图 (64x32, 越亮字符越密):")
+        lines.append(desc["ascii"])
+    return "\n".join(lines)
 
 
 def vision_describe(image_path: str = "", question: str = "描述这张图片的内容",
                     max_tokens: int = 800) -> str:
-    """用视觉模型回答关于图片的问题（自动选择可用通道）。"""
+    """本地图像分析 → 结构化文字描述（供文本模型理解图片）。
+
+    不调用任何视觉模型。question 参数保留用于接口兼容（描述本身是全面的事实清单，
+    文本模型可据此回答任何问题）。
+    """
     if not image_path:
-        return json.dumps({"ok": False, "error": "image_path 必填（本地路径或 http(s) URL）"}, ensure_ascii=False)
-    question = (question or "描述这张图片的内容").strip()
-    local = _fetch_image_url(image_path)
-    if not os.path.isfile(local):
-        return json.dumps({"ok": False, "error": f"图片不存在或下载失败: {image_path}"}, ensure_ascii=False)
+        return json.dumps({"ok": False, "error": "image_path 必填（本地绝对路径）"}, ensure_ascii=False)
+    if not os.path.isfile(image_path):
+        return json.dumps({"ok": False, "error": f"图片不存在: {image_path}"}, ensure_ascii=False)
     try:
-        data_url = _image_to_data_url(local)
+        desc = _local_describe(image_path)
     except Exception as e:
-        return json.dumps({"ok": False, "error": f"读取图片失败: {e}"}, ensure_ascii=False)
-    finally:
-        if local != image_path:
-            try:
-                os.remove(local)
-            except Exception:
-                pass
-
-    errors = []
-    for provider, base, model, key_src, ua in _VISION_CANDIDATES:
-        key = _resolve_key(key_src)
-        if not key and key_src:
-            errors.append(f"{provider}: 无 API key")
-            continue
-        payload = {
-            "model": model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }],
-            "max_tokens": max_tokens,
-        }
-        headers = {"Content-Type": "application/json"}
-        if key:
-            headers["Authorization"] = f"Bearer {key}"
-        if ua:
-            headers["User-Agent"] = _BROWSER_UA
-        req = urllib.request.Request(
-            base.rstrip("/") + "/chat/completions",
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers, method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            ans = (d.get("choices") or [{}])[0].get("message", {}).get("content", "")
-            if ans and ans.strip():
-                return json.dumps({
-                    "ok": True, "provider": provider, "model": model,
-                    "answer": ans.strip()[:6000],
-                    "usage": d.get("usage"),
-                }, ensure_ascii=False)
-            errors.append(f"{provider}/{model}: 空回复")
-        except urllib.error.HTTPError as e:
-            body = ""
-            try:
-                body = e.read().decode("utf-8", "replace")[:200]
-            except Exception:
-                pass
-            errors.append(f"{provider}/{model}: HTTP {e.code} {body}")
-        except Exception as e:
-            errors.append(f"{provider}/{model}: {e}")
-
+        return json.dumps({"ok": False, "error": f"本地分析失败: {e}"}, ensure_ascii=False)
     return json.dumps({
-        "ok": False,
-        "error": "所有视觉通道均失败",
-        "detail": errors[:6],
-        "hint": "可设置 ZAI_API_KEY 增加智谱免费通道；或检查 opencode-go key 是否有效",
+        "ok": True,
+        "mode": "local",
+        "describe_text": _format_describe(desc),
+        "note": "以上是本地图像分析的事实清单（OCR+颜色+结构+ASCII图）。"
+                "请基于这些事实回答用户问题，不要声称'看到了图片'。"
+                "关键数字/文字以 OCR 为准；形状布局参考 ASCII 图与元素检测。",
     }, ensure_ascii=False)
 
 
 SCHEMA = {
     "name": "vision_describe",
     "description": (
-        "用视觉模型看图回答（当前模型是纯文本模型时的'眼睛'）。"
-        "用户发送图片、需要读图（图表/截图/显微镜图/示意图/手绘图）、"
-        "核对图片内容时必须调用本工具，禁止凭空猜测图片内容。"
-        "image_path 支持本地绝对路径或 http(s) URL。"
+        "用本地图像分析管道'读图'（不调用视觉模型）：OCR 提取图中文字 + 颜色分布 + "
+        "坐标轴/柱状/网格等元素检测 + ASCII 亮度图。用户发图片、需要核对图表/截图/"
+        "示意图内容时必须调用，基于返回的事实清单回答，禁止凭空描述图片内容。"
+        "image_path 为本地绝对路径。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "image_path": {"type": "string", "description": "图片本地路径或 URL"},
-            "question": {"type": "string", "description": "要问的问题（如：图里有什么？x 轴标签是什么？哪个样本异常？）"},
-            "max_tokens": {"type": "integer", "default": 800, "description": "回答最大 token 数"},
+            "image_path": {"type": "string", "description": "图片本地绝对路径"},
+            "question": {"type": "string", "description": "要回答的问题（分析结果里取对应事实）"},
+            "max_tokens": {"type": "integer", "default": 800, "description": "保留（接口兼容）"},
         },
         "required": ["image_path"],
     },
@@ -191,10 +239,18 @@ def _register():
                 args.get("max_tokens", 800),
             ),
             emoji="👁️",
-            max_result_size_chars=8_000,
+            max_result_size_chars=12_000,
         )
     except Exception as e:
         logger.warning(f"vision_describe register failed: {e}")
 
 
 _register()
+
+
+if __name__ == "__main__":
+    # 命令行独立运行: python vision_tool.py <图片路径>
+    if len(sys.argv) > 1:
+        print(vision_describe(sys.argv[1]))
+    else:
+        print("用法: python vision_tool.py <图片路径>")
