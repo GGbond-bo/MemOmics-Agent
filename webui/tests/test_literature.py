@@ -161,6 +161,87 @@ class TestBlockTranslation:
         res = LL._parse_numbered_output(out, 3)
         assert res[0] == "" and res[1] == "只有第二段" and res[2] == ""
 
+    def test_normalize_zh_collapses_blank_lines(self):
+        """块内空行折叠 + 空块回填原文 → zh 段数与原文严格一致（对照对齐关键）。"""
+        blocks = ["one", "two", "three"]
+        res = ["译一\n\n多行\n\n尾巴", "###2###\n译二", ""]
+        zh = LL._normalize_zh(res, blocks)
+        assert zh == ["译一\n多行\n尾巴", "译二", "three"]
+        assert LL._md_blocks("\n\n".join(zh)) == ["译一\n多行\n尾巴", "译二", "three"]
+
+
+# ---------------------------------------------------------------- 物种标准化与知识域（批O3）
+class TestSpeciesCanonical:
+    def test_human_variants(self):
+        from memomics.bio_tools.save_knowledge import canonical_species
+        assert canonical_species("human") == "Homo_sapiens"
+        assert canonical_species("Homo sapiens") == "Homo_sapiens"
+        assert canonical_species("人") == "Homo_sapiens"
+
+    def test_mouse_variants(self):
+        from memomics.bio_tools.save_knowledge import canonical_species
+        assert canonical_species("mouse") == "Mus_musculus"
+        assert canonical_species("小鼠") == "Mus_musculus"
+        assert canonical_species("mice") == "Mus_musculus"
+
+    def test_monkey_common_name(self):
+        from memomics.bio_tools.save_knowledge import canonical_species
+        assert canonical_species("macaque") == "monkey"
+        assert canonical_species("猕猴") == "monkey"
+
+    def test_unknown_fallback(self):
+        from memomics.bio_tools.save_knowledge import canonical_species
+        assert canonical_species("unknown") == "other"
+        assert canonical_species("") == "other"
+
+    def test_multivalue_first(self):
+        from memomics.bio_tools.save_knowledge import canonical_species
+        assert canonical_species("human;mouse") == "Homo_sapiens"
+
+
+class TestKnowledgeDomains:
+    def test_common_domain_path(self, tmp_path, monkeypatch):
+        from memomics.bio_tools.save_knowledge import save_knowledge
+        monkeypatch.setenv("MEMOMICS_KB_DIR", str(tmp_path))
+        r = json.loads(save_knowledge(
+            name="test_method", content="方法内容", source="literature",
+            evidence="DOI x", verified="partially_verified",
+            domain="common", direction="general",
+            kb_category="03_测序方法", assay_type="RNA"))
+        assert r["status"] == "success"
+        assert os.path.normpath(r["path"]).replace("\\", "/").endswith(
+            "common/general/03_测序方法/RNA/test_method.yaml")
+
+    def test_chemistry_domain_path(self, tmp_path, monkeypatch):
+        from memomics.bio_tools.save_knowledge import save_knowledge
+        monkeypatch.setenv("MEMOMICS_KB_DIR", str(tmp_path))
+        r = json.loads(save_knowledge(
+            name="chem_resveratrol", content="- IC50: 5 uM", source="literature",
+            evidence="DOI y", verified="partially_verified",
+            domain="chemistry", direction="compounds"))
+        assert r["status"] == "success"
+        assert os.path.normpath(r["path"]).replace("\\", "/").endswith(
+            "chemistry/compounds/chem_resveratrol.yaml")
+
+    def test_chemistry_bad_category_rejected(self, tmp_path, monkeypatch):
+        from memomics.bio_tools.save_knowledge import save_knowledge
+        monkeypatch.setenv("MEMOMICS_KB_DIR", str(tmp_path))
+        r = json.loads(save_knowledge(name="x", content="c", domain="chemistry",
+                                      direction="../../evil"))
+        assert r["status"] == "error"
+
+    def test_five_level_canonicalizes_species(self, tmp_path, monkeypatch):
+        from memomics.bio_tools.save_knowledge import save_knowledge
+        monkeypatch.setenv("MEMOMICS_KB_DIR", str(tmp_path))
+        r = json.loads(save_knowledge(
+            name="test_bio", content="结论", source="literature", evidence="DOI z",
+            verified="partially_verified", species="human",
+            tissue="skeletal_muscle", direction="aging",
+            kb_category="01_生物学知识", assay_type="RNA"))
+        assert r["status"] == "success"
+        assert "/Homo_sapiens/skeletal_muscle/aging/" in r["path"].replace("\\", "/")
+        assert "/human/" not in r["path"]
+
 
 # ---------------------------------------------------------------- get_summary 修复
 class TestGetSummaryFix:

@@ -782,7 +782,7 @@ def _md_blocks(md: str) -> list:
     return blocks
 
 
-def _batch_blocks(blocks: list, max_chars: int = 9000, max_blocks: int = 6) -> list:
+def _batch_blocks(blocks: list, max_chars: int = 6000, max_blocks: int = 4) -> list:
     """段落分组（每批 ≤max_chars 字符 且 ≤max_blocks 段，块内保持完整段落）。"""
     batches, cur, cur_n, cur_b = [], [], 0, 0
     for b in blocks:
@@ -827,22 +827,52 @@ _TRANS_PROMPT_HEAD = (
 
 
 def _translate_block_batch(blocks: list) -> list:
-    """按 ###N### 编号批量直译一组段落，返回与输入等长的译文列表。"""
+    """按 ###N### 编号批量直译一组段落，返回与输入等长的译文列表。
+
+    三层兜底：① 首次整批编号直译 ② 全空→整体重试 ③ 部分缺失→只对缺失段
+    重新发一次小批（编号沿用原编号）。仍缺失的段由调用方单段兜底。
+    """
     prompt = _TRANS_PROMPT_HEAD
     for i, b in enumerate(blocks):
         prompt += f"[{i + 1}]\n{b}\n\n"
     out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=12000,
                        retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n")
     res = _parse_numbered_output(out, len(blocks))
+    missing = [i for i, t in enumerate(res) if not t]
     if not any(res):
-        # 编号解析全空 → 重试一次（更强的直接输出指令）
+        # 全空（可能整段输出格式不符/推理占满）→ 整体重试
         out2 = _llm_content(
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文，"
             "每段必须以 ###数字### 单独一行开头】\n" + prompt,
             "lit_trans_blocks_retry", temperature=0.1, max_tokens=12000,
             retry_prefix="【直接输出译文，不要思考】\n")
         res = _parse_numbered_output(out2, len(blocks))
+        missing = [i for i, t in enumerate(res) if not t]
+    if missing and any(res):
+        # 部分缺失（多为输出截断）→ 缺失段单独再发一小批
+        sub_prompt = _TRANS_PROMPT_HEAD
+        for i in missing:
+            sub_prompt += f"[{i + 1}]\n{blocks[i]}\n\n"
+        out3 = _llm_content(
+            "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文】\n" + sub_prompt,
+            "lit_trans_blocks_sub", temperature=0.1, max_tokens=12000,
+            retry_prefix="【直接输出译文，不要思考】\n")
+        part3 = _parse_numbered_output(out3, len(blocks))
+        for i in missing:
+            if part3[i]:
+                res[i] = part3[i]
     return res
+
+
+def _normalize_zh(results: list, blocks: list) -> list:
+    """译文块归一化：折叠块内空行/残余编号；空块回填原文。保证 zh 段数 == 原文段数。"""
+    zh_parts = []
+    for i, t in enumerate(results):
+        t = (t or "").strip()
+        t = re.sub(r"\n\s*\n+", "\n", t)
+        t = re.sub(r"^#{1,6}\s*\d{1,3}\s*#{1,6}\s*", "", t, count=1)
+        zh_parts.append(t or (blocks[i] if i < len(blocks) else ""))
+    return zh_parts
 
 
 def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -887,18 +917,44 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     blocks = _md_blocks(md)
     if not blocks:
         return json.dumps({"ok": False, "error": "Markdown 切段失败"}, ensure_ascii=False)
-    batches = _batch_blocks(blocks)
+    # 批O3：断点续译——服务重启中断后，从 .part.json 恢复已译段落，只补未译批次
+    part_json = zh_path + ".part.json"
     results = [""] * len(blocks)
-    # 批O2：3 路并发翻译批次（每批编号直译互不依赖；结果按批次偏移回填保证顺序）
+    if force and os.path.isfile(part_json):
+        try:
+            with open(part_json, encoding="utf-8") as f:
+                saved = json.load(f)
+            if isinstance(saved, list) and len(saved) == len(blocks):
+                results = saved
+                _cb("convert", 0, 1, f"断点续译：已恢复 {sum(1 for t in saved if t)}/{len(blocks)} 段")
+        except Exception as e:
+            logger.warning(f"translation part load failed: {e}")
+
+    def _flush_part():
+        try:
+            with open(part_json, "w", encoding="utf-8") as f:
+                json.dump(results, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"translation part flush failed: {e}")
+
+    batches = _batch_blocks(blocks)
+    # 批O2：2 路并发翻译批次（每批编号直译互不依赖；结果按批次偏移回填保证顺序）
     indexed = []
     _off = 0
     for batch in batches:
         indexed.append((_off, batch))
         _off += len(batch)
-    _cb("translate", 0, len(indexed), f"段落级编号直译 {len(indexed)} 批（并发3）")
+    # 只翻译还有缺失段的批次（断点续译跳过已完成批次）
+    pending = []
+    for off, batch in indexed:
+        if all(results[off + k] for k in range(len(batch))):
+            continue
+        pending.append((off, batch))
+    if pending:
+        _cb("translate", 0, len(pending), f"段落级编号直译 {len(pending)}/{len(indexed)} 批（并发2）")
     try:
         from concurrent.futures import ThreadPoolExecutor
-        _mw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "3"))))
+        _mw = max(1, min(2, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "2"))))
 
         def _one(off_batch):
             off, batch = off_batch
@@ -906,36 +962,48 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
 
         _n_done = 0
         with ThreadPoolExecutor(max_workers=_mw) as _ex:
-            for off, part in _ex.map(_one, indexed):
+            for off, part in _ex.map(_one, pending):
                 for k, t in enumerate(part):
                     if t:
                         results[off + k] = t
                 _n_done += 1
-                _cb("translate", _n_done, len(indexed), f"段落级翻译 {_n_done}/{len(indexed)} 批")
+                _flush_part()  # 每完成一批落盘一次（服务重启可续）
+                _cb("translate", _n_done, len(pending), f"段落级翻译 {_n_done}/{len(pending)} 批")
     except Exception as e:
         logger.warning(f"parallel translate failed, fallback serial: {e}")
-        _flat = 0
-        for bi, batch in enumerate(batches):
-            _cb("translate", bi, len(batches), f"段落级翻译第 {bi + 1}/{len(batches)} 批（{len(batch)} 段）")
+        _n_done = 0
+        for off, batch in pending:
             part = _translate_block_batch(batch)
             for k, t in enumerate(part):
                 if t:
-                    results[_flat + k] = t
-            _flat += len(batch)
+                    results[off + k] = t
+            _n_done += 1
+            _flush_part()
+            _cb("translate", _n_done, len(pending), f"段落级翻译第 {_n_done}/{len(pending)} 批（{len(batch)} 段）")
     # 缺段单段兜底直译（保证 1:1 完整）
     for i, b in enumerate(blocks):
         if not results[i]:
             _cb("translate", i, len(blocks), f"补译第 {i + 1}/{len(blocks)} 段")
             results[i] = _llm_content(
-                "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），只输出译文：\n" + b,
+                "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），"
+                "输出为**单个段落，不要空行**，只输出译文：\n" + b,
                 f"lit_trans_fix_{i}", temperature=0.2, max_tokens=6000,
                 retry_prefix="【不要思考，立即输出译文】\n").strip()
-    zh = "\n\n".join(results)
+            _flush_part()
+    # 批O2c：块归一化——折叠块内空行/残余编号；仍为空的段落回填原文
+    # （保证译文段落数与原文严格一致，中英对照逐段对齐不漂移）
+    zh_parts = _normalize_zh(results, blocks)
+    zh = "\n\n".join(zh_parts)
     if not zh.strip():
         return json.dumps({"ok": False, "error": "翻译失败：LLM 未返回译文"}, ensure_ascii=False)
     _cb("write", len(blocks), len(blocks), "写入 translations/<名>.zh.md")
     with open(zh_path, "w", encoding="utf-8") as f:
         f.write(zh)
+    try:
+        if os.path.isfile(part_json):
+            os.remove(part_json)
+    except Exception:
+        pass
     # 索引标记 translated + 段落数（对照对齐依据）
     try:
         _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
@@ -1342,28 +1410,53 @@ def _safe_kb_name(stem: str, prefix: str) -> str:
 
 
 def _kb_write_fallbacks(tags: dict, k: dict) -> tuple:
-    """物种/组织/方向缺失时的兜底（五级目录必填，缺失用 other 占位）。"""
-    sp = ((tags.get("species") or [""])[0] or "other").lower().replace(" ", "_")
+    """物种列表标准化 + 组织/方向兜底（五级目录必填，缺失用 other 占位）。
+
+    批O3: 物种走 save_knowledge.canonical_species（human→Homo_sapiens 等），
+    返回去重后的标准物种列表（跨物种文章 → 多物种）。
+    """
+    from memomics.bio_tools.save_knowledge import canonical_species
+    species = []
+    for s in (tags.get("species") or []) or ["other"]:
+        c = canonical_species(s)
+        if c and c not in species:
+            species.append(c)
+    if not species:
+        species = ["other"]
     ti = ((tags.get("tissue") or [""])[0] or "other").lower().replace(" ", "_")
     dr = ((tags.get("direction") or [""])[0] or "other").lower().replace(" ", "_")
-    if sp == "unknown":
-        sp = "other"
-    for seg in (sp, ti, dr):
+    for seg in (ti, dr):
         if not re.fullmatch(r"[\w\u4e00-\u9fff_-]{1,64}", seg):
-            return "other", "other", "other"
-    return sp, ti, dr
+            ti, dr = "other", "other"
+            break
+    return species, ti, dr
 
 
 def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> tuple:
-    """把结构化知识写进 knowledge_base 五级目录（biology→01，qc→02，bioinfo→03）。"""
+    """把结构化知识写进 knowledge_base（批O3 2026-08-16 跨物种/化学域版）：
+
+    - 生物学知识（结论/marker/细胞类型/通路/类器官）→ 每个物种各写一份 01_生物学知识
+      （跨物种文章按物种拆分；基因名大小写由提取 prompt 保证，人全大写/鼠首字母大写）
+    - 生信知识（测序/流程/软件/参数/参考基因组/数据库）→ 物种无关，只写一份
+      common/general/03_测序方法/<assay>/
+    - 质控阈值 → common/general/02_质控参数/<assay>/
+    - 化合物 → 每化合物一条 chemistry/compounds/（化学类文章可检索复用）
+    """
     from memomics.bio_tools.save_knowledge import save_knowledge
     written, rejected = [], []
-    sp, ti, dr = _kb_write_fallbacks(tags, k)
+    species_list, ti, dr = _kb_write_fallbacks(tags, k)
     stem = os.path.splitext(hit.get("file") or "")[0]
     bio = k.get("biology") or {}
     bi = k.get("bioinfo") or {}
+    assay = str(tags.get("assay") or "RNA").upper()
 
-    # 1) 生物学知识条目（结论/marker/细胞类型/通路/类器官/化合物）
+    def _record(r, extra_note: str = ""):
+        rec = {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)}
+        if extra_note:
+            rec["note"] = extra_note
+        (written if r.get("status") == "success" else rejected).append(rec)
+
+    # 1) 生物学知识条目 —— 每个物种一份（跨物种拆分）
     bio_parts = []
     for label, key in (("结论", "conclusions"), ("细胞类型", "cell_types"), ("通路", "pathways")):
         vals = bio.get(key) or []
@@ -1387,18 +1480,19 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
                  for c in chems if isinstance(c, dict)]
         bio_parts.append("## 化合物/化学信息\n" + "\n".join(lines))
     if bio_parts:
-        r = json.loads(save_knowledge(
-            name=_safe_kb_name(stem, "paper_bio"),
-            content="\n\n".join(bio_parts),
-            source="literature", evidence=evidence,
-            verified="partially_verified",
-            species=sp, tissue=ti, direction=dr,
-            kb_category="01_生物学知识",
-            assay_type=str(tags.get("assay") or "RNA").upper()))
-        (written if r.get("status") == "success" else rejected).append(
-            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+        content = "\n\n".join(bio_parts)
+        multi = len(species_list) > 1
+        for sp in species_list:
+            r = json.loads(save_knowledge(
+                name=_safe_kb_name(stem, "paper_bio") + (f"_{sp.lower()}" if multi else ""),
+                content=content,
+                source="literature", evidence=evidence,
+                verified="partially_verified",
+                species=sp, tissue=ti, direction=dr,
+                kb_category="01_生物学知识", assay_type=assay))
+            _record(r, f"species={sp}")
 
-    # 2) 生信知识条目（测序方法/流程/软件/参数/参考基因组/数据库）
+    # 2) 生信知识条目 —— 物种无关，common 域一份
     bi_parts = []
     seqs = bi.get("sequencing") or []
     if seqs:
@@ -1430,13 +1524,11 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             content="\n\n".join(bi_parts),
             source="literature", evidence=evidence,
             verified="partially_verified",
-            species=sp, tissue=ti, direction=dr,
-            kb_category="03_测序方法",
-            assay_type=str(tags.get("assay") or "RNA").upper()))
-        (written if r.get("status") == "success" else rejected).append(
-            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+            domain="common", direction="general",
+            kb_category="03_测序方法", assay_type=assay))
+        _record(r, "domain=common")
 
-    # 3) 质控参数条目（02_质控参数）
+    # 3) 质控参数条目 —— 物种无关，common 域
     qc = bi.get("qc_params") or []
     if qc:
         content = "\n".join(f"- {q.get('param')} = {q.get('value')}（{q.get('context') or ''}）"
@@ -1445,11 +1537,25 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             name=_safe_kb_name(stem, "paper_qc"),
             content=content, source="literature", evidence=evidence,
             verified="partially_verified",
-            species=sp, tissue=ti, direction=dr,
-            kb_category="02_质控参数",
-            assay_type=str(tags.get("assay") or "RNA").upper()))
-        (written if r.get("status") == "success" else rejected).append(
-            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+            domain="common", direction="general",
+            kb_category="02_质控参数", assay_type=assay))
+        _record(r, "domain=common")
+
+    # 4) 化合物条目 —— chemistry/compounds/ 每化合物一条（化学类文章）
+    for c in chems:
+        if not isinstance(c, dict) or not c.get("compound"):
+            continue
+        slug = re.sub(r"[^A-Za-z0-9_.\-]", "_", str(c["compound"]))[:40].strip("_") or "compound"
+        c_content = "\n".join(
+            f"- {label}: {c.get(key) or '—'}"
+            for label, key in (("靶点", "target"), ("剂量", "dose"), ("IC50/EC50", "ic50"),
+                               ("模型", "model"), ("效应", "effect")))
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "chem") + f"_{slug}",
+            content=c_content, source="literature", evidence=evidence,
+            verified="partially_verified",
+            domain="chemistry", direction="compounds"))
+        _record(r, "domain=chemistry")
     return written, rejected
 
 

@@ -4541,8 +4541,12 @@ async function litPollTranslate(jobId) {
     }
     clearInterval(_litTransTimer);
     _litTransTimer = null;
-    if (st.status === 'error') {
-      body.innerHTML = '<span style="color:var(--danger);">❌ 翻译失败: ' + escapeHtml(st.error || '') + '</span>';
+    if (st.status === 'error' || st.status === 'unknown') {
+      var msg = st.status === 'unknown'
+        ? '任务中断（服务重启，进度已自动保存）。点下方按钮重新翻译——支持断点续译，已完成的段落不会重翻。'
+        : ('翻译失败: ' + (st.error || ''));
+      body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(msg) + '</span>' +
+        (_litTransRef ? '<div style="margin-top:8px;"><button onclick="litForceTranslate(\'' + litJsStr(_litTransRef) + '\')" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 断点续译</button></div>' : '');
       return;
     }
     var res = st.result || {};
