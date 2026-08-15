@@ -10047,4 +10047,16 @@ if __name__ == "__main__":
                 print(f"[FATAL] Server crashed {_crash_count} times, giving up: {e}")
                 break
             print(f"[WARN] Server crashed (#{_crash_count}), restarting in 3s: {e}")
+            # 批O3c(2026-08-16)：崩溃原因留痕——uvicorn 异常时写完整 traceback 到
+            # log/server_crash.log（此前重启原因只打印在控制台，窗口一关就无从追查）
+            try:
+                import traceback as _tb
+                _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "log")
+                os.makedirs(_log_dir, exist_ok=True)
+                with open(os.path.join(_log_dir, "server_crash.log"), "a", encoding="utf-8") as _f:
+                    _f.write("\n===== %s  crash #%d =====\n" % (
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"), _crash_count))
+                    _tb.print_exc(file=_f)
+            except Exception:
+                pass
             _time.sleep(3)
