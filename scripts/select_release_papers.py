@@ -16,18 +16,13 @@ import os
 import shutil
 import sys
 
-# 精选 10 篇（按体验价值排序；文件名与 .pdf_index.json 的 file 字段一致）
+# 精选 5 篇（批O5d 用户拍板只带5篇；按体验价值排序，文件名与 .pdf_index.json 的 file 字段一致）
 CURATED = [
     "10.1016_j.devcel.2026.03.010.pdf",            # ✅已翻译+摘要+知识（肌肉图谱 Dev Cell）
-    "10.1038_s41467-025-56896-6.pdf",              # ✅已翻译（Nat Commun）
+    "10.1038_s41467-025-56896-6.pdf",              # ✅已翻译+摘要（Nat Commun）
     "hotspot.pdf",                                  # ✅摘要+知识（方法学 Cell Systems）
     "lipid_signature_marks_in_human_muscle_aging.pdf",   # Nature Aging 2024 人骨骼肌脂质
-    "hdWGCNA.pdf",                                  # 方法学 Cell Reports Methods
-    "muscle_maker.pdf",                             # Genome Research 多组学
-    "sample_cellproportion.pdf",                    # Nature Medicine 癌症免疫
     "s41588-024-01961-x.pdf",                       # Nature Genetics 空间转录组
-    "PAK_pathway.pdf",                              # ERJ 空间+单细胞纤维化
-    "s43587-022-00309-6.pdf",                       # Nature Aging 鞘脂/肌少症
 ]
 
 DERIVED_DIRS = ("markdown", "summaries", "translations", "knowledge")
