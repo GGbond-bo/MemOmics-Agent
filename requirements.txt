@@ -44,6 +44,10 @@ tzdata>=2024.1; sys_platform == "win32"
 # === System ===
 psutil>=5.9.0
 
+# === 文献库 PDF 引擎（批O5 2026-08-16：跨平台，原文渲染/对照定位/全文提取必需）===
+pymupdf>=1.24.0
+pymupdf4llm>=0.0.17
+
 # === Web Search (multi-backend, auto-detected) ===
 # ddgs (DuckDuckGo) — free, no API key needed, installed by default
 duckduckgo-search>=4.0.0
