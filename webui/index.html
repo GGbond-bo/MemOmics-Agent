@@ -4106,20 +4106,19 @@ async function forceBindLit() {
 
 // 全文提炼（方向1，给人看）+ 查看摘要（批J）
 async function summarizePaper(ref) {
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交全文提炼任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">📝 提交全文提炼任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/summarize', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({file_or_title: ref})
     });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
     litPollExtract(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
@@ -4130,17 +4129,16 @@ async function summarizeAllPapers() {
     n = (d.library || []).filter(function(e) { return !e.summary_done; }).length;
   } catch(e) {}
   if (!confirm('将只对未提炼的 ' + n + ' 篇文章做 9 项全文提炼（思路/背景/问题/方法/结论/验证），需要几分钟。继续？')) return;
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键全文提炼任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">📝 提交一键全文提炼任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/summarize-all', { method: 'POST' });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
     litPollExtract(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
@@ -4648,29 +4646,60 @@ var _litTransTimer = null;
 var _litTransTargetTab = 'zh';
 var _litTransRef = '';
 
+// 批O5e(2026-08-16)：任务进度不占内容区——提取/翻译/补全运行期间，
+// 进度只显示在标题下方细条里，正文区照常浏览原文PDF/对照/摘要/知识/引用。
+var _litJobBarTimer = null;
+
+function litJobBar(html) {
+  var bar = document.getElementById('lit-job-progress');
+  if (!bar) return;
+  bar.style.display = '';
+  bar.innerHTML = html +
+    '<button onclick="litJobBarHide()" title="隐藏进度条（任务继续后台运行，完成后自动刷新）" style="margin-left:10px;font-size:10px;padding:0 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 隐藏</button>';
+}
+
+function litJobBarHide() {
+  var bar = document.getElementById('lit-job-progress');
+  if (bar) bar.style.display = 'none';
+}
+
+function litJobBarFlash(msg) {
+  litJobBar(msg);
+  if (_litJobBarTimer) clearTimeout(_litJobBarTimer);
+  _litJobBarTimer = setTimeout(litJobBarHide, 6000);
+}
+
+function _litModalOpen() {
+  var modal = document.getElementById('lit-summary-modal');
+  return !!(modal && modal.style.display !== 'none');
+}
+
+function litProgressWrite(html, modalOpen) {
+  // 模态开着 → 写顶部细条（不覆盖内容区）；否则写文献库工具栏进度区
+  if (modalOpen) { litJobBar(html); return true; }
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = html; return true; }
+  return false;
+}
+
 async function translatePaper(ref, wantTab, force) {
   var modal = document.getElementById('lit-summary-modal');
   if (modal) modal.style.display = 'flex';
   _litTransTargetTab = wantTab || 'zh';
   _litTransRef = ref || '';
-  var body = document.getElementById('lit-summary-body');
-  if (body) {
-    body.style.padding = '10px 16px';
-    body.style.overflowY = 'auto';
-    body.innerHTML = '<span style="color:var(--text-light);">提交翻译任务…</span>';
-  }
+  litProgressWrite('<span style="color:var(--text-light);">🌐 提交翻译任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/translate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({file_or_title: ref, force: !!force})
     });
     var d = await r.json();
-    if (d.error) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litTransTimer) clearInterval(_litTransTimer);
     _litTransTimer = setInterval(function() { litPollTranslate(d.job_id); }, 1500);
     litPollTranslate(d.job_id);
   } catch(e) {
-    if (body) body.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
@@ -4680,8 +4709,6 @@ function litForceTranslate(ref) {
 }
 
 async function litPollTranslate(jobId) {
-  var body = document.getElementById('lit-summary-body');
-  if (!body) return;
   try {
     var r = await fetch('/api/literature/import/' + encodeURIComponent(jobId));
     var st = await r.json();
@@ -4689,25 +4716,24 @@ async function litPollTranslate(jobId) {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
       var phaseLabel = {convert: 'PDF → Markdown', translate: '段落级编号直译', write: '写入译文', done: '完成'}[st.phase] || st.phase;
-      body.innerHTML = '<div style="padding:10px 4px;">' +
-        '<div style="font-weight:600;margin-bottom:8px;">🌐 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
-        '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
-        '<div style="color:var(--text-light);font-size:11px;margin-top:4px;">' + escapeHtml(st.current || '') + '</div></div>';
+      litProgressWrite('<span style="font-weight:600;">🌐 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</span>' +
+        ' <span style="display:inline-block;width:90px;background:var(--border);border-radius:4px;height:6px;overflow:hidden;vertical-align:middle;"><span style="display:block;width:' + pct + '%;height:100%;background:var(--primary);"></span></span>' +
+        ' <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(st.current || '') + '</span>', _litModalOpen());
       return;
     }
     clearInterval(_litTransTimer);
     _litTransTimer = null;
     if (st.status === 'error' || st.status === 'unknown') {
       var msg = st.status === 'unknown'
-        ? '任务中断（服务重启，进度已自动保存）。点下方按钮重新翻译——支持断点续译，已完成的段落不会重翻。'
+        ? '任务中断（服务重启，进度已自动保存）——点"断点续译"继续，已完成段落不会重翻。'
         : ('翻译失败: ' + (st.error || ''));
-      body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(msg) + '</span>' +
-        (_litTransRef ? '<div style="margin-top:8px;"><button onclick="litForceTranslate(\'' + litJsStr(_litTransRef) + '\')" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 断点续译</button></div>' : '');
+      litProgressWrite('<span style="color:var(--danger);">❌ ' + escapeHtml(msg) + '</span>' +
+        (_litTransRef ? ' <button onclick="litForceTranslate(\'' + litJsStr(_litTransRef) + '\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 断点续译</button>' : ''), _litModalOpen());
       return;
     }
     var res = st.result || {};
     if (!res.ok) {
-      body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(res.error || '翻译失败') + '</span>';
+      litProgressWrite('<span style="color:var(--danger);">❌ ' + escapeHtml(res.error || '翻译失败') + '</span>', _litModalOpen());
       return;
     }
     if (_litPaper) {
@@ -4715,6 +4741,7 @@ async function litPollTranslate(jobId) {
       _litPaper.translated = true;
     }
     var target = _litTransTargetTab || 'zh';
+    litJobBarFlash('✅ 翻译完成（' + (res.blocks || '') + ' 段，已逐段对齐）');
     if (target === 'cmp' && _litTransRef) {
       _litPaper = null;
       viewSummary(_litTransRef, 'cmp');
@@ -4724,7 +4751,7 @@ async function litPollTranslate(jobId) {
   } catch(e) {
     clearInterval(_litTransTimer);
     _litTransTimer = null;
-    body.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
@@ -4916,55 +4943,53 @@ function litRenderKnowledge(body, d) {
 }
 
 async function litEnrichPaper(ref) {
-  var body = document.getElementById('lit-summary-body');
-  if (body) body.innerHTML = '<span style="color:var(--text-light);">提交元数据补全…</span>';
+  litProgressWrite('<span style="color:var(--text-light);">🛠 提交元数据补全…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/enrich', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({file_or_title: ref})
     });
     var d = await r.json();
-    if (d.error) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollEnrich(d.job_id); }, 1500);
     litPollEnrich(d.job_id);
   } catch(e) {
-    if (body) body.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function litPollEnrich(jobId) {
-  var modal = document.getElementById('lit-summary-modal');
-  var body = document.getElementById('lit-summary-body');
-  var prog = document.getElementById('lit-extract-progress');
-  var modalOpen = modal && modal.style.display !== 'none';
-  var target = modalOpen ? body : prog;
-  if (!target) return;
+  var modalOpen = _litModalOpen();
   try {
     var st = await (await fetch('/api/literature/import/' + encodeURIComponent(jobId))).json();
     if (st.status === 'running') {
-      target.innerHTML = '<div style="padding:10px 4px;">🛠 ' + escapeHtml(st.current || '补全中…') + '</div>';
+      litProgressWrite('<span style="font-weight:600;">🛠 元数据补全…</span> <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(st.current || '') + '</span>', modalOpen);
       return;
     }
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
     var res = st.result || {};
     if (st.status === 'error' || (!res.ok && res.error)) {
-      target.innerHTML = '<div style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '补全失败') + '</div>';
+      litProgressWrite('<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '补全失败') + '</span>', modalOpen);
       return;
     }
     if (res.results) {
-      var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 元数据补全完成：' + (res.succeeded || 0) + '/' + (res.pending || 0) + ' 篇</div>';
-      html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
-      (res.results || []).forEach(function(rr) {
-        var col = rr.ok ? 'var(--success)' : 'var(--danger)';
-        html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
-          (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || rr.file || '') +
-          (rr.ok && (rr.changed || []).length ? ' — 修正: ' + escapeHtml(rr.changed.join(',')) : '') +
-          (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
-      });
-      html += '</div><div style="margin-top:6px;"><button onclick="loadLiteratureLibrary()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">刷新文献库</button></div>';
-      target.innerHTML = html;
+      if (modalOpen) {
+        litJobBarFlash('✅ 元数据补全完成：' + (res.succeeded || 0) + '/' + (res.pending || 0) + ' 篇');
+      } else {
+        var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 元数据补全完成：' + (res.succeeded || 0) + '/' + (res.pending || 0) + ' 篇</div>';
+        html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
+        (res.results || []).forEach(function(rr) {
+          var col = rr.ok ? 'var(--success)' : 'var(--danger)';
+          html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
+            (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || rr.file || '') +
+            (rr.ok && (rr.changed || []).length ? ' — 修正: ' + escapeHtml(rr.changed.join(',')) : '') +
+            (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
+        });
+        html += '</div><div style="margin-top:6px;"><button onclick="loadLiteratureLibrary()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">刷新文献库</button></div>';
+        litProgressWrite(html, false);
+      }
       return;
     }
     litToast('✅ 元数据补全完成：修正 ' + ((res.changed || []).join(', ') || '—'));
@@ -4978,122 +5003,115 @@ async function litPollEnrich(jobId) {
   } catch(e) {
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
-    if (target) target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>', modalOpen);
   }
 }
 
 async function extractKnowledge(ref) {
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交知识提取任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">🧠 提交知识提取任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/knowledge', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({file_or_title: ref})
     });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollKnowledge(d.job_id); }, 1500);
     litPollKnowledge(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function extractAllKnowledge() {
   if (!confirm('将对文献库全部未提取文章做结构化知识提取（结论/基因marker/类器官/化学信息 + 测序方法/流程/包/参数），每篇约 1-3 分钟。继续？')) return;
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键知识提取任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">提交一键知识提取任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/knowledge-all', { method: 'POST' });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollKnowledge(d.job_id); }, 1500);
     litPollKnowledge(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function litPollKnowledge(jobId) {
-  var modal = document.getElementById('lit-summary-modal');
-  var body = document.getElementById('lit-summary-body');
-  var prog = document.getElementById('lit-extract-progress');
-  var modalOpen = modal && modal.style.display !== 'none';
-  var target = modalOpen ? body : prog;
-  if (!target) return;
+  var modalOpen = _litModalOpen();
   try {
     var st = await (await fetch('/api/literature/import/' + encodeURIComponent(jobId))).json();
     if (st.status === 'running') {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
       var phaseLabel = {convert: 'PDF → Markdown', extract: 'LLM 结构化提取', write: '写入知识库', paper: '逐篇提取', done: '完成'}[st.phase] || st.phase;
-      target.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧠 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
-        '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
-        '<div style="color:var(--text-light);font-size:11px;margin-top:4px;word-break:break-all;">' + escapeHtml(st.current || '') + '</div>';
+      litProgressWrite('<span style="font-weight:600;">🧠 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</span>' +
+        ' <span style="display:inline-block;width:90px;background:var(--border);border-radius:4px;height:6px;overflow:hidden;vertical-align:middle;"><span style="display:block;width:' + pct + '%;height:100%;background:var(--primary);"></span></span>' +
+        ' <span style="color:var(--text-light);font-size:10px;word-break:break-all;">' + escapeHtml(st.current || '') + '</span>', modalOpen);
       return;
     }
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
     var res = st.result || {};
     if (st.status === 'error' || (res.error && !res.ok)) {
-      target.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '知识提取失败') + '</span>';
+      litProgressWrite('<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '知识提取失败') + '</span>', modalOpen);
       return;
     }
     if (res.results) {
-      var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 批量知识提取完成：' + (res.succeeded || 0) + '/' + (res.total || 0) + ' 篇成功，共写入 <b>' + (res.written_total || 0) + '</b> 条知识库条目</div>';
-      html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
-      (res.results || []).forEach(function(rr) {
-        var col = rr.ok ? 'var(--success)' : 'var(--danger)';
-        html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
-          (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || '') + ' — 写入 ' + (rr.written || 0) + ' 条' +
-          (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
-      });
-      html += '</div><div style="margin-top:6px;"><button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">查看知识库</button></div>';
-      target.innerHTML = html;
+      if (modalOpen) {
+        litJobBarFlash('✅ 批量知识提取完成：' + (res.succeeded || 0) + '/' + (res.total || 0) + ' 篇，写入 ' + (res.written_total || 0) + ' 条');
+      } else {
+        var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 批量知识提取完成：' + (res.succeeded || 0) + '/' + (res.total || 0) + ' 篇成功，共写入 <b>' + (res.written_total || 0) + '</b> 条知识库条目</div>';
+        html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
+        (res.results || []).forEach(function(rr) {
+          var col = rr.ok ? 'var(--success)' : 'var(--danger)';
+          html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
+            (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || '') + ' — 写入 ' + (rr.written || 0) + ' 条' +
+            (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
+        });
+        html += '</div><div style="margin-top:6px;"><button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">查看知识库</button></div>';
+        litProgressWrite(html, false);
+      }
     } else {
-      target.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">✅ 知识提取完成：写入 ' + ((res.written || []).length) + ' 条知识库条目</div>' +
-        '<div style="margin-top:6px;display:flex;gap:6px;">' +
-        '<button onclick="viewSummary(\'' + litJsStr(res.file || '') + '\', \'knowledge\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🧠 查看知识</button>' +
-        '<button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">查看知识库</button></div>';
+      litProgressWrite('<span style="font-weight:600;">✅ 知识提取完成：写入 ' + ((res.written || []).length) + ' 条知识库条目</span>', modalOpen);
       if (modalOpen && _litPaper) { _litPaper = null; viewSummary(res.file || '', 'knowledge'); }
     }
   } catch(e) {
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
-    target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>', modalOpen);
   }
 }
 
 async function litForceSummarize(ref) {
   if (!confirm('将重新提炼这篇文献的 9 项摘要（force，重新调用 LLM，约 1-5 分钟）。继续？')) return;
-  var body = document.getElementById('lit-summary-body');
+  litProgressWrite('<span style="color:var(--text-light);">🔄 提交重新提炼任务…</span>', _litModalOpen());
   var r = await fetch('/api/literature/summarize', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({file_or_title: ref, force: true})
   });
   var d = await r.json();
-  if (d.error || !d.job_id) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '提交失败') + '</span>'; return; }
-  if (body) body.innerHTML = '<span style="color:var(--text-light);">🔄 重新提炼中…</span>';
+  if (d.error || !d.job_id) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error || '提交失败') + '</span>', _litModalOpen()); return; }
   var timer = setInterval(async function() {
     try {
       var st = await (await fetch('/api/literature/import/' + encodeURIComponent(d.job_id))).json();
       if (st.status === 'running') {
-        if (body) body.innerHTML = '<span style="color:var(--text-light);">🔄 ' + escapeHtml(st.current || '提炼中…') + '</span>';
+        litProgressWrite('<span style="font-weight:600;">🔄 重新提炼…</span> <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(st.current || '') + '</span>', _litModalOpen());
         return;
       }
       clearInterval(timer);
       if (st.status === 'error' || !((st.result || {}).ok)) {
-        if (body) body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || ((st.result || {}).error) || '提炼失败') + '</span>';
+        litProgressWrite('<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || ((st.result || {}).error) || '提炼失败') + '</span>', _litModalOpen());
         return;
       }
-      litToast('✅ 重新提炼完成');
+      litJobBarFlash('✅ 重新提炼完成');
       _litPaper = null;
       viewSummary(ref, 'summary');
     } catch(e) {
       clearInterval(timer);
-      if (body) body.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+      litProgressWrite('<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
     }
   }, 1500);
 }
@@ -5126,34 +5144,32 @@ function litAskAgent() {
 }
 
 async function litExportAll() {
-  var body = document.getElementById('lit-summary-body');
-  if (body) body.innerHTML = '<span style="color:var(--text-light);">生成整库引用…</span>';
+  litProgressWrite('<span style="color:var(--text-light);">📚 生成整库引用…</span>', _litModalOpen());
   try {
     var d = await (await fetch('/api/literature/export')).json();
-    if (!d.ok) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>'; return; }
+    if (!d.ok) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>', _litModalOpen()); return; }
     if (d.bibtex) _litBlobDownload('memomics_references.bib', d.bibtex);
     if (d.ris) _litBlobDownload('memomics_references.ris', d.ris);
     if (d.gbt7714) _litBlobDownload('memomics_references_gbt7714.txt', d.gbt7714);
-    litToast('✅ 整库引用已导出（BibTeX / RIS / GB/T 7714）');
+    litJobBarFlash('✅ 整库引用已导出（BibTeX / RIS / GB/T 7714）');
     if (_litPaper) litPaperTab('cite');
   } catch(e) {
-    if (body) body.innerHTML = '<span style="color:var(--danger);">导出失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">导出失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function litEnrichAll() {
   if (!confirm('将对文献库全部疑似缺元数据（卷/期/页码/乱码作者/脏DOI）的文章做 Crossref 补全，约 1-3 分钟。继续？')) return;
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键元数据补全…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">提交一键元数据补全…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/enrich-all', { method: 'POST' });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollEnrich(d.job_id); }, 2000);
     litPollEnrich(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
@@ -5161,46 +5177,39 @@ async function litEnrichAll() {
 var _litExtractTimer = null;
 
 async function extractPaper(ref) {
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交提炼任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">提交提炼任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/extract', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({file_or_title: ref})
     });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
     litPollExtract(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function extractAllPapers() {
   if (!confirm('将把文献库全部文献逐篇提炼进知识库（每篇 1-3 条，需要几分钟）。继续？')) return;
-  var prog = document.getElementById('lit-extract-progress');
-  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键提炼任务…</span>'; }
+  litProgressWrite('<span style="color:var(--text-light);">提交一键提炼任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/extract-all', { method: 'POST' });
     var d = await r.json();
-    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
     litPollExtract(d.job_id);
   } catch(e) {
-    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
   }
 }
 
 async function litPollExtract(jobId) {
-  var modal = document.getElementById('lit-summary-modal');
-  var body = document.getElementById('lit-summary-body');
-  var prog = document.getElementById('lit-extract-progress');
-  var modalOpen = modal && modal.style.display !== 'none';
-  var target = modalOpen ? body : prog;
-  if (!target) return;
+  var modalOpen = _litModalOpen();
   try {
     var r = await fetch('/api/literature/import/' + encodeURIComponent(jobId));
     var st = await r.json();
@@ -5209,27 +5218,38 @@ async function litPollExtract(jobId) {
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
       var phaseLabel = {read: '读取全文', extract: 'LLM 提炼', write: '写入知识库', paper: '逐篇提炼',
                          summarize: 'LLM 全文提炼(9项)', convert: 'PDF → Markdown', done: '完成'}[st.phase] || st.phase;
-      target.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧬 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
-        '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
-        '<div style="color:var(--text-light);font-size:11px;margin-top:4px;word-break:break-all;">' + escapeHtml(st.current || '') + '</div>';
+      litProgressWrite('<span style="font-weight:600;">🧬 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</span>' +
+        ' <span style="display:inline-block;width:90px;background:var(--border);border-radius:4px;height:6px;overflow:hidden;vertical-align:middle;"><span style="display:block;width:' + pct + '%;height:100%;background:var(--primary);"></span></span>' +
+        ' <span style="color:var(--text-light);font-size:10px;word-break:break-all;">' + escapeHtml(st.current || '') + '</span>', modalOpen);
       return;
     }
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
     if (st.status === 'error') {
-      target.innerHTML = '<span style="color:var(--danger);">❌ 提炼失败: ' + escapeHtml(st.error || '') + '</span>';
+      litProgressWrite('<span style="color:var(--danger);">❌ 提炼失败: ' + escapeHtml(st.error || '') + '</span>', modalOpen);
       return;
     }
-    renderExtractResult(st.result || {}, target);
-    if (modalOpen && (st.result || {}).summary) {
-      // 模态内提炼完成后自动刷新详情
-      var f = (st.result || {}).file;
-      if (f) { _litPaper = null; viewSummary(f, 'summary'); }
+    var res = st.result || {};
+    if (modalOpen) {
+      // 模态开着：结果用细条提示 + 自动刷新详情内容（正文区不被覆盖）
+      if (res.summary && !res.results) {
+        var n = Object.keys(res.summary).filter(function(k) { return res.summary[k]; }).length;
+        litJobBarFlash('✅ 全文提炼完成（' + n + '/9 项）');
+        var f = res.file;
+        if (f) { _litPaper = null; viewSummary(f, 'summary'); }
+      } else if (res.results) {
+        litJobBarFlash('✅ 批量任务完成：' + (res.succeeded || 0) + '/' + (res.total || 0) + ' 篇' + (res.written_total != null ? '，写入 ' + res.written_total + ' 条' : ''));
+        loadLiteratureLibrary();
+      } else {
+        litJobBarFlash('✅ 提炼完成：写入 ' + ((res.written || []).length) + ' 条知识库条目');
+      }
+      return;
     }
+    renderExtractResult(res, document.getElementById('lit-extract-progress'));
   } catch(e) {
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
-    target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    litProgressWrite('<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>', modalOpen);
   }
 }
 
@@ -7229,6 +7249,7 @@ async function litImportSelected() {
       </span>
     </div>
     <div id="lit-paper-meta" style="font-size:11px;color:var(--text-light);padding:4px 14px;border-bottom:1px solid var(--border);"></div>
+    <div id="lit-job-progress" style="display:none;margin:6px 14px 0;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:11px;color:var(--text);line-height:1.6;"></div>
     <div class="lit-tabs">
       <button class="lit-tab" id="lit-tab-pdf" onclick="litPaperTab('pdf')">📄 原文PDF</button>
       <button class="lit-tab" id="lit-tab-md" onclick="litPaperTab('md')">📝 Markdown</button>
