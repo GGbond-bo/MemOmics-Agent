@@ -583,13 +583,23 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
 
 
 def list_library() -> str:
-    """列出全部文献：用户导入 + agent 下载。"""
+    """列出全部文献：用户导入 + agent 下载（批O5f 2026-08-16 起跨库去重）。
+
+    正式库（user_import，含 download_pdf 自动入库的）优先；agent 下载索引里与
+    正式库重复的条目（同 sha256 或同文件名，历史遗留双份）不再重复显示。
+    """
     out = []
+    seen_sha, seen_name = set(), set()
     for label, idx_path in (("user_import", os.path.join(_library_dir(), ".pdf_index.json")),
                             ("agent_download", _agent_papers_index())):
         if not idx_path or not os.path.isfile(idx_path):
             continue
         for e in _load_index(idx_path):
+            _sha = (e.get("sha256") or "").strip()
+            _fname = (e.get("file") or "").strip().lower()
+            if label == "agent_download" and ((_sha and _sha in seen_sha)
+                                              or (_fname and _fname in seen_name)):
+                continue
             _s = e.get("summary") or {}
             out.append({
                 "source": label,
@@ -610,6 +620,10 @@ def list_library() -> str:
                 "summary_idea": str(_s.get("idea") or "")[:160],
                 "meta_complete": bool(e.get("volume") and e.get("pages")),
             })
+            if _sha:
+                seen_sha.add(_sha)
+            if _fname:
+                seen_name.add(_fname)
     return json.dumps({"ok": True, "total": len(out), "library": out,
                        "library_dir": _library_dir().replace("\\", "/")},
                       ensure_ascii=False, indent=2)

@@ -600,17 +600,72 @@ def _index_downloaded_pdf(result: dict, output_dir: Path, doi: str, source_url: 
     return result
 
 
+def _auto_import_to_library(fp: str) -> dict:
+    """下载成功后自动正式入库（批O5f 2026-08-16）。
+
+    用户要求"下载即正式入库"：不再只是 work/papers 索引合并显示，而是走
+    import_pdfs 完整链路——复制进 hermes_home/papers/ + Crossref 元数据反查 +
+    去重 + 引用库注册。失败不影响下载结果本身（调用方保留下载索引兜底显示）。
+    """
+    try:
+        from memomics.bio_tools.literature_library import import_pdfs
+        r = json.loads(import_pdfs([fp], imported_by="download_pdf"))
+        return {"ok": bool(r.get("ok")), "imported": int(r.get("imported") or 0),
+                "skipped": int(r.get("skipped") or 0),
+                "entries": r.get("entries") or [],
+                "library_dir": r.get("library_dir", ""),
+                "error": r.get("error", "")}
+    except Exception as e:
+        return {"ok": False, "imported": 0, "skipped": 0, "entries": [],
+                "library_dir": "", "error": str(e)[:200]}
+
+
+def _drop_agent_index_entry(fp: str):
+    """正式入库成功后，从下载目录 .pdf_index.json 摘除该条目（防文献库双份显示）。
+
+    按 sha256（非空时）或文件名匹配；摘除失败静默——list_library 侧还有
+    跨库去重兜底（批O5f）。
+    """
+    try:
+        idx_file = Path(fp).parent / ".pdf_index.json"
+        if not idx_file.is_file():
+            return
+        try:
+            entries = json.loads(idx_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        sha = _sha256_of(fp)
+        base = os.path.basename(fp)
+        keep = [e for e in entries
+                if not ((sha and e.get("sha256") == sha) or e.get("file") == base)]
+        if len(keep) != len(entries):
+            idx_file.write_text(json.dumps(keep, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _finish_download(result: dict, output_dir: Path, doi: str, source_url: str) -> str:
-    """成功返回前的统一收尾：PDF 索引 + 引用库收录。"""
+    """成功返回前的统一收尾：PDF 索引 + 引用库收录 + 自动入全局文献库（批O5f）。"""
     try:
         result = _index_downloaded_pdf(result, output_dir, doi, source_url)
     except Exception:
         pass
+    fp = (result.get("file_path") or "").strip()
+    if fp and os.path.isfile(fp):
+        ai = _auto_import_to_library(fp)
+        result["auto_import"] = ai
+        if ai.get("ok") and (ai.get("imported") or ai.get("skipped")):
+            _drop_agent_index_entry(fp)
     return json.dumps(result, ensure_ascii=False)
 
 
 def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str:
     """下载文献 PDF 到 work/papers/ 目录。强制多源尝试。
+
+    下载成功后自动正式入库：复制到全局文献库 hermes_home/papers/ 并做
+    Crossref 元数据反查（标题/期刊/作者/年份/卷期页码）+ 去重 + 引用库注册，
+    无需再手动导入。入库失败时兜底：仍写 work/papers/.pdf_index.json，文献库
+    照常显示（可后续点"补全元数据"）。
 
     下载策略（按优先级依次尝试）：
     1. 如果传入的是 PDF URL → 直接下载
@@ -870,6 +925,7 @@ def register(registry):
             "description": (
                 "下载文献 PDF 到 work/papers/ 目录。强制多源尝试下载。\n"
                 "下载策略（依次尝试）：1)直接URL 2)PMID→PMC全文 3)DOI→Unpaywall 4)DOI直接解析\n"
+                "下载成功后自动导入全局文献库（hermes_home/papers/，Crossref 元数据+去重），无需再手动导入。\n"
                 "下载后可用 extract_params_from_pdf 提取参数。\n"
                 "搜索文献时拿到 pdf_url/fulltext_url/doi/pmid 后，尽量传给此工具下载。"
             ),

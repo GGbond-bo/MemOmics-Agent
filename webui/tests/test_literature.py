@@ -437,3 +437,75 @@ class TestFrontendLitWorkbench:
     def test_force_rerun(self):
         assert "function litForceSummarize" in HTML
         assert "function litForceKnowledge" in HTML
+
+
+# ---------------------------------------------------------------- 下载即正式入库（批O5f 2026-08-16）
+class TestDownloadAutoImport:
+    def test_finish_download_auto_imports_and_dedupes(self, tmp_path, monkeypatch):
+        """download_pdf 成功后自动 import_pdfs 入正式库，并从下载索引摘除条目。"""
+        from memomics.bio_tools import literature_search as LS
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        # 离线：Crossref 反查与 LLM 分类打桩
+        monkeypatch.setattr(LL, "_extract_metadata", lambda dest, text, src: {
+            "title": "Auto imported paper", "journal": "Test Journal",
+            "authors": ["Jane Doe"], "year": "2025", "doi": "10.1000/xyz.1",
+            "url": "", "volume": "1", "issue": "2", "pages": "3-4", "pmid": ""})
+        monkeypatch.setattr(LL, "_classify_papers", lambda entries: {})
+        out = tmp_path / "work" / "papers"
+        out.mkdir(parents=True)
+        pdf = out / "downloaded.pdf"
+        _make_syn_pdf(pdf, toc=False)
+        res = json.loads(LS._finish_download(
+            {"success": True, "file_path": str(pdf), "file_size": pdf.stat().st_size},
+            out, "", ""))
+        ai = res["auto_import"]
+        assert ai["ok"] is True and ai["imported"] == 1
+        # 正式库已有 1 条（含元数据）
+        lib_idx = json.loads((tmp_path / "papers" / ".pdf_index.json").read_text(encoding="utf-8"))
+        assert len(lib_idx) == 1
+        assert lib_idx[0]["title"] == "Auto imported paper"
+        assert lib_idx[0]["imported_by"] == "download_pdf"
+        # 下载索引条目已摘除
+        agent_idx = json.loads((out / ".pdf_index.json").read_text(encoding="utf-8"))
+        assert agent_idx == []
+        # 文献库只显示 1 条，不重复
+        lib = json.loads(LL.list_library())["library"]
+        assert len(lib) == 1 and lib[0]["source"] == "user_import"
+
+    def test_failed_import_keeps_agent_index(self, tmp_path, monkeypatch):
+        """正式入库失败时保留下载索引兜底，文献库仍可见该文献。"""
+        from memomics.bio_tools import literature_search as LS
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        out = tmp_path / "work" / "papers"
+        out.mkdir(parents=True)
+        pdf = out / "broken.pdf"
+        _make_syn_pdf(pdf, toc=False)
+        monkeypatch.setattr(LS, "_auto_import_to_library",
+                            lambda fp: {"ok": False, "imported": 0, "skipped": 0,
+                                        "entries": [], "library_dir": "", "error": "boom"})
+        res = json.loads(LS._finish_download(
+            {"success": True, "file_path": str(pdf), "file_size": pdf.stat().st_size},
+            out, "", ""))
+        assert res["auto_import"]["ok"] is False
+        agent_idx = json.loads((out / ".pdf_index.json").read_text(encoding="utf-8"))
+        assert any(e["file"] == "broken.pdf" for e in agent_idx)
+
+    def test_list_library_cross_index_dedupe(self, tmp_path, monkeypatch):
+        """历史遗留双份（同一 PDF 在正式库与下载索引各一条）只显示一次。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "a.pdf", "path": str(papers / "a.pdf"),
+                        "title": "A", "sha256": "samehash"}], f, ensure_ascii=False)
+        agent = tmp_path / "agent.json"
+        with open(agent, "w", encoding="utf-8") as f:
+            json.dump([{"file": "a.pdf", "path": str(tmp_path / "a.pdf"),
+                        "title": "A", "sha256": "samehash"},
+                       {"file": "b.pdf", "path": str(tmp_path / "b.pdf"),
+                        "title": "B", "sha256": "otherhash"}], f, ensure_ascii=False)
+        monkeypatch.setattr(LL, "_agent_papers_index", lambda: str(agent))
+        lib = json.loads(LL.list_library())["library"]
+        assert [e["file"] for e in lib] == ["a.pdf", "b.pdf"]
+        assert lib[0]["source"] == "user_import"
+        assert lib[1]["source"] == "agent_download"
