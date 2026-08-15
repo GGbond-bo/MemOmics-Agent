@@ -1918,6 +1918,291 @@ def export_citations() -> str:
     }, ensure_ascii=False)
 
 
+# ── 双语对照文档（批O4 2026-08-16：真 PDF 原文 + 模块化译文 + 点击互映射）──
+def _norm_ws(s: str) -> str:
+    """空白归一化（用于跨页面/PDF 文本匹配）。"""
+    return re.sub(r"\s+", " ", (s or "")).strip()
+
+
+def _pdf_pages_text(path: str) -> list:
+    """逐页文本（空白归一化，用于段落→页码定位）。"""
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+        pages = [_norm_ws(doc[i].get_text("text")) for i in range(doc.page_count)]
+        doc.close()
+        return pages
+    except Exception as e:
+        logger.warning(f"pdf pages text failed: {e}")
+        return []
+
+
+def _pdf_toc(path: str) -> list:
+    """PDF 书签目录 → [{'level':int,'title':str,'page':int(0-based)}, ...]。"""
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+        toc = doc.get_toc()
+        doc.close()
+        out = []
+        for level, title, page in (toc or []):
+            t = _norm_ws(title)
+            if not t:
+                continue
+            pg = max(0, min(int(page) - 1, 9999))
+            out.append({"level": int(level), "title": t[:120], "page": pg})
+        return out
+    except Exception as e:
+        logger.warning(f"pdf toc failed: {e}")
+        return []
+
+
+def _pdf_heading_pages(path: str) -> list:
+    """无书签时的模块检测：每页最大字号行 → [{'title','page'}, ...]（批O4）。
+
+    过滤规则：行文本 6-90 字符、不以句末标点结尾、字号 ≥ 该页正文字号的 1.15 倍。
+    """
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+        out = []
+        for i in range(doc.page_count):
+            page = doc[i]
+            body_sizes = []
+            cands = []
+            for block in page.get_text("dict").get("blocks", []):
+                for line in block.get("lines", []):
+                    txt = "".join(s.get("text", "") for s in line.get("spans", [])).strip()
+                    size = max((s.get("size", 0) for s in line.get("spans", [])), default=0)
+                    if len(txt) >= 20:
+                        body_sizes.append(size)
+                    if 6 <= len(txt) <= 90 and not txt.endswith((".", ",", ";")) and size >= 10:
+                        cands.append((size, txt))
+            if not cands:
+                continue
+            body_med = sorted(body_sizes)[len(body_sizes) // 2] if body_sizes else 10
+            cands = sorted(cands, key=lambda x: -x[0])
+            best = cands[0]
+            if best[0] >= body_med * 1.15 or len(body_sizes) < 3:
+                out.append({"title": _norm_ws(best[1])[:120], "page": i, "level": 1})
+        doc.close()
+        return out
+    except Exception as e:
+        logger.warning(f"pdf heading pages failed: {e}")
+        return []
+
+
+def _map_blocks_to_pages(blocks: list, pages_text: list) -> list:
+    """段落 → 页码（0-based）。前缀精确匹配 → 缩略前缀 → 全文包含兜底。"""
+    page_of = []
+    for b in blocks:
+        nb = _norm_ws(re.sub(r"^#{1,6}\s*", "", b))
+        hit = -1
+        for prefix_len in (48, 28, 16):
+            key = nb[:prefix_len]
+            if len(key) < 8:
+                continue
+            for i, pt in enumerate(pages_text):
+                if key in pt:
+                    hit = i
+                    break
+            if hit >= 0:
+                break
+        if hit < 0 and len(nb) >= 8:
+            for i, pt in enumerate(pages_text):
+                if nb[:12] and nb[:12] in pt:
+                    hit = i
+                    break
+        page_of.append(hit if hit >= 0 else -1)
+    return page_of
+
+
+def _find_block_rect(path: str, page_no: int, text: str) -> list:
+    """段落首句在页面上的归一化矩形 [x0,y0,x1,y1]（0~1），找不到返回 null。
+
+    用 page.search_for 逐级缩短前缀定位（PyMuPDF C 级文本定位，无需 OCR）。
+    """
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+        if page_no < 0 or page_no >= doc.page_count:
+            doc.close()
+            return None
+        page = doc[page_no]
+        p_w, p_h = page.rect.width, page.rect.height
+        key = _norm_ws(re.sub(r"^#{1,6}\s*", "", text))
+        words = key.split()
+        for n in (12, 8, 5, 3):
+            if len(words) < n:
+                continue
+            probe = " ".join(words[:n])
+            rects = page.search_for(probe)
+            if rects:
+                r = rects[0]
+                doc.close()
+                return [round(r.x0 / p_w, 4), round(r.y0 / p_h, 4),
+                        round(r.x1 / p_w, 4), round(r.y1 / p_h, 4)]
+        doc.close()
+        return None
+    except Exception:
+        return None
+
+
+def _bilingual_cache_path(stem: str) -> str:
+    return os.path.join(_translations_dir(), f"{stem}.bilingual.json")
+
+
+_BILINGUAL_SCHEMA = 2  # 模块结构版本（变动时自动重建缓存）
+
+
+def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
+    """构建双语对照文档（批O4 2026-08-16）。
+
+    结构：
+      {ok, file, stem, title, pages, has_zh,
+       toc_source: 'toc'|'headings'|'none',
+       modules: [{id, title, start_page, end_page, paras: [
+                  {page, en, zh, rect:[x0,y0,x1,y1]|null}]}]}
+    模块边界优先取 PDF 书签（get_toc），无书签时按页眉字号检测，都无 → 单模块"全文"。
+    段落→页码靠逐页文本匹配；段落→矩形靠 search_for（点译文定位原文高亮）。
+    结果缓存 translations/<stem>.bilingual.json（md/zh 更新时自动重建）。
+    """
+    hit = _find_raw_entry(file_or_title)
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    pdf_path = hit.get("path", "")
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    md_path = os.path.join(_markdown_dir(), f"{stem}.md")
+    zh_path = os.path.join(_translations_dir(), f"{stem}.zh.md")
+    cache_path = _bilingual_cache_path(stem)
+    try:
+        if not rebuild and os.path.isfile(cache_path):
+            _src_newer = False
+            for _p in (md_path, zh_path):
+                if os.path.isfile(_p) and os.path.getmtime(_p) > os.path.getmtime(cache_path):
+                    _src_newer = True
+                    break
+            if not _src_newer:
+                with open(cache_path, encoding="utf-8") as f:
+                    _cached = f.read()
+                try:
+                    _cj = json.loads(_cached)
+                    if _cj.get("_schema") == _BILINGUAL_SCHEMA:
+                        return _cached
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    # 原文 Markdown + 对齐译文
+    md = pdf_to_markdown(pdf_path)
+    blocks_en = _md_blocks(md)
+    zh_text = ""
+    if os.path.isfile(zh_path):
+        try:
+            with open(zh_path, encoding="utf-8") as f:
+                zh_text = f.read()
+        except Exception:
+            zh_text = ""
+    blocks_zh = _md_blocks(zh_text) if zh_text.strip() else []
+    # 对齐（段数一致时 1:1；不一致按标题锚点/比例配平）
+    if blocks_zh and len(blocks_zh) == len(blocks_en):
+        pairs = [[i, i] for i in range(len(blocks_en))]
+    elif blocks_zh:
+        pairs = _align_blocks_backend(blocks_en, blocks_zh)
+    else:
+        pairs = [[i, None] for i in range(len(blocks_en))]
+    # 段落 → 页码
+    pages_text = _pdf_pages_text(pdf_path)
+    page_of = _map_blocks_to_pages(blocks_en, pages_text) if pages_text else [-1] * len(blocks_en)
+    # 模块边界
+    toc = _pdf_toc(pdf_path)
+    toc_source = "toc"
+    if not toc:
+        toc = _pdf_heading_pages(pdf_path)
+        toc_source = "headings" if toc else "none"
+    if not toc:
+        toc = [{"title": hit.get("title") or "全文", "page": 0, "level": 1}]
+    # 批O4：level-1 条目 = 模块；level>1 子节归入上一模块（subs 带页码可点击定位）
+    _lvs = sorted({t.get("level", 1) for t in toc})
+    _top_lv = 1 if 1 in _lvs else (_lvs[0] if _lvs else 1)
+    modules = []
+    for t in toc:
+        lv = t.get("level", 1)
+        page = max(0, min(t["page"], len(pages_text) - 1 if pages_text else 0))
+        if not modules or lv <= _top_lv:
+            modules.append({"title": t["title"], "start_page": page,
+                            "end_page": page, "paras": [], "subs": []})
+        else:
+            modules[-1]["subs"].append({"title": t["title"], "page": page})
+            modules[-1]["end_page"] = max(modules[-1]["end_page"], page)
+    # end_page = 下一模块起始页 - 1（且 ≥ start，防同页条目倒挂）
+    for i, m in enumerate(modules):
+        if i + 1 < len(modules):
+            m["end_page"] = max(m["start_page"], modules[i + 1]["start_page"] - 1)
+        else:
+            m["end_page"] = max(m["start_page"], (len(pages_text) - 1) if pages_text else m["start_page"])
+    # 段落归属模块（按模块页区间）
+    for idx, m in enumerate(modules):
+        start, end = m["start_page"], m["end_page"]
+        for pi, (ei, zi) in enumerate(pairs):
+            pg = page_of[ei] if ei is not None else -1
+            if pg < 0 or not (start <= pg <= end):
+                continue
+            en = blocks_en[ei] if ei is not None else ""
+            zh = blocks_zh[zi] if zi is not None and zi < len(blocks_zh) else ""
+            rect = _find_block_rect(pdf_path, pg, en) if en else None
+            m["paras"].append({"page": pg, "en": en, "zh": zh, "rect": rect})
+        m["id"] = idx
+    out = json.dumps({
+        "ok": True, "file": hit.get("file"), "stem": stem,
+        "title": hit.get("title") or "", "pages": len(pages_text),
+        "has_zh": bool(blocks_zh), "toc_source": toc_source,
+        "_schema": _BILINGUAL_SCHEMA,
+        "modules": modules,
+        "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；点模块/段落自动定位原文页与高亮区域。",
+    }, ensure_ascii=False)
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            f.write(out)
+    except Exception as e:
+        logger.warning(f"bilingual cache write failed: {e}")
+    return out
+
+
+def _align_blocks_backend(L: list, R: list) -> list:
+    """与前端 litAlignBlocks 同规则的段落配平（后端版，供 build_bilingual 用）。"""
+    if len(L) == len(R):
+        return [[i, i] for i in range(len(L))]
+
+    def _heads(arr):
+        return [i for i, b in enumerate(arr) if re.match(r"^#{1,6}\s", b)]
+
+    hL, hR = _heads(L), _heads(R)
+    if hL and len(hL) == len(hR):
+        pairs, li, ri = [], 0, 0
+        for k in range(len(hL)):
+            for j in range(max(hL[k] - li, hR[k] - ri)):
+                pairs.append([li + j if li + j < hL[k] else None,
+                              ri + j if ri + j < hR[k] else None])
+            pairs.append([hL[k], hR[k]])
+            li, ri = hL[k] + 1, hR[k] + 1
+        while li < len(L) or ri < len(R):
+            pairs.append([li if li < len(L) else None, ri if ri < len(R) else None])
+            li += 1
+            ri += 1
+        return pairs
+    n = max(len(L), len(R))
+    out = []
+    for j in range(n):
+        lj = j if len(L) == n else round(j * (len(L) - 1) / max(n - 1, 1))
+        rj = j if len(R) == n else round(j * (len(R) - 1) / max(n - 1, 1))
+        out.append([lj, rj])
+    return out
+
+
 # ── 会话绑定（12 小时自动换绑，批J 2026-08-16）──
 _BIND_TTL_SECONDS = 12 * 3600
 def get_binding() -> dict:

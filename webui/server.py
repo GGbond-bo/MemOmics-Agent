@@ -60,7 +60,7 @@ except ModuleNotFoundError:
     pass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -6631,6 +6631,40 @@ async def serve_papers(path: str = ""):
     return FileResponse(full, media_type=media)
 
 
+@app.get("/api/papers/page")
+async def serve_paper_page(path: str = "", page: int = 0, dpi: int = 150):
+    """文献 PDF 单页渲染为 PNG（批O4 2026-08-16：对照视图左侧"真原文"，含原图）。
+
+    - path: 相对 papers 根的 .pdf 文件名
+    - page: 0-based 页码；dpi: 80-300（默认 150，含图清晰可读）
+    - PyMuPDF get_pixmap 整页渲染（含全部图/表）；Cache-Control 供浏览器缓存
+    """
+    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    try:
+        from webui.security import resolve_within_roots, UnsafePathError
+        full = str(resolve_within_roots(os.path.join(papers_root, path or ""), [papers_root]))
+    except UnsafePathError as e:
+        return JSONResponse({"error": str(e)}, status_code=403)
+    if not full.lower().endswith(".pdf") or not os.path.isfile(full):
+        return JSONResponse({"error": "PDF not found"}, status_code=404)
+    dpi = max(80, min(300, int(dpi or 150)))
+    page = max(0, int(page or 0))
+    try:
+        import pymupdf as fitz
+        import io as _io
+        doc = fitz.open(full)
+        if page >= doc.page_count:
+            doc.close()
+            return JSONResponse({"error": "page out of range"}, status_code=400)
+        pix = doc[page].get_pixmap(dpi=dpi)
+        doc.close()
+        png = pix.tobytes("png")
+        return Response(content=png, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        return JSONResponse({"error": f"page render failed: {str(e)[:200]}"}, status_code=500)
+
+
 # --- 知识库 ---
 
 @app.get("/api/kb")
@@ -7814,6 +7848,23 @@ async def literature_export():
         from memomics.bio_tools.literature_library import export_citations
         import json as _json
         return _json.loads(export_citations())
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
+@app.get("/api/literature/bilingual")
+async def literature_bilingual(file_or_title: str = ""):
+    """双语对照文档（批O4 2026-08-16）：模块(书签/标题)→页码→段落→矩形 映射。
+
+    前端 ⇄对照 视图用：左侧真 PDF（/api/papers/page 渲染，含原图），
+    右侧按模块组织的译文；点模块/段落定位原文页并高亮区域。
+    """
+    if not file_or_title.strip():
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    try:
+        from memomics.bio_tools.literature_library import build_bilingual
+        import json as _json
+        return _json.loads(build_bilingual(file_or_title.strip()))
     except Exception as e:
         return JSONResponse({"error": str(e)[:300]}, status_code=500)
 

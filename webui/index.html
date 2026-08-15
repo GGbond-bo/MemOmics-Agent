@@ -460,6 +460,33 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .lit-compare-cell { padding:5px 10px; font-size:12px; line-height:1.7; white-space:pre-wrap; word-break:break-word; min-height:1em; }
 .lit-compare-cell.left { border-right:1px solid var(--border); }
 .lit-compare-cell.h { font-weight:700; color:var(--primary); }
+/* 批O4：真PDF原文 + 模块化译文 对照（通义千问式，点击互映射） */
+.lit-bi { display:flex; height:100%; min-height:0; flex-direction:column; }
+.lit-bi-toolbar { display:flex; gap:8px; align-items:center; padding:4px 0 8px; flex-wrap:wrap; font-size:11px; color:var(--text-light); }
+.lit-bi-outline { display:flex; gap:6px; flex-wrap:wrap; padding:0 0 8px; }
+.lit-bi-outline button { font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lit-bi-outline button:hover { background:var(--primary); color:#fff; }
+.lit-bi-main { flex:1; display:grid; grid-template-columns:minmax(260px,42%) 1fr; min-height:0; gap:8px; }
+.lit-pdf-pane { overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:#3a3f44; padding:8px; }
+.lit-pdf-page { position:relative; margin:0 0 12px; background:#fff; border-radius:2px; box-shadow:0 1px 5px rgba(0,0,0,0.45); cursor:pointer; }
+.lit-pdf-page img { width:100%; display:block; border-radius:2px; }
+.lit-pdf-page .lit-page-no { position:absolute; bottom:4px; right:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; pointer-events:none; }
+.lit-pdf-page.hl { outline:3px solid #4a90e2; outline-offset:-3px; }
+.lit-pdf-hl { position:absolute; background:rgba(74,144,217,0.35); border:2px solid #4a90e2; border-radius:2px; pointer-events:none; transition:opacity .4s; }
+.lit-mod-pane { overflow-y:auto; padding:2px 2px 2px 0; }
+.lit-mod-card { border:1px solid var(--border); border-radius:8px; margin-bottom:10px; background:var(--bg); overflow:hidden; }
+.lit-mod-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(74,144,217,0.08); border-bottom:1px solid var(--border); cursor:pointer; }
+.lit-mod-head:hover { background:rgba(74,144,217,0.15); }
+.lit-mod-head.hl { background:rgba(74,144,217,0.25); }
+.lit-mod-title { font-weight:600; font-size:12.5px; flex:1; }
+.lit-mod-pages { font-size:10px; color:var(--text-light); background:var(--panel); padding:1px 6px; border-radius:3px; white-space:nowrap; }
+.lit-mod-para { position:relative; padding:7px 12px; font-size:12px; line-height:1.75; border-bottom:1px dashed var(--border); cursor:pointer; }
+.lit-mod-para:last-child { border-bottom:none; }
+.lit-mod-para:hover { background:rgba(74,144,217,0.06); }
+.lit-mod-para.hl { background:rgba(230,126,34,0.16); }
+.lit-mod-para .lit-p-chip { position:absolute; right:8px; top:6px; font-size:9px; color:var(--primary); background:var(--panel); border:1px solid var(--border); border-radius:3px; padding:0 5px; cursor:pointer; }
+.lit-mod-para .lit-p-chip:hover { background:var(--primary); color:#fff; }
+.lit-mod-para.h { font-weight:700; color:var(--primary); background:rgba(74,144,217,0.05); }
 /* 批O：引用卡 / 知识卡 */
 .lit-cite-item { border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:8px 0; background:var(--bg); }
 .lit-cite-item .lit-cite-head { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-light); margin-bottom:4px; }
@@ -4337,40 +4364,170 @@ function litAlignBlocks(L, R) {
   return out;
 }
 
-function litRenderCompare(body, mdText, zhText, stem) {
-  var L = litSplitBlocks(mdText), R = litSplitBlocks(zhText);
-  var pairs = litAlignBlocks(L, R);
-  var aligned = L.length === R.length;
-  var ref = litJsStr(_litPaper ? _litPaper.file : '');
-  var html = '<div class="lit-compare">' +
-    '<div class="lit-compare-toolbar">' +
-    '<span>⇄ 左侧原文 / 右侧译文 · 逐段对齐 · 悬停联动高亮 · 原文 ' + L.length + ' 段 / 译文 ' + R.length + ' 段' +
-    (aligned ? '（1:1 对齐）' : '（段落数不同，已按标题锚点/比例配平）') + '</span>' +
+// 批O4(2026-08-16)：真PDF原文 + 模块化译文 对照（通义千问式，点击互映射）
+var _litBi = null;
+var _litBiHlTimer = null;
+
+function litRenderBilingual(body, bi) {
+  _litBi = bi;
+  var ref = litJsStr(_litPaper ? _litPaper.file : bi.file || '');
+  var stem = bi.stem || '';
+  var html = '<div class="lit-bi">' +
+    '<div class="lit-bi-toolbar">' +
+    '<span>📄 左侧=原版 PDF（含图表） · 右侧=按模块译文 · 点模块/段落定位原文 · 点原文页回定位译文</span>' +
     '<span style="margin-left:auto;display:flex;gap:6px;">' +
-    '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.md\', _litCmpSrc)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载原文</button>' +
-    '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.zh.md\', _litCmpZh)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
-    '<button onclick="litForceTranslate(\'' + ref + '\')" title="段落级重新翻译（修复对照对齐）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button>' +
+    '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+    '<button onclick="litForceTranslate(\'' + ref + '\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button>' +
     '<button onclick="litPaperTab(\'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">仅看译文</button>' +
     '</span></div>' +
-    '<div class="lit-compare-cols">' +
-    '<div class="lit-compare-head"><div>📄 原文 (English)</div><div>🌐 译文 (中文)</div></div>';
-  pairs.forEach(function(p, i) {
-    var lb = p[0] != null ? L[p[0]] : '—';
-    var rb = p[1] != null ? R[p[1]] : '—';
-    html += '<div class="lit-compare-row" id="lit-cmp-row-' + i + '">' +
-      '<div class="lit-compare-cell left' + (/^#{1,6}\s/.test(lb) ? ' h' : '') + '">' + escapeHtml(lb) + '</div>' +
-      '<div class="lit-compare-cell' + (/^#{1,6}\s/.test(rb) ? ' h' : '') + '">' + escapeHtml(rb) + '</div></div>';
-  });
-  html += '</div></div>';
+    '<div class="lit-bi-outline" id="lit-bi-outline"></div>' +
+    '<div class="lit-bi-main">' +
+    '<div class="lit-pdf-pane" id="lit-pdf-pane"></div>' +
+    '<div class="lit-mod-pane" id="lit-mod-pane"></div>' +
+    '</div></div>';
   body.innerHTML = html;
-  _litCmpSrc = mdText;
-  _litCmpZh = zhText;
-  pairs.forEach(function(p, j) {
-    var row = document.getElementById('lit-cmp-row-' + j);
-    if (!row) return;
-    row.onmouseenter = function() { row.classList.add('hl'); };
-    row.onmouseleave = function() { row.classList.remove('hl'); };
+  // 左侧：整页渲染 PDF（含原图）
+  var pdfHtml = '';
+  for (var p = 0; p < (bi.pages || 0); p++) {
+    pdfHtml += '<div class="lit-pdf-page" id="lit-pdf-page-' + p + '" data-page="' + p + '" title="第 ' + (p + 1) + ' 页（点击定位对应译文模块）">' +
+      '<img loading="lazy" src="/api/papers/page?path=' + encodeURIComponent(bi.file || '') + '&page=' + p + '&dpi=150" alt="第' + (p + 1) + '页">' +
+      '<span class="lit-page-no">P' + (p + 1) + '</span>' +
+      '</div>';
+  }
+  document.getElementById('lit-pdf-pane').innerHTML = pdfHtml;
+  // 目录条
+  var outline = '';
+  (bi.modules || []).forEach(function(m, i) {
+    outline += '<button onclick="litBiGoModule(' + i + ')" title="' + escapeHtml(m.title || '') + '">' + escapeHtml(m.title || ('模块' + (i + 1))) + '</button>';
   });
+  document.getElementById('lit-bi-outline').innerHTML = outline;
+  // 右侧：模块化译文
+  var modHtml = '';
+  if (!bi.has_zh) {
+    modHtml = '<div style="color:var(--text-light);padding:14px;">译文尚未完成（正在后台翻译）。可先浏览左侧原版 PDF，译文完成后刷新本页即可。</div>';
+  } else {
+    (bi.modules || []).forEach(function(m, i) {
+      var pLabel = 'P' + (m.start_page + 1) + (m.end_page > m.start_page ? '–P' + (m.end_page + 1) : '');
+      modHtml += '<div class="lit-mod-card" id="lit-mod-card-' + i + '" data-start="' + m.start_page + '" data-end="' + m.end_page + '">' +
+        '<div class="lit-mod-head" onclick="litBiGoModule(' + i + ')">' +
+        '<span class="lit-mod-title">' + escapeHtml(m.title || ('模块 ' + (i + 1))) + '</span>' +
+        '<span class="lit-mod-pages">📄 ' + pLabel + '</span></div>';
+      if ((m.subs || []).length) {
+        modHtml += '<div style="display:flex;gap:5px;flex-wrap:wrap;padding:5px 12px;border-bottom:1px solid var(--border);background:var(--panel);">' +
+          (m.subs || []).map(function(s2) {
+            return '<button onclick="litBiGoPage(' + s2.page + ')" title="定位原文第 ' + (s2.page + 1) + ' 页" style="font-size:10px;padding:1px 8px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text-light);cursor:pointer;">' + escapeHtml(s2.title || '') + '</button>';
+          }).join('') + '</div>';
+      }
+      (m.paras || []).forEach(function(pp, j) {
+        var zh = (pp.zh || '').trim();
+        if (!zh) return;
+        var isH = /^#{1,6}\s/.test(pp.en || '');
+        modHtml += '<div class="lit-mod-para' + (isH ? ' h' : '') + '" id="lit-mod-para-' + i + '-' + j + '" data-page="' + pp.page + '" data-rect="' + encodeURIComponent(JSON.stringify(pp.rect || null)) + '"' +
+          ' onclick="litBiGoPara(' + i + ',' + j + ')" title="点击定位原文第 ' + (pp.page + 1) + ' 页">' +
+          escapeHtml(zh.replace(/^#{1,6}\s*/, '')) +
+          '<span class="lit-p-chip" title="定位到原文第 ' + (pp.page + 1) + ' 页">P' + (pp.page + 1) + '</span></div>';
+      });
+      modHtml += '</div>';
+    });
+  }
+  document.getElementById('lit-mod-pane').innerHTML = modHtml;
+  // 左侧页点击 → 定位对应模块/段落
+  document.getElementById('lit-pdf-pane').querySelectorAll('.lit-pdf-page').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var pg = parseInt(el.getAttribute('data-page'), 10);
+      litBiFromPage(pg);
+    });
+  });
+}
+
+function _litBiPdfPane() { return document.getElementById('lit-pdf-pane'); }
+function _litBiModPane() { return document.getElementById('lit-mod-pane'); }
+
+function litBiClearHl() {
+  document.querySelectorAll('.lit-pdf-page.hl').forEach(function(el) { el.classList.remove('hl'); });
+  document.querySelectorAll('.lit-mod-head.hl').forEach(function(el) { el.classList.remove('hl'); });
+  document.querySelectorAll('.lit-mod-para.hl').forEach(function(el) { el.classList.remove('hl'); });
+  document.querySelectorAll('.lit-pdf-hl').forEach(function(el) { el.remove(); });
+  if (_litBiHlTimer) { clearTimeout(_litBiHlTimer); _litBiHlTimer = null; }
+}
+
+function litBiGoPage(p, rect) {
+  var pane = _litBiPdfPane();
+  if (!pane) return;
+  var pgEl = document.getElementById('lit-pdf-page-' + p);
+  if (!pgEl) return;
+  pgEl.scrollIntoView({behavior: 'smooth', block: 'start'});
+  litBiClearHl();
+  pgEl.classList.add('hl');
+  if (rect && rect.length === 4) {
+    var hl = document.createElement('div');
+    hl.className = 'lit-pdf-hl';
+    hl.style.left = (rect[0] * 100) + '%';
+    hl.style.top = (rect[1] * 100) + '%';
+    hl.style.width = Math.max(2, (rect[2] - rect[0]) * 100) + '%';
+    hl.style.height = Math.max(1, (rect[3] - rect[1]) * 100) + '%';
+    pgEl.appendChild(hl);
+  }
+  _litBiHlTimer = setTimeout(function() {
+    pgEl.classList.remove('hl');
+    var h = pgEl.querySelector('.lit-pdf-hl');
+    if (h) h.remove();
+  }, 3000);
+}
+
+function litBiGoModule(i) {
+  var bi = _litBi;
+  if (!bi || !(bi.modules || [])[i]) return;
+  var m = bi.modules[i];
+  litBiGoPage(m.start_page, null);
+  // 右侧滚动到模块 + 高亮
+  var card = document.getElementById('lit-mod-card-' + i);
+  if (card) {
+    card.scrollIntoView({behavior: 'smooth', block: 'start'});
+    card.querySelector('.lit-mod-head').classList.add('hl');
+    setTimeout(function() { card.querySelector('.lit-mod-head').classList.remove('hl'); }, 2500);
+  }
+}
+
+function litBiGoPara(i, j) {
+  var bi = _litBi;
+  if (!bi) return;
+  var m = (bi.modules || [])[i];
+  var pp = m && (m.paras || [])[j];
+  if (!pp) return;
+  var paraEl = document.getElementById('lit-mod-para-' + i + '-' + j);
+  if (paraEl) paraEl.classList.add('hl');
+  litBiGoPage(pp.page, pp.rect || null);
+  setTimeout(function() { if (paraEl) paraEl.classList.remove('hl'); }, 2500);
+}
+
+function litBiFromPage(p) {
+  var bi = _litBi;
+  if (!bi) return;
+  var hitMod = -1, hitPara = null;
+  (bi.modules || []).forEach(function(m, i) {
+    if (p >= m.start_page && p <= m.end_page) {
+      hitMod = i;
+      (m.paras || []).forEach(function(pp, j) {
+        if (!hitPara && pp.page === p && (pp.zh || '').trim()) hitPara = [i, j];
+      });
+    }
+  });
+  if (hitMod >= 0) {
+    var card = document.getElementById('lit-mod-card-' + hitMod);
+    if (card) {
+      card.scrollIntoView({behavior: 'smooth', block: 'start'});
+      card.querySelector('.lit-mod-head').classList.add('hl');
+      setTimeout(function() { card.querySelector('.lit-mod-head').classList.remove('hl'); }, 2500);
+    }
+    if (hitPara) {
+      var paraEl = document.getElementById('lit-mod-para-' + hitPara[0] + '-' + hitPara[1]);
+      if (paraEl) {
+        paraEl.classList.add('hl');
+        setTimeout(function() { paraEl.classList.remove('hl'); }, 2500);
+      }
+    }
+  }
 }
 
 async function litPaperTab(tab) {
@@ -4428,23 +4585,22 @@ async function litPaperTab(tab) {
     return;
   }
   if (tab === 'cmp') {
-    if (!d.markdown_file) {
-      body.innerHTML = '<span style="color:var(--text-light);">尚无原文 Markdown——先点"📝 提炼"生成。</span>';
-      return;
-    }
     if (!d.translation_file) {
       body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">对照视图需要中文译文。' +
         '<button onclick="translatePaper(\'' + ref + '\', \'cmp\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
-        '<div style="font-size:11px;">翻译完成后自动生成"原文 ⇄ 译文"段落级对照双屏。</div></div>';
+        '<div style="font-size:11px;">翻译完成后：左侧=原版 PDF（含图），右侧=按模块组织的译文，点模块/段落自动定位原文。</div></div>';
       return;
     }
-    body.innerHTML = '<span style="color:var(--text-light);">加载对照双屏…</span>';
+    body.innerHTML = '<span style="color:var(--text-light);">构建对照视图（定位原文模块…）</span>';
     body.style.overflowY = 'hidden';
     body.style.padding = '0';
     try {
-      var t1 = await (await fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md'))).text();
-      var t2 = await (await fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem + '.zh.md'))).text();
-      litRenderCompare(body, t1, t2, stem);
+      var bj = await (await fetch('/api/literature/bilingual?file_or_title=' + encodeURIComponent(d.file || ''))).json();
+      if (!bj.ok) {
+        body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(bj.error || '') + '</span>';
+        return;
+      }
+      litRenderBilingual(body, bj);
     } catch(e) {
       body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
     }

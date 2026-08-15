@@ -243,6 +243,79 @@ class TestKnowledgeDomains:
         assert "/human/" not in r["path"]
 
 
+# ---------------------------------------------------------------- 双语对照文档（批O4）
+def _make_syn_pdf(path, toc=True):
+    import pymupdf as fitz
+    doc = fitz.open()
+    for i in range(3):
+        page = doc.new_page()
+        page.insert_text((72, 100), f"Section {i + 1} Heading", fontsize=16)
+        body = (f"Body paragraph {i + 1} with unique marker word marker{i + 1}xyz. "
+                f"More text to make the block longer and searchable. ") * 3
+        page.insert_text((72, 150), body, fontsize=11)
+    if toc:
+        doc.set_toc([[1, "Introduction", 1], [1, "Methods", 2], [1, "Results", 3]])
+    doc.save(str(path))
+    doc.close()
+
+
+class TestBilingualBuilder:
+    def test_build_with_toc(self, tmp_path, monkeypatch):
+        import pymupdf as fitz
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        pdf_path = papers / "demo.pdf"
+        _make_syn_pdf(pdf_path, toc=True)
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "demo.pdf", "path": str(pdf_path),
+                        "title": "Demo paper"}], f, ensure_ascii=False)
+        r = json.loads(LL.build_bilingual("demo.pdf"))
+        assert r["ok"] is True
+        assert r["pages"] == 3
+        assert r["toc_source"] == "toc"
+        assert len(r["modules"]) == 3
+        assert [m["start_page"] for m in r["modules"]] == [0, 1, 2]
+        for m in r["modules"]:
+            assert len(m["paras"]) >= 1
+            for p in m["paras"]:
+                assert m["start_page"] <= p["page"] <= m["end_page"]
+                assert p["rect"] is None or len(p["rect"]) == 4
+
+    def test_build_without_toc_falls_back(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        pdf_path = papers / "notoc.pdf"
+        _make_syn_pdf(pdf_path, toc=False)
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "notoc.pdf", "path": str(pdf_path),
+                        "title": "NoToc paper"}], f, ensure_ascii=False)
+        r = json.loads(LL.build_bilingual("notoc.pdf"))
+        assert r["ok"] is True
+        assert r["toc_source"] in ("headings", "none")
+        assert len(r["modules"]) >= 1
+
+    def test_map_blocks_to_pages(self):
+        pages = ["page zero contains hello world marker", "page one has marker two here"]
+        blocks = ["## hello world", "marker two"]
+        got = LL._map_blocks_to_pages(blocks, pages)
+        assert got == [0, 1]
+
+    def test_find_rect_on_synthetic_pdf(self, tmp_path):
+        pdf_path = tmp_path / "rect.pdf"
+        _make_syn_pdf(pdf_path, toc=True)
+        rect = LL._find_block_rect(str(pdf_path), 0, "Section 1 Heading")
+        assert rect is not None and len(rect) == 4
+        assert all(0 <= v <= 1 for v in rect)
+
+    def test_missing_paper_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "papers").mkdir()
+        r = json.loads(LL.build_bilingual("nope.pdf"))
+        assert r["ok"] is False
+
+
 # ---------------------------------------------------------------- get_summary 修复
 class TestGetSummaryFix:
     def test_summary_and_authors_not_empty(self, tmp_path, monkeypatch):
@@ -317,11 +390,20 @@ class TestFrontendLitWorkbench:
         assert HTML.count('class="lit-resizer') >= 8  # 八向调节
 
     def test_compare_view(self):
-        assert "function litRenderCompare" in HTML
+        assert "function litRenderCompare" in HTML or "function litRenderBilingual" in HTML
         assert "function litAlignBlocks" in HTML
         assert "lit-compare-cols" in HTML
         assert "lit-compare-head" in HTML
         assert "litDownloadTextRaw" in HTML
+
+    def test_bilingual_view(self):
+        assert "function litRenderBilingual" in HTML
+        assert "function litBiGoModule" in HTML
+        assert "function litBiGoPara" in HTML
+        assert "function litBiFromPage" in HTML
+        assert "/api/literature/bilingual" in HTML
+        assert "/api/papers/page" in HTML
+        assert "lit-pdf-pane" in HTML and "lit-mod-pane" in HTML
 
     def test_force_retranslate(self):
         assert "function litForceTranslate" in HTML
