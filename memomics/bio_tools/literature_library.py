@@ -782,15 +782,16 @@ def _md_blocks(md: str) -> list:
     return blocks
 
 
-def _batch_blocks(blocks: list, max_chars: int = 6000, max_blocks: int = 8) -> list:
-    """段落分组（每批 ≤max_chars 且 ≤max_blocks，块内保持完整段落）。"""
-    batches, cur, cur_n = [], [], 0
+def _batch_blocks(blocks: list, max_chars: int = 9000, max_blocks: int = 6) -> list:
+    """段落分组（每批 ≤max_chars 字符 且 ≤max_blocks 段，块内保持完整段落）。"""
+    batches, cur, cur_n, cur_b = [], [], 0, 0
     for b in blocks:
-        if cur and (cur_n >= max_blocks or cur_n + len(b) > max_chars):
+        if cur and (cur_b >= max_blocks or cur_n + len(b) > max_chars):
             batches.append(cur)
-            cur, cur_n = [], 0
+            cur, cur_n, cur_b = [], 0, 0
         cur.append(b)
         cur_n += len(b)
+        cur_b += 1
     if cur:
         batches.append(cur)
     return batches
@@ -830,7 +831,7 @@ def _translate_block_batch(blocks: list) -> list:
     prompt = _TRANS_PROMPT_HEAD
     for i, b in enumerate(blocks):
         prompt += f"[{i + 1}]\n{b}\n\n"
-    out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=6000,
+    out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=12000,
                        retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n")
     res = _parse_numbered_output(out, len(blocks))
     if not any(res):
@@ -838,7 +839,7 @@ def _translate_block_batch(blocks: list) -> list:
         out2 = _llm_content(
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文，"
             "每段必须以 ###数字### 单独一行开头】\n" + prompt,
-            "lit_trans_blocks_retry", temperature=0.1, max_tokens=6000,
+            "lit_trans_blocks_retry", temperature=0.1, max_tokens=12000,
             retry_prefix="【直接输出译文，不要思考】\n")
         res = _parse_numbered_output(out2, len(blocks))
     return res
@@ -888,21 +889,46 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         return json.dumps({"ok": False, "error": "Markdown 切段失败"}, ensure_ascii=False)
     batches = _batch_blocks(blocks)
     results = [""] * len(blocks)
-    flat = 0
-    for bi, batch in enumerate(batches):
-        _cb("translate", bi, len(batches), f"段落级翻译第 {bi + 1}/{len(batches)} 批（{len(batch)} 段）")
-        part = _translate_block_batch(batch)
-        for k, t in enumerate(part):
-            if t:
-                results[flat + k] = t
-        flat += len(batch)
+    # 批O2：3 路并发翻译批次（每批编号直译互不依赖；结果按批次偏移回填保证顺序）
+    indexed = []
+    _off = 0
+    for batch in batches:
+        indexed.append((_off, batch))
+        _off += len(batch)
+    _cb("translate", 0, len(indexed), f"段落级编号直译 {len(indexed)} 批（并发3）")
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        _mw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "3"))))
+
+        def _one(off_batch):
+            off, batch = off_batch
+            return off, _translate_block_batch(batch)
+
+        _n_done = 0
+        with ThreadPoolExecutor(max_workers=_mw) as _ex:
+            for off, part in _ex.map(_one, indexed):
+                for k, t in enumerate(part):
+                    if t:
+                        results[off + k] = t
+                _n_done += 1
+                _cb("translate", _n_done, len(indexed), f"段落级翻译 {_n_done}/{len(indexed)} 批")
+    except Exception as e:
+        logger.warning(f"parallel translate failed, fallback serial: {e}")
+        _flat = 0
+        for bi, batch in enumerate(batches):
+            _cb("translate", bi, len(batches), f"段落级翻译第 {bi + 1}/{len(batches)} 批（{len(batch)} 段）")
+            part = _translate_block_batch(batch)
+            for k, t in enumerate(part):
+                if t:
+                    results[_flat + k] = t
+            _flat += len(batch)
     # 缺段单段兜底直译（保证 1:1 完整）
     for i, b in enumerate(blocks):
         if not results[i]:
             _cb("translate", i, len(blocks), f"补译第 {i + 1}/{len(blocks)} 段")
             results[i] = _llm_content(
                 "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），只输出译文：\n" + b,
-                f"lit_trans_fix_{i}", temperature=0.2, max_tokens=3000,
+                f"lit_trans_fix_{i}", temperature=0.2, max_tokens=6000,
                 retry_prefix="【不要思考，立即输出译文】\n").strip()
     zh = "\n\n".join(results)
     if not zh.strip():
