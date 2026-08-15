@@ -899,7 +899,7 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     if not hit:
         return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
                           ensure_ascii=False)
-    pdf_path = hit.get("path", "")
+    pdf_path = _resolve_paper_path(hit)
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
     stem = os.path.splitext(hit.get("file") or "")[0]
@@ -1052,6 +1052,31 @@ def _load_summary_file(stem: str) -> str:
         return ""
 
 
+def _resolve_paper_path(entry: dict) -> str:
+    """文献 PDF 实际路径解析（批O5 2026-08-16：发布包可移植）。
+
+    索引里存的是打包机上的绝对路径；用户解压到别的目录后路径失效。
+    兜底策略：① 存路径存在直接用 ② 按文件名在当前文献库根目录找
+    ③ 找不到才返回原路径（调用方会给出"PDF 不存在"错误）。
+    """
+    p = (entry.get("path") or "").strip()
+    if p and os.path.isfile(p):
+        return p
+    f = (entry.get("file") or "").strip()
+    if f:
+        cand = os.path.join(_library_dir(), f)
+        if os.path.isfile(cand):
+            return cand
+        # 宽松兜底：库内递归找同名文件（防历史条目放在子目录）
+        try:
+            for root, _dirs, fs in os.walk(_library_dir()):
+                if f in fs:
+                    return os.path.join(root, f)
+        except Exception:
+            pass
+    return p
+
+
 def _find_raw_entry(file_or_title: str) -> dict:
     """在两份索引（用户导入 + agent 下载）里按文件名/标题子串找原始条目。"""
     needle = (file_or_title or "").strip().lower()
@@ -1183,7 +1208,7 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
                            "file": hit.get("file"),
                            "note": "已提炼过（幂等跳过）。如需重新提炼，用 force=true。"},
                           ensure_ascii=False)
-    pdf_path = hit.get("path", "")
+    pdf_path = _resolve_paper_path(hit)
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
     # 批N(2026-08-16)：PDF → Markdown 落盘 → 分节分块解读（替代 30K 字符一锅炖）
@@ -1578,7 +1603,7 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
                            "file": hit.get("file"),
                            "note": "已提取过（幂等跳过）。force=true 可重新提取。"},
                           ensure_ascii=False)
-    pdf_path = hit.get("path", "")
+    pdf_path = _resolve_paper_path(hit)
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
     _cb("convert", 0, 1, f"PDF → Markdown: {hit.get('file')}")
@@ -1754,7 +1779,7 @@ def enrich_paper_metadata(file_or_title: str, progress_cb=None) -> str:
     if not hit:
         return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
                           ensure_ascii=False)
-    pdf_path = hit.get("path", "")
+    pdf_path = _resolve_paper_path(hit)
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
     _cb("read", 0, 1, f"重新提取 DOI: {hit.get('file')}")
@@ -2071,7 +2096,7 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
     if not hit:
         return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
                           ensure_ascii=False)
-    pdf_path = hit.get("path", "")
+    pdf_path = _resolve_paper_path(hit)
     if not pdf_path or not os.path.isfile(pdf_path):
         return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
     stem = os.path.splitext(hit.get("file") or "")[0]

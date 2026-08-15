@@ -88,6 +88,13 @@ if ! "$VENV_PY" -c "import fastapi" 2>/dev/null; then
 else
     echo "[OK] Dependencies ready"
 fi
+# 批O5(2026-08-16): 读图组件(OCR=rapidocr_onnxruntime+opencv-headless, 跨平台含Linux)首次装
+if ! "$VENV_PY" -c "import rapidocr_onnxruntime" 2>/dev/null; then
+    echo "[INSTALL] Installing vision/OCR components (约200MB, once)..."
+    "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+else
+    echo "[OK] OCR ready"
+fi
 
 # === Step 5: Start ===
 echo ""

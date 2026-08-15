@@ -64,11 +64,27 @@ if not defined BASE_PYTHON (
     )
 )
 if not defined BASE_PYTHON (
-    echo [ERROR] 未找到 Python 3.11-3.13。
-    echo         方案1: 运行 install.bat（自动装 Miniconda）
-    echo         方案2: 手动安装 https://www.python.org/downloads/
-    pause
-    exit /b 1
+    echo [WARN] 未找到系统 Python —— 使用随包内置 Miniconda（发布包自带 miniconda\ 目录时）。
+    set "CONDA_PY=%~dp0miniconda_env\python.exe"
+    if not exist "!CONDA_PY!" (
+        set "CONDA_INSTALLER=%~dp0miniconda\Miniconda3-latest-Windows-x86_64.exe"
+        if not exist "!CONDA_INSTALLER!" (
+            echo [ERROR] 未找到 Python 3.11-3.13，且包内无 Miniconda 安装器。
+            echo         方案1: 运行 install.bat（自动装 Miniconda）
+            echo         方案2: 手动安装 https://www.python.org/downloads/
+            pause
+            exit /b 1
+        )
+        echo [INSTALL] 静默安装内置 Miniconda（2-5 分钟）...
+        start /wait "" "!CONDA_INSTALLER!" /S /InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /D=%~dp0miniconda_env
+        if not exist "!CONDA_PY!" (
+            echo [ERROR] Miniconda 安装失败！
+            pause
+            exit /b 1
+        )
+    )
+    set "BASE_PYTHON=!CONDA_PY!"
+    echo [OK] 使用内置 Miniconda Python
 )
 
 echo [SETUP] 首次运行：用 %BASE_PYTHON% 创建 .venv ...
