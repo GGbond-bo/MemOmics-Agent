@@ -131,6 +131,37 @@ class TestDoiClean:
         assert LL._clean_doi("10.1016/j.cmet.2022.05.010") == "10.1016/j.cmet.2022.05.010"
 
 
+# ---------------------------------------------------------------- 段落级翻译（对照 1:1 对齐）
+class TestBlockTranslation:
+    def test_md_blocks_splits_headings(self):
+        md = "# Title\n\npara one.\n\n## H2\n\npara two.\n\nmore two."
+        blocks = LL._md_blocks(md)
+        assert blocks == ["# Title", "para one.", "## H2", "para two.", "more two."]
+
+    def test_md_blocks_paragraph_split(self):
+        blocks = LL._md_blocks("a\n\nb\n\nc")
+        assert blocks == ["a", "b", "c"]
+
+    def test_batch_blocks_respects_limits(self):
+        blocks = ["x" * 3000, "y" * 3000, "z" * 3000]
+        batches = LL._batch_blocks(blocks, max_chars=6000, max_blocks=8)
+        assert all(len("".join(b)) <= 6000 for b in batches)
+        flat = [b for batch in batches for b in batch]
+        assert flat == blocks
+
+    def test_parse_numbered_output(self):
+        out = "###1###\n译文一第一行\n译文一第二行\n###2### 译文二（同行标记）\n###3###\n译文三\n"
+        res = LL._parse_numbered_output(out, 3)
+        assert res[0] == "译文一第一行\n译文一第二行"
+        assert res[1] == "译文二（同行标记）"
+        assert res[2] == "译文三"
+
+    def test_parse_numbered_missing_tolerated(self):
+        out = "###2###\n只有第二段\n"
+        res = LL._parse_numbered_output(out, 3)
+        assert res[0] == "" and res[1] == "只有第二段" and res[2] == ""
+
+
 # ---------------------------------------------------------------- get_summary 修复
 class TestGetSummaryFix:
     def test_summary_and_authors_not_empty(self, tmp_path, monkeypatch):
@@ -206,8 +237,14 @@ class TestFrontendLitWorkbench:
 
     def test_compare_view(self):
         assert "function litRenderCompare" in HTML
+        assert "function litAlignBlocks" in HTML
         assert "lit-compare-cols" in HTML
+        assert "lit-compare-head" in HTML
         assert "litDownloadTextRaw" in HTML
+
+    def test_force_retranslate(self):
+        assert "function litForceTranslate" in HTML
+        assert "force" in HTML
 
     def test_knowledge_view(self):
         assert "function litRenderKnowledge" in HTML

@@ -298,6 +298,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .file-item .file-icon { font-size:14px; }
 .file-item .file-name { flex:1; word-break:break-all; }
 .file-item .file-size { font-size:10px; color:var(--text-light); }
+.file-item .file-mtime { font-size:10px; color:var(--text-light); white-space:nowrap; }
 .file-item .download-btn { font-size:11px; padding:2px 8px; border-radius:4px; background:var(--primary); color:#fff; border:none; cursor:pointer; }
 /* Git 风格结果文件树 */
 .results-tree-header { padding:6px 12px; font-size:11px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:#f6f8fa; }
@@ -335,7 +336,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .fig-thumb { position:relative; border:1px solid var(--border); border-radius:8px; overflow:hidden; cursor:pointer; background:#f8f9fa; transition:transform 0.15s; }
 .fig-thumb:hover { border-color:var(--primary); box-shadow:0 4px 12px rgba(0,0,0,0.12); transform:translateY(-2px); }
 .fig-thumb img { width:100%; height:120px; object-fit:contain; background:#fff; }
-.fig-thumb .fig-thumb-name { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:#fff; font-size:10px; padding:3px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fig-thumb .fig-thumb-name { background:rgba(0,0,0,0.7); color:#fff; font-size:10px; padding:3px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fig-thumb .fig-thumb-mtime { background:rgba(0,0,0,0.55); color:#ddd; font-size:9px; padding:1px 6px 3px; text-align:center; white-space:nowrap; }
 
 /* 文件预览 */
 .file-preview { padding:12px; }
@@ -446,9 +448,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 /* 批O：中英对照双屏（通义千问式） */
 .lit-compare { display:flex; height:100%; min-height:0; flex-direction:column; }
 .lit-compare-toolbar { display:flex; gap:8px; align-items:center; padding:4px 0 8px; flex-wrap:wrap; font-size:11px; color:var(--text-light); }
-.lit-compare-cols { flex:1; display:grid; grid-template-columns:1fr 1fr; min-height:0; overflow:hidden; border:1px solid var(--border); border-radius:8px; }
-.lit-compare-col { overflow-y:auto; padding:8px 10px; min-height:0; }
-.lit-compare-col.left { border-right:1px solid var(--border); }
+/* 批O2 修复：单一滚动容器内逐行两列（左原文右译文），每行占满全宽——旧版把内容挤进了左半格 */
+.lit-compare-cols { flex:1; min-height:0; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--bg); }
+.lit-compare-head { position:sticky; top:0; z-index:3; display:grid; grid-template-columns:1fr 1fr; background:var(--panel); border-bottom:1px solid var(--border); }
+.lit-compare-head div { padding:5px 10px; font-size:11px; color:var(--text-light); font-weight:600; }
+.lit-compare-head div + div { border-left:1px solid var(--border); }
 .lit-compare-row { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px dashed var(--border); }
 .lit-compare-row:last-child { border-bottom:none; }
 .lit-compare-row:hover { background:rgba(74,144,217,0.07); }
@@ -1042,6 +1046,12 @@ let pendingImages = [];  // 待发送图片 [{dataUrl, file, uploadedUrl}]
 // === 会话级进度缓存（切换会话时保存/恢复） ===
 let _sessionProgressCache = {};  // sid -> { timelineEl, items }
 let _currentRunningSid = null;   // 当前正在运行的会话 ID
+// === 结果面板轻量自动刷新(出完图自己小幅刷一下:内容没变不重绘、不跳滚动条) ===
+let _lastFiguresCount = 0;
+let _lastFilesCount = 0;
+let _lastFiguresSig = '';        // 图片列表签名
+let _lastFilesSig = '';          // 文件列表签名(含会话+路径)
+let _resultsRefreshTimer = null; // 任务结束后的补刷定时器
 let _newSessionPromise = null;   // 同一浏览器只允许一个建会话请求在途
 let _sessionTransitioning = false;
 const _sessionScopedEventTypes = new Set([
@@ -1390,6 +1400,9 @@ function handleMessage(msg) {
     _currentRunningSid = null;
     setFloatBar(false);
     scrollBottom();
+    // 出完图自动小幅刷新结果面板:立即 + 2.5 秒后补刷(最后落盘的文件也出现)
+    refreshResults();
+    _scheduleResultsRefresh(2500);
     refreshTodos();
     updateSessionList();
   } else if (msg.type === 'error') {
@@ -1403,6 +1416,7 @@ function handleMessage(msg) {
     setFloatBar(false);
     agentRunning = false;
     document.getElementById('steer-hint').style.display = 'none';
+    refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
   } else if (msg.type === 'todos_update') {
@@ -1418,6 +1432,7 @@ function handleMessage(msg) {
     agentRunning = false;
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
+    refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
   } else if (msg.type === 'new_figure') {
     // 分析过程中生成了新图片——自动展示
     if (msg.figure) {
@@ -4274,34 +4289,88 @@ function litSplitBlocks(t) {
   return blocks;
 }
 
+// 批O2：段落配平——两边段数一致时 1:1；不一致时先按标题锚点分段配平，无标题则按比例拉伸
+function litAlignSeg(L, l0, l1, R, r0, r1) {
+  var nL = (l1 == null ? -1 : l1 - l0 + 1), nR = (r1 == null ? -1 : r1 - r0 + 1);
+  if (nL <= 0 && nR <= 0) return [];
+  var n = Math.max(nL, nR);
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var li = nL === n ? l0 + i : (nL <= 0 ? null : l0 + Math.round(i * (nL - 1) / Math.max(n - 1, 1)));
+    var ri = nR === n ? r0 + i : (nR <= 0 ? null : r0 + Math.round(i * (nR - 1) / Math.max(n - 1, 1)));
+    out.push([li, ri]);
+  }
+  return out;
+}
+
+function litAlignBlocks(L, R) {
+  // 返回 [[原文索引或null, 译文索引或null], ...]（null 一侧显示 '—'）
+  if (L.length === R.length) {
+    var exact = [];
+    for (var i = 0; i < L.length; i++) exact.push([i, i]);
+    return exact;
+  }
+  function headIdx(arr) {
+    var out = [];
+    arr.forEach(function(b, i) { if (/^#{1,6}\s/.test(b)) out.push(i); });
+    return out;
+  }
+  var hL = headIdx(L), hR = headIdx(R);
+  if (hL.length && hL.length === hR.length) {
+    var pairs = [], li = 0, ri = 0;
+    for (var k = 0; k < hL.length; k++) {
+      pairs = pairs.concat(litAlignSeg(L, li, hL[k] - 1, R, ri, hR[k] - 1));
+      pairs.push([hL[k], hR[k]]);
+      li = hL[k] + 1; ri = hR[k] + 1;
+    }
+    pairs = pairs.concat(litAlignSeg(L, li, L.length - 1, R, ri, R.length - 1));
+    return pairs;
+  }
+  // 无标题锚点 → 按比例拉伸到相同行数（同段率最高）
+  var n = Math.max(L.length, R.length);
+  var out = [];
+  for (var j = 0; j < n; j++) {
+    var lj = L.length === n ? j : Math.round(j * (L.length - 1) / Math.max(n - 1, 1));
+    var rj = R.length === n ? j : Math.round(j * (R.length - 1) / Math.max(n - 1, 1));
+    out.push([lj, rj]);
+  }
+  return out;
+}
+
 function litRenderCompare(body, mdText, zhText, stem) {
   var L = litSplitBlocks(mdText), R = litSplitBlocks(zhText);
-  var n = Math.max(L.length, R.length);
+  var pairs = litAlignBlocks(L, R);
+  var aligned = L.length === R.length;
+  var ref = litJsStr(_litPaper ? _litPaper.file : '');
   var html = '<div class="lit-compare">' +
     '<div class="lit-compare-toolbar">' +
-    '<span>⇄ 左侧原文 / 右侧译文 · 按段落对齐 · 悬停联动高亮（' + n + ' 段）</span>' +
+    '<span>⇄ 左侧原文 / 右侧译文 · 逐段对齐 · 悬停联动高亮 · 原文 ' + L.length + ' 段 / 译文 ' + R.length + ' 段' +
+    (aligned ? '（1:1 对齐）' : '（段落数不同，已按标题锚点/比例配平）') + '</span>' +
     '<span style="margin-left:auto;display:flex;gap:6px;">' +
     '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.md\', _litCmpSrc)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载原文</button>' +
     '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.zh.md\', _litCmpZh)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+    '<button onclick="litForceTranslate(\'' + ref + '\')" title="段落级重新翻译（修复对照对齐）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button>' +
     '<button onclick="litPaperTab(\'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">仅看译文</button>' +
     '</span></div>' +
-    '<div class="lit-compare-cols"><div class="lit-compare-col left">' +
-    '<div style="font-size:11px;color:var(--text-light);padding:2px 4px 8px;border-bottom:1px solid var(--border);">📄 原文 (English)</div>';
-  for (var i = 0; i < n; i++) html += '<div class="lit-compare-row" id="lit-cmp-row-' + i + '">' +
-    '<div class="lit-compare-cell left' + (/^#{1,6}\s/.test(L[i] || '') ? ' h' : '') + '">' + escapeHtml(L[i] || '—') + '</div>' +
-    '<div class="lit-compare-cell' + (/^#{1,6}\s/.test(R[i] || '') ? ' h' : '') + '">' + escapeHtml(R[i] || '—') + '</div></div>';
-  html += '</div></div></div>';
+    '<div class="lit-compare-cols">' +
+    '<div class="lit-compare-head"><div>📄 原文 (English)</div><div>🌐 译文 (中文)</div></div>';
+  pairs.forEach(function(p, i) {
+    var lb = p[0] != null ? L[p[0]] : '—';
+    var rb = p[1] != null ? R[p[1]] : '—';
+    html += '<div class="lit-compare-row" id="lit-cmp-row-' + i + '">' +
+      '<div class="lit-compare-cell left' + (/^#{1,6}\s/.test(lb) ? ' h' : '') + '">' + escapeHtml(lb) + '</div>' +
+      '<div class="lit-compare-cell' + (/^#{1,6}\s/.test(rb) ? ' h' : '') + '">' + escapeHtml(rb) + '</div></div>';
+  });
+  html += '</div></div>';
   body.innerHTML = html;
   _litCmpSrc = mdText;
   _litCmpZh = zhText;
-  for (var j = 0; j < n; j++) {
-    (function(j2) {
-      var row = document.getElementById('lit-cmp-row-' + j2);
-      if (!row) return;
-      row.onmouseenter = function() { row.classList.add('hl'); };
-      row.onmouseleave = function() { row.classList.remove('hl'); };
-    })(j);
-  }
+  pairs.forEach(function(p, j) {
+    var row = document.getElementById('lit-cmp-row-' + j);
+    if (!row) return;
+    row.onmouseenter = function() { row.classList.add('hl'); };
+    row.onmouseleave = function() { row.classList.remove('hl'); };
+  });
 }
 
 async function litPaperTab(tab) {
@@ -4340,8 +4409,8 @@ async function litPaperTab(tab) {
   if (tab === 'zh') {
     if (!d.translation_file) {
       body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">这篇还没有中文翻译。' +
-        '<button onclick="translatePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
-        '<div style="font-size:11px;">学术严谨直译，分块进行，约 3-10 分钟（视篇幅），可关页面后台跑。完成后可在"⇄ 对照"里双屏比读。</div></div>';
+        '<button onclick="translatePaper(\'' + ref + '\', \'zh\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
+        '<div style="font-size:11px;">段落级编号直译（译文与原文逐段对齐），约 2-8 分钟（视篇幅）。完成后可在"⇄ 对照"里双屏比读。</div></div>';
       return;
     }
     body.innerHTML = '<span style="color:var(--text-light);">加载翻译…</span>';
@@ -4350,7 +4419,8 @@ async function litPaperTab(tab) {
       var txt2 = await r2.text();
       body.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
         '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'' + 'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
-        '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⇄ 中英对照</button></div>' +
+        '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⇄ 中英对照</button>' +
+        '<button onclick="litForceTranslate(\'' + ref + '\')" title="段落级重新翻译（修复对照对齐）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button></div>' +
         '<pre id="lit-md-pre">' + escapeHtml(txt2) + '</pre>';
     } catch(e) {
       body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
@@ -4364,7 +4434,7 @@ async function litPaperTab(tab) {
     }
     if (!d.translation_file) {
       body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">对照视图需要中文译文。' +
-        '<button onclick="translatePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
+        '<button onclick="translatePaper(\'' + ref + '\', \'cmp\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
         '<div style="font-size:11px;">翻译完成后自动生成"原文 ⇄ 译文"段落级对照双屏。</div></div>';
       return;
     }
@@ -4417,12 +4487,16 @@ async function litPaperTab(tab) {
   body.innerHTML = html2;
 }
 
-// 学术中文翻译（批N2 2026-08-16）：按篇异步 + 模态内进度条
+// 学术中文翻译（批N2 2026-08-16；批O2 段落级编号直译 + 目标标签回跳）
 var _litTransTimer = null;
+var _litTransTargetTab = 'zh';
+var _litTransRef = '';
 
-async function translatePaper(ref) {
+async function translatePaper(ref, wantTab, force) {
   var modal = document.getElementById('lit-summary-modal');
   if (modal) modal.style.display = 'flex';
+  _litTransTargetTab = wantTab || 'zh';
+  _litTransRef = ref || '';
   var body = document.getElementById('lit-summary-body');
   if (body) {
     body.style.padding = '10px 16px';
@@ -4432,7 +4506,7 @@ async function translatePaper(ref) {
   try {
     var r = await fetch('/api/literature/translate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({file_or_title: ref})
+      body: JSON.stringify({file_or_title: ref, force: !!force})
     });
     var d = await r.json();
     if (d.error) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
@@ -4444,6 +4518,11 @@ async function translatePaper(ref) {
   }
 }
 
+function litForceTranslate(ref) {
+  if (!confirm('将重新翻译这篇文献（段落级编号直译，保证中英对照逐段对齐，约 2-8 分钟）。继续？')) return;
+  translatePaper(ref, 'cmp', true);
+}
+
 async function litPollTranslate(jobId) {
   var body = document.getElementById('lit-summary-body');
   if (!body) return;
@@ -4453,7 +4532,7 @@ async function litPollTranslate(jobId) {
     if (st.status === 'running') {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
-      var phaseLabel = {convert: 'PDF → Markdown', translate: '分块直译', write: '写入译文', done: '完成'}[st.phase] || st.phase;
+      var phaseLabel = {convert: 'PDF → Markdown', translate: '段落级编号直译', write: '写入译文', done: '完成'}[st.phase] || st.phase;
       body.innerHTML = '<div style="padding:10px 4px;">' +
         '<div style="font-weight:600;margin-bottom:8px;">🌐 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
         '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
@@ -4471,8 +4550,17 @@ async function litPollTranslate(jobId) {
       body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(res.error || '翻译失败') + '</span>';
       return;
     }
-    if (_litPaper) _litPaper.translation_file = res.translation_file || _litPaper.translation_file;
-    litPaperTab('zh');
+    if (_litPaper) {
+      _litPaper.translation_file = res.translation_file || _litPaper.translation_file;
+      _litPaper.translated = true;
+    }
+    var target = _litTransTargetTab || 'zh';
+    if (target === 'cmp' && _litTransRef) {
+      _litPaper = null;
+      viewSummary(_litTransRef, 'cmp');
+    } else {
+      litPaperTab(target);
+    }
   } catch(e) {
     clearInterval(_litTransTimer);
     _litTransTimer = null;
@@ -6180,6 +6268,19 @@ async function refreshResults() {
   switchResultsTab(resultsTab);
 }
 
+// === 出完图自动小幅刷新(轻量) ===
+// 1) 运行中:每 5 秒拉一次最新列表;内容签名没变就不动 DOM(不闪烁、滚动条不跳)
+// 2) 任务结束(complete):立即刷一次 + 2.5 秒后再补一次,等最后落盘的文件也显示出来
+function _scheduleResultsRefresh(ms) {
+  if (_resultsRefreshTimer) clearTimeout(_resultsRefreshTimer);
+  _resultsRefreshTimer = setTimeout(function() { refreshResults(); }, ms || 2500);
+}
+setInterval(function() {
+  if (!currentSid) return;
+  if (!agentRunning && !_currentRunningSid) return; // 空闲时不轮询,靠事件触发
+  refreshResults();
+}, 5000);
+
 async function loadFigures() {
   try {
     var r = await fetch('/api/results/' + currentSid + '/figures');
@@ -6187,15 +6288,23 @@ async function loadFigures() {
     var figs = d.figures || [];
     var el = document.getElementById('results-figures');
     _lastFiguresCount = figs.length;
+    // 签名:会话+文件名+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
+    var sig = currentSid + '||' + figs.map(function(f) { return f.name + '|' + f.size + '|' + (f.mtime_epoch || f.mtime || ''); }).join(',');
+    if (!figs.length) sig += '|empty';
+    if (sig === _lastFiguresSig) return;
+    _lastFiguresSig = sig;
+    var st = el.scrollTop;
     if (!figs.length) {
       el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
       return;
     }
-    // 平坦网格：当前会话所有图片统一展示
+    // 平坦网格：当前会话所有图片统一展示（URL 附带文件修改时间戳，防止浏览器缓存旧图）
     el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
-      var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '" loading="lazy">';
-      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div></div>';
+      var v = f.mtime_epoch ? Math.round(f.mtime_epoch * 1000) : 0;
+      var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '&v=' + v + '" loading="lazy">';
+      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '&v=' + v + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div><div class="fig-thumb-mtime">🕐 ' + escapeHtml(f.mtime || '') + '</div></div>';
     }).join('') + '</div>';
+    el.scrollTop = st;
   } catch(e) {
     document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">加载图片失败</div>';
   }
@@ -6205,6 +6314,15 @@ async function loadResultsFiles() {
   var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || ''));
   var d = await r.json();
   var sessionId = d.session_id || currentSid;
+  var items = d.items || [];
+  _lastFilesCount = items.length;
+  // 签名:会话+路径+文件名+类型+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
+  var sig = currentSid + '||' + currentPath.results + '||' + items.map(function(f) { return f.name + '|' + (f.is_dir ? 1 : 0) + '|' + f.size + '|' + (f.mtime || ''); }).join(',');
+  if (!items.length) sig += '|empty';
+  if (sig === _lastFilesSig) return;
+  _lastFilesSig = sig;
+  var listEl = document.getElementById('results-list');
+  var st = listEl.scrollTop;
   var pathParts = (d.path || '').split('/').filter(function(p){return p;});
   var breadcrumb = '<span style="color:var(--primary);font-weight:600;cursor:pointer;" onclick="currentPath.results=\'\';loadResultsFiles()">' + escapeHtml(d.results_name || ('会话 ' + sessionId)) + '</span>';
   var accumPath = '';
@@ -6222,19 +6340,19 @@ async function loadResultsFiles() {
   var backBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--primary);color:#fff;border:none;cursor:pointer;margin-left:6px;">⬆️ 返回上一级</button>' : '';
   var rootBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;margin-left:4px;">🏠 根目录</button>' : '';
   document.getElementById('results-path').innerHTML = breadcrumb + backBtn + rootBtn;
-  var items = d.items || [];
-  _lastFilesCount = items.length;
   if (!items.length) {
-    document.getElementById('results-list').innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + (d.note || '暂无分析结果') + '</div>';
+    listEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + (d.note || '暂无分析结果') + '</div>';
     return;
   }
   var upItem = currentPath.results ? '<div class="file-item" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="color:var(--primary);"><span class="file-icon">⬆️</span><span class="file-name">返回上一级</span></div>' : '';
-  document.getElementById('results-list').innerHTML = upItem + items.map(function(f) {
+  listEl.innerHTML = upItem + items.map(function(f) {
     var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' ? '📊' : f.ext === '.rds' ? '💾' : '📄');
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
+    var mtimeStr = f.is_dir ? '' : '<span class="file-mtime">' + escapeHtml(f.mtime_str || '') + '</span>';
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
-    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
+  listEl.scrollTop = st;
 }
 
 function switchResultsTab(tab) {
@@ -6262,10 +6380,15 @@ function handleNewFigure(fig) {
 function showFigurePreview(url, name) {
   var area = document.getElementById('figure-preview-area');
   area.style.display = 'block';
-  var ext = (url.split('.').pop() || '').toLowerCase();
+  // 防浏览器缓存旧图：URL 没有版本参数时附加打开时间戳，确保总是取最新文件
+  if (url.indexOf('v=') === -1) { url += (url.indexOf('?') === -1 ? '?' : '&') + 'v=' + Date.now(); }
+  // 扩展名从 path= 参数里的真实文件名取(URL 主体是 /figure,文件名在查询参数里)
+  var _pm = url.match(/[?&]path=([^&#]+)/i);
+  var _filePart = _pm ? _pm[1] : url.split('?')[0];
+  var ext = (_filePart.split('.').pop() || '').toLowerCase();
   var inner;
   if (ext === 'pdf') {
-    inner = '<embed src="' + url + '" type="application/pdf" style="width:100%;height:500px;">';
+    inner = '<embed src="' + url + '" type="application/pdf" style="width:100%;height:520px;">';
   } else {
     inner = '<img src="' + url + '" onclick="window.open(\'' + url + '\')" style="max-width:100%;max-height:500px;cursor:zoom-in;">';
   }

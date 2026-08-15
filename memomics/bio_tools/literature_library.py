@@ -761,9 +761,95 @@ def extract_all_papers(progress_cb=None) -> str:
     return json.dumps(r, ensure_ascii=False, indent=2)
 
 
-def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
-    """学术中文翻译（批N2 2026-08-16）：Markdown 分节分块 → LLM 直译 → translations/<名>.zh.md。
+def _md_blocks(md: str) -> list:
+    """段落级切块（与前端 litSplitBlocks 同规则）：空行切块 + 标题行独立成块。
 
+    批O2(2026-08-16)：保证译文与原文段落数严格 1:1，中英对照逐段对齐。
+    """
+    blocks = []
+    for seg in re.split(r"\n\s*\n", md or ""):
+        seg = seg.strip()
+        if not seg:
+            continue
+        cur = []
+        for ln in seg.splitlines():
+            if re.match(r"^#{1,6}\s", ln) and cur:
+                blocks.append("\n".join(cur))
+                cur = []
+            cur.append(ln)
+        if cur:
+            blocks.append("\n".join(cur))
+    return blocks
+
+
+def _batch_blocks(blocks: list, max_chars: int = 6000, max_blocks: int = 8) -> list:
+    """段落分组（每批 ≤max_chars 且 ≤max_blocks，块内保持完整段落）。"""
+    batches, cur, cur_n = [], [], 0
+    for b in blocks:
+        if cur and (cur_n >= max_blocks or cur_n + len(b) > max_chars):
+            batches.append(cur)
+            cur, cur_n = [], 0
+        cur.append(b)
+        cur_n += len(b)
+    if cur:
+        batches.append(cur)
+    return batches
+
+
+def _parse_numbered_output(out: str, n: int) -> list:
+    """解析 '###N###' 编号译文输出 → [译文1, 译文2, ...]（缺失给空串）。"""
+    res = [""] * n
+    cur_idx, cur = None, []
+    for ln in (out or "").splitlines():
+        m = re.match(r"^#{1,6}\s*(\d{1,3})\s*#{1,6}\s*(.*)$", ln.strip())
+        if not m:
+            m = re.match(r"^###(\d{1,3})###\s*(.*)$", ln.strip())
+        if m:
+            idx = int(m.group(1))
+            if cur_idx is not None and 1 <= cur_idx <= n and cur:
+                res[cur_idx - 1] = "\n".join(cur).strip()
+            cur_idx, cur = idx, ([m.group(2)] if m.group(2).strip() else [])
+        elif cur_idx is not None:
+            cur.append(ln)
+    if cur_idx is not None and 1 <= cur_idx <= n and cur:
+        res[cur_idx - 1] = "\n".join(cur).strip()
+    return res
+
+
+_TRANS_PROMPT_HEAD = (
+    "你是生物医学文献翻译专家。把下面编号的段落逐一翻译成学术严谨的中文。\n"
+    "输出格式（严格遵守）：每段先单独一行输出编号标记 ###N###（N=段落编号），"
+    "紧接着输出该段译文（可多行）；下一段从新的 ###N### 行开始。\n"
+    "规则：① 段落以 # 开头的保持 Markdown 标题格式（# 号与编号保留在行首）"
+    "② 术语用规范译名，基因名/蛋白名/阈值/数字/单位/统计量保持原文"
+    "③ 人名、机构名保留英文 ④ 忠实原文不意译不增删 ⑤ 不要输出任何解释。\n\n")
+
+
+def _translate_block_batch(blocks: list) -> list:
+    """按 ###N### 编号批量直译一组段落，返回与输入等长的译文列表。"""
+    prompt = _TRANS_PROMPT_HEAD
+    for i, b in enumerate(blocks):
+        prompt += f"[{i + 1}]\n{b}\n\n"
+    out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=6000,
+                       retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n")
+    res = _parse_numbered_output(out, len(blocks))
+    if not any(res):
+        # 编号解析全空 → 重试一次（更强的直接输出指令）
+        out2 = _llm_content(
+            "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文，"
+            "每段必须以 ###数字### 单独一行开头】\n" + prompt,
+            "lit_trans_blocks_retry", temperature=0.1, max_tokens=6000,
+            retry_prefix="【直接输出译文，不要思考】\n")
+        res = _parse_numbered_output(out2, len(blocks))
+    return res
+
+
+def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
+    """学术中文翻译（批N2 2026-08-16；批O2 2026-08-16 升级为段落级编号直译）。
+
+    旧实现按 9000 字符整块直译，段落会合并/分裂 → 中英对照无法逐段对齐。
+    新实现：PDF→Markdown → 段落切块（与前端 litSplitBlocks 同规则）→
+    每批 ≤8 段按 ###N### 编号直译 → 译文段落数与原文严格 1:1。
     幂等：已翻译且非 force 直接返回（不重复花钱）。
     progress_cb(phase, done, total, detail)。
     """
@@ -797,38 +883,48 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     md = pdf_to_markdown(pdf_path)
     if not md.strip():
         return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
-    chunks = _chunk_sections(_split_md_sections(md), max_chars=9000) or [md[:9000]]
-    parts = []
-    for i, chunk in enumerate(chunks):
-        _cb("translate", i, len(chunks), f"翻译第 {i + 1}/{len(chunks)} 块")
-        out = _llm_content(
-            "你是生物医学文献翻译专家。把下面的英文文献 Markdown 翻译成**学术严谨的中文**：\n"
-            "规则：① 保留 Markdown 结构（# 标题/列表/表格）② 术语用规范译名，基因名/蛋白名/"
-            "阈值/数字/单位/统计量保持原文 ③ 人名、机构名保留英文 ④ 忠实原文不意译不增删。\n"
-            "只输出译文，不要任何解释。\n\n" + chunk,
-            f"lit_trans_{i}", temperature=0.2, max_tokens=6000,
-            retry_prefix="【不要思考，立即输出译文】\n")
-        parts.append(out.strip())
-    zh = "\n\n".join(p for p in parts if p)
+    blocks = _md_blocks(md)
+    if not blocks:
+        return json.dumps({"ok": False, "error": "Markdown 切段失败"}, ensure_ascii=False)
+    batches = _batch_blocks(blocks)
+    results = [""] * len(blocks)
+    flat = 0
+    for bi, batch in enumerate(batches):
+        _cb("translate", bi, len(batches), f"段落级翻译第 {bi + 1}/{len(batches)} 批（{len(batch)} 段）")
+        part = _translate_block_batch(batch)
+        for k, t in enumerate(part):
+            if t:
+                results[flat + k] = t
+        flat += len(batch)
+    # 缺段单段兜底直译（保证 1:1 完整）
+    for i, b in enumerate(blocks):
+        if not results[i]:
+            _cb("translate", i, len(blocks), f"补译第 {i + 1}/{len(blocks)} 段")
+            results[i] = _llm_content(
+                "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），只输出译文：\n" + b,
+                f"lit_trans_fix_{i}", temperature=0.2, max_tokens=3000,
+                retry_prefix="【不要思考，立即输出译文】\n").strip()
+    zh = "\n\n".join(results)
     if not zh.strip():
         return json.dumps({"ok": False, "error": "翻译失败：LLM 未返回译文"}, ensure_ascii=False)
-    _cb("write", len(chunks), len(chunks), "写入 translations/<名>.zh.md")
+    _cb("write", len(blocks), len(blocks), "写入 translations/<名>.zh.md")
     with open(zh_path, "w", encoding="utf-8") as f:
         f.write(zh)
-    # 索引标记 translated
+    # 索引标记 translated + 段落数（对照对齐依据）
     try:
         _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
         _idx = _load_index(_idx_file)
         for _e in _idx:
             if _e.get("file") == hit.get("file"):
                 _e["translated"] = True
+                _e["translation_blocks"] = len(blocks)
         _save_index(_idx_file, _idx)
     except Exception as e:
         logger.warning(f"translated mark failed: {e}")
-    _cb("done", len(chunks), len(chunks), "翻译完成")
+    _cb("done", len(blocks), len(blocks), "翻译完成")
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
                        "translation_file": f"hermes_home/papers/translations/{stem}.zh.md",
-                       "chars": len(zh)}, ensure_ascii=False, indent=2)
+                       "blocks": len(blocks), "chars": len(zh)}, ensure_ascii=False, indent=2)
 
 
 # ── 方向1：全文思路提炼（给人看，批J 2026-08-16）──

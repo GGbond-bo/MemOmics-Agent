@@ -1092,6 +1092,45 @@ def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     return False
 
 
+def _results_dir_changed_since(session, ts: float) -> bool:
+    """results_dir 下是否有真实产出文件在 ts 之后被修改（排除平台自写文件）。
+
+    平台自写(不算产出): token_usage.jsonl / .task_state.json / task_plan.md / log/ / .loopx/
+    扫描上限 200 个文件，避免大目录全量遍历。
+    返回 True 表示"有变化"(或无法判断——此时不干预，避免误伤)。
+    """
+    _rd = session.get("results_dir", "") or ""
+    if not _rd or not os.path.isdir(_rd) or not ts:
+        return True
+    _skip_names = {"token_usage.jsonl", ".task_state.json", "task_plan.md"}
+    _targets = []
+    for _sub in ("figures", "scripts", "results", "data", "datasets"):
+        _p = os.path.join(_rd, _sub)
+        if os.path.isdir(_p):
+            try:
+                _targets.extend(os.path.join(_p, f) for f in os.listdir(_p))
+            except Exception:
+                pass
+    try:
+        _targets.extend(os.path.join(_rd, f) for f in os.listdir(_rd))
+    except Exception:
+        pass
+    _seen = 0
+    for _f in _targets:
+        try:
+            _base = os.path.basename(_f)
+            if _base in _skip_names or ".loopx" in _f or os.sep + "log" in _f:
+                continue
+            _seen += 1
+            if _seen > 200:
+                break
+            if os.path.isfile(_f) and os.path.getmtime(_f) >= ts:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -7620,7 +7659,7 @@ async def literature_summarize_all():
     return {"job_id": job_id, "status": "running"}
 
 
-def _run_lit_translate(job_id: str, file_or_title: str):
+def _run_lit_translate(job_id: str, file_or_title: str, force: bool = False):
     import json as _json
     from memomics.bio_tools.literature_library import translate_paper
     try:
@@ -7629,10 +7668,10 @@ def _run_lit_translate(job_id: str, file_or_title: str):
                 "status": "running", "phase": phase,
                 "done": int(done), "total": int(total), "current": str(detail)[:150],
             })
-        _result = _json.loads(translate_paper(file_or_title, progress_cb=_cb))
+        _result = _json.loads(translate_paper(file_or_title, progress_cb=_cb, force=force))
         if _result.get("ok"):
-            _msg = "翻译完成（学术中文，已落盘 translations/）" if not _result.get("skipped") \
-                else "该文献已翻译过（幂等跳过）"
+            _msg = ("翻译完成（学术中文，段落级对齐，已落盘 translations/）" if not _result.get("skipped")
+                    else "该文献已翻译过（幂等跳过）")
         else:
             _msg = f"翻译失败：{_result.get('error', '未知错误')[:120]}"
         _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
@@ -7642,7 +7681,8 @@ def _run_lit_translate(job_id: str, file_or_title: str):
 
 @app.post("/api/literature/translate")
 async def literature_translate(payload: dict):
-    """学术中文翻译（批N2 2026-08-16）：按篇异步翻译，Markdown 分块直译。"""
+    """学术中文翻译（批N2 2026-08-16；批O2 2026-08-16 段落级编号直译，保证中英对照 1:1）。
+    force=true 重新翻译。"""
     file_or_title = (payload.get("file_or_title") or "").strip()
     if not file_or_title:
         return JSONResponse({"error": "file_or_title required"}, status_code=400)
@@ -7650,7 +7690,8 @@ async def literature_translate(payload: dict):
     job_id = uuid.uuid4().hex[:8]
     _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "convert",
                          "done": 0, "total": 0, "current": "任务已创建"}
-    asyncio.create_task(asyncio.to_thread(_run_lit_translate, job_id, file_or_title))
+    _force = bool(payload.get("force"))
+    asyncio.create_task(asyncio.to_thread(_run_lit_translate, job_id, file_or_title, _force))
     return {"job_id": job_id, "status": "running"}
 
 
@@ -7983,18 +8024,21 @@ async def list_figures(sid: str):
                 rel = str(p.relative_to(base)).replace("\\", "/")
                 parts = rel.split("/")
                 category = parts[0] if len(parts) > 1 else "root"
+                _st = p.stat()
                 figures.append({
                     "name": p.name,
                     "rel_path": rel,
                     "category": category,
                     "url": f"/api/results/{sid}/figure?path={rel}",
-                    "size": p.stat().st_size,
-                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%H:%M:%S"),
+                    "size": _st.st_size,
+                    "mtime": datetime.fromtimestamp(_st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "mtime_epoch": _st.st_mtime,
                     "ext": p.suffix.lower(),
                 })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    return {"figures": figures, "base": base.replace("\\", "/"), "session_id": sid}
+    return JSONResponse({"figures": figures, "base": base.replace("\\", "/"), "session_id": sid},
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/results/{sid}/figure")
@@ -8011,7 +8055,7 @@ async def get_figure(sid: str, path: str = ""):
     # 防止路径遍历
     if not os.path.abspath(file_path).startswith(os.path.abspath(base)):
         return JSONResponse({"error": "Access denied"}, status_code=403)
-    return FileResponse(file_path)
+    return FileResponse(file_path, headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"})
 
 
 # --- 待办 ---
@@ -8367,6 +8411,8 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-14: 运行状态基线（UI 心跳实时可见）
                 session["_turn_start_ts"] = time.time()
                 session["_api_calls"] = 0
+                session["_real_exec_this_turn"] = False  # 本回合是否有代码真实执行(被护栏跳过的调用不算)
+                session["_tool_dedup"] = {}  # 每轮用户消息重置重复执行拦截:用户反复重跑相同代码是合法的
                 session["_live_tool"] = ""
                 session["_live_tool_ts"] = time.time()
                 session["_turn_activity_ts"] = time.time()
@@ -8687,8 +8733,14 @@ async def ws_endpoint(ws: WebSocket):
                         # 相同的 execute_code（每个都在里面再跑一遍 python 出图脚本），
                         # 机器被拖垮、用户被迫手动停止。两重保护：
                         #   (1) 昂贵工具（execute_code/execute_python/execute_r）相同参数
-                        #       90 秒内只执行第一次，重复调用合并返回"已跳过"
+                        #       在同一轮内只执行第一次，其余重复调用跳过并返回失败
                         #   (2) 单回合工具调用总数上限 100 —— 超过后所有昂贵工具一律跳过
+                        # 2026-08-16 修订(memomics-2274ab75 用户反馈):
+                        #   - 拦截范围限定"单轮"：每轮新用户消息都会清零 _tool_dedup ——
+                        #     用户合法地反复重跑相同代码（改图改很多遍）不受任何限制
+                        #   - 记录带 tid：hermes 对同一调用会触发两次回调(预检+执行worker)，
+                        #     同一调用的第二次触发不算重复，只有"别的调用"提交相同代码才拦截
+                        #   - 跳过的调用以非零退出码结束(status=error)，模型不会再误报"已生成"
                         _dedup = _s.setdefault("_tool_dedup", {})
                         _now_d = time.time()
                         if len(_dedup) > 300:
@@ -8704,21 +8756,45 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 _key = ""
                             _rec = _dedup.get(_key) if _key else None
+                            # 同一调用的第二次回调(执行worker)不算重复 —— 它才是真正执行的那次
+                            _fresh = bool(_rec and _now_d - _rec.get("ts", 0) < 90
+                                          and _rec.get("tid") != tool_id)
                             _over_cap = int(_s.get("_api_calls", 0)) >= 100
-                            if (_rec and _now_d - _rec.get("ts", 0) < 90) or _over_cap:
-                                _skip_msg = ("重复调用已合并：相同代码在 90 秒内已执行过，本次跳过"
-                                             if _rec else
-                                             "回合保护：本回合工具调用已超 100 次，暂停重复执行。请先总结已完成的步骤并交付结果。")
-                                args["code"] = ("print('[⛔ 执行保护] " + _skip_msg + "')"
-                                                if tool_name == "execute_code" else
-                                                "cat('[⛔ 执行保护] " + _skip_msg + "')\n")
-                                _dedup[_key] = {"ts": _now_d, "n": (_rec.get("n", 0) + 1) if _rec else 1}
-                                logger.warning(f"[MemOmics] 工具调用护栏: {tool_name} {_skip_msg} (n={_dedup[_key]['n']})")
+                            if _fresh or _over_cap:
+                                _n = (_rec.get("n", 0) + 1) if _rec else 1
+                                if _fresh:
+                                    _skip_msg = (
+                                        "本次调用未执行任何代码，磁盘文件没有任何变化。"
+                                        "本回合内已执行过完全相同的代码（以那次执行的真实结果为准），本次重复调用被跳过。"
+                                        "如需重新生成：请先修改代码内容再调用；或直接发新一轮用户消息后再跑（每轮开始会重置此限制）。"
+                                        "不要宣称“已生成/已修改”。")
+                                else:
+                                    _skip_msg = (
+                                        "回合保护：本回合工具调用已超 100 次，本次未执行任何代码。"
+                                        "请先总结已完成的步骤并交付结果，不要宣称“已生成/已修改”。")
+                                if _n >= 3:
+                                    _skip_msg += f"（已连续 {_n} 次提交完全相同的代码且全部被跳过，请立即停止重试）"
+                                # 关键修复(2026-08-16 memomics-2274ab75):用非零退出码结束,
+                                # 工具结果会是 status=error —— 模型会明确知道"没有执行成功",
+                                # 而不是像旧实现那样收到 status=ok 后误报"✅ 已重新生成"
+                                if tool_name == "execute_r":
+                                    args["code"] = (
+                                        "cat('[⛔ 执行保护] " + _skip_msg + "')\n"
+                                        "stop('[⛔ 执行保护] skipped')\n")
+                                else:
+                                    args["code"] = (
+                                        "import sys\n"
+                                        "print('[⛔ 执行保护] " + _skip_msg + "', file=sys.stderr)\n"
+                                        "raise SystemExit(3)\n")
+                                # 跳过后不刷新 ts:窗口从第一次真实执行起算,风暴停止后自然过期
+                                if _rec:
+                                    _rec["n"] = _n
+                                logger.warning(f"[MemOmics] 工具调用护栏: {tool_name} {_skip_msg} (n={_n})")
                                 _session_emit(_s, {"type": "warning",
                                     "content": f"⛔ {_skip_msg}（{tool_name}）",
                                     "session_id": _s["id"]})
                             else:
-                                _dedup[_key] = {"ts": _now_d, "n": 1}
+                                _dedup[_key] = {"ts": _now_d, "n": 1, "tid": tool_id}
                         # 强制保护：禁止自杀命令 + 禁止删除数据
                         if tool_name in ("terminal", "execute_code", "execute_python") and isinstance(args, dict):
                             _cmd = str(args.get("command", args.get("code", "")))
@@ -8764,6 +8840,10 @@ async def ws_endpoint(ws: WebSocket):
                         if tool_name in _PRODUCING_TOOLS and not _s.get("_dir_created"):
                             _ensure_results_dir(_s)
                             _s["_dir_created"] = True
+                        # 记录本回合是否有真实执行(被执行保护替换成占位打印的调用不算)
+                        if tool_name in _PRODUCING_TOOLS and isinstance(args, dict):
+                            if "[⛔ 执行保护]" not in str(args.get("command", args.get("code", ""))):
+                                _s["_real_exec_this_turn"] = True
                         _tool_call_log.append({"tool": tool_name, "id": tool_id})
                         _s["_api_calls"] = int(_s.get("_api_calls", 0)) + 1
                         _s["_live_tool"] = tool_name
@@ -9676,6 +9756,28 @@ async def ws_endpoint(ws: WebSocket):
                                 "session_id": _session["id"]})
                             _session["_urgent_wakeup"] = True
                             _session["_force_tool_check"] = True
+                        # 2026-08-16 修复 memomics-2274ab75:模型宣称"已生成/已修改",
+                        # 但本回合所有执行调用都被执行保护拦截、磁盘文件无变化 →
+                        # 强制自检纠正,杜绝"看着旧文件假装跑完"
+                        _claim_done_words = ("已生成", "已重新生成", "已修改", "已保存",
+                                             "已更新", "已重跑", "已出图", "已执行")
+                        if any(_w in (result or "") for _w in _claim_done_words) \
+                                and not _session.get("_real_exec_this_turn") \
+                                and not _results_dir_changed_since(_session, _session.get("_turn_start_ts") or 0):
+                            _wake_n2 = _session.get("_saying_wakeup_n", 0)
+                            if _wake_n2 < 2:
+                                _session["_saying_wakeup_n"] = _wake_n2 + 1
+                                _session["_urgent_wakeup"] = True
+                                _session["_force_tool_check"] = True
+                                _session.setdefault("messages", []).append(
+                                    {"role": "system",
+                                     "content": "⚠️ 你刚才回复称已生成/已修改文件，但系统检查发现本回合没有任何代码真正执行、磁盘文件也没有任何变化。请立即调用工具实际重新执行，并核对文件修改时间后再回复，不要谎报完成。",
+                                     "time": datetime.now().strftime("%H:%M:%S"),
+                                     "source": "fake_done_check"})
+                                _session_emit(_session, {"type": "info",
+                                    "content": "⚠️ 检测到虚假完成声明（本回合无真实执行、文件未变化）——系统将强制重新执行",
+                                    "session_id": _session["id"]})
+                                logger.info("[MemOmics] 检测到虚假完成声明 → 强制自检重跑")
                         # 🔧 空响应检测：只有模型真正返回空（无任何文本且无工具调用）才重试。
                         # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
                         if not _tool_call_log and (not result or not result.strip()):
