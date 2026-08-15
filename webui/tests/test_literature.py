@@ -1,0 +1,239 @@
+# -*- coding: utf-8 -*-
+"""文献栏批O(2026-08-16)回归测试：
+1) 引用格式专业化（GB/T 7714 顺序编码制/著者-出版年制 / APA 7 / NLM / MLA / BibTeX / RIS）
+2) get_summary 九项摘要修复（从原始索引读取，不再为空；作者不再丢失）
+3) DOI 清洗（WILEY 水印等脏后缀）
+4) 前端静态断言：大窗口可调节 / 中英对照双屏 / 知识提取 / 专业引用 / 整库导出
+"""
+import json
+import os
+import sys
+
+import pytest
+
+TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(TESTS_DIR))                 # webui/
+sys.path.insert(0, os.path.join(TESTS_DIR, "..", ".."))        # repo root
+sys.path.insert(0, os.path.join(TESTS_DIR, "..", "..", "hermes-agent"))
+
+from memomics.bio_tools import reference_library as RL  # noqa: E402
+from memomics.bio_tools import literature_library as LL  # noqa: E402
+
+HTML_PATH = os.path.join(TESTS_DIR, "..", "index.html")
+HTML = open(HTML_PATH, encoding="utf-8").read()
+
+META = {
+    "title": "A conserved complex lipid signature marks human muscle aging and responds to short-term exercise",
+    "authors": ["Georges E. Janssens", "Marte Molenaars", "Katharina Herzog",
+                "Lotte Grevendonk"],
+    "year": "2024", "journal": "Nature Aging",
+    "volume": "1", "issue": "2", "pages": "145-157",
+    "doi": "10.1038/s43587-024-00595-2", "entry_type": "article",
+}
+
+
+# ---------------------------------------------------------------- 引用格式
+class TestCitationFormats:
+    def test_gbt7714_numeric(self):
+        s = RL.format_citation(META, "gbt7714-numeric")
+        assert s.startswith("[1] JANSSENS G E, MOLENAARS M, HERZOG K, et al. ")
+        assert "Nature Aging, 2024, 1(2): 145-157" in s
+        assert "DOI:10.1038/s43587-024-00595-2" in s
+        assert "et al.." not in s and ".. " not in s
+
+    def test_gbt7714_author_year(self):
+        s = RL.format_citation(META, "gbt7714-author-year")
+        assert s.startswith("JANSSENS G E, MOLENAARS M, HERZOG K, et al. 2024. ")
+        assert "[J]. Nature Aging, 1(2): 145-157." in s
+
+    def test_apa7(self):
+        s = RL.format_citation(META, "apa")
+        assert s.startswith("Janssens, G. E., Molenaars, M., Herzog, K., & Grevendonk, L. (2024). ")
+        assert ", 1(2), 145-157." in s
+        assert "https://doi.org/10.1038/s43587-024-00595-2" in s
+
+    def test_nlm(self):
+        s = RL.format_citation(META, "nlm")
+        # NLM/Vancouver ≤6 位作者全列（不加 et al.），姓名=姓+空格+首字母缩写
+        assert s.startswith("Janssens GE, Molenaars M, Herzog K, Grevendonk L. ")
+        assert "Nature Aging. 2024;1(2):145-157." in s
+        assert "doi:10.1038/s43587-024-00595-2" in s
+
+    def test_mla(self):
+        s = RL.format_citation(META, "mla")
+        # MLA 9 第一作者全名（Given Family），≥3 位作者 → et al.
+        assert s.startswith('Georges E. Janssens, et al. "A conserved')
+        assert "vol. 1, no. 2, 2024, pp. 145-157" in s
+
+    def test_three_authors_no_etal(self):
+        m = dict(META, authors=META["authors"][:3])
+        s = RL.format_citation(m, "gbt7714-numeric")
+        assert "et al." not in s
+        assert s.startswith("[1] JANSSENS G E, MOLENAARS M, HERZOG K. ")
+
+    def test_bibtex_key_and_fields(self):
+        b = RL._to_bibtex(META)
+        assert b.startswith("@article{janssens2024conserved,")
+        assert "author = {Georges E. Janssens and Marte Molenaars" in b
+        assert "volume = {1}" in b and "number = {2}" in b and "pages = {145-157}" in b
+
+    def test_ris_family_first(self):
+        r = RL._to_ris(META)
+        assert "AU  - Janssens, Georges E." in r
+        assert "VL  - 1" in r and "IS  - 2" in r
+        assert "SP  - 145" in r and "EP  - 157" in r
+
+    def test_graceful_degradation_without_volume(self):
+        m = {k: v for k, v in META.items() if k not in ("volume", "issue", "pages")}
+        s = RL.format_citation(m, "gbt7714-numeric")
+        assert "Nature Aging, 2024." in s  # 无卷期页时不出现空段
+        assert ", ," not in s
+
+    def test_doi_only_fallback_url(self):
+        m = {k: v for k, v in META.items() if k != "url"}
+        m["url"] = ""
+        s = RL.format_citation(m, "apa")
+        assert "https://doi.org/10.1038/s43587-024-00595-2" in s
+
+
+class TestAuthorSplit:
+    def test_given_family(self):
+        assert RL._split_author("Georges E. Janssens") == ("Janssens", "Georges E.")
+
+    def test_family_comma_given(self):
+        assert RL._split_author("Janssens, Georges E.") == ("Janssens", "Georges E.")
+
+    def test_apostrophe_particle(self):
+        fam, giv = RL._split_author("Stefania Dell’ Orso")
+        assert fam == "Dell’ Orso" and giv == "Stefania"
+
+    def test_van_particle(self):
+        assert RL._split_author("Michel van Weeghel") == ("van Weeghel", "Michel")
+
+    def test_prefix_family(self):
+        assert RL._split_author("Raza Ur Rahman") == ("Ur Rahman", "Raza")
+
+    def test_single_word(self):
+        assert RL._split_author("Yosef") == ("Yosef", "")
+
+    def test_upper_initials_gbt(self):
+        assert RL._family_initials("Michel van Weeghel", upper=True) == "VAN WEEGHEL M"
+
+
+class TestDoiClean:
+    def test_strips_wiley_watermark(self):
+        assert LL._clean_doi("10.1111/acel.70485WILEYlogoSocietylogo") == "10.1111/acel.70485"
+
+    def test_strips_trailing_punct(self):
+        assert LL._clean_doi("10.1038/s41586-026-10250-y.") == "10.1038/s41586-026-10250-y"
+
+    def test_untouched_clean_doi(self):
+        assert LL._clean_doi("10.1016/j.cmet.2022.05.010") == "10.1016/j.cmet.2022.05.010"
+
+
+# ---------------------------------------------------------------- get_summary 修复
+class TestGetSummaryFix:
+    def test_summary_and_authors_not_empty(self, tmp_path, monkeypatch):
+        """历史 bug：get_summary 从 list_library 投影读 summary/authors → 恒为空。
+        修复后必须从 .pdf_index.json 原始条目返回完整九项摘要 + 作者 + 引用。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        entry = {
+            "file": "demo.pdf", "path": str(papers / "demo.pdf"),
+            "title": "Demo paper about muscle aging", "journal": "Nature Aging",
+            "authors": ["Jane Doe", "John Smith"], "year": "2025",
+            "doi": "10.1038/demo.2025.1", "volume": "3", "issue": "4", "pages": "10-20",
+            "summary_done": True,
+            "summary": {"idea": "切入点", "background": "背景", "species": "human",
+                        "tissue": "skeletal_muscle", "problem": "问题", "solution": "方案",
+                        "methods": "方法", "conclusion": "结论", "validation": "验证"},
+        }
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([entry], f, ensure_ascii=False)
+        r = json.loads(LL.get_summary("demo.pdf"))
+        assert r["ok"] is True
+        assert r["summary"].get("background") == "背景"
+        assert r["summary"].get("idea") == "切入点"
+        assert r["authors"] == ["Jane Doe", "John Smith"]
+        assert r["volume"] == "3" and r["pages"] == "10-20"
+        c = r.get("citations") or {}
+        assert c.get("gbt7714-numeric", "").startswith("[1] DOE J, SMITH J. ")
+        assert "Jane Doe and John Smith" in (c.get("bibtex") or "")
+        assert "AU  - Doe, Jane" in (c.get("ris") or "")
+
+    def test_summary_md_fallback(self, tmp_path, monkeypatch):
+        """index 里没有 summary 但 summaries/<stem>.md 存在时，反解析九项。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        sdir = papers / "summaries"
+        sdir.mkdir(parents=True)
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "x.pdf", "path": str(papers / "x.pdf"),
+                        "title": "X", "summary_done": False}], f, ensure_ascii=False)
+        with open(sdir / "x.md", "w", encoding="utf-8") as f:
+            f.write("# X\n\n## 思路\n\n核心想法\n\n## 结论\n\n结论一\n结论二\n")
+        r = json.loads(LL.get_summary("x.pdf"))
+        assert r["summary"].get("idea") == "核心想法"
+        assert "结论一" in r["summary"].get("conclusion", "")
+
+    def test_list_library_includes_new_fields(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "y.pdf", "path": str(papers / "y.pdf"),
+                        "authors": ["A B"], "volume": "9", "pages": "1-5",
+                        "knowledge_done": True, "imported_by": "sid-1"}], f, ensure_ascii=False)
+        lib = json.loads(LL.list_library())["library"]
+        assert lib[0]["authors"] == ["A B"]
+        assert lib[0]["meta_complete"] is True
+        assert lib[0]["knowledge_done"] is True
+        assert lib[0]["imported_by"] == "sid-1"
+
+
+# ---------------------------------------------------------------- 前端静态断言
+class TestFrontendLitWorkbench:
+    def test_new_tabs_exist(self):
+        assert 'id="lit-tab-cmp"' in HTML and 'id="lit-tab-know"' in HTML
+        assert 'id="lit-tab-cite"' in HTML and 'id="lit-tab-sum"' in HTML
+
+    def test_resizable_modal(self):
+        assert "function initLitResize" in HTML
+        assert "function litToggleMax" in HTML
+        assert "memomics_lit_box" in HTML
+        assert HTML.count('class="lit-resizer') >= 8  # 八向调节
+
+    def test_compare_view(self):
+        assert "function litRenderCompare" in HTML
+        assert "lit-compare-cols" in HTML
+        assert "litDownloadTextRaw" in HTML
+
+    def test_knowledge_view(self):
+        assert "function litRenderKnowledge" in HTML
+        assert "gene_markers" in HTML and "organoid" in HTML and "chemicals" in HTML
+        assert "sequencing" in HTML and "software" in HTML and "qc_params" in HTML
+
+    def test_cite_view_professional(self):
+        assert "function litRenderCite" in HTML
+        assert "gbt7714-numeric" in HTML and "gbt7714-author-year" in HTML
+        assert "APA" in HTML and "NLM" in HTML and "MLA" in HTML
+
+    def test_export_all(self):
+        assert "function litExportAll" in HTML
+        assert "/api/literature/export" in HTML
+
+    def test_enrich_flow(self):
+        assert "function litEnrichPaper" in HTML and "function litEnrichAll" in HTML
+        assert "/api/literature/enrich" in HTML
+
+    def test_ask_agent(self):
+        assert "function litAskAgent" in HTML
+
+    def test_knowledge_endpoints(self):
+        assert "/api/literature/knowledge" in HTML
+        assert "/api/literature/knowledge-all" in HTML
+
+    def test_force_rerun(self):
+        assert "function litForceSummarize" in HTML
+        assert "function litForceKnowledge" in HTML

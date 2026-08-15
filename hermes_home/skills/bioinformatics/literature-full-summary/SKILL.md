@@ -38,9 +38,19 @@ trigger:
 ## 两个方向的分工（重要）
 
 - **本 skill（给人看）**：上面 9 项 = 论文解读，供用户阅读，存入 `hermes_home/papers/summaries/`
-- **kb_extract_from_paper（给 AI 调用）**：生物知识/生信知识/参数 → knowledge_base 五级目录 YAML，供 search_knowledge 检索复用
+- **kb_extract_from_paper（给 AI 调用）**：结构化知识提取（批O 2026-08-16 升级）——
+  - 生物学知识（结论/基因marker/细胞类型/通路/类器官培养条件/化合物化学信息）→ `01_生物学知识`
+  - 生信知识（测序方法/分析流程/软件包含版本/关键参数/QC阈值/参考基因组/数据库）→ `03_测序方法`
+  - 质控阈值 → `02_质控参数`
+  - 人读版落盘 `hermes_home/papers/knowledge/<文件名>.md`，机读 JSON 存文献库索引（WebUI 文献详情 🧠知识 标签）
 
-两个方向互相独立：一篇文章可以只有全文摘要、只有知识库条目、或两者都有。状态标记：`summary_done`（全文已提炼）与 `kb_done`（已入库）互不干扰。
+两个方向互相独立：一篇文章可以只有全文摘要、只有知识库条目、或两者都有。状态标记：`summary_done`（全文已提炼）与 `kb_done`/`knowledge_done`（已入库）互不干扰。
+
+## 引用（批O 2026-08-16）
+
+文献详情「📎 引用」标签提供 GB/T 7714（顺序编码制/著者-出版年制）、APA 7、NLM、MLA、
+BibTeX、RIS 全套专业格式；缺卷/期/页码时点「🛠 补全元数据」从 Crossref 拉取。
+「⬇ 导出引用」可整库导出 .bib/.ris/GB/T 7714 文本。
 
 ## 使用方式
 

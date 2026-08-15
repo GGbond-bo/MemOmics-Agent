@@ -23,7 +23,29 @@ from pathlib import Path
 logger = logging.getLogger("memomics.literature_library")
 
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b")
-_CROSSREF_UA = {"User-Agent": "MemOmics-Library/1.0 (mailto:research@localhost)"}
+_DOI_JUNK = ("wileyonlinelibrary", "sciencedirect", "tandfonline", "onlinelibrary",
+             "springer", "elsevier", "wiley", "logosociety", "societylogo",
+             "logo", "academic", ".com", ".pdf", "pdf")
+_CROSSREF_UA = {"User-Agent": "MemOmics-Library/1.1 (mailto:research@localhost)"}
+
+
+def _clean_doi(raw: str) -> str:
+    """清洗 PDF 文本里抓到的 DOI：去尾部标点与出版商水印（WILEY/logo 等）。
+
+    例: "10.1111/acel.70485WILEYlogoSocietylogo" → "10.1111/acel.70485"
+    """
+    s = (raw or "").strip().rstrip(".,;)]}>\"'")
+    while s:
+        low = s.lower()
+        cut = None
+        for junk in _DOI_JUNK:
+            i = low.find(junk)
+            if i > 0 and (cut is None or i < cut):
+                cut = i
+        if cut is None:
+            break
+        s = s[:cut].rstrip(".,;-_/()[]")
+    return s
 
 
 def _library_dir() -> str:
@@ -144,22 +166,41 @@ def _crossref_by_doi(doi: str, timeout: float = 15.0) -> dict:
         if v and v[0]:
             year = str(v[0])
             break
+    # 批O(2026-08-16)：补卷/期/页码/PMID（引用格式正确性必需）
+    volume = m.get("volume") or ""
+    issue = m.get("issue") or ""
+    pages = m.get("page") or ""
+    if not pages:
+        pages = m.get("article-number") or ""
+    pmid = ""
+    try:
+        _pmid = m.get("PMID") or ""
+        if not _pmid:
+            for _alt in (m.get("alternative-id") or []):
+                if re.fullmatch(r"\d{7,8}", str(_alt)):
+                    _pmid = _alt
+                    break
+        pmid = str(_pmid or "")
+    except Exception:
+        pass
     return {"title": (m.get("title") or [""])[0], "journal": journal,
-            "authors": authors, "year": year, "doi": doi}
+            "authors": authors, "year": year, "doi": doi,
+            "volume": volume, "issue": issue, "pages": pages, "pmid": pmid}
 
 
 def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
     doi = ""
     m = DOI_RE.search(text or "")
     if m:
-        doi = m.group(0).rstrip(".,;")
+        doi = _clean_doi(m.group(0))
     meta = {"title": "", "journal": "", "authors": [], "year": "", "doi": doi,
+            "volume": "", "issue": "", "pages": "", "pmid": "",
             "entry_type": "article", "url": f"https://doi.org/{doi}" if doi else ""}
     # 1. DOI → Crossref 反查
     if doi:
         try:
             cr = _crossref_by_doi(doi)
-            for k in ("title", "journal", "authors", "year"):
+            for k in ("title", "journal", "authors", "year", "volume", "issue", "pages", "pmid"):
                 if cr.get(k):
                     meta[k] = cr[k]
             return meta
@@ -187,7 +228,7 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
                     None, guess.lower()[:120], ((it.get("title") or [""])[0] or "").lower()[:120]).ratio())
                 _ratio = difflib.SequenceMatcher(
                     None, guess.lower()[:120], ((best.get("title") or [""])[0] or "").lower()[:120]).ratio()
-                if _ratio >= 0.45:
+                if _ratio >= 0.55:  # 批O: 0.45→0.55，收紧防张冠李戴（NDRG1 误配书章节教训）
                     it = best
                     meta["title"] = (it.get("title") or [""])[0] or meta["title"]
                     ct = it.get("container-title") or []
@@ -197,9 +238,12 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
                     v = it.get("published", {}).get("date-parts", [[None]])[0]
                     if v and v[0]:
                         meta["year"] = str(v[0])
+                    meta["volume"] = it.get("volume") or ""
+                    meta["issue"] = it.get("issue") or ""
+                    meta["pages"] = it.get("page") or it.get("article-number") or ""
                     if not meta.get("doi") and it.get("DOI"):
-                        meta["doi"] = it["DOI"]
-                        meta["url"] = f"https://doi.org/{it['DOI']}"
+                        meta["doi"] = _clean_doi(it["DOI"])
+                        meta["url"] = f"https://doi.org/{meta['doi']}"
                 return meta
         except Exception as e:
             logger.debug(f"crossref bibliographic lookup failed: {e}")
@@ -410,11 +454,12 @@ def _parse_json_array(text: str) -> list:
         return []
 
 
-def import_pdfs(paths, progress_cb=None) -> str:
+def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 分类标签 + 引用库注册）。
 
     progress_cb(phase, done, total, detail): 进度回调——
     phase ∈ collect/file/classify/done；detail=当前文件名或说明。
+    imported_by: 导入人标识（多用户场景记录在条目上）。
     """
     files = _collect_pdfs(paths)
     if not files:
@@ -480,8 +525,13 @@ def import_pdfs(paths, progress_cb=None) -> str:
                 "year": meta.get("year") or "",
                 "doi": meta.get("doi") or "",
                 "url": meta.get("url") or "",
+                "volume": meta.get("volume") or "",
+                "issue": meta.get("issue") or "",
+                "pages": meta.get("pages") or "",
+                "pmid": meta.get("pmid") or "",
                 "downloaded_at": datetime.fromtimestamp(os.path.getmtime(src)).strftime("%Y-%m-%d %H:%M:%S"),
                 "imported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "imported_by": (imported_by or "").strip()[:64],
                 "source": "user_import",
                 "imported_from": src.replace("\\", "/"),
             }
@@ -497,6 +547,8 @@ def import_pdfs(paths, progress_cb=None) -> str:
                     "authors": ";".join(entry["authors"]),
                     "year": entry["year"], "doi": entry["doi"], "journal": entry["journal"],
                     "url": entry["url"], "entry_type": "article",
+                    "volume": entry["volume"], "issue": entry["issue"], "pages": entry["pages"],
+                    "pmid": entry["pmid"],
                     "note": f"local_pdf: {entry['path']}",
                 }, global_lib=True)
             except Exception as e:
@@ -544,13 +596,19 @@ def list_library() -> str:
                 "file": e.get("file"), "title": e.get("title") or "",
                 "journal": e.get("journal") or "", "year": e.get("year") or "",
                 "doi": e.get("doi") or "",
+                "authors": e.get("authors") or [],
+                "volume": e.get("volume") or "", "issue": e.get("issue") or "",
+                "pages": e.get("pages") or "", "pmid": e.get("pmid") or "",
                 "downloaded_at": e.get("downloaded_at") or e.get("imported_at") or "",
+                "imported_by": e.get("imported_by") or "",
                 "path": e.get("path") or "",
                 "tags": e.get("tags") or {},
                 "summary_done": bool(e.get("summary_done")),
                 "kb_done": bool(e.get("kb_done")),
+                "knowledge_done": bool(e.get("knowledge_done")),
                 "translated": bool(e.get("translated")),
                 "summary_idea": str(_s.get("idea") or "")[:160],
+                "meta_complete": bool(e.get("volume") and e.get("pages")),
             })
     return json.dumps({"ok": True, "total": len(out), "library": out,
                        "library_dir": _library_dir().replace("\\", "/")},
@@ -666,170 +724,41 @@ def _classify_single(title: str) -> dict:
 
 
 def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
-    """把文献库中的一篇文献提炼成知识库 YAML 条目（批G 2026-08-16）。
+    """把文献库中的一篇文献提炼成知识库条目（批G 2026-08-16；批O 2026-08-16 升级为
+    结构化知识提取：生物学知识[结论/基因marker/细胞类型/通路/类器官/化学信息]
+    + 生信知识[测序方法/流程/软件包/参数/QC/参考基因组/数据库]）。
 
-    流程: 定位 PDF → 全文提取(≤30K字符) → LLM 提炼 1-3 个 KB 条目 →
-          save_knowledge 五级目录落库（带 DOI/原文溯源 evidence）。
+    流程: 定位 PDF → 全文分块 → LLM 结构化提取 → knowledge/<名>.md 落盘
+          + save_knowledge 五级目录 YAML（带 DOI/原文溯源 evidence）。
     progress_cb(phase, done, total, detail): 可选进度回调。
     force=True 时即使已入库也重新提炼（默认幂等跳过，防并发重复调用）。
+    兼容旧调用方（agent 工具/一键入库），内部委托 extract_paper_knowledge。
     """
-    _cb = progress_cb or (lambda *a, **k: None)
-    try:
-        lib = json.loads(list_library()).get("library", [])
-    except Exception:
-        lib = []
-    needle = (file_or_title or "").strip().lower()
-    hit = None
-    for e in lib:
-        if needle and (needle in (e.get("file") or "").lower()
-                       or needle in (e.get("title") or "").lower()):
-            hit = e
-            break
-    if not hit:
-        return json.dumps({"ok": False, "error": (
-            f"文献库中未找到 '{file_or_title}'。可先用 literature_import 导入 PDF，"
-            "或用 save_reference list / 文献库面板查看已入库文献。")},
-            ensure_ascii=False)
-    if not force and hit.get("kb_done"):
-        return json.dumps({"ok": True, "skipped": True, "paper": hit.get("title"),
-                           "file": hit.get("file"),
-                           "note": "已入库（幂等跳过）。如需重新提炼，用 force=true。"},
-                          ensure_ascii=False)
-    pdf_path = hit.get("path", "")
-    if not pdf_path or not os.path.isfile(pdf_path):
-        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
-    _cb("read", 0, 1, f"PDF → Markdown: {hit.get('title') or hit.get('file')}")
-    text = pdf_to_markdown(pdf_path)[:20000]
-    if not text.strip():
-        return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用（可尝试装 rapidocr_onnxruntime）"},
-                          ensure_ascii=False)
-    tags = hit.get("tags") or _classify_single(hit.get("title") or "")
-    from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
-    prompt = (
-        "你是生信知识库提炼员。从文献中提炼 1-3 条可直接复用的知识库条目（参数/方法/生物学结论），"
-        "输出 JSON 数组（不要其他文字）：\n"
-        "[{\"name\":\"英文小写短名_下划线\",\"content\":\"条目内容(≤300字,含关键参数/数值)\","
-        "\"kb_category\":\"01_生物学知识|02_质控参数|03_测序方法\",\"assay_type\":\"RNA|ATAC|spatial|bulk\","
-        "\"species\":\"human/mouse/...\",\"tissue\":\"英文小写下划线\",\"direction\":\"aging/exercise/...\"}]\n"
-        f"文献: {hit.get('title')} | 期刊 {hit.get('journal')} | DOI {hit.get('doi')}\n"
-        f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
-        + "优先提炼: ① 该文献特有的参数(阈值/基因集/统计方法) ② 物种组织方向特异结论 ③ 可被"
-        "search_knowledge 检索复用的方法要点。文献 Markdown 正文（# 为标题）:\n" + text
-    )
-    _cb("extract", 0, 1, f"LLM 提炼: {hit.get('title') or hit.get('file')}")
-    try:
-        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-        r = _call_llm_sync(prompt, "kb_extract", cfg["api_key"], cfg["base_url"],
-                           cfg["model"], temperature=0.3, max_tokens=6000)
-        txt = r.get("content", "")
-        items = _parse_json_array(txt)
-        if r.get("used_reasoning_fallback") or not items:
-            logger.warning(f"kb_extract reasoning 占满/解析为空 (len={len(txt)}) → 重试直接输出")
-            r2 = _call_llm_sync(
-                "【重要：不要输出任何思考过程，立即输出最终 JSON 数组，第一个字符必须是 [ 】\n" + prompt,
-                "kb_extract_retry", cfg["api_key"], cfg["base_url"], cfg["model"],
-                temperature=0.2, max_tokens=6000)
-            items = _parse_json_array(r2.get("content", "")) or items
-    except Exception as e:
-        return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
-    if not items:
-        return json.dumps({"ok": False, "error": "未能提炼出条目"}, ensure_ascii=False)
-    from memomics.bio_tools.save_knowledge import save_knowledge
-    written, rejected = [], []
-    for _i, it in enumerate(items):
-        if not isinstance(it, dict):
-            continue
-        _cb("write", _i + 1, len(items), f"写入知识库: {it.get('name')}")
-        sp = (it.get("species") or (tags.get("species") or ["unknown"])[0]).lower()
-        ti = (it.get("tissue") or (tags.get("tissue") or [""])[0]).lower().replace(" ", "_")
-        dr = (it.get("direction") or (tags.get("direction") or [""])[0]).lower().replace(" ", "_")
-        # 清洗多值字段（如 "human;mouse" / "skeletal muscle, liver"）：取第一个合法值
-        def _first_seg(v: str) -> str:
-            for seg in re.split(r"[;,，、/；]", v):
-                seg = seg.strip().replace(" ", "_")
-                if re.fullmatch(r"[\w\u4e00-\u9fff_-]{1,64}", seg):
-                    return seg
-            return ""
-        sp = _first_seg(sp)
-        ti = _first_seg(ti)
-        dr = _first_seg(dr)
-        if sp == "unknown" or not ti or not dr:
-            rejected.append({"name": it.get("name"), "error": "物种/组织/方向缺失，无法定位五级目录"})
-            continue
-        r = json.loads(save_knowledge(
-            name=str(it.get("name") or "")[:64],
-            content=str(it.get("content") or ""),
-            source="literature",
-            evidence=f"DOI {hit.get('doi')} | {hit.get('title')} | {hit.get('path')}",
-            verified="partially_verified",
-            species=sp, tissue=ti, direction=dr,
-            kb_category=str(it.get("kb_category") or "01_生物学知识"),
-            assay_type=str(it.get("assay_type") or tags.get("assay") or "RNA").upper(),
-        ))
-        (written if r.get("status") == "success" else rejected).append(
-            {k: r.get(k) for k in ("status", "name", "path", "error") if r.get(k)})
-    _cb("done", 1, 1, f"提炼完成: 写入 {len(written)} 条")
-    # 标记 kb_done（方向2：给 AI 调用的知识库条目）
-    try:
-        _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
-        _idx = _load_index(_idx_file)
-        for _e in _idx:
-            if _e.get("file") == hit.get("file") and written:
-                _e["kb_done"] = True
-                _e["kb_written_count"] = len(written)
-        _save_index(_idx_file, _idx)
-    except Exception as e:
-        logger.warning(f"kb_done mark failed: {e}")
-    return json.dumps({
-        "ok": bool(written), "paper": hit.get("title"), "doi": hit.get("doi"),
-        "written": written, "rejected": rejected,
-        "note": "写入 knowledge_base 五级目录（物种/组织/方向/类别/assay），带 DOI 溯源。"},
-        ensure_ascii=False, indent=2)
+    r = json.loads(extract_paper_knowledge(file_or_title, progress_cb=progress_cb, force=force))
+    if r.get("ok"):
+        return json.dumps({
+            "ok": True, "paper": r.get("paper"), "doi": r.get("doi"),
+            "file": r.get("file"), "written": r.get("written") or [],
+            "rejected": r.get("rejected") or [],
+            "knowledge": r.get("knowledge") or {},
+            "note": ("结构化知识已入库：生物学知识(结论/marker/类器官/化学) → 01_生物学知识；"
+                     "生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。")},
+            ensure_ascii=False, indent=2)
+    return json.dumps(r, ensure_ascii=False)
 
 
 def extract_all_papers(progress_cb=None) -> str:
-    """一键入库（批I 2026-08-16；批K 2026-08-16 只处理未入库）：
-    对文献库中未入库（kb_done≠true）的文献逐一提炼进知识库。
+    """一键入库（批I 2026-08-16；批O 2026-08-16 升级为结构化知识提取）：
+    对文献库中未入库（kb_done≠true）的文献逐篇提取知识进知识库。
+    （kb_done 与 knowledge_done 同步：提取成功即标记 kb_done。）
 
     progress_cb(phase, done, total, detail)。
     """
-    try:
-        lib = json.loads(list_library()).get("library", [])
-    except Exception:
-        lib = []
-    if not lib:
-        return json.dumps({"ok": False, "error": "文献库为空——先导入 PDF 再一键提炼"},
-                          ensure_ascii=False)
-    pending = [e for e in lib if not e.get("kb_done")]
-    if not pending:
-        return json.dumps({"ok": True, "total": len(lib), "pending": 0,
-                           "results": [], "note": "全部文献都已入库"},
-                          ensure_ascii=False)
-    _cb = progress_cb or (lambda *a, **k: None)
-    n = len(pending)
-    results = []
-    for i, e in enumerate(pending):
-        name = e.get("file") or e.get("title") or ""
-        _cb("paper", i, n, f"[{i + 1}/{n}] 提炼: {e.get('title') or name}")
-        try:
-            r = json.loads(kb_extract_from_paper(name, progress_cb=(
-                lambda ph, d, t, det, _i=i: _cb(ph, _i + (d / max(t, 1)) * 0.9, n,
-                                                f"[{_i + 1}/{n}] {det}")
-            )))
-        except Exception as ex:
-            r = {"ok": False, "error": str(ex)[:200]}
-        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
-                        "written": len(r.get("written") or []),
-                        "rejected": len(r.get("rejected") or []),
-                        "error": r.get("error", "")})
-    ok_n = sum(1 for r in results if r["ok"])
-    _cb("done", n, n, f"全部完成: {ok_n}/{n} 篇成功")
-    return json.dumps({
-        "ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
-        "written_total": sum(r["written"] for r in results),
-        "results": results,
-        "note": "只处理未入库文献，逐篇提炼进 knowledge_base 五级目录，每篇 1-3 条（参数/方法/结论），带 DOI 溯源。"},
-        ensure_ascii=False, indent=2)
+    r = json.loads(extract_all_knowledge(progress_cb=progress_cb))
+    if r.get("ok"):
+        r["note"] = ("结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base "
+                     "五级目录，每篇 2-3 条，带 DOI 溯源。")
+    return json.dumps(r, ensure_ascii=False, indent=2)
 
 
 def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -920,6 +849,10 @@ def _translations_dir() -> str:
     return os.path.join(_library_dir(), "translations")
 
 
+def _knowledge_dir() -> str:
+    return os.path.join(_library_dir(), "knowledge")
+
+
 def _load_summary_file(stem: str) -> str:
     p = os.path.join(_summaries_dir(), f"{stem}.md")
     try:
@@ -929,48 +862,102 @@ def _load_summary_file(stem: str) -> str:
         return ""
 
 
-def get_summary(file_or_title: str) -> str:
-    """查看某篇文献的全文思路摘要（方向1）。"""
-    try:
-        lib = json.loads(list_library()).get("library", [])
-    except Exception:
-        lib = []
+def _find_raw_entry(file_or_title: str) -> dict:
+    """在两份索引（用户导入 + agent 下载）里按文件名/标题子串找原始条目。"""
     needle = (file_or_title or "").strip().lower()
-    hit = None
-    for e in lib:
-        if needle and (needle in (e.get("file") or "").lower()
-                       or needle in (e.get("title") or "").lower()):
-            hit = e
-            break
+    for idx_path in (os.path.join(_library_dir(), ".pdf_index.json"),
+                     _agent_papers_index()):
+        if not idx_path or not os.path.isfile(idx_path):
+            continue
+        for e in _load_index(idx_path):
+            if needle and (needle in (e.get("file") or "").lower()
+                           or needle in (e.get("title") or "").lower()):
+                return e
+    return {}
+
+
+def _parse_summary_md(md: str) -> dict:
+    """把 summaries/<stem>.md 的九项标题反解析回 dict（index 缺失时的兜底）。"""
+    out = {}
+    label_to_key = {v: k for k, v in _SUMMARY_FIELD_LABELS.items()}
+    cur = None
+    for ln in (md or "").splitlines():
+        if ln.startswith("## "):
+            key = label_to_key.get(ln[3:].strip())
+            cur = key
+            out.setdefault(key, [])
+            continue
+        if cur and ln.strip():
+            out[cur].append(ln.strip())
+    return {k: "\n".join(v).strip() for k, v in out.items() if v}
+
+
+def _citations_for(entry: dict) -> dict:
+    """为文献条目生成全套专业引文（GB/T 7714 ×2 / APA / NLM / MLA / BibTeX / RIS）。"""
+    try:
+        from memomics.bio_tools.reference_library import (_to_bibtex, _to_ris,
+                                                          format_citation)
+    except Exception:
+        return {}
+    meta = {"title": entry.get("title") or "", "authors": entry.get("authors") or "",
+            "year": entry.get("year") or "", "doi": entry.get("doi") or "",
+            "journal": entry.get("journal") or "",
+            "url": entry.get("url") or (f"https://doi.org/{entry['doi']}" if entry.get("doi") else ""),
+            "entry_type": entry.get("entry_type") or "article",
+            "volume": entry.get("volume") or "", "issue": entry.get("issue") or "",
+            "pages": entry.get("pages") or "", "pmid": entry.get("pmid") or ""}
+    out = {"bibtex": _to_bibtex(meta), "ris": _to_ris(meta)}
+    for style in ("gbt7714-numeric", "gbt7714-author-year", "apa", "nlm", "mla"):
+        try:
+            out[style] = format_citation(meta, style)
+        except Exception as e:
+            logger.warning(f"citation {style} failed: {e}")
+            out[style] = ""
+    return out
+
+
+def get_summary(file_or_title: str) -> str:
+    """查看某篇文献的完整详情（批O 2026-08-16 修复：从原始索引读全文摘要/作者/知识）。
+
+    修复历史 bug：旧实现从 list_library 投影读 summary/authors（投影里根本没有
+    这两个字段）→ 九项摘要恒为空、引用恒无作者。现在直读 .pdf_index.json 原始条目，
+    摘要缺失时回退解析 summaries/<stem>.md。
+    """
+    hit = _find_raw_entry(file_or_title)
     if not hit:
         return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
                           ensure_ascii=False)
-    md = _load_summary_file(os.path.splitext(hit.get("file") or "")[0])
-    if not md and hit.get("summary"):
-        md = hit["summary"].get("markdown", "")
+    summary = dict(hit.get("summary") or {})
     stem = os.path.splitext(hit.get("file") or "")[0]
+    md = _load_summary_file(stem)
+    if not md and summary.get("markdown"):
+        md = summary.get("markdown", "")
+    if not summary:
+        parsed = _parse_summary_md(md)
+        if parsed:
+            summary = parsed
     src_md = os.path.join(_markdown_dir(), f"{stem}.md")
     zh_md = os.path.join(_translations_dir(), f"{stem}.zh.md")
-    # 引用信息（批N1 2026-08-16：详情页"引用"标签）
-    bibtex, ris = "", ""
-    try:
-        from memomics.bio_tools.reference_library import _to_bibtex, _to_ris
-        _meta = {"title": hit.get("title"), "authors": hit.get("authors") or "",
-                 "year": hit.get("year"), "doi": hit.get("doi"), "journal": hit.get("journal"),
-                 "url": hit.get("doi") and f"https://doi.org/{hit['doi']}" or "", "entry_type": "article"}
-        bibtex = _to_bibtex(_meta)
-        ris = _to_ris(_meta)
-    except Exception:
-        pass
+    knowledge = hit.get("knowledge") or {}
+    k_md = os.path.join(_knowledge_dir(), f"{stem}.md")
     return json.dumps({"ok": True, "file": hit.get("file"), "title": hit.get("title"),
                        "journal": hit.get("journal"), "year": hit.get("year"),
                        "doi": hit.get("doi"), "authors": hit.get("authors") or [],
-                       "summary": hit.get("summary") or {}, "markdown": md,
+                       "volume": hit.get("volume") or "", "issue": hit.get("issue") or "",
+                       "pages": hit.get("pages") or "", "pmid": hit.get("pmid") or "",
+                       "imported_by": hit.get("imported_by") or "",
+                       "summary": summary, "markdown": md,
+                       "knowledge": knowledge,
                        "markdown_file": src_md.replace("\\", "/") if os.path.isfile(src_md) else "",
                        "translation_file": zh_md.replace("\\", "/") if os.path.isfile(zh_md) else "",
-                       "bibtex": bibtex, "ris": ris,
+                       "knowledge_file": k_md.replace("\\", "/") if os.path.isfile(k_md) else "",
+                       "citations": _citations_for(hit),
                        "summary_done": bool(hit.get("summary_done")),
-                       "kb_done": bool(hit.get("kb_done"))}, ensure_ascii=False)
+                       "knowledge_done": bool(hit.get("knowledge_done")),
+                       "kb_done": bool(hit.get("kb_done")),
+                       "translated": bool(hit.get("translated")),
+                       "meta_complete": bool(hit.get("volume") and hit.get("pages")),
+                       }, ensure_ascii=False)
 
 
 def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -1028,6 +1015,7 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
     )
     summary = {}
+    bullets = {}  # 批O: 合并失败时的兜底（分块要点直接拼成九项，不再整篇失败）
     try:
         if len(md_text) <= 18000:
             # 短文献：单次调用（Markdown 结构化后质量更好）
@@ -1063,7 +1051,12 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
                 retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
             summary = _parse_json_object(txt)
     except Exception as e:
-        return json.dumps({"ok": False, "error": f"LLM 提炼失败: {str(e)[:200]}"}, ensure_ascii=False)
+        logger.warning(f"lit_summary LLM 调用异常: {e}")
+        summary = {}
+    if not summary and bullets and any(bullets.values()):
+        # 批O 兜底：合并调用失败时直接用分块要点拼九项（不烧 token、不整篇失败）
+        logger.warning(f"lit_summary merge 失败，用分块要点兜底: file={hit.get('file')}")
+        summary = {k: ("；".join(v[:8]) if v else "") for k, v in bullets.items()}
     if not summary or not any(summary.get(k) for k in _SUMMARY_FIELDS):
         logger.warning(f"lit_summary 最终失败: file={hit.get('file')}")
         return json.dumps({"ok": False,
@@ -1137,10 +1130,568 @@ def summarize_all_papers(progress_cb=None) -> str:
                       ensure_ascii=False, indent=2)
 
 
+# ── 方向3：结构化知识提取（生物学知识 + 生信知识，批O 2026-08-16）──
+_KNOWLEDGE_SCHEMA_HINT = (
+    '{"biology":{"conclusions":["主要发现/结论，每条一句"],'
+    '"gene_markers":[{"gene":"基因名","cell_type":"细胞类型","direction":"up/down/na","context":"说明"}],'
+    '"cell_types":["涉及的细胞类型"],"pathways":["关键通路/信号轴"],'
+    '"organoid":[{"name":"类器官名","species":"物种","media":"培养基","cytokines":["细胞因子"],'
+    '"matrix":"基质胶/支架","duration":"培养时长"}],'
+    '"chemicals":[{"compound":"化合物","target":"靶点","dose":"剂量","ic50":"IC50/EC50","model":"模型","effect":"效应"}]},'
+    '"bioinfo":{"sequencing":[{"tech":"测序技术(如 scRNA-seq 10x v3)","platform":"测序平台","library":"建库","read_depth":"测序深度/读数"}],'
+    '"pipeline":["分析步骤1 → 步骤2 → ..."],'
+    '"software":[{"name":"软件/包名","version":"版本","lang":"R/Python","purpose":"用途"}],'
+    '"parameters":[{"tool":"所属工具","param":"参数名","value":"参数值","context":"使用场景"}],'
+    '"qc_params":[{"param":"质控参数","value":"阈值","context":"说明"}],'
+    '"reference_genome":"参考基因组","databases":[{"name":"数据库","purpose":"用途"}]}}'
+)
+
+
+def _md_table(rows: list, columns: list) -> str:
+    if not rows:
+        return ""
+    head = "| " + " | ".join(columns) + " |\n| " + " | ".join(["---"] * len(columns)) + " |\n"
+    body = ""
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        cells = [str(r.get(c) or "").replace("\n", " ").replace("|", "/") for c in columns]
+        body += "| " + " | ".join(cells) + " |\n"
+    return head + body
+
+
+def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
+    """结构化知识 JSON → 人类可读 Markdown（knowledge/<stem>.md）。"""
+    bio = k.get("biology") or {}
+    bi = k.get("bioinfo") or {}
+    L = [f"# {title}", f"> {meta_line}", ""]
+    L.append("## 🧬 生物学知识")
+    for label, key in (("📌 结论", "conclusions"), ("🫁 细胞类型", "cell_types"),
+                       ("🔀 通路", "pathways")):
+        vals = bio.get(key) or []
+        if vals:
+            L.append(f"### {label}\n" + "\n".join(f"- {v}" for v in vals) + "\n")
+    markers = bio.get("gene_markers") or []
+    if markers:
+        L.append("### 🧬 基因 Marker\n" + _md_table(
+            markers, ["gene", "cell_type", "direction", "context"]))
+    organoid = bio.get("organoid") or []
+    if organoid:
+        L.append("### 🧫 类器官/培养条件\n" + _md_table(
+            organoid, ["name", "species", "media", "cytokines", "matrix", "duration"]))
+    chems = bio.get("chemicals") or []
+    if chems:
+        L.append("### ⚗️ 化合物/化学信息\n" + _md_table(
+            chems, ["compound", "target", "dose", "ic50", "model", "effect"]))
+    if not any(bio.get(x) for x in ("conclusions", "cell_types", "pathways",
+                                    "gene_markers", "organoid", "chemicals")):
+        L.append("（未提及）\n")
+    L.append("## 💻 生信知识")
+    seqs = bi.get("sequencing") or []
+    if seqs:
+        L.append("### 🔬 测序方法\n" + _md_table(
+            seqs, ["tech", "platform", "library", "read_depth"]))
+    pipe = bi.get("pipeline") or []
+    if pipe:
+        L.append("### 🧭 分析流程\n" + "\n".join(f"- {p}" for p in pipe) + "\n")
+    soft = bi.get("software") or []
+    if soft:
+        L.append("### 📦 软件/包\n" + _md_table(soft, ["name", "version", "lang", "purpose"]))
+    params = bi.get("parameters") or []
+    if params:
+        L.append("### 🎛️ 关键参数\n" + _md_table(params, ["tool", "param", "value", "context"]))
+    qc = bi.get("qc_params") or []
+    if qc:
+        L.append("### 🧹 质控参数\n" + _md_table(qc, ["param", "value", "context"]))
+    if bi.get("reference_genome"):
+        L.append(f"### 🧬 参考基因组\n{bi['reference_genome']}\n")
+    dbs = bi.get("databases") or []
+    if dbs:
+        L.append("### 🗄️ 数据库\n" + _md_table(dbs, ["name", "purpose"]))
+    if not any(bi.get(x) for x in ("sequencing", "pipeline", "software", "parameters",
+                                   "qc_params", "reference_genome", "databases")):
+        L.append("（未提及）\n")
+    return "\n".join(L)
+
+
+def _safe_kb_name(stem: str, prefix: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9_.\-]", "_", stem or "paper")[:40].strip("_") or "paper"
+    return f"{prefix}_{name}"[:64]
+
+
+def _kb_write_fallbacks(tags: dict, k: dict) -> tuple:
+    """物种/组织/方向缺失时的兜底（五级目录必填，缺失用 other 占位）。"""
+    sp = ((tags.get("species") or [""])[0] or "other").lower().replace(" ", "_")
+    ti = ((tags.get("tissue") or [""])[0] or "other").lower().replace(" ", "_")
+    dr = ((tags.get("direction") or [""])[0] or "other").lower().replace(" ", "_")
+    if sp == "unknown":
+        sp = "other"
+    for seg in (sp, ti, dr):
+        if not re.fullmatch(r"[\w\u4e00-\u9fff_-]{1,64}", seg):
+            return "other", "other", "other"
+    return sp, ti, dr
+
+
+def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> tuple:
+    """把结构化知识写进 knowledge_base 五级目录（biology→01，qc→02，bioinfo→03）。"""
+    from memomics.bio_tools.save_knowledge import save_knowledge
+    written, rejected = [], []
+    sp, ti, dr = _kb_write_fallbacks(tags, k)
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    bio = k.get("biology") or {}
+    bi = k.get("bioinfo") or {}
+
+    # 1) 生物学知识条目（结论/marker/细胞类型/通路/类器官/化合物）
+    bio_parts = []
+    for label, key in (("结论", "conclusions"), ("细胞类型", "cell_types"), ("通路", "pathways")):
+        vals = bio.get(key) or []
+        if vals:
+            bio_parts.append(f"## {label}\n" + "\n".join(f"- {v}" for v in vals))
+    markers = bio.get("gene_markers") or []
+    if markers:
+        lines = [f"- {m.get('gene')}：{m.get('cell_type') or '—'}，{m.get('direction') or '—'}，{m.get('context') or ''}"
+                 for m in markers if isinstance(m, dict)]
+        bio_parts.append("## 基因 Marker\n" + "\n".join(lines))
+    organoid = bio.get("organoid") or []
+    if organoid:
+        lines = [f"- {o.get('name')}：{o.get('species') or ''} | 培养基 {o.get('media') or '—'} | "
+                 f"细胞因子 {', '.join(o.get('cytokines') or [])} | 基质 {o.get('matrix') or '—'} | {o.get('duration') or '—'}"
+                 for o in organoid if isinstance(o, dict)]
+        bio_parts.append("## 类器官/培养条件\n" + "\n".join(lines))
+    chems = bio.get("chemicals") or []
+    if chems:
+        lines = [f"- {c.get('compound')}：靶点 {c.get('target') or '—'} | 剂量 {c.get('dose') or '—'} | "
+                 f"IC50 {c.get('ic50') or '—'} | 模型 {c.get('model') or '—'} | {c.get('effect') or ''}"
+                 for c in chems if isinstance(c, dict)]
+        bio_parts.append("## 化合物/化学信息\n" + "\n".join(lines))
+    if bio_parts:
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "paper_bio"),
+            content="\n\n".join(bio_parts),
+            source="literature", evidence=evidence,
+            verified="partially_verified",
+            species=sp, tissue=ti, direction=dr,
+            kb_category="01_生物学知识",
+            assay_type=str(tags.get("assay") or "RNA").upper()))
+        (written if r.get("status") == "success" else rejected).append(
+            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+
+    # 2) 生信知识条目（测序方法/流程/软件/参数/参考基因组/数据库）
+    bi_parts = []
+    seqs = bi.get("sequencing") or []
+    if seqs:
+        lines = [f"- {s.get('tech')} | 平台 {s.get('platform') or '—'} | 建库 {s.get('library') or '—'} | 深度 {s.get('read_depth') or '—'}"
+                 for s in seqs if isinstance(s, dict)]
+        bi_parts.append("## 测序方法\n" + "\n".join(lines))
+    pipe = bi.get("pipeline") or []
+    if pipe:
+        bi_parts.append("## 分析流程\n" + "\n".join(f"- {p}" for p in pipe))
+    soft = bi.get("software") or []
+    if soft:
+        lines = [f"- {s.get('name')} {s.get('version') or ''}（{s.get('lang') or ''}）：{s.get('purpose') or ''}"
+                 for s in soft if isinstance(s, dict)]
+        bi_parts.append("## 软件/包\n" + "\n".join(lines))
+    params = bi.get("parameters") or []
+    if params:
+        lines = [f"- {p.get('tool')}.{p.get('param')} = {p.get('value')}（{p.get('context') or ''}）"
+                 for p in params if isinstance(p, dict)]
+        bi_parts.append("## 关键参数\n" + "\n".join(lines))
+    if bi.get("reference_genome"):
+        bi_parts.append(f"## 参考基因组\n{bi['reference_genome']}")
+    dbs = bi.get("databases") or []
+    if dbs:
+        bi_parts.append("## 数据库\n" + "\n".join(
+            f"- {d.get('name')}：{d.get('purpose') or ''}" for d in dbs if isinstance(d, dict)))
+    if bi_parts:
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "paper_bioinfo"),
+            content="\n\n".join(bi_parts),
+            source="literature", evidence=evidence,
+            verified="partially_verified",
+            species=sp, tissue=ti, direction=dr,
+            kb_category="03_测序方法",
+            assay_type=str(tags.get("assay") or "RNA").upper()))
+        (written if r.get("status") == "success" else rejected).append(
+            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+
+    # 3) 质控参数条目（02_质控参数）
+    qc = bi.get("qc_params") or []
+    if qc:
+        content = "\n".join(f"- {q.get('param')} = {q.get('value')}（{q.get('context') or ''}）"
+                            for q in qc if isinstance(q, dict))
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "paper_qc"),
+            content=content, source="literature", evidence=evidence,
+            verified="partially_verified",
+            species=sp, tissue=ti, direction=dr,
+            kb_category="02_质控参数",
+            assay_type=str(tags.get("assay") or "RNA").upper()))
+        (written if r.get("status") == "success" else rejected).append(
+            {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)})
+    return written, rejected
+
+
+def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = False) -> str:
+    """结构化知识提取（批O 2026-08-16）：生物学知识 + 生信知识。
+
+    - 生物学知识：结论、基因 marker、细胞类型、通路、类器官/培养条件、化合物/化学信息
+    - 生信知识：测序方法（技术/平台/建库/深度）、分析流程、软件包（含版本/语言）、
+      关键参数、质控阈值、参考基因组、数据库
+    产物：hermes_home/papers/knowledge/<名>.md（人读）+ 索引 knowledge JSON（机读）
+          + knowledge_base 五级目录 YAML 条目（给 AI 检索复用）。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    hit = _find_raw_entry(file_or_title)
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    if not force and hit.get("knowledge_done") and hit.get("knowledge"):
+        return json.dumps({"ok": True, "skipped": True, "paper": hit.get("title"),
+                           "file": hit.get("file"),
+                           "note": "已提取过（幂等跳过）。force=true 可重新提取。"},
+                          ensure_ascii=False)
+    pdf_path = hit.get("path", "")
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    _cb("convert", 0, 1, f"PDF → Markdown: {hit.get('file')}")
+    md_text = pdf_to_markdown(pdf_path)
+    if not md_text.strip():
+        return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
+    tags = hit.get("tags") or _classify_single(hit.get("title") or "")
+    base = (
+        "你是生信文献知识提炼专家。从文献中提取**可直接复用的知识**（给 AI 分析系统检索使用），"
+        "输出 JSON 对象（不要其他文字）：\n"
+        + _KNOWLEDGE_SCHEMA_HINT + "\n"
+        "规则：① 只提取文献明确给出的信息，没有的字段给空数组/空串，禁止编造 ② 基因名/参数值/"
+        "阈值/版本号必须原文原样 ③ 参数要带 tool 和 context（如 resolution=0.8 用于聚类）"
+        " ④ 化学信息要给剂量/IC50/模型 ⑤ 类器官要给培养基/细胞因子/基质条件。\n"
+        f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
+        f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
+    )
+    knowledge = {}
+    bullets = {}
+    try:
+        if len(md_text) <= 18000:
+            txt = _llm_content(
+                base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
+                "lit_knowledge", temperature=0.3, max_tokens=6000,
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+            knowledge = _parse_json_object(txt)
+        else:
+            _cb("extract", 0, 1, f"长文献分块提取: {len(_split_md_sections(md_text))} 节")
+            chunks = _chunk_sections(_split_md_sections(md_text))
+            bullets = {"biology": [], "bioinfo": []}
+            for ci, chunk in enumerate(chunks):
+                _cb("extract", ci, len(chunks), f"提取第 {ci + 1}/{len(chunks)} 块")
+                txt = _llm_content(
+                    "你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
+                    "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
+                    "（该片段没涉及的字段给空数组/空串）\n" + chunk,
+                    f"lit_know_chunk_{ci}", temperature=0.2, max_tokens=4000,
+                    retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
+                part = _parse_json_object(txt)
+                for sec in ("biology", "bioinfo"):
+                    bullets[sec].append(part.get(sec) or {})
+            merged = json.dumps(bullets, ensure_ascii=False)
+            txt = _llm_content(
+                base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
+                "请合并去重后输出最终的完整 JSON 对象（不要其他文字）:\n" + merged[:12000],
+                "lit_knowledge_merge", temperature=0.3, max_tokens=6000,
+                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+            knowledge = _parse_json_object(txt)
+    except Exception as e:
+        logger.warning(f"lit_knowledge LLM 调用异常: {e}")
+        knowledge = {}
+    if not knowledge and bullets.get("biology") and bullets.get("bioinfo"):
+        # 兜底：合并失败时直接聚合分块碎片（列表字段并集、标量字段取首个非空）
+        logger.warning(f"lit_knowledge merge 失败，用分块碎片兜底: file={hit.get('file')}")
+        knowledge = {"biology": {}, "bioinfo": {}}
+        for sec in ("biology", "bioinfo"):
+            agg = {}
+            for part in bullets[sec]:
+                for k2, v2 in (part or {}).items():
+                    if isinstance(v2, list):
+                        agg.setdefault(k2, [])
+                        for it in v2:
+                            if it not in agg[k2]:
+                                agg[k2].append(it)
+                    elif isinstance(v2, str) and v2 and not agg.get(k2):
+                        agg[k2] = v2
+            knowledge[sec] = agg
+    bio = knowledge.get("biology") or {}
+    bi = knowledge.get("bioinfo") or {}
+    if not any(bio.values()) and not any(bi.values()):
+        return json.dumps({"ok": False,
+                           "error": f"未能提取出知识（{hit.get('file')}：LLM 未输出有效 JSON，"
+                                    "已自动重试；可稍后再试）"},
+                          ensure_ascii=False)
+    # 落盘 knowledge/<stem>.md + 索引 knowledge JSON
+    _cb("write", 1, 1, "写入知识文件 + 知识库条目")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    stem = os.path.splitext(hit.get("file") or "")[0]
+    meta_line = (f"期刊 {hit.get('journal') or '—'} · {hit.get('year') or '—'} · "
+                 f"DOI {hit.get('doi') or '—'} · 提取于 {now}")
+    os.makedirs(_knowledge_dir(), exist_ok=True)
+    with open(os.path.join(_knowledge_dir(), f"{stem}.md"), "w", encoding="utf-8") as f:
+        f.write(_knowledge_to_markdown(knowledge, hit.get("title") or hit.get("file"), meta_line))
+    evidence = f"DOI {hit.get('doi')} | {hit.get('title')} | {hit.get('path')}"
+    written, rejected = _write_knowledge_entries(hit, knowledge, tags, evidence)
+    try:
+        _idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+        _idx = _load_index(_idx_file)
+        for _e in _idx:
+            if _e.get("file") == hit.get("file"):
+                _e["knowledge"] = knowledge
+                _e["knowledge_done"] = True
+                _e["knowledge_extracted_at"] = now
+                if written:
+                    _e["kb_done"] = True
+                    _e["kb_written_count"] = len(written)
+        _save_index(_idx_file, _idx)
+    except Exception as e:
+        logger.warning(f"knowledge mark failed: {e}")
+    _cb("done", 1, 1, f"知识提取完成: 写入 {len(written)} 条")
+    return json.dumps({
+        "ok": True, "paper": hit.get("title"), "file": hit.get("file"), "doi": hit.get("doi"),
+        "knowledge": knowledge, "written": written, "rejected": rejected,
+        "knowledge_file": f"hermes_home/papers/knowledge/{stem}.md",
+        "note": "生物学知识(结论/marker/类器官/化学) → 01_生物学知识；生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。"},
+        ensure_ascii=False, indent=2)
+
+
+def extract_all_knowledge(progress_cb=None) -> str:
+    """一键知识提取：只处理未提取（knowledge_done≠true）的文章（批O）。"""
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空"}, ensure_ascii=False)
+    pending = [e for e in lib if not e.get("knowledge_done")]
+    if not pending:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0,
+                           "results": [], "note": "全部文章都已提取知识"},
+                          ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(pending)
+    results = []
+    for i, e in enumerate(pending):
+        name = e.get("file") or e.get("title") or ""
+        _cb("paper", i, n, f"[{i + 1}/{n}] 知识提取: {e.get('title') or name}")
+        try:
+            r = json.loads(extract_paper_knowledge(name, progress_cb=(
+                lambda ph, d, t, det, _i=i: _cb(ph, _i + (d / max(t, 1)) * 0.9, n,
+                                                f"[{_i + 1}/{n}] {det}")
+            )))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
+                        "written": len(r.get("written") or []),
+                        "rejected": len(r.get("rejected") or []),
+                        "error": r.get("error", "")})
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"知识提取完成: {ok_n}/{n} 篇成功")
+    return json.dumps({
+        "ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
+        "written_total": sum(r["written"] for r in results),
+        "results": results,
+        "note": "结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base 五级目录，带 DOI 溯源。"},
+        ensure_ascii=False, indent=2)
+
+
+# ── 元数据补全（批O 2026-08-16：引用格式正确性）──
+_MOJIBAKE_MARKERS = ("茅", "帽", "鈥", "铆", "锚", "脜", "猫", "縫")
+
+
+def _meta_suspect(e: dict) -> str:
+    """判断元数据是否需要补全。返回 '' = 不需要。"""
+    if not e.get("doi"):
+        return "no_doi"
+    blob = (str(e.get("title") or "") + " " + str(e.get("journal") or "") +
+            " " + " ".join(e.get("authors") or []))
+    if any(mk in blob for mk in _MOJIBAKE_MARKERS):
+        return "mojibake"
+    low = (e.get("doi") or "").lower()
+    if any(j in low for j in _DOI_JUNK):
+        return "junk_doi"
+    if not (e.get("volume") and e.get("pages")):
+        return "incomplete"
+    return ""
+
+
+def enrich_paper_metadata(file_or_title: str, progress_cb=None) -> str:
+    """Crossref 补全/修正单篇元数据（卷/期/页码/PMID/作者乱码/错误 DOI/标题）。"""
+    _cb = progress_cb or (lambda *a, **k: None)
+    hit = _find_raw_entry(file_or_title)
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    pdf_path = hit.get("path", "")
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return json.dumps({"ok": False, "error": f"PDF 文件不存在: {pdf_path}"}, ensure_ascii=False)
+    _cb("read", 0, 1, f"重新提取 DOI: {hit.get('file')}")
+    text = _pdf_text(pdf_path, pages=2)
+    doi = ""
+    m = DOI_RE.search(text or "")
+    if m:
+        doi = _clean_doi(m.group(0))
+    # 1) 优先用 PDF 里新抓到的 DOI（可能修正了旧的水印脏 DOI）
+    _updated = {}
+    if doi and doi != hit.get("doi"):
+        try:
+            cr = _crossref_by_doi(doi)
+            _updated.update(cr)
+            _cb("fetch", 0, 1, f"Crossref 命中新 DOI: {doi}")
+        except Exception as e:
+            logger.debug(f"crossref {doi} failed: {e}")
+    # 2) 否则用旧 DOI 补全
+    if not _updated and hit.get("doi"):
+        try:
+            _updated.update(_crossref_by_doi(hit.get("doi")))
+            _cb("fetch", 0, 1, f"Crossref 补全: {hit.get('doi')}")
+        except Exception:
+            _updated = {}
+    # 3) 仍无结果 → 标题书目检索
+    if not _updated:
+        guess = hit.get("title") or _pdf_title_guess(pdf_path) or ""
+        if guess:
+            try:
+                import difflib
+                import urllib.parse
+                import urllib.request
+                url = ("https://api.crossref.org/works?query.bibliographic="
+                       + urllib.parse.quote(guess[:200]) + "&rows=3")
+                req = urllib.request.Request(url, headers=_CROSSREF_UA)
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    d = json.loads(r.read().decode("utf-8"))
+                items = (d.get("message") or {}).get("items") or []
+                items = [it for it in items
+                         if not ((it.get("title") or [""])[0] or "").lower().startswith("review for")]
+                if items:
+                    best = max(items, key=lambda it: difflib.SequenceMatcher(
+                        None, guess.lower()[:120], ((it.get("title") or [""])[0] or "").lower()[:120]).ratio())
+                    _ratio = difflib.SequenceMatcher(
+                        None, guess.lower()[:120], ((best.get("title") or [""])[0] or "").lower()[:120]).ratio()
+                    if _ratio >= 0.55:
+                        it = best
+                        _updated = {
+                            "title": (it.get("title") or [""])[0],
+                            "journal": (it.get("container-title") or [""])[0],
+                            "authors": [f"{a.get('given','')} {a.get('family','')}".strip()
+                                        for a in it.get("author", [])][:20],
+                            "year": str((it.get("published", {}).get("date-parts", [[None]])[0] or [None])[0] or ""),
+                            "doi": it.get("DOI") or "", "volume": it.get("volume") or "",
+                            "issue": it.get("issue") or "", "pages": it.get("page") or it.get("article-number") or "",
+                        }
+                        _cb("fetch", 0, 1, f"Crossref 书目检索命中: {_updated['title'][:60]}")
+            except Exception as e:
+                logger.debug(f"crossref biblio enrich failed: {e}")
+    if not _updated:
+        return json.dumps({"ok": False, "error": "Crossref 未命中（DOI 无效且标题检索失败），元数据未改动"},
+                          ensure_ascii=False)
+    # 更新索引 + 引用库
+    _cb("write", 1, 1, "更新索引与引用库")
+    idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+    idx = _load_index(idx_file)
+    changed = []
+    for _e in idx:
+        if _e.get("file") == hit.get("file"):
+            for k in ("title", "journal", "authors", "year", "doi", "volume", "issue", "pages", "pmid"):
+                v = str(_updated.get(k) or "").strip()
+                if v and v != str(_e.get(k) or ""):
+                    _e[k] = (_updated.get(k) if isinstance(_updated.get(k), list) else v)
+                    changed.append(k)
+            if _updated.get("doi") and _e.get("doi"):
+                _e["url"] = f"https://doi.org/{_e['doi']}"
+            break
+    _save_index(idx_file, idx)
+    try:
+        from memomics.bio_tools.reference_library import save_reference
+        for _e in idx:
+            if _e.get("file") == hit.get("file"):
+                save_reference("add", {
+                    "title": _e.get("title") or "", "authors": ";".join(_e.get("authors") or []),
+                    "year": _e.get("year") or "", "doi": _e.get("doi") or "",
+                    "journal": _e.get("journal") or "", "url": _e.get("url") or "",
+                    "entry_type": "article", "volume": _e.get("volume") or "",
+                    "issue": _e.get("issue") or "", "pages": _e.get("pages") or "",
+                    "pmid": _e.get("pmid") or "", "note": f"local_pdf: {_e.get('path')}",
+                }, global_lib=True)
+                break
+    except Exception as e:
+        logger.warning(f"reference re-register failed: {e}")
+    _cb("done", 1, 1, "元数据补全完成")
+    return json.dumps({"ok": True, "paper": _updated.get("title") or hit.get("title"),
+                       "file": hit.get("file"), "changed": changed, "meta": _updated},
+                      ensure_ascii=False, indent=2)
+
+
+def enrich_all_metadata(progress_cb=None) -> str:
+    """一键补全：对所有疑似缺卷/期/页、乱码作者、脏 DOI 的文献做 Crossref 补全（批O）。"""
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    suspects = []
+    for e in lib:
+        reason = _meta_suspect(e)
+        if reason:
+            suspects.append((e, reason))
+    if not suspects:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0,
+                           "results": [], "note": "元数据已全部完整"}, ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(suspects)
+    results = []
+    for i, (e, reason) in enumerate(suspects):
+        name = e.get("file") or e.get("title") or ""
+        _cb("paper", i, n, f"[{i + 1}/{n}] 补全({reason}): {name[:80]}")
+        try:
+            r = json.loads(enrich_paper_metadata(name))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        results.append({"paper": e.get("title") or name, "file": e.get("file"),
+                        "ok": r.get("ok"), "changed": r.get("changed") or [],
+                        "error": r.get("error", "")})
+        time.sleep(0.4)  # 温和限速，防 Crossref 限流
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"元数据补全完成: {ok_n}/{n} 篇")
+    return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
+                       "results": results, "note": "Crossref 补全卷/期/页码/PMID，修正乱码作者与脏 DOI。"},
+                      ensure_ascii=False, indent=2)
+
+
+def export_citations() -> str:
+    """导出整库引文（批O 2026-08-16）：BibTeX/RIS/GB/T 7714 全量文本。"""
+    lib = []
+    for idx_path in (os.path.join(_library_dir(), ".pdf_index.json"),
+                     _agent_papers_index()):
+        if idx_path and os.path.isfile(idx_path):
+            lib.extend(_load_index(idx_path))
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空"}, ensure_ascii=False)
+    bibs, riss, gbts = [], [], []
+    n = 0
+    for e in lib:
+        c = _citations_for(e)
+        if not c:
+            continue
+        bibs.append(c.get("bibtex", ""))
+        riss.append(c.get("ris", ""))
+        g = c.get("gbt7714-numeric", "")
+        if g:
+            n += 1
+            gbts.append(g.replace("[1] ", f"[{n}] ", 1))
+    return json.dumps({
+        "ok": True, "total": len(lib),
+        "bibtex": "\n\n".join(b for b in bibs if b),
+        "ris": "\n\n".join(r for r in riss if r),
+        "gbt7714": "\n".join(gbts),
+    }, ensure_ascii=False)
+
+
 # ── 会话绑定（12 小时自动换绑，批J 2026-08-16）──
 _BIND_TTL_SECONDS = 12 * 3600
-
-
 def get_binding() -> dict:
     """当前文献库会话绑定：{session_id, bound_at, expired, remaining_hours}。"""
     p = os.path.join(_library_dir(), ".binding.json")
@@ -1197,10 +1748,12 @@ SCHEMA = {
 EXTRACT_SCHEMA = {
     "name": "kb_extract_from_paper",
     "description": (
-        "把文献库里的一篇文献（用户导入或 download_pdf 下载的）提炼成知识库 YAML 条目"
-        "（给 AI 调用：参数/方法/生物学知识/生信知识），写入 knowledge_base 五级目录"
-        "（物种/组织/方向/类别/assay），evidence 带 DOI 溯源。"
-        "用户说'把这篇文献的参数/知识提炼进知识库/入库'时使用。"
+        "把文献库里的一篇文献（用户导入或 download_pdf 下载的）做结构化知识提取并写入知识库："
+        "生物学知识（结论/基因marker/细胞类型/通路/类器官培养条件/化合物化学信息）→ 01_生物学知识；"
+        "生信知识（测序方法/分析流程/软件包含版本/关键参数/QC阈值/参考基因组/数据库）→ 03_测序方法；"
+        "质控阈值 → 02_质控参数。写入 knowledge_base 五级目录（物种/组织/方向/类别/assay），"
+        "evidence 带 DOI 溯源，另存人读版 hermes_home/papers/knowledge/<名>.md。"
+        "用户说'把这篇文献的参数/生物学知识/生信知识提炼进知识库/入库'时使用。"
         "【重要】用户要'总结文章思路/论文解读/全文提炼/9项摘要'时不要用本工具——那走 summarize_paper。"
     ),
     "parameters": {

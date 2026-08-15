@@ -16,46 +16,122 @@ import re
 logger = logging.getLogger("memomics.reference_library")
 
 
-def _bibtex_key(meta: dict) -> str:
-    """生成 BibTeX key: 第一作者姓+年+标题首词（中文标题用标题首2字）。"""
+_AUTHOR_PARTICLES = {"van", "von", "der", "den", "de", "la", "le", "du", "da",
+                     "di", "del", "dell", "della", "delle", "ter", "ten",
+                     "el", "al", "o", "af", "op", "san", "st", "sta", "mc"}
+_AUTHOR_PREFIXES = {"ur", "bin", "ibn", "mc", "mac", "ben", "abu", "abdul"}
+_AUTHOR_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "2nd", "3rd"}
+
+
+def _author_list(meta: dict) -> list:
+    """归一化作者列表：str(分号/逗号分隔) 或 list → ['Given Family', ...]（去掉空项）。"""
     authors = meta.get("authors") or []
     if isinstance(authors, str):
-        authors = [a.strip() for a in authors.split(";") if a.strip()]
+        authors = [a.strip() for a in re.split(r"[;；]", authors) if a.strip()]
+    return [str(a).strip() for a in authors if a and str(a).strip()]
+
+
+def _split_author(full: str):
+    """'Georges E. Janssens' / 'van Weeghel, M.' / 'Janssens, Georges E.' → (family, given)。
+
+    规则：优先 "Family, Given"；否则从尾部收集姓——姓 = 末词 + 其前连续的
+    小写虚词（van/der/de...）；"Raza Ur Rahman" 的 Ur 属前缀集，仍并入姓。
+    """
+    s = (full or "").strip()
+    if not s:
+        return "", ""
+    if "," in s:
+        fam, _, giv = s.partition(",")
+        return fam.strip(), giv.strip()
+    parts = [p for p in s.split() if p]
+    if not parts:
+        return "", ""
+    family = []
+    for p in reversed(parts):
+        low = p.lower().rstrip(".")
+        core = low.replace("'", "").replace("\u2019", "")
+        if low in _AUTHOR_SUFFIXES:
+            continue
+        if not family:
+            family.append(p)
+            continue
+        # 前一个词若为小写虚词/前缀（Dell'/van/der/Ur...）→ 并入姓
+        if core in _AUTHOR_PARTICLES or core in _AUTHOR_PREFIXES or p[0].islower() or len(p) == 1:
+            family.append(p)
+            continue
+        break
+    family = family[::-1]
+    given = " ".join(parts[: len(parts) - len(family)])
+    return " ".join(family), given
+
+
+def _family_initials(full: str, upper: bool = False, periods: bool = False,
+                     space_after: bool = True, initials_joined: bool = False) -> str:
+    """姓 + 名首字母。upper=True → 全大写（GB/T 7714）；initials_joined=True → 'Janssens GE'（NLM）。"""
+    fam, giv = _split_author(full)
+    fam = fam or full
+    inits = []
+    for w in giv.split():
+        w = w.strip()
+        if not w:
+            continue
+        # "D'Amico" 的首字母带撇号；"-" 连字符名取两段首字母（Jean-Pierre → JP）
+        core = re.sub(r"[^A-Za-z\u00c0-\u024f]", "", w)
+        if core:
+            inits.extend(ch for ch in re.split(r"[-]", core) if ch)
+    letters = [ch[0] for ch in inits if ch]
+    if upper:
+        fam = fam.upper()
+        letters = [c.upper() for c in letters]
+    if initials_joined:
+        return fam + (" " + "".join(letters) if letters else "")
+    if periods:
+        letters = [c + "." for c in letters]
+    sep = " " if space_after else ""
+    return (fam + sep + sep.join(letters)).strip()
+
+
+def _bibtex_key(meta: dict) -> str:
+    """BibTeX key: 第一作者姓 + 年 + 标题首词（无作者时用标题首词）。"""
+    authors = _author_list(meta)
     first = authors[0] if authors else ""
-    parts = [p for p in first.split() if p]
-    last = parts[-1] if parts else ""
-    # "Smith J" / "Li W" → 姓是第一个词（末词是首字母缩写）
-    if len(last) <= 2 and len(parts) > 1:
-        last = parts[0]
-    last = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]", "", last or "")[:20]
+    fam, _g = _split_author(first)
+    last = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]", "", fam or "")[:20]
     year = re.sub(r"[^0-9]", "", str(meta.get("year") or ""))[:4]
     title = str(meta.get("title") or "")
     tw = re.findall(r"[A-Za-z0-9\u4e00-\u9fff]+", title)
-    first_word = tw[0][:10] if tw else "ref"
+    _stop = {"a", "an", "the", "of", "on", "in", "and", "for"}
+    first_word = next((w[:10] for w in tw if w.lower() not in _stop), tw[0][:10] if tw else "ref")
     if not last:
         last = first_word
-    return f"{last}{year}{first_word}"
+    return f"{last.lower()}{year}{first_word}"
 
 
 def _escape_tex(s: str) -> str:
-    return str(s or "").replace("&", "\\&").replace("%", "\\%").replace("_", "\\_").replace("#", "\\#")
+    return (str(s or "").replace("\\", "\\textbackslash{}").replace("&", "\\&")
+            .replace("%", "\\%").replace("_", "\\_").replace("#", "\\#"))
 
 
 def _to_bibtex(meta: dict) -> str:
+    """标准 BibTeX @article：author(and 连接)/title/journal/year/volume/number/pages/doi。"""
     key = _bibtex_key(meta)
     etype = str(meta.get("entry_type") or "article")
-    authors = meta.get("authors") or []
-    if isinstance(authors, str):
-        authors = [a.strip() for a in authors.split(";") if a.strip()]
+    authors = _author_list(meta)
     author_str = " and ".join(authors) if authors else "Unknown"
     fields = [
-        f"  title = {{{_escape_tex(meta.get('title', ''))}}}",
         f"  author = {{{_escape_tex(author_str)}}}",
+        f"  title = {{{_escape_tex(meta.get('title', ''))}}}",
     ]
     if meta.get("journal"):
         fields.append(f"  journal = {{{_escape_tex(meta['journal'])}}}")
     if meta.get("year"):
         fields.append(f"  year = {{{meta['year']}}}")
+    if meta.get("volume"):
+        fields.append(f"  volume = {{{meta['volume']}}}")
+    if meta.get("issue"):
+        fields.append(f"  number = {{{meta['issue']}}}")
+    if meta.get("pages"):
+        fields.append(f"  pages = {{{meta['pages']}}}")
     if meta.get("doi"):
         fields.append(f"  doi = {{{meta['doi']}}}")
     if meta.get("pmid"):
@@ -68,29 +144,210 @@ def _to_bibtex(meta: dict) -> str:
 
 
 def _to_ris(meta: dict) -> str:
+    """标准 RIS：AU 用 'Family, Given'；含 VL/IS/SP/EP/PMID。"""
     etype = str(meta.get("entry_type") or "article")
     ris_type = {"article": "JOUR", "preprint": "ELEC", "book": "BOOK",
                 "review": "JOUR", "chapter": "CHAP"}.get(etype, "JOUR")
-    authors = meta.get("authors") or []
-    if isinstance(authors, str):
-        authors = [a.strip() for a in authors.split(";") if a.strip()]
     lines = [f"TY  - {ris_type}"]
-    for a in authors:
-        lines.append(f"AU  - {a}")
+    for a in _author_list(meta):
+        fam, giv = _split_author(a)
+        lines.append(f"AU  - {fam + ', ' + giv if giv else fam}")
     if meta.get("title"):
         lines.append(f"TI  - {meta['title']}")
     if meta.get("journal"):
         lines.append(f"JO  - {meta['journal']}")
     if meta.get("year"):
         lines.append(f"PY  - {meta['year']}")
+    if meta.get("volume"):
+        lines.append(f"VL  - {meta['volume']}")
+    if meta.get("issue"):
+        lines.append(f"IS  - {meta['issue']}")
+    pages = str(meta.get("pages") or "")
+    if pages:
+        seg = re.split(r"[-–—]", pages)
+        lines.append(f"SP  - {seg[0].strip()}")
+        if len(seg) > 1:
+            lines.append(f"EP  - {seg[-1].strip()}")
     if meta.get("doi"):
         lines.append(f"DO  - {meta['doi']}")
+    if meta.get("pmid"):
+        lines.append(f"AN  - {meta['pmid']}")
     if meta.get("url"):
         lines.append(f"UR  - {meta['url']}")
     if meta.get("abstract"):
         lines.append(f"AB  - {meta['abstract'][:500]}")
     lines.append("ER  - ")
     return "\n".join(lines)
+
+
+def _citation_author_short(authors: list, max_n: int = 3, upper: bool = False,
+                           initials_joined: bool = False) -> str:
+    """GB/T / NLM 用作者串：≤max_n 全列，超出取前 max_n + 'et al.'。"""
+    out = [_family_initials(a, upper=upper, initials_joined=initials_joined)
+           for a in authors]
+    if len(out) > max_n:
+        out = out[:max_n] + ["et al."]
+    return ", ".join(out)
+
+
+def _citation_apa_authors(authors: list) -> str:
+    """APA 7：≤20 全列（末位 & 连接），>20 前 19 + '... ' + 末位。
+    姓名格式 'Janssens, G. E.'（姓后逗号 + 首字母缩写）。"""
+    def _one(full):
+        fam, giv = _split_author(full)
+        fam = fam or full
+        inits = []
+        for w in giv.split():
+            core = re.sub(r"[^A-Za-z\u00c0-\u024f]", "", w)
+            if core:
+                inits.extend(ch for ch in re.split(r"[-]", core) if ch)
+        letters = [c[0] + "." for c in inits if c]
+        return fam + (", " + " ".join(letters) if letters else "")
+
+    fmt = [_one(a) for a in authors]
+    if not fmt:
+        return "(佚名)"
+    if len(fmt) == 1:
+        return fmt[0]
+    if len(fmt) <= 20:
+        return ", ".join(fmt[:-1]) + ", & " + fmt[-1]
+    return ", ".join(fmt[:19]) + ", ... " + fmt[-1]
+
+
+def _citation_mla_authors(authors: list) -> str:
+    """MLA 9：1 人全名；2 人 'A, and B.'；≥3 'A, et al.'（第一作者 Given Family）。"""
+    fam, giv = _split_author(authors[0]) if authors else ("", "")
+    first = f"{giv} {fam}".strip() or "佚名"
+    if len(authors) == 1:
+        return first
+    if len(authors) == 2:
+        fam2, giv2 = _split_author(authors[1])
+        return f"{first}, and {giv2} {fam2}".strip()
+    return f"{first}, et al."
+
+
+def _vol_issue(meta: dict) -> str:
+    vol = str(meta.get("volume") or "").strip()
+    iss = str(meta.get("issue") or "").strip()
+    return vol + (f"({iss})" if iss else "") if vol else ""
+
+
+def format_citation(meta: dict, style: str = "gbt7714-numeric") -> str:
+    """按专业格式生成单条引文（2026-08-16 批O·文献引用专业化）。
+
+    style: gbt7714-numeric(顺序编码制) | gbt7714-author-year(著者-出版年制)
+           | apa(APA 7) | nlm(NLM/Vancouver) | mla(MLA 9)
+    缺卷/期/页码时按各规范省略规则优雅降级，不编造。
+    """
+    authors = _author_list(meta)
+    title = str(meta.get("title") or "").strip() or "(无题名)"
+    journal = str(meta.get("journal") or "").strip()
+    year = str(meta.get("year") or "").strip()
+    vol_issue = _vol_issue(meta)
+    pages = str(meta.get("pages") or "").strip().replace("--", "-")
+    doi = str(meta.get("doi") or "").strip()
+    url = str(meta.get("url") or "").strip() or (f"https://doi.org/{doi}" if doi else "")
+
+    def _page_tail() -> str:
+        return (", " + pages) if pages else ""
+
+    def _join_author(au: str, sep: str) -> str:
+        """作者串以 '.' 结尾（et al./首字母缩写）时不再重复加句点。"""
+        return au + (sep if not au.endswith(".") else sep[1:])
+
+    if style == "gbt7714-numeric":
+        au = _citation_author_short(authors, 3, upper=True) or "佚名"
+        s = f"[1] {_join_author(au, '. ')}{title}[J]"
+        if journal:
+            s += f". {journal}"
+        tail = []
+        if year:
+            tail.append(year)
+        if vol_issue:
+            tail.append(vol_issue)
+        if tail:
+            s += ", " + ", ".join(tail)
+        if pages:
+            s += f": {pages}"
+        s += "."
+        if doi:
+            s += f" DOI:{doi}."
+        return s
+
+    if style == "gbt7714-author-year":
+        au = _citation_author_short(authors, 3, upper=True) or "佚名"
+        s = f"{_join_author(au, '. ')}"
+        if year:
+            s += f"{year}. "
+        s += f"{title}[J]"
+        if journal:
+            s += f". {journal}"
+        tail = []
+        if vol_issue:
+            tail.append(vol_issue)
+        if tail:
+            s += ", " + ", ".join(tail)
+        if pages:
+            s += f": {pages}"
+        s += "."
+        if doi:
+            s += f" DOI:{doi}."
+        return s
+
+    if style == "apa":
+        au = _citation_apa_authors(authors)
+        s = f"{au} ({year}). " if year else f"{au}. "
+        s += f"{title}."
+        if journal:
+            s += f" {journal}"
+        if vol_issue:
+            s += f", {vol_issue}"
+        s += _page_tail() + "."
+        if url:
+            s += f" {url}"
+        return s
+
+    if style == "nlm":
+        au = _citation_author_short(authors, 6, initials_joined=True) or "佚名"
+        s = f"{_join_author(au, '. ')}{title}."
+        if journal:
+            s += f" {journal}."
+        tail = []
+        if year:
+            tail.append(year)
+        if vol_issue:
+            tail.append(vol_issue)
+        if tail:
+            s += " " + ";".join(tail)
+        if pages:
+            s += f":{pages}"
+        s += "."
+        if doi:
+            s += f" doi:{doi}."
+        return s
+
+    if style == "mla":
+        au = _citation_mla_authors(authors)
+        s = f'{_join_author(au, ". ")}"{title}."'
+        if journal:
+            s += f" {journal}"
+        if vol_issue:
+            vol = str(meta.get("volume") or "").strip()
+            iss = str(meta.get("issue") or "").strip()
+            s += f", vol. {vol}"
+            if iss:
+                s += f", no. {iss}"
+        if year:
+            s += f", {year}"
+        if pages:
+            s += f", pp. {pages}"
+        s += "."
+        if url:
+            s += f" {url}."
+        return s
+
+    # 兜底：GB/T 顺序编码制
+    return format_citation(meta, "gbt7714-numeric")
 
 
 def _session_lib_dir():

@@ -424,14 +424,52 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #lit-picker .lit-footer button { flex:1; font-size:12px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 #lit-picker .lit-footer button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
 #lit-summary-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:9997; }
-#lit-summary-modal .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:760px; max-width:95%; height:84vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; }
-#lit-summary-modal .lit-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; }
-#lit-summary-body { flex:1; overflow-y:auto; padding:10px 16px; }
+#lit-summary-modal .lit-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(88vw,1360px); height:min(88vh,920px); min-width:460px; min-height:340px; max-width:96vw; max-height:96vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,0.35); overflow:hidden; position:relative; }
+#lit-summary-modal .lit-header { display:flex; align-items:center; gap:8px; padding:8px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; flex-wrap:wrap; }
+#lit-summary-body { flex:1; overflow-y:auto; padding:10px 16px; min-height:0; }
 #lit-summary-modal .lit-tabs { display:flex; gap:4px; padding:6px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
 #lit-summary-modal .lit-tab { font-size:12px; padding:3px 10px; border-radius:5px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 #lit-summary-modal .lit-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
 #lit-pdf-frame { width:100%; height:100%; border:none; background:#525659; }
 #lit-md-pre { white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.7; margin:0; padding:10px; background:var(--code-bg); color:var(--code-fg); border-radius:6px; }
+/* 批O(2026-08-16)：文献详情大窗口 + 八向拖拽调节 + 最大化 */
+#lit-summary-modal .lit-box.lit-max { width:96vw !important; height:96vh !important; }
+#lit-summary-modal .lit-resizer { position:absolute; z-index:6; }
+#lit-summary-modal .lit-resizer.e { top:0; right:-4px; width:8px; height:100%; cursor:ew-resize; }
+#lit-summary-modal .lit-resizer.w { top:0; left:-4px; width:8px; height:100%; cursor:ew-resize; }
+#lit-summary-modal .lit-resizer.s { left:0; bottom:-4px; height:8px; width:100%; cursor:ns-resize; }
+#lit-summary-modal .lit-resizer.n { left:0; top:-4px; height:8px; width:100%; cursor:ns-resize; }
+#lit-summary-modal .lit-resizer.ne { top:-4px; right:-4px; width:12px; height:12px; cursor:nesw-resize; }
+#lit-summary-modal .lit-resizer.nw { top:-4px; left:-4px; width:12px; height:12px; cursor:nwse-resize; }
+#lit-summary-modal .lit-resizer.se { bottom:-4px; right:-4px; width:12px; height:12px; cursor:nwse-resize; }
+#lit-summary-modal .lit-resizer.sw { bottom:-4px; left:-4px; width:12px; height:12px; cursor:nesw-resize; }
+/* 批O：中英对照双屏（通义千问式） */
+.lit-compare { display:flex; height:100%; min-height:0; flex-direction:column; }
+.lit-compare-toolbar { display:flex; gap:8px; align-items:center; padding:4px 0 8px; flex-wrap:wrap; font-size:11px; color:var(--text-light); }
+.lit-compare-cols { flex:1; display:grid; grid-template-columns:1fr 1fr; min-height:0; overflow:hidden; border:1px solid var(--border); border-radius:8px; }
+.lit-compare-col { overflow-y:auto; padding:8px 10px; min-height:0; }
+.lit-compare-col.left { border-right:1px solid var(--border); }
+.lit-compare-row { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px dashed var(--border); }
+.lit-compare-row:last-child { border-bottom:none; }
+.lit-compare-row:hover { background:rgba(74,144,217,0.07); }
+.lit-compare-row.hl { background:rgba(74,144,217,0.14); }
+.lit-compare-cell { padding:5px 10px; font-size:12px; line-height:1.7; white-space:pre-wrap; word-break:break-word; min-height:1em; }
+.lit-compare-cell.left { border-right:1px solid var(--border); }
+.lit-compare-cell.h { font-weight:700; color:var(--primary); }
+/* 批O：引用卡 / 知识卡 */
+.lit-cite-item { border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:8px 0; background:var(--bg); }
+.lit-cite-item .lit-cite-head { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-light); margin-bottom:4px; }
+.lit-cite-item pre { margin:0; white-space:pre-wrap; word-break:break-word; font-size:11.5px; line-height:1.6; color:var(--text); background:transparent; padding:0; }
+.lit-kb-sec { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:8px 0; background:var(--bg); }
+.lit-kb-sec h4 { margin:0 0 6px; font-size:12.5px; }
+.lit-kb-sec ul { margin:4px 0; padding-left:18px; }
+.lit-kb-sec li { font-size:12px; line-height:1.6; }
+.lit-kb-sec table { width:100%; border-collapse:collapse; font-size:11px; }
+.lit-kb-sec th, .lit-kb-sec td { border:1px solid var(--border); padding:3px 6px; text-align:left; }
+.lit-kb-sec th { background:rgba(74,144,217,0.10); }
+.lit-sum-field { margin-bottom:10px; }
+.lit-sum-field b { font-size:12.5px; }
+.lit-sum-field div { color:var(--text); white-space:pre-wrap; font-size:12px; line-height:1.7; margin-top:2px; }
 /* === 环境检测面板 === */
 #env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
 #env-check-panel h3 { margin:0 0 8px; font-size:14px; }
@@ -679,7 +717,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <button onclick="doScienceSearch()" style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">检索</button>
         </div>
         <div id="science-results" style="flex:1;overflow-y:auto;padding:0 10px 10px;font-size:12px;">
-          <div style="color:var(--text-light);line-height:1.7;">📌 <b>导入</b> = 把你的 PDF 收进文献库（自动识别期刊/文章名/分类标签，去重）。<br>📌 <b>提炼</b> = 读全文，把参数/方法/结论写成知识库条目（做分析时可直接检索复用）。<br>📌 步骤：① 下方"📂 选择目录"一键导入 → ② "📚 文献库"里点每篇的 🧬提炼，或 🧬一键提炼全部。<br>也可在上方输入关键词检索 arXiv / OpenAlex 文献。</div>
+          <div style="color:var(--text-light);line-height:1.7;">📌 <b>导入</b> = 把你的 PDF 收进文献库（自动识别期刊/文章名/DOI/卷期页码，去重）。<br>📌 <b>提炼</b> = 📝 读全文出 9 项摘要（思路/背景/问题/方法/结论/验证，给人看）。<br>📌 <b>知识</b> = 🧠 提取生物学知识（结论/基因marker/类器官条件/化学信息）与生信知识（测序方法/流程/软件包/参数），写入知识库给 AI 调用。<br>📌 <b>翻译</b> = 🌐 学术中文翻译 + ⇄ 中英对照双屏。<br>📌 <b>引用</b> = 📎 GB/T 7714 / APA / NLM / MLA / BibTeX / RIS 专业引用格式，一键复制/下载/整库导出。<br>📌 步骤：① 下方"📂 选择目录"一键导入 → ② "📚 文献库"里点每篇的 📄 查看详情（大窗口可拖拽调节）。<br>也可在上方输入关键词检索 arXiv / OpenAlex 文献。</div>
         </div>
         <div id="lit-library" style="display:none;flex:1;overflow-y:auto;padding:0 10px 10px;font-size:12px;"></div>
         <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;align-items:center;">
@@ -3900,12 +3938,15 @@ async function loadLiteratureLibrary() {
     if (!items.length) { lib.innerHTML = '<span style="color:var(--text-light);">文献库为空——可用下方输入框导入你自己的 PDF，或让 Agent 用 download_pdf 下载后自动入库。</span>'; return; }
     _litAllItems = items;
     var nSum = items.filter(function(e) { return !e.summary_done; }).length;
-    var nKb = items.filter(function(e) { return !e.kb_done; }).length;
+    var nKnow = items.filter(function(e) { return !e.knowledge_done; }).length;
+    var nMeta = items.filter(function(e) { return !e.meta_complete; }).length;
     var html = '<div style="font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📚 文献库共 ' + d.total + ' 篇' +
       '<span id="lit-binding-chip" style="font-size:10px;color:var(--text-light);">绑定加载中…</span>' +
-      '<span style="margin-left:auto;display:flex;gap:6px;">' +
+      '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">' +
       '<button onclick="summarizeAllPapers()" title="只对未提炼的文章做 9 项全文提炼（思路/背景/问题/方法/结论/验证）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 一键全文提炼(未提炼 ' + nSum + ')</button>' +
-      '<button onclick="extractAllPapers()" title="只对未入库的文章提炼知识库条目（参数/方法/结论，给AI调用）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬 一键入库(未入库 ' + nKb + ')</button>' +
+      '<button onclick="extractAllKnowledge()" title="结构化知识提取：结论/基因marker/类器官/化学 + 测序方法/流程/软件包/参数，写入知识库" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧠 一键知识提取(未提取 ' + nKnow + ')</button>' +
+      '<button onclick="litEnrichAll()" title="Crossref 补全卷/期/页码/PMID，修正乱码作者与脏DOI（引用格式更完整）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🛠 补全元数据(' + nMeta + ')</button>' +
+      '<button onclick="litExportAll()" title="导出整库引用（BibTeX/RIS/GB/T 7714）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 导出引用</button>' +
       '</span></div>' +
       '<div id="lit-extract-progress" style="display:none;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;"></div>' +
       '<div style="display:flex;gap:6px;align-items:center;padding:4px 0 6px;flex-wrap:wrap;font-size:11px;">' +
@@ -3916,7 +3957,7 @@ async function loadLiteratureLibrary() {
       '<option value="">全部状态</option><option value="sum_pending">未提炼</option><option value="sum_done">已提炼</option>' +
       '<option value="kb_pending">未入库</option><option value="kb_done">已入库</option><option value="zh_pending">未翻译</option></select>' +
       '</div>' +
-      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>分类标签</th><th>📝全文</th><th>🧬知识库</th><th>🌐翻译</th><th>操作</th></tr></thead><tbody id="lit-rows"></tbody></table></div></div>';
+      '<div class="bubble"><div class="table-wrap"><table><thead><tr><th>文章名</th><th>期刊</th><th>分类标签</th><th>📝全文</th><th>🧠知识</th><th>🌐翻译</th><th>操作</th></tr></thead><tbody id="lit-rows"></tbody></table></div></div>';
     lib.innerHTML = html;
     // 填充过滤下拉
     var spSet = {}, dirSet = {};
@@ -3961,8 +4002,8 @@ function litRenderRows() {
     if (f.dir && dir.indexOf(f.dir) < 0) return false;
     if (f.st === 'sum_pending' && e.summary_done) return false;
     if (f.st === 'sum_done' && !e.summary_done) return false;
-    if (f.st === 'kb_pending' && e.kb_done) return false;
-    if (f.st === 'kb_done' && !e.kb_done) return false;
+    if (f.st === 'kb_pending' && e.knowledge_done) return false;
+    if (f.st === 'kb_done' && !e.knowledge_done) return false;
     if (f.st === 'zh_pending' && e.translated) return false;
     return true;
   });
@@ -3973,19 +4014,21 @@ function litRenderRows() {
     if (!tagStr.trim()) tagStr = '—';
     var ref = (e.file || e.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     var sumBadge = e.summary_done ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
-    var kbBadge = e.kb_done ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
+    var knowBadge = e.knowledge_done ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
     var zhBadge = e.translated ? '<span style="color:var(--success);">✅</span>' : '<span style="color:#e67e22;">⏳</span>';
-    var ops = '<button onclick="viewSummary(\'' + ref + '\', \'pdf\')" title="查看原文 PDF / Markdown / 翻译 / 引用" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📄</button> ' +
-      '<button onclick="' + (e.summary_done ? 'viewSummary(\'' + ref + '\', \'summary\')' : 'summarizePaper(\'' + ref + '\')') + '" title="' + (e.summary_done ? '查看 9 项全文思路摘要' : '提炼 9 项全文摘要') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝</button> ';
-    if (!e.kb_done) {
-      ops += '<button onclick="extractPaper(\'' + ref + '\')" title="把参数/方法/结论提炼进知识库（给AI调用）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧬</button> ';
-    }
+    var metaWarn = !e.meta_complete ? '<span title="缺卷/期/页码，引用不完整——详情页点🛠补全" style="color:#e67e22;cursor:help;">⚠️</span>' : '';
+    var ops = '<button onclick="viewSummary(\'' + ref + '\', \'pdf\')" title="原文 PDF / Markdown / 对照翻译 / 摘要 / 知识 / 引用" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📄</button> ' +
+      '<button onclick="' + (e.summary_done ? 'viewSummary(\'' + ref + '\', \'summary\')' : 'summarizePaper(\'' + ref + '\')') + '" title="' + (e.summary_done ? '查看 9 项全文思路摘要' : '提炼 9 项全文摘要（思路/背景/问题/方法/结论/验证）') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝</button> ' +
+      '<button onclick="' + (e.knowledge_done ? 'viewSummary(\'' + ref + '\', \'knowledge\')' : 'extractKnowledge(\'' + ref + '\')') + '" title="' + (e.knowledge_done ? '查看结构化知识（结论/基因marker/类器官/化学 + 测序/流程/包/参数）' : '提取结构化知识进知识库（生物学+生信）') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧠</button> ' +
+      '<button onclick="viewSummary(\'' + ref + '\', \'cite\')" title="专业引用格式（GB/T 7714 / APA / NLM / MLA / BibTeX / RIS）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📎</button>';
     if (!e.translated) {
-      ops += '<button onclick="translatePaper(\'' + ref + '\')" title="学术中文翻译（分块直译，约3-10分钟）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐</button>';
+      ops += '<button onclick="translatePaper(\'' + ref + '\')" title="学术中文翻译（分块直译，约3-10分钟）+ 中英对照" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐</button>';
+    } else {
+      ops += '<button onclick="viewSummary(\'' + ref + '\', \'cmp\')" title="中英对照双屏" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⇄</button>';
     }
-    html += '<tr><td style="cursor:pointer;" onclick="viewSummary(\'' + ref + '\', \'summary\')">' + escapeHtml(e.title || e.file) + '</td><td>' + escapeHtml(e.journal || '—') + '</td>' +
+    html += '<tr><td style="cursor:pointer;" onclick="viewSummary(\'' + ref + '\', \'summary\')">' + escapeHtml(e.title || e.file) + ' ' + metaWarn + '</td><td>' + escapeHtml(e.journal || '—') + '</td>' +
       '<td style="font-size:10px;">' + escapeHtml(tagStr) + '</td>' +
-      '<td>' + sumBadge + '</td><td>' + kbBadge + '</td><td>' + zhBadge + '</td>' +
+      '<td>' + sumBadge + '</td><td>' + knowBadge + '</td><td>' + zhBadge + '</td>' +
       '<td>' + ops + '</td></tr>';
   });
   tbody.innerHTML = html || '<tr><td colspan="7" style="color:var(--text-light);">无匹配文献</td></tr>';
@@ -4060,6 +4103,115 @@ async function summarizeAllPapers() {
 }
 
 var _litPaper = null;
+var _litResizeInit = false;
+var _litCmpSrc = '', _litCmpZh = '';
+
+// 批O(2026-08-16)：文献详情大窗口（自动适配视口 + 八向拖拽调节 + 最大化 + Esc 关闭）
+function litApplySavedSize() {
+  var box = document.getElementById('lit-summary-box');
+  if (!box) return;
+  try {
+    var s = JSON.parse(localStorage.getItem('memomics_lit_box') || 'null');
+    if (s && s.w >= 460 && s.h >= 340) {
+      box.style.width = Math.min(s.w, window.innerWidth * 0.96) + 'px';
+      box.style.height = Math.min(s.h, window.innerHeight * 0.96) + 'px';
+    }
+  } catch(e) {}
+}
+
+function litPersistSize() {
+  var box = document.getElementById('lit-summary-box');
+  if (!box || box.classList.contains('lit-max')) return;
+  try {
+    localStorage.setItem('memomics_lit_box', JSON.stringify({
+      w: Math.round(box.getBoundingClientRect().width),
+      h: Math.round(box.getBoundingClientRect().height)
+    }));
+  } catch(e) {}
+}
+
+function litToggleMax() {
+  var box = document.getElementById('lit-summary-box');
+  var btn = document.getElementById('lit-btn-max');
+  if (!box) return;
+  var isMax = box.classList.toggle('lit-max');
+  if (btn) btn.textContent = isMax ? '🗔 还原' : '🗗 最大化';
+}
+
+function initLitResize() {
+  if (_litResizeInit) return;
+  _litResizeInit = true;
+  litApplySavedSize();
+  var box = document.getElementById('lit-summary-box');
+  var modal = document.getElementById('lit-summary-modal');
+  if (!box || !modal) return;
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape' && modal.style.display !== 'none') {
+      modal.style.display = 'none';
+    }
+  });
+  var hdr = box.querySelector('.lit-header');
+  if (hdr) {
+    hdr.addEventListener('dblclick', function(ev) {
+      if (ev.target.tagName === 'BUTTON') return;
+      litToggleMax();
+    });
+  }
+  var handles = box.querySelectorAll('.lit-resizer');
+  handles.forEach(function(rs) {
+    rs.addEventListener('mousedown', function(ev) {
+      ev.preventDefault();
+      if (box.classList.contains('lit-max')) return;
+      var dir = rs.getAttribute('data-dir');
+      var r0 = box.getBoundingClientRect();
+      var sx = ev.clientX, sy = ev.clientY;
+      function move(e2) {
+        var dx = e2.clientX - sx, dy = e2.clientY - sy;
+        var w = r0.width, h = r0.height;
+        var x = r0.left, y = r0.top;
+        if (dir.indexOf('e') >= 0) w = r0.width + dx;
+        if (dir.indexOf('s') >= 0) h = r0.height + dy;
+        if (dir.indexOf('w') >= 0) { w = r0.width - dx; }
+        if (dir.indexOf('n') >= 0) { h = r0.height - dy; }
+        var maxW = window.innerWidth * 0.96, maxH = window.innerHeight * 0.96;
+        w = Math.max(460, Math.min(maxW, w));
+        h = Math.max(340, Math.min(maxH, h));
+        if (dir.indexOf('w') >= 0) { x = Math.max(4, r0.right - w); w = r0.right - x; }
+        if (dir.indexOf('n') >= 0) { y = Math.max(4, r0.bottom - h); h = r0.bottom - y; }
+        box.style.width = w + 'px';
+        box.style.height = h + 'px';
+        if (dir.indexOf('w') >= 0) box.style.left = x + 'px';
+        if (dir.indexOf('n') >= 0) box.style.top = y + 'px';
+        if (x >= 4) box.style.left = 'auto';
+        if (y >= 4) box.style.top = 'auto';
+      }
+      function up() {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        litPersistSize();
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  });
+}
+
+function litMetaLine(d) {
+  var parts = [];
+  if (d.journal) parts.push('📖 ' + d.journal);
+  if (d.year) parts.push('🗓 ' + d.year);
+  if (d.volume) parts.push('Vol.' + d.volume + (d.issue ? '(' + d.issue + ')' : ''));
+  if (d.pages) parts.push('pp.' + d.pages);
+  if (d.doi) parts.push('DOI: ' + d.doi);
+  if (d.pmid) parts.push('PMID: ' + d.pmid);
+  if (d.imported_by) parts.push('👤 ' + d.imported_by);
+  var flags = [];
+  flags.push(d.summary_done ? '✅摘要' : '⏳摘要');
+  flags.push(d.knowledge_done ? '✅知识' : '⏳知识');
+  flags.push(d.translated ? '✅译文' : '⏳译文');
+  parts.push(flags.join(' '));
+  return parts.join(' · ');
+}
 
 async function viewSummary(ref, tab) {
   var modal = document.getElementById('lit-summary-modal');
@@ -4074,16 +4226,21 @@ async function viewSummary(ref, tab) {
     }
   } catch(e) {}
   modal.style.display = 'flex';
+  initLitResize();
   var body = document.getElementById('lit-summary-body');
+  body.style.padding = '10px 16px';
+  body.style.overflowY = 'auto';
   body.innerHTML = '<span style="color:var(--text-light);">加载文献…</span>';
   document.getElementById('lit-paper-title').textContent = '';
+  document.getElementById('lit-paper-meta').textContent = '';
   try {
     var r = await fetch('/api/literature/summary?file_or_title=' + encodeURIComponent(ref));
     var d = await r.json();
     if (!d.ok) { body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>'; return; }
     _litPaper = d;
     var tEl = document.getElementById('lit-paper-title');
-    tEl.textContent = (d.title || d.file || '') + (jumpNote ? ' · ' + jumpNote : '');
+    tEl.textContent = (d.title || d.file || '');
+    document.getElementById('lit-paper-meta').textContent = litMetaLine(d) + (jumpNote ? ' · ' + jumpNote : '');
     litPaperTab(tab || 'summary');
   } catch(e) {
     body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
@@ -4091,10 +4248,60 @@ async function viewSummary(ref, tab) {
 }
 
 function litSetTab(active) {
-  ['pdf', 'md', 'zh', 'summary', 'cite'].forEach(function(t) {
+  ['pdf', 'md', 'zh', 'cmp', 'summary', 'knowledge', 'cite'].forEach(function(t) {
     var b = document.getElementById('lit-tab-' + t);
     if (b) b.classList.toggle('active', t === active);
   });
+}
+
+function litJsStr(s) { return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+// 批O：中英对照双屏（通义千问式：左侧原文 / 右侧译文，段落对齐，悬停联动高亮）
+function litSplitBlocks(t) {
+  t = t || '';
+  var parts = t.split(/\n\s*\n/);
+  var blocks = [];
+  parts.forEach(function(seg) {
+    var seg2 = seg.trim();
+    if (!seg2) return;
+    var cur = [];
+    seg2.split('\n').forEach(function(ln) {
+      if (/^#{1,6}\s/.test(ln) && cur.length) { blocks.push(cur.join('\n')); cur = []; }
+      cur.push(ln);
+    });
+    if (cur.length) blocks.push(cur.join('\n'));
+  });
+  return blocks;
+}
+
+function litRenderCompare(body, mdText, zhText, stem) {
+  var L = litSplitBlocks(mdText), R = litSplitBlocks(zhText);
+  var n = Math.max(L.length, R.length);
+  var html = '<div class="lit-compare">' +
+    '<div class="lit-compare-toolbar">' +
+    '<span>⇄ 左侧原文 / 右侧译文 · 按段落对齐 · 悬停联动高亮（' + n + ' 段）</span>' +
+    '<span style="margin-left:auto;display:flex;gap:6px;">' +
+    '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.md\', _litCmpSrc)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载原文</button>' +
+    '<button onclick="litDownloadTextRaw(\'' + litJsStr(stem) + '.zh.md\', _litCmpZh)" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+    '<button onclick="litPaperTab(\'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">仅看译文</button>' +
+    '</span></div>' +
+    '<div class="lit-compare-cols"><div class="lit-compare-col left">' +
+    '<div style="font-size:11px;color:var(--text-light);padding:2px 4px 8px;border-bottom:1px solid var(--border);">📄 原文 (English)</div>';
+  for (var i = 0; i < n; i++) html += '<div class="lit-compare-row" id="lit-cmp-row-' + i + '">' +
+    '<div class="lit-compare-cell left' + (/^#{1,6}\s/.test(L[i] || '') ? ' h' : '') + '">' + escapeHtml(L[i] || '—') + '</div>' +
+    '<div class="lit-compare-cell' + (/^#{1,6}\s/.test(R[i] || '') ? ' h' : '') + '">' + escapeHtml(R[i] || '—') + '</div></div>';
+  html += '</div></div></div>';
+  body.innerHTML = html;
+  _litCmpSrc = mdText;
+  _litCmpZh = zhText;
+  for (var j = 0; j < n; j++) {
+    (function(j2) {
+      var row = document.getElementById('lit-cmp-row-' + j2);
+      if (!row) return;
+      row.onmouseenter = function() { row.classList.add('hl'); };
+      row.onmouseleave = function() { row.classList.remove('hl'); };
+    })(j);
+  }
 }
 
 async function litPaperTab(tab) {
@@ -4103,14 +4310,15 @@ async function litPaperTab(tab) {
   var body = document.getElementById('lit-summary-body');
   var d = _litPaper;
   var stem = (d.file || '').replace(/\.pdf$/i, '');
+  var ref = litJsStr(d.file || '');
   body.style.overflowY = 'auto';
+  body.style.padding = '10px 16px';
   if (tab === 'pdf') {
     body.style.overflowY = 'hidden';
     body.style.padding = '0';
     body.innerHTML = '<iframe id="lit-pdf-frame" src="/api/papers?path=' + encodeURIComponent(d.file || '') + '"></iframe>';
     return;
   }
-  body.style.padding = '10px 16px';
   if (tab === 'md') {
     if (!d.markdown_file) {
       body.innerHTML = '<span style="color:var(--text-light);">尚无 Markdown——先点"📝 提炼"生成（提炼时会自动转换 PDF→Markdown 落盘）。</span>';
@@ -4120,7 +4328,10 @@ async function litPaperTab(tab) {
     try {
       var r = await fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md'));
       var txt = await r.text();
-      body.innerHTML = '<pre id="lit-md-pre">' + escapeHtml(txt) + '</pre>';
+      body.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
+        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.md\', \'' + 'md\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载</button>' +
+        '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⇄ 对照译文</button></div>' +
+        '<pre id="lit-md-pre">' + escapeHtml(txt) + '</pre>';
     } catch(e) {
       body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
     }
@@ -4129,33 +4340,52 @@ async function litPaperTab(tab) {
   if (tab === 'zh') {
     if (!d.translation_file) {
       body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">这篇还没有中文翻译。' +
-        '<button onclick="translatePaper(\'' + (d.file || '').replace(/'/g, "\\'") + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
-        '<div style="font-size:11px;">学术严谨直译，分块进行，约 3-10 分钟（视篇幅），可关页面后台跑。</div></div>';
+        '<button onclick="translatePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
+        '<div style="font-size:11px;">学术严谨直译，分块进行，约 3-10 分钟（视篇幅），可关页面后台跑。完成后可在"⇄ 对照"里双屏比读。</div></div>';
       return;
     }
     body.innerHTML = '<span style="color:var(--text-light);">加载翻译…</span>';
     try {
       var r2 = await fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem + '.zh.md'));
       var txt2 = await r2.text();
-      body.innerHTML = '<pre id="lit-md-pre">' + escapeHtml(txt2) + '</pre>';
+      body.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
+        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'' + 'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+        '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⇄ 中英对照</button></div>' +
+        '<pre id="lit-md-pre">' + escapeHtml(txt2) + '</pre>';
+    } catch(e) {
+      body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
+    }
+    return;
+  }
+  if (tab === 'cmp') {
+    if (!d.markdown_file) {
+      body.innerHTML = '<span style="color:var(--text-light);">尚无原文 Markdown——先点"📝 提炼"生成。</span>';
+      return;
+    }
+    if (!d.translation_file) {
+      body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">对照视图需要中文译文。' +
+        '<button onclick="translatePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
+        '<div style="font-size:11px;">翻译完成后自动生成"原文 ⇄ 译文"段落级对照双屏。</div></div>';
+      return;
+    }
+    body.innerHTML = '<span style="color:var(--text-light);">加载对照双屏…</span>';
+    body.style.overflowY = 'hidden';
+    body.style.padding = '0';
+    try {
+      var t1 = await (await fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md'))).text();
+      var t2 = await (await fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem + '.zh.md'))).text();
+      litRenderCompare(body, t1, t2, stem);
     } catch(e) {
       body.innerHTML = '<span style="color:var(--danger);">加载失败: ' + escapeHtml(e.message || e) + '</span>';
     }
     return;
   }
   if (tab === 'cite') {
-    var html = '<div style="font-weight:600;margin-bottom:8px;">📎 引用信息（Zotero/EndNote 可直接导入）</div>' +
-      '<div style="font-size:12px;margin-bottom:6px;">' + escapeHtml(d.title || '') + '<br>' +
-      escapeHtml(d.journal || '—') + ' · ' + escapeHtml(d.year || '—') + ' · DOI: ' + escapeHtml(d.doi || '—') + '</div>';
-    if (d.bibtex) {
-      html += '<div style="font-size:11px;color:var(--text-light);margin:6px 0 2px;">BibTeX <button onclick="litCopyCite(\'bib\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button></div>' +
-        '<pre style="white-space:pre-wrap;background:var(--code-bg);color:var(--code-fg);padding:8px;border-radius:6px;font-size:11px;">' + escapeHtml(d.bibtex) + '</pre>';
-    }
-    if (d.ris) {
-      html += '<div style="font-size:11px;color:var(--text-light);margin:6px 0 2px;">RIS <button onclick="litCopyCite(\'ris\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button></div>' +
-        '<pre style="white-space:pre-wrap;background:var(--code-bg);color:var(--code-fg);padding:8px;border-radius:6px;font-size:11px;">' + escapeHtml(d.ris) + '</pre>';
-    }
-    body.innerHTML = html;
+    litRenderCite(body, d);
+    return;
+  }
+  if (tab === 'knowledge') {
+    litRenderKnowledge(body, d);
     return;
   }
   // summary（默认）
@@ -4165,14 +4395,23 @@ async function litPaperTab(tab) {
                 conclusion: '📌 结论', validation: '✅ 怎么验证'};
   var html2 = '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">' + escapeHtml(d.title || d.file || '') +
     (d.summary_done ? ' <span style="color:var(--success);font-size:11px;">✅ 已提炼</span>' : ' <span style="color:#e67e22;font-size:11px;">⏳ 未提炼</span>') +
-    (d.kb_done ? ' <span style="color:var(--success);font-size:11px;">🧬 已入库</span>' : '') + '</div>';
+    (d.knowledge_done ? ' <span style="color:var(--success);font-size:11px;">🧠 知识已提取</span>' : '') + '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">' +
+    (d.summary_done ? '<button onclick="litForceSummarize(\'' + ref + '\')" title="重新提炼（force）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新提炼</button>' : '') +
+    (d.knowledge_done ? '<button onclick="litForceKnowledge(\'' + ref + '\')" title="重新提取知识（force）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新提取知识</button>' : '') +
+    '<button onclick="litPaperTab(\'knowledge\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧠 生物学/生信知识</button>' +
+    '<button onclick="litPaperTab(\'cite\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📎 引用</button>' +
+    '<button onclick="litAskAgent()" title="把解读请求发给文献库绑定的 Agent 会话" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">💬 让 Agent 解读</button>' +
+    '</div>';
   if (d.markdown_file) html2 += '<div style="color:var(--text-light);font-size:11px;margin-bottom:6px;">📄 原文 Markdown: hermes_home/papers/markdown/' + escapeHtml(stem) + '.md（会话里可 read_file）</div>';
   if (!d.summary_done) {
     html2 += '<div style="color:var(--text-light);">这篇还没有提炼。' +
-      '<button onclick="summarizePaper(\'' + (d.file || '').replace(/'/g, "\\'") + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 立即提炼</button></div>';
+      '<button onclick="summarizePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 立即提炼</button></div>';
   } else {
     Object.keys(labels).forEach(function(k) {
-      html2 += '<div style="margin-bottom:8px;"><b>' + labels[k] + '</b><div style="color:var(--text);white-space:pre-wrap;font-size:12px;">' + escapeHtml(s[k] || '未提及') + '</div></div>';
+      var v = s[k];
+      if (k === 'markdown_file' || k === 'extracted_at') return;
+      html2 += '<div class="lit-sum-field"><b>' + labels[k] + '</b><div>' + escapeHtml(v || '未提及') + '</div></div>';
     });
   }
   body.innerHTML = html2;
@@ -4244,14 +4483,429 @@ async function litPollTranslate(jobId) {
 function litCopyCite(kind) {
   var d = _litPaper;
   if (!d) return;
-  var text = kind === 'bib' ? d.bibtex : d.ris;
+  var text = kind === 'bib' ? (d.bibtex || (d.citations || {}).bibtex) : (d.ris || (d.citations || {}).ris);
   if (!text) return;
+  litCopyTextRaw(text);
+}
+
+// 批O(2026-08-16)：专业引用 / 知识 / 下载 / 强制重跑 / Agent 解读
+function litCopyTextRaw(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() {
-      alert('✅ 已复制到剪贴板');
+      litToast('✅ 已复制到剪贴板');
+    }, function() {
+      alert('复制失败：浏览器不支持剪贴板 API\n\n' + text);
     });
   } else {
     alert('复制失败：浏览器不支持剪贴板 API\n\n' + text);
+  }
+}
+
+var _litToastTimer = null;
+function litToast(msg) {
+  var el = document.getElementById('lit-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'lit-toast';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:6px 14px;border-radius:6px;font-size:12px;z-index:10000;box-shadow:0 4px 16px rgba(0,0,0,0.3);';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = '';
+  if (_litToastTimer) clearTimeout(_litToastTimer);
+  _litToastTimer = setTimeout(function() { el.style.display = 'none'; }, 1800);
+}
+
+function litCiteText(kind) {
+  var d = _litPaper;
+  if (!d) return '';
+  var c = d.citations || {};
+  if (kind === 'bibtex') return c.bibtex || d.bibtex || '';
+  if (kind === 'ris') return c.ris || d.ris || '';
+  return c[kind] || '';
+}
+
+function litDownloadText(filename, kind) {
+  var text;
+  if (kind === 'md' && _litPaper) {
+    // 从服务器已加载的原文：直接再取一次（简单可靠）
+    var stem = (_litPaper.file || '').replace(/\.pdf$/i, '');
+    fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md')).then(function(r) { return r.text(); }).then(function(t) {
+      _litBlobDownload(filename, t);
+    }).catch(function() { litToast('下载失败'); });
+    return;
+  }
+  if (kind === 'zh' && _litPaper) {
+    var stem2 = (_litPaper.file || '').replace(/\.pdf$/i, '');
+    fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem2 + '.zh.md')).then(function(r) { return r.text(); }).then(function(t) {
+      _litBlobDownload(filename, t);
+    }).catch(function() { litToast('下载失败'); });
+    return;
+  }
+  text = litCiteText(kind);
+  if (!text) { litToast('暂无内容'); return; }
+  _litBlobDownload(filename, text);
+}
+
+function _litBlobDownload(filename, text) {
+  var blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 4000);
+  litToast('⬇ 已下载 ' + filename);
+}
+
+function litDownloadTextRaw(filename, text) {
+  if (!text) { litToast('暂无内容'); return; }
+  _litBlobDownload(filename, text);
+}
+
+function litRenderCite(body, d) {
+  var c = d.citations || {};
+  var ref = litJsStr(d.file || '');
+  var items = [
+    ['gbt7714-numeric', 'GB/T 7714-2015 顺序编码制（中文期刊通用）', 'gbt7714-numeric', '.txt'],
+    ['gbt7714-author-year', 'GB/T 7714-2015 著者-出版年制', 'gbt7714-author-year', '.txt'],
+    ['apa', 'APA 第7版（心理/社科/部分医学期刊）', 'apa', '.txt'],
+    ['nlm', 'NLM / Vancouver（生物医学期刊通用）', 'nlm', '.txt'],
+    ['mla', 'MLA 第9版（人文学科）', 'mla', '.txt'],
+    ['bibtex', 'BibTeX（Zotero / LaTeX 可直接导入）', 'bibtex', '.bib'],
+    ['ris', 'RIS（EndNote / Zotero 可直接导入）', 'ris', '.ris']
+  ];
+  var html = '<div style="font-weight:600;margin-bottom:6px;">📎 专业引用格式（GB/T 7714 / APA / NLM / MLA / BibTeX / RIS）</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' +
+    '<button onclick="litEnrichPaper(\'' + ref + '\')" title="Crossref 补全卷/期/页码/PMID（引用格式更完整）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🛠 补全元数据</button>' +
+    '<span style="font-size:11px;color:var(--text-light);">' +
+    (d.meta_complete ? '✅ 元数据完整' : '⚠️ 缺卷/期/页码——引用会省略这些项，可点"🛠 补全元数据"从 Crossref 拉取') + '</span></div>';
+  var any = false;
+  items.forEach(function(it) {
+    var txt = litCiteText(it[0]);
+    if (!txt) return;
+    any = true;
+    html += '<div class="lit-cite-item">' +
+      '<div class="lit-cite-head"><b>' + escapeHtml(it[1]) + '</b><span style="margin-left:auto;display:flex;gap:6px;">' +
+      '<button onclick="litCopyTextRaw(document.getElementById(\'lit-cite-' + it[0] + '\').textContent)" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button>' +
+      '<button onclick="litDownloadText(\'' + litJsStr((d.file || 'paper').replace(/\.pdf$/i, '') + '-citation') + it[3] + '\', \'' + it[0] + '\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载</button>' +
+      '</span></div>' +
+      '<pre id="lit-cite-' + it[0] + '">' + escapeHtml(txt) + '</pre></div>';
+  });
+  if (!any) {
+    html += '<div style="color:var(--text-light);">引用元数据缺失（无 DOI/标题）。可点"🛠 补全元数据"修复。</div>';
+  }
+  html += '<div style="display:flex;gap:6px;margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">' +
+    '<button onclick="litExportAll()" title="导出文献库全部引用" style="font-size:11px;padding:3px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📚 导出整库引用</button>' +
+    '<span style="font-size:11px;color:var(--text-light);align-self:center;">格式说明：GB/T 7714 为国标（中文期刊/毕业论文标准），APA/NLM 为国际期刊常用，BibTeX/RIS 供文献管理软件导入。</span></div>';
+  body.innerHTML = html;
+}
+
+function litRenderKnowledge(body, d) {
+  var k = d.knowledge || {};
+  var bio = k.biology || {}, bi = k.bioinfo || {};
+  var ref = litJsStr(d.file || '');
+  var html = '<div style="font-weight:600;margin-bottom:6px;">🧠 结构化知识提取（生物学知识 + 生信知识）' +
+    (d.knowledge_done ? ' <span style="color:var(--success);font-size:11px;">✅ 已提取并入库</span>' : ' <span style="color:#e67e22;font-size:11px;">⏳ 未提取</span>') + '</div>';
+  if (!d.knowledge_done) {
+    html += '<div style="color:var(--text-light);">还没有提取本文的知识。' +
+      '<button onclick="extractKnowledge(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🧠 立即提取（结论/基因marker/类器官/化学/测序方法/包/参数）</button>' +
+      '<div style="font-size:11px;">提取后写入知识库五级目录（物种/组织/方向/类别/assay），做分析时 AI 可直接检索复用；同时生成人读版 papers/knowledge/<文件名>.md。</div></div>';
+    body.innerHTML = html;
+    return;
+  }
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
+    '<button onclick="litForceKnowledge(\'' + ref + '\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新提取</button>' +
+    '<button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📂 查看知识库</button>' +
+    '<button onclick="litPaperTab(\'summary\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">💡 九项摘要</button></div>';
+  // 生物学知识
+  html += '<div class="lit-kb-sec"><h4>🧬 生物学知识</h4>';
+  if ((bio.conclusions || []).length) html += '<div style="margin-bottom:6px;"><b>📌 结论</b><ul>' + bio.conclusions.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
+  if ((bio.cell_types || []).length) html += '<div style="margin-bottom:6px;"><b>🫁 细胞类型</b><ul>' + bio.cell_types.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
+  if ((bio.pathways || []).length) html += '<div style="margin-bottom:6px;"><b>🔀 通路</b><ul>' + bio.pathways.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
+  if ((bio.gene_markers || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🧬 基因 Marker</b><table><tr><th>基因</th><th>细胞类型</th><th>方向</th><th>说明</th></tr>' +
+      bio.gene_markers.map(function(m) { return '<tr><td>' + escapeHtml(m.gene || '') + '</td><td>' + escapeHtml(m.cell_type || '') + '</td><td>' + escapeHtml(m.direction || '') + '</td><td>' + escapeHtml(m.context || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if ((bio.organoid || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🧫 类器官/培养条件</b><table><tr><th>名称</th><th>物种</th><th>培养基</th><th>细胞因子</th><th>基质</th><th>时长</th></tr>' +
+      bio.organoid.map(function(o) { return '<tr><td>' + escapeHtml(o.name || '') + '</td><td>' + escapeHtml(o.species || '') + '</td><td>' + escapeHtml(o.media || '') + '</td><td>' + escapeHtml((o.cytokines || []).join(', ')) + '</td><td>' + escapeHtml(o.matrix || '') + '</td><td>' + escapeHtml(o.duration || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if ((bio.chemicals || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>⚗️ 化合物/化学信息</b><table><tr><th>化合物</th><th>靶点</th><th>剂量</th><th>IC50</th><th>模型</th><th>效应</th></tr>' +
+      bio.chemicals.map(function(c2) { return '<tr><td>' + escapeHtml(c2.compound || '') + '</td><td>' + escapeHtml(c2.target || '') + '</td><td>' + escapeHtml(c2.dose || '') + '</td><td>' + escapeHtml(c2.ic50 || '') + '</td><td>' + escapeHtml(c2.model || '') + '</td><td>' + escapeHtml(c2.effect || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if (!Object.keys(bio).filter(function(k2) { return (bio[k2] || []).length || (typeof bio[k2] === 'string' && bio[k2]); }).length) html += '<span style="color:var(--text-light);">（未提及）</span>';
+  html += '</div>';
+  // 生信知识
+  html += '<div class="lit-kb-sec"><h4>💻 生信知识</h4>';
+  if ((bi.sequencing || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🔬 测序方法</b><table><tr><th>技术</th><th>平台</th><th>建库</th><th>深度</th></tr>' +
+      bi.sequencing.map(function(sq) { return '<tr><td>' + escapeHtml(sq.tech || '') + '</td><td>' + escapeHtml(sq.platform || '') + '</td><td>' + escapeHtml(sq.library || '') + '</td><td>' + escapeHtml(sq.read_depth || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if ((bi.pipeline || []).length) html += '<div style="margin-bottom:6px;"><b>🧭 分析流程</b><ul>' + bi.pipeline.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
+  if ((bi.software || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>📦 软件/包</b><table><tr><th>名称</th><th>版本</th><th>语言</th><th>用途</th></tr>' +
+      bi.software.map(function(s2) { return '<tr><td>' + escapeHtml(s2.name || '') + '</td><td>' + escapeHtml(s2.version || '') + '</td><td>' + escapeHtml(s2.lang || '') + '</td><td>' + escapeHtml(s2.purpose || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if ((bi.parameters || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🎛️ 关键参数</b><table><tr><th>工具</th><th>参数</th><th>值</th><th>场景</th></tr>' +
+      bi.parameters.map(function(p) { return '<tr><td>' + escapeHtml(p.tool || '') + '</td><td>' + escapeHtml(p.param || '') + '</td><td>' + escapeHtml(p.value || '') + '</td><td>' + escapeHtml(p.context || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if ((bi.qc_params || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🧹 质控参数</b><table><tr><th>参数</th><th>阈值</th><th>说明</th></tr>' +
+      bi.qc_params.map(function(q) { return '<tr><td>' + escapeHtml(q.param || '') + '</td><td>' + escapeHtml(q.value || '') + '</td><td>' + escapeHtml(q.context || '') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  if (bi.reference_genome) html += '<div style="margin-bottom:6px;"><b>🧬 参考基因组</b>：' + escapeHtml(bi.reference_genome) + '</div>';
+  if ((bi.databases || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>🗄️ 数据库</b><ul>' + bi.databases.map(function(db) { return '<li>' + escapeHtml(db.name || '') + '：' + escapeHtml(db.purpose || '') + '</li>'; }).join('') + '</ul></div>';
+  }
+  if (!Object.keys(bi).filter(function(k3) { return (bi[k3] || []).length || (typeof bi[k3] === 'string' && bi[k3]); }).length) html += '<span style="color:var(--text-light);">（未提及）</span>';
+  html += '</div>';
+  html += '<div style="color:var(--text-light);font-size:11px;">🗂 已写入 knowledge_base 五级目录（01_生物学知识 / 02_质控参数 / 03_测序方法），带 DOI 溯源，AI 分析时可检索复用。</div>';
+  body.innerHTML = html;
+}
+
+async function litEnrichPaper(ref) {
+  var body = document.getElementById('lit-summary-body');
+  if (body) body.innerHTML = '<span style="color:var(--text-light);">提交元数据补全…</span>';
+  try {
+    var r = await fetch('/api/literature/enrich', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_or_title: ref})
+    });
+    var d = await r.json();
+    if (d.error) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollEnrich(d.job_id); }, 1500);
+    litPollEnrich(d.job_id);
+  } catch(e) {
+    if (body) body.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function litPollEnrich(jobId) {
+  var modal = document.getElementById('lit-summary-modal');
+  var body = document.getElementById('lit-summary-body');
+  var prog = document.getElementById('lit-extract-progress');
+  var modalOpen = modal && modal.style.display !== 'none';
+  var target = modalOpen ? body : prog;
+  if (!target) return;
+  try {
+    var st = await (await fetch('/api/literature/import/' + encodeURIComponent(jobId))).json();
+    if (st.status === 'running') {
+      target.innerHTML = '<div style="padding:10px 4px;">🛠 ' + escapeHtml(st.current || '补全中…') + '</div>';
+      return;
+    }
+    clearInterval(_litExtractTimer);
+    _litExtractTimer = null;
+    var res = st.result || {};
+    if (st.status === 'error' || (!res.ok && res.error)) {
+      target.innerHTML = '<div style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '补全失败') + '</div>';
+      return;
+    }
+    if (res.results) {
+      var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 元数据补全完成：' + (res.succeeded || 0) + '/' + (res.pending || 0) + ' 篇</div>';
+      html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
+      (res.results || []).forEach(function(rr) {
+        var col = rr.ok ? 'var(--success)' : 'var(--danger)';
+        html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
+          (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || rr.file || '') +
+          (rr.ok && (rr.changed || []).length ? ' — 修正: ' + escapeHtml(rr.changed.join(',')) : '') +
+          (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
+      });
+      html += '</div><div style="margin-top:6px;"><button onclick="loadLiteratureLibrary()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">刷新文献库</button></div>';
+      target.innerHTML = html;
+      return;
+    }
+    litToast('✅ 元数据补全完成：修正 ' + ((res.changed || []).join(', ') || '—'));
+    if (_litPaper && modalOpen) {
+      var ref = _litPaper.file;
+      _litPaper = null;
+      viewSummary(ref, 'cite');
+    } else if (!modalOpen) {
+      loadLiteratureLibrary();
+    }
+  } catch(e) {
+    clearInterval(_litExtractTimer);
+    _litExtractTimer = null;
+    if (target) target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function extractKnowledge(ref) {
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交知识提取任务…</span>'; }
+  try {
+    var r = await fetch('/api/literature/knowledge', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_or_title: ref})
+    });
+    var d = await r.json();
+    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollKnowledge(d.job_id); }, 1500);
+    litPollKnowledge(d.job_id);
+  } catch(e) {
+    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function extractAllKnowledge() {
+  if (!confirm('将对文献库全部未提取文章做结构化知识提取（结论/基因marker/类器官/化学信息 + 测序方法/流程/包/参数），每篇约 1-3 分钟。继续？')) return;
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键知识提取任务…</span>'; }
+  try {
+    var r = await fetch('/api/literature/knowledge-all', { method: 'POST' });
+    var d = await r.json();
+    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollKnowledge(d.job_id); }, 1500);
+    litPollKnowledge(d.job_id);
+  } catch(e) {
+    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function litPollKnowledge(jobId) {
+  var modal = document.getElementById('lit-summary-modal');
+  var body = document.getElementById('lit-summary-body');
+  var prog = document.getElementById('lit-extract-progress');
+  var modalOpen = modal && modal.style.display !== 'none';
+  var target = modalOpen ? body : prog;
+  if (!target) return;
+  try {
+    var st = await (await fetch('/api/literature/import/' + encodeURIComponent(jobId))).json();
+    if (st.status === 'running') {
+      var total = st.total || 0;
+      var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
+      var phaseLabel = {convert: 'PDF → Markdown', extract: 'LLM 结构化提取', write: '写入知识库', paper: '逐篇提取', done: '完成'}[st.phase] || st.phase;
+      target.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧠 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
+        '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
+        '<div style="color:var(--text-light);font-size:11px;margin-top:4px;word-break:break-all;">' + escapeHtml(st.current || '') + '</div>';
+      return;
+    }
+    clearInterval(_litExtractTimer);
+    _litExtractTimer = null;
+    var res = st.result || {};
+    if (st.status === 'error' || (res.error && !res.ok)) {
+      target.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || res.error || '知识提取失败') + '</span>';
+      return;
+    }
+    if (res.results) {
+      var html = '<div style="font-weight:600;margin-bottom:4px;">✅ 批量知识提取完成：' + (res.succeeded || 0) + '/' + (res.total || 0) + ' 篇成功，共写入 <b>' + (res.written_total || 0) + '</b> 条知识库条目</div>';
+      html += '<div style="max-height:220px;overflow-y:auto;font-size:11px;">';
+      (res.results || []).forEach(function(rr) {
+        var col = rr.ok ? 'var(--success)' : 'var(--danger)';
+        html += '<div style="padding:3px 0;border-bottom:1px solid var(--border);color:' + col + ';">' +
+          (rr.ok ? '✅' : '❌') + ' ' + escapeHtml(rr.paper || '') + ' — 写入 ' + (rr.written || 0) + ' 条' +
+          (rr.error ? '（' + escapeHtml(rr.error) + '）' : '') + '</div>';
+      });
+      html += '</div><div style="margin-top:6px;"><button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">查看知识库</button></div>';
+      target.innerHTML = html;
+    } else {
+      target.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">✅ 知识提取完成：写入 ' + ((res.written || []).length) + ' 条知识库条目</div>' +
+        '<div style="margin-top:6px;display:flex;gap:6px;">' +
+        '<button onclick="viewSummary(\'' + litJsStr(res.file || '') + '\', \'knowledge\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🧠 查看知识</button>' +
+        '<button onclick="loadKnowledgeAfterExtract()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">查看知识库</button></div>';
+      if (modalOpen && _litPaper) { _litPaper = null; viewSummary(res.file || '', 'knowledge'); }
+    }
+  } catch(e) {
+    clearInterval(_litExtractTimer);
+    _litExtractTimer = null;
+    target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function litForceSummarize(ref) {
+  if (!confirm('将重新提炼这篇文献的 9 项摘要（force，重新调用 LLM，约 1-5 分钟）。继续？')) return;
+  var body = document.getElementById('lit-summary-body');
+  var r = await fetch('/api/literature/summarize', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({file_or_title: ref, force: true})
+  });
+  var d = await r.json();
+  if (d.error || !d.job_id) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '提交失败') + '</span>'; return; }
+  if (body) body.innerHTML = '<span style="color:var(--text-light);">🔄 重新提炼中…</span>';
+  var timer = setInterval(async function() {
+    try {
+      var st = await (await fetch('/api/literature/import/' + encodeURIComponent(d.job_id))).json();
+      if (st.status === 'running') {
+        if (body) body.innerHTML = '<span style="color:var(--text-light);">🔄 ' + escapeHtml(st.current || '提炼中…') + '</span>';
+        return;
+      }
+      clearInterval(timer);
+      if (st.status === 'error' || !((st.result || {}).ok)) {
+        if (body) body.innerHTML = '<span style="color:var(--danger);">❌ ' + escapeHtml(st.error || ((st.result || {}).error) || '提炼失败') + '</span>';
+        return;
+      }
+      litToast('✅ 重新提炼完成');
+      _litPaper = null;
+      viewSummary(ref, 'summary');
+    } catch(e) {
+      clearInterval(timer);
+      if (body) body.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    }
+  }, 1500);
+}
+
+async function litForceKnowledge(ref) {
+  if (!confirm('将重新提取这篇文献的生物学/生信知识（force，重新调用 LLM）。继续？')) return;
+  var r = await fetch('/api/literature/knowledge', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({file_or_title: ref, force: true})
+  });
+  var d = await r.json();
+  if (d.job_id) {
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollKnowledge(d.job_id); }, 1500);
+    litPollKnowledge(d.job_id);
+  }
+}
+
+function litAskAgent() {
+  var d = _litPaper;
+  if (!d) return;
+  var prompt = '请解读文献库中的这篇文献：' + (d.title || d.file || '') +
+    (d.doi ? '（DOI: ' + d.doi + '）' : '') +
+    '。请覆盖：① 研究背景与思路 ② 方法与关键参数 ③ 主要结论与验证方式 ④ 可复用的生物学知识（基因marker/细胞类型/通路）与生信知识（测序方法/分析流程/软件包/参数）。';
+  document.getElementById('lit-summary-modal').style.display = 'none';
+  var input = document.getElementById('input');
+  if (input) { input.value = prompt; input.focus(); }
+  switchView('chat');
+  litToast('已填入解读请求，按发送即可（发送到文献库绑定的会话）');
+}
+
+async function litExportAll() {
+  var body = document.getElementById('lit-summary-body');
+  if (body) body.innerHTML = '<span style="color:var(--text-light);">生成整库引用…</span>';
+  try {
+    var d = await (await fetch('/api/literature/export')).json();
+    if (!d.ok) { if (body) body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || '') + '</span>'; return; }
+    if (d.bibtex) _litBlobDownload('memomics_references.bib', d.bibtex);
+    if (d.ris) _litBlobDownload('memomics_references.ris', d.ris);
+    if (d.gbt7714) _litBlobDownload('memomics_references_gbt7714.txt', d.gbt7714);
+    litToast('✅ 整库引用已导出（BibTeX / RIS / GB/T 7714）');
+    if (_litPaper) litPaperTab('cite');
+  } catch(e) {
+    if (body) body.innerHTML = '<span style="color:var(--danger);">导出失败: ' + escapeHtml(e.message || e) + '</span>';
+  }
+}
+
+async function litEnrichAll() {
+  if (!confirm('将对文献库全部疑似缺元数据（卷/期/页码/乱码作者/脏DOI）的文章做 Crossref 补全，约 1-3 分钟。继续？')) return;
+  var prog = document.getElementById('lit-extract-progress');
+  if (prog) { prog.style.display = ''; prog.innerHTML = '<span style="color:var(--text-light);">提交一键元数据补全…</span>'; }
+  try {
+    var r = await fetch('/api/literature/enrich-all', { method: 'POST' });
+    var d = await r.json();
+    if (d.error) { if (prog) prog.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>'; return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollEnrich(d.job_id); }, 2000);
+    litPollEnrich(d.job_id);
+  } catch(e) {
+    if (prog) prog.innerHTML = '<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>';
   }
 }
 
@@ -4293,8 +4947,12 @@ async function extractAllPapers() {
 }
 
 async function litPollExtract(jobId) {
+  var modal = document.getElementById('lit-summary-modal');
+  var body = document.getElementById('lit-summary-body');
   var prog = document.getElementById('lit-extract-progress');
-  if (!prog) return;
+  var modalOpen = modal && modal.style.display !== 'none';
+  var target = modalOpen ? body : prog;
+  if (!target) return;
   try {
     var r = await fetch('/api/literature/import/' + encodeURIComponent(jobId));
     var st = await r.json();
@@ -4302,8 +4960,8 @@ async function litPollExtract(jobId) {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
       var phaseLabel = {read: '读取全文', extract: 'LLM 提炼', write: '写入知识库', paper: '逐篇提炼',
-                         summarize: 'LLM 全文提炼(9项)', done: '完成'}[st.phase] || st.phase;
-      prog.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧬 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
+                         summarize: 'LLM 全文提炼(9项)', convert: 'PDF → Markdown', done: '完成'}[st.phase] || st.phase;
+      target.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">🧬 ' + escapeHtml(phaseLabel) + '… ' + (st.done || 0) + '/' + (total || '?') + '</div>' +
         '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--primary);transition:width 0.4s;"></div></div>' +
         '<div style="color:var(--text-light);font-size:11px;margin-top:4px;word-break:break-all;">' + escapeHtml(st.current || '') + '</div>';
       return;
@@ -4311,14 +4969,19 @@ async function litPollExtract(jobId) {
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
     if (st.status === 'error') {
-      prog.innerHTML = '<span style="color:var(--danger);">❌ 提炼失败: ' + escapeHtml(st.error || '') + '</span>';
+      target.innerHTML = '<span style="color:var(--danger);">❌ 提炼失败: ' + escapeHtml(st.error || '') + '</span>';
       return;
     }
-    renderExtractResult(st.result || {}, prog);
+    renderExtractResult(st.result || {}, target);
+    if (modalOpen && (st.result || {}).summary) {
+      // 模态内提炼完成后自动刷新详情
+      var f = (st.result || {}).file;
+      if (f) { _litPaper = null; viewSummary(f, 'summary'); }
+    }
   } catch(e) {
     clearInterval(_litExtractTimer);
     _litExtractTimer = null;
-    prog.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
+    target.innerHTML = '<span style="color:var(--danger);">进度查询失败: ' + escapeHtml(e.message || e) + '</span>';
   }
 }
 
@@ -4437,7 +5100,7 @@ function highlightKbSearchPaths(paths) {
   if (!_kbCy || !paths || !paths.length) return;
   _kbCy.nodes().removeClass('search-hit');
   var set = {};
-  paths.forEach(function(p) { set(String(p).replace(/\\/g, '/') || '') = true; });
+  paths.forEach(function(p) { set[String(p).replace(/\\/g, '/') || ''] = true; });
   _kbCy.nodes().forEach(function(n) {
     var np = (n.data('path') || '').replace(/\\/g, '/');
     if (np && set[np]) n.addClass('search-hit');
@@ -6273,20 +6936,34 @@ async function litImportSelected() {
     </div>
   </div>
 </div>
-<!-- 文献详情抽屉（批N1 2026-08-16：原文PDF/Markdown/翻译/9项摘要/引用）-->
+<!-- 文献详情抽屉（批N1 2026-08-16；批O 2026-08-16：大窗口可调节/对照双屏/知识/专业引用）-->
 <div id="lit-summary-modal">
-  <div class="lit-box">
-    <div class="lit-header">📚 文献详情 <span id="lit-paper-title" style="font-weight:500;color:var(--text-light);font-size:12px;"></span>
-      <button onclick="document.getElementById('lit-summary-modal').style.display='none'" style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button>
+  <div class="lit-box" id="lit-summary-box">
+    <div class="lit-header">📚 <span id="lit-paper-title" style="font-weight:600;font-size:13px;color:var(--text);"></span>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+        <button id="lit-btn-max" onclick="litToggleMax()" title="最大化 / 还原（或双击标题栏）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🗗 最大化</button>
+        <button onclick="document.getElementById('lit-summary-modal').style.display='none'" title="关闭（Esc）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">✕ 关闭</button>
+      </span>
     </div>
+    <div id="lit-paper-meta" style="font-size:11px;color:var(--text-light);padding:4px 14px;border-bottom:1px solid var(--border);"></div>
     <div class="lit-tabs">
       <button class="lit-tab" id="lit-tab-pdf" onclick="litPaperTab('pdf')">📄 原文PDF</button>
       <button class="lit-tab" id="lit-tab-md" onclick="litPaperTab('md')">📝 Markdown</button>
-      <button class="lit-tab" id="lit-tab-zh" onclick="litPaperTab('zh')">🌐 翻译</button>
+      <button class="lit-tab" id="lit-tab-zh" onclick="litPaperTab('zh')">🌐 译文</button>
+      <button class="lit-tab" id="lit-tab-cmp" onclick="litPaperTab('cmp')">⇄ 对照</button>
       <button class="lit-tab" id="lit-tab-sum" onclick="litPaperTab('summary')">💡 9项摘要</button>
+      <button class="lit-tab" id="lit-tab-know" onclick="litPaperTab('knowledge')">🧠 知识</button>
       <button class="lit-tab" id="lit-tab-cite" onclick="litPaperTab('cite')">📎 引用</button>
     </div>
     <div id="lit-summary-body"></div>
+    <div class="lit-resizer e" data-dir="e" title="拖拽调节窗口宽度"></div>
+    <div class="lit-resizer w" data-dir="w" title="拖拽调节窗口宽度"></div>
+    <div class="lit-resizer s" data-dir="s" title="拖拽调节窗口高度"></div>
+    <div class="lit-resizer n" data-dir="n" title="拖拽调节窗口高度"></div>
+    <div class="lit-resizer ne" data-dir="ne" title="拖拽调节窗口"></div>
+    <div class="lit-resizer nw" data-dir="nw" title="拖拽调节窗口"></div>
+    <div class="lit-resizer se" data-dir="se" title="拖拽调节窗口"></div>
+    <div class="lit-resizer sw" data-dir="sw" title="拖拽调节窗口"></div>
   </div>
 </div>
 </body>

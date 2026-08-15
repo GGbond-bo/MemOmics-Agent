@@ -97,7 +97,7 @@ _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$")
 _SAFE_CATEGORY_RE = re.compile(r"^[a-zA-Z0-9_\-]{0,32}$")
 # 五级目录模式的路径段白名单（2026-08-14）
 _SAFE_PATH_SEG_RE = re.compile(r"^[a-zA-Z0-9_\u4e00-\u9fff\-]{1,64}$")
-_KB_CATEGORIES = ("01_生物学知识", "02_质控参数", "03_测序方法")
+_KB_CATEGORIES = ("01_生物学知识", "02_质控参数", "03_测序方法", "04_个性化")
 _KB_ASSAYS = ("RNA", "ATAC", "spatial", "bulk")
 
 

@@ -7356,16 +7356,20 @@ async def list_results(sid: str, path: str = ""):
         for p in sorted(Path(target).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
             if p.name.startswith("."):
                 continue
+            _st = p.stat()
             items.append({
                 "name": p.name,
                 "path": str(p).replace("\\", "/"),
                 "is_dir": p.is_dir(),
-                "size": p.stat().st_size if p.is_file() else 0,
+                "size": _st.st_size if p.is_file() else 0,
                 "ext": p.suffix.lower() if p.is_file() else "",
                 "rel_path": str(p.relative_to(base)).replace("\\", "/"),
+                "mtime": _st.st_mtime,
+                "mtime_str": datetime.fromtimestamp(_st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             })
-        return {"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base),
-                "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)}
+        return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base),
+                "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)},
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -7483,7 +7487,7 @@ async def science_search(q: str = "", source: str = "arxiv", limit: int = 5):
 _lit_jobs = {}
 
 
-def _run_lit_import(job_id: str, paths: list):
+def _run_lit_import(job_id: str, paths: list, imported_by: str = ""):
     import json as _json
     from memomics.bio_tools.literature_library import import_pdfs
     try:
@@ -7492,7 +7496,7 @@ def _run_lit_import(job_id: str, paths: list):
                 "status": "running", "phase": phase,
                 "done": done, "total": total, "current": str(detail)[:120],
             })
-        _result = _json.loads(import_pdfs(paths, progress_cb=_cb))
+        _result = _json.loads(import_pdfs(paths, progress_cb=_cb, imported_by=imported_by))
         _lit_jobs[job_id].update({"status": "done", "result": _result,
                                   "current": f"完成：导入 {_result.get('imported', 0)} 篇"})
     except Exception as e:
@@ -7509,7 +7513,8 @@ async def literature_import(payload: dict):
     job_id = uuid.uuid4().hex[:8]
     _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "collect",
                          "done": 0, "total": 0, "current": "任务已创建"}
-    asyncio.create_task(asyncio.to_thread(_run_lit_import, job_id, paths))
+    _imported_by = str(payload.get("session_id") or "")[:64]
+    asyncio.create_task(asyncio.to_thread(_run_lit_import, job_id, paths, _imported_by))
     return {"job_id": job_id, "status": "running"}
 
 
@@ -7566,7 +7571,7 @@ async def literature_extract_all():
     return {"job_id": job_id, "status": "running"}
 
 
-def _run_lit_summarize(job_id: str, file_or_title: str, do_all: bool = False):
+def _run_lit_summarize(job_id: str, file_or_title: str, do_all: bool = False, force: bool = False):
     import json as _json
     from memomics.bio_tools.literature_library import summarize_paper, summarize_all_papers
     try:
@@ -7578,7 +7583,7 @@ def _run_lit_summarize(job_id: str, file_or_title: str, do_all: bool = False):
         if do_all:
             _result = _json.loads(summarize_all_papers(progress_cb=_cb))
         else:
-            _result = _json.loads(summarize_paper(file_or_title, progress_cb=_cb))
+            _result = _json.loads(summarize_paper(file_or_title, progress_cb=_cb, force=force))
         if _result.get("ok"):
             _msg = (f"全文提炼完成：{_result.get('succeeded', 1)} 篇成功" if do_all
                     else "全文提炼完成（9 项摘要已落盘）")
@@ -7591,7 +7596,7 @@ def _run_lit_summarize(job_id: str, file_or_title: str, do_all: bool = False):
 
 @app.post("/api/literature/summarize")
 async def literature_summarize(payload: dict):
-    """全文思路提炼（方向1，给人看，批J）：9 项摘要，异步任务化。"""
+    """全文思路提炼（方向1，给人看，批J）：9 项摘要，异步任务化。force=true 重新提炼。"""
     file_or_title = (payload.get("file_or_title") or "").strip()
     if not file_or_title:
         return JSONResponse({"error": "file_or_title required"}, status_code=400)
@@ -7599,7 +7604,8 @@ async def literature_summarize(payload: dict):
     job_id = uuid.uuid4().hex[:8]
     _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "read",
                          "done": 0, "total": 1, "current": "任务已创建"}
-    asyncio.create_task(asyncio.to_thread(_run_lit_summarize, job_id, file_or_title, False))
+    _force = bool(payload.get("force"))
+    asyncio.create_task(asyncio.to_thread(_run_lit_summarize, job_id, file_or_title, False, _force))
     return {"job_id": job_id, "status": "running"}
 
 
@@ -7650,13 +7656,123 @@ async def literature_translate(payload: dict):
 
 @app.get("/api/literature/summary")
 async def literature_summary(file_or_title: str = ""):
-    """查看某篇文献的 9 项全文摘要（方向1）。"""
+    """查看某篇文献的完整详情（批O 2026-08-16：含 9 项摘要/知识/全套引文）。"""
     if not file_or_title.strip():
         return JSONResponse({"error": "file_or_title required"}, status_code=400)
     try:
         from memomics.bio_tools.literature_library import get_summary
         import json as _json
         return _json.loads(get_summary(file_or_title.strip()))
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+
+# ── 批O(2026-08-16)：结构化知识提取 / 元数据补全 / 整库引用导出 ──
+
+def _run_lit_knowledge(job_id: str, file_or_title: str, do_all: bool = False, force: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import extract_paper_knowledge, extract_all_knowledge
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        if do_all:
+            _result = _json.loads(extract_all_knowledge(progress_cb=_cb))
+        else:
+            _result = _json.loads(extract_paper_knowledge(file_or_title, progress_cb=_cb, force=force))
+        if _result.get("ok"):
+            _msg = (f"知识提取完成：{_result.get('succeeded', 1)} 篇成功" if do_all
+                    else f"知识提取完成：写入 {len(_result.get('written') or [])} 条知识库条目")
+        else:
+            _msg = f"知识提取失败：{_result.get('error', '未知错误')[:120]}"
+        _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/knowledge")
+async def literature_knowledge(payload: dict):
+    """单篇结构化知识提取（生物学+生信），异步任务化（批O）。force=true 重新提取。"""
+    file_or_title = (payload.get("file_or_title") or "").strip()
+    if not file_or_title:
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "convert",
+                         "done": 0, "total": 1, "current": "任务已创建"}
+    _force = bool(payload.get("force"))
+    asyncio.create_task(asyncio.to_thread(_run_lit_knowledge, job_id, file_or_title, False, _force))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/api/literature/knowledge-all")
+async def literature_knowledge_all():
+    """一键知识提取：只处理未提取（knowledge_done≠true）的文章（批O）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_knowledge, job_id, "", True))
+    return {"job_id": job_id, "status": "running"}
+
+
+def _run_lit_enrich(job_id: str, file_or_title: str, do_all: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import enrich_paper_metadata, enrich_all_metadata
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        if do_all:
+            _result = _json.loads(enrich_all_metadata(progress_cb=_cb))
+        else:
+            _result = _json.loads(enrich_paper_metadata(file_or_title, progress_cb=_cb))
+        if _result.get("ok"):
+            _msg = (f"元数据补全完成：{_result.get('succeeded', 1)} 篇" if do_all
+                    else f"元数据补全完成：修正字段 {_result.get('changed') or []}")
+        else:
+            _msg = f"元数据补全失败：{_result.get('error', '未知错误')[:120]}"
+        _lit_jobs[job_id].update({"status": "done", "result": _result, "current": _msg})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/enrich")
+async def literature_enrich(payload: dict):
+    """单篇元数据补全（Crossref：卷/期/页码/PMID/修正乱码与脏 DOI），异步（批O）。"""
+    file_or_title = (payload.get("file_or_title") or "").strip()
+    if not file_or_title:
+        return JSONResponse({"error": "file_or_title required"}, status_code=400)
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "read",
+                         "done": 0, "total": 1, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_enrich, job_id, file_or_title, False))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/api/literature/enrich-all")
+async def literature_enrich_all():
+    """一键补全全部疑似缺失元数据（卷/期/页/乱码作者/脏 DOI），异步（批O）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    asyncio.create_task(asyncio.to_thread(_run_lit_enrich, job_id, "", True))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/literature/export")
+async def literature_export():
+    """整库引文导出：BibTeX / RIS / GB/T 7714 全量文本（批O 2026-08-16）。"""
+    try:
+        from memomics.bio_tools.literature_library import export_citations
+        import json as _json
+        return _json.loads(export_citations())
     except Exception as e:
         return JSONResponse({"error": str(e)[:300]}, status_code=500)
 
