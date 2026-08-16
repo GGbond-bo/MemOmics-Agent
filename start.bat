@@ -102,6 +102,8 @@ echo [CHECK] Python: "%PYTHON%"
 
 REM --- 环境校准 + R 检测 ---
 "%PYTHON%" "%~dp0scripts\validate_env.py" >nul 2>&1
+REM 旧安装自愈：文件级修复迁移（幂等，失败不影响启动）
+"%PYTHON%" "%~dp0scripts\apply_fix_bundle.py" >nul 2>&1
 "%PYTHON%" "%~dp0scripts\validate_env.py" --r-bin > "%TEMP%\memomics_rbin.txt" 2>nul
 for /f "usebackq delims=" %%r in ("%TEMP%\memomics_rbin.txt") do set "R_BIN=%%r"
 del "%TEMP%\memomics_rbin.txt" >nul 2>&1

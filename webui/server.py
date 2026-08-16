@@ -263,6 +263,24 @@ async def _start_process_completion_poller():
 
 
 @app.on_event("startup")
+async def _apply_fix_bundle_startup():
+    """旧安装自愈（2026-08-16）：启动时应用文件级修复（config 限额等）。
+
+    Linux/macOS/Cluster 的 launcher 直接跑 server.py（不走 start.bat），
+    这里兜底执行幂等迁移；代码级修复仍需换新包文件，old 时打警告日志。
+    """
+    try:
+        from memomics.fix_bundle import apply_fix_bundle, BUNDLE
+        _rep = apply_fix_bundle(HERMES_HOME_DIR)
+        if not _rep.get("up_to_date"):
+            logger.info("[FixBundle] 已应用文件级迁移: %s", _rep)
+            print(f"[FixBundle] 已应用文件级迁移: {_rep}", flush=True)
+        print(f"[FixBundle] 当前修复级别: {BUNDLE}", flush=True)
+    except Exception as e:
+        logger.warning(f"[FixBundle] 启动迁移失败(不阻塞): {e}")
+
+
+@app.on_event("startup")
 async def _start_agent_stall_watchdog():
     """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
 
@@ -5312,8 +5330,12 @@ async def resource_status():
 
 @app.get("/api/version")
 async def api_version():
-    """前端版本标识：git commit + server 启动时间。
-    用于排查"刷新没用"——footer 显示版本，用户/开发者一眼确认加载的是新代码。"""
+    """前端版本标识：git commit + server 启动时间 + 修复包级别。
+
+    修复包（fix_bundle）：打包分发的安装没有 .git（rev=unknown），
+    用 hermes_home/.fix_bundle 标记当前修复级别；outdated=True 表示
+    文件级修复已落后（旧安装/部分覆盖更新），WebUI 可据此提示升级。
+    """
     import subprocess as _sp
     rev = "unknown"
     try:
@@ -5323,7 +5345,18 @@ async def api_version():
             rev = _r.stdout.strip()
     except Exception:
         pass
-    return {"version": rev, "started": _SERVER_STARTED_STR}
+    # 2026-08-16: 修复包级别（启动事件已自动应用文件级迁移，此处只报告）
+    _level = "none"
+    _outdated = False
+    try:
+        from memomics.fix_bundle import BUNDLE as _BUNDLE, fix_bundle_level as _level_fn
+        _level = _level_fn(HERMES_HOME_DIR) or "none"
+        _outdated = _level < _BUNDLE
+        _bundle = _BUNDLE
+    except Exception:
+        _bundle = ""
+    return {"version": rev, "started": _SERVER_STARTED_STR,
+            "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated}
 
 
 @app.get("/api/health")

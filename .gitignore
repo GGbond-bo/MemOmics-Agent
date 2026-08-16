@@ -143,3 +143,5 @@ hermes_home/weixin_account.json
 *.bak-*
 .venv_deps_ok.txt
 .venv_vision_ok.txt
+
+hermes_home/.fix_bundle
