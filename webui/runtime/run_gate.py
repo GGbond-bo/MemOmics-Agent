@@ -23,6 +23,9 @@ logger = logging.getLogger("memomics.run_gate")
 
 STATE_FILE = ".task_state.json"
 VALID_STATES = ("pending", "running", "done", "blocked", "cancelled")
+# 任务类型（2026-08-16）：normal=普通任务（画图/轻量分析，默认）；
+# long_running=长任务管线（后台进程/心跳监督）。运行时证据自动升级，不降级。
+VALID_TASK_CLASSES = ("normal", "long_running")
 
 # 判"用户显式继续/新任务"的最小词表（命中才重置退役状态）
 RESET_HINT_WORDS = ("继续", "接着", "下一步", "新任务", "换一个", "重跑", "重新",
@@ -35,7 +38,7 @@ def _state_path(results_dir: str) -> str:
 
 def load_state(results_dir: str) -> dict:
     """读取落盘状态；文件缺失/损坏返回 {'state': 'pending'}（安全默认：视为新任务）。"""
-    default = {"state": "pending", "reason": "", "updated_at": 0.0}
+    default = {"state": "pending", "reason": "", "updated_at": 0.0, "task_class": "normal"}
     if not results_dir:
         return default
     try:
@@ -43,6 +46,8 @@ def load_state(results_dir: str) -> dict:
             data = json.load(f)
         if data.get("state") not in VALID_STATES:
             return default
+        if data.get("task_class") not in VALID_TASK_CLASSES:
+            data["task_class"] = "normal"
         return data
     except FileNotFoundError:
         return default
@@ -59,7 +64,10 @@ def save_state(results_dir: str, state: str, reason: str = "") -> bool:
         return False
     try:
         os.makedirs(results_dir, exist_ok=True)
-        payload = {"state": state, "reason": reason, "updated_at": time.time()}
+        # 保留任务类型（save_state 不得清掉 long_running 标记）
+        _existing = load_state(results_dir)
+        payload = {"state": state, "reason": reason, "updated_at": time.time(),
+                   "task_class": _existing.get("task_class", "normal")}
         tmp = _state_path(results_dir) + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
@@ -96,6 +104,33 @@ def is_done(results_dir: str) -> bool:
 def is_retired(results_dir: str) -> bool:
     """任务是否已退役（完成或放弃）—— 退役状态不得污染新任务。"""
     return load_state(results_dir).get("state") in ("done", "cancelled")
+
+
+def get_task_class(results_dir: str) -> str:
+    """当前任务类型：normal（默认，画图/轻量分析）| long_running（长任务管线）。"""
+    return load_state(results_dir).get("task_class", "normal")
+
+
+def set_task_class(results_dir: str, task_class: str) -> bool:
+    """标记任务类型（运行时证据升级 long_running），不改变 state/reason。"""
+    if task_class not in VALID_TASK_CLASSES or not results_dir:
+        return False
+    try:
+        _st = load_state(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+        payload = {"state": _st.get("state", "pending"),
+                   "reason": _st.get("reason", ""),
+                   "updated_at": time.time(),
+                   "task_class": task_class}
+        tmp = _state_path(results_dir) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, _state_path(results_dir))
+        logger.info("[RunGate] task_class -> %s (%s)", task_class, os.path.basename(results_dir))
+        return True
+    except Exception:
+        logger.warning("[RunGate] 写入 task_class 失败", exc_info=True)
+        return False
 
 
 def user_restarts(results_dir: str, user_text: str) -> bool:

@@ -175,11 +175,23 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   - **区分度分析（CV）**：每打分跨亚群的 `CV = sd/mean`——纤维类型打分 CV 高（TypeI 0.36/TypeII 0.36/TypeIIx 0.29，**区分亚群**）；状态打分 CV 极低（Stress 0.04/Inflam 0.03/TNFA 0.05/SenMayo 0.07，**亚群间几乎一致**）→ 结论：纤维类型打分组间差异讲\"组成\"，状态打分（应激/炎症/衰老）是\"组别敏感、亚群不敏感\"的信号，解读时分开
 - **关键打分箱线图**：挑显著打分（如 IIa/OxPhos/Type I/Type II/Insulin/Sarcomeric）出 6 组箱线，p 值标注从打分差异 CSV 读（不重算），与比例图同风格
 
+### 打分分层放置策略（22 打分怎么摆，2026-08-15 用户问"你觉得我们该怎么放这个打分呢？"）
+
+用户拿到 22 打分问"怎么放"——**推荐拆两层放，不要 22 个全堆一张图**：
+
+- **主图 = 18 程序/通路打分**（SenMayo/Stress/TNFA/Inflammatory/Glycolysis/FAO/Denervation/AMPK_PGC1a/Autophagy/Adipogenesis/mTORC1/Fibrosis 等）：打分 × 亚群热图（行=打分、列=亚群），颜色 = 6 组均值或五效应 Cohen's d——这才是要讲的生物学故事（衰老-炎症轴 vs 代谢-结构轴）
+- **附图/验证 = 4 身份打分（scoreI/II/IIa/IIx）单独一张小图**：作用是验证注释对不对（IIX 亚群应 scoreIIx 高），不回答生物学问题，放进主图会跟亚群定义自说自话（循环论证）
+- **纤维漂移（I↔IIa↔IIx）不靠打分讲**：用比例箱线图（已定稿那套）讲方向性——打分热图讲不了漂移方向
+- 一句话原则：**身份打分 = "证明亚群是真的"（验证层）；程序打分 = "亚群在衰老/运动下怎么变"（故事层）**——两类问题不同，混一张图读者抓不到重点
+- 备选（用户要一张大图全包含）：身份打分做成主热图**顶部的行注释条**，18 程序做主区——信息密度高但视觉仍分层
+- ⛔ **用户问方案/看法（"你觉得怎么放""你怎么看"）= discussion 模式，直接给建议，不要先跑一堆工具验证**——身份 vs 程序分层是既定结论（本 skill + memory 已有），除非建议依赖未确认的数据细节（如打分列名、亚群列表），否则凭上下文直接答；乱调 execute_python/search_files 会被系统回合保护拦截（本会话实测，纯咨询问题撞 100 次回合保护）
+- **⛔ 唤醒/状态检查上下文中的"怎么放"决策交付模板（2026-08-15 唤醒 #16 实测）**：Phase 1 已完成、用户未决问题是"肌肉身份怎么放打分"时，唤醒回复 = ① 三源核对（task_plan Phase 状态 + figures 产出物 + process list 后台）② 确认 Phase complete、后台已关 ③ **直接呈现分层推荐**（主图=18 程序打分×亚群热图，颜色=五效应 d；附图=4 身份打分小图作验证层；备选=身份做顶部行注释条）④ 列出 2-3 个候选选项让用户选——**不创建新 task_plan、不自动开跑、不重复验证已确认的数据**。用户当时给的选项集：按亚群拆分热图（打分×亚群×组别）/ 打分矩阵旁挂身份条 / 只保留整体热图——都映射到上述分层方案，未来遇到直接给推荐分层而不是再列一遍选项
+
 ### 打分解读生物学坑
 - **scoreSenMayo 在肌纤维里衰老反而↓（FDR=0.007）**——SenMayo 是"衰老细胞"打分，肌纤维里下降不代表更年轻，更可能是衰老肌纤维丢失年轻表达谱但未进入典型衰老细胞态（或 SenMayo 主要在免疫/基质细胞高）。**肌纤维里谨慎解读，别写成"肌肉更年轻"**
 - 衰老轴（Y vs O）与糖尿病轴（O vs OD）是不同模式：衰老 = IIa+OxPhos+Sarcomeric 全面↓；糖尿病 = Type I 程序↓ + Type II 程序↑（向糖酵解倾斜）——分开讲
 - 运动唯一显著信号：老年运动回升 IIa 程序（FDR=0.031），这是"运动逆转"的关键证据点
-- **基因集评估要点**（去神经化等自定义基因集）：① 检查方向相反基因（如 SCN4A 去神经时**下调**，与 SCN5A 上调共存会互相抵消）② 补经典 marker（去神经必加 **NCAM1**，Lai 2024 Nature 用它定义去神经纤维）③ 查与已有打分重叠（Atrophy/RegMyon/Sarcomeric 重叠基因 → 共线性，不能都讲）④ 缺哪类打分按研究问题补齐（骨骼肌衰老+糖尿病运动最少要补：Glycolysis 与 OxPhos 配对、AMPK-PGC1α 运动开关、Autophagy、Adipogenesis、Fibrosis）——详见 `references/mf-score-analysis.md` 与 `references/geneset-supplement-2026-08.md`
+- **基因集评估要点**（去神经化等自定义基因集）：① 检查方向相反基因（如 SCN4A 去神经时**下调**，与 SCN5A 上调共存会互相抵消）② 补经典 marker（去神经必加 **NCAM1**，Lai 2024 Nature 用它定义去神经纤维）③ 查与已有打分重叠（Atrophy/RegMyon/Sarcomeric 重叠基因 → 共线性，不能都讲）④ 缺哪类打分按研究问题补齐（骨骼肌衰老+糖尿病运动最少要补：Glycolysis 与 OxPhos 配对、AMPK-PGC1α 运动开关、Autophagy、Adipogenesis、Fibrosis）⑤ **区分度/信息量审查：泛谱系身份基因集在谱系同质子集中零区分度（2026-08-15 用户问"肌肉身份要放在这上面吗"）**——MF 子集数据（全部是肌纤维）里泛肌肉身份基因（MYH/ACTA1/TNNT/TPM）每群高表达 → 行内 z-score 后整行均色、无信息，不要为"显得完整"加恒定行。判断标准 = 该基因集在子集内部是否有跨亚群/跨组差异。身份信息已由亚型特异打分覆盖（scoreI/II/IIa/IIx = Fiber Identity 组）；CNS 惯例 = 身份基因走 UMAP FeaturePlot/marker 表佐证注释（如 MYH7/MYH2/MYH1），不塞进通路/效应打分热图——详见 `references/mf-score-analysis.md` 与 `references/geneset-supplement-2026-08.md`
 - **⛔ 基因集语义污染判断（2026-08-14 实测 Denervation 案例）**：**任何打分出现"全亚群 × 多效应轴"一致方向的反直觉模式（如去神经打分运动后反而全亚群升高），先怀疑基因集语义污染而非生物学真信号**。诊断三步：① 出 **6 组原始 AUC 均值热图（不做效应、不做 z-score）**——区分"基线本来就高" vs "某组暴增"（实测 Denervation：Y_Pre 0.023 → O_Post 0.065 翻倍 = 运动后暴增而非基线高）② 查基因集构成与已有程序重叠（Denervation 11 基因中 **MYOG/RUNX1/NCAM1/MYH8 也是 RegMyon 再生核心标志**——运动诱导肌核再生被误捕为"去神经"，属假信号）③ 一个基因可属于多个生物学程序，基因集打分无法区分，必要时剔除重叠基因重算或正文注明局限。④ **用户质疑"你是不是算错了"→ 手动重算 + 展示原始均值表，并解释 Cohen's d 对低基线打分的放大效应**（见下方专项）。⑤ **用户采纳剔除重叠基因方案（2026-08-14）**：用户主动提议 Denervation 基因集改为 **8 基因** = CHRNA1/CHRNG/CHRND/SCN5A/KCNMB1/NCAM1/NGFR + RUNX1，**去掉 MYOG/MYH8/GAP43**。**⛔ 重叠基因 ≠ 一律剔除——逐基因查文献（2026-08-14 用户当场纠正 Agent 的倾向）**：用户说"RUNX1 也算上吧，我观察到它确实可能跟去神经有关"——这是对的，**RUNX1 有硬核去神经文献**：Zhu et al. 1994 MCB (PMID 7969143, AML1 受神经支配调控) + Wang et al. 2005 Genes Dev (PMID 16024660, Runx1 去神经后诱导、防萎缩)。所以只剔除**无去神经特异性的纯再生/施万标志**（MYH8=发育型肌球蛋白、MYOG=肌生成 TF、GAP43=施万细胞），**RUNX1 保留**（去神经应答 TF + 再生必需，双面基因，生物学上本就交织）。污染诊断的正确执行 = 先查每个重叠基因的单基因文献再决定去留，不是机械剔除。更新 `pathway_score_CLEAN.xlsx`（SuppTable3 宽表，Class/Signature/Annoation/Genes 四列 + 基因逐列展开）时按用户版本执行，并按 Class 分类整理（AChR 亚基 CHRNA1/CHRNG/CHRND | 离子通道 SCN5A/KCNMB1 | 粘附/神经营养受体 NCAM1/NGFR | 转录因子 RUNX1）；来源三篇：Covault & Sanes 1985 PNAS (PMID 3892537) / Tang et al. 2009 MBC (PMID 19109424) / Lai et al. 2024 Nature (PMID 38649488)。⑥ **净化后重算对比（2026-08-14 用户重跑验证）**：用户用 8 基因重跑 AUCell → 运动轴效应**回落但未消失**（ExOld +1.03→+0.96、ExT2D +0.82→+0.80），Aging 反而略升（+0.59→+0.73）= 剩余 8 基因本身参与 NMJ 重塑，**预期管理：净化 ≠ 运动轴归零**；T2D 轴仍无信号（d≈0）。详见 `references/denervation-geneset-contamination.md`
 - **⛔ 效应计算被质疑时的重算验证流程 + Cohen's d 低基线放大效应（2026-08-14 实测，用户问"你有没有算错"）**：
   - 场景：效应热图显示 Denervation 全亚群全效应正，但 6 组原始打分热图显示只有 SMF 绝对分高——用户质疑"是不是算错了"。
@@ -221,6 +233,30 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 3. **用真实数据验证符号**：从 `effect5_d_table.csv` 抽一个生物学上方向明确的行（如 OxPhos 衰老应下降 → Aging 轴 d 应为负）确认符号方向与预期一致，再答。若发现反直觉结果（如 SenMayo 在 Aging 轴 d 为负 = 老年组 SenMayo 反而低于年轻组，原始均值 Y_Pre=0.034 vs O_Pre=0.030）→ **如实报告反直觉点**并建议确认打分方向/样本构成，不要掩盖
 
 ⚠️ 与比例箱线图 Cliff's delta 方向约定（正值=后者高）**不同**：效应矩阵 Cohen's d 约定为**前项组（效应组）高=正=红**——两套约定并存，回答前必须看代码，不能套用箱线图约定。
+
+### ⛔ 效应量大 ≠ 统计显著：热图颜色深 ≠ 显著（2026-08-14 用户问"Fibrosis 这个RSS好像很显著啊"实测）
+
+**触发场景**：用户看按 Cohen's d 着色的效应矩阵/热图，某格颜色很深（尤其 RSS 这类特异亚群），说"XX 好像很显著啊"。
+
+**必须区分两个概念**：
+- **效应量（Cohen's d）**：热图颜色依据。d=0.79/0.82 属于"大效应"，视觉上红得非常抢眼
+- **统计显著性（raw p / FDR q）**：Welch t / Wilcoxon 检验结果。小样本（每组 4-6 个体）下 **d 大 ≠ p 显著**——个体间方差大，检验功效不足
+
+**Fibrosis×RSS 实测（5 格全不显著）**：
+| 轴 | Cohen's d | raw p | FDR q |
+|-----|----------|-------|-------|
+| RSS\|Aging | 0.79 | 0.193 | 0.457 |
+| RSS\|T2D | 0.68 | 0.456 | 0.639 |
+| RSS\|ExOld | 0.82 | 0.383 | 0.543 |
+
+**处理流程**：
+1. 用户质疑某格"显著" → **立即查 `effect_table.csv`（含 raw p）或 `effect5_q_table.csv`（FDR q）+ `effect5_d_table.csv`（d），不许凭热图颜色/记忆回答**（本次就是靠 read_file 三张表实锤：d 大但 p 全不显著）
+2. 如实说"你对了一半"：效应量确实大（颜色深的原因），但统计上不显著（raw p / FDR q 数值摆出来）
+3. 报告语言铁律：**只能写"呈升高趋势（d=0.79）"、"效应量大但未达显著"，绝不能写"显著"**——用户会拿 q 值对质
+4. 如果用户想支撑显著性：说明功效不足的根因（每组 n=4-6），可建议 paired 检验（个体配对提功效）或增加个体数；`gene_set_response_summary.csv` 的 n_sig_all=0 就是"整体无 FDR<0.05 格"的权威依据
+5. "删除哪个基因集"类筛选决策：d 大 + 方向一致 + 特异亚群集中 = 保留（故事线资产）；d 小 + 全轴无方向 = 可删。**筛选标准是"是否有特异信号"，不是"是否显著"**
+
+⚠️ 相关坑：`gene_set_response_summary.csv` 里"弱响应(慎删)"判定基于 FDR<0.05 格数=0，但该判定**不代表该基因集无生物学信号**（可能只是小样本检验不出）——引用该表下删除结论前先查特异亚群 d 值。
 
 ## Pitfalls
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
@@ -307,11 +343,27 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   **判断 PNG 是否真更新**：别只看文件大小/时间戳，用 vision_describe 看主色（热图区不应 60%+ 灰白 #e0e0e0）+ 裁剪底部 OCR 确认标签贴边。
   亚群标签离热图太远的正确参数 = 底部 45° 斜排 `y=-0.15`（不是 -1.9）。详见 `references/cns-effect-matrix-aucell.md` v5→v6 节。
 - **⛔ Fig7 打分×亚群热图必须转置（2026-08-14 用户明确：y轴是基因集名字，亚群是x轴）**：y=22 打分、x=10 亚群，不要默认行=亚群列=打分；行分组色带移左侧。
+- **⛔ type×亚群 六组分布热图标签布局（2026-08-15 用户三连纠："亚群在下面，type在上面，label又在图内了"）**：
+  出"6 组原始打分 × 10 亚群"分布热图（列=6type×10亚群=60，type 间间隙 1.2、亚群无间隙 CELL=1.0，行=22 打分 z-score）
+  时：**亚群标签必须在底部 45° 斜排、type 标签在顶部、所有 label 在图形外**。底部标签若进图内 =
+  画布底部留白不够 + y 坐标没同步下移：`SUB_H=5.0`（不是 3.2）+ 标签 `y=HEAD_H+n_rows*CELL+0.9`（不是 +0.25），
+  两者必须同步调，否则 `bbox_inches='tight'` 会把标签裁回图内（与 v6 tight_layout 坑同源）。脚本
+  `fig_type6_v8.py` 为最终可用版。详见 `references/cns-effect-matrix-aucell.md` v7→v8 节。
 - **⛔ matplotlib 逐格热图白色间隙根因 = CELL<1.0（2026-08-14 用户抓 小色块之间不要有白色间隙 且以 v1 为基准）**：
   用 `ax.add_patch(Rectangle((x,y), CELL, CELL, edgecolor=none))` 逐格画热图时，**CELL 必须 = 1.0 填满整个单元格**；
   手滑改成 0.94/0.82 会在相邻格子间留 0.06/0.18 白色缝隙（与 edgecolor 无关，edgecolor=none 也留缝），用户一眼看出与 v1 的差异。
   修复 = 格子宽/高 = 行/列间距 = 1.0 严格匹配。用户提列宽调小时改 figsize/xlim 收窄整体图宽，**不要用 CELL<1.0 制造更窄**（那会同时产生白缝）。
   行分组间隙最终值 = `ri += 0.2`（用户明确指定），面板间距 PANEL_GAP=1.8 保持不变。最终可用脚本 `fig_v7_final.py`。详见 `references/cns-effect-matrix-aucell.md` v6→v7 节。
+- **⛔ 六组分布热图（type×亚群）当用户说\"像 figure1 v7 那样\"→ 直接复用多面板横排架构（2026-08-15）**：
+  单张 60 列大矩阵（v8）反复调标签后用户拍板\"你能不能像 figure1 v7 那样呢？它的脚本是对的，出图也很好\"。
+  正确响应 = **从用户已认可图的脚本（fig_v7_final.py）复制改数据源，而不是继续在 v8 上打补丁**：6 个 type 各一个面板横排、
+  每面板 10 亚群列、亚群标签 45° 贴底 y=-0.15、type 标题顶部、行分组 0.2、无白缝 CELL=1.0、subplots_adjust 手动布局。
+  产物 `fig_type6_v9.py` → `Fig_type6_by_subcluster_v9.png`。用户确认\"很完美\"。
+- **⛔ \"真实 AUCell 分数\"诉求 → 别卡死在窄区间，默认还是 z-score（2026-08-15）**：
+  用户要\"真实的 AUCell 分数\"时若实现为 `TwoSlopeNorm(vmin=0, vcenter=0.05, vmax=0.20)` 会被打回（\"你把值卡死在0.2,其他的怎么办呢？还是z-score吧\"）——
+  AUCell 绝对分集中在 0-0.2，vmax=0.2 把绝大多数格子压到同色丢信息。要么全 0-1/数据驱动 max 映射，要么（用户终态）回到行内 z-score。
+  **z-score 仍是本类热图默认**；回 z-score 要同步改数据层 + 颜色层（TwoSlopeNorm(-2,0,2) + colorbar 刻度 [-2,-1,0,1,2] + 标签 row z-score）。
+- **⛔ pandas MultiIndex × z-score 两大坑 + numpy 层修复（2026-08-15）**：① `apply(lambda r: zscore(r), axis=1)` 把 DataFrame 变 Series（scipy zscore 返回 ndarray）→ MultiIndex 列丢失 → `Z.loc[name,(tp,sub)]` 报 `IndexingError: Too many indexers`；② `(Z_raw - Z_raw.mean(axis=1))` 报 `cannot join with no overlapping index names`（MultiIndex 列与 Series 广播）。**✅ 修复 = numpy 层向量化**：`Z=Z_raw.copy(); Z[:]=(Z_raw.values - Z_raw.values.mean(axis=1,keepdims=True)) / Z_raw.values.std(axis=1,ddof=0,keepdims=True)`——`.values` 取底层数组运算再写回，MultiIndex 完整保留。详见 `references/cns-effect-matrix-aucell.md` v8→v9 节。
 
 ## 用户上传图识别（2026-08-14 实测）
 - 用户上传项目产出图（如 Fig1_five_effects_matrix PNG）问"能识别这个图吗" → **不要只凭肉眼描述**，先 `vision_describe(image_path)` 拿 OCR + 元素检测 + ASCII 亮度图事实清单，再结合项目上下文（本 skill 的图格式约定）回答
@@ -323,4 +375,4 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
-- `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现 + **五效应扩展版 + 颜色语义问答三步核实 + v5→v6 定稿参数（tight_layout/add_axes 坑、亚群标签 y=-0.15、Fig7 转置）**。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图" / "PNG没变PDF对了"
+- `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现 + **五效应扩展版 + 颜色语义问答三步核实 + v5→v6 定稿参数（tight_layout/add_axes 坑、亚群标签 y=-0.15、Fig7 转置）+ v6→v7 无白缝 CELL=1.0 + v7→v8 六组分布热图标签布局 + v8→v9 多面板重构（像 fig1 v7 那样）+ 真实分数 vs z-score 决策 + pandas MultiIndex×zscore numpy 层修复**。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图" / "PNG没变PDF对了"

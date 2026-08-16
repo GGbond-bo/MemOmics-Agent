@@ -278,21 +278,65 @@ async def _start_agent_stall_watchdog():
                 agent_ref = s.get("running_agent")
                 if not agent_ref:
                     continue
-                # 2026-08-15: 心跳/监控进度不再喂活 watchdog — 模型挂起时 delta/reasoning/
-                # 工具事件都不更新 _turn_activity_ts，5 分钟即可自动中断恢复
+                # 2026-08-16 任务进程采样：每 tick 采样本会话内核/后台进程（窗口 300s），
+                # 供"任务在算 vs 真卡死"判定
+                _sample_task_procs(s)
+                _live = str(s.get("_live_tool") or "").strip()
                 _act = s.get("_turn_activity_ts")
                 last_ts = _act if _act else (s.get("_last_event_ts") or now)
-                if now - last_ts > 300:  # 5 分钟无任何事件输出
-                    try:
-                        if hasattr(agent_ref, "interrupt"):
-                            agent_ref.interrupt()
-                    except Exception:
-                        pass
-                    try:
-                        _session_emit(s, {"type": "error", "content": "Agent 长时间无响应（5 分钟无输出），已自动中断。可能是模型网关连接挂起，请重试或切换模型。", "session_id": sid})
-                    except Exception:
-                        pass
-                    _clear_session_running(sid)
+                if now - last_ts <= 300:
+                    continue  # 5 分钟内有过事件输出，无需干预
+                # ── 工具在飞：用进程级证据（CPU/IO）区分"在算"与"卡死" ──
+                if _live:
+                    _verdict, _info = _task_liveness(s)
+                    if _verdict == "working":
+                        # 任务在推进（CPU/IO 在动）→ 不中断
+                        if now - s.get("_stall_notice_last", 0) > 300:
+                            s["_stall_notice_last"] = now
+                            _session_emit(s, {"type": "notice", "content": f"⏳ {_info}（模型无输出但任务在推进，不中断）", "session_id": sid})
+                        _since = s.get("_live_tool_ts") or 0
+                        if _since and (now - _since) > 1800 and not s.get("_live_tool_warned"):
+                            s["_live_tool_warned"] = True
+                            _session_emit(s, {"type": "notice", "content": f"⏳ 工具 {_live} 已运行超过 30 分钟（{_info}），仍在推进，请耐心等待。", "session_id": sid})
+                        continue
+                    if _verdict == "frozen":
+                        # 进程存在但 CPU/IO 完全冻结（死锁/挂起）→ 唤醒 AI 诊断解决
+                        s["_stall_diag"] = (
+                            f"⚠️ [任务卡死诊断] {_info}。请立即调查：\n"
+                            "1) read_file 读任务日志尾部（找 error/traceback/停在哪一步）\n"
+                            "2) terminal 查该进程状态（Windows: tasklist /FI \"PID eq <pid>\"；Linux: ps -p <pid> -o pid,pcpu,rss,stat）\n"
+                            "3) 判断原因（死锁/内存耗尽/数据问题）后修复并重跑\n"
+                            "4) 确认卡死可强杀该 PID（Windows: taskkill /PID <pid> /F；Linux: kill -9 <pid>）——"
+                            "卡住的旧回合会自动解绑，kernel 下次调用自动重建\n"
+                            "不要直接放弃，找出原因继续解决。"
+                        )
+                        s["_urgent_wakeup"] = True
+                        s["_force_tool_check"] = True
+                        try:
+                            if hasattr(agent_ref, "interrupt"):
+                                agent_ref.interrupt()
+                        except Exception:
+                            pass
+                        _session_emit(s, {"type": "error", "content": f"⚠️ {_info}。已唤醒 Agent 诊断处理（不直接放弃）。", "session_id": sid})
+                        _clear_session_running(sid)
+                        continue
+                    # insufficient / no_task：无进程证据 → 工具自身超时兜底 + 长工具提醒
+                    _since = s.get("_live_tool_ts") or 0
+                    if _since and (now - _since) > 1800 and not s.get("_live_tool_warned"):
+                        s["_live_tool_warned"] = True
+                        _session_emit(s, {"type": "notice", "content": f"⏳ 工具 {_live} 已运行超过 30 分钟且无进程证据（{_info}），如疑似卡死请手动停止。", "session_id": sid})
+                    continue
+                # ── 无工具在飞 + 5 分钟无事件 = 模型网关挂起（原逻辑） ──
+                try:
+                    if hasattr(agent_ref, "interrupt"):
+                        agent_ref.interrupt()
+                except Exception:
+                    pass
+                try:
+                    _session_emit(s, {"type": "error", "content": "Agent 长时间无响应（5 分钟无输出），已自动中断。可能是模型网关连接挂起，请重试或切换模型。", "session_id": sid})
+                except Exception:
+                    pass
+                _clear_session_running(sid)
     try:
         asyncio.create_task(_watch())
         logger.info("[MemOmics] Agent stall watchdog started — 5min no-event auto-interrupt")
@@ -461,11 +505,14 @@ def _is_code_destroy(code: str) -> bool:
 
 
 def _is_launch_command(cmd_str: str) -> bool:
-    """检测终端命令是否为启动长任务的命令。"""
+    """检测终端命令是否为启动长任务管线的命令。
+
+    2026-08-16 收窄（memomics-2274ab75 教训）：去掉 "rscript"/"python -c"——
+    画图/普通脚本属正常任务，不触发长任务启动验证（verify_launch）。
+    """
     c = str(cmd_str).lower()
     keywords = ["cellbender", "subprocess.popen", "popen", "run_cellbender",
-                "run_serial", "run_pipeline", "python -c", "python3 -c",
-                "rscript", "no_window", "create_no_window"]
+                "run_serial", "run_pipeline", "no_window", "create_no_window"]
     return any(k in c for k in keywords)
 
 
@@ -660,6 +707,28 @@ def _auto_create_task_plan(session, plan_path):
     # task_plan.md 写入 results_dir（此时已对齐到用户指定目录）
     plan_path = os.path.join(session["results_dir"], "task_plan.md")
 
+    # 完成契约兼容（2026-08-16，memomics-2274ab75 案例）：CellBender 专用验算项
+    # 只在真正的 CellBender 任务预置。否则默认模板的未勾选框会卡死非 CellBender
+    # 任务的自动归档（_completion_contract_check 要求主线区无 "- [ ]"），
+    # 造成"任务已终态但持续唤醒"死循环。
+    _is_cellbender = "cellbender" in goal.lower()
+    _checklist_block = (
+        """每个样本跑完后自动验证：
+- [ ] output_filtered.h5 存在且 > 10MB
+- [ ] 无 OOM / traceback 在日志尾部
+- [ ] ptrepack 成功（如适用）
+
+Phase 全部完成后：
+- [ ] 产出文件数 = 预期数
+- [ ] pipeline_status.json → completed"""
+        if _is_cellbender
+        else """（待 LLM 根据任务填写具体验证项，完成一项勾选一项）"""
+    )
+    # 2026-08-16 任务类型：默认普通任务——画图/轻量分析前台执行即可，
+    # 不要诱导 agent 走后台运行+心跳（那是长任务管线才需要的设施）。
+    _phase1_hint = ("直接开始执行（加载 skill → 写脚本 → 后台运行 → 部署心跳）"
+                    if _is_cellbender
+                    else "直接开始执行（加载 skill → 写脚本 → 前台运行并检查产出）")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     rd = session.get("results_dir", "")
     content = f"""# Task Plan: {goal}
@@ -673,7 +742,7 @@ Phase 1
 ## Phases
 
 ### Phase 1: 执行用户任务
-- [ ] 直接开始执行（加载 skill → 写脚本 → 后台运行 → 部署心跳）
+- [ ] {_phase1_hint}
 **Status:** in_progress
 
 ## Runtime State
@@ -685,14 +754,7 @@ Phase 1
 | started_at | {now} |
 
 ## Verification Checklist
-每个样本跑完后自动验证：
-- [ ] output_filtered.h5 存在且 > 10MB
-- [ ] 无 OOM / traceback 在日志尾部
-- [ ] ptrepack 成功（如适用）
-
-Phase 全部完成后：
-- [ ] 产出文件数 = 预期数
-- [ ] pipeline_status.json → completed
+{_checklist_block}
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
@@ -899,17 +961,40 @@ def _contract_output_paths(plan_text: str, results_dir: str):
     return _abs, _rel
 
 
-def _completion_contract_check(plan_main_text: str, results_dir: str) -> bool:
+def _strip_template_checklist(text: str) -> str:
+    """去掉模板自动生成的「## Verification Checklist」段。
+
+    模板遗留勾选框（output_filtered.h5/ptrepack 等 CellBender 验算项）与
+    当前任务无关，不应卡死完成契约/活跃判定（memomics-2274ab75 案例：
+    画图任务被模板未勾选框卡住 35 小时持续唤醒）。
+    """
+    if not text:
+        return text
+    _i = text.find("## Verification Checklist")
+    if _i < 0:
+        return text
+    _j = text.find("\n## ", _i + 1)
+    if _j >= 0:
+        return text[:_i] + text[_j:]
+    return text[:_i]
+
+
+def _completion_contract_check(plan_main_text: str, results_dir: str,
+                               skip_unchecked: bool = False) -> bool:
     """P0-2(2026-08-13) 完成契约：提交即校验。
 
-    ① 主线区不得有未勾选复选框（- [ ]）；
+    ① 主线区不得有未勾选复选框（- [ ]）——模板 Verification Checklist 段
+       除外（2026-08-16 修复）；普通任务且外部无活跃工作时可整体跳过 ①
+       （确定性证据优先于勾选框）。
     ② 主线区声明的产出文件（E:/ 绝对路径或 data/、results/、output/ 相对路径）
        必须存在且非空。
     任一不满足 → False（词法"完成"不算数，继续自检，不归档）。
     """
     try:
-        if re.search(r"-\s*\[ \]", plan_main_text):
-            return False
+        if not skip_unchecked:
+            _core = _strip_template_checklist(plan_main_text)
+            if re.search(r"-\s*\[ \]", _core):
+                return False
         _abs, _rel = _contract_output_paths(plan_main_text, results_dir)
         for _p in _abs:
             _fp = _p.replace("\\", "/").strip()
@@ -945,15 +1030,17 @@ def _task_plan_active(rd):
         "等待用户指示", "COMPLETE", "ALL DONE", "Status: completed",
         "## 完成情况", "任务已完成",
     ]
+    # 2026-08-16: 勾选框判定剔除模板 Verification Checklist 段
+    _core = _strip_template_checklist(content)
     for _m in _done_marks:
         if _m in content:
             # P0-2(2026-08-13): 词法完成标记命中仍需契约校验——存在未勾选复选框
             # → 任务实际未完成，不算完成（继续判定，避免重启后丢自检）
-            if "- [ ]" in content:
+            if "- [ ]" in _core:
                 break
             return False
     # 所有任务项都已勾选（无未完成 checkbox）→ 完成
-    if "[" in content and "- [ ]" not in content and ("- [x]" in content or "- [X]" in content):
+    if "[" in _core and "- [ ]" not in _core and ("- [x]" in _core or "- [X]" in _core):
         return False
     return True
 
@@ -1131,6 +1218,132 @@ def _results_dir_changed_since(session, ts: float) -> bool:
     return False
 
 
+def _task_class(results_dir: str) -> str:
+    """当前任务类型：normal（默认，画图/轻量分析）| long_running（长任务管线）。
+
+    运行时证据（后台进程/管线启动/cron 心跳）自动升级为 long_running。
+    """
+    if not results_dir:
+        return "normal"
+    try:
+        from webui.runtime.run_gate import get_task_class
+        return get_task_class(results_dir)
+    except Exception:
+        return "normal"
+
+
+def _mark_task_long_running(session) -> None:
+    """运行时证据 → 任务类型升级 long_running（幂等，不改变 state/reason）。"""
+    try:
+        from webui.runtime.run_gate import get_task_class, set_task_class
+        _rd = session.get("results_dir", "") or ""
+        if _rd and get_task_class(_rd) != "long_running":
+            set_task_class(_rd, "long_running")
+            logger.info("[TaskClass] session %s: normal -> long_running (%s)",
+                        str(session.get("id", ""))[:12], os.path.basename(_rd))
+    except Exception:
+        pass
+
+
+# ── 任务进程证据（2026-08-16）：CPU/内存/IO 采样 + 卡死判定 ─────────────────
+_TRACKED_PROC_HIST_WINDOW = 300  # 与 stall watchdog 的 5 分钟无事件阈值对齐
+
+
+def _tracked_process_pids(session, live_tool: str = ""):
+    """本会话当前任务的进程 PID 集合（按在飞工具类型收敛，避免误采无关进程）。
+
+    execute_r/execute_python/execute_code → 持久内核 worker（R/Python）；
+    terminal → 本会话注册的后台进程；其余工具 → 空（无进程证据，工具自身超时兜底）。
+    """
+    _pids = set()
+    if live_tool in ("execute_r", "execute_python", "execute_code"):
+        try:
+            from memomics.bio_tools.execute_r import _session_task_id
+            _task = _session_task_id(session.get("id") or "")
+        except Exception:
+            _task = session.get("id") or ""
+        try:
+            from tools.persistent_kernel import KERNEL_POOL
+            for _w in KERNEL_POOL.worker_snapshot(task_id=_task):
+                if _w.get("pid"):
+                    _pids.add(int(_w["pid"]))
+        except Exception:
+            pass
+    if live_tool == "terminal":
+        try:
+            from tools.process_registry import process_registry
+            for _p in process_registry.list_sessions(session_key=session.get("id")):
+                _pid = _p.get("pid")
+                if _pid:
+                    try:
+                        _pids.add(int(_pid))
+                    except (TypeError, ValueError):
+                        pass
+        except Exception:
+            pass
+    return _pids
+
+
+def _sample_task_procs(session) -> None:
+    """watchdog 每 tick 采样一次本会话任务进程（窗口 300s，供卡死判定）。"""
+    try:
+        from memomics.proc_stats import sample_processes
+    except Exception:
+        return
+    _now = time.time()
+    _hist = session.setdefault("_proc_hist", [])
+    _pids = _tracked_process_pids(session, str(session.get("_live_tool") or "").strip())
+    _samples = [
+        (s["pid"], s["cpu_seconds"], s["io_read"] + s["io_write"], s["rss_bytes"])
+        for s in sample_processes(_pids)
+    ]
+    _hist.append((_now, _samples))
+    while _hist and _now - _hist[0][0] > _TRACKED_PROC_HIST_WINDOW:
+        _hist.pop(0)
+    while len(_hist) > 32:  # 防无限增长
+        _hist.pop(0)
+
+
+def _task_liveness(session) -> tuple:
+    """区分"任务在算 / 真卡死 / 无任务"（进程级证据，2026-08-16）。
+
+    working      = 任一追踪进程窗口内 CPU 累计时间增长 > 0.2s 或 IO 字节增长
+                   （readRDS/大矩阵/训练都在推进）→ 不中断；
+    frozen       = 进程存在但窗口内 CPU/IO 全部冻结（死锁/挂起）→ 唤醒 AI 诊断；
+    no_task      = 没有可追踪进程（只剩模型在等网关）→ 网关挂起原逻辑。
+    返回 (verdict, info)；verdict 额外有 insufficient（采样不足，继续观察）。
+    """
+    _hist = session.get("_proc_hist", [])
+    _now = time.time()
+    _pids = _tracked_process_pids(session, str(session.get("_live_tool") or "").strip())
+    if not _pids:
+        return ("no_task", "无内核/后台进程可追踪")
+    if not _hist:
+        return ("insufficient", "无采样历史")
+    _last = _hist[-1][1]
+    if not _last:
+        return ("no_task", f"追踪进程已退出: {sorted(_pids)}")
+    if len(_hist) < 2:
+        return ("insufficient", "采样窗口不足，继续观察")
+    _cpu_delta = 0.0
+    _io_delta = 0
+    _rss_mb = 0.0
+    _fm = {pid: (cpu, io) for pid, cpu, io, rss in _hist[0][1]}
+    for _pid, _cpu, _io, _rss in _last:
+        _prev = _fm.get(_pid)
+        if _prev:
+            _cpu_delta = max(_cpu_delta, _cpu - _prev[0])
+            _io_delta = max(_io_delta, _io - _prev[1])
+        _rss_mb = max(_rss_mb, _rss / 1048576.0)
+    _window = int(_now - _hist[0][0])
+    if _cpu_delta > 0.2 or _io_delta > 0:
+        return ("working",
+                f"任务仍在计算：PID {sorted(_pids)} | 窗口 {_window}s 内 ΔCPU {_cpu_delta:.1f}s / "
+                f"ΔIO {_io_delta / 1048576.0:.1f}MB | RSS {_rss_mb:.0f}MB")
+    return ("frozen",
+            f"任务疑似卡死：PID {sorted(_pids)} | 窗口 {_window}s 内 CPU/IO 零变化 | RSS {_rss_mb:.0f}MB")
+
+
 def _schedule_self_check(session, agent, loop):
     """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
@@ -1180,14 +1393,21 @@ def _schedule_self_check(session, agent, loop):
                 # 2026-08-14 增强完成信号：不再只靠完成关键词（LLM 忘写就多唤醒烧 token），
                 # 三种信号任一命中即进入完成契约校验：
                 # 1) 完成关键词（旧逻辑） 2) 复选框全勾 3) 外部工作确实停了（无进程+无近期产出）
-                _has_done_word = any(m in _pt_lower for m in ("completed", "closed", "完成", "已停止", "done"))
-                _all_checked = ("- [x]" in _pt_lower or "- [X]" in _pt_lower) and "- [ ]" not in _pt_lower
+                # 2026-08-16 任务类型修复：复选框判定剔除模板 Verification Checklist 段
+                # （模板遗留项与任务无关，曾卡死画图类普通任务的自动归档）。
+                _main_core = _strip_template_checklist(_main)
+                _core_lower = _main_core.lower()
+                _has_done_word = any(m in _core_lower for m in ("completed", "closed", "完成", "已停止", "done"))
+                _all_checked = ("- [x]" in _core_lower or "- [X]" in _core_lower) and "- [ ]" not in _core_lower
                 _no_live_work = _session_no_live_work(session)
                 if _has_done_word or _all_checked or _no_live_work:
                     # P0-2(2026-08-13) 完成契约：提交即校验 — 复选框全勾 + 产出文件存在且非空。
                     # 契约未满足 → 不归档不 mark_done，继续自检（唤醒 agent 补齐）。
                     # 2026-08-14: urgent 唤醒在完成归档闸门处放行（紧急介入优先）。
-                    if not _completion_contract_check(_main, results_dir):
+                    # 2026-08-16: 普通任务且外部无活跃工作 = 确定性完成证据，
+                    # 勾选框不再拦（长任务仍走严格契约）。
+                    _skip_unchecked = _task_class(results_dir) == "normal" and _no_live_work
+                    if not _completion_contract_check(_main, results_dir, skip_unchecked=_skip_unchecked):
                         logger.info(f"[SelfCheck] session {session['id'][:12]}: 词法判定完成但完成契约未满足（未勾选复选框或产出文件缺失/为空）→ 继续自检")
                     elif not urgent:
                         try:
@@ -1332,6 +1552,10 @@ def _schedule_self_check(session, agent, loop):
                 )
             # 2026-08-14: 唤醒成功——重排计数清零
             s.pop("_wakeup_retry_n", None)
+            # 2026-08-16 任务卡死诊断：watchdog 冻结判定留下的诊断指令优先注入
+            _stall_diag = s.pop("_stall_diag", None)
+            if _stall_diag:
+                wake_msg = _stall_diag + "\n\n" + wake_msg
             _force_prefix = "⛔ 强制工具调用（系统要求）：本轮必须先调用工具实际执行，禁止纯文本回复！\n\n" if force_tool else ""
             s.setdefault("messages", []).append(
                 {"role": "system", "content": _force_prefix + wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
@@ -1446,7 +1670,14 @@ def _build_self_check_wake_history(session):
 
 
 async def _trigger_agent_turn(session, message):
-    """从服务端触发一轮 agent 对话（不等用户消息），5分钟超时"""
+    """从服务端触发一轮 agent 对话（不等用户消息）。
+
+    2026-08-16: 不再用 300s wait_for —— 长工具（大文件 readRDS/长计算）会被
+    误杀且 executor 线程继续跑成孤儿。回合生命周期交给 stall watchdog
+    （无工具在飞 5 分钟才中断）与工具自身超时（terminal 180s / kernel 1800s）兜底。
+    """
+    # 惰性加载兜底：自检唤醒也会读/写 session['messages']
+    _ensure_session_messages_loaded(session)
     agent = session.get("agent")
     if not agent:
         # 2026-08-14 P0: agent 为 None 时重建（会话恢复后 agent 可能被清理）
@@ -1471,6 +1702,8 @@ async def _trigger_agent_turn(session, message):
         session["_api_calls"] = 0
         session["_live_tool"] = ""
         session["_live_tool_ts"] = time.time()
+        session["_proc_hist"] = []  # 2026-08-16: 进程采样历史（回合级窗口）
+        session["_stall_notice_last"] = 0
         loop = asyncio.get_event_loop()
         def _run():
             # P1-13(2026-08-13): 自检唤醒 executor 线程内设置会话上下文（kernel 会话隔离）
@@ -1483,7 +1716,8 @@ async def _trigger_agent_turn(session, message):
             # 不带全量历史（67K input/次 → ~4K）
             _wake_history = _build_self_check_wake_history(session)
             return agent.run_conversation(_inject_anchors(session, message), conversation_history=_wake_history or None, task_id=session["id"])
-        result = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=300)
+        # 2026-08-16: 去 wait_for —— 让长工具自然跑完；网关挂起由 stall watchdog 中断
+        result = await loop.run_in_executor(None, _run)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
         session.setdefault("messages", []).append(
             {"role": "assistant", "content": final, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
@@ -3418,6 +3652,11 @@ def _create_session(title="新会话"):
         "reasoning_log": [],  # 思考文本按 turn 持久化（刷新/重连后可恢复）
         "_last_event_ts": time.time(),  # stall watchdog 用
         "ws_attached": True,  # 当前是否有 WebSocket 连接监听此会话
+        # 新会话本就为空，视为消息已加载（避免惰性加载误查 DB）
+        "_messages_loaded": True,
+        "_msg_count": 0,
+        "_first_msg": "",
+        "_last_msg": "",
     }
     # 结果目录延迟创建：仅在首次分析（scan_data/update_results_dir）时创建
     # 避免每次开新会话（即使只是聊天）都产生空目录
@@ -3494,13 +3733,11 @@ def _restore_single_session(sid):
                 continue
             if not sid.startswith("memomics-"):
                 continue
-            msgs = db.get_messages_as_conversation(sid) or []
+            msgs = []
+            # 惰性恢复：按需恢复单会话时也只取元数据，完整消息在 get_messages 时加载
             messages = []
-            for m in msgs:
-                role = m.get("role", "")
-                content = m.get("content", "")
-                if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content), "time": ""})
+            _msg_count = int(s.get("message_count") or 0)
+            _first_msg = str(s.get("preview") or "")
             persisted_cwd = ""
             try:
                 row = db._conn.execute("SELECT cwd FROM sessions WHERE id = ?", (sid,)).fetchone()
@@ -3535,7 +3772,7 @@ def _restore_single_session(sid):
             _mc, _mc_locked = _restore_session_model_config(sid, _current_model)
             session = {
                 "id": sid,
-                "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
+                "title": s.get("title") or (_first_msg[:30] if _first_msg else sid[:20]),
                 "title_source": _load_title_source(sid),
                 "created": created_str,
                 "last_active": active_str,
@@ -3554,6 +3791,11 @@ def _restore_single_session(sid):
                 "ws_attached": False,
                 "ws_ref": None,
                 "loop_ref": None,
+                # 惰性加载标记：完整消息尚未载入内存
+                "_messages_loaded": False,
+                "_msg_count": _msg_count,
+                "_first_msg": _first_msg,
+                "_last_msg": "",
             }
             _sessions[sid] = session
             if _mc_locked:
@@ -3573,14 +3815,11 @@ def _restore_one_persisted_session(db, s):
     # 只加载 memomics 开头的会话
     if not sid.startswith("memomics-"):
         return False
-    msgs = db.get_messages_as_conversation(sid) or []
-    # 转成 MemOmics 格式
+    # 惰性恢复：启动时只取元数据（message_count/preview），不加载全部消息。
+    # 完整消息在用户打开/继续会话时按需加载（见 _load_session_messages）。
+    _msg_count = int(s.get("message_count") or 0)
+    _first_msg = str(s.get("preview") or "")
     messages = []
-    for m in msgs:
-        role = m.get("role", "")
-        content = m.get("content", "")
-        if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": str(content), "time": ""})
     # 空会话也恢复（用户可能创建了但还没发消息）
     # 恢复 results_dir：优先从 state.db 的 cwd 字段读，没有就用 sid
     persisted_cwd = s.get("cwd") or ""
@@ -3625,7 +3864,7 @@ def _restore_one_persisted_session(db, s):
     _mc, _mc_locked = _restore_session_model_config(sid, _current_model)
     session = {
         "id": sid,
-        "title": s.get("title") or (messages[0]["content"][:30] if messages else sid[:20]),
+        "title": s.get("title") or (_first_msg[:30] if _first_msg else sid[:20]),
         "created": created_str,
         "last_active": active_str,
         "messages": messages,
@@ -3641,6 +3880,11 @@ def _restore_one_persisted_session(db, s):
         "ws_attached": False,
         "ws_ref": None,
         "loop_ref": None,
+        # 惰性加载标记：完整消息尚未载入内存
+        "_messages_loaded": False,
+        "_msg_count": _msg_count,
+        "_first_msg": _first_msg,
+        "_last_msg": "",
     }
     _sessions[sid] = session
     if _mc_locked:
@@ -3698,6 +3942,43 @@ def _persist_session_message(session, role, content):
         db.append_message(session["id"], role=role, content=content)
     except Exception:
         pass
+
+
+def _conv_messages_to_memomics(msgs):
+    """把 get_messages_as_conversation 的输出转成 MemOmics 显示格式。"""
+    out = []
+    for m in msgs or []:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if role in ("user", "assistant") and content:
+            out.append({"role": role, "content": str(content), "time": ""})
+    return out
+
+
+def _load_session_messages(sid, limit=None):
+    """从 state.db 惰性加载会话消息。
+
+    limit=None 加载全部；limit>0 只加载最近 limit 条（插入顺序）。
+    失败返回 []，绝不抛异常。"""
+    db = _get_session_db()
+    if not db:
+        return []
+    try:
+        return _conv_messages_to_memomics(db.get_messages_as_conversation(sid, limit=limit))
+    except Exception:
+        return []
+
+
+def _ensure_session_messages_loaded(session):
+    """确保会话的完整消息已在内存（供继续对话时的上下文构建/追加使用）。
+
+    只在尚未完整加载时从 state.db 加载一次；新会话（本就空）直接视为已加载。"""
+    if session.get("_messages_loaded"):
+        return session.get("messages", [])
+    sid = session.get("id", "")
+    session["messages"] = _load_session_messages(sid, limit=None)
+    session["_messages_loaded"] = True
+    return session["messages"]
 
 
 def _fmt_tool_args(tool_name, args):
@@ -3981,17 +4262,31 @@ async def list_sessions():
     ordered = sorted(_sessions.values(),
                      key=lambda s: (s.get("last_active", s["created"]), s.get("created", "")),
                      reverse=True)
-    return {"sessions": [{"id": s["id"], "title": s["title"], "created": s["created"],
-                          "bg_running": s.get("bg_running", False),
-                          "is_running": bool(s.get("running_agent") or s.get("running_task")),
-                          "restored": s.get("restored", False),
-                          "msg_count": len(s.get("messages", [])),
-                          "model": (s.get("model_config") or {}).get("model", ""),
-                          "last_active": s.get("last_active", s["created"]),
-                          "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
-                          "first_message": (s.get("messages", [{}])[0].get("content") or s.get("messages", [{}])[0].get("text", ""))[:60] if s.get("messages") else "",
-                          "last_message": (s.get("messages", [{}])[-1].get("content") or s.get("messages", [{}])[-1].get("text", ""))[:80] if s.get("messages") else ""
-                         } for s in ordered]}
+    result = []
+    for s in ordered:
+        msgs = s.get("messages") or []
+        if s.get("_messages_loaded", True):
+            _count = len(msgs)
+            _first = (msgs[0].get("content") or msgs[0].get("text", ""))[:60] if msgs else ""
+            _last = (msgs[-1].get("content") or msgs[-1].get("text", ""))[:80] if msgs else ""
+        else:
+            # 惰性会话：用启动时已取的元数据（不触发全量消息加载）
+            _count = int(s.get("_msg_count") or 0)
+            _first = (s.get("_first_msg") or "")[:60]
+            _last = (s.get("_last_msg") or "")[:80]
+        result.append({
+            "id": s["id"], "title": s["title"], "created": s["created"],
+            "bg_running": s.get("bg_running", False),
+            "is_running": bool(s.get("running_agent") or s.get("running_task")),
+            "restored": s.get("restored", False),
+            "msg_count": _count,
+            "model": (s.get("model_config") or {}).get("model", ""),
+            "last_active": s.get("last_active", s["created"]),
+            "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
+            "first_message": _first,
+            "last_message": _last,
+        })
+    return {"sessions": result}
 
 
 @app.post("/api/sessions/new")
@@ -4325,22 +4620,35 @@ async def rename_session(sid: str, body: dict = None):
 
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str, limit: int = 100):
-    """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿"""
+    """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿。
+
+    惰性加载：会话完整消息不在内存时，按需从 state.db 加载。
+    limit>0 只加载一个窗口（最近 ~2*limit 条），limit<=0 加载全部。"""
     if sid not in _sessions:
         _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
-    msgs = _sessions[sid]["messages"]
-    # 只取最近 limit 条
+    session = _sessions[sid]
     if limit and limit > 0:
-        msgs = msgs[-limit:]
+        # 窗口加载：只取最近窗口，避免大会话全量解码
+        if not session.get("_messages_loaded"):
+            _win = max(int(limit), 200)
+            if len(session.get("messages") or []) < _win:
+                session["messages"] = _load_session_messages(sid, limit=_win)
+        msgs = (session.get("messages") or [])[-limit:]
+        total = len(session["messages"]) if session.get("_messages_loaded") else int(session.get("_msg_count") or 0)
+    else:
+        # 显示全部：加载完整历史
+        _ensure_session_messages_loaded(session)
+        msgs = session.get("messages") or []
+        total = len(msgs)
     normalized = []
     for m in msgs:
         nm = dict(m)
         if "content" not in nm and "text" in nm:
             nm["content"] = nm["text"]
         normalized.append(nm)
-    return {"messages": normalized, "total": len(_sessions[sid]["messages"])}
+    return {"messages": normalized, "total": total}
 
 
 @app.delete("/api/sessions/{sid}")
@@ -8466,6 +8774,8 @@ async def ws_endpoint(ws: WebSocket):
                 session["_tool_dedup"] = {}  # 每轮用户消息重置重复执行拦截:用户反复重跑相同代码是合法的
                 session["_live_tool"] = ""
                 session["_live_tool_ts"] = time.time()
+                session["_proc_hist"] = []  # 2026-08-16: 进程采样历史（回合级窗口）
+                session["_stall_notice_last"] = 0
                 session["_turn_activity_ts"] = time.time()
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
@@ -8487,6 +8797,9 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-14: 会话轮数计数（长会话可见性：第 N 轮）
                 session["_turn_count"] = int(session.get("_turn_count", 0)) + 1
                 _run_text = _inject_anchors(session, user_text)
+
+                # 惰性加载：继续旧会话前，先把完整历史载入内存（保证上下文构建/追加正确）
+                _ensure_session_messages_loaded(session)
 
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
@@ -8778,6 +9091,9 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
                         _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
+                        # 2026-08-16 任务类型：terminal background=True = 长任务运行时证据
+                        if tool_name == "terminal" and isinstance(args, dict) and args.get("background") is True:
+                            _mark_task_long_running(_s)
                         _s["_turn_activity_ts"] = time.time()
                         # 批M(2026-08-16) 工具调用爆炸护栏：
                         # 事故 memomics-2274ab75 05:47:52 —— 模型一次响应并发发射 984 次
@@ -8899,6 +9215,7 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_api_calls"] = int(_s.get("_api_calls", 0)) + 1
                         _s["_live_tool"] = tool_name
                         _s["_live_tool_ts"] = time.time()
+                        _s.pop("_live_tool_warned", None)  # 每个工具各自一次 30min 长工具提醒
                         _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
 
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
@@ -8937,11 +9254,21 @@ async def ws_endpoint(ws: WebSocket):
                 def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session, _agent=agent):
                     try:
                         result_str = str(result or "")
+                        # 2026-08-16: 长工具完成后刷新活动时间 + 清除工具在飞标记——
+                        # 否则 watchdog 会在长工具结束后立即把"模型思考间隙"误判成挂起，
+                        # 且工具豁免会泄漏到工具结束之后。
+                        _s["_turn_activity_ts"] = time.time()
+                        _s["_live_tool"] = ""
+                        _s["_live_tool_ts"] = time.time()
                         _session_emit(_s, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
-                        # 强制验证：如果 terminal 命令是启动类操作，二次确认进程存活
-                        if tool_name in ("terminal", "execute_code", "execute_python") and _is_launch_command(str(args)):
+                        # 2026-08-16 任务类型：管线启动命令 = 长任务运行时证据
+                        _is_launch = tool_name in ("terminal", "execute_code", "execute_python") and _is_launch_command(str(args))
+                        if _is_launch:
+                            _mark_task_long_running(_s)
+                        # 强制验证：仅 CellBender 类启动做 GPU/进程二次确认（画图/普通脚本不触发）
+                        if _is_launch and "cellbender" in str(args).lower():
                             _session_emit(_s, {"type": "progress", "step": "verify_launch", "status": "pending",
                                 "detail": "验证启动状态...", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             try:
@@ -8977,6 +9304,9 @@ async def ws_endpoint(ws: WebSocket):
                                         "detail": f"GPU {_gpu or 'n/a'} — 进程已启动", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             except Exception:
                                 pass
+                        # 2026-08-16 任务类型：cron 心跳部署 = 长任务运行时证据
+                        if tool_name == "cronjob" and "heartbeat" in str(args).lower():
+                            _mark_task_long_running(_s)
                         # 持久化工具调用到 state.db 的 tool_calls_log 表
                         try:
                             import json as _tcl_json
@@ -9271,12 +9601,23 @@ async def ws_endpoint(ws: WebSocket):
                             _live_tool = _s.get("_live_tool", "") or ""
                             _live_since = _s.get("_live_tool_ts") or 0
                             _stalled = bool(_live_tool) and (time.time() - _live_since) > 180
+                            # 2026-08-16: 任务进程 CPU/内存监控（内核 worker/后台进程最新采样）
+                            _proc = {}
+                            try:
+                                _h = _s.get("_proc_hist", [])
+                                if _h and _h[-1][1]:
+                                    _pid0, _cpu0, _io0, _rss0 = _h[-1][1][0]
+                                    _proc = {"pid": _pid0, "cpu_s": round(_cpu0, 1),
+                                             "rss_mb": round(_rss0 / 1048576.0, 0)}
+                            except Exception:
+                                pass
                             _session_emit(_s, {"type": "heartbeat",
                                 "elapsed": int(time.time() - _turn_start),
                                 "api_calls": int(_s.get("_api_calls", 0) or 0),
                                 "turns": int(_s.get("_turn_count", 0) or 0),
                                 "tool": _live_tool,
                                 "stalled": _stalled,
+                                "proc": _proc or None,
                                 "ts": datetime.now().strftime("%H:%M:%S"),
                                 "session_id": _s["id"]})
                             _results_dir = _s.get("results_dir", "")
@@ -9556,6 +9897,8 @@ async def ws_endpoint(ws: WebSocket):
                 async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx, _session=session, _agent=agent):
                     """在 executor 中运行 _agent — 用 run_conversation + conversation_history"""
                     try:
+                        # 惰性加载兜底：确保上下文构建器（task_plan/resume 等）能读到完整历史
+                        _ensure_session_messages_loaded(_session)
                         # 从 state.db 加载 conversation_history（排除当前消息，run_conversation 会加）
                         conversation_history = []
                         db = _get_session_db()

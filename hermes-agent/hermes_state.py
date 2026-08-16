@@ -4846,10 +4846,15 @@ class SessionDB:
         include_ancestors: bool = False,
         include_inactive: bool = False,
         repair_alternation: bool = False,
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Load messages in the OpenAI conversation format (role + content dicts).
         Used by the gateway to restore conversation history.
+
+        ``limit`` (when positive) returns only the most recent ``limit`` rows
+        in insertion order — used for lazy/窗口加载 of very long sessions
+        without decoding the whole transcript.
 
         By default only active messages are returned. Pass
         ``include_inactive=True`` to load soft-deleted (rewound) rows
@@ -4872,23 +4877,36 @@ class SessionDB:
         active_clause = "" if include_inactive else " AND active = 1"
         with self._lock:
             placeholders = ",".join("?" for _ in session_ids)
-            rows = self._conn.execute(
-                "SELECT role, content, tool_call_id, tool_calls, tool_name, effect_disposition, "
+            _cols = (
+                "role, content, tool_call_id, tool_calls, tool_name, effect_disposition, "
                 "finish_reason, reasoning, reasoning_content, reasoning_details, "
                 "codex_reasoning_items, codex_message_items, platform_message_id, observed, timestamp, "
-                "api_content "
-                f"FROM messages WHERE session_id IN ({placeholders})"
-                # Order by AUTOINCREMENT id (true insertion order), NOT timestamp:
-                # append_message stamps rows with time.time(), which is not
-                # monotonic (WSL2, NTP steps, VM/laptop sleep resume). A later
-                # row can carry an earlier timestamp than its predecessor, and
-                # ORDER BY timestamp would then sort an assistant tool_calls row
-                # after its tool response, breaking tool-call/response adjacency
-                # and triggering an HTTP 400 on replay. This matches get_messages
-                # — see c03acca50 for the original fix.
-                f"{active_clause} ORDER BY id",
-                tuple(session_ids),
-            ).fetchall()
+                "api_content"
+            )
+            # Order by AUTOINCREMENT id (true insertion order), NOT timestamp:
+            # append_message stamps rows with time.time(), which is not
+            # monotonic (WSL2, NTP steps, VM/laptop sleep resume). A later
+            # row can carry an earlier timestamp than its predecessor, and
+            # ORDER BY timestamp would then sort an assistant tool_calls row
+            # after its tool response, breaking tool-call/response adjacency
+            # and triggering an HTTP 400 on replay. This matches get_messages
+            # — see c03acca50 for the original fix.
+            if limit is not None and limit > 0:
+                # 懒加载窗口：只取最近 limit 条，但按插入顺序返回
+                # （先倒序取尾窗口，再正序），避免大会话全表解码。
+                rows = self._conn.execute(
+                    f"SELECT {_cols} FROM ("
+                    f"SELECT {_cols}, id FROM messages WHERE session_id IN ({placeholders})"
+                    f"{active_clause} ORDER BY id DESC LIMIT ?"
+                    f") ORDER BY id",
+                    tuple(session_ids) + (limit,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    f"SELECT {_cols} FROM messages WHERE session_id IN ({placeholders})"
+                    f"{active_clause} ORDER BY id",
+                    tuple(session_ids),
+                ).fetchall()
 
         return self._rows_to_conversation(
             rows,

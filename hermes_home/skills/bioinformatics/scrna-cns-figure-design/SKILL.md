@@ -417,6 +417,71 @@ panel reviewers want.
 - **教训**：新基因集必须逐基因文献审计（search_papers 给真实 PMID），剔除与再生/其他打分重叠的基因；"打分高"先分绝对水平与效应量两个概念再解读。
 
 > 完整可复现 v5 脚本 + 样式参数 + 图型模板：`references/aucell-heatmap-style-v5.md`
+> v8 新增（六组分布图 + 坐标倒置坑 + 最终间距参数）：`references/aucell-heatmap-custom-layout-v8.md`
+
+## ⛔ 自定义热图 v5→v8 迭代补充（2026-08-15，覆盖/细化上面 v5 规范）
+
+**格间无白色间隙是硬性要求**（用户两次强调："小色块之间不要有白色间隙，你看第一版就没有间隙"）：
+格子尺寸 `CELL=1.0` 填满整个单元格，行/列方向都紧贴。`CELL=0.94/0.82` 会在相邻格之间留 0.06/0.18 的缝——用户一眼看出"有白色间隙"就打回。v5 规范的"行分组空行≈0.6"指的是**三类别之间**的组间隙，与格间无隙不冲突。
+
+**行分组间隙最终定 0.2**（v5 写 0.6 偏大）：用户逐步要求"代谢、肌肉识别的三个模块不要隔开这么多，稍微小一点"→ 0.6→0.3→0.2。五效应面板间隙 `PANEL_GAP=1.8` 保持不变（"五个效应组距离不变"）。
+
+**亚群标签离热图底边的距离（Fig1 非倒置坐标）**：v6 用 -1.9 被嫌"亚群离热图太远了"，收到 -0.35/-0.15/-0.08 后用户仍要更近，最终 v7 贴紧（y=-0.08 + 同步收窄 ylim 底部留白）。**v8 六组图最终定稿参数（2026-08-15，invert_yaxis 坐标系下）**：亚群标签 y = `HEAD_H + n_rows_real*CELL + 4.0` 且 **`va='center'`**，底部留白 `SUB_H = 6.5`。迭代历程：+2.2 → "离热图太远"；+0.4 → "label 还在热图里"（**45° 文本 va='top' 的边界框向上压进热图**，只调距离不够）；最终 +4.0 + va='center' + SUB_H=6.5 通过——像素扫描验证热图底边 y≈2100、标签 y≈2200-2500 完全在图外。
+
+**⛔ matplotlib y 轴坐标倒置坑（v8 六组图翻车根因，最隐蔽）**：
+手动 `fig.add_axes` 画分块热图时，matplotlib y 轴**向上增长**。若按"直觉坐标"设计——亚群标签画在 y=26.8（大值）→ 渲染到**顶部**；type 标题 y=1.7（小值）→ 渲染到**底部**——整图上下颠倒，用户报"亚群还在上呀"。修复：`ax.invert_yaxis()` 翻转（翻转后 0 在底部、大值在顶部），或从一开始按 y-up 语义设计（热图顶部行坐标大、底部行坐标小、亚群标签在最小坐标处、type 标题在最大坐标处）。**改标签数值距离时先想清楚坐标方向对不对，不只是调大调小。**
+
+**⛔ `plt.tight_layout()` 与 `fig.add_axes` 颜色条不兼容**：
+tight_layout 与手动 add_axes 的颜色条冲突 → **PNG 渲染异常（热图空白/标签被裁剪/只见 label 没有热图）但 PDF/SVG 正常**——用户报"PNG 没变 PDF 对了"。修复：去掉 tight_layout，用 `subplots_adjust` 手动布局，PNG/PDF/SVG 三种格式渲染才一致。
+
+**交付前必须 `vision_describe` 验证 PNG 实际内容**：OCR 看标签位置（type 顶部/亚群底部/基因名左侧）+ 主色占比判断是否白图/淡图（OCR 主色 >60% 灰白 #e0e0e0 = 热图格没画出来）。只信 savefig 成功不够——PNG/PDF/SVG 可能不一致。
+
+**⛔ 执行纪律（用户多次发火："图呢？""你执行了吗？""没有更新啊"）**：
+- 说"马上改/马上出图"必须**同一轮内绑定 execute_code/terminal 调用**，纯叙述不算执行
+- 用户会**核对文件时间戳**验证是否真更新——改完必须确认 savefig 后时间戳刷新
+- 修图循环里**不要反复做环境诊断/读日志**（用户："你老是检查terminal干什么全是报错？""搞了这么久，一张图都没有出"）——环境问题直接切已验证路径（Python 绘图栈绕开 R DLL 地狱），然后改参数→跑→交付
+- 用户说"找原因，先不执行"才进入诊断模式；平时默认"改→跑→交付"节奏
+
+**六组分布图（type6，2026-08-15 新增图型）**：22 打分 × 6 type × 10 亚群 = 60 列。行=打分（左侧三色带 + 行分组），列=6 type × 10 亚群（**type 顶部灰条标题、亚群底部 45°、type 间留 1.2 间隙、亚群格间无间隙**），值=样本级均值行内 z-score ±2 截断，RdBu。回答"各基因集在不同 type×亚群的绝对水平分布"，与五效应图（变化量）互补。
+
+## ⛔ 打分拆分交付架构（user 最终拍板 2026-08-16：18 程序 + 4 身份 × 3 视图 = 6 图）
+
+用户确认的最终交付结构（不再一张图塞 22 打分）——**主图/验证图分层**：
+- **主热图 = 18 程序打分**（去掉身份打分 + 弱响应项），讲"活性变化"：SenMayo/Stress/TNFA/Inflammatory/Glycolysis/FattyAcidMetabolism/Denervation/AMPK_PGC1a/Autophagy/Adipogenesis/mTORC1/Fibrosis/scoreOxPhos/scoreSarcomeric/scoreRegMyon/scoreInsulin/scoreROS/scoreAtrophy
+- **验证图 = 4 身份打分**（scoreI/scoreII/scoreIIa/scoreIIx）单独成图，作用=证明注释对（IIX 亚群 scoreIIx 高），**不回答生物学问题**，放主图=与亚群定义自说自话（user 问"肌肉身份要放在这上面吗？"→ 拆）
+- **每个集合 × 3 种视图 = 6 张**：① 6 组图（type 面板）② 5 效应图（效应面板，Cohen's d）③ 亚群图（不分 type，z-score）
+- 已验证完整脚本：`results/*/scripts/fig_split_v10.py`（GROUP_COLORS 必须含 "Identity" 键，否则 KeyError；18 程序按 5 功能轴分组色带：Metabolic/Structural/Regeneration/Stress-Inflam/Atrophy-Fibrosis）
+
+**⛔ 着色必须是 z-score，不要卡死真实分数范围（user 2026-08-16 纠正："你把值卡死在0.2,其他的怎么办呢？还是z-score吧"）**：
+把真实 AUCell 分数映射到固定区间（0-0.2）会把大片低值格子压成同一颜色，丢失对比度。行内 z-score 跨组×亚群标准化才保留相对高低。6 组图/亚群图 = z-score（±2），5 效应图 = Cohen's d（±3），都 TwoSlopeNorm + RdBu_r。
+
+> v10 完整交付配方（6 图清单/参数/数据源/常见坑）：`references/aucell-score-split-6figures-v10.md`
+
+## ⛔ 基因集响应筛选（"哪些打分没响应可以删掉"协议，2026-08-15）
+
+用户拿到 22 打分 × 5 效应 × 10 亚群后问"哪些基因集没有太多响应，可以删掉"——**用长表（effect5_d_v2.csv：1100 行，列 score/sub/effect/d/q）直接算三指标，不重新读原始 meta**：
+
+1. **全效应平均响应强度** = 该打分 5 效应 × 10 亚群 50 格的 `mean(|d|)`（先 `df['d'].abs().groupby(df['score']).mean()`）
+2. **显著格数** = `df[(df['q']<0.05)].groupby('score').size()`（BH 校正后，1100 检验中约 93 项显著）
+3. **逐效应轴看有无方向性**：Aging 轴平均 d 接近 0 且全亚群同向性差 = 该打分在衰老维度无故事（如 T2D 轴去神经 d≈0、SenMayo 在多数纤维亚群负 d 反直觉）
+
+**删除判定梯**（用户接受的标准）：① 三指标都低（mean|d|<0.3 且显著格 0）→ 建议删/进补充 ② 只有一个轴有响应（如 scoreInsulin 只 Aging 强）→ 保留但降级 ③ 有反转故事（Aging 正、运动负 = 逆转靶点）→ 核心保留。**输出格式：给用户一张"打分 × 三指标"表 + 每条建议一句话理由，让用户拍板删哪些，不擅自改基因集列表。**
+
+## ⛔ CNS 技能评估清单（scipilot-figure-skill 套用，2026-08-15）
+
+用户明确要求"根据 CNS 的 skill 进行评估"时，按以下清单逐项过（这些都是本项目实测会被打回的点）：
+
+| 检查项 | 达标标准 | 本项目实测 |
+|---|---|---|
+| 视觉自检闭环 | 渲染→读图→回改直到通过 | ✅ 已按"label 在热图内/离太远"迭代 |
+| 标签压数据 | 全部 label 在图形外 | ✅ type 顶/亚群底 45°/基因名左 |
+| 配色 | RdBu 红蓝白（colorblind 安全）+ colorbar | ✅ ±2/±3 截断 + TwoSlopeNorm |
+| 格线/间隙 | 格内 `edgecolor='none'` 无白色格线 | ✅ CELL=1.0 |
+| 矢量导出 | PNG(300dpi)+PDF+SVG | ✅ |
+| ⚠️ 最小字号 | ≥6pt（技能硬性下限） | ⚠️ 亚群 4.6pt/基因名 5.2pt 低于下限——60 列太密所致；投稿前需重排（代表标签或分两行） |
+| ⚠️ 出图尺寸 | CNS 双栏 7.2in | ⚠️ 工作版 20.9in 宽；投稿按 7.2in 重渲一版（字号相对放大） |
+
+**要点**：字号 <6pt 和超宽工作版不是"画错"，是"投稿前需要重排"——交付时主动声明这两项 ⚠️，给出投稿规格方案（重排标签或双栏重渲），不要等审稿人打回。
 
 **Statistical protocol (validated on muscle MF, Y=10/O=7/OD=7 individuals):**
 1. **Individual-level pseudobulk FIRST**: aggregate score means per pair_id × type × cluster

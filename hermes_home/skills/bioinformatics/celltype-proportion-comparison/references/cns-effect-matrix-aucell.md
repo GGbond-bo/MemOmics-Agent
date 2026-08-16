@@ -124,3 +124,50 @@ _, pv = wilcoxon(w['O_Post'], w['O_Pre'])
 - **Fig7**：`CELL2 = 1.0`（无白色间隙，同样修 0.82→1.0）
 - 用户提\"Fig7 x/y 轴字体太远 + 亚群列宽调小\"时：优先调 `figsize`/`subplots_adjust`/xlim，**不要用 CELL<1.0 制造\"更窄\"**——那会同时产生白缝，用户随后会要求去掉。窄 = 整体图宽收窄（figsize 变小），格子保持 1.0。
 - 交付前自查：格子宽 == 行间距（都 1.0）才无白缝；`fig_v7_final.py` 为最终可用脚本（复制自 v6，patch CELL/间隙后跑），v1 格式基准 = 用户认可的红蓝白 + 完整基因名 + 无缝隙紧贴。
+
+## v7→v8：type×亚群 六组分布热图（2026-08-15 用户新增诉求，标签布局三连纠）
+
+用户要求"再出一个 type 六组图，看看各基因集在不同 type 和亚群的分布"——**不是五效应差值版，而是 6 组原始打分 × 10 亚群的分布热图**。产物 `fig_type6_v8.py` → `Fig_type6_by_subcluster_v8.png/pdf/svg`。
+
+**布局规格（与 Fig1/Fig7 同系列）**：
+- 行 = 22 基因集（按 Metabolic 蓝 11 / Fiber identity 黄 4 / Senescence 红 7 分组，左侧功能色带 + 行分组间隙 0.2）
+- 列 = 6 type × 10 亚群 = 60 列，**type 间留间隙 `GAP_C=1.2`，亚群间无间隙**（CELL=1.0）
+- 值 = 样本级聚合均值，行内 z-score（每基因集跨 60 格标准化），RdBu 红蓝白 ±2 截断
+- 配色 = `['#2166AC','#67A9CF','#F7F7F7','#EF8A62','#B2182B']`（5 锚点）+ TwoSlopeNorm(-2,0,2)
+
+**⛔ 用户标签布局三连纠（v8 首版全踩）**：
+1. **亚群标签必须在底部（45° 斜排），type 标签在顶部**——与 Fig1 五效应版一致；v8 首版把亚群和 type 混排被用户打回"亚群在下面，type 在上面"
+2. **label 必须全部在图外**（用户原话："label 又在图内了"）——亚群标签底部 y 要远离热图底边：
+   - 修正前：`y = HEAD_H + n_rows_real*CELL + 0.25` + `SUB_H=3.2` → 标签贴太近/进图内
+   - 修正后：`y = HEAD_H + n_rows_real*CELL + 0.9` + **`SUB_H=5.0`**（加大底部留白）→ 标签明确在图外
+3. **顶部 type 标题**保持 `HEAD_H-0.5`（灰色条 `HEAD_H-0.8` 高 0.6 + 粗体标题），行标签左侧、功能色带左侧——全部图外
+
+**⚠️ 底部标签离图太远与进图内是一对矛盾，只调 y 不够，必须同时加大 SUB_H 预留**——底部留白不足时 y 再大也会被 `bbox_inches='tight'` 裁回图内（与 v6 tight_layout 坑同源：手动画布 + tight 导出 = 标签被裁）。正确做法 = 画布高度预留 `SUB_H` 足够大 + 标签 y 下移，两者同步。
+
+**版本纪律**：v8 用独立脚本 `fig_type6_v8.py`（不复制 v7），每版反馈只改用户点名的一处（亚群标签位置），其他保持系列样式（无白缝 CELL=1.0、行分组 0.2、完整基因名、RdBu）不动。交付时说明"亚群标签在底部、type 标签在顶部、留白已加大"。
+
+## v8→v9：type6 六组图重构为 Fig1 v7 多面板架构（2026-08-15 用户明确拍板）
+
+用户对单张 60 列大矩阵的 v8 反复调标签位置后说：**"你能不能像 figure1 v7 那样呢？它的脚本是对的，出图也很好"**——这是关键转折：**与其在单矩阵布局里反复调标签，不如直接复用用户已认可的 Fig1 v7 多面板横排架构**。
+
+- **v9 布局 = Fig1 v7 同架构**：6 个 type（Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post）各成一个面板横排，每面板 10 亚群列（`PANEL_GAP=1.8` 面板间隙、`CELL=1.0` 无白缝、亚群标签 45° 贴底 `y=-0.15`、行分组间隙 0.2、行标签 22 完整基因名 + 左侧三色带、`subplots_adjust` 手动布局不用 tight_layout）
+- 脚本 = `fig_type6_v9.py`（从 `fig_v7_final.py` 复制改，不继续在 v8 上打补丁）——**当用户拿另一张已认可的图当基准时，直接复制那张图的脚本改数据源，而不是继续修当前的图**
+- 用户确认 v9 布局完美（"很完美"）
+
+**⛔ 用户要求"真实的 AUCell 分数"→ 不要卡死在窄区间，最终回到 z-score（2026-08-15 实测）**：
+- 用户说"6组的需要真实的AUCell分数" → Agent 实现为绝对均值 + `TwoSlopeNorm(vmin=0, vcenter=0.05, vmax=0.20)` → 用户质疑"你确定这值是对的吗？" → 手动重算数值确认无误（值确实对）→ **但用户继续打回："肯定错啊，你把值卡死在0.2,其他的怎么办呢？还是z-score吧"**
+- 教训：AUCell 绝对分数绝大部分集中在 0-0.2 窄区间（实测大部分格子 0.01~0.09，个别如 SMF 去神经 O_Post=0.176 接近上限），**vmax=0.2 等于把绝大多数格子压到同色，丢信息**。用户要"真实分数"时：① 要么用**全 0-1 或数据驱动的 max** 做映射（不要自作主张截断到 0.2）② 要么直接回到**行内 z-score**（用户最终拍板方案）。**z-score 仍是本类热图的默认与终态**；"真实分数"诉求若实现不当会被打回。
+- 数值验证结论可先报：8 基因版去神经（CHRNA1/CHRNG/CHRND/SCN5A/KCNMB1/NCAM1/NGFR/RUNX1）Aging 均值 d=+0.73（SMF 最高 +1.10）、ExOld +1.01、ExT2D +0.80、T2D +0.03——净化后运动轴回落但未消失（NMJ 重塑共享基因），T2D 无信号。
+
+**⛔ pandas MultiIndex × z-score 两大坑（2026-08-15 实测，回 z-score 时踩到）**：
+1. **`Z_raw.apply(lambda r: zscore(r), axis=1)` 会把 DataFrame 变成 Series**——`scipy.stats.zscore` 返回 ndarray，apply(axis=1) 后 Z 的 MultiIndex 列丢失，随后 `Z.loc[name, (tp, sub)]` 报 `IndexingError: Too many indexers`。**不要用 apply + zscore**。
+2. **`(Z_raw - Z_raw.mean(axis=1)) / Z_raw.std(axis=1)` 报 `cannot join with no overlapping index names`**——MultiIndex 列与 Series 广播触发 pandas 索引对齐错误。**不要用 pandas 层减法广播**。
+3. **✅ 修复 = numpy 层向量化标准化，保留 DataFrame 骨架**：
+```python
+Z = Z_raw.copy()
+_mu = Z_raw.values.mean(axis=1, keepdims=True)
+_sd = Z_raw.values.std(axis=1, ddof=0, keepdims=True)
+Z[:] = (Z_raw.values - _mu) / _sd
+```
+用 `.values` 取底层 numpy 数组做运算，再 `Z[:] = ...` 写回——MultiIndex 列索引完整保留，`Z.loc[name, (tp, sub)]` 正常。
+- 改回 z-score 时同步改两处：数据层（上面的 numpy 标准化）+ 颜色层（`TwoSlopeNorm(vmin=-2, vcenter=0, vmax=2)` + colorbar 刻度 `[-2,-1,0,1,2]` + 标签 `row z-score`）。只改数据层不改颜色层 = 值对但颜色全截断。

@@ -15,7 +15,13 @@ run <- function() {
     if (length(line) == 0) break
     if (is.na(line) || nchar(line) == 0) next
     req <- tryCatch(fromJSON(line, simplifyVector = TRUE), error = function(e) NULL)
-    if (is.null(req)) next
+    if (is.null(req)) {
+      # 2026-08-16: 无法解析的请求 → 回一个 error 响应而不是静默 next，
+      # 防止宿主 execute 干等满整个超时（实测：坏字节请求曾致 worker 永久无响应）
+      cat(toJSON(list(id = NULL, error = "unparseable request"), auto_unbox = TRUE, force = TRUE), "\n")
+      flush(stdout())
+      next
+    }
     # 宿主优雅关闭帧 {"type":"shutdown"} → 退出
     if (!is.null(req$type) && identical(req$type, "shutdown")) break
     if (is.null(req$id)) next
@@ -40,7 +46,14 @@ run <- function() {
       err_txt <<- conditionMessage(e)
     })
     resp <- list(id = rid, stdout = out, stderr = err_txt, error = error_msg)
-    cat(toJSON(resp, auto_unbox = TRUE, force = TRUE), "\n")
+    # 2026-08-16: 序列化兜底 — 错误消息含坏字节时 toJSON 可能失败/卡死，
+    # 此时回退最小 ASCII 响应，保证宿主永远收得到答复
+    resp_json <- tryCatch(
+      toJSON(resp, auto_unbox = TRUE, force = TRUE),
+      error = function(e) toJSON(list(id = rid, stdout = "", stderr = "",
+                                      error = "worker serialization failed"), auto_unbox = TRUE, force = TRUE)
+    )
+    cat(resp_json, "\n")
     flush(stdout())
   }
 }

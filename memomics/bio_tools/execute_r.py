@@ -39,8 +39,8 @@ SCHEMA = {
             },
             "timeout": {
                 "type": "integer",
-                "description": "Timeout in seconds (30-900, default 600)",
-                "default": 600
+                "description": "Timeout in seconds (30-7200, default 1800). 大文件 readRDS/长计算请显式传大 timeout（如 3600），不要靠默认值。",
+                "default": 1800
             }
         },
         "required": ["code"]
@@ -151,7 +151,21 @@ def _session_task_id(task_id: str) -> str:
     return os.environ.get("MEMOMICS_SESSION_ID") or "default"
 
 
-def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str = "") -> str:
+# 2026-08-16: R 非法转义消毒 — 反斜杠后跟非转义字符（如 Windows 单反斜杠路径
+# 'E:\骨骼肌锻炼\MF_AUCell_meta.csv' 中的 \骨 \M）会让 R 4.5.3 报错且错误消息
+# 含坏字节，卡死 jsonlite 序列化 → kernel worker 永久无响应（实测复现）。
+_BAD_R_ESCAPE_RE = re.compile(r'\\(?![0-7nrtbafvxuU\\\'"])')
+
+
+def _sanitize_r_backslashes(code: str) -> str:
+    """把非法转义的反斜杠换成正斜杠（R 文件路径完全兼容正斜杠），
+    保留 \\n \\t \\r \\\\ \\' \\" \\xNN \\uNNNN \\0..\\7 等合法转义。"""
+    if not code or "\\" not in code:
+        return code
+    return _BAD_R_ESCAPE_RE.sub("/", code)
+
+
+def execute_r(code: str, working_dir: str = "", timeout: int = 1800, task_id: str = "") -> str:
     """Execute R code with OOM detection and auto-retry.
 
     P0-1 持久 kernel 优先：跨调用保留变量/已加载包（热调用免解释器启动
@@ -162,7 +176,10 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
     status ∈ success/error/timeout，含 exit_code/error 字段；output 字段保留
     纯文本（含 [STDERR]/[Exit code] 标记）兼容既有文本消费方。
     """
-    timeout = min(max(int(timeout), 30), 900)
+    # 2026-08-16: 上限 900→7200 —— 几十 GB readRDS / 长计算曾被默认超时误杀
+    # 2026-08-16: 消毒非法反斜杠转义（防 R worker 解析挂起，见 _sanitize_r_backslashes）
+    code = _sanitize_r_backslashes(code)
+    timeout = min(max(int(timeout), 30), 7200)
 
     _sct_changes = []
     if 'SCTransform' in code:
@@ -198,7 +215,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 600, task_id: str
         _res = KERNEL_POOL.execute(
             code,
             _session_task_id(task_id),
-            timeout=min(timeout, 600), language="r",
+            timeout=min(timeout, 7200), language="r",
             cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
             _out = _sct_note + ((_res.get("output", "") or "(no output)")[:15000])
@@ -347,7 +364,7 @@ def _register():
         handler=lambda args, **kw: execute_r(
             args.get("code", ""),
             args.get("working_dir", ""),
-            args.get("timeout", 600),
+            args.get("timeout", 1800),
             kw.get("task_id", ""),
         ),
         emoji="📊",

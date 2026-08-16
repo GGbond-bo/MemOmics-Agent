@@ -16,7 +16,7 @@ env/
 node_modules/
 npm-debug.log*
 
-# === 运行结果/数据（体积大，不进 git）===
+# === 运行结果/数据（体积大，不�?git�?==
 hermes-agent/results/
 results/
 work/
@@ -28,7 +28,7 @@ work/
 *.tar.gz
 *.zip
 
-# === Miniconda 安装包 ===
+# === Miniconda 安装�?===
 miniconda/
 miniconda_env/
 
@@ -56,7 +56,7 @@ test_*.py
 !webui/tests/test_*.py
 verify_*.py
 
-# === 敏感/个人数据（不进 git）===
+# === 敏感/个人数据（不�?git�?==
 hermes_home/provider_keys.json
 hermes_home/image_gen_config.json
 hermes_home/model_config.json
@@ -83,13 +83,13 @@ state.db
 Rplots.pdf
 nul
 
-# === 运行产物（不入 git）===
+# === 运行产物（不�?git�?==
 hdwgcn_src/
 hermes_home/environment.json
 hermes_home/skills/bioinformatics/_debates/
 webui/uploads/
 
-# === 运行态噪音（每次运行自动变化，不入库） ===
+# === 运行态噪音（每次运行自动变化，不入库�?===
 hermes_home/cron/ticker_*
 hermes_home/cron/.hb_*.tmp
 hermes_home/gateway_state.json
@@ -103,11 +103,10 @@ hermes_home/session_usage/
 hermes_home/processes.json
 hermes_home/lsp/bin/
 .backups/
-# 备份文件不入库
-*.bak*
+# 备份文件不入�?*.bak*
 memory_api_token
 
-# === 敏感/运行时（2026-08-14 停止跟踪）===
+# === 敏感/运行时（2026-08-14 停止跟踪�?==
 hermes_home/config.yaml
 hermes_home/backup_plaintext_*/
 hermes_home/verification_evidence.db
@@ -123,15 +122,24 @@ memomics/webui/
 # 会话锚点运行时文件（每会话一条，跨压缩持久）
 hermes_home/session_anchors/
 
-# start.bat 依赖安装标记（装过一次就跳过）
-.venv_deps_ok.txt
+# start.bat 依赖安装标记（装过一次就跳过�?.venv_deps_ok.txt
 .venv_vision_ok.txt
 
-# 便携打包运行时（打包.bat 生成的内置 Python）
-runtime/
+# 便携打包运行时（打包.bat 生成的内�?Python�?runtime/
 
 # �û����׿������ÿ⣨�������ݣ�����⣩
 hermes_home/papers/
 hermes_home/references.bib
 hermes_home/references.ris
 hermes_home/references.json
+
+# ƾ���ࣨ��ʷ�Ѹ��٣���δ���޸ı� add -A ���ύ��
+hermes_home/auth.json
+hermes_home/channel_directory.json
+hermes_home/weixin_account.json
+
+# ���ر���/���б�ǣ�����⣩
+*.bak_*
+*.bak-*
+.venv_deps_ok.txt
+.venv_vision_ok.txt

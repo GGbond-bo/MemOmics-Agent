@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (73 skills)
+## 08_报告 - 报告/可视化 (75 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 
@@ -270,6 +270,8 @@
 | platform-execution-pitfalls | MemOmics 平台执行层（execute_r/execute_code/skill_view/rail_review 交互）的实测坑与规避。触发：execute_r 报 could not fin |  | YEL 讨论触发 |
 | diagram-design | Create branded architecture, IT current-state, flowchart, sequence, state machine, ER/data model, ti |  | YEL 讨论触发 |
 | literature-full-summary | 文献全文思路提炼（给人看的方向）：逐篇提取思路/背景/物种/组织/问题/解决方法/方法/结论/验证 9 项结构化摘要，写入文献库 summaries/ 并可跨会话查看。与 literature-par |  | YEL 讨论触发 |
+| pre-submission-reviewer | 投稿前审查：以审稿人视角在投稿截止前对论文做五维全面体检（宏观逻辑/写作细节/英语语法/LaTeX格式/图表质量），CRITICAL/MAJOR/MINOR 分级 + 逐条改写建议 + AI腔禁用词与 | 投稿前审查, 投稿前检查, 投前审, 查草稿, 检查草稿, 投稿前体检, 找问题, proofread, check the draft, find issues, 语法检查, 图表质量, AI腔 | RED 必触发 |
+| figure-designer | 论文图设计顾问：对三张核心图（Motivated Example动机图/解决方案总览图/实验结果图）给设计范式、布局草图、标注指南、工具选型与QC审计建议。只给设计建议、不实际出图。触发词：设计图、图 | 设计图, 图设计, 图不好看, 图不专业, 选什么图, 图型选择, 布局建议, 图布局, 作图建议, 设计一张图, figure design, design a figure, choose the right chart, figure looks unprofessional, plot design | RED 必触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

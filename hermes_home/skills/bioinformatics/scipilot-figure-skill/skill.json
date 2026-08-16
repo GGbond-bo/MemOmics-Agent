@@ -53,8 +53,8 @@
       "date": "2026-08-12 23:12:16"
     }
   ],
-  "success_count": 6,
-  "proven_script": "fig_v5_final.py",
+  "success_count": 7,
+  "proven_script": "fig_split_v10.py",
   "proven_params": [
     {
       "species": "",
@@ -133,10 +133,23 @@
       "approved": false,
       "custom_script": false,
       "result": "Fig1 五效应矩阵 v5 + Fig7 打分×亚群转置版。修复：新 meta 打分列带 _AUC 后缀，Z 转置前需 sub_agg.columns = score_names 统一列名，否则 ZT.loc 报 KeyError。Fig1 v5 保存成功 465KB（PANEL_GAP 3.0→1.8 缩小面板间距、行分组间隙 ri+=1→0.6）。Fig7 转置：y=22打分、x=10亚群，行"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_split_v10.py",
+      "params": "type6=6 panels (Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post); effect5=Aging/T2D/ExYoung/ExOld/ExT2D; subcluster=10 subtypes; value: 6groups+subcluster=row z-score ±2, 5effects=Cohen's d ±3; RdBu_r; CELL=1.0 no white gaps; row gap 0.2; PANEL_GAP=1.8; yticklabels full names; subtype labels y=-0.15 rot45; subplots_adjust manual layout (no tight_layout)",
+      "date": "2026-08-16",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA1/A2/A3 (18 program scores × 6groups/5effects/subcluster) saved OK. B-group (4 identity) hit KeyError 'Identity' — fixed by adding GROUP_COLORS['Identity']='#6A6A6A', rerun needed."
     }
   ],
   "user_prefs": {
-    "last_used_script": "fig_v5_final.py"
+    "last_used_script": "fig_split_v10.py"
   },
   "error_count": 1,
   "errors": [

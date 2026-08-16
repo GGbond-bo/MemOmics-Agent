@@ -1,0 +1,32 @@
+{
+  "id": "figure-designer",
+  "name": "Figure Designer（论文图设计顾问）",
+  "category": "general",
+  "language": "Python",
+  "description": "论文图设计顾问：对三张核心图（Motivated Example动机图/解决方案总览图/实验结果图）给设计范式、布局草图、标注指南、工具选型与QC审计建议。只给设计建议、不实际出图。触发词：设计图、图设计、图不好看、图不专业、选什么图、图型选择、布局建议、作图建议、figure design、choose the right chart",
+  "starting_prompt": "使用 Figure Designer（论文图设计顾问） 进行分析",
+  "source_dir": "skills/bioinformatics/figure-designer",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "设计图",
+    "图设计",
+    "图不好看",
+    "图不专业",
+    "选什么图",
+    "图型选择",
+    "布局建议",
+    "图布局",
+    "作图建议",
+    "设计一张图",
+    "figure design",
+    "design a figure",
+    "choose the right chart",
+    "figure looks unprofessional",
+    "plot design"
+  ]
+}

@@ -73,6 +73,12 @@ class _ProtoWorker:
             if rid in self._pending:
                 self._results[rid] = msg
                 self._pending[rid].set()
+            elif rid is None and msg.get("error") and self._pending:
+                # 2026-08-16: worker 对无法解析的请求回 id=null 的 error 响应 —
+                # 解开最早的在等请求，避免 execute 干等满整个超时
+                _first = sorted(self._pending.keys())[0]
+                self._results[_first] = msg
+                self._pending[_first].set()
 
     def _stderr_loop(self):
         while not self._reader_stop.is_set():
@@ -466,6 +472,36 @@ class KernelPool:
             "remaining_workers": len(self._workers),
             "note": "workers closed; next execute spawns a fresh worker — all in-memory objects are gone, reload from disk as needed",
         }, ensure_ascii=False)
+
+    def worker_snapshot(self, task_id=None, language=None):
+        """暴露活跃 worker 的 PID（2026-08-16：长任务卡死判定的进程证据源）。
+
+        返回 [{'key','language','task_id','pid','alive','last_use'}]；
+        pid=None 表示 worker 不在运行（未创建/已退出）。watchdog 用 PID 采样
+        CPU/IO，区分"任务还在算"与"真卡死"。
+        """
+        out = []
+        with self._lock:
+            for k, w in list(self._workers.items()):
+                _lang, _tid = k.split(":", 1)
+                if language is not None and _lang != language:
+                    continue
+                if task_id is not None and _tid != str(task_id):
+                    continue
+                _pid = None
+                _alive = False
+                try:
+                    if w.proc is not None:
+                        _pid = int(w.proc.pid)
+                        _alive = w.proc.poll() is None
+                except Exception:
+                    pass
+                out.append({
+                    "key": k, "language": _lang, "task_id": _tid,
+                    "pid": _pid, "alive": _alive,
+                    "last_use": round(float(getattr(w, "last_use", 0.0)), 1),
+                })
+        return out
 
 
 KERNEL_POOL = KernelPool()

@@ -38,8 +38,8 @@ SCHEMA = {
             },
             "timeout": {
                 "type": "integer",
-                "description": "Timeout in seconds (10-600, default 300)",
-                "default": 300
+                "description": "Timeout in seconds (10-7200, default 1800). 大矩阵/长计算请显式传大 timeout（如 3600），不要靠默认值。",
+                "default": 1800
             },
             "conda_env": {
                 "type": "string",
@@ -86,7 +86,7 @@ def _kill_process_group(proc):
         pass
 
 
-def execute_python(code: str, working_dir: str = "", timeout: int = 300,
+def execute_python(code: str, working_dir: str = "", timeout: int = 1800,
                    conda_env: str = "", task_id: str = "") -> str:
     """Execute Python code with process-group kill on timeout.
 
@@ -95,7 +95,8 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
     现在优先走 KERNEL_POOL（按 {lang}:{task_id} 缓存，空闲 30 分钟惰性关闭，
     同会话跨调用保留变量/已加载包）；持久不可用/报错时回退旧路径。
     """
-    timeout = min(max(int(timeout), 10), 600)
+    # 2026-08-16: 上限 600→7200 —— 长计算曾被默认超时误杀
+    timeout = min(max(int(timeout), 10), 7200)
 
     # ── P2-14: 持久 kernel 优先（状态保持 + 免包加载） ──
     try:
@@ -108,7 +109,7 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 300,
         except Exception:
             _task = task_id or _os.environ.get("MEMOMICS_SESSION_ID") or "default"
         _res = KERNEL_POOL.execute(
-            code, _task, timeout=min(timeout, 600), language="python",
+            code, _task, timeout=min(timeout, 7200), language="python",
             cwd=working_dir or None)  # P1-5: working_dir 接线
         if _res.get("status") == "ok":
             return (_res.get("output", "") or "(no output)")[:15000]
@@ -215,7 +216,7 @@ def _register():
         handler=lambda args, **kw: execute_python(
             args.get("code", ""),
             args.get("working_dir", ""),
-            args.get("timeout", 300),
+            args.get("timeout", 1800),
             args.get("conda_env", ""),
             kw.get("task_id", ""),
         ),

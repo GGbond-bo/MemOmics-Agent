@@ -342,6 +342,8 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 | human | skeletal_muscle | aging | 2026-08-15 | fig_v4_final.py | - | - |  |
 | - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
 | - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
