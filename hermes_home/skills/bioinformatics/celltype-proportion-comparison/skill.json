@@ -12,5 +12,38 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [],
+  "success_count": 2,
+  "proven_script": "02_significance.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_extract_meta.R",
+      "params": "Seurat 5.5.1, readRDS special_MF_annotation_umap.rds, 提取 samplename/type/subcluster → special_MF_meta.csv (11630 rows)",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF meta 提取: 11,630 细胞(非 51,227, dims 顺序读反更正) × 51,227 基因, 48 样本 6 组, 7 亚群 NMJ+zone1-6"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_significance.py",
+      "params": "per-sample 比例, 配对Wilcoxon(Pre→Post base_id), Mann-WhitneyU(跨组), Cliff's delta 方向翻转(正值=后者高), 双FDR(per_celltype+global), 9比较对×7亚群=63行",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF 显著性完成: 衰老效应 zone5 显著↓(p=0.0046,FDR_global=0.0485,eff=-0.80) + zone3↑(p=0.0234)+zone1↑(p=0.0271); 糖尿病效应无显著; 老年运动 zone3↑(p=0.0156)+zone5↓(p=0.0156); 糖尿病运动 zone6↓(p=0.0469)。六组比例中位数表已出"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "02_significance.py"
+  }
 }

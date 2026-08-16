@@ -303,6 +303,8 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 ⚠️ 相关坑：`gene_set_response_summary.csv` 里"弱响应(慎删)"判定基于 FDR<0.05 格数=0，但该判定**不代表该基因集无生物学信号**（可能只是小样本检验不出）——引用该表下删除结论前先查特异亚群 d 值。
 
 ## Pitfalls
+- **⛔ Seurat `dim()` = (genes, cells) — ncol 是细胞数、nrow 是基因数（2026-08-17 实测报错）**：Specialized MF 实测 `dims: 11630 cells x 51227 genes`（脚本 `cat('dims:', ncol(obj), 'cells x', nrow(obj), 'genes')` 输出），但此前被误报成"51,227 细胞 × 11,630 基因"（把 ncol/nrow 语义读反）。**验证铁律：亚群细胞数求和必须等于报告的细胞数**（59+3022+822+808+1254+4912+753=11,630 ✓）。汇报任何细胞数前先核对 dims 顺序 + 亚群求和，用户对数字精度极敏感。
+- **⛔ Python 显著性实现可直接复用（2026-08-17 实测，R 库 DLL 损坏/不想冷启动时的保底路径）**：比例显著性计算不必死磕 R（coin::wilcoxsign_test 非标准写法 + R 库 DLL 坑），pandas+scipy 一次跑通：`scipy.stats.wilcoxon`（配对，按 base_id inner_join 后两列）/ `mannwhitneyu(v2, v1)`（独立）+ `statsmodels.stats.multitest.multipletests(method='fdr_bh')` 双 FDR（per_celltype + 全局）。Cliff's delta 方向翻转 Python 实现：`gt += np.sum(b > x); lt += np.sum(b < x); d = (gt-lt)/(n1*n2)`（正值 = 后者组高，符合用户直觉）。完整脚本见 `references/specialized-mf-proportion-case.md`（02_significance.py 模式，9 比较对 × 7 亚群 = 63 行）。
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
   `egg::set_panel_size` 处理后的对象经 `ggsave()` 输出 PNG **默认纯黑背景**（实测 94.8% 像素
   纯黑 [0,0,0]，视觉=黑屏几道灰）——而"非白像素 95%"恰好会把它误判成"有内容"！
@@ -415,8 +417,18 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
 
 ## 支持文件
+- `references/specialized-mf-proportion-case.md` — **Specialized MF 11,630 细胞比例显著性案例（2026-08-17）**：Python 显著性管线完整代码（pandas+scipy wilcoxon/mannwhitneyu + 双 FDR + Cliff's delta 方向翻转）、9 比较对定义、六组比例中位数表、显著性要点（zone5 衰老↓ p=0.0046 / 糖尿病轴全不显著）
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
 - `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现 + **五效应扩展版 + 颜色语义问答三步核实 + v5→v6 定稿参数（tight_layout/add_axes 坑、亚群标签 y=-0.15、Fig7 转置）+ v6→v7 无白缝 CELL=1.0 + v7→v8 六组分布热图标签布局 + v8→v9 多面板重构（像 fig1 v7 那样）+ 真实分数 vs z-score 决策 + pandas MultiIndex×zscore numpy 层修复**。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图" / "PNG没变PDF对了"
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-08-17 | 01_extract_meta.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 02_significance.py | - | - |  |
