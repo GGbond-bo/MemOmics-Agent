@@ -77,6 +77,7 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | skeletal_muscle | aging | 2026-08-17 | plot_umap_annotation.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

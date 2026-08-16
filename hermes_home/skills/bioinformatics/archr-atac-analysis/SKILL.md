@@ -188,6 +188,7 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 | 错误 | 原因 | 修复 |
 |------|------|------|
 | `gzfile cannot open` reading RDS | 上一步超时未保存 | 从上一个 checkpoint 重跑 |
+| `plotMarkerHeatmap(...): unused arguments (ArchRProj=, useMatrix=, groupBy=, markerGenes=, name=)` | 函数签名不匹配（ArchR 版本不同）或 `plotMarkerHeatmap` 被其他包遮蔽 | ① 诊断：`find("plotMarkerHeatmap"); packageVersion("ArchR"); args(ArchR::plotMarkerHeatmap)` ② 显式命名空间 `ArchR::plotMarkerHeatmap(...)` 排除遮蔽 ③ 若签名无 `ArchRProj`（0.9.x 旧版）→ 走 `seMarker` 路线：先 `markers <- getMarkerFeatures(...)` 再 `plotMarkerHeatmap(seMarker=markers, markerGenes=..., groupBy=...)`（2026-08-16 猴侧 MarkerHeatmap 实测） |
 | bash 下 R segfault | Rcpp 与 MSYS 冲突 | 用 `cmd.exe /c` 包装 |
 | `library(ArchR)` 失败 | 缺 Rtools 编译 | 确保 Rtools45 在 PATH |
 | `TFMPvalue` not found | R < 4.5 | 必须 R 4.5.x |

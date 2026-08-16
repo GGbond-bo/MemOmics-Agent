@@ -151,6 +151,7 @@ proj <- ArchRProject(ArrowFiles = arrow_files, outputDirectory = "...", copyArro
 ```
 
 三选一：① 有 pre-built RDS（师兄/上游给的）→ 直接 readRDS 传参（**最省、功能最全**，含基因注释可做 ChIPseeker）；② 无 RDS → 按 `references/custom-genome-non-ucsc.md` 手动 SimpleList（⚠️ 空 geneAnnotation 只够 TileMatrix/降维/聚类，做不了 peak 注释）；③ 已保存的 ArchR 项目 → `loadArchRProject(..., force=TRUE)` 直接读，不用碰 Arrow/注释（rds 自带注释）。⛔ 不要用 `createGenomeAnnotation(genome="自定义")`——它会去搜 BSgenome 包失败。
+💡 **回答模板 = 先场景二分（2026-08-16 用户问"猴子的代码需要 genomeAnnotation 吗"再证）**：用户贴师兄 create_archr_project.R 问"这两步我需要吗"→ 直接按场景答——**loadArchRProject(已保存项目) = 不用传注释**（注释已存在项目对象里）；**从 Arrow 重建 = 必须传**（否则 `getGeneAnnotation NULL` / `ArchRPRoj is NULL` 报错）。先给结论表再给代码，不要上来就讲建 Arrow 的细节。
 
 ### 🟢 跨物种管线一致性检查清单（2026-08-12 猴 63 样本 vs 人 40 样本对比实测）
 
