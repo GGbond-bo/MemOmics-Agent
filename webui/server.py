@@ -319,6 +319,25 @@ async def _start_agent_stall_watchdog():
                             pass
                         _session_emit(s, {"type": "error", "content": f"⚠️ {_info}。已唤醒 Agent 诊断处理（不直接放弃）。", "session_id": sid})
                         _clear_session_running(sid)
+                        # 2026-08-16 补: 被卡线程可能永远不返回（卡死在 kernel 工具内），
+                        # 其 finally 不会执行 → _urgent_wakeup 永不消费 → AI 永远不会被叫醒。
+                        # 直接武装 3 秒后的诊断回合；dedupe 防与旧线程 finally 双发。
+                        _diag_txt = str(s.get("_stall_diag", ""))
+
+                        async def _frozen_wake(_s=s, _diag=_diag_txt):
+                            await asyncio.sleep(3)
+                            if _s.get("running_agent") or _s.get("running_task"):
+                                return  # 旧线程已自然结束并重排，让它走
+                            if _s.get("_stall_wake_active"):
+                                return
+                            _s["_stall_wake_active"] = True
+                            try:
+                                await _trigger_agent_turn(_s, _diag)
+                            finally:
+                                _s.pop("_stall_wake_active", None)
+                                _s.pop("_stall_diag", None)
+
+                        asyncio.ensure_future(_frozen_wake())
                         continue
                     # insufficient / no_task：无进程证据 → 工具自身超时兜底 + 长工具提醒
                     _since = s.get("_live_tool_ts") or 0
@@ -1131,8 +1150,8 @@ def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     if any(w in result for w in _done_words):
         return False
     _tail = result[-300:]
-    # 征询式结尾（在问用户）不是承诺
-    if _tail.rstrip().endswith(("？", "?", "吗", "呢")):
+    # 征询式/条件式结尾（在问用户或等条件再定）不是"说而不做"承诺
+    if _tail.rstrip().endswith(("？", "?", "吗", "呢", "再决定", "再定", "再说", "再确认")):
         return False
     _action_words = ["现在运行", "即将执行", "马上执行", "开始运行", "开始执行",
                      "开始跑", "现在跑", "接下来跑", "运行脚本", "执行脚本",
@@ -1490,6 +1509,9 @@ def _schedule_self_check(session, agent, loop):
             if sid not in _sessions: return
             s = _sessions[sid]
             if s.get("running_agent") or s.get("running_task"):
+                # 2026-08-16: 冻结分支已直接武装诊断回合 → 本唤醒不重排（防双发）
+                if s.get("_stall_wake_active"):
+                    return
                 # 2026-08-14 P0: 早退重排——被并发回合吞掉的唤醒重新调度（最多 3 次）
                 _retry_n = s.setdefault("_wakeup_retry_n", 0)
                 if _retry_n < 3:
@@ -8454,6 +8476,18 @@ async def wakeup_session(sid: str):
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found", "wakeup": False}, status_code=404)
     session = _sessions[sid]
+    # 2026-08-16: 退役任务（done/cancelled）的自动唤醒一律拦截——此前外部唤醒
+    # 置 urgent 会绕过 RunGate，让已完成任务白跑一轮
+    try:
+        from webui.runtime.run_gate import check_gate
+        _rd = session.get("results_dir", "") or ""
+        if _rd:
+            _verdict, _reason = check_gate(_rd, is_auto_wake=True)
+            if _verdict == "stop":
+                logger.info(f"[Wakeup] session {sid[:12]}: RunGate 拦截外部唤醒 ({_reason})")
+                return {"wakeup": False, "session_id": sid, "msg": f"Wakeup rejected: {_reason}"}
+    except Exception:
+        pass
     session["_urgent_wakeup"] = True
     logger.info(f"[Wakeup] session {sid[:12]}: external wakeup triggered")
     return {"wakeup": True, "session_id": sid, "msg": "Wakeup signal received. Agent will be activated on next tick."}

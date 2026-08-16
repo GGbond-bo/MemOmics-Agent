@@ -520,9 +520,20 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 _emit("enforcement", action="info",
                       message="💡 建议先 search_knowledge() 获取参数推荐。铁律 #2。")
 
+        # 2026-08-16: 状态有界化 — 长会话（35h+/数千次工具调用）历史/告警/重试表
+        # 无限增长造成内存缓慢泄漏；只保留最近窗口
+        if len(es.tool_history) > 200:
+            es.tool_history = es.tool_history[-200:]
+        if len(es.warnings) > 50:
+            es.warnings = es.warnings[-50:]
+        if len(es._exec_retries) > 100:
+            es._exec_retries = dict(list(es._exec_retries.items())[-100:])
+
     def tool_complete_cb(tool_call_id: str, tool_name: str, args, result):
         """工具执行后拦截 — 自动触发后续动作"""
         es.tool_history.append({"tool": tool_name, "args": str(args)[:200], "time": time.time(), "phase": "complete"})
+        if len(es.tool_history) > 200:
+            es.tool_history = es.tool_history[-200:]
 
         if tool_name == "terminal" or (tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal"):
             es.rail_post_done = False
