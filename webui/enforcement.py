@@ -610,11 +610,14 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         should_proceed = r.get("passed", r.get("should_proceed", True))
                         if not should_proceed:
                             issues = r.get("issues", [])
-                            es.blocked = True  # P0-1: 硬阻断接线
-                            es._block_kind = "rail_post"
+                            # 2026-08-17 用户要求：后审查不硬阻断——产出已存在，
+                            # 达标就放行交付；不达标给修复指引让 agent 继续解决问题，
+                            # 绝不 es.blocked 拦死执行工具（修复产出本身就需要执行工具）。
                             es._block_reason = (f"🛡️ rail_review(post) 发现问题: {'; '.join(issues[:3])}。"
-                                                "请修复后重新 rail_review(phase='post') 通过。")
-                            _emit("enforcement", action="blocked", message=es._block_reason)
+                                                "请修复后重新 rail_review(phase='post') 通过再交付。")
+                            _emit("enforcement", action="require", require=["rail_review"],
+                                  message=(es._block_reason
+                                           + "（不拦截执行工具：直接修复问题重新产出，再跑 post 审查）"))
                         else:
                             # 2026-08-16: 任一阶段审查通过即解除硬阻断（对称解绑，防死锁残留）
                             es.blocked = False

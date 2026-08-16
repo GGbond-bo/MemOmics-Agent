@@ -132,33 +132,63 @@ PYTHON_PACKAGES_BIO = {
 
 
 def _r_lib_env():
-    """从 environment.json 取主力 R 库路径（E:/R-libs/R-4.5.3 等）注入子进程环境。
+    """真实环境检查（2026-08-17 用户要求）：先按 environment.json 找主力库，
+    命中即可；未命中再让 R 自报 .libPaths() + 扫描常见 R 库目录（别的环境兜底），
+    把所有候选库一并注入 R_LIBS（支持 pathsep 多路径，顺序=优先级）。
 
     2026-08-17 修复（memomics-0228a136 案例）：此前 check_env 用默认 R 库路径
     探测，Seurat 等装在 E:/R-libs 的包全部误报 MISSING → rail_review(pre)
-    永远不过 → 执行保护永久拦截 + agent 手动设 R_LIBS 才能绕过。
-    库路径在 paths.r["R-x.y.z"].lib_user（按 default Rscript 匹配版本子键）。
+    永远不过 → 执行保护永久拦截。
     """
     import json
+    import glob as _glob
     env = dict(os.environ)
+    cands = []
+    # 1) environment.json 声明的库（主力 + 其他版本的 lib_user/lib_site）
     try:
         _app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         _env = json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
         _r = (_env.get("paths", {}).get("r", {}) or {})
-        _lib = _r.get("lib_user") or ""
-        if not _lib:
-            # 按 default 的 Rscript 路径匹配版本子键（R-4.5.3 → lib_user）
-            _def_bin = _r.get("default", "")
-            for _k, _v in _r.items():
-                if isinstance(_v, dict) and _v.get("bin") == _def_bin:
-                    _lib = _v.get("lib_user") or ""
-                    if _lib:
-                        break
-        if _lib:
-            env["R_LIBS"] = _lib
-            env["R_LIBS_USER"] = _lib
+        for _k, _v in _r.items():
+            if isinstance(_v, dict):
+                for _f in ("lib_user", "lib_site"):
+                    _p = _v.get(_f) or ""
+                    if _p and _p not in cands:
+                        cands.append(_p)
     except Exception:
         pass
+    # 2) R 自报 .libPaths()
+    try:
+        _rbin = _find_r_executable()
+        _p = subprocess.run([_rbin, "-e", "cat(paste(.libPaths(), collapse='\\n'))"],
+                            capture_output=True, text=True, timeout=30, errors="replace")
+        if _p.returncode == 0:
+            for _l in _p.stdout.strip().splitlines():
+                _l = _l.strip()
+                if _l and _l not in cands:
+                    cands.append(_l)
+    except Exception:
+        pass
+    # 3) 常见 R 库根扫描（找找还有没有别的环境）
+    try:
+        _home = os.path.expanduser("~")
+        _roots = [os.path.join(_home, "R"),
+                  os.path.join(os.environ.get("LOCALAPPDATA", ""), "R"),
+                  "C:/Program Files/R"]
+        _roots = [r for r in _roots if r and os.path.isdir(r)]
+        for _root in _roots:
+            for _pat in (os.path.join(_root, "*", "library"),
+                         os.path.join(_root, "win-library", "*"),
+                         os.path.join(_root, "*-library")):
+                for _d in _glob.glob(_pat):
+                    if _d not in cands:
+                        cands.append(_d)
+    except Exception:
+        pass
+    cands = cands[:12]  # 有界
+    if cands:
+        env["R_LIBS"] = os.pathsep.join(cands)
+        env["R_LIBS_USER"] = cands[0]
     return env
 
 
@@ -226,7 +256,8 @@ BiocManager::install("{pkg}", ask=FALSE, update=FALSE)
         subprocess.run(
             [_r_bin, "-e", r_code],
             capture_output=True, text=True, timeout=600,
-            encoding="utf-8", errors="replace"
+            encoding="utf-8", errors="replace",
+            env=_r_lib_env(),  # 2026-08-17: 装到 environment.json 主力库
         )
         return True
     except Exception:

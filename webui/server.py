@@ -6322,36 +6322,39 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             _session_emit(session, {"type": "reasoning", "content": str(reasoning_text), "session_id": sid})
 
         # 合并 enforcement + WeChat 回调（先保存 enforcement 回调）
-        _enf_tool_start = agent.tool_start_callback
-        _enf_tool_complete = agent.tool_complete_callback
-        _enf_progress = agent.tool_progress_callback
-        
-        def _merged_tool_start(tool_call_id, tool_name, args):
-            # P0-1(2026-08-13): 透传 enforcement 硬阻断返回值
-            _block = None
-            if _enf_tool_start:
-                try:
-                    _block = _enf_tool_start(tool_call_id, tool_name, args)
-                except Exception:
-                    pass
-            _wx_tool_start_cb(tool_name, args)
-            return _block
-        
-        def _merged_tool_complete(tool_call_id, tool_name, args, result):
-            if _enf_tool_complete:
-                _enf_tool_complete(tool_call_id, tool_name, args, result)
-            _wx_tool_complete_cb(tool_name, str(result)[:500] if result else "")
-        
-        def _merged_progress(event_type, **kwargs):
-            if _enf_progress:
-                try: _enf_progress(event_type, **kwargs)
+        # 2026-08-17: 幂等合并（同上，防回调链无限叠加）
+        if not getattr(agent, "_memomics_wx_cbs_merged", False):
+            _enf_tool_start = agent.tool_start_callback
+            _enf_tool_complete = agent.tool_complete_callback
+            _enf_progress = agent.tool_progress_callback
+            
+            def _merged_tool_start(tool_call_id, tool_name, args):
+                # P0-1(2026-08-13): 透传 enforcement 硬阻断返回值
+                _block = None
+                if _enf_tool_start:
+                    try:
+                        _block = _enf_tool_start(tool_call_id, tool_name, args)
+                    except Exception:
+                        pass
+                _wx_tool_start_cb(tool_name, args)
+                return _block
+            
+            def _merged_tool_complete(tool_call_id, tool_name, args, result):
+                if _enf_tool_complete:
+                    _enf_tool_complete(tool_call_id, tool_name, args, result)
+                _wx_tool_complete_cb(tool_name, str(result)[:500] if result else "")
+            
+            def _merged_progress(event_type, **kwargs):
+                if _enf_progress:
+                    try: _enf_progress(event_type, **kwargs)
+                    except Exception: pass
+                try: _wx_tool_progress_cb(event_type, **kwargs)
                 except Exception: pass
-            try: _wx_tool_progress_cb(event_type, **kwargs)
-            except Exception: pass
-        
-        agent.tool_start_callback = _merged_tool_start
-        agent.tool_complete_callback = _merged_tool_complete
-        agent.tool_progress_callback = _merged_progress
+            
+            agent.tool_start_callback = _merged_tool_start
+            agent.tool_complete_callback = _merged_tool_complete
+            agent.tool_progress_callback = _merged_progress
+            agent._memomics_wx_cbs_merged = True
         agent.stream_delta_callback = _wx_delta_cb
         agent.reasoning_callback = _wx_reasoning_cb
 
@@ -9643,28 +9646,32 @@ async def ws_endpoint(ws: WebSocket):
                 # P0-1(2026-08-13): 合并 enforcement 回调（_create_agent 已注册）——
                 # 之前本地回调直接覆盖，导致审查硬阻断（es.blocked / 自杀命令 / record_run 门禁）在主聊天路径失效。
                 # enforcement 回调返回 {"blocked": True, "message": ...} 时透传给 tool_executor 硬拦截。
-                _enf_tool_start = getattr(agent, "tool_start_callback", None)
-                _enf_tool_complete = getattr(agent, "tool_complete_callback", None)
-                def _merged_tool_start(tool_id, tool_name, args=None, _s=session):
-                    _block = None
-                    if _enf_tool_start:
-                        try:
-                            _block = _enf_tool_start(tool_id, tool_name, args)
-                        except Exception:
-                            pass
-                    tool_start_cb(tool_id, tool_name, args)
-                    return _block
-                def _merged_tool_complete(tool_id, tool_name, args=None, result=None, _s=session):
-                    if _enf_tool_complete:
-                        try:
-                            _enf_tool_complete(tool_id, tool_name, args, result)
-                        except Exception:
-                            pass
-                    tool_complete_cb(tool_id, tool_name, args, result)
-                    # 2026-08-14: 自动锚定本轮新产物文件（会话锚点）
-                    _auto_anchor_turn(_s, tool_name=tool_name, args=args)
-                agent.tool_start_callback = _merged_tool_start
-                agent.tool_complete_callback = _merged_tool_complete
+                # 2026-08-17: 幂等合并——此前每次进入都再包一层，链长随触发次数增长
+                # （实测单事件被触发 984 次 → system_log 写放大 984x、UI 卡顿）
+                if not getattr(agent, "_memomics_ws_cbs_merged", False):
+                    _enf_tool_start = getattr(agent, "tool_start_callback", None)
+                    _enf_tool_complete = getattr(agent, "tool_complete_callback", None)
+                    def _merged_tool_start(tool_id, tool_name, args=None, _s=session):
+                        _block = None
+                        if _enf_tool_start:
+                            try:
+                                _block = _enf_tool_start(tool_id, tool_name, args)
+                            except Exception:
+                                pass
+                        tool_start_cb(tool_id, tool_name, args)
+                        return _block
+                    def _merged_tool_complete(tool_id, tool_name, args=None, result=None, _s=session):
+                        if _enf_tool_complete:
+                            try:
+                                _enf_tool_complete(tool_id, tool_name, args, result)
+                            except Exception:
+                                pass
+                        tool_complete_cb(tool_id, tool_name, args, result)
+                        # 2026-08-14: 自动锚定本轮新产物文件（会话锚点）
+                        _auto_anchor_turn(_s, tool_name=tool_name, args=args)
+                    agent.tool_start_callback = _merged_tool_start
+                    agent.tool_complete_callback = _merged_tool_complete
+                    agent._memomics_ws_cbs_merged = True
                 agent.status_callback = status_cb
                 agent.notice_callback = notice_cb
                 agent.notice_clear_callback = notice_clear_cb
