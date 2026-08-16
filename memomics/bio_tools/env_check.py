@@ -131,6 +131,37 @@ PYTHON_PACKAGES_BIO = {
 }
 
 
+def _r_lib_env():
+    """从 environment.json 取主力 R 库路径（E:/R-libs/R-4.5.3 等）注入子进程环境。
+
+    2026-08-17 修复（memomics-0228a136 案例）：此前 check_env 用默认 R 库路径
+    探测，Seurat 等装在 E:/R-libs 的包全部误报 MISSING → rail_review(pre)
+    永远不过 → 执行保护永久拦截 + agent 手动设 R_LIBS 才能绕过。
+    库路径在 paths.r["R-x.y.z"].lib_user（按 default Rscript 匹配版本子键）。
+    """
+    import json
+    env = dict(os.environ)
+    try:
+        _app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        _env = json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
+        _r = (_env.get("paths", {}).get("r", {}) or {})
+        _lib = _r.get("lib_user") or ""
+        if not _lib:
+            # 按 default 的 Rscript 路径匹配版本子键（R-4.5.3 → lib_user）
+            _def_bin = _r.get("default", "")
+            for _k, _v in _r.items():
+                if isinstance(_v, dict) and _v.get("bin") == _def_bin:
+                    _lib = _v.get("lib_user") or ""
+                    if _lib:
+                        break
+        if _lib:
+            env["R_LIBS"] = _lib
+            env["R_LIBS_USER"] = _lib
+    except Exception:
+        pass
+    return env
+
+
 def _check_r_packages(packages):
     """Check R package availability — uses cached R path if available"""
     r_bin = _find_r_executable()
@@ -148,7 +179,8 @@ for (p in names(installed)) {{
         result = subprocess.run(
             [r_bin, "-e", r_code],
             capture_output=True, text=True, timeout=60,
-            encoding="utf-8", errors="replace"
+            encoding="utf-8", errors="replace",
+            env=_r_lib_env(),  # 2026-08-17: 注入主力 R 库路径，防 Seurat 等误报缺失
         )
         lines = result.stdout.strip().split("\n")
         status = {}

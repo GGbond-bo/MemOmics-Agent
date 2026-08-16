@@ -253,6 +253,7 @@ class EnforcementState:
         self.tool_history: list = []
         self.warnings: list = []
         self.blocked: bool = False
+        self._blocked_attempts: int = 0  # 2026-08-17: 连续被拦次数（重试风暴压制）
         self.conclusions_dir: str = ""
 
     def get_conclusions_dir(self) -> str:
@@ -310,6 +311,7 @@ def clear_hard_block(session_id: str) -> bool:
     es.blocked = False
     es._block_kind = ""
     es._block_reason = ""
+    es._blocked_attempts = 0
     es._pending_record = False  # record_run 门禁同样只约束当轮
     return was
 
@@ -392,9 +394,20 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         # P0-1: es.blocked 置位（rail_review pre/post 未通过）→ 拦截执行类工具
         # 修复类工具不在 _DEBATE_EXEC_TOOLS，天然放行。
         if es.blocked and tool_name in _DEBATE_EXEC_TOOLS:
+            # 2026-08-17 重试风暴压制（memomics-0228a136 案例：单响应 150+ 次
+            # execute_r 被拦，模型疯狂重试烧 token）：第 2 次起注入强制引导，
+            # 让模型停止重试执行工具、先跑 rail_review 解绑。
+            es._blocked_attempts = int(getattr(es, "_blocked_attempts", 0)) + 1
+            _base = es._block_reason or "⛔ 执行被拦截：前序审查未通过。"
+            _hint = ("（解除：修复问题后重新 rail_review 通过自动解绑；或用户发新消息重置本轮审查状态）")
+            if es._blocked_attempts >= 2:
+                _emit("enforcement", action="require", require=["rail_review"],
+                      message=(f"⛔ 已连续 {es._blocked_attempts} 次尝试执行被拦截！"
+                               f"停止重试 {tool_name}。正确路径：先调用 rail_review 通过拿到"
+                               "解绑（检查 required_packages 是否与实际环境一致），"
+                               "解绑后执行工具才会放行；反复被拦请检查 rail_review 的参数。"))
             return {"blocked": True,
-                    "message": (es._block_reason or "⛔ 执行被拦截：前序审查未通过。")
-                    + "（解除：修复问题后重新 rail_review 通过自动解绑；或用户发新消息重置本轮审查状态）"}
+                    "message": _base + f"（已连续拦截 {es._blocked_attempts} 次）" + _hint}
 
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
@@ -589,6 +602,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                             es.blocked = False
                             es._block_kind = ""
                             es._block_reason = ""
+                            es._blocked_attempts = 0
                     elif phase == "post" or r.get("phase") == "post":
                         es.rail_post_done = True
                         # 🔧 bug② 修复(2026-08-01): rail_review 返回键是 "passed" 不是 "should_proceed"
@@ -606,6 +620,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                             es.blocked = False
                             es._block_kind = ""
                             es._block_reason = ""
+                            es._blocked_attempts = 0
             except Exception:
                 pass
 
