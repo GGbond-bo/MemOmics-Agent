@@ -344,6 +344,7 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 | - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | plot_umap_annotation_v2.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
