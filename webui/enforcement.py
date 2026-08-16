@@ -295,6 +295,25 @@ def reset_enforcement(session_id: str):
     _session_enforcement.pop(session_id, None)
 
 
+def clear_hard_block(session_id: str) -> bool:
+    """2026-08-16: 用户新消息 = 新指令 → 解除审查硬阻断残留（fail-open）。
+
+    阻断只应约束"当前一轮执行流"，不应跨用户回合永久锁死执行类工具
+    （12G Seurat 对象读取案例：rail_review(post) 未通过残留使 execute_r
+    一直被拦，重跑 pre 也解不开 → 死锁）。审查门禁会在新一轮自动重新武装
+    （执行完成后照常要求 rail_review(post)）。
+    """
+    es = _session_enforcement.get(session_id)
+    if not es:
+        return False
+    was = bool(es.blocked or es._pending_record)
+    es.blocked = False
+    es._block_kind = ""
+    es._block_reason = ""
+    es._pending_record = False  # record_run 门禁同样只约束当轮
+    return was
+
+
 def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list = None):
     """
     创建强制执行回调，注入到 AIAgent。
@@ -375,7 +394,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         if es.blocked and tool_name in _DEBATE_EXEC_TOOLS:
             return {"blocked": True,
                     "message": (es._block_reason or "⛔ 执行被拦截：前序审查未通过。")
-                    + "（提示：rail_review 通过后自动解除阻断）"}
+                    + "（解除：修复问题后重新 rail_review 通过自动解绑；或用户发新消息重置本轮审查状态）"}
 
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
@@ -552,8 +571,11 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                             es._block_reason = (f"🛡️ rail_review(pre) 发现问题: {'; '.join(issues[:3])}。"
                                                 "请修复后重新 rail_review(phase='pre') 通过再执行。")
                             _emit("enforcement", action="blocked", message=es._block_reason)
-                        elif es._block_kind == "rail_pre":
-                            es.blocked = False  # P0-1: 通过后解除
+                        else:
+                            # 2026-08-16: 任一阶段审查通过即解除硬阻断。此前只解除同阶段
+                            # （elif es._block_kind == "rail_pre"）——post 失败残留时重跑 pre
+                            # 通过也解不开 → execute_r/terminal 被永久锁死（12G Seurat 读取案例）
+                            es.blocked = False
                             es._block_kind = ""
                             es._block_reason = ""
                     elif phase == "post" or r.get("phase") == "post":
@@ -568,8 +590,9 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                             es._block_reason = (f"🛡️ rail_review(post) 发现问题: {'; '.join(issues[:3])}。"
                                                 "请修复后重新 rail_review(phase='post') 通过。")
                             _emit("enforcement", action="blocked", message=es._block_reason)
-                        elif es._block_kind == "rail_post":
-                            es.blocked = False  # P0-1: 通过后解除
+                        else:
+                            # 2026-08-16: 任一阶段审查通过即解除硬阻断（对称解绑，防死锁残留）
+                            es.blocked = False
                             es._block_kind = ""
                             es._block_reason = ""
             except Exception:

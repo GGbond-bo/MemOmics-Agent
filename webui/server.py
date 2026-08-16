@@ -8792,6 +8792,10 @@ async def ws_endpoint(ws: WebSocket):
                 _es = _enf2.get_enforcement(session["id"])
                 _es.analysis_level = _level
                 _es.results_dir = session.get("results_dir", "")
+                # 2026-08-16: 用户新消息 = 新指令 → 解除审查硬阻断残留（12G Seurat 案例：
+                # rail_review(post) 未通过残留使 execute_r/terminal 一直被拦，死锁）
+                if _enf2.clear_hard_block(session["id"]):
+                    logger.info(f"[Enforcement] session {session['id'][:12]}: 新用户消息解除审查硬阻断")
                 # 2026-08-14: 会话锚点 — 用户点名的路径自动标记 + 注入锚点摘要
                 _auto_anchor_turn(session, user_text=user_text)
                 # 2026-08-14: 会话轮数计数（长会话可见性：第 N 轮）
