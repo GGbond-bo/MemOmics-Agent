@@ -135,7 +135,14 @@ def run_governance(dry_run: bool = True, verbose: bool = True) -> dict:
     if not dry_run:
         os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
-    for key, ent in idx["entries"].items():
+    # 2026-08-16: 按条目号降序处理 —— 替换条目为索引行会减少分隔符、重编号
+    # 后续条目；从大到小处理保证低编号条目不受影响（升序会错位替换/归档）
+    _sorted_keys = sorted(
+        (k for k in idx["entries"].keys() if ":" in k and k.split(":")[1].isdigit()),
+        key=lambda k: -int(k.split(":")[1]),
+    )
+    for key in _sorted_keys:
+        ent = idx["entries"][key]
         # 2026-08-14 防御：reg: 等元数据登记键不是 "kind:int" 文件条目，
         # int() 会 ValueError 导致整个治理崩溃（孤儿清理后本应消失，双保险）
         _parts = key.split(":")
@@ -152,7 +159,20 @@ def run_governance(dry_run: bool = True, verbose: bool = True) -> dict:
             report["kept_l1"].append(ent["preview"])
             continue
         if ent["pinned"] or ent["layer"] == "L1":
-            report["kept_l1"].append(ent["preview"])
+            # 2026-08-16: 补 L1→L2 下沉 —— 原实现永远保留 L1（L2/L3 恒 0），
+            # L1 文件无限膨胀超 char 限额，每次新写入都触发 LLM consolidate 折腾。
+            # 判据保守：score < 0.3 且未 pinned（用户铁律 importance≥0.8 →
+            # score≥0.4 恒留 L1，不影响用户规则注入）。
+            if (ent["layer"] == "L1" and not ent["pinned"]
+                    and float(ent.get("score", 1.0) or 1.0) < 0.3):
+                report["moved_to_l2"].append(ent["preview"])
+                if not dry_run:
+                    _sink_to_facts(entry_text, kind, ent)
+                    _ent2 = dict(ent)
+                    _ent2["layer"] = "L2"
+                    _replace_entry_with_index_line(path, entry_text, _ent2)
+            else:
+                report["kept_l1"].append(ent["preview"])
             continue
         if ent["layer"] == "L2":
             report["moved_to_l2"].append(ent["preview"])

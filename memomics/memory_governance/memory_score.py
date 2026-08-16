@@ -87,13 +87,19 @@ def decide_layer(score: float, pinned: bool, last_used_ts: float = None) -> str:
 
 
 def parse_entries(text: str) -> list:
-    """按 § 切条目，去空。返回条目文本列表。"""
+    """按 § 切条目，去空。返回条目文本列表。
+
+    2026-08-16: 跳过外置索引行（[L2→外置]/[L3→外置]）——它们是 L1→L2/L3
+    迁移留下的占位符，不是真实记忆条目（此前被当条目 → 统计虚高 + 编号错位）。
+    """
     parts = text.split("\n§\n")
     entries = []
     for p in parts:
         p = p.strip()
         # 跳过文件头（# Memory / <!-- --> 注释在第一个 § 之前）
         if p and not p.startswith("# ") and not p.startswith("<!--"):
+            if p.startswith("[L2→外置]") or p.startswith("[L3→外置]"):
+                continue
             entries.append(p)
     return entries
 

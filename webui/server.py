@@ -1744,6 +1744,15 @@ async def _trigger_agent_turn(session, message):
         session.setdefault("messages", []).append(
             {"role": "assistant", "content": final, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
         _session_emit(session, {"type": "complete", "content": final[:200], "session_id": session["id"]})
+        # 2026-08-16: 自检回合同样检测"说而不做"（此前只覆盖用户回合；
+        # 虚假完成检测依赖回合级 _real_exec_this_turn 接线，自检回合无，只做承诺检测）
+        if _detect_action_promise(final, []):
+            _wake_n = session.get("_saying_wakeup_n", 0)
+            if _wake_n < 2:
+                session["_saying_wakeup_n"] = _wake_n + 1
+                session["_urgent_wakeup"] = True
+                session["_force_tool_check"] = True
+                logger.info("[MemOmics] 自检回合检测到说而不做 → 立即强制重跑 (#%d/2)", _wake_n + 1)
     except asyncio.TimeoutError:
         _session_emit(session, {"type": "timeout", "content": "自检超时(5分钟)", "session_id": session["id"]})
     except Exception as e:
