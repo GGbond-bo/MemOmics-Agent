@@ -1204,7 +1204,8 @@ def _detect_action_promise(result: str, tool_call_log: list) -> bool:
             _before = _tail[max(0, _i - 12):_i]
             if not any(_c in _before for _c in ("可以", "如需", "如果", "若要", "需要的话", "可随时", "随时", "能否", "要不要")):
                 _after = _tail[_i + len(_w):_i + len(_w) + 40]
-                if any(_p in _after for _p in _prod_words):
+                # 2026-08-17: 大小写不敏感（"RDS" 也匹配词表 "rds"）
+                if any(_p in _after.lower() for _p in _prod_words):
                     return True
             _i = _tail.find(_w, _i + 1)
     # Tier B: 编号计划承诺（①②③/第N步/1. 2. 3.）+ 计划动词 + 无完成叙述

@@ -23,7 +23,8 @@ ANALYSIS_KEYWORDS = {
         "dia-nn", "diann", "磷酸化", "phospho", "微生物", "microbiome", "16s",
         "宏基因组", "metagenome", "otu", "asv", "qiime", "甲基化", "methylation",
         "chip-seq", "chipseq", "cut&tag", "cuttag", "dmr", "表观",
-        "画图", "可视化", "figure", "plot", "chart", "graph", "volcano", "heatmap", "generate", "create", "draw",
+        "画图", "可视化", "出图", "画出来", "画个", "热图", "火山图", "小提琴图", "箱线图",
+        "umap", "tsne", "pca", "注释", "annotat", "figure", "plot", "chart", "graph", "volcano", "heatmap", "generate", "create", "draw",
         "报告", "report", "html",
         "差异表达", "differential expression", "deg",
         "跑", "执行", "开始", "start",
@@ -47,8 +48,9 @@ def detect_analysis_level(user_message: str) -> str:
         if kw.lower() in msg_lower:
             score += 1
     
-    # 有分析关键词 + 执行意图 → analysis
-    has_action = any(kw in msg_lower for kw in ["run", "do", "go", "start", "generate", "create", "draw", "plot", "subset", "exec"])
+    # 有分析关键词 + 执行意图 → analysis（含中文动作词：画/绘/读/跑）
+    has_action = any(kw in msg_lower for kw in ["run", "do", "go", "start", "generate", "create", "draw", "plot",
+                                                "subset", "exec", "画", "绘", "读", "跑"])
     if score >= 3 or (score >= 2 and has_action):
         return "analysis"
     elif score >= 1:
