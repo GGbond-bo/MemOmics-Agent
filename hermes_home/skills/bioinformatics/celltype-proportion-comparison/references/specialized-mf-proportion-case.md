@@ -79,3 +79,25 @@ zone6   0.1442  0.1179  0.1079  0.0922  0.0592   0.0241
 - `data/special_MF_meta.csv`（meta 3 列，11630 行）
 - `data/special_MF_significance.csv`（63 行：9 比较 × 7 亚群，含 p/FDR_per_celltype/FDR_global/eff）
 - `data/special_MF_proportion_by_group.csv` + `data/special_MF_proportion_median_pivot.csv`
+
+## 探索箱线图（03_boxplot_6grp_cluster1.R，2026-08-17 追加）
+
+**触发**：用户"先做第一组，6个柱子的箱线图，我先看看效果"——按逐亚群门禁先出第一个亚群（zone1/cluster1）的 6 组探索图。
+
+**模板要点**（可复用为后续亚群画图脚本）：
+- 读 `special_MF_meta.csv` → 每样本每亚群比例（`n / sample_total`）→ 6 组 factor 顺序 `Y_Pre..OD_Post`
+- 亚群显示名映射：`zone1-6 -> cluster1-6`（用户拍板改名），NMJ 不变；`label_map <- c(NMJ='NMJ', zone1='cluster1', ...)`
+- 画图：`ggplot + geom_boxplot(outlier.shape=NA, fill='#f0f0f0') + geom_jitter(width=0.14, color='#3b6fb5') + theme_bw(base_size=11)`；标题 `Specialized MF: cluster1 (6 groups)`
+- **显著性标注从 CSV 读，不重算**：`comp_sig <- sig_ct[sig_ct$paired != 'True' & sig_ct$p < 0.05, ]`——⚠️ paired 是字符型，`== FALSE` 永远匹配不到（2026-08-17 实测踩坑，图上 0 标注不报错）
+- 手动括号：`annotate('segment'/'text', y = base_h + (i-1)*step, label=paste0('p=', formatC(p, format='f', digits=3)))`，括号高度随比较数递增（`base_h <- ymax*1.08; step <- ymax*0.08`），`coord_cartesian(ylim=c(0, ymax*1.30))` 预留标注空间
+- 探索图尺寸 **140×110mm, 300dpi, bg='white'**（定稿才用 egg::set_panel_size 柱数规则）
+
+**cluster1 实测标注**（raw p 探索版，4 个独立比较显著）：
+| 比较 | p |
+|------|-----|
+| Y_Pre vs OD_Pre | 0.0054 |
+| Y_Pre vs OD_Pre（YvsOD） | 0.0161 |
+| Y_Post vs O_Post | 0.0217 |
+| Y_Pre vs O_Pre（YvsO） | 0.0271 |
+
+**⚠️ 生物学解读警示（L1 辩论 verdict=modify, high）**：cluster1 比例年轻组极低（Y_Pre 1.5%）→ 老年升高（O_Pre 10.5%）→ **老年运动后继续升（O_Post 21.5%）**，糖尿病运动组也保持高位（OD_Post 18.6%）。方向与"运动逆转去神经"知识库预期**相反**——运动后 Specialized MF 比例反而升。定稿前必须补 **pseudobulk（DESeq2, FDR<0.1）验证**，防止 10 vs 7 小样本个体异质性带偏；raw p 探索标注须注明未校正。产出 `explore_6grp_cluster1_boxplot.png`、脚本 `03_boxplot_6grp_cluster1.R`。

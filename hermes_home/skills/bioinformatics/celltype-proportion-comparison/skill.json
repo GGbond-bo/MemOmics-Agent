@@ -13,8 +13,8 @@
   "aliases": [],
   "trigger_level": "YEL",
   "trigger_keywords": [],
-  "success_count": 2,
-  "proven_script": "02_significance.py",
+  "success_count": 4,
+  "proven_script": "03_boxplot_6grp_cluster1.R",
   "proven_params": [
     {
       "species": "human",
@@ -41,9 +41,45 @@
       "approved": false,
       "custom_script": false,
       "result": "Specialized MF 显著性完成: 衰老效应 zone5 显著↓(p=0.0046,FDR_global=0.0485,eff=-0.80) + zone3↑(p=0.0234)+zone1↑(p=0.0271); 糖尿病效应无显著; 老年运动 zone3↑(p=0.0156)+zone5↓(p=0.0156); 糖尿病运动 zone6↓(p=0.0469)。六组比例中位数表已出"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "03_boxplot_6grp_cluster1.R",
+      "params": "type_order 6组; theme_bw; 手动括号; raw p 标注; 140x110mm探索图",
+      "date": "2026-08-17",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF cluster1(zone1) 6柱探索箱线图生成 explore_6grp_cluster1_boxplot.png。发现问题: sig comparisons=0 (显著性表 zone1 有4个p<0.05比较未标注), ymax=0.79 个别样本占比极高, 需排查过滤逻辑。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_boxplot_6grp_cluster1.R",
+      "params": "140x110mm探索图; theme_bw; raw p标注; 手动括号",
+      "date": "2026-08-17",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster1(zone1) 6柱探索箱线图 explore_6grp_cluster1_boxplot.png 生成, 4个显著比较raw p标注(YvsO 0.0271/YvsOD 0.0161/Ypost_vs_Opost 0.0217/Ypost_vs_ODpost 0.0054)。post审查通过。L1辩论verdict=modify: raw p可接受+需pseudobulk验证。"
     }
   ],
   "user_prefs": {
-    "last_used_script": "02_significance.py"
-  }
+    "last_used_script": "03_boxplot_6grp_cluster1.R"
+  },
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.0,
+      "evidence": "L1辩论裁决(modify, high): raw p标注探索图可接受但须注明未校正; 结论需pseudobulk(DESeq2 FDR<0.1)验证; 警惕批次效应与10vs7小样本个体异质性; cluster1随运动升高与'运动逆转去神经'知识库矛盾需谨慎解读",
+      "date": "2026-08-17 02:16:49"
+    }
+  ]
 }

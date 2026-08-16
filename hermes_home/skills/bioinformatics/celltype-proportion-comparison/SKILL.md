@@ -305,6 +305,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 ## Pitfalls
 - **⛔ Seurat `dim()` = (genes, cells) — ncol 是细胞数、nrow 是基因数（2026-08-17 实测报错）**：Specialized MF 实测 `dims: 11630 cells x 51227 genes`（脚本 `cat('dims:', ncol(obj), 'cells x', nrow(obj), 'genes')` 输出），但此前被误报成"51,227 细胞 × 11,630 基因"（把 ncol/nrow 语义读反）。**验证铁律：亚群细胞数求和必须等于报告的细胞数**（59+3022+822+808+1254+4912+753=11,630 ✓）。汇报任何细胞数前先核对 dims 顺序 + 亚群求和，用户对数字精度极敏感。
 - **⛔ Python 显著性实现可直接复用（2026-08-17 实测，R 库 DLL 损坏/不想冷启动时的保底路径）**：比例显著性计算不必死磕 R（coin::wilcoxsign_test 非标准写法 + R 库 DLL 坑），pandas+scipy 一次跑通：`scipy.stats.wilcoxon`（配对，按 base_id inner_join 后两列）/ `mannwhitneyu(v2, v1)`（独立）+ `statsmodels.stats.multitest.multipletests(method='fdr_bh')` 双 FDR（per_celltype + 全局）。Cliff's delta 方向翻转 Python 实现：`gt += np.sum(b > x); lt += np.sum(b < x); d = (gt-lt)/(n1*n2)`（正值 = 后者组高，符合用户直觉）。完整脚本见 `references/specialized-mf-proportion-case.md`（02_significance.py 模式，9 比较对 × 7 亚群 = 63 行）。
+- **⛔ significance CSV 的 `paired` 列是字符型 'True'/'False'——过滤必须 `paired != 'True'`，不能 `paired == FALSE`（2026-08-17 实测被自己坑）**：read.csv(stringsAsFactors=FALSE) 读进后 `paired` 是 character，`paired == FALSE`（逻辑值）永远匹配不到 → comp_sig 0 行 → 图上没有显著性标注但脚本不报错。探索图/定稿图脚本读取显著性 CSV 时**统一用 `paired != 'True'`（或 paired=='False' 取反）筛选独立比较**。交付前 R 侧打印 `nrow(comp_sig)` 与预期比较数核对，防止\"图出来了但没标注\"的静默失败。
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
   `egg::set_panel_size` 处理后的对象经 `ggsave()` 输出 PNG **默认纯黑背景**（实测 94.8% 像素
   纯黑 [0,0,0]，视觉=黑屏几道灰）——而"非白像素 95%"恰好会把它误判成"有内容"！
@@ -417,7 +418,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
 
 ## 支持文件
-- `references/specialized-mf-proportion-case.md` — **Specialized MF 11,630 细胞比例显著性案例（2026-08-17）**：Python 显著性管线完整代码（pandas+scipy wilcoxon/mannwhitneyu + 双 FDR + Cliff's delta 方向翻转）、9 比较对定义、六组比例中位数表、显著性要点（zone5 衰老↓ p=0.0046 / 糖尿病轴全不显著）
+- `references/specialized-mf-proportion-case.md` — **Specialized MF 11,630 细胞比例显著性案例（2026-08-17）**：Python 显著性管线完整代码（pandas+scipy wilcoxon/mannwhitneyu + 双 FDR + Cliff's delta 方向翻转）、9 比较对定义、六组比例中位数表、显著性要点（zone5 衰老↓ p=0.0046 / 糖尿病轴全不显著）+ **探索箱线图模板（03_boxplot_6grp_cluster1.R：zone→cluster 改名映射、手动括号 raw p 标注、paired 列字符型坑、cluster1 衰老↑/运动↑ 方向与"运动逆转去神经"预期相反→需 pseudobulk 验证）**
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
@@ -432,3 +433,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 |------|------|------|------|------|------|------|----|
 | human | skeletal_muscle | aging | 2026-08-17 | 01_extract_meta.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-17 | 02_significance.py | - | - |  |
+| - | - | - | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
+| - | - | - | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
+| - | - | - | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
