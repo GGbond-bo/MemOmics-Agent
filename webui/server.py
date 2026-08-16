@@ -8720,10 +8720,23 @@ def _ensure_results_dir(session):
         pass
 
 
-def _auto_system_log(session, tool_name, args, result_str):
+def _auto_system_log(session, tool_name, args, result_str, tool_id=""):
     """在每个关键工具调用完成后，自动写入 results/<sid>/log/system_log.jsonl
-    仅当 results_dir 已存在（即有实际分析产出）时才写入，不主动创建目录。"""
+    仅当 results_dir 已存在（即有实际分析产出）时才写入，不主动创建目录。
+
+    2026-08-17 去重（memomics-0228a136 案例）：tool_complete 回调经多层合并链
+    被同一工具事件反复触发（实测单个事件写 984 条相同日志，35h 会话日志
+    膨胀到 166MB、UI 卡顿），按 tool_id 在 1.5s 窗口内去重。
+    """
     try:
+        _dedup = session.setdefault("_syslog_dedup", {})
+        _key = str(tool_id or tool_name or "")
+        _now = time.time()
+        if _key and _now - _dedup.get(_key, 0) < 1.5:
+            return
+        _dedup[_key] = _now
+        if len(_dedup) > 500:  # 有界化
+            _dedup.clear()
         results_dir = session.get("results_dir", "")
         if not results_dir or not os.path.isdir(results_dir):
             return  # 纯聊天会话不创建目录
@@ -9395,17 +9408,18 @@ async def ws_endpoint(ws: WebSocket):
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
-                            _conn = _tcl_sqlite.connect(_db_path, timeout=2)
+                            _conn = _tcl_sqlite.connect(_db_path, timeout=10)
                             _conn.execute("PRAGMA journal_mode=WAL")
-                            _conn.execute("PRAGMA busy_timeout=2000")
+                            _conn.execute("PRAGMA busy_timeout=5000")
                             _conn.execute(
                                 "INSERT INTO tool_calls_log (session_id, tool_name, tool_id, args_json, result_text, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                                 (_s["id"], tool_name, str(tool_id or ""), _args_json, _result_trunc, _tcl_time.time())
                             )
                             _conn.commit()
                             _conn.close()
-                        except Exception:
-                            pass
+                        except Exception as _tcl_err:
+                            # 2026-08-17: 此前 except:pass 静默吞错，表 35 小时零行；记录原因
+                            logger.warning(f"[tool_log] tool_calls_log 写入失败: {_tcl_err}")
                         # 检测 skill_evolution 自进化事件
                         if tool_name == "skill_evolution":
                             try:
@@ -9548,7 +9562,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
                         # 先确保 results_dir 物理目录存在（纯聊天不创建，首次分析自动创建）
                         _ensure_results_dir(session)
-                        _auto_system_log(session, tool_name, args, result_str)
+                        _auto_system_log(session, tool_name, args, result_str, tool_id=tool_id)
                         # 📱 微信进度推送：关键步骤完成时推送到微信
                         _weixin_push_progress(session, tool_name, result_str, loop=_main_loop)
                         # 🔧 update_results_dir 后同步更新 session 的 results_dir
