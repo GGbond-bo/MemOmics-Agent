@@ -1,0 +1,23 @@
+{
+  "id": "patent-analysis",
+  "name": "专利深度分析",
+  "category": "Literature",
+  "language": "Python",
+  "description": "生物信息学/方法类专利深度分析：竞品拆解、权利解读、规避策略、创新点空白识别",
+  "starting_prompt": "使用 专利深度分析 进行分析",
+  "source_dir": "skills/bioinformatics/patent-analysis",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "patent",
+    "patent-analysis",
+    "专利分析",
+    "竞品拆解",
+    "IP",
+    "intellectual-property"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

@@ -1,0 +1,18 @@
+{
+  "id": "gene-essentiality",
+  "name": "gene-essentiality",
+  "category": "GWAS/Genetics",
+  "language": "R+Python",
+  "description": "Guidance for interpreting DepMap essentiality scores and correlations correctly.",
+  "tags": [
+    "essentiality",
+    "CRISPR",
+    "DepMap",
+    "gene effect",
+    "correlation"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

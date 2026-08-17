@@ -1,0 +1,20 @@
+{
+  "id": "analyze_ebv_antibody_titers",
+  "name": "Analyze Ebv Antibody Titers",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze ELISA data to quantify EBV antibody titers in plasma/serum samples.",
+  "detailed_description": "Analyze ELISA data to quantify EBV antibody titers in plasma/serum samples.",
+  "when_to_use": "When you need analyze ebv antibody titers analysis",
+  "parameters": {
+    "raw_od_data": "[Required] Dictionary containing optical density (OD) readings for each sample. Format: {sample_id: {'VCA_IgG': float, 'VCA_IgM': float, 'EA_IgG': float, 'EA_IgM': float, 'EBNA1_IgG': float, 'EBNA1_IgM': float}} (dict)",
+    "standard_curve_data": "[Required] Dictionary containing standard curve data for each antibody type. Format: {antibody_type: [(concentration, OD), ...]} (dict)",
+    "sample_metadata": "[Required] Dictionary containing metadata for each sample. Format: {sample_id: {'group': str, 'collection_date': str}} (dict)",
+    "output_dir": "[Optional] Directory to save output files. (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

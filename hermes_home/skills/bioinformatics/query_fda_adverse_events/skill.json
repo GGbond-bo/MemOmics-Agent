@@ -1,0 +1,21 @@
+{
+  "id": "query_fda_adverse_events",
+  "name": "Query Fda Adverse Events",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query FDA adverse event reports for specific drugs from the OpenFDA database to identify potential safety signals, reaction patterns, and regulatory intelligence.",
+  "detailed_description": "Query FDA adverse event reports for specific drugs from the OpenFDA database to identify potential safety signals, reaction patterns, and regulatory intelligence.",
+  "when_to_use": "When you need query fda adverse events analysis",
+  "parameters": {
+    "drug_name": "[Required] Name of the drug to query for adverse events (str)",
+    "date_range": "[Optional] Optional date range as (start_date, end_date) in YYYY-MM-DD format",
+    "severity_filter": "[Optional] Optional filter by severity levels ['serious', 'non_serious']",
+    "outcome_filter": "[Optional] Optional filter by outcomes ['life_threatening', 'hospitalization', 'death']",
+    "limit": "[Optional] Maximum number of results to return (default: 100)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

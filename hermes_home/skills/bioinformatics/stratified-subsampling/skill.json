@@ -1,0 +1,45 @@
+{
+  "id": "stratified-subsampling",
+  "name": "stratified-subsampling",
+  "category": "stratified",
+  "language": "R+Python",
+  "description": "Auto-generated for stratified-subsampling",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": [],
+  "success_count": 2,
+  "proven_script": "subsample_10k_random.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "subsample_10k.py",
+      "params": "{\"target_total\": 10000, \"min_per_type\": 30, \"seed\": 42, \"stratify_by\": \"celltype\", \"method\": \"proportional_allocation\"}",
+      "date": "2026-07-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "从324,434细胞中按celltype分层抽样10,000细胞，11种细胞类型全覆盖，比例偏差<0.5%（仅MastCells从0.2%→0.3%因保底30），年龄分布15-99全保留"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "subsample_10k_random.py",
+      "params": "{\"target_total\": 10000, \"seed\": 42, \"method\": \"random\", \"input\": \"Migule_lai_24 _new.h5ad (324,434 cells)\"}",
+      "date": "2026-07-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "纯随机抽取10,000细胞，11种细胞类型均有代表（MastCells仅11个），年龄15-99全保留，文件329.5MB"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "subsample_10k_random.py"
+  }
+}

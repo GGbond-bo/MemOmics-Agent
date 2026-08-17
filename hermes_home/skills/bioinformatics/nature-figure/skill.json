@@ -1,0 +1,81 @@
+{
+  "name": "nature-figure",
+  "description": "Submission-grade Nature/high-impact journal figure workflow for Python or R. Publication-quality scientific figures with editable SVG/PDF/TIFF output. Supports matplotlib/seaborn and ggplot2/patchwork/ComplexHeatmap. Figure contract before plotting: claim → evidence chain → archetype → backend → journal contract.",
+  "domain": "08_Visualization",
+  "trigger_keywords": [
+    "发表",
+    "投稿",
+    "Nature",
+    "Science",
+    "Cell",
+    "manuscript",
+    "publication figure",
+    "期刊",
+    "SCI",
+    "paper figure",
+    "figure contract",
+    "SVG editable",
+    "TIFF 600dpi"
+  ],
+  "when_to_use": "User needs publication-ready figures for journals. Not for EDA or quick exploration plots.",
+  "dependencies": {
+    "python": [
+      "matplotlib",
+      "seaborn",
+      "numpy"
+    ],
+    "r": [
+      "ggplot2",
+      "patchwork",
+      "ComplexHeatmap",
+      "svglite",
+      "ragg"
+    ]
+  },
+  "success_count": 3,
+  "proven_script": "run_plot_PureTypeI_4grp_CNS.R",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "phase5_nature_figures.R",
+      "params": "{\"backend\": \"R (ggplot2+patchwork+ComplexHeatmap)\", \"export\": \"SVG(editable)+PDF(TrueType)+TIFF(600dpi)\", \"palette\": \"NMI pastel 低饱和\", \"PanelA\": \"条件拆分UMAP 6面板 facet_wrap\", \"PanelB\": \"NMF program×cluster ComplexHeatmap z-score blue-white-red\", \"PanelC\": \"P3(NMF_3)×condition 小提琴+箱线 全群vs RSS\", \"PanelD\": \"扰动向量场 dodge barplot aging vs exercise\"}",
+      "date": "2026-07-31",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Phase 5 发表级出图完成：Fig2A-D 全套 SVG+PDF+TIFF (15 文件) + 3 source_data CSV。Panel A 条件拆分 UMAP 展示 6 条件转录景观；Panel B NMF 6 程序×10 亚群热图；Panel C P3(RSS/aging) loading 跨条件（RSS 衰老递增+运动不响应核心证据）；Panel D 扰动向量场（RSS aging"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "modules from modules_extracted.csv (10176 genes, 9 modules excl grey); datExpr.rds 4659 metacells; Pearson cor → power10 adjacency → top15% sparse → igraph; black=179nodes/2567edges, magenta=47nodes/227edges; ComplexHeatmap pub heatmap 9mod×5trait, Aging-sorted, diverging blue-white-red, sig stars",
+      "date": "2026-08-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "hdWGCNA hub 基因网络图 + 发表级模块-性状热图。black hub=NUDT3/ERBB4/FILIP1L/GLUL/NDUFA10/RPL3L (衰老-0.51, ExYoung+0.27, ExOld-0.23 可逆靶点); magenta hub=SETX/USP54/N4BP2L2/DUSP10/SVIL (衰老+T2D上调, ExT2D压不住=不可逆损伤)。发表级热图 9 "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging_diabetes_exercise",
+      "script": "run_plot_PureTypeI_4grp_CNS.R",
+      "params": "groups=O_Pre/O_Post/OD_Pre/OD_Post; comparisons=O_Pre/O_Post, OD_Pre/OD_Post, O_Pre/OD_Pre; annot_col=FDR_per_celltype|p.value; egg::set_panel_size(26mm x 32mm); ggsave dpi=300",
+      "date": "2026-08-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Pure Type I 4组箱线图两版对比交付: (1)用户原脚本样式 FDR版+raw p值版 (2)CNS优化版(同色系Pre/Post配色+星号体系+theme_classic 6.5pt+配对虚线)。10文件齐全(PNG/PDF/SVG)。关键统计: O_Pre vs OD_Pre p=0.00699 FDR=0.035 糖尿病显著压低 Pure Type I (cliffs_delta="
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "run_plot_PureTypeI_4grp_CNS.R"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "analyze_ciliary_beat_frequency",
+  "name": "Analyze Ciliary Beat Frequency",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze ciliary beat frequency from high-speed video microscopy data using FFT analysis.",
+  "detailed_description": "Analyze ciliary beat frequency from high-speed video microscopy data using FFT analysis.",
+  "when_to_use": "When you need analyze ciliary beat frequency analysis",
+  "parameters": {
+    "video_path": "[Required] Path to the high-speed video microscopy file of ciliary beating (str)",
+    "roi_count": "[Optional] Number of regions of interest to analyze (default: 5)",
+    "min_freq": "[Optional] Minimum frequency to consider in Hz (default: 0)",
+    "max_freq": "[Optional] Maximum frequency to consider in Hz (default: 30)",
+    "output_dir": "[Optional] Directory to save output files (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

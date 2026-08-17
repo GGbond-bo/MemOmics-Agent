@@ -1,0 +1,18 @@
+{
+  "id": "analyze_protein_conservation",
+  "name": "Analyze Protein Conservation",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform multiple sequence alignment and phylogenetic analysis to identify conserved protein regions.",
+  "detailed_description": "Perform multiple sequence alignment and phylogenetic analysis to identify conserved protein regions.",
+  "when_to_use": "When you need analyze protein conservation analysis",
+  "parameters": {
+    "protein_sequences": "[Required] List of protein sequences in FASTA format from multiple organisms. (list of str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

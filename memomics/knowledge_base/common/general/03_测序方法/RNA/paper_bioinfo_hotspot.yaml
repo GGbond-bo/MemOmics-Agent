@@ -1,0 +1,136 @@
+type: kb_entry
+name: paper_bioinfo_hotspot
+species: other
+tissue: other
+direction: other
+assay_type: RNA
+last_updated: 2026-08-15 15:14
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bioinfo_hotspot
+content: '## 测序方法
+
+  - scRNA-seq | 平台 10x Genomics | 建库 na | 深度 na
+
+  - Slide-seq (spatial transcriptomics) | 平台 Broad Institute Slide-seq portal | 建库
+  na | 深度 median UMIs/barcode 45
+
+  - CRISPR-Cas9 lineage tracing + scRNA-seq | 平台 na | 建库 na | 深度 na
+
+  - 10x Genomics 5k PBMC protein (CITE-seq) | 平台 10x Genomics | 建库 scRNA-seq + surface
+  protein | 深度 —
+
+
+  ## 分析流程
+
+  - 计算细胞相似性图（KNN图） → 特征选择（局部自相关统计量Hx，用负二项或伯努利零模型） → 基因模块识别（局部相关统计量Hxy，层次聚类UPGMA）
+
+  - 下载barcode表达和位置信息 → 预处理过滤基因（<50 cells） → Hotspot特征选择（neighborhood=300, bernoulli模型）
+  → 配对相关和模块识别（FDR<0.05, neighborhood=30） → 计算模块分数并可视化
+
+  - 下载Chan et al.表达数据(GSE117542) → Cassiopeia-Greedy推断谱系 → PCA/log归一化 → 构建KNN图(30
+  neighbors) → Hotspot模块识别（tree/transcription metric） → 评估模块
+
+  - 下载10x PBMC蛋白数据 → 过滤细胞（UMI<3000, mito>16%） → 门控CD4+T/CD14+ → 特征选择(HVG/NBDisp/PCA/Hotspot)
+  → scVI(10 components) → Hotspot评估蛋白局部自相关
+
+
+  ## 软件/包
+
+  - Hotspot 0.9.1（Python）：从单细胞数据中识别信息基因和基因模块
+
+  - scVI 0.2.4（Python）：非线性降维/潜在空间推断，用于构建细胞相似性图
+
+  - Seurat 2.3.4（R）：高变基因选择比较
+
+  - WGCNA 1.69（R）：基因共表达网络模块检测比较
+
+  - GRNBoost na（Python）：基因调控网络/模块推断比较
+
+  - SpatialDE 1.1.3（Python）：空间可变基因检测比较
+
+  - SymSim 0.0.0.9000（R）：模拟单细胞RNA-seq数据
+
+  - M3Drop 3.10.4（R）：NBDisp特征选择比较
+
+  - Scikit-learn 0.21.2（Python）：机器学习工具
+
+  - arboreto 0.1.5（Python）：GRNBoost实现
+
+  - Seurat 2.3（R）：HVG特征选择与单细胞分析
+
+  - M3Drop 3.10（R）：NBDisp特征选择
+
+  - scVI （Python）：低维潜空间推断
+
+  - SymSim （R/Python）：模拟单细胞转录组
+
+  - WGCNA （R）：基因共表达模块识别
+
+  - arboreto （Python）：Grnboost2基因调控网络推断
+
+  - scikit-learn (FastICA) （Python）：ICA独立成分分析
+
+  - fdrtool （R）：FDR校正
+
+  - Cassiopeia-Greedy （Python）：谱系追踪树推断
+
+  - UMAP （Python）：降维可视化
+
+
+  ## 关键参数
+
+  - Hotspot.K（邻居数） = 30（转录组相似性图的默认邻居数）
+
+  - Hotspot.K（邻居数） = 300（空间转录组（Slide-seq）的邻居数）
+
+  - Hotspot.null_model = negative binomial（常规转录组数据的默认零模型）
+
+  - Hotspot.null_model = bernoulli（极稀疏数据（如Slide-seq）的零模型）
+
+  - Hotspot.FDR阈值 = 0.05（特征选择和模块显著性判断）
+
+  - Hotspot.模块合并Z分数阈值 = 可配置（层次聚类停止阈值）
+
+  - Hotspot.权重核 = 高斯核（带宽=到K=3邻居的距离）（默认边权重计算）
+
+  - Hotspot.min_cluster_genes = 15/30/50 depending dataset（模块识别最小基因数）
+
+  - Hotspot.fdr_threshold = 0.05（模块识别显著性阈值）
+
+  - Hotspot.neighborhood_size = 300 (feature selection), 30 (module detection)（KNN图邻居数）
+
+  - Hotspot.model = bernoulli / negative binomial / depth-adjusted normal（表达空模型）
+
+  - Seurat FindVariableGenes.x.low.cutoff = 0.01 (PBMC) / 0.1 (sim)（HVG低表达阈值）
+
+  - Seurat FindVariableGenes.x.high.cutoff = 3.04 (PBMC)（HVG高表达阈值）
+
+  - Seurat FindVariableGenes.y.cutoff = 0.5（HVG离散度阈值）
+
+  - scVI.n_latent = 10（潜空间维度）
+
+  - UMAP.n_neighbors = 30（UMAP邻居数）
+
+  - WGCNA blockwiseModules.minModuleSize = 15（模块最小基因数）
+
+  - WGCNA.mergeCutHeight = 0.25（模块合并阈值）
+
+
+  ## 数据库
+
+  - MSigDB：计算基因相关性评分（GR score）评估CD4+ T细胞生物学相关性
+
+  - DropViz：小鼠小脑细胞类型标记基因参考
+
+  - NCBI GEO (GSE117542, GSE122187)：小鼠胚胎发生谱系追踪表达数据及细胞状态核
+
+  - MSigDB (c7 immune signature set)：计算CD4 T细胞基因相关性评分
+
+  - 10x Genomics：5k PBMC protein v3数据集
+
+  - Broad Institute Slide-seq portal：小鼠小脑Slide-seq数据'
+evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
+  across modalities of single-cell genomics | MEMOMICS_HOME/hermes_home/papers/hotspot.pdf

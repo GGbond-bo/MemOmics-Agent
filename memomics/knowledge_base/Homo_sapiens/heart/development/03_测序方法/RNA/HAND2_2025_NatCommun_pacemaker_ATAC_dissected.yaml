@@ -1,0 +1,201 @@
+metadata:
+  source: work/papers/heart_san/HAND2_2025_NatCommun_pacemaker_ATAC.pdf
+  dissected_at: '2026-07-12T18:02:10.026093'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Monocle
+    version: null
+    context: 'rom HT seq were imported into
+
+      Monocle, and dimensionality reduction was performed to create a
+
+      matrix where each “cell” is simply the bulk RNA-seq of one replicate
+
+      from a speciﬁc reprogram'
+    params: []
+  - name: Slingshot
+    version: null
+    context: 'rmed as previously described (Slingshot)98.
+
+      The raw read counts obtained from HT seq were imported into
+
+      Monocle, and dimensionality reduction was performed to create a
+
+      matrix where each “ce'
+    params: []
+  - name: DESeq2
+    version: null
+    context: 'malization was done as
+
+      above. DEseq2 was used to calculate differentially expressed genes
+
+      between MEF RNA seq at Day 6 and P14 PM cells.
+
+      Psuedotime was performed as previously described'
+    params: []
+  - name: Bowtie2
+    version: 2.2.1
+    context: ', version from igenomes) with bowtie2 (version 2.3.3.1). The
+
+      duplicates were marked using Picard-Tools (v2.2.1), and blacklist
+
+      regions were removed using bedtools (v2.7.1). TN5 shifting o'
+    params: []
+  - name: MACS2
+    version: 2.1.0.20160309
+    context: 'P-Seq peaks
+
+      were called using MACS2 (version 2.1.0.20160309) with a q-value
+
+      threshold of 0.01 and using IgG Input from either the srHC or Eu
+
+      fraction as the background/control ﬁle. Over'
+    params: []
+  - name: MACS
+    version: null
+    context: 'ﬁles were generated using the MACS input subtracted
+
+      begraph using bamtools.
+
+      ChIP-seq proﬁle plots were generated using deepTools100. Matri-
+
+      ces were created using ComputeMatrix with “r'
+    params: []
+  - name: HOMER
+    version: null
+    context: 'MotifsGenome.pl script in
+
+      the HOMER collection101.
+
+      Peaks are delineated in Supplementary Data 9.
+
+      ATAC-seq analysis. Raw FASTQ ﬁles were trimmed and mapped to the
+
+      mm10 assembly of the mo'
+    params: []
+  - name: deepTools
+    version: null
+    context: 'Genomic sequencing datasets. Deeptools
+
+      BigWig Compare was used to normalize the signal between Nucleolar
+
+      and Genomic samples resulting in a bigwig plotting the log2fc between
+
+      nucleolar seq'
+    params: []
+  - name: computeMatrix
+    version: null
+    context: 'Matri-
+
+      ces were created using ComputeMatrix with “reference-point” fol-
+
+      lowed by PlotHeatmap to generate the visual graphics. At default,
+
+      peaks were plotted in order of descending signal, for F'
+    params: []
+  - name: plotHeatmap
+    version: null
+    context: 'eference-point” fol-
+
+      lowed by PlotHeatmap to generate the visual graphics. At default,
+
+      peaks were plotted in order of descending signal, for Fig. 3G ATAC
+
+      signal was plotted using the same ran'
+    params: []
+  - name: bedtools
+    version: 2.7.1
+    context: 'st
+
+      regions were removed using bedtools (v2.7.1). The ChIP-Seq peaks
+
+      were called using MACS2 (version 2.1.0.20160309) with a q-value
+
+      threshold of 0.01 and using IgG Input from either the sr'
+    params: []
+  - name: picard
+    version: '1.127'
+    context: 'cated reads
+
+      were marked using Picard tools (v1.127; https://broadinstitute.github.
+
+      io/picard/), the RNA counts generated from HTseqCount93 and nor-
+
+      malized using DEseq294. For differenti'
+    params: []
+  - name: FastQC
+    version: 0.11.2
+    context: 'ASTQ ﬁles were analyzed using FastQC
+
+      v0.11.2 (Andrews, 2010), and reads were quality-trimmed using Trim-
+
+      momatic (Bolger, 2014). The trimmed reads were mapped to the
+
+      mm10 assembly of the'
+    params: []
+  parameters:
+  - name: FDR
+    value: '0.05'
+    context: 'onsistently
+
+      and signiﬁcantly different (FDR < 0.05) between at least two condi-
+
+      tions. Big'
+  - name: FDR
+    value: '0.05'
+    context: 'onsistently and signiﬁcantly different
+
+      (FDR < 0.05) between at least two conditions.
+
+      NAD-s'
+  - name: FDR_threshold
+    value: '0.05'
+    context: 'onsistently
+
+      and signiﬁcantly different (FDR < 0.05) between at least two condi-
+
+      tions. Big'
+    source: prose
+  - name: FDR_threshold
+    value: '0.05'
+    context: 'onsistently and signiﬁcantly different
+
+      (FDR < 0.05) between at least two conditions.
+
+      NAD-s'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'multiple comparison test. Hand2 vs. GMT P < 0.001, Hand2 vs. Hand2 +
+      E12
+
+      P < 0.001. E EMS'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 's. GMT P < 0.001, Hand2 vs. Hand2 + E12
+
+      P < 0.001. E EMSA using HAND2 homodimers and dsDN'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: 'the GraphPad Prism
+
+      10 software package. P < 0.05 was considered signiﬁcant in all cases.'
+    source: prose
+  platforms:
+  - Illumina
+  - NextSeq2
+  stats:
+    methods_length: 33316
+    methods_lines: 588
+    package_count: 13
+    version_count: 5
+    parameter_count: 7
+    platform_count: 5
+llm_extraction: null

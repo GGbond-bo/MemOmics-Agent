@@ -1,0 +1,27 @@
+type: kb_entry
+name: paper_qc_hotspot
+species: other
+tissue: other
+direction: other
+assay_type: RNA
+last_updated: 2026-08-15 15:14
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_qc_hotspot
+content: '- FDR = 0.05（空间自相关显著基因阈值）
+
+  - IDR = 0.1（重复样本间重现性评估阈值）
+
+  - min_cells = 50 (cerebellum), 10 (lineage), 10 (selection threshold)（基因预过滤至少检测细胞数）
+
+  - min_UMI = 3000（CD4 T cell数据细胞过滤）
+
+  - max_mito = 16%（CD4 T cell数据细胞过滤）
+
+  - protein_95th_percentile = 100 counts per 10,000（过滤背景蛋白表达）
+
+  - FDR = 0.05 / 0.1（多种统计显著性阈值）'
+evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
+  across modalities of single-cell genomics | MEMOMICS_HOME/hermes_home/papers/hotspot.pdf

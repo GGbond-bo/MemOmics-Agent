@@ -1,0 +1,44 @@
+{
+  "id": "academic-research",
+  "name": "学术研究设计",
+  "category": "literature",
+  "language": "Python",
+  "description": "综合学术研究技能：实验方案设计、文献检索、研究规划",
+  "starting_prompt": "帮我设计实验方案",
+  "source_dir": "skills/external/academic-research-skills",
+  "memomics_module": "研究设计",
+  "chains_from": [],
+  "chains_to": [
+    "deg-analysis",
+    "atac-seq",
+    "scrna-basic"
+  ],
+  "tags": [
+    "research",
+    "experiment",
+    "design",
+    "实验设计",
+    "方案"
+  ],
+  "aliases": [
+    "实验方案",
+    "研究设计",
+    "experiment design",
+    "研究方案"
+  ],
+  "r_packages": [],
+  "python_packages": [],
+  "difficulty": "advanced",
+  "applicable": [
+    "实验方案设计",
+    "研究规划",
+    "文献综述"
+  ],
+  "parameters": {},
+  "detailed_description": "综合学术研究技能：实验方案设计、文献检索、研究规划\n\n适用场景: 实验方案设计, 研究规划, 文献综述\n\n难度: advanced\n\n触发提示: \"帮我设计实验方案\"\n\n别名: 实验方案, 研究设计, experiment design, 研究方案",
+  "when_to_use": "适用于: 实验方案设计, 研究规划, 文献综述",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,20 @@
+{
+  "id": "get_genes_near_ccre",
+  "name": "Get Genes Near Ccre",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Given a cCRE accession, return k nearest genes sorted by distance.",
+  "detailed_description": "Given a cCRE accession, return k nearest genes sorted by distance.",
+  "when_to_use": "When you need get genes near ccre analysis",
+  "parameters": {
+    "accession": "[Required] ENCODE cCRE accession ID (e.g., 'EH38E1516980') (str)",
+    "assembly": "[Required] Genome assembly (e.g., 'GRCh38') (str)",
+    "chromosome": "[Required] Chromosome of the cCRE (e.g., 'chr12') (str)",
+    "k": "[Optional] Number of nearby genes to return (default: 10)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

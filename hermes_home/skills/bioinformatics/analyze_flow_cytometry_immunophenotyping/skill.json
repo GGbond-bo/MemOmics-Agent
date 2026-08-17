@@ -1,0 +1,20 @@
+{
+  "id": "analyze_flow_cytometry_immunophenotyping",
+  "name": "Analyze Flow Cytometry Immunophenotyping",
+  "category": "transcriptomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze flow cytometry data to identify and quantify specific cell populations based on surface markers.",
+  "detailed_description": "Analyze flow cytometry data to identify and quantify specific cell populations based on surface markers.",
+  "when_to_use": "When you need analyze flow cytometry immunophenotyping analysis",
+  "parameters": {
+    "fcs_file_path": "[Required] Path to the FCS file containing flow cytometry data (str)",
+    "gating_strategy": "[Required] Dictionary defining the gating strategy. Each key is a population name, and each value is a list of tuples (marker, operator, threshold) (dict)",
+    "compensation_matrix": "[Optional] Spillover/compensation matrix to correct for fluorescence overlap",
+    "output_dir": "[Optional] Directory to save the results (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

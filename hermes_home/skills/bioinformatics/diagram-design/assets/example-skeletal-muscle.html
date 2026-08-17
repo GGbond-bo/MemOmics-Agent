@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>骨骼肌 snRNA-seq 研究设计 — MF_subset_2000</title>
+<style>
+  :root {
+    --paper: #fafaf7;
+    --ink: #23272e;
+    --muted: #4f5d75;
+    --soft: #7a8399;
+    --rule: rgba(35,39,46,0.12);
+    --accent: #2e7d32;
+    --accent-tint: rgba(46,125,50,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    display: flex; justify-content: center; padding: 32px;
+  }
+  .canvas { max-width: 920px; width: 100%; }
+  .title-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+  .eyebrow {
+    font-family: "Geist Mono", Consolas, monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--soft);
+  }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 28px; font-weight: 400; }
+  .callout {
+    font-family: Georgia, "Times New Roman", serif; font-style: italic;
+    font-size: 14px; color: var(--muted); border-left: 2px solid var(--accent);
+    padding: 6px 0 6px 12px; margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="title-row">
+    <span class="eyebrow">snRNA-seq · 研究设计</span>
+    <h1>骨骼肌衰老运动干预 — MF_subset_2000</h1>
+  </div>
+
+  <svg viewBox="0 0 880 560" xmlns="http://www.w3.org/2000/svg" font-family="'Geist', system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif">
+    <!-- 数据源带 -->
+    <rect x="24" y="24" width="832" height="56" rx="8" fill="rgba(35,39,46,0.04)" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <text x="40" y="46" font-family="Consolas, monospace" font-size="9" fill="#7a8399" letter-spacing="0.12em">DATA SOURCE</text>
+    <text x="40" y="66" font-size="12" font-weight="600" fill="#23272e">MF_subset_2000.rds</text>
+    <text x="296" y="66" font-family="Consolas, monospace" font-size="10" fill="#4f5d75">20,000 nuclei × 51,227 genes</text>
+    <text x="560" y="66" font-family="Consolas, monospace" font-size="10" fill="#4f5d75">dual assay: RNA + SCT</text>
+
+    <!-- 六个阶段节点 -->
+    <!-- 1 样本 -->
+    <rect x="68" y="128" width="136" height="232" rx="6" fill="#fafaf7" stroke="#4f5d75" stroke-width="1"/>
+    <text x="84" y="152" font-family="Consolas, monospace" font-size="8" fill="#7a8399" letter-spacing="0.14em">STAGE 1</text>
+    <text x="84" y="176" font-size="13" font-weight="600" fill="#23272e">样本 · 6 组配对</text>
+    <text x="84" y="200" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Y_Pre 3,767</text>
+    <text x="84" y="216" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Y_Post 2,930</text>
+    <text x="84" y="232" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">O_Pre 2,923</text>
+    <text x="84" y="248" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">O_Post 2,901</text>
+    <text x="84" y="264" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">OD_Pre 3,636</text>
+    <text x="84" y="280" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">OD_Post 3,843</text>
+
+    <!-- 2 QC -->
+    <rect x="220" y="128" width="136" height="232" rx="6" fill="#fafaf7" stroke="#4f5d75" stroke-width="1"/>
+    <text x="236" y="152" font-family="Consolas, monospace" font-size="8" fill="#7a8399" letter-spacing="0.14em">STAGE 2</text>
+    <text x="236" y="176" font-size="13" font-weight="600" fill="#23272e">QC · 验证性评估</text>
+    <text x="236" y="200" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">nFeature 200–6000</text>
+    <text x="236" y="216" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">nCount 500–50k</text>
+    <text x="236" y="232" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">MT &lt; 5%（max 4.99）</text>
+    <text x="236" y="248" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">59 doublets 保留</text>
+    <text x="236" y="264" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">(0.295%)</text>
+    <text x="236" y="284" font-size="11" font-weight="600" fill="#2e7d32">不重过滤 ✓</text>
+
+    <!-- 3 亚群 -->
+    <rect x="372" y="128" width="136" height="232" rx="6" fill="#fafaf7" stroke="#4f5d75" stroke-width="1"/>
+    <text x="388" y="152" font-family="Consolas, monospace" font-size="8" fill="#7a8399" letter-spacing="0.14em">STAGE 3</text>
+    <text x="388" y="176" font-size="13" font-weight="600" fill="#23272e">10 个 L3 亚群</text>
+    <text x="388" y="200" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Pure Type I / IIA / IIX</text>
+    <text x="388" y="216" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">LRP1B⁺ / OTUD1⁺</text>
+    <text x="388" y="232" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">RP_high (I / II)</text>
+    <text x="388" y="248" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">RSS</text>
+    <text x="388" y="264" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Specialized MF</text>
+    <text x="388" y="284" font-family="Consolas, monospace" font-size="9" fill="#7a8399">60 组合全平衡</text>
+
+    <!-- 4 分析 -->
+    <rect x="524" y="128" width="136" height="232" rx="6" fill="#fafaf7" stroke="#4f5d75" stroke-width="1"/>
+    <text x="540" y="152" font-family="Consolas, monospace" font-size="8" fill="#7a8399" letter-spacing="0.14em">STAGE 4</text>
+    <text x="540" y="176" font-size="13" font-weight="600" fill="#23272e">比例 + 效应量</text>
+    <text x="540" y="200" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Aging = O − Y</text>
+    <text x="540" y="216" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">Exercise = Post − Pre</text>
+    <text x="540" y="240" font-size="11" fill="#23272e">比例箱线图</text>
+    <text x="540" y="256" font-size="11" fill="#23272e">效应量方向校验</text>
+    <text x="540" y="280" font-family="Consolas, monospace" font-size="9" fill="#7a8399">Cliff's delta</text>
+
+    <!-- 5 结论 (焦点) -->
+    <rect x="676" y="128" width="136" height="232" rx="6" fill="rgba(46,125,50,0.08)" stroke="#2e7d32" stroke-width="1.2"/>
+    <text x="692" y="152" font-family="Consolas, monospace" font-size="8" fill="#7a8399" letter-spacing="0.14em">STAGE 5</text>
+    <text x="692" y="176" font-size="13" font-weight="600" fill="#23272e">生物学结论</text>
+    <text x="692" y="200" font-size="11" fill="#23272e">II 型纤维萎缩</text>
+    <text x="692" y="216" font-size="11" fill="#23272e">(Type II 49→33%)</text>
+    <text x="692" y="240" font-size="11" fill="#23272e">去神经化标志</text>
+    <text x="692" y="256" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">MYOG · MYOD1</text>
+    <text x="692" y="272" font-family="Consolas, monospace" font-size="9" fill="#4f5d75">NCAM1 · CHRNG</text>
+
+    <!-- 阶段箭头 -->
+    <line x1="204" y1="244" x2="218" y2="244" stroke="#4f5d75" stroke-width="1"/>
+    <path d="M216 240 L220 244 L216 248 Z" fill="#4f5d75"/>
+    <line x1="356" y1="244" x2="370" y2="244" stroke="#4f5d75" stroke-width="1"/>
+    <path d="M368 240 L372 244 L368 248 Z" fill="#4f5d75"/>
+    <line x1="508" y1="244" x2="522" y2="244" stroke="#4f5d75" stroke-width="1"/>
+    <path d="M520 240 L524 244 L520 248 Z" fill="#4f5d75"/>
+    <line x1="660" y1="244" x2="674" y2="244" stroke="#2e7d32" stroke-width="1.2"/>
+    <path d="M672 240 L676 244 L672 248 Z" fill="#2e7d32"/>
+
+    <!-- 阶段间语义标注 -->
+    <text x="206" y="228" font-family="Consolas, monospace" font-size="8" fill="#7a8399">滤</text>
+    <text x="358" y="228" font-family="Consolas, monospace" font-size="8" fill="#7a8399">注释</text>
+    <text x="510" y="228" font-family="Consolas, monospace" font-size="8" fill="#7a8399">检验</text>
+    <text x="662" y="228" font-family="Consolas, monospace" font-size="8" fill="#2e7d32">解读</text>
+
+    <!-- 消费带 -->
+    <rect x="24" y="480" width="832" height="56" rx="8" fill="rgba(35,39,46,0.04)" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <text x="40" y="502" font-family="Consolas, monospace" font-size="9" fill="#7a8399" letter-spacing="0.12em">CONSUMERS</text>
+    <text x="40" y="522" font-size="12" font-weight="600" fill="#23272e">下游分析</text>
+    <text x="160" y="522" font-family="Consolas, monospace" font-size="10" fill="#4f5d75">DEG / 轨迹 / WGCNA / CellChat</text>
+    <text x="472" y="522" font-family="Consolas, monospace" font-size="10" fill="#4f5d75">发表级图 · nature-figure</text>
+
+    <!-- 阶段→消费带 连线 -->
+    <line x1="136" y1="360" x2="136" y2="480" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <line x1="288" y1="360" x2="288" y2="480" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <line x1="440" y1="360" x2="440" y2="480" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <line x1="592" y1="360" x2="592" y2="480" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+    <line x1="744" y1="360" x2="744" y2="480" stroke="rgba(35,39,46,0.12)" stroke-width="1"/>
+
+    <!-- 图注 callout -->
+    <text x="84" y="400" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="14" fill="#4f5d75">59 个双联体特征细胞（0.295%）不重过滤——保留并标注，比例分析不受影响。</text>
+    <line x1="84" y1="408" x2="84" y2="440" stroke="#2e7d32" stroke-width="2"/>
+  </svg>
+</div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "id": "quick_rigid_registration",
+  "name": "Quick Rigid Registration",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform rigid image registration between two medical images using SimpleITK. Rigid registration handles translation and rotation only, preserving shape and size. Includes preprocessing, similarity met",
+  "detailed_description": "Perform rigid image registration between two medical images using SimpleITK. Rigid registration handles translation and rotation only, preserving shape and size. Includes preprocessing, similarity metrics calculation, and visualization generation.",
+  "when_to_use": "When you need quick rigid registration analysis",
+  "parameters": {
+    "fixed_image_path": "[Required] Path to the reference (fixed) image file (supports .nii, .nii.gz, .nrrd, .mha, .mhd formats) (str)",
+    "moving_image_path": "[Required] Path to the image to be registered (moving image) (str)",
+    "output_dir": "[Required] Directory path to save registration results and outputs (str)",
+    "metric": "[Optional] Similarity metric for registration: 'mutual_information', 'mean_squares', 'correlation', or 'normalized_correlation' (default: mutual_information)",
+    "optimizer": "[Optional] Optimization method: 'gradient_descent', 'lbfgsb', 'powell', or 'amoeba' (default: gradient_descent)",
+    "preprocess": "[Optional] Whether to preprocess images (denoising and normalization) (default: True)",
+    "create_visualizations": "[Optional] Whether to create visualization plots (default: True)",
+    "learning_rate": "[Optional] Learning rate for gradient descent optimizer (default: 0.01)",
+    "number_of_iterations": "[Optional] Maximum number of optimization iterations (default: 100)",
+    "gradient_convergence_tolerance": "[Optional] Convergence tolerance for optimization (default: 1e-06)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

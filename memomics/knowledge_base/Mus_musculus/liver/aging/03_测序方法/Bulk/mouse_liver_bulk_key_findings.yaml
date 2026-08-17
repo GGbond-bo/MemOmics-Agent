@@ -1,0 +1,79 @@
+# 小鼠肝脏 衰老方向 Bulk RNA-seq 关键发现（文献更新版）
+direction: aging
+omics: bulk
+updated: '2026-07-07'
+
+key_findings:
+  - paper: "White et al. 2015, BMC Genomics (PMID: 26542215)"
+    method: "Bulk RNA-seq (directional whole transcriptome)"
+    species: "Mouse (C57BL/6)"
+    sample: "Young (5M) vs Aged (24M)"
+    key_results: |
+      - 数千个基因在衰老肝脏中差异表达
+      - 炎症/免疫应答↑, 代谢↓, 昼夜节律↓
+      - LCN2, SAA, 补体系统上调
+      - CYP450家族, 糖代谢下调
+      - Dlk-Dio3 miRNA位点 (Meg3, Rian, Mirg) 上调 → 衰老调控热点
+      - 个体间变异增加
+    analysis_params:
+      platform: "Illumina (directional RNA-seq)"
+      alignment: "TopHat/Bowtie → mm9"
+      deg: "DESeq / edgeR"
+      isoform: "Cufflinks/Cuffdiff"
+      ncRNA: "custom pipeline for lncRNA/small RNA"
+
+  - paper: "Gyenis et al. 2023, Nature Genetics (PMID: 36646902)"
+    method: "Nascent RNA-seq (EU-seq) + Total RNA-seq + RNAPII ChIP-seq"
+    species: "Mouse (C57BL6J/FVB F1, male)"
+    sample: "Young (15 wk) vs Aged (104 wk); also Ercc1Δ/- and Xpg-/- mutants"
+    key_results: |
+      - 衰老肝脏中40%延伸RNA聚合酶停滞 (stalling)
+      - 基因长度依赖的转录偏移: 长基因更受影响
+      - 内源性DNA损伤是转录stress的根本原因
+      - 影响衰老标志通路: 营养感知, 自噬, 蛋白质稳态, 能量代谢, 免疫
+      - 进化保守: 线虫到人类均存在
+    analysis_params:
+      rna_isolation: "miRNeasy kit (QIAGEN) + on-column DNase"
+      rna_quality: "RIN > 8 (Bioanalyzer)"
+      library: "Total RNA-seq + EU-seq (nascent RNA)"
+      alignment: "STAR → mm10"
+      deg: "DESeq2"
+      chip: "RNAPII (total, Ser2P, Ser5P) ChIP-seq"
+
+  - paper: "Du et al. 2024, Hepatol Commun (PMC11019831)"
+    method: "Review + scRNA-seq analysis"
+    species: "Mouse / Human"
+    key_results: "肝星状细胞(HSC)在肝脏病理中的可塑性、异质性和多功能性"
+
+  - paper: "Geroscience 2023 (PMC10643490)"
+    method: "Data-driven transcriptomics analysis"
+    species: "Mouse"
+    key_results: "PCSK9被鉴定为肝脏衰老新型关键调控因子"
+    source: "PMID: 37726433"
+
+  - paper: "Aging Cell 2023 (PMC10577549)"
+    method: "RNA-seq + functional assays"
+    species: "Mouse"
+    key_results: "抑制FOXO1减轻炎症衰老(inflamm-aging)并改善衰老肝脏功能"
+    source: "PMID: 37602516"
+
+  - paper: "J Transl Med 2023 (PMC10326954)"
+    method: "Bulk RNA-seq + molecular profiling"
+    species: "Human"
+    key_results: "鉴定NAFLD纤维化亚型, 促纤维化巨噬细胞参与"
+    source: "PMID: 37415134"
+
+  - paper: "Nature Reviews Gastro 2025 (PMID: 40033000)"
+    method: "Comprehensive review"
+    species: "Mouse / Human"
+    key_results: "肝脏衰老综合综述: 结构/功能变化, 实质/非实质细胞, 氧化应激, SIRT1"
+    source: "PMID: 40033000"
+
+analysis_params:
+  deg: "DESeq2 / edgeR / limma-voom"
+  min_samples: 3
+  recommended_samples: 5-10
+  padj_cutoff: 0.05
+  log2FC_cutoff: 0.58
+  liver_aging_markers_up: [Lcn2, Clec7a, Saa1, Cdkn1a, Cdkn2a, Clu, C3, Il6, Tnf, Ccl2, Pcsk9, Serpine1, Meg3, Mirg]
+  liver_aging_markers_down: [Cyp3a11, Cyp2e1, Alb, Pck1, G6pc, Hnf4a, Ppargc1a, Sirt1, Foxo1, Cyp2f2, Cyp1a2]

@@ -1,0 +1,26 @@
+{
+  "id": "design_verification_primers",
+  "name": "Design Verification Primers",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Design Sanger sequencing primers to verify a specific region in a plasmid. First tries to use primers from an existing primer pool. If they cannot fully cover the region, designs additional primers as",
+  "detailed_description": "Design Sanger sequencing primers to verify a specific region in a plasmid. First tries to use primers from an existing primer pool. If they cannot fully cover the region, designs additional primers as needed.",
+  "when_to_use": "When you need design verification primers analysis",
+  "parameters": {
+    "plasmid_sequence": "[Required] The complete plasmid sequence (str)",
+    "target_region": "[Required] Start and end positions to verify (0-based indexing) (Tuple[int, int])",
+    "existing_primers": "[Optional] List of existing primers with their sequences and optional names",
+    "is_circular": "[Optional] Whether the plasmid is circular (default: True)",
+    "coverage_length": "[Optional] Typical read length for each primer in base pairs (default: 800)",
+    "primer_length": "[Optional] Length of newly designed primers (default: 20)",
+    "min_gc": "[Optional] Minimum GC content for new primers (default: 0.4)",
+    "max_gc": "[Optional] Maximum GC content for new primers (default: 0.6)",
+    "min_tm": "[Optional] Minimum melting temperature in °C (default: 55.0)",
+    "max_tm": "[Optional] Maximum melting temperature in °C (default: 65.0)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

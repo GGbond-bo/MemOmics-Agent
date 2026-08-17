@@ -1,0 +1,39 @@
+# 小鼠肝脏 衰老方向 ATAC-seq 关键发现（文献更新版）
+direction: aging
+omics: atac
+updated: '2026-07-07'
+
+key_findings:
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    method: "scATAC-seq (10x Genomics) + scRNA-seq + Spatial + Lipidomics"
+    species: "Mouse (C57BL/6N, male)"
+    sample: "Young (3-4M) vs Aged (18-22M), 4 replicates per age"
+    key_results: |
+      1. 衰老以区域依赖方式改变染色质可及性
+      2. 区域化和年龄是scATAC数据的主要分离轴
+      3. 表观基因组变化以区域依赖性方式: Zone 1 vs Zone 3差异可及性区域(DARs)
+      4. Hnf4a, Foxa3, Hnf1为关键转录因子
+      5. 衰老改变了肝脏的区域化表观基因组景观
+    analysis_params:
+      platform: "10x Genomics Chromium Single Cell ATAC"
+      cellranger: "v2.1.0"
+      median_fragments: "21557-27028 per cell"
+      target_cells: 4000
+      sequencing: "NovaSeq PE"
+      analysis_tool: "cisTopic v0.3.0"
+      motif_analysis: "iRegulon (Cytoscape) — 20kb centered on TSS"
+      tss_enrichment: ">6"
+      nfrags: "500-100000"
+    tf_motifs:
+      periportal: [Hnf4a, Foxa3, Hnf1, Cebp, Nr4a2]
+      pericentral: [Hnf4a, Foxa3, Hnf1, Srebf2, Hnf1b]
+
+analysis_params:
+  qc:
+    tss_enrichment: ">6"
+    nfrags: "500-100000"
+  dim_reduction: "IterativeLSI (ArchR) / cisTopic"
+  clustering: "Leiden, resolution 0.6-1.0"
+  peak_calling: "MACS2 (per cluster)"
+  motif_analysis: "HOMER / iRegulon"
+  key_motifs: [Hnf4a, Foxa3, Hnf1a, Cebpa, Srebf1, Srebf2, Nr4a2, Hnf1b]

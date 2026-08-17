@@ -1,0 +1,41 @@
+# 小鼠肝脏 衰老方向 空间转录组 关键发现（文献更新版）
+direction: aging
+omics: spatial
+updated: '2026-07-07'
+
+key_findings:
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    method: "Spatial transcriptomics (Visium) + scATAC-seq + scRNA-seq + Lipidomics"
+    species: "Mouse (C57BL/6N, male)"
+    sample: "Young (3-4M) vs Aged (18-22M)"
+    key_results: |
+      1. 空间转录组揭示区域特异性衰老变化
+         - Zone 1 (periportal): 线粒体功能下降, 氧化磷酸化↓, 脂肪酸β-氧化↓
+         - Zone 3 (pericentral): 脂质代谢重编程, 大脂滴积累
+      2. 代谢状态空间异质性增强
+      3. 年龄和区域是空间数据的主要变异来源
+      4. 多组学整合验证: 空间+scATAC+scRNA+lipidomics
+    analysis_params:
+      platform: "10x Genomics Visium"
+      spaceranger: "v1.2.2"
+      normalization: "SCTransform (Seurat v4.0.4)"
+      pca_dims: "10 (ElbowPlot确定)"
+      integration: "两步法: 先分别整合Young/Old, 再合并(CCA-based)"
+      spot_filter: "1000-7000 genes per spot"
+      deg_method: "MAST (Bonferroni correction, p<0.05)"
+      pathway: "Metascape (Reactome) + clusterProfiler"
+      mouse_genome: "mm10"
+
+analysis_params:
+  visium:
+    normalization: SCTransform
+    clustering: Leiden (0.5-0.8)
+    deconvolution: "RCTD / CARD (需scRNA-seq参考)"
+    pca_dims: "10-30"
+    zonal_markers:
+      zone1_periportal: [Cyp2f2, Ass1, Arg1, Pck1, G6pc, Aldob]
+      zone3_pericentral: [Cyp2e1, Glul, Cyp1a2, Axin2, Lgr5, Lect2]
+  deg:
+    method: "MAST (Seurat) / SpatialDE"
+    padj: 0.05
+    min_log2FC: 0.585

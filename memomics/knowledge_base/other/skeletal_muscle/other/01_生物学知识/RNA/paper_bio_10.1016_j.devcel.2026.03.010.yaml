@@ -1,0 +1,117 @@
+type: kb_entry
+name: paper_bio_10.1016_j.devcel.2026.03.010
+species: other
+tissue: skeletal_muscle
+direction: other
+assay_type: RNA
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bio_10.1016_j.devcel.2026.03.010
+content: '## 结论
+
+  - 构建了小鼠肢体骨骼肌在静息、萎缩和肥大状态下的单核和单细胞转录组图谱，结合空间转录组学。
+
+  - 发现条件依赖的细胞群变化和纤维类型特异性转录反应。
+
+  - 神经肌肉接头(NMJ)发生广泛重塑，包括出现特化突触肌核(SynM)和终末施万细胞(tSCs)。
+
+  - 萎缩导致NMJ轴突丢失和结构破坏，肥大保持NMJ完整性并扩展运动终板和SynM区域。
+
+  - 去神经支配诱导终末施万细胞转分化为激活的tSC样细胞(aSC1)，通过TGFβ/activin信号与突触肌核通讯，可能促进肌肉萎缩。
+
+  - 人类去神经和运动肌肉中观察到类似的NMJ改变，支持小鼠模型的转化相关性。
+
+
+  ## 细胞类型
+
+  - myonuclei
+
+  - synaptic myonuclei (SynM)
+
+  - terminal Schwann cells (tSCs)
+
+  - activated Schwann cells (aSCs)
+
+  - myelinating Schwann cells (mSCs)
+
+  - muscle stem cells (MuSCs/satellite cells)
+
+  - fibro-adipogenic progenitors (FAPs)
+
+  - mural cells
+
+  - vascular endothelial cells
+
+  - immune cells
+
+
+  ## 通路
+
+  - TGFβ/activin signaling
+
+  - Wnt signaling
+
+  - BMP signaling
+
+  - MAPK signaling
+
+  - Hippo signaling
+
+  - semaphorin-mediated axon guidance
+
+
+  ## 基因 Marker
+
+  - Myog：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+
+  - Igfn1：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+
+  - Ampd3：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+
+  - Runx1：denervated myonuclei/Myonuc1，up，去神经相关基因
+
+  - Gadd45：denervated myonuclei/Myonuc1，up，去神经相关基因
+
+  - Scn5a：synaptic myonuclei (SynM)，up，去神经萎缩时SynM上调
+
+  - Gpc4：synaptic myonuclei (SynM)，up，肥大时SynM上调
+
+  - Chrne：synaptic myonuclei (SynM)，down，去神经时突触基因下调
+
+  - Colq：synaptic myonuclei (SynM)，down，去神经时突触基因下调
+
+  - Inhba：activated terminal Schwann cells (aSC1)，up，去神经时aSC1标记，表达于NMJ
+
+  - Ajap1：terminal Schwann cells (tSCs)，down，去神经时tSC标记下降
+
+  - Atf3：activated Schwann cells (aSCs)，up，轴突再生和迁移相关
+
+  - Ngfr：activated Schwann cells (aSCs)，up，轴突再生相关
+
+  - Tnc：activated Schwann cells (aSCs)，up，细胞外基质重塑
+
+  - Sostdc1：aSC2 subcluster，na，肥大相关aSC2标记
+
+  - Col20a1：terminal Schwann cells (tSCs)，na，非髓鞘化SC/tSC标记
+
+  - Bche：terminal Schwann cells (tSCs)，na，非髓鞘化SC/tSC标记
+
+
+  ## 化合物/化学信息
+
+  - tamoxifen：靶点 Cre-ER recombinase | 剂量 2 mg per 25 g body weight (i.p.) | IC50 —
+  | 模型 Plp1CreER mice | 诱导Cre重组
+
+  - diphtheria toxin (DT)：靶点 diphtheria toxin receptor (DTR) | 剂量 450 ng per 25 g
+  body weight (i.p.) | IC50 — | 模型 Plp1iDTR mice | 选择性清除施万细胞
+
+  - EdU (5-ethynyl-2''-deoxyuridine)：靶点 DNA synthesis | 剂量 25.5 mg/kg (i.p.) | IC50
+  — | 模型 proliferation assay in mice | 标记增殖细胞
+
+  - buprenorphine：靶点 opioid receptor | 剂量 0.1 mg/kg (i.m.) | IC50 — | 模型 mouse surgery
+  analgesia | 镇痛'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | MEMOMICS_HOME/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf

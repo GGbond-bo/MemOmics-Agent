@@ -1,0 +1,45 @@
+# System files
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Downloaded data files (user downloads locally)
+data/
+*_results/
+test_results/
+chipatlas_results/
+test_export/
+test_plots/
+test_data/
+
+# Large data files
+*.pkl
+*.pickle
+
+# CSV output files (generated during analysis)
+*enrichment_results*.csv
+failed_genes.txt
+summary_report.md
+
+# Temporary files
+*.tmp
+*.temp
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# User data
+my_genes.txt
+user_data/
+user_genes/

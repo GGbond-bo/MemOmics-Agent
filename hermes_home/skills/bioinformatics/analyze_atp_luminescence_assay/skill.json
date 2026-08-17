@@ -1,0 +1,20 @@
+{
+  "id": "analyze_atp_luminescence_assay",
+  "name": "Analyze Atp Luminescence Assay",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze luminescence-based ATP assay data to determine intracellular ATP concentration.",
+  "detailed_description": "Analyze luminescence-based ATP assay data to determine intracellular ATP concentration.",
+  "when_to_use": "When you need analyze atp luminescence assay analysis",
+  "parameters": {
+    "data_file": "[Required] Path to CSV file containing luminescence readings from samples with columns for Sample_ID and Luminescence_Value (str)",
+    "standard_curve_file": "[Required] Path to CSV file containing standard curve data with columns for ATP_Concentration (in nM) and Luminescence_Value (str)",
+    "normalization_method": "[Optional] Method used to normalize ATP values, either cell_count or protein_content (default: cell_count)",
+    "normalization_data": "[Optional] Path to CSV file with normalization data or dictionary with sample IDs as keys and normalization values"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

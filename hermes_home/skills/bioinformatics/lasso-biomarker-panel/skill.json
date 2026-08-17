@@ -1,0 +1,40 @@
+{
+  "name": "LASSO 生物标志物",
+  "id": "lasso-biomarker-panel",
+  "category": "machine_learning",
+  "language": "R/Python",
+  "source": "Biomni Lab",
+  "description": "LASSO特征选择 → 生物标志物Panel",
+  "triggers": [
+    "LASSO",
+    "biomarker",
+    "特征选择",
+    "诊断Panel"
+  ],
+  "steps": [
+    "标准化",
+    "LASSO回归",
+    "CV选lambda",
+    "特征系数图",
+    "ROC评估"
+  ],
+  "dependencies": [
+    "glmnet",
+    "caret",
+    "pROC"
+  ],
+  "outputs": [
+    "系数图",
+    "选定特征",
+    "ROC曲线"
+  ],
+  "detailed_description": "LASSO特征选择 → 生物标志物Panel\n\n分析步骤:\n  - 标准化\n  - LASSO回归\n  - CV选lambda\n  - 特征系数图\n  - ROC评估\n\n依赖包: glmnet, pROC, caret",
+  "when_to_use": "当你需要 LASSO 生物标志物 时触发",
+  "parameters": {
+    "steps": "标准化 -> LASSO回归 -> CV选lambda -> 特征系数图 -> ROC评估"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,110 @@
+# 人类肝脏 衰老方向 空间转录组 关键发现与分析参数
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+direction: aging
+omics: spatial
+
+# ─── 关键文献 ──────────────────────────────────────────
+key_findings:
+  # 核心文献1: 小鼠肝脏衰老空间转录组
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    title: "Spatial and single-cell profiling of the metabolome, transcriptome and epigenome of the aging mouse liver"
+    method: "Spatial transcriptomics (Visium, 10x Genomics) + scATAC-seq + scRNA-seq"
+    species: "Mouse (C57BL/6, male)"
+    tissue_sections: "Young (5 months) vs Aged (24 months) liver sections"
+    key_results: |
+      1. 空间转录组揭示了衰老肝脏的区域特异性变化
+         - Zone 1(门静脉周): 线粒体功能下降, 氧化磷酸化通路下调
+         - Zone 3(中央静脉周): 脂质代谢重编程, 脂滴累积, 脂肪酸合成上调
+      2. 代谢状态的空间异质性在衰老中增强
+         - 区域间代谢基因表达差异增大
+      3. 整合scRNA-seq + scATAC-seq + 空间 → 多层验证
+    spatial_technology: "Visium (55um spots)"
+    analysis_approach: |
+      - 使用zonation marker基因(Cyp2f2=Zone1, Glul=Zone3)定义空间区域
+      - 空间变量基因(SVGs)鉴定
+      - 区域特异性DEG分析
+      - 多组学整合
+
+  # 核心文献2: 人类肝脏MERFISH空间转录组
+  - paper: "Nature Communications 2025 (PMID: 39747095)"
+    title: "Spatial transcriptomics of healthy and fibrotic human liver at single-cell resolution"
+    method: "MERFISH (Vizgen) + snRNA-seq (10x Genomics)"
+    species: "Human"
+    sample_info: "Healthy human liver samples (~310,000 cells)"
+    key_results: |
+      1. 单细胞分辨率人类肝脏空间图谱
+      2. 肝细胞的区域化分布被精确定义
+         - 约一半的肝细胞基因在肝小叶内差异表达
+      3. 巨噬细胞和间质细胞亚群的空间分布
+      4. 肝细胞倍性与基因表达的空间关系
+         - 年龄增加→多倍体肝细胞比例增加
+         - 多倍体肝细胞的空间分布偏好特定区域
+      5. 受体-配体相互作用的空间映射
+    spatial_technology: "MERFISH (>300 genes, single-cell resolution)"
+    analysis_approach: |
+      - MERFISH + snRNA-seq联合分析
+      - 空间区域定义(zonal mapping)
+      - 细胞邻域分析(cell neighborhood)
+      - 配体-受体空间相互作用
+
+  # 核心文献3: 人类肝脏健康供体空间图谱 — 2026年4月Nature发表
+  - paper: "Yakubovsky et al. 2026, Nature (PMID: 41986723, DOI: 10.1038/s41586-026-10377-y)"
+    title: "A spatial atlas of the healthy human liver from live donors"
+    method: "Visium + Visium HD + MERFISH + PhenoCycler + snRNA-seq"
+    species: "Human"
+    sample_info: "16 liver samples (8 young healthy donors, 8 adjacent normal from pathology)"
+    key_results: |
+      - 最全面的人类健康肝脏空间图谱
+      - Visium HD(2um)提供近单细胞分辨率
+      - 多平台交叉验证
+      - 发现了肝细胞区域化在疾病中的早期变化
+      - 肝细胞-非实质细胞互作的空间图谱
+    spatial_technology: "Visium + Visium HD (2um) + MERFISH + PhenoCycler imaging"
+    status: "Published April 2026, Nature"
+
+# ─── 分析参数建议 ──────────────────────────────────────
+analysis_params:
+  # Visium 分析
+  visium:
+    software: [SpaceRanger, Seurat/Spatial, squidpy]
+    qc:
+      nCount_Spatial_min: 500
+      nFeature_Spatial_min: 200
+      percent_mt_max: 25
+    normalization:
+      method: SCTransform (Seurat) / SCANPY normalization
+      vars.to.regress: [percent.mt]
+    dimension_reduction:
+      method: PCA + UMAP/STAGATE
+    clustering:
+      method: "Leiden (Seurat) / BayesSpace (enhanced resolution)"
+      resolution: 0.5-0.8
+    spatial_variable_genes:
+      method: "Seurat/FindSpatiallyVariableFeatures (markvariogram) / SPARK / nnSVG"
+    deconvolution:
+      method: "RCTD (spacexr) / CARD / cell2location / SPOTlight"
+      note: "需要同时有scRNA-seq/snRNA-seq参考数据"
+    zonal_markers:
+      zone1_portal: [CYP2F2, ASS1, ARG1, PCK1, HAL]
+      zone3_central: [CYP2E1, GLUL, CYP1A2, LGR5, AXIN2]
+      note: "可用AUCell/UCell进行区域评分"
+
+  # MERFISH 分析
+  merfish:
+    software: [Vizgen MERSCOPE pipeline, Seurat/Spatial]
+    analysis:
+      - "单细胞分割(cell segmentation)"
+      - "空间聚类(spatial clustering)"
+      - "细胞邻域分析(cell neighborhood analysis)"
+      - "配体-受体空间互作"
+    integration_with_snrna:
+      method: "Seurat/FindTransferAnchors + label transfer"
+      note: "MERFISH基因数有限(~300-500 genes)，需snRNA-seq补全转录组"
+
+source: |
+  - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+  - "Nature Communications 2025 (PMID: 39747095)"
+  - "Yakubovsky et al. 2026, Nature (PMID: 41986723, DOI: 10.1038/s41586-026-10377-y)"
+  - "Human Cell Atlas: liver spatial data"

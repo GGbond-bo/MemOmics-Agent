@@ -1,0 +1,181 @@
+{
+  "id": "scipilot-figure-skill",
+  "name": "SciPilot 可视化顾问",
+  "category": "visualization",
+  "language": "Python",
+  "description": "可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检闭环。15条画图陷阱主动拦截，Nature/Science/IEEE/Elsevier/PNAS期刊规范自适应，CJK中文字体自动配置",
+  "starting_prompt": "帮我画论文图",
+  "source_dir": "skills/bioinformatics/scipilot-figure-skill",
+  "memomics_module": "07_可视化",
+  "chains_from": [
+    "deg-analysis",
+    "scrna-seurat-core",
+    "cellchat-v2",
+    "trajectory-analysis",
+    "functional-enrichment"
+  ],
+  "chains_to": [
+    "bioinformatics-html-report",
+    "pdf-report-generation"
+  ],
+  "tags": [
+    "figure",
+    "visualization",
+    "plot",
+    "chart",
+    "publication",
+    "CNS",
+    "期刊",
+    "画图",
+    "可视化",
+    "scipilot"
+  ],
+  "aliases": [
+    "scipilot-figure"
+  ],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "画图",
+    "可视化",
+    "figure",
+    "plot",
+    "发表级",
+    "作图",
+    "出图"
+  ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.0,
+      "evidence": "辩论7方论点(正方: 文献T2D慢肌减少PMID 23515448/17284623/39634609 + 7/7一致 + FDR_per_celltype=0.035; 反方: FDR_global=0.117不显著 + n=7功效低 + MYH7转录下调可致假比例下降 + O运动后也下降与运动增I型常识相悖 + 符号约定陷阱重现风险)。judge JSON解析失败→need_more_info/low。",
+      "date": "2026-08-12 23:12:16"
+    }
+  ],
+  "success_count": 8,
+  "proven_script": "plot_umap_annotation_v2.R",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "aucell_cns_figures.R",
+      "params": "AUCell五效应热图: Aging(O_Pre vs Y_Pre)/T2D(OD_Pre vs O_Pre)/ExYoung(Y paired)/ExOld(O paired)/ExT2D(OD paired), 22 scores x individual-level Wilcoxon + BH, ComplexHeatmap z-scored rows + star annotation, 600dpi PNG+PDF",
+      "date": "2026-08-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R-4.5.3 Rscript 直跑成功（绕开 execute_r 内核 DLL 问题）：Fig1_effect_matrix / Fig2_paired_response / Fig3_aging_vs_exercise 已生成。核心发现：代谢轴逆转率中位数+0.21 vs 衰老-炎症轴-0.07——运动只逆转代谢-结构轴，SenMayo/TNFA/Inflammatory 炎症程序无效。数据已"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig1b_five_effects_heatmap.py",
+      "params": "{\"five_effects\": [\"Aging=O_Pre vs Y_Pre\", \"T2D=OD_Pre vs O_Pre\", \"ExYoung=Y_Post vs Y_Pre\", \"ExOld=O_Post vs O_Pre\", \"ExT2D=OD_Post vs OD_Pre\"], \"statistics\": \"sample-level Cohen's d + Welch t-test + BH-FDR\", \"layout\": \"22 scores x 50 subtype-effect cells\", \"color\": \"RdBu_r TwoSlopeNorm clip ±3\", \"output\": \"Fig1b_five_effects_heatmap.png/pdf\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "五效应热图完成：1100项检验，BH-FDR<0.05 共93项显著。Aging 方向 d 最负在 Glycolysis/OxPhos（代谢程序衰老崩塌 d≈-4.7），T2D 附加效应相对温和，三运动组（ExYoung/ExOld/ExT2D）并排可直观比较糖尿病是否拖累运动逆转。R 环境 DLL 损坏（rlang/digest/cluster/Matrix/vctrs/cli 批量损坏）→ 改"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "Fig1_five_effects_matrix.py",
+      "params": "{\"format\": \"Figure1复刻：1x5并排面板(Aging/T2D/ExYoung/ExOld/ExT2D)，行=22打分(11代谢/4身份/7衰老)，列=10亚群，Cohen's d±3截断RdBu(#2166AC/#F7F7F7/#B2182B)，*FDR<0.05，png/pdf/svg三格式\", \"stats\": \"1100项检验，93项FDR<0.05\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "五效应矩阵图完成，严格复刻用户认可的Figure1格式（1x5并排热图面板）。用户明确要求\"按Figure1格式出\"——从system_log.jsonl提取原始Fig1_effect_matrix生成代码作为格式基准，扩展为5效应。关键经验：用户认可格式要原样复用，不要自行创新布局。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "update_denervation_gene_set.py",
+      "params": "genes: CHRNA1 CHRNG CHRND SCN5A KCNMB1 MYOG RUNX1 NCAM1 NGFR GAP43 MYH8; classification: AChR/channels/TF/neural/embryonic myosin",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "按功能分类更新 Denervation 基因集（11 基因全保留）：[AChR] CHRNA1/CHRNG/CHRND (PMID 3949875/3892537), [离子通道] SCN5A/KCNMB1 (PMID 33803193/19109424), [转录因子] MYOG/RUNX1 (PMID 7969143/16024660/21465538), [神经/施万标志] NCAM1/NG"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_v4_final.py",
+      "params": "{\"Fig1\": \"RdBu_r, TwoSlopeNorm(-3,0,3), 5 panels, PANEL_GAP=3.0, 行分组间隙, 亚群底部45度, 22完整基因名\", \"Fig7\": \"z-score, TwoSlopeNorm(-2,0,2), 10亚群x22打分, 顶部色带, 完整基因名\", \"data\": \"effect5_d_v2.csv (1100项) + MF_AUCell_meta.csv (新8基因Denervation)\"}",
+      "date": "2026-08-15",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v4 最终版：修复 v3 亚群标签被 invert_yaxis 翻到顶部的 bug（改为行0在最上的坐标映射，亚群标签固定 y=-1.9 底部）、三类别行分组间加白色间隙（11+1+4+1+7=24行）、五面板间距 PANEL_GAP=3.0 拼图感、行标签22个完整基因名、RdBu_r 红蓝白。Fig1 463KB + Fig7 204KB 生成成功。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fig_v5_final.py",
+      "params": "PANEL_GAP=1.8, CELL=0.94, RdBu_r TwoSlopeNorm(-3,0,3), Fig7 y=score x=sub",
+      "date": "2026-08-15",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Fig1 五效应矩阵 v5 + Fig7 打分×亚群转置版。修复：新 meta 打分列带 _AUC 后缀，Z 转置前需 sub_agg.columns = score_names 统一列名，否则 ZT.loc 报 KeyError。Fig1 v5 保存成功 465KB（PANEL_GAP 3.0→1.8 缩小面板间距、行分组间隙 ri+=1→0.6）。Fig7 转置：y=22打分、x=10亚群，行"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_split_v10.py",
+      "params": "type6=6 panels (Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post); effect5=Aging/T2D/ExYoung/ExOld/ExT2D; subcluster=10 subtypes; value: 6groups+subcluster=row z-score ±2, 5effects=Cohen's d ±3; RdBu_r; CELL=1.0 no white gaps; row gap 0.2; PANEL_GAP=1.8; yticklabels full names; subtype labels y=-0.15 rot45; subplots_adjust manual layout (no tight_layout)",
+      "date": "2026-08-16",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA1/A2/A3 (18 program scores × 6groups/5effects/subcluster) saved OK. B-group (4 identity) hit KeyError 'Identity' — fixed by adding GROUP_COLORS['Identity']='#6A6A6A', rerun needed."
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "plot_umap_annotation_v2.R",
+      "params": "Seurat 5.5.1, DimPlot(reduction=umap, group.by=subcluster, label=TRUE), subcluster 标签 zone1-6→cluster1-6, R 4.5.3 + R_LIBS=USER_R_LIBS/R-4.5.3, 51,227细胞×11,630基因, 7亚群",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF 注释 UMAP v2: NMJ(59) + cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签 zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×22"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "plot_umap_annotation_v2.R"
+  },
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-08-14 16:40",
+      "error_type": "missing_package",
+      "message": "library(ComplexHeatmap): 不存在叫'ComplexHeatmap'这个名称的程序包 — 但 requireNamespace 检查返回 TRUE",
+      "root_cause": "Rscript -e requireNamespace 用 R-4.5.3 主库能探测到 ComplexHeatmap，但 aucell_cns_figures.R 运行时 .libPaths(c('USER_R_LIBS/R-4.5.3', .libPaths())) 后 library() 失败——可能 USER_R_LIBS/R-4.5.3 下 ComplexHeatmap 目录损坏或缺失（该库此前",
+      "fix_applied": "",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    }
+  ]
+}

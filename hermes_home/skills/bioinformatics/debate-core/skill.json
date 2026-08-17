@@ -1,0 +1,22 @@
+{
+  "id": "debate-core",
+  "name": "Debate Core: 何时辩、怎么辩、怎么回流",
+  "category": "Core Mechanism",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 Debate Core: 何时辩、怎么辩、怎么回流 进行分析",
+  "source_dir": "skills/bioinformatics/debate-core",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "debate",
+    "gating",
+    "verdict",
+    "quality",
+    "self-evolution"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

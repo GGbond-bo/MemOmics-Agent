@@ -1,0 +1,31 @@
+{
+  "id": "find-skill",
+  "name": "技能搜索",
+  "category": "meta",
+  "language": "Python",
+  "description": "智能搜索可用技能：当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。",
+  "starting_prompt": "帮我找技能",
+  "memomics_module": "元技能",
+  "chains_from": [],
+  "chains_to": ["install_skill", "search_skills", "skill_hub"],
+  "tags": ["meta", "skill", "search", "find", "技能", "搜索技能", "有没有"],
+  "aliases": ["找技能", "有没有技能", "what skills", "skill search", "find skill", "有没有xxx"],
+  "triggers": [
+    "有没有.*技能", "找.*技能", "找.*skill", "需要.*技能", "有没有.*分析",
+    "有没有.*方法", "什么技能.*用", "哪些技能", "skill search", "find skill",
+    "有没有.*包", "有没有.*工具"
+  ],
+  "difficulty": "beginner",
+  "applicable": ["all_species"],
+  "parameters": {
+    "query": {"type": "string", "description": "搜索关键词", "required": true},
+    "direction": {"type": "string", "description": "研究方向过滤", "required": false}
+  },
+  "steps": [
+    {"name": "搜索技能", "description": "根据用户输入的关键词搜索内置239个技能+外部蓝图", "tool": "search_skills"},
+    {"name": "推荐最佳匹配", "description": "展示搜索结果，推荐最匹配的技能", "tool": "ask_choice"},
+    {"name": "安装技能", "description": "用户选择后自动安装所需技能", "tool": "install_skill"}
+  ],
+  "r_packages": [],
+  "python_packages": []
+}

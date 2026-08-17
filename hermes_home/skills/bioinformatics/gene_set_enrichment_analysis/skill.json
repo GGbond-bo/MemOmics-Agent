@@ -1,0 +1,21 @@
+{
+  "id": "gene_set_enrichment_analysis",
+  "name": "Gene Set Enrichment Analysis",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality.",
+  "detailed_description": "Perform enrichment analysis for a list of genes, with optional background gene set and plotting functionality.",
+  "when_to_use": "When you need gene set enrichment analysis analysis",
+  "parameters": {
+    "genes": "[Required] List of gene symbols to analyze (list)",
+    "top_k": "[Optional] Number of top pathways to return (default: 10)",
+    "database": "[Optional] Database to use for enrichment analysis (e.g., pathway, transcription, ontology) (default: ontology)",
+    "background_list": "[Optional] List of background genes to use for enrichment analysis",
+    "plot": "[Optional] Generate a bar plot of the top K enrichment results (default: False)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

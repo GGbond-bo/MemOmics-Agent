@@ -1,0 +1,38 @@
+# 通用知识库索引
+# 自动触发场景: 基因筛选、DotPlot、Marker展示、DEG解读
+type: common_resource
+last_updated: "2026-06-25"
+
+resources:
+  gene_protein_coding:
+    file: gene_protein_coding.csv
+    description: "GEO来源蛋白质编码基因表 (20,333个基因)"
+    format: csv
+    columns: [gene_id, gene_type, gene_name]
+    source: "GEO (NCBI Gene)"
+    
+    # 自动触发场景
+    auto_trigger:
+      - "DotPlot基因筛选 — 排除非编码基因, 只展示蛋白质编码marker"
+      - "Marker基因列表 — 过滤MALAT1/XIST/NEAT1/MIR等非编码基因"
+      - "DEG解读 — 区分编码/非编码DEG, 非编码基因需单独注释"
+      - "FeaturePlot — 优选蛋白质编码基因作为特征基因"
+      - "Heatmap — 基因行优先选蛋白质编码"
+      - "基因集评分 — 从基因集中筛选编码基因"
+      - "文献marker验证 — 文献marker是否在该表中"
+    
+    # 使用方式
+    usage: |
+      read.csv("knowledge_base/common/gene_protein_coding.csv")
+      pc_genes <- unique(pc_df$gene_name[pc_df$gene_type == "protein_coding"])
+      markers_pc <- all_markers[all_markers$gene %in% pc_genes, ]
+    
+    # 注意事项
+    notes:
+      - "该表为人类基因, 猴(Macaca fascicularis)基因组高度同源(>93%), 可直接使用"
+      - "鼠(Mus musculus)基因名需转换大小写后使用"
+      - "非编码基因(miRNA/lncRNA)被排除, 如需展示需单独说明生物学意义"
+      - "该表不包含新发现的非编码RNA, 但覆盖所有已知蛋白质编码基因"
+    
+    quality: "high"
+    verified: true

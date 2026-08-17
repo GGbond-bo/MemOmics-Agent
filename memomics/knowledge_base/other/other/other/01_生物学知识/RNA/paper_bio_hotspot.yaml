@@ -1,0 +1,125 @@
+type: kb_entry
+name: paper_bio_hotspot
+species: other
+tissue: other
+direction: other
+assay_type: RNA
+last_updated: 2026-08-15 15:14
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bio_hotspot
+content: '## 结论
+
+  - Hotspot是一种基于图的程序，用于识别单细胞基因组学中信息丰富的基因和基因模块。
+
+  - 该方法通过共享相似细胞的信息来提高稀疏数据中的灵敏度。
+
+  - 该方法可应用于大多数降维流程的下游分析。
+
+  - 该方法还可用于检测多模态设置（RNA + X）中的基因模块。
+
+  - Hotspot在识别空间变异基因方面与SpatialDE性能相当，但计算速度快数个数量级。
+
+  - Hotspot是第一个能够利用谱系追踪数据识别发育相关基因模块的方法。
+
+  - Hotspot通过局部自相关识别基因模块，在空间转录组中优于spatialDE，在谱系追踪数据中可结合不同相似性图。
+
+  - Hotspot性能随K增大而提高，但最优K通常为100-300。
+
+  - 局部相关性在模拟和真实数据上比Pearson相关性更稳健，与真实相关性的Spearman秩相关更高。
+
+  - 在CD4 T细胞转录组中，Hotspot选择的基因集在蛋白局部自相关上优于HVG、NBDisp和PCA方法。
+
+
+  ## 细胞类型
+
+  - CD4+ T细胞
+
+  - Th1细胞
+
+  - 调节性T细胞
+
+  - 细胞毒性T细胞
+
+  - 初始T细胞
+
+  - 活化T细胞
+
+  - 少突胶质细胞
+
+  - 浦肯野神经元
+
+  - 颗粒细胞
+
+  - 内胚层细胞
+
+  - 原始血细胞
+
+  - 壁内胚层细胞
+
+  - 滋养层细胞
+
+  - 成血管细胞
+
+  - CD14+ monocytes
+
+  - mouse cerebellum cell types (11 annotated clusters)
+
+
+  ## 基因 Marker
+
+  - CCR7：CD4+ T细胞，na，模块1，区分初始和活化T细胞亚群
+
+  - SELL：CD4+ T细胞，na，模块1（CD62L），区分初始和活化T细胞亚群
+
+  - IL7R：CD4+ T细胞，na，模块3，与S100A4一起区分初始和活化T细胞亚群
+
+  - S100A4：CD4+ T细胞，na，模块3，与IL7R一起区分初始和活化T细胞亚群
+
+  - IFNG：Th1细胞，na，模块0，Th1相关基因
+
+  - TBX21：Th1细胞，na，模块0，Th1相关基因
+
+  - PRF1：细胞毒性T细胞，na，模块2，细胞毒性相关基因
+
+  - GZMB：细胞毒性T细胞，na，模块2，细胞毒性相关基因
+
+  - FOXP3：调节性T细胞，na，模块6，调节性T细胞活性相关基因
+
+  - IL2RA：调节性T细胞，na，模块6，调节性T细胞活性相关基因
+
+  - CTLA4：调节性T细胞，na，模块6，抑制性受体
+
+  - TIGIT：调节性T细胞，na，模块6，抑制性受体
+
+  - Plp1：少突胶质细胞，na，小脑空间模块3，白质少突胶质细胞标志物
+
+  - Car8：浦肯野神经元，na，小脑空间模块1，浦肯野神经元标志物
+
+  - Cubn：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+
+  - Amot：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+
+  - Amn：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+
+  - Slc39a8：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+
+  - Hbb-bh1：原始血细胞，na，发育模块3，原始血液相关
+
+  - Gata1：原始血细胞，na，发育模块3，原始血液相关
+
+  - Klf1：原始血细胞，na，发育模块3，原始血液相关
+
+  - Nfe2：原始血细胞，na，发育模块3，原始血液相关
+
+  - Srgn： parietal endoderm，na，发育模块4， parietal内胚层发育相关
+
+  - Plac1：滋养层细胞，na，发育模块5，滋养层分化相关
+
+  - Ascl2：滋养层细胞，na，发育模块5，滋养层分化相关
+
+  - Pecam1：成血管细胞，na，表达空间分析中检测到的成血管细胞标志物，在谱系分析中未检测到'
+evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
+  across modalities of single-cell genomics | MEMOMICS_HOME/hermes_home/papers/hotspot.pdf

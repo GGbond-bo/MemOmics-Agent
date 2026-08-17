@@ -1,0 +1,96 @@
+{
+  "name": "CellBender 去污染",
+  "id": "cellbender-remove-background",
+  "category": "decontamination",
+  "language": "Python",
+  "source": "Biomni-style (custom)",
+  "description": "CellBender去除环境RNA: raw h5 → CellBender → clean h5",
+  "detailed_description": "CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。适用于10x Chromium数据，特别是高污染组织(骨骼肌/脑)和衰老样本。参数自适应: 衰老→fpr=0.02/epochs=200; 大数据>50K→epochs=250; 稀缺细胞→fpr=0.005",
+  "when_to_use": "10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本)",
+  "triggers": [
+    "CellBender",
+    "去污染",
+    "环境RNA",
+    "ambient RNA",
+    "remove background"
+  ],
+  "steps": [
+    "检查raw h5输入",
+    "GPU检测+模式选择",
+    "cellbender remove-background运行",
+    "质量对比: 前后细胞数/基因数/mt%",
+    "保存到cellbender/目录"
+  ],
+  "dependencies": [
+    "cellbender",
+    "torch",
+    "h5py"
+  ],
+  "outputs": [
+    "filtered.h5",
+    "质量对比报告",
+    "污染比例估计"
+  ],
+  "parameters": {
+    "fpr": "0.01(衰老→0.02,稀缺→0.005)",
+    "epochs": "150(大>50K→250,小<5K→100)",
+    "learning_rate": "0.001(小数据→0.0005)",
+    "expected_cells": "auto"
+  },
+  "proven_params": [
+    {
+      "date": "2025-06-15",
+      "species": "Macaca mulatta",
+      "tissue": "skeletal_muscle",
+      "platform": "DNB (BGI/MGI)",
+      "params": {
+        "projected_ambient_count_threshold": 5,
+        "learning_rate": 0.0001,
+        "training_fraction": 0.9,
+        "low_count_threshold": 20,
+        "epochs": 150,
+        "checkpoint_mins": 120,
+        "cuda": true
+      },
+      "review_score": 1.0,
+      "data_quality": {
+        "n_samples": 15,
+        "platform": "DNB"
+      },
+      "note": "User-verified production run, manually imported"
+    },
+    {
+      "species": "猕猴",
+      "tissue": "大脑",
+      "direction": "衰老",
+      "script": "run_cellbender.ps1",
+      "params": "expected-cells=5000, total-droplets=20000, epochs=150, low-count-threshold=5, cuda=true, learning-rate=0.0001",
+      "date": "2026-07-04",
+      "score": 0.0,
+      "result": "两个样本 CRR278961(5876 cells) + CRR278962(6064 cells) 均成功完成 CellBender 去污染，输出 filtered.h5"
+    }
+  ],
+  "proven_script": "run_cellbender.ps1",
+  "error_count": 1,
+  "success_count": 16,
+  "official_docs": "https://cellbender.readthedocs.io/en/latest/usage/index.html",
+  "doc_source": "official",
+  "scripts": [
+    "scripts/reference_script.py",
+    "scripts/run_cellbender.ps1",
+    "scripts/run_ptrepack.ps1"
+  ],
+  "errors": [
+    {
+      "timestamp": "2026-07-04 22:01",
+      "error_type": "",
+      "message": "CRR278962 启动后卡在 epoch 1/150，loss 不动，没有进度",
+      "root_cause": "PYTHONPATH 环境变量污染，导致 cellbender 加载了错误的 Python 模块路径",
+      "fix_applied": "unset PYTHONPATH 后重新启动，正常运行",
+      "species": "猕猴",
+      "tissue": "大脑",
+      "script": "run_cellbender.ps1",
+      "severity": "medium"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "query_clinvar",
+  "name": "Query Clinvar",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Convert a natural language prompt into a structured ClinVar search query and run it.",
+  "detailed_description": "Convert a natural language prompt into a structured ClinVar search query and run it.",
+  "when_to_use": "When you need query clinvar analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about genetic variants (str)",
+    "search_term": "[Optional] Direct ClinVar search term",
+    "max_results": "[Optional] Maximum number of results (default: 3)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

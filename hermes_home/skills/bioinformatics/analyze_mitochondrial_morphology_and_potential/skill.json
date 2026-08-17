@@ -1,0 +1,19 @@
+{
+  "id": "analyze_mitochondrial_morphology_and_potential",
+  "name": "Analyze Mitochondrial Morphology And Potential",
+  "category": "transcriptomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images.",
+  "detailed_description": "Quantifies metrics of mitochondrial morphology and membrane potential from fluorescence microscopy images.",
+  "when_to_use": "When you need analyze mitochondrial morphology and potential analysis",
+  "parameters": {
+    "morphology_image_path": "[Required] Path to the fluorescence microscopy image showing mitochondrial morphology (e.g., MTS-GFP) (str)",
+    "potential_image_path": "[Required] Path to the fluorescence microscopy image showing mitochondrial membrane potential (e.g., TMRE staining) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

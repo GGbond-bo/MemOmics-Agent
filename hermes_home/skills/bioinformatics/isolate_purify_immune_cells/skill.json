@@ -1,0 +1,21 @@
+{
+  "id": "isolate_purify_immune_cells",
+  "name": "Isolate Purify Immune Cells",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulates the isolation and purification of immune cells from tissue samples.",
+  "detailed_description": "Simulates the isolation and purification of immune cells from tissue samples.",
+  "when_to_use": "When you need isolate purify immune cells analysis",
+  "parameters": {
+    "tissue_type": "[Required] The type of tissue sample (e.g., 'adipose', 'kidney', 'liver', 'lung', 'spleen') (str)",
+    "target_cell_type": "[Required] The immune cell population to isolate (e.g., 'macrophages', 'leukocytes', 'T cells') (str)",
+    "enzyme_type": "[Optional] The enzyme used for tissue digestion (default: collagenase)",
+    "macs_antibody": "[Optional] Specific antibody for magnetic-assisted cell sorting",
+    "digestion_time_min": "[Optional] Digestion time in minutes (default: 45)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

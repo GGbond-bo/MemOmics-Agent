@@ -1,0 +1,33 @@
+# System files
+.DS_Store
+**/.DS_Store
+
+# Python temporary files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Large data files
+**/*.h5ad
+**/*.h5
+**/*.loom
+**/*.mtx
+**/*.csv.gz
+**/*.tsv.gz
+**/data/
+
+# Analysis output directories
+**/results/
+**/*_results/
+**/*_output/
+
+# Test outputs
+assets/eval/test_results/
+
+# R temporary (if R scripts added later)
+.RData
+.Rhistory
+Rplots.pdf

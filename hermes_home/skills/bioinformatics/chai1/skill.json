@@ -1,0 +1,19 @@
+{
+  "id": "chai1",
+  "name": "Chai-1",
+  "category": "protein-structure",
+  "language": "Python",
+  "description": "Structure prediction for protein, nucleic-acid, and small-molecule complexes with the Chai-1 foundation model (Chai Discovery 2024, github.com/chaidiscovery/chai-lab). Reach for this skill to predict ",
+  "starting_prompt": "使用 Chai-1 进行分析",
+  "source_dir": "skills/bioinformatics/chai1",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "chai1"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

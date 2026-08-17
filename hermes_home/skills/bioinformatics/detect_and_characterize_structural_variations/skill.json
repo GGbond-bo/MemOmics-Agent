@@ -1,0 +1,21 @@
+{
+  "id": "detect_and_characterize_structural_variations",
+  "name": "Detect And Characterize Structural Variations",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Detects and characterizes structural variations (SVs) in genomic sequencing data using LUMPY for SV detection followed by annotation with COSMIC and/or ClinVar databases.",
+  "detailed_description": "Detects and characterizes structural variations (SVs) in genomic sequencing data using LUMPY for SV detection followed by annotation with COSMIC and/or ClinVar databases.",
+  "when_to_use": "When you need detect and characterize structural variations analysis",
+  "parameters": {
+    "bam_file_path": "[Required] Path to the aligned sequencing data in BAM format (str)",
+    "reference_genome_path": "[Required] Path to the reference genome in FASTA format (str)",
+    "output_dir": "[Required] Directory where results will be saved (str)",
+    "cosmic_db_path": "[Optional] Path to the COSMIC database for cancer annotation",
+    "clinvar_db_path": "[Optional] Path to the ClinVar database for clinical annotation"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

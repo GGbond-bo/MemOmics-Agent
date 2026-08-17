@@ -1,0 +1,10 @@
+doublet_method: DoubletFinder
+last_updated: '2026-06-25'
+mt_percent: 20
+nCount_high: 50000
+nFeature_high: 8000
+nFeature_low: 200
+note: 默认参数, 建议从文献中更新
+source: Seurat 官方默认值 + 多数文献共识
+species: monkey
+tissue: brain

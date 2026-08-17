@@ -1,0 +1,30 @@
+analysis_type: deg
+date: '2026-06-27'
+methods:
+  mast:
+    ebayes:
+      confidence: low
+      source: default_value
+      value: true
+    padj_threshold:
+      confidence: medium
+      source: domain_convention
+      value: 0.05
+  pseudobulk_deseq2:
+    design_formula:
+      confidence: medium
+      source: domain_convention
+      value: ~ 0 + type
+    logfc_threshold:
+      confidence: medium
+      source: domain_convention
+      value: 0.5
+    min_detection_rate:
+      confidence: high
+      source: data_driven
+      value: 0.1
+    padj_threshold:
+      confidence: medium
+      source: domain_convention
+      value: 0.05
+source: default_seed

@@ -1,0 +1,20 @@
+metadata:
+  source: work/papers/10.3389_fimmu.2026.1787641.pdf
+  dissected_at: '2026-07-12T17:30:18.338297'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages: []
+  parameters: []
+  platforms: []
+  stats:
+    methods_length: 53851
+    methods_lines: 949
+    package_count: 0
+    version_count: 0
+    parameter_count: 0
+    platform_count: 0
+llm_extraction: null

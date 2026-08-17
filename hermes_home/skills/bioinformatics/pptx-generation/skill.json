@@ -1,0 +1,12 @@
+{
+  "id": "pptx-generation",
+  "name": "pptx-generation",
+  "category": "pptx",
+  "language": "R+Python",
+  "description": "Auto-generated for pptx-generation",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

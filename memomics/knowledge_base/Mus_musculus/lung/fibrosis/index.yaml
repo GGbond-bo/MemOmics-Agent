@@ -1,0 +1,9 @@
+created: '2026-06-27'
+direction: fibrosis
+literature_count: 0
+omics:
+- rna
+species: mouse
+status: seeded
+tissue: lung
+version: 1

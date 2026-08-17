@@ -1,0 +1,16 @@
+{
+  "id": "mesh-semantic-indexing",
+  "name": "MeSH / DeCS Semantic Indexing (NCBI E-utilities)",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "Generate and verify MeSH/DeCS semantic indexing labels for biomedical articles using NCBI E-utilities. Use when asked to output MeSH major topics for PMIDs, annotate literature with controlled vocabul",
+  "starting_prompt": "使用 MeSH / DeCS Semantic Indexing (NCBI E-utilities) 进行分析",
+  "source_dir": "skills/bioinformatics/mesh-semantic-indexing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

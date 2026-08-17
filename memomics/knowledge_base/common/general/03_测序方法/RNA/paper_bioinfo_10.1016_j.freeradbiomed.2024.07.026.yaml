@@ -1,0 +1,23 @@
+type: kb_entry
+domain: common
+name: paper_bioinfo_10.1016_j.freeradbiomed.2024.07.026
+direction: general
+assay_type: RNA
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bioinfo_10.1016_j.freeradbiomed.2024.07.026
+content: '## 测序方法
+
+  - scRNA-seq | 平台 — | 建库 — | 深度 —
+
+  - snRNA-seq | 平台 — | 建库 — | 深度 —
+
+
+  ## 数据库
+
+  - MoTrPAC (Molecular Transducers of Physical Activity Consortium)：提供运动反应的系统水平多组学数据资源，用于研究运动对全身的影响。'
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

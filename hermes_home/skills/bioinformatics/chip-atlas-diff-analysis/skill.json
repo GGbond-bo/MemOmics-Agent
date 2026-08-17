@@ -1,0 +1,39 @@
+{
+  "name": "ChIP-seq 差异分析",
+  "id": "chip-atlas-diff-analysis",
+  "category": "epigenomics",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "ChIP差异Peak: DiffBind → 差异结合位点",
+  "triggers": [
+    "ChIP差异",
+    "DiffBind",
+    "差异Peak"
+  ],
+  "steps": [
+    "样本矩阵构建",
+    "Peak一致性",
+    "DiffBind分析",
+    "差异Peak注释",
+    "motif富集"
+  ],
+  "dependencies": [
+    "DiffBind",
+    "ChIPseeker",
+    "DESeq2"
+  ],
+  "outputs": [
+    "差异Peak",
+    "MA plot",
+    "热图"
+  ],
+  "detailed_description": "ChIP差异Peak: DiffBind → 差异结合位点\n\n分析步骤:\n  - 样本矩阵构建\n  - Peak一致性\n  - DiffBind分析\n  - 差异Peak注释\n  - motif富集\n\n依赖包: DESeq2, ChIPseeker, DiffBind",
+  "when_to_use": "当你需要 ChIP-seq 差异分析 时触发",
+  "parameters": {
+    "steps": "样本矩阵构建 -> Peak一致性 -> DiffBind分析 -> 差异Peak注释 -> motif富集"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

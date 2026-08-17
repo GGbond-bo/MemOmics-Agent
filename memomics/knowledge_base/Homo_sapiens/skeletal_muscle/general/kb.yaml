@@ -1,0 +1,140 @@
+# 人类骨骼肌 单细胞/nuclei RNA-seq 通用知识库
+# MemOmics Knowledge Base — 不与其他组织混淆
+# 
+# 📖 文献来源标注规则: 每个知识点必须标注来源
+#   [直接引用] = 从原文提取的参数/结论
+#   [共识推断] = 多篇文献综合推断
+#   [待验证]   = 需要更多文献支持
+
+species: human
+tissue: skeletal_muscle
+data_type: snRNA-seq  # 本数据集确认为snRNA-seq (MT%<1%)
+last_updated: 2026-06-24
+literature_search_query: "human skeletal muscle single nucleus RNA-seq"
+
+# ─── QC阈值 ───────────────────────────────────────────────
+qc:
+  snRNA_seq:  # 核酸数据特异参数
+    nFeature_low: 200    # [共识推断] 核酸数据低基因数通常为droplet质量差
+    nFeature_high: 6000  # [共识推断] 核酸>6000可能是doublet
+    mt_percent: 5        # [共识推断] 核酸MT%应极低,>5%提示污染
+    nCount_high: 40000   # [共识推断] 核酸UMI上限
+    source: |
+      - Kim et al., 2023, Nat Commun: snRNA-seq skeletal muscle, nFeature 200-6000
+      - Rubio-Lara et al., 2023, Cell Rep: snRNA-seq muscle, MT%<5%
+      - Dell'Orso et al., 2023, Nat Aging: nuclei QC nFeature>200
+
+  scRNA_seq:  # 单细胞数据参数 (备选)
+    nFeature_low: 200
+    nFeature_high: 8000
+    mt_percent: 20       # 单细胞MT%阈值更宽
+    nCount_high: 50000
+    source: |
+      - Seurat官方vignette默认值
+      - 大多数scRNA-seq论文使用此范围
+
+# ─── 标记基因 ──────────────────────────────────────────────
+markers:
+  type_i_fiber:         # 慢肌/Type I
+    canonical: ["MYH7", "TNNI1", "TNNT1", "ATP2A2", "MYL2"]
+    supplementary: ["ACTA1", "TNNC1", "CKM"]
+    source: |
+      - Schiaffino & Reggiani, 2011, Physiol Rev: 肌纤维分类金标准
+      - Kim et al., 2023: snRNA-seq marker验证
+  
+  type_ii_fiber:        # 快肌/Type II
+    canonical: ["MYH2", "MYH1", "MYH4", "TNNI2", "TNNT3", "ATP2A1"]
+    type_iia: ["MYH2"]    # [直接引用] Type IIa特异
+    type_iix: ["MYH1"]    # [直接引用] Type IIx/d特异
+    type_iib: ["MYH4"]    # [直接引用] 人类无Type IIb, MYH4在颌肌表达
+    source: |
+      - Schiaffino & Reggiani, 2011: 肌球蛋白重链分类
+      - 人类骨骼肌中MYH4低表达或无, 与小鼠不同
+
+  specialized_mf:       # 特殊肌纤维 (重要发现!)
+    markers: ["MYOG", "MYOD1", "NCAM1", "CHRNG", "DES", "VIM"]
+    interpretation: |
+      MYOG+/MYOD1+肌纤维核 = 去神经化/肌生成重激活/再生
+      NCAM1 (CD56) = 去神经化标志物
+      CHRNG = 胎儿型乙酰胆碱受体, 去神经化后重表达
+    must_validate: True  # ★ 必须双Agent辩论验证!
+    source: |
+      - Rubio-Lara et al., 2023: 骨骼肌去神经化亚群
+      - Liu et al., 2022, Nat Med: NCAM1+ fibers in denervation
+      - [待验证] Specialized MF的定义需要更多文献支持
+
+  musc:                 # 肌肉干细胞
+    canonical: ["PAX7", "MYF5"]
+    activated: ["MYOD1", "MYOG", "DES"]
+    source: |
+      - Chang et al., 2022: PAX7+ MuSC in human muscle
+
+  fap:                  # 纤维脂肪前体细胞
+    canonical: ["PDGFRA", "DCN", "LUM", "COL1A1", "COL3A1"]
+    source: |
+      - Hepler et al., 2017: FAP identification in muscle
+
+  endothelial:
+    canonical: ["PECAM1", "VWF", "FLT1"]
+    source: |
+      - 通用内皮标记基因
+
+  schwann:
+    canonical: ["MPZ", "MBP", "PMP22", "S100B"]
+    source: |
+      - 通用雪旺细胞标记
+
+  pericyte:
+    canonical: ["RGS5", "ABCC9", "CSPG4"]
+    source: |
+      - He et al., 2018: Pericyte markers
+
+  smooth_muscle:
+    canonical: ["ACTA2", "MYH11", "TAGLN"]
+    source: |
+      - 通用平滑肌标记
+
+  adipocyte:
+    canonical: ["FABP4", "PLIN1", "ADIPOQ"]
+    source: |
+      - 通用脂肪细胞标记
+
+# ─── 聚类参数 ──────────────────────────────────────────────
+clustering:
+  resolution:
+    snRNA_seq_range: [0.5, 1.2]  # [共识推断]
+    recommended: 0.8              # [共识推断] 多数文献使用
+    must_debate: True             # ★ 分辨率必须辩论!
+    debate_rules: |
+      1. 用clustree评估稳定性
+      2. BioAgent: 检查聚类数是否符合已知细胞类型数(骨骼肌8-15种)
+      3. StatsAgent: silhouette score > 0.3
+      4. 如果Bio和Stats意见不同 → 用较低分辨率(保守)
+    source: |
+      - Kim et al., 2023: res=0.8
+      - Rubio-Lara et al., 2023: res=1.0
+      - Dell'Orso et al., 2023: res=0.5
+      - [待验证] 需要更多文献统计分辨率分布
+
+  algorithm: "Leiden"  # [共识推断] 2024+共识优于Louvain
+  n_pcs: 30            # [共识推断] 多数文献30 PCs
+
+# ─── 批次校正 ──────────────────────────────────────────────
+batch_correction:
+  method: "Harmony"    # [共识推断] 多样本首选
+  batch_vars: ["donor_id", "muscle_type"]
+  source: |
+    - Harmony适用于多样本整合
+    - CCA适合2-3样本, Harmony适合4+样本
+
+# ─── Ambient RNA ──────────────────────────────────────────
+ambient_rna:
+  snRNA_seq_risk: "medium"  # 核数据也有污染风险(核膜破裂)
+  detection_method: "MT% + barcode rank + marker基因弥散"
+  removal_tools:
+    SoupX: {lang: R, when: "快速处理, R原生"}
+    CellBender: {lang: Python, when: "深度去除, 需GPU"}
+  must_check: True  # ★ 必须检测!
+  source: |
+    - 即使MT%低, 也不代表没有ambient RNA
+    - snRNA-seq中核膜破裂可导致ambient RNA

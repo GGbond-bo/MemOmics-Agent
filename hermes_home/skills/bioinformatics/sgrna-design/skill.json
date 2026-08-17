@@ -1,0 +1,12 @@
+{
+  "id": "sgrna-design",
+  "name": "sgRNA Design",
+  "category": "Mol Bio",
+  "language": "R+Python",
+  "description": "CRISPR sgRNA design with three-tiered scoring",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

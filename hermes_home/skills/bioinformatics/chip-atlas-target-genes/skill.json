@@ -1,0 +1,37 @@
+{
+  "name": "ChIP-seq 靶基因",
+  "id": "chip-atlas-target-genes",
+  "category": "epigenomics",
+  "language": "R/Python",
+  "source": "Biomni Lab",
+  "description": "ChIP Peak靶基因注释: Peak → 基因组注释 → 靶基因",
+  "triggers": [
+    "ChIP靶基因",
+    "peak注释",
+    "ChIPseeker"
+  ],
+  "steps": [
+    "Peak文件读取",
+    "ChIPseeker注释",
+    "promoter→靶基因",
+    "motif分析",
+    "功能富集"
+  ],
+  "dependencies": [
+    "ChIPseeker",
+    "GenomicRanges"
+  ],
+  "outputs": [
+    "靶基因列表",
+    "注释统计图"
+  ],
+  "detailed_description": "ChIP Peak靶基因注释: Peak → 基因组注释 → 靶基因\n\n分析步骤:\n  - Peak文件读取\n  - ChIPseeker注释\n  - promoter→靶基因\n  - motif分析\n  - 功能富集\n\n依赖包: GenomicRanges, ChIPseeker",
+  "when_to_use": "当你需要 ChIP-seq 靶基因 时触发",
+  "parameters": {
+    "steps": "Peak文件读取 -> ChIPseeker注释 -> promoter→靶基因 -> motif分析 -> 功能富集"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

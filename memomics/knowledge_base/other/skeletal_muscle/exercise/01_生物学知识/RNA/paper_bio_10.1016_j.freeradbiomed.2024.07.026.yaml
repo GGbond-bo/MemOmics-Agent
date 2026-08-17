@@ -1,0 +1,101 @@
+type: kb_entry
+name: paper_bio_10.1016_j.freeradbiomed.2024.07.026
+species: other
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bio_10.1016_j.freeradbiomed.2024.07.026
+content: '## 结论
+
+  - 骨骼肌可塑性使其能适应运动等刺激，但训练适应的分子机制仍未完全阐明。
+
+  - 运动适应涉及复杂的信号整合网络，而非单一主调控因子。
+
+  - 耐力和抗阻运动的急性转录反应高度重叠，但基因抑制更具训练范式特异性。
+
+  - 训练状态改变急性运动反应：次最大耐力运动在训练后转录反应减弱，而力竭运动和抗阻运动不减弱甚至加速。
+
+  - 训练肌肉静息时转录组变化小，但蛋白质组和表观遗传变化显著。
+
+  - 多细胞类型（如免疫细胞、内皮细胞、间充质细胞）参与骨骼肌可塑性调控。
+
+  - PGC-1α是耐力适应的关键调节节点，但其缺失时训练仍能改善性能，显示系统冗余性。
+
+
+  ## 细胞类型
+
+  - 肌纤维（I型/慢缩、II型/快缩）
+
+  - 内皮细胞
+
+  - 平滑肌细胞
+
+  - 单核细胞
+
+  - 间充质细胞（纤维-脂肪祖细胞 FAPs）
+
+  - 卫星细胞
+
+  - 调节性T细胞 (Treg)
+
+  - 2型天然淋巴细胞 (ILC2)
+
+  - 神经胶质细胞
+
+  - 肌腱细胞
+
+
+  ## 通路
+
+  - AMPK-PGC-1α 信号轴
+
+  - mTORC1 信号通路
+
+  - Ca2+/CaMKII/钙调神经磷酸酶-NFAT 通路
+
+  - MAPK (ERK1/2, JNK, p38) 通路
+
+  - ROS/KEAP1/NRF2 抗氧化通路
+
+  - β2-肾上腺素受体-cAMP-PKA 通路
+
+  - IGF-1/PI3K/Akt/mTORC1 通路
+
+  - HSF1/AP-1 应激反应通路
+
+
+  ## 基因 Marker
+
+  - PPARGC1A (PGC-1α)：肌纤维，up，急性运动后转录诱导，耐力/抗阻运动均增加，高强度运动诱导更显著。
+
+  - JUNB：肌纤维，up，急性运动后即早期基因上调，耐力与抗阻运动共有。
+
+  - FOS：肌纤维，up，急性运动后即早期基因上调。
+
+  - EGR1：肌纤维，up，急性运动后即早期基因上调。
+
+  - ATF3：肌纤维，up，急性运动后即早期基因上调。
+
+  - MAFF：肌纤维，up，急性运动后即早期基因上调。
+
+  - NR4As：肌纤维，up，急性运动后即早期基因上调。
+
+  - HSPA1A：肌纤维，up，急性运动后热应激相关基因上调。
+
+  - DNAJA4：肌纤维，up，急性运动后热应激相关基因上调。
+
+  - NFE2L2 (NRF2)：肌纤维，up，ROS促进其从KEAP1释放并入核，激活抗氧化基因表达。
+
+  - IL13：2型天然淋巴细胞 (ILC2)，up，耐力训练增加IL-13产生的组织常驻ILC2比例，促进氧化表型。
+
+
+  ## 化合物/化学信息
+
+  - rapamycin：靶点 mTORC1 | 剂量 — | IC50 — | 模型 人体/动物实验 | 抑制mTORC1，影响训练适应（主要在抗阻训练中研究）'
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

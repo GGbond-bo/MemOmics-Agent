@@ -1,0 +1,19 @@
+{
+  "id": "create_segmentation_visualization",
+  "name": "Create Segmentation Visualization",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Create and save visualization of segmentation results using nilearn. Generates overlay plots and multiple anatomical views.",
+  "detailed_description": "Create and save visualization of segmentation results using nilearn. Generates overlay plots and multiple anatomical views.",
+  "when_to_use": "When you need create segmentation visualization analysis",
+  "parameters": {
+    "original_mri": "[Required] Path to original MRI file (str)",
+    "segmentation": "[Required] Path to segmentation file (str)",
+    "output_dir": "[Optional] Directory to save visualization images (default: ./visualization_output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

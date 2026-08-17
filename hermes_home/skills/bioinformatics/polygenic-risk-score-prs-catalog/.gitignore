@@ -1,0 +1,25 @@
+# System files
+.DS_Store
+
+# Data files (downloaded reference genotypes + scoring files)
+data/
+**/*.rds
+**/*.bk
+**/*.bed
+**/*.bim
+**/*.fam
+**/*.tsv.gz
+**/*.csv.gz
+**/*.txt.gz
+
+# Output directories
+*_results/
+results/
+
+# R temporary files
+.RData
+.Rhistory
+*.Rproj.user
+
+# Test output
+assets/eval/test_results/

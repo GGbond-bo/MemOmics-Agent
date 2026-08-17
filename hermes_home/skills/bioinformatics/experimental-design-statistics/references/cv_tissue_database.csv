@@ -1,0 +1,30 @@
+Organism,Tissue,Assay,CV,CV_Min,CV_Max,Source,Notes
+Human,PBMC,Bulk RNA-seq,0.40,0.30,0.50,"Schurch et al. 2016",Peripheral blood mononuclear cells
+Human,Brain,Bulk RNA-seq,0.35,0.25,0.45,"GTEx Consortium",Post-mortem brain tissue
+Human,Liver,Bulk RNA-seq,0.38,0.28,0.48,"GTEx Consortium",Various pathologies
+Human,Muscle,Bulk RNA-seq,0.42,0.32,0.52,"GTEx Consortium",Skeletal muscle
+Human,Tumor,Bulk RNA-seq,0.45,0.35,0.60,"TCGA",High inter-patient variability
+Mouse,Brain,Bulk RNA-seq,0.25,0.20,0.35,"Vieth et al. 2017",Inbred strains
+Mouse,Liver,Bulk RNA-seq,0.28,0.22,0.38,"Conesa et al. 2016",Inbred strains
+Mouse,Spleen,Bulk RNA-seq,0.30,0.24,0.40,"Literature avg",Immune organ variability
+Cell Line,HeLa,Bulk RNA-seq,0.15,0.10,0.20,"Hart et al. 2013",Low biological variability
+Cell Line,293T,Bulk RNA-seq,0.12,0.08,0.18,"Hart et al. 2013",Very controlled conditions
+Cell Line,iPSC,Bulk RNA-seq,0.20,0.15,0.28,"Literature avg",Induced pluripotent stem cells
+Yeast,S cerevisiae,Bulk RNA-seq,0.10,0.05,0.15,"Schurch et al. 2016",Highly controlled model
+Drosophila,Adult,Bulk RNA-seq,0.22,0.18,0.30,"pasilla dataset",Inbred strains
+C elegans,Mixed stage,Bulk RNA-seq,0.25,0.18,0.35,"Literature avg",Synchronized cultures lower
+Human,PBMC,scRNA-seq,0.80,0.60,1.20,"Vieth et al. 2017",High cell-to-cell variability
+Human,Tumor,scRNA-seq,0.90,0.70,1.50,"Literature avg",Very heterogeneous
+Mouse,Brain,scRNA-seq,0.75,0.55,1.00,"Vieth et al. 2017",Neuronal diversity
+Mouse,Embryo,scRNA-seq,0.85,0.65,1.20,"Literature avg",Developmental stages
+Human,PBMC,ATAC-seq,0.30,0.20,0.40,"ENCODE",Open chromatin less variable
+Human,Tumor,ATAC-seq,0.35,0.25,0.50,"ENCODE",Epigenetic heterogeneity
+Mouse,Liver,ATAC-seq,0.25,0.18,0.35,"ENCODE",Inbred strains
+Cell Line,GM12878,ATAC-seq,0.15,0.10,0.22,"ENCODE",B-lymphoblast cell line
+Human,Various,ChIP-seq TF,0.40,0.30,0.60,"ENCODE",Transcription factors
+Human,Various,ChIP-seq Histone,0.30,0.22,0.45,"ENCODE",Histone modifications
+Human,Plasma,Proteomics TMT,0.35,0.25,0.50,"Literature avg",Targeted proteomics
+Human,Tissue,Proteomics LFQ,0.45,0.35,0.65,"Literature avg",Label-free more variable
+Cell Line,HeLa,Proteomics,0.20,0.15,0.30,"Literature avg",Controlled conditions
+Human,Blood,Methylation Array,0.25,0.18,0.38,"Literature avg",450K EPIC arrays
+Human,Tumor,Methylation Array,0.35,0.25,0.50,"TCGA",Inter-tumor variability

@@ -1,0 +1,83 @@
+{
+  "id": "ml-classification",
+  "name": "机器学习分类",
+  "category": "machine_learning",
+  "language": "Python",
+  "description": "LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA",
+  "starting_prompt": "使用机器学习进行分类预测",
+  "source_dir": "skills/built_in/ml-classification",
+  "memomics_module": "04_临床分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "ml",
+    "classification",
+    "LASSO",
+    "random-forest",
+    "SVM",
+    "SHAP"
+  ],
+  "steps": [
+    {
+      "name": "Feature selection (LASSO)",
+      "description": "cv.glmnet sparse features",
+      "tool": "terminal"
+    },
+    {
+      "name": "Train/test split",
+      "description": "createDataPartition 70/30",
+      "tool": "terminal"
+    },
+    {
+      "name": "Random Forest",
+      "description": "randomForest + OOB",
+      "tool": "terminal"
+    },
+    {
+      "name": "SVM training",
+      "description": "svm + cross-validation",
+      "tool": "terminal"
+    },
+    {
+      "name": "ROC/AUC evaluation",
+      "description": "pROC multi-model comparison",
+      "tool": "terminal"
+    },
+    {
+      "name": "SHAP explanation",
+      "description": "shapviz feature importance",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "caret",
+    "glmnet",
+    "randomForest",
+    "e1071",
+    "pROC",
+    "shapviz"
+  ],
+  "python_packages": [
+    "scikit-learn",
+    "xgboost",
+    "shap",
+    "optuna"
+  ],
+  "difficulty": "advanced",
+  "applicable": [
+    "disease",
+    "有标签数据",
+    "分类/预测"
+  ],
+  "parameters": {
+    "r_packages": "caret, glmnet, randomForest, e1071, pROC, shapviz",
+    "python_packages": "scikit-learn, xgboost, shap, optuna",
+    "steps": "Feature selection (LASSO) -> Train/test split -> Random Forest -> SVM training -> ROC/AUC evaluation -> SHAP explanation"
+  },
+  "detailed_description": "LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA\n\n适用场景: disease, 有标签数据, 分类/预测\n\n分析步骤:\n  - Feature selection (LASSO): cv.glmnet sparse features\n  - Train/test split: createDataPartition 70/30\n  - Random Forest: randomForest + OOB\n  - SVM training: svm + cross-validation\n  - ROC/AUC evaluation: pROC multi-model comparison\n  - SHAP explanation: shapviz feature importance\n\n依赖包: shapviz, e1071, scikit-learn, caret, shap, glmnet, optuna, pROC, xgboost, randomForest\n\n难度: advanced\n\n触发提示: \"使用机器学习进行分类预测\"",
+  "when_to_use": "适用于: disease, 有标签数据, 分类/预测",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

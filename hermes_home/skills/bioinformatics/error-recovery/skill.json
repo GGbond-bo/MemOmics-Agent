@@ -1,0 +1,53 @@
+{
+  "id": "error-recovery",
+  "name": "错误自动诊断与修复",
+  "category": "General Utility",
+  "language": "R+Python",
+  "description": "分析报错后自动诊断根因并修复。6 类错误分类 (包缺失/内存/类型转换/路径/参数/未知)，历史经验累积。",
+  "starting_prompt": "分析报错了，帮我看看",
+  "memomics_module": "00_系统工具",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "error",
+    "recovery",
+    "troubleshooting",
+    "debugging",
+    "fix",
+    "报错",
+    "出错",
+    "修复",
+    "怎么修",
+    "debug"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": [
+    {
+      "name": "诊断错误类型",
+      "description": "读取错误信息，分类到 A-F 6 类",
+      "tool": "terminal"
+    },
+    {
+      "name": "查历史经验",
+      "description": "skill_evolution query_logs 查同类错误修复记录",
+      "tool": "skill_evolution"
+    },
+    {
+      "name": "执行修复",
+      "description": "按对应 Step 执行修复方案",
+      "tool": "terminal"
+    },
+    {
+      "name": "验证修复",
+      "description": "重新运行原脚本，确认通过",
+      "tool": "terminal"
+    },
+    {
+      "name": "记录经验",
+      "description": "record_run 或 record_error 记录",
+      "tool": "skill_evolution"
+    }
+  ]
+}

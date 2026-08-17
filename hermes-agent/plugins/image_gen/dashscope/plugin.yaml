@@ -1,0 +1,6 @@
+name: dashscope
+version: 1.0.0
+description: "Alibaba DashScope image generation (qwen-image / wan 万相) via the native async multimodal-generation protocol."
+author: MemOmics
+kind: backend
+requires_env: []

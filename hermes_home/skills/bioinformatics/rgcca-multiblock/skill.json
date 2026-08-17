@@ -1,0 +1,12 @@
+{
+  "id": "rgcca-multiblock",
+  "name": "RGCCA Multiblock Analysis",
+  "category": "Multi-omics",
+  "language": "R+Python",
+  "description": "Regularized Generalized Canonical Correlation Analysis for multi-omics",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

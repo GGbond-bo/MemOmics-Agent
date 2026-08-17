@@ -1,0 +1,21 @@
+{
+  "id": "detect_and_annotate_somatic_mutations",
+  "name": "Detect And Annotate Somatic Mutations",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Detects and annotates somatic mutations in tumor samples compared to matched normal samples using GATK Mutect2 for variant calling, GATK FilterMutectCalls for filtering, and SnpEff for functional anno",
+  "detailed_description": "Detects and annotates somatic mutations in tumor samples compared to matched normal samples using GATK Mutect2 for variant calling, GATK FilterMutectCalls for filtering, and SnpEff for functional annotation.",
+  "when_to_use": "When you need detect and annotate somatic mutations analysis",
+  "parameters": {
+    "tumor_bam": "[Required] Path to the tumor sample BAM file (str)",
+    "normal_bam": "[Required] Path to the matched normal sample BAM file (str)",
+    "reference_genome": "[Required] Path to the reference genome FASTA file (str)",
+    "output_prefix": "[Required] Prefix for output files (str)",
+    "snpeff_database": "[Optional] SnpEff database to use for annotation (default: GRCh38.105)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

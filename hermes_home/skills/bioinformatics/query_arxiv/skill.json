@@ -1,0 +1,18 @@
+{
+  "id": "query_arxiv",
+  "name": "Query Arxiv",
+  "category": "literature",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query arXiv for papers based on the provided search query.",
+  "detailed_description": "Query arXiv for papers based on the provided search query.",
+  "when_to_use": "When you need query arxiv analysis",
+  "parameters": {
+    "query": "[Required] The search query string. (str)",
+    "max_papers": "[Optional] The maximum number of papers to retrieve. (default: 10)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

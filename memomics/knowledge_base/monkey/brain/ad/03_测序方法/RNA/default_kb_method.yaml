@@ -1,0 +1,45 @@
+data_type: snRNA-seq
+language: R
+omics_type: RNA
+paper_id: default_kb
+pipeline:
+  advanced: []
+  annotation:
+    method: ''
+    notes: ''
+    package: ''
+    reference: ''
+  clustering:
+    method: Leiden
+    notes: ''
+    package: ''
+    parameters: {}
+  deg:
+    method: DESeq2
+    notes: ''
+    package: DESeq2
+    parameters: {}
+  integration:
+    method: Harmony
+    notes: ''
+    package: Harmony
+    parameters: {}
+  normalization:
+    method: SCTransform
+    notes: ''
+    package: Seurat
+    parameters: {}
+  qc:
+    method: standard
+    notes: ''
+    package: ''
+    parameters: {}
+qc_thresholds:
+  doublet_method: DoubletFinder
+  mt_percent: 5
+  nCount_high: 40000
+  nFeature_high: 6000
+  nFeature_low: 200
+  notes: 从摘要推断 + 默认值
+source: monkey brain ad atlas (默认知识库)
+title: monkey brain ad 默认方法

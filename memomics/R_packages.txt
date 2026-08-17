@@ -1,0 +1,140 @@
+# MemOmics-Agent R Dependencies
+# ================================
+# The agent auto-installs missing R packages during analysis via:
+#   BiocManager::install("PackageName")   # Bioconductor packages
+#   install.packages("PackageName")        # CRAN packages
+#
+# To pre-install ALL packages manually (optional, takes 30-60 min):
+#   Rscript -e 'source("install_r_packages.R")'
+#
+# Or install by category (recommended):
+
+# ========================
+# scRNA-seq Core (Seurat)
+# ========================
+# install.packages(c("Seurat","SeuratData","dplyr","ggplot2","patchwork","ggrepel","future"))
+# BiocManager::install(c("glmGamPoi","SingleCellExperiment","SingleR","celldex","DESeq2","limma","ComplexHeatmap","harmony","DoubletFinder","SoupX"))
+
+Seurat
+SeuratData
+dplyr
+ggplot2
+patchwork
+ggrepel
+future
+glmGamPoi
+SingleCellExperiment
+SingleR
+celldex
+DESeq2
+limma
+ComplexHeatmap
+harmony
+DoubletFinder
+SoupX
+Azimuth
+cluster
+
+# ========================
+# Cell Communication
+# ========================
+# BiocManager::install("CellChat")
+CellChat
+
+# ========================
+# Trajectory / Pseudotime
+# ========================
+# install.packages("monocle3")  # or BiocManager::install("monocle3")
+# monocle3  # (requires remotes::install_github)
+
+# ========================
+# Transcription Factor (SCENIC)
+# ========================
+# SCENIC is installed separately — see SCENIC installation guide
+# Not a simple R package — requires pySCENIC (Python) + R SCENIC
+
+# ========================
+# Pathway Enrichment
+# ========================
+# BiocManager::install(c("clusterProfiler","enrichplot","fgsea","msigdbr","org.Hs.eg.db"))
+clusterProfiler
+enrichplot
+fgsea
+msigdbr
+org.Hs.eg.db
+
+# ========================
+# scATAC-seq
+# ========================
+# BiocManager::install(c("ArchR","ChIPseeker","TxDb.Hsapiens.UCSC.hg38.knownGene"))
+ArchR
+ChIPseeker
+TxDb.Hsapiens.UCSC.hg38.knownGene
+
+# ========================
+# Spatial Transcriptomics
+# ========================
+# These are loaded via Seurat extensions
+# See spatial analysis skills for details
+
+# ========================
+# Bulk RNA-seq
+# ========================
+# BiocManager::install(c("DESeq2","limma","edgeR","sva","apeglm"))
+DESeq2
+limma
+edgeR
+sva
+apeglm
+
+# ========================
+# Survival Analysis
+# ========================
+# install.packages(c("survival","survminer"))
+survival
+survminer
+
+# ========================
+# Visualization
+# ========================
+# install.packages(c("ggprism","ggplate","RColorBrewer","circlize","svglite","openxlsx"))
+ggprism
+ggplate
+RColorBrewer
+circlize
+svglite
+openxlsx
+patchwork
+
+# ========================
+# Utilities
+# ========================
+# install.packages(c("data.table","reshape2","jsonlite","matrixStats","impute"))
+data.table
+reshape2
+jsonlite
+matrixStats
+impute
+
+# ========================
+# WGCNA / Network
+# ========================
+# install.packages(c("WGCNA","igraph"))
+WGCNA
+
+# ========================
+# Mendelian Randomization
+# ========================
+# install.packages(c("TwoSampleMR","ieugwasr"))
+TwoSampleMR
+ieugwasr
+
+# ========================
+# Note
+# ========================
+# 1. R >= 4.3.0 is required
+# 2. Some packages (DoubletFinder, SoupX) are GitHub-only:
+#    remotes::install_github("chris-mcginnis-ucsf/DoubletFinder")
+#    remotes::install_github("squarechapman/SoupX")
+# 3. The agent will detect missing packages and auto-install them.
+# 4. You do NOT need to install all packages upfront.

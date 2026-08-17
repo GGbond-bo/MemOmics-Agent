@@ -1,0 +1,62 @@
+{
+  "id": "gse278576-atac-aging-comparison",
+  "name": "GSE278576 人海马衰老 ATAC 对比流程（官方复现）",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 GSE278576 人海马衰老 ATAC 对比流程（官方复现） 进行分析",
+  "source_dir": "skills/bioinformatics/gse278576-atac-aging-comparison",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED 必触发",
+  "trigger_keywords": [],
+  "success_count": 3,
+  "proven_script": "",
+  "proven_params": [
+    {
+      "species": "macaca",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "l1_phylop_fill_v3.py",
+      "params": "UCSC phyloP100way REST API, 5kb窗口(相对位置映射±2500bp), conserved=phyloP_mean>0, 断点续传(追加写+done_keys)",
+      "date": "2026-08-09",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "P3-L1 猴侧 DA tiles → 基因锚定 → human ortholog → hg38 → phyloP 查询完成。40 tiles 全部查询成功 (26/40 保守)，Old 50% vs Young 77.3% 保守率。8 基因 ortholog 覆盖。"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "l3_human_motif.R / l3_motif_compare.R",
+      "params": "JASPAR2020 CORE 633 motifs, matchMotifs out=scores, GC-matched随机背景, Top30 fc ranking Jaccard",
+      "date": "2026-08-09",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "P3-L3 人侧 DA tiles motif 富集完成（Old 2955/Young 563）：人Old Top=ELF1/SPIB/KLF15/E2F1/ZFP57, 人Young Top=ELF1/MLX/ZFP57/FOSL2::JUND。与猴侧 Phase6 对比 Jaccard: 人Old-猴Old=0.020, 人Young-猴Young=0.070, 人Young-猴Old=0.0"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "",
+      "params": "{\"cmap\": \"Blues\", \"vmin\": -2, \"vmax\": 2, \"top_variable_ccres\": 2000, \"donors_sorted_by_age\": true, \"dpi\": 200}",
+      "date": "2026-08-11",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GSE278576 对比流程热图配色从 RdBu_r(红白蓝) 改为 Blues(白→蓝) 蓝白色渐变，重跑成功，输出 heatmap_top2000.png 916KB"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": ""
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "nature-reader",
+  "name": "Full-Paper Markdown Reader — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读这篇文章",
+  "starting_prompt": "使用 Full-Paper Markdown Reader — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-reader",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "读论文",
+    "精读论文",
+    "论文翻译",
+    "文献翻译",
+    "文献阅读",
+    "帮我读这篇文章",
+    "翻译这篇paper",
+    "全文对照",
+    "paper translation",
+    "read this paper",
+    "deep reading"
+  ]
+}

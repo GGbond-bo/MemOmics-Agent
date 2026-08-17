@@ -1,0 +1,16 @@
+{
+  "id": "archr-atac-analysis",
+  "name": "从 CRAN 下载 R-4.5.3-win.exe，安装到 C:\\Program Files\\R\\R-4.5.3",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 从 CRAN 下载 R-4.5.3-win.exe，安装到 C:\\Program Files\\R\\R-4.5.3 进行分析",
+  "source_dir": "skills/bioinformatics/archr-atac-analysis",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

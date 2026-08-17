@@ -1,0 +1,19 @@
+{
+  "id": "check_fda_drug_recalls",
+  "name": "Check Fda Drug Recalls",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Check for FDA drug recalls and enforcement actions from the OpenFDA database to identify safety concerns and regulatory actions.",
+  "detailed_description": "Check for FDA drug recalls and enforcement actions from the OpenFDA database to identify safety concerns and regulatory actions.",
+  "when_to_use": "When you need check fda drug recalls analysis",
+  "parameters": {
+    "drug_name": "[Required] Name of the drug to check for recalls (str)",
+    "classification": "[Optional] Optional filter by recall class ['Class I', 'Class II', 'Class III']",
+    "date_range": "[Optional] Optional date range for recalls as (start_date, end_date)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

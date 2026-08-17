@@ -1,0 +1,20 @@
+{
+  "id": "quantify_corneal_nerve_fibers",
+  "name": "Quantify Corneal Nerve Fibers",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Quantify the volume/density of immunofluorescence-labeled corneal nerve fibers.",
+  "detailed_description": "Quantify the volume/density of immunofluorescence-labeled corneal nerve fibers.",
+  "when_to_use": "When you need quantify corneal nerve fibers analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the immunofluorescence microscopy image file (str)",
+    "marker_type": "[Required] Type of nerve fiber marker (e.g., 'βIII-tubulin', 'SP', 'L1CAM') (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)",
+    "threshold_method": "[Optional] Method for thresholding ('otsu', 'adaptive', 'manual') (default: otsu)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

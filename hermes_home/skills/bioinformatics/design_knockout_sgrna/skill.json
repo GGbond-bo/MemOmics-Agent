@@ -1,0 +1,20 @@
+{
+  "id": "design_knockout_sgrna",
+  "name": "Design Knockout Sgrna",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Design sgRNAs for CRISPR knockout by searching pre-computed sgRNA libraries. Returns optimized guide RNAs for targeting a specific gene.",
+  "detailed_description": "Design sgRNAs for CRISPR knockout by searching pre-computed sgRNA libraries. Returns optimized guide RNAs for targeting a specific gene.",
+  "when_to_use": "When you need design knockout sgrna analysis",
+  "parameters": {
+    "gene_name": "[Required] Target gene symbol/name (e.g., \"EGFR\", \"TP53\") (str)",
+    "data_lake_path": "[Required] Path to the data lake (str)",
+    "species": "[Optional] Target organism species (default: human)",
+    "num_guides": "[Optional] Number of guides to return (default: 1)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

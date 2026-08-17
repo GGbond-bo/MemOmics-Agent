@@ -1,0 +1,31 @@
+{
+  "id": "nature-response",
+  "name": "Nature Reviewer Response — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "Nature风格修回信套件：逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿；触发词：修回信、返修、rebuttal、response to reviewers、逐点回复、标红修改",
+  "starting_prompt": "使用 Nature Reviewer Response — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-response",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "修回信",
+    "返修",
+    "rebuttal",
+    "response to reviewers",
+    "审稿意见回复",
+    "逐点回复",
+    "大修回复",
+    "小修回复",
+    "回复审稿人",
+    "修改稿回复",
+    "标红修改",
+    "cover letter",
+    "编辑邮件",
+    "返修邮件"
+  ]
+}

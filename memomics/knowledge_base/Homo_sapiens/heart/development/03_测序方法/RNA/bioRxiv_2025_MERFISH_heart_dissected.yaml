@@ -1,0 +1,50 @@
+metadata:
+  source: work/papers/heart_san/bioRxiv_2025_MERFISH_heart.pdf
+  dissected_at: '2026-07-12T18:02:19.940534'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Scanpy
+    version: null
+    context: "the “ingest” function of the Scanpy tool to map the newly generated\
+      \ \ndata onto the previously published MERFISH data 93. \nAnalysis of 2D heart\
+      \ sections with MERFISH+ probes \nMERFISH dat"
+    params: []
+  - name: scVI
+    version: null
+    context: "e-cell variational inference (scVI)74 framework, using a \nvariational\
+      \ autoencoder (VAE)98 to model gene expression data. Each cell i has an \nunderlying\
+      \ global latent variable \n that ca"
+    params: []
+  - name: STAR
+    version: null
+    context: "atforms15 (Figures 4A, 4B and STAR \nMethods). We provide a complete\
+      \ list of parts to assemble this high-throughput \nmicrofluidics-microscope\
+      \ system. To comprehensively examine the hear"
+    params: []
+  - name: MERFISH
+    version: 0.6.1
+    context: "ctions with acrydite-modified MERFISH probes \nMERFISH data imaged using\
+      \ acrydite-modified MERFISH probes were analyzed using \nMERlin v0.6.1 exactly\
+      \ as previously described15. Cell types w"
+    params: []
+  parameters:
+  - name: nPCs
+    value: '12'
+    context: "rt sections (12 \npost-conceptual weeks, 12 pcw). Briefly, a template\
+      \ library of MERFI"
+    source: prose
+  platforms:
+  - Illumina
+  stats:
+    methods_length: 150000
+    methods_lines: 3034
+    package_count: 4
+    version_count: 1
+    parameter_count: 1
+    platform_count: 2
+llm_extraction: null

@@ -1,0 +1,23 @@
+{
+  "id": "competitor-agent-research",
+  "name": "竞品科研 AI Agent 调研",
+  "category": "Research",
+  "language": "Python",
+  "description": "调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biomni'/'BiOmics'。方法论：身份确认→GitHub API 源码调研→论文 PDF 提取→能力/架构双维对比。",
+  "starting_prompt": "使用 竞品科研 AI Agent 调研 进行分析",
+  "source_dir": "skills/bioinformatics/competitor-agent-research",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "agent-research",
+    "competitor-analysis",
+    "benchmark",
+    "竞品分析",
+    "能力对比",
+    "架构对比"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

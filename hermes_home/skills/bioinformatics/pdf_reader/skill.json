@@ -1,0 +1,64 @@
+{
+  "id": "pdf_reader",
+  "name": "PDF 文献读取器",
+  "version": "1.0.0",
+  "category": "literature",
+  "description": "读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换",
+  "author": "MemOmics Built-in",
+  "triggers": [
+    "读论文",
+    "读文献",
+    "读PDF",
+    "查看PDF",
+    "解析论文",
+    "提取方法",
+    "文献解读"
+  ],
+  "tools": [
+    "read_pdf",
+    "pdf_to_markdown",
+    "pdf_batch"
+  ],
+  "python_requires": [
+    "PyMuPDF"
+  ],
+  "usage": {
+    "read_pdf": "读取 PDF: read_pdf(pdf_path='paper.pdf', mode='full')",
+    "pdf_to_markdown": "转 Markdown: pdf_to_markdown(pdf_path='paper.pdf')",
+    "pdf_batch": "批量读取: pdf_batch(pdf_dir='papers/', max_papers=5)"
+  },
+  "modes": {
+    "full": "提取全部内容（文本+图片+表格）",
+    "text": "仅提取文本（快速）",
+    "summary": "提取元数据+前2000字预览",
+    "search": "搜索关键词并返回上下文"
+  },
+  "examples": {
+    "文献解读": "read_pdf(pdf_path='cell_atlas.pdf', mode='summary') → read_pdf(pdf_path='cell_atlas.pdf', mode='full')",
+    "方法提取": "read_pdf(pdf_path='method.pdf', mode='search', keyword='SCTransform')",
+    "批量入库": "pdf_batch(pdf_dir='knowledge_base/papers/', max_papers=10) → pdf_to_markdown for each"
+  },
+  "steps": [
+    {
+      "name": "PDF parsing (PyMuPDF)",
+      "description": "Extract text + tables + figures",
+      "tool": "terminal"
+    },
+    {
+      "name": "Structured output",
+      "description": "Organize by section/paragraph",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "PDF parsing (PyMuPDF) -> Structured output"
+  },
+  "chains_from": [],
+  "chains_to": [],
+  "detailed_description": "读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换\n\n分析步骤:\n  - PDF parsing (PyMuPDF): Extract text + tables + figures\n  - Structured output: Organize by section/paragraph",
+  "when_to_use": "当你需要 PDF 文献读取器 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

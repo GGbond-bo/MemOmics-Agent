@@ -1,0 +1,21 @@
+{
+  "id": "simulate_protein_signaling_network",
+  "name": "Simulate Protein Signaling Network",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulate protein signaling network dynamics using ODE-based logic modeling with normalized Hill functions.",
+  "detailed_description": "Simulate protein signaling network dynamics using ODE-based logic modeling with normalized Hill functions.",
+  "when_to_use": "When you need simulate protein signaling network analysis",
+  "parameters": {
+    "network_structure": "[Required] Dictionary defining the network topology. Each key is a target protein and its value is a list of tuples (regulator, regulation_type) where regulation_type is 1 for activation and -1 for inhibition. (dict)",
+    "reaction_params": "[Required] Dictionary of reaction parameters. Keys are tuples (regulator, target) and values are dictionaries with keys 'W' (weight), 'n' (Hill coefficient), and 'EC50' (half-maximal effective concentration). (dict)",
+    "species_params": "[Required] Dictionary of species parameters. Keys are protein names and values are dictionaries with keys 'tau' (time constant), 'y0' (initial concentration), and 'ymax' (maximum concentration). (dict)",
+    "simulation_time": "[Optional] Total simulation time in arbitrary time units. (default: 100)",
+    "time_points": "[Optional] Number of time points for the simulation. (default: 1000)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,11 @@
+{
+  "paths": {
+    "python": "C:/Users/USERNAME/AppData/Local/Programs/Python/Python312/python.exe",
+    "cellbender": "C:/Users/USERNAME/AppData/Local/Programs/Python/Python312/Scripts/cellbender.exe",
+    "ptrepack": "C:/Users/USERNAME/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe",
+    "Rscript": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
+    "pip": "C:/Users/USERNAME/AppData/Local/Programs/Python/Python312/Scripts/pip.exe"
+  },
+  "last_validated": "2026-07-29T20:38:45.400528",
+  "validated_by": "validate_env.py (auto-fix)"
+}

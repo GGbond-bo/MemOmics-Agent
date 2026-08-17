@@ -1,0 +1,17 @@
+assay: scrna
+confidence: medium
+date: '2026-06-29'
+filters:
+  doublet_rate: 0.08
+  nCount_RNA:
+  - 500
+  - 50000
+  nFeature_RNA:
+  - 200
+  - 6000
+  percent_mt:
+  - 0
+  - 20
+source: default_seed
+species: Mus musculus
+tissue: skeletal muscle

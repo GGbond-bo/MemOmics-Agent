@@ -1,0 +1,135 @@
+{
+  "id": "cellchat-v2",
+  "name": "细胞通讯分析 (CellChat v2)",
+  "category": "transcriptomics",
+  "language": "R",
+  "description": "CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seurat输出链接",
+  "starting_prompt": "分析细胞间通讯",
+  "source_dir": "skills/built_in/cellchat-v2",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "cellchat",
+    "cell-communication",
+    "ligand-receptor"
+  ],
+  "aliases": [
+    "细胞通讯 (CellChat v2)"
+  ],
+  "steps": [
+    {
+      "name": "Create CellChat object",
+      "description": "Import from Seurat",
+      "tool": "terminal"
+    },
+    {
+      "name": "L-R interaction inference",
+      "description": "CellChatDB v2 matching",
+      "tool": "terminal"
+    },
+    {
+      "name": "Signal flow visualization",
+      "description": "netVisual_aggregate",
+      "tool": "terminal"
+    },
+    {
+      "name": "Comparison (multi-condition)",
+      "description": "compareInteractions",
+      "tool": "terminal"
+    },
+    {
+      "name": "Source-target summary",
+      "description": "Signal contribution",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "CellChat",
+    "Seurat",
+    "NMF",
+    "reticulate"
+  ],
+  "python_packages": [
+    "cellchat"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "多细胞类型",
+    "disease",
+    "aging",
+    "development"
+  ],
+  "parameters": {
+    "r_packages": "CellChat, Seurat, NMF, reticulate",
+    "python_packages": "cellchat",
+    "steps": "Create CellChat object -> L-R interaction inference -> Signal flow visualization -> Comparison (multi-condition) -> Source-target summary"
+  },
+  "detailed_description": "CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seurat输出链接\n\n适用场景: 多细胞类型, disease, aging, development\n\n分析步骤:\n  - Create CellChat object: Import from Seurat\n  - L-R interaction inference: CellChatDB v2 matching\n  - Signal flow visualization: netVisual_aggregate\n  - Comparison (multi-condition): compareInteractions\n  - Source-target summary: Signal contribution\n\n依赖包: reticulate, Seurat, CellChat, NMF, cellchat\n\n难度: intermediate\n\n触发提示: \"分析细胞间通讯\"\n\n别名: 细胞通讯 (CellChat v2)",
+  "when_to_use": "适用于: 多细胞类型, disease, aging, development",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "cellchat_analysis.R",
+      "params": "CellChat v2, Young vs Old separately, 10 cell types, secreted+cell-cell contact signaling",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "Young: 9 interactions, 21 pathways. Old: 9 interactions, 24 pathways. 12 figures generated (chord+heatmap+bubble per group)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "min.pct=0.1, trim=0.1, type=truncatedMean, population.size=FALSE+TRUE compared, 7 subclusters, 39 pathways, LAMININ/COLLAGEN/TGFb/NRG/NCAM key",
+      "date": "2026-07-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CellChat v2完成: 11630 cells, 7 subclusters, 39通路。标志基因验证排除FAP污染。发现ECM重塑(COL1A1/LAMININ)、NMJ信号(NRG/NCAM)、TGFb纤维化、WNT/FGF肌源性。population.size归一化后zone1主导(去神经化)。14/15通路跨参数一致。19张图。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_cellchat.R",
+      "params": "method=CellChat_v2, population.size=FALSE, min.cells=10, n_cells=10000, celltypes=11",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "35 signaling pathways detected. Top: LAMININ(2.27), COLLAGEN(1.51), PTPRM(0.93), EGF(0.26), CD45(0.22), PARs(0.20), PECAM1(0.19), THBS(0.17), NOTCH(0.15), VEGF(0.09). 447 significant interactions. ECM"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "CellChatDB.human; population.size=TRUE; Young=3771 cells, Old=6229 cells; 11 cell types; min.cells=10",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Young: 22 pathways, 208 interactions. Top: PTPRM, EGF, LAMININ. Old: 43 pathways, 416 interactions. Top: PTPRM, LAMININ, COLLAGEN. Aging doublings communication: 2X pathways & interactions. 2 heatmaps"
+    }
+  ],
+  "proven_script": "",
+  "error_count": 0,
+  "success_count": 4,
+  "official_docs": "https://raw.githubusercontent.com/sqjin/CellChat/refs/heads/master/README.md",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类/注释的数据"
+  },
+  "user_prefs": {
+    "last_used_script": ""
+  }
+}

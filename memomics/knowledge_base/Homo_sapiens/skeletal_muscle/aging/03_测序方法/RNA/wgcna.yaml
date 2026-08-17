@@ -1,0 +1,13 @@
+analysis_type: wgcna
+date: '2026-06-29'
+methods:
+  hdwgcna:
+    min_module_size:
+      confidence: medium
+      source: domain_convention
+      value: 50
+    soft_power:
+      confidence: high
+      source: data_driven
+      value: 6
+source: default_seed

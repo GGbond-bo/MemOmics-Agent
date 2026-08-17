@@ -1,0 +1,19 @@
+{
+  "id": "digest_sequence",
+  "name": "Digest Sequence",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulates restriction enzyme digestion of a DNA sequence and returns the resulting fragments with their properties.",
+  "detailed_description": "Simulates restriction enzyme digestion of a DNA sequence and returns the resulting fragments with their properties.",
+  "when_to_use": "When you need digest sequence analysis",
+  "parameters": {
+    "dna_sequence": "[Required] Input DNA sequence to be digested (str)",
+    "enzyme_names": "[Required] Names of restriction enzymes to use for digestion (List[str])",
+    "is_circular": "[Optional] Whether the DNA sequence is circular (True) or linear (False) (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

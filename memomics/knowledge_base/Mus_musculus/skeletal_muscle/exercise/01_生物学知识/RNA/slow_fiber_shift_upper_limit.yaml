@@ -1,0 +1,15 @@
+type: kb_entry
+name: slow_fiber_shift_upper_limit
+species: mouse
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:13
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- slow_fiber_shift_upper_limit
+content: 在骨骼肌中过表达PGC-1α或持续激活钙调磷酸酶(CnA)/CaMK的转基因小鼠，慢肌纤维(氧化型)比例增加存在约15-30%的上限，而氧化代谢能力（如琥珀酸脱氢酶活性）改变更显著，提示收缩性纤维类型与代谢表型可独立调节。该结论基于小鼠模型，有助于理解运动训练中纤维类型转化的调控边界。
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

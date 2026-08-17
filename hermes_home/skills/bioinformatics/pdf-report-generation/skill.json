@@ -1,0 +1,12 @@
+{
+  "id": "pdf-report-generation",
+  "name": "pdf-report-generation",
+  "category": "pdf",
+  "language": "R+Python",
+  "description": "Auto-generated for pdf-report-generation",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

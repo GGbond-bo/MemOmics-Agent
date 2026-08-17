@@ -1,0 +1,854 @@
+[
+  {
+    "title": "A skeletal muscle atlas shows neuromuscular junction adaptations to growth and atrophy",
+    "authors": "Silvia Campanario;Mercedes Grima-Terrén;Megan Rommelfanger;Stefania Dell’ Orso;Xuesong Feng;Andrés Cisneros;Ignacio Ramírez-Pardo;Aina Calls-Cobos;Benjamin A. Yang;Kyung Dae Ko;Esther García-Domínguez;Laura Pena-Couso;Grace Chou;Yuewen Zheng;Nasun Hah;Davide Randazzo;Alberto Pérez-Garcia;Tovah E. Markowitz;Jose Milisenda;Iago Pinal-Fernandez",
+    "year": "2026",
+    "doi": "10.1016/j.devcel.2026.03.010",
+    "journal": "Developmental Cell",
+    "url": "https://doi.org/10.1016/j.devcel.2026.03.010",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf"
+  },
+  {
+    "title": "Molecular aspects of the exercise response and training adaptation in skeletal muscle",
+    "authors": "Regula Furrer;Christoph Handschin",
+    "year": "2024",
+    "doi": "10.1016/j.freeradbiomed.2024.07.026",
+    "journal": "Free Radical Biology and Medicine",
+    "url": "https://doi.org/10.1016/j.freeradbiomed.2024.07.026",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf"
+  },
+  {
+    "title": "Human skeletal muscle fiber heterogeneity beyond myosin heavy chains",
+    "authors": "Roger Moreno-Justicia;Thibaux Van der Stede;Ben Stocks;Jenni Laitila;Robert A. Seaborne;Alexia Van de Loock;Eline Lievens;Diana Samodova;Leyre Marín-Arraiza;Oksana Dmytriyeva;Robin Browaeys;Kim Van Vossel;Lukas Moesgaard;Nurten Yigit;Jasper Anckaert;Anneleen Weyns;Ruud Van Thienen;Ronni E. Sahl;Edmar Zanoteli;Michael W. Lawlor",
+    "year": "2025",
+    "doi": "10.1038/s41467-025-56896-6",
+    "journal": "Nature Communications",
+    "url": "https://doi.org/10.1038/s41467-025-56896-6",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1038_s41467-025-56896-6.pdf"
+  },
+  {
+    "title": "Cross-tissue multicellular coordination and its rewiring in cancer",
+    "authors": "Qiang Shi;Yihan Chen;Yang Li;Shishang Qin;Yu Yang;Yang Gao;Linnan Zhu;Dongfang Wang;Zemin Zhang",
+    "year": "2025",
+    "doi": "10.1038/s41586-025-09053-4",
+    "journal": "Nature",
+    "url": "https://doi.org/10.1038/s41586-025-09053-4",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1038_s41586-025-09053-4.pdf"
+  },
+  {
+    "title": "Delayed molecular aging, preservation of energy metabolism and enhanced exercise response in exercise-trained human muscle",
+    "authors": "Georges Janssens;Marit Kotte;Lotte Grevendonk;Angelique Scantlebery;Bauke Schomakers;Michel van Weeghel;Jill Hermans;Martin Vervaart;Eric Wever;Simone Denis;Aldo Jongejan;Gajja Salomons;Frederic Vaz;Patrick Schrauwen;Joris Hoeks;Riekelt Houtkooper",
+    "year": "2025",
+    "doi": "10.21203/rs.3.rs-6074097/v1",
+    "journal": "",
+    "url": "https://doi.org/10.21203/rs.3.rs-6074097/v1",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1038_s43587-026-01150-x.pdf"
+  },
+  {
+    "title": "Transcriptional Diversity in Response to Aging Across Skeletal Muscles",
+    "authors": "Can Liu;Dongbin Zheng;Rui Zhang;Hong Li;Xingyan Tong;Yujie Wu;Geng Zhang;Siyuan Wang;Hongyu Chen;Zhinong Ren;Ying Sun;Chengdong Wang;Desheng Li;Xuewei Li;Mingzhou Li;Long Jin",
+    "year": "2025",
+    "doi": "10.1111/acel.70164",
+    "journal": "Aging Cell",
+    "url": "https://doi.org/10.1111/acel.70164",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1111_acel.70164.pdf"
+  },
+  {
+    "title": "Impact of exercise intervention on IGF-1 signaling related to muscle regeneration and physical performance in aged mice",
+    "authors": "Taewan Kim;Jinkyung Cho;Yoonhwan Kim;Joohyung Kim;Sanggu Woo;Donghyun Kim",
+    "year": "2025",
+    "doi": "10.1101/2025.03.14.643197",
+    "journal": "",
+    "url": "https://doi.org/10.1101/2025.03.14.643197",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/2025.03.14.643197.full.pdf"
+  },
+  {
+    "title": "Supplementary file 9. Differentially expressed genes annotated as being involved in skeletal muscle disease.",
+    "authors": "",
+    "year": "",
+    "doi": "10.7554/elife.34613.033",
+    "journal": "",
+    "url": "https://doi.org/10.7554/elife.34613.033",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/27745114-4882-44c1-89ac-2cd68fb995d1_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "A conserved re-epithelialization program underlies malignancy in pancreatic ductal adenocarcinoma",
+    "authors": "Meilian Zhuo;Yong Li;Yifeng Zhang;Chenlu Yang;Di Zou;Wenhao Xu;Jing Han;Saisai Wang;Haohao Deng;Xu Pan;Ruikang Dun;Ruizhe He;Yihong Shi;Xianlin Han;Taiping Zhang;Weibin Wang;Menghua Dai;Qiang Xu;Lulu Liu;Wenze Wang",
+    "year": "2026",
+    "doi": "10.1016/j.ccell.2026.03.021",
+    "journal": "Cancer Cell",
+    "url": "https://doi.org/10.1016/j.ccell.2026.03.021",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/A_conserved_re-epithelialization_program_underlies_malignancy_in_pancreatic_ductal_adenocarcinoma_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "Muscle fibroblasts and stem cells stimulate motor neurons in an age and exercise‐dependent manner",
+    "authors": "Casper Soendenbroe;Peter Schjerling;Cecilie J. L. Bechshøft;Rene B. Svensson;Laurent Schaeffer;Michael Kjaer;Bénédicte Chazaud;Arnaud Jacquier;Abigail L. Mackey",
+    "year": "2025",
+    "doi": "10.1111/acel.14413",
+    "journal": "Aging Cell",
+    "url": "https://doi.org/10.1111/acel.14413",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Aging_Cell_-_2024_-_Soendenbroe_-_Muscle_fibroblasts_and_stem_cells_stimulate_motor_neurons_in_an_age_and.pdf"
+  },
+  {
+    "title": "Neurodevelopmental Pathways to Obesity and Type 2 Diabetes: Insights From Prenatal Exposure to Maternal Obesity and Gestational Diabetes Mellitus: A Report on Research Supported by Pathway to Stop Diabetes",
+    "authors": "Kathleen A. Page",
+    "year": "2024",
+    "doi": "10.2337/dbi24-0012",
+    "journal": "Diabetes",
+    "url": "https://doi.org/10.2337/dbi24-0012",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/ajpcell.00154.2024.pdf"
+  },
+  {
+    "title": "Single-cell multiregion epigenomic rewiring in Alzheimer’s disease progression and cognitive resilience",
+    "authors": "Zunpeng Liu;Shanshan Zhang;Benjamin T. James;Kyriaki Galani;Riley J. Mangan;Stuart Benjamin Fass;Chuqian Liang;Manoj M. Wagle;Carles A. Boix;Yosuke Tanigawa;Sukwon Yun;Yena Sung;Xushen Xiong;Na Sun;Lei Hou;Martin Wohlwend;Mufan Qiu;Xikun Han;Lei Xiong;Efthalia Preka",
+    "year": "2025",
+    "doi": "10.1016/j.cell.2025.06.031",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2025.06.031",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Alzheimer_cilinic.pdf"
+  },
+  {
+    "title": "Single-cell atlas of colonic CD8+ T cells in ulcerative colitis",
+    "authors": "Daniele Corridoni;Agne Antanaviciute;Tarun Gupta;David Fawkner-Corbett;Anna Aulicino;Marta Jagielowicz;Kaushal Parikh;Emmanouela Repapi;Steve Taylor;Dai Ishikawa;Ryo Hatano;Taketo Yamada;Wei Xin;Hubert Slawinski;Rory Bowden;Giorgio Napolitani;Oliver Brain;Chikao Morimoto;Hashem Koohy;Alison Simmons",
+    "year": "2020",
+    "doi": "10.1038/s41591-020-1003-4",
+    "journal": "Nature Medicine",
+    "url": "https://doi.org/10.1038/s41591-020-1003-4",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/CD8T_Aucell_score.pdf"
+  },
+  {
+    "title": "Transcriptional and open chromatin analysis of bovine skeletal muscle development by single‐cell sequencing",
+    "authors": "Cuicui Cai;Peng Wan;Hui Wang;Xin Cai;Jiabo Wang;Zhixin Chai;Jikun Wang;Haibo Wang;Ming Zhang;Nan Yang;Zhijuan Wu;Jiangjiang Zhu;Xueyao Yang;Yulian Li;Binglin Yue;Ruihua Dang;Jincheng Zhong",
+    "year": "2023",
+    "doi": "10.1111/cpr.13430",
+    "journal": "Cell Proliferation",
+    "url": "https://doi.org/10.1111/cpr.13430",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Cell_Proliferation_-_2023_-_Cai_-_Transcriptional_and_open_chromatin_analysis_of_bovine_skeletal_muscle_development_by.pdf"
+  },
+  {
+    "title": "CellChat for systematic analysis of cell–cell communication from single-cell transcriptomics",
+    "authors": "Suoqin Jin;Maksim V. Plikus;Qing Nie",
+    "year": "2025",
+    "doi": "10.1038/s41596-024-01045-4",
+    "journal": "Nature Protocols",
+    "url": "https://doi.org/10.1038/s41596-024-01045-4",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/cellchat2024.pdf"
+  },
+  {
+    "title": "A single-cell time-series atlas of endothelial cell embryonic development",
+    "authors": "Lihui Lin;Jing Zhong;Fuqing Jiang;Yu-xiang Wang;Lan-yue Ma;Jia-xin Yang;Yu-yan Li;Rong-Rong Gao;Huijian Feng;Baomei Cai;Ziyu Feng;Xin Zhou;Ya-hai Shu;Pan Chen;Xue Wu;Chen-Leng Cai;Qiang Wang;Guangming Wu;Duanqing Pei;Shangtao Cao",
+    "year": "2026",
+    "doi": "10.1016/j.cell.2026.01.002",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2026.01.002",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/cellchat_application.pdf"
+  },
+  {
+    "title": "Benchmarking algorithms for single-cell multi-omics prediction and integration",
+    "authors": "Yinlei Hu;Siyuan Wan;Yuanhanyu Luo;Yuanzhe Li;Tong Wu;Wentao Deng;Chen Jiang;Shan Jiang;Yueping Zhang;Nianping Liu;Zongcheng Yang;Falai Chen;Bin Li;Kun Qu",
+    "year": "2024",
+    "doi": "10.1038/s41592-024-02429-w",
+    "journal": "Nature Methods",
+    "url": "https://doi.org/10.1038/s41592-024-02429-w",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/cell_proportion评估.pdf"
+  },
+  {
+    "title": "Nonlinear dynamics of multi-omics profiles during human aging",
+    "authors": "Xiaotao Shen;Chuchu Wang;Xin Zhou;Wenyu Zhou;Daniel Hornburg;Si Wu;Michael P. Snyder",
+    "year": "2024",
+    "doi": "10.1038/s43587-024-00692-2",
+    "journal": "Nature Aging",
+    "url": "https://doi.org/10.1038/s43587-024-00692-2",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Clinic_data_annaliyze.pdf"
+  },
+  {
+    "title": "Multi-omics Profiling Identifies Molecular and Cellular Signatures of Regular Physical Activity in Human Peripheral Blood",
+    "authors": "Xuemei Song;Jingzhi Lv;Siliang Ge;Sihan Xu;Yisha Wu;Yuhui Zheng;Wenwen Zhou;Lifeng Li;Yan Zhang;Jiaqiang Zhang;Zhenxia Chen;Peng Gao;Pengbin Yin;Jianhua Yin;Chuanyu Liu",
+    "year": "2026",
+    "doi": "10.64898/2026.01.13.699221",
+    "journal": "",
+    "url": "https://doi.org/10.64898/2026.01.13.699221",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/clinic_data_liuchuanyu.pdf"
+  },
+  {
+    "title": "The Diversity of Skeletal Muscle Fiber Types",
+    "authors": "Stefano Schiaffino;Francesco Chemello;Carlo Reggiani",
+    "year": "2025",
+    "doi": "10.1101/cshperspect.a041477",
+    "journal": "Cold Spring Harbor Perspectives in Biology",
+    "url": "https://doi.org/10.1101/cshperspect.a041477",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Cold_Spring_Harb_Perspect_Biol-2025-Schiaffino-a041477.pdf"
+  },
+  {
+    "title": "Comprehensive human proteome profiles across a 50-year lifespan reveal aging trajectories and signatures",
+    "authors": "Yingjie Ding;Yuesheng Zuo;Bin Zhang;Yanling Fan;Gang Xu;Zhongyi Cheng;Shuai Ma;Shuaiqi Fang;Ao Tian;Dandan Gao;Xi Xu;Qiaoran Wang;Yaobin Jing;Mengmeng Jiang;Muzhao Xiong;Jiaming Li;Zichu Han;Shuhui Sun;Si Wang;Fuchu He",
+    "year": "2025",
+    "doi": "10.1016/j.cell.2025.06.047",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2025.06.047",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Comprehensive_human_proteome_profiles_across_a_50-year_lifespan_reveal_aging_trajectories_and_signatures_科研通-ablesci.com___2_.pdf"
+  },
+  {
+    "title": "Single-cell landscape of bronchoalveolar immune cells in patients with COVID-19",
+    "authors": "Mingfeng Liao;Yang Liu;Jing Yuan;Yanling Wen;Gang Xu;Juanjuan Zhao;Lin Cheng;Jinxiu Li;Xin Wang;Fuxiang Wang;Lei Liu;Ido Amit;Shuye Zhang;Zheng Zhang",
+    "year": "2020",
+    "doi": "10.1038/s41591-020-0901-9",
+    "journal": "Nature Medicine",
+    "url": "https://doi.org/10.1038/s41591-020-0901-9",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Covind19_scCODA.pdf"
+  },
+  {
+    "title": "Metformin decelerates aging clock in male monkeys",
+    "authors": "Yuanhan Yang;Xiaoyong Lu;Ning Liu;Shuai Ma;Hui Zhang;Zhiyi Zhang;Kuan Yang;Mengmeng Jiang;Zikai Zheng;Yicheng Qiao;Qinchao Hu;Ying Huang;Yiyuan Zhang;Muzhao Xiong;Lixiao Liu;Xiaoyu Jiang;Pradeep Reddy;Xueda Dong;Fanshu Xu;Qiaoran Wang",
+    "year": "2024",
+    "doi": "10.1016/j.cell.2024.08.021",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2024.08.021",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/DEG_monkey.pdf"
+  },
+  {
+    "title": "Determining the Magnitude of Wind Loads on Structures in Kenya according to the Eurocodes",
+    "authors": "Muthomi Munyua",
+    "year": "2021",
+    "doi": "10.14293/s2199-1006.1.sor-.ppbrj1u.v3",
+    "journal": "",
+    "url": "https://doi.org/10.14293/s2199-1006.1.sor-.ppbrj1u.v3",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Determining_the_magnitude_of_treatment_effects_in_strength_training_research_through_the_use_of_the_effect_size.pdf"
+  },
+  {
+    "title": "Identification of potential shared core biomarkers in type 2 diabetes and sarcopenia",
+    "authors": "Ping Zhang;Yijun Du;Xing Zhong;Yue Wang;Tianrong Pan",
+    "year": "2025",
+    "doi": "10.1038/s41598-025-10200-0",
+    "journal": "Scientific Reports",
+    "url": "https://doi.org/10.1038/s41598-025-10200-0",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/diabetes_biomarker_WGCNA.pdf"
+  },
+  {
+    "title": "Deciphering the Pharmacological Potential of Kouqiangjie Formula for the Treatment of Diabetic Periodontitis Based on Network Pharmacology, Machine Learning, Molecular Dynamics, and Animal Experiments",
+    "authors": "Yeke Wu;Jiawei Li;Min Liu;Ranran Gao;Huijing Li;Yunfei Xie;Qiongying Hu;Jing Wei;Lixing Zhao;Li Li",
+    "year": "2025",
+    "doi": "10.2147/DDDT.S494066",
+    "journal": "Drug Design, Development and Therapy",
+    "url": "https://doi.org/10.2147/DDDT.S494066",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/diabetes_correlation.pdf"
+  },
+  {
+    "title": "Effects of one‐legged high‐intensity interval training on insulin‐mediated skeletal muscle glucose homeostasis in patients with type 2 diabetes",
+    "authors": "Flemming Dela;Arthur Ingersen;Nynne B. Andersen;Maria B. Nielsen;Helga H. H. Petersen;Christina N. Hansen;Steen Larsen;Jørgen Wojtaszewski;Jørn Wulff Helge",
+    "year": "2019",
+    "doi": "10.1111/apha.13245",
+    "journal": "Acta Physiologica",
+    "url": "https://doi.org/10.1111/apha.13245",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Effects_of_one_legged_high_intensity_interval_training_on_insulin_mediated_skeletal_muscle_glucose_homeostasis_in_patients_with__科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "A spatially coordinated keratinocyte–fibroblast circuit recruits MMP9+ myeloid cells to drive type I interferon-driven inflammation in photosensitive autoimmunity",
+    "authors": "Yuqing Wang;Khashayar Afshari;Nazgol-Sadat Haddadi;Carolina Salomão Lopes;Chee-Huat Linus Eng;Leah M. Whiteman;Nuria Martinez;Pyae P. Kyawe;Ksenia S. Anufrieva;Kevin Wei;Kirsten Frieda;Misha Rosenbach;Ruth Ann Vleugels;Stefania Gallucci;John E. Harris;Mehdi Rashighi;Manuel Garber",
+    "year": "2026",
+    "doi": "10.1038/s41590-026-02502-w",
+    "journal": "Nature Immunology",
+    "url": "https://doi.org/10.1038/s41590-026-02502-w",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/fibroblast_2026.pdf"
+  },
+  {
+    "title": "Reprogramming the GRHL2−CDK19 axis by gene therapy alleviates prostate aging",
+    "authors": "Guoqiang Sun;Zan He;Dongliang Lv;Qiaoran Wang;Gang Xu;Feifei Liu;Peiyu Wang;Bilan Luo;Yandong Zheng;Jinghao Hu;Shuhui Sun;Shuai Ma;Concepcion Rodriguez Esteban;Jiayin Yang;Xiaobing Fu;Juan Carlos Izpisua Belmonte;Weiqi Zhang;Jing Qu;Si Wang;Guang-Hui Liu",
+    "year": "2025",
+    "doi": "10.1038/s43587-025-01020-y",
+    "journal": "Nature Aging",
+    "url": "https://doi.org/10.1038/s43587-025-01020-y",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/GRHL2_CDK19_aging.pdf"
+  },
+  {
+    "title": "Single-cell dissection of cellular and molecular features underlying mesenchymal stem cell therapy in ischemic acute kidney injury",
+    "authors": "Wenjuan Wang;Min Zhang;Xuejing Ren;Yanqi Song;Yue Xu;Kaiting Zhuang;Tuo Xiao;Xinru Guo;Siyang Wang;Quan Hong;Zhe Feng;Xiangmei Chen;Guangyan Cai",
+    "year": "2023",
+    "doi": "10.1016/j.ymthe.2023.07.024",
+    "journal": "Molecular Therapy",
+    "url": "https://doi.org/10.1016/j.ymthe.2023.07.024",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/gsva_score_ref.pdf"
+  },
+  {
+    "title": "hdWGCNA identifies co-expression networks in high-dimensional transcriptomics data",
+    "authors": "Samuel Morabito;Fairlie Reese;Negin Rahimzadeh;Emily Miyoshi;Vivek Swarup",
+    "year": "2023",
+    "doi": "10.1016/j.crmeth.2023.100498",
+    "journal": "Cell Reports Methods",
+    "url": "https://doi.org/10.1016/j.crmeth.2023.100498",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/hdWGCNA.pdf"
+  },
+  {
+    "title": "Hotspot identifies informative gene modules across modalities of single-cell genomics",
+    "authors": "David DeTomaso;Nir Yosef",
+    "year": "2021",
+    "doi": "10.1016/j.cels.2021.04.005",
+    "journal": "Cell Systems",
+    "url": "https://doi.org/10.1016/j.cels.2021.04.005",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/hotspot.pdf"
+  },
+  {
+    "title": "Human immune aging clock identifies RUNX1 as a decelerator of T cell senescence",
+    "authors": "Jiale Ping;Qin Qiao;Dan-Dan Gao;Yun Li;Yanling Fan;Yutong Tian;Muzhao Xiong;Quan Zheng;Beier Jiang;Jiaming Li;Zheng Huang;Qinxin Tu;Zikai Zheng;Xiaoyong Lu;Yiwen Hu;Yangqing Xu;Xiaoyan Sun;Qiaoran Wang;Liu-Jun Xu;Si-Jia Chen",
+    "year": "2026",
+    "doi": "10.1016/j.immuni.2026.02.007",
+    "journal": "Immunity",
+    "url": "https://doi.org/10.1016/j.immuni.2026.02.007",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Human_immune_aging_clock_identifies_RUNX1_as_a_decelerator_of_T_cell_senescence_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "Epigenetic and 3D genome reprogramming during the aging of human hippocampus",
+    "authors": "Nathan R. Zemke;Seoyeon Lee;Sainath Mamde;Bing Yang;Nicole Berchtold;B. Maximiliano Garduño;Hannah S. Indralingam;Weronika M. Bartosik;Pik Ki Lau;Keyi Dong;Amanda Yang;Yasmine Tani;Chumo Chen;Qiurui Zeng;Varun Ajith;Liqi Tong;Chanrung Seng;Daofeng Li;Ting Wang;Xiangmin Xu",
+    "year": "2024",
+    "doi": "10.1101/2024.10.14.618338",
+    "journal": "",
+    "url": "https://doi.org/10.1101/2024.10.14.618338",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/human_hiippo.pdf"
+  },
+  {
+    "title": "Identification of a Cancer Stem Cell-Related Gene Signature in Hepatocellular Carcinoma Based on Single-Cell RNA-Seq and Bulk RNA-Seq Analysis",
+    "authors": "Jing Wu;Xu Liu;Sheng Huang;Wei Liu",
+    "year": "2025",
+    "doi": "10.3390/ijms26072933",
+    "journal": "International Journal of Molecular Sciences",
+    "url": "https://doi.org/10.3390/ijms26072933",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/ijms-26-02933.pdf"
+  },
+  {
+    "title": "Integrative Single-Cell and Bulk Transcriptomes Analyses Identify Intrinsic HNSCC Subtypes with Distinct Prognoses and Therapeutic Vulnerabilities",
+    "authors": "Yibin Dai;Ziyu Wang;Yingchao Xia;Jin Li;Yaping Wu;Yanling Wang;Hongbing Jiang;Jie Cheng",
+    "year": "2023",
+    "doi": "10.1158/1078-0432.CCR-22-3563",
+    "journal": "Clinical Cancer Research",
+    "url": "https://doi.org/10.1158/1078-0432.CCR-22-3563",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Integrative_Single-Cell_and_Bulk_Transcriptomes_Analyses_Identify_Intrinsic_HNSCC_Subtypes_with_Distinct_Prognoses_and_Therapeut_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "A conserved complex lipid signature marks human muscle aging and responds to short-term exercise",
+    "authors": "Georges E. Janssens;Marte Molenaars;Katharina Herzog;Lotte Grevendonk;Carlijn M. E. Remie;Martin A. T. Vervaart;Hyung L. Elfrink;Eric J. M. Wever;Bauke V. Schomakers;Simone W. Denis;Hans R. Waterham;Mia L. Pras-Raves;Michel van Weeghel;Antoine H. C. van Kampen;Alessandra Tammaro;Loes M. Butter;Sanne van der Rijt;Sandrine Florquin;Aldo Jongejan;Perry D. Moerland",
+    "year": "2024",
+    "doi": "10.1038/s43587-024-00595-2",
+    "journal": "Nature Aging",
+    "url": "https://doi.org/10.1038/s43587-024-00595-2",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/lipid_signature_marks_in_human_muscle_aging.pdf"
+  },
+  {
+    "title": "Single-cell transcriptomics reveals the impact of sex and age in the healthy human liver",
+    "authors": "Raza Ur Rahman;Eliana T. Epstein;Shane Murphy;Liat Amir-Zilberstein;Cristin McCabe;Toni Delorey;Hope Koene;Lilly Fernandes;Kenneth K. Tanabe;Motaz Qadan;Christina Ferrone;David L. Berger;Angela Shih;Jacques Deguine;Alan C. Mullen",
+    "year": "2025",
+    "doi": "10.1101/2025.01.27.635138",
+    "journal": "",
+    "url": "https://doi.org/10.1101/2025.01.27.635138",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/liver_male_female_cellchat.pdf"
+  },
+  {
+    "title": "Mapping the single-cell transcriptomic response of murine diabetic kidney disease to therapies",
+    "authors": "Haojia Wu;Romer Gonzalez Villalobos;Xiang Yao;Dermot Reilly;Tao Chen;Matthew Rankin;Eugene Myshkin;Matthew D. Breyer;Benjamin D. Humphreys",
+    "year": "2022",
+    "doi": "10.1016/j.cmet.2022.05.010",
+    "journal": "Cell Metabolism",
+    "url": "https://doi.org/10.1016/j.cmet.2022.05.010",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Mapping_the_single-cell_transcriptomic_response_of_murine_diabetic_kidney_disease_to_therapies_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "Single-nuclei RNA-sequencing uncovers sexually divergent exercise signatures partially mimicked by TFEB overexpression in mouse skeletal muscle",
+    "authors": "Katrina Granger;Kailin Liu;Tiarra Joseph;Ari Adler;Ian Matthews;Jocelyne Leon;Clayton Baker;Minhoo Kim;Hu Wang;Xianlin Han;Bérénice A. Benayoun;Constanza J. Cortes",
+    "year": "2026",
+    "doi": "10.64898/2026.01.23.700915",
+    "journal": "",
+    "url": "https://doi.org/10.64898/2026.01.23.700915",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/mouse_sex_difference_snRNA.pdf"
+  },
+  {
+    "title": "Transcriptomic advances in studies of muscle stem cell aging: From bulk to single-cell and beyond",
+    "authors": "Soochi Kim;Seung Pil Pack;Thomas A. Rando",
+    "year": "2026",
+    "doi": "10.1038/s41422-026-01240-w",
+    "journal": "Cell Research",
+    "url": "https://doi.org/10.1038/s41422-026-01240-w",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/MuSC.pdf"
+  },
+  {
+    "title": "Single-Nucleus RNA Sequencing Reveals Muscle Fiber Cell Heterogeneity during Human Skeletal Muscle Aging",
+    "authors": "Li Wu;Caixia Gong;Ange Wang;Jing Chen;Qin Zhang",
+    "year": "2025",
+    "doi": "10.1111/acel.70485WILEYlogoSocietylogo",
+    "journal": "Innovation in Aging",
+    "url": "https://doi.org/10.1111/acel.70485WILEYlogoSocietylogo",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/muscle_aging_2026.pdf"
+  },
+  {
+    "title": "Impact of polymorphisms on gene expression and splicing in response to exercise and diet-induced weight loss in human skeletal muscle tissues",
+    "authors": "Wenjing Wang;Wei Lin Liew;Shiqi Huang;Edmund Chan;Amelia Li Min Tan;Chi Tian;Yihan Tong;Yuntian Zhang;Fei Liu;Yixian Qin;Sean Jun Leong Ou;Suresh Anand Sadananthan;Sambasivam Sendhil Velan;Kavita Venkataraman;Sarah R. Langley;Petretto Enrico;Shawn Hoon;Kwang Wei Tham;Yap Seng Chong;Yung Seng Lee",
+    "year": "2025",
+    "doi": "10.1016/j.xgen.2025.100951",
+    "journal": "Cell Genomics",
+    "url": "https://doi.org/10.1016/j.xgen.2025.100951",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Muscle_clinic_annalyze.pdf"
+  },
+  {
+    "title": "Human and rat skeletal muscle single-nuclei multi-omic integrative analyses nominate causal cell types, regulatory elements, and SNPs for complex traits",
+    "authors": "Peter Orchard;Nandini Manickam;Christa Ventresca;Swarooparani Vadlamudi;Arushi Varshney;Vivek Rai;Jeremy Kaplan;Claudia Lalancette;Karen L. Mohlke;Katherine Gallagher;Charles F. Burant;Stephen C.J. Parker",
+    "year": "2021",
+    "doi": "10.1101/gr.268482.120",
+    "journal": "Genome Research",
+    "url": "https://doi.org/10.1101/gr.268482.120",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/muscle_maker.pdf"
+  },
+  {
+    "title": "Protein profile of fiber types in human skeletal muscle: a single-fiber proteomics study",
+    "authors": "Marta Murgia;Leonardo Nogara;Martina Baraldo;Carlo Reggiani;Matthias Mann;Stefano Schiaffino",
+    "year": "2021",
+    "doi": "10.1186/s13395-021-00279-0",
+    "journal": "Skeletal Muscle",
+    "url": "https://doi.org/10.1186/s13395-021-00279-0",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/muscle_protein_2021.pdf"
+  },
+  {
+    "title": "Extensive differential gene expression and regulation by sex in human skeletal muscle",
+    "authors": "Sarah C. Hanks;Abigail S. Mauger;Arushi Varshney;Dan L. Ciotlos;Nandini Manickam;Narisu Narisu;Alexandria J. Shumway;Peter Orchard;Michael R. Erdos;Michael D. Sweeney;Jeffrey Okamoto;Anne U. Jackson;Heather M. Stringham;Lori L. Bonnycastle;Xiang Zhou;Timo A. Lakka;Karen L. Mohlke;Jaakko Tuomilehto;Markku Laakso;Michael Boehnke",
+    "year": "2025",
+    "doi": "10.1016/j.xgen.2025.100915",
+    "journal": "Cell Genomics",
+    "url": "https://doi.org/10.1016/j.xgen.2025.100915",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/muscle_sex.pdf"
+  },
+  {
+    "title": "Survivorship Bias",
+    "authors": "Andrew Jenkinson",
+    "year": "2022",
+    "doi": "10.1201/9781003278214-11",
+    "journal": "Ransomware and Cybercrime",
+    "url": "https://doi.org/10.1201/9781003278214-11",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/NDRG1_in_Musc.pdf"
+  },
+  {
+    "title": "Integrated single-cell multiome analysis reveals muscle fiber-type gene regulatory circuitry modulated by endurance exercise",
+    "authors": "Aliza B. Rubenstein;Gregory R. Smith;Zidong Zhang;Xi Chen;Toby L. Chambers;Frederique Ruf-Zamojski;Natalia Mendelev;Wan Sze Cheng;Michel Zamojski;Mary Anne S. Amper;Venugopalan D. Nair;Andrew R. Marderstein;Stephen B. Montgomery;Olga G. Troyanskaya;Elena Zaslavsky;Todd Trappe;Scott Trappe;Stuart C. Sealfon",
+    "year": "2023",
+    "doi": "10.1101/2023.09.26.558914",
+    "journal": "",
+    "url": "https://doi.org/10.1101/2023.09.26.558914",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/nihpp-2023.09.26.558914v2.pdf"
+  },
+  {
+    "title": "Single-cell RNA sequencing reveals that kimchi dietary intervention modulates human antigen-presenting and CD4⁺ T cells",
+    "authors": "Wooje Lee;Ha-Rin Moon;Hasun Choi;Ho Jae Lee;Yebin Kim;Hyun Ju Kim;Ye-Rang Yun;Min-Sung Kwon;Sung Wook Hong",
+    "year": "2025",
+    "doi": "10.1038/s41538-025-00593-7",
+    "journal": "npj Science of Food",
+    "url": "https://doi.org/10.1038/s41538-025-00593-7",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/pair_sample_proportion.pdf"
+  },
+  {
+    "title": "Integrated spatial and single-cell transcriptomics reveal PAK kinase as a therapeutic target in fibroblastic foci and dense fibrosis of idiopathic pulmonary fibrosis",
+    "authors": "Naoaki Watanabe;Masahiro Yoshida;Yuta Hirano;Shota Fujimoto;Sachi Matsubayashi;Takashi Ishiguro;Nobumasa Takahashi;Yoshihiko Shimizu;Noboru Takayanagi;Yoshinori Kawabata;Yutaro Mori;Koji Okamoto;Shunsuke Minagawa;Kazuyoshi Kuwano;Jun Araya;Yusuke Yamamoto;Yu Fujita",
+    "year": "2025",
+    "doi": "10.1183/13993003.00022-2025",
+    "journal": "European Respiratory Journal",
+    "url": "https://doi.org/10.1183/13993003.00022-2025",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/PAK_pathway.pdf"
+  },
+  {
+    "title": "Exercise Promotes Healthy Aging of Skeletal Muscle",
+    "authors": "Gregory D. Cartee;Russell T. Hepple;Marcas M. Bamman;Juleen R. Zierath",
+    "year": "2016",
+    "doi": "10.1016/j.cmet.2016.05.007",
+    "journal": "Cell Metabolism",
+    "url": "https://doi.org/10.1016/j.cmet.2016.05.007",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/PIIS155041311630225X.pdf"
+  },
+  {
+    "title": "Exercise reprograms the inflammatory landscape of multiple stem cell compartments during mammalian aging",
+    "authors": "Ling Liu;Soochi Kim;Matthew T. Buckley;Jaime M. Reyes;Jengmin Kang;Lei Tian;Mingqiang Wang;Alexander Lieu;Michelle Mao;Cristina Rodriguez-Mateo;Heather D. Ishak;Mira Jeong;Joseph C. Wu;Margaret A. Goodell;Anne Brunet;Thomas A. Rando",
+    "year": "2023",
+    "doi": "10.1016/j.stem.2023.03.016",
+    "journal": "Cell Stem Cell",
+    "url": "https://doi.org/10.1016/j.stem.2023.03.016",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/PIIS1934590923000875.pdf"
+  },
+  {
+    "title": "Single-Cell Analysis of the Muscle Stem Cell Hierarchy Identifies Heterotypic Communication Signals Involved in Skeletal Muscle Regeneration",
+    "authors": "Andrea J. De Micheli;Emily J. Laurilliard;Charles L. Heinke;Hiranmayi Ravichandran;Paula Fraczek;Sharon Soueid-Baumgarten;Iwijn De Vlaminck;Olivier Elemento;Benjamin D. Cosgrove",
+    "year": "2020",
+    "doi": "10.1016/j.celrep.2020.02.067",
+    "journal": "Cell Reports",
+    "url": "https://doi.org/10.1016/j.celrep.2020.02.067",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/PIIS2211124720302357.pdf"
+  },
+  {
+    "title": "A single-cell transcriptomic atlas of exercise-induced anti-inflammatory and geroprotective effects across the body",
+    "authors": "Shuhui Sun;Shuai Ma;Yusheng Cai;Si Wang;Jie Ren;Yuanhan Yang;Jiale Ping;Xuebao Wang;Yiyuan Zhang;Haoteng Yan;Wei Li;Concepcion Rodriguez Esteban;Yan Yu;Feifei Liu;Juan Carlos Izpisua Belmonte;Weiqi Zhang;Jing Qu;Guang-Hui Liu",
+    "year": "2023",
+    "doi": "10.1016/j.xinn.2023.100380",
+    "journal": "The Innovation",
+    "url": "https://doi.org/10.1016/j.xinn.2023.100380",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/PIIS2666675823000085.pdf"
+  },
+  {
+    "title": "Single-cell Multiome Analysis of Chromatin State and Transcriptome in the Human Basal Ganglia",
+    "authors": "Lei Chang;Kai Li;Yang Xie;Guojie Zhong;Jonathan A. Rink;Cindy Tatiana Báez-Becerra;Audrey Lie;Hannah S Indralingam;Keyi Dong;Timothy Loe;Zhaoning Wang;Songpeng Zu;Joseph Colin Kern;Zoey Zhao;Eric Boone;Jesus Flores;Alexander Monell;Jacqueline Olness;Cesar Barragan;Emma Osgood",
+    "year": "2026",
+    "doi": "10.64898/2026.02.03.703645",
+    "journal": "",
+    "url": "https://doi.org/10.64898/2026.02.03.703645",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/RNA_ATAC.full.pdf"
+  },
+  {
+    "title": "Integrative Analysis of Single-Cell and Spatial Transcriptomics Reveals Intratumor Heterogeneity Shaping the Tumor Microenvironment in Hepatocellular Carcinoma",
+    "authors": "Yue Liu;Guoping Dong;Jie Yu;Ping Liang",
+    "year": "2025",
+    "doi": "10.3390/livers5040062",
+    "journal": "Livers",
+    "url": "https://doi.org/10.3390/livers5040062",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Roe_livers-05-00062.pdf"
+  },
+  {
+    "title": "Lineage tracking reveals dynamic relationships of T cells in colorectal cancer",
+    "authors": "Lei Zhang;Xin Yu;Liangtao Zheng;Yuanyuan Zhang;Yansen Li;Qiao Fang;Ranran Gao;Boxi Kang;Qiming Zhang;Julie Y. Huang;Hiroyasu Konno;Xinyi Guo;Yingjiang Ye;Songyuan Gao;Shan Wang;Xueda Hu;Xianwen Ren;Zhanlong Shen;Wenjun Ouyang;Zemin Zhang",
+    "year": "2018",
+    "doi": "10.1038/s41586-018-0694-x",
+    "journal": "Nature",
+    "url": "https://doi.org/10.1038/s41586-018-0694-x",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Roe_Tcells-x.pdf"
+  },
+  {
+    "title": "Pan-cancer single-cell landscape of tumor-infiltrating T cells",
+    "authors": "Liangtao Zheng;Shishang Qin;Wen Si;Anqiang Wang;Baocai Xing;Ranran Gao;Xianwen Ren;Li Wang;Xiaojiang Wu;Ji Zhang;Nan Wu;Ning Zhang;Hong Zheng;Hanqiang Ouyang;Keyuan Chen;Zhaode Bu;Xueda Hu;Jiafu Ji;Zemin Zhang",
+    "year": "2021",
+    "doi": "10.1126/science.abe6474",
+    "journal": "Science",
+    "url": "https://doi.org/10.1126/science.abe6474",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Roe_Tcells_2021.pdf"
+  },
+  {
+    "title": "Runx1 prevents wasting, myofibrillar disorganization, and autophagy of skeletal muscle",
+    "authors": "Xiaoxia Wang;Chris Blagden;Jihua Fan;Scott J. Nowak;Ichiro Taniuchi;Dan R. Littman;Steven J. Burden",
+    "year": "2005",
+    "doi": "10.1101/gad.1318305",
+    "journal": "Genes &amp; Development",
+    "url": "https://doi.org/10.1101/gad.1318305",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Runx1_prevents_wasting__myofibrillar_disorganization__and_autophagy_of_skeletal_muscle_科研通-ablesci.com_.pdf"
+  },
+  {
+    "title": "The unique functions of Runx1 in skeletal muscle maintenance and regeneration are facilitated by an ETS interaction domain",
+    "authors": "Meng Yu;Konrad Thorner;Sreeja Parameswaran;Wei Wei;Chuyue Yu;Xinhua Lin;Raphael Kopan;Matthew R. Hass",
+    "year": "2024",
+    "doi": "10.1242/dev.202556",
+    "journal": "Development",
+    "url": "https://doi.org/10.1242/dev.202556",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/RUNX1.pdf"
+  },
+  {
+    "title": "Impact of exercise on immune cell infiltration in muscle tissue: implications for muscle repair and chronic disease",
+    "authors": "Yiping Su;Zhanguo Su",
+    "year": "2025",
+    "doi": "10.1007/s10238-025-01852-3",
+    "journal": "Clinical and Experimental Medicine",
+    "url": "https://doi.org/10.1007/s10238-025-01852-3",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s10238-025-01852-3.pdf"
+  },
+  {
+    "title": "Molecular mechanisms of exercise contributing to tissue regeneration",
+    "authors": "Jibao Chen;Ren Zhou;Ye Feng;Lin Cheng",
+    "year": "2022",
+    "doi": "10.1038/s41392-022-01233-2",
+    "journal": "Signal Transduction and Targeted Therapy",
+    "url": "https://doi.org/10.1038/s41392-022-01233-2",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s41392-022-01233-2.pdf"
+  },
+  {
+    "title": "Endurance exercise remodels skeletal muscle by suppressing Ythdf1-mediated myostatin expression",
+    "authors": "Xin Huang;Chenzhong Xu;Jie Zhang;Weiwei Wu;Zimei Wang;Qiuxiang Pang;Zuojun Liu;Baohua Liu",
+    "year": "2025",
+    "doi": "10.1038/s41419-025-07379-5",
+    "journal": "Cell Death &amp; Disease",
+    "url": "https://doi.org/10.1038/s41419-025-07379-5",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s41419-025-07379-5.pdf"
+  },
+  {
+    "title": "Spatial and single-nucleus transcriptomic analysis of genetic and sporadic forms of Alzheimer’s disease",
+    "authors": "Emily Miyoshi;Samuel Morabito;Caden M. Henningfield;Sudeshna Das;Negin Rahimzadeh;Sepideh Kiani Shabestari;Neethu Michael;Nora Emerson;Fairlie Reese;Zechuan Shi;Zhenkun Cao;Shushrruth Sai Srinivasan;Vanessa M. Scarfone;Miguel A. Arreola;Jackie Lu;Sierra Wright;Justine Silva;Kelsey Leavy;Ira T. Lott;Eric Doran",
+    "year": "2024",
+    "doi": "10.1038/s41588-024-01961-x",
+    "journal": "Nature Genetics",
+    "url": "https://doi.org/10.1038/s41588-024-01961-x",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s41588-024-01961-x.pdf"
+  },
+  {
+    "title": "Sphingolipids accumulate in aged muscle, and their reduction counteracts sarcopenia",
+    "authors": "Pirkka-Pekka Laurila;Martin Wohlwend;Tanes Imamura de Lima;Peiling Luan;Sébastien Herzig;Nadège Zanou;Barbara Crisol;Maroun Bou-Sleiman;Eleonora Porcu;Hector Gallart-Ayala;Michal K. Handzlik;Qi Wang;Suresh Jain;Davide D’Amico;Minna Salonen;Christian M. Metallo;Zoltan Kutalik;Thomas O. Eichmann;Nicolas Place;Julijana Ivanisevic",
+    "year": "2022",
+    "doi": "10.1038/s43587-022-00309-6",
+    "journal": "Nature Aging",
+    "url": "https://doi.org/10.1038/s43587-022-00309-6",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s43587-022-00309-6.pdf"
+  },
+  {
+    "title": "Induced somatic mutation accumulation during skeletal muscle regeneration reduces muscle strength",
+    "authors": "Peter Vrtačnik;Lara G. Merino;Santhilal Subhash;Hafdís T. Helgadóttir;Matthieu Bardin;Fabiana Stefani;Depin Wang;Ping Chen;Irene Franco;Gwladys Revêchon;Maria Eriksson",
+    "year": "2025",
+    "doi": "10.1038/s43587-025-00941-y",
+    "journal": "Nature Aging",
+    "url": "https://doi.org/10.1038/s43587-025-00941-y",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/s43587-025-00941-y.pdf"
+  },
+  {
+    "title": "A single-cell map of intratumoral changes during anti-PD1 treatment of patients with breast cancer",
+    "authors": "Ayse Bassez;Hanne Vos;Laurien Van Dyck;Giuseppe Floris;Ingrid Arijs;Christine Desmedt;Bram Boeckx;Marlies Vanden Bempt;Ines Nevelsteen;Kathleen Lambein;Kevin Punie;Patrick Neven;Abhishek D. Garg;Hans Wildiers;Junbin Qian;Ann Smeets;Diether Lambrechts",
+    "year": "2021",
+    "doi": "10.1038/s41591-021-01323-8",
+    "journal": "Nature Medicine",
+    "url": "https://doi.org/10.1038/s41591-021-01323-8",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/sample_cellproportion.pdf"
+  },
+  {
+    "title": "Proteasome-guided haem signalling axis contributes to T cell exhaustion",
+    "authors": "Yingxi Xu;Yangtao Shangguan;Yu-Ming Chuang;Tzu-Hsuan Chang;Wenbing Liu;Jhan-Jie Peng;Josep Garnica;Leling Xie;Pei-Chun Hsueh;Mei-Chun Lin;Yi-Hao Wang;Karina Lobo Hajdu;Yibo Wu;Maryam Akrami;Chen Wang;Anna Kohl;Alfred Zippelius;Wei Qi;Min Wang;Bugi Ratno Budiarto",
+    "year": "2026",
+    "doi": "10.1038/s41586-026-10250-y",
+    "journal": "Nature",
+    "url": "https://doi.org/10.1038/s41586-026-10250-y",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/sample_cellproportion_reference.pdf"
+  },
+  {
+    "title": "TECHNOLOGY-ENHANCED HUMAN-CENTRIC LEARNING",
+    "authors": "Dr. Amit Yograj Kapoor",
+    "year": "2022",
+    "doi": "10.25215/1105357155.14",
+    "journal": "HUMAN-CENTRIC PEDAGOGY IN CONTEMPORARY EDUCATION: REIMAGINING TEACHING AND LEARNING FOR THE 21ST CENTURY",
+    "url": "https://doi.org/10.25215/1105357155.14",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/science.aeb0045.pdf"
+  },
+  {
+    "title": "scRNA-seq of gastric tumor shows complex intercellular interaction with an alternative T cell exhaustion trajectory",
+    "authors": "Keyong Sun;Runda Xu;Fuhai Ma;Naixue Yang;Yang Li;Xiaofeng Sun;Peng Jin;Wenzhe Kang;Lemei Jia;Jianping Xiong;Haitao Hu;Yantao Tian;Xun Lan",
+    "year": "2022",
+    "doi": "10.1038/s41467-022-32627-z",
+    "journal": "Nature Communications",
+    "url": "https://doi.org/10.1038/s41467-022-32627-z",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Score_reference.pdf"
+  },
+  {
+    "title": "Population-scale skeletal muscle single-nucleus multi-omic profiling reveals extensive context specific genetic regulation",
+    "authors": "Arushi Varshney;Nandini Manickam;Peter Orchard;Adelaide Tovar;Christa Ventresca;Zhenhao Zhang;Fan Feng;Joseph Mears;Michael R Erdos;Narisu Narisu;Kirsten Nishino;Vivek Rai;Heather M Stringham;Anne U Jackson;Tricia Tamsen;Chao Gao;Mao Yang;Olivia I Koues;Joshua D Welch;Charles F Burant",
+    "year": "2023",
+    "doi": "10.1101/2023.12.15.571696",
+    "journal": "",
+    "url": "https://doi.org/10.1101/2023.12.15.571696",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/skeletal_muscle.full.pdf"
+  },
+  {
+    "title": "Pan-cancer single-cell dissection reveals phenotypically distinct B cell subtypes",
+    "authors": "Yu Yang;Xueyan Chen;Jieying Pan;Huiheng Ning;Yaojun Zhang;Yufei Bo;Xianwen Ren;Jiesheng Li;Shishang Qin;Dongfang Wang;Min-Min Chen;Zemin Zhang",
+    "year": "2024",
+    "doi": "10.1016/j.cell.2024.06.038",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2024.06.038",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/snRNA_snATAC_skin.pdf"
+  },
+  {
+    "title": "MicroRNA-33 inhibition ameliorates muscular dystrophy by enhancing skeletal muscle regeneration",
+    "authors": "Naoya Sowa;Takahiro Horie;Yuya Ide;Osamu Baba;Kengo Kora;Takeshi Yoshida;Yujiro Nakamura;Shigenobu Matsumura;Kazuki Matsushita;Miyako Imanaka;Fuquan Zou;Eitaro Kume;Hidenori Kojima;Qiuxian Qian;Kayo Kimura;Ryotaro Otsuka;Noriko Hara;Tomohiro Yamasaki;Chiharu Otani;Yuta Tsujisaka",
+    "year": "2025",
+    "doi": "10.1038/s44321-025-00273-9",
+    "journal": "EMBO Molecular Medicine",
+    "url": "https://doi.org/10.1038/s44321-025-00273-9",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/sowa-et-al-2025-microrna-33-inhibition-ameliorates-muscular-dystrophy-by-enhancing-skeletal-muscle-regeneration.pdf"
+  },
+  {
+    "title": "Multi-modal spatial characterization of tumor immune microenvironments identifies targetable inflammatory niches in diffuse large B cell lymphoma",
+    "authors": "Yibo Dai;Atish Kizhakeyil;Dai Chihara;Xubin Li;Yunhe Liu;Tania Patricia Sainz Zuniga;Ashley Wilson;Jared Henderson;Daniil Vibe;Arman Petrosyants;Connor Jacobson;Alexander Sarachakov;Krystle Nomie;Kirill Kryukov;Aleksander Bagaev;Ayushi Chauhan;Jason R. Westin;Christopher R. Flowers;Francisco Vega;Linghua Wang",
+    "year": "2025",
+    "doi": "10.1038/s41588-025-02353-5",
+    "journal": "Nature Genetics",
+    "url": "https://doi.org/10.1038/s41588-025-02353-5",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/Stereo_Bcell.pdf"
+  },
+  {
+    "title": "The skeletal muscle response to high‐intensity training assessed by single‐nucleus RNA‐sequencing is blunted in individuals with type 2 diabetes",
+    "authors": "Maria Hansen;Julius E. R. Grothen;Anders Karlsen;Jaime M. Martinez;Nikos Sidiropoulos;Jørn W. Helge;Thomas Å. Pedersen;Flemming Dela",
+    "year": "2025",
+    "doi": "10.1113/JP288368",
+    "journal": "The Journal of Physiology",
+    "url": "https://doi.org/10.1113/JP288368",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/The_Journal_of_Physiology_-_2025_-_Hansen_-_The_skeletal_muscle_response_to_high_E2_80_90intensity_training_assessed_by.pdf"
+  },
+  {
+    "title": "FNDC1 is a myokine that promotes myogenesis and muscle regeneration",
+    "authors": "Rui Xin Zhang;Yuan Yuan Zhai;Rong Rong Ding;Jia He Huang;Xiao Chen Shi;Huan Liu;Xiao Peng Liu;Jian Feng Zhang;Jun Feng Lu;Zhe Zhang;Xiang Kai Leng;De Fu Li;Jun Ying Xiao;Bo Xia;Jiang Wei Wu",
+    "year": "2024",
+    "doi": "10.1038/s44318-024-00285-0",
+    "journal": "The EMBO Journal",
+    "url": "https://doi.org/10.1038/s44318-024-00285-0",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/zhang-et-al-2024-fndc1-is-a-myokine-that-promotes-myogenesis-and-muscle-regeneration.pdf"
+  },
+  {
+    "title": "Lipid-dependent accrual of a subset of monocyte-derived macrophages is essential for tissue regeneration",
+    "authors": "Tao Yao;Xin Tian;Linbin Rao;Jinling Ni;Jiayong Yu;Hongguo Yang;Yuexiao Tang;Xingxiao Huang;Xintong Xia;Lin Zhao;Bowen Diao;Yan Ping;Danni Wei;Siqi Li;Hui Chai;Zhiming Hu;Xiongzhong Ruan;Suihan Feng;Mengle Shao;Bo Shan",
+    "year": "2026",
+    "doi": "10.1038/s42255-026-01480-5",
+    "journal": "Nature Metabolism",
+    "url": "https://doi.org/10.1038/s42255-026-01480-5",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/损伤修复脂肪积累.pdf"
+  },
+  {
+    "title": "Single-cell transcriptome profiling of sepsis identifies HLA-DRlowS100Ahigh monocytes with immunosuppressive function",
+    "authors": "Ren-Qi Yao;Peng-Yue Zhao;Zhi-Xuan Li;Yu-Yang Liu;Li-Yu Zheng;Yu Duan;Lu Wang;Rong-Li Yang;Hong-Jun Kang;Ji-Wei Hao;Jing-Yan Li;Ning Dong;Yao Wu;Xiao-Hui Du;Feng Zhu;Chao Ren;Guo-Sheng Wu;Zhao-Fan Xia;Yong-Ming Yao",
+    "year": "2023",
+    "doi": "10.1186/s40779-023-00462-y",
+    "journal": "Military Medical Research",
+    "url": "https://doi.org/10.1186/s40779-023-00462-y",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/独特亚群.pdf"
+  },
+  {
+    "title": "Molecular Pathways of Colon Inflammation Induced by Cancer Immunotherapy",
+    "authors": "Adrienne M. Luoma;Shengbao Suo;Hannah L. Williams;Tatyana Sharova;Keri Sullivan;Michael Manos;Peter Bowling;F. Stephen Hodi;Osama Rahma;Ryan J. Sullivan;Genevieve M. Boland;Jonathan A. Nowak;Stephanie K. Dougan;Michael Dougan;Guo-Cheng Yuan;Kai W. Wucherpfennig",
+    "year": "2020",
+    "doi": "10.1016/j.cell.2020.06.001",
+    "journal": "Cell",
+    "url": "https://doi.org/10.1016/j.cell.2020.06.001",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/疾病治疗文献.pdf"
+  },
+  {
+    "title": "Discovery of Muscle-Tendon Progenitor Subpopulation in Human Myotendinous Junction at Single-Cell Resolution",
+    "authors": "Ruojin Yan;Hong Zhang;Yuanzhu Ma;Ruifu Lin;Bo Zhou;Tao Zhang;Chunmei Fan;Yuxiang Zhang;Zetao Wang;Tianshun Fang;Zi Yin;Youzhi Cai;Hongwei Ouyang;Xiao Chen",
+    "year": "2022",
+    "doi": "10.34133/2022/9760390",
+    "journal": "Research",
+    "url": "https://doi.org/10.34133/2022/9760390",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/肌腱细胞2022.pdf"
+  },
+  {
+    "title": "Impact of biological sex and sex hormones on molecular signatures of skeletal muscle at rest and in response to distinct exercise training modes",
+    "authors": "Mark W. Pataky;Surendra Dasari;Kelly L. Michie;Kyle J. Sevits;A. Aneesh Kumar;Katherine A. Klaus;Carrie J. Heppelmann;Matthew M. Robinson;Rickey E. Carter;Ian R. Lanza;K. Sreekumaran Nair",
+    "year": "2023",
+    "doi": "10.1016/j.cmet.2023.10.010",
+    "journal": "Cell Metabolism",
+    "url": "https://doi.org/10.1016/j.cmet.2023.10.010",
+    "entry_type": "article",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/运动响应.pdf"
+  },
+  {
+    "title": "Figure S1: Supplementary Figure",
+    "authors": "",
+    "year": "",
+    "doi": "10.7717/peerj.16740/supp-1",
+    "journal": "",
+    "url": "https://doi.org/10.7717/peerj.16740/supp-1",
+    "entry_type": "article",
+    "volume": "",
+    "issue": "",
+    "pages": "",
+    "pmid": "",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.1038_ng1180.pdf"
+  },
+  {
+    "title": "Integrative Multi-Omics Analysis Identifies Tissue, Cellular and Splicing Programs Associated with Exercise-Mediated Improvement in Type 2 Diabetes",
+    "authors": "Jingzhe Xiao;Yuwei Ding;Songbo Li;Yi Yan;Ziyue Yu;Pengyu Fu;Chunyan Xu;Lijing Gong",
+    "year": "2026",
+    "doi": "10.3390/cells15110979",
+    "journal": "Cells",
+    "url": "https://doi.org/10.3390/cells15110979",
+    "entry_type": "article",
+    "volume": "15",
+    "issue": "11",
+    "pages": "979",
+    "pmid": "",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.3390_cells15110979.pdf"
+  },
+  {
+    "title": "Integrating SMRT and Bulk RNA Sequencing With Metabolic Phenotyping to Examine Reduced Skeletal Muscle Mitochondrial Respiration in Type 2 Diabetes",
+    "authors": "Martin Schön;Daniel Oehler;Iryna Yurchenko;Alexander Lang;Nina Trinks;Bedair Dewidar;Lucia Mastrototaro;Oana P. Zaharia;Kálmán B. Bódis;Yanislava Karusheva;Frederico G.S. Toledo;Volker Burkart;Cesare Granata;Ralf Westenfeld;Amin Polzin;Malte Kelm;Robert Wagner;Michael Roden;Julia Szendroedi;",
+    "year": "2026",
+    "doi": "10.2337/db25-0625",
+    "journal": "Diabetes",
+    "url": "https://doi.org/10.2337/db25-0625",
+    "entry_type": "article",
+    "volume": "75",
+    "issue": "3",
+    "pages": "571-581",
+    "pmid": "",
+    "note": "local_pdf: MEMOMICS_HOME/hermes_home/papers/10.2337_db25-0625.pdf"
+  }
+]

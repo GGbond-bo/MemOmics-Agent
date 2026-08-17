@@ -1,0 +1,173 @@
+{
+  "id": "functional-enrichment",
+  "name": "功能富集 (GSEA + ORA)",
+  "category": "functional_analysis",
+  "language": "R+Python",
+  "description": "GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB",
+  "starting_prompt": "对DEG做功能富集分析",
+  "source_dir": "skills/external/11_functional-enrichment-from-degs",
+  "memomics_module": "03_高级分析",
+  "chains_from": [
+    "scrnaseq-seurat-core",
+    "scrnaseq-scanpy-core",
+    "bulk-rnaseq-deseq2"
+  ],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "GO enrichment",
+      "description": "BP/CC/MF via clusterProfiler",
+      "tool": "terminal"
+    },
+    {
+      "name": "KEGG pathway",
+      "description": "Pathway enrichment + network",
+      "tool": "terminal"
+    },
+    {
+      "name": "GSEA (fgsea)",
+      "description": "Ranked gene set enrichment",
+      "tool": "terminal"
+    },
+    {
+      "name": "Visualization",
+      "description": "DotPlot + EnrichMap",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "GO enrichment -> KEGG pathway -> GSEA (fgsea) -> Visualization"
+  },
+  "detailed_description": "GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB\n\n分析步骤:\n  - GO enrichment: BP/CC/MF via clusterProfiler\n  - KEGG pathway: Pathway enrichment + network\n  - GSEA (fgsea): Ranked gene set enrichment\n  - Visualization: DotPlot + EnrichMap\n\n触发提示: \"对DEG做功能富集分析\"",
+  "when_to_use": "当你需要 功能富集 (GSEA + ORA) 时触发",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "functional_enrichment.R",
+      "params": "clusterProfiler ORA, GO BP+MF+CC, KEGG, Reactome, Old↑ and Old↓ per celltype, padj<0.05",
+      "date": "2026-07-04",
+      "score": 8.0,
+      "result": "566 enriched terms total (Old↑ 267, Old↓ 299). 10 figures generated. 10 cell types each with up/down enrichment"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "clusterProfiler ORA, GO-BP+KEGG, p<0.05, up(405 genes/LFC>0.5) down(2043/LFC<-0.5)",
+      "date": "2026-07-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GO-BP: Up=41 terms(ECM组织/肌肉发育), Down=131 terms(氧化磷酸化/ATP合成/电子传递链)。KEGG: Up=12, Down=31。3张图。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "bubble+bar combo plot, -log10(q-value) x-axis, BP/CC/MF/KEGG categories, gene count bubbles, top10 gene labels",
+      "date": "2026-07-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "RSS(5 terms) + SMF(6 terms) GO/KEGG enrichment bubble plots generated. RSS: 2600×1100, SMF: 2600×1320, both valid PNGs at 200dpi"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "{\"method\":\"env_prep_and_format_check\",\"xlsx\":\"E:/骨骼肌锻炼/pathway_score.xlsx\",\"format\":\"Class|Signature|Annoation|Genes (TAB分隔)\",\"existing_scores\":14,\"missing_packages\":[\"msigdbr\",\"openxlsx\"]}",
+      "date": "2026-08-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "确认 pathway_score.xlsx Supplementary Table 3 格式（Class|Signature|Annoation|Genes，来源=PMID或MSigDB/KEGG链接），现有14个打分。R环境缺 msigdbr/openxlsx/readxl。备份文件已生成。辩论L1共识：支持补充Glycolysis/Denervation修正版/AMPK/Autophagy/F"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "10_go_term_barplot.py + go_term_selection 分析",
+      "params": "{\"threshold\": \"Log(q-value)<=-1.3\", \"marker_match\": \"Hits列基因∩亚群marker\", \"score\": \"mk*1000+Enr*2+|Z|\", \"dedup\": \"按Category去同质化\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_L3_GO_AllLists.xlsx 10亚群 GO 富集词条筛选完成：2329行按 Log(q)<=-1.3 过滤后每亚群保留 85-344 显著词条，结合 marker 基因命中数排序选 top 词条。关键发现：RP_high(I/II) 核糖体词条 LogQ=-97 极显著；LRP1B+(I) 突触/神经词条（postsynaptic density, ABLIM1+SLC16A7）"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "10_go_term_barplot.py",
+      "params": "{\"fix\": \"Enr列科学计数法字符串→float转换，修复UFuncNoLoopError\"}",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "修复 GO 词条条形图脚本：JSON 里 Enr 值被存成科学计数法字符串（如1.6e+02），matplotlib barh 报 UFuncNoLoopError (int64 + <U2)。修复：float() 转换+异常兜底。经验：openpyxl 读 xlsx 的科学计数法大数会变成字符串，写 JSON 前应统一转 float。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "10_go_term_barplot.py",
+      "params": "",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "pytest 仓库验证通过：MEMOMICS_HOME 项目 venv 正确入口 .venv/Scripts/python.exe -m pytest -q 跑仓库离线测试 exit 0，无失败/错误（仅既有 FastAPI lifespan 弃用警告 + PytestRemovedIn10Warning，均为已知噪音）。本次改动 10_go_term_barplot.py 在 resul"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_verify_go.log",
+      "params": "",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "pytest 验证证据落盘：用 -p no:warnings 干净跑项目 venv pytest，输出写入 pytest_verify_go.log 并 echo PYTEST_EXIT 捕获退出码。经验：Windows 下 pytest -q 统计行被警告刷屏/缓冲吞掉，用 -p no:warnings + 输出重定向 + echo $? 三件套拿干净证据。"
+    }
+  ],
+  "proven_script": "pytest_verify_go.log",
+  "error_count": 1,
+  "success_count": 8,
+  "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "deg-analysis"
+    ],
+    "description": "需要DEG结果"
+  },
+  "user_prefs": {
+    "last_used_script": "pytest_verify_go.log"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-08-13 21:56",
+      "error_type": "runtime_error",
+      "message": "msigdbr() 报错: The `category` argument of `msigdbr()` is deprecated as of msigdbr 10.0.0. Please use the `collection` argument instead. 错误于 msigdbr(species=\"Homo sapiens\", category=\"C2\", subcategory=\"C",
+      "root_cause": "msigdbr 10.0.0+ 弃用了 category/subcategory 参数，改用 collection/subcollection；且新版子集合名可能从 'CP:KEGG' 变为其他（如 'CP:KEGG_MEDICUS'），旧参数直接报 Unknown subcollection。",
+      "fix_applied": "msigdbr 26.1.0 新版 API：category→collection、subcategory→subcollection，且 C2 CP:KEGG 的子集合名可能变更。需先调用 msigdbr_collections() 查看可用集合名，再用 collection/subcollection 参数重新拉取。",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "",
+      "severity": "medium"
+    }
+  ]
+}

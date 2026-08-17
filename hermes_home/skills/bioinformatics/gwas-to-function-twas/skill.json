@@ -1,0 +1,42 @@
+{
+  "name": "GWAS TWAS 分析",
+  "id": "gwas-to-function-twas",
+  "category": "genomics",
+  "language": "R/Python",
+  "source": "Biomni Lab",
+  "description": "GWAS → TWAS功能分析: 关联信号 → 基因优先级 → 功能验证",
+  "triggers": [
+    "GWAS",
+    "TWAS",
+    "全基因组关联",
+    "FUSION"
+  ],
+  "steps": [
+    "GWAS质控",
+    "LD clumping",
+    "基因注释",
+    "TWAS分析",
+    "共定位"
+  ],
+  "dependencies": [
+    "FUSION",
+    "plink2",
+    "coloc"
+  ],
+  "outputs": [
+    "显著位点",
+    "TWAS基因",
+    "曼哈顿图"
+  ],
+  "detailed_description": "GWAS → TWAS功能分析: 关联信号 → 基因优先级 → 功能验证\n\n分析步骤:\n  - GWAS质控\n  - LD clumping\n  - 基因注释\n  - TWAS分析\n  - 共定位\n\n依赖包: plink2, coloc, FUSION",
+  "when_to_use": "当你需要 GWAS TWAS 分析 时触发",
+  "parameters": {
+    "steps": "GWAS质控 -> LD clumping -> 基因注释 -> TWAS分析 -> 共定位"
+  },
+  "proven_params": [],
+  "proven_script": "scripts/run_proven.R",
+  "error_count": 0,
+  "success_count": 1,
+  "official_docs": "https://github.com/opentargets/genetics-behavioural",
+  "doc_source": "official"
+}

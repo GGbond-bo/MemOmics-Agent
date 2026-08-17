@@ -1,0 +1,61 @@
+{
+  "_version": "1.1",
+  "_description": "MemOmics 鍏ㄥ眬鐜 鈥?鎵€鏈夊垎鏋愬叡浜€傚惎鍔ㄦ椂 validate_env.py 鑷姩璇烩啋楠屸啋淇€?,
+  "_last_updated": "2026-08-16T00:00:00",
+  "_canonical": {
+    "_comment": "寮€婧愬垎鍙戞ā鏉匡細鏈満璺緞宸茶劚鏁忥紝棣栨鍚姩鐢?validate_env.py 鑷姩鎺㈡祴骞跺洖濉?,
+    "R": "4.5.x @ C:/Program Files/R锛堝簱璺緞鑷姩鎺㈡祴锛?,
+    "python_app": ".venv锛堝惎鍔ㄨ剼鏈嚜鍔ㄥ垱寤猴級"
+  },
+  "platform": {
+    "_comment": "骞冲彴鏍囪銆倃indows 鐗堝～ windows锛汱inux/macOS 鐗堝彂琛屾椂鏀?linux/darwin锛宲aths 娈垫崲鎴愬搴旇矾寰勩€?,
+    "current": "windows",
+    "supported": ["windows", "linux", "darwin"]
+  },
+  "cellbender_project_dir": "",
+  "task_guardian": {
+    "_comment": "閫氱敤闀夸换鍔″畧鎶ら厤缃€俻roject_dir 缂虹渷鍒欏畧鎶や笉鍚姩銆?,
+    "project_dir": "",
+    "heartbeat_script": "heartbeat_v2.py",
+    "scanner_script": "error_scanner.py",
+    "task_name": "CellBender_samples",
+    "check_interval": 60
+  },
+  "paths": {
+    "python": {
+      "memomics_venv": "MEMOMICS_HOME/.venv/Scripts/python.exe",
+      "system_python312": "",
+      "default": "MEMOMICS_HOME/.venv/Scripts/python.exe"
+    },
+    "r": {
+      "R-4.5.3": {
+        "bin": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
+        "lib_site": "C:/Program Files/R/R-4.5.3/library",
+        "lib_user": "USER_R_LIBS/R-4.5.3",
+        "pkg_count": 0,
+        "key_pkgs": ["Seurat", "SeuratObject", "harmony", "ArchR", "ggplot2", "dplyr", "ComplexHeatmap", "circlize", "patchwork", "ggrepel", "future", "future.apply", "pak", "BiocManager", "data.table", "TFBSTools", "motifmatchr", "chromVAR", "BSgenome", "GenomicRanges", "Rsamtools"],
+        "note": "涓诲姏鍒嗘瀽鐜妯℃澘 鈥?棣栨鍚姩 validate_env.py 鑷姩鎺㈡祴鏈満 R 骞跺洖濉?
+      },
+      "default": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe"
+    },
+    "cli_tools": {
+      "cellbender": { "exe": "", "python": "", "note": "棣栨鍚姩鑷姩鎺㈡祴" },
+      "ptrepack": { "exe": "", "note": "棣栨鍚姩鑷姩鎺㈡祴" },
+      "pip": { "conda": "", "memomics_venv": "MEMOMICS_HOME/.venv/Scripts/pip.exe" }
+    }
+  },
+  "gpu": {
+    "name": "auto-detect",
+    "memory_mb": 0,
+    "cuda_available": false,
+    "pytorch_version": "",
+    "note": "棣栨鍚姩鑷姩鎺㈡祴"
+  },
+  "known_issues": {
+    "cellbender_cuda": "蹇呴』浼?--cuda 鍜?--total-droplets-included锛屽惁鍒橤PU涓嶅伐浣?鍏ㄩ噺娑叉淮鎷栨",
+    "cellbender_tmpdir": "Windows 涓婂缓璁缃?TMPDIR 鍒扮┖闂村厖瓒崇殑鐩?,
+    "r_package_install": "R 4.5.x 鏃?RTools 鏃剁紪璇戝寘鐢?type='win.binary'",
+    "h5ad_to_seurat_windows": "SeuratDisk::Convert()鍦╓indows涓婇绻佸け璐ワ紝鍥為€€MTX瀵煎嚭鏂规",
+    "cellbender_checkpoint": "checkpoint鎭㈠鏈塰ash涓嶅尮閰峛ug锛屼笉鍙潬"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "find_alternative_drugs_ddinter",
+  "name": "Find Alternative Drugs Ddinter",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Find alternative drugs that don't interact with contraindicated drugs using DDInter database for safer therapeutic substitutions.",
+  "detailed_description": "Find alternative drugs that don't interact with contraindicated drugs using DDInter database for safer therapeutic substitutions.",
+  "when_to_use": "When you need find alternative drugs ddinter analysis",
+  "parameters": {
+    "target_drug": "[Required] Drug to find alternatives for (str)",
+    "contraindicated_drugs": "[Required] List of drugs to avoid interactions with (List[str])",
+    "therapeutic_class": "[Optional] Limit search to specific therapeutic class",
+    "data_lake_path": "[Optional] Path to data lake directory containing DDInter data"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

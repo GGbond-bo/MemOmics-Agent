@@ -1,0 +1,15 @@
+type: kb_entry
+name: gh_levels_exercise_response
+species: human
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:13
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- gh_levels_exercise_response
+content: 急性运动后生长激素(GH)水平可升至基础水平的300-500%，并持续约3小时；IGF-1和睾酮在运动后也升高。GH升高幅度与运动负荷、休息时间和训练量正相关（负荷越大、休息越短、训练量越大，GH反应越强）。该参数可用于评估运动干预的内分泌应答强度，适用于人类运动生理研究。
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

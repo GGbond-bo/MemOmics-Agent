@@ -1,0 +1,18 @@
+{
+  "id": "analyze_cytokine_production_in_cd4_tcells",
+  "name": "Analyze Cytokine Production In Cd4 Tcells",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze cytokine production (IFN-γ, IL-17) in CD4+ T cells after antigen stimulation.",
+  "detailed_description": "Analyze cytokine production (IFN-γ, IL-17) in CD4+ T cells after antigen stimulation.",
+  "when_to_use": "When you need analyze cytokine production in cd4 tcells analysis",
+  "parameters": {
+    "fcs_files_dict": "[Required] Dictionary mapping stimulation conditions to FCS file paths. Expected keys: 'unstimulated', 'Mtb300', 'CMV', 'SEB' (dict)",
+    "output_dir": "[Optional] Directory to save the results file (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

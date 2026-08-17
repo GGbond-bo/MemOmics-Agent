@@ -1,0 +1,19 @@
+{
+  "id": "analyze_fda_safety_signals",
+  "name": "Analyze Fda Safety Signals",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze safety signals across multiple drugs using OpenFDA adverse event data to identify patterns and comparative risk profiles.",
+  "detailed_description": "Analyze safety signals across multiple drugs using OpenFDA adverse event data to identify patterns and comparative risk profiles.",
+  "when_to_use": "When you need analyze fda safety signals analysis",
+  "parameters": {
+    "drug_list": "[Required] List of drug names to analyze for safety signals (List[str])",
+    "comparison_period": "[Optional] Optional comparison time period as (start_date, end_date)",
+    "signal_threshold": "[Optional] Threshold for signal detection (default: 2.0)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

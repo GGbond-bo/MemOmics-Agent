@@ -1,0 +1,20 @@
+# System files
+.DS_Store
+
+# Data files
+**/*.h5ad
+**/*.rds
+**/data/
+
+# Output directories
+**/*_results/
+**/test_results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Analysis artifacts
+*.pkl

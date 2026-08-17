@@ -1,0 +1,19 @@
+{
+  "id": "query_paleobiology",
+  "name": "Query Paleobiology",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the Paleobiology Database (PBDB) API using natural language or a direct endpoint.",
+  "detailed_description": "Query the Paleobiology Database (PBDB) API using natural language or a direct endpoint.",
+  "when_to_use": "When you need query paleobiology analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about fossil records (str)",
+    "endpoint": "[Optional] API endpoint name or full URL",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

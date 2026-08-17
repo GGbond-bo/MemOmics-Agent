@@ -1,0 +1,145 @@
+{
+  "id": "scrna-eda",
+  "name": "scRNA-seq 数据探索",
+  "category": "scRNA",
+  "language": "Python",
+  "description": "分析前自动数据探索: 细胞/基因数、稀疏度、批次分布、表达分布、top HVG、UMAP 预览",
+  "starting_prompt": "先看看数据长什么样",
+  "memomics_module": "01_数据探索",
+  "chains_from": [
+    "scrna-qc",
+    "scrna-clustering"
+  ],
+  "chains_to": [],
+  "tags": [
+    "eda",
+    "exploration",
+    "data-quality",
+    "metadata",
+    "distribution",
+    "数据探索",
+    "看看数据",
+    "数据概览"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": [
+    {
+      "name": "加载数据",
+      "description": "anndata.read_h5ad 读入",
+      "tool": "terminal"
+    },
+    {
+      "name": "基本统计",
+      "description": "n_cells, n_genes, sparsity, mito%, doublet_score",
+      "tool": "terminal"
+    },
+    {
+      "name": "批次分布",
+      "description": "sample/batch 柱状图，检查批次效应信号",
+      "tool": "terminal"
+    },
+    {
+      "name": "表达分布",
+      "description": "count depth 直方图，percent_top50 箱线图",
+      "tool": "terminal"
+    },
+    {
+      "name": "高变基因",
+      "description": "Top 2000 HVG 热图预览",
+      "tool": "terminal"
+    },
+    {
+      "name": "QC 建议",
+      "description": "基于分布推荐 QC 阈值",
+      "tool": "rail_review"
+    }
+  ],
+  "success_count": 5,
+  "proven_script": "fix_xlsx_to_newfile.R",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "check_xlsx.R",
+      "params": "openxlsx/readxl 双引擎检查 pathway_score.xlsx 结构",
+      "date": "2026-08-13",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "openpyxl 报 xlsx 缺 xl/drawings/drawing1.xml 引用，疑似文件结构损坏；改用 R-4.5.3 openxlsx/readxl 双引擎验证"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "check_xlsx2.R",
+      "params": "check_xlsx2.R 全行结构打印",
+      "date": "2026-08-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "定位问题根因：原表基因是宽表展开（每列一个基因，最多203列），我新加的8行是TAB单元格格式（仅4列）——格式不一致，需重写新行"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fix_xlsx_format.R",
+      "params": "fix_xlsx_format.R 重写验证",
+      "date": "2026-08-13",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "写回失败 Permission denied——文件被占用或权限问题，重读仍是 TAB 格式（未破坏），备份已生成；发现 Diabete 拼写错误"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "check_xlsx3.R",
+      "params": "check_xlsx3.R 原表 Class 分布",
+      "date": "2026-08-13",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "确认原表 Class 分类本身含 Diabete（行12 Insulin signaling score），我的拼写跟随一致非错误；文件当前可写（Permission denied 是瞬时占用）"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fix_xlsx_to_newfile.R",
+      "params": "fix_xlsx_to_newfile.R 输出修复版到新文件",
+      "date": "2026-08-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "修复版成功写入 pathway_score_fixed_format.xlsx：8 个新增行基因全部展开为宽表格式（非空列从4→14~203列），与原表格式一致"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "fix_xlsx_to_newfile.R"
+  },
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-08-13 22:29",
+      "error_type": "runtime_error",
+      "message": "write.xlsx 写回 E:/骨骼肌锻炼/pathway_score.xlsx 时 Permission denied（两次）",
+      "root_cause": "目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下无法覆盖写入",
+      "fix_applied": "改为输出修复版到独立新文件，用户关闭 Excel 后自行替换",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "medium"
+    }
+  ]
+}

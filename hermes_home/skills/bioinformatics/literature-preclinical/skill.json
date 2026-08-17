@@ -1,0 +1,38 @@
+{
+  "id": "literature-preclinical",
+  "name": "临床前文献提取",
+  "category": "literature",
+  "language": "Python",
+  "description": "从临床前文献提取关键发现、方法、模型、剂量。PubMed+LLM",
+  "starting_prompt": "从文献中提取临床前研究发现",
+  "source_dir": "skills/external/16_literature-preclinical",
+  "memomics_module": "文献系统",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "PubMed/PMC search",
+      "description": "Keywords + filters",
+      "tool": "terminal"
+    },
+    {
+      "name": "Abstract extraction",
+      "description": "BioC API structured extraction",
+      "tool": "terminal"
+    },
+    {
+      "name": "Key findings summary",
+      "description": "LLM-assisted summarization",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "PubMed/PMC search -> Abstract extraction -> Key findings summary"
+  },
+  "detailed_description": "从临床前文献提取关键发现、方法、模型、剂量。PubMed+LLM\n\n分析步骤:\n  - PubMed/PMC search: Keywords + filters\n  - Abstract extraction: BioC API structured extraction\n  - Key findings summary: LLM-assisted summarization\n\n触发提示: \"从文献中提取临床前研究发现\"",
+  "when_to_use": "当你需要 临床前文献提取 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,12 @@
+{
+  "id": "cell-cell-communication",
+  "name": "cell-cell-communication",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

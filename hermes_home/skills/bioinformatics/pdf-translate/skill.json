@@ -1,0 +1,76 @@
+{
+  "id": "pdf-translate",
+  "name": "PDF保留排版翻译",
+  "category": "literature",
+  "language": "Python",
+  "description": "使用PDFMathTranslate(pdf2zh)进行学术论文保留排版翻译，公式/图/表格完整保留，支持Google/OpenAI/DeepSeek等24种引擎",
+  "starting_prompt": "帮我翻译这篇PDF文献",
+  "source_dir": "memory_omics/tools/pdf_translate_skill.py",
+  "memomics_module": "文献翻译",
+  "chains_from": [
+    "academic-research"
+  ],
+  "chains_to": [
+    "literature-preclinical"
+  ],
+  "tags": [
+    "translate",
+    "pdf",
+    "翻译",
+    "中英文",
+    "公式保留",
+    "排版保留",
+    "pdf2zh",
+    "PDFMathTranslate"
+  ],
+  "aliases": [
+    "PDF翻译",
+    "文献翻译",
+    "中英对照",
+    "translate pdf",
+    "bilingual pdf"
+  ],
+  "r_packages": [],
+  "python_packages": [
+    "pdf2zh>=1.7.0"
+  ],
+  "difficulty": "basic",
+  "applicable": [
+    "学术论文翻译",
+    "保留排版PDF翻译",
+    "公式和图表保留翻译",
+    "中英对照PDF生成"
+  ],
+  "parameters": {
+    "service": {
+      "type": "string",
+      "default": "google",
+      "description": "翻译引擎：google/bing/openai/deepseek/zhipu/deepl/azure/ollama/argos",
+      "required": false
+    },
+    "lang_in": {
+      "type": "string",
+      "default": "en",
+      "description": "源语言代码",
+      "required": false
+    },
+    "lang_out": {
+      "type": "string",
+      "default": "zh",
+      "description": "目标语言代码",
+      "required": false
+    },
+    "pages": {
+      "type": "list",
+      "default": null,
+      "description": "指定翻译的页码列表(0-based)，null=全部",
+      "required": false
+    }
+  },
+  "detailed_description": "使用PDFMathTranslate(pdf2zh)进行学术论文保留排版翻译，公式/图/表格完整保留，支持Google/OpenAI/DeepSeek等24种引擎\n\n适用场景: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成\n\n依赖包: pdf2zh>=1.7.0\n\n难度: basic\n\n触发提示: \"帮我翻译这篇PDF文献\"\n\n别名: PDF翻译, 文献翻译, 中英对照, translate pdf, bilingual pdf",
+  "when_to_use": "适用于: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

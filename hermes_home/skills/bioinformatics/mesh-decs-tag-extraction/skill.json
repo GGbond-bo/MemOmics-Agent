@@ -1,0 +1,16 @@
+{
+  "id": "mesh-decs-tag-extraction",
+  "name": "MeSH/DeCS 语义索引标签提取（benchmarker 试卷作答）",
+  "category": "general",
+  "language": "Python",
+  "description": "从文献（title/abstract/PMID）提取 MeSH/DeCS 受控词表标签，用于语义索引类任务与 benchmarker 试卷（TaskA 语义索引 / MESINESP 多语言检索）。触发词：语义索引、MeSH标签、MeSH主要标签、DeCS编码、meshMajor、decsCodes、benchmarker、试卷作答、paper to tags、PubMed索引、多语言检索。核心经",
+  "starting_prompt": "使用 MeSH/DeCS 语义索引标签提取（benchmarker 试卷作答） 进行分析",
+  "source_dir": "skills/bioinformatics/mesh-decs-tag-extraction",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

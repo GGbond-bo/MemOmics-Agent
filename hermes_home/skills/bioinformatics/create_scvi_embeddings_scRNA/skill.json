@@ -1,0 +1,20 @@
+{
+  "id": "create_scvi_embeddings_scRNA",
+  "name": "Create Scvi Embeddings Scrna",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Create scVI and scANVI embeddings for single-cell RNA-seq data, saving the results to an AnnData object.",
+  "detailed_description": "Create scVI and scANVI embeddings for single-cell RNA-seq data, saving the results to an AnnData object.",
+  "when_to_use": "When you need create scvi embeddings scRNA analysis",
+  "parameters": {
+    "adata_filename": "[Required] Filename of the AnnData object to load (str)",
+    "batch_key": "[Required] Column name in adata.obs for batch information (str)",
+    "label_key": "[Required] Column name in adata.obs for cell type labels (str)",
+    "data_dir": "[Required] Directory path where the AnnData file is located and where output will be saved (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

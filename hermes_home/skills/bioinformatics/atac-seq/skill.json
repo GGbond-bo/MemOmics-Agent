@@ -1,0 +1,108 @@
+{
+  "id": "atac-seq",
+  "name": "ATAC-seq分析 (ArchR) v2",
+  "category": "epigenomics",
+  "language": "R",
+  "description": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出",
+  "starting_prompt": "分析我的scATAC-seq数据",
+  "source_dir": "skills/atac-seq",
+  "memomics_module": "05_表观组学",
+  "chains_from": [],
+  "chains_to": [
+    "scrnaseq-seurat-core-analysis"
+  ],
+  "tags": [
+    "atac-seq",
+    "archr",
+    "chromatin",
+    "peak-calling",
+    "scATAC",
+    "epigenomics"
+  ],
+  "steps": [
+    {
+      "name": "Setup ArchR",
+      "script": "setup_archr.R",
+      "function": "setup_archr"
+    },
+    {
+      "name": "Create Arrow + Project",
+      "script": "create_archr_project.R",
+      "function": "create_archr_project"
+    },
+    {
+      "name": "QC",
+      "script": "qc_atac.R",
+      "function": "filter_atac_cells+remove_doublets_atac"
+    },
+    {
+      "name": "DimRed (IterativeLSI)",
+      "script": "dimensionality_reduction.R",
+      "function": "run_iterative_lsi+add_harmony+add_umap_atac"
+    },
+    {
+      "name": "Clustering",
+      "script": "cluster_atac.R",
+      "function": "add_clusters_atac"
+    },
+    {
+      "name": "Peak Calling",
+      "script": "peak_calling.R",
+      "function": "call_peaks+add_peak_matrix"
+    },
+    {
+      "name": "Gene Activity",
+      "script": "gene_activity.R",
+      "function": "add_gene_activity"
+    },
+    {
+      "name": "Motif Analysis",
+      "script": "motif_analysis.R",
+      "function": "add_motif_annotations+run_chromvar"
+    },
+    {
+      "name": "TF Footprinting",
+      "script": "tf_footprinting.R",
+      "function": "add_footprinting+plot_footprint"
+    },
+    {
+      "name": "Diff Accessibility",
+      "script": "diff_accessibility.R",
+      "function": "find_diff_peaks+annotate_peaks"
+    },
+    {
+      "name": "Co-accessibility",
+      "script": "co_accessibility.R",
+      "function": "add_co_accessibility+add_peak2gene"
+    },
+    {
+      "name": "Export",
+      "script": "export_results.R",
+      "function": "export_atac_results+save_archr_project"
+    }
+  ],
+  "r_packages": [
+    "ArchR",
+    "Signac",
+    "Seurat",
+    "chromVAR",
+    "motifmatchr",
+    "ChIPseeker"
+  ],
+  "python_packages": [
+    "MACS2"
+  ],
+  "difficulty": "advanced",
+  "applicable": [
+    "scATAC-seq",
+    "snATAC-seq",
+    "multiome"
+  ],
+  "official_docs": "https://www.archrproject.com/",
+  "doc_source": "official+literature",
+  "version": "2.0.0",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

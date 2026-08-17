@@ -1,0 +1,24 @@
+﻿# MemOmics-Agent config - edit or use WebUI to configure
+provider: openai
+model: deepseek-chat
+api_base: https://api.deepseek.com/v1
+api_key: YOUR_API_KEY_HERE
+max_turns: 200
+sessions:
+  write_json_snapshots: true
+skills:
+  disabled: []
+memory:
+  provider: holographic
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 10000
+  user_char_limit: 10000
+  nudge_interval: 10
+  flush_min_turns: 6
+plugins:
+  hermes-memory-store:
+    db_path: hermes_home/memory_store.db
+    auto_extract: true
+    default_trust: 0.5
+    min_trust_threshold: 0.2

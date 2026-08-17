@@ -1,0 +1,19 @@
+{
+  "id": "analyze_cns_lesion_histology",
+  "name": "Analyze Cns Lesion Histology",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes histological images of CNS lesions to quantify immune cell infiltration, demyelination, and tissue damage.",
+  "detailed_description": "Analyzes histological images of CNS lesions to quantify immune cell infiltration, demyelination, and tissue damage.",
+  "when_to_use": "When you need analyze cns lesion histology analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the microscopy image file of brain or spinal cord tissue section (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)",
+    "stain_type": "[Optional] Type of histological stain used (options: \"H&E\", \"LFB\", \"IHC\") (default: H&E)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

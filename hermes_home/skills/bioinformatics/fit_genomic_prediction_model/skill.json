@@ -1,0 +1,21 @@
+{
+  "id": "fit_genomic_prediction_model",
+  "name": "Fit Genomic Prediction Model",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Fit a linear mixed model for genomic prediction using genotype and phenotype data.",
+  "detailed_description": "Fit a linear mixed model for genomic prediction using genotype and phenotype data.",
+  "when_to_use": "When you need fit genomic prediction model analysis",
+  "parameters": {
+    "genotypes": "[Required] Matrix of genotype data, with individuals in rows and markers in columns. Values are typically coded as 0, 1, 2 for additive models or with specific encoding for dominance effects. (numpy.ndarray)",
+    "phenotypes": "[Required] Vector or matrix of phenotype data, with individuals in rows and traits in columns. (numpy.ndarray)",
+    "fixed_effects": "[Optional] Matrix of fixed effects (e.g., environment, management), with individuals in rows and effects in columns.",
+    "model_type": "[Optional] Type of genetic model to fit: \"additive\" or \"additive_dominance\". (default: additive)",
+    "output_file": "[Optional] File name to save the results. (default: genomic_prediction_results.csv)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

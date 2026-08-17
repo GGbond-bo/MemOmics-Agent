@@ -1,0 +1,19 @@
+{
+  "id": "analyze_immunohistochemistry_image",
+  "name": "Analyze Immunohistochemistry Image",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes immunohistochemistry images to quantify protein expression and spatial distribution.",
+  "detailed_description": "Analyzes immunohistochemistry images to quantify protein expression and spatial distribution.",
+  "when_to_use": "When you need analyze immunohistochemistry image analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the microscopy image of tissue section stained with antibodies (str)",
+    "protein_name": "[Optional] Name of the protein being analyzed (default: Unknown)",
+    "output_dir": "[Optional] Directory to save output files (default: ./ihc_results/)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

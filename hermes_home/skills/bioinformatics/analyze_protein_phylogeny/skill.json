@@ -1,0 +1,20 @@
+{
+  "id": "analyze_protein_phylogeny",
+  "name": "Analyze Protein Phylogeny",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform phylogenetic analysis on a set of protein sequences. This function aligns sequences, constructs a phylogenetic tree, and visualizes evolutionary relationships.",
+  "detailed_description": "Perform phylogenetic analysis on a set of protein sequences. This function aligns sequences, constructs a phylogenetic tree, and visualizes evolutionary relationships.",
+  "when_to_use": "When you need analyze protein phylogeny analysis",
+  "parameters": {
+    "fasta_sequences": "[Required] Path to a FASTA file containing protein sequences or a string with FASTA-formatted sequences (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./)",
+    "alignment_method": "[Optional] Method for sequence alignment: \"clustalw\", \"muscle\", or \"pre-aligned\" (default: clustalw)",
+    "tree_method": "[Optional] Method for tree construction: \"iqtree\" or fallback to neighbor-joining (default: fasttree)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

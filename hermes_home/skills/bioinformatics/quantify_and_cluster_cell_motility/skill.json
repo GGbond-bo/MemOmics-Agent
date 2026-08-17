@@ -1,0 +1,19 @@
+{
+  "id": "quantify_and_cluster_cell_motility",
+  "name": "Quantify And Cluster Cell Motility",
+  "category": "transcriptomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Quantify cell motility features from time-lapse microscopy images and cluster cells based on motility patterns.",
+  "detailed_description": "Quantify cell motility features from time-lapse microscopy images and cluster cells based on motility patterns.",
+  "when_to_use": "When you need quantify and cluster cell motility analysis",
+  "parameters": {
+    "image_sequence_path": "[Required] Path to directory containing time-lapse microscopy images in sequential order (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./results)",
+    "num_clusters": "[Optional] Number of motility pattern clusters to identify (default: 3)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

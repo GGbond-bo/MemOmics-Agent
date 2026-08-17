@@ -1,0 +1,20 @@
+{
+  "id": "analyze_fatty_acid_composition_by_gc",
+  "name": "Analyze Fatty Acid Composition By Gc",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes fatty acid composition in tissue samples using gas chromatography data.",
+  "detailed_description": "Analyzes fatty acid composition in tissue samples using gas chromatography data.",
+  "when_to_use": "When you need analyze fatty acid composition by gc analysis",
+  "parameters": {
+    "gc_data_file": "[Required] Path to the CSV file containing gas chromatography data with columns 'retention_time' and 'peak_area' (str)",
+    "tissue_type": "[Required] Type of tissue sample (e.g., liver, kidney, heart, muscle, adipose) (str)",
+    "sample_id": "[Required] Identifier for the sample being analyzed (str)",
+    "output_directory": "[Optional] Directory where result files will be saved (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

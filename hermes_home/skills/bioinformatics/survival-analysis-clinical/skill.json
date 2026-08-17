@@ -1,0 +1,12 @@
+{
+  "id": "survival-analysis-clinical",
+  "name": "survival-analysis-clinical",
+  "category": "Clinical",
+  "language": "R+Python",
+  "description": "Perform Kaplan-Meier estimation, Cox proportional hazards regression, and risk stratification from clinical time-to-event data.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

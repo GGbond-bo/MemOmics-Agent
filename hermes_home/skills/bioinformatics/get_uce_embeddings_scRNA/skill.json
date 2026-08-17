@@ -1,0 +1,20 @@
+{
+  "id": "get_uce_embeddings_scRNA",
+  "name": "Get Uce Embeddings Scrna",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Generate UCE embeddings for single-cell RNA-seq data and map them to a reference dataset for cell type annotation.",
+  "detailed_description": "Generate UCE embeddings for single-cell RNA-seq data and map them to a reference dataset for cell type annotation.",
+  "when_to_use": "When you need get uce embeddings scRNA analysis",
+  "parameters": {
+    "adata_filename": "[Required] Filename of the AnnData object to process (str)",
+    "data_dir": "[Required] Directory where the input data is stored and output will be saved (str)",
+    "DATA_ROOT": "[Optional] Root directory for single-cell data storage (default: /dfs/project/bioagentos/data/singlecell/)",
+    "custom_args": "[Optional] Custom command line arguments to pass to the UCE script"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

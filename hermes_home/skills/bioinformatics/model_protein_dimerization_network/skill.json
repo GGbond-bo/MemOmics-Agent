@@ -1,0 +1,19 @@
+{
+  "id": "model_protein_dimerization_network",
+  "name": "Model Protein Dimerization Network",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Model protein dimerization networks to find equilibrium concentrations of dimers.",
+  "detailed_description": "Model protein dimerization networks to find equilibrium concentrations of dimers.",
+  "when_to_use": "When you need model protein dimerization network analysis",
+  "parameters": {
+    "monomer_concentrations": "[Required] Dictionary mapping monomer names to their initial concentrations (in arbitrary units) (dict)",
+    "dimerization_affinities": "[Required] Dictionary mapping dimer names (as 'A-B' strings) to their association constants (Ka) (dict)",
+    "network_topology": "[Required] List of (monomer1, monomer2) pairs that can form dimers (list)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

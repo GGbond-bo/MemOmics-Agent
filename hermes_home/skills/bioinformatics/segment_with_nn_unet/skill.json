@@ -1,0 +1,27 @@
+{
+  "id": "segment_with_nn_unet",
+  "name": "Segment With Nn Unet",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Segment images using nnUNet with proper environment setup. Supports brain tumor segmentation and other medical image segmentation tasks.",
+  "detailed_description": "Segment images using nnUNet with proper environment setup. Supports brain tumor segmentation and other medical image segmentation tasks.",
+  "when_to_use": "When you need segment with nn unet analysis",
+  "parameters": {
+    "image_path": "[Required] Path to input image file or directory (str)",
+    "output_dir": "[Required] Directory to save segmentation results (str)",
+    "task_id": "[Required] Task identifier (e.g., 'Task001_BrainTumour') (str)",
+    "model_type": "[Optional] Model type for segmentation (default: 3d_fullres)",
+    "folds": "[Optional] Model folds to use for ensemble prediction (default: [0, 1, 2, 3, 4])",
+    "use_tta": "[Optional] Use test time augmentation (default: False)",
+    "num_threads": "[Optional] Number of threads for preprocessing (default: 1)",
+    "mixed_precision": "[Optional] Use mixed precision for faster inference (default: True)",
+    "verbose": "[Optional] Enable verbose logging (default: True)",
+    "auto_prepare_input": "[Optional] Automatically prepare input for nnUNet (default: True)",
+    "results_folder": "[Optional] Path to nnUNet results folder"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

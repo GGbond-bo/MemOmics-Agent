@@ -1,0 +1,22 @@
+{
+  "id": "analyze_protease_kinetics",
+  "name": "Analyze Protease Kinetics",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze protease kinetics data from fluorogenic peptide cleavage assays, fit the data to Michaelis-Menten kinetics, and determine key kinetic parameters.",
+  "detailed_description": "Analyze protease kinetics data from fluorogenic peptide cleavage assays, fit the data to Michaelis-Menten kinetics, and determine key kinetic parameters.",
+  "when_to_use": "When you need analyze protease kinetics analysis",
+  "parameters": {
+    "time_points": "[Required] Array of time points (in seconds) at which measurements were taken (numpy.ndarray)",
+    "fluorescence_data": "[Required] 2D array of fluorescence measurements where each row corresponds to a different substrate concentration and each column corresponds to a time point (numpy.ndarray)",
+    "substrate_concentrations": "[Required] Array of substrate concentrations (in μM) corresponding to each row in fluorescence_data (numpy.ndarray)",
+    "enzyme_concentration": "[Required] Concentration of the protease enzyme (in μM) (float)",
+    "output_prefix": "[Optional] Prefix for output files (default: protease_kinetics)",
+    "output_dir": "[Optional] Directory to save output files (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

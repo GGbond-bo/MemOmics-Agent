@@ -1,0 +1,18 @@
+{
+  "id": "analyze_rna_secondary_structure_features",
+  "name": "Analyze Rna Secondary Structure Features",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Calculate numeric values for various structural features of an RNA secondary structure.",
+  "detailed_description": "Calculate numeric values for various structural features of an RNA secondary structure.",
+  "when_to_use": "When you need analyze rna secondary structure features analysis",
+  "parameters": {
+    "dot_bracket_structure": "[Required] RNA secondary structure in dot-bracket notation (e.g., \"(((...)))\"). Parentheses represent base pairs, dots represent unpaired bases. (str)",
+    "sequence": "[Optional] The RNA sequence corresponding to the structure. If provided, sequence-dependent energy calculations will be performed."
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

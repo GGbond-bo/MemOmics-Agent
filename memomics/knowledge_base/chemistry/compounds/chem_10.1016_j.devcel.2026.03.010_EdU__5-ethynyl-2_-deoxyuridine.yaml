@@ -1,0 +1,21 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.devcel.2026.03.010_EdU__5-ethynyl-2_-deoxyuridine
+chem_category: compounds
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.devcel.2026.03.010_EdU__5-ethynyl-2_-deoxyuridine
+content: '- 靶点: DNA synthesis
+
+  - 剂量: 25.5 mg/kg (i.p.)
+
+  - IC50/EC50: —
+
+  - 模型: proliferation assay in mice
+
+  - 效应: 标记增殖细胞'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | MEMOMICS_HOME/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf

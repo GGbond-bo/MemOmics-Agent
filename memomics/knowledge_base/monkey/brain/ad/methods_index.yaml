@@ -1,0 +1,6 @@
+rna:
+  cellchat:
+    analysis_type: cellchat
+    depth_score: 17
+    saved_at: '2026-06-26 01:08:44'
+    language: R

@@ -1,0 +1,20 @@
+{
+  "id": "analyze_bacterial_growth_curve",
+  "name": "Analyze Bacterial Growth Curve",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes bacterial growth curve data to determine growth parameters such as doubling time, growth rate, and lag phase.",
+  "detailed_description": "Analyzes bacterial growth curve data to determine growth parameters such as doubling time, growth rate, and lag phase.",
+  "when_to_use": "When you need analyze bacterial growth curve analysis",
+  "parameters": {
+    "time_points": "[Required] Time points of measurements in hours (List or numpy.ndarray)",
+    "od_values": "[Required] Optical density measurements corresponding to each time point (List or numpy.ndarray)",
+    "strain_name": "[Required] Name of the bacterial strain being analyzed (str)",
+    "output_dir": "[Optional] Directory where output files will be saved (default: .)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

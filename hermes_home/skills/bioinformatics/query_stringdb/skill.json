@@ -1,0 +1,21 @@
+{
+  "id": "query_stringdb",
+  "name": "Query Stringdb",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the STRING protein interaction database using natural language or direct endpoint.",
+  "detailed_description": "Query the STRING protein interaction database using natural language or direct endpoint.",
+  "when_to_use": "When you need query stringdb analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about protein interactions (str)",
+    "endpoint": "[Optional] Full URL to query directly",
+    "download_image": "[Optional] Download image results if endpoint is image (default: False)",
+    "output_dir": "[Optional] Directory to save downloaded files",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

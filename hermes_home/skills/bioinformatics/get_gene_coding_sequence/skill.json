@@ -1,0 +1,19 @@
+{
+  "id": "get_gene_coding_sequence",
+  "name": "Get Gene Coding Sequence",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Retrieves the coding sequence(s) of a specified gene from NCBI Entrez.",
+  "detailed_description": "Retrieves the coding sequence(s) of a specified gene from NCBI Entrez.",
+  "when_to_use": "When you need get gene coding sequence analysis",
+  "parameters": {
+    "gene_name": "[Required] Name of the gene (str)",
+    "organism": "[Required] Name of the organism (str)",
+    "email": "[Optional] Email address for NCBI Entrez (recommended)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

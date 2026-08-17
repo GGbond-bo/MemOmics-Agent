@@ -1,0 +1,17 @@
+{
+  "id": "analyze_cell_senescence_and_apoptosis",
+  "name": "Analyze Cell Senescence And Apoptosis",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze flow cytometry data to quantify senescent and apoptotic cell populations.",
+  "detailed_description": "Analyze flow cytometry data to quantify senescent and apoptotic cell populations.",
+  "when_to_use": "When you need analyze cell senescence and apoptosis analysis",
+  "parameters": {
+    "fcs_file_path": "[Required] Path to the FCS file containing flow cytometry data with measurements for senescence-associated β-galactosidase (SA-β-Gal) and Annexin V/7-AAD staining (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

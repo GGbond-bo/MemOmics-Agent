@@ -1,0 +1,27 @@
+{
+  "id": "batch_register_images",
+  "name": "Batch Register Images",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform batch registration of multiple images to a single reference image. Automatically processes all medical image files in a directory and registers them to the fixed reference. Supports rigid, aff",
+  "detailed_description": "Perform batch registration of multiple images to a single reference image. Automatically processes all medical image files in a directory and registers them to the fixed reference. Supports rigid, affine, or deformable registration for all images.",
+  "when_to_use": "When you need batch register images analysis",
+  "parameters": {
+    "fixed_image_path": "[Required] Path to the reference (fixed) image file (str)",
+    "moving_images_dir": "[Required] Directory path containing multiple images to register (supports .nii, .nii.gz, .nrrd, .mha, .mhd formats) (str)",
+    "output_dir": "[Required] Directory path to save registration results for all images (str)",
+    "transform_type": "[Optional] Type of registration to perform: 'rigid', 'affine', or 'deformable' (default: rigid)",
+    "metric": "[Optional] Similarity metric for registration: 'mutual_information', 'mean_squares', 'correlation', or 'normalized_correlation' (default: mutual_information)",
+    "optimizer": "[Optional] Optimization method: 'gradient_descent', 'lbfgsb', 'powell', or 'amoeba' (default: gradient_descent)",
+    "preprocess": "[Optional] Whether to preprocess images (denoising and normalization) (default: True)",
+    "create_visualizations": "[Optional] Whether to create visualization plots for each registration (default: True)",
+    "learning_rate": "[Optional] Learning rate for gradient descent optimizer (default: 0.01)",
+    "number_of_iterations": "[Optional] Maximum number of optimization iterations (default: 100)",
+    "gradient_convergence_tolerance": "[Optional] Convergence tolerance for optimization (default: 1e-06)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

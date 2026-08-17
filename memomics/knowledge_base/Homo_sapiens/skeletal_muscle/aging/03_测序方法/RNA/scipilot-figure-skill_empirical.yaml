@@ -1,0 +1,30 @@
+type: kb_entry
+name: scipilot-figure-skill_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-17 01:15
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scipilot-figure-skill_empirical
+content: 'skill: scipilot-figure-skill
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  Seurat 5.5.1, DimPlot(reduction=umap, group.by=subcluster, label=TRUE), subcluster
+  标签 zone1-6→cluster1-6, R 4.5.3 + R_LIBS=USER_R_LIBS/R-4.5.3, 51,227细胞×11,630基因, 7亚群
+
+
+  result_summary:
+
+  Specialized MF 注释 UMAP v2: NMJ(59) + cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签
+  zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×2250 300dpi。'
+evidence: 'record_run(scipilot-figure-skill): Specialized MF 注释 UMAP v2: NMJ(59) +
+  cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签
+  zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×22'

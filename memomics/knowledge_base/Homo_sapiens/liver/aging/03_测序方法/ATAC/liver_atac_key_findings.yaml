@@ -1,0 +1,82 @@
+# 人类肝脏 衰老方向 ATAC-seq / scATAC-seq 关键发现与分析参数
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+direction: aging
+omics: atac
+
+# ─── 关键文献 ──────────────────────────────────────────
+key_findings:
+  # 核心文献：空间+scATAC+scRNA多组学（目前最全面的肝脏衰老表观组研究）
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    title: "Spatial and single-cell profiling of the metabolome, transcriptome and epigenome of the aging mouse liver"
+    method: "scATAC-seq (10x Genomics) + scRNA-seq + Spatial transcriptomics + Lipidomics"
+    species: "Mouse (C57BL/6, male)"
+    sample_info: "Young (5 months) vs Aged (24 months)"
+    key_results: |
+      1. 衰老以区域依赖方式改变染色质可及性
+         - Zone 1(门静脉周)与Zone 3(中央静脉周)的染色质可及性变化不同
+         - 区域特异性差异可及性区域(DARs)数量多
+      2. 关键转录因子motif变化
+         - Hnf4a: 肝脏分化的主调控因子，motif可及性在衰老中变化
+         - Foxa3: 肝脏再生重要因子，motif变化与Zone相关
+         - Hnf1: 调节众多肝脏基因，两个区域共享
+      3. 表观基因组变化与转录组和代谢组变化相关
+         - DARs附近的基因富集于代谢和线粒体功能通路
+      4. 染色质可及性变化先于/伴随基因表达变化
+    tf_motifs_aging:
+      periportal_zone1: [Hnf4a(up), Foxa3(up), Hnf1(shared), Cebp(up)]
+      pericentral_zone3: [Hnf4a(up), Foxa3(up), Hnf1(shared), Srebp(down)]
+    note: "这是目前最全面的肝脏衰老表观基因组研究，强烈推荐参考"
+
+  # ─── 补充文献 ──────────────────────────────────────
+  - paper: "Liver zonation revisited - Frontiers Physiology 2021"
+    title: "Liver Zonation - Revisiting Old Questions With New Technologies"
+    method: scRNA-seq + ATAC-seq review
+    key_results: |
+      - 单细胞技术揭示肝细胞区域化的表观遗传调控
+      - Wnt/b-catenin信号通路是区域化的核心驱动
+      - Hnf4a和Cebp是门静脉周区域的关键TF
+      - Axin2是Zone 3的典型标志基因
+
+# ─── 肝脏ATAC-seq分析参数 ──────────────────────────────
+analysis_params:
+  library_preparation:
+    method: "snATAC-seq (10x Genomics Chromium Single Cell ATAC)"
+    note: "肝脏组织snATAC-seq比scATAC-seq更适合，避免解离导致的细胞类型偏差"
+    reference: "Corces et al. 2017, Nature Methods"
+  qc:
+    tss_enrichment: ">6"    # 肝脏可适度放宽(>8用于其他组织)
+    fraction_fragments_in_peaks: ">0.10"
+    nfrags: "500-100000"
+    blacklist_ratio: "<0.05"
+    note: "肝脏代谢基因表达活跃，TSS富集度可能略低于其他组织"
+  doublet_detection:
+    method: "ArchR DoubletFilter"
+    doublet_rate: 0.08
+  dimension_reduction:
+    method: "IterativeLSI (ArchR) / RunTFIDF+RunSVD (Signac)"
+    params:
+      iterations: 2
+      varFeatures: 25000
+      dims: 2:30
+  clustering:
+    method: "Leiden (ArchR/Signac)"
+    resolution: 0.6-1.0
+  peak_calling:
+    method: "MACS2 (ArchR: addReproduciblePeakSet)"
+    params:
+      fdr: 0.05
+      min_dist: 100
+      cut_off: 0.05
+  motif_enrichment:
+    tools: [HOMER, chromVAR, Signac/FindMotifs]
+    key_tfs: [HNF4A, FOXA3, HNF1A, CEBPA, CEBPB, SREBF1, SREBF2, AXIN2, LEF1, TCF7L2]
+  integration_with_rna:
+    method: "ArchR: addGeneIntegrationMatrix / Signac: FindTransferAnchors"
+    note: "建议与scRNA-seq联合分析，将ATAC数据映射到RNA定义的细胞类型"
+
+source: |
+  - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+  - "Frontiers Physiology 2021 — Liver Zonation review"
+  - "Corces et al. 2017, Nature Methods — snATAC-seq protocol"

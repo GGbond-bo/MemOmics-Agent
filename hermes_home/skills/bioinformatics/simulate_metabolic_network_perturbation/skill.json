@@ -1,0 +1,21 @@
+{
+  "id": "simulate_metabolic_network_perturbation",
+  "name": "Simulate Metabolic Network Perturbation",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Construct and simulate kinetic models of metabolic networks and analyze their responses to perturbations.",
+  "detailed_description": "Construct and simulate kinetic models of metabolic networks and analyze their responses to perturbations.",
+  "when_to_use": "When you need simulate metabolic network perturbation analysis",
+  "parameters": {
+    "model_file": "[Required] Path to the COBRA model file (SBML format) (str)",
+    "initial_concentrations": "[Required] Dictionary mapping metabolite IDs to their initial concentrations (dict)",
+    "perturbation_params": "[Required] Dictionary with keys 'time' (float), 'metabolite' (str), and 'factor' (float) for perturbation details (dict)",
+    "simulation_time": "[Optional] Total simulation time (default: 100)",
+    "time_points": "[Optional] Number of time points to simulate (default: 1000)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,72 @@
+{
+  "id": "cns-visualization",
+  "name": "CNS级可视化",
+  "category": "visualization",
+  "language": "R+Python",
+  "description": "Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey",
+  "starting_prompt": "生成CNS级可视化图表",
+  "source_dir": "skills/built_in/cns-visualization",
+  "memomics_module": "07_可视化",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "cns",
+    "ggplot2",
+    "umap",
+    "dotplot"
+  ],
+  "steps": [
+    {
+      "name": "UMAP FeaturePlot (Nature)",
+      "description": "Unified palette + hi-res",
+      "tool": "terminal"
+    },
+    {
+      "name": "DotPlot",
+      "description": "Marker genes across celltypes",
+      "tool": "terminal"
+    },
+    {
+      "name": "ViolinPlot",
+      "description": "Expression distribution + stats",
+      "tool": "terminal"
+    },
+    {
+      "name": "Heatmap",
+      "description": "Top DEG + annotation bars",
+      "tool": "terminal"
+    },
+    {
+      "name": "Sankey/Alluvial",
+      "description": "Cell type flow diagram",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "UMAP FeaturePlot (Nature) -> DotPlot -> ViolinPlot -> Heatmap -> Sankey/Alluvial"
+  },
+  "detailed_description": "Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey\n\n分析步骤:\n  - UMAP FeaturePlot (Nature): Unified palette + hi-res\n  - DotPlot: Marker genes across celltypes\n  - ViolinPlot: Expression distribution + stats\n  - Heatmap: Top DEG + annotation bars\n  - Sankey/Alluvial: Cell type flow diagram\n\n触发提示: \"生成CNS级可视化图表\"",
+  "when_to_use": "当你需要 CNS级可视化 时触发",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "plot_umap_annotation.R",
+      "params": "{\"group_by\": \"subcluster\", \"label\": true, \"repel\": true, \"label_size\": 4.5, \"dpi\": 300, \"width\": 9, \"height\": 7.5, \"rds\": \"MEMOMICS_HOME/results/memomics-0228a136/data/special_MF_annotation_umap.rds\"}",
+      "date": "2026-08-17",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Specialized MF 51,227 细胞 × 11,630 基因，7 亚群（NMJ 59 + zone1-6），48 样本 6 组（Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post）。注释 UMAP 已出图 special_MF_umap_annotation.png (1.1MB, 300dpi)。"
+    }
+  ],
+  "proven_script": "plot_umap_annotation.R",
+  "error_count": 0,
+  "success_count": 1,
+  "user_prefs": {
+    "last_used_script": "plot_umap_annotation.R"
+  }
+}

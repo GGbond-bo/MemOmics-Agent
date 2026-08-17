@@ -1,0 +1,19 @@
+{
+  "id": "alphafold2",
+  "name": "AlphaFold2 (ColabFold runner)",
+  "category": "protein-structure",
+  "language": "Python",
+  "description": "Predict protein structure for monomers and multimers with AlphaFold2 via the ColabFold runner (Mirdita et al. 2022, github.com/sokrypton/ColabFold; AlphaFold2 Jumper et al. 2021). Reach for this skill",
+  "starting_prompt": "使用 AlphaFold2 (ColabFold runner) 进行分析",
+  "source_dir": "skills/bioinformatics/alphafold2",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "alphafold2"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

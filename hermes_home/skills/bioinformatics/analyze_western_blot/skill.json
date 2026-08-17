@@ -1,0 +1,21 @@
+{
+  "id": "analyze_western_blot",
+  "name": "Analyze Western Blot",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs densitometric analysis of Western blot images to quantify relative protein expression.",
+  "detailed_description": "Performs densitometric analysis of Western blot images to quantify relative protein expression.",
+  "when_to_use": "When you need analyze western blot analysis",
+  "parameters": {
+    "blot_image_path": "[Required] Path to the Western blot image file (str)",
+    "target_bands": "[Required] List of dictionaries containing information about target protein bands, each with 'name' and 'roi' (region of interest as [x, y, width, height]) (list of dict)",
+    "loading_control_band": "[Required] Dictionary with 'name' and 'roi' for the loading control protein (e.g., β-actin, GAPDH) (dict)",
+    "antibody_info": "[Required] Dictionary containing information about antibodies used with 'primary' and 'secondary' keys (dict)",
+    "output_dir": "[Optional] Directory to save output files (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

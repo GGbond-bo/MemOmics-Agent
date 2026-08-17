@@ -1,0 +1,57 @@
+{
+  "id": "sasp-scoring",
+  "name": "SASP Scoring (AUCell/UCell)",
+  "category": "aging",
+  "language": "R+Python",
+  "description": "SASP gene set scoring + heatmap + group comparison",
+  "starting_prompt": "Calculate SASP scores",
+  "memomics_module": "04_aging",
+  "source_dir": "skills/built_in/sasp-scoring",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "SASP gene set definition",
+      "description": "Literature + database genes",
+      "tool": "terminal"
+    },
+    {
+      "name": "UCell/AUCell scoring",
+      "description": "Single-cell SASP activity",
+      "tool": "terminal"
+    },
+    {
+      "name": "Group comparison + viz",
+      "description": "Aging vs control SASP diff",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "Seurat",
+    "UCell",
+    "AUCell"
+  ],
+  "python_packages": [
+    "scanpy",
+    "gseapy"
+  ],
+  "difficulty": "basic",
+  "applicable": [
+    "aging"
+  ],
+  "parameters": {
+    "r_packages": "Seurat, UCell, AUCell",
+    "python_packages": "scanpy, gseapy",
+    "steps": "SASP gene set definition -> UCell/AUCell scoring -> Group comparison + viz"
+  },
+  "tags": [
+    "aging",
+    "senescence"
+  ],
+  "detailed_description": "SASP gene set scoring + heatmap + group comparison\n\n适用场景: aging\n\n分析步骤:\n  - SASP gene set definition: Literature + database genes\n  - UCell/AUCell scoring: Single-cell SASP activity\n  - Group comparison + viz: Aging vs control SASP diff\n\n依赖包: Seurat, AUCell, scanpy, UCell, gseapy\n\n难度: basic\n\n触发提示: \"Calculate SASP scores\"",
+  "when_to_use": "适用于: aging",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

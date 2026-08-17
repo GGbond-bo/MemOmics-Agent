@@ -1,0 +1,39 @@
+{
+  "id": "deep-research",
+  "name": "深度研究",
+  "category": "literature",
+  "language": "Python",
+  "description": "13-agent深度研究团队，系统性文献检索+综述+PRISMA",
+  "starting_prompt": "深度研究",
+  "source_dir": "skills/external/academic-research-skills",
+  "memomics_module": "研究设计",
+  "chains_from": [],
+  "chains_to": [
+    "academic-research"
+  ],
+  "tags": [
+    "deep-research",
+    "literature-review",
+    "systematic-review",
+    "文献综述"
+  ],
+  "aliases": [
+    "深度研究",
+    "文献综述",
+    "系统性回顾"
+  ],
+  "r_packages": [],
+  "python_packages": [],
+  "difficulty": "advanced",
+  "applicable": [
+    "深度文献研究",
+    "系统性综述"
+  ],
+  "parameters": {},
+  "detailed_description": "13-agent深度研究团队，系统性文献检索+综述+PRISMA\n\n适用场景: 深度文献研究, 系统性综述\n\n难度: advanced\n\n触发提示: \"深度研究\"\n\n别名: 深度研究, 文献综述, 系统性回顾",
+  "when_to_use": "适用于: 深度文献研究, 系统性综述",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

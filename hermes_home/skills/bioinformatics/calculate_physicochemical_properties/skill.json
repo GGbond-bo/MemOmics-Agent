@@ -1,0 +1,17 @@
+{
+  "id": "calculate_physicochemical_properties",
+  "name": "Calculate Physicochemical Properties",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Calculate key physicochemical properties of a drug candidate molecule.",
+  "detailed_description": "Calculate key physicochemical properties of a drug candidate molecule.",
+  "when_to_use": "When you need calculate physicochemical properties analysis",
+  "parameters": {
+    "smiles_string": "[Required] The molecular structure in SMILES format (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,26 @@
+{
+  "id": "simulate_demographic_history",
+  "name": "Simulate Demographic History",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulate DNA sequences with specified demographic and coalescent histories using msprime.",
+  "detailed_description": "Simulate DNA sequences with specified demographic and coalescent histories using msprime.",
+  "when_to_use": "When you need simulate demographic history analysis",
+  "parameters": {
+    "num_samples": "[Optional] Number of sample sequences to simulate (default: 10)",
+    "sequence_length": "[Optional] Length of the simulated sequence in base pairs (default: 100000)",
+    "recombination_rate": "[Optional] Per-base recombination rate (default: 1e-08)",
+    "mutation_rate": "[Optional] Per-base mutation rate (default: 1e-08)",
+    "demographic_model": "[Optional] Type of demographic model to simulate (constant, bottleneck, expansion, contraction, sawtooth) (default: constant)",
+    "demographic_params": "[Optional] Parameters specific to the chosen demographic model",
+    "coalescent_model": "[Optional] Type of coalescent model to use (kingman, beta) (default: kingman)",
+    "beta_coalescent_param": "[Optional] Parameter for beta-coalescent model",
+    "random_seed": "[Optional] Seed for random number generator",
+    "output_file": "[Optional] Filename to save the simulated sequences in VCF format (default: simulated_sequences.vcf)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

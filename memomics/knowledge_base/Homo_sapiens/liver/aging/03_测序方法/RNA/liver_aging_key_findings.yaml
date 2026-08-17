@@ -1,0 +1,106 @@
+# 人类肝脏 衰老方向 RNA-seq / scRNA-seq 关键发现与分析参数
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+direction: aging
+omics: rna
+updated: '2026-07-07'
+
+# ─── 关键发现 ──────────────────────────────────────────
+key_findings:
+  # 1. 小鼠肝脏衰老scRNA-seq - Lin 2024 FASEB
+  - paper: "Lin et al. 2024, FASEB Journal (PMID: 38334462)"
+    title: "Single-cell transcriptome analysis of aging mouse liver"
+    method: scRNA-seq (10x Genomics)
+    species: "Mouse (C57BL/6)"
+    sample_info: "Young (2-4 months) vs Aged (20-24 months) male mice"
+    key_results: |
+      - 衰老肝脏呈现肝窦失调控(sinusoidal deregulation)和中度促炎状态
+      - LSEC假毛细血管化并获促收缩表型
+      - HSC获得活化表型
+      - 热量限制可逆转部分衰老相关细胞组成和基因表达变化
+    cell_types_identified: [hepatocyte, LSEC, HSC, Kupffer cell, cholangiocyte, T cell, B cell, NK cell, DC, neutrophil]
+    deg_count: "大量衰老相关差异表达基因"
+
+  # 2. 小鼠肝脏衰老空间+scATAC+scRNA多组学 - Nikopoulou 2023 Nature Aging
+  - paper: "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+    title: "Spatial and single-cell profiling of the metabolome, transcriptome and epigenome of the aging mouse liver"
+    method: "Spatial transcriptomics (Visium) + scATAC-seq (10x) + scRNA-seq (10x) + lipidomics"
+    species: "Mouse (C57BL/6, male)"
+    sample_info: "Young (5 months) vs Aged (24 months)"
+    key_results: |
+      - 肝细胞按区域(Zone 1 vs Zone 3)经历不同的衰老轨迹
+      - Zone 1(门静脉周)肝细胞: 线粒体功能下降
+      - Zone 3(中央静脉周)肝细胞: 大脂滴累积
+      - 表观基因组以区域依赖性方式改变
+      - Hnf4a, Foxa3, Hnf1为关键衰老相关转录因子
+
+  # 3. 小鼠肝脏免疫衰老 - Hepatology 2024
+  - paper: "Hepatology 2024 (PMC10871588)"
+    title: "Single-cell immune profiling of mouse liver aging reveals Cxcl2+ macrophages"
+    method: scRNA-seq (10x Genomics) + flow cytometry
+    species: "Mouse (C57BL/6)"
+    sample_info: "Young vs Aged"
+    key_results: |
+      - Cxcl2+巨噬细胞亚群在衰老肝脏中积累
+      - 免疫微环境促炎转变
+      - 巨噬细胞衰老是肝脏免疫衰老关键驱动
+    source: "PMID: 38334462 (关联文献), PMC10871588"
+
+  # 4. 肝脏区域化破坏 - Hepatology 2025
+  - paper: "Hepatology 2025 (PMID: 40622856)"
+    title: "Aging disrupts hepatocyte zonation homeostasis"
+    method: snRNA-seq (10x Genomics)
+    species: "Mouse + Primate"
+    sample_info: "Young (2 months) vs Aged (24+ months)"
+    key_results: |
+      - 衰老肝脏肝细胞区域化被破坏
+      - 细胞间相互作用改变
+      - 肝细胞均匀性增大(无纤维化)
+
+  # 5. 灵长类肝脏衰老snRNA-seq
+  - paper: "Yang et al. 2024, Protein Cell;15:98-120"
+    doi: "10.1093/procel/pwad055"
+    title: "A single-nucleus transcriptomic atlas of primate liver aging uncovers the pro-senescence role of SREBP2 in hepatocytes"
+    method: snRNA-seq
+    species: "Primate (Cynomolgus monkey)"
+    key_results: |
+      - 鉴定SREBP2在肝细胞中的促衰老作用
+      - 衰老相关细胞类型比例变化
+
+# ─── 分析参数建议 ──────────────────────────────────────
+analysis_params:
+  # 肝脏特异QC参数
+  qc:
+    nFeature_RNA_min: 200
+    nFeature_RNA_max: 6000
+    percent_mt_max: 20  # 肝脏代谢旺盛，线粒体基因比例较高，可适当放宽
+    percent_ribo_max: 30
+    doublet_rate: 0.08
+    note: "肝脏组织解离较困难，snRNA-seq可能比scRNA-seq更适合"
+  normalization:
+    method: SCTransform v2
+    params:
+      conserve.memory: TRUE
+      vars.to.regress: [percent.mt]
+  batch_correction:
+    method: Harmony
+    params:
+      dims.use: 1:30
+  clustering:
+    method: Leiden
+    resolution_range: [0.3, 0.5, 0.8, 1.0]
+    note: "肝脏细胞类型多样(10+种)，建议测试多个resolution"
+  annotation:
+    methods: [SingleR, Azimuth, manual+marker]
+    note: "肝脏细胞类型marker明确，建议结合SingleR自动注释+人工验证"
+  deg:
+    methods:
+      - "pseudobulk DESeq2 (推荐，肝脏有biological replicates)"
+      - "MAST (无replicates时)"
+    params:
+      min_cells_per_cluster: 50
+
+source: |
+  Literature-driven, curated from PubMed search (liver aging scRNA-seq)
+  Total papers integrated: 10+

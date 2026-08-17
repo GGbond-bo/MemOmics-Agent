@@ -1,0 +1,20 @@
+{
+  "id": "analyze_intracellular_calcium_with_rhod2",
+  "name": "Analyze Intracellular Calcium With Rhod2",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes intracellular calcium concentration using Rhod-2 fluorescent indicator from microscopy images.",
+  "detailed_description": "Analyzes intracellular calcium concentration using Rhod-2 fluorescent indicator from microscopy images.",
+  "when_to_use": "When you need analyze intracellular calcium with rhod2 analysis",
+  "parameters": {
+    "background_image_path": "[Required] Path to the background image (no cells, just media) (str)",
+    "control_image_path": "[Required] Path to the control image (cells without calcium stimulus) (str)",
+    "sample_image_path": "[Required] Path to the sample image (cells with calcium stimulus) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

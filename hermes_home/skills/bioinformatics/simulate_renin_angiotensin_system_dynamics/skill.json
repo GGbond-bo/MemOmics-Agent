@@ -1,0 +1,21 @@
+{
+  "id": "simulate_renin_angiotensin_system_dynamics",
+  "name": "Simulate Renin Angiotensin System Dynamics",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulate the time-dependent concentrations of renin-angiotensin system (RAS) components.",
+  "detailed_description": "Simulate the time-dependent concentrations of renin-angiotensin system (RAS) components.",
+  "when_to_use": "When you need simulate renin angiotensin system dynamics analysis",
+  "parameters": {
+    "initial_concentrations": "[Required] Initial concentrations of RAS components with keys: 'renin', 'angiotensinogen', 'angiotensin_I', 'angiotensin_II', 'ACE2_angiotensin_II', 'angiotensin_1_7' (dict)",
+    "rate_constants": "[Required] Kinetic rate constants with keys: 'k_ren', 'k_agt', 'k_ace', 'k_ace2', 'k_at1r', 'k_mas' (dict)",
+    "feedback_params": "[Required] Parameters controlling feedback mechanisms with keys: 'fb_ang_II', 'fb_ace2' (dict)",
+    "simulation_time": "[Optional] Total simulation time in hours (default: 48)",
+    "time_points": "[Optional] Number of time points to evaluate (default: 100)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

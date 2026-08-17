@@ -1,0 +1,21 @@
+{
+  "id": "track_immune_cells_under_flow",
+  "name": "Track Immune Cells Under Flow",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Track immune cells under flow conditions and classify their behaviors.",
+  "detailed_description": "Track immune cells under flow conditions and classify their behaviors.",
+  "when_to_use": "When you need track immune cells under flow analysis",
+  "parameters": {
+    "image_sequence_path": "[Required] Path to image sequence directory or video file (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)",
+    "pixel_size_um": "[Optional] Pixel size in micrometers (default: 1.0)",
+    "time_interval_sec": "[Optional] Time interval between frames in seconds (default: 1.0)",
+    "flow_direction": "[Optional] Direction of flow ('right', 'left', 'up', 'down') (default: right)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

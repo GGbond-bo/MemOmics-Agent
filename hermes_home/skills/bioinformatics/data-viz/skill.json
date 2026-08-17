@@ -1,0 +1,59 @@
+{
+  "id": "data-viz",
+  "name": "数据可视化",
+  "category": "general",
+  "language": "Python/R",
+  "description": "绘制高质量数据可视化图表：UMAP/tSNE/热图/火山图/小提琴图等",
+  "triggers": [
+    "画图",
+    "可视化",
+    "plot",
+    "图表",
+    "作图",
+    "画个",
+    "umap"
+  ],
+  "tools": [
+    "execute_python",
+    "execute_r",
+    "write_file"
+  ],
+  "python_requires": [
+    "matplotlib",
+    "seaborn",
+    "scanpy"
+  ],
+  "r_requires": [
+    "ggplot2"
+  ],
+  "steps": [
+    {
+      "name": "确认需求",
+      "description": "确认图表类型、数据、样式"
+    },
+    {
+      "name": "绘制图表",
+      "description": "编写绘图代码，CNS级别风格"
+    },
+    {
+      "name": "质量检查",
+      "description": "检查清晰度、标注、配色"
+    }
+  ],
+  "parameters": {
+    "steps": "确认需求 -> 绘制图表 -> 质量检查"
+  },
+  "chains_from": [
+    "code-writer"
+  ],
+  "chains_to": [
+    "html-report",
+    "ppt-generator"
+  ],
+  "detailed_description": "绘制高质量数据可视化图表：UMAP/tSNE/热图/火山图/小提琴图等\n\n分析步骤:\n  - 确认需求: 确认图表类型、数据、样式\n  - 绘制图表: 编写绘图代码，CNS级别风格\n  - 质量检查: 检查清晰度、标注、配色",
+  "when_to_use": "当你需要 数据可视化 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

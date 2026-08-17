@@ -1,0 +1,55 @@
+# macOS system files
+.DS_Store
+**/.DS_Store
+
+# Python temporary files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.pytest_cache/
+
+# R temporary files (in case R scripts added later)
+Rplots.pdf
+**/Rplots.pdf
+.RData
+.Rhistory
+
+# Large data files (should be downloaded/generated locally)
+**/*.h5ad
+**/*.h5
+**/*.rds
+**/*.fasta.gz
+**/*.bam
+**/*.fastq.gz
+**/data/
+**/*_data/
+**/reference_genomes/
+
+# Primer BLAST results (can be large)
+**/blast_results/
+**/primer_blast_results/
+
+# Analysis output directories (results should be generated locally)
+**/results/
+**/*_results/
+**/*_output/
+**/test_output*/
+**/complete_test_results/
+
+# Test outputs
+assets/eval/eval_output/
+assets/eval/test_output*/
+assets/eval/expected_outputs/
+
+# Keep assets/eval/ for evaluation scripts (these are small text/code files)
+!**/assets/eval/**/*.py
+!**/assets/eval/**/*.R
+!**/assets/eval/**/*.md
+!**/assets/eval/**/*.fasta
+
+# Legacy/backup files
+_LEGACY_*.md.backup
+*.md.backup
+pcr-primer-design.md

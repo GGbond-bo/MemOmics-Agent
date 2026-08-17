@@ -1,0 +1,25 @@
+{
+  "id": "find_enriched_motifs_with_homer",
+  "name": "Find Enriched Motifs With Homer",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Find DNA sequence motifs enriched in genomic regions using the HOMER motif discovery software.",
+  "detailed_description": "Find DNA sequence motifs enriched in genomic regions using the HOMER motif discovery software.",
+  "when_to_use": "When you need find enriched motifs with homer analysis",
+  "parameters": {
+    "peak_file": "[Required] Path to peak file in BED format containing genomic regions to analyze for motif enrichment (str)",
+    "genome": "[Optional] Reference genome for sequence extraction (default: hg38)",
+    "background_file": "[Optional] Path to BED file with background regions for comparison. If None, HOMER will generate random background sequences automatically",
+    "motif_length": "[Optional] Comma-separated list of motif lengths to discover (default: 8,10,12)",
+    "output_dir": "[Optional] Directory to save output files (default: ./homer_motifs)",
+    "num_motifs": "[Optional] Number of motifs to find (default: 10)",
+    "threads": "[Optional] Number of CPU threads to use (default: 4)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "http://homer.ucsd.edu/homer/motif/",
+  "doc_source": "official"
+}

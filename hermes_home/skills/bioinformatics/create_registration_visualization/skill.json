@@ -1,0 +1,21 @@
+{
+  "id": "create_registration_visualization",
+  "name": "Create Registration Visualization",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Create visualization plots for registration results. Generates comparison plots, difference images, overlays, and metric charts.",
+  "detailed_description": "Create visualization plots for registration results. Generates comparison plots, difference images, overlays, and metric charts.",
+  "when_to_use": "When you need create registration visualization analysis",
+  "parameters": {
+    "fixed_image_path": "[Required] Path to the reference (fixed) image file (str)",
+    "moving_image_path": "[Required] Path to the original moving image file (str)",
+    "registered_image_path": "[Required] Path to the registered image file (str)",
+    "output_dir": "[Required] Directory to save visualization files (str)",
+    "prefix": "[Optional] Prefix for output files (default: registration)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

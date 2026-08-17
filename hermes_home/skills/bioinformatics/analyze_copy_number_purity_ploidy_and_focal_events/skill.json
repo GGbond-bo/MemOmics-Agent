@@ -1,0 +1,26 @@
+{
+  "id": "analyze_copy_number_purity_ploidy_and_focal_events",
+  "name": "Analyze Copy Number Purity Ploidy And Focal Events",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "CNVkit-based copy number workflow performing CNV segmentation, purity & ploidy approximation, simplified HRD-style metrics, and focal amplification/deletion detection in selected genes.",
+  "detailed_description": "CNVkit-based copy number workflow performing CNV segmentation, purity & ploidy approximation, simplified HRD-style metrics, and focal amplification/deletion detection in selected genes.",
+  "when_to_use": "When you need analyze copy number purity ploidy and focal events analysis",
+  "parameters": {
+    "tumor_bam": "[Required] Path to tumor BAM (indexed) (str)",
+    "reference_genome": "[Required] Path to reference genome FASTA (str)",
+    "normal_bam": "[Optional] Path to matched normal BAM (recommended for CNVkit)",
+    "output_dir": "[Optional] Directory to store CNVkit workflow outputs (default: cn_analysis_results)",
+    "targets_bed": "[Optional] BED file of target regions for CNVkit (panel/exome)",
+    "antitargets_bed": "[Optional] BED file of antitarget regions for CNVkit",
+    "gene_bed": "[Optional] Gene BED (chrom, start, end, gene) for focal event annotation",
+    "focal_genes": "[Optional] Genes to highlight for focal events (defaults: MYC, ERBB2, CDKN2A)",
+    "log2_amp_threshold": "[Optional] Log2 ratio threshold for focal amplification calls (default: 1.0)",
+    "log2_del_threshold": "[Optional] Log2 ratio threshold for focal deep deletion calls (default: -1.0)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

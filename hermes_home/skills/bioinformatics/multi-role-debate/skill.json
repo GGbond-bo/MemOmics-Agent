@@ -1,0 +1,22 @@
+{
+  "id": "multi-role-debate",
+  "name": "Multi-Role Debate: Run, Fail, Recover",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 Multi-Role Debate: Run, Fail, Recover 进行分析",
+  "source_dir": "skills/bioinformatics/multi-role-debate",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "debate",
+    "multi-agent",
+    "review",
+    "quality",
+    "llm"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

@@ -1,0 +1,37 @@
+{
+  "name": "临床试验全景",
+  "id": "clinicaltrials-landscape",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni Lab",
+  "description": "ClinicalTrials.gov数据挖掘",
+  "triggers": [
+    "临床试验",
+    "ClinicalTrials",
+    "药物试验"
+  ],
+  "steps": [
+    "API检索",
+    "数据清洗",
+    "阶段分布",
+    "时间趋势"
+  ],
+  "dependencies": [
+    "requests",
+    "pandas",
+    "plotly"
+  ],
+  "outputs": [
+    "试验列表",
+    "阶段分布图"
+  ],
+  "detailed_description": "ClinicalTrials.gov数据挖掘\n\n分析步骤:\n  - API检索\n  - 数据清洗\n  - 阶段分布\n  - 时间趋势\n\n依赖包: requests, plotly, pandas",
+  "when_to_use": "当你需要 临床试验全景 时触发",
+  "parameters": {
+    "steps": "API检索 -> 数据清洗 -> 阶段分布 -> 时间趋势"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

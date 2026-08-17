@@ -1,0 +1,18 @@
+{
+  "id": "estimate_cell_cycle_phase_durations",
+  "name": "Estimate Cell Cycle Phase Durations",
+  "category": "immunology",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Estimate cell cycle phase durations using dual-nucleoside pulse labeling data and mathematical modeling.",
+  "detailed_description": "Estimate cell cycle phase durations using dual-nucleoside pulse labeling data and mathematical modeling.",
+  "when_to_use": "When you need estimate cell cycle phase durations analysis",
+  "parameters": {
+    "flow_cytometry_data": "[Required] Dictionary containing experimental data from flow cytometry with EdU and BrdU labeling, including time points and percentages of labeled cells (dict)",
+    "initial_estimates": "[Required] Initial estimates for cell cycle phase durations and death rates (dict)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

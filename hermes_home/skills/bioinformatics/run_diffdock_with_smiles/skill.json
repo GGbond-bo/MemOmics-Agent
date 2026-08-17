@@ -1,0 +1,21 @@
+{
+  "id": "run_diffdock_with_smiles",
+  "name": "Run Diffdock With Smiles",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Run DiffDock molecular docking using a protein PDB file and a SMILES string for the ligand, executing the process in a Docker container.",
+  "detailed_description": "Run DiffDock molecular docking using a protein PDB file and a SMILES string for the ligand, executing the process in a Docker container.",
+  "when_to_use": "When you need run diffdock with smiles analysis",
+  "parameters": {
+    "pdb_path": "[Required] Path to the protein PDB file for docking (str)",
+    "smiles_string": "[Required] SMILES string representation of the ligand molecule (str)",
+    "local_output_dir": "[Required] Local directory path where docking results will be saved (str)",
+    "gpu_device": "[Optional] GPU device ID to use for computation (default: 0)",
+    "use_gpu": "[Optional] Whether to use GPU acceleration for docking (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,18 @@
+{
+  "id": "find_restriction_enzymes",
+  "name": "Find Restriction Enzymes",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Finds common restriction enzyme sites in a DNA sequence and returns their cut positions.",
+  "detailed_description": "Finds common restriction enzyme sites in a DNA sequence and returns their cut positions.",
+  "when_to_use": "When you need find restriction enzymes analysis",
+  "parameters": {
+    "sequence": "[Required] DNA sequence to analyze (str)",
+    "is_circular": "[Optional] Whether the sequence is circular (default: False)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

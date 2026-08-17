@@ -1,0 +1,164 @@
+{
+  "id": "hdwgcna",
+  "name": "共表达网络分析 (hdWGCNA)",
+  "category": "transcriptomics",
+  "language": "R",
+  "description": "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联",
+  "starting_prompt": "进行共表达网络分析",
+  "source_dir": "skills/built_in/hdwgcna",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "hdwgcna",
+    "wgcna",
+    "co-expression",
+    "module"
+  ],
+  "aliases": [
+    "共表达网络 (WGCNA/hdWGCNA)"
+  ],
+  "steps": [
+    {
+      "name": "Setup hdWGCNA",
+      "description": "SetUpWGCNA initialize",
+      "tool": "terminal"
+    },
+    {
+      "name": "Module detection",
+      "description": "FindWGCNAModules",
+      "tool": "terminal"
+    },
+    {
+      "name": "Module eigengenes",
+      "description": "ModuleEigengenes",
+      "tool": "terminal"
+    },
+    {
+      "name": "Hub gene identification",
+      "description": "GetHubGenes per module",
+      "tool": "terminal"
+    },
+    {
+      "name": "Module-trait correlation",
+      "description": "CorrelateModules",
+      "tool": "terminal"
+    },
+    {
+      "name": "Functional enrichment",
+      "description": "GO/KEGG per module",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "hdWGCNA",
+    "Seurat",
+    "WGCNA",
+    "igraph"
+  ],
+  "python_packages": [],
+  "difficulty": "advanced",
+  "applicable": [
+    "异质性高",
+    ">5K细胞",
+    "disease",
+    "aging"
+  ],
+  "parameters": {
+    "r_packages": "hdWGCNA, Seurat, WGCNA, igraph",
+    "steps": "Setup hdWGCNA -> Module detection -> Module eigengenes -> Hub gene identification -> Module-trait correlation -> Functional enrichment"
+  },
+  "detailed_description": "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联\n\n适用场景: 异质性高, >5K细胞, disease, aging\n\n分析步骤:\n  - Setup hdWGCNA: SetUpWGCNA initialize\n  - Module detection: FindWGCNAModules\n  - Module eigengenes: ModuleEigengenes\n  - Hub gene identification: GetHubGenes per module\n  - Module-trait correlation: CorrelateModules\n  - Functional enrichment: GO/KEGG per module\n\n依赖包: WGCNA, Seurat, hdWGCNA, igraph\n\n难度: advanced\n\n触发提示: \"进行共表达网络分析\"\n\n别名: 共表达网络 (WGCNA/hdWGCNA)",
+  "when_to_use": "适用于: 异质性高, >5K细胞, disease, aging",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_step4.R + run_step5.R + run_step6.R",
+      "params": "{\"power\": 10, \"networkType\": \"signed\", \"TOMType\": \"signed\", \"minModuleSize\": 50, \"mergeCutHeight\": 0.25, \"metacell_k\": 25, \"target_metacells\": 1500, \"gene_select\": \"fraction 0.05\", \"softpower\": 10}",
+      "date": "2026-08-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "hdWGCNA 全流程跑通：6482 metacells × 10176 基因，软阈值 power=10 (R²=0.98)，9 个有义模块。关键发现：black 模块 Aging=-0.51/ExYoung=+0.27（衰老强下调、年轻运动恢复）→血管/能量代谢；magenta Aging=+0.39/T2D=+0.29（衰老糖尿病上调、年轻运动下调）→ECM/信号；blue=氧化磷酸化 Agi"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_hdwgcna_official_full.R + resume.R + resume2.R",
+      "params": "{\"metacells\": 6524, \"genes\": 10176, \"soft_power\": 10, \"networkType\": \"signed\", \"TOMType\": \"signed\", \"minModuleSize\": 50, \"modules\": 11, \"effects\": \"Aging/T2D/ExYoung/ExOld/ExT2D\"}",
+      "date": "2026-08-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "hdWGCNA 官方 workflow 完整跑通（0.4.12）。11 模块（blue/turquoise/green/yellow/magenta/grey/brown/red/pink/black/purple）。官方标准图集 7 类 14 文件全部生成（softpower/dendrogram/module_trait/module_umap/module_features/hub_netw"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "build_hdwgcna_figure.R + run_hdwgcna_official_*.R + go_kegg_official.R",
+      "params": "metacells=6524, soft_power=10, R2=0.982, signed/bicor, 10 modules + grey, GO/KEGG via clusterProfiler",
+      "date": "2026-08-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "hdWGCNA 官方 workflow 完整跑通 + 最终 Figure 构建（6 panel：softpower/dendrogram/module_trait/GO/KEGG/hub_network + 结论条）。red 模块（能量/胰岛素/AMPK/血管）Aging -0.264/T2D -0.252/ExYoung +0.271/ExOld -0.233 → 可逆靶点；purple/mag"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "hdWGCNA v0.4.12, power=10 (R²=0.982), signed+bicor, 6524 metacells, 10176 genes, 11 modules; CNS figure 183x230mm PNG/PDF/TIFF + GO/KEGG (red=insulin signaling)",
+      "date": "2026-08-01",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CNS级 hdWGCNA Figure 重建完成：6 panels (softpower/dendrogram/module×effect heatmap/GO/KEGG/hub genes) + 结论条 + 辩论文档。red模块=运动可逆代谢程序(Aging-0.26/T2D-0.25/ExYoung+0.27/ExOld-0.23, KEGG=insulin signaling/AMPK)；p"
+    }
+  ],
+  "proven_script": "",
+  "error_count": 1,
+  "success_count": 4,
+  "official_docs": "https://smorabit.github.io/hdWGCNA/articles/basic_tutorial.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-08-01 02:08",
+      "error_type": "logic_error",
+      "message": "hdWGCNA/WGCNA 在 MF 亚群数据上拆不出模块：soft threshold R2 最高 0.72（power=1，未达 0.8 标准），3000 高变基因全部落入单一 turquoise 模块（mergeCloseModules 报 less than two proper modules）。",
+      "root_cause": "MF（终末分化肌纤维）的转录程序高度协调——慢肌/快肌/代谢基因共享一个主轴，共表达网络不满足 scale-free 假设，WGCNA 无法切成独立模块。这不是参数问题（已试 power 1-30 全谱 + signed/bicor + minModuleSize 30 + top3000 基因），是数据结构本质。",
+      "fix_applied": "改用 NMF（RcppML/nmf 包）做基因程序分解——已在同数据上成功拆出 6 个程序（快肌 P1/慢肌 P2/RSS-衰老 P3/应激 P4/骨架 P5/翻译 P6），其中 P3 含 BMPR1B 命中 RSS 生物学。结论：MF 场景 NMF >> hdWGCNA，hdWGCNA 不用再试。",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "run_hdwgcna_3000.R",
+      "severity": "medium"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": ""
+  },
+  "debate_verdicts": [
+    {
+      "topic": "hdWGCNA 模块-性状关联分析：软阈值选择",
+      "verdict": "建议 power=9",
+      "recommended_params": "{\"power\": 9}",
+      "confidence": 0.7,
+      "evidence": "{\"call_ids\": [\"\", \"\", \"\"], \"scores\": {}, \"kb_used\": {}}",
+      "date": "2026-08-10 20:51:12"
+    }
+  ]
+}

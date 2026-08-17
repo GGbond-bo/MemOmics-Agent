@@ -1,0 +1,101 @@
+# 小鼠肝脏衰老 — 生物学知识
+# MemOmics Knowledge Base — 文献提取 + 已知生物学
+# 更新日期: 2026-07-07
+# 文献来源: 综合PubMed搜索 (liver aging scRNA-seq/spatial/bulk/ATAC)
+
+species: Mus musculus
+tissue: liver
+direction: aging
+updated: '2026-07-07'
+source: |
+  - Lin et al. 2024, FASEB Journal (PMID: 38334462)
+  - Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)
+  - Gyenis et al. 2023, Nature Genetics (PMID: 36646902)
+  - Hepatology 2024 (PMC10871588)
+  - White et al. 2015, BMC Genomics (PMID: 26542215)
+  - Geroscience 2023 - PCSK9 liver aging (PMC10643490)
+  - Aging Cell 2023 - FOXO1 inflamm-aging (PMC10577549)
+  - Hepatol Commun 2023 - Liver EC aging (PMC9894352)
+  - J Transl Med 2023 - NAFLD fibrosis (PMC10326954)
+  - Nature Reviews Gastro 2025 - Liver aging review
+  - Tabula Muris Senis (mouse aging atlas)
+  - Inflammation & Regeneration 2025
+
+# 小鼠肝脏细胞类型与 marker genes
+# (注: 标记基因为小鼠同源基因，首字母大写)
+cell_types:
+  hepatocyte:
+    aliases: [肝细胞, hepatocytes]
+    markers: [Alb, Cyp3a11, Serpina1a, Ttr, Apoa1, Apob, Fga, Fgb, Fgg]
+    description: 肝脏主要实质细胞，行使代谢、解毒、蛋白合成等功能
+    subtypes:
+      periportal_hepatocyte:
+        markers: [Cyp2f2, Ass1, Arg1, Pck1, G6pc, Slc2a2]
+        zonation: periportal (zone 1)
+      pericentral_hepatocyte:
+        markers: [Cyp2e1, Glul, Cyp1a2, Oat, Rbp4, Lgr5, Axin2]
+        zonation: pericentral (zone 3)
+        aging_note: 衰老时中央静脉周肝细胞累积大脂滴，线粒体功能下降
+    aging_note: |
+      - 衰老时肝细胞体积增大，多倍体比例上升
+      - 区域化(zonation)被破坏
+      - Cyp2e1+ Zone 3区域脂滴积累
+      - 40%延伸RNAPII在衰老肝脏停滞 (Gyenis 2023 Nature Genetics)
+      - 转录噪声被多倍体缓冲 (Nikopoulou 2023 Nature Aging)
+
+  cholangiocyte:
+    aliases: [胆管细胞, bile duct cell]
+    markers: [Krt19, Krt7, EpCAM, Sox9, Cftr, Aqp1]
+    description: 胆管上皮细胞
+
+  hepatic_stellate_cell:
+    aliases: [HSC, 肝星状细胞]
+    markers: [Pdgfra, Pdgfrb, Des, Acta2, Col1a1, Lrat, Gfap, Vim]
+    subtypes:
+      quiescent_HSC: [Lrat, Gfap, Pparg]
+      activated_HSC: [Acta2, Col1a1, Tgfb1, Pdgfra]
+    aging_note: 衰老时HSC获得"活化"表型
+
+  liver_sinusoidal_endothelial_cell:
+    aliases: [LSEC, 肝窦内皮细胞]
+    markers: [Pecam1, Vwf, Cdh5, Cldn5, Flt1, Kdr, Stab1, Stab2, Lyve1, Cd32b]
+    aging_note: |
+      - 衰老时LSEC假毛细血管化(pseudocapillarization)
+      - 窗孔减少，促收缩表型
+      - 血管发育基因下调 (Stab1, Stab2, Lyve1, Fcgr2b)
+      - 促收缩基因上调 (Vwf, Icam1, Vcam1, Sele, Edn1)
+      - 参考: Hepatol Commun 2023 (PMC9894352) scRNA-seq专门研究
+
+  kupffer_cell:
+    aliases: [Kupffer cell, 库普弗细胞, liver macrophage]
+    markers: [Clec4f, Vsig4, Cd163, Fcgr2a, Cd68, Marco, Timd4, Sirpa]
+    aging_note: |
+      - 衰老时向促炎表型转变(M1-like)
+      - Cxcl2+亚群积累，招募中性粒细胞
+      - 巨噬细胞衰老驱动免疫衰老
+      - FOXO1信号调控炎症衰老 (Aging Cell 2023)
+
+  monocyte_macrophage:
+    markers: [Cd14, Fcgr3, Csf1r, Cd68, Itgam, Ccr2]
+    aging_note: 衰老时招募增加
+
+  t_cell:
+    markers: [Cd3d, Cd3e, Cd3g, Trac, Trbc1, Trbc2]
+    subtypes:
+      cd4_t_cell: [Cd4, Cd40lg, Il7r]
+      cd8_t_cell: [Cd8a, Cd8b, Gzmb, Prf1, Nkg7]
+    aging_note: 衰老时T细胞耗竭
+
+  b_cell:
+    markers: [Cd19, Ms4a1, Cd79a, Cd79b, Pax5, Jchain]
+
+  nk_cell:
+    markers: [Nkg7, Gnly, Klrd1, Klrb1, Klrf1, Ncr1, Fcgr3a]
+    aging_note: 衰老时频率降低、功能耗竭
+
+  dendritic_cell:
+    markers: [Clec9a, Cd1c, Fcer1a, Xcr1, Flt3, Ccr7]
+
+  neutrophil:
+    markers: [Csf3r, S100a8, S100a9, Fcgr3b, Cxcl8]
+    description: 中性粒细胞

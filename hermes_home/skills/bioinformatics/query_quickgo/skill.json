@@ -1,0 +1,20 @@
+{
+  "id": "query_quickgo",
+  "name": "Query Quickgo",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the QuickGO API using natural language or a direct endpoint.",
+  "detailed_description": "Query the QuickGO API using natural language or a direct endpoint.",
+  "when_to_use": "When you need query quickgo analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about GO terms/annotations (str)",
+    "endpoint": "[Optional] Direct QuickGO endpoint or full URL",
+    "max_results": "[Optional] Max results (limit, up to 100) (default: 25)",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

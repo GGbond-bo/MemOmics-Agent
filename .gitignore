@@ -1,0 +1,16 @@
+# runtime
+.venv/
+__pycache__/
+*.pyc
+*.log
+
+# user data / credentials (never commit real ones)
+hermes_home/config.yaml
+hermes_home/state.db
+hermes_home/*.db
+results/
+logs/
+
+# os
+.DS_Store
+Thumbs.db

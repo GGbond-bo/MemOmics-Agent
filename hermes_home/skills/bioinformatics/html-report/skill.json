@@ -1,0 +1,44 @@
+{
+  "id": "html-report",
+  "name": "HTML报告",
+  "category": "general",
+  "language": "Python",
+  "description": "生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好",
+  "triggers": [
+    "生成html",
+    "做报告",
+    "写网页",
+    "html报告",
+    "报告"
+  ],
+  "tools": [
+    "execute_python",
+    "write_file"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "内容整理",
+      "description": "整理分析结果、图表、结论"
+    },
+    {
+      "name": "HTML生成",
+      "description": "生成响应式HTML报告"
+    }
+  ],
+  "parameters": {
+    "steps": "内容整理 -> HTML生成"
+  },
+  "chains_from": [
+    "paper-summary",
+    "code-writer"
+  ],
+  "chains_to": [],
+  "detailed_description": "生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好\n\n分析步骤:\n  - 内容整理: 整理分析结果、图表、结论\n  - HTML生成: 生成响应式HTML报告",
+  "when_to_use": "当你需要 HTML报告 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,18 @@
+{
+  "id": "analyze_thrombus_histology",
+  "name": "Analyze Thrombus Histology",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze histological images of thrombus samples stained with H&E to identify and quantify different thrombus components (fresh, cellular lysis, endothelialization, fibroblastic reaction).",
+  "detailed_description": "Analyze histological images of thrombus samples stained with H&E to identify and quantify different thrombus components (fresh, cellular lysis, endothelialization, fibroblastic reaction).",
+  "when_to_use": "When you need analyze thrombus histology analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the histological image of thrombus sample stained with H&E (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

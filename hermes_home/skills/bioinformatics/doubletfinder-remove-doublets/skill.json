@@ -1,0 +1,47 @@
+{
+  "name": "DoubletFinder 去双胞",
+  "id": "doubletfinder-remove-doublets",
+  "category": "decontamination",
+  "language": "R",
+  "source": "Biomni-style (custom)",
+  "description": "DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤",
+  "detailed_description": "DoubletFinder通过模拟人工双胞在PC空间中检测doublets。参数自适应: pK通过BCparamOpt优化; 衰老样本→预期双胞数+20%; 免疫细胞丰富→+10%。所有10x数据都应做双胞检测",
+  "when_to_use": "scRNA-seq数据需去除双细胞",
+  "triggers": [
+    "DoubletFinder",
+    "去双胞",
+    "doublet",
+    "双细胞"
+  ],
+  "steps": [
+    "Seurat PCA预处理",
+    "BCparamOpt优化pK",
+    "计算nExp_poi预期双胞数",
+    "doubletFinder检测",
+    "UMAP标注双胞",
+    "subset过滤双胞",
+    "保存到doubletfinder/目录"
+  ],
+  "dependencies": [
+    "DoubletFinder",
+    "Seurat",
+    "spatstat"
+  ],
+  "outputs": [
+    "双胞标注对象",
+    "pK优化曲线",
+    "UMAP双胞图",
+    "过滤后对象"
+  ],
+  "parameters": {
+    "pN": "0.25",
+    "pK": "auto(BCparamOpt)",
+    "nExp_poi": "auto(细胞数*0.008*千细胞数)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://raw.githubusercontent.com/chris-mcginnis-ucsf/DoubletFinder/master/README.md",
+  "doc_source": "official"
+}

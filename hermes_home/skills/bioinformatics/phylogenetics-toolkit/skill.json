@@ -1,0 +1,12 @@
+{
+  "id": "phylogenetics-toolkit",
+  "name": "Phylogenetics Toolkit",
+  "category": "GWAS/Genetics",
+  "language": "R+Python",
+  "description": "Phylogenetic tree construction and analysis toolkit",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

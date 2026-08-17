@@ -1,0 +1,122 @@
+# 小鼠肝脏衰老 — 关键发现（文献更新版 v2）
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+species: Mus musculus
+tissue: liver
+direction: aging
+last_updated: 2026-07-07
+
+findings:
+  - finding: 衰老破坏肝细胞区域化(zonation)稳态
+    evidence: |
+      - snRNA-seq显示衰老肝脏中Zone 1和Zone 3基因表达边界模糊
+      - 区域特异性代谢基因表达失调(Cyp2e1, Glul, Ass1等)
+    source: |
+      - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+      - "Lin et al. 2024, FASEB Journal (PMID: 38334462)"
+    confidence: high
+
+  - finding: 衰老肝脏LSEC假毛细血管化
+    evidence: |
+      - 窗孔减少，血管发育基因(Stab1, Stab2, Lyve1, Fcgr2b)下调
+      - LSEC获得促收缩表型(Vwf, Icam1, Vcam1, Sele, Edn1上调)
+    source: |
+      - "Lin et al. 2024, FASEB Journal"
+      - "Hepatol Commun 2023 (PMC9894352) — scRNA-seq of liver EC aging"
+    confidence: high
+
+  - finding: 衰老时HSC获得活化表型
+    evidence: "ACTA2+ / COL1A1+ HSC比例增加，但无显著纤维化"
+    source: "Lin et al. 2024, FASEB Journal"
+    confidence: high
+
+  - finding: 衰老肝脏免疫微环境重塑
+    evidence: |
+      - Cxcl2+巨噬细胞亚群积累，招募中性粒细胞
+      - Kupffer细胞向M1样促炎表型转变
+      - NK细胞频率降低、功能耗竭
+      - T细胞耗竭
+    source: "Hepatology 2024 (PMC10871588)"
+    confidence: high
+
+  - finding: 肝细胞区域特异性衰老轨迹
+    evidence: |
+      - Zone 1肝细胞: 线粒体功能下降显著，SRC(spare respiratory capacity)丧失
+      - Zone 3肝细胞: 累积大脂滴，脂质代谢重编程
+      - 表观基因组以区域依赖性方式改变
+    source: "Nikopoulou et al. 2023, Nature Aging"
+    confidence: high
+
+  - finding: 衰老时肝细胞多倍体比例增加，缓冲转录噪声
+    evidence: |
+      - 多倍体肝细胞表现出增强的DNA修复和应激抵抗
+      - 转录噪声被多倍体缓冲
+    source: "Nikopoulou et al. 2023, Nature Aging"
+    confidence: high
+
+  - finding: 衰老肝脏线粒体功能下降(Zone 1显著)
+    evidence: |
+      - Zone 1肝细胞线粒体功能下降，脂肪酸氧化能力下降
+      - 电子传递链复合物I-V表达下调
+      - 线粒体含量不变但功能下降
+    source: "Nikopoulou et al. 2023, Nature Aging"
+    confidence: high
+
+  - finding: 衰老肝脏脂质代谢重编程
+    evidence: |
+      - Zone 3肝细胞累积大脂滴，甘油三酯和胆固醇酯增加
+      - 脂质合成基因(Srebf2, Scd, Fasn)上调
+      - 脂肪酸氧化基因(Cpt1a, Ppara, Acox1)下调
+    source: |
+      - "Nikopoulou et al. 2023, Nature Aging"
+      - "Inflammation & Regeneration 2025"
+    confidence: high
+
+  - finding: 40% RNA聚合酶II在衰老肝脏停滞 (NEW — Nature Genetics 2023)
+    evidence: |
+      - 2岁小鼠肝脏中40%延伸RNAPII停滞
+      - 基因长度依赖的转录偏移: 长基因受影响更大
+      - 由内源性DNA损伤累积引起
+      - 影响衰老标志通路: 营养感知, 自噬, 蛋白质稳态, 能量代谢, 免疫
+      - 该现象进化保守: 线虫→小鼠→人类
+    source: "Gyenis et al. 2023, Nature Genetics (PMID: 36646902)"
+    confidence: high
+
+  - finding: PCSK9是肝脏衰老新型调控因子 (NEW)
+    evidence: "数据驱动转录组学分析鉴定PCSK9为肝脏衰老关键调控因子"
+    source: "Geroscience 2023 (PMC10643490, PMID: 37726433)"
+    confidence: medium
+
+  - finding: FOXO1抑制减轻炎症衰老 (NEW)
+    evidence: "抑制FOXO1可减轻inflamm-aging并改善衰老肝脏功能"
+    source: "Aging Cell 2023 (PMC10577549, PMID: 37602516)"
+    confidence: medium
+
+  - finding: Dlk-Dio3 miRNA位点是衰老肝脏调控热点
+    evidence: "Meg3, Rian, Mirg lncRNAs在衰老肝脏中显著上调"
+    source: "White et al. 2015, BMC Genomics (PMID: 26542215)"
+    confidence: high
+
+  - finding: 衰老肝脏昼夜节律基因表达失调
+    evidence: "核心时钟基因(Clock, Bmal1, Per, Cry)表达幅度下降"
+    source: "White et al. 2015, BMC Genomics"
+    confidence: medium
+
+  - finding: 衰老肝脏无显著纤维化
+    evidence: "老年(>24月)小鼠肝脏H&E染色无纤维化，但肝细胞均匀性增大"
+    source: "Nikopoulou et al. 2023, Nature Aging"
+    confidence: high
+
+  - finding: 衰老肝脏炎症细胞浸润增加
+    evidence: |
+      - 中性粒细胞(PMN)和单核细胞来源巨噬细胞(MoMF)增加
+      - 炎症细胞因子和趋化因子增加
+      - 促炎组织微环境
+    source: "Lin et al. 2024, FASEB Journal"
+    confidence: high
+
+  - finding: 衰老细胞累积与SASP
+    evidence: "p16INK4a+、p21+细胞增加，SASP因子表达上升"
+    source: "Nature Reviews Gastro 2025 (PMID: 40033000)"
+    confidence: high

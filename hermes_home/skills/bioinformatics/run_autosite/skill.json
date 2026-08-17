@@ -1,0 +1,19 @@
+{
+  "id": "run_autosite",
+  "name": "Run Autosite",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Runs AutoSite on a PDB file to identify potential binding sites and returns a research log with the results.",
+  "detailed_description": "Runs AutoSite on a PDB file to identify potential binding sites and returns a research log with the results.",
+  "when_to_use": "When you need run autosite analysis",
+  "parameters": {
+    "pdb_file": "[Required] Path to the input PDB file (str)",
+    "output_dir": "[Required] Directory where AutoSite results will be saved (str)",
+    "spacing": "[Optional] Grid spacing parameter for AutoSite calculation (default: 1.0)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

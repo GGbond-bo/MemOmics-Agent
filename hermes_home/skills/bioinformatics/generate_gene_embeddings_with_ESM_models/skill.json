@@ -1,0 +1,22 @@
+{
+  "id": "generate_gene_embeddings_with_ESM_models",
+  "name": "Generate Gene Embeddings With Esm Models",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Generate average protein embeddings for a list of Ensembl gene IDs using ESM (Evolutionary Scale Modeling) protein language models. This function fetches all protein isoform sequences for each gene, c",
+  "detailed_description": "Generate average protein embeddings for a list of Ensembl gene IDs using ESM (Evolutionary Scale Modeling) protein language models. This function fetches all protein isoform sequences for each gene, computes embeddings for each isoform using the specified ESM model and layer, then averages the embeddings across all isoforms to create a single representative embedding per gene. The embeddings are saved as PyTorch tensors for future use. Memory-friendly implementation with rolling averages, small batch processing, and automatic memory management. Automatically handles GPU/CPU device selection and includes error recovery for out-of-memory situations by falling back to single-sequence processing.",
+  "when_to_use": "When you need generate gene embeddings with ESM models analysis",
+  "parameters": {
+    "ensembl_gene_ids": "[Required] List of Ensembl gene IDs (e.g., ['ENSG00000012048', 'ENSG00000012049']) (List[str])",
+    "model_name": "[Optional] ESM model name to use for generating embeddings (default: esm2_t6_8M_UR50D)",
+    "layer": "[Optional] Which layer of the ESM model to extract embeddings from, generally use last layer (default: 6)",
+    "save_path": "[Optional] Optional path to save embeddings as PyTorch dictionary",
+    "batch_size": "[Optional] Number of sequences to process at once to manage memory usage (default: 1)",
+    "max_sequence_length": "[Optional] Maximum sequence length to process, longer sequences are filtered out (default: 1024)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

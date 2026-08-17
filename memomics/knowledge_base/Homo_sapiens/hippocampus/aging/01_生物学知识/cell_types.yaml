@@ -1,0 +1,304 @@
+# 人海马体衰老snRNA-seq知识库（2026-08-12 扩充版）
+# 更新说明：新增 Zhang 2021 / Wang 2022 / Zhou 2022 三篇文献解读，
+#           修正 Franjic 2022 DOI/标题错误，补充原文级精细 marker 分层，
+#           2026-08-12 扩充：新增 12 篇文献（Thompson 2025 / Su 2022 / Yang 2022 /
+#           Sinnamon 2019 / Zhong 2020 / Chen 2024 / MAESTRO 2020 / scAGDE 2025 /
+#           hECA 2025 / Acera-Mateos 2026 / Tosoni 2023 / Zhou 2022），
+#           完整解读见 literature_review_20260812.md
+species: Homo sapiens
+tissue: hippocampus
+direction: aging
+
+cell_types:
+  # ========== 神经元谱系 ==========
+  - name: Excitatory neuron (ExN)
+    markers:
+      - SLC17A7
+      - CAMK2A
+    subtypes:
+      - name: DG granule cell
+        markers: [PROX1, NEUROD1]
+        aging_note: "成人海马DG颗粒细胞新生在衰老中大幅下降; 争议存在但多数研究支持下降趋势"
+      - name: CA1/CA3 pyramidal
+        markers: [CAMK2A, SLC17A7]
+        aging_note: "CA1锥体神经元在衰老中最易受损; 突触基因下调"
+      - name: EC layer 2/3 (Franjic 2022)
+        markers: [CUX2, RELN]
+      - name: EC deep layer (Franjic 2022)
+        markers: [TLE4, ADRA1A, THEMIS]
+    aging_note: "灵长类海马 ExN 中 METTL7B 为灵长类特异亚群 marker（与脂滴/ER 蛋白相关，含 AD 相关蛋白）"
+    source: "Franjic 2022 Neuron (PMID 34798047)"
+
+  - name: Inhibitory neuron (InN)
+    markers:
+      - GAD1
+      - GAD2
+    subtypes:
+      - SST+ interneuron: [SST]
+      - PVALB+ interneuron: [PVALB]
+      - VIP+ interneuron: [VIP]
+      - LAMP5+ interneuron: [LAMP5]
+    aging_note: "InN 按主要 marker (SST/PVALB/VIP/LAMP5) 区分亚群；PVALB+ 亚群在 AD 早期亚托核过度活跃"
+    source: "Franjic 2022 Neuron (PMID 34798047)"
+
+  - name: Neurogenic lineage (NSC→TAPC→Neuroblast→Granule)
+    markers:
+      - SOX2
+      - PAX6
+      - GFAP
+    subtypes:
+      - name: quiescent NSC (qNSC)
+        markers: [SOX2, PAX6, GFAP]
+      - name: transiently amplifying progenitor cell (TAPC)
+        markers: [TAPC 专用 marker 待定]
+        aging_note: "灵长类海马衰老中 TAPC 分裂受损最显著（Zhang 2021），是神经发生下降的细胞学核心"
+      - name: Neuroblast / Immature neuron
+        markers: [DCX]
+        aging_note: "DCX 是经典未成熟神经元 marker，但 Franjic 2022 发现 DCX 不定义成人未成熟神经元群（检出广泛但无特异性）；Wang 2022 提出 STMN1/STMN2 为灵长类未成熟神经元更可靠 marker"
+      - name: Radial glia-like cell (RGL)
+        markers: [GFAP, SOX2]
+        aging_note: "RGL 与星形胶质共享多个 marker，跨物种整合时 RGL 与 Astro 聚类（Franjic 2022）"
+    aging_note: "成人海马神经发生争议中；Wang 2022 验证 ETNPPL 为灵长类特异 NSC marker；STMN1/STMN2 为灵长类未成熟神经元 marker"
+    source: "Yao 2024 eLife, Franjic 2022 Neuron, Zhang 2021 Protein&Cell, Wang 2022 Cell Res"
+
+  # ========== 胶质谱系 ==========
+  - name: Microglia (MG)
+    markers:
+      - CX3CR1
+      - AIF1
+      - TREM2
+      - P2RY12
+      - TMEM119
+      - C1QB
+    aging_note: "人小胶质细胞在衰老中呈现促炎表型; APOE通路随年龄上调; 与小鼠共享~70%衰老DEG; 但IL1RAPL1和SPP1为人特异性; Franjic 2022 用 C1QB/F13A1/LYZ/SKAP1 分解免疫细胞为 microglia/macrophage/myeloid/T cell"
+    source: "He 2024 PLoS One, Franjic 2022 Neuron"
+
+  - name: Astrocyte
+    markers:
+      - GFAP
+      - ALDH1L1
+      - S100B
+      - AQP4
+    aging_note: "人海马星形胶质细胞在衰老中呈现反应性增生; 跨物种最保守的衰老细胞类型; Wang 2022 发现衰老样本中激活型星形胶质（active astrocyte）簇促进炎症"
+    source: "Xiong 2025 Mol Biol Evol, Wang 2022 Cell Res"
+
+  - name: Oligodendrocyte lineage
+    markers:
+      - MBP
+      - PLP1
+      - MOBP
+    subtypes:
+      - name: OPC
+        markers: [PDGFRA, EGR1, GRIA4]
+      - name: Committed OPC (COP)
+        markers: [GPR17]
+      - name: Oligodendrocyte
+        markers: [MOBP, CPXM2, SLC5A11]
+    aging_note: "少突胶质细胞在衰老中髓鞘相关基因下调; 亚群按 PDGFRA(OPC)/GPR17(COP)/MOBP(Oligo) 分层（Franjic 2022）"
+    source: "Franjic 2022 Neuron"
+
+  # ========== 血管谱系 ==========
+  - name: Vascular cells
+    markers:
+      - CLDN5
+      - VWF
+    subtypes:
+      - name: Arterial endothelial
+        markers: [DKK2]
+      - name: Endothelial
+        markers: [CLDN5, VWF]
+      - name: Pericyte
+        markers: [CLDN5, ABCC9]
+      - name: Venous smooth muscle
+        markers: [ABCC9, P2RY1]
+    aging_note: "血管谱系组合表达分型（Franjic 2022）; Zhang 2021 发现衰老内皮凝血通路失调，构成神经发生不利微环境"
+    source: "Franjic 2022 Neuron, Zhang 2021 Protein&Cell"
+
+literature:
+  # ===== 核心锚点（人海马跨物种图谱）=====
+  - pmid: "34798047"
+    title: "Transcriptomic Taxonomy and Neurogenic Trajectories of Adult Human, Macaque and Pig Hippocampal and Entorhinal Cells"
+    authors: "Franjic D et al."
+    journal: "Neuron"
+    year: 2022
+    doi: "10.1016/j.neuron.2021.10.036"
+    pmcid: "PMC8813897"
+    key_findings:
+      - "人/猕猴/猪海马+内嗅皮层跨物种图谱，69,461 神经元 + 149,597 非神经元"
+      - "InN 按 SST/PVALB/VIP/LAMP5 分层；EC 按 CUX2/RELN(浅层) vs TLE4/ADRA1A/THEMIS(深层)"
+      - "免疫细胞分解：C1QB=小胶质 / F13A1=巨噬 / LYZ=髓系 / SKAP1=T 细胞；小胶质细分 P2RY12/CD83"
+      - "少突谱系：PDGFRA=OPC / GPR17=COP / MOBP=Oligo；OPC 亚群 EGR1/GRIA4；Oligo 亚群 CPXM2/SLC5A11"
+      - "血管谱系：DKK2=动脉内皮 / CLDN5+VWF=内皮 / CLDN5+ABCC9=周细胞 / ABCC9+P2RY1=静脉平滑肌"
+      - "关键结论：DCX 不定义成人未成熟神经元群；小鼠/猪/猕猴存在神经发生转录特征，但人类不明显"
+      - "RGL 与星形胶质共享多个 marker，跨物种整合时聚类到一起"
+
+  # ===== 灵长类海马衰老（猴侧参考）=====
+  - pmid: "34052996"
+    title: "Single-nucleus transcriptomic landscape of primate hippocampal aging"
+    authors: "Hui Zhang, Jiaming Li, Jie Ren et al."
+    journal: "Protein & Cell"
+    year: 2021
+    doi: "10.1007/s13238-021-00852-9"
+    key_findings:
+      - "首个灵长类海马衰老 snRNA 图谱，12 个细胞类型"
+      - "TAPC（瞬时扩增祖细胞）分裂受损 + 神经元功能受损是衰老核心变化"
+      - "衰老小胶质和少突胶质促炎反应上调；内皮凝血通路失调"
+      - "神经发生微环境恶化（胶质+血管协同）"
+
+  # ===== 猕猴海马神经发生跨寿命（猴-人对比关键）=====
+  - pmid: "35750757"
+    title: "Transcriptome dynamics of hippocampal neurogenesis in macaques across the lifespan and aged humans"
+    authors: "Wang W, Wang M, Yang M et al."
+    journal: "Cell Research"
+    year: 2022
+    doi: "10.1038/s41422-022-00678-y"
+    key_findings:
+      - "猕猴海马跨寿命神经发生转录组动力学 + 老年人类对照"
+      - "13 大细胞类型；神经源性谱系从 NSC→未成熟→成熟颗粒细胞连续体"
+      - "ETNPPL 验证为灵长类特异 NSC marker（免疫染色验证）"
+      - "STMN1/STMN2 为灵长类未成熟神经元更可靠 marker"
+      - "衰老样本中激活型星形胶质+小胶质簇促炎响应；星形胶质信号调控 NSC 增殖/静息/炎症"
+
+  # ===== 人海马未成熟神经元（人类侧参考）=====
+  - pmid: "35794479"
+    title: "Molecular landscapes of human hippocampal immature neurons across lifespan"
+    authors: "Zhou Y, Su Y, Li S et al."
+    journal: "Nature"
+    year: 2022
+    doi: "10.1038/s41586-022-04912-w"
+    key_findings:
+      - "人海马未成熟神经元跨寿命分子景观"
+      - "确认人类成人海马存在未成熟神经元（成熟度梯度）"
+      - "与猕猴/小鼠神经发生轨迹对比，人类神经发生显著减少但未消失"
+
+  # ===== 人海马胶质多样性（胶质 marker 参考）=====
+  - pmid: "36332572"
+    title: "A single-cell transcriptome atlas of glial diversity in the human hippocampus across the postnatal lifespan"
+    authors: "Su Y, Zhou Y, Bennett ML et al."
+    journal: "Cell Stem Cell"
+    year: 2022
+    doi: "10.1016/j.stem.2022.09.010"
+    note: "2026-08-12 已补全文 (PMC9844262 XML)；AST1-AST7 星形亚群：AST2=SOX2+/EGFR+胶质发生, AST6/7=吞噬, AST1=TGFβ；少突谱系异常+髓鞘化失调；小胶质疾病易感性"
+
+  # ===== 人海马整合单核+空间图谱（2025 最新参考）=====
+  - pmid: "40739059"
+    title: "An integrated single-nucleus and spatial transcriptomics atlas reveals the molecular landscape of the human hippocampus"
+    authors: "Thompson JR, Nelson ED, Tippani M et al."
+    journal: "Nature Neuroscience"
+    year: 2025
+    doi: "10.1038/s41593-025-02022-0"
+    note: "全文 47 页已下载；10 例成人前海马 snRNA+SRT（150,917 spots）；NMF+label transfer 整合；18 空间域 GCL/CA2-CA4/CA1/SUB/RHP；兴奋/抑制突触特化空间组织"
+
+  # ===== 人脑血管图谱（VS marker 来源）=====
+  - pmid: "35165441"
+    title: "A human brain vascular atlas reveals diverse mediators of Alzheimer's risk"
+    authors: "Yang AC, Vest RT, Kern F et al."
+    journal: "Nature"
+    year: 2022
+    doi: "10.1038/s41586-021-04369-3"
+    note: "全文 XML 已下载 (PMC9635042)；血管 marker：VWF/CLDN5=内皮, ABCC9/PTN=周细胞, ACTA2/TAGLN=平滑肌；血管介导 AD 遗传风险；血管特征存在物种差异"
+
+  # ===== 小鼠海马 scATAC（方法学先驱）=====
+  - pmid: "30936163"
+    title: "The accessible chromatin landscape of the murine hippocampus at single-cell resolution"
+    authors: "Sinnamon JR, Torkenczy KA, Linhoff MW et al."
+    journal: "Genome Research"
+    year: 2019
+    doi: "10.1101/gr.243725.118"
+    note: "全文 13 页已下载；sci-ATAC-seq 2346 细胞；8 主要 cluster；scitools 软件套件；海马单细胞 CRE 调控网络"
+
+  # ===== 人脑多区域整合图谱 =====
+  - pmid: "39095595"
+    title: "A brain cell atlas integrating single-cell transcriptomes across human brain regions"
+    authors: "Chen X, Huang Y, Huang L et al."
+    journal: "Nature Medicine"
+    year: 2024
+    doi: "10.1038/s41591-024-03150-z"
+    note: "全文 27MB 已下载；跨脑区单细胞转录组整合图谱；区域细胞类型一致化"
+
+  # ===== 人海马发育图谱 =====
+  - pmid: "31942070"
+    title: "Decoding the development of the human hippocampus"
+    authors: "Zhong S, Ding W, Sun L et al."
+    journal: "Nature"
+    year: 2020
+    doi: "10.1038/s41586-019-1917-5"
+    note: "PDF 仅 reporting summary（Nature 版权限制）；人海马发育 scRNA 图谱；与衰老方向互补"
+
+  # ===== 人成体海马神经发生争议（综述）=====
+  - pmid: "37015226"
+    title: "Mapping human adult hippocampal neurogenesis with single-cell transcriptomics: Reconciling controversy or fueling the debate?"
+    authors: "Tosoni G, Ayyildiz D, Bryois J et al."
+    journal: "Neuron"
+    year: 2023
+    doi: "10.1016/j.neuron.2023.03.010"
+    note: "摘要级收录（PMC XML 误下无关文章）；人成体神经发生 scRNA 视角争议综述；与 Franjic DCX 阴性结论互证"
+
+    # ===== 生信方法：scRNA+scATAC 整合 =====
+  - pmid: "32767996"
+    title: "Integrative analyses of single-cell transcriptome and regulome using MAESTRO"
+    authors: "Wang C, Sun D, Huang X et al."
+    journal: "Genome Biology"
+    year: 2020
+    doi: "10.1186/s13059-020-02116-x"
+    note: "全文 28 页已下载；scRNA+scATAC 整合工作流；gene regulatory potential 概念与 GeneScoreMatrix 一致；自动注释参考"
+
+  # ===== 生信方法：scATAC 深度图聚类 =====
+  - pmid: "39956806"
+    title: "Topological identification and interpretation for single-cell epigenetic regulation elucidation in multi-tasks using scAGDE"
+    authors: "Hao G, Fan Y, Yu Z et al."
+    journal: "Nature Communications"
+    year: 2025
+    doi: "10.1038/s41467-025-57027-x"
+    note: "全文 26 页已下载；VAE+图神经网络 scATAC 聚类；人脑组织成功注释 cis-regulatory element 特异细胞类型；与 L3 层方法学关联"
+
+  # ===== 生信方法：AI 细胞图谱 =====
+  - pmid: "41398179"
+    title: "hECA v2.0: an AI-ready ensemble cell atlas of single-cell RNA and ATAC sequencing data"
+    authors: "Xi X, Chen Y, Wu X et al."
+    journal: "Scientific Data"
+    year: 2025
+    doi: "10.1038/s41597-025-06426-2"
+    note: "全文 12 页已下载；AI-ready 单细胞 RNA+ATAC 整合图谱；注释参考数据源"
+
+  # ===== 生信方法：多模态整合 benchmark =====
+  - pmid: "41821037"
+    title: "Systematic evaluation of single-cell multimodal data integration enhances cell type resolution and discovery of clinically relevant states in complex tissues"
+    authors: "Acera-Mateos M, Adiconis X, Li JK et al."
+    journal: "Genome Biology"
+    year: 2026
+    doi: "10.1186/s13059-026-04002-4"
+    note: "全文 6MB 已下载；单细胞多模态整合方法系统评估；RNA+ATAC 整合策略选择依据"
+
+# ===== 原知识库保留条目 =====
+  - pmid: "38607670"
+    title: "Deciphering molecular heterogeneity and dynamics of human hippocampal neural stem cells at different ages and injury states"
+    authors: "Yao J et al."
+    journal: "eLife"
+    year: 2024
+    doi: "10.7554/eLife.89507"
+
+  - pmid: "39591421"
+    title: "Exploring the feasibility of using mice as a substitute model for investigating microglia in aging and AD"
+    authors: "He R et al."
+    journal: "PLoS One"
+    year: 2024
+    doi: "10.1371/journal.pone.0311374"
+    note: "注意：小鼠模型，非人海马来源；仅作跨物种替代性参考"
+
+  - pmid: "41883201"
+    title: "Differential Gene Expression in Human Hippocampus With Aging"
+    authors: "Saenz-Antoñanzas A et al."
+    journal: "Aging Cell"
+    year: 2026
+    doi: "10.1111/acel.70459"
+
+# ===== 专利应用提示（2026-08-12 扩充）=====
+patent_notes:
+  - "Franjic 2022 是人-猕猴海马跨物种图谱，最直接支撑专利跨物种 marker 锚定（ExN/InN/Astro/OPC/Oligo/Micro/Vas 七大类+细亚型）"
+  - "Wang 2022 的 ETNPPL/STMN1/STMN2 灵长类特异 marker 提示：注释猴侧 ATAC 时不能完全照搬小鼠 marker"
+  - "Zhang 2021 灵长类海马衰老 12 类图谱提供猴侧细胞类型组成基线，与我们的 8 大类注释（Ex/Inh/Astro/Micro/OPC/ODC/VS/ChP）对应关系：TAPC→NSC 类、Vas→VS"
+  - "marker 引用规范：人海马 marker 只引 Franjic 2022 / Yao 2024 / Zhou 2022；Xiong(树鼩)/He(小鼠) 只能作跨物种参照，不能当人海马来源"
+  - "血管标记最新来源：Yang 2022（VWF/CLDN5=内皮, ABCC9/PTN=周细胞, ACTA2/TAGLN=平滑肌）；Franjic 血管谱系可作交叉验证"
+  - "星形胶质亚群参考：Su 2022（AST1-AST7, AST2=SOX2+/EGFR+ 胶质发生）"
+  - "生信方法参考（用于正式版方法论证）：MAESTRO 2020 整合工作流 / scAGDE 2025 人脑 scATAC 注释 / Sinnamon 2019 海马 scATAC 先驱 / Acera-Mateos 2026 多模态 benchmark"

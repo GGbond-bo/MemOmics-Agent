@@ -1,0 +1,21 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.devcel.2026.03.010_buprenorphine
+chem_category: compounds
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.devcel.2026.03.010_buprenorphine
+content: '- 靶点: opioid receptor
+
+  - 剂量: 0.1 mg/kg (i.m.)
+
+  - IC50/EC50: —
+
+  - 模型: mouse surgery analgesia
+
+  - 效应: 镇痛'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | MEMOMICS_HOME/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf

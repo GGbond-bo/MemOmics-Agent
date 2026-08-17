@@ -1,0 +1,22 @@
+{
+  "id": "analyze_enzyme_kinetics_assay",
+  "name": "Analyze Enzyme Kinetics Assay",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Performs in vitro enzyme kinetics assay and analyzes the dose-dependent effects of modulators.",
+  "detailed_description": "Performs in vitro enzyme kinetics assay and analyzes the dose-dependent effects of modulators.",
+  "when_to_use": "When you need analyze enzyme kinetics assay analysis",
+  "parameters": {
+    "enzyme_name": "[Required] Name of the purified enzyme being tested (str)",
+    "substrate_concentrations": "[Required] List of substrate concentrations in μM for kinetic analysis (list or numpy.ndarray)",
+    "enzyme_concentration": "[Required] Concentration of the enzyme in nM (float)",
+    "modulators": "[Optional] Dictionary of modulators where keys are modulator names and values are lists of concentrations in μM",
+    "time_points": "[Optional] Time points in minutes for time-course measurements",
+    "output_dir": "[Optional] Directory to save output files (default: ./)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

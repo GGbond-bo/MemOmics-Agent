@@ -1,0 +1,18 @@
+{
+  "id": "quantify_cell_cycle_phases_from_microscopy",
+  "name": "Quantify Cell Cycle Phases From Microscopy",
+  "category": "transcriptomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Quantify the percentage of cells in each cell cycle phase using Calcofluor white stained microscopy images.",
+  "detailed_description": "Quantify the percentage of cells in each cell cycle phase using Calcofluor white stained microscopy images.",
+  "when_to_use": "When you need quantify cell cycle phases from microscopy analysis",
+  "parameters": {
+    "image_paths": "[Required] List of file paths to microscopy images of cells stained with Calcofluor white (List[str])",
+    "output_dir": "[Optional] Directory to save results (default: ./results)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

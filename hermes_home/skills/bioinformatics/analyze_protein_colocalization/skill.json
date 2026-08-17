@@ -1,0 +1,20 @@
+{
+  "id": "analyze_protein_colocalization",
+  "name": "Analyze Protein Colocalization",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze colocalization between two fluorescently labeled proteins in microscopy images.",
+  "detailed_description": "Analyze colocalization between two fluorescently labeled proteins in microscopy images.",
+  "when_to_use": "When you need analyze protein colocalization analysis",
+  "parameters": {
+    "channel1_path": "[Required] Path to the first channel image file (fluorescent protein 1) (str)",
+    "channel2_path": "[Required] Path to the second channel image file (fluorescent protein 2) (str)",
+    "output_dir": "[Optional] Directory to save output files (default: ./output)",
+    "threshold_method": "[Optional] Method for thresholding images ('otsu', 'li', or 'yen') (default: otsu)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

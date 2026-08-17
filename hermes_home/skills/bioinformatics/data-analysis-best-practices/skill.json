@@ -1,0 +1,18 @@
+{
+  "id": "data-analysis-best-practices",
+  "name": "data-analysis-best-practices",
+  "category": "General Utility",
+  "language": "R+Python",
+  "description": "Best practices for data analyses with focused on user supplied data.",
+  "tags": [
+    "data analysis",
+    "data validation",
+    "handling duplicates",
+    "missing data",
+    "data quality"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

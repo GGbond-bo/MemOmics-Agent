@@ -1,0 +1,21 @@
+{
+  "id": "liftover_coordinates",
+  "name": "Liftover Coordinates",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform liftover of genomic coordinates between hg19 and hg38 formats with detailed intermediate steps.",
+  "detailed_description": "Perform liftover of genomic coordinates between hg19 and hg38 formats with detailed intermediate steps.",
+  "when_to_use": "When you need liftover coordinates analysis",
+  "parameters": {
+    "chromosome": "[Required] Chromosome number (e.g., '1', 'X') (str)",
+    "position": "[Required] Genomic position (int)",
+    "input_format": "[Required] Input genome build ('hg19' or 'hg38') (str)",
+    "output_format": "[Required] Output genome build ('hg19' or 'hg38') (str)",
+    "data_path": "[Required] Path to liftover chain files (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

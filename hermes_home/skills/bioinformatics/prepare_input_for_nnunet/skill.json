@@ -1,0 +1,19 @@
+{
+  "id": "prepare_input_for_nnunet",
+  "name": "Prepare Input For Nnunet",
+  "category": "visualization",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Prepare input data for nnUNet by handling both 4D and pre-split modality files. Automatically detects file format and prepares data accordingly.",
+  "detailed_description": "Prepare input data for nnUNet by handling both 4D and pre-split modality files. Automatically detects file format and prepares data accordingly.",
+  "when_to_use": "When you need prepare input for nnunet analysis",
+  "parameters": {
+    "input_path": "[Required] Path to input file or directory (str)",
+    "output_dir": "[Required] Directory to save prepared files (str)",
+    "case_name": "[Optional] Base name for the case files (default: BRAT)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

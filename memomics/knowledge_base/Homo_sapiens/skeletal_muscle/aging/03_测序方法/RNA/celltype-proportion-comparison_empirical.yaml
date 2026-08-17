@@ -1,0 +1,30 @@
+type: kb_entry
+name: celltype-proportion-comparison_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-17 01:59
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- celltype-proportion-comparison_empirical
+content: 'skill: celltype-proportion-comparison
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  per-sample 比例, 配对Wilcoxon(Pre→Post base_id), Mann-WhitneyU(跨组), Cliff''s delta 方向翻转(正值=后者高),
+  双FDR(per_celltype+global), 9比较对×7亚群=63行
+
+
+  result_summary:
+
+  Specialized MF 显著性完成: 衰老效应 zone5 显著↓(p=0.0046,FDR_global=0.0485,eff=-0.80) + zone3↑(p=0.0234)+zone1↑(p=0.0271);
+  糖尿病效应无显著; 老年运动 zone3↑(p=0.0156)+zone5↓(p=0.0156); 糖尿病运动 zone6↓(p=0.0469)。六组比例中位数表已出'
+evidence: 'record_run(celltype-proportion-comparison): Specialized MF 显著性完成: 衰老效应
+  zone5 显著↓(p=0.0046,FDR_global=0.0485,eff=-0.80) + zone3↑(p=0.0234)+zone1↑(p=0.0271);
+  糖尿病效应无显著; 老年运动 zone3↑(p=0.0156)+zone5↓(p=0.0156); 糖尿病运动 zone6↓(p=0.0469)。六组比例中位数表已出'

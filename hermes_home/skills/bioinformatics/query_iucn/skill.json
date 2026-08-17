@@ -1,0 +1,20 @@
+{
+  "id": "query_iucn",
+  "name": "Query Iucn",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the IUCN Red List API using natural language or a direct endpoint.",
+  "detailed_description": "Query the IUCN Red List API using natural language or a direct endpoint.",
+  "when_to_use": "When you need query iucn analysis",
+  "parameters": {
+    "token": "[Required] IUCN API token (str)",
+    "prompt": "[Optional] Natural language query about species conservation status",
+    "endpoint": "[Optional] Endpoint name or full URL",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

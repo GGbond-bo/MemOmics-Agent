@@ -1,0 +1,20 @@
+{
+  "id": "perform_flux_balance_analysis",
+  "name": "Perform Flux Balance Analysis",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform Flux Balance Analysis (FBA) on a genome-scale metabolic network model and return a research log of the process and results.",
+  "detailed_description": "Perform Flux Balance Analysis (FBA) on a genome-scale metabolic network model and return a research log of the process and results.",
+  "when_to_use": "When you need perform flux balance analysis analysis",
+  "parameters": {
+    "model_file": "[Required] Path to the metabolic model file (SBML or JSON format) (str)",
+    "constraints": "[Optional] Dictionary of reaction constraints where keys are reaction IDs and values are tuples of (lower_bound, upper_bound)",
+    "objective_reaction": "[Optional] Reaction ID to use as the objective function (e.g., biomass reaction)",
+    "output_file": "[Optional] File name to save the flux distribution results (default: fba_results.csv)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

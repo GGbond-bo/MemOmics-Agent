@@ -1,0 +1,48 @@
+analysis_type: cellchat
+species: monkey
+tissue: brain
+direction: ad
+omics: rna
+language: R
+depth_score: 17
+source: Jin et al. 2021 Nature Protocols
+parameters: {}
+code: '
+
+  # CellChat v2 complete analysis
+
+  library(CellChat)
+
+  cellchat <- createCellChat(seurat_obj)
+
+  cellchat@DB <- CellChatDB.mouse
+
+  cellchat <- subsetData(cellchat)
+
+  cellchat <- identifyOverExpressedGenes(cellchat)
+
+  cellchat <- computeCommunProb(cellchat)
+
+  cellchat <- filterCommunication(cellchat)
+
+  cellchat <- computeCommunProbPathway(cellchat)
+
+  cellchat <- aggregateNet(cellchat)
+
+  netVisual_circle(cellchat)
+
+  netVisual_heatmap(cellchat)
+
+  netVisual_chord_cell(cellchat)
+
+  netAnalysis_signalingRole_scatter(cellchat)
+
+  netAnalysis_signalingRole_heatmap(cellchat)
+
+  netVisual_bubble(cellchat)
+
+  netVisual_chord_gene(cellchat)
+
+  '
+saved_at: '2026-06-26 01:08:44'
+code_lines: 19

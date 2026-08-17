@@ -1,0 +1,21 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.freeradbiomed.2024.07.026_rapamycin
+chem_category: compounds
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.freeradbiomed.2024.07.026_rapamycin
+content: '- 靶点: mTORC1
+
+  - 剂量: —
+
+  - IC50/EC50: —
+
+  - 模型: 人体/动物实验
+
+  - 效应: 抑制mTORC1，影响训练适应（主要在抗阻训练中研究）'
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

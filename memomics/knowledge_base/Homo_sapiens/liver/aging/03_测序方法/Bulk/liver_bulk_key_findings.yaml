@@ -1,0 +1,97 @@
+# 人类肝脏 衰老方向 Bulk RNA-seq 关键发现与分析参数
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-07-07
+
+direction: aging
+omics: bulk
+
+# ─── 关键文献 ──────────────────────────────────────────
+key_findings:
+  # 1. 小鼠肝脏衰老bulk转录组全景
+  - paper: "BMC Genomics 2015 (PMID: 26542215)"
+    title: "Comprehensive transcriptional landscape of aging mouse liver"
+    method: "Directional whole transcriptome RNA-seq (bulk)"
+    species: "Mouse (C57BL/6)"
+    sample_info: "Young vs Aged liver"
+    key_results: |
+      1. 数千个基因在衰老肝脏中差异表达
+      2. 检测到编码RNA和非编码RNA(lncRNA, pseudogene, small RNA)的衰老相关变化
+      3. 通路富集: 炎症/免疫应答↑, 代谢↓, 昼夜节律↓
+      4. 炎症相关基因(LCN2, SAA, 补体系统)在衰老中上调
+      5. 代谢相关基因(CYP450家族, 糖代谢)下调
+
+  # 2. 跨组织衰老转录组
+  - paper: "Genomics, Proteomics & Bioinformatics 2020 (DOI: 10.1016/j.gpb.2020.06.002)"
+    title: "Tissue-specific Gene Expression Changes Are Associated with Aging in Mice"
+    method: "Bulk RNA-seq"
+    species: "Mouse (C57BL/6)"
+    sample_info: "4 tissues (brain, blood, skin, liver) at 9M, 15M, 24M, 30M"
+    key_results: |
+      - 肝脏衰老具有组织特异性和共享的转录组变化
+      - 肝脏在衰老过程中表现出最显著的转录组变化
+      - 炎症通路在多种组织中共享上调，但肝脏有独特的代谢变化
+
+  # 3. 跨器官衰老转录组特征
+  - paper: "PubMed 2025 (PMID: 41508419)"
+    title: "Deciphering the Transcriptomic Signatures of Aging Across Organs in Mice"
+    method: "Bulk RNA-seq"
+    species: "Mouse (C57BL/6J, male)"
+    sample_info: "8 organs at 6 age points (3M, 5M, 8M, 14M, 20M, 26M)"
+    key_results: |
+      - 最系统的小鼠多器官衰老时序转录组
+      - 肝脏衰老呈现: 炎症↑, 代谢↓, 线粒体↓, 昼夜节律↓
+      - 提供了肝脏衰老的时间轨迹
+
+  # 4. 衰老相关炎性特征(脂质组+转录组)
+  - paper: "Inflammation & Regeneration 2025 (DOI: 10.1186/s41232-025-00364-1)"
+    title: "Transcriptomic and lipidomic analysis of aging-associated inflammatory signature in mouse liver"
+    method: "Bulk RNA-seq + Lipidomics"
+    species: "Mouse (SPF/GF, male/female)"
+    sample_info: "Young vs Aged; SPF and Germ-free mice"
+    key_results: |
+      - LCN2和CLEc7A在衰老肝脏中显著上调(性别独立)
+      - 肠道菌群不影响炎症标志(SPF vs GF无差异)
+      - 脂质组学: 衰老肝脏甘油三酯和胆固醇酯增加
+      - 炎症和脂质代谢基因协同失调
+
+# ─── 分析参数建议 ──────────────────────────────────────
+analysis_params:
+  # 实验设计
+  design:
+    min_samples_per_group: 3
+    recommended_per_group: "5-10 (bulk RNA-seq)"
+    note: "肝脏bulk RNA-seq建议每组至少5个生物重复，以应对生物学变异"
+
+  # 差异表达分析
+  deg:
+    method: "DESeq2 (首选) / edgeR / limma-voom"
+    software: [DESeq2, edgeR, limma]
+    params:
+      padj_cutoff: 0.05
+      log2FC_cutoff: 0.58
+    batch_correction: "DESeq2 ~ batch + condition (若存在批次效应)"
+    count_type: "featureCounts / HTSeq-count / Salmon/SARTools"
+    note: "bulk RNA-seq需要count matrix而非normalized counts"
+
+  # 功能富集
+  enrichment:
+    go: "clusterProfiler / goseq / enrichR"
+    kegg: "clusterProfiler / GSEA"
+    reactome: "ReactomePA"
+    gsea:
+      method: "fgsea / clusterProfiler/GSEA"
+      minGSSize: 15
+      maxGSSize: 500
+
+  # 肝脏衰老特征基因
+  liver_aging_signature:
+    up: [LCN2, CLEC7A, SAA1, SAA2, CDKN1A, CDKN2A, CLU, C3, CXCL8, IL6, TNF, CCL2, SERPINE1]
+    down: [CYP3A4, CYP2E1, ALB, PCK1, G6PC, GCK, HNF4A, PPARGC1A, SIRT1, ATG5, BECN1]
+    note: "这些标志基因在bulk RNA-seq中易于检测，可作为肝脏衰老的转录组特征"
+
+source: |
+  - "BMC Genomics 2015 (PMID: 26542215)"
+  - "Genomics Proteomics Bioinformatics 2020 (DOI: 10.1016/j.gpb.2020.06.002)"
+  - "PubMed 2025 (PMID: 41508419) — Multi-organ aging"
+  - "Inflammation & Regeneration 2025 (DOI: 10.1186/s41232-025-00364-1)"
+  - "PubMed 2025 (PMID: 40033000) — Nature Reviews Gastro liver aging review"

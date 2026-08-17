@@ -1,0 +1,20 @@
+{
+  "id": "identify_transcription_factor_binding_sites",
+  "name": "Identify Transcription Factor Binding Sites",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Identifies binding sites for a specific transcription factor in a genomic sequence.",
+  "detailed_description": "Identifies binding sites for a specific transcription factor in a genomic sequence.",
+  "when_to_use": "When you need identify transcription factor binding sites analysis",
+  "parameters": {
+    "sequence": "[Required] The genomic DNA sequence to analyze (str)",
+    "tf_name": "[Required] Name of the transcription factor to search for (e.g., 'Hsf1', 'GATA1') (str)",
+    "threshold": "[Optional] Minimum score threshold for reporting binding sites (0.0-1.0) (default: 0.8)",
+    "output_file": "[Optional] Path to save the results"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

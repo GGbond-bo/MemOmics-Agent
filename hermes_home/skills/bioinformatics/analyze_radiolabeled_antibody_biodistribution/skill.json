@@ -1,0 +1,18 @@
+{
+  "id": "analyze_radiolabeled_antibody_biodistribution",
+  "name": "Analyze Radiolabeled Antibody Biodistribution",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies.",
+  "detailed_description": "Analyze biodistribution and pharmacokinetic profile of radiolabeled antibodies.",
+  "when_to_use": "When you need analyze radiolabeled antibody biodistribution analysis",
+  "parameters": {
+    "time_points": "[Required] Time points (hours) at which measurements were taken (List[float] or numpy.ndarray)",
+    "tissue_data": "[Required] Dictionary where keys are tissue names and values are lists/arrays of %IA/g measurements corresponding to time_points. Must include 'tumor' as one of the keys (dict)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

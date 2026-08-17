@@ -1,0 +1,41 @@
+type: kb_entry
+domain: common
+name: paper_bioinfo_10.1016_j.devcel.2026.03.010
+direction: general
+assay_type: RNA
+last_updated: 2026-08-16 03:44
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bioinfo_10.1016_j.devcel.2026.03.010
+content: '## 测序方法
+
+  - snRNA-seq (single-nucleus RNA-seq) | 平台 — | 建库 — | 深度 —
+
+  - scRNA-seq (single-cell RNA-seq) | 平台 — | 建库 — | 深度 —
+
+  - spatial transcriptomics | 平台 — | 建库 — | 深度 —
+
+  - bulk RNA-seq | 平台 — | 建库 — | 深度 —
+
+
+  ## 分析流程
+
+  - FACS enrichment for rare populations → snRNA-seq and scRNA-seq → integration of
+  sn- and scRNA-seq datasets → unsupervised clustering → re-clustering of myonuclei
+  and Schwann cells → CellChat ligand-receptor inference → spatial transcriptomics
+  validation → 3D imaging validation
+
+
+  ## 软件/包
+
+  - CellChat （R）：配体-受体相互作用推断
+
+
+  ## 数据库
+
+  - NCBI Gene Expression Omnibus (GEO)：储存原始sn/scRNA-seq、空间转录组和bulk RNA-seq数据，accession:
+  GSE294765, GSE311567, GSE312393'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | MEMOMICS_HOME/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf

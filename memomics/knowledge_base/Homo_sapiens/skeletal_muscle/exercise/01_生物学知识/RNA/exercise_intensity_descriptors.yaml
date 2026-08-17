@@ -1,0 +1,15 @@
+type: kb_entry
+name: exercise_intensity_descriptors
+species: human
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:13
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- exercise_intensity_descriptors
+content: 耐力运动强度以%VO2max或%最大心率(HFmax)表示，高强度间歇训练(HIIT)通常>80% HFmax；抗阻运动强度以%一次最大重复(1RM)表示，并需描述重复次数、组数、收缩类型等。训练周期分微周期7-21天、中周期3-8周、大周期1季/年。这些参数可标准化运动干预方案设计，用于比较不同研究的分子响应。
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

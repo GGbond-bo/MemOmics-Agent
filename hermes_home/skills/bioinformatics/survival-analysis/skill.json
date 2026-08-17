@@ -1,0 +1,73 @@
+{
+  "id": "survival-analysis",
+  "name": "生存分析",
+  "category": "clinical",
+  "language": "R+Python",
+  "description": "KM曲线+Cox回归+风险评分模型+时间依赖ROC",
+  "starting_prompt": "进行生存分析",
+  "source_dir": "skills/built_in/survival-analysis",
+  "memomics_module": "04_临床分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "survival",
+    "KM",
+    "cox",
+    "risk-score"
+  ],
+  "steps": [
+    {
+      "name": "KM survival curve",
+      "description": "survfit + ggsurvplot",
+      "tool": "terminal"
+    },
+    {
+      "name": "Log-rank test",
+      "description": "survdiff significance",
+      "tool": "terminal"
+    },
+    {
+      "name": "Cox regression",
+      "description": "coxph multivariate + forestplot",
+      "tool": "terminal"
+    },
+    {
+      "name": "Risk score model",
+      "description": "LASSO + Cox prognostic model",
+      "tool": "terminal"
+    },
+    {
+      "name": "Time-dependent ROC",
+      "description": "timeROC AUC evaluation",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "survival",
+    "survminer",
+    "forestplot",
+    "timeROC"
+  ],
+  "python_packages": [
+    "lifelines",
+    "scikit-survival"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "disease",
+    "有生存数据"
+  ],
+  "parameters": {
+    "r_packages": "survival, survminer, forestplot, timeROC",
+    "python_packages": "lifelines, scikit-survival",
+    "steps": "KM survival curve -> Log-rank test -> Cox regression -> Risk score model -> Time-dependent ROC"
+  },
+  "detailed_description": "KM曲线+Cox回归+风险评分模型+时间依赖ROC\n\n适用场景: disease, 有生存数据\n\n分析步骤:\n  - KM survival curve: survfit + ggsurvplot\n  - Log-rank test: survdiff significance\n  - Cox regression: coxph multivariate + forestplot\n  - Risk score model: LASSO + Cox prognostic model\n  - Time-dependent ROC: timeROC AUC evaluation\n\n依赖包: scikit-survival, timeROC, forestplot, survival, lifelines, survminer\n\n难度: intermediate\n\n触发提示: \"进行生存分析\"",
+  "when_to_use": "适用于: disease, 有生存数据",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://lifelines.readthedocs.io/en/latest/Survival%20Analysis%20with%20lifelines.html",
+  "doc_source": "official"
+}

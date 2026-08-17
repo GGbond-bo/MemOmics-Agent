@@ -1,0 +1,16 @@
+# System files
+.DS_Store
+
+# Data files
+**/data/
+**/*_results/
+
+# R temporary
+.RData
+.Rhistory
+*.Rproj.user
+Rplots.pdf
+
+# Large output files
+**/*.rds
+**/*.xlsx

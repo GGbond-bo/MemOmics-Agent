@@ -1,0 +1,9 @@
+created: '2026-06-27'
+direction: cardiomyopathy
+literature_count: 0
+omics:
+- rna
+species: human
+status: seeded
+tissue: heart
+version: 1

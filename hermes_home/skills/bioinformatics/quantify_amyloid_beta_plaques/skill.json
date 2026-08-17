@@ -1,0 +1,21 @@
+{
+  "id": "quantify_amyloid_beta_plaques",
+  "name": "Quantify Amyloid Beta Plaques",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes an image to detect and quantify amyloid-beta plaques, returning a detailed analysis log.",
+  "detailed_description": "Analyzes an image to detect and quantify amyloid-beta plaques, returning a detailed analysis log.",
+  "when_to_use": "When you need quantify amyloid beta plaques analysis",
+  "parameters": {
+    "image_path": "[Required] Path to the image file to be analyzed for amyloid-beta plaques (str)",
+    "output_dir": "[Optional] Directory where results will be saved (default: ./results)",
+    "threshold_method": "[Optional] Method for image thresholding (otsu, adaptive, or manual) (default: otsu)",
+    "min_plaque_size": "[Optional] Minimum size in pixels² for a region to be considered a plaque (default: 50)",
+    "manual_threshold": "[Optional] Threshold value to use when threshold_method is manual (default: 127)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

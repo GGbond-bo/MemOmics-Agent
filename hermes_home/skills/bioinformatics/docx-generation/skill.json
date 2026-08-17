@@ -1,0 +1,12 @@
+{
+  "id": "docx-generation",
+  "name": "docx-generation",
+  "category": "docx",
+  "language": "R+Python",
+  "description": "Auto-generated for docx-generation",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

@@ -1,0 +1,21 @@
+# System files
+.DS_Store
+.Rhistory
+.RData
+.Rproj.user
+
+# Data files
+data/
+*_results/
+
+# Large files
+**/*.rds
+**/*.h5ad
+**/*.bam
+
+# R temporary/generated files
+Rplots.pdf
+
+# Test outputs
+assets/eval/test_output*/
+assets/eval/eval_output/

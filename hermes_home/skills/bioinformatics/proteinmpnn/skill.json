@@ -1,0 +1,19 @@
+{
+  "id": "proteinmpnn",
+  "name": "ProteinMPNN",
+  "category": "protein-design",
+  "language": "Python",
+  "description": "Inverse-fold a protein backbone (PDB structure) into amino-acid sequence with ProteinMPNN (Dauparas et al. 2022, github.com/dauparas/ProteinMPNN). Reach for this skill to run sequence design on RFdiff",
+  "starting_prompt": "使用 ProteinMPNN 进行分析",
+  "source_dir": "skills/bioinformatics/proteinmpnn",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "proteinmpnn"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

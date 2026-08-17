@@ -1,0 +1,43 @@
+{
+  "id": "research-plan",
+  "name": "研究方案设计",
+  "category": "research",
+  "language": "Python",
+  "description": "根据用户研究问题+数据类型，自动生成技术路线树状图+每步目的/工具/预期产出表",
+  "starting_prompt": "帮我设计研究方案",
+  "source_dir": "skills/bioinformatics/research-plan",
+  "memomics_module": "研究设计",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "research-plan",
+    "实验设计",
+    "技术路线",
+    "方案设计"
+  ],
+  "aliases": [
+    "研究方案",
+    "实验方案",
+    "技术路线",
+    "怎么分析",
+    "分析路线",
+    "帮我设计",
+    "研究思路",
+    "方案设计"
+  ],
+  "r_packages": [],
+  "python_packages": [],
+  "difficulty": "intermediate",
+  "applicable": [
+    "研究方案设计",
+    "技术路线规划"
+  ],
+  "parameters": {},
+  "detailed_description": "根据用户的研究问题、物种、数据类型，自动确定分析模块，生成 Mermaid 树状技术路线图 + 每步目的/工具/预期产出对照表\n\n适用场景: 任何组学分析开始前的方案设计\n\n难度: intermediate\n\n触发提示: \"帮我设计研究方案\" / \"怎么分析\"\n\n别名: 研究方案, 实验方案, 技术路线, 分析路线",
+  "when_to_use": "用户询问\"怎么分析\"、\"用什么方法\"、\"实验方案\"、\"技术路线\"时自动触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "generated": true
+}

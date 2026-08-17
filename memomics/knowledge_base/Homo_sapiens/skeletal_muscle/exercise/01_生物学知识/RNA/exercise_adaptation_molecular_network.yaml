@@ -1,0 +1,18 @@
+type: kb_entry
+name: exercise_adaptation_molecular_network
+species: Homo sapiens
+tissue: skeletal muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-08-15 05:07
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- exercise_adaptation_molecular_network
+content: 急性运动激活 AMPK、mTORC1、PGC-1α、MAPK、Ca2+ 信号、机械传感、氧化应激等多条通路，但多数通路在耐力（endurance）和抗阻（resistance）训练中均被激活，刺激特异性（stimulus
+  specificity）的分子机制仍未知。缺乏单一"主控因子"：肌肉训练适应依赖信号冗余和代偿网络（如 PGC-1α 敲除小鼠训练仍能部分改善性能）。长期训练重塑转录组、蛋白质组和代谢表型，并涉及肌纤维、卫星细胞、免疫细胞、ECM
+  等多种细胞类型。现有知识不足以支撑个体化训练方案设计。建议用多组学（转录组/表观基因组/蛋白质组/磷酸化蛋白质组）+ 单细胞/多细胞分析对运动适应做无偏倚系统解析。
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | Free Radical Biology and Medicine
+  2024 | MEMOMICS_HOME/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf

@@ -1,0 +1,16 @@
+{
+  "id": "public-data-download",
+  "name": "Public Data Download Skill",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。",
+  "starting_prompt": "使用 Public Data Download Skill 进行分析",
+  "source_dir": "skills/bioinformatics/public-data-download",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

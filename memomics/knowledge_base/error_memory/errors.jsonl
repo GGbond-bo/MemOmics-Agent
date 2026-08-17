@@ -1,0 +1,2 @@
+{"errors":[]}
+{"ts": "2026-08-14 02:43:07", "error_type": "r_env_missing_package_loop", "pattern": "错误于library(X): 不存在叫'X'这个名称的程序包 / there is no package called", "symptom": "agent 反复重试 terminal，任务卡死无进展（用户多次催'还没好吗'）", "root_cause": "R-4.5.3 只有 Seurat 依赖链，绘图/富集生态（ggplot2/dplyr/clusterProfiler 等 15 包）全缺；agent 把缺包当脚本错误反复重试", "fix_action": "1) 立即 install.packages 缺失包（清华镜像），禁止重试原脚本；2) 装完 requireNamespace 验证；3) 长任务 background=True 或 timeout>=300；4) Windows 路径用 E:/ 禁止 /e/", "verified": true}

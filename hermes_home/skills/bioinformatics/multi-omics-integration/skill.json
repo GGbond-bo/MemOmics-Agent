@@ -1,0 +1,40 @@
+{
+  "id": "multi-omics-integration",
+  "name": "多组学整合 (MOFA+)",
+  "category": "multi_omics",
+  "language": "Python",
+  "description": "MOFA+/DIABLO多组学整合。RNA+ATAC+Protein联合分析",
+  "starting_prompt": "整合我的RNA-seq和ATAC-seq数据",
+  "source_dir": "skills/external/18_multi-omics-integration",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "steps": [
+    {
+      "name": "MOFA+ factor analysis",
+      "description": "RNA+ATAC+Protein decomposition",
+      "tool": "terminal"
+    },
+    {
+      "name": "DIABLO (mixOmics)",
+      "description": "Supervised multi-omics classification",
+      "tool": "terminal"
+    },
+    {
+      "name": "Factor interpretation",
+      "description": "Loadings + sample grouping",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "MOFA+ factor analysis -> DIABLO (mixOmics) -> Factor interpretation"
+  },
+  "detailed_description": "MOFA+/DIABLO多组学整合。RNA+ATAC+Protein联合分析\n\n分析步骤:\n  - MOFA+ factor analysis: RNA+ATAC+Protein decomposition\n  - DIABLO (mixOmics): Supervised multi-omics classification\n  - Factor interpretation: Loadings + sample grouping\n\n触发提示: \"整合我的RNA-seq和ATAC-seq数据\"",
+  "when_to_use": "当你需要 多组学整合 (MOFA+) 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://satijalab.org/seurat/articles/integration_introduction.html",
+  "doc_source": "official"
+}

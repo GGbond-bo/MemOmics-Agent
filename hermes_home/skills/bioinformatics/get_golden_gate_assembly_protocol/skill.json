@@ -1,0 +1,22 @@
+{
+  "id": "get_golden_gate_assembly_protocol",
+  "name": "Get Golden Gate Assembly Protocol",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Return a customized protocol for Golden Gate assembly based on the number of inserts and specific DNA sequences.",
+  "detailed_description": "Return a customized protocol for Golden Gate assembly based on the number of inserts and specific DNA sequences.",
+  "when_to_use": "When you need get golden gate assembly protocol analysis",
+  "parameters": {
+    "enzyme_name": "[Required] Type IIS restriction enzyme to be used (str)",
+    "vector_length": "[Required] Length of the destination vector in bp (int)",
+    "num_inserts": "[Optional] Number of inserts to be assembled (default: 1)",
+    "vector_amount_ng": "[Optional] Amount of vector to use in ng (default: 75.0)",
+    "insert_lengths": "[Optional] List of insert lengths in bp",
+    "is_library_prep": "[Optional] Whether this is for library preparation (default: False)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

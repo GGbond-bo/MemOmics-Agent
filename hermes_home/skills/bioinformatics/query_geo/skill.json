@@ -1,0 +1,19 @@
+{
+  "id": "query_geo",
+  "name": "Query Geo",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the NCBI GEO database (GDS/GEOPROFILES) using natural language or direct search term.",
+  "detailed_description": "Query the NCBI GEO database (GDS/GEOPROFILES) using natural language or direct search term.",
+  "when_to_use": "When you need query geo analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about expression data (str)",
+    "search_term": "[Optional] Direct GEO search term",
+    "max_results": "[Optional] Maximum number of results (default: 3)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

@@ -1,0 +1,20 @@
+{
+  "id": "analyze_crispr_genome_editing",
+  "name": "Analyze Crispr Genome Editing",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences.",
+  "detailed_description": "Analyzes CRISPR-Cas9 genome editing results by comparing original and edited sequences.",
+  "when_to_use": "When you need analyze crispr genome editing analysis",
+  "parameters": {
+    "original_sequence": "[Required] The original DNA sequence before CRISPR-Cas9 editing (str)",
+    "edited_sequence": "[Required] The DNA sequence after CRISPR-Cas9 editing (str)",
+    "guide_rna": "[Required] The CRISPR guide RNA (crRNA) sequence used for targeting (str)",
+    "repair_template": "[Optional] The homology-directed repair template sequence, if used"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}
