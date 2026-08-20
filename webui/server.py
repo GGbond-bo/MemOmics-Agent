@@ -4257,6 +4257,14 @@ def _build_memory_digest(session, text):
     (b) 改造(2026-08-21)：每轮只注入最新一条；上限收紧(6 条/420 字)，
     避免窗口被每轮重复的锚点/记忆脚手架占满(实测 220K 上下文 94% 是缓存命中的重复系统段)。"""
     _parts = []
+    # (#2 记忆不丢) 持久的用户要求/文件路径必须固定带上——不依赖当前问题关键词命中
+    try:
+        _reqs = _read_requirements(session, limit=6)
+        if _reqs:
+            _parts.append("[会话要求 · 用户明确给过且仍未撤销的要求/文件路径(持久)]\n" +
+                          "\n".join(f"- {r[:110]}" for r in _reqs))
+    except Exception:
+        pass
     try:
         _facts = _recall_facts(text or "")
         if _facts:
@@ -4268,6 +4276,13 @@ def _build_memory_digest(session, text):
         _block = _sm.build_digest(session.get("id", ""), max_items=6, max_chars=420)
         if _block:
             _parts.append(_block)
+    except Exception:
+        pass
+    # (#3 脚本复用) scripts/ 已有脚本清单
+    try:
+        _sdig = _build_scripts_digest(session)
+        if _sdig:
+            _parts.append(_sdig)
     except Exception:
         pass
     if not _parts:
@@ -4328,6 +4343,13 @@ def _build_rollup_checkpoint(session, head):
     rd = session.get("results_dir") or ""
     if rd:
         _lines.append(f"- results_dir: {rd}")
+    # (#2 记忆不丢) 持久要求随 checkpoint 带过滚动 —— 折叠后依然记得用户要求/路径
+    try:
+        _reqs = _read_requirements(session, limit=10)
+        if _reqs:
+            _lines += ["## 持久用户要求/路径(REQUIREMENTS)", "\n".join(f"- {r[:150]}" for r in _reqs)]
+    except Exception:
+        pass
     try:
         _plan = ""
         _p = os.path.join(rd, "task_plan.md") if rd else ""
@@ -4396,6 +4418,95 @@ def _maybe_rollup_history(session, history):
     if _est_message_tokens({"content": _checkpoint}) >= _est:
         return history
     return [{"role": "system", "content": _checkpoint}] + _tail_msgs
+
+
+_REQUIREMENTS_MARKERS = ("必须", "不要", "别忘", "以后", "每次", "记住", "记得",
+                         "保持不变", "统一", "都要", "都给我", "始终", "一律",
+                         "我要求", "我需要", "务必", "请务必", "只能", "只许", "优先")
+_REQUIREMENTS_MEM_WORDS = ("记住", "记得", "以后", "每次", "永远", "后续都", "我要求")
+
+
+def _read_requirements(session, limit=8):
+    """读会话持久要求文件 results/<sid>/REQUIREMENTS.md（路径优先、最新在前、去重）。"""
+    rd = session.get("results_dir") or ""
+    if not rd:
+        return []
+    _p = os.path.join(rd, "REQUIREMENTS.md")
+    try:
+        if not os.path.isfile(_p):
+            return []
+        with open(_p, encoding="utf-8", errors="replace") as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+    except Exception:
+        return []
+    if not lines:
+        return []
+    paths = [ln for ln in lines if re.search(r"[A-Za-z]:[/\\]", ln)]
+    others = [ln for ln in lines if ln not in paths]
+    seen, out = set(), []
+    for ln in (paths[-limit:] + others[-limit:]):
+        if ln not in seen:
+            seen.add(ln)
+            out.append(ln)
+    return out[-limit:]
+
+
+def _extract_and_store_requirements(session, text):
+    """把用户明确给的要求/约束/文件路径沉淀为会话级 REQUIREMENTS.md + memory facts。
+
+    (#2 记忆不丢) 几百条之后仍记得"我给的要求/文件路径/重要信息"的关键保障：
+      1) 结构化写 results/<sid>/REQUIREMENTS.md（文件在就一直在，digest/rollup 都带）
+      2) 含明确记忆词(记住/以后/每次…)的要求另写 memory_store facts(user_pref)
+      digest 每轮固定带上该文件，与当前问题是否含关键词无关 → 不会因关键词漏配而丢。
+    """
+    try:
+        rd = session.get("results_dir") or ""
+        if not rd or not os.path.isdir(rd):
+            return
+        _p = os.path.join(rd, "REQUIREMENTS.md")
+        existing = []
+        if os.path.isfile(_p):
+            with open(_p, encoding="utf-8", errors="replace") as f:
+                existing = [ln.rstrip("\n") for ln in f]
+        _sents = [s.strip() for s in re.split(r"[。！？!?\n;；]", text or "") if s and s.strip()]
+        added = []
+        for _s in _sents:
+            if not (4 <= len(_s) <= 200):
+                continue
+            _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
+            _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
+            if not (_has_path or _has_marker):
+                continue
+            if any(w in _s for w in _REQUIREMENTS_MEM_WORDS):
+                try:
+                    from memomics.bio_tools.memory_bridge import store_user_pref
+                    store_user_pref(f"[用户要求] {_s[:160]}", tags="requirement")
+                except Exception:
+                    pass
+            if _s not in existing and _s not in added:
+                added.append(_s)
+        if not added:
+            return
+        existing = (existing + added)[-40:]
+        with open(_p, "w", encoding="utf-8") as f:
+            f.write("\n".join(existing) + ("\n" if existing else ""))
+    except Exception:
+        pass
+
+
+def _build_scripts_digest(session, limit=5):
+    """返回会话 scripts/ 目录最近文件清单提示（重复跑图先到这里找），无则空串。"""
+    try:
+        rd = session.get("results_dir") or ""
+        _sdir = os.path.join(rd, "scripts") if rd else ""
+        if not _sdir or not os.path.isdir(_sdir):
+            return ""
+        _fs = sorted([p.name for p in os.scandir(_sdir) if p.is_file()])[-limit:]
+        if not _fs:
+            return ""
+        return f"[会话脚本目录 · scripts/ 已有脚本：{'、'.join(_fs)}，重复跑图/统计先到这里 search_files 找已有脚本复用]"
+    except Exception:
+        return ""
 
 
 def _session_may_have_result(session):
@@ -8964,6 +9075,12 @@ def _ensure_results_dir(session):
             return
         if not os.path.isdir(results_dir):
             os.makedirs(results_dir, exist_ok=True)
+        # (3) 会话目录子结构：分析产出子目录 + scripts/(脚本落盘约定) + REQUIREMENTS.md 目录
+        for _sub in ("figures", "results", "data", "scripts", "log"):
+            try:
+                os.makedirs(os.path.join(results_dir, _sub), exist_ok=True)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -9242,6 +9359,7 @@ async def ws_endpoint(ws: WebSocket):
                         import session_state as _ss
                     _ss.capture_user_request(session["id"], user_text, intent=_intent or "chat")
                     _ss.extract_assets(session["id"], user_text)
+                    _extract_and_store_requirements(session, user_text)  # (#2) 要求/路径持久化
 
                     # === 话题切换检测旁路（P1-4）：analysis 意图且实体变化 → 更新任务状态块 ===
                     try:
@@ -9381,7 +9499,7 @@ async def ws_endpoint(ws: WebSocket):
                 if not _is_heavy:
                     # 轻量：闲聊/知识/进度/无数据路径的分析讨论 → 不注入 skills 和 detail
                     agent.ephemeral_system_prompt = (
-                        f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+                        f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
                         if rd else ""
                     )
                 else:
@@ -9397,7 +9515,7 @@ async def ws_endpoint(ws: WebSocket):
                     _skills = _read_skills_index()
                     agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
                     if rd:
-                        agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。"
+                        agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
 
                     # 🔧 分析任务自动预查知识库 + 方法路线引导
                     _kb_result = _auto_search_knowledge(user_text)
@@ -9595,6 +9713,19 @@ async def ws_endpoint(ws: WebSocket):
                         if tool_name in _PRODUCING_TOOLS and not _s.get("_dir_created"):
                             _ensure_results_dir(_s)
                             _s["_dir_created"] = True
+                        # (3) 脚本落盘约定(非阻断提醒)：写 .py/.r/.sh 且不在会话 scripts/ 下 → 提示复用
+                        if tool_name == "write_file" and isinstance(args, dict):
+                            try:
+                                _fp = str(args.get("path", ""))
+                                if _fp.lower().endswith((".py", ".r", ".sh", ".m", ".rmd")):
+                                    _rdir = _s.get("results_dir") or ""
+                                    _sdir = os.path.join(_rdir, "scripts") or ""
+                                    if _rdir and not _fp.replace("\\", "/").startswith(_sdir.replace("\\", "/")):
+                                        _session_emit(_s, {"type": "warning",
+                                            "content": f"⏳ 脚本落盘提醒（不阻断）：分析脚本建议保存到 `{_sdir}`（会话目录 scripts/）。当前路径：`{_fp}`。下次重复跑图请先到 scripts/ search_files 找已有脚本。",
+                                            "session_id": _s["id"]})
+                            except Exception:
+                                pass
                         # 记录本回合是否有真实执行(被执行保护替换成占位打印的调用不算)
                         if tool_name in _PRODUCING_TOOLS and isinstance(args, dict):
                             if "[⛔ 执行保护]" not in str(args.get("command", args.get("code", ""))):

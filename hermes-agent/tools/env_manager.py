@@ -60,7 +60,7 @@ def list_envs() -> list:
     if not bin_:
         return []
     try:
-        r = subprocess.run([bin_, "env", "list", "--json"], capture_output=True, text=True, timeout=30)
+        r = subprocess.run([bin_, "env", "list", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         if r.returncode != 0:
             return []
         d = json.loads(r.stdout)
@@ -77,7 +77,7 @@ def fingerprint(env_name: str) -> dict:
         return {"conda_env": env_name, "python": "", "packages": {}, "available": False}
     try:
         r = subprocess.run([bin_, "list", "-n", env_name, "--json"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         if r.returncode != 0:
             return {"conda_env": env_name, "python": "", "packages": {}, "available": False}
         pkgs = {}
@@ -119,7 +119,7 @@ def env_apply(name: str, packages=None, action="create", timeout=1800) -> dict:
     _save_snapshot(name, "pre", pre)
     cmd = ([bin_, "create" if action == "create" else "install", "-n", name, "-y"] + (packages or []))
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         post = fingerprint(name)
         _save_snapshot(name, "post", post)
@@ -145,7 +145,7 @@ def env_rollback(name: str, timeout=3600) -> dict:
         pkgs.append(f"python={pre['python']}")
     cmd = [bin_, "install", "-n", name, "-y"] + pkgs
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return {"ok": False, "env": name, "error": f"回滚超时（>{timeout}s）"}
     return {"ok": r.returncode == 0, "env": name,

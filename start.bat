@@ -1,4 +1,5 @@
 @echo off
+set PYTHONUTF8=1
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
