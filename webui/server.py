@@ -922,7 +922,7 @@ def _build_task_resume_prompt(session):
     
     # 检查当前意图：知识问答/进度查询/方案讨论 → 轻量提示
     _intent = session.get("intent", "")
-    _is_light_question = _intent in ("knowledge_ask", "progress_check", "analysis_plan", "chat", "cancel_task")
+    _is_light_question = _intent in ("knowledge_ask", "progress_check", "result_check", "analysis_plan", "chat", "cancel_task")
     
     if _is_light_question:
         # 轻量：只提醒有任务在后台，不强制推进
@@ -1845,7 +1845,7 @@ def _build_task_plan_context(session):
     plan_path = os.path.join(results_dir, "task_plan.md")
 
     _intent = session.get("intent", "")
-    _is_analysis = _intent not in ("", "chat", "self_intro", "knowledge_ask", "progress_check")
+    _is_analysis = _intent not in ("", "chat", "self_intro", "knowledge_ask", "progress_check", "result_check")
     _has_messages = len(session.get("messages", [])) >= 2
 
     if not os.path.isfile(plan_path):
@@ -1859,7 +1859,7 @@ def _build_task_plan_context(session):
                            "帮我做", "帮我跑", "做分析", "跑分析"))
         _is_exec = _intent in ("analysis_exec", "direct_exec")
         # 三个条件同时满足才创建：explicit exec intent OR (data+exec keywords), AND not light intent
-        _LIGHT_FOR_PLAN = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan")
+        _LIGHT_FOR_PLAN = ("chat", "self_intro", "knowledge_ask", "progress_check", "result_check", "analysis_plan")
         if (_is_exec or (_has_data_path and _has_exec_kw)) and _intent not in _LIGHT_FOR_PLAN and len(_msgs) >= 2:
             return _auto_create_task_plan(session, plan_path)
         return None
@@ -2956,6 +2956,20 @@ def _classify_intent(text: str):
     if any(kw in t for kw in PROGRESS_KW):
         return ("progress_check", 0.85, {"reason": "progress_or_status_query"})
 
+    # 1.5a2: result_check —— 用户问"结果呢/出图了吗/结果在哪/还没结果"（过去时/产出查询），
+    # 不是新任务、不是纯闲聊：路由到先查 task_plan + results_dir + 工具日志再回答的意图，
+    # 避免被短句规则误判为 chat 后 Agent 只聊不查状态（2026-08-21 memomics-2274ab75 实测）。
+    RESULT_KW = ["结果呢", "出结果", "结果出来", "出图了吗", "图出来了吗", "图呢",
+                 "结果文件", "结果在哪", "产物", "还没有结果", "没有结果",
+                 "结果怎么样", "结果如何", "出图没", "图好了吗", "图出来没",
+                 "做完没", "完成没", "拿到结果", "给我结果", "看下结果",
+                 "结果出来没", "结果做出来没", "图做好了没", "图在哪"]
+    _result_neg_re = _re_mod.search(
+        r"(怎么|为什么|为何|咋|干嘛|到底|还).{0,8}(没|不|还|未|没有).{0,8}(结果|图|输出|产物|报告|文件|东西)", t)
+    _is_result_q = any(kw in t for kw in RESULT_KW) or bool(_result_neg_re)
+    if _is_result_q and not _has_data_path_early:
+        return ("result_check", 0.88, {"reason": "result_or_output_query"})
+
     # 1.5b: knowledge_ask（知识/错误/润色/参数问题 — 无数据路径）
     KNOWLEDGE_QUESTION_KW = ["什么意思", "是什么", "什么是", "参数", "怎么选",
                              "怎么设", "怎么调", "区别", "vs", "对比",
@@ -2964,7 +2978,8 @@ def _classify_intent(text: str):
                              "解释", "说明", "介绍一下",
                              "哪些", "用什么方法", "怎么修", "怎么处理",
                              "润色", "怎么写", "如何选择", "如何设置",
-                             "报错了", "不工作", "出错了", "失败了", "怎么解决"]
+                             "报错了", "不工作", "出错了", "失败了", "怎么解决",
+                             "怎么算", "怎么算的", "怎么分", "怎么比较", "如何计算", "怎么算出来"]
     _has_knowledge_q = any(kw in t for kw in KNOWLEDGE_QUESTION_KW)
     _is_planning_q = any(kw in t for kw in ["怎么设计", "如何设计", "方案", "路线",
                                              "研究框架", "分析框架", "实验设计"])
@@ -3382,6 +3397,18 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]
     
+    elif intent in ("result_check",):
+        lines += [
+            "用户正在查询之前任务的结果/产出（图、表格、报告在哪）。只汇报已落盘的真实结果，绝不凭记忆编。",
+            "⛔ 必须先调工具核实，不许凭记忆编结果（不查就答 = 撒谎）：",
+            "1. read_file 读 task_plan.md 看任务状态（进行中 / 已归档 / 已取消）",
+            "2. search_files 或 terminal('dir <输出目录>') 列出 figures/ results/ scripts/ 下最新文件（带文件名与时间）",
+            "3. 有产物 → 把真实文件路径交给用户（绝对路径 + 文件名 + 是否本轮新生成）；无产物 → 明说'当前还没有产出文件'并简述卡在哪一步",
+            "4. 任务未完成且用户想继续 → 读 task_plan 的下一步继续执行；用户没要求继续就别擅自启动新任务",
+            "⛔ 不要新建 task_plan。不要凭空说'已生成/已完成/图已出'。",
+            "",
+        ]
+
     elif intent in ("analysis_plan",):
         lines += [
             "用户正在询问分析方案/技术路线图。使用只读工具构建方案，不执行代码。",
@@ -4225,8 +4252,10 @@ def _recall_facts(text, limit=6, max_chars=450):
         return ""
 
 
-def _inject_anchors(session, text):
-    """每轮注入 历史记忆召回 + 会话锚点摘要（跨压缩持久，2026-08-14）。"""
+def _build_memory_digest(session, text):
+    """构建"历史记忆召回 + 会话锚点摘要"脚手架（不含用户文本）。
+    (b) 改造(2026-08-21)：每轮只注入最新一条；上限收紧(6 条/420 字)，
+    避免窗口被每轮重复的锚点/记忆脚手架占满(实测 220K 上下文 94% 是缓存命中的重复系统段)。"""
     _parts = []
     try:
         _facts = _recall_facts(text or "")
@@ -4236,14 +4265,199 @@ def _inject_anchors(session, text):
         pass
     try:
         from memomics.bio_tools import session_memory as _sm
-        _block = _sm.build_digest(session.get("id", ""), max_items=12, max_chars=700)
+        _block = _sm.build_digest(session.get("id", ""), max_items=6, max_chars=420)
         if _block:
             _parts.append(_block)
     except Exception:
         pass
     if not _parts:
-        return text
-    return "\n\n".join(_parts) + "\n\n" + (text or "")
+        return ""
+    return "\n\n".join(_parts)
+
+
+def _inject_anchors(session, text):
+    """每轮注入 历史记忆召回 + 会话锚点摘要（跨压缩持久，2026-08-14）。
+    保留给自检唤醒路径(1761)使用；主用户回合改由 _build_memory_digest + run_agent 单条注入。"""
+    _digest = _build_memory_digest(session, text)
+    if not _digest:
+        return text or ""
+    return _digest + "\n\n" + (text or "")
+
+
+def _est_message_tokens(m):
+    """粗略 token 估算（CJK 密集文本约 2 字/token）：用于触发上下文折叠预算。"""
+    c = m.get("content") if isinstance(m, dict) else ""
+    if not isinstance(c, str) or not c:
+        return 4
+    return max(4, len(c) // 2) + 4
+
+
+def _strip_scaffold_text(text):
+    """剥离历史里服务器注入的 [相关历史记忆]/[会话锚点] 前缀脚手架，返回真实用户文本；
+    纯脚手架返回 None。(b) 上下文卫生。唤醒/系统通知类消息本身即脚手架，不剥离直接丢弃。"""
+    if not isinstance(text, str):
+        return None
+    cur = text.strip()
+    if not cur:
+        return None
+    if cur.startswith(("[系统唤醒", "📊 LoopX 状态", "[System:")):
+        return None
+    for _ in range(4):
+        if cur.startswith(("[相关历史记忆", "[会话锚点")):
+            idx = cur.rfind("\n\n")
+            if idx == -1:
+                return None
+            nxt = cur[idx + 2:].strip()
+            if not nxt or nxt.startswith(("[相关历史记忆", "[会话锚点")):
+                cur = nxt or cur
+                if not nxt:
+                    return None
+                continue
+            return nxt
+        return cur
+    return None
+
+
+def _build_rollup_checkpoint(session, head):
+    """(c) 步进式结构化 checkpoint：把被折叠的历史头部压缩为结构化摘要。
+
+    确定性构建（task_plan + 会话锚点 + 最近工具调用 + 起始诉求），零 LLM 成本、可离线测试。
+    只折叠发给模型的这一份；state.db 全量轨迹不动，压缩永不丢证据。"""
+    _lines = ["[会话检查点 · 跨压缩持久 · 早期历史已折叠为结构化摘要]",
+              "## 会话", f"- id: {session.get('id', '')}"]
+    rd = session.get("results_dir") or ""
+    if rd:
+        _lines.append(f"- results_dir: {rd}")
+    try:
+        _plan = ""
+        _p = os.path.join(rd, "task_plan.md") if rd else ""
+        if _p and os.path.isfile(_p):
+            with open(_p, encoding="utf-8", errors="replace") as _f:
+                _plan = _f.read()[:1500]
+        if _plan:
+            _lines += ["## 目标/任务(task_plan 摘要)", _plan.strip()]
+    except Exception:
+        pass
+    try:
+        from memomics.bio_tools import session_memory as _sm
+        _dig = _sm.build_digest(session.get("id", ""), max_items=6, max_chars=420)
+        if _dig:
+            _lines += ["## 关键文件/路径(会话锚点)", _dig]
+    except Exception:
+        pass
+    try:
+        import sqlite3 as _sq
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT tool_name, substr(args_json,1,120), substr(result_text,1,60), "
+                "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
+                "WHERE session_id=? ORDER BY rowid DESC LIMIT 10", (session.get("id", ""),)).fetchall()
+        finally:
+            _conn.close()
+        if _rows:
+            _lines += ["## 已执行工作(最近工具调用)"]
+            for _t, _a, _r, _ts in reversed(_rows):
+                _lines.append(f"- [{_ts}] {_t} args={_a} result={str(_r)[:60]}")
+    except Exception:
+        pass
+    for _m in head:
+        if isinstance(_m, dict) and _m.get("role") in ("user", "human") \
+                and isinstance(_m.get("content"), str) and _m["content"].strip():
+            _lines += ["## 起始诉求", _m["content"].strip()[:300]]
+            break
+    _lines += ["## 提示",
+               "以上为早期对话的结构化摘要（保留了关键决策/路径/任务状态）。紧接其后的若干条消息是最近的真实对话，请基于它们继续，不必复述摘要。"]
+    return "\n".join(_lines)
+
+
+def _maybe_rollup_history(session, history):
+    """(c) 步进式结构化 checkpoint：重放历史估算超预算时，把头部折叠为结构化摘要 + 保留最近尾窗逐字。
+
+    预算/尾窗可用 MEMOMICS_ROLLUP_BUDGET / MEMOMICS_ROLLUP_TAIL 环境变量调整（便于测试）。
+    摘要未变小则不折叠。"""
+    if not history or len(history) < 12:
+        return history
+    try:
+        _budget = int(os.environ.get("MEMOMICS_ROLLUP_BUDGET", "60000"))
+        _tail = int(os.environ.get("MEMOMICS_ROLLUP_TAIL", "40"))
+    except Exception:
+        _budget, _tail = 60000, 40
+    if _tail <= 0 or len(history) <= _tail + 4:
+        return history
+    _est = sum(_est_message_tokens(m) for m in history)
+    if _est <= _budget:
+        return history
+    _tail_msgs = history[-_tail:]
+    _checkpoint = _build_rollup_checkpoint(session, history[:-_tail])
+    if not _checkpoint:
+        return history
+    if _est_message_tokens({"content": _checkpoint}) >= _est:
+        return history
+    return [{"role": "system", "content": _checkpoint}] + _tail_msgs
+
+
+def _session_may_have_result(session):
+    """该会话是否可能已有任务结果/产出（用于低置信度 chat 时决定要不要 LLM 兜底路由）。"""
+    try:
+        rd = session.get("results_dir") or ""
+        if rd and os.path.isdir(rd) and any(next(os.scandir(rd), None)):
+            return True
+    except Exception:
+        pass
+    return len(session.get("messages") or []) >= 2
+
+
+def _llm_route_intent(text, session):
+    """低置信度 chat 的 LLM 兜底路由（规则分类器兜不住的短句/省略上下文场景）。
+
+    让大模型判断：结果查询 / 进度查询 / 新分析 / 闲聊。失败静默返回 None（维持 chat）。
+    仅由 ws chat 处理在 {chat 且置信度低且会话有产出} 的窄带上调用，成本可控。
+    """
+    _CANDIDATES = ["chat", "result_check", "progress_check", "knowledge_ask",
+                   "analysis", "direct_exec", "cancel_task"]
+    try:
+        import urllib.request as _ur
+        import json as _json
+        cfg = _current_model or {}
+        base = (cfg.get("base_url") or "").rstrip("/")
+        key = cfg.get("api_key") or ""
+        if not base or not key:
+            return None
+        prompt = (
+            "你是科研助手 MemOmics 的意图路由器。用户消息可能很短且省略上下文。根据当前会话状态判意图，只输出一个词。\n"
+            "候选词与含义：\n"
+            "result_check=用户问之前任务的结果/产出在哪、出图了吗、还没结果\n"
+            "progress_check=用户问任务是否还在跑/进度\n"
+            "chat=闲聊或无法判断\n"
+            "knowledge_ask=问专业知识\n"
+            "analysis=要开始新的分析\n"
+            "direct_exec=明确让我直接执行\n"
+            "cancel_task=要停止/取消任务\n"
+            f"当前会话有结果目录: {session.get('results_dir', '') or '无'}。\n"
+            f"用户消息：{str(text)[:200]}\n"
+            "只输出一个候选词。"
+        )
+        body = _json.dumps({
+            "model": cfg.get("model", "deepseek-v4-flash"),
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 8,
+            "temperature": 0,
+        }).encode("utf-8")
+        req = _ur.Request(base + "/chat/completions", data=body, headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (key or ""),
+        })
+        with _ur.urlopen(req, timeout=15) as r:
+            d = _json.loads(r.read().decode("utf-8", "replace"))
+        ans = (((d.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip().lower()
+        for c in _CANDIDATES:
+            if c in ans:
+                return c if c != "chat" else None
+    except Exception:
+        pass
+    return None
 
 
 def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
@@ -8939,7 +9153,8 @@ async def ws_endpoint(ws: WebSocket):
                 _auto_anchor_turn(session, user_text=user_text)
                 # 2026-08-14: 会话轮数计数（长会话可见性：第 N 轮）
                 session["_turn_count"] = int(session.get("_turn_count", 0)) + 1
-                _run_text = _inject_anchors(session, user_text)
+                _run_text = user_text  # (b) 不再把记忆/锚点脚手架拼进用户消息本体（防历史污染），
+                # 脚手架由 run_agent 以单条 system 消息注入（见下文 (b) 上下文卫生块）
 
                 # 惰性加载：继续旧会话前，先把完整历史载入内存（保证上下文构建/追加正确）
                 _ensure_session_messages_loaded(session)
@@ -9003,6 +9218,14 @@ async def ws_endpoint(ws: WebSocket):
                 
                 # 意图分类 + 构建技能注入上下文
                 _intent, _intent_conf, _intent_meta = _classify_intent(user_text)
+                # (a2) 低置信度 chat + 会话可能有任务结果 → LLM 兜底路由（规则兜不住时让模型判，
+                # 避免"怎么没有结果呢"这类省略上下文短句被当 chat 后只聊不查状态）
+                if _intent == "chat" and float(_intent_conf or 0) <= 0.75 and _session_may_have_result(session):
+                    _routed = await loop.run_in_executor(None, _llm_route_intent, user_text, session)
+                    if _routed:
+                        _intent, _intent_conf = _routed, 0.55
+                        _intent_meta = {"reason": "llm_router_fallback"}
+                        logger.info(f"Session {session['id']}: intent llm-router {_routed} (rules said chat)")
                 session["intent"] = _intent
                 session["intent_conf"] = _intent_conf
                 session["intent_meta"] = _intent_meta
@@ -9145,7 +9368,7 @@ async def ws_endpoint(ws: WebSocket):
                 import re as _re_path
                 _has_data_path = bool(_re_path.search(r'[A-Za-z]:[/\\]\S+', user_text)) if user_text else False
                 # 轻量意图：永远不注入 SOUL-detail + skills_index（省 40%+ 上下文）
-                _LIGHT_INTENTS = ("chat", "self_intro", "knowledge_ask", "progress_check", "analysis_plan", "cancel_task")
+                _LIGHT_INTENTS = ("chat", "self_intro", "knowledge_ask", "progress_check", "result_check", "analysis_plan", "cancel_task")
                 # 重量意图：仅 explicit execution 或 analysis + 数据路径 + 执行关键词
                 _has_exec_kw = any(kw in user_text for kw in
                     ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze")) if user_text else False
@@ -10096,6 +10319,43 @@ async def ws_endpoint(ws: WebSocket):
                                     conversation_history.append({"role": role, "content": content})
                             except Exception:
                                 pass
+
+                        # ── (b) 上下文卫生：历史里累积的"记忆/锚点/唤醒"脚手架去重折叠 ──
+                        # 旧版把 _inject_anchors 拼进用户消息并被持久化，导致历史堆满重复的
+                        # [相关历史记忆]/[会话锚点] 脚手架(实测 220K 上下文 94% 为缓存命中的
+                        # 重复系统段)。这里：纯脚手架丢弃、带脚手架的旧用户消息剥离脚手架只留
+                        # 真实文本、本轮记忆/锚点以有且仅一条 system 消息注入。
+                        try:
+                            _filtered = []
+                            for _m in conversation_history:
+                                _c = _m.get("content")
+                                if not isinstance(_c, str):
+                                    _filtered.append(_m)
+                                    continue
+                                if _c.lstrip().startswith(("[相关历史记忆", "[会话锚点", "[系统唤醒", "📊 LoopX 状态", "[System:")):
+                                    _rest = _strip_scaffold_text(_c)
+                                    if _rest is None:
+                                        continue
+                                    _m2 = dict(_m)
+                                    _m2["content"] = _rest
+                                    _filtered.append(_m2)
+                                    continue
+                                _filtered.append(_m)
+                            conversation_history = _filtered
+                            _mem_digest = _build_memory_digest(_session, user_text or "")
+                            if _mem_digest:
+                                conversation_history = [m for m in conversation_history
+                                    if not (isinstance(m.get("content"), str)
+                                            and m["content"].startswith(("[相关历史记忆", "[会话锚点")))]
+                                conversation_history.append({"role": "system", "content": _mem_digest})
+                        except Exception as _b_err:
+                            logger.warning(f"[MemOmics] (b) 上下文卫生失败(不阻断): {_b_err}")
+
+                        # ── (c) 步进式结构化 checkpoint：重放估算仍超预算 → 头部折叠 + 保留尾窗 ──
+                        try:
+                            conversation_history = _maybe_rollup_history(_session, conversation_history)
+                        except Exception as _c_err:
+                            logger.warning(f"[MemOmics] (c) rollup 失败(不阻断): {_c_err}")
 
                         # 🔧 每轮开头：检查上一轮是否有未完成的后台进程
                         _bg_check = _build_background_process_check(_session, _agent)
