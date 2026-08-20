@@ -1527,8 +1527,10 @@ def _schedule_self_check(session, agent, loop):
         try:
             if sid not in _sessions: return
             s = _sessions[sid]
-            if s.get("running_agent") or s.get("running_task"):
+            if s.get("running_agent") or s.get("running_task") or s.get("_user_turn_active"):
                 # 2026-08-16: 冻结分支已直接武装诊断回合 → 本唤醒不重排（防双发）
+                # 2026-08-20: 用户回合进行中(_user_turn_active)同等视为忙——避免自检
+                # 唤醒与用户回合在同一 agent 上并发交错流, 把工具参数流截断成空
                 if s.get("_stall_wake_active"):
                     return
                 # 2026-08-14 P0: 早退重排——被并发回合吞掉的唤醒重新调度（最多 3 次）
@@ -5364,7 +5366,7 @@ async def api_version():
     rev = "unknown"
     try:
         _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
-                     capture_output=True, text=True, timeout=3)
+                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
         if _r.returncode == 0:
             rev = _r.stdout.strip()
     except Exception:
@@ -5450,7 +5452,7 @@ async def env_check():
     r_path = shutil.which("Rscript")
     if r_path:
         try:
-            rv = _sp.run(["Rscript", "-e", "cat(R.version$major, R.version$minor, sep='.')"], capture_output=True, text=True, timeout=10)
+            rv = _sp.run(["Rscript", "-e", "cat(R.version$major, R.version$minor, sep='.')"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
             result["r"]["version"] = rv.stdout.strip()
             result["r"]["ok"] = True
         except Exception:
@@ -5460,7 +5462,7 @@ async def env_check():
     try:
         gpu = shutil.which("nvidia-smi")
         if gpu:
-            gv = _sp.run([gpu, "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=10)
+            gv = _sp.run([gpu, "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
             result["gpu"]["name"] = gv.stdout.strip()
             result["gpu"]["ok"] = True
         else:
@@ -7896,8 +7898,10 @@ def _save_result_manifest(results_dir: str, manifest: dict) -> int:
     if "git" not in prov:
         try:
             import subprocess as _sp
-            _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR, capture_output=True, text=True, timeout=3)
-            _d = _sp.run(["git", "status", "--porcelain"], cwd=MEMOMICS_DIR, capture_output=True, text=True, timeout=3)
+            # 2026-08-20: GBK 崩溃修复——git status 输出含中文文件名(UTF-8), 默认按
+            # cp936 解码会抛 UnicodeDecodeError 并崩溃子进程 reader 线程
+            _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
+            _d = _sp.run(["git", "status", "--porcelain"], cwd=MEMOMICS_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
             prov["git"] = {"commit": _r.stdout.strip() or "unknown", "dirty": bool(_d.stdout.strip())}
         except Exception:
             prov["git"] = {"commit": "unknown", "dirty": False}
@@ -8943,6 +8947,11 @@ async def ws_endpoint(ws: WebSocket):
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # 并发护栏(2026-08-20 memomics-2274ab75 只说不做): 用户消息一进来就置位,
+                # 自检唤醒/心跳在该标记为真期间不得启动并发 agent 回合——否则两个回合在
+                # 同一 agent 上交错流, single-writer 护栏砍掉在飞流导致工具参数被截断为空。
+                # 在 self_intro/agent创建失败/run_agent finally 三处清除。
+                session["_user_turn_active"] = True
                 # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
                 # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
@@ -9080,6 +9089,7 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "complete", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
+                    session["_user_turn_active"] = False  # 并发护栏: 快速回复路径结束后清除
                     continue  # 跳过 agent 调用
 
                 # 发送 session_id（thinking 已在消息到达时即时发送）
@@ -9099,6 +9109,7 @@ async def ws_endpoint(ws: WebSocket):
                             "detail": _pt(session, "engine_ready"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
+                        session["_user_turn_active"] = False  # 并发护栏: 失败路径也需清除
                         continue
 
                 # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
@@ -9432,20 +9443,20 @@ async def ws_endpoint(ws: WebSocket):
                                 # POSIX 用 ps -ef（nvidia-smi 缺失时静默跳过 GPU 检查）
                                 if os.name == "nt":
                                     _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader",
-                                        shell=True, capture_output=True, text=True, timeout=10)
+                                        shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
                                     _gpu = _check.stdout.strip()
                                     _check2 = subprocess.run("tasklist | findstr cellbender",
-                                        shell=True, capture_output=True, text=True, timeout=5)
+                                        shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                                     _proc = _check2.stdout.strip()
                                     _failed = ("0 %" in _gpu and not _proc)
                                 else:
                                     _gpu = ""
                                     _check = subprocess.run("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader",
-                                        shell=True, capture_output=True, text=True, timeout=5)
+                                        shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                                     if _check.returncode == 0:
                                         _gpu = _check.stdout.strip()
                                     _check2 = subprocess.run("ps -ef | grep -E 'cellbender|rscript|python' | grep -v grep",
-                                        shell=True, capture_output=True, text=True, timeout=5)
+                                        shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                                     _proc = _check2.stdout.strip()
                                     _failed = ("0 %" in _gpu and not _proc) if _gpu else False
                                 if _failed:
@@ -9465,7 +9476,8 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             import json as _tcl_json
                             import time as _tcl_time
-                            _db_path = os.path.join(HERMES_HOME_DIR, "state.db")
+                            import os as _tcl_os  # 2026-08-20: 局部别名, 规避闭包作用域 os 未绑定
+                            _db_path = _tcl_os.path.join(HERMES_HOME_DIR, "state.db")
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
@@ -10350,6 +10362,7 @@ async def ws_endpoint(ws: WebSocket):
                     finally:
                         _session["running_agent"] = None
                         _session["running_task"] = None
+                        _session["_user_turn_active"] = False  # 并发护栏: 用户回合结束清除
                         # LoopX 执行层：用户回合交付记录（cadence 数据源）
                         try:
                             from memomics.loopx_bridge import LoopXBridge

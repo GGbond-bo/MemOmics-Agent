@@ -2955,6 +2955,17 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                         else:
                             # Unrepairable — flag for truncation handling
                             has_truncated_tool_args = True
+                else:
+                    # Blank/empty arguments (a superseded stream cut, an
+                    # upstream stall mid tool-call, or a malformed emission)
+                    # must NEVER be handed to the executor as a "valid" empty
+                    # call — that is exactly the memomics-2274ab75 "只说不做"
+                    # loop (write_file with no 'path', execute_python with no
+                    # 'code', ...).  Route through the same truncation
+                    # machinery as unrepairable args so the loop requests a
+                    # fresh, full-argument emission instead of burning a turn
+                    # on a call that can never execute.
+                    has_truncated_tool_args = True
                 mock_tool_calls.append(SimpleNamespace(
                     id=tc["id"],
                     type=tc["type"],
