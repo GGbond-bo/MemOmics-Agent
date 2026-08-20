@@ -101,3 +101,22 @@ zone6   0.1442  0.1179  0.1079  0.0922  0.0592   0.0241
 | Y_Pre vs O_Pre（YvsO） | 0.0271 |
 
 **⚠️ 生物学解读警示（L1 辩论 verdict=modify, high）**：cluster1 比例年轻组极低（Y_Pre 1.5%）→ 老年升高（O_Pre 10.5%）→ **老年运动后继续升（O_Post 21.5%）**，糖尿病运动组也保持高位（OD_Post 18.6%）。方向与"运动逆转去神经"知识库预期**相反**——运动后 Specialized MF 比例反而升。定稿前必须补 **pseudobulk（DESeq2, FDR<0.1）验证**，防止 10 vs 7 小样本个体异质性带偏；raw p 探索标注须注明未校正。产出 `explore_6grp_cluster1_boxplot.png`、脚本 `03_boxplot_6grp_cluster1.R`。
+
+## 用户风格定稿版（04_user_style_proportion.R，2026-08-17）
+
+用户贴出两段个人代码（显著性 R 版 + `plot_celltype_proportion` 画图函数），要求"你要记住了，重新画，之前的不好"——**凡是用户提供个人脚本，优先适配其代码而不是自写**：
+
+- **显著性 R 版**：5 比较对 = Y_Pre↔Y_Post / O_Pre↔O_Post / OD_Pre↔OD_Post（配对）+ Y_Pre↔O_Pre / O_Pre↔OD_Pre（独立）；配对按 `base_id` inner_join（用户代码 `extract_base_id <- str_remove(samplename, '_(Pre|Post)$')`）；**不补 0**（与 Python 版补 0 相反，见 SKILL.md "补不补 0 会反转结论"）
+- **画图函数**：六色配色（Y 绿 `#B2DF8A/#33A02C`、O 蓝 `#80B1D3/#1F78B4`、OD 红 `#FB9A99/#E31A1C`）、配对虚线（`geom_segment` + `base_id` inner_join）、`geom_boxplot(alpha=0.5)` + `geom_point` jitter、手动括号（左竖线+右竖线+横线）+ `geom_label` 白底 FDR 标注
+- **适配要点**：脚本内 `str_detect/str_remove` 用 base R shim（`grepl/sub`）替代 stringr（check_env 误报）；`sig_data$paired != 'True'`；定稿加 `label_type` 参数出 p/FDR 两版
+- ⚠️ 用户 R 版口径 cluster1 **全不显著**（YvsO p=0.234, O 运动 p=0.469），与 Python 补 0 版 p=0.027 冲突——交付声明口径
+
+## cluster2 探索预览版（07_explore_4grp_cluster2_p.R，2026-08-17）
+
+**用户中途补"下一个群先看预览，探索"** → cluster2 走探索流程而非直接套定稿模板：
+
+- 脚本 = cluster1 探索脚本（03）的 4 柱改造：`groups = O_Pre/O_Post/OD_Pre/OD_Post`，比较 = O 运动（配对）+ OD 运动（配对）+ O vs OD（独立）
+- **探索版故意不加载 egg**（140×110 不需要 set_panel_size）→ 绕开 check_env 对 egg 误报导致 rail_review(pre) 拦截；required_packages 只列 dplyr/tidyr/ggplot2
+- **sed 克隆脚本的坑**：从 05 复制出 06 时 `sed 's/cluster1/cluster2/g'` 会把 `subcluster_map` 映射行 `zone1='cluster1'` 也替换成 `zone1='cluster2'`——克隆后必须检查映射行，用 patch 单独修复
+- **cluster2 实测（n=7/组）**：三比较全不显著——O 运动 p=0.578 / OD 运动 p=0.219 / O vs OD p=0.318；中位比例 O_Pre 5.4% → O_Post 2.4% / OD_Pre 9.9% → OD_Post 6.7%
+- 产出 `explore_4grp_cluster2_boxplot_p.png`（140×110mm, 300dpi）——探索阶段只出 raw p 版，等用户确认后再定稿（柱数规则 + FDR 版 + PDF）

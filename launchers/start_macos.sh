@@ -49,8 +49,8 @@ if [ -z "$PYTHON" ]; then
     if [ ! -f "$CONDA_PY" ]; then
         ARCH=$(uname -m)
         case "$ARCH" in
-            arm64)  INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-latest-MacOSX-arm64.sh" ;;
-            x86_64) INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" ;;
+            arm64)  INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-py312_25.1.1-2-MacOSX-arm64.sh" ;;
+            x86_64) INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-py312_25.1.1-2-MacOSX-x86_64.sh" ;;
             *)      echo "[ERROR] Unsupported arch: $ARCH"; exit 1 ;;
         esac
         if [ ! -f "$INSTALLER" ]; then
@@ -94,9 +94,18 @@ else
     echo "[OK] Dependencies ready"
 fi
 # 批O5(2026-08-16): 读图组件(OCR=rapidocr_onnxruntime+opencv-headless, 跨平台含macOS)首次装
+# 批O7(2026-08-17): 优先随包离线 wheel（vendor/wheels，Python 3.12），无网也能装；失败才走在线
 if ! "$VENV_PY" -c "import rapidocr_onnxruntime" 2>/dev/null; then
     echo "[INSTALL] Installing vision/OCR components (约200MB, once)..."
-    "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+    if [ -d "$SCRIPT_DIR/vendor/wheels" ]; then
+        echo "[INFO] Using bundled OCR wheels (offline)..."
+        "$VENV_PY" -m pip install --no-index --find-links "$SCRIPT_DIR/vendor/wheels" -r requirements-vision.txt || {
+            echo "[WARN] offline wheels failed, trying online..."
+            "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+        }
+    else
+        "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+    fi
 else
     echo "[OK] OCR ready"
 fi

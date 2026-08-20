@@ -2726,6 +2726,21 @@ def _detect_lang(text):
         return "en"
     return "zh"
 
+def _user_lang_instruction(text):
+    """显式语言指令: 返回 'en'/'zh'/None。
+    用户说"用英文回答/answer in english"等 → 强制该语言并粘滞整个会话。"""
+    t = (text or "").lower()
+    en_kw = ("用英文", "用英语", "说英文", "说英语", "英文回答", "英语回答", "请用英文",
+             "请用英语", "answer in english", "respond in english", "in english please",
+             "english please", "write in english", "speak english")
+    zh_kw = ("用中文", "说中文", "中文回答", "请用中文", "用汉语", "中文交流",
+             "answer in chinese", "respond in chinese", "in chinese please", "chinese please")
+    if any(k in t for k in en_kw):
+        return "en"
+    if any(k in t for k in zh_kw):
+        return "zh"
+    return None
+
 def ascii_lang_ratio(text):
     """ASCII 字母占比"""
     total = len(text.strip())
@@ -3643,6 +3658,10 @@ def _session_emit(session, msg_dict):
         # 上限 10 个 turn，超出删最早的
         if len(rlog) > 10:
             del rlog[:len(rlog) - 10]
+    # 2026-08-17: delta 流式文本按会话累积 —— 刷新/重连后 switch_session
+    # 的 progress_replay 携带 partial_text 重放半截输出，前端继续接流不丢内容
+    if msg_type == "delta":
+        session["_partial_text"] = session.get("_partial_text", "") + msg_dict.get("content", "")
     # delta/reasoning/tool_gen 是流式文本，不存（太大）；其他都存
     if msg_type not in ("delta", "reasoning", "tool_gen", "heartbeat"):
         progress_log = session.setdefault("progress_log", [])
@@ -3655,6 +3674,8 @@ def _session_emit(session, msg_dict):
         rlog = session.get("reasoning_log")
         if rlog and rlog[-1].get("_open"):
             rlog[-1]["_open"] = False
+        # 2026-08-17: 回合结束清空半截文本累积（下个 turn 重新开始）
+        session.pop("_partial_text", None)
     # 通过连接注册表广播到该会话的全部浏览器连接（多会话并发互不覆盖）
     recipients = list(_ws_clients_by_session.get(session.get("id", ""), set()))
     if recipients:
@@ -4686,7 +4707,9 @@ async def get_messages(sid: str, limit: int = 100):
             if len(session.get("messages") or []) < _win:
                 session["messages"] = _load_session_messages(sid, limit=_win)
         msgs = (session.get("messages") or [])[-limit:]
-        total = len(session["messages"]) if session.get("_messages_loaded") else int(session.get("_msg_count") or 0)
+        # 2026-08-17: total 给可靠下限——旧会话 _msg_count 可能为 0，
+        # 至少不小于已加载窗口长度，前端据此显示"加载更早"入口
+        total = len(session["messages"]) if session.get("_messages_loaded") else max(int(session.get("_msg_count") or 0), len(session["messages"] or []))
     else:
         # 显示全部：加载完整历史
         _ensure_session_messages_loaded(session)
@@ -8506,6 +8529,9 @@ async def get_progress(sid: str):
     session = _sessions[sid]
     return {
         "progress_log": session.get("progress_log", []),
+        "reasoning_log": [r.get("content", "") for r in session.get("reasoning_log", []) if r.get("content")],
+        # 2026-08-17: 半截流式文本（刷新/重连时恢复进行中的回复，HTTP 兜底同款）
+        "partial_text": session.get("_partial_text", ""),
         "is_running": bool(session.get("running_agent") or session.get("running_task")),
         "session_id": sid,
     }
@@ -8831,6 +8857,8 @@ async def ws_endpoint(ws: WebSocket):
                     "type": "progress_replay",
                     "progress_log": progress_log,
                     "reasoning_log": [r.get("content", "") for r in session.get("reasoning_log", []) if r.get("content")],
+                    # 2026-08-17: 半截流式文本（刷新/重连时恢复进行中的回复）
+                    "partial_text": session.get("_partial_text", ""),
                     "is_running": is_running,
                     "session_id": session["id"],
                 }, ensure_ascii=False))
@@ -8863,6 +8891,7 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-14: 运行状态基线（UI 心跳实时可见）
                 session["_turn_start_ts"] = time.time()
                 session["_api_calls"] = 0
+                session["_partial_text"] = ""  # 2026-08-17: 新回合重置半截文本累积
                 session["_real_exec_this_turn"] = False  # 本回合是否有代码真实执行(被护栏跳过的调用不算)
                 session["_tool_dedup"] = {}  # 每轮用户消息重置重复执行拦截:用户反复重跑相同代码是合法的
                 session["_live_tool"] = ""
@@ -8876,7 +8905,20 @@ async def ws_endpoint(ws: WebSocket):
                     user_text = (user_text or "查看图片") + img_context
 
                 # 问题9: 检测用户语言并更新会话语言
+                # 2026-08-17: 显式指定（用英文/answer in english）→ 强制并粘滞；
+                # 英文提问且近期上下文无中文 → 英文；上下文有中文 → 保持中文
                 detected_lang = _detect_lang(user_text)
+                _explicit_lang = _user_lang_instruction(user_text)
+                if _explicit_lang:
+                    detected_lang = _explicit_lang
+                    session["lang_locked"] = _explicit_lang
+                elif session.get("lang_locked"):
+                    detected_lang = session["lang_locked"]
+                elif detected_lang == "en":
+                    _recent_msgs = [m for m in (session.get("messages") or [])[-8:]
+                                    if m.get("role") == "user" and m.get("content")]
+                    if any(_detect_lang(m.get("content", "")) == "zh" for m in _recent_msgs):
+                        detected_lang = session.get("lang", "zh")
                 session["lang"] = detected_lang
 
                 # 分析级别检测 (闲聊 vs 分析)
@@ -9154,6 +9196,21 @@ async def ws_endpoint(ws: WebSocket):
                             f"⛔ 领域限定：用户问题推断为 {_detected_domain or '通用'} 领域，请只查询该领域相关 skill。\n"
                             "⛔ 不要用 LLM 预训练知识凭空编造分析路线。skill_index 里的 368 个 skill 是权威来源。"
                         )
+
+                # 2026-08-17: 回答语言策略 — 把会话语言显式注入 Agent 系统提示
+                # （英文提问+无中文上下文 / 用户显式指定英文 → 全程英文回复；否则中文）
+                _resp_lang = session.get("lang", "zh")
+                if _resp_lang == "en":
+                    agent.ephemeral_system_prompt += (
+                        "\n\n## 回答语言（最高优先）\n"
+                        "用户当前使用英文交流。请用**英文**完成本回合及后续所有回复："
+                        "包括分析结论、图表标题与图注、报告正文与文件名，不要混用中文。"
+                    )
+                else:
+                    agent.ephemeral_system_prompt += (
+                        "\n\n## 回答语言（最高优先）\n"
+                        "请使用**中文**回复用户（包括图表标题与图注、报告正文）。"
+                    )
 
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail="", _s=session):

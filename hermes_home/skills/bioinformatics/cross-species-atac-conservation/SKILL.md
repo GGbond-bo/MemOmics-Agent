@@ -117,6 +117,15 @@ C 类: S_seq 高 + S_acc 低 → 序列保守但不可及
 D 类: S_seq 低 → 序列不保守
 ```
 
+## 🔴 评估粒度决策：主评估 8 大类，细粒度只做验证层（2026-08-17 用户问"还有必要分更细致吗"）
+
+**用户问"人和猴子的可代替性要不要分更细（亚区/亚型）评估"时，标准答案：**
+
+- **主评估停在 8 大类**——理由：① 统计功效（63样本/161,497细胞 → 每样本~2,563 → 8大类每类~320 够 pseudobulk；拆到亚型只剩几十个，ATAC 稀疏性崩）② 跨物种对齐（猴16标签 vs 人30群，8大类是"最大公约数"，拆细撞物种特异亚群如 METTL7B）③ 专利范围（独权宽罩得住所有粒度，细粒度进从权）
+- **细粒度只做"验证层"**：挑两侧能对齐的 CA1/DG 两个亚区，拿已知衰老脆弱性（CA1 易损、DG 神经发生下降）对答案 → 从权 8"细胞类型特异性评估"的实施例素材 + A25 实用性抗辩弹药
+- 对不上的亚群（METTL7B 等）→ 直接进"物种特异"清单，当错误检测机制的演示
+- 完整算账表/生物学锚点/回答话术 → `references/evaluation-granularity-decision.md`
+
 ## 专利框架
 
 - **独权**：三层递进整合（序列+可及性+TF结合）→ CRECS 综合评分 → A/B/C/D 分类
@@ -356,6 +365,10 @@ GET https://api.genome.ucsc.edu/getData/track?genome=hg38;track=phyloP100way;chr
 > 📑 测试版 P3-P6 完整执行记录（脚本/结果/文件清单/专利文档路径）→ `references/test-version-p3-p6-execution-2026-08.md`
 
 ### 🔴 人侧注释首选方案：用猴侧已验证的 marker 列表标签迁移（2026-08-12 用户问根据猴子来注释可以吗）
+
+> 📑 **人侧 40 样本 getMarkerFeatures 逐群注释协议（2026-08-17 实测，28 群 C1-C30 注释地图 + 假阳性过滤 regex + 金标准排名核对法 + C1-C6 NPC 修正）→ `references/human-40-marker-annotation.md`**
+
+> ⛔ **ATAC GeneScore 铁律（2026-08-17）**：getMarkerFeatures 的 top marker 不能直接读——每群 22-45% 是 MIR/SNORD/OR/KRTAP/LOC/LINC 等假阳性家族。正确流程 = 先过滤假阳性 → 取过滤后 top10-12 真实基因 → 金标准 marker 做排名交叉核对（名次 ≤50 才命中）。只看 top 会把 C1-C6（实际是 MYT1/DLL3/SOX1 NPC 签名）误判成 Ex。
 
 用户猴侧已注释好（8 大类 scRNA marker），问能否根据猴子来注释人——答案：可以，且推荐。实现方式 = marker 列表迁移（label transfer via markers），不是直接搬细胞标签。
 

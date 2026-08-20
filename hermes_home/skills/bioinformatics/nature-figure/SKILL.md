@@ -199,3 +199,13 @@ save_pub_r <- function(plot, filename, width_mm = 183, height_mm = 120, dpi = 60
 | human | skeletal_muscle | aging | 2026-07-31 | phase5_nature_figures.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-01 | - | - | - |  |
 | human | skeletal_muscle | aging_diabetes_exercise | 2026-08-13 | run_plot_PureTypeI_4grp_CNS.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | subcluster_top1_scores.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_subcluster_top1_violin.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_subcluster_AMPK_violin.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_v2.py | - | - |  |
+| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_v2.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
+| - | - | - | 2026-08-20 | fig_split_v10.py (FigA3 提取) | - | - |  |
+| - | - | - | 2026-08-20 | fig_split_v10.py 口径验证 | - | - |  |
+| - | - | - | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_vs_pure_v2.py | - | - |  |

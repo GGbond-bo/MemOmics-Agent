@@ -590,33 +590,99 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 </style>
 </head>
 <body>
+<script>
+// === 界面语言 i18n（v1: 主要界面文案，中/英切换，localStorage 持久化） ===
+var I18N = {
+  zh: {
+    'title_chat':'生信分析对话','status_connecting':'连接中...','send':'发送','stop':'⏹ 停止',
+    'input_ph':'输入您的分析需求... (Enter发送, Shift+Enter换行)\n支持粘贴截图、拖拽图片到输入框',
+    'upload_img':'上传图片 (或粘贴/拖拽)','goto_bottom':'▼ 回到底部','steer_hint':'💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）',
+    'enter_hint':'Enter发送 · Shift+Enter换行','info_title':'分析信息','cur_session':'当前会话',
+    'todo':'待办列表','todo_empty':'暂无待办','tool_status':'工具状态','ready':'就绪',
+    'kb':'知识库','yaml_tpl':'YAML 模板','runtime_health':'运行健康','runtime_load':'点击 🔄 加载',
+    'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
+    'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
+    'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息',
+    'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
+    'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
+    'download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
+    'detect_local':'🔍 检测本地模型 (Ollama/LM Studio/vLLM)','api_provider':'API 提供商',
+    'model_default':'模型 (选择默认)','api_base':'API Base URL (自动填充)','api_key':'API Key',
+    'save_key':'保存 Key','delete_key':'删除 Key','protocol':'传输协议',
+    'custom_model':'自定义模型 ID (可选)','custom_model_ph':'留空用上方选择','set_as_current':'设为当前模型',
+    'imagegen_label':'🖼️ 图像生成 (聊天里说「画一张…」即可用)','imagegen_loading':'读取中…',
+    'base_url':'Base URL','model_id':'模型 ID','default_size':'默认尺寸 (横屏/竖屏在 config 里可另配)',
+    'default_size2':'默认尺寸','imagegen_size_ph':'1024x1024 或 2K','not_connected':'未连接',
+    'memory_ph':'输入要追加的记忆内容...','mem_append':'追加','mem_overwrite':'覆盖',
+    'drag_grip':'↑ 向上拖动拉大输入框（双击还原 100px）'
+  },
+  en: {
+    'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
+    'input_ph':'Describe your analysis... (Enter to send, Shift+Enter for newline)\nPaste screenshots or drag images here',
+    'upload_img':'Upload image (or paste/drag)','goto_bottom':'▼ Back to bottom','steer_hint':'💡 Agent is running — type to steer (won\'t interrupt current tool)',
+    'enter_hint':'Enter to send · Shift+Enter for newline','info_title':'Analysis Info','cur_session':'Current Session',
+    'todo':'To-do List','todo_empty':'No to-dos yet','tool_status':'Tool Status','ready':'Ready',
+    'kb':'Knowledge Base','yaml_tpl':'YAML Templates','runtime_health':'Runtime Health','runtime_load':'Click 🔄 to load',
+    'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
+    'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
+    'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat',
+    'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
+    'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
+    'download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
+    'detect_local':'🔍 Detect local models (Ollama/LM Studio/vLLM)','api_provider':'API Provider',
+    'model_default':'Model (global default)','api_base':'API Base URL (auto-filled)','api_key':'API Key',
+    'save_key':'Save Key','delete_key':'Delete Key','protocol':'Protocol',
+    'custom_model':'Custom model ID (optional)','custom_model_ph':'Empty = use selection above','set_as_current':'Set as default model',
+    'imagegen_label':'🖼️ Image generation (say "draw ..." in chat)','imagegen_loading':'Loading...',
+    'base_url':'Base URL','model_id':'Model ID','default_size':'Default size (landscape/portrait configurable)',
+    'default_size2':'Default size','imagegen_size_ph':'1024x1024 or 2K','not_connected':'Not connected',
+    'memory_ph':'Memory content to append...','mem_append':'Append','mem_overwrite':'Overwrite',
+    'drag_grip':'↑ Drag up to enlarge input (double-click to reset)'
+  }
+};
+var UI_LANG = 'zh';
+try { UI_LANG = localStorage.getItem('memomics_ui_lang') || 'zh'; } catch(e) {}
+function t(key){ var d = I18N[UI_LANG] || I18N.zh; return (d[key] != null) ? d[key] : (I18N.zh[key] || key); }
+function applyUILang(){
+  document.querySelectorAll('[data-i18n]').forEach(function(el){ var v = t(el.getAttribute('data-i18n')); if (v) el.textContent = v; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el){ var v = t(el.getAttribute('data-i18n-ph')); if (v) el.placeholder = v; });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el){ var v = t(el.getAttribute('data-i18n-title')); if (v) el.title = v; });
+  var btn = document.getElementById('lang-toggle');
+  if (btn) btn.textContent = (UI_LANG === 'zh') ? 'EN' : '中';
+  document.documentElement.lang = (UI_LANG === 'zh') ? 'zh-CN' : 'en';
+}
+function toggleUILang(){ UI_LANG = (UI_LANG === 'zh') ? 'en' : 'zh'; try { localStorage.setItem('memomics_ui_lang', UI_LANG); } catch(e){} applyUILang(); }
+document.addEventListener('DOMContentLoaded', applyUILang);
+</script>
 <div class="app">
   <!-- === 左侧栏 === -->
   <div class="sidebar">
     <div class="sidebar-header">
       <h1>🧬 MemOmics</h1>
-      <div class="subtitle">自进化多组学生信分析平台</div>
+      <div class="subtitle" data-i18n="subtitle">自进化多组学生信分析平台</div>
     </div>
-    <button class="new-session-btn" onclick="newSession()">+ 新建会话</button>
+    <button class="new-session-btn" onclick="newSession()" data-i18n="new_session">+ 新建会话</button>
 
-    <input class="session-search" id="session-search" type="search" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="memomics-session-filter" readonly onfocus="this.removeAttribute('readonly')" />
+    <input class="session-search" id="session-search" type="search" data-i18n-ph="search_session" placeholder="🔍 搜索会话..." oninput="filterSessions()" autocomplete="off" name="memomics-session-filter" readonly onfocus="this.removeAttribute('readonly')" />
     <div class="session-batch-bar" id="session-batch-bar">
-      <button id="batch-btn" onclick="toggleBatchMode()">☑ 批量管理</button>
-      <button id="batch-delete-btn" style="display:none;" onclick="batchDeleteSelected()" disabled>🗑 删除选中</button>
-      <button id="batch-cancel-btn" style="display:none;" onclick="toggleBatchMode(false)">✕ 取消</button>
+      <button id="batch-btn" onclick="toggleBatchMode()" data-i18n="batch_mgmt">☑ 批量管理</button>
+      <button id="batch-delete-btn" style="display:none;" onclick="batchDeleteSelected()" disabled data-i18n="batch_delete">🗑 删除选中</button>
+      <button id="batch-cancel-btn" style="display:none;" onclick="toggleBatchMode(false)" data-i18n="batch_cancel">✕ 取消</button>
     </div>
 
     <div class="session-list" id="session-list"></div>
     <div class="sidebar-nav">
-      <div class="nav-item active" onclick="switchView('chat')" id="nav-chat">💬 对话分析</div>
-      <div class="nav-item" onclick="switchView('results')" id="nav-results">📊 分析结果</div>
-      <div class="nav-item" onclick="switchView('files')" id="nav-files">📁 文件浏览</div>
-      <div class="nav-item" onclick="switchView('kb')" id="nav-kb">📚 知识库</div>
-      <div class="nav-item" onclick="switchView('skills')" id="nav-skills">🧩 Skill库</div>
-      <div class="nav-item" onclick="switchView('settings')" id="nav-settings">⚙️ 设置</div>
-      <div class="nav-item" onclick="switchView('memory')" id="nav-memory">🧠 记忆</div>
-      <div class="nav-item" onclick="switchView('context')" id="nav-context">📐 上下文窗口</div>
-      <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin">💬 微信消息</div>
+      <div class="nav-item active" onclick="switchView('chat')" id="nav-chat" data-i18n="nav_chat">💬 对话分析</div>
+      <div class="nav-item" onclick="switchView('results')" id="nav-results" data-i18n="nav_results">📊 分析结果</div>
+      <div class="nav-item" onclick="switchView('files')" id="nav-files" data-i18n="nav_files">📁 文件浏览</div>
+      <div class="nav-item" onclick="switchView('kb')" id="nav-kb" data-i18n="nav_kb">📚 知识库</div>
+      <div class="nav-item" onclick="switchView('skills')" id="nav-skills" data-i18n="nav_skills">🧩 Skill库</div>
+      <div class="nav-item" onclick="switchView('settings')" id="nav-settings" data-i18n="nav_settings">⚙️ 设置</div>
+      <div class="nav-item" onclick="switchView('memory')" id="nav-memory" data-i18n="nav_memory">🧠 记忆</div>
+      <div class="nav-item" onclick="switchView('context')" id="nav-context" data-i18n="nav_context">📐 上下文窗口</div>
+      <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
       <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
@@ -628,6 +694,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     <div class="chat-header">
       <div class="title" id="chat-title">生信分析对话</div>
       <div style="display:flex; align-items:center; gap:12px;">
+        <button id="lang-toggle" onclick="toggleUILang()" title="Switch language / 切换语言" style="font-size:11px;padding:2px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;">EN</button>
         <span class="model-badge" id="model-badge">未连接</span>
         <div class="status"><span class="dot"></span> <span id="status-text">连接中...</span></div>
       </div>
@@ -637,25 +704,25 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
     </div>
     <!-- 输出中悬浮浮条：仅"回到底部"（停止按钮在底部输入区，不重复） -->
     <div class="chat-float-bar" id="chat-float-bar" style="display:none;">
-      <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出">▼ 回到底部</button>
+      <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出" data-i18n="goto_bottom">▼ 回到底部</button>
     </div>
     <div class="chat-input" id="chat-input">
-      <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）"></div>
+      <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
       <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
       <div class="input-row">
-        <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)">
+        <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)" data-i18n-title="upload_img">
           🖼️
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)">
         </label>
-        <textarea id="input" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
-        <button id="send" onclick="send(false)">发送</button>
-        <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行">⏹ 停止</button>
+        <textarea id="input" data-i18n-ph="input_ph" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
+        <button id="send" onclick="send(false)" data-i18n="send">发送</button>
+        <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行" data-i18n="stop">⏹ 停止</button>
       </div>
-      <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;">
+      <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;" data-i18n="steer_hint">
         💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）
       </div>
       <div class="input-info">
-        <span>Enter发送 · Shift+Enter换行</span>
+        <span data-i18n="enter_hint">Enter发送 · Shift+Enter换行</span>
         <select class="model-select" id="model-select" onchange="onModelSelect()"></select>
       </div>
     </div>
@@ -668,18 +735,18 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
   <div class="info-panel" id="info-panel">
     <!-- 默认: 分析信息 -->
     <div id="panel-info">
-      <div class="info-header">分析信息</div>
+      <div class="info-header" data-i18n="info_title">分析信息</div>
       <div class="info-content" id="info-content">
         <div class="info-section">
-          <h3>当前会话</h3>
+          <h3 data-i18n="cur_session">当前会话</h3>
           <div class="item"><span class="name" id="cur-session">无</span></div>
         </div>
         <div class="info-section">
-          <h3>待办列表</h3>
+          <h3 data-i18n="todo">待办列表</h3>
           <div id="todo-list" style="font-size:12px;color:var(--text-light);">暂无待办</div>
         </div>
         <div class="info-section">
-          <h3>工具状态</h3>
+          <h3 data-i18n="tool_status">工具状态</h3>
           <div class="item"><span class="name">scan_data</span><span class="badge">就绪</span></div>
           <div class="item"><span class="name">search_knowledge</span><span class="badge">就绪</span></div>
           <div class="item"><span class="name">rail_review</span><span class="badge">就绪</span></div>
@@ -688,12 +755,12 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           <div class="item"><span class="name">save_reference</span><span class="badge">就绪</span></div>
         </div>
         <div class="info-section">
-          <h3>知识库</h3>
-          <div class="item"><span class="name">YAML 模板</span><span class="badge" id="info-kb-count">…</span></div>
+          <h3 data-i18n="kb">知识库</h3>
+          <div class="item"><span class="name" data-i18n="yaml_tpl">YAML 模板</span><span class="badge" id="info-kb-count">…</span></div>
           <div class="item"><span class="name">Skills</span><span class="badge" id="info-skill-count">…</span></div>
         </div>
         <div class="info-section">
-          <h3>运行健康 <button onclick="refreshRuntimePanel()" title="刷新运行状态" style="float:right;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄</button></h3>
+          <h3 data-i18n="runtime_health">运行健康 <button onclick="refreshRuntimePanel()" title="刷新运行状态" style="float:right;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄</button></h3>
           <div id="runtime-panel" style="font-size:11px;color:var(--text-light);">点击 🔄 加载</div>
         </div>
       </div>
@@ -701,14 +768,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
     <!-- 分析结果面板 -->
     <div id="panel-results" style="display:none;">
-      <div class="info-header">分析结果 <button class="back-btn" onclick="refreshResults()" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;float:right;">🔄 刷新</button></div>
+      <div class="info-header" data-i18n="results_title">分析结果 <button class="back-btn" onclick="refreshResults()" style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;float:right;" data-i18n="refresh">🔄 刷新</button></div>
       <div class="file-path-bar" id="results-path"></div>
       <!-- 图片预览区（新图自动弹出，可叉掉） -->
       <div id="figure-preview-area" style="display:none;"></div>
       <!-- 分类标签 -->
       <div id="results-tabs" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;">
-        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;">🖼️ 图片</span>
-        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);">📁 文件</span>
+        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;" data-i18n="tab_figures">🖼️ 图片</span>
+        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);" data-i18n="tab_files">📁 文件</span>
       </div>
       <!-- 图片缩略图网格 -->
       <div id="results-figures" style="display:none;padding:8px;overflow-y:auto;flex:1;"></div>
@@ -718,11 +785,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
     <!-- 文件浏览面板 -->
     <div id="panel-files" style="display:none;">
-      <div class="info-header">文件浏览</div>
+      <div class="info-header" data-i18n="files_title">文件浏览</div>
       <div class="file-path-bar" id="file-path"></div>
       <div class="file-browser" id="file-list"></div>
       <div class="file-preview" id="file-preview" style="display:none;">
-        <button class="back-btn" onclick="closeFilePreview()">← 返回</button>
+        <button class="back-btn" onclick="closeFilePreview()" data-i18n="back">← 返回</button>
         <pre id="file-preview-content"></pre>
       </div>
     </div>
@@ -855,11 +922,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         </div>
         <div class="settings-group">
           <label>记忆内容</label>
-          <textarea id="memory-content" style="width:100%;height:200px;border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12px;font-family:Consolas,monospace;resize:vertical;background:var(--panel);color:var(--text);" placeholder="输入要追加的记忆内容..."></textarea>
+          <textarea id="memory-content" style="width:100%;height:200px;border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12px;font-family:Consolas,monospace;resize:vertical;background:var(--panel);color:var(--text);" data-i18n-ph="memory_ph" placeholder="输入要追加的记忆内容..."></textarea>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="save-btn" onclick="writeMemory('append')" style="flex:1;">追加</button>
-          <button class="save-btn" onclick="writeMemory('overwrite')" style="flex:1;background:var(--warning);">覆盖</button>
+          <button class="save-btn" onclick="writeMemory('append')" style="flex:1;" data-i18n="mem_append">追加</button>
+          <button class="save-btn" onclick="writeMemory('overwrite')" style="flex:1;background:var(--warning);" data-i18n="mem_overwrite">覆盖</button>
         </div>
         <div id="memory-result" style="margin-top:8px;font-size:12px;"></div>
         <hr style="margin:12px 0;border:none;border-top:1px solid var(--border);">
@@ -869,14 +936,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
     <!-- 设置面板 -->
     <div id="panel-settings" style="display:none;">
-      <div class="info-header">设置</div>
+      <div class="info-header" data-i18n="settings_title">设置</div>
       <div class="settings-panel">
         <!-- 已连接的模型快速切换 -->
         <div class="settings-group">
-          <label>已连接的模型 (交互框可切换)</label>
+          <label data-i18n="connected_models">已连接的模型 (交互框可切换)</label>
           <div id="connected-models-list" style="font-size:12px;"></div>
           <div style="margin-top:6px;font-size:11px;color:var(--text-light);">
-            <button onclick="detectLocalModels()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔍 检测本地模型 (Ollama/LM Studio/vLLM)</button>
+            <button onclick="detectLocalModels()" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;" data-i18n="detect_local">🔍 检测本地模型 (Ollama/LM Studio/vLLM)</button>
             <span id="local-models-hint" style="margin-left:6px;"></span>
           </div>
           <div id="local-models-list" style="font-size:11px;margin-top:4px;"></div>
@@ -884,29 +951,29 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
         <hr style="margin:12px 0;border:none;border-top:1px solid var(--border);">
         <!-- 添加新 Provider Key -->
         <div class="settings-group">
-          <label>API 提供商</label>
+          <label data-i18n="api_provider">API 提供商</label>
           <select id="settings-provider-select" onchange="onProviderSelect()" style="width:100%;"></select>
         </div>
         <div class="settings-group">
-          <label>模型 (选择默认)</label>
+          <label data-i18n="model_default">模型 (选择默认)</label>
           <select id="settings-model" onchange="onSettingsModelSelect()"></select>
         </div>
         <div class="settings-group">
-          <label>API Base URL (自动填充)</label>
+          <label data-i18n="api_base">API Base URL (自动填充)</label>
           <input type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" readonly>
         </div>
         <div class="settings-group">
-          <label>API Key</label>
+          <label data-i18n="api_key">API Key</label>
           <div style="display:flex;gap:4px;">
             <input type="password" id="settings-api-key" placeholder="sk-..." style="flex:1;">
-            <button onclick="saveProviderKey()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">保存 Key</button>
-            <button onclick="deleteProviderKey()" title="删除该 Provider 已保存的 API Key" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--danger);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">删除 Key</button>
+            <button onclick="saveProviderKey()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;" data-i18n="save_key">保存 Key</button>
+            <button onclick="deleteProviderKey()" title="删除该 Provider 已保存的 API Key" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--danger);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;" data-i18n="delete_key">删除 Key</button>
           </div>
           <div id="settings-api-key-hint" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
           <div id="settings-api-key-status" style="font-size:11px;margin-top:2px;"></div>
         </div>
         <div class="settings-group">
-          <label>传输协议</label>
+          <label data-i18n="protocol">传输协议</label>
           <select id="settings-provider">
             <option value="openai">OpenAI 兼容</option>
             <option value="anthropic">Anthropic</option>
@@ -914,10 +981,10 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
           </select>
         </div>
         <div class="settings-group">
-          <label>自定义模型 ID (可选)</label>
-          <input type="text" id="settings-custom-model" placeholder="留空用上方选择" style="font-size:12px;">
+          <label data-i18n="custom_model">自定义模型 ID (可选)</label>
+          <input type="text" id="settings-custom-model" data-i18n-ph="custom_model_ph" placeholder="留空用上方选择" style="font-size:12px;">
         </div>
-        <button class="save-btn" onclick="saveModel()">设为当前模型</button>
+        <button class="save-btn" onclick="saveModel()" data-i18n="set_as_current">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
         <!-- 图像生成配置 -->
         <div class="settings-group">
@@ -1119,7 +1186,9 @@ function handleMessage(msg) {
   }
   // 微信会话更新通知（自动切换+刷新列表，防抖3秒）
   if (msg.type === 'session_update' && msg.session_id) {
-    if (msg.is_running && currentSid !== msg.session_id) {
+    // 2026-08-17: 多会话并发防串——只有当前会话自己没在跑时才自动切过去。
+    // 用户正看着的会话在运行时，不被其他会话的运行更新拽走视图。
+    if (msg.is_running && currentSid !== msg.session_id && !agentRunning) {
       switchSession(msg.session_id);
     }
     if (!window._sessionUpdateTimer) {
@@ -1213,6 +1282,14 @@ function handleMessage(msg) {
     updateSessionListThrottled();
   }
   if (msg.type === 'progress_replay') {
+    // 2026-08-17: 半截回复恢复必须无条件执行（不能受"本地时间线已存在"早退影响——
+    // HTTP 进度兜底先到并渲染时间线时，早退分支会跳过它，刷新后正在输出的内容就丢了）
+    if (msg.partial_text && !currentAssistantEl) {
+      currentAssistantEl = addAssistantMsg('');
+      currentBubble = currentAssistantEl.querySelector('.bubble');
+      fullText = msg.partial_text;
+      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+    }
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
     if (progressTimelineEl || progressItems.length > 0) {
       // 只更新 running 状态
@@ -2394,7 +2471,7 @@ async function newSession() {
     if (!response.ok || !created.id) throw new Error(created.error || '创建会话失败');
     _ensureSessionRenderCache(created.id);
     if (!_allSessions.some(function(item) { return item.id === created.id; })) {
-      _allSessions.unshift({ id: created.id, title: created.title || '新会话', messages: [], msg_count: 0 });
+      _allSessions.unshift({ id: created.id, title: created.title || t('new_session_title'), messages: [], msg_count: 0 });
     }
     _lastSessionFingerprint = '';
     renderSessionList(_allSessions);
@@ -2832,21 +2909,45 @@ function switchSession(sid) {
   // 加载消息历史（只加载最近100条，防止大会话卡顿）
   fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
-    var preserveLiveSnapshot = cached.hasSnapshot && cached.running;
-    if (!preserveLiveSnapshot) document.getElementById('messages').innerHTML = '';
+    // 2026-08-17 修复：历史消息【始终】渲染。若此刻有进行中的半截气泡，
+    // 先摘下来 → 渲染完整历史 → 再把气泡接回末尾。
+    // （此前"运行中跳过历史"会在刷新后丢掉整段历史对话；而直接清空又丢半截输出）
+    var hasLiveSnapshot = cached.hasSnapshot && cached.running;
+    if (hasLiveSnapshot) {
+      // 同页面切回已有完整快照的会话：快照已含全部历史，跳过 HTTP 重渲染防重复
+      refreshTodos();
+      refreshResults();
+      return;
+    }
+    var liveBubble = null, liveText = '';
+    if (currentAssistantEl && agentRunning && _currentRunningSid === sid) {
+      liveBubble = currentAssistantEl;
+      liveText = fullText;
+    }
+    document.getElementById('messages').innerHTML = '';
     var msgs = d.messages || [];
-    if (!preserveLiveSnapshot) {
-      if (!msgs.length) showNewSessionWelcome();
-      msgs.forEach(function(m) {
-        if (m.role === 'user') addUserMsg(m.content);
-        else addAssistantMsg(m.content);
-      });
+    if (!msgs.length && !liveBubble) showNewSessionWelcome();
+    msgs.forEach(function(m) {
+      if (m.role === 'user') addUserMsg(m.content);
+      else addAssistantMsg(m.content);
+    });
+    if (liveBubble) {
+      document.getElementById('messages').appendChild(liveBubble);
+      currentAssistantEl = liveBubble;
+      currentBubble = liveBubble.querySelector('.bubble');
+      fullText = liveText;
+      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
     }
     // 如果还有更多历史消息，显示加载提示
-    if (!preserveLiveSnapshot && d.total && d.total > msgs.length) {
+    // 2026-08-17: 返回窗口已满(100)就一定显示入口——旧会话 _msg_count 可能为 0，
+    // 只依赖 d.total 会把入口藏起来，用户卡在最近 100 条无法加载更早对话
+    if ((d.total && d.total > msgs.length) || msgs.length >= 100) {
       var moreDiv = document.createElement('div');
       moreDiv.className = 'more-msgs-hint';
-      moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">📜 显示全部 ' + d.total + ' 条消息 (当前显示最近 ' + msgs.length + ' 条)</span>';
+      var _moreText = (d.total && d.total > msgs.length)
+        ? ('📜 显示全部 ' + d.total + ' 条消息 (当前显示最近 ' + msgs.length + ' 条)')
+        : '📜 加载更早的消息';
+      moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">' + _moreText + '</span>';
       document.getElementById('messages').insertBefore(moreDiv, document.getElementById('messages').firstChild);
     }
     refreshTodos();
@@ -2856,6 +2957,13 @@ function switchSession(sid) {
   // 拉取进度日志（如果 WS 的 progress_replay 没收到，用 HTTP 兜底）
   fetch('/api/sessions/' + sid + '/progress').then(r => r.json()).then(d => {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
+    // 2026-08-17: HTTP 兜底也恢复半截回复（WS replay 未收到时仍不丢输出）
+    if (d.partial_text && !currentAssistantEl) {
+      currentAssistantEl = addAssistantMsg('');
+      currentBubble = currentAssistantEl.querySelector('.bubble');
+      fullText = d.partial_text;
+      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+    }
     // 只有本地缓存为空且 WS progress_replay 也没填进度时才用 HTTP 重放
     if (d.progress_log && d.progress_log.length > 0 && !cached.hasSnapshot && !progressTimelineEl && progressItems.length === 0) {
       // 只有本地缓存为空时才用服务器进度重放
@@ -3012,15 +3120,24 @@ async function refreshModelUI() {
       groups[gk].items.push(m);
     });
     var html = '';
+    // 2026-08-17: 选中项同时比对 base_url（多家 provider 有同名模型 id，
+    // 只比 id 会选到第一家，可能与会话实际用的 provider 不符）
+    var curModelId = currentModel.model;
+    var curBase = ((currentModel.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
     Object.keys(groups).forEach(function(g) {
       html += '<optgroup label="' + escapeHtml(groups[g].name) + '">';
       groups[g].items.forEach(function(m) {
-        html += '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (m.id === currentModel.model ? ' selected' : '') + '>' + m.name + '</option>';
+        var mBase = ((m.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
+        var matched = (m.id === curModelId) && (!curBase || mBase === curBase);
+        html += '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (matched ? ' selected' : '') + '>' + m.name + '</option>';
       });
       html += '</optgroup>';
     });
     // 当前模型不在已连接列表时（全局默认未配 key 等极端情况）追加一项保证可显示
-    var hasCur = availModels.some(function(m) { return m.id === currentModel.model; });
+    var hasCur = availModels.some(function(m) {
+      var mBase = ((m.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
+      return m.id === curModelId && (!curBase || mBase === curBase);
+    });
     if (!hasCur && currentModel.model) {
       html += '<optgroup label="当前模型"><option value="' + currentModel.model + '\\u0001" selected>' + currentModel.model + '</option></optgroup>';
     }
@@ -3261,30 +3378,58 @@ async function saveImageGenConfig() {
 // 刷新已连接模型列表 (设置面板)
 async function refreshConnectedModels() {
   try {
-    // 修复 2026-08-08：带 session_id，让后端按当前会话判定 ●当前
-    // （原来不带 → 后端用全局 _current_model → 会话实际用 kimi/GLM 时
-    //  "已连接的模型" 却把 ●当前 标在全局默认 Flash 上）
-    var qs = currentSid ? ('?session_id=' + encodeURIComponent(currentSid)) : '';
-    var r = await fetch('/api/models/available' + qs);
-    var d = await r.json();
+    // 2026-08-17: 设置页「已连接的模型」同时标注【全局】与【当前会话】两种视角：
+    //   ●全局 = 全局默认模型；●会话 = 当前会话实际使用的模型（会话级切换后可能不同）
+    var rG = await fetch('/api/models/available');
+    var dG = await rG.json();
+    var dS = { models: [] };
+    if (currentSid) {
+      try {
+        var rS = await fetch('/api/models/available?session_id=' + encodeURIComponent(currentSid));
+        dS = await rS.json();
+      } catch (e) {}
+    }
+    var mG = await (await fetch('/api/models')).json();
+    var mS = mG;
+    if (currentSid) {
+      try { mS = await (await fetch('/api/models?session_id=' + encodeURIComponent(currentSid))).json(); } catch (e) {}
+    }
+    var globalModel = (mG.current || {}).model || '';
+    var sessModel = (mS.current || {}).model || '';
     var el = document.getElementById('connected-models-list');
     if (!el) return;
-    var models = d.models || [];
+    var models = dG.models || [];
     if (!models.length) {
       el.innerHTML = '<div style="color:var(--text-light);padding:8px;">暂未连接任何 Provider，请在下方添加 Key</div>';
       return;
     }
+    function keyOf(m) { return (m.provider_id || '') + '|' + (m.id || '') + '|' + ((m.base_url || '').replace(/\/+$/, '')); }
+    var globalMark = {}, sessMark = {};
+    (dG.models || []).forEach(function(m) { if (m.is_current) globalMark[keyOf(m)] = true; });
+    (dS.models || []).forEach(function(m) { if (m.is_current) sessMark[keyOf(m)] = true; });
+    function findName(modelId, baseUrl) {
+      for (var i = 0; i < models.length; i++) {
+        if (models[i].id === modelId && (!baseUrl || (models[i].base_url || '').replace(/\/+$/, '') === (baseUrl || '').replace(/\/+$/, ''))) return models[i].name;
+      }
+      return modelId;
+    }
+    var html = '<div style="margin-bottom:8px;font-size:11px;color:var(--text-light);">' +
+      t('global_model') + ': <b style="color:var(--text);">' + escapeHtml(globalModel ? findName(globalModel, (mG.current || {}).base_url) : '-') + '</b>' +
+      (currentSid ? (' &nbsp;·&nbsp; ' + t('session_model') + ': <b style="color:var(--text);">' + escapeHtml(sessModel ? findName(sessModel, (mS.current || {}).base_url) : '-') + '</b>') : '') +
+      '</div>';
     var byProvider = {};
     models.forEach(function(m) {
       if (!byProvider[m.provider_name]) byProvider[m.provider_name] = [];
       byProvider[m.provider_name].push(m);
     });
-    var html = '';
     Object.keys(byProvider).forEach(function(pn) {
       html += '<div style="margin-bottom:6px;"><b style="color:var(--primary);">' + escapeHtml(pn) + '</b></div>';
       byProvider[pn].forEach(function(m) {
-        var cur = m.is_current ? ' <span style="color:#2d8659;">\u25cf当前</span>' : '';
-        html += '<div style="padding:2px 0 2px 12px;font-size:11px;">' + escapeHtml(m.name) + cur + '</div>';
+        var k = keyOf(m);
+        var marks = '';
+        if (globalMark[k]) marks += ' <span style="color:#2d8659;">\u25cf' + t('global_model') + '</span>';
+        if (sessMark[k]) marks += ' <span style="color:#c07a1f;">\u25cf' + t('session_model') + '</span>';
+        html += '<div style="padding:2px 0 2px 12px;font-size:11px;">' + escapeHtml(m.name) + marks + '</div>';
       });
     });
     el.innerHTML = html;
@@ -3394,7 +3539,9 @@ async function saveModel() {
       body: JSON.stringify({ api_key: apiKey })
     });
   } catch(e) {}
-  var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey, session_id: currentSid }) });
+  // 设置页"设为当前模型"= 全局默认模型：不带 session_id（后端会广播到所有未锁定会话，
+  // 新会话一律继承全局默认；会话级切换请用交互框下拉框）
+  var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey }) });
   var d = await r.json();
   if (d && d.error) { alert('\u26a0\ufe0f 切换失败：' + d.error); return; }
   currentModel = d.current;
@@ -3650,7 +3797,7 @@ async function browseFiles(path) {
   document.getElementById('file-list').innerHTML = backBtn + items.map(function(f) {
     var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' || f.ext === '.tsv' ? '📊' : f.ext === '.R' || f.ext === '.py' ? '📜' : f.ext === '.yaml' || f.ext === '.yml' ? '📚' : '📄');
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
-    var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
+    var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseFiles('" + f.path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
 }
@@ -3677,8 +3824,8 @@ async function previewFile(path) {
   if (_isBinaryFile(name)) {
     box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-light);">'
       + '<div style="font-size:40px;margin-bottom:8px;">📦</div>'
-      + '<div>二进制文件，无法文本预览</div>'
-      + '<button onclick="downloadFile(\'' + path.replace(/'/g, "\'") + '\')" style="margin-top:12px;padding:6px 16px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⬇ 下载文件</button>'
+      + '<div>'+ t('binary_no_preview') +'</div>'
+      + '<button onclick="downloadFile(\'' + path.replace(/'/g, "\'") + '\')" style="margin-top:12px;padding:6px 16px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">' + t('download_file') + '</button>'
       + '</div>';
     return;
   }
@@ -4374,7 +4521,7 @@ function litRenderBilingual(body, bi) {
     '<div class="lit-bi-toolbar">' +
     '<span>📄 左侧=原版 PDF（含图表） · 右侧=按模块译文 · 点模块/段落定位原文 · 点原文页回定位译文</span>' +
     '<span style="margin-left:auto;display:flex;gap:6px;">' +
-    '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+    '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">' + t('download_trans') + '</button>' +
     '<button onclick="litForceTranslate(\'' + ref + '\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button>' +
     '<button onclick="litPaperTab(\'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">仅看译文</button>' +
     '</span></div>' +
@@ -4553,7 +4700,7 @@ async function litPaperTab(tab) {
       var r = await fetch('/api/papers?path=' + encodeURIComponent('markdown/' + stem + '.md'));
       var txt = await r.text();
       body.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
-        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.md\', \'' + 'md\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载</button>' +
+        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.md\', \'' + 'md\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">' + t('download') + '</button>' +
         '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⇄ 对照译文</button></div>' +
         '<pre id="lit-md-pre">' + escapeHtml(txt) + '</pre>';
     } catch(e) {
@@ -4573,7 +4720,7 @@ async function litPaperTab(tab) {
       var r2 = await fetch('/api/papers?path=' + encodeURIComponent('translations/' + stem + '.zh.md'));
       var txt2 = await r2.text();
       body.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
-        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'' + 'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载译文</button>' +
+        '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'' + 'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">' + t('download_trans') + '</button>' +
         '<button onclick="litPaperTab(\'cmp\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">⇄ 中英对照</button>' +
         '<button onclick="litForceTranslate(\'' + ref + '\')" title="段落级重新翻译（修复对照对齐）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button></div>' +
         '<pre id="lit-md-pre">' + escapeHtml(txt2) + '</pre>';
@@ -4864,7 +5011,7 @@ function litRenderCite(body, d) {
     html += '<div class="lit-cite-item">' +
       '<div class="lit-cite-head"><b>' + escapeHtml(it[1]) + '</b><span style="margin-left:auto;display:flex;gap:6px;">' +
       '<button onclick="litCopyTextRaw(document.getElementById(\'lit-cite-' + it[0] + '\').textContent)" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">复制</button>' +
-      '<button onclick="litDownloadText(\'' + litJsStr((d.file || 'paper').replace(/\.pdf$/i, '') + '-citation') + it[3] + '\', \'' + it[0] + '\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⬇ 下载</button>' +
+      '<button onclick="litDownloadText(\'' + litJsStr((d.file || 'paper').replace(/\.pdf$/i, '') + '-citation') + it[3] + '\', \'' + it[0] + '\')" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">' + t('download') + '</button>' +
       '</span></div>' +
       '<pre id="lit-cite-' + it[0] + '">' + escapeHtml(txt) + '</pre></div>';
   });
@@ -6126,11 +6273,11 @@ function showKbNodeDetail(n) {
     fetch('/api/kb/file?path=' + encodeURIComponent(n.path)).then(function(r) { return r.json(); }).then(function(d) {
       if (!body) return;
       if (d.parsed && typeof d.parsed === 'object') {
-        body.innerHTML = renderKbYaml(d.parsed, 0) + '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">打开完整预览</button></div>';
+        body.innerHTML = renderKbYaml(d.parsed, 0) + '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">' + t('open_preview') + '</button></div>';
       } else {
         var c = d.content || '';
         body.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;margin:0;">' + escapeHtml(c.slice(0, 600)) + (c.length > 600 ? '...' : '') + '</pre>' +
-          '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">打开完整预览</button></div>';
+          '<div style="margin-top:8px;"><button onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')" style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">' + t('open_preview') + '</button></div>';
       }
     }).catch(function() { if (body) body.innerHTML = '加载失败'; });
   } else {
@@ -6529,7 +6676,7 @@ async function loadResultsFiles() {
     var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' ? '📊' : f.ext === '.rds' ? '💾' : '📄');
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
     var mtimeStr = f.is_dir ? '' : '<span class="file-mtime">' + escapeHtml(f.mtime_str || '') + '</span>';
-    var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">下载</button>';
+    var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
     return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
   listEl.scrollTop = st;

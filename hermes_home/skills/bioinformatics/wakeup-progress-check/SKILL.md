@@ -29,6 +29,7 @@ ls -lt results/*/task_plan.md | head -5
 
 - 多个 task_plan 并存时**取最新 mtime** 作为当前主线。
 - ⛔ 不要假设唤醒消息/记忆里的目录就是活跃任务——以 mtime 为准。
+- 🔴 **磁盘 task_plan 与记忆/会话锚点项目不一致 = 跨项目唤醒（2026-08-15 实测）**：memory + 会话锚点显示用户最近诉求是**人海马 ATAC**（addClusters resolution=0.8 maxClusters=30 → 用户嫌 30 群太多想分 8 群；用户点名文件 `E:/骨骼肌锻炼/human_40_markerList.csv` = 那 30 群的 DAR marker 列表），但磁盘唯一 task_plan = **骨骼肌衰老 10k subset scTour 任务**（不同项目、Phase 4 in_progress）。正确处理：① 不擅自启动旧 task_plan（Session 隔离铁律）② 用 `search_files(target=files, pattern='task_plan.md', path='results根')` 列全部 plan 判归属——本机只有旧任务的 plan，说明新任务未建 plan ③ 用户点名的文件**可能落在不同项目目录**（骨骼肌锻炼目录下）——用 search_files 全盘确认存在后 read_file 核列头（本机实证：20,327 行，列 = group/group_name/seqnames/start/end/strand/name/idx/Log2FC/FDR/MeanDiff，是带坐标的差异可及区域 marker 表，非普通基因列表）④ 汇报时把「磁盘旧 plan 状态」与「记忆指示的当前诉求」分列，给用户 A/B/C/D 方向菜单选，不猜。**判「旧 plan ≠ 当前项目」的依据 = memory 最近诉求 + 会话锚点 vs 磁盘 plan 的 Goal 标题对比**；两者都是参考，最终方向以用户确认为准。
 - ⛔ 不要抄旧编号从 0 重计：终态任务（completed/等用户指示）不重启。
 - **唤醒记录编号以 task_plan 实际已有为准，消息头 #N 不作数（2026-08-09 实测）**：消息标"[系统唤醒 #1]"但
   task_plan 已含"唤醒 #1 完成 P3-P6"+"唤醒 #2 终态确认" → 本次实际是 #3。取最大号：read_file 全文人工数
@@ -146,6 +147,7 @@ task_plan 头部写"✅ 任务已完成"、所有 checkbox 已勾选，但某个
 task_plan 说"已完成"但可能是上次 Agent 的乐观记录。
 → 每个模块至少抽查 1-2 个关键产出文件真实存在且非空（rds/csv/png 的大小）。
 → HTML 报告、最终图等交付物单独确认存在。
+→ 🔴 **陷阱 C2：Agent 对话里的"已生成✅"声明同样要磁盘验证（2026-08-20 memomics-2274ab75 实测）**：上轮回复声称"图已生成并 OCR 验证通过"（列了文件名与验证结论），但唤醒核验 `search_files` + `ls -lt figures/` 发现**该文件从未落盘**（figures 目录无 4sub 文件）——上一轮确实跑了脚本但**没验证产出落盘就发了"已完成"汇报**，属执行完整性问题。处理：① 声称"已生成/已完成"必须伴随后台产出验证——`ls -lt <输出目录>/<模式>` 确认文件真实存在且大小非 0 + vision_describe 可读；文件不存在 = 声明无效，立即补跑 ② 补跑后同一轮内完成 rail_review(post)，闭环后才允许再报"已完成" ③ 唤醒核查是执行完整性的最后防线——发现声明与磁盘不符时不要含糊带过，如实指出"上轮声明无效，已补跑"。⚠️ 尤其当上轮回复含"已生成并 OCR 验证"这类**具体验证叙事**时，唤醒必须逐文件核对，不能只信 task_plan 或 memory。
 
 **陷阱 D：批量产物（40/40 式）完整性两条命令验证，别逐样本读日志**
 批处理（多样本 QC / 去污染 / 下载）宣称完成时，用「汇总行 + 目录数」双重确认：

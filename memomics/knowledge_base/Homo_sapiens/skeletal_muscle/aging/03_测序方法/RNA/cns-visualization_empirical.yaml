@@ -1,0 +1,29 @@
+type: kb_entry
+name: cns-visualization_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-20 19:02
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cns-visualization_empirical
+content: 'skill: cns-visualization
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  5亚群vs3纯纤维 top1基因集, raw p<0.001, 小提琴图10张(PNG/SVG/PDF/TIFF), species=human tissue=skeletal_muscle
+  direction=aging
+
+
+  result_summary:
+
+  5亚群小提琴图已实际落盘: LRP1B+=OxPhos, OTUD1(I/II)=Denervation, RP_high(I/II)=Sarcomeric;
+  FigC1_*共38文件+FigA1-3/B1-3/type6共45PNG在results/memomics-2274ab75/figures/'
+evidence: 'record_run(cns-visualization): 5亚群小提琴图已实际落盘: LRP1B+=OxPhos, OTUD1(I/II)=Denervation,
+  RP_high(I/II)=Sarcomeric; FigC1_*共38文件+FigA1-3/B1-3/type6共45PNG在results/memomics-2274ab75/figures/'

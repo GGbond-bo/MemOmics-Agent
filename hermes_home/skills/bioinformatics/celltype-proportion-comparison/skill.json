@@ -13,8 +13,8 @@
   "aliases": [],
   "trigger_level": "YEL",
   "trigger_keywords": [],
-  "success_count": 4,
-  "proven_script": "03_boxplot_6grp_cluster1.R",
+  "success_count": 10,
+  "proven_script": "10_final_3grp_cluster3_pfdr.R",
   "proven_params": [
     {
       "species": "human",
@@ -67,10 +67,88 @@
       "approved": false,
       "custom_script": false,
       "result": "cluster1(zone1) 6柱探索箱线图 explore_6grp_cluster1_boxplot.png 生成, 4个显著比较raw p标注(YvsO 0.0271/YvsOD 0.0161/Ypost_vs_Opost 0.0217/Ypost_vs_ODpost 0.0054)。post审查通过。L1辩论verdict=modify: raw p可接受+需pseudobulk验证。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "04_user_style_proportion.R",
+      "params": "6组6柱探索图 cluster1, use_global_fdr=FALSE (FDR_per_celltype), 用户原版样式(六色+配对虚线+手动括号+白底FDR标注), 140x110mm, 300dpi",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "用户原版 R 代码适配 Specialized MF 成功: 标签映射 zone1-6->cluster1-6 + NMJ; 用户 R 版显著性管线(5比较 base_id配对+Cliff's delta+双FDR)复现 cluster5 Y_Pre->O_Pre p=0.0046 FDR=0.0231; explore_6grp_cluster1_boxplot_user.png 生成, clu"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "05_boxplot_4grp_cluster1_pfdr.R",
+      "params": "{\"groups\": [\"O_Pre\",\"O_Post\",\"OD_Pre\",\"OD_Post\"], \"comparisons\": 3, \"label_type\": [\"p\",\"fdr\"], \"size\": \"140x110mm@300dpi\", \"style\": \"user_original_theme_bw + paired_dashed + manual_bracket + geom_label\"}",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster1 4柱版箱线图完成：O_Pre/O_Post/OD_Pre/OD_Post 三比较（2配对+1独立）均不显著（O_Pre→O_Post p=0.469 FDR=0.703；OD_Pre→OD_Post p=0.156 FDR=0.469；O_Pre→OD_Pre p=0.902）。p版+FDR版两图输出。教训：check_env 对 E:/R-libs/R-4.5.3 下 stri"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "07_explore_4grp_cluster2_p.R",
+      "params": "groups=6组全画, comparisons=5(用户代码口径), label_type=p, 140x110mm探索尺寸, 不依赖egg",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster2 探索预览 6组(raw p)版成功: 140×110mm, theme_bw+配对虚线+手动括号, 5比较全部不显著(Y_Pre-Y_Post NA, O配对 p=0.578, OD配对 p=0.219, Y-O p=0.788, O-OD p=0.318); Y组cluster2比例极低(中位0%/1.8%)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "08_final_3grp_cluster2_pfdr.R",
+      "params": "3柱(Y_Pre/O_Pre/O_Post) 面板24×32mm p+FDR两版 PNG+PDF; 比较=Y_Pre-O_Pre(独立) + O_Pre-O_Post(配对); 补0网格; 删对角Y_Pre-O_Post",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster2正式版: Y_Pre vs O_Pre p=0.065 FDR=0.130(cliffs_delta=-0.543边缘), O_Pre vs O_Post p=0.578 FDR=0.578; 用户要求去对角比较, 只标2个"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "09_explore_6grp_cluster3_p.R",
+      "params": "cluster3/zone3 探索预览 6柱补0口径; 140x110mm; raw p标注; 5两两比较; 配对Y/O/OD运动 + 独立YvsO/OvsOD; O_PrevsO_Post p=0.0156显著, Y_Pre vs O_Pre p=0.0234显著",
+      "date": "2026-08-17",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster3 6组探索预览: O_Pre→O_Post p=0.0156(老年运动后比例升+2.3pp), Y_Pre→O_Pre p=0.0234(衰老上升 delta+0.64), 均FDR边缘0.059. 其余不显著. 有别于cluster1/2全不显著"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "10_final_3grp_cluster3_pfdr.R",
+      "params": "Specialized MF cluster3 3柱正式版 (Y_Pre/O_Pre/O_Post), 24×32mm, p+FDR两版, PDF+PNG, 补0口径, 2比较: Y_Pre vs O_Pre + O_Pre vs O_Post",
+      "date": "2026-08-17",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cluster3 衰老上升显著: YvsO p=0.0234 FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156 FDR=0.0234 +2.30pp。2比较BH后均显著"
     }
   ],
   "user_prefs": {
-    "last_used_script": "03_boxplot_6grp_cluster1.R"
+    "last_used_script": "10_final_3grp_cluster3_pfdr.R"
   },
   "debate_verdicts": [
     {

@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-08-17 01:15
+last_updated: 2026-08-20 01:02
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,14 +17,13 @@ content: 'skill: scipilot-figure-skill
 
   params_used:
 
-  Seurat 5.5.1, DimPlot(reduction=umap, group.by=subcluster, label=TRUE), subcluster
-  标签 zone1-6→cluster1-6, R 4.5.3 + R_LIBS=E:/R-libs/R-4.5.3, 51,227细胞×11,630基因, 7亚群
+  meta=MF_AUCell_meta.csv, 18 program scores, subcluster z-score (跨10亚群行内标准化), top3
+  per subcluster
 
 
   result_summary:
 
-  Specialized MF 注释 UMAP v2: NMJ(59) + cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签
-  zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×2250 300dpi。'
-evidence: 'record_run(scipilot-figure-skill): Specialized MF 注释 UMAP v2: NMJ(59) +
-  cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签
-  zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×22'
+  FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
+  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'
+evidence: 'record_run(scipilot-figure-skill): FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
+  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'

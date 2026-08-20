@@ -345,6 +345,13 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 | human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-17 | plot_umap_annotation_v2.R | - | - |  |
+| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | subcluster_top_scores.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | verify_top1_by_agg.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | verify_top1_celllevel.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-20 | fig_split_v10.py | - | - |  |
+| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | subcluster_top_scores_5sub.py | - | - |  |
+| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
+| - | - | - | 2026-08-20 | subcluster_violin_fig | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

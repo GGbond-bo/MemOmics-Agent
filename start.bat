@@ -34,60 +34,88 @@ if not exist "%HERMES_HOME%\config.yaml" (
 set "MEMOMICS_RUN_GATE=1"
 
 REM ============================================================
-REM  1. 定位 Python（.venv 优先；没有就找系统 Python 自动创建）
+REM  1. 定位 Python（有效 .venv 直接用；否则首选内置 Miniconda，系统 Python 兜底）
 REM ============================================================
 set "PYTHON="
 
 if exist ".venv\Scripts\python.exe" (
-    set "PYTHON=%~dp0.venv\Scripts\python.exe"
-    goto :check_deps
+    ".venv\Scripts\python.exe" -c "import sys,os; sys.exit(0 if os.path.exists(sys._base_executable) else 1)" >nul 2>&1
+    if not errorlevel 1 set "PYTHON=%~dp0.venv\Scripts\python.exe"
 )
+if defined PYTHON goto :check_deps
+
+REM 预装环境：python\ 目录随包自带 Python 3.12 + 全部依赖 + OCR（双击即用）
+if exist "%~dp0python\python.exe" (
+    "%~dp0python\python.exe" -c "import sys" >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON=%~dp0python\python.exe"
+        set "BUNDLED_PY=1"
+    )
+)
+if defined PYTHON goto :check_deps
 
 set "BASE_PYTHON="
-for %%c in (python3.12 python3.11 python3.13 python3 python) do (
-    where %%c >nul 2>&1
+
+REM 首选：随包内置 Miniconda（安装到 %LOCALAPPDATA%，与解压位置无关，最保险）
+set "CONDA_PY=%LOCALAPPDATA%\MemOmics\miniconda\python.exe"
+if not exist "!CONDA_PY!" (
+    set "CONDA_INSTALLER=%~dp0miniconda\Miniconda3-py312_25.1.1-2-Windows-x86_64.exe"
+    if exist "!CONDA_INSTALLER!" (
+        echo [INSTALL] 静默安装内置 Miniconda（2-5 分钟，仅此一次）...
+        start /wait "" "!CONDA_INSTALLER!" /S /InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /D=%LOCALAPPDATA%\MemOmics\miniconda
+    )
+)
+if exist "!CONDA_PY!" (
+    "!CONDA_PY!" -c "import sys" >nul 2>&1
     if not errorlevel 1 (
-        for /f "delims=" %%p in ('where %%c 2^>nul') do (
-            if not defined BASE_PYTHON set "BASE_PYTHON=%%p"
-        )
+        set "BASE_PYTHON=!CONDA_PY!"
+        echo [OK] 使用内置 Miniconda Python
+    ) else (
+        echo [WARN] 内置 Miniconda 异常，回退系统 Python...
     )
-)
-if not defined BASE_PYTHON (
-    for %%d in (
-        "%LOCALAPPDATA%\Programs\Python\Python312"
-        "%LOCALAPPDATA%\Programs\Python\Python311"
-        "%LOCALAPPDATA%\Programs\Python\Python313"
-        "C:\Program Files\Python312"
-        "C:\Python312"
-    ) do (
-        if not defined BASE_PYTHON if exist "%%~d\python.exe" set "BASE_PYTHON=%%~d\python.exe"
-    )
-)
-if not defined BASE_PYTHON (
-    echo [WARN] 未找到系统 Python —— 使用随包内置 Miniconda（发布包自带 miniconda\ 目录时）。
-    set "CONDA_PY=%~dp0miniconda_env\python.exe"
-    if not exist "!CONDA_PY!" (
-        set "CONDA_INSTALLER=%~dp0miniconda\Miniconda3-latest-Windows-x86_64.exe"
-        if not exist "!CONDA_INSTALLER!" (
-            echo [ERROR] 未找到 Python 3.11-3.13，且包内无 Miniconda 安装器。
-            echo         方案1: 运行 install.bat（自动装 Miniconda）
-            echo         方案2: 手动安装 https://www.python.org/downloads/
-            pause
-            exit /b 1
-        )
-        echo [INSTALL] 静默安装内置 Miniconda（2-5 分钟）...
-        start /wait "" "!CONDA_INSTALLER!" /S /InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /D=%~dp0miniconda_env
-        if not exist "!CONDA_PY!" (
-            echo [ERROR] Miniconda 安装失败！
-            pause
-            exit /b 1
-        )
-    )
-    set "BASE_PYTHON=!CONDA_PY!"
-    echo [OK] 使用内置 Miniconda Python
 )
 
-echo [SETUP] 首次运行：用 %BASE_PYTHON% 创建 .venv ...
+REM 兜底：系统 Python（跳过 WindowsApps 假快捷方式，只认能跑通的 .exe）
+if not defined BASE_PYTHON (
+    for %%c in (python3.12 python3.11 python3.13 python3 python) do (
+        where %%c >nul 2>&1
+        if not errorlevel 1 (
+            for /f "delims=" %%p in ('where %%c 2^>nul') do (
+                if not defined BASE_PYTHON (
+                    echo %%p | findstr /i "WindowsApps" >nul 2>&1
+                    if errorlevel 1 (
+                        echo %%p | findstr /i "\.exe" >nul 2>&1
+                        if not errorlevel 1 (
+                            "%%p" -c "import sys" >nul 2>&1
+                            if not errorlevel 1 set "BASE_PYTHON=%%p"
+                        )
+                    )
+                )
+            )
+        )
+    )
+    if not defined BASE_PYTHON (
+        for %%d in (
+            "%LOCALAPPDATA%\Programs\Python\Python312"
+            "%LOCALAPPDATA%\Programs\Python\Python311"
+            "%LOCALAPPDATA%\Programs\Python\Python313"
+            "C:\Program Files\Python312"
+            "C:\Python312"
+        ) do (
+            if not defined BASE_PYTHON if exist "%%~d\python.exe" set "BASE_PYTHON=%%~d\python.exe"
+        )
+    )
+)
+if not defined BASE_PYTHON (
+    echo [ERROR] 未找到可用 Python（内置 Miniconda 安装失败且系统无 Python）。
+    echo         请手动安装 Python：https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
+
+echo [SETUP] 重建运行环境：用 %BASE_PYTHON% 创建 .venv ...
+if exist ".venv" rmdir /s /q ".venv" >nul 2>&1
+del ".venv_deps_ok.txt" ".venv_vision_ok.txt" >nul 2>&1
 "%BASE_PYTHON%" -m venv ".venv"
 if errorlevel 1 (
     echo [ERROR] 创建 .venv 失败
@@ -114,6 +142,7 @@ if exist "%R_BIN%\Rscript.exe" (
     echo [INFO] R 未检测到（可选；R 分析如 Seurat 需要）
 )
 
+if "%BUNDLED_PY%"=="1" goto :deps_done
 REM ============================================================
 REM  2. 依赖安装（两类独立标记，装成功一次就不再装）
 REM ============================================================

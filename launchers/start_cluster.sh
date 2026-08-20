@@ -88,9 +88,9 @@ if [ -z "$PYTHON" ]; then
 
     CONDA_PY="$SCRIPT_DIR/miniconda_env/bin/python"
     if [ ! -f "$CONDA_PY" ]; then
-        INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+        INSTALLER="$SCRIPT_DIR/miniconda/Miniconda3-py312_25.1.1-2-Linux-x86_64.sh"
         if [ ! -f "$INSTALLER" ]; then
-            echo "[ERROR] miniconda installer missing!"
+            echo "[ERROR] miniconda installer missing: $INSTALLER"
             exit 1
         fi
         echo "[INSTALL] Installing Miniconda (1-2 min)..."
@@ -130,9 +130,18 @@ else
     echo "[OK] Dependencies ready"
 fi
 # 批O5(2026-08-16): 读图组件(OCR=rapidocr_onnxruntime+opencv-headless, 集群/无显示环境可用)首次装
+# 批O7(2026-08-17): 优先随包离线 wheel（vendor/wheels，Python 3.12），无网也能装；失败才走在线
 if ! "$VENV_PY" -c "import rapidocr_onnxruntime" 2>/dev/null; then
     echo "[INSTALL] Installing vision/OCR components (约200MB, once)..."
-    "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+    if [ -d "$SCRIPT_DIR/vendor/wheels" ]; then
+        echo "[INFO] Using bundled OCR wheels (offline)..."
+        "$VENV_PY" -m pip install --no-index --find-links "$SCRIPT_DIR/vendor/wheels" -r requirements-vision.txt || {
+            echo "[WARN] offline wheels failed, trying online..."
+            "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+        }
+    else
+        "$VENV_PY" -m pip install -r requirements-vision.txt || echo "[WARN] vision components failed (OCR unavailable, core OK)"
+    fi
 else
     echo "[OK] OCR ready"
 fi

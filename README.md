@@ -1,11 +1,11 @@
 # MemOmics-Agent
 
-> **面向生物信息学的自主科研 Agent**：接入你的 API Key，用自然语言把科学问题变成完整分析流水线——从环境校验、数据读取、质控分析，到出版级图表与结论交付，全程自主执行、自主审查、自我纠错。
+> **面向生物信息学的自主科研 Agent**：接入你的 API Key，用自然语言把科学问题变成完整分析流水线——从环境校验、数据读取、质控分析，到出版级图表与结论交付，全程自主执行、自主审查、自我纠错。同时，自主搭建知识库，查阅、提炼、翻译、引用文献，润色、设计文章，科研全方位一体。
 
 [![Platform](https://img.shields.io/badge/平台-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20HPC-blue)](#平台支持)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-green)](#系统要求)
-[![R](https://img.shields.io/badge/R-4.5%2B-276dc3)](#系统要求)
-[![Skills](https://img.shields.io/badge/生信技能-400%2B-orange)](#核心能力)
+[![R](https://img.shields.io/badge/R-4.2%2B-276dc3)](#系统要求)
+[![Skills](https://img.shields.io/badge/生信技能-300%2B-orange)](#核心能力)
 
 ---
 

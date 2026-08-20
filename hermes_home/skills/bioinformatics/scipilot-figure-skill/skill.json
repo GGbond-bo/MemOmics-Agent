@@ -53,8 +53,8 @@
       "date": "2026-08-12 23:12:16"
     }
   ],
-  "success_count": 8,
-  "proven_script": "plot_umap_annotation_v2.R",
+  "success_count": 15,
+  "proven_script": "subcluster_violin_fig",
   "proven_params": [
     {
       "species": "",
@@ -159,10 +159,101 @@
       "approved": false,
       "custom_script": false,
       "result": "Specialized MF 注释 UMAP v2: NMJ(59) + cluster1(3022)/cluster2(822)/cluster3(808)/cluster4(1254)/cluster5(4912)/cluster6(753)。标签 zone1-6 改名 cluster1-6 成功，NMJ 保留。输出 special_MF_umap_annotation.png 2700×22"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "subcluster_top_scores.py",
+      "params": "meta=MF_AUCell_meta.csv, 18 program scores, subcluster z-score (跨10亚群行内标准化), top3 per subcluster",
+      "date": "2026-08-20",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56) 代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "verify_top1_by_agg.py",
+      "params": "",
+      "date": "2026-08-20",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "用 agg_sample_v2.csv（样本×亚群聚合）算 4 亚群 top1 全部=scoreSarcomeric(z≈3.4)，与细胞级 FigA3 结论（OTUD1+(I)=Inflammatory 等）矛盾，需验证口径差异"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "verify_top1_celllevel.py",
+      "params": "",
+      "date": "2026-08-20",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "细胞级复算发现 10 亚群 top1 全为 scoreSarcomeric(z=3.2-3.5)=泛肌纤维结构程序无区分度; 改用\"亚群 vs 3 纯type 的 Cohen's d 最大\"定义身份基因集"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_split_v10.py",
+      "params": "",
+      "date": "2026-08-20",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "确认 FigA3 生成脚本为 fig_split_v10.py 的 sub_matrix(names) 函数（第77行），需读该函数体看 z-score 标准化方向"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "subcluster_top_scores_5sub.py",
+      "params": "5亚群×18程序基因集 vs 3纯纤维 Mann-Whitney raw p + Cohen's d",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5亚群各自最显著高表达基因集定稿：LRP1B+=OxPhos(d0.60)、OTUD1+(I)=Denervation(d0.44)、OTUD1+(II)=Denervation(d0.39)、RP_high(I)=Sarcomeric(d0.80)、RP_high(II)=Sarcomeric(d0.63)。均 raw p<0.001。PS：OTUD1+两亚群共享Denerv，RP_high两亚"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_5sub_rawp_effsize.py",
+      "params": "raw p星号(p<0.05/*,0.01/**,0.001/***)+Cohen's d标注; 5亚群×[该亚群+3纯纤维]4组小提琴; 30°标签; 7pt Arial; SVG/PDF/TIFF",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5张小提琴图生成成功(PNG 57-67KB/TIFF 12MB), raw p均<0.001, d标注清晰。LRP1B+=OxPhos/OTUD1+I=Denerv/OTUD1+II=Denerv/RP_highI=Sarcomeric/RP_highII=Sarcomeric"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "subcluster_violin_fig",
+      "params": "亚群小提琴图",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "用户上传正确参考图：RP_high(I)对应scoreROS。之前\"5亚群记忆\"(RP_highI=Sarcomeric)是错误口径，需以用户FigA3/上传图为准。"
     }
   ],
   "user_prefs": {
-    "last_used_script": "plot_umap_annotation_v2.R"
+    "last_used_script": "subcluster_violin_fig"
   },
   "error_count": 1,
   "errors": [

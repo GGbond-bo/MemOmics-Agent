@@ -1,0 +1,21 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1038_s41467-025-56896-6_xylocaine__lidocaine
+chem_category: compounds
+last_updated: 2026-08-18 01:57
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1038_s41467-025-56896-6_xylocaine__lidocaine
+content: '- 靶点: sodium channels (local anesthetic)
+
+  - 剂量: 0.5 mL of 1% or 2-3 mL of 2%
+
+  - IC50/EC50: —
+
+  - 模型: human muscle biopsy
+
+  - 效应: local anesthesia before muscle biopsy'
+evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
+  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf

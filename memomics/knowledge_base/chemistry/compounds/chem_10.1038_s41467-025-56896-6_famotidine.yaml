@@ -1,0 +1,21 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1038_s41467-025-56896-6_famotidine
+chem_category: compounds
+last_updated: 2026-08-18 01:57
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1038_s41467-025-56896-6_famotidine
+content: '- 靶点: histamine H2 receptor
+
+  - 剂量: 40 mg
+
+  - IC50/EC50: —
+
+  - 模型: human participants
+
+  - 效应: H2-receptor antagonist; does not affect resting skeletal muscle state'
+evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
+  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf

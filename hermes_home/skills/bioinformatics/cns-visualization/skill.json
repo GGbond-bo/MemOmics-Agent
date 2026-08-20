@@ -61,12 +61,38 @@
       "approved": false,
       "custom_script": false,
       "result": "Specialized MF 51,227 细胞 × 11,630 基因，7 亚群（NMJ 59 + zone1-6），48 样本 6 组（Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post）。注释 UMAP 已出图 special_MF_umap_annotation.png (1.1MB, 300dpi)。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_AMPK_violin_4sub.py",
+      "params": "22 AUCell score 列, raw p + Cohen's d 显著性方案",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "确认 MF_AUCell_meta.csv 数据结构：10亚群(排除RSS/SMF后5目标亚群 LRP1B+(I)/OTUD1+(I)/OTUD1+(II)/RP_high(I)/RP_high(II)) + 3纯纤维(Pure I/IIA/IIX) + 22个AUCell打分列。数据探索确认完毕。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_5sub_rawp_effsize.py",
+      "params": "5亚群vs3纯纤维 top1基因集, raw p<0.001, 小提琴图10张(PNG/SVG/PDF/TIFF), species=human tissue=skeletal_muscle direction=aging",
+      "date": "2026-08-20",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5亚群小提琴图已实际落盘: LRP1B+=OxPhos, OTUD1(I/II)=Denervation, RP_high(I/II)=Sarcomeric; FigC1_*共38文件+FigA1-3/B1-3/type6共45PNG在results/memomics-2274ab75/figures/"
     }
   ],
-  "proven_script": "plot_umap_annotation.R",
+  "proven_script": "fig_C1_5sub_rawp_effsize.py",
   "error_count": 0,
-  "success_count": 1,
+  "success_count": 3,
   "user_prefs": {
-    "last_used_script": "plot_umap_annotation.R"
+    "last_used_script": "fig_C1_5sub_rawp_effsize.py"
   }
 }

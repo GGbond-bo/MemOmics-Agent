@@ -1,0 +1,283 @@
+type: kb_entry
+domain: common
+name: paper_bioinfo_10.1038_s41467-025-56896-6
+direction: general
+assay_type: RNA
+last_updated: 2026-08-18 01:57
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bioinfo_10.1038_s41467-025-56896-6
+content: '## 测序方法
+
+  - single fiber RNA-seq with molecular barcodes | 平台 未明确 | 建库 反转录时加入样本特异性分子条形码，96纤维混合
+  | 深度 ~1M reads per fiber
+
+  - DIA-PASEF proteomics | 平台 timsTOF mass spectrometer | 建库 短色谱梯度（21 min） | 深度 —
+
+  - RNA-seq (transcriptomics) | 平台 — | 建库 — | 深度 —
+
+  - DIA-PASEF proteomics | 平台 timsTOF | 建库 — | 深度 —
+
+  - 3'' mRNA-seq (QuantSeq-Pool) | 平台 Illumina NovaSeq 6000 | 建库 QuantSeq-Pool 3''
+  mRNA-Seq library prep kit (Lexogen) | 深度 1 x 100 nucleotides
+
+  - DIA-MS | 平台 — | 建库 — | 深度 —
+
+  - RNA-seq | 平台 — | 建库 — | 深度 —
+
+
+  ## 分析流程
+
+  - 样本储存与RNA/蛋白质完整性保存 → 反转录加样本特异性分子条形码 → 混合96根纤维 → 深测序(±1M reads/fiber) → 过滤(>1000基因,
+  50% valid values) → 下游生物信息分析
+
+  - 蛋白质组样本制备 → 21分钟短梯度液相分离 → DIA-PASEF采集(timsTOF) → 过滤(50% valid values) → 下游分析
+
+  - Fiber isolation → RNA sequencing and DIA-PASEF proteomics → Rank expression of
+  MYH7, MYH2, MYH1 per fiber → Calculate bottom knee threshold for each MYH → Assign
+  MYH-based fiber types (positive/negative) → UMAP clustering of whole transcriptome/proteome
+  → Compare fiber type clusters
+
+  - 基于MYH异构体进行纤维分型
+
+  - 转录组和蛋白质组表达谱分析
+
+  - PCA降维分析
+
+  - UMAP降维分析
+
+  - 对top PC驱动基因/蛋白进行过表达分析(over-representation analysis)
+
+  - PCA of transcriptomics and proteomics datasets
+
+  - Enrichment analysis of PC drivers using clusterProfiler
+
+  - Correlation analysis of transcriptome and proteome PC drivers
+
+  - Unsupervised hierarchical clustering of ribosomal proteins
+
+  - Structural mapping onto human 80S ribosome (PDB 4V6X)
+
+  - single muscle fiber isolation → transcriptomics and proteomics → integration →
+  clustering/fiber type analysis
+
+  - Demultiplex i7/i5 (bcl2fastq2) → Demultiplex i1 (idemux) → Extract UMI (umi_tools)
+  → Trim reads (cutadapt) → Align to human genome (STAR) → Index BAM (SAMtools) →
+  Deduplicate reads (umi_tools) → Count alignments (featureCounts) → Quality control
+  (FastQC)
+
+  - sample lysis → protein digestion → desalting → LC-MS/MS → MS data processing →
+  data filtering → normalization → batch correction → imputation
+
+  - Calculate relative expression/intensity per gene/protein and log10 transform →
+  VennDiagram overlap analysis → Proteomics CV calculation → Pearson correlation analysis
+  → Fiber typing using contractile isoforms and barcodeRanks → PCA using Seurat RunPCA/prcomp
+  → UMAP clustering with first 6 dimensions → Enrichment analysis using clusterProfiler
+  → Hierarchical clustering of ribosomal proteins → Pseudobulk differential expression
+  (DESeq2/limma) → SCENIC regulatory network inference → lncRNA database construction
+  and microprotein identification
+
+  - Download muscle-specific ribosomal gene signature → rank log2 fold change values
+  → identify overexpressed ribosomal proteins in skeletal muscle
+
+  - Download human 80S ribosome structure from PDB (4V6X) → visualize/edit in UCSF
+  ChimeraX → prepare figures and movies
+
+  - RNAscope staining → imaging → count dots per fiber → average by fiber type and
+  participant → two-sample t-test
+
+
+  ## 软件/包
+
+  - UMAP （）：Dimensionality reduction and visualization of fiber transcriptome/proteome
+  data
+
+  - clusterProfiler na（R）：GO enrichment analysis of PC drivers
+
+  - bcl2fastq2 v2.20.0（）：demultiplexing based on i7/i5 indices
+
+  - idemux v0.1.6（）：demultiplexing based on i1 sample-specific barcodes
+
+  - umi_tools v1.0.1（Python）：extracting UMI sequences and deduplication
+
+  - cutadapt v3.4（Python）：read trimming
+
+  - STAR v2.6.0c（C++）：alignment to human genome
+
+  - SAMtools v1.11（）：BAM file indexing
+
+  - Subread (featureCounts) v2.0.3（C）：counting alignments
+
+  - FastQC v0.11.9（）：quality control at intermediate steps
+
+  - R v4.2.3（R）：bioinformatics processing and visualization
+
+  - Seurat v4.4.0（R）：single-cell/fiber analysis workflow
+
+  - Fragpipe 19.0（Java）：MS data search and spectral library generation
+
+  - DIA-NN 1.8（）：Sample MS data quantification using library-based DIA analysis
+
+  - R 4.22（R）：Data analysis environment
+
+  - limma 3.54.2（R）：Quantile normalization
+
+  - sva 3.50.0（R）：Batch correction via ComBat
+
+  - PhosR 1.12.0（R）：Missing value imputation via tImpute
+
+  - VennDiagram 1.7.3（R）：Overlap analysis of detected features
+
+  - DropletUtils 1.18.1（R）：barcodeRanks() for knee point detection in fiber typing
+
+  - ComplexUpset 1.3.3（R）：Generate upset plots for overlap of contractile features
+
+  - Seurat （R）：RunPCA, UMAP clustering, FeaturePlot
+
+  - factoextra 1.0.7（R）：Scree plots via fviz_eig()
+
+  - clusterProfiler 4.6.2（R）：Overrepresentation analysis with enrichGO() and simplify()
+
+  - Pheatmap 1.0.12（R）：Heatmap visualization of Z-scored ribosomal proteins
+
+  - DESeq2 1.38.3（R）：Differential expression analysis for transcriptomics
+
+  - limma （R）：Differential expression analysis for proteomics, eBayes, topTable, normalizeBetweenArrays
+
+  - pySCENIC 0.12.1（Python）：Inference of active transcription factors
+
+  - cisTarget v10（）：Databases and annotations for SCENIC
+
+  - AnnotationDbi 1.60.2（R）：Determine gene biotype using EnsDb.Hsapiens.v86
+
+  - biomaRt 2.56.1（R）：Extract RNA sequences for lncRNA database construction
+
+  - ORFfinder （Web）：Extract open reading frames from lncRNA transcripts
+
+  - Spectronaut v18（）：DIA raw MS data analysis with directDIA mode
+
+  - UCSF ChimeraX （）：Visualization and editing of ribosomal structure and preparation
+  of figures and movies
+
+  - Zen （）：Image acquisition on Zeiss fluorescence microscope
+
+
+  ## 关键参数
+
+  - UMAP.input_components = 6 principal components（UMAP was used for dimension reduction
+  of 6 principal components from transcriptomics and proteomics data.）
+
+  - fiber typing.expression_threshold = bottom knee of ranked MYH expression curve（Threshold
+  for assigning a fiber as positive or negative for each MYH transcript/protein.）
+
+  - cutadapt.min_length = 20（read trimming）
+
+  - Seurat.min_UMI = 1000（sample quality filtering）
+
+  - Seurat.min_detected_genes = 1000（sample quality filtering）
+
+  - Seurat.features = 7418（SCTransform normalization）
+
+  - SCTransform.regress = participant variation（SCTransform normalization）
+
+  - NovaSeq.loading_concentration = 2 nM equimolar pool（sequencing run）
+
+  - NovaSeq.PhiX spiked-in = 4%（sequencing run）
+
+  - sample preparation.enzyme:protein ratio (LysC) = 1:500（in-solution digestion）
+
+  - sample preparation.enzyme:protein ratio (trypsin) = 1:100（in-solution digestion）
+
+  - sample preparation.digestion temperature = 37°C（overnight digestion）
+
+  - LC-MS.DDA-PASEF scan range = 100-1700 m/z（library fractions）
+
+  - LC-MS.TIMS mobility range (DDA) = 0.6-1.6 V cm^-2（library）
+
+  - LC-MS.DIA-PASEF scan range = 400-1000 m/z（single fiber peptides）
+
+  - LC-MS.TIMS mobility range (DIA) = 0.64-1.37 V cm^-2（single fibers）
+
+  - DIA-NN.precursor FDR = 1%（default）
+
+  - DIA-NN.peptide length = 7-30 amino acids（default）
+
+  - DIA-NN.quantification strategy = Robust LC (high accuracy)（quantification）
+
+  - DIA-NN.neural network = double-pass mode（processing）
+
+  - UMAP.dims = 6（First 6 dimensions as input for K-nearest neighbor graph）
+
+  - DESeq2.design = ~ participant + fiber type（Transcriptomics differential expression
+  model）
+
+  - limma.design = ~ 0 + fiber type + participant（1000 fiber proteomics linear model）
+
+  - limma.design = ~ 0 + condition（Myopathy dataset comparisons between conditions）
+
+  - limma.design = ~ 0 + fiber type and condition（Myopathy dataset comparisons including
+  fiber type）
+
+  - limma.adjust = Benjamini-Hochberg（p-value adjustment for differential expression）
+
+  - differential expression.adjusted p-value = 0.05（Threshold for significance）
+
+  - differential expression.log fold change = 1（Cutoff for significance）
+
+  - Xiao score.threshold = 0.05（Proteins with Xiao score under 0.05 considered differentially
+  expressed）
+
+  - ORFfinder.min ORF length = 75 nucleotides（Minimal ORF length for lncRNA translation）
+
+  - ORFfinder.genetic code = Standard（Genetic code used for ORF extraction）
+
+  - ORFfinder.start codon = Any sense codon（Start codon option to maximize ORF extraction）
+
+  - Spectronaut.FDR = 1%（FDR at peptide precursor and protein level）
+
+  - Spectronaut.quantification = Top3 peptide precursors（Used for protein quantification）
+
+  - limma.normalization = quantile（Between-array normalization for combined datasets）
+
+  - RNAscope quantification.expression unit = dots/mm^2（RNA expression per muscle
+  fiber）
+
+
+  ## 参考基因组
+
+  human genome (not specified)
+
+
+  ## 数据库
+
+  - Gene Ontology (GO)：Enrichment analysis
+
+  - Protein Data Bank (PDB)：Human 80S ribosome structural model (4V6X)
+
+  - LNCipedia：查询 lncRNA 转录本信息（如 lnc-ERCC5-5）
+
+  - Uniprot (human reviewed FASTA, March 2022, 20410 entries)：spectral library search
+  database
+
+  - EnsDb.Hsapiens.v86：Gene biotype annotation
+
+  - UCSC Human Genome Browser：Genomic location interrogation
+
+  - GTEx Portal：Tissue-specific gene expression of lncRNAs
+
+  - cisTarget v10：SCENIC transcription factor inference
+
+  - UniProt proteome UP000005640：Reviewed human proteome reference for MS analysis
+
+  - Protein Data Bank (RCSB PDB)：Downloaded human 80S ribosome structural model 4V6X
+
+  - European Genome-phenome Archive (EGA)：Deposited RNA-seq data under study ID EGAS50000000418
+
+  - ProteomeXchange/PRIDE：Deposited raw mass spectrometry files and search engine
+  results under PXD046863
+
+  - GitHub：Code availability for the manuscript'
+evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
+  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf

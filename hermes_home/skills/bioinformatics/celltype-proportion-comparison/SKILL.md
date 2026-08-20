@@ -72,6 +72,12 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
   `p_main_scaled <- egg::set_panel_size(p_main, width=unit(N,"mm"), height=unit(32,"mm"))`
   → `ggsave(..., plot=p_main_scaled, dpi=300, bg="white", limitsize=FALSE)`
 - **FDR 版与 p 值版尺寸必须完全一致**（同一亚群同一组别 = 同一宽度 mm）
+- **⛔ 定稿导出 = PNG + PDF 一次同时出，不要只出 PNG 等用户开口（2026-08-17 Specialized MF cluster1 实测）**：
+  用户拿到 PNG 后追了一句"要生成pdf格式啊"，随即又补"保留png"——**PDF 是矢量投稿版、PNG 是 300dpi 预览版，两者都要，PDF 不是 PNG 的替代品**。
+  脚本里对同一 `p_scaled` 对象连续两次 `ggsave`：
+  `ggsave('xxx.png', p_scaled, dpi=300, bg='white', limitsize=FALSE)` +
+  `ggsave('xxx.pdf', p_scaled, device='pdf', bg='white', limitsize=FALSE, useDingbats=FALSE)`
+  交付清单同时列 PNG 与 PDF（用户会按文件大小/存在性核对）。
 - 教训链：曾把 IIA 的 FDR/p 值定稿图用 140×110 全幅出（被"大小有按照我给的画吗？"抓住）；随后又把探索图
   强行套 30mm（被"探索脚本可以全幅"纠正）。**规则 = 探索全幅、定稿按柱数**，交付前自查脚本里
   `png()`/`ggsave()` 尺寸参数属于哪个阶段（探索 or 定稿）
@@ -149,11 +155,29 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
 
 用户要求"按照衰老逆转和糖尿病逆转分别出图，记得分好目录"：
 - **衰老逆转板块**：有趋势的亚群全部画 3 柱 **Y_Pre / O_Pre / O_Post**，比较子集 = YvsO + O运动
+- **⛔ 3柱衰老逆转正式版 = 全部 3 个两两比较，含 Y_Pre vs O_Post（需现场补算，2026-08-17 cluster2 实测）**：用户说\"cluster2 画三组（年轻、老年运动前后），正式版\"时，**3柱图上所有两两比较都要标注**（用户 6 柱场景已强调过\"所有两两比较\"，3 柱同样适用）——即 Y_Pre vs O_Pre（独立）+ O_Pre vs O_Post（配对）+ **Y_Pre vs O_Post（独立，跨时间对角线）**。其中 Y_Pre vs O_Post **不在标准 9 比较表里**（预计算只做 YvsO/OvsOD 两个基线跨组）→ **在正式版脚本内现场补算**：复用补0百分比网格 `ct_data`，对 `COMP_PAIRS <- list(c('Y_Pre','O_Pre'), c('O_Pre','O_Post'), c('Y_Pre','O_Post'))` 循环跑 配对(O运动)/独立(其余) Wilcoxon + per_celltype BH——**不要为此重跑整条预计算管线**，脚本自带三比较计算即可。实测 cluster2 全不显著：YvsO p=0.065（FDR=0.195，Cliff's +0.54 = 🟡趋势）、O运动 p=0.578（配对）、YvsO_Post p=0.178——交付口径 = \"趋势候选，中位 0%→5.4% 方向成立但未过阈值\"，与 3柱正式版 24×32mm、p/FDR 两版、PNG+PDF 规则相同。
 - **糖尿病逆转板块**：3 柱 **O_Pre / OD_Pre / OD_Post**，比较子集 = OvsOD + OD运动
 - 每个亚群 p 值 + FDR 两版（PNG+PDF），3柱 = 24mm×32mm（宽度自适应公式）
 - **目录分离**：`figures/reversal_aging/` + `figures/reversal_diabetes/`（用户强调"分好目录"）
 - 亚群选择 = 上表"逆转判定 YES/方向成立"的亚群（实测：衰老逆转 6 个 = LRP1B+(I)/Pure Type IIX/RP_high(II)/RP_high(I)/Pure Type I/OTUD1+(II)；糖尿病逆转 2 个 = Pure Type IIX/Pure Type IIA）
 - 绘图脚本统一参数化：`plot_3grp(celltype, groups, comparisons, annot_col, out_tag, outdir)`，循环跑两个板块
+
+### 4 柱"臂内效应"模式（2026-08-17 Specialized MF cluster1 用户拍板）
+
+用户说"cluster1 出 4 个柱子，老年运动前后，老年糖尿病运动前后，p 值和 fdr 都要出" → **既不是 6 柱全组，也不是 3 柱逆转板块，而是 O_Pre/O_Post/OD_Pre/OD_Post 四柱**，回答"每个臂内部运动有没有效果"：
+
+- **groups** = `c('O_Pre','O_Post','OD_Pre','OD_Post')`；**比较子集** = 3 个：O_Pre vs O_Post（老年运动，配对）+ OD_Pre vs OD_Post（糖尿病运动，配对）+ O_Pre vs OD_Pre（老年 vs 糖尿病基线，独立）——配对用 base_id、独立用 Cliff's delta（方向翻转，正值=后者高）
+- **p/FDR 两版 = 给用户绘图函数加 `label_type` 参数**（用户原函数 `label` 写死 `FDR=`；`label_type='fdr'` → `FDR=`+fdr 列，`label_type='p'` → `p=`+p.value 列），**同一个函数跑两遍出两张图**，不要写两套函数
+- 实测结果（cluster1，7-8 样本/组）：三比较全不显著——O 运动 p=0.469/FDR=0.703、OD 运动 p=0.156/FDR=0.469、O vs OD p=0.902——**方向全在但全不显著**，交付时如实说"4 柱口径无显著变化"，不要因不显著就不标注（用户要求 p/FDR 都标出来，不显著的括号也画）
+- ⚠️ 此模式与 6 柱版 cluster1 的显著性结论**冲突预警**：6 柱版 Y_Pre vs O_Pre p=0.027（Python 补 0 口径）/p=0.234（用户 R 口径不补 0）；4 柱版只问臂内。交付时声明口径（是否补 0 + 比较数），详见 Pitfalls"补不补 0 + 比较数会反转结论"
+
+### ⛔ "下一个群" = 先探索预览，不定稿（2026-08-17 Specialized MF cluster2 实测）
+
+**触发场景**：cluster1 已定稿（26×32mm + PDF）后，用户说"下一个群" / "画下一个" —— **不要直接套用定稿模板批量出下一亚群**。用户会中途补一句"下一个群先看预览，探索"——正确顺序 = 每个新亚群**一律先出探索版**（140×110mm 全幅 + raw p 标注）→ 等用户确认效果/样式 → 才走定稿（柱数规则 mm + p/FDR 两版 + PNG+PDF）。探索→定稿门禁对每个亚群独立生效，即使模板已建立。cluster2 探索版实测全部不显著（O 运动 p=0.578 / OD 运动 p=0.219 / O vs OD p=0.318，中位比例 O_Pre 5.4% → O_Post 2.4% / OD_Pre 9.9% → OD_Post 6.7%、n=7/组），交付时如实说"无显著变化"。
+
+- **⛔ 探索版 = 6 组全画，不是 4 柱（2026-08-17 用户纠正"预览版是6组啊"）**：cluster2 预览曾按 cluster1 的 4 柱模板（O/OD 臂内）出图被纠正——**探索预览 = 全部 6 组**（Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post），4 柱模式只在用户明确说"出 4 个柱子"（如 cluster1 定稿）时用。脚本 `target_grps` 与 `target_cmps` 必须显式区分探索（6 组 5 比较）与定稿（4 柱 3 比较）两种配置，不要复用上一定稿模板。
+- **⛔ 6 组图上必须标注全部 5 个两两比较，含年轻组（2026-08-17 用户纠正"不是需要标注所有两两比较吗？年轻运动这些不需要标记吗？需要"）**：标准 5 比较 = 3 配对（Y/O/OD 各组 Pre→Post）+ 2 独立（Y_Pre vs O_Pre、O_Pre vs OD_Pre）。**不能只标 O/OD 臂内比较**——young exercise（Y_Pre vs Y_Post）、young vs old（Y_Pre vs O_Pre）都必须有括号。用户官方绘图函数本来就不过滤显著性（有效值就标），Agent 端脚本可能因 NA/漏配导致部分比较没标 → 交付前 R 侧打印 `nrow(sig)` 核对=5。
+- **⛔ 稀疏亚群配对检验 insufficient_n（NA）→ 补0补偿才能标注（2026-08-17 cluster2 实测）**：某亚群在年轻组几乎不存在（zone2：Y_Pre 中位 0%，10 样本 6 个 0 细胞）时，Y_Pre vs Y_Post 配对在用户原口径（不补 0，只取双边都有细胞样本）仅 2 对 <3 → `insufficient_n` p=NA → 绘图 filter `!is.na` 静默跳过该比较 → 图上缺年轻运动括号，用户会质疑"年轻运动怎么没标"（本次就是这么被抓）。**修复 = 对 NA 行补 0 补偿**：无该亚群细胞的样本按 0% 参与配对 → 全样本配出 N 对（cluster2 = 10 对）→ p 可算（实测 10 对方向混乱 p=1.0 = 真正无差异），在 `global_fdr_table` 里用 `bind_rows` 替换该 NA 行（注释写明"补0配对补偿 + 其余比较仍用用户原口径"），图上即可补标。⚠️ p=1.0 的 bracket 因所在组比例低被分配在图底部、标签小且与箱体/散点重叠，OCR/肉眼都可能漏看（OCR 常把 'p=1' 读成 'D='）——交付时主动说明"它画上了，只是位置低"，别等用户问。
 
 ## 打分分析（AUCell score 跨组比较，2026-08-13 扩展）
 
@@ -202,7 +226,43 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 样式沿用 v7 架构（RdBu_r、无白缝 CELL=1.0、行分组 0.2、面板间距 1.8、亚群标签贴底）
 - ⚠️ 曾踩坑：脚本里 `Identity` 色键未定义 → `KeyError: 'Identity'`（color_map 的 group 键必须覆盖所有组名，加 `'Identity': ...` 修复）
 
-### 📊 基因集响应筛选量化阈值（2026-08-16 用户问\"哪些可以删\"）
+### 🎻 亚群 top1 基因集小提琴图（2026-08-16 用户点名要 "每个亚群画自己top1的基因打分的小提琴图"）
+
+**触发场景**：用户从 FigA3（18 程序 × 亚群 z-score 热图）看到各亚群有对应高表达基因集（"RSS 就非常高表达 Fibrosis"），要求**每个亚群画自己 top1 基因打分的小提琴图，横坐标是亚群**——验证各亚群 signature 打分。
+
+**top1 挑选方法（与 FigA3 同口径）**：样本级聚合表（`agg_sample_v2.csv`，annotation_L3 分组）→ 每打分跨 10 亚群行内 z-score（`scipy.stats.zscore`，`result_type='expand'`）→ 每亚群 `sort_values(ascending=False).index[0]`。必须排除 4 个身份打分（scoreI/II/IIa/IIx）——用户看的 FigA3 是 18 程序版，OTUD1+(II) 在 22 打分里 top1=scoreII（身份打分）但 18 程序里 top1=scoreAtrophy，口径不同结果不同，先按图口径。已验证签名：RSS→Fibrosis、Specialized MF→Denervation、RP_high(II)→Glycolysis、LRP1B+(I)→AMPK_PGC1a、RP_high(I)→scoreSarcomeric、OTUD1+(I)→scoreInflammatory、OTUD1+(II)→scoreAtrophy（z=0.58 弱，该亚群无突出程序）。
+
+**⛔ z-score 方向陷阱：按亚群跨基因集标准化会退化出全亚群同一伪 top1（2026-08-20 最后两轮实测）**：挑每亚群 top1 打分时若按**错误方向**标准化（`Z = sub_agg.apply(zscore, axis=1)`，即每个亚群跨所有基因集标准化），会得到**无区分度的伪 top1**——本项目 scoreSarcomeric（泛肌纤维结构程序，肌节基因）在全部 10 亚群 z≈3.2-3.5 都是 top1，4 张图全是同一个基因集、毫无意义。**正确方向 = 每个基因集跨亚群标准化**（行=基因集：`Z.values.mean(axis=1)`/`std(axis=1)`，见 cns-effect-matrix 同款）。若全亚群 top1 相同，先怀疑标准化方向错了，不是数据真的如此。**用户明确"每张图都是独立的"（2026-08-20）**：每张小提琴图各自选出该亚群自己的高分基因集、与纯 type 对照对比即可，**不要因跨图 top1 相同/重复就统一改公式或否定方案**——sarcomeric 全 top1 是标准化方向 bug，换正确方向后各亚群自然分化（RSS=Fibrosis、SMF=Denervation、LRP1B+=AMPK…）。
+
+**⛔ y 轴选 raw AUCell 值，不是 z-score（2026-08-16 用户问"我不确定是z-score，还是原始AUCell"）**：小提琴展示的是**分布形状**——raw AUCell（0-1）直接反映真实水平分布；z-score 会把每个基因集自己的分布拉平到 0 附近，小提琴形状（峰/尾/偏态）失真。**z-score 适合热图（跨亚群相对比较），raw 适合分布图（绝对水平）**——nature-figure 惯例。**⚠️ 每个亚群 top1 基因集不同 → 横轴之间高度不可直接比较**（实测 Inflammatory 中位 0.040 vs Sarcomeric 0.511，天生量级差）——必须在小提琴标签下加小字标注每个亚群对应的基因集名，避免误读。
+
+**实现配方（50 万细胞级 CSV）**：`pd.read_csv(usecols=['annotation_L3']+[top1_map[s]+'_AUC' for s in targets])` 只读 6 列（382MB 文件秒读）→ 每亚群抽样 ≤3000 细胞（`groupby(...).sample(n=min(3000,len(x)), random_state=42)`，形状稳定且不糊）→ `ax.violinplot` + 中位数黑短线 + jitter 散点（每亚群 ≤800 点、alpha 0.45）→ nature-figure rcParams（Arial、pdf.fonttype=42、svg.fonttype=none、font.size 7）。完整代码见 `references/subcluster-top1-violin.md`。
+
+### ⛔ "画自己显著高表达的基因集" = 亚群 vs 纯型的数据实算，不靠 FigA3/memory 挑（2026-08-20 实测纠正）
+
+**触发场景**：用户从打分热图看到各亚群有对应高表达基因集，要求"每个亚群匹配 3 个纯纤维（Pure I/IIA/IIX），画**自己显著高表达**的基因集打分小提琴图"。
+
+**关键区分两类"top1"口径**（极易混淆）：
+- **口径 A（FigA3 签名，memory 里存的）**：样本级聚合 → 行内 z-score → 每亚群 `argmax`，回答"哪个基因集是**该亚群最高的**"。RSS→Fibrosis、LRP1B+→AMPK、RP_high(I)→Sarcomeric 等。
+- **口径 B（用户此处真正要的："自己显著高表达"）**：每个亚群 vs 3 个纯型 **逐基因集算 avg Cohen's d（方向 = 亚群−纯型）**，选 **d 最大且为正**（亚群比纯型高）的程序基因集。回答"该亚群**相对纯纤维**最能区分/上调哪个程序"。
+
+**⛔ 用户点名“画 FigureA3 里这个基因集”时，FigA3 表 = 权威映射，逐亚群照表用，不许默默换成口径 B，也不许两口径混用**（2026-08-20 实测用户“怎么跑去神经了？”）：用户上传 FigA3 的“亚群×top1基因集”对照表并说“画这个”时，该表就是用户认定的基因集映射，必须逐亚群照表用：LRP1B+(I)=AMPK_PGC1a、OTUD1+(I)=scoreInflammatory、OTUD1+(II)=scoreAtrophy、RP_high(I)=scoreROS、RP_high(II)=Glycolysis。**Z 值锚定以“当前 meta 数据重算的行内 z-score top1”为准，不以上传旧表的 z 数值死记**——RP_high(I) 在旧表是 scoreSarcomeric (z=2.00)，但用户确认“scoreROS这个啊”（当前 meta 该亚群 z 最高已变为 scoreROS z=2.01 > Sarcomeric 1.79），即亚群无需照抄旧表的基因集名错值，z 最高才是真 top1，用户会纠正。上一套 5 亚群图用口径 B（数据实算 avg Cohen's d vs 3 纯纤维）把 OTUD1+(I)/(II) 选成了 Denervation（d=0.44/0.39），与图 A3 表的 Inflammatory/Atrophy 冲突 → 用户看到 OTUD1 图挂 Denervation 直接质问“怎么跑去神经了？”。**规则**：① 用户拿出 FigA3 表/叫出该表基因集名 → 用表值，不重算、不替换；② 两口径对状态型亚群（OTUD1 系列）分歧：口径 A（z-score 该亚群最高）= Inflammatory/Atrophy，口径 B（vs 纯纤维 d 显著）= Denervation；③ 同一套多亚群图必须整套统一到一个口径——混合 = 图间基因集口径不一致，用户一眼抓矛盾；④ 用户明确说“数据实算 / 按 vs 纯纤维显著”才用口径 B，未指定时默认口径 A（FigA3 表）；⑤ 用户对逐亚群基因集的一致性/来源高度敏感（“我先确定你用的那个亚群和top1基因集”→ 交付前先跟用户对齐映射表并得到确认，再画整套）。AMPK_PGC1a × LRP1B+(I)+3 纯纤维本身两口径一致，是该图安全起点。
+
+**⛔ 必须用口径 B 现算，不能查 memory/FigA3——可数据实算验证口径 A 的选择常“不算显著”**（2026-08-20 实测）：
+| 亚群 | 上一轮(口径A/记忆)选的 | 数据实算 avgD | vs纯型明细 | 真·口径B top |
+|------|----------------------|--------------|-----------|-------------|
+| OTUD1+(I) | scoreTNFA | +0.17 | vs Pure I 仅 +0.00（几乎无差异！）| **Denervation (+0.44)** |
+| RP_high(I) | scoreAtrophy | +0.10 | vs IIA 仅 +0.02 | **Sarcomeric (+0.80)** |
+| RP_high(II) | scoreInsulin | +0.02 | vs IIA/IIX 为**负**（亚群不比纯型高）| **Sarcomeric (+0.63)** |
+| OTUD1+(II) | Denervation | +0.39 | 一致 | Denervation ✅ |
+| LRP1B+(I) | AMPK_PGC1a | +0.41 | 可用但 OxPhos+0.60/FAO+0.56 更高 | OxPhos/FAO |
+
+**规则**：
+1. **排除 4 个身份打分（scoreI/II/IIa/IIx）**——它们定义纤维身份，目标亚群如 LRP1B+(I)/OTUD1+(I)/RP_high(I) 本身是 I 型样，scoreI 天然高，属"身份自证"不算"程序信号"。只在 18 个程序基因集中选。
+2. **always 从数据现算 avg Cohen's d vs 3 纯型**，选最大且为正的程序基因集；发现"上轮/记忆选的基因集 vs 某纯型 d≈0 甚至是负"→ **必须向用户披露差异并让其拍板**（选数据 top vs 保留上轮），不要默默改用户已确认选择（铁律 28）。用户要"自己显著的"时，数据实算 top 才是正解。
+3. 交付对比表（亚群 / 上轮基因集 / 数据top / 差异说明），让用户决策，再一次性画齐。
+
+### 📊 基因集响应筛选量化阈值（2026-08-16 用户问\\\"哪些可以删\\\"）
 
 用效应表（22 基因集 × 10 亚群 × 5 效应 = 1100 检验，BH 校正）做响应强度筛选的**量化标准**：
 
@@ -302,9 +362,58 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 
 ⚠️ 相关坑：`gene_set_response_summary.csv` 里"弱响应(慎删)"判定基于 FDR<0.05 格数=0，但该判定**不代表该基因集无生物学信号**（可能只是小样本检验不出）——引用该表下删除结论前先查特异亚群 d 值。
 
+## 统计标注与出图执行纪律（2026-08-20 FigC1 AMPK 4亚群小提琴实测）
+
+### ⛔ 大样本 p 值浮点下溢：报 `<1e-6`，不报 `0.0`
+单细胞亚群对比 n 巨大（LRP1B+(I) 31,331 vs Pure Type I 166,747 细胞）时 `mannwhitneyu` 返回 p≈0.0（下溢），
+`round(p, 6)` → `0.0` = 精度谎言。**打印/汇报一律阈值改写**：`('<1e-6') if p < 1e-6 else round(float(p), 6)`；
+图星号逻辑不变（`p<1e-6 → ***`）。
+
+### ⛔ 大样本「星号骗人」：小效应也 p*** → 星号必须配效应量
+n=166k vs 31k 时 vs Pure Type I d=0.21（小效应、慢肌共性）仍 p<1e-6 → 光挂 `***` 会让读者误读为强差异
+（用户对效应量极其敏感）。规则：① 图注/注释必须星号配 d 值（`vs Type I d=0.21 small p***`）② 结论措辞分级：
+d≥0.5 才说"富集/差异强"，d<0.3 说"统计显著但效应小（共性/趋势）"，用"富集"不用"特异" ③ 汇报三件套 =
+中位数 + p（<1e-6 改写）+ 效应量 Cohen's d。
+
+- **⛔ 多亚群图必须是「单一模板脚本 + 改参数」，不许每张重写代码；每个看图脚本立即存 scripts/（2026-08-20 用户\"代码都不一样\"\"跑完也不保存\"）**：用户会逐张核对\"你画的 A 图跟 B 图是不是同一个脚本\"——**同一个模板脚本（如 fig_C1_AMPK_violin_4sub.py）只改 3 处参数（目标亚群、基因集列、颜色）出全套**，保证 5 张图代码和风格完全一致；每张图重起炉灶写新代码 → 风格/星号规则/标签全漂移，用户一眼发现\"你跟 Figure X 就不是一个图\"。**每个成熟脚本立即 write_file 到 scripts/ 目录并登记**，不靠记忆/聊天记录（用户原话\"跑完的脚本也不保存一下，保存到script目录里啊\"）——脚本首次跑通后立刻落盘，不能等到用户问\"脚本呢\"。改图只 patch 脚本里对应常量并重跑，不要在对话里手写整段新代码。
+小提琴/比较图亚群太多（>5-6 个）占版面时：优先保留「主角 + 干净纯型对照」（本次 = LRP1B+(I) + Pure Type
+I/IIA/IIX 共 4 个），**排除特殊状态群 RSS（纤维化/去神经/代谢塌陷）与 SMF（去神经/再生）以及 RP_high/OTUD1
+系列**（无核心故事、占位且拉低对照纯度）。特殊状态群的代谢塌陷是另一故事，混一起分散注意力。选型疑问先问用户
+（铁律 28），改版后文件名带版本标记（`_4sub`）。
+
+### ⛔ 「光说不做」升级版：交付 = 真实落盘文件 + 可给路径，不是叙述（2026-08-20 FigureC1 尾部实测）
+
+本轮最严重的用户信号，远超 boxplot 场景的"说了就跑"：
+- "你一直没执行代码，光说不做，我不是聊天"
+- "所以图到底在哪里呢？"（多次，图从未真正生成时）
+- "跑完的脚本也不保存一下，保存到script目录里啊" "你没有放到script里面吗？"
+
+**根因两类**：
+1. **把"描述将画/已画"当成交付**——声称"图已生成/5张已交付"但实际文件从未落盘，或脚本从未执行。用户要的是**磁盘上真实存在、路径可给、vision/OCR 通过**的图文件。
+2. **发空参工具调用**——write_file 缺 `path`/`content`、execute_python 缺 `code` 时调用**静默什么都不做**（不报错、不产出），却能连续空转多轮，拖到最后才醒悟。**只要发现连续 1-2 次工具调用参数为空/未携带实际代码，立即停下诊断参数序列化问题，换 execute_code 或直接把完整代码写进 code 参数，不要继续发空参。**
+
+**执行铁律（本类任务）**：
+- 说"画/出图/交付" = 同轮必须有**真实执行**写完文件；**结束语永远带着绝对路径 + 文件已落盘确认**。给不出路径 = 没完成，不许说"已完成"。
+- 每个成熟脚本跑通后**立即 write_file 抢救到 scripts/**（用户会审计）——脚本在 scripts/ 不在 = 交付不完整（"跑完也不保存"）。
+- 用户问"图在哪/跑了吗" → **先 search_files/read_file 查产出物和时间戳**，用证据回答（产物在=交付路径；产物不在=承认没跑、立即补跑），不要凭空自认/也不要撒谎声称已生成。
+- 多亚群/多版本图：改版只 patch 一个**已认可模板脚本**的常量并重跑保存，同一轮内闭环（改→跑→给路径），不留"我改了，你确认"这种无执行收尾。
+
+### ⛔ L1 辩论裁判解析失败 → 同内容重试 1 次，modify 裁决必须落地（2026-08-20 实测）
+L1 辩论返回 `verdict: need_more_info` + `low` + `verdict_parse_error` 时是**模型 JSON 被推理草稿污染，
+不是裁决失败**——用相同 topic/context 重试 1 次（实测重试即得 `modify` + `high`）。`verdict=modify` =
+**必须把 recommended_params/reasoning 的修正意见实际执行**（本案例：p 报 <1e-6、星号补 d、结论弱化）并重跑
+后再汇报，不要把 modify 当"通过"了事。反方意见即便整体被驳回，可操作项（如打印精度）通常值得采纳。连续 2 次
+解析失败才升级 L2/换 mode。
+
 ## Pitfalls
+- **⛔ 亚群 vs 纯纤维小提琴的两套星号口径并存——用户说「按之前代码画」先分清用哪套（2026-08-20）**：同类「主角 vs 3 纯纤维」图存在两个已验证模板，星号标注口径不同，混用会被用户抓到「怎么跟 Figure X 不是一个图」：① **fig_C1_AMPK_violin_4sub.py（用户当次指定「按我之前代码」）** = 星号按 **Cohen's d 效应量分级**（>=0.8***/0.5**/0.3*/ns），不挂 p，避细胞级伪重复虚标；② **fig_C1_5sub_rawp_effsize.py（另一会话用户拍板）** = **raw p 星号 + d 数值双标注**。**先确认用户指定哪个模板再画**（「参考 fig_C1_AMPK_violin_4sub.py」= d 分级），整套统一口径不混用。详见 references/main-vs-pure-4sub-violin-template.md 与 references/subtype-vs-fiber-violin.md。
+- **⛔ rail_review(post) 的 code_executed 传 `exec(open(...).read())` 会误报"代码过短(1 行)"（2026-08-20 实测）**：审查器按 code_executed 的字符/行数判"是否完整代码"，一行 exec 调用被当成偷懒 stub → post 审查 failed。**必须先 read_file 完整脚本，把完整多行脚本内容（≥200 字符，含注释）传给 code_executed 再跑 post**，不要缩写成一行 exec。同理 rail_review(pre) 的 required_packages 只列脚本真实 import 的包（见后续 egg/stringr 误报坑）。
+- **⛔ 多亚群克隆脚本时 sed 全局替换会破坏 subcluster_map 映射行（2026-08-17 实测被抓）**：从已跑通的 05 脚本克隆 06 时用 `sed -i 's/cluster1/cluster2/g'`，结果**第 17 行 `subcluster_map <- c(zone1='cluster1', zone2='cluster2', ...)` 也被替换成 `zone1='cluster2'`**——zone1 的映射被静默改坏。**克隆后必须检查映射行/非目标字符串**（grep 看所有 clusterN 出现位置，逐行核对语义），映射表这类"包含但不等于目标名"的行要用 patch 单独恢复。更稳做法：先复制再 `sed` 只替换 `ct <- 'clusterX'`、`target_ct`、`ggsave` 文件名三处（精确锚定），映射行不动。
+- **⛔ 探索版脚本故意不依赖 egg（绕开 check_env 误报导致的 rail_review(pre) 拦截，2026-08-17 实测）**：探索版 140×110mm 全幅**不需要 `egg::set_panel_size`**（只有定稿按柱数规则才需要）。写探索脚本时**故意不加载 egg**、`required_packages` 只列该阶段真实需要的（dplyr/tidyr/ggplot2），这样 rail_review(pre) 不会被 check_env 对 egg 的误报卡住（egg 装在 E:/R-libs 但 check_env 用默认 R 库路径探测 → 永远误报 MISSING）。定稿脚本再单独用 egg。**通用原则：rail_review(required_packages) 只列脚本实际 import 的包，不为"可能用到"的包付拦截代价**。
+- **⛔ stringr 误报 → 用 base R 等价函数替代，从源头消除**：check_env 探测不到 E:/R-libs/R-4.5.3 里的 stringr → rail_review(pre) 拦截。最稳修复不是修环境，而是**脚本里不用 stringr**：顶部加 `str_detect <- function(x, pattern) grepl(pattern, x)`、`str_remove <- function(x, pattern) sub(pattern, '', x)` 两个 shim，代码照写 `str_detect(...)` 调用不变，依赖归零。（2026-08-17 cluster1/2 脚本已内置此 shim，头部注释"不用 stringr"）
 - **⛔ Seurat `dim()` = (genes, cells) — ncol 是细胞数、nrow 是基因数（2026-08-17 实测报错）**：Specialized MF 实测 `dims: 11630 cells x 51227 genes`（脚本 `cat('dims:', ncol(obj), 'cells x', nrow(obj), 'genes')` 输出），但此前被误报成"51,227 细胞 × 11,630 基因"（把 ncol/nrow 语义读反）。**验证铁律：亚群细胞数求和必须等于报告的细胞数**（59+3022+822+808+1254+4912+753=11,630 ✓）。汇报任何细胞数前先核对 dims 顺序 + 亚群求和，用户对数字精度极敏感。
 - **⛔ Python 显著性实现可直接复用（2026-08-17 实测，R 库 DLL 损坏/不想冷启动时的保底路径）**：比例显著性计算不必死磕 R（coin::wilcoxsign_test 非标准写法 + R 库 DLL 坑），pandas+scipy 一次跑通：`scipy.stats.wilcoxon`（配对，按 base_id inner_join 后两列）/ `mannwhitneyu(v2, v1)`（独立）+ `statsmodels.stats.multitest.multipletests(method='fdr_bh')` 双 FDR（per_celltype + 全局）。Cliff's delta 方向翻转 Python 实现：`gt += np.sum(b > x); lt += np.sum(b < x); d = (gt-lt)/(n1*n2)`（正值 = 后者组高，符合用户直觉）。完整脚本见 `references/specialized-mf-proportion-case.md`（02_significance.py 模式，9 比较对 × 7 亚群 = 63 行）。
+- **⛔ 两条显著性管线的 CSV schema 不一致，跨读必炸（2026-08-17 实测 KeyError）**：本会话存在两套显著性结果：**Python 版 `02_significance.py` 写出的 CSV** 用 `subcluster/comparison/g1/g2/paired/p/eff/n1/n2` 列名（`comparison` 是 `YvsO/OvsOD/...` 缩写键、`paired` 是字符 'True'/'False'），**R 版用户管线/绘图脚本**内部用 `annotation_L3/group1/group2/p.value/test_type`。**读取 CSV 前必须先 `print(df.columns)` 确认是哪套 schema**——拿 Python 版列名拼 R 版查询（如 `df['annotation_L3']`）直接 KeyError；同样，R 绘图脚本若想消费 Python 版 CSV 也要重命名列（`rename(subcluster='annotation_L3', group1='g1', ...)`）。**更稳做法：正式版/探索版绘图脚本内自带三比较显著性计算（复用百分比网格），不读外部 CSV**——预计算 CSV 只用于给用户交付全表，绘图永远现场算，避免 schema 漂移。
 - **⛔ significance CSV 的 `paired` 列是字符型 'True'/'False'——过滤必须 `paired != 'True'`，不能 `paired == FALSE`（2026-08-17 实测被自己坑）**：read.csv(stringsAsFactors=FALSE) 读进后 `paired` 是 character，`paired == FALSE`（逻辑值）永远匹配不到 → comp_sig 0 行 → 图上没有显著性标注但脚本不报错。探索图/定稿图脚本读取显著性 CSV 时**统一用 `paired != 'True'`（或 paired=='False' 取反）筛选独立比较**。交付前 R 侧打印 `nrow(comp_sig)` 与预期比较数核对，防止\"图出来了但没标注\"的静默失败。
 - **⛔ 图空白/黑底检查必须三指标，不能只看文件大小或"非白%"（2026-08-12 被用户两次纠正）**：
   `egg::set_panel_size` 处理后的对象经 `ggsave()` 输出 PNG **默认纯黑背景**（实测 94.8% 像素
@@ -315,7 +424,8 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
   **统一用 `ggsave(..., bg="white")` 输出 PNG**。文件大小 ≠ 内容正确（3.9KB 空白和 55KB 黑底都骗过人）。
 - R 环境：`.libPaths('E:/R-libs/R-4.5.3')` + R-4.5.3 全路径；readr 不在该库用基础 `write.csv`；CSV 首列空表头 → `row.names=1`
 - `coin::wilcoxsign_test(diff_val ~ 1)` 非标准配对写法，但 exact→approx fallback 链有效，不用改（用户脚本无需修正）
-- `complete(nesting(samplename, base_id, type), fill=list(Proportion=0))` 补缺失组合（0 细胞样本）必需
+- `complete(nesting(samplename, base_id, type), fill=list(Proportion=0))` 补缺失组合（0 细胞样本）必需（2026-08-14 起 L3 流程默认；**用户官方 R 管线不补 0**，见下一条）
+- **⛔ 补不补 0 + 比较数会反转结论（2026-08-17 Specialized MF 实测）**：用户官方 R 管线（5 比较）不补 0 → cluster1 Y_Pre vs O_Pre p=0.234 **不显著**；Agent Python 版（9 比较）补 0 → p=0.027 **边缘显著**——同数据两口径结论相反！根因 = 比较数不同（BH-FDR 严格度）+ 补 0（0 值堆积极敏感 vs 不补 0 引入选择偏倚、只让\"至少 1 个该亚群细胞\"的样本参与）。**交付规则**：① 报告必须显式声明\"是否补 0 + 比较数\"；② 比例表同时给\"0 值样本数\"；③ 结论区分\"普遍性上升（补 0 检验）vs 丰度上升（不补 0 检验）\"；④ 用户官方代码口径（5 比较不补 0）= 交付默认，但与补 0 版结论冲突时主动披露差异。详见 `references/specialized-mf-user-r-pipeline.md`
 - 双 FDR 列同时保留：`FDR_per_celltype`（探索灵敏）vs `FDR_global`（保守结论），绘图参数选择
 - 效应量列混两种度量：运动比较是 median_diff（百分点），跨组比较是 Cliff's delta（−1~1），**不能直接比大小**，表格必须分开标注
 - **多亚群流程避免重复冷启动（用户："为什么调用这么多 R？" / "kernel 不持久化吗？" 2026-08-12）**：
@@ -418,12 +528,17 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 - 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
 
 ## 支持文件
+- `references/subtype-vs-fiber-violin.md` — **慢肌类亚群 vs 纯纤维「自己显著高表达基因集」小提琴图**（2026-08-20）：5 亚群 × 3 纯纤维，口径 B 数据实算 avg Cohen's d 选 top1 + **raw p 星号 + 效应量 d 数值双标注**（用户拍板，非效应量分级星号）+ 细胞级 Mann-Whitney 伪重复局限披露 + 可复用脚本 `fig_C1_5sub_rawp_effsize.py`
+- `references/main-vs-pure-4sub-violin-template.md` — **「主角亚群 vs Pure I/IIA/IIX」4-sub 小提琴模板**（2026-08-20 用户指定 fig_C1_AMPK_violin_4sub.py）：单栏 90×62mm nature-figure 版、主角浅蓝+纯纤维标准配色、**星号按 Cohen's d 分级（≥0.8***/0.5**/0.3*/ns）非 p 值**、不截断 Y 轴、PNG+SVG+PDF+TIFF 四格式、5 亚群实例 d 值表 + 期望中位数逐项核对 + 删旧图=移入备份目录。⚠️ 与 subtype-vs-fiber 的 raw-p 星号是两套口径，用户说"按 fig_C1_AMPK_violin_4sub.py / 之前代码画"用本模板。
 - `references/specialized-mf-proportion-case.md` — **Specialized MF 11,630 细胞比例显著性案例（2026-08-17）**：Python 显著性管线完整代码（pandas+scipy wilcoxon/mannwhitneyu + 双 FDR + Cliff's delta 方向翻转）、9 比较对定义、六组比例中位数表、显著性要点（zone5 衰老↓ p=0.0046 / 糖尿病轴全不显著）+ **探索箱线图模板（03_boxplot_6grp_cluster1.R：zone→cluster 改名映射、手动括号 raw p 标注、paired 列字符型坑、cluster1 衰老↑/运动↑ 方向与"运动逆转去神经"预期相反→需 pseudobulk 验证）**
+- `references/specialized-mf-user-r-pipeline.md` — **用户官方 R 管线（显著性 5 比较 + plot_celltype_proportion 画图函数）可复用版（2026-08-17，用户说"你要记住了"）**：六色配色/配对虚线/手动括号/FDR 白底标注完整函数、5 比较对定义、`&&`→`&` 与删 coin 分支的 rail_review 修复、**补 0 vs 不补 0 口径反转结论案例（cluster1 YvsO p=0.234 vs 0.027）与辩论裁决（普遍性 vs 丰度）**
 - `references/mf-l3-proportion-case.md` — 骨骼肌 MF L3 10 亚群实测案例：脚本结构、显著性结果、Pure Type I/IIA 结论与响应者分析
 - `references/mf-score-analysis.md` — AUCell 打分跨组差异实测：相关性冗余/独立结构、衰老/糖尿病/运动三轴显著结果、SenMayo 解读陷阱、去神经化基因集评估（SCN4A 方向坑 + NCAM1 缺失 + 重叠检查）、缺失打分建议（Glycolysis/AMPK-PGC1α 等）、真实文献 PMID 清单
 - `references/xlsx-geneset-wide-format.md` — 用户基因集 xlsx 宽表格式追加/编辑铁律 + openxlsx 损坏文件修复配方（zipfile 解析读取 + openpyxl 从零重建）
 - `references/go-term-selection-per-subtype.md` — 亚群 GO 富集词条筛选（MF_L3_GO_AllLists.xlsx）：Log(q-value)≤-1.3 过滤 + **特异性优先选词条算法**（挑亚群独有词条，不是 marker 命中数优先——第一版给 10 亚群全挑共享 sarcomere 词条被用户否决）+ 正刊 GO 词条挑选方法论（去冗余/差异化/锚定身份/dotplot）+ L2 辩论警示（LRP1B+ 突触需注明 NMJ、RSS 泛 growth 换 BMP、RP_high 核糖体注明管家基因背景）+ openpyxl 科学计数法/read_only 无 dimensions 坑 + **CNS 级别 GO dotplot 完整配方**（关键词驱动选词条 → ggplot2 dotplot：shape=21、size=Enrichment、fill=-log10(q) 蓝白红渐变、PNG+PDF 双导出）。触发词："GO词条" / "富集词条" / "MF_L3_GO_AllLists" / "亚群富集" / "GO dotplot" / "GO富集图"
 - `references/cns-effect-matrix-aucell.md` — **CNS 级效应矩阵图组配方**（2026-08-14）：细胞级 AUCell meta CSV → 样本级聚合（防伪重复）→ Cohen's d + Wilcoxon 三效应（Aging/Exercise/T2D）→ 三图架构（Fig1 效应矩阵热图 + Fig2 配对个体响应 + Fig3 Aging-vs-Exercise 效应散点）+ 逆转率公式 + 可直接复用的 Python 实现 + **五效应扩展版 + 颜色语义问答三步核实 + v5→v6 定稿参数（tight_layout/add_axes 坑、亚群标签 y=-0.15、Fig7 转置）+ v6→v7 无白缝 CELL=1.0 + v7→v8 六组分布热图标签布局 + v8→v9 多面板重构（像 fig1 v7 那样）+ 真实分数 vs z-score 决策 + pandas MultiIndex×zscore numpy 层修复**。触发词："CNS级别" + "AUCell打分" / "效应矩阵" / "逆转矩阵" / "主刊图" / "PNG没变PDF对了"
+- `references/subcluster-top1-violin.md` — **亚群 top1 基因集小提琴图配方**（2026-08-16）：top1 挑选方法（样本级聚合→行内 z-score→argmax，必须排除 4 身份打分）+ **y 轴用 raw AUCell 非 z-score 的决策**（分布形状 vs 相对高低）+ 每亚群抽样 ≤3000 + violinplot 完整代码 + 已验证亚群签名（RSS→Fibrosis 等 7 个）+ 用户六色配色。触发词："top1 小提琴" / "每个亚群画自己top1" / "亚群 signature 打分" / "原始AUCell还是z-score"
+- `references/aucell-score-figures.md` — **AUCell 打分图全套约定总纲（heatmap+violin，2026-08-20 多轮纠正沉淀）**：数据口径（细胞级/样本级/五效应表）、**z-score 方向陷阱**（按亚群跨基因集标准化→全亚群同一伪 top1）+ 每张图独立选基因集、热图布局（CELL=1.0 无白缝/行分组 0.2/面板 1.8/标签位置）、**matplotlib invert_yaxis 上下颠倒坑**、小提琴规范（Y 轴原始分数不截断/星号按 raw p 分级 + 效应量 d 数值双标注/不算 BH-FDR/标准 bracket 无框无注释）、PDF-vs-PNG 渲染分叉（tight_layout+add_axes 坑）、图稿参数记忆（Fig_type6_v9、Fig_C1_AMPK_violin_4sub）。触发词："打分热图" / "五效应图" / "六组图" / "亚群top1" / "小提琴图" / "无白缝" / "bracket星号" / "红蓝热图"
 
 ## Proven Scripts
 
@@ -437,3 +552,12 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 | - | - | - | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
 | - | - | - | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-17 | 03_boxplot_6grp_cluster1.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 04_user_style_proportion.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 04_user_style_proportion.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 04_user_style_proportion.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 05_boxplot_4grp_cluster1_pfdr.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 05_boxplot_4grp_cluster1_pfdr.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 07_explore_4grp_cluster2_p.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 08_final_3grp_cluster2_pfdr.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 09_explore_6grp_cluster3_p.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-17 | 10_final_3grp_cluster3_pfdr.R | - | - |  |

@@ -32,8 +32,8 @@
       "ragg"
     ]
   },
-  "success_count": 3,
-  "proven_script": "run_plot_PureTypeI_4grp_CNS.R",
+  "success_count": 13,
+  "proven_script": "fig_C1_5sub_vs_pure_v2.py",
   "proven_params": [
     {
       "species": "human",
@@ -73,9 +73,139 @@
       "approved": false,
       "custom_script": false,
       "result": "Pure Type I 4组箱线图两版对比交付: (1)用户原脚本样式 FDR版+raw p值版 (2)CNS优化版(同色系Pre/Post配色+星号体系+theme_classic 6.5pt+配对虚线)。10文件齐全(PNG/PDF/SVG)。关键统计: O_Pre vs OD_Pre p=0.00699 FDR=0.035 糖尿病显著压低 Pure Type I (cliffs_delta="
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "subcluster_top1_scores.py",
+      "params": "agg_sample_v2.csv, annotation_L3 分组, z-score 跨亚群标准化, top1 基因集挑选",
+      "date": "2026-08-20",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5 个亚群 top1: LRP1B+(I)=AMPK_PGC1a(z2.30), OTUD1+(I)=scoreInflammatory(z1.57), OTUD1+(II)=scoreII(z0.73, 身份打分需排除), RP_high(I)=scoreSarcomeric(z2.00), RP_high(II)=Glycolysis(z2.18). RSS=Fibrosis 验证通过"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_subcluster_top1_violin.py",
+      "params": "MF_AUCell_meta.csv usecols 只读5列, 每亚群抽样3000, violinplot+散点+中位线, raw AUCell y轴, nature-figure 规范(Arial/pdf.fonttype42)",
+      "date": "2026-08-20",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5亚群top1小提琴图: LRP1B+(I)=AMPK_PGC1a(med0.195), OTUD1+(I)=scoreInflammatory(med0.040), OTUD1+(II)=scoreAtrophy(med0.177), RP_high(I)=scoreSarcomeric(med0.511), RP_high(II)=Glycolysis(med0.068)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_subcluster_AMPK_violin.py",
+      "params": "AMPK_PGC1a_AUC 跨10亚群小提琴, 原始AUCell分数0-1, 用户配色muscle_fiber_final_colors, violin+窄boxplot+中位数标注, LRP1B+(I)高亮框+注释, PNG 300dpi+PDF+SVG",
+      "date": "2026-08-20",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "LRP1B+(I) AMPK_PGC1a 中位数 0.1962 全亚群最高，RSS/SMF 最低(0.145)；LRP1B+(I) 确认为氧化代谢程序富集群，可作为身份定义证据。★字形在Arial缺失(warning)，不影响图主体。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_AMPK_violin_v2.py",
+      "params": "nature-figure 规范: 7pt Arial, 183mm双栏, 不截断Y轴(ylim=0..0.673覆盖数据max0.552), violin+窄boxplot+中位数5.5pt小字, LRP1B+(I)高亮框+星号(Mann-Whitney vs各群), SVG/PDF/TIFF600dpi导出",
+      "date": "2026-08-20",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "AMPK_PGC1a v2完整小提琴图: LRP1B+(I)中位数0.196全亚群最高, RSS/SMF最低0.145, Y轴不截断(0-0.673)。脚本需import matplotlib as mpl(曾漏), round(p,2e-6)应为科学计数。产出png171KB/svg/pdf/tiff31MB"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_AMPK_violin_v2.py",
+      "params": "mannwhitneyu(two-sided), p<1e-6='***', p<1e-3='**', p<0.05='*', 10亚群, n(LRP1B+)=31331",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigC1 AMPK_PGC1a 10亚群小提琴图：星号标注逻辑确认——每个亚群 vs LRP1B+(I) 的 Mann-Whitney U 双侧检验，全部亚群 p<1e-250 (***)，LRP1B+(I) 自身不标注。读取脚本+复算 p 值验证一致。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_AMPK_violin_4sub.py",
+      "params": "order=LRP1B+(I),Pure Type I,IIA,IIX; cohens_d pooled SD; star by effect size; bracket阶梯高度; ylim 0~1.28*ymax不截断; 90x62mm单栏",
+      "date": "2026-08-20",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigC1 4亚群 AMPK-PGC1a 小提琴图定稿版：LRP1B+(I) vs Pure Type I/IIA/IIX。按用户要求改为：组间显著性bracket横线+星号；星号按效应量Cohen's d分级(d>=0.8****** ,0.5**,0.3*,<0.3 ns)而非p值（大样本p<1e-250失真）；去掉Box高亮框、annotate注释、med数值文字。单栏90x62mm, 7p"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fig_split_v10.py (FigA3 提取)",
+      "params": "FigA3_program_subcluster 行内z-score(细胞级全部样本, sub_matrix), 18程序×10亚群",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读图fig_split_v10.py确认FigA3亚群top1口径=sub_matrix全样本行内z-score最高, 非vs纯纤维d。用户top1表: LRP1B+=AMPK_PGC1a(z2.30), OTUD1I=scoreInflammatory(z1.57), OTUD1II=scoreAtrophy(z0.58), RPhighI=scoreSarcomeric(z2.00), RPh"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fig_split_v10.py 口径验证",
+      "params": "FigA3 sub_matrix 口径重算5亚群top1: LRP1B+=AMPK(1.99), OTUD1I=Inflammatory(1.71), OTUD1II=Atrophy(0.71), RPhighI=ROS(2.01)>Sarcomeric(1.79), RPhighII=Glycolysis(2.01)",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "当前meta重算: 4/5亚群top1与上传图一致; RP_high(I)分歧—当前ROS=2.01>Sarcomeric=1.79, 但上传图标Sarcomeric(z2.00)。疑似上传图源自早期数据/脚本版本。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "fig_C1_AMPK_violin_4sub.py",
+      "params": "LRP1B+(I) + Pure Type I/IIA/IIX × AMPK_PGC1a AUCell violin, Cohen's d 分级星号(ns/*/**/***), 无截断, 单栏90mm, 300dpi PNG+SVG+PDF+600dpi TIFF",
+      "date": "2026-08-20",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "4sub 小提琴脚本(正确基准): LRP1B+ med=0.195, d vs PureI=0.21(ns)/IIA=0.33(*)/IIX=0.68(**)。主刊规范。用户认可此脚本为正确基准, 后续 OTUD1/RP_high 均应复用此画法。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_5sub_vs_pure_v2.py",
+      "params": "{\"jobs\":5,\"template\":\"fig_C1_AMPK_violin_4sub.py\",\"star_eff\":\"d>=0.8***,0.5**,0.3*,else ns\",\"violin_width\":0.70,\"alpha\":0.85,\"ylim\":\"data_max*1.28\",\"formats\":\"png300,svg,pdf,tiff600\"}",
+      "date": "2026-08-20",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5亚群vs3纯纤维小提琴图重画成功: LRP1B+(I)-AMPK_PGC1a d=[0.21,0.33,0.68]; OTUD1+(I)-scoreInflammatory d=[0.12,0.35,0.36]; OTUD1+(II)-scoreAtrophy d=[0.30,0.11,0.17] 全ns; RP_high(I)-scoreROS d=[0.38,0.66,0.71]; RP_h"
     }
   ],
   "user_prefs": {
-    "last_used_script": "run_plot_PureTypeI_4grp_CNS.R"
+    "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
   }
 }
