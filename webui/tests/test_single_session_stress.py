@@ -469,3 +469,47 @@ class TestI_WakeHistoryCacheStable:
         assert h1[0]["content"] == h2[0]["content"], "user 消息应一致"
         assert h1[1]["content"] == h2[1]["content"], "assistant 消息应一致"
         assert h1[2]["content"] != h2[2]["content"], "task_plan 摘要应变化（在尾部）"
+
+
+# ══ J. 用户特别指定强化（2026-08-22：标记 + 置顶 + 跨会话高信任）══
+class TestJ_SpecialRequirements:
+    def test_special_marked_and_first(self, tmp_path, monkeypatch):
+        """特别指定句 → (特别指定) 标记 + digest 置顶；普通要求排后。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "以后出图默认 300dpi。")
+        srv._extract_and_store_requirements(s, "特别重要：出图时 Y 轴必须从 0 开始，不要自动缩放。")
+        reqs = srv._read_requirements(s, limit=6)
+        assert reqs and "(特别指定)" in reqs[0], f"特别指定应置顶, 实际: {reqs}"
+        assert "(特别指定)" in reqs[0] and "Y 轴" in reqs[0]
+        d = srv._build_memory_digest(s, "画图")
+        assert "(特别指定)" in d and "Y 轴" in d
+
+    def test_special_cross_session_high_trust(self, tmp_path, monkeypatch):
+        """特别指定 → 强制进跨会话 facts（trust 0.95）；普通记忆 0.8。"""
+        import memomics.bio_tools.memory_bridge as mb
+        import tempfile
+        tmpdb = os.path.join(str(tmp_path), "memory_store_test.db")
+        monkeypatch.setattr(mb, "_get_db_path", lambda: tmpdb)
+        monkeypatch.setattr(mb, "_conn", None)  # 重置单例连接
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "务必记住：这个项目最终交付必须含 DOCX+PDF 双格式。")
+        srv._extract_and_store_requirements(s, "记住：配色用蓝橙。")
+        import sqlite3
+        conn = sqlite3.connect(tmpdb)
+        rows = conn.execute(
+            "SELECT content, trust_score FROM facts WHERE category='user_pref' ORDER BY trust_score DESC"
+        ).fetchall()
+        conn.close()
+        texts = [r[0] for r in rows]
+        assert any("DOCX+PDF" in t for t in texts), "特别指定应进跨会话记忆"
+        scores = {r[0]: r[1] for r in rows}
+        special_row = [r for r in rows if "DOCX+PDF" in r[0]]
+        normal_row = [r for r in rows if "蓝橙" in r[0]]
+        assert special_row and abs(float(special_row[0][1]) - 0.95) < 1e-9, f"特别指定 trust 应为 0.95: {special_row}"
+        assert normal_row and abs(float(normal_row[0][1]) - 0.8) < 1e-9, f"普通 trust 应为 0.8: {normal_row}"
+
+    def test_special_question_not_stored(self, tmp_path):
+        """问句（'这个很重要吗？'）不得入库。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "这个配色方案很重要吗？")
+        assert not os.path.exists(os.path.join(s["results_dir"], "REQUIREMENTS.md"))

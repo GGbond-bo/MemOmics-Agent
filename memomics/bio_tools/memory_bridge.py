@@ -143,13 +143,17 @@ def store_script_score(
         return -1
 
 
-def store_user_pref(content: str, tags: str = "") -> int:
-    """存储用户偏好。返回 fact_id。"""
+def store_user_pref(content: str, tags: str = "", trust_score: float = 0.8) -> int:
+    """存储用户偏好。返回 fact_id。
+
+    trust_score（2026-08-22）：用户"特别指定"的要求用更高信任分（0.95），
+    召回排序时优先返回。
+    """
     try:
         conn = _get_conn()
         cur = conn.execute(
-            "INSERT OR IGNORE INTO facts (content, category, tags, trust_score) VALUES (?, 'user_pref', ?, 0.8)",
-            (content, tags)
+            "INSERT OR IGNORE INTO facts (content, category, tags, trust_score) VALUES (?, 'user_pref', ?, ?)",
+            (content, tags, float(trust_score))
         )
         conn.commit()
         if cur.lastrowid:

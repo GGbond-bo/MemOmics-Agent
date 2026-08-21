@@ -192,6 +192,11 @@ class MemoryStore:
 
         Scanning is deterministic from disk bytes, so the snapshot remains
         stable for the entire session (prefix-cache invariant holds).
+
+        2026-08-22 记忆清理：system prompt 快照只保留「常用 + 用户指定」条目
+        （_curate_entries：用户指定/强调词条目优先，其次按序截断到字符上限）。
+        磁盘文件全量保留——memory 工具仍可读全部条目；截断从磁盘字节
+        确定性推导，prefix-cache invariant 不受影响。
         """
         mem_dir = get_memory_dir()
         mem_dir.mkdir(parents=True, exist_ok=True)
@@ -202,6 +207,10 @@ class MemoryStore:
         # Deduplicate entries (preserves order, keeps first occurrence)
         self.memory_entries = list(dict.fromkeys(self.memory_entries))
         self.user_entries = list(dict.fromkeys(self.user_entries))
+
+        # 2026-08-22 记忆清理（快照精选，磁盘不动）
+        self.memory_entries = self._curate_entries(self.memory_entries, is_user=False)
+        self.user_entries = self._curate_entries(self.user_entries, is_user=True)
 
         # Sanitize entries for the system-prompt snapshot only.  Live state
         # (memory_entries / user_entries) keeps the raw text so the user
@@ -214,6 +223,31 @@ class MemoryStore:
             "memory": self._render_block("memory", sanitized_memory),
             "user": self._render_block("user", sanitized_user),
         }
+
+    # (2026-08-22) 快照精选：用户指定/强调词条目 = 必留（优先），其余按序截断。
+    # 词表与 webui REQUIREMENTS 的"特别指定"语义对齐，保证用户特别指定的
+    # 内容一定进入 system prompt。
+    _CURATE_SPECIAL = ("特别", "重要", "务必", "一定", "千万", "重中之重",
+                       "必须记住", "很重要", "用户要求", "用户指定", "用户偏好",
+                       "用户纠正", "纠正过", "用户强调", "偏好")
+    _CURATE_CAP = {"user": 4000, "memory": 6000}
+
+    @classmethod
+    def _curate_entries(cls, entries, is_user):
+        """从全量记忆条目中精选快照：用户指定优先 + 字符上限截断（确定性）。"""
+        if not entries:
+            return entries
+        special = [e for e in entries if any(w in e for w in cls._CURATE_SPECIAL)]
+        rest = [e for e in entries if e not in special]
+        cap = cls._CURATE_CAP.get("user" if is_user else "memory", 6000)
+        out, used = [], 0
+        for e in special + rest:
+            n = len(e) + len(ENTRY_DELIMITER)
+            if out and used + n > cap:
+                break
+            out.append(e)
+            used += n
+        return out
 
     @staticmethod
     def _sanitize_entries_for_snapshot(entries: List[str], filename: str) -> List[str]:

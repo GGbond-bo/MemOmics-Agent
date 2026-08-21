@@ -4564,6 +4564,11 @@ _REQUIREMENTS_MARKERS = ("必须", "不要", "别忘", "以后", "每次", "记�
                          "保持不变", "统一", "都要", "都给我", "始终", "一律",
                          "我要求", "我需要", "务必", "请务必", "只能", "只许", "优先")
 _REQUIREMENTS_MEM_WORDS = ("记住", "记得", "以后", "每次", "永远", "后续都", "我要求")
+# (2026-08-22 用户强调) 特别指定词：用户特别强调/指定的要求 → 标记 (特别指定) +
+# 强制进跨会话记忆(trust 0.95) + digest 置顶 —— 最高优先级
+_REQUIREMENTS_SPECIAL_WORDS = ("特别记住", "特别指定", "特别重要", "非常重要", "特别强调",
+                               "务必记住", "一定记住", "一定要记住", "必须记住", "一定要",
+                               "重中之重", "重点记住", "千万记住", "千万别忘", "很重要")
 # (2026-08-21) 过滤"发给助手本人的指令"（带'不要调用工具/只用一句话回复'等），
 # 避免把对助手的指令误当成用户对项目的持久要求写入 REQUIREMENTS.md
 _REQUIREMENTS_SKIP_ASSISTANT = (
@@ -4571,6 +4576,10 @@ _REQUIREMENTS_SKIP_ASSISTANT = (
     "请简短确认", "请简短回复", "请简短", "请确认", "不要做多余", "请勿", "你别",
     "只做一件事", "不要跑完整", "不要跑分析", "只回答数字", "只回答文件名", "先不要执行",
     "先别执行", "不要执行", "先看下", "看一下就行", "不用跑",
+    # (2026-08-22) 元指令尾巴：指代上文的空要求（上面那句已入库，这句是废话）
+    # 注意：不用"别忘/别忘了"子串——"路径 X 别忘了"是实义要求，不能误伤
+    "记住这一点", "记住这个", "记住这点", "记住这些", "记住那条", "记住这条",
+    "记住吧", "别忘了这个", "别忘了那条",
 )
 # (2026-08-21) 一次性任务指令词：含路径+动作词且无"记住/必须/以后"等 marker →
 # 是"这次的任务"不是"持久要求"，不入库、不覆盖已有确认行
@@ -4635,10 +4644,13 @@ def _read_requirements(session, limit=8):
         return []
     if not lines:
         return []
-    paths = [ln for ln in lines if re.search(r"[A-Za-z]:[/\\]", ln)]
-    others = [ln for ln in lines if ln not in paths]
+    # (2026-08-22) 特别指定优先置顶（最高优先级），再路径优先、最新在前
+    special = [ln for ln in lines if "(特别指定)" in ln]
+    rest = [ln for ln in lines if "(特别指定)" not in ln]
+    paths = [ln for ln in rest if re.search(r"[A-Za-z]:[/\\]", ln)]
+    others = [ln for ln in rest if ln not in paths]
     seen, out = set(), []
-    for ln in (paths[-limit:] + others[-limit:]):
+    for ln in (special[-limit:] + paths[-limit:] + others[-limit:]):
         if ln not in seen:
             seen.add(ln)
             out.append(ln)
@@ -4657,12 +4669,14 @@ def _requirement_anchor(text):
 
 
 def _fmt_req_line(r, cap=110):
-    """digest 展示行：截断到 cap，但保留 (已确认) 标记不被截掉。"""
+    """digest 展示行：截断到 cap，但保留 (已确认)/(特别指定) 标记不被截掉。"""
     s = (r or "")[:cap]
     if len(r or "") > cap:
         s = s.rstrip() + "…"
     if "(已确认)" in (r or "") and "(已确认)" not in s:
         s = s[: max(0, cap - 8)].rstrip() + "… (已确认)"
+    if "(特别指定)" in (r or "") and "(特别指定)" not in s:
+        s = s[: max(0, cap - 8)].rstrip() + "… (特别指定)"
     return s
 
 
@@ -4793,27 +4807,34 @@ def _extract_and_store_requirements(session, text):
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             _is_env = _is_env_sentence(_s)
             _is_verified = any(w in _s for w in _REQUIREMENTS_VERIFIED_WORDS)
+            # (2026-08-22) 用户特别指定/强调 → (特别指定) 标记 + 强制进跨会话记忆
+            _is_special = any(w in _s for w in _REQUIREMENTS_SPECIAL_WORDS)
             # (2026-08-21) 一次性任务指令（含路径+动作词、无持久 marker）不入库——
             # "用 X 画一张图/统计一下"是本次任务，不是用户对项目的持久要求
             _is_task = _has_path and not _has_marker and any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
             if _is_task:
                 continue
-            if not (_has_path or _has_marker or _is_env or _is_verified):
+            if not (_has_path or _has_marker or _is_env or _is_verified or _is_special):
                 continue
-            if any(w in _s for w in _REQUIREMENTS_MEM_WORDS):
+            if any(w in _s for w in _REQUIREMENTS_MEM_WORDS) or _is_special:
                 try:
                     from memomics.bio_tools.memory_bridge import store_user_pref
-                    store_user_pref(f"[用户要求] {_s[:160]}", tags="requirement")
+                    # 特别指定 → trust 0.95（召回时优先）；普通记忆要求 → 0.8
+                    store_user_pref(f"[用户要求] {_s[:160]}", tags="requirement",
+                                    trust_score=0.95 if _is_special else 0.8)
                 except Exception:
                     pass
             # (用户强调) 环境/服务器情况 → 加 [环境] 前缀；确认句(就用/就是这个) → 标 (已确认)
             # (2026-08-21) 已验证句(已验证/确认存在/包已装…) → 加 [已验证] 前缀 + (已确认)，
             # 下一轮 digest 携带后模型直接复用，不再重复探测（省 token）
+            # (2026-08-22) 特别指定句 → 加 (特别指定) 标记（最高优先级）
             _entry = _s
             if _is_verified and not _has_marker:
                 _entry = f"[已验证] {_s}"
             elif _is_env and not _has_marker:
                 _entry = f"[环境] {_s}"
+            if _is_special:
+                _entry = _entry + " (特别指定)"
             if _is_verified:
                 _entry = _entry + " (已确认)"
             elif any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
