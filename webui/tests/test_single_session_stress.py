@@ -322,3 +322,85 @@ class TestF_Fuzz:
             srv._extract_and_store_requirements(s, self._rand_text(rng, 60))
         d = srv._build_memory_digest(s, "随便问问")
         assert len(d) <= 6000, f"digest 失控: {len(d)}"
+
+
+# ══ G. 环境记忆 + 确认标记 极端/多场景（2026-08-21 用户强调语义）══
+class TestG_EnvAndConfirm_Extremes:
+    def _reqs(self, tmp_path, sid=None):
+        s = _session(tmp_path, sid=sid)
+        return s
+
+    def test_env_variants(self, tmp_path):
+        """环境/服务器信息各种写法都应入 [环境] 节。"""
+        s = self._reqs(tmp_path)
+        for msg in ("R 4.5.3 装在 E:/R-libs",
+                    "python 是 3.12.10，conda 环境是 base",
+                    "服务器 IP 是 10.0.0.5，数据库在 127.0.0.1:5432",
+                    "本机 R 库路径 E:/R-libs/R-4.5.3",
+                    "R version 4.5.3 on this server, libs at E:/R-libs"):
+            srv._extract_and_store_requirements(s, msg)
+        txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "R-4.5.3" in txt and "127.0.0.1:5432" in txt and "3.12.10" in txt
+        assert "[环境]" in txt, "环境句应带 [环境] 前缀"
+
+    def test_confirm_question_not_stored(self, tmp_path):
+        """'你确认这个结果吗？' 是问句：不得入库、不得标确认。"""
+        s = self._reqs(tmp_path)
+        srv._extract_and_store_requirements(s, "你确认这个分析方向吗？")
+        assert not os.path.exists(os.path.join(s["results_dir"], "REQUIREMENTS.md"))
+
+    def test_confirm_update_conflict(self, tmp_path):
+        """'改成 FDR 就用这个'：更新优先于确认——旧条目被替换，不误标 (已确认)。"""
+        s = self._reqs(tmp_path)
+        srv._extract_and_store_requirements(s, "以后出图必须带 P 值。")
+        srv._extract_and_store_requirements(s, "出图统计量改成 FDR，P 值不要了。")
+        txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "P 值" not in txt, "被更新的旧要求应移除"
+        assert "FDR" in txt, "新要求应写入"
+
+    def test_drop_removes_confirmed_entry(self, tmp_path):
+        """已确认条目被作废：整个条目(含标记)移除。"""
+        s = self._reqs(tmp_path)
+        p = str(tmp_path / "a.csv")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x")
+        srv._extract_and_store_requirements(s, f"数据文件是 {p}，就用这个。")
+        txt1 = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "(已确认)" in txt1
+        srv._extract_and_store_requirements(s, f"那条 {p} 的要求不用记了。")
+        txt2 = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "a.csv" not in txt2
+
+    def test_cap_mixed(self, tmp_path):
+        """环境句+要求+确认混合 60 条 → 上限 40，标记保留。"""
+        s = self._reqs(tmp_path)
+        for i in range(60):
+            srv._extract_and_store_requirements(s, f"要求 {i}：记住第 {i} 号必须用 E:/data/{i}.csv，就用这个。")
+        txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert txt.count("要求 ") == 40
+        assert "(已确认)" in txt
+
+    def test_strong_warning_only_when_confirmed(self, tmp_path):
+        """未确认缺失路径 → 普通 ⚠️；已确认缺失路径 → 强警告。"""
+        s1 = self._reqs(tmp_path, sid="w1")
+        srv._extract_and_store_requirements(s1, f"数据文件在 {tmp_path}/gone.csv。")
+        d1 = srv._build_memory_digest(s1, "随便")
+        assert "⚠️" in d1 and "已确认但路径不存在" not in d1
+        s2 = self._reqs(tmp_path, sid="w2")
+        srv._extract_and_store_requirements(s2, f"数据文件在 {tmp_path}/gone.csv，就用这个。")
+        d2 = srv._build_memory_digest(s2, "随便")
+        assert "已确认但路径不存在" in d2
+
+    def test_confirmed_existing_no_warn(self, tmp_path):
+        """已确认且路径存在 → 无警告、带策略句。"""
+        s = self._reqs(tmp_path)
+        p = str(tmp_path / "real.csv")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x")
+        srv._extract_and_store_requirements(s, f"数据文件是 {p}，就用这个。")
+        d = srv._build_memory_digest(s, "随便")
+        for _si, _seg in enumerate(d.split("\\n\\n")):
+            print(f"DBG_SEG{_si}:", repr(_seg)[:400])
+        print("DBG_W:", srv._verify_requirements(s, srv._read_requirements(s, limit=6)))
+        print("DBG_R:", srv._read_requirements(s, limit=6))
+        assert "⚠️" not in d and "优先按用户说明执行" in d and "(已确认)" in d

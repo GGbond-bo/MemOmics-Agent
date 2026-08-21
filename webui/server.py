@@ -4272,7 +4272,7 @@ def _build_memory_digest(session, text):
             _req_block = ("[会话要求 · 用户明确给过且仍未撤销的要求/路径/环境(持久)]\n"
                           "执行策略：优先按用户说明执行；先核实路径/环境实际存在，"
                           "若不存在或与现状冲突，向用户确认后再调整。已确认(标注)项以用户说明为准。\n" +
-                          "\n".join(f"- {r[:110]}" for r in _reqs))
+                          "\n".join(f"- {_fmt_req_line(r)}" for r in _reqs))
             if _warns:
                 _req_block += "\n⚠️ 以下要求中的路径不存在，请向用户核实是否已更新/作废：" + \
                               "；".join(f"{k[:40]}({','.join(v)})" for k, v in _warns.items())[:400]
@@ -4525,21 +4525,47 @@ def _requirement_anchor(text):
     return ""
 
 
+def _fmt_req_line(r, cap=110):
+    """digest 展示行：截断到 cap，但保留 (已确认) 标记不被截掉。"""
+    s = (r or "")[:cap]
+    if len(r or "") > cap:
+        s = s.rstrip() + "…"
+    if "(已确认)" in (r or "") and "(已确认)" not in s:
+        s = s[: max(0, cap - 8)].rstrip() + "… (已确认)"
+    return s
+
+
+_REQUIREMENTS_OVERLAP_STOP2 = {"以后", "必须", "都要", "每次", "记住", "这个", "就是", "就用",
+                               "现在", "然后", "已经", "都是", "不要", "还是", "可以", "需要",
+                               "要求", "按照", "直接", "输出", "生成", "绘制", "画图", "进行",
+                               "出来", "完成", "没有", "一个", "那些", "下面"}
+
+
 def _requirements_overlap(line, text):
-    """旧要求行与新文本是否同一主题：共享 ≥1 个 4 字中文片段，或旧行的绝对路径被新文本提及。"""
+    """旧要求行与新文本是否同一主题：绝对路径、共享 ≥1 个 4 字中文片段、
+    共享字母数字 token(如 P 值/FDR/4.5.3)、或共享显著 2-gram。"""
     if not line or not text:
         return False
     for m in re.finditer(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", line):
         if m.group(0) in text:
             return True
-    a, b = set(), set()
+    a4, b4 = set(), set()
     for r in re.findall(r"[\u4e00-\u9fff]+", line):
         for i in range(len(r) - 3):
-            a.add(r[i:i + 4])
+            a4.add(r[i:i + 4])
     for r in re.findall(r"[\u4e00-\u9fff]+", text):
         for i in range(len(r) - 3):
-            b.add(r[i:i + 4])
-    return bool(a & b)
+            b4.add(r[i:i + 4])
+    if a4 & b4:
+        return True
+    # 字母数字 token（P 值 / FDR / 4.5.3 …）—— 更新/作废常靠这些对齐主题
+    at = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9._\-]*", line))
+    bt = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9._\-]*", text))
+    if at & bt:
+        return True
+    a2 = {line[i:i + 2] for i in range(len(line) - 1) if line[i:i + 2] not in _REQUIREMENTS_OVERLAP_STOP2}
+    b2 = {text[i:i + 2] for i in range(len(text) - 1) if text[i:i + 2] not in _REQUIREMENTS_OVERLAP_STOP2}
+    return bool(a2 & b2)
 
 
 def _apply_requirements_change(existing, text):
@@ -4557,7 +4583,12 @@ def _apply_requirements_change(existing, text):
         keep = [ln for ln in existing if not _requirements_overlap(ln, text)]
         changed = len(keep) != len(existing) or is_update
         if is_update:
-            new_line = re.sub(r"^(其实|改成|改为|换成|改用|更改为|更新|更正)[为是:：]?\s*", "", text.strip()[:160])
+            # 提取"主语 = 新值"（'出图统计量改成 FDR' → '出图统计量 = FDR'），避免整句塞入
+            m = re.search(r"([\u4e00-\u9fffA-Za-z0-9_\-]{2,14}?)(?:改成|改为|换成|改用|更改为)[为是:：]?\s*([^，。！？!?；;、]+)", text)
+            if m:
+                new_line = f"{m.group(1).strip()} = {m.group(2).strip()}"
+            else:
+                new_line = re.sub(r"^(其实|改成|改为|换成|改用|更改为|更新|更正)[为是:：]?\s*", "", text.strip()[:160])
             if new_line:
                 keep.append(new_line)
         return keep[-40:], changed
@@ -4646,10 +4677,14 @@ def _extract_and_store_requirements(session, text):
                 _entry = _entry + " (已确认)"
             if _entry in existing or _entry in added:
                 continue
-            # 同锚点覆盖(仅路径锚点)：用户对同一路径重复陈述 → 替换旧行(路径是唯一无歧义主题)
+            # 同锚点覆盖(仅路径锚点)：用户对同一完整路径重复陈述 → 替换旧行。
+            # 注意用"完整路径相等"而非子串包含——避免 E:/R-libs 误删 E:/R-libs/R-4.5.3
             _anc = _requirement_anchor(_s)
             if _anc and _has_path:
-                existing = [ln for ln in existing if not (_anc in (ln or ""))]
+                _anc_n = os.path.normpath(_anc)
+                existing = [ln for ln in existing
+                            if not any(os.path.normpath(pp) == _anc_n
+                                       for pp in re.findall(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln or ""))]
             added.append(_entry)
         if not added and not changed:
             return
