@@ -1,0 +1,42 @@
+{
+  "id": "academic-figure-skill",
+  "name": "Academic Figure Skill（学术级科研绘图·TingxiYu）",
+  "category": "bioinformatics",
+  "language": "Python+R",
+  "description": "学术级科研绘图规范与优化（源自 TingxiYu/academic-figure-skill，GitHub 243★）：8 步闭环工作流（意图解析→原型分类→图型论证→环境探测→风格注入→生产脚本扫描→渲染→4 轮 QA 30+ 项检查），29 种图型（热图/火山图/柱状图/散点图/箱线图/PCA/雷达图/桑基图/AUROC/山脊图/小提琴图/Mantel 相关/森林图/混淆矩阵等），矢量 PDF+300dpi PNG 交付，Nature/Cell/Science 期刊规范（栏宽 89mm/183mm、Arial、色盲友好配色）。触发词：学术图、专业出图、期刊出图、论文配图、出图规范、脚本检查、脚本优化、academic figure、publication figure、manuscript figure。用户提供脚本且未强调 CNS 时默认用本 skill 检查/优化出图；用户脚本不成熟（意图识别）→ 识别脚本类型 → 用本 skill 匹配出图规范优化。",
+  "starting_prompt": "使用 Academic Figure Skill（学术级科研绘图）检查/优化出图",
+  "source_dir": "skills/bioinformatics/academic-figure-skill",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": ["visualization", "figure", "plotting", "publication", "journal"],
+  "aliases": ["academic-figure", "academic figure", "学术图"],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "学术图",
+    "学术级",
+    "专业出图",
+    "期刊出图",
+    "期刊图",
+    "论文配图",
+    "论文图",
+    "投稿图",
+    "出图规范",
+    "脚本检查",
+    "脚本优化",
+    "检查出图",
+    "academic figure",
+    "academic-figure",
+    "publication figure",
+    "manuscript figure",
+    "journal figure"
+  ],
+  "when_to_use": "用户提供出图脚本（未强调 CNS 级）时默认用本 skill 检查出图规范并优化；用户未提供脚本但要专业/期刊级出图时用本 skill；脚本不成熟时优先识别脚本类型并匹配本 skill 的 29 种图型规范。CNS 级（发表级/Nature style/SCI figure）才用 nature-figure。",
+  "dependencies": {
+    "python": ["matplotlib", "seaborn", "numpy", "pandas"],
+    "r": ["ggplot2", "patchwork", "ComplexHeatmap", "svglite", "ragg"]
+  },
+  "success_count": 0,
+  "proven_params": [],
+  "user_prefs": {}
+}

@@ -45,16 +45,18 @@ Payload（multimodal-generation 格式）：
 4. ⛔ **api_key 在嵌套路径 `cfg["dashscope"]["api_key"]`**，不是顶层 `cfg["api_key"]`。用顶层读取会得到空 key → 401 Unauthorized。且 read_file 工具输出对 sk- 脱敏，必须用 Python `open()` 读原始字节（2026-08-12 实测踩坑）
 5. 先查配置再建议安装：用户已有 API 时不要推荐 ComfyUI/本地模型/在线付费服务
 6. 生信"画图"（UMAP/热图/火山图等）≠ 文生图：先按 SOUL 画图 Skill 选择策略分流，用户明确说"文生图/AI绘画"才走本 skill
-7. ⚠️ **答画图逻辑/能力类问题前必须调查**：2026-08-12 用户问"什么时候用画图API什么时候用正常生图"，Agent 凭记忆列了 `cns-visualization` → 用户纠正"你没有调查"。实测 `cns-visualization` **不存在**（skills_list 无此名、skill_view 报 unsupported、磁盘无此目录），SOUL.md 画图触发表已过时。答此类问题先 `skills_list` + 读配置 + 查框架代码，禁止凭记忆声称某 skill 存在。
+7. ⚠️ **答画图逻辑/能力类问题前必须调查**：2026-08-12 用户问"什么时候用画图API什么时候用正常生图"，Agent 凭记忆列了 `cns-visualization` → 用户纠正"你没有调查"。当日实测 `cns-visualization` 不存在，但 **2026-08-21 起该 skill 已恢复**（磁盘 `skills/bioinformatics/cns-visualization/` 存在，.usage.json 记录 12 次使用、最后 2026-08-21）。答此类问题先 `skills_list` + 读配置 + 查框架代码，禁止凭记忆声称某 skill 存在/不存在。
 
-## 判定逻辑（用户 2026-08-12 明确要求过的分流）
+## 判定逻辑（用户 2026-08-12 明确要求过的分流；2026-08-22 更新加入 academic-figure-skill）
 
 ```
 用户要画图
   ├─ 有数据文件 → 代码画（数据可视化，像素忠于数据）
+  │    ├─ 用户指定脚本 → 以脚本为准；不成熟 → academic-figure-skill 检查/优化（未强调 CNS）或 nature-figure（CNS 级）
+  │    ├─ 专业/期刊出图（未强调 CNS）→ academic-figure-skill
   │    ├─ CSV/通用数据 → scipilot-figure-skill
-  │    ├─ Seurat/单细胞 → scrna-cns-figure-design
-  │    └─ 发表级/投稿 → nature-figure
+  │    ├─ Seurat/单细胞 → cns-visualization / scrna-cns-figure-design
+  │    └─ 发表级/投稿（CNS 级）→ nature-figure
   ├─ 只有文字描述，要概念图/示意图/封面图 → 文生图 API（本 skill）
   │    ├─ 新会话（toolsets.py 注册了 image_gen toolset）→ 优先框架 image_generate 工具
   │    └─ 当前会话无 image_generate 工具 → 脚本直调 DashScope API（见上）
@@ -62,7 +64,7 @@ Payload（multimodal-generation 格式）：
        文生图 AI 生成文字/箭头经常出错，只适合文字不重要或无需标注的图
 ```
 
-实际可用的画图 skill（不存在 cns-visualization）：`scipilot-figure-skill` / `nature-figure` / `scrna-cns-figure-design`。
+实际可用的画图 skill：`academic-figure-skill`（专业/期刊默认）/ `nature-figure`（CNS 级）/ `cns-visualization`（生信对象快速图）/ `scipilot-figure-skill`（通用数据）/ `scrna-cns-figure-design`（scRNA 主图架构）。
 
 ## 验证
 

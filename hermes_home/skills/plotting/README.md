@@ -40,12 +40,17 @@
 
 ```
 画图意图出现
-├─ 用户指定了脚本 → 按其脚本执行（仅参数/小修优化，不改风格）→ 结束【必问】沉淀
+├─ 用户指定了脚本 → 按其脚本执行（仅参数/小修优化，不改风格）
+│     ├─ 脚本不成熟（意图识别）→ 未强调 CNS：academic-figure-skill 识别脚本类型+匹配规范优化
+│     │                            强调 CNS：nature-figure 发表级重做
+│     └─ 结束【必问】沉淀
 ├─ 未指定，但 plotting/ 匹配到用户脚本
 │     → 【必问】"发现你之前用过 XX 脚本，用它画 / 用 CNS 标准版 / 出两版？"
 │     → 按用户选择执行 → 结束【必问】沉淀
-└─ 未指定，无匹配 → 用 CNS 画图 skill（nature-figure / cns-visualization /
-                      scrna-cns-figure-design）→ 结束【必问】沉淀
+├─ 未指定，专业/期刊出图 → academic-figure-skill（默认，8步闭环+29图型+4轮QA）
+├─ 未指定，CNS 级 → nature-figure
+└─ 未指定，生信对象快速图 → cns-visualization；通用数据快速图 → scipilot-figure-skill
+      → 结束【必问】沉淀
 ```
 
 **核心不变式：用户脚本永远不自动执行**——匹配到只是"候选"，是否使用必须用户拍板（新会话同理）。

@@ -55,14 +55,36 @@
 
 ### 画图 Skill 选择策略
 
-MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自动选择：**
+MemOmics 有四个画图 skill。**优先级逻辑链（2026-08-22 用户定稿）**：
+
+```
+用户要出图
+├─ 用户指定了脚本 ──→ ① 肯定以用户脚本为准出图（不改用户风格）
+│                      ② 脚本不成熟（意图识别：缺规范/缺导出/缺QA）→ 识别脚本类型
+│                         → 未强调 CNS：skill_view("academic-figure-skill") 匹配规范并优化
+│                         → 强调 CNS：skill_view("nature-figure") 发表级重做
+│                      ③ 成功出图 → 脚本沉淀到 skills/plotting/（询问用户后）
+├─ 用户未指定脚本 + 专业/期刊出图 ──→ skill_view("academic-figure-skill")（默认）
+├─ 用户未指定脚本 + CNS 级（发表级/Nature style/SCI figure/投稿）──→ skill_view("nature-figure")
+├─ 生信对象快速出图（UMAP/热图/DotPlot/Violin/Sankey）──→ skill_view("cns-visualization")
+└─ 通用数据快速出图（柱状/箱线/散点/折线/分布）──→ skill_view("scipilot-figure-skill")
+```
+
+**规则细化**：
+- **用户脚本优先**：用户提供的脚本是基准，AI 不得擅自重写用户脚本风格；仅做参数/小修/规范化优化，且必须经 rail_review。
+- **academic-figure-skill vs nature-figure 分工**（同级、触发场景不同）：
+  - `academic-figure-skill`（TingxiYu，29 图型 + 8 步闭环 + 4 轮 QA）：用户提供脚本（未强调 CNS）的默认检查/优化工具；未指定脚本时的专业/期刊出图默认工具。
+  - `nature-figure`（figures4papers）：CNS 级/发表级最终图专用（铁律 26）。
+- **脚本不成熟判定**：缺导出格式（SVG/PDF/TIFF）、缺期刊尺寸/字体规范、缺 QA 自检、风格与数据不匹配 → 视为不成熟，需 skill 优化。
 
 | 用户给什么 | 要画什么 | 用哪个 skill | 分析级别 |
 |-----------|---------|-------------|:--:|
+| 用户脚本（未强调 CNS） | 按脚本出图 + 规范检查/优化 | `academic-figure-skill` | 轻量级 |
+| 任何数据 + "发表"/"投稿"/"Nature"/"manuscript" | 发表级最终图 | `nature-figure` | 统计级 |
+| 分析完成后的最终出图（铁律 26） | 全套发表级图 | `nature-figure`（CNS 级） | 分析级末尾 |
+| 分析完成后的最终出图（未强调 CNS） | 专业/期刊级图 | `academic-figure-skill` | 分析级末尾 |
 | Seurat/AnnData/SCE 对象 | UMAP / 热图 / DotPlot / 小提琴 / FeaturePlot / Sankey | `cns-visualization` | 轻量级 |
 | CSV/Excel/临床信息/metadata | 柱状图 / 箱线图 / 散点图 / 折线图 / 分布图 | `scipilot-figure-skill` | 轻量级 |
-| 任何数据 + "发表"/"投稿"/"Nature"/"manuscript" | 发表级最终图 | `nature-figure` | 统计级 |
-| 分析完成后的最终出图（铁律 26） | 全套发表级图 | `nature-figure` | 分析级末尾 |
 
 **快速出图场景速查（给数据→直接画图，不走完整分析）：**
 
@@ -76,6 +98,8 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "画个柱状图" | CSV/metadata | `scipilot-figure-skill` | 先剖析数据→推荐图型 |
 | "画个箱线图" | CSV/临床信息 | `scipilot-figure-skill` | 先检查样本量/分布 |
 | "帮我画图，不知道画什么" | 任何 | `scipilot-figure-skill` | 先做数据剖析 |
+| "用我的脚本出图/检查一下这个脚本" | 用户脚本 | `academic-figure-skill` | 以脚本为准 + 规范检查/优化 |
+| "期刊图/专业出图" | 任何 | `academic-figure-skill` | 默认专业出图工具 |
 
 **🔴 组合场景：CNS/发表级 + 多种图表 + 数据路径**
 
@@ -85,6 +109,7 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
 | "发表级小提琴图+热图+箱线图" | ① scan_data 确认数据类型 → ② 生信数据用 cns-visualization 快速出 → ③ 通用数据用 scipilot-figure-skill → ④ nature-figure 统一打磨 |
 | "Nature级别，用 E:/data/xxx 画图" | ① read_file/scan_data → ② 确定数据格式 → ③ cns-visualization 出草稿 → ④ nature-figure 最终版 |
 | "投稿用图，数据在 E:/results/" | ① search_files 找到分析产出 → ② 读 task_plan 确认哪些 Phase 完成 → ③ nature-figure 直接出发表级全套 |
+| "用我的脚本出个期刊图" | ① 读用户脚本 → ② skill_view("academic-figure-skill") 识别脚本类型+规范检查 → ③ 以脚本为准优化出图 → ④ 询问沉淀 |
 
 **组合场景核心原则**：
 ```
@@ -100,11 +125,14 @@ MemOmics 有三个画图 skill。**根据用户给的数据类型 + 图类型自
   Step 1: scan_data / read_file 确认格式
   Step 2: 对应 skill 快速出图
   Step 3: nature-figure 最终版
+
+用户脚本 + 未强调 CNS → academic-figure-skill 检查/优化（以脚本为准，不重写风格）
+用户脚本 + CNS 级 → nature-figure 发表级重做（同样以脚本为基线）
 ```
 
 > 💡 **纯出图 = 轻量级**：skill_view → check_env → write → terminal → rail_review(post)。不创建 task_plan，不跑 debate。
 > 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
-> 💡 分析完成 = 铁律 26 自动触发 nature-figure。
+> 💡 分析完成 = 铁律 26：CNS 级自动触发 nature-figure；未强调 CNS 用 academic-figure-skill。
 
 **🔴 图像 API（image_generate）使用边界 — 默认禁止私自调用**
 
@@ -129,9 +157,10 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
-| "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 根据数据类型选择：Seurat/AnnData→`cns-visualization`，CSV/metadata→`scipilot-figure-skill` |
+| "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 按分流决策树：用户给了脚本→`academic-figure-skill`（未强调CNS）；生信对象→`cns-visualization`；CSV/metadata→`scipilot-figure-skill` |
 | "CNS级别" / "发表级" + 任何图表名 | 两阶段：① 对应 skill 快速出图 → ② `skill_view("nature-figure")` 发表级重做 |
 | "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 单独说"发表级"直接 nature-figure |
+| "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 用户脚本检查/优化 + 专业期刊出图默认工具 |
 | "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
 | "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
 | "CellBender" / "去背景" / "ambient RNA" / "filtered.h5" / "ptrepack" | `skill_view("cellbender-remove-background")` |
@@ -457,7 +486,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 21. **知识入库走 save_knowledge（2026-08-13 起）**：把文献结论/学习参数/分析经验写入知识库必须用 `save_knowledge` 工具——铁轨强制：data_driven/domain_convention 来源必须带 evidence（引用原文），verified=unverified 拒绝入库。不要绕过铁轨直接写 KB 文件。
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
 25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
-26. **发表级出图**：所有分析 Phase 完成后 → 必须 `skill_view("nature-figure")` → 出至少一套发表级 SVG+PDF+TIFF 图。分析中快速探索用 cns-visualization，最终交付用 nature-figure。
+26. **发表级出图**：所有分析 Phase 完成后 → 必须出至少一套发表级 SVG+PDF+TIFF 图。**CNS 级（用户强调发表/Nature/Science/Cell 目标）→ `skill_view("nature-figure")`；未强调 CNS 的专业/期刊级 → `skill_view("academic-figure-skill")`。**分析中快速探索用 cns-visualization，最终交付用 nature-figure / academic-figure-skill。
 27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。用户明说"直接做/不用审"可跳过。
 28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。
 29. **缺包即装（2026-08-14 起）**：R/Python 报"不存在叫 X 这个名称的程序包" / "there is no package called 'X'" / "No module named 'X'" → 这是**环境缺包，不是脚本错误**：立即 `install.packages(...)`（R，清华镜像）或 `pip install X`（Python），**禁止重试原脚本**。装完验证 `requireNamespace("X", quietly=TRUE)` / import 成功后再继续。跑图前必查：ggplot2/dplyr/scales 在不在（`Rscript -e 'cat(requireNamespace("ggplot2", quietly=TRUE))'`）。
@@ -624,8 +653,8 @@ terminal 完成 → _pending_record = True
 |------|------|
 | 任何不确定/疑惑时 | **先问用户，禁止猜测**；确定用户需求后再动手（疑惑必问） |
 | 用户提供脚本/经验时 | 先运行验证（报错→修复→再验证）→ **询问用户**是否沉淀 → 用户确认才写入 `skills/plotting/`；未询问 = 不沉淀 |
-| 画图且用户指定脚本 | 按用户脚本执行（仅参数/小修优化，不改风格）；结束后**立即询问**是否沉淀 |
-| 画图且未指定脚本 | 用 CNS 画图 skill（nature-figure / cns-visualization / scrna-cns-figure-design）；结束后**立即询问**是否沉淀 |
+| 画图且用户指定脚本 | 按用户脚本执行（仅参数/小修优化，不改风格）；脚本不成熟（意图识别）→ 未强调 CNS 用 `academic-figure-skill` 识别脚本类型+匹配规范优化，强调 CNS 用 `nature-figure`；结束后**立即询问**是否沉淀 |
+| 画图且未指定脚本 | 专业/期刊出图默认 `academic-figure-skill`；CNS 级用 `nature-figure`（nature-figure / cns-visualization / scrna-cns-figure-design）；结束后**立即询问**是否沉淀 |
 | 新会话画图且匹配到用户脚本 | **绝不自动使用**：向用户说明"发现你之前用过的脚本 XX"，询问用旧脚本 / CNS 标准版 / 出两版，按用户选择执行 |
 | 沉淀写入时 | 只写 `skills/plotting/`（不得触碰 bioinformatics 等其他 skill）；frontmatter 标 `category: user-skill` + `source: user`；场景描述精准（禁"画图/好看"等泛词） |
 | 数据流分流 | 用户提供的脚本/经验 → user-skill 库（询问确认）；**skill 被触发运行产生的记录** → 该 skill 自身目录走自进化（`record_run` → skill.json proven + 归档；`record_error` → logs/error_log.md），**严禁**把 skill 运行记录写入 user-skill 库，也**严禁**把用户脚本塞进触发 skill 的 log |
@@ -723,4 +752,5 @@ terminal 完成 → _pending_record = True
 
 | "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
+| "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 见上方必触发列表 |
 <!-- AUTO_SKILL_INSERT_MARKER -->
