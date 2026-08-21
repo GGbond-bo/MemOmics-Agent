@@ -1752,16 +1752,32 @@ def _calc_self_check_delay(session):
 
 
 def _build_self_check_wake_history(session):
-    """自检唤醒精简上下文（2026-08-14 成本优化）。
+    """自检唤醒精简上下文（2026-08-14 成本优化 + 2026-08-22 缓存优化）。
 
     之前每次唤醒走 agent 内部全量对话历史（实测 67K input tokens/次，
     占全部 token 消耗 66%）。改为只带：
-    1) task_plan.md 主线区摘要（含 Goal/Phase 状态）
-    2) 最近一条用户消息（原始诉求）
-    3) 最近一条助手回复（上次做到哪）
+    1) 最近一条用户消息（原始诉求）
+    2) 最近一条助手回复（上次做到哪）
+    3) task_plan.md 主线区摘要（含 Goal/Phase 状态）——放**最后**（尾部）
     用户回合仍走 run_agent 的全量历史路径，不受影响。
+
+    2026-08-22 缓存优化：task_plan 摘要是唤醒上下文里变化最频繁的部分
+    （每次任务进展都重写），原实现放第 1 条 → task_plan 一更新整个唤醒
+    前缀失效（实测唤醒命中率 66-76%）。改为放最后：前缀 = 最近
+    user/assistant 消息（唤醒之间稳定，除非主循环跑过），task_plan 变化
+    只影响尾部 → 唤醒命中率可回 95%+。
     """
     history = []
+    _msgs = session.get("messages", [])
+    for _m in reversed(_msgs[-10:]):
+        if _m.get("role") == "user" and isinstance(_m.get("content"), str) and _m.get("content").strip():
+            history.append({"role": "user", "content": _m["content"][:1000]})
+            break
+    for _m in reversed(_msgs[-10:]):
+        if _m.get("role") == "assistant" and isinstance(_m.get("content"), str) and _m.get("content").strip():
+            history.append({"role": "assistant", "content": _m["content"][:2000]})
+            break
+    # 尾部：task_plan 摘要（变化源 → 放最后，前缀固定化）
     _rd = session.get("results_dir", "") or ""
     _plan = os.path.join(_rd, "task_plan.md") if _rd else ""
     if _plan and os.path.isfile(_plan):
@@ -1775,15 +1791,6 @@ def _build_self_check_wake_history(session):
                     "[自检唤醒上下文：task_plan.md 主线区摘要（完整计划见磁盘）]\n" + "\n".join(_lines)})
         except Exception:
             pass
-    _msgs = session.get("messages", [])
-    for _m in reversed(_msgs[-10:]):
-        if _m.get("role") == "user" and isinstance(_m.get("content"), str) and _m.get("content").strip():
-            history.append({"role": "user", "content": _m["content"][:1000]})
-            break
-    for _m in reversed(_msgs[-10:]):
-        if _m.get("role") == "assistant" and isinstance(_m.get("content"), str) and _m.get("content").strip():
-            history.append({"role": "assistant", "content": _m["content"][:2000]})
-            break
     return history
 
 

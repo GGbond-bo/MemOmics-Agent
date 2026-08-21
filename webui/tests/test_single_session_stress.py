@@ -437,3 +437,35 @@ class TestH_VerifiedReuse:
         s = _session(tmp_path)
         srv._extract_and_store_requirements(s, "这个包验证过没有？")
         assert not os.path.exists(os.path.join(s["results_dir"], "REQUIREMENTS.md"))
+
+
+# ══ I. 唤醒上下文缓存固定化（2026-08-22：task_plan 摘要移尾部，前缀稳定）══
+class TestI_WakeHistoryCacheStable:
+    def _session_with_plan(self, tmp_path, plan_text):
+        s = _session(tmp_path)
+        rd = s["results_dir"]
+        with open(os.path.join(rd, "task_plan.md"), "w", encoding="utf-8") as f:
+            f.write(plan_text)
+        s["messages"] = [
+            {"role": "user", "content": "帮我跑 cellbender"},
+            {"role": "assistant", "content": "已启动样本 A 的 cellbender"},
+        ]
+        return s
+
+    def test_plan_summary_at_tail(self, tmp_path):
+        """task_plan 摘要必须在最后一条（尾部），前缀 = user/assistant。"""
+        s = self._session_with_plan(tmp_path, "# Task Plan\n## 🏁 目标\n- 跑完 13 样本")
+        h = srv._build_self_check_wake_history(s)
+        assert len(h) == 3, f"应为 user+assistant+plan 3 条, 实际 {len(h)}"
+        assert h[0]["role"] == "user" and h[1]["role"] == "assistant", "前缀应为 user/assistant"
+        assert h[2]["role"] == "system" and "task_plan" in h[2]["content"], "最后一条应为 task_plan 摘要"
+
+    def test_prefix_stable_across_plan_change(self, tmp_path):
+        """task_plan 更新后：前缀（前两条）字节不变 → 缓存前缀稳定。"""
+        s1 = self._session_with_plan(tmp_path, "# Task Plan\n## 目标\n- Phase1 跑完\n## 🏁 阶段")
+        h1 = srv._build_self_check_wake_history(s1)
+        s2 = self._session_with_plan(tmp_path, "# Task Plan\n## 目标\n- Phase2 进行中\n- 新加步骤\n## 🏁 阶段")
+        h2 = srv._build_self_check_wake_history(s2)
+        assert h1[0]["content"] == h2[0]["content"], "user 消息应一致"
+        assert h1[1]["content"] == h2[1]["content"], "assistant 消息应一致"
+        assert h1[2]["content"] != h2[2]["content"], "task_plan 摘要应变化（在尾部）"
