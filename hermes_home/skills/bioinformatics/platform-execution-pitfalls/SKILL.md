@@ -31,6 +31,10 @@ metadata:
 | 平台修复后仍有**小包误报**：rail_review(pre) 报 "Missing packages: stringr"（2026-08-17 实测，stringr 实装且上一个脚本刚用过） | `_r_lib_env()` 只注入 environment.json 登记过的库路径包；stringr 这类小/新依赖实测走默认路径被探测成 missing——检查器仍有漏网 | **最稳修复 = 脚本内消除依赖，不让检查器看见**：行首 `str_detect <- function(x, pattern) grepl(pattern, x); str_remove <- function(x, pattern) sub(pattern, '', x)` 自制替代（代码体零改动），`required_packages` 只列 dplyr/tidyr/ggplot2。实测 4 列箱线图脚本一次通过；**不要真的 pip/R 去重装已存在的包**。若必须保留 stringr：改完 pre 被拦 → 走 terminal 兜底（Rscript 直接跑，绕过检查器） |
 | rail_review(post) 未通过 → **下一个** execute_r/terminal 也被拦（post 失败锁死，非"先出图再后审"） | rail_review(post) 失败会置位 `es.blocked=True`，直到**用户发新消息** fail-open（clear_hard_block 2026-08-16 已加，但残留仍会发生）——是死锁设计，不是先画图再审查的正常流程 | 用户质疑"图都出来了后审查怎么还停"时如实解释这是 blocked 残留死锁；被拦期间**不要反复重试 execute_r**（重试风暴压制 2026-08-17：单响应 150+ 次被拦的注释已进 enforcement.py）——直接走 terminal Rscript 兜底或修复审查传参后继续 |
 | execute_r 持续报 `[⛔ 执行保护] skipped`（Kernel error）即使 rail_review(pre) 已 should_proceed=true，而 terminal 放行 | 持久内核执行保护状态异常（与 rail_review 结果不同步） | **放弃 execute_r，走 terminal 兜底**：① write_file 写 R 脚本（开头 `.libPaths(c("E:/R-libs/R-4.5.3", .libPaths()))`）；② terminal `export R_LIBS=...` + `"C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe" 脚本` 执行；③ 中文路径数据先 cp 英文路径；④ 跑通后 rail_review(post) 照常传完整 code_executed。528MB 级 RDS 读取 + DimPlot/ggsave 实测一次成功 |
+| execute_code 报 FileNotFoundError / 相对路径找不到（如锚点里的 `data/xxx.csv`），但 search_files 能定位到文件 | execute_code 沙箱工作目录 ≠ 会话锚点基准目录；锚点里的相对路径（`data/...`）不会自动按锚点基目录解析（2026-08-21 stress-run 实测：`data/gene_set_response_summary.csv` 实际在 `results/stress-run-*/data/`） | 用前先 `search_files(target='files', pattern='*.csv')` 或 `session_memory(list)` 定位**绝对路径**，代码里直接用绝对路径；不要凭锚点相对路径直接跑。同理适用于 execute_python / execute_r |
+| execute_code 里 `import definitely_missing_module_xyz` → ModuleNotFoundError，且**整个 cell 中断**（status=error，后续语句不执行、无部分副作用） | 沙箱执行器把 import 错误当 cell 级致命错误中断，不是继续跑后面代码 | 预期行为，不是 bug：做链路自检/排错时把 import 放独立 cell 验证；同一命令原样跑两次结果一致（status=ok 确定性）；修正为 `print('OK')` 后 status=ok、0.0s（2026-08-21 实测，探针见 Proven Scripts execute_code_stress_probe / execute_code_missing_module_probe） |
+| read_file 返回 `"File unchanged since last read... refer to that instead of re-reading"`（dedup），但**该文件此前的读取内容已被上下文压缩清掉、当前上下文看不到**——任务_plan.md / 脚本需要重新看内容却被拒读 | read_file 按"上次读过且未变"去重，不感知上下文压缩；唤醒/跨轮场景最常见（先读过占位 task_plan，压缩后想再看正文却被 dedup 挡） | **用 `terminal cat <路径>` 强制读取**（绕过 read_file dedup）；或 read_file 带不同 offset/limit 触发重读。唤醒核查读 task_plan/脚本正文时若 dedup 挡路，直接 cat（2026-08-21 memomics-1b0e5b39 实测：task_plan + fig_v1.py 双双 dedup，cat 一次拿到真实 8 行占位 plan + 10 字节空壳脚本） |
+| rail_review(post) warning `"No result files found in output directory"` 但 `ls -la` 明明有 20 个产出文件（5 图 × 4 格式） | output_dir 扫描用 glob 只认特定模式/扩展名，PNG+SVG+PDF+TIFF 混合目录或中文/长文件名可能漏扫；审查仍 passed 但 warning 会误导"产出缺失" | **以磁盘为准，不重跑**：`ls -la <output_dir>` 数文件 + vision_describe 抽查 1 张图确认非空白即可；warning 是扫描器限制不是产出缺失信号（2026-08-21 FigC1 5 亚群 violin 实测：20 文件全落盘，rail_review passed + figure_count=15，warning 可忽略并如实记录） |
 
 ## 使用要点
 
@@ -41,5 +45,24 @@ metadata:
 
 ## References
 
+- `scripts/execute_code_link_probe.py` — execute_code 链路自检探针（HELLO-STRESS ×2 + 缺失模块中断 + 修正 OK，2026-08-21 实测通过），怀疑沙箱/链路异常时直接跑
 - 关联：SOUL.md 铁律 19（审查硬阻断）、铁律 20（kernel 会话隔离）
 - `references/preqc-seurat-verify-not-rerun.md` — 用户给 pre-QC'd Seurat .rds 时的 verify-not-re-run 工作流：探测已预处理 → L1 裁决 report-only QC → **KB 阈值审计（重过滤争议用数字裁决，裁判解析失败时的兜底）** → L2 need_more_info 的 marker 阳性率+Wilcoxon 统计闭环（含 MF_subset_2000 实测数据）
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-21 | 链路自检 | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | execute_code_min_probe.py | - | - |  |
+| - | - | - | 2026-08-21 | execute_code_missing_module_probe.py | - | - |  |
+| - | - | - | 2026-08-21 | execute_code_stress_probe.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| - | - | - | 2026-08-21 | read_summary_csv.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | read_summary_csv.py | - | - |  |

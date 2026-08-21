@@ -82,6 +82,7 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

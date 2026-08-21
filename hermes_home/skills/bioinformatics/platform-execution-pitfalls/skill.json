@@ -18,5 +18,90 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [],
+  "success_count": 6,
+  "proven_script": "read_summary_csv.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "链路自检",
+      "params": "",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "平台链路自检通过：execute_code 正常执行，Python 3.12.10，results/memomics-2274ab75 目录存在"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "execute_code_min_probe.py",
+      "params": "execute_code minimal import probe",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "链路自检：execute_code 正常执行。Python 3.12.10，E:/MemOmics-Agent/results/memomics-2274ab75 目录存在（dir exists: True）。工具链路已恢复。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "execute_code_missing_module_probe.py",
+      "params": "execute_code 缺失模块探针：import definitely_missing_module_xyz → status=error/ModuleNotFoundError 中断；移除后 print OK → status=ok",
+      "date": "2026-08-21",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "execute_code 对不存在的模块报 ModuleNotFoundError 并中断 cell（status=error），不执行后续代码；修正后正常输出 OK（status=ok, 0.0s）。链路自检通过。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "execute_code_stress_probe.py",
+      "params": "print('HELLO-STRESS') ×2; import definitely_missing_module_xyz → ModuleNotFoundError; 修正 print('OK')",
+      "date": "2026-08-21",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "execute_code 链路自检通过：HELLO-STRESS 两次均 status=ok；缺失模块 import 报 ModuleNotFoundError 中断 cell；修正后 OK (status=ok, 0.0s)。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "read_summary_csv.py",
+      "params": "data/summary.csv, 行数统计(减表头), glob 兜底定位",
+      "date": "2026-08-21",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "execute_code 定位 E:/MemOmics-Agent/results/memomics-1b0e5b39/data/summary.csv 成功，行数=5(含表头减1)，0.0s status=ok"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "read_summary_csv.py",
+      "params": "path=E:/MemOmics-Agent/results/memomics-b0f7f1c7/data/summary.csv; csv.reader; fallback 路径探测",
+      "date": "2026-08-21",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "execute_code 定位 data/summary.csv 成功，行数=5(含表头6减1)，cols=2(score,d)，0.0s status=ok"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "read_summary_csv.py"
+  }
 }

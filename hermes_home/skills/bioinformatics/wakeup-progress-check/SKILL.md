@@ -148,6 +148,9 @@ task_plan 说"已完成"但可能是上次 Agent 的乐观记录。
 → 每个模块至少抽查 1-2 个关键产出文件真实存在且非空（rds/csv/png 的大小）。
 → HTML 报告、最终图等交付物单独确认存在。
 → 🔴 **陷阱 C2：Agent 对话里的"已生成✅"声明同样要磁盘验证（2026-08-20 memomics-2274ab75 实测）**：上轮回复声称"图已生成并 OCR 验证通过"（列了文件名与验证结论），但唤醒核验 `search_files` + `ls -lt figures/` 发现**该文件从未落盘**（figures 目录无 4sub 文件）——上一轮确实跑了脚本但**没验证产出落盘就发了"已完成"汇报**，属执行完整性问题。处理：① 声称"已生成/已完成"必须伴随后台产出验证——`ls -lt <输出目录>/<模式>` 确认文件真实存在且大小非 0 + vision_describe 可读；文件不存在 = 声明无效，立即补跑 ② 补跑后同一轮内完成 rail_review(post)，闭环后才允许再报"已完成" ③ 唤醒核查是执行完整性的最后防线——发现声明与磁盘不符时不要含糊带过，如实指出"上轮声明无效，已补跑"。⚠️ 尤其当上轮回复含"已生成并 OCR 验证"这类**具体验证叙事**时，唤醒必须逐文件核对，不能只信 task_plan 或 memory。
+→ 🔴 **陷阱 C3：task_plan 正文的"已出 N 张/已产出 N 个"计数同样要与磁盘逐文件核对（2026-08-21 e2e-abc-9f4d 实测）**：result_check 场景（用户问"怎么没有结果呢？"）读 task_plan 时，plan 正文写"已出 4 张: figures/FigC1_*.png，剩 1 张未出"，但 `ls -la figures/` 实际只有 **2 个文件**（1 张旧 ECDF + 1 张 violin）——plan 的产出计数是乐观记录，与实际磁盘严重不符。恢复流程（本会话完整实证）：① **逐文件 `ls -la` 数产出**，与 plan 声称数对比（不是只看 plan 文字）② 定位用户认可的**基准脚本**（从 memory/会话锚点找，本会话 = `results/memomics-2274ab75/scripts/fig_C1_5sub_vs_pure_v2.py`，用户 2026-08-20 定稿风格）③ 复制到当前任务 `scripts/` 目录，**只改 OUT_DIR + JOBS 参数**，保持代码与风格完全一致（用户铁律：禁止另起新代码）④ execute_python 补跑缺失图 → 逐张打印 n/中位数/效应量 d/星号/文件大小 ⑤ `ls -la` 验证全部落盘 + vision_describe 抽查 1 张确认非空白/标签/星号齐全 ⑥ patch task_plan 同步真实状态（含备注：plan 原声称与实际不符，已补齐）。⚠️ plan 声称"已出 4 张剩 1 张"≠ 只需补 1 张——**以磁盘实际为准算缺口**（本会话实际缺 4 张 violin，只补 1 张会再次交付不完整）。
+
+→ 🔴 **陷阱 C3.5：scripts/ 只有空壳占位（`# script` 10 字节）= 任务实际从未写码 → 直接去历史会话找用户认可脚本（2026-08-21 memomics-b0f7f1c7 实证）**：唤醒续跑时若 scripts/ 下全是 `# script` 占位文件（fig_v1.py/fig_v2.R 各 10B）+ figures/ 空 → **不要浪费时间读空壳、更不要凭空重写**——这是"上一会话只建了占位、没写实际代码"的强信号。恢复：① memory/会话锚点定位用户认可脚本（本案例 = `results/memomics-2274ab75/scripts/fig_C1_5sub_vs_pure_v2.py`，用户 2026-08-20 定稿）② `cp` 到本会话 scripts/，**只 patch OUT_DIR**（唯一改动）③ execute_python + exec(open) 重跑 → 逐张打印 n/中位数/d/星号/文件大小验证 → `ls -la figures/` 确认全落盘 → rail_review(post)（figure_count=15=5张×3格式）→ record_run → patch task_plan 标 completed。⚠️ 空壳占位 + task_plan in_progress = 尚未真正开始，不属于"重复请求"（区别于陷阱 C4 的产出已存在场景）；判据 = figures/ 是否已有实际产出文件。\n\n→ 🔴 **陷阱 C4：判"没出图/未完成"前必须先查产出目录 + 数据时效验证（2026-08-21 memomics-aea166f0 实测）**：用户问"出图了吗"时，第一轮只看了 log/ 和 task_plan 状态（rail_review 拦截记录 + Phase 未勾选）就答"没出图"——**误报**：实际图早已生成（FigA1-3/B1-3 @08-16、FigC1 定稿系列 @08-20），凌晨 01:13 的 task_plan 是**重复触发的同一任务**（用户之前会话已完成交付），卡在自检未产新图 ≠ 无图。正确流程：① **先查产出目录**：`search_files(target='files', pattern='*.png', path='<会话目录>')` 按 mtime 降序列实际产出（该工具自带排序），或 `ls -lt --time-style='+%m-%d %H:%M' <会话目录>/figures/*.png` ② 看产出时间戳 ③ **数据时效验证：比较源数据 mtime vs 产出 mtime**——源数据未变（本会话 MF_AUCell_meta.csv mtime=08-15 03:27）且产出晚于数据（08-16/08-20）→ 产出就是基于最新数据的，**无需重跑** ④ 判"无需重跑"后 patch task_plan 标 completed 并注明"交付物已存在，task_plan 为重复请求"（不追加新 Phase、不重跑）。⛔ **log/ 里的 rail_review(post) 拦截记录 ≠ "任务没产出图"**——那是重复请求自检卡住的痕迹，交付物可能早已落盘；⛔ 用户问"出图了吗"这类交付物询问，第一动作永远是 `search_files *.png/rds/csv` 数实际产出，不是读 task_plan 状态或日志。
 
 **陷阱 D：批量产物（40/40 式）完整性两条命令验证，别逐样本读日志**
 批处理（多样本 QC / 去污染 / 下载）宣称完成时，用「汇总行 + 目录数」双重确认：
@@ -178,6 +181,8 @@ task_plan 里某 Phase 标 `in_progress`、某 todo 还勾 `[ ]`，但**实际�
 → ⚠️ 重算时注意脚本用 `utf-8-sig` 读 CSV（BOM），Windows 路径用 `E:/` 而非 `/e/`（execute_code 沙箱不识别 MSYS 路径）。
 
 ## Step 3: 三源交叉验证
+
+🔴 **铁律 24 拦截：跑三源命令前先 record_run（2026-08-21 memomics-5a18228d 实测）**：唤醒核查通常并行发多条 terminal（tasklist + nvidia-smi + find），但**本会话/上一轮只要有任何 terminal 已完成且未 record_run（包括只读 ls/find），第一条 terminal 就会被铁律 24 硬拦**（报"上一步 terminal 完成后未记录经验"），后续并行 terminal 也被阻断。应对：① 被拦后先 `skill_evolution(action='record_run', ...)` 沉淀一条经验（可顺手把本次唤醒核查本身记进去：三源命令 + 结果摘要），再重跑被拦命令即放行 ② 更稳：三源命令前主动先 record_run 一次（唤醒核查本身就是可记录的执行），避免被拦浪费一轮。⚠️ 被拦不是命令错，是流程门禁——不要换命令变体重试，先 record_run 再重跑原命令。
 
 💡 **三源验证脚本 scripts/verify_wakeup.sh（#82 后新增 2026-08-09）**：`bash scripts/verify_wakeup.sh <会话目录> [基线时间]` 一条命令跑完三源（进程 plain tasklist + GPU compute-apps + find 磁盘），不需要手打命令、不需要翻历史。🔴 **verify_wakeup.sh 实际路径在 skill 目录，不在仓库根（2026-08-12 唤醒 #110 实测）**：从 `E:/MemOmics-Agent` 跑 `bash scripts/verify_wakeup.sh ...` 报 "verify_wakeup.sh 不可用"（脚本真实位置 = `E:/MemOmics-Agent/hermes_home/skills/bioinformatics/wakeup-progress-check/scripts/verify_wakeup.sh`，skill_view 的 linked_files 可见）。**失败不是脚本坏，是路径错** → 回退路径 = Step 3 快查三条（本唤醒实测等效可靠，见下），或显式 `bash "E:/MemOmics-Agent/hermes_home/skills/bioinformatics/wakeup-progress-check/scripts/verify_wakeup.sh" <会话目录> <基线>`。🔴 **#82 复发实证（2026-08-09，执行缺口第 13 次）**：唤醒 #82 未 skill_view 本 skill 直接凭 memory 跑三源 → 进程源又用被禁 `tasklist //FI "IMAGENAME eq python.exe|Rscript.exe|cellbender.exe|node.exe" 2>/dev/null | grep` 四连 → 全空输出 → **未补 plain 复核** → 记录 #82 写 "0 命中 python/Rscript/CellBender/node" 且未列 5 基线组件（webui×2 PID 3480/35096 + guardian×2 PID 28516/47856 + _kernel_worker.R PID 49380，同 #62/#65/#76 数据污染模式——终态结论靠 GPU 空载 + 磁盘无新产出两源兜住，碰巧正确，但记录 #82 进程源不可信，不得用作跨唤醒一致性佐证）。⛔ 纪律重申：**唤醒第一步 = skill_view 本 skill（#76 立规），三源跑 verify_wakeup.sh 或下方 Step 3 快查三条，禁用任何 //FI //FO CSV / 2>/dev/null 变体；空输出一律 plain `tasklist 2>/dev/null | grep -iE 'python\.exe|Rscript\.exe|node\.exe'` 复核，记录必须带基线组件清单。**
 🔴 **Step 3 快查 — 本机可靠命令（#46 实证 2026-08-09，先跑这三条，别翻历史）**：
@@ -328,6 +333,7 @@ GPU 显示 **84-91% 高占用 + 7.2GiB 显存**（对照既往唤醒 #2-#10 的 
 
 - **用户消息优先于唤醒消息（2026-08-12 用户原话"我有问你这些进度吗？你一直回我这些干什么呢？我不是问你代码吗？"）**：唤醒消息是系统自动心跳，**用户消息才是真实诉求**。若用户本轮贴了代码/问了 API 用法/给了新指令 → 唤醒核查只做最小确认（三源验证一句话带过），**主要回复必须直接回答用户的代码/知识问题**，不堆 P0-P6 状态表/三源验证摘要。进度汇报只在用户明确问进度时展开。唤醒消息与用户消息同轮出现时，用户消息优先。
 - 🔴 **代码/知识问题 + 唤醒同轮 = 最小化工具调用（2026-08-16 实测，系统循环检测强制干预）**：用户贴代码问知识问题（如"猴子的代码需要 genomeAnnotation 吗"）同时带唤醒标签时，**唤醒核查压到一条命令甚至跳过**（单条 `ls -lt results/*/task_plan.md` 确认无活跃任务即可），不要跑 skill_view + 三源完整仪式——重复的监控命令会触发系统循环检测强制干预（OOB 消息"检测到你已连续多轮重复几乎相同的操作和表述…立即停止"）。被干预后正确动作 = ①立即停手，不再执行任何验证/监控动作 ②2-3 句话给结论（任务已完成/失败/无活跃任务 + 原因 + 产物路径）③结束回复。判定"已回答用户问题 + 无活跃任务"即可收尾，唤醒记录不追加（skip 规则适用）。
+- 🔴 **纯记忆问答（"你记得X吗"）+ 唤醒同轮 = 零工具调用直接答（2026-08-21 memomics-6f93c92c 实测）**：用户问"你记得本会话固定用的数据文件名是什么吗？只答文件名"这类召回测试/记忆确认问题时，答案已在注入的 memory/会话锚点中（本会话 = data/gene_set_response_summary.csv）→ **不调任何工具直接答**（连最小化的一条 `ls` 也跳过）；注入上下文里"纯压力测试会话/无活跃主线/已全部完成"的状态注记即视为唤醒核查完成（已知终态会话，skip 规则适用，不追加唤醒记录）。用户明确"只答文件名/只答结论"时严格按字面给最短答案，不加解释、不加状态汇报、不跑三源仪式。
 - **有活跃任务** → 汇报进度 + 继续推进当前 Phase。
 - **全部终态** → 如实汇报"无活跃任务"，逐条列出：每条主线的状态、验证证据、待用户确认的阻塞项。
 - ⛔ **红线：终态任务不自动重启，阻塞项（如"等待用户明确指示后启动"）绝不自动执行**——只列出选项让用户选。
@@ -398,3 +404,16 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 **辅助判定**：
 - 用户引用的"那个脚本"路径可能是**误记**（本会话用户引用 `webui/session_state.py`，实际是会话状态模块不是热图脚本——因"文件存在"被 `extract_assets` 自动入库为 asset 造成误导）。判断标准：脚本内容是否与分析任务匹配（session_state.py 是 `capture_user_request`/`extract_assets` 模块）；不匹配 → 用 `find E:/MemOmics-Agent -newermt "20分钟前" -name "*.py"` 找最近修改的真实分析脚本
 - 用户改配色偏好（如 GSE278576 热图蓝白色 `cmap="Blues"`）可能已由前一实例落在脚本里——核对脚本当前 cmap 行再决定要不要动
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-08-21 | result_check_inventory.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-5a18228d | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-5a18228d_proc | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-6f93c92c | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-1b0e5b39 | - | - |  |
+| human | skeletal_muscle | aging | 2026-08-21 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
