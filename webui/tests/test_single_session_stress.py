@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """单会话上下文逻辑 + 记忆 —— 多场景/复杂/极端/对抗性测试（2026-08-21）。
 
 离线、确定性、不触网（writer 一律注入 fake llm / 不注入）。覆盖：
@@ -19,7 +19,7 @@ import pytest
 import context_arch as ca
 import server as srv  # noqa: F401  (用于 _strip_scaffold_text / REQUIREMENTS 过滤)
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.memory]
 
 
 def _session(tmp_path, sid=None, model="deepseek-v4-flash"):
@@ -271,3 +271,54 @@ class TestE_Orchestration_Extremes:
         out = ca.memomics_replay(s, _hist(40), budget=_TINY, tail_len=6, llm_fn=None)
         blob = "\n".join(m["content"] for m in out if m["role"] == "system")
         assert "必须带 P 值" in blob
+
+
+# ══ F. 模糊输入（seeded random，确定性）══
+class TestF_Fuzz:
+    """任意垃圾输入不得让核心函数抛异常（fail-open / 容错）。"""
+
+    def _rand_bytes(self, rng, n):
+        return bytes(rng.randrange(0, 256) for _ in range(n))
+
+    def _rand_text(self, rng, n):
+        alpha = "ab汉字[相\n会]<script> %*{}\\'\"\u0000"
+        return "".join(alpha[rng.randrange(len(alpha))] for _ in range(n))
+
+    def test_fuzz_core_functions_never_raise(self, tmp_path):
+        import random
+        rng = random.Random(12345)  # 固定种子 → 可复现
+        s = _session(tmp_path)
+        for _ in range(300):
+            kind = rng.randrange(6)
+            if kind == 0:
+                ca.compute_usable(model=self._rand_text(rng, 20), max_context=rng.choice([0, -5, 10**12, 3.14, "abc", None]))
+            elif kind == 1:
+                srv._strip_scaffold_text(self._rand_text(rng, rng.randrange(0, 200)))
+            elif kind == 2:
+                hist = [{"role": rng.choice(["user", "assistant", None]),
+                         "content": rng.choice([None, 123, {"a": 1}, self._rand_text(rng, rng.randrange(0, 300))])}
+                        for _ in range(rng.randrange(0, 20))]
+                ca.memomics_replay(s, hist, budget=_TINY, tail_len=rng.choice([0, 5, -3, 999]),
+                                   llm_fn=lambda p: self._rand_text(rng, 50))
+            elif kind == 3:
+                ca.rebuild_context(s, [{"role": "user", "content": self._rand_bytes(rng, 10)}],
+                                   self._rand_text(rng, 400), {"requirements": None, "scripts": b"x",
+                                                               "global_memory": None},
+                                   caps={"checkpoint": rng.choice([0, -1, 10**9])})
+            elif kind == 4:
+                ca.new_span([{"role": "user", "content": self._rand_text(rng, 90)}],
+                            rng.choice([-1, 0, 5, 999999]), rng.choice([0, -2, 1000]))
+            else:
+                ck = ca.read_checkpoint(s)
+                ca.new_span([], ck["upto"], 8)
+        assert True  # 到达这里 = 全程无异常
+
+    def test_fuzz_digest_bounded(self, tmp_path):
+        """随机要求场景下 digest 有界（不因输入膨胀失控）。"""
+        import random
+        rng = random.Random(7)
+        s = _session(tmp_path)
+        for _ in range(200):
+            srv._extract_and_store_requirements(s, self._rand_text(rng, 60))
+        d = srv._build_memory_digest(s, "随便问问")
+        assert len(d) <= 6000, f"digest 失控: {len(d)}"

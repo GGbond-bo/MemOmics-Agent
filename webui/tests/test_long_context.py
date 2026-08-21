@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """超长上下文改造（2026-08-21 b/c）离线单测：
 - (b) _strip_scaffold_text / _build_memory_digest：脚手架剥离与收紧
 - (c) _maybe_rollup_history / _build_rollup_checkpoint：超预算折叠 + 尾窗保留
@@ -10,7 +10,7 @@ import pytest
 
 import server
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.memory]
 
 
 def _digest(session, text):

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """#2/#3 改造（2026-08-21）离线单测：
 - #2 持久要求记忆：REQUIREMENTS.md 提取/去重/上限/digest 固定携带/rollup 同带
 - #3 脚本落盘：scripts/ 清单提示
@@ -10,7 +10,7 @@ import pytest
 
 import server
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.memory]
 
 
 @pytest.fixture(autouse=True)

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """MiMo-Code 上下文架构迁移（P1-P5）离线单测（2026-08-21）。
 
 覆盖：single usable() 预算、writer(§1-§11 checkpoint 落盘/单写者/路径守卫)、
@@ -12,7 +12,7 @@ import pytest
 
 import context_arch as ca
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.memory]
 
 
 def _session(tmp_path):

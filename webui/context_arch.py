@@ -38,6 +38,19 @@ def model_context_window(model: str = "") -> int:
     return max(1024, w)
 
 
+def _coerce_max_context(v):
+    """把任意输入(max_context)规范化为 int 或 None/0（容忍 str/bytes/float/NaN/畸形）。"""
+    if v is None:
+        return 0
+    try:
+        if isinstance(v, float) and v != v:  # NaN
+            return 0
+        n = int(v) if not isinstance(v, str) else int(float(v.strip() or "0"))
+        return n
+    except Exception:
+        return 0
+
+
 def compute_usable(model: str = "", max_context=None) -> dict:
     """MiMo overflow.ts 语义：effective=min(hard, configured)；usable=effective-reserved。"""
     hard = model_context_window(model)
@@ -47,6 +60,7 @@ def compute_usable(model: str = "", max_context=None) -> dict:
             max_context = int(os.environ.get("MEMOMICS_MAX_CONTEXT", "0") or "0")
         except Exception:
             max_context = 0
+    max_context = _coerce_max_context(max_context)
     effective, source = hard, "model"
     if max_context and 0 < max_context <= hard and max_context > reserved:
         effective, source = max_context, "config"
@@ -264,8 +278,13 @@ REBUILD_CAPS = {
 
 
 def _cut(text, cap):
-    if not text:
+    if text is None:
         return ""
+    if not isinstance(text, str):
+        try:
+            text = str(text)  # (fuzz 抓出) bytes/number/dict 等脏值先转 str，防 str+bytes 崩
+        except Exception:
+            return ""
     return text[: max(0, int(cap))]
 
 
