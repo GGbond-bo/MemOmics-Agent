@@ -364,19 +364,81 @@ def rebuild_context(session, tail_messages, checkpoint_text, extras, caps=None) 
 
 
 # ── P3 FTS 召回 ─────────────────────────────────────────
-def fts_recall(query: str, limit: int = 5) -> str:
-    """memory_store FTS5 召回（中文按字符拆词 + BM25 排序的兜底实现）。"""
+def _cjk_tokens(text):
+    """中文词级切分：优先 jieba（>1 字词），回退 2-gram。"""
     try:
-        from memomics.bio_tools import memory_bridge
-        rows = memory_bridge.search_memory(query or "", "", limit)
-        if not rows:
+        import jieba
+        toks = [w for w in jieba.lcut(text or "") if w.strip() and len(w.strip()) > 1]
+        if toks:
+            return toks
+    except Exception:
+        pass
+    s = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", text or "")
+    if not s:
+        return []
+    return [s[i:i + 2] for i in range(max(0, len(s) - 1))]
+
+
+def _facts_db_path():
+    hh = os.environ.get("HERMES_HOME", "")
+    p = os.path.join(hh, "memory_store.db") if hh else ""
+    return p if p and os.path.isfile(p) else ""
+
+
+def recall_hybrid(query, limit=5, db_path=None):
+    """中文词级召回（B，2026-08-21）：jieba(或 2-gram) 分词 → facts 表粗筛 → 词交并×trust 打分。
+
+    解决 FTS5 unicode61 对中文不分词、MATCH 恒空命中的问题。db_path 可注入（单测用临时库）。
+    返回格式与 fts_recall 一致：`[相关历史记忆 · 词级召回]` + 行，无命中返回 ""。"""
+    try:
+        p = db_path or _facts_db_path()
+        if not p:
             return ""
-        lines = ["[相关历史记忆 · FTS 召回]"]
-        for r in rows:
-            lines.append(f"- {str(r.get('content', ''))[:110]}")
+        q = set(_cjk_tokens(query or ""))
+        if not q:
+            return ""
+        import sqlite3
+        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=8)
+        try:
+            cond = " OR ".join("content LIKE ?" for _ in q)
+            rows = conn.execute(
+                f"SELECT content, trust_score FROM facts WHERE ({cond}) LIMIT 60",
+                tuple(f"%{t}%" for t in q)).fetchall()
+        finally:
+            conn.close()
+        scored = []
+        for content, trust in rows:
+            rw = set(_cjk_tokens(content or ""))
+            inter = len(q & rw)
+            if not inter:
+                continue
+            jac = inter / (len(q | rw) or 1)
+            scored.append((jac * float(trust or 0.5), content))
+        scored.sort(key=lambda x: -x[0])
+        top = scored[:limit]
+        if not top:
+            return ""
+        lines = ["[相关历史记忆 · 词级召回]"]
+        for _, content in top:
+            lines.append(f"- {str(content)[:110]}")
         return "\n".join(lines)
     except Exception:
         return ""
+
+
+def fts_recall(query: str, limit: int = 5, db_path=None) -> str:
+    """记忆召回（P3）：英文/数字优先 FTS5（BM25）；中文/空命中走词级召回（jieba/2-gram）。"""
+    try:
+        from memomics.bio_tools import memory_bridge
+        rows = memory_bridge.search_memory(query or "", "", limit)
+        if rows:
+            lines = ["[相关历史记忆 · FTS 召回]"]
+            for r in rows:
+                lines.append(f"- {str(r.get('content', ''))[:110]}")
+            return "\n".join(lines)
+    except Exception:
+        pass
+    return recall_hybrid(query, limit, db_path=db_path)
 
 
 # ── P1-P5 主编排 ────────────────────────────────────────
@@ -414,8 +476,29 @@ def _maybe_spawn_writer(session, history, ck, span, new_upto, llm_fn):
             pass
 
 
+def _aggressive_trigger(session, total, usable):
+    """科研交互适配触发（A，2026-08-21）：MiMo 的"窗口占比"触发对 1M 窗口几乎永远不响，
+    日常会话只靠逐字重放。这里加两个通道，让机制在科研场景真正上场：
+      1) 显式 knob：MEMOMICS_AGGRESSIVE_COMPACT=1 时，历史 >= min(usable, MEMOMICS_AGGRESSIVE_THRESHOLD(默认150K))
+      2) 长任务连续运行：自检唤醒计数 >=3 且历史 >=30K → 连续长跑的科研任务提前接管"""
+    try:
+        if os.environ.get("MEMOMICS_AGGRESSIVE_COMPACT", "0") == "1":
+            t = _env_int("MEMOMICS_AGGRESSIVE_THRESHOLD", 150000)
+            if total >= min(usable, t):
+                return True
+        try:
+            sc = int(session.get("_self_check_count") or 0)
+        except Exception:
+            sc = 0
+        if sc >= 3 and total >= 30000:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def memomics_replay(session, history, llm_fn=None, budget=None, tail_len=None, caps=None):
-    """P1-P5 主入口：返回发给模型的重放消息（超预算时：后台 writer + 分段 rebuild；fail-open）。"""
+    """P1-P5 主入口：返回发给模型的重放消息（超预算/科研适配触发时：后台 writer + 分段 rebuild；fail-open）。"""
     try:
         if not history:
             return []
@@ -425,7 +508,7 @@ def memomics_replay(session, history, llm_fn=None, budget=None, tail_len=None, c
         tlen = tail_len or _env_int("MEMOMICS_ROLLUP_TAIL", 40)
         if tlen <= 0 or len(history) <= tlen + 4:
             return history
-        if total < b["usable"]:
+        if total < b["usable"] and not _aggressive_trigger(session, total, b["usable"]):
             return history
         ck = read_checkpoint(session)
         span, new_upto = new_span(history, ck["upto"], tlen)

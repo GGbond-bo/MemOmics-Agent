@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MiMo-Code 上下文架构迁移（P1-P5）离线单测（2026-08-21）。
 
 覆盖：single usable() 预算、writer(§1-§11 checkpoint 落盘/单写者/路径守卫)、
@@ -168,11 +168,11 @@ class TestReplay:
 
         import time as _t
         out = ca.memomics_replay(s, h, budget=tiny_budget, llm_fn=fake_llm)
-        # writer 是后台线程：轮询等它把 checkpoint 写出来（≤3s）
+        # writer 是后台线程：轮询等它把 checkpoint 写出来（避免读到 open() 截断瞬间的空文件）
         ck = None
-        for _ in range(30):
+        for _ in range(50):
             ck = ca.read_checkpoint(s)
-            if ck.get("path") and calls["n"] >= 1:
+            if ck.get("path") and ck.get("upto", 0) > 0 and calls["n"] >= 1:
                 break
             _t.sleep(0.1)
         assert calls["n"] >= 1, "writer llm 应被调用"
@@ -213,3 +213,59 @@ class TestFts:
     def test_fts_recall_returns_string(self):
         r = ca.fts_recall("骨骼肌 衰老 基因", 3)
         assert isinstance(r, str)
+
+    def test_chinese_recall_hybrid(self, tmp_path):
+        """B(2026-08-21)：中文词级召回——jieba 分词后按词交并×trust 打分，不再依赖 FTS 中文分词。"""
+        dbp = str(tmp_path / "mem.db")
+        import sqlite3
+        conn = sqlite3.connect(dbp)
+        conn.execute("CREATE TABLE facts (fact_id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT, category TEXT, tags TEXT, trust_score REAL, retrieval_count INTEGER DEFAULT 0)")
+        conn.executemany("INSERT INTO facts (content, category, trust_score) VALUES (?,?,?)", [
+            ("用户要求: 所有分析脚本统一保存到 scripts/ 目录", "user_pref", 0.8),
+            ("用户要求: 出图必须带 P 值标注", "user_pref", 0.8),
+            ("技能经验: R 4.5.3 库损坏重装", "skill_exp", 0.5),
+        ])
+        conn.commit(); conn.close()
+        r1 = ca.recall_hybrid("脚本保存目录", 3, db_path=dbp)
+        assert "scripts/" in r1 and "脚本" in r1, f"应召回脚本相关: {r1}"
+        r2 = ca.recall_hybrid("出图 P 值", 3, db_path=dbp)
+        assert "P 值" in r2, f"应召回 P 值相关: {r2}"
+        r3 = ca.recall_hybrid("今天天气不错", 3, db_path=dbp)
+        assert r3 == "", f"无关查询应空: {r3!r}"
+
+
+# ── A. 科研适配触发 ──
+class TestAggressiveTrigger:
+    def _session(self, tmp_path, sc=0):
+        rd = str(tmp_path / "r"); os.makedirs(rd, exist_ok=True)
+        return {"id": "aggr", "results_dir": rd, "_self_check_count": sc}
+
+    def test_off_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("MEMOMICS_AGGRESSIVE_COMPACT", raising=False)
+        assert ca._aggressive_trigger(self._session(tmp_path), 40000, 987712) is False
+
+    def test_knob_triggers(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MEMOMICS_AGGRESSIVE_COMPACT", "1")
+        monkeypatch.setenv("MEMOMICS_AGGRESSIVE_THRESHOLD", "50000")
+        assert ca._aggressive_trigger(self._session(tmp_path), 60000, 987712) is True
+        assert ca._aggressive_trigger(self._session(tmp_path), 30000, 987712) is False  # 低于阈值
+
+    def test_long_task_auto(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("MEMOMICS_AGGRESSIVE_COMPACT", raising=False)
+        # 自检唤醒 >=3 且历史 >=30K → 长任务自动接管
+        assert ca._aggressive_trigger(self._session(tmp_path, sc=3), 40000, 987712) is True
+        assert ca._aggressive_trigger(self._session(tmp_path, sc=2), 40000, 987712) is False
+        assert ca._aggressive_trigger(self._session(tmp_path, sc=3), 20000, 987712) is False
+
+    def test_replay_trigger_end_to_end(self, tmp_path, monkeypatch):
+        """A 端到端：默认不触发（原样返回）；knob 打开且超阈值 → 触发重建。"""
+        s = self._session(tmp_path)
+        h = _hist(60)
+        b = {"hard": 1_000_000, "effective": 1_000_000, "usable": 987712, "reserved": 12288, "source": "test"}
+        monkeypatch.delenv("MEMOMICS_AGGRESSIVE_COMPACT", raising=False)
+        assert ca.memomics_replay(s, h, budget=b, tail_len=10, llm_fn=lambda p: "## §1\n- x") == h
+        monkeypatch.setenv("MEMOMICS_AGGRESSIVE_COMPACT", "1")
+        monkeypatch.setenv("MEMOMICS_AGGRESSIVE_THRESHOLD", "100")
+        out = ca.memomics_replay(s, h, budget=b, tail_len=10, llm_fn=lambda p: "## §1\n- x")
+        blob = "\n".join(m["content"] for m in out if m["role"] == "system")
+        assert "会话检查点" in blob
