@@ -59,6 +59,12 @@ try:
 except ModuleNotFoundError:
     pass
 
+# === MiMo-Code 上下文架构迁移（2026-08-21）：P1-P5（预算/writer/四层记忆/分段重建/增量压缩）===
+try:
+    from webui import context_arch
+except ImportError:
+    import context_arch
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -4266,11 +4272,17 @@ def _build_memory_digest(session, text):
     except Exception:
         pass
     try:
-        _facts = _recall_facts(text or "")
+        # (P3) 记忆召回切到 memory_store FTS5（失败回退 LIKE）
+        _facts = context_arch.fts_recall(text or "") or _recall_facts(text or "")
         if _facts:
             _parts.append(_facts)
     except Exception:
-        pass
+        try:
+            _facts = _recall_facts(text or "")
+            if _facts:
+                _parts.append(_facts)
+        except Exception:
+            pass
     try:
         from memomics.bio_tools import session_memory as _sm
         _block = _sm.build_digest(session.get("id", ""), max_items=6, max_chars=420)
@@ -4569,6 +4581,47 @@ def _llm_route_intent(text, session):
     except Exception:
         pass
     return None
+
+
+def _checkpoint_writer_llm(prompt):
+    """(P2) writer 的 LLM 后端：一次 OpenAI-compat 调用，输出 §1-§11 checkpoint 文本。失败抛错由调用方兜底。"""
+    import urllib.request as _ur
+    import json as _json
+    cfg = _current_model or {}
+    base = (cfg.get("base_url") or "").rstrip("/")
+    key = cfg.get("api_key") or ""
+    if not base or not key:
+        raise RuntimeError("no model config for checkpoint writer")
+
+    def _one_call(p):
+        body = _json.dumps({
+            "model": cfg.get("model", "deepseek-v4-flash"),
+            "messages": [{"role": "user", "content": p}],
+            "max_tokens": 4096,
+            "temperature": 0.2,
+        }).encode("utf-8")
+        req = _ur.Request(base + "/chat/completions", data=body, headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (key or ""),
+        })
+        with _ur.urlopen(req, timeout=120) as r:
+            return _json.loads(r.read().decode("utf-8", "replace"))
+
+    d = _one_call(prompt)
+    m = ((d.get("choices") or [{}])[0].get("message") or {})
+    txt = (m.get("content") or "").strip()
+    # deepseek-v4-flash 等推理模型可能只回 reasoning_content → 兜底取它
+    if not txt:
+        txt = (m.get("reasoning_content") or "").strip()
+    if txt:
+        return txt
+    # 空返回 → 换更短提示重试一次
+    short = ("把下面对话压缩为结构化 checkpoint（Markdown，含 §1 Active intent / §2 Next action / "
+             "§3 Directives / §5 Current work / §6 Files / §7 Discovered knowledge / §8 Errors / "
+             "§10 Decisions / §11 Open notes）。保留路径与用户要求原文：\n" + prompt[:12000])
+    d2 = _one_call(short)
+    m2 = ((d2.get("choices") or [{}])[0].get("message") or {})
+    return (m2.get("content") or m2.get("reasoning_content") or "").strip()
 
 
 def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
@@ -10482,11 +10535,13 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception as _b_err:
                             logger.warning(f"[MemOmics] (b) 上下文卫生失败(不阻断): {_b_err}")
 
-                        # ── (c) 步进式结构化 checkpoint：重放估算仍超预算 → 头部折叠 + 保留尾窗 ──
+                        # ── (c/P1-P5) MiMo-Code 上下文架构：单一边界 usable() + 后台 writer(§1-§11) +
+                        #      四层记忆(FTS/REQUIREMENTS/MEMORY/History) + 分段重建预算 + 增量压缩 ──
                         try:
-                            conversation_history = _maybe_rollup_history(_session, conversation_history)
+                            conversation_history = context_arch.memomics_replay(
+                                _session, conversation_history, llm_fn=_checkpoint_writer_llm)
                         except Exception as _c_err:
-                            logger.warning(f"[MemOmics] (c) rollup 失败(不阻断): {_c_err}")
+                            logger.warning(f"[MemOmics] (c) P1-P5 架构回放失败(不阻断): {_c_err}")
 
                         # 🔧 每轮开头：检查上一轮是否有未完成的后台进程
                         _bg_check = _build_background_process_check(_session, _agent)
