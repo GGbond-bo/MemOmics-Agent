@@ -60,6 +60,20 @@ class TestRequirementPersistence:
         server._extract_and_store_requirements(s, "你好呀")
         assert not os.path.isfile(os.path.join(str(tmp_path), "REQUIREMENTS.md"))
 
+    def test_skip_assistant_directed_instructions(self, tmp_path):
+        """回归(2026-08-21)：“发给助手的指令”不得污染持久要求。
+        如自检消息('只用一句话回复…不要调用任何工具')带'不要/记住'本会命中标记，应被过滤；真要求照存。"""
+        s = _mk_session(tmp_path)
+        server._extract_and_store_requirements(
+            s, "系统自检：只用一句话回复'通过'，不要调用任何工具。以后做图必须带 P 值。")
+        txt = ""
+        p = os.path.join(str(tmp_path), "REQUIREMENTS.md")
+        if os.path.isfile(p):
+            txt = open(p, encoding="utf-8").read()
+        assert "只用一句话回复" not in txt, "助手指令不得入库"
+        assert "不要调用任何工具" not in txt
+        assert "必须带 P 值" in txt, "真正的用户要求应照存"
+
 
 class TestScriptsReuse:
     def test_scripts_digest_lists_existing(self, tmp_path):

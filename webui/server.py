@@ -4436,6 +4436,12 @@ _REQUIREMENTS_MARKERS = ("必须", "不要", "别忘", "以后", "每次", "记�
                          "保持不变", "统一", "都要", "都给我", "始终", "一律",
                          "我要求", "我需要", "务必", "请务必", "只能", "只许", "优先")
 _REQUIREMENTS_MEM_WORDS = ("记住", "记得", "以后", "每次", "永远", "后续都", "我要求")
+# (2026-08-21) 过滤"发给助手本人的指令"（带'不要调用工具/只用一句话回复'等），
+# 避免把对助手的指令误当成用户对项目的持久要求写入 REQUIREMENTS.md
+_REQUIREMENTS_SKIP_ASSISTANT = (
+    "不要调用任何工具", "不用调用工具", "只用一句话回复", "请只回复", "只回复",
+    "请简短确认", "请简短回复", "请简短", "请确认", "不要做多余", "请勿", "你别",
+)
 
 
 def _read_requirements(session, limit=8):
@@ -4485,6 +4491,8 @@ def _extract_and_store_requirements(session, text):
         for _s in _sents:
             if not (4 <= len(_s) <= 200):
                 continue
+            if any(_k in _s for _k in _REQUIREMENTS_SKIP_ASSISTANT):
+                continue  # 发给助手的指令，不是用户对项目的持久要求
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             if not (_has_path or _has_marker):

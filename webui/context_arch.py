@@ -156,17 +156,40 @@ def _latest_checkpoint(session):
 
 
 def read_checkpoint(session) -> dict:
-    p = _latest_checkpoint(session)
-    if not p:
+    """读"最新且有实质内容"的 checkpoint（upto 边界 + 文本）。
+
+    (2026-08-21 修正) 只在 checkpoints/ 里取"最新"文件的旧逻辑会被空壳/占位结果
+    （如 writer 空返回、测试占位）顶掉真正含 §1-§11 的好摘要：优先选文件大小≥400B 的最新档，
+    都没有才退回最新文件。
+    """
+    d = checkpoints_dir(session)
+    if not d or not os.path.isdir(d):
         return {"text": "", "upto": 0, "path": None}
     try:
-        with open(p, encoding="utf-8", errors="replace") as f:
+        fs = sorted(f for f in os.listdir(d) if f.endswith(".md"))
+    except Exception:
+        return {"text": "", "upto": 0, "path": None}
+    if not fs:
+        return {"text": "", "upto": 0, "path": None}
+    paths = [os.path.join(d, f) for f in fs]  # fs 已按文件名(时间序)排序
+    pick = None
+    for p in reversed(paths):
+        try:
+            if os.path.getsize(p) >= 400:
+                pick = p
+                break
+        except Exception:
+            continue
+    if pick is None:
+        pick = paths[-1]
+    try:
+        with open(pick, encoding="utf-8", errors="replace") as f:
             text = f.read()
     except Exception:
         return {"text": "", "upto": 0, "path": None}
     m = re.search(r"upto_count:\s*(\d+)", text[:400])
     upto = int(m.group(1)) if m else 0
-    return {"text": text, "upto": upto, "path": p}
+    return {"text": text, "upto": upto, "path": pick}
 
 
 def write_checkpoint(session, upto: int, text: str) -> str:

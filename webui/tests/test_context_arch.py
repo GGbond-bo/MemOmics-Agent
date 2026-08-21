@@ -81,6 +81,21 @@ class TestWriter:
         ck = ca.read_checkpoint(s)
         assert ck["upto"] == 17 and ck["path"]
 
+    def test_read_checkpoint_prefers_substantial_over_placeholder(self, tmp_path):
+        """回归(2026-08-21)：空壳/占位 checkpoint 不得顶掉真正含 § 的好摘要。
+        两个文件，新的是 116B 占位、旧的是 3.8KB 好摘要 → 读取应选好摘要。"""
+        s = _session(tmp_path)
+        d = ca.checkpoints_dir(s)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "checkpoint-1000.md"), "w", encoding="utf-8") as f:  # 新版=占位
+            f.write("<!-- ... upto_count: 760 ... -->\n\n## §1\n- x")
+        good = "## §1 Active intent\n" + "长" * 4000
+        with open(os.path.join(d, "checkpoint-0900.md"), "w", encoding="utf-8") as f:  # 旧版=好
+            f.write("<!-- ... upto_count: 748 ... -->\n\n" + good)
+        ck = ca.read_checkpoint(s)
+        assert ck["path"] and ck["path"].endswith("checkpoint-0900.md")
+        assert ck["upto"] == 748
+
 
 # ── P5 增量边界 ──
 class TestIncremental:
