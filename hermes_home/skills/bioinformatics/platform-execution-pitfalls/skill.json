@@ -19,8 +19,8 @@
   "aliases": [],
   "trigger_level": "YEL",
   "trigger_keywords": [],
-  "success_count": 6,
-  "proven_script": "read_summary_csv.py",
+  "success_count": 8,
+  "proven_script": "background_sleep_task_verify",
   "proven_params": [
     {
       "species": "",
@@ -99,9 +99,35 @@
       "approved": false,
       "custom_script": false,
       "result": "execute_code 定位 data/summary.csv 成功，行数=5(含表头6减1)，cols=2(score,d)，0.0s status=ok"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "terminal_background_sleep",
+      "params": "python -c \"import time; time.sleep(600)\" | background=True | notify_on_complete=True",
+      "date": "2026-08-22",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "后台 sleep 600s 任务启动成功：terminal background=True + notify_on_complete=True，session=proc_d173a6f2f1af, PID=65572"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "background_sleep_task_verify",
+      "params": "后台sleep任务链路自检：terminal background sleep600 + task_plan.md记录 + execute_code探针验证",
+      "date": "2026-08-22",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "后台sleep任务通过execute_code探针验证：进程已启动(exit 0)、task_plan.md 31行完整记录(PID 65572, session proc_d173a6f2f1af, in_progress)。链路自检通过。"
     }
   ],
   "user_prefs": {
-    "last_used_script": "read_summary_csv.py"
+    "last_used_script": "background_sleep_task_verify"
   }
 }
