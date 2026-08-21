@@ -2275,6 +2275,7 @@ def run_conversation(
                     agent.session_completion_tokens += completion_tokens
                     agent.session_total_tokens += total_tokens
                     agent.session_api_calls += 1
+                    agent.session_llm_ms += float(api_duration or 0) * 1000
                     agent.session_input_tokens += canonical_usage.input_tokens
                     agent.session_output_tokens += canonical_usage.output_tokens
                     agent.session_cache_read_tokens += canonical_usage.cache_read_tokens
@@ -2372,6 +2373,7 @@ def run_conversation(
                                 if cost_result.status == "included" else None,
                                 model=agent.model,
                                 api_call_count=1,
+                                llm_ms=int(round(float(api_duration or 0) * 1000)),
                             )
                         except Exception as e:
                             # Log token persistence failures so they're

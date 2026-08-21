@@ -635,13 +635,17 @@ def _build_session_stats(session_id, agent=None):
         "cache_read_tokens": 0,
         "cache_write_tokens": 0,
         "reasoning_tokens": 0,
+        "api_calls": 0,
+        "llm_ms": 0,
+        "turns": 0,
     }
     db = _get_session_db()
     if db and hasattr(db, "_conn"):
         try:
             row = db._conn.execute(
                 "SELECT input_tokens, output_tokens, cache_read_tokens, "
-                "cache_write_tokens, reasoning_tokens FROM sessions WHERE id = ?",
+                "cache_write_tokens, reasoning_tokens, api_call_count, llm_ms "
+                "FROM sessions WHERE id = ?",
                 (session_id,),
             ).fetchone()
             if row:
@@ -650,14 +654,34 @@ def _build_session_stats(session_id, agent=None):
                 stats["cache_read_tokens"] = row[2] or 0
                 stats["cache_write_tokens"] = row[3] or 0
                 stats["reasoning_tokens"] = row[4] or 0
+                stats["api_calls"] = row[5] or 0
+                stats["llm_ms"] = row[6] or 0
+            # 用户轮次 = messages 表中用户消息数（排除 system/assistant/工具回执）
+            try:
+                _tr = db._conn.execute(
+                    "SELECT COUNT(*) FROM messages WHERE session_id = ? AND role = 'user' AND active = 1",
+                    (session_id,),
+                ).fetchone()
+                if _tr:
+                    stats["turns"] = _tr[0] or 0
+            except Exception:
+                pass
         except Exception:
             pass
     stats["prompt_tokens"] = stats["input_tokens"]
+    # 派生统计（口径对齐 DSH/MiMo token meter）：
+    # billed input = 未缓存输入 + 缓存读 + 缓存写（三个不相交计费桶）
+    stats["billed_input_tokens"] = (stats["input_tokens"] or 0) + (stats["cache_read_tokens"] or 0) + (stats["cache_write_tokens"] or 0)
+    _billed = stats["billed_input_tokens"]
+    stats["cache_hit_percent"] = round(100.0 * (stats["cache_read_tokens"] or 0) / _billed) if _billed > 0 else None
+    _llm_sec = (stats["llm_ms"] or 0) / 1000.0
+    stats["llm_seconds"] = round(_llm_sec, 1)
+    stats["tokens_per_sec"] = round((stats["output_tokens"] or 0) / _llm_sec, 1) if _llm_sec > 0 else None
     return stats
 
 
 _TOKEN_USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_tokens",
-                       "cache_write_tokens", "reasoning_tokens")
+                       "cache_write_tokens", "reasoning_tokens", "llm_ms", "api_calls")
 
 
 def _persist_token_usage(session, turn_kind="user"):
@@ -707,6 +731,51 @@ def _persist_token_usage(session, turn_kind="user"):
         return record
     except Exception:
         return None
+
+
+def _last_turn_stats(results_dir):
+    """读取最近一个回合的差分统计（token_usage.jsonl 最后一行 deltas）。
+
+    回合级口径（对齐 DSH token meter 的 per-step 展示）：
+    - last_output_tokens / last_llm_ms → 最近回合平均输出速率（tok/s）
+    - last_cache_read / last_billed_input → 最近回合缓存命中率
+    历史回合（llm_ms 未记录前）llm_ms 差分并入首笔，速率可能偏大，属已知口径。
+    """
+    import json as _json
+    try:
+        if not results_dir:
+            return {}
+        path = os.path.join(results_dir, "token_usage.jsonl")
+        if not os.path.isfile(path):
+            return {}
+        last = None
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    last = _json.loads(line)
+        if not last:
+            return {}
+        d = last.get("deltas") or {}
+        llm_ms = int(d.get("llm_ms") or 0)
+        out = int(d.get("output_tokens") or 0)
+        billed = (int(d.get("input_tokens") or 0)
+                  + int(d.get("cache_read_tokens") or 0)
+                  + int(d.get("cache_write_tokens") or 0))
+        cached = int(d.get("cache_read_tokens") or 0)
+        return {
+            "ts": last.get("ts", ""),
+            "output_tokens": out,
+            "llm_ms": llm_ms,
+            "llm_seconds": round(llm_ms / 1000.0, 1) if llm_ms else 0.0,
+            "tokens_per_sec": round(out / (llm_ms / 1000.0), 1) if llm_ms > 0 else None,
+            "cache_read_tokens": cached,
+            "billed_input_tokens": billed,
+            "cache_hit_percent": round(100.0 * cached / billed) if billed > 0 else None,
+            "api_calls": int(d.get("api_calls") or 0),
+        }
+    except Exception:
+        return {}
 
 
 def _get_headroom_stats():
@@ -11064,6 +11133,7 @@ async def ws_endpoint(ws: WebSocket):
                     # agent 未初始化（重启/重连后还没发消息）：仍返回 DB 持久化的累计 token，
                     # 让上下文窗口不因 agent 未创建而丢失历史统计
                     _ss = _build_session_stats(session["id"])
+                    _ss["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
                     _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
                     _session_emit(session, {"type": "context_usage", "data": {
                         "categories": [],
@@ -11083,6 +11153,7 @@ async def ws_endpoint(ws: WebSocket):
                         breakdown = compute_session_context_breakdown(agent, messages=conv_msgs)
                         # 累计 session 统计（优先内存，回退 DB 聚合）
                         breakdown["session_stats"] = _build_session_stats(session["id"], agent)
+                        breakdown["session_stats"]["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
                         # headroom 压缩统计
                         breakdown["headroom_stats"] = _get_headroom_stats()
                         # 累计 token 用于圆圈展示（全部输入+输出）
@@ -11098,6 +11169,7 @@ async def ws_endpoint(ws: WebSocket):
                             ctx_used = int(getattr(compressor, "last_prompt_tokens", 0) or 0)
                             ctx_pct = round(ctx_used / ctx_max * 100, 1) if ctx_max > 0 else 0
                             _ss = _build_session_stats(session["id"], agent)
+                            _ss["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
                             _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
                             _session_emit(session, {"type": "context_usage", "data": {
                                 "categories": [],

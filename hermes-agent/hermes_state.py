@@ -797,6 +797,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     pricing_version TEXT,
     title TEXT,
     api_call_count INTEGER DEFAULT 0,
+    llm_ms INTEGER DEFAULT 0,
     handoff_state TEXT,
     handoff_platform TEXT,
     handoff_error TEXT,
@@ -2857,6 +2858,7 @@ class SessionDB:
         billing_base_url: Optional[str] = None,
         billing_mode: Optional[str] = None,
         api_call_count: int = 0,
+        llm_ms: int = 0,
         absolute: bool = False,
     ) -> None:
         """Update token counters and backfill model if not already set.
@@ -2892,7 +2894,8 @@ class SessionDB:
                    billing_base_url = COALESCE(billing_base_url, ?),
                    billing_mode = COALESCE(billing_mode, ?),
                    model = COALESCE(model, ?),
-                   api_call_count = ?
+                   api_call_count = ?,
+                   llm_ms = ?
                    WHERE id = ?"""
         else:
             sql = """UPDATE sessions SET
@@ -2913,12 +2916,13 @@ class SessionDB:
                    billing_base_url = COALESCE(billing_base_url, ?),
                    billing_mode = COALESCE(billing_mode, ?),
                    model = COALESCE(model, ?),
-                   api_call_count = COALESCE(api_call_count, 0) + ?
+                   api_call_count = COALESCE(api_call_count, 0) + ?,
+                   llm_ms = COALESCE(llm_ms, 0) + ?
                    WHERE id = ?"""
         has_accounted_usage = bool(
             input_tokens or output_tokens or cache_read_tokens
             or cache_write_tokens or reasoning_tokens or api_call_count
-            or estimated_cost_usd or actual_cost_usd
+            or llm_ms or estimated_cost_usd or actual_cost_usd
         )
         params = (
             input_tokens,
@@ -2937,6 +2941,7 @@ class SessionDB:
             billing_mode if has_accounted_usage else None,
             model if has_accounted_usage else None,
             api_call_count,
+            llm_ms,
             session_id,
         )
         # Per-model usage attribution.  ``update_token_counts`` is the single
