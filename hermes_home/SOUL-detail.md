@@ -40,6 +40,21 @@
 
 → `skill_view("create-bio-skill")` → 讨论需求 → 生成 → 注册到 SOUL.md + SKILLS_INDEX.md
 
+### 场景 5.5：用户给脚本 / 给数据无 skill / 找之前的脚本（2026-08-22 用户脚本铁律）
+
+```
+用户给了脚本（画图/比对/其他）
+  → 先读脚本识别用途，识别不出必问（禁止猜）
+  → 运行验证通过 → 询问沉淀 → 分类入库：画图→skills/plotting/，比对→skills/comparison/，其他按用途建类
+  → record_run 留档 + 登记 skills/user-scripts/INDEX.md
+
+用户给了数据 + 任务但无 skill，主题有文章/官网/教程
+  → create-bio-skill 自动创建正式 skill（查官方文档≥3页 + 文献）→ 注册触发 → 立即可用（source: memomics-created）
+
+用户说"之前那个脚本/那个分析/那个代码"
+  → 先读 skills/user-scripts/INDEX.md 匹配 → 定位复用；无匹配再查 MEMORY.md [脚本库] 记忆
+```
+
 ### 场景 6：纯粹聊天/问候
 
 → 不触发任何 skill，直接回复

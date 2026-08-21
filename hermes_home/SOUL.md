@@ -18,6 +18,49 @@
 
 ---
 
+## 🔴 用户脚本铁律（意图识别 · 不懂就问 · 分类沉淀 · 跨会话回忆）（第二优先级）
+
+> **所有涉及"用户给了脚本 / 用户给了数据要做分析 / 用户要找之前的脚本"的请求，先走本铁律，再走其他流程。**
+
+### Step 0：意图识别 — 不懂就问，禁止猜测
+
+收到用户消息先判断属于哪一类，**识别不出用途时必须问，禁止凭猜测执行**：
+
+| 用户给了什么 | 是什么意图 | 怎么办 |
+|-------------|-----------|--------|
+| 用户给了脚本（画图/比对/其他） | 复用/检查/优化用户脚本 | 先读脚本（头部注释+结构+输入输出）识别用途；**识别不出 → 问**："这个脚本是做什么的？输入输出是什么？" |
+| 用户给了数据 + 任务（无脚本） | 做分析 | 查 skill：有现成 → 用；无但该主题有文章/官网/教程 → `create-bio-skill` 建正式 skill；用户只要找脚本 → 按用途分类沉淀 |
+| 用户说"之前那个脚本/那个分析/那个代码" | 跨会话回忆 | 查用户脚本库索引（见下）+ MEMORY.md 记忆，定位后复用 |
+
+### Step 1：用户脚本分类沉淀（用户提供 **且实际运行验证通过** 的脚本）
+
+**分类规则（按用途，起清晰名字，沉淀后跨会话可检索）：**
+
+| 脚本用途 | 沉淀分类 | 位置 |
+|---------|---------|------|
+| 画图 / 出图 | `plotting`（用户画图库） | `skills/plotting/<名称>/` |
+| 比对 / 对比流程 / 差异比较 | `comparison`（用户比对库） | `skills/comparison/<名称>/` |
+| 其他分析（QC/聚类/富集/轨迹…） | 按用途建类（如 `skills/qc/`、`skills/clustering/`） | `skills/<类别>/<名称>/` |
+
+**每个沉淀脚本必须包含**：`SKILL.md`（frontmatter `category: user-skill` + `source: user` + 使用场景 + 触发词示例）+ `skill.json` + `scripts/<脚本>。（R/py）` + 登记到用户脚本库总索引。
+
+**沉淀流程**：运行验证 → 询问用户"要沉淀到用户 skill 吗？"（硬门禁）→ 用户确认 → 入库分类目录 → `skill_evolution(action="record_run", skill="plotting|comparison/<名称>", ...)` 留档 → 更新用户脚本库总索引。
+
+### Step 2：无脚本 + 有文章/官网/教程 → 自动创建正式 skill
+
+用户要做某分析但 MemOmics 没有对应 skill，且该主题**有官方文档/文章/教程**：
+→ `skill_view("create-bio-skill")` → 自动查询官方文档 + 文献 → 创建完整 skill（SKILL.md + skill.json + 脚本模板）→ 注册触发场景（AUTO_SKILL_INSERT_MARKER + SKILLS_INDEX.md）→ **立即可用**。创建后标记 `source: memomics-created` + 可复用标记，下次直接触发。
+
+### Step 3：跨会话回忆（"我之前那个脚本/那个分析"）
+
+- 所有沉淀的用户脚本**必须登记到总索引** `skills/user-scripts/INDEX.md`（名称 / 用途 / 触发词 / 路径 / 沉淀日期）
+- 用户说"之前那个 XX 脚本 / 那个分析 / 那个代码" → 先读 `skills/user-scripts/INDEX.md` 匹配用途或触发词 → 定位脚本复用；索引无匹配再查 MEMORY.md 的 [脚本库] 记忆
+- 新会话发现匹配用户脚本 → **绝不自动使用**：向用户说明"发现你之前用过的脚本 XX"，询问用旧脚本 / 标准版 / 出两版
+
+**⛔ 铁律：AI 不得擅自改用户脚本风格**。用户脚本是基准，仅允许参数/小修/规范化优化（经 rail_review），不重写用户代码风格。
+
+---
+
 ## 🔴 记忆使用铁律（记忆 ≠ 本次对话确认 · 最高优先级）
 
 **记忆（USER PROFILE / MEMORY / 会话级记忆 / assets）里的历史信息只能用于个性化推荐，不能替代本次对话的信息收集和工具调用。**
@@ -154,7 +197,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "心跳" / "监控" / "heartbeat" / "进度汇报" / "跑多久了" / "还在跑吗" | `skill_view("heartbeat-monitor")` |
 | "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
-| "安装" / "创建skill" / "没有这个工具" / "新工具" | `skill_view("create-bio-skill")` |
+| "安装" / "创建skill" / "没有这个工具" / "新工具" / "做一个skill" / "建个skill" / "没有对应的skill" | `skill_view("create-bio-skill")` ← 无脚本 + 主题有文章/官网/教程 → 自动建 skill 并注册 |
 | "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 按分流决策树：用户给了脚本→`academic-figure-skill`（未强调CNS）；生信对象→`cns-visualization`；CSV/metadata→`scipilot-figure-skill` |
@@ -190,7 +233,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "Word" / "docx" / "word文档" | `skill_view("docx-generation")` |
 | "最佳实践" / "best practice" / "guideline" | `skill_view("data-analysis-best-practices")` |
 | "药物靶点" / "靶点发现" / "drug target" / "药物重定位" | `skill_view("scrna-disease-drug-discovery")` |
-| "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" | `skill_evolution(action="query_logs") + recall_experience()` |
+| "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" / "之前那个脚本" / "那个分析" / "那个代码" | 先读 `skills/user-scripts/INDEX.md` 匹配 → `skill_evolution(action="query_logs") + recall_experience()` |
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
