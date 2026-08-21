@@ -4269,7 +4269,9 @@ def _build_memory_digest(session, text):
         if _reqs:
             # (用户要求要核实) 标注其中已不存在的路径，模型据此提示用户确认/纠错
             _warns = _verify_requirements(session, _reqs)
-            _req_block = ("[会话要求 · 用户明确给过且仍未撤销的要求/文件路径(持久)]\n" +
+            _req_block = ("[会话要求 · 用户明确给过且仍未撤销的要求/路径/环境(持久)]\n"
+                          "执行策略：优先按用户说明执行；先核实路径/环境实际存在，"
+                          "若不存在或与现状冲突，向用户确认后再调整。已确认(标注)项以用户说明为准。\n" +
                           "\n".join(f"- {r[:110]}" for r in _reqs))
             if _warns:
                 _req_block += "\n⚠️ 以下要求中的路径不存在，请向用户核实是否已更新/作废：" + \
@@ -4448,6 +4450,43 @@ _REQUIREMENTS_SKIP_ASSISTANT = (
     "不要调用任何工具", "不用调用工具", "只用一句话回复", "请只回复", "只回复",
     "请简短确认", "请简短回复", "请简短", "请确认", "不要做多余", "请勿", "你别",
 )
+# (2026-08-21 用户强调) 环境/服务器情况信号：版本号/工具+路径/环境词 → 记入环境节
+_REQUIREMENTS_ENV_SIGNALS = ("服务器", "本机", "这台机器", "系统环境", "环境", "R 版本", "python 版本",
+                             "conda", "库目录", "libPath", "R-libs", "数据目录", "工作目录",
+                             "根目录", "路径是", "装在", "安装位置", "数据库地址", "接口地址")
+# (2026-08-21 用户强调) 确认词：用户确认某条 → 标"已确认"，下次以用户说明为主
+_REQUIREMENTS_CONFIRM_WORDS = ("就用", "就是这个", "就用这个", "就用它", "确认", "没问题",
+                               "按这个来", "按这个", "就这么定", "就用这条", "对，就")
+
+
+def _is_env_sentence(s):
+    """环境/服务器情况句：含环境信号词，或 版本号+（R/python/conda/环境/库）组合。"""
+    if any(w in s for w in _REQUIREMENTS_ENV_SIGNALS):
+        return True
+    return bool(re.search(r"\d+\.\d+(\.\d+)?", s)) and any(
+        w in s for w in ("R ", "R-", "python", "conda", "环境", "版本", "库", "服务器"))
+
+
+def _apply_confirm(existing, text):
+    """用户确认已有条目（'就用/就是这个/确认…'）→ 在该条目尾标 (已确认)。
+
+    返回 (列表, 是否变更)。用户已说明 → 标记为以用户为主。"""
+    try:
+        if not any(w in text for w in _REQUIREMENTS_CONFIRM_WORDS):
+            return list(existing), False
+        out, changed = [], False
+        for ln in existing:
+            if "(已确认)" in ln:
+                out.append(ln)
+                continue
+            if _requirements_overlap(ln, text):
+                out.append(ln + " (已确认)")
+                changed = True
+            else:
+                out.append(ln)
+        return out, changed
+    except Exception:
+        return list(existing), False
 
 
 def _read_requirements(session, limit=8):
@@ -4537,7 +4576,8 @@ def _verify_requirements(session, lines):
         for m in re.finditer(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln):
             p = m.group(0).rstrip("/\\")
             if not os.path.exists(p):
-                warns.setdefault(ln.strip()[:140], []).append(f"{p} 不存在")
+                tag = "（用户已确认但路径不存在，请立即向用户核实！）" if "(已确认)" in ln else " 不存在"
+                warns.setdefault(ln.strip()[:140], []).append(f"{p}{tag}")
         # 相对路径校验：跳过落在绝对路径匹配区间内的片段(避免把 C:\…\data\real.csv 重复当相对路径误报)
         for m in re.finditer(r"(?:data|results|output|figures?|scripts?)[/\\][^\s，。！？!?;；、]+", ln):
             if any(m.start() >= a and m.end() <= b for a, b in abs_spans):
@@ -4569,8 +4609,10 @@ def _extract_and_store_requirements(session, text):
             with open(_p, encoding="utf-8", errors="replace") as f:
                 existing = [ln.rstrip("\n") for ln in f]
 
-        # 0) 移除/更新语义（用户纠正/否定 → 改掉旧条目）
+        # 0) 移除/更新语义（用户纠正/否定 → 改掉旧条目）+ 确认标记（用户说"就用/就是这个"→已确认）
         existing, changed = _apply_requirements_change(existing, text or "")
+        existing, changed_c = _apply_confirm(existing, text or "")
+        changed = changed or changed_c
 
         _sents = [s.strip() for s in re.split(r"[。！？!?\n;；]", text or "") if s and s.strip()]
         _META_WORDS = ("取消", "不要了", "不需要", "不算", "去掉", "删掉", "删除", "不用记", "收回", "不成立",
@@ -4587,7 +4629,8 @@ def _extract_and_store_requirements(session, text):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
-            if not (_has_path or _has_marker):
+            _is_env = _is_env_sentence(_s)
+            if not (_has_path or _has_marker or _is_env):
                 continue
             if any(w in _s for w in _REQUIREMENTS_MEM_WORDS):
                 try:
@@ -4595,13 +4638,19 @@ def _extract_and_store_requirements(session, text):
                     store_user_pref(f"[用户要求] {_s[:160]}", tags="requirement")
                 except Exception:
                     pass
-            if _s in existing or _s in added:
+            # (用户强调) 环境/服务器情况 → 加 [环境] 前缀；确认句(就用/就是这个) → 标 (已确认)
+            _entry = _s
+            if _is_env and not _has_marker:
+                _entry = f"[环境] {_s}"
+            if any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
+                _entry = _entry + " (已确认)"
+            if _entry in existing or _entry in added:
                 continue
             # 同锚点覆盖(仅路径锚点)：用户对同一路径重复陈述 → 替换旧行(路径是唯一无歧义主题)
             _anc = _requirement_anchor(_s)
             if _anc and _has_path:
                 existing = [ln for ln in existing if not (_anc in (ln or ""))]
-            added.append(_s)
+            added.append(_entry)
         if not added and not changed:
             return
         existing = (existing + added)[-40:]

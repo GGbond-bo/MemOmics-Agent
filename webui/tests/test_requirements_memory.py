@@ -83,6 +83,41 @@ class TestRequirementPersistence:
         assert "你记得本会话固定用的数据文件名是什么吗" not in txt, "问句不得入库"
         assert "gene_set_response_summary.csv" in txt, "陈述句要求应照存"
 
+    def test_env_and_server_info_stored(self, tmp_path):
+        """用户强调(2026-08-21)：服务器/环境情况(R版本、库路径)也要记入用户记忆([环境]节)。"""
+        s = _mk_session(tmp_path)
+        server._extract_and_store_requirements(
+            s, "服务器上 R 是 4.5.3，库目录在 E:/R-libs/R-4.5.3。")
+        txt = open(os.path.join(str(tmp_path), "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "R-4.5.3" in txt and "R 是 4.5.3" in txt, "环境信息应入记忆"
+        assert "R 是 4.5.3" in txt
+
+    def test_confirm_marks_existing(self, tmp_path):
+        """用户确认(2026-08-21)：'就用 E:/a.csv' → 已有条目标 (已确认)，下次以用户说明为主。"""
+        s = _mk_session(tmp_path)
+        p = str(tmp_path / "a.csv")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x")
+        server._extract_and_store_requirements(s, f"数据文件是 {p}。")
+        server._extract_and_store_requirements(s, f"就用 {p}，不用改。")
+        txt = open(os.path.join(str(tmp_path), "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "(已确认)" in txt, "确认过的条目应带标记"
+
+    def test_digest_priority_strategy_line(self, tmp_path):
+        """digest 应带执行策略：优先按用户说明执行+先核实。"""
+        s = _mk_session(tmp_path)
+        server._extract_and_store_requirements(s, "记住数据文件在 E:/x.csv。")
+        d = server._build_memory_digest(s, "随便")
+        assert "优先按用户说明执行" in d and "先核实" in d, "digest 应含执行策略句"
+
+    def test_confirmed_missing_path_strong_warning(self, tmp_path):
+        """已确认但路径不存在 → 强警告(立即核实)。"""
+        s = _mk_session(tmp_path)
+        missing = os.path.join(str(tmp_path), "gone.csv")
+        server._extract_and_store_requirements(s, f"数据文件是 {missing}，就用这个 (已确认)。")
+        d = server._build_memory_digest(s, "随便")
+        assert "已确认但路径不存在" in d, "已确认但缺失的路径应有强警告"
+
     def test_user_correction_removes_old(self, tmp_path):
         """用户纠正(2026-08-21)：'以前说必须带P值，其实改成带FDR' → 旧P值条目移除，新FDR条目在。"""
         s = _mk_session(tmp_path)
