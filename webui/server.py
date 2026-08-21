@@ -4267,8 +4267,14 @@ def _build_memory_digest(session, text):
     try:
         _reqs = _read_requirements(session, limit=6)
         if _reqs:
-            _parts.append("[会话要求 · 用户明确给过且仍未撤销的要求/文件路径(持久)]\n" +
+            # (用户要求要核实) 标注其中已不存在的路径，模型据此提示用户确认/纠错
+            _warns = _verify_requirements(session, _reqs)
+            _req_block = ("[会话要求 · 用户明确给过且仍未撤销的要求/文件路径(持久)]\n" +
                           "\n".join(f"- {r[:110]}" for r in _reqs))
+            if _warns:
+                _req_block += "\n⚠️ 以下要求中的路径不存在，请向用户核实是否已更新/作废：" + \
+                              "；".join(f"{k[:40]}({','.join(v)})" for k, v in _warns.items())[:400]
+            _parts.append(_req_block)
     except Exception:
         pass
     try:
@@ -4469,13 +4475,89 @@ def _read_requirements(session, limit=8):
     return out[-limit:]
 
 
+def _requirement_anchor(text):
+    """提取一条要求的锚点：优先绝对路径，否则取最长 ≤12 字中文短语（用于匹配/覆盖旧条目）。"""
+    m = re.search(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", text or "")
+    if m:
+        return m.group(0)
+    m2 = re.search(r"[\u4e00-\u9fff]{4,12}", text or "")
+    if m2:
+        return m2.group(0)
+    return ""
+
+
+def _requirements_overlap(line, text):
+    """旧要求行与新文本是否同一主题：共享 ≥1 个 4 字中文片段，或旧行的绝对路径被新文本提及。"""
+    if not line or not text:
+        return False
+    for m in re.finditer(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", line):
+        if m.group(0) in text:
+            return True
+    a, b = set(), set()
+    for r in re.findall(r"[\u4e00-\u9fff]+", line):
+        for i in range(len(r) - 3):
+            a.add(r[i:i + 4])
+    for r in re.findall(r"[\u4e00-\u9fff]+", text):
+        for i in range(len(r) - 3):
+            b.add(r[i:i + 4])
+    return bool(a & b)
+
+
+def _apply_requirements_change(existing, text):
+    """处理用户对已有要求的 移除/更新（用户说错了→能改掉，而不是只 append）。
+
+    - 更新词(改成/改为/换成/其实是/更改为/更正/更新/其实)：移除与新文本同主题的旧条目, 写入新表述
+    - 作废词(取消/不要了/不需要/不算/去掉/删掉/删除/不用记/收回/不成立)：移除同主题旧条目
+    - 主题匹配：绝对路径精确, 或共享 ≥1 个 4 字中文片段(如"以后出图")
+    返回 (处理后的列表, 是否发生动作)。"""
+    try:
+        is_update = any(w in text for w in ("改成", "改为", "换成", "改用", "更改为", "更正", "更新", "其实是", "其实"))
+        is_drop = any(w in text for w in ("取消", "不要了", "不需要", "不算", "去掉", "删掉", "删除", "不用记", "收回", "不成立"))
+        if not (is_update or is_drop):
+            return list(existing), False
+        keep = [ln for ln in existing if not _requirements_overlap(ln, text)]
+        changed = len(keep) != len(existing) or is_update
+        if is_update:
+            new_line = re.sub(r"^(其实|改成|改为|换成|改用|更改为|更新|更正)[为是:：]?\s*", "", text.strip()[:160])
+            if new_line:
+                keep.append(new_line)
+        return keep[-40:], changed
+    except Exception:
+        return list(existing), False
+
+
+def _verify_requirements(session, lines):
+    """核实 REQUIREMENTS 行里的路径是否存在（用户要记住的内容要核实）。
+
+    返回 warning 集合 {存在问题的行: 提示}。相对路径(含 data/ 等)按 results_dir 解析。"""
+    rd = session.get("results_dir") or ""
+    warns = {}
+    for ln in lines or []:
+        abs_spans = [(m.start(), m.end()) for m in re.finditer(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln)]
+        for m in re.finditer(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln):
+            p = m.group(0).rstrip("/\\")
+            if not os.path.exists(p):
+                warns.setdefault(ln.strip()[:140], []).append(f"{p} 不存在")
+        # 相对路径校验：跳过落在绝对路径匹配区间内的片段(避免把 C:\…\data\real.csv 重复当相对路径误报)
+        for m in re.finditer(r"(?:data|results|output|figures?|scripts?)[/\\][^\s，。！？!?;；、]+", ln):
+            if any(m.start() >= a and m.end() <= b for a, b in abs_spans):
+                continue
+            p = re.sub(r"^\.?[/\\]+", "", m.group(0))
+            full = os.path.join(rd, p)
+            if rd and not os.path.exists(full):
+                warns.setdefault(ln.strip()[:140], []).append(f"{p} 不存在(相对会话目录)")
+    return warns
+
+
 def _extract_and_store_requirements(session, text):
     """把用户明确给的要求/约束/文件路径沉淀为会话级 REQUIREMENTS.md + memory facts。
 
-    (#2 记忆不丢) 几百条之后仍记得"我给的要求/文件路径/重要信息"的关键保障：
+    (#2 记忆不丢 + 可纠错)：
       1) 结构化写 results/<sid>/REQUIREMENTS.md（文件在就一直在，digest/rollup 都带）
       2) 含明确记忆词(记住/以后/每次…)的要求另写 memory_store facts(user_pref)
-      digest 每轮固定带上该文件，与当前问题是否含关键词无关 → 不会因关键词漏配而丢。
+      3) 用户说"改成/其实是/取消这条/不要了…" → 移除/更新旧条目(不再盲目 append)
+      4) 同一锚点(路径/核心短语)重复陈述 → 覆盖旧条目，避免"旧对 + 新对"并存
+      digest 每轮固定带上，并核实其中路径是否存在(不存在则标注 ⚠️ 待核实)。
     """
     try:
         rd = session.get("results_dir") or ""
@@ -4486,13 +4568,23 @@ def _extract_and_store_requirements(session, text):
         if os.path.isfile(_p):
             with open(_p, encoding="utf-8", errors="replace") as f:
                 existing = [ln.rstrip("\n") for ln in f]
+
+        # 0) 移除/更新语义（用户纠正/否定 → 改掉旧条目）
+        existing, changed = _apply_requirements_change(existing, text or "")
+
         _sents = [s.strip() for s in re.split(r"[。！？!?\n;；]", text or "") if s and s.strip()]
+        _META_WORDS = ("取消", "不要了", "不需要", "不算", "去掉", "删掉", "删除", "不用记", "收回", "不成立",
+                       "改成", "改为", "换成", "改用", "更改为", "更正", "更新", "其实是", "其实")
         added = []
         for _s in _sents:
             if not (4 <= len(_s) <= 200):
                 continue
             if any(_k in _s for _k in _REQUIREMENTS_SKIP_ASSISTANT):
                 continue  # 发给助手的指令，不是用户对项目的持久要求
+            if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?"):
+                continue  # (压测发现) 问句(如'你记得…吗?')不是要求，不得入库
+            if any(_m in _s for _m in _META_WORDS):
+                continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             if not (_has_path or _has_marker):
@@ -4503,9 +4595,14 @@ def _extract_and_store_requirements(session, text):
                     store_user_pref(f"[用户要求] {_s[:160]}", tags="requirement")
                 except Exception:
                     pass
-            if _s not in existing and _s not in added:
-                added.append(_s)
-        if not added:
+            if _s in existing or _s in added:
+                continue
+            # 同锚点覆盖(仅路径锚点)：用户对同一路径重复陈述 → 替换旧行(路径是唯一无歧义主题)
+            _anc = _requirement_anchor(_s)
+            if _anc and _has_path:
+                existing = [ln for ln in existing if not (_anc in (ln or ""))]
+            added.append(_s)
+        if not added and not changed:
             return
         existing = (existing + added)[-40:]
         with open(_p, "w", encoding="utf-8") as f:

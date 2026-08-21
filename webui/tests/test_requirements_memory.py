@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """#2/#3 改造（2026-08-21）离线单测：
 - #2 持久要求记忆：REQUIREMENTS.md 提取/去重/上限/digest 固定携带/rollup 同带
 - #3 脚本落盘：scripts/ 清单提示
@@ -73,6 +73,55 @@ class TestRequirementPersistence:
         assert "只用一句话回复" not in txt, "助手指令不得入库"
         assert "不要调用任何工具" not in txt
         assert "必须带 P 值" in txt, "真正的用户要求应照存"
+
+    def test_skip_question_sentences(self, tmp_path):
+        """回归(压测发现 2026-08-21)：问句('你记得…吗?')即使含'记住/记得'也不是要求，不得入库。"""
+        s = _mk_session(tmp_path)
+        server._extract_and_store_requirements(
+            s, "你记得本会话固定用的数据文件名是什么吗？记住数据文件在 data/gene_set_response_summary.csv。")
+        txt = open(os.path.join(str(tmp_path), "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "你记得本会话固定用的数据文件名是什么吗" not in txt, "问句不得入库"
+        assert "gene_set_response_summary.csv" in txt, "陈述句要求应照存"
+
+    def test_user_correction_removes_old(self, tmp_path):
+        """用户纠正(2026-08-21)：'以前说必须带P值，其实改成带FDR' → 旧P值条目移除，新FDR条目在。"""
+        s = _mk_session(tmp_path)
+        server._extract_and_store_requirements(s, "以后出图必须带 P 值。")
+        server._extract_and_store_requirements(s, "其实以后出图改成带 FDR。")
+        txt = open(os.path.join(str(tmp_path), "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "P 值" not in txt, "被纠正的旧要求应移除"
+        assert "FDR" in txt, "新要求应写入"
+
+    def test_user_drop_removes(self, tmp_path):
+        """用户作废(2026-08-21)：'那条 <路径> 的要求不用记了' → 旧条目移除。"""
+        s = _mk_session(tmp_path)
+        p = str(tmp_path / "data" / "a.csv")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        server._extract_and_store_requirements(s, f"记住固定数据文件在 {p}。")
+        server._extract_and_store_requirements(s, f"那条 {p} 的要求不用记了。")
+        txt = open(os.path.join(str(tmp_path), "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "a.csv" not in txt, "已作废的要求应移除"
+
+    def test_verify_warns_missing_path(self, tmp_path):
+        """核实(2026-08-21)：要求里的路径不存在 → digest 带 ⚠️ 待核实标注；存在则无。"""
+        # 会话1：只含不存在路径 → 有 ⚠️
+        rd1 = str(tmp_path / "s1"); os.makedirs(rd1, exist_ok=True)
+        s1 = {"id": "verify-1", "results_dir": rd1}
+        missing = os.path.join(str(tmp_path), "data", "no_such_file.csv")
+        server._extract_and_store_requirements(s1, f"记住数据文件在 {missing}。")
+        d1 = server._build_memory_digest(s1, "随便")
+        assert "⚠️" in d1 and "no_such_file.csv" in d1, "不存在的路径应被核实标注"
+        # 会话2：只含存在路径 → 无 ⚠️
+        rd2 = str(tmp_path / "s2"); os.makedirs(rd2, exist_ok=True)
+        s2 = {"id": "verify-2", "results_dir": rd2}
+        real = os.path.join(str(tmp_path), "data", "real.csv")
+        os.makedirs(os.path.dirname(real), exist_ok=True)
+        with open(real, "w", encoding="utf-8") as f:
+            f.write("x")
+        server._extract_and_store_requirements(s2, f"数据文件在 {real} 别忘了。")
+        d2 = server._build_memory_digest(s2, "随便")
+        # 注：digest 展示对行做 [:110] 截断，长 pytest 临时路径可能截掉文件名尾部 → 断言"行存在+无⚠️"
+        assert "数据文件在" in d2 and "⚠️" not in d2, "存在的路径不应被标注"
 
 
 class TestScriptsReuse:
