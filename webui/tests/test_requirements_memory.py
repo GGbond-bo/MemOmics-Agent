@@ -104,11 +104,11 @@ class TestRequirementPersistence:
         assert "(已确认)" in txt, "确认过的条目应带标记"
 
     def test_digest_priority_strategy_line(self, tmp_path):
-        """digest 应带执行策略：优先按用户说明执行+先核实。"""
+        """digest 应带执行策略：优先按用户说明执行+已确认/已验证直接复用。"""
         s = _mk_session(tmp_path)
         server._extract_and_store_requirements(s, "记住数据文件在 E:/x.csv。")
         d = server._build_memory_digest(s, "随便")
-        assert "优先按用户说明执行" in d and "先核实" in d, "digest 应含执行策略句"
+        assert "优先按用户说明执行" in d and "直接复用" in d, "digest 应含执行策略句"
 
     def test_confirmed_missing_path_strong_warning(self, tmp_path):
         """已确认但路径不存在 → 强警告(立即核实)。"""

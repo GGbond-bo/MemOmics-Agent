@@ -4382,8 +4382,9 @@ def _build_memory_digest(session, text):
             # (用户要求要核实) 标注其中已不存在的路径，模型据此提示用户确认/纠错
             _warns = _verify_requirements(session, _reqs)
             _req_block = ("[会话要求 · 用户明确给过且仍未撤销的要求/路径/环境(持久)]\n"
-                          "执行策略：优先按用户说明执行；先核实路径/环境实际存在，"
-                          "若不存在或与现状冲突，向用户确认后再调整。已确认(标注)项以用户说明为准。\n" +
+                          "执行策略：优先按用户说明执行；带 (已确认)/(已验证) 标记的路径、环境、"
+                          "包与结论**直接复用，不要再重复探测/验证**（每轮重复 check_env/探测 "
+                          "浪费 token 且已确认过）；仅当条目缺失或与现状冲突时才核实并向用户确认。\n" +
                           "\n".join(f"- {_fmt_req_line(r)}" for r in _reqs))
             if _warns:
                 _req_block += "\n⚠️ 以下要求中的路径不存在，请向用户核实是否已更新/作废：" + \
@@ -4559,9 +4560,15 @@ _REQUIREMENTS_MEM_WORDS = ("记住", "记得", "以后", "每次", "永远", "�
 # (2026-08-21) 过滤"发给助手本人的指令"（带'不要调用工具/只用一句话回复'等），
 # 避免把对助手的指令误当成用户对项目的持久要求写入 REQUIREMENTS.md
 _REQUIREMENTS_SKIP_ASSISTANT = (
-    "不要调用任何工具", "不用调用工具", "只用一句话回复", "请只回复", "只回复",
+    "不要调用任何工具", "不要调用工具", "不用调用工具", "只用一句话回复", "请只回复", "只回复",
     "请简短确认", "请简短回复", "请简短", "请确认", "不要做多余", "请勿", "你别",
+    "只做一件事", "不要跑完整", "不要跑分析", "只回答数字", "只回答文件名", "先不要执行",
+    "先别执行", "不要执行", "先看下", "看一下就行", "不用跑",
 )
+# (2026-08-21) 一次性任务指令词：含路径+动作词且无"记住/必须/以后"等 marker →
+# 是"这次的任务"不是"持久要求"，不入库、不覆盖已有确认行
+_REQUIREMENTS_TASK_WORDS = ("画一张", "画图", "绘图", "帮我分析", "分析一下", "统计一下", "跑一",
+                            "读取", "数一下", "报告", "生成", "计算", "做个", "做一张", "画个")
 # (2026-08-21 用户强调) 环境/服务器情况信号：版本号/工具+路径/环境词 → 记入环境节
 _REQUIREMENTS_ENV_SIGNALS = ("服务器", "本机", "这台机器", "系统环境", "环境", "R 版本", "python 版本",
                              "conda", "库目录", "libPath", "R-libs", "数据目录", "工作目录",
@@ -4569,6 +4576,11 @@ _REQUIREMENTS_ENV_SIGNALS = ("服务器", "本机", "这台机器", "系统环�
 # (2026-08-21 用户强调) 确认词：用户确认某条 → 标"已确认"，下次以用户说明为主
 _REQUIREMENTS_CONFIRM_WORDS = ("就用", "就是这个", "就用这个", "就用它", "确认", "没问题",
                                "按这个来", "按这个", "就这么定", "就用这条", "对，就")
+# (2026-08-21 用户强调) 已验证词：环境/路径/包已验证存在 → 标 [已验证] (已确认)，
+# 下一轮直接复用不再重复验证（省 token）
+_REQUIREMENTS_VERIFIED_WORDS = ("已验证", "验证通过", "确认存在", "确认可用", "测试通过",
+                                "能跑通", "跑通了", "已存在", "包已装", "装好了", "已装好",
+                                "验证过", "没问题了", "可以用了", "检查过了", "测过了")
 
 
 def _is_env_sentence(s):
@@ -4766,14 +4778,20 @@ def _extract_and_store_requirements(session, text):
                 continue
             if any(_k in _s for _k in _REQUIREMENTS_SKIP_ASSISTANT):
                 continue  # 发给助手的指令，不是用户对项目的持久要求
-            if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?"):
-                continue  # (压测发现) 问句(如'你记得…吗?')不是要求，不得入库
+            if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?") or re.search(r"(没有|了没|了吗|过没|过吗)$", _s):
+                continue  # (压测发现) 问句(如'你记得…吗?'/'验证过没有?')不是要求，不得入库
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             _is_env = _is_env_sentence(_s)
-            if not (_has_path or _has_marker or _is_env):
+            _is_verified = any(w in _s for w in _REQUIREMENTS_VERIFIED_WORDS)
+            # (2026-08-21) 一次性任务指令（含路径+动作词、无持久 marker）不入库——
+            # "用 X 画一张图/统计一下"是本次任务，不是用户对项目的持久要求
+            _is_task = _has_path and not _has_marker and any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
+            if _is_task:
+                continue
+            if not (_has_path or _has_marker or _is_env or _is_verified):
                 continue
             if any(w in _s for w in _REQUIREMENTS_MEM_WORDS):
                 try:
@@ -4782,21 +4800,37 @@ def _extract_and_store_requirements(session, text):
                 except Exception:
                     pass
             # (用户强调) 环境/服务器情况 → 加 [环境] 前缀；确认句(就用/就是这个) → 标 (已确认)
+            # (2026-08-21) 已验证句(已验证/确认存在/包已装…) → 加 [已验证] 前缀 + (已确认)，
+            # 下一轮 digest 携带后模型直接复用，不再重复探测（省 token）
             _entry = _s
-            if _is_env and not _has_marker:
+            if _is_verified and not _has_marker:
+                _entry = f"[已验证] {_s}"
+            elif _is_env and not _has_marker:
                 _entry = f"[环境] {_s}"
-            if any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
+            if _is_verified:
+                _entry = _entry + " (已确认)"
+            elif any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
                 _entry = _entry + " (已确认)"
             if _entry in existing or _entry in added:
                 continue
             # 同锚点覆盖(仅路径锚点)：用户对同一完整路径重复陈述 → 替换旧行。
             # 注意用"完整路径相等"而非子串包含——避免 E:/R-libs 误删 E:/R-libs/R-4.5.3
+            # (2026-08-21) 旧行带 (已确认) → 新行继承标记（确认过的事实不因换措辞丢失）
             _anc = _requirement_anchor(_s)
             if _anc and _has_path:
                 _anc_n = os.path.normpath(_anc)
-                existing = [ln for ln in existing
-                            if not any(os.path.normpath(pp) == _anc_n
-                                       for pp in re.findall(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln or ""))]
+                _had_confirm = False
+                _kept = []
+                for ln in existing:
+                    if any(os.path.normpath(pp) == _anc_n
+                           for pp in re.findall(r"[A-Za-z]:[/\\][^\s，。！？!?;；、]+", ln or "")):
+                        if "(已确认)" in ln:
+                            _had_confirm = True
+                        continue
+                    _kept.append(ln)
+                existing = _kept
+                if _had_confirm and "(已确认)" not in _entry:
+                    _entry = _entry + " (已确认)"
             added.append(_entry)
         if not added and not changed:
             return

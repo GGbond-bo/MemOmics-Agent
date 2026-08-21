@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """单会话上下文逻辑 + 记忆 —— 多场景/复杂/极端/对抗性测试（2026-08-21）。
 
 离线、确定性、不触网（writer 一律注入 fake llm / 不注入）。覆盖：
@@ -404,3 +404,36 @@ class TestG_EnvAndConfirm_Extremes:
         print("DBG_W:", srv._verify_requirements(s, srv._read_requirements(s, limit=6)))
         print("DBG_R:", srv._read_requirements(s, limit=6))
         assert "⚠️" not in d and "优先按用户说明执行" in d and "(已确认)" in d
+
+
+# ══ H. [已验证] 复用语义（2026-08-21 用户强调：已验证的不重复探索，省 token）══
+class TestH_VerifiedReuse:
+    def test_verified_env_marked(self, tmp_path):
+        """'已验证/确认存在/包已装' 句 → [已验证] 前缀 + (已确认) 标记。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "已验证 R 4.5.3 的 Seurat/harmony 包都能用。")
+        srv._extract_and_store_requirements(s, "E:/R-libs/R-4.5.3 确认存在。")
+        txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "[已验证]" in txt, "已验证句应带 [已验证] 前缀"
+        assert "(已确认)" in txt, "已验证 = 事实确认，应带 (已确认)"
+        assert "Seurat" in txt
+
+    def test_verified_package_only(self, tmp_path):
+        """纯包验证句（无路径无环境词）也入库——不再要求路径/marker。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "cellbender 包已装好，直接能用。")
+        txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
+        assert "cellbender" in txt and "[已验证]" in txt
+
+    def test_verified_reuse_policy_in_digest(self, tmp_path):
+        """digest 策略句明确：已确认/已验证 → 直接复用，不再重复探测。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "已验证 R 4.5.3 可用。")
+        d = srv._build_memory_digest(s, "画图")
+        assert "直接复用" in d and "不要再重复探测" in d and "[已验证]" in d
+
+    def test_verified_question_not_stored(self, tmp_path):
+        """'验证过没有？' 是问句：不得入库。"""
+        s = _session(tmp_path)
+        srv._extract_and_store_requirements(s, "这个包验证过没有？")
+        assert not os.path.exists(os.path.join(s["results_dir"], "REQUIREMENTS.md"))
