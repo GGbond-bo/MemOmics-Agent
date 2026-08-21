@@ -3339,6 +3339,49 @@ def _detect_modalities_from_text(text: str) -> list:
     return mods if mods else ["scrna"]
 
 
+def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str:
+    """KB 预查询 + 领域路线引导 → 尾部 system 消息（2026-08-21 缓存优化）。
+
+    原实现注入 ephemeral_system_prompt（= 请求前缀头部），内容随用户消息变化，
+    每次回合都破坏 DeepSeek 前缀缓存（实测连续回合命中率仅 12-22%）。
+    改为返回文本，由调用方作为历史末尾的 system 消息追加——前缀保持稳定，
+    REQUIREMENTS/索引更新也不会再让整段前缀失效。
+    """
+    if not is_heavy:
+        return ""
+    try:
+        _kb_result = _auto_search_knowledge(user_text)
+        if _kb_result and ('"total": 0' not in _kb_result.split('\n')[0] if _kb_result else False):
+            return (
+                "\n\n## 📚 知识库预查询（线索，非文献来源）\n"
+                "以下是系统自动从知识库检索的内容，**仅作为分析线索和背景参考**。\n"
+                "⚠️ KB 中的文献引用可能缺少 PMID/DOI，**不可直接作为辩论引用来源**。\n\n"
+                "**铁律 5 强制要求**：\n"
+                "1. 辩论前必须先调 `search_papers()` 获取带 PMID/DOI 的真实文献\n"
+                "2. KB 内容作为 `knowledge_base_info` 传入辩论，提供生物学背景\n"
+                "3. 辩论中**只能引用 search_papers 返回的真实文献**\n\n"
+                + _kb_result
+            )
+        if intent in ("analysis", "research_plan", "analysis_plan"):
+            _detected_domain = _detect_domain_from_text(user_text)
+            _domain_hint = f"（系统推断领域: {_detected_domain}）" if _detected_domain else ""
+            _domain_list = f"skill_list_by_domain(domain=\"{_detected_domain}\")" if _detected_domain else "skill_list_by_domain(domain=<推断的领域>)"
+            return (
+                f"\n\n## 📋 分析路线引导（KB 无精确匹配，请使用 Skill 体系）{_domain_hint}\n"
+                "当前知识库中未找到精确匹配。请**不要用预训练知识编造**，按以下步骤从 skill 体系构建路线：\n\n"
+                f"1. **按领域精确查询**：调用 `{_domain_list}` 列出该领域所有技能\n"
+                "2. **关键词搜索**：调用 `skill_search(query=\"<用户问题核心词>\")` 补充搜索\n"
+                "3. **加载关键 skill**：对匹配的 skill 调用 `skill_view(name=\"skill名\")` 获取方法论、参数、参考文献\n"
+                "4. **从 skill 构建路线图**：skill 中的 Pipeline/Workflow 节 = 分析路线图；References 节 = 文献支撑\n"
+                "5. **必要时补充文献**：skill 中的 References 可能不够新 → 调 `search_papers()` 补充最新文献\n\n"
+                f"⛔ 领域限定：用户问题推断为 {_detected_domain or '通用'} 领域，请只查询该领域相关 skill。\n"
+                "⛔ 不要用 LLM 预训练知识凭空编造分析路线。skill_index 里的 368 个 skill 是权威来源。"
+            )
+    except Exception:
+        pass
+    return ""
+
+
 def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "") -> str:
     """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
     # === RED 必触发预检：用户消息命中 RED skill 触发词 → 前置强约束先 skill_view ===
@@ -9812,58 +9855,29 @@ async def ws_endpoint(ws: WebSocket):
                     and _has_data_path
                     and _has_exec_kw
                 )
-                if not _is_heavy:
-                    # 轻量：闲聊/知识/进度/无数据路径的分析讨论 → 不注入 skills 和 detail
-                    agent.ephemeral_system_prompt = (
-                        f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
-                        if rd else ""
-                    )
-                else:
-                    # 重量：有数据路径 + 分析执行 → 注入全量
-                    _soul_detail = ""
-                    try:
-                        _detail_path = os.path.join(HERMES_HOME_DIR, "SOUL-detail.md")
-                        if os.path.isfile(_detail_path):
-                            with open(_detail_path, encoding="utf-8") as _f:
-                                _soul_detail = _f.read()
-                    except Exception:
-                        pass
-                    _skills = _read_skills_index()
-                    agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
-                    if rd:
-                        agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
+                # 2026-08-21 缓存优化：light/heavy 若用不同结构系统提示，同一会话
+                # 交替回合（分析↔闲聊）会让 DeepSeek 前缀缓存整体失效（实测回合首
+                # 调用 miss 140K+）。统一为基础段（soul+skills+PLANNING+目录+语言），
+                # light 只是不再注入 KB/领域尾部；heavy 的 KB 注入已走 _kb_tail。
+                _soul_detail = ""
+                try:
+                    _detail_path = os.path.join(HERMES_HOME_DIR, "SOUL-detail.md")
+                    if os.path.isfile(_detail_path):
+                        with open(_detail_path, encoding="utf-8") as _f:
+                            _soul_detail = _f.read()
+                except Exception:
+                    pass
+                _skills = _read_skills_index()
+                agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                if rd:
+                    agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
 
                     # 🔧 分析任务自动预查知识库 + 方法路线引导
-                    _kb_result = _auto_search_knowledge(user_text)
-                    if _kb_result and '"total": 0' not in _kb_result.split('\n')[0] if _kb_result else False:
-                        # KB 有匹配 → 注入背景知识
-                        agent.ephemeral_system_prompt += (
-                            "\n\n## 📚 知识库预查询（线索，非文献来源）\n"
-                            "以下是系统自动从知识库检索的内容，**仅作为分析线索和背景参考**。\n"
-                            "⚠️ KB 中的文献引用可能缺少 PMID/DOI，**不可直接作为辩论引用来源**。\n\n"
-                            "**铁律 5 强制要求**：\n"
-                            "1. 辩论前必须先调 `search_papers()` 获取带 PMID/DOI 的真实文献\n"
-                            "2. KB 内容作为 `knowledge_base_info` 传入辩论，提供生物学背景\n"
-                            "3. 辩论中**只能引用 search_papers 返回的真实文献**\n\n"
-                            + _kb_result
-                        )
-                    elif _intent in ("analysis", "research_plan", "analysis_plan"):
-                        # KB 无匹配 → 引导使用 skill 体系构建分析路线
-                        # 🔑 关键：限定领域，不让 RNA 问题搜到空间组
-                        _detected_domain = _detect_domain_from_text(user_text)
-                        _domain_hint = f"（系统推断领域: {_detected_domain}）" if _detected_domain else ""
-                        _domain_list = f"skill_list_by_domain(domain=\"{_detected_domain}\")" if _detected_domain else "skill_list_by_domain(domain=<推断的领域>)"
-                        agent.ephemeral_system_prompt += (
-                            f"\n\n## 📋 分析路线引导（KB 无精确匹配，请使用 Skill 体系）{_domain_hint}\n"
-                            "当前知识库中未找到精确匹配。请**不要用预训练知识编造**，按以下步骤从 skill 体系构建路线：\n\n"
-                            f"1. **按领域精确查询**：调用 `{_domain_list}` 列出该领域所有技能\n"
-                            "2. **关键词搜索**：调用 `skill_search(query=\"<用户问题核心词>\")` 补充搜索\n"
-                            "3. **加载关键 skill**：对匹配的 skill 调用 `skill_view(name=\"skill名\")` 获取方法论、参数、参考文献\n"
-                            "4. **从 skill 构建路线图**：skill 中的 Pipeline/Workflow 节 = 分析路线图；References 节 = 文献支撑\n"
-                            "5. **必要时补充文献**：skill 中的 References 可能不够新 → 调 `search_papers()` 补充最新文献\n\n"
-                            f"⛔ 领域限定：用户问题推断为 {_detected_domain or '通用'} 领域，请只查询该领域相关 skill。\n"
-                            "⛔ 不要用 LLM 预训练知识凭空编造分析路线。skill_index 里的 368 个 skill 是权威来源。"
-                        )
+                    # 2026-08-21 缓存优化：KB 预查询/领域引导内容随用户消息变化，
+                    # 注入 system prompt(=请求前缀头部) 会破坏 DeepSeek 前缀缓存
+                    # （实测连续回合命中率仅 12-22%）。已改为尾部 system 消息注入
+                    # （见 conversation_history 构建处 _kb_tail），前缀保持稳定
+                    # （soul+skills+PLANNING），命中率可回 90%+。
 
                 # 2026-08-17: 回答语言策略 — 把会话语言显式注入 Agent 系统提示
                 # （英文提问+无中文上下文 / 用户显式指定英文 → 全程英文回复；否则中文）
@@ -10824,6 +10838,15 @@ async def ws_endpoint(ws: WebSocket):
                         # 图路由：根据意图+领域注入技能触发指令（P1+P2+P3）
                         if _skill_ctx:
                             conversation_history.append({"role": "system", "content": _skill_ctx})
+
+                        # 🔧 KB 预查询/领域引导 → 尾部 system 消息（2026-08-21 缓存优化：
+                        # 放前缀会破坏 DeepSeek 前缀缓存，放尾部只影响最新请求段）
+                        try:
+                            _kb_tail = _build_kb_tail_injection(user_text or "", _intent, _is_heavy)
+                            if _kb_tail:
+                                conversation_history.append({"role": "system", "content": _kb_tail})
+                        except Exception:
+                            pass
 
                         # 2026-08-16 修复「问下一个问题被旧上下文占据」：
                         # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，
