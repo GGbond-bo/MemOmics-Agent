@@ -6,6 +6,7 @@
 writer 的 LLM 用 monkeypatch 注入假函数，全程不触网。
 """
 import os
+import time
 
 import pytest
 
@@ -173,6 +174,23 @@ class TestReplay:
 
         out = ca.memomics_replay(s, _hist(30), llm_fn=boom, budget=ca.compute_usable(model="", max_context=20000))
         assert isinstance(out, list) and len(out) >= 1
+
+    def test_no_writer_when_no_new_span(self, tmp_path):
+        """P5 单调性回归(2026-08-21)：历史条数波动使 stop < upto 时，
+        不得重写 checkpoint——否则边界回退、覆盖已合并摘要、白烧一次 LLM。"""
+        s = _session(tmp_path)
+        ca.write_checkpoint(s, 748, "## §1\n- prior merged summary")
+        h = _hist(760)  # 760 - tail(40) = 720 < 748 → 无新片段
+        calls = {"n": 0}
+        tiny_budget = {"hard": 1_000_000, "effective": 1000, "usable": 10,
+                       "reserved": 12288, "source": "test"}
+        out = ca.memomics_replay(s, h, budget=tiny_budget, tail_len=40,
+                                 llm_fn=lambda p: calls.__setitem__("n", calls["n"] + 1) or "## §1\n- x")
+        assert isinstance(out, list)
+        time.sleep(0.3)  # 若误 spawn，后台线程会写文件/计数
+        assert calls["n"] == 0, "无新片段时 writer 不得被调用"
+        ck = ca.read_checkpoint(s)
+        assert ck["upto"] == 748, "边界必须保持单调不回退"
 
 
 # ── P3 FTS ──

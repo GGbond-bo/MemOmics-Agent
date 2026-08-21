@@ -386,7 +386,11 @@ def memomics_replay(session, history, llm_fn=None, budget=None, tail_len=None, c
             return history
         ck = read_checkpoint(session)
         span, new_upto = new_span(history, ck["upto"], tlen)
-        _maybe_spawn_writer(session, history, ck, span, new_upto, llm_fn)
+        # P5 单调性：只有存在"上次摘要之后的新片段"才重写 checkpoint。
+        # 历史条数波动（(b) 剥离脚手架/尾窗变化）时 stop 可能 < 已存 upto ——
+        # 若照旧重写会把边界回退并覆盖已合并摘要（记忆劣化 + 白烧一次 LLM）。
+        if span:
+            _maybe_spawn_writer(session, history, ck, span, new_upto, llm_fn)
         ck2 = read_checkpoint(session)
         ctext = ck2.get("text", "") or ""
         if not ctext.strip():

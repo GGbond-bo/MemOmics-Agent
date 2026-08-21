@@ -4583,11 +4583,11 @@ def _llm_route_intent(text, session):
     return None
 
 
-def _checkpoint_writer_llm(prompt):
+def _checkpoint_writer_llm(prompt, cfg=None):
     """(P2) writer 的 LLM 后端：一次 OpenAI-compat 调用，输出 §1-§11 checkpoint 文本。失败抛错由调用方兜底。"""
     import urllib.request as _ur
     import json as _json
-    cfg = _current_model or {}
+    cfg = cfg or _current_model or {}
     base = (cfg.get("base_url") or "").rstrip("/")
     key = cfg.get("api_key") or ""
     if not base or not key:
@@ -10538,8 +10538,10 @@ async def ws_endpoint(ws: WebSocket):
                         # ── (c/P1-P5) MiMo-Code 上下文架构：单一边界 usable() + 后台 writer(§1-§11) +
                         #      四层记忆(FTS/REQUIREMENTS/MEMORY/History) + 分段重建预算 + 增量压缩 ──
                         try:
+                            _wcfg = _session.get("model_config") or _current_model
                             conversation_history = context_arch.memomics_replay(
-                                _session, conversation_history, llm_fn=_checkpoint_writer_llm)
+                                _session, conversation_history,
+                                llm_fn=lambda p, _c=_wcfg: _checkpoint_writer_llm(p, cfg=_c))
                         except Exception as _c_err:
                             logger.warning(f"[MemOmics] (c) P1-P5 架构回放失败(不阻断): {_c_err}")
 
