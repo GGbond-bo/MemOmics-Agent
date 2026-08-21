@@ -29,22 +29,30 @@
 | 用户给了什么 | 是什么意图 | 怎么办 |
 |-------------|-----------|--------|
 | 用户给了脚本（画图/比对/其他） | 复用/检查/优化用户脚本 | 先读脚本（头部注释+结构+输入输出）识别用途；**识别不出 → 问**："这个脚本是做什么的？输入输出是什么？" |
-| 用户给了数据 + 任务（无脚本） | 做分析 | 查 skill：有现成 → 用；无但该主题有文章/官网/教程 → `create-bio-skill` 建正式 skill；用户只要找脚本 → 按用途分类沉淀 |
+| 用户给了数据 + 任务（无脚本） | 做分析 | 查 skill：有现成 → 用；无但该主题有文章/官网/教程 → `create-bio-skill` 建正式 skill；无官方教程 → AI 写脚本 → 验证 → 用户认可 → 按意图分类沉淀（见 Step 1） |
+| 用户口头描述分析需求（如"算显著性：衰老独立比较+运动前后配对"） | AI 编写脚本 | 写脚本 → 实际运行验证 → 用户认可 → **按意图分类沉淀**（统计检验 → `statistics` 类） |
 | 用户说"之前那个脚本/那个分析/那个代码" | 跨会话回忆 | 查用户脚本库索引（见下）+ MEMORY.md 记忆，定位后复用 |
 
-### Step 1：用户脚本分类沉淀（用户提供 **且实际运行验证通过** 的脚本）
+### Step 1：用户脚本分类沉淀（**用户提供** 或 **用户口头需求驱动 AI 编写**，且 **实际运行验证通过** 的脚本）
 
-**分类规则（按用途，起清晰名字，沉淀后跨会话可检索）：**
+**两类来源同等沉淀**：
+1. **用户提供的脚本** — 以用户脚本为基准（不改风格）
+2. **用户口头需求 → AI 编写**（无脚本、无官方教程）— 如"算细胞比例显著性"（衰老独立比较 / 运动前后配对比较）。AI 写脚本 → 跑通 → 汇报 → 用户认可 → 沉淀
+
+**分类规则（按意图，起清晰名字，沉淀后跨会话可检索）：**
 
 | 脚本用途 | 沉淀分类 | 位置 |
 |---------|---------|------|
 | 画图 / 出图 | `plotting`（用户画图库） | `skills/plotting/<名称>/` |
 | 比对 / 对比流程 / 差异比较 | `comparison`（用户比对库） | `skills/comparison/<名称>/` |
+| 统计检验 / 显著性计算（组间独立比较、配对比较、细胞比例检验等） | `statistics`（用户统计检验库） | `skills/statistics/<名称>/` |
 | 其他分析（QC/聚类/富集/轨迹…） | 按用途建类（如 `skills/qc/`、`skills/clustering/`） | `skills/<类别>/<名称>/` |
 
-**每个沉淀脚本必须包含**：`SKILL.md`（frontmatter `category: user-skill` + `source: user` + 使用场景 + 触发词示例）+ `skill.json` + `scripts/<脚本>。（R/py）` + 登记到用户脚本库总索引。
+**每个沉淀脚本必须包含**：`SKILL.md`（frontmatter `category: user-skill` + `source: user` + 使用场景 + 触发词示例；AI 编写脚本 source 标 `user-requested` 注明原始需求）+ `skill.json` + `scripts/<脚本>。（R/py）` + 登记到用户脚本库总索引。
 
-**沉淀流程**：运行验证 → 询问用户"要沉淀到用户 skill 吗？"（硬门禁）→ 用户确认 → 入库分类目录 → `skill_evolution(action="record_run", skill="plotting|comparison/<名称>", ...)` 留档 → 更新用户脚本库总索引。
+**沉淀流程**：运行验证 → 询问用户"要沉淀到用户 skill 吗？"（硬门禁）→ 用户确认 → 入库分类目录 → `skill_evolution(action="record_run", skill="plotting|comparison|statistics/<名称>", ...)` 留档 → 更新用户脚本库总索引。
+
+**统计检验类沉淀示例**（2026-08-22 用户确认）：用户说"算细胞比例显著性——衰老组间独立比较 + 运动前后配对比较"→ AI 写脚本跑通 → 沉淀到 `skills/statistics/cell-proportion-significance/`，触发词："算显著性" / "细胞比例检验" / "独立比较" / "配对比较"。下次同类需求直接复用旧脚本改参数。
 
 ### Step 2：无脚本 + 有文章/官网/教程 → 自动创建正式 skill
 
@@ -234,6 +242,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "最佳实践" / "best practice" / "guideline" | `skill_view("data-analysis-best-practices")` |
 | "药物靶点" / "靶点发现" / "drug target" / "药物重定位" | `skill_view("scrna-disease-drug-discovery")` |
 | "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" / "之前那个脚本" / "那个分析" / "那个代码" | 先读 `skills/user-scripts/INDEX.md` 匹配 → `skill_evolution(action="query_logs") + recall_experience()` |
+| "算显著性" / "显著性检验" / "细胞比例检验" / "独立比较" / "配对比较" / "组间比较" / "算P值" | 先查 `skills/user-scripts/INDEX.md` statistics 类 → 有旧脚本复用；无 → AI 编写 → 验证 → 认可 → 沉淀 `skills/statistics/` |
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |

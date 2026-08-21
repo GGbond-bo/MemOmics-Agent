@@ -13,12 +13,15 @@
 用户给了脚本
 ├─ 画图/出图 → skills/plotting/<名称>/
 ├─ 比对/对比流程/差异比较 → skills/comparison/<名称>/   ← 本库
+├─ 统计检验/显著性计算（独立/配对比较、比例检验）→ skills/statistics/<名称>/
 └─ 其他分析 → 按用途建类（skills/qc/、skills/clustering/ 等）
 
 用户没给脚本 + 主题有文章/官网/教程 → create-bio-skill 创建正式 skill（注册后立即可用）
-用户没给脚本 + 只要找脚本 → 意图识别 → 分类沉淀到用户 skill
+用户没给脚本 + 口头需求（如"算显著性"）→ AI 编写 → 验证 → 用户认可 → 按意图分类沉淀（统计类→statistics/）
 用户说"之前那个脚本" → 查 skills/user-scripts/INDEX.md 回忆复用
 ```
+
+> **comparison vs statistics 判定**：意图是"跑完整对比流程"（产出分析结论）→ comparison；意图是"算显著性/检验/比较"（产出统计量）→ statistics。
 
 ---
 

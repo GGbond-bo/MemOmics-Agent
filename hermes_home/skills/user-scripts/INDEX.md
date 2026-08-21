@@ -10,6 +10,7 @@
 |------|------|------|------|
 | `plotting` | 画图 / 出图 / 可视化 | `skills/plotting/<名称>/` | 用户画图脚本库（含 CNS 标准版） |
 | `comparison` | 比对 / 对比流程 / 差异比较 | `skills/comparison/<名称>/` | 用户比对脚本库（2026-08-22 建） |
+| `statistics` | 统计检验 / 显著性计算（独立/配对比较、细胞比例检验） | `skills/statistics/<名称>/` | 用户统计检验脚本库（2026-08-22 建；来源含用户口头需求→AI 编写，标 source: user-requested） |
 
 ## 已沉淀脚本登记表
 
