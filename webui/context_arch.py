@@ -199,7 +199,8 @@ def write_checkpoint(session, upto: int, text: str) -> str:
         return ""
     path_guard(d, [_results_dir(session)])
     os.makedirs(d, exist_ok=True)
-    p = os.path.join(d, f"checkpoint-{int(time.time())}.md")
+    # (2026-08-21 压测发现) 文件名只用 int(time) 会在同一秒内互相覆盖 → 加毫秒+随机后缀防碰撞
+    p = os.path.join(d, f"checkpoint-{int(time.time()*1000)}-{os.urandom(3).hex()}.md")
     header = CHECKPOINT_HEADER_TMPL.format(upto=int(upto), ts=int(time.time()))
     with _lock_for(p):
         with open(p, "w", encoding="utf-8") as f:
