@@ -8360,12 +8360,17 @@ language: {req.language}
     shutil.copytree(skill_dir, dest)
 
     # P5: 自动重建技能索引（新 skill 创建后立即生效）
+    # 2026-08-21: hermes-agent/tools/build_skill_index.py 已不在仓库内 → 改用
+    # webui/auto_register（启动 scan 同一套机制），保证 create 后索引立即生效。
     try:
-        import subprocess
-        index_script = os.path.join(HERMES_DIR, "tools", "build_skill_index.py")
-        if os.path.exists(index_script):
-            subprocess.run([sys.executable, index_script], capture_output=True, timeout=30)
-            print(f"[MemOmics] Auto-rebuilt skill index after creating {safe_name}", flush=True)
+        from webui import auto_register as _ar
+        _ar.init(
+            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+        )
+        _r = _ar.scan_and_register_all()
+        print(f"[MemOmics] Auto-rebuilt skill index after creating {safe_name}: {_r}", flush=True)
     except Exception as e:
         print(f"[MemOmics] Auto-rebuild index failed (non-fatal): {e}", flush=True)
 
