@@ -1322,42 +1322,47 @@ def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     return False
 
 
-def _results_dir_changed_since(session, ts: float) -> bool:
+def _results_dir_changed_since(session, ts: float, extra_dirs: list = None) -> bool:
     """results_dir 下是否有真实产出文件在 ts 之后被修改（排除平台自写文件）。
 
     平台自写(不算产出): token_usage.jsonl / .task_state.json / task_plan.md / log/ / .loopx/
     扫描上限 200 个文件，避免大目录全量遍历。
+    extra_dirs: 2026-08-22 额外检查目录（用户目标路径如 E:\\骨骼肌锻炼\\，产物可能写在那里）。
     返回 True 表示"有变化"(或无法判断——此时不干预，避免误伤)。
     """
     _rd = session.get("results_dir", "") or ""
-    if not _rd or not os.path.isdir(_rd) or not ts:
+    _roots = [p for p in ([_rd] + (extra_dirs or [])) if p and os.path.isdir(p)]
+    if not _roots or not ts:
         return True
     _skip_names = {"token_usage.jsonl", ".task_state.json", "task_plan.md"}
-    _targets = []
-    for _sub in ("figures", "scripts", "results", "data", "datasets"):
-        _p = os.path.join(_rd, _sub)
-        if os.path.isdir(_p):
-            try:
-                _targets.extend(os.path.join(_p, f) for f in os.listdir(_p))
-            except Exception:
-                pass
-    try:
-        _targets.extend(os.path.join(_rd, f) for f in os.listdir(_rd))
-    except Exception:
-        pass
-    _seen = 0
-    for _f in _targets:
+    for _root in _roots:
+        _targets = []
+        for _sub in ("figures", "scripts", "results", "data", "datasets"):
+            _p = os.path.join(_root, _sub)
+            if os.path.isdir(_p):
+                try:
+                    _targets.extend(os.path.join(_p, f) for f in os.listdir(_p))
+                except Exception:
+                    pass
         try:
-            _base = os.path.basename(_f)
-            if _base in _skip_names or ".loopx" in _f or os.sep + "log" in _f:
-                continue
-            _seen += 1
-            if _seen > 200:
-                break
-            if os.path.isfile(_f) and os.path.getmtime(_f) >= ts:
-                return True
+            _targets.extend(os.path.join(_root, f) for f in os.listdir(_root))
         except Exception:
             pass
+        _seen = 0
+        for _f in _targets:
+            try:
+                _base = os.path.basename(_f)
+                if _base in _skip_names or ".loopx" in _f or os.sep + "log" in _f:
+                    continue
+                _seen += 1
+                if _seen > 200:
+                    break
+                # 2026-08-22: 产物必须非空（0 字节不算交付产物，空文件视为未完成）
+                if os.path.isfile(_f) and os.path.getmtime(_f) >= ts \
+                        and os.path.getsize(_f) > 0:
+                    return True
+            except Exception:
+                pass
     return False
 
 
@@ -11169,6 +11174,41 @@ async def ws_endpoint(ws: WebSocket):
                                     "content": "⚠️ 检测到虚假完成声明（本回合无真实执行、文件未变化）——系统将强制重新执行",
                                     "session_id": _session["id"]})
                                 logger.info("[MemOmics] 检测到虚假完成声明 → 强制自检重跑")
+                        # 2026-08-22 产物终检（一次性，回合末）：本回合有真实执行 + 模型声称完成 →
+                        # 检查结果目录是否有新产物且非空（存在+大小>0），不满足则提醒模型核实交付。
+                        # 设计：不每次执行都查（省 token），只在回合交付前查一次；内容对错靠执行时
+                        # rail_review 保证，这里只兜底"声称完成但产物缺失/空文件"。
+                        _claim_prod_words = ("完成", "已生成", "已保存", "已复制", "已写入",
+                                             "已交付", "已导出", "已输出", "已合并", "已创建",
+                                             "已写好", "已出", "产物", "结果如下", "文件已")
+                        _real_exec_this_turn = _session.get("_real_exec_this_turn") or bool(_tool_call_log)
+                        if _real_exec_this_turn and any(_w in (result or "") for _w in _claim_prod_words):
+                            try:
+                                # 用户目标路径（如 E:\骨骼肌锻炼\）产物可能不在 results_dir，一并检查
+                                _extra_dirs = []
+                                for _p in re.findall(r'[A-Za-z]:[\\/][^\s"\'，。；：、]*', _run_text or ""):
+                                    _dir_c = _p if os.path.isdir(_p) else os.path.dirname(_p)
+                                    if _dir_c and os.path.isdir(_dir_c):
+                                        _extra_dirs.append(_dir_c)
+                                _prod_ok = _results_dir_changed_since(_session, _session.get("_turn_start_ts") or 0,
+                                                                      extra_dirs=_extra_dirs)
+                            except Exception:
+                                _prod_ok = True
+                            if not _prod_ok:
+                                _wake_n3 = _session.get("_saying_wakeup_n", 0)
+                                if _wake_n3 < 2:
+                                    _session["_saying_wakeup_n"] = _wake_n3 + 1
+                                    _session["_urgent_wakeup"] = True
+                                    _session["_force_tool_check"] = True
+                                    _session.setdefault("messages", []).append(
+                                        {"role": "system",
+                                         "content": "⚠️ 你回复称已完成，但系统检查发现本回合执行后结果目录没有任何新产物（文件不存在或为空）。请先核实目标产物是否真的写出：检查文件存在、大小非空、内容正确；缺失则重新执行并验证后再交付。",
+                                         "time": datetime.now().strftime("%H:%M:%S"),
+                                         "source": "prod_check"})
+                                    _session_emit(_session, {"type": "info",
+                                        "content": "⚠️ 回合终检：声称完成但结果目录无新产物——已提醒模型核实",
+                                        "session_id": _session["id"]})
+                                    logger.info("[MemOmics] 产物终检未过（声称完成但无新产物）→ 提醒核实")
                         # 🔧 空响应检测：只有模型真正返回空（无任何文本且无工具调用）才重试。
                         # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
                         if not _tool_call_log and (not result or not result.strip()):

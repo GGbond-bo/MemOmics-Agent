@@ -245,6 +245,7 @@ class EnforcementState:
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
+        self._pending_record_warned: bool = False  # 2026-08-22: execute 门禁软拦截已提醒一次（不卡死）
         self._error_recorded: int = 0  # P1-11: 本会话自动 record_error 次数（限 2 防刷屏）
         self._block_kind: str = ""  # P0-1(2026-08-13): 阻断原因类别 rail_pre/rail_post/""
         self._block_reason: str = ""  # P0-1: 阻断原因描述（注入被拦工具的错误消息）
@@ -315,6 +316,7 @@ def clear_hard_block(session_id: str) -> bool:
     es._block_reason = ""
     es._blocked_attempts = 0
     es._pending_record = False  # record_run 门禁同样只约束当轮
+    es._pending_record_warned = False  # 2026-08-22: 软拦截计数随回合重置
     return was
 
 
@@ -475,6 +477,21 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                           message=(f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。"
                                    f"先 debate_analysis 辩脚本设计与参数选择，再执行。{_check_txt}"),
                           require=["debate_analysis"])
+            # 🔧 2026-08-22: 自进化门禁扩展 — execute_r/execute_python 完成后未 record_run
+            # 时，下一次执行调用注入软提醒（不阻断执行，避免持久内核迭代被卡死）：
+            # 提醒模型自检目标产物 → 已完成则 record_run 沉淀；未完成则【继续完成目标】。
+            # （区别于 terminal 的硬阻断：execute 是迭代开发，硬卡会打断修复链；
+            #   软提醒 = 持续督促"完成目标 → 沉淀"，绝不卡死；回合末有产物终检兜底）
+            if es._pending_record and es.analysis_level != "chat":
+                if not es._pending_record_warned:
+                    es._pending_record_warned = True
+                    _emit("enforcement", action="warning",
+                          message=("⚠️ 上一步 execute 完成但未沉淀经验。请先检查目标产物是否已生成"
+                                   "（文件存在、大小非空、内容正确）："
+                                   "已生成 → 调用 skill_evolution(action='record_run') 沉淀；"
+                                   "未生成 → 继续完成未完成的目标，全部完成后必须 record_run 沉淀再交付。"),
+                          missing=["skill_evolution(record_run)"])
+                # 不阻断：目标未完成时模型继续执行以完成目标；完成后 record_run 解除。
 
         elif tool_name in _DEBATE_HIGH_IMPACT_TOOLS:
             # P2(2026-08-10): 高影响工具 — 记录待触发信号（强制 L2）
@@ -762,6 +779,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 a = json.loads(str(args)) if isinstance(args, str) else args
                 if isinstance(a, dict) and a.get("action") in ("record_run", "record_success"):
                     es._pending_record = False
+                    es._pending_record_warned = False  # 2026-08-22: 沉淀完成 → 软拦截计数重置
             except Exception:
                 pass
     def tool_progress_cb(event_type: str, **kwargs):
