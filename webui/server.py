@@ -4508,16 +4508,61 @@ def _strip_scaffold_text(text):
     return None
 
 
+def _resolve_message_id(session_id: str, content_hint: str) -> int:
+    """按 content 片段在 state.db 查该会话的 message_id（elision marker 用）。
+
+    返回 id 或 0（查不到时 fail-open，不阻断压缩）。"""
+    if not session_id or not content_hint:
+        return 0
+    try:
+        import sqlite3 as _sq
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.isfile(_dbp):
+            return 0
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _hint = content_hint.strip()[:60]
+            if not _hint:
+                return 0
+            _row = _conn.execute(
+                "SELECT id FROM messages WHERE session_id=? AND content LIKE ? "
+                "ORDER BY id DESC LIMIT 1",
+                (session_id, f"%{_hint[:40]}%")).fetchone()
+            return int(_row[0]) if _row else 0
+        finally:
+            _conn.close()
+    except Exception:
+        return 0
+
+
 def _build_rollup_checkpoint(session, head):
     """(c) 步进式结构化 checkpoint：把被折叠的历史头部压缩为结构化摘要。
 
     确定性构建（task_plan + 会话锚点 + 最近工具调用 + 起始诉求），零 LLM 成本、可离线测试。
-    只折叠发给模型的这一份；state.db 全量轨迹不动，压缩永不丢证据。"""
+    只折叠发给模型的这一份；state.db 全量轨迹不动，压缩永不丢证据。
+    2026-08-22: 追加 elision marker —— 折叠边界 message_id 指针，模型可
+    session_search(session_id, around_message_id=<id>, window=5) 逐字捞回早期细节。"""
     _lines = ["[会话检查点 · 跨压缩持久 · 早期历史已折叠为结构化摘要]",
               "## 会话", f"- id: {session.get('id', '')}"]
     rd = session.get("results_dir") or ""
     if rd:
         _lines.append(f"- results_dir: {rd}")
+    # elision marker：折叠边界（head 最后一条）的 message_id —— 细节召回的直接指针
+    try:
+        _sid = session.get("id", "") or ""
+        _last = None
+        for _m in reversed(head or []):
+            if isinstance(_m, dict) and isinstance(_m.get("content"), str) and _m["content"].strip():
+                _last = _m["content"].strip()
+                break
+        if _sid and _last:
+            _mid = _resolve_message_id(_sid, _last[-40:])
+            if _mid:
+                _lines.append(f"- 折叠边界 message_id: {_mid}（早期 N 条已折叠；"
+                              f"需要细节 → session_search(session_id='{_sid}', "
+                              f"around_message_id={_mid}, window=5) 逐字捞回）")
+    except Exception:
+        pass
     # (#2 记忆不丢) 持久要求随 checkpoint 带过滚动 —— 折叠后依然记得用户要求/路径
     try:
         _reqs = _read_requirements(session, limit=10)
@@ -9552,6 +9597,16 @@ def _ensure_results_dir(session):
                 os.makedirs(os.path.join(results_dir, _sub), exist_ok=True)
             except Exception:
                 pass
+        # (4) 2026-08-22: notes.md 草稿本（MiMo-Code 模式）——模型临时想法/疑问/引语的唯一合法 scratchpad
+        try:
+            _notes = os.path.join(results_dir, "notes.md")
+            if not os.path.isfile(_notes):
+                with open(_notes, "w", encoding="utf-8") as _f:
+                    _f.write("# 会话草稿本 (notes.md)\n\n"
+                             "临时观察/未决疑问/引语/跨项目观察。\n"
+                             "格式：## [turn N · 时间]\n自由正文。\n")
+        except Exception:
+            pass
     except Exception:
         pass
 

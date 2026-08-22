@@ -635,6 +635,11 @@ terminal 完成 → _pending_record = True
 3. **阶段结论必锚定**：每个分析阶段完成时 `session_memory(add, kind=finding)` 一句结论 + 关键产物路径（产物文件系统已自动锚定，agent 补语义与重要度）。
 4. **记忆纠错**：发现记忆条目过时/错误 → `session_memory(remove)` 或 `memory` 工具更新，禁止只在对话里口头"记住"了事。
 
+## 🔴 铁律 31.5 — 草稿本与任务进度落盘（2026-08-22 补）
+
+1. **notes.md 草稿本（唯一合法 scratchpad）**：临时观察/未决疑问/用户引语/跨项目观察 → 追加到 `results/<sid>/notes.md`（格式 `## [turn N · 时间]` + 自由正文）。**禁止**自建 learning.md/scratch.md 等其他草稿文件；结构化结论仍走 session_memory/REQUIREMENTS，不要把草稿内容当记忆注入。
+2. **per-task 进度落盘**：长任务每个 Phase/子步骤完成时，在 `results/<sid>/task_plan.md` 更新该 Phase 状态（`[x] 完成 + 产物路径`），禁止只口头说"完成了"；进度是跨压缩恢复的依据（checkpoint 的 §4 Task tree 从 task_plan 提取）。
+
 ## 🔴 铁律 32 — 视觉工具（读图必须用工具，纯本地管道不换模型）
 
 1. 当前模型是纯文本模型（无视觉）。用户发图片、或需要核对图表/截图/示意图/显微镜图内容时，**必须调用 `vision_describe`**（本地绝对路径），禁止凭空描述图片内容。
