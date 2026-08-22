@@ -246,6 +246,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
+| "结构化展示" / "可视化呈现" / "UI组件" / "要点卡片" / "dsh-ui" / "genui" / "交互面板" | `skill_view("genui")` ← 回答正文输出 ```dsh-ui 围栏，webui 自动渲染成卡片/表格/图表/流程（2026-08-22 集成） |
 
 ### ⛔ 取消/停止命令处理（最高优先级，先于决策树）
 

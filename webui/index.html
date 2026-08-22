@@ -2279,6 +2279,15 @@ function renderMarkdown(text) {
   // 统一换行符：CRLF (\r\n) / 单独 \r → \n
   // 否则后续正则用 \n 匹配时，Windows 风格的 LLM 输出会全部失配
   text = text.replace(/\r\n?/g, '\n');
+  // GenUI (dsh-ui) 块优先提取（在 escapeHtml 之前，保留原始 JSON；先于 mermaid 提取避免干扰）
+  var genUiBlocks = [];
+  var gtick = (text.match(/```/g) || []).length;
+  if (gtick >= 2 && gtick % 2 === 0) {
+    text = text.replace(/```dsh-ui\n([\s\S]*?)```/g, function(m, code) {
+      genUiBlocks.push(code.trim());
+      return '\x00GENUI' + (genUiBlocks.length - 1) + '\x00';
+    });
+  }
   // Mermaid 块优先提取（在 escapeHtml 之前，保留原始语法）
   var mermaidBlocks = [];
   var tickCount = (text.match(/```/g) || []).length;
@@ -2318,6 +2327,10 @@ function renderMarkdown(text) {
   html = html.replace(/\x00MERMAID(\d+)\x00/g, function(m, idx) {
     return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(mermaidBlocks[parseInt(idx)]) + '</div>';
   });
+  // 恢复 GenUI 块 → 渲染为组件（静态渲染，无 action 回传）
+  html = html.replace(/\x00GENUI(\d+)\x00/g, function(m, idx) {
+    return renderGenUiBlock(genUiBlocks[parseInt(idx)] || '');
+  });
   // 恢复代码块（<pre> 保留原始 \n，正常显示换行）
   html = html.replace(/\x00CODE(\d+)\x00/g, function(m, idx) {
     return blocks[parseInt(idx)] || '';
@@ -2325,6 +2338,262 @@ function renderMarkdown(text) {
   return html;
 }
 
+// === dsh-ui fence 渲染器（GenUI 静态版，2026-08-22 集成；源自 DSH dsh-genui 规范） ===
+// 组件白名单：text/stat/badge/progress/list/table/keyvalue/callout/steps/chart/mermaid/divider/spacer/grid/card/accordion/tabs/code/json/avatar/timeline/link/copy
+// 交互组件（button/input/select/radio/checkbox/switch/textarea/submit/quiz/plot/scene3d）降级为静态展示，无 action 回传。
+function guEsc(s) {
+  if (s === undefined || s === null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function guText(node) {
+  var sizes = {h1:'20px',h2:'17px',h3:'15px',body:'13px',muted:'12px',caption:'11px'};
+  var size = sizes[node.size] || '13px';
+  var st = 'font-size:' + size + ';line-height:1.5;margin:2px 0;';
+  if (node.size === 'h1' || node.size === 'h2' || node.size === 'h3') st += 'font-weight:600;';
+  if (node.size === 'muted' || node.size === 'caption') st += 'color:var(--text-light);';
+  if (node.center) st += 'text-align:center;';
+  return '<div style="' + st + '">' + guEsc(node.content) + '</div>';
+}
+function guBadge(node) {
+  var tones = {success:'var(--success)',warn:'var(--warning)',danger:'var(--danger)',accent:'var(--primary)'};
+  var c = tones[node.tone] || 'var(--text-light)';
+  return '<span class="gu-badge" style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;margin:2px 4px 2px 0;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;">' + (node.icon ? guEsc(node.icon) + ' ' : '') + guEsc(node.label) + '</span>';
+}
+function guStat(node) {
+  var delta = '';
+  if (node.delta) {
+    var dc = String(node.delta).charAt(0) === '-' ? 'var(--danger)' : 'var(--success)';
+    delta = '<div style="font-size:11px;color:' + dc + ';">' + guEsc(node.delta) + '</div>';
+  }
+  return '<div style="display:inline-block;min-width:96px;margin:4px 6px 4px 0;padding:10px 12px;background:var(--tool-bg);border:1px solid var(--border);border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--primary);">' + guEsc(node.value) + '</div><div style="font-size:11px;color:var(--text-light);margin-top:2px;">' + guEsc(node.label) + '</div>' + delta + '</div>';
+}
+function guProgress(node) {
+  var v = Math.max(0, Math.min(100, Number(node.value) || 0));
+  return '<div style="margin:6px 0;"><div style="font-size:12px;color:var(--text-light);margin-bottom:3px;display:flex;justify-content:space-between;"><span>' + guEsc(node.label || '') + '</span><span>' + guEsc(node.valueLabel || v + '%') + '</span></div><div style="height:8px;background:var(--tool-bg);border:1px solid var(--border);border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + v + '%;background:var(--primary);border-radius:4px;"></div></div></div>';
+}
+function guList(node) {
+  var items = node.items || [];
+  var out = '<ul style="margin:6px 0;padding-left:18px;font-size:13px;line-height:1.6;">';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it && typeof it === 'object') out += '<li><strong>' + guEsc(it.title) + '</strong>' + (it.desc ? ' — ' + guEsc(it.desc) : '') + '</li>';
+    else out += '<li>' + guEsc(it) + '</li>';
+  }
+  return out + '</ul>';
+}
+function guTable(node) {
+  var cols = node.columns || [];
+  var rows = node.rows || [];
+  var out = '<div style="overflow-x:auto;margin:6px 0;"><table style="border-collapse:collapse;font-size:12px;width:100%;"><thead><tr>';
+  for (var c = 0; c < cols.length; c++) out += '<th style="border:1px solid var(--border);padding:5px 10px;background:var(--tool-bg);text-align:left;white-space:nowrap;">' + guEsc(cols[c]) + '</th>';
+  out += '</tr></thead><tbody>';
+  for (var r = 0; r < rows.length; r++) {
+    out += '<tr>';
+    var row = rows[r] || [];
+    for (var c2 = 0; c2 < cols.length; c2++) out += '<td style="border:1px solid var(--border);padding:5px 10px;">' + guEsc(row[c2] === undefined ? '' : row[c2]) + '</td>';
+    out += '</tr>';
+  }
+  return out + '</tbody></table></div>';
+}
+function guKeyvalue(node) {
+  var pairs = node.pairs || [];
+  var out = '<div style="margin:6px 0;font-size:12px;">';
+  for (var i = 0; i < pairs.length; i++) {
+    var p = pairs[i] || {};
+    out += '<div style="display:flex;padding:4px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text-light);min-width:110px;flex-shrink:0;">' + guEsc(p.key) + '</span><span style="color:var(--text);word-break:break-all;">' + guEsc(p.value) + '</span></div>';
+  }
+  return out + '</div>';
+}
+function guCallout(node) {
+  var tones = {info:'var(--primary)',success:'var(--success)',warning:'var(--warning)',error:'var(--danger)'};
+  var c = tones[node.tone] || 'var(--primary)';
+  return '<div style="margin:8px 0;padding:10px 12px;border-left:3px solid ' + c + ';background:' + c + '11;border-radius:0 6px 6px 0;font-size:13px;line-height:1.5;"><strong style="color:' + c + ';">' + guEsc(node.title || '') + '</strong>' + (node.title ? '<br>' : '') + guEsc(node.content || '') + '</div>';
+}
+function guSteps(node) {
+  var steps = node.steps || [];
+  var cur = Number(node.current) || 0;
+  var out = '<div style="margin:8px 0;">';
+  for (var i = 0; i < steps.length; i++) {
+    var s = steps[i] || {};
+    var done = i < cur;
+    var active = i === cur;
+    var dotC = active ? 'var(--primary)' : (done ? 'var(--success)' : 'var(--border)');
+    var titleC = active ? 'var(--text)' : (done ? 'var(--text)' : 'var(--text-light)');
+    out += '<div style="display:flex;margin:6px 0;"><div style="width:18px;height:18px;border-radius:50%;background:' + dotC + ';color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:8px;margin-top:1px;">' + (done ? '✓' : (i + 1)) + '</div><div style="font-size:13px;line-height:1.5;"><div style="font-weight:' + (active ? '600' : '400') + ';color:' + titleC + ';">' + guEsc(s.title) + '</div>' + (s.desc ? '<div style="color:var(--text-light);font-size:12px;">' + guEsc(s.desc) + '</div>' : '') + '</div></div>';
+  }
+  return out + '</div>';
+}
+function guChart(node) {
+  var kind = node.kind || 'bars';
+  var data = node.data || [];
+  var maxV = 1;
+  for (var i = 0; i < data.length; i++) if (Math.abs(Number(data[i].value) || 0) > maxV) maxV = Math.abs(Number(data[i].value) || 0);
+  if (maxV === 0) maxV = 1;
+  var out = '<div style="margin:8px 0;font-size:12px;">';
+  if (kind === 'donut') {
+    var total = 0;
+    for (var d = 0; d < data.length; d++) total += Math.max(0, Number(data[d].value) || 0);
+    var acc = 0;
+    var segs = '';
+    for (var d2 = 0; d2 < data.length; d2++) {
+      var v2 = Math.max(0, Number(data[d2].value) || 0);
+      var frac = total > 0 ? v2 / total : 0;
+      var col2 = data[d2].color || ['#1565c0','#4fc3f7','#4caf50','#ff9800','#f44336','#9c27b0'][d2 % 6];
+      if (frac > 0) segs += '<circle r="15.9" cx="18" cy="18" fill="none" stroke="' + col2 + '" stroke-width="4" stroke-dasharray="' + (frac * 100) + ' 100" stroke-dashoffset="' + (-acc * 100) + '" />';
+      acc += frac;
+    }
+    out += '<div style="display:flex;align-items:center;gap:14px;"><svg width="44" height="44" viewBox="0 0 36 36">' + segs + '</svg><div>';
+    for (var d3 = 0; d3 < data.length; d3++) {
+      out += '<div style="display:flex;align-items:center;margin:2px 0;"><span style="width:10px;height:10px;border-radius:2px;background:' + (data[d3].color || ['#1565c0','#4fc3f7','#4caf50','#ff9800','#f44336','#9c27b0'][d3 % 6]) + ';display:inline-block;margin-right:6px;"></span><span>' + guEsc(data[d3].label) + ' <strong>' + guEsc(String(data[d3].value)) + '</strong></span></div>';
+    }
+    out += '</div></div>';
+  } else if (kind === 'line') {
+    var pts = [];
+    var n = data.length;
+    var W = 280, H = 90, pad = 20;
+    for (var li = 0; li < n; li++) {
+      var x = pad + (n > 1 ? li * (W - 2 * pad) / (n - 1) : 0);
+      var y = H - pad - (Math.abs(Number(data[li].value) || 0) / maxV) * (H - 2 * pad);
+      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    out += '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="max-width:100%;"><polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2"/><circle cx="' + pts[0].split(',')[0] + '" cy="' + pts[0].split(',')[1] + '" r="2.5" fill="var(--primary)"/></svg><div style="display:flex;justify-content:space-between;color:var(--text-light);">' + (data[0] ? '<span>' + guEsc(data[0].label) + '</span>' : '') + (data[n-1] ? '<span>' + guEsc(data[n-1].label) + '</span>' : '') + '</div>';
+  } else {
+    out += '<div style="display:flex;align-items:flex-end;gap:6px;height:110px;padding:4px 2px 0;">';
+    for (var bi = 0; bi < data.length; bi++) {
+      var v = Math.max(0, Number(data[bi].value) || 0);
+      var h = Math.round((v / maxV) * 100);
+      var col = data[bi].color || ['#1565c0','#4fc3f7','#4caf50','#ff9800','#f44336','#9c27b0'][bi % 6];
+      out += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font-size:10px;color:var(--text-light);margin-bottom:2px;">' + guEsc(String(v)) + '</div><div style="width:70%;max-width:36px;height:' + h + '%;min-height:2px;background:' + col + ';border-radius:3px 3px 0 0;"></div></div>';
+    }
+    out += '</div><div style="display:flex;gap:6px;margin-top:4px;">';
+    for (var bl = 0; bl < data.length; bl++) out += '<div style="flex:1;text-align:center;font-size:10px;color:var(--text-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + guEsc(data[bl].label) + '</div>';
+    out += '</div>';
+  }
+  return out + '</div>';
+}
+function guMermaid(node) {
+  // 复用现有 mermaid 渲染管线：生成 .mermaid[data-mermaid] div，initMermaid 会处理
+  return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(node.code || '') + '</div>';
+}
+function guCode(node) {
+  return '<div class="code-block"><div class="code-head"><span class="code-lang">' + guEsc(node.lang || 'code') + '</span></div><pre><code>' + guEsc(node.code || '') + '</code></pre></div>';
+}
+function guJson(node) {
+  var s = '';
+  try { s = JSON.stringify(node.value, null, 2); } catch (e) { s = String(node.value); }
+  return '<div class="code-block"><div class="code-head"><span class="code-lang">json</span></div><pre><code>' + guEsc(s) + '</code></pre></div>';
+}
+function guCard(node) {
+  return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--tool-bg);margin:6px 0;">' + (node.title ? '<div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text);">' + guEsc(node.title) + '</div>' : '') + guRenderItems(node.items || []) + '</div>';
+}
+function guGrid(node) {
+  var cols = Math.max(1, Number(node.cols) || 2);
+  var items = node.items || [];
+  var per = Math.ceil(items.length / cols);
+  var out = '<div style="display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:8px;margin:6px 0;">';
+  for (var i = 0; i < items.length; i++) out += '<div style="min-width:0;">' + guRender(items[i]) + '</div>';
+  return out + '</div>';
+}
+function guAccordion(node) {
+  var items = node.items || [];
+  var out = '<div style="margin:6px 0;">';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    var uid = 'guacc' + (guAccSeed++);
+    out += '<details style="border:1px solid var(--border);border-radius:6px;margin:4px 0;background:var(--tool-bg);"><summary style="padding:8px 10px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);">' + guEsc(it.title || '') + '</summary><div style="padding:6px 10px 10px;border-top:1px solid var(--border);">' + guRenderItems(it.items || []) + '</div></details>';
+  }
+  return out + '</div>';
+}
+function guTabs(node) {
+  var tabs = node.tabs || [];
+  var out = '<div style="margin:6px 0;">';
+  for (var i = 0; i < tabs.length; i++) {
+    var tb = tabs[i] || {};
+    out += '<div style="border:1px solid var(--border);border-radius:6px;margin:4px 0;overflow:hidden;"><div style="padding:7px 10px;background:var(--tool-bg);font-size:12px;font-weight:600;color:var(--primary);border-bottom:1px solid var(--border);">' + guEsc(tb.label || '') + '</div><div style="padding:8px 10px;">' + guRenderItems(tb.items || []) + '</div></div>';
+  }
+  return out + '</div>';
+}
+function guTimeline(node) {
+  var items = node.items || [];
+  var out = '<div style="margin:6px 0;padding-left:4px;">';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    out += '<div style="display:flex;margin:6px 0;"><div style="width:10px;height:10px;border-radius:50%;background:var(--primary);flex-shrink:0;margin:4px 10px 0 0;"></div><div style="font-size:13px;line-height:1.5;"><strong>' + guEsc(it.title) + '</strong>' + (it.time ? ' <span style="color:var(--text-light);font-size:11px;">' + guEsc(it.time) + '</span>' : '') + (it.desc ? '<div style="color:var(--text-light);font-size:12px;">' + guEsc(it.desc) + '</div>' : '') + '</div></div>';
+  }
+  return out + '</div>';
+}
+function guAvatar(node) {
+  var name = String(node.name || '?');
+  var ch = name.charAt(0).toUpperCase();
+  return '<span style="display:inline-flex;width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;font-size:12px;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;">' + guEsc(ch) + '</span><span style="font-size:13px;vertical-align:middle;">' + guEsc(name) + '</span>';
+}
+function guLink(node) {
+  var href = node.href || '';
+  if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) return '<a href="' + guEsc(href) + '" target="_blank" rel="noopener" style="color:var(--primary);">' + guEsc(node.label || href) + '</a>';
+  return '<span style="color:var(--text-light);">' + guEsc(node.label || '') + '</span>';
+}
+function guCopy(node) {
+  return '<span style="display:inline-block;padding:3px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text-light);cursor:default;background:var(--tool-bg);">' + guEsc(node.label || '复制') + '</span>';
+}
+function guDivider() { return '<div style="border-top:1px solid var(--border);margin:8px 0;"></div>'; }
+function guSpacer() { return '<div style="height:8px;"></div>'; }
+// 交互组件降级：静态展示（无 action 回传）
+function guInteractiveFallback(node) {
+  var label = node.label || node.placeholder || node.question || '';
+  var t = node.type || '';
+  return '<div style="margin:6px 0;padding:8px 10px;border:1px dashed var(--border);border-radius:6px;font-size:12px;color:var(--text-light);background:var(--tool-bg);">[' + t + '] ' + guEsc(label) + ' <span style="opacity:0.6;">（交互需 DSH 环境，此处静态展示）</span></div>';
+}
+function guRender(node) {
+  if (!node || typeof node !== 'object') return '';
+  switch (node.type) {
+    case 'text': return guText(node);
+    case 'badge': return guBadge(node);
+    case 'stat': return guStat(node);
+    case 'progress': return guProgress(node);
+    case 'list': return guList(node);
+    case 'table': return guTable(node);
+    case 'keyvalue': return guKeyvalue(node);
+    case 'callout': return guCallout(node);
+    case 'steps': return guSteps(node);
+    case 'chart': return guChart(node);
+    case 'mermaid': return guMermaid(node);
+    case 'code': return guCode(node);
+    case 'json': return guJson(node);
+    case 'card': return guCard(node);
+    case 'grid': return guGrid(node);
+    case 'accordion': return guAccordion(node);
+    case 'tabs': return guTabs(node);
+    case 'timeline': return guTimeline(node);
+    case 'avatar': return guAvatar(node);
+    case 'link': return guLink(node);
+    case 'copy': return guCopy(node);
+    case 'divider': return guDivider();
+    case 'spacer': return guSpacer();
+    case 'row': return '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' + guRenderItems(node.items || []) + '</div>';
+    case 'col': return '<div style="display:flex;flex-direction:column;gap:6px;">' + guRenderItems(node.items || []) + '</div>';
+    case 'button': case 'input': case 'select': case 'radio': case 'checkbox': case 'switch': case 'textarea': case 'submit': case 'quiz': case 'plot': case 'scene3d': case 'slider': case 'file-tree': case 'breadcrumb':
+      return guInteractiveFallback(node);
+    default: return '';
+  }
+}
+function guRenderItems(items) {
+  if (!items || !items.length) return '';
+  var out = '';
+  for (var i = 0; i < items.length; i++) out += guRender(items[i]);
+  return out;
+}
+var guAccSeed = 0;
+function renderGenUiBlock(specText) {
+  var spec;
+  try { spec = JSON.parse(specText); } catch (e) {
+    return '<div style="margin:8px 0;padding:8px 12px;background:#fff5f5;border:1px solid #ffcdd2;border-radius:6px;font-size:12px;color:#c62828;">dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String(e.message || e)) + '</div><div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
+  }
+  if (!spec || typeof spec !== 'object') return '';
+  var out = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
+  if (spec.title) out += '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text);">' + guEsc(spec.title) + '</div>';
+  out += guRenderItems(spec.items || []);
+  return out + '</div>';
+}
 // === 代码块复制按钮 ===
 function fallbackCopy(text) {
   var ta = document.createElement('textarea');

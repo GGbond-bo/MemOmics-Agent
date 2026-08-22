@@ -199,6 +199,7 @@
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 | academic-figure-skill | 学术级科研绘图（TingxiYu）：8步闭环+29图型+4轮QA，用户脚本检查/优化+专业期刊出图默认；CNS级用nature-figure | academic figure, 学术图, 专业出图, 期刊出图, 脚本优化, publication figure | RED 必触发 |
+| genui | 回答内联交互 UI：dsh-ui 围栏 JSON → webui 渲染卡片/表格/图表/流程/要点 | dsh-ui, genui, 结构化展示, 可视化呈现, 要点卡片 | YEL 讨论触发 |
 
 | # | Skill | Description | Keywords | Trigger |
 |---|---|---|---|---|
