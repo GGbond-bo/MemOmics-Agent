@@ -7659,9 +7659,11 @@ async function litImportSelected() {
 // === 检查更新（2026-08-23） ===
 var _updateCheckCache = null;
 var _updateApplying = false;
+var _updatePollTimer = null;
 
 function closeUpdateDialog() {
   document.getElementById('update-modal').style.display = 'none';
+  if (_updatePollTimer) { clearInterval(_updatePollTimer); _updatePollTimer = null; }
 }
 
 function updateStatusDot(text, tone) {
@@ -7679,6 +7681,7 @@ function showUpdateDialog() {
   modal.style.display = 'flex';
   body.innerHTML = '🔍 正在检查更新…';
   btn.style.display = 'none';
+  document.getElementById('update-cancel-btn').style.display = 'inline-block';
   checkForUpdate(true);
 }
 
@@ -7693,29 +7696,30 @@ async function checkForUpdate(showAll) {
     var remote = d.remote || {};
     var status = d.status || 'unable_to_check';
     var html = '';
-    html += '<div style="margin-bottom:8px;">本地版本：<code>' + escapeHtml(local.rev || '?') + '</code>' +
-            (local.date ? '（' + escapeHtml(local.date) + '）' : '') + ' · fix_bundle ' + escapeHtml(local.fix_bundle || 'none') + '</div>';
+    html += '<div style="margin-bottom:8px;">本地版本：<code>' + escapeHtml(local.version || '?') + '</code>' +
+            (local.rev && local.rev !== 'unknown' ? '（git ' + escapeHtml(local.rev) + '）' : '') +
+            ' · fix_bundle ' + escapeHtml(local.fix_bundle || 'none') + '</div>';
     if (status === 'up_to_date') {
       html += '<div style="color:var(--success);font-weight:600;">✅ 已是最新版本</div>';
-      html += remote.rev ? '<div style="color:var(--text-light);margin-top:4px;">GitHub main：<code>' + escapeHtml(remote.rev) + '</code>' + (remote.date ? '（' + escapeHtml(remote.date) + '）' : '') + '</div>' : '';
+      html += remote.tag ? '<div style="color:var(--text-light);margin-top:4px;">GitHub 最新：<code>' + escapeHtml(remote.tag) + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>' : '';
       updateStatusDot('已是最新', 'var(--success)');
     } else if (status === 'update_available') {
       html += '<div style="color:var(--warning);font-weight:600;">🔄 发现新版本</div>';
-      html += '<div style="margin-top:4px;">GitHub main：<code>' + escapeHtml(remote.rev || '?') + '</code>' + (remote.date ? '（' + escapeHtml(remote.date) + '）' : '') + '</div>';
-      if (remote.tag) html += '<div>最新 Release：<code>' + escapeHtml(remote.tag) + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>';
+      html += '<div style="margin-top:4px;">GitHub 最新：<code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>';
       html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
-      if (d.history_compatible === false) {
-        html += '<div style="margin-top:8px;color:var(--danger);">⚠️ 本地安装与 GitHub 版本无共同历史（独立初始化），无法自动增量合并。请手动更新：下载最新安装包覆盖（保留 hermes_home/ 和 results/），或备份后重新安装。</div>';
-        btn.style.display = 'none';
-        updateStatusDot('需手动更新', 'var(--danger)');
-      } else {
-        html += '<div style="margin-top:8px;color:var(--text-light);">点击「立即更新」将自动拉取 GitHub 最新代码（git 增量更新，不重新下载安装包）。更新完成后需重启服务生效。</div>';
+      if (d.update_mode === 'zip_overlay' && remote.asset_name) {
+        html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+        html += '<div style="margin-top:6px;color:var(--text-light);">更新完成后请自行重启 MemOmics 生效。</div>';
         btn.style.display = 'inline-block';
         updateStatusDot('有更新', 'var(--warning)');
+      } else {
+        html += '<div style="margin-top:8px;color:var(--danger);">⚠️ 当前平台暂无匹配的自动更新包。请手动更新：下载安装包解压覆盖（保留 hermes_home/ 与 results/）。</div>';
+        btn.style.display = 'none';
+        updateStatusDot('需手动更新', 'var(--danger)');
       }
     } else if (status === 'local_ahead') {
-      html += '<div style="color:var(--primary);font-weight:600;">📌 本地领先于 GitHub（' + (d.local_ahead_commits || 0) + ' 个 commit）</div>';
-      html += '<div style="color:var(--text-light);margin-top:4px;">当前是开发版，GitHub 上是旧版本，无需更新。' + (remote.rev ? '远端 main：<code>' + escapeHtml(remote.rev) + '</code>' : '') + '</div>';
+      html += '<div style="color:var(--primary);font-weight:600;">📌 本地领先于 GitHub 发布版</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">当前是开发版（' + escapeHtml(local.version) + '），GitHub 最新发布是 ' + escapeHtml(remote.tag || '?') + '，无需更新。</div>';
       updateStatusDot('本地已最新', 'var(--primary)');
     } else {
       html += '<div style="color:var(--danger);font-weight:600;">⚠️ 无法检查更新</div>';
@@ -7730,13 +7734,38 @@ async function checkForUpdate(showAll) {
   }
 }
 
+function pollUpdateProgress() {
+  fetch('/api/update/status', { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var body = document.getElementById('update-modal-body');
+      var stageNames = { download: '⬇️ 下载安装包', extract: '📦 解压', apply: '🔄 覆盖代码文件', done: '✅ 完成' };
+      var stageTxt = stageNames[d.stage] || d.stage || '';
+      if (d.stage === 'done' || d.stage === '') {
+        if (_updatePollTimer) { clearInterval(_updatePollTimer); _updatePollTimer = null; }
+        return;
+      }
+      var pct = d.progress_pct || 0;
+      body.innerHTML = '<div style="font-weight:600;">' + stageTxt + (d.total_bytes ? '（' + pct.toFixed(1) + '%）' : '…') + '</div>' +
+        '<div style="margin-top:8px;height:8px;background:var(--tool-bg);border:1px solid var(--border);border-radius:4px;overflow:hidden;">' +
+        '<div style="height:100%;width:' + Math.min(100, pct) + '%;background:var(--primary);"></div></div>' +
+        '<div style="margin-top:8px;color:var(--text-light);font-size:11px;">' +
+        (d.done_bytes ? (d.done_bytes / 1048576).toFixed(1) + ' / ' + (d.total_bytes / 1048576).toFixed(1) + ' MB' : '') + '</div>';
+    })
+    .catch(function() {});
+}
+
 async function applyUpdate() {
   if (_updateApplying) return;
   _updateApplying = true;
   var body = document.getElementById('update-modal-body');
   var btn = document.getElementById('update-confirm-btn');
-  btn.disabled = true;
-  body.innerHTML = '⏳ 正在更新（拉取 GitHub 最新代码）…<br><span style="color:var(--text-light);font-size:11px;">这可能需数十秒，请勿关闭页面。</span>';
+  var cancelBtn = document.getElementById('update-cancel-btn');
+  btn.style.display = 'none';
+  cancelBtn.textContent = '取消更新';
+  body.innerHTML = '⏳ 正在下载安装包（数百 MB，请耐心等待）…';
+  if (_updatePollTimer) clearInterval(_updatePollTimer);
+  _updatePollTimer = setInterval(pollUpdateProgress, 1000);
   try {
     var r = await fetch('/api/update/apply', {
       method: 'POST',
@@ -7744,27 +7773,41 @@ async function applyUpdate() {
       body: JSON.stringify({ confirmed: true })
     });
     var d = await r.json();
+    if (_updatePollTimer) { clearInterval(_updatePollTimer); _updatePollTimer = null; }
+    cancelBtn.textContent = '取消';
     if (!r.ok) {
       body.innerHTML = '<div style="color:var(--danger);font-weight:600;">❌ 更新失败</div><div style="margin-top:6px;">' + escapeHtml(d.error || '未知错误') + '</div>' +
-        (d.error && d.error.indexOf('工作区') >= 0 ? '<div style="margin-top:6px;color:var(--text-light);">请先处理本地未提交改动（提交或 stash）后再更新。</div>' : '');
+        (d.error && d.error.indexOf('已取消') >= 0 ? '<div style="margin-top:6px;color:var(--text-light);">更新已取消，未做任何修改。</div>' : '');
       updateStatusDot('更新失败', 'var(--danger)');
-      btn.style.display = 'none';
       _updateApplying = false;
       return;
     }
     body.innerHTML = '<div style="color:var(--success);font-weight:600;">✅ 更新成功</div>' +
-      '<div style="margin-top:6px;">新版本：<code>' + escapeHtml(d.new_rev || '?') + '</code></div>' +
+      '<div style="margin-top:6px;">' + escapeHtml(d.message || '代码已覆盖') + '</div>' +
+      '<div style="margin-top:6px;">新版本：<code>' + escapeHtml(d.new_version || '?') + '</code></div>' +
       (d.fix_log ? '<div style="margin-top:6px;color:var(--text-light);">迁移：' + escapeHtml(d.fix_log.slice(0, 200)) + '</div>' : '') +
-      '<div style="margin-top:10px;color:var(--warning);font-weight:600;">⚠️ 需要重启服务才能生效</div>' +
-      '<div style="margin-top:6px;color:var(--text-light);">请关闭并重新启动 MemOmics（server-start.cmd 或 start.bat）。</div>';
+      '<div style="margin-top:10px;color:var(--warning);font-weight:600;">⚠️ 请自行重启 MemOmics 使更新生效</div>' +
+      '<div style="margin-top:6px;color:var(--text-light);">关闭窗口后重新运行 start.bat（或 server-start.cmd / start.sh）。</div>';
     updateStatusDot('已更新待重启', 'var(--warning)');
-    btn.style.display = 'none';
   } catch (e) {
+    if (_updatePollTimer) { clearInterval(_updatePollTimer); _updatePollTimer = null; }
+    cancelBtn.textContent = '取消';
     body.innerHTML = '<div style="color:var(--danger);font-weight:600;">❌ 更新失败</div><div style="margin-top:6px;">' + escapeHtml(String(e.message || e)) + '</div>';
     updateStatusDot('更新失败', 'var(--danger)');
-    btn.style.display = 'none';
   }
   _updateApplying = false;
+}
+
+async function cancelUpdate() {
+  try {
+    var r = await fetch('/api/update/cancel', { method: 'POST' });
+    var d = await r.json();
+    var body = document.getElementById('update-modal-body');
+    body.innerHTML = '<div style="color:var(--text-light);">' + escapeHtml(d.message || '正在取消…') + '</div>';
+    if (!d.ok) {
+      updateStatusDot(d.message || '无法取消', 'var(--danger)');
+    }
+  } catch (e) {}
 }
 
 </script>
@@ -7822,7 +7865,7 @@ async function applyUpdate() {
     <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;">🔄 检查更新</div>
     <div id="update-modal-body" style="padding:14px 16px;font-size:12px;line-height:1.7;color:var(--text);"></div>
     <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);justify-content:flex-end;">
-      <button id="update-cancel-btn" onclick="closeUpdateDialog()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">取消</button>
+      <button id="update-cancel-btn" onclick="cancelUpdate()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">取消</button>
       <button id="update-confirm-btn" onclick="applyUpdate()" style="display:none;padding:6px 16px;border-radius:6px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;">立即更新</button>
     </div>
   </div>

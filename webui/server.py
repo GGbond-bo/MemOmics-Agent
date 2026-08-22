@@ -6265,7 +6265,20 @@ def _git_run(args: list, timeout: int = 60) -> str:
 
 
 def _local_version_info() -> dict:
-    """本地版本：HEAD commit + 提交时间 + fix_bundle 级别。"""
+    """本地版本：VERSION 文件 + git commit（若有）+ fix_bundle 级别。
+
+    安装包用户无 .git → VERSION 是唯一版本标识；开发仓库另有 git commit。
+    """
+    # VERSION 文件（打包时写入，安装后根目录存在）
+    ver = "unknown"
+    try:
+        _vp = os.path.join(MEMOMICS_DIR, "VERSION")
+        if os.path.isfile(_vp):
+            with open(_vp, encoding="utf-8", errors="replace") as f:
+                ver = f.read().strip() or "unknown"
+    except Exception:
+        pass
+    # git commit（开发仓库才有；安装包无 .git → unknown）
     rev = "unknown"
     date = ""
     try:
@@ -6282,62 +6295,261 @@ def _local_version_info() -> dict:
         bundle = BUNDLE
     except Exception:
         pass
-    return {"rev": rev, "date": date, "fix_bundle": bundle}
+    return {"version": ver, "rev": rev, "date": date, "fix_bundle": bundle,
+            "has_git": rev != "unknown"}
+
+
+# 平台 → GitHub release 资产名（2026-08-23；新增资产时在此登记）
+def _platform_asset() -> str:
+    """按当前平台返回 release 资产名（zip/tar.gz），未知平台返回空。"""
+    import platform as _plt
+    sysname = (_plt.system() or "").lower()
+    machine = (_plt.machine() or "").lower()
+    if sysname == "windows":
+        return "MemOmics-Windows.zip"
+    if sysname == "linux":
+        return "MemOmics-Linux.tar.gz"
+    if sysname == "darwin":
+        return ("MemOmics-macOS-arm64.tar.gz" if "arm" in machine or "aarch64" in machine
+                else "MemOmics-macOS-x86_64.tar.gz")
+    return ""
+
+
+# ── 差异覆盖的保留清单（对齐打包.bat 排除：用户数据/环境/密钥绝不覆盖）──
+_KEEP_DIRS = (".venv", ".git", ".backups", "node_modules", "miniconda_env", "miniconda",
+              "runtime", "hermes_home", "results", "uploads", "log", "ArchRLogs",
+              "__pycache__", ".pytest_cache", ".idea", ".vscode")
+_KEEP_FILES = (".env", ".install_path", "venv_deps_ok.txt", "venv_vision_ok.txt",
+               "VERSION",  # 本地版本标识不被远端覆盖（覆盖会破坏比较）
+               )
+_KEEP_TOP_LEVEL = ("hermes_home", "results", "uploads", "log", ".venv", "runtime",
+                   "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
+
+
+def _is_keep_path(rel: str) -> bool:
+    """判断 zip 内相对路径是否应保留（不覆盖）。
+
+    检查路径的每一段：任何一段命中保留目录（node_modules/.venv/hermes_home 等）
+    都保留——例如 hermes-agent/node_modules/xxx 命中 node_modules 段。
+    """
+    rel = rel.replace("\\", "/").lstrip("/")
+    if not rel:
+        return True
+    parts = rel.split("/")
+    top = parts[0]
+    if top in _KEEP_TOP_LEVEL:
+        return True
+    # 路径任何段命中保留目录 → 保留（覆盖 hermes-agent/node_modules、memomics/vendor 等）
+    if any(seg in _KEEP_DIRS for seg in parts):
+        return True
+    if parts[-1] in _KEEP_FILES:
+        return True
+    return False
+
+
+# ── 更新任务状态（单任务锁 + 取消） ──
+_UPDATE_TASK = {"running": False, "cancelled": False, "stage": "", "progress": 0.0,
+                "total_bytes": 0, "done_bytes": 0, "error": "", "started": ""}
+
+
+def _update_status_dict() -> dict:
+    return dict(_UPDATE_TASK, progress_pct=round(
+        _UPDATE_TASK["done_bytes"] / _UPDATE_TASK["total_bytes"] * 100, 1)
+        if _UPDATE_TASK["total_bytes"] else 0.0)
+
+
+@app.get("/api/update/status")
+async def update_status():
+    """更新任务状态（进度/阶段/可取消）。"""
+    return _update_status_dict()
+
+
+@app.post("/api/update/cancel")
+async def update_cancel():
+    """取消进行中的下载/解压（覆盖阶段不中断：覆盖是原子短操作）。"""
+    if _UPDATE_TASK["running"] and _UPDATE_TASK["stage"] in ("download", "extract"):
+        _UPDATE_TASK["cancelled"] = True
+        return {"ok": True, "message": "已请求取消"}
+    if _UPDATE_TASK["stage"] == "apply":
+        return {"ok": False, "message": "正在覆盖文件（短暂操作），无法取消，请稍候"}
+    return {"ok": False, "message": "当前没有可取消的更新任务"}
+
+
+def _download_file(url: str, dest: str, timeout: int = 1800) -> None:
+    """流式下载到文件，支持取消与进度；失败清理。"""
+    import urllib.request as _ur
+    _UPDATE_TASK["stage"] = "download"
+    _UPDATE_TASK["done_bytes"] = 0
+    last_err = None
+    for proxy in (_PROXY, None):
+        if _UPDATE_TASK["cancelled"]:
+            raise RuntimeError("已取消")
+        try:
+            req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
+            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            with opener.open(req, timeout=timeout) as r, open(dest, "wb") as f:
+                _UPDATE_TASK["total_bytes"] = int(r.headers.get("Content-Length") or 0)
+                while True:
+                    if _UPDATE_TASK["cancelled"]:
+                        f.close()
+                        try:
+                            os.remove(dest)
+                        except Exception:
+                            pass
+                        raise RuntimeError("已取消")
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    _UPDATE_TASK["done_bytes"] += len(chunk)
+            return
+        except Exception as e:
+            last_err = e
+            if isinstance(e, RuntimeError) and str(e) == "已取消":
+                raise
+            continue
+    raise last_err
+
+
+def _safe_extract(archive_path: str, dest_dir: str, is_tar: bool = False) -> list:
+    """安全解压（防路径穿越），返回顶层目录名列表。"""
+    import zipfile
+    import tarfile
+    _UPDATE_TASK["stage"] = "extract"
+    os.makedirs(dest_dir, exist_ok=True)
+    tops = set()
+    if is_tar:
+        with tarfile.open(archive_path, "r:gz") as tf:
+            for m in tf.getmembers():
+                name = m.name.replace("\\", "/")
+                if name.startswith("/") or ".." in name.split("/"):
+                    raise RuntimeError(f"非法的归档路径: {name}")
+                if m.isdir():
+                    tops.add(name.rstrip("/").split("/")[0])
+                    continue
+                target = os.path.join(dest_dir, *name.split("/"))
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                src = tf.extractfile(m)
+                if src:
+                    with open(target, "wb") as f:
+                        while True:
+                            if _UPDATE_TASK["cancelled"]:
+                                raise RuntimeError("已取消")
+                            chunk = src.read(1 << 20)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                tops.add(name.split("/")[0])
+    else:
+        with zipfile.ZipFile(archive_path) as zf:
+            for m in zf.infolist():
+                name = m.filename.replace("\\", "/")
+                if name.startswith("/") or ".." in name.split("/"):
+                    raise RuntimeError(f"非法的归档路径: {name}")
+                if m.is_dir():
+                    tops.add(name.rstrip("/").split("/")[0])
+                    continue
+                target = os.path.join(dest_dir, *name.split("/"))
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(m) as src, open(target, "wb") as f:
+                    while True:
+                        if _UPDATE_TASK["cancelled"]:
+                            raise RuntimeError("已取消")
+                        chunk = src.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                tops.add(name.split("/")[0])
+    return sorted(tops)
+
+
+def _apply_overlay(extract_root: str, tops: list) -> int:
+    """把解压出的内容按保留清单覆盖到安装目录，返回覆盖文件数。
+
+    tops 是解压顶层名列表；若 extract_root 已定位到内容根（zip 内单层
+    MemOmics-Windows/ 子目录），tops 传入该子目录名 → 直接覆盖其内容。
+    """
+    import shutil as _sh
+    _UPDATE_TASK["stage"] = "apply"
+    copied = 0
+    # 若 extract_root 本身就是某个 top 的内容目录，直接覆盖根
+    base_name = os.path.basename(extract_root.rstrip(os.sep))
+    roots = []
+    if base_name in tops and os.path.isdir(extract_root):
+        roots.append(("", extract_root))  # 覆盖 extract_root 下所有内容到 MEMOMICS_DIR
+    else:
+        for top in tops:
+            if _is_keep_path(top):
+                continue
+            src_dir = os.path.join(extract_root, top)
+            if os.path.isdir(src_dir):
+                roots.append((top, src_dir))
+    for prefix, src_dir in roots:
+        dst_dir = MEMOMICS_DIR if not prefix else os.path.join(MEMOMICS_DIR, prefix)
+        os.makedirs(dst_dir, exist_ok=True)
+        for root, dirs, files in os.walk(src_dir):
+            rel_sub = os.path.relpath(root, src_dir)
+            dirs[:] = [d for d in dirs
+                       if not _is_keep_path(os.path.join(prefix, rel_sub, d).replace("\\", "/"))]
+            for fn in files:
+                rel = os.path.join(prefix, rel_sub, fn).replace("\\", "/")
+                if _is_keep_path(rel):
+                    continue
+                s = os.path.join(root, fn)
+                d = os.path.join(dst_dir, rel_sub, fn)
+                try:
+                    os.makedirs(os.path.dirname(d), exist_ok=True)
+                    _sh.copy2(s, d)
+                    copied += 1
+                except Exception:
+                    # 单个文件失败不阻断（运行中占用等），记录继续
+                    pass
+    return copied
 
 
 @app.get("/api/update/check")
 async def update_check():
-    """检查更新：本地版本 vs GitHub main 最新 commit + 最新 release tag。
+    """检查更新：本地 VERSION vs GitHub 最新 release（含平台资产信息）。
 
     返回:
-      local: {rev, date, fix_bundle}
-      remote: {rev, date, tag, tag_date, tag_url}
+      local: {version, rev, date, fix_bundle, has_git}
+      remote: {tag, tag_date, asset_name, asset_size_mb, asset_url, tag_url}
       status: "up_to_date" | "update_available" | "local_ahead" | "unable_to_check"
-      local_ahead_commits: 本地领先远端多少 commit（仅 local_ahead 时有意义）
+      update_mode: "zip_overlay"（有平台资产可自动覆盖）| "manual"（无资产/无 VERSION）
     """
     local = _local_version_info()
-    result = {"local": local, "remote": None, "status": "unable_to_check", "local_ahead_commits": 0,
-              "history_compatible": None, "error": ""}
+    result = {"local": local, "remote": None, "status": "unable_to_check", "update_mode": "manual",
+              "local_ahead_commits": 0, "error": ""}
     try:
-        # 远端 main 最新 commit
-        main_commit = _http_get_json(f"{_GITHUB_API}/commits/main")
-        remote_rev = (main_commit.get("sha") or "")[:7]
-        remote_date = (main_commit.get("commit") or {}).get("committer", {}).get("date", "")[:10]
-        # 最新 release
-        tag, tag_date = "", ""
-        try:
-            rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
-            tag = rel.get("tag_name", "")
-            tag_date = (rel.get("published_at") or "")[:10]
-        except Exception:
-            pass
-        result["remote"] = {"rev": remote_rev, "date": remote_date, "tag": tag, "tag_date": tag_date,
-                            "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest"}
-        # 对比
-        if local["rev"] == "unknown" or not remote_rev:
+        rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
+        tag = rel.get("tag_name", "")
+        tag_date = (rel.get("published_at") or "")[:10]
+        assets = rel.get("assets") or []
+        asset_name = _platform_asset()
+        asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
+        result["remote"] = {
+            "tag": tag, "tag_date": tag_date,
+            "asset_name": asset.get("name", "") if asset else "",
+            "asset_size_mb": round((asset.get("size") or 0) / 1048576, 1) if asset else 0,
+            "asset_url": asset.get("browser_download_url", "") if asset else "",
+            "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest",
+        }
+        local_ver = local.get("version") or "unknown"
+        if local_ver == "unknown" or not tag:
             result["status"] = "unable_to_check"
-            result["error"] = "无法获取本地或远端 commit"
-        elif local["rev"] == remote_rev:
-            result["status"] = "up_to_date"
+            result["error"] = "无法获取本地 VERSION 或远端 release" if not tag else "本地缺少 VERSION 文件（旧安装），请手动更新"
+            result["update_mode"] = "manual"
         else:
-            # 判断本地是否领先：尝试 fetch 后对比（只读，不改工作区）
-            try:
-                _git_run(["fetch", "origin", "main"], timeout=90)
-                ahead = _git_run(["rev-list", "--count", f"origin/main..HEAD"])
-                result["local_ahead_commits"] = int(ahead or 0)
-                # 历史连通性：有共同祖先才能增量 merge
-                try:
-                    _mb = _git_run(["merge-base", "HEAD", "origin/main"])
-                    result["history_compatible"] = bool(_mb)
-                except Exception:
-                    result["history_compatible"] = False
-                if int(ahead or 0) > 0:
-                    result["status"] = "local_ahead"
-                else:
-                    result["status"] = "update_available"
-            except Exception:
-                # fetch 失败（如未配 remote）：按 commit 不同提示
+            # 比较：开发版（vdev-*）永远视为最新；否则按 tag 字符串比较
+            if local_ver.startswith("vdev") or local_ver.startswith("dev"):
+                result["status"] = "local_ahead"
+                result["update_mode"] = "manual" if not asset else "zip_overlay"
+            elif local_ver == tag:
+                result["status"] = "up_to_date"
+                result["update_mode"] = "zip_overlay" if asset else "manual"
+            else:
                 result["status"] = "update_available"
+                result["update_mode"] = "zip_overlay" if asset else "manual"
     except Exception as e:
         result["error"] = str(e)[:200]
         result["status"] = "unable_to_check"
@@ -6346,36 +6558,55 @@ async def update_check():
 
 @app.post("/api/update/apply")
 async def update_apply(payload: dict):
-    """执行更新（用户已确认）：fetch + 检查工作区 + merge origin/main + 应用 fix_bundle。
+    """执行更新（用户已确认）：下载平台安装包 → 校验 → 差异覆盖代码（保留用户数据）→ fix_bundle。
 
-    仅在 status=update_available 时执行；本地领先/无更新返回 400。
-    安全：工作区有未提交改动时拒绝（需用户先处理）；结果返回需重启提示。
+    覆盖范围：zip 内除保留清单（hermes_home/results/.venv/runtime/node_modules 等）外的代码文件。
+    完成后需用户重启服务生效。
     """
     confirmed = payload.get("confirmed")
     if not confirmed:
         return JSONResponse({"error": "需要 confirmed=true 确认"}, status_code=400)
-    # 先检查是否有更新
+    if _UPDATE_TASK["running"]:
+        return JSONResponse({"error": "已有更新任务进行中"}, status_code=409)
     check = await update_check()
     if check["status"] != "update_available":
         return JSONResponse({"error": f"当前状态 {check['status']}，无需更新或无法更新"}, status_code=400)
+    remote = check.get("remote") or {}
+    asset_url = remote.get("asset_url") or ""
+    asset_name = remote.get("asset_name") or ""
+    if not asset_url or not asset_name:
+        return JSONResponse({"error": "当前平台无可用更新包（没有匹配的 release 资产）"}, status_code=400)
+
+    import tempfile as _tmp
+    import shutil as _sh
+    _UPDATE_TASK.update(running=True, cancelled=False, stage="download", progress=0.0,
+                        total_bytes=0, done_bytes=0, error="",
+                        started=datetime.now().strftime("%H:%M:%S"))
+    tmpdir = ""
     try:
-        # 工作区必须干净（有本地改动会冲突）
-        dirty = _git_run(["status", "--porcelain"])
-        if dirty:
-            return JSONResponse({"error": "工作区有未提交改动，请先保存/提交后再更新。改动的文件: " + dirty[:200]}, status_code=409)
-        # 检查是否有共同祖先（GitHub 发布历史与本地可能独立：发布版是脱敏后独立初始化的）
-        merge_base = ""
-        try:
-            merge_base = _git_run(["merge-base", "HEAD", "origin/main"])
-        except Exception:
-            merge_base = ""
-        if not merge_base:
-            return JSONResponse({"error": "本地仓库与 GitHub 版本无共同历史（独立初始化），无法自动增量合并。"
-                                        "请手动更新：下载最新安装包覆盖，或备份 hermes_home/results 后重新安装。"
-                                        "（GitHub: https://github.com/GGbond-bo/MemOmics-Agent/releases）"}, status_code=409)
-        # 有共同祖先 → ff-only merge（保留本地 commit，线性历史）
-        out = _git_run(["merge", "--ff-only", "origin/main"], timeout=120)
-        # 应用文件级迁移
+        tmpdir = _tmp.mkdtemp(prefix="memomics_update_")
+        archive = os.path.join(tmpdir, asset_name)
+        # 1. 下载
+        _download_file(asset_url, archive)
+        if _UPDATE_TASK["cancelled"]:
+            raise RuntimeError("已取消")
+        # 2. 解压
+        is_tar = asset_name.endswith(".tar.gz")
+        extract = os.path.join(tmpdir, "extract")
+        tops = _safe_extract(archive, extract, is_tar=is_tar)
+        if not tops:
+            raise RuntimeError("安装包为空或解压失败")
+        # 解压后内容可能在顶层子目录（如 MemOmics-Windows/）
+        extract_root = extract
+        for t in tops:
+            cand = os.path.join(extract, t)
+            if os.path.isdir(cand) and (os.path.isfile(os.path.join(cand, "start.bat")) or
+                                        os.path.isfile(os.path.join(cand, "start.sh"))):
+                extract_root = cand
+                break
+        # 3. 差异覆盖（保留用户数据）
+        copied = _apply_overlay(extract_root, tops)
+        # 4. 应用文件级迁移
         fix_log = ""
         try:
             import subprocess as _sp
@@ -6385,13 +6616,28 @@ async def update_apply(payload: dict):
             fix_log = (r.stdout or "")[-200:]
         except Exception as e:
             fix_log = f"fix_bundle 跳过: {e}"
-        new_rev = _git_run(["rev-parse", "--short", "HEAD"])
-        return {"ok": True, "message": out, "fix_log": fix_log, "new_rev": new_rev,
-                "restart_required": True}
+        if _UPDATE_TASK["cancelled"]:
+            raise RuntimeError("已取消")
+        new_local = _local_version_info()
+        _UPDATE_TASK["running"] = False
+        _UPDATE_TASK["stage"] = "done"
+        return {"ok": True, "message": f"已覆盖 {copied} 个代码文件", "fix_log": fix_log,
+                "new_version": new_local.get("version"), "restart_required": True,
+                "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:
-        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+        _UPDATE_TASK["running"] = False
+        _UPDATE_TASK["error"] = str(e)
+        return JSONResponse({"error": str(e)}, status_code=400 if str(e) == "已取消" else 500)
     except Exception as e:
+        _UPDATE_TASK["running"] = False
+        _UPDATE_TASK["error"] = str(e)[:300]
         return JSONResponse({"error": f"更新失败: {str(e)[:300]}"}, status_code=500)
+    finally:
+        if tmpdir:
+            try:
+                _sh.rmtree(tmpdir, ignore_errors=True)
+            except Exception:
+                pass
 
 
 # === 首次启动 / 环境检测 ===
