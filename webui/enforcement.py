@@ -152,6 +152,52 @@ def _param_checklist(code: str) -> list:
     return checks
 
 
+def _error_fingerprint(text: str) -> str:
+    """报错文本指纹：规范化（去数字/路径/内存地址/时间戳/换行）→ md5。
+
+    用于判断"同一段代码的报错是不是同一种"——同一指纹连续出现
+    = 重复相同报错（盲目重试无效）。
+    """
+    if not text:
+        return ""
+    t = str(text)
+    # 去掉易变内容：十六进制地址、数字、反斜杠路径、时间戳、行号
+    t = re.sub(r'0x[0-9a-fA-F]+', '0xADDR', t)
+    t = re.sub(r'[A-Za-z]:[\\/][^\s"\']*', 'PATH', t)
+    t = re.sub(r'\b\d+\b', 'N', t)
+    t = re.sub(r'\s+', ' ', t)
+    t = t.strip().lower()
+    if len(t) < 20:
+        return t
+    import hashlib
+    return hashlib.md5(t.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _looks_like_encoding_garbage(text: str) -> bool:
+    """识别编码乱码特征（GBK/UTF-8 解码失败产物），用于提示"这是乱码不是新报错"。
+
+    覆盖：
+    - Python 报错关键词：UnicodeDecodeError / illegal multibyte / can't decode byte
+    - 替换字符 U+FFFD（�）
+    - GBK 经典乱码：锟斤拷（UTF-8 被 GBK 读）、�����（\ufffd 重复）
+    - 中文正常输出不算乱码（科研输出常含中文）
+    """
+    if not text:
+        return False
+    t = str(text)
+    markers = ("unicodedecodeerror", "illegal multibyte sequence",
+               "can't decode byte", "codec can't decode",
+               "\\ufffd", "\ufffd", "锟斤拷", "锘匡拷")
+    low = t.lower()
+    for m in markers:
+        if m in low:
+            return True
+    # 大量替换字符（≥5 个连续 �）也是乱码特征
+    if t.count("\ufffd") >= 5:
+        return True
+    return False
+
+
 def debate_gate(es: "EnforcementState", stage: str = "conclusion",
                 signals: dict = None) -> tuple:
     """三级门控判定 — 什么时候该辩论。
@@ -246,6 +292,9 @@ class EnforcementState:
         self.analysis_level: str = "chat"
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
         self._pending_record_warned: bool = False  # 2026-08-22: execute 门禁软拦截已提醒一次（不卡死）
+        self._exec_error_hist: dict = {}  # 2026-08-22: 每个命令的报错指纹历史 {cmd_key: [fp,...]}
+        self._exec_error_repeat: set = set()  # 已判定"连续相同报错"的 cmd_key（防重复提醒）
+        self._exec_garbage_warned: set = set()  # 已提醒过"编码乱码"的 cmd_key
         self._error_recorded: int = 0  # P1-11: 本会话自动 record_error 次数（限 2 防刷屏）
         self._block_kind: str = ""  # P0-1(2026-08-13): 阻断原因类别 rail_pre/rail_post/""
         self._block_reason: str = ""  # P0-1: 阻断原因描述（注入被拦工具的错误消息）
@@ -457,9 +506,15 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 _cmd = str(args.get("command") or args.get("code") or args.get("script") or "")
             else:
                 _cmd = str(args)
-            _key = _cmd.strip()[:100]
+            _key = _cmd.strip()[:120]
             es._exec_retries[_key] = es._exec_retries.get(_key, 0) + 1
             es._last_exec_error = False  # 由 complete 分支更新
+            # 2026-08-22: 执行前检查——该代码已被判定"连续相同报错"，阻止盲目重试
+            if _key in es._exec_error_repeat:
+                _emit("enforcement", action="warning",
+                      message=("🔄 这段代码此前已连续多次相同报错（已标记）。"
+                               "请勿原样重试——先排查根因（环境/依赖/数据/编码），"
+                               "修改代码或换方案后再执行。"))
             # P2-7(2026-08-10): 钩子① — 执行前脚本设计辩论。
             # analysis 级 + 该命令首次执行 + 门控判定 L1/L2 → 提示先辩脚本设计
             if (es.analysis_level == "analysis" and es._exec_retries[_key] == 1
@@ -583,6 +638,36 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             es._last_exec_error = any(k in _rstr for k in (
                 "traceback", "error:", "exception", "exit code 1", "nonzero",
                 "not found", '"status": "error"', '"status":"error"', "kernel error"))
+            # 2026-08-22: 重复相同报错检测 + 乱码识别（用户需求：同一代码跑多次，
+            # 要区分"相同的报错乱码"（盲目重试无效）和"正常执行"）
+            if not _ro:
+                _key2 = _cmd.strip()[:120] or tool_name
+                _full_res = str(result) if result else ""
+                _is_err = es._last_exec_error
+                _is_garbage = _looks_like_encoding_garbage(_full_res)
+                if _is_err:
+                    _fp = _error_fingerprint(_full_res)
+                    _hist = es._exec_error_hist.setdefault(_key2, [])
+                    _hist.append(_fp)
+                    if len(_hist) > 10:
+                        _hist.pop(0)
+                    # 连续 ≥3 次同一指纹 → 重复相同报错，提醒换思路
+                    _tail = _hist[-3:]
+                    if len(_tail) >= 3 and len(set(_tail)) == 1 and _tail[0] and _key2 not in es._exec_error_repeat:
+                        es._exec_error_repeat.add(_key2)
+                        _g_hint = ("。⚠️ 且输出疑似编码乱码（GBK/UTF-8 解码问题），"
+                                   "请检查 PYTHONUTF8/编码设置或改用 UTF-8 读写" if _is_garbage else "")
+                        _emit("enforcement", action="warning",
+                              message=(f"🔄 检测到同一段代码连续 {len(_hist)} 次相同报错"
+                                       f"（指纹 {_fp[:8]}）。盲目重试无效——请先排查根因："
+                                       f"① 环境/依赖缺失 ② 数据路径/格式 ③ 换一种实现方案"
+                                       f"{_g_hint}"))
+                elif _is_garbage and _key2 not in es._exec_garbage_warned:
+                    # 执行"成功"但输出是乱码 → 单独提示编码问题（不算失败）
+                    es._exec_garbage_warned.add(_key2)
+                    _emit("enforcement", action="info",
+                          message=("⚠️ 该代码执行完成但输出疑似编码乱码（GBK/UTF-8 解码问题）。"
+                                   "结果可能被误读——请确认输出编码（PYTHONUTF8=1 / utf-8-sig / 文件编码）后再交付。"))
             # 设置 pending 标记：所有非闲聊级别都需要 record
             if es.analysis_level != "chat" and not _ro:
                 es._pending_record = True
