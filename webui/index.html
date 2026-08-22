@@ -687,6 +687,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
+    <div class="sidebar-footer" style="padding-top:0;">
+      <span id="update-check-btn" onclick="showUpdateDialog()" title="检查更新" style="cursor:pointer;font-size:12px;color:var(--text-light);">🔄 检查更新</span>
+      <span id="update-status-dot" style="display:none;margin-left:6px;font-size:11px;"></span>
+    </div>
   </div>
 
   <!-- === 中间聊天区 === -->
@@ -7652,6 +7656,117 @@ async function litImportSelected() {
   await importLocalPdfs(paths);
 }
 
+// === 检查更新（2026-08-23） ===
+var _updateCheckCache = null;
+var _updateApplying = false;
+
+function closeUpdateDialog() {
+  document.getElementById('update-modal').style.display = 'none';
+}
+
+function updateStatusDot(text, tone) {
+  var dot = document.getElementById('update-status-dot');
+  if (!dot) return;
+  dot.style.display = 'inline';
+  dot.textContent = text;
+  dot.style.color = tone || 'var(--text-light)';
+}
+
+function showUpdateDialog() {
+  var modal = document.getElementById('update-modal');
+  var body = document.getElementById('update-modal-body');
+  var btn = document.getElementById('update-confirm-btn');
+  modal.style.display = 'flex';
+  body.innerHTML = '🔍 正在检查更新…';
+  btn.style.display = 'none';
+  checkForUpdate(true);
+}
+
+async function checkForUpdate(showAll) {
+  var body = document.getElementById('update-modal-body');
+  var btn = document.getElementById('update-confirm-btn');
+  try {
+    var r = await fetch('/api/update/check', { cache: 'no-store' });
+    var d = await r.json();
+    _updateCheckCache = d;
+    var local = d.local || {};
+    var remote = d.remote || {};
+    var status = d.status || 'unable_to_check';
+    var html = '';
+    html += '<div style="margin-bottom:8px;">本地版本：<code>' + escapeHtml(local.rev || '?') + '</code>' +
+            (local.date ? '（' + escapeHtml(local.date) + '）' : '') + ' · fix_bundle ' + escapeHtml(local.fix_bundle || 'none') + '</div>';
+    if (status === 'up_to_date') {
+      html += '<div style="color:var(--success);font-weight:600;">✅ 已是最新版本</div>';
+      html += remote.rev ? '<div style="color:var(--text-light);margin-top:4px;">GitHub main：<code>' + escapeHtml(remote.rev) + '</code>' + (remote.date ? '（' + escapeHtml(remote.date) + '）' : '') + '</div>' : '';
+      updateStatusDot('已是最新', 'var(--success)');
+    } else if (status === 'update_available') {
+      html += '<div style="color:var(--warning);font-weight:600;">🔄 发现新版本</div>';
+      html += '<div style="margin-top:4px;">GitHub main：<code>' + escapeHtml(remote.rev || '?') + '</code>' + (remote.date ? '（' + escapeHtml(remote.date) + '）' : '') + '</div>';
+      if (remote.tag) html += '<div>最新 Release：<code>' + escapeHtml(remote.tag) + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>';
+      html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
+      if (d.history_compatible === false) {
+        html += '<div style="margin-top:8px;color:var(--danger);">⚠️ 本地安装与 GitHub 版本无共同历史（独立初始化），无法自动增量合并。请手动更新：下载最新安装包覆盖（保留 hermes_home/ 和 results/），或备份后重新安装。</div>';
+        btn.style.display = 'none';
+        updateStatusDot('需手动更新', 'var(--danger)');
+      } else {
+        html += '<div style="margin-top:8px;color:var(--text-light);">点击「立即更新」将自动拉取 GitHub 最新代码（git 增量更新，不重新下载安装包）。更新完成后需重启服务生效。</div>';
+        btn.style.display = 'inline-block';
+        updateStatusDot('有更新', 'var(--warning)');
+      }
+    } else if (status === 'local_ahead') {
+      html += '<div style="color:var(--primary);font-weight:600;">📌 本地领先于 GitHub（' + (d.local_ahead_commits || 0) + ' 个 commit）</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">当前是开发版，GitHub 上是旧版本，无需更新。' + (remote.rev ? '远端 main：<code>' + escapeHtml(remote.rev) + '</code>' : '') + '</div>';
+      updateStatusDot('本地已最新', 'var(--primary)');
+    } else {
+      html += '<div style="color:var(--danger);font-weight:600;">⚠️ 无法检查更新</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(d.error || '网络或 GitHub 访问失败，请稍后重试') + '</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">检查地址：https://github.com/GGbond-bo/MemOmics-Agent</div>';
+      updateStatusDot('检查失败', 'var(--danger)');
+    }
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div style="color:var(--danger);font-weight:600;">⚠️ 检查失败</div><div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(String(e.message || e)) + '</div>';
+    updateStatusDot('检查失败', 'var(--danger)');
+  }
+}
+
+async function applyUpdate() {
+  if (_updateApplying) return;
+  _updateApplying = true;
+  var body = document.getElementById('update-modal-body');
+  var btn = document.getElementById('update-confirm-btn');
+  btn.disabled = true;
+  body.innerHTML = '⏳ 正在更新（拉取 GitHub 最新代码）…<br><span style="color:var(--text-light);font-size:11px;">这可能需数十秒，请勿关闭页面。</span>';
+  try {
+    var r = await fetch('/api/update/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed: true })
+    });
+    var d = await r.json();
+    if (!r.ok) {
+      body.innerHTML = '<div style="color:var(--danger);font-weight:600;">❌ 更新失败</div><div style="margin-top:6px;">' + escapeHtml(d.error || '未知错误') + '</div>' +
+        (d.error && d.error.indexOf('工作区') >= 0 ? '<div style="margin-top:6px;color:var(--text-light);">请先处理本地未提交改动（提交或 stash）后再更新。</div>' : '');
+      updateStatusDot('更新失败', 'var(--danger)');
+      btn.style.display = 'none';
+      _updateApplying = false;
+      return;
+    }
+    body.innerHTML = '<div style="color:var(--success);font-weight:600;">✅ 更新成功</div>' +
+      '<div style="margin-top:6px;">新版本：<code>' + escapeHtml(d.new_rev || '?') + '</code></div>' +
+      (d.fix_log ? '<div style="margin-top:6px;color:var(--text-light);">迁移：' + escapeHtml(d.fix_log.slice(0, 200)) + '</div>' : '') +
+      '<div style="margin-top:10px;color:var(--warning);font-weight:600;">⚠️ 需要重启服务才能生效</div>' +
+      '<div style="margin-top:6px;color:var(--text-light);">请关闭并重新启动 MemOmics（server-start.cmd 或 start.bat）。</div>';
+    updateStatusDot('已更新待重启', 'var(--warning)');
+    btn.style.display = 'none';
+  } catch (e) {
+    body.innerHTML = '<div style="color:var(--danger);font-weight:600;">❌ 更新失败</div><div style="margin-top:6px;">' + escapeHtml(String(e.message || e)) + '</div>';
+    updateStatusDot('更新失败', 'var(--danger)');
+    btn.style.display = 'none';
+  }
+  _updateApplying = false;
+}
+
 </script>
 
 <!-- 文献导入目录选择器（批H 2026-08-16）-->
@@ -7698,6 +7813,18 @@ async function litImportSelected() {
     <div class="lit-resizer nw" data-dir="nw" title="拖拽调节窗口"></div>
     <div class="lit-resizer se" data-dir="se" title="拖拽调节窗口"></div>
     <div class="lit-resizer sw" data-dir="sw" title="拖拽调节窗口"></div>
+  </div>
+</div>
+
+<!-- === 检查更新弹窗（2026-08-23） === -->
+<div id="update-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:9998;">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;width:min(92vw,520px);max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.35);">
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;">🔄 检查更新</div>
+    <div id="update-modal-body" style="padding:14px 16px;font-size:12px;line-height:1.7;color:var(--text);"></div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);justify-content:flex-end;">
+      <button id="update-cancel-btn" onclick="closeUpdateDialog()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">取消</button>
+      <button id="update-confirm-btn" onclick="applyUpdate()" style="display:none;padding:6px 16px;border-radius:6px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;">立即更新</button>
+    </div>
   </div>
 </div>
 </body>

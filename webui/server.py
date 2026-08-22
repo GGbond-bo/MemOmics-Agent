@@ -6296,7 +6296,8 @@ async def update_check():
       local_ahead_commits: 本地领先远端多少 commit（仅 local_ahead 时有意义）
     """
     local = _local_version_info()
-    result = {"local": local, "remote": None, "status": "unable_to_check", "local_ahead_commits": 0, "error": ""}
+    result = {"local": local, "remote": None, "status": "unable_to_check", "local_ahead_commits": 0,
+              "history_compatible": None, "error": ""}
     try:
         # 远端 main 最新 commit
         main_commit = _http_get_json(f"{_GITHUB_API}/commits/main")
@@ -6324,6 +6325,12 @@ async def update_check():
                 _git_run(["fetch", "origin", "main"], timeout=90)
                 ahead = _git_run(["rev-list", "--count", f"origin/main..HEAD"])
                 result["local_ahead_commits"] = int(ahead or 0)
+                # 历史连通性：有共同祖先才能增量 merge
+                try:
+                    _mb = _git_run(["merge-base", "HEAD", "origin/main"])
+                    result["history_compatible"] = bool(_mb)
+                except Exception:
+                    result["history_compatible"] = False
                 if int(ahead or 0) > 0:
                     result["status"] = "local_ahead"
                 else:
@@ -6356,7 +6363,17 @@ async def update_apply(payload: dict):
         dirty = _git_run(["status", "--porcelain"])
         if dirty:
             return JSONResponse({"error": "工作区有未提交改动，请先保存/提交后再更新。改动的文件: " + dirty[:200]}, status_code=409)
-        # fetch 已由 check 完成，直接 merge（ff-only：不产生合并提交，保持线性历史）
+        # 检查是否有共同祖先（GitHub 发布历史与本地可能独立：发布版是脱敏后独立初始化的）
+        merge_base = ""
+        try:
+            merge_base = _git_run(["merge-base", "HEAD", "origin/main"])
+        except Exception:
+            merge_base = ""
+        if not merge_base:
+            return JSONResponse({"error": "本地仓库与 GitHub 版本无共同历史（独立初始化），无法自动增量合并。"
+                                        "请手动更新：下载最新安装包覆盖，或备份 hermes_home/results 后重新安装。"
+                                        "（GitHub: https://github.com/GGbond-bo/MemOmics-Agent/releases）"}, status_code=409)
+        # 有共同祖先 → ff-only merge（保留本地 commit，线性历史）
         out = _git_run(["merge", "--ff-only", "origin/main"], timeout=120)
         # 应用文件级迁移
         fix_log = ""
