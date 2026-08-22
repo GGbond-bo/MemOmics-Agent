@@ -4995,14 +4995,14 @@ def _checkpoint_writer_llm(prompt, cfg=None):
         body = _json.dumps({
             "model": cfg.get("model", "deepseek-v4-flash"),
             "messages": [{"role": "user", "content": p}],
-            "max_tokens": 4096,
+            "max_tokens": 8192,  # 2026-08-22 加固: 4096 易截断(实测只到 §6)，提到 8192
             "temperature": 0.2,
         }).encode("utf-8")
         req = _ur.Request(base + "/chat/completions", data=body, headers={
             "Content-Type": "application/json",
             "Authorization": "Bearer " + (key or ""),
         })
-        with _ur.urlopen(req, timeout=120) as r:
+        with _ur.urlopen(req, timeout=180) as r:
             return _json.loads(r.read().decode("utf-8", "replace"))
 
     d = _one_call(prompt)
@@ -5012,6 +5012,20 @@ def _checkpoint_writer_llm(prompt, cfg=None):
     if not txt:
         txt = (m.get("reasoning_content") or "").strip()
     if txt:
+        # 2026-08-22 加固: 校验是否覆盖 9+ 个 § 段；不足 → 追加补全请求
+        _sec_count = sum(1 for _s in ("§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§10", "§11")
+                         if f"## {_s}" in txt)
+        if _sec_count < 9:
+            _fill = ("你上一条输出不完整（只覆盖了部分 § 段）。请只补全缺失的段，"
+                     "保持原有内容不变，追加输出缺失的 § 段（Markdown，含 § 标题）：\n" + txt[:4000])
+            try:
+                _d2 = _one_call(_fill)
+                _m2 = ((_d2.get("choices") or [{}])[0].get("message") or {})
+                _txt2 = (_m2.get("content") or _m2.get("reasoning_content") or "").strip()
+                if _txt2:
+                    txt = txt.rstrip() + "\n\n" + _txt2
+            except Exception:
+                pass  # 补全失败不阻塞——run_writer 的 _merge_sections 还会兜底
         return txt
     # 空返回 → 换更短提示重试一次
     short = ("把下面对话压缩为结构化 checkpoint（Markdown，含 §1 Active intent / §2 Next action / "

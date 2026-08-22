@@ -169,49 +169,111 @@ def _latest_checkpoint(session):
     return os.path.join(d, fs[-1])
 
 
-def read_checkpoint(session) -> dict:
-    """读"最新且有实质内容"的 checkpoint（upto 边界 + 文本）。
+# ── 2026-08-22 加固：checkpoint 质量校验 ───────────────────
+_CHECKPOINT_SECTIONS = ("§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§10", "§11")
 
-    (2026-08-21 修正) 只在 checkpoints/ 里取"最新"文件的旧逻辑会被空壳/占位结果
-    （如 writer 空返回、测试占位）顶掉真正含 §1-§11 的好摘要：优先选文件大小≥400B 的最新档，
-    都没有才退回最新文件。
+
+def _checkpoint_quality(text: str) -> dict:
+    """checkpoint 质量评分（加固核心）：§ 段覆盖数 + 有效内容 + 空壳惩罚。
+
+    返回 {score, sections, chars}。score 范围 0-100：
+    - 每覆盖一个 § 段 +8 分（§1-§11 满 88 分）
+    - 段内有实质内容（非 "- x" 空壳）再加分
+    - 空壳（总长 <80 或只有 "- x"）直接 0 分
+    """
+    t = (text or "").strip()
+    if len(t) < 80:
+        return {"score": 0, "sections": 0, "chars": len(t)}
+    covered = [s for s in _CHECKPOINT_SECTIONS if f"## {s}" in t]
+    # 空壳行检测："- x" / "-" 这种占位
+    shell_lines = sum(1 for ln in t.splitlines() if ln.strip() in ("- x", "-", "x", "(none)"))
+    n_sections = len(covered)
+    score = n_sections * 8
+    # 有实质内容的段数（按段块长度粗略判断）
+    for s in covered:
+        idx = t.find(f"## {s}")
+        nxt = len(t)
+        for s2 in covered:
+            i2 = t.find(f"## {s2}", idx + 4)
+            if 0 < i2 < nxt:
+                nxt = i2
+        seg = t[idx:nxt]
+        if len(seg.strip()) > 40:
+            score += 2
+    # 空壳惩罚
+    if shell_lines >= max(1, n_sections):
+        score = min(score, 10)
+    return {"score": min(score, 100), "sections": n_sections, "chars": len(t)}
+
+
+def _best_checkpoint(session):
+    """按质量分选最优 checkpoint 文件（加固：不再只看 400B，避免空壳顶掉好档）。"""
+    d = checkpoints_dir(session)
+    if not d or not os.path.isdir(d):
+        return None
+    try:
+        fs = sorted(f for f in os.listdir(d) if f.endswith(".md"))
+    except Exception:
+        return None
+    if not fs:
+        return None
+    best, best_q = None, {"score": -1, "sections": 0, "chars": 0}
+    for f in fs:
+        p = os.path.join(d, f)
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except Exception:
+            continue
+        q = _checkpoint_quality(text)
+        if q["score"] > best_q["score"]:
+            best, best_q = p, q
+    return {"path": best, **best_q} if best else None
+
+
+def read_checkpoint(session) -> dict:
+    """读"最优" checkpoint（upto 边界 + 文本）。
+
+    2026-08-22 加固：改用 _best_checkpoint 按质量分选（§ 段覆盖优先），
+    空壳/占位档不会再顶掉含实质内容的摘要。
     """
     d = checkpoints_dir(session)
     if not d or not os.path.isdir(d):
         return {"text": "", "upto": 0, "path": None}
-    try:
-        fs = sorted(f for f in os.listdir(d) if f.endswith(".md"))
-    except Exception:
+    best = _best_checkpoint(session)
+    if not best or not best["path"]:
         return {"text": "", "upto": 0, "path": None}
-    if not fs:
-        return {"text": "", "upto": 0, "path": None}
-    paths = [os.path.join(d, f) for f in fs]  # fs 已按文件名(时间序)排序
-    pick = None
-    for p in reversed(paths):
-        try:
-            if os.path.getsize(p) >= 400:
-                pick = p
-                break
-        except Exception:
-            continue
-    if pick is None:
-        pick = paths[-1]
     try:
-        with open(pick, encoding="utf-8", errors="replace") as f:
+        with open(best["path"], encoding="utf-8", errors="replace") as f:
             text = f.read()
     except Exception:
         return {"text": "", "upto": 0, "path": None}
     m = re.search(r"upto_count:\s*(\d+)", text[:400])
     upto = int(m.group(1)) if m else 0
-    return {"text": text, "upto": upto, "path": pick}
+    return {"text": text, "upto": upto, "path": best["path"]}
 
 
 def write_checkpoint(session, upto: int, text: str) -> str:
-    """单一写者写 checkpoint 文件：写锁 + 路径守卫 + 文件头 + 数量上限(保留 4 个)。"""
+    """单一写者写 checkpoint 文件：写锁 + 路径守卫 + 文件头 + 数量上限(保留 4 个)。
+
+    2026-08-22 加固：劣质输出（空壳/§ 段过少）拒绝落盘——
+    不覆盖现有更优档，避免"空壳顶掉好摘要"。
+    """
     d = checkpoints_dir(session)
     if not d:
         return ""
     path_guard(d, [_results_dir(session)])
+    # 质量门禁：空壳/无实质 § 段 → 拒绝写入（保留既有档）
+    q = _checkpoint_quality(text or "")
+    best = _best_checkpoint(session)
+    # 2026-08-22 加固：新档质量必须 ≥ 既有最优档才允许写入（防半截顶掉完整档）。
+    # 严格小于才拒绝：同分（如 100 满分的更新档）允许写入——upto 边界前移仍有价值。
+    if best and best.get("score", 0) >= 30 and q["score"] < best["score"]:
+        return best["path"] or ""
+    if q["score"] < 30:
+        # 无既有档时首个写入（兜底留痕）；有更优档则拒绝（上面已处理）
+        if best and best.get("score", 0) >= 30:
+            return best["path"] or ""
     os.makedirs(d, exist_ok=True)
     # (2026-08-21 压测发现) 文件名只用 int(time) 会在同一秒内互相覆盖 → 加毫秒+随机后缀防碰撞
     p = os.path.join(d, f"checkpoint-{int(time.time()*1000)}-{os.urandom(3).hex()}.md")
@@ -231,15 +293,105 @@ def write_checkpoint(session, upto: int, text: str) -> str:
     return p
 
 
+def _sections_fallback(session, span_text: str) -> str:
+    """确定性补全段：LLM checkpoint 缺 §7-§11 时，从 REQUIREMENTS/锚点/span 就近提取补全。
+
+    加固目标：结论/知识/决策（§7/§8/§10）即使 LLM 截断也不丢——从
+    已有持久记忆（REQUIREMENTS）+ 最近对话内容提取可验证信息。
+    """
+    parts = []
+    rd = _results_dir(session)
+    req = ""
+    p = requirements_path(session)
+    if p and os.path.isfile(p):
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                req = " | ".join(l.strip() for l in f if l.strip())[:600]
+        except Exception:
+            req = ""
+    if req:
+        parts.append(f"## §3 Directives (user requirements)\n- {req}")
+    # 从 span 提取用户消息（诉求）+ 工具痕迹，作为 §5/§6 的兜底
+    user_msgs = []
+    tool_hints = []
+    for m in (span_text or "").split("\n"):
+        m = m.strip()
+        if not m:
+            continue
+        if len(m) > 20 and ("E:/" in m or "E:\\" in m or "C:/" in m or "C:\\" in m):
+            tool_hints.append(m[:120])
+        if m.startswith("user") or m.startswith("用户") or m.startswith("Human"):
+            user_msgs.append(m[:150])
+    if user_msgs:
+        parts.append(f"## §1 Active intent\n- {'；'.join(user_msgs[-3:])}")
+    if tool_hints:
+        parts.append(f"## §6 Files and code sections\n- " + "\n- ".join(tool_hints[-5:]))
+    parts.append("## §11 Open notes\n- 该折叠片段约 "
+                 f"{len(span_text or '')} 字符；完整轨迹见 state.db（压缩永不丢证据）。")
+    return "\n\n".join(parts)
+
+
+def _merge_sections(llm_text: str, fallback_text: str, prior_text: str = "") -> str:
+    """把 fallback/prior 中缺失的 § 段补进 LLM 输出（加固：§7-§11 缺失时补全）。
+
+    - fallback_text: 确定性兜底段（REQUIREMENTS/锚点/span 提取）
+    - prior_text: 上一版 checkpoint 文本（旧知识 §7/§8/§10 在 LLM 截断时保留）
+    """
+    if not llm_text or not llm_text.strip():
+        return fallback_text
+    out = llm_text.rstrip()
+    # 找出 LLM 输出已有的 § 段
+    have = set()
+    for s in _CHECKPOINT_SECTIONS:
+        if f"## {s}" in out:
+            have.add(s)
+    if len(have) >= 9:
+        return out
+    # 从 fallback + prior 补缺失段（prior 优先——它是历史确认过的知识）
+    missing_blocks = []
+    for src in (prior_text or "", fallback_text or ""):
+        if not src:
+            continue
+        for s in _CHECKPOINT_SECTIONS:
+            if s in have:
+                continue
+            idx = src.find(f"## {s}")
+            if idx < 0:
+                continue
+            nxt = len(src)
+            for s2 in _CHECKPOINT_SECTIONS:
+                i2 = src.find(f"## {s2}", idx + 4)
+                if 0 < i2 < nxt:
+                    nxt = i2
+            blk = src[idx:nxt].strip()
+            if len(blk) > 30:
+                missing_blocks.append(blk)
+                have.add(s)  # 已补，不再重复
+    if missing_blocks:
+        out += "\n\n" + "\n\n".join(missing_blocks)
+    return out
+
+
 def run_writer(session, span_text: str, prior_text: str, upto: int, llm_fn) -> str:
-    """执行一次 writer（LLM §1-§11 或确定性回退），写好 checkpoint 返回路径。"""
+    """执行一次 writer（LLM §1-§11 或确定性回退），写好 checkpoint 返回路径。
+
+    2026-08-22 加固：
+    - LLM 输出缺 § 段 → 用 _sections_fallback 补全（§7 知识/§8 错误/§10 决策不因截断丢失）
+    - 劣质结果由 write_checkpoint 质量门禁拒绝（不覆盖更优档）
+    """
     llm = llm_fn if callable(llm_fn) else None
     if not llm:
         return write_checkpoint(session, upto, _digest_fallback(session, span_text or ""))
     prompt = CHECKPOINT_PROMPT.format(span=(span_text or "")[:40000], prior=(prior_text or "")[:8000])
     try:
-        out = llm(prompt)
-        return write_checkpoint(session, upto, (out or "").strip()[:30000])
+        out = (llm(prompt) or "").strip()
+        if not out:
+            # 空输出 → 占位（write_checkpoint 质量门禁会拒绝覆盖更优档，保留原行为语义）
+            return write_checkpoint(session, upto, "(none)")
+        merged = _merge_sections(out,
+                                 _sections_fallback(session, span_text or ""),
+                                 prior_text=prior_text or "")
+        return write_checkpoint(session, upto, merged[:30000])
     except Exception:
         return write_checkpoint(session, upto, _digest_fallback(session, span_text or ""))
 
