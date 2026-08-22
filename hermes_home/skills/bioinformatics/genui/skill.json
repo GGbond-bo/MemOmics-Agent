@@ -11,7 +11,7 @@
   "chains_to": [],
   "tags": ["ui", "visualization", "presentation", "render", "组件", "展示"],
   "aliases": ["genui", "dsh-ui", "交互组件", "结构化展示"],
-  "trigger_level": "YEL",
+  "trigger_level": "RED",
   "trigger_keywords": [
     "dsh-ui",
     "genui",
