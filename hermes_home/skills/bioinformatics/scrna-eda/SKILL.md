@@ -154,6 +154,8 @@ except Exception as e:
 | - | - | - | 2026-08-13 | fix_xlsx_format.R | - | - |  |
 | - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
 | - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
+| - | - | - | 2026-08-22 | metascape_top100.py | - | - |  |
+| - | - | - | 2026-08-22 | metascape_top100.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

@@ -1,0 +1,22 @@
+{
+  "id": "metascape-gene-list-prep",
+  "name": "Metascape 基因列表构建",
+  "category": "user-skill",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Metascape 基因列表构建 进行分析",
+  "source_dir": "skills/bioinformatics/metascape-gene-list-prep",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "metascape",
+    "deg",
+    "gene-list",
+    "marker",
+    "csv-formatting"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

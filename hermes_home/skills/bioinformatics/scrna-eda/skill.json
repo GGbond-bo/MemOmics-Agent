@@ -56,8 +56,8 @@
       "tool": "rail_review"
     }
   ],
-  "success_count": 5,
-  "proven_script": "fix_xlsx_to_newfile.R",
+  "success_count": 6,
+  "proven_script": "metascape_top100.py",
   "proven_params": [
     {
       "species": "",
@@ -123,10 +123,23 @@
       "approved": false,
       "custom_script": false,
       "result": "修复版成功写入 pathway_score_fixed_format.xlsx：8 个新增行基因全部展开为宽表格式（非空列从4→14~203列），与原表格式一致"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "metascape_top100.py",
+      "params": "{\"src\": \"E:/骨骼肌锻炼/MF_annotation_L3_protein_DEG.csv\", \"top_n\": 100, \"sort_by\": \"avg_log2FC\", \"group_by\": \"cluster\", \"out\": \"results/memomics-4687a591/Metascape_top100_by_subcluster.csv\"}",
+      "date": "2026-08-22",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FindMarkers结果(10亚群,1900基因)按 avg_log2FC 降序每亚群取top100，构建Metascape表(列头=亚群名，下排100基因)，全部亚群≥100基因故10列×100行完整，导出utf-8-sig CSV"
     }
   ],
   "user_prefs": {
-    "last_used_script": "fix_xlsx_to_newfile.R"
+    "last_used_script": "metascape_top100.py"
   },
   "error_count": 1,
   "errors": [

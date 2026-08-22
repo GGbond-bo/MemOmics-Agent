@@ -528,6 +528,7 @@ L1 辩论返回 `verdict: need_more_info` + `low` + `verdict_parse_error` 时是
 - 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
 
 ## 支持文件
+- `references/metascape-input-top100.md` — **FindMarkers → Metascape 输入表构建（2026-08-22）**：每亚群按 avg_log2FC 降序取 top100 基因，宽表导出（列头=亚群名、下排基因），FindMarkers 输出 `gene_type` 带残留制表符需清洗、utf-8-sig 编码防 Excel 乱码、不足 N 全取、用户未提显著性不加 p_val_adj 过滤、rail_review(post) 判"无图"时补辅助 boxplot（matplotlib 3.9+ `tick_labels=`）。触发词："metascape" / "top100" / "基因表" / "亚群基因宽表" / "findermarker 表格"
 - `references/subtype-vs-fiber-violin.md` — **慢肌类亚群 vs 纯纤维「自己显著高表达基因集」小提琴图**（2026-08-20）：5 亚群 × 3 纯纤维，口径 B 数据实算 avg Cohen's d 选 top1 + **raw p 星号 + 效应量 d 数值双标注**（用户拍板，非效应量分级星号）+ 细胞级 Mann-Whitney 伪重复局限披露 + 可复用脚本 `fig_C1_5sub_rawp_effsize.py`
 - `references/main-vs-pure-4sub-violin-template.md` — **「主角亚群 vs Pure I/IIA/IIX」4-sub 小提琴模板**（2026-08-20 用户指定 fig_C1_AMPK_violin_4sub.py）：单栏 90×62mm nature-figure 版、主角浅蓝+纯纤维标准配色、**星号按 Cohen's d 分级（≥0.8***/0.5**/0.3*/ns）非 p 值**、不截断 Y 轴、PNG+SVG+PDF+TIFF 四格式、5 亚群实例 d 值表 + 期望中位数逐项核对 + 删旧图=移入备份目录。⚠️ 与 subtype-vs-fiber 的 raw-p 星号是两套口径，用户说"按 fig_C1_AMPK_violin_4sub.py / 之前代码画"用本模板。
 - `references/specialized-mf-proportion-case.md` — **Specialized MF 11,630 细胞比例显著性案例（2026-08-17）**：Python 显著性管线完整代码（pandas+scipy wilcoxon/mannwhitneyu + 双 FDR + Cliff's delta 方向翻转）、9 比较对定义、六组比例中位数表、显著性要点（zone5 衰老↓ p=0.0046 / 糖尿病轴全不显著）+ **探索箱线图模板（03_boxplot_6grp_cluster1.R：zone→cluster 改名映射、手动括号 raw p 标注、paired 列字符型坑、cluster1 衰老↑/运动↑ 方向与"运动逆转去神经"预期相反→需 pseudobulk 验证）**
