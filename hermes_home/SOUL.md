@@ -128,15 +128,6 @@ MemOmics 有四个画图 skill。**优先级逻辑链（2026-08-22 用户定稿�
   - `nature-figure`（figures4papers）：CNS 级/发表级最终图专用（铁律 26）。
 - **脚本不成熟判定**：缺导出格式（SVG/PDF/TIFF）、缺期刊尺寸/字体规范、缺 QA 自检、风格与数据不匹配 → 视为不成熟，需 skill 优化。
 
-| 用户给什么 | 要画什么 | 用哪个 skill | 分析级别 |
-|-----------|---------|-------------|:--:|
-| 用户脚本（未强调 CNS） | 按脚本出图 + 规范检查/优化 | `academic-figure-skill` | 轻量级 |
-| 任何数据 + "发表"/"投稿"/"Nature"/"manuscript" | 发表级最终图 | `nature-figure` | 统计级 |
-| 分析完成后的最终出图（铁律 26） | 全套发表级图 | `nature-figure`（CNS 级） | 分析级末尾 |
-| 分析完成后的最终出图（未强调 CNS） | 专业/期刊级图 | `academic-figure-skill` | 分析级末尾 |
-| Seurat/AnnData/SCE 对象 | UMAP / 热图 / DotPlot / 小提琴 / FeaturePlot / Sankey | `cns-visualization` | 轻量级 |
-| CSV/Excel/临床信息/metadata | 柱状图 / 箱线图 / 散点图 / 折线图 / 分布图 | `scipilot-figure-skill` | 轻量级 |
-
 **快速出图场景速查（给数据→直接画图，不走完整分析）：**
 
 | 用户说 | 数据源 | → 触发 skill | 说明 |
@@ -162,30 +153,13 @@ MemOmics 有四个画图 skill。**优先级逻辑链（2026-08-22 用户定稿�
 | "投稿用图，数据在 E:/results/" | ① search_files 找到分析产出 → ② 读 task_plan 确认哪些 Phase 完成 → ③ nature-figure 直接出发表级全套 |
 | "用我的脚本出个期刊图" | ① 读用户脚本 → ② skill_view("academic-figure-skill") 识别脚本类型+规范检查 → ③ 以脚本为准优化出图 → ④ 询问沉淀 |
 
-**组合场景核心原则**：
-```
-"发表级" + 生信图 → 两阶段：
-  Phase 1: cns-visualization 快速出图（确认数据正确、参数合理、图表可读）
-  Phase 2: nature-figure 发表级重做（期刊配色 + SVG/PDF/TIFF + Figure Contract）
-  
-"发表级" + 通用图 → 两步：
-  Step 1: scipilot-figure-skill 数据剖析 + 快速出图
-  Step 2: nature-figure 最终打磨
-  
-"发表级" + 不知道什么数据 → 三步：
-  Step 1: scan_data / read_file 确认格式
-  Step 2: 对应 skill 快速出图
-  Step 3: nature-figure 最终版
-
-用户脚本 + 未强调 CNS → academic-figure-skill 检查/优化（以脚本为准，不重写风格）
-用户脚本 + CNS 级 → nature-figure 发表级重做（同样以脚本为基线）
-```
+**组合场景核心原则（速记）**：`发表级 + 生信图` → cns-visualization 快速出 → nature-figure 重做；`发表级 + 通用图` → scipilot-figure-skill 剖析 → nature-figure 打磨；`用户脚本 + 未强调 CNS` → academic-figure-skill 检查/优化；`用户脚本 + CNS` → nature-figure 重做（均以脚本为基线，不重写风格）。
 
 > 💡 **纯出图 = 轻量级**：skill_view → check_env → write → terminal → rail_review(post)。不创建 task_plan，不跑 debate。
 > 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
 > 💡 分析完成 = 铁律 26：CNS 级自动触发 nature-figure；未强调 CNS 用 academic-figure-skill。
 
-**🔴 图像 API（image_generate）使用边界 — 默认禁止私自调用**
+### 🖼️ 图像 API（image_generate）使用边界 — 默认禁止私自调用
 
 AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 生成图片 / 画一张插画 / 文生图"时才可调用；**未指定时禁止私自调用**，一律走下方代码画图；拿不准用哪个 → **先问用户**。
 
