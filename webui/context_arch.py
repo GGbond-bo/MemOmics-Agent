@@ -506,7 +506,10 @@ def rebuild_context(session, tail_messages, checkpoint_text, extras, caps=None) 
         blocks.append("[全局记忆]\n" + _cut(extras["global_memory"], c["global"]))
     if extras.get("scripts"):
         blocks.append("[会话脚本索引(scripts/)]\n" + _cut(extras["scripts"], c["scripts"]))
-    blocks.append("[提示] 以上为早期对话的结构化摘要；紧接其后的消息是最近真实对话，请基于它们继续，不必复述摘要。")
+    blocks.append("[提示] 以上为早期对话的结构化摘要；紧接其后的消息是最近真实对话，请基于它们继续，不必复述摘要。"
+                  "如需早期细节（具体数字/原话/中间结果），用 session_search 全文召回："
+                  "session_search(query=关键词) → 找到 message_id → "
+                  "session_search(session_id=..., around_message_id=<id>, window=5) 拉逐字上下文，禁止凭摘要编造。")
     out = [{"role": "system", "content": b} for b in blocks]
     tail = list(tail_messages or [])
     tc = int(c.get("recent_tail", 16000))

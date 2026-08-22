@@ -626,6 +626,7 @@ terminal 完成 → _pending_record = True
 - 用户点名要求保留/重点关注的路径 → `kind=path/file`, `pinned=true`, `importance≥0.8`
 - 关键结果脚本 → `kind=script`；阶段结论 → `kind=finding`；用户偏好/决定 → `kind=preference/decision`
 - 每轮对话自动注入锚点摘要；**上下文压缩后以锚点为准**：需要精确路径/文件名时先 `session_memory(list)` 或 read 锚点文件，禁止凭压缩摘要猜。
+- **压缩后细节召回（2026-08-22 明确）**：checkpoint 只保留摘要，早期对话细节（具体数字/原话/中间结果）用 `session_search` 全文召回——① `session_search(query=关键词, limit=3)` 搜到匹配消息（带 message_id）→ ② `session_search(session_id=..., around_message_id=<id>, window=5)` 拉该消息 ±5 条逐字上下文。禁止凭 checkpoint 摘要编造细节，查不到就如实说"查不到，请提供线索"。
 
 ## 🔴 铁律 31 — 超长会话纪律（单会话 2000+ 轮保障）
 

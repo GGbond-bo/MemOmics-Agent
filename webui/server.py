@@ -4565,7 +4565,8 @@ def _build_rollup_checkpoint(session, head):
             _lines += ["## 起始诉求", _m["content"].strip()[:300]]
             break
     _lines += ["## 提示",
-               "以上为早期对话的结构化摘要（保留了关键决策/路径/任务状态）。紧接其后的若干条消息是最近的真实对话，请基于它们继续，不必复述摘要。"]
+               "以上为早期对话的结构化摘要（保留了关键决策/路径/任务状态）。紧接其后的若干条消息是最近的真实对话，请基于它们继续，不必复述摘要。",
+               "如需早期对话的细节（具体数字/原话/中间结果），用 session_search 全文召回：先 session_search(query=关键词) 找到带 message_id 的匹配，再 session_search(session_id=..., around_message_id=<id>, window=5) 拉逐字上下文——禁止凭摘要编造细节。"]
     return "\n".join(_lines)
 
 
