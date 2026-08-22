@@ -107,3 +107,18 @@ description: "Render structured interactive UI inline in your reply via the dsh-
 9. **一个主题选一个主组件**：命中映射表后选**一种**组件承载，同一信息不要用两种组件重复表达（同一批数据又画 bars 又画 donut = 冗余）
 10. **数量纪律**：一条回答 3–8 个组件为宜，宁缺毋滥。反例：该用 `table` 对比时写三段 `text`；一个 `stat` 能说清的事套 `card`+`grid`；与内容无关的 `scene3d` 炫技——3D 只在内容本身就是几何/空间时才用
 11. **先验后发（复杂 UI）**：发出 ```dsh-ui 围栏前，若 spec ≥3 个组件或含 `table`（长表格最易括号错位），先调用 `validate_dsh_ui` 工具（参数 `spec` 传围栏内的 JSON 文本）验证；返回 ❌ 就按错误信息（位置、括号计数、常见原因）修正后重新验证，✅ 再发出；**若 ❌ 回复里附了「已自动修复」的 JSON，直接照抄那份发出，无需再验证**；简单 UI（≤2 个组件）不必验证，渲染器会自动修复大部分标点/括号错误
+
+## MemOmics 适配说明（2026-08-22）
+
+- **本环境已集成静态渲染器**（webui/index.html renderMarkdown 提取 ```dsh-ui → renderGenUiBlock 渲染）。模型回答输出 dsh-ui fence 即自动渲染，无需额外工具。
+- **支持组件**（静态版）：text/stat/badge/progress/list/table/keyvalue/callout/steps/chart(bars/line/donut)/mermaid(复用现有管线)/code/json/card/grid/accordion/tabs/timeline/avatar/link/copy/divider/spacer/row/col。
+- **交互组件降级**：button/input/select/radio/checkbox/switch/textarea/submit/quiz/plot/scene3d/slider/file-tree/breadcrumb → 渲染为"静态展示"提示（无 action 回传）。这是预期的，不要因此不用 dsh-ui——展示类组件（table/callout/steps/chart）是主力。
+- **科研场景高频用法**：
+  - 方法/工具对比（GSEA vs GSVA vs ORA）→ `table`（列：方法/回答的问题/输入/输出）
+  - 关键优势 → `callout`(tone=success)
+  - 分析流程/阶段建议 → `steps`（current 标当前位置）
+  - 指标/统计量 → `stat` + `badge`
+  - 工具选型 → `keyvalue`
+  - 占比/趋势 → `chart`
+- **与 DSH 版差异**：无 action 回传（模型不会收到组件点击事件）、无持久化状态恢复、plot/scene3d 不可用。其余展示行为一致。
+- **触发**：SOUL.md 触发词（"结构化展示"/"可视化呈现"/"UI组件"/"要点卡片"）+ 内容类型映射表命中即用，不等用户开口。
