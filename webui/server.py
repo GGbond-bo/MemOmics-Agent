@@ -6226,6 +6226,157 @@ async def health():
     return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
 
 
+# === 检查更新 / 在线更新（2026-08-23，方案A：git 增量更新） ===
+
+_GITHUB_REPO = "GGbond-bo/MemOmics-Agent"
+_GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}"
+_GITHUB_RAW = f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main"
+_PROXY = "http://127.0.0.1:6478"
+
+
+def _http_get_json(url: str, timeout: int = 20) -> dict:
+    """带代理的 GET JSON：先走本机代理，失败降级直连。"""
+    import urllib.request as _ur
+    headers = {"User-Agent": "MemOmics-Updater", "Accept": "application/vnd.github+json"}
+    last_err = None
+    for proxy in (_PROXY, None):
+        try:
+            req = _ur.Request(url, headers=headers)
+            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            with opener.open(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
+
+
+def _git_run(args: list, timeout: int = 60) -> str:
+    """在 MemOmics 仓库执行 git（走代理环境变量），返回 stdout。"""
+    import subprocess as _sp
+    env = dict(os.environ)
+    env["HTTPS_PROXY"] = _PROXY
+    env["HTTP_PROXY"] = _PROXY
+    r = _sp.run(["git"] + args, cwd=MEMOMICS_DIR, capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=timeout, env=env)
+    if r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} 失败: {r.stderr.strip()[:300]}")
+    return r.stdout.strip()
+
+
+def _local_version_info() -> dict:
+    """本地版本：HEAD commit + 提交时间 + fix_bundle 级别。"""
+    rev = "unknown"
+    date = ""
+    try:
+        rev = _git_run(["rev-parse", "--short", "HEAD"])
+    except Exception:
+        pass
+    try:
+        date = _git_run(["log", "-1", "--format=%cd", "--date=short"])
+    except Exception:
+        pass
+    bundle = "none"
+    try:
+        from memomics.fix_bundle import BUNDLE
+        bundle = BUNDLE
+    except Exception:
+        pass
+    return {"rev": rev, "date": date, "fix_bundle": bundle}
+
+
+@app.get("/api/update/check")
+async def update_check():
+    """检查更新：本地版本 vs GitHub main 最新 commit + 最新 release tag。
+
+    返回:
+      local: {rev, date, fix_bundle}
+      remote: {rev, date, tag, tag_date, tag_url}
+      status: "up_to_date" | "update_available" | "local_ahead" | "unable_to_check"
+      local_ahead_commits: 本地领先远端多少 commit（仅 local_ahead 时有意义）
+    """
+    local = _local_version_info()
+    result = {"local": local, "remote": None, "status": "unable_to_check", "local_ahead_commits": 0, "error": ""}
+    try:
+        # 远端 main 最新 commit
+        main_commit = _http_get_json(f"{_GITHUB_API}/commits/main")
+        remote_rev = (main_commit.get("sha") or "")[:7]
+        remote_date = (main_commit.get("commit") or {}).get("committer", {}).get("date", "")[:10]
+        # 最新 release
+        tag, tag_date = "", ""
+        try:
+            rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
+            tag = rel.get("tag_name", "")
+            tag_date = (rel.get("published_at") or "")[:10]
+        except Exception:
+            pass
+        result["remote"] = {"rev": remote_rev, "date": remote_date, "tag": tag, "tag_date": tag_date,
+                            "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest"}
+        # 对比
+        if local["rev"] == "unknown" or not remote_rev:
+            result["status"] = "unable_to_check"
+            result["error"] = "无法获取本地或远端 commit"
+        elif local["rev"] == remote_rev:
+            result["status"] = "up_to_date"
+        else:
+            # 判断本地是否领先：尝试 fetch 后对比（只读，不改工作区）
+            try:
+                _git_run(["fetch", "origin", "main"], timeout=90)
+                ahead = _git_run(["rev-list", "--count", f"origin/main..HEAD"])
+                result["local_ahead_commits"] = int(ahead or 0)
+                if int(ahead or 0) > 0:
+                    result["status"] = "local_ahead"
+                else:
+                    result["status"] = "update_available"
+            except Exception:
+                # fetch 失败（如未配 remote）：按 commit 不同提示
+                result["status"] = "update_available"
+    except Exception as e:
+        result["error"] = str(e)[:200]
+        result["status"] = "unable_to_check"
+    return result
+
+
+@app.post("/api/update/apply")
+async def update_apply(payload: dict):
+    """执行更新（用户已确认）：fetch + 检查工作区 + merge origin/main + 应用 fix_bundle。
+
+    仅在 status=update_available 时执行；本地领先/无更新返回 400。
+    安全：工作区有未提交改动时拒绝（需用户先处理）；结果返回需重启提示。
+    """
+    confirmed = payload.get("confirmed")
+    if not confirmed:
+        return JSONResponse({"error": "需要 confirmed=true 确认"}, status_code=400)
+    # 先检查是否有更新
+    check = await update_check()
+    if check["status"] != "update_available":
+        return JSONResponse({"error": f"当前状态 {check['status']}，无需更新或无法更新"}, status_code=400)
+    try:
+        # 工作区必须干净（有本地改动会冲突）
+        dirty = _git_run(["status", "--porcelain"])
+        if dirty:
+            return JSONResponse({"error": "工作区有未提交改动，请先保存/提交后再更新。改动的文件: " + dirty[:200]}, status_code=409)
+        # fetch 已由 check 完成，直接 merge（ff-only：不产生合并提交，保持线性历史）
+        out = _git_run(["merge", "--ff-only", "origin/main"], timeout=120)
+        # 应用文件级迁移
+        fix_log = ""
+        try:
+            import subprocess as _sp
+            r = _sp.run([sys.executable, os.path.join(MEMOMICS_DIR, "scripts", "apply_fix_bundle.py")],
+                        cwd=MEMOMICS_DIR, capture_output=True, text=True, encoding="utf-8",
+                        errors="replace", timeout=60)
+            fix_log = (r.stdout or "")[-200:]
+        except Exception as e:
+            fix_log = f"fix_bundle 跳过: {e}"
+        new_rev = _git_run(["rev-parse", "--short", "HEAD"])
+        return {"ok": True, "message": out, "fix_log": fix_log, "new_rev": new_rev,
+                "restart_required": True}
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)[:300]}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"error": f"更新失败: {str(e)[:300]}"}, status_code=500)
+
+
 # === 首次启动 / 环境检测 ===
 
 @app.get("/api/setup/status")
