@@ -186,6 +186,9 @@ if "%MEMOMICS_SKIP_RUN%"=="1" (
 
 echo.
 echo [START] http://127.0.0.1:%PORT%
+
+REM 2026-08-23: 桌面图标（企鹅图；双击=已运行则开浏览器，未运行则启动；幂等，OneDrive 桌面兼容）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\create_desktop_icon.ps1" 2>nul
 echo         3 秒后自动打开浏览器（如未打开请手动访问）
 echo         关闭本窗口 = 停止 MemOmics
 echo.

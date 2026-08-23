@@ -15,6 +15,11 @@ VENV_DIR=".venv"
 NO_VENV=false
 [[ "${2:-}" == "--no-venv" ]] && NO_VENV=true
 
+# === 桌面图标（macOS：首次启动在桌面创建 MemOmics 图标，双击即启动/打开 WebUI；幂等）===
+if [ "$(uname -s)" = "Darwin" ] && [ -f "$SCRIPT_DIR/scripts/create_desktop_icon.sh" ]; then
+    bash "$SCRIPT_DIR/scripts/create_desktop_icon.sh" "$SCRIPT_DIR" >/dev/null 2>&1 || true
+fi
+
 echo "╔══════════════════════════════════════════════╗"
 echo "║       MemOmics-Agent v2.0 Starting...        ║"
 echo "╚══════════════════════════════════════════════╝"
