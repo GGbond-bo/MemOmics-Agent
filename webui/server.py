@@ -484,6 +484,12 @@ async def _start_hermes_cron_ticker():
         logger.info("[MemOmics] Cron ticker started — hermes_home/cron/jobs.json, interval=60s")
     except Exception as e:
         logger.warning(f"[MemOmics] Cron ticker 启动失败（长任务心跳不可用）: {e}")
+    # 2026-08-23 迁移 MiMo-Code：启动后台自动检查更新（静默失败，不阻塞启动）
+    try:
+        _background_update_check()
+        logger.info("[MemOmics] 后台自动检查更新已启动（策略: %s）", _get_update_config()["autoupdate"])
+    except Exception:
+        pass
 
 @app.on_event("shutdown")
 async def _stop_hermes_cron_ticker():
@@ -6226,12 +6232,90 @@ async def health():
     return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
 
 
-# === 检查更新 / 在线更新（2026-08-23，方案A：git 增量更新） ===
+# === 检查更新 / 在线更新（2026-08-23，迁移 MiMo-Code 更新架构：自动检查 + autoupdate 策略） ===
 
 _GITHUB_REPO = "GGbond-bo/MemOmics-Agent"
 _GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}"
 _GITHUB_RAW = f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main"
 _PROXY = "http://127.0.0.1:6478"
+
+
+def _get_update_config() -> dict:
+    """读取更新策略配置（hermes_home/config.yaml 的 update 段）。
+
+    对齐 MiMo-Code autoupdate 语义：
+      notify — 仅通知用户有新版本（默认，更新由用户决定）
+      false  — 完全关闭检查
+      true   — 自动应用补丁（日期型 tag 无补丁概念，等价 notify）
+    返回 {autoupdate: str, enabled: bool}
+    """
+    cfg = {"autoupdate": "notify", "enabled": True}
+    try:
+        import yaml as _yaml
+        _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        if os.path.isfile(_p):
+            with open(_p, encoding="utf-8") as _f:
+                _d = _yaml.safe_load(_f) or {}
+            _u = _d.get("update") or {}
+            _v = str(_u.get("autoupdate", "notify")).lower()
+            if _v == "false" or _v == "off" or _v == "0":
+                cfg["autoupdate"] = "false"
+                cfg["enabled"] = False
+            elif _v == "true" or _v == "on":
+                cfg["autoupdate"] = "true"
+            else:
+                cfg["autoupdate"] = "notify"
+    except Exception:
+        pass
+    return cfg
+
+
+def _set_update_config(autoupdate: str) -> dict:
+    """写更新策略回 config.yaml（保留其他键）。"""
+    import yaml as _yaml
+    _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    try:
+        with open(_p, encoding="utf-8") as _f:
+            _d = _yaml.safe_load(_f) or {}
+    except Exception:
+        _d = {}
+    _d.setdefault("update", {})
+    _d["update"]["autoupdate"] = autoupdate
+    try:
+        with open(_p, "w", encoding="utf-8") as _f:
+            _yaml.safe_dump(_d, _f, allow_unicode=True, sort_keys=False)
+        return {"ok": True, "autoupdate": autoupdate}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# 启动时自动检查结果缓存（供前端 footer 状态点显示，避免每轮重复请求 GitHub）
+_AUTO_CHECK = {"done": False, "status": "", "tag": "", "ts": 0.0, "error": ""}
+
+
+def _background_update_check() -> None:
+    """启动后台线程自动检查一次更新（对齐 MiMo-Code 启动即查；静默失败）。"""
+    import threading as _th
+    def _run():
+        try:
+            cfg = _get_update_config()
+            if not cfg["enabled"]:
+                _AUTO_CHECK.update(done=True, status="disabled", ts=__import__("time").time())
+                return
+            import asyncio as _aio
+            # 用新事件循环执行 check（不依赖主 loop）
+            _loop = _aio.new_event_loop()
+            try:
+                _r = _loop.run_until_complete(update_check())
+            finally:
+                _loop.close()
+            _AUTO_CHECK.update(done=True, status=_r.get("status", ""),
+                               tag=((_r.get("remote") or {}).get("tag", "")),
+                               ts=__import__("time").time())
+        except Exception as _e:
+            _AUTO_CHECK.update(done=True, status="error", error=str(_e)[:150],
+                               ts=__import__("time").time())
+    _th.Thread(target=_run, daemon=True, name="memomics-auto-update-check").start()
 
 
 def _http_get_json(url: str, timeout: int = 20) -> dict:
@@ -6362,6 +6446,21 @@ def _update_status_dict() -> dict:
 async def update_status():
     """更新任务状态（进度/阶段/可取消）。"""
     return _update_status_dict()
+
+
+@app.get("/api/update/autocheck")
+async def update_autocheck():
+    """启动时自动检查的结果（供前端 footer 状态点显示，不重复请求 GitHub）。"""
+    return dict(_AUTO_CHECK, config=_get_update_config())
+
+
+@app.post("/api/update/config")
+async def update_config(payload: dict):
+    """修改更新策略（对齐 MiMo-Code autoupdate：notify/false/true）。"""
+    mode = str(payload.get("autoupdate") or "").lower()
+    if mode not in ("notify", "false", "true"):
+        return JSONResponse({"error": "autoupdate 必须是 notify/false/true"}, status_code=400)
+    return _set_update_config(mode)
 
 
 @app.post("/api/update/cancel")
@@ -6519,7 +6618,17 @@ async def update_check():
     """
     local = _local_version_info()
     result = {"local": local, "remote": None, "status": "unable_to_check", "update_mode": "manual",
-              "local_ahead_commits": 0, "error": ""}
+              "install_type": "unknown", "local_ahead_commits": 0, "error": ""}
+    # 安装方式检测（迁移 MiMo-Code method 概念）：git 仓库 / 安装包（无 git）
+    try:
+        if local.get("has_git"):
+            result["install_type"] = "git"
+        elif local.get("version") != "unknown":
+            result["install_type"] = "portable"
+        else:
+            result["install_type"] = "unknown"
+    except Exception:
+        pass
     try:
         rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
         tag = rel.get("tag_name", "")

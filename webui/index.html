@@ -3431,6 +3431,22 @@ async function loadModels() {
       var vd = await vr.json();
       document.getElementById('footer-info').innerHTML = 'MemOmics v1 · ' + (vd.version || '?') + ' · ' + (vd.started || '');
     } catch(e) {}
+    // 2026-08-23 迁移 MiMo-Code：启动后拉取自动检查结果 → footer 状态点
+    try {
+      var ac = await fetch('/api/update/autocheck', { cache: 'no-store' });
+      var ad = await ac.json();
+      if (ad.config && ad.config.enabled === false) {
+        // 检查已关闭，不显示
+      } else if (ad.done && ad.status === 'update_available') {
+        updateStatusDot('🔄 有更新', 'var(--warning)');
+      } else if (ad.done && ad.status === 'local_ahead') {
+        updateStatusDot('本地最新', 'var(--primary)');
+      } else if (ad.done && ad.status === 'up_to_date') {
+        updateStatusDot('已是最新', 'var(--success)');
+      } else if (ad.done && ad.status === 'error') {
+        // 静默（检查失败不打扰）
+      }
+    } catch(e) {}
     // 加载 provider 列表到设置页
     await loadProviders();
   } catch(e) { console.error('loadModels error', e); }
@@ -7696,8 +7712,10 @@ async function checkForUpdate(showAll) {
     var remote = d.remote || {};
     var status = d.status || 'unable_to_check';
     var html = '';
+    var installLabels = { git: '开发仓库（git）', portable: '安装包', unknown: '未知' };
     html += '<div style="margin-bottom:8px;">本地版本：<code>' + escapeHtml(local.version || '?') + '</code>' +
             (local.rev && local.rev !== 'unknown' ? '（git ' + escapeHtml(local.rev) + '）' : '') +
+            ' · 安装方式：' + escapeHtml(installLabels[d.install_type] || d.install_type || '?') +
             ' · fix_bundle ' + escapeHtml(local.fix_bundle || 'none') + '</div>';
     if (status === 'up_to_date') {
       html += '<div style="color:var(--success);font-weight:600;">✅ 已是最新版本</div>';
@@ -7727,6 +7745,20 @@ async function checkForUpdate(showAll) {
       html += '<div style="color:var(--text-light);margin-top:4px;">检查地址：https://github.com/GGbond-bo/MemOmics-Agent</div>';
       updateStatusDot('检查失败', 'var(--danger)');
     }
+    // 2026-08-23 迁移 MiMo-Code：autoupdate 策略设置
+    try {
+      var ac = await fetch('/api/update/autocheck', { cache: 'no-store' });
+      var ad = await ac.json();
+      var curMode = (ad.config || {}).autoupdate || 'notify';
+      var modeLabels = { notify: '仅通知（默认）', false: '关闭检查', true: '自动检查' };
+      html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">' +
+        '<div style="margin-bottom:4px;color:var(--text-light);">自动检查策略：</div>' +
+        '<select id="update-autoupdate-select" onchange="saveUpdateConfig(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text);font-size:12px;">' +
+        '<option value="notify"' + (curMode === 'notify' ? ' selected' : '') + '>仅通知（更新由我决定）</option>' +
+        '<option value="true"' + (curMode === 'true' ? ' selected' : '') + '>自动检查</option>' +
+        '<option value="false"' + (curMode === 'false' ? ' selected' : '') + '>关闭检查</option>' +
+        '</select></div>';
+    } catch(e) {}
     body.innerHTML = html;
   } catch (e) {
     body.innerHTML = '<div style="color:var(--danger);font-weight:600;">⚠️ 检查失败</div><div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(String(e.message || e)) + '</div>';
@@ -7808,6 +7840,22 @@ async function cancelUpdate() {
       updateStatusDot(d.message || '无法取消', 'var(--danger)');
     }
   } catch (e) {}
+}
+
+async function saveUpdateConfig(mode) {
+  try {
+    var r = await fetch('/api/update/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoupdate: mode })
+    });
+    var d = await r.json();
+    if (!d.ok) {
+      alert('保存失败: ' + (d.error || '未知错误'));
+    }
+  } catch (e) {
+    alert('保存失败: ' + String(e.message || e));
+  }
 }
 
 </script>
