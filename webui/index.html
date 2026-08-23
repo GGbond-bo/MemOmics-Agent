@@ -212,6 +212,17 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 /* Mermaid 图表 */
 .mermaid { margin:12px 0; padding:16px; background:#fafafa; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
 .mermaid svg { max-width:100%; height:auto; }
+.mermaid-copy {
+  display: block;
+  margin: 10px 0 0 auto;
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-light);
+  font-size: 11px;
+  cursor: pointer;
+}
 .mermaid-error { margin:12px 0; padding:16px; background:#fff5f5; border:1px solid #ffcdd2; border-radius:8px; color:#c62828; font-size:13px; white-space:pre-wrap; }
 .mermaid-error pre { margin:8px 0 0 0; padding:8px; background:#fff; border-radius:4px; overflow-x:auto; font-size:12px; color:#333; white-space:pre-wrap; }
 
@@ -2881,8 +2892,11 @@ function renderMermaidNode(el) {
   var mid = el.getAttribute('data-mermaid') || 'mm' + (mermaidIdx++);
   // 确保 ID 不以数字开头（CSS querySelector 不支持 '#123-svg' 这样的选择器）
   if (/^[0-9]/.test(mid)) mid = 'm' + mid;
+  // 2026-08-23: 存原始代码供"复制代码"按钮（全局数组，避免属性转义问题）
+  _mermaidCodeStore.push(code);
+  var cidx = _mermaidCodeStore.length - 1;
   mermaid.render(mid + '-svg', code).then(function(result) {
-    el.innerHTML = result.svg;
+    el.innerHTML = result.svg + '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
     el.removeAttribute('data-mermaid');
   }).catch(function(err) {
     el.className = 'mermaid-error';
@@ -2892,6 +2906,19 @@ function renderMermaidNode(el) {
     el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>';
     el.removeAttribute('data-mermaid');
   });
+}
+
+// === Mermaid 代码复制（2026-08-23） ===
+var _mermaidCodeStore = [];
+function copyMermaidCode(idx) {
+  var code = _mermaidCodeStore[idx] || '';
+  if (!code) return;
+  function done() { /* 静默成功 */ }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(done).catch(function() { fallbackCopy(code); });
+  } else {
+    fallbackCopy(code);
+  }
 }
 
 // === 会话管理 ===
