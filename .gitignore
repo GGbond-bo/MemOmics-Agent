@@ -7,7 +7,7 @@ dist/
 build/
 .eggs/
 
-# === 虚拟环境 ===
+# === 铏氭嫙鐜 ===
 .venv/
 venv/
 env/
@@ -16,7 +16,7 @@ env/
 node_modules/
 npm-debug.log*
 
-# === 运行结果/数据（体积大，不�?git�?==
+# === 杩愯缁撴灉/鏁版嵁锛堜綋绉ぇ锛屼笉杩?git锛?==
 hermes-agent/results/
 results/
 work/
@@ -28,17 +28,17 @@ work/
 *.tar.gz
 *.zip
 
-# === Miniconda 安装�?===
+# === Miniconda 瀹夎鍖?===
 miniconda/
 miniconda_env/
 
-# === 日志/缓存 ===
+# === 鏃ュ織/缂撳瓨 ===
 *.log
 .cache/
 .run_logs/
 error_memory/
 
-# === IDE/系统文件 ===
+# === IDE/绯荤粺鏂囦欢 ===
 .vscode/
 .idea/
 *.swp
@@ -47,7 +47,7 @@ error_memory/
 Thumbs.db
 desktop.ini
 
-# === 临时脚本 ===
+# === 涓存椂鑴氭湰 ===
 batch_inject_*.py
 apply_nav.py
 fix_*.py
@@ -56,7 +56,7 @@ test_*.py
 !webui/tests/test_*.py
 verify_*.py
 
-# === 敏感/个人数据（不�?git�?==
+# === 鏁忔劅/涓汉鏁版嵁锛堜笉杩?git锛?==
 hermes_home/provider_keys.json
 hermes_home/image_gen_config.json
 hermes_home/model_config.json
@@ -83,13 +83,13 @@ state.db
 Rplots.pdf
 nul
 
-# === 运行产物（不�?git�?==
+# === 杩愯浜х墿锛堜笉鍏?git锛?==
 hdwgcn_src/
 hermes_home/environment.json
 hermes_home/skills/bioinformatics/_debates/
 webui/uploads/
 
-# === 运行态噪音（每次运行自动变化，不入库�?===
+# === 杩愯鎬佸櫔闊筹紙姣忔杩愯鑷姩鍙樺寲锛屼笉鍏ュ簱锛?===
 hermes_home/cron/ticker_*
 hermes_home/cron/.hb_*.tmp
 hermes_home/gateway_state.json
@@ -103,42 +103,42 @@ hermes_home/session_usage/
 hermes_home/processes.json
 hermes_home/lsp/bin/
 .backups/
-# 备份文件不入�?*.bak*
+# 澶囦唤鏂囦欢涓嶅叆搴?*.bak*
 memory_api_token
 
-# === 敏感/运行时（2026-08-14 停止跟踪�?==
+# === 鏁忔劅/杩愯鏃讹紙2026-08-14 鍋滄璺熻釜锛?==
 hermes_home/config.yaml
 hermes_home/backup_plaintext_*/
 hermes_home/verification_evidence.db
 hermes_home/weixin/accounts/
 hermes_home/skills/**/logs/
 
-# === Ƕ�׸����ѹ鵵��2026-08-14 ������ .backups/code_copies_20260814��===
+# === 嵌套副本已归档（2026-08-14 收敛到 .backups/code_copies_20260814）===
 memomics/hermes-agent/
 memomics/hermes_home/
 memomics/memomics/
 memomics/webui/
 
-# 会话锚点运行时文件（每会话一条，跨压缩持久）
+# 浼氳瘽閿氱偣杩愯鏃舵枃浠讹紙姣忎細璇濅竴鏉★紝璺ㄥ帇缂╂寔涔咃級
 hermes_home/session_anchors/
 
-# start.bat 依赖安装标记（装过一次就跳过�?.venv_deps_ok.txt
+# start.bat 渚濊禆瀹夎鏍囪锛堣杩囦竴娆″氨璺宠繃锛?.venv_deps_ok.txt
 .venv_vision_ok.txt
 
-# 便携打包运行时（打包.bat 生成的内�?Python�?runtime/
+# 渚挎惡鎵撳寘杩愯鏃讹紙鎵撳寘.bat 鐢熸垚鐨勫唴缃?Python锛?runtime/
 
-# �û����׿������ÿ⣨�������ݣ�����⣩
+# 用户文献库与引用库（个人数据，不入库）
 hermes_home/papers/
 hermes_home/references.bib
 hermes_home/references.ris
 hermes_home/references.json
 
-# ƾ���ࣨ��ʷ�Ѹ��٣���δ���޸ı� add -A ���ύ��
+# 凭据类（历史已跟踪，防未来修改被 add -A 误提交）
 hermes_home/auth.json
 hermes_home/channel_directory.json
 hermes_home/weixin_account.json
 
-# ���ر���/���б�ǣ�����⣩
+# 本地备份/运行标记（不入库）
 *.bak_*
 *.bak-*
 .venv_deps_ok.txt
@@ -146,20 +146,20 @@ hermes_home/weixin_account.json
 
 hermes_home/.fix_bundle
 
-# 2026-08-23 ���������������ű�/΢�ż���/�ϴ�ͼƬ/���Բ��������ֿ��밲װ��
+# 2026-08-23 发布脱敏：本机脚本/微信集成/上传图片/调试残留不进仓库与安装包
 server-start.cmd
 integrate_hermes_weixin.py
 webui/uploads/
 tmp_diff*.py
 
-# 2026-08-23 �������� v2���о��ƻ�/���б���/��־/��������/�����ű� �����ֿ�
+# 2026-08-23 发布脱敏 v2：研究计划/调研报告/日志/本机环境/开发脚本 不进仓库
 .hermes/
 log/
 plans/
 task_plan.md
-MemOmics��������������������.md
-hdWGCNA_WGCNA�����Ե��б���.md
-hdWGCNA_vs_WGCNA_���б���.md
+MemOmics自主科研能力评估报告.md
+hdWGCNA_WGCNA局限性调研报告.md
+hdWGCNA_vs_WGCNA_调研报告.md
 environment.json
 bioagent_test_output.txt
 memomics_bench_report.json
@@ -171,7 +171,32 @@ install.bat
 watchdog.bat
 run_debug.bat
 start_fixed.bat
-���.bat
+打包.bat
+test_enforcement_block.py
+test_p0*.py
+test_p1*.py
+test_proc_watchdog_e2e.py
+test_realdata_multiscene.py
+# 2026-08-23 发布脱敏 v2（UTF-8 可靠版）：研究计划/调研报告/日志/本机环境/开发脚本 不进仓库
+.hermes/
+log/
+plans/
+task_plan.md
+MemOmics自主科研能力评估报告.md
+hdWGCNA_WGCNA局限性调研报告.md
+hdWGCNA_vs_WGCNA_调研报告.md
+environment.json
+bioagent_test_output.txt
+memomics_bench_report.json
+skill_eval_final.json
+skill_hitrate_report.json
+loopx_test.py
+_delegation_*.py
+install.bat
+watchdog.bat
+run_debug.bat
+start_fixed.bat
+打包.bat
 test_enforcement_block.py
 test_p0*.py
 test_p1*.py
