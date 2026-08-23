@@ -145,3 +145,9 @@ hermes_home/weixin_account.json
 .venv_vision_ok.txt
 
 hermes_home/.fix_bundle
+
+# 2026-08-23 发布脱敏：本机脚本/微信集成/上传图片/调试残留不进仓库与安装包
+server-start.cmd
+integrate_hermes_weixin.py
+webui/uploads/
+tmp_diff*.py
