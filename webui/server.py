@@ -6410,22 +6410,35 @@ _KEEP_TOP_LEVEL = ("hermes_home", "results", "uploads", "log", ".venv", "runtime
                    "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
 
 
-def _is_keep_path(rel: str) -> bool:
+def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = True) -> bool:
     """判断 zip 内相对路径是否应保留（不覆盖）。
 
     检查路径的每一段：任何一段命中保留目录（node_modules/.venv/hermes_home 等）
     都保留——例如 hermes-agent/node_modules/xxx 命中 node_modules 段。
+
+    2026-08-23 细化（轻量 update 包场景）：
+    - hermes_home/ 整体保留（config/memories/sessions 是用户数据）
+    - 但 hermes_home/skills/ 例外：技能库是发布内容，随版本更新
+    - VERSION 例外：update 包携带发布版 VERSION，允许覆盖（更新后版本号变化）
     """
     rel = rel.replace("\\", "/").lstrip("/")
     if not rel:
         return True
-    parts = rel.split("/")
+    parts = [p for p in rel.split("/") if p and p != "."]  # 忽略空段和 ./ 段
+    if not parts:
+        return True
     top = parts[0]
     if top in _KEEP_TOP_LEVEL:
+        # 例外 1: hermes_home/skills 技能库随版本更新
+        if top == "hermes_home" and len(parts) > 1 and parts[1] == "skills":
+            return False
         return True
     # 路径任何段命中保留目录 → 保留（覆盖 hermes-agent/node_modules、memomics/vendor 等）
     if any(seg in _KEEP_DIRS for seg in parts):
         return True
+    # 例外 2: VERSION 允许被 update 包覆盖（携带发布版号）
+    if parts[-1] == "VERSION":
+        return False
     if parts[-1] in _KEEP_FILES:
         return True
     return False
@@ -6578,6 +6591,13 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
         roots.append(("", extract_root))  # 覆盖 extract_root 下所有内容到 MEMOMICS_DIR
     else:
         for top in tops:
+            # 2026-08-23: hermes_home 顶层特殊处理——允许进入（skills 技能库随版本更新），
+            # 内部子目录仍按 _is_keep_path 过滤（config/memories/sessions 保留）
+            if top == "hermes_home":
+                src_dir = os.path.join(extract_root, top)
+                if os.path.isdir(src_dir):
+                    roots.append((top, src_dir))
+                continue
             if _is_keep_path(top):
                 continue
             src_dir = os.path.join(extract_root, top)
@@ -6588,8 +6608,14 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
         os.makedirs(dst_dir, exist_ok=True)
         for root, dirs, files in os.walk(src_dir):
             rel_sub = os.path.relpath(root, src_dir)
-            dirs[:] = [d for d in dirs
-                       if not _is_keep_path(os.path.join(prefix, rel_sub, d).replace("\\", "/"))]
+            keep_dirs = []
+            for d in dirs:
+                rel_d = os.path.join(prefix, rel_sub, d).replace("\\", "/")
+                # 2026-08-23: hermes_home 必须进入 walk（内部 skills 更新），
+                # 仅当整路径命中保留时才剪枝（如 hermes_home/memories）
+                if rel_d.lstrip("./") == "hermes_home" or not _is_keep_path(rel_d):
+                    keep_dirs.append(d)
+            dirs[:] = keep_dirs
             for fn in files:
                 rel = os.path.join(prefix, rel_sub, fn).replace("\\", "/")
                 if _is_keep_path(rel):
@@ -6634,13 +6660,18 @@ async def update_check():
         tag = rel.get("tag_name", "")
         tag_date = (rel.get("published_at") or "")[:10]
         assets = rel.get("assets") or []
+        # 2026-08-23: 更新包优先级 —— 轻量代码包 MemOmics-update.zip（跨平台，~22MB）优先，
+        # 老用户升级只下载代码；找不到才回退平台完整包（新装机用，542MB）。
+        upd_asset = next((a for a in assets if a.get("name") == "MemOmics-update.zip"), None)
         asset_name = _platform_asset()
-        asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
+        full_asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
+        asset = upd_asset or full_asset
         result["remote"] = {
             "tag": tag, "tag_date": tag_date,
             "asset_name": asset.get("name", "") if asset else "",
             "asset_size_mb": round((asset.get("size") or 0) / 1048576, 1) if asset else 0,
             "asset_url": asset.get("browser_download_url", "") if asset else "",
+            "asset_kind": "update" if upd_asset else ("full" if full_asset else ""),
             "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest",
         }
         local_ver = local.get("version") or "unknown"

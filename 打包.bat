@@ -129,6 +129,27 @@ if not exist "%ZIP%" (
     echo [鍥為��] Compress-Archive 澶辫触锛屾敼鐢?tar...
     tar -a -cf "%ZIP%" -C "%STAGE%" . 2>nul
 )
+
+REM ============================================================
+REM  3.5 2026-08-23: 轻量 update 包（老用户升级用，不含 runtime 嵌入式 Python）
+REM ============================================================
+set "UPD=%STAGE%_update"
+if exist "%UPD%" rmdir /s /q "%UPD%"
+mkdir "%UPD%"
+robocopy "%STAGE%" "%UPD%" /E /NFL /NDL /NJH /NJS /NP /XD runtime miniconda miniconda_env >nul
+set "UPD_ZIP=%~dp0MemOmics-update-!DT!.zip"
+if exist "%UPD_ZIP%" del "%UPD_ZIP%" /q
+echo [UPDATE包] 生成 %UPD_ZIP% ...
+powershell -Command "Compress-Archive -Path '%UPD%\*' -DestinationPath '%UPD_ZIP%' -CompressionLevel Optimal" 2>nul
+if not exist "%UPD_ZIP%" (
+    tar -a -cf "%UPD_ZIP%" -C "%UPD%" . 2>nul
+)
+rmdir /s /q "%UPD%" >nul 2>&1
+for %%f in ("%UPD_ZIP%") do (
+    set /a "UMB=%%~zf/1024/1024"
+    echo [UPDATE包] 完成: %%~nxf  (!UMB! MB) —— 老用户一键更新用
+)
+
 rmdir /s /q "%STAGE%" >nul 2>&1
 
 if exist "%ZIP%" (

@@ -7726,7 +7726,11 @@ async function checkForUpdate(showAll) {
       html += '<div style="margin-top:4px;">GitHub 最新：<code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>';
       html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
       if (d.update_mode === 'zip_overlay' && remote.asset_name) {
-        html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+        if (remote.asset_kind === 'update') {
+          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>轻量代码更新包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 仅覆盖代码文件（保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+        } else {
+          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>完整安装包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+        }
         html += '<div style="margin-top:6px;color:var(--text-light);">更新完成后请自行重启 MemOmics 生效。</div>';
         btn.style.display = 'inline-block';
         updateStatusDot('有更新', 'var(--warning)');
