@@ -5533,6 +5533,61 @@ async def rename_session(sid: str, body: dict = None):
     return {"ok": True, "title": new_title, "session_id": sid}
 
 
+def _session_display_stats(sid, start_ua=0):
+    """会话展示统计（只读，失败静默）：token 用量 + 消息时间窗元数据。
+    返回 (stats, meta)：meta[k] = 第 (start_ua+k) 个 user/assistant 消息的
+    {elapsed, tool_count, tool_names}——页脚显示用。"""
+    import sqlite3 as _sq
+    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    try:
+        _conn = _sq.connect(_dbp, timeout=5)
+        _usage = _conn.execute(
+            "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),"
+            " COALESCE(SUM(api_call_count),0), COALESCE(SUM(estimated_cost_usd),0)"
+            " FROM session_model_usage WHERE session_id=?", (sid,)).fetchone()
+        _rows = _conn.execute(
+            "SELECT timestamp, role FROM messages WHERE session_id=? ORDER BY id", (sid,)).fetchall()
+        _tools = _conn.execute(
+            "SELECT timestamp, tool_name FROM tool_calls_log WHERE session_id=? ORDER BY timestamp", (sid,)).fetchall()
+        _conn.close()
+    except Exception:
+        return {}, {}
+    _ua = [r for r in _rows if r[1] in ("user", "assistant")]
+    _meta = {}
+    for i in range(start_ua, len(_ua)):
+        _ts, _role = _ua[i]
+        _nxt = _ua[i + 1][0] if i + 1 < len(_ua) else None
+        _wnd = [t[1] for t in _tools if t[0] >= _ts and (_nxt is None or t[0] < _nxt)]
+        _meta[i - start_ua] = {
+            "elapsed": round(_nxt - _ts, 1) if _nxt else None,
+            "tool_count": len(_wnd),
+            "tool_names": _wnd[:8],
+        }
+    _stats = {}
+    if _usage:
+        _stats = {
+            "input_tokens": int(_usage[0] or 0),
+            "output_tokens": int(_usage[1] or 0),
+            "api_calls": int(_usage[2] or 0),
+            "estimated_cost_usd": round(float(_usage[3] or 0), 4),
+        }
+    return _stats, _meta
+
+
+def _last_tool_of(sid):
+    """会话最近一次工具调用（刷新后运行状态条显示 agent 在干什么）。"""
+    import sqlite3 as _sq
+    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    try:
+        _conn = _sq.connect(_dbp, timeout=5)
+        _row = _conn.execute(
+            "SELECT tool_name FROM tool_calls_log WHERE session_id=? ORDER BY id DESC LIMIT 1", (sid,)).fetchone()
+        _conn.close()
+        return _row[0] if _row else ""
+    except Exception:
+        return ""
+
+
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str, limit: int = 100):
     """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿。
@@ -5568,7 +5623,27 @@ async def get_messages(sid: str, limit: int = 100):
         if "content" not in nm and "text" in nm:
             nm["content"] = nm["text"]
         normalized.append(nm)
-    return {"messages": normalized, "total": total}
+    # 2026-08-23: 消息页脚元数据（耗时/工具数）+ 会话统计（token/成本）
+    _stats, _meta = {}, {}
+    try:
+        _ua_before = 0
+        _all = session.get("messages") or []
+        _win_start = max(0, len(_all) - (limit if (limit and limit > 0) else len(_all)))
+        for _m in _all[:_win_start]:
+            if _m.get("role") in ("user", "assistant"):
+                _ua_before += 1
+        _stats, _meta = _session_display_stats(sid, start_ua=_ua_before)
+    except Exception:
+        pass
+    _mi = 0
+    for m in normalized:
+        if m.get("role") in ("user", "assistant"):
+            if _mi in _meta:
+                m["elapsed"] = _meta[_mi].get("elapsed")
+                m["tool_count"] = _meta[_mi].get("tool_count", 0)
+                m["tool_names"] = _meta[_mi].get("tool_names", [])
+            _mi += 1
+    return {"messages": normalized, "total": total, "stats": _stats}
 
 
 @app.delete("/api/sessions/{sid}")
@@ -9935,6 +10010,8 @@ async def get_progress(sid: str):
         # 2026-08-17: 半截流式文本（刷新/重连时恢复进行中的回复，HTTP 兜底同款）
         "partial_text": session.get("_partial_text", ""),
         "is_running": bool(session.get("running_agent") or session.get("running_task")),
+        # 2026-08-23: 最近一次工具调用（刷新后状态条显示 agent 在干什么）
+        "last_tool": _last_tool_of(sid),
         "session_id": sid,
     }
 

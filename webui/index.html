@@ -578,6 +578,32 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
   border-style: dashed;
   opacity: 0.94;
 }
+.msg-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.msg-tools {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--text-light);
+}
+.msg-tools .tool-names {
+  display: none;
+}
+.msg-meta.open .tool-names {
+  display: inline;
+}
+.session-stats {
+  margin: 8px 12px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: rgba(128, 128, 128, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  line-height: 1.6;
+}
 .code-block table, .code-block th, .code-block td { border: none; }
 .code-copy {
   background: transparent;
@@ -1855,15 +1881,52 @@ function addUserMsg(text, imageUrls) {
   scrollBottom();
 }
 
-function addAssistantMsg(text) {
+function addAssistantMsg(text, meta) {
   text = text || '';
   var div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
+  // 2026-08-23: 消息页脚（耗时/工具调用数，刷新后从历史元数据恢复显示）
+  var foot = '';
+  if (meta && (meta.elapsed !== undefined || meta.tool_count)) {
+    var parts = [];
+    if (meta.elapsed !== undefined && meta.elapsed !== null) parts.push('⏱ ' + _fmtDur(meta.elapsed));
+    if (meta.tool_count) {
+      var tnHtml = (meta.tool_names || []).map(_toolLabel).join('、');
+      parts.push('<span class="msg-tools" title="点击查看" onclick="this.parentNode.classList.toggle(\'open\')">🛠 ' + meta.tool_count + ' 次工具调用<span class="tool-names">（' + tnHtml + '）</span></span>');
+    }
+    foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
+  }
+  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   initMermaid();
   document.getElementById('messages').appendChild(div);
   scrollBottom();
   return div;
+}
+
+// === 会话统计条（token/成本；刷新后从历史 API 的 stats 渲染） ===
+function renderSessionStats(stats) {
+  if (!stats || (!stats.input_tokens && !stats.output_tokens)) return;
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var el = document.getElementById('session-stats');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'session-stats';
+    el.className = 'session-stats';
+    box.insertBefore(el, box.firstChild);
+  }
+  var cost = stats.estimated_cost_usd ? ' · 约 $' + stats.estimated_cost_usd : '';
+  el.innerHTML = '📊 本会话：输入 <b>' + _fmtTokens(stats.input_tokens) + '</b> · 输出 <b>' + _fmtTokens(stats.output_tokens) + '</b> · ' + stats.api_calls + ' 次 API 调用' + cost;
+}
+
+// === 工具名显示映射 + token 格式化（2026-08-23） ===
+var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库' };
+function _toolLabel(n) { return _toolLabels[n] || n; }
+function _fmtTokens(n) {
+  n = n || 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
 }
 
 // === 进度时间线 ===
@@ -3124,8 +3187,9 @@ function loadAllMessages(sid) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       if (m.role === 'system' || m.role === 'tool') return;
       if (m.role === 'user') addUserMsg(m.content);
-      else addAssistantMsg(m.content);
+      else addAssistantMsg(m.content, m);
     });
+    renderSessionStats(d.stats);
   });
 }
 
@@ -3306,8 +3370,9 @@ function switchSession(sid) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       if (m.role === 'system' || m.role === 'tool') return;
       if (m.role === 'user') addUserMsg(m.content);
-      else addAssistantMsg(m.content);
+      else addAssistantMsg(m.content, m);
     });
+    renderSessionStats(d.stats);
     if (liveBubble) {
       document.getElementById('messages').appendChild(liveBubble);
       currentAssistantEl = liveBubble;
@@ -3359,6 +3424,11 @@ function switchSession(sid) {
       setFloatBar(true);
       document.getElementById('steer-hint').style.display = '';
       _currentRunningSid = sid;
+      // 2026-08-23: 刷新后 agent 仍在运行 → 状态条显示最近工具（DSH 式运行指示）
+      if (d.last_tool) {
+        var _ls = _ensureLiveStatus();
+        if (_ls) _ls.textContent = '🔄 运行中 · 最近工具: ' + _toolLabel(d.last_tool) + ' · 详情见上方进度';
+      }
     }
   }).catch(function(e) {
     // 静默失败 — WS 的 progress_replay 可能已经处理了
