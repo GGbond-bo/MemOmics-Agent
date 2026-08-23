@@ -314,7 +314,7 @@
 | 11 | unsupervised_celltype_transfer_between_scRNA_datasets | Transfer cell type labels from an annotated reference scRNA-seq dataset to an unannotated query data | multi_omics, multi-omics, rgcca | YEL 讨论触发 |
 ---
 
-## 11_文献搜索 - 文献/数据库 (61 skills)
+## 11_文献搜索 - 文献/数据库 (62 skills)
 
 
 | # | Skill | Description | Keywords | Trigger |
@@ -382,6 +382,7 @@
 ---
 | 61 | research-plan | Mermaid技术路线图+模块映射表生成 | 技术路线, 分析路线, 研究方案, research plan | RED 必触发 |
 
+| translate-book | 整本书/大段内容翻译：PDF/DOCX/EPUB 整书输入，并行子代理逐 chunk 翻译（默认译中文），术语表保证专名一致，输出 HTML/DOCX/EPUB/PDF 保留排版 | 翻译整本书, 整书翻译, 翻译这本书, 把这本书翻译, 翻译大段, 大段内容翻译, translate book, translate the book, translate this book, book translation | RED 必触发 |
 ## 12_分子生物学 - 分子克隆 (21 skills)
 
 

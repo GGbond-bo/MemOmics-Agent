@@ -73,3 +73,5 @@ seaborn>=0.13.0
 # The agent auto-installs missing R packages via BiocManager during analysis.
 # R itself must be installed separately: https://cran.r-project.org/
 jieba>=0.42.1
+
+pypandoc>=1.14  # translate-book skill: 整书翻译格式转换 (pandoc 3.x)
