@@ -7694,10 +7694,12 @@ function showUpdateDialog() {
   var modal = document.getElementById('update-modal');
   var body = document.getElementById('update-modal-body');
   var btn = document.getElementById('update-confirm-btn');
+  var cancelBtn = document.getElementById('update-cancel-btn');
   modal.style.display = 'flex';
   body.innerHTML = '🔍 正在检查更新…';
   btn.style.display = 'none';
-  document.getElementById('update-cancel-btn').style.display = 'inline-block';
+  cancelBtn.style.display = 'inline-block';
+  cancelBtn.textContent = '取消';
   checkForUpdate(true);
 }
 
@@ -7835,15 +7837,12 @@ async function applyUpdate() {
 }
 
 async function cancelUpdate() {
+  // 2026-08-23 修复：无论服务端返回什么（已取消/无可取消任务/覆盖中），
+  // 一律关闭弹窗并停轮询，不让界面残留卡死
   try {
-    var r = await fetch('/api/update/cancel', { method: 'POST' });
-    var d = await r.json();
-    var body = document.getElementById('update-modal-body');
-    body.innerHTML = '<div style="color:var(--text-light);">' + escapeHtml(d.message || '正在取消…') + '</div>';
-    if (!d.ok) {
-      updateStatusDot(d.message || '无法取消', 'var(--danger)');
-    }
+    await fetch('/api/update/cancel', { method: 'POST' });
   } catch (e) {}
+  closeUpdateDialog();
 }
 
 async function saveUpdateConfig(mode) {
@@ -7914,7 +7913,9 @@ async function saveUpdateConfig(mode) {
 <!-- === 检查更新弹窗（2026-08-23） === -->
 <div id="update-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:9998;">
   <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;width:min(92vw,520px);max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.35);">
-    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;">🔄 检查更新</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;">🔄 检查更新
+      <span style="margin-left:auto;cursor:pointer;color:var(--text-light);font-size:14px;" onclick="closeUpdateDialog()" title="关闭">✕</span>
+    </div>
     <div id="update-modal-body" style="padding:14px 16px;font-size:12px;line-height:1.7;color:var(--text);"></div>
     <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);justify-content:flex-end;">
       <button id="update-cancel-btn" onclick="cancelUpdate()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">取消</button>
