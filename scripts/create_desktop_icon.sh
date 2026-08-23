@@ -41,6 +41,9 @@ sed -i.bak "s|APP_DIR_PLACEHOLDER|$APP_DIR|" "$CMD_FILE"
 rm -f "$CMD_FILE.bak"
 chmod +x "$CMD_FILE"
 
+# 清除隔离属性：从网上下载解压的文件可能带 com.apple.quarantine，双击会被 Gatekeeper 拦截
+xattr -d com.apple.quarantine "$CMD_FILE" 2>/dev/null || true
+
 # 企鹅图标（NSWorkspace 设置文件图标；失败不影响功能）
 case "$PNG" in *"'"*) PNG="" ;; esac
 if [ -f "$PNG" ]; then
