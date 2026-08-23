@@ -1,0 +1,119 @@
+metadata:
+  source: work/papers/heart_san/Lim_2024_NatCommun_SAN_CD34.pdf
+  dissected_at: '2026-07-12T18:01:59.162608'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Seurat
+    version: 4.0.2
+    context: 'was performed in R using the
+
+      Seurat toolkit (version 4.0.2, https://satijalab.org/seurat/)68. First, data
+
+      was ﬁltered to remove low-quality cells and potential doublets by
+
+      removing cell'
+    params: []
+  - name: SCTransform
+    version: null
+    context: '%). Data was normalized using
+
+      ScTransform, principal components analysis was performed using
+
+      RunPCA, and the top 25 principal components were used for clus-
+
+      tering into distinct cell clusters'
+    params: []
+  - name: Harmony
+    version: '1.0'
+    context: 'on
+
+      reduction. We then applied Harmony (version 1.0) integration on the
+
+      principal components to remove the technical batch variations. UMAP
+
+      was
+
+      next
+
+      applied
+
+      to
+
+      Harmony-adjusted
+
+      top
+
+      compone'
+    params: []
+  - name: MACS
+    version: null
+    context: 'y25 EBs were dissociated, and MACS sorted using
+
+      the PSC-Derived Cardiomyocyte Isolation Kit to enrich for cardio-
+
+      myocytes as described above. Cells were plated on 12 mm cover glas-
+
+      se'
+    params: []
+  - name: CellRanger
+    version: null
+    context: 'rformed with the 10x Genomics
+
+      CellRanger pipeline by UHN’s Princess Margaret Genomics Centre.
+
+      Single-cell RNA-seq data and single-nuclei RNA-seq data were mapped
+
+      to the human reference Genom'
+    params: []
+  parameters:
+  - name: ndims
+    value: '25'
+    context: 'sis was performed using
+
+      RunPCA, and the top 25 principal components were used for clus-
+
+      tering into distinc'
+    source: prose
+  - name: nPCs
+    value: '25'
+    context: 'was performed using
+
+      RunPCA, and the top 25 principal components were used for clus-
+
+      tering into distinc'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.05'
+    context: '. Results were considered signiﬁcant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***)'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'considered signiﬁcant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***). All statisti'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: 'ant at p < 0.05 (*), p < 0.01
+
+      (**), and p < 0.001 (***). All statistical parameters are d'
+    source: prose
+  platforms:
+  - 10x Genomics
+  - NovaSeq 6000
+  - Chromium Single Cell 3
+  stats:
+    methods_length: 32121
+    methods_lines: 575
+    package_count: 5
+    version_count: 2
+    parameter_count: 5
+    platform_count: 5
+llm_extraction: null

@@ -1,0 +1,21 @@
+{
+  "id": "perform_mwas_cyp2c19_metabolizer_status",
+  "name": "Perform Mwas Cyp2C19 Metabolizer Status",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform a Methylome-wide Association Study (MWAS) to identify CpG sites significantly associated with CYP2C19 metabolizer status.",
+  "detailed_description": "Perform a Methylome-wide Association Study (MWAS) to identify CpG sites significantly associated with CYP2C19 metabolizer status.",
+  "when_to_use": "When you need perform mwas cyp2c19 metabolizer status analysis",
+  "parameters": {
+    "methylation_data_path": "[Required] Path to CSV or TSV file containing DNA methylation beta values. Rows should be samples, columns should be CpG sites. (str)",
+    "metabolizer_status_path": "[Required] Path to CSV or TSV file containing CYP2C19 metabolizer status for each sample. Should have a sample ID column and a status column. (str)",
+    "covariates_path": "[Optional] Path to CSV or TSV file containing covariates to adjust for in the regression model (e.g., age, sex, smoking status).",
+    "pvalue_threshold": "[Optional] P-value threshold for significance after multiple testing correction. (default: 0.05)",
+    "output_file": "[Optional] Filename to save significant CpG sites. (default: significant_cpg_sites.csv)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

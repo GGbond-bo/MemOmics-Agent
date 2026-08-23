@@ -1,0 +1,163 @@
+# 猕猴海马体细胞类型知识
+species: Macaca mulatta
+tissue: hippocampus
+direction: aging
+
+cell_types:
+  - name: Neural stem cell (NSC)
+    subtypes:
+      - quiescent NSC (qNSC)
+      - primed NSC (pNSC)
+      - active NSC (aNSC)
+    markers:
+      - SOX2
+      - PAX6
+      - GFAP
+    aging_note: "NSCs在衰老过程中逐渐进入深度静息状态; 大部分qNSC在衰老期无法被再激活; 猕猴DG区神经发生在衰老时显著下降"
+    source: "Yao 2024 eLife, Wang 2022 Cell Res"
+
+  - name: Neuroblast (NB)
+    markers:
+      - CALM3
+      - NEUROD2
+      - NRN1
+      - NRGN
+    aging_note: "神经母细胞在衰老海马中显著减少; DCX和PROX1在人类GABAergic中间神经元中也有表达"
+    source: "Yao 2024 eLife"
+
+  - name: Granule cell (GC)
+    location: "dentate gyrus (DG)"
+    aging_note: "颗粒细胞在衰老过程中部分丢失; 成年后新生颗粒细胞整合能力下降"
+    source: "Yao 2024 eLife, Wang 2022 Cell Res"
+
+  - name: Astrocyte (AS)
+    markers:
+      - GFAP
+      - S100B
+      - AQP4
+      - ALDH1L1
+    aging_note: "星形胶质细胞在衰老中表现出反应性星形胶质增生; AS2亚群与qNSC有部分重叠; 跨物种比较显示星形胶质细胞衰老特征在哺乳动物中最保守"
+    source: "Wang 2025 Genome Med, Yao 2024 eLife, Xiong 2025 Mol Biol Evol"
+
+  - name: Oligodendrocyte (OLG)
+    markers:
+      - MBP
+      - PLP1
+      - MOBP
+    aging_note: "少突胶质细胞在衰老中脱髓鞘相关基因上调; OLG在衰老海马中比例相对稳定"
+    source: "Wang 2025 Genome Med"
+
+  - name: Oligodendrocyte progenitor (OPC)
+    markers:
+      - PDGFRA
+      - CSPG4
+      - SOX6
+    aging_note: "OPC分化能力随年龄下降"
+    source: "Wang 2025 Genome Med"
+
+  - name: Microglia (MG)
+    markers:
+      - CX3CR1
+      - AIF1
+      - TREM2
+      - P2RY12
+    aging_note: "小胶质细胞在衰老中促炎表型增加; 衰老小胶质细胞中APOE通路上调; 跨物种分析显示小鼠Cx3cr1+稳态小胶质细胞可用于研究人类小胶质细胞衰老; 但人特异性基因(IL1RAPL1, SPP1)无法在小鼠中完全模拟"
+    source: "He 2024 PLoS One"
+
+  - name: GABAergic interneuron (GABA-IN)
+    markers:
+      - GAD1
+      - GAD2
+      - SST
+      - PVALB
+      - VIP
+    aging_note: "GABA能中间神经元在衰老中PV+亚群选择性减少; 海马CA1区在衰老中神经元亚型特异性变化最明显"
+    source: "Wang 2025 Genome Med"
+
+  - name: Pyramidal neuron (PN)
+    subregions:
+      - CA1
+      - CA2
+      - CA3
+    markers:
+      - CAMK2A
+      - SATB2
+      - SLC17A7
+    aging_note: "锥体神经元在衰老中突触可塑性相关基因下调; 海马CA1区锥体神经元在衰老中最易受损"
+    source: "Anderson 2026 Geroscience, Wang 2025 Genome Med"
+
+  - name: Endothelial cell (EC)
+    markers:
+      - CLDN5
+      - PECAM1
+      - VWF
+    aging_note: "血脑屏障在衰老早期即发生破坏，海马是最早受影响的脑区之一"
+    source: "Anderson 2026 Geroscience"
+
+  - name: Transiently amplifying progenitor cell (TAPC)
+    markers:
+      - SOX2
+      - PAX6
+      - GFAP (与NSC/Astro共享)
+    aging_note: "灵长类海马衰老中 TAPC 分裂受损最显著（Zhang 2021），是神经发生下降的核心细胞学事件；TAPC 位于 NSC→Neuroblast→Granule 谱系中间"
+    source: "Zhang 2021 Protein & Cell (PMID 34052996)"
+
+  - name: Pericyte (Per)
+    markers:
+      - PDGFRB
+      - CSPG4
+    source: "Yao 2024 eLife"
+
+literature:
+  - pmid: "34052996"
+    title: "Single-nucleus transcriptomic landscape of primate hippocampal aging"
+    authors: "Hui Zhang, Jiaming Li, Jie Ren et al."
+    journal: "Protein & Cell"
+    year: 2021
+    doi: "10.1007/s13238-021-00852-9"
+    key_findings:
+      - "首个灵长类海马衰老 snRNA 图谱，12 个细胞类型"
+      - "TAPC 分裂受损 + 神经元功能受损是衰老核心"
+      - "衰老小胶质/少突促炎、内皮凝血失调 → 神经发生微环境恶化"
+
+  - pmid: "35750757"
+    title: "Transcriptome dynamics of hippocampal neurogenesis in macaques across the lifespan and aged humans"
+    authors: "Wang W et al."
+    journal: "Cell Res"
+    year: 2022
+    doi: "10.1038/s41422-022-00678-y"
+
+  - pmid: "40296047"
+    title: "Regional and aging-specific cellular architecture of non-human primate brains"
+    authors: "Wang YM et al."
+    journal: "Genome Med"
+    year: 2025
+    doi: "10.1186/s13073-025-01469-x"
+
+  - pmid: "38607670"
+    title: "Deciphering molecular heterogeneity and dynamics of human hippocampal neural stem cells at different ages and injury states"
+    authors: "Yao J et al."
+    journal: "eLife"
+    year: 2024
+    doi: "10.7554/eLife.89507"
+
+  - pmid: "39591421"
+    title: "Exploring the feasibility of using mice as a substitute model for investigating microglia in aging and AD"
+    authors: "He R et al."
+    journal: "PLoS One"
+    year: 2024
+    doi: "10.1371/journal.pone.0311374"
+
+  - pmid: "40824352"
+    title: "Patterns of transcriptomic aging in the hippocampus of rhesus macaques highlight midlife transitions"
+    authors: "Anderson TJ et al."
+    journal: "Geroscience"
+    year: 2026
+    doi: "10.1007/s11357-025-01834-z"
+
+  - pmid: "40036868"
+    title: "Cross-Species Insights from Single-Nucleus Sequencing Highlight Aging-Related Hippocampal Features in Tree Shrew"
+    authors: "Xiong LL et al."
+    journal: "Mol Biol Evol"
+    year: 2025
+    doi: "10.1093/molbev/msaf020"

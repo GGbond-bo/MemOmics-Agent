@@ -1,0 +1,21 @@
+{
+  "id": "annotate_celltype_with_panhumanpy",
+  "name": "Annotate Celltype With Panhumanpy",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform cell type annotation of single-cell RNA-seq data using Panhuman Azimuth Neural Network. This function implements the Panhuman Azimuth workflow for cell type annotation using the panhumanpy pac",
+  "detailed_description": "Perform cell type annotation of single-cell RNA-seq data using Panhuman Azimuth Neural Network. This function implements the Panhuman Azimuth workflow for cell type annotation using the panhumanpy package, providing hierarchical cell type labels for tissues across the human body. ",
+  "when_to_use": "When you need annotate celltype with panhumanpy analysis",
+  "parameters": {
+    "adata_path": "[Required] Path to the AnnData file containing scRNA-seq data (str)",
+    "feature_names_col": "[Optional] Column name in adata.var containing gene symbols (default: None, uses index)",
+    "refine": "[Optional] Whether to perform additional label refinement for consistent granularity (default: True)",
+    "umap": "[Optional] Whether to generate ANN embeddings and UMAP (default: True)",
+    "output_dir": "[Optional] Directory to save results (default: ./output)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

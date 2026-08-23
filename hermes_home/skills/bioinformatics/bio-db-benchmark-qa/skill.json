@@ -1,0 +1,16 @@
+{
+  "id": "bio-db-benchmark-qa",
+  "name": "Bio DB Benchmark QA（生物数据库问答 Benchmark 作答）",
+  "category": "general",
+  "language": "Python",
+  "description": "作答生物信息学数据库问答 benchmark 考试（LABBench2 dbqa2、MESINESP DeCS、MeSH 语义索引、以及任何\"题目给出问题→用真实公共数据库 API 检索→输出结构化答案→对照密封答案评分\"的测试）。触发词：benchmarker、密封答案、考试题、TaskA/TaskB/TaskC、dbqa2、MESINESP、MeSH 标签、DeCS 编码、LABBench2。",
+  "starting_prompt": "使用 Bio DB Benchmark QA（生物数据库问答 Benchmark 作答） 进行分析",
+  "source_dir": "skills/bioinformatics/bio-db-benchmark-qa",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

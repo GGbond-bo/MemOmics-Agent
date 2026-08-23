@@ -1,0 +1,20 @@
+{
+  "id": "query_dailymed",
+  "name": "Query Dailymed",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the DailyMed RESTful API using natural language or a direct endpoint.",
+  "detailed_description": "Query the DailyMed RESTful API using natural language or a direct endpoint.",
+  "when_to_use": "When you need query dailymed analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about drug labeling (str)",
+    "endpoint": "[Optional] Direct DailyMed endpoint or full URL",
+    "format": "[Optional] 'json' or 'xml' (default: json)",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

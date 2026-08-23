@@ -1,0 +1,202 @@
+# 人类骨骼肌衰老 ATAC-seq 关键发现
+# MemOmics Knowledge Base — 文献驱动
+# 更新日期: 2026-06-28
+
+# ─── 衰老相关染色质可及性变化 ──────────────────────────
+aging_chromatin_changes:
+  global_condensation:
+    desc: "衰老骨骼肌染色质全局趋于凝缩，异染色质增加"
+    evidence: |
+      - H3K27me3水平升高，H3K9ac降低 → 染色质可及性下降
+      - HP1α和polycomb复合体亚基增加
+      - 衰老相关异染色质灶(SAHF)增加
+    source: |
+      - Cencioni et al., 2019, Cells (PMID: 31569376)
+      - Nothobranchius furzeri模型
+    species: "killifish (具参考价值)"
+
+  # ─── 快肌纤维特异性染色质重塑 ─────────────────────
+  fast_fiber_chromatin:
+    desc: "快肌(糖酵解型)肌纤维在衰老/去神经化中染色质变化最显著"
+    key_tf: "MAF (c-MAF)"
+    mechanism: |
+      去神经化 → MAF表达抑制 → 快肌基因程序关闭
+      → 慢肌基因程序不作为 → 肌纤维萎缩
+    evidence: |
+      - snATAC-seq: 去神经化后快肌基因位点可及性下降
+      - MAF过表达可逆转萎缩，恢复快肌基因表达
+      - MAF绑定位点主要富集于快肌基因MYH1, MYH2, MYH4附近
+    source: |
+      - Dos Santos et al., 2025, Cell Rep (PMID: 40632651)
+      - snRNA-seq + snATAC-seq联合分析
+    must_validate: True
+
+  # ─── 肌核异质性 ─────────────────────────────────────
+  myonuclei_heterogeneity:
+    desc: "肌纤维是多核细胞，不同肌核的染色质状态存在空间异质性"
+    evidence: |
+      - 同一肌纤维中不同肌核的chromatin accessibility不同
+      - NMJ附近肌核与肌纤维末梢肌核的open chromatin谱不同
+      - 衰老导致特定肌核亚群染色质失调
+    source: |
+      - Dos Santos et al., 2025, Cell Rep
+      - Kim et al., 2023, Nat Commun (snRNA-seq)
+      - Petrany et al., 2020, Nat Commun (snRNA-seq)
+    notes: "snATAC-seq是研究肌核异质性的最佳方法"
+
+  # ─── 去神经化应答的顺式调控重编程 ─────────────────
+  denervation_cis_regulatory:
+    desc: "去神经化导致顺式调控网络大规模重编程"
+    key_genes: ["MYOG", "RUNX1", "HDAC4", "MAF", "MEF2"]
+    chromatin_changes: |
+      - 萎缩相关基因(Atrogenes, UBLs)的启动子可及性增加
+      - 快肌基因(Myh1, Myh2, Myh4)的增强子可及性下降
+      - MYOG绑定位点的染色质开放
+      - HDAC4位点可及性升高 → HDAC4上调 → 去神经化级联
+    source: |
+      - Dos Santos et al., 2025, Cell Rep
+      - Lin et al., 2025, "Reprogramming of cis-regulatory networks during skeletal muscle atrophy"
+      - Moresi et al., 2010, Cell (HDAC4-myogenin通路)
+
+  # ─── 线粒体相关染色质变化 ─────────────────────────
+  mitochondrial_chromatin:
+    desc: "衰老线粒体功能障碍与核编码线粒体基因的染色质可及性下降相关"
+    key_genes: ["PPARGC1A", "SIRT3", "TFAM", "NRF1", "ESRRA"]
+    chromatin_accessible: "下降"
+    regulator: "HSF1-SIRT3-PGC1α轴"
+    evidence: |
+      - HSF1在衰老肌中下调
+      - ChIP-seq显示HSF1直接绑定SIRT3启动子
+      - SIRT3去乙酰化PGC1α，维持线粒体功能
+    source: |
+      - Zhang et al., 2026, Adv Sci (PMID: 41400028)
+      - Chen et al., 2024, J Cachexia Sarcopenia Muscle (PMID: 39187977)
+
+  # ─── 卫星细胞(MuSC)表观遗传变化 ───────────────────
+  musc_epigenetic:
+    desc: "肌肉干细胞在衰老中染色质景观改变，导致自我更新能力下降"
+    markers: ["PAX7", "MYF5", "MYOD"]
+    chromatin_changes: |
+      - 静息状态基因(PAX7)位点可及性增加
+      - 激活基因(MYOD, MYOG)位点可及性延迟开放
+      - H3K27me3在分化基因位点积累
+    source: |
+      - Liu et al., 2022, Nat Med
+      - Blau et al., 2015 (综述)
+
+# ─── 关键衰老相关转录因子 ──────────────────────────────
+aging_tfs:
+  maf:
+    name: "MAF (c-MAF)"
+    role: "快肌基因程序的主调控因子，衰老中下调"
+    target_genes: ["MYH1", "MYH2", "MYH4", "TNNC2", "TNNT3"]
+    evidence: "snATAC-seq + ChIP-seq验证"
+    source: "Dos Santos et al., 2025, Cell Rep"
+
+  myog:
+    name: "Myogenin"
+    role: "去神经化时被诱导，导致萎缩基因上调"
+    target_genes: ["TRIM63", "FBXO32", "MURF1"]
+    evidence: "RNA-seq + ATAC-seq联合分析"
+    source: "Moresi et al., 2010, Cell"
+
+  runx1:
+    name: "RUNX1"
+    role: "去神经化应答的保护性TF，防止肌纤维变性"
+    evidence: "ATAC-seq显示去神经化后RUNX1 motif富集"
+    source: "Wang et al., 2005; Lin et al., 2025"
+
+  hsf1:
+    name: "HSF1"
+    role: "热休克因子，衰老中下调 → 线粒体功能下降"
+    target_genes: ["SIRT3"]
+    evidence: "ChIP-seq验证"
+    source: "Zhang et al., 2026, Adv Sci"
+
+  yy1:
+    name: "YY1"
+    role: "抑制Mss51，保护线粒体功能"
+    evidence: "ChIP-qPCR验证"
+    source: "Chen et al., 2024, J Cachexia Sarcopenia Muscle"
+
+  foxo:
+    name: "FOXO1/3"
+    role: "萎缩相关基因表达的主激活因子"
+    target_genes: ["TRIM63", "FBXO32", "GADD45A"]
+    evidence: "FOXO motif在萎缩相关增强子中富集"
+    source: "Sandri et al., 2004, Cell; Lin et al., 2025"
+
+  hdac4:
+    name: "HDAC4"
+    role: "连接神经活动到肌肉转录重编程，去神经化时上调"
+    evidence: "去神经化后HDAC4位点可及性增加"
+    source: "Cohen et al., 2007, Cell; Tang et al., 2009"
+
+# ─── ATAC差异可及性分析参数 ─────────────────────────
+diff_accessibility_params:
+  young_vs_old:
+    comparisons:
+      - "Young vs Old (所有细胞类型)"
+      - "Young vs Old (逐细胞类型)"
+      - "Type II myonuclei: Young vs Old"
+      - "Type I myonuclei: Young vs Old"
+    test: "Wilcoxon秩和检验"
+    log2fc_cutoff: 0.5
+    fdr_cutoff: 0.05
+    min_cells: 10
+    source: "ArchR默认参数"
+
+  annotation:
+    peak_annotation: "ChIPseeker"
+    genome: "hg38"
+    tss_region: "-1000~+100bp"
+    distal_cutoff: "-3000~+3000bp以外"
+    source: "共识方法"
+
+# ─── TF motif 优先级列表 ──────────────────────────────
+motif_priorities:
+  muscle_fiber_type: ["MAF", "MAFB", "MEF2A", "MEF2C", "MEF2D", "MYOD1", "MYOG", "TEAD1", "TEAD4"]
+  atrophy: ["FOXO1", "FOXO3", "FOXO4", "MYOG", "RUNX1", "STAT3"]
+  denervation: ["HDAC4", "MEF2", "MYOG", "RUNX1", "AP1"]
+  mitochondria: ["PPARG", "ESRRA", "ESRRB", "NRF1", "TFAM"]
+  senescence: ["E2F", "DP1", "HMGA", "P53", "NFKB"]
+  source: "文献综合"
+
+# ─── 文献来源列表 ────────────────────────────────────
+literature_sources:
+  - pmid: "40632651"
+    title: "A mechanistic basis of fast myofiber vulnerability to neuromuscular diseases"
+    journal: "Cell Rep, 2025"
+    method: "snRNA-seq + snATAC-seq"
+    key_finding: "MAF调控快肌基因程序，去神经化后MAF抑制"
+
+  - pmid: "31569376"
+    title: "Aging Triggers H3K27 Trimethylation Hoarding in the Chromatin of Nothobranchius furzeri Skeletal Muscle"
+    journal: "Cells, 2019"
+    method: "ChIP-seq + RNA-seq (killifish模型)"
+    key_finding: "衰老引起H3K27me3积累，染色质凝缩"
+
+  - pmid: "41400028"
+    title: "Skeletal Muscle HSF1 Alleviates Age-Associated Sarcopenia and Mitochondrial Function Decline via SIRT3-PGC1α Axis"
+    journal: "Adv Sci, 2026"
+    method: "ChIP-seq"
+    key_finding: "HSF1-SIRT3-PGC1α轴维持线粒体功能"
+
+  - pmid: "39187977"
+    title: "Betaine delays age-related muscle loss by mitigating Mss51-induced impairment in mitochondrial respiration via Yin Yang1"
+    journal: "J Cachexia Sarcopenia Muscle, 2024"
+    method: "ChIP-qPCR"
+    key_finding: "YY1抑制Mss51, 保护线粒体呼吸"
+
+  - pmid: "40317420"
+    title: "RNA-seq and ChIP-seq unveils thyroid hormone receptor α deficiency affects skeletal muscle myoblast proliferation and differentiation via Col6a1 during aging"
+    journal: "J Muscle Res Cell Motil, 2025"
+    method: "ChIP-seq + RNA-seq"
+    key_finding: "TRα通过Col6a1调控肌细胞增殖分化"
+
+  - ref: "Lin et al., 2025"
+    title: "Reprogramming of cis-regulatory networks during skeletal muscle atrophy in male mice"
+    journal: "ATAC-seq during denervation-induced atrophy"
+    method: "ATAC-seq + RNA-seq"
+    key_finding: "顺式调控网络在肌萎缩中被大规模重编程"
+    source: "cited in Dos Santos et al., 2025 Cell Rep"

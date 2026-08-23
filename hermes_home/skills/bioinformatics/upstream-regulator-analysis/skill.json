@@ -1,0 +1,40 @@
+{
+  "name": "上游调控因子分析",
+  "id": "upstream-regulator-analysis",
+  "category": "functional_analysis",
+  "language": "R/Python",
+  "source": "Biomni Lab",
+  "description": "上游调控预测: DEGs → DoRothEA → TF/激酶活性",
+  "triggers": [
+    "上游调控",
+    "DoRothEA",
+    "TF活性",
+    "regulator"
+  ],
+  "steps": [
+    "DEG准备",
+    "DoRothEA富集",
+    "VIPER活性评分",
+    "调控网络",
+    "可视化"
+  ],
+  "dependencies": [
+    "decoupleR",
+    "DoRothEA",
+    "VIPER"
+  ],
+  "outputs": [
+    "调控因子排名",
+    "活性热图",
+    "调控网络"
+  ],
+  "detailed_description": "上游调控预测: DEGs → DoRothEA → TF/激酶活性\n\n分析步骤:\n  - DEG准备\n  - DoRothEA富集\n  - VIPER活性评分\n  - 调控网络\n  - 可视化\n\n依赖包: decoupleR, VIPER, DoRothEA",
+  "when_to_use": "当你需要 上游调控因子分析 时触发",
+  "parameters": {
+    "steps": "DEG准备 -> DoRothEA富集 -> VIPER活性评分 -> 调控网络 -> 可视化"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

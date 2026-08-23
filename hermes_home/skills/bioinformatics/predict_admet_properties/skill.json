@@ -1,0 +1,18 @@
+{
+  "id": "predict_admet_properties",
+  "name": "Predict Admet Properties",
+  "category": "drug_discovery",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Predicts ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity) properties for a list of compounds using pretrained models.",
+  "detailed_description": "Predicts ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity) properties for a list of compounds using pretrained models.",
+  "when_to_use": "When you need predict admet properties analysis",
+  "parameters": {
+    "smiles_list": "[Required] List of SMILES strings representing chemical compounds to analyze (List[str])",
+    "ADMET_model_type": "[Optional] Type of model to use for ADMET prediction (options: 'MPNN', 'CNN', 'Morgan') (default: MPNN)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

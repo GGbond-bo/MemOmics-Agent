@@ -1,0 +1,40 @@
+{
+  "name": "孟德尔随机化",
+  "id": "mendelian-randomization-twosamplemr",
+  "category": "genomics",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "两样本MR: 工具变量 → MR分析 → 敏感性分析",
+  "triggers": [
+    "孟德尔随机化",
+    "MR分析",
+    "因果推断",
+    "TwoSampleMR"
+  ],
+  "steps": [
+    "暴露GWAS提取",
+    "IV选择(F<10)",
+    "结局GWAS匹配",
+    "MR分析(IVW/Egger)",
+    "异质性+多效性",
+    "留一法"
+  ],
+  "dependencies": [
+    "TwoSampleMR",
+    "MR-PRESSO"
+  ],
+  "outputs": [
+    "MR结果",
+    "散点图",
+    "漏斗图"
+  ],
+  "detailed_description": "两样本MR: 工具变量 → MR分析 → 敏感性分析\n\n分析步骤:\n  - 暴露GWAS提取\n  - IV选择(F<10)\n  - 结局GWAS匹配\n  - MR分析(IVW/Egger)\n  - 异质性+多效性\n  - 留一法\n\n依赖包: MR-PRESSO, TwoSampleMR",
+  "when_to_use": "当你需要 孟德尔随机化 时触发",
+  "parameters": {
+    "steps": "暴露GWAS提取 -> IV选择(F<10) -> 结局GWAS匹配 -> MR分析(IVW/Egger) -> 异质性+多效性 -> 留一法"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

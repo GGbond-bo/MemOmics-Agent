@@ -1,0 +1,59 @@
+{
+  "id": "drug-response",
+  "name": "药物响应预测",
+  "category": "drug_discovery",
+  "language": "Python",
+  "description": "Connectivity Map+药物敏感性+联合用药预测",
+  "starting_prompt": "预测药物响应",
+  "source_dir": "skills/built_in/drug-response",
+  "memomics_module": "06_药物发现",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "drug",
+    "cmap",
+    "pharmacogenomics"
+  ],
+  "steps": [
+    {
+      "name": "Connectivity Map",
+      "description": "cmapPy gene set enrichment",
+      "tool": "terminal"
+    },
+    {
+      "name": "Drug sensitivity prediction",
+      "description": "oncoPredict IC50",
+      "tool": "terminal"
+    },
+    {
+      "name": "Combination therapy",
+      "description": "DrugComb synergy",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "pRRophetic",
+    "oncoPredict",
+    "GSVA"
+  ],
+  "python_packages": [
+    "cmapPy"
+  ],
+  "difficulty": "advanced",
+  "applicable": [
+    "disease",
+    "tumor",
+    "有药敏数据"
+  ],
+  "parameters": {
+    "r_packages": "pRRophetic, oncoPredict, GSVA",
+    "python_packages": "cmapPy",
+    "steps": "Connectivity Map -> Drug sensitivity prediction -> Combination therapy"
+  },
+  "detailed_description": "Connectivity Map+药物敏感性+联合用药预测\n\n适用场景: disease, tumor, 有药敏数据\n\n分析步骤:\n  - Connectivity Map: cmapPy gene set enrichment\n  - Drug sensitivity prediction: oncoPredict IC50\n  - Combination therapy: DrugComb synergy\n\n依赖包: pRRophetic, cmapPy, oncoPredict, GSVA\n\n难度: advanced\n\n触发提示: \"预测药物响应\"",
+  "when_to_use": "适用于: disease, tumor, 有药敏数据",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

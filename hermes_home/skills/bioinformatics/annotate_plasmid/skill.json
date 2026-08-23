@@ -1,0 +1,18 @@
+{
+  "id": "annotate_plasmid",
+  "name": "Annotate Plasmid",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Annotate a DNA sequence using pLannotate's command-line interface.",
+  "detailed_description": "Annotate a DNA sequence using pLannotate's command-line interface.",
+  "when_to_use": "When you need annotate plasmid analysis",
+  "parameters": {
+    "sequence": "[Required] The DNA sequence to annotate (str)",
+    "is_circular": "[Optional] Whether the sequence is circular (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

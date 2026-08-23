@@ -1,0 +1,15 @@
+{
+  "id": "get_oligo_annealing_protocol",
+  "name": "Get Oligo Annealing Protocol",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Return a standard protocol for annealing oligonucleotides without phosphorylation.",
+  "detailed_description": "Return a standard protocol for annealing oligonucleotides without phosphorylation.",
+  "when_to_use": "When you need get oligo annealing protocol analysis",
+  "parameters": {},
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

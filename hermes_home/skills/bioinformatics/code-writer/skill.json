@@ -1,0 +1,53 @@
+{
+  "id": "code-writer",
+  "name": "代码编写",
+  "category": "general",
+  "language": "Python/R",
+  "description": "编写Python/R脚本，数据分析代码，函数封装，程序开发",
+  "triggers": [
+    "写代码",
+    "写脚本",
+    "写个python",
+    "写r代码",
+    "写个函数",
+    "编程",
+    "帮我写"
+  ],
+  "tools": [
+    "execute_python",
+    "execute_r",
+    "terminal",
+    "write_file"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "需求确认",
+      "description": "确认代码需求、输入输出、依赖"
+    },
+    {
+      "name": "编写代码",
+      "description": "编写代码，包含注释和错误处理"
+    },
+    {
+      "name": "测试执行",
+      "description": "运行代码，检查输出"
+    }
+  ],
+  "parameters": {
+    "steps": "需求确认 -> 编写代码 -> 测试执行"
+  },
+  "chains_from": [],
+  "chains_to": [
+    "data-viz",
+    "html-report",
+    "ppt-generator"
+  ],
+  "detailed_description": "编写Python/R脚本，数据分析代码，函数封装，程序开发\n\n分析步骤:\n  - 需求确认: 确认代码需求、输入输出、依赖\n  - 编写代码: 编写代码，包含注释和错误处理\n  - 测试执行: 运行代码，检查输出",
+  "when_to_use": "当你需要 代码编写 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

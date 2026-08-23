@@ -1,0 +1,50 @@
+{
+  "id": "self-improving-agent",
+  "name": "自进化代理",
+  "category": "meta",
+  "language": "Python",
+  "description": "自进化能力：分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。",
+  "starting_prompt": "自进化",
+  "memomics_module": "元技能",
+  "chains_from": [],
+  "chains_to": ["find-skill", "install_skill"],
+  "tags": ["meta", "evolution", "self-improving", "learn", "自进化", "自我改进", "经验沉淀", "技能生成", "错误学习", "参数优化"],
+  "aliases": ["自进化", "自我改进", "学习经验", "沉淀技能", "self-improving", "evolve", "自动学习"],
+  "triggers": [
+    "自进化", "自我改进", "沉淀.*技能", "沉淀.*经验", "学习.*错误",
+    "自动学习", "记住.*经验", "优化.*参数", "evolve", "self-improving",
+    "为什么.*重复.*错误", "怎么.*记住"
+  ],
+  "difficulty": "advanced",
+  "applicable": ["all_species"],
+  "parameters": {
+    "action": {"type": "string", "description": "操作: status/evolve/learn_from_error/save_skill/show_history", "required": false, "default": "status"},
+    "skill_name": {"type": "string", "description": "技能名称(save_skill时用)", "required": false},
+    "skill_data": {"type": "object", "description": "技能数据(save_skill时用)", "required": false}
+  },
+  "steps": [
+    {"name": "查询自进化状态", "description": "展示当前已沉淀技能数、错误记忆条数、参数进化次数", "tool": "llm"},
+    {"name": "技能沉淀", "description": "分析成功后，将成功脚本+参数保存为新技能", "tool": "create_skill"},
+    {"name": "错误学习", "description": "分析失败后，记录错误模式+根因+修复方案到ErrorMemory", "tool": "terminal"},
+    {"name": "参数进化", "description": "根据历史运行结果，用EWMA优化关键参数(如resolution/MT阈值)", "tool": "evolve_parameters"}
+  ],
+  "r_packages": [],
+  "python_packages": [],
+  "subsystems": {
+    "skill_sedimentation": {
+      "trigger": "review.passed && overall_score >= 0.7",
+      "action": "save_proven_code() → 保存到 skill/scripts/proven/",
+      "storage": "memory_omics/skills/built_in/<skill_id>/scripts/"
+    },
+    "error_learning": {
+      "trigger": "tool.error || review.failed",
+      "action": "ErrorMemory.record() → 记录错误类型+根因+修复方案",
+      "storage": "knowledge_base/error_memory/errors.jsonl"
+    },
+    "parameter_evolution": {
+      "trigger": "review.passed",
+      "action": "EvolutionEngine.propose_edit() → EWMA更新参数",
+      "storage": "data/evolution_log/state.json"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "windows-bioinformatics-batch-processing",
+  "name": "✅ 正确：for 循环串行",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "Windows生信批量任务执行规程：进程生命周期管理、GPU内存、进度监控、错误恢复。适用于CellBender/scanpy/Seurat等需要在Windows上用GPU跑大批量样本的场景",
+  "starting_prompt": "使用 ✅ 正确：for 循环串行 进行分析",
+  "source_dir": "skills/bioinformatics/windows-bioinformatics-batch-processing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "windows",
+    "batch",
+    "process-management",
+    "cellbender",
+    "gpu"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

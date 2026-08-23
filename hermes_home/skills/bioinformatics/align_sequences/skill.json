@@ -1,0 +1,18 @@
+{
+  "id": "align_sequences",
+  "name": "Align Sequences",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Align short sequences (primers) to a longer sequence, allowing for one mismatch. Checks both forward and reverse complement strands.",
+  "detailed_description": "Align short sequences (primers) to a longer sequence, allowing for one mismatch. Checks both forward and reverse complement strands.",
+  "when_to_use": "When you need align sequences analysis",
+  "parameters": {
+    "long_seq": "[Required] Target DNA sequence (str)",
+    "short_seqs": "[Required] Single primer or list of primers (Union[str, List[str]])"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

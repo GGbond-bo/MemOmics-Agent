@@ -1,0 +1,23 @@
+{
+  "id": "adaptyv-api",
+  "name": "adaptyv-api",
+  "category": "Multi-omics",
+  "language": "R+Python",
+  "description": "Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv.",
+  "tags": [
+    "adaptyv",
+    "protein characterization",
+    "binding assay",
+    "BLI",
+    "SPR",
+    "thermostability",
+    "expression",
+    "affinity",
+    "experiment",
+    "foundry"
+  ],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

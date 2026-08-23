@@ -1,0 +1,16 @@
+{
+  "id": "agent-loop-engineering",
+  "name": "Agent Loop Engineering — 防止 LLM \"叙事代替执行\"的框架级防御",
+  "category": "sys_internal",
+  "language": "Python",
+  "description": "防止 LLM '叙事代替执行'的框架级防御。触发：长链修复任务中 Agent 输出动作动词但无 tool call，或 rail_review(post) code_executed 过短。已部署 Guardian 快照回滚 + Planner/Executor 双阶段协议。",
+  "starting_prompt": "使用 Agent Loop Engineering — 防止 LLM \"叙事代替执行\"的框架级防御 进行分析",
+  "source_dir": "skills/bioinformatics/agent-loop-engineering",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL 讨论触发",
+  "trigger_keywords": []
+}

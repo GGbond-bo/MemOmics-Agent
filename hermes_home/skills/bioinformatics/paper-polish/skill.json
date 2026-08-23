@@ -1,0 +1,28 @@
+{
+  "id": "paper-polish",
+  "name": "Paper Polish",
+  "category": "general",
+  "language": "Python",
+  "description": "学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张；触发词：润色、论文润色、去AI腔、中译英、polish",
+  "starting_prompt": "使用 Paper Polish 进行分析",
+  "source_dir": "skills/bioinformatics/paper-polish",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "润色",
+    "论文润色",
+    "去AI腔",
+    "去除AI味",
+    "AI味",
+    "polish",
+    "中译英",
+    "翻译成英文",
+    "语言修改",
+    "awkward wording",
+    "overclaiming"
+  ]
+}

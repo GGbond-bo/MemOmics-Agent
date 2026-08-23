@@ -1,0 +1,23 @@
+{
+  "id": "query_chembl",
+  "name": "Query Chembl",
+  "category": "data_retrieval",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Query the ChEMBL REST API via natural language, direct endpoint, or identifiers (chembl_id, smiles, molecule_name).",
+  "detailed_description": "Query the ChEMBL REST API via natural language, direct endpoint, or identifiers (chembl_id, smiles, molecule_name).",
+  "when_to_use": "When you need query chembl analysis",
+  "parameters": {
+    "prompt": "[Required] Natural language query about bioactivity data (str)",
+    "endpoint": "[Optional] Direct ChEMBL API endpoint or full URL",
+    "chembl_id": "[Optional] ChEMBL ID (e.g., 'CHEMBL25')",
+    "smiles": "[Optional] SMILES for similarity/substructure",
+    "molecule_name": "[Optional] Molecule name to search",
+    "max_results": "[Optional] Max results (default: 20)",
+    "verbose": "[Optional] Return detailed results (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

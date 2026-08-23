@@ -1,0 +1,49 @@
+{
+  "id": "file-convert",
+  "name": "格式转换",
+  "category": "general",
+  "language": "Python",
+  "description": "数据格式转换：CSV/Excel/TSV/H5AD/MTX等常见格式互转",
+  "triggers": [
+    "转换格式",
+    "格式转换",
+    "转成",
+    "csv转",
+    "excel转"
+  ],
+  "tools": [
+    "execute_python",
+    "terminal"
+  ],
+  "python_requires": [
+    "pandas",
+    "openpyxl",
+    "anndata"
+  ],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "检测格式",
+      "description": "检测输入文件格式和结构"
+    },
+    {
+      "name": "转换",
+      "description": "执行格式转换"
+    },
+    {
+      "name": "验证",
+      "description": "验证输出文件完整性"
+    }
+  ],
+  "parameters": {
+    "steps": "检测格式 -> 转换 -> 验证"
+  },
+  "chains_from": [],
+  "chains_to": [],
+  "detailed_description": "数据格式转换：CSV/Excel/TSV/H5AD/MTX等常见格式互转\n\n分析步骤:\n  - 检测格式: 检测输入文件格式和结构\n  - 转换: 执行格式转换\n  - 验证: 验证输出文件完整性",
+  "when_to_use": "当你需要 格式转换 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

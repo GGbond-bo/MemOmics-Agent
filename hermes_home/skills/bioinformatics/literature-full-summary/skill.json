@@ -1,0 +1,16 @@
+{
+  "id": "literature-full-summary",
+  "name": "文献全文思路提炼 Skill（给人看的方向）",
+  "category": "Literature",
+  "language": "Python",
+  "description": "文献全文思路提炼（给人看的方向）：逐篇提取思路/背景/物种/组织/问题/解决方法/方法/结论/验证 9 项结构化摘要，写入文献库 summaries/ 并可跨会话查看。与 literature-param-extraction 分工：本 skill 产出人类阅读的论文解读；参数/生物知识/生信知识（给 AI 调用）走 kb_extract_from_paper。",
+  "starting_prompt": "使用 文献全文思路提炼 Skill（给人看的方向） 进行分析",
+  "source_dir": "skills/bioinformatics/literature-full-summary",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

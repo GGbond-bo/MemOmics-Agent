@@ -1,0 +1,19 @@
+# System files
+.DS_Store
+
+# Data files (downloaded/generated)
+**/*.rds
+**/data/
+
+# Results directories
+**/*_results/
+**/mr_results/
+
+# Test outputs
+assets/eval/test_output/
+assets/eval/eval_output/
+
+# R temporary files
+.RData
+.Rhistory
+Rplots.pdf

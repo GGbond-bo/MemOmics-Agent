@@ -1,0 +1,29 @@
+{
+  "id": "academic-paper-reviewer",
+  "name": "Academic Paper Reviewer v1.10.0 — Multi-Perspective Academic Paper Review Agent Team",
+  "category": "general",
+  "language": "Python",
+  "description": "Multi-perspective academic paper review with dynamic reviewer personas. Simulates 5 independent reviewers (Journal-Fit Reviewer + 3 peer reviewers + Devil's Advocate) with field-specific expertise. Su",
+  "starting_prompt": "使用 Academic Paper Reviewer v1.10.0 — Multi-Perspective Academic Paper Review Agent Team 进行分析",
+  "source_dir": "skills/bioinformatics/academic-paper-reviewer",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "审稿",
+    "论文审稿",
+    "同行评审",
+    "审稿意见",
+    "帮我审论文",
+    "模拟审稿",
+    "审稿人",
+    "referee",
+    "peer review",
+    "review paper",
+    "critique paper",
+    "editorial review"
+  ]
+}

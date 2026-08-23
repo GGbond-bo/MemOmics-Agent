@@ -1,0 +1,46 @@
+{
+  "id": "cross-species-atac-conservation",
+  "name": "跨物种 ATAC CRE 保守性评估（纯 ATAC）",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 跨物种 ATAC CRE 保守性评估（纯 ATAC） 进行分析",
+  "source_dir": "skills/bioinformatics/cross-species-atac-conservation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED 必触发",
+  "trigger_keywords": [],
+  "success_count": 1,
+  "proven_script": "p4_crecs_scores.py",
+  "proven_params": [
+    {
+      "species": "macaca",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "p4_crecs_scores.py",
+      "params": "CRECS=0.4L1+0.3L2+0.3L3 (L1=phyloP>0, L2=猴/人DA密度, L3=group Jaccard), 分类A>=0.8/B=L1=1&L3<0.5/D=L1=0",
+      "date": "2026-08-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "P4-P6 完成：26 tiles 分类 B=17/D=9（B=序列保守+TF结合分歧=专利核心检出）；BNIP3 正向对照 PASS（TSS±1kb phyloP=0.185）；专利文档3份（交底书/独权草案/实施例数据）落盘 patent/"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "p4_crecs_scores.py"
+  },
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.75,
+      "evidence": "辩论证据（2026-08-11 8角色L2辩论）：裁判 verdict=modify, confidence=high。反方4角色全面占优（8/9/8/8 vs 正方7/5/7）。核心攻击点：1) con_statistics 9分——单一benchmark无多重比较校正（5方法×8管线×10指标）、仅6数据集功效不足、ARI对聚类数敏感+ArchR默认参数未调优不公平、'致命'阈值r>0.75未经过假设检验、r²仅>0.56需比较效应量比值；2) con_history 8分——违反铁律-4多源验证（仅Luo 2024单一来源），物种误判教训（mulatta→fascicularis）警示单",
+      "date": "2026-08-11 23:23:07"
+    }
+  ]
+}

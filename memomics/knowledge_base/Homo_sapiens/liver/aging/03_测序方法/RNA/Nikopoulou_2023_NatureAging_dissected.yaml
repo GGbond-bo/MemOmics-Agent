@@ -1,0 +1,753 @@
+metadata:
+  source: work/papers/liver_aging/Nikopoulou_2023_NatureAging.pdf
+  dissected_at: '2026-07-12T17:30:55.008371'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Seurat
+    version: 4.0.4
+    context: "the Seurat package (V. 4.0.4) (ref. 49). Count matrices were normalized\
+      \ \nand scaled using the SCTransform func"
+    params: []
+  - name: SCTransform
+    version: null
+    context: "the SCTransform function with standard parameters. \nRelative gene expression\
+      \ visualization of known hepatic pericen"
+    params: []
+  - name: SCENIC
+    version: null
+    context: "al. SCENIC: single-cell regulatory network inference \nand clustering.\
+      \ Nat. Methods 14, 1083–1086 (2017).\n39."
+    params: []
+  - name: RcisTarget
+    version: '1.14'
+    context: "and RcisTarget (V. 1.14)38. Transcription factor motifs shown in Fig.\
+      \ 3g \nwere downloaded from the JASPAR database"
+    params: []
+  - name: iRegulon
+    version: null
+    context: "the iRegulon app within Cytoscape20,21 and visualized the top \nthree\
+      \ most significant TFs (normalized enrichment"
+    params: []
+  - name: cisTopic
+    version: null
+    context: "on CisTopic-mediated clustering confirmed the separation of the \nlarge\
+      \ cluster depending on age (Fig. 3a and Ex"
+    params: []
+  - name: Signac
+    version: '1.8'
+    context: "with Signac (V. 1.8.) (ref. 33). \nThe cell region count matrix was\
+      \ normalized using the term frequency-\ninverse"
+    params: []
+  - name: MAST
+    version: 1.19.0
+    context: "the \nMAST library (V. 1.19.0) (ref. 18). Bonferroni correction was\
+      \ applied for \nmultiple testing adjustments"
+    params: []
+  - name: DESeq2
+    version: null
+    context: "sing DEseq2 (1.26.0) (ref. 77) at the adjusted P value of 0.1. Obtained\
+      \ \nsets of genes were further used for GO"
+    params: []
+  - name: edgeR
+    version: null
+    context: "n of edgeR \n(3.28.1) (ref. 76) with the min.count = 3. The differential\
+      \ gene expression \nanalysis between youn"
+    params: []
+  - name: clusterProfiler
+    version: null
+    context: "from clusterProfiler (3.14.3) R package78. \nTo remove the redundancy\
+      \ of enriched terms, we used the ‘simplify’ \nfunction"
+    params: []
+  - name: ReactomePA
+    version: 1.36.0
+    context: "the ReactomePA \nR package (V. 1.36.0) (ref. 81).\nStatistics and reproducibility\n\
+      Sample sizes were chosen based on"
+    params: []
+  - name: Cytoscape
+    version: null
+    context: "in Cytoscape (based on Supplementary Table 3; see Methods for details).\
+      \ For \neach zone, the top predicted transc"
+    params: []
+  - name: STAR
+    version: 2.7.1
+    context: "sing STAR \n(V. 2.7.1a). The count matrix was further filtered for genes\
+      \ expressed in \nat least 3 cells, cells"
+    params: []
+  - name: PEER
+    version: null
+    context: "arz.\nPeer review information Nature Aging thanks the anonymous \nreviewers\
+      \ for their contribution to the peer"
+    params: []
+  - name: SpaceRanger
+    version: 1.2.2
+    context: "mics SpaceRanger framework (V. 1.2.2).\nDimensionality reduction and\
+      \ individual analysis of datasets. Young \nand old"
+    params: []
+  - name: CellRanger
+    version: 2.1.0
+    context: 'mics CellRanger framework (V. 2.1.0).
+
+      scATAC-seq analysis of young and old liver tissue
+
+      Region accessibility count'
+    params: []
+  parameters:
+  - name: ndims
+    value: '10'
+    context: "an elbowplot \n(Elbowplot function). The first 10 principal components,\
+      \ therefore, \nserved as input to UMAP fo"
+    source: prose
+  - name: nPCs
+    value: '4'
+    context: 'AG 50:2
+
+      CL 68:4
+
+      CL 70:5
+
+      DAG 36:3
+
+      DAG 36:4
+
+      PC 40:2
+
+      PC 36:2
+
+      lysoPC 20:0
+
+      PC 40:3
+
+      SM d18'
+    source: prose
+  - name: nPCs
+    value: '2'
+    context: 'CL 68:4
+
+      CL 70:5
+
+      DAG 36:3
+
+      DAG 36:4
+
+      PC 40:2
+
+      PC 36:2
+
+      lysoPC 20:0
+
+      PC 40:3
+
+      SM d18:1/26:0'
+    source: prose
+  - name: nPCs
+    value: '0'
+    context: '36:3
+
+      DAG 36:4
+
+      PC 40:2
+
+      PC 36:2
+
+      lysoPC 20:0
+
+      PC 40:3
+
+      SM d18:1/26:0
+
+      PC 40:0
+
+      PC 40:1
+
+      PC 3'
+    source: prose
+  - name: nPCs
+    value: '0'
+    context: 'PC 36:2
+
+      lysoPC 20:0
+
+      PC 40:3
+
+      SM d18:1/26:0
+
+      PC 40:0
+
+      PC 40:1
+
+      PC 38:0
+
+      SM d18:1/20:0
+
+      0
+
+      0.'
+    source: prose
+  - name: nPCs
+    value: '0'
+    context: 'lysoPC 20:0
+
+      PC 40:3
+
+      SM d18:1/26:0
+
+      PC 40:0
+
+      PC 40:1
+
+      PC 38:0
+
+      SM d18:1/20:0
+
+      0
+
+      0.5
+
+      1.0
+
+      1.'
+    source: prose
+  - name: nPCs
+    value: '1'
+    context: '0:0
+
+      PC 40:3
+
+      SM d18:1/26:0
+
+      PC 40:0
+
+      PC 40:1
+
+      PC 38:0
+
+      SM d18:1/20:0
+
+      0
+
+      0.5
+
+      1.0
+
+      1.5
+
+      Basal'
+    source: prose
+  - name: nPCs
+    value: '3'
+    context: '–14
+
+      4 × 10
+
+      –14
+
+      Hepatocytes
+
+      Afp
+
+      Glul
+
+      Mup3
+
+      Pck1
+
+      Clec4f
+
+      Cd68
+
+      Irf7
+
+      Spic
+
+      Mnda
+
+      Ear2
+
+      Bmp2'
+    source: prose
+  - name: nPCs
+    value: '3'
+    context: 'C1qtnf
+
+      Dpp4
+
+      F8
+
+      II1a
+
+      Lyve1
+
+      Mmrn2
+
+      Myf6
+
+      Oit3
+
+      Pcdh12
+
+      Ushbp1
+
+      Cldn5
+
+      Des
+
+      Acta2
+
+      Stx2
+
+      Gfap
+
+      Ig'
+    source: prose
+  - name: nPCs
+    value: '6'
+    context: 'hl2
+
+      Gnb5
+
+      Cd22
+
+      Ltb
+
+      Cxcr6
+
+      Cd4
+
+      Cd44
+
+      Foxp3
+
+      G6pc
+
+      Cyp2f2
+
+      Cyp2e1
+
+      Ass1
+
+      Asl
+
+      Apoa1
+
+      Alb
+
+      Acly
+
+      L'
+    source: prose
+  - name: nPCs
+    value: '10'
+    context: "owplot \n(Elbowplot function). The first 10 principal components, therefore,\
+      \ \nserved as input to UMAP fo"
+    source: prose
+  - name: nPCs
+    value: '20'
+    context: 'Red
+
+      H&E
+
+      young
+
+      old
+
+      −20
+
+      −10
+
+      0
+
+      10
+
+      −10
+
+      0
+
+      10
+
+      20
+
+      PC1: 29% variance
+
+      PC2: 19% variance
+
+      c
+
+      old'
+    source: prose
+  - name: nPCs
+    value: '10'
+    context: 'ptl8
+
+      Ahsg
+
+      Apoa1
+
+      −0.10
+
+      −0.05
+
+      0.00
+
+      0.05
+
+      0.10
+
+      PC_1
+
+      old 1
+
+      old 2
+
+      young 1
+
+      young 2
+
+      PC1: 52.5'
+    source: prose
+  - name: nPCs
+    value: '2'
+    context: '.05
+
+      0.10
+
+      PC_1
+
+      old 1
+
+      old 2
+
+      young 1
+
+      young 2
+
+      PC1: 52.5% variance
+
+      PC2: 19.6% variance
+
+      e'
+    source: prose
+  - name: nPCs
+    value: '0'
+    context: 'y
+
+      a
+
+      b
+
+      c
+
+      d
+
+      −2
+
+      −1
+
+      0
+
+      1
+
+      −5.0
+
+      −2.5
+
+      0.0
+
+      2.5
+
+      5.0
+
+      PC1: 97.6% variance
+
+      PC2: 1.9% variance
+
+      old'
+    source: prose
+  - name: multiple_testing
+    value: 'yes'
+    context: "red in red and blue (based on MAST18). \nBonferroni correction was applied\
+      \ for multiple testing adjust"
+    source: prose
+  - name: multiple_testing
+    value: 'yes'
+    context: "colored in and blue (based on MAST18). Bonferroni correction was \n\
+      applied for multiple testing adjus"
+    source: prose
+  - name: multiple_testing
+    value: 'yes'
+    context: "he \nMAST library (V. 1.19.0) (ref. 18). Bonferroni correction was applied\
+      \ for \nmultiple testing adjus"
+    source: prose
+  - name: FDR_threshold
+    value: '0.1'
+    context: "use the ‘BASiCS_\nTestDE’ function with EFDR cutoff 0.1. Only genes\
+      \ with no change in \nmean exp"
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: 'P
+
+      Oligomycin
+
+      FCCP
+
+      Antimycin A/
+
+      rotenone
+
+      P < 0.01
+
+      P < 0.01
+
+      c
+
+      APC+ cells (CD73)
+
+      13.7 %
+
+      PE+'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.01'
+    context: "cin\nFCCP\nAntimycin A/\nrotenone\nP < 0.01\nP < 0.01\nc\nAPC+ cells\
+      \ (CD73)\n13.7 %\nPE+ cells \n("
+    source: prose
+  - name: pvalue_threshold
+    value: '0.5'
+    context: 'e
+
+      (expression)
+
+      Down < −0.5
+
+      Down > −0.5
+
+      Up < 0.5
+
+      Up > 0.5
+
+      Genes
+
+      B430212C06Rik
+
+      0
+
+      10
+
+      20
+
+      30'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.001'
+    context: '0
+
+      5
+
+      10
+
+      15
+
+      2 µm
+
+      2 µm
+
+      Size of lipids (µm)
+
+      P < 0.001
+
+      Periportal Pericentral
+
+      Periportal Peric'
+    source: prose
+  - name: pvalue_threshold
+    value: '2.22'
+    context: 'nt
+
+      2 n
+
+      4 n
+
+      8 n
+
+      Old
+
+      Young
+
+      0
+
+      5
+
+      10
+
+      0
+
+      3
+
+      6
+
+      9
+
+      P < 2.22 × 10
+
+      –16
+
+      P < 2.22 × 10
+
+      –16
+
+      Old Young
+
+      Ol'
+    source: prose
+  - name: pvalue_threshold
+    value: '2.22'
+    context: 'Young
+
+      0
+
+      5
+
+      10
+
+      0
+
+      3
+
+      6
+
+      9
+
+      P < 2.22 × 10
+
+      –16
+
+      P < 2.22 × 10
+
+      –16
+
+      Old Young
+
+      Old
+
+      Young
+
+      Coeﬀicient'
+    source: prose
+  - name: pvalue_threshold
+    value: '2.22'
+    context: 'ortal
+
+      Coeﬀicient of variation
+
+      0
+
+      5
+
+      10
+
+      15
+
+      P < 2.22 × 10
+
+      –16
+
+      Old Young
+
+      Age
+
+      Young vs old
+
+      P <'
+    source: prose
+  - name: pvalue_threshold
+    value: '2.22'
+    context: '.22 × 10
+
+      –16
+
+      Old Young
+
+      Age
+
+      Young vs old
+
+      P < 2.22 × 10
+
+      –16
+
+      7.7 × 10
+
+      –7
+
+      0.57
+
+      Old
+
+      Young
+
+      Old'
+    source: prose
+  - name: pvalue_threshold
+    value: '0.5'
+    context: 'nections
+
+      logfc
+
+      down < −0.5
+
+      down > −0.5
+
+      up < 0.5
+
+      up > 0.5
+
+      b
+
+      a
+
+      Extended Data Fig. 7 | See'
+    source: prose
+  - name: pvalue_threshold
+    value: 2e-16
+    context: 'sterior median
+
+      Age
+
+      Young
+
+      Old
+
+      p = 0.0498
+
+      p < 2e-16
+
+      Differentially dispersed
+
+      Differentially'
+    source: prose
+  - name: cells_per_group
+    value: '000'
+    context: "n and sequencing\nscATAC-seq targeting 4,000 cells per sample and per\
+      \ dataset was \nperformed using a"
+    source: prose
+  platforms:
+  - 10X Genomics
+  - Chromium
+  - 10x Genomics
+  - Illumina
+  - Chromium Single Cell
+  - NovaSeq 6000
+  - NovaSeq
+  stats:
+    methods_length: 114010
+    methods_lines: 3479
+    package_count: 17
+    version_count: 8
+    parameter_count: 30
+    platform_count: 13
+llm_extraction: null

@@ -1,0 +1,24 @@
+{
+  "id": "design_primer",
+  "name": "Design Primer",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Design a single primer within the given sequence window.",
+  "detailed_description": "Design a single primer within the given sequence window.",
+  "when_to_use": "When you need design primer analysis",
+  "parameters": {
+    "sequence": "[Required] Target DNA sequence (str)",
+    "start_pos": "[Required] Starting position for primer search (int)",
+    "primer_length": "[Optional] Length of the primer to design (default: 20)",
+    "min_gc": "[Optional] Minimum GC content (default: 0.4)",
+    "max_gc": "[Optional] Maximum GC content (default: 0.6)",
+    "min_tm": "[Optional] Minimum melting temperature in °C (default: 55.0)",
+    "max_tm": "[Optional] Maximum melting temperature in °C (default: 65.0)",
+    "search_window": "[Optional] Size of window to search for primers (default: 100)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

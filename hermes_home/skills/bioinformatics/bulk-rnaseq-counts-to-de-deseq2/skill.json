@@ -1,0 +1,49 @@
+{
+  "name": "Bulk RNA-seq DESeq2",
+  "id": "bulk-rnaseq-counts-to-de-deseq2",
+  "category": "transcriptomics",
+  "language": "R",
+  "source": "Biomni Lab",
+  "description": "Bulk RNA-seq差异表达: 计数矩阵 → DESeq2 → 差异基因 → 富集",
+  "triggers": [
+    "Bulk RNA",
+    "DESeq2",
+    "差异表达",
+    "bulk转录组"
+  ],
+  "steps": [
+    "读取计数矩阵",
+    "DESeqDataSetFromMatrix",
+    "DESeq差异分析",
+    "results提取差异基因",
+    "火山图+热图",
+    "GO/KEGG富集"
+  ],
+  "dependencies": [
+    "DESeq2",
+    "ggplot2",
+    "pheatmap",
+    "clusterProfiler"
+  ],
+  "outputs": [
+    "差异基因表",
+    "火山图",
+    "热图",
+    "富集结果"
+  ],
+  "parameters": {
+    "padj": "0.05",
+    "log2fc": "1.0",
+    "min_count": "10"
+  },
+  "detailed_description": "Bulk RNA-seq差异表达: 计数矩阵 → DESeq2 → 差异基因 → 富集\n\n分析步骤:\n  - 读取计数矩阵\n  - DESeqDataSetFromMatrix\n  - DESeq差异分析\n  - results提取差异基因\n  - 火山图+热图\n  - GO/KEGG富集\n\n依赖包: ggplot2, DESeq2, clusterProfiler, pheatmap",
+  "when_to_use": "当你需要 Bulk RNA-seq DESeq2 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "prerequisites": {
+    "requires": [],
+    "description": "Bulk counts直接开始"
+  }
+}

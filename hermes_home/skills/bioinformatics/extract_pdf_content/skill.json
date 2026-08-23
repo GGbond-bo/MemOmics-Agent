@@ -1,0 +1,17 @@
+{
+  "id": "extract_pdf_content",
+  "name": "Extract Pdf Content",
+  "category": "literature",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Extract text content from a PDF file.",
+  "detailed_description": "Extract text content from a PDF file.",
+  "when_to_use": "When you need extract pdf content analysis",
+  "parameters": {
+    "url": "[Required] URL of the PDF file (str)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

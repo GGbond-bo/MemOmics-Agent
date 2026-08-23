@@ -1,0 +1,16 @@
+{
+  "id": "mesh-decs-semantic-indexing",
+  "name": "MeSH / DeCS Semantic Indexing",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "Extract MeSH/DeCS semantic indexing labels from biomedical literature (English PubMed MeSH major labels, Spanish/LILACS DeCS codes). Encodes benchmark-gold behavior: full descriptor lists including de",
+  "starting_prompt": "使用 MeSH / DeCS Semantic Indexing 进行分析",
+  "source_dir": "skills/bioinformatics/mesh-decs-semantic-indexing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

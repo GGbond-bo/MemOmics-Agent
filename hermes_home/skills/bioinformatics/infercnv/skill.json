@@ -1,0 +1,52 @@
+{
+  "id": "infercnv",
+  "name": "单细胞CNV推断",
+  "category": "genomics",
+  "language": "R",
+  "description": "inferCNV肿瘤细胞CNV推断+恶性细胞鉴定",
+  "starting_prompt": "推断单细胞CNV",
+  "source_dir": "skills/built_in/infercnv",
+  "memomics_module": "05_基因组学",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "infercnv",
+    "cnv",
+    "tumor",
+    "malignant"
+  ],
+  "steps": [
+    {
+      "name": "Create inferCNV object",
+      "description": "Tumor + normal reference",
+      "tool": "terminal"
+    },
+    {
+      "name": "CNV inference",
+      "description": "run + CNV heatmap",
+      "tool": "terminal"
+    },
+    {
+      "name": "Malignant cell ID",
+      "description": "Classify by CNV level",
+      "tool": "terminal"
+    }
+  ],
+  "parameters": {
+    "steps": "Create inferCNV object -> CNV inference -> Malignant cell ID"
+  },
+  "detailed_description": "inferCNV肿瘤细胞CNV推断+恶性细胞鉴定\n\n分析步骤:\n  - Create inferCNV object: Tumor + normal reference\n  - CNV inference: run + CNV heatmap\n  - Malignant cell ID: Classify by CNV level\n\n触发提示: \"推断单细胞CNV\"",
+  "when_to_use": "当你需要 单细胞CNV推断 时触发",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://infercnv.readthedocs.io/en/latest/tutorials.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-qc"
+    ],
+    "description": "需要已QC的数据"
+  }
+}

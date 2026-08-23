@@ -1,0 +1,20 @@
+{
+  "id": "calculate_brain_adc_map",
+  "name": "Calculate Brain Adc Map",
+  "category": "clinical",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Calculate Apparent Diffusion Coefficient (ADC) map from diffusion-weighted MRI data using monoexponential diffusion model.",
+  "detailed_description": "Calculate Apparent Diffusion Coefficient (ADC) map from diffusion-weighted MRI data using monoexponential diffusion model.",
+  "when_to_use": "When you need calculate brain adc map analysis",
+  "parameters": {
+    "dwi_file_path": "[Required] Path to the 4D NIfTI file containing diffusion-weighted MRI data (str)",
+    "b_values": "[Required] List of b-values corresponding to each volume in the 4D DWI data (List[float])",
+    "output_path": "[Optional] Path where the output ADC map will be saved (default: adc_map.nii.gz)",
+    "mask_file_path": "[Optional] Path to a binary mask file to limit ADC calculation to brain regions"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

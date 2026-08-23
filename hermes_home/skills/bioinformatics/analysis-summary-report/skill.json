@@ -1,0 +1,60 @@
+{
+  "id": "analysis-summary-report",
+  "name": "分析后总结报告",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "真实分析完成后的图文并茂总结报告 — 数据情况/分析流程/知识库来源/辩论记录/参数选择/图表结果/生物结论，含结论审查辩论",
+  "triggers": [
+    "分析总结",
+    "总结报告",
+    "分析后总结",
+    "生成总结",
+    "做总结报告",
+    "分析完成总结",
+    "final report"
+  ],
+  "tools": [
+    "skill_view",
+    "execute_python",
+    "write_file",
+    "terminal"
+  ],
+  "python_requires": [],
+  "r_requires": [],
+  "steps": [
+    {
+      "name": "收集分析记录",
+      "description": "从会话历史中提取：数据扫描结果、每步分析的参数/代码/输出/图表、辩论记录、知识库引用、rail_review 结果"
+    },
+    {
+      "name": "结论辩论",
+      "description": "对最终生物结论进行正反方辩论：正方从生物学/统计学/生信角度支持，反方从同样角度+历史经验质疑，裁判裁决"
+    },
+    {
+      "name": "生成HTML报告",
+      "description": "用 bioinformatics-html-report 的 ReportBuilder 生成结构化报告，7个模块"
+    }
+  ],
+  "parameters": {
+    "steps": "收集分析记录 -> 结论辩论 -> 生成HTML报告",
+    "modules": "数据概览/分析流程/知识库来源/辩论记录/图表结果/生物结论/质量评估"
+  },
+  "chains_from": [
+    "scrna-qc",
+    "scrna-clustering",
+    "scrna-annotation",
+    "deg-analysis",
+    "cellchat-v2",
+    "monocle3-trajectory",
+    "scenic-tf"
+  ],
+  "chains_to": [
+    "bioinformatics-html-report"
+  ],
+  "detailed_description": "分析后总结报告 — 做完真实分析后生成图文并茂的HTML总结\n\n触发条件（必须全部满足）:\n  1. 已经完成真实分析（有 terminal 执行结果 + 生成了 figures）\n  2. 用户要求总结/报告/归纳\n\n不触发:\n  - 没有做过分析，只是文献综述/整理结果\n  - 只有个别步骤完成，没有系统分析\n  - 概念咨询、闲聊\n\n报告7模块:\n  1. 📊 数据概览：数据来源、细胞数、物种、组织、测序方法、硬件环境\n  2. 🔬 分析流程：每步用了什么 skill、什么参数、参数来源（知识库/文献/辩论/经验）\n  3. 📚 知识库来源：每个参数推荐来自哪条知识库记录\n  4. 🗣️ 辩论记录：每轮辩论正方/反方/裁决/分数/行动\n  5. 📈 图表结果：每张图带方法/结果/生物学意义/参数来源四面板\n  6. 🧬 生物结论：含结论辩论（支持+质疑+裁决+置信度），根据真实结果总结\n  7. ⚠️ 质量评估：QC指标、双胞率、污染率、线粒体阈值等\n\n结论辩论要求:\n  - 正方：生物学agent（marker gene验证、已知生物学知识）+ 统计学agent + 生信agent\n  - 反方：同样角度 + 历史经验记录 + 报错记录\n  - 裁判：综合裁决，给出置信度（高/中/低）\n  - 不互通上下文：正方不知道反方说了什么\n\n技术:\n  - 基于 bioinformatics-html-report 的 ReportBuilder API\n  - 图片按分析模块排列，专业好看\n  - 分模块展示，可折叠",
+  "when_to_use": "当已完成真实分析（有terminal执行结果+figures）且用户要求总结/报告时触发。文献综述/整理结果不触发。",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

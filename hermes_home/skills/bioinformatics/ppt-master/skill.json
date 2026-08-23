@@ -1,0 +1,45 @@
+{
+  "id": "ppt-master",
+  "name": "PPT Master",
+  "category": "visualization",
+  "language": "Python",
+  "description": "AI驱动的SVG-PPT生成系统，多角色协作：策划→执行→质量检查→导出",
+  "starting_prompt": "生成PPT",
+  "source_dir": "skills/external/ppt-master",
+  "memomics_module": "报告",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "ppt",
+    "presentation",
+    "svg",
+    "slide",
+    "powerpoint"
+  ],
+  "aliases": [
+    "做PPT",
+    "生成PPT",
+    "PPT生成",
+    "制作演示文稿"
+  ],
+  "r_packages": [],
+  "python_packages": [
+    "python-pptx",
+    "Pillow",
+    "PyMuPDF"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "文献解读后生成PPT",
+    "分析报告制作PPT"
+  ],
+  "parameters": {
+    "python_packages": "python-pptx, Pillow, PyMuPDF"
+  },
+  "detailed_description": "AI驱动的SVG-PPT生成系统，多角色协作：策划→执行→质量检查→导出\n\n适用场景: 文献解读后生成PPT, 分析报告制作PPT\n\n依赖包: python-pptx, Pillow, PyMuPDF\n\n难度: intermediate\n\n触发提示: \"生成PPT\"\n\n别名: 做PPT, 生成PPT, PPT生成, 制作演示文稿",
+  "when_to_use": "适用于: 文献解读后生成PPT, 分析报告制作PPT",
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

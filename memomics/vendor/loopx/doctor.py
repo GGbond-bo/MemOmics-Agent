@@ -1,0 +1,1244 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from enum import Enum
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+from . import __version__
+from .control_plane.runtime.promotion_readiness import (
+    PROMOTION_READINESS_CLASSIFICATION,
+    PROMOTION_READINESS_RUNTIME_INDEX,
+)
+from .paths import DEFAULT_RUNTIME_ROOT, global_registry_path
+from .project_skill_delivery import discover_project_scoped_skill_ids
+from .registry_writability import probe_registry_write_path
+from .release_manifest import load_release_manifest, release_version_tag
+from .skill_install_readback import (
+    ARK_MANAGED_AGENT_REQUIRED_SKILL_IDS,
+    configured_host_skills_dir,
+    inspect_skill_install_readback,
+)
+
+
+PROMOTION_READINESS_CLASSIFICATIONS = {
+    PROMOTION_READINESS_CLASSIFICATION,
+}
+PROMOTION_READINESS_FRESHNESS_HOURS = 24
+INSTALL_FRESHNESS_STALE_HOURS = 168
+NO_CLONE_INSTALL_URL = "https://raw.githubusercontent.com/huangruiteng/loopx/main/scripts/install-from-github.sh"
+RELEASE_ID_TIMESTAMP_RE = re.compile(r"^\d{8}T\d{6}Z$")
+REQUIRED_INSTALLED_SKILL_PHRASES = {
+    "loopx-project": (
+        "--classification <PUBLIC_SAFE_PROGRESS_CLASSIFICATION>",
+        "--delivery-batch-scale <ACTUAL_DELIVERY_BATCH_SCALE>",
+        "--delivery-outcome <ACTUAL_DELIVERY_OUTCOME>",
+    ),
+    "loopx-pr-review": (
+        "loopx --format json pr-review --state all",
+        "agent_response_contract",
+        "Do not pipe the first packet through `jq`",
+        "submit a formal `REQUEST_CHANGES` review",
+        "A plain PR comment is not an adequate substitute for `REQUEST_CHANGES`",
+        "route approval, merge, self-merge, and admin-bypass actions to",
+    ),
+    "loopx-doc-registry": (
+        "Use even when the user does not mention LoopX or doc registry",
+        "use `.loopx/registry.json` as the project-local doc registry",
+        "not a substitute for project-local authority registration",
+    ),
+    "loopx-self-repair": (
+        "Build a compact evidence packet",
+        "loopx --format json diagnose --goal-id <goal-id>",
+        "loopx --format json status --goal-id <goal-id> --limit 20",
+        "registry-declared active state file",
+        "references/repair-patterns.md",
+        "Repair at the lowest durable layer",
+    ),
+}
+
+
+class GitRevisionRelation(str, Enum):
+    SAME = "same"
+    INSTALLED_AHEAD = "installed_ahead"
+    INSTALLED_BEHIND = "installed_behind"
+    DIVERGED = "diverged"
+    UNKNOWN = "unknown"
+
+
+def no_clone_upgrade_command(
+    source_ref: Any = None,
+    *,
+    doctor_agent_type: str | None = None,
+) -> str:
+    ref = str(source_ref or "").strip()
+    installer = f"curl -fsSL {NO_CLONE_INSTALL_URL}"
+    doctor_agent_arg = (
+        f" --agent-type {shlex.quote(doctor_agent_type)}"
+        if doctor_agent_type
+        else ""
+    )
+    if ref and ref != "stable":
+        installer = f"{installer} | env LOOPX_REF={shlex.quote(ref)} bash"
+    else:
+        installer = f"{installer} | bash"
+    return (
+        f"{installer}\n"
+        'export PATH="$HOME/.local/bin:$PATH"\n'
+        f"loopx doctor{doctor_agent_arg}"
+    )
+
+
+def user_local_bin() -> Path:
+    return Path.home() / ".local" / "bin"
+
+
+def codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
+
+
+def command_release_root(command_realpath: Path | None) -> Path | None:
+    if (
+        command_realpath
+        and command_realpath.name == "loopx"
+        and command_realpath.parent.name == "scripts"
+    ):
+        return command_realpath.parent.parent
+    return None
+
+
+def resolve_command_path(name: str) -> Path | None:
+    path_text = shutil.which(name)
+    return Path(path_text).expanduser() if path_text else None
+
+
+def current_script_invocation_path() -> Path | None:
+    """Return the active LoopX wrapper when doctor was invoked by absolute path."""
+    if not sys.argv or not sys.argv[0]:
+        return None
+    path = Path(sys.argv[0]).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    try:
+        path = path.resolve()
+    except OSError:
+        path = path.absolute()
+    if path.exists() and path.name == "loopx" and path.parent.name == "scripts":
+        return path
+    return None
+
+
+def is_release_snapshot(root: Path | None) -> bool:
+    return bool(root and "releases" in root.parts)
+
+
+def command_root_summary(command_path: Path | None, command_realpath: Path | None) -> dict[str, Any]:
+    root = command_release_root(command_realpath)
+    return {
+        "command": str(command_path) if command_path else None,
+        "realpath": str(command_realpath) if command_realpath else None,
+        "root": str(root) if root else None,
+        "release_id": root.name if is_release_snapshot(root) else None,
+        "is_release_snapshot": is_release_snapshot(root),
+    }
+
+
+def parse_release_id_time(release_id: str | None) -> datetime | None:
+    if not release_id or not RELEASE_ID_TIMESTAMP_RE.match(release_id):
+        return None
+    try:
+        return datetime.strptime(release_id, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def short_revision(value: Any, *, length: int = 12) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    return text[:length] if len(text) > length else text
+
+
+def git_metadata_for_root(root: Path | None) -> dict[str, Any]:
+    if root is None:
+        return {
+            "root": None,
+            "git_commit": None,
+            "git_ref": None,
+            "git_dirty": None,
+        }
+    try:
+        source_root = root.expanduser().resolve()
+    except OSError:
+        source_root = root.expanduser()
+    if not source_root.exists():
+        return {
+            "root": str(source_root),
+            "git_commit": None,
+            "git_ref": None,
+            "git_dirty": None,
+        }
+
+    def _run(args: list[str]) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(source_root), *args],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+
+    commit = _run(["rev-parse", "HEAD"])
+    branch = _run(["symbolic-ref", "--quiet", "--short", "HEAD"])
+    tag = _run(["describe", "--tags", "--exact-match"])
+    status = _run(["status", "--porcelain"])
+    dirty = None if commit is None and branch is None and tag is None and status is None else bool(status)
+    return {
+        "root": str(source_root),
+        "git_commit": commit,
+        "git_ref": branch or tag,
+        "git_dirty": dirty,
+    }
+
+
+def git_revision_relation(
+    root: Path | None,
+    *,
+    installed_commit: Any,
+    comparison_commit: Any,
+) -> GitRevisionRelation:
+    """Classify installed vs comparison revisions in one Git object graph."""
+    if not isinstance(installed_commit, str) or not installed_commit.strip():
+        return GitRevisionRelation.UNKNOWN
+    if not isinstance(comparison_commit, str) or not comparison_commit.strip():
+        return GitRevisionRelation.UNKNOWN
+    installed_commit = installed_commit.strip()
+    comparison_commit = comparison_commit.strip()
+    if installed_commit == comparison_commit:
+        return GitRevisionRelation.SAME
+    if root is None:
+        return GitRevisionRelation.UNKNOWN
+
+    try:
+        source_root = root.expanduser().resolve()
+    except OSError:
+        source_root = root.expanduser()
+    if not source_root.exists():
+        return GitRevisionRelation.UNKNOWN
+
+    def _is_ancestor(ancestor: str, descendant: str) -> bool | None:
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(source_root),
+                    "merge-base",
+                    "--is-ancestor",
+                    ancestor,
+                    descendant,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return None
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
+        return None
+
+    comparison_is_ancestor = _is_ancestor(comparison_commit, installed_commit)
+    installed_is_ancestor = _is_ancestor(installed_commit, comparison_commit)
+    if comparison_is_ancestor is None or installed_is_ancestor is None:
+        return GitRevisionRelation.UNKNOWN
+    if comparison_is_ancestor:
+        return GitRevisionRelation.INSTALLED_AHEAD
+    if installed_is_ancestor:
+        return GitRevisionRelation.INSTALLED_BEHIND
+    return GitRevisionRelation.DIVERGED
+
+
+def _github_repository_from_remote_url(value: Any) -> str | None:
+    text = str(value or "").strip().removesuffix(".git")
+    match = re.search(r"github\.com(?::|/)([^/\s]+/[^/\s]+)$", text, flags=re.IGNORECASE)
+    return match.group(1).lower() if match else None
+
+
+def trusted_release_ref_for_root(
+    root: Path | None,
+    *,
+    repository: Any,
+    ref: Any,
+) -> dict[str, Any] | None:
+    """Resolve the manifest repository's fetched ref without trusting canary HEAD."""
+    expected_repository = _github_repository_from_remote_url(repository) or (
+        str(repository or "").strip().removesuffix(".git").lower()
+    )
+    expected_ref = str(ref or "").strip().removeprefix("refs/heads/")
+    if root is None or not expected_repository or not expected_ref:
+        return None
+    try:
+        source_root = root.expanduser().resolve()
+    except OSError:
+        source_root = root.expanduser()
+    if not source_root.exists():
+        return None
+
+    try:
+        remotes = subprocess.run(
+            ["git", "-C", str(source_root), "remote"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if remotes.returncode != 0:
+        return None
+
+    for remote in remotes.stdout.splitlines():
+        remote = remote.strip()
+        if not remote:
+            continue
+        try:
+            remote_url = subprocess.run(
+                ["git", "-C", str(source_root), "remote", "get-url", remote],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            continue
+        if (
+            remote_url.returncode != 0
+            or _github_repository_from_remote_url(remote_url.stdout) != expected_repository
+        ):
+            continue
+        trusted_ref = f"refs/remotes/{remote}/{expected_ref}"
+        resolved = subprocess.run(
+            ["git", "-C", str(source_root), "rev-parse", "--verify", f"{trusted_ref}^{{commit}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        commit = resolved.stdout.strip() if resolved.returncode == 0 else ""
+        if commit:
+            return {
+                "label": f"{expected_repository}@{expected_ref}",
+                "root": str(source_root),
+                "git_commit": commit,
+                "git_ref": f"{remote}/{expected_ref}",
+            }
+    return None
+
+
+def build_install_freshness(
+    *,
+    command_path: Path | None,
+    release_root: Path | None,
+    repo_root: Path,
+    skills: dict[str, dict[str, Any]],
+    release_manifest: dict[str, Any] | None = None,
+    comparison_source: dict[str, Any] | None = None,
+    freshness_source: dict[str, Any] | None = None,
+    require_installed_skills: bool = True,
+    doctor_agent_type: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    release_id = release_root.name if is_release_snapshot(release_root) else None
+    release_time = parse_release_id_time(release_id)
+    age_hours: float | None = None
+    if release_time:
+        age_hours = round(max(0, (reference - release_time.astimezone(timezone.utc)).total_seconds()) / 3600, 2)
+
+    skill_problem = require_installed_skills and any(
+        not skill.get("exists") or not skill.get("required_phrases") for skill in skills.values()
+    )
+    if command_path is None:
+        status = "missing"
+        reason = "loopx is not on PATH"
+        requires_upgrade = True
+    elif skill_problem:
+        status = "repair_recommended"
+        reason = "installed LoopX skills are missing or stale"
+        requires_upgrade = True
+    elif release_id and age_hours is not None and age_hours > INSTALL_FRESHNESS_STALE_HOURS:
+        status = "stale"
+        reason = f"default release snapshot is older than {INSTALL_FRESHNESS_STALE_HOURS} hours"
+        requires_upgrade = True
+    elif release_id and age_hours is not None:
+        status = "fresh"
+        reason = "default release snapshot timestamp is within the freshness window"
+        requires_upgrade = False
+    elif is_release_snapshot(release_root):
+        status = "unknown"
+        reason = "default release snapshot has a non-timestamp release id"
+        requires_upgrade = False
+    else:
+        status = "live_checkout"
+        reason = "current command is not a timestamped release snapshot"
+        requires_upgrade = False
+
+    manifest = release_manifest if isinstance(release_manifest, dict) else {}
+    manifest_body = manifest.get("manifest") if isinstance(manifest.get("manifest"), dict) else {}
+    manifest_package = (
+        manifest_body.get("package") if isinstance(manifest_body.get("package"), dict) else {}
+    )
+    manifest_package_version = manifest_package.get("version")
+    manifest_package_version_tag = manifest_package.get("version_tag") or (
+        release_version_tag(manifest_package_version)
+        if isinstance(manifest_package_version, str)
+        else None
+    )
+    current_version_tag = release_version_tag(__version__)
+    manifest_package_version_matches_runtime = (
+        manifest_package_version == __version__
+        if isinstance(manifest_package_version, str) and manifest_package_version
+        else None
+    )
+    manifest_source = (
+        manifest_body.get("source") if isinstance(manifest_body.get("source"), dict) else {}
+    )
+    upgrade_command = no_clone_upgrade_command(
+        manifest_source.get("ref"),
+        doctor_agent_type=doctor_agent_type,
+    )
+    doctor_agent_arg = (
+        f" --agent-type {shlex.quote(doctor_agent_type)}"
+        if doctor_agent_type
+        else ""
+    )
+    contributor_upgrade_command = (
+        f"{repo_root / 'scripts' / 'install-local.sh'}\n"
+        f"loopx doctor{doctor_agent_arg}"
+    )
+    manifest_source_git_commit = manifest_source.get("git_commit")
+    manifest_source_revision = (
+        manifest_source_git_commit
+        or manifest_source.get("git_ref")
+        or manifest_source.get("ref")
+    )
+    comparison = comparison_source if isinstance(comparison_source, dict) else {}
+    comparison_source_git_commit = comparison.get("git_commit")
+    comparison_source_label = comparison.get("label") or "comparison_source"
+    comparison_revision_relation = comparison.get("revision_relation")
+    manifest_source_matches_comparison = (
+        manifest_source_git_commit == comparison_source_git_commit
+        if manifest_source_git_commit and comparison_source_git_commit
+        else None
+    )
+    trusted = freshness_source if isinstance(freshness_source, dict) else {}
+    freshness_source_git_commit = trusted.get("git_commit")
+    freshness_source_label = trusted.get("label") or "trusted release source"
+    freshness_revision_relation = trusted.get("revision_relation")
+    manifest_source_matches_freshness_source = (
+        manifest_source_git_commit == freshness_source_git_commit
+        if manifest_source_git_commit and freshness_source_git_commit
+        else None
+    )
+    source_commit_is_behind = (
+        manifest_source_matches_freshness_source is False
+        and freshness_revision_relation == GitRevisionRelation.INSTALLED_BEHIND
+    )
+
+    if release_id and source_commit_is_behind and command_path is not None and not skill_problem:
+        status = "stale"
+        reason = f"release manifest source commit is behind {freshness_source_label} commit"
+        requires_upgrade = True
+
+    if (
+        manifest_package_version_matches_runtime is False
+        and command_path is not None
+        and not skill_problem
+    ):
+        status = "repair_recommended"
+        reason = "release manifest package version differs from runtime package version"
+        requires_upgrade = True
+
+    manifest_skills = (
+        manifest_body.get("skills") if isinstance(manifest_body.get("skills"), dict) else {}
+    )
+    return {
+        "schema_version": "loopx_install_freshness_v0",
+        "status": status,
+        "requires_upgrade": requires_upgrade,
+        "reason": reason,
+        "current_version": __version__,
+        "current_version_tag": current_version_tag,
+        "stale_after_hours": INSTALL_FRESHNESS_STALE_HOURS,
+        "release_id": release_id,
+        "release_age_hours": age_hours,
+        "upgrade_command": upgrade_command,
+        "no_clone_upgrade_command": upgrade_command,
+        "contributor_upgrade_command": contributor_upgrade_command,
+        "doctor_after_upgrade": f"loopx doctor{doctor_agent_arg}",
+        "installed_skills_required": require_installed_skills,
+        "release_manifest_available": manifest.get("available"),
+        "release_manifest_path": manifest.get("path"),
+        "release_manifest_reason": manifest.get("reason"),
+        "manifest_package_version": manifest_package_version,
+        "manifest_package_version_tag": manifest_package_version_tag,
+        "manifest_package_version_matches_runtime": manifest_package_version_matches_runtime,
+        "manifest_source_kind": manifest_source.get("kind"),
+        "manifest_source_repo": manifest_source.get("repo"),
+        "manifest_source_ref": manifest_source.get("ref"),
+        "manifest_source_git_commit": manifest_source_git_commit,
+        "manifest_source_git_commit_short": short_revision(manifest_source_git_commit),
+        "manifest_source_git_ref": manifest_source.get("git_ref"),
+        "manifest_source_git_dirty": manifest_source.get("git_dirty"),
+        "manifest_source_revision": manifest_source_revision,
+        "manifest_source_revision_short": short_revision(manifest_source_revision),
+        "comparison_source_label": comparison_source_label if comparison else None,
+        "comparison_source_root": comparison.get("root"),
+        "comparison_source_git_commit": comparison_source_git_commit,
+        "comparison_source_git_commit_short": short_revision(comparison_source_git_commit),
+        "comparison_source_git_ref": comparison.get("git_ref"),
+        "comparison_source_git_dirty": comparison.get("git_dirty"),
+        "manifest_source_matches_comparison": manifest_source_matches_comparison,
+        "manifest_source_comparison_relation": (
+            comparison_revision_relation.value
+            if isinstance(comparison_revision_relation, GitRevisionRelation)
+            else comparison_revision_relation
+        ),
+        "freshness_source_label": freshness_source_label if trusted else None,
+        "freshness_source_root": trusted.get("root"),
+        "freshness_source_git_commit": freshness_source_git_commit,
+        "freshness_source_git_commit_short": short_revision(freshness_source_git_commit),
+        "freshness_source_git_ref": trusted.get("git_ref"),
+        "manifest_source_matches_freshness_source": manifest_source_matches_freshness_source,
+        "manifest_source_freshness_relation": (
+            freshness_revision_relation.value
+            if isinstance(freshness_revision_relation, GitRevisionRelation)
+            else freshness_revision_relation
+        ),
+        "manifest_archive_sha256": manifest_source.get("archive_sha256"),
+        "manifest_skills_digest": manifest_skills.get("digest"),
+    }
+
+
+def parse_event_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def add_promotion_readiness_freshness(
+    event: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    freshness_hours: int = PROMOTION_READINESS_FRESHNESS_HOURS,
+) -> dict[str, Any]:
+    result = dict(event)
+    result["freshness_window_hours"] = freshness_hours
+    if not result.get("available"):
+        result.update(
+            {
+                "freshness_status": "missing",
+                "is_fresh": False,
+                "requires_readiness_run": True,
+                "age_seconds": None,
+                "age_hours": None,
+            }
+        )
+        return result
+
+    reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    generated_at = parse_event_time(result.get("generated_at"))
+    if generated_at is None:
+        result.update(
+            {
+                "freshness_status": "unknown",
+                "is_fresh": False,
+                "requires_readiness_run": True,
+                "age_seconds": None,
+                "age_hours": None,
+            }
+        )
+        return result
+
+    age_seconds = max(0, int((reference - generated_at).total_seconds()))
+    is_fresh = age_seconds <= freshness_hours * 3600
+    result.update(
+        {
+            "freshness_status": "fresh" if is_fresh else "stale",
+            "is_fresh": is_fresh,
+            "requires_readiness_run": not is_fresh,
+            "age_seconds": age_seconds,
+            "age_hours": round(age_seconds / 3600, 2),
+            "freshness_reference_time": reference.isoformat(),
+        }
+    )
+    return result
+
+
+def skill_has_delivery_hints(skill_path: Path) -> bool:
+    if not skill_path.exists():
+        return False
+    text = " ".join(skill_path.read_text(encoding="utf-8").split())
+    return all(phrase in text for phrase in REQUIRED_INSTALLED_SKILL_PHRASES["loopx-project"])
+
+
+def skill_has_required_phrases(skill_path: Path, phrases: tuple[str, ...]) -> bool:
+    if not skill_path.exists():
+        return False
+    text = " ".join(skill_path.read_text(encoding="utf-8").split())
+    return all(phrase in text for phrase in phrases)
+
+
+def installed_skill_summary(skills_root: Path) -> dict[str, dict[str, Any]]:
+    summaries: dict[str, dict[str, Any]] = {}
+    for skill_name, phrases in REQUIRED_INSTALLED_SKILL_PHRASES.items():
+        skill_path = skills_root / skill_name / "SKILL.md"
+        summaries[skill_name] = {
+            "path": str(skill_path),
+            "exists": skill_path.exists(),
+            "required_phrases": skill_has_required_phrases(skill_path, phrases),
+        }
+    return summaries
+
+
+def installed_skill_check(
+    check_id: str,
+    *,
+    actual_ok: bool,
+    detail: str,
+    applicable: bool,
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "required": False,
+        "ok": actual_ok if applicable else True,
+        "applicable": applicable,
+        "detail": (
+            detail
+            if applicable
+            else "not applicable: skill delivery is owned by the selected host integration"
+        ),
+    }
+
+
+def latest_promotion_readiness_event(runtime_root: Path, goal_id: str | None = None) -> dict[str, Any]:
+    goals_dir = runtime_root / "goals"
+    runtime_index = runtime_root / PROMOTION_READINESS_RUNTIME_INDEX
+    if not goals_dir.exists() and not runtime_index.is_file():
+        return {
+            "available": False,
+            "runtime_root": str(runtime_root),
+            "reason": "promotion readiness ledger does not exist",
+        }
+
+    runtime_matches: list[dict[str, Any]] = []
+    legacy_matches: list[dict[str, Any]] = []
+    indexes: list[tuple[Path, str | None, str]] = []
+    if runtime_index.is_file():
+        indexes.append((runtime_index, None, "runtime_release_ledger"))
+    if goals_dir.exists():
+        index_glob = f"{goal_id}/runs/index.jsonl" if goal_id else "*/runs/index.jsonl"
+        indexes.extend(
+            (path, path.parent.parent.name, "goal_run_history_legacy")
+            for path in goals_dir.glob(index_glob)
+        )
+    for index_path, current_goal_id, source in indexes:
+        try:
+            lines = index_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(item, dict):
+                continue
+            classification = str(item.get("classification") or "")
+            if classification not in PROMOTION_READINESS_CLASSIFICATIONS:
+                continue
+            json_path = Path(str(item.get("json_path") or ""))
+            markdown_path = Path(str(item.get("markdown_path") or ""))
+            target_matches = (
+                runtime_matches if source == "runtime_release_ledger" else legacy_matches
+            )
+            target_matches.append(
+                {
+                    "available": True,
+                    "source": source,
+                    "goal_id": str(item.get("goal_id") or current_goal_id or "") or None,
+                    "generated_at": item.get("generated_at"),
+                    "classification": classification,
+                    "evidence_scope": item.get("evidence_scope") or (
+                        "goal_run_history" if current_goal_id else "runtime_release"
+                    ),
+                    "dashboard_readiness": item.get("dashboard_readiness"),
+                    "delivery_batch_scale": item.get("delivery_batch_scale"),
+                    "delivery_outcome": item.get("delivery_outcome"),
+                    "recommended_action": item.get("recommended_action"),
+                    "json_exists": json_path.exists() if str(json_path) else False,
+                    "markdown_exists": markdown_path.exists() if str(markdown_path) else False,
+                }
+            )
+
+    matches = runtime_matches or legacy_matches
+    if not matches:
+        return {
+            "available": False,
+            "runtime_root": str(runtime_root),
+            "goal_id": goal_id,
+            "reason": (
+                f"no canary promotion readiness run found for `{goal_id}`"
+                if goal_id
+                else "no canary promotion readiness run found"
+            ),
+        }
+    matches.sort(key=lambda item: str(item.get("generated_at") or ""), reverse=True)
+    latest = matches[0]
+    latest["runtime_root"] = str(runtime_root)
+    return latest
+
+
+def collect_doctor(
+    *,
+    deep: bool = False,
+    agent_type: str | None = None,
+) -> dict[str, Any]:
+    from .control_plane.runtime.runtime_projection_route import (
+        collect_runtime_projection_route_diagnostics,
+    )
+
+    from .host_loop_activation import (
+        agent_type_uses_host_managed_skills,
+        normalize_agent_type,
+    )
+
+    canonical_agent_type = normalize_agent_type(agent_type) if agent_type else None
+    host_managed_skill_delivery = bool(
+        canonical_agent_type
+        and agent_type_uses_host_managed_skills(canonical_agent_type)
+    )
+    installed_skills_required = not host_managed_skill_delivery
+    host_skill_install_readback = (
+        inspect_skill_install_readback(
+            skills_dir=configured_host_skills_dir(os.environ),
+            required_skill_ids=ARK_MANAGED_AGENT_REQUIRED_SKILL_IDS,
+            source_root=Path(__file__).resolve().parents[1],
+        )
+        if canonical_agent_type == "ark-managed-agent"
+        else None
+    )
+    loopx_path = resolve_command_path("loopx")
+    invocation_path = current_script_invocation_path()
+    loopx_canary_path = resolve_command_path("loopx-canary")
+    command_path_primary = loopx_path or invocation_path
+    canary_path = loopx_canary_path
+    command_path = command_path_primary
+    command_realpath = command_path.resolve() if command_path else None
+    canary_realpath = canary_path.resolve() if canary_path else None
+    loopx_canary_realpath = loopx_canary_path.resolve() if loopx_canary_path else None
+    module_path = Path(__file__).resolve()
+    package_dir = module_path.parent
+    repo_root = package_dir.parent
+    install_script = repo_root / "scripts" / "install-local.sh"
+    wrapper_script = repo_root / "scripts" / "loopx"
+    release_root = command_release_root(command_realpath)
+    canary_root = command_release_root(canary_realpath)
+    release_manifest = load_release_manifest(release_root)
+    comparison_source = None
+    if canary_realpath and command_realpath and canary_realpath != command_realpath:
+        comparison_source = git_metadata_for_root(command_release_root(canary_realpath))
+        comparison_source["label"] = "loopx-canary"
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    local_bin = user_local_bin()
+    skills_root = codex_home() / "skills"
+    skill_path = skills_root / "loopx-project" / "SKILL.md"
+    skills = installed_skill_summary(skills_root)
+    project_scoped_skill_ids = discover_project_scoped_skill_ids(
+        repo_root / "skills"
+    )
+    globally_visible_project_skills = [
+        skill_name
+        for skill_name in project_scoped_skill_ids
+        if (skills_root / skill_name).exists()
+    ]
+    default_release = command_root_summary(command_path, command_realpath)
+    default_release["release_manifest_available"] = release_manifest.get("available")
+    default_release["release_manifest_path"] = release_manifest.get("path")
+    release_manifest_body = (
+        release_manifest.get("manifest")
+        if isinstance(release_manifest.get("manifest"), dict)
+        else {}
+    )
+    release_manifest_source = (
+        release_manifest_body.get("source")
+        if isinstance(release_manifest_body.get("source"), dict)
+        else {}
+    )
+    if comparison_source:
+        comparison_root = comparison_source.get("root")
+        comparison_source["revision_relation"] = git_revision_relation(
+            Path(str(comparison_root)) if comparison_root else None,
+            installed_commit=release_manifest_source.get("git_commit"),
+            comparison_commit=comparison_source.get("git_commit"),
+        )
+    freshness_source = trusted_release_ref_for_root(
+        Path(str(comparison_source.get("root")))
+        if comparison_source and comparison_source.get("root")
+        else None,
+        repository=release_manifest_source.get("repo"),
+        ref=release_manifest_source.get("ref"),
+    )
+    if freshness_source:
+        freshness_source["revision_relation"] = git_revision_relation(
+            Path(str(freshness_source.get("root"))),
+            installed_commit=release_manifest_source.get("git_commit"),
+            comparison_commit=freshness_source.get("git_commit"),
+        )
+    default_release["promotion_mode"] = release_manifest_source.get("promotion_mode")
+    release_provenance = {
+        "runtime_root": str(DEFAULT_RUNTIME_ROOT),
+        "default_release": default_release,
+        "live_canary": {
+            **command_root_summary(canary_path, canary_realpath),
+            "separate_from_default": bool(canary_realpath and command_realpath and canary_realpath != command_realpath),
+        },
+        "current_invocation": {
+            "module_path": str(module_path),
+            "repo_root": str(repo_root),
+            "source": "release_snapshot" if is_release_snapshot(repo_root) else "live_checkout",
+        },
+        "promotion_readiness": add_promotion_readiness_freshness(
+            latest_promotion_readiness_event(DEFAULT_RUNTIME_ROOT)
+        ),
+    }
+    install_freshness = build_install_freshness(
+        command_path=command_path,
+        release_root=release_root,
+        repo_root=repo_root,
+        skills=skills,
+        release_manifest=release_manifest,
+        comparison_source=comparison_source,
+        freshness_source=freshness_source,
+        require_installed_skills=installed_skills_required,
+        doctor_agent_type=canonical_agent_type,
+    )
+    if installed_skills_required:
+        skill_delivery_status = (
+            "ready"
+            if all(
+                skill.get("exists") and skill.get("required_phrases")
+                for skill in skills.values()
+            )
+            else "repair_recommended"
+        )
+    elif host_skill_install_readback:
+        skill_delivery_status = str(host_skill_install_readback["status"])
+    else:
+        skill_delivery_status = "external_readback_required"
+    skill_delivery = {
+        "agent_type": canonical_agent_type,
+        "owner": (
+            "loopx_surface_installer"
+            if installed_skills_required
+            else (
+                "loopx_install_script"
+                if canonical_agent_type == "ark-managed-agent"
+                else "custom_agent_host"
+            )
+        ),
+        "mode": "surface_managed" if installed_skills_required else "host_managed",
+        "codex_skills_root_applicable": installed_skills_required,
+        "installed_skills_required_for_freshness": installed_skills_required,
+        "status": skill_delivery_status,
+        **(
+            {"filesystem_readback": host_skill_install_readback}
+            if host_skill_install_readback
+            else {}
+        ),
+    }
+    default_global_registry = global_registry_path(DEFAULT_RUNTIME_ROOT)
+    global_registry_writability = probe_registry_write_path(default_global_registry, create_parent=True)
+    runtime_projection_routes = (
+        collect_runtime_projection_route_diagnostics(
+            registry_path=default_global_registry,
+            runtime_root=DEFAULT_RUNTIME_ROOT,
+        )
+        if default_global_registry.exists()
+        else {
+            "schema_version": "runtime_projection_route_diagnostics_v0",
+            "available": False,
+            "goal_count": 0,
+            "healthy": True,
+            "counts": {},
+            "items": [],
+        }
+    )
+    deep_validation = None
+    if deep:
+        from .release_candidate import collect_release_candidate_checks
+
+        invocation_root_text = os.environ.get("LOOPX_RELEASE_ROOT")
+        invocation_root = (
+            Path(invocation_root_text).expanduser().resolve()
+            if invocation_root_text
+            else release_root
+        )
+        deep_validation = collect_release_candidate_checks(
+            command_path=command_path,
+            package_root=repo_root,
+            invocation_root=invocation_root,
+        )
+    checks = [
+        {
+            "id": "command_available",
+            "required": True,
+            "ok": command_path is not None,
+            "detail": str(loopx_path)
+            if loopx_path
+            else (
+                f"loopx was not found on PATH; using current invocation {invocation_path}"
+                if invocation_path
+                else "loopx was not found on PATH"
+            ),
+        },
+        {
+            "id": "command_on_path",
+            "required": False,
+            "ok": loopx_path is not None,
+            "detail": str(loopx_path) if loopx_path else "loopx was not found on PATH",
+        },
+        {
+            "id": "command_resolves",
+            "required": True,
+            "ok": bool(command_realpath and command_realpath.exists()),
+            "detail": str(command_realpath) if command_realpath else "no command realpath",
+        },
+        {
+            "id": "default_command_is_release_snapshot",
+            "required": False,
+            "ok": bool(release_root and "releases" in release_root.parts),
+            "detail": str(release_root) if release_root else "default command is not a release snapshot",
+        },
+        {
+            "id": "canary_command_on_path",
+            "required": False,
+            "ok": canary_path is not None,
+            "detail": str(canary_path) if canary_path else "loopx-canary was not found on PATH",
+        },
+        {
+            "id": "canary_separate_from_default",
+            "required": False,
+            "ok": bool(canary_realpath and command_realpath and canary_realpath != command_realpath),
+            "detail": str(canary_realpath) if canary_realpath else "no canary realpath",
+        },
+        {
+            "id": "module_importable",
+            "required": True,
+            "ok": module_path.exists(),
+            "detail": str(module_path),
+        },
+        {
+            "id": "install_script_exists",
+            "required": False,
+            "ok": install_script.exists(),
+            "detail": str(install_script),
+        },
+        {
+            "id": "wrapper_script_exists",
+            "required": False,
+            "ok": wrapper_script.exists(),
+            "detail": str(wrapper_script),
+        },
+        {
+            "id": "local_bin_on_path",
+            "required": False,
+            "ok": str(local_bin) in path_entries,
+            "detail": str(local_bin),
+        },
+        installed_skill_check(
+            "installed_skill_exists",
+            actual_ok=skill_path.exists(),
+            detail=str(skill_path),
+            applicable=installed_skills_required,
+        ),
+        installed_skill_check(
+            "installed_skill_delivery_hints",
+            actual_ok=skill_has_delivery_hints(skill_path),
+            detail=str(skill_path),
+            applicable=installed_skills_required,
+        ),
+        installed_skill_check(
+            "installed_required_skills",
+            actual_ok=all(skill.get("exists") for skill in skills.values()),
+            detail=",".join(sorted(skills)),
+            applicable=installed_skills_required,
+        ),
+        installed_skill_check(
+            "installed_required_skill_routes",
+            actual_ok=all(skill.get("required_phrases") for skill in skills.values()),
+            detail=",".join(
+                f"{name}={skill.get('required_phrases')}"
+                for name, skill in sorted(skills.items())
+            ),
+            applicable=installed_skills_required,
+        ),
+        {
+            "id": "project_scoped_skills_absent_globally",
+            "required": False,
+            "ok": not globally_visible_project_skills,
+            "detail": (
+                "none"
+                if not globally_visible_project_skills
+                else ",".join(globally_visible_project_skills)
+            ),
+        },
+        *(
+            [
+                {
+                    "id": "host_skill_installation_readback",
+                    "required": False,
+                    "ok": bool(host_skill_install_readback.get("ready")),
+                    "applicable": True,
+                    "detail": str(host_skill_install_readback.get("reason")),
+                }
+            ]
+            if host_skill_install_readback
+            else []
+        ),
+        {
+            "id": "global_registry_writable",
+            "required": True,
+            "ok": bool(global_registry_writability.get("ok")),
+            "detail": str(default_global_registry)
+            if global_registry_writability.get("ok")
+            else str(global_registry_writability.get("error") or default_global_registry),
+        },
+        {
+            "id": "runtime_projection_routes_healthy",
+            "required": False,
+            "ok": bool(runtime_projection_routes.get("healthy", True)),
+            "detail": json.dumps(
+                runtime_projection_routes.get("counts") or {},
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        },
+    ]
+    if deep_validation:
+        checks.extend(deep_validation["checks"])
+    payload = {
+        "ok": all(check["ok"] for check in checks if check["required"]),
+        "mode": "deep" if deep else "standard",
+        "agent_type": canonical_agent_type,
+        "python": {
+            "executable": sys.executable,
+            "version": sys.version.split()[0],
+        },
+        "path": {
+            "loopx": str(command_path) if command_path else None,
+            "loopx_realpath": str(command_realpath) if command_realpath else None,
+            "loopx_on_path": str(loopx_path) if loopx_path else None,
+            "current_invocation": str(invocation_path) if invocation_path else None,
+            "loopx_canary": str(loopx_canary_path) if loopx_canary_path else None,
+            "loopx_canary_realpath": str(loopx_canary_realpath) if loopx_canary_realpath else None,
+            "user_local_bin": str(local_bin),
+            "user_local_bin_on_path": str(local_bin) in path_entries,
+        },
+        "package": {
+            "module_path": str(module_path),
+            "repo_root": str(repo_root),
+            "release_root": str(release_root) if release_root else None,
+            "canary_root": str(canary_root) if canary_root else None,
+            "install_script": str(install_script),
+            "wrapper_script": str(wrapper_script),
+            "release_manifest_path": release_manifest.get("path"),
+        },
+        "release_manifest": release_manifest,
+        "release_provenance": release_provenance,
+        "global_registry_writability": global_registry_writability,
+        "runtime_projection_routes": runtime_projection_routes,
+        "install_freshness": install_freshness,
+        "upgrade_hint": install_freshness,
+        "skill": {
+            "path": str(skill_path),
+            "exists": skill_path.exists(),
+            "delivery_hints": skill_has_delivery_hints(skill_path),
+        },
+        "skill_delivery": skill_delivery,
+        "skills": skills,
+        "project_scoped_skill_ids": list(project_scoped_skill_ids),
+        "globally_visible_project_skills": globally_visible_project_skills,
+        "checks": checks,
+        "fix": (
+            "Set `LOOPX_SKILLS_DIR=<PROJECT_WORKSPACE>/.agents/skills` and rerun "
+            f"`{repo_root / 'scripts' / 'install-local.sh'}`; then rerun doctor "
+            "with the same environment. Filesystem readback proves materialization; "
+            "the host must still report its runtime loaded-skill readback."
+            if canonical_agent_type == "ark-managed-agent"
+            else (
+                "Do not infer custom-host skill delivery from `~/.codex/skills`; "
+                "verify the host-managed loaded-skill readback from `loopx agent-onboard`."
+            )
+            if canonical_agent_type
+            and agent_type_uses_host_managed_skills(canonical_agent_type)
+            else (
+                f"Run `{repo_root / 'scripts' / 'install-local.sh'}` and start a new shell, "
+                f"or export PATH=\"{local_bin}:$PATH\". For no-clone repair, run "
+                f"`curl -fsSL {NO_CLONE_INSTALL_URL} | bash`."
+            )
+        ),
+    }
+    if deep_validation:
+        payload["release_candidate"] = deep_validation
+    return payload
+
+
+def render_doctor_markdown(payload: dict[str, Any]) -> str:
+    release_provenance = payload.get("release_provenance") or {}
+    default_release = release_provenance.get("default_release") or {}
+    lines = [
+        "# LoopX Doctor",
+        "",
+        f"- ok: `{payload.get('ok')}`",
+        f"- agent_type: `{payload.get('agent_type')}`",
+        f"- loopx: `{(payload.get('path') or {}).get('loopx')}`",
+        f"- loopx_realpath: `{(payload.get('path') or {}).get('loopx_realpath')}`",
+        f"- loopx_canary: `{(payload.get('path') or {}).get('loopx_canary')}`",
+        f"- loopx_canary_realpath: `{(payload.get('path') or {}).get('loopx_canary_realpath')}`",
+        f"- release_root: `{(payload.get('package') or {}).get('release_root')}`",
+        f"- canary_root: `{(payload.get('package') or {}).get('canary_root')}`",
+        f"- default_promotion_mode: `{default_release.get('promotion_mode')}`",
+        f"- installed_skill: `{(payload.get('skill') or {}).get('path')}`",
+        f"- installed_skill_delivery_hints: `{(payload.get('skill') or {}).get('delivery_hints')}`",
+        f"- installed_required_skills: `{','.join(sorted((payload.get('skills') or {}).keys()))}`",
+        f"- skill_delivery_mode: `{(payload.get('skill_delivery') or {}).get('mode')}`",
+        f"- skill_delivery_status: `{(payload.get('skill_delivery') or {}).get('status')}`",
+        f"- global_registry_writable: `{(payload.get('global_registry_writability') or {}).get('ok')}`",
+        f"- runtime_projection_routes_healthy: `{(payload.get('runtime_projection_routes') or {}).get('healthy')}`",
+        f"- user_local_bin_on_path: `{(payload.get('path') or {}).get('user_local_bin_on_path')}`",
+        f"- python: `{(payload.get('python') or {}).get('executable')}`",
+        "",
+        "## Checks",
+    ]
+    for check in payload.get("checks") or []:
+        required = "required" if check.get("required") else "optional"
+        lines.append(f"- {check.get('id')} ({required}): `{check.get('ok')}` - {check.get('detail')}")
+    provenance = payload.get("release_provenance") if isinstance(payload.get("release_provenance"), dict) else {}
+    if provenance:
+        default_release = provenance.get("default_release") if isinstance(provenance.get("default_release"), dict) else {}
+        live_canary = provenance.get("live_canary") if isinstance(provenance.get("live_canary"), dict) else {}
+        current = provenance.get("current_invocation") if isinstance(provenance.get("current_invocation"), dict) else {}
+        readiness = (
+            provenance.get("promotion_readiness")
+            if isinstance(provenance.get("promotion_readiness"), dict)
+            else {}
+        )
+        lines.extend(
+            [
+                "",
+                "## Release Provenance",
+                (
+                    "- default_release: "
+                    f"root=`{default_release.get('root')}`, "
+                    f"release_id=`{default_release.get('release_id')}`, "
+                    f"is_release_snapshot=`{default_release.get('is_release_snapshot')}`"
+                ),
+                (
+                    "- live_canary: "
+                    f"root=`{live_canary.get('root')}`, "
+                    f"separate_from_default=`{live_canary.get('separate_from_default')}`"
+                ),
+                (
+                    "- current_invocation: "
+                    f"source=`{current.get('source')}`, "
+                    f"repo_root=`{current.get('repo_root')}`"
+                ),
+                (
+                    "- latest_promotion_readiness: "
+                    f"available=`{readiness.get('available')}`, "
+                    f"goal=`{readiness.get('goal_id')}`, "
+                    f"generated_at=`{readiness.get('generated_at')}`, "
+                    f"classification=`{readiness.get('classification')}`, "
+                    f"outcome=`{readiness.get('delivery_outcome')}`, "
+                    f"freshness=`{readiness.get('freshness_status')}`, "
+                    f"age_hours=`{readiness.get('age_hours')}`, "
+                    f"requires_readiness_run=`{readiness.get('requires_readiness_run')}`"
+                ),
+            ]
+        )
+    freshness = payload.get("install_freshness") if isinstance(payload.get("install_freshness"), dict) else {}
+    if freshness:
+        manifest_source_repo = freshness.get("manifest_source_repo") or freshness.get("manifest_source_kind")
+        manifest_source_ref = (
+            freshness.get("manifest_source_git_ref")
+            or freshness.get("manifest_source_ref")
+            or freshness.get("manifest_source_git_commit_short")
+            or "n/a"
+        )
+        lines.extend(
+            [
+                "",
+                "## Install Freshness",
+                f"- schema_version: `{freshness.get('schema_version')}`",
+                f"- status: `{freshness.get('status')}`",
+                f"- requires_upgrade: `{freshness.get('requires_upgrade')}`",
+                f"- current_version: `{freshness.get('current_version')}`",
+                f"- current_version_tag: `{freshness.get('current_version_tag')}`",
+                f"- manifest_package_version: `{freshness.get('manifest_package_version')}`",
+                f"- manifest_package_version_tag: `{freshness.get('manifest_package_version_tag')}`",
+                f"- manifest_package_version_matches_runtime: `{freshness.get('manifest_package_version_matches_runtime')}`",
+                f"- release_id: `{freshness.get('release_id')}`",
+                f"- release_age_hours: `{freshness.get('release_age_hours')}`",
+                f"- reason: `{freshness.get('reason')}`",
+                f"- release_manifest_available: `{freshness.get('release_manifest_available')}`",
+                f"- manifest_source: `{manifest_source_repo}` @ `{manifest_source_ref}`",
+                f"- manifest_source_git_commit: `{freshness.get('manifest_source_git_commit_short')}`",
+                f"- manifest_source_git_dirty: `{freshness.get('manifest_source_git_dirty')}`",
+                f"- comparison_source: `{freshness.get('comparison_source_label')}` @ `{freshness.get('comparison_source_git_commit_short')}`",
+                f"- manifest_source_matches_comparison: `{freshness.get('manifest_source_matches_comparison')}`",
+                f"- manifest_source_comparison_relation: `{freshness.get('manifest_source_comparison_relation')}`",
+                f"- freshness_source: `{freshness.get('freshness_source_label')}` @ `{freshness.get('freshness_source_git_commit_short')}`",
+                f"- manifest_source_matches_freshness_source: `{freshness.get('manifest_source_matches_freshness_source')}`",
+                f"- manifest_source_freshness_relation: `{freshness.get('manifest_source_freshness_relation')}`",
+                f"- manifest_archive_sha256: `{freshness.get('manifest_archive_sha256')}`",
+                f"- manifest_skills_digest: `{freshness.get('manifest_skills_digest')}`",
+                "- upgrade_command:",
+                "```bash",
+                str(freshness.get("upgrade_command") or ""),
+                "```",
+            ]
+        )
+    if not payload.get("ok"):
+        lines.extend(["", "## Fix", str(payload.get("fix"))])
+        writable = payload.get("global_registry_writability")
+        if isinstance(writable, dict) and not writable.get("ok") and writable.get("recommended_action"):
+            lines.append(str(writable.get("recommended_action")))
+    return "\n".join(lines)

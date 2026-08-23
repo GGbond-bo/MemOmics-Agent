@@ -1,0 +1,18 @@
+{
+  "id": "get_bacterial_transformation_protocol",
+  "name": "Get Bacterial Transformation Protocol",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Return a standard protocol for bacterial transformation.",
+  "detailed_description": "Return a standard protocol for bacterial transformation.",
+  "when_to_use": "When you need get bacterial transformation protocol analysis",
+  "parameters": {
+    "antibiotic": "[Optional] Selection antibiotic (default: ampicillin)",
+    "is_repetitive": "[Optional] Whether the sequence contains repetitive elements (default: False)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

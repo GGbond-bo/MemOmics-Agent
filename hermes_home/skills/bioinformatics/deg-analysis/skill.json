@@ -1,0 +1,280 @@
+{
+  "id": "deg-analysis",
+  "name": "差异表达分析",
+  "category": "transcriptomics",
+  "language": "R+Python",
+  "description": "Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正",
+  "starting_prompt": "进行差异表达分析",
+  "source_dir": "skills/built_in/deg-analysis",
+  "memomics_module": "03_高级分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "DESeq2",
+    "pseudobulk",
+    "differential-expression"
+  ],
+  "aliases": [
+    "Bulk RNA-seq DE (DESeq2)"
+  ],
+  "steps": [
+    {
+      "name": "Pseudobulk aggregation",
+      "description": "Aggregate by celltype/sample",
+      "tool": "terminal"
+    },
+    {
+      "name": "DESeq2 DE",
+      "description": "Wald test + LFC shrinkage",
+      "tool": "terminal"
+    },
+    {
+      "name": "Wilcoxon test",
+      "description": "FindMarkers single-cell DE",
+      "tool": "terminal"
+    },
+    {
+      "name": "MAST (optional)",
+      "description": "GLM with detection rate",
+      "tool": "terminal"
+    },
+    {
+      "name": "Multiple testing correction",
+      "description": "BH correction + filter",
+      "tool": "terminal"
+    },
+    {
+      "name": "VolcanoPlot/Heatmap",
+      "description": "Visualize DEG",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "DESeq2",
+    "Seurat",
+    "edgeR",
+    "clusterProfiler",
+    "org.Hs.eg.db",
+    "org.Mm.eg.db"
+  ],
+  "python_packages": [
+    "scanpy",
+    "diffxpy"
+  ],
+  "difficulty": "intermediate",
+  "applicable": [
+    "有分组的scRNA-seq"
+  ],
+  "parameters": {
+    "r_packages": "DESeq2, Seurat, edgeR, clusterProfiler, org.Hs.eg.db, org.Mm.eg.db",
+    "python_packages": "scanpy, diffxpy",
+    "steps": "Pseudobulk aggregation -> DESeq2 DE -> Wilcoxon test -> MAST (optional) -> Multiple testing correction -> VolcanoPlot/Heatmap"
+  },
+  "detailed_description": "Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正\n\n适用场景: 有分组的scRNA-seq\n\n分析步骤:\n  - Pseudobulk aggregation: Aggregate by celltype/sample\n  - DESeq2 DE: Wald test + LFC shrinkage\n  - Wilcoxon test: FindMarkers single-cell DE\n  - MAST (optional): GLM with detection rate\n  - Multiple testing correction: BH correction + filter\n  - VolcanoPlot/Heatmap: Visualize DEG\n\n依赖包: org.Hs.eg.db, clusterProfiler, DESeq2, Seurat, scanpy, org.Mm.eg.db, diffxpy, edgeR\n\n难度: intermediate\n\n触发提示: \"进行差异表达分析\"\n\n别名: Bulk RNA-seq DE (DESeq2)",
+  "when_to_use": "适用于: 有分组的scRNA-seq",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "deg_analysis.R",
+      "params": "Pseudobulk DESeq2 + Wilcoxon, Old vs Young per celltype, padj<0.05, |log2FC|>0.25, 10 cell types",
+      "date": "2026-07-04",
+      "score": 8.5,
+      "result": "1,119 DEGs across 10 cell types. Type I most active (156↑ 182↓), Endothelial vascular degeneration (30↑ 154↓), Schwann neural remodeling (54↑ 5↓), Denervated innervation loss (12↑ 85↓)"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "direction": "sinoatrial node aging",
+      "script": "run_deg.R",
+      "params": "test=MAST, logfc.threshold=0.25, min.pct=0.1",
+      "date": "2026-07-12",
+      "score": 6.0,
+      "auto_score": 7.5,
+      "approved": true,
+      "custom_script": false,
+      "result": "287 DEGs in aged SAN: ion channel genes down, ECM/fibrosis genes up"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "DESeq2 ~subcluster+age_group, padj<0.05, 143 pseudobulk samples (110 Old, 33 Young), LFC shrinkage not applied (apeglm unavailable)",
+      "date": "2026-07-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "3,864 DEGs Old vs Young: PPARGC1A↓, MT-ND5↓, HK2↓ (线粒体+代谢崩溃), MCU↑ (代偿)。Wilcoxon zone5验证2,615 DEGs。3张图。注: 未控制donor随机效应"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_deg.R",
+      "params": "method=Wilcoxon_FindMarkers, min.pct=0.1, logfc.threshold=0.1, test.use=wilcox, age_groups=Young(15-34) vs Aged(77-99), n_cells=10000",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "TypeI: 1561 DEG (1178 Aged↑/383 Young↑), TypeII: 1465 DEG (867/598), FAP: 413 DEG, EC: 180 DEG (mainly Young↑=144), MuSC: 64 DEG, Pericytes: 56 DEG"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "run_deg_pseudobulk.R",
+      "params": "Pseudobulk DESeq2, donor×celltype aggregation, design=~age_group, padj<0.05, min 5 cells/pseudobulk, min 2 donors/group",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "7 cell types DEG: TypeI=148, TypeII=189, FAP=102, EC=79, MuSC=39, Pericyte=18, Myeloid=46. 5/5 KB predictions validated (CHRNG↑ denervation, CDKN1A↑ senescence, CCL2↑ inflammation, PAX7↓ MuSC decline,"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "",
+      "params": "Pseudobulk sample_id×celltype; 9 cell types; DESeq2 with normal shrinkage; |LFC|>1 filter; Young=3,771 / Old=6,229 cells; 24 samples",
+      "date": "2026-07-17",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "TypeII: 504 DEGs (456 |LFC|>1), TypeI: 361 (332), FAP: 161 (160), EC: 99 (97), Myeloid: 61, Pericyte: 39, MuSC: 32, Lym: 15, SchwannCell: 0. CDKN1A up in FAP (LFC=4.01). Missing kb markers: COL1A1/COL"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "test_degs.r",
+      "params": "{}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Test run summary"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "test_degs.r",
+      "params": "{}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Test run"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "verify_test.r",
+      "params": "{\"method\":\"DESeq2\"}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Verification test - auto record_run"
+    },
+    {
+      "species": "human",
+      "tissue": "muscle",
+      "direction": "aging",
+      "script": "eval_test.r",
+      "params": "{\"method\":\"DESeq2\"}",
+      "date": "2026-07-17",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Evaluation test - multi-round verification"
+    }
+  ],
+  "proven_script": "eval_test.r",
+  "error_count": 3,
+  "success_count": 12,
+  "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-clustering"
+    ],
+    "description": "需要已聚类的数据"
+  },
+  "user_prefs": {
+    "last_used_script": "eval_test.r"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-07-12 21:23",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:26",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-12 21:27",
+      "error_type": "PackageNotFoundError",
+      "message": "there is no package called 'MAST'",
+      "root_cause": "MAST not installed in R environment",
+      "fix_applied": "install.packages('BiocManager'); BiocManager::install('MAST')",
+      "species": "Homo sapiens",
+      "tissue": "heart",
+      "script": "",
+      "severity": "medium"
+    }
+  ]
+}

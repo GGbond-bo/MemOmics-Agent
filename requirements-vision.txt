@@ -1,0 +1,6 @@
+# MemOmics 读图组件（vision_describe 纯本地管道）— 可选，失败不影响主程序
+# OCR 文字提取 + OpenCV 图形结构检测；Linux/macOS/Windows 通用
+# 磁盘约 200MB（一次性），首次看图 1.2s，之后每次约 0.3s
+# 批O5(2026-08-16): opencv-python-headless 无 GUI 依赖（Linux 服务器/容器无 libGL 也能跑）
+rapidocr_onnxruntime>=1.3.0
+opencv-python-headless>=4.8.0

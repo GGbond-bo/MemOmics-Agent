@@ -1,0 +1,12 @@
+{
+  "id": "scrna-disease-drug-discovery",
+  "name": "scrna-disease-drug-discovery",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "End-to-end scRNA-seq disease analysis with genetic evidence integration for multi-omics drug target prioritization.",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

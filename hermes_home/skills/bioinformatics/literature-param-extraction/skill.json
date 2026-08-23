@@ -1,0 +1,36 @@
+{
+  "id": "literature-param-extraction",
+  "name": "Literature Parameter Extraction",
+  "category": "literature",
+  "language": "Python",
+  "source": "MemOmics",
+  "description": "从科学文献 PDF 中提取生信分析参数，结构化写入知识库 YAML。支持 pymupdf + markitdown 双层解析。",
+  "detailed_description": "当知识库缺少对应物种/组织/方法的参数时，从文献 PDF 提取参数值、置信度、来源，写入知识库。支持 pymupdf 快速提取 + markitdown fallback。",
+  "when_to_use": "拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时",
+  "parameters": {
+    "pdf_path": "[Required] PDF 文件路径 (str)",
+    "kb_dir": "[Required] 知识库根目录 (str)",
+    "method": "[Optional] 提取方法: auto/pymupdf/markitdown (default: auto)"
+  },
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "",
+      "params": "下载6篇候选→成功4篇(Franjic 2022 PMC XML / Zhang 2021 / Wang 2022 / Zhou 2022) + Su 2022/Trans 2021被Cloudflare拦截; extract_pdf.py脚本参数仅pdf_path; 知识库路径=memomics/knowledge_base/Homo_sapiens/hippocampus/aging/01_生物学知识/cell_types.yaml",
+      "date": "2026-08-12",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人海马知识库更新：新增Zhang 2021(灵长类12类衰老图谱,TAPC核心)/Wang 2022(猕猴13类,ETNPPL灵长类NSC marker,STMN1/2未成熟神经元)/Zhou 2022(Nature未成熟神经元)/Su 2022(胶质图谱,摘要级); 修正Franjic 2022 DOI(10.1016/j.neuron.2021.10.036)和标题; 补充原文级精细marke"
+    }
+  ],
+  "proven_script": "",
+  "error_count": 0,
+  "success_count": 1,
+  "user_prefs": {
+    "last_used_script": ""
+  }
+}

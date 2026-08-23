@@ -1,0 +1,20 @@
+{
+  "id": "pcr_simple",
+  "name": "Pcr Simple",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Simulate PCR amplification with given primers and sequence.",
+  "detailed_description": "Simulate PCR amplification with given primers and sequence.",
+  "when_to_use": "When you need pcr simple analysis",
+  "parameters": {
+    "sequence": "[Required] Either a sequence string or path to plasmid file (str)",
+    "forward_primer": "[Required] Forward primer sequence (5' to 3') (str)",
+    "reverse_primer": "[Required] Reverse primer sequence (5' to 3') (str)",
+    "circular": "[Optional] Whether the sequence is circular (default: False)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

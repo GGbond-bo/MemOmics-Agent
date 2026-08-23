@@ -1,0 +1,29 @@
+type: kb_entry
+name: scipilot-figure-skill_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-20 01:02
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scipilot-figure-skill_empirical
+content: 'skill: scipilot-figure-skill
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  meta=MF_AUCell_meta.csv, 18 program scores, subcluster z-score (跨10亚群行内标准化), top3
+  per subcluster
+
+
+  result_summary:
+
+  FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
+  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'
+evidence: 'record_run(scipilot-figure-skill): FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
+  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'

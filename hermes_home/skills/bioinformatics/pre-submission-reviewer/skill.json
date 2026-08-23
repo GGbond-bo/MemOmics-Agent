@@ -1,0 +1,30 @@
+{
+  "id": "pre-submission-reviewer",
+  "name": "Pre-Submission Reviewer（投稿前审查）",
+  "category": "general",
+  "language": "Python",
+  "description": "投稿前审查：以审稿人视角在投稿截止前对论文做五维全面体检（宏观逻辑/写作细节/英语语法/LaTeX格式/图表质量），CRITICAL/MAJOR/MINOR 分级 + 逐条改写建议 + AI腔禁用词与破折号检查。触发词：投稿前审查、投稿前检查、投前审、预审、查草稿、proofread、找问题、语法检查、图表质量",
+  "starting_prompt": "使用 Pre-Submission Reviewer（投稿前审查） 进行分析",
+  "source_dir": "skills/bioinformatics/pre-submission-reviewer",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "投稿前审查",
+    "投稿前检查",
+    "投前审",
+    "查草稿",
+    "检查草稿",
+    "投稿前体检",
+    "找问题",
+    "proofread",
+    "check the draft",
+    "find issues",
+    "语法检查",
+    "图表质量",
+    "AI腔"
+  ]
+}

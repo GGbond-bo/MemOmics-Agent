@@ -1,0 +1,16 @@
+{
+  "id": "proteomics-secretome-analysis",
+  "name": "Proteomics Secretome Analysis — 分泌蛋白组全流程",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Proteomics Secretome Analysis — 分泌蛋白组全流程 进行分析",
+  "source_dir": "skills/bioinformatics/proteomics-secretome-analysis",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

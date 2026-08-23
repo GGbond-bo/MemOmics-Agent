@@ -1,0 +1,29 @@
+type: kb_entry
+name: celltype-proportion-comparison_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-17 18:00
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- celltype-proportion-comparison_empirical
+content: 'skill: celltype-proportion-comparison
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  Specialized MF cluster3 3柱正式版 (Y_Pre/O_Pre/O_Post), 24×32mm, p+FDR两版, PDF+PNG, 补0口径,
+  2比较: Y_Pre vs O_Pre + O_Pre vs O_Post
+
+
+  result_summary:
+
+  cluster3 衰老上升显著: YvsO p=0.0234 FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156
+  FDR=0.0234 +2.30pp。2比较BH后均显著'
+evidence: 'record_run(celltype-proportion-comparison): cluster3 衰老上升显著: YvsO p=0.0234
+  FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156 FDR=0.0234 +2.30pp。2比较BH后均显著'

@@ -1,0 +1,42 @@
+{
+  "name": "SoupX 去污染",
+  "id": "soupx-remove-background",
+  "category": "decontamination",
+  "language": "R",
+  "source": "Biomni-style (custom)",
+  "description": "SoupX环境RNA去污染: 估计soup → 减法去除",
+  "detailed_description": "SoupX基于soup模型估计环境RNA。轻量级，CPU即可运行。适用于轻度到中度污染，或CellBender不可用时的替代。需要raw+filtered矩阵。参数自适应: 高污染组织→soupFraction上限0.3",
+  "when_to_use": "需去除环境RNA但无GPU，或CellBender的替代/补充",
+  "triggers": [
+    "SoupX",
+    "soup去污染",
+    "环境RNA去除"
+  ],
+  "steps": [
+    "加载raw+filtered矩阵",
+    "estimateSoup()估计soup比例",
+    "autoEstCont()自动估计污染",
+    "adjustCounts()校正",
+    "输出校正后矩阵"
+  ],
+  "dependencies": [
+    "SoupX",
+    "Seurat",
+    "DropletUtils"
+  ],
+  "outputs": [
+    "校正后矩阵",
+    "soup比例图",
+    "校正前后对比"
+  ],
+  "parameters": {
+    "soupFraction": "auto(高污染→0.1-0.3)",
+    "maxSoupFraction": "0.3"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0,
+  "official_docs": "https://raw.githubusercontent.com/constantAmateur/SoupX/refs/heads/master/README.md",
+  "doc_source": "official"
+}

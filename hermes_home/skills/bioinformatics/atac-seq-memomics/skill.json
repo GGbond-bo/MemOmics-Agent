@@ -1,0 +1,95 @@
+{
+  "id": "atac-seq-memomics",
+  "name": "ATAC-seq 分析 (ArchR)",
+  "category": "general",
+  "language": "Python",
+  "description": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出",
+  "starting_prompt": "使用 ATAC-seq 分析 (ArchR) 进行分析",
+  "source_dir": "skills/bioinformatics/atac-seq-memomics",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [],
+  "success_count": 2,
+  "proven_script": "P1_da_young_old.R",
+  "proven_params": [
+    {
+      "species": "macaca",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "run_motif_v6.R / run_motif_figs.R",
+      "params": "JASPAR2020 CORE human 633 motifs; GC-matched random background 3600 tiles (200/chr × 18 chr); matchMotifs out=scores; ranking by mean score fold-change (fg/bg); Old=48 tiles, Young=60 tiles",
+      "date": "2026-08-02",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Phase 6 motif 富集完成并收尾: Old DA tiles 富集 ZFP57(FC=6.14)/CEBPB(5.28)/MLX(4.41)/VENTX(4.39)/PITX1(3.73); Young 富集 HOXB8(8.38)/PITX1(4.44)/BHLHE41(3.63)/FOSL1::JUND(3.40)。PITX1/ZFP57/GBX1 两侧共享。产出 motif_enr"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "P1_da_young_old.R",
+      "params": "TileMatrix 500bp, wilcoxon, useGroups=Young/Old, bias=TSSEnrichment+log10(nFrags), cutOff strict=FDR<=0.05 & |log2FC|>=0.5, loose=FDR<=0.1 & |log2FC|>=0.25, threads=1",
+      "date": "2026-08-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "P1 人海马 4 样本 (35,787 cells, 17 clusters) Young vs Old 差异可及性完成: strict DA Old 2,955 / Young 563 tiles; loose Old 5,037 / Young 972。markers_age_tiles.rds (348MB) + da_tiles_strict_{Old,Young}.bed + volca"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "P1_da_young_old.R"
+  },
+  "error_count": 3,
+  "errors": [
+    {
+      "timestamp": "2026-08-07 17:21",
+      "error_type": "runtime_error",
+      "message": "run_serial.sh 用 cmd.exe //c \"E:\\\\MemOmics-Agent\\\\results\\\\...\\\\${local_bat}\" 在 MSYS bash 下把路径 \\r 转义吃掉（'un_GSM...bat' 找不到）；run_final9.sh 用 cmd.exe /c \"\\\"$RSCRIPT\\\" \\\"$SCRIPT\\\"...\" 嵌套引号同样失败（9 样本全 FAIL e",
+      "root_cause": "MSYS bash 调用 cmd.exe 时路径参数转义问题（\\r 被解释）+ monitor 自动重启机制与手动启动双源叠加产生多实例并发（ArchR 1.0.3 Windows 多实例共享 tmp 目录 → 竞争崩溃）",
+      "fix_applied": "改用 run_serial_v2.sh: bash 直接调 Rscript.exe（MSYS bash 可直接执行 Windows exe，中文路径在 R 内部处理），绕开 cmd.exe//c+bat。彻底清理所有并发实例（taskkill /F /IM Rscript.exe /T + bash.exe /T）后单实例启动。单实例锁 .run_serial_v2.pid。",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-08-08 21:33",
+      "error_type": "runtime_error",
+      "message": "02_annotate_human.R (PID 49976) 和 02b_annotate_human_bg.R (PID 49636) 均在 addGeneScoreMatrix 阶段崩溃：LOG1 停在 \"Adding GeneScoreMatrix to GSM8549616_hc78 for Chr (1 of 23)\" (21:25:13)，LOG2 停在 \"Creating Temp",
+      "root_cause": "ArchR addGeneScoreMatrix 在 Windows 上写 Arrow 时不稳定：GeneScoreMatrix 是稠密矩阵（35787 cells × 24919 genes），分 chr 组装 + 写回 Arrow 阶段内存/句柄压力大。连续两次崩溃均发生在该函数内部。TileMatrix 完好（h5py 验证 4 个 Arrow 均有 TileMatrix group），说明",
+      "fix_applied": "绕开 addGeneScoreMatrix：改用 TileMatrix（500bp bins）计算 marker 基因 TSS±2kb 覆盖度作为注释特征，等价于 gene score 简化版。8 大类 marker 与猴侧对齐。threads=1 避免并发。",
+      "species": "human",
+      "tissue": "hippocampus",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-08-08 22:19",
+      "error_type": "logic_error",
+      "message": "02e cluster-level marker 注释失败：17 clusters 中 16 个被误判为 OPC（34684/35787 = 97% OPC），仅 C17 判 Astro。log 显示各 cluster 的 OPC 分数普遍最高（0.024-0.094），但其他类型分数也非零——问题是 cluster 聚合后 argmax 被 OPC marker 主导。",
+      "root_cause": "02e R 脚本对 cluster 内所有 cell 的 marker TSS±2kb tile 覆盖度求和再除以 cell 数，但未按 marker 基因数/ tile 数归一化。OPC marker（PDGFRA/OLIG1/OLIG2/CSPG4）tile 覆盖普遍高于其他类型（可能因 OPC 在脑组织中表达广泛或 tile 计数方式偏差），导致 argmax 一律选 OPC。而 02d P",
+      "fix_applied": "03_finalize_annotation.R：读 02d celltype_map.json（cell-level 8 大类），35787/35787 匹配，覆盖 rds 的 CellType 列 → 分布 OPC 12032/ODC 7752/Ex 7001/Astro 4557/Micro 1661/Inh 1321/VS 887/ChP 576 + 重画 UMAP v2。教训：ArchR",
+      "species": "human",
+      "tissue": "hippocampus",
+      "script": "02e_annotate_human_tile2.R",
+      "severity": "high"
+    }
+  ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.8,
+      "evidence": "Luo et al. Genome Biol 2024 (PMID 39152456) benchmark + ArchR (PMID 33633365)/SnapATAC (PMID 33637727)/SnapATAC2 (PMID 38191932) 原论文 + 本项目 40 样本实战",
+      "date": "2026-08-14 15:14:43"
+    }
+  ]
+}

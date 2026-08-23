@@ -1,0 +1,79 @@
+# 小鼠肝脏 衰老方向 RNA-seq 分析流程（文献更新版）
+direction: aging
+omics: rna
+pipeline:
+  ambient_rna:
+    method: CellBender
+    package: CellBender
+    reference: Fleming et al. 2023, Nature Methods
+  qc:
+    method: Seurat + custom
+    package: Seurat
+    params:
+      nFeature_RNA_min: 200
+      nFeature_RNA_max: 6000
+      percent_mt_max: 20
+    reference: "Nikopoulou 2023 Nature Aging: zUMIs v2.9.7, STAR v2.7.1a, mm10/Ensembl v99"
+  doublet_detection:
+    method: DoubletFinder
+    package: DoubletFinder
+    doublet_rate: 0.08
+  normalization:
+    method: SCTransform v2
+    package: Seurat (v4.1.1+)
+    conserve.memory: TRUE
+    vars.to.regress: [percent.mt]
+    reference: "Nikopoulou 2023 Nature Aging: Seurat v4.1.1 SCTransform default params"
+  batch_correction:
+    method: Harmony
+    package: harmony
+  clustering:
+    method: Leiden
+    package: Seurat
+    resolution: 0.5-1.0
+  annotation:
+    method: SingleR + manual (marker-based)
+    package: SingleR
+    markers:
+      hepatocyte: [Alb, Cyp3a11, Serpina1a, Ttr]
+      periportal: [Cyp2f2, Ass1, Arg1, Pck1]
+      pericentral: [Cyp2e1, Glul, Cyp1a2, Axin2]
+      kupffer: [Clec4f, Vsig4, Cd163, Cd68]
+      lsec: [Pecam1, Vwf, Stab1, Stab2, Lyve1]
+      hsc: [Pdgfra, Des, Lrat, Gfap]
+      cholangiocyte: [Krt19, Krt7, Epcam]
+    reference: "Nikopoulou 2023 Nature Aging + Lin 2024 FASEB"
+  deg:
+    method: DESeq2 (pseudobulk) + MAST (Seurat FindMarkers)
+    package: DESeq2 / Seurat
+    params:
+      min_log2FC: 0.585
+      padj_cutoff: 0.05
+    reference: "BASiCS v2.8.0 used in Nikopoulou 2023 for dispersion analysis"
+  cellchat:
+    method: CellChat v2
+    package: CellChat
+  pathway:
+    method: clusterProfiler (v3.14.3)
+    package: clusterProfiler
+    params:
+      simplify: TRUE
+      organism: mouse
+    reference: "Nikopoulou 2023 Nature Aging: enrichGO + simplify default params"
+  tf:
+    method: decoupleR + SCENIC
+    key_tfs: [Hnf4a, Foxa3, Hnf1a, Cebpa, Srebf2, Axin2, Lef1, Tcf7l2, Nr4a2, Hnf1b]
+    reference: "Nikopoulou 2023: iRegulon in Cytoscape for TF activity prediction"
+  smart_seq3xpress:
+    method: Smart-seq3xpress (scRNA-seq full-length)
+    package: zUMIs v2.9.7 + STAR v2.7.1a
+    reference: "Nikopoulou 2023 Nature Aging Methods"
+    params:
+      mapping: mm10 (Ensembl v99)
+      min_cells: 3
+      min_genes: 200
+      min_counts: 1000
+source: "Updated 2026-07-07 from Nature Aging 2023, FASEB 2024, Nature Genetics 2023, BMC Genomics 2015"
+species: mouse
+tissue: liver
+updated: '2026-07-07'

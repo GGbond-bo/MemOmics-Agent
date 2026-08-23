@@ -1,0 +1,25 @@
+# System files
+.DS_Store
+
+# Data files
+**/*.pkl
+**/*.h5ad
+**/*.rds
+**/data/
+**/*_results/
+
+# Python temporary files
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# R temporary files
+.RData
+.Rhistory
+
+# Large output files
+*.png
+*.svg
+*.pdf
+*.html

@@ -1,0 +1,101 @@
+metadata:
+  source: work/papers/liver_aging/Nature_2026_spatial_atlas.pdf
+  dissected_at: '2026-07-12T17:29:44.596808'
+  pipeline_version: '2.0'
+  paper_title: ''
+  doi: ''
+  pmid: ''
+  extraction_method: regex_layer1
+methods:
+  packages:
+  - name: Scanpy
+    version: null
+    context: "sing Scanpy (version 1.10.0) standard functions (n_neighbors = \n20,\
+      \ resolution = 1.7).\nThe Visium HD single-cel"
+    params:
+    - name: resolution
+      value: '1.7'
+  - name: Harmony
+    version: null
+    context: "the Harmony algorithm (Harmonypy 0.0.10). The Harmony-corrected \nPCs\
+      \ were used to build the neighbourhood graph"
+    params: []
+  - name: GSEA
+    version: null
+    context: "s29 (GSEA) to identify strong \npericentral enrichment of multiple hepatic\
+      \ functions, including xeno-\nbiotic m"
+    params: []
+  - name: STAR
+    version: null
+    context: "with star-convex \npolygons. In Proc. Medical Image Computing and Computer\
+      \ Assisted Intervention – \nMICCAI 201"
+    params: []
+  - name: PEER
+    version: null
+    context: "nts, peer review information; details of author contributions \nand\
+      \ competing interests; and statements of dat"
+    params: []
+  - name: MERFISH
+    version: null
+    context: "ion (MERFISH)4 and \nPhenoCycler imaging5) and single-nucleus RNA sequencing6,\
+      \ we analysed 16 liver \nsamples: 8 f"
+    params: []
+  - name: Vizgen
+    version: null
+    context: "the Vizgen \nphotobleacher, followed by a de-crosslinking step, gel\
+      \ embedding and \ntissue clearing for 3 days."
+    params: []
+  - name: CellRanger
+    version: 9.0.0
+    context: "ing \nCellranger multi v9.0.0. GRCh38 (build 2024-A, 10X Genomics) and\
+      \ \nChromium Human Transcriptome Probe Set v1.1."
+    params: []
+  - name: cellranger
+    version: 9.0.0
+    context: "ing \nCellranger multi v9.0.0. GRCh38 (build 2024-A, 10X Genomics) and\
+      \ \nChromium Human Transcriptome Probe Set v1.1."
+    params: []
+  parameters:
+  - name: resolution
+    value: '1.7'
+    context: "standard functions (n_neighbors = \n20, resolution = 1.7).\nThe Visium\
+      \ HD single-cell atlas was u"
+  - name: FDR
+    value: '0.1'
+    context: 'K)
+
+      EMT (H)
+
+      Ribosome (K)
+
+      Number of genes
+
+      FDR < 0.1
+
+      16–68
+
+      69–106
+
+      107–144
+
+      145–182
+
+      183–220
+
+      Co'
+  platforms:
+  - 10X genomics
+  - 10X Genomics
+  - Illumina
+  - NovaSeq 6000
+  - 10x Genomics
+  - Chromium
+  - "10X \nGenomics"
+  stats:
+    methods_length: 104943
+    methods_lines: 2924
+    package_count: 9
+    version_count: 2
+    parameter_count: 2
+    platform_count: 11
+llm_extraction: null

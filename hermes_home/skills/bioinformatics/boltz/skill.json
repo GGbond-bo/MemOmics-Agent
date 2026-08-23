@@ -1,0 +1,19 @@
+{
+  "id": "boltz",
+  "name": "Boltz-2",
+  "category": "protein-structure",
+  "language": "Python",
+  "description": "Structure prediction for protein, nucleic-acid, and small-molecule complexes with Boltz-2 (Passaro & Wohlwend et al. 2025, github.com/jwohlwend/boltz). Reach for this skill to validate designed binder",
+  "starting_prompt": "使用 Boltz-2 进行分析",
+  "source_dir": "skills/bioinformatics/boltz",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "boltz"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

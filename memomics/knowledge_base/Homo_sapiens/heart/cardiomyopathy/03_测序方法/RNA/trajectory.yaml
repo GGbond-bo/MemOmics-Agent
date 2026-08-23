@@ -1,0 +1,14 @@
+analysis_type: trajectory
+date: '2026-06-27'
+methods:
+  monocle3:
+    reduction_method:
+      confidence: medium
+      source: domain_convention
+      value: UMAP
+  scvelo:
+    mode:
+      confidence: medium
+      source: domain_convention
+      value: dynamical
+source: default_seed

@@ -1,0 +1,10 @@
+created: '2026-06-29'
+direction: sarcomere regeneration
+last_updated: '2026-06-29'
+literature_count: 2
+omics:
+- rna
+species: Mus musculus
+status: active
+tissue: skeletal muscle
+version: 1

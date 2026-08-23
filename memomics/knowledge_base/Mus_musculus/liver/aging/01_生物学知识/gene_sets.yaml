@@ -1,0 +1,93 @@
+# 小鼠肝脏衰老 — 基因集（文献更新版 v2）
+# MemOmics Knowledge Base — 文献驱动
+
+species: Mus musculus
+tissue: liver
+direction: aging
+
+gene_sets:
+  # ─── 肝脏区域化标记 ─────────────────────────────────
+  hepatocyte_zonation_markers:
+    periportal_zone1: [Cyp2f2, Ass1, Arg1, Pck1, G6pc, Slc2a2, Aldob, Fbp1, Pc, Cps1, Otc]
+    pericentral_zone3: [Cyp2e1, Glul, Cyp1a2, Oat, Rbp4, Lgr5, Axin2, Cyp2a6, Cyp2c9, Lect2, Wif1]
+
+  # ─── 肝脏衰老上调 ───────────────────────────────────
+  liver_aging_up:
+    description: 衰老肝脏中上调的基因
+    genes: [Cdkn2a, Cdkn1a, Clu, Lcn2, Clec7a, Saa1, Saa2, C3, Serpine1, Igfbp3, Cxcl8, Il6, Il1b, Tnf, Ccl2, Cxcl10, Mmp9, Timp1, Tgfb1, Fn1, Col1a1, Col3a1, Acta2, Ctgf, Srebf2, Lepr, Pcsk9, Meg3, Rian, Mirg, S100a8, S100a9]
+    source: "Lin 2024 FASEB + Nikopoulou 2023 Nature Aging + BMC Genomics 2015"
+
+  # ─── 肝脏衰老下调 ───────────────────────────────────
+  liver_aging_down:
+    description: 衰老肝脏中下调的基因
+    genes: [Ppargc1a, Tfam, Ndufs1, Ndufv1, Cox5a, Atp5f1a, Cyp3a11, Cyp2e1, Alb, Pck1, G6pc, Gck, Hnf4a, Foxa2, Ppara, Sirt1, Atg5, Atg7, Becn1, Sod1, Sod2, Cat, Gpx1, Foxo1, Stab1, Stab2, Lyve1, Fcgr2b, Cyp2f2, Cyp1a2]
+    source: "Nikopoulou 2023 Nature Aging + BMC Genomics 2015 + Hepatol Commun 2023"
+
+  # ─── 肝脏炎症衰老 ───────────────────────────────────
+  liver_inflammaging:
+    genes: [Il1b, Il6, Tnf, Cxcl8, Ccl2, Ccl3, Ccl5, Cxcl1, Cxcl10, Nfkb1, Nfkb2, Rela, Stat1, Stat3, Jun, Fos, Icam1, Vcam1, Sele, S100a8, S100a9]
+    source: "Hepatology 2024 + Inflamm Regen 2025 + Aging Cell 2023"
+
+  # ─── RNAPII stalling 相关 (NEW - Nature Genetics 2023) ───
+  rnapii_stalling_aging:
+    description: "衰老肝脏中RNA聚合酶II停滞影响的通路基因"
+    pathways:
+      nutrient_sensing: [Irs1, Irs2, Akt1, Akt2, Mtor, Rptor, Rictor, S6k1, 4ebp1, Foxo1, Foxo3, Sirt1, Sirt3]
+      autophagy: [Atg5, Atg7, Becn1, Lc3b, Gabarap, Sqstm1, Ulk1, Ulk2, Lamp1, Lamp2, Ctsb, Ctsd]
+      proteostasis: [Hspa1a, Hspa1b, Hsp90aa1, Hsp90ab1, Hspb1, Dnajb1, Dnajb4, Hsph1, Cryab, Bag3]
+      energy_metabolism: [Ppargc1a, Esrra, Ppara, Ppard, Ndufs1, Cox5a, Atp5f1a, Slc2a4, Gck, Pck1]
+      immune: [Il6, Il1b, Tnf, Ifng, Stat1, Stat3, Nfkb1, Rela, Ccl2, Ccl5, Cxcl10]
+    source: "Gyenis et al. 2023, Nature Genetics"
+
+  # ─── 衰老标志通路基因 (NEW) ─────────────────────────
+  aging_hallmark_genes:
+    genomic_instability: [Trp53, Cdkn1a, Cdkn2a, H2ax, Atm, Atr, Chek1, Chek2, Brca1, Brca2, Ercc1, Ercc2, Xpa, Xpg]
+    epigenetic_alteration: [Hdac1, Hdac2, Hdac3, Sirt1, Sirt3, Sirt6, HAT1, KAT2A, KAT6A, Dnmt1, Dnmt3a, Dnmt3b, Tet1, Tet2]
+    mitochondrial_dysfunction: [Ppargc1a, Tfam, Esrra, Ndufs1, Ndufv1, Sdha, Uqcrc1, Cox5a, Atp5f1a, Mfn1, Mfn2, Opa1, Fis1, Pink1, Park2, Bnip3]
+
+  kupffer_cell_aging:
+    genes_up: [Cxcl2, Il1b, Tnf, Nlrp3, Casp1, Cd80, Cd86, Tlr2, Tlr4, S100a8, S100a9, Ccl2, Cxcl1]
+    genes_down: [Vsig4, Timd4, Clec4f, Cd163, Mrc1, Il10, Tgfb1, Clec1b]
+    source: "Hepatology 2024 (PMC10871588)"
+
+  # ─── SASP ────────────────────────────────────────────
+  liver_sasp:
+    genes: [Il6, Il1a, Il1b, Cxcl8, Cxcl1, Ccl2, Ccl3, Mmp1, Mmp2, Mmp3, Mmp9, Mmp10, Timp1, Timp2, Igfbp3, Igfbp7, Serpine1, Tgfb1, Ctgf, Hgf, Areg, Ereg]
+
+  hepatocyte_senescence:
+    genes: [Cdkn1a, Cdkn2a, Glb1, Lmnb1, Hmgb1, Tp53, Rb1, E2f1, Pcna, Mki67, Srebf2, Lcn2, Clu, Serpine1]
+
+  # ─── 线粒体 ─────────────────────────────────────────
+  liver_mitochondrial:
+    genes: [Ppargc1a, Tfam, Esrra, Ndufs1, Ndufv1, Ndufa13, Sdha, Uqcrc1, Cox5a, Cox6b1, Atp5f1a, Atp5o, Slc25a4, Slc25a5, Mfn1, Mfn2, Opa1, Fis1, Bnip3, Park2, Pink1]
+
+  # ─── 脂质代谢 ───────────────────────────────────────
+  liver_lipid_aging:
+    genes_up: [Dgat2, Scd, Fasn, Acaca, Srebf1, Srebf2, Hmgcr, Ldlr, Lpl, Lepr, Pcsk9]
+    genes_down: [Cpt1a, Cpt2, Acadl, Acadm, Ppara, Ppard, Acox1, Cyp4a10, Cyp4a14, Ppargc1a]
+
+  # ─── LSEC衰老 ────────────────────────────────────────
+  lsec_aging:
+    genes_down: [Stab1, Stab2, Lyve1, Fcgr2b, F8, Clec4m, Clec1b, Kdr, Flt1, Cd32b]
+    genes_up: [Vwf, Icam1, Vcam1, Sele, Edn1, Nos3, Eng, Serpine1]
+
+  # ─── 纤维化 ─────────────────────────────────────────
+  liver_fibrosis:
+    genes: [Col1a1, Col1a2, Col3a1, Col4a1, Col6a1, Fn1, Tgfb1, Ctgf, Acta2, Pdgfra, Pdgfrb, Mmp2, Mmp9, Timp1, Lox, Loxl2, Lum, Dcn, Sparc]
+
+  # ─── 衰老差异表达基因 (NEW - 整合多文献) ────────────
+  liver_aging_deg_integrated:
+    description: "整合多篇文献的肝脏衰老差异表达基因，按可信度分级"
+    tier1_high_confidence:
+      up: [Cdkn2a, Cdkn1a, Clu, Lcn2, Clec7a, Saa1, C3, Serpine1, Cxcl2, Igfbp3]
+      down: [Ppargc1a, Cyp3a11, Cyp2e1, Alb, Hnf4a, Pck1, G6pc, Sirt1, Stab1, Lyve1]
+    tier2_moderate_confidence:
+      up: [Pcsk9, Meg3, Rian, Mirg, S100a8, S100a9, Ccl2, Il6, Tnf, Timp1]
+      down: [Foxo1, Foxa2, Ppara, Atg5, Atg7, Tfam, Sod2, Cyp2f2, Cyp1a2]
+    source: "整合 BMC Genomics 2015, Nature Aging 2023, Nature Genetics 2023, FASEB 2024, Geroscience 2023"
+
+  # ─── 空间区域化衰老基因 (NEW - 空间转录组) ──────────
+  spatial_zonation_aging:
+    zone1_periportal_aging_up: [Mup1, Mup11, Mup17, Mup7, Hsd3b5, Apoa4, Cyp1a2, Cyp4a12b, Noct, Cidea, Cyp2b9, Cyp4a12a, Apcs, Angptl8, Rdh16f2, Hamp2, A2ml1]
+    zone3_pericentral_aging_up: [Fgl1, Cyp2b9, Gstp1, Apcs, Cth, Angptl8, Etnppl, Ifi27l2b, A2ml1, Serpina12, Rbp1, Igfbp3, Cidea, Lcn2]
+    source: "Nikopoulou et al. 2023, Nature Aging (Fig 1d-1g)"

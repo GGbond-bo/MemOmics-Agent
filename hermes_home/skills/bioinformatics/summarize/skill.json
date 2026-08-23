@@ -1,0 +1,32 @@
+{
+  "id": "summarize",
+  "name": "智能总结",
+  "category": "meta",
+  "language": "Python",
+  "description": "智能总结分析结果/文献/对话/数据：自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。",
+  "starting_prompt": "帮我总结",
+  "memomics_module": "元技能",
+  "chains_from": [],
+  "chains_to": ["generate_report"],
+  "tags": ["meta", "summary", "summarize", "总结", "摘要", "概览", "要点", "归纳"],
+  "aliases": ["总结一下", "帮我总结", "摘要", "概述", "总结结果", "summarize", "总结分析", "归纳"],
+  "triggers": [
+    "总结", "帮我总结", "总结一下", "概述", "摘要", "归纳",
+    "总结.*结果", "总结.*分析", "总结.*文献", "总结.*数据",
+    "summarize", "summary", "给我.*概览", "要点.*什么"
+  ],
+  "difficulty": "beginner",
+  "applicable": ["all_species"],
+  "parameters": {
+    "content_type": {"type": "string", "description": "总结类型: analysis_result/literature/conversation/data_overview", "required": false},
+    "max_length": {"type": "integer", "description": "最大字数", "required": false, "default": 500}
+  },
+  "steps": [
+    {"name": "识别总结对象", "description": "根据上下文判断用户想总结什么：分析结果/文献/对话/数据", "tool": "llm"},
+    {"name": "提取关键信息", "description": "从分析结果/文献/对话中提取关键发现、统计数字、结论", "tool": "llm"},
+    {"name": "生成结构化摘要", "description": "按背景→方法→结果→结论的结构生成摘要", "tool": "llm"},
+    {"name": "验证关键数字", "description": "摘要中的数字必须来自实际数据，不能编造", "tool": "llm"}
+  ],
+  "r_packages": [],
+  "python_packages": []
+}

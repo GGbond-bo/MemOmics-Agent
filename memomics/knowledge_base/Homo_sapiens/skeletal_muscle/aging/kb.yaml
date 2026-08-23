@@ -1,0 +1,108 @@
+# 人类骨骼肌 衰老方向 知识库
+# MemOmics Knowledge Base — 衰老特异, 与通用知识分开
+#
+# 📖 文献来源标注: [直接引用] / [共识推断] / [待验证]
+
+species: human
+tissue: skeletal_muscle
+direction: aging
+last_updated: 2026-06-24
+literature_search_query: "aging skeletal muscle single cell nucleus RNA-seq human"
+
+# ─── 衰老核心发现 ──────────────────────────────────────────
+key_findings:
+  type_ii_atrophy:
+    desc: "Type II(快肌)纤维在衰老中优先萎缩"
+    evidence: "Type II%从young~49%降到old~23%"
+    source: |
+      - Lexell et al., 1988, J Neurol Sci: 经典发现
+      - Kim et al., 2023, Nat Commun: snRNA-seq证实
+    must_validate: True
+
+  denervation_reinnervation:
+    desc: "衰老中运动神经元丢失→去神经化→尝试重新支配→纤维类型 grouping"
+    markers: ["MYOG", "MYOD1", "NCAM1", "CHRNG"]
+    interpretation: |
+      MYOG+MYOD1+ = 肌生成程序重激活(去神经化应答)
+      NCAM1+ = 去神经化纤维的经典标志
+      CHRNG+ = 胎儿型AChR重表达(去神经化特征)
+    source: |
+      - Liu et al., 2022, Nat Med: denervated fibers in aging
+      - Rubio-Lara et al., 2023: 去神经化亚群
+      - Hepple & Rice, 2016: motor unit remodeling in aging
+    must_validate: True  # ★ 必须双Agent辩论!
+
+  fap_fibrosis:
+    desc: "FAP在衰老中增加→纤维化→ECM沉积"
+    markers: ["COL1A1", "COL3A1", "FN1", "TGFBI"]
+    source: |
+      - Lemos et al., 2018, Cell Rep: FAP in muscle fibrosis
+      - Kim et al., 2023: FAP比例在老年中增加
+
+  inflammaging:
+    desc: "衰老相关慢性低度炎症, 免疫细胞浸润增加"
+    markers: ["IL1B", "TNF", "CCL2", "CXCL8"]
+    source: |
+      - Franceschi et al., 2018: inflammaging concept
+      - Kim et al., 2023: immune infiltration in aged muscle
+
+  musc_decline:
+    desc: "MuSC数量和功能下降"
+    markers: ["PAX7", "MYF5"]
+    source: |
+      - Blau et al., 2015: MuSC aging
+      - Kim et al., 2023: MuSC proportion decrease
+
+# ─── 衰老分析参数 ──────────────────────────────────────────
+aging_params:
+  age_groups:
+    young: "<40岁"
+    middle: "40-60岁"
+    old: ">60岁"
+    source: "多数骨骼肌衰老研究使用此分组"
+
+  deg_method: "DESeq2_pseudobulk"  # [共识推断] 衰老DEG金标准
+  deg_source: |
+    - Squair et al., 2021, Nat Commun: pseudobulk是金标准
+    - Zimmermann et al., 2021: DESeq2 vs MAST vs Wilcoxon
+
+  proportion_test: "Fisher_exact"  # [直接引用] 细胞比例变化
+  proportion_source: |
+    - 2×2列联表Fisher精确检验
+    - 每个细胞类型分别检验young vs old
+
+# ─── 衰老相关基因集 ─────────────────────────────────────────
+gene_sets:
+  sasp:  # Senescence-Associated Secretory Phenotype
+    genes: ["IL6", "IL1A", "IL1B", "CXCL8", "CCL2", "MMP3", "MMP9", "SERPINE1", "TGFB1", "IGFBP3", "IGFBP5"]
+    source: "Coppé et al., 2010, Annu Rev Pathol"
+
+  denervation:
+    genes: ["MYOG", "MYOD1", "NCAM1", "CHRNG", "DES", "VIM", "CHRNE", "CHRNA1"]
+    source: |
+      - Liu et al., 2022: denervation signature
+      - Rubio-Lara et al., 2023: 去神经化cluster标记
+
+  fibrosis:
+    genes: ["COL1A1", "COL3A1", "FN1", "TGFBI", "POSTN", "CTGF", "THBS1"]
+    source: "Lemos et al., 2018: fibrotic FAP markers"
+
+  nmj:  # Neuromuscular Junction
+    genes: ["CHRNE", "CHRNA1", "CHRND", "MUSK", "RAPSN", "AGRIN", "LRP4"]
+    source: "Burden et al., 2018: NMJ genes"
+
+# ─── 双Agent辩论规则 ──────────────────────────────────────────
+debate_rules:
+  denervation_fibers:
+    bio_agent_checks:
+      - "MYOG+/MYOD1+ 是否确实在肌纤维核中? (排除MuSC)"
+      - "NCAM1表达量是否足够高(>1% cells)?"
+      - "去神经化cluster的比例是否合理(通常5-20%)?"
+      - "有没有混杂其他细胞类型?"
+    stats_agent_checks:
+      - "亚聚类分辨率是否合适? silhouette score?"
+      - "MYOG+比例的统计显著性? (Fisher/wilcoxon)"
+      - "样本量是否足够做此推断?"
+      - "是否控制了donor效应?"
+    consensus_threshold: 7.0  # 两个Agent都>7分才通过
+    source: "MemOmics设计: Nature审稿制度(Bio+Stats双审)"

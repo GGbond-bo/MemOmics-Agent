@@ -1,0 +1,23 @@
+{
+  "id": "pubmed-mesh-annotation",
+  "name": "PubMed MeSH 语义索引标注",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "MeSH 语义索引/文献 MeSH 标签标注：给定文献 title+abstract（或 PMID），从 PubMed 官方索引输出 MeSH 主要标签。适用于语义索引 benchmark（如 试卷1_语义索引TaskA）、文献打标、知识库构建的 MeSH 词表获取。",
+  "starting_prompt": "使用 PubMed MeSH 语义索引标注 进行分析",
+  "source_dir": "skills/bioinformatics/pubmed-mesh-annotation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "mesh",
+    "pubmed",
+    "ncbi",
+    "semantic-indexing",
+    "annotation",
+    "benchmark"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

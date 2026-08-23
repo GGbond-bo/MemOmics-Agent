@@ -1,0 +1,31 @@
+# 骨骼肌衰老 — 关键发现
+# 详细生物学知识请见 biology_knowledge.yaml
+findings:
+  - finding: 衰老骨骼肌中 type 2 (快肌) 纤维选择性萎缩, type 1 (慢肌) 相对保留
+    evidence: 约 30% type 2 纤维丢失
+    source: Nilwik et al. 2013, J Cachexia Sarcopenia Muscle
+    confidence: high
+  - finding: 肌卫星细胞 (PAX7+) 数量减少 30-50%, 再生能力下降
+    evidence: 衰老 SC 进入衰老状态, SASP 分泌增加
+    source: Garcia-Prat et al. 2016, Nature
+    confidence: high
+  - finding: 促炎巨噬细胞 (M1) 增加, 抗炎 (M2) 减少
+    evidence: M1/M2 比值上升, IL6/TNF 表达增加
+    source: Wang et al. 2022, Nature Aging
+    confidence: high
+  - finding: 肌内脂肪浸润增加, FAP 分化为脂肪细胞
+    evidence: ADIPOQ+ 细胞比例上升
+    source: Lukjanenko et al. 2019, Nature Medicine
+    confidence: high
+  - finding: 纤维化增加, COL1A1/COL3A1 表达上升
+    evidence: ECM 沉积增加
+    source: Barberi et al. 2023, Nature Communications
+    confidence: high
+  - finding: 毛细血管密度下降, 内皮细胞减少
+    evidence: PECAM1+ 细胞比例下降
+    source: Emeis et al. 2020, Aging Cell
+    confidence: medium
+  - finding: CD8+ 耗竭 T 细胞 (PD1+, TIM3+) 在肌肉中积累
+    evidence: T 细胞浸润增加
+    source: Bencsik et al. 2023, Nature Communications
+    confidence: medium

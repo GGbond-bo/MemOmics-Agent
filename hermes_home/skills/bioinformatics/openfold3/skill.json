@@ -1,0 +1,19 @@
+{
+  "id": "openfold3",
+  "name": "OpenFold3 Structure Prediction",
+  "category": "protein-structure",
+  "language": "Python",
+  "description": "Structure prediction using OpenFold3, an open-weights PyTorch reproduction of AlphaFold3 from the AlQuraishi Lab. Use this skill when predicting protein/nucleic-acid/ligand complex structures with an ",
+  "starting_prompt": "使用 OpenFold3 Structure Prediction 进行分析",
+  "source_dir": "skills/bioinformatics/openfold3",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "openai4s",
+    "openfold3"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

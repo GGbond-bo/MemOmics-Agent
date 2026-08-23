@@ -1,0 +1,16 @@
+{
+  "id": "atac-paper-reproduction",
+  "name": "ATAC-seq 论文对比流程复现",
+  "category": "general",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 ATAC-seq 论文对比流程复现 进行分析",
+  "source_dir": "skills/bioinformatics/atac-paper-reproduction",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL 讨论触发",
+  "trigger_keywords": []
+}

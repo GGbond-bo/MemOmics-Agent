@@ -1,0 +1,33 @@
+type: kb_entry
+name: wakeup-progress-check_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-21 10:07
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup-progress-check_empirical
+content: 'skill: wakeup-progress-check
+
+  quality_score: 10.0
+
+
+  params_used:
+
+  唤醒#0: 定位task_plan(仅旧plan human_skeletal_muscle_aging_20260717_b020560c, 本会话无task_plan);
+  固定数据文件 gene_set_response_summary.csv 全盘定位=stress-run-1787277145/data/(23行) + memomics-2274ab75/(23行,
+  同内容); 三源: 进程=node×2+python×8(小内存, 无分析脚本路径, 系统组件), GPU=全桌面C+G(explorer/EdgeWebView/QQBrowser/Olivia等)+2高权限,
+  无Compute分析进程
+
+
+  result_summary:
+
+  唤醒#0核查: 本会话memomics-6f93c92c无task_plan/无活跃主线, 纯压力测试会话(execute_code HELLO-STRESS×2
+  + import缺失模块 + OK修正), 已全部完成。固定数据文件gene_set_response_summary.csv共2副本(stress-run-1787277145/data/
+  + memomics-2274ab75/, 均23行), 本会话data/目录为空需注意。'
+evidence: 'record_run(wakeup-progress-check): 唤醒#0核查: 本会话memomics-6f93c92c无task_plan/无活跃主线,
+  纯压力测试会话(execute_code HELLO-STRESS×2 + import缺失模块 + OK修正), 已全部完成。固定数据文件gene_set_response_summary.csv共2副本(stress-run-1787277145/data/
+  + memomics-2274ab75/,'

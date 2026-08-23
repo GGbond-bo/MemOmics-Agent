@@ -1,0 +1,230 @@
+{
+  "id": "scrna-qc",
+  "name": "scRNA-seq质量控制",
+  "category": "transcriptomics",
+  "language": "R+Python",
+  "description": "质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值",
+  "starting_prompt": "对我的单细胞数据进行质控",
+  "source_dir": "skills/built_in/scrna-qc",
+  "memomics_module": "01_质控",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "qc",
+    "doublet",
+    "ambient-rna",
+    "scRNA-seq"
+  ],
+  "steps": [
+    {
+      "name": "Read10X/ReadH5",
+      "description": "Load 10X/Smart-seq2 data",
+      "tool": "terminal"
+    },
+    {
+      "name": "QC metrics (mt/ribo)",
+      "description": "PercentageFeatureSet",
+      "tool": "terminal"
+    },
+    {
+      "name": "Doublet removal",
+      "description": "DoubletFinder/scDblFinder",
+      "tool": "terminal"
+    },
+    {
+      "name": "Ambient RNA (SoupX)",
+      "description": "Correct ambient RNA",
+      "tool": "terminal"
+    },
+    {
+      "name": "Filter cells",
+      "description": "By nFeature/percent.mt",
+      "tool": "terminal"
+    },
+    {
+      "name": "QC report + Violin",
+      "description": "Before/after comparison",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "Seurat",
+    "patchwork",
+    "ggplot2",
+    "dplyr"
+  ],
+  "python_packages": [
+    "scanpy",
+    "matplotlib",
+    "harmonypy"
+  ],
+  "difficulty": "basic",
+  "applicable": [
+    "所有scRNA-seq"
+  ],
+  "parameters": {
+    "r_packages": "Seurat, patchwork, ggplot2, dplyr",
+    "python_packages": "scanpy, matplotlib, harmonypy",
+    "steps": "Read10X/ReadH5 -> QC metrics (mt/ribo) -> Doublet removal -> Ambient RNA (SoupX) -> Filter cells -> QC report + Violin"
+  },
+  "detailed_description": "质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值\n\n适用场景: 所有scRNA-seq\n\n分析步骤:\n  - Read10X/ReadH5: Load 10X/Smart-seq2 data\n  - QC metrics (mt/ribo): PercentageFeatureSet\n  - Doublet removal: DoubletFinder/scDblFinder\n  - Ambient RNA (SoupX): Correct ambient RNA\n  - Filter cells: By nFeature/percent.mt\n  - QC report + Violin: Before/after comparison\n\n依赖包: ggplot2, matplotlib, harmonypy, Seurat, scanpy, patchwork, dplyr\n\n难度: basic\n\n触发提示: \"对我的单细胞数据进行质控\"",
+  "when_to_use": "适用于: 所有scRNA-seq",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_subset_qc.py",
+      "params": "nFeature 500-6000, nCount 1000-40000, MT%<5%, gene_min_cells=3, stratified subset by age, seed=42",
+      "date": "2026-07-04",
+      "score": 8.5,
+      "result": "40,000→39,982 cells (18 removed, 0.04%), 55,211→43,844 genes, 6 figures, snRNA-seq confirmed (median MT% 0.68%), 13 age groups balanced"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "qc_metrics.R",
+      "params": "nFeature 200-6000, MT%<5%, nCount 1000-40000, per-sample MAD nmads=2.5 on nFeature+nCount, subset 40k cells",
+      "date": "2026-07-04",
+      "score": 8.5,
+      "result": "40k cells subset from 324k, QC filtered ~39.5k retained, 24 samples, snRNA-seq low MT%, per-sample MAD correctly handled batch-level QC differences"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_qc_metrics.py, 02_qc_visualization.py",
+      "params": "backed_mode=True, 6 QC figures generated, n_genes 200-6000, pct_mt 0-5%",
+      "date": "2026-07-10",
+      "score": 9,
+      "result": "QC PASS: Upstream QC already applied. 324,434 cells, 0 filtered, 11 cell types. Young 125k, Old 199k. Raw counts available in layers['counts']."
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "qc_validation.R",
+      "params": "{\"qc_strategy\": \"验证性评估-不重过滤\", \"nFeature_range\": \"501-7807\", \"mt_max\": 4.99, \"doublet\": \"skip-无raw counts\", \"thresholds_from\": \"KB snRNA-seq nFeature 200-6000 MT<5%\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000.rds (20,000 cells) QC验证性评估：无任何离群细胞(nFeature<200:0,>8000:0,MT>5%:0)，上游已严格QC。Y_Pre median nFeature 2861最高，O_Pre 2167最低。产出QC_vln_by_type.png + QC_scatter.png + qc_summary_by_type.csv"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "env_check_and_load.R",
+      "params": "{\"language\": \"R\", \"seurat\": \"5.5.1\", \"note\": \"execute_r 持久内核不自动 library(Seurat)，必须显式调用 library(Seurat) 才能使用 Assays/DefaultAssay 等函数\"}",
+      "date": "2026-08-14",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Seurat 5.5.1 + SeuratObject 5.4.0 已装；持久内核需显式 library(Seurat)。readRDS 中文路径 E:/骨骼肌锻炼/MF_subset_2000.rds 报 cannot open the connection，需进一步排查路径。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "qc_report.R",
+      "params": "{\"mode\": \"report_only\", \"qc\": \"no_hard_filter\", \"figures\": \"01_QC_report.png\", \"table\": \"QC_by_type.csv\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000 QC 验证性报告完成：20,000 cells，nFeature median=2491，nCount median=5165，MT median=0.35%（max 4.99 提示上游已用5%阈值过滤），ribo median=0.35%。6组配对 Y_Pre 3767/Y_Post 2930/O_Pre 2923/O_Post 2901/OD_Pre 3636/O"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_qc_visualization.R",
+      "params": "{\"qc_strategy\": \"验证性评估-不重过滤\", \"nFeature_range\": \"501-7807\", \"mt_max\": 4.99, \"doublet\": \"skip-无raw counts\", \"thresholds_from\": \"KB snRNA-seq nFeature 200-6000 MT<5%\", \"audit\": \"nFeature>6000仅59cells(0.295%)且nCount均>15000(双联体特征), MT>5%:0, nCount<500/>50000:0\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000.rds (20,000 cells × 51,227 genes, 双assay RNA+SCT) QC验证性评估完成：KB阈值审计 nFeature<200:0, >6000:59(0.295%), >8000:0, nCount<500:0, >50000:0, MT>5%:0(上游已5%硬截断), 6组×10亚群60组合全齐完全平衡。Y_Pre nFeature"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "03_qc_visualization.R",
+      "params": "{\"verify_method\": \"R_parse_lint + 产出物完整性复核\", \"scripts_checked\": \"3个R脚本全部parse PASS\", \"outputs_checked\": \"4图+3表全部存在非空\"}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "QC分析脚本验证: 01/02/03_load/audit/visualization.R 全部 parse 通过, 4张图(143-1004KB)+3张表全部存在。R脚本不属于pytest可测范围(results/产出脚本), 用R语法解析+产出物存在性作为验证证据。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_collect_check",
+      "params": "{\"verify_method\": \"pytest collect-only 配置探测\", \"pytest_ini\": \"存在\", \"collect\": \"成功 exit_code=0\", \"note\": \"pytest.ini 存在, --co 收集通过, 输出仅 DeprecationWarning(server.py on_event)\"}",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MemOmics 仓库 pytest 配置探测: pytest.ini 存在, pytest --co 收集成功(exit_code 0), 只有 server.py 的 FastAPI on_event DeprecationWarning 非致命。下一步跑默认 offline 测试集。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_offline_run",
+      "params": "{\"verify_method\": \"pytest offline 默认测试集\", \"note\": \"exit_code=0, 输出尾部仅 DeprecationWarning, 需抓取 passed/failed 统计行\"}",
+      "date": "2026-08-14",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MemOmics 仓库默认 offline pytest 运行 exit_code=0, 无失败, 尾部仅 PytestRemovedIn10Warning(类级fixture弃用,非致命)。"
+    }
+  ],
+  "proven_script": "pytest_offline_run",
+  "error_count": 1,
+  "success_count": 10,
+  "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [],
+    "description": "QC是起点，无前置要求"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-07-04 02:44",
+      "error_type": "memory",
+      "message": "sc.pp.filter_genes() → anndata copy() → numpy._ArrayMemoryError: Unable to allocate 173 MiB",
+      "root_cause": "sc.pp.filter_genes internally calls .copy() which creates a full sparse matrix copy, OOM on 40k×55k matrix",
+      "fix_applied": "Replace sc.pp.filter_genes() with inplace: gene_counts = (adata.X > 0).sum(0); gene_mask = gene_counts >= 3; adata._inplace_subset_var(gene_mask)",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "01_subset_qc.py",
+      "severity": "medium"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "pytest_offline_run"
+  },
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.8,
+      "evidence": "MF_subset_2000 QC策略裁决: 不重过滤(验证性评估)成立, 59个双联体特征细胞保留但标注",
+      "date": "2026-08-14 21:02:52"
+    }
+  ]
+}

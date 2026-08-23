@@ -1,0 +1,9 @@
+analysis_type: spatial
+date: '2026-06-29'
+methods:
+  squidpy:
+    n_neighs:
+      confidence: medium
+      source: domain_convention
+      value: 6
+source: default_seed

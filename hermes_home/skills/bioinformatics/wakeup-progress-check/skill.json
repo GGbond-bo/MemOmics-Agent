@@ -1,0 +1,101 @@
+{
+  "id": "wakeup-progress-check",
+  "name": "Wakeup Progress Check — 唤醒/进度核查规程",
+  "category": "general",
+  "language": "Python",
+  "description": "系统唤醒/进度询问时的任务状态核查规程。定位活跃 task_plan → 终态验证 → 三源交叉验证 → 汇报。触发：\"[系统唤醒]\"、\"还在跑吗\"、\"进度\"、cron 唤醒、跨会话恢复。",
+  "starting_prompt": "使用 Wakeup Progress Check — 唤醒/进度核查规程 进行分析",
+  "source_dir": "skills/bioinformatics/wakeup-progress-check",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [],
+  "success_count": 6,
+  "proven_script": "fig_C1_5sub_vs_pure_v2.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "result_check_inventory.sh",
+      "params": "read_file task_plan + ls figures + tail system_log",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "结果核查：当前会话 memomics-aea166f0 无产出（仅 log）；memomics-2274ab75 凌晨01:13任务(可视化MF_AUCell_meta.csv)卡在链路自检未出图，figures最新为08-20 19:12 FigC1系列"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "wakeup_check_memomics-5a18228d",
+      "params": "三源核查：本会话无task_plan；e2e-abc-9f4d task_plan=done；磁盘find确认5张violin图×4格式=20文件全部落盘(02:38)；GPU全桌面C+G无Compute",
+      "date": "2026-08-21",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "唤醒#0核查：本会话(memomics-5a18228d)无活跃任务；e2e-abc-9f4d(5亚群小提琴)终态，产出与plan一致；GPU空载桌面应用"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "wakeup_check_memomics-5a18228d_proc",
+      "params": "进程源plain tasklist: node×2(7156/67128)+python×4(71828/15124/66776/39872)系统组件,无分析脚本路径",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "进程源复核：6行=系统组件(webui/guardian/kernel worker),无CellBender/archr/scTour分析进程; 三源一致判终态"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "wakeup_check_memomics-6f93c92c",
+      "params": "唤醒#0: 定位task_plan(仅旧plan human_skeletal_muscle_aging_20260717_b020560c, 本会话无task_plan); 固定数据文件 gene_set_response_summary.csv 全盘定位=stress-run-1787277145/data/(23行) + memomics-2274ab75/(23行, 同内容); 三源: 进程=node×2+python×8(小内存, 无分析脚本路径, 系统组件), GPU=全桌面C+G(explorer/EdgeWebView/QQBrowser/Olivia等)+2高权限, 无Compute分析进程",
+      "date": "2026-08-21",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "唤醒#0核查: 本会话memomics-6f93c92c无task_plan/无活跃主线, 纯压力测试会话(execute_code HELLO-STRESS×2 + import缺失模块 + OK修正), 已全部完成。固定数据文件gene_set_response_summary.csv共2副本(stress-run-1787277145/data/ + memomics-2274ab75/, "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "wakeup_check_memomics-1b0e5b39",
+      "params": "wakeup #1 核查 FigC1 出图任务",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "唤醒核查开始：定位 task_plan（memomics-1b0e5b39 最新）+ 用户认可基准脚本 fig_C1_5sub_vs_pure_v2.py（memomics-2274ab75）"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_C1_5sub_vs_pure_v2.py",
+      "params": "{\"jobs\": 5, \"formats\": [\"png300\", \"svg\", \"pdf\", \"tiff600\"], \"data\": \"E:/骨骼肌锻炼/MF_AUCell_meta.csv\", \"sig\": \"cohens_d stars\", \"template\": \"fig_C1_5sub_vs_pure_v2.py\"}",
+      "date": "2026-08-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigC1 5亚群小提琴图重跑成功：LRP1B+(I)=AMPK_PGC1a d0.21-0.68, OTUD1+(I)=Inflammatory d0.12-0.355, OTUD1+(II)=Atrophy d0.106-0.298全ns, RP_high(I)=ROS d0.381-0.712, RP_high(II)=Glycolysis d0.142-0.487。20文件落盘(5图×4格"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
+  }
+}

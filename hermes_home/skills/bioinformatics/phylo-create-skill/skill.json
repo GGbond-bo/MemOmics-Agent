@@ -1,0 +1,12 @@
+{
+  "id": "phylo-create-skill",
+  "name": "phylo-create-skill",
+  "category": "phylo",
+  "language": "R+Python",
+  "description": "Auto-generated for phylo-create-skill",
+  "tags": [],
+  "user_score": 0,
+  "auto_score": 0,
+  "approved": false,
+  "steps": []
+}

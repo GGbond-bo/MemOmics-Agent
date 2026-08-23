@@ -1,0 +1,15 @@
+{
+  "id": "get_gene_set_enrichment_analysis_supported_database_list",
+  "name": "Get Gene Set Enrichment Analysis Supported Database List",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Returns a list of supported databases for gene set enrichment analysis.",
+  "detailed_description": "Returns a list of supported databases for gene set enrichment analysis.",
+  "when_to_use": "When you need get gene set enrichment analysis supported database list analysis",
+  "parameters": {},
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

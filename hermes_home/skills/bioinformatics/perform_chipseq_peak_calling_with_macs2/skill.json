@@ -1,0 +1,21 @@
+{
+  "id": "perform_chipseq_peak_calling_with_macs2",
+  "name": "Perform Chipseq Peak Calling With Macs2",
+  "category": "genomics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Perform ChIP-seq peak calling using MACS2 to identify genomic regions with significant binding.",
+  "detailed_description": "Perform ChIP-seq peak calling using MACS2 to identify genomic regions with significant binding.",
+  "when_to_use": "When you need perform chipseq peak calling with macs2 analysis",
+  "parameters": {
+    "chip_seq_file": "[Required] Path to the ChIP-seq read data file (BAM, BED, or other supported format) (str)",
+    "control_file": "[Required] Path to the control/input data file (BAM, BED, or other supported format) (str)",
+    "output_name": "[Optional] Prefix for output files (default: macs2_output)",
+    "genome_size": "[Optional] Effective genome size shorthand: 'hs' for human, 'mm' for mouse, etc. (default: hs)",
+    "q_value": "[Optional] q-value (minimum FDR) cutoff for peak calling (default: 0.05)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

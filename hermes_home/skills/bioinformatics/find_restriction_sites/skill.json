@@ -1,0 +1,19 @@
+{
+  "id": "find_restriction_sites",
+  "name": "Find Restriction Sites",
+  "category": "multi_omics",
+  "language": "Python",
+  "source": "Biomni",
+  "description": "Identifies restriction enzyme sites in a given DNA sequence for specified enzymes.",
+  "detailed_description": "Identifies restriction enzyme sites in a given DNA sequence for specified enzymes.",
+  "when_to_use": "When you need find restriction sites analysis",
+  "parameters": {
+    "dna_sequence": "[Required] Complete input DNA sequence (str)",
+    "enzymes": "[Required] List of restriction enzyme names to check (List[str])",
+    "is_circular": "[Optional] Whether the DNA sequence is circular (True) or linear (False) (default: True)"
+  },
+  "proven_params": [],
+  "proven_script": null,
+  "error_count": 0,
+  "success_count": 0
+}

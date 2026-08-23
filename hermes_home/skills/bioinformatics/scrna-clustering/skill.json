@@ -1,0 +1,207 @@
+{
+  "id": "scrna-clustering",
+  "name": "scRNA-seq聚类分析",
+  "category": "transcriptomics",
+  "language": "R+Python",
+  "description": "从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE",
+  "starting_prompt": "对我的单细胞数据进行聚类分析",
+  "source_dir": "skills/built_in/scrna-clustering",
+  "memomics_module": "02_基础分析",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "clustering",
+    "SCTransform",
+    "UMAP",
+    "leiden",
+    "annotation"
+  ],
+  "aliases": [
+    "scRNA-seq 完整分析 (Seurat v5)",
+    "scRNA-seq 完整分析 (Scanpy)"
+  ],
+  "steps": [
+    {
+      "name": "Normalize (SCTransform)",
+      "description": "SCTransform recommended",
+      "tool": "terminal"
+    },
+    {
+      "name": "HVG selection",
+      "description": "FindVariableFeatures",
+      "tool": "terminal"
+    },
+    {
+      "name": "PCA + PC selection",
+      "description": "ElbowPlot/JackStraw",
+      "tool": "terminal"
+    },
+    {
+      "name": "Batch correction (Harmony)",
+      "description": "Multi-sample integration",
+      "tool": "terminal"
+    },
+    {
+      "name": "Cluster (Leiden)",
+      "description": "FindNeighbors+FindClusters",
+      "tool": "terminal"
+    },
+    {
+      "name": "UMAP visualization",
+      "description": "RunUMAP 2D projection",
+      "tool": "terminal"
+    },
+    {
+      "name": "Cell annotation",
+      "description": "SingleR/CellTypist/markers",
+      "tool": "terminal"
+    }
+  ],
+  "r_packages": [
+    "SingleR",
+    "celldex",
+    "Seurat"
+  ],
+  "python_packages": [
+    "scanpy",
+    "celltypist"
+  ],
+  "difficulty": "basic",
+  "applicable": [
+    "所有scRNA-seq"
+  ],
+  "parameters": {
+    "r_packages": "SingleR, celldex, Seurat",
+    "python_packages": "scanpy, celltypist",
+    "steps": "Normalize (SCTransform) -> HVG selection -> PCA + PC selection -> Batch correction (Harmony) -> Cluster (Leiden) -> UMAP visualization -> Cell annotation"
+  },
+  "detailed_description": "从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE\n\n适用场景: 所有scRNA-seq\n\n分析步骤:\n  - Normalize (SCTransform): SCTransform recommended\n  - HVG selection: FindVariableFeatures\n  - PCA + PC selection: ElbowPlot/JackStraw\n  - Batch correction (Harmony): Multi-sample integration\n  - Cluster (Leiden): FindNeighbors+FindClusters\n  - UMAP visualization: RunUMAP 2D projection\n  - Cell annotation: SingleR/CellTypist/markers\n\n依赖包: Seurat, scanpy, celltypist, celldex, SingleR\n\n难度: basic\n\n触发提示: \"对我的单细胞数据进行聚类分析\"\n\n别名: scRNA-seq 完整分析 (Seurat v5), scRNA-seq 完整分析 (Scanpy)",
+  "when_to_use": "适用于: 所有scRNA-seq",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_sct_normalize.R",
+      "params": "SCTransform v2, conserve.memory=TRUE, ncells=2000, plan('sequential'), MT% fix (^MT\\\\. pattern), 37 MT genes, median MT% 0.60%",
+      "date": "2026-07-04",
+      "score": 8.5,
+      "result": "39,982 cells x 40,369 genes, MT% fix applied (37 genes found, median 0.60%), scale.data removed, ~12 min runtime"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "sctransform_cluster_annotate.R",
+      "params": "SCTransform v2 conserve.memory=TRUE, PCA 50PCs, Harmony on sample_id, UMAP 30 dims, Leiden resolution=0.5, SingleR + FindAllMarkers annotation",
+      "date": "2026-07-04",
+      "score": 9.0,
+      "result": "~39.5k cells, 10 cell types identified: Type I (LRP1B+/ATP2A2+/ANKRD2+), Type II (MYH2+/MYH1+), RSS, Specialized MF, FAP, Endothelial, Schwann, Denervated, etc. UMAP清晰分群"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "phase3_5_dimred_cluster_annotation.R",
+      "params": "{\"dimreduction\": \"验证已有pca30/harmony30/umap2\", \"clustering\": \"验证已有res 0.8/1/1.4/2 + leiden_1\", \"annotation\": \"marker验证: MYH7/TNNI1/TNNT1/ATP2A2=TypeI, MYH2=IIa, MYH1=IIx, MYH4=人类无IIb, NCAM1=去神经化\", \"rerun\": false}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_subset_2000.rds 降维聚类验证：已有pca/harmony/umap完整；seurat_clusters=18群(5-9各2000细胞=10亚型x2000抽样设计)；marker验证annotation_L3 10亚型高度一致(MYH7↑LRP1B+/OTUD1+/PureI/RP_highI, MYH2↑IIa群, MYH1↑PureIIX, MYH4全低, NCAM1↑RS"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "qc_validation.R + phase3_5_dimred_cluster_annotation.R",
+      "params": "{\"verify_method\": \"source()磁盘文件端到端重跑\", \"qc_script_time\": \"8.2s PASS\", \"phase35_script_time\": \"13.9s PASS\", \"note\": \"R分析脚本无法用pytest验证，用source()重跑+产物比对作为fresh evidence\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "qc_validation.R 与 phase3_5_dimred_cluster_annotation.R 从磁盘 source() 完整重跑均 PASS，输出与之前一致，产物文件重新写入成功，两脚本 verified。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "env_check",
+      "params": "{\"check\": \"venv存在 .venv/Scripts/python.exe + pytest.ini 存在\"}",
+      "date": "2026-08-14",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "环境检查：MemOmics-Agent 仓库有 .venv/Scripts/python.exe（Windows）与 pytest.ini，可运行仓库级 pytest（offline markers）验证改动未破坏 Python 测试。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "dimred_cluster_check.R",
+      "params": "{\"sct_hvg\": 3000, \"pca\": 30, \"harmony\": 30, \"umap\": 2, \"clusters\": 18, \"annotation_L3\": 10}",
+      "date": "2026-08-14",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "标准化确认: SCT assay 3000 HVG 已标准化。降维: PCA/Harmony 30d, UMAP 2d。聚类与注释一致性高: seurat_clusters 18 个与 annotation_L3 10 亚群映射清晰（Pure Type I/IIA/IIX 分裂成多个 cluster，LRP1B+/OTUD1+/RP_high/RSS 各 2000 cells 单 cluster）"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "step5_marker_annotation.R",
+      "params": "{\"markers\": [\"MYH7\",\"TNNI1\",\"TNNT1\",\"MYH2\",\"TNNI2\",\"MYH1\",\"ACTA1\",\"TNNC2\"], \"assay\": \"SCT\", \"annotation\": \"annotation_L3\"}",
+      "date": "2026-08-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "肌纤维亚型 marker 鉴定完成：Pure Type I (MYH7=8.43, TNNT1=19.77), Pure Type IIA (MYH2=11.18), Pure Type IIX (MYH1=19.99), RP_high(I) (MYH7=16.91), RP_high(II) (MYH2=21.68), OTUD1+(I) (MYH7=9.34), OTUD1+(II) (MY"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "step5b_marker_stats_validation.R",
+      "params": "{\"method\": \"pct_matrix + Wilcoxon DE\", \"outputs\": [\"marker_pct_by_subtype.csv\", \"marker_DE_by_subtype.csv\"]}",
+      "date": "2026-08-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "marker 特异性统计验证通过：Pure Type IIX MYH1 avg_log2FC=3.65 (98.3% vs 44.4%, p=0)；RP_high(I) MYH7 avg_log2FC=1.75 (99.4% vs 85.8%)；RP_high(II) MYH2 avg_log2FC=1.83 (99.1% vs 83.5%)。全部 FDR<1e-160，效应量+阳性率差显著 → "
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "verify_outputs.R",
+      "params": "{\"verify\": \"parse + file.exists + read.csv\", \"step5_exprs\": 27, \"step5b_exprs\": 22}",
+      "date": "2026-08-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "验证完成：step5_marker_annotation.R (27 表达式) 和 step5b_marker_stats_validation.R (22 表达式) 语法均通过 parse()；8 个产出物全部存在且非空（图 98KB-1.2MB，表 0.3-0.6KB）；3 个结果表行列数核验正确（QC_by_type 6x6, marker_pct 8x11, marker_DE 8x6）。"
+    }
+  ],
+  "proven_script": "verify_outputs.R",
+  "error_count": 0,
+  "success_count": 9,
+  "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
+  "doc_source": "official",
+  "prerequisites": {
+    "requires": [
+      "scrna-qc"
+    ],
+    "description": "需要已QC的数据"
+  },
+  "user_prefs": {
+    "last_used_script": "verify_outputs.R"
+  }
+}

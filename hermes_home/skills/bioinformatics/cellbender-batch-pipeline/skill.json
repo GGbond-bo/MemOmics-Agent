@@ -1,0 +1,20 @@
+{
+  "id": "cellbender-batch-pipeline",
+  "name": "CellBender 批量样本 Pipeline",
+  "category": "scRNA",
+  "language": "Python",
+  "description": "CellBender 批量样本可靠执行方案 — PyTorch 2.12 weakref 修复 + 磁盘追踪式后台运行 + 进度监控。触发词：批量cellbender / 多样本去污染 / 后台运行cellbender",
+  "starting_prompt": "使用 CellBender 批量样本 Pipeline 进行分析",
+  "source_dir": "skills/bioinformatics/cellbender-batch-pipeline",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "gpu",
+    "pipeline",
+    "cellbender"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

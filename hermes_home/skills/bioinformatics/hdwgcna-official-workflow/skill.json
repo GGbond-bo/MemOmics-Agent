@@ -1,0 +1,23 @@
+{
+  "id": "hdwgcna-official-workflow",
+  "name": "hdWGCNA 官方 workflow（Windows 实操版）",
+  "category": "scRNA",
+  "language": "R",
+  "description": "hdWGCNA 官方 workflow 端到端运行：SetupForWGCNA→Metacells→SetDatExpr→TestSoftPowers→ConstructNetwork→ModuleEigengenes→ModuleConnectivity→ModuleTraitCorrelation→7类官方标准图。含 Windows/R 4.4.2 实操坑（enrichR .onAttach ",
+  "starting_prompt": "使用 hdWGCNA 官方 workflow（Windows 实操版） 进行分析",
+  "source_dir": "skills/bioinformatics/hdwgcna-official-workflow",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "hdwgcna",
+    "wgcna",
+    "co-expression",
+    "module",
+    "windows",
+    "official-workflow"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

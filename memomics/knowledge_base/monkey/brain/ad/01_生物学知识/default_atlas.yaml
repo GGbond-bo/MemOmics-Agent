@@ -1,0 +1,21 @@
+cell_types: []
+direction_specific:
+  notes: '方向: ad'
+gene_sets:
+  mentioned_genes:
+    description: 文献中提到的基因
+    genes:
+    - DEG
+    source: monkey brain ad atlas (默认知识库)
+key_findings:
+- evidence: 从摘要提取
+  finding: '文献摘要: Single-cell transcriptomic atlas of brain in monkey during ad. We
+    performed snRNA-seq and identified major cell types. We used standard QC filtering,
+    SCTransform normalization, Harmony integration, Le...'
+  related_genes:
+  - DEG
+  related_pathways: []
+pathways: []
+source: monkey brain ad atlas (默认知识库)
+species_specific:
+  notes: '物种: monkey'
