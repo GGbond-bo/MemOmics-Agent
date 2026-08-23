@@ -193,8 +193,8 @@ echo         3 秒后自动打开浏览器（如未打开请手动访问）
 echo         关闭本窗口 = 停止 MemOmics
 echo.
 
-REM 延迟自动开浏览器（不阻塞启动）
-start "" cmd /c "timeout /t 3 /nobreak >nul & start http://127.0.0.1:%PORT%"
+REM 延迟自动开浏览器（不阻塞启动；显式浏览器打开，规避系统默认关联损坏）
+start "" /min powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open_webui.ps1" %PORT%
 
 REM CellBender 心跳监控（仅当本机存在时启用，其他机器自动跳过）
 if exist "F:\CellBender_v2\heartbeat_v2.py" (

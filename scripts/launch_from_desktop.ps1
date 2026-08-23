@@ -13,7 +13,7 @@ if (-not $port) { $port = '8899' }
 # Port check (same logic as start.bat: netstat LISTENING)
 $busy = netstat -ano | Select-String -Pattern (":$port\s+\S+\s+LISTENING")
 if ($busy) {
-    Start-Process "http://127.0.0.1:$port"
+    & (Join-Path $root 'scripts\open_webui.ps1') $port
     exit 0
 }
 
@@ -22,6 +22,6 @@ if (-not (Test-Path $startBat)) { $startBat = Join-Path $root '启动.bat' }
 if (Test-Path $startBat) {
     Start-Process -FilePath $env:ComSpec -ArgumentList '/c', ("`"$startBat`" $port") -WorkingDirectory $root
 } else {
-    Start-Process "http://127.0.0.1:$port"
+    & (Join-Path $root 'scripts\open_webui.ps1') $port
 }
 exit 0
