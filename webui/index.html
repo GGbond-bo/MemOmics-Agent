@@ -210,7 +210,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
 /* Mermaid 图表 */
 /* Mermaid 图表 */
-.mermaid { margin:12px 0; padding:16px; background:#fafafa; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
+.mermaid { margin:12px 0; padding:16px; background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
 .mermaid svg { max-width:100%; height:auto; }
 .mermaid-copy {
   display: block;
@@ -2841,7 +2841,9 @@ function initMermaid() {
 }
 
 function mermaidReady(pending) {
-  mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  // 2026-08-23: 主题跟随界面（dark → mermaid dark 主题，其余 default）
+  var isDark = document.documentElement && document.documentElement.getAttribute('data-theme') === 'dark';
+  mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
   _mermaidLoaded = true;
   _mermaidLoading = false;
   // 批量渲染所有排队的节点
@@ -2899,13 +2901,29 @@ function renderMermaidNode(el) {
     el.innerHTML = result.svg + '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
     el.removeAttribute('data-mermaid');
   }).catch(function(err) {
-    el.className = 'mermaid-error';
-    var msg = err.message || String(err);
-    // 截取错误信息的前 200 字符
-    if (msg.length > 200) msg = msg.substring(0, 200) + '...';
-    el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>';
-    el.removeAttribute('data-mermaid');
+    // 2026-08-23: 首次失败重试一次（mermaid 初始化竞态容错），仍失败才显示错误
+    if (!el.getAttribute('data-mermaid-retry')) {
+      el.setAttribute('data-mermaid-retry', '1');
+      try {
+        mermaid.render(mid + '-svg', code).then(function(result) {
+          el.innerHTML = result.svg + '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
+          el.removeAttribute('data-mermaid');
+        }).catch(function(err2) { showMermaidError(el, err2, code, cidx); });
+      } catch (e2) { showMermaidError(el, e2, code, cidx); }
+    } else {
+      showMermaidError(el, err, code, cidx);
+    }
   });
+}
+
+// 2026-08-23: 渲染失败的统一降级展示（错误信息 + 原始代码 + 复制按钮）
+function showMermaidError(el, err, code, cidx) {
+  el.className = 'mermaid-error';
+  var msg = (err && err.message) || String(err || '未知错误');
+  if (msg.length > 200) msg = msg.substring(0, 200) + '...';
+  el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>' +
+    '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
+  el.removeAttribute('data-mermaid');
 }
 
 // === Mermaid 代码复制（2026-08-23） ===
