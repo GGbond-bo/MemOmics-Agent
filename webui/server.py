@@ -5147,6 +5147,9 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=_provider,
         model=cfg["model"],
         max_iterations=300,
+        max_tokens=8192,  # 2026-08-24 修复(memomics-aa368e59): 默认 None→服务端可能低至 4096，
+                          # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
+                          # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
         ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
         quiet_mode=True,

@@ -2652,8 +2652,10 @@ function guChart(node) {
   return out + '</div>';
 }
 function guMermaid(node) {
+  // 2026-08-23: 字段兼容——规范字段 code；兼容 agent 变体 spec/diagram
+  var code = node.code || node.spec || node.diagram || '';
   // 复用现有 mermaid 渲染管线：生成 .mermaid[data-mermaid] div，initMermaid 会处理
-  return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(node.code || '') + '</div>';
+  return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(code) + '</div>';
 }
 function guCode(node) {
   return '<div class="code-block"><div class="code-head"><span class="code-lang">' + guEsc(node.lang || 'code') + '</span></div><pre><code>' + guEsc(node.code || '') + '</code></pre></div>';
@@ -2763,14 +2765,116 @@ function guRenderItems(items) {
   return out;
 }
 var guAccSeed = 0;
+
+// 2026-08-24: JSON 宽松修复——字符串内的真实换行/制表符/回车转义为 \n \t \r
+// （agent 常把 mermaid 代码的真实换行直接写进 JSON 字符串 → "Bad control character in string literal"）
+function tryRepairJson(text) {
+  var out = '', inStr = false, i = 0;
+  while (i < text.length) {
+    var ch = text[i];
+    if (inStr) {
+      if (ch === '\\') { out += ch + (text[i + 1] || ''); i += 2; continue; }
+      if (ch === '"') { inStr = false; out += ch; i++; continue; }
+      if (ch === '\n') { out += '\\n'; i++; continue; }
+      if (ch === '\t') { out += '\\t'; i++; continue; }
+      if (ch === '\r') { out += '\\r'; i++; continue; }
+      out += ch; i++;
+    } else {
+      if (ch === '"') inStr = true;
+      out += ch; i++;
+    }
+  }
+  return out;
+}
+// 2026-08-24 修复(memomics-aa368e59): 截断 JSON 自动修复。
+// 服务端超时/中断可能让 dsh-ui 围栏里的 JSON 字符串未闭合(如 ...getMatrixFromProject()\" 截断)，
+// 直接 JSON.parse 报 "Unexpected end of JSON input" → 整块降级代码块。
+// 这里尝试补全未闭合的字符串引号与括号，修复成功则正常渲染 + 灰字提示。
+function guRepairTruncatedJson(specText) {
+  if (typeof specText !== 'string' || !specText) return null;
+  var s = specText;
+  // 去掉围栏残渣/前置说明文本（找第一个 { 或 [ 起点）
+  var start = -1;
+  for (var i = 0; i < s.length; i++) {
+    if (s[i] === '{' || s[i] === '[') { start = i; break; }
+  }
+  if (start < 0) return null;
+  s = s.substring(start);
+  var out = '';
+  var stack = [];
+  var inStr = false;
+  var i2 = 0;
+  while (i2 < s.length) {
+    var ch = s[i2];
+    if (inStr) {
+      out += ch;
+      if (ch === '\\') { if (i2 + 1 < s.length) { out += s[i2 + 1]; i2++; } }
+      else if (ch === '"') inStr = false;
+      i2++;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; i2++; continue; }
+    if (ch === '{' || ch === '[') { stack.push(ch); out += ch; i2++; continue; }
+    if (ch === '}' || ch === ']') {
+      if (stack.length && ((ch === '}' && stack[stack.length - 1] === '{') || (ch === ']' && stack[stack.length - 1] === '['))) {
+        stack.pop(); out += ch;
+      } else {
+        return null; // 括号错配，无法可靠修复
+      }
+      i2++;
+      continue;
+    }
+    out += ch;
+    i2++;
+  }
+  if (inStr) {
+    // 字符串未闭合：若末尾是奇数个连续反斜杠，说明正卡在转义符中间（如 "...getMatrixFromProject()\ 截断），
+    // 先补一个反斜杠把已输出的 \ 变成合法的 \\（字面反斜杠），再补 " 闭合字符串。
+    var backslashes = 0;
+    for (var bi = out.length - 1; bi >= 0 && out[bi] === '\\'; bi--) backslashes++;
+    if (backslashes % 2 === 1) out += '\\';
+    out += '"'; // 补未闭合字符串
+  }
+  while (stack.length) {
+    var open = stack.pop();
+    out += open === '{' ? '}' : ']'; // 补未闭合括号
+  }
+  try {
+    var parsed = JSON.parse(out);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch (e) { /* 修复后仍不合法 → 返回 null 走降级 */ }
+  return null;
+}
 function renderGenUiBlock(specText) {
   var spec;
   try { spec = JSON.parse(specText); } catch (e) {
-    // 2026-08-23: JSON 不合法 → 温和降级（灰字提示 + 代码块 + 复制按钮），对齐 DSH 行为
+    // 2026-08-24: JSON 截断/控制字符 → 链式自动修复：
+    // ① 换行转义（真实换行→\n）② 截断补全（引号/括号）③ 组合。成功则渲染并提示。
+    var repaired = null;
+    var escaped = tryRepairJson(specText);
+    repaired = guRepairTruncatedJson(escaped);
+    if (!repaired) {
+      try { repaired = JSON.parse(escaped); } catch (e3) { repaired = null; }
+    }
+    if (!repaired) { repaired = guRepairTruncatedJson(specText); }
+    if (repaired) {
+      var note = '<div style="margin:8px 0;font-size:11px;color:var(--warning);">⚠ 输出 JSON 不完整，已自动修复渲染（' + guEsc(String((e && e.message) || '')) + '）。建议让 Agent 重新生成完整版。</div>';
+      return note + guRenderGenUiSpec(repaired);
+    }
     return '<div style="margin:8px 0;font-size:11px;color:var(--text-light);">⚠ dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String((e && e.message) || e || '未知错误')) + '</div>' +
       '<div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
   }
+  return guRenderGenUiSpec(spec);
+}
+function guRenderGenUiSpec(spec) {
   if (!spec || typeof spec !== 'object') return '';
+  // 2026-08-23 容错：顶层没有 items 但 type 是已知组件 → 当作单组件直接渲染
+  // （agent 变体：直接输出 {"type":"mermaid","code":"..."} 而非 {"items":[...]} 包裹）
+  if (!Array.isArray(spec.items) && typeof spec.type === 'string' && guRender(spec) !== '') {
+    var out1 = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
+    if (spec.title) out1 += '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text);">' + guEsc(spec.title) + '</div>';
+    return out1 + guRender(spec) + '</div>';
+  }
   var out = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
   if (spec.title) out += '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text);">' + guEsc(spec.title) + '</div>';
   out += guRenderItems(spec.items || []);
