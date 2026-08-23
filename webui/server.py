@@ -5561,6 +5561,9 @@ async def get_messages(sid: str, limit: int = 100):
         total = len(msgs)
     normalized = []
     for m in msgs:
+        # 2026-08-23: 系统注入（唤醒/强制工具调用）与工具消息不进前端对话流
+        if m.get("role") in ("system", "tool"):
+            continue
         nm = dict(m)
         if "content" not in nm and "text" in nm:
             nm["content"] = nm["text"]

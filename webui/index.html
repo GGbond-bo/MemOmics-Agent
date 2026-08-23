@@ -3121,6 +3121,8 @@ function loadAllMessages(sid) {
     if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
     (d.messages || []).forEach(function(m) {
+      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
+      if (m.role === 'system' || m.role === 'tool') return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content);
     });
@@ -3301,6 +3303,8 @@ function switchSession(sid) {
     var msgs = d.messages || [];
     if (!msgs.length && !liveBubble) showNewSessionWelcome();
     msgs.forEach(function(m) {
+      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
+      if (m.role === 'system' || m.role === 'tool') return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content);
     });
