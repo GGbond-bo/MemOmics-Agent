@@ -574,6 +574,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+.code-streaming {
+  border-style: dashed;
+  opacity: 0.94;
+}
+.code-block table, .code-block th, .code-block td { border: none; }
 .code-copy {
   background: transparent;
   border: 1px solid var(--border, #556);
@@ -2278,68 +2283,163 @@ function escapeHtml(s) {
 
 function renderMarkdown(text) {
   if (!text) return '';
-  // 长文本截断：防止正则回溯卡死整页
-  if (text.length > 15000) text = text.substring(0, 15000) + '\n\n...';
+  // 长文本截断：防止正则回溯卡死整页；fence 感知——不把代码块/mermaid 腰斩
+  if (text.length > 15000) {
+    var cut = 15000;
+    var head = text.substring(0, 15000);
+    var _ticks = (head.match(/```/g) || []).length;
+    if (_ticks % 2 === 1) {
+      var _lastTick = head.lastIndexOf('```');
+      if (_lastTick >= 11000) cut = _lastTick;
+    }
+    text = text.substring(0, cut) + '\n\n...';
+  }
   // 统一换行符：CRLF (\r\n) / 单独 \r → \n
-  // 否则后续正则用 \n 匹配时，Windows 风格的 LLM 输出会全部失配
   text = text.replace(/\r\n?/g, '\n');
-  // GenUI (dsh-ui) 块优先提取（在 escapeHtml 之前，保留原始 JSON；先于 mermaid 提取避免干扰）
-  var genUiBlocks = [];
-  var gtick = (text.match(/```/g) || []).length;
-  if (gtick >= 2 && gtick % 2 === 0) {
-    text = text.replace(/```dsh-ui\n([\s\S]*?)```/g, function(m, code) {
-      genUiBlocks.push(code.trim());
-      return '\x00GENUI' + (genUiBlocks.length - 1) + '\x00';
-    });
+  // 统一 fence 扫描（配对 + 流式未闭合预览），按语言分类
+  var fences = extractFenceBlocks(text);
+  var genUiBlocks = [], mermaidBlocks = [], codeBlocks = [];
+  for (var fi = 0; fi < fences.blocks.length; fi++) {
+    var fb = fences.blocks[fi];
+    var flang = (fb.lang || '').toLowerCase();
+    var fidx;
+    if (flang === 'dsh-ui') { fidx = genUiBlocks.length; genUiBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00GENUI' + fidx + '\x00'); }
+    else if (flang === 'mermaid') { fidx = mermaidBlocks.length; mermaidBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00MERMAID' + fidx + '\x00'); }
+    else { fidx = codeBlocks.length; codeBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00CODE' + fidx + '\x00'); }
   }
-  // Mermaid 块优先提取（在 escapeHtml 之前，保留原始语法）
-  var mermaidBlocks = [];
-  var tickCount = (text.match(/```/g) || []).length;
-  if (tickCount >= 2 && tickCount % 2 === 0) {
-    text = text.replace(/```mermaid\n([\s\S]*?)```/g, function(m, code) {
-      mermaidBlocks.push(code.trim());
-      return '\x00MERMAID' + (mermaidBlocks.length - 1) + '\x00';
-    });
-  }
-  var html = escapeHtml(text);
-  // 代码块处理
-  tickCount = (html.match(/```/g) || []).length;
-  if (tickCount >= 2 && tickCount % 2 === 0) {
-    var blocks = [];
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
-      blocks.push('<div class="code-block"><div class="code-head"><span class="code-lang">' + (lang || 'code') + '</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + code + '</code></pre></div>');
-      return '\x00CODE' + (blocks.length - 1) + '\x00';
-    });
-  }
+  var html = escapeHtml(fences.text);
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  html = html.replace(/^\|(.+)\|$/gm, function(m) {
-    var cells = m.split('|').filter(function(c) { return c.trim(); });
-    if (cells.length < 2) return m;
-    var isSep = cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); });
-    if (isSep) return '';
-    var tds = cells.map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('');
-    return '<table><tr>' + tds + '</tr></table>';
+  // 表格：连续 | 行块合并为一张表（首行 <th> 表头，分隔行忽略）——修复表头与内容错位
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
+    var lines = block.split('\n');
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.charAt(0) !== '|') continue;
+      var cells = line.split('|');
+      if (cells.length && cells[0].trim() === '') cells.shift();
+      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+      if (cells.length < 2) continue;
+      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
+      rows.push(cells);
+    }
+    if (rows.length === 0) return block;
+    var t = '<table><thead><tr>';
+    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
+    t += '</tr></thead><tbody>';
+    for (var r = 1; r < rows.length; r++) {
+      t += '<tr>';
+      for (var c = 0; c < rows[r].length; c++) t += '<td>' + rows[r][c].trim() + '</td>';
+      t += '</tr>';
+    }
+    return t + '</tbody></table>';
   });
-  html = html.replace(/<\/table>\n<table>/g, '');
-  // 先把 \n → <br>（此时 Mermaid/CODE 块仍是占位符，不受影响）
+  // 先把 \n → <br>（此时 MERMAID/GENUI/CODE 块仍是占位符，不受影响）
   html = html.replace(/\n/g, '<br>');
-  // 恢复 Mermaid 块 → 占位 div，随后 initMermaid 异步渲染
+  // 恢复 Mermaid 块（闭合 → 图表占位 div；未闭合流式 → 代码块预览）
   html = html.replace(/\x00MERMAID(\d+)\x00/g, function(m, idx) {
-    return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(mermaidBlocks[parseInt(idx)]) + '</div>';
+    var b = mermaidBlocks[parseInt(idx)];
+    if (!b) return '';
+    if (!b.complete) return renderCodeBlockHtml(b, 'mermaid');
+    return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(b.code) + '</div>';
   });
-  // 恢复 GenUI 块 → 渲染为组件（静态渲染，无 action 回传）
+  // 恢复 GenUI 块（闭合 → 组件；未闭合/解析失败 → 代码块预览）
   html = html.replace(/\x00GENUI(\d+)\x00/g, function(m, idx) {
-    return renderGenUiBlock(genUiBlocks[parseInt(idx)] || '');
+    var b = genUiBlocks[parseInt(idx)];
+    if (!b || !b.complete) return b ? renderCodeBlockHtml(b, 'dsh-ui') : '';
+    return renderGenUiBlock(b.code);
   });
   // 恢复代码块（<pre> 保留原始 \n，正常显示换行）
   html = html.replace(/\x00CODE(\d+)\x00/g, function(m, idx) {
-    return blocks[parseInt(idx)] || '';
+    var b = codeBlocks[parseInt(idx)];
+    return b ? renderCodeBlockHtml(b, b.lang || 'code') : '';
   });
+  // 代码高亮（懒加载；未闭合的流式代码块跳过，写完再高亮）
+  if (typeof document !== 'undefined' && typeof setTimeout !== 'undefined') {
+    setTimeout(initHighlight, 0);
+  }
   return html;
+}
+
+// === fence 配对提取（流式兼容：未闭合的最后一个块作为预览） ===
+function extractFenceBlocks(text) {
+  var fenceRe = /```([\w+-]*)[ \t]*\r?\n?/g;
+  var blocks = [], out = '', last = 0, m, open = null;
+  while ((m = fenceRe.exec(text)) !== null) {
+    if (open === null) {
+      out += text.substring(last, m.index);
+      open = { lang: m[1], contentStart: fenceRe.lastIndex };
+    } else {
+      var content = text.substring(open.contentStart, m.index);
+      if (content.charAt(content.length - 1) === '\n') content = content.slice(0, -1);
+      blocks.push({ lang: open.lang, code: content, complete: true });
+      out += '\x00BLOCK' + (blocks.length - 1) + '\x00';
+      open = null;
+      last = fenceRe.lastIndex;
+    }
+  }
+  if (open !== null) {
+    var c2 = text.substring(open.contentStart);
+    if (c2.charAt(c2.length - 1) === '\n') c2 = c2.slice(0, -1);
+    blocks.push({ lang: open.lang, code: c2, complete: false });
+    out += '\x00BLOCK' + (blocks.length - 1) + '\x00';
+  } else {
+    out += text.substring(last);
+  }
+  return { text: out, blocks: blocks };
+}
+
+// === 代码块 HTML（闭合 = 可复制+高亮；未闭合 = 流式预览标记） ===
+function renderCodeBlockHtml(b, lang) {
+  var note = b.complete ? '' : '<span style="color:var(--warning);font-weight:600;margin-right:8px;">⏳ 生成中…</span>';
+  return '<div class="code-block' + (b.complete ? '' : ' code-streaming') + '"><div class="code-head"><span class="code-lang">' + escapeHtml(lang || 'code') + '</span><span style="margin-left:auto;display:flex;gap:6px;align-items:center;">' + note + '<button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></span></div><pre><code>' + escapeHtml(b.code) + '</code></pre></div>';
+}
+
+// === 代码高亮（本地 vendor 优先 → CDN 回退；与 mermaid 同模式） ===
+var _hljsLoading = false;
+function initHighlight() {
+  var codes = document.querySelectorAll('.code-block pre code:not(.hljs)');
+  if (codes.length === 0) return;
+  if (typeof hljs !== 'undefined') {
+    for (var i = 0; i < codes.length; i++) {
+      try { hljs.highlightElement(codes[i]); } catch (e) {}
+    }
+    return;
+  }
+  if (_hljsLoading) return;
+  _hljsLoading = true;
+  if (!document.getElementById('hljs-theme-css')) {
+    var lk = document.createElement('link');
+    lk.id = 'hljs-theme-css';
+    lk.rel = 'stylesheet';
+    lk.href = '/assets/vendor/highlight-theme-atom-one-dark.css';
+    document.head.appendChild(lk);
+  }
+  var s = document.createElement('script');
+  s.src = '/assets/vendor/highlight.min.js';
+  s.onload = function() {
+    if (typeof hljs === 'undefined') { loadHighlightCdn(); return; }
+    runHighlightAll();
+  };
+  s.onerror = function() { loadHighlightCdn(); };
+  document.head.appendChild(s);
+}
+function loadHighlightCdn() {
+  var s2 = document.createElement('script');
+  s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
+  s2.onload = function() { if (typeof hljs !== 'undefined') runHighlightAll(); };
+  s2.onerror = function() {};
+  document.head.appendChild(s2);
+}
+function runHighlightAll() {
+  var codes = document.querySelectorAll('.code-block pre code:not(.hljs)');
+  for (var i = 0; i < codes.length; i++) {
+    try { hljs.highlightElement(codes[i]); } catch (e) {}
+  }
 }
 
 // === dsh-ui fence 渲染器（GenUI 静态版，2026-08-22 集成；源自 DSH dsh-genui 规范） ===
