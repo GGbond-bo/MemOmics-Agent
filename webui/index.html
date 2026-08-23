@@ -2654,6 +2654,13 @@ function guChart(node) {
 function guMermaid(node) {
   // 2026-08-23: 字段兼容——规范字段 code；兼容 agent 变体 spec/diagram
   var code = node.code || node.spec || node.diagram || '';
+  // 2026-08-24 修复(用户反馈"流程图渲染需要手动刷新")：dsh-ui 内嵌 mermaid 组件
+  // 渲染后必须触发 initMermaid——此前只在 ```mermaid 独立围栏路径触发，dsh-ui JSON
+  // 里的 mermaid div 生成后无人调用 initMermaid，只能靠页面刷新（历史快照恢复）才渲染。
+  // setTimeout 确保 DOM 更新后再渲染（guMermaid 在字符串拼接阶段执行，div 尚未入 DOM）。
+  if (typeof document !== 'undefined' && typeof setTimeout !== 'undefined' && code) {
+    setTimeout(function() { if (typeof initMermaid === 'function') initMermaid(); }, 0);
+  }
   // 复用现有 mermaid 渲染管线：生成 .mermaid[data-mermaid] div，initMermaid 会处理
   return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(code) + '</div>';
 }

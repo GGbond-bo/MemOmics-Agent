@@ -210,6 +210,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "文献综述" / "literature review" / "综述" | `skill_view("literature-review")` |
 | "提取参数" / "文献参数" / "parameter extraction" | `skill_view("literature-param-extraction")` |
 | "总结论文" / "解读" / "summarize paper" | `skill_view("paper-summary")` |
+| "总结这篇文章" / "解读这篇文献" / "这篇文章的研究思路" / "作者做了什么" | **文献精读，非调研**：优先 `skill_view("nature-reader")`（RED 必触发，全文中英对照精读器：图表/公式感知、源锚定、术语表，绝不降级为摘要；用户指定优先，2026-08-24）→ 精读后以专业编辑口吻解读；本地文献库未导入 → `literature_import` 后精读；只要摘要 → `summarize_paper` 快速路径。**禁止** skill_view('academic-research') / search_knowledge / search_papers 调研组合、禁止生成研究方案/文献表格（2026-08-24 修复："让我知道作者的研究思路"≠"设计研究思路"，前者是文献解读不是方案设计） |
 | "公共数据" / "下载数据集" / "GEO数据" | `skill_view("omics-dataset-retrieval")` |
 | "PPT" / "幻灯片" / "演示文稿" / "组会" | `skill_view("ppt-generator")` |
 | "Word" / "docx" / "word文档" | `skill_view("docx-generation")` |

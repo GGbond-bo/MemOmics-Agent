@@ -3158,6 +3158,30 @@ def _classify_intent(text: str):
     if any(kw in t for kw in VIEW_EARLY_KW) and _has_data_path_early:
         return ("analysis", 0.85, {"reason": "view_inspect_with_data"})
 
+    # === Priority 2.6: 单篇文献解读/总结（先于 chat 与 research_plan，2026-08-24 修复）===
+    # 问题(memomics-aa368e59 同类实测): "让我知道作者的研究思路，做了什么" 含 PLAN_KW
+    # '研究思路' → 被误判 research_plan → 强制 3 工具调研(skill_view academic-research +
+    # search_knowledge + search_papers) + memomics_pipeline，用户只要精读总结单篇文献。
+    # 此外短句 "这篇文章讲了什么"(8字) / "帮我概括这篇文章的核心要点"(14字) 会被
+    # short_no_bio 规则(<15字→chat) 拦截——所以本分支必须放在 Priority 2 chat 之前。
+    # 这里是文献解读，不是方案设计：命中"这篇X + 解读类动词"→ 直接 literature，轻量精读。
+    _PAPER_READ_INDIC = ["这篇文章", "这篇文献", "这篇论文", "该文献", "该文章", "该论文",
+                         "说一下这篇文章", "讲讲这篇文章", "介绍这篇文章", "解读这篇文章",
+                         "总结这篇文章", "总结一下这篇文章", "总结一下这篇", "精读",
+                         "概括这篇文章", "概括这篇", "概括一下这篇文章", "核心要点",
+                         "这篇文章讲", "这篇文献讲", "这篇论文讲", "讲了什么", "说了什么",
+                         "评价这篇文章", "评价这篇", "怎么评价这篇", "如何评价这篇",
+                         "作者做了什么", "作者的研究思路", "研究思路，做了什么",
+                         "review this paper", "summarize this paper", "explain this paper",
+                         "summarize this article", "review this article"]
+    if any(kw in t for kw in _PAPER_READ_INDIC):
+        # 排除：明确要基于该文献做方案/分析/写作 → 不抢（落 research_plan / analysis / literature 写作分支）
+        _excl_paper_plan = any(kw in t for kw in ["设计方案", "研究方案", "实验设计", "分析", "跑",
+                                                  "执行", "写论文", "写成方案", "怎么做", "如何设计",
+                                                  "design", "analy", "write a"])
+        if not _excl_paper_plan:
+            return ("literature", 0.90, {"reason": "single_paper_reading"})
+
     # === Priority 2: chat (non-bioinfo, casual) ===
     CHAT_KW = ["你好", "嗨", "hello", "hi", "谢谢", "感谢", "再见", "拜拜",
                "天气", "今天天气", "怎么样", "好吗",
@@ -3731,6 +3755,13 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                          "write a paper", "draft a paper", "帮我写", "投稿", "学术论文"]
         paper_research_kw = ["研究方案", "实验设计", "方案设计", "设计实验", "研究计划",
                             "research plan", "research proposal", "技术路线"]
+        paper_read_kw = ["这篇文章", "这篇文献", "这篇论文", "该文献", "该文章", "该论文",
+                        "总结这篇文章", "总结一下这篇", "解读这篇", "精读",
+                        "概括这篇文章", "概括这篇", "核心要点",
+                        "说一下这篇", "讲讲这篇", "介绍这篇", "评价这篇", "怎么评价这篇",
+                        "作者做了什么", "作者的研究思路", "讲了什么", "说了什么",
+                        "review this paper", "summarize this paper", "explain this paper",
+                        "pdf", ".pdf", "文献库", "文献库里"]
         if any(kw in lit_text for kw in paper_write_kw):
             lines.append("论文写作任务。调用 skill_view('academic-paper-writing')，"
                         "按 12-agent pipeline 生成论文。" if zh else
@@ -3739,6 +3770,22 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             lines.append("研究方案设计。调用 skill_view('research-plan')，"
                         "生成含 Mermaid 技术路线图的完整方案。" if zh else
                         "Research plan. Call skill_view('research-plan').")
+        elif any(kw in lit_text for kw in paper_read_kw):
+            # 2026-08-24 修复(memomics-aa368e59): 单篇文献总结/解读 → 轻量精读，禁止调研/出方案。
+            # 用户只让"从专业编辑解读这篇文章、作者的研究思路做了什么"——不触发
+            # skill_view('academic-research') / search_knowledge / search_papers 调研组合。
+            # 2026-08-24 用户指定: 读文献优先 nature-reader（全文中英对照精读器，RED 必触发）。
+            lines += [
+                "📄 单篇文献总结/解读任务（用户提供或已导入 PDF）——轻量精读，不做文献调研、不出研究方案！",
+                "1. 若该 PDF 尚未导入文献库：先 literature_import 导入；已在库则跳过",
+                "2. 【优先】skill_view('nature-reader') 加载精读器 → 按其对 PDF/DOI/HTML/文本做全文中英对照精读",
+                "   （图表/公式感知、源锚定、术语表，绝不降级为摘要）；精读产出后再以专业编辑口吻解读",
+                "3. 备选快速路径：用户只要摘要/要点 → summarize_paper(文件或标题) 提取结构化摘要即可，不必全文对照",
+                "4. 以专业编辑口吻直接解读：研究思路、作者做了什么、核心结论、学术价值——只解读用户问的这一篇",
+                "⛔ 禁止：skill_view('academic-research') / search_knowledge / search_papers / memomics_pipeline",
+                "⛔ 禁止：输出文献调研表格、PMID/DOI 清单、生成研究方案或待办——用户没要这些",
+                "",
+            ]
         else:
             lines.append("文献任务。调用 skill_search('文献') 或 skill_view('pubmed-search')。PDF保存到 work/papers/" if zh else
                          "Literature task. Use skill_search('literature') or skill_view('pubmed-search').")
@@ -7356,6 +7403,17 @@ import threading as _threading_mod
 
 _LOOP_SIG_TOOLS = {"terminal", "execute_code", "execute_python", "execute_r", "bash", "shell"}
 
+# 2026-08-24: 循环检测豁免——以下工具连续调用是正常业务（连续读文献/查知识/出图），
+# 不是失控死循环。尤其无参数调用（skill_view/summarize_paper/search_*）签名相似度高，
+# 连续两篇文献就会被误报"工具调用循环"。这些工具不参与相似度累计。
+_LOOP_EXEMPT_TOOLS = {
+    "skill_view", "skill_search", "skill_list_by_domain",
+    "summarize_paper", "literature_import", "kb_extract_from_paper", "extract_paper_knowledge",
+    "search_knowledge", "search_knowledge_base", "search_papers", "search_papers_by_context",
+    "web_search", "literature_search", "pubmed_search",
+    "rail_review", "debate_analysis", "record_run", "check_env",
+}
+
 
 def _loop_tool_sig(tool_name: str, args) -> str:
     """提取工具调用的命令特征签名（用于相似度比较）。"""
@@ -7430,6 +7488,9 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                     g["turn_texts"].append(g["text_buf"][:800])
                     g["turn_texts"] = g["turn_texts"][-8:]
                 g["text_buf"] = ""
+                if tool_name in _LOOP_EXEMPT_TOOLS:
+                    # 豁免工具不累计（但保留文本分段语义，text_buf 已清空）
+                    return False
                 _sig = _loop_tool_sig(tool_name, args)
                 g["tool_hist"].append((tool_name or "", _sig, now))
                 g["tool_hist"] = g["tool_hist"][-10:]
@@ -10397,6 +10458,17 @@ async def ws_endpoint(ws: WebSocket):
                 session["_proc_hist"] = []  # 2026-08-16: 进程采样历史（回合级窗口）
                 session["_stall_notice_last"] = 0
                 session["_turn_activity_ts"] = time.time()
+                # 2026-08-24 修复: 循环检测状态按用户回合重置——之前的 tool_hist/turn_texts
+                # 跨回合累计，用户连续几轮做相似的正事（连读两篇文献都调 summarize_paper /
+                # nature-reader / skill_view）会被误报"工具调用循环"并注入强制收尾提示。
+                # 循环检测只应判断"同一回合内"的重复动作。
+                sg = session.get("_loop_guard")
+                if sg is not None:
+                    with sg.get("lock", _threading_mod.Lock()):
+                        sg["tool_hist"] = []
+                        sg["turn_texts"] = []
+                        sg["text_buf"] = ""
+                        sg["inject_count"] = 0
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
                     img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
