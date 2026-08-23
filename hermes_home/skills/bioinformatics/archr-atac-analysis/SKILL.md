@@ -191,10 +191,112 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 | `plotMarkerHeatmap(...): unused arguments (ArchRProj=, useMatrix=, groupBy=, markerGenes=, name=)` | 函数签名不匹配（ArchR 版本不同）或 `plotMarkerHeatmap` 被其他包遮蔽 | ① 诊断：`find("plotMarkerHeatmap"); packageVersion("ArchR"); args(ArchR::plotMarkerHeatmap)` ② 显式命名空间 `ArchR::plotMarkerHeatmap(...)` 排除遮蔽 ③ 若签名无 `ArchRProj`（0.9.x 旧版）→ 走 `seMarker` 路线：先 `markers <- getMarkerFeatures(...)` 再 `plotMarkerHeatmap(seMarker=markers, markerGenes=..., groupBy=...)`（2026-08-16 猴侧 MarkerHeatmap 实测） |
 | bash 下 R segfault | Rcpp 与 MSYS 冲突 | 用 `cmd.exe /c` 包装 |
 | `library(ArchR)` 失败 | 缺 Rtools 编译 | 确保 Rtools45 在 PATH |
+| `loadArrowFiles` 不存在（`exists("loadArrowFiles")` → FALSE） | ArchR 1.0.2 部分安装/版本问题未导出该函数 | `exists("loadArrowFiles")` 确认；若 FALSE → 用 `rhdf5` 直接读 HDF5（见下方「rhdf5 回退方案」） |
+| `h5read(arrow, "Fragmentation/FragmentCounts")` 不存在 | 箭头文件内部路径因 ArchR 版本/构建不同而异，**不能硬编码假设** | **先 `h5ls(af, recursive=TRUE)` 探索完整 HDF5 结构**，再按实际路径读取 |
 | `TFMPvalue` not found | R < 4.5 | 必须 R 4.5.x |
 | coverage 600s 超时 | 57 组太多 | 用 background=True 后台跑 |
 | symlink 失败 | Windows 无管理员 | 直接 copy Arrow 文件 |
 | `.libPaths()` 劫持 | `.Rprofile` 硬编码 | 改为版本自适应 |
+
+## rhdf5 回退方案（`loadArrowFiles` 不可用时）
+
+当 ArchR 未导出 `loadArrowFiles`（如 1.0.2），直接用 `rhdf5` 读箭头文件。
+
+### ⚠️ ArchR Arrow 文件 HDF5 结构（已验证 1.0.2）
+
+```
+/
+├── Fragments/
+│   ├── chr1/
+│   │   ├── Ranges        ← N×2 matrix [start, fragment_size]  ← 读这个
+│   │   ├── RGLengths     ← 每个 cell 的 fragment 数
+│   │   └── RGValues      ← cell 索引
+│   ├── chr2/ ... chrY/
+├── Metadata/
+│   ├── CellNames, nFrags, TSSEnrichment, DoubletScore, PassQC ...
+└── TileMatrix/
+    └── chr1/ ... (sparse matrix: data/indices/indptr)
+```
+
+**关键发现**：`Ranges` 的两列是 `[start_position, fragment_size]`，**不是** `[start, end]`！
+- col1 = 染色体坐标 (start)
+- col2 = fragment 长度 (bp)，范围通常 10-2000
+- 因此 fragment size 直接取 `col2`，**不需要** `col2 - col1`
+
+### 完整代码模板
+
+```r
+library(rhdf5)
+library(ggplot2)
+
+af <- "path/to/sample.arrow"
+
+# 1. 先探索结构（必做！不同版本路径不同）
+top <- h5ls(af)
+chrs <- top$name[top$group == "/Fragments"]
+cat("Chromosomes:", paste(chrs, collapse = ", "), "\n")
+
+# 2. 读取所有染色体的 fragment sizes
+frag_sizes <- c()
+for (chr in chrs) {
+  ranges <- h5read(af, paste0("Fragments/", chr, "/Ranges"))
+  frag_sizes <- c(frag_sizes, as.numeric(ranges[, 2]))  # col2 = fragment size
+}
+
+# 3. 统计
+cat("Total:", length(frag_sizes), "\n")
+cat("Median:", median(frag_sizes), "bp\n")
+cat("100-200bp:", round(mean(frag_sizes >= 100 & frag_sizes <= 200) * 100, 1), "%\n")
+
+# 4. 画 Fragment Size Distribution（用 hist 避免 data.frame 大向量问题）
+frag_sub <- frag_sizes[frag_sizes >= 0 & frag_sizes <= 800]
+brks <- seq(0, 800, by = 5)
+h <- hist(frag_sub, breaks = brks, plot = FALSE)
+df <- data.frame(size = h$mids, count = h$counts)
+
+ggplot(df, aes(x = size, y = count)) +
+  geom_col(fill = "steelblue", alpha = 0.8, width = 4.5) +
+  geom_vline(xintercept = c(147, 294), linetype = "dashed", color = "red") +
+  annotate("text", x = 147, y = max(df$count) * 1.05, label = "147bp\n(nucleosome)",
+           vjust = -0.2, color = "red", size = 3) +
+  annotate("text", x = 294, y = max(df$count) * 1.05, label = "294bp\n(di-nucleosome)",
+           vjust = -0.2, color = "red", size = 3) +
+  labs(title = "Fragment Size Distribution",
+       subtitle = paste0("n=", length(frag_sizes), " | median=", median(frag_sizes), "bp"),
+       x = "Fragment Size (bp)", y = "Count") +
+  theme_bw(base_size = 12)
+```
+
+**经验法则**：
+- `data.frame(size = frag_sizes)` 在 >1000万行时可能失败 → 用 `hist()` + `data.frame(mids, counts)` 代替
+- Ranges 可能因 int64 报错 → 加 `as.numeric()` 转换
+- 高质量 ATAC-seq：中位数 ~150-200bp，100-200bp 占比 >30%
+
+### 其他 Metadata 可直接读取
+
+```r
+# QC 指标（已含在箭头文件中）
+nFrags <- h5read(af, "Metadata/nFrags")
+tss <- h5read(af, "Metadata/TSSEnrichment")
+doublet <- h5read(af, "Metadata/DoubletScore")
+cells <- h5read(af, "Metadata/CellNames")
+sample <- h5read(af, "Metadata/Sample")
+```
+
+**关键铁律**：h5ls 输出中实际含 fragment 坐标的 group 名因箭头版本而异，绝不能假设固定路径。先 `h5ls()` 探索，再读取。
+
+## ⚠️ 远程服务器数据分析工作流
+
+当用户提供远程服务器路径（如 `/data/input/...`、`/hwfssz3/...`）时：
+- **禁止** 在本地 `terminal` 中 `cd` 到该路径（必然失败）
+- **正确做法**：生成完整的自包含 R/Python 脚本，让用户复制到服务器上运行
+- 脚本开头用 `af <- list.files(".", pattern="xxx.arrow", full.names=TRUE)` 自动发现，或接受用户指定的绝对路径
+- 用户会把结果（`h5ls` 输出、日志、截图）贴回对话 → 根据输出继续给下一步脚本
+- 分步给（不要一次性出整个管线），每步跑完贴输出回来核对
+
+**经验**：这类远程协作场景下，`h5ls()` 探索结构的脚本必须自包含（library + 文件路径 + h5ls + 打印），用户粘贴即可执行。
+
+---
 
 ## 自动拆分长任务
 
