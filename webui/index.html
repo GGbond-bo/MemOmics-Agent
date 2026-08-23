@@ -2766,7 +2766,9 @@ var guAccSeed = 0;
 function renderGenUiBlock(specText) {
   var spec;
   try { spec = JSON.parse(specText); } catch (e) {
-    return '<div style="margin:8px 0;padding:8px 12px;background:#fff5f5;border:1px solid #ffcdd2;border-radius:6px;font-size:12px;color:#c62828;">dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String(e.message || e)) + '</div><div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
+    // 2026-08-23: JSON 不合法 → 温和降级（灰字提示 + 代码块 + 复制按钮），对齐 DSH 行为
+    return '<div style="margin:8px 0;font-size:11px;color:var(--text-light);">⚠ dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String((e && e.message) || e || '未知错误')) + '</div>' +
+      '<div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
   }
   if (!spec || typeof spec !== 'object') return '';
   var out = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
