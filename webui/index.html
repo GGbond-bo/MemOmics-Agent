@@ -1897,8 +1897,10 @@ function addAssistantMsg(text, meta) {
     foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
   }
   div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
-  initMermaid();
   document.getElementById('messages').appendChild(div);
+  // 2026-08-23 修复：initMermaid 必须在节点入 DOM 之后调用——
+  // 之前先调用再 append，querySelectorAll 找不到 → 历史加载（刷新）的 mermaid 永不渲染
+  initMermaid();
   scrollBottom();
   return div;
 }
