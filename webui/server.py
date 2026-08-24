@@ -2859,7 +2859,14 @@ def _user_lang_instruction(text):
              "请用英语", "answer in english", "respond in english", "in english please",
              "english please", "write in english", "speak english")
     zh_kw = ("用中文", "说中文", "中文回答", "请用中文", "用汉语", "中文交流",
-             "answer in chinese", "respond in chinese", "in chinese please", "chinese please")
+             # 2026-08-24 修复: 翻译类指令缺失 → "英文段落 + 翻译成中文" 被 _detect_lang 误判 en，
+             # 导致 MemOmics 用英文回复翻译任务。翻译指令必须显式锁定中文。
+             "翻译成中文", "翻译成汉语", "翻译成国语", "翻译一下", "中文翻译",
+             "翻译为中文", "帮我翻译", "请翻译", "翻译这篇文章", "翻译这段",
+             "翻译这个", "翻译这段话", "翻译一下这段", "翻译成中文吧",
+             "answer in chinese", "respond in chinese", "in chinese please", "chinese please",
+             "translate to chinese", "translate into chinese", "translate it to chinese",
+             "say it in chinese", "speak chinese", "write in chinese")
     if any(k in t for k in en_kw):
         return "en"
     if any(k in t for k in zh_kw):
