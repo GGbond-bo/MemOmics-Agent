@@ -460,6 +460,12 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     progress_cb(phase, done, total, detail): 进度回调——
     phase ∈ collect/file/classify/done；detail=当前文件名或说明。
     imported_by: 导入人标识（多用户场景记录在条目上）。
+
+    2026-08-25 断点续传语义：已导入的 PDF 按 sha256（或同名同大小）跳过——
+    大批量导入中断后直接重跑同一批路径，已完成的不重复处理；返回的 skipped
+    列表即"本次跳过（此前已导入）"清单。注意 knowledge 卡片/摘要不在本函数
+    生成（走 summarize_paper / kb_extract_from_paper），续传后对缺卡片的文献
+    单独补提炼即可。
     """
     files = _collect_pdfs(paths)
     if not files:
@@ -497,9 +503,11 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
             size = _sz
             if sha and sha in by_sha:
                 skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
+                _n_done += 1  # 2026-08-25: 续传跳过也算进度（原实现卡住计数）
                 continue
             if (os.path.basename(src), size) in by_name:
                 skipped.append({"file": os.path.basename(src), "reason": "重复(同名同大小)"})
+                _n_done += 1  # 2026-08-25: 同上
                 continue
             # 复制进库
             dest_name = "".join(c if (c.isalnum() or c in "._-") else "_" for c in os.path.basename(src))

@@ -291,6 +291,44 @@ supported by what you read.
 
 ---
 
+## Mode B — Library Review（库内综述模式，2026-08-25 新增）
+
+**触发**：用户已有文献库（`hermes_home/papers/`，用 literature_import 导入过 PDF）
+或说"基于已有文献/库内综述/整理已导入的文献/把这批文献做个综述"。此时**不重新
+搜索**，从库内文献出发做证据综合——支持几十到上百篇的规模。
+
+### B1 列出库内文献
+- 读 `hermes_home/papers/.pdf_index.json`（含 title/journal/year/doi/tags）
+- 按用户主题过滤（tags 的 species/tissue/direction，或标题关键词）
+- 输出清单：DOI / 标题 / 年份 / 方向，与用户确认纳入范围
+
+### B2 补提炼（只对缺卡片的）
+- 对已有 `papers/knowledge/<doi>.md` 的：直接读卡片（含结论/细胞类型/通路/marker）
+- 对缺卡片的：`summarize_paper`（9 项摘要）和/或 `kb_extract_from_paper`（生信知识）
+
+### B3 逐篇写证据行（核心）
+- 每读一篇，把**每条关键结论**用 `evidence_write` 写一行：
+  `doi`（必须）+ `claim`（一句话结论）+ `method`（支持方法）+ `species`/`tissue`/
+  `direction`（可选）+ `strength`（strong/moderate/weak/**conflict**——与其他文献
+  矛盾时标 conflict）
+- 同一结论多篇支持 → 每篇各一行（DOI 不同即可并存，供证据综合对比）
+
+### B4 导出证据底稿
+- `evidence_query(mode="export")` → `results/<sid>/review/evidence.csv`
+- `evidence_query(mode="stats")` → 看总数/方向分布/强度分布，给用户进度
+
+### B5 分批复综（规模控制）
+- 每 ~20 篇一批做证据综合（用 evidence_query 按 direction/主题过滤这一批），
+  批间汇总；矛盾结论在综述里显式列出"争议"段落
+- 叙述综述结构：方法学 → 各主题证据 → 一致/冲突/证据缺口 → 结论
+
+### B6 引用校验（防幻觉）
+- 成稿后 `evidence_query(mode="verify", text=<综述全文>)`——提取文中 DOI/PMID
+  对照证据表 + papers 索引，**缺失的引用必须修到可校验**才能交付
+- 与 Mode A 相同铁律：只引用真实记录，绝不编造 DOI/PMID
+
+---
+
 ## Step 4 — Deliverables
 
 Produce the deliverables confirmed in Step 1 (default: all three).
