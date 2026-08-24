@@ -165,6 +165,22 @@ def _sanitize_r_backslashes(code: str) -> str:
     return _BAD_R_ESCAPE_RE.sub("/", code)
 
 
+def _kernel_note(res) -> str:
+    """L0: kernel 状态提示前缀 —— 新建 = 变量已清空，模型必须知道（防\"变量失忆\"）。
+
+    复用超过 5 次也简短提示（长会话里提醒 kernel 一直活着，变量可信）。"""
+    try:
+        if res and res.get("kernel_rebuilt"):
+            return ("[kernel: 新建 · 此前定义的所有变量已清空，需重新加载数据"
+                    "（可先看读取配方/readRDS 恢复）]\n")
+        _uses = int(res.get("kernel_uses", 1) or 1)
+        if _uses > 5:
+            return f"[kernel: 复用 #{_uses} · 变量仍在]\n"
+    except Exception:
+        pass
+    return ""
+
+
 def execute_r(code: str, working_dir: str = "", timeout: int = 1800, task_id: str = "") -> str:
     """Execute R code with OOM detection and auto-retry.
 
@@ -218,13 +234,13 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 1800, task_id: st
             timeout=min(timeout, 7200), language="r",
             cwd=working_dir or None)  # P1-5: working_dir 接线（不再被 kernel 丢弃）
         if _res.get("status") == "ok":
-            _out = _sct_note + ((_res.get("output", "") or "(no output)")[:15000])
+            _out = _sct_note + _kernel_note(_res) + ((_res.get("output", "") or "(no output)")[:15000])
             return json.dumps({"status": "success", "output": _out, "exit_code": 0,
                                "mode": "persistent_kernel"}, ensure_ascii=False)
         if _res.get("status") == "timeout":
             _msg = f"Error: R execution timed out after {timeout}s. Kernel killed; next call starts fresh."
-            return json.dumps({"status": "timeout", "output": _sct_note + _msg, "error": _msg,
-                               "exit_code": None}, ensure_ascii=False)
+            return json.dumps({"status": "timeout", "output": _sct_note + _kernel_note(_res) + _msg,
+                               "error": _msg, "exit_code": None}, ensure_ascii=False)
         # status == error → 分类处理（P1-4 修复，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
         _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
@@ -242,7 +258,7 @@ def execute_r(code: str, working_dir: str = "", timeout: int = 1800, task_id: st
         else:
             # 代码运行时错误：kernel 内已执行（可能有部分副作用）→ 不回退，
             # 直接返回 error，防止 Rscript 把整脚本再跑一遍造成双写/重复副作用。
-            _out = (_res.get("output", "") or "")[:15000]
+            _out = _kernel_note(_res) + ((_res.get("output", "") or "")[:15000])
             _out += chr(10) + f"[Kernel error: {_err}]"
             return json.dumps({"status": "error", "output": _sct_note + _out, "error": _err,
                                "exit_code": 1, "mode": "persistent_kernel"}, ensure_ascii=False)

@@ -1894,6 +1894,18 @@ def _build_self_check_wake_history(session):
             history.append({"role": "system", "content": _recipes})
     except Exception:
         pass
+    # 2026-08 L1: kernel 生命周期事件 —— 续跑前让模型知道"kernel 被回收过、
+    # 变量已丢失"（与读取配方配套：知道丢了 → 知道怎么重载）
+    try:
+        from tools.persistent_kernel import KERNEL_POOL
+        _kevs = KERNEL_POOL.kernel_events(session.get("id", ""))
+        if _kevs:
+            history.append({"role": "system", "content":
+                "[kernel 状态提醒] 本会话 kernel 近期发生过状态丢失，此前定义的变量已不可用：\n"
+                + "\n".join(f"- {e}" for e in _kevs[:4])
+                + "\n如需继续使用之前加载的数据，先按上方[数据读取配方]重新加载。"})
+    except Exception:
+        pass
     return history
 
 

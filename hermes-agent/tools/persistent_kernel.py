@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class _ProtoWorker:
         self.proc = None
         self.lock = threading.Lock()
         self.last_use = time.monotonic()
+        self.uses = 0  # L0: 该 worker 被复用的次数（新建 = 1）
         self._pending = {}
         self._results = {}
         self._seq = 0
@@ -98,6 +100,7 @@ class _ProtoWorker:
             if self.proc is None or self.proc.poll() is not None:
                 self._spawn()
             self.last_use = time.monotonic()
+            self.uses += 1  # L0: 复用计数（新建 spawn 后第一次调用 = 1）
             # P1-5(2026-08-13): working_dir 接线 — 复用 worker 时若 cwd 变化，
             # 执行前先切换目录（R: setwd / Python: os.chdir）
             if cwd and os.path.abspath(str(cwd)) != os.path.abspath(str(self.cwd)):
@@ -257,11 +260,42 @@ class _RWorker(_ProtoWorker):
 
 
 class KernelPool:
+    """持久 kernel 池：task_id → 独立 worker，LRU 容量回收 + 可选空闲时间回收。
+
+    L0/L1（2026-08，kernel 变量失忆修复）：
+      - 每次 execute 的返回附 kernel_rebuilt / kernel_uses —— 模型"知道"
+        自己的变量还在不在（新建 = 变量已清空，需重新加载）
+      - 逐出/回收/重建事件记录到 _events（按 task_id，内存环）——
+        server 层注入唤醒上下文，续跑时模型知道自己错过了 kernel 状态
+    """
+
     def __init__(self):
         self._workers = {}
         self._lock = threading.Lock()
         self._sweeper_started = False
         self._sweeper_lock = threading.Lock()
+        self._events = {}  # task_id -> deque[str]（最近 kernel 生命周期事件）
+
+    # ── L1: kernel 生命周期事件（逐出/回收/重建可见化）────────────────────
+    def _record_event(self, task_id, text):
+        try:
+            if not task_id:
+                return
+            q = self._events.setdefault(str(task_id), deque(maxlen=8))
+            q.append(text)
+        except Exception:
+            pass
+
+    def kernel_events(self, task_id=None):
+        """查询 kernel 生命周期事件（最新在前）。task_id=None 返回全部。"""
+        with self._lock:
+            out = []
+            for _tid, q in self._events.items():
+                if task_id is not None and _tid != str(task_id):
+                    continue
+                for e in reversed(q):
+                    out.append(f"[{_tid[:14]}] {e}")
+            return out
 
     def _ensure_sweeper(self):
         """启动后台空闲清扫线程（幂等）。
@@ -297,11 +331,16 @@ class KernelPool:
                 return
             overflow = len(same_lang) - _MAX_WORKERS_PER_LANG
             for k in sorted(same_lang, key=lambda k: same_lang[k].last_use)[:overflow]:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     same_lang[k].close()
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 逐出事件可见化 —— 该任务的所有 RAM 变量已丢失
+                self._record_event(
+                    _tid, f"{lang} kernel 被 LRU 逐出（同语言 worker 超上限 {_MAX_WORKERS_PER_LANG}），"
+                          f"此前所有变量已丢失，需重新加载数据")
             logger.info("kernel pool: LRU evicted %d %s worker(s), %d remaining",
                         overflow, lang, len(self._workers))
 
@@ -311,11 +350,16 @@ class KernelPool:
             stale = [k for k, w in self._workers.items()
                      if now - w.last_use > _IDLE_TIMEOUT]
             for k in stale:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     self._workers[k].close()
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 空闲回收事件可见化
+                self._record_event(
+                    _tid, f"{k.split(':', 1)[0]} kernel 被空闲回收（{int(_IDLE_TIMEOUT / 60)} 分钟无请求），"
+                          f"此前所有变量已丢失，需重新加载数据")
         if stale:
             logger.info("kernel pool: reaped %d idle worker(s), %d remaining",
                         len(stale), len(self._workers))
@@ -416,24 +460,39 @@ class KernelPool:
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
         self._ensure_sweeper()  # 幂等：仅 _IDLE_TIMEOUT>0 时启动时间回收
+        rebuilt = False
         with self._lock:
             if _IDLE_TIMEOUT > 0:
                 for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
+                    _tid = k.split(":", 1)[1] if ":" in k else ""
                     self._workers[k].close()
                     del self._workers[k]
+                    # L1: execute 前即时回收也记事件（与 sweeper 同语义）
+                    self._record_event(
+                        _tid, f"{k.split(':', 1)[0]} kernel 被空闲回收（{int(_IDLE_TIMEOUT / 60)} 分钟无请求），"
+                              f"此前所有变量已丢失，需重新加载数据")
             w = self._workers.get(key)
             if w is None:
+                rebuilt = True  # L0: 本次调用是新建 worker → 之前变量已清空
                 if lang == "r":
                     w = _RWorker(task_id or "default", self._rscript_path(), self._child_env(), cwd=cwd or os.getcwd())
                 else:
                     w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=cwd or os.getcwd())
                 self._workers[key] = w
+                self._record_event(task_id or "default", f"{lang} kernel 新建（变量已清空，需重新加载数据）")
         self._evict_lru(lang)  # LRU 容量回收：超出上限时回收最久未用的 worker
         try:
-            return w.execute(code, timeout, cwd=cwd)
+            res = w.execute(code, timeout, cwd=cwd)
+            if isinstance(res, dict):
+                # L0: 模型可见的 kernel 元信息（新建 = 变量不在；复用计数供诊断）
+                res["kernel_rebuilt"] = bool(rebuilt)
+                res["kernel_uses"] = int(getattr(w, "uses", 1))
+            return res
         except Exception as e:
             logger.exception("kernel execute error")
-            return {"status": "error", "error": str(e), "output": "", "tool_calls_made": 0, "duration_seconds": 0}
+            return {"status": "error", "error": str(e), "output": "", "tool_calls_made": 0,
+                    "duration_seconds": 0, "kernel_rebuilt": bool(rebuilt),
+                    "kernel_uses": int(getattr(w, "uses", 1))}
 
     def close(self):
         with self._lock:
@@ -460,12 +519,16 @@ class KernelPool:
                     and (task_id is None or k.endswith(":" + task_id))]
             closed = 0
             for k in keys:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     self._workers[k].close()
                     closed += 1
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 显式重启事件可见化
+                self._record_event(
+                    _tid, f"{k.split(':', 1)[0]} kernel 被显式重启，此前所有变量已丢失，需重新加载数据")
         return json.dumps({
             "ok": True,
             "closed_workers": closed,
