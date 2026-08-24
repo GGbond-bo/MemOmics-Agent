@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from threading import RLock
-from typing import Any
+from typing import Any, Callable
+
+logger = logging.getLogger("memomics.tasks")
 
 
 def _utc_now() -> str:
@@ -46,11 +49,32 @@ class SupervisedTask:
 
 
 class TaskSupervisor:
+    """监督会话级 asyncio 任务：注册/完成记账 + 完成事件监听（M1 事件驱动唤醒底座）。
+
+    add_done_listener 注册的回调在任务进入终态后调用（带 record 快照），
+    供上层做事件驱动唤醒（后台任务完成 → 立即调度 agent 自检），
+    替代"定时轮询任务状态"。
+    """
+
     def __init__(self, store=None) -> None:
         self._active: dict[str, SupervisedTask] = {}
         self._history: list[dict[str, Any]] = []
+        self._done_listeners: list[Callable[[dict[str, Any]], Any]] = []
         self._lock = RLock()
         self._store = store
+
+    def add_done_listener(self, fn: Callable[[dict[str, Any]], Any]) -> None:
+        """注册任务完成监听器。fn(record: dict) 在任务终态确定后调用（锁外）。"""
+        with self._lock:
+            self._done_listeners.append(fn)
+
+    def _notify_done(self, record: dict[str, Any]) -> None:
+        """锁外通知所有完成监听器（单个异常不阻断其余监听器）。"""
+        for fn in list(self._done_listeners):
+            try:
+                fn(dict(record))
+            except Exception:
+                logger.warning("tasks: done listener threw for job %s", record.get("job_id"), exc_info=True)
 
     def register(
         self, session_id: str, task: asyncio.Task[Any], label: str = "agent"
@@ -92,15 +116,18 @@ class TaskSupervisor:
             self._history.append(record.public())
             self._history[:] = self._history[-200:]
             self._active.pop(session_id, None)
-            if self._store:
-                self._store.finish(
-                    record.job_id,
-                    record.state.value,
-                    error=record.error,
-                    termination_source=(
-                        "user_cancel" if record.state == JobState.CANCELLED else None
-                    ),
-                )
+            done_snapshot = record.public()
+        # 锁外落盘 + 事件通知（监听器可能回调 supervisor，不能持锁）
+        if self._store:
+            self._store.finish(
+                record.job_id,
+                record.state.value,
+                error=record.error,
+                termination_source=(
+                    "user_cancel" if record.state == JobState.CANCELLED else None
+                ),
+            )
+        self._notify_done(done_snapshot)
 
     def cancel(self, session_id: str) -> bool:
         with self._lock:

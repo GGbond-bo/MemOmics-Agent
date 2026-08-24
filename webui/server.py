@@ -1199,6 +1199,21 @@ def _session_has_active_work(session):
     return False
 
 
+def _session_has_external_work(session):
+    """M1: 是否有外部工作在跑（Hermes 进程注册表有活进程 / batch 活跃）。
+
+    用于"兜底唤醒先做便宜检查"：只有进程/batch 活着且无新进展时才跳过
+    LLM 唤醒；进程退出或 batch 完成 → 立即让 LLM 去收结果。
+    """
+    try:
+        from tools.process_registry import process_registry
+        if process_registry.count_running() > 0:
+            return True
+    except Exception:
+        pass
+    return _session_has_active_work(session)
+
+
 def _session_no_live_work(session):
     """外部工作是否确实已停（2026-08-14 完成判定增强信号3）。
 
@@ -1498,9 +1513,16 @@ def _task_liveness(session) -> tuple:
             f"任务疑似卡死：PID {sorted(_pids)} | 窗口 {_window}s 内 CPU/IO 零变化 | RSS {_rss_mb:.0f}MB")
 
 
-def _schedule_self_check(session, agent, loop):
-    """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
-    但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
+def _schedule_self_check(session, agent, loop, trigger="turn_end"):
+    """本轮结束后，如果有未完成的主线任务，延迟后自动触发下一轮自检。
+    但如果 task_plan 被标记为 cancelled 或 paused，则跳过。
+
+    trigger（2026-08 M1 事件驱动唤醒，DSH 思想迁移）：
+      turn_end   — 用户/自检回合结束（默认）：按 LoopX 退避调度，兜底先查签名
+      task_done  — 后台任务完成事件：3 秒内尽快唤醒（DSH jobs 结算通知语义）
+      fallback   — 兜底重排：唤醒前先做便宜检查（外部工作在跑且无新进展 →
+                    跳过 LLM 唤醒，只重排兜底——轮询文件系统而非轮询 LLM）
+    """
     if not agent or not loop:
         return
     # 2026-08-14 P0 修复：紧急标记提前 pop——六闸门在 urgent 时不得吞掉"说而不做/心跳错误"的唤醒
@@ -1637,6 +1659,10 @@ def _schedule_self_check(session, agent, loop):
     if urgent:
         delay = 3  # 3秒后立即唤醒
         logger.info(f"[SelfCheck] session {sid[:12]}: urgent wakeup triggered")
+    elif trigger == "task_done":
+        # M1: 后台任务完成事件 → 尽快唤醒（DSH jobs 结算通知语义）
+        delay = 3
+        logger.info(f"[SelfCheck] session {sid[:12]}: task-done wakeup triggered")
     
     async def _wakeup():
         await asyncio.sleep(delay)
@@ -1655,10 +1681,38 @@ def _schedule_self_check(session, agent, loop):
                     s["_wakeup_retry_n"] = _retry_n + 1
                     s["_urgent_wakeup"] = True
                     logger.info(f"[SelfCheck] session {sid[:12]}: 唤醒遇运行中回合，重排 #{_retry_n + 1}/3")
-                    _schedule_self_check(s, agent, loop)
+                    _schedule_self_check(s, agent, loop, trigger=trigger)
                 else:
                     s.pop("_wakeup_retry_n", None)
                 return
+            # ── M1 兜底闸门：外部工作在跑且无新进展 → 不唤醒 LLM，只重排兜底 ──
+            # （省 token 的关键：轮询文件系统/进程表，而不是轮询 LLM；
+            #   DSH"无产出就不唤醒"的落地）
+            if trigger in ("turn_end", "fallback") and not urgent and not force_tool:
+                try:
+                    _sig_now = _session_progress_signature(s)
+                    # 注意：签名是 hash%2^31 的不透明值，非单调——"有变化"必须用 != 判定
+                    # （<= 会把哈希值变小误判为"无进展"→ 外部工作永远不唤醒 LLM）
+                    if _sig_now == s.get("_self_check_last_sig", 0.0) and _session_has_external_work(s):
+                        # 等待外部工作不算无进展：计数清零，重排兜底
+                        s["_self_check_count"] = 0
+                        logger.info(f"[SelfCheck] session {sid[:12]}: M1 兜底跳过（外部工作活跃且无新进展）→ 重排，不唤醒 LLM")
+                        _schedule_self_check(s, agent, loop, trigger="fallback")
+                        return
+                except Exception:
+                    pass
+            # ── M3 硬轮数预算：真正注入唤醒才 +1（DSH roundsStarted 语义）──
+            try:
+                from webui.runtime.run_gate import admit_round
+                _rd_b = s.get("results_dir", "") or ""
+                # 无任务目录或预算耗尽/任务退役 → 一律不注入
+                # （极端测试修复：原 `if _rd_b and not admit_round(...)` 在
+                #   results_dir 为空时整个跳过检查 → 无任务会话也会唤醒 LLM）
+                if not _rd_b or not admit_round(_rd_b):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮数预算耗尽/无任务目录/任务退役，停止注入唤醒")
+                    return
+            except Exception:
+                pass
             # 判断唤醒类型
             todos = s.get("todos", [])
             in_progress = [t for t in todos if t.get("status") == "in_progress"]
@@ -1923,7 +1977,7 @@ async def _trigger_agent_turn(session, message):
             _persist_token_usage(session, turn_kind="self_check")
         except Exception:
             pass
-        _schedule_self_check(session, agent, asyncio.get_event_loop())
+        _schedule_self_check(session, agent, asyncio.get_event_loop(), trigger="turn_end")
 
 
 def _build_alerts_context(session):
@@ -2201,6 +2255,28 @@ except ImportError:
 _job_store = JobStore(os.path.join(HERMES_HOME_DIR, "runtime", "jobs.json"))
 _task_supervisor = TaskSupervisor(store=_job_store)
 _resource_scheduler = ResourceScheduler(ResourceCapacity.detect())
+
+
+def _on_supervised_task_done(record):
+    """M1（事件驱动唤醒）：后台任务完成 → 立即调度唤醒。
+
+    label == agent_conversation 的回合任务已由 run_agent finally 自行调度
+    （_schedule_self_check at turn end），此处只处理真正的后台任务，
+    避免"回合结束 → 3 秒后必再醒一轮"的双触发。
+    """
+    try:
+        if not record or record.get("label") == "agent_conversation":
+            return
+        _sid2 = record.get("session_id", "")
+        _s2 = _sessions.get(_sid2)
+        if not _s2 or not _s2.get("agent"):
+            return
+        _schedule_self_check(_s2, _s2["agent"], asyncio.get_event_loop(), trigger="task_done")
+    except Exception:
+        logger.warning("[SelfCheck] supervised-task done 唤醒失败", exc_info=True)
+
+
+_task_supervisor.add_done_listener(_on_supervised_task_done)
 
 
 def _session_resource_request(session):
@@ -4249,6 +4325,37 @@ def _load_persisted_sessions():
             print(f"[MemOmics] 从 state.db 恢复了 {count} 个历史会话", flush=True)
             # 恢复微信会话映射
             _rebuild_weixin_session_map()
+        # M2: 重启后重新授权——所有恢复的非退役任务 disarm，自动唤醒必须用户消息恢复
+        # （DSH armed 语义：机器不会自己恢复自主权，必须人显式"继续"）
+        try:
+            from webui.runtime.run_gate import disarm as _disarm_gate
+            from webui.runtime.run_gate import is_retired as _is_retired_gate
+            from webui.runtime.run_gate import is_armed as _is_armed_gate
+            _disarmed = 0
+            for _sid2, _sess2 in list(_sessions.items()):
+                _rd2 = _sess2.get("results_dir", "") or ""
+                if _rd2 and not _is_retired_gate(_rd2) and _is_armed_gate(_rd2):
+                    _disarm_gate(_rd2, "server restart (re-authorization required)")
+                    _disarmed += 1
+            if _disarmed:
+                print(f"[MemOmics] M2: {_disarmed} 个任务的自动唤醒已暂停（重启后需用户消息重新授权）", flush=True)
+        except Exception:
+            pass
+        # M4: 启动一致性对账（run_gate 与 task_plan 漂移检测 + 自动修复确定性漂移）
+        try:
+            from webui.runtime.run_gate import reconcile as _reconcile_gate
+            _recon_notes = []
+            for _sid2, _sess2 in list(_sessions.items()):
+                _rd2 = _sess2.get("results_dir", "") or ""
+                if _rd2:
+                    for _w in _reconcile_gate(_rd2):
+                        _recon_notes.append(f"{_sid2[:12]}: {_w}")
+            for _n in _recon_notes:
+                print(f"[MemOmics] [Reconcile] {_n}", flush=True)
+            if _recon_notes:
+                print(f"[MemOmics] 启动对账完成：{len(_recon_notes)} 条漂移告警/修复", flush=True)
+        except Exception:
+            pass
     except Exception as e:
         print(f"[MemOmics] 会话恢复失败: {e}", flush=True)
 
@@ -10533,12 +10640,15 @@ async def ws_endpoint(ws: WebSocket):
                 # 退役任务（done/cancelled）重置为 pending（命中"继续"词表由 check_gate 内部处理；
                 # 未命中返回 ask_user → 用户发消息本身即新指令，保守重置为新任务）
                 try:
-                    from webui.runtime.run_gate import check_gate, save_state
+                    from webui.runtime.run_gate import check_gate, save_state, arm, reset_rounds
                     _rd_g = session.get("results_dir", "") or ""
                     if _rd_g:
                         _verdict, _reason = check_gate(_rd_g, is_auto_wake=False, user_message=user_text)
                         if _verdict == "ask_user":
                             save_state(_rd_g, "pending", "user message (ask_user -> new task)")
+                        # M2/M3（DSH resume 语义的交互式版）：用户在场 = 重新授权 + 预算刷新
+                        arm(_rd_g, by="user_message")
+                        reset_rounds(_rd_g)
                 except Exception:
                     pass
 
@@ -12038,7 +12148,7 @@ async def ws_endpoint(ws: WebSocket):
                         if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
                             _heartbeat_task.cancel()
                         # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
-                        _schedule_self_check(_session, _agent, loop)
+                        _schedule_self_check(_session, _agent, loop, trigger="turn_end")
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
