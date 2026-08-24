@@ -877,6 +877,16 @@ colnames(ccd); head(as.data.frame(ccd), 3); sapply(ccd, class)
 ```
 复用脚本：`results/memomics-1c1890da/patent_test/check_cellcoldata_columns.R`
 
+### 🔴 跨物种脑ATAC-seq细胞类型marker（2026-08-25 新增）
+
+人+猴脑共同7大群marker + 文献PMID对照表 → `references/brain_atac_cross_species_markers.md`。包含：
+- 7大群（ExN/InN/Ast/OLG/OPC/MG/EC+PC）核心marker + 亚群marker
+- 6篇核心文献（Zhang X 2026 Cell / Yuan 2024 Cell Genom / Zemke 2024 / Zhang J 2026 Nat Neurosci / Liu 2025 Cell / Kabbe 2026 Nat Neurosci）
+- 人猴共有核心marker对照表
+- ATAC Gene Activity Score注释方法说明
+
+**用户铁律（2026-08-25）**：提供marker时必须附文献PMID/DOI，不能凭LLM预训练知识列marker。
+
 ### 🔴 细胞类型 marker 来源必须逐篇验证物种（2026-08-12 用户质疑"这些数据有来源吗？"实测）
 
 给用户 cell-type marker 列表时，**必须用 search_papers 验证每篇引用文献的物种/组织是否真的匹配**——知识库/记忆里现成的"来源标注"可能是错的：
