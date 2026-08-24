@@ -1886,6 +1886,14 @@ def _build_self_check_wake_history(session):
                     "[自检唤醒上下文：task_plan.md 主线区摘要（完整计划见磁盘）]\n" + "\n".join(_lines)})
         except Exception:
             pass
+    # 2026-08: 数据读取配方 —— 唤醒回合没有历史/工具记录，模型最容易
+    # "忘了怎么读"；把此前成功读取命令确定性带回（tool_calls_log 提取）
+    try:
+        _recipes = _build_read_recipes(session)
+        if _recipes:
+            history.append({"role": "system", "content": _recipes})
+    except Exception:
+        pass
     return history
 
 
@@ -4675,6 +4683,62 @@ def _strip_scaffold_text(text):
     return None
 
 
+_READ_KEYWORDS = ("readRDS", "read.csv", "read.table", "read_tsv", "read.delim",
+                  "fread", "read_parquet", "read_excel", "readxl", "Load10X",
+                  "Read10X", "scanpy.read", "pd.read_", "readr::", "readLines",
+                  "readline", "vroom", "read.delim2", "read.delim(", "readxl::")
+_FAIL_MARKERS = ("error", "exception", "traceback", "cannot open", "no such file",
+                 "not found", "failed", "错误", "失败", "不存在", "无法读取")
+
+
+def _extract_read_recipes(rows, limit=5, max_chars=1200):
+    """从 tool_calls_log 行提取"此前成功读取方式"配方（确定性，不依赖 LLM writer）。
+
+    筛选：args 含读取类关键词 且 result 不含失败标志 → 视为成功读取配方。
+    解决长会话根因：上下文折叠/唤醒精简后模型"忘了怎么读文件"——
+    把成功示例（含路径与参数）原样带回上下文，模型直接复用而不是重新发明。
+    """
+    recipes = []
+    for _t, _a, _r, _ts in rows:
+        _args = str(_a or "")
+        _res = str(_r or "")
+        if not any(k in _args for k in _READ_KEYWORDS):
+            continue
+        if any(m in _res.lower() for m in _FAIL_MARKERS):
+            continue
+        recipes.append(f"- [{_ts}] {_t}({_args[:260]})")
+        if len(recipes) >= limit:
+            break
+    if not recipes:
+        return ""
+    out = "[数据读取配方 · 此前成功读取文件的命令（含路径/参数），直接复用，不要重新摸索]\n" + "\n".join(recipes)
+    return out[:max_chars]
+
+
+def _build_read_recipes(session, db_path=None, limit_rows=40):
+    """查 state.db tool_calls_log，提取本会话的成功读取配方（最新优先）。"""
+    try:
+        sid = session.get("id", "") or ""
+        if not sid:
+            return ""
+        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.isfile(_dbp):
+            return ""
+        import sqlite3 as _sq
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT tool_name, args_json, result_text, "
+                "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
+                "WHERE session_id=? ORDER BY rowid DESC LIMIT ?",
+                (sid, limit_rows)).fetchall()
+        finally:
+            _conn.close()
+        return _extract_read_recipes(_rows)
+    except Exception:
+        return ""
+
+
 def _resolve_message_id(session_id: str, content_hint: str) -> int:
     """按 content 片段在 state.db 查该会话的 message_id（elision marker 用）。
 
@@ -4769,6 +4833,14 @@ def _build_rollup_checkpoint(session, head):
             _lines += ["## 已执行工作(最近工具调用)"]
             for _t, _a, _r, _ts in reversed(_rows):
                 _lines.append(f"- [{_ts}] {_t} args={_a} result={str(_r)[:60]}")
+        # 2026-08: 数据读取配方 —— 折叠后"怎么读文件"不失忆（确定性提取，
+        # 不依赖 LLM writer 是否记得保留读取命令）
+        try:
+            _recipes = _extract_read_recipes(_rows, limit=5)
+            if _recipes:
+                _lines += ["## 数据读取配方(此前成功)", _recipes]
+        except Exception:
+            pass
     except Exception:
         pass
     for _m in head:
