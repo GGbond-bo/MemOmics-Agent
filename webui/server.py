@@ -986,17 +986,24 @@ def _maybe_switch_task_dir(session, user_text, intent):
 
 
 def _build_grill_prompt(session, user_text, intent):
-    """开工前澄清（grill）触发：执行类意图 + 关键信息缺失 → 要求模型先问清楚。
+    """开工前澄清（grill）触发：执行请求 + 关键信息缺失 → 要求模型先问清楚。
 
-    2026-08-25（用户核心诉求）：'帮我做单细胞聚类分析'（执行意图 + 无数据路径）→
-    先问'有数据吗？在哪？'——不靠意图猜、不先跑再说；一次问清比十次返工便宜。
-    已有数据路径（当前消息或 REQUIREMENTS）→ 信息够，不触发。
+    2026-08-25（用户核心诉求）：'帮我做单细胞聚类分析'（无数据路径）→ 先问
+    '有数据吗？在哪？'——不靠意图猜、不先跑再说；一次问清比十次返工便宜。
+    判定原则（不依赖意图词表精确值——词表会漏判执行请求）：
+      - 文本含执行信号词（跑/分析/聚类/注释/流程…）或意图为执行类 → 触发
+      - "继续/接着/之前"类 → 交给 resume/task_plan 恢复机制，不触发标准 grill
+      - 已有数据路径（当前消息或 REQUIREMENTS）→ 信息够，不触发
+      - 轻量意图（chat/知识问答/调查/文献/进度）→ 不触发
     """
-    if intent not in ("analysis", "direct_exec", "research_plan"):
-        return ""
     if not user_text or not str(user_text).strip():
         return ""
-    if re.search(r"[A-Za-z]:[/\\]\S+", str(user_text)):
+    t = str(user_text)
+    # 继续旧任务 → 由 resume/task_plan 恢复机制接管，不触发标准 grill
+    if any(w in t for w in ("继续", "接着", "下一步", "之前")):
+        return ""
+    # 已有数据路径（当前消息）→ 信息够
+    if re.search(r"[A-Za-z]:[/\\]\S+", t):
         return ""
     try:
         _reqs = _read_requirements(session, limit=6)
@@ -1004,6 +1011,16 @@ def _build_grill_prompt(session, user_text, intent):
             return ""
     except Exception:
         pass
+    # 执行判定：文本含执行信号词 或 意图为执行类；轻量意图排除
+    _EXEC_SIGNALS = ("跑", "执行", "分析", "聚类", "注释", "降维", "计算", "比较",
+                     "富集", "拟时序", "通讯", "wgcna", "帮我做", "帮我跑", "做分析",
+                     "做个", "跑一", "流程", "细胞通讯", "degs", "差异表达")
+    _LIGHT = ("chat", "knowledge_ask", "progress_check", "result_check",
+              "analysis_plan", "literature", "cancel_task", "investigate")
+    _has_exec = any(s in t.lower() for s in _EXEC_SIGNALS)
+    _is_exec_intent = intent in ("analysis", "direct_exec", "research_plan")
+    if (not (_has_exec or _is_exec_intent)) or intent in _LIGHT:
+        return ""
     return (
         "[开工前澄清 · 铁律：不确定就问]\n"
         "用户请求执行分析任务，但关键信息缺失（没有数据路径）。"
