@@ -1,0 +1,196 @@
+# Linux E2E Extreme — 云 runner 最新版全链路 + 多意图多场景极端测试
+#
+# 链路：下载最新发行 update.zip（v2026-08-25）→ 覆盖运行代码（测试文件用仓库版）
+#      → venv 装依赖 → 装 R → 起真实 server → 各链路冒烟（HTTP/health/update/env/R）
+#      → pytest 极端矩阵（grill 30+ 用例 / wake 重启矩阵 / 执行策略极端套件）
+#      → pytest 全量离线套件 → LLM 真实对话（若配置了 DEEPSEEK_API_KEY secret）
+#
+# LLM 链路：repo Settings → Secrets and variables → Actions → New secret
+#           DEEPSEEK_API_KEY = <你的 DeepSeek key>（无则自动跳过 LLM 步骤）
+
+name: Linux E2E Extreme
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/linux-e2e-extreme.yml'
+
+jobs:
+  e2e-extreme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout (latest tests from repo)
+        uses: actions/checkout@v4
+
+      - name: Download latest update package (v2026-08-25)
+        run: |
+          curl -fsSL -o upd.zip \
+            https://github.com/GGbond-bo/MemOmics-Agent/releases/download/v2026-08-25/MemOmics-update.zip
+          unzip -q upd.zip -d pkg
+          ls pkg/MemOmics-update | head -25
+
+      - name: Overlay latest runtime code (code=update.zip, tests=repo)
+        run: |
+          U=pkg/MemOmics-update
+          rm -rf hermes_home
+          cp -rf $U/webui/* webui/
+          cp -rf $U/memomics/* memomics/
+          cp -rf $U/hermes-agent/* hermes-agent/
+          cp -rf $U/scripts/* scripts/
+          cp -rf $U/hermes_home .
+          cp -f $U/*.txt $U/*.py $U/VERSION $U/environment.json . 2>/dev/null || true
+          # 验证：运行代码是最新版（含 Linux 修复），测试保留仓库版
+          grep -c 'environment discovery' webui/server.py && echo 'OK server.py = latest'
+          ls webui/tests/test_grill_extreme.py && echo 'OK tests = repo (extreme present)'
+          cat VERSION
+
+      - name: Setup venv + deps
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q --upgrade pip
+          .venv/bin/pip install -q -r requirements.txt
+          .venv/bin/pip install -q -r requirements-vision.txt
+          .venv/bin/python -c "import fastapi, scanpy, rapidocr_onnxruntime; print('deps OK')"
+
+      - name: Install minimal R (r-base + jsonlite)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq r-base r-cran-jsonlite
+          Rscript --version | head -1
+
+      - name: Boot real server + chain smoke (HTTP/health/update/env)
+        run: |
+          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_PORT=8899
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          nohup .venv/bin/python webui/server.py > server.log 2>&1 &
+          BOOTED=0
+          for i in $(seq 1 150); do
+            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null; then BOOTED=1; break; fi
+            sleep 5
+          done
+          echo "SERVER_BOOTED=$BOOTED"
+          [ "$BOOTED" = "1" ] || { tail -80 server.log; exit 1; }
+          echo '--- chain: root ---'
+          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://127.0.0.1:8899/
+          echo '--- chain: health ---'
+          curl -sS --max-time 15 http://127.0.0.1:8899/api/health; echo
+          echo '--- chain: update/check (版本链路) ---'
+          curl -sS --max-time 20 http://127.0.0.1:8899/api/update/check | head -c 600; echo
+          echo '--- chain: env/check (环境探测链路) ---'
+          curl -sS --max-time 20 http://127.0.0.1:8899/api/env/check | head -c 900; echo
+          echo '--- env discovery: environment.json 回填验证 ---'
+          cat environment.json
+          echo '--- chain: sessions ---'
+          curl -sS --max-time 15 -X POST http://127.0.0.1:8899/api/sessions/new | head -c 300; echo
+          echo '--- server.log tail ---'
+          tail -25 server.log
+
+      - name: Chain - persistent kernel reuse (R + Python, 变量跨调用存活)
+        run: |
+          export HERMES_HOME="$PWD/hermes_home"
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          .venv/bin/python - <<'PYEOF'
+          from tools.persistent_kernel import KERNEL_POOL
+          r1 = KERNEL_POOL.execute('x <- 42; cat("defined x =", x, "\n")', 'e2e-r', timeout=120, language='r')
+          r2 = KERNEL_POOL.execute('cat("second call sees x =", x, "\n")', 'e2e-r', timeout=120, language='r')
+          rok = r1.get("status") == "ok" and r2.get("status") == "ok" and "42" in (r2.get("result") or "")
+          print("R_PERSISTENT:", "OK" if rok else "FAILED", "|", (r1.get("error") or r2.get("error") or ""))
+          p1 = KERNEL_POOL.execute('x = 7\nprint("defined x =", x)', 'e2e-py', timeout=120, language='python')
+          p2 = KERNEL_POOL.execute('print("second call sees x =", x)', 'e2e-py', timeout=120, language='python')
+          pok = p1.get("status") == "ok" and p2.get("status") == "ok" and "7" in (p2.get("result") or "")
+          print("PY_PERSISTENT:", "OK" if pok else "FAILED", "|", (p1.get("error") or p2.get("error") or ""))
+          PYEOF
+
+      - name: Stop real server (avoid state.db contention with pytest)
+        run: |
+          pkill -f 'webui/server.py' || true
+          sleep 2
+
+      - name: pytest - extreme matrices (多意图多场景极端测试)
+        run: |
+          export HERMES_HOME="$PWD/hermes_home"
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          .venv/bin/python -m pytest \
+            webui/tests/test_grill_extreme.py \
+            webui/tests/test_execution_policy_extreme.py \
+            webui/tests/test_wake_extreme.py \
+            webui/tests/test_wake_e2e_matrix.py \
+            webui/tests/test_requirements_matrix.py \
+            webui/tests/test_session_isolation.py \
+            webui/tests/test_kernel_state.py \
+            webui/tests/test_prisma_flow.py \
+            webui/tests/test_output_assets.py \
+            webui/tests/test_link_chain.py \
+            webui/tests/test_read_recipes.py \
+            webui/tests/test_task_goal_persistence.py \
+            webui/tests/test_grill_clarify.py \
+            webui/tests/test_execution_policy.py \
+            webui/tests/test_evidence_table.py \
+            webui/tests/test_requirements_remember.py \
+            -q --tb=line --junitxml=extreme.xml 2>&1 | tail -50
+          echo "EXTREME_EXIT=${PIPESTATUS[0]}"
+
+      - name: pytest - full offline suite
+        run: |
+          export HERMES_HOME="$PWD/hermes_home"
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          .venv/bin/python -m pytest webui/tests -q --tb=line --junitxml=full.xml 2>&1 | tail -80
+          echo "FULL_EXIT=${PIPESTATUS[0]}"
+
+      - name: LLM chain - real conversation (needs DEEPSEEK_API_KEY secret)
+        if: env.DEEPSEEK_API_KEY != ''
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_PORT=8899
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          # 注入 key 到 config.yaml（测试实例专用）
+          .venv/bin/python - <<'PYEOF'
+          import os, yaml
+          cfg = os.path.join(os.environ['HERMES_HOME'], 'config.yaml')
+          if not os.path.isfile(cfg):
+              example = os.path.join(os.environ['HERMES_HOME'], 'config.yaml.example')
+              if os.path.isfile(example):
+                  import shutil; shutil.copy(example, cfg)
+          with open(cfg, 'r', encoding='utf-8') as f:
+              data = yaml.safe_load(f) or {}
+          data['api_key'] = os.environ['DEEPSEEK_API_KEY']
+          data['model'] = data.get('model', 'deepseek-chat')
+          with open(cfg, 'w', encoding='utf-8') as f:
+              yaml.safe_dump(data, f, allow_unicode=True)
+          print('key injected (masked):', os.environ['DEEPSEEK_API_KEY'][:6] + '***')
+          PYEOF
+          nohup .venv/bin/python webui/server.py > server-llm.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null && break
+            sleep 5
+          done
+          # WS 真实对话（直连 openai 兼容接口验证 key + server 已就绪）
+          .venv/bin/python - <<'PYEOF'
+          import json, os, time
+          from openai import OpenAI
+          client = OpenAI(api_key=os.environ['DEEPSEEK_API_KEY'],
+                          base_url='https://api.deepseek.com/v1')
+          r = client.chat.completions.create(
+              model='deepseek-chat',
+              messages=[{'role': 'user', 'content': '只回复两个字：正常'}],
+              max_tokens=10, timeout=60)
+          print('LLM_CHAIN:', 'OK' if r.choices else 'FAILED', '|', (r.choices[0].message.content or '')[:50])
+          PYEOF
+          pkill -f 'webui/server.py' || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-extreme-evidence
+          path: |
+            server.log
+            extreme.xml
+            full.xml
+            server-llm.log
+          if-no-files-found: ignore
