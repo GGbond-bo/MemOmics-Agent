@@ -260,20 +260,147 @@ class _RWorker(_ProtoWorker):
 
 
 class KernelPool:
-    """持久 kernel 池：task_id → 独立 worker，LRU 容量回收 + 可选空闲时间回收。
+    """持久 kernel 池注册表（2026-08-25 会话隔离迁移，DSH 模型）。
 
-    L0/L1（2026-08，kernel 变量失忆修复）：
-      - 每次 execute 的返回附 kernel_rebuilt / kernel_uses —— 模型"知道"
-        自己的变量还在不在（新建 = 变量已清空，需重新加载）
-      - 逐出/回收/重建事件记录到 _events（按 task_id，内存环）——
-        server 层注入唤醒上下文，续跑时模型知道自己错过了 kernel 状态
+    每个 task_id（= 会话 sid）路由到独立的 _SessionKernelPool 子池：
+    worker 集合 / LRU 上限（每会话每语言 _MAX_WORKERS_PER_LANG）/ 事件环
+    全部按会话隔离——两会话并行各用各的 worker，**跨会话不再互逐出**
+    （原全局共享池：会话 A 的 R 变量会被会话 B/C 顶掉，即"kernel 失忆"
+    的多会话版本）。对外 API 不变：execute / close / restart /
+    worker_snapshot / kernel_events。
     """
 
     def __init__(self):
-        self._workers = {}
+        self._pools = {}
         self._lock = threading.Lock()
         self._sweeper_started = False
         self._sweeper_lock = threading.Lock()
+
+    def _pool_for(self, task_id):
+        key = str(task_id or "default")
+        with self._lock:
+            p = self._pools.get(key)
+            if p is None:
+                p = _SessionKernelPool(key)
+                self._pools[key] = p
+            return p
+
+    def execute(self, code, task_id, timeout=120, language="python", cwd=None):
+        self._ensure_sweeper()
+        return self._pool_for(task_id).execute(
+            code, task_id, timeout=timeout, language=language, cwd=cwd)
+
+    def _ensure_sweeper(self):
+        """注册表级一个空闲清扫线程，遍历所有会话子池（幂等）。"""
+        if _IDLE_TIMEOUT <= 0:
+            return
+        with self._sweeper_lock:
+            if self._sweeper_started:
+                return
+            self._sweeper_started = True
+
+        def _sweep():
+            while True:
+                try:
+                    time.sleep(60)
+                    with self._lock:
+                        pools = list(self._pools.values())
+                    for _p in pools:
+                        try:
+                            _p._reap_idle()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass  # 清扫失败不影响主流程
+
+        threading.Thread(target=_sweep, daemon=True, name="kernel-pool-sweeper").start()
+
+    def kernel_events(self, task_id=None):
+        """跨会话查询 kernel 生命周期事件（最新在前）。task_id=None 返回全部会话。"""
+        with self._lock:
+            pools = [p for k, p in self._pools.items()
+                     if task_id is None or k == str(task_id)]
+        out = []
+        for _p in pools:
+            out.extend(_p.kernel_events())
+        return out
+
+    def close(self, task_id=None):
+        """关闭全部（或指定会话）子池。"""
+        with self._lock:
+            keys = list(self._pools.keys()) if task_id is None else [str(task_id)]
+            for _k in keys:
+                _p = self._pools.pop(_k, None)
+                if _p is not None:
+                    try:
+                        _p.close()
+                    except Exception:
+                        pass
+
+    def restart(self, language=None, task_id=None):
+        """重启指定会话（或全部）worker，释放内存。"""
+        if task_id is not None:
+            return self._pool_for(task_id).restart(language=language, task_id=task_id)
+        with self._lock:
+            pools = list(self._pools.values())
+        closed = 0
+        for _p in pools:
+            try:
+                _r = json.loads(_p.restart(language=language))
+                closed += int(_r.get("closed_workers", 0))
+            except Exception:
+                pass
+        with self._lock:
+            remaining = len(self._pools)
+        return json.dumps({
+            "ok": True, "closed_workers": closed, "remaining_workers": remaining,
+            "note": "session pools closed; next execute spawns fresh workers — all in-memory objects are gone",
+        }, ensure_ascii=False)
+
+    def worker_snapshot(self, task_id=None, language=None):
+        """所有会话子池的活跃 worker（带 session 标识）。"""
+        with self._lock:
+            pools = [(k, p) for k, p in self._pools.items()
+                     if task_id is None or k == str(task_id)]
+        out = []
+        for _k, _p in pools:
+            for _w in _p.worker_snapshot(language=language):
+                _w["session"] = _k
+                out.append(_w)
+        return out
+
+    # ── 静态工具（保留旧引用点兼容：execute_r fallback 用 KERNEL_POOL._rscript_path()）──
+    @staticmethod
+    def _python_path():
+        return _SessionKernelPool._python_path()
+
+    @staticmethod
+    def _env_json_r_section():
+        return _SessionKernelPool._env_json_r_section()
+
+    @staticmethod
+    def _rscript_path():
+        return _SessionKernelPool._rscript_path()
+
+    @staticmethod
+    def _r_lib_env(env):
+        return _SessionKernelPool._r_lib_env(env)
+
+    @staticmethod
+    def _child_env():
+        return _SessionKernelPool._child_env()
+
+
+class _SessionKernelPool(KernelPool):
+    """单会话子池：worker 集合 + LRU（每会话每语言 _MAX_WORKERS_PER_LANG）+ 事件环。
+
+    跨会话完全独立——会话 A 的 worker 不会因会话 B 的 execute 被逐出。
+    """
+
+    def __init__(self, session_id):
+        self.session_id = str(session_id or "default")
+        self._workers = {}
+        self._lock = threading.Lock()
         self._events = {}  # task_id -> deque[str]（最近 kernel 生命周期事件）
 
     # ── L1: kernel 生命周期事件（逐出/回收/重建可见化）────────────────────
@@ -287,7 +414,7 @@ class KernelPool:
             pass
 
     def kernel_events(self, task_id=None):
-        """查询 kernel 生命周期事件（最新在前）。task_id=None 返回全部。"""
+        """本会话子池事件（最新在前）。task_id=None 返回本池全部。"""
         with self._lock:
             out = []
             for _tid, q in self._events.items():
@@ -296,28 +423,6 @@ class KernelPool:
                 for e in reversed(q):
                     out.append(f"[{_tid[:14]}] {e}")
             return out
-
-    def _ensure_sweeper(self):
-        """启动后台空闲清扫线程（幂等）。
-
-        仅当 _IDLE_TIMEOUT > 0 时启动（时间回收模式）；默认 LRU 容量回收
-        在 execute() 创建新 worker 时即时触发，不需要后台线程。"""
-        if _IDLE_TIMEOUT <= 0:
-            return
-        with self._sweeper_lock:
-            if self._sweeper_started:
-                return
-            self._sweeper_started = True
-
-        def _sweep():
-            while True:
-                try:
-                    time.sleep(60)
-                    self._reap_idle()
-                except Exception:
-                    pass  # 清扫失败不影响主流程
-
-        threading.Thread(target=_sweep, daemon=True, name="kernel-pool-sweeper").start()
 
     def _evict_lru(self, lang):
         """LRU 容量回收：该语言 worker 数超过上限时，回收最久未用的。
@@ -459,7 +564,7 @@ class KernelPool:
         lang = language or "python"
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
-        self._ensure_sweeper()  # 幂等：仅 _IDLE_TIMEOUT>0 时启动时间回收
+        # sweeper 由注册表 KernelPool._ensure_sweeper 统一驱动（子池不重复启动）
         rebuilt = False
         with self._lock:
             if _IDLE_TIMEOUT > 0:

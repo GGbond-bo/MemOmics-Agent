@@ -39,49 +39,60 @@ class _FakeWorker:
         self.closed = True
 
 
-# ── L1: 事件环 ──────────────────────────────────────────────────────────────
+# ── L1: 事件环（2026-08-25 会话隔离：事件按会话子池）──────────────────────
 
 def test_kernel_events_ring_basic():
     pool = pk.KernelPool()
-    pool._record_event("sess-a", "evicted")
-    pool._record_event("sess-a", "reaped")
-    pool._record_event("sess-b", "rebuilt")
+    pa = pool._pool_for("sess-a")
+    pb = pool._pool_for("sess-b")
+    pa._record_event("sess-a", "evicted")
+    pa._record_event("sess-a", "reaped")
+    pb._record_event("sess-b", "rebuilt")
     evs_a = pool.kernel_events("sess-a")
     assert len(evs_a) == 2
     assert evs_a[0].endswith("reaped"), "最新在前"
-    assert any("sess-b" in e for e in pool.kernel_events()), "无过滤返回全部"
+    assert any("sess-b" in e for e in pool.kernel_events()), "无过滤返回全部（跨会话合并）"
     assert pool.kernel_events("nope") == []
+    assert "sess-b" not in "|".join(evs_a), "会话 A 看不到会话 B 的事件（隔离）"
 
 
 def test_kernel_events_ring_capped():
     pool = pk.KernelPool()
+    pa = pool._pool_for("sess-c")
     for i in range(12):
-        pool._record_event("sess-c", f"e{i}")
+        pa._record_event("sess-c", f"e{i}")
     evs = pool.kernel_events("sess-c")
     assert len(evs) <= 8, "事件环有上限"
     assert evs[0].endswith("e11"), "保留最新"
 
 
-def test_evict_lru_records_event():
+def test_evict_lru_records_event_per_session():
+    """LRU 逐出按会话子池：A 超限只逐出 A 自己的，B 不受影响（会话隔离核心）。"""
     pool = pk.KernelPool()
-    pool._workers["r:sess-old"] = _FakeWorker(last_use=100.0)
-    pool._workers["r:sess-new"] = _FakeWorker(last_use=200.0)
-    pool._workers["r:sess-extra"] = _FakeWorker(last_use=150.0)
-    pool._evict_lru("r")  # 上限 2 → 逐出最久未用（sess-old）
-    assert "r:sess-old" not in pool._workers
-    assert "r:sess-new" in pool._workers
+    pa = pool._pool_for("sess-old")
+    pa._workers["r:sess-old"] = _FakeWorker(last_use=100.0)
+    pa._workers["r:sess-new"] = _FakeWorker(last_use=200.0)
+    pa._workers["r:sess-extra"] = _FakeWorker(last_use=150.0)
+    pool._evict_lru_global = None  # 不应存在（逐出在子池）
+    pa._evict_lru("r")  # 本会话超上限 2 → 逐出本会话最久未用（sess-old）
+    assert "r:sess-old" not in pa._workers
+    assert "r:sess-new" in pa._workers
     evs = pool.kernel_events("sess-old")
     assert evs and "LRU" in evs[0], f"逐出必须记录事件: {evs}"
     assert "变量已丢失" in evs[0]
+    # 会话 B 完全不受影响（无自己的 worker 被碰）
+    pb = pool._pool_for("sess-b")
+    assert pb._workers == {}
 
 
-def test_reap_idle_records_event():
+def test_reap_idle_records_event_per_session():
     pool = pk.KernelPool()
-    pool._workers["python:sess-idle"] = _FakeWorker(last_use=time.monotonic() - 10_000)
-    pool._workers["python:sess-fresh"] = _FakeWorker(last_use=time.monotonic())
-    pool._reap_idle()
-    assert "python:sess-idle" not in pool._workers
-    assert "python:sess-fresh" in pool._workers
+    pa = pool._pool_for("sess-idle")
+    pa._workers["python:sess-idle"] = _FakeWorker(last_use=time.monotonic() - 10_000)
+    pa._workers["python:sess-fresh"] = _FakeWorker(last_use=time.monotonic())
+    pa._reap_idle()
+    assert "python:sess-idle" not in pa._workers
+    assert "python:sess-fresh" in pa._workers
     evs = pool.kernel_events("sess-idle")
     assert evs and "空闲回收" in evs[0]
 
