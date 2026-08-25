@@ -9,6 +9,7 @@
 """
 import os
 import shutil
+import sys
 
 import pytest
 
@@ -37,6 +38,7 @@ def test_manifest_submit_and_versioning(client, new_session):
     assert os.path.isfile(os.path.join(base, "analysis_manifest.v2.json"))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="manifest 自动溯源依赖本机 git/路径语义")
 def test_manifest_auto_provenance(client, new_session):
     """自动补全：schema/version/created_at/model/git"""
     sid = new_session
