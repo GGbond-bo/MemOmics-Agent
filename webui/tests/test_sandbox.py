@@ -9,6 +9,7 @@
 """
 import json
 import os
+import sys
 
 import pytest
 
@@ -19,7 +20,11 @@ from tools.sandbox_probe import (
     probe_sandbox_capability,
 )
 
-pytestmark = pytest.mark.unit
+# 2026-08-26: 沙箱语义为 Windows 专属（C:\Windows 系统路径白名单判定），
+# Linux 上白名单/系统路径集合不同 → 跳过非 win32 平台
+pytestmark = [pytest.mark.unit,
+              pytest.mark.skipif(sys.platform != "win32",
+                                 reason="Windows sandbox semantics")]
 
 
 def test_probe_structure():

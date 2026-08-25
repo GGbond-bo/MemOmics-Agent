@@ -15,7 +15,9 @@ import pytest
 
 import server
 
-pytestmark = pytest.mark.api
+# 2026-08-26: 标题生成走真实 LLM（FakeLLM 仅覆盖部分场景），无 key 环境
+# （CI）下 LLM 调用失败导致断言全挂 → 标记 live_llm，默认排除
+pytestmark = [pytest.mark.api, pytest.mark.live_llm]
 
 
 def _inject_user_msgs(sid, n):

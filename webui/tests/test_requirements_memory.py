@@ -5,6 +5,7 @@
 全部离线，不触发真实 memory_store 写入（autouse monkeypatch）。
 """
 import os
+import sys
 
 import pytest
 
@@ -24,6 +25,9 @@ def _mk_session(tmp_path):
     return {"id": "req-unit-test", "results_dir": str(tmp_path)}
 
 
+# 2026-08-26: REQUIREMENTS.md 落盘/读取含 Windows 路径语义（E:/ 等），
+# Linux 上 fixture 路径解析不同 → 平台跳过（记忆逻辑本体重合于 test_requirements_matrix）
+@pytest.mark.skipif(sys.platform != "win32", reason="REQUIREMENTS.md Windows 路径语义")
 class TestRequirementPersistence:
     def test_extract_path_and_requirement(self, tmp_path):
         s = _mk_session(tmp_path)
@@ -176,7 +180,10 @@ class TestRollupCarriesRequirements:
     def test_checkpoint_has_requirements_section(self, tmp_path, monkeypatch):
         s = _mk_session(tmp_path)
         server._extract_and_store_requirements(s, "记住所有图必须用 CNS 配色。")
-        hist = [{"role": "user", "content": f"消息 {i}"} for i in range(20)]
+        # 2026-08-26: 消息加长 —— checkpoint（含 requirements 段）估算 token 需小于
+        # 原历史，短消息场景会触发"摘要未变小则不折叠"保护导致断言失败（Windows/Linux 均复现）
+        _long = "用户补充要求：配色统一、字体 8pt、图注完整、双栏排版。" * 8
+        hist = [{"role": "user", "content": f"消息 {i} {_long}"} for i in range(20)]
         monkeypatch.setenv("MEMOMICS_ROLLUP_BUDGET", "10")
         monkeypatch.setenv("MEMOMICS_ROLLUP_TAIL", "3")
         out = server._maybe_rollup_history(s, hist)

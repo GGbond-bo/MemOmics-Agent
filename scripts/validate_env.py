@@ -223,8 +223,13 @@ def validate_and_fix(env_data, verbose=False, dry_run=False):
             cli["cellbender"]["exe"] = found
         else:
             all_ok = False
-            critical_missing = True
-            changes.append("cellbender: NOT FOUND — CRITICAL")
+            # 2026-08-26: cellbender 是 Windows/GPU 专属工具；Linux/macOS 或打包模板
+            # （无 cli_tools 段）缺失属常态，不判 CRITICAL（此前 Linux 首启必误报 FATAL）
+            if os.name == "nt" and cli:
+                critical_missing = True
+                changes.append("cellbender: NOT FOUND — CRITICAL")
+            else:
+                changes.append("cellbender: NOT FOUND (Windows 专属，非关键)")
 
     # ptrepack
     ptr_path = cli.get("ptrepack", {}).get("exe", "")

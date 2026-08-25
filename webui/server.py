@@ -4948,20 +4948,26 @@ def _build_rollup_checkpoint(session, head):
     try:
         import sqlite3 as _sq
         _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
-        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        _rows = []
         try:
-            _rows = _conn.execute(
-                "SELECT tool_name, substr(args_json,1,120), substr(result_text,1,60), "
-                "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
-                "WHERE session_id=? ORDER BY rowid DESC LIMIT 10", (session.get("id", ""),)).fetchall()
-        finally:
-            _conn.close()
+            _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+            try:
+                _rows = _conn.execute(
+                    "SELECT tool_name, substr(args_json,1,120), substr(result_text,1,60), "
+                    "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
+                    "WHERE session_id=? ORDER BY rowid DESC LIMIT 10", (session.get("id", ""),)).fetchall()
+            finally:
+                _conn.close()
+        except Exception:
+            _rows = []  # DB 不可用（新装/测试环境无 state.db）→ 不阻塞 checkpoint，配方段照跑
         if _rows:
             _lines += ["## 已执行工作(最近工具调用)"]
             for _t, _a, _r, _ts in reversed(_rows):
                 _lines.append(f"- [{_ts}] {_t} args={_a} result={str(_r)[:60]}")
         # 2026-08: 数据读取配方 —— 折叠后"怎么读文件"不失忆（确定性提取，
         # 不依赖 LLM writer 是否记得保留读取命令）
+        # 2026-08-26: 配方提取独立于 DB 查询 —— DB 缺失时也执行（否则新装/测试
+        # 环境 checkpoint 永久丢配方段，实测 Linux 无 state.db 时整段被跳过）
         try:
             _recipes = _extract_read_recipes(_rows, limit=5)
             if _recipes:
@@ -6973,7 +6979,11 @@ def _http_get_json(url: str, timeout: int = 20) -> dict:
     for proxy in (_PROXY, None):
         try:
             req = _ur.Request(url, headers=headers)
-            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            # 2026-08-26: 修复 build_opener 嵌套 —— else 分支把 build_opener() 结果
+            # （OpenerDirector）当 Handler 再传进 build_opener → Linux 无代理降级
+            # 直连时抛 "expected BaseHandler instance, got OpenerDirector"（实测）
+            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                      if proxy else _ur.build_opener())
             with opener.open(req, timeout=timeout) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except Exception as e:
@@ -7145,7 +7155,9 @@ def _download_file(url: str, dest: str, timeout: int = 1800) -> None:
             raise RuntimeError("已取消")
         try:
             req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
-            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            # 2026-08-26: 同 _http_get_json 的 build_opener 嵌套修复（无代理降级直连）
+            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                      if proxy else _ur.build_opener())
             with opener.open(req, timeout=timeout) as r, open(dest, "wb") as f:
                 _UPDATE_TASK["total_bytes"] = int(r.headers.get("Content-Length") or 0)
                 while True:
