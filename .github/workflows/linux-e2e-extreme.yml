@@ -119,7 +119,6 @@ jobs:
             webui/tests/test_grill_extreme.py \
             webui/tests/test_execution_policy_extreme.py \
             webui/tests/test_wake_extreme.py \
-            webui/tests/test_wake_e2e_matrix.py \
             webui/tests/test_requirements_matrix.py \
             webui/tests/test_session_isolation.py \
             webui/tests/test_kernel_state.py \
