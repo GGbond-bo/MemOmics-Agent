@@ -2041,6 +2041,11 @@ async def _trigger_agent_turn(session, message):
         except Exception:
             pass
         _schedule_self_check(session, agent, asyncio.get_event_loop(), trigger="turn_end")
+        # 2026-08-25: 回合结束刷新产出资产索引（供 digest 跨轮复用）
+        try:
+            _save_assets_index(session)
+        except Exception:
+            pass
 
 
 def _build_alerts_context(session):
@@ -4750,6 +4755,13 @@ def _build_memory_digest(session, text):
             _parts.append(_sdig)
     except Exception:
         pass
+    # (2026-08-25) 产出资产清单：输入/输出/脚本/图片在哪——复用与汇报的依据
+    try:
+        _adig = _build_output_assets_digest(session)
+        if _adig:
+            _parts.append(_adig)
+    except Exception:
+        pass
     if not _parts:
         return ""
     return "\n\n".join(_parts)
@@ -5354,6 +5366,114 @@ def _build_scripts_digest(session, limit=5):
         if not _fs:
             return ""
         return f"[会话脚本目录 · scripts/ 已有脚本：{'、'.join(_fs)}，重复跑图/统计先到这里 search_files 找已有脚本复用]"
+    except Exception:
+        return ""
+
+
+# ── 产出资产清单（2026-08-25）：输入/输出/脚本/图片的结构化索引 + digest 复用 ──
+_ASSET_CATEGORIES = {
+    "figure": (".png", ".jpg", ".jpeg", ".pdf", ".svg", ".tiff", ".bmp", ".webp"),
+    "table": (".csv", ".tsv", ".xlsx", ".xls", ".txt"),
+    "data": (".rds", ".rdata", ".rda", ".h5ad", ".mtx", ".h5", ".parquet", ".loom"),
+    "report": (".html", ".md", ".docx", ".pptx"),
+    "script": (".r", ".py", ".sh", ".pl"),
+    "log": (".log", ".err", ".out"),
+}
+_ASSET_SKIP = ("task_plan.md", "task_plan.done.md", "REQUIREMENTS.md",
+               ".task_state.json", "token_usage.jsonl", "prisma.json",
+               "evidence.jsonl", "evidence.csv", "assets.json",
+               ".loopx", "__pycache__", "checkpoints", ".git")
+
+
+def _scan_output_assets(results_dir: str, max_files: int = 200) -> list:
+    """扫描会话产出资产（子目录 + 根目录），分类、按时间最新在前。
+
+    返回 [{cat, name, rel, path, mtime, size}]；排除运行账本文件与中间产物。
+    """
+    assets = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return assets
+    try:
+        for root, dirs, files in os.walk(results_dir):
+            dirs[:] = [d for d in dirs if d not in _ASSET_SKIP]
+            if any(seg in _ASSET_SKIP for seg in root.replace("\\", "/").split("/")):
+                continue
+            for f in files:
+                if f in _ASSET_SKIP or f.endswith((".tmp", ".pyc")):
+                    continue
+                if len(assets) >= max_files:
+                    return assets
+                p = os.path.join(root, f)
+                try:
+                    st = os.stat(p)
+                    if st.st_size == 0:
+                        continue
+                except Exception:
+                    continue
+                try:
+                    rel = os.path.relpath(p, results_dir).replace("\\", "/")
+                except Exception:
+                    rel = f
+                ext = os.path.splitext(f)[1].lower()
+                cat = "other"
+                for _c, _exts in _ASSET_CATEGORIES.items():
+                    if ext in _exts:
+                        cat = _c
+                        break
+                assets.append({"cat": cat, "name": f, "rel": rel,
+                               "path": p.replace("\\", "/"),
+                               "mtime": st.st_mtime, "size": st.st_size})
+        assets.sort(key=lambda a: -a["mtime"])
+    except Exception:
+        pass
+    return assets
+
+
+def _save_assets_index(session) -> None:
+    """刷新产出资产索引 results/<sid>/review/assets.json（回合结束调用）。"""
+    try:
+        rd = session.get("results_dir") or ""
+        if not rd or not os.path.isdir(rd):
+            return
+        assets = _scan_output_assets(rd)
+        _rev = os.path.join(rd, "review")
+        os.makedirs(_rev, exist_ok=True)
+        _tmp = os.path.join(_rev, "assets.json.tmp")
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump({"updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                       "assets": assets}, f, ensure_ascii=False)
+        os.replace(_tmp, os.path.join(_rev, "assets.json"))
+    except Exception:
+        pass
+
+
+def _build_output_assets_digest(session, limit=8) -> str:
+    """产出资产摘要（digest 块）：优先读 assets.json（快），缺失则现扫。
+
+    让模型跨轮知道"输入/输出/脚本/图片在哪"——复用、汇报、避免重跑。
+    """
+    try:
+        rd = session.get("results_dir") or ""
+        if not rd:
+            return ""
+        _idx = os.path.join(rd, "review", "assets.json")
+        assets = None
+        if os.path.isfile(_idx):
+            try:
+                with open(_idx, encoding="utf-8") as f:
+                    assets = json.load(f).get("assets") or []
+            except Exception:
+                assets = None
+        if assets is None:
+            assets = _scan_output_assets(rd)
+        if not assets:
+            return ""
+        _tags = {"figure": "📊图", "table": "📋表", "script": "📜脚本",
+                 "data": "💾数据", "report": "📄报告", "log": "📝日志"}
+        lines = [f"[会话产出资产 · 已生成 {len(assets)} 个文件（最新在前；复用/汇报用这些路径，不要重复跑）]"]
+        for a in assets[:limit]:
+            lines.append(f"- {_tags.get(a.get('cat'), '📁')} {a.get('rel', a.get('name', ''))}")
+        return "\n".join(lines)
     except Exception:
         return ""
 
@@ -11090,7 +11210,17 @@ async def ws_endpoint(ws: WebSocket):
                 agent.ephemeral_system_prompt = (_soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
                                                  + "\n\n" + _EXECUTION_POLICY)
                 if rd:
-                    agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
+                    agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。\n"
+                    agent.ephemeral_system_prompt += (
+                        f"**输出归位铁律（2026-08-25）**：产出文件必须写入 `{rd.replace(chr(92), '/')}` 的对应子目录：\n"
+                        f"- 图 → `{rd.replace(chr(92), '/')}/figures/`\n"
+                        f"- 表/结果 → `{rd.replace(chr(92), '/')}/results/`\n"
+                        f"- 脚本 → `{rd.replace(chr(92), '/')}/scripts/`\n"
+                        f"- 数据 → `{rd.replace(chr(92), '/')}/data/`\n"
+                        f"- 日志 → `{rd.replace(chr(92), '/')}/log/`\n"
+                        f"禁止把产出直接写到 `{rd.replace(chr(92), '/')}` 根目录（子目录已由系统创建）。\n"
+                        "回合结束时，向用户汇报本次产出的**文件清单**（类别 + 相对路径，如 `figures/umap.png`、`results/cluster_stats.csv`），"
+                        "不要只说'已生成图'不给出位置。")
 
                     # 🔧 分析任务自动预查知识库 + 方法路线引导
                     # 2026-08-21 缓存优化：KB 预查询/领域引导内容随用户消息变化，
@@ -12385,6 +12515,11 @@ async def ws_endpoint(ws: WebSocket):
                             _heartbeat_task.cancel()
                         # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
                         _schedule_self_check(_session, _agent, loop, trigger="turn_end")
+                        # 2026-08-25: 用户回合结束刷新产出资产索引（供 digest 跨轮复用）
+                        try:
+                            _save_assets_index(_session)
+                        except Exception:
+                            pass
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
