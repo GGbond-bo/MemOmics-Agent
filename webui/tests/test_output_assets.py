@@ -124,4 +124,5 @@ def test_ephemeral_output_rules_present(server):
                encoding="utf-8").read()
     assert "输出归位铁律" in src
     assert "figures/" in src and "results/" in src and "scripts/" in src
-    assert "回合结束时，向用户汇报本次产出的**文件清单**" in src
+    assert "回合结束时，向用户汇报**本次回合新增**的产出" in src
+    assert "不要逐条罗列全部历史文件" in src, "防长清单拖慢回合的约束必须在"

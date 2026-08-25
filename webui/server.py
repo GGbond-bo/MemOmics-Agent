@@ -11219,8 +11219,10 @@ async def ws_endpoint(ws: WebSocket):
                         f"- 数据 → `{rd.replace(chr(92), '/')}/data/`\n"
                         f"- 日志 → `{rd.replace(chr(92), '/')}/log/`\n"
                         f"禁止把产出直接写到 `{rd.replace(chr(92), '/')}` 根目录（子目录已由系统创建）。\n"
-                        "回合结束时，向用户汇报本次产出的**文件清单**（类别 + 相对路径，如 `figures/umap.png`、`results/cluster_stats.csv`），"
-                        "不要只说'已生成图'不给出位置。")
+                        "回合结束时，向用户汇报**本次回合新增**的产出（类别 + 相对路径，"
+                        "如 `figures/umap.png`、`results/cluster_stats.csv`），不要只说'已生成图'不给出位置。"
+                        "历史产出较多时只给总数总览（如'另有历史产出 87 个文件，完整清单见 review/assets.json'），"
+                        "**不要逐条罗列全部历史文件**——避免长清单拖慢回合、膨胀历史。")
 
                     # 🔧 分析任务自动预查知识库 + 方法路线引导
                     # 2026-08-21 缓存优化：KB 预查询/领域引导内容随用户消息变化，
