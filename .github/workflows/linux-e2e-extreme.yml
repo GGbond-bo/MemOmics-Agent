@@ -53,7 +53,8 @@ jobs:
           .venv/bin/pip install -q --upgrade pip
           .venv/bin/pip install -q -r requirements.txt
           .venv/bin/pip install -q -r requirements-vision.txt
-          .venv/bin/python -c "import fastapi, scanpy, rapidocr_onnxruntime; print('deps OK')"
+          .venv/bin/pip install -q pytest
+          .venv/bin/python -c "import fastapi, scanpy, rapidocr_onnxruntime, pytest; print('deps OK')"
 
       - name: Install minimal R (r-base + jsonlite)
         run: |
