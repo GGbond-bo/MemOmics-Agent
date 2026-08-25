@@ -2049,7 +2049,11 @@ def _build_task_plan_context(session):
         _has_exec_kw = any(kw in _last_msg for kw in 
                           ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze",
                            "帮我做", "帮我跑", "做分析", "跑分析"))
-        _is_exec = _intent in ("analysis_exec", "direct_exec")
+        _is_exec = _intent in ("analysis", "direct_exec", "research_plan")
+        # 2026-08-25 修复：原引用不存在的意图 "analysis_exec"（恒 False），导致
+        # 无数据路径的执行请求（"帮我做单细胞聚类分析"）永不自动创建 task_plan →
+        # 任务目标没有服务器兜底，全靠模型自觉（真实会话实证：多数无 task_plan）。
+        # 改用真实意图列表——执行类意图即使无路径也自动建 plan（Goal=用户原话前80字）
         # 三个条件同时满足才创建：explicit exec intent OR (data+exec keywords), AND not light intent
         _LIGHT_FOR_PLAN = ("chat", "self_intro", "knowledge_ask", "progress_check", "result_check", "analysis_plan")
         if (_is_exec or (_has_data_path and _has_exec_kw)) and _intent not in _LIGHT_FOR_PLAN and len(_msgs) >= 2:
