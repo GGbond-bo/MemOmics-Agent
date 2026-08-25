@@ -141,7 +141,7 @@ jobs:
           echo "FULL_EXIT=${PIPESTATUS[0]}"
 
       - name: LLM chain - real conversation (needs DEEPSEEK_API_KEY secret)
-        if: ${{ secrets.DEEPSEEK_API_KEY != '' }}
+        if: env.DEEPSEEK_API_KEY != ''
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
