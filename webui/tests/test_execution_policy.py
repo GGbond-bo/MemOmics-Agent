@@ -35,7 +35,7 @@ def server():
 def test_execution_policy_principles(server):
     p = server._EXECUTION_POLICY
     required = ["最高优先级", "只回答", "插话", "自动续跑", "报错停止", "由用户决定",
-                "ask_user", "不要猜"]
+                "ask_user", "不要靠猜", "中途问的问题 ≠ 打断", "开工前先问清楚"]
     for kw in required:
         assert kw in p, f"策略缺关键原则: {kw}"
     # 决策交给 LLM：策略是行为准则不是 if-else 硬编码

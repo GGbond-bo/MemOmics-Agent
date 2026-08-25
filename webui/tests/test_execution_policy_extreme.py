@@ -176,15 +176,16 @@ def test_resume_full_matrix(server, tmp_path):
 
 def test_policy_all_five_principles(server):
     p = server._EXECUTION_POLICY
-    # 五个编号小节齐全
-    for i in range(1, 6):
+    # 六个编号小节齐全（2026-08-25 起为 6 条：新增开工前问清楚/一切以用户为主）
+    for i in range(1, 7):
         assert f"### {i}." in p, f"策略缺第 {i} 节"
     pairs = [
         ("最高优先级", "覆盖"),
-        ("只回答", "不擅自推进"),
+        ("中途问的问题 ≠ 打断", "才停或改任务"),
         ("自动续跑轮", "自主"),
         ("报错停止后", "由用户决定"),
-        ("ask_user", "不要猜"),
+        ("开工前先问清楚", "不确定就问，铁律"),
+        ("一切以用户为主", "一次问清比十次返工便宜"),
     ]
     for a, b in pairs:
         assert a in p and b in p

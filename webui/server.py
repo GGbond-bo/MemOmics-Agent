@@ -985,6 +985,37 @@ def _maybe_switch_task_dir(session, user_text, intent):
         return False
 
 
+def _build_grill_prompt(session, user_text, intent):
+    """开工前澄清（grill）触发：执行类意图 + 关键信息缺失 → 要求模型先问清楚。
+
+    2026-08-25（用户核心诉求）：'帮我做单细胞聚类分析'（执行意图 + 无数据路径）→
+    先问'有数据吗？在哪？'——不靠意图猜、不先跑再说；一次问清比十次返工便宜。
+    已有数据路径（当前消息或 REQUIREMENTS）→ 信息够，不触发。
+    """
+    if intent not in ("analysis", "direct_exec", "research_plan"):
+        return ""
+    if not user_text or not str(user_text).strip():
+        return ""
+    if re.search(r"[A-Za-z]:[/\\]\S+", str(user_text)):
+        return ""
+    try:
+        _reqs = _read_requirements(session, limit=6)
+        if any(re.search(r"[A-Za-z]:[/\\]\S+", str(r)) for r in _reqs):
+            return ""
+    except Exception:
+        pass
+    return (
+        "[开工前澄清 · 铁律：不确定就问]\n"
+        "用户请求执行分析任务，但关键信息缺失（没有数据路径）。"
+        "先调 ask_user 问清楚（带选项），不要猜、不要直接开始、不要先跑再说：\n"
+        "1. 有数据吗？数据文件在哪（绝对路径）？\n"
+        "2. 物种/组织/实验条件是什么？\n"
+        "3. 期望得到什么结果（图/表/报告）？\n"
+        "4. 是要继续之前的任务，还是全新任务？\n"
+        "用户回答后再规划执行。"
+    )
+
+
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
 
@@ -4487,9 +4518,12 @@ _EXECUTION_POLICY = """
 
 ### 2. 任务进行中用户插话（回答与执行两不误）
 - 先完整响应用户当前消息（问答/调查/修改指示）
-- 判断用户意图：纯问答 → 只回答，不擅自推进任务；要求修改任务 → 按新指示更新任务；
-  用户没有明确说"继续/接着跑"→ 不要在本回合自行继续执行
-- 任务推进由系统自动接管：用户回合结束后系统会调度后台自检继续任务，无需你推进
+- **用户中途问的问题 ≠ 打断**：纯问题（"为什么慢/参数是什么/结果怎样"）→ 先回答，
+  任务本身继续，不用停
+- 只有用户明确说"停止/停一下/先别跑/换个方向/重做"才停或改任务
+- 判断用户意图：纯问答 → 只回答；要求修改任务 → 按新指示更新任务；
+  没有明确说"继续/接着跑"→ 不擅自扩大执行
+- 任务推进由系统自动接管：用户回合结束后系统会调度后台自检继续任务
 
 ### 3. 自动续跑轮（无人插手）可以自主工作
 系统唤醒的自检回合（用户不在场）：检查进度 → 报错分析原因 → 修复 → 继续，
@@ -4499,9 +4533,15 @@ _EXECUTION_POLICY = """
 用户回合中任务报错停止：只报告原因和可选方案，不要擅自修改后继续执行，等用户指示。
 只有自动轮（用户不在场）才自主修复重试。
 
-### 5. 不确定就问
-用户意图不明确（例如只说"检查"而没说"修复并继续"）时，用 ask_user 工具向用户确认，
-不要猜。用户回答后再行动。
+### 5. 开工前先问清楚（不确定就问，铁律）
+执行任务前，如果关键信息缺失——**数据在哪、物种/组织/条件、期望结果、
+交付形式、是否继续旧任务**——必须先调用 ask_user 问清楚（带选项），
+不要靠猜、不要靠意图推断、不要先跑再说。用户回答后再规划执行。
+原则：一次问清比十次返工便宜。
+
+### 6. 一切以用户为主
+问清目的 → 规划 → 执行 → 报错就解决，循环；用户打断才停，用户回答后继续。
+拿不准用户要什么时，回到第 5 条：问。
 """
 
 _PLANNING_PROMPT = """
@@ -12001,6 +12041,14 @@ async def ws_endpoint(ws: WebSocket):
                             _kb_tail = _build_kb_tail_injection(user_text or "", _intent, _is_heavy)
                             if _kb_tail:
                                 conversation_history.append({"role": "system", "content": _kb_tail})
+                        except Exception:
+                            pass
+
+                        # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
+                        try:
+                            _grill = _build_grill_prompt(_session, user_text or "", _intent)
+                            if _grill:
+                                conversation_history.append({"role": "system", "content": _grill})
                         except Exception:
                             pass
 

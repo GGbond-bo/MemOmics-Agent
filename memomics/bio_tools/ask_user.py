@@ -40,13 +40,22 @@ def _session_context() -> tuple:
     return os.environ.get("MEMOMICS_SESSION_ID") or "", ""
 
 
-def ask_user(question: str) -> str:
-    """向用户提问澄清（异步：发问题→结束回合→用户回答成为新消息）。"""
+def ask_user(question: str, options: list = None) -> str:
+    """向用户提问澄清（异步：发问题→结束回合→用户回答成为新消息）。
+
+    options（可选）：选项列表 → 前端渲染选择按钮（无前端支持时文本降级
+    "回复 1/2/3"），用户点选/回复后成为新消息。
+    """
     q = (question or "").strip()
     if not q:
         return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
     if len(q) > 500:
         q = q[:500]
+    opts = None
+    if isinstance(options, (list, tuple)):
+        opts = [str(o)[:80] for o in options][:6]  # 最多 6 个选项
+        if not opts:
+            opts = None
     sid, _rd = _session_context()
     delivered = False
     if sid:
@@ -59,20 +68,26 @@ def ask_user(question: str) -> str:
                 import webui.server as _server
             sess = _server._sessions.get(sid)
             if sess:
+                _opt_txt = ""
+                if opts:
+                    _opt_txt = "\n" + "\n".join(f"{i+1}) {o}" for i, o in enumerate(opts))
                 _server._session_emit(sess, {
                     "type": "question",
                     "content": f"❓ {q}",
                     "question": q,
+                    "options": opts or [],
                     "session_id": sid,
                 })
                 _server._session_emit(sess, {
                     "type": "notice",
-                    "content": f"❓ AI 需要确认：{q}（请在输入框直接回答）",
+                    "content": f"❓ AI 需要确认：{q}{_opt_txt}"
+                              + ("\n（点击选项或直接回复序号/内容）" if opts else "\n（请在输入框直接回答）"),
                     "session_id": sid,
                 })
                 pending = sess.setdefault("_pending_questions", [])
                 with _LOCK:
-                    pending.append({"question": q, "asked_at": time.strftime("%H:%M:%S")})
+                    pending.append({"question": q, "options": opts or [],
+                                    "asked_at": time.strftime("%H:%M:%S")})
                     # 上限：只保留最近 20 条待确认问题（防模型连问导致无限累积）
                     if len(pending) > 20:
                         del pending[:len(pending) - 20]
@@ -86,6 +101,7 @@ def ask_user(question: str) -> str:
     return json.dumps({
         "ok": True,
         "question": q,
+        "options": opts or [],
         "instruction": ("❓ 问题已发送给用户。请立即结束本回合，不要再调用任何工具。"
                         "用户回答后会作为新消息发给你，届时再继续。"),
     }, ensure_ascii=False)
@@ -94,16 +110,19 @@ def ask_user(question: str) -> str:
 SCHEMA = {
     "name": "ask_user",
     "description": (
-        "向用户提问澄清（不确定时用，不要猜）。适用场景：用户意图不明确（例如只说"
-        "'检查'没说'修复并继续'）、需要用户决定是否继续任务、需要确认数据/路径/参数。"
-        "调用后必须立即结束本回合等待用户回答；用户回答会成为下一条消息。"
-        "仅在确实需要用户输入时使用，不要滥用。"
+        "向用户提问澄清（不确定时用，不要猜）。适用场景：开工前关键信息缺失（数据在哪/"
+        "物种组织/期望结果/是否继续旧任务）、用户意图不明确（例如只说'检查'没说'修复并"
+        "继续'）、需要用户决定是否继续任务、需要确认数据/路径/参数。可带 options 选项数组"
+        "（用户点选更省事）。调用后必须立即结束本回合等待用户回答；用户回答会成为下一条"
+        "消息。仅在确实需要用户输入时使用，不要滥用。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "question": {"type": "string",
-                         "description": "向用户提出的澄清问题（简洁、具体、给选项）"}
+                         "description": "向用户提出的澄清问题（简洁、具体）"},
+            "options": {"type": "array", "items": {"type": "string"},
+                        "description": "可选选项列表（最多 6 个，用户点选或回复序号）"}
         },
         "required": ["question"]
     }
@@ -117,9 +136,10 @@ def _register():
             name="ask_user",
             toolset="memomics",
             schema=SCHEMA,
-            handler=lambda args, **kw: ask_user(args.get("question", "")),
+            handler=lambda args, **kw: ask_user(args.get("question", ""),
+                                                args.get("options")),
             emoji="❓",
-            max_result_size_chars=1_000,
+            max_result_size_chars=1_200,
         )
     except Exception as e:
         logger.warning(f"ask_user register failed: {e}")
