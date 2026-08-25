@@ -105,6 +105,20 @@ else
     echo "[OK] OCR ready"
 fi
 
+# === Step 4.5: R 检查（Linux 包不预装 R——给出指引，避免用户开箱即遇 R 报错） ===
+# 2026-08-25: 多 R 环境（conda/系统共存）时用 RSCRIPT_PATH 指定主力 R，
+# 持久内核会优先用它（persistent_kernel._rscript_path 已支持）。
+if ! command -v Rscript &>/dev/null; then
+    echo "[WARN] Rscript 未找到 —— R 分析（Seurat/WGCNA 等）不可用，核心 WebUI 不受影响"
+    echo "  安装 R（Ubuntu/Debian，tuna 镜像加速包安装）:"
+    echo "    sudo apt-get update && sudo apt-get install -y r-base"
+    echo "  已有 R 但不在 PATH: export RSCRIPT_PATH=/path/to/Rscript 后再启动"
+    echo "  关键 R 包清单见 R_packages.txt；安装 R 包可用清华镜像:"
+    echo "    Rscript -e 'options(repos=c(CRAN=\"https://mirrors.tuna.tsinghua.edu.cn/CRAN/\")); install.packages(c(\"Seurat\",\"ggplot2\"))'"
+else
+    echo "[OK] Rscript found: $(command -v Rscript)"
+fi
+
 # === Step 5: Start ===
 echo ""
 echo "[START] http://localhost:$PORT"

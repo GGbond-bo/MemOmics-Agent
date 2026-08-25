@@ -29,6 +29,10 @@ _MAX_WORKERS_PER_LANG = int(os.environ.get("MEMOMICS_KERNEL_MAX_WORKERS", "2"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
 _PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
 _R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
+# 2026-08-25: Linux/macOS 打包模板 environment.json 的 paths.r 为空（防泄露），
+# R 库路径改为运行时用 Rscript -e '.libPaths()' 探测一次并缓存（进程生命周期）。
+# 缓存键 = 可执行 Rscript 绝对路径；值为库目录列表（空列表 = 探测失败/无 R）。
+_LIBPATHS_CACHE: dict = {}
 
 
 def _truncate(text, max_bytes=_MAX_OUTPUT_BYTES):
@@ -519,22 +523,59 @@ class _SessionKernelPool(KernelPool):
         R_LIBS（优先级最高）+ R_LIBS_USER 指向主力库，R_LIBS_SITE 指向
         site 库。2026-08-16 修复：environment.json 的 lib_user 曾指向
         不含 Seurat 的旧库目录，主力库在 E:/R-libs/<ver>。
+
+        2026-08-25（Linux/macOS 修复）：打包模板的 environment.json paths.r
+        为空（防泄露设计），此时回退用 Rscript -e '.libPaths()' 探测实际库
+        路径并注入（探测结果进程内缓存）——否则 R worker 用默认 libPaths，
+        缺 jsonlite 等包时启动即死，execute_r 每次回退全新 Rscript（不持久）。
         """
         out = {}
         try:
             _r_section = KernelPool._env_json_r_section()
             _def_rscript = _r_section.get("default", "")
-            _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
-            _r_info = _r_section.get(_r_ver, {})
-            _lib_user = _r_info.get("lib_user", "")
-            _lib_site = _r_info.get("lib_site", "")
-            if _lib_user:
-                out["R_LIBS"] = _lib_user
-                out["R_LIBS_USER"] = _lib_user
-            if _lib_site:
-                out["R_LIBS_SITE"] = _lib_site
+            if _def_rscript:
+                _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
+                _r_info = _r_section.get(_r_ver, {})
+                _lib_user = _r_info.get("lib_user", "")
+                _lib_site = _r_info.get("lib_site", "")
+                if _lib_user:
+                    out["R_LIBS"] = _lib_user
+                    out["R_LIBS_USER"] = _lib_user
+                if _lib_site:
+                    out["R_LIBS_SITE"] = _lib_site
         except Exception:
             pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
+        if out:
+            return out
+        # ── paths.r 为空（Linux/macOS 发行版）→ 运行时探测 .libPaths() ──
+        try:
+            import shutil as _shutil
+            import subprocess as _subprocess
+            _rscript = KernelPool._rscript_path()
+            _exe = (_rscript if os.path.isabs(_rscript) and os.path.isfile(_rscript)
+                    else _shutil.which(_rscript))
+            if _exe:
+                if _exe not in _LIBPATHS_CACHE:
+                    _libs: list = []
+                    try:
+                        # 探测用干净环境（不带已有 R_LIBS*，避免循环/污染结果）
+                        _probe_env = {k: v for k, v in dict(env).items()
+                                      if k not in ("R_LIBS", "R_LIBS_USER", "R_LIBS_SITE")}
+                        _pr = _subprocess.run(
+                            [_exe, "--vanilla", "-e", "cat(.libPaths(), sep='\\n')"],
+                            capture_output=True, text=True, timeout=30, env=_probe_env)
+                        if _pr.returncode == 0:
+                            _libs = [l.strip() for l in (_pr.stdout or "").splitlines() if l.strip()]
+                    except Exception:
+                        _libs = []
+                    _LIBPATHS_CACHE[_exe] = _libs
+                _libs = _LIBPATHS_CACHE.get(_exe) or []
+                if _libs:
+                    # R 库路径分隔符：posix=: / nt=;（os.pathsep 自动适配）
+                    out["R_LIBS"] = os.pathsep.join(_libs)
+                    out["R_LIBS_USER"] = os.pathsep.join(_libs)
+        except Exception:
+            pass  # 探测失败不阻塞执行，worker 用 R 默认库
         return out
 
     @staticmethod

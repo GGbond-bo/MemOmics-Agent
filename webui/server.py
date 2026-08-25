@@ -12795,6 +12795,22 @@ if __name__ == "__main__":
     except Exception:
         pass
     
+    # 2026-08-25: 非 Windows 首启环境探测 —— 打包模板 environment.json 的
+    # paths.python/paths.r 为空，validate_env.py 会把探测结果回填（Linux/macOS）。
+    # Windows 本机 environment.json 已含完整路径，跳过以免误改本机配置。
+    try:
+        if os.name != "nt":
+            _env_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "..", "scripts", "validate_env.py")
+            if os.path.exists(_env_script):
+                import subprocess as _sp
+                _pr = _sp.run([sys.executable, _env_script],
+                              capture_output=True, text=True, timeout=180)
+                _last = ((_pr.stdout or "").strip().splitlines() or [""])[-1]
+                print(f"[MemOmics] environment discovery exit={_pr.returncode} | {_last}", flush=True)
+    except Exception:
+        pass  # 探测失败不阻塞启动；worker 运行时另有 .libPaths() 探测兜底
+
     print(f"MemOmics WebUI v2 starting on http://127.0.0.1:{port}")
     # 2026-08-08：不再自动打开浏览器（用户要求手动输入地址，
     # 避免每次启动/重启都新开标签页）。请在浏览器手动访问：
