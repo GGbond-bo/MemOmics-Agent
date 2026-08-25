@@ -39,15 +39,27 @@ def tmp(tmp_path):
 
 
 def test_goal_only_exec_request_auto_creates_plan(server, tmp):
-    """无数据路径的执行请求 → task_plan 自动创建（Goal 持久化）。"""
+    """执行请求：有数据路径 → task_plan 自动创建（Goal 持久化）。
+
+    2026-08-25 链路审计：无路径执行请求先走 grill 澄清（问数据），
+    不立即建 plan（避免幽灵任务）——用户回答路径后建 plan（见 test_link_chain）。
+    """
     for intent in ("analysis", "direct_exec", "research_plan"):
-        sess, plan = _mk_sess(tmp, intent, "帮我做单细胞聚类分析，用 marker 基因注释")
+        sess, plan = _mk_sess(tmp, intent, "用 E:/data/obj.rds 做单细胞聚类分析")
         ctx = server._build_task_plan_context(sess)
-        assert os.path.isfile(plan), f"intent={intent} 应自动创建 task_plan"
+        assert os.path.isfile(plan), f"intent={intent} 有路径应自动创建 task_plan"
         assert ctx, "创建后应返回注入内容"
         with open(plan, encoding="utf-8") as f:
             content = f.read()
         assert "单细胞聚类" in content, f"Goal 应含用户目标: {content[:120]}"
+
+
+def test_goal_only_exec_without_path_goes_grill(server, tmp):
+    """无路径执行请求 → grill 抑制（不建幽灵 plan），先问数据。"""
+    sess, plan = _mk_sess(tmp, "analysis", "帮我做单细胞聚类分析")
+    ctx = server._build_task_plan_context(sess)
+    assert not os.path.isfile(plan), "无路径应先 grill 澄清，不得建幽灵 plan"
+    assert ctx in (None, False, "")
 
 
 def test_path_exec_request_auto_creates_plan(server, tmp):
@@ -84,7 +96,7 @@ def test_existing_plan_reused(server, tmp):
 
 def test_goal_survives_in_digest_path(server, tmp):
     """任务目标经 task_plan 持久后，折叠 checkpoint/唤醒上下文可见（链路闭环）。"""
-    sess, plan = _mk_sess(tmp, "analysis", "帮我做跨物种 ATAC 保守性分析")
+    sess, plan = _mk_sess(tmp, "analysis", "帮我做跨物种 ATAC 保守性分析，数据在 E:/atac")
     server._build_task_plan_context(sess)
     # task_plan 摘要注入（_build_task_plan_context 返回）含目标
     ctx = server._build_task_plan_context(sess) or ""

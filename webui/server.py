@@ -2093,6 +2093,13 @@ def _build_task_plan_context(session):
         # ① 有数据路径 ② 有执行关键词 ③ 意图不是轻量类型
         _msgs = session.get("messages", [])
         _last_msg = _msgs[-1].get("content", "") if _msgs else ""
+        # 2026-08-25 链路审计：grill 场景（执行请求+关键信息缺失）→ 先问清楚再建 plan，
+        # 避免用户还没确认数据就产生"幽灵 task_plan"（会干扰 RunGate/唤醒/完成判定）
+        try:
+            if _build_grill_prompt(session, _last_msg, _intent):
+                return None
+        except Exception:
+            pass
         _has_data_path = bool(re.search(r'[A-Za-z]:[/\\]\S+', _last_msg))
         _has_exec_kw = any(kw in _last_msg for kw in 
                           ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze",
