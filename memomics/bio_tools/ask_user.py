@@ -71,7 +71,11 @@ def ask_user(question: str) -> str:
                     "session_id": sid,
                 })
                 pending = sess.setdefault("_pending_questions", [])
-                pending.append({"question": q, "asked_at": time.strftime("%H:%M:%S")})
+                with _LOCK:
+                    pending.append({"question": q, "asked_at": time.strftime("%H:%M:%S")})
+                    # 上限：只保留最近 20 条待确认问题（防模型连问导致无限累积）
+                    if len(pending) > 20:
+                        del pending[:len(pending) - 20]
                 delivered = True
         except Exception as e:
             logger.warning(f"[ask_user] 发送失败: {e}")

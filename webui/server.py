@@ -3211,7 +3211,7 @@ def _classify_intent(text: str):
     _INVESTIGATE_KW = ["为什么", "为何", "原因", "检查一下", "排查", "诊断", "调查一下",
                        "看下.*日志", "看下.*报错", "分析.*原因", "查一下.*报错", "查一下.*日志",
                        "什么问题", "哪里出错", "怎么挂的", "怎么失败的", "为何失败",
-                       "什么原因", "出错原因", "失败原因"]
+                       "什么原因", "出错原因", "失败原因", "怎么发生", "怎么出现"]
     _is_investigate = any(
         _re_mod.search(p, t) if ("*" in p or "." in p) else p in t
         for p in _INVESTIGATE_KW)
