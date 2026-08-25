@@ -5207,19 +5207,14 @@ def _extract_and_store_requirements(session, text):
             _is_verified = any(w in _s for w in _REQUIREMENTS_VERIFIED_WORDS)
             # (2026-08-22) 用户特别指定/强调 → (特别指定) 标记 + 强制进跨会话记忆
             _is_special = any(w in _s for w in _REQUIREMENTS_SPECIAL_WORDS)
-            # (2026-08-21) 一次性任务指令（含路径+动作词、无持久 marker）不入库——
-            # "用 X 画一张图/统计一下"是本次任务，不是用户对项目的持久要求
-            # 2026-08-25 修复（实证发现）：句子含"输出位置词"（输出到/保存到/放到/写入/
-            # 存到/生成到/写到）时**必须入库**——"帮我分析 X 并把结果输出到 E:/out"、
-            # "把最终报告输出到 E:/x" 是用户指定的持久输出位置，整句丢弃会导致下一轮
-            # 模型不知道文件放哪、重复跑（用户真实场景）。此时把"输出目标子句"单独提取
-            # 入库，而不是整句丢弃。
+            # 2026-08-25: 路径类默认全录（向 DSH"全量留痕"哲学靠拢）——
+            # 含绝对路径的用户句默认入库（digest 每轮必达），不再因"任务词"整句丢弃。
+            # "读取 E:/data 分析"（输入路径）与"输出到 E:/out"（输出位置）都记；
+            # 有输出位置时提取输出子句（干净），否则整句入录（保守记住比丢好——
+            # 提取规则丢了的后果是模型找不到，见接缝实证）。
+            # 豁免仅保留：纠错（META_WORDS）/问句/助手指令/无路径无标志（均在上面过滤）。
             _has_out = any(w in _s for w in _OUTPUT_LOCATION_WORDS)
             _has_task_word = any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
-            _is_task = _has_path and not _has_marker and _has_task_word and not _has_out
-            if _is_task:
-                # 无输出位置的一次性任务（"用 X 画一张图"）→ 不入库
-                continue
             if _has_out and _has_task_word and _has_path and not _has_marker:
                 # 任务词+输出位置并存：提取"输出目标子句"入库（任务动作部分不入库）
                 _out_clause = _extract_output_clause(_s)
