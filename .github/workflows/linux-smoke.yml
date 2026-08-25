@@ -27,7 +27,7 @@ jobs:
       - name: Download shipped Linux package from Release
         run: |
           curl -fsSL -o MemOmics-Linux.tar.gz \
-            https://github.com/GGbond-bo/MemOmics-Agent/releases/download/v2026-08-16/MemOmics-Linux.tar.gz
+            https://github.com/GGbond-bo/MemOmics-Agent/releases/download/v2026-08-23/MemOmics-Linux.tar.gz
           ls -lh MemOmics-Linux.tar.gz
 
       - name: Extract package
