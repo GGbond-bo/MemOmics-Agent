@@ -987,7 +987,12 @@ def _maybe_switch_task_dir(session, user_text, intent):
 
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
-    如果是知识问答/进度查询 → 只给轻量提示。如果是正常对话 → 给完整提醒。"""
+
+    2026-08-25 重构（DSH 执行策略迁移）：不再是"必须推进主线"的强制指令——
+    用户消息是最高优先级，推进任务由回合结束后的系统自检调度接管
+    （_schedule_self_check turn_end → fallback），模型本回合只需响应用户。
+    本函数只做"状态通报"，决策交给模型（见 _EXECUTION_POLICY）。
+    """
     has_plan = False
     results_dir = session.get("results_dir", "")
     if results_dir:
@@ -997,45 +1002,35 @@ def _build_task_resume_prompt(session):
     todos = session.get("todos", [])
     incomplete = [t for t in todos if t.get("status") not in ("completed", "cancelled")]
     has_todos = len(incomplete) > 0
-    
+
     if not has_plan and not has_todos:
         return ""
-    
-    # 检查当前意图：知识问答/进度查询/方案讨论 → 轻量提示
+
+    # 轻量/调查/问答类请求 → 只提醒任务存在，不引导推进
     _intent = session.get("intent", "")
-    _is_light_question = _intent in ("knowledge_ask", "progress_check", "result_check", "analysis_plan", "chat", "cancel_task")
-    
+    _is_light_question = _intent in ("knowledge_ask", "progress_check", "result_check",
+                                     "analysis_plan", "chat", "cancel_task", "investigate")
+
     if _is_light_question:
-        # 轻量：只提醒有任务在后台，不强制推进
         return (
             "💡 提示：你有未完成的分析任务在后台。"
-            "先回答用户的问题，回答完后如果需要继续任务，"
-            f"可以读取 {plan_path} 查看进度。"
+            "先回答用户的问题；任务推进由系统自动续跑接管，无需你处理。"
             if has_plan else
-            "💡 提示：你有未完成的待办事项。先回答用户的问题。"
+            "💡 提示：你有未完成的待办事项。先回答用户的问题；"
+            "任务推进由系统自动续跑接管。"
         )
-    
-    # 正常对话 → 完整提醒
-    parts = ["⛔ 你有未完成的主线任务！"]
+
+    # 其他请求 → 状态通报（不再强制推进）
+    parts = ["ℹ️ 当前任务状态（仅供参考，不是执行命令）："]
     if has_plan:
-        parts.append(f"- task_plan.md: {plan_path if results_dir else '存在'}")
+        parts.append(f"- 有未完成主线 task_plan.md: {plan_path if results_dir else '存在'}")
     if has_todos:
         parts.append(f"- 待办: {len(incomplete)}/{len(todos)} 未完成: {', '.join(t.get('title','')[:30] for t in incomplete[:5])}")
     parts += [
         "",
-        "⛔ 工具优先！你的下一句话必须是工具调用（terminal/read_file/search_files/process），不是文字！",
-        "禁止：先说'马上查'然后输出文字。正确：直接调工具，完成后再汇报。",
-        "",
-        "你必须按以下优先级行动：",
-        "1. 先简短回答用户的问题（如果用户问了问题）",
-        "2. 然后立即检查主线任务进度：",
-        "   - 读 task_plan.md 看当前 Phase",
-        "   - 调 process(action='list') 检查后台进程",
-        "   - 调 process(action='poll') 查具体进程状态",
-        "   - 用 search_files 看 results_dir 最新产出文件",
-        "3. 根据进度继续执行下一个未完成的待办/Phase",
-        "4. 报错→分析原因→能修就修→修不了记录到 task_plan.md Errors 段→跳过继续",
-        "禁止：回答完用户问题后直接结束 turn！必须检查并推进主线！",
+        "本回合只响应用户当前请求（问答/调查/修改指示）。",
+        "任务推进由系统自动接管：回合结束后系统会调度后台自检继续任务，",
+        "除非用户明确要求，否则不要在本回合自行推进/修复/继续执行任务。",
     ]
     return "\n".join(parts)
 
@@ -3211,6 +3206,17 @@ def _classify_intent(text: str):
                                              "研究框架", "分析框架", "实验设计"])
     # 错误/修复上下文：即使有"跑"也不当执行动作
     _is_error_context = any(kw in t for kw in ["报错", "出错", "错误", "不工作", "失败", "怎么修", "怎么解决"])
+    # 2026-08-25: 调查/诊断类问句（"检查为什么报错"/"看看日志分析原因" → 只调查不执行，
+    # DSH 用户优先策略迁移）。调查信号词本身即触发，不要求伴随"报错"字样。
+    _INVESTIGATE_KW = ["为什么", "为何", "原因", "检查一下", "排查", "诊断", "调查一下",
+                       "看下.*日志", "看下.*报错", "分析.*原因", "查一下.*报错", "查一下.*日志",
+                       "什么问题", "哪里出错", "怎么挂的", "怎么失败的", "为何失败",
+                       "什么原因", "出错原因", "失败原因"]
+    _is_investigate = any(
+        _re_mod.search(p, t) if ("*" in p or "." in p) else p in t
+        for p in _INVESTIGATE_KW)
+    if _is_investigate:
+        return ("investigate", 0.82, {"reason": "error_investigation_request"})
     _has_exec_action = not _is_error_context and any(kw in t for kw in 
         ["跑", "执行", "运行", "帮我做", "开始做", "run ", "start ", "do ", "execute"])
     if _has_knowledge_q and not _has_data_path_early and not _has_exec_action and not _is_planning_q:
@@ -4465,6 +4471,35 @@ def _fmt_tool_result(tool_name, result):
 
 
 # === Planning prompt: agent 收到任务后必须先创建待办清单 ===
+# 2026-08-25: 执行策略（DSH 执行策略迁移——用户优先，决策交给 LLM，不硬编码）
+# 用户消息 = 最高优先级；插话两不误；自动轮才自主修错续跑；报错停止后由用户决定；
+# 不确定就问（ask_user）。注入 ephemeral_system_prompt（agent 级，所有回合可见）。
+_EXECUTION_POLICY = """
+## 执行策略（用户优先 · 决策由你判断）
+
+### 1. 用户消息是最高优先级
+用户让你做什么就做什么：用户只问就只答，用户要调查就只调查，用户要求执行才执行。
+不要因为"有未完成任务"而覆盖用户当前的请求。
+
+### 2. 任务进行中用户插话（回答与执行两不误）
+- 先完整响应用户当前消息（问答/调查/修改指示）
+- 判断用户意图：纯问答 → 只回答，不擅自推进任务；要求修改任务 → 按新指示更新任务；
+  用户没有明确说"继续/接着跑"→ 不要在本回合自行继续执行
+- 任务推进由系统自动接管：用户回合结束后系统会调度后台自检继续任务，无需你推进
+
+### 3. 自动续跑轮（无人插手）可以自主工作
+系统唤醒的自检回合（用户不在场）：检查进度 → 报错分析原因 → 修复 → 继续，
+这是允许的自主行为，直接执行。
+
+### 4. 报错停止后，是否继续由用户决定
+用户回合中任务报错停止：只报告原因和可选方案，不要擅自修改后继续执行，等用户指示。
+只有自动轮（用户不在场）才自主修复重试。
+
+### 5. 不确定就问
+用户意图不明确（例如只说"检查"而没说"修复并继续"）时，用 ask_user 工具向用户确认，
+不要猜。用户回答后再行动。
+"""
+
 _PLANNING_PROMPT = """
 
 ## Task Execution Protocol
@@ -5396,7 +5431,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY,
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -10945,7 +10980,8 @@ async def ws_endpoint(ws: WebSocket):
                 except Exception:
                     pass
                 _skills = _read_skills_index()
-                agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                agent.ephemeral_system_prompt = (_soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                                                 + "\n\n" + _EXECUTION_POLICY)
                 if rd:
                     agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
 
@@ -11938,19 +11974,20 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 _new_data_task = False
 
-                        # 🔧 长任务记忆锚点 + 强制执行指令（合并为一条，避免被稀释）
+                        # 🔧 长任务记忆锚点 + 任务状态指令（合并为一条，避免被稀释）
+                        # 2026-08-25: 从"强制推进"改为"状态通报"——用户请求优先（_EXECUTION_POLICY）
                         _plan_ctx = _build_task_plan_context(_session) if not _new_data_task else None
                         if _plan_ctx:
                             # 把所有关键指令合并成一条 system 消息
                             _merged = (
                                 _plan_ctx + "\n\n"
-                                "⛔⛔⛔ 最高优先级指令 ⛔⛔⛔\n"
-                                "你当前有 task_plan.md，正在执行分析任务。请严格遵守：\n"
-                                "1. 你的下一句话必须是一个工具调用（terminal/write_file/skill_view），不是文字。\n"
-                                "2. 说'启动'→调 terminal。说'写脚本'→调 write_file。说'检查'→调 terminal 执行命令。\n"
-                                "3. 禁止先输出大段文字再调工具。工具调用必须在文字之前。\n"
-                                "4. CellBender/训练/长时间命令必须 terminal(background=True, notify_on_complete=True)。\n"
-                                "5. 如果 task_plan 的 Phase 描述模糊，直接用你的判断补充具体步骤并执行。不要等用户确认。"
+                                "## 任务状态指令（用户请求优先）\n"
+                                "你当前有 task_plan.md，存在进行中的分析任务。请遵守：\n"
+                                "1. 用户当前消息是最高优先级：用户问什么就答什么，用户要调查就只调查。\n"
+                                "2. 仅当用户明确要求执行/继续任务时，才按 task_plan 推进（工具调用优先）。\n"
+                                "3. 用户是问答/调查/规划类请求时，不要擅自执行任务、不要擅自修复后重跑。\n"
+                                "4. 用户没有说'继续'时，任务推进交给系统自动续跑，不在本回合推进。\n"
+                                "5. 若用户明确要求执行且 Phase 描述模糊，可补充具体步骤执行；不确定时用 ask_user 确认。"
                             )
                             conversation_history.append({"role": "system", "content": _merged})
 
