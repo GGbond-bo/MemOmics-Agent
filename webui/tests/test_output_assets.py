@@ -126,3 +126,70 @@ def test_ephemeral_output_rules_present(server):
     assert "figures/" in src and "results/" in src and "scripts/" in src
     assert "回合结束时，向用户汇报**本次回合新增**的产出" in src
     assert "不要逐条罗列全部历史文件" in src, "防长清单拖慢回合的约束必须在"
+
+
+# ── 输入路径保留（2026-08-25）：assets.json 带 inputs，可反查 ─────────────
+
+def test_extract_input_paths(server, tmp_path):
+    """从 tool_calls_log 提取读取类输入路径（临时 sqlite）。"""
+    import sqlite3
+    dbp = str(tmp_path / "state.db")
+    conn = sqlite3.connect(dbp)
+    conn.execute("CREATE TABLE tool_calls_log (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                 "session_id TEXT, tool_name TEXT, args_json TEXT, result_text TEXT, timestamp REAL)")
+    conn.execute("INSERT INTO tool_calls_log (session_id, tool_name, args_json, result_text, timestamp) "
+                 "VALUES ('s-in', 'execute_r', '{\"code\": \"readRDS(\\\"E:/data/obj.rds\\\")\"}', 'ok', 1)")
+    conn.execute("INSERT INTO tool_calls_log (session_id, tool_name, args_json, result_text, timestamp) "
+                 "VALUES ('s-in', 'execute_python', '{\"code\": \"pd.read_csv(r\\\"E:/data/meta.csv\\\")\"}', 'ok', 2)")
+    conn.execute("INSERT INTO tool_calls_log (session_id, tool_name, args_json, result_text, timestamp) "
+                 "VALUES ('s-in', 'execute_r', '{\"code\": \"obj2 <- CreateSeuratObject(obj)\"}', 'ok', 3)")
+    conn.execute("INSERT INTO tool_calls_log (session_id, tool_name, args_json, result_text, timestamp) "
+                 "VALUES ('s-other', 'execute_r', '{\"code\": \"readRDS(\\\"E:/other/x.rds\\\")\"}', 'ok', 4)")
+    conn.commit()
+    conn.close()
+
+    paths = server._extract_input_paths({"id": "s-in"}, limit=10, db_path=dbp)
+    rels = [p["path"] for p in paths]
+    assert "E:/data/obj.rds" in rels, f"应提取 readRDS 路径: {rels}"
+    assert "E:/data/meta.csv" in rels, f"应提取 pd.read_csv 路径: {rels}"
+    assert "E:/other/x.rds" not in rels, "其他会话的路径不得混入"
+    # 非读取调用不提取（CreateSeuratObject 不是读取）
+    assert not any("CreateSeuratObject" in p["path"] for p in paths)
+    assert server._extract_input_paths({"id": "nope"}, db_path=dbp) == []
+    assert server._extract_input_paths({"id": "x"}, db_path=str(tmp_path / "nodb.db")) == []
+
+
+def test_assets_index_contains_inputs(server, tmp_path):
+    """assets.json 结构含 inputs 段 + digest 携带输入路径。"""
+    import sqlite3
+    dbp = str(tmp_path / "state.db")
+    conn = sqlite3.connect(dbp)
+    conn.execute("CREATE TABLE tool_calls_log (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                 "session_id TEXT, tool_name TEXT, args_json TEXT, result_text TEXT, timestamp REAL)")
+    conn.execute("INSERT INTO tool_calls_log (session_id, tool_name, args_json, result_text, timestamp) "
+                 "VALUES ('s-io', 'execute_r', '{\"code\": \"readRDS(\\\"E:/input/obj.rds\\\")\"}', 'ok', 1)")
+    conn.commit()
+    conn.close()
+
+    rd = str(tmp_path / "results")
+    os.makedirs(os.path.join(rd, "figures"), exist_ok=True)
+    with open(os.path.join(rd, "figures", "out.png"), "wb") as f:
+        f.write(b"P")
+    sess = {"id": "s-io", "results_dir": rd, "todos": [], "messages": []}
+    # 用 monkeypatch 让 _extract_input_paths 用临时库
+    import server as _server
+    _orig = _server._extract_input_paths
+    _server._extract_input_paths = lambda s, limit=15: _orig(s, limit=limit, db_path=dbp)
+    try:
+        _server._save_assets_index(sess)
+    finally:
+        _server._extract_input_paths = _orig
+    idx = json.load(open(os.path.join(rd, "review", "assets.json"), encoding="utf-8"))
+    assert idx["inputs"], "assets.json 必须含输入路径"
+    assert idx["inputs"][0]["path"] == "E:/input/obj.rds"
+    assert any(a["rel"] == "figures/out.png" for a in idx["assets"])
+    # digest 携带输入路径（模型可见，可按输入反查）
+    dig = server._build_output_assets_digest(sess)
+    assert "会话输入路径" in dig
+    assert "E:/input/obj.rds" in dig
+    assert "figures/out.png" in dig

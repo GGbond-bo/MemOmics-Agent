@@ -5430,27 +5430,77 @@ def _scan_output_assets(results_dir: str, max_files: int = 200) -> list:
 
 
 def _save_assets_index(session) -> None:
-    """刷新产出资产索引 results/<sid>/review/assets.json（回合结束调用）。"""
+    """刷新产出资产索引 results/<sid>/review/assets.json（回合结束调用）。
+
+    结构：{updated_at, inputs:[读取过的输入路径], assets:[产出文件分类清单]}
+    输入路径供"按输入反查产出"（如 E:/data 分析产出了哪些文件）。
+    """
     try:
         rd = session.get("results_dir") or ""
         if not rd or not os.path.isdir(rd):
             return
         assets = _scan_output_assets(rd)
+        inputs = _extract_input_paths(session, limit=15)
         _rev = os.path.join(rd, "review")
         os.makedirs(_rev, exist_ok=True)
         _tmp = os.path.join(_rev, "assets.json.tmp")
         with open(_tmp, "w", encoding="utf-8") as f:
             json.dump({"updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                       "assets": assets}, f, ensure_ascii=False)
+                       "inputs": inputs, "assets": assets}, f, ensure_ascii=False)
         os.replace(_tmp, os.path.join(_rev, "assets.json"))
     except Exception:
         pass
 
 
-def _build_output_assets_digest(session, limit=8) -> str:
-    """产出资产摘要（digest 块）：优先读 assets.json（快），缺失则现扫。
+def _extract_input_paths(session, limit=10, db_path=None) -> list:
+    """从 tool_calls_log 提取本会话读取过的输入路径（数据从哪来）。
 
-    让模型跨轮知道"输入/输出/脚本/图片在哪"——复用、汇报、避免重跑。
+    供 assets.json 的 inputs 段使用——后面可按输入反查产出：
+    "E:/data/matrix.mtx 分析产出了哪些文件？"（同一 results_dir 下、时间在读取之后）。
+    db_path 可注入（单测用临时库）。
+    """
+    try:
+        sid = session.get("id", "") or ""
+        if not sid:
+            return []
+        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.isfile(_dbp):
+            return []
+        import sqlite3 as _sq
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT tool_name, args_json, datetime(timestamp,'unixepoch','localtime') "
+                "FROM tool_calls_log WHERE session_id=? "
+                "AND (args_json LIKE '%readRDS%' OR args_json LIKE '%read.csv%' "
+                "OR args_json LIKE '%read.table%' OR args_json LIKE '%read_parquet%' "
+                "OR args_json LIKE '%read_excel%' OR args_json LIKE '%Load10X%' "
+                "OR args_json LIKE '%pd.read_%' OR args_json LIKE '%scanpy.read%' "
+                "OR args_json LIKE '%fread%' OR args_json LIKE '%read.delim%') "
+                "ORDER BY rowid DESC LIMIT ?", (sid, limit * 4)).fetchall()
+        finally:
+            _conn.close()
+        out = []
+        seen = set()
+        for _tool, _args, _ts in _rows:
+            for _m in re.finditer(r"[A-Za-z]:[/\\][^\s'\"\),;]+", str(_args or "")):
+                _p = _m.group(0).rstrip("/\\")
+                if _p in seen:
+                    continue
+                seen.add(_p)
+                out.append({"path": _p.replace("\\", "/"), "tool": _tool, "ts": _ts or ""})
+                if len(out) >= limit:
+                    return out
+        return out
+    except Exception:
+        return []
+
+
+def _build_output_assets_digest(session, limit=8) -> str:
+    """产出资产摘要（digest 块）：输入路径 + 产出文件清单。
+
+    优先读 assets.json（快），缺失则现扫。让模型跨轮知道"输入从哪来、
+    输出在哪"——复用、汇报、避免重跑、可按输入反查产出。
     """
     try:
         rd = session.get("results_dir") or ""
@@ -5458,21 +5508,30 @@ def _build_output_assets_digest(session, limit=8) -> str:
             return ""
         _idx = os.path.join(rd, "review", "assets.json")
         assets = None
+        inputs = []
         if os.path.isfile(_idx):
             try:
                 with open(_idx, encoding="utf-8") as f:
-                    assets = json.load(f).get("assets") or []
+                    _data = json.load(f)
+                assets = _data.get("assets") or []
+                inputs = _data.get("inputs") or []
             except Exception:
                 assets = None
         if assets is None:
             assets = _scan_output_assets(rd)
-        if not assets:
+        if not assets and not inputs:
             return ""
         _tags = {"figure": "📊图", "table": "📋表", "script": "📜脚本",
                  "data": "💾数据", "report": "📄报告", "log": "📝日志"}
-        lines = [f"[会话产出资产 · 已生成 {len(assets)} 个文件（最新在前；复用/汇报用这些路径，不要重复跑）]"]
-        for a in assets[:limit]:
-            lines.append(f"- {_tags.get(a.get('cat'), '📁')} {a.get('rel', a.get('name', ''))}")
+        lines = []
+        if inputs:
+            _in = "、".join(i.get("path", "") for i in inputs[:3])
+            lines.append(f"[会话输入路径 · 读取过的数据（{len(inputs)} 个，前 3：{_in}；"
+                         f"完整清单与产出对应关系见 review/assets.json）]")
+        if assets:
+            lines.append(f"[会话产出资产 · 已生成 {len(assets)} 个文件（最新在前；复用/汇报用这些路径，不要重复跑）]")
+            for a in assets[:limit]:
+                lines.append(f"- {_tags.get(a.get('cat'), '📁')} {a.get('rel', a.get('name', ''))}")
         return "\n".join(lines)
     except Exception:
         return ""
