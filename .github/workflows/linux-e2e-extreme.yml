@@ -28,7 +28,8 @@ jobs:
         run: |
           curl -fsSL -o upd.zip \
             https://github.com/GGbond-bo/MemOmics-Agent/releases/download/v2026-08-25/MemOmics-update.zip
-          unzip -q upd.zip -d pkg
+          # tar.exe 生成的 zip 会被 Info-ZIP unzip 误判 zip bomb → 用 python zipfile
+          python3 -m zipfile -e upd.zip pkg
           ls pkg/MemOmics-update | head -25
 
       - name: Overlay latest runtime code (code=update.zip, tests=repo)
