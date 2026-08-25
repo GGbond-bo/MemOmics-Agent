@@ -4952,6 +4952,37 @@ _REQUIREMENTS_SKIP_ASSISTANT = (
 # 是"这次的任务"不是"持久要求"，不入库、不覆盖已有确认行
 _REQUIREMENTS_TASK_WORDS = ("画一张", "画图", "绘图", "帮我分析", "分析一下", "统计一下", "跑一",
                             "读取", "数一下", "报告", "生成", "计算", "做个", "做一张", "画个")
+# (2026-08-25) 输出位置词：句子含这些词说明用户指定了持久输出位置 →
+# 即使含任务词也必须入库（提取"输出目标子句"），否则下一轮模型忘记文件放哪、重复跑
+_OUTPUT_LOCATION_WORDS = ("输出到", "保存到", "放到", "写入", "存到", "生成到", "写到",
+                          "输出至", "存放", "拷贝到", "复制到", "导出到")
+
+
+def _extract_output_clause(s: str) -> str:
+    """从"任务词+输出位置词"并存句提取输出目标子句（含路径的部分）。
+
+    "帮我分析 E:/data 并把结果输出到 E:/my_output" → "把结果输出到 E:/my_output"
+    "用 E:/data 画一张图，图保存到 E:/figures"      → "图保存到 E:/figures"
+    "把最终报告输出到 E:/reports/final"            → "输出到 E:/reports/final"
+    提取失败（无路径/子句过短）返回原句——调用方按原句处理。
+    """
+    try:
+        for w in _OUTPUT_LOCATION_WORDS:
+            idx = s.find(w)
+            if idx < 0:
+                continue
+            start = idx
+            for sep in ("，", ",", "；", ";", "并", "然后", "再"):
+                j = s.rfind(sep, 0, idx)
+                if j >= 0:
+                    start = j + len(sep)
+                    break
+            clause = s[start:].strip()
+            if 4 <= len(clause) <= 200 and (":" in clause or "/" in clause or "\\" in clause):
+                return clause
+    except Exception:
+        pass
+    return s
 # (2026-08-21 用户强调) 环境/服务器情况信号：版本号/工具+路径/环境词 → 记入环境节
 _REQUIREMENTS_ENV_SIGNALS = ("服务器", "本机", "这台机器", "系统环境", "环境", "R 版本", "python 版本",
                              "conda", "库目录", "libPath", "R-libs", "数据目录", "工作目录",
@@ -5178,9 +5209,22 @@ def _extract_and_store_requirements(session, text):
             _is_special = any(w in _s for w in _REQUIREMENTS_SPECIAL_WORDS)
             # (2026-08-21) 一次性任务指令（含路径+动作词、无持久 marker）不入库——
             # "用 X 画一张图/统计一下"是本次任务，不是用户对项目的持久要求
-            _is_task = _has_path and not _has_marker and any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
+            # 2026-08-25 修复（实证发现）：句子含"输出位置词"（输出到/保存到/放到/写入/
+            # 存到/生成到/写到）时**必须入库**——"帮我分析 X 并把结果输出到 E:/out"、
+            # "把最终报告输出到 E:/x" 是用户指定的持久输出位置，整句丢弃会导致下一轮
+            # 模型不知道文件放哪、重复跑（用户真实场景）。此时把"输出目标子句"单独提取
+            # 入库，而不是整句丢弃。
+            _has_out = any(w in _s for w in _OUTPUT_LOCATION_WORDS)
+            _has_task_word = any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
+            _is_task = _has_path and not _has_marker and _has_task_word and not _has_out
             if _is_task:
+                # 无输出位置的一次性任务（"用 X 画一张图"）→ 不入库
                 continue
+            if _has_out and _has_task_word and _has_path and not _has_marker:
+                # 任务词+输出位置并存：提取"输出目标子句"入库（任务动作部分不入库）
+                _out_clause = _extract_output_clause(_s)
+                if _out_clause and _out_clause != _s:
+                    _s = _out_clause
             if not (_has_path or _has_marker or _is_env or _is_verified or _is_special):
                 continue
             if any(w in _s for w in _REQUIREMENTS_MEM_WORDS) or _is_special:
