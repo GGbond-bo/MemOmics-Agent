@@ -877,6 +877,97 @@ colnames(ccd); head(as.data.frame(ccd), 3); sapply(ccd, class)
 ```
 复用脚本：`results/memomics-1c1890da/patent_test/check_cellcoldata_columns.R`
 
+### 🔴 AddModuleScore / addScoreGeneset 不能用于 ArchRProject（2026-08-25 实测）
+
+**现象**：
+- `AddModuleScore(proj, features=sigs, name="score")` → `Error in UseMethod(generic = "AddModuleScore", object = object): no applicable method for 'AddModuleScore' applied to an object of class "ArchRProject"`
+- `addScoreGeneset(ArchRProj=proj, geneNames=sigs, name="CellTypeScore")` → `could not find function "addScoreGeneset"`
+
+**根因**：`AddModuleScore` 是 **Seurat** 函数，只能用于 Seurat 对象；`addScoreGeneset` **不存在于 ArchR 1.0.3**（ArchR 没有这个函数）。
+
+**正确做法（手动打分，纯 ArchR）**：
+```r
+# 1. 确保 GeneScoreMatrix 已在 Arrow 中（createArrowFiles 默认生成）
+proj <- addGeneScoreMatrix(proj, force = TRUE)  # 如果确实缺失才需要
+
+# 2. 从 GeneScoreMatrix 提取矩阵（genes × cells）
+mat <- getMatrixFromProject(proj, useMatrix = "GeneScoreMatrix")
+mat <- assays(mat)[[1]]
+
+# 3. 对每组 signature 手算均值打分
+sigs <- list(
+  ExN = c("SLC17A7","CAMK2A","NEUROD6"),
+  InN = c("GAD1","GAD2","SLC32A1"),
+  Ast = c("GFAP","S100B","AQP4","ALDH1L1"),
+  OLG = c("MBP","PLP1","MOBP"),
+  OPC = c("PDGFRA","CSPG4","SOX10"),
+  MG  = c("CX3CR1","P2RY12","TMEM119"),
+  EC  = c("FLT1","PECAM1","CLDN5","RGS5")
+)
+
+for (name in names(sigs)) {
+  idx <- which(rownames(mat) %in% sigs[[name]])
+  if (length(idx) > 0) {
+    scores <- colMeans(mat[idx, ])
+    proj <- addCellColData(ArchRProj = proj, data = scores,
+                           name = paste0("score_", name))
+  }
+}
+
+# 4. 画图
+plotEmbedding(ArchRProj = proj, colorBy = "cellColData",
+              name = paste0("score_", names(sigs)), embedding = "UMAP")
+```
+
+**原理**：`GeneScoreMatrix` 是 ArchR 用 peak-to-gene 算出的每个基因在每个细胞的染色质可及性得分。取一组基因的均值 ≈ Seurat `AddModuleScore` 的等价操作。
+
+**注意**：ATAC 的 GeneScore 反映的是"染色质开放潜力"，不是"基因表达"。一个基因在 ATAC 上 score 高但 RNA 不表达是正常的（增强子开了但转录没启动）。大群注释用此方法可行，但亚群细分最好结合 snRNA 的 TransferData。
+
+### 🔴 跨物种海马标签转移（Label Transfer）注释方法（2026-08-25 新增）
+
+Zhang Xiao 2026 Cell 猴脑文章的 16 类 `predictedAnno` = **用人类脑参考图谱做标签转移预测注释**，不是手动打 marker。
+
+**标准流程**：
+```r
+# 1. 准备人类参考（已注释的 snRNA-seq）
+# 2. 准备猴脑 query（未注释的 snRNA-seq）
+# 3. FindTransferAnchors + TransferData
+anchors <- FindTransferAnchors(
+  reference = human_seurat,    # 人类已注释数据
+  query = macaque_seurat,      # 猴脑数据
+  dims = 1:30
+)
+predictions <- TransferData(
+  anchorset = anchors,
+  refdata = human_seurat$cell_type,
+  dims = 1:30
+)
+macaque_seurat$predicted_anno <- predictions$predicted.id
+```
+
+**常用跨物种注释工具**：
+
+| 方法 | 工具 | 特点 |
+|------|------|------|
+| Seurat TransferData | R/Seurat | 最常用，需要人类参考 + 猴脑 query |
+| Azimuth | Seurat v5 | Allen Brain Atlas 作为参考，自动注释 |
+| scType | R包 | 不需要参考，基于 marker 列表自动打分 |
+| SingleR | R/Bioconductor | 基于相关性打分，支持自定义参考 |
+| CAMEX | R包 (2026) | 专门做多物种整合+注释 |
+
+**⚠️ 专利循环论证风险**：猴侧 predictedAnno 若用人类参考 label transfer 预测而来，再用它做"猴-人保守性对比" = 循环论证。专利方法里必须注明"label transfer 仅用于对齐，保守性评估基于独立信号（序列/可及性/TF）"。
+
+**人+猴海马亚群粒度对比**：
+
+| 维度 | 猴海马 (Zhang X 2026) | 人海马 (Zemke 2024 / Franjic 2022) |
+|------|----------------------|----------------------------------|
+| 兴奋性神经元 | 8-12 亚群 (DG/CA1/CA2-CA3/EC L2/L3_5/L6/Sub) | 10-15 亚群 (DG/mossy cell/CA1/CA2/CA3/EC L2-6/Sub/Pre-Sub) |
+| 抑制性神经元 | 5-8 (SST/PVALB/VIP/LAMP5/MGE/CGE) | 6-10 (SST/PVALB/VIP/LAMP5/NDNF/MEIS2/Chandelier) |
+| 胶质细胞 | 8-12 (Ast/OLG/OPC/MG/EC/PC/CP/Ependymal) | 10-15 (同 + Macro/T-Cell/VLMC) |
+| 总计 | ~25-35 亚群 | ~30-45 亚群 |
+
+**跨物种对比前必须归并到同一标签体系**（推荐 8 大类：Ex/Inh/Astro/OLG/OPC/MG/EC+PC），否则粒度不一致导致对比失真。
+
 ### 🔴 跨物种脑ATAC-seq细胞类型marker（2026-08-25 新增）
 
 人+猴脑共同7大群marker + 文献PMID对照表 → `references/brain_atac_cross_species_markers.md`。包含：

@@ -1,0 +1,16 @@
+{
+  "id": "cross-species-annotation",
+  "name": "跨物种单细胞RNA-seq细胞类型注释",
+  "category": "general",
+  "language": "Python",
+  "description": "跨物种单细胞RNA-seq细胞类型注释方法",
+  "starting_prompt": "使用 跨物种单细胞RNA-seq细胞类型注释 进行分析",
+  "source_dir": "skills/bioinformatics/cross-species-annotation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": []
+}

@@ -98,8 +98,8 @@
 ## ATAC注释方法
 
 1. ArchR `addGeneScoreMatrix()` 计算gene activity score
-2. `AddModuleScore()` 对上述marker打分
-3. 每个cluster取高分marker判断细胞类型
+2. 从 `GeneScoreMatrix` 提取矩阵 → 对每组marker手算 `colMeans` → `addCellColData` 写入打分列
+3. 每个cluster取高分marker判断细胞类型（argmax）
 4. 跨物种：用共有核心marker做初步注释，各物种特有marker做精细亚群鉴定
 
-⚠️ ATAC gene activity score反映染色质可及性，与RNA不完全一致。某些RNA marker在ATAC中可及性较低（如P2RY12），需结合peak可及性判断。
+⚠️ **注意**：`AddModuleScore()` 是 Seurat 函数，不能用于 ArchRProject 对象；ArchR 没有 `addScoreGeneset()` 函数。必须手动从 GeneScoreMatrix 提取矩阵后打分（见 SKILL.md "AddModuleScore / addScoreGeneset 不能用于 ArchRProject" 条目）。
