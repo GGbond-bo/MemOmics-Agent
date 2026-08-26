@@ -1799,6 +1799,15 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                     "6. 需要审查→标记 waiting_review"
                 )
             else:
+                # 2026-08-26: 无进行中/待审任务时，仅当 task_plan.md 真实存在才唤醒
+                # 检查进度——否则任务已完成（plan 归档为 task_plan.done.md）的会话会被
+                # 无限「检查主线任务进度」唤醒空转（实测：memomics-cd677556 任务完成后
+                # 唤醒 #5/#6 继续注入 → 模型反复读不存在的 plan → 5 分钟无输出被看门狗
+                # 中断；LoopX goal:active 为残留状态误导）
+                _plan_p = os.path.join(s.get("results_dir", ""), "task_plan.md") if s.get("results_dir") else ""
+                if not (_plan_p and os.path.isfile(_plan_p)):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
+                    return
                 wake_msg = (
                     _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
