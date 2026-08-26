@@ -3774,7 +3774,8 @@ async function loadModels() {
       } else if (ad.done && ad.status === 'update_available') {
         updateStatusDot('🔄 有更新', 'var(--warning)');
       } else if (ad.done && ad.status === 'local_ahead') {
-        updateStatusDot('本地最新', 'var(--primary)');
+        // 2026-08-26: 开发版不误导为"本地最新"——远端可能有新发布，开发仓库走 git 更新
+        updateStatusDot('开发版', 'var(--primary)');
       } else if (ad.done && ad.status === 'up_to_date') {
         updateStatusDot('已是最新', 'var(--success)');
       } else if (ad.done && ad.status === 'error') {
@@ -8076,9 +8077,11 @@ async function checkForUpdate(showAll) {
         updateStatusDot('需手动更新', 'var(--danger)');
       }
     } else if (status === 'local_ahead') {
-      html += '<div style="color:var(--primary);font-weight:600;">📌 本地领先于 GitHub 发布版</div>';
-      html += '<div style="color:var(--text-light);margin-top:4px;">当前是开发版（' + escapeHtml(local.version) + '），GitHub 最新发布是 ' + escapeHtml(remote.tag || '?') + '，无需更新。</div>';
-      updateStatusDot('本地已最新', 'var(--primary)');
+      // 2026-08-26: 开发版明确展示与远端发布版的差异（不误导为"已最新"）
+      html += '<div style="color:var(--primary);font-weight:600;">📌 开发版 · GitHub 已有新发布</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">本地是开发版 <code>' + escapeHtml(local.version) + '</code>，GitHub 最新发布 <code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '。开发仓库请用 git 方式更新（不提供一键覆盖，避免冲掉开发代码）。</div>';
+      html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
+      updateStatusDot('开发版', 'var(--primary)');
     } else {
       html += '<div style="color:var(--danger);font-weight:600;">⚠️ 无法检查更新</div>';
       html += '<div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(d.error || '网络或 GitHub 访问失败，请稍后重试') + '</div>';
