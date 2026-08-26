@@ -4810,6 +4810,12 @@ def _strip_scaffold_text(text):
     return None
 
 
+# 2026-08-26: 服务端系统注入脚手架前缀（写历史时常以 role=user 形式喂给模型，
+# 显示层按 role 过滤不到 → 刷新后刷屏实测复现）。命中即视为注入消息，不进前端对话流。
+_INJECT_PREFIXES = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒",
+                    "📊 LoopX 状态", "[System:", "[数据读取配方", "[wakeup-progress-check]")
+
+
 _READ_KEYWORDS = ("readRDS", "read.csv", "read.table", "read_tsv", "read.delim",
                   "fread", "read_parquet", "read_excel", "readxl", "Load10X",
                   "Read10X", "scanpy.read", "pd.read_", "readr::", "readLines",
@@ -6192,7 +6198,11 @@ async def get_messages(sid: str, limit: int = 100):
     normalized = []
     for m in msgs:
         # 2026-08-23: 系统注入（唤醒/强制工具调用）与工具消息不进前端对话流
+        # 2026-08-26: 注入脚手架常以 role=user 写入历史（喂模型）——按前缀内容级过滤，
+        # 否则刷新后 [会话要求]/[相关历史记忆]/[会话锚点]/[系统唤醒] 全部刷屏（实测）
         if m.get("role") in ("system", "tool"):
+            continue
+        if (m.get("content") or "").lstrip().startswith(_INJECT_PREFIXES):
             continue
         nm = dict(m)
         if "content" not in nm and "text" in nm:

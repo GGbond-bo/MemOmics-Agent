@@ -3339,13 +3339,26 @@ function renameSession(sid) {
   }).catch(function(e) { console.error('rename failed:', e); });
 }
 
+// 2026-08-26: 服务端注入脚手架前缀（role=user 但带标记，按内容过滤防刷新刷屏）
+var INJECT_PREFIXES = ['[会话要求', '[相关历史记忆', '[会话锚点', '[系统唤醒',
+                       '📊 LoopX 状态', '[System:', '[数据读取配方', '[wakeup-progress-check]'];
+function _isInjectMsg(m) {
+  if (m.role === 'system' || m.role === 'tool') return true;
+  var c = (m.content || '').trim();
+  for (var i = 0; i < INJECT_PREFIXES.length; i++) {
+    if (c.indexOf(INJECT_PREFIXES[i]) === 0) return true;
+  }
+  return false;
+}
+
 function loadAllMessages(sid) {
   fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
     if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
     (d.messages || []).forEach(function(m) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
-      if (m.role === 'system' || m.role === 'tool') return;
+      // 2026-08-26: 增加前缀内容级过滤（[会话要求]/[相关历史记忆] 等 role=user 注入）
+      if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content, m);
     });
@@ -3528,7 +3541,8 @@ function switchSession(sid) {
     if (!msgs.length && !liveBubble) showNewSessionWelcome();
     msgs.forEach(function(m) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
-      if (m.role === 'system' || m.role === 'tool') return;
+      // 2026-08-26: 前缀内容级过滤（与 loadAllMessages 同 helper）
+      if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content, m);
     });
