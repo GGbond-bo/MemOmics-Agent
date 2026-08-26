@@ -2741,6 +2741,33 @@ def _load_provider_keys():
 
 _load_provider_keys()
 
+# === 自定义 Provider 定义存储（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
+# 与 provider_keys.json 分工：本文件存"定义"（名称/base_url/模型列表），key 仍走
+# provider_keys.json（现有同步/联动逻辑不变）。启动时 merge 进 _PROVIDERS_INDEX。
+_CUSTOM_PROVIDERS_FILE = os.path.join(HERMES_HOME_DIR, "custom_providers.json")
+
+_custom_providers = {}  # pid -> {id, name, api, models[]}
+
+def _load_custom_providers():
+    global _custom_providers
+    try:
+        if os.path.exists(_CUSTOM_PROVIDERS_FILE):
+            with open(_CUSTOM_PROVIDERS_FILE, "r", encoding="utf-8") as f:
+                _custom_providers = json.load(f)
+        for _pid, _def in _custom_providers.items():
+            if isinstance(_def, dict) and _def.get("id") and _def.get("api"):
+                _PROVIDERS_INDEX[_pid] = _def
+    except Exception:
+        _custom_providers = {}
+
+def _save_custom_providers():
+    try:
+        _atomic_write_json(_CUSTOM_PROVIDERS_FILE, _custom_providers)
+    except Exception as e:
+        print(f"[WARN] 保存自定义 provider 失败: {e}")
+
+_load_custom_providers()
+
 # === 图像生成配置（image_gen_config.json，独立于 Hermes 主配置） ===
 _IMAGE_GEN_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "image_gen_config.json")
 _IMAGE_GEN_DEFAULTS = {
@@ -6534,6 +6561,19 @@ async def list_providers():
             "has_key": bool(saved.get("api_key")),
             "is_custom": p["id"] == "dcs-cloud",
         })
+    # 2026-08-27: 用户自定义 provider（custom-*）并入列表
+    for pid, cp in _custom_providers.items():
+        saved = _provider_keys.get(pid, {})
+        items.append({
+            "id": pid,
+            "name": cp.get("name", pid),
+            "api": cp.get("api", ""),
+            "env_var": "",
+            "group": "⭐ 自定义",
+            "model_count": len(cp.get("models", [])),
+            "has_key": bool(saved.get("api_key")),
+            "is_custom": True,
+        })
     groups = {}
     for it in items:
         g = it["group"]
@@ -6632,15 +6672,19 @@ def _sync_custom_providers_to_hermes(pid=None):
             if isinstance(c, dict) and c.get("id"):
                 existing[c["id"]] = c
         if pid is None:
-            for p in _CHINA_PROVIDERS:
-                saved = _provider_keys.get(p["id"])
-                if saved and saved.get("api_key"):
-                    existing[p["id"]] = {
-                        "id": p["id"], "name": p["name"],
-                        "api_base": saved.get("base_url") or p["api"],
-                        "api_key": saved["api_key"],
-                        "models": p.get("models", []),
-                    }
+            # 2026-08-27: 遍历所有有 key 的 provider（内置 + 用户自定义 custom-*），
+            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 Hermes 底座
+            for _pid in list(_provider_keys.keys()):
+                saved = _provider_keys.get(_pid)
+                if not (saved and saved.get("api_key")):
+                    continue
+                p = _PROVIDERS_INDEX.get(_pid) or {}
+                existing[_pid] = {
+                    "id": _pid, "name": p.get("name", _pid),
+                    "api_base": saved.get("base_url") or p.get("api", ""),
+                    "api_key": saved["api_key"],
+                    "models": p.get("models", []),
+                }
         elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
             saved = _provider_keys[pid]
@@ -6754,6 +6798,116 @@ async def detect_local_models():
         except Exception:
             continue
     return {"models": found, "count": len(found)}
+
+
+# === 自定义 Provider API（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
+
+@app.get("/api/providers/custom")
+async def list_custom_providers():
+    """列出用户自定义 provider（key 脱敏）"""
+    items = []
+    for pid, p in _custom_providers.items():
+        saved = _provider_keys.get(pid) or {}
+        items.append({
+            "id": pid,
+            "name": p.get("name", pid),
+            "base_url": p.get("api", ""),
+            "models": p.get("models", []),
+            "has_key": bool(saved.get("api_key")),
+            "key_masked": _mask_key(saved.get("api_key", "")),
+            "local": bool(saved.get("local")),
+        })
+    return {"providers": items, "total": len(items)}
+
+
+def _normalize_custom_models(models_raw):
+    """模型归一化：["m1","m2"] 或 [{"id":"m1","name":"..."}] → [{"id","name",...}]"""
+    models = []
+    for m in models_raw or []:
+        if isinstance(m, dict):
+            _mid = str(m.get("id") or "").strip()
+            if not _mid:
+                continue
+            models.append({"id": _mid, "name": str(m.get("name") or _mid).strip(),
+                           "reasoning": bool(m.get("reasoning")),
+                           "tool_call": bool(m.get("tool_call"))})
+        elif isinstance(m, str) and m.strip():
+            models.append({"id": m.strip(), "name": m.strip()})
+    return models
+
+
+@app.post("/api/providers/custom")
+async def add_custom_provider(payload: dict):
+    """添加自定义 OpenAI 兼容 provider：名称 + base_url + api_key + 模型列表"""
+    name = (payload.get("name") or "").strip()
+    base_url = (payload.get("base_url") or "").strip().rstrip("/")
+    api_key = (payload.get("api_key") or "").strip()
+    models = _normalize_custom_models(payload.get("models"))
+    if not name or not base_url:
+        return JSONResponse({"error": "name 和 base_url 必填"}, status_code=400)
+    if not models:
+        return JSONResponse({"error": "models 必填（至少一个模型名）"}, status_code=400)
+    if not base_url.startswith(("http://", "https://")):
+        return JSONResponse({"error": "base_url 需以 http(s):// 开头"}, status_code=400)
+    pid = "custom-" + _sanitize_dir_name(name)
+    if pid in _PROVIDERS_INDEX and pid not in _custom_providers:
+        return JSONResponse({"error": f"provider id 冲突: {pid}"}, status_code=409)
+    _custom_providers[pid] = {"id": pid, "name": name, "api": base_url, "models": models}
+    _PROVIDERS_INDEX[pid] = _custom_providers[pid]
+    _save_custom_providers()
+    if api_key:
+        _provider_keys[pid] = {"api_key": api_key, "base_url": base_url}
+        _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True, "provider_id": pid}
+
+
+@app.put("/api/providers/custom/{pid}")
+async def update_custom_provider(pid: str, payload: dict):
+    """更新自定义 provider（base_url / 模型 / key）"""
+    if pid not in _custom_providers:
+        return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
+    _def = _custom_providers[pid]
+    if payload.get("name"):
+        _def["name"] = str(payload["name"]).strip()
+    if payload.get("base_url"):
+        _b = str(payload["base_url"]).strip().rstrip("/")
+        if _b.startswith(("http://", "https://")):
+            _def["api"] = _b
+    _models = _normalize_custom_models(payload.get("models"))
+    if _models:
+        _def["models"] = _models
+    _PROVIDERS_INDEX[pid] = _def
+    _save_custom_providers()
+    _key = (payload.get("api_key") or "").strip()
+    if _key and "…" not in _key and _key != "****":
+        _provider_keys[pid] = {"api_key": _key, "base_url": _def["api"]}
+        _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True, "provider_id": pid}
+
+
+@app.delete("/api/providers/custom/{pid}")
+async def delete_custom_provider(pid: str):
+    """删除自定义 provider（定义 + key + Hermes 同步）"""
+    if pid not in _custom_providers:
+        return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
+    del _custom_providers[pid]
+    _PROVIDERS_INDEX.pop(pid, None)
+    _provider_keys.pop(pid, None)
+    _save_custom_providers()
+    _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @app.get("/api/models/available")

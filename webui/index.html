@@ -1032,6 +1032,22 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         </div>
         <button class="save-btn" onclick="saveModel()" data-i18n="set_as_current">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+        <!-- 自定义提供商（2026-08-27：任意 OpenAI 兼容端点 + 自定义模型） -->
+        <div class="settings-group">
+          <label>⭐ 自定义提供商（OpenAI 兼容：vLLM / OneAPI / 硅基流动 / 本地推理等）</label>
+          <div id="custom-providers-list" style="font-size:11px;margin-bottom:8px;"></div>
+          <input type="text" id="cp-name" placeholder="名称，如：硅基流动" style="width:100%;font-size:12px;">
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" id="cp-base-url" placeholder="Base URL: https://api.siliconflow.cn/v1" style="flex:2;min-width:180px;font-size:12px;">
+            <input type="password" id="cp-api-key" placeholder="API Key（可留空，保存后再补）" style="flex:1;min-width:120px;font-size:12px;">
+          </div>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" id="cp-models" placeholder="模型名，逗号分隔：Qwen/Qwen2.5-72B-Instruct,deepseek-ai/DeepSeek-V3" style="flex:3;min-width:180px;font-size:12px;">
+            <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加</button>
+          </div>
+          <div id="cp-status" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
+        </div>
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
         <!-- 图像生成配置 -->
         <div class="settings-group">
           <label>🖼️ 图像生成 (聊天里说「画一张…」即可用)</label>
@@ -3854,7 +3870,70 @@ async function loadProviders() {
     if (pSel && currentModel.provider) pSel.value = currentModel.provider;
     await refreshConnectedModels();
     await refreshModelUI();
+    loadCustomProviders();  // 2026-08-27: 自定义提供商列表
   } catch(e) { console.error('loadProviders error', e); }
+}
+
+// === 自定义提供商（2026-08-27）===
+async function loadCustomProviders() {
+  try {
+    var r = await fetch('/api/providers/custom', { cache: 'no-store' });
+    var d = await r.json();
+    var el = document.getElementById('custom-providers-list');
+    if (!el) return;
+    var list = d.providers || [];
+    if (!list.length) { el.innerHTML = '<span style="color:var(--text-light);">暂无自定义提供商</span>'; return; }
+    var html = '';
+    list.forEach(function(p) {
+      html += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-bottom:6px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
+        '<b>' + escapeHtml(p.name) + '</b>' +
+        '<button onclick="deleteCustomProvider(\'' + p.id + '\')" title="删除该提供商" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--danger);color:#fff;cursor:pointer;font-size:11px;">删除</button>' +
+        '</div>' +
+        '<div style="color:var(--text-light);margin-top:2px;word-break:break-all;">' + escapeHtml(p.base_url) + '</div>' +
+        '<div style="color:var(--text-light);margin-top:2px;">模型: ' + (p.models || []).map(function(m) { return escapeHtml(m.id || m); }).join(', ') + '</div>' +
+        '<div style="margin-top:2px;">' + (p.has_key ? '🔑 已配置 Key' : '⚠️ 未配置 Key（保存后请在下方下拉中选它补 Key）') + '</div>' +
+        '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { console.error('loadCustomProviders error', e); }
+}
+
+async function addCustomProvider() {
+  var name = document.getElementById('cp-name').value.trim();
+  var base = document.getElementById('cp-base-url').value.trim();
+  var key = document.getElementById('cp-api-key').value.trim();
+  var models = document.getElementById('cp-models').value.split(/[,，\n]/).map(function(s) { return s.trim(); }).filter(Boolean);
+  var status = document.getElementById('cp-status');
+  if (!name || !base) { status.textContent = '请填写名称和 Base URL'; status.style.color = 'var(--danger)'; return; }
+  if (!models.length) { status.textContent = '请至少填一个模型名'; status.style.color = 'var(--danger)'; return; }
+  try {
+    var r = await fetch('/api/providers/custom', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, base_url: base, api_key: key, models: models })
+    });
+    var d = await r.json();
+    if (!r.ok) { status.textContent = d.error || '添加失败'; status.style.color = 'var(--danger)'; return; }
+    document.getElementById('cp-name').value = '';
+    document.getElementById('cp-base-url').value = '';
+    document.getElementById('cp-api-key').value = '';
+    document.getElementById('cp-models').value = '';
+    status.textContent = '已添加 ' + name + '（' + d.provider_id + '）— 可在上方下拉选它设默认模型';
+    status.style.color = 'var(--success)';
+    loadCustomProviders();
+    loadProviders();
+  } catch(e) { status.textContent = '添加失败: ' + e.message; status.style.color = 'var(--danger)'; }
+}
+
+async function deleteCustomProvider(pid) {
+  if (!confirm('删除自定义提供商 ' + pid + '？')) return;
+  try {
+    var r = await fetch('/api/providers/custom/' + pid, { method: 'DELETE' });
+    var d = await r.json();
+    if (!r.ok) { alert(d.error || '删除失败'); return; }
+    loadCustomProviders();
+    loadProviders();
+  } catch(e) { alert('删除失败: ' + e.message); }
 }
 
 async function onProviderSelect() {
