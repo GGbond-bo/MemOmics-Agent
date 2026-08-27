@@ -42,7 +42,7 @@ done
 
 # === Step 2: No Python? Use bundled miniconda ===
 if [ -z "$PYTHON" ]; then
-    echo "[WARN] Python 3.11-3.13 not found"
+    echo "[WARN] Python 3.10-3.13 not found"
     echo "[INFO] Using bundled Miniconda..."
 
     CONDA_PY="$SCRIPT_DIR/miniconda_env/bin/python"
