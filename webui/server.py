@@ -1808,16 +1808,14 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 if not (_plan_p and os.path.isfile(_plan_p)):
                     logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
                     return
-                # 2026-08-27 最后防线：task_plan 文本已标完成（"已完成/全部完成/用户确认
-                # 无长任务"等）→ 即使 task_state 被误重置 pending，也不注入唤醒——
+                # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
+                # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
                 # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
                 # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
                 try:
                     with open(_plan_p, "r", encoding="utf-8") as _pf:
                         _ptext = _pf.read()
-                    _pl = _ptext.lower()
-                    if any(m in _pl for m in ("已完成", "全部完成", "标记完成", "无长任务",
-                                              "status:** complete", "no active task", "任务结束")):
+                    if _plan_is_complete_text(_ptext):
                         logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
                         return
                 except Exception:
@@ -4873,6 +4871,32 @@ def _strip_scaffold_text(text):
 # 显示层按 role 过滤不到 → 刷新后刷屏实测复现）。命中即视为注入消息，不进前端对话流。
 _INJECT_PREFIXES = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒",
                     "📊 LoopX 状态", "[System:", "[数据读取配方", "[wakeup-progress-check]")
+
+
+# 2026-08-27: task_plan 文本"整体完成"判定（纯函数，供唤醒注入最后防线 + 测试直测）。
+# 只用整体级信号——Phase 级会出现"Phase 1 已完成"、"**Status:** complete"（每个
+# Phase 都有），不能代表任务整体完成；"已完成"单词同样太弱（实测 Phase 级高频出现）。
+def _plan_is_complete_text(plan_text: str) -> bool:
+    if not plan_text or not isinstance(plan_text, str):
+        return False
+    _pl = plan_text.lower()
+    return any(m in _pl for m in (
+        "全部完成", "已全部完成", "无长任务", "确认无长任务", "标记完成",
+        "任务结束", "任务已完成", "任务全部完成", "no active task",
+        "all tasks complete", "all complete", "**task status:** complete"))
+
+
+# 2026-08-27: ask_user 否定/结束回答判定（纯函数）：命中则保持任务退役状态，
+# 不得复活 done 任务（实测："不用了" 回答曾把已完成任务复活 → 唤醒链 → 重复输出）。
+_NEG_END_WORDS = ("不用", "不需要", "不用了", "不做了", "算了", "先这样",
+                  "就到这", "没有任务", "没任务", "不跑", "不用继续",
+                  "暂停", "先不", "不要了", "不用做")
+
+def _is_negation_end_answer(user_text: str) -> bool:
+    if not user_text or not isinstance(user_text, str):
+        return False
+    _t = user_text.lower()
+    return any(w in _t for w in _NEG_END_WORDS)
 
 
 _READ_KEYWORDS = ("readRDS", "read.csv", "read.table", "read_tsv", "read.delim",
@@ -11333,10 +11357,7 @@ async def ws_endpoint(ws: WebSocket):
                     if _rd_g:
                         _verdict, _reason = check_gate(_rd_g, is_auto_wake=False, user_message=user_text)
                         if _verdict == "ask_user":
-                            _NEG_END = ("不用", "不需要", "不用了", "不做了", "算了", "先这样",
-                                        "就到这", "没有任务", "没任务", "不跑", "不用继续",
-                                        "暂停", "先不", "不要了", "不用做")
-                            if any(w in user_text.lower() for w in _NEG_END):
+                            if _is_negation_end_answer(user_text):
                                 # 用户确认结束/否定 → 保持退役状态（休息），不重置 pending
                                 logger.info(f"[RunGate] session {session['id'][:12]}: ask_user 否定回答（{user_text[:30]}）→ 保持任务退役，不复活")
                             else:
