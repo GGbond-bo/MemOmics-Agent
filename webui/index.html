@@ -2670,15 +2670,32 @@ function guChart(node) {
   }
   return out + '</div>';
 }
+function guFixMermaid(code) {
+  // 2026-08-27 稳定性修复：渲染前归一化常见 Mermaid 语法笔误
+  code = String(code || '').trim();
+  // ① 三横线/省略箭头（---> / ...>）→ 标准 -->（历史 bug：会导致解析失败）
+  code = code.replace(/--->/g, '-->').replace(/...>/g, '-->');
+  // ② <br/> 统一处理（不同 mermaid 版本支持不一）
+  code = code.replace(/<br\s*\/?>/gi, ' ');
+  // ③ 含中文/空格的 [label]/(label) 节点加引号（对齐 DSH dsh-genui 的 repairMermaidSource）
+  code = code.replace(/([\[\(])([^\[\]\(\)\{\}\"'\n]*)([\]\)])/g, function(m, a, b, c) {
+    var t = b.trim();
+    if (!t) return m;
+    if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(t) || /\s/.test(t)) return a + '\"' + t + '\"' + c;
+    return m;
+  });
+  return code;
+}
 function guMermaid(node) {
   // 2026-08-23: 字段兼容——规范字段 code；兼容 agent 变体 spec/diagram
-  var code = node.code || node.spec || node.diagram || '';
+  var code = guFixMermaid(node.code || node.spec || node.diagram || '');
   // 2026-08-24 修复(用户反馈"流程图渲染需要手动刷新")：dsh-ui 内嵌 mermaid 组件
   // 渲染后必须触发 initMermaid——此前只在 ```mermaid 独立围栏路径触发，dsh-ui JSON
   // 里的 mermaid div 生成后无人调用 initMermaid，只能靠页面刷新（历史快照恢复）才渲染。
-  // setTimeout 确保 DOM 更新后再渲染（guMermaid 在字符串拼接阶段执行，div 尚未入 DOM）。
+  // 2026-08-27 双保险：0ms 立即 + 300ms 兜底（应对 DOM 追加/重排竞态，无需手动刷新）。
   if (typeof document !== 'undefined' && typeof setTimeout !== 'undefined' && code) {
     setTimeout(function() { if (typeof initMermaid === 'function') initMermaid(); }, 0);
+    setTimeout(function() { if (typeof initMermaid === 'function') initMermaid(); }, 300);
   }
   // 复用现有 mermaid 渲染管线：生成 .mermaid[data-mermaid] div，initMermaid 会处理
   return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(code) + '</div>';
@@ -3022,6 +3039,8 @@ function renderMermaidNode(el) {
   } catch(e) {
     code = el.innerText || '';
   }
+  // 2026-08-27 稳定性修复：统一归一化（---> → -->、中文标签加引号）
+  code = guFixMermaid(code);
   if (!code.trim()) { el.removeAttribute('data-mermaid'); return; }
   var mid = el.getAttribute('data-mermaid') || 'mm' + (mermaidIdx++);
   // 确保 ID 不以数字开头（CSS querySelector 不支持 '#123-svg' 这样的选择器）
