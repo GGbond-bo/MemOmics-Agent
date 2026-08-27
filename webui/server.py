@@ -1808,6 +1808,20 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 if not (_plan_p and os.path.isfile(_plan_p)):
                     logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
                     return
+                # 2026-08-27 最后防线：task_plan 文本已标完成（"已完成/全部完成/用户确认
+                # 无长任务"等）→ 即使 task_state 被误重置 pending，也不注入唤醒——
+                # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
+                # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
+                try:
+                    with open(_plan_p, "r", encoding="utf-8") as _pf:
+                        _ptext = _pf.read()
+                    _pl = _ptext.lower()
+                    if any(m in _pl for m in ("已完成", "全部完成", "标记完成", "无长任务",
+                                              "status:** complete", "no active task", "任务结束")):
+                        logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                        return
+                except Exception:
+                    pass
                 wake_msg = (
                     _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
@@ -11310,13 +11324,23 @@ async def ws_endpoint(ws: WebSocket):
                 # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
                 # 退役任务（done/cancelled）重置为 pending（命中"继续"词表由 check_gate 内部处理；
                 # 未命中返回 ask_user → 用户发消息本身即新指令，保守重置为新任务）
+                # 2026-08-27 修复：ask_user 的**否定回答**（"不用了/不需要继续"）不得复活
+                # done 任务——实测：模型 ask_user 问"还要继续吗？"→ 用户答"不用"→ 无条件
+                # 重置 pending+armed → 已完成任务被唤醒链复活 → 模型被反复叫醒重复输出
                 try:
                     from webui.runtime.run_gate import check_gate, save_state, arm, reset_rounds
                     _rd_g = session.get("results_dir", "") or ""
                     if _rd_g:
                         _verdict, _reason = check_gate(_rd_g, is_auto_wake=False, user_message=user_text)
                         if _verdict == "ask_user":
-                            save_state(_rd_g, "pending", "user message (ask_user -> new task)")
+                            _NEG_END = ("不用", "不需要", "不用了", "不做了", "算了", "先这样",
+                                        "就到这", "没有任务", "没任务", "不跑", "不用继续",
+                                        "暂停", "先不", "不要了", "不用做")
+                            if any(w in user_text.lower() for w in _NEG_END):
+                                # 用户确认结束/否定 → 保持退役状态（休息），不重置 pending
+                                logger.info(f"[RunGate] session {session['id'][:12]}: ask_user 否定回答（{user_text[:30]}）→ 保持任务退役，不复活")
+                            else:
+                                save_state(_rd_g, "pending", "user message (ask_user -> new task)")
                         # M2/M3（DSH resume 语义的交互式版）：用户在场 = 重新授权 + 预算刷新
                         arm(_rd_g, by="user_message")
                         reset_rounds(_rd_g)
