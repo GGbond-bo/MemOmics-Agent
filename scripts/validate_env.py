@@ -91,6 +91,42 @@ def find_r_installations():
                         results[d.name] = str(_rs)
     return results
 
+def find_conda_envs():
+    """探测 conda 环境列表（Linux/macOS）：name + prefix + python 路径。
+
+    2026-08-29: 供 Agent 复用——写回 environment.json paths.conda_envs，
+    模型跑分析前直接读清单，不再每次重复探测。
+    """
+    envs = []
+    try:
+        conda = shutil.which("conda")
+        if not conda:
+            for c in (os.path.expanduser("~/miniconda3/bin/conda"),
+                      os.path.expanduser("~/anaconda3/bin/conda"),
+                      "/opt/miniconda3/bin/conda", "/opt/anaconda3/bin/conda"):
+                if os.path.isfile(c):
+                    conda = c
+                    break
+        if not conda:
+            return envs
+        r = subprocess.run([conda, "env", "list"], capture_output=True, text=True,
+                           timeout=20, encoding="utf-8", errors="replace")
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "conda environments" in line:
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[0].rstrip("*")
+                prefix = parts[-1]
+                py = os.path.join(prefix, "bin", "python")
+                envs.append({"name": name, "prefix": prefix,
+                             "python": py if os.path.isfile(py) else ""})
+    except Exception:
+        pass
+    return envs
+
+
 def find_cellbender():
     """多级回退查找cellbender"""
     # 1. shutil.which
@@ -208,6 +244,17 @@ def validate_and_fix(env_data, verbose=False, dry_run=False):
                 print(f"[MISSING] Python {py_key}: {py_path}")
             all_ok = False
             changes.append(f"Python {py_key}: NOT FOUND")
+
+    # --- 2026-08-29: conda 环境清单写回（Agent 复用，避免重复探测） ---
+    if os.name != "nt":
+        try:
+            _envs = find_conda_envs()
+            env_data.setdefault("paths", {}).setdefault("conda_envs", [])
+            env_data["paths"]["conda_envs"] = _envs
+            if _envs:
+                changes.append(f"conda envs: {len(_envs)} 个（{', '.join(e['name'] for e in _envs[:6])}{'…' if len(_envs) > 6 else ''}）")
+        except Exception:
+            pass
 
     # --- 验证 CLI tools ---
     cli = env_data.get("paths", {}).get("cli_tools", {})

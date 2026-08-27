@@ -547,8 +547,8 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。用户明说"直接做/不用审"可跳过。
 28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。
 29. **缺包先查用户环境，用户同意才装（2026-08-29 修订，替代原"缺包即装"）**：R/Python 报"不存在叫 X 这个名称的程序包" / "there is no package called 'X'" / "No module named 'X'" → 环境缺包。处理顺序：
-  1) **先检查用户环境**：`conda env list` / `which python` 看用户有没有现成环境，并探测该环境是否已有此包（`conda run -n <env> python -c "import X"` 或 `pip list`）——**用户环境已有 → 优先用用户环境跑**（execute_python 传 conda_env=<env> 等），不重复安装；
-  2) 用户环境也没有 → **ask_user 询问用户是否安装**（给出安装命令：R 用清华镜像 `install.packages(...)`，Python 用 `pip install X`），**用户明确同意才安装**；
+  1) **先查 environment.json 与用户环境**：读 `<项目根>/environment.json` 的 `paths.conda_envs`（首启已探测写回）看有哪些现成 conda 环境；需要时 `conda env list` / `which python` 复核，并探测该环境是否已有此包（`conda run -n <env> python -c "import X"` 或 `pip list`）——**用户环境已有 → 优先用用户环境跑**（execute_python 传 conda_env=<env> 等），不重复安装；
+  2) 用户环境也没有 → **ask_user 询问用户是否安装**（给出安装命令），**用户明确同意才安装**；**安装位置强制项目内**：Python 包装到当前项目 venv（`<项目根>/.venv/bin/pip install X`），**禁止** `pip install --user` 或装系统 Python；R 包装到项目内库目录（`install.packages("X", lib=Sys.getenv("R_LIBS"))`，R_LIBS 已由 start.sh 指向 `<项目根>/R_libs`），**禁止**装系统库/默认用户库——项目内统一管理，不污染用户环境；
   3) 用户拒绝/无网络 → 不装，明确告知该包缺失对任务的影响；
   4) 安装失败（如当前 Python 版本无可用 wheel / 编译失败）→ 提示改用用户环境或调整方案，**禁止无限重试**。
   跑图前必查：ggplot2/dplyr/scales 在不在（`Rscript -e 'cat(requireNamespace("ggplot2", quietly=TRUE))'`）。

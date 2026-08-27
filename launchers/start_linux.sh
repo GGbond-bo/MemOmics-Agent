@@ -113,6 +113,12 @@ fi
 echo "[INFO] 核心依赖就绪（Agent 可正常使用）。"
 echo "  Python 分析包（scanpy 生态）按需安装：pip install -r requirements-analysis.txt"
 echo "  R 包由 Agent 在任务中检查用户环境后询问安装（清华镜像）"
+
+# === Step 4.6: 项目内 R 库目录（2026-08-29：R 包统一装这里，不污染系统/用户库）===
+# Agent 按 SOUL 铁律 29 安装 R 包时用 R_LIBS 指向本目录；持久内核
+# （persistent_kernel .libPaths 探测）会自动包含 R_LIBS。
+mkdir -p "$SCRIPT_DIR/R_libs"
+export R_LIBS="$SCRIPT_DIR/R_libs${R_LIBS:+:$R_LIBS}"
 if ! command -v Rscript &>/dev/null; then
     echo "[WARN] Rscript 未找到 —— R 分析（Seurat/WGCNA 等）不可用，核心 WebUI 不受影响"
     echo "  安装 R（Ubuntu/Debian，tuna 镜像加速包安装）:"
