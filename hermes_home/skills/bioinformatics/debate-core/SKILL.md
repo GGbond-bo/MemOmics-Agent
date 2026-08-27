@@ -72,6 +72,20 @@ analysis → 结论前 L2、其余 L1。
 - 无环境 key 时回退 provider_keys.json：跳过失效 dcs-cloud，优先 deepseek
   官方（deepseek-v4-flash），其余兜底
 
+**v2（2026-08-27）新增参数**（config 的 debate 段或工具参数）：
+- prompt_version: 2（默认）：v2 证据契约 + 结构化论据 + 裁判 rubrics；
+  MEMOMICS_DEBATE_LEGACY_PROMPTS=1 一键回退 v1 提示词
+- evidence_cards：外部证据卡（JSON 数组或文本，含 PMID/DOI/effect/n/source_file），
+  注入所有角色与裁判；内容变化 → 指纹变化 → 不复用缓存
+- role_preset: core7 | core9：core9 增加**实验设计评审**与**可重复性评审**两个中立角色 → 10 角色/轮
+- judge_count: 1 | 3：多裁判温度采样 + 简单多数投票（judge_consensus 字段）；
+  >1 时成本 ×2-3，预算护栏按调用次数计
+- rounds_max: 5：rounds 上限护栏（默认 5）
+- max_tokens: {judge:8192, role:2048, l1_role:2048, l1_judge:8192}
+  —— 推理模型（deepseek-v4-pro）若上限过低会被 reasoning 吃满，content 为空 → 裁决恒低
+- 并发说明（2026-08-14 修正）：受控并发 max_workers=3（MEMOMICS_DEBATE_MAX_WORKERS），
+  不再全串行（会卡死）也不全并发（会触发配额 8/8 失败）；隔离性不受影响
+
 ## 3. 辩论结果怎么用（裁决回流）
 
 辩论成功后**自动**（无需 agent 手动）：
