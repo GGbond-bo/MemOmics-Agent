@@ -6886,14 +6886,25 @@ def _normalize_base_url(raw):
     return url.rstrip("/")
 
 
+def _safe_str(v):
+    """2026-08-28: 请求字段类型防御——误传 list/数字等取首元素或空，不 500。"""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, (list, tuple)) and v:
+        return str(v[0]).strip()
+    if v is None:
+        return ""
+    return str(v).strip()
+
+
 @app.post("/api/providers/custom/discover")
 async def discover_custom_models(payload: dict):
     """输入 URL（支持完整 chat/completions 端点）+ API Key → 自动拉取该端点所有模型。
 
     走 OpenAI 兼容 /models 列表接口；带代理 fallback 直连（与 _http_get_json 同策略）。
     """
-    raw = (payload.get("url") or payload.get("base_url") or "").strip()
-    api_key = (payload.get("api_key") or "").strip()
+    raw = _safe_str(payload.get("url") or payload.get("base_url"))
+    api_key = _safe_str(payload.get("api_key"))
     base = _normalize_base_url(raw)
     if not base.startswith(("http://", "https://")):
         return JSONResponse({"error": "URL 需以 http(s):// 开头"}, status_code=400)
