@@ -219,7 +219,7 @@ def run_stage2(sample_names, h5ad_dir, cb_output_dir, log_file, params):
 
         # 启动 CellBender
         with open(run_log, "w", encoding="utf-8") as rl:
-            write_log(log_file, f"[Stage2] [{sname}] {"="*50}")
+            write_log(log_file, f"[Stage2] [{sname}] {'='*50}")
             write_log(log_file, f"[Stage2] [{sname}] CellBender 训练开始 ...")
 
             proc = subprocess.run(

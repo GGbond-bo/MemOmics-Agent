@@ -1,0 +1,33 @@
+# MemOmics-Agent 分析依赖（按需安装，2026-08-29）
+# Agent 核心不依赖本文件 —— 跑 Scanpy/Python 单细胞分析、OCR/读图、文档转换时按需安装：
+#   pip install -r requirements-analysis.txt
+#
+# 策略（SOUL 铁律 29）：Agent 任务中先检查用户已有环境（conda env / 系统 Python），
+# 用户环境已有则复用；没有且用户同意安装时才执行本文件。
+#
+# 支持 Python 3.10 - 3.13：版本下限按各包对 Python 3.13 的 wheel 支持设定，
+# 3.10/3.11 下 pip 会自动选择满足约束的可用版本；个别包在旧版本无可用 wheel 时
+# 安装会失败——此时提示用户改用已有环境，不阻塞 Agent 核心。
+
+# === 单细胞分析生态 ===
+scanpy>=1.10.4
+anndata>=0.10.9
+numpy>=1.26.4
+pandas>=2.2.2
+scipy>=1.14.1
+scikit-learn>=1.5.2
+matplotlib>=3.9.2
+seaborn>=0.13.2
+# RNA velocity / doublet / 聚类图（Linux/macOS；Windows 本机共享库已有则无需）
+scvelo>=0.3.2; sys_platform != "win32"
+scrublet>=0.2.3; sys_platform != "win32"
+leidenalg>=0.10.2; sys_platform != "win32"
+igraph>=0.11.8; sys_platform != "win32"
+
+# === OCR / 读图 ===
+# rapidocr_onnxruntime / opencv-python-headless 已由安装器随包离线安装
+# （requirements-vision.txt + vendor/wheels），此处无需重复；若用户环境自建
+# 时可手动补装：pip install rapidocr_onnxruntime opencv-python-headless
+
+# === 文档转换（translate-book 整书翻译 skill） ===
+pypandoc>=1.14

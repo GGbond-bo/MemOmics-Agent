@@ -108,6 +108,11 @@ fi
 # === Step 4.5: R 检查（Linux 包不预装 R——给出指引，避免用户开箱即遇 R 报错） ===
 # 2026-08-25: 多 R 环境（conda/系统共存）时用 RSCRIPT_PATH 指定主力 R，
 # 持久内核会优先用它（persistent_kernel._rscript_path 已支持）。
+# 2026-08-29: 分析包策略 —— 核心 Agent 依赖已装完；scanpy 生态等分析包
+# 按需安装（Agent 任务中先查用户环境，用户同意才装，SOUL 铁律 29）。
+echo "[INFO] 核心依赖就绪（Agent 可正常使用）。"
+echo "  Python 分析包（scanpy 生态）按需安装：pip install -r requirements-analysis.txt"
+echo "  R 包由 Agent 在任务中检查用户环境后询问安装（清华镜像）"
 if ! command -v Rscript &>/dev/null; then
     echo "[WARN] Rscript 未找到 —— R 分析（Seurat/WGCNA 等）不可用，核心 WebUI 不受影响"
     echo "  安装 R（Ubuntu/Debian，tuna 镜像加速包安装）:"

@@ -8505,7 +8505,7 @@ def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
     session["wx_sender_id"] = sender_id
     session["source"] = "weixin"
     _save_weixin_session_map()
-    print(f"[MemOmics] 微信新会话: {sender_name} → {session["id"]}", flush=True)
+    print(f"[MemOmics] 微信新会话: {sender_name} → {session['id']}", flush=True)
     return session
 
 
