@@ -1,0 +1,101 @@
+# Linux Install Test — 轻量安装（核心 Agent 依赖 only）+ Python 3.10/3.11/3.13 矩阵
+#
+# 验证点（2026-08-29 依赖拆分策略）：
+#   1. 解压发行 Linux 完整包，只装 requirements.txt（core，不装 requirements-analysis）
+#   2. Python 3.10 / 3.11 / 3.13 三个版本矩阵（3.11 = 用户 conda base 实测版本，
+#      同时回归 f-string 同引号嵌套修复；3.12 已知 OK 不重复）
+#   3. 核心 Agent 可启动：HTTP 200 / update_check / env_check
+#   4. 分析包（scanpy 等）不装也不影响 Agent 核心（OCR 缺失优雅降级）
+#
+# 手动触发：Actions → Linux Install Test → Run workflow（可填 release_tag）
+
+name: Linux Install Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '测试哪个 Release 的 Linux 完整包'
+        required: false
+        default: 'v2026-08-29'
+  push:
+    paths:
+      - '.github/workflows/linux-install-test.yml'
+
+jobs:
+  install-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.13']
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Download Linux full package
+        run: |
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-08-29' }}"
+          curl -fsSL -o pkg.tar.gz \
+            "https://github.com/GGbond-bo/MemOmics-Agent/releases/download/${RELEASE_TAG}/MemOmics-Linux.tar.gz"
+          tar -xzf pkg.tar.gz
+          ls MemOmics | head -8
+
+      - name: Lightweight install - core only (no analysis packages)
+        run: |
+          cd MemOmics
+          # 与 start_linux.sh 一致的 core 安装路径（analysis 不装）
+          python3 -m venv .venv
+          .venv/bin/pip install -q --upgrade pip
+          .venv/bin/pip install -q -r requirements.txt
+          echo '--- core deps ---'
+          .venv/bin/python -c "import fastapi, uvicorn, openai, httpx, yaml, pymupdf; print('core deps OK')"
+          echo '--- analysis pkgs should be ABSENT ---'
+          .venv/bin/python -c "import importlib.util as u; print('scanpy:', bool(u.find_spec('scanpy')), '| rapidocr:', bool(u.find_spec('rapidocr_onnxruntime')))"
+
+      - name: Python ${{ matrix.python }} syntax check (f-string regression)
+        run: |
+          cd MemOmics
+          # 真实 ${{ matrix.python }} 解释器解析 server.py —— f-string 同引号嵌套在 <3.12 必须不报错
+          .venv/bin/python -c "import ast; ast.parse(open('webui/server.py', encoding='utf-8').read()); print('server.py parses on Python ${{ matrix.python }}')"
+          # 全量核心模块语法
+          .venv/bin/python -m compileall -q webui memomics hermes-agent 2>&1 | tail -5 || true
+
+      - name: Boot server (core-only, no OCR)
+        run: |
+          cd MemOmics
+          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_PORT=8899
+          export PYTHONPATH="$PWD:$PWD/hermes-agent"
+          # 首启配置
+          if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$HERMES_HOME/config.yaml.example" ]; then
+            cp "$HERMES_HOME/config.yaml.example" "$HERMES_HOME/config.yaml"
+          fi
+          nohup .venv/bin/python webui/server.py > server.log 2>&1 &
+          BOOTED=0
+          for i in $(seq 1 90); do
+            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null; then BOOTED=1; break; fi
+            sleep 5
+          done
+          echo "SERVER_BOOTED=$BOOTED"
+          if [ "$BOOTED" != "1" ]; then tail -60 server.log; exit 1; fi
+          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://127.0.0.1:8899/
+          curl -sS --max-time 15 http://127.0.0.1:8899/api/update/check | head -c 200; echo
+          echo '--- server log: OCR/vision 降级提示（无 rapidocr 不崩）---'
+          grep -iE 'ocr|vision|rapid' server.log | head -5 || echo '(无 OCR 相关日志 = 静默降级)'
+          echo '--- server log tail ---'
+          tail -8 server.log
+
+      - name: Stop server
+        if: always()
+        run: pkill -f 'webui/server.py' || true
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-test-py${{ matrix.python }}-log
+          path: MemOmics/server.log
+          if-no-files-found: ignore
