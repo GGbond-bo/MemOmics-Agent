@@ -6836,6 +6836,78 @@ def _normalize_custom_models(models_raw):
     return models
 
 
+def _normalize_base_url(raw):
+    """URL 规整：完整 chat/completions 端点 → base_url。
+    支持：https://host/v1/chat/completions → https://host/v1
+          https://host/v1 → 原样
+          https://host → 原样（/models 探测会自动补 /v1 变体）"""
+    url = (raw or "").strip()
+    for tail in ("/chat/completions", "/completions"):
+        if url.endswith(tail):
+            url = url[: -len(tail)]
+    return url.rstrip("/")
+
+
+@app.post("/api/providers/custom/discover")
+async def discover_custom_models(payload: dict):
+    """输入 URL（支持完整 chat/completions 端点）+ API Key → 自动拉取该端点所有模型。
+
+    走 OpenAI 兼容 /models 列表接口；带代理 fallback 直连（与 _http_get_json 同策略）。
+    """
+    raw = (payload.get("url") or payload.get("base_url") or "").strip()
+    api_key = (payload.get("api_key") or "").strip()
+    base = _normalize_base_url(raw)
+    if not base.startswith(("http://", "https://")):
+        return JSONResponse({"error": "URL 需以 http(s):// 开头"}, status_code=400)
+    import urllib.request as _ur
+    import urllib.error as _uerr
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    # /models 端点变体：base + /v1 兜底
+    candidates = [base + "/models"]
+    if not base.endswith("/v1"):
+        candidates.append(base + "/v1/models")
+    last_err = ""
+    for _url in candidates:
+        for proxy in (_PROXY, None):
+            try:
+                req = _ur.Request(_url, headers=headers)
+                # 2026-08-26: build_opener 嵌套修复（else 分支直接返回 OpenerDirector）
+                opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                          if proxy else _ur.build_opener())
+                with opener.open(req, timeout=20) as r:
+                    data = json.loads(r.read().decode("utf-8", "replace"))
+                # OpenAI 兼容三种形态：data[] / models[] / object=list 的 data
+                raw_models = data.get("data") or data.get("models") or []
+                if not isinstance(raw_models, list):
+                    raise ValueError("模型列表格式不识别")
+                models = []
+                for m in raw_models:
+                    if isinstance(m, str):
+                        models.append({"id": m, "name": m})
+                        continue
+                    if not isinstance(m, dict):
+                        continue
+                    mid = m.get("id") or m.get("model") or ""
+                    if not mid:
+                        continue
+                    models.append({"id": str(mid), "name": str(m.get("name") or m.get("display_name") or mid)})
+                if models:
+                    return {"ok": True, "base_url": base, "url_used": _url,
+                            "models": models, "count": len(models)}
+                last_err = "端点返回空模型列表"
+            except _uerr.HTTPError as e:
+                last_err = f"HTTP {e.code}: {e.reason}"
+                if e.code in (401, 403):
+                    return JSONResponse({"error": f"{_url} 返回 {e.code} —— API Key 无效或无权访问"}, status_code=400)
+                if e.code == 404:
+                    continue  # 试下一个端点变体
+            except Exception as e:
+                last_err = str(e)[:150]
+    return JSONResponse({"error": f"模型发现失败（{base}/models）：{last_err or '无法连接'}。请确认 URL 正确、Key 有效、端点支持 OpenAI 兼容 /models。"}, status_code=400)
+
+
 @app.post("/api/providers/custom")
 async def add_custom_provider(payload: dict):
     """添加自定义 OpenAI 兼容 provider：名称 + base_url + api_key + 模型列表"""

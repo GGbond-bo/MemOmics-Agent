@@ -1032,18 +1032,21 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         </div>
         <button class="save-btn" onclick="saveModel()" data-i18n="set_as_current">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
-        <!-- 自定义提供商（2026-08-27：任意 OpenAI 兼容端点 + 自定义模型） -->
+        <!-- 自定义提供商（2026-08-27：任意 OpenAI 兼容端点 + 自动发现模型） -->
         <div class="settings-group">
-          <label>⭐ 自定义提供商（OpenAI 兼容：vLLM / OneAPI / 硅基流动 / 本地推理等）</label>
+          <label>⭐ 自定义提供商（输入 URL + Key，自动发现模型）</label>
           <div id="custom-providers-list" style="font-size:11px;margin-bottom:8px;"></div>
-          <input type="text" id="cp-name" placeholder="名称，如：硅基流动" style="width:100%;font-size:12px;">
-          <div style="display:flex;gap:4px;margin-top:4px;">
-            <input type="text" id="cp-base-url" placeholder="Base URL: https://api.siliconflow.cn/v1" style="flex:2;min-width:180px;font-size:12px;">
-            <input type="password" id="cp-api-key" placeholder="API Key（可留空，保存后再补）" style="flex:1;min-width:120px;font-size:12px;">
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="cp-name" placeholder="名称（可自动填）" style="flex:1;min-width:100px;font-size:12px;">
+            <input type="text" id="cp-url" placeholder="URL: https://opencode.ai/zen/go/v1 或完整 …/v1/chat/completions" style="flex:3;min-width:200px;font-size:12px;">
           </div>
           <div style="display:flex;gap:4px;margin-top:4px;">
-            <input type="text" id="cp-models" placeholder="模型名，逗号分隔：Qwen/Qwen2.5-72B-Instruct,deepseek-ai/DeepSeek-V3" style="flex:3;min-width:180px;font-size:12px;">
-            <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加</button>
+            <input type="password" id="cp-api-key" placeholder="API Key" style="flex:2;min-width:150px;font-size:12px;">
+            <button onclick="discoverCustomModels()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">🔍 发现模型</button>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" id="cp-models" placeholder="模型名，逗号分隔（点「发现模型」自动填充，可再手动增删）" style="flex:3;min-width:180px;font-size:12px;">
+            <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--success);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加</button>
           </div>
           <div id="cp-status" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
         </div>
@@ -3901,12 +3904,12 @@ async function loadCustomProviders() {
 
 async function addCustomProvider() {
   var name = document.getElementById('cp-name').value.trim();
-  var base = document.getElementById('cp-base-url').value.trim();
+  var base = document.getElementById('cp-url').value.trim();
   var key = document.getElementById('cp-api-key').value.trim();
   var models = document.getElementById('cp-models').value.split(/[,，\n]/).map(function(s) { return s.trim(); }).filter(Boolean);
   var status = document.getElementById('cp-status');
-  if (!name || !base) { status.textContent = '请填写名称和 Base URL'; status.style.color = 'var(--danger)'; return; }
-  if (!models.length) { status.textContent = '请至少填一个模型名'; status.style.color = 'var(--danger)'; return; }
+  if (!name || !base) { status.textContent = '请填写名称和 URL'; status.style.color = 'var(--danger)'; return; }
+  if (!models.length) { status.textContent = '请至少填一个模型名（或先点「🔍 发现模型」）'; status.style.color = 'var(--danger)'; return; }
   try {
     var r = await fetch('/api/providers/custom', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3915,7 +3918,7 @@ async function addCustomProvider() {
     var d = await r.json();
     if (!r.ok) { status.textContent = d.error || '添加失败'; status.style.color = 'var(--danger)'; return; }
     document.getElementById('cp-name').value = '';
-    document.getElementById('cp-base-url').value = '';
+    document.getElementById('cp-url').value = '';
     document.getElementById('cp-api-key').value = '';
     document.getElementById('cp-models').value = '';
     status.textContent = '已添加 ' + name + '（' + d.provider_id + '）— 可在上方下拉选它设默认模型';
@@ -3923,6 +3926,32 @@ async function addCustomProvider() {
     loadCustomProviders();
     loadProviders();
   } catch(e) { status.textContent = '添加失败: ' + e.message; status.style.color = 'var(--danger)'; }
+}
+
+// 2026-08-27: 输入 URL + Key → 自动发现该端点所有模型
+async function discoverCustomModels() {
+  var url = document.getElementById('cp-url').value.trim();
+  var key = document.getElementById('cp-api-key').value.trim();
+  var status = document.getElementById('cp-status');
+  var nameEl = document.getElementById('cp-name');
+  if (!url) { status.textContent = '请先填写 URL'; status.style.color = 'var(--danger)'; return; }
+  if (!nameEl.value.trim()) {
+    try { nameEl.value = new URL(url).hostname; } catch(e) {}
+  }
+  status.textContent = '🔍 正在探测 ' + url + ' 的模型列表…';
+  status.style.color = 'var(--text-light)';
+  try {
+    var r = await fetch('/api/providers/custom/discover', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url, api_key: key })
+    });
+    var d = await r.json();
+    if (!r.ok) { status.textContent = d.error || '发现失败'; status.style.color = 'var(--danger)'; return; }
+    var models = (d.models || []).map(function(m) { return m.id; });
+    document.getElementById('cp-models').value = models.join(', ');
+    status.textContent = '✅ 发现 ' + d.count + ' 个模型（端点 ' + d.url_used + '）— 可手动增删后点「添加」';
+    status.style.color = 'var(--success)';
+  } catch(e) { status.textContent = '发现失败: ' + e.message; status.style.color = 'var(--danger)'; }
 }
 
 async function deleteCustomProvider(pid) {
