@@ -12677,23 +12677,9 @@ async def ws_endpoint(ws: WebSocket):
                                     result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
                                 _session_emit(_session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": _session["id"]})
                         else:
-                            try:
-                                # 绝对超时防护：Windows 上 ssl 握手被网关挂起时
-                                # connect/read 超时可能失效，线程永久卡死。
-                                # 15 分钟上限 → 超时中断 agent 并报错（daemon 线程
-                                # 泄漏不阻塞进程，但避免任务永久挂起）。
-                                result = await asyncio.wait_for(
-                                    loop.run_in_executor(None, _do_run),
-                                    timeout=900
-                                )
-                            except asyncio.TimeoutError:
-                                try:
-                                    if hasattr(_agent, "interrupt"):
-                                        _agent.interrupt()
-                                except Exception:
-                                    pass
-                                result = ""
-                                _session_emit(_session, {"type": "error", "content": "AI 响应超时（15 分钟）。网关连接可能被挂起，请重试或切换模型。", "session_id": _session["id"]})
+                            # 2026-08-27 用户要求：去除 15 分钟绝对超时保护（长任务会被误杀）。
+                            # 不再设置 turn 级绝对上限；服务端仍保留 5 分钟无输出 stall watchdog 兜底。
+                            result = await loop.run_in_executor(None, _do_run)
 
                         # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
                         if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
