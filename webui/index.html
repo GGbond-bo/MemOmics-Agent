@@ -1440,14 +1440,9 @@ function handleMessage(msg) {
       fullText += (msg.content || '');
     }
     if (currentBubble) {
-      // 防跳动：用户在上方阅读时，重渲染后补偿滚动位置，保证阅读点不漂移
-      var _msgs = document.getElementById('messages');
-      var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
-      currentBubble.innerHTML = renderMarkdown(fullText);
-      // Mermaid 内容未变化时不重绘，避免闪烁
-      var _mermaidSrc = (fullText.match(/```mermaid[\s\S]*?```/g) || []).join('');
-      if (_mermaidSrc !== _lastMermaidHash) { if (typeof initMermaid === 'function') initMermaid(); _lastMermaidHash = _mermaidSrc; }
-      if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
+      // 2026-08-27 防闪烁：节流合并（150ms），不再每个 token 重建 DOM；
+      // 滚动补偿逻辑移到 _doStreamRender 内（渲染时才测量，避免中间态跳动）
+      _scheduleStreamRender();
     }
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
@@ -1551,11 +1546,11 @@ function handleMessage(msg) {
     }
   } else if (msg.type === 'complete') {
     var completeContent = msg.content || '';
-    if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
-    else if (currentBubble && completeContent && completeContent.length > fullText.length) {
-      // 切换恢复场景：complete 是最终完整内容，补全切走期间丢失的流式 delta
-      fullText = completeContent;
-      currentBubble.innerHTML = renderMarkdown(fullText); initMermaid();
+    if (currentBubble) {
+      // 2026-08-27：统一走 flush（节流定时器若还在，先清掉并立即渲染最终稿）
+      if (completeContent && completeContent.length > fullText.length) fullText = completeContent;
+      if (!fullText) fullText = completeContent;
+      _flushStreamRender();
     }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
@@ -2369,6 +2364,35 @@ function scrollBottom() {
   if (_autoScroll === false) return;  // 用户正在上方阅读，不打断
   var m = document.getElementById('messages');
   m.scrollTop = m.scrollHeight;
+}
+
+// === 流式渲染节流（2026-08-27 防页面颤抖/闪烁） ===
+// 每个 delta 都整格 innerHTML 重建会在 token 级触发布局抖动；
+// 改为 150ms 节流合并渲染，滚动也只补偿一次，阅读体验更稳。
+var _streamRenderTimer = null;
+var _streamRenderPending = false;
+function _doStreamRender() {
+  if (!currentBubble) return;
+  var _msgs = document.getElementById('messages');
+  var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
+  currentBubble.innerHTML = renderMarkdown(fullText);
+  var _mermaidSrc = (fullText.match(/```mermaid[\s\S]*?```/g) || []).join('');
+  if (_mermaidSrc !== _lastMermaidHash) { if (typeof initMermaid === 'function') initMermaid(); _lastMermaidHash = _mermaidSrc; }
+  if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
+}
+function _scheduleStreamRender() {
+  var _bubble = currentBubble;  // 捕获当前气泡，防止会话切换后旧定时器误渲染到新气泡
+  clearTimeout(_streamRenderTimer);
+  _streamRenderTimer = setTimeout(function() {
+    _streamRenderPending = false;
+    if (currentBubble !== _bubble) return;
+    _doStreamRender();
+  }, 150);
+}
+function _flushStreamRender() {
+  if (_streamRenderTimer) clearTimeout(_streamRenderTimer);
+  _streamRenderPending = false;
+  _doStreamRender();
 }
 
 function escapeHtml(s) {
