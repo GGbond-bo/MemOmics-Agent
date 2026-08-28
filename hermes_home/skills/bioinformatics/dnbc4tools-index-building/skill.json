@@ -1,0 +1,26 @@
+{
+  "name": "dnbc4tools-index-building",
+  "version": "1.1.0",
+  "success_count": 1,
+  "proven_script": "",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "",
+      "params": "skill_update=v1.1.0 触发门禁（规则0+When to Use 触发判定+SOUL.md 注册提示+skill.json notes）",
+      "date": "2026-08-28",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "dnbc4tools-index-building skill v1.1.0 更新验证：SKILL.md 新增规则0触发门禁（用户特别指定：先澄清厂家BGI/DNBelab + RNA/ATAC索引 + ref.json状态）+ When to Use 触发判定表；SOUL.md 注册行加门禁提示；skill.json version 1.1.0。project pytest offline 全量"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "",
+    "preferred_params": {},
+    "notes": "v1.1.0 (2026-08-28): 用户特别指定触发门禁——触发前必须先澄清厂家(BGI/DNBelab)与索引类型(RNA/ATAC)，未确认不触发"
+  }
+}
