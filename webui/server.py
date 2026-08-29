@@ -12671,6 +12671,22 @@ async def ws_endpoint(ws: WebSocket):
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
 
+                        # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
+                        # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
+                        # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
+                        try:
+                            _focus_text = (user_text or "").strip()
+                            if _focus_text:
+                                _turn_focus = (
+                                    "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
+                                    "请只回答这一条，不要延续或重复你上一轮的输出；"
+                                    "历史对话仅供背景，若与历史相似，以本轮用户消息为准。\n"
+                                    f"用户本轮消息：{_focus_text[:800]}"
+                                )
+                                conversation_history.append({"role": "system", "content": _turn_focus})
+                        except Exception:
+                            pass
+
                         # 2026-08-14: 本轮回合运行基线（心跳计时起点）
                         _session["_turn_start_ts"] = time.time()
                         _session["_live_tool"] = ""
