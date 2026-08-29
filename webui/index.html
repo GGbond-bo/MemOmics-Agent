@@ -1353,7 +1353,7 @@ function handleMessage(msg) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.partial_text;
-      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
     if (progressTimelineEl || progressItems.length > 0) {
@@ -2375,9 +2375,7 @@ function _doStreamRender() {
   if (!currentBubble) return;
   var _msgs = document.getElementById('messages');
   var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
-  currentBubble.innerHTML = renderMarkdown(fullText);
-  var _mermaidSrc = (fullText.match(/```mermaid[\s\S]*?```/g) || []).join('');
-  if (_mermaidSrc !== _lastMermaidHash) { if (typeof initMermaid === 'function') initMermaid(); _lastMermaidHash = _mermaidSrc; }
+  renderBubbleIncremental(currentBubble, fullText);
   if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
 }
 function _scheduleStreamRender() {
@@ -2393,6 +2391,122 @@ function _flushStreamRender() {
   if (_streamRenderTimer) clearTimeout(_streamRenderTimer);
   _streamRenderPending = false;
   _doStreamRender();
+}
+
+// === 块级增量渲染（2026-08-27，对齐 DSH MarkdownText 思路） ===
+// DSH 做法：React 单实例 + 增量 markdown 渲染器，未变化块不重建 DOM；
+// 这里用 vanilla JS 等价实现：把消息拆成 text/code/mermaid/dsh-ui 块，
+// 已完成块复用节点，只重渲染发生变化的尾部块 —— 从根本上消除整体闪烁。
+function splitMsgBlocks(text) {
+  var segs = [];
+  if (!text) return segs;
+  var fences = extractFenceBlocks(text);
+  var parts = fences.text.split(/\x00BLOCK(\d+)\x00/);
+  for (var i = 0; i < parts.length; i += 2) {
+    var tp = parts[i];
+    if (tp && tp.length) segs.push({ kind: 'text', raw: tp });
+    if (i + 1 < parts.length) {
+      var fi = parseInt(parts[i + 1], 10);
+      var fb = fences.blocks[fi];
+      if (!fb) continue;
+      var kind = fb.lang === 'mermaid' ? 'mermaid' : (fb.lang === 'dsh-ui' ? 'dsh-ui' : 'code');
+      var raw = '\u0060\u0060\u0060' + (fb.lang || '') + '\n' + fb.code + (fb.complete ? '\n\u0060\u0060\u0060' : '');
+      segs.push({ kind: kind, raw: raw, closed: !!fb.complete, lang: fb.lang || '', code: fb.code, fence: fb });
+    }
+  }
+  return segs;
+}
+function renderTextSegment(text) {
+  if (!text) return '';
+  var html = escapeHtml(text);
+  html = html.replace(/\u0060([^\u0060]+)\u0060/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
+    var lines = block.split('\n');
+    var rows = [];
+    for (var i2 = 0; i2 < lines.length; i2++) {
+      var line = lines[i2].trim();
+      if (!line || line.charAt(0) !== '|') continue;
+      var cells = line.split('|');
+      if (cells.length && cells[0].trim() === '') cells.shift();
+      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+      if (cells.length < 2) continue;
+      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
+      rows.push(cells);
+    }
+    if (rows.length === 0) return block;
+    var t = '<table><thead><tr>';
+    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
+    t += '</tr></thead><tbody>';
+    for (var r2 = 1; r2 < rows.length; r2++) {
+      t += '<tr>';
+      for (var c2 = 0; c2 < rows[r2].length; c2++) t += '<td>' + rows[r2][c2].trim() + '</td>';
+      t += '</tr>';
+    }
+    return t + '</tbody></table>';
+  });
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+function renderSegmentHtml(seg) {
+  if (seg.kind === 'code') return renderCodeBlockHtml(seg.fence, seg.lang);
+  if (seg.kind === 'mermaid') return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(seg.code) + '</div>';
+  if (seg.kind === 'dsh-ui') {
+    if (seg.closed) return renderGenUiBlock(seg.code);
+    return renderCodeBlockHtml(seg.fence, 'dsh-ui');
+  }
+  return renderTextSegment(seg.raw);
+}
+function renderBubbleIncremental(bubble, text) {
+  if (!bubble) return;
+  var state = bubble._incr;
+  if (!state) {
+    state = { segs: [], content: null, mermaidDirty: false };
+    bubble._incr = state;
+  }
+  if (!state.content || !state.content.isConnected) {
+    state.content = document.createElement('div');
+    state.content.className = 'md-incremental-body';
+    bubble.appendChild(state.content);
+    state.segs = [];
+  }
+  // 与 renderMarkdown 一致的长文本截断 + 换行归一
+  if (text && text.length > 15000) {
+    var cut = 15000;
+    var head = text.substring(0, 15000);
+    var ticks = (head.match(/\u0060\u0060\u0060/g) || []).length;
+    if (ticks % 2 === 1) {
+      var lastTick = head.lastIndexOf('\u0060\u0060\u0060');
+      if (lastTick >= 11000) cut = lastTick;
+    }
+    text = text.substring(0, cut) + '\n\n...';
+  }
+  if (text) text = text.replace(/\r\n?/g, '\n');
+  var segs = splitMsgBlocks(text);
+  var common = 0;
+  while (common < state.segs.length && common < segs.length &&
+         state.segs[common].kind === segs[common].kind &&
+         state.segs[common].raw === segs[common].raw) common++;
+  for (var r = state.segs.length - 1; r >= common; r--) {
+    var oldNode = state.segs[r].node;
+    if (oldNode && oldNode.parentNode) oldNode.parentNode.removeChild(oldNode);
+  }
+  for (var j = common; j < segs.length; j++) {
+    var node = document.createElement('div');
+    node.className = 'md-seg md-seg-' + segs[j].kind + (segs[j].closed === false ? ' md-seg-streaming' : '');
+    node.innerHTML = renderSegmentHtml(segs[j]);
+    state.content.appendChild(node);
+    segs[j].node = node;
+    if (segs[j].kind === 'mermaid') state.mermaidDirty = true;
+  }
+  state.segs = segs;
+  if (state.mermaidDirty) {
+    state.mermaidDirty = false;
+    if (typeof initMermaid === 'function') initMermaid();
+  }
 }
 
 function escapeHtml(s) {
@@ -3614,7 +3728,7 @@ function switchSession(sid) {
       currentAssistantEl = liveBubble;
       currentBubble = liveBubble.querySelector('.bubble');
       fullText = liveText;
-      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 如果还有更多历史消息，显示加载提示
     // 2026-08-17: 返回窗口已满(100)就一定显示入口——旧会话 _msg_count 可能为 0，

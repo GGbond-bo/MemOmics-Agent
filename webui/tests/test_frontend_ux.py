@@ -204,7 +204,9 @@ class TestMermaidCache:
         assert "var _lastMermaidHash = '';" in HTML
 
     def test_compared_before_redraw(self):
-        assert "_mermaidSrc !== _lastMermaidHash" in HTML
+        # 2026-08-27: 增量渲染器在新增 mermaid 块时触发 initMermaid（替代全文 hash 比较）
+        assert "renderBubbleIncremental" in HTML
+        assert "state.mermaidDirty" in HTML
 
     def test_reset_on_new_message(self):
         # send() 新回合重置
