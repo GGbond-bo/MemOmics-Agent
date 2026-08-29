@@ -12536,6 +12536,25 @@ async def ws_endpoint(ws: WebSocket):
                                     continue
                                 _filtered.append(_m)
                             conversation_history = _filtered
+                            # ── (b2 2026-08-29) 历史去重：空 assistant 丢弃 + 相邻完全重复消息折叠 ──
+                            # 实证：memomics-cd677556 3449 条 user/assistant 历史，含 99 条重复 user
+                            # 消息、757 处同角色连排 → 模型被旧问答淹没，回答上一个问题/重复重跑。
+                            _dedupe = []
+                            _prev_key = None
+                            for _m in conversation_history:
+                                _c = _m.get("content") if isinstance(_m, dict) else None
+                                if not isinstance(_c, str):
+                                    _dedupe.append(_m)
+                                    _prev_key = None
+                                    continue
+                                if not _c.strip() and _m.get("role") == "assistant":
+                                    continue
+                                _key = (_m.get("role"), _c.strip())
+                                if _key == _prev_key:
+                                    continue
+                                _dedupe.append(_m)
+                                _prev_key = _key
+                            conversation_history = _dedupe
                             _mem_digest = _build_memory_digest(_session, user_text or "")
                             if _mem_digest:
                                 conversation_history = [m for m in conversation_history
@@ -12544,6 +12563,14 @@ async def ws_endpoint(ws: WebSocket):
                                 conversation_history.append({"role": "system", "content": _mem_digest})
                         except Exception as _b_err:
                             logger.warning(f"[MemOmics] (b) 上下文卫生失败(不阻断): {_b_err}")
+
+                        # ── (c0 2026-08-29) 超预算早折叠：把死代码 _maybe_rollup_history 接上 ──
+                        # 之前 1M 窗口模型让 317K token 历史一直不折叠，老问答紧邻新问题 →
+                        # “回答上一个问题”/忘记已跑结果。现在 >60K token 就折叠头部为结构化摘要。
+                        try:
+                            conversation_history = _maybe_rollup_history(_session, conversation_history)
+                        except Exception as _c0_err:
+                            logger.warning(f"[MemOmics] (c0) 历史早折叠失败(不阻断): {_c0_err}")
 
                         # ── (c/P1-P5) MiMo-Code 上下文架构：单一边界 usable() + 后台 writer(§1-§11) +
                         #      四层记忆(FTS/REQUIREMENTS/MEMORY/History) + 分段重建预算 + 增量压缩 ──
@@ -12615,7 +12642,8 @@ async def ws_endpoint(ws: WebSocket):
                                 "2. 仅当用户明确要求执行/继续任务时，才按 task_plan 推进（工具调用优先）。\n"
                                 "3. 用户是问答/调查/规划类请求时，不要擅自执行任务、不要擅自修复后重跑。\n"
                                 "4. 用户没有说'继续'时，任务推进交给系统自动续跑，不在本回合推进。\n"
-                                "5. 若用户明确要求执行且 Phase 描述模糊，可补充具体步骤执行；不确定时用 ask_user 确认。"
+                                "5. 若用户明确要求执行且 Phase 描述模糊，可补充具体步骤执行；不确定时用 ask_user 确认。\n"
+                                "6. 任何脚本/分析在重新执行前，必须先用 search_files/read_file 检查 results 目录下对应产物是否已存在且非空；已存在 → 直接复用并汇报，禁止重跑（铁律13）。"
                             )
                             conversation_history.append({"role": "system", "content": _merged})
 
