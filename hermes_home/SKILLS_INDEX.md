@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (80 skills)
+## 08_报告 - 报告/可视化 (82 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 | academic-figure-skill | 学术级科研绘图（TingxiYu）：8步闭环+29图型+4轮QA，用户脚本检查/优化+专业期刊出图默认；CNS级用nature-figure | academic figure, 学术图, 专业出图, 期刊出图, 脚本优化, publication figure | RED 必触发 |
@@ -277,6 +277,8 @@
 | metascape-gene-list-prep | > |  | YEL 讨论触发 |
 | professional-paper-interpretation | 专业编辑视角论文解读：叙事逻辑分析 + 研究思路拆解 + 结构化写作逻辑。区别于 paper-summary 的字段导向提取，本 skill 侧重'作者为什么这样做、逻辑链是什么、文章怎么组织的'。触 |  | YEL 讨论触发 |
 | cross-species-annotation | 跨物种单细胞RNA-seq细胞类型注释方法 |  | YEL 讨论触发 |
+| dnbc4tools-index-building | 华大BGI DNBelab C系列高通量单细胞数据分析软件 dnbc4tools 的参考基因组索引构建流程（rna mkref=STAR 2.7.2b genomeGenerate + atac mk |  | YEL 讨论触发 |
+| dnbc4tools-analysis-workflow | > |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

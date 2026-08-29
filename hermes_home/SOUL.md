@@ -821,4 +821,8 @@ terminal 完成 → _pending_record = True
 | "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
 | "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 见上方必触发列表 |
+| "DNBelab" / "dnbc4tools" / "华大单细胞" / "BGI索引" / "基因组索引构建" / "mkref" / "STAR 索引" / "mkgtf" / "华大BGI" / "华大" / "索引" | `skill_view("dnbc4tools-index-building")` |
+> ⚠️ `dnbc4tools-index-building` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行建库**——必须先向用户澄清 ①是否华大BGI/DNBelab平台 ②RNA索引还是ATAC索引 ③是否已有 ref.json 库 → 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）或非索引需求 → **不触发本 skill**，redirect 到对应流程。
+| "华大BGI单细胞分析" / "dnbc4tools 比对" / "dnbc4tools rna run" / "dnbc4tools atac run" / "dnbc4tools vdj run" / "DNBelab 完整流程" / "华大 RNA 分析流程" / "华大 ATAC 分析流程" / "DNBelab FASTQ 分析" / "华大单细胞比对流程" / "dnbc4tools multi" / "DNBelab 多样本" | `skill_view("dnbc4tools-analysis-workflow")` |
+> ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
 <!-- AUTO_SKILL_INSERT_MARKER -->
