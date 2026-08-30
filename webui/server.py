@@ -5076,6 +5076,58 @@ def _build_rollup_checkpoint(session, head):
     return "\n".join(_lines)
 
 
+def _build_pending_question_context(session, user_text):
+    """2026-08-31: 待确认问题追踪 — 防止“需要”回答错题/遗忘自己问过的承诺。
+
+    实证：memomics-cd677556 中 agent 问“需要我把这套解释整理进专利结论表吗？”，
+    用户答“1.需要。2.为什么你在电脑上做不了？”，agent 却只去验证 bigWig，
+    把已确认的任务（整理进专利结论表）丢了 —— 因为上下文没有“上一轮问过什么”的确定性记录。
+    原理与 DSH dsh-client-ui-user-questions（PendingQuestion/QuestionComposer）一致：
+    问话与答复必须绑定，不靠模型对“需要”的模糊指代。
+    """
+    try:
+        import sqlite3 as _sq
+        sid = session.get("id", "")
+        if not sid or not (user_text or "").strip():
+            return ""
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return ""
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT content FROM messages WHERE session_id=? AND role='assistant' AND content IS NOT NULL AND length(content)>50 ORDER BY id DESC LIMIT 1",
+                (sid,),
+            ).fetchall()
+        finally:
+            _conn.close()
+        if not _rows:
+            return ""
+        _last_assistant = (_rows[0][0] or "").strip()
+        # 提取最后一句；以问句结尾且含征询词 → 视为待确认问题
+        _parts = re.split(r"(?<=[。！？!?])", _last_assistant)
+        _q = ""
+        for _p in reversed(_parts):
+            _p = _p.strip()
+            if _p and (_p.endswith("？") or _p.endswith("?")):
+                _q = _p
+                break
+        if not _q or not re.search(r"(需要|要不要|是否|可以吗|好吗|同意吗|吗)", _q):
+            return ""
+        if re.search(r"(不要|不用|不需要|不用了|算了|先不)", user_text or ""):
+            return ""
+        if not re.search(r"(需要|要|是|好|同意|可以|行|当然|好的|嗯)", user_text or ""):
+            return ""
+        return (
+            "【待确认任务提醒 — 你上一轮问过，用户已确认】\n"
+            f"你上一轮问：{_q[:300]}\n"
+            "用户本轮已回复确认（需要/要/是/好/同意…）。本次必须完成该请求（执行/整理/生成），"
+            "不要只复述或延后；若用户同时提出了新问题，请一并回答，两者都要完成。"
+        )
+    except Exception:
+        return ""
+
+
 def _maybe_rollup_history(session, history):
     """(c) 步进式结构化 checkpoint：重放历史估算超预算时，把头部折叠为结构化摘要 + 保留最近尾窗逐字。
 
@@ -12670,6 +12722,14 @@ async def ws_endpoint(ws: WebSocket):
                             _agent.tools = [t for t in _agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
+
+                        # ── 2026-08-31 待确认问题追踪：用户“需要”必须绑定上一轮问话 ──
+                        try:
+                            _pend_ctx = _build_pending_question_context(_session, user_text or "")
+                            if _pend_ctx:
+                                conversation_history.append({"role": "system", "content": _pend_ctx})
+                        except Exception:
+                            pass
 
                         # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
                         # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
