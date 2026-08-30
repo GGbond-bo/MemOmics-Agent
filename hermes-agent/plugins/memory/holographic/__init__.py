@@ -139,6 +139,45 @@ def _extract_query_keywords(query: str) -> str:
     return cleaned
 
 
+def _enhance_query(query: str, sid: str = "", store=None) -> str:
+    """Intent/entity-enhanced retrieval query (P0-6 wiring, 2026-08-31).
+
+    The caller (Hermes turn_context) hands us the raw user message — the
+    server-side ``_classify_intent`` routing never reaches the provider. The
+    session-state block already carries the current topic entity (written by
+    server.py's topic-switch bypass, P1-4), so we merge it here.
+
+    2026-08-31 极端评测修复（实体污染排序）：只有当净化后的 query 退化回原文
+    （即消息本身没有实质内容词，如"继续跑"）时才把 entity 并入；
+    否则只返回净化后的内容词——避免旧任务实体（trust 高的旧事实）把新话题
+    （"专利结论表"/"下载张潇文章"）的真正相关事实挤出 Top5。
+    """
+    raw = (query or "").strip()
+    base = _extract_query_keywords(raw)
+    if not base:
+        return raw
+    _noise_hits = _RE_NOISE_WORDS.findall(raw)
+    # 判据（三态）：
+    # ① 净化掉过噪音词（base != raw）→ 内容词足够，不带旧实体（防污染）
+    # ② 原文根本没有噪音词（纯内容词短句，如"专利结论表"）→ 也不带旧实体
+    # ③ 含噪音词但净化后退化回原文（如"继续跑"）→ 无内容词，entity 兜底
+    if base != raw or not _noise_hits:
+        return base
+    # base 退化回原文 = 无实质内容词 → entity 兜底（"继续跑" → "热图 继续跑"）
+    entity = ""
+    if sid and store is not None:
+        try:
+            st = store.get_session_state(sid)
+            task = json.loads(st.get("task_json") or "{}")
+            entity = str(task.get("entity") or "")
+        except Exception:
+            entity = ""
+    entity = (entity or "").strip()
+    if not entity or entity in base:
+        return base
+    return (entity + " " + base).strip()
+
+
 def _search_session_messages(sid: str, query: str, limit: int = 3):
     """Read-only FTS over ONE session user messages (trigram + LIKE fallback).
 
@@ -329,6 +368,11 @@ class HolographicMemoryProvider(MemoryProvider):
         if not self._retriever or not query:
             return ""
         sid = session_id or self._session_id or ""
+        # P0-6 wiring: merge the current session topic entity into the retrieval
+        # query before fan-out (facts / assets / history all benefit).
+        query = _enhance_query(query, sid=sid, store=self._store)
+        if not query:
+            return ""
         try:
             parts = []
             # Source 1: facts (existing)

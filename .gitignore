@@ -202,3 +202,6 @@ test_p0*.py
 test_p1*.py
 test_proc_watchdog_e2e.py
 test_realdata_multiscene.py
+
+# 评测基准导出的用户私有对话数据（脚本可复跑生成）
+scripts/bench_*.json

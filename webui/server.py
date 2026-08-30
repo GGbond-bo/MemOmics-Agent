@@ -3271,8 +3271,12 @@ def _classify_intent(text: str):
     if any(kw in t for kw in CANCEL_KW):
         return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
     # 停止/暂停/取消/不要/别 + 任务相关词 → cancel
-    if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and any(kw in t for kw in 
-        ["任务", "分析", "cellbender", "训练", "计算", "进程", "job"]):
+    # 2026-08-31 极端评测修复：粘贴的长引用文本（如千问评价"不要用这组基因…"）
+    # 曾触发 cancel 误杀。改为"触发词 + 就近(10字内)任务词"组合，"不要用这组基因"不再命中。
+    if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and (
+        any(kw in t for kw in ["任务", "分析", "cellbender", "训练", "计算", "进程", "job"])
+        and _re_mod.search(r"(停止|暂停|取消|不要|别)[^。！？!?\n]{0,10}(任务|分析|训练|计算|进程|跑了|继续|执行)", t)
+    ):
         return ("cancel_task", 0.85, {"reason": "stop_with_context"})
     # 取消 + 任务相关词 → cancel（排除问句）
     if "取消" in t and not any(kw in t for kw in ["怎么", "如何", "什么", "为什么", "哪里"]):
@@ -3291,10 +3295,15 @@ def _classify_intent(text: str):
     
     # 1.5a: progress_check
     PROGRESS_KW = ["还在跑吗", "还在运行", "跑完了吗", "跑完没", "进度", "怎么样了",
-                   "状态", "nvidia-smi", "gpu", "显卡", "显存", "内存",
+                   "什么状态", "现在状态", "目前状态", "任务状态", "当前状态", "现在情况",
+                   "nvidia-smi", "gpu", "显卡", "显存", "内存",
                    "后台", "后台任务", "后台进程", "卡住了", "停了",
-                   "还要多久", "多久了", "跑了多久", "跑多久",
-                   "check progress", "how long", "status", "still running"]
+                   "还要多久", "多久了", "跑了多久", "跑多久", "跑到哪",
+                   "check progress", "how long", "status", "still running",
+                   # 2026-08-31 极端评测补丁：进度抱怨口语（"等了两天了还在跑"实测误判 chat）
+                   # 注意：裸词"状态"太宽——引用文本"细胞功能状态"曾误触发 progress_check，
+                   # 因此只保留短语形式（见上）。
+                   "还在跑", "还在等", "等了两天", "等了几天", "还在弄", "跑了好几天", "还在转"]
     if any(kw in t for kw in PROGRESS_KW):
         return ("progress_check", 0.85, {"reason": "progress_or_status_query"})
 
@@ -3387,6 +3396,22 @@ def _classify_intent(text: str):
     VIEW_EARLY_KW = ["检查一下", "检查", "查看", "看看", "看一下", "打开"]
     if any(kw in t for kw in VIEW_EARLY_KW) and _has_data_path_early:
         return ("analysis", 0.85, {"reason": "view_inspect_with_data"})
+
+    # === Priority 1.95: 交付类执行短句（2026-08-31 极端评测补丁）===
+    # "把人和猴脑对齐的亚群和基因给我"/"把8大类的基因都给我"/"帮我整理一下它的数据"
+    # 这类是明确的执行请求，此前无路径无生物词，被 short_no_bio 误判 chat。
+    # 排除：问句（"怎么弄"）、解释类（"讲讲/解释"）、无任务名词的纯闲聊。
+    _EXEC_NOUNS = ("代码", "表格", "基因", "亚群", "注释", "marker", "文件", "清单",
+                   "脚本", "结果", "数据", "列表", "报告", "名字", "命名")
+    # 注意：不含"方案"——"给我方案"是规划请求（research_plan），2026-08-31 实测误伤
+    _has_exec_noun = any(n in t for n in _EXEC_NOUNS)
+    _is_exec_deliver = any(k in t for k in ("给我", "帮我整理", "帮我列", "列出来", "列出", "整理一下"))
+    _is_question = any(k in t for k in ("怎么", "如何", "为什么", "多少", "什么", "哪", "? ", "？"))
+    # 决策征询句不是执行请求（"你觉得…还是…给我方案" → research_plan）
+    _is_consult = any(k in t for k in ("你觉得", "还是", "给我方案", "建议", "推荐"))
+    if _is_exec_deliver and _has_exec_noun and not _is_question and not _has_data_path_early \
+            and not _is_consult:
+        return ("direct_exec", 0.82, {"reason": "deliverable_exec_short"})
 
     # === Priority 2.6: 单篇文献解读/总结（先于 chat 与 research_plan，2026-08-24 修复）===
     # 问题(memomics-aa368e59 同类实测): "让我知道作者的研究思路，做了什么" 含 PLAN_KW
@@ -4788,7 +4813,16 @@ def _build_memory_digest(session, text):
         pass
     try:
         # (P3) 记忆召回切到 memory_store FTS5（失败回退 LIKE）
-        _facts = context_arch.fts_recall(text or "") or _recall_facts(text or "")
+        # 2026-08-31 P0-6 接线：检索 query 用内容实体优先（"继续跑"→entity"热图"），
+        # 让意图/话题切换旁路沉淀的 entity 真正驱动召回，而不是裸原文。
+        _q_ent = ""
+        try:
+            from webui import session_state as _ss2
+        except ImportError:
+            import session_state as _ss2
+        _q_ent = _ss2.extract_entity(text or "") or ""
+        _recall_query = _q_ent or (text or "")
+        _facts = context_arch.fts_recall(_recall_query) or _recall_facts(_recall_query)
         if _facts:
             _parts.append(_facts)
     except Exception:
@@ -5458,6 +5492,21 @@ def _extract_and_store_requirements(session, text):
         rd = session.get("results_dir") or ""
         if not rd or not os.path.isdir(rd):
             return
+        # 2026-08-31 极端评测修复 1/2：注入脚手架元循环——
+        # digest 注入文本（"[会话要求 · …]"开头）会被自身规则当成"用户要求"
+        # 再次写回 REQUIREMENTS.md（实测生产文件里同一条脚手架重复 8 行）。
+        # 注入文本的原始用户消息在末尾，剥掉脚手架前缀后再提取。
+        _t = (text or "").strip()
+        _INJ = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "[System:", "[数据读取配方")
+        while _t.startswith(_INJ):
+            _idx = _t.rfind("\n\n")
+            if _idx == -1:
+                _t = ""  # 纯脚手架，无用户原文 → 不提取
+                break
+            _t = _t[_idx + 2:].strip()
+        if not _t:
+            return
+        text = _t
         _p = os.path.join(rd, "REQUIREMENTS.md")
         existing = []
         if os.path.isfile(_p):
@@ -5480,8 +5529,20 @@ def _extract_and_store_requirements(session, text):
                 continue  # 发给助手的指令，不是用户对项目的持久要求
             if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?") or re.search(r"(没有|了没|了吗|过没|过吗)$", _s):
                 continue  # (压测发现) 问句(如'你记得…吗?'/'验证过没有?')不是要求，不得入库
+            if "要不要" in _s or "能不能" in _s:
+                continue  # 征询句（"你要不要看看…"）不是持久要求（2026-08-31 实测误报）
+            if len(_s) < 16 and ("=" in _s or "==" in _s):
+                continue  # 截断的映射片段（"帮我替 = 对应的亚群名"）不是完整要求
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
+            # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
+            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
+            # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
+            # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
+            if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
+                    or ("Filesystem " in _s and "Use%" in _s) \
+                    or re.search(r"^\s*[\w-]+@[\w.-]+[:$]\s*$", _s):
+                continue
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             _is_env = _is_env_sentence(_s)
@@ -5526,7 +5587,15 @@ def _extract_and_store_requirements(session, text):
                 _entry = _entry + " (已确认)"
             elif any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
                 _entry = _entry + " (已确认)"
-            if _entry in existing or _entry in added:
+            # 2026-08-31 极端评测修复 2/2：去重键规范化——
+            # "(已确认)/(特别指定)/[环境]/[已验证]" 是状态标记不是内容，
+            # 否则同一句要求因标记变化反复入库（实测"一定要有依据"重复 4 行）
+            def _norm_key(x: str) -> str:
+                k = x
+                for tag in (" (已确认)", " (特别指定)", "[环境] ", "[已验证] "):
+                    k = k.replace(tag, "")
+                return k.strip()
+            if any(_norm_key(_entry) == _norm_key(x) for x in (existing + added)):
                 continue
             # 同锚点覆盖(仅路径锚点)：用户对同一完整路径重复陈述 → 替换旧行。
             # 注意用"完整路径相等"而非子串包含——避免 E:/R-libs 误删 E:/R-libs/R-4.5.3
@@ -12674,17 +12743,23 @@ async def ws_endpoint(ws: WebSocket):
                         # 之前 1M 窗口模型让 317K token 历史一直不折叠，老问答紧邻新问题 →
                         # “回答上一个问题”/忘记已跑结果。现在 >60K token 就折叠头部为结构化摘要。
                         try:
+                            _pre_roll = conversation_history
                             conversation_history = _maybe_rollup_history(_session, conversation_history)
+                            _rolled = conversation_history is not _pre_roll
                         except Exception as _c0_err:
+                            _rolled = False
                             logger.warning(f"[MemOmics] (c0) 历史早折叠失败(不阻断): {_c0_err}")
 
                         # ── (c/P1-P5) MiMo-Code 上下文架构：单一边界 usable() + 后台 writer(§1-§11) +
                         #      四层记忆(FTS/REQUIREMENTS/MEMORY/History) + 分段重建预算 + 增量压缩 ──
+                        # 2026-08-31 折叠分工：c0 已折叠 → skip_rebuild=True（防摘要套摘要）；
+                        # c0 未折叠且触发（30K+/自检唤醒）→ 才走 P1-P5 重建。
                         try:
                             _wcfg = _session.get("model_config") or _current_model
                             conversation_history = context_arch.memomics_replay(
                                 _session, conversation_history,
-                                llm_fn=lambda p, _c=_wcfg: _checkpoint_writer_llm(p, cfg=_c))
+                                llm_fn=lambda p, _c=_wcfg: _checkpoint_writer_llm(p, cfg=_c),
+                                skip_rebuild=_rolled)
                         except Exception as _c_err:
                             logger.warning(f"[MemOmics] (c) P1-P5 架构回放失败(不阻断): {_c_err}")
 

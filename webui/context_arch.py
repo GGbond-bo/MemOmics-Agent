@@ -652,8 +652,17 @@ def _aggressive_trigger(session, total, usable):
     return False
 
 
-def memomics_replay(session, history, llm_fn=None, budget=None, tail_len=None, caps=None):
-    """P1-P5 主入口：返回发给模型的重放消息（超预算/科研适配触发时：后台 writer + 分段 rebuild；fail-open）。"""
+def memomics_replay(session, history, llm_fn=None, budget=None, tail_len=None, caps=None,
+                    skip_rebuild: bool = False):
+    """P1-P5 主入口：返回发给模型的重放消息（超预算/科研适配触发时：后台 writer + 分段 rebuild；fail-open）。
+
+    2026-08-31 折叠分工（防摘要套摘要）：server 侧 ``_maybe_rollup_history``（c0 确定性折叠，
+    60K 阈值）先执行；当其已折叠时调用方传 ``skip_rebuild=True`` —— 本函数直接原样返回
+    （不再对"已含 c0 摘要 system 块"的历史再做 new_span/rebuild，否则 LLM 会把 c0 摘要
+    当 span 再压缩一遍，模型同时看到两份摘要）。c0 未折叠时行为不变。
+    """
+    if skip_rebuild:
+        return history
     try:
         if not history:
             return []

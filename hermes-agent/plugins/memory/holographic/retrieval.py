@@ -66,15 +66,23 @@ class FactRetriever:
         candidates = self._fts_candidates(query, category, min_trust, limit * 3)
 
         if not candidates:
-            return []
+            # Stage 1b: CJK word-level candidate channel. The facts_fts table
+            # uses the unicode61 tokenizer, which cannot substring-match
+            # Chinese queries ("热图" never matches a fact containing
+            # "绘制热图"), so FTS candidates are routinely empty for CJK.
+            # Fall back to jieba/2-gram token → LIKE scan → trust scoring,
+            # mirroring context_arch.recall_hybrid semantics.
+            candidates = self._cjk_candidates(query, category, min_trust, limit * 3)
+            if not candidates:
+                return []
 
         # Stage 2: Rerank with Jaccard + trust + optional decay
-        query_tokens = self._tokenize(query)
+        query_tokens = self._text_tokens(query)
         scored = []
 
         for fact in candidates:
-            content_tokens = self._tokenize(fact["content"])
-            tag_tokens = self._tokenize(fact.get("tags", ""))
+            content_tokens = self._text_tokens(fact["content"])
+            tag_tokens = self._text_tokens(fact.get("tags", ""))
             all_tokens = content_tokens | tag_tokens
 
             jaccard = self._jaccard_similarity(query_tokens, all_tokens)
@@ -545,6 +553,52 @@ class FactRetriever:
 
         return results
 
+    def _cjk_candidates(
+        self,
+        query: str,
+        category: str | None,
+        min_trust: float,
+        limit: int,
+    ) -> list[dict]:
+        """LIKE-based candidate channel for CJK queries (jieba/2-gram tokens).
+
+        facts_fts (unicode61) cannot substring-match Chinese; this channel
+        OR-scans ``content LIKE %token%`` for the query's segmented words
+        (capped at 60 rows), then the shared Stage-2 rerank (Jaccard + trust)
+        picks the best matches. Returns rows in the same dict shape as
+        ``_fts_candidates`` with ``fts_rank=0.0`` (no BM25 signal available).
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        q_tokens = self._cjk_tokens(query)
+        if not q_tokens:
+            return []
+        cond = " OR ".join("content LIKE ?" for _ in q_tokens)
+        params: list = [f"%{t}%" for t in q_tokens]
+        where = f"WHERE ({cond})"
+        if category:
+            where += " AND category = ?"
+            params.append(category)
+        where += " AND trust_score >= ?"
+        params.append(min_trust)
+        try:
+            conn = self.store._conn
+            rows = conn.execute(
+                f"SELECT fact_id, content, category, tags, trust_score, "
+                f"retrieval_count, helpful_count, created_at, updated_at, hrr_vector "
+                f"FROM facts {where} LIMIT ?",
+                params + [limit],
+            ).fetchall()
+        except Exception:
+            return []
+        results = []
+        for row in rows:
+            fact = dict(row)
+            fact["fts_rank"] = 0.0
+            results.append(fact)
+        return results
+
     @staticmethod
     def _tokenize(text: str) -> set[str]:
         """Simple whitespace tokenization with lowercasing.
@@ -560,6 +614,44 @@ class FactRetriever:
             if cleaned:
                 tokens.add(cleaned)
         return tokens
+
+    @staticmethod
+    def _cjk_tokens(text: str) -> list[str]:
+        """CJK-aware word segmentation: jieba words (>1 char), 2-gram fallback.
+
+        Chinese runs have no whitespace, so the whitespace tokenizer above
+        yields one giant token and Jaccard degenerates. jieba splits into
+        content words instead; when jieba is unavailable (trimmed envs) a
+        2-gram fallback still gives substring-level overlap signal.
+        """
+        import re as _re
+        if not text:
+            return []
+        try:
+            import jieba
+            toks = [w for w in jieba.lcut(text or "") if w.strip() and len(w.strip()) > 1]
+            if toks:
+                return toks
+        except Exception:
+            pass
+        s = _re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", text or "")
+        if not s:
+            return []
+        return [s[i:i + 2] for i in range(max(0, len(s) - 1))]
+
+    @classmethod
+    def _text_tokens(cls, text: str) -> set[str]:
+        """Unified tokenizer: CJK-aware when the text contains any CJK char.
+
+        Returns a set so union/intersection math stays cheap; for pure ASCII
+        text this is exactly the legacy whitespace tokenizer, preserving
+        prior behavior for English queries.
+        """
+        if not text:
+            return set()
+        if any("\u4e00" <= ch <= "\u9fff" for ch in text):
+            return set(cls._cjk_tokens(text))
+        return cls._tokenize(text)
 
     # Stopwords dropped before FTS5 OR-expansion. Short English function
     # words that carry no retrieval signal and force false-negative AND
