@@ -822,6 +822,37 @@ class MemoryStore:
             )
             self._conn.commit()
 
+    def reconcile_assets(self, session_id: str = "", project: str = "") -> dict:
+        """Mark confirmed assets whose file vanished as 'missing' (design §2.1⑥).
+
+        Returns {"checked": n, "missing": n}. Missing assets stay visible to
+        system_prompt_block (rendered with a ⚠️ stale warning) but drop out of
+        the default confirmed search. Never deletes rows — user can restore.
+        """
+        import os as _os
+        clause = "WHERE status='confirmed'"
+        params: list = []
+        if session_id:
+            clause += " AND session_id = ?"
+            params.append(session_id)
+        if project:
+            clause += " AND project = ?"
+            params.append(project)
+        rows = self._conn.execute(
+            f"SELECT asset_id, path FROM assets {clause}", params
+        ).fetchall()
+        missing = 0
+        for aid, path in rows:
+            if path and not _os.path.isfile(path):
+                with self._lock:
+                    self._conn.execute(
+                        "UPDATE assets SET status='missing', updated_at=CURRENT_TIMESTAMP WHERE asset_id=?",
+                        (aid,),
+                    )
+                    self._conn.commit()
+                missing += 1
+        return {"checked": len(rows), "missing": missing}
+
     def list_assets(
         self,
         session_id: str | None = None,

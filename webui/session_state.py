@@ -147,9 +147,17 @@ def capture_user_request(
     ):
         return {"entity": entity, "escalated": False}
 
-    # 升级：明确记忆词，或同 entity 诉求此前已出现过（本次为第 2 次）
+    # 2026-08-31 极端评测修复：代码行/长粘贴不是"诉求"——
+    # 实测 134 条 user_request facts 中 14% 是 R 代码原文（"peaks <- getPeakSet(proj)…"）。
+    # 此类文本仍记入 requests_json（近 3 条注入），但不升级为跨会话 facts。
+    _code_like = bool(re.search(r"<-\s*[A-Za-z]|\b(?:library|readRDS|saveRDS|install\.packages|BiocManager)\s*\(",
+                                text)) or text.count("\n") >= 3
+    # 升级：明确记忆词，或同 entity 诉求此前已出现过（本次为第 2 次）——代码样文本除外
     same_entity = [r for r in reqs if r.get("entity") == entity]
-    escalated = bool(_RE_REMEMBER.search(text)) or (bool(entity) and len(same_entity) >= 1)
+    escalated = (
+        not _code_like
+        and (bool(_RE_REMEMBER.search(text)) or (bool(entity) and len(same_entity) >= 1))
+    )
 
     reqs.append({
         "text": text[:200],
@@ -247,6 +255,12 @@ def extract_assets(
                       "status": "confirmed" if auto_confirm else "pending"})
         if len(found) >= _MAX_ASSETS_PER_TURN:
             break
+    # 2026-08-31 失效检测（设计 §2.1⑥）：本会话 confirmed 资产文件若已消失 → 标 missing
+    # （仅本会话低频资产，成本可忽略；missing 仍可被 system_prompt_block 渲染 ⚠️ 提示）
+    try:
+        store.reconcile_assets(session_id=session_id)
+    except Exception:
+        pass
     return found
 
 

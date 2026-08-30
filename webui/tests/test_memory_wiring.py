@@ -87,6 +87,24 @@ class TestAssetAutoConfirm:
         assert "heatmap.R" in out and "参考" in out
         p.shutdown()
 
+    def test_asset_missing_reconcile(self, store, tmp_path):
+        """设计 §2.1⑥：文件消失 → missing 标记 + ⚠️ 注入 + 检索隔离。"""
+        real = self._mk(tmp_path)
+        ss.extract_assets("s1", f"用 {real} 跑 QC", store=store)
+        os.remove(real)  # 文件被用户移走
+        ss.extract_assets("s1", "继续跑 QC", store=store)  # 每轮 reconcile
+        assert store.search_assets("heatmap", session_id="s1") == []  # 隔离
+        missing = [a for a in store.list_assets(session_id="s1", status=None)
+                   if a["status"] == "missing"]
+        assert len(missing) == 1
+        p = HolographicMemoryProvider(config={})
+        p._config["db_path"] = str(tmp_path / "m2.db")
+        p.initialize(session_id="s1")
+        p._store = store
+        blk = p.system_prompt_block()
+        assert "已失效" in blk and "heatmap.R" in blk
+        p.shutdown()
+
 
 # ---------------------------------------------------------------------------
 # 2) 中文 facts 检索（P0-2：unicode61 中文 MATCH 恒空 → 词级候选通道）
@@ -181,6 +199,55 @@ class TestIntentEnhancedPrefetch:
         assert "heatmap.R" in out, "entity 增强后 '继续跑' 必须召回 热图 资产"
         unenhanced = _extract_query_keywords("继续跑")
         assert unenhanced == "继续跑"  # 证明单靠净化词表确实不行，增强是必要环节
+
+
+class TestCaptureNoise:
+    """2026-08-31：代码行/长粘贴不升级为跨会话 facts（仍进 requests_json）。"""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        st = MemoryStore(db_path=str(tmp_path / "m.db"))
+        yield st
+        st.close()
+
+    def test_code_paste_not_escalated(self, store):
+        ss.capture_user_request("s1", "继续跑热图", store=store)
+        r = ss.capture_user_request(
+            "s1", "peaks <- getPeakSet(proj)\ncat(\"Peak 总数:\", length(peaks))\nhead(peaks)",
+            store=store,
+        )
+        # 同 entity(peak) 第 2 次出现——旧规则会升级；新规则代码样不升级
+        assert r["escalated"] is False
+        facts = store.search_facts("用户诉求", limit=10)
+        assert all("peaks <-" not in f["content"] for f in facts)
+
+    def test_remember_word_still_escalates_normal_text(self, store):
+        r = ss.capture_user_request("s1", "记住：以后热图都用蓝白配色", store=store)
+        assert r["escalated"] is True
+
+
+class TestRankingBoost:
+    """2026-08-31 排序强化：知识类别权重 > 引文；短语连续加分。"""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        st = MemoryStore(db_path=str(tmp_path / "m.db"))
+        yield st
+        st.close()
+
+    def test_user_pref_outranks_user_request_same_tokens(self, store):
+        store.add_fact("用户偏好热图用 pheatmap 蓝白配色", category="user_pref")
+        store.add_fact("继续跑热图，帮我画一下", category="user_request")
+        r = FactRetriever(store=store)
+        out = r.search("热图", limit=5)
+        assert out and "偏好" in out[0]["content"]  # 知识引文同词频，知识胜出
+
+    def test_phrase_bonus_orders(self, store):
+        store.add_fact("讨论过 peak 调用", category="project")
+        store.add_fact("call peak 的完整步骤：getPeakSet 保存", category="project")
+        r = FactRetriever(store=store)
+        out = r.search("call peak", limit=5)
+        assert out and "call peak" in out[0]["content"]
 
 
 # ---------------------------------------------------------------------------

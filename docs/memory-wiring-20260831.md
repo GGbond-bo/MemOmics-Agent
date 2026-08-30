@@ -154,3 +154,22 @@
    `_build_rollup_checkpoint` 中，但 marker 需要 state.db 有记录才生成——
    合成环境无 DB 时为空，线上正常）。
 
+## 9. 第三轮完善（2026-08-31：把第 8 章剩余问题逐项落地）
+
+| # | 问题 | 修复 | 验证 |
+|---|---|---|---|
+| 1 | intent 值未进检索 | server 每轮 `update_task_state(intent=…)`；prefetch 读 intent 分流（knowledge_ask→facts×6；analysis/direct_exec→assets×5） | test_memory_wiring 23 用例绿 |
+| 2 | 项目隔离 project 未传 | `extract_assets(project=results_dir basename)` | 同上 |
+| 3 | 资产失效检测未实现（§2.1⑥） | `store.reconcile_assets`（confirmed 且 isfile=False→missing）；extract_assets 每轮对本会话 reconcile；system_prompt_block 渲染"⚠️ 资产失效提示" | test_asset_missing_reconcile |
+| 4 | capture 升级误捕代码（14% 污染） | `_code_like` 检测（`<-`/library(/readRDS/≥3 行）→ 不升级 facts（仍记 requests_json） | test_code_paste_not_escalated |
+| 5 | 中文排序无区分度 | ①HRR 对 CJK 查询强制中性（随机噪声实锤反超 user_pref）②类别权重作用于相关性（引文 0.8×，短引文 jaccard 偏置被压住）③recency 0.92-1.0 ④短语连续 +0.08 | test_ranking_boost + bench q2/q3/q6 复测 |
+| 6 | REQUIREMENTS 句子级脚手架残留 | 分句循环加注入前缀跳过 | bench_extract 复测 19→6 行 |
+| 7 | 历史 938 条脚手架持久化污染 | 新消息端 8-21 已修（_run_text 干净）；`scripts/migrate_strip_scaffold.py` 一次性剥离 193 条带原文消息（1898 条纯注入保留，(b) 模型侧过滤） | 已执行，备份 state.db.bak_strip_* |
+
+本轮改动文件：`webui/server.py`、`webui/session_state.py`、
+`hermes-agent/plugins/memory/holographic/{__init__,retrieval,store}.py`、
+`webui/tests/test_memory_wiring.py`（23 用例）、
+`scripts/migrate_strip_scaffold.py`（新增）。
+验证：py_compile OK；webui/tests 全量 EXIT 0；bench 检索复测 q2 gold 置顶
+保持、q3 专利双 gold 占 TOP2、q6 直接答案 TOP2。
+

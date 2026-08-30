@@ -80,6 +80,31 @@ class FactRetriever:
         query_tokens = self._text_tokens(query)
         scored = []
 
+        # 2026-08-31 排序强化：①类别权重（蒸馏知识 > 经验笔记 > 诉求引文 > 机器记账）
+        # ②时效（同分时新事实优先）③短语连续加分（词序相邻 = 更强语义证据）。
+        # 背景：极端评测实测 user_request 整句引文与 skill_exp 高分笔记同词频时
+        # 排序无区分度（"专利结论表"曾被同词频 peak 引文淹没）。
+        _CATEGORY_WEIGHT = {
+            "user_pref": 1.0, "project": 1.0, "skill_exp": 1.0,
+            "delegation": 0.95, "general": 0.92,
+            "script_score": 0.90, "memory_governance": 0.90,
+            "user_request": 0.80,
+        }
+        _q_ordered = sorted(query_tokens, key=len, reverse=True)
+        _created_all = [f.get("created_at") or f.get("updated_at") or "" for f in candidates]
+        _ts_all = []
+        for _c in _created_all:
+            try:
+                _ts_all.append(float(_c))
+            except Exception:
+                _ts_all.append(0.0)
+        _ts_max = max(_ts_all) if _ts_all else 1.0
+        _ts_min = min(t for t in _ts_all if t > 0) if any(t > 0 for t in _ts_all) else _ts_max
+        # 2026-08-31：HRR 对中文无训练语义——CJK 查询时其相似度近似随机噪声，
+        # 0.3 权重下足以把正确排序打乱（实测 user_pref 被 user_request 反超）。
+        # CJK 查询 → HRR 强制中性 0.5，排序完全交给 jaccard+trust+类别+时效+短语。
+        _cjk_query = any("\u4e00" <= ch <= "\u9fff" for ch in (query or ""))
+
         for fact in candidates:
             content_tokens = self._text_tokens(fact["content"])
             tag_tokens = self._text_tokens(fact.get("tags", ""))
@@ -89,7 +114,9 @@ class FactRetriever:
             fts_score = fact.get("fts_rank", 0.0)
 
             # HRR similarity
-            if self.hrr_weight > 0 and fact.get("hrr_vector"):
+            if _cjk_query:
+                hrr_sim = 0.5  # neutral: no CJK training signal
+            elif self.hrr_weight > 0 and fact.get("hrr_vector"):
                 fact_vec = hrr.bytes_to_phases(fact["hrr_vector"])
                 query_vec = hrr.encode_text(query, self.hrr_dim)
                 hrr_sim = (hrr.similarity(query_vec, fact_vec) + 1.0) / 2.0  # shift to [0,1]
@@ -101,8 +128,32 @@ class FactRetriever:
                         + self.jaccard_weight * jaccard
                         + self.hrr_weight * hrr_sim)
 
+            # ① category weight 作用于相关性（引文类命中相关性打折，而非总分打折——
+            # 否则短引文的 jaccard 偏置（token 少→相似度高）会盖过类别信号）
+            _cat = str(fact.get("category") or "")
+            relevance *= _CATEGORY_WEIGHT.get(_cat, 0.95)
+
             # Trust weighting
             score = relevance * fact["trust_score"]
+
+            # ② recency weight (created/updated epoch; 0.92 .. 1.0)
+            _ts = 0.0
+            try:
+                _ts = float(fact.get("created_at") or fact.get("updated_at") or 0.0)
+            except Exception:
+                _ts = 0.0
+            if _ts_max > _ts_min:
+                _age_ratio = max(0.0, min(1.0, (_ts_max - _ts) / (_ts_max - _ts_min)))
+            else:
+                _age_ratio = 0.0
+            score *= (0.92 + 0.08 * (1.0 - _age_ratio))
+
+            # ③ phrase bonus: longest query token appearing verbatim in content
+            _content = str(fact.get("content") or "")
+            for _tok in _q_ordered:
+                if _tok and _tok in _content:
+                    score += 0.08
+                    break
 
             # Optional temporal decay
             if self.half_life > 0:

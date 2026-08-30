@@ -5525,6 +5525,8 @@ def _extract_and_store_requirements(session, text):
         for _s in _sents:
             if not (4 <= len(_s) <= 200):
                 continue
+            if _s.startswith(("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "[System:", "[数据读取配方", "📊")):
+                continue  # 句子级注入前缀残留（2026-08-31 实测元循环残留 1 条）
             if any(_k in _s for _k in _REQUIREMENTS_SKIP_ASSISTANT):
                 continue  # 发给助手的指令，不是用户对项目的持久要求
             if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?") or re.search(r"(没有|了没|了吗|过没|过吗)$", _s):
@@ -11612,7 +11614,11 @@ async def ws_endpoint(ws: WebSocket):
                     except ImportError:
                         import session_state as _ss
                     _ss.capture_user_request(session["id"], user_text, intent=_intent or "chat")
-                    _ss.extract_assets(session["id"], user_text)
+                    # 2026-08-31 P3 接线：project = 结果目录名（资产项目隔离）；
+                    # intent 每轮写入 task_json → holographic prefetch 按意图调检索策略
+                    _proj = os.path.basename((session.get("results_dir") or "").rstrip("\\/"))
+                    _ss.extract_assets(session["id"], user_text, project=_proj or "")
+                    _ss.update_task_state(session["id"], intent=_intent or "chat")
                     _extract_and_store_requirements(session, user_text)  # (#2) 要求/路径持久化
 
                     # === 话题切换检测旁路（P1-4）：analysis 意图且实体变化 → 更新任务状态块 ===

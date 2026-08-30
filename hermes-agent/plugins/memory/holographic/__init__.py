@@ -354,11 +354,16 @@ class HolographicMemoryProvider(MemoryProvider):
         # --- Session asset inventory (compression-immune: rebuilt with the
         # --- volatile system prompt section on every system prompt rebuild).
         try:
-            assets = self._store.list_assets(session_id=self._session_id or None, status="confirmed", limit=10)
-            if assets:
+            assets = self._store.list_assets(session_id=self._session_id or None, status=None, limit=20)
+            _confirmed = [a for a in assets if a["status"] == "confirmed"][:10]
+            _missing = [a for a in assets if a["status"] == "missing"]
+            if _confirmed:
                 lines = [f"- {a['name']} → {a['path'] or '(no path)'}" + (f"（用途：{a['purpose']}）" if a["purpose"] else "")
-                         for a in assets]
+                         for a in _confirmed]
                 blocks.append("📌 会话资产清单（用户在本会话提供的脚本/文件/路径，压缩后依然有效，可直接引用）\n" + "\n".join(lines))
+            if _missing:
+                mlines = [f"- ⚠️ 已失效：{a['name']} → {a['path']}（文件已不存在，用前与用户确认）" for a in _missing]
+                blocks.append("⚠️ 资产失效提示\n" + "\n".join(mlines))
         except Exception as e:
             logger.debug("Holographic asset block failed: %s", e)
 
@@ -373,10 +378,23 @@ class HolographicMemoryProvider(MemoryProvider):
         query = _enhance_query(query, sid=sid, store=self._store)
         if not query:
             return ""
+        # 2026-08-31 P3: intent-aware retrieval strategy. server writes the
+        # current _classify_intent value into session_state.task_json every
+        # turn; adjust per-source recall budgets accordingly.
+        _intent = ""
+        _task_early = {}
+        try:
+            _st_early = self._store.get_session_state(sid)
+            _task_early = json.loads(_st_early.get("task_json") or "{}")
+            _intent = str(_task_early.get("intent") or "")
+        except Exception:
+            _task_early = {}
+        _facts_limit = 6 if _intent == "knowledge_ask" else 5
+        _assets_limit = 5 if _intent in ("analysis", "direct_exec", "research_plan") else 2
         try:
             parts = []
-            # Source 1: facts (existing)
-            results = self._retriever.search(query, min_trust=self._min_trust, limit=5)
+            # Source 1: facts (existing) — knowledge_ask 放宽（问原理/方法多召回）
+            results = self._retriever.search(query, min_trust=self._min_trust, limit=_facts_limit)
             if results:
                 lines = []
                 for r in results:
@@ -385,10 +403,11 @@ class HolographicMemoryProvider(MemoryProvider):
                 parts.append("## Holographic Memory\n" + "\n".join(lines))
 
             # Source 2: confirmed assets (cross-session; scoped to session when
-            # the session_id is known and the query is short).
+            # the session_id is known and the query is short). Execution intents
+            # widen recall — scripts/data reuse is the whole point of "继续跑".
             try:
                 assets = self._store.search_assets(
-                    _extract_query_keywords(query), session_id=None, status="confirmed", limit=3
+                    _extract_query_keywords(query), session_id=None, status="confirmed", limit=_assets_limit
                 )
                 if assets:
                     alines = []
