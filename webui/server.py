@@ -12778,6 +12778,15 @@ async def ws_endpoint(ws: WebSocket):
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
 
+                        # ── 2026-08-31 L0/L1 结论注册表注入（关键结论/修复/决策，勿重跑） ──
+                        try:
+                            from conclusion_store import build_memory_budget_context
+                            _l1_ctx = build_memory_budget_context(_session, user_text or "", limit=20, max_chars=4000)
+                            if _l1_ctx:
+                                conversation_history.append({"role": "system", "content": _l1_ctx})
+                        except Exception:
+                            pass
+
                         # ── 2026-08-31 待确认问题追踪：用户“需要”必须绑定上一轮问话 ──
                         try:
                             _pend_ctx = _build_pending_question_context(_session, user_text or "")
@@ -12847,6 +12856,17 @@ async def ws_endpoint(ws: WebSocket):
                             # 2026-08-27 用户要求：去除 15 分钟绝对超时保护（长任务会被误杀）。
                             # 不再设置 turn 级绝对上限；服务端仍保留 5 分钟无输出 stall watchdog 兜底。
                             result = await loop.run_in_executor(None, _do_run)
+
+                        # ── 2026-08-31 L0 结论注册表：本轮结论/修复/决策自动沉淀 ──
+                        try:
+                            from conclusion_store import extract_turn_conclusions, append_conclusions
+                            _l0 = extract_turn_conclusions(user_text or "", str(result or ""))
+                            if _l0:
+                                _added = append_conclusions(_session, _l0)
+                                if _added:
+                                    logger.info(f"[MemOmics] L0 conclusions +{_added} (session {_session['id'][:12]})")
+                        except Exception as _l0_err:
+                            logger.warning(f"[MemOmics] L0 conclusions store failed(不阻断): {_l0_err}")
 
                         # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
                         if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
