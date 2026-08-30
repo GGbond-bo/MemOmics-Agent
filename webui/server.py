@@ -5076,6 +5076,60 @@ def _build_rollup_checkpoint(session, head):
     return "\n".join(_lines)
 
 
+def _build_recent_turns_digest(session, max_turns=8):
+    """2026-08-31: 最近 N 轮对话速览（L2 层确定性注入）。
+
+    用户痛点：上一轮解决过的错误/得出的关键结论，下一轮又忘了 → 重新报错、重新跑。
+    这里从 state.db 直接取最近 user/assistant 问答，按轮生成 concise digest，
+    每轮注入模型上下文。历史再怎么压缩，最近 8 轮的“问了什么→答了什么”始终可见。
+    """
+    try:
+        import sqlite3 as _sq
+        sid = session.get("id", "")
+        if not sid:
+            return ""
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return ""
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT role, content FROM messages WHERE session_id=? AND role IN ('user','assistant') AND content IS NOT NULL AND length(content)>0 ORDER BY id DESC LIMIT ?",
+                (sid, max_turns * 2 + 2),
+            ).fetchall()
+        finally:
+            _conn.close()
+        if not _rows:
+            return ""
+        _chrono = list(reversed(_rows))
+        _entries = []
+        _pending_user = None
+        for _role, _content in _chrono:
+            _c = str(_content or "").strip().replace("\n", " ")[:160]
+            if not _c:
+                continue
+            if _role == "user":
+                _pending_user = _c[:90]
+            elif _role == "assistant" and _pending_user is not None:
+                _entries.append(
+                    f"- 问：{_pending_user}\n  答：{_c}"
+                )
+                _pending_user = None
+        if _pending_user is not None:
+            _entries.append(f"- 问：{_pending_user[:90]}（本轮用户消息，尚未回答）")
+        if not _entries:
+            return ""
+        _tail = "\n".join(_entries[-max_turns:])
+        return (
+            "## 最近几轮对话速览（L2，供背景，不是你本轮要回答的内容）\n"
+            f"{_tail}\n"
+            "【重要】以上是你之前已经问过/答过的内容。已被解决的错误不要再次提起；"
+            "已完成的步骤/已给出的结论请直接复用，禁止重新运行或重复回答。"
+        )
+    except Exception:
+        return ""
+
+
 def _build_pending_question_context(session, user_text):
     """2026-08-31: 待确认问题追踪 — 防止“需要”回答错题/遗忘自己问过的承诺。
 
@@ -12695,7 +12749,8 @@ async def ws_endpoint(ws: WebSocket):
                                 "3. 用户是问答/调查/规划类请求时，不要擅自执行任务、不要擅自修复后重跑。\n"
                                 "4. 用户没有说'继续'时，任务推进交给系统自动续跑，不在本回合推进。\n"
                                 "5. 若用户明确要求执行且 Phase 描述模糊，可补充具体步骤执行；不确定时用 ask_user 确认。\n"
-                                "6. 任何脚本/分析在重新执行前，必须先用 search_files/read_file 检查 results 目录下对应产物是否已存在且非空；已存在 → 直接复用并汇报，禁止重跑（铁律13）。"
+                                "6. 任何脚本/分析在重新执行前，必须先用 search_files/read_file 检查 results 目录下对应产物是否已存在且非空；已存在 → 直接复用并汇报，禁止重跑（铁律13）。\n"
+                                "7. 需要用户确认（是否/要不要/需要吗/可以吗）时，必须调用 ask_user 工具（带选项）提问，禁止在正文结尾用问句——正文问句的答复无法与问题绑定，用户答‘需要’会丢失所指。"
                             )
                             conversation_history.append({"role": "system", "content": _merged})
 
@@ -12728,6 +12783,14 @@ async def ws_endpoint(ws: WebSocket):
                             _pend_ctx = _build_pending_question_context(_session, user_text or "")
                             if _pend_ctx:
                                 conversation_history.append({"role": "system", "content": _pend_ctx})
+                        except Exception:
+                            pass
+
+                        # ── 2026-08-31 最近 N 轮速览注入（L2）：结论/已解决问题不再忘 ──
+                        try:
+                            _recent_digest = _build_recent_turns_digest(_session, max_turns=8)
+                            if _recent_digest:
+                                conversation_history.append({"role": "system", "content": _recent_digest})
                         except Exception:
                             pass
 
