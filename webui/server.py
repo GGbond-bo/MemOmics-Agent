@@ -2019,7 +2019,18 @@ async def _trigger_agent_turn(session, message):
             # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
             # 不带全量历史（67K input/次 → ~4K）
             _wake_history = _build_self_check_wake_history(session)
-            return agent.run_conversation(_inject_anchors(session, message), conversation_history=_wake_history or None, task_id=session["id"])
+            # 2026-08-31: 自检唤醒不再把 [会话要求…] 脚手架拼进用户消息（否则被持久化成
+            # 大量 user 消息 → 模型每轮当成新问题重复回答，实证 870 条）。
+            # 改为：digest 走 system 尾巴；唤醒文本加 [系统唤醒] 前缀由显示/卫生层过滤。
+            _whist = list(_wake_history or [])
+            try:
+                _wdigest = _build_memory_digest(session, message)
+                if _wdigest:
+                    _whist.append({"role": "system", "content": _wdigest})
+            except Exception:
+                pass
+            _wake_msg = ("[系统唤醒] " + str(message or "")).strip()
+            return agent.run_conversation(_wake_msg, conversation_history=_whist or None, task_id=session["id"])
         # 2026-08-16: 去 wait_for —— 让长工具自然跑完；网关挂起由 stall watchdog 中断
         result = await loop.run_in_executor(None, _run)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
@@ -4883,7 +4894,7 @@ def _strip_scaffold_text(text):
     cur = text.strip()
     if not cur:
         return None
-    if cur.startswith(("[系统唤醒", "📊 LoopX 状态", "[System:")):
+    if cur.startswith(("[会话要求", "[系统唤醒", "📊 LoopX 状态", "[System:", "[数据读取配方")):
         return None
     for _ in range(4):
         if cur.startswith(("[相关历史记忆", "[会话锚点")):
@@ -12707,7 +12718,7 @@ async def ws_endpoint(ws: WebSocket):
                                 if not isinstance(_c, str):
                                     _filtered.append(_m)
                                     continue
-                                if _c.lstrip().startswith(("[相关历史记忆", "[会话锚点", "[系统唤醒", "📊 LoopX 状态", "[System:")):
+                                if _c.lstrip().startswith(("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "📊 LoopX 状态", "[System:", "[数据读取配方")):
                                     _rest = _strip_scaffold_text(_c)
                                     if _rest is None:
                                         continue
