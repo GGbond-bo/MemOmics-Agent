@@ -286,6 +286,24 @@ async def _apply_fix_bundle_startup():
         logger.warning(f"[FixBundle] 启动迁移失败(不阻塞): {e}")
 
 
+def _stall_hard_seconds(s: dict) -> int:
+    """stall watchdog 硬中断阈值（2026-08-31：长任务不被 5 分钟误杀）。
+
+    - 回合开始即静默（connect 后零输出 = 网关挂起典型）→ 300s 快速恢复；
+    - 回合中段静默（此前有过模型输出/推理/工具活动 = 长思考/长生成）→ 600s
+      （env MEMOMICS_STALL_HARD_SECONDS 可调），靠"有前科"区分挂起与慢。
+    """
+    try:
+        hard = int(os.environ.get("MEMOMICS_STALL_HARD_SECONDS", "600"))
+    except Exception:
+        hard = 600
+    _start = s.get("_turn_start_ts") or 0
+    _act = s.get("_turn_activity_ts") or 0
+    if not (_act and (_act - _start) > 5):
+        return 300
+    return max(300, hard)
+
+
 @app.on_event("startup")
 async def _start_agent_stall_watchdog():
     """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
@@ -369,14 +387,57 @@ async def _start_agent_stall_watchdog():
                         s["_live_tool_warned"] = True
                         _session_emit(s, {"type": "notice", "content": f"⏳ 工具 {_live} 已运行超过 30 分钟且无进程证据（{_info}），如疑似卡死请手动停止。", "session_id": sid})
                     continue
-                # ── 无工具在飞 + 5 分钟无事件 = 模型网关挂起（原逻辑） ──
+                # ── 无工具在飞 + 300s 无事件 ──
+                # 2026-08-31 升级（用户反馈：长任务不该被 5 分钟规则中断）：
+                # ① 后台进程（terminal background 注册表）活跃 → 永不中断，提示进行中
+                # ② 回合"中段静默"（此前有过输出/推理/工具）→ 300s 提醒 → 600s
+                #    （MEMOMICS_STALL_HARD_SECONDS 可调）才中断——长思考/长生成不误杀
+                # ③ 回合开始即静默（无任何前科，网关挂起典型）→ 保持 300s 快速中断
+                # ④ 中断前落日志（此前零日志，复现全靠猜）
+                try:
+                    from tools.process_registry import process_registry
+                    _bg_active = [
+                        p for p in process_registry.list_sessions(session_key=sid)
+                        if p.get("status") == "running"
+                    ]
+                except Exception:
+                    _bg_active = []
+                if _bg_active:
+                    if now - s.get("_stall_notice_last", 0) > 300:
+                        s["_stall_notice_last"] = now
+                        _session_emit(s, {"type": "notice",
+                                          "content": f"⏳ 本会话后台任务仍在运行（{len(_bg_active)} 个），回合静默等待中，不会中断。",
+                                          "session_id": sid})
+                    continue
+                _start = s.get("_turn_start_ts") or 0
+                _act = s.get("_turn_activity_ts") or 0
+                _has_event = bool(_act and (_act - _start) > 5)
+                _hard = _stall_hard_seconds(s)
+                _silent = int(now - last_ts)
+                if _silent < _hard:
+                    if now - (s.get("_stall_noevent_ts") or 0) > 240:
+                        s["_stall_noevent_ts"] = now
+                        _left = int(_hard - _silent)
+                        _session_emit(s, {"type": "notice",
+                                          "content": (f"⏳ 模型已静默 {_silent}s（无输出/推理/工具活动）。"
+                                                      f"长任务/长思考会继续等待，{_left // 60} 分钟后仍无任何活动才中断。"),
+                                          "session_id": sid})
+                    continue
+                logger.warning(
+                    "[MemOmics] stall watchdog interrupt: session=%s silent=%ds has_event=%s live=%r",
+                    sid[:12], _silent, _has_event, _live,
+                )
                 try:
                     if hasattr(agent_ref, "interrupt"):
                         agent_ref.interrupt()
                 except Exception:
                     pass
                 try:
-                    _session_emit(s, {"type": "error", "content": "Agent 长时间无响应（5 分钟无输出），已自动中断。可能是模型网关连接挂起，请重试或切换模型。", "session_id": sid})
+                    _session_emit(s, {"type": "error",
+                                      "content": (f"⏱ Agent 已 {_silent}s 无任何模型输出（含推理/工具活动），自动中断并清理本回合。"
+                                                  f"可能原因：① 模型网关/API 连接挂起（最常见）；② 模型长思考超过 {_hard}s。"
+                                                  f"后台任务/长任务在跑不会被中断——若确认无后台任务，请重试或切换模型。"),
+                                      "session_id": sid})
                 except Exception:
                     pass
                 _clear_session_running(sid)
