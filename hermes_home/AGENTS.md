@@ -23,3 +23,13 @@
 - 完整流程 + SHA + 坑位见 docs/UPDATE_WORKFLOW.md（打包时随包发布）。
 - 绝不打包：API key / provider_keys / auth / weixin / channel_directory / model_config / state.db / sessions / results / uploads / work / .memory / 本机路径 / 测试数据。
 - 最新：2026-08-31 · v2026-08-31（记忆分层 L0 结论失败注册表 + L3 索引、待确认绑定、L2 轮速览、辩论 v2、BGI 技能、渲染/超时修复）。
+
+### 日常快速更新（只传 update）
+```
+VERSION=v<当天>（如 v2026-08-31）
+powershell -ExecutionPolicy Bypass -File E:\release\_rebuild_v4.ps1 -Win
+gh release upload v<当天> E:/release/MemOmics-update.zip --repo GGbond-bo/MemOmics-Agent --clobber
+gh release edit v<当天> --repo GGbond-bo/MemOmics-Agent --notes-file E:/release/RELEASE_NOTES.md
+# 恢复 VERSION=vdev-<当天>
+```
+**只传 update.zip**；全量 5 包不要上传（除非用户明确要求）。版本日期=当天，禁止未来/旧 tag。

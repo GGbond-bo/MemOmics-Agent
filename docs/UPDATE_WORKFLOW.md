@@ -13,16 +13,40 @@
 | 版本号 | 必须=真实当天日期（如 v2026-08-31）；禁止未来日期、禁止旧 tag 覆盖（WebUI 按 tag 字符串比对） |
 | 本地 VERSION | 打包时写 v<当天>；打完恢复 vdev-<当天> |
 
+## 2.0 快速流程（默认：只更新 update 包）
+
+```bash
+# ① 版本日期 = 真实当天（例：2026-08-31）
+# 编辑 VERSION 写入 v2026-08-31
+
+# ② 只重打 update 所需包（本机会顺带生成 Windows.zip，但不要上传它）
+powershell -ExecutionPolicy Bypass -File E:\release\_rebuild_v4.ps1 -Win
+
+# ③ 只上传 update 包（不要上传其它 5 个平台包）
+gh release upload v2026-08-31 E:/release/MemOmics-update.zip \
+   --repo GGbond-bo/MemOmics-Agent --clobber
+
+# ④ 更新说明（同步 SHA）
+gh release edit v2026-08-31 --repo GGbond-bo/MemOmics-Agent \
+   --notes-file E:/release/RELEASE_NOTES.md
+
+# ⑤ 恢复仓库 VERSION = vdev-2026-08-31
+```
+
+> ⚠️ **用户偏好（2026-08-31）**：默认**只上传 MemOmics-update.zip**。
+> 5 个平台全量包 **不要上传**，除非用户明确说“全量/新装机包一起传”。
+> 版本号必须=真实当天日期；禁止未来日期、禁止旧 tag 覆盖。
+
 ## 2. 标准流程（每一步都做）
 
 1. 改代码 → 跑离线测试（pytest 全量相关套件，见 §0 提示）；
 2. 编译检查：python -m py_compile webui/server.py conclusion_store.py；
 3. VERSION 改为 v<当天>；
-4. 打包：E:\release\_rebuild_v4.ps1（只 update 用 -Win；全量不带开关）；
+4. 打包：E:\release\_rebuild_v4.ps1 -Win（只重打 update 所需；本机顺带生成 Windows.zip 但**只上传 update.zip**）；全量才不带开关；
 5. 打包前确认 requirements.txt UTF-8；打包脚本内置凭据守卫（禁止 provider_keys/auth/weixin/channel_directory/model_config/state.db 等进包）；
 6. 验证：E:\release\_test_update.ps1 -Version v<当天>（若脚本 exit 2 但 booted/HTTP 200 通过，再手动解包启动一次兜底）；
 7. 更新 E:\release\RELEASE_NOTES.md（标题=当天、追加变更、同步全部资产 SHA256）；
-8. 发布：gh release create v<当天> --repo GGbond-bo/MemOmics-Agent --notes-file E:/release/RELEASE_NOTES.md；再 upload（--clobber）；同天全量包按需一并 upload；最后 release edit 更新说明；
+8. 发布：gh release create v<当天> --repo GGbond-bo/MemOmics-Agent --notes-file E:/release/RELEASE_NOTES.md；再 upload（--clobber）——**只上传 MemOmics-update.zip**；全量包仅在用户明确要求时一并 upload；最后 release edit 更新说明；
 9. 恢复 VERSION=vdev-<当天>；
 10. 提交 docs/UPDATE_WORKFLOW.md + hermes_home/AGENTS.md + VERSION 到 git。
 
