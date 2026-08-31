@@ -2815,11 +2815,26 @@ function guFixMermaid(code) {
   code = code.replace(/--->/g, '-->').replace(/...>/g, '-->');
   // ② <br/> 统一处理（不同 mermaid 版本支持不一）
   code = code.replace(/<br\s*\/?>/gi, ' ');
-  // ③ 含中文/空格的 [label]/(label) 节点加引号（对齐 DSH dsh-genui 的 repairMermaidSource）
-  code = code.replace(/([\[\(])([^\[\]\(\)\{\}\"'\n]*)([\]\)])/g, function(m, a, b, c) {
-    var t = b.trim();
-    if (!t) return m;
-    if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(t) || /\s/.test(t)) return a + '\"' + t + '\"' + c;
+  // ③ 节点/菱形标签修复：含中文/空格/内嵌引号的未加引号标签 → 清洗内引号并整体加引号（2026-08-31）
+  code = code.replace(/([\[\(])([^\[\]\(\)\{\}\n]*)([\]\)])/g, function(m, a, b, c) {
+    if (b.charAt(0) === '"') return m; // 已加引号
+    var t = b.replace(/"/g, "'");
+    var tt = t.trim();
+    if (!tt) return m;
+    if (t !== b || /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(tt) || /\s/.test(tt)) {
+      return a + '"' + t + '"' + c;
+    }
+    return m;
+  });
+  // 菱形 {…} 同样处理（Mermaid 允许 {"中文"}）
+  code = code.replace(/\{([^}\n]*)\}/g, function(m, b) {
+    if (b.charAt(0) === '"') return m;
+    var t = b.replace(/"/g, "'");
+    var tt = t.trim();
+    if (!tt) return m;
+    if (t !== b || /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(tt) || /\s/.test(tt)) {
+      return '{' + '"' + t + '"' + '}';
+    }
     return m;
   });
   return code;
