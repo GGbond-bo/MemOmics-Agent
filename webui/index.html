@@ -2815,8 +2815,14 @@ function guChart(node) {
 function guFixMermaid(code) {
   // 2026-08-27 稳定性修复：渲染前归一化常见 Mermaid 语法笔误
   code = String(code || '').trim();
-  // ① 三横线/省略箭头（---> / ...>）→ 标准 -->（历史 bug：会导致解析失败）
-  code = code.replace(/--->/g, '-->').replace(/...>/g, '-->');
+  // 2026-09-01 修复：仅对 flowchart/graph 做归一化。原 .replace(/...>/g) 里的
+  // . 是正则通配符（任意字符，不是字面点），会吞掉合法箭头：sequenceDiagram 的
+  // A->>B 被改成 -->>B（丢参与者 → Parse error）、flowchart 虚线 -.-> 被改成 -->。
+  // 对齐 DSH repairMermaidSource 的 kind 守卫：非 flowchart/graph 原样返回。
+  var _k = /^([A-Za-z]+)/.exec(code);
+  if (!_k || (_k[1] !== 'graph' && _k[1] !== 'flowchart')) return code;
+  // ① 三横线箭头（--->）→ 标准 -->（mermaid 无法解析 --->）
+  code = code.replace(/--->/g, '-->');
   // ② <br/> 统一处理（不同 mermaid 版本支持不一）
   code = code.replace(/<br\s*\/?>/gi, ' ');
   // ③ 节点/菱形标签修复：含中文/空格/内嵌引号的未加引号标签 → 清洗内引号并整体加引号（2026-08-31）
