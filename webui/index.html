@@ -1910,6 +1910,8 @@ function addUserMsg(text, imageUrls) {
 
 function addAssistantMsg(text, meta) {
   text = text || '';
+  // 2026-08-31: 自检唤醒输出 [系统唤醒]… 不渲染成对话气泡（防重复回答刷屏）
+  if (typeof _isInjectMsg === 'function' && _isInjectMsg({content: text})) return null;
   var div = document.createElement('div');
   div.className = 'message assistant';
   // 2026-08-23: 消息页脚（耗时/工具调用数，刷新后从历史元数据恢复显示）

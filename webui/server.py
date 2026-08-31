@@ -2034,9 +2034,12 @@ async def _trigger_agent_turn(session, message):
         # 2026-08-16: 去 wait_for —— 让长工具自然跑完；网关挂起由 stall watchdog 中断
         result = await loop.run_in_executor(None, _run)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
+        # 2026-08-31: 自检回合输出加 [系统唤醒] 前缀 → 前端按注入消息过滤，不再刷屏成“重复回答”；
+        # 关键信息仍由 _build_memory_digest 以 system 尾注入（不会丢）。
+        _wake_out = ("[系统唤醒] " + final) if final else final
         session.setdefault("messages", []).append(
-            {"role": "assistant", "content": final, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
-        _session_emit(session, {"type": "complete", "content": final[:200], "session_id": session["id"]})
+            {"role": "assistant", "content": _wake_out, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+        _session_emit(session, {"type": "complete", "content": _wake_out[:200], "session_id": session["id"]})
         # 2026-08-16: 自检回合同样检测"说而不做"（此前只覆盖用户回合；
         # 虚假完成检测依赖回合级 _real_exec_this_turn 接线，自检回合无，只做承诺检测）
         if _detect_action_promise(final, []):
