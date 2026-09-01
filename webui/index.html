@@ -7724,12 +7724,24 @@ async function loadMemory() {
 
 async function viewMemoryFile(name) {
   try {
-    var r = await fetch('/api/file/read?path=' + encodeURIComponent('E:/MemOmics-Agent/hermes_home/memories/' + name));
+    // 2026-09-01: 不再拼死路径——从 /api/memory 拿服务端返回的正确 path（跨平台）
+    var pr = await fetch('/api/memory');
+    var pd = await pr.json();
+    var entries = pd.entries || [];
+    var entry = null;
+    for (var i = 0; i < entries.length; i++) { if (entries[i].name === name) { entry = entries[i]; break; } }
+    if (!entry || !entry.path) {
+      document.getElementById('memory-view').innerHTML = '<div style="color:var(--danger);font-size:12px;">文件不存在或已删除: ' + escapeHtml(name) + '</div>';
+      return;
+    }
+    var r = await fetch('/api/file/read?path=' + encodeURIComponent(entry.path));
     var d = await r.json();
     document.getElementById('memory-view').innerHTML =
       '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">' + escapeHtml(name) + ':</div>' +
       '<pre style="background:var(--code-bg);color:var(--code-fg);padding:10px;border-radius:6px;overflow:auto;font-size:11px;max-height:400px;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(d.content || '(空)') + '</pre>';
-  } catch(e) {}
+  } catch(e) {
+    document.getElementById('memory-view').innerHTML = '<div style="color:var(--danger);font-size:12px;">读取失败: ' + escapeHtml(e.message || e) + '</div>';
+  }
 }
 
 async function writeMemory(mode) {

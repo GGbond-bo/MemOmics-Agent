@@ -9600,6 +9600,10 @@ async def lit_browse(path: str = ""):
                 "parent": parent, "platform": os.name, "pdf_count": _pdf_count(real)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/file/read")
+async def file_read(path: str = ""):
     """读取文件内容（限制在 work/results/项目内，防任意文件读取）"""
     try:
         from webui.security import resolve_within_roots, UnsafePathError
@@ -9609,6 +9613,8 @@ async def lit_browse(path: str = ""):
         with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read(200000)  # 最多 200KB
         return {"path": path, "content": content, "size": size, "truncated": size > 200000}
+    except UnsafePathError as e:
+        return JSONResponse({"error": str(e)}, status_code=403)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
