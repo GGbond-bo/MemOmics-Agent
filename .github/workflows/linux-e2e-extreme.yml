@@ -53,6 +53,7 @@ jobs:
           .venv/bin/pip install -q --upgrade pip
           .venv/bin/pip install -q -r requirements.txt
           .venv/bin/pip install -q -r requirements-vision.txt
+          .venv/bin/pip install -q -r requirements-analysis.txt   # 2026-09-01: 依赖拆分后 scanpy 生态在此
           .venv/bin/pip install -q pytest
           .venv/bin/python -c "import fastapi, scanpy, rapidocr_onnxruntime, pytest; print('deps OK')"
 
