@@ -89,6 +89,20 @@ def find_r_installations():
                     _rs = d / "bin/Rscript"
                     if _rs.exists():
                         results[d.name] = str(_rs)
+        # 2026-09-01: 集群环境 R 常经 module load（Lmod/Environment Modules）
+        # 暴露到 PATH —— 尽力在登录 shell 探测一次（超时保护，失败静默）
+        if not results:
+            try:
+                _m = subprocess.run(
+                    ["bash", "-lc",
+                     "if command -v module >/dev/null 2>&1; then module load R 2>/dev/null; command -v Rscript; fi"],
+                    capture_output=True, text=True, timeout=15,
+                    encoding="utf-8", errors="replace")
+                _path = (_m.stdout or "").strip()
+                if _path and os.path.exists(_path):
+                    results["module"] = _path
+            except Exception:
+                pass
     return results
 
 def find_conda_envs():

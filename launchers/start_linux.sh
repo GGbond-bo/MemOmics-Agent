@@ -9,6 +9,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 PORT="${1:-${MEMOMICS_PORT:-8899}}"
 
+# === 守护模式（登录节点/服务器后台常驻；2026-09-01） ===
+#   ./start.sh 8899 --daemon → nohup 后台运行；日志 log/webui.log，PID log/webui.pid
+#   ./start.sh --stop        → 停止后台实例
+if [ "$1" = "--stop" ]; then
+    if [ -f "$SCRIPT_DIR/log/webui.pid" ]; then
+        _pid="$(cat "$SCRIPT_DIR/log/webui.pid")"
+        kill "$_pid" 2>/dev/null && echo "[DAEMON] 已停止 PID $_pid" || echo "[DAEMON] PID $_pid 不存在或已退出"
+        rm -f "$SCRIPT_DIR/log/webui.pid"
+    else
+        echo "[DAEMON] 未找到 PID 文件（log/webui.pid）"
+    fi
+    exit 0
+fi
+DAEMON=0
+for _arg in "$@"; do
+    [ "$_arg" = "--daemon" ] && DAEMON=1
+done
+if [ "$DAEMON" = "1" ]; then
+    mkdir -p "$SCRIPT_DIR/log"
+    nohup setsid bash "$0" "$PORT" >"$SCRIPT_DIR/log/webui.log" 2>&1 &
+    echo "$!" >"$SCRIPT_DIR/log/webui.pid"
+    echo "[DAEMON] MemOmics WebUI 后台启动中（日志: log/webui.log，PID: $!）"
+    echo "[DAEMON] 查看: tail -f log/webui.log | 停止: ./start.sh --stop"
+    exit 0
+fi
+
 echo "╔══════════════════════════════════════════════╗"
 echo "║       MemOmics-Agent v2.0 Starting...        ║"
 echo "╚══════════════════════════════════════════════╝"
@@ -110,24 +136,36 @@ fi
 # 持久内核会优先用它（persistent_kernel._rscript_path 已支持）。
 # 2026-08-29: 分析包策略 —— 核心 Agent 依赖已装完；scanpy 生态等分析包
 # 按需安装（Agent 任务中先查用户环境，用户同意才装，SOUL 铁律 29）。
+# 2026-09-01: 集群环境 R 常经 module load（Lmod/Environment Modules）提供，
+# 启动前在登录 shell 尽力探测并导出 RSCRIPT_PATH；找不到不阻塞。
 echo "[INFO] 核心依赖就绪（Agent 可正常使用）。"
 echo "  Python 分析包（scanpy 生态）按需安装：pip install -r requirements-analysis.txt"
 echo "  R 包由 Agent 在任务中检查用户环境后询问安装（清华镜像）"
+
+# === Step 4.5.1: module load R 尽力探测（集群） ===
+if ! command -v Rscript &>/dev/null && [ -z "${RSCRIPT_PATH:-}" ]; then
+    _r_module="$(bash -lc 'if command -v module >/dev/null 2>&1; then module load R 2>/dev/null; command -v Rscript; fi' 2>/dev/null)"
+    if [ -n "$_r_module" ]; then
+        export RSCRIPT_PATH="$_r_module"
+        echo "[OK] Rscript 经 module load 找到: $RSCRIPT_PATH"
+    fi
+fi
 
 # === Step 4.6: 项目内 R 库目录（2026-08-29：R 包统一装这里，不污染系统/用户库）===
 # Agent 按 SOUL 铁律 29 安装 R 包时用 R_LIBS 指向本目录；持久内核
 # （persistent_kernel .libPaths 探测）会自动包含 R_LIBS。
 mkdir -p "$SCRIPT_DIR/R_libs"
 export R_LIBS="$SCRIPT_DIR/R_libs${R_LIBS:+:$R_LIBS}"
-if ! command -v Rscript &>/dev/null; then
+if command -v Rscript &>/dev/null || [ -n "${RSCRIPT_PATH:-}" ]; then
+    echo "[OK] Rscript found: ${RSCRIPT_PATH:-$(command -v Rscript)}"
+else
     echo "[WARN] Rscript 未找到 —— R 分析（Seurat/WGCNA 等）不可用，核心 WebUI 不受影响"
-    echo "  安装 R（Ubuntu/Debian，tuna 镜像加速包安装）:"
+    echo "  集群 R 经 module 提供: 先 module load R 再启动（本脚本也会自动尝试）"
+    echo "  独立安装 R（Ubuntu/Debian，tuna 镜像加速包安装）:"
     echo "    sudo apt-get update && sudo apt-get install -y r-base"
     echo "  已有 R 但不在 PATH: export RSCRIPT_PATH=/path/to/Rscript 后再启动"
     echo "  关键 R 包清单见 R_packages.txt；安装 R 包可用清华镜像:"
     echo "    Rscript -e 'options(repos=c(CRAN=\"https://mirrors.tuna.tsinghua.edu.cn/CRAN/\")); install.packages(c(\"Seurat\",\"ggplot2\"))'"
-else
-    echo "[OK] Rscript found: $(command -v Rscript)"
 fi
 
 # === Step 5: Start ===
