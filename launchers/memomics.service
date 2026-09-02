@@ -1,0 +1,34 @@
+# MemOmics-Agent systemd 服务单元模板（2026-09-01）
+# 适用：登录节点/服务器上让 MemOmics WebUI 常驻、崩溃自重启（解决"刷着就没了"）。
+#
+# 安装（把 /path/to/MemOmics、User、端口换成实际值）：
+#   1) sudo cp launchers/memomics.service /etc/systemd/system/memomics.service
+#   2) sudo vi /etc/systemd/system/memomics.service   ← 改下面三处
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now memomics
+#   5) 查看日志:  journalctl -u memomics -f
+#   6) 停止:      sudo systemctl stop memomics
+#
+# 注意：集群登录节点通常没有 systemd（用 --daemon 模式:
+#   ./start.sh 8899 --daemon / ./start.sh --stop）
+[Unit]
+Description=MemOmics-Agent WebUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 改：MemOmics 安装目录（含 start.sh 的目录）
+WorkingDirectory=/path/to/MemOmics
+# 改：运行用户；删掉本行则以 root 运行
+User=memomics
+# 改：端口
+Environment=MEMOMICS_PORT=8899
+ExecStart=/path/to/MemOmics/start.sh 8899
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

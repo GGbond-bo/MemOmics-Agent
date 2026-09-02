@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ _MAX_WORKERS_PER_LANG = int(os.environ.get("MEMOMICS_KERNEL_MAX_WORKERS", "2"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
 _PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
 _R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
+# 2026-08-25: Linux/macOS 打包模板 environment.json 的 paths.r 为空（防泄露），
+# R 库路径改为运行时用 Rscript -e '.libPaths()' 探测一次并缓存（进程生命周期）。
+# 缓存键 = 可执行 Rscript 绝对路径；值为库目录列表（空列表 = 探测失败/无 R）。
+_LIBPATHS_CACHE: dict = {}
 
 
 def _truncate(text, max_bytes=_MAX_OUTPUT_BYTES):
@@ -50,6 +55,7 @@ class _ProtoWorker:
         self.proc = None
         self.lock = threading.Lock()
         self.last_use = time.monotonic()
+        self.uses = 0  # L0: 该 worker 被复用的次数（新建 = 1）
         self._pending = {}
         self._results = {}
         self._seq = 0
@@ -98,6 +104,7 @@ class _ProtoWorker:
             if self.proc is None or self.proc.poll() is not None:
                 self._spawn()
             self.last_use = time.monotonic()
+            self.uses += 1  # L0: 复用计数（新建 spawn 后第一次调用 = 1）
             # P1-5(2026-08-13): working_dir 接线 — 复用 worker 时若 cwd 变化，
             # 执行前先切换目录（R: setwd / Python: os.chdir）
             if cwd and os.path.abspath(str(cwd)) != os.path.abspath(str(self.cwd)):
@@ -257,17 +264,38 @@ class _RWorker(_ProtoWorker):
 
 
 class KernelPool:
+    """持久 kernel 池注册表（2026-08-25 会话隔离迁移，DSH 模型）。
+
+    每个 task_id（= 会话 sid）路由到独立的 _SessionKernelPool 子池：
+    worker 集合 / LRU 上限（每会话每语言 _MAX_WORKERS_PER_LANG）/ 事件环
+    全部按会话隔离——两会话并行各用各的 worker，**跨会话不再互逐出**
+    （原全局共享池：会话 A 的 R 变量会被会话 B/C 顶掉，即"kernel 失忆"
+    的多会话版本）。对外 API 不变：execute / close / restart /
+    worker_snapshot / kernel_events。
+    """
+
     def __init__(self):
-        self._workers = {}
+        self._pools = {}
         self._lock = threading.Lock()
         self._sweeper_started = False
         self._sweeper_lock = threading.Lock()
 
-    def _ensure_sweeper(self):
-        """启动后台空闲清扫线程（幂等）。
+    def _pool_for(self, task_id):
+        key = str(task_id or "default")
+        with self._lock:
+            p = self._pools.get(key)
+            if p is None:
+                p = _SessionKernelPool(key)
+                self._pools[key] = p
+            return p
 
-        仅当 _IDLE_TIMEOUT > 0 时启动（时间回收模式）；默认 LRU 容量回收
-        在 execute() 创建新 worker 时即时触发，不需要后台线程。"""
+    def execute(self, code, task_id, timeout=120, language="python", cwd=None):
+        self._ensure_sweeper()
+        return self._pool_for(task_id).execute(
+            code, task_id, timeout=timeout, language=language, cwd=cwd)
+
+    def _ensure_sweeper(self):
+        """注册表级一个空闲清扫线程，遍历所有会话子池（幂等）。"""
         if _IDLE_TIMEOUT <= 0:
             return
         with self._sweeper_lock:
@@ -279,11 +307,126 @@ class KernelPool:
             while True:
                 try:
                     time.sleep(60)
-                    self._reap_idle()
+                    with self._lock:
+                        pools = list(self._pools.values())
+                    for _p in pools:
+                        try:
+                            _p._reap_idle()
+                        except Exception:
+                            pass
                 except Exception:
                     pass  # 清扫失败不影响主流程
 
         threading.Thread(target=_sweep, daemon=True, name="kernel-pool-sweeper").start()
+
+    def kernel_events(self, task_id=None):
+        """跨会话查询 kernel 生命周期事件（最新在前）。task_id=None 返回全部会话。"""
+        with self._lock:
+            pools = [p for k, p in self._pools.items()
+                     if task_id is None or k == str(task_id)]
+        out = []
+        for _p in pools:
+            out.extend(_p.kernel_events())
+        return out
+
+    def close(self, task_id=None):
+        """关闭全部（或指定会话）子池。"""
+        with self._lock:
+            keys = list(self._pools.keys()) if task_id is None else [str(task_id)]
+            for _k in keys:
+                _p = self._pools.pop(_k, None)
+                if _p is not None:
+                    try:
+                        _p.close()
+                    except Exception:
+                        pass
+
+    def restart(self, language=None, task_id=None):
+        """重启指定会话（或全部）worker，释放内存。"""
+        if task_id is not None:
+            return self._pool_for(task_id).restart(language=language, task_id=task_id)
+        with self._lock:
+            pools = list(self._pools.values())
+        closed = 0
+        for _p in pools:
+            try:
+                _r = json.loads(_p.restart(language=language))
+                closed += int(_r.get("closed_workers", 0))
+            except Exception:
+                pass
+        with self._lock:
+            remaining = len(self._pools)
+        return json.dumps({
+            "ok": True, "closed_workers": closed, "remaining_workers": remaining,
+            "note": "session pools closed; next execute spawns fresh workers — all in-memory objects are gone",
+        }, ensure_ascii=False)
+
+    def worker_snapshot(self, task_id=None, language=None):
+        """所有会话子池的活跃 worker（带 session 标识）。"""
+        with self._lock:
+            pools = [(k, p) for k, p in self._pools.items()
+                     if task_id is None or k == str(task_id)]
+        out = []
+        for _k, _p in pools:
+            for _w in _p.worker_snapshot(language=language):
+                _w["session"] = _k
+                out.append(_w)
+        return out
+
+    # ── 静态工具（保留旧引用点兼容：execute_r fallback 用 KERNEL_POOL._rscript_path()）──
+    @staticmethod
+    def _python_path():
+        return _SessionKernelPool._python_path()
+
+    @staticmethod
+    def _env_json_r_section():
+        return _SessionKernelPool._env_json_r_section()
+
+    @staticmethod
+    def _rscript_path():
+        return _SessionKernelPool._rscript_path()
+
+    @staticmethod
+    def _r_lib_env(env):
+        return _SessionKernelPool._r_lib_env(env)
+
+    @staticmethod
+    def _child_env():
+        return _SessionKernelPool._child_env()
+
+
+class _SessionKernelPool(KernelPool):
+    """单会话子池：worker 集合 + LRU（每会话每语言 _MAX_WORKERS_PER_LANG）+ 事件环。
+
+    跨会话完全独立——会话 A 的 worker 不会因会话 B 的 execute 被逐出。
+    """
+
+    def __init__(self, session_id):
+        self.session_id = str(session_id or "default")
+        self._workers = {}
+        self._lock = threading.Lock()
+        self._events = {}  # task_id -> deque[str]（最近 kernel 生命周期事件）
+
+    # ── L1: kernel 生命周期事件（逐出/回收/重建可见化）────────────────────
+    def _record_event(self, task_id, text):
+        try:
+            if not task_id:
+                return
+            q = self._events.setdefault(str(task_id), deque(maxlen=8))
+            q.append(text)
+        except Exception:
+            pass
+
+    def kernel_events(self, task_id=None):
+        """本会话子池事件（最新在前）。task_id=None 返回本池全部。"""
+        with self._lock:
+            out = []
+            for _tid, q in self._events.items():
+                if task_id is not None and _tid != str(task_id):
+                    continue
+                for e in reversed(q):
+                    out.append(f"[{_tid[:14]}] {e}")
+            return out
 
     def _evict_lru(self, lang):
         """LRU 容量回收：该语言 worker 数超过上限时，回收最久未用的。
@@ -297,11 +440,16 @@ class KernelPool:
                 return
             overflow = len(same_lang) - _MAX_WORKERS_PER_LANG
             for k in sorted(same_lang, key=lambda k: same_lang[k].last_use)[:overflow]:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     same_lang[k].close()
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 逐出事件可见化 —— 该任务的所有 RAM 变量已丢失
+                self._record_event(
+                    _tid, f"{lang} kernel 被 LRU 逐出（同语言 worker 超上限 {_MAX_WORKERS_PER_LANG}），"
+                          f"此前所有变量已丢失，需重新加载数据")
             logger.info("kernel pool: LRU evicted %d %s worker(s), %d remaining",
                         overflow, lang, len(self._workers))
 
@@ -311,11 +459,16 @@ class KernelPool:
             stale = [k for k, w in self._workers.items()
                      if now - w.last_use > _IDLE_TIMEOUT]
             for k in stale:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     self._workers[k].close()
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 空闲回收事件可见化
+                self._record_event(
+                    _tid, f"{k.split(':', 1)[0]} kernel 被空闲回收（{int(_IDLE_TIMEOUT / 60)} 分钟无请求），"
+                          f"此前所有变量已丢失，需重新加载数据")
         if stale:
             logger.info("kernel pool: reaped %d idle worker(s), %d remaining",
                         len(stale), len(self._workers))
@@ -370,22 +523,59 @@ class KernelPool:
         R_LIBS（优先级最高）+ R_LIBS_USER 指向主力库，R_LIBS_SITE 指向
         site 库。2026-08-16 修复：environment.json 的 lib_user 曾指向
         不含 Seurat 的旧库目录，主力库在 E:/R-libs/<ver>。
+
+        2026-08-25（Linux/macOS 修复）：打包模板的 environment.json paths.r
+        为空（防泄露设计），此时回退用 Rscript -e '.libPaths()' 探测实际库
+        路径并注入（探测结果进程内缓存）——否则 R worker 用默认 libPaths，
+        缺 jsonlite 等包时启动即死，execute_r 每次回退全新 Rscript（不持久）。
         """
         out = {}
         try:
             _r_section = KernelPool._env_json_r_section()
             _def_rscript = _r_section.get("default", "")
-            _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
-            _r_info = _r_section.get(_r_ver, {})
-            _lib_user = _r_info.get("lib_user", "")
-            _lib_site = _r_info.get("lib_site", "")
-            if _lib_user:
-                out["R_LIBS"] = _lib_user
-                out["R_LIBS_USER"] = _lib_user
-            if _lib_site:
-                out["R_LIBS_SITE"] = _lib_site
+            if _def_rscript:
+                _r_ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def_rscript))))
+                _r_info = _r_section.get(_r_ver, {})
+                _lib_user = _r_info.get("lib_user", "")
+                _lib_site = _r_info.get("lib_site", "")
+                if _lib_user:
+                    out["R_LIBS"] = _lib_user
+                    out["R_LIBS_USER"] = _lib_user
+                if _lib_site:
+                    out["R_LIBS_SITE"] = _lib_site
         except Exception:
             pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
+        if out:
+            return out
+        # ── paths.r 为空（Linux/macOS 发行版）→ 运行时探测 .libPaths() ──
+        try:
+            import shutil as _shutil
+            import subprocess as _subprocess
+            _rscript = KernelPool._rscript_path()
+            _exe = (_rscript if os.path.isabs(_rscript) and os.path.isfile(_rscript)
+                    else _shutil.which(_rscript))
+            if _exe:
+                if _exe not in _LIBPATHS_CACHE:
+                    _libs: list = []
+                    try:
+                        # 探测用干净环境（不带已有 R_LIBS*，避免循环/污染结果）
+                        _probe_env = {k: v for k, v in dict(env).items()
+                                      if k not in ("R_LIBS", "R_LIBS_USER", "R_LIBS_SITE")}
+                        _pr = _subprocess.run(
+                            [_exe, "--vanilla", "-e", "cat(.libPaths(), sep='\\n')"],
+                            capture_output=True, text=True, timeout=30, env=_probe_env)
+                        if _pr.returncode == 0:
+                            _libs = [l.strip() for l in (_pr.stdout or "").splitlines() if l.strip()]
+                    except Exception:
+                        _libs = []
+                    _LIBPATHS_CACHE[_exe] = _libs
+                _libs = _LIBPATHS_CACHE.get(_exe) or []
+                if _libs:
+                    # R 库路径分隔符：posix=: / nt=;（os.pathsep 自动适配）
+                    out["R_LIBS"] = os.pathsep.join(_libs)
+                    out["R_LIBS_USER"] = os.pathsep.join(_libs)
+        except Exception:
+            pass  # 探测失败不阻塞执行，worker 用 R 默认库
         return out
 
     @staticmethod
@@ -415,25 +605,40 @@ class KernelPool:
         lang = language or "python"
         key = f"{lang}:{task_id or 'default'}"
         now = time.monotonic()
-        self._ensure_sweeper()  # 幂等：仅 _IDLE_TIMEOUT>0 时启动时间回收
+        # sweeper 由注册表 KernelPool._ensure_sweeper 统一驱动（子池不重复启动）
+        rebuilt = False
         with self._lock:
             if _IDLE_TIMEOUT > 0:
                 for k in [k for k, w in self._workers.items() if now - w.last_use > _IDLE_TIMEOUT]:
+                    _tid = k.split(":", 1)[1] if ":" in k else ""
                     self._workers[k].close()
                     del self._workers[k]
+                    # L1: execute 前即时回收也记事件（与 sweeper 同语义）
+                    self._record_event(
+                        _tid, f"{k.split(':', 1)[0]} kernel 被空闲回收（{int(_IDLE_TIMEOUT / 60)} 分钟无请求），"
+                              f"此前所有变量已丢失，需重新加载数据")
             w = self._workers.get(key)
             if w is None:
+                rebuilt = True  # L0: 本次调用是新建 worker → 之前变量已清空
                 if lang == "r":
                     w = _RWorker(task_id or "default", self._rscript_path(), self._child_env(), cwd=cwd or os.getcwd())
                 else:
                     w = _PyWorker(task_id or "default", self._python_path(), self._child_env(), cwd=cwd or os.getcwd())
                 self._workers[key] = w
+                self._record_event(task_id or "default", f"{lang} kernel 新建（变量已清空，需重新加载数据）")
         self._evict_lru(lang)  # LRU 容量回收：超出上限时回收最久未用的 worker
         try:
-            return w.execute(code, timeout, cwd=cwd)
+            res = w.execute(code, timeout, cwd=cwd)
+            if isinstance(res, dict):
+                # L0: 模型可见的 kernel 元信息（新建 = 变量不在；复用计数供诊断）
+                res["kernel_rebuilt"] = bool(rebuilt)
+                res["kernel_uses"] = int(getattr(w, "uses", 1))
+            return res
         except Exception as e:
             logger.exception("kernel execute error")
-            return {"status": "error", "error": str(e), "output": "", "tool_calls_made": 0, "duration_seconds": 0}
+            return {"status": "error", "error": str(e), "output": "", "tool_calls_made": 0,
+                    "duration_seconds": 0, "kernel_rebuilt": bool(rebuilt),
+                    "kernel_uses": int(getattr(w, "uses", 1))}
 
     def close(self):
         with self._lock:
@@ -460,12 +665,16 @@ class KernelPool:
                     and (task_id is None or k.endswith(":" + task_id))]
             closed = 0
             for k in keys:
+                _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
                     self._workers[k].close()
                     closed += 1
                 except Exception:
                     pass
                 del self._workers[k]
+                # L1: 显式重启事件可见化
+                self._record_event(
+                    _tid, f"{k.split(':', 1)[0]} kernel 被显式重启，此前所有变量已丢失，需重新加载数据")
         return json.dumps({
             "ok": True,
             "closed_workers": closed,

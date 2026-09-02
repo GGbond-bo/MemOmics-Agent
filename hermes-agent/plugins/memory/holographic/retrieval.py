@@ -66,22 +66,57 @@ class FactRetriever:
         candidates = self._fts_candidates(query, category, min_trust, limit * 3)
 
         if not candidates:
-            return []
+            # Stage 1b: CJK word-level candidate channel. The facts_fts table
+            # uses the unicode61 tokenizer, which cannot substring-match
+            # Chinese queries ("热图" never matches a fact containing
+            # "绘制热图"), so FTS candidates are routinely empty for CJK.
+            # Fall back to jieba/2-gram token → LIKE scan → trust scoring,
+            # mirroring context_arch.recall_hybrid semantics.
+            candidates = self._cjk_candidates(query, category, min_trust, limit * 3)
+            if not candidates:
+                return []
 
         # Stage 2: Rerank with Jaccard + trust + optional decay
-        query_tokens = self._tokenize(query)
+        query_tokens = self._text_tokens(query)
         scored = []
 
+        # 2026-08-31 排序强化：①类别权重（蒸馏知识 > 经验笔记 > 诉求引文 > 机器记账）
+        # ②时效（同分时新事实优先）③短语连续加分（词序相邻 = 更强语义证据）。
+        # 背景：极端评测实测 user_request 整句引文与 skill_exp 高分笔记同词频时
+        # 排序无区分度（"专利结论表"曾被同词频 peak 引文淹没）。
+        _CATEGORY_WEIGHT = {
+            "user_pref": 1.0, "project": 1.0, "skill_exp": 1.0,
+            "delegation": 0.95, "general": 0.92,
+            "script_score": 0.90, "memory_governance": 0.90,
+            "user_request": 0.80,
+        }
+        _q_ordered = sorted(query_tokens, key=len, reverse=True)
+        _created_all = [f.get("created_at") or f.get("updated_at") or "" for f in candidates]
+        _ts_all = []
+        for _c in _created_all:
+            try:
+                _ts_all.append(float(_c))
+            except Exception:
+                _ts_all.append(0.0)
+        _ts_max = max(_ts_all) if _ts_all else 1.0
+        _ts_min = min(t for t in _ts_all if t > 0) if any(t > 0 for t in _ts_all) else _ts_max
+        # 2026-08-31：HRR 对中文无训练语义——CJK 查询时其相似度近似随机噪声，
+        # 0.3 权重下足以把正确排序打乱（实测 user_pref 被 user_request 反超）。
+        # CJK 查询 → HRR 强制中性 0.5，排序完全交给 jaccard+trust+类别+时效+短语。
+        _cjk_query = any("\u4e00" <= ch <= "\u9fff" for ch in (query or ""))
+
         for fact in candidates:
-            content_tokens = self._tokenize(fact["content"])
-            tag_tokens = self._tokenize(fact.get("tags", ""))
+            content_tokens = self._text_tokens(fact["content"])
+            tag_tokens = self._text_tokens(fact.get("tags", ""))
             all_tokens = content_tokens | tag_tokens
 
             jaccard = self._jaccard_similarity(query_tokens, all_tokens)
             fts_score = fact.get("fts_rank", 0.0)
 
             # HRR similarity
-            if self.hrr_weight > 0 and fact.get("hrr_vector"):
+            if _cjk_query:
+                hrr_sim = 0.5  # neutral: no CJK training signal
+            elif self.hrr_weight > 0 and fact.get("hrr_vector"):
                 fact_vec = hrr.bytes_to_phases(fact["hrr_vector"])
                 query_vec = hrr.encode_text(query, self.hrr_dim)
                 hrr_sim = (hrr.similarity(query_vec, fact_vec) + 1.0) / 2.0  # shift to [0,1]
@@ -93,8 +128,32 @@ class FactRetriever:
                         + self.jaccard_weight * jaccard
                         + self.hrr_weight * hrr_sim)
 
+            # ① category weight 作用于相关性（引文类命中相关性打折，而非总分打折——
+            # 否则短引文的 jaccard 偏置（token 少→相似度高）会盖过类别信号）
+            _cat = str(fact.get("category") or "")
+            relevance *= _CATEGORY_WEIGHT.get(_cat, 0.95)
+
             # Trust weighting
             score = relevance * fact["trust_score"]
+
+            # ② recency weight (created/updated epoch; 0.92 .. 1.0)
+            _ts = 0.0
+            try:
+                _ts = float(fact.get("created_at") or fact.get("updated_at") or 0.0)
+            except Exception:
+                _ts = 0.0
+            if _ts_max > _ts_min:
+                _age_ratio = max(0.0, min(1.0, (_ts_max - _ts) / (_ts_max - _ts_min)))
+            else:
+                _age_ratio = 0.0
+            score *= (0.92 + 0.08 * (1.0 - _age_ratio))
+
+            # ③ phrase bonus: longest query token appearing verbatim in content
+            _content = str(fact.get("content") or "")
+            for _tok in _q_ordered:
+                if _tok and _tok in _content:
+                    score += 0.08
+                    break
 
             # Optional temporal decay
             if self.half_life > 0:
@@ -545,6 +604,52 @@ class FactRetriever:
 
         return results
 
+    def _cjk_candidates(
+        self,
+        query: str,
+        category: str | None,
+        min_trust: float,
+        limit: int,
+    ) -> list[dict]:
+        """LIKE-based candidate channel for CJK queries (jieba/2-gram tokens).
+
+        facts_fts (unicode61) cannot substring-match Chinese; this channel
+        OR-scans ``content LIKE %token%`` for the query's segmented words
+        (capped at 60 rows), then the shared Stage-2 rerank (Jaccard + trust)
+        picks the best matches. Returns rows in the same dict shape as
+        ``_fts_candidates`` with ``fts_rank=0.0`` (no BM25 signal available).
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        q_tokens = self._cjk_tokens(query)
+        if not q_tokens:
+            return []
+        cond = " OR ".join("content LIKE ?" for _ in q_tokens)
+        params: list = [f"%{t}%" for t in q_tokens]
+        where = f"WHERE ({cond})"
+        if category:
+            where += " AND category = ?"
+            params.append(category)
+        where += " AND trust_score >= ?"
+        params.append(min_trust)
+        try:
+            conn = self.store._conn
+            rows = conn.execute(
+                f"SELECT fact_id, content, category, tags, trust_score, "
+                f"retrieval_count, helpful_count, created_at, updated_at, hrr_vector "
+                f"FROM facts {where} LIMIT ?",
+                params + [limit],
+            ).fetchall()
+        except Exception:
+            return []
+        results = []
+        for row in rows:
+            fact = dict(row)
+            fact["fts_rank"] = 0.0
+            results.append(fact)
+        return results
+
     @staticmethod
     def _tokenize(text: str) -> set[str]:
         """Simple whitespace tokenization with lowercasing.
@@ -560,6 +665,44 @@ class FactRetriever:
             if cleaned:
                 tokens.add(cleaned)
         return tokens
+
+    @staticmethod
+    def _cjk_tokens(text: str) -> list[str]:
+        """CJK-aware word segmentation: jieba words (>1 char), 2-gram fallback.
+
+        Chinese runs have no whitespace, so the whitespace tokenizer above
+        yields one giant token and Jaccard degenerates. jieba splits into
+        content words instead; when jieba is unavailable (trimmed envs) a
+        2-gram fallback still gives substring-level overlap signal.
+        """
+        import re as _re
+        if not text:
+            return []
+        try:
+            import jieba
+            toks = [w for w in jieba.lcut(text or "") if w.strip() and len(w.strip()) > 1]
+            if toks:
+                return toks
+        except Exception:
+            pass
+        s = _re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", text or "")
+        if not s:
+            return []
+        return [s[i:i + 2] for i in range(max(0, len(s) - 1))]
+
+    @classmethod
+    def _text_tokens(cls, text: str) -> set[str]:
+        """Unified tokenizer: CJK-aware when the text contains any CJK char.
+
+        Returns a set so union/intersection math stays cheap; for pure ASCII
+        text this is exactly the legacy whitespace tokenizer, preserving
+        prior behavior for English queries.
+        """
+        if not text:
+            return set()
+        if any("\u4e00" <= ch <= "\u9fff" for ch in text):
+            return set(cls._cjk_tokens(text))
+        return cls._tokenize(text)
 
     # Stopwords dropped before FTS5 OR-expansion. Short English function
     # words that carry no retrieval signal and force false-negative AND

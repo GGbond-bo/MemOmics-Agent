@@ -89,7 +89,57 @@ def find_r_installations():
                     _rs = d / "bin/Rscript"
                     if _rs.exists():
                         results[d.name] = str(_rs)
+        # 2026-09-01: 集群环境 R 常经 module load（Lmod/Environment Modules）
+        # 暴露到 PATH —— 尽力在登录 shell 探测一次（超时保护，失败静默）
+        if not results:
+            try:
+                _m = subprocess.run(
+                    ["bash", "-lc",
+                     "if command -v module >/dev/null 2>&1; then module load R 2>/dev/null; command -v Rscript; fi"],
+                    capture_output=True, text=True, timeout=15,
+                    encoding="utf-8", errors="replace")
+                _path = (_m.stdout or "").strip()
+                if _path and os.path.exists(_path):
+                    results["module"] = _path
+            except Exception:
+                pass
     return results
+
+def find_conda_envs():
+    """探测 conda 环境列表（Linux/macOS）：name + prefix + python 路径。
+
+    2026-08-29: 供 Agent 复用——写回 environment.json paths.conda_envs，
+    模型跑分析前直接读清单，不再每次重复探测。
+    """
+    envs = []
+    try:
+        conda = shutil.which("conda")
+        if not conda:
+            for c in (os.path.expanduser("~/miniconda3/bin/conda"),
+                      os.path.expanduser("~/anaconda3/bin/conda"),
+                      "/opt/miniconda3/bin/conda", "/opt/anaconda3/bin/conda"):
+                if os.path.isfile(c):
+                    conda = c
+                    break
+        if not conda:
+            return envs
+        r = subprocess.run([conda, "env", "list"], capture_output=True, text=True,
+                           timeout=20, encoding="utf-8", errors="replace")
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "conda environments" in line:
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[0].rstrip("*")
+                prefix = parts[-1]
+                py = os.path.join(prefix, "bin", "python")
+                envs.append({"name": name, "prefix": prefix,
+                             "python": py if os.path.isfile(py) else ""})
+    except Exception:
+        pass
+    return envs
+
 
 def find_cellbender():
     """多级回退查找cellbender"""
@@ -209,6 +259,17 @@ def validate_and_fix(env_data, verbose=False, dry_run=False):
             all_ok = False
             changes.append(f"Python {py_key}: NOT FOUND")
 
+    # --- 2026-08-29: conda 环境清单写回（Agent 复用，避免重复探测） ---
+    if os.name != "nt":
+        try:
+            _envs = find_conda_envs()
+            env_data.setdefault("paths", {}).setdefault("conda_envs", [])
+            env_data["paths"]["conda_envs"] = _envs
+            if _envs:
+                changes.append(f"conda envs: {len(_envs)} 个（{', '.join(e['name'] for e in _envs[:6])}{'…' if len(_envs) > 6 else ''}）")
+        except Exception:
+            pass
+
     # --- 验证 CLI tools ---
     cli = env_data.get("paths", {}).get("cli_tools", {})
     
@@ -223,8 +284,13 @@ def validate_and_fix(env_data, verbose=False, dry_run=False):
             cli["cellbender"]["exe"] = found
         else:
             all_ok = False
-            critical_missing = True
-            changes.append("cellbender: NOT FOUND — CRITICAL")
+            # 2026-08-26: cellbender 是 Windows/GPU 专属工具；Linux/macOS 或打包模板
+            # （无 cli_tools 段）缺失属常态，不判 CRITICAL（此前 Linux 首启必误报 FATAL）
+            if os.name == "nt" and cli:
+                critical_missing = True
+                changes.append("cellbender: NOT FOUND — CRITICAL")
+            else:
+                changes.append("cellbender: NOT FOUND (Windows 专属，非关键)")
 
     # ptrepack
     ptr_path = cli.get("ptrepack", {}).get("exe", "")

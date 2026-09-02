@@ -167,6 +167,22 @@ SCHEMA = {
                 "type": "boolean",
                 "description": "自动检索知识库注入（默认 true）：biology_kb 按物种+组织+方向优先（其他物种降权参考），bioinfo_kb 按话题匹配（跨物种可参考），statistics_kb 不注入（LLM 自行判断）。显式传 kb 参数时自动注入跳过对应库。",
                 "default": True
+            },
+            "evidence_cards": {
+                "type": "string",
+                "description": "证据卡（v2）：JSON 数组或 Markdown 文本，注入到所有角色与裁判 prompt。每卡含 id/type/title/pmid/doi/conclusion/effect/n/source_file。空=无外部证据卡。",
+                "default": ""
+            },
+            "role_preset": {
+                "type": "string",
+                "enum": ["core7", "core9"],
+                "description": "v2 角色预设：core7=现状 8 角色；core9=增加实验设计/可重复性中立评审（10 角色/轮，成本更高）。留空用 config。",
+                "default": ""
+            },
+            "judge_count": {
+                "type": "integer",
+                "description": "v2 多裁判数量：1=单裁判（现状）；2-3=温度采样多裁判 + 简单多数投票（judge_consensus）。留空用 config。",
+                "default": 0
             }
         },
         "required": ["topic", "context"]
@@ -412,6 +428,274 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 ```
 """
 
+# ==================== v2 证据审查器提示词（2026-08-27） ====================
+
+_EVIDENCE_CONTRACT = """## 证据契约（必须遵守）
+1. 每个观点必须有证据锚点：[PMID:xxx] / [DOI:xxx] / [KB源:文件] / [数据:具体数值]。
+2. 无直接证据的推理必须标注 [仅是推理]，且不得作为论点计分。
+3. 证据等级：P=文献/实验证据，C=证据卡/KB，I=纯推理。
+4. 你的专业领域内若存在失败条件/已知反例，必须写入 self_audit_failures。
+5. 若证据不足，明确写“本领域证据不足，不可下结论”，并列出 needed_evidence。"""
+
+_V2_OUTPUT_SPEC = """## 输出格式（严格 JSON，不要输出任何其他文字）
+{{"claims": [{{"claim": "…", "evidence": "[PMID:…] / [KB源:…] / [数据:…]", "level": "P|C|I", "confidence": "high|medium|low", "risk_boundary": "失效条件…"}}], "self_audit_failures": ["…"], "alternative_hypothesis": "若…则结论可能为…（可检验）", "needed_evidence": ["…"]}}"""
+
+_V2_ROLE_QUESTIONS = {
+    "pro_biology": {
+        "title": "生物学专业编辑（正方）",
+        "task": "从生物学角度支持以下决策/结论",
+        "questions": """1. Marker gene 验证：相关标记基因的表达模式是否支持？
+2. 已知生物学知识：与文献中已知的细胞类型/组织特征是否一致？
+3. 生物学预期：结果是否符合该物种/组织/方向的生物学预期？
+4. 证据等级标注：marker 特异性需给出双细胞类型对比数据或 PMID/DOI；无则 [I]。""",
+    },
+    "pro_statistics": {
+        "title": "统计学专业编辑（正方）",
+        "task": "从统计学角度支持以下决策/结论",
+        "questions": """1. 显著性：p 值/FDR 是否达到阈值？效应量是否足够大？
+2. 样本量：细胞数/样本数是否足够支持这个结论？（必须报告是否做过功效分析，没有则写在 self_audit_failures）
+3. 分布特征：数据分布是否符合方法假设（附模型诊断证据）。
+4. 多重比较校正方法明确说明。""",
+    },
+    "pro_bioinformatics": {
+        "title": "生信专业编辑（正方）",
+        "task": "从生信分析质量角度支持以下决策/结论",
+        "questions": """1. QC 指标：nFeature/nCount/percent.mt 分布（给分位数，不只是均值）。
+2. 聚类质量：轮廓系数、聚类稳定性、双胞率是否达标。
+3. 分析流程：参数选择是否符合最佳实践？是否遗漏步骤？
+4. 参数敏感性：说明结果对参数的变化区间（敏感/不敏感）。""",
+    },
+    "con_biology": {
+        "title": "生物学专业编辑（反方）",
+        "task": "从生物学角度质疑以下决策/结论",
+        "questions": """1. 异质性：是否存在亚群被合并？是否有过度聚类？
+2. 批次效应：生物学差异与技术差异是否混淆？
+3. Marker 重叠：标记基因是否在多种细胞类型中表达？特异性是否足够？
+4. 替代解释：必须给出【可检验的替代假设】（如“可能同源亚群，用 X 标记可区分”）。""",
+    },
+    "con_statistics": {
+        "title": "统计学专业编辑（反方）",
+        "task": "从统计学角度质疑以下决策/结论",
+        "questions": """1. 多重比较：是否校正？假阳性率是否可控？
+2. 统计功效：样本量是否足够？按当前样本量该效应量的功效是多少？（无法估计则写 self_audit_failures）
+3. 模型假设：是否满足？是否有更合适方法？
+4. 效应量：显著是否达到有生物学意义的大小？""",
+    },
+    "con_bioinformatics": {
+        "title": "生信专业编辑（反方）",
+        "task": "从生信分析质量角度质疑以下决策/结论",
+        "questions": """1. 降维质量：PCA/UMAP 解释方差是否足够？是否过度降维？
+2. 聚类稳定性：不同分辨率下是否稳定？bootstrap 稳定性如何？
+3. 注释置信度：自动注释置信度得分？是否有手动验证？
+4. 参数敏感性：换一组参数结果会变吗（给出敏感性陈述与证据或 [I]）。""",
+    },
+    "con_history": {
+        "title": "历史经验编辑（反方）",
+        "task": "从历史报错与经验记录角度质疑，并做证据匹配",
+        "questions": """1. 检索相似历史报错（error_memory/errors.jsonl），给出〔相似度/适用性/置信度〕。
+2. 已知陷阱：该参数/方法是否有已知的坑？
+3. 环境限制：当前硬件/环境能否跑通？
+4. 修复经验：之前是如何修复的？是否应采用修复后方案？""",
+    },
+    "design_review": {
+        "title": "实验设计评审（中立）",
+        "task": "检查实验设计/对照/批次/混杂，给出 confounding 风险清单",
+        "questions": """1. design 公式与因子水平是否正确？（对照组/处理命名/交互项——设计错了结论全错）
+2. 是否存在 donor/sample 混杂？是否建议 leave-one-out 或随机效应？
+3. 样本与对照是否可比较（年龄/性别/批次/采集方案）？
+4. 给出 confounding_risk 清单与最低限度的改进设计。""",
+    },
+    "reproducibility_review": {
+        "title": "可重复性评审（中立）",
+        "task": "检查随机种子/版本/环境/运行时长，输出可复现性评分与风险",
+        "questions": """1. 随机种子/采样顺序是否固定？能否复现？
+2. 工具链版本（R/Python/包）是否记录？是否需要 lock 文件？
+3. 运行环境依赖（GPU/内存/路径）是否固化？
+4. 给出 reproducibility_score(1-10) 与重跑建议。""",
+    },
+}
+
+_V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{task}。
+
+## 辩论主题
+{topic}
+
+## 上下文
+{context}
+
+## {kb_title}
+{kb_info}
+
+{evidence_section}{contract}
+
+{questions}
+
+## 要求
+- 严格按“输出格式”输出 JSON；每个 claim 必须带证据锚点与等级。
+- 不编造证据；无证据写 [仅是推理] 并计入 needed_evidence。
+- 控制在 500 字以内（结构化字段总长度）。
+- 你不知道其他编辑的观点，请独立思考。
+{output_spec}"""
+
+_V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2）。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
+
+## 辩论主题
+{topic}
+
+## 上下文
+{context}
+
+## 正方论证
+{pro_arguments}
+
+## 反方论证
+{con_arguments}
+
+{neutral_args}{evidence_section}{contract}
+
+## 评分 rubrics（替代主观“说服力”）
+{rubrics_hint}
+
+## 裁决决策树（必须遵守）
+1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing。
+2. 若 verdict=modify 但拿不出 recommended_params → 禁止输出该组合。
+3. 若 confidence=high 但 missing 非空 → confidence 必须降为 medium。
+4. 若双方论证接近 → 只能 need_more_info + missing，不得强行二选一。
+
+## 输出格式（严格 JSON）
+{{"rubrics": {{"evidence_quality": 1-10, "effect_size": 1-10, "confounding_control": 1-10, "prior_literature": 1-10, "reproducibility": 1-10, "pro_claim_coverage": 1-10, "con_claim_coverage": 1-10}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "missing": ["必要证据/数据清单"], "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
+
+_RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
+- effect_size：效应量大小与生物学意义
+- confounding_control：批次/混杂/对照是否被考虑
+- prior_literature：是否参考相关文献
+- reproducibility：是否可复现
+- pro/con_claim_coverage：正/反方是否覆盖完整（未覆盖给低分）"""
+
+
+def _evidence_block(evidence_cards: str = "") -> str:
+    """把证据卡文本拼进 prompt；为空返回 '（未提供证据卡）'。"""
+    ev = _format_evidence_cards(evidence_cards)
+    if not ev:
+        return "## 证据卡\n（未提供证据卡；所有无锚点推理都只能标记 [仅是推理]）\n\n"
+    return f"## 证据卡（可引用，引用时用 id/PMID/DOI）\n{ev}\n\n"
+
+
+def _v2_role_prompt(label: str, topic: str, context: str, kb_info: str,
+                    history_errors: str = "", evidence_cards: str = "") -> str:
+    spec = _V2_ROLE_QUESTIONS.get(label, _V2_ROLE_QUESTIONS["pro_biology"])
+    kb_title = "历史报错记录" if label == "con_history" else "知识库参考"
+    kb = history_errors if label == "con_history" else (kb_info or "无知识库参考")
+    return _V2_ROLE_TEMPLATE.format(
+        title=spec["title"], task=spec["task"], topic=topic, context=context,
+        kb_title=kb_title, kb_info=kb,
+        evidence_section=_evidence_block(evidence_cards),
+        contract=_EVIDENCE_CONTRACT + "\n\n", questions=spec["questions"],
+        output_spec=_V2_OUTPUT_SPEC)
+
+
+def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments: str,
+                     evidence_cards: str = "", neutral_args: str = "",
+                     roles: str = "3 正方 + 4 反方") -> str:
+    return _V2_JUDGE_PROMPT.format(
+        n_pro="7位" if not neutral_args else "9位",
+        roles=roles,
+        topic=topic, context=context,
+        pro_arguments=pro_arguments, con_arguments=con_arguments,
+        neutral_args=neutral_args or "",
+        evidence_section=_evidence_block(evidence_cards),
+        contract=_EVIDENCE_CONTRACT + "\n\n",
+        rubrics_hint=_RUBRICS_HINT)
+
+
+def _use_v2_prompts(cfg: dict) -> bool:
+    """v2 提示词开关：prompt_version>=2 且未强制 legacy。"""
+    if str(os.environ.get("MEMOMICS_DEBATE_LEGACY_PROMPTS", "")).strip() == "1":
+        return False
+    try:
+        return int((cfg or {}).get("prompt_version", 2) or 2) >= 2
+    except Exception:
+        return False
+
+
+def _format_evidence_cards(evidence_cards: str) -> str:
+    """把 evidence_cards（JSON 数组或文本）格式化为可注入的证据卡文本。"""
+    ev = (evidence_cards or "").strip()
+    if not ev:
+        return ""
+    try:
+        obj = json.loads(ev)
+        items = obj if isinstance(obj, list) else ([obj] if isinstance(obj, dict) else [])
+        lines = []
+        for i, c in enumerate(items, 1):
+            if not isinstance(c, dict):
+                continue
+            cid = c.get("id") or f"ev{i}"
+            pmid = c.get("pmid") or c.get("doi") or ""
+            title = c.get("title") or c.get("conclusion") or "证据"
+            eff = c.get("effect", "?")
+            n = c.get("n", "?")
+            src = c.get("source_file", "?")
+            conflict = c.get("conflict_with") or ""
+            lines.append(f"- [{cid}] {title} | PMID/DOI: {pmid} | 效应: {eff} | n={n} | 来源: {src}"
+                         + (f" | 冲突: {conflict}" if conflict else ""))
+        return "\n".join(lines) if lines else ev
+    except Exception:
+        return ev
+
+
+def _evidence_fingerprint(evidence_cards: str) -> str:
+    """证据卡指纹：内容变化 → 新缓存条目（防止不同证据复用同一辩论）。"""
+    if not (evidence_cards or "").strip():
+        return ""
+    try:
+        obj = json.loads(evidence_cards)
+        text = json.dumps(obj, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        text = str(evidence_cards)
+    return hashlib.md5(text.encode("utf-8")).hexdigest()[:10]
+
+
+def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
+    """v2: 多裁判采样 — 返回 (primary_judge_result, consensus_dict)。
+
+    count=1 时即现状单裁判。count>1 用温度梯度独立采样，简单多数投票。
+    共识对象只含 votes/agreement，不替代主结果字段（主解析仍走 primary）。
+    """
+    try:
+        count = max(1, min(3, int((cfg or {}).get("judge_count") or 1)))
+    except Exception:
+        count = 1
+    raw = []
+    objs = []
+    for i in range(count):
+        jr = _call_llm_role("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
+        raw.append(jr)
+        try:
+            objs.append(_parse_judge_json(jr.get("content", "")))
+        except Exception:
+            pass
+    consensus = {
+        "judge_count": count,
+        "valid_judges": len(objs),
+        "agreement": round(len(objs) / count, 2) if count else 0.0,
+        "votes": {},
+        "confidence_votes": {},
+    }
+    if objs:
+        votes = {}
+        conf = {}
+        for o in objs:
+            votes[o.get("verdict")] = votes.get(o.get("verdict"), 0) + 1
+            conf[o.get("confidence")] = conf.get(o.get("confidence"), 0) + 1
+        majority_verdict = max(votes, key=votes.get)
+        majority_conf = max(conf, key=conf.get)
+        consensus["votes"] = votes
+        consensus["confidence_votes"] = conf
+        consensus["majority_verdict"] = majority_verdict
+        consensus["majority_confidence"] = majority_conf
+    return (raw[0] if raw else None), consensus
+
 
 def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
                     temperature: float = 0.7, max_tokens: int = 4096) -> dict:
@@ -525,7 +809,9 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
 
 ALL_ROLES = ["pro_biology", "pro_statistics", "pro_bioinformatics",
              "con_biology", "con_statistics", "con_bioinformatics",
-             "con_history", "judge"]
+             "con_history", "judge",
+             # core9 中立评审（role_preset=core9 时参与）
+             "design_review", "reproducibility_review"]
 
 # temperature 模式下按角色哈希分配的采样温度池（L1 对照组用）
 _TEMP_POOL = [0.3, 0.5, 0.7, 0.9, 1.1]
@@ -566,6 +852,13 @@ def _load_debate_config() -> dict:
         # C2/C3(2026-08-11): L1 轻量采样 + token 预算
         "l1": {"samples": 3, "strategy": "sampling"},
         "token_budget": 0,  # 0=不限；>0 为单会话辩论 token 预算
+        # v2(2026-08-27): 证据审查器改造 — 全部向后兼容
+        "role_preset": "core7",       # core7 | core9（新增设计/可重复性编辑）
+        "judge_count": 1,             # 1 | 3（多裁判一致性；>1 成本 ×2-3）
+        "rounds_max": 5,              # 上限护栏（防止 rounds=1000 打爆）
+        "evidence_mode": False,       # True 时注入证据卡/做引用校验
+        "prompt_version": 2,          # 2=v2 证据契约 | 1=legacy（可用 MEMOMICS_DEBATE_LEGACY_PROMPTS=1 回退）
+        "max_tokens": {"judge": 8192, "role": 8192, "l1_role": 2048, "l1_judge": 8192},
     }
     try:
         import yaml
@@ -600,7 +893,7 @@ def _load_provider_keys() -> dict:
 
 
 def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None,
-                        level: str = "L2") -> str:
+                        level: str = "L2", evidence_fp: str = "") -> str:
     """模式指纹 — 参与缓存 key，防止不同辩论架构/级别的结果互相污染（P0 级）。
 
     任何影响辩论产出的配置（mode/rounds/角色模型分配/分组模型/门控级别）变化 → 指纹变化 → 新缓存条目。
@@ -613,6 +906,11 @@ def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict 
     if level and level != "L2":
         parts.append(f"level={level}")
     if cfg:
+        # v2(2026-08-27): 影响产出的新参数一并入指纹，防缓存串用
+        for key in ("role_preset", "judge_count", "rounds_max", "prompt_version", "evidence_mode"):
+            v = cfg.get(key)
+            if v not in (None, ""):
+                parts.append(f"{key}={v}")
         for grp in ("judge", "pro", "con"):
             gc = (cfg.get(grp) or {})
             if gc:
@@ -621,6 +919,8 @@ def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict 
         for k in sorted(role_model_map):
             v = role_model_map[k] or {}
             parts.append(f"{k}={v.get('provider','?')}/{v.get('model','?')}")
+    if evidence_fp:
+        parts.append(f"ev={evidence_fp}")
     return "|".join(parts)
 
 
@@ -749,19 +1049,32 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
 
 
 # C1(2026-08-11): token 分级 — 论点角色不需要 4096，judge 需要综合 7 方给结构化裁决
-_ROLE_MAX_TOKENS = {"judge": 2048}  # 其余角色（pro/con）默认 1024
-_ROLE_MAX_TOKENS_DEFAULT = 1024
+# 2026-08-27 实测修复：deepseek-v4-pro 推理模型在 judge 2048 上限时
+# completion_tokens 全被 reasoning 吃掉（finish_reason=length, content 为空），
+# 导致裁决永远是 need_more_info/low。提升上限后终稿 JSON 正常输出。
+_ROLE_MAX_TOKENS = {"judge": 8192}  # 其余角色（pro/con）默认 8192（推理模型防 reasoning 吃满）
+_ROLE_MAX_TOKENS_DEFAULT = 8192
 
 
-def _role_max_tokens(label: str) -> int:
-    return _ROLE_MAX_TOKENS.get(label, _ROLE_MAX_TOKENS_DEFAULT)
+def _role_max_tokens(label: str, cfg: dict = None) -> int:
+    """按角色返回 max_tokens；config debate.max_tokens 可覆盖（v2 配置化）。"""
+    mt = (cfg or {}).get("max_tokens") or {}
+    if not mt:
+        return _ROLE_MAX_TOKENS.get(label, _ROLE_MAX_TOKENS_DEFAULT)
+    try:
+        if label == "judge":
+            return max(1024, int(mt.get("judge") or _ROLE_MAX_TOKENS.get("judge", 8192)))
+        return max(512, int(mt.get("role") or _ROLE_MAX_TOKENS_DEFAULT))
+    except Exception:
+        return _ROLE_MAX_TOKENS.get(label, _ROLE_MAX_TOKENS_DEFAULT)
 
 
-def _call_llm_role(label: str, prompt: str, cfg: dict) -> dict:
+def _call_llm_role(label: str, prompt: str, cfg: dict, temperature: float = None) -> dict:
     """按角色解析模型后调用 _call_llm_sync（隔离性不变：messages 只有该角色自己的 prompt）。"""
     rc = _resolve_role_llm(label, cfg)
     return _call_llm_sync(prompt, label, rc["api_key"], rc["base_url"], rc["model"],
-                          temperature=rc["temperature"], max_tokens=_role_max_tokens(label))
+                          temperature=rc["temperature"] if temperature is None else temperature,
+                          max_tokens=_role_max_tokens(label, cfg))
 
 
 def _role_model_id(label: str, cfg: dict) -> str:
@@ -899,19 +1212,35 @@ def _extract_json_candidates(text: str) -> list:
             i += 1
             continue
         depth, j = 0, i
+        in_str = False
+        escaped = False
         while j < n:
-            if text[j] == '{':
-                depth += 1
-            elif text[j] == '}':
-                depth -= 1
-                if depth == 0:
-                    cands.append(text[i:j + 1])
-                    break
+            ch = text[j]
+            if in_str:
+                if escaped:
+                    escaped = False
+                elif ch == '\\':
+                    escaped = True
+                elif ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        cands.append(text[i:j + 1])
+                        break
             j += 1
         if j >= n:
             break
         i = j + 1
     return cands
+
+
+_ALLOWED_VERDICTS = {"support", "modify", "need_more_info", "ok"}
 
 
 def _parse_judge_json(text: str) -> dict:
@@ -931,8 +1260,12 @@ def _parse_judge_json(text: str) -> dict:
             o = json.loads(cand)
         except Exception:
             continue
-        if isinstance(o, dict) and o.get("verdict") not in (None, ""):
-            return o
+        if isinstance(o, dict):
+            v = o.get("verdict")
+            # v2(2026-08-27): verdict 必须是合法枚举字符串（防 {"verdict": 1} 误判）
+            if isinstance(v, str) and v.strip() and v.lower() in _ALLOWED_VERDICTS:
+                o["verdict"] = v.lower()
+                return o
     # B3(2026-08-14): 兜底解析 — 部分网关把思考链塞进 content，JSON 结构残缺，
     # 但 verdict/confidence 字段本身完整。直接正则抓取，避免 L1→L2 无谓升级。
     _m = re.search(r'"verdict"\s*:\s*"([a-zA-Z_]+)"', text)
@@ -964,6 +1297,9 @@ def _check_consistency(result: dict) -> list:
         issues.append("verdict=need_more_info 但 confidence=high（信息不足不可能高置信）")
     if verdict == "modify" and not (result.get("recommended_params") or {}):
         issues.append("verdict=modify 但 recommended_params 为空（要求修改却无建议）")
+    # v2(2026-08-27): 高置信 + 缺失证据清单 = 矛盾（证据不足还自称高置信）
+    if conf == "high" and result.get("missing"):
+        issues.append("confidence=high 但 missing 非空（证据不足不可能高置信）")
     scores = result.get("scores") or {}
     if scores and all((v or 0) == 0 for v in scores.values()) and conf != "low":
         issues.append("scores 全为 0 但 confidence 非 low")
@@ -1120,7 +1456,8 @@ _L1_JUDGE_PROMPT = """你是生信分析评审的**裁判**。{n}组正反方编
 {{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "reasoning": "50字内总结"}}"""
 
 
-def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str) -> str:
+def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str,
+                               evidence_cards: str = "") -> str:
     """C2(2026-08-11): L1 轻量采样辩论。
 
     架构（按用户要求）：使用当前选择的默认模型，正方与反方**上下文切断**独立采样，
@@ -1138,28 +1475,53 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
 
     debates_text = []
     sample_records = []
+    use_v2 = _use_v2_prompts(cfg)
+    ev = evidence_cards or ""
+    _mt = (cfg.get("max_tokens") or {})
+    try:
+        _l1_role_max = int(_mt.get("l1_role") or 2048)
+    except Exception:
+        _l1_role_max = 2048
+    try:
+        _l1_judge_max = int(_mt.get("l1_judge") or 8192)
+    except Exception:
+        _l1_judge_max = 8192
+    # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
+    _keep = 800 if use_v2 else 500
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
-        pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
-        con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
+        if use_v2:
+            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev)
+            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev)
+        else:
+            pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
+            con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
         pro = _call_llm_sync(pro_prompt, f"l1_pro_{i}", rc["api_key"], rc["base_url"],
-                             rc["model"], temperature=temp, max_tokens=512)
+                             rc["model"], temperature=temp, max_tokens=_l1_role_max)
         con = _call_llm_sync(con_prompt, f"l1_con_{i}", rc["api_key"], rc["base_url"],
-                             rc["model"], temperature=temp + 0.1, max_tokens=512)
+                             rc["model"], temperature=temp + 0.1, max_tokens=_l1_role_max)
         if pro.get("error") or con.get("error"):
             continue
         debates_text.append(f"### 第{i+1}组（采样温度 {temp:.1f}）\n"
-                            f"正方：{pro['content'][:400]}\n反方：{con['content'][:400]}")
-        sample_records.append({"pro": pro["content"][:500], "con": con["content"][:500],
-                               "pro_call_id": pro["call_id"], "con_call_id": con["call_id"]})
+                            f"正方：{pro['content'][:_keep]}\n反方：{con['content'][:_keep]}")
+        sample_records.append({"pro": pro["content"][:800], "con": con["content"][:800],
+                               "pro_call_id": pro["call_id"], "con_call_id": con["call_id"],
+                               "pro_draft_only": str(pro["content"]).startswith("[reasoning草稿"),
+                               "con_draft_only": str(con["content"]).startswith("[reasoning草稿")})
 
     if not debates_text:
         return _fallback_debate(topic, context, kb, "")
 
-    judge_prompt = _L1_JUDGE_PROMPT.format(n=len(debates_text), topic=topic,
-                                           context=context, debates="\n\n".join(debates_text))
+    if use_v2:
+        pro_args = "\n\n".join(s["pro"] for s in sample_records)
+        con_args = "\n\n".join(s["con"] for s in sample_records)
+        judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev)
+    else:
+        judge_prompt = _L1_JUDGE_PROMPT.format(n=len(debates_text), topic=topic,
+                                               context=context, debates="\n\n".join(debates_text))
     judge = _call_llm_sync(judge_prompt, "l1_judge", rc["api_key"], rc["base_url"],
-                           rc["model"], temperature=0.3, max_tokens=1024)
+                           rc["model"], temperature=0.3, max_tokens=_l1_judge_max)
+
 
     result = {
         "topic": topic,
@@ -1183,6 +1545,10 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
             result["recommended_params"] = obj.get("recommended_params", {}) or {}
         except Exception as e:
             result["verdict_parse_error"] = str(e)[:100]
+    else:
+        # v2(2026-08-27): L1 裁判失败不再静默 — 下游可区分“信息不足”和“裁判故障”
+        result["judge_error"] = True
+        result["judge_error_detail"] = "L1 judge LLM call failed (retry exhausted)"
 
     # B2 一致性门禁（与 L2 同规则）
     issues = _check_consistency(result)
@@ -1286,7 +1652,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     mode: str = None, rounds: int = None,
                     role_model_map: dict = None, level: str = "L2",
                     species: str = "", tissue: str = "", direction: str = "",
-                    auto_kb: bool = True) -> str:
+                    auto_kb: bool = True, evidence_cards: str = "",
+                    role_preset: str = None, judge_count: int = None) -> str:
     """多角色辩论 — 正方3专业编辑 + 反方4专业编辑 + 裁判编辑，全部独立 LLM 调用。
 
     上下文隔离实现：
@@ -1315,8 +1682,21 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         cfg["rounds"] = int(rounds) if str(rounds).isdigit() else 1
     if role_model_map is not None:
         cfg["role_model_map"] = role_model_map
+    if role_preset is not None:
+        cfg["role_preset"] = str(role_preset)
+    if judge_count is not None:
+        try:
+            cfg["judge_count"] = max(1, min(3, int(judge_count)))
+        except Exception:
+            cfg["judge_count"] = 1
     mode = str(cfg.get("mode", "homogeneous")).lower()
-    rounds = max(1, int(cfg.get("rounds", 1) or 1))
+    # v2(2026-08-27): rounds 上限护栏（默认 5），防极端配置打爆调用量
+    _r_raw = int(cfg.get("rounds", 1) or 1)
+    try:
+        _r_cap = max(1, int(cfg.get("rounds_max") or 5))
+    except Exception:
+        _r_cap = 5
+    rounds = max(1, min(_r_raw, _r_cap))
     rmm = cfg.get("role_model_map") or {}
     level = str(level or "L2").upper()
     if level not in ("L1", "L2"):
@@ -1330,7 +1710,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             biology_kb = _inj["biology_kb"]
         if not bioinfo_kb and _inj.get("bioinfo_kb"):
             bioinfo_kb = _inj["bioinfo_kb"]
-    fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg, level=level)
+    # v2: 证据卡指纹 — 证据内容变化必须隔离缓存
+    ev_fp = _evidence_fingerprint(evidence_cards)
+    cfg["evidence_fingerprint"] = ev_fp
+    fingerprint = _debate_fingerprint(mode, rounds, rmm, cfg, level=level, evidence_fp=ev_fp)
 
     # 检查至少有一个可用 key（judge 能跑即可；role_model_map/分组配置的 key 也算）
     judge_rc = _resolve_role_llm("judge", cfg)
@@ -1372,12 +1755,13 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
 
     # ========== C2(2026-08-11): L1 轻量采样辩论（默认模型上下文切断正反采样 + 裁判总结） ==========
     if level == "L1":
-        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint)
+        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards)
 
     try:
         # ========== 辩论轮次循环（P0：rounds>1 时轮间注入上一轮裁判摘要） ==========
         prev_round_summary = ""
         final_judge = None
+        final_consensus = None
         for round_no in range(1, rounds + 1):
             round_note = ""
             if round_no > 1 and prev_round_summary:
@@ -1386,50 +1770,98 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     f"{prev_round_summary}"
                 )
 
+            # v2 提示词开关（含证据卡注入）
+            use_v2 = _use_v2_prompts(cfg)
+            ev = evidence_cards or ""
+
             # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
-            pro_tasks = [
-                ("pro_biology", PRO_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
-                ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
-                ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
-            ]
+            if use_v2:
+                pro_tasks = [
+                    ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev) + round_note),
+                    ("pro_statistics", _v2_role_prompt("pro_statistics", topic, context, stat_kb, "", ev) + round_note),
+                    ("pro_bioinformatics", _v2_role_prompt("pro_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
+                ]
+            else:
+                pro_tasks = [
+                    ("pro_biology", PRO_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
+                    ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
+                    ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
+                ]
             pro_results = _call_role_parallel(pro_tasks, cfg)
             pro_bio = pro_results["pro_biology"]
             pro_stat = pro_results["pro_statistics"]
             pro_bioinfo = pro_results["pro_bioinformatics"]
 
             # ========== 反方 4 专业编辑（互相不知道，也看不到正方，各用专属知识库） ==========
-            con_tasks = [
-                ("con_biology", CON_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
-                ("con_statistics", CON_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
-                ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
-                ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist) + round_note),
-            ]
+            if use_v2:
+                con_tasks = [
+                    ("con_biology", _v2_role_prompt("con_biology", topic, context, bio_kb, "", ev) + round_note),
+                    ("con_statistics", _v2_role_prompt("con_statistics", topic, context, stat_kb, "", ev) + round_note),
+                    ("con_bioinformatics", _v2_role_prompt("con_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
+                    ("con_history", _v2_role_prompt("con_history", topic, context, "", hist, ev) + round_note),
+                ]
+            else:
+                con_tasks = [
+                    ("con_biology", CON_BIO_PROMPT.format(topic=topic, context=context, kb_info=bio_kb) + round_note),
+                    ("con_statistics", CON_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
+                    ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
+                    ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist) + round_note),
+                ]
             con_results = _call_role_parallel(con_tasks, cfg)
             con_bio = con_results["con_biology"]
             con_stat = con_results["con_statistics"]
             con_bioinfo = con_results["con_bioinformatics"]
             con_history = con_results["con_history"]
 
-            # ========== 裁判（唯一看到所有角色论点的，单独调用） ==========
-            judge_prompt = JUDGE_PROMPT.format(
-                topic=topic, context=context,
-                pro_bio=pro_bio["content"],
-                pro_stat=pro_stat["content"],
-                pro_bioinfo=pro_bioinfo["content"],
-                con_bio=con_bio["content"],
-                con_stat=con_stat["content"],
-                con_bioinfo=con_bioinfo["content"],
-                con_history=con_history["content"],
-            )
-            judge = _call_llm_role("judge", judge_prompt, cfg)
+            # ========== core9 中立评审（实验设计 / 可重复性） ==========
+            use_core9 = use_v2 and str(cfg.get("role_preset", "core7")).lower() == "core9"
+            neutral_results = {}
+            neutral_args_v2 = ""
+            if use_core9:
+                for _nl in ("design_review", "reproducibility_review"):
+                    _nr = _call_llm_role(_nl, _v2_role_prompt(_nl, topic, context, "通用知识库", "", ev), cfg)
+                    neutral_results[_nl] = _nr
+                neutral_args_v2 = "\n\n".join(
+                    [f"### {_nl}\n{neutral_results[_nl]['content']}"
+                     for _nl in ("design_review", "reproducibility_review")])
+
+            # ========== 裁判（唯一看到所有角色论点的，单/多裁判采样） ==========
+            if use_v2:
+                pro_args_v2 = "\n\n".join([
+                    "### 生物学编辑（正方）\n" + pro_bio["content"],
+                    "### 统计学编辑（正方）\n" + pro_stat["content"],
+                    "### 生信编辑（正方）\n" + pro_bioinfo["content"],
+                ])
+                con_args_v2 = "\n\n".join([
+                    "### 生物学编辑（反方）\n" + con_bio["content"],
+                    "### 统计学编辑（反方）\n" + con_stat["content"],
+                    "### 生信编辑（反方）\n" + con_bioinfo["content"],
+                    "### 历史经验编辑（反方）\n" + con_history["content"],
+                ])
+                judge_prompt = _v2_judge_prompt(topic, context, pro_args_v2, con_args_v2, ev,
+                                                neutral_args=neutral_args_v2)
+            else:
+                judge_prompt = JUDGE_PROMPT.format(
+                    topic=topic, context=context,
+                    pro_bio=pro_bio["content"],
+                    pro_stat=pro_stat["content"],
+                    pro_bioinfo=pro_bioinfo["content"],
+                    con_bio=con_bio["content"],
+                    con_stat=con_stat["content"],
+                    con_bioinfo=con_bioinfo["content"],
+                    con_history=con_history["content"],
+                )
+            primary_judge, consensus = _collect_judge_consensus(judge_prompt, cfg)
+            judge = primary_judge or _call_llm_role("judge", judge_prompt, cfg)
             final_judge = judge
+            final_consensus = consensus
 
             # 🔧 P0-1 修复(2026-08-01): 失败检测 — 8个角色任一失败则不缓存不归档
             # 之前: 401/超时失败占位符仍被 _save_debate 缓存72h → 相同topic+context再命中返回占位符
-            _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge]
+            _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge] + list(neutral_results.values())
             _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
             if _failed_roles:
-                logger.warning(f"debate FAILED {len(_failed_roles)}/8 roles: {_failed_roles[:3]}... 不缓存不归档")
+                logger.warning(f"debate FAILED {len(_failed_roles)}/{len(_all_roles)} roles: {_failed_roles[:3]}... 不缓存不归档")
                 return json.dumps({
                     "topic": topic,
                     "debate_format": "多角色对抗（v3）",
@@ -1450,15 +1882,44 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             "topic": topic,
             "debate_format": "多角色对抗（v3）",
             "pro_arguments": {
-                "biology": {"argument": pro_bio["content"], "call_id": pro_bio["call_id"]},
-                "statistics": {"argument": pro_stat["content"], "call_id": pro_stat["call_id"]},
-                "bioinformatics": {"argument": pro_bioinfo["content"], "call_id": pro_bioinfo["call_id"]},
+                "biology": {"argument": pro_bio["content"], "call_id": pro_bio["call_id"],
+                            "draft_only": str(pro_bio["content"]).startswith("[reasoning草稿"),
+                            "used_reasoning_fallback": bool(pro_bio.get("used_reasoning_fallback"))},
+                "statistics": {"argument": pro_stat["content"], "call_id": pro_stat["call_id"],
+                               "draft_only": str(pro_stat["content"]).startswith("[reasoning草稿"),
+                               "used_reasoning_fallback": bool(pro_stat.get("used_reasoning_fallback"))},
+                "bioinformatics": {"argument": pro_bioinfo["content"], "call_id": pro_bioinfo["call_id"],
+                                   "draft_only": str(pro_bioinfo["content"]).startswith("[reasoning草稿"),
+                                   "used_reasoning_fallback": bool(pro_bioinfo.get("used_reasoning_fallback"))},
             },
             "con_arguments": {
-                "biology": {"argument": con_bio["content"], "call_id": con_bio["call_id"]},
-                "statistics": {"argument": con_stat["content"], "call_id": con_stat["call_id"]},
-                "bioinformatics": {"argument": con_bioinfo["content"], "call_id": con_bioinfo["call_id"]},
-                "history": {"argument": con_history["content"], "call_id": con_history["call_id"]},
+                "biology": {"argument": con_bio["content"], "call_id": con_bio["call_id"],
+                            "draft_only": str(con_bio["content"]).startswith("[reasoning草稿"),
+                            "used_reasoning_fallback": bool(con_bio.get("used_reasoning_fallback"))},
+                "statistics": {"argument": con_stat["content"], "call_id": con_stat["call_id"],
+                               "draft_only": str(con_stat["content"]).startswith("[reasoning草稿"),
+                               "used_reasoning_fallback": bool(con_stat.get("used_reasoning_fallback"))},
+                "bioinformatics": {"argument": con_bioinfo["content"], "call_id": con_bioinfo["call_id"],
+                                   "draft_only": str(con_bioinfo["content"]).startswith("[reasoning草稿"),
+                                   "used_reasoning_fallback": bool(con_bioinfo.get("used_reasoning_fallback"))},
+                "history": {"argument": con_history["content"], "call_id": con_history["call_id"],
+                            "draft_only": str(con_history["content"]).startswith("[reasoning草稿"),
+                            "used_reasoning_fallback": bool(con_history.get("used_reasoning_fallback"))},
+            },
+            "draft_only_roles": [
+                _l for _l, _r in [("pro_biology", pro_bio), ("pro_statistics", pro_stat),
+                                  ("pro_bioinformatics", pro_bioinfo), ("con_biology", con_bio),
+                                  ("con_statistics", con_stat), ("con_bioinformatics", con_bioinfo),
+                                  ("con_history", con_history),
+                                  ("design_review", neutral_results.get("design_review")),
+                                  ("reproducibility_review", neutral_results.get("reproducibility_review"))]
+                if isinstance(_r, dict) and str(_r.get("content", "")).startswith("[reasoning草稿")
+            ],
+            "neutral_reviews": {
+                name: {"argument": nr.get("content", ""), "call_id": nr.get("call_id", ""),
+                       "draft_only": str(nr.get("content", "")).startswith("[reasoning草稿"),
+                       "used_reasoning_fallback": bool(nr.get("used_reasoning_fallback"))}
+                for name, nr in neutral_results.items()
             },
             "judge_verdict": judge["content"],
             "isolation_verification": {
@@ -1519,11 +1980,29 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             result["confidence"] = _judge_obj.get("confidence", "low") or "low"
             result["recommended_params"] = _judge_obj.get("recommended_params", {}) or {}
             result["scores"] = _judge_obj.get("scores", {}) or {}
+            # v2: rubrics / missing 与多裁判一致性
+            if _judge_obj.get("rubrics"):
+                result["rubrics"] = _judge_obj.get("rubrics") or {}
+            if _judge_obj.get("missing"):
+                result["missing"] = _judge_obj.get("missing") or []
+            if final_consensus and final_consensus.get("judge_count", 1) > 1:
+                result["judge_consensus"] = final_consensus
+                if final_consensus.get("majority_verdict"):
+                    result["verdict"] = final_consensus["majority_verdict"]
+                    result["confidence"] = final_consensus.get("majority_confidence") or result["confidence"]
+                else:
+                    # 多裁判全部解析失败 → 没有可靠裁决
+                    result["verdict"] = "need_more_info"
+                    result["confidence"] = "low"
+                    result["judge_consensus"]["all_judges_failed"] = True
         except Exception as _je:
             result["verdict"] = "need_more_info"
             result["confidence"] = "low"
             result["recommended_params"] = {}
             result["verdict_parse_error"] = str(_je)[:100]
+            if final_consensus and final_consensus.get("judge_count", 1) > 1:
+                result["judge_consensus"] = final_consensus
+                result["judge_consensus"]["primary_parse_failed"] = True
 
         # ========== B2(2026-08-11): 裁决一致性门禁 ==========
         # 实证 bug：_debates/ 中 3 条 need_more_info+high 矛盾裁决已进入缓存。
@@ -1743,6 +2222,9 @@ def _register():
                 tissue=args.get("tissue", ""),
                 direction=args.get("direction", ""),
                 auto_kb=args.get("auto_kb", True),
+                evidence_cards=args.get("evidence_cards", ""),
+                role_preset=args.get("role_preset") or None,
+                judge_count=args.get("judge_count") or None,
             ),
             emoji="🎭",
             max_result_size_chars=40_000,

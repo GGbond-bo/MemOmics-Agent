@@ -102,9 +102,15 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 1800,
     try:
         from tools.persistent_kernel import KERNEL_POOL
         import os as _os
+        # L0: kernel 状态提示（新建 = 变量已清空）——与 execute_r 共用
+        try:
+            from memomics.bio_tools.execute_r import _session_task_id, _kernel_note
+        except Exception:
+            from memomics.bio_tools.execute_r import _session_task_id
+            def _kernel_note(res):  # pragma: no cover - 兜底
+                return ""
         # P1-13(2026-08-13): 会话识别 — 用 execute_r 同款隔离键（线程上下文 sid 优先）
         try:
-            from memomics.bio_tools.execute_r import _session_task_id
             _task = _session_task_id(task_id)
         except Exception:
             _task = task_id or _os.environ.get("MEMOMICS_SESSION_ID") or "default"
@@ -112,9 +118,10 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 1800,
             code, _task, timeout=min(timeout, 7200), language="python",
             cwd=working_dir or None)  # P1-5: working_dir 接线
         if _res.get("status") == "ok":
-            return (_res.get("output", "") or "(no output)")[:15000]
+            return (_kernel_note(_res) + (_res.get("output", "") or "(no output)"))[:15000]
         if _res.get("status") == "timeout":
-            return f"Error: Python execution timed out after {timeout}s. Kernel killed; next call starts fresh."
+            return (_kernel_note(_res) +
+                    f"Error: Python execution timed out after {timeout}s. Kernel killed; next call starts fresh.")
         # status == error → 分类处理（P1-4，2026-08-13：防副作用双跑）
         _err = _res.get("error", "unknown kernel error")
         _infra_fail = ("worker died unexpectedly" in _err) or ("worker write failed" in _err)
@@ -123,7 +130,7 @@ def execute_python(code: str, working_dir: str = "", timeout: int = 1800,
             pass
         else:
             # 代码运行时错误：不回退，防整脚本重跑双写
-            return json.dumps({"status": "error", "output": (_res.get("output", "") or "")[:15000],
+            return json.dumps({"status": "error", "output": (_kernel_note(_res) + (_res.get("output", "") or ""))[:15000],
                                "error": _err, "exit_code": 1,
                                "mode": "persistent_kernel"}, ensure_ascii=False)
     except Exception:

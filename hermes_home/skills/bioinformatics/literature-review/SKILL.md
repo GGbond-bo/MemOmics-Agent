@@ -291,6 +291,104 @@ supported by what you read.
 
 ---
 
+## Mode B — Library Review（库内综述模式，2026-08-25 新增）
+
+**触发**：用户已有文献库（`hermes_home/papers/`，用 literature_import 导入过 PDF）
+或说"基于已有文献/库内综述/整理已导入的文献/把这批文献做个综述"。此时**不重新
+搜索**，从库内文献出发做证据综合——支持几十到上百篇的规模。
+
+### B1 列出库内文献
+- 读 `hermes_home/papers/.pdf_index.json`（含 title/journal/year/doi/tags）
+- 按用户主题过滤（tags 的 species/tissue/direction，或标题关键词）
+- 输出清单：DOI / 标题 / 年份 / 方向，与用户确认纳入范围
+
+### B2 补提炼（只对缺卡片的）
+- 对已有 `papers/knowledge/<doi>.md` 的：直接读卡片（含结论/细胞类型/通路/marker）
+- 对缺卡片的：`summarize_paper`（9 项摘要）和/或 `kb_extract_from_paper`（生信知识）
+
+### B3 逐篇写证据行（核心）
+- 每读一篇，把**每条关键结论**用 `evidence_write` 写一行：
+  `doi`（必须）+ `claim`（一句话结论）+ `method`（支持方法）+ `species`/`tissue`/
+  `direction`（可选）+ `strength`（strong/moderate/weak/**conflict**——与其他文献
+  矛盾时标 conflict）
+- 同一结论多篇支持 → 每篇各一行（DOI 不同即可并存，供证据综合对比）
+
+### B4 导出证据底稿
+- `evidence_query(mode="export")` → `results/<sid>/review/evidence.csv`
+- `evidence_query(mode="stats")` → 看总数/方向分布/强度分布，给用户进度
+
+### B5 分批复综（规模控制）
+- 每 ~20 篇一批做证据综合（用 evidence_query 按 direction/主题过滤这一批），
+  批间汇总；矛盾结论在综述里显式列出"争议"段落
+- 叙述综述结构：方法学 → 各主题证据 → 一致/冲突/证据缺口 → 结论
+
+### B6 引用校验（防幻觉）
+- 成稿后 `evidence_query(mode="verify", text=<综述全文>)`——提取文中 DOI/PMID
+  对照证据表 + papers 索引，**缺失的引用必须修到可校验**才能交付
+- 与 Mode A 相同铁律：只引用真实记录，绝不编造 DOI/PMID
+
+---
+
+## Mode C — Systematic Review（系统综述模式 · PRISMA，2026-08-25 新增）
+
+**触发场景（满足任一即走 Mode C，而不是 Mode A/B）**：
+- 用户明确说"系统综述 / systematic review / PRISMA / 发综述论文 / 严格证据综述 / 证据质量评估"
+- 用户要求"meta 分析"或"效应量汇总"（偏倚评估是前置）
+- 用户要求"可复现的文献筛选流程"、"记录排除原因"、"综述要有流程图"
+- 判断口诀：**探索性总结 → Mode A/B；协议化+筛选留痕+偏倚评估 → Mode C**
+
+与 Mode A/B 的差异：Mode C 是**协议化、可复现**的流程——检索式要留痕、筛选要逐篇记录
+决定和原因、偏倚要评估、最终交付含 PRISMA 流程图。全程用 `prisma_flow` 记账。
+
+### C1 协议（先写协议再动手）
+- 用 PICOS 框架明确问题（Population/Intervention/Comparison/Outcome/Study design）
+- 写纳入/排除标准、数据库列表（PubMed/EuropePMC/Embase…）、检索日期范围
+- `prisma_flow(mode="init", picot=..., inclusion=[...], exclusion=[...], databases=[...])`
+
+### C2 多库检索（留痕可复现）
+- 每个数据库用完整检索式（主题词+自由词+布尔逻辑），**逐个**：
+  `prisma_flow(mode="search", database=..., query=完整检索式, hits=命中数)`
+- 合并结果 → 去重 → `prisma_flow(mode="stage", stage="identified", count=总命中)`
+  → `mode="stage", stage="deduplicated", count=去重后`
+
+### C3 标题/摘要筛选（逐篇留痕）
+- 每篇一个决定：`prisma_flow(mode="screen", item=<DOI或标题>, decision=include|exclude,
+  reason=<排除原因>, screen_stage="title_abstract")`
+- 排除原因同时累计：`prisma_flow(mode="exclude", category=title_abstract|language|irrelevant|no_data, count=N)`
+- 筛选后 `mode="stage", stage="screened", count=通过数`
+
+### C4 全文资格评估
+- 下载全文（paper-download / 库内 literature_import）→ 读全文 → 逐篇决定
+  `prisma_flow(mode="screen", ..., screen_stage="fulltext")`
+- `mode="stage", stage="fulltext", count=进入全文数` → `mode="stage", stage="eligible", count=合格数`
+
+### C5 偏倚风险评估（系统综述特有）
+- 对每篇纳入文献评估偏倚风险（低/中/高 + 理由），记录在证据表的 note 字段
+  （`evidence_write(..., note="RoB: 低（随机双盲）")`）或筛选记录的 reason 里
+
+### C6 数据提取（证据表 + 效应量）
+- 与 Mode B 相同：每篇关键结论 `evidence_write(doi, claim, method, strength, ...)`
+- 若做定量综合：额外记录效应量（OR/HR/β 等）到 note 或 method 字段
+
+### C7 综合
+- 定性综合：按主题分组叙述（一致/冲突/证据缺口）——沿用 Mode B 分批复综
+- 定量综合（可选）：若用户要 meta 分析，明确告诉用户效应量合并需要统计工具
+  （R metafor / Python），MemOmics 提供证据底稿，合并计算由脚本完成
+
+### C8 PRISMA 报告（交付必需）
+- `prisma_flow(mode="status")` 查看流程状态（含 mermaid 流程图）
+- `prisma_flow(mode="export")` → `results/<sid>/review/prisma_report.md`
+  （协议/检索记录/流程表格/排除原因/筛选记录/流程图）
+- 交付物：叙述综述 md + evidence.csv + prisma_report.md + PRISMA 流程图
+- 最后 `evidence_query(mode="verify", text=<综述全文>)` 校验引用
+
+### C9 一致性自检（交付前）
+- 核对：identified ≥ deduplicated ≥ screened ≥ fulltext ≥ eligible ≥ included
+- 核对：排除原因总数 ≈ 各阶段差值（screened−fulltext ≈ title_abstract 排除数）
+- 数字对不上 → 用 `prisma_flow(mode="stage")` 修正后再交付
+
+---
+
 ## Step 4 — Deliverables
 
 Produce the deliverables confirmed in Step 1 (default: all three).

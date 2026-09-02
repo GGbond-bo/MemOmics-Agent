@@ -286,6 +286,24 @@ async def _apply_fix_bundle_startup():
         logger.warning(f"[FixBundle] 启动迁移失败(不阻塞): {e}")
 
 
+def _stall_hard_seconds(s: dict) -> int:
+    """stall watchdog 硬中断阈值（2026-08-31：长任务不被 5 分钟误杀）。
+
+    - 回合开始即静默（connect 后零输出 = 网关挂起典型）→ 300s 快速恢复；
+    - 回合中段静默（此前有过模型输出/推理/工具活动 = 长思考/长生成）→ 600s
+      （env MEMOMICS_STALL_HARD_SECONDS 可调），靠"有前科"区分挂起与慢。
+    """
+    try:
+        hard = int(os.environ.get("MEMOMICS_STALL_HARD_SECONDS", "600"))
+    except Exception:
+        hard = 600
+    _start = s.get("_turn_start_ts") or 0
+    _act = s.get("_turn_activity_ts") or 0
+    if not (_act and (_act - _start) > 5):
+        return 300
+    return max(300, hard)
+
+
 @app.on_event("startup")
 async def _start_agent_stall_watchdog():
     """LLM 卡死自动恢复：5 分钟无事件输出 → 中断 agent 并报错。
@@ -369,14 +387,57 @@ async def _start_agent_stall_watchdog():
                         s["_live_tool_warned"] = True
                         _session_emit(s, {"type": "notice", "content": f"⏳ 工具 {_live} 已运行超过 30 分钟且无进程证据（{_info}），如疑似卡死请手动停止。", "session_id": sid})
                     continue
-                # ── 无工具在飞 + 5 分钟无事件 = 模型网关挂起（原逻辑） ──
+                # ── 无工具在飞 + 300s 无事件 ──
+                # 2026-08-31 升级（用户反馈：长任务不该被 5 分钟规则中断）：
+                # ① 后台进程（terminal background 注册表）活跃 → 永不中断，提示进行中
+                # ② 回合"中段静默"（此前有过输出/推理/工具）→ 300s 提醒 → 600s
+                #    （MEMOMICS_STALL_HARD_SECONDS 可调）才中断——长思考/长生成不误杀
+                # ③ 回合开始即静默（无任何前科，网关挂起典型）→ 保持 300s 快速中断
+                # ④ 中断前落日志（此前零日志，复现全靠猜）
+                try:
+                    from tools.process_registry import process_registry
+                    _bg_active = [
+                        p for p in process_registry.list_sessions(session_key=sid)
+                        if p.get("status") == "running"
+                    ]
+                except Exception:
+                    _bg_active = []
+                if _bg_active:
+                    if now - s.get("_stall_notice_last", 0) > 300:
+                        s["_stall_notice_last"] = now
+                        _session_emit(s, {"type": "notice",
+                                          "content": f"⏳ 本会话后台任务仍在运行（{len(_bg_active)} 个），回合静默等待中，不会中断。",
+                                          "session_id": sid})
+                    continue
+                _start = s.get("_turn_start_ts") or 0
+                _act = s.get("_turn_activity_ts") or 0
+                _has_event = bool(_act and (_act - _start) > 5)
+                _hard = _stall_hard_seconds(s)
+                _silent = int(now - last_ts)
+                if _silent < _hard:
+                    if now - (s.get("_stall_noevent_ts") or 0) > 240:
+                        s["_stall_noevent_ts"] = now
+                        _left = int(_hard - _silent)
+                        _session_emit(s, {"type": "notice",
+                                          "content": (f"⏳ 模型已静默 {_silent}s（无输出/推理/工具活动）。"
+                                                      f"长任务/长思考会继续等待，{_left // 60} 分钟后仍无任何活动才中断。"),
+                                          "session_id": sid})
+                    continue
+                logger.warning(
+                    "[MemOmics] stall watchdog interrupt: session=%s silent=%ds has_event=%s live=%r",
+                    sid[:12], _silent, _has_event, _live,
+                )
                 try:
                     if hasattr(agent_ref, "interrupt"):
                         agent_ref.interrupt()
                 except Exception:
                     pass
                 try:
-                    _session_emit(s, {"type": "error", "content": "Agent 长时间无响应（5 分钟无输出），已自动中断。可能是模型网关连接挂起，请重试或切换模型。", "session_id": sid})
+                    _session_emit(s, {"type": "error",
+                                      "content": (f"⏱ Agent 已 {_silent}s 无任何模型输出（含推理/工具活动），自动中断并清理本回合。"
+                                                  f"可能原因：① 模型网关/API 连接挂起（最常见）；② 模型长思考超过 {_hard}s。"
+                                                  f"后台任务/长任务在跑不会被中断——若确认无后台任务，请重试或切换模型。"),
+                                      "session_id": sid})
                 except Exception:
                     pass
                 _clear_session_running(sid)
@@ -985,9 +1046,62 @@ def _maybe_switch_task_dir(session, user_text, intent):
         return False
 
 
+def _build_grill_prompt(session, user_text, intent):
+    """开工前澄清（grill）触发：执行请求 + 关键信息缺失 → 要求模型先问清楚。
+
+    2026-08-25（用户核心诉求）：'帮我做单细胞聚类分析'（无数据路径）→ 先问
+    '有数据吗？在哪？'——不靠意图猜、不先跑再说；一次问清比十次返工便宜。
+    判定原则（不依赖意图词表精确值——词表会漏判执行请求）：
+      - 文本含执行信号词（跑/分析/聚类/注释/流程…）或意图为执行类 → 触发
+      - "继续/接着/之前"类 → 交给 resume/task_plan 恢复机制，不触发标准 grill
+      - 已有数据路径（当前消息或 REQUIREMENTS）→ 信息够，不触发
+      - 轻量意图（chat/知识问答/调查/文献/进度）→ 不触发
+    """
+    if not user_text or not str(user_text).strip():
+        return ""
+    t = str(user_text)
+    # 继续旧任务 → 由 resume/task_plan 恢复机制接管，不触发标准 grill
+    if any(w in t for w in ("继续", "接着", "下一步", "之前")):
+        return ""
+    # 已有数据路径（当前消息）→ 信息够
+    if re.search(r"[A-Za-z]:[/\\]\S+", t):
+        return ""
+    try:
+        _reqs = _read_requirements(session, limit=6)
+        if any(re.search(r"[A-Za-z]:[/\\]\S+", str(r)) for r in _reqs):
+            return ""
+    except Exception:
+        pass
+    # 执行判定：文本含执行信号词 或 意图为执行类；轻量意图排除
+    _EXEC_SIGNALS = ("跑", "执行", "分析", "聚类", "注释", "降维", "计算", "比较",
+                     "富集", "拟时序", "通讯", "wgcna", "帮我做", "帮我跑", "做分析",
+                     "做个", "跑一", "流程", "细胞通讯", "degs", "差异表达")
+    _LIGHT = ("chat", "knowledge_ask", "progress_check", "result_check",
+              "analysis_plan", "literature", "cancel_task", "investigate")
+    _has_exec = any(s in t.lower() for s in _EXEC_SIGNALS)
+    _is_exec_intent = intent in ("analysis", "direct_exec", "research_plan")
+    if (not (_has_exec or _is_exec_intent)) or intent in _LIGHT:
+        return ""
+    return (
+        "[开工前澄清 · 铁律：不确定就问]\n"
+        "用户请求执行分析任务，但关键信息缺失（没有数据路径）。"
+        "先调 ask_user 问清楚（带选项），不要猜、不要直接开始、不要先跑再说：\n"
+        "1. 有数据吗？数据文件在哪（绝对路径）？\n"
+        "2. 物种/组织/实验条件是什么？\n"
+        "3. 期望得到什么结果（图/表/报告）？\n"
+        "4. 是要继续之前的任务，还是全新任务？\n"
+        "用户回答后再规划执行。"
+    )
+
+
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
-    如果是知识问答/进度查询 → 只给轻量提示。如果是正常对话 → 给完整提醒。"""
+
+    2026-08-25 重构（DSH 执行策略迁移）：不再是"必须推进主线"的强制指令——
+    用户消息是最高优先级，推进任务由回合结束后的系统自检调度接管
+    （_schedule_self_check turn_end → fallback），模型本回合只需响应用户。
+    本函数只做"状态通报"，决策交给模型（见 _EXECUTION_POLICY）。
+    """
     has_plan = False
     results_dir = session.get("results_dir", "")
     if results_dir:
@@ -997,45 +1111,35 @@ def _build_task_resume_prompt(session):
     todos = session.get("todos", [])
     incomplete = [t for t in todos if t.get("status") not in ("completed", "cancelled")]
     has_todos = len(incomplete) > 0
-    
+
     if not has_plan and not has_todos:
         return ""
-    
-    # 检查当前意图：知识问答/进度查询/方案讨论 → 轻量提示
+
+    # 轻量/调查/问答类请求 → 只提醒任务存在，不引导推进
     _intent = session.get("intent", "")
-    _is_light_question = _intent in ("knowledge_ask", "progress_check", "result_check", "analysis_plan", "chat", "cancel_task")
-    
+    _is_light_question = _intent in ("knowledge_ask", "progress_check", "result_check",
+                                     "analysis_plan", "chat", "cancel_task", "investigate")
+
     if _is_light_question:
-        # 轻量：只提醒有任务在后台，不强制推进
         return (
             "💡 提示：你有未完成的分析任务在后台。"
-            "先回答用户的问题，回答完后如果需要继续任务，"
-            f"可以读取 {plan_path} 查看进度。"
+            "先回答用户的问题；任务推进由系统自动续跑接管，无需你处理。"
             if has_plan else
-            "💡 提示：你有未完成的待办事项。先回答用户的问题。"
+            "💡 提示：你有未完成的待办事项。先回答用户的问题；"
+            "任务推进由系统自动续跑接管。"
         )
-    
-    # 正常对话 → 完整提醒
-    parts = ["⛔ 你有未完成的主线任务！"]
+
+    # 其他请求 → 状态通报（不再强制推进）
+    parts = ["ℹ️ 当前任务状态（仅供参考，不是执行命令）："]
     if has_plan:
-        parts.append(f"- task_plan.md: {plan_path if results_dir else '存在'}")
+        parts.append(f"- 有未完成主线 task_plan.md: {plan_path if results_dir else '存在'}")
     if has_todos:
         parts.append(f"- 待办: {len(incomplete)}/{len(todos)} 未完成: {', '.join(t.get('title','')[:30] for t in incomplete[:5])}")
     parts += [
         "",
-        "⛔ 工具优先！你的下一句话必须是工具调用（terminal/read_file/search_files/process），不是文字！",
-        "禁止：先说'马上查'然后输出文字。正确：直接调工具，完成后再汇报。",
-        "",
-        "你必须按以下优先级行动：",
-        "1. 先简短回答用户的问题（如果用户问了问题）",
-        "2. 然后立即检查主线任务进度：",
-        "   - 读 task_plan.md 看当前 Phase",
-        "   - 调 process(action='list') 检查后台进程",
-        "   - 调 process(action='poll') 查具体进程状态",
-        "   - 用 search_files 看 results_dir 最新产出文件",
-        "3. 根据进度继续执行下一个未完成的待办/Phase",
-        "4. 报错→分析原因→能修就修→修不了记录到 task_plan.md Errors 段→跳过继续",
-        "禁止：回答完用户问题后直接结束 turn！必须检查并推进主线！",
+        "本回合只响应用户当前请求（问答/调查/修改指示）。",
+        "任务推进由系统自动接管：回合结束后系统会调度后台自检继续任务，",
+        "除非用户明确要求，否则不要在本回合自行推进/修复/继续执行任务。",
     ]
     return "\n".join(parts)
 
@@ -1197,6 +1301,21 @@ def _session_has_active_work(session):
     except Exception:
         pass
     return False
+
+
+def _session_has_external_work(session):
+    """M1: 是否有外部工作在跑（Hermes 进程注册表有活进程 / batch 活跃）。
+
+    用于"兜底唤醒先做便宜检查"：只有进程/batch 活着且无新进展时才跳过
+    LLM 唤醒；进程退出或 batch 完成 → 立即让 LLM 去收结果。
+    """
+    try:
+        from tools.process_registry import process_registry
+        if process_registry.count_running() > 0:
+            return True
+    except Exception:
+        pass
+    return _session_has_active_work(session)
 
 
 def _session_no_live_work(session):
@@ -1498,9 +1617,16 @@ def _task_liveness(session) -> tuple:
             f"任务疑似卡死：PID {sorted(_pids)} | 窗口 {_window}s 内 CPU/IO 零变化 | RSS {_rss_mb:.0f}MB")
 
 
-def _schedule_self_check(session, agent, loop):
-    """本轮结束后，如果有未完成的主线任务，延迟5分钟后自动触发下一轮自检。
-    但如果 task_plan 被标记为 cancelled 或 paused，则跳过。"""
+def _schedule_self_check(session, agent, loop, trigger="turn_end"):
+    """本轮结束后，如果有未完成的主线任务，延迟后自动触发下一轮自检。
+    但如果 task_plan 被标记为 cancelled 或 paused，则跳过。
+
+    trigger（2026-08 M1 事件驱动唤醒，DSH 思想迁移）：
+      turn_end   — 用户/自检回合结束（默认）：按 LoopX 退避调度，兜底先查签名
+      task_done  — 后台任务完成事件：3 秒内尽快唤醒（DSH jobs 结算通知语义）
+      fallback   — 兜底重排：唤醒前先做便宜检查（外部工作在跑且无新进展 →
+                    跳过 LLM 唤醒，只重排兜底——轮询文件系统而非轮询 LLM）
+    """
     if not agent or not loop:
         return
     # 2026-08-14 P0 修复：紧急标记提前 pop——六闸门在 urgent 时不得吞掉"说而不做/心跳错误"的唤醒
@@ -1637,6 +1763,10 @@ def _schedule_self_check(session, agent, loop):
     if urgent:
         delay = 3  # 3秒后立即唤醒
         logger.info(f"[SelfCheck] session {sid[:12]}: urgent wakeup triggered")
+    elif trigger == "task_done":
+        # M1: 后台任务完成事件 → 尽快唤醒（DSH jobs 结算通知语义）
+        delay = 3
+        logger.info(f"[SelfCheck] session {sid[:12]}: task-done wakeup triggered")
     
     async def _wakeup():
         await asyncio.sleep(delay)
@@ -1655,10 +1785,38 @@ def _schedule_self_check(session, agent, loop):
                     s["_wakeup_retry_n"] = _retry_n + 1
                     s["_urgent_wakeup"] = True
                     logger.info(f"[SelfCheck] session {sid[:12]}: 唤醒遇运行中回合，重排 #{_retry_n + 1}/3")
-                    _schedule_self_check(s, agent, loop)
+                    _schedule_self_check(s, agent, loop, trigger=trigger)
                 else:
                     s.pop("_wakeup_retry_n", None)
                 return
+            # ── M1 兜底闸门：外部工作在跑且无新进展 → 不唤醒 LLM，只重排兜底 ──
+            # （省 token 的关键：轮询文件系统/进程表，而不是轮询 LLM；
+            #   DSH"无产出就不唤醒"的落地）
+            if trigger in ("turn_end", "fallback") and not urgent and not force_tool:
+                try:
+                    _sig_now = _session_progress_signature(s)
+                    # 注意：签名是 hash%2^31 的不透明值，非单调——"有变化"必须用 != 判定
+                    # （<= 会把哈希值变小误判为"无进展"→ 外部工作永远不唤醒 LLM）
+                    if _sig_now == s.get("_self_check_last_sig", 0.0) and _session_has_external_work(s):
+                        # 等待外部工作不算无进展：计数清零，重排兜底
+                        s["_self_check_count"] = 0
+                        logger.info(f"[SelfCheck] session {sid[:12]}: M1 兜底跳过（外部工作活跃且无新进展）→ 重排，不唤醒 LLM")
+                        _schedule_self_check(s, agent, loop, trigger="fallback")
+                        return
+                except Exception:
+                    pass
+            # ── M3 硬轮数预算：真正注入唤醒才 +1（DSH roundsStarted 语义）──
+            try:
+                from webui.runtime.run_gate import admit_round
+                _rd_b = s.get("results_dir", "") or ""
+                # 无任务目录或预算耗尽/任务退役 → 一律不注入
+                # （极端测试修复：原 `if _rd_b and not admit_round(...)` 在
+                #   results_dir 为空时整个跳过检查 → 无任务会话也会唤醒 LLM）
+                if not _rd_b or not admit_round(_rd_b):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮数预算耗尽/无任务目录/任务退役，停止注入唤醒")
+                    return
+            except Exception:
+                pass
             # 判断唤醒类型
             todos = s.get("todos", [])
             in_progress = [t for t in todos if t.get("status") == "in_progress"]
@@ -1702,6 +1860,27 @@ def _schedule_self_check(session, agent, loop):
                     "6. 需要审查→标记 waiting_review"
                 )
             else:
+                # 2026-08-26: 无进行中/待审任务时，仅当 task_plan.md 真实存在才唤醒
+                # 检查进度——否则任务已完成（plan 归档为 task_plan.done.md）的会话会被
+                # 无限「检查主线任务进度」唤醒空转（实测：memomics-cd677556 任务完成后
+                # 唤醒 #5/#6 继续注入 → 模型反复读不存在的 plan → 5 分钟无输出被看门狗
+                # 中断；LoopX goal:active 为残留状态误导）
+                _plan_p = os.path.join(s.get("results_dir", ""), "task_plan.md") if s.get("results_dir") else ""
+                if not (_plan_p and os.path.isfile(_plan_p)):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
+                    return
+                # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
+                # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
+                # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
+                # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
+                try:
+                    with open(_plan_p, "r", encoding="utf-8") as _pf:
+                        _ptext = _pf.read()
+                    if _plan_is_complete_text(_ptext):
+                        logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                        return
+                except Exception:
+                    pass
                 wake_msg = (
                     _loopx_ctx +
                     f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
@@ -1832,6 +2011,26 @@ def _build_self_check_wake_history(session):
                     "[自检唤醒上下文：task_plan.md 主线区摘要（完整计划见磁盘）]\n" + "\n".join(_lines)})
         except Exception:
             pass
+    # 2026-08: 数据读取配方 —— 唤醒回合没有历史/工具记录，模型最容易
+    # "忘了怎么读"；把此前成功读取命令确定性带回（tool_calls_log 提取）
+    try:
+        _recipes = _build_read_recipes(session)
+        if _recipes:
+            history.append({"role": "system", "content": _recipes})
+    except Exception:
+        pass
+    # 2026-08 L1: kernel 生命周期事件 —— 续跑前让模型知道"kernel 被回收过、
+    # 变量已丢失"（与读取配方配套：知道丢了 → 知道怎么重载）
+    try:
+        from tools.persistent_kernel import KERNEL_POOL
+        _kevs = KERNEL_POOL.kernel_events(session.get("id", ""))
+        if _kevs:
+            history.append({"role": "system", "content":
+                "[kernel 状态提醒] 本会话 kernel 近期发生过状态丢失，此前定义的变量已不可用：\n"
+                + "\n".join(f"- {e}" for e in _kevs[:4])
+                + "\n如需继续使用之前加载的数据，先按上方[数据读取配方]重新加载。"})
+    except Exception:
+        pass
     return history
 
 
@@ -1881,13 +2080,27 @@ async def _trigger_agent_turn(session, message):
             # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
             # 不带全量历史（67K input/次 → ~4K）
             _wake_history = _build_self_check_wake_history(session)
-            return agent.run_conversation(_inject_anchors(session, message), conversation_history=_wake_history or None, task_id=session["id"])
+            # 2026-08-31: 自检唤醒不再把 [会话要求…] 脚手架拼进用户消息（否则被持久化成
+            # 大量 user 消息 → 模型每轮当成新问题重复回答，实证 870 条）。
+            # 改为：digest 走 system 尾巴；唤醒文本加 [系统唤醒] 前缀由显示/卫生层过滤。
+            _whist = list(_wake_history or [])
+            try:
+                _wdigest = _build_memory_digest(session, message)
+                if _wdigest:
+                    _whist.append({"role": "system", "content": _wdigest})
+            except Exception:
+                pass
+            _wake_msg = ("[系统唤醒] " + str(message or "")).strip()
+            return agent.run_conversation(_wake_msg, conversation_history=_whist or None, task_id=session["id"])
         # 2026-08-16: 去 wait_for —— 让长工具自然跑完；网关挂起由 stall watchdog 中断
         result = await loop.run_in_executor(None, _run)
         final = result.get("final_response", "") if isinstance(result, dict) else str(result)
+        # 2026-08-31: 自检回合输出加 [系统唤醒] 前缀 → 前端按注入消息过滤，不再刷屏成“重复回答”；
+        # 关键信息仍由 _build_memory_digest 以 system 尾注入（不会丢）。
+        _wake_out = ("[系统唤醒] " + final) if final else final
         session.setdefault("messages", []).append(
-            {"role": "assistant", "content": final, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
-        _session_emit(session, {"type": "complete", "content": final[:200], "session_id": session["id"]})
+            {"role": "assistant", "content": _wake_out, "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
+        _session_emit(session, {"type": "complete", "content": _wake_out[:200], "session_id": session["id"]})
         # 2026-08-16: 自检回合同样检测"说而不做"（此前只覆盖用户回合；
         # 虚假完成检测依赖回合级 _real_exec_this_turn 接线，自检回合无，只做承诺检测）
         if _detect_action_promise(final, []):
@@ -1923,7 +2136,12 @@ async def _trigger_agent_turn(session, message):
             _persist_token_usage(session, turn_kind="self_check")
         except Exception:
             pass
-        _schedule_self_check(session, agent, asyncio.get_event_loop())
+        _schedule_self_check(session, agent, asyncio.get_event_loop(), trigger="turn_end")
+        # 2026-08-25: 回合结束刷新产出资产索引（供 digest 跨轮复用）
+        try:
+            _save_assets_index(session)
+        except Exception:
+            pass
 
 
 def _build_alerts_context(session):
@@ -1976,11 +2194,22 @@ def _build_task_plan_context(session):
         # ① 有数据路径 ② 有执行关键词 ③ 意图不是轻量类型
         _msgs = session.get("messages", [])
         _last_msg = _msgs[-1].get("content", "") if _msgs else ""
+        # 2026-08-25 链路审计：grill 场景（执行请求+关键信息缺失）→ 先问清楚再建 plan，
+        # 避免用户还没确认数据就产生"幽灵 task_plan"（会干扰 RunGate/唤醒/完成判定）
+        try:
+            if _build_grill_prompt(session, _last_msg, _intent):
+                return None
+        except Exception:
+            pass
         _has_data_path = bool(re.search(r'[A-Za-z]:[/\\]\S+', _last_msg))
         _has_exec_kw = any(kw in _last_msg for kw in 
                           ("跑", "执行", "开始", "启动", "运行", "run", "start", "execute", "analyze",
                            "帮我做", "帮我跑", "做分析", "跑分析"))
-        _is_exec = _intent in ("analysis_exec", "direct_exec")
+        _is_exec = _intent in ("analysis", "direct_exec", "research_plan")
+        # 2026-08-25 修复：原引用不存在的意图 "analysis_exec"（恒 False），导致
+        # 无数据路径的执行请求（"帮我做单细胞聚类分析"）永不自动创建 task_plan →
+        # 任务目标没有服务器兜底，全靠模型自觉（真实会话实证：多数无 task_plan）。
+        # 改用真实意图列表——执行类意图即使无路径也自动建 plan（Goal=用户原话前80字）
         # 三个条件同时满足才创建：explicit exec intent OR (data+exec keywords), AND not light intent
         _LIGHT_FOR_PLAN = ("chat", "self_intro", "knowledge_ask", "progress_check", "result_check", "analysis_plan")
         if (_is_exec or (_has_data_path and _has_exec_kw)) and _intent not in _LIGHT_FOR_PLAN and len(_msgs) >= 2:
@@ -2201,6 +2430,28 @@ except ImportError:
 _job_store = JobStore(os.path.join(HERMES_HOME_DIR, "runtime", "jobs.json"))
 _task_supervisor = TaskSupervisor(store=_job_store)
 _resource_scheduler = ResourceScheduler(ResourceCapacity.detect())
+
+
+def _on_supervised_task_done(record):
+    """M1（事件驱动唤醒）：后台任务完成 → 立即调度唤醒。
+
+    label == agent_conversation 的回合任务已由 run_agent finally 自行调度
+    （_schedule_self_check at turn end），此处只处理真正的后台任务，
+    避免"回合结束 → 3 秒后必再醒一轮"的双触发。
+    """
+    try:
+        if not record or record.get("label") == "agent_conversation":
+            return
+        _sid2 = record.get("session_id", "")
+        _s2 = _sessions.get(_sid2)
+        if not _s2 or not _s2.get("agent"):
+            return
+        _schedule_self_check(_s2, _s2["agent"], asyncio.get_event_loop(), trigger="task_done")
+    except Exception:
+        logger.warning("[SelfCheck] supervised-task done 唤醒失败", exc_info=True)
+
+
+_task_supervisor.add_done_listener(_on_supervised_task_done)
 
 
 def _session_resource_request(session):
@@ -2577,6 +2828,33 @@ def _load_provider_keys():
 
 _load_provider_keys()
 
+# === 自定义 Provider 定义存储（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
+# 与 provider_keys.json 分工：本文件存"定义"（名称/base_url/模型列表），key 仍走
+# provider_keys.json（现有同步/联动逻辑不变）。启动时 merge 进 _PROVIDERS_INDEX。
+_CUSTOM_PROVIDERS_FILE = os.path.join(HERMES_HOME_DIR, "custom_providers.json")
+
+_custom_providers = {}  # pid -> {id, name, api, models[]}
+
+def _load_custom_providers():
+    global _custom_providers
+    try:
+        if os.path.exists(_CUSTOM_PROVIDERS_FILE):
+            with open(_CUSTOM_PROVIDERS_FILE, "r", encoding="utf-8") as f:
+                _custom_providers = json.load(f)
+        for _pid, _def in _custom_providers.items():
+            if isinstance(_def, dict) and _def.get("id") and _def.get("api"):
+                _PROVIDERS_INDEX[_pid] = _def
+    except Exception:
+        _custom_providers = {}
+
+def _save_custom_providers():
+    try:
+        _atomic_write_json(_CUSTOM_PROVIDERS_FILE, _custom_providers)
+    except Exception as e:
+        print(f"[WARN] 保存自定义 provider 失败: {e}")
+
+_load_custom_providers()
+
 # === 图像生成配置（image_gen_config.json，独立于 Hermes 主配置） ===
 _IMAGE_GEN_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "image_gen_config.json")
 _IMAGE_GEN_DEFAULTS = {
@@ -2859,7 +3137,14 @@ def _user_lang_instruction(text):
              "请用英语", "answer in english", "respond in english", "in english please",
              "english please", "write in english", "speak english")
     zh_kw = ("用中文", "说中文", "中文回答", "请用中文", "用汉语", "中文交流",
-             "answer in chinese", "respond in chinese", "in chinese please", "chinese please")
+             # 2026-08-24 修复: 翻译类指令缺失 → "英文段落 + 翻译成中文" 被 _detect_lang 误判 en，
+             # 导致 MemOmics 用英文回复翻译任务。翻译指令必须显式锁定中文。
+             "翻译成中文", "翻译成汉语", "翻译成国语", "翻译一下", "中文翻译",
+             "翻译为中文", "帮我翻译", "请翻译", "翻译这篇文章", "翻译这段",
+             "翻译这个", "翻译这段话", "翻译一下这段", "翻译成中文吧",
+             "answer in chinese", "respond in chinese", "in chinese please", "chinese please",
+             "translate to chinese", "translate into chinese", "translate it to chinese",
+             "say it in chinese", "speak chinese", "write in chinese")
     if any(k in t for k in en_kw):
         return "en"
     if any(k in t for k in zh_kw):
@@ -3039,8 +3324,17 @@ def _classify_intent(text: str):
         return ("self_intro", 0.99, {})
     # "介绍一下你自己/介绍一下你的功能"："绍"后跟"一"导致"介绍你自己"子串断链，
     # 用 "介绍一下"+人称 组合补齐（2026-08-14 实测）；纯"介绍一下Seurat怎么用"仍落 knowledge
+    # 2026-08-27 修复：排除"我(先)(跟你/给你)介绍一下…"句式——用户主动介绍自己的
+    # 进度/背景（主语=我），不是询问系统身份（实测："我先跟你介绍一下我当前的进度…"
+    # 被误判 self_intro，正经分析问题走了自我介绍模板）
     if "介绍一下" in t and any(x in t for x in ["你", "自己", "你们"]):
-        return ("self_intro", 0.99, {})
+        _pre = t[:t.index("介绍一下")].rstrip()
+        # 排除"用户主动介绍"句式（主语=我）：我/我先/我跟你/我和你/我给大家/我向/让我/跟你/给你
+        # 注意："给我/跟我/帮我/请你/我想让你"结尾的"我"不在此列——那是请求系统介绍（2026-08-27 实测边界）
+        _user_intro = (_pre == "我") or _pre.endswith(("我先", "我跟你", "我和你", "我给大家", "我向",
+                                                       "让我", "跟你", "给你"))
+        if not _user_intro:
+            return ("self_intro", 0.99, {})
 
     # === Priority 1.3: cancel_task (用户明确要求取消/停止任务) ===
     CANCEL_KW = ["取消任务", "取消分析", "停止任务", "停止分析", "不要跑了",
@@ -3052,8 +3346,12 @@ def _classify_intent(text: str):
     if any(kw in t for kw in CANCEL_KW):
         return ("cancel_task", 0.90, {"reason": "explicit_cancel"})
     # 停止/暂停/取消/不要/别 + 任务相关词 → cancel
-    if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and any(kw in t for kw in 
-        ["任务", "分析", "cellbender", "训练", "计算", "进程", "job"]):
+    # 2026-08-31 极端评测修复：粘贴的长引用文本（如千问评价"不要用这组基因…"）
+    # 曾触发 cancel 误杀。改为"触发词 + 就近(10字内)任务词"组合，"不要用这组基因"不再命中。
+    if any(kw in t for kw in ["停止", "暂停", "取消", "不要", "别"]) and (
+        any(kw in t for kw in ["任务", "分析", "cellbender", "训练", "计算", "进程", "job"])
+        and _re_mod.search(r"(停止|暂停|取消|不要|别)[^。！？!?\n]{0,10}(任务|分析|训练|计算|进程|跑了|继续|执行)", t)
+    ):
         return ("cancel_task", 0.85, {"reason": "stop_with_context"})
     # 取消 + 任务相关词 → cancel（排除问句）
     if "取消" in t and not any(kw in t for kw in ["怎么", "如何", "什么", "为什么", "哪里"]):
@@ -3072,10 +3370,15 @@ def _classify_intent(text: str):
     
     # 1.5a: progress_check
     PROGRESS_KW = ["还在跑吗", "还在运行", "跑完了吗", "跑完没", "进度", "怎么样了",
-                   "状态", "nvidia-smi", "gpu", "显卡", "显存", "内存",
+                   "什么状态", "现在状态", "目前状态", "任务状态", "当前状态", "现在情况",
+                   "nvidia-smi", "gpu", "显卡", "显存", "内存",
                    "后台", "后台任务", "后台进程", "卡住了", "停了",
-                   "还要多久", "多久了", "跑了多久", "跑多久",
-                   "check progress", "how long", "status", "still running"]
+                   "还要多久", "多久了", "跑了多久", "跑多久", "跑到哪",
+                   "check progress", "how long", "status", "still running",
+                   # 2026-08-31 极端评测补丁：进度抱怨口语（"等了两天了还在跑"实测误判 chat）
+                   # 注意：裸词"状态"太宽——引用文本"细胞功能状态"曾误触发 progress_check，
+                   # 因此只保留短语形式（见上）。
+                   "还在跑", "还在等", "等了两天", "等了几天", "还在弄", "跑了好几天", "还在转"]
     if any(kw in t for kw in PROGRESS_KW):
         return ("progress_check", 0.85, {"reason": "progress_or_status_query"})
 
@@ -3108,6 +3411,17 @@ def _classify_intent(text: str):
                                              "研究框架", "分析框架", "实验设计"])
     # 错误/修复上下文：即使有"跑"也不当执行动作
     _is_error_context = any(kw in t for kw in ["报错", "出错", "错误", "不工作", "失败", "怎么修", "怎么解决"])
+    # 2026-08-25: 调查/诊断类问句（"检查为什么报错"/"看看日志分析原因" → 只调查不执行，
+    # DSH 用户优先策略迁移）。调查信号词本身即触发，不要求伴随"报错"字样。
+    _INVESTIGATE_KW = ["为什么", "为何", "原因", "检查一下", "排查", "诊断", "调查一下",
+                       "看下.*日志", "看下.*报错", "分析.*原因", "查一下.*报错", "查一下.*日志",
+                       "什么问题", "哪里出错", "怎么挂的", "怎么失败的", "为何失败",
+                       "什么原因", "出错原因", "失败原因", "怎么发生", "怎么出现"]
+    _is_investigate = any(
+        _re_mod.search(p, t) if ("*" in p or "." in p) else p in t
+        for p in _INVESTIGATE_KW)
+    if _is_investigate:
+        return ("investigate", 0.82, {"reason": "error_investigation_request"})
     _has_exec_action = not _is_error_context and any(kw in t for kw in 
         ["跑", "执行", "运行", "帮我做", "开始做", "run ", "start ", "do ", "execute"])
     if _has_knowledge_q and not _has_data_path_early and not _has_exec_action and not _is_planning_q:
@@ -3157,6 +3471,46 @@ def _classify_intent(text: str):
     VIEW_EARLY_KW = ["检查一下", "检查", "查看", "看看", "看一下", "打开"]
     if any(kw in t for kw in VIEW_EARLY_KW) and _has_data_path_early:
         return ("analysis", 0.85, {"reason": "view_inspect_with_data"})
+
+    # === Priority 1.95: 交付类执行短句（2026-08-31 极端评测补丁）===
+    # "把人和猴脑对齐的亚群和基因给我"/"把8大类的基因都给我"/"帮我整理一下它的数据"
+    # 这类是明确的执行请求，此前无路径无生物词，被 short_no_bio 误判 chat。
+    # 排除：问句（"怎么弄"）、解释类（"讲讲/解释"）、无任务名词的纯闲聊。
+    _EXEC_NOUNS = ("代码", "表格", "基因", "亚群", "注释", "marker", "文件", "清单",
+                   "脚本", "结果", "数据", "列表", "报告", "名字", "命名")
+    # 注意：不含"方案"——"给我方案"是规划请求（research_plan），2026-08-31 实测误伤
+    _has_exec_noun = any(n in t for n in _EXEC_NOUNS)
+    _is_exec_deliver = any(k in t for k in ("给我", "帮我整理", "帮我列", "列出来", "列出", "整理一下"))
+    _is_question = any(k in t for k in ("怎么", "如何", "为什么", "多少", "什么", "哪", "? ", "？"))
+    # 决策征询句不是执行请求（"你觉得…还是…给我方案" → research_plan）
+    _is_consult = any(k in t for k in ("你觉得", "还是", "给我方案", "建议", "推荐"))
+    if _is_exec_deliver and _has_exec_noun and not _is_question and not _has_data_path_early \
+            and not _is_consult:
+        return ("direct_exec", 0.82, {"reason": "deliverable_exec_short"})
+
+    # === Priority 2.6: 单篇文献解读/总结（先于 chat 与 research_plan，2026-08-24 修复）===
+    # 问题(memomics-aa368e59 同类实测): "让我知道作者的研究思路，做了什么" 含 PLAN_KW
+    # '研究思路' → 被误判 research_plan → 强制 3 工具调研(skill_view academic-research +
+    # search_knowledge + search_papers) + memomics_pipeline，用户只要精读总结单篇文献。
+    # 此外短句 "这篇文章讲了什么"(8字) / "帮我概括这篇文章的核心要点"(14字) 会被
+    # short_no_bio 规则(<15字→chat) 拦截——所以本分支必须放在 Priority 2 chat 之前。
+    # 这里是文献解读，不是方案设计：命中"这篇X + 解读类动词"→ 直接 literature，轻量精读。
+    _PAPER_READ_INDIC = ["这篇文章", "这篇文献", "这篇论文", "该文献", "该文章", "该论文",
+                         "说一下这篇文章", "讲讲这篇文章", "介绍这篇文章", "解读这篇文章",
+                         "总结这篇文章", "总结一下这篇文章", "总结一下这篇", "精读",
+                         "概括这篇文章", "概括这篇", "概括一下这篇文章", "核心要点",
+                         "这篇文章讲", "这篇文献讲", "这篇论文讲", "讲了什么", "说了什么",
+                         "评价这篇文章", "评价这篇", "怎么评价这篇", "如何评价这篇",
+                         "作者做了什么", "作者的研究思路", "研究思路，做了什么",
+                         "review this paper", "summarize this paper", "explain this paper",
+                         "summarize this article", "review this article"]
+    if any(kw in t for kw in _PAPER_READ_INDIC):
+        # 排除：明确要基于该文献做方案/分析/写作 → 不抢（落 research_plan / analysis / literature 写作分支）
+        _excl_paper_plan = any(kw in t for kw in ["设计方案", "研究方案", "实验设计", "分析", "跑",
+                                                  "执行", "写论文", "写成方案", "怎么做", "如何设计",
+                                                  "design", "analy", "write a"])
+        if not _excl_paper_plan:
+            return ("literature", 0.90, {"reason": "single_paper_reading"})
 
     # === Priority 2: chat (non-bioinfo, casual) ===
     CHAT_KW = ["你好", "嗨", "hello", "hi", "谢谢", "感谢", "再见", "拜拜",
@@ -3731,6 +4085,13 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                          "write a paper", "draft a paper", "帮我写", "投稿", "学术论文"]
         paper_research_kw = ["研究方案", "实验设计", "方案设计", "设计实验", "研究计划",
                             "research plan", "research proposal", "技术路线"]
+        paper_read_kw = ["这篇文章", "这篇文献", "这篇论文", "该文献", "该文章", "该论文",
+                        "总结这篇文章", "总结一下这篇", "解读这篇", "精读",
+                        "概括这篇文章", "概括这篇", "核心要点",
+                        "说一下这篇", "讲讲这篇", "介绍这篇", "评价这篇", "怎么评价这篇",
+                        "作者做了什么", "作者的研究思路", "讲了什么", "说了什么",
+                        "review this paper", "summarize this paper", "explain this paper",
+                        "pdf", ".pdf", "文献库", "文献库里"]
         if any(kw in lit_text for kw in paper_write_kw):
             lines.append("论文写作任务。调用 skill_view('academic-paper-writing')，"
                         "按 12-agent pipeline 生成论文。" if zh else
@@ -3739,6 +4100,22 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             lines.append("研究方案设计。调用 skill_view('research-plan')，"
                         "生成含 Mermaid 技术路线图的完整方案。" if zh else
                         "Research plan. Call skill_view('research-plan').")
+        elif any(kw in lit_text for kw in paper_read_kw):
+            # 2026-08-24 修复(memomics-aa368e59): 单篇文献总结/解读 → 轻量精读，禁止调研/出方案。
+            # 用户只让"从专业编辑解读这篇文章、作者的研究思路做了什么"——不触发
+            # skill_view('academic-research') / search_knowledge / search_papers 调研组合。
+            # 2026-08-24 用户指定: 读文献优先 nature-reader（全文中英对照精读器，RED 必触发）。
+            lines += [
+                "📄 单篇文献总结/解读任务（用户提供或已导入 PDF）——轻量精读，不做文献调研、不出研究方案！",
+                "1. 若该 PDF 尚未导入文献库：先 literature_import 导入；已在库则跳过",
+                "2. 【优先】skill_view('nature-reader') 加载精读器 → 按其对 PDF/DOI/HTML/文本做全文中英对照精读",
+                "   （图表/公式感知、源锚定、术语表，绝不降级为摘要）；精读产出后再以专业编辑口吻解读",
+                "3. 备选快速路径：用户只要摘要/要点 → summarize_paper(文件或标题) 提取结构化摘要即可，不必全文对照",
+                "4. 以专业编辑口吻直接解读：研究思路、作者做了什么、核心结论、学术价值——只解读用户问的这一篇",
+                "⛔ 禁止：skill_view('academic-research') / search_knowledge / search_papers / memomics_pipeline",
+                "⛔ 禁止：输出文献调研表格、PMID/DOI 清单、生成研究方案或待办——用户没要这些",
+                "",
+            ]
         else:
             lines.append("文献任务。调用 skill_search('文献') 或 skill_view('pubmed-search')。PDF保存到 work/papers/" if zh else
                          "Literature task. Use skill_search('literature') or skill_view('pubmed-search').")
@@ -4195,6 +4572,37 @@ def _load_persisted_sessions():
             print(f"[MemOmics] 从 state.db 恢复了 {count} 个历史会话", flush=True)
             # 恢复微信会话映射
             _rebuild_weixin_session_map()
+        # M2: 重启后重新授权——所有恢复的非退役任务 disarm，自动唤醒必须用户消息恢复
+        # （DSH armed 语义：机器不会自己恢复自主权，必须人显式"继续"）
+        try:
+            from webui.runtime.run_gate import disarm as _disarm_gate
+            from webui.runtime.run_gate import is_retired as _is_retired_gate
+            from webui.runtime.run_gate import is_armed as _is_armed_gate
+            _disarmed = 0
+            for _sid2, _sess2 in list(_sessions.items()):
+                _rd2 = _sess2.get("results_dir", "") or ""
+                if _rd2 and not _is_retired_gate(_rd2) and _is_armed_gate(_rd2):
+                    _disarm_gate(_rd2, "server restart (re-authorization required)")
+                    _disarmed += 1
+            if _disarmed:
+                print(f"[MemOmics] M2: {_disarmed} 个任务的自动唤醒已暂停（重启后需用户消息重新授权）", flush=True)
+        except Exception:
+            pass
+        # M4: 启动一致性对账（run_gate 与 task_plan 漂移检测 + 自动修复确定性漂移）
+        try:
+            from webui.runtime.run_gate import reconcile as _reconcile_gate
+            _recon_notes = []
+            for _sid2, _sess2 in list(_sessions.items()):
+                _rd2 = _sess2.get("results_dir", "") or ""
+                if _rd2:
+                    for _w in _reconcile_gate(_rd2):
+                        _recon_notes.append(f"{_sid2[:12]}: {_w}")
+            for _n in _recon_notes:
+                print(f"[MemOmics] [Reconcile] {_n}", flush=True)
+            if _recon_notes:
+                print(f"[MemOmics] 启动对账完成：{len(_recon_notes)} 条漂移告警/修复", flush=True)
+        except Exception:
+            pass
     except Exception as e:
         print(f"[MemOmics] 会话恢复失败: {e}", flush=True)
 
@@ -4284,6 +4692,44 @@ def _fmt_tool_result(tool_name, result):
 
 
 # === Planning prompt: agent 收到任务后必须先创建待办清单 ===
+# 2026-08-25: 执行策略（DSH 执行策略迁移——用户优先，决策交给 LLM，不硬编码）
+# 用户消息 = 最高优先级；插话两不误；自动轮才自主修错续跑；报错停止后由用户决定；
+# 不确定就问（ask_user）。注入 ephemeral_system_prompt（agent 级，所有回合可见）。
+_EXECUTION_POLICY = """
+## 执行策略（用户优先 · 决策由你判断）
+
+### 1. 用户消息是最高优先级
+用户让你做什么就做什么：用户只问就只答，用户要调查就只调查，用户要求执行才执行。
+不要因为"有未完成任务"而覆盖用户当前的请求。
+
+### 2. 任务进行中用户插话（回答与执行两不误）
+- 先完整响应用户当前消息（问答/调查/修改指示）
+- **用户中途问的问题 ≠ 打断**：纯问题（"为什么慢/参数是什么/结果怎样"）→ 先回答，
+  任务本身继续，不用停
+- 只有用户明确说"停止/停一下/先别跑/换个方向/重做"才停或改任务
+- 判断用户意图：纯问答 → 只回答；要求修改任务 → 按新指示更新任务；
+  没有明确说"继续/接着跑"→ 不擅自扩大执行
+- 任务推进由系统自动接管：用户回合结束后系统会调度后台自检继续任务
+
+### 3. 自动续跑轮（无人插手）可以自主工作
+系统唤醒的自检回合（用户不在场）：检查进度 → 报错分析原因 → 修复 → 继续，
+这是允许的自主行为，直接执行。
+
+### 4. 报错停止后，是否继续由用户决定
+用户回合中任务报错停止：只报告原因和可选方案，不要擅自修改后继续执行，等用户指示。
+只有自动轮（用户不在场）才自主修复重试。
+
+### 5. 开工前先问清楚（不确定就问，铁律）
+执行任务前，如果关键信息缺失——**数据在哪、物种/组织/条件、期望结果、
+交付形式、是否继续旧任务**——必须先调用 ask_user 问清楚（带选项），
+不要靠猜、不要靠意图推断、不要先跑再说。用户回答后再规划执行。
+原则：一次问清比十次返工便宜。
+
+### 6. 一切以用户为主
+问清目的 → 规划 → 执行 → 报错就解决，循环；用户打断才停，用户回答后继续。
+拿不准用户要什么时，回到第 5 条：问。
+"""
+
 _PLANNING_PROMPT = """
 
 ## Task Execution Protocol
@@ -4442,7 +4888,16 @@ def _build_memory_digest(session, text):
         pass
     try:
         # (P3) 记忆召回切到 memory_store FTS5（失败回退 LIKE）
-        _facts = context_arch.fts_recall(text or "") or _recall_facts(text or "")
+        # 2026-08-31 P0-6 接线：检索 query 用内容实体优先（"继续跑"→entity"热图"），
+        # 让意图/话题切换旁路沉淀的 entity 真正驱动召回，而不是裸原文。
+        _q_ent = ""
+        try:
+            from webui import session_state as _ss2
+        except ImportError:
+            import session_state as _ss2
+        _q_ent = _ss2.extract_entity(text or "") or ""
+        _recall_query = _q_ent or (text or "")
+        _facts = context_arch.fts_recall(_recall_query) or _recall_facts(_recall_query)
         if _facts:
             _parts.append(_facts)
     except Exception:
@@ -4464,6 +4919,13 @@ def _build_memory_digest(session, text):
         _sdig = _build_scripts_digest(session)
         if _sdig:
             _parts.append(_sdig)
+    except Exception:
+        pass
+    # (2026-08-25) 产出资产清单：输入/输出/脚本/图片在哪——复用与汇报的依据
+    try:
+        _adig = _build_output_assets_digest(session)
+        if _adig:
+            _parts.append(_adig)
     except Exception:
         pass
     if not _parts:
@@ -4496,7 +4958,7 @@ def _strip_scaffold_text(text):
     cur = text.strip()
     if not cur:
         return None
-    if cur.startswith(("[系统唤醒", "📊 LoopX 状态", "[System:")):
+    if cur.startswith(("[会话要求", "[系统唤醒", "📊 LoopX 状态", "[System:", "[数据读取配方")):
         return None
     for _ in range(4):
         if cur.startswith(("[相关历史记忆", "[会话锚点")):
@@ -4512,6 +4974,94 @@ def _strip_scaffold_text(text):
             return nxt
         return cur
     return None
+
+
+# 2026-08-26: 服务端系统注入脚手架前缀（写历史时常以 role=user 形式喂给模型，
+# 显示层按 role 过滤不到 → 刷新后刷屏实测复现）。命中即视为注入消息，不进前端对话流。
+_INJECT_PREFIXES = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒",
+                    "📊 LoopX 状态", "[System:", "[数据读取配方", "[wakeup-progress-check]")
+
+
+# 2026-08-27: task_plan 文本"整体完成"判定（纯函数，供唤醒注入最后防线 + 测试直测）。
+# 只用整体级信号——Phase 级会出现"Phase 1 已完成"、"**Status:** complete"（每个
+# Phase 都有），不能代表任务整体完成；"已完成"单词同样太弱（实测 Phase 级高频出现）。
+def _plan_is_complete_text(plan_text: str) -> bool:
+    if not plan_text or not isinstance(plan_text, str):
+        return False
+    _pl = plan_text.lower()
+    return any(m in _pl for m in (
+        "全部完成", "已全部完成", "无长任务", "确认无长任务", "标记完成",
+        "任务结束", "任务已完成", "任务全部完成", "no active task",
+        "all tasks complete", "all complete", "**task status:** complete"))
+
+
+# 2026-08-27: ask_user 否定/结束回答判定（纯函数）：命中则保持任务退役状态，
+# 不得复活 done 任务（实测："不用了" 回答曾把已完成任务复活 → 唤醒链 → 重复输出）。
+_NEG_END_WORDS = ("不用", "不需要", "不用了", "不做了", "算了", "先这样",
+                  "就到这", "没有任务", "没任务", "不跑", "不用继续",
+                  "暂停", "先不", "不要了", "不用做")
+
+def _is_negation_end_answer(user_text: str) -> bool:
+    if not user_text or not isinstance(user_text, str):
+        return False
+    _t = user_text.lower()
+    return any(w in _t for w in _NEG_END_WORDS)
+
+
+_READ_KEYWORDS = ("readRDS", "read.csv", "read.table", "read_tsv", "read.delim",
+                  "fread", "read_parquet", "read_excel", "readxl", "Load10X",
+                  "Read10X", "scanpy.read", "pd.read_", "readr::", "readLines",
+                  "readline", "vroom", "read.delim2", "read.delim(", "readxl::")
+_FAIL_MARKERS = ("error", "exception", "traceback", "cannot open", "no such file",
+                 "not found", "failed", "错误", "失败", "不存在", "无法读取")
+
+
+def _extract_read_recipes(rows, limit=5, max_chars=1200):
+    """从 tool_calls_log 行提取"此前成功读取方式"配方（确定性，不依赖 LLM writer）。
+
+    筛选：args 含读取类关键词 且 result 不含失败标志 → 视为成功读取配方。
+    解决长会话根因：上下文折叠/唤醒精简后模型"忘了怎么读文件"——
+    把成功示例（含路径与参数）原样带回上下文，模型直接复用而不是重新发明。
+    """
+    recipes = []
+    for _t, _a, _r, _ts in rows:
+        _args = str(_a or "")
+        _res = str(_r or "")
+        if not any(k in _args for k in _READ_KEYWORDS):
+            continue
+        if any(m in _res.lower() for m in _FAIL_MARKERS):
+            continue
+        recipes.append(f"- [{_ts}] {_t}({_args[:260]})")
+        if len(recipes) >= limit:
+            break
+    if not recipes:
+        return ""
+    out = "[数据读取配方 · 此前成功读取文件的命令（含路径/参数），直接复用，不要重新摸索]\n" + "\n".join(recipes)
+    return out[:max_chars]
+
+
+def _build_read_recipes(session, db_path=None, limit_rows=40):
+    """查 state.db tool_calls_log，提取本会话的成功读取配方（最新优先）。"""
+    try:
+        sid = session.get("id", "") or ""
+        if not sid:
+            return ""
+        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.isfile(_dbp):
+            return ""
+        import sqlite3 as _sq
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT tool_name, args_json, result_text, "
+                "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
+                "WHERE session_id=? ORDER BY rowid DESC LIMIT ?",
+                (sid, limit_rows)).fetchall()
+        finally:
+            _conn.close()
+        return _extract_read_recipes(_rows)
+    except Exception:
+        return ""
 
 
 def _resolve_message_id(session_id: str, content_hint: str) -> int:
@@ -4596,18 +5146,32 @@ def _build_rollup_checkpoint(session, head):
     try:
         import sqlite3 as _sq
         _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
-        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        _rows = []
         try:
-            _rows = _conn.execute(
-                "SELECT tool_name, substr(args_json,1,120), substr(result_text,1,60), "
-                "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
-                "WHERE session_id=? ORDER BY rowid DESC LIMIT 10", (session.get("id", ""),)).fetchall()
-        finally:
-            _conn.close()
+            _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+            try:
+                _rows = _conn.execute(
+                    "SELECT tool_name, substr(args_json,1,120), substr(result_text,1,60), "
+                    "datetime(timestamp,'unixepoch','localtime') FROM tool_calls_log "
+                    "WHERE session_id=? ORDER BY rowid DESC LIMIT 10", (session.get("id", ""),)).fetchall()
+            finally:
+                _conn.close()
+        except Exception:
+            _rows = []  # DB 不可用（新装/测试环境无 state.db）→ 不阻塞 checkpoint，配方段照跑
         if _rows:
             _lines += ["## 已执行工作(最近工具调用)"]
             for _t, _a, _r, _ts in reversed(_rows):
                 _lines.append(f"- [{_ts}] {_t} args={_a} result={str(_r)[:60]}")
+        # 2026-08: 数据读取配方 —— 折叠后"怎么读文件"不失忆（确定性提取，
+        # 不依赖 LLM writer 是否记得保留读取命令）
+        # 2026-08-26: 配方提取独立于 DB 查询 —— DB 缺失时也执行（否则新装/测试
+        # 环境 checkpoint 永久丢配方段，实测 Linux 无 state.db 时整段被跳过）
+        try:
+            _recipes = _extract_read_recipes(_rows, limit=5)
+            if _recipes:
+                _lines += ["## 数据读取配方(此前成功)", _recipes]
+        except Exception:
+            pass
     except Exception:
         pass
     for _m in head:
@@ -4619,6 +5183,112 @@ def _build_rollup_checkpoint(session, head):
                "以上为早期对话的结构化摘要（保留了关键决策/路径/任务状态）。紧接其后的若干条消息是最近的真实对话，请基于它们继续，不必复述摘要。",
                "如需早期对话的细节（具体数字/原话/中间结果），用 session_search 全文召回：先 session_search(query=关键词) 找到带 message_id 的匹配，再 session_search(session_id=..., around_message_id=<id>, window=5) 拉逐字上下文——禁止凭摘要编造细节。"]
     return "\n".join(_lines)
+
+
+def _build_recent_turns_digest(session, max_turns=8):
+    """2026-08-31: 最近 N 轮对话速览（L2 层确定性注入）。
+
+    用户痛点：上一轮解决过的错误/得出的关键结论，下一轮又忘了 → 重新报错、重新跑。
+    这里从 state.db 直接取最近 user/assistant 问答，按轮生成 concise digest，
+    每轮注入模型上下文。历史再怎么压缩，最近 8 轮的“问了什么→答了什么”始终可见。
+    """
+    try:
+        import sqlite3 as _sq
+        sid = session.get("id", "")
+        if not sid:
+            return ""
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return ""
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT role, content FROM messages WHERE session_id=? AND role IN ('user','assistant') AND content IS NOT NULL AND length(content)>0 ORDER BY id DESC LIMIT ?",
+                (sid, max_turns * 2 + 2),
+            ).fetchall()
+        finally:
+            _conn.close()
+        if not _rows:
+            return ""
+        _chrono = list(reversed(_rows))
+        _entries = []
+        _pending_user = None
+        for _role, _content in _chrono:
+            _c = str(_content or "").strip().replace("\n", " ")[:160]
+            if not _c:
+                continue
+            if _role == "user":
+                _pending_user = _c[:90]
+            elif _role == "assistant" and _pending_user is not None:
+                _entries.append(
+                    f"- 问：{_pending_user}\n  答：{_c}"
+                )
+                _pending_user = None
+        if _pending_user is not None:
+            _entries.append(f"- 问：{_pending_user[:90]}（本轮用户消息，尚未回答）")
+        if not _entries:
+            return ""
+        _tail = "\n".join(_entries[-max_turns:])
+        return (
+            "## 最近几轮对话速览（L2，供背景，不是你本轮要回答的内容）\n"
+            f"{_tail}\n"
+            "【重要】以上是你之前已经问过/答过的内容。已被解决的错误不要再次提起；"
+            "已完成的步骤/已给出的结论请直接复用，禁止重新运行或重复回答。"
+        )
+    except Exception:
+        return ""
+
+
+def _build_pending_question_context(session, user_text):
+    """2026-08-31: 待确认问题追踪 — 防止“需要”回答错题/遗忘自己问过的承诺。
+
+    实证：memomics-cd677556 中 agent 问“需要我把这套解释整理进专利结论表吗？”，
+    用户答“1.需要。2.为什么你在电脑上做不了？”，agent 却只去验证 bigWig，
+    把已确认的任务（整理进专利结论表）丢了 —— 因为上下文没有“上一轮问过什么”的确定性记录。
+    原理与 DSH dsh-client-ui-user-questions（PendingQuestion/QuestionComposer）一致：
+    问话与答复必须绑定，不靠模型对“需要”的模糊指代。
+    """
+    try:
+        import sqlite3 as _sq
+        sid = session.get("id", "")
+        if not sid or not (user_text or "").strip():
+            return ""
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return ""
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT content FROM messages WHERE session_id=? AND role='assistant' AND content IS NOT NULL AND length(content)>50 ORDER BY id DESC LIMIT 1",
+                (sid,),
+            ).fetchall()
+        finally:
+            _conn.close()
+        if not _rows:
+            return ""
+        _last_assistant = (_rows[0][0] or "").strip()
+        # 提取最后一句；以问句结尾且含征询词 → 视为待确认问题
+        _parts = re.split(r"(?<=[。！？!?])", _last_assistant)
+        _q = ""
+        for _p in reversed(_parts):
+            _p = _p.strip()
+            if _p and (_p.endswith("？") or _p.endswith("?")):
+                _q = _p
+                break
+        if not _q or not re.search(r"(需要|要不要|是否|可以吗|好吗|同意吗|吗)", _q):
+            return ""
+        if re.search(r"(不要|不用|不需要|不用了|算了|先不)", user_text or ""):
+            return ""
+        if not re.search(r"(需要|要|是|好|同意|可以|行|当然|好的|嗯)", user_text or ""):
+            return ""
+        return (
+            "【待确认任务提醒 — 你上一轮问过，用户已确认】\n"
+            f"你上一轮问：{_q[:300]}\n"
+            "用户本轮已回复确认（需要/要/是/好/同意…）。本次必须完成该请求（执行/整理/生成），"
+            "不要只复述或延后；若用户同时提出了新问题，请一并回答，两者都要完成。"
+        )
+    except Exception:
+        return ""
 
 
 def _maybe_rollup_history(session, history):
@@ -4672,6 +5342,37 @@ _REQUIREMENTS_SKIP_ASSISTANT = (
 # 是"这次的任务"不是"持久要求"，不入库、不覆盖已有确认行
 _REQUIREMENTS_TASK_WORDS = ("画一张", "画图", "绘图", "帮我分析", "分析一下", "统计一下", "跑一",
                             "读取", "数一下", "报告", "生成", "计算", "做个", "做一张", "画个")
+# (2026-08-25) 输出位置词：句子含这些词说明用户指定了持久输出位置 →
+# 即使含任务词也必须入库（提取"输出目标子句"），否则下一轮模型忘记文件放哪、重复跑
+_OUTPUT_LOCATION_WORDS = ("输出到", "保存到", "放到", "写入", "存到", "生成到", "写到",
+                          "输出至", "存放", "拷贝到", "复制到", "导出到")
+
+
+def _extract_output_clause(s: str) -> str:
+    """从"任务词+输出位置词"并存句提取输出目标子句（含路径的部分）。
+
+    "帮我分析 E:/data 并把结果输出到 E:/my_output" → "把结果输出到 E:/my_output"
+    "用 E:/data 画一张图，图保存到 E:/figures"      → "图保存到 E:/figures"
+    "把最终报告输出到 E:/reports/final"            → "输出到 E:/reports/final"
+    提取失败（无路径/子句过短）返回原句——调用方按原句处理。
+    """
+    try:
+        for w in _OUTPUT_LOCATION_WORDS:
+            idx = s.find(w)
+            if idx < 0:
+                continue
+            start = idx
+            for sep in ("，", ",", "；", ";", "并", "然后", "再"):
+                j = s.rfind(sep, 0, idx)
+                if j >= 0:
+                    start = j + len(sep)
+                    break
+            clause = s[start:].strip()
+            if 4 <= len(clause) <= 200 and (":" in clause or "/" in clause or "\\" in clause):
+                return clause
+    except Exception:
+        pass
+    return s
 # (2026-08-21 用户强调) 环境/服务器情况信号：版本号/工具+路径/环境词 → 记入环境节
 _REQUIREMENTS_ENV_SIGNALS = ("服务器", "本机", "这台机器", "系统环境", "环境", "R 版本", "python 版本",
                              "conda", "库目录", "libPath", "R-libs", "数据目录", "工作目录",
@@ -4866,6 +5567,21 @@ def _extract_and_store_requirements(session, text):
         rd = session.get("results_dir") or ""
         if not rd or not os.path.isdir(rd):
             return
+        # 2026-08-31 极端评测修复 1/2：注入脚手架元循环——
+        # digest 注入文本（"[会话要求 · …]"开头）会被自身规则当成"用户要求"
+        # 再次写回 REQUIREMENTS.md（实测生产文件里同一条脚手架重复 8 行）。
+        # 注入文本的原始用户消息在末尾，剥掉脚手架前缀后再提取。
+        _t = (text or "").strip()
+        _INJ = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "[System:", "[数据读取配方")
+        while _t.startswith(_INJ):
+            _idx = _t.rfind("\n\n")
+            if _idx == -1:
+                _t = ""  # 纯脚手架，无用户原文 → 不提取
+                break
+            _t = _t[_idx + 2:].strip()
+        if not _t:
+            return
+        text = _t
         _p = os.path.join(rd, "REQUIREMENTS.md")
         existing = []
         if os.path.isfile(_p):
@@ -4884,23 +5600,45 @@ def _extract_and_store_requirements(session, text):
         for _s in _sents:
             if not (4 <= len(_s) <= 200):
                 continue
+            if _s.startswith(("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "[System:", "[数据读取配方", "📊")):
+                continue  # 句子级注入前缀残留（2026-08-31 实测元循环残留 1 条）
             if any(_k in _s for _k in _REQUIREMENTS_SKIP_ASSISTANT):
                 continue  # 发给助手的指令，不是用户对项目的持久要求
             if re.search(r"[吗呢么吧]？?\s*$", _s) or _s.endswith("?") or re.search(r"(没有|了没|了吗|过没|过吗)$", _s):
                 continue  # (压测发现) 问句(如'你记得…吗?'/'验证过没有?')不是要求，不得入库
+            if "要不要" in _s or "能不能" in _s:
+                continue  # 征询句（"你要不要看看…"）不是持久要求（2026-08-31 实测误报）
+            if len(_s) < 16 and ("=" in _s or "==" in _s):
+                continue  # 截断的映射片段（"帮我替 = 对应的亚群名"）不是完整要求
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
+            # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
+            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
+            # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
+            # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
+            if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
+                    or ("Filesystem " in _s and "Use%" in _s) \
+                    or re.search(r"^\s*[\w-]+@[\w.-]+[:$]\s*$", _s):
+                continue
             _has_path = bool(re.search(r"[A-Za-z]:[/\\]\S+", _s))
             _has_marker = any(m in _s for m in _REQUIREMENTS_MARKERS)
             _is_env = _is_env_sentence(_s)
             _is_verified = any(w in _s for w in _REQUIREMENTS_VERIFIED_WORDS)
             # (2026-08-22) 用户特别指定/强调 → (特别指定) 标记 + 强制进跨会话记忆
             _is_special = any(w in _s for w in _REQUIREMENTS_SPECIAL_WORDS)
-            # (2026-08-21) 一次性任务指令（含路径+动作词、无持久 marker）不入库——
-            # "用 X 画一张图/统计一下"是本次任务，不是用户对项目的持久要求
-            _is_task = _has_path and not _has_marker and any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
-            if _is_task:
-                continue
+            # 2026-08-25: 路径类默认全录（向 DSH"全量留痕"哲学靠拢）——
+            # 含绝对路径的用户句默认入库（digest 每轮必达），不再因"任务词"整句丢弃。
+            # "读取 E:/data 分析"（输入路径）与"输出到 E:/out"（输出位置）都记；
+            # 有输出位置时提取输出子句（干净），否则整句入录（保守记住比丢好——
+            # 提取规则丢了的后果是模型找不到，见接缝实证）。
+            # 豁免仅保留：纠错（META_WORDS）/问句/助手指令/无路径无标志（均在上面过滤）。
+            _has_out = any(w in _s for w in _OUTPUT_LOCATION_WORDS)
+            _has_task_word = any(w in _s for w in _REQUIREMENTS_TASK_WORDS)
+            if _has_out and _has_task_word and _has_path and not _has_marker:
+                # 任务词+输出位置并存：提取"输出目标子句"入库（任务动作部分不入库）
+                _out_clause = _extract_output_clause(_s)
+                if _out_clause and _out_clause != _s:
+                    _s = _out_clause
             if not (_has_path or _has_marker or _is_env or _is_verified or _is_special):
                 continue
             if any(w in _s for w in _REQUIREMENTS_MEM_WORDS) or _is_special:
@@ -4926,7 +5664,15 @@ def _extract_and_store_requirements(session, text):
                 _entry = _entry + " (已确认)"
             elif any(w in _s for w in _REQUIREMENTS_CONFIRM_WORDS) and (_has_path or _has_marker or _is_env):
                 _entry = _entry + " (已确认)"
-            if _entry in existing or _entry in added:
+            # 2026-08-31 极端评测修复 2/2：去重键规范化——
+            # "(已确认)/(特别指定)/[环境]/[已验证]" 是状态标记不是内容，
+            # 否则同一句要求因标记变化反复入库（实测"一定要有依据"重复 4 行）
+            def _norm_key(x: str) -> str:
+                k = x
+                for tag in (" (已确认)", " (特别指定)", "[环境] ", "[已验证] "):
+                    k = k.replace(tag, "")
+                return k.strip()
+            if any(_norm_key(_entry) == _norm_key(x) for x in (existing + added)):
                 continue
             # 同锚点覆盖(仅路径锚点)：用户对同一完整路径重复陈述 → 替换旧行。
             # 注意用"完整路径相等"而非子串包含——避免 E:/R-libs 误删 E:/R-libs/R-4.5.3
@@ -4967,6 +5713,173 @@ def _build_scripts_digest(session, limit=5):
         if not _fs:
             return ""
         return f"[会话脚本目录 · scripts/ 已有脚本：{'、'.join(_fs)}，重复跑图/统计先到这里 search_files 找已有脚本复用]"
+    except Exception:
+        return ""
+
+
+# ── 产出资产清单（2026-08-25）：输入/输出/脚本/图片的结构化索引 + digest 复用 ──
+_ASSET_CATEGORIES = {
+    "figure": (".png", ".jpg", ".jpeg", ".pdf", ".svg", ".tiff", ".bmp", ".webp"),
+    "table": (".csv", ".tsv", ".xlsx", ".xls", ".txt"),
+    "data": (".rds", ".rdata", ".rda", ".h5ad", ".mtx", ".h5", ".parquet", ".loom"),
+    "report": (".html", ".md", ".docx", ".pptx"),
+    "script": (".r", ".py", ".sh", ".pl"),
+    "log": (".log", ".err", ".out"),
+}
+_ASSET_SKIP = ("task_plan.md", "task_plan.done.md", "REQUIREMENTS.md",
+               ".task_state.json", "token_usage.jsonl", "prisma.json",
+               "evidence.jsonl", "evidence.csv", "assets.json",
+               ".loopx", "__pycache__", "checkpoints", ".git")
+
+
+def _scan_output_assets(results_dir: str, max_files: int = 200) -> list:
+    """扫描会话产出资产（子目录 + 根目录），分类、按时间最新在前。
+
+    返回 [{cat, name, rel, path, mtime, size}]；排除运行账本文件与中间产物。
+    """
+    assets = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return assets
+    try:
+        for root, dirs, files in os.walk(results_dir):
+            dirs[:] = [d for d in dirs if d not in _ASSET_SKIP]
+            if any(seg in _ASSET_SKIP for seg in root.replace("\\", "/").split("/")):
+                continue
+            for f in files:
+                if f in _ASSET_SKIP or f.endswith((".tmp", ".pyc")):
+                    continue
+                if len(assets) >= max_files:
+                    return assets
+                p = os.path.join(root, f)
+                try:
+                    st = os.stat(p)
+                    if st.st_size == 0:
+                        continue
+                except Exception:
+                    continue
+                try:
+                    rel = os.path.relpath(p, results_dir).replace("\\", "/")
+                except Exception:
+                    rel = f
+                ext = os.path.splitext(f)[1].lower()
+                cat = "other"
+                for _c, _exts in _ASSET_CATEGORIES.items():
+                    if ext in _exts:
+                        cat = _c
+                        break
+                assets.append({"cat": cat, "name": f, "rel": rel,
+                               "path": p.replace("\\", "/"),
+                               "mtime": st.st_mtime, "size": st.st_size})
+        assets.sort(key=lambda a: -a["mtime"])
+    except Exception:
+        pass
+    return assets
+
+
+def _save_assets_index(session) -> None:
+    """刷新产出资产索引 results/<sid>/review/assets.json（回合结束调用）。
+
+    结构：{updated_at, inputs:[读取过的输入路径], assets:[产出文件分类清单]}
+    输入路径供"按输入反查产出"（如 E:/data 分析产出了哪些文件）。
+    """
+    try:
+        rd = session.get("results_dir") or ""
+        if not rd or not os.path.isdir(rd):
+            return
+        assets = _scan_output_assets(rd)
+        inputs = _extract_input_paths(session, limit=15)
+        _rev = os.path.join(rd, "review")
+        os.makedirs(_rev, exist_ok=True)
+        _tmp = os.path.join(_rev, "assets.json.tmp")
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump({"updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                       "inputs": inputs, "assets": assets}, f, ensure_ascii=False)
+        os.replace(_tmp, os.path.join(_rev, "assets.json"))
+    except Exception:
+        pass
+
+
+def _extract_input_paths(session, limit=10, db_path=None) -> list:
+    """从 tool_calls_log 提取本会话读取过的输入路径（数据从哪来）。
+
+    供 assets.json 的 inputs 段使用——后面可按输入反查产出：
+    "E:/data/matrix.mtx 分析产出了哪些文件？"（同一 results_dir 下、时间在读取之后）。
+    db_path 可注入（单测用临时库）。
+    """
+    try:
+        sid = session.get("id", "") or ""
+        if not sid:
+            return []
+        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.isfile(_dbp):
+            return []
+        import sqlite3 as _sq
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT tool_name, args_json, datetime(timestamp,'unixepoch','localtime') "
+                "FROM tool_calls_log WHERE session_id=? "
+                "AND (args_json LIKE '%readRDS%' OR args_json LIKE '%read.csv%' "
+                "OR args_json LIKE '%read.table%' OR args_json LIKE '%read_parquet%' "
+                "OR args_json LIKE '%read_excel%' OR args_json LIKE '%Load10X%' "
+                "OR args_json LIKE '%pd.read_%' OR args_json LIKE '%scanpy.read%' "
+                "OR args_json LIKE '%fread%' OR args_json LIKE '%read.delim%') "
+                "ORDER BY rowid DESC LIMIT ?", (sid, limit * 4)).fetchall()
+        finally:
+            _conn.close()
+        out = []
+        seen = set()
+        for _tool, _args, _ts in _rows:
+            for _m in re.finditer(r"[A-Za-z]:[/\\][^\s'\"\),;]+", str(_args or "")):
+                _p = _m.group(0).rstrip("/\\")
+                if _p in seen:
+                    continue
+                seen.add(_p)
+                out.append({"path": _p.replace("\\", "/"), "tool": _tool, "ts": _ts or ""})
+                if len(out) >= limit:
+                    return out
+        return out
+    except Exception:
+        return []
+
+
+def _build_output_assets_digest(session, limit=8) -> str:
+    """产出资产摘要（digest 块）：输入路径 + 产出文件清单。
+
+    优先读 assets.json（快），缺失则现扫。让模型跨轮知道"输入从哪来、
+    输出在哪"——复用、汇报、避免重跑、可按输入反查产出。
+    """
+    try:
+        rd = session.get("results_dir") or ""
+        if not rd:
+            return ""
+        _idx = os.path.join(rd, "review", "assets.json")
+        assets = None
+        inputs = []
+        if os.path.isfile(_idx):
+            try:
+                with open(_idx, encoding="utf-8") as f:
+                    _data = json.load(f)
+                assets = _data.get("assets") or []
+                inputs = _data.get("inputs") or []
+            except Exception:
+                assets = None
+        if assets is None:
+            assets = _scan_output_assets(rd)
+        if not assets and not inputs:
+            return ""
+        _tags = {"figure": "📊图", "table": "📋表", "script": "📜脚本",
+                 "data": "💾数据", "report": "📄报告", "log": "📝日志"}
+        lines = []
+        if inputs:
+            _in = "、".join(i.get("path", "") for i in inputs[:3])
+            lines.append(f"[会话输入路径 · 读取过的数据（{len(inputs)} 个，前 3：{_in}；"
+                         f"完整清单与产出对应关系见 review/assets.json）]")
+        if assets:
+            lines.append(f"[会话产出资产 · 已生成 {len(assets)} 个文件（最新在前；复用/汇报用这些路径，不要重复跑）]")
+            for a in assets[:limit]:
+                lines.append(f"- {_tags.get(a.get('cat'), '📁')} {a.get('rel', a.get('name', ''))}")
+        return "\n".join(lines)
     except Exception:
         return ""
 
@@ -5147,8 +6060,11 @@ def _create_agent(model_config=None, session_id=None, session=None):
         provider=_provider,
         model=cfg["model"],
         max_iterations=300,
+        max_tokens=8192,  # 2026-08-24 修复(memomics-aa368e59): 默认 None→服务端可能低至 4096，
+                          # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
+                          # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT,
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY,
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -5533,6 +6449,61 @@ async def rename_session(sid: str, body: dict = None):
     return {"ok": True, "title": new_title, "session_id": sid}
 
 
+def _session_display_stats(sid, start_ua=0):
+    """会话展示统计（只读，失败静默）：token 用量 + 消息时间窗元数据。
+    返回 (stats, meta)：meta[k] = 第 (start_ua+k) 个 user/assistant 消息的
+    {elapsed, tool_count, tool_names}——页脚显示用。"""
+    import sqlite3 as _sq
+    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    try:
+        _conn = _sq.connect(_dbp, timeout=5)
+        _usage = _conn.execute(
+            "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),"
+            " COALESCE(SUM(api_call_count),0), COALESCE(SUM(estimated_cost_usd),0)"
+            " FROM session_model_usage WHERE session_id=?", (sid,)).fetchone()
+        _rows = _conn.execute(
+            "SELECT timestamp, role FROM messages WHERE session_id=? ORDER BY id", (sid,)).fetchall()
+        _tools = _conn.execute(
+            "SELECT timestamp, tool_name FROM tool_calls_log WHERE session_id=? ORDER BY timestamp", (sid,)).fetchall()
+        _conn.close()
+    except Exception:
+        return {}, {}
+    _ua = [r for r in _rows if r[1] in ("user", "assistant")]
+    _meta = {}
+    for i in range(start_ua, len(_ua)):
+        _ts, _role = _ua[i]
+        _nxt = _ua[i + 1][0] if i + 1 < len(_ua) else None
+        _wnd = [t[1] for t in _tools if t[0] >= _ts and (_nxt is None or t[0] < _nxt)]
+        _meta[i - start_ua] = {
+            "elapsed": round(_nxt - _ts, 1) if _nxt else None,
+            "tool_count": len(_wnd),
+            "tool_names": _wnd[:8],
+        }
+    _stats = {}
+    if _usage:
+        _stats = {
+            "input_tokens": int(_usage[0] or 0),
+            "output_tokens": int(_usage[1] or 0),
+            "api_calls": int(_usage[2] or 0),
+            "estimated_cost_usd": round(float(_usage[3] or 0), 4),
+        }
+    return _stats, _meta
+
+
+def _last_tool_of(sid):
+    """会话最近一次工具调用（刷新后运行状态条显示 agent 在干什么）。"""
+    import sqlite3 as _sq
+    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    try:
+        _conn = _sq.connect(_dbp, timeout=5)
+        _row = _conn.execute(
+            "SELECT tool_name FROM tool_calls_log WHERE session_id=? ORDER BY id DESC LIMIT 1", (sid,)).fetchone()
+        _conn.close()
+        return _row[0] if _row else ""
+    except Exception:
+        return ""
+
+
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str, limit: int = 100):
     """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿。
@@ -5561,11 +6532,38 @@ async def get_messages(sid: str, limit: int = 100):
         total = len(msgs)
     normalized = []
     for m in msgs:
+        # 2026-08-23: 系统注入（唤醒/强制工具调用）与工具消息不进前端对话流
+        # 2026-08-26: 注入脚手架常以 role=user 写入历史（喂模型）——按前缀内容级过滤，
+        # 否则刷新后 [会话要求]/[相关历史记忆]/[会话锚点]/[系统唤醒] 全部刷屏（实测）
+        if m.get("role") in ("system", "tool"):
+            continue
+        if (m.get("content") or "").lstrip().startswith(_INJECT_PREFIXES):
+            continue
         nm = dict(m)
         if "content" not in nm and "text" in nm:
             nm["content"] = nm["text"]
         normalized.append(nm)
-    return {"messages": normalized, "total": total}
+    # 2026-08-23: 消息页脚元数据（耗时/工具数）+ 会话统计（token/成本）
+    _stats, _meta = {}, {}
+    try:
+        _ua_before = 0
+        _all = session.get("messages") or []
+        _win_start = max(0, len(_all) - (limit if (limit and limit > 0) else len(_all)))
+        for _m in _all[:_win_start]:
+            if _m.get("role") in ("user", "assistant"):
+                _ua_before += 1
+        _stats, _meta = _session_display_stats(sid, start_ua=_ua_before)
+    except Exception:
+        pass
+    _mi = 0
+    for m in normalized:
+        if m.get("role") in ("user", "assistant"):
+            if _mi in _meta:
+                m["elapsed"] = _meta[_mi].get("elapsed")
+                m["tool_count"] = _meta[_mi].get("tool_count", 0)
+                m["tool_names"] = _meta[_mi].get("tool_names", [])
+            _mi += 1
+    return {"messages": normalized, "total": total, "stats": _stats}
 
 
 @app.delete("/api/sessions/{sid}")
@@ -5853,6 +6851,19 @@ async def list_providers():
             "has_key": bool(saved.get("api_key")),
             "is_custom": p["id"] == "dcs-cloud",
         })
+    # 2026-08-27: 用户自定义 provider（custom-*）并入列表
+    for pid, cp in _custom_providers.items():
+        saved = _provider_keys.get(pid, {})
+        items.append({
+            "id": pid,
+            "name": cp.get("name", pid),
+            "api": cp.get("api", ""),
+            "env_var": "",
+            "group": "⭐ 自定义",
+            "model_count": len(cp.get("models", [])),
+            "has_key": bool(saved.get("api_key")),
+            "is_custom": True,
+        })
     groups = {}
     for it in items:
         g = it["group"]
@@ -5951,15 +6962,19 @@ def _sync_custom_providers_to_hermes(pid=None):
             if isinstance(c, dict) and c.get("id"):
                 existing[c["id"]] = c
         if pid is None:
-            for p in _CHINA_PROVIDERS:
-                saved = _provider_keys.get(p["id"])
-                if saved and saved.get("api_key"):
-                    existing[p["id"]] = {
-                        "id": p["id"], "name": p["name"],
-                        "api_base": saved.get("base_url") or p["api"],
-                        "api_key": saved["api_key"],
-                        "models": p.get("models", []),
-                    }
+            # 2026-08-27: 遍历所有有 key 的 provider（内置 + 用户自定义 custom-*），
+            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 Hermes 底座
+            for _pid in list(_provider_keys.keys()):
+                saved = _provider_keys.get(_pid)
+                if not (saved and saved.get("api_key")):
+                    continue
+                p = _PROVIDERS_INDEX.get(_pid) or {}
+                existing[_pid] = {
+                    "id": _pid, "name": p.get("name", _pid),
+                    "api_base": saved.get("base_url") or p.get("api", ""),
+                    "api_key": saved["api_key"],
+                    "models": p.get("models", []),
+                }
         elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
             saved = _provider_keys[pid]
@@ -6073,6 +7088,199 @@ async def detect_local_models():
         except Exception:
             continue
     return {"models": found, "count": len(found)}
+
+
+# === 自定义 Provider API（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
+
+@app.get("/api/providers/custom")
+async def list_custom_providers():
+    """列出用户自定义 provider（key 脱敏）"""
+    items = []
+    for pid, p in _custom_providers.items():
+        saved = _provider_keys.get(pid) or {}
+        items.append({
+            "id": pid,
+            "name": p.get("name", pid),
+            "base_url": p.get("api", ""),
+            "models": p.get("models", []),
+            "has_key": bool(saved.get("api_key")),
+            "key_masked": _mask_key(saved.get("api_key", "")),
+            "local": bool(saved.get("local")),
+        })
+    return {"providers": items, "total": len(items)}
+
+
+def _normalize_custom_models(models_raw):
+    """模型归一化：["m1","m2"] 或 [{"id":"m1","name":"..."}] → [{"id","name",...}]"""
+    models = []
+    for m in models_raw or []:
+        if isinstance(m, dict):
+            _mid = str(m.get("id") or "").strip()
+            if not _mid:
+                continue
+            models.append({"id": _mid, "name": str(m.get("name") or _mid).strip(),
+                           "reasoning": bool(m.get("reasoning")),
+                           "tool_call": bool(m.get("tool_call"))})
+        elif isinstance(m, str) and m.strip():
+            models.append({"id": m.strip(), "name": m.strip()})
+    return models
+
+
+def _normalize_base_url(raw):
+    """URL 规整：完整 chat/completions 端点 → base_url。
+    支持：https://host/v1/chat/completions → https://host/v1
+          https://host/v1 → 原样
+          https://host → 原样（/models 探测会自动补 /v1 变体）"""
+    url = (raw or "").strip()
+    for tail in ("/chat/completions", "/completions"):
+        if url.endswith(tail):
+            url = url[: -len(tail)]
+    return url.rstrip("/")
+
+
+def _safe_str(v):
+    """2026-08-28: 请求字段类型防御——误传 list/数字等取首元素或空，不 500。"""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, (list, tuple)) and v:
+        return str(v[0]).strip()
+    if v is None:
+        return ""
+    return str(v).strip()
+
+
+@app.post("/api/providers/custom/discover")
+async def discover_custom_models(payload: dict):
+    """输入 URL（支持完整 chat/completions 端点）+ API Key → 自动拉取该端点所有模型。
+
+    走 OpenAI 兼容 /models 列表接口；带代理 fallback 直连（与 _http_get_json 同策略）。
+    """
+    raw = _safe_str(payload.get("url") or payload.get("base_url"))
+    api_key = _safe_str(payload.get("api_key"))
+    base = _normalize_base_url(raw)
+    if not base.startswith(("http://", "https://")):
+        return JSONResponse({"error": "URL 需以 http(s):// 开头"}, status_code=400)
+    import urllib.request as _ur
+    import urllib.error as _uerr
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    # /models 端点变体：base + /v1 兜底
+    candidates = [base + "/models"]
+    if not base.endswith("/v1"):
+        candidates.append(base + "/v1/models")
+    last_err = ""
+    for _url in candidates:
+        for proxy in (_PROXY, None):
+            try:
+                req = _ur.Request(_url, headers=headers)
+                # 2026-08-26: build_opener 嵌套修复（else 分支直接返回 OpenerDirector）
+                opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                          if proxy else _ur.build_opener())
+                with opener.open(req, timeout=20) as r:
+                    data = json.loads(r.read().decode("utf-8", "replace"))
+                # OpenAI 兼容三种形态：data[] / models[] / object=list 的 data
+                raw_models = data.get("data") or data.get("models") or []
+                if not isinstance(raw_models, list):
+                    raise ValueError("模型列表格式不识别")
+                models = []
+                for m in raw_models:
+                    if isinstance(m, str):
+                        models.append({"id": m, "name": m})
+                        continue
+                    if not isinstance(m, dict):
+                        continue
+                    mid = m.get("id") or m.get("model") or ""
+                    if not mid:
+                        continue
+                    models.append({"id": str(mid), "name": str(m.get("name") or m.get("display_name") or mid)})
+                if models:
+                    return {"ok": True, "base_url": base, "url_used": _url,
+                            "models": models, "count": len(models)}
+                last_err = "端点返回空模型列表"
+            except _uerr.HTTPError as e:
+                last_err = f"HTTP {e.code}: {e.reason}"
+                if e.code in (401, 403):
+                    return JSONResponse({"error": f"{_url} 返回 {e.code} —— API Key 无效或无权访问"}, status_code=400)
+                if e.code == 404:
+                    continue  # 试下一个端点变体
+            except Exception as e:
+                last_err = str(e)[:150]
+    return JSONResponse({"error": f"模型发现失败（{base}/models）：{last_err or '无法连接'}。请确认 URL 正确、Key 有效、端点支持 OpenAI 兼容 /models。"}, status_code=400)
+
+
+@app.post("/api/providers/custom")
+async def add_custom_provider(payload: dict):
+    """添加自定义 OpenAI 兼容 provider：名称 + base_url + api_key + 模型列表"""
+    name = (payload.get("name") or "").strip()
+    base_url = (payload.get("base_url") or "").strip().rstrip("/")
+    api_key = (payload.get("api_key") or "").strip()
+    models = _normalize_custom_models(payload.get("models"))
+    if not name or not base_url:
+        return JSONResponse({"error": "name 和 base_url 必填"}, status_code=400)
+    if not models:
+        return JSONResponse({"error": "models 必填（至少一个模型名）"}, status_code=400)
+    if not base_url.startswith(("http://", "https://")):
+        return JSONResponse({"error": "base_url 需以 http(s):// 开头"}, status_code=400)
+    pid = "custom-" + _sanitize_dir_name(name)
+    if pid in _PROVIDERS_INDEX and pid not in _custom_providers:
+        return JSONResponse({"error": f"provider id 冲突: {pid}"}, status_code=409)
+    _custom_providers[pid] = {"id": pid, "name": name, "api": base_url, "models": models}
+    _PROVIDERS_INDEX[pid] = _custom_providers[pid]
+    _save_custom_providers()
+    if api_key:
+        _provider_keys[pid] = {"api_key": api_key, "base_url": base_url}
+        _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True, "provider_id": pid}
+
+
+@app.put("/api/providers/custom/{pid}")
+async def update_custom_provider(pid: str, payload: dict):
+    """更新自定义 provider（base_url / 模型 / key）"""
+    if pid not in _custom_providers:
+        return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
+    _def = _custom_providers[pid]
+    if payload.get("name"):
+        _def["name"] = str(payload["name"]).strip()
+    if payload.get("base_url"):
+        _b = str(payload["base_url"]).strip().rstrip("/")
+        if _b.startswith(("http://", "https://")):
+            _def["api"] = _b
+    _models = _normalize_custom_models(payload.get("models"))
+    if _models:
+        _def["models"] = _models
+    _PROVIDERS_INDEX[pid] = _def
+    _save_custom_providers()
+    _key = (payload.get("api_key") or "").strip()
+    if _key and "…" not in _key and _key != "****":
+        _provider_keys[pid] = {"api_key": _key, "base_url": _def["api"]}
+        _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True, "provider_id": pid}
+
+
+@app.delete("/api/providers/custom/{pid}")
+async def delete_custom_provider(pid: str):
+    """删除自定义 provider（定义 + key + Hermes 同步）"""
+    if pid not in _custom_providers:
+        return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
+    del _custom_providers[pid]
+    _PROVIDERS_INDEX.pop(pid, None)
+    _provider_keys.pop(pid, None)
+    _save_custom_providers()
+    _save_provider_keys()
+    try:
+        _sync_custom_providers_to_hermes(pid)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @app.get("/api/models/available")
@@ -6326,7 +7534,11 @@ def _http_get_json(url: str, timeout: int = 20) -> dict:
     for proxy in (_PROXY, None):
         try:
             req = _ur.Request(url, headers=headers)
-            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            # 2026-08-26: 修复 build_opener 嵌套 —— else 分支把 build_opener() 结果
+            # （OpenerDirector）当 Handler 再传进 build_opener → Linux 无代理降级
+            # 直连时抛 "expected BaseHandler instance, got OpenerDirector"（实测）
+            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                      if proxy else _ur.build_opener())
             with opener.open(req, timeout=timeout) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except Exception as e:
@@ -6498,7 +7710,9 @@ def _download_file(url: str, dest: str, timeout: int = 1800) -> None:
             raise RuntimeError("已取消")
         try:
             req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
-            opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy else _ur.build_opener())
+            # 2026-08-26: 同 _http_get_json 的 build_opener 嵌套修复（无代理降级直连）
+            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
+                      if proxy else _ur.build_opener())
             with opener.open(req, timeout=timeout) as r, open(dest, "wb") as f:
                 _UPDATE_TASK["total_bytes"] = int(r.headers.get("Content-Length") or 0)
                 while True:
@@ -7275,6 +8489,17 @@ import threading as _threading_mod
 
 _LOOP_SIG_TOOLS = {"terminal", "execute_code", "execute_python", "execute_r", "bash", "shell"}
 
+# 2026-08-24: 循环检测豁免——以下工具连续调用是正常业务（连续读文献/查知识/出图），
+# 不是失控死循环。尤其无参数调用（skill_view/summarize_paper/search_*）签名相似度高，
+# 连续两篇文献就会被误报"工具调用循环"。这些工具不参与相似度累计。
+_LOOP_EXEMPT_TOOLS = {
+    "skill_view", "skill_search", "skill_list_by_domain",
+    "summarize_paper", "literature_import", "kb_extract_from_paper", "extract_paper_knowledge",
+    "search_knowledge", "search_knowledge_base", "search_papers", "search_papers_by_context",
+    "web_search", "literature_search", "pubmed_search",
+    "rail_review", "debate_analysis", "record_run", "check_env",
+}
+
 
 def _loop_tool_sig(tool_name: str, args) -> str:
     """提取工具调用的命令特征签名（用于相似度比较）。"""
@@ -7349,6 +8574,9 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                     g["turn_texts"].append(g["text_buf"][:800])
                     g["turn_texts"] = g["turn_texts"][-8:]
                 g["text_buf"] = ""
+                if tool_name in _LOOP_EXEMPT_TOOLS:
+                    # 豁免工具不累计（但保留文本分段语义，text_buf 已清空）
+                    return False
                 _sig = _loop_tool_sig(tool_name, args)
                 g["tool_hist"].append((tool_name or "", _sig, now))
                 g["tool_hist"] = g["tool_hist"][-10:]
@@ -7529,7 +8757,7 @@ def _get_or_create_weixin_session(sender_id: str, sender_name: str) -> dict:
     session["wx_sender_id"] = sender_id
     session["source"] = "weixin"
     _save_weixin_session_map()
-    print(f"[MemOmics] 微信新会话: {sender_name} → {session["id"]}", flush=True)
+    print(f"[MemOmics] 微信新会话: {sender_name} → {session['id']}", flush=True)
     return session
 
 
@@ -8372,6 +9600,10 @@ async def lit_browse(path: str = ""):
                 "parent": parent, "platform": os.name, "pdf_count": _pdf_count(real)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/file/read")
+async def file_read(path: str = ""):
     """读取文件内容（限制在 work/results/项目内，防任意文件读取）"""
     try:
         from webui.security import resolve_within_roots, UnsafePathError
@@ -8381,6 +9613,8 @@ async def lit_browse(path: str = ""):
         with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read(200000)  # 最多 200KB
         return {"path": path, "content": content, "size": size, "truncated": size > 200000}
+    except UnsafePathError as e:
+        return JSONResponse({"error": str(e)}, status_code=403)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -9932,6 +11166,8 @@ async def get_progress(sid: str):
         # 2026-08-17: 半截流式文本（刷新/重连时恢复进行中的回复，HTTP 兜底同款）
         "partial_text": session.get("_partial_text", ""),
         "is_running": bool(session.get("running_agent") or session.get("running_task")),
+        # 2026-08-23: 最近一次工具调用（刷新后状态条显示 agent 在干什么）
+        "last_tool": _last_tool_of(sid),
         "session_id": sid,
     }
 
@@ -10314,6 +11550,17 @@ async def ws_endpoint(ws: WebSocket):
                 session["_proc_hist"] = []  # 2026-08-16: 进程采样历史（回合级窗口）
                 session["_stall_notice_last"] = 0
                 session["_turn_activity_ts"] = time.time()
+                # 2026-08-24 修复: 循环检测状态按用户回合重置——之前的 tool_hist/turn_texts
+                # 跨回合累计，用户连续几轮做相似的正事（连读两篇文献都调 summarize_paper /
+                # nature-reader / skill_view）会被误报"工具调用循环"并注入强制收尾提示。
+                # 循环检测只应判断"同一回合内"的重复动作。
+                sg = session.get("_loop_guard")
+                if sg is not None:
+                    with sg.get("lock", _threading_mod.Lock()):
+                        sg["tool_hist"] = []
+                        sg["turn_texts"] = []
+                        sg["text_buf"] = ""
+                        sg["inject_count"] = 0
                 # 如果有图片，将图片 URL 作为上下文附加到用户消息中
                 if image_urls:
                     img_context = "\n\n[用户上传的图片]\n" + "\n".join(f"![]({url})" for url in image_urls)
@@ -10370,13 +11617,23 @@ async def ws_endpoint(ws: WebSocket):
                 # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
                 # 退役任务（done/cancelled）重置为 pending（命中"继续"词表由 check_gate 内部处理；
                 # 未命中返回 ask_user → 用户发消息本身即新指令，保守重置为新任务）
+                # 2026-08-27 修复：ask_user 的**否定回答**（"不用了/不需要继续"）不得复活
+                # done 任务——实测：模型 ask_user 问"还要继续吗？"→ 用户答"不用"→ 无条件
+                # 重置 pending+armed → 已完成任务被唤醒链复活 → 模型被反复叫醒重复输出
                 try:
-                    from webui.runtime.run_gate import check_gate, save_state
+                    from webui.runtime.run_gate import check_gate, save_state, arm, reset_rounds
                     _rd_g = session.get("results_dir", "") or ""
                     if _rd_g:
                         _verdict, _reason = check_gate(_rd_g, is_auto_wake=False, user_message=user_text)
                         if _verdict == "ask_user":
-                            save_state(_rd_g, "pending", "user message (ask_user -> new task)")
+                            if _is_negation_end_answer(user_text):
+                                # 用户确认结束/否定 → 保持退役状态（休息），不重置 pending
+                                logger.info(f"[RunGate] session {session['id'][:12]}: ask_user 否定回答（{user_text[:30]}）→ 保持任务退役，不复活")
+                            else:
+                                save_state(_rd_g, "pending", "user message (ask_user -> new task)")
+                        # M2/M3（DSH resume 语义的交互式版）：用户在场 = 重新授权 + 预算刷新
+                        arm(_rd_g, by="user_message")
+                        reset_rounds(_rd_g)
                 except Exception:
                     pass
 
@@ -10438,7 +11695,11 @@ async def ws_endpoint(ws: WebSocket):
                     except ImportError:
                         import session_state as _ss
                     _ss.capture_user_request(session["id"], user_text, intent=_intent or "chat")
-                    _ss.extract_assets(session["id"], user_text)
+                    # 2026-08-31 P3 接线：project = 结果目录名（资产项目隔离）；
+                    # intent 每轮写入 task_json → holographic prefetch 按意图调检索策略
+                    _proj = os.path.basename((session.get("results_dir") or "").rstrip("\\/"))
+                    _ss.extract_assets(session["id"], user_text, project=_proj or "")
+                    _ss.update_task_state(session["id"], intent=_intent or "chat")
                     _extract_and_store_requirements(session, user_text)  # (#2) 要求/路径持久化
 
                     # === 话题切换检测旁路（P1-4）：analysis 意图且实体变化 → 更新任务状态块 ===
@@ -10589,9 +11850,22 @@ async def ws_endpoint(ws: WebSocket):
                 except Exception:
                     pass
                 _skills = _read_skills_index()
-                agent.ephemeral_system_prompt = _soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                agent.ephemeral_system_prompt = (_soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
+                                                 + "\n\n" + _EXECUTION_POLICY)
                 if rd:
-                    agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。"
+                    agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。\n"
+                    agent.ephemeral_system_prompt += (
+                        f"**输出归位铁律（2026-08-25）**：产出文件必须写入 `{rd.replace(chr(92), '/')}` 的对应子目录：\n"
+                        f"- 图 → `{rd.replace(chr(92), '/')}/figures/`\n"
+                        f"- 表/结果 → `{rd.replace(chr(92), '/')}/results/`\n"
+                        f"- 脚本 → `{rd.replace(chr(92), '/')}/scripts/`\n"
+                        f"- 数据 → `{rd.replace(chr(92), '/')}/data/`\n"
+                        f"- 日志 → `{rd.replace(chr(92), '/')}/log/`\n"
+                        f"禁止把产出直接写到 `{rd.replace(chr(92), '/')}` 根目录（子目录已由系统创建）。\n"
+                        "回合结束时，向用户汇报**本次回合新增**的产出（类别 + 相对路径，"
+                        "如 `figures/umap.png`、`results/cluster_stats.csv`），不要只说'已生成图'不给出位置。"
+                        "历史产出较多时只给总数总览（如'另有历史产出 87 个文件，完整清单见 review/assets.json'），"
+                        "**不要逐条罗列全部历史文件**——避免长清单拖慢回合、膨胀历史。")
 
                     # 🔧 分析任务自动预查知识库 + 方法路线引导
                     # 2026-08-21 缓存优化：KB 预查询/领域引导内容随用户消息变化，
@@ -11514,7 +12788,7 @@ async def ws_endpoint(ws: WebSocket):
                                 if not isinstance(_c, str):
                                     _filtered.append(_m)
                                     continue
-                                if _c.lstrip().startswith(("[相关历史记忆", "[会话锚点", "[系统唤醒", "📊 LoopX 状态", "[System:")):
+                                if _c.lstrip().startswith(("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒", "📊 LoopX 状态", "[System:", "[数据读取配方")):
                                     _rest = _strip_scaffold_text(_c)
                                     if _rest is None:
                                         continue
@@ -11524,6 +12798,25 @@ async def ws_endpoint(ws: WebSocket):
                                     continue
                                 _filtered.append(_m)
                             conversation_history = _filtered
+                            # ── (b2 2026-08-29) 历史去重：空 assistant 丢弃 + 相邻完全重复消息折叠 ──
+                            # 实证：memomics-cd677556 3449 条 user/assistant 历史，含 99 条重复 user
+                            # 消息、757 处同角色连排 → 模型被旧问答淹没，回答上一个问题/重复重跑。
+                            _dedupe = []
+                            _prev_key = None
+                            for _m in conversation_history:
+                                _c = _m.get("content") if isinstance(_m, dict) else None
+                                if not isinstance(_c, str):
+                                    _dedupe.append(_m)
+                                    _prev_key = None
+                                    continue
+                                if not _c.strip() and _m.get("role") == "assistant":
+                                    continue
+                                _key = (_m.get("role"), _c.strip())
+                                if _key == _prev_key:
+                                    continue
+                                _dedupe.append(_m)
+                                _prev_key = _key
+                            conversation_history = _dedupe
                             _mem_digest = _build_memory_digest(_session, user_text or "")
                             if _mem_digest:
                                 conversation_history = [m for m in conversation_history
@@ -11533,13 +12826,27 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception as _b_err:
                             logger.warning(f"[MemOmics] (b) 上下文卫生失败(不阻断): {_b_err}")
 
+                        # ── (c0 2026-08-29) 超预算早折叠：把死代码 _maybe_rollup_history 接上 ──
+                        # 之前 1M 窗口模型让 317K token 历史一直不折叠，老问答紧邻新问题 →
+                        # “回答上一个问题”/忘记已跑结果。现在 >60K token 就折叠头部为结构化摘要。
+                        try:
+                            _pre_roll = conversation_history
+                            conversation_history = _maybe_rollup_history(_session, conversation_history)
+                            _rolled = conversation_history is not _pre_roll
+                        except Exception as _c0_err:
+                            _rolled = False
+                            logger.warning(f"[MemOmics] (c0) 历史早折叠失败(不阻断): {_c0_err}")
+
                         # ── (c/P1-P5) MiMo-Code 上下文架构：单一边界 usable() + 后台 writer(§1-§11) +
                         #      四层记忆(FTS/REQUIREMENTS/MEMORY/History) + 分段重建预算 + 增量压缩 ──
+                        # 2026-08-31 折叠分工：c0 已折叠 → skip_rebuild=True（防摘要套摘要）；
+                        # c0 未折叠且触发（30K+/自检唤醒）→ 才走 P1-P5 重建。
                         try:
                             _wcfg = _session.get("model_config") or _current_model
                             conversation_history = context_arch.memomics_replay(
                                 _session, conversation_history,
-                                llm_fn=lambda p, _c=_wcfg: _checkpoint_writer_llm(p, cfg=_c))
+                                llm_fn=lambda p, _c=_wcfg: _checkpoint_writer_llm(p, cfg=_c),
+                                skip_rebuild=_rolled)
                         except Exception as _c_err:
                             logger.warning(f"[MemOmics] (c) P1-P5 架构回放失败(不阻断): {_c_err}")
 
@@ -11569,6 +12876,14 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
 
+                        # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
+                        try:
+                            _grill = _build_grill_prompt(_session, user_text or "", _intent)
+                            if _grill:
+                                conversation_history.append({"role": "system", "content": _grill})
+                        except Exception:
+                            pass
+
                         # 2026-08-16 修复「问下一个问题被旧上下文占据」：
                         # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，
                         # 跳过 task_plan 恢复 + 主线续跑注入，先干净回答新问题。
@@ -11582,19 +12897,22 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 _new_data_task = False
 
-                        # 🔧 长任务记忆锚点 + 强制执行指令（合并为一条，避免被稀释）
+                        # 🔧 长任务记忆锚点 + 任务状态指令（合并为一条，避免被稀释）
+                        # 2026-08-25: 从"强制推进"改为"状态通报"——用户请求优先（_EXECUTION_POLICY）
                         _plan_ctx = _build_task_plan_context(_session) if not _new_data_task else None
                         if _plan_ctx:
                             # 把所有关键指令合并成一条 system 消息
                             _merged = (
                                 _plan_ctx + "\n\n"
-                                "⛔⛔⛔ 最高优先级指令 ⛔⛔⛔\n"
-                                "你当前有 task_plan.md，正在执行分析任务。请严格遵守：\n"
-                                "1. 你的下一句话必须是一个工具调用（terminal/write_file/skill_view），不是文字。\n"
-                                "2. 说'启动'→调 terminal。说'写脚本'→调 write_file。说'检查'→调 terminal 执行命令。\n"
-                                "3. 禁止先输出大段文字再调工具。工具调用必须在文字之前。\n"
-                                "4. CellBender/训练/长时间命令必须 terminal(background=True, notify_on_complete=True)。\n"
-                                "5. 如果 task_plan 的 Phase 描述模糊，直接用你的判断补充具体步骤并执行。不要等用户确认。"
+                                "## 任务状态指令（用户请求优先）\n"
+                                "你当前有 task_plan.md，存在进行中的分析任务。请遵守：\n"
+                                "1. 用户当前消息是最高优先级：用户问什么就答什么，用户要调查就只调查。\n"
+                                "2. 仅当用户明确要求执行/继续任务时，才按 task_plan 推进（工具调用优先）。\n"
+                                "3. 用户是问答/调查/规划类请求时，不要擅自执行任务、不要擅自修复后重跑。\n"
+                                "4. 用户没有说'继续'时，任务推进交给系统自动续跑，不在本回合推进。\n"
+                                "5. 若用户明确要求执行且 Phase 描述模糊，可补充具体步骤执行；不确定时用 ask_user 确认。\n"
+                                "6. 任何脚本/分析在重新执行前，必须先用 search_files/read_file 检查 results 目录下对应产物是否已存在且非空；已存在 → 直接复用并汇报，禁止重跑（铁律13）。\n"
+                                "7. 需要用户确认（是否/要不要/需要吗/可以吗）时，必须调用 ask_user 工具（带选项）提问，禁止在正文结尾用问句——正文问句的答复无法与问题绑定，用户答‘需要’会丢失所指。"
                             )
                             conversation_history.append({"role": "system", "content": _merged})
 
@@ -11621,6 +12939,47 @@ async def ws_endpoint(ws: WebSocket):
                             _agent.tools = [t for t in _agent.tools if t.get("function", {}).get("name", "") in PLAN_ONLY]
                             before = sorted([t.get('function',{}).get('name','') for t in _agent.tools]) if _agent.tools else []
                             logger.info(f"[DEBUG-ALL-TOOLS] ({len(before)}): {before}")
+
+                        # ── 2026-08-31 L0/L1 结论注册表注入（关键结论/修复/决策，勿重跑） ──
+                        try:
+                            from conclusion_store import build_memory_budget_context
+                            _l1_ctx = build_memory_budget_context(_session, user_text or "", limit=20, max_chars=4000)
+                            if _l1_ctx:
+                                conversation_history.append({"role": "system", "content": _l1_ctx})
+                        except Exception:
+                            pass
+
+                        # ── 2026-08-31 待确认问题追踪：用户“需要”必须绑定上一轮问话 ──
+                        try:
+                            _pend_ctx = _build_pending_question_context(_session, user_text or "")
+                            if _pend_ctx:
+                                conversation_history.append({"role": "system", "content": _pend_ctx})
+                        except Exception:
+                            pass
+
+                        # ── 2026-08-31 最近 N 轮速览注入（L2）：结论/已解决问题不再忘 ──
+                        try:
+                            _recent_digest = _build_recent_turns_digest(_session, max_turns=8)
+                            if _recent_digest:
+                                conversation_history.append({"role": "system", "content": _recent_digest})
+                        except Exception:
+                            pass
+
+                        # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
+                        # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
+                        # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
+                        try:
+                            _focus_text = (user_text or "").strip()
+                            if _focus_text:
+                                _turn_focus = (
+                                    "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
+                                    "请只回答这一条，不要延续或重复你上一轮的输出；"
+                                    "历史对话仅供背景，若与历史相似，以本轮用户消息为准。\n"
+                                    f"用户本轮消息：{_focus_text[:800]}"
+                                )
+                                conversation_history.append({"role": "system", "content": _turn_focus})
+                        except Exception:
+                            pass
 
                         # 2026-08-14: 本轮回合运行基线（心跳计时起点）
                         _session["_turn_start_ts"] = time.time()
@@ -11656,23 +13015,23 @@ async def ws_endpoint(ws: WebSocket):
                                     result = "研究方案生成超时。CNS 级方案涉及大量文献调研，请回复 **继续** 让我完成。"
                                 _session_emit(_session, {"type": "timeout", "content": "research_plan超时(8分钟)", "session_id": _session["id"]})
                         else:
-                            try:
-                                # 绝对超时防护：Windows 上 ssl 握手被网关挂起时
-                                # connect/read 超时可能失效，线程永久卡死。
-                                # 15 分钟上限 → 超时中断 agent 并报错（daemon 线程
-                                # 泄漏不阻塞进程，但避免任务永久挂起）。
-                                result = await asyncio.wait_for(
-                                    loop.run_in_executor(None, _do_run),
-                                    timeout=900
-                                )
-                            except asyncio.TimeoutError:
-                                try:
-                                    if hasattr(_agent, "interrupt"):
-                                        _agent.interrupt()
-                                except Exception:
-                                    pass
-                                result = ""
-                                _session_emit(_session, {"type": "error", "content": "AI 响应超时（15 分钟）。网关连接可能被挂起，请重试或切换模型。", "session_id": _session["id"]})
+                            # 2026-08-27 用户要求：去除 15 分钟绝对超时保护（长任务会被误杀）。
+                            # 不再设置 turn 级绝对上限；服务端仍保留 5 分钟无输出 stall watchdog 兜底。
+                            result = await loop.run_in_executor(None, _do_run)
+
+                        # ── 2026-08-31 L0 结论注册表：本轮结论/修复/失败/决策自动沉淀 + L3 归档索引 ──
+                        try:
+                            from conclusion_store import extract_turn_conclusions, append_conclusions, archive_turn, link_archive
+                            _l0 = extract_turn_conclusions(user_text or "", str(result or ""))
+                            if _l0:
+                                _ids = append_conclusions(_session, _l0)
+                                if _ids:
+                                    _arc = archive_turn(_session, user_text or "", str(result or ""))
+                                    if _arc:
+                                        link_archive(_session, _ids, _arc)
+                                    logger.info(f"[MemOmics] L0 conclusions +{len(_ids)} ids={_ids} (session {_session['id'][:12]})")
+                        except Exception as _l0_err:
+                            logger.warning(f"[MemOmics] L0 conclusions store failed(不阻断): {_l0_err}")
 
                         # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
                         if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
@@ -11876,7 +13235,12 @@ async def ws_endpoint(ws: WebSocket):
                         if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
                             _heartbeat_task.cancel()
                         # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
-                        _schedule_self_check(_session, _agent, loop)
+                        _schedule_self_check(_session, _agent, loop, trigger="turn_end")
+                        # 2026-08-25: 用户回合结束刷新产出资产索引（供 digest 跨轮复用）
+                        try:
+                            _save_assets_index(_session)
+                        except Exception:
+                            pass
                         # state.db 已在运行中实时持久化，无需额外快照
 
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
@@ -12091,6 +13455,22 @@ if __name__ == "__main__":
     except Exception:
         pass
     
+    # 2026-08-25: 非 Windows 首启环境探测 —— 打包模板 environment.json 的
+    # paths.python/paths.r 为空，validate_env.py 会把探测结果回填（Linux/macOS）。
+    # Windows 本机 environment.json 已含完整路径，跳过以免误改本机配置。
+    try:
+        if os.name != "nt":
+            _env_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "..", "scripts", "validate_env.py")
+            if os.path.exists(_env_script):
+                import subprocess as _sp
+                _pr = _sp.run([sys.executable, _env_script],
+                              capture_output=True, text=True, timeout=180)
+                _last = ((_pr.stdout or "").strip().splitlines() or [""])[-1]
+                print(f"[MemOmics] environment discovery exit={_pr.returncode} | {_last}", flush=True)
+    except Exception:
+        pass  # 探测失败不阻塞启动；worker 运行时另有 .libPaths() 探测兜底
+
     print(f"MemOmics WebUI v2 starting on http://127.0.0.1:{port}")
     # 2026-08-08：不再自动打开浏览器（用户要求手动输入地址，
     # 避免每次启动/重启都新开标签页）。请在浏览器手动访问：

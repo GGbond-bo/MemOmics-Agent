@@ -677,6 +677,23 @@ class MemoryStore:
             ).fetchone()
             return row is not None
 
+    def get_asset_id(self, name: str, path: str = "", session_id: str = "") -> int:
+        """asset_id for (name, path, session_id), or 0 when absent."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT asset_id FROM assets WHERE name = ? AND path = ? AND session_id = ? LIMIT 1",
+                (name, path, session_id),
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+    def get_asset_status(self, asset_id: int) -> str:
+        """Current status ('pending'/'confirmed'/'rejected') for an asset id, '' when absent."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT status FROM assets WHERE asset_id = ? LIMIT 1", (asset_id,)
+            ).fetchone()
+            return str(row[0]) if row else ""
+
     def add_asset(
         self,
         name: str,
@@ -762,19 +779,26 @@ class MemoryStore:
                 rows = []
 
             if not rows:
-                # LIKE fallback (single token)
-                like = f"%{query}%"
+                # LIKE fallback (multi-token OR: enhanced queries like
+                # "热图 继续跑" must still hit purpose='热图')
+                like_parts = [t for t in query.split() if t] or [query]
+                like_conds = " OR ".join(
+                    "(a.name LIKE ? OR a.path LIKE ? OR a.purpose LIKE ?)" for _ in like_parts
+                )
+                like_params: list = []
+                for t in like_parts:
+                    like_params += [f"%{t}%", f"%{t}%", f"%{t}%"]
                 rows = self._conn.execute(
                     f"""SELECT a.asset_id, a.name, a.path, a.kind, a.purpose,
                                a.session_id, a.project, a.status, a.source,
                                a.content_hash, a.use_count, a.last_used_at,
                                a.created_at, a.updated_at
                         FROM assets a
-                        WHERE (a.name LIKE ? OR a.path LIKE ? OR a.purpose LIKE ?)
+                        WHERE ({like_conds})
                           {clause}
                         ORDER BY (a.last_used_at IS NULL), a.last_used_at DESC, a.asset_id DESC
                         LIMIT ?""",
-                    [like, like, like] + params + [limit],
+                    like_params + params + [limit],
                 ).fetchall()
 
             return [self._row_to_dict(r) for r in rows]
@@ -797,6 +821,37 @@ class MemoryStore:
                 (asset_id,),
             )
             self._conn.commit()
+
+    def reconcile_assets(self, session_id: str = "", project: str = "") -> dict:
+        """Mark confirmed assets whose file vanished as 'missing' (design §2.1⑥).
+
+        Returns {"checked": n, "missing": n}. Missing assets stay visible to
+        system_prompt_block (rendered with a ⚠️ stale warning) but drop out of
+        the default confirmed search. Never deletes rows — user can restore.
+        """
+        import os as _os
+        clause = "WHERE status='confirmed'"
+        params: list = []
+        if session_id:
+            clause += " AND session_id = ?"
+            params.append(session_id)
+        if project:
+            clause += " AND project = ?"
+            params.append(project)
+        rows = self._conn.execute(
+            f"SELECT asset_id, path FROM assets {clause}", params
+        ).fetchall()
+        missing = 0
+        for aid, path in rows:
+            if path and not _os.path.isfile(path):
+                with self._lock:
+                    self._conn.execute(
+                        "UPDATE assets SET status='missing', updated_at=CURRENT_TIMESTAMP WHERE asset_id=?",
+                        (aid,),
+                    )
+                    self._conn.commit()
+                missing += 1
+        return {"checked": len(rows), "missing": missing}
 
     def list_assets(
         self,

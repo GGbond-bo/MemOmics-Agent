@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (78 skills)
+## 08_报告 - 报告/可视化 (85 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 | academic-figure-skill | 学术级科研绘图（TingxiYu）：8步闭环+29图型+4轮QA，用户脚本检查/优化+专业期刊出图默认；CNS级用nature-figure | academic figure, 学术图, 专业出图, 期刊出图, 脚本优化, publication figure | RED 必触发 |
@@ -266,7 +266,7 @@
 | nature-reviewer | Nature风格投稿前预审（审稿人视角）：原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking；触发词：Nature审稿、预审、投稿前自审、审 | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, review this paper | RED 必触发 |
 | paper-polish | 学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张；触发词：润色、论文润色、去AI腔、中译英、polish | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 像AI写的, 读着像AI, AI写的, polish, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming | RED 必触发 |
 | nature-paper-card | 单篇论文深度拆解卡片（固定01-16节：文献定位/研究问题/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/批判分析/知识连接/可测试研究想法）；触发词：拆解文献、文献拆解、paper  | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, critical analysis of paper, 拆解这篇文献, 拆一下, 帮我拆 | RED 必触发 |
-| nature-reader | 全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读 | 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 帮我读这篇, 帮我读一下, 读一下这篇, 翻译这篇paper, 全文对照, paper translation, read this paper, deep reading, read this | RED 必触发 |
+| nature-reader | 全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读（2026-08-24：用户指定读文献优先本 skill，补充口语触发词） | 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 帮我读这篇, 帮我读一下, 读一下这篇, 翻译这篇paper, 全文对照, paper translation, read this paper, deep reading, read this, 精读这篇文献, 精读这篇文章, 精读这篇论文, 帮我读这篇文献, 帮我读这篇文章, 读这篇文献, 读这篇文章, 这篇文献讲了什么, 这篇文章讲了什么, 概括这篇文章, 概括这篇, 核心要点, 评价这篇文章, 怎么评价这篇文章, CNS编辑, 专业解读, 解读这篇文献, 解读这篇文章, 专业编辑, 编辑的角度, 总结这篇文献, 总结一下这篇文献, 总结这篇论文, 总结一下这篇论文, 总结一下文献库里, 文献库里这篇论文 | RED 必触发 |
 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-rea |  | YEL 讨论触发 |
 | celltype-proportion-comparison | 细胞类型/亚群比例跨组比较箱线图全流程（配对前后 + 独立跨组）。触发词："亚群比例"、"L3 boxplot"、"Proportion (%)"、"6组箱线图"、"FDR标注"、"p值标注"、"画哪 |  | YEL 讨论触发 |
 | platform-execution-pitfalls | MemOmics 平台执行层（execute_r/execute_code/skill_view/rail_review 交互）的实测坑与规避。触发：execute_r 报 could not fin |  | YEL 讨论触发 |
@@ -275,6 +275,13 @@
 | pre-submission-reviewer | 投稿前审查：以审稿人视角在投稿截止前对论文做五维全面体检（宏观逻辑/写作细节/英语语法/LaTeX格式/图表质量），CRITICAL/MAJOR/MINOR 分级 + 逐条改写建议 + AI腔禁用词与 | 投稿前审查, 投稿前检查, 投前审, 查草稿, 检查草稿, 投稿前体检, 找问题, proofread, check the draft, find issues, 语法检查, 图表质量, AI腔 | RED 必触发 |
 | figure-designer | 论文图设计顾问：对三张核心图（Motivated Example动机图/解决方案总览图/实验结果图）给设计范式、布局草图、标注指南、工具选型与QC审计建议。只给设计建议、不实际出图。触发词：设计图、图 | 设计图, 图设计, 图不好看, 图不专业, 选什么图, 图型选择, 布局建议, 图布局, 作图建议, 设计一张图, figure design, design a figure, choose the right chart, figure looks unprofessional, plot design | RED 必触发 |
 | metascape-gene-list-prep | > |  | YEL 讨论触发 |
+| professional-paper-interpretation | 专业编辑视角论文解读：叙事逻辑分析 + 研究思路拆解 + 结构化写作逻辑。区别于 paper-summary 的字段导向提取，本 skill 侧重'作者为什么这样做、逻辑链是什么、文章怎么组织的'。触 |  | YEL 讨论触发 |
+| cross-species-annotation | 跨物种单细胞RNA-seq细胞类型注释方法 |  | YEL 讨论触发 |
+| cross-species-atac-annotation | > |  | YEL 讨论触发 |
+| dnbc4tools-index-building | 华大BGI DNBelab C系列高通量单细胞数据分析软件 dnbc4tools 的参考基因组索引构建流程（rna mkref=STAR 2.7.2b genomeGenerate + atac mk |  | YEL 讨论触发 |
+| dnbc4tools-analysis-workflow | > |  | YEL 讨论触发 |
+| deg-mixed-design | 混合设计差异表达分析（组间独立比较 + 组内配对/重复测量）。使用场景：多组（如 Young/Old/T2D）× 运动前后取样的 scRNA/bulk 数据，需同时算组间主效应、配对时间效应与组×时间 |  | YEL 讨论触发 |
+| mixed-design-deg | 混合设计差异表达分析（组间独立比较 + 组内配对比较同存）：24 donors × 2 时间点的 aging/糖尿病/运动前后 DEG。pseudo-bulk + dream LMM (1|donor |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 
@@ -314,7 +321,7 @@
 | 11 | unsupervised_celltype_transfer_between_scRNA_datasets | Transfer cell type labels from an annotated reference scRNA-seq dataset to an unannotated query data | multi_omics, multi-omics, rgcca | YEL 讨论触发 |
 ---
 
-## 11_文献搜索 - 文献/数据库 (61 skills)
+## 11_文献搜索 - 文献/数据库 (62 skills)
 
 
 | # | Skill | Description | Keywords | Trigger |
@@ -382,6 +389,7 @@
 ---
 | 61 | research-plan | Mermaid技术路线图+模块映射表生成 | 技术路线, 分析路线, 研究方案, research plan | RED 必触发 |
 
+| translate-book | 整本书/大段内容翻译：PDF/DOCX/EPUB 整书输入，并行子代理逐 chunk 翻译（默认译中文），术语表保证专名一致，输出 HTML/DOCX/EPUB/PDF 保留排版 | 翻译整本书, 整书翻译, 翻译这本书, 把这本书翻译, 翻译大段, 大段内容翻译, translate book, translate the book, translate this book, book translation | RED 必触发 |
 ## 12_分子生物学 - 分子克隆 (21 skills)
 
 

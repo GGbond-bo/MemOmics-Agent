@@ -128,11 +128,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chat-header .model-badge { font-size:12px; padding:3px 10px; border-radius:10px; background:var(--primary-light); color:var(--primary); }
 .chat-header .status { font-size:12px; color:var(--success); display:flex; align-items:center; gap:6px; }
 .chat-header .status .dot { width:8px; height:8px; border-radius:50%; background:var(--success); }
-.chat-messages { flex:1; overflow-y:auto; padding:20px; }
+.chat-messages { flex:1; overflow-y:auto; padding:20px; max-width:90%; width:100%; margin:0 auto; }
 
 /* 消息样式 */
-.message { margin-bottom:16px; max-width:88%; }
-.message.user { margin-left:auto; }
+.message { margin-bottom:16px; max-width:100%; }  /* 回答内容占满 90% 列，右侧同样留 5% */
+.message.user { margin-left:auto; max-width:85%; }
 .message.user .bubble { background:var(--primary); color:#fff; }
 .message.assistant .bubble { background:var(--panel); border:1px solid var(--border); }
 .message .bubble { padding:12px 16px 28px 16px; border-radius:12px; font-size:14px; line-height:1.7; white-space:pre-wrap; word-break:break-word; position:relative; }
@@ -210,13 +210,26 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
 /* Mermaid 图表 */
 /* Mermaid 图表 */
-.mermaid { margin:12px 0; padding:16px; background:#fafafa; border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
+.mermaid { margin:12px 0; padding:16px; background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow-x:auto; text-align:center; }
 .mermaid svg { max-width:100%; height:auto; }
+.mermaid-copy {
+  display: block;
+  margin: 10px 0 0 auto;
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-light);
+  font-size: 11px;
+  cursor: pointer;
+}
 .mermaid-error { margin:12px 0; padding:16px; background:#fff5f5; border:1px solid #ffcdd2; border-radius:8px; color:#c62828; font-size:13px; white-space:pre-wrap; }
 .mermaid-error pre { margin:8px 0 0 0; padding:8px; background:#fff; border-radius:4px; overflow-x:auto; font-size:12px; color:#333; white-space:pre-wrap; }
 
 /* 输入区 */
 .chat-input { padding:12px 20px; border-top:1px solid var(--border); }
+/* 2026-08-31: 输入框与聊天气泡同列居中（对齐 DSH 中间内容列） */
+.chat-input .input-row, .chat-input .input-info, .chat-input .input-grip { max-width:90%; margin:0 auto; }
 .chat-input .input-row { display:flex; gap:8px; align-items:flex-end; }
 .chat-input .input-grip { height:12px; cursor:ns-resize; display:flex; align-items:center; justify-content:center; font-size:9px; letter-spacing:3px; color:var(--text-light); user-select:none; margin-bottom:2px; transition:background 0.15s,color 0.15s; }
 .chat-input .input-grip::before { content:'⋮⋮'; }
@@ -574,6 +587,37 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+.code-streaming {
+  border-style: dashed;
+  opacity: 0.94;
+}
+.msg-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.msg-tools {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--text-light);
+}
+.msg-tools .tool-names {
+  display: none;
+}
+.msg-meta.open .tool-names {
+  display: inline;
+}
+.session-stats {
+  margin: 8px 12px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-light);
+  background: rgba(128, 128, 128, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  line-height: 1.6;
+}
+.code-block table, .code-block th, .code-block td { border: none; }
 .code-copy {
   background: transparent;
   border: 1px solid var(--border, #556);
@@ -990,6 +1034,25 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         </div>
         <button class="save-btn" onclick="saveModel()" data-i18n="set_as_current">设为当前模型</button>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+        <!-- 自定义提供商（2026-08-27：任意 OpenAI 兼容端点 + 自动发现模型） -->
+        <div class="settings-group">
+          <label>⭐ 自定义提供商（输入 URL + Key，自动发现模型）</label>
+          <div id="custom-providers-list" style="font-size:11px;margin-bottom:8px;"></div>
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="cp-name" placeholder="名称（可自动填）" style="flex:1;min-width:100px;font-size:12px;">
+            <input type="text" id="cp-url" placeholder="URL: https://opencode.ai/zen/go/v1 或完整 …/v1/chat/completions" style="flex:3;min-width:200px;font-size:12px;">
+          </div>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <input type="password" id="cp-api-key" placeholder="API Key" style="flex:2;min-width:150px;font-size:12px;">
+            <button onclick="discoverCustomModels()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">🔍 发现模型</button>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <input type="text" id="cp-models" placeholder="模型名，逗号分隔（点「发现模型」自动填充，可再手动增删）" style="flex:3;min-width:180px;font-size:12px;">
+            <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--success);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加</button>
+          </div>
+          <div id="cp-status" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
+        </div>
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
         <!-- 图像生成配置 -->
         <div class="settings-group">
           <label>🖼️ 图像生成 (聊天里说「画一张…」即可用)</label>
@@ -1292,7 +1355,7 @@ function handleMessage(msg) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.partial_text;
-      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
     if (progressTimelineEl || progressItems.length > 0) {
@@ -1379,14 +1442,9 @@ function handleMessage(msg) {
       fullText += (msg.content || '');
     }
     if (currentBubble) {
-      // 防跳动：用户在上方阅读时，重渲染后补偿滚动位置，保证阅读点不漂移
-      var _msgs = document.getElementById('messages');
-      var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
-      currentBubble.innerHTML = renderMarkdown(fullText);
-      // Mermaid 内容未变化时不重绘，避免闪烁
-      var _mermaidSrc = (fullText.match(/```mermaid[\s\S]*?```/g) || []).join('');
-      if (_mermaidSrc !== _lastMermaidHash) { if (typeof initMermaid === 'function') initMermaid(); _lastMermaidHash = _mermaidSrc; }
-      if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
+      // 2026-08-27 防闪烁：节流合并（150ms），不再每个 token 重建 DOM；
+      // 滚动补偿逻辑移到 _doStreamRender 内（渲染时才测量，避免中间态跳动）
+      _scheduleStreamRender();
     }
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
@@ -1490,11 +1548,11 @@ function handleMessage(msg) {
     }
   } else if (msg.type === 'complete') {
     var completeContent = msg.content || '';
-    if (currentBubble && !fullText) { fullText = completeContent; currentBubble.innerHTML = renderMarkdown(fullText); initMermaid(); }
-    else if (currentBubble && completeContent && completeContent.length > fullText.length) {
-      // 切换恢复场景：complete 是最终完整内容，补全切走期间丢失的流式 delta
-      fullText = completeContent;
-      currentBubble.innerHTML = renderMarkdown(fullText); initMermaid();
+    if (currentBubble) {
+      // 2026-08-27：统一走 flush（节流定时器若还在，先清掉并立即渲染最终稿）
+      if (completeContent && completeContent.length > fullText.length) fullText = completeContent;
+      if (!fullText) fullText = completeContent;
+      _flushStreamRender();
     }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
@@ -1850,15 +1908,56 @@ function addUserMsg(text, imageUrls) {
   scrollBottom();
 }
 
-function addAssistantMsg(text) {
+function addAssistantMsg(text, meta) {
   text = text || '';
+  // 2026-08-31: 自检唤醒输出 [系统唤醒]… 不渲染成对话气泡（防重复回答刷屏）
+  if (typeof _isInjectMsg === 'function' && _isInjectMsg({content: text})) return null;
   var div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
-  initMermaid();
+  // 2026-08-23: 消息页脚（耗时/工具调用数，刷新后从历史元数据恢复显示）
+  var foot = '';
+  if (meta && (meta.elapsed !== undefined || meta.tool_count)) {
+    var parts = [];
+    if (meta.elapsed !== undefined && meta.elapsed !== null) parts.push('⏱ ' + _fmtDur(meta.elapsed));
+    if (meta.tool_count) {
+      var tnHtml = (meta.tool_names || []).map(_toolLabel).join('、');
+      parts.push('<span class="msg-tools" title="点击查看" onclick="this.parentNode.classList.toggle(\'open\')">🛠 ' + meta.tool_count + ' 次工具调用<span class="tool-names">（' + tnHtml + '）</span></span>');
+    }
+    foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
+  }
+  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
+  // 2026-08-23 修复：initMermaid 必须在节点入 DOM 之后调用——
+  // 之前先调用再 append，querySelectorAll 找不到 → 历史加载（刷新）的 mermaid 永不渲染
+  initMermaid();
   scrollBottom();
   return div;
+}
+
+// === 会话统计条（token/成本；刷新后从历史 API 的 stats 渲染） ===
+function renderSessionStats(stats) {
+  if (!stats || (!stats.input_tokens && !stats.output_tokens)) return;
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var el = document.getElementById('session-stats');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'session-stats';
+    el.className = 'session-stats';
+    box.insertBefore(el, box.firstChild);
+  }
+  var cost = stats.estimated_cost_usd ? ' · 约 $' + stats.estimated_cost_usd : '';
+  el.innerHTML = '📊 本会话：输入 <b>' + _fmtTokens(stats.input_tokens) + '</b> · 输出 <b>' + _fmtTokens(stats.output_tokens) + '</b> · ' + stats.api_calls + ' 次 API 调用' + cost;
+}
+
+// === 工具名显示映射 + token 格式化（2026-08-23） ===
+var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库' };
+function _toolLabel(n) { return _toolLabels[n] || n; }
+function _fmtTokens(n) {
+  n = n || 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
 }
 
 // === 进度时间线 ===
@@ -2271,6 +2370,149 @@ function scrollBottom() {
   m.scrollTop = m.scrollHeight;
 }
 
+// === 流式渲染节流（2026-08-27 防页面颤抖/闪烁） ===
+// 每个 delta 都整格 innerHTML 重建会在 token 级触发布局抖动；
+// 改为 150ms 节流合并渲染，滚动也只补偿一次，阅读体验更稳。
+var _streamRenderTimer = null;
+var _streamRenderPending = false;
+function _doStreamRender() {
+  if (!currentBubble) return;
+  var _msgs = document.getElementById('messages');
+  var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
+  renderBubbleIncremental(currentBubble, fullText);
+  if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
+}
+function _scheduleStreamRender() {
+  var _bubble = currentBubble;  // 捕获当前气泡，防止会话切换后旧定时器误渲染到新气泡
+  clearTimeout(_streamRenderTimer);
+  _streamRenderTimer = setTimeout(function() {
+    _streamRenderPending = false;
+    if (currentBubble !== _bubble) return;
+    _doStreamRender();
+  }, 150);
+}
+function _flushStreamRender() {
+  if (_streamRenderTimer) clearTimeout(_streamRenderTimer);
+  _streamRenderPending = false;
+  _doStreamRender();
+}
+
+// === 块级增量渲染（2026-08-27，对齐 DSH MarkdownText 思路） ===
+// DSH 做法：React 单实例 + 增量 markdown 渲染器，未变化块不重建 DOM；
+// 这里用 vanilla JS 等价实现：把消息拆成 text/code/mermaid/dsh-ui 块，
+// 已完成块复用节点，只重渲染发生变化的尾部块 —— 从根本上消除整体闪烁。
+function splitMsgBlocks(text) {
+  var segs = [];
+  if (!text) return segs;
+  var fences = extractFenceBlocks(text);
+  var parts = fences.text.split(/\x00BLOCK(\d+)\x00/);
+  for (var i = 0; i < parts.length; i += 2) {
+    var tp = parts[i];
+    if (tp && tp.length) segs.push({ kind: 'text', raw: tp });
+    if (i + 1 < parts.length) {
+      var fi = parseInt(parts[i + 1], 10);
+      var fb = fences.blocks[fi];
+      if (!fb) continue;
+      var kind = fb.lang === 'mermaid' ? 'mermaid' : (fb.lang === 'dsh-ui' ? 'dsh-ui' : 'code');
+      var raw = '\u0060\u0060\u0060' + (fb.lang || '') + '\n' + fb.code + (fb.complete ? '\n\u0060\u0060\u0060' : '');
+      segs.push({ kind: kind, raw: raw, closed: !!fb.complete, lang: fb.lang || '', code: fb.code, fence: fb });
+    }
+  }
+  return segs;
+}
+function renderTextSegment(text) {
+  if (!text) return '';
+  var html = escapeHtml(text);
+  html = html.replace(/\u0060([^\u0060]+)\u0060/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
+    var lines = block.split('\n');
+    var rows = [];
+    for (var i2 = 0; i2 < lines.length; i2++) {
+      var line = lines[i2].trim();
+      if (!line || line.charAt(0) !== '|') continue;
+      var cells = line.split('|');
+      if (cells.length && cells[0].trim() === '') cells.shift();
+      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+      if (cells.length < 2) continue;
+      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
+      rows.push(cells);
+    }
+    if (rows.length === 0) return block;
+    var t = '<table><thead><tr>';
+    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
+    t += '</tr></thead><tbody>';
+    for (var r2 = 1; r2 < rows.length; r2++) {
+      t += '<tr>';
+      for (var c2 = 0; c2 < rows[r2].length; c2++) t += '<td>' + rows[r2][c2].trim() + '</td>';
+      t += '</tr>';
+    }
+    return t + '</tbody></table>';
+  });
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+function renderSegmentHtml(seg) {
+  if (seg.kind === 'code') return renderCodeBlockHtml(seg.fence, seg.lang);
+  if (seg.kind === 'mermaid') return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(seg.code) + '</div>';
+  if (seg.kind === 'dsh-ui') {
+    if (seg.closed) return renderGenUiBlock(seg.code);
+    return renderCodeBlockHtml(seg.fence, 'dsh-ui');
+  }
+  return renderTextSegment(seg.raw);
+}
+function renderBubbleIncremental(bubble, text) {
+  if (!bubble) return;
+  var state = bubble._incr;
+  if (!state) {
+    state = { segs: [], content: null, mermaidDirty: false };
+    bubble._incr = state;
+  }
+  if (!state.content || !state.content.isConnected) {
+    state.content = document.createElement('div');
+    state.content.className = 'md-incremental-body';
+    bubble.appendChild(state.content);
+    state.segs = [];
+  }
+  // 与 renderMarkdown 一致的长文本截断 + 换行归一
+  if (text && text.length > 15000) {
+    var cut = 15000;
+    var head = text.substring(0, 15000);
+    var ticks = (head.match(/\u0060\u0060\u0060/g) || []).length;
+    if (ticks % 2 === 1) {
+      var lastTick = head.lastIndexOf('\u0060\u0060\u0060');
+      if (lastTick >= 11000) cut = lastTick;
+    }
+    text = text.substring(0, cut) + '\n\n...';
+  }
+  if (text) text = text.replace(/\r\n?/g, '\n');
+  var segs = splitMsgBlocks(text);
+  var common = 0;
+  while (common < state.segs.length && common < segs.length &&
+         state.segs[common].kind === segs[common].kind &&
+         state.segs[common].raw === segs[common].raw) common++;
+  for (var r = state.segs.length - 1; r >= common; r--) {
+    var oldNode = state.segs[r].node;
+    if (oldNode && oldNode.parentNode) oldNode.parentNode.removeChild(oldNode);
+  }
+  for (var j = common; j < segs.length; j++) {
+    var node = document.createElement('div');
+    node.className = 'md-seg md-seg-' + segs[j].kind + (segs[j].closed === false ? ' md-seg-streaming' : '');
+    node.innerHTML = renderSegmentHtml(segs[j]);
+    state.content.appendChild(node);
+    segs[j].node = node;
+    if (segs[j].kind === 'mermaid') state.mermaidDirty = true;
+  }
+  state.segs = segs;
+  if (state.mermaidDirty) {
+    state.mermaidDirty = false;
+    if (typeof initMermaid === 'function') initMermaid();
+  }
+}
+
 function escapeHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2278,68 +2520,163 @@ function escapeHtml(s) {
 
 function renderMarkdown(text) {
   if (!text) return '';
-  // 长文本截断：防止正则回溯卡死整页
-  if (text.length > 15000) text = text.substring(0, 15000) + '\n\n...';
+  // 长文本截断：防止正则回溯卡死整页；fence 感知——不把代码块/mermaid 腰斩
+  if (text.length > 15000) {
+    var cut = 15000;
+    var head = text.substring(0, 15000);
+    var _ticks = (head.match(/```/g) || []).length;
+    if (_ticks % 2 === 1) {
+      var _lastTick = head.lastIndexOf('```');
+      if (_lastTick >= 11000) cut = _lastTick;
+    }
+    text = text.substring(0, cut) + '\n\n...';
+  }
   // 统一换行符：CRLF (\r\n) / 单独 \r → \n
-  // 否则后续正则用 \n 匹配时，Windows 风格的 LLM 输出会全部失配
   text = text.replace(/\r\n?/g, '\n');
-  // GenUI (dsh-ui) 块优先提取（在 escapeHtml 之前，保留原始 JSON；先于 mermaid 提取避免干扰）
-  var genUiBlocks = [];
-  var gtick = (text.match(/```/g) || []).length;
-  if (gtick >= 2 && gtick % 2 === 0) {
-    text = text.replace(/```dsh-ui\n([\s\S]*?)```/g, function(m, code) {
-      genUiBlocks.push(code.trim());
-      return '\x00GENUI' + (genUiBlocks.length - 1) + '\x00';
-    });
+  // 统一 fence 扫描（配对 + 流式未闭合预览），按语言分类
+  var fences = extractFenceBlocks(text);
+  var genUiBlocks = [], mermaidBlocks = [], codeBlocks = [];
+  for (var fi = 0; fi < fences.blocks.length; fi++) {
+    var fb = fences.blocks[fi];
+    var flang = (fb.lang || '').toLowerCase();
+    var fidx;
+    if (flang === 'dsh-ui') { fidx = genUiBlocks.length; genUiBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00GENUI' + fidx + '\x00'); }
+    else if (flang === 'mermaid') { fidx = mermaidBlocks.length; mermaidBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00MERMAID' + fidx + '\x00'); }
+    else { fidx = codeBlocks.length; codeBlocks.push(fb); fences.text = fences.text.split('\x00BLOCK' + fi + '\x00').join('\x00CODE' + fidx + '\x00'); }
   }
-  // Mermaid 块优先提取（在 escapeHtml 之前，保留原始语法）
-  var mermaidBlocks = [];
-  var tickCount = (text.match(/```/g) || []).length;
-  if (tickCount >= 2 && tickCount % 2 === 0) {
-    text = text.replace(/```mermaid\n([\s\S]*?)```/g, function(m, code) {
-      mermaidBlocks.push(code.trim());
-      return '\x00MERMAID' + (mermaidBlocks.length - 1) + '\x00';
-    });
-  }
-  var html = escapeHtml(text);
-  // 代码块处理
-  tickCount = (html.match(/```/g) || []).length;
-  if (tickCount >= 2 && tickCount % 2 === 0) {
-    var blocks = [];
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
-      blocks.push('<div class="code-block"><div class="code-head"><span class="code-lang">' + (lang || 'code') + '</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + code + '</code></pre></div>');
-      return '\x00CODE' + (blocks.length - 1) + '\x00';
-    });
-  }
+  var html = escapeHtml(fences.text);
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  html = html.replace(/^\|(.+)\|$/gm, function(m) {
-    var cells = m.split('|').filter(function(c) { return c.trim(); });
-    if (cells.length < 2) return m;
-    var isSep = cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); });
-    if (isSep) return '';
-    var tds = cells.map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('');
-    return '<table><tr>' + tds + '</tr></table>';
+  // 表格：连续 | 行块合并为一张表（首行 <th> 表头，分隔行忽略）——修复表头与内容错位
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
+    var lines = block.split('\n');
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.charAt(0) !== '|') continue;
+      var cells = line.split('|');
+      if (cells.length && cells[0].trim() === '') cells.shift();
+      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+      if (cells.length < 2) continue;
+      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
+      rows.push(cells);
+    }
+    if (rows.length === 0) return block;
+    var t = '<table><thead><tr>';
+    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
+    t += '</tr></thead><tbody>';
+    for (var r = 1; r < rows.length; r++) {
+      t += '<tr>';
+      for (var c = 0; c < rows[r].length; c++) t += '<td>' + rows[r][c].trim() + '</td>';
+      t += '</tr>';
+    }
+    return t + '</tbody></table>';
   });
-  html = html.replace(/<\/table>\n<table>/g, '');
-  // 先把 \n → <br>（此时 Mermaid/CODE 块仍是占位符，不受影响）
+  // 先把 \n → <br>（此时 MERMAID/GENUI/CODE 块仍是占位符，不受影响）
   html = html.replace(/\n/g, '<br>');
-  // 恢复 Mermaid 块 → 占位 div，随后 initMermaid 异步渲染
+  // 恢复 Mermaid 块（闭合 → 图表占位 div；未闭合流式 → 代码块预览）
   html = html.replace(/\x00MERMAID(\d+)\x00/g, function(m, idx) {
-    return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(mermaidBlocks[parseInt(idx)]) + '</div>';
+    var b = mermaidBlocks[parseInt(idx)];
+    if (!b) return '';
+    if (!b.complete) return renderCodeBlockHtml(b, 'mermaid');
+    return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + escapeHtml(b.code) + '</div>';
   });
-  // 恢复 GenUI 块 → 渲染为组件（静态渲染，无 action 回传）
+  // 恢复 GenUI 块（闭合 → 组件；未闭合/解析失败 → 代码块预览）
   html = html.replace(/\x00GENUI(\d+)\x00/g, function(m, idx) {
-    return renderGenUiBlock(genUiBlocks[parseInt(idx)] || '');
+    var b = genUiBlocks[parseInt(idx)];
+    if (!b || !b.complete) return b ? renderCodeBlockHtml(b, 'dsh-ui') : '';
+    return renderGenUiBlock(b.code);
   });
   // 恢复代码块（<pre> 保留原始 \n，正常显示换行）
   html = html.replace(/\x00CODE(\d+)\x00/g, function(m, idx) {
-    return blocks[parseInt(idx)] || '';
+    var b = codeBlocks[parseInt(idx)];
+    return b ? renderCodeBlockHtml(b, b.lang || 'code') : '';
   });
+  // 代码高亮（懒加载；未闭合的流式代码块跳过，写完再高亮）
+  if (typeof document !== 'undefined' && typeof setTimeout !== 'undefined') {
+    setTimeout(initHighlight, 0);
+  }
   return html;
+}
+
+// === fence 配对提取（流式兼容：未闭合的最后一个块作为预览） ===
+function extractFenceBlocks(text) {
+  var fenceRe = /```([\w+-]*)[ \t]*\r?\n?/g;
+  var blocks = [], out = '', last = 0, m, open = null;
+  while ((m = fenceRe.exec(text)) !== null) {
+    if (open === null) {
+      out += text.substring(last, m.index);
+      open = { lang: m[1], contentStart: fenceRe.lastIndex };
+    } else {
+      var content = text.substring(open.contentStart, m.index);
+      if (content.charAt(content.length - 1) === '\n') content = content.slice(0, -1);
+      blocks.push({ lang: open.lang, code: content, complete: true });
+      out += '\x00BLOCK' + (blocks.length - 1) + '\x00';
+      open = null;
+      last = fenceRe.lastIndex;
+    }
+  }
+  if (open !== null) {
+    var c2 = text.substring(open.contentStart);
+    if (c2.charAt(c2.length - 1) === '\n') c2 = c2.slice(0, -1);
+    blocks.push({ lang: open.lang, code: c2, complete: false });
+    out += '\x00BLOCK' + (blocks.length - 1) + '\x00';
+  } else {
+    out += text.substring(last);
+  }
+  return { text: out, blocks: blocks };
+}
+
+// === 代码块 HTML（闭合 = 可复制+高亮；未闭合 = 流式预览标记） ===
+function renderCodeBlockHtml(b, lang) {
+  var note = b.complete ? '' : '<span style="color:var(--warning);font-weight:600;margin-right:8px;">⏳ 生成中…</span>';
+  return '<div class="code-block' + (b.complete ? '' : ' code-streaming') + '"><div class="code-head"><span class="code-lang">' + escapeHtml(lang || 'code') + '</span><span style="margin-left:auto;display:flex;gap:6px;align-items:center;">' + note + '<button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></span></div><pre><code>' + escapeHtml(b.code) + '</code></pre></div>';
+}
+
+// === 代码高亮（本地 vendor 优先 → CDN 回退；与 mermaid 同模式） ===
+var _hljsLoading = false;
+function initHighlight() {
+  var codes = document.querySelectorAll('.code-block pre code:not(.hljs)');
+  if (codes.length === 0) return;
+  if (typeof hljs !== 'undefined') {
+    for (var i = 0; i < codes.length; i++) {
+      try { hljs.highlightElement(codes[i]); } catch (e) {}
+    }
+    return;
+  }
+  if (_hljsLoading) return;
+  _hljsLoading = true;
+  if (!document.getElementById('hljs-theme-css')) {
+    var lk = document.createElement('link');
+    lk.id = 'hljs-theme-css';
+    lk.rel = 'stylesheet';
+    lk.href = '/assets/vendor/highlight-theme-atom-one-dark.css';
+    document.head.appendChild(lk);
+  }
+  var s = document.createElement('script');
+  s.src = '/assets/vendor/highlight.min.js';
+  s.onload = function() {
+    if (typeof hljs === 'undefined') { loadHighlightCdn(); return; }
+    runHighlightAll();
+  };
+  s.onerror = function() { loadHighlightCdn(); };
+  document.head.appendChild(s);
+}
+function loadHighlightCdn() {
+  var s2 = document.createElement('script');
+  s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
+  s2.onload = function() { if (typeof hljs !== 'undefined') runHighlightAll(); };
+  s2.onerror = function() {};
+  document.head.appendChild(s2);
+}
+function runHighlightAll() {
+  var codes = document.querySelectorAll('.code-block pre code:not(.hljs)');
+  for (var i = 0; i < codes.length; i++) {
+    try { hljs.highlightElement(codes[i]); } catch (e) {}
+  }
 }
 
 // === dsh-ui fence 渲染器（GenUI 静态版，2026-08-22 集成；源自 DSH dsh-genui 规范） ===
@@ -2475,9 +2812,56 @@ function guChart(node) {
   }
   return out + '</div>';
 }
+function guFixMermaid(code) {
+  // 2026-08-27 稳定性修复：渲染前归一化常见 Mermaid 语法笔误
+  code = String(code || '').trim();
+  // 2026-09-01 修复：仅对 flowchart/graph 做归一化。原 .replace(/...>/g) 里的
+  // . 是正则通配符（任意字符，不是字面点），会吞掉合法箭头：sequenceDiagram 的
+  // A->>B 被改成 -->>B（丢参与者 → Parse error）、flowchart 虚线 -.-> 被改成 -->。
+  // 对齐 DSH repairMermaidSource 的 kind 守卫：非 flowchart/graph 原样返回。
+  var _k = /^([A-Za-z]+)/.exec(code);
+  if (!_k || (_k[1] !== 'graph' && _k[1] !== 'flowchart')) return code;
+  // ① 三横线箭头（--->）→ 标准 -->（mermaid 无法解析 --->）
+  code = code.replace(/--->/g, '-->');
+  // ② <br/> 统一处理（不同 mermaid 版本支持不一）
+  code = code.replace(/<br\s*\/?>/gi, ' ');
+  // ③ 节点/菱形标签修复：含中文/空格/内嵌引号的未加引号标签 → 清洗内引号并整体加引号（2026-08-31）
+  code = code.replace(/([\[\(])([^\[\]\(\)\{\}\n]*)([\]\)])/g, function(m, a, b, c) {
+    if (b.charAt(0) === '"') return m; // 已加引号
+    var t = b.replace(/"/g, "'");
+    var tt = t.trim();
+    if (!tt) return m;
+    if (t !== b || /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(tt) || /\s/.test(tt)) {
+      return a + '"' + t + '"' + c;
+    }
+    return m;
+  });
+  // 菱形 {…} 同样处理（Mermaid 允许 {"中文"}）
+  code = code.replace(/\{([^}\n]*)\}/g, function(m, b) {
+    if (b.charAt(0) === '"') return m;
+    var t = b.replace(/"/g, "'");
+    var tt = t.trim();
+    if (!tt) return m;
+    if (t !== b || /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(tt) || /\s/.test(tt)) {
+      return '{' + '"' + t + '"' + '}';
+    }
+    return m;
+  });
+  return code;
+}
 function guMermaid(node) {
+  // 2026-08-23: 字段兼容——规范字段 code；兼容 agent 变体 spec/diagram
+  var code = guFixMermaid(node.code || node.spec || node.diagram || '');
+  // 2026-08-24 修复(用户反馈"流程图渲染需要手动刷新")：dsh-ui 内嵌 mermaid 组件
+  // 渲染后必须触发 initMermaid——此前只在 ```mermaid 独立围栏路径触发，dsh-ui JSON
+  // 里的 mermaid div 生成后无人调用 initMermaid，只能靠页面刷新（历史快照恢复）才渲染。
+  // 2026-08-27 双保险：0ms 立即 + 300ms 兜底（应对 DOM 追加/重排竞态，无需手动刷新）。
+  if (typeof document !== 'undefined' && typeof setTimeout !== 'undefined' && code) {
+    setTimeout(function() { if (typeof initMermaid === 'function') initMermaid(); }, 0);
+    setTimeout(function() { if (typeof initMermaid === 'function') initMermaid(); }, 300);
+  }
   // 复用现有 mermaid 渲染管线：生成 .mermaid[data-mermaid] div，initMermaid 会处理
-  return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(node.code || '') + '</div>';
+  return '<div class="mermaid" data-mermaid="' + (mermaidIdx++) + '">' + guEsc(code) + '</div>';
 }
 function guCode(node) {
   return '<div class="code-block"><div class="code-head"><span class="code-lang">' + guEsc(node.lang || 'code') + '</span></div><pre><code>' + guEsc(node.code || '') + '</code></pre></div>';
@@ -2587,12 +2971,116 @@ function guRenderItems(items) {
   return out;
 }
 var guAccSeed = 0;
+
+// 2026-08-24: JSON 宽松修复——字符串内的真实换行/制表符/回车转义为 \n \t \r
+// （agent 常把 mermaid 代码的真实换行直接写进 JSON 字符串 → "Bad control character in string literal"）
+function tryRepairJson(text) {
+  var out = '', inStr = false, i = 0;
+  while (i < text.length) {
+    var ch = text[i];
+    if (inStr) {
+      if (ch === '\\') { out += ch + (text[i + 1] || ''); i += 2; continue; }
+      if (ch === '"') { inStr = false; out += ch; i++; continue; }
+      if (ch === '\n') { out += '\\n'; i++; continue; }
+      if (ch === '\t') { out += '\\t'; i++; continue; }
+      if (ch === '\r') { out += '\\r'; i++; continue; }
+      out += ch; i++;
+    } else {
+      if (ch === '"') inStr = true;
+      out += ch; i++;
+    }
+  }
+  return out;
+}
+// 2026-08-24 修复(memomics-aa368e59): 截断 JSON 自动修复。
+// 服务端超时/中断可能让 dsh-ui 围栏里的 JSON 字符串未闭合(如 ...getMatrixFromProject()\" 截断)，
+// 直接 JSON.parse 报 "Unexpected end of JSON input" → 整块降级代码块。
+// 这里尝试补全未闭合的字符串引号与括号，修复成功则正常渲染 + 灰字提示。
+function guRepairTruncatedJson(specText) {
+  if (typeof specText !== 'string' || !specText) return null;
+  var s = specText;
+  // 去掉围栏残渣/前置说明文本（找第一个 { 或 [ 起点）
+  var start = -1;
+  for (var i = 0; i < s.length; i++) {
+    if (s[i] === '{' || s[i] === '[') { start = i; break; }
+  }
+  if (start < 0) return null;
+  s = s.substring(start);
+  var out = '';
+  var stack = [];
+  var inStr = false;
+  var i2 = 0;
+  while (i2 < s.length) {
+    var ch = s[i2];
+    if (inStr) {
+      out += ch;
+      if (ch === '\\') { if (i2 + 1 < s.length) { out += s[i2 + 1]; i2++; } }
+      else if (ch === '"') inStr = false;
+      i2++;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; i2++; continue; }
+    if (ch === '{' || ch === '[') { stack.push(ch); out += ch; i2++; continue; }
+    if (ch === '}' || ch === ']') {
+      if (stack.length && ((ch === '}' && stack[stack.length - 1] === '{') || (ch === ']' && stack[stack.length - 1] === '['))) {
+        stack.pop(); out += ch;
+      } else {
+        return null; // 括号错配，无法可靠修复
+      }
+      i2++;
+      continue;
+    }
+    out += ch;
+    i2++;
+  }
+  if (inStr) {
+    // 字符串未闭合：若末尾是奇数个连续反斜杠，说明正卡在转义符中间（如 "...getMatrixFromProject()\ 截断），
+    // 先补一个反斜杠把已输出的 \ 变成合法的 \\（字面反斜杠），再补 " 闭合字符串。
+    var backslashes = 0;
+    for (var bi = out.length - 1; bi >= 0 && out[bi] === '\\'; bi--) backslashes++;
+    if (backslashes % 2 === 1) out += '\\';
+    out += '"'; // 补未闭合字符串
+  }
+  while (stack.length) {
+    var open = stack.pop();
+    out += open === '{' ? '}' : ']'; // 补未闭合括号
+  }
+  try {
+    var parsed = JSON.parse(out);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch (e) { /* 修复后仍不合法 → 返回 null 走降级 */ }
+  return null;
+}
 function renderGenUiBlock(specText) {
   var spec;
   try { spec = JSON.parse(specText); } catch (e) {
-    return '<div style="margin:8px 0;padding:8px 12px;background:#fff5f5;border:1px solid #ffcdd2;border-radius:6px;font-size:12px;color:#c62828;">dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String(e.message || e)) + '</div><div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
+    // 2026-08-24: JSON 截断/控制字符 → 链式自动修复：
+    // ① 换行转义（真实换行→\n）② 截断补全（引号/括号）③ 组合。成功则渲染并提示。
+    var repaired = null;
+    var escaped = tryRepairJson(specText);
+    repaired = guRepairTruncatedJson(escaped);
+    if (!repaired) {
+      try { repaired = JSON.parse(escaped); } catch (e3) { repaired = null; }
+    }
+    if (!repaired) { repaired = guRepairTruncatedJson(specText); }
+    if (repaired) {
+      var note = '<div style="margin:8px 0;font-size:11px;color:var(--warning);">⚠ 输出 JSON 不完整，已自动修复渲染（' + guEsc(String((e && e.message) || '')) + '）。建议让 Agent 重新生成完整版。</div>';
+      return note + guRenderGenUiSpec(repaired);
+    }
+    return '<div style="margin:8px 0;font-size:11px;color:var(--text-light);">⚠ dsh-ui JSON 解析失败，已退化为代码块：' + guEsc(String((e && e.message) || e || '未知错误')) + '</div>' +
+      '<div class="code-block"><div class="code-head"><span class="code-lang">dsh-ui</span><button class="code-copy" onclick="copyCodeBlock(this)" title="复制代码">⧉ 复制</button></div><pre><code>' + guEsc(specText) + '</code></pre></div>';
   }
+  return guRenderGenUiSpec(spec);
+}
+function guRenderGenUiSpec(spec) {
   if (!spec || typeof spec !== 'object') return '';
+  // 2026-08-23 容错：顶层没有 items 但 type 是已知组件 → 当作单组件直接渲染
+  // （agent 变体：直接输出 {"type":"mermaid","code":"..."} 而非 {"items":[...]} 包裹）
+  if (!Array.isArray(spec.items) && typeof spec.type === 'string' && guRender(spec) !== '') {
+    var out1 = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
+    if (spec.title) out1 += '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text);">' + guEsc(spec.title) + '</div>';
+    return out1 + guRender(spec) + '</div>';
+  }
   var out = '<div class="genui-root" style="margin:10px 0;padding:12px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;">';
   if (spec.title) out += '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text);">' + guEsc(spec.title) + '</div>';
   out += guRenderItems(spec.items || []);
@@ -2665,7 +3153,9 @@ function initMermaid() {
 }
 
 function mermaidReady(pending) {
-  mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  // 2026-08-23: 主题跟随界面（dark → mermaid dark 主题，其余 default）
+  var isDark = document.documentElement && document.documentElement.getAttribute('data-theme') === 'dark';
+  mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
   _mermaidLoaded = true;
   _mermaidLoading = false;
   // 批量渲染所有排队的节点
@@ -2712,21 +3202,55 @@ function renderMermaidNode(el) {
   } catch(e) {
     code = el.innerText || '';
   }
+  // 2026-08-27 稳定性修复：统一归一化（---> → -->、中文标签加引号）
+  code = guFixMermaid(code);
   if (!code.trim()) { el.removeAttribute('data-mermaid'); return; }
   var mid = el.getAttribute('data-mermaid') || 'mm' + (mermaidIdx++);
   // 确保 ID 不以数字开头（CSS querySelector 不支持 '#123-svg' 这样的选择器）
   if (/^[0-9]/.test(mid)) mid = 'm' + mid;
+  // 2026-08-23: 存原始代码供"复制代码"按钮（全局数组，避免属性转义问题）
+  _mermaidCodeStore.push(code);
+  var cidx = _mermaidCodeStore.length - 1;
   mermaid.render(mid + '-svg', code).then(function(result) {
-    el.innerHTML = result.svg;
+    el.innerHTML = result.svg + '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
     el.removeAttribute('data-mermaid');
   }).catch(function(err) {
-    el.className = 'mermaid-error';
-    var msg = err.message || String(err);
-    // 截取错误信息的前 200 字符
-    if (msg.length > 200) msg = msg.substring(0, 200) + '...';
-    el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>';
-    el.removeAttribute('data-mermaid');
+    // 2026-08-23: 首次失败重试一次（mermaid 初始化竞态容错），仍失败才显示错误
+    if (!el.getAttribute('data-mermaid-retry')) {
+      el.setAttribute('data-mermaid-retry', '1');
+      try {
+        mermaid.render(mid + '-svg', code).then(function(result) {
+          el.innerHTML = result.svg + '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
+          el.removeAttribute('data-mermaid');
+        }).catch(function(err2) { showMermaidError(el, err2, code, cidx); });
+      } catch (e2) { showMermaidError(el, e2, code, cidx); }
+    } else {
+      showMermaidError(el, err, code, cidx);
+    }
   });
+}
+
+// 2026-08-23: 渲染失败的统一降级展示（错误信息 + 原始代码 + 复制按钮）
+function showMermaidError(el, err, code, cidx) {
+  el.className = 'mermaid-error';
+  var msg = (err && err.message) || String(err || '未知错误');
+  if (msg.length > 200) msg = msg.substring(0, 200) + '...';
+  el.innerHTML = '⚠ Mermaid 渲染错误\n<pre>' + escapeHtml(msg) + '</pre><pre>' + escapeHtml(code) + '</pre>' +
+    '<button class="mermaid-copy" onclick="copyMermaidCode(' + cidx + ')" title="复制 Mermaid 代码">⧉ 复制代码</button>';
+  el.removeAttribute('data-mermaid');
+}
+
+// === Mermaid 代码复制（2026-08-23） ===
+var _mermaidCodeStore = [];
+function copyMermaidCode(idx) {
+  var code = _mermaidCodeStore[idx] || '';
+  if (!code) return;
+  function done() { /* 静默成功 */ }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(done).catch(function() { fallbackCopy(code); });
+  } else {
+    fallbackCopy(code);
+  }
 }
 
 // === 会话管理 ===
@@ -3016,14 +3540,30 @@ function renameSession(sid) {
   }).catch(function(e) { console.error('rename failed:', e); });
 }
 
+// 2026-08-26: 服务端注入脚手架前缀（role=user 但带标记，按内容过滤防刷新刷屏）
+var INJECT_PREFIXES = ['[会话要求', '[相关历史记忆', '[会话锚点', '[系统唤醒',
+                       '📊 LoopX 状态', '[System:', '[数据读取配方', '[wakeup-progress-check]'];
+function _isInjectMsg(m) {
+  if (m.role === 'system' || m.role === 'tool') return true;
+  var c = (m.content || '').trim();
+  for (var i = 0; i < INJECT_PREFIXES.length; i++) {
+    if (c.indexOf(INJECT_PREFIXES[i]) === 0) return true;
+  }
+  return false;
+}
+
 function loadAllMessages(sid) {
   fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
     if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
     (d.messages || []).forEach(function(m) {
+      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
+      // 2026-08-26: 增加前缀内容级过滤（[会话要求]/[相关历史记忆] 等 role=user 注入）
+      if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
-      else addAssistantMsg(m.content);
+      else addAssistantMsg(m.content, m);
     });
+    renderSessionStats(d.stats);
   });
 }
 
@@ -3201,15 +3741,19 @@ function switchSession(sid) {
     var msgs = d.messages || [];
     if (!msgs.length && !liveBubble) showNewSessionWelcome();
     msgs.forEach(function(m) {
+      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
+      // 2026-08-26: 前缀内容级过滤（与 loadAllMessages 同 helper）
+      if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
-      else addAssistantMsg(m.content);
+      else addAssistantMsg(m.content, m);
     });
+    renderSessionStats(d.stats);
     if (liveBubble) {
       document.getElementById('messages').appendChild(liveBubble);
       currentAssistantEl = liveBubble;
       currentBubble = liveBubble.querySelector('.bubble');
       fullText = liveText;
-      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 如果还有更多历史消息，显示加载提示
     // 2026-08-17: 返回窗口已满(100)就一定显示入口——旧会话 _msg_count 可能为 0，
@@ -3255,6 +3799,11 @@ function switchSession(sid) {
       setFloatBar(true);
       document.getElementById('steer-hint').style.display = '';
       _currentRunningSid = sid;
+      // 2026-08-23: 刷新后 agent 仍在运行 → 状态条显示最近工具（DSH 式运行指示）
+      if (d.last_tool) {
+        var _ls = _ensureLiveStatus();
+        if (_ls) _ls.textContent = '🔄 运行中 · 最近工具: ' + _toolLabel(d.last_tool) + ' · 详情见上方进度';
+      }
     }
   }).catch(function(e) {
     // 静默失败 — WS 的 progress_replay 可能已经处理了
@@ -3440,7 +3989,8 @@ async function loadModels() {
       } else if (ad.done && ad.status === 'update_available') {
         updateStatusDot('🔄 有更新', 'var(--warning)');
       } else if (ad.done && ad.status === 'local_ahead') {
-        updateStatusDot('本地最新', 'var(--primary)');
+        // 2026-08-26: 开发版不误导为"本地最新"——远端可能有新发布，开发仓库走 git 更新
+        updateStatusDot('开发版', 'var(--primary)');
       } else if (ad.done && ad.status === 'up_to_date') {
         updateStatusDot('已是最新', 'var(--success)');
       } else if (ad.done && ad.status === 'error') {
@@ -3505,7 +4055,96 @@ async function loadProviders() {
     if (pSel && currentModel.provider) pSel.value = currentModel.provider;
     await refreshConnectedModels();
     await refreshModelUI();
+    loadCustomProviders();  // 2026-08-27: 自定义提供商列表
   } catch(e) { console.error('loadProviders error', e); }
+}
+
+// === 自定义提供商（2026-08-27）===
+async function loadCustomProviders() {
+  try {
+    var r = await fetch('/api/providers/custom', { cache: 'no-store' });
+    var d = await r.json();
+    var el = document.getElementById('custom-providers-list');
+    if (!el) return;
+    var list = d.providers || [];
+    if (!list.length) { el.innerHTML = '<span style="color:var(--text-light);">暂无自定义提供商</span>'; return; }
+    var html = '';
+    list.forEach(function(p) {
+      html += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-bottom:6px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
+        '<b>' + escapeHtml(p.name) + '</b>' +
+        '<button onclick="deleteCustomProvider(\'' + p.id + '\')" title="删除该提供商" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--danger);color:#fff;cursor:pointer;font-size:11px;">删除</button>' +
+        '</div>' +
+        '<div style="color:var(--text-light);margin-top:2px;word-break:break-all;">' + escapeHtml(p.base_url) + '</div>' +
+        '<div style="color:var(--text-light);margin-top:2px;">模型: ' + (p.models || []).map(function(m) { return escapeHtml(m.id || m); }).join(', ') + '</div>' +
+        '<div style="margin-top:2px;">' + (p.has_key ? '🔑 已配置 Key' : '⚠️ 未配置 Key（保存后请在下方下拉中选它补 Key）') + '</div>' +
+        '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { console.error('loadCustomProviders error', e); }
+}
+
+async function addCustomProvider() {
+  var name = document.getElementById('cp-name').value.trim();
+  var base = document.getElementById('cp-url').value.trim();
+  var key = document.getElementById('cp-api-key').value.trim();
+  var models = document.getElementById('cp-models').value.split(/[,，\n]/).map(function(s) { return s.trim(); }).filter(Boolean);
+  var status = document.getElementById('cp-status');
+  if (!name || !base) { status.textContent = '请填写名称和 URL'; status.style.color = 'var(--danger)'; return; }
+  if (!models.length) { status.textContent = '请至少填一个模型名（或先点「🔍 发现模型」）'; status.style.color = 'var(--danger)'; return; }
+  try {
+    var r = await fetch('/api/providers/custom', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, base_url: base, api_key: key, models: models })
+    });
+    var d = await r.json();
+    if (!r.ok) { status.textContent = d.error || '添加失败'; status.style.color = 'var(--danger)'; return; }
+    document.getElementById('cp-name').value = '';
+    document.getElementById('cp-url').value = '';
+    document.getElementById('cp-api-key').value = '';
+    document.getElementById('cp-models').value = '';
+    status.textContent = '已添加 ' + name + '（' + d.provider_id + '）— 可在上方下拉选它设默认模型';
+    status.style.color = 'var(--success)';
+    loadCustomProviders();
+    loadProviders();
+  } catch(e) { status.textContent = '添加失败: ' + e.message; status.style.color = 'var(--danger)'; }
+}
+
+// 2026-08-27: 输入 URL + Key → 自动发现该端点所有模型
+async function discoverCustomModels() {
+  var url = document.getElementById('cp-url').value.trim();
+  var key = document.getElementById('cp-api-key').value.trim();
+  var status = document.getElementById('cp-status');
+  var nameEl = document.getElementById('cp-name');
+  if (!url) { status.textContent = '请先填写 URL'; status.style.color = 'var(--danger)'; return; }
+  if (!nameEl.value.trim()) {
+    try { nameEl.value = new URL(url).hostname; } catch(e) {}
+  }
+  status.textContent = '🔍 正在探测 ' + url + ' 的模型列表…';
+  status.style.color = 'var(--text-light)';
+  try {
+    var r = await fetch('/api/providers/custom/discover', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url, api_key: key })
+    });
+    var d = await r.json();
+    if (!r.ok) { status.textContent = d.error || '发现失败'; status.style.color = 'var(--danger)'; return; }
+    var models = (d.models || []).map(function(m) { return m.id; });
+    document.getElementById('cp-models').value = models.join(', ');
+    status.textContent = '✅ 发现 ' + d.count + ' 个模型（端点 ' + d.url_used + '）— 可手动增删后点「添加」';
+    status.style.color = 'var(--success)';
+  } catch(e) { status.textContent = '发现失败: ' + e.message; status.style.color = 'var(--danger)'; }
+}
+
+async function deleteCustomProvider(pid) {
+  if (!confirm('删除自定义提供商 ' + pid + '？')) return;
+  try {
+    var r = await fetch('/api/providers/custom/' + pid, { method: 'DELETE' });
+    var d = await r.json();
+    if (!r.ok) { alert(d.error || '删除失败'); return; }
+    loadCustomProviders();
+    loadProviders();
+  } catch(e) { alert('删除失败: ' + e.message); }
 }
 
 async function onProviderSelect() {
@@ -7085,12 +7724,24 @@ async function loadMemory() {
 
 async function viewMemoryFile(name) {
   try {
-    var r = await fetch('/api/file/read?path=' + encodeURIComponent('E:/MemOmics-Agent/hermes_home/memories/' + name));
+    // 2026-09-01: 不再拼死路径——从 /api/memory 拿服务端返回的正确 path（跨平台）
+    var pr = await fetch('/api/memory');
+    var pd = await pr.json();
+    var entries = pd.entries || [];
+    var entry = null;
+    for (var i = 0; i < entries.length; i++) { if (entries[i].name === name) { entry = entries[i]; break; } }
+    if (!entry || !entry.path) {
+      document.getElementById('memory-view').innerHTML = '<div style="color:var(--danger);font-size:12px;">文件不存在或已删除: ' + escapeHtml(name) + '</div>';
+      return;
+    }
+    var r = await fetch('/api/file/read?path=' + encodeURIComponent(entry.path));
     var d = await r.json();
     document.getElementById('memory-view').innerHTML =
       '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">' + escapeHtml(name) + ':</div>' +
       '<pre style="background:var(--code-bg);color:var(--code-fg);padding:10px;border-radius:6px;overflow:auto;font-size:11px;max-height:400px;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(d.content || '(空)') + '</pre>';
-  } catch(e) {}
+  } catch(e) {
+    document.getElementById('memory-view').innerHTML = '<div style="color:var(--danger);font-size:12px;">读取失败: ' + escapeHtml(e.message || e) + '</div>';
+  }
 }
 
 async function writeMemory(mode) {
@@ -7742,9 +8393,11 @@ async function checkForUpdate(showAll) {
         updateStatusDot('需手动更新', 'var(--danger)');
       }
     } else if (status === 'local_ahead') {
-      html += '<div style="color:var(--primary);font-weight:600;">📌 本地领先于 GitHub 发布版</div>';
-      html += '<div style="color:var(--text-light);margin-top:4px;">当前是开发版（' + escapeHtml(local.version) + '），GitHub 最新发布是 ' + escapeHtml(remote.tag || '?') + '，无需更新。</div>';
-      updateStatusDot('本地已最新', 'var(--primary)');
+      // 2026-08-26: 开发版明确展示与远端发布版的差异（不误导为"已最新"）
+      html += '<div style="color:var(--primary);font-weight:600;">📌 开发版 · GitHub 已有新发布</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">本地是开发版 <code>' + escapeHtml(local.version) + '</code>，GitHub 最新发布 <code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '。开发仓库请用 git 方式更新（不提供一键覆盖，避免冲掉开发代码）。</div>';
+      html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
+      updateStatusDot('开发版', 'var(--primary)');
     } else {
       html += '<div style="color:var(--danger);font-weight:600;">⚠️ 无法检查更新</div>';
       html += '<div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(d.error || '网络或 GitHub 访问失败，请稍后重试') + '</div>';

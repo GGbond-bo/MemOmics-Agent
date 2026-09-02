@@ -147,9 +147,17 @@ def capture_user_request(
     ):
         return {"entity": entity, "escalated": False}
 
-    # 升级：明确记忆词，或同 entity 诉求此前已出现过（本次为第 2 次）
+    # 2026-08-31 极端评测修复：代码行/长粘贴不是"诉求"——
+    # 实测 134 条 user_request facts 中 14% 是 R 代码原文（"peaks <- getPeakSet(proj)…"）。
+    # 此类文本仍记入 requests_json（近 3 条注入），但不升级为跨会话 facts。
+    _code_like = bool(re.search(r"<-\s*[A-Za-z]|\b(?:library|readRDS|saveRDS|install\.packages|BiocManager)\s*\(",
+                                text)) or text.count("\n") >= 3
+    # 升级：明确记忆词，或同 entity 诉求此前已出现过（本次为第 2 次）——代码样文本除外
     same_entity = [r for r in reqs if r.get("entity") == entity]
-    escalated = bool(_RE_REMEMBER.search(text)) or (bool(entity) and len(same_entity) >= 1)
+    escalated = (
+        not _code_like
+        and (bool(_RE_REMEMBER.search(text)) or (bool(entity) and len(same_entity) >= 1))
+    )
 
     reqs.append({
         "text": text[:200],
@@ -179,11 +187,17 @@ def extract_assets(
     text: str,
     store=None,
     project: str = "",
+    auto_confirm: bool = True,
 ) -> list:
-    """从用户消息提取资产候选（脚本/数据路径），status=pending 入库。
+    """从用户消息提取资产（脚本/数据路径），入库并默认确认。
 
-    规则：盘符路径或常见扩展名 + os.path.isfile 存在性校验。
-    每轮最多 _MAX_ASSETS_PER_TURN 条，防批量误提取。
+    2026-08 落地接线（设计文档 §2.1 ②确认环节）：
+    - 候选 = 盘符路径/常见扩展名 + ``os.path.isfile`` 存在性校验（双保险防假阳性）
+    - 路径由用户消息显式给出且文件真实存在 → 视为用户意图足够强，默认 status=confirmed
+      （不再滞留 pending——此前生产库 25/25 全 pending、confirmed=0，资产清单/检索永远为空）
+    - 每轮最多 _MAX_ASSETS_PER_TURN 条，防批量误提取；
+    - auto_confirm=False 时退回旧行为（status=pending，供需要人工确认的场景/测试）
+    - purpose 用同消息内容实体填充（如"热图"/umap），供 FTS 检索命中
     """
     text = (text or "").strip()
     if not text:
@@ -191,33 +205,62 @@ def extract_assets(
     store = store or _get_store()
     found: list = []
     seen = set()
+    # 同一消息：实体（内容词）作为 purpose 的种子；无实体则留空
+    _purpose_seed = extract_entity(text)
+    # 实体词上的英文同义词归一（umap/tsne 在实体表里已是小写）
+    _purpose = (_purpose_seed or "")[:40]
     for m in _RE_PATH.finditer(text):
         raw = m.group(1)
-        key = raw.lower().rstrip(".,;:，。；、")
-        if key in seen:
+        # 保留原始大小写（Windows 无感、Linux 敏感路径必须原样 isfile；
+        # 此前 raw.lower() 会小写化文件名路径，属缺陷）。去重/比对用 lower 版本。
+        key = raw.rstrip(".,;:，。；、")
+        key_l = key.lower()
+        if key_l in seen:
             continue
-        seen.add(key)
+        seen.add(key_l)
         # 只收存在性校验通过的候选（防 LLM/文本里的假路径）
         if not os.path.isfile(key):
             continue
         ext = os.path.splitext(key)[1].lower()
         kind = _ASSET_KIND_BY_EXT.get(ext, "file")
         name = os.path.basename(key)
-        if store.has_asset(name=name, path=key, session_id=session_id):
+        # 精确 + 大小写变体双查（历史数据曾小写化入库）
+        if store.has_asset(name=name, path=key, session_id=session_id) or store.has_asset(
+            name=name.lower(), path=key.lower(), session_id=session_id
+        ):
+            # 已存在：旧 pending 且自动确认档 → 顺带升级（修复存量断链）
+            try:
+                _aid = store.get_asset_id(name, key, session_id) or store.get_asset_id(
+                    name.lower(), key.lower(), session_id
+                )
+                _st = store.get_asset_status(_aid) if _aid else None
+                if _aid and auto_confirm and _st == "pending":
+                    store.confirm_asset(_aid, "confirmed")
+                if _aid:
+                    store.mark_asset_used(_aid)
+            except Exception:
+                pass
             continue
         store.add_asset(
             name=name,
             path=key,
             kind=kind,
-            purpose="",
+            purpose=_purpose,
             session_id=session_id,
             project=project,
-            status="pending",
+            status="confirmed" if auto_confirm else "pending",
             source="user",
         )
-        found.append({"name": name, "path": key, "kind": kind})
+        found.append({"name": name, "path": key, "kind": kind,
+                      "status": "confirmed" if auto_confirm else "pending"})
         if len(found) >= _MAX_ASSETS_PER_TURN:
             break
+    # 2026-08-31 失效检测（设计 §2.1⑥）：本会话 confirmed 资产文件若已消失 → 标 missing
+    # （仅本会话低频资产，成本可忽略；missing 仍可被 system_prompt_block 渲染 ⚠️ 提示）
+    try:
+        store.reconcile_assets(session_id=session_id)
+    except Exception:
+        pass
     return found
 
 
