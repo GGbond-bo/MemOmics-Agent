@@ -2821,10 +2821,13 @@ function guFixMermaid(code) {
   // 对齐 DSH repairMermaidSource 的 kind 守卫：非 flowchart/graph 原样返回。
   var _k = /^([A-Za-z]+)/.exec(code);
   if (!_k || (_k[1] !== 'graph' && _k[1] !== 'flowchart')) return code;
+  // ② %%{init: ...}%% / %%{init:{...}}%% 指令保护（2026-09-01）：
+  // 指令本身含 {}，会被下方 ③ 菱形加引号逻辑破坏成 %%{"init: ..."}}%% → mermaid 解析失败。
+  // 先占位抽出、全部归一化完成后再还原。
+  var _dirs = [];
+  code = code.replace(/%%\{[\s\S]*?%%/g, function(d) { _dirs.push(d); return '\x00DIR' + (_dirs.length - 1) + '\x00'; });
   // ① 三横线箭头（--->）→ 标准 -->（mermaid 无法解析 --->）
   code = code.replace(/--->/g, '-->');
-  // ② <br/> 统一处理（不同 mermaid 版本支持不一）
-  code = code.replace(/<br\s*\/?>/gi, ' ');
   // ③ 节点/菱形标签修复：含中文/空格/内嵌引号的未加引号标签 → 清洗内引号并整体加引号（2026-08-31）
   code = code.replace(/([\[\(])([^\[\]\(\)\{\}\n]*)([\]\)])/g, function(m, a, b, c) {
     if (b.charAt(0) === '"') return m; // 已加引号
@@ -2847,6 +2850,10 @@ function guFixMermaid(code) {
     }
     return m;
   });
+  // 还原 ② 占位的 %%{init}%% 指令
+  if (_dirs.length) {
+    code = code.replace(/\x00DIR(\d+)\x00/g, function(m, i) { return _dirs[parseInt(i, 10)]; });
+  }
   return code;
 }
 function guMermaid(node) {
