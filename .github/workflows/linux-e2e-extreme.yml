@@ -1,6 +1,6 @@
 # Linux E2E Extreme — 云 runner 最新版全链路 + 多意图多场景极端测试
 #
-# 链路：下载最新发行 update.zip（v2026-08-25）→ 覆盖运行代码（测试文件用仓库版）
+# 链路：下载最新发行 update.zip（v2026-09-01）→ 覆盖运行代码（测试文件用仓库版）
 #      → venv 装依赖 → 装 R → 起真实 server → 各链路冒烟（HTTP/health/update/env/R）
 #      → pytest 极端矩阵（grill 30+ 用例 / wake 重启矩阵 / 执行策略极端套件）
 #      → pytest 全量离线套件 → LLM 真实对话（若配置了 DEEPSEEK_API_KEY secret）
@@ -24,17 +24,18 @@ jobs:
       - name: Checkout (latest tests from repo)
         uses: actions/checkout@v4
 
-      - name: Download latest update package (v2026-08-25)
+      - name: Download latest update package (releases/latest)
         run: |
           curl -fsSL -o upd.zip \
-            https://github.com/GGbond-bo/MemOmics-Agent/releases/download/v2026-08-25/MemOmics-update.zip
+            https://github.com/GGbond-bo/MemOmics-Agent/releases/latest/download/MemOmics-update.zip
           # tar.exe 生成的 zip 会被 Info-ZIP unzip 误判 zip bomb → 用 python zipfile
           python3 -m zipfile -e upd.zip pkg
-          ls pkg/MemOmics-update | head -25
+          # 2026-09-10 批U4: update 包内根目录已改为 MemOmics（与安装目录同名，便于用户解压覆盖）
+          ls pkg/MemOmics | head -25
 
       - name: Overlay latest runtime code (code=update.zip, tests=repo)
         run: |
-          U=pkg/MemOmics-update
+          U=pkg/MemOmics
           rm -rf hermes_home
           cp -rf $U/webui/* webui/
           cp -rf $U/memomics/* memomics/
@@ -53,6 +54,7 @@ jobs:
           .venv/bin/pip install -q --upgrade pip
           .venv/bin/pip install -q -r requirements.txt
           .venv/bin/pip install -q -r requirements-vision.txt
+          .venv/bin/pip install -q -r requirements-analysis.txt
           .venv/bin/pip install -q pytest
           .venv/bin/python -c "import fastapi, scanpy, rapidocr_onnxruntime, pytest; print('deps OK')"
 
