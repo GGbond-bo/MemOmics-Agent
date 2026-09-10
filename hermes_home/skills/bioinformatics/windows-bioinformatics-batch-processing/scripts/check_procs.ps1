@@ -1,4 +1,4 @@
-# check_procs.ps1 — Windows 批处理进程诊断（MemOmics，2026-08-07 唤醒 #4 实测定型）
+﻿# check_procs.ps1 — Windows 批处理进程诊断（MemOmics，2026-08-07 唤醒 #4 实测定型）
 #
 # 用途: 进程状态三源验证失败时的最终裁决器。
 #   git-bash 下 tasklist //FI 可能静默空、Get-Process 会把 bash/cmd 包装算进计数、

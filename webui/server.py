@@ -2824,12 +2824,54 @@ def _save_provider_keys():
     except Exception as e:
         print(f"[WARN] 保存 provider keys 失败: {e}")
 
+# 2026-09-10: 占位符 key 判定 —— 打包模板里的 YOUR_API_KEY_HERE 等绝不能被当成
+# "已配置"。此前首启把占位符同步进 provider_keys.json，导致设置页显示"已保存"、
+# 首次运行向导不弹、聊天直接 401（用户反馈"没有输入 API 的界面"）。
+_PLACEHOLDER_KEY_TOKENS = (
+    "your_api_key", "your-api-key", "yourkey", "your_key", "insert_key",
+    "changeme", "change_me", "replace_me", "placeholder", "sk-xxx", "sk-xxxx",
+    "api_key_here", "在这里", "请填写", "空",
+)
+
+
+def _is_valid_api_key(value) -> bool:
+    """真实可用 key 判定：非空、非占位符、长度像样。"""
+    if not isinstance(value, str):
+        return False
+    s = value.strip()
+    if len(s) < 12:
+        return False
+    low = s.lower()
+    if low in ("none", "null", "undefined", "todo", "xxx", "dummy", "test"):
+        return False
+    if low.startswith(("<", "${")):
+        return False
+    for tok in _PLACEHOLDER_KEY_TOKENS:
+        if tok in low:
+            return False
+    # 全是同一个字符（如 xxxxxxxx）也不是真 key
+    if len(set(s)) <= 3:
+        return False
+    return True
+
+
 def _load_provider_keys():
     global _provider_keys
     try:
         if os.path.exists(_PROVIDER_KEYS_FILE):
             with open(_PROVIDER_KEYS_FILE, "r", encoding="utf-8") as f:
                 _provider_keys = json.load(f)
+        # 自愈：剔除历史被写入的占位符条目（否则设置页永远显示"已保存"）
+        _dropped = [k for k, v in list(_provider_keys.items())
+                    if isinstance(v, dict) and v.get("api_key") and not _is_valid_api_key(v.get("api_key"))]
+        if _dropped:
+            for _k in _dropped:
+                _provider_keys.pop(_k, None)
+            try:
+                _save_provider_keys()
+            except Exception:
+                pass
+            print(f"[MemOmics] 已清理 {len(_dropped)} 个占位符/无效 key 的 provider 条目: {_dropped}")
     except Exception:
         _provider_keys = {}
 
@@ -2960,7 +3002,7 @@ def _sync_debate_env():
         ak = info.get("api_key", "")
         bu = info.get("base_url", "")
         # 优先 deepseek 官方；dcs-cloud 若存在但被跳过
-        if ak and pid.lower() == "deepseek":
+        if ak and _is_valid_api_key(ak) and pid.lower() == "deepseek":
             os.environ["DEEPSEEK_API_KEY"] = ak
             if bu:
                 os.environ["DEEPSEEK_BASE_URL"] = bu.rstrip("/")
@@ -2970,7 +3012,7 @@ def _sync_debate_env():
     for pid, info in _provider_keys.items():
         ak = info.get("api_key", "")
         bu = info.get("base_url", "")
-        if ak and ("dcs" in pid.lower() or "dcs" in bu.lower() or "deepseek" in pid.lower()):
+        if ak and _is_valid_api_key(ak) and ("dcs" in pid.lower() or "dcs" in bu.lower() or "deepseek" in pid.lower()):
             os.environ["DEEPSEEK_API_KEY"] = ak
             if bu:
                 os.environ["DEEPSEEK_BASE_URL"] = bu.rstrip("/")
@@ -2980,7 +3022,7 @@ def _sync_debate_env():
 
 # 启动同步：如果 _current_model 有 key 但 provider_keys 为空，
 # 自动按 base_url 反查 provider 并同步 key，保证交互框下拉框能显示模型
-if _current_model.get("api_key") and not _provider_keys:
+if _is_valid_api_key(_current_model.get("api_key")) and not _provider_keys:
     _cur_base = _current_model.get("base_url", "")
     for _p in _CHINA_PROVIDERS:
         if _p["api"] == _cur_base:
@@ -6708,7 +6750,7 @@ async def put_skills_manage(request: Request):
 def _public_model_config() -> dict:
     """对浏览器脱敏的模型配置：不含 api_key 明文，只带 has_key 状态"""
     cfg = dict(_current_model)
-    cfg["has_key"] = bool(cfg.get("api_key"))
+    cfg["has_key"] = _is_valid_api_key(cfg.get("api_key"))
     cfg.pop("api_key", None)
     return cfg
 
@@ -6855,7 +6897,7 @@ async def list_providers():
             "env_var": p.get("env_var", ""),
             "group": p.get("group", "其他"),
             "model_count": len(p.get("models", [])),
-            "has_key": bool(saved.get("api_key")),
+            "has_key": _is_valid_api_key(saved.get("api_key")),
             "is_custom": p["id"] == "dcs-cloud",
         })
     # 2026-08-27: 用户自定义 provider（custom-*）并入列表
@@ -6868,7 +6910,7 @@ async def list_providers():
             "env_var": "",
             "group": "⭐ 自定义",
             "model_count": len(cp.get("models", [])),
-            "has_key": bool(saved.get("api_key")),
+            "has_key": _is_valid_api_key(saved.get("api_key")),
             "is_custom": True,
         })
     groups = {}
@@ -6976,7 +7018,7 @@ def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None
         "name": name,
         "api_base": api_base,     # MemOmics 自身读取的字段
         "base_url": api_base,     # Hermes 底座/匹配器读取的字段
-        "api_key": api_key,
+        "api_key": api_key if _is_valid_api_key(api_key) else "",
         "models": models,
     })
     try:
@@ -7146,7 +7188,7 @@ async def list_custom_providers():
             "name": p.get("name", pid),
             "base_url": p.get("api", ""),
             "models": p.get("models", []),
-            "has_key": bool(saved.get("api_key")),
+            "has_key": _is_valid_api_key(saved.get("api_key")),
             "key_masked": _mask_key(saved.get("api_key", "")),
             "local": bool(saved.get("local")),
         })
@@ -8042,14 +8084,17 @@ async def update_apply(payload: dict):
 @app.get("/api/setup/status")
 async def setup_status():
     """检查是否需要首次配置"""
-    needs_config = not _current_model.get("api_key") or not _current_model.get("base_url") or not _current_model.get("model")
+    _has_valid_key = _is_valid_api_key(_current_model.get("api_key"))
+    needs_config = (not _has_valid_key
+                    or not _current_model.get("base_url")
+                    or not _current_model.get("model"))
     return {
         "needs_config": needs_config,
         "current": {
             "provider": _current_model.get("provider", "openai"),
             "base_url": _current_model.get("base_url", ""),
             "model": _current_model.get("model", ""),
-            "has_key": bool(_current_model.get("api_key")),
+            "has_key": _has_valid_key,
         }
     }
 
