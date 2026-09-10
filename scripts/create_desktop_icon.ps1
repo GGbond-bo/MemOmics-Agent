@@ -20,7 +20,21 @@ if (-not $desktop -or -not (Test-Path $desktop)) { $desktop = Join-Path $env:USE
 if (-not (Test-Path $desktop)) { exit 0 }
 
 $lnkPath = Join-Path $desktop 'MemOmics.lnk'
-if (Test-Path $lnkPath) { exit 0 }  # 已存在，跳过
+$launcher = Join-Path $root 'scripts\launch_from_desktop.ps1'
+if (Test-Path $lnkPath) {
+    # 2026-09-10 修复：原来"已存在就跳过"，导致旧安装遗留的快捷方式（指向已删除/
+    # 另一个安装目录）永远无法自愈——用户双击图标毫无反应。现在校验指向：
+    #   指向本安装目录 → 尊重现状直接退出；指向别处/失效 → 继续往下重建。
+    $okLnk = $false
+    try {
+        $ws0 = New-Object -ComObject WScript.Shell
+        $sc0 = $ws0.CreateShortcut($lnkPath)
+        if ($sc0.Arguments -like "*launch_from_desktop.ps1*") {
+            $okLnk = ($sc0.Arguments -like "*$root*")
+        }
+    } catch { $okLnk = $false }
+    if ($okLnk) { exit 0 }
+}
 
 # 图标：webui/assets/penguin.png -> 256x256 PNG-in-ICO（持久化到 %LOCALAPPDATA%\MemOmics，
 # 不占用安装目录；temp 会被清理导致图标丢失，这里不用 temp）
