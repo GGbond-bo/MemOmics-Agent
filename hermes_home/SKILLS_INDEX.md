@@ -195,7 +195,7 @@
 ---
 | 23 | scrna-disease-drug-discovery | 疾病scRNA+遗传证据整合的药物靶点优先级排序 | drug, disease, target, 药物靶点 | RED 必触发 |
 
-## 08_报告 - 报告/可视化 (85 skills)
+## 08_报告 - 报告/可视化 (86 skills)
 
 | scipilot-figure-skill | 可视化顾问：先剖析数据→推荐图型→期刊规范→绘制→程序+AI视觉自检 | figure, plot, 画图, 可视化, publication | RED 必触发 |
 | academic-figure-skill | 学术级科研绘图（TingxiYu）：8步闭环+29图型+4轮QA，用户脚本检查/优化+专业期刊出图默认；CNS级用nature-figure | academic figure, 学术图, 专业出图, 期刊出图, 脚本优化, publication figure | RED 必触发 |
@@ -282,6 +282,7 @@
 | dnbc4tools-analysis-workflow | > |  | YEL 讨论触发 |
 | deg-mixed-design | 混合设计差异表达分析（组间独立比较 + 组内配对/重复测量）。使用场景：多组（如 Young/Old/T2D）× 运动前后取样的 scRNA/bulk 数据，需同时算组间主效应、配对时间效应与组×时间 |  | YEL 讨论触发 |
 | mixed-design-deg | 混合设计差异表达分析（组间独立比较 + 组内配对比较同存）：24 donors × 2 时间点的 aging/糖尿病/运动前后 DEG。pseudo-bulk + dream LMM (1|donor |  | YEL 讨论触发 |
+| go-enrichment-visualization | > |  | YEL 讨论触发 |
 ## 09_内置 - Hermes系统 (15 skills)
 
 

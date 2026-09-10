@@ -51,6 +51,9 @@ if exist "%~dp0python\python.exe" (
     if not errorlevel 1 (
         set "PYTHON=%~dp0python\python.exe"
         set "BUNDLED_PY=1"
+        REM 2026-09-06 修复：随包 python 必须自给自足——禁用 user-site，否则会用到用户自己的
+        REM C:\Users\xxx\AppData\Roaming\Python\... 里的包（或被其中的旧版本遮蔽），换机即崩。
+        set "PYTHONNOUSERSITE=1"
     )
 )
 if defined PYTHON goto :check_deps
@@ -143,7 +146,27 @@ if exist "%R_BIN%\Rscript.exe" (
     echo [INFO] R 未检测到（可选；R 分析如 Seurat 需要）
 )
 
-if "%BUNDLED_PY%"=="1" goto :deps_done
+if "%BUNDLED_PY%"=="1" (
+    REM 2026-09-06 修复：内置 python 曾经漏装 starlette/pydantic/websockets 等（靠开发机 user-site 兜底，
+    REM 用户机器一启动就 ModuleNotFoundError）。这里做核心依赖自检，缺则自动补装一次。
+    "%PYTHON%" -c "import fastapi, starlette, uvicorn, websockets, pydantic, httpx" >nul 2>&1
+    if not errorlevel 1 goto :deps_done
+    echo [WARN] 内置运行环境缺少依赖（如 starlette/websockets），正在自动补装...
+    REM 先显式补装核心包集合：pip 不会自动补"已装包的缺失依赖"（starlette 就属于这种，
+    REM 2026-09-10 事故根因），所以这里直接点名安装——缺则装、已装则跳过。
+    "%PYTHON%" -m pip install --no-user --disable-pip-version-check fastapi starlette pydantic uvicorn websockets httpx python-multipart
+    "%PYTHON%" -m pip install --no-user --disable-pip-version-check -r "%~dp0requirements.txt"
+    "%PYTHON%" -c "import fastapi, starlette, uvicorn, websockets, pydantic, httpx" >nul 2>&1
+    if not errorlevel 1 (
+        echo [OK] 依赖补装完成
+        goto :deps_done
+    )
+    echo [ERROR] 内置环境依赖不完整，且自动补装失败（多为无网络）。
+    echo         请联网后重跑本启动器，或手动执行：
+    echo           "%PYTHON%" -m pip install -r "%~dp0requirements.txt"
+    pause
+    exit /b 1
+)
 REM ============================================================
 REM  2. 依赖安装（两类独立标记，装成功一次就不再装）
 REM ============================================================

@@ -6,6 +6,9 @@
 
 # === Web Framework ===
 fastapi>=0.110.0
+# 2026-09-10: starlette 是 fastapi 的必需运行时依赖，pip 不会补装"已装包的缺失依赖"；
+# 显式声明，避免随包环境缺 starlette 时（2026-09-10 Windows 包事故）pip 无感跳过。
+starlette>=0.40.0
 uvicorn[standard]>=0.27.0
 websockets>=12.0
 python-multipart>=0.0.12
@@ -46,12 +49,12 @@ tzdata>=2024.1; sys_platform == "win32"
 # === System ===
 psutil>=5.9.0
 
-# === 鏂囩尞搴?PDF 寮曟搸锛堟壒O5 2026-08-16锛氳法骞冲彴锛屽師鏂囨覆鏌?瀵圭収瀹氫綅/鍏ㄦ枃鎻愬彇蹇呴渶锛?==
+# === 文献库 PDF 引擎（批O5 2026-08-16：跨平台，原文渲染/对照定位/全文提取必需） ===
 pymupdf>=1.24.0
 pymupdf4llm>=0.0.17
 
 # === Web Search (multi-backend, auto-detected) ===
-# ddgs (DuckDuckGo) 鈥?free, no API key needed, installed by default
+# ddgs (DuckDuckGo) - free, no API key needed, installed by default
 duckduckgo-search>=4.0.0
 # Optional backends (uncomment if you have API keys):
 # tavily-python>=0.4.0
