@@ -1,11 +1,11 @@
 # MemOmics Agent — 项目上下文
 
 ## 项目路径
-- 项目根目录：E:/MemOmics-Agent/
-- Hermes 框架：E:/MemOmics-Agent/hermes-agent/
-- 知识库：E:/MemOmics-Agent/memomics/knowledge_base/ (90个YAML)
+- 项目根目录：<安装目录>/
+- Hermes 框架：<安装目录>/hermes-agent/
+- 知识库：<安装目录>/memomics/knowledge_base/ (90个YAML)
 - 技能库：~/.hermes/skills/bioinformatics/ (241个SKILL.md)
-- 分析结果：E:/MemOmics-Agent/hermes-agent/results/
+- 分析结果：<安装目录>/hermes-agent/results/
 
 ## 数据库
 - 用户数据：D:/我的下载/Migule_lai_24 _new.h5ad (人类骨骼肌 scRNA-seq, 324,434 cells, 已注释)

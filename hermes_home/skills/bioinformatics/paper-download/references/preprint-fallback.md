@@ -61,7 +61,7 @@ source: "PPR"
 DOI: 10.1101/2023.09.26.558914
 
 # Step 2: curl 下载
-curl -L -o "E:/MemOmics-Agent/work/papers/Rubenstein2025_Muscle_Multiome_Exercise.pdf" \
+curl -L -o "<安装目录>/work/papers/Rubenstein2025_Muscle_Multiome_Exercise.pdf" \
   -H "User-Agent: Mozilla/5.0 ... Chrome/120.0.0.0 Safari/537.36" \
   --max-time 180 \
   "https://www.biorxiv.org/content/10.1101/2023.09.26.558914v1.full.pdf"

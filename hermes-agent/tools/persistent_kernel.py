@@ -487,7 +487,7 @@ class _SessionKernelPool(KernelPool):
         try:
             import json as _json
             _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hermes-agent/
-            _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
+            _app_root = os.path.dirname(_root)  # <安装目录>
             _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
             return _env_json.get("paths", {}).get("r", {}) or {}
         except Exception:

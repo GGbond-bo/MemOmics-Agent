@@ -60,7 +60,7 @@ prerequisites:
 > ```
 > 此验证步骤**不可跳过**。宁可多检查一次，不可漏一份记录。
 >
-> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `E:/MemOmics-Agent/results/`），**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `hermes_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
+> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `<安装目录>/results/`），**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `hermes_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
 >
 > ⚠️ **目录结构**：每步执行后必须创建 `figures/` `results/` `scripts/` `data/` `log/` 五个子目录。`log/` 目录是强制保留的，包含 `analysis.log`、`debate_*.json`、`run_record_*.json`。
 
@@ -555,7 +555,7 @@ results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
 └── scTour_Trajectory_Report.html  # 综合HTML报告
 ```
 
-> **重要**：结果基路径为 `results/`（如 `E:/MemOmics-Agent/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
+> **重要**：结果基路径为 `results/`（如 `<安装目录>/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
 
 ---
 

@@ -4,7 +4,7 @@
 用户连续两次说"检查环境"。第一轮信 check_env 工具输出（返回 "R: 4.4.2 ✓"），
 误报 R-4.5.3 环境 Seurat 可用。第二轮用 execute_r 实测才发现：
 **execute_r / check_env 用的不是 environment.json 的 default，而是 PATH 里的 Rscript**
-（`C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript`），
+（`<用户目录>/AppData/Local/R/R-4.4.2/bin/x64/Rscript`），
 而真正能加载 Seurat 的 R 是 `C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe`。
 
 ## 症状链

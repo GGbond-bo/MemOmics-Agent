@@ -21,7 +21,7 @@
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='Rscript.exe'\" | Where-Object { \$_.CommandLine -like '*_kernel_worker.R*' } | Select-Object ProcessId, CreationDate | Format-Table -AutoSize"
 ```
 
-CommandLine 特征：`C:\Users\<user>\AppData\Local\R\R-4.4.2\bin\x64\Rscript.EXE --vanilla E:\MemOmics-Agent\hermes-agent\tools\_kernel_worker.R`
+CommandLine 特征：`C:\Users\<user>\AppData\Local\R\R-4.4.2\bin\x64\Rscript.EXE --vanilla <安装目录>\hermes-agent\tools\_kernel_worker.R`
 
 **父进程/创建时间链是关键证据**：本次 30 个进程创建时间分 3 簇（本会话 22:49-00:01
 + 凌晨 3:02 + 8/8-8/10 遗留），父 PID 集中在同一个已退出进程 → 跨会话遗留，不是

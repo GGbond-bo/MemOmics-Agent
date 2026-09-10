@@ -7,8 +7,8 @@ PyTorch 2.6+ 将 `torch.load()` 的默认参数从 `weights_only=False` 改为 `
 ### 错误症状
 
 ```
-Successfully unpacked tarball to C:\Users\...\Temp\tmpXXXXXXXX
-C:\Users\...\Temp\tmpXXXXXXXX\...\model.torch
+Successfully unpacked tarball to <用户目录>\Temp\tmpXXXXXXXX
+<用户目录>\Temp\tmpXXXXXXXX\...\model.torch
 ...
 _pickle.UnpicklingError: Weights only load failed. This file can still be loaded...
     (1) Re-running `torch.load` with `weights_only` set to `False` will likely succeed...
@@ -19,7 +19,7 @@ _pickle.UnpicklingError: Weights only load failed. This file can still be loaded
 
 ## 修复方案 A：sitecustomize.py monkey-patch（推荐）
 
-在 `C:\Users\23136\AppData\Local\Programs\Python\Python312\Lib\site-packages\sitecustomize.py` 中：
+在 `<用户目录>\AppData\Local\Programs\Python\Python312\Lib\site-packages\sitecustomize.py` 中：
 
 ```python
 try:
@@ -77,5 +77,5 @@ load_kwargs = {'weights_only': False}
 
 ## 相关文件
 
-- `sitecustomize.py` 完整代码：`C:\Users\23136\AppData\Local\Programs\Python\Python312\Lib\site-packages\sitecustomize.py`
+- `sitecustomize.py` 完整代码：`<用户目录>\AppData\Local\Programs\Python\Python312\Lib\site-packages\sitecustomize.py`
 - 首次出现：2026-07-26, `4CL_SD_D4_2_scRNA` CellBender 重跑

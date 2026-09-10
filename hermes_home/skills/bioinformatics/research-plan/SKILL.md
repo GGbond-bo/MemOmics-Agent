@@ -327,7 +327,7 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 1. **停止尝试修复 Mermaid** — 即使语法完全正确，Mermaid 11.x 在某些环境下也不稳定
 2. **改用 HTML 文件交付技术路线图** — 使用 `templates/tech-roadmap-html.html` 模板
 3. **HTML 优势**：自包含、无渲染依赖、支持复杂表格+流程图+Panel 布局+颜色编码
-4. **写文件后提示用户直接打开**：浏览器打开 `file:///E:/MemOmics-Agent/results/...html`
+4. **写文件后提示用户直接打开**：浏览器打开 `file:///<安装目录>/results/...html`
 
 > ⛔ **不要在第 3 次失败后继续尝试 Mermaid。直接切 HTML。** 用户要的是可见的路线图，不是 Mermaid 语法正确性。
 

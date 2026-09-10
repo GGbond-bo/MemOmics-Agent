@@ -13,7 +13,7 @@ import sys
 import os
 
 # === 参数 ===
-SRC = sys.argv[1] if len(sys.argv) > 1 else r"E:\骨骼肌锻炼\MF_annotation_L3_protein_DEG.csv"
+SRC = sys.argv[1] if len(sys.argv) > 1 else r"<数据目录>\MF_annotation_L3_protein_DEG.csv"
 OUT = sys.argv[2] if len(sys.argv) > 2 else r"Metascape_gene_list.csv"
 TOP_N = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 CLUSTER_COL = "cluster"

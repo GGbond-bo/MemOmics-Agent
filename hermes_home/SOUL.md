@@ -612,7 +612,7 @@ terminal 完成 → _pending_record = True
 
 ```
 每次分析启动:
-  1. read_file("E:/MemOmics-Agent/environment.json")   ← 全局环境文件
+  1. read_file("<安装目录>/environment.json")   ← 全局环境文件
   2. terminal("python scripts/validate_env.py --verbose")
   3. exit 0 → 继续 | exit 1 → 已修复→继续 | exit 2 → 阻断
 ```
@@ -816,7 +816,7 @@ terminal 完成 → _pending_record = True
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
 > 📚 **SKILLS_INDEX.md**：368 个生信技能索引（由系统按意图动态注入）
-> 🔧 **environment.json**：`E:/MemOmics-Agent/environment.json` 全局环境文件
+> 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |

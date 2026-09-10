@@ -3,7 +3,7 @@
 ## 环境要求
 
 - R 4.6.1 (Windows, 独立安装到 C:/Program Files/R/R-4.6.1/)
-- 库路径: C:/Users/23136/R/R-4.6.1-library/
+- 库路径: <用户目录>/R/R-4.6.1-library/
 - ArchR 1.0.2+
 - 参考基因组: BSgenome.Hsapiens.UCSC.hg38 + BSgenome.Mmulatta.UCSC.rheMac10
 - 调用方式: `"C:/Program Files/R/R-4.6.1/bin/Rscript.exe" script.R`

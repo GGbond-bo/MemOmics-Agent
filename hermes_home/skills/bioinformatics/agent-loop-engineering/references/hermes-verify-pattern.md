@@ -11,7 +11,7 @@ After any framework-level code change (new tool, new iron law, new module), writ
 ```python
 """Ad-hoc verification: MemOmics <module>."""
 import sys, os
-sys.path.insert(0, r"E:\MemOmics-Agent\memomics")
+sys.path.insert(0, r"<安装目录>\memomics")
 
 from bio_tools.<module> import <imports>
 

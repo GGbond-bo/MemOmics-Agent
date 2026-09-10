@@ -161,7 +161,7 @@ def _find_kb_root() -> Path:
         return derived_path
 
     # 4. 基于项目根目录
-    # 可能是 E:/MemOmics-Agent 或 E:/MemOmics 等
+    # 可能是 <安装目录> 或 E:/MemOmics 等
     project_root = this_file.parent.parent.parent
     for candidate in [
         project_root / "memomics" / "knowledge_base",
@@ -172,7 +172,7 @@ def _find_kb_root() -> Path:
 
     # 5. 常见部署路径（最后手段）
     for fallback in [
-        Path("E:/MemOmics-Agent/memomics/knowledge_base"),
+        Path("<安装目录>/memomics/knowledge_base"),
         Path("E:/MemOmics/memomics/knowledge_base"),
     ]:
         if fallback.exists():

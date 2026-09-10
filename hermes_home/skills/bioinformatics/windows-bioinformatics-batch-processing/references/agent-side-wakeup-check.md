@@ -6,11 +6,11 @@ prompt 模板固定三行：1. 读 task_plan.md 看当前 Phase 2. search_files 
 ## 铁律 1: 找 task_plan — 按 mtime 选最新，禁止按路径假设
 
 本机实测（2026-08-08, 唤醒 #3）存在 **6 个 task_plan.md**：
-- `E:/MemOmics-Agent/task_plan.md` — **过期副本**（7月30 旧版），不是真身！
-- `E:/MemOmics-Agent/results/<session_dir>/task_plan.md` — 每个 session 一份真身
+- `<安装目录>/task_plan.md` — **过期副本**（7月30 旧版），不是真身！
+- `<安装目录>/results/<session_dir>/task_plan.md` — 每个 session 一份真身
 
 ```bash
-ls -lt E:/MemOmics-Agent/results/*/task_plan.md E:/MemOmics-Agent/task_plan.md | head
+ls -lt <安装目录>/results/*/task_plan.md <安装目录>/task_plan.md | head
 ```
 
 选 **mtime 最新** 的一份读。读旧 task_plan = 基于过期状态决策 = 跨 session 污染（同铁律 -5）。

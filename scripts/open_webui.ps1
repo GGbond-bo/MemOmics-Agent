@@ -1,4 +1,4 @@
-# MemOmics WebUI opener: waits for the server port, then opens the URL in a real browser.
+﻿# MemOmics WebUI opener: waits for the server port, then opens the URL in a real browser.
 # Uses explicit browser executables because the system default URL association may be
 # broken (ShellExecute fails with "Application not found").
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File open_webui.ps1 [port]

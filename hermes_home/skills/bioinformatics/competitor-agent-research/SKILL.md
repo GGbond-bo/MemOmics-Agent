@@ -57,7 +57,7 @@ prerequisites:
 
 | 陷阱 | 现象 | 修复 |
 |------|------|------|
-| execute_python 的 /tmp ≠ bash 的 /tmp | execute_python 写 `/tmp/xxx` 后 bash `ls /tmp` 看不到 | 直接写显式路径（如 `E:/MemOmics-Agent/results/<session>/`）再 read_file |
+| execute_python 的 /tmp ≠ bash 的 /tmp | execute_python 写 `/tmp/xxx` 后 bash `ls /tmp` 看不到 | 直接写显式路径（如 `<安装目录>/results/<session>/`）再 read_file |
 | web_extract 后端不可用 | DuckDuckGo search-only 后端无法 extract URL | 用 execute_code 内 hermes_tools.web_extract 或 urllib 直接抓 |
 | git clone 失败 | github.com:443 连接超时 | 改用 GitHub REST API（api.github.com 通） |
 | terminal 中 rm -rf 被拦截 | 安全护栏拦截删除 | 克隆到新目录名，不要 rm 旧目录 |

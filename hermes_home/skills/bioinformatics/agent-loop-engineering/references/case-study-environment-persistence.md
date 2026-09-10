@@ -38,9 +38,9 @@ Unfixable → prompt user to install/create environment
 ```json
 {
   "paths": {
-    "python": "C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe",
-    "cellbender": "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/cellbender.exe",
-    "ptrepack": "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe",
+    "python": "<用户目录>/AppData/Local/Programs/Python/Python312/python.exe",
+    "cellbender": "<用户目录>/AppData/Local/Programs/Python/Python312/Scripts/cellbender.exe",
+    "ptrepack": "<用户目录>/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe",
     "Rscript": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe"
   },
   "last_validated": "2026-07-29T17:03:00",

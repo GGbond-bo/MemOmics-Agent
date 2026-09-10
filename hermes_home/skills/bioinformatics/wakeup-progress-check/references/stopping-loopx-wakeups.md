@@ -47,7 +47,7 @@ with open(p, 'w', encoding='utf-8') as f:
 import sys
 sys.path.insert(0, '.')
 from memomics.loopx_bridge import _load_loopx, LoopXBridge
-b = LoopXBridge('<session_id>', 'E:/MemOmics-Agent/results/<session_id>', user_online=True)
+b = LoopXBridge('<session_id>', '<安装目录>/results/<session_id>', user_online=True)
 d = b.should_run()
 print(d)
 # 期望: {'should_run': False, 'state': 'paused', 'decision': 'skip',

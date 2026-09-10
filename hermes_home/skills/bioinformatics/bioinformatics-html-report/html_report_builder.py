@@ -1439,7 +1439,7 @@ def _find_project_root() -> str:
             return p
         p = os.path.dirname(p)
     # 3. 回退到默认
-    return "E:/MemOmics-Agent"
+    return "<安装目录>"
 
 
 def _collect_from_state_db(project_root: str, session_id: str) -> dict:

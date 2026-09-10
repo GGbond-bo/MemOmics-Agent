@@ -1261,7 +1261,7 @@ def _safe_getcwd() -> str:
 
 # Path prefixes that identify a *host* working directory which cannot exist
 # inside a container sandbox. Covers POSIX user dirs and Windows drive paths
-# (``C:\Users\...`` / ``C:/Users/...``) — the latter is how a Windows host's
+# (``<用户目录>`` / ``<用户目录>``) — the latter is how a Windows host's
 # cwd looks when it leaks toward a Linux container's ``-w`` flag.
 _HOST_CWD_PREFIXES = ("/Users/", "/home/", "C:\\", "C:/")
 

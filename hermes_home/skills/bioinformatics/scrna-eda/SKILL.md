@@ -160,5 +160,5 @@ except Exception as e:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| write.xlsx 写回 E:/骨骼肌锻炼/pathway_score.xlsx 时 Permis | 目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下 | 改为输出修复版到独立新文件，用户关闭 Excel 后自行替换 |
+| write.xlsx 写回 <数据目录>/pathway_score.xlsx 时 Permis | 目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下 | 改为输出修复版到独立新文件，用户关闭 Excel 后自行替换 |
 

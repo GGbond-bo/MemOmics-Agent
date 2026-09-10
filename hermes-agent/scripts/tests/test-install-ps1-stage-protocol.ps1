@@ -1,4 +1,4 @@
-# Smoke tests for the install.ps1 stage protocol.
+﻿# Smoke tests for the install.ps1 stage protocol.
 #
 # Run from a PowerShell prompt:
 #

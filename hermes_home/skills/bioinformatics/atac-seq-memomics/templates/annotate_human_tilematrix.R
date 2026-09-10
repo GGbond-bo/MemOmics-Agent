@@ -9,7 +9,7 @@ suppressPackageStartupMessages(library(ArchR))
 addArchRThreads(threads = 1)
 addArchRGenome("hg38")
 
-out_dir <- "E:/MemOmics-Agent/results/memomics-1c1890da/patent_test"   # ← 改成本项目输出目录
+out_dir <- "<安装目录>/results/memomics-1c1890da/patent_test"   # ← 改成本项目输出目录
 setwd(out_dir)
 
 cat("Loading human_proj_clustered.rds ...\n")

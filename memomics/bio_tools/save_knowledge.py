@@ -169,7 +169,7 @@ def _kb_root():
     here = os.path.dirname(os.path.abspath(__file__))
     for _cand in (
         os.path.normpath(os.path.join(here, "..", "..", "hermes_home", "skills")),
-        "E:/MemOmics-Agent/hermes_home/skills",
+        "<安装目录>/hermes_home/skills",
     ):
         if os.path.isdir(_cand):
             return _cand

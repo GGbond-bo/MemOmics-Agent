@@ -18,7 +18,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # E:/MemOmics-Agent/
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # <安装目录>/
 STATE_FILE = REPO_ROOT / "memomics" / "config" / "guardian_state.json"
 
 

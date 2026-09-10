@@ -886,22 +886,22 @@ def _normalize_command_for_detection(command: str) -> str:
     # rm/mkfs/dd patterns (notably the HARDLINE root-delete floor, which cannot
     # be bypassed even with yolo). Handles both \n and \r\n line endings. Line
     # continuations carry no path separator, so this is a no-op on the Windows
-    # home-prefix folds below (which match C:\Users\alice\... — no newline).
+    # home-prefix folds below (which match <用户目录>\... — no newline).
     command = re.sub(r'\\\r?\n', '', command)
     # Fold absolute home / active-profile-home prefixes into their canonical
     # ~/ and ~/.hermes/ forms so static user-sensitive patterns catch
-    # /home/alice/.bashrc and C:\Users\alice\.bashrc the same way they catch
+    # /home/alice/.bashrc and <用户目录>\.bashrc the same way they catch
     # ~/.bashrc. Resolve at detection time (not via an import-time snapshot) so
     # it tracks HOME / HERMES_HOME even when those are set after this module is
     # imported — as the hermetic test conftest and profile/session launchers do.
     #
     # This MUST run before the backslash-escape strip below: on Windows the home
-    # prefix is separated by backslashes (C:\Users\alice\...), which that strip
+    # prefix is separated by backslashes (<用户目录>\...), which that strip
     # would otherwise dissolve (-> C:Usersalice) and make the fold impossible.
     # The fold matches either separator, so POSIX paths are unaffected by order.
     #
     # Fold the (more specific) Hermes home first: on Windows it nests under the
-    # user home (C:\Users\alice\AppData\...\hermes), so folding the user home
+    # user home (<用户目录>\AppData\...\hermes), so folding the user home
     # first would eat the prefix the Hermes-home fold needs.
     command = _rewrite_resolved_hermes_home(command)
     command = _rewrite_resolved_user_home(command)
@@ -993,7 +993,7 @@ def _rewrite_resolved_user_home(command: str) -> str:
     the same static patterns as tilde and ``$HOME`` forms. ``HOME`` is consulted
     directly because Windows' ``os.path.expanduser`` resolves ``~`` from
     ``USERPROFILE`` and ignores ``HOME``, unlike POSIX. Matches both POSIX
-    (``/home/alice``) and Windows (``C:\\Users\\alice`` or ``C:/Users/alice``)
+    (``/home/alice``) and Windows (``C:\\Users\\alice`` or ``<用户目录>``)
     separators. No-op when the home is unset or degenerate.
     """
     try:

@@ -46,7 +46,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "链路自检：execute_code 正常执行。Python 3.12.10，E:/MemOmics-Agent/results/memomics-2274ab75 目录存在（dir exists: True）。工具链路已恢复。"
+      "result": "链路自检：execute_code 正常执行。Python 3.12.10，<安装目录>/results/memomics-2274ab75 目录存在（dir exists: True）。工具链路已恢复。"
     },
     {
       "species": "",
@@ -85,14 +85,14 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "execute_code 定位 E:/MemOmics-Agent/results/memomics-1b0e5b39/data/summary.csv 成功，行数=5(含表头减1)，0.0s status=ok"
+      "result": "execute_code 定位 <安装目录>/results/memomics-1b0e5b39/data/summary.csv 成功，行数=5(含表头减1)，0.0s status=ok"
     },
     {
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "read_summary_csv.py",
-      "params": "path=E:/MemOmics-Agent/results/memomics-b0f7f1c7/data/summary.csv; csv.reader; fallback 路径探测",
+      "params": "path=<安装目录>/results/memomics-b0f7f1c7/data/summary.csv; csv.reader; fallback 路径探测",
       "date": "2026-08-21",
       "score": 10,
       "auto_score": 0.0,

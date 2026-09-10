@@ -129,7 +129,7 @@
       "tissue": "",
       "direction": "",
       "script": "metascape_top100.py",
-      "params": "{\"src\": \"E:/骨骼肌锻炼/MF_annotation_L3_protein_DEG.csv\", \"top_n\": 100, \"sort_by\": \"avg_log2FC\", \"group_by\": \"cluster\", \"out\": \"results/memomics-4687a591/Metascape_top100_by_subcluster.csv\"}",
+      "params": "{\"src\": \"<数据目录>/MF_annotation_L3_protein_DEG.csv\", \"top_n\": 100, \"sort_by\": \"avg_log2FC\", \"group_by\": \"cluster\", \"out\": \"results/memomics-4687a591/Metascape_top100_by_subcluster.csv\"}",
       "date": "2026-08-22",
       "score": 9,
       "auto_score": 0.0,
@@ -146,7 +146,7 @@
     {
       "timestamp": "2026-08-13 22:29",
       "error_type": "runtime_error",
-      "message": "write.xlsx 写回 E:/骨骼肌锻炼/pathway_score.xlsx 时 Permission denied（两次）",
+      "message": "write.xlsx 写回 <数据目录>/pathway_score.xlsx 时 Permission denied（两次）",
       "root_cause": "目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下无法覆盖写入",
       "fix_applied": "改为输出修复版到独立新文件，用户关闭 Excel 后自行替换",
       "species": "",

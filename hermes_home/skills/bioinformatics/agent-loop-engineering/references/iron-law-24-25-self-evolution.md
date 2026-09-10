@@ -33,8 +33,8 @@ Agent 检查发现 `skill_evolution(action="record_run")` 从未被调用——�
 用户指出 `environment.json` 放在 `cellbender-batch-pipeline/` 下是错的——其他分析（scRNA、ATAC、空间组学）也用得上。应放到全局路径。
 
 - **修复前**: `cellbender-batch-pipeline/environment.json`（per-skill，其他分析访问不到）
-- **修复后**: `E:/MemOmics-Agent/environment.json`（全局，含 R 4.5.3/4.6.1 路径、包数、Python venv、CLI工具、GPU信息）
-- **验证器**: `E:/MemOmics-Agent/scripts/validate_env.py`（启动时自动读→验→修）
+- **修复后**: `<安装目录>/environment.json`（全局，含 R 4.5.3/4.6.1 路径、包数、Python venv、CLI工具、GPU信息）
+- **验证器**: `<安装目录>/scripts/validate_env.py`（启动时自动读→验→修）
 
 ## 铁律 24: 自动沉淀门禁
 
@@ -56,8 +56,8 @@ agent 调 skill_evolution(action="record_run", ...) → _pending_record = False
 
 ```
 每次分析启动:
-  1. read_file("E:/MemOmics-Agent/environment.json")   ← 全局文件
-  2. terminal("python E:/MemOmics-Agent/scripts/validate_env.py --verbose")
+  1. read_file("<安装目录>/environment.json")   ← 全局文件
+  2. terminal("python <安装目录>/scripts/validate_env.py --verbose")
   3. exit 0 → 继续 | exit 1 → 已自动修复 | exit 2 → 阻断
 ```
 
@@ -71,13 +71,13 @@ agent 调 skill_evolution(action="record_run", ...) → _pending_record = False
 |------|------|------|
 | R 4.6.1 | `C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe` | 245包，主力环境 |
 | R 4.5.3 | `C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe` | 仅30 base包 |
-| Python 3.12 | `E:/MemOmics-Agent/.venv/Scripts/python.exe` | MemOmics venv |
+| Python 3.12 | `<安装目录>/.venv/Scripts/python.exe` | MemOmics venv |
 | CellBender | `Python312/Scripts/cellbender.exe` | 需要 `TMPDIR=/e/tmp` |
 | GPU | RTX 5070 Ti, 16GB | PyTorch 2.11+cu128 |
 
 ## 实施文件
 
-- `E:/MemOmics-Agent/environment.json` — 全局环境文件
-- `E:/MemOmics-Agent/scripts/validate_env.py` — 全局环境验证器
-- `E:/MemOmics-Agent/hermes_home/SOUL.md` — 铁律 24 + 25
+- `<安装目录>/environment.json` — 全局环境文件
+- `<安装目录>/scripts/validate_env.py` — 全局环境验证器
+- `<安装目录>/hermes_home/SOUL.md` — 铁律 24 + 25
 - `cellbender-batch-pipeline/scripts/auto_record_hook.py` — run_log.json 自动生成钩子

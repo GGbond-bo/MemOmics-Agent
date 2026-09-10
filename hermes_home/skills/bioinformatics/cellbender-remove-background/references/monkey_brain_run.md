@@ -69,4 +69,4 @@ This skill lives under `bioinformatics/cellbender-remove-background/` and is the
 - `E:\monkey\cellbender\CRR278961\`
 - `E:\monkey\cellbender\CRR278962\`
 
-Note: User specified `E:\monkey\cellbender\` for this run. Default MemOmics convention is `E:\MemOmics-Agent\results/`.
+Note: User specified `E:\monkey\cellbender\` for this run. Default MemOmics convention is `<安装目录>\results/`.

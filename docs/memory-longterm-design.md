@@ -286,7 +286,7 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 
 ### 关键坑（实施中发现）
 
-1. **两份 hermes-agent 副本**：`E:\MemOmics-Agent\hermes-agent\`（运行环境实际使用，含"共享连接注册表"新架构）与 `memomics\hermes-agent\`（旧架构副本）独立演化——改动必须两份同步，但**不能整文件覆盖**（顶层 shutdown 是 refcount 版，memomics 是直接 close 版）。
+1. **两份 hermes-agent 副本**：`<安装目录>\hermes-agent\`（运行环境实际使用，含"共享连接注册表"新架构）与 `memomics\hermes-agent\`（旧架构副本）独立演化——改动必须两份同步，但**不能整文件覆盖**（顶层 shutdown 是 refcount 版，memomics 是直接 close 版）。
 2. **`SessionDB.search_messages(source_filter=...)` 的 source 是渠道类型**（cli/webui），不是 session_id——按会话过滤必须只读 SQL 直查 `messages` 表（`m.session_id = ? AND (m.active = 1 OR m.compacted = 1)`），压缩归档消息仍可搜。
 3. **中文检索**：unicode61 FTS 按单字分词，句子 AND 连接过度严格 → 查询侧 `_extract_query_keywords` 去动词噪声词（"继续跑热图"→"热图"）；2 字符查询走 LIKE 兜底；≥3 字符用 `messages_fts_trigram`（CJK 子串原生）。
 4. **JSON→heredoc 转义地狱**：`\n` 经工具参数 JSON 层解码为 `\n`，再经 Python 字面量变换行——修复脚本必须用 `chr(92)` 构造反斜杠。

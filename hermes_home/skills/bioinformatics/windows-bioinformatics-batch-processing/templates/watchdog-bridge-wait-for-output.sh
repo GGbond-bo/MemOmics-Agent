@@ -10,13 +10,13 @@
 #       START 心跳 / worker 不受影响 / 磁盘进度不变 (铁规 13.5 行为级验证)
 # ---------------------------------------------------------------------
 # ── CONFIG (每项目改这里) ──────────────────────────────────────────────
-OUTDIR="E:/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 输出目录
+OUTDIR="<数据目录>/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 输出目录
 WAIT_SAMPLE="GSM8549648_hc73"                                      # 等待完成的样本目录名
 RUN_SAMPLE="GSM8549649_hc19"                                       # 要补跑的剩余样本名
-LOGDIR="E:/MemOmics-Agent/results/<session>/batch/logs"             # 样本日志目录
+LOGDIR="<安装目录>/results/<session>/batch/logs"             # 样本日志目录
 RSCRIPT="C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe"            # R 可执行
-CREATE_SCRIPT="E:/MemOmics-Agent/results/<session>/create_arrow_qc.R" # 样本处理脚本
-WORKDIR="E:/MemOmics-Agent/results/<session>"                       # 工作目录
+CREATE_SCRIPT="<安装目录>/results/<session>/create_arrow_qc.R" # 样本处理脚本
+WORKDIR="<安装目录>/results/<session>"                       # 工作目录
 BRIDGE_LOG="$LOGDIR/../bridge.log"                                  # 桥接心跳日志
 SETTLE_SEC=30            # DONE_MARK 出现后等文件 settle 的秒数
 TIMEOUT_MIN=180          # 超时分钟数(大样本留足余量)

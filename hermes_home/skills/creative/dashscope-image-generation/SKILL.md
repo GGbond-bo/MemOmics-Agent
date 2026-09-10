@@ -10,19 +10,19 @@ when_to_use: 用户要求文生图/图像生成/AI绘画/生成概念图或示�
 
 ## 关键事实
 
-- 配置文件：`E:/MemOmics-Agent/hermes_home/image_gen_config.json`
+- 配置文件：`<安装目录>/hermes_home/image_gen_config.json`
   - provider: `dashscope`（阿里云通义万相），model: `qwen-image-3.0`
   - size: `1024*1024`（横图 `1280*720` / 竖图 `720*1280`）
   - api_key 存在（read_file 输出会 redact 为 `«redacted:sk-…»`，脚本里用 json.load 读真实值，不要依赖 read_file 明文）
 - 正确端点：`https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation`（同步返回，无需轮询任务）
-- 结果保存约定：`E:/MemOmics-Agent/results/<sid>/image_gen/`，不丢桌面
+- 结果保存约定：`<安装目录>/results/<sid>/image_gen/`，不丢桌面
 
 ## 调用
 
 复用脚本 `scripts/generate_image.py`：
 
 ```bash
-python scripts/generate_image.py "一只金毛幼犬在向日葵田里，写实，黄金时刻光线" --size 1024*1024 --out E:/MemOmics-Agent/results/<sid>/image_gen/
+python scripts/generate_image.py "一只金毛幼犬在向日葵田里，写实，黄金时刻光线" --size 1024*1024 --out <安装目录>/results/<sid>/image_gen/
 ```
 
 Payload（multimodal-generation 格式）：

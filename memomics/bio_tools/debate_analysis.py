@@ -826,7 +826,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+        base = Path(os.environ.get("HERMES_HOME", "<安装目录>/hermes_home"))
     return base / "config.yaml"
 
 
@@ -1097,7 +1097,7 @@ def _get_debates_dir() -> Path:
         base = Path(get_hermes_home())
     except Exception:
         # fallback: 环境变量或硬编码
-        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+        base = Path(os.environ.get("HERMES_HOME", "<安装目录>/hermes_home"))
     debates_dir = base / "skills" / "bioinformatics" / "_debates"
     debates_dir.mkdir(parents=True, exist_ok=True)
     return debates_dir

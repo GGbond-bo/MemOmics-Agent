@@ -176,19 +176,19 @@ After all samples complete, extract metrics from `*_raw_output_metrics.csv` file
 
 ## 🔧 环境持久化（自进化基础设施，铁律 25）
 
-> **环境文件是全局的** — `E:/MemOmics-Agent/environment.json`，所有分析（scRNA/ATAC/空间/Bulk）共享。不是 per-skill。
+> **环境文件是全局的** — `<安装目录>/environment.json`，所有分析（scRNA/ATAC/空间/Bulk）共享。不是 per-skill。
 > 本 skill 的 `scripts/validate_env.py` 和 `scripts/auto_record_hook.py` 是 skill 专属实现，但环境数据从全局文件读取。
 
 每次分析启动前，必须先执行三阶段环境验证（SOUL.md 铁律 25）:
 
 ```
-Level 1: read_file("E:/MemOmics-Agent/environment.json") → 全局环境
+Level 1: read_file("<安装目录>/environment.json") → 全局环境
 Level 2: validate each path → os.path.exists()
 Level 3: auto-fix broken paths → update environment.json
 ```
 
-- **全局环境文件**: `E:/MemOmics-Agent/environment.json` — tools (python/cellbender/ptrepack/Rscript/pip) + GPU + known_issues
-- **全局验证脚本**: `E:/MemOmics-Agent/scripts/validate_env.py` (exit 0/1/2)
+- **全局环境文件**: `<安装目录>/environment.json` — tools (python/cellbender/ptrepack/Rscript/pip) + GPU + known_issues
+- **全局验证脚本**: `<安装目录>/scripts/validate_env.py` (exit 0/1/2)
 - **自进化钩子** (本 skill): `scripts/auto_record_hook.py` — 每样本完成后自动写 `run_log.json`（参数+耗时+收敛+产出）
 - **环境内容**: R 4.6.1 (245 pkgs, 主力) + R 4.5.3 (30 base) + Python 3.12 + CellBender + ptrepack + GPU RTX 5070 Ti
 
@@ -455,7 +455,7 @@ Level 3: auto-fix broken paths → update environment.json
     - 📄 h5py 绕过方案: `references/ptrepack-h5py-corruption-fallback.md`
 
 25b. **🔥🔥 ptrepack MSYS bash 路径转换 + 静默失败 (2026-07-27 证实)**：
-    - **症状 A — 路径破坏**: `ptrepack F:/path/src.h5 F:/path/dst.h5` → `FileNotFoundError: E:\MemOmics-Agent\F does not exist`（MSYS 把 `F:` 转成当前工作目录下的相对路径）
+    - **症状 A — 路径破坏**: `ptrepack F:/path/src.h5 F:/path/dst.h5` → `FileNotFoundError: <安装目录>\F does not exist`（MSYS 把 `F:` 转成当前工作目录下的相对路径）
     - **症状 B — 静默失败**: `python -m tables.scripts.ptrepack` exit code 0，无错误信息，但目标文件不存在。PyTables ptrepack 模块在某些条件下静默跳过写入。
     - **修复 A（推荐，根除）**: 放弃 ptrepack CLI，用 Python `tables` API 直接复制 — `tables.Filters(complevel=5, complib='blosc:zstd')` + `copy_node` 递归。已验证 2026-07-27 产出 186 MB 文件。
     - **修复 B（ptrepack CLI 备选）**: `cd /f/CellBender_v2` 切换到工作目录后使用相对路径，避免 MSYS 路径转换。
@@ -561,7 +561,7 @@ Level 3: auto-fix broken paths → update environment.json
     - **正确做法**: 当用户质疑一个表面异常的指标时：(a) 从日志提取数据规模（总液滴数、特征数）(b) 与其他已完成样本做数值对比（液滴数、epoch 速度、GPU 利用率）(c) 给出量化解释（"这个 133 万 vs 正常 10-30 万"）而非模糊解释（"数据加载阶段"）。用户的"有问题吧" = "给我看证据"。
 
 37. **🔥🔥 硬编码工具路径 — 机器/用户/Python版本变更即失效 (2026-07-27, 用户纠正)**：
-    - **症状**: Agent 用 `ptrepack = "C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe"` 硬编码路径。用户指出："这个路径不是固定的，下次换机器就废了。分析前应该检索环境。"
+    - **症状**: Agent 用 `ptrepack = "<用户目录>/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe"` 硬编码路径。用户指出："这个路径不是固定的，下次换机器就废了。分析前应该检索环境。"
     - **根因**: 硬编码路径依赖当前用户/版本，无泛化能力。`CREATE_NO_WINDOW` Popen 不继承 shell PATH，但也不能硬编码代替。
     - **修复**: 三级探测策略 — `shutil.which` → `sysconfig.get_path("scripts")` → `pip show <pkg>`。探测结果写入 task_plan.md `## Environment` 段。脚本启动时读 Environment 段（而非硬编码）。
     - **铁律**: 所有脱离式 Popen/脚本中的工具路径必须来自动态探测。探测失败 → 写入 task_plan.md Errors 表 + 使用 fallback（如 h5py 替代 ptrepack）。

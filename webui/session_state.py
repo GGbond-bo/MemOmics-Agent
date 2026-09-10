@@ -86,7 +86,7 @@ def _get_store():
 def _get_db_path() -> str:
     """hermes_home/memory_store.db（与 holographic 插件共享同一库）。"""
     from pathlib import Path
-    cur = Path(__file__).resolve().parent.parent  # E:/MemOmics-Agent/
+    cur = Path(__file__).resolve().parent.parent  # <安装目录>/
     return str(cur / "hermes_home" / "memory_store.db")
 
 

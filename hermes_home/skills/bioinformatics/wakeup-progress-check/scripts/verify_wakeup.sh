@@ -8,7 +8,7 @@
 #
 # 用法：
 #   bash scripts/verify_wakeup.sh <会话目录> [基线时间]
-#     例：bash scripts/verify_wakeup.sh E:/MemOmics-Agent/results/memomics-1c1890da "2026-08-09 10:45"
+#     例：bash scripts/verify_wakeup.sh <安装目录>/results/memomics-1c1890da "2026-08-09 10:45"
 #   基线时间缺省 = <会话目录>/task_plan.md 的 mtime
 #
 # 输出：三源报告（进程/GPU/磁盘）+ 判定提醒。空输出≠无进程，先质疑过滤器。

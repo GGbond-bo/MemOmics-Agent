@@ -70,7 +70,7 @@ rail_review(
 
 写脚本到 `results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/scripts/`
 
-**结果基路径**：`results/`（项目根目录下的 `results/`，如 `E:/MemOmics-Agent/results/`。**不是** `hermes-agent/results/`。2026-07-08 会话教训——memory 中误写导致日志放错位置，用户指出后才修正）
+**结果基路径**：`results/`（项目根目录下的 `results/`，如 `<安装目录>/results/`。**不是** `hermes-agent/results/`。2026-07-08 会话教训——memory 中误写导致日志放错位置，用户指出后才修正）
 
 ### 步骤 6: terminal
 

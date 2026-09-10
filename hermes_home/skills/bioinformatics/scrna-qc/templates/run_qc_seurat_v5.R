@@ -26,8 +26,8 @@ suppressPackageStartupMessages({
 })
 
 # ── Configuration (edit these) ──────────────────────────────────────────
-input_path  <- "E:/MemOmics-Agent/results/subset_30k.h5ad"
-output_dir  <- "E:/MemOmics-Agent/results/02_basic/qc"
+input_path  <- "<安装目录>/results/subset_30k.h5ad"
+output_dir  <- "<安装目录>/results/02_basic/qc"
 SPECIES     <- "human"
 MIN_GENES   <- 200
 MAX_GENES   <- 6000
@@ -110,8 +110,8 @@ seurat_obj$nFeature_RNA <- nFeature_RNA_vals
 
 # ── Step 3: Source predefined QC scripts (if available) ──
 # These provide get_species_mito_pattern() and filter_cells_by_qc()
-qc_metrics_script <- "E:/MemOmics-Agent/skills/scrna-seurat-core/scripts/qc_metrics.R"
-filter_script     <- "E:/MemOmics-Agent/skills/scrna-seurat-core/scripts/filter_cells.R"
+qc_metrics_script <- "<安装目录>/skills/scrna-seurat-core/scripts/qc_metrics.R"
+filter_script     <- "<安装目录>/skills/scrna-seurat-core/scripts/filter_cells.R"
 if (file.exists(qc_metrics_script)) source(qc_metrics_script)
 if (file.exists(filter_script))     source(filter_script)
 

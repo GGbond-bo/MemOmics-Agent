@@ -29,7 +29,7 @@ vision-capable model or ask the user to describe the content.
 ## Recipe (verified 2026-07-31, Windows / MemOmics)
 
 1. **Locate the upload** — try in order:
-   - `E:/MemOmics-Agent/webui/uploads/` (verified location for this deployment)
+   - `<安装目录>/webui/uploads/` (verified location for this deployment)
    - The user message usually contains `/uploads/<timestamp>_<hash>.png`
    - Fall back to search_files for the filename / recent PNG
 2. **Check image properties** (optional sanity check):

@@ -32,10 +32,10 @@ import pandas as pd
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
-FRAG_DIR = r"E:\专利\Human_Hippocampus_ATAC\fragments"
-OUT_DIR = r"E:\MemOmics-Agent\results\memomics-8857f1c1\gse278576_comparison"
-TABLE_S7 = r"E:\专利\Human_Hippocampus_ATAC\papers\suppl_media2\Supplemental Tables S1-S24\Table_S7.tsv"
-TABLE_S1 = r"E:\专利\Human_Hippocampus_ATAC\papers\suppl_media2\Supplemental Tables S1-S24\Table_S1.tsv"
+FRAG_DIR = r"<数据目录>\Human_Hippocampus_ATAC\fragments"
+OUT_DIR = r"<安装目录>\results\memomics-8857f1c1\gse278576_comparison"
+TABLE_S7 = r"<数据目录>\Human_Hippocampus_ATAC\papers\suppl_media2\Supplemental Tables S1-S24\Table_S7.tsv"
+TABLE_S1 = r"<数据目录>\Human_Hippocampus_ATAC\papers\suppl_media2\Supplemental Tables S1-S24\Table_S1.tsv"
 
 SAMPLE_MAP = {
     "GSM8549615_hc77": "hc77", "GSM8549616_hc78": "hc78", "GSM8549617_hc5579": "hc5579",

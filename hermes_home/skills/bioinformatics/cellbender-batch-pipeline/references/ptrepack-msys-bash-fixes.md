@@ -8,7 +8,7 @@
 
 **修复**: 使用完整路径：
 ```
-/c/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack
+/c/Users/<用户>/AppData/Local/Programs/Python/Python312/Scripts/ptrepack
 ```
 
 ---
@@ -40,9 +40,9 @@ print(f'Done: {os.path.getsize(dst)} bytes')
 
 ## 问题 3: MSYS bash 路径自动转换破坏 ptrepack 参数
 
-**症状**: `FileNotFoundError: ``E:\MemOmics-Agent\F`` does not exist`
+**症状**: `FileNotFoundError: ``<安装目录>\F`` does not exist`
 
-**根因**: MSYS bash 将 `F:/path` 自动转换为 `E:\MemOmics-Agent\F\path`（相对于工作目录）。
+**根因**: MSYS bash 将 `F:/path` 自动转换为 `<安装目录>\F\path`（相对于工作目录）。
 
 MSYS bash 也会把 `/f/path` 转为 `E:\f\path`。
 

@@ -2,7 +2,7 @@
 
 ## 问题
 
-硬编码工具路径（如 `C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe`）在以下场景失效：
+硬编码工具路径（如 `<用户目录>/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe`）在以下场景失效：
 - 不同机器 / 不同用户名
 - Python 版本升级（3.12→3.13）
 - 虚拟环境 vs 系统 Python
@@ -69,9 +69,9 @@ def find_tool(name, pip_package=None):
 ## Environment（分析启动时自动探测）
 | 工具 | 路径 | 来源 |
 |------|------|------|
-| ptrepack | C:\Users\...\Python312\Scripts\ptrepack.exe | sysconfig |
-| cellbender | C:\Users\...\Python312\Scripts\cellbender.exe | shutil.which |
-| python | C:\Users\...\Python312\python.exe | sys.executable |
+| ptrepack | <用户目录>\Python312\Scripts\ptrepack.exe | sysconfig |
+| cellbender | <用户目录>\Python312\Scripts\cellbender.exe | shutil.which |
+| python | <用户目录>\Python312\python.exe | sys.executable |
 ```
 
 ## 在脚本中使用

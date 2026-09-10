@@ -101,7 +101,7 @@ obj@misc$MF_wgcna$wgcna_net$TOMFiles <- "E:/.../TOM_official/MF_wgcna_TOM.rda"
 - ⚠️ 拆模块失败排查顺序：先换完整基因集重跑，再下"低异质性/均质"结论——NMF 可作互补验证（见 `references/limitations-and-literature.md`），但不可作为跳过完整基因集尝试的理由
 
 ## 环境备注（本机）
-- R 4.4.2 在 `C:/Users/23136/AppData/Local/R/R-4.4.2/`（execute_r 和 PATH 的 Rscript 用这个；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `C:/Users/23136/AppData/Local/R/R-4.4.2/bin/Rscript.exe` 跑参数核实/诊断脚本）
+- R 4.4.2 在 `<用户目录>/AppData/Local/R/R-4.4.2/`（execute_r 和 PATH 的 Rscript 用这个；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `<用户目录>/AppData/Local/R/R-4.4.2/bin/Rscript.exe` 跑参数核实/诊断脚本）
 - hdWGCNA 0.4.12 + WGCNA 1.74 + enrichR 3.4（.onAttach 联网不可达）已装进 AppData 库
 - 网络：GitHub raw/codeload 有时可达，github.com 页面 curl 常 reset——R 包安装优先 pak 或已缓存
 

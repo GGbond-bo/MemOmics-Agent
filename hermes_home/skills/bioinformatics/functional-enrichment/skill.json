@@ -82,7 +82,7 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "",
-      "params": "{\"method\":\"env_prep_and_format_check\",\"xlsx\":\"E:/骨骼肌锻炼/pathway_score.xlsx\",\"format\":\"Class|Signature|Annoation|Genes (TAB分隔)\",\"existing_scores\":14,\"missing_packages\":[\"msigdbr\",\"openxlsx\"]}",
+      "params": "{\"method\":\"env_prep_and_format_check\",\"xlsx\":\"<数据目录>/pathway_score.xlsx\",\"format\":\"Class|Signature|Annoation|Genes (TAB分隔)\",\"existing_scores\":14,\"missing_packages\":[\"msigdbr\",\"openxlsx\"]}",
       "date": "2026-08-13",
       "score": 8,
       "auto_score": 0.0,
@@ -127,7 +127,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "pytest 仓库验证通过：E:/MemOmics-Agent 项目 venv 正确入口 .venv/Scripts/python.exe -m pytest -q 跑仓库离线测试 exit 0，无失败/错误（仅既有 FastAPI lifespan 弃用警告 + PytestRemovedIn10Warning，均为已知噪音）。本次改动 10_go_term_barplot.py 在 resul"
+      "result": "pytest 仓库验证通过：<安装目录> 项目 venv 正确入口 .venv/Scripts/python.exe -m pytest -q 跑仓库离线测试 exit 0，无失败/错误（仅既有 FastAPI lifespan 弃用警告 + PytestRemovedIn10Warning，均为已知噪音）。本次改动 10_go_term_barplot.py 在 resul"
     },
     {
       "species": "",

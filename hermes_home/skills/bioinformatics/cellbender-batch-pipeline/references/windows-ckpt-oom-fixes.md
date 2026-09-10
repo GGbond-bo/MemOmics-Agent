@@ -21,7 +21,7 @@ Windows 临时文件管理器在 CellBender 训练期间锁定了 `%TEMP%\tmpXXX
 
 ```bash
 # 1. 清理 Windows 临时目录（启动 pipeline 前）
-rm -rf /c/Users/23136/AppData/Local/Temp/tmp* 2>/dev/null
+rm -rf /c/Users/<用户>/AppData/Local/Temp/tmp* 2>/dev/null
 
 # 2. 删除失败样本的 ckpt（如果 pipeline 没自动删）
 rm -f F:/CellBender_v2/cellbender_output/{failed_sample}/ckpt.tar.gz

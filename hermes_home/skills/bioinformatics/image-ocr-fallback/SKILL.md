@@ -63,8 +63,8 @@ else:
 Pitfalls:
 - `conf` is a **str** — do NOT `%.2f` format it (ValueError). Use `conf={conf}` or str().
 - Locate uploaded files first: webui uploads live under
-  `E:/MemOmics-Agent/webui/uploads/<timestamp>_<name>.png` — find with
-  `find E:/MemOmics-Agent -name "<filename>"`.
+  `<安装目录>/webui/uploads/<timestamp>_<name>.png` — find with
+  `find <安装目录> -name "<filename>"`.
 
 ## Failure Chain (do not re-try these)
 

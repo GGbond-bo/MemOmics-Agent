@@ -1387,7 +1387,7 @@ def _normalize_git_bash_path(p: Optional[str]) -> Optional[str]:
 
     No-op on non-Windows and for paths that already look native.  Git on
     native Windows normally emits forward-slash Windows paths
-    (``C:/Users/...``) which both bash and Python handle, but certain
+    (``<用户目录>``) which both bash and Python handle, but certain
     configurations (Git Bash shells, MSYS2, WSL-mounted repos) surface
     ``/c/...`` or ``/cygdrive/c/...`` variants.
     """

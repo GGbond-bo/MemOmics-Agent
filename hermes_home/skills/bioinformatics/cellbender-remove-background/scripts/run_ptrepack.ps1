@@ -1,9 +1,9 @@
-# =============================================================================
+﻿# =============================================================================
 # ptrepack: Compress CellBender output for Seurat Read10X_h5()
 # Source: User's actual production run
 # =============================================================================
 $ErrorActionPreference = "Continue"
-$ptrepack = "C:\Users\23136\AppData\Local\Programs\Python\Python312\Scripts\ptrepack.exe"
+$ptrepack = "<用户目录>\AppData\Local\Programs\Python\Python312\Scripts\ptrepack.exe"
 $cbDir    = "E:\monkey\cellbender"
 $outDir   = "E:\monkey\cellbender_seurat"
 

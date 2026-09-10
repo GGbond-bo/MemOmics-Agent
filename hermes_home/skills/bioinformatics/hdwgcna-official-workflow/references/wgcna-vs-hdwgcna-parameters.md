@@ -69,7 +69,7 @@
 ## 技术坑（本次实测）
 - hdWGCNA GitHub 默认分支是 **dev** 不是 main：`raw.githubusercontent.com/smorabit/hdWGCNA/dev/...`，main 一律 404
 - smorabit.github.io / UCLA 站点 curl 常 SSL reset（exit 35）：兜底路径 GitHub API（api.github.com/repos/.../contents/）、raw.githubusercontent、cdn.jsdelivr.net、web.archive.org
-- execute_r 调用的 R 4.5.3（Program Files）Matrix.dll 损坏无法加载包 → 用终端直接调 R 4.4.2 Rscript：`C:/Users/23136/AppData/Local/R/R-4.4.2/bin/Rscript.exe`
+- execute_r 调用的 R 4.5.3（Program Files）Matrix.dll 损坏无法加载包 → 用终端直接调 R 4.4.2 Rscript：`<用户目录>/AppData/Local/R/R-4.4.2/bin/Rscript.exe`
 - 验证已装包默认值：`Rscript -e 'loadNamespace("hdWGCNA"); print(args(asNamespace("hdWGCNA")$SetDatExpr))'`——签名即文档
 - 软阈值 R² 不达标排查顺序：未聚合直接用稀疏矩阵 / 基因子集太少 / 亚群异质性不足
 
@@ -78,4 +78,4 @@
 - Morabito et al. 2023 Cell Rep Methods 3:100498
 - https://cran.r-project.org/web/packages/WGCNA/WGCNA.pdf（v1.74）
 - WGCNA FAQ：https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/faq.html（archive.org 2021 快照）
-- 完整中文调研报告：E:\MemOmics-Agent\hdWGCNA_vs_WGCNA_调研报告.md
+- 完整中文调研报告：<安装目录>\hdWGCNA_vs_WGCNA_调研报告.md

@@ -20,7 +20,7 @@ ROUTE_B = f"{BASE}/routeB/run1_balanced"
 SCRIPTS_DIR = f"{BASE}/scripts"
 
 # 加载 ReportBuilder
-builder_dir = "E:/MemOmics-Agent/hermes_home/skills/bioinformatics/bioinformatics-html-report"
+builder_dir = "<安装目录>/hermes_home/skills/bioinformatics/bioinformatics-html-report"
 sys.path.insert(0, builder_dir)
 from html_report_builder import ReportBuilder
 

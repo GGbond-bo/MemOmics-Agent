@@ -23,7 +23,7 @@
 ### 1.2 Reasonix（本机运行环境）
 
 - **目录结构**：`%APPDATA%/reasonix/projects/<workspace-slug>/sessions/`
-  - workspace-slug = 路径转义（`C:\Users\...\global-workspace` → `C--Users-23136-AppData-Roaming-reasonix-global-workspace`，`\` 与 `:` 转 `-`）
+  - workspace-slug = 路径转义（`<用户目录>\global-workspace` → `C--Users-<用户>-AppData-Roaming-reasonix-global-workspace`，`\` 与 `:` 转 `-`）
 - **会话文件组**（同前缀多 sidecar）：
   - 主文件：`YYYYMMDD-HHMMSS.<微秒>-<provider-model>.jsonl`（如 `20260808-190919.562733500-dcs-glm-5.2.jsonl`）
   - sidecar：`.meta` / `.events.jsonl` / `.event-index.json` / `.goal-state.json` / `.telemetry.json` / `.recovery.json` / 分支 `.ckpt`（时间戳毫秒-模型名）
@@ -99,7 +99,7 @@ results/<project>/<topic-slug>_<YYYYMMDD-HHMMSS>_<hash8>/
     "project": "human_skeletal_muscle_aging",
     "model": "opencode-go/deepseek-v4-pro",
     "started_at": "2026-08-11T02:30:00+08:00",
-    "git_repo_root": "E:/MemOmics-Agent",
+    "git_repo_root": "<安装目录>",
     "git_branch": "master",
     "artifact_refs": ["log/debate_xxx.json", "figure1.png"]
   }

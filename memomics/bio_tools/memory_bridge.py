@@ -33,7 +33,7 @@ _lock = threading.Lock()
 
 def _get_db_path():
     """获取记忆数据库路径（与 Hermes 共用 hermes_home/memory_store.db）。"""
-    cur = Path(__file__).resolve().parent.parent.parent  # E:/MemOmics-Agent/
+    cur = Path(__file__).resolve().parent.parent.parent  # <安装目录>/
     hermes_home = cur / "hermes_home"
     return str(hermes_home / "memory_store.db")
 

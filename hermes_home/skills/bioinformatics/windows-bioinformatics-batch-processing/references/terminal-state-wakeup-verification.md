@@ -23,7 +23,7 @@
 
 ## ⚠️ 陷阱：多 session 环境选活跃 task_plan（2026-08-08 实测）
 
-results/ 下有多个 session 的 task_plan.md（实测 6 个）时，唤醒消息不指定 session。**不能按名字/直觉选** — 用 mtime 判定：`ls -lt --time-style=full-iso E:/MemOmics-Agent/results/*/task_plan.md`，最新修改者即活跃任务（本例 memomics-1135ed52 00:39，其余最早到 07-14）。读尾部（大文件 >250 行先读 tail，如 `wc -l` 后 offset=total-150）看最近唤醒记录与红线段，再决定是否三源验证。
+results/ 下有多个 session 的 task_plan.md（实测 6 个）时，唤醒消息不指定 session。**不能按名字/直觉选** — 用 mtime 判定：`ls -lt --time-style=full-iso <安装目录>/results/*/task_plan.md`，最新修改者即活跃任务（本例 memomics-1135ed52 00:39，其余最早到 07-14）。读尾部（大文件 >250 行先读 tail，如 `wc -l` 后 offset=total-150）看最近唤醒记录与红线段，再决定是否三源验证。
 
 ## ⛔ 权威完成信号陷阱：.arrow 计数 ≠ 样本数（2026-08-08 实测）
 

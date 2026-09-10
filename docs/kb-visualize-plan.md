@@ -7,10 +7,10 @@
 - `.backups/kb-visualize-prod-20260806-121751/`（生产文件改动前，md5 校验一致）
 
 ## ⚠️ 关键发现（实施中）
-- **生产文件 = 顶层 `E:/MemOmics-Agent/webui/server.py` + `webui/index.html`**
+- **生产文件 = 顶层 `<安装目录>/webui/server.py` + `webui/index.html`**
 - `memomics/webui/` 是旧副本（改它不生效）
 - 用户实例（127.0.0.1:8899, PID 52772）跑旧代码，**需重启才生效**，未擅自重启
-- 真实运行时 KB_DIR = `E:/MemOmics-Agent/memomics/knowledge_base`（单层，95 YAML）
+- 真实运行时 KB_DIR = `<安装目录>/memomics/knowledge_base`（单层，95 YAML）
 
 ## 目标
 用户能在 MemOmics WebUI 中像浏览 Obsidian 一样查看知识库：目录树、结构化内容渲染、全文搜索、图谱视图。LLM 调用侧（search_knowledge）已完备，不动。
