@@ -152,7 +152,7 @@ def _session_task_id(task_id: str) -> str:
 
 
 # 2026-08-16: R 非法转义消毒 — 反斜杠后跟非转义字符（如 Windows 单反斜杠路径
-# 'E:\骨骼肌锻炼\MF_AUCell_meta.csv' 中的 \骨 \M）会让 R 4.5.3 报错且错误消息
+# 'D:\data\MF_AUCell_meta.csv' 中的 \骨 \M）会让 R 4.5.3 报错且错误消息
 # 含坏字节，卡死 jsonlite 序列化 → kernel worker 永久无响应（实测复现）。
 _BAD_R_ESCAPE_RE = re.compile(r'\\(?![0-7nrtbafvxuU\\\'"])')
 

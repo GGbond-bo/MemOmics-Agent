@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MemOmics 全局环境验证器
-读取 E:/MemOmics-Agent/environment.json → 验证每个路径 → MISSING时自动重新探测 → 更新JSON
+读取 <安装目录>/environment.json → 验证每个路径 → MISSING时自动重新探测 → 更新JSON
 exit 0: 全部OK
 exit 1: 有缺失但已自动修复
 exit 2: 有关键缺失无法修复
@@ -11,7 +11,7 @@ exit 2: 有关键缺失无法修复
 import json, os, sys, shutil, subprocess
 from pathlib import Path
 
-# P1-16(2026-08-13): 路径相对化 — 打包/分发版不再依赖 E:/MemOmics-Agent 写死路径
+# P1-16(2026-08-13): 路径相对化 — 打包/分发版不再依赖开发机写死路径
 ENV_FILE = Path(__file__).resolve().parent.parent / "environment.json"
 if not ENV_FILE.exists():
     # 兼容旧布局：环境文件可能在 memomics/ 或当前目录
@@ -141,6 +141,16 @@ def find_conda_envs():
     return envs
 
 
+def _user_local_python312():
+    """当前用户的 Python312 安装目录（不写死用户名/路径）。
+
+    2026-09-10: 原实现硬编码 C:/Users/<开发者用户名>/... —— 既在分发包里泄漏开发机
+    个人信息，也导致其他用户机器上该回退路径永远失效。改用环境变量推导。
+    """
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    return Path(base) / "Programs" / "Python" / "Python312"
+
+
 def find_cellbender():
     """多级回退查找cellbender"""
     # 1. shutil.which
@@ -148,7 +158,7 @@ def find_cellbender():
     if cb:
         return cb
     # 2. 已知位置
-    known = Path("C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/cellbender.exe")
+    known = _user_local_python312() / "Scripts" / "cellbender.exe"
     if known.exists():
         return str(known)
     # 3. pip show
@@ -172,7 +182,7 @@ def find_ptrepack():
     cb = shutil.which("ptrepack")
     if cb:
         return cb
-    known = Path("C:/Users/23136/AppData/Local/Programs/Python/Python312/Scripts/ptrepack.exe")
+    known = _user_local_python312() / "Scripts" / "ptrepack.exe"
     if known.exists():
         return str(known)
     return None

@@ -1459,7 +1459,7 @@ def _results_dir_changed_since(session, ts: float, extra_dirs: list = None) -> b
 
     平台自写(不算产出): token_usage.jsonl / .task_state.json / task_plan.md / log/ / .loopx/
     扫描上限 200 个文件，避免大目录全量遍历。
-    extra_dirs: 2026-08-22 额外检查目录（用户目标路径如 E:\\骨骼肌锻炼\\，产物可能写在那里）。
+    extra_dirs: 2026-08-22 额外检查目录（用户目标路径，如 D:\\data\\，产物可能写在那里）。
     返回 True 表示"有变化"(或无法判断——此时不干预，避免误伤)。
     """
     _rd = session.get("results_dir", "") or ""
@@ -13255,7 +13255,7 @@ async def ws_endpoint(ws: WebSocket):
                         _real_exec_this_turn = _session.get("_real_exec_this_turn") or bool(_tool_call_log)
                         if _real_exec_this_turn and any(_w in (result or "") for _w in _claim_prod_words):
                             try:
-                                # 用户目标路径（如 E:\骨骼肌锻炼\）产物可能不在 results_dir，一并检查
+                                # 用户目标路径产物可能不在 results_dir，一并检查
                                 _extra_dirs = []
                                 for _p in re.findall(r'[A-Za-z]:[\\/][^\s"\'，。；：、]*', _run_text or ""):
                                     _dir_c = _p if os.path.isdir(_p) else os.path.dirname(_p)

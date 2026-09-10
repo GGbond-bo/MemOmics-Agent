@@ -435,13 +435,13 @@ Phase 1
 
 ## 环境文件 (environment.json)
 
-全局路径：`E:/MemOmics-Agent/environment.json`
+全局路径：`<安装目录>/environment.json`
 
 | 工具 | 路径 | 备注 |
 |------|------|------|
-| R 4.4.2 | `C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe` | 515包，主力环境 |
+| R 4.4.2 | `C:/Users/<用户名>/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe` | 515包，主力环境 |
 | R 4.6.1 | `C:/Program Files/R/R-4.6.1/bin/x64/Rscript.exe` | 245包 |
-| Python 3.12 | `C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe` | |
+| Python 3.12 | `C:/Users/<用户名>/AppData/Local/Programs/Python/Python312/python.exe` | |
 | CellBender | `Python312/Scripts/cellbender.exe` | |
 | GPU | RTX 5070 Ti, 16GB | |
 
