@@ -527,6 +527,13 @@ async def _start_hermes_cron_ticker():
     cron ticker 每 60 秒扫描一次 hermes_home/cron/jobs.json，
     执行到期的 cron job。这是长任务心跳监控的核心引擎。
     """
+    # 2026-09-10: 启动时同步一次 custom_providers 到 Hermes 底座——补齐 base_url 与
+    # per-provider extra_headers（opencode.ai 网关的 x-opencode-session），
+    # 让已装用户无需重新保存 key 即可修复。失败不阻塞启动。
+    try:
+        _sync_custom_providers_to_hermes()
+    except Exception as _e_sync:
+        logger.warning(f"[MemOmics] 启动同步 custom_providers 失败（不阻塞）: {_e_sync}")
     try:
         from cron.scheduler_provider import InProcessCronScheduler
         # 确保 HERMES_HOME 正确：cron 数据存在 hermes_home/cron/ 下
@@ -6947,6 +6954,46 @@ async def get_provider_models(pid: str):
     return {"provider": pid, "models": models, "base_url": p["api"]}
 
 
+_OPENCODE_SESSION_HOST = "opencode.ai"
+
+
+def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None):
+    """构造写入 Hermes config.yaml 的 custom_providers 条目（2026-09-10 修复）。
+
+    1) 同时写 `base_url`：Hermes 的 ProviderProfile / per-provider `extra_headers`
+       匹配只认 `base_url`（hermes_cli/config.py:get_custom_provider_extra_headers），
+       此前只写 `api_base` → 该类配置永远匹配不上，静默失效。
+    2) 保留原有附加字段（extra_headers / api_mode / ssl_* / context_length…）：
+       原实现每次保存 key 都从零重建条目，会抹掉用户或底座写入的附加设置。
+    3) opencode.ai 网关自动补 `x-opencode-session`：该网关缺此请求头会直接
+       400 MissingSessionID（"cannot be routed efficiently"）——这是 opencode-go
+       提供商在 MemOmics 里"能列模型但一发消息就失败"的根因。会话 id 用于上游
+       路由/缓存亲和，生成一次后随 config 持久化、稳定复用。
+    """
+    entry = dict(prev) if isinstance(prev, dict) else {}
+    entry.update({
+        "id": pid,
+        "name": name,
+        "api_base": api_base,     # MemOmics 自身读取的字段
+        "base_url": api_base,     # Hermes 底座/匹配器读取的字段
+        "api_key": api_key,
+        "models": models,
+    })
+    try:
+        import urllib.parse as _up_mod
+        host = (_up_mod.urlparse(api_base).hostname or "").lower()
+    except Exception:
+        host = ""
+    headers = entry.get("extra_headers")
+    headers = dict(headers) if isinstance(headers, dict) else {}
+    if _OPENCODE_SESSION_HOST in host and not headers.get("x-opencode-session"):
+        headers["x-opencode-session"] = str(uuid.uuid4())
+        print("[MemOmics] 已为 opencode.ai 网关补充 x-opencode-session 请求头")
+    if headers:
+        entry["extra_headers"] = headers
+    return entry
+
+
 def _sync_custom_providers_to_hermes(pid=None):
     """把「有 key 的 provider」同步为 Hermes config.yaml 的 custom_providers。
 
@@ -6969,21 +7016,17 @@ def _sync_custom_providers_to_hermes(pid=None):
                 if not (saved and saved.get("api_key")):
                     continue
                 p = _PROVIDERS_INDEX.get(_pid) or {}
-                existing[_pid] = {
-                    "id": _pid, "name": p.get("name", _pid),
-                    "api_base": saved.get("base_url") or p.get("api", ""),
-                    "api_key": saved["api_key"],
-                    "models": p.get("models", []),
-                }
+                _api = saved.get("base_url") or p.get("api", "")
+                existing[_pid] = _build_hermes_provider_entry(
+                    _pid, p.get("name", _pid), _api, saved["api_key"],
+                    p.get("models", []), existing.get(_pid))
         elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
             saved = _provider_keys[pid]
-            existing[pid] = {
-                "id": pid, "name": p.get("name", pid),
-                "api_base": saved.get("base_url") or p.get("api", ""),
-                "api_key": saved["api_key"],
-                "models": p.get("models", []),
-            }
+            _api = saved.get("base_url") or p.get("api", "")
+            existing[pid] = _build_hermes_provider_entry(
+                pid, p.get("name", pid), _api, saved["api_key"],
+                p.get("models", []), existing.get(pid))
         else:
             existing.pop(pid, None)
         cfg["custom_providers"] = list(existing.values())
