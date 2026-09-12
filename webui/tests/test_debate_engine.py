@@ -57,6 +57,22 @@ def provider_keys(monkeypatch):
     return pk
 
 
+@pytest.fixture(autouse=True)
+def _isolate_machine_state(monkeypatch):
+    """隔离开发机状态：辩论路由不得依赖本机 hermes_home/model_config.json。
+
+    2026-09-13：_current_model_route() 会读「界面当前模型」文件，单元测试必须置空，
+    否则开发机的当前模型（dcs-cloud/deepseek-flash）会串进断言。
+    """
+    monkeypatch.setattr(da, "_load_global_model_config", lambda: {})
+    monkeypatch.setattr(da, "_model_cfg_cache", {"path": "", "mtime": -1.0, "data": {}})
+    monkeypatch.setattr(da, "_provider_default_models", lambda: {})
+    monkeypatch.setattr(da, "_prov_models_cache", {"mtime": -1.0, "data": {}})
+    da.set_session_context("", "")
+    yield
+    da.set_session_context("", "")
+
+
 # ==================== A1 指纹隔离 ====================
 
 class TestFingerprint:

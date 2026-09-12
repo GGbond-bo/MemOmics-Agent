@@ -2081,7 +2081,7 @@ async def _trigger_agent_turn(session, message):
             # P1-13(2026-08-13): 自检唤醒 executor 线程内设置会话上下文（kernel 会话隔离）
             try:
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
             except Exception:
                 pass
             # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
@@ -3034,6 +3034,25 @@ if _is_valid_api_key(_current_model.get("api_key")) and not _provider_keys:
 
 # 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量
 _sync_debate_env()
+
+
+def _set_debate_session_context(session, results_dir: str = None):
+    """设置辩论/工具链路的会话上下文（2026-09-13）。
+
+    除 sid/results_dir 外，把该会话「当前使用的模型配置」一并注入。
+    debate_analysis 的独立 LLM 调用（含裁判）据此走「当前使用模型的提供商」，
+    再在「可用提供商」之间兜底 —— 此前辩论只认 server 启动时注入一次的 DEEPSEEK_*
+    env，界面换模型后仍走旧通道（judge 还被 config 写死到 opencode-go）。
+    """
+    try:
+        from memomics.bio_tools.debate_analysis import set_session_context
+        session = session or {}
+        mc = session.get("model_config") or _current_model
+        if not results_dir:
+            results_dir = session.get("results_dir", "")
+        set_session_context(sid=session.get("id", ""), results_dir=results_dir, model_config=mc)
+    except Exception:
+        pass
 
 # 预设模型 (兼容旧 API, 从 _CHINA_PROVIDERS 生成)
 _preset_models = []
@@ -6272,7 +6291,7 @@ async def rename_results_dir(sid: str, body: dict = None):
     
     # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
     from memomics.bio_tools.debate_analysis import set_session_context
-    set_session_context(sid=sid, results_dir=new_dir.replace("\\", "/"))
+    _set_debate_session_context(_sessions.get(sid) or {}, results_dir=new_dir.replace("\\", "/"))
     # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
     
     return {
@@ -6884,6 +6903,11 @@ async def switch_model(payload: dict):
             s["agent"] = None
     # 持久化到文件 (重启后自动恢复)
     _save_model_config()
+    # 2026-09-13: 全局换模型后同步刷新辩论 env（无会话上下文的调用走这条兜底通道）
+    try:
+        _sync_debate_env()
+    except Exception:
+        pass
     return {"ok": True, "current": _public_model_config()}
 
 
@@ -9137,7 +9161,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             # P1-13(2026-08-13): 微信 executor 线程内设置会话上下文（kernel 会话隔离）
             try:
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
             except Exception:
                 pass
             result = agent.run_conversation(text, conversation_history=history if history else None, task_id=session["id"])
@@ -11940,7 +11964,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
                 # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
 
                 # 注入 results_dir 到 Agent 系统提示词，确保输出文件写到正确位置
@@ -13116,7 +13140,7 @@ async def ws_endpoint(ws: WebSocket):
                             # execute_r/execute_python 才能识别会话并隔离 kernel。
                             try:
                                 from memomics.bio_tools.debate_analysis import set_session_context
-                                set_session_context(sid=_session["id"], results_dir=_session.get("results_dir", ""))
+                                _set_debate_session_context(_session)
                             except Exception:
                                 pass
                             result = _agent.run_conversation(

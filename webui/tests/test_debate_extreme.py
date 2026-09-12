@@ -58,6 +58,22 @@ def no_keys(monkeypatch):
     return {}
 
 
+@pytest.fixture(autouse=True)
+def _isolate_machine_state(monkeypatch):
+    """隔离开发机状态：辩论路由不得依赖本机 hermes_home/model_config.json。
+
+    2026-09-13：_current_model_route() 会读「界面当前模型」文件，单元测试必须置空，
+    否则开发机的当前模型（dcs-cloud/deepseek-flash）会串进断言。
+    """
+    monkeypatch.setattr(da, "_load_global_model_config", lambda: {})
+    monkeypatch.setattr(da, "_model_cfg_cache", {"path": "", "mtime": -1.0, "data": {}})
+    monkeypatch.setattr(da, "_provider_default_models", lambda: {})
+    monkeypatch.setattr(da, "_prov_models_cache", {"mtime": -1.0, "data": {}})
+    da.set_session_context("", "")
+    yield
+    da.set_session_context("", "")
+
+
 def _role_reply(label, content=None):
     """构造 8 角色 mock 回复。"""
     content = content or f"[{label} 论点]"
@@ -788,4 +804,152 @@ class TestResilienceHardening:
         details = obj["failed_role_details"]
         assert details and any("MissingSessionID" in v["detail"] for v in details.values())
         assert any(v["model"] == "m @ u" for v in details.values())
+
+
+# ==================== 当前模型路由 / 可用提供商（2026-09-13） ====================
+
+class TestCurrentModelRouting:
+    """用户要求：辩论（含裁判）跟随「当前使用模型的提供商」，再在「可用提供商」兜底。"""
+
+    def test_session_model_config_wins(self, monkeypatch):
+        da.set_session_context("s1", "", model_config={
+            "provider": "openai", "base_url": "https://session.example/v1",
+            "api_key": "sk-session", "model": "session-model"})
+        monkeypatch.setattr(da, "_load_global_model_config", lambda: {
+            "provider": "p", "base_url": "https://global.example/v1",
+            "api_key": "sk-global", "model": "global-model"})
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-env")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://env.example/v1")
+        r = da._current_model_route({})
+        assert r["base_url"] == "https://session.example/v1"
+        assert r["model"] == "session-model" and r["source"] == "session"
+
+    def test_global_file_before_env(self, monkeypatch):
+        da.set_session_context("", "")
+        monkeypatch.setattr(da, "_load_global_model_config", lambda: {
+            "provider": "dcs-cloud", "base_url": "https://global.example/v1",
+            "api_key": "sk-global", "model": "global-model"})
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-env")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://env.example/v1")
+        r = da._current_model_route({})
+        assert r["base_url"] == "https://global.example/v1"
+        assert r["source"] == "model_config.json"
+
+    def test_env_is_last_resort(self, monkeypatch):
+        da.set_session_context("", "")
+        monkeypatch.setattr(da, "_load_global_model_config", lambda: {})
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-env")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://env.example/v1")
+        monkeypatch.setenv("DEEPSEEK_MODEL", "env-model")
+        r = da._current_model_route({})
+        assert r["base_url"] == "https://env.example/v1" and r["source"] == "env"
+
+    def test_no_route_when_nothing_configured(self, monkeypatch):
+        da.set_session_context("", "")
+        monkeypatch.setattr(da, "_load_global_model_config", lambda: {})
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        assert da._current_model_route({}) == {}
+
+    def test_placeholder_and_empty_keys_rejected(self):
+        assert da._looks_like_placeholder_key("your_api_key")
+        assert da._looks_like_placeholder_key("sk-xxx")
+        assert da._looks_like_placeholder_key("")
+        assert not da._looks_like_placeholder_key("sk-realkey123")
+        assert da._route_from_config({"api_key": "your_api_key", "base_url": "https://x/v1"}, {}, "session") == {}
+        assert da._route_from_config({"api_key": "sk-a", "base_url": ""}, {}, "session") == {}
+
+    def test_default_role_follows_current_model(self, monkeypatch):
+        """pro/con 走默认路由 = 当前模型提供商，而不是启动时注入的旧 env。"""
+        da.set_session_context("s", "", model_config={
+            "provider": "openai", "base_url": "https://session.example/v1",
+            "api_key": "sk-session", "model": "session-model"})
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-stale")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://stale.example/v1")
+        rc = da._default_role_llm("sk-stale", "https://stale.example/v1", "stale-model",
+                                  {"deepseek": {"api_key": "sk-ds", "base_url": "https://api.deepseek.com/v1"}})
+        assert rc["base_url"] == "https://session.example/v1" and rc["model"] == "session-model"
+
+    def test_available_routes_order_and_placeholder_filter(self):
+        pk = {"opencode-go": {"api_key": "sk-oc", "base_url": "https://oc.example/v1"},
+              "deepseek": {"api_key": "sk-ds", "base_url": "https://api.deepseek.com/v1"},
+              "dcs-cloud": {"api_key": "sk-dc", "base_url": "https://dcs.example/v1"},
+              "template": {"api_key": "your_api_key", "base_url": "https://t.example/v1"}}
+        routes = da._available_routes(pk)
+        assert [r["provider"] for r in routes] == ["deepseek", "opencode-go", "dcs-cloud"]
+        assert all("template" != r["provider"] for r in routes)
+
+    def test_judge_fallback_uses_current_model_then_available(self, monkeypatch):
+        """judge 写死通道挂掉 → ① 当前模型提供商 → ② 可用提供商，而不是直接整场作废。"""
+        da.set_session_context("s", "", model_config={
+            "provider": "openai", "base_url": "https://session.example/v1",
+            "api_key": "sk-session", "model": "session-model"})
+        monkeypatch.setattr(da, "_load_provider_keys", lambda: {
+            "opencode-go": {"api_key": "sk-oc", "base_url": "https://oc.example/v1"},
+            "deepseek": {"api_key": "sk-ds", "base_url": "https://api.deepseek.com/v1"}})
+        cfg = _mk_cfg(judge={"provider": "opencode-go", "model": "deepseek-v4-pro"})
+        monkeypatch.setattr(da, "_call_llm_role", lambda label, prompt, cfg, temperature=None: {
+            "content": "[judge 辩论生成失败]", "call_id": "j1", "error": True,
+            "error_detail": "HTTP 400 MissingSessionID", "transient": False})
+        seen = []
+
+        def fake_sync(prompt, label, api_key, base_url, model, temperature=0.7, max_tokens=1024):
+            seen.append((base_url, model))
+            if base_url == "https://session.example/v1":
+                return {"content": '{"verdict":"ok"}', "call_id": "j2", "messages_count": 1}
+            return {"content": "[judge 辩论生成失败]", "call_id": "j3", "error": True,
+                    "error_detail": "HTTP 500"}
+
+        monkeypatch.setattr(da, "_call_llm_sync", fake_sync)
+        r = da._call_llm_role_resilient("judge", "p", cfg)
+        assert r["fallback_used"] is True
+        assert r["fallback_route"] == "openai/session-model"
+        assert seen[0] == ("https://session.example/v1", "session-model")
+
+    def test_judge_fallback_walks_to_available_providers(self, monkeypatch):
+        da.set_session_context("", "")
+        monkeypatch.setattr(da, "_load_global_model_config", lambda: {})
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+        monkeypatch.setattr(da, "_load_provider_keys", lambda: {
+            "opencode-go": {"api_key": "sk-oc", "base_url": "https://oc.example/v1"},
+            "deepseek": {"api_key": "sk-ds", "base_url": "https://api.deepseek.com/v1"}})
+        cfg = _mk_cfg(judge={"provider": "opencode-go", "model": "deepseek-v4-pro"})
+        monkeypatch.setattr(da, "_call_llm_role", lambda label, prompt, cfg, temperature=None: {
+            "content": "[judge 辩论生成失败]", "call_id": "j1", "error": True,
+            "error_detail": "HTTP 400 MissingSessionID", "transient": False})
+        seen = []
+
+        def fake_sync(prompt, label, api_key, base_url, model, temperature=0.7, max_tokens=1024):
+            seen.append(base_url)
+            return {"content": "[judge 辩论生成失败]", "call_id": "j9", "error": True,
+                    "error_detail": "HTTP 429 rate limit", "transient": True}
+
+        monkeypatch.setattr(da, "_call_llm_sync", fake_sync)
+        r = da._call_llm_role_resilient("judge", "p", cfg)
+        # 「可用提供商」顺序：deepseek 官方优先，其余靠后（dcs-cloud 垫底）
+        assert seen == ["https://api.deepseek.com/v1", "https://oc.example/v1"]
+        assert r.get("fallback_used") is None
+        assert "fallback" in r["error_detail"]
+
+    def test_available_routes_use_provider_own_model_list(self, monkeypatch):
+        """回退到别的 provider 时用「该 provider 真实存在的模型」，不能拿当前模型的 id 硬打。"""
+        monkeypatch.setattr(da, "_provider_default_models",
+                            lambda: {"opencode-go": ["glm-5.2", "kimi-k3"]})
+        pk = {"opencode-go": {"api_key": "sk-oc", "base_url": "https://oc.example/v1"}}
+        routes = da._available_routes(pk)
+        assert routes and routes[0]["model"] == "glm-5.2"
+
+    def test_fingerprint_includes_current_route(self, monkeypatch):
+        """换「当前使用模型」→ 指纹必须变，否则换模型后命中旧模型产出的缓存。"""
+        da.set_session_context("s", "", model_config={
+            "provider": "openai", "base_url": "https://a.example/v1",
+            "api_key": "sk-a", "model": "m-a"})
+        f1 = da._debate_fingerprint("homogeneous", 1, {}, {})
+        da.set_session_context("s", "", model_config={
+            "provider": "openai", "base_url": "https://b.example/v1",
+            "api_key": "sk-b", "model": "m-b"})
+        f2 = da._debate_fingerprint("homogeneous", 1, {}, {})
+        assert f1 != f2 and "cur=" in f2
 

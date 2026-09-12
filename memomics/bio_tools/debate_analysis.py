@@ -60,14 +60,20 @@ import contextvars as _contextvars
 
 _sid_var = _contextvars.ContextVar("memomics_session_sid", default="")
 _results_dir_var = _contextvars.ContextVar("memomics_session_results_dir", default="")
+# 2026-09-13（用户要求）：辩论必须跟随「当前使用模型的提供商」。会话级模型配置由
+# server.py 在 agent 回合入口注入（多会话各用各的模型），见 _current_model_route()。
+_model_cfg_var = _contextvars.ContextVar("memomics_session_model_cfg", default=None)
 
-def set_session_context(sid: str = "", results_dir: str = ""):
+def set_session_context(sid: str = "", results_dir: str = "", model_config: dict = None):
     """设置当前上下文（线程 + 其派生的工具 worker 线程）的会话上下文。
 
     由 server.py 在 agent 启动 / executor 线程入口调用。
+    model_config: 该会话当前使用的模型配置 {provider, base_url, api_key, model}。
+    辩论/文献库等独立 LLM 调用据此走「当前模型提供商」（2026-09-13 新增）。
     """
     _sid_var.set(sid or "")
     _results_dir_var.set(results_dir or "")
+    _model_cfg_var.set(dict(model_config) if isinstance(model_config, dict) and model_config else None)
 
 def get_session_sid() -> str:
     """获取当前会话 ID（ContextVar，跨工具 worker 线程传播）。"""
@@ -76,6 +82,11 @@ def get_session_sid() -> str:
 def get_session_results_dir() -> str:
     """获取当前结果目录（ContextVar，跨工具 worker 线程传播）。"""
     return _results_dir_var.get()
+
+def get_session_model_config() -> dict:
+    """获取当前会话「正在使用的模型配置」（ContextVar，跨工具 worker 线程传播）。"""
+    cfg = _model_cfg_var.get()
+    return cfg if isinstance(cfg, dict) else {}
 
 SCHEMA = {
     "name": "debate_analysis",
@@ -982,6 +993,152 @@ def _load_provider_keys() -> dict:
         return {}
 
 
+# ==================== 当前使用模型的提供商 / 可用提供商（2026-09-13 用户要求）====================
+# 现象：judge 走 config.yaml 里写死的单条通道（opencode-go），该通道一坏 → L2 全灭；
+# 而界面里用户"当前使用"的模型（model_config.json）从未参与辩论路由。
+# 规则：辩论角色 = 当前使用模型的提供商优先 → 再在可用提供商之间兜底。
+_PLACEHOLDER_KEY_TOKENS = ("your_api_key", "your-api-key", "yourkey", "your_key", "insert_key",
+                           "changeme", "change_me", "replace_me", "placeholder", "sk-xxx",
+                           "api_key_here", "在这里", "请填写")
+
+_model_cfg_cache = {"path": "", "mtime": -1.0, "data": {}}
+
+
+def _looks_like_placeholder_key(value) -> bool:
+    """占位符 key 判定（与 webui/server.py::_is_valid_api_key 同源口径）。"""
+    s = str(value or "").strip().lower()
+    if not s:
+        return True
+    if s in ("none", "null", "undefined", "todo", "xxx", "dummy", "test"):
+        return True
+    if s.startswith(("<", "${")):
+        return True
+    return any(tok in s for tok in _PLACEHOLDER_KEY_TOKENS)
+
+
+def _load_global_model_config() -> dict:
+    """读取 hermes_home/model_config.json —— 界面「当前模型」的落盘位置。
+
+    按 mtime 缓存重读：用户在界面换了模型/提供商，辩论下一次调用立刻生效。
+    （旧实现只在 server 启动时把 DEEPSEEK_* 注入 env 一次，换模型后辩论仍用旧通道。）
+    """
+    try:
+        p = _get_config_path().parent / "model_config.json"
+        if not p.exists():
+            return {}
+        mt = p.stat().st_mtime
+        if _model_cfg_cache["path"] == str(p) and _model_cfg_cache["mtime"] == mt:
+            return dict(_model_cfg_cache["data"])
+        data = json.loads(p.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            return {}
+        _model_cfg_cache.update({"path": str(p), "mtime": mt, "data": data})
+        return dict(data)
+    except Exception as e:
+        logger.warning(f"Failed to load model_config.json: {e}")
+        return {}
+
+
+def _route_from_config(raw: dict, provider_keys: dict, source: str) -> dict:
+    """把 {provider, base_url, api_key, model} 规格化成路由 dict；不可用返回 {}。"""
+    raw = raw or {}
+    key = str(raw.get("api_key") or "").strip()
+    url = str(raw.get("base_url") or raw.get("api_base") or "").rstrip("/")
+    model = str(raw.get("model") or "").strip()
+    if not key or not url or _looks_like_placeholder_key(key):
+        return {}
+    pid = ""
+    for _pid, _info in (provider_keys or {}).items():
+        if str((_info or {}).get("base_url") or "").rstrip("/").lower() == url.lower():
+            pid = _pid
+            break
+    return {"api_key": key, "base_url": url,
+            "model": model or "deepseek-v4-flash", "temperature": 0.7,
+            "provider": pid or str(raw.get("provider") or source), "source": source}
+
+
+def _current_model_route(provider_keys: dict = None) -> dict:
+    """「当前使用模型的提供商」路由。优先级：会话级 → 全局 model_config.json → env。
+
+    会话级 = server.py 每回合 set_session_context(model_config=...) 注入（多会话各用各的模型）；
+    全局 = 界面下拉框当前模型（model_config.json，按 mtime 实时读）；
+    env = server 启动时 _sync_debate_env 注入的旧兼容通道（命令行/脚本调用时兜底）。
+    """
+    pk = provider_keys if provider_keys is not None else _load_provider_keys()
+    for raw, source in ((get_session_model_config(), "session"),
+                        (_load_global_model_config(), "model_config.json"),
+                        ({"api_key": os.environ.get("DEEPSEEK_API_KEY", ""),
+                          "base_url": os.environ.get("DEEPSEEK_BASE_URL", ""),
+                          "model": os.environ.get("DEEPSEEK_MODEL", "")}, "env")):
+        route = _route_from_config(raw, pk, source)
+        if route:
+            return route
+    return {}
+
+
+_prov_models_cache = {"mtime": -1.0, "data": {}}
+
+
+def _provider_default_models() -> dict:
+    """config.yaml custom_providers[].models 的模型清单 → {pid: [model_id, ...]}（按 mtime 缓存）。
+
+    用途：回退到「别的可用提供商」时要给一个该 provider 真正存在的模型 id，
+    否则拿当前模型的 id 去打（如用 dcs 的 deepseek-flash 打 opencode-go）必 400。
+    """
+    try:
+        p = _get_config_path()
+        if not p.exists():
+            return {}
+        mt = p.stat().st_mtime
+        if _prov_models_cache["mtime"] == mt:
+            return dict(_prov_models_cache["data"])
+        import yaml
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        out = {}
+        for entry in (data.get("custom_providers") or []):
+            if not isinstance(entry, dict):
+                continue
+            pid = str(entry.get("id") or "").strip()
+            ids = [str(m.get("id")) for m in (entry.get("models") or [])
+                   if isinstance(m, dict) and m.get("id")]
+            if pid and ids:
+                out[pid] = ids
+        _prov_models_cache.update({"mtime": mt, "data": out})
+        return dict(out)
+    except Exception as e:
+        logger.warning(f"Failed to load provider model list: {e}")
+        return {}
+
+
+def _available_routes(provider_keys: dict = None, exclude: list = None) -> list:
+    """「可用提供商」路由表：有 key + base_url、非占位符 key。
+
+    排序与 webui/server.py 一致：deepseek 官方优先，已知死通道（dcs-cloud）靠后。
+    """
+    pk = provider_keys if provider_keys is not None else _load_provider_keys()
+    _known_dead = {"dcs-cloud"}
+    _prov_default_model = {"deepseek": "deepseek-v4-flash"}
+    _env_model = os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash"
+    _listed = _provider_default_models()   # {pid: [该 provider 真实存在的 model id, ...]}
+    out, seen = [], set()
+    for pid in sorted(pk.keys(), key=lambda p: (p in _known_dead, p != "deepseek")):
+        info = pk.get(pid) or {}
+        key = str(info.get("api_key") or "").strip()
+        url = str(info.get("base_url") or "").rstrip("/")
+        if not key or not url or _looks_like_placeholder_key(key):
+            continue
+        # 模型 id 优先级：deepseek 官方惯例 → config.yaml 里该 provider 的模型清单 → env 模型
+        _cands = [_prov_default_model.get(pid)] + list(_listed.get(pid) or []) + [_env_model]
+        model = next((m for m in _cands if m), _env_model)
+        sig = (url.lower(), model)
+        if sig in seen or sig in (exclude or []):
+            continue
+        seen.add(sig)
+        out.append({"api_key": key, "base_url": url, "model": model, "temperature": 0.7,
+                    "provider": pid, "source": "provider_keys"})
+    return out
+
+
 def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None,
                         level: str = "L2", evidence_fp: str = "") -> str:
     """模式指纹 — 参与缓存 key，防止不同辩论架构/级别的结果互相污染（P0 级）。
@@ -995,6 +1152,11 @@ def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict 
     parts = [f"mode={mode}", f"rounds={rounds}"]
     if level and level != "L2":
         parts.append(f"level={level}")
+    # 2026-09-13: 默认路由改为「当前使用模型的提供商」后，同一 topic 在不同模型下
+    # 会产出不同结论 → 当前模型必须进指纹，否则换模型后仍命中旧模型的结果。
+    _cur_route = _current_model_route()
+    if _cur_route:
+        parts.append(f"cur={_cur_route.get('provider')}/{_cur_route.get('model')}")
     if cfg:
         # v2(2026-08-27): 影响产出的新参数一并入指纹，防缓存串用
         for key in ("role_preset", "judge_count", "rounds_max", "prompt_version", "evidence_mode"):
@@ -1108,6 +1270,11 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
     P2-8(2026-08-10): 抽成独立函数供 temperature 模式复用（原 temperature 直接返回 env_key，
     无环境变量时 api_key 为空 → 8/8 全失败 "Illegal header value b'Bearer '"）。
     """
+    # 2026-09-13（用户要求）：默认路由 = 「当前使用模型的提供商」（会话级 → 全局
+    # model_config.json → env），pro/con 等角色全部跟随界面当前模型，不再吃启动时的旧 env。
+    _cur = _current_model_route(provider_keys)
+    if _cur:
+        return _cur
     if env_key:
         # 2026-08-15: base_url 为空时按 key 匹配 provider_keys；再不行回退 deepseek 官方
         _url = env_url or ""
@@ -1175,8 +1342,10 @@ def _call_llm_role_resilient(label: str, prompt: str, cfg: dict, temperature: fl
     缺附加头/额度耗尽，L2 就是 100% 失败（2026-09-13 实测：7 个角色全部成功，judge
     一律 400 MissingSessionID，4 次 L2 全部返回 error）。
 
-    回退策略：分组路由失败后，用默认角色路由（env DEEPSEEK_* → provider_keys）再试一次；
-    成功则标记 fallback_used/fallback_from，让「一个 provider 挂掉」不再拖垮整场辩论。
+    回退策略（2026-09-13 用户要求）：分组路由失败后按序回退
+    ①「当前使用模型的提供商」（会话级 model_config → 全局 model_config.json → env）
+    ②「可用提供商」（provider_keys 里有非占位 key 的通道，deepseek 官方优先）
+    成功则标记 fallback_used/fallback_from/fallback_route，让「一个 provider 挂掉」不再拖垮整场辩论。
     非 judge 角色不做回退（保持角色间模型隔离与成本可控）。
     """
     res = _call_llm_role(label, prompt, cfg, temperature=temperature)
@@ -1186,30 +1355,40 @@ def _call_llm_role_resilient(label: str, prompt: str, cfg: dict, temperature: fl
         return res
     try:
         rc = _resolve_role_llm(label, cfg)
-        fb = _default_role_llm(os.environ.get("DEEPSEEK_API_KEY", ""),
-                               os.environ.get("DEEPSEEK_BASE_URL", ""),
-                               os.environ.get("DEEPSEEK_MODEL", ""),
-                               _load_provider_keys())
-        same_route = (str(fb.get("base_url") or "").rstrip("/").lower()
-                      == str(rc.get("base_url") or "").rstrip("/").lower()
-                      and str(fb.get("model") or "") == str(rc.get("model") or ""))
-        if not fb.get("api_key") or same_route:
-            return res
-        logger.warning(
-            f"debate judge 分组路由 {rc.get('provider')}/{rc.get('model')} 失败"
-            f"（{str(res.get('error_detail', ''))[:120]}）→ 回退默认路由 {fb.get('provider')}/{fb.get('model')}")
-        res2 = _call_llm_sync(prompt, label, fb["api_key"], fb["base_url"], fb["model"],
-                              temperature=rc["temperature"] if temperature is None else temperature,
-                              max_tokens=_role_max_tokens(label, cfg))
-        if not res2.get("error"):
-            res2["fallback_used"] = True
+        _pk = _load_provider_keys()
+        _primary_sig = (str(rc.get("base_url") or "").rstrip("/").lower(),
+                        str(rc.get("model") or ""))
+        # 回退链（2026-09-13 用户要求）：① 当前使用模型的提供商 → ② 可用提供商（deepseek 官方优先）
+        _chain = []
+        _cur = _current_model_route(_pk)
+        if _cur:
+            _chain.append(_cur)
+        _chain.extend(_available_routes(_pk, exclude=[_primary_sig]))
+        _tried = set()
+        _last = res
+        for _cand in _chain[:3]:
+            _sig = (str(_cand.get("base_url") or "").rstrip("/").lower(),
+                    str(_cand.get("model") or ""))
+            if _sig == _primary_sig or _sig in _tried:
+                continue
+            _tried.add(_sig)
+            logger.warning(
+                f"debate judge 主路由 {rc.get('provider')}/{rc.get('model')} 失败"
+                f"（{str(res.get('error_detail', ''))[:120]}）"
+                f"→ 回退 {_cand.get('provider')}/{_cand.get('model')}")
+            res2 = _call_llm_sync(prompt, label, _cand["api_key"], _cand["base_url"], _cand["model"],
+                                  temperature=_cand["temperature"] if temperature is None else temperature,
+                                  max_tokens=_role_max_tokens(label, cfg))
             res2["fallback_from"] = f"{rc.get('provider')}/{rc.get('model')}"
-            res2["fallback_detail"] = str(res.get("error_detail", ""))[:200]
-            return res2
-        res2["fallback_from"] = f"{rc.get('provider')}/{rc.get('model')}"
-        res2["error_detail"] = (str(res.get("error_detail", ""))[:200]
-                                 + " || fallback: " + str(res2.get("error_detail", ""))[:200])
-        return res2
+            if not res2.get("error"):
+                res2["fallback_used"] = True
+                res2["fallback_route"] = f"{_cand.get('provider')}/{_cand.get('model')}"
+                res2["fallback_detail"] = str(res.get("error_detail", ""))[:200]
+                return res2
+            res2["error_detail"] = (str(res.get("error_detail", ""))[:200]
+                                     + " || fallback: " + str(res2.get("error_detail", ""))[:200])
+            _last = res2
+        return _last
     except Exception as e:
         logger.warning(f"debate judge fallback attempt failed: {e}")
         return res
