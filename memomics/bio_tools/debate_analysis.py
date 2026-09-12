@@ -697,6 +697,39 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
     return (raw[0] if raw else None), consensus
 
 
+def _provider_extra_headers(base_url: str) -> dict:
+    """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
+
+    本模块用裸 httpx 直发请求，绕过 Hermes 底座的 openai SDK 客户端，因此拿不到
+    get_custom_provider_extra_headers 注入的附加头。opencode.ai 的 zen 网关要求每个
+    请求带 x-opencode-session，缺则一律 400 MissingSessionID —— 050e0d14 只修了
+    Hermes 底座路径，辩论链路仍 400。这里按 base_url/api_base 匹配 provider 条目并
+    返回其 extra_headers，使任何 provider 的附加头都能生效。匹配不到返回 {}。
+    """
+    if not base_url:
+        return {}
+    try:
+        import yaml
+        cfg_path = _get_config_path()
+        if not cfg_path.exists():
+            return {}
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        target = base_url.rstrip("/").lower()
+        for entry in data.get("custom_providers") or []:
+            if not isinstance(entry, dict):
+                continue
+            for field in ("base_url", "api_base"):
+                candidate = (entry.get(field) or "").rstrip("/").lower()
+                if candidate and candidate == target:
+                    extra = entry.get("extra_headers")
+                    if isinstance(extra, dict) and extra:
+                        return {str(k): str(v) for k, v in extra.items()}
+                    return {}
+    except Exception as e:
+        logger.warning(f"Failed to load provider extra_headers for {base_url}: {e}")
+    return {}
+
+
 def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
                     temperature: float = 0.7, max_tokens: int = 4096) -> dict:
     """独立 LLM 调用 — 每个角色一个独立的 messages 数组，切断上下文。
@@ -712,6 +745,9 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    # 2026-09-13: 合并 config.yaml custom_providers[].extra_headers
+    # （opencode.ai zen 网关必需 x-opencode-session，缺失一律 400 MissingSessionID）
+    headers.update(_provider_extra_headers(base_url))
     # 关键：每个角色只有自己的 prompt，没有其他角色的消息
     # 这就是"切断上下文"的实现方式
     payload = {
