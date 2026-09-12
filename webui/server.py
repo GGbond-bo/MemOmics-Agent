@@ -2525,6 +2525,7 @@ _CHINA_PROVIDERS = [
         "models": [
             {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro (旗舰 1.6T MoE)", "reasoning": True, "tool_call": True},
             {"id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash (快速 284B MoE)", "reasoning": True, "tool_call": True},
+            {"id": "deepseek-flash", "name": "DeepSeek Flash (DCS Cloud)", "reasoning": True, "tool_call": True},
             {"id": "glm-5.2", "name": "GLM-5.2 (智谱旗舰)", "reasoning": True, "tool_call": True},
             {"id": "glm-5.1", "name": "GLM-5.1", "reasoning": True, "tool_call": True},
             {"id": "kimi-k3", "name": "Kimi K3 (月之暗面旗舰)", "reasoning": True, "tool_call": True},
@@ -6412,9 +6413,13 @@ def _auto_summarize_title(sid):
             "要求：具体（如'hdWGCNA 网络构建参数选择'），不要空泛（如'生信分析'）。\n"
             "只输出标题本身，不要引号、不要解释、不要编号。\n\n对话要点：\n" + digest
         )
+        _hdrs = {"Authorization": f"Bearer {cfg['api_key']}"}
+        # 2026-09-13: 合并 config custom_providers[].extra_headers（opencode.ai
+        # 网关必需 x-opencode-session，缺则 400 MissingSessionID）
+        _hdrs.update(_provider_extra_headers_for(base_url))
         resp = httpx.post(
             url,
-            headers={"Authorization": f"Bearer {cfg['api_key']}"},
+            headers=_hdrs,
             json={
                 "model": cfg["model"],
                 "messages": [{"role": "user", "content": prompt}],
@@ -6997,6 +7002,37 @@ async def get_provider_models(pid: str):
 
 
 _OPENCODE_SESSION_HOST = "opencode.ai"
+
+
+def _provider_extra_headers_for(base_url):
+    """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
+
+    opencode.ai zen 网关要求每个请求带 x-opencode-session，缺则一律 400
+    MissingSessionID。Hermes 底座走 openai SDK 时由
+    get_custom_provider_extra_headers 注入，但 MemOmics 侧自建 httpx 调用
+    （会话自动命名等）绕过底座，必须自行合并。匹配不到返回 {}。
+    """
+    if not base_url:
+        return {}
+    try:
+        from hermes_cli.config import read_raw_config
+        target = str(base_url).rstrip("/").lower()
+        if target.endswith("/chat/completions"):
+            target = target[: -len("/chat/completions")]
+        cfg = read_raw_config() or {}
+        for c in cfg.get("custom_providers") or []:
+            if not isinstance(c, dict):
+                continue
+            for field in ("base_url", "api_base"):
+                cand = str(c.get(field) or "").rstrip("/").lower()
+                if cand and cand == target:
+                    extra = c.get("extra_headers")
+                    if isinstance(extra, dict) and extra:
+                        return {str(k): str(v) for k, v in extra.items()}
+                    return {}
+    except Exception as e:
+        print(f"[WARN] 读取 provider extra_headers 失败({base_url}): {e}")
+    return {}
 
 
 def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None):
