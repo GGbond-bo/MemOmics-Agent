@@ -638,3 +638,154 @@ class TestV2Features:
         assert issues
         assert da._check_consistency({"verdict": "support", "confidence": "medium", "missing": ["缺 X"]}) == []
 
+
+# ==================== 韧性加固（2026-09-13） ====================
+
+class TestResilienceHardening:
+    """judge 单点故障加固：失败正文回传 + 路由回退 + 瞬时失败重跑。
+
+    背景（真实事故 2026-09-13）：opencode.ai zen 网关要求每个请求带
+    x-opencode-session，缺失一律 400 MissingSessionID。8 个角色里只有 judge 走
+    debate.judge 分组 provider（opencode-go），于是 7 个角色全部成功、judge 必挂，
+    4 次 L2 辩论全部返回 error；而日志只留 "400 Bad Request"，根因被吞掉。
+    """
+
+    def test_transient_classifier(self):
+        assert da._is_transient_error('HTTP 400 {"error":{"type":"MissingSessionID"}}') is False
+        assert da._is_transient_error("HTTP 401 Unauthorized") is False
+        assert da._is_transient_error("HTTP 429 rate limit") is True
+        assert da._is_transient_error("ReadTimeout: timed out") is True
+        assert da._is_transient_error("ConnectError: getaddrinfo failed") is True
+        assert da._is_transient_error("HTTP 502 Bad Gateway") is True
+        assert da._is_transient_error("") is False
+
+    def test_llm_sync_keeps_http_error_body(self, monkeypatch, provider_keys):
+        """400 的服务端正文必须回传到 error_detail（否则无法区分 MissingSessionID / key 失效 / 超限）。"""
+        class _Resp:
+            status_code = 400
+            text = '{"error":{"type":"MissingSessionID"}}'
+
+            def raise_for_status(self):
+                raise RuntimeError("Client error '400 Bad Request'")
+
+        class _Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def post(self, *a, **k):
+                return _Resp()
+
+        monkeypatch.setattr(da.httpx, "Client", _Client)
+        monkeypatch.setattr(da.time, "sleep", lambda *_: None)
+        r = da._call_llm_sync("p", "judge", "sk", "https://x/v1", "m")
+        assert r["error"] is True
+        assert "MissingSessionID" in r["error_detail"]
+        assert r["transient"] is False
+        assert "https://x/v1" in r["error_model"]
+
+    def test_judge_fallback_when_group_route_fails(self, monkeypatch, provider_keys):
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-env")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://env.example/v1")
+        monkeypatch.setenv("DEEPSEEK_MODEL", "env-model")
+        cfg = _mk_cfg(judge={"provider": "opencode-go", "model": "deepseek-v4-pro"})
+        monkeypatch.setattr(da, "_call_llm_role", lambda label, prompt, cfg, temperature=None: {
+            "content": "[judge 辩论生成失败]", "call_id": "j1", "error": True,
+            "error_detail": "HTTP 400 MissingSessionID", "transient": False})
+        seen = {}
+
+        def fake_sync(prompt, label, api_key, base_url, model, temperature=0.7, max_tokens=1024):
+            seen.update({"label": label, "model": model, "base_url": base_url})
+            return {"content": '{"verdict":"ok"}', "call_id": "j2", "messages_count": 1}
+
+        monkeypatch.setattr(da, "_call_llm_sync", fake_sync)
+        r = da._call_llm_role_resilient("judge", "p", cfg)
+        assert r["fallback_used"] is True
+        assert r["fallback_from"].startswith("opencode-go/")
+        assert "MissingSessionID" in r["fallback_detail"]
+        assert seen["base_url"] == "https://env.example/v1"
+
+    def test_non_judge_role_has_no_fallback(self, monkeypatch, provider_keys):
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-env")
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://env.example/v1")
+        cfg = _mk_cfg(judge={"provider": "opencode-go", "model": "m"})
+        monkeypatch.setattr(da, "_call_llm_role", lambda label, prompt, cfg, temperature=None: {
+            "content": "[con_biology 辩论生成失败]", "call_id": "x1", "error": True})
+
+        def _boom(*a, **k):
+            raise AssertionError("非 judge 角色不应触发回退")
+
+        monkeypatch.setattr(da, "_call_llm_sync", _boom)
+        r = da._call_llm_role_resilient("con_biology", "p", cfg)
+        assert r.get("fallback_used") is None
+
+    def test_judge_fallback_skipped_when_same_route(self, monkeypatch, provider_keys):
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+        cfg = _mk_cfg(judge={"provider": "deepseek", "model": "deepseek-v4-flash"})
+        monkeypatch.setattr(da, "_call_llm_role", lambda label, prompt, cfg, temperature=None: {
+            "content": "[judge 辩论生成失败]", "call_id": "j1", "error": True})
+
+        def _boom(*a, **k):
+            raise AssertionError("回退目标与主路由相同 → 不应重复调用")
+
+        monkeypatch.setattr(da, "_call_llm_sync", _boom)
+        r = da._call_llm_role_resilient("judge", "p", cfg)
+        assert r.get("fallback_used") is None
+
+    def test_transient_retry_only_reruns_transient(self, monkeypatch):
+        called = []
+
+        def fake_parallel(tasks, cfg=None):
+            called.append([l for l, _ in tasks])
+            return {l: _role_reply(l) for l, _ in tasks}
+
+        monkeypatch.setattr(da, "_call_role_parallel", fake_parallel)
+        tasks = [("pro_biology", "p1"), ("pro_statistics", "p2"), ("pro_bioinformatics", "p3")]
+        results = {
+            "pro_biology": {**_role_reply("pro_biology"), "error": True, "transient": True},
+            "pro_statistics": {**_role_reply("pro_statistics"), "error": True, "transient": False},
+            "pro_bioinformatics": _role_reply("pro_bioinformatics"),
+        }
+        out = da._retry_transient_roles(results, tasks, _mk_cfg())
+        assert called == [["pro_biology"]]
+        assert out["pro_biology"]["error"] is False
+        assert out["pro_statistics"]["error"] is True
+
+    def test_no_transient_failure_no_retry(self, monkeypatch):
+        def _boom(*a, **k):
+            raise AssertionError("无瞬时失败不应重跑")
+
+        monkeypatch.setattr(da, "_call_role_parallel", _boom)
+        tasks = [("pro_biology", "p1")]
+        results = {"pro_biology": _role_reply("pro_biology")}
+        assert da._retry_transient_roles(results, tasks, _mk_cfg()) is results
+
+    def test_partial_failure_payload_carries_details(self, monkeypatch, tmp_debates_dir):
+        monkeypatch.setattr(da, "_load_debate_config", lambda: _mk_cfg())
+        monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
+        monkeypatch.setattr(da, "_reflow_verdict", lambda r: None)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+        def fake(label, prompt, cfg, temperature=None):
+            if label == "con_biology":
+                return {**_role_reply(label), "error": True, "transient": False,
+                        "content": "[con_biology 辩论生成失败]",
+                        "error_detail": "HTTP 400 MissingSessionID", "error_model": "m @ u"}
+            if label == "judge":
+                return _role_reply(label, '{"verdict":"ok","confidence":"high"}')
+            return _role_reply(label)
+
+        monkeypatch.setattr(da, "_call_llm_role", fake)
+        obj = json.loads(da.debate_analysis("t", "c", auto_kb=False))
+        assert obj["error"] is True and obj["failed_roles"] == 1
+        details = obj["failed_role_details"]
+        assert details and any("MissingSessionID" in v["detail"] for v in details.values())
+        assert any(v["model"] == "m @ u" for v in details.values())
+

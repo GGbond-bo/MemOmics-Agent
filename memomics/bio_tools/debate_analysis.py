@@ -669,7 +669,7 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
     raw = []
     objs = []
     for i in range(count):
-        jr = _call_llm_role("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
+        jr = _call_llm_role_resilient("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
         raw.append(jr)
         try:
             objs.append(_parse_judge_json(jr.get("content", "")))
@@ -730,6 +730,24 @@ def _provider_extra_headers(base_url: str) -> dict:
     return {}
 
 
+# 2026-09-13: 瞬时 vs 配置类失败判定 —— 只有瞬时失败才值得重跑（见 _retry_transient_roles）。
+_TRANSIENT_HINTS = ("429", "500", "502", "503", "504", "timeout", "timed out",
+                    "connect", "connection", "reset", "eof", "remotedisconnected",
+                    "readtimeout", "temporarily", "overload", "rate limit", "tpm")
+_CONFIG_HINTS = ("401", "403", "400 bad request", "unauthorized", "invalid api key",
+                 "missing", "not found", "missing_session", "model_not")
+
+
+def _is_transient_error(detail: str) -> bool:
+    """失败是否属于瞬时类（429/5xx/超时/连接中断）。配置类（400/401/403/模型不存在）返回 False。"""
+    d = str(detail or "").lower()
+    if not d:
+        return False
+    if any(t in d for t in _CONFIG_HINTS):
+        return False
+    return any(t in d for t in _TRANSIENT_HINTS)
+
+
 def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
                     temperature: float = 0.7, max_tokens: int = 4096) -> dict:
     """独立 LLM 调用 — 每个角色一个独立的 messages 数组，切断上下文。
@@ -758,13 +776,20 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
     }
     call_id = f"{label}_{int(time.time() * 1000) % 1000000}"
 
+    last_error = ""
     for attempt in range(3):
+        _detail = ""
         try:
             with httpx.Client(timeout=120) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     headers=headers, json=payload
                 )
+                if resp.status_code >= 400:
+                    # 2026-09-13: 服务端错误正文是区分 400 MissingSessionID / 401 key 失效 /
+                    # 上下文超限的唯一证据。此前只留 "400 Bad Request" 一行，judge 连续失败
+                    # 4 次都无法定位（真因是缺 x-opencode-session 请求头）。
+                    _detail = f"HTTP {resp.status_code} {resp.text[:300]}"
                 resp.raise_for_status()
                 msg = resp.json()["choices"][0]["message"]
                 content = msg.get("content") or ""
@@ -781,9 +806,15 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
                         "messages_count": 1,  # 只有 1 条消息 = 上下文已隔离
                         "used_reasoning_fallback": bool(not msg.get("content") or len(msg.get("content", "").strip()) < 10),
                     }
+                _detail = (f"empty content (finish_reason={msg.get('finish_reason')}, "
+                           f"reasoning={'yes' if msg.get('reasoning_content') else 'no'}, model={model})")
+                last_error = _detail[:400]
                 time.sleep(2)
         except Exception as e:
-            logger.warning(f"debate {label} attempt {attempt+1} failed: {e}")
+            if not _detail:
+                _detail = f"{type(e).__name__}: {e}"
+            last_error = _detail[:400]
+            logger.warning(f"debate {label} attempt {attempt+1} failed: {e} | detail={last_error}")
             time.sleep(3)
 
     return {
@@ -792,6 +823,10 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         "isolation_verified": True,
         "messages_count": 1,
         "error": True,
+        # 2026-09-13: 失败原因随结果回传（配置类 vs 瞬时类），上层据此决定重跑还是报错
+        "error_detail": last_error or "unknown",
+        "error_model": f"{model} @ {base_url}",
+        "transient": _is_transient_error(last_error),
     }
 
 
@@ -838,6 +873,25 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
             for _f in _futures:
                 _l, _r = _f.result()
                 results[_l] = _r
+    return results
+
+
+def _retry_transient_roles(results: dict, tasks: list, cfg: dict) -> dict:
+    """2026-09-13 加固：只重跑「瞬时失败」的角色一次。
+
+    现行策略是 8 角色任一失败即整场辩论作废（不缓存不归档），于是一个角色被 429/
+    超时抖一下，整场 8 角色辩论全废。这里对 HTTP 429/5xx/超时/连接中断这类失败再跑
+    一次（配置类失败如 400/401 重跑无意义，直接报错并带回 error_detail）。
+    """
+    try:
+        _retry_tasks = [(l, p) for l, p in tasks
+                        if results.get(l, {}).get("error") and results.get(l, {}).get("transient")]
+        if not _retry_tasks:
+            return results
+        logger.warning(f"debate 重跑瞬时失败角色: {[l for l, _ in _retry_tasks]}")
+        results.update(_call_role_parallel(_retry_tasks, cfg))
+    except Exception as e:
+        logger.warning(f"debate transient retry pass failed: {e}")
     return results
 
 
@@ -1111,6 +1165,54 @@ def _call_llm_role(label: str, prompt: str, cfg: dict, temperature: float = None
     return _call_llm_sync(prompt, label, rc["api_key"], rc["base_url"], rc["model"],
                           temperature=rc["temperature"] if temperature is None else temperature,
                           max_tokens=_role_max_tokens(label, cfg))
+
+
+def _call_llm_role_resilient(label: str, prompt: str, cfg: dict, temperature: float = None) -> dict:
+    """角色 LLM 调用 + 失败回退链（2026-09-13 加固）。
+
+    judge 是整场辩论的单点故障：8 个角色里只有 judge 走 config.yaml 的 debate.judge
+    分组 provider（本机 = opencode-go/deepseek-v4-pro），该 provider 一旦 key 失效/
+    缺附加头/额度耗尽，L2 就是 100% 失败（2026-09-13 实测：7 个角色全部成功，judge
+    一律 400 MissingSessionID，4 次 L2 全部返回 error）。
+
+    回退策略：分组路由失败后，用默认角色路由（env DEEPSEEK_* → provider_keys）再试一次；
+    成功则标记 fallback_used/fallback_from，让「一个 provider 挂掉」不再拖垮整场辩论。
+    非 judge 角色不做回退（保持角色间模型隔离与成本可控）。
+    """
+    res = _call_llm_role(label, prompt, cfg, temperature=temperature)
+    if not res.get("error"):
+        return res
+    if label != "judge":
+        return res
+    try:
+        rc = _resolve_role_llm(label, cfg)
+        fb = _default_role_llm(os.environ.get("DEEPSEEK_API_KEY", ""),
+                               os.environ.get("DEEPSEEK_BASE_URL", ""),
+                               os.environ.get("DEEPSEEK_MODEL", ""),
+                               _load_provider_keys())
+        same_route = (str(fb.get("base_url") or "").rstrip("/").lower()
+                      == str(rc.get("base_url") or "").rstrip("/").lower()
+                      and str(fb.get("model") or "") == str(rc.get("model") or ""))
+        if not fb.get("api_key") or same_route:
+            return res
+        logger.warning(
+            f"debate judge 分组路由 {rc.get('provider')}/{rc.get('model')} 失败"
+            f"（{str(res.get('error_detail', ''))[:120]}）→ 回退默认路由 {fb.get('provider')}/{fb.get('model')}")
+        res2 = _call_llm_sync(prompt, label, fb["api_key"], fb["base_url"], fb["model"],
+                              temperature=rc["temperature"] if temperature is None else temperature,
+                              max_tokens=_role_max_tokens(label, cfg))
+        if not res2.get("error"):
+            res2["fallback_used"] = True
+            res2["fallback_from"] = f"{rc.get('provider')}/{rc.get('model')}"
+            res2["fallback_detail"] = str(res.get("error_detail", ""))[:200]
+            return res2
+        res2["fallback_from"] = f"{rc.get('provider')}/{rc.get('model')}"
+        res2["error_detail"] = (str(res.get("error_detail", ""))[:200]
+                                 + " || fallback: " + str(res2.get("error_detail", ""))[:200])
+        return res2
+    except Exception as e:
+        logger.warning(f"debate judge fallback attempt failed: {e}")
+        return res
 
 
 def _role_model_id(label: str, cfg: dict) -> str:
@@ -1823,7 +1925,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
                     ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
                 ]
-            pro_results = _call_role_parallel(pro_tasks, cfg)
+            pro_results = _retry_transient_roles(_call_role_parallel(pro_tasks, cfg), pro_tasks, cfg)
             pro_bio = pro_results["pro_biology"]
             pro_stat = pro_results["pro_statistics"]
             pro_bioinfo = pro_results["pro_bioinformatics"]
@@ -1843,7 +1945,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
                     ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist) + round_note),
                 ]
-            con_results = _call_role_parallel(con_tasks, cfg)
+            con_results = _retry_transient_roles(_call_role_parallel(con_tasks, cfg), con_tasks, cfg)
             con_bio = con_results["con_biology"]
             con_stat = con_results["con_statistics"]
             con_bioinfo = con_results["con_bioinformatics"]
@@ -1888,7 +1990,12 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     con_history=con_history["content"],
                 )
             primary_judge, consensus = _collect_judge_consensus(judge_prompt, cfg)
-            judge = primary_judge or _call_llm_role("judge", judge_prompt, cfg)
+            # 2026-09-13 修复：原写法 `primary_judge or _call_llm_role(...)` 里，失败裁判结果是
+            # 非空 dict（真值）→ 回退分支永不触发，裁判故障会被当作有效裁决继续走。
+            if primary_judge and not primary_judge.get("error"):
+                judge = primary_judge
+            else:
+                judge = _call_llm_role_resilient("judge", judge_prompt, cfg)
             final_judge = judge
             final_consensus = consensus
 
@@ -1898,14 +2005,28 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
             if _failed_roles:
                 logger.warning(f"debate FAILED {len(_failed_roles)}/{len(_all_roles)} roles: {_failed_roles[:3]}... 不缓存不归档")
+                # 2026-09-13: 失败原因随结果回传（provider/模型 + HTTP 正文）。
+                # 之前只有一句「有角色返回占位符」，judge 连续 4 次 L2 失败都要翻日志才能定位。
+                _fail_details = {}
+                for _r in _all_roles:
+                    if not isinstance(_r, dict):
+                        continue
+                    if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
+                        _fail_details[_r.get("call_id", "?")] = {
+                            "model": str(_r.get("error_model", "")),
+                            "detail": str(_r.get("error_detail", "placeholder content"))[:300],
+                        }
                 return json.dumps({
                     "topic": topic,
                     "debate_format": "多角色对抗（v3）",
                     "error": True,
                     "failed_roles": len(_failed_roles),
                     "failed_role_ids": _failed_roles,
+                    "failed_role_details": _fail_details,
                     "judge_verdict": judge.get("content", "") if not judge.get("error") else "裁判也失败",
-                    "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档，Agent 应重试或检查 API key/base_url。",
+                    "judge_error_detail": str(judge.get("error_detail", ""))[:300] if judge.get("error") else "",
+                    "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档。failed_role_details 写明每个失败角色"
+                             "的 provider/模型与 HTTP 正文：400/401 多为配置或附加头问题，429/5xx 属瞬时问题（已自动重跑一次）。",
                 }, ensure_ascii=False, indent=2)
 
             # 轮间摘要（供下一轮 pro/con 参考；rounds=1 时不生效）
@@ -1958,6 +2079,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 for name, nr in neutral_results.items()
             },
             "judge_verdict": judge["content"],
+            # 2026-09-13: 裁判走回退路由时留痕（实验记录必须能看出真实使用的模型）
+            "judge_fallback": ({"from_route": judge.get("fallback_from"),
+                                "detail": str(judge.get("fallback_detail", ""))[:200]}
+                               if judge.get("fallback_used") else None),
             "isolation_verification": {
                 "method": "每个角色独立 HTTP API 调用，messages 数组只包含该角色自己的 prompt",
                 "pro_isolated": all(r["messages_count"] == 1 for r in [pro_bio, pro_stat, pro_bioinfo]),
@@ -2048,7 +2173,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         if _issues:
             logger.warning(f"debate verdict inconsistent {_issues}; judge 重裁一次")
             try:
-                _judge2 = _call_llm_role("judge", judge_prompt, cfg)
+                _judge2 = _call_llm_role_resilient("judge", judge_prompt, cfg)
                 if not _judge2.get("error") and "辩论生成失败" not in str(_judge2.get("content", "")):
                     _obj2 = _parse_judge_json(_judge2["content"])
                     result["verdict"] = _obj2.get("verdict") or result["verdict"]
