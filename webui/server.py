@@ -6639,6 +6639,129 @@ async def get_messages(sid: str, limit: int = 100):
     return {"messages": normalized, "total": total, "stats": _stats}
 
 
+# ============ 会话删除 = 数据删除：结果目录连带清理 ============
+# 用户要求：会话删除后，该会话在 results/ 下的目录连同里面的数据一并删除，不再保留。
+# 三条安全边界：
+#   1) 只删 results/ 之内的目录 —— 用户 output_root（桌面/自定义路径）镜像一律不动；
+#   2) 目录必须可追溯到本会话（== sid 或含 sid 短 ID），绝不误伤别的会话；
+#   3) results/ 根目录自身永不被删（防呆：base 严格子路径判定）。
+
+def _owned_results_dir(sid: str, path) -> bool:
+    """归属校验：path 必须真实位于 results/ 之内，且目录名可追溯到 sid。"""
+    if not path:
+        return False
+    try:
+        base = os.path.abspath(RESULTS_DIR)
+        real_base = os.path.realpath(base)
+        abs_path = os.path.abspath(str(path).replace("/", os.sep))
+        real_path = os.path.realpath(abs_path)
+    except Exception:
+        return False
+    # 严格位于 results/ 之下（== results/ 自身直接拒绝）；realpath 也必须在里面，
+    # 否则符号链接可以指向 results/ 之外 → 拒绝（不跟随链接删除）。
+    if not (os.path.normcase(abs_path).startswith(os.path.normcase(base) + os.sep)
+            and os.path.normcase(real_path).startswith(os.path.normcase(real_base) + os.sep)):
+        return False
+    name = os.path.basename(abs_path.rstrip("\\/"))
+    if not name or name in (".", ".."):
+        return False
+    if name == sid:
+        return True
+    short_id = sid.split("-")[-1] if "-" in sid else ""
+    return bool(short_id) and short_id in name
+
+
+def _owned_results_dirs(sid: str) -> list:
+    """收集 results/ 下属于 sid 的目录（含 rename 后的 物种_组织_方向_日期_短ID 型）。"""
+    owned = []
+    base = os.path.abspath(RESULTS_DIR)
+    if not os.path.isdir(base):
+        return owned
+    try:
+        names = os.listdir(base)
+    except Exception:
+        return owned
+    for name in names:
+        cand = os.path.join(base, name)
+        if _owned_results_dir(sid, cand):
+            owned.append(cand)
+    return owned
+
+
+def _force_rmtree(path: str) -> None:
+    """物理删除目录（清只读位；Windows 占用由调用方重试兜底）。"""
+    if os.path.islink(path):
+        os.remove(path)
+        return
+    if not os.path.lexists(path):
+        return
+    if not os.path.isdir(path):
+        os.remove(path)
+        return
+    # agent 产物常带只读位 → 先统一放开权限再删
+    for root, dirs, files in os.walk(path):
+        for n in files:
+            p = os.path.join(root, n)
+            if not os.path.islink(p):
+                try:
+                    os.chmod(p, 0o600)
+                except Exception:
+                    pass
+        for n in dirs:
+            p = os.path.join(root, n)
+            if not os.path.islink(p):
+                try:
+                    os.chmod(p, 0o700)
+                except Exception:
+                    pass
+    shutil.rmtree(path)
+
+
+async def _purge_session_results(sid: str, extra_paths=None) -> dict:
+    """删除会话在 results/ 下的全部数据目录。
+
+    返回 {deleted: [路径], failed: [{path, error}], external: [未删的外部路径]}。
+    外部路径（用户 output_root / 桌面镜像）只报告不删除。
+    """
+    targets, seen, external = [], set(), []
+    for p in list(extra_paths or []):
+        if p and not _owned_results_dir(sid, p):
+            external.append(str(p).replace("\\", "/"))
+    candidates = _owned_results_dirs(sid) + [os.path.join(RESULTS_DIR, sid)] + list(extra_paths or [])
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            ap = os.path.abspath(str(p).replace("/", os.sep))
+        except Exception:
+            continue
+        if ap in seen or not _owned_results_dir(sid, ap):
+            continue
+        seen.add(ap)
+        if os.path.lexists(ap):
+            targets.append(ap)
+
+    deleted, failed = [], []
+    loop = asyncio.get_running_loop()
+    for ap in targets:
+        err = ""
+        ok = False
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(None, _force_rmtree, ap)
+            except Exception as e:  # Windows 文件占用 / 权限
+                err = str(e)
+            if not os.path.lexists(ap):
+                ok = True
+                break
+            await asyncio.sleep(0.3 * (attempt + 1))  # 等后台脚本释放句柄后重试
+        if ok:
+            deleted.append(ap.replace("\\", "/"))
+        else:
+            failed.append({"path": ap.replace("\\", "/"), "error": err or "目录在重试后仍存在"})
+    return {"deleted": deleted, "failed": failed, "external": external}
+
+
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid: str):
     # sid 校验（防路径穿越：只接受 memomics-xxxxxxx 格式）
@@ -6654,9 +6777,12 @@ async def delete_session(sid: str):
         _task_supervisor.cancel(sid)
     except Exception:
         pass
-    """删除会话：内存 + state.db + agent 资源（真正杀死 agent）"""
+    """删除会话：内存 + state.db + agent 资源（真正杀死 agent）+ 结果目录数据"""
     session = _sessions.get(sid)
+    _hint_dirs = []
     if session:
+        # 结果目录 / 外部镜像先留作线索：内存记录删掉后，磁盘数据仍要按会话清干净
+        _hint_dirs = [session.get("results_dir", ""), session.get("output_root", "")]
         # 清理 agent 资源（真正杀死 agent）
         _cleanup_session_agent(session, kill_agent=True)
         del _sessions[sid]
@@ -6673,7 +6799,16 @@ async def delete_session(sid: str):
             db.delete_session(sid)
         except Exception:
             pass
-    # 注：结果目录（results/{sid}/ 分析产出）按用户要求保留，不删除
+    # 会话删除 = 数据删除（用户要求 2026-09-13）：results/ 下该会话的目录连同全部
+    # 分析产物（figures/results/scripts/data/log、token_usage.jsonl 等）物理删除。
+    # 放在 agent 清理之后，避免「边写边删」把目录复活。
+    purge = await _purge_session_results(sid, extra_paths=_hint_dirs)
+    if purge["deleted"]:
+        logger.info(f"[MemOmics] 会话 {sid} 结果目录已删除: {purge['deleted']}")
+    if purge["failed"]:
+        logger.warning(f"[MemOmics] 会话 {sid} 结果目录删除失败: {purge['failed']}")
+    if purge["external"]:
+        logger.info(f"[MemOmics] 会话 {sid} 外部目录保留（非 results/ 内，未删）: {purge['external']}")
     # 删除 Hermes 会话转录文件（hermes_home/sessions/ 下的 request_dump_*）
     try:
         import glob as _glob
@@ -6684,7 +6819,12 @@ async def delete_session(sid: str):
                 pass
     except Exception:
         pass
-    return {"ok": True}
+    return {
+        "ok": True,
+        "results_dirs_deleted": purge["deleted"],
+        "results_dirs_failed": purge["failed"],
+        "external_dirs_kept": purge["external"],
+    }
 
 
 # --- 模型切换 ---

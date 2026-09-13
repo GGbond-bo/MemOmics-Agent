@@ -3414,7 +3414,7 @@ function updateBatchCount() {
 function batchDeleteSelected() {
   var ids = Object.keys(_selectedSessions);
   if (!ids.length) return;
-  if (!confirm('确定删除选中的 ' + ids.length + ' 个会话？\n将清除：会话消息与记录、agent 资源（结果目录会保留）。\n此操作不可恢复！')) return;
+  if (!confirm('确定删除选中的 ' + ids.length + ' 个会话？\n将永久删除：会话消息与记录、agent 资源、结果目录（results/ 下该会话的全部分析数据）。\n此操作不可恢复！')) return;
   var delCurrent = false;
   var done = 0;
   ids.forEach(function(sid) {
@@ -3497,7 +3497,7 @@ function renderSessionList(sessions) {
 }
 
 function deleteSession(sid) {
-  if (!confirm('确定删除这个会话吗？\n将清除：会话消息与记录、agent 资源（结果目录会保留）。\n此操作不可恢复！')) return;
+  if (!confirm('确定删除这个会话吗？\n将永久删除：会话消息与记录、agent 资源、结果目录（results/ 下该会话的全部分析数据）。\n此操作不可恢复！')) return;
   fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(r => r.json()).then(function() {
     // 立即从本地移除，再同步服务器（避免空响应 guard 阻止更新）
     _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
