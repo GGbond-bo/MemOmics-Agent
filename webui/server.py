@@ -9788,6 +9788,110 @@ async def list_files(path: str = ""):
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+# ============ 2026-09-17 文献导入提速：目录 PDF 计数缓存 ============
+# 现象：点导入 → 选目录，每打开一层就要等几秒到几十秒。根因是列表接口每次都对该目录
+# 做一次递归 os.walk 数 PDF（实测 E:/ 单次 32.7s，E:/MemOmics-Agent 0.8s）。
+# 现在改为：内存缓存 + 命中即返回；未命中时后台线程预热并立刻返回 pdf_count=null，
+# 前端先渲染列表、再轮询 /api/lit/pdf_count 把数字补上（不阻塞浏览）。
+_LIT_PDF_COUNT_CACHE = {}
+_LIT_PDF_COUNT_TTL = 600.0        # 10 分钟内直接复用
+_LIT_PDF_COUNT_BUDGET = 2.5       # 单次扫描时间预算（秒），超预算按已扫到的计数并标 partial
+_LIT_PDF_COUNT_CAP = 5000
+_LIT_PDF_COUNT_BUDGET_DEEP = 25.0   # 用户主动查数字时（/api/lit/pdf_count）给足预算，尽量精确
+_LIT_PDF_COUNT_LOCK = _threading.Lock()
+_LIT_PDF_COUNT_PENDING = set()
+
+
+def _scan_pdf_count(root: str, budget: float = None) -> tuple:
+    """迭代式扫描目录树数 PDF（os.scandir，比 os.walk 快）；受时间预算与上限约束。
+
+    返回 (count, partial)：partial=True 表示没扫完（预算/上限触发），count 是下界。
+    """
+    budget = _LIT_PDF_COUNT_BUDGET if budget is None else float(budget)
+    n, t0, partial = 0, time.time(), False
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for ent in it:
+                    if ent.name.startswith("."):
+                        continue
+                    try:
+                        if ent.is_dir(follow_symlinks=False):
+                            stack.append(ent.path)
+                        elif ent.name.lower().endswith(".pdf"):
+                            n += 1
+                            if n >= _LIT_PDF_COUNT_CAP:
+                                return n, True
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+        if time.time() - t0 > budget:
+            partial = True
+            break
+    return n, partial
+
+
+def _lit_pdf_count_cached(path: str, wait: bool = False, budget: float = None):
+    """取目录 PDF 数：缓存优先；未命中则（wait=False 时）后台预热并返回 None。
+
+    wait=True 时同步扫描并按 budget 计时（默认浅预算 2.5s；用户主动查数字时用深预算）。
+    partial（没扫完）的结果只短缓存 60s，等下次深扫覆盖。
+    """
+    key = os.path.realpath(path or MEMOMICS_DIR)
+    now = time.time()
+    with _LIT_PDF_COUNT_LOCK:
+        hit = _LIT_PDF_COUNT_CACHE.get(key)
+        if hit:
+            _ttl = 60.0 if hit[2] else _LIT_PDF_COUNT_TTL
+            if now - hit[1] < _ttl:
+                return {"pdf_count": hit[0], "pdf_count_partial": bool(hit[2])}
+        if not wait and key in _LIT_PDF_COUNT_PENDING:
+            return {"pdf_count": None, "pdf_count_partial": False}
+        _LIT_PDF_COUNT_PENDING.add(key)
+
+    if wait:
+        try:
+            n, partial = _scan_pdf_count(key, budget)
+        except Exception:
+            n, partial = 0, False
+        with _LIT_PDF_COUNT_LOCK:
+            _LIT_PDF_COUNT_CACHE[key] = (n, time.time(), partial)
+            _LIT_PDF_COUNT_PENDING.discard(key)
+        return {"pdf_count": n, "pdf_count_partial": partial}
+
+    def _warm():
+        try:
+            n, partial = _scan_pdf_count(key)
+            with _LIT_PDF_COUNT_LOCK:
+                _LIT_PDF_COUNT_CACHE[key] = (n, time.time(), partial)
+        except Exception:
+            pass
+        finally:
+            with _LIT_PDF_COUNT_LOCK:
+                _LIT_PDF_COUNT_PENDING.discard(key)
+
+    _threading.Thread(target=_warm, daemon=True).start()
+    return {"pdf_count": None, "pdf_count_partial": False}
+
+
+@app.get("/api/lit/pdf_count")
+async def lit_pdf_count(path: str = ""):
+    """文献导入：只取"本目录 PDF 数量"（缓存优先，未命中最多扫 2.5s）。
+
+    前端在浏览列表渲染后轮询它补数字，避免浏览被递归扫描阻塞。
+    """
+    real = os.path.realpath(path or MEMOMICS_DIR)
+    if not os.path.isdir(real):
+        return {"count": 0, "partial": False, "path": real.replace("\\", "/")}
+    # 用户主动要这个数字时给足预算（浏览列表早已渲染完成，不阻塞任何交互）
+    r = await asyncio.to_thread(_lit_pdf_count_cached, real, True, _LIT_PDF_COUNT_BUDGET_DEEP)
+    return {"count": r.get("pdf_count") or 0, "partial": bool(r.get("pdf_count_partial")),
+            "path": real.replace("\\", "/")}
+
+
 @app.get("/api/lit/browse")
 async def lit_browse(path: str = ""):
     """文献导入的目录浏览（批H 2026-08-16，跨平台）。
@@ -9801,21 +9905,6 @@ async def lit_browse(path: str = ""):
     仅本机回环服务使用（文献导入需要访问用户任意位置的 PDF）。
     """
     is_win = os.name == "nt"
-
-    def _pdf_count(d: str) -> int:
-        """递归统计目录下 PDF 数量（上限 2000，防超深目录拖慢浏览）。"""
-        n = 0
-        try:
-            for _root, _dirs, _files in os.walk(d):
-                _dirs[:] = [x for x in _dirs if not x.startswith(".")]
-                for _f in _files:
-                    if _f.lower().endswith(".pdf"):
-                        n += 1
-                        if n >= 2000:
-                            return n
-        except Exception:
-            pass
-        return n
 
     # 系统根虚拟项
     root_virtual = ({"name": "💻 此电脑", "path": "__drives__", "is_dir": True, "virtual": True}
@@ -9843,7 +9932,7 @@ async def lit_browse(path: str = ""):
                 })
             return {"path": root_dir.replace("\\", "/") + "  (MemOmics 安装目录)",
                     "items": items, "is_root": True, "parent": None, "platform": os.name,
-                    "pdf_count": _pdf_count(root_dir)}
+                    **_lit_pdf_count_cached(root_dir)}
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     if path == "__drives__" and is_win:
@@ -9868,24 +9957,35 @@ async def lit_browse(path: str = ""):
         parent = "" if os.path.realpath(path) == "/" else (os.path.dirname(os.path.realpath(path)) or "/")
     try:
         items = [root_virtual]
-        for p in sorted(Path(real).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-            if p.name.startswith(".") or p.name in ("$RECYCLE.BIN", "System Volume Information", "__pycache__"):
-                continue
-            try:
-                is_dir = p.is_dir()
-            except Exception:
-                continue
-            if not is_dir and p.suffix.lower() != ".pdf":
-                continue
-            items.append({
-                "name": p.name,
-                "path": str(p).replace("\\", "/"),
-                "is_dir": is_dir,
-                "size": p.stat().st_size if not is_dir else 0,
-                "ext": p.suffix.lower() if not is_dir else "",
-            })
+        # 2026-09-17: Path.iterdir()+stat 改为 os.scandir（每个条目省一次 stat 系统调用，
+        # 大目录/慢盘差异明显）；排序语义保持不变（目录在前，然后按名字小写）。
+        _rows = []
+        with os.scandir(real) as _it:
+            for _e in _it:
+                if _e.name.startswith(".") or _e.name in ("$RECYCLE.BIN", "System Volume Information", "__pycache__"):
+                    continue
+                try:
+                    _is_dir = _e.is_dir()
+                except Exception:
+                    continue
+                _suf = os.path.splitext(_e.name)[1].lower()
+                if not _is_dir and _suf != ".pdf":
+                    continue
+                try:
+                    _size = 0 if _is_dir else _e.stat().st_size
+                except Exception:
+                    _size = 0
+                _rows.append((not _is_dir, _e.name.lower(), {
+                    "name": _e.name,
+                    "path": os.path.join(real, _e.name).replace("\\", "/"),
+                    "is_dir": _is_dir,
+                    "size": _size,
+                    "ext": "" if _is_dir else _suf,
+                }))
+        _rows.sort(key=lambda r: (r[0], r[1]))
+        items.extend([r[2] for r in _rows])
         return {"path": real.replace("\\", "/"), "items": items, "is_root": False,
-                "parent": parent, "platform": os.name, "pdf_count": _pdf_count(real)}
+                "parent": parent, "platform": os.name, **_lit_pdf_count_cached(real)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

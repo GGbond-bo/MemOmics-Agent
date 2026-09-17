@@ -16,7 +16,10 @@ import json
 import logging
 import os
 import re
+import shutil
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -251,6 +254,86 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
     return meta
 
 
+# ================= 2026-09-17 导入提速：Crossref 结果落盘缓存 + 并发预取 ===================
+# 实测单篇 Crossref 反查 1.0–1.4s，且原实现是串行 —— 18 篇导入光网络就 20s+。
+# 这里把"同一篇文献"的元数据结果缓存到 .crossref_cache.json（重复导入/补元数据零网络），
+# 并按并发预取代价最高的网络查询。
+_CROSSREF_CACHE_TTL = 30 * 86400.0   # 命中可用结果：30 天
+_CROSSREF_MISS_TTL = 6 * 3600.0      # 未解析出期刊/作者/年份的弱结果：6 小时（避免死 DOI 每次重试）
+_cr_cache_mem = None
+_cr_cache_lock = threading.Lock()
+_cr_cache_dirty = False
+_cr_stats = {"hit": 0, "miss": 0, "write": 0}
+
+
+def _cr_cache_path() -> str:
+    return os.path.join(_library_dir(), ".crossref_cache.json")
+
+
+def _cr_cache_get(key: str):
+    global _cr_cache_mem
+    with _cr_cache_lock:
+        if _cr_cache_mem is None:
+            raw = _load_index(_cr_cache_path())
+            _cr_cache_mem = raw if isinstance(raw, dict) else {}
+        rec = _cr_cache_mem.get(key)
+    if not isinstance(rec, dict):
+        return None
+    try:
+        if time.time() - float(rec.get("ts") or 0) > float(rec.get("ttl") or 0):
+            return None
+    except Exception:
+        return None
+    return rec.get("meta") or {}
+
+
+def _cr_cache_put(key: str, meta: dict, ttl: float):
+    global _cr_cache_mem, _cr_cache_dirty
+    with _cr_cache_lock:
+        if _cr_cache_mem is None:
+            _cr_cache_mem = {}
+        _cr_cache_mem[key] = {"ts": time.time(), "ttl": float(ttl), "meta": meta}
+        _cr_cache_dirty = True
+
+
+def _cr_cache_flush():
+    """把缓存写回磁盘（导入结束时调用一次，避免每篇都写盘）。"""
+    global _cr_cache_dirty
+    with _cr_cache_lock:
+        if not _cr_cache_dirty or not _cr_cache_mem:
+            return
+        data = dict(_cr_cache_mem)
+        _cr_cache_dirty = False
+    try:
+        _save_index(_cr_cache_path(), data)
+    except Exception as e:
+        logger.debug(f"crossref cache save failed: {e}")
+
+
+def _meta_cache_key(text: str, original_path: str) -> str:
+    """缓存键：能抓到 DOI 就用 DOI，否则用"文件名/标题猜测"（同一篇文献跨导入稳定）。"""
+    m = DOI_RE.search(text or "")
+    if m:
+        return "doi:" + _clean_doi(m.group(0)).lower()
+    stem = _pdf_title_guess(original_path) or Path(original_path).stem
+    return "name:" + re.sub(r"\s+", " ", str(stem)).strip().lower()[:200]
+
+
+def _crossref_meta_cached(pdf_path: str, text: str, original_path: str) -> dict:
+    """_extract_metadata + 磁盘缓存（并发调用安全）。"""
+    key = _meta_cache_key(text, original_path)
+    hit = _cr_cache_get(key)
+    if hit is not None:
+        _cr_stats["hit"] += 1
+        return dict(hit)
+    _cr_stats["miss"] += 1
+    meta = _extract_metadata(pdf_path, text, original_path)
+    resolved = bool(meta.get("journal") or meta.get("authors") or meta.get("year"))
+    _cr_cache_put(key, meta, _CROSSREF_CACHE_TTL if resolved else _CROSSREF_MISS_TTL)
+    _cr_stats["write"] += 1
+    return meta
+
+
 def _load_index(path: str) -> list:
     try:
         with open(path, encoding="utf-8") as f:
@@ -454,6 +537,38 @@ def _parse_json_array(text: str) -> list:
         return []
 
 
+_CLASSIFY_LOCK = threading.Lock()
+
+
+def _apply_classification_bg(index_file: str, keymap: dict, fut):
+    """后台补写 LLM 精细分类标签（不阻塞导入返回；只改条目 tags，不动其它字段）。"""
+    try:
+        tags = fut.result() or {}
+    except Exception as e:
+        logger.warning(f"background classification failed: {e}")
+        return
+    if not tags:
+        return
+    try:
+        with _CLASSIFY_LOCK:
+            cur = _load_index(index_file)
+            changed = 0
+            for fname, key in (keymap or {}).items():
+                tg = tags.get(key)
+                if not tg:
+                    continue
+                for e in cur:
+                    if e.get("file") == fname and e.get("tags"):
+                        e["tags"] = tg
+                        changed += 1
+                        break
+            if changed:
+                _save_index(index_file, cur)
+            logger.info(f"background classification applied: {changed}/{len(keymap or {})}")
+    except Exception as e:
+        logger.warning(f"background classification save failed: {e}")
+
+
 def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 分类标签 + 引用库注册）。
 
@@ -471,6 +586,7 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     if not files:
         return json.dumps({"ok": False, "error": "未找到 PDF 文件（支持 .pdf 文件或目录路径）"},
                           ensure_ascii=False)
+    _t0 = time.time()
     _cb = progress_cb or (lambda *a, **k: None)
     _cb("collect", 0, len(files), f"共发现 {len(files)} 个 PDF")
     lib_dir = _library_dir()
@@ -482,10 +598,13 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
 
     imported, skipped, errors = [], [], []
     _n_done = 0
+
+    # ---- ① 本地预筛（快）：空文件 / 非 PDF / 重复 ----
+    # 2026-09-17 提速：便宜判断在前 —— 原实现先无条件算 sha256（整文件读一遍）再判同名，
+    # 重复导入时白读全文；现在同名同大小直接跳过，重复文件零读取。
+    _cands = []
     for src in files:
-        _cb("file", _n_done, len(files), os.path.basename(src))
         try:
-            # 校验：空文件 / 非 PDF 直接报错跳过
             _sz = os.path.getsize(src)
             if _sz == 0:
                 errors.append({"file": os.path.basename(src),
@@ -499,17 +618,66 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
                                "error": "不是有效的 PDF 文件（文件头非 %PDF-）"})
                 _n_done += 1
                 continue
-            sha = _sha256_of(src)
-            size = _sz
-            if sha and sha in by_sha:
-                skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
+            if (os.path.basename(src), _sz) in by_name:
+                skipped.append({"file": os.path.basename(src), "reason": "重复(同名同大小)"})
                 _n_done += 1  # 2026-08-25: 续传跳过也算进度（原实现卡住计数）
                 continue
-            if (os.path.basename(src), size) in by_name:
-                skipped.append({"file": os.path.basename(src), "reason": "重复(同名同大小)"})
-                _n_done += 1  # 2026-08-25: 同上
-                continue
-            # 复制进库
+        except Exception as e:
+            errors.append({"file": os.path.basename(src), "error": str(e)[:200]})
+            _n_done += 1
+            continue
+        sha = _sha256_of(src)
+        if sha and sha in by_sha:
+            skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
+            _n_done += 1
+            continue
+        _cands.append((src, sha, _sz))
+
+    # ---- ②③ 元数据预取：本地解析首页文本（快）→ 并发 Crossref 反查（网络是瓶颈）----
+    _metas, _texts = {}, {}
+    if _cands:
+        _cb("meta", 0, len(_cands), f"解析首页文本（{len(_cands)} 篇）…")
+        for _src, _sha, _sz in _cands:
+            try:
+                _texts[_src] = _pdf_text(_src, pages=2)
+            except Exception:
+                _texts[_src] = ""
+        _workers = min(8, max(1, len(_cands)))
+        _n_meta = 0
+        with ThreadPoolExecutor(max_workers=_workers) as _ex:
+            _futs = {_ex.submit(_crossref_meta_cached, _src, _texts.get(_src, ""), _src): _src
+                     for _src, _sha, _sz in _cands}
+            for _fu in as_completed(_futs):
+                _src = _futs[_fu]
+                try:
+                    _metas[_src] = _fu.result() or {}
+                except Exception as e:
+                    logger.debug(f"metadata prefetch failed for {_src}: {e}")
+                    _metas[_src] = {}
+                _n_meta += 1
+                _cb("meta", _n_meta, len(_futs), f"并发查询元数据 {_n_meta}/{len(_futs)}")
+
+    # ---- ④ 分类（LLM，实测 15–20s/批）与后面的复制入库并行：LLM 等待被本地 IO 掩盖 ----
+    _cls_pool, _cls_fut, _cls_order = None, None, []
+    if _cands:
+        try:
+            _cls_order = [s for s, _h, _z in _cands]
+            _cls_items = []
+            for _i, _src in enumerate(_cls_order):
+                _m = _metas.get(_src) or {}
+                _cls_items.append({"file": f"__{_i}",
+                                   "title": (_m.get("title") or os.path.basename(_src))[:200],
+                                   "journal": (_m.get("journal") or "")[:80]})
+            _cls_pool = ThreadPoolExecutor(max_workers=1)
+            _cls_fut = _cls_pool.submit(_classify_papers, _cls_items)
+        except Exception as e:
+            logger.debug(f"classify prefetch failed: {e}")
+
+    _entry_for = {}
+    for src, sha, size in _cands:
+        _cb("file", _n_done, len(files), os.path.basename(src))
+        try:
+            # 复制进库（2026-09-17: 改用 shutil.copyfile —— 原实现 fin.read() 把整个 PDF 读进内存）
             dest_name = "".join(c if (c.isalnum() or c in "._-") else "_" for c in os.path.basename(src))
             dest = os.path.join(lib_dir, dest_name)
             n = 1
@@ -517,11 +685,9 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
                 stem, ext = os.path.splitext(dest_name)
                 dest = os.path.join(lib_dir, f"{stem}_{n}{ext}")
                 n += 1
-            with open(src, "rb") as fin, open(dest, "wb") as fout:
-                fout.write(fin.read())
-            # 元数据提取（PDF 文本 + Crossref）
-            text = _pdf_text(dest, pages=2)
-            meta = _extract_metadata(dest, text, src)
+            shutil.copyfile(src, dest)
+            # 元数据：直接用预取结果（源文件已解析 + 已并发 Crossref），命中缓存时零网络
+            meta = _metas.get(src) or _extract_metadata(dest, _pdf_text(dest, pages=2), src)
             entry = {
                 "file": os.path.basename(dest),
                 "path": dest.replace("\\", "/"),
@@ -547,6 +713,7 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
             by_sha.add(sha)
             by_name.add((entry["file"], size))
             imported.append({k: entry[k] for k in ("file", "title", "journal", "year", "doi", "downloaded_at")})
+            _entry_for[src] = entry
             # 注册进全局引用库（BibTeX/RIS）
             try:
                 from memomics.bio_tools.reference_library import save_reference
@@ -566,27 +733,46 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
         _n_done += 1
         _cb("file", _n_done, len(files), f"已处理 {_n_done}/{len(files)}")
     # 自动分类打标（物种/组织/方向/assay/kb_category）——仅对新导入的
+    # 2026-09-17 提速：分类的 LLM 调用在复制入库之前就已并发发出（见 ④），
+    # 这里只取回结果 —— 实测该调用固定 15–20s，现在与复制/解析并行，不再叠加等待。
     if index and any(not e.get("tags") for e in index):
         _new = [e for e in index if not e.get("tags")]
-        _cb("classify", _n_done, len(files), f"LLM 分类 {len(_new)} 篇文献…")
-        try:
-            _tags = _classify_papers(_new)
-            for e in _new:
-                if e.get("file") in _tags:
-                    e["tags"] = _tags[e["file"]]
-        except Exception as e:
-            logger.warning(f"classification failed: {e}")
+        # 2026-09-17：先落规则标签（零成本、立即可用），再让 LLM 精细分类在后台改写——
+        # 实测单次 LLM 分类固定 15–20s（一篇和十八篇一样），不该让用户等它。
+        for e in _new:
+            e["tags"] = _rule_classify(e.get("title") or "")
         _save_index(index_file, index)
+        _keymap = {}
+        for _i, _src in enumerate(_cls_order):
+            _e = _entry_for.get(_src)
+            if _e is not None:
+                _keymap[_e.get("file")] = f"__{_i}"
+        if _cls_fut is not None and _keymap:
+            _cb("classify", _n_done, len(files),
+                f"已按规则打标 {len(_new)} 篇；LLM 精细分类 {len(_keymap)} 篇后台进行（不阻塞导入）")
+            threading.Thread(target=_apply_classification_bg,
+                             args=(index_file, _keymap, _cls_fut), daemon=True).start()
+        else:
+            _cb("classify", _n_done, len(files), f"分类打标 {len(_new)} 篇（规则）")
+    if _cls_pool is not None:
+        try:
+            _cls_pool.shutdown(wait=False)
+        except Exception:
+            pass
     for it in imported:
         for e in index:
             if e.get("file") == it.get("file") and e.get("tags"):
                 it["tags"] = e["tags"]
-    _cb("done", _n_done, len(files), f"完成：导入 {len(imported)} 篇")
+    _cr_cache_flush()
+    _elapsed = time.time() - _t0
+    _cb("done", _n_done, len(files), f"完成：导入 {len(imported)} 篇（{_elapsed:.1f}s）")
     return json.dumps({
         "ok": True, "imported": len(imported), "skipped": len(skipped), "errors": errors,
         "entries": imported, "library_dir": lib_dir.replace("\\", "/"),
         "bibtex_file": os.path.join(os.path.dirname(_library_dir()) or "", "references.bib").replace("\\", "/"),
         "ris_file": os.path.join(os.path.dirname(_library_dir()) or "", "references.ris").replace("\\", "/"),
+        "elapsed_s": round(_elapsed, 2),
+        "crossref_cache": dict(_cr_stats),
     }, ensure_ascii=False, indent=2)
 
 

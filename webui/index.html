@@ -5025,7 +5025,7 @@ async function litPollProgress(jobId, box) {
     if (st.status === 'running') {
       var total = st.total || 0;
       var pct = total ? Math.round((st.done || 0) / total * 100) : 0;
-      var phaseLabel = {collect: '收集 PDF', file: '识别元数据（期刊/文章名/DOI）', classify: '分类打标（物种/组织/方向）', done: '完成'}[st.phase] || st.phase;
+      var phaseLabel = {collect: '收集 PDF', meta: '并发解析元数据（DOI/Crossref）', file: '复制入库', classify: '分类打标（物种/组织/方向）', done: '完成'}[st.phase] || st.phase;
       box.innerHTML = '<div style="padding:10px 4px;">' +
         '<div style="font-weight:600;margin-bottom:8px;">📥 正在导入文献… ' + escapeHtml(phaseLabel) + '</div>' +
         '<div style="background:var(--border);border-radius:6px;height:12px;overflow:hidden;">' +
@@ -8264,7 +8264,44 @@ function stopCtxPolling() {
 var _litPickerPath = '';
 var _litSelected = {};
 var _litPickerPdfCount = 0;
+var _litPickerPdfPartial = false;
+var _litCountTimer = null;
+var _litCountPath = null;
 var _litLastItems = [];
+
+// 2026-09-17: 目录 PDF 数量改为"先渲染列表、后补数字"——服务端不再阻塞式递归扫描
+function _litUpdateDirBtn() {
+  var dirBtn = document.getElementById('lit-import-dir');
+  if (!dirBtn) return;
+  var n = _litPickerPdfCount;
+  var label = (n === null || n === undefined) ? '统计中…' : ((_litPickerPdfPartial ? '≥' : '') + n + ' 篇 PDF');
+  dirBtn.textContent = '📥 一键导入本目录 (' + label + ')';
+}
+
+function _litPollPdfCount(path) {
+  if (_litCountTimer) { clearTimeout(_litCountTimer); _litCountTimer = null; }
+  _litCountPath = path;
+  var tries = 0;
+  function tick() {
+    if (tries++ > 12 || _litCountPath !== path) return;
+    var box = document.getElementById('lit-picker');
+    if (!box || box.style.display === 'none') return;
+    fetch('/api/lit/pdf_count?path=' + encodeURIComponent(path || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (_litCountPath !== path) return;
+        if (d && typeof d.count === 'number' && d.count > 0) {
+          _litPickerPdfCount = d.count;
+          _litPickerPdfPartial = !!d.partial;
+          _litUpdateDirBtn();
+          return;
+        }
+        _litCountTimer = setTimeout(tick, 800);
+      })
+      .catch(function() { _litCountTimer = setTimeout(tick, 1200); });
+  }
+  _litCountTimer = setTimeout(tick, 350);
+}
 
 function openLitPicker() {
   document.getElementById('lit-picker').style.display = 'flex';
@@ -8287,9 +8324,10 @@ async function litBrowse(path) {
     document.getElementById('lit-picker-path').textContent = d.path || '';
     var items = d.items || [];
     _litLastItems = items;
-    _litPickerPdfCount = d.pdf_count || 0;
-    var dirBtn = document.getElementById('lit-import-dir');
-    if (dirBtn) dirBtn.textContent = '📥 一键导入本目录 (' + _litPickerPdfCount + ' 篇 PDF)';
+    _litPickerPdfCount = (d.pdf_count === null || d.pdf_count === undefined) ? null : d.pdf_count;
+    _litPickerPdfPartial = !!d.pdf_count_partial;
+    _litUpdateDirBtn();
+    if (_litPickerPdfCount === null) _litPollPdfCount(path);
     // 上下级切换由服务端 parent 决定（Windows 盘符根/Linux / 之上无 parent），
     // 前端不做平台路径拼装
     var backBtn = '';

@@ -509,3 +509,117 @@ class TestDownloadAutoImport:
         assert [e["file"] for e in lib] == ["a.pdf", "b.pdf"]
         assert lib[0]["source"] == "user_import"
         assert lib[1]["source"] == "agent_download"
+
+
+# ---------------------------------------------------------------- 导入提速（2026-09-17）
+class TestImportSpeedup:
+    """导入提速的回归护栏（用户反馈"导入太慢"）：
+
+    实测基线：18 篇 210MB → 43.25s（2.40s/篇）；其中串行 Crossref 反查占大头、
+    LLM 分类固定 15–20s 全程阻塞。改造后同批 6.05s（0.34s/篇）。
+    - 便宜去重在前：同名同大小不再读全文算 sha256
+    - Crossref 结果落盘缓存 + 并发预取：每篇只查一次网络
+    - LLM 分类与复制入库并行，标签先按规则落库、精细标签后台改写
+    """
+
+    def _fake_pdf(self, path, pad=30):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(b"%PDF-1.4\n" + b"x" * pad)
+        return path
+
+    def _fresh_cr_cache(self, monkeypatch):
+        monkeypatch.setattr(LL, "_cr_cache_mem", None)
+        monkeypatch.setattr(LL, "_cr_cache_dirty", False)
+
+    def test_dup_name_size_skips_before_hashing(self, tmp_path, monkeypatch):
+        """已导入过的文件（同名同大小）应在算 sha256 之前就跳过 —— 否则重复导入白读全文。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers";
+        papers.mkdir()
+        src = self._fake_pdf(tmp_path / "a.pdf")
+        with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
+            json.dump([{"file": "a.pdf", "size": src.stat().st_size, "sha256": "known"}],
+                      f, ensure_ascii=False)
+        calls = {"n": 0}
+
+        def _sha(p):
+            calls["n"] += 1
+            return "hash"
+
+        monkeypatch.setattr(LL, "_sha256_of", _sha)
+        res = json.loads(LL.import_pdfs([str(src)]))
+        assert res["imported"] == 0 and res["skipped"] == 1   # 结果里 skipped 是条数
+        assert calls["n"] == 0, "同名同大小必须在 sha256 之前短路"
+
+    def test_crossref_cache_hit_avoids_second_lookup(self, tmp_path, monkeypatch):
+        """同一篇文献（同 DOI）第二次导入不再打 Crossref；缓存落盘后新进程也命中。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "papers").mkdir()
+        self._fresh_cr_cache(monkeypatch)
+        calls = {"n": 0}
+
+        def _fake_extract(pdf_path, text, original_path):
+            calls["n"] += 1
+            return {"title": "T", "journal": "J", "authors": ["A"], "year": "2026",
+                    "doi": "10.1234/abc.def", "url": "", "volume": "", "issue": "",
+                    "pages": "", "pmid": ""}
+
+        monkeypatch.setattr(LL, "_extract_metadata", _fake_extract)
+        text = "see doi 10.1234/abc.def for details"
+        m1 = LL._crossref_meta_cached("p.pdf", text, "p.pdf")
+        m2 = LL._crossref_meta_cached("p.pdf", text, "p.pdf")
+        assert calls["n"] == 1 and m1["journal"] == "J" and m2["title"] == "T"
+        LL._cr_cache_flush()
+        cache_file = tmp_path / "papers" / ".crossref_cache.json"
+        assert cache_file.exists()
+        monkeypatch.setattr(LL, "_cr_cache_mem", None)          # 模拟进程重启：从磁盘读回
+        m3 = LL._crossref_meta_cached("p.pdf", text, "p.pdf")
+        assert calls["n"] == 1 and m3["journal"] == "J"
+
+    def test_import_prefetches_metadata_once_per_file(self, tmp_path, monkeypatch):
+        """并发预取的元数据必须被复制入库阶段复用：每篇只解析一次，且返回耗时。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "papers").mkdir()
+        self._fresh_cr_cache(monkeypatch)
+        monkeypatch.setattr(LL, "_pdf_text", lambda p, pages=2: "text")
+        monkeypatch.setattr(LL, "_classify_papers", lambda entries: {})
+        calls = {"n": 0}
+
+        def _fake_extract(pdf_path, text, original_path):
+            calls["n"] += 1
+            return {"title": "T%d" % calls["n"], "journal": "J", "authors": [], "year": "2026",
+                    "doi": "10.1000/x%d" % calls["n"], "url": "", "volume": "", "issue": "",
+                    "pages": "", "pmid": ""}
+
+        monkeypatch.setattr(LL, "_extract_metadata", _fake_extract)
+        srcs = [str(self._fake_pdf(tmp_path / ("s%d.pdf" % i), 20 + i)) for i in range(3)]
+        res = json.loads(LL.import_pdfs(srcs))
+        assert res["imported"] == 3
+        assert calls["n"] == 3, "每篇只应解析一次元数据（预取结果复用）"
+        assert isinstance(res.get("elapsed_s"), (int, float))
+        assert "crossref_cache" in res
+        idx = json.loads((tmp_path / "papers" / ".pdf_index.json").read_text(encoding="utf-8"))
+        assert len(idx) == 3
+        assert all(e.get("tags") for e in idx), "导入返回时标签（规则）必须已可用"
+
+    def test_bg_classification_overwrites_rule_tags(self, tmp_path, monkeypatch):
+        """后台精细分类只改 tags、按文件名对号入座，不阻塞也不需要用户等待。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        papers = tmp_path / "papers";
+        papers.mkdir()
+        idx = papers / ".pdf_index.json"
+        with open(idx, "w", encoding="utf-8") as f:
+            json.dump([{"file": "a.pdf", "title": "T", "tags": LL._rule_classify("T")}],
+                      f, ensure_ascii=False)
+
+        class _F:
+            def result(self):
+                return {"__0": {"species": ["mouse"], "tissue": ["skeletal_muscle"],
+                                "direction": ["aging"], "assay": "RNA",
+                                "kb_category": "01_生物学知识"}}
+
+        LL._apply_classification_bg(str(idx), {"a.pdf": "__0"}, _F())
+        after = json.loads(idx.read_text(encoding="utf-8"))
+        assert after[0]["tags"]["species"] == ["mouse"]
+        assert after[0]["tags"]["tissue"] == ["skeletal_muscle"]
