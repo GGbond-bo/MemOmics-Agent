@@ -170,6 +170,193 @@ class TestBlockTranslation:
         assert LL._md_blocks("\n\n".join(zh)) == ["译一\n多行\n尾巴", "译二", "three"]
 
 
+# ------------------------------------------------- 翻译提速：超大段拆单元 + 并发（2026-09-17）
+class TestTranslationUnits:
+    """用户反馈"翻译太慢"的回归护栏。
+
+    实测：单段 3630 字符整段直译要 32.4s；某篇 31 段里 18 段 >6000 字符（最大 8995）
+    → 旧代码 25 批、每批一次超大调用、2 并发，整篇 5–6 分钟，还常顶到 120s 超时截断。
+    改造：超大段按句子边界拆成 ≤1800 字符的小单元并发翻译，译完拼回原段
+    （中英对照仍严格 1:1）。
+    """
+
+    def test_oversized_block_split_into_units(self):
+        block = ("Sentence number one is here. " * 300).strip()
+        units = LL._split_units([block])
+        assert len(units) > 1, "超大段必须被拆"
+        assert all(len(t) <= 1800 for _bi, t in units)
+        assert {bi for bi, _t in units} == {0}, "拆出的单元仍属于原段"
+        assert "".join(t for _bi, t in units).replace(" ", "") == block.replace(" ", "")
+
+    def test_small_blocks_stay_whole(self):
+        units = LL._split_units(["short paragraph.", "y" * 2000])
+        assert units[0] == (0, "short paragraph.")
+        assert len([u for u in units if u[0] == 1]) >= 2
+
+    def test_join_unit_texts(self):
+        assert LL._join_unit_texts(["第一句。", "第二句。"]) == "第一句。第二句。"
+        assert LL._join_unit_texts(["end.", "Next"]) == "end. Next"
+        assert LL._join_unit_texts(["", "只有这段", ""]) == "只有这段"
+
+    def test_translate_reassembles_units_into_same_block_count(self, tmp_path, monkeypatch):
+        """整篇翻译完成后：译文段数 == 原文段数，且每段都含其全部单元译文。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "papers").mkdir()
+        md = ("# Title\n\n" + ("This is a very long paragraph sentence. " * 240)
+              + "\n\nshort tail paragraph.")
+        pdf = tmp_path / "p.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n" + b"x" * 20)
+        monkeypatch.setattr(LL, "list_library",
+                            lambda *a, **k: json.dumps({"library": [{"file": "p.pdf", "title": "P"}]}))
+        monkeypatch.setattr(LL, "_resolve_paper_path", lambda hit: str(pdf))
+        monkeypatch.setattr(LL, "pdf_to_markdown", lambda *a, **k: md)
+        batches = {"n": 0, "sizes": []}
+
+        def fake_batch(batch):
+            batches["n"] += 1
+            batches["sizes"].append(len(batch))
+            return [f"<译{b[:8]}…>" for b in batch]
+
+        monkeypatch.setattr(LL, "_translate_block_batch", fake_batch)
+        r = json.loads(LL.translate_paper("p.pdf"))
+        assert r.get("ok") is True, r
+        zh_path = tmp_path / "papers" / "translations" / "p.zh.md"
+        zh_blocks = LL._md_blocks(zh_path.read_text(encoding="utf-8"))
+        assert len(zh_blocks) == len(LL._md_blocks(md)), "译文段数必须与原文严格一致"
+        assert all("<译" in b for b in zh_blocks), "每段都要拼回单元译文"
+        assert batches["n"] > 1, "超大段应拆成多批"
+        assert max(batches["sizes"]) <= 4
+
+
+# ------------------------------------------------- 知识/摘要提速：分块并发（2026-09-17）
+class TestParallelChunkExtraction:
+    """分块 LLM 提炼并发化（知识提取 19 块串行 → 并发 5 路）+ 碎片去重压缩。"""
+
+    def test_chunks_run_concurrently_and_keep_order(self, monkeypatch):
+        import threading as _th
+        import time as _time
+        live = {"cur": 0, "max": 0}
+        lock = _th.Lock()
+
+        def fake_llm(prompt, label, **kw):
+            with lock:
+                live["cur"] += 1
+                live["max"] = max(live["max"], live["cur"])
+            _time.sleep(0.15)
+            with lock:
+                live["cur"] -= 1
+            return json.dumps({"idx": int(label.rsplit("_", 1)[1])})
+
+        monkeypatch.setattr(LL, "_llm_content", fake_llm)
+        out = LL._llm_chunks_parallel(["a", "b", "c", "d"], lambda i, c: c, "chunk", workers=4)
+        assert [p.get("idx") for p in out] == [0, 1, 2, 3], "结果必须按输入顺序返回"
+        assert live["max"] >= 2, "必须真的并发"
+        assert live["max"] <= 4
+
+    def test_empty_chunk_retried_once(self, monkeypatch):
+        """某块没产出合法 JSON 时必须严格模式重试一次——否则那块知识直接蒸发
+        （实测 lung_no-smoking 缺了 Methods 的 FACETS/GISTIC 就是这类丢块）。"""
+        seen = []
+
+        def fake_llm(prompt, label, **kw):
+            seen.append(label)
+            if label.endswith("_fix_1"):
+                return json.dumps({"ok": "fixed"})
+            if label.endswith("_1"):
+                return "抱歉，我无法按要求输出 JSON"
+            return json.dumps({"ok": "first"})
+
+        monkeypatch.setattr(LL, "_llm_content", fake_llm)
+        out = LL._llm_chunks_parallel(["a", "b", "c"], lambda i, c: c, "chunk", workers=3)
+        assert out[0] == {"ok": "first"} and out[2] == {"ok": "first"}
+        assert out[1] == {"ok": "fixed"}, f"空块必须补齐，实际 {out[1]}；调用={seen}"
+        assert sum(1 for s in seen if s.endswith("_fix_1")) == 1
+
+    def test_chunk_failure_isolated(self, monkeypatch):
+        def fake_llm(prompt, label, **kw):
+            if label.endswith("_1"):
+                raise RuntimeError("boom")
+            return json.dumps({"ok": 1})
+
+        monkeypatch.setattr(LL, "_llm_content", fake_llm)
+        out = LL._llm_chunks_parallel(["a", "b"], lambda i, c: c, "chunk", workers=2)
+        assert out[0] == {"ok": 1} and out[1] == {}, "单块失败不能拖垮整篇"
+
+    def test_oversized_section_is_split(self):
+        """没有标题行的 PDF（整篇=1 节）必须被拆成多块——否则一次巨型调用必然失败。"""
+        big = ("This is a body paragraph sentence. " * 2000).strip()   # ~66k 字符
+        chunks = LL._chunk_sections([("", big)], max_chars=9000)
+        assert len(chunks) > 5, f"必须拆成多块，实际 {len(chunks)}"
+        assert all(len(c) <= 9000 for c in chunks)
+        # 段落间用 \n\n 拼接，去空白后内容不丢
+        assert "".join("".join(c.split()) for c in chunks) == big.replace(" ", "")
+
+    def test_chunk_sections_merges_small_sections_and_keeps_heading(self):
+        secs = [("Intro", "p1"), ("Methods", "p2"), ("Long", "x" * 12000)]
+        chunks = LL._chunk_sections(secs, max_chars=9000)
+        assert all(len(c) <= 9000 for c in chunks)
+        assert "## Intro" in chunks[0] and "## Methods" in chunks[0], "小节能合并"
+        assert any("## Long" in c for c in chunks)
+        assert sum(c.count("x") for c in chunks) == 12000, "长节内容不丢"
+
+    def test_cap_json_size_keeps_json_valid(self):
+        """截图式截断会切出非法 JSON → 合并调用拿到垃圾；这里必须按完整条目丢弃。"""
+        big = {"biology": {"conclusions": [f"结论{i}·" + "x" * 200 for i in range(60)]},
+               "bioinfo": {"software": [{"name": f"S{i}"} for i in range(30)]}}
+        s = LL._cap_json_size(big, 3000)
+        assert len(s) <= 3000
+        parsed = json.loads(s)          # 关键：仍是合法 JSON
+        assert parsed["biology"]["conclusions"], "不能把内容全丢光"
+        assert len(parsed["biology"]["conclusions"]) < 60
+
+    def test_cap_json_size_passthrough(self):
+        small = {"biology": {"conclusions": ["A"]}}
+        assert json.loads(LL._cap_json_size(small, 3000)) == small
+
+    def test_long_paper_skips_llm_merge_and_keeps_all_fragments(self, tmp_path, monkeypatch):
+        """碎片过大时必须跳过 LLM 合并（会失败）并保留全部碎片内容。"""
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "papers").mkdir()
+        big_md = ("\n\n".join("Body paragraph %d about single cell RNA sequencing. " % i
+                              for i in range(3000)))     # >18000 字符 → 走分块
+        pdf = tmp_path / "p.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n" + b"x" * 10)
+        monkeypatch.setattr(LL, "_find_raw_entry", lambda q: {"file": "p.pdf", "title": "P",
+                                                              "journal": "J", "doi": "10.1/x",
+                                                              "tags": {"species": ["human"], "tissue": ["lung"], "direction": ["cancer"], "assay": "RNA"}})
+        monkeypatch.setattr(LL, "_resolve_paper_path", lambda hit: str(pdf))
+        monkeypatch.setattr(LL, "pdf_to_markdown", lambda *a, **k: big_md)
+        monkeypatch.setattr(LL, "_write_knowledge_entries", lambda *a, **k: ([], []))
+        monkeypatch.setattr(LL, "_save_index_entry", lambda *a, **k: None, raising=False)
+        calls = []
+
+        def fake_llm(prompt, label, **kw):
+            calls.append(label)
+            if label.startswith("lit_know_chunk"):
+                # 每块给一大段结论 → 24 块碎片总长 >14000 字符，命中"跳过合并"分支
+                return json.dumps({"biology": {"conclusions": ["结论-" + label + "·" + "细" * 1200]},
+                                   "bioinfo": {"software": [{"name": "S-" + label}]}})
+            raise AssertionError("碎片过长时不应再发 LLM 合并调用")
+
+        monkeypatch.setattr(LL, "_llm_content", fake_llm)
+        r = json.loads(LL.extract_paper_knowledge("p.pdf", force=True))
+        assert r.get("ok") is True, r
+        assert not any(lbl.startswith("lit_knowledge_merge") for lbl in calls)
+        md_file = tmp_path / "papers" / "knowledge" / "p.md"
+        body = md_file.read_text(encoding="utf-8")
+        assert body.count("结论-lit_know_chunk_") >= 3, "每个分块的结论都要保留"
+        assert "S-lit_know_chunk_" in body
+
+    def test_compact_fragments_dedupes_and_shrinks(self):
+        parts = [{"conclusions": ["A", "B"], "pathways": ["P"], "reference_genome": "GRCh38"},
+                 {"conclusions": ["B", "C"], "pathways": ["P", "Q"], "reference_genome": "mm10"}]
+        out = LL._compact_fragments(parts)
+        assert out["conclusions"] == ["A", "B", "C"], "重复结论要去掉"
+        assert out["pathways"] == ["P", "Q"]
+        assert out["reference_genome"] == "GRCh38", "标量取首个非空"
+        assert len(json.dumps(out, ensure_ascii=False)) <= len(json.dumps(parts, ensure_ascii=False))
+
+
 # ---------------------------------------------------------------- 物种标准化与知识域（批O3）
 class TestSpeciesCanonical:
     def test_human_variants(self):

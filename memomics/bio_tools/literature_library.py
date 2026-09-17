@@ -416,17 +416,33 @@ def _repair_json_via_llm(bad_text: str, target: str) -> str:
         return ""
 
 
+def _no_think_enabled() -> bool:
+    """批量文献任务（翻译/提炼/知识提取）默认首轮就抑制推理。
+
+    实测（2026-09-17，dcs-cloud/deepseek-flash，同一 1691 字符翻译单元 2×2 次）：
+    带前缀 11.5/13.4s，不带 16.4/19.5s —— 快约 30%，且译文质量一致。
+    环境变量 MEMOMICS_LIT_NO_THINK=0 可关掉。"""
+    return os.environ.get("MEMOMICS_LIT_NO_THINK", "1").lower() not in ("0", "false", "no", "off")
+
+
+_NO_THINK_PREFIX = "【不要输出任何思考/推理过程，直接输出最终结果】\n"
+
+
 def _llm_content(prompt: str, label: str, temperature: float = 0.3,
-                 max_tokens: int = 6000, retry_prefix: str = "") -> str:
+                 max_tokens: int = 6000, retry_prefix: str = "",
+                 no_think: bool = False) -> str:
     """LLM 调用 + 推理占满自动重试（批N 2026-08-16）。
 
     deepseek-v4-flash 是推理模型，偶尔把输出额度全花在 reasoning 上、
     content 为空（_call_llm_sync 回退返回 reasoning 草稿）→ 检测到后
     重试一次并要求直接输出最终结果。
+    no_think=True：首轮就带上"不要思考"前缀（批量翻译/提炼用，实测快 30%，
+    且省掉一次"推理占满→整轮重试"的重复调用）。重试仍用原始 prompt，避免前缀叠加。
     """
     from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
     cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-    r = _call_llm_sync(prompt, label, cfg["api_key"], cfg["base_url"], cfg["model"],
+    r = _call_llm_sync((_NO_THINK_PREFIX if (no_think and _no_think_enabled()) else "") + prompt,
+                       label, cfg["api_key"], cfg["base_url"], cfg["model"],
                        temperature=temperature, max_tokens=max_tokens)
     if r.get("used_reasoning_fallback"):
         logger.warning(f"{label} reasoning 占满 → 重试直接输出")
@@ -435,6 +451,130 @@ def _llm_content(prompt: str, label: str, temperature: float = 0.3,
                             temperature=0.2, max_tokens=max_tokens)
         return r2.get("content", "") or r.get("content", "")
     return r.get("content", "")
+
+
+def _llm_chunks_parallel(chunks: list, make_prompt, label_prefix: str,
+                         progress_cb=None, phase: str = "extract",
+                         max_tokens: int = 4000, retry_prefix: str = "",
+                         workers: int = 0) -> list:
+    """分块 LLM 提炼并发执行，按输入顺序返回解析后的 JSON dict 列表。
+
+    各分块互不依赖（结果统一合并），并发不改变语义。实测某篇 170k 字符文献切 19 块，
+    串行每块 20–40s；并发 5 路后整体 <2 分钟（MEMOMICS_LIT_CHUNK_WORKERS 可覆盖）。
+    """
+    out = [{} for _ in chunks]
+    n = len(chunks)
+    if not n:
+        return out
+    mw = workers or max(1, min(10, int(os.environ.get("MEMOMICS_LIT_CHUNK_WORKERS", "6"))))
+
+    def _run(i: int):
+        return _parse_json_object(_llm_content(
+            make_prompt(i, chunks[i]), f"{label_prefix}_{i}", temperature=0.2,
+            max_tokens=max_tokens, retry_prefix=retry_prefix, no_think=True))
+
+    done = 0
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=min(mw, n)) as ex:
+            futs = {ex.submit(_run, i): i for i in range(n)}
+            for f in as_completed(futs):
+                i = futs[f]
+                try:
+                    out[i] = f.result() or {}
+                except Exception as e:
+                    logger.warning(f"{label_prefix} 第{i + 1}块失败: {e}")
+                    out[i] = {}
+                done += 1
+                if progress_cb:
+                    progress_cb(phase, done, n, f"{label_prefix} {done}/{n} 块（并发{mw}）")
+        # 批P4(2026-09-17)：没产出有效 JSON 的块重试一次——否则那块内容直接蒸发
+        # （实测 lung_no-smoking 缺了 Methods 里的 FACETS/GISTIC：24 块里 1-2 块 JSON 没解析出来）
+        _empty = [i for i in range(n) if not out[i]]
+        if _empty:
+            logger.warning(f"{label_prefix} {len(_empty)}/{n} 块未产出有效 JSON → 严格模式重试")
+
+            def _run_strict(i: int):
+                return _parse_json_object(_llm_content(
+                    "【严格：只输出一个 JSON 对象，第一个字符必须是 { ，不要任何解释或思考】\n"
+                    + make_prompt(i, chunks[i]), f"{label_prefix}_fix_{i}", temperature=0.1,
+                    max_tokens=max_tokens, retry_prefix=retry_prefix, no_think=True))
+
+            try:
+                with ThreadPoolExecutor(max_workers=min(mw, len(_empty))) as ex2:
+                    futs2 = {ex2.submit(_run_strict, i): i for i in _empty}
+                    for f in as_completed(futs2):
+                        i = futs2[f]
+                        try:
+                            got = f.result() or {}
+                        except Exception as e:
+                            logger.warning(f"{label_prefix} 第{i + 1}块严格重试失败: {e}")
+                            got = {}
+                        if got:
+                            out[i] = got
+                _fixed = sum(1 for i in _empty if out[i])
+                if progress_cb:
+                    progress_cb(phase, n, n, f"{label_prefix} 空块重试补齐 {_fixed}/{len(_empty)} 块")
+            except Exception as e:
+                logger.warning(f"strict chunk retry failed: {e}")
+    except Exception as e:
+        logger.warning(f"parallel chunk LLM failed, fallback serial: {e}")
+        done = 0
+        for i in range(n):
+            try:
+                out[i] = _run(i) or {}
+            except Exception as e2:
+                logger.warning(f"{label_prefix} 第{i + 1}块失败: {e2}")
+                out[i] = {}
+            done += 1
+            if progress_cb:
+                progress_cb(phase, done, n, f"{label_prefix} {done}/{n} 块")
+    return out
+
+
+def _cap_json_size(obj, cap: int):
+    """把碎片 JSON 压到 ≤cap 字符，且保持 JSON 合法（按完整条目丢弃，不切字符串）。"""
+    s = json.dumps(obj, ensure_ascii=False)
+    if len(s) <= cap:
+        return s
+    import copy as _copy
+    cur = _copy.deepcopy(obj)
+
+    def _trim(node):
+        changed = False
+        for k, v in list(node.items()):
+            if isinstance(v, list) and v:
+                v.pop()
+                changed = True
+            elif isinstance(v, dict) and v:
+                changed = _trim(v) or changed
+        return changed
+
+    while len(json.dumps(cur, ensure_ascii=False)) > cap and _trim(cur):
+        pass
+    return json.dumps(cur, ensure_ascii=False)
+
+
+def _compact_fragments(parts: list) -> dict:
+    """合并去重分块碎片（列表取并集、标量取首个非空）——压缩合并调用的输入。
+
+    旧实现把碎片 JSON 硬截断到 12000 字符，长文献（19 块）后面几块的碎片
+    直接被丢掉 → 知识缺失。去重后体积通常只剩零头，可完整送进合并调用。
+    """
+    agg = {}
+    for part in parts:
+        for k, v in (part or {}).items():
+            if isinstance(v, list):
+                bucket = agg.setdefault(k, [])
+                seen = {json.dumps(x, ensure_ascii=False, sort_keys=True) for x in bucket}
+                for it in v:
+                    sig = json.dumps(it, ensure_ascii=False, sort_keys=True)
+                    if sig not in seen:
+                        seen.add(sig)
+                        bucket.append(it)
+            elif isinstance(v, str) and v.strip() and not agg.get(k):
+                agg[k] = v
+    return agg
 
 
 def _markdown_dir() -> str:
@@ -491,15 +631,33 @@ def _split_md_sections(md: str) -> list:
 
 
 def _chunk_sections(sections: list, max_chars: int = 9000) -> list:
-    """分节合并成 ≤max_chars 的块（块内保留节标题）。"""
-    chunks, cur = [], ""
+    """分节合并成 ≤max_chars 的块（块内保留节标题）；超大节按段落再拆。
+
+    批P2(2026-09-17)：旧实现只合并、从不拆分。遇到 pdf→markdown 没产出 # 标题的
+    PDF 时整篇 = 1 节 → 拼出一个 170k 字符的巨型块，一次送模型必然「推理占满/超时」，
+    知识提取直接报「未能提取出知识」（实测 lung_no-smoking_clinic.pdf 100% 失败）。
+    """
+    pieces = []
     for title, content in sections:
-        piece = f"## {title}\n{content}\n\n"
-        if len(cur) + len(piece) > max_chars and cur:
+        head = f"## {title}\n" if title else ""
+        for para in re.split(r"\n\s*\n", (content or "").strip()):
+            para = para.strip()
+            if not para:
+                continue
+            while len(para) > max_chars:      # 单段超长（无空行）→ 硬切
+                pieces.append(para[:max_chars])
+                para = para[max_chars:]
+            pieces.append(head + para)
+            head = ""
+        if head:
+            pieces.append(head)
+    chunks, cur = [], ""
+    for p in pieces:
+        if cur and len(cur) + len(p) + 2 > max_chars:
             chunks.append(cur)
-            cur = piece
+            cur = p
         else:
-            cur += piece
+            cur = (cur + "\n\n" + p) if cur else p
     if cur:
         chunks.append(cur)
     return chunks
@@ -1044,7 +1202,8 @@ def _translate_block_batch(blocks: list) -> list:
     for i, b in enumerate(blocks):
         prompt += f"[{i + 1}]\n{b}\n\n"
     out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=12000,
-                       retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n")
+                       retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n",
+                       no_think=True)
     res = _parse_numbered_output(out, len(blocks))
     missing = [i for i, t in enumerate(res) if not t]
     if not any(res):
@@ -1053,7 +1212,7 @@ def _translate_block_batch(blocks: list) -> list:
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文，"
             "每段必须以 ###数字### 单独一行开头】\n" + prompt,
             "lit_trans_blocks_retry", temperature=0.1, max_tokens=12000,
-            retry_prefix="【直接输出译文，不要思考】\n")
+            retry_prefix="【直接输出译文，不要思考】\n", no_think=True)
         res = _parse_numbered_output(out2, len(blocks))
         missing = [i for i, t in enumerate(res) if not t]
     if missing and any(res):
@@ -1064,7 +1223,7 @@ def _translate_block_batch(blocks: list) -> list:
         out3 = _llm_content(
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文】\n" + sub_prompt,
             "lit_trans_blocks_sub", temperature=0.1, max_tokens=12000,
-            retry_prefix="【直接输出译文，不要思考】\n")
+            retry_prefix="【直接输出译文，不要思考】\n", no_think=True)
         part3 = _parse_numbered_output(out3, len(blocks))
         for i in missing:
             if part3[i]:
@@ -1081,6 +1240,59 @@ def _normalize_zh(results: list, blocks: list) -> list:
         t = re.sub(r"^#{1,6}\s*\d{1,3}\s*#{1,6}\s*", "", t, count=1)
         zh_parts.append(t or (blocks[i] if i < len(blocks) else ""))
     return zh_parts
+
+
+def _split_text_sentences(text: str, max_chars: int = 1800) -> list:
+    """按句子边界把长文本切成 ≤max_chars 的片段（单句超长时硬切）。"""
+    out, cur = [], ""
+    for part in re.split(r"(?<=[.!?。！？])\s+", text or ""):
+        if not part:
+            continue
+        if cur and len(cur) + len(part) + 1 > max_chars:
+            out.append(cur.strip())
+            cur = part
+        else:
+            cur = (cur + " " + part) if cur else part
+        while len(cur) > max_chars:
+            out.append(cur[:max_chars].strip())
+            cur = cur[max_chars:]
+    if cur.strip():
+        out.append(cur.strip())
+    return [x for x in out if x] or [(text or "").strip()]
+
+
+def _split_units(blocks: list, max_chars: int = 1800) -> list:
+    """块 → 翻译单元 [(块下标, 文本)…]。
+
+    PDF→Markdown 常把整页/整节并成一个“段”（实测某篇 31 段里 18 段 >6000 字符、
+    最大 8995），整段送模型单次要 30–120s 且极易被 max_tokens 截断。
+    这里按句子边界把超大段拆成小单元，译完再拼回原段，中英对照仍严格 1:1。
+    """
+    units = []
+    for bi, b in enumerate(blocks):
+        if len(b) <= max_chars:
+            units.append((bi, b))
+        else:
+            for piece in _split_text_sentences(b, max_chars):
+                units.append((bi, piece))
+    return units
+
+
+def _join_unit_texts(pieces: list) -> str:
+    """把同一段的单元译文拼回一段（相邻都是中文则不插空格）。"""
+    out = ""
+    for p in pieces:
+        p = (p or "").strip()
+        if not p:
+            continue
+        if not out:
+            out = p
+            continue
+        if re.search(r"[\u4e00-\u9fff]$", out) or re.match(r"^[\u4e00-\u9fff]", p):
+            out += p
+        else:
+            out += " " + p
+    return out
 
 
 def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -1145,38 +1357,62 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         except Exception as e:
             logger.warning(f"translation part flush failed: {e}")
 
-    batches = _batch_blocks(blocks)
-    # 批O2：2 路并发翻译批次（每批编号直译互不依赖；结果按批次偏移回填保证顺序）
+    # 批P1(2026-09-17)：超大段先拆成小单元再翻译。实测单段 3630 字符的整段直译要 32s，
+    # 8–9k 字符的段会顶到 120s 超时/被 max_tokens 截断 → 拆单元后单次输出小，快且不截断。
+    _uns = _split_units(blocks)
+    _unit_text = [""] * len(_uns)
+    batches = _batch_blocks([t for _bi, t in _uns], max_chars=6000, max_blocks=4)
     indexed = []
     _off = 0
     for batch in batches:
         indexed.append((_off, batch))
         _off += len(batch)
-    # 只翻译还有缺失段的批次（断点续译跳过已完成批次）
+    # 断点续译：已完成的段（.part.json 里已有译文）直接用旧结果，其单元不再翻
+    _block_done = [bool(results[i]) for i in range(len(blocks))]
+    _units_of = {}
+    for _ui, (_bi, _t) in enumerate(_uns):
+        _units_of.setdefault(_bi, []).append(_ui)
+
+    def _block_flush(bi):
+        """某段所有单元都译完 → 拼回该段（保证译文段数 == 原文段数）。"""
+        if _block_done[bi]:
+            return
+        _idxs = _units_of.get(bi) or []
+        if _idxs and all(_unit_text[j] for j in _idxs):
+            results[bi] = _join_unit_texts([_unit_text[j] for j in _idxs])
+            _block_done[bi] = True
+
     pending = []
     for off, batch in indexed:
-        if all(results[off + k] for k in range(len(batch))):
+        if all(_block_done[_uns[off + k][0]] for k in range(len(batch))):
             continue
         pending.append((off, batch))
+    # 批P1：默认 5 路并发（MEMOMICS_LIT_TRANS_WORKERS 可覆盖）
+    _mw = max(1, min(10, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "6"))))
     if pending:
-        _cb("translate", 0, len(pending), f"段落级编号直译 {len(pending)}/{len(indexed)} 批（并发2）")
+        _cb("translate", 0, len(pending),
+            f"段落级编号直译 {len(pending)}/{len(indexed)} 批（{len(_uns)} 单元，并发{_mw}）")
+    _n_done = 0
     try:
-        from concurrent.futures import ThreadPoolExecutor
-        _mw = max(1, min(2, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "2"))))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def _one(off_batch):
             off, batch = off_batch
             return off, _translate_block_batch(batch)
 
-        _n_done = 0
-        with ThreadPoolExecutor(max_workers=_mw) as _ex:
-            for off, part in _ex.map(_one, pending):
+        with ThreadPoolExecutor(max_workers=min(_mw, max(1, len(pending)))) as _ex:
+            _futs = [_ex.submit(_one, ib) for ib in pending]
+            for _f in as_completed(_futs):
+                off, part = _f.result()
                 for k, t in enumerate(part):
                     if t:
-                        results[off + k] = t
+                        _unit_text[off + k] = t
+                for bi in {_uns[off + k][0] for k in range(len(part))}:
+                    _block_flush(bi)
                 _n_done += 1
                 _flush_part()  # 每完成一批落盘一次（服务重启可续）
-                _cb("translate", _n_done, len(pending), f"段落级翻译 {_n_done}/{len(pending)} 批")
+                _cb("translate", _n_done, len(pending),
+                    f"段落级翻译 {_n_done}/{len(pending)} 批（{sum(1 for d in _block_done if d)}/{len(blocks)} 段完成）")
     except Exception as e:
         logger.warning(f"parallel translate failed, fallback serial: {e}")
         _n_done = 0
@@ -1184,20 +1420,24 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             part = _translate_block_batch(batch)
             for k, t in enumerate(part):
                 if t:
-                    results[off + k] = t
+                    _unit_text[off + k] = t
+            for bi in {_uns[off + k][0] for k in range(len(part))}:
+                _block_flush(bi)
             _n_done += 1
             _flush_part()
-            _cb("translate", _n_done, len(pending), f"段落级翻译第 {_n_done}/{len(pending)} 批（{len(batch)} 段）")
-    # 缺段单段兜底直译（保证 1:1 完整）
-    for i, b in enumerate(blocks):
-        if not results[i]:
-            _cb("translate", i, len(blocks), f"补译第 {i + 1}/{len(blocks)} 段")
-            results[i] = _llm_content(
-                "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），"
-                "输出为**单个段落，不要空行**，只输出译文：\n" + b,
-                f"lit_trans_fix_{i}", temperature=0.2, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出译文】\n").strip()
-            _flush_part()
+            _cb("translate", _n_done, len(pending), f"段落级翻译第 {_n_done}/{len(pending)} 批")
+    # 缺单元兜底直译（单单元送模型，保证 1:1 完整）
+    for _ui, (_bi, _txt) in enumerate(_uns):
+        if _unit_text[_ui] or _block_done[_bi]:
+            continue
+        _cb("translate", _ui, len(_uns), f"补译第 {_ui + 1}/{len(_uns)} 单元")
+        _unit_text[_ui] = _llm_content(
+            "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），"
+            "输出为**单个段落，不要空行**，只输出译文：\n" + _txt,
+            f"lit_trans_fix_{_ui}", temperature=0.2, max_tokens=6000,
+            retry_prefix="【不要思考，立即输出译文】\n", no_think=True).strip()
+        _block_flush(_bi)
+        _flush_part()
     # 批O2c：块归一化——折叠块内空行/残余编号；仍为空的段落回填原文
     # （保证译文段落数与原文严格一致，中英对照逐段对齐不漂移）
     zh_parts = _normalize_zh(results, blocks)
@@ -1445,23 +1685,25 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             txt = _llm_content(
                 base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
                 "lit_summary", temperature=0.3, max_tokens=6000,
-                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             summary = _parse_json_object(txt)
         else:
             # 长文献：分节分块 → 每块提炼要点 → 合并成 9 项
             _cb("summarize", 0, 1, f"长文献分块解读: {len(_split_md_sections(md_text))} 节")
             chunks = _chunk_sections(_split_md_sections(md_text))
             bullets = {k: [] for k in _SUMMARY_FIELDS}
-            for ci, chunk in enumerate(chunks):
-                _cb("summarize", ci, len(chunks), f"解读第 {ci + 1}/{len(chunks)} 块")
-                txt = _llm_content(
-                    "你是文献解读助手。对下面的文献片段，按 9 个字段各提炼 1-2 句要点，"
-                    '输出 JSON：{"idea":[],"background":[],"species":[],"tissue":[],'
-                    '"problem":[],"solution":[],"methods":[],"conclusion":[],"validation":[]}'
-                    "（值都是字符串数组；该片段没涉及的字段给空数组；不要其他文字）\n" + chunk,
-                    f"lit_chunk_{ci}", temperature=0.2, max_tokens=3000,
-                    retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 { 】\n")
-                part = _parse_json_object(txt)
+
+            def _sum_prompt(_i, chunk):
+                return ("你是文献解读助手。对下面的文献片段，按 9 个字段各提炼 1-2 句要点，"
+                        '输出 JSON：{"idea":[],"background":[],"species":[],"tissue":[],'
+                        '"problem":[],"solution":[],"methods":[],"conclusion":[],"validation":[]}'
+                        "（值都是字符串数组；该片段没涉及的字段给空数组；不要其他文字）\n" + chunk)
+
+            _parts = _llm_chunks_parallel(
+                chunks, _sum_prompt, "lit_chunk", progress_cb=_cb, phase="summarize",
+                max_tokens=6000, retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 { 】\n")
+            for part in _parts:
                 for k in _SUMMARY_FIELDS:
                     for v in (part.get(k) or []):
                         if isinstance(v, str) and v.strip():
@@ -1470,8 +1712,9 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             txt = _llm_content(
                 base + "以下是从全文各节提炼出的要点（按字段聚合），请据此写出最终的 9 项摘要，"
                 "输出 JSON 对象（不要其他文字）:\n" + merged[:9000],
-                "lit_summary_merge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                "lit_summary_merge", temperature=0.3, max_tokens=12000,
+                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             summary = _parse_json_object(txt)
     except Exception as e:
         logger.warning(f"lit_summary LLM 调用异常: {e}")
@@ -1836,30 +2079,44 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
             txt = _llm_content(
                 base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
                 "lit_knowledge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             knowledge = _parse_json_object(txt)
         else:
             _cb("extract", 0, 1, f"长文献分块提取: {len(_split_md_sections(md_text))} 节")
             chunks = _chunk_sections(_split_md_sections(md_text))
             bullets = {"biology": [], "bioinfo": []}
-            for ci, chunk in enumerate(chunks):
-                _cb("extract", ci, len(chunks), f"提取第 {ci + 1}/{len(chunks)} 块")
-                txt = _llm_content(
-                    "你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
-                    "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
-                    "（该片段没涉及的字段给空数组/空串）\n" + chunk,
-                    f"lit_know_chunk_{ci}", temperature=0.2, max_tokens=4000,
-                    retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
-                part = _parse_json_object(txt)
+
+            def _know_prompt(_i, chunk):
+                return ("你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
+                        "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
+                        "（该片段没涉及的字段给空数组/空串）\n" + chunk)
+
+            # max_tokens 4000 → 10000：实测 24 块里 20 块把 4000 额度全用在 reasoning 上、
+            # content 为空 → 每块都白跑一遍再重试。给足额度后一次成型（推理+JSON 都装得下）。
+            _parts = _llm_chunks_parallel(
+                chunks, _know_prompt, "lit_know_chunk", progress_cb=_cb, phase="extract",
+                max_tokens=10000, retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
+            for part in _parts:
                 for sec in ("biology", "bioinfo"):
                     bullets[sec].append(part.get(sec) or {})
-            merged = json.dumps(bullets, ensure_ascii=False)
-            txt = _llm_content(
-                base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
-                "请合并去重后输出最终的完整 JSON 对象（不要其他文字）:\n" + merged[:12000],
-                "lit_knowledge_merge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
-            knowledge = _parse_json_object(txt)
+            # 去重压缩后再合并：旧实现 merged[:12000] 会把后面几块的碎片直接截掉
+            merged = json.dumps({sec: _compact_fragments(bullets[sec])
+                                 for sec in ("biology", "bioinfo")}, ensure_ascii=False)
+            # 批P3(2026-09-17)：碎片超长时不硬上合并调用。实测 24 块碎片（72k 字符）时
+            # 合并调用必然失败（输出 JSON 过长 → 解析失败 → 退化），白花 20s 还丢内容。
+            # 小/中篇走 LLM 合并（去重 + 冲突消解）；超长直接走下面的确定性聚合（内容一条不丢）。
+            if len(merged) <= 14000:
+                txt = _llm_content(
+                    base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
+                    "请合并去重后输出最终的完整 JSON 对象（不要其他文字）:\n" + merged,
+                    "lit_knowledge_merge", temperature=0.3, max_tokens=12000,
+                    retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                    no_think=True)
+                knowledge = _parse_json_object(txt)
+            else:
+                logger.info(f"lit_knowledge 碎片 {len(merged)} 字符（{len(chunks)} 块）→ 跳过 LLM 合并，"
+                            "用确定性聚合（去重并集，内容不丢）")
     except Exception as e:
         logger.warning(f"lit_knowledge LLM 调用异常: {e}")
         knowledge = {}

@@ -5171,7 +5171,7 @@ function litRenderRows() {
       '<button onclick="' + (e.knowledge_done ? 'viewSummary(\'' + ref + '\', \'knowledge\')' : 'extractKnowledge(\'' + ref + '\')') + '" title="' + (e.knowledge_done ? '查看结构化知识（结论/基因marker/类器官/化学 + 测序/流程/包/参数）' : '提取结构化知识进知识库（生物学+生信）') + '" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧠</button> ' +
       '<button onclick="viewSummary(\'' + ref + '\', \'cite\')" title="专业引用格式（GB/T 7714 / APA / NLM / MLA / BibTeX / RIS）" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📎</button>';
     if (!e.translated) {
-      ops += '<button onclick="translatePaper(\'' + ref + '\')" title="学术中文翻译（分块直译，约3-10分钟）+ 中英对照" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐</button>';
+      ops += '<button onclick="translatePaper(\'' + ref + '\')" title="学术中文翻译（超大段拆单元并发直译，一般 1-3 分钟）+ 中英对照" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐</button>';
     } else {
       ops += '<button onclick="viewSummary(\'' + ref + '\', \'cmp\')" title="中英对照双屏" style="font-size:10px;padding:1px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">⇄</button>';
     }
@@ -5672,7 +5672,7 @@ async function litPaperTab(tab) {
     if (!d.translation_file) {
       body.innerHTML = '<div style="color:var(--text-light);padding:12px 0;">这篇还没有中文翻译。' +
         '<button onclick="translatePaper(\'' + ref + '\', \'zh\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🌐 翻译这篇</button>' +
-        '<div style="font-size:11px;">段落级编号直译（译文与原文逐段对齐），约 2-8 分钟（视篇幅）。完成后可在"⇄ 对照"里双屏比读。</div></div>';
+        '<div style="font-size:11px;">段落级编号直译（译文与原文逐段对齐，超大段拆成小单元并发，一般 1-3 分钟；170k 字符超长文献约 6 分钟）。完成后可在"⇄ 对照"里双屏比读。</div></div>';
       return;
     }
     body.innerHTML = '<span style="color:var(--text-light);">加载翻译…</span>';
@@ -5811,7 +5811,7 @@ async function translatePaper(ref, wantTab, force) {
 }
 
 function litForceTranslate(ref) {
-  if (!confirm('将重新翻译这篇文献（段落级编号直译，保证中英对照逐段对齐，约 2-8 分钟）。继续？')) return;
+  if (!confirm('将重新翻译这篇文献（超大段拆成小单元并发直译，中英对照仍逐段对齐；一般 1-3 分钟，170k 字符的超长文献约 6 分钟）。继续？')) return;
   translatePaper(ref, 'cmp', true);
 }
 
@@ -6132,7 +6132,7 @@ async function extractKnowledge(ref) {
 }
 
 async function extractAllKnowledge() {
-  if (!confirm('将对文献库全部未提取文章做结构化知识提取（结论/基因marker/类器官/化学信息 + 测序方法/流程/包/参数），每篇约 1-3 分钟。继续？')) return;
+  if (!confirm('将对文献库全部未提取文章做结构化知识提取（结论/基因marker/类器官/化学信息 + 测序方法/流程/包/参数）。分块并发（6 路），每篇约 0.5-3 分钟。继续？')) return;
   litProgressWrite('<span style="color:var(--text-light);">提交一键知识提取任务…</span>', _litModalOpen());
   try {
     var r = await fetch('/api/literature/knowledge-all', { method: 'POST' });
@@ -6193,7 +6193,7 @@ async function litPollKnowledge(jobId) {
 }
 
 async function litForceSummarize(ref) {
-  if (!confirm('将重新提炼这篇文献的 9 项摘要（force，重新调用 LLM，约 1-5 分钟）。继续？')) return;
+  if (!confirm('将重新提炼这篇文献的 9 项摘要（force，重新调用 LLM；分块并发，一般 0.5-3 分钟）。继续？')) return;
   litProgressWrite('<span style="color:var(--text-light);">🔄 提交重新提炼任务…</span>', _litModalOpen());
   var r = await fetch('/api/literature/summarize', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
