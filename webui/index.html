@@ -4812,6 +4812,31 @@ var _kbCy = null;
 var _kbCurrentNode = null;
 var _kbMode = 'browse';
 var _kbView = 'browse';  // 当前高亮的子栏：browse/graph/matrix/science
+// 2026-09-17 修复：loadKbGraph() 每次用 innerHTML 重建 #kb-graph，会把里面的
+// #kb-node-detail（点节点看知识点模块化展示的面板）一起清掉 → showKbNodeDetail()
+// 拿到 null 直接 return，点击节点静默无反应。这里留存原始结构 + 重建时搬移 + 丢失自愈。
+var _kbDetailPanelHTML = (function() {
+  var p = document.getElementById('kb-node-detail');
+  return p ? p.outerHTML : null;
+})();
+function _kbTakeNodeDetail() {
+  var p = document.getElementById('kb-node-detail');
+  if (p && p.parentNode) p.parentNode.removeChild(p);
+  return p;
+}
+function _kbPutNodeDetail(host, p) {
+  if (p && host) host.appendChild(p);
+}
+function _kbEnsureNodeDetail() {
+  var p = document.getElementById('kb-node-detail');
+  if (p) return p;
+  var host = document.getElementById('kb-graph');
+  if (!host || !_kbDetailPanelHTML) return null;
+  host.insertAdjacentHTML('beforeend', _kbDetailPanelHTML);
+  p = document.getElementById('kb-node-detail');
+  if (p && typeof initKbDetailResizer === 'function') { try { initKbDetailResizer(); } catch (e) {} }
+  return p;
+}
 var _kbMode3D = false;
 var _kbGraphData = null;
 var _kb3D = null;
@@ -6530,6 +6555,7 @@ function loadKbGraph() {
   _kbGraphLoaded = true;
   fetch('/api/kb/graph').then(function(r) { return r.json(); }).then(function(d) {
     _kbGraphData = d;
+    var _kdp = _kbTakeNodeDetail();   // 重建会清空 #kb-graph，先把面板摘出来
     el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;display:flex;align-items:center;justify-content:space-between;">' +
       '<span>物种🟣 组织🔵 方向🟢 分类🟠 ｜ 文件: 绿=已验证 浅绿=高质量 灰=普通 橙=未验证 ｜ 错误🔴 ｜ 灰线=层级 红虚线=方法共享</span>' +
       '<span style="white-space:nowrap;">' +
@@ -6540,6 +6566,7 @@ function loadKbGraph() {
       '<div id="kb-species-bar" style="padding:3px 8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;border-bottom:1px solid var(--border);"></div>' +
       '<div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);background:#ffffff;border:1px solid #dde2ea;border-radius:6px;"></div>' +
       '<div id="kb-graph-3d" style="display:none;width:100%;height:100%;"></div>';
+    _kbPutNodeDetail(el, _kdp);
     _kbLastSig = kbGraphSig(d);
     renderKbSpeciesBar(d);
     loadCytoscape(function() {
@@ -6578,7 +6605,9 @@ function loadKbGraph() {
       if (_kbPending3D) { _kbPending3D = false; enterKbGraph3D(); }
     });
   }).catch(function(err) {
+    var _kdpf = _kbTakeNodeDetail();
     el.innerHTML = '<div style="padding:12px;color:#e74c3c;font-size:12px;">图谱加载失败：' + escapeHtml(err.message || err) + '</div>';
+    _kbPutNodeDetail(el, _kdpf);
   });
 }
 
@@ -6587,7 +6616,9 @@ function renderKbGraphFallback(el, d) {
   d.nodes.filter(function(n) { return n.type === 'file'; }).forEach(function(n) {
     html += '<div class="file-item" onclick="previewKb(\'' + n.path.replace(/'/g, "\\'") + '\')"><span class="file-icon">📚</span><span class="file-name">' + escapeHtml(n.label) + ' <span style="color:var(--text-light);font-size:10px;">' + escapeHtml(n.id) + '</span></span></div>';
   });
+  var _kdp2 = _kbTakeNodeDetail();
   el.innerHTML = html;
+  _kbPutNodeDetail(el, _kdp2);
 }
 
 /* ================= 知识图谱 物种聚焦 + 自动更新 ================= */
@@ -7184,7 +7215,8 @@ function hideKbNodeDetail() {
 }
 
 function showKbNodeDetail(n) {
-  var panel = document.getElementById('kb-node-detail');
+  // 2026-09-17: 面板可能被 #kb-graph 的 innerHTML 重建清掉 → 自愈重建（否则点击静默无反应）
+  var panel = _kbEnsureNodeDetail();
   if (!panel) return;
   var header = document.getElementById('kb-node-detail-header');
   var body = document.getElementById('kb-node-detail-body');
