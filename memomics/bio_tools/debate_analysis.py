@@ -92,13 +92,20 @@ SCHEMA = {
     "name": "debate_analysis",
     "description": (
         "Trigger a multi-role structured debate on an analysis decision or result. "
-        "Pro side has 3 independent role editors (biology/statistics/bioinformatics), "
-        "Con side has 4 independent role editors (biology/statistics/bioinformatics/history). "
+        "SCENARIO PRE-ANALYSIS runs first (automatic, +1 call): the engine classifies the question "
+        "(bio_data / stats_design / figure_layout / code_engineering / writing / ops_environment / general) and then "
+        "rewrites the seat identities and the judge's rubric keys to match that scenario — so figure layout, "
+        "journal-compliance, code-engineering, writing and environment questions are judged by scenario-appropriate "
+        "criteria instead of biology ones. Therefore topic+context must state the question TYPE and its constraints "
+        "(target journal, grayscale/CVD printing, panel size, language & dependencies, deployment env); the classifier sees "
+        "only these two strings. "
+        "Pro side has 3 independent role editors, Con side has 4 (the 4th is the history/pitfalls seat); "
+        "seat identities are scenario-driven (biology/statistics/bioinformatics/history in the default bio_data scenario). "
         "Each role is a professional editor making an INDEPENDENT LLM call — they cannot see each other's arguments. "
-        "Each discipline uses its own knowledge base (biology_kb/statistics_kb/bioinfo_kb). "
         "A judge editor reviews ALL arguments and gives a final verdict with confidence level. "
-        "Use for: parameter choices, cell type annotation disputes, method selection, "
-        "result validation, biological conclusion verification. "
+        "Use for: parameter choices, cell type annotation disputes, method selection, result validation, "
+        "biological conclusion verification, AND non-biology decisions such as figure layout/typesetting, "
+        "journal figure compliance, grayscale/CVD accessibility, code architecture and environment issues. "
         "MUST call this when encountering uncertain parameters or debatable results. "
         "Results are archived to results/.../log/debate_*.json automatically."
     ),
@@ -107,11 +114,11 @@ SCHEMA = {
         "properties": {
             "topic": {
                 "type": "string",
-                "description": "The decision/parameter/result being debated (e.g. 'clustering resolution=0.8', 'MT% threshold=15%', 'cluster 3 = T cells?', '衰老相关基因在Type II纤维中上调')"
+                "description": "The decision/parameter/result being debated, phrased with its question type (e.g. 'clustering resolution=0.8', 'MT% threshold=15%', 'cluster 3 = T cells?', 'FigA3 热图左侧是否删除纤维型色条、亚群顺序如何排列'). The scenario pre-analysis reads this — vague topics fall back to a generic judge."
             },
             "context": {
                 "type": "string",
-                "description": "Context: data details, species, tissue, direction, cell count, current parameters, results summary, QC metrics"
+                "description": "Context: data details, species, tissue, direction, cell count, current parameters, results summary, QC metrics — and for non-biology questions the constraints that decide the judging standard (target journal & submission guide, grayscale/CVD printing, publication figure size, language/dependencies/runtime, deployment environment)"
             },
             "knowledge_base_info": {
                 "type": "string",

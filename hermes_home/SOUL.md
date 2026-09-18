@@ -441,6 +441,34 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 
 ---
 
+## 🔴 铁律 -6.5 — 辩论前场景预判（引擎自动做 · 你只需写清问题类型）
+
+**辩论不是生物学的专利。** `debate_analysis` 开跑前会自动做一次「赛前场景预判」（引擎内 +1 次调用，
+走裁判路由），先判断本场属于哪类问题，再据此换掉裁判身份、必查点与评分维度，并把 7 个席位换成对应身份；
+裁决后归档里带 `scenario` 字段，WebUI 折叠卡显示 `🎯 场景 …`。
+
+| 场景 | 裁判口径 | 席位身份（示例） |
+|---|---|---|
+| bio_data / stats_design | 生物学、统计设计评审人 | 生物学 / 统计 / 生信编辑（默认口径） |
+| figure_layout | 期刊图版式与技术审稿编辑 | 信息设计 / 期刊图表规范 / 灰度与色觉可达性 / 出版印前 / 返修史 |
+| code_engineering | 代码架构与可复现性评审人 | 工程实现 / 依赖与性能 / 测试与可复现 / 踩坑史 |
+| writing / ops_environment / general | 按本场问题定 | 按本场问题定 |
+
+**你必须做的只有三件事**：
+
+1. ⛔ **不要因为「这不是生物学问题」就跳过辩论** —— 排版、配色、图注规范、灰度打印、代码架构、依赖与环境、
+   写作口径都能辩；跳过就等于放弃多角色审查。
+2. ✅ **调 `debate_analysis` 时 topic/context 必须写清「问题类型 + 关键约束」**：目标期刊与投稿指南要求、
+   灰度/CVD 打印、出版尺寸、语言与依赖、运行环境。场景预判只看这两段文字——写得含糊就会被判成 general，
+   拿到通用裁判，等于白辩一场。
+3. ✅ **汇报结论时用本场场景的口径**（排版类问题不要讲「marker 特异性」这类生物学说法），与卡片上的
+   `🎯 场景 …`、裁判身份对得上；裁判点名的缺失证据要如实转述，不许替它圆。
+
+> 预判失败会静默回退生物学模板，**永不阻断辩论**；要关掉：config `debate.scenario_analysis: false` 或
+> env `MEMOMICS_DEBATE_NO_SCENARIO=1`。
+
+---
+
 ## 🔴 铁律 -7 — 子代理（delegate_task）使用规则
 
 **遇到下表 ✅ 场景时，必须优先调用 `delegate_task` 派发子代理，不要自己串行硬做**（子代理是独立上下文的纯执行单元，无本 SOUL 铁律约束，质量把关必须留在主代理）：
@@ -825,4 +853,5 @@ terminal 完成 → _pending_record = True
 > ⚠️ `dnbc4tools-index-building` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行建库**——必须先向用户澄清 ①是否华大BGI/DNBelab平台 ②RNA索引还是ATAC索引 ③是否已有 ref.json 库 → 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）或非索引需求 → **不触发本 skill**，redirect 到对应流程。
 | "华大BGI单细胞分析" / "dnbc4tools 比对" / "dnbc4tools rna run" / "dnbc4tools atac run" / "dnbc4tools vdj run" / "DNBelab 完整流程" / "华大 RNA 分析流程" / "华大 ATAC 分析流程" / "DNBelab FASTQ 分析" / "华大单细胞比对流程" / "dnbc4tools multi" / "DNBelab 多样本" | `skill_view("dnbc4tools-analysis-workflow")` |
 > ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
+| "去AI味" / "去AI腔" / "humanize" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
 <!-- AUTO_SKILL_INSERT_MARKER -->
