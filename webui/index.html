@@ -383,41 +383,76 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .pt-count { margin-left:auto; font-size:10px; color:var(--text-light); font-weight:400; }
 .debate-block .debate-side.con .side-label { color:var(--danger); }
 .debate-block .debate-verdict { margin-top:6px; padding:6px 8px; background:var(--tool-bg); border-radius:4px; font-size:12px; }
-/* ===== 辩论过程表格（2026-09-18）：辩论发生时在对话里展示「谁怎么辩、正反方怎么对抗」 ===== */
-.debate-card-wrap { margin:8px 0; }
-.debate-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--panel); box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-.debate-card .dc-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 12px; background:var(--primary-light); border-bottom:1px solid var(--border); font-size:13px; font-weight:600; color:var(--primary); }
-.debate-card .dc-head .dc-topic { flex:1 1 100%; font-weight:400; font-size:12px; color:var(--text); word-break:break-word; }
-.debate-card .dc-act { margin-left:auto; font-weight:400; font-size:11px; color:var(--primary); cursor:pointer; }
-.debate-card .dc-body { padding:10px 12px; overflow-x:auto; }
-.debate-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-.debate-table th, .debate-table td { border:1px solid var(--border); padding:6px 8px; vertical-align:top; text-align:left; word-break:break-word; overflow-wrap:anywhere; }
-.debate-table thead th { background:var(--tool-bg); color:var(--text); font-weight:600; }
-.debate-table th.dt-seat { width:106px; }
-.debate-table td.dt-seat { background:var(--tool-bg); font-weight:600; color:var(--text); }
-.debate-table th.dt-pro { color:var(--success); }
-.debate-table th.dt-con { color:var(--danger); }
-.dt-badge { display:inline-block; font-size:10px; padding:0 5px; border-radius:7px; margin-right:4px; font-weight:600; }
-.dt-badge.pro { background:rgba(63,158,106,0.14); color:var(--success); }
-.dt-badge.con { background:rgba(216,67,107,0.14); color:var(--danger); }
-.dt-model { font-size:10px; color:var(--text-light); font-family:Consolas,monospace; }
-.dt-score { display:inline-block; font-size:10px; padding:0 5px; margin-left:4px; border-radius:7px; background:var(--primary-light); color:var(--primary); }
-.dt-text { white-space:pre-wrap; }
-.dt-claim { margin:3px 0 3px 4px; padding-left:7px; border-left:2px solid var(--border); }
-.dt-claim .dt-ev { font-size:11px; color:var(--text-light); margin-top:2px; }
-.dt-meta { font-size:10px; color:var(--text-light); }
-.dt-chips { margin-top:4px; }
-.dc-chip { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; background:var(--primary-light); color:var(--primary); margin:2px 4px 0 0; }
-.dc-chip.warn { background:rgba(224,135,42,0.16); color:var(--warning); }
-.dt-more { font-size:11px; color:var(--primary); cursor:pointer; user-select:none; }
-.dt-empty { color:var(--text-light); font-size:11px; }
-.debate-card .dc-verdict { margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--tool-bg); border:1px dashed var(--border); font-size:12px; color:var(--text); }
-.debate-card .dc-verdict .dt-verdict-text { margin-top:4px; white-space:pre-wrap; }
-.debate-card .dc-foot { display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
-.debate-card .dc-foot a { color:var(--primary); text-decoration:none; }
-.debate-card .dc-foot a:hover { text-decoration:underline; }
-
-
+/* ===== 辩论过程卡片（2026-09-18 v2：干净整洁 + 模型/证据全罗列） ===== */
+.dcb-wrap { margin:10px 0; }
+.dcb { border:1px solid var(--border); border-radius:12px; background:var(--panel); overflow:hidden; font-size:12px; line-height:1.55; }
+.dcb-head { padding:10px 14px 9px; background:var(--primary-light); border-bottom:1px solid var(--border); }
+.dcb-title { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:13px; font-weight:600; color:var(--primary); }
+.dcb-title .dcb-act { margin-left:auto; font-weight:400; font-size:11px; cursor:pointer; }
+.dcb-title .dcb-act:hover { text-decoration:underline; }
+.dcb-topic { margin-top:6px; font-size:12px; color:var(--text); }
+.dcb-topic .k { color:var(--text-light); font-weight:600; margin-right:4px; }
+.chip { display:inline-block; font-size:10px; padding:1px 7px; border-radius:9px; background:var(--tool-bg); color:var(--text-light); border:1px solid var(--border); white-space:nowrap; }
+.chip.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
+.chip.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
+.chip.judge { color:var(--primary); border-color:var(--primary); background:rgba(96,125,205,0.12); }
+.chip.mono { font-family:Consolas,monospace; }
+.dcb-sec { padding:11px 14px; border-top:1px solid var(--border); }
+.dcb-sec-h { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:11.5px; font-weight:700; color:var(--text); margin-bottom:8px; }
+.dcb-sec-h .n { font-weight:400; color:var(--text-light); font-size:11px; }
+table.dcb-models { width:100%; border-collapse:collapse; }
+table.dcb-models th { text-align:left; font-size:10px; font-weight:600; color:var(--text-light); padding:3px 8px; border-bottom:1px solid var(--border); }
+table.dcb-models td { padding:4px 8px; border-bottom:1px dashed var(--border); color:var(--text); vertical-align:middle; }
+table.dcb-models tr:last-child td { border-bottom:none; }
+table.dcb-models tr:hover td { background:var(--tool-bg); }
+.dcb-role { font-weight:600; }
+.dcb-model { font-family:Consolas,monospace; font-size:11px; }
+.dcb-call { font-family:Consolas,monospace; font-size:10px; color:var(--text-light); }
+table.dcb-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+table.dcb-table th { font-size:11px; font-weight:600; padding:6px 10px; background:var(--tool-bg); border:1px solid var(--border); text-align:left; color:var(--text); }
+table.dcb-table td { border:1px solid var(--border); padding:9px 11px; vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
+table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px; }
+.dcb-side { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:7px; }
+.claim { margin:0 0 9px; padding-left:10px; border-left:2px solid var(--border); }
+.claim:last-child { margin-bottom:0; }
+.claim.pro { border-left-color:var(--success); }
+.claim.con { border-left-color:var(--danger); }
+.claim-t { color:var(--text); }
+.claim-t .idx { color:var(--text-light); font-weight:600; margin-right:3px; }
+.claim-l { margin-top:3px; font-size:11px; color:var(--text-light); }
+.claim-l .k { font-weight:600; margin-right:4px; color:var(--text-light); }
+.claim-l .kv { color:var(--text); }
+.anchor { display:inline-block; font-family:Consolas,monospace; font-size:10px; padding:0 5px; margin:1px 4px 2px 0; border-radius:6px; background:var(--code-bg); color:var(--code-fg); border:1px solid var(--border); }
+.anchor.infer { background:rgba(224,135,42,0.14); color:var(--warning); border-color:rgba(224,135,42,0.3); }
+.anchor.kb { background:rgba(96,125,205,0.14); color:var(--primary); border-color:rgba(96,125,205,0.3); }
+.anchor.data { background:rgba(63,158,106,0.12); color:var(--success); border-color:rgba(63,158,106,0.28); }
+.anchor.sum { background:var(--tool-bg); }
+.lv { display:inline-block; font-size:10px; font-weight:700; padding:0 5px; border-radius:6px; margin-left:5px; }
+.lv-P { background:rgba(63,158,106,0.16); color:var(--success); }
+.lv-C { background:rgba(96,125,205,0.16); color:var(--primary); }
+.lv-I { background:rgba(224,135,42,0.16); color:var(--warning); }
+.lv-x { background:var(--tool-bg); color:var(--text-light); font-weight:400; }
+.dcb-list { margin:5px 0 0; padding-left:15px; font-size:11px; color:var(--text-light); }
+.dcb-list li { margin:2px 0; }
+.dcb-draft { font-size:11px; color:var(--warning); cursor:pointer; user-select:none; }
+.dcb-draft:hover { text-decoration:underline; }
+.dcb-raw { white-space:pre-wrap; font-size:11px; color:var(--text-light); margin-top:5px; }
+.dcb-prev { white-space:pre-wrap; font-size:11.5px; color:var(--text-light); margin:3px 0 4px; padding-left:8px; border-left:2px solid var(--border); word-break:break-word; }
+.bars { display:flex; flex-direction:column; gap:4px; margin:8px 0 4px; }
+.bar-row { display:flex; align-items:center; gap:8px; font-size:11px; }
+.bar-row .bl { width:120px; color:var(--text-light); flex:none; }
+.bar { flex:1; height:6px; border-radius:3px; background:var(--tool-bg); overflow:hidden; }
+.bar > i { display:block; height:100%; background:var(--primary); border-radius:3px; }
+.bar-row .bv { width:30px; text-align:right; color:var(--text); font-family:Consolas,monospace; flex:none; }
+.dcb-judge { border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--tool-bg); }
+.dcb-verdict-text { white-space:pre-wrap; margin-top:7px; color:var(--text); font-size:12px; }
+.dcb-foot { display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding:8px 14px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
+.dcb-foot a { color:var(--primary); text-decoration:none; }
+.dcb-foot a:hover { text-decoration:underline; }
+.dcb-empty { color:var(--text-light); font-size:11px; }
+.dcb-fail { border:1px solid rgba(216,67,107,0.35); background:rgba(216,67,107,0.07); border-radius:9px; padding:9px 11px; }
+.dcb-fail table { width:100%; border-collapse:collapse; margin-top:6px; }
+.dcb-fail td { padding:3px 8px 3px 0; font-size:11px; color:var(--text-light); vertical-align:top; }
 /* 待办块 */
 .todo-block { margin:8px 0; }
 .todo-item { display:flex; align-items:center; gap:8px; padding:5px 8px; font-size:13px; border-radius:4px; transition:background 0.2s; }
@@ -2560,274 +2595,670 @@ function renderDebateBlock(toolBlock, debate) {
   toolBlock.insertAdjacentHTML('beforeend', html);
 }
 
-// ============ 辩论过程表格（2026-09-18）============
-// 需求：辩论产生时，把「各个编辑怎么辩的、正反方怎么对抗」用表格展示出来。
-// 数据源：/api/results/<sid>/debate/latest（后端读 results/**/debate_*.json），
-//         或 tool_complete 事件里直接带的 debate 字段（避免 500 字截断看不到论点）。
-// 兼容 4 种历史结构：v3 多角色、L1 轻量采样、v2 pro_args/con_args、失败记录。
+// ============ 辩论过程卡片（2026-09-18 v2）============
+// 目标：干净整洁 + 把「谁在辩 / 用什么模型辩 / 证据说了什么」全部罗列清楚。
+// 数据源：/api/results/<sid>/debate/latest，或 tool_complete 事件自带 debate 字段。
+// 兼容：L2 多角色对抗（v3）· L1 轻量采样 · v2 pro_args/con_args · 失败记录。
 var _lastDebateSig = '';
 var _FENCE3 = String.fromCharCode(96, 96, 96);
 
-var _DT_ROLE_CN = {
+var _DT_SEATS = {
   biology: '生物学编辑', statistics: '统计学编辑', bioinformatics: '生信编辑',
   history: '历史经验编辑', methodology: '方法学专家', clinical: '临床专家',
-  ethics: '伦理专家', reviewer: '评审编辑'
+  ethics: '伦理专家', general: '综合编辑'
 };
-function _dtRoleName(k) { return _DT_ROLE_CN[k] || k; }
-function _dtEsc(s) { return escapeHtml(s == null ? '' : String(s)); }
+var _DT_ROLES = {
+  judge: '裁判', design_review: '设计评审', reproducibility_review: '可复现性评审',
+  reviewer: '评审编辑'
+};
+var _DT_SIDE = {
+  pro: { label: '正方', icon: '✅', cls: 'pro' },
+  con: { label: '反方', icon: '❌', cls: 'con' },
+  neutral: { label: '中立评审', icon: '⚪', cls: '' },
+  judge: { label: '裁判', icon: '⚖️', cls: 'judge' }
+};
+var _DT_RUBRIC_CN = {
+  evidence_quality: '证据质量', effect_size: '效应量', confounding_control: '混杂控制',
+  prior_literature: '文献支撑', reproducibility: '可复现性', pro_claim_coverage: '正方论点覆盖',
+  con_claim_coverage: '反方论点覆盖', novelty: '新颖性', risk_control: '风险控制',
+  clinical_relevance: '临床相关性', feasibility: '可行性'
+};
+var _DT_KB_CN = {
+  biology_kb_provided: '生物学知识库', statistics_kb_provided: '统计学知识库',
+  bioinfo_kb_provided: '生信知识库', general_kb_used_as_fallback: '通用知识库兜底',
+  kb_provided: '专业知识库'
+};
+
+function _dtEsc(s) { return escapeHtml(s === null || s === undefined ? '' : String(s)); }
 
 function _dtTryJson(s) {
+  if (s && typeof s === 'object') return s;
   if (typeof s !== 'string') return null;
-  var t = s.trim();
-  if (t.indexOf(_FENCE3) === 0) { t = t.slice(3).replace(/^[a-zA-Z]+[ \t]*/, ''); }
-  if (t.slice(-3) === _FENCE3) { t = t.slice(0, -3); }
-  t = t.trim();
-  try { var o = JSON.parse(t); return (o && typeof o === 'object') ? o : null; } catch (e) { return null; }
-}
-
-// 单条论点：可能是纯文本，也可能是 rubric JSON（claims/evidence/level/confidence/risk_boundary）
-function _dtArgHtml(arg) {
-  if (arg == null) return '<span class="dt-empty">未参与</span>';
-  var obj = null, text = '';
-  if (typeof arg === 'object') { obj = arg; text = arg.argument || arg.content || ''; }
-  else { text = String(arg); obj = _dtTryJson(text); if (obj && (obj.argument || obj.content)) text = obj.argument || obj.content; }
-  var body = '';
-  var claims = obj && Array.isArray(obj.claims) ? obj.claims : null;
-  if (claims && claims.length) {
-    body = claims.map(function(c) {
-      if (typeof c === 'string') return '<div class="dt-claim">' + _dtEsc(c) + '</div>';
-      var meta = [];
-      if (c.level) meta.push('证据等级 ' + c.level);
-      if (c.confidence) meta.push('置信度 ' + c.confidence);
-      var s = '<div class="dt-claim">' + _dtEsc(c.claim || '') +
-        (meta.length ? ' <span class="dt-meta">[' + _dtEsc(meta.join(' · ')) + ']</span>' : '');
-      if (c.evidence) s += '<div class="dt-ev">依据：' + _dtEsc(String(c.evidence).substring(0, 260)) + '</div>';
-      if (c.risk_boundary) s += '<div class="dt-ev">失效边界：' + _dtEsc(String(c.risk_boundary).substring(0, 200)) + '</div>';
-      return s + '</div>';
-    }).join('');
-  } else {
-    if (!text) return '<span class="dt-empty">（无内容）</span>';
-    if (text.length <= 260) {
-      body = '<div class="dt-text">' + _dtEsc(text) + '</div>';
-    } else {
-      body = '<div class="dt-text dt-short">' + _dtEsc(text.substring(0, 260)) + '…</div>' +
-             '<div class="dt-text dt-full" style="display:none">' + _dtEsc(text) + '</div>' +
-             '<span class="dt-more" onclick="_dtToggle(this)">展开全文 ▾</span>';
-    }
+  var t = String(s).trim();
+  if (!t) return null;
+  if (t.indexOf(_FENCE3) === 0) {
+    t = t.slice(3);
+    if (t.indexOf('json') === 0 || t.indexOf('JSON') === 0) t = t.slice(4);
+    var e = t.lastIndexOf(_FENCE3);
+    if (e >= 0) t = t.slice(0, e);
+    t = t.trim();
   }
-  var chips = '';
-  var rp = obj && obj.recommended_params, kp = obj && obj.risk_params;
-  if (rp && typeof rp === 'object') chips += '<div class="dt-chips">建议：' + Object.keys(rp).map(function(k) {
-    return '<span class="dc-chip">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(rp[k])) + '</span>'; }).join('') + '</div>';
-  if (kp && typeof kp === 'object') chips += '<div class="dt-chips">风险：' + Object.keys(kp).map(function(k) {
-    return '<span class="dc-chip warn">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(kp[k])) + '</span>'; }).join('') + '</div>';
-  return body + chips;
+  try { return JSON.parse(t); } catch (err) {}
+  var i = t.indexOf('{');
+  if (i > 0) { try { return JSON.parse(t.slice(i)); } catch (err2) {} }
+  return null;
 }
 
-function _dtToggle(el) {
-  var cell = el.parentNode;
-  var s = cell.querySelector('.dt-short'), f = cell.querySelector('.dt-full');
-  if (!s || !f) return;
-  var open = f.style.display !== 'none';
-  f.style.display = open ? 'none' : 'block';
-  s.style.display = open ? 'block' : 'none';
-  el.textContent = open ? '展开全文 ▾' : '收起 ▴';
+function _dtSeatName(k) { return _DT_SEATS[k] || k; }
+
+function _dtRoleLabel(k) {
+  if (!k) return '';
+  if (_DT_ROLES[k]) return _DT_ROLES[k];
+  var side = '', base = k;
+  if (k.indexOf('pro_') === 0) { side = '正方·'; base = k.slice(4); }
+  else if (k.indexOf('con_') === 0) { side = '反方·'; base = k.slice(4); }
+  return side + _dtSeatName(base);
 }
 
-// 把 4 种历史结构归一成 {rows:[{seat, pro:{arg,model,score}, con:{...}}], verdict, ...}
-function normalizeDebate(d) {
-  d = d || {};
-  var cfg = d.debate_config || {};
-  var scores = (d.scores && typeof d.scores === 'object') ? d.scores : {};
-  var models = cfg.role_models || {};
-  var out = { topic: d.topic || '', format: d.debate_format || '', level: d.level || '',
-              mode: cfg.mode || '', rounds: cfg.rounds || '', kind: 'unknown', rows: [],
-              verdict: {}, isolation: d.isolation_verification || d.isolation || null,
-              failed: [], note: d.note || '' };
+function _dtRoleSide(k) {
+  if (k === 'judge') return 'judge';
+  if (_DT_ROLES[k] && k !== 'judge') return 'neutral';
+  if (k.indexOf('con_') === 0) return 'con';
+  if (k.indexOf('pro_') === 0) return 'pro';
+  return '';
+}
 
-  var jv = d.judge_verdict;
-  var jvObj = (jv && typeof jv === 'object') ? jv : _dtTryJson(jv);
-  out.verdict = {
-    verdict: d.verdict || (jvObj && (jvObj.verdict || jvObj.winner)) || '',
-    confidence: d.confidence || (jvObj && jvObj.confidence) || '',
-    text: (typeof jv === 'string') ? jv : (jvObj ? JSON.stringify(jvObj, null, 1) : ''),
-    recommended: d.recommended_params || (jvObj && jvObj.recommended_params) || null,
-    proScore: (jvObj && jvObj.pro_score) || null,
-    conScore: (jvObj && jvObj.con_score) || null,
-    winner: (jvObj && jvObj.winner) || '',
-    reasoning: (jvObj && jvObj.reasoning) || ''
-  };
-  if (d.error) out.failed.push(out.note || '本场辩论失败（有角色返回占位符，未归档有效结果）');
-  if (Array.isArray(d.failed_role_ids) && d.failed_role_ids.length) out.failed.push('失败角色：' + d.failed_role_ids.join('、'));
-
-  if (d.pro_arguments || d.con_arguments) {
-    var pro = d.pro_arguments || {}, con = d.con_arguments || {}, seats = [];
-    Object.keys(pro).forEach(function(k) { if (seats.indexOf(k) < 0) seats.push(k); });
-    Object.keys(con).forEach(function(k) { if (seats.indexOf(k) < 0) seats.push(k); });
-    out.kind = 'multi';
-    out.rows = seats.map(function(k) {
-      return { seat: _dtRoleName(k),
-        pro: pro[k] ? { arg: pro[k], model: models['pro_' + k] || '', score: scores['pro_' + k] } : null,
-        con: con[k] ? { arg: con[k], model: models['con_' + k] || '', score: scores['con_' + k] } : null };
-    });
-  } else if (Array.isArray(d.samples) && d.samples.length) {
-    out.kind = 'sampling';
-    out.rows = d.samples.map(function(s, i) {
-      return { seat: '采样组 ' + (i + 1),
-        pro: s.pro ? { arg: s.pro, model: d.model || '', score: null } : null,
-        con: s.con ? { arg: s.con, model: d.model || '', score: null } : null };
-    });
-  } else if (Array.isArray(d.pro_args) || Array.isArray(d.con_args)) {
-    out.kind = 'v2';
-    var pa = d.pro_args || [], ca = d.con_args || [], n = Math.max(pa.length, ca.length);
-    for (var i = 0; i < n; i++) {
-      out.rows.push({ seat: (pa[i] && pa[i].role) || (ca[i] && ca[i].role) || ('编辑 ' + (i + 1)),
-        pro: pa[i] ? { arg: pa[i].argument || pa[i], model: '', score: null } : null,
-        con: ca[i] ? { arg: ca[i].argument || ca[i], model: '', score: null } : null });
-    }
-  }
+// 把 [DOI:...] / [PMID:...] / [KB源:...] / [数据:...] / [仅是推理] 变成可扫读的证据标签
+function _dtAnchors(ev) {
+  var out = _dtEsc(ev);
+  out = out.replace(/\[\s*(DOI|PMID|PMIDs|KB源|KB|数据|DATA|资料|URL|链接|来源)\s*[:：]?\s*([^\]]*)\]/gi, function (m, k, v) {
+    var kk = String(k), cls = '';
+    if (/^KB/i.test(kk) || kk === '来源' || kk === '资料') cls = 'kb';
+    else if (/^数据$/i.test(kk) || /^DATA$/i.test(kk)) cls = 'data';
+    return '<span class="anchor ' + cls + '" title="证据锚点：' + _dtEsc(kk) + '">' + _dtEsc(kk) + (v ? ':' + _dtEsc(v) : '') + '</span>';
+  });
+  out = out.replace(/\[\s*(仅是推理|推理|无外部证据|推断)\s*\]/g, '<span class="anchor infer" title="该论点没有外部证据支撑，只是推理">仅是推理</span>');
   return out;
 }
 
-function debateTableHtml(d, meta) {
-  meta = meta || {};
-  var h = '<div class="debate-card">';
-  h += '<div class="dc-head"><span>🎭 辩论过程</span>';
-  if (d.format) h += '<span class="dc-chip">' + _dtEsc(d.format) + '</span>';
-  if (d.level) h += '<span class="dc-chip">' + _dtEsc(d.level) + '</span>';
-  if (d.mode) h += '<span class="dc-chip">模式 ' + _dtEsc(d.mode) + '</span>';
-  if (d.rounds) h += '<span class="dc-chip">' + _dtEsc(d.rounds) + ' 轮</span>';
-  h += '<span class="dc-act" onclick="reloadDebateCard(this)">🔄 重新加载</span>';
-  if (d.topic) h += '<span class="dc-topic">📌 辩题：' + _dtEsc(d.topic) + '</span>';
-  h += '</div>';
-
-  h += '<div class="dc-body">';
-  if (d.rows.length) {
-    h += '<table class="debate-table"><thead><tr><th class="dt-seat">编辑席位</th>' +
-         '<th class="dt-pro">✅ 正方（支持）</th><th class="dt-con">❌ 反方（质疑）</th></tr></thead><tbody>';
-    d.rows.forEach(function(r) {
-      h += '<tr><td class="dt-seat">' + _dtEsc(r.seat) + '</td>';
-      ['pro', 'con'].forEach(function(side) {
-        var cell = r[side];
-        var label = (side === 'pro' ? '正方' : '反方');
-        h += '<td>';
-        if (!cell) { h += '<span class="dt-empty">未参与</span>'; }
-        else {
-          h += '<div><span class="dt-badge ' + side + '">' + label + '·' + _dtEsc(r.seat) + '</span>';
-          if (cell.model) h += '<span class="dt-model">' + _dtEsc(cell.model) + '</span>';
-          if (cell.score != null && cell.score !== '') h += '<span class="dt-score">' + _dtEsc(cell.score) + ' 分</span>';
-          h += '</div>' + _dtArgHtml(cell.arg);
-        }
-        h += '</td>';
-      });
-      h += '</tr>';
-    });
-    h += '</tbody></table>';
+// 解析单个角色的发言：可能是 rubric JSON（claims[]），也可能是纯文本/推理草稿
+function _dtParseArg(raw, opts) {
+  opts = opts || {};
+  var rec = { raw: '', claims: [], selfAudit: [], alt: '', needed: [], draft: !!opts.draft,
+              fallback: !!opts.fallback, structured: false };
+  var text = '';
+  if (raw && typeof raw === 'object') {
+    rec.draft = rec.draft || !!raw.draft_only;
+    rec.fallback = rec.fallback || !!raw.used_reasoning_fallback;
+    text = raw.argument !== undefined && raw.argument !== null ? raw.argument
+         : (raw.content !== undefined && raw.content !== null ? raw.content : '');
   } else {
-    h += '<div style="font-size:12px;color:var(--text-light);">这场辩论没有可展示的编辑论点记录。</div>';
+    text = raw === null || raw === undefined ? '' : String(raw);
+  }
+  text = String(text);
+  if (/^\s*\[reasoning草稿/.test(text)) {
+    rec.draft = true;
+    text = text.replace(/^\s*\[reasoning草稿[^\]]*\]\s*/, '');
+  }
+  rec.raw = text;
+  var obj = _dtTryJson(text);
+  if (obj && typeof obj === 'object' && (Array.isArray(obj.claims) || Array.isArray(obj.self_audit_failures))) {
+    rec.structured = true;
+    rec.claims = (obj.claims || []).map(function (c) {
+      if (!c || typeof c !== 'object') return { claim: String(c), evidence: '', level: '', confidence: '', risk: '' };
+      return {
+        claim: c.claim || c.point || c.statement || c.title || '',
+        evidence: c.evidence || c.evidences || c.evidence_anchor || '',
+        level: c.level || '', confidence: c.confidence || '',
+        risk: c.risk_boundary || c.risk || ''
+      };
+    }).filter(function (c) { return c.claim || c.evidence; });
+    rec.selfAudit = (obj.self_audit_failures || obj.self_audit || []).map(String);
+    rec.alt = obj.alternative_hypothesis || obj.alternative || '';
+    rec.needed = (obj.needed_evidence || []).map(String);
+  }
+  return rec;
+}
+
+function _dtClaimHtml(c, idx, side) {
+  var h = '<div class="claim ' + (side === 'con' ? 'con' : 'pro') + '">';
+  h += '<div class="claim-t"><span class="idx">' + idx + '.</span>' + _dtEsc(c.claim);
+  if (c.level) {
+    var lv = String(c.level).toUpperCase();
+    h += '<span class="lv ' + (/^[PCI]$/.test(lv) ? 'lv-' + lv : 'lv-x') + '" title="证据等级 P=同行评议直接证据 / C=间接或类比证据 / I=仅是推理">' + _dtEsc(lv) + '</span>';
+  }
+  if (c.confidence) h += '<span class="lv lv-x">置信度 ' + _dtEsc(c.confidence) + '</span>';
+  h += '</div>';
+  var evs = Array.isArray(c.evidence) ? c.evidence : (c.evidence ? [c.evidence] : []);
+  for (var i = 0; i < evs.length; i++) {
+    if (!evs[i]) continue;
+    h += '<div class="claim-l"><span class="k">依据</span>' + _dtAnchors(evs[i]) + '</div>';
+  }
+  if (c.risk) h += '<div class="claim-l"><span class="k">失效边界</span><span class="kv">' + _dtEsc(c.risk) + '</span></div>';
+  return h + '</div>';
+}
+
+function _dtListHtml(title, arr) {
+  var h = '<div class="claim-l" style="margin-top:7px"><span class="k">' + title + '</span></div><ul class="dcb-list">';
+  for (var i = 0; i < arr.length; i++) h += '<li>' + _dtEsc(arr[i]) + '</li>';
+  return h + '</ul>';
+}
+
+function _dtCellHtml(cell, side, skipHead) {
+  if (!cell) return '<span class="dcb-empty">— 该席位本场未参与 —</span>';
+  var a = cell.arg, h = '';
+  if (skipHead) {
+    if (a.draft) h += '<div class="dcb-side"><span class="chip">⚠️ 草稿输出</span></div>';
+    h += _dtBodyHtml(a, side);
+    return h;
+  }
+  h = '<div class="dcb-side">';
+  if (cell.model) h += '<span class="chip mono" title="该角色本次实际使用的模型">' + _dtEsc(cell.model) + '</span>';
+  if (cell.score !== null && cell.score !== undefined && cell.score !== '') h += '<span class="chip">评分 ' + _dtEsc(cell.score) + '</span>';
+  if (a.draft) h += '<span class="chip">⚠️ 草稿输出</span>';
+  if (a.fallback) h += '<span class="chip">推理兜底</span>';
+  if (cell.callId) h += '<span class="dcb-call" title="该角色独立的一次 LLM 调用 ID（上下文互相隔离）">#' + _dtEsc(cell.callId) + '</span>';
+  h += '</div>';
+  return h + _dtBodyHtml(a, side);
+}
+
+// 只渲染发言正文（论点/依据/自审/替代假设/待补证据），不含头部模型标签
+function _dtBodyHtml(a, side) {
+  var h = '';
+  if (a.claims.length) {
+    for (var i = 0; i < a.claims.length; i++) h += _dtClaimHtml(a.claims[i], i + 1, side);
+  } else if (a.raw) {
+    if (a.draft) {
+      var prev = a.raw.length > 200 ? a.raw.slice(0, 200) + ' …' : a.raw;
+      h += '<div class="dcb-prev">' + _dtMdInline(prev) + '</div>' +
+           '<div class="dcb-draft" onclick="_dtToggleRaw(this)">⚠️ 该角色未按 JSON 契约输出（只留下推理草稿）—— 点击展开完整原文 ▾</div>' +
+           '<div class="dcb-raw" style="display:none">' + _dtMdInline(a.raw) + '</div>';
+    } else {
+      h += '<div class="dcb-raw" style="color:var(--text)">' + _dtMdInline(a.raw) + '</div>';
+    }
+  } else {
+    h += '<span class="dcb-empty">（无内容）</span>';
+  }
+  if (a.selfAudit.length) h += _dtListHtml('🛡️ 自审失败', a.selfAudit);
+  if (a.alt) h += '<div class="claim-l" style="margin-top:7px"><span class="k">🔀 替代假设</span><span class="kv">' + _dtEsc(a.alt) + '</span></div>';
+  if (a.needed.length) h += _dtListHtml('❓ 待补证据', a.needed);
+  return h;
+}
+
+// 轻量内联 markdown：**加粗**、行首 - / * 项目符号保留（其余原样转义输出）
+function _dtMdInline(text) {
+  var h = _dtEsc(text);
+  h = h.replace(/\*\*([^*]{1,120})\*\*/g, '<b>$1</b>');
+  return h;
+}
+
+function _dtToggleRaw(el) {
+  var box = el.nextElementSibling;
+  if (!box) return;
+  var open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  var t = el.textContent || '';
+  el.textContent = open ? t.replace(/▴\s*$/, '▾') : t.replace(/▾\s*$/, '▴');
+}
+
+// 全场引用证据去重总览
+function _dtCollectAnchors(cells) {
+  var seen = {}, list = [];
+  function scan(ev, fromRaw) {
+    var s = Array.isArray(ev) ? ev.join(' ') : String(ev === null || ev === undefined ? '' : ev);
+    if (!s) return;
+    var re = /\[\s*(DOI|PMID|PMIDs|KB源|KB|数据|DATA|资料|URL|链接|来源)\s*[:：]?\s*([^\]]*)\]/gi, m;
+    while ((m = re.exec(s)) !== null) {
+      var type = m[1].toUpperCase() === 'KB' ? 'KB源' : m[1];
+      var key = type + '|' + m[2].trim();
+      if (!seen[key]) { seen[key] = { type: type, value: m[2].trim(), n: 0, raw: !!fromRaw }; list.push(seen[key]); }
+      else if (!fromRaw) seen[key].raw = false;
+      seen[key].n++;
+    }
+    var inf = s.match(/\[\s*(仅是推理|推理|无外部证据|推断)\s*\]/g);
+    if (inf && inf.length) {
+      if (!seen['__i']) { seen['__i'] = { type: '仅是推理', value: '', n: 0, raw: !!fromRaw }; list.push(seen['__i']); }
+      else if (!fromRaw) seen['__i'].raw = false;
+      seen['__i'].n += inf.length;
+    }
+  }
+  for (var i = 0; i < cells.length; i++) {
+    var a = cells[i];
+    if (!a) continue;
+    for (var j = 0; j < (a.claims || []).length; j++) scan(a.claims[j].evidence, false);
+    // 非结构化输出（草稿原文）也扫一遍，保证 L1/草稿场景同样能看到"证据说了什么"
+    if (a.raw) scan(a.raw, true);
+  }
+  return list;
+}
+
+function _dtAnchorChip(a) {
+  if (a.type === '仅是推理') return '<span class="anchor infer" title="出现 ' + a.n + ' 次">仅是推理' + (a.n > 1 ? ' ×' + a.n : '') + '</span>';
+  var cls = /^KB/i.test(a.type) || a.type === '来源' || a.type === '资料' ? 'kb'
+          : (/^数据$/i.test(a.type) || /^DATA$/i.test(a.type) ? 'data' : '');
+  return '<span class="anchor ' + cls + '" title="出现 ' + a.n + ' 次">' + _dtEsc(a.type) + (a.value ? ':' + _dtEsc(a.value) : '') + (a.n > 1 ? ' ×' + a.n : '') + '</span>';
+}
+
+function _dtBarsHtml(rubrics) {
+  var keys = Object.keys(rubrics);
+  if (!keys.length) return '';
+  var vals = [], i;
+  for (i = 0; i < keys.length; i++) { var n = Number(rubrics[keys[i]]); if (!isNaN(n)) vals.push(n); }
+  if (!vals.length) return '';
+  var mx = Math.max.apply(null, vals.concat([5]));
+  var h = '<div class="bars">';
+  for (i = 0; i < keys.length; i++) {
+    var v = Number(rubrics[keys[i]]);
+    if (isNaN(v)) continue;
+    var label = _DT_RUBRIC_CN[keys[i]] || keys[i];
+    h += '<div class="bar-row"><span class="bl" title="' + _dtEsc(keys[i]) + '">' + _dtEsc(label) + '</span>' +
+         '<span class="bar"><i style="width:' + Math.round(Math.max(0, Math.min(1, v / mx)) * 100) + '%"></i></span>' +
+         '<span class="bv">' + _dtEsc(v) + '</span></div>';
+  }
+  return h + '</div>';
+}
+
+function _dtChipsHtml(obj, cnMap) {
+  var keys = Object.keys(obj || {});
+  if (!keys.length) return '';
+  var h = '';
+  for (var i = 0; i < keys.length; i++) {
+    var v = obj[keys[i]], label = (cnMap && cnMap[keys[i]]) || keys[i];
+    var on = (v === true || v === 'true' || v === 1);
+    h += '<span class="chip" title="' + _dtEsc(keys[i]) + '">' + _dtEsc(label) + ' ' + (on ? '✅' : '—') + '</span>';
+  }
+  return h;
+}
+
+// ============ 归一化：把不同版本的辩论归档整理成统一结构 ============
+function normalizeDebate(d) {
+  d = d || {};
+  var cfg = d.debate_config || {};
+  var models = cfg.role_models || {};
+  var scores = (d.scores && typeof d.scores === 'object') ? d.scores : {};
+  var db = {
+    topic: d.topic || '', format: d.debate_format || '', level: d.level || '',
+    mode: cfg.mode || '', rounds: cfg.rounds || (d.timing && d.timing.rounds) || '',
+    kind: 'unknown', models: [], modelSummary: [], seats: [], neutrals: [],
+    cells: [], judge: {}, rubrics: d.rubrics && typeof d.rubrics === 'object' ? d.rubrics : {},
+    missing: Array.isArray(d.missing) ? d.missing : [], kb: d.knowledge_base || null,
+    isolation: d.isolation_verification || d.isolation || null,
+    failedRoles: d.failed_role_ids || [], failDetails: d.failed_role_details || null,
+    draftRoles: d.draft_only_roles || [], note: d.note || '', error: !!d.error,
+    anchors: [], modelNote: ''
+  };
+  function mkCell(rec, model, callId, score) {
+    return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
+  }
+  function addModel(label, side, model, callId, a) {
+    db.models.push({ label: label, side: side, model: model || '', callId: callId || '',
+                     draft: a ? !!a.draft : false, structured: a ? !!a.structured : false });
+  }
+  function judgeFrom(jv, jmodel, fallbackModel) {
+    var isStr = typeof jv === 'string';
+    var obj = isStr ? _dtTryJson(jv) : (jv && typeof jv === 'object' ? jv : null);
+    var rawText = isStr ? jv : (obj ? JSON.stringify(obj, null, 1) : '');
+    var j = { model: jmodel || fallbackModel || '', text: '', reasoning: '', showText: false,
+              verdict: d.verdict || '', confidence: d.confidence || '', winner: '',
+              proScore: null, conScore: null, recommended: d.recommended_params || null,
+              fallback: !!d.judge_fallback, error: !!(d.judge_error || d.judge_error_detail),
+              errorDetail: d.judge_error_detail || '' };
+    if (obj) {
+      j.verdict = j.verdict || obj.verdict || obj.winner || '';
+      j.confidence = j.confidence || obj.confidence || '';
+      j.winner = obj.winner || '';
+      if (obj.pro_score !== undefined) j.proScore = obj.pro_score;
+      if (obj.con_score !== undefined) j.conScore = obj.con_score;
+      j.reasoning = obj.reasoning || obj.summary || obj.analysis || obj.decision || '';
+      if (!j.recommended && obj.recommended_params) j.recommended = obj.recommended_params;
+      if (j.reasoning && rawText && rawText.length > j.reasoning.length && rawText.indexOf(j.reasoning) !== 0) {
+        j.text = rawText; j.showText = true;
+      }
+      if (!j.reasoning && !j.text) j.text = rawText;
+    } else {
+      j.text = rawText;
+    }
+    return j;
   }
 
-  // 裁决
-  var v = d.verdict || {};
-  var hasVerdict = v.verdict || v.text || v.recommended || v.reasoning;
-  if (hasVerdict) {
-    h += '<div class="dc-verdict"><strong>⚖️ 裁判裁决</strong>';
-    if (v.verdict) h += ' <span class="dc-chip">' + _dtEsc(v.verdict) + '</span>';
-    if (v.winner && v.winner !== v.verdict) h += ' <span class="dc-chip">胜方 ' + _dtEsc(v.winner) + '</span>';
-    if (v.confidence) h += ' <span class="dc-chip">置信度 ' + _dtEsc(v.confidence) + '</span>';
-    if (v.proScore != null || v.conScore != null) h += ' <span class="dc-chip">正方 ' + _dtEsc(v.proScore) + ' : 反方 ' + _dtEsc(v.conScore) + '</span>';
-    if (v.reasoning) h += '<div class="dt-verdict-text">' + _dtEsc(v.reasoning) + '</div>';
-    else if (v.text) h += '<div class="dt-verdict-text">' + _dtEsc(v.text.length > 900 ? v.text.substring(0, 900) + '…' : v.text) + '</div>';
-    if (v.recommended && typeof v.recommended === 'object') {
-      h += '<div class="dt-chips">推荐参数：' + Object.keys(v.recommended).map(function(k) {
-        return '<span class="dc-chip">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(v.recommended[k])) + '</span>'; }).join('') + '</div>';
+  if (d.pro_arguments || d.con_arguments) {
+    // ---- L2 多角色对抗（v3，8+ 角色，含每角色模型映射）----
+    db.kind = 'multi';
+    if (!db.level) db.level = 'L2';
+    var pro = d.pro_arguments || {}, con = d.con_arguments || {};
+    var seatKeys = [], k;
+    for (k in pro) if (pro.hasOwnProperty(k) && seatKeys.indexOf(k) < 0) seatKeys.push(k);
+    for (k in con) if (con.hasOwnProperty(k) && seatKeys.indexOf(k) < 0) seatKeys.push(k);
+    for (var si = 0; si < seatKeys.length; si++) {
+      var sk = seatKeys[si];
+      var pc = pro[sk] ? mkCell(pro[sk], models['pro_' + sk], pro[sk].call_id, scores['pro_' + sk]) : null;
+      var cc = con[sk] ? mkCell(con[sk], models['con_' + sk], con[sk].call_id, scores['con_' + sk]) : null;
+      db.seats.push({ seat: _dtSeatName(sk), pro: pc, con: cc });
+      if (pc) { db.cells.push(pc.arg); addModel('正方·' + _dtSeatName(sk), 'pro', pc.model, pc.callId, pc.arg); }
+      if (cc) { db.cells.push(cc.arg); addModel('反方·' + _dtSeatName(sk), 'con', cc.model, cc.callId, cc.arg); }
+    }
+    var nr = d.neutral_reviews || {};
+    for (k in nr) {
+      if (!nr.hasOwnProperty(k)) continue;
+      if (!nr[k]) continue;
+      var nc = mkCell(nr[k], models[k], nr[k].call_id, null);
+      db.neutrals.push({ label: _dtRoleLabel(k), model: nc.model, callId: nc.callId, cell: nc });
+      db.cells.push(nc.arg);
+      addModel(_dtRoleLabel(k), 'neutral', nc.model, nc.callId, nc.arg);
+    }
+    addModel('裁判', 'judge', models['judge'], 'judge', null);
+    db.judge = judgeFrom(d.judge_verdict, models['judge'], '');
+    if (db.judge.fallback) db.modelNote = '裁判走了兜底模型（judge_fallback=true）。';
+  } else if (Array.isArray(d.samples) && d.samples.length) {
+    // ---- L1 轻量采样辩论（N 组正反采样 + 裁判，全部同一模型）----
+    db.kind = 'sampling';
+    if (!db.level) db.level = 'L1';
+    for (var i = 0; i < d.samples.length; i++) {
+      var s = d.samples[i] || {};
+      var p1 = mkCell(s.pro, d.model, s.pro_call_id, null); p1.arg.draft = p1.arg.draft || !!s.pro_draft_only;
+      var c1 = mkCell(s.con, d.model, s.con_call_id, null); c1.arg.draft = c1.arg.draft || !!s.con_draft_only;
+      db.seats.push({ seat: '采样组 ' + (i + 1), pro: p1, con: c1 });
+      db.cells.push(p1.arg); db.cells.push(c1.arg);
+      addModel('正方采样 ' + (i + 1), 'pro', d.model, s.pro_call_id, p1.arg);
+      addModel('反方采样 ' + (i + 1), 'con', d.model, s.con_call_id, c1.arg);
+    }
+    addModel('裁判（总结正反方）', 'judge', d.model, 'l1_judge', null);
+    db.judge = judgeFrom(d.judge_verdict, d.model, d.model);
+    if (d.verdict_parse_error) db.judge.verdict = db.judge.verdict || 'need_more_info';
+    db.modelNote = 'L1 轻量采样：正反方各 ' + d.samples.length + ' 次独立调用（上下文互相看不见，同一模型不同采样温度），裁判最后统一裁决 —— 本场全部使用同一模型。';
+  } else if (Array.isArray(d.pro_args) || Array.isArray(d.con_args)) {
+    // ---- v2（pro_args / con_args 列表）----
+    db.kind = 'v2';
+    var pa = d.pro_args || [], ca = d.con_args || [], nn = Math.max(pa.length, ca.length);
+    for (var vi = 0; vi < nn; vi++) {
+      var pr = pa[vi] || null, cr = ca[vi] || null;
+      var p2 = pr ? mkCell(pr.argument, '', '', null) : null;
+      var c2 = cr ? mkCell(cr.argument, '', '', null) : null;
+      var seatName = (cr && cr.role) ? _dtRoleLabel(cr.role)
+                   : (pr && pr.role ? _dtRoleLabel(pr.role) : ('席位 ' + (vi + 1)));
+      db.seats.push({ seat: seatName, pro: p2, con: c2 });
+      if (p2) { db.cells.push(p2.arg); addModel('正方·' + seatName, 'pro', '', '', p2.arg); }
+      if (c2) { db.cells.push(c2.arg); addModel('反方·' + seatName, 'con', '', '', c2.arg); }
+    }
+    db.judge = judgeFrom(d.judge_verdict, '');
+    db.modelNote = '旧版（v2）归档没有记录每个角色的模型，只有正反论点与裁判评分。';
+  }
+
+  if (db.error || db.failedRoles.length || db.failDetails) {
+    db.failed = true;
+    db.note = db.note || '本场辩论有角色失败，未缓存未归档为可用结果。';
+  }
+  var counts = {}, ii;
+  for (ii = 0; ii < db.models.length; ii++) {
+    var mk = db.models[ii].model;
+    if (!mk) continue;
+    if (!counts[mk]) counts[mk] = { model: mk, n: 0 };
+    counts[mk].n++;
+  }
+  for (var kk in counts) if (counts.hasOwnProperty(kk)) db.modelSummary.push(counts[kk]);
+  db.modelSummary.sort(function (a, b) { return b.n - a.n; });
+  db.anchors = _dtCollectAnchors(db.cells);
+  db.roleCount = db.models.length;
+  db.hasJudgeRow = !!db.judge.model;
+  return db;
+}
+
+// ============ 渲染 ============
+function _dtHeaderHtml(db, meta) {
+  var h = '<div class="dcb-head"><div class="dcb-title">🎭 多 Agent 辩论过程';
+  if (db.format) h += '<span class="chip">' + _dtEsc(db.format) + '</span>';
+  if (db.level) h += '<span class="chip judge">' + _dtEsc(db.level) + (db.kind === 'multi' ? '（完整多角色）' : (db.kind === 'sampling' ? '（轻量采样）' : '')) + '</span>';
+  if (db.mode) h += '<span class="chip">模式 ' + _dtEsc(db.mode) + '</span>';
+  if (db.rounds) h += '<span class="chip">' + _dtEsc(db.rounds) + ' 轮</span>';
+  if (db.roleCount) h += '<span class="chip">' + (db.kind === 'sampling' ? (db.roleCount + ' 次独立调用') : (db.roleCount + ' 个角色')) + '</span>';
+  if (db.modelSummary.length) h += '<span class="chip">' + db.modelSummary.length + ' 个模型</span>';
+  else if (db.models.length) h += '<span class="chip">模型未记录</span>';
+  if (db.draftRoles && db.draftRoles.length) h += '<span class="chip">草稿角色 ' + db.draftRoles.length + '</span>';
+  if (db.failed) h += '<span class="chip con">⚠️ 有角色失败</span>';
+  h += '<span class="dcb-act" onclick="reloadDebateCard(this)">🔄 重新加载</span>';
+  h += '</div>';
+  if (db.topic) h += '<div class="dcb-topic"><span class="k">辩题</span>' + _dtEsc(db.topic) + '</div>';
+  if (meta && meta.mtime_text) h += '<div class="dcb-topic"><span class="k">归档</span><span style="color:var(--text-light)">' + _dtEsc(meta.mtime_text) + (meta.path ? ' · ' + _dtEsc(meta.path) : '') + '</span></div>';
+  return h + '</div>';
+}
+
+function _dtModelsSection(db) {
+  if (!db.models.length) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">🤖 参战阵容与模型<span class="n">共 ' + db.roleCount + (db.kind === 'sampling' ? ' 次调用' : ' 个角色') + ' · ' + (db.modelSummary.length ? (db.modelSummary.length + ' 个模型') : '模型未记录') + '</span></div>';
+  if (db.modelSummary.length) {
+    h += '<div class="dcb-side" style="margin-bottom:8px">';
+    for (var mi = 0; mi < db.modelSummary.length; mi++) {
+      h += '<span class="chip mono" title="本场使用该模型调用 ' + db.modelSummary[mi].n + ' 次">' + _dtEsc(db.modelSummary[mi].model) + ' ×' + db.modelSummary[mi].n + '</span>';
     }
     h += '</div>';
   }
-  d.failed.forEach(function(f) { h += '<div class="dc-verdict" style="color:var(--danger);">⚠️ ' + _dtEsc(f) + '</div>'; });
+  h += '<table class="dcb-models"><thead><tr><th style="width:140px">角色 / 席位</th><th style="width:78px">阵营</th><th>模型</th><th style="width:150px">调用 ID</th><th style="width:86px">输出</th></tr></thead><tbody>';
+  for (var i = 0; i < db.models.length; i++) {
+    var m = db.models[i], s = _DT_SIDE[m.side] || _DT_SIDE.neutral;
+    var out = m.draft ? '<span class="chip">⚠️ 草稿</span>' : (m.structured ? '<span class="chip">✅ 结构化</span>' : '<span class="chip">文本</span>');
+    h += '<tr><td class="dcb-role">' + _dtEsc(m.label) + '</td>' +
+         '<td><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + '</span></td>' +
+         '<td class="dcb-model">' + (m.model ? _dtEsc(m.model) : '<span class="dcb-empty">未记录</span>') + '</td>' +
+         '<td class="dcb-call">' + (m.callId ? '#' + _dtEsc(m.callId) : '—') + '</td>' +
+         '<td>' + out + '</td></tr>';
+  }
+  h += '</tbody></table>';
+  if (db.modelNote) h += '<div class="dcb-empty" style="margin-top:7px">' + _dtEsc(db.modelNote) + '</div>';
+  return h + '</div>';
+}
 
-  // 隔离验证
-  var iso = d.isolation;
-  if (iso && typeof iso === 'object') {
-    var bits = [];
-    if (iso.pro_con_isolated || iso.pro_isolated || iso.con_isolated) bits.push('正反方上下文隔离：是（互相看不到对方论点）');
-    if (iso.judge_sees_all) bits.push('裁判可见全部编辑论点');
-    if (iso.messages_count) bits.push('每个角色独立调用（messages=' + _dtEsc(iso.messages_count) + '）');
-    if (bits.length) h += '<div class="dc-foot" style="border-top:none;padding-top:2px;">🔒 ' + _dtEsc(bits.join('；')) + '</div>';
+function _dtSeatsSection(db) {
+  if (!db.seats.length) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">⚔️ 逐席位正反对抗<span class="n">每格 = 该编辑的一次独立发言（上下文切断）；黑体小标签是该角色实际模型</span></div>';
+  h += '<table class="dcb-table"><thead><tr><th style="width:98px">编辑席位</th><th>✅ 正方（支持）</th><th>❌ 反方（质疑）</th></tr></thead><tbody>';
+  for (var i = 0; i < db.seats.length; i++) {
+    h += '<tr><td class="seat">' + _dtEsc(db.seats[i].seat) + '</td><td>' + _dtCellHtml(db.seats[i].pro, 'pro') + '</td><td>' + _dtCellHtml(db.seats[i].con, 'con') + '</td></tr>';
+  }
+  return h + '</tbody></table></div>';
+}
+
+function _dtEvidenceSection(db) {
+  if (!db.anchors.length) return '';
+  var i, hasRaw = false;
+  for (i = 0; i < db.anchors.length; i++) if (db.anchors[i].raw) hasRaw = true;
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">📚 全场引用证据总览<span class="n">从各方 claims[].evidence' +
+    (hasRaw ? ' 与草稿原文' : '') + ' 去重汇总，共 ' + db.anchors.length +
+    ' 条（×N = 被引用 N 次；灰底「仅是推理」= 该角色没给外部证据，只是推断）</span></div><div>';
+  for (i = 0; i < db.anchors.length; i++) h += _dtAnchorChip(db.anchors[i]);
+  return h + '</div></div>';
+}
+
+function _dtNeutralSection(db) {
+  if (!db.neutrals.length) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">⚪ 中立评审<span class="n">不站队，只挑设计与可复现性毛病</span></div>';
+  for (var i = 0; i < db.neutrals.length; i++) {
+    var n = db.neutrals[i];
+    h += '<div class="claim" style="border-left-color:var(--text-light)">' +
+         '<div class="dcb-side"><span class="chip">' + _dtEsc(n.label) + '</span>' +
+         (n.model ? '<span class="chip mono">' + _dtEsc(n.model) + '</span>' : '') +
+         (n.callId ? '<span class="dcb-call">#' + _dtEsc(n.callId) + '</span>' : '') + '</div>' +
+         _dtBodyHtml(n.cell.arg, 'pro') + '</div>';
+  }
+  return h + '</div>';
+}
+
+function _dtJudgeSection(db) {
+  var j = db.judge || {};
+  var hasAny = j.verdict || j.confidence || j.reasoning || j.text || j.recommended || j.error || Object.keys(db.rubrics).length;
+  if (!hasAny && !db.missing.length) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">⚖️ 裁判裁决' + (j.model ? '<span class="n">裁判模型：' + _dtEsc(j.model) + '</span>' : '') + '</div><div class="dcb-judge">';
+  h += '<div class="dcb-side" style="margin-bottom:2px">';
+  if (j.verdict) h += '<span class="chip judge">裁决 ' + _dtEsc(j.verdict) + '</span>';
+  if (j.confidence) h += '<span class="chip">置信度 ' + _dtEsc(j.confidence) + '</span>';
+  if (j.proScore !== null || j.conScore !== null) h += '<span class="chip pro">正方 ' + _dtEsc(j.proScore) + '</span><span class="chip con">反方 ' + _dtEsc(j.conScore) + '</span>';
+  if (j.fallback) h += '<span class="chip">兜底模型</span>';
+  if (j.error) h += '<span class="chip con">裁判调用失败</span>';
+  h += '</div>';
+  if (Object.keys(db.rubrics).length) {
+    h += '<div class="dcb-sec-h" style="margin:8px 0 0;font-size:11px">📊 评分细则</div>' + _dtBarsHtml(db.rubrics);
+  }
+  if (j.reasoning) h += '<div class="dcb-verdict-text">' + _dtEsc(j.reasoning) + '</div>';
+  if (j.text) {
+    if (j.showText) {
+      h += '<div class="dcb-draft" onclick="_dtToggleRaw(this)" style="margin-top:6px">展开裁判原始输出 ▾</div><div class="dcb-raw" style="display:none">' + _dtEsc(j.text) + '</div>';
+    } else {
+      h += '<div class="dcb-verdict-text">' + _dtEsc(j.text) + '</div>';
+    }
+  }
+  if (j.errorDetail) h += '<div class="claim-l"><span class="k">失败详情</span><span class="kv">' + _dtEsc(j.errorDetail) + '</span></div>';
+  if (j.recommended && Object.keys(j.recommended).length) {
+    var scalars = [], lists = [], rk;
+    for (rk in j.recommended) {
+      if (!j.recommended.hasOwnProperty(rk)) continue;
+      var rv = j.recommended[rk];
+      if (Array.isArray(rv)) lists.push([rk, rv]);
+      else if (rv && typeof rv === 'object') lists.push([rk, [JSON.stringify(rv)]]);
+      else if (rv !== null && rv !== undefined && rv !== '') scalars.push([rk, rv]);
+    }
+    if (scalars.length) {
+      h += '<div class="dcb-side" style="margin:9px 0 0"><span class="chip">裁判给出的推荐参数</span>';
+      for (var sc = 0; sc < scalars.length; sc++) h += '<span class="chip mono" title="' + _dtEsc(scalars[sc][0]) + '">' + _dtEsc(scalars[sc][0]) + '=' + _dtEsc(scalars[sc][1]) + '</span>';
+      h += '</div>';
+    }
+    for (var li = 0; li < lists.length; li++) {
+      var lk = lists[li][0];
+      var lname = lk === 'self_audit_failures' ? '裁判自审失败（可能让结论失效）' : (lk === 'risk_params' ? '风险参数' : lk);
+      h += '<div class="claim-l" style="margin-top:8px"><span class="k">📌 ' + _dtEsc(lname) + '</span></div><ul class="dcb-list">';
+      for (var vi = 0; vi < lists[li][1].length; vi++) h += '<li>' + _dtMdInline(String(lists[li][1][vi])) + '</li>';
+      h += '</ul>';
+    }
   }
   h += '</div>';
-
-  // 页脚：归档路径 / 时间 / 下载
-  var foot = [];
-  if (meta.rel_path) foot.push('📄 归档：' + _dtEsc(meta.rel_path));
-  if (meta.mtime) foot.push('🕐 ' + _dtEsc(meta.mtime));
-  h += '<div class="dc-foot">' + foot.map(function(x) { return '<span>' + x + '</span>'; }).join('');
-  if (meta.path) h += '<a href="/api/file/download?path=' + encodeURIComponent(meta.path) + '" download>⬇ 下载原始 JSON</a>';
-  if (meta.skipped_newer && meta.skipped_newer.length) {
-    h += '<span title="更新的归档是会话结论摘要（内容被截断，没有完整论点）">⚠️ 展示的是最近一场可解析的辩论</span>';
+  if (db.missing.length) {
+    h += '<div class="dcb-sec-h" style="margin:12px 0 0;font-size:11px">❓ 裁判点名的缺失证据</div><ul class="dcb-list">';
+    for (var i = 0; i < db.missing.length; i++) h += '<li>' + _dtEsc(db.missing[i]) + '</li>';
+    h += '</ul>';
   }
+  return h + '</div>';
+}
+
+function _dtFailSection(db) {
+  if (!db.failed) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-fail"><div><b>⚠️ 本场辩论未完成</b> — ' + _dtEsc(db.note || '') + '</div>';
+  if (db.failedRoles.length) h += '<div class="dcb-side" style="margin-top:6px">失败角色：' + db.failedRoles.map(function (r) { return '<span class="chip con">' + _dtEsc(r) + '</span>'; }).join('') + '</div>';
+  if (db.failDetails) {
+    h += '<table><tbody>';
+    for (var k in db.failDetails) {
+      if (!db.failDetails.hasOwnProperty(k)) continue;
+      var f = db.failDetails[k] || {};
+      h += '<tr><td style="width:170px"><span class="chip con">' + _dtEsc(k) + '</span></td><td style="width:200px" class="dcb-model">' + _dtEsc(f.model || '未记录') + '</td><td>' + _dtEsc(f.detail || '') + '</td></tr>';
+    }
+    h += '</tbody></table>';
+  }
+  return h + '</div></div>';
+}
+
+function _dtFootHtml(db, meta) {
+  var h = '<div class="dcb-foot">';
+  var iso = db.isolation || {};
+  if (iso.pro_con_isolated !== undefined) h += '<span>🔒 正反隔离：' + (iso.pro_con_isolated ? '✅ 已切断上下文' : '❌ 未隔离') + (iso.messages_count ? '（每角色 ' + iso.messages_count + ' 条消息）' : '') + '</span>';
+  if (db.kb) h += '<span>📖 知识库：' + _dtChipsHtml(db.kb, _DT_KB_CN) + '</span>';
+  if (db.draftRoles.length) h += '<span>⚠️ 草稿角色：' + _dtEsc(db.draftRoles.join('、')) + '</span>';
+  if (meta && meta.skipped) h += '<span title="更新的那一个是会话级汇总文件，被判为不可用">已跳过 ' + meta.skipped + ' 个汇总文件</span>';
+  if (meta && meta.download) h += '<a href="' + _dtEsc(meta.download) + '" download>⬇ 下载原始 JSON</a>';
   h += '</div>';
+  return h;
+}
+
+function debateTableHtml(db, meta) {
+  meta = meta || {};
+  var h = '<div class="dcb">';
+  h += _dtHeaderHtml(db, meta);
+  h += _dtFailSection(db);
+  h += _dtModelsSection(db);
+  h += _dtSeatsSection(db);
+  h += _dtEvidenceSection(db);
+  h += _dtNeutralSection(db);
+  h += _dtJudgeSection(db);
+  h += _dtFootHtml(db, meta);
   return h + '</div>';
 }
 
 function renderDebateCard(payload) {
-  if (!payload || !payload.ok || !payload.debate) return false;
-  var sig = (payload.path || '') + '|' + (payload.mtime_epoch || '');
-  if (sig === _lastDebateSig) return true;   // 同一场辩论只挂一张卡
+  var sig = String(payload.path || '') + '|' + String(payload.mtime_epoch || payload.mtime || '');
+  if (sig === _lastDebateSig) return;
   _lastDebateSig = sig;
+  var db = normalizeDebate(payload.debate || payload);
+  var sid = currentSid;
   var wrap = document.createElement('div');
-  wrap.className = 'debate-card-wrap';
-  wrap.innerHTML = debateTableHtml(normalizeDebate(payload.debate), payload);
+  wrap.className = 'dcb-wrap';
+  wrap.dataset.sid = sid || '';
+  if (payload.rel_path) wrap.dataset.rel = payload.rel_path;
+  var mt = payload.mtime_text || '';
+  if (!mt && payload.mtime) { try { mt = new Date(payload.mtime * 1000).toLocaleString(); } catch (e) { mt = String(payload.mtime); } }
+  var meta = {
+    mtime_text: mt, path: payload.rel_path || '',
+    skipped: (payload.skipped_newer || []).length || '',
+    download: (payload.path || payload.rel_path) ? ('/api/file/download?path=' + encodeURIComponent(payload.path || payload.rel_path)) : ''
+  };
+  wrap.innerHTML = debateTableHtml(db, meta);
   document.getElementById('messages').appendChild(wrap);
   scrollBottom();
-  return true;
 }
 
-function _debateNotice(msg) {
+function _debateNotice(text) {
+  if (_lastDebateSig === 'notice:' + text) return;
+  _lastDebateSig = 'notice:' + text;
   var wrap = document.createElement('div');
-  wrap.className = 'debate-card-wrap';
-  wrap.innerHTML = '<div class="debate-card"><div class="dc-head"><span>🎭 辩论过程</span></div>' +
-    '<div class="dc-body" style="font-size:12px;color:var(--text-light);">' + _dtEsc(msg) + '</div></div>';
+  wrap.className = 'dcb-wrap';
+  wrap.innerHTML = '<div class="dcb"><div class="dcb-head"><div class="dcb-title">🎭 多 Agent 辩论过程</div>' +
+    '<div class="dcb-topic" style="color:var(--text-light)">' + _dtEsc(text) + '</div></div></div>';
   document.getElementById('messages').appendChild(wrap);
   scrollBottom();
 }
 
-// 拉最新一场辩论（tool_complete 事件没带 debate 时的兜底；归档刚写完可能有毫秒级延迟 → 重试）
 async function loadLatestDebate(sid, tries) {
-  sid = sid || currentSid;
-  tries = tries || 3;
+  tries = (tries === undefined) ? 3 : tries;
+  if (!sid) return null;
   for (var i = 0; i < tries; i++) {
     try {
-      var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest', { cache: 'no-store' });
-      if (r.status === 404) { _debateNotice('辩论过程接口还没生效：这是服务端改动，重启 MemOmics 后再跑辩论即可看到表格'); return null; }
-      var d = await r.json();
-      if (d && d.ok) { renderDebateCard(d); return d; }
-      if (i === tries - 1) _debateNotice((d && d.error) ? d.error : '未取到辩论记录');
-    } catch (e) {
-      if (i === tries - 1) _debateNotice('获取辩论记录失败：' + e);
-    }
-    await new Promise(function(res) { setTimeout(res, 700); });
+      var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest?ts=' + Date.now());
+      if (r.status === 404) {
+        _debateNotice('辩论过程接口还没生效：这是服务端改动，重启 MemOmics 后再跑辩论即可看到表格');
+        return null;
+      }
+      if (r.ok) {
+        var j = await r.json();
+        if (j && j.ok) { renderDebateCard(j); return j; }
+        if (i === tries - 1) {
+          _debateNotice(j && j.error ? ('没找到本会话的辩论归档：' + j.error) : '没找到本会话的辩论归档');
+          return null;
+        }
+      }
+    } catch (e) { /* 归档可能正在写，重试 */ }
+    await new Promise(function (res) { setTimeout(res, 700); });
   }
   return null;
 }
 
 async function reloadDebateCard(el) {
-  var wrap = el.closest ? el.closest('.debate-card-wrap') : null;
+  var wrap = el.closest ? el.closest('.dcb-wrap') : null;
+  var sid = (wrap && wrap.dataset.sid) || currentSid;
+  if (!sid) return;
+  _lastDebateSig = '';
   try {
-    var r = await fetch('/api/results/' + encodeURIComponent(currentSid) + '/debate/latest', { cache: 'no-store' });
-    var p = await r.json();
-    if (p && p.ok && wrap) {
-      _lastDebateSig = (p.path || '') + '|' + (p.mtime_epoch || '');
-      wrap.innerHTML = debateTableHtml(normalizeDebate(p.debate), p);
-      scrollBottom();
-      return;
+    var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest?ts=' + Date.now());
+    if (!r.ok) { alert('加载失败：HTTP ' + r.status); return; }
+    var j = await r.json();
+    if (!j || !j.ok) { alert('没找到辩论归档：' + ((j && j.error) || '未知原因')); return; }
+    var db = normalizeDebate(j.debate);
+    var meta = {
+      mtime_text: j.mtime_text || (j.mtime ? new Date(j.mtime * 1000).toLocaleString() : ''),
+      path: j.rel_path || '',
+      skipped: (j.skipped_newer || []).length || '',
+      download: (j.path || j.rel_path) ? ('/api/file/download?path=' + encodeURIComponent(j.path || j.rel_path)) : ''
+    };
+    if (wrap) {
+      wrap.innerHTML = debateTableHtml(db, meta);
+      _lastDebateSig = String(j.path || '') + '|' + String(j.mtime_epoch || j.mtime || '');
     }
-    if (wrap) wrap.querySelector('.dc-body').innerHTML = '<div style="font-size:12px;color:var(--text-light);">' + _dtEsc((p && p.error) || '未取到辩论记录') + '</div>';
-  } catch (e) {
-    if (wrap) wrap.querySelector('.dc-body').innerHTML = '<div style="font-size:12px;color:var(--danger);">重新加载失败：' + _dtEsc(e) + '</div>';
-  }
+  } catch (e) { alert('加载失败：' + e); }
 }
-
 function addStatusNotice(content) {
   var div = document.createElement('div');
   div.className = 'status-notice';
