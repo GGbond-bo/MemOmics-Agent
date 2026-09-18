@@ -383,6 +383,40 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .pt-count { margin-left:auto; font-size:10px; color:var(--text-light); font-weight:400; }
 .debate-block .debate-side.con .side-label { color:var(--danger); }
 .debate-block .debate-verdict { margin-top:6px; padding:6px 8px; background:var(--tool-bg); border-radius:4px; font-size:12px; }
+/* ===== 辩论过程表格（2026-09-18）：辩论发生时在对话里展示「谁怎么辩、正反方怎么对抗」 ===== */
+.debate-card-wrap { margin:8px 0; }
+.debate-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--panel); box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+.debate-card .dc-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 12px; background:var(--primary-light); border-bottom:1px solid var(--border); font-size:13px; font-weight:600; color:var(--primary); }
+.debate-card .dc-head .dc-topic { flex:1 1 100%; font-weight:400; font-size:12px; color:var(--text); word-break:break-word; }
+.debate-card .dc-act { margin-left:auto; font-weight:400; font-size:11px; color:var(--primary); cursor:pointer; }
+.debate-card .dc-body { padding:10px 12px; overflow-x:auto; }
+.debate-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+.debate-table th, .debate-table td { border:1px solid var(--border); padding:6px 8px; vertical-align:top; text-align:left; word-break:break-word; overflow-wrap:anywhere; }
+.debate-table thead th { background:var(--tool-bg); color:var(--text); font-weight:600; }
+.debate-table th.dt-seat { width:106px; }
+.debate-table td.dt-seat { background:var(--tool-bg); font-weight:600; color:var(--text); }
+.debate-table th.dt-pro { color:var(--success); }
+.debate-table th.dt-con { color:var(--danger); }
+.dt-badge { display:inline-block; font-size:10px; padding:0 5px; border-radius:7px; margin-right:4px; font-weight:600; }
+.dt-badge.pro { background:rgba(63,158,106,0.14); color:var(--success); }
+.dt-badge.con { background:rgba(216,67,107,0.14); color:var(--danger); }
+.dt-model { font-size:10px; color:var(--text-light); font-family:Consolas,monospace; }
+.dt-score { display:inline-block; font-size:10px; padding:0 5px; margin-left:4px; border-radius:7px; background:var(--primary-light); color:var(--primary); }
+.dt-text { white-space:pre-wrap; }
+.dt-claim { margin:3px 0 3px 4px; padding-left:7px; border-left:2px solid var(--border); }
+.dt-claim .dt-ev { font-size:11px; color:var(--text-light); margin-top:2px; }
+.dt-meta { font-size:10px; color:var(--text-light); }
+.dt-chips { margin-top:4px; }
+.dc-chip { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; background:var(--primary-light); color:var(--primary); margin:2px 4px 0 0; }
+.dc-chip.warn { background:rgba(224,135,42,0.16); color:var(--warning); }
+.dt-more { font-size:11px; color:var(--primary); cursor:pointer; user-select:none; }
+.dt-empty { color:var(--text-light); font-size:11px; }
+.debate-card .dc-verdict { margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--tool-bg); border:1px dashed var(--border); font-size:12px; color:var(--text); }
+.debate-card .dc-verdict .dt-verdict-text { margin-top:4px; white-space:pre-wrap; }
+.debate-card .dc-foot { display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
+.debate-card .dc-foot a { color:var(--primary); text-decoration:none; }
+.debate-card .dc-foot a:hover { text-decoration:underline; }
+
 
 /* 待办块 */
 .todo-block { margin:8px 0; }
@@ -1670,6 +1704,11 @@ function handleMessage(msg) {
   } else if (msg.type === 'tool_complete') {
     // 更新时间线中对应行为 done, 附带结果摘要
     addProgressItem(msg.tool, 'done', _fmtToolResult(msg.tool, msg.result), msg.ts || _nowTs());
+    // 2026-09-18: 辩论工具完成 → 在对话里挂一张「辩论过程」表格（正反方逐席位对抗）
+    if (msg.tool === 'debate_analysis' && (!msg.session_id || msg.session_id === currentSid)) {
+      if (msg.debate && msg.debate.ok) { renderDebateCard(msg.debate); }
+      else { loadLatestDebate(currentSid, 3); }
+    }
   } else if (msg.type === 'status') {
     // status 只进时间线
     addProgressItem(msg.content.substring(0,40), 'pending', msg.category, msg.ts || _nowTs());
@@ -2519,6 +2558,274 @@ function renderDebateBlock(toolBlock, debate) {
   }
   html += '</div>';
   toolBlock.insertAdjacentHTML('beforeend', html);
+}
+
+// ============ 辩论过程表格（2026-09-18）============
+// 需求：辩论产生时，把「各个编辑怎么辩的、正反方怎么对抗」用表格展示出来。
+// 数据源：/api/results/<sid>/debate/latest（后端读 results/**/debate_*.json），
+//         或 tool_complete 事件里直接带的 debate 字段（避免 500 字截断看不到论点）。
+// 兼容 4 种历史结构：v3 多角色、L1 轻量采样、v2 pro_args/con_args、失败记录。
+var _lastDebateSig = '';
+var _FENCE3 = String.fromCharCode(96, 96, 96);
+
+var _DT_ROLE_CN = {
+  biology: '生物学编辑', statistics: '统计学编辑', bioinformatics: '生信编辑',
+  history: '历史经验编辑', methodology: '方法学专家', clinical: '临床专家',
+  ethics: '伦理专家', reviewer: '评审编辑'
+};
+function _dtRoleName(k) { return _DT_ROLE_CN[k] || k; }
+function _dtEsc(s) { return escapeHtml(s == null ? '' : String(s)); }
+
+function _dtTryJson(s) {
+  if (typeof s !== 'string') return null;
+  var t = s.trim();
+  if (t.indexOf(_FENCE3) === 0) { t = t.slice(3).replace(/^[a-zA-Z]+[ \t]*/, ''); }
+  if (t.slice(-3) === _FENCE3) { t = t.slice(0, -3); }
+  t = t.trim();
+  try { var o = JSON.parse(t); return (o && typeof o === 'object') ? o : null; } catch (e) { return null; }
+}
+
+// 单条论点：可能是纯文本，也可能是 rubric JSON（claims/evidence/level/confidence/risk_boundary）
+function _dtArgHtml(arg) {
+  if (arg == null) return '<span class="dt-empty">未参与</span>';
+  var obj = null, text = '';
+  if (typeof arg === 'object') { obj = arg; text = arg.argument || arg.content || ''; }
+  else { text = String(arg); obj = _dtTryJson(text); if (obj && (obj.argument || obj.content)) text = obj.argument || obj.content; }
+  var body = '';
+  var claims = obj && Array.isArray(obj.claims) ? obj.claims : null;
+  if (claims && claims.length) {
+    body = claims.map(function(c) {
+      if (typeof c === 'string') return '<div class="dt-claim">' + _dtEsc(c) + '</div>';
+      var meta = [];
+      if (c.level) meta.push('证据等级 ' + c.level);
+      if (c.confidence) meta.push('置信度 ' + c.confidence);
+      var s = '<div class="dt-claim">' + _dtEsc(c.claim || '') +
+        (meta.length ? ' <span class="dt-meta">[' + _dtEsc(meta.join(' · ')) + ']</span>' : '');
+      if (c.evidence) s += '<div class="dt-ev">依据：' + _dtEsc(String(c.evidence).substring(0, 260)) + '</div>';
+      if (c.risk_boundary) s += '<div class="dt-ev">失效边界：' + _dtEsc(String(c.risk_boundary).substring(0, 200)) + '</div>';
+      return s + '</div>';
+    }).join('');
+  } else {
+    if (!text) return '<span class="dt-empty">（无内容）</span>';
+    if (text.length <= 260) {
+      body = '<div class="dt-text">' + _dtEsc(text) + '</div>';
+    } else {
+      body = '<div class="dt-text dt-short">' + _dtEsc(text.substring(0, 260)) + '…</div>' +
+             '<div class="dt-text dt-full" style="display:none">' + _dtEsc(text) + '</div>' +
+             '<span class="dt-more" onclick="_dtToggle(this)">展开全文 ▾</span>';
+    }
+  }
+  var chips = '';
+  var rp = obj && obj.recommended_params, kp = obj && obj.risk_params;
+  if (rp && typeof rp === 'object') chips += '<div class="dt-chips">建议：' + Object.keys(rp).map(function(k) {
+    return '<span class="dc-chip">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(rp[k])) + '</span>'; }).join('') + '</div>';
+  if (kp && typeof kp === 'object') chips += '<div class="dt-chips">风险：' + Object.keys(kp).map(function(k) {
+    return '<span class="dc-chip warn">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(kp[k])) + '</span>'; }).join('') + '</div>';
+  return body + chips;
+}
+
+function _dtToggle(el) {
+  var cell = el.parentNode;
+  var s = cell.querySelector('.dt-short'), f = cell.querySelector('.dt-full');
+  if (!s || !f) return;
+  var open = f.style.display !== 'none';
+  f.style.display = open ? 'none' : 'block';
+  s.style.display = open ? 'block' : 'none';
+  el.textContent = open ? '展开全文 ▾' : '收起 ▴';
+}
+
+// 把 4 种历史结构归一成 {rows:[{seat, pro:{arg,model,score}, con:{...}}], verdict, ...}
+function normalizeDebate(d) {
+  d = d || {};
+  var cfg = d.debate_config || {};
+  var scores = (d.scores && typeof d.scores === 'object') ? d.scores : {};
+  var models = cfg.role_models || {};
+  var out = { topic: d.topic || '', format: d.debate_format || '', level: d.level || '',
+              mode: cfg.mode || '', rounds: cfg.rounds || '', kind: 'unknown', rows: [],
+              verdict: {}, isolation: d.isolation_verification || d.isolation || null,
+              failed: [], note: d.note || '' };
+
+  var jv = d.judge_verdict;
+  var jvObj = (jv && typeof jv === 'object') ? jv : _dtTryJson(jv);
+  out.verdict = {
+    verdict: d.verdict || (jvObj && (jvObj.verdict || jvObj.winner)) || '',
+    confidence: d.confidence || (jvObj && jvObj.confidence) || '',
+    text: (typeof jv === 'string') ? jv : (jvObj ? JSON.stringify(jvObj, null, 1) : ''),
+    recommended: d.recommended_params || (jvObj && jvObj.recommended_params) || null,
+    proScore: (jvObj && jvObj.pro_score) || null,
+    conScore: (jvObj && jvObj.con_score) || null,
+    winner: (jvObj && jvObj.winner) || '',
+    reasoning: (jvObj && jvObj.reasoning) || ''
+  };
+  if (d.error) out.failed.push(out.note || '本场辩论失败（有角色返回占位符，未归档有效结果）');
+  if (Array.isArray(d.failed_role_ids) && d.failed_role_ids.length) out.failed.push('失败角色：' + d.failed_role_ids.join('、'));
+
+  if (d.pro_arguments || d.con_arguments) {
+    var pro = d.pro_arguments || {}, con = d.con_arguments || {}, seats = [];
+    Object.keys(pro).forEach(function(k) { if (seats.indexOf(k) < 0) seats.push(k); });
+    Object.keys(con).forEach(function(k) { if (seats.indexOf(k) < 0) seats.push(k); });
+    out.kind = 'multi';
+    out.rows = seats.map(function(k) {
+      return { seat: _dtRoleName(k),
+        pro: pro[k] ? { arg: pro[k], model: models['pro_' + k] || '', score: scores['pro_' + k] } : null,
+        con: con[k] ? { arg: con[k], model: models['con_' + k] || '', score: scores['con_' + k] } : null };
+    });
+  } else if (Array.isArray(d.samples) && d.samples.length) {
+    out.kind = 'sampling';
+    out.rows = d.samples.map(function(s, i) {
+      return { seat: '采样组 ' + (i + 1),
+        pro: s.pro ? { arg: s.pro, model: d.model || '', score: null } : null,
+        con: s.con ? { arg: s.con, model: d.model || '', score: null } : null };
+    });
+  } else if (Array.isArray(d.pro_args) || Array.isArray(d.con_args)) {
+    out.kind = 'v2';
+    var pa = d.pro_args || [], ca = d.con_args || [], n = Math.max(pa.length, ca.length);
+    for (var i = 0; i < n; i++) {
+      out.rows.push({ seat: (pa[i] && pa[i].role) || (ca[i] && ca[i].role) || ('编辑 ' + (i + 1)),
+        pro: pa[i] ? { arg: pa[i].argument || pa[i], model: '', score: null } : null,
+        con: ca[i] ? { arg: ca[i].argument || ca[i], model: '', score: null } : null });
+    }
+  }
+  return out;
+}
+
+function debateTableHtml(d, meta) {
+  meta = meta || {};
+  var h = '<div class="debate-card">';
+  h += '<div class="dc-head"><span>🎭 辩论过程</span>';
+  if (d.format) h += '<span class="dc-chip">' + _dtEsc(d.format) + '</span>';
+  if (d.level) h += '<span class="dc-chip">' + _dtEsc(d.level) + '</span>';
+  if (d.mode) h += '<span class="dc-chip">模式 ' + _dtEsc(d.mode) + '</span>';
+  if (d.rounds) h += '<span class="dc-chip">' + _dtEsc(d.rounds) + ' 轮</span>';
+  h += '<span class="dc-act" onclick="reloadDebateCard(this)">🔄 重新加载</span>';
+  if (d.topic) h += '<span class="dc-topic">📌 辩题：' + _dtEsc(d.topic) + '</span>';
+  h += '</div>';
+
+  h += '<div class="dc-body">';
+  if (d.rows.length) {
+    h += '<table class="debate-table"><thead><tr><th class="dt-seat">编辑席位</th>' +
+         '<th class="dt-pro">✅ 正方（支持）</th><th class="dt-con">❌ 反方（质疑）</th></tr></thead><tbody>';
+    d.rows.forEach(function(r) {
+      h += '<tr><td class="dt-seat">' + _dtEsc(r.seat) + '</td>';
+      ['pro', 'con'].forEach(function(side) {
+        var cell = r[side];
+        var label = (side === 'pro' ? '正方' : '反方');
+        h += '<td>';
+        if (!cell) { h += '<span class="dt-empty">未参与</span>'; }
+        else {
+          h += '<div><span class="dt-badge ' + side + '">' + label + '·' + _dtEsc(r.seat) + '</span>';
+          if (cell.model) h += '<span class="dt-model">' + _dtEsc(cell.model) + '</span>';
+          if (cell.score != null && cell.score !== '') h += '<span class="dt-score">' + _dtEsc(cell.score) + ' 分</span>';
+          h += '</div>' + _dtArgHtml(cell.arg);
+        }
+        h += '</td>';
+      });
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+  } else {
+    h += '<div style="font-size:12px;color:var(--text-light);">这场辩论没有可展示的编辑论点记录。</div>';
+  }
+
+  // 裁决
+  var v = d.verdict || {};
+  var hasVerdict = v.verdict || v.text || v.recommended || v.reasoning;
+  if (hasVerdict) {
+    h += '<div class="dc-verdict"><strong>⚖️ 裁判裁决</strong>';
+    if (v.verdict) h += ' <span class="dc-chip">' + _dtEsc(v.verdict) + '</span>';
+    if (v.winner && v.winner !== v.verdict) h += ' <span class="dc-chip">胜方 ' + _dtEsc(v.winner) + '</span>';
+    if (v.confidence) h += ' <span class="dc-chip">置信度 ' + _dtEsc(v.confidence) + '</span>';
+    if (v.proScore != null || v.conScore != null) h += ' <span class="dc-chip">正方 ' + _dtEsc(v.proScore) + ' : 反方 ' + _dtEsc(v.conScore) + '</span>';
+    if (v.reasoning) h += '<div class="dt-verdict-text">' + _dtEsc(v.reasoning) + '</div>';
+    else if (v.text) h += '<div class="dt-verdict-text">' + _dtEsc(v.text.length > 900 ? v.text.substring(0, 900) + '…' : v.text) + '</div>';
+    if (v.recommended && typeof v.recommended === 'object') {
+      h += '<div class="dt-chips">推荐参数：' + Object.keys(v.recommended).map(function(k) {
+        return '<span class="dc-chip">' + _dtEsc(k) + '=' + _dtEsc(JSON.stringify(v.recommended[k])) + '</span>'; }).join('') + '</div>';
+    }
+    h += '</div>';
+  }
+  d.failed.forEach(function(f) { h += '<div class="dc-verdict" style="color:var(--danger);">⚠️ ' + _dtEsc(f) + '</div>'; });
+
+  // 隔离验证
+  var iso = d.isolation;
+  if (iso && typeof iso === 'object') {
+    var bits = [];
+    if (iso.pro_con_isolated || iso.pro_isolated || iso.con_isolated) bits.push('正反方上下文隔离：是（互相看不到对方论点）');
+    if (iso.judge_sees_all) bits.push('裁判可见全部编辑论点');
+    if (iso.messages_count) bits.push('每个角色独立调用（messages=' + _dtEsc(iso.messages_count) + '）');
+    if (bits.length) h += '<div class="dc-foot" style="border-top:none;padding-top:2px;">🔒 ' + _dtEsc(bits.join('；')) + '</div>';
+  }
+  h += '</div>';
+
+  // 页脚：归档路径 / 时间 / 下载
+  var foot = [];
+  if (meta.rel_path) foot.push('📄 归档：' + _dtEsc(meta.rel_path));
+  if (meta.mtime) foot.push('🕐 ' + _dtEsc(meta.mtime));
+  h += '<div class="dc-foot">' + foot.map(function(x) { return '<span>' + x + '</span>'; }).join('');
+  if (meta.path) h += '<a href="/api/file/download?path=' + encodeURIComponent(meta.path) + '" download>⬇ 下载原始 JSON</a>';
+  if (meta.skipped_newer && meta.skipped_newer.length) {
+    h += '<span title="更新的归档是会话结论摘要（内容被截断，没有完整论点）">⚠️ 展示的是最近一场可解析的辩论</span>';
+  }
+  h += '</div>';
+  return h + '</div>';
+}
+
+function renderDebateCard(payload) {
+  if (!payload || !payload.ok || !payload.debate) return false;
+  var sig = (payload.path || '') + '|' + (payload.mtime_epoch || '');
+  if (sig === _lastDebateSig) return true;   // 同一场辩论只挂一张卡
+  _lastDebateSig = sig;
+  var wrap = document.createElement('div');
+  wrap.className = 'debate-card-wrap';
+  wrap.innerHTML = debateTableHtml(normalizeDebate(payload.debate), payload);
+  document.getElementById('messages').appendChild(wrap);
+  scrollBottom();
+  return true;
+}
+
+function _debateNotice(msg) {
+  var wrap = document.createElement('div');
+  wrap.className = 'debate-card-wrap';
+  wrap.innerHTML = '<div class="debate-card"><div class="dc-head"><span>🎭 辩论过程</span></div>' +
+    '<div class="dc-body" style="font-size:12px;color:var(--text-light);">' + _dtEsc(msg) + '</div></div>';
+  document.getElementById('messages').appendChild(wrap);
+  scrollBottom();
+}
+
+// 拉最新一场辩论（tool_complete 事件没带 debate 时的兜底；归档刚写完可能有毫秒级延迟 → 重试）
+async function loadLatestDebate(sid, tries) {
+  sid = sid || currentSid;
+  tries = tries || 3;
+  for (var i = 0; i < tries; i++) {
+    try {
+      var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest', { cache: 'no-store' });
+      if (r.status === 404) { _debateNotice('辩论过程接口还没生效：这是服务端改动，重启 MemOmics 后再跑辩论即可看到表格'); return null; }
+      var d = await r.json();
+      if (d && d.ok) { renderDebateCard(d); return d; }
+      if (i === tries - 1) _debateNotice((d && d.error) ? d.error : '未取到辩论记录');
+    } catch (e) {
+      if (i === tries - 1) _debateNotice('获取辩论记录失败：' + e);
+    }
+    await new Promise(function(res) { setTimeout(res, 700); });
+  }
+  return null;
+}
+
+async function reloadDebateCard(el) {
+  var wrap = el.closest ? el.closest('.debate-card-wrap') : null;
+  try {
+    var r = await fetch('/api/results/' + encodeURIComponent(currentSid) + '/debate/latest', { cache: 'no-store' });
+    var p = await r.json();
+    if (p && p.ok && wrap) {
+      _lastDebateSig = (p.path || '') + '|' + (p.mtime_epoch || '');
+      wrap.innerHTML = debateTableHtml(normalizeDebate(p.debate), p);
+      scrollBottom();
+      return;
+    }
+    if (wrap) wrap.querySelector('.dc-body').innerHTML = '<div style="font-size:12px;color:var(--text-light);">' + _dtEsc((p && p.error) || '未取到辩论记录') + '</div>';
+  } catch (e) {
+    if (wrap) wrap.querySelector('.dc-body').innerHTML = '<div style="font-size:12px;color:var(--danger);">重新加载失败：' + _dtEsc(e) + '</div>';
+  }
 }
 
 function addStatusNotice(content) {

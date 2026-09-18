@@ -9218,7 +9218,17 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
 
         def _wx_tool_complete_cb(tool_name, result_str=""):
-            _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            _ev_wx = {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid}
+            if tool_name == "debate_analysis":  # 2026-09-18: 附完整辩论归档，前端渲染过程表格
+                try:
+                    _deb_wx = _load_latest_debate(sid)
+                    if _deb_wx.get("ok"):
+                        _ev_wx["debate"] = _deb_wx
+                    else:
+                        _ev_wx["debate_error"] = _deb_wx.get("error", "")
+                except Exception:
+                    pass
+            _session_emit(session, _ev_wx)
             # 扫描新生成的图片 → 推送 new_figure 事件
             try:
                 base = session.get("results_dir", "")
@@ -11476,6 +11486,136 @@ async def results_tree(sid: str):
     return {"tree": {"name": rn, "path": "", "is_dir": True, "children": tree["ch"], "total_files": tree["tf"], "total_dirs": tree["td"]}, "results_name": rn, "total_files": tree["tf"], "total_dirs": tree["td"], "base": base.replace(chr(92), "/"), "session_id": sid}
 
 
+def _extract_json_obj(s):
+    """best-effort：从字符串里抠出第一个 JSON 对象（容忍 ```json 围栏、前后缀说明文字、被截断的尾巴）。"""
+    if not isinstance(s, str):
+        return None
+    t = s.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t).strip()
+    try:
+        obj = json.loads(t)
+        if isinstance(obj, (dict, list)):
+            return obj
+    except Exception:
+        pass
+    i = t.find("{")
+    while i != -1:
+        try:
+            obj, _end = json.JSONDecoder().raw_decode(t[i:])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+        i = t.find("{", i + 1)
+    return None
+
+
+def _load_latest_debate(sid: str):
+    """读取会话 results 目录下最新一场辩论的完整归档（2026-09-18，供 WebUI 渲染辩论过程表格）。
+
+    兼容历史上出现过的 4 种结构：
+      v3 多角色 —— pro_arguments/con_arguments = {biology:{argument:...}, ...}
+      L1 轻量采样 —— samples = [{pro:..., con:...}]
+      v2 —— pro_args/con_args = [{role, argument}]
+      失败记录 —— error=true + failed_roles
+    外层若被 result_summary 包一层（会话级归档），自动剥掉。
+    只读，绝不抛异常给调用方。
+    """
+    base = ""
+    try:
+        base = _find_best_results_dir(sid) or ""
+    except Exception:
+        base = ""
+    if not base and sid in _sessions:
+        base = (_sessions.get(sid) or {}).get("results_dir") or ""
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not base or not os.path.isdir(base):
+        return {"ok": False, "error": "未找到该会话的结果目录", "base": str(base)}
+    try:
+        files = [p for p in Path(base).rglob("debate_*.json") if p.is_file()]
+    except Exception as e:
+        return {"ok": False, "error": f"扫描辩论记录失败: {e}", "base": str(base)}
+    if not files:
+        return {"ok": False, "error": "该会话还没有辩论记录文件", "base": str(base).replace("\\", "/")}
+
+    def _mtime(x):
+        try:
+            return x.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    def _usable(x):
+        """这份归档能不能渲染出「辩论过程」表。"""
+        if not isinstance(x, dict):
+            return False
+        if x.get("pro_arguments") or x.get("con_arguments") or x.get("samples") \
+                or x.get("pro_args") or x.get("con_args"):
+            return True
+        if x.get("error") or x.get("failed_role_ids"):
+            return True   # 失败场也要展示（能看到失败角色/原因）
+        return bool(x.get("judge_verdict") and (x.get("level") or x.get("verdict")))
+
+    def _read_debate(p):
+        try:
+            x = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return None
+        if isinstance(x, dict) and "result_summary" in x and "pro_arguments" not in x:
+            inner = _extract_json_obj(x.get("result_summary"))
+            if isinstance(inner, dict):
+                x = inner
+        return x
+
+    files.sort(key=_mtime, reverse=True)
+    files = files[:60]
+    newest = files[0]
+    # 会话级结论归档（conclusions/debate_*.json）常是 result_summary 被截断的副本，会排在最新 ——
+    # 因此不能只取最新一份，要往下找最近一份「能渲染」的（24h 窗口内，避免翻出陈年旧辩论）。
+    newest_mt = _mtime(newest)
+    picked, picked_data = None, None
+    for _p in files:
+        _mt = _mtime(_p)
+        if newest_mt - _mt > 6 * 3600:
+            break   # 只在这「同一场辩论」的归档批次里回退，避免翻出很久以前的旧辩论
+        _x = _read_debate(_p)
+        if _usable(_x):
+            picked, picked_data = _p, _x
+            break
+    if picked is None:
+        return {"ok": False, "path": str(newest), "candidate_count": len(files),
+                "error": "最近这场辩论没有可展示的编辑论点（可能失败了，或归档被截断成摘要）",
+                "base": str(base).replace("\\", "/")}
+    st = None
+    try:
+        st = picked.stat()
+    except Exception:
+        pass
+    skipped = []
+    for _p in files:
+        if _p == picked:
+            break
+        skipped.append(str(_p))
+    return {
+        "ok": True,
+        "path": str(picked),
+        "rel_path": str(picked.relative_to(base)).replace("\\", "/") if base else picked.name,
+        "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S") if st else "",
+        "mtime_epoch": st.st_mtime if st else 0,
+        "skipped_newer": skipped,
+        "debate": picked_data,
+    }
+
+
+@app.get("/api/results/{sid}/debate/latest")
+async def latest_debate(sid: str):
+    """最新一场辩论的完整记录（WebUI「辩论过程」表格数据源）。"""
+    return JSONResponse(_load_latest_debate(sid),
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
 @app.get("/api/results/{sid}/figures")
 async def list_figures(sid: str):
     """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）"""
@@ -12492,7 +12632,19 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_turn_activity_ts"] = time.time()
                         _s["_live_tool"] = ""
                         _s["_live_tool_ts"] = time.time()
-                        _session_emit(_s, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                        _ev_complete = {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]}
+                        # 2026-09-18: 辩论完成 → 事件里带上完整辩论归档，前端据此渲染「辩论过程」表格
+                        # （tool_complete 的 result 只有 500 字，装不下 7 位编辑的完整论点）
+                        if tool_name == "debate_analysis":
+                            try:
+                                _deb = _load_latest_debate(_s["id"])
+                                if _deb.get("ok"):
+                                    _ev_complete["debate"] = _deb
+                                else:
+                                    _ev_complete["debate_error"] = _deb.get("error", "")
+                            except Exception:
+                                pass
+                        _session_emit(_s, _ev_complete)
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
                         # 2026-08-16 任务类型：管线启动命令 = 长任务运行时证据
