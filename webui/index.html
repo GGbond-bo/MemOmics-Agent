@@ -881,6 +881,33 @@ table.dcb-table.dg-table th { position:relative; }
 .lit-sum-field b { font-size:12.5px; }
 .lit-sum-field div { color:var(--text); white-space:pre-wrap; font-size:12px; line-height:1.7; margin-top:2px; }
 /* === 环境检测面板 === */
+/* === 远端集群控制台（2026-09-19）=== */
+#cluster-console { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
+#cluster-console .cc-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1080px); height:min(88vh,860px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
+#cluster-console .cc-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; flex-wrap:wrap; }
+#cluster-console .cc-title { font-weight:600; }
+#cluster-console .cc-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tool-bg); color:var(--text-light); max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#cluster-console .cc-chip.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+#cluster-console .cc-chip.warn { background:rgba(239,68,68,0.15); color:#ef4444; }
+#cluster-console .cc-spacer { flex:1; }
+#cluster-console .cc-btn { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-family:inherit; }
+#cluster-console .cc-btn:hover { background:var(--primary-light); }
+#cluster-console .cc-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+#cluster-console .cc-btn:disabled { opacity:0.55; cursor:default; }
+#cluster-console .cc-cfg { padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; font-size:12px; max-height:46%; overflow-y:auto; }
+#cluster-console .cc-cfg label { display:flex; flex-direction:column; gap:3px; color:var(--text-light); }
+#cluster-console .cc-cfg input, #cluster-console .cc-cfg select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; font-family:inherit; }
+#cluster-console .cc-cfg-actions { grid-column:1/-1; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+#cluster-console .cc-cfg-note { grid-column:1/-1; font-size:11px; color:var(--text-light); line-height:1.6; }
+#cluster-console .cc-out { flex:1; overflow-y:auto; padding:10px 14px; background:#0d1117; color:#d7e2ec; font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+#cluster-console .cc-out .cc-time { color:#6b7684; }
+#cluster-console .cc-out .cc-sys { color:#7fb3ff; }
+#cluster-console .cc-out .cc-err { color:#ff8a8a; }
+#cluster-console .cc-out .cc-ok { color:#7ee787; }
+#cluster-console .cc-input { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); align-items:flex-end; }
+#cluster-console .cc-input select { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; font-family:inherit; }
+#cluster-console .cc-input textarea { flex:1; resize:vertical; min-height:34px; max-height:150px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
+#cluster-console .cc-hint { padding:0 14px 10px; font-size:11px; color:var(--text-light); }
 #env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
 #env-check-panel h3 { margin:0 0 8px; font-size:14px; }
 #env-check-panel .env-row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; }
@@ -1034,7 +1061,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_cluster':'🖧 远端集群',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1058,7 +1085,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_cluster':'🖧 Cluster',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1114,6 +1141,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory" data-i18n="nav_memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context" data-i18n="nav_context">📐 上下文窗口</div>
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
+      <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
       <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
       <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
@@ -9914,6 +9942,304 @@ async function showEnvCheck() {
   } catch(e) { console.error('env check failed', e); }
 }
 
+// === 远端集群控制台（2026-09-19）===
+// WebUI 里直接敲 SSH 命令 / 交作业：走 /api/cluster/*，最终调用的是 remote_cluster 工具的同一个
+// handler，所以 UI 与 agent 的行为完全一致（只是 UI 不过 rail_review / 辩论门禁——那是给模型看的闸）。
+var _clusterHist = [], _clusterHistIdx = -1, _clusterCfg = null, _clusterBusy = false, _clusterLastJob = '';
+
+var CLUSTER_MODES = {
+  run:    { opt: 'run · 同步执行',    ph: '在登录节点执行的命令，例：squeue -u $USER  或  ls -lh /root/data', hint: 'run：登录节点同步执行。只放轻量命令（ls/du/head/which），重计算会被管理员封号；要算重活请用 submit。' },
+  submit: { opt: 'submit · 交作业',   ph: '作业正文，例：\ncd /root/memomics_test\npython train.py --epochs 10', hint: 'submit：生成作业脚本并提交（slurm=sbatch / pbs=qsub / 无调度器=setsid 后台跑），返回 job_id；随后用 status / logs / cancel。' },
+  status: { opt: 'status · 查作业',   ph: '作业号（留空 = 最近一次提交）', hint: 'status：squeue → scontrol → sacct 三级判定，附带日志尾巴。' },
+  logs:   { opt: 'logs · 看日志',     ph: '作业号 或 远端日志文件路径（留空 = 最近一次提交）', hint: 'logs：读 stdout/stderr。Slurm 的 %j 会按作业号自动展开成真实文件名。' },
+  cancel: { opt: 'cancel · 取消作业', ph: '作业号（留空 = 本次会话里最近看到的那个作业号）', hint: 'cancel：scancel / qdel / 按进程组整组 kill。留空只会用你这次会话里刚看见过的作业号，不会替你猜一个没见过的号——取消是不可逆操作。' },
+  push:   { opt: 'push · 传上去',     ph: '本地路径 [远端路径]   例：E:/data/a.vcf   或   E:/data/a.vcf /root/data/', hint: 'push：本地 → 集群。配了 local_root/remote_root 后只写一边路径即可自动换算。' },
+  pull:   { opt: 'pull · 拉下来',     ph: '远端路径 [本地路径]   例：/root/memomics_test/out.txt', hint: 'pull：集群 → 本地（产物拉回来接着用本机内核分析）。' },
+  check:  { opt: 'check · 自检',      ph: '（不用输入，直接点执行）', hint: 'check：连通性 / 调度器 / CPU·内存 / 工作目录 / 已装工具自检。第一次连集群先跑这个。' },
+  jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' }
+};
+
+function openClusterConsole() {
+  var el = document.getElementById('cluster-console');
+  if (!el) return;
+  el.style.display = 'flex';
+  var sel = document.getElementById('cluster-mode');
+  if (sel && !sel.options.length) {
+    var order = ['run', 'submit', 'status', 'logs', 'cancel', 'push', 'pull', 'check', 'jobs'];
+    for (var i = 0; i < order.length; i++) {
+      var o = document.createElement('option');
+      o.value = order[i];
+      o.textContent = CLUSTER_MODES[order[i]].opt;
+      sel.appendChild(o);
+    }
+  }
+  try { _clusterHist = JSON.parse(localStorage.getItem('memomics_cluster_hist') || '[]') || []; } catch (e) { _clusterHist = []; }
+  clusterModeChange();
+  clusterRefreshStatus();
+  var box = document.getElementById('cluster-cmd');
+  if (box) box.focus();
+}
+
+function clusterClose() {
+  var el = document.getElementById('cluster-console');
+  if (el) el.style.display = 'none';
+}
+
+function clusterPrint(text, cls) {
+  var out = document.getElementById('cluster-out');
+  if (!out) return;
+  var d = document.createElement('div');
+  if (cls) d.className = 'cc-' + cls;
+  var t = new Date().toTimeString().slice(0, 8);
+  d.innerHTML = '<span class="cc-time">[' + t + ']</span> ' + escapeHtml(String(text == null ? '' : text));
+  out.appendChild(d);
+  out.scrollTop = out.scrollHeight;
+}
+
+function clusterModeChange() {
+  var sel = document.getElementById('cluster-mode');
+  var mode = sel ? sel.value : 'run';
+  var m = CLUSTER_MODES[mode] || CLUSTER_MODES.run;
+  var box = document.getElementById('cluster-cmd');
+  if (box) box.placeholder = m.ph;
+  var hint = document.getElementById('cluster-hint');
+  if (hint) hint.textContent = m.hint;
+  var btn = document.getElementById('cluster-run-btn');
+  if (btn && !_clusterBusy) btn.textContent = (mode === 'check' || mode === 'jobs') ? '执行' : '执行';
+}
+
+function clusterKey(e) {
+  var box = document.getElementById('cluster-cmd');
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); clusterExec(); return; }
+  if (!box || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  if (_clusterHist.length === 0) return;
+  if (e.key === 'ArrowUp') {
+    if (box.selectionStart !== 0) return;
+    e.preventDefault();
+    _clusterHistIdx = Math.min(_clusterHistIdx + 1, _clusterHist.length - 1);
+    box.value = _clusterHist[_clusterHistIdx] || '';
+  } else {
+    if (box.selectionStart !== box.value.length) return;
+    e.preventDefault();
+    _clusterHistIdx = Math.max(_clusterHistIdx - 1, -1);
+    box.value = (_clusterHistIdx < 0) ? '' : (_clusterHist[_clusterHistIdx] || '');
+  }
+  box.selectionStart = box.selectionEnd = box.value.length;
+}
+
+async function clusterRefreshStatus() {
+  var chip = document.getElementById('cluster-chip');
+  try {
+    var r = await fetch('/api/cluster/status');
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || '读取失败');
+    _clusterCfg = d.config;
+    clusterFillCfg(d.config);
+    var c = d.config;
+    if (!c.enabled || !c.host || !c.user) {
+      chip.className = 'cc-chip warn';
+      chip.textContent = '未配置：点「⚙️ 配置」填 host / user / key';
+    } else if (!c.key_exists) {
+      chip.className = 'cc-chip warn';
+      chip.textContent = c.user + '@' + c.host + ':' + c.port + ' · 私钥文件不存在：' + c.key;
+    } else {
+      chip.className = 'cc-chip ok';
+      chip.textContent = c.user + '@' + c.host + ':' + c.port + ' · ' + (c.scheduler || 'auto') + ' · ' + (c.workdir || '~');
+    }
+    var note = document.getElementById('cluster-cfg-note');
+    if (note) note.textContent = '配置文件：' + c.config_path + '　（保存即生效，不用重启；模型侧是否可见工具：' + (c.tool_visible ? '可见' : '不可见') + '）';
+  } catch (e) {
+    chip.className = 'cc-chip warn';
+    chip.textContent = '状态读取失败：' + e.message;
+  }
+}
+
+function clusterToggleCfg(forceOpen) {
+  var el = document.getElementById('cluster-cfg');
+  if (!el) return;
+  var show = (forceOpen === true) ? true : (el.style.display === 'none');
+  el.style.display = show ? 'grid' : 'none';
+}
+
+function clusterSetVal(id, v) {
+  var el = document.getElementById(id);
+  if (el) el.value = (v == null) ? '' : v;
+}
+
+function clusterFillCfg(c) {
+  var en = document.getElementById('cc-enabled');
+  if (en) en.checked = !!c.enabled;
+  clusterSetVal('cc-host', c.host);
+  clusterSetVal('cc-port', c.port);
+  clusterSetVal('cc-user', c.user);
+  clusterSetVal('cc-key', c.key);
+  clusterSetVal('cc-workdir', c.workdir === '~' ? '' : c.workdir);
+  clusterSetVal('cc-partition', c.partition);
+  clusterSetVal('cc-queue', c.queue);
+  clusterSetVal('cc-local-root', c.local_root);
+  clusterSetVal('cc-remote-root', c.remote_root);
+  clusterSetVal('cc-timeout', c.timeout);
+  var sc = document.getElementById('cc-scheduler');
+  if (sc) sc.value = c.scheduler || 'auto';
+}
+
+function clusterGetVal(id) {
+  var el = document.getElementById(id);
+  return el ? String(el.value || '').trim() : '';
+}
+
+async function clusterSaveCfg(andCheck) {
+  var en = document.getElementById('cc-enabled');
+  var body = {
+    enabled: !!(en && en.checked),
+    host: clusterGetVal('cc-host'),
+    user: clusterGetVal('cc-user'),
+    key: clusterGetVal('cc-key'),
+    workdir: clusterGetVal('cc-workdir'),
+    scheduler: clusterGetVal('cc-scheduler') || 'auto',
+    partition: clusterGetVal('cc-partition'),
+    queue: clusterGetVal('cc-queue'),
+    local_root: clusterGetVal('cc-local-root'),
+    remote_root: clusterGetVal('cc-remote-root')
+  };
+  var port = parseInt(clusterGetVal('cc-port'), 10);
+  if (!isNaN(port) && port > 0) body.port = port;
+  var to = parseInt(clusterGetVal('cc-timeout'), 10);
+  if (!isNaN(to) && to > 0) body.timeout = to;
+  try {
+    var r = await fetch('/api/cluster/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var d = await r.json();
+    if (!d.ok) { clusterPrint('✗ 保存失败：' + (d.error || '未知错误'), 'err'); return; }
+    clusterPrint('✓ 已写入 config.yaml 的 remote 段（host=' + (d.config.host || '空') + ', user=' + (d.config.user || '空') + ', scheduler=' + d.config.scheduler + '）', 'ok');
+    await clusterRefreshStatus();
+    if (andCheck) { clusterQuick('check'); }
+  } catch (e) {
+    clusterPrint('✗ 保存请求失败：' + e.message, 'err');
+  }
+}
+
+function clusterTokens(text) {
+  var out = [], re = /"([^"]*)"|'([^']*)'|(\S+)/g, m;
+  while ((m = re.exec(String(text || ''))) !== null) {
+    out.push(m[1] != null ? m[1] : (m[2] != null ? m[2] : m[3]));
+  }
+  return out;
+}
+
+function clusterBuildArgs(mode, text) {
+  var t = String(text || '');
+  var tk = clusterTokens(t);
+  if (mode === 'run' || mode === 'submit') {
+    if (!t.trim()) { clusterPrint('✗ ' + mode + ' 需要命令内容', 'err'); return null; }
+    return { action: mode, command: t };
+  }
+  if (mode === 'status' || mode === 'cancel') {
+    var a = { action: mode };
+    if (tk[0]) { a.job_id = tk[0]; }
+    else if (mode === 'cancel' && _clusterLastJob) {
+      a.job_id = _clusterLastJob;
+      clusterPrint('（cancel 留空 → 用本次会话最近看到的作业号 ' + _clusterLastJob + '）', 'sys');
+    }
+    return a;
+  }
+  if (mode === 'logs') {
+    var b = { action: 'logs' };
+    if (tk[0] && tk[0].indexOf('/') >= 0) { b.path = tk[0]; }
+    else if (tk[0]) { b.job_id = tk[0]; }
+    var n = (b.path ? tk[1] : tk[1]);
+    if (n && /^[0-9]+$/.test(n)) b.lines = parseInt(n, 10);
+    return b;
+  }
+  if (mode === 'push') {
+    if (!tk[0]) { clusterPrint('✗ push 需要本地路径', 'err'); return null; }
+    var c = { action: 'push', local_path: tk[0] };
+    if (tk[1]) c.remote_path = tk[1];
+    return c;
+  }
+  if (mode === 'pull') {
+    if (!tk[0]) { clusterPrint('✗ pull 需要远端路径', 'err'); return null; }
+    var e2 = { action: 'pull', remote_path: tk[0] };
+    if (tk[1]) e2.local_path = tk[1];
+    return e2;
+  }
+  return { action: mode };
+}
+
+function clusterRenderResult(mode, res) {
+  if (!res || res.ok === false) {
+    clusterPrint('✗ ' + ((res && res.error) || '请求失败'), 'err');
+    return;
+  }
+  var r = res.result || {};
+  var bad = (r.status === 'error');
+  if (r.job_id) _clusterLastJob = String(r.job_id);
+  var head = '▸ ' + mode;
+  if (r.job_id) head += ' · job ' + r.job_id;
+  if (r.state) head += ' · ' + r.state;
+  if (r.scheduler && mode === 'check') head += ' · ' + r.scheduler;
+  if (r._secs != null) head += '  (' + r._secs + 's)';
+  clusterPrint(head, bad ? 'err' : 'ok');
+  if (bad && r.message) clusterPrint(r.message, 'err');
+  if (r.output) clusterPrint(String(r.output).replace(/\s+$/, ''), null);
+  var skip = { output: 1, status: 1, _secs: 1, scheduler: 1, job_id: 1, state: 1, message: 1 };
+  var rest = {};
+  for (var k in r) { if (!skip[k]) rest[k] = r[k]; }
+  if (Object.keys(rest).length) clusterPrint(JSON.stringify(rest, null, 2), bad ? 'err' : null);
+  if (r.hint) clusterPrint('提示：' + r.hint, 'err');
+  if (!bad && mode === 'submit' && r.job_id) clusterPrint('作业已提交：看进度点「📋 作业」，或在模式下选 status/logs/cancel 填 ' + r.job_id, 'sys');
+}
+
+async function clusterExec() {
+  if (_clusterBusy) { clusterPrint('上一条还在执行中，稍等…', 'sys'); return; }
+  var sel = document.getElementById('cluster-mode');
+  var mode = sel ? sel.value : 'run';
+  var box = document.getElementById('cluster-cmd');
+  var text = box ? box.value : '';
+  var payload = clusterBuildArgs(mode, text);
+  if (!payload) return;
+  if (text.trim()) {
+    _clusterHist.unshift(text.trim());
+    _clusterHist = _clusterHist.slice(0, 50);
+    _clusterHistIdx = -1;
+    try { localStorage.setItem('memomics_cluster_hist', JSON.stringify(_clusterHist)); } catch (e) {}
+    if (box) box.value = '';
+  }
+  if (!_clusterCfg || !_clusterCfg.enabled || !_clusterCfg.host || !_clusterCfg.user) {
+    clusterPrint('⚠️ 还没配置远端（config.yaml 的 remote 段）：先点「⚙️ 配置」填 host / user / 私钥并保存。', 'err');
+    clusterToggleCfg(true);
+    return;
+  }
+  var btn = document.getElementById('cluster-run-btn');
+  _clusterBusy = true;
+  if (btn) btn.disabled = true;
+  var t0 = Date.now();
+  var timer = setInterval(function () {
+    if (btn) btn.textContent = '执行中 ' + Math.round((Date.now() - t0) / 1000) + 's';
+  }, 500);
+  try {
+    var resp = await fetch('/api/cluster/exec', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    var data = await resp.json();
+    clusterRenderResult(mode, data);
+  } catch (e) {
+    clusterPrint('✗ 请求失败：' + e.message, 'err');
+  } finally {
+    clearInterval(timer);
+    _clusterBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '执行'; }
+    var b2 = document.getElementById('cluster-cmd');
+    if (b2) b2.focus();
+  }
+}
+
+function clusterQuick(action) {
+  var sel = document.getElementById('cluster-mode');
+  if (sel) sel.value = action;
+  clusterModeChange();
+  clusterExec();
+}
+
 // 启动后检测
 setTimeout(checkFirstRun, 1000);
 
@@ -10497,5 +10823,51 @@ async function saveUpdateConfig(mode) {
     </div>
   </div>
 </div>
+<!-- === 远端集群控制台（2026-09-19）：WebUI 里直接敲 SSH 命令 / 交作业 === -->
+<div id="cluster-console">
+  <div class="cc-box">
+    <div class="cc-head">
+      <span class="cc-title">🖧 远端集群</span>
+      <span class="cc-chip" id="cluster-chip">读取配置中…</span>
+      <span class="cc-spacer"></span>
+      <button class="cc-btn" onclick="clusterQuick('check')">🔌 自检</button>
+      <button class="cc-btn" onclick="clusterQuick('jobs')">📋 作业</button>
+      <button class="cc-btn" onclick="clusterToggleCfg()">⚙️ 配置</button>
+      <button class="cc-btn" onclick="clusterClose()">✕ 关闭</button>
+    </div>
+    <div class="cc-cfg" id="cluster-cfg" style="display:none;">
+      <label>启用<input type="checkbox" id="cc-enabled"></label>
+      <label>登录节点 host<input id="cc-host" placeholder="cluster.example.edu"></label>
+      <label>端口<input id="cc-port" placeholder="22"></label>
+      <label>用户名<input id="cc-user" placeholder="yourname"></label>
+      <label>私钥路径<input id="cc-key" placeholder="C:/Users/you/.ssh/id_ed25519"></label>
+      <label>远端工作目录<input id="cc-workdir" placeholder="/home/you/project"></label>
+      <label>调度器<select id="cc-scheduler">
+        <option value="auto">auto（自动探测）</option>
+        <option value="slurm">slurm（sbatch）</option>
+        <option value="pbs">pbs（qsub）</option>
+        <option value="none">none（无调度器，直接后台跑）</option>
+      </select></label>
+      <label>Slurm 分区<input id="cc-partition" placeholder="debug / cpu"></label>
+      <label>PBS 队列<input id="cc-queue" placeholder="batch"></label>
+      <label>本地根目录<input id="cc-local-root" placeholder="E:/data"></label>
+      <label>远端根目录<input id="cc-remote-root" placeholder="/home/you/data"></label>
+      <label>超时秒<input id="cc-timeout" placeholder="300"></label>
+      <div class="cc-cfg-actions">
+        <button class="cc-btn primary" onclick="clusterSaveCfg(false)">💾 保存</button>
+        <button class="cc-btn" onclick="clusterSaveCfg(true)">💾 保存并自检</button>
+        <span id="cluster-cfg-note" class="cc-cfg-note"></span>
+      </div>
+    </div>
+    <div class="cc-out" id="cluster-out"></div>
+    <div class="cc-input">
+      <select id="cluster-mode" onchange="clusterModeChange()"></select>
+      <textarea id="cluster-cmd" rows="1" onkeydown="clusterKey(event)" placeholder="在这里输入命令，Enter 执行，Shift+Enter 换行"></textarea>
+      <button class="cc-btn primary" id="cluster-run-btn" onclick="clusterExec()">执行</button>
+    </div>
+    <div class="cc-hint" id="cluster-hint"></div>
+  </div>
+</div>
+
 </body>
 </html>

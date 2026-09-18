@@ -14338,6 +14338,139 @@ async def ws_endpoint(ws: WebSocket):
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
 
 
+# === 远端集群控制台（2026-09-19）===
+# 让用户直接在 WebUI 里敲 SSH 命令 / 交作业，不必先跟模型说话。三点取舍：
+#  1. 复用 remote_cluster 的 handler —— UI 与 agent 走同一条代码路径，行为不漂移；
+#  2. UI 里敲的命令是用户自己的操作，不过 rail_review / 辩论门禁（那是给模型看的闸）；
+#  3. 配置写回用「文本块替换」而不是 _hermes_config_write —— 后者整文件 yaml.dump，
+#     会把 config.yaml 的注释全抹掉（本机已被抹过一次，注释模板就是这么没的）。
+_CLUSTER_FIELDS = (
+    "enabled", "host", "user", "port", "key", "workdir", "scheduler",
+    "partition", "queue", "local_root", "remote_root", "timeout", "job_dir",
+)
+_CLUSTER_ACTIONS = ("check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs")
+
+
+def _cluster_mod():
+    from memomics.bio_tools import remote_cluster as _rc
+    return _rc
+
+
+def _cluster_view() -> dict:
+    """配置视图：只回显当前生效值，不建连接（连通性自检是单独的 action=check）。"""
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)
+    out = {k: cfg.get(k) for k in _CLUSTER_FIELDS}
+    out["enabled"] = bool(cfg.get("enabled"))
+    key = str(cfg.get("key") or "")
+    out["key_exists"] = bool(key) and os.path.exists(os.path.expanduser(key))
+    out["config_path"] = str(rc._get_config_path())
+    out["tool_visible"] = bool(rc.remote_cluster_enabled())
+    out["job_dir_effective"] = cfg.get("job_dir")
+    return out
+
+
+def _cluster_yaml_scalar(value) -> str:
+    """单引号 YAML 标量：Windows 路径里的反斜杠在单引号里是字面量，不会被转义吃掉。"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _cluster_write_config(values: dict) -> dict:
+    rc = _cluster_mod()
+    path = rc._get_config_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    lines = ["remote:"]
+    for key in _CLUSTER_FIELDS:
+        if key not in values:
+            continue
+        val = values[key]
+        if val is None or (isinstance(val, str) and not val.strip()):
+            continue  # 空值不落盘，回落默认
+        lines.append("  %s: %s" % (key, _cluster_yaml_scalar(val)))
+    block = "\n".join(lines) + "\n"
+    # 顶层 remote: 块（后续行必须缩进；注释行以 # 开头，不会被误吞）
+    pat = re.compile(r"(?m)^remote:[ \t]*\n(?:[ \t]+[^\n]*\n)*")
+    m = pat.search(text)
+    if m:
+        new_text = text[:m.start()] + block + text[m.end():]
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        new_text = text + block
+    # 落盘前先校验：新文件必须能解析出 remote 段，宁可写不进去也不写坏 config.yaml
+    import yaml as _yaml
+    parsed = _yaml.safe_load(new_text) or {}
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("remote"), dict):
+        raise ValueError("生成的 remote 段无法被 YAML 解析，已放弃写入（config.yaml 未改动）")
+    tmp = str(path) + ".cluster.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(new_text)
+    os.replace(tmp, path)
+    rc._load_remote_config(force=True)  # 清 mtime 缓存，下一个动作就用新配置
+    try:
+        from tools.registry import invalidate_check_fn_cache
+        invalidate_check_fn_cache()  # 让模型侧立刻看到工具出现/消失，不用重启
+    except Exception:
+        pass
+    return _cluster_view()
+
+
+@app.get("/api/cluster/status")
+async def api_cluster_status():
+    try:
+        return {"ok": True, "config": _cluster_view(), "actions": list(_CLUSTER_ACTIONS)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/cluster/config")
+async def api_cluster_config(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    values = {k: v for k, v in body.items() if k in _CLUSTER_FIELDS}
+    if not values:
+        return {"ok": False, "error": "没有可写入的字段（可选：%s）" % ", ".join(_CLUSTER_FIELDS)}
+    try:
+        return {"ok": True, "config": _cluster_write_config(values)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/cluster/exec")
+async def api_cluster_exec(request: Request):
+    """把 WebUI 的输入原样转给 remote_cluster（与 agent 同一个 handler）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    action = str(body.get("action") or "").strip().lower()
+    if action not in _CLUSTER_ACTIONS:
+        return {"ok": False, "error": "未知 action: %r（可选：%s）" % (action, ", ".join(_CLUSTER_ACTIONS))}
+    args = {k: v for k, v in body.items() if v is not None and v != ""}
+    args["action"] = action
+    try:
+        raw = _cluster_mod().remote_cluster_handler(args)
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
+
+
 if __name__ == "__main__":
     import uvicorn
     import time as _time
