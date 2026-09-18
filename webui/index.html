@@ -3212,25 +3212,32 @@ function _debateNotice(text) {
   scrollBottom();
 }
 
-async function loadLatestDebate(sid, tries) {
+async function loadLatestDebate(sid, tries, quiet) {
   tries = (tries === undefined) ? 3 : tries;
   if (!sid) return null;
   for (var i = 0; i < tries; i++) {
     try {
       var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest?ts=' + Date.now());
       if (r.status === 404) {
-        _debateNotice('辩论过程接口还没生效：这是服务端改动，重启 MemOmics 后再跑辩论即可看到表格');
+        // quiet=true（打开会话时静默补渲染）：服务端还没这个接口就什么都不提示，避免刷屏
+        if (!quiet) _debateNotice('辩论过程接口还没生效：这是服务端改动，重启 MemOmics 后再跑辩论即可看到表格');
         return null;
       }
       if (r.ok) {
         var j = await r.json();
-        if (j && j.ok) { renderDebateCard(j); return j; }
+        if (j && j.ok) {
+          // 打开会话时补渲染：用户已经切到别的会话就丢弃（防止卡片串到别的会话里）
+          if (quiet && sid !== currentSid) return null;
+          renderDebateCard(j); return j;
+        }
         if (i === tries - 1) {
-          _debateNotice(j && j.error ? ('没找到本会话的辩论归档：' + j.error) : '没找到本会话的辩论归档');
+          // 打开会话时本会话没有辩论归档 → 静默返回（绝大多数会话都没有辩论，不能弹提示）
+          if (!quiet) _debateNotice(j && j.error ? ('没找到本会话的辩论归档：' + j.error) : '没找到本会话的辩论归档');
           return null;
         }
       }
     } catch (e) { /* 归档可能正在写，重试 */ }
+    if (i === tries - 1) break;
     await new Promise(function (res) { setTimeout(res, 700); });
   }
   return null;
@@ -4527,6 +4534,9 @@ function loadAllMessages(sid) {
       else addAssistantMsg(m.content, m);
     });
     renderSessionStats(d.stats);
+    // 2026-09-18: 「加载全部消息」同样把辩论过程卡片补回来
+    _lastDebateSig = '';
+    loadLatestDebate(sid, 1, true);
   });
 }
 
@@ -4711,6 +4721,10 @@ function switchSession(sid) {
       else addAssistantMsg(m.content, m);
     });
     renderSessionStats(d.stats);
+    // 2026-09-18: 打开/切回会话时，把该会话最新一场辩论的过程卡片补渲染回来
+    // （此前只有「辩论刚跑完的那个页面」看得到卡片，刷新或切会话就消失了）
+    _lastDebateSig = '';
+    loadLatestDebate(sid, 1, true);
     if (liveBubble) {
       document.getElementById('messages').appendChild(liveBubble);
       currentAssistantEl = liveBubble;
