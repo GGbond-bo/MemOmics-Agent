@@ -2343,7 +2343,7 @@ function renderSessionStats(stats) {
 }
 
 // === 工具名显示映射 + token 格式化（2026-08-23） ===
-var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库' };
+var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库', remote_cluster:'集群执行' };
 function _toolLabel(n) { return _toolLabels[n] || n; }
 function _fmtTokens(n) {
   n = n || 0;

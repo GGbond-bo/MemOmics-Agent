@@ -126,6 +126,28 @@ ssh -L 8899:localhost:8899 user@cluster
 # 然后本地浏览器打开 http://localhost:8899
 ```
 
+### 在集群上跑作业（`remote_cluster` 工具）
+
+MemOmics 本体**不含**集群能力；要连集群需要在 `hermes_home/config.yaml` 里打开 `remote:` 段（见文件末尾注释模板，也可用 `MEMOMICS_REMOTE_HOST` 等环境变量覆盖）。没配 = 模型看不到这个工具，配了才出现。
+
+```yaml
+remote:
+  enabled: true
+  host: cluster.example.edu
+  user: yourname
+  key: C:/Users/you/.ssh/id_ed25519   # 只支持密钥登录（BatchMode，不弹密码）
+  workdir: /home/yourname/memomics
+  scheduler: auto                      # auto | slurm | pbs | none
+```
+
+工具动作：`check`（探测调度器/CPU/内存/已装工具）、`run`（同步跑一条命令）、`submit`（交作业，返回 job_id）、`status`/`logs`/`cancel`/`jobs`（作业管理）、`push`/`pull`（本地↔集群传文件，配了 `local_root`/`remote_root` 可自动换算路径）。
+
+**必须知道的三条边界**：
+
+1. **不会把执行搬过去**：`execute_r`/`execute_python` 的持久内核仍在本机跑。想在集群上算，得把代码写成脚本用 `submit`/`run` 送过去，再把产物 `pull` 回来。
+2. **不会把凭据同步过去**：复用的是 hermes 的 SSH 传输层，但**刻意跳过了**它默认的 `~/.hermes` 凭据/技能同步——登录节点是共享机器，不该落本地密钥。`push` 之后远端文件权限会被收紧成 0700/0600。
+3. **平台差异自动处理**：Windows 自带的 OpenSSH 没有连接复用（ControlMaster），工具会自动降级为每条命令新建连接；Linux/macOS 上自动复用。
+
 ### 多用户部署
 
 每个用户独立运行自己的 MemOmics 实例：

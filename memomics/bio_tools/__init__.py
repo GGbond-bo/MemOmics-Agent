@@ -24,3 +24,4 @@ from . import session_memory
 from . import vision_tool
 from . import reference_library
 from . import literature_library
+from . import remote_cluster

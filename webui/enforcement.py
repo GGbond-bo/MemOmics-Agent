@@ -107,6 +107,29 @@ _DEBATE_HIGH_IMPACT_TOOLS = {
 # 失败信号工具（terminal/脚本执行，重试≥2 或报错 → 升级 L2）
 _DEBATE_EXEC_TOOLS = {"terminal", "execute_r", "execute_python", "execute_code", "run_script"}
 
+# 远程集群工具（2026-09-19 接入）：复合工具，只有真在集群上跑代码的 action
+# 才算"执行类"（要过辩论门控/审查门禁/报错重试检测）；check/status/logs/jobs/
+# push/pull/cancel 是只读或运维动作，不该被当成执行代码拦下来。
+_REMOTE_CLUSTER_TOOL = "remote_cluster"
+_REMOTE_CLUSTER_EXEC_ACTIONS = {"run", "submit"}
+
+
+def _args_as_dict(args):
+    if isinstance(args, dict):
+        return args
+    try:
+        return json.loads(str(args))
+    except Exception:
+        return {}
+
+
+def _is_exec_call(tool_name: str, args) -> bool:
+    """这次调用是否算"执行代码"（门禁/重试/参数核查共用判定）。"""
+    if tool_name == _REMOTE_CLUSTER_TOOL:
+        action = str(_args_as_dict(args).get("action") or "").strip().lower()
+        return action in _REMOTE_CLUSTER_EXEC_ACTIONS
+    return tool_name in _DEBATE_EXEC_TOOLS
+
 # 参数核查清单规则（2026-08-13）：按代码关键词定向注入核查项——零 token
 # 成本（纯字符串匹配，不跑 R、不调 LLM），意图识别=关键词命中。只在该
 # 类代码执行前出现在辩论门控消息里，引导 agent 辩脚本设计时逐项核查，
@@ -446,7 +469,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
 
         # P0-1: es.blocked 置位（rail_review pre/post 未通过）→ 拦截执行类工具
         # 修复类工具不在 _DEBATE_EXEC_TOOLS，天然放行。
-        if es.blocked and tool_name in _DEBATE_EXEC_TOOLS:
+        if es.blocked and _is_exec_call(tool_name, args):
             # 2026-08-17 重试风暴压制（memomics-0228a136 案例：单响应 150+ 次
             # execute_r 被拦，模型疯狂重试烧 token）：第 2 次起注入强制引导，
             # 让模型停止重试执行工具、先跑 rail_review 解绑。
@@ -498,7 +521,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                   topic=t, count=es.debate_count,
                   message=f"💬 辩论 #{es.debate_count} 开始" + (f": {t}" if t else ""))
 
-        elif tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal":
+        elif _is_exec_call(tool_name, args) and tool_name != "terminal":
             # P2(2026-08-10): 失败重试信号 — execute_r/python/code 同命令重试计数
             # 参数键兼容 command/code/script（execute_r/python 用 code，terminal 用 command）
             _cmd = ""
@@ -622,7 +645,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         if len(es.tool_history) > 200:
             es.tool_history = es.tool_history[-200:]
 
-        if tool_name == "terminal" or (tool_name in _DEBATE_EXEC_TOOLS and tool_name != "terminal"):
+        if tool_name == "terminal" or (_is_exec_call(tool_name, args) and tool_name != "terminal"):
             es.rail_post_done = False
             # 2026-08-14: 只读观察命令不进入沉淀/审查门禁
             _cmd = ""
