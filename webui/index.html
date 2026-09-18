@@ -437,6 +437,25 @@ table.dcb-table th.dt-no-h { width:30px; }
 table.dcb-table td.dt-no { width:30px; text-align:center; font-family:ui-monospace,Consolas,monospace;
   font-size:11px; font-weight:700; color:var(--text-light); background:var(--tool-bg); }
 table.dcb-table.dcb-cmp { margin-top:6px; }
+/* 整理稿用「文本清单」呈现：大标题 → 角色 → 1/2/3 条陈述 → 论据行 */
+.dg-h { margin:15px 0 5px; font-size:12px; font-weight:700; color:var(--text); }
+.dg-h .dg-h-n { margin-left:8px; font-size:10px; font-weight:600; color:var(--text-light); }
+.dg-role { margin:11px 0 5px; }
+.dg-role .dg-role-n { margin-left:7px; font-size:10px; color:var(--text-light); }
+.dg-item { display:flex; gap:7px; margin:7px 0 7px 4px; }
+.dg-no { flex:0 0 18px; height:18px; line-height:17px; text-align:center; border-radius:9px;
+  background:var(--tool-bg); border:1px solid var(--border); font-size:10px; font-weight:700;
+  color:var(--text-light); font-family:ui-monospace,Consolas,monospace; }
+.dg-body { flex:1; min-width:0; }
+.dg-claim { font-size:12px; color:var(--text); line-height:1.6; }
+.dg-line { margin-top:4px; font-size:11px; color:var(--text); line-height:1.55; }
+.dg-ev { margin-top:5px; font-size:10.5px; color:var(--text-light); line-height:1.7; }
+.dg-k { display:inline-block; margin-right:5px; padding:0 5px; border-radius:8px; background:var(--tool-bg);
+  border:1px solid var(--border); font-size:10px; font-weight:600; color:var(--text-light); }
+.dg-st { margin-left:7px; font-size:10px; color:var(--text-light); }
+.dg-st.warn { color:var(--warning); }
+.dg-note { margin-top:3px; font-size:10px; color:var(--text-light); line-height:1.55; }
+.dg-note-i { margin-left:7px; font-size:10px; color:var(--text-light); }
 .dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
 .dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
 .dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
@@ -3125,31 +3144,51 @@ function _dtWhoChip(s) {
   return '<span class="dt-who">' + _dtEsc(t) + '</span>';
 }
 
-// 一方论点 → 带序号（1,2,3…）的表；每行都写清「出处角色 + 清晰陈述 + 论据锚点」
-function _dtDigestPointTable(list, side, subTitle, subNote) {
+// 一方论点 → 纯文本清单：按「角色」分组，每个角色自己的 1、2、3…
+// 例：✅ 正方支持的理由 → 生物学编辑 1/2/3 条 → 统计学编辑 重新从 1 开始。
+function _dtDigestSideText(list, side, subTitle) {
   var s = _DT_SIDE[side] || _DT_SIDE.pro;
-  var h = '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">' + s.icon + ' ' + subTitle +
-          '<span class="n">' + subNote + '</span></div>';
-  h += '<table class="dcb-table dcb-cmp"><thead><tr><th class="dt-no-h">#</th>' +
-       '<th style="width:104px">出处（' + s.label + '角色）</th><th>清晰陈述</th>' +
-       '<th class="dt-ev-h">论据（只允许引用原文出现过的锚点）</th></tr></thead><tbody>';
-  for (var i = 0; i < list.length; i++) h += _dtDigestPointRow(list[i], side, i + 1);
-  return h + '</tbody></table>';
+  var groups = [], idx = {}, i;
+  for (i = 0; i < list.length; i++) {
+    var p = list[i] || {};
+    var key = String(p.source_role || '') || '__none';
+    if (!idx[key]) {
+      var lb = _dtRoleLabel(key === '__none' ? '' : key) || '未标注出处';
+      // 角色名本身常带立场前缀（"正方·生物学编辑"）→ 分组标题里已经写了立场，去掉重复
+      if (lb.indexOf(s.label + '·') === 0) lb = lb.slice(s.label.length + 1);
+      idx[key] = { label: lb, points: [] };
+      groups.push(idx[key]);
+    }
+    idx[key].points.push(p);
+  }
+  var h = '<div class="dg-h">' + s.icon + ' ' + subTitle +
+          '<span class="dg-h-n">共 ' + list.length + ' 条 · 每个角色各自从 1 编号</span></div>';
+  for (i = 0; i < groups.length; i++) {
+    var gr = groups[i];
+    var anyDraft = false;
+    for (var d0 = 0; d0 < gr.points.length; d0++) if (gr.points[d0] && gr.points[d0].draft_flag) anyDraft = true;
+    h += '<div class="dg-role"><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + ' · ' +
+         _dtEsc(gr.label) + '</span><span class="dg-role-n">' + gr.points.length + ' 条</span>' +
+         (anyDraft ? '<span class="chip warn" title="该角色没按 JSON 契约输出，下面的条目是从它的推理草稿里整理出来的">⚠️ 草稿</span>' : '') +
+         '</div>';
+    for (var j = 0; j < gr.points.length; j++) h += _dtDigestPointBlock(gr.points[j], j + 1);
+  }
+  return h;
 }
 
-function _dtDigestPointRow(p, side, no) {
+// 一条陈述 = 一句话 + 一行论据（文本形式，不用表格）
+function _dtDigestPointBlock(p, no) {
   p = p || {};
-  var s = _DT_SIDE[side] || _DT_SIDE.pro;
-  var h = '<tr><td class="dt-no">' + (no || 1) + '</td>' +
-          '<td class="dt-side"><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + '</span>' +
-          '<div class="who">' + _dtEsc(_dtRoleLabel(p.source_role || '') || '未标注') + '</div></td>';
-  h += '<td><div class="claim-t">' + _dtEsc(p.claim || '') + '</div>';
-  if (p.draft_flag) h += '<span class="chip warn" title="该角色没按 JSON 契约输出，这条是从它的推理草稿里整理出来的">⚠️ 来自草稿</span>';
-  if (p.note) h += '<div class="claim-l"><span class="k">备注</span><span class="kv">' + _dtEsc(p.note) + '</span></div>';
-  h += '</td>';
-  h += '<td class="dt-ev">' + (p.evidence ? _dtAnchors(p.evidence) : '<span class="dcb-empty">未写依据</span>') +
-       (p.evidence_status ? ' ' + _dtEvStatusChip(p.evidence_status) : '') + '</td></tr>';
-  return h;
+  var h = '<div class="dg-item"><span class="dg-no">' + (no || 1) + '</span><div class="dg-body">' +
+          '<div class="dg-claim">' + _dtEsc(p.claim || '') + '</div>' +
+          '<div class="dg-ev"><span class="dg-k">论据</span>' +
+          (p.evidence ? _dtAnchors(p.evidence) : '<span class="dcb-empty">原文没有写依据</span>') +
+          (p.evidence_status ? '<span class="dg-st">' + _dtEsc(p.evidence_status) + '</span>' : '') +
+          (p.draft_flag ? '<span class="dg-st warn" title="该角色没按 JSON 契约输出，这条是从它的推理草稿里整理出来的">来自草稿</span>' : '') +
+          '</div>';
+  // 「未按契约输出/取自草稿」这类通用说明已在角色分组标题上标出，不再逐条重复
+  if (p.note && String(p.note).indexOf('草稿') < 0) h += '<div class="dg-note">' + _dtEsc(p.note) + '</div>';
+  return h + '</div></div>';
 }
 
 // 诚实性检查：整理稿里引用、但各方发言原文里找不到的锚点（整理者自己补的证据）
@@ -3230,7 +3269,7 @@ function _dtDigestSection(db) {
   var drafts = Array.isArray(g.draft_roles) ? g.draft_roles : [];
   if (!pro.length && !con.length && !cfs.length && !agree.length && !gaps.length && !g.summary) return '';
   var h = '<div class="dcb-sec"><div class="dcb-sec-h">🧾 首席编辑整理：各方言论与论据' +
-    '<span class="n">裁判裁决前先把所有角色（含只交了草稿的）压成一条条清晰陈述；依据写「找不到论据」= 原文没有任何外部证据支撑，不能当成已证实</span></div>';
+    '<span class="n">裁决前先把所有角色（含只交了草稿的）写成文字总结：每个角色的论点按 1/2/3 列出，后面跟一行论据来源；「找不到论据」= 原文没有任何外部证据支撑，不能当成已证实</span></div>';
   h += '<div class="dcb-side" style="margin-bottom:7px">';
   if (db.digestModel) h += '<span class="chip mono" title="执行这次整理的模型（与裁判同一路由）">整理者 ' + _dtEsc(db.digestModel) + '</span>';
   if (db.digestCallId) h += '<span class="dcb-call">#' + _dtEsc(db.digestCallId) + '</span>';
@@ -3241,12 +3280,8 @@ function _dtDigestSection(db) {
   if (db.digestRepaired) h += '<span class="chip warn" title="整理模型第一次只给了推理草稿，重试一次（仅格式化）才输出 JSON">整理重试 1 次</span>';
   h += '</div>';
   if (g.summary) h += '<div class="dcb-verdict-text">' + _dtEsc(g.summary) + '</div>';
-  if (pro.length) {
-    h += _dtDigestPointTable(pro, 'pro', '正方支持的理由', pro.length + ' 条 · 按 1/2/3 编号，逐条给出处与论据');
-  }
-  if (con.length) {
-    h += _dtDigestPointTable(con, 'con', '反方反对的理由', con.length + ' 条 · 按 1/2/3 编号，逐条给出处与论据');
-  }
+  if (pro.length) h += _dtDigestSideText(pro, 'pro', '正方支持的理由');
+  if (con.length) h += _dtDigestSideText(con, 'con', '反方反对的理由');
   if (!pro.length && !con.length && !cfs.length) {
     h += '<div class="dcb-empty">整理稿里没有给出任何论点条目</div>';
   }
@@ -3257,27 +3292,29 @@ function _dtDigestSection(db) {
     h += '</ol>';
   }
   if (cfs.length) {
-    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">⚡ 争议点对照<span class="n">正反在同一问题上给出相反判断时逐条摆明</span></div>';
-    h += '<table class="dcb-table"><thead><tr><th class="dt-no-h">#</th><th style="width:24%">争议点</th><th>✅ 正方主张</th><th>❌ 反方主张</th><th style="width:30%">谁的证据更硬</th></tr></thead><tbody>';
+    h += '<div class="dg-h">⚡ 争议点对照<span class="dg-h-n">同一问题上正反给出相反判断' +
+         (cfs.length > 1 ? '，共 ' + cfs.length + ' 条' : '') + '</span></div>';
     for (k = 0; k < cfs.length; k++) {
       var c = cfs[k] || {};
-      h += '<tr><td class="dt-no">' + (k + 1) + '</td><td class="dcb-role">' + _dtEsc(c.issue || '') + '</td>' +
-           '<td>' + _dtEsc(c.pro || '') + '</td>' +
-           '<td>' + _dtEsc(c.con || '') + '</td>' +
-           '<td>' + _dtWhoChip(c.who_has_evidence) +
-           (c.judgement ? '<div class="claim-l"><span class="kv">' + _dtEsc(c.judgement) + '</span></div>' : '') + '</td></tr>';
+      h += '<div class="dg-item"><span class="dg-no">' + (k + 1) + '</span><div class="dg-body">' +
+           '<div class="dg-claim">' + _dtEsc(c.issue || '') + '</div>' +
+           '<div class="dg-line"><span class="dg-k">正方</span>' + _dtEsc(c.pro || '—') + '</div>' +
+           '<div class="dg-line"><span class="dg-k">反方</span>' + _dtEsc(c.con || '—') + '</div>' +
+           '<div class="dg-ev"><span class="dg-k">谁的证据更硬</span>' + _dtWhoChip(c.who_has_evidence) +
+           (c.judgement ? '<span class="dg-note-i">' + _dtEsc(c.judgement) + '</span>' : '') + '</div>' +
+           '</div></div>';
     }
-    h += '</tbody></table>';
   }
   if (gaps.length) {
-    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🕳️ 证据缺口<span class="n">要有这些证据才能把结论坐实（找不到就如实列在这里）</span></div>';
-    h += '<table class="dcb-table"><thead><tr><th class="dt-no-h">#</th><th style="width:36%">待证实的结论</th><th>缺什么证据 / 数据</th><th style="width:110px">谁提的</th></tr></thead><tbody>';
+    h += '<div class="dg-h">🕳️ 证据缺口<span class="dg-h-n">要有这些证据才能把结论坐实；找不到就如实列在这里</span></div>';
     for (k = 0; k < gaps.length; k++) {
       var gg = gaps[k] || {};
-      h += '<tr><td class="dt-no">' + (k + 1) + '</td><td>' + _dtEsc(gg.claim || '') + '</td><td>' + _dtEsc(gg.missing || '') + '</td>' +
-           '<td class="dcb-role">' + _dtEsc(_dtRoleLabel(gg.source_role || '') || '未标注') + '</td></tr>';
+      h += '<div class="dg-item"><span class="dg-no">' + (k + 1) + '</span><div class="dg-body">' +
+           '<div class="dg-claim">' + _dtEsc(gg.claim || '') + '</div>' +
+           '<div class="dg-ev"><span class="dg-k">缺什么</span>' + _dtEsc(gg.missing || '') + '</div>' +
+           '<div class="dg-ev"><span class="dg-k">谁提的</span>' + _dtEsc(_dtRoleLabel(gg.source_role || '') || '未标注') + '</div>' +
+           '</div></div>';
     }
-    h += '</tbody></table>';
   }
   var extra = _dtDigestExtraAnchors(db);
   if (extra.length) {

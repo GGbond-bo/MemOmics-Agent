@@ -613,6 +613,7 @@ _JUDGE_DIGEST_PROMPT = """你是这场多角色辩论的**首席整理编辑**�
 4. **找不到就老实承认**：原文没有任何外部证据支撑的陈述，evidence 写 "[找不到论据]"，evidence_status 写 "无外部证据"。不要为了让清单好看而补证据——裁判要靠这个判断该不该下结论。
 5. **草稿必须标出来**：草稿角色的观点照实整理，但 draft_flag 写 true，note 里写明「该角色未按契约输出，本节取自推理草稿」。
 6. **正反冲突要摆明**：双方对同一问题给出相反判断 → 写成一条 conflicts；谁的证据更硬写谁，都没证据就写 "双方都没有证据"。
+7. **按角色成组**：每条陈述都要写清 source_role（用上面发言块标题里的角色名/角色键）。同一个角色的同类陈述合并成一条，不同角色的论点不要混进同一条——展示时会按「正方·生物学编辑 1/2/3…、正方·统计学编辑 1/2/3…、反方·生物学编辑 1/2/3…」分组，漏掉某个角色等于判它没说话。
 
 ## 输出格式（严格 JSON，不要输出任何其他文字，不要用代码块包裹）
 {{"pro_points": [{{"claim": "一句清晰的陈述", "evidence": "[PMID:…] / [数据:…]", "evidence_status": "有外部证据|仅推理|无外部证据", "source_role": "pro_biology", "draft_flag": false, "note": ""}}], "con_points": [{{"claim": "…", "evidence": "…", "evidence_status": "…", "source_role": "con_biology", "draft_flag": false, "note": ""}}], "agreements": ["双方都认同的点"], "conflicts": [{{"issue": "争议点", "pro": "正方主张", "con": "反方主张", "who_has_evidence": "正方|反方|双方都有|双方都没有证据", "judgement": "一句话说明为什么"}}], "evidence_gaps": [{{"claim": "需要证据支撑的结论", "missing": "缺什么证据/数据", "source_role": "谁提的"}}], "draft_roles": ["未按契约输出、只给了草稿的角色"], "summary": "≤200字：这场辩论真正吵清楚的是什么，卡在什么地方"}}"""
@@ -633,8 +634,9 @@ _JUDGE_DIGEST_REPAIR_PROMPT = """你上一步已经把辩论整理分析做完�
 1. 只允许使用原始发言里出现过的内容与锚点；没有证据的陈述 evidence 写 "[找不到论据]"，evidence_status 写 "无外部证据"。
 2. 结构必须是这个 JSON：
 {{"pro_points": [{{"claim": "一句清晰的陈述", "evidence": "[PMID:…] / [数据:…] / [找不到论据]", "evidence_status": "有外部证据|仅推理|无外部证据", "source_role": "pro_biology", "draft_flag": false, "note": ""}}], "con_points": [{{"claim": "…", "evidence": "…", "evidence_status": "…", "source_role": "con_biology", "draft_flag": false, "note": ""}}], "agreements": ["双方都认同的点"], "conflicts": [{{"issue": "争议点", "pro": "正方主张", "con": "反方主张", "who_has_evidence": "正方|反方|双方都有|双方都没有证据", "judgement": "一句话说明为什么"}}], "evidence_gaps": [{{"claim": "需要证据支撑的结论", "missing": "缺什么证据/数据", "source_role": "谁提的"}}], "draft_roles": ["未按契约输出、只给了草稿的角色"], "summary": "≤200字：这场辩论真正吵清楚的是什么，卡在什么地方"}}
-3. 如果你上一步的输出里确实没有任何可整理的内容，就输出 {{"pro_points": [], "con_points": [], "agreements": [], "conflicts": [], "evidence_gaps": [], "draft_roles": [], "summary": "整理失败：原文没有可用内容"}}。
-4. 直接输出 JSON 本身，前后不要有任何字符。"""
+3. 每条陈述都要带 source_role（角色名/角色键），同一角色的同类陈述合并成一条，不同角色不要混在一条里。
+4. 如果你上一步的输出里确实没有任何可整理的内容，就输出 {{"pro_points": [], "con_points": [], "agreements": [], "conflicts": [], "evidence_gaps": [], "draft_roles": [], "summary": "整理失败：原文没有可用内容"}}。
+5. 直接输出 JSON 本身，前后不要有任何字符。"""
 
 
 def _digest_parse(txt: str):
