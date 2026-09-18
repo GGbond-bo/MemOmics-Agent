@@ -427,6 +427,16 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 .anchor.kb { background:rgba(96,125,205,0.14); color:var(--primary); border-color:rgba(96,125,205,0.3); }
 .anchor.data { background:rgba(63,158,106,0.12); color:var(--success); border-color:rgba(63,158,106,0.28); }
 .anchor.sum { background:var(--tool-bg); }
+.anchor.none { background:rgba(216,67,107,0.12); color:var(--danger); border-color:rgba(216,67,107,0.3); }
+.chip.warn { color:var(--warning); border-color:rgba(224,135,42,0.35); background:rgba(224,135,42,0.10); }
+.dcb-note { margin-top:7px; font-size:11px; color:var(--text-light); }
+table.dcb-table td.dt-side { width:104px; background:var(--tool-bg); }
+table.dcb-table td.dt-side .who { margin-top:4px; font-size:10px; color:var(--text-light); font-weight:600; }
+table.dcb-table th.dt-ev-h { width:34%; }
+.dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
+.dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
+.dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
+.dt-who.none { color:var(--danger); border-color:rgba(216,67,107,0.45); background:rgba(216,67,107,0.16); font-weight:700; }
 .lv { display:inline-block; font-size:10px; font-weight:700; padding:0 5px; border-radius:6px; margin-left:5px; }
 .lv-P { background:rgba(63,158,106,0.16); color:var(--success); }
 .lv-C { background:rgba(96,125,205,0.16); color:var(--primary); }
@@ -2677,6 +2687,7 @@ function _dtAnchors(ev) {
     else if (/^数据$/i.test(kk) || /^DATA$/i.test(kk)) cls = 'data';
     return '<span class="anchor ' + cls + '" title="证据锚点：' + _dtEsc(kk) + '">' + _dtEsc(kk) + (v ? ':' + _dtEsc(v) : '') + '</span>';
   });
+  out = out.replace(/\[\s*(找不到论据|找不到证据|未找到证据|无证据)\s*\]/g, '<span class="anchor none" title="原文没有任何外部证据支撑这条陈述">找不到论据</span>');
   out = out.replace(/\[\s*(仅是推理|推理|无外部证据|推断)\s*\]/g, '<span class="anchor infer" title="该论点没有外部证据支撑，只是推理">仅是推理</span>');
   return out;
 }
@@ -2885,7 +2896,12 @@ function normalizeDebate(d) {
     isolation: d.isolation_verification || d.isolation || null,
     failedRoles: d.failed_role_ids || [], failDetails: d.failed_role_details || null,
     draftRoles: d.draft_only_roles || [], note: d.note || '', error: !!d.error,
-    anchors: [], modelNote: ''
+    anchors: [], modelNote: '',
+    // 2026-09-18 v3：裁判整理稿（后端 judge_digest）。旧归档没有这些字段 → null/''，卡片照常渲染
+    digest: (d.judge_digest && typeof d.judge_digest === 'object') ? d.judge_digest : null,
+    digestModel: d.judge_digest_model || '', digestCallId: d.judge_digest_call_id || '',
+    digestError: d.judge_digest_error || '', digestRaw: d.judge_digest_raw || '',
+    digestNote: d.judge_digest_note || '', digestRepaired: !!d.judge_digest_repaired
   };
   function mkCell(rec, model, callId, score) {
     return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
@@ -3014,6 +3030,7 @@ function _dtHeaderHtml(db, meta) {
   if (db.modelSummary.length) h += '<span class="chip">' + db.modelSummary.length + ' 个模型</span>';
   else if (db.models.length) h += '<span class="chip">模型未记录</span>';
   if (db.draftRoles && db.draftRoles.length) h += '<span class="chip">草稿角色 ' + db.draftRoles.length + '</span>';
+  if (db.digest) h += '<span class="chip" title="裁决前已由首席整理编辑把草稿整理成清晰陈述">🧾 已整理</span>';
   if (db.failed) h += '<span class="chip con">⚠️ 有角色失败</span>';
   h += '<span class="dcb-act" onclick="reloadDebateCard(this)">🔄 重新加载</span>';
   h += '</div>';
@@ -3079,6 +3096,148 @@ function _dtNeutralSection(db) {
          (n.callId ? '<span class="dcb-call">#' + _dtEsc(n.callId) + '</span>' : '') + '</div>' +
          _dtBodyHtml(n.cell.arg, 'pro') + '</div>';
   }
+  return h + '</div>';
+}
+
+// ============ 裁判整理稿（2026-09-18 v3：草稿 → 清晰言论 + 论据）============
+// 后端在正式裁决前多跑一个「首席整理编辑」（归档字段 judge_digest），把每个角色的
+// 草稿/JSON/长篇推理压成一句条清单：正反分开、每条带依据、没证据就写「找不到论据」。
+// 这里只负责如实展示，不做任何美化；整理失败时显示失败原因并退回原文裁决。
+function _dtEvStatusChip(st) {
+  var s = String(st || '');
+  if (s.indexOf('无外部证据') >= 0) return '<span class="chip con" title="原文没有给出任何外部证据">无外部证据</span>';
+  if (s.indexOf('仅推理') >= 0 || s.indexOf('仅推理') >= 0) return '<span class="chip warn" title="只有推理链条，没有外部证据">仅推理</span>';
+  if (s.indexOf('有外部证据') >= 0) return '<span class="chip pro" title="依据里含 PMID/DOI/KB/数据 锚点">有外部证据</span>';
+  return s ? '<span class="chip">' + _dtEsc(s) + '</span>' : '';
+}
+
+function _dtWhoChip(s) {
+  var t = String(s || '');
+  if (!t) return '';
+  if (t.indexOf('双方都没有') >= 0) return '<span class="dt-who none" title="两边都拿不出证据">' + _dtEsc(t) + '</span>';
+  if (t.indexOf('双方都有') >= 0) return '<span class="dt-who" title="两边都有证据，需要仲裁">' + _dtEsc(t) + '</span>';
+  if (t.indexOf('正方') >= 0) return '<span class="dt-who pro" title="整理者判断正方证据更硬">' + _dtEsc(t) + '</span>';
+  if (t.indexOf('反方') >= 0) return '<span class="dt-who con" title="整理者判断反方证据更硬">' + _dtEsc(t) + '</span>';
+  return '<span class="dt-who">' + _dtEsc(t) + '</span>';
+}
+
+function _dtDigestPointRow(p, side) {
+  p = p || {};
+  var s = _DT_SIDE[side] || _DT_SIDE.pro;
+  var h = '<tr><td class="dt-side"><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + '</span>' +
+          '<div class="who">' + _dtEsc(_dtRoleLabel(p.source_role || '') || '未标注') + '</div></td>';
+  h += '<td><div class="claim-t">' + _dtEsc(p.claim || '') + '</div>';
+  if (p.draft_flag) h += '<span class="chip warn" title="该角色没按 JSON 契约输出，这条是从它的推理草稿里整理出来的">⚠️ 来自草稿</span>';
+  if (p.note) h += '<div class="claim-l"><span class="k">备注</span><span class="kv">' + _dtEsc(p.note) + '</span></div>';
+  h += '</td>';
+  h += '<td class="dt-ev">' + (p.evidence ? _dtAnchors(p.evidence) : '<span class="dcb-empty">未写依据</span>') +
+       (p.evidence_status ? ' ' + _dtEvStatusChip(p.evidence_status) : '') + '</td></tr>';
+  return h;
+}
+
+// 诚实性检查：整理稿里引用、但各方发言原文里找不到的锚点（整理者自己补的证据）
+function _dtDigestExtraAnchors(db) {
+  var raw = {}, i, out = [];
+  for (i = 0; i < (db.anchors || []).length; i++) {
+    var a = db.anchors[i];
+    if (a.type === '仅是推理') continue;
+    raw[a.type + '|' + a.value] = true;
+  }
+  var g = db.digest || {}, evs = [];
+  function push(arr) {
+    for (var k = 0; k < (arr || []).length; k++) {
+      if (arr[k] && arr[k].evidence) evs.push({ raw: String(arr[k].evidence), claims: [] });
+    }
+  }
+  push(g.pro_points); push(g.con_points);
+  var list = _dtCollectAnchors(evs);
+  for (i = 0; i < list.length; i++) {
+    if (list[i].type === '仅是推理') continue;
+    if (!raw[list[i].type + '|' + list[i].value]) out.push(list[i]);
+  }
+  return out;
+}
+
+function _dtDigestSection(db) {
+  var g = db.digest;
+  if (!g || typeof g !== 'object') {
+    // 整理这一步失败（模型两次都没吐出 JSON）：也要如实显示，不能悄悄退回原文
+    if (!db.digestError) return '';
+    return '<div class="dcb-sec"><div class="dcb-sec-h">🧾 首席编辑整理' +
+           '<span class="n">裁判裁决前的一次「草稿 → 清晰清单」整理</span></div>' +
+           '<div class="dcb-note">⚠️ 整理这一步失败：' + _dtEsc(db.digestError) +
+           '（本次裁决直接按各方原文给出，未使用整理稿）</div></div>';
+  }
+  var pro = Array.isArray(g.pro_points) ? g.pro_points : [];
+  var con = Array.isArray(g.con_points) ? g.con_points : [];
+  var agree = Array.isArray(g.agreements) ? g.agreements : [];
+  var cfs = Array.isArray(g.conflicts) ? g.conflicts : [];
+  var gaps = Array.isArray(g.evidence_gaps) ? g.evidence_gaps : [];
+  var drafts = Array.isArray(g.draft_roles) ? g.draft_roles : [];
+  if (!pro.length && !con.length && !cfs.length && !agree.length && !gaps.length && !g.summary) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">🧾 首席编辑整理：各方言论与论据' +
+    '<span class="n">裁判裁决前先把所有角色（含只交了草稿的）压成一条条清晰陈述；依据写「找不到论据」= 原文没有任何外部证据支撑，不能当成已证实</span></div>';
+  h += '<div class="dcb-side" style="margin-bottom:7px">';
+  if (db.digestModel) h += '<span class="chip mono" title="执行这次整理的模型（与裁判同一路由）">整理者 ' + _dtEsc(db.digestModel) + '</span>';
+  if (db.digestCallId) h += '<span class="dcb-call">#' + _dtEsc(db.digestCallId) + '</span>';
+  h += '<span class="chip pro">正方 ' + pro.length + ' 条</span><span class="chip con">反方 ' + con.length + ' 条</span>';
+  if (agree.length) h += '<span class="chip">共识 ' + agree.length + '</span>';
+  if (cfs.length) h += '<span class="chip">争议 ' + cfs.length + '</span>';
+  if (gaps.length) h += '<span class="chip warn">缺证据 ' + gaps.length + '</span>';
+  if (db.digestRepaired) h += '<span class="chip warn" title="整理模型第一次只给了推理草稿，重试一次（仅格式化）才输出 JSON">整理重试 1 次</span>';
+  h += '</div>';
+  if (g.summary) h += '<div class="dcb-verdict-text">' + _dtEsc(g.summary) + '</div>';
+  if (pro.length || con.length) {
+    h += '<table class="dcb-table" style="margin-top:9px"><thead><tr><th style="width:104px">立场 / 出处</th>' +
+         '<th>清晰陈述</th><th class="dt-ev-h">论据（只允许引用原文出现过的锚点）</th></tr></thead><tbody>';
+    for (var i = 0; i < pro.length; i++) h += _dtDigestPointRow(pro[i], 'pro');
+    for (var j = 0; j < con.length; j++) h += _dtDigestPointRow(con[j], 'con');
+    h += '</tbody></table>';
+  } else if (!cfs.length) {
+    h += '<div class="dcb-empty">整理稿里没有给出任何论点条目</div>';
+  }
+  var k;
+  if (agree.length) {
+    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🤝 双方都认同<span class="n">这些点没有争议</span></div><ul class="dcb-list">';
+    for (k = 0; k < agree.length; k++) h += '<li>' + _dtEsc(agree[k]) + '</li>';
+    h += '</ul>';
+  }
+  if (cfs.length) {
+    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">⚡ 争议点对照<span class="n">正反在同一问题上给出相反判断时逐条摆明</span></div>';
+    h += '<table class="dcb-table"><thead><tr><th style="width:24%">争议点</th><th>✅ 正方主张</th><th>❌ 反方主张</th><th style="width:30%">谁的证据更硬</th></tr></thead><tbody>';
+    for (k = 0; k < cfs.length; k++) {
+      var c = cfs[k] || {};
+      h += '<tr><td class="dcb-role">' + _dtEsc(c.issue || '') + '</td>' +
+           '<td>' + _dtEsc(c.pro || '') + '</td>' +
+           '<td>' + _dtEsc(c.con || '') + '</td>' +
+           '<td>' + _dtWhoChip(c.who_has_evidence) +
+           (c.judgement ? '<div class="claim-l"><span class="kv">' + _dtEsc(c.judgement) + '</span></div>' : '') + '</td></tr>';
+    }
+    h += '</tbody></table>';
+  }
+  if (gaps.length) {
+    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🕳️ 证据缺口<span class="n">要有这些证据才能把结论坐实（找不到就如实列在这里）</span></div>';
+    h += '<table class="dcb-table"><thead><tr><th style="width:38%">待证实的结论</th><th>缺什么证据 / 数据</th><th style="width:110px">谁提的</th></tr></thead><tbody>';
+    for (k = 0; k < gaps.length; k++) {
+      var gg = gaps[k] || {};
+      h += '<tr><td>' + _dtEsc(gg.claim || '') + '</td><td>' + _dtEsc(gg.missing || '') + '</td>' +
+           '<td class="dcb-role">' + _dtEsc(_dtRoleLabel(gg.source_role || '') || '未标注') + '</td></tr>';
+    }
+    h += '</tbody></table>';
+  }
+  var extra = _dtDigestExtraAnchors(db);
+  if (extra.length) {
+    h += '<div class="dcb-note">⚠️ 整理稿里有 ' + extra.length + ' 个锚点在各方发言原文中找不到（可能来自证据卡，也可能是整理时补的），请抽查：';
+    for (k = 0; k < extra.length; k++) h += _dtAnchorChip(extra[k]);
+    h += '</div>';
+  }
+  if (drafts.length) {
+    h += '<div class="dcb-note">⚠️ 本场未按契约输出、只交草稿的角色（上面的条目已标明「来自草稿」）：';
+    for (k = 0; k < drafts.length; k++) h += '<span class="chip warn">' + _dtEsc(_dtRoleLabel(drafts[k])) + '</span> ';
+    h += '</div>';
+  }
+  if (db.digestNote) h += '<div class="dcb-note">ℹ️ ' + _dtEsc(db.digestNote) + '</div>';
+  if (db.digestError) h += '<div class="dcb-note">⚠️ 整理这一步失败：' + _dtEsc(db.digestError) + '（本次裁决直接按原文给出，未使用整理稿）</div>';
   return h + '</div>';
 }
 
@@ -3174,6 +3333,7 @@ function debateTableHtml(db, meta) {
   h += _dtSeatsSection(db);
   h += _dtEvidenceSection(db);
   h += _dtNeutralSection(db);
+  h += _dtDigestSection(db);   // 2026-09-18 v3：草稿 → 清晰言论 + 论据（裁决前的整理稿）
   h += _dtJudgeSection(db);
   h += _dtFootHtml(db, meta);
   return h + '</div>';
