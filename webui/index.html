@@ -68,6 +68,22 @@
   --primary: #8d5524; --primary-light: #f0e0c0; --accent: #c49a5c; --success: #5d8a3c;
   --warning: #b06a00; --danger: #a33a2a; --tool-bg: #f7ecd6; --code-bg: #3a2a1a; --code-fg: #f5e6c8;
 }
+[data-theme="pink"] {
+  --bg: #fff2f8;
+  --panel: #ffffff;
+  --border: #ffd2e5;
+  --text: #4b2237;
+  --text-light: #a4768d;
+  --primary: #cf3f74;
+  --primary-light: #ffe4f1;
+  --accent: #ff9ec4;
+  --success: #3f9e6a;
+  --warning: #e0872a;
+  --danger: #d8436b;
+  --tool-bg: #fff6fb;
+  --code-bg: #46223a;
+  --code-fg: #ffeaf4;
+}
 
 /* === 羊皮纸质感层（仅 parchment 主题；其他主题默认隐藏，零影响） === */
 body::before {
@@ -88,6 +104,180 @@ html[data-theme="parchment"] body::before {
     /* 泛黄底色渐变 */
     linear-gradient(160deg, #f6e9ce 0%, #efdcb8 60%, #e9d2a8 100%);
 }
+
+/* === 樱花粉装饰层（仅 pink 主题；其他主题 display:none，零影响） === */
+body::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; display:none; }
+html[data-theme="pink"] body::before {
+  display:block;
+  background:
+    /* 樱花 / 小爱心 / 花瓣图案（稀疏平铺） */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='%23ff8fbc' fill-opacity='0.26'%3E%3Cpath d='M50 52c-8-5-16-11-16-19 0-5 4-9 9-9 3 0 6 2 7 4 1-2 4-4 7-4 5 0 9 4 9 9 0 8-8 14-16 19z'/%3E%3C/g%3E%3Cg fill='%23ffa9cb' fill-opacity='0.30'%3E%3Ccircle cx='130' cy='112' r='6'/%3E%3Ccircle cx='138' cy='118' r='6'/%3E%3Ccircle cx='135' cy='127' r='6'/%3E%3Ccircle cx='125' cy='127' r='6'/%3E%3Ccircle cx='122' cy='118' r='6'/%3E%3C/g%3E%3Cg fill='%23ffd0e4' fill-opacity='0.45'%3E%3Ccircle cx='130' cy='120' r='3.5'/%3E%3C/g%3E%3Cg fill='%23ffb3d1' fill-opacity='0.34'%3E%3Ccircle cx='95' cy='70' r='2.6'/%3E%3Ccircle cx='20' cy='150' r='3'/%3E%3Ccircle cx='168' cy='40' r='2.2'/%3E%3Ccircle cx='85' cy='166' r='2.2'/%3E%3C/g%3E%3C/svg%3E"),
+    /* 四角柔光晕 */
+    radial-gradient(circle at 10% 12%, rgba(255,173,208,0.55) 0%, rgba(255,173,208,0) 38%),
+    radial-gradient(circle at 92% 8%, rgba(255,214,234,0.65) 0%, rgba(255,214,234,0) 36%),
+    radial-gradient(circle at 82% 88%, rgba(255,164,203,0.42) 0%, rgba(255,164,203,0) 42%),
+    radial-gradient(circle at 16% 86%, rgba(255,201,226,0.50) 0%, rgba(255,201,226,0) 40%),
+    /* 白色小圆点网格 */
+    radial-gradient(rgba(255,255,255,0.85) 1.4px, transparent 1.8px) 0 0/36px 36px,
+    /* 底色渐变 */
+    linear-gradient(165deg, #fff7fb 0%, #ffeaf4 46%, #ffdcec 100%);
+}
+html[data-theme="pink"] body::after {
+  display:block;
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.70) 0%, rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 72% 74%, rgba(255,182,214,0.32) 0%, rgba(255,182,214,0) 52%);
+  animation: pinkDrift 26s ease-in-out infinite alternate;
+}
+@keyframes pinkDrift {
+  from { transform: translate3d(-2%, -1.5%, 0) scale(1.02); }
+  to   { transform: translate3d(2.5%, 2%, 0) scale(1.06); }
+}
+
+/* 樱花粉：面板 / 卡片 / 气泡的粉系打磨 */
+html[data-theme="pink"] .sidebar {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,240,247,0.90) 100%);
+  box-shadow: 6px 0 24px rgba(226,110,163,0.10);
+}
+html[data-theme="pink"] .sidebar-header {
+  position: relative;
+  background:
+    /* 蕾丝花边（下缘一排半圆） */
+    radial-gradient(circle 5px at 9px 0, #ffd9e9 0 5px, rgba(255,217,233,0) 5.5px) bottom left/18px 9px repeat-x,
+    linear-gradient(135deg, #ffe6f2 0%, #fff6fb 58%, #ffeaf4 100%);
+  border-bottom: 1px solid #ffc9de;
+}
+html[data-theme="pink"] .sidebar-header h1::after { content:"🌸"; font-size:14px; display:inline-block; transform-origin:50% 60%; animation:pdBeat 3.6s ease-in-out infinite; }
+html[data-theme="pink"] .sidebar-header::after {
+  content:""; position:absolute; top:12px; right:16px; width:34px; height:24px;
+  transform-origin:50% 60%;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 30'%3E%3Cpath d='M20 20 L15 29 L22 26 L29 29 L24 20 Z' fill='%23ff8fc0'/%3E%3Cpath d='M19 15 C14 11 6 5 3 6 C1 7 1 23 3 24 C6 25 14 19 19 15 Z' fill='%23ffaed2'/%3E%3Cpath d='M25 15 C30 11 38 5 41 6 C43 7 43 23 41 24 C38 25 30 19 25 15 Z' fill='%23ffaed2'/%3E%3Ccircle cx='22' cy='15' r='4.6' fill='%23cf3f74'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 2px 3px rgba(207,63,116,0.25));
+  animation: pdBow 6s ease-in-out infinite;
+}
+@keyframes pdBow { 0%,100% { transform:rotate(-5deg); } 50% { transform:rotate(5deg); } }
+@keyframes pdBeat { 0%,100% { transform:scale(1) rotate(-6deg); } 45% { transform:scale(1.18) rotate(6deg); } }
+html[data-theme="pink"] .chat-header {
+  padding-bottom: 16px;
+  background:
+    radial-gradient(circle 5px at 9px 0, #ffd9e9 0 5px, rgba(255,217,233,0) 5.5px) bottom left/18px 9px repeat-x,
+    linear-gradient(90deg, #fff5fa 0%, #ffe9f3 50%, #fff5fa 100%);
+  border-bottom: 1px solid #ffc9de;
+}
+html[data-theme="pink"] .chat-header .title::before { content:"🌸 "; }
+html[data-theme="pink"] .new-session-btn {
+  background: linear-gradient(135deg, #e0558d 0%, #b93064 100%);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(207,63,116,0.28);
+  letter-spacing: 0.5px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+html[data-theme="pink"] .new-session-btn:hover { transform: translateY(-1px); box-shadow: 0 7px 18px rgba(229,85,143,0.34); opacity:1; }
+html[data-theme="pink"] .session-item:hover { background: #fff2f8; }
+html[data-theme="pink"] .session-item.active {
+  background: linear-gradient(90deg, #ffe4f1 0%, #fff6fb 100%);
+  border-radius: 0 8px 8px 0;
+}
+html[data-theme="pink"] .chat-input {
+  background: linear-gradient(180deg, rgba(255,246,251,0.86) 0%, rgba(255,236,245,0.96) 100%);
+  border-top: 1px dashed #ffc9de;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -6px 18px rgba(226,110,163,0.08);
+}
+html[data-theme="pink"] .message.user .bubble {
+  background: linear-gradient(135deg, #e0558d 0%, #b93064 100%);
+  color:#fff;
+  border-radius: 14px 14px 4px 14px;
+  box-shadow: 0 6px 16px rgba(207,63,116,0.26);
+}
+html[data-theme="pink"] .message.assistant .bubble {
+  background: rgba(255,255,255,0.94);
+  border: 1px solid #ffd9e9;
+  border-radius: 14px 14px 14px 4px;
+  box-shadow: 0 6px 18px rgba(226,110,163,0.10);
+}
+html[data-theme="pink"] .tool-block { background: rgba(255,247,252,0.92); border-color:#ffd9e9; border-radius:10px; }
+html[data-theme="pink"] .reasoning-block { border-color:#ffd9e9; border-radius:10px; }
+html[data-theme="pink"] .theme-btn.active { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 3px rgba(229,85,143,0.15); }
+html[data-theme="pink"] ::-webkit-scrollbar-thumb { background:#ffb8d5; }
+html[data-theme="pink"] ::-webkit-scrollbar-thumb:hover { background:#ff9ec4; }
+html[data-theme="pink"] ::selection { background:#ffc9de; color:#4b2237; }
+
+/* === 🌸 少女感点缀（2026-09-18）：飘落花瓣 / 爱心呼吸 / 星星闪烁 ——— 只在 pink 主题下显示 === */
+.pink-decor { display:none; }
+html[data-theme="pink"] .pink-decor { display:block; position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+html[data-theme="pink"] .pink-decor i { position:absolute; top:0; left:var(--x,50%); width:var(--w,10px); height:var(--w,10px); opacity:0; will-change:transform; }
+
+/* 飘落花瓣（椭圆尖角花瓣，边落边转） */
+html[data-theme="pink"] .pink-decor i.pd-petal {
+  border-radius:150% 0 150% 0;
+  background:linear-gradient(135deg, #ffe4f0 0%, #ff9ec4 68%, #ff86b6 100%);
+  box-shadow:0 0 6px rgba(255,158,196,0.40);
+  animation:pdFall var(--d,28s) linear infinite;
+  animation-delay:var(--delay,0s);
+}
+@keyframes pdFall {
+  0%   { transform:translate3d(0,-14vh,0) rotate(0deg); opacity:0; }
+  6%   { opacity:var(--o,0.5); }
+  50%  { transform:translate3d(5vw,50vh,0) rotate(200deg); }
+  94%  { opacity:var(--o,0.5); }
+  100% { transform:translate3d(-3vw,112vh,0) rotate(400deg); opacity:0; }
+}
+
+/* 爱心（原地轻轻浮动，像心跳） */
+html[data-theme="pink"] .pink-decor i.pd-heart {
+  top:var(--y,24%);
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='30 22 40 32'%3E%3Cpath d='M50 52c-8-5-16-11-16-19 0-5 4-9 9-9 3 0 6 2 7 4 1-2 4-4 7-4 5 0 9 4 9 9 0 8-8 14-16 19z' fill='%23ff9ec4'/%3E%3C/svg%3E") center/contain no-repeat;
+  animation:pdBob var(--d,11s) ease-in-out infinite alternate;
+  animation-delay:var(--delay,0s);
+}
+@keyframes pdBob {
+  from { transform:translateY(-7px) rotate(-7deg) scale(0.92); opacity:calc(var(--o,0.4) * 0.7); }
+  to   { transform:translateY(9px) rotate(7deg) scale(1.06);  opacity:var(--o,0.4); }
+}
+
+/* 四角星星（一闪一闪） */
+html[data-theme="pink"] .pink-decor i.pd-spark {
+  top:var(--y,30%);
+  background:linear-gradient(135deg, #ffffff 0%, #ffd0e4 100%);
+  clip-path:polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  animation:pdSpark var(--d,7s) ease-in-out infinite;
+  animation-delay:var(--delay,0s);
+}
+@keyframes pdSpark {
+  0%,100% { opacity:0; transform:scale(0.5) rotate(0deg); }
+  50%     { opacity:var(--o,0.7); transform:scale(1.1) rotate(45deg); }
+}
+
+/* 侧边栏：导航项悬停冒出小爱心，当前页面是实心 ♥ */
+html[data-theme="pink"] .nav-item::after {
+  content:"♡"; margin-left:auto; font-size:12px; color:var(--primary);
+  opacity:0; transform:scale(0.7); transition:opacity 0.2s, transform 0.2s;
+}
+html[data-theme="pink"] .nav-item:hover::after { opacity:0.8; transform:scale(1.15); }
+html[data-theme="pink"] .nav-item.active::after { content:"♥"; opacity:0.9; transform:scale(1); }
+
+/* 会话列表：当前会话挂一颗心（鼠标移上去让位给删除按钮） */
+html[data-theme="pink"] .session-item { padding-right:24px; }
+html[data-theme="pink"] .session-item.active::after {
+  content:"♥"; position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  font-size:11px; color:var(--primary); opacity:0.85; transition:opacity 0.15s;
+}
+html[data-theme="pink"] .session-item.active:hover::after { opacity:0; }
+
+/* 消息：角色名前面挂一颗心；列表符号换成 ♡ */
+html[data-theme="pink"] .message .role::before { content:"♡ "; color:var(--primary); }
+html[data-theme="pink"] .message .bubble ul > li::marker { content:"♡  "; color:var(--primary); }
+html[data-theme="pink"] .message .bubble ol > li::marker { color:var(--primary); font-weight:600; }
+
+/* 动效敏感 / 省电模式：关掉动画，只留静态粉色 */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="pink"] .pink-decor { display:none; }
+  html[data-theme="pink"] body::after { animation:none; }
+  html[data-theme="pink"] .sidebar-header::after,
+  html[data-theme="pink"] .sidebar-header h1::after { animation:none; }
+}
+
 body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; transition:background 0.3s; }
 .app { display:flex; height:100vh; }
 
@@ -634,6 +824,27 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 </style>
 </head>
 <body>
+<div class="pink-decor" aria-hidden="true">
+  <i class="pd-petal" style="--x:6%;--w:11px;--d:26s;--delay:-3s;--o:0.55"></i>
+  <i class="pd-petal" style="--x:16%;--w:8px;--d:34s;--delay:-14s;--o:0.45"></i>
+  <i class="pd-petal" style="--x:25%;--w:13px;--d:29s;--delay:-21s;--o:0.5"></i>
+  <i class="pd-petal" style="--x:34%;--w:9px;--d:38s;--delay:-7s;--o:0.42"></i>
+  <i class="pd-petal" style="--x:43%;--w:12px;--d:24s;--delay:-16s;--o:0.55"></i>
+  <i class="pd-petal" style="--x:52%;--w:8px;--d:31s;--delay:-11s;--o:0.45"></i>
+  <i class="pd-petal" style="--x:61%;--w:14px;--d:27s;--delay:-5s;--o:0.5"></i>
+  <i class="pd-petal" style="--x:70%;--w:10px;--d:36s;--delay:-19s;--o:0.42"></i>
+  <i class="pd-petal" style="--x:79%;--w:12px;--d:23s;--delay:-9s;--o:0.55"></i>
+  <i class="pd-petal" style="--x:88%;--w:9px;--d:33s;--delay:-24s;--o:0.45"></i>
+  <i class="pd-petal" style="--x:30%;--w:7px;--d:44s;--delay:-30s;--o:0.35"></i>
+  <i class="pd-petal" style="--x:66%;--w:7px;--d:41s;--delay:-2s;--o:0.35"></i>
+  <i class="pd-heart" style="--x:20%;--y:22%;--w:15px;--d:11s;--delay:-2s;--o:.40"></i>
+  <i class="pd-heart" style="--x:74%;--y:58%;--w:12px;--d:13s;--delay:-6s;--o:.35"></i>
+  <i class="pd-heart" style="--x:47%;--y:12%;--w:10px;--d:9s;--delay:-4s;--o:.30"></i>
+  <i class="pd-spark" style="--x:26%;--y:30%;--w:12px;--d:7s;--delay:-1s;--o:.70"></i>
+  <i class="pd-spark" style="--x:82%;--y:18%;--w:10px;--d:9s;--delay:-3s;--o:.60"></i>
+  <i class="pd-spark" style="--x:58%;--y:72%;--w:13px;--d:8s;--delay:-5s;--o:.65"></i>
+  <i class="pd-spark" style="--x:36%;--y:56%;--w:9px;--d:6s;--delay:-2.5s;--o:.55"></i>
+</div>
 <script>
 // === 界面语言 i18n（v1: 主要界面文案，中/英切换，localStorage 持久化） ===
 var I18N = {
@@ -4670,6 +4881,7 @@ var THEME_PRESETS = [
   {id:'eye',   label:'🌿 护眼', bg:'#e8f3e8', dark:false},
   {id:'sci',   label:'🔬 科研', bg:'#f4f6f8', dark:false},
   {id:'parchment', label:'📜 羊皮纸', bg:'#f2e3c6', dark:false},
+  {id:'pink', label:'🎀 少女粉', bg:'#ffe4f0', dark:false},
 ];
 function renderThemeButtons() {
   var box = document.getElementById('theme-options');
