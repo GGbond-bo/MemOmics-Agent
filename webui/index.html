@@ -433,6 +433,10 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 table.dcb-table td.dt-side { width:104px; background:var(--tool-bg); }
 table.dcb-table td.dt-side .who { margin-top:4px; font-size:10px; color:var(--text-light); font-weight:600; }
 table.dcb-table th.dt-ev-h { width:34%; }
+table.dcb-table th.dt-no-h { width:30px; }
+table.dcb-table td.dt-no { width:30px; text-align:center; font-family:ui-monospace,Consolas,monospace;
+  font-size:11px; font-weight:700; color:var(--text-light); background:var(--tool-bg); }
+table.dcb-table.dcb-cmp { margin-top:6px; }
 .dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
 .dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
 .dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
@@ -3121,10 +3125,23 @@ function _dtWhoChip(s) {
   return '<span class="dt-who">' + _dtEsc(t) + '</span>';
 }
 
-function _dtDigestPointRow(p, side) {
+// 一方论点 → 带序号（1,2,3…）的表；每行都写清「出处角色 + 清晰陈述 + 论据锚点」
+function _dtDigestPointTable(list, side, subTitle, subNote) {
+  var s = _DT_SIDE[side] || _DT_SIDE.pro;
+  var h = '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">' + s.icon + ' ' + subTitle +
+          '<span class="n">' + subNote + '</span></div>';
+  h += '<table class="dcb-table dcb-cmp"><thead><tr><th class="dt-no-h">#</th>' +
+       '<th style="width:104px">出处（' + s.label + '角色）</th><th>清晰陈述</th>' +
+       '<th class="dt-ev-h">论据（只允许引用原文出现过的锚点）</th></tr></thead><tbody>';
+  for (var i = 0; i < list.length; i++) h += _dtDigestPointRow(list[i], side, i + 1);
+  return h + '</tbody></table>';
+}
+
+function _dtDigestPointRow(p, side, no) {
   p = p || {};
   var s = _DT_SIDE[side] || _DT_SIDE.pro;
-  var h = '<tr><td class="dt-side"><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + '</span>' +
+  var h = '<tr><td class="dt-no">' + (no || 1) + '</td>' +
+          '<td class="dt-side"><span class="chip ' + s.cls + '">' + s.icon + ' ' + s.label + '</span>' +
           '<div class="who">' + _dtEsc(_dtRoleLabel(p.source_role || '') || '未标注') + '</div></td>';
   h += '<td><div class="claim-t">' + _dtEsc(p.claim || '') + '</div>';
   if (p.draft_flag) h += '<span class="chip warn" title="该角色没按 JSON 契约输出，这条是从它的推理草稿里整理出来的">⚠️ 来自草稿</span>';
@@ -3143,6 +3160,41 @@ function _dtDigestExtraAnchors(db) {
     if (a.type === '仅是推理') continue;
     raw[a.type + '|' + a.value] = true;
   }
+  // 原始发言文本（草稿也算）：模型只交草稿时 claims 解析不出锚点，但草稿正文里
+  // 往往照样写到了 PMID/数据 —— 只要原文里出现过，就不能报「整理者自己补的」。
+  var hay = '';
+  function feed(t) { if (t) hay += String(t) + '\u0001'; }
+  for (i = 0; i < (db.cells || []).length; i++) feed(db.cells[i] && db.cells[i].text);
+  for (i = 0; i < (db.neutrals || []).length; i++) feed(db.neutrals[i] && db.neutrals[i].cell && db.neutrals[i].cell.text);
+  if (db.judge) { feed(db.judge.text); feed(db.judge.reasoning); }
+  for (i = 0; i < (db.seats || []).length; i++) {
+    var st = db.seats[i] || {};
+    if (st.pro && st.pro.arg) feed(st.pro.arg.text);
+    if (st.con && st.con.arg) feed(st.con.arg.text);
+  }
+  hay = hay.replace(/[\s\u3000]+/g, '');
+  function numsOf(s) {
+    var m = String(s || '').match(/\d[\d.,]*\d|\d/g) || [];
+    return m.map(function (x) { return x.replace(/[.,]+$/, ''); });
+  }
+  var hayNum = '|' + numsOf(hay).join('|') + '|';
+  // 原文里出现过就算「有据可依」：先整串比对；整串对不上（草稿转述时措辞/空格不同）
+  // 再看数字指纹 —— 数据锚点只要大部分数字都在原文里出现过，就不该报「整理者自己补的」。
+  function inRawText(v) {
+    var s = String(v || '').replace(/[\s\u3000]+/g, '');
+    if (s.length > 3 && hay.indexOf(s) >= 0) return true;
+    var ns = numsOf(v);
+    if (!ns.length) return false;
+    var hit = 0, seen = {};
+    for (var q = 0; q < ns.length; q++) {
+      if (seen[ns[q]]) continue;
+      seen[ns[q]] = 1;
+      if (hayNum.indexOf('|' + ns[q] + '|') >= 0) hit++;
+    }
+    var uniq = 0;
+    for (var kk in seen) if (seen.hasOwnProperty(kk)) uniq++;
+    return uniq ? (hit / uniq) >= 0.6 : false;
+  }
   var g = db.digest || {}, evs = [];
   function push(arr) {
     for (var k = 0; k < (arr || []).length; k++) {
@@ -3153,7 +3205,9 @@ function _dtDigestExtraAnchors(db) {
   var list = _dtCollectAnchors(evs);
   for (i = 0; i < list.length; i++) {
     if (list[i].type === '仅是推理') continue;
-    if (!raw[list[i].type + '|' + list[i].value]) out.push(list[i]);
+    if (raw[list[i].type + '|' + list[i].value]) continue;
+    if (inRawText(list[i].value)) continue;
+    out.push(list[i]);
   }
   return out;
 }
@@ -3187,27 +3241,27 @@ function _dtDigestSection(db) {
   if (db.digestRepaired) h += '<span class="chip warn" title="整理模型第一次只给了推理草稿，重试一次（仅格式化）才输出 JSON">整理重试 1 次</span>';
   h += '</div>';
   if (g.summary) h += '<div class="dcb-verdict-text">' + _dtEsc(g.summary) + '</div>';
-  if (pro.length || con.length) {
-    h += '<table class="dcb-table" style="margin-top:9px"><thead><tr><th style="width:104px">立场 / 出处</th>' +
-         '<th>清晰陈述</th><th class="dt-ev-h">论据（只允许引用原文出现过的锚点）</th></tr></thead><tbody>';
-    for (var i = 0; i < pro.length; i++) h += _dtDigestPointRow(pro[i], 'pro');
-    for (var j = 0; j < con.length; j++) h += _dtDigestPointRow(con[j], 'con');
-    h += '</tbody></table>';
-  } else if (!cfs.length) {
+  if (pro.length) {
+    h += _dtDigestPointTable(pro, 'pro', '正方支持的理由', pro.length + ' 条 · 按 1/2/3 编号，逐条给出处与论据');
+  }
+  if (con.length) {
+    h += _dtDigestPointTable(con, 'con', '反方反对的理由', con.length + ' 条 · 按 1/2/3 编号，逐条给出处与论据');
+  }
+  if (!pro.length && !con.length && !cfs.length) {
     h += '<div class="dcb-empty">整理稿里没有给出任何论点条目</div>';
   }
   var k;
   if (agree.length) {
-    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🤝 双方都认同<span class="n">这些点没有争议</span></div><ul class="dcb-list">';
+    h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🤝 双方都认同<span class="n">这些点没有争议（1/2/3…）</span></div><ol class="dcb-list">';
     for (k = 0; k < agree.length; k++) h += '<li>' + _dtEsc(agree[k]) + '</li>';
-    h += '</ul>';
+    h += '</ol>';
   }
   if (cfs.length) {
     h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">⚡ 争议点对照<span class="n">正反在同一问题上给出相反判断时逐条摆明</span></div>';
-    h += '<table class="dcb-table"><thead><tr><th style="width:24%">争议点</th><th>✅ 正方主张</th><th>❌ 反方主张</th><th style="width:30%">谁的证据更硬</th></tr></thead><tbody>';
+    h += '<table class="dcb-table"><thead><tr><th class="dt-no-h">#</th><th style="width:24%">争议点</th><th>✅ 正方主张</th><th>❌ 反方主张</th><th style="width:30%">谁的证据更硬</th></tr></thead><tbody>';
     for (k = 0; k < cfs.length; k++) {
       var c = cfs[k] || {};
-      h += '<tr><td class="dcb-role">' + _dtEsc(c.issue || '') + '</td>' +
+      h += '<tr><td class="dt-no">' + (k + 1) + '</td><td class="dcb-role">' + _dtEsc(c.issue || '') + '</td>' +
            '<td>' + _dtEsc(c.pro || '') + '</td>' +
            '<td>' + _dtEsc(c.con || '') + '</td>' +
            '<td>' + _dtWhoChip(c.who_has_evidence) +
@@ -3217,10 +3271,10 @@ function _dtDigestSection(db) {
   }
   if (gaps.length) {
     h += '<div class="dcb-sec-h" style="margin:12px 0 4px;font-size:11px">🕳️ 证据缺口<span class="n">要有这些证据才能把结论坐实（找不到就如实列在这里）</span></div>';
-    h += '<table class="dcb-table"><thead><tr><th style="width:38%">待证实的结论</th><th>缺什么证据 / 数据</th><th style="width:110px">谁提的</th></tr></thead><tbody>';
+    h += '<table class="dcb-table"><thead><tr><th class="dt-no-h">#</th><th style="width:36%">待证实的结论</th><th>缺什么证据 / 数据</th><th style="width:110px">谁提的</th></tr></thead><tbody>';
     for (k = 0; k < gaps.length; k++) {
       var gg = gaps[k] || {};
-      h += '<tr><td>' + _dtEsc(gg.claim || '') + '</td><td>' + _dtEsc(gg.missing || '') + '</td>' +
+      h += '<tr><td class="dt-no">' + (k + 1) + '</td><td>' + _dtEsc(gg.claim || '') + '</td><td>' + _dtEsc(gg.missing || '') + '</td>' +
            '<td class="dcb-role">' + _dtEsc(_dtRoleLabel(gg.source_role || '') || '未标注') + '</td></tr>';
     }
     h += '</tbody></table>';
