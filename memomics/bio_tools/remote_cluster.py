@@ -93,6 +93,7 @@ _ENV_MAP = {
     "scheduler": "MEMOMICS_REMOTE_SCHEDULER",
     "local_root": "MEMOMICS_REMOTE_LOCAL_ROOT",
     "remote_root": "MEMOMICS_REMOTE_REMOTE_ROOT",
+    "timeout": "MEMOMICS_REMOTE_TIMEOUT",
 }
 
 _DEFAULT_CFG = {
@@ -914,6 +915,22 @@ def _action_submit(cfg: dict, args: dict) -> str:
     })
 
 
+def _expand_job_pattern(path: str, job_id: str, name: str = "", user: str = "") -> str:
+    """展开 Slurm --output/--error 路径里的占位符（%j/%A/%x/%u...）。
+
+    sbatch 提交时作业文件名带 %j，由 Slurm 在落盘时展开成真实文件名；我们事后再
+    按记录里的模板去找日志，就必须自己展开——否则永远读到 "No such file or
+    directory"（实测 job 1/4/6/7 全部踩到，state 也因此只能给 UNKNOWN）。
+    """
+    if not path or "%" not in path or not job_id:
+        return path
+    out = path.replace("%%", "\x00")           # %% 是字面量百分号，先保护起来
+    for k, v in (("%j", job_id), ("%J", job_id), ("%A", job_id), ("%a", "0"),
+                 ("%x", name or "memomics"), ("%u", user or "")):
+        out = out.replace(k, str(v))
+    return out.replace("\x00", "%")
+
+
 def _derive_state(sched: str, output: str) -> str:
     """从 status 命令输出里判断作业状态。
 
@@ -936,12 +953,24 @@ def _derive_state(sched: str, output: str) -> str:
         for st in ("PENDING", "RUNNING", "COMPLETING", "CONFIGURING", "SUSPENDED"):
             if st in section:
                 return st
+        # 作业一离开队列 squeue 就查不到；scontrol 还能看到刚结束的作业（Slurm 默认
+        # MinJobAge=300s 内保留），最后才退到 sacct（需要 accounting 数据库——很多
+        # 单机/test 集群是关的，实测 "Slurm accounting storage is disabled"）。
+        m = re.search(r"== scontrol ==\n(.*?)(?=\n== |\Z)", text, re.S)
+        section = (m.group(1) if m else "").upper()
+        for st in ("COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
+                   "NODE_FAIL", "PREEMPTED"):
+            if st in section:
+                return st
         m = re.search(r"== sacct ==\n(.*?)(?=\n== |\Z)", text, re.S)
         section = (m.group(1) if m else "").upper()
         for st in ("COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY",
                    "NODE_FAIL", "PREEMPTED"):
             if st in section:
                 return st
+        if "ACCOUNTING STORAGE IS DISABLED" in text.upper():
+            return ("UNKNOWN(队列与 scontrol 都没记录，sacct 未启用 accounting；"
+                    "作业大概率已结束——直接 action='logs' 看输出)")
         return "UNKNOWN"
     m = re.search(r"job_state\s*=\s*(\w+)", text)
     return m.group(1).upper() if m else "UNKNOWN"
@@ -964,9 +993,12 @@ def _action_status(cfg: dict, args: dict) -> str:
     if sched == "auto":
         sched, _ = _detect_scheduler(conn, cfg)
     if sched == "slurm":
+        qid = shlex.quote(job_id)
         cmd = ("echo '== squeue =='; squeue -j %s -h -o '%%T %%M %%R' 2>&1; "
+               "echo '== scontrol =='; (scontrol show job %s 2>&1 "
+               "| grep -E 'JobState|RunTime|ExitCode' | head -5); "
                "echo '== sacct =='; (sacct -j %s --format=JobID,State,Elapsed,ExitCode -P -n 2>&1 | head -5)"
-               % (shlex.quote(job_id), shlex.quote(job_id)))
+               % (qid, qid, qid))
     elif sched == "pbs":
         cmd = ("echo '== qstat =='; (qstat -f %s 2>&1 | grep -E 'job_state|exec_host|resources_used' "
                "|| qstat -x %s 2>&1 | grep -E 'job_state' || echo 'not in queue')"
@@ -983,8 +1015,13 @@ def _action_status(cfg: dict, args: dict) -> str:
         else:
             cmd = ("ps -p %s -o pid=,etime=,stat=,cmd= 2>/dev/null || echo 'not running'"
                    % shlex.quote(job_id))
+    out_path = err_path = ""
     if rec and rec.get("stdout"):
-        cmd += "\necho '== log tail =='; tail -n 15 %s 2>/dev/null || echo '(no log yet)'" % shlex.quote(str(rec["stdout"]))
+        out_path = _expand_job_pattern(str(rec["stdout"]), job_id,
+                                       str(rec.get("name") or ""), cfg["user"])
+        err_path = _expand_job_pattern(str(rec.get("stderr") or ""), job_id,
+                                       str(rec.get("name") or ""), cfg["user"])
+        cmd += "\necho '== log tail =='; tail -n 15 %s 2>/dev/null || echo '(no log yet)'" % shlex.quote(out_path)
     res = conn.execute(cmd, timeout=max(cfg["timeout"], 120))
     output = (res.get("output") or "").strip()
     state = _derive_state(sched, output)
@@ -992,31 +1029,42 @@ def _action_status(cfg: dict, args: dict) -> str:
         "job_id": job_id, "scheduler": sched, "name": (rec or {}).get("name"),
         "state": state,
         **({"note": "未指定 job_id，用的是最近一次提交"} if assumed else {}),
-        "stdout": (rec or {}).get("stdout"), "stderr": (rec or {}).get("stderr"),
+        "stdout": out_path or (rec or {}).get("stdout"),
+        "stderr": err_path or (rec or {}).get("stderr"),
         "output": _truncate(output, cfg["max_output_chars"]),
     })
 
 
 def _action_logs(cfg: dict, args: dict) -> str:
     lines = int(args.get("lines") or 100)
+    job_id = str(args.get("job_id") or "").strip()
     path = (args.get("path") or "").strip()
+    rec = _find_job(cfg, job_id) if job_id else None
     if not path:
-        job_id = str(args.get("job_id") or "")
-        rec = _find_job(cfg, job_id) if job_id else None
         if rec is None:
             recent = [r for r in _iter_jobs(20) if r.get("host") == cfg["host"]]
             if len(recent) == 1:
                 rec = recent[0]
         if rec is not None:
+            job_id = job_id or str(rec.get("job_id") or "")
             path = str(rec.get("stdout") or "")
     if not path:
         return _err("logs 需要 job_id（最近一次提交）或 path（远端日志文件）")
     conn = _get_conn(cfg)
-    err_path = path[:-4] + ".err" if path.endswith(".out") else path
-    cmd = ("echo '== %s =='; tail -n %d %s 2>&1; echo '== stderr =='; "
-           "if [ -f %s ]; then tail -n %d %s; else echo '(no stderr file)'; fi"
-           % (path, lines, shlex.quote(path), shlex.quote(err_path),
-              max(lines // 4, 20), shlex.quote(err_path)))
+    # 记录里存的是作业文件名模板（slurm 是 %j 形式），读之前必须展开成真实文件名
+    name = str((rec or {}).get("name") or "")
+    path = _expand_job_pattern(path, job_id, name, cfg["user"])
+    err_path = (_expand_job_pattern(str((rec or {}).get("stderr") or ""), job_id, name, cfg["user"])
+                or (path[:-4] + ".err" if path.endswith(".out") else path))
+    same_file = posixpath.normpath(err_path) == posixpath.normpath(path)
+    if same_file:
+        # 无调度器分支的作业脚本把 stdout/stderr 合并写同一个日志，别再重复打印一遍
+        cmd = "echo '== %s =='; tail -n %d %s 2>&1" % (path, lines, shlex.quote(path))
+    else:
+        cmd = ("echo '== %s =='; tail -n %d %s 2>&1; echo '== stderr =='; "
+               "if [ -f %s ]; then tail -n %d %s; else echo '(no stderr file)'; fi"
+               % (path, lines, shlex.quote(path), shlex.quote(err_path),
+                  max(lines // 4, 20), shlex.quote(err_path)))
     res = conn.execute(cmd, timeout=max(cfg["timeout"], 120))
     return _ok({
         "path": path, "lines": lines, "exit_code": res.get("returncode"),
@@ -1068,9 +1116,9 @@ def _action_jobs(cfg: dict, args: dict) -> str:
         cmd = "qstat -u \"$USER\" 2>&1 | head -30"
     else:
         # 无调度器时只列本工具提交的作业（按作业目录过滤），避免把登录节点进程全倒出来
-        cmd = ("ps -u \"$USER\" -o pid=,etime=,cmd= 2>/dev/null | grep -F %s | grep -v grep "
-               "| cut -c1-160 | head -30 || echo '(没有本工具提交的作业在跑)'"
-               % shlex.quote(cfg["job_dir"]))
+        cmd = ("out=$(ps -u \"$USER\" -o pid=,etime=,cmd= 2>/dev/null | grep -F %s | grep -v grep "
+               "| cut -c1-160 | head -30); if [ -n \"$out\" ]; then echo \"$out\"; "
+               "else echo '(没有本工具提交的作业在跑)'; fi" % shlex.quote(cfg["job_dir"]))
     res = conn.execute(cmd, timeout=max(cfg["timeout"], 120))
     return _ok({
         "scheduler": sched,
@@ -1125,12 +1173,15 @@ SCHEMA = {
         "用法：先 action='check' 自检（连通性/调度器/资源/工作目录），再决定 run 还是 submit。\n"
         "  • run    —— 在登录节点跑**轻量**命令（ls/du/head/which/环境自检）。"
         "禁止在登录节点跑重计算，会被管理员封号。\n"
-        "  • submit —— 生成作业脚本并提交（Slurm 用 sbatch，PBS 用 qsub，无调度器则 nohup 后台），"
+        "  • submit —— 生成作业脚本并提交（Slurm 用 sbatch，PBS 用 qsub，无调度器则 setsid 脱离会话后台跑），"
         "返回 job_id；随后 status 看状态、logs 读日志、cancel 取消。\n"
         "  • push / pull —— 本地 ↔ 远端传文件（大文件先 push 再 submit，产物 pull 回本地）。\n"
         "  • jobs   —— 列队列与最近提交记录。\n"
         "连接配置在 hermes_home/config.yaml 的 remote: 段（host/user/port/key/workdir/scheduler/"
-        "local_root/remote_root）；未配置时本工具不可见。"
+        "local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
+        "⚠️ 两点别搞混：① 本工具只把**命令/作业**送到远端，execute_python / execute_r 的持久内核仍在本地跑——"
+        "要在集群上算就把代码写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"
+        "push/pull 可用 local_root/remote_root 自动换算。"
     ),
     "parameters": {
         "type": "object",
