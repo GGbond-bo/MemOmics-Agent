@@ -288,6 +288,38 @@ debate verdict + confidence + recommended_params
 
 **取消 `debate_done` 会话级布尔**，改为 `debated_topics` 集合（topic 级去重）——同会话多个结论各自门控评估，这是现状"每会话只辩一次"的修正。
 
+### 5.5.6 赛前场景预判（2026-09-18，非生物学辩题换裁判）
+
+**动机**：辩论引擎原本硬编码生物学角色（生物学/统计/生信编辑 + 生物学裁判 + 7 条生物学评分维度）。
+当辩题其实是**图表排版、代码工程、投稿规范**这类问题时，用生物学评分维度去裁决是错配的——裁判会问"有没有 marker 特异性证据"，
+而这类问题的关键证据其实是"期刊投稿指南条款、灰度/CVD 模拟图"。
+
+**做法**：辩论开跑前多一次 LLM 调用（走 judge 路由），先判断本场属于哪类场景，再据此覆盖**席位身份**与**裁判标准**：
+
+| 环节 | 覆盖内容 |
+|---|---|
+| 席位（7 个槽位不变） | 每个槽位的 title / task / questions 换成场景身份（如"信息设计编辑""期刊技术审稿编辑"） |
+| 裁判 | judge_persona（如"目标期刊图版式与技术审稿编辑"）、judge_focus（必查点）、rubrics（评分键） |
+| 证据标准 | evidence_types → 裁判点名的"缺失证据"清单 |
+
+**不变的部分**：槽位标签（pro_biology/pro_statistics/... ）、路由、归档字段、缓存指纹都不变——只换 prompt 里的身份与标准，
+所以历史归档、前端渲染、模型路由完全向后兼容（老归档没有 scenario 段就照旧走生物学模板）。
+
+**场景枚举**：bio_data｜stats_design｜figure_layout｜code_engineering｜writing｜ops_environment｜general。
+
+**产物字段**（归档可见）：`scenario`（含 scenario/scenario_label/why/judge_persona/judge_focus/rubrics/evidence_types/pro_roles/con_roles）、
+`scenario_model`、`scenario_call_id`；失败时写 `scenario_error` 并静默回退生物学模板（**永不阻断辩论**）。
+
+**开关**：config `debate.scenario_analysis: false` 或 env `MEMOMICS_DEBATE_NO_SCENARIO=1`。
+
+**实测（2026-09-18，排版类辩题）**：辩题「FigA3 热图左侧是否删除纤维型色条、亚群顺序如何排列」→ 判为 `figure_layout / 图表版式与视觉呈现`；
+裁判身份"目标期刊图版式与技术审稿编辑"，评分维度 journal_compliance / grayscale_accessibility / information_hierarchy /
+annotation_clarity / minimal_change_risk / print_fidelity / visual_consistency；7 个席位全部换成排版/出版类身份；
+裁判最终裁决 need_more_info（low）并点名缺"期刊投稿规范原文、灰度/CVD 模拟图、亚群-纤维型映射表"——正是场景预判给出的证据标准。
+对照组（生物学辩题「LRP1B+(I) 亚群是否为 AMPK-P 通路特异亚群」）判为 `bio_data`，评分维度仍是 marker_specificity / pathway_score_specificity 等 7 条生物学维度。
+
+**成本**：+1 次调用（约 100~200s，与 L2 的 10+ 次调用相比可忽略）。
+
 ## 6. 风险与开放问题
 
 | 风险/问题 | 缓解 |

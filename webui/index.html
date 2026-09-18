@@ -385,6 +385,69 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .debate-block .debate-verdict { margin-top:6px; padding:6px 8px; background:var(--tool-bg); border-radius:4px; font-size:12px; }
 /* ===== 辩论过程卡片（2026-09-18 v2：干净整洁 + 模型/证据全罗列） ===== */
 .dcb-wrap { margin:10px 0; }
+/* ===== 辩论卡片折叠外壳（2026-09-18 v4：辩题醒目 · 结论放大 · 默认折叠，用户自己选看多少） ===== */
+.dcb-wrap .dcb-card { border:1px solid var(--border); border-radius:12px; background:var(--panel); overflow:hidden; }
+.dcb-wrap .dcb-top { padding:11px 14px 12px; cursor:pointer; background:linear-gradient(180deg, var(--primary-light), var(--panel)); }
+.dcb-wrap .dcb-top:hover { filter:brightness(1.02); }
+.dcb-line1 { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dcb-badge { font-size:12px; font-weight:700; color:#fff; background:var(--primary); border-radius:8px; padding:2px 9px; }
+.dcb-seq { font-size:11.5px; font-weight:700; color:var(--primary); }
+.dcb-time { font-size:11px; color:var(--text-light); }
+.dcb-fold { margin-left:auto; font-size:11.5px; font-weight:700; color:var(--primary); white-space:nowrap; }
+.dcb-wrap.dcb-open .dcb-fold { color:var(--text-light); }
+.dcb-top .dcb-topic { display:flex; gap:8px; margin-top:9px; padding-left:10px; border-left:4px solid var(--primary);
+  font-size:19px; font-weight:800; line-height:1.42; color:var(--text); letter-spacing:.2px; }
+.dcb-top .dcb-topic .k { flex:0 0 auto; align-self:flex-start; margin-top:3px; font-size:11px; font-weight:700;
+  color:#fff; background:var(--primary); border-radius:6px; padding:1px 6px; }
+.dcb-concl { margin-top:10px; padding:11px 13px; border-radius:10px; border:1px solid var(--border); background:var(--tool-bg); }
+.dcb-concl-main { font-size:25px; font-weight:900; line-height:1.25; letter-spacing:.3px; color:var(--text); }
+.dcb-concl-meta { margin-top:6px; font-size:11.5px; color:var(--text-light); }
+/* ===== 赛前场景预判（2026-09-18 v4）===== */
+.dcb-scen-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:2px 0 8px; }
+.dcb-scen-tag { display:inline-block; padding:3px 12px; border-radius:999px; background:rgba(99,102,241,.18);
+  border:1px solid rgba(99,102,241,.55); color:#c7d2fe; font-size:13.5px; font-weight:700; }
+.dcb-scen-why { font-size:12.5px; color:var(--text-light); margin:0 0 10px; line-height:1.65; }
+.dcb-scen-row { display:flex; gap:10px; align-items:flex-start; margin:0 0 10px; }
+.dcb-scen-row > .k { flex:0 0 88px; font-size:12px; color:var(--text-light); padding-top:2px; text-align:right; }
+.dcb-scen-row > span:not(.k), .dcb-scen-row > ol, .dcb-scen-row > ul, .dcb-scen-row > table, .dcb-scen-rolewrap { flex:1 1 auto; min-width:0; }
+.dcb-scen-ol, .dcb-scen-ul { margin:0; padding-left:20px; font-size:12.5px; line-height:1.7; }
+.dcb-scen-ul { padding-left:18px; }
+.dcb-rub { width:100%; border-collapse:collapse; font-size:12.5px; }
+.dcb-rub th { text-align:left; font-weight:600; color:var(--text-light); font-size:11.5px; padding:3px 8px; border-bottom:1px solid var(--border); }
+.dcb-rub td { padding:4px 8px; border-bottom:1px dashed var(--border); vertical-align:top; line-height:1.6; }
+.dcb-rub-cn { font-size:11.5px; color:var(--text-light); font-weight:400; margin-top:2px; }
+.dcb-scen-rolewrap { display:flex; gap:14px; flex-wrap:wrap; }
+.dcb-scen-roles { flex:1 1 300px; min-width:260px; }
+.dcb-scen-roles.pro { border-left:3px solid rgba(34,197,94,.6); padding-left:10px; }
+.dcb-scen-roles.con { border-left:3px solid rgba(239,68,68,.6); padding-left:10px; }
+.dcb-scen-role { margin-bottom:10px; }
+.dcb-scen-role-t { font-size:13px; font-weight:700; }
+.dcb-scen-role-d { font-size:12px; color:var(--text-light); margin:2px 0 3px; line-height:1.6; }
+.dcb-roleline { font-size:11.5px; color:#a5b4fc; font-weight:600; margin-bottom:4px; line-height:1.4; }
+.dcb-roleline.con { color:#fca5a5; }
+.chip.scen { background:rgba(99,102,241,.16); border-color:rgba(99,102,241,.5); color:#c7d2fe; }
+
+.dcb-concl-why { margin-top:7px; font-size:12.5px; line-height:1.6; color:var(--text); }
+.dcb-concl.tone-ok { border-color:rgba(63,158,106,.42); background:rgba(63,158,106,.08); }
+.dcb-concl.tone-ok .dcb-concl-main { color:var(--success); }
+.dcb-concl.tone-warn { border-color:rgba(224,135,42,.45); background:rgba(224,135,42,.09); }
+.dcb-concl.tone-warn .dcb-concl-main { color:var(--warning); }
+.dcb-concl.tone-con { border-color:rgba(216,67,107,.42); background:rgba(216,67,107,.08); }
+.dcb-concl.tone-con .dcb-concl-main { color:var(--danger); }
+.dcb-concl.tone-none .dcb-concl-main { color:var(--text-light); font-size:20px; }
+.dcb-early { margin-top:8px; font-size:11.5px; color:var(--warning); }
+.dcb-link { color:var(--primary); font-weight:700; cursor:pointer; text-decoration:underline; }
+.dcb-hint { margin-top:9px; font-size:11.5px; color:var(--primary); }
+.dcb-wrap.dcb-open .dcb-hint { display:none; }
+.dcb-body { border-top:1px solid var(--border); }
+.dcb-wrap:not(.dcb-open) .dcb-body { display:none; }
+.dcb-loading { padding:12px 14px; font-size:12px; color:var(--text-light); }
+.dcb-sec-h.dcb-sec-toggle { cursor:pointer; user-select:none; }
+.dcb-sec-h.dcb-sec-toggle::before { content:'▾'; font-size:10px; color:var(--text-light); }
+.dcb-sec.dcb-sec-fold .dcb-sec-h.dcb-sec-toggle::before { content:'▸'; }
+.dcb-sec.dcb-sec-fold .dcb-sec-body { display:none; }
+.dg-box.dg-fold .dg-scroll { display:none; }
+.dg-box.dg-fold { padding-bottom:9px; }
 .dcb { border:1px solid var(--border); border-radius:12px; background:var(--panel); overflow:hidden; font-size:12px; line-height:1.55; }
 .dcb-head { padding:10px 14px 9px; background:var(--primary-light); border-bottom:1px solid var(--border); }
 .dcb-title { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:13px; font-weight:600; color:var(--primary); }
@@ -2928,7 +2991,10 @@ function normalizeDebate(d) {
     digest: (d.judge_digest && typeof d.judge_digest === 'object') ? d.judge_digest : null,
     digestModel: d.judge_digest_model || '', digestCallId: d.judge_digest_call_id || '',
     digestError: d.judge_digest_error || '', digestRaw: d.judge_digest_raw || '',
-    digestNote: d.judge_digest_note || '', digestRepaired: !!d.judge_digest_repaired
+    digestNote: d.judge_digest_note || '', digestRepaired: !!d.judge_digest_repaired,
+    // 2026-09-18 v4：赛前场景预判（后端 scenario）。旧归档没有 → null，卡片照常渲染
+    scenario: (d.scenario && typeof d.scenario === 'object') ? d.scenario : null,
+    scenarioModel: d.scenario_model || '', scenarioError: d.scenario_error || ''
   };
   function mkCell(rec, model, callId, score) {
     return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
@@ -2969,16 +3035,25 @@ function normalizeDebate(d) {
     db.kind = 'multi';
     if (!db.level) db.level = 'L2';
     var pro = d.pro_arguments || {}, con = d.con_arguments || {};
-    var seatKeys = [], k;
-    for (k in pro) if (pro.hasOwnProperty(k) && seatKeys.indexOf(k) < 0) seatKeys.push(k);
-    for (k in con) if (con.hasOwnProperty(k) && seatKeys.indexOf(k) < 0) seatKeys.push(k);
+    var seatKeys = [], proKeys = [], conKeys = [], k;
+    for (k in pro) if (pro.hasOwnProperty(k)) { proKeys.push(k); if (seatKeys.indexOf(k) < 0) seatKeys.push(k); }
+    for (k in con) if (con.hasOwnProperty(k)) { conKeys.push(k); if (seatKeys.indexOf(k) < 0) seatKeys.push(k); }
+    // 赛前场景预判给了本场席位身份（排版题 = 信息设计编辑 …），就用它显示；
+    // 槽位顺序固定：正方 3 席（第 1-3 个 pro key）、反方 4 席（第 1-4 个 con key）。
+    var _scPr = (db.scenario && db.scenario.pro_roles) || [];
+    var _scCr = (db.scenario && db.scenario.con_roles) || [];
+    function scenTitle(side, idx) {
+      var arr = (side === 'pro' ? _scPr : _scCr), r = arr[idx];
+      return (r && r.title) ? String(r.title) : '';
+    }
     for (var si = 0; si < seatKeys.length; si++) {
       var sk = seatKeys[si];
       var pc = pro[sk] ? mkCell(pro[sk], models['pro_' + sk], pro[sk].call_id, scores['pro_' + sk]) : null;
       var cc = con[sk] ? mkCell(con[sk], models['con_' + sk], con[sk].call_id, scores['con_' + sk]) : null;
-      db.seats.push({ seat: _dtSeatName(sk), pro: pc, con: cc });
-      if (pc) { db.cells.push(pc.arg); addModel('正方·' + _dtSeatName(sk), 'pro', pc.model, pc.callId, pc.arg); }
-      if (cc) { db.cells.push(cc.arg); addModel('反方·' + _dtSeatName(sk), 'con', cc.model, cc.callId, cc.arg); }
+      var pTitle = scenTitle('pro', proKeys.indexOf(sk)), cTitle = scenTitle('con', conKeys.indexOf(sk));
+      db.seats.push({ seat: _dtSeatName(sk), pro: pc, con: cc, proTitle: pTitle, conTitle: cTitle });
+      if (pc) { db.cells.push(pc.arg); addModel('正方·' + (pTitle || _dtSeatName(sk)), 'pro', pc.model, pc.callId, pc.arg); }
+      if (cc) { db.cells.push(cc.arg); addModel('反方·' + (cTitle || _dtSeatName(sk)), 'con', cc.model, cc.callId, cc.arg); }
     }
     var nr = d.neutral_reviews || {};
     for (k in nr) {
@@ -3066,6 +3141,56 @@ function _dtHeaderHtml(db, meta) {
   return h + '</div>';
 }
 
+function _dtScenarioSection(db) {
+  var sc = db.scenario;
+  if (!sc) return '';
+  var h = '<div class="dcb-sec"><div class="dcb-sec-h">🎯 赛前场景预判<span class="n">辩论开始前先判断这是哪类问题，再据此定席位身份与裁判评分维度（避免拿生物学的尺子量排版问题）</span></div>';
+  h += '<div class="dcb-scen-top"><span class="dcb-scen-tag">' + _dtEsc(sc.scenario_label || sc.scenario || '') + '</span>';
+  if (sc.scenario) h += '<span class="chip mono">' + _dtEsc(sc.scenario) + '</span>';
+  if (db.scenarioModel) h += '<span class="chip">预判模型 ' + _dtEsc(db.scenarioModel) + '</span>';
+  h += '</div>';
+  if (sc.why) h += '<div class="dcb-scen-why">判定依据：' + _dtEsc(sc.why) + '</div>';
+  if (sc.judge_persona) h += '<div class="dcb-scen-row"><span class="k">裁判身份</span><span>⚖️ ' + _dtEsc(sc.judge_persona) + '</span></div>';
+  if (sc.judge_focus && sc.judge_focus.length) {
+    h += '<div class="dcb-scen-row"><span class="k">裁判必查</span><ol class="dcb-scen-ol">';
+    for (var i = 0; i < sc.judge_focus.length; i++) h += '<li>' + _dtEsc(sc.judge_focus[i]) + '</li>';
+    h += '</ol></div>';
+  }
+  if (sc.rubrics && sc.rubrics.length) {
+    h += '<div class="dcb-scen-row"><span class="k">评分维度</span><table class="dcb-rub"><thead><tr><th style="width:210px">维度</th><th>打分说明</th></tr></thead><tbody>';
+    for (var r = 0; r < sc.rubrics.length; r++) {
+      var rb = sc.rubrics[r] || {};
+      h += '<tr><td class="mono">' + _dtEsc(rb.key || '') + (rb.label ? ('<div class="dcb-rub-cn">' + _dtEsc(rb.label) + '</div>') : '') + '</td><td>' + _dtEsc(rb.hint || '') + '</td></tr>';
+    }
+    h += '</tbody></table></div>';
+  }
+  if (sc.evidence_types && sc.evidence_types.length) {
+    h += '<div class="dcb-scen-row"><span class="k">本场证据标准</span><ul class="dcb-scen-ul">';
+    for (var e2 = 0; e2 < sc.evidence_types.length; e2++) h += '<li>' + _dtEsc(sc.evidence_types[e2]) + '</li>';
+    h += '</ul></div>';
+  }
+  function showRoles(arr, side) {
+    if (!arr || !arr.length) return '';
+    var s = '<div class="dcb-scen-roles ' + side + '">';
+    for (var j = 0; j < arr.length; j++) {
+      var a = arr[j] || {};
+      if (!a.title && !a.task) continue;
+      s += '<div class="dcb-scen-role"><div class="dcb-scen-role-t">' + (side === 'pro' ? '✅ ' : '❌ ') + _dtEsc(a.title || '') + '</div>';
+      if (a.task) s += '<div class="dcb-scen-role-d">' + _dtEsc(a.task) + '</div>';
+      if (a.questions && a.questions.length) {
+        s += '<ul class="dcb-scen-ul">';
+        for (var q = 0; q < a.questions.length; q++) s += '<li>' + _dtEsc(a.questions[q]) + '</li>';
+        s += '</ul>';
+      }
+      s += '</div>';
+    }
+    return s + '</div>';
+  }
+  var _pr = showRoles(sc.pro_roles, 'pro'), _cr = showRoles(sc.con_roles, 'con');
+  if (_pr || _cr) h += '<div class="dcb-scen-row"><span class="k">本场席位</span><div class="dcb-scen-rolewrap">' + _pr + _cr + '</div></div>';
+  return h + '</div>';
+}
+
 function _dtModelsSection(db) {
   if (!db.models.length) return '';
   var h = '<div class="dcb-sec"><div class="dcb-sec-h">🤖 参战阵容与模型<span class="n">共 ' + db.roleCount + (db.kind === 'sampling' ? ' 次调用' : ' 个角色') + ' · ' + (db.modelSummary.length ? (db.modelSummary.length + ' 个模型') : '模型未记录') + '</span></div>';
@@ -3096,7 +3221,10 @@ function _dtSeatsSection(db) {
   var h = '<div class="dcb-sec"><div class="dcb-sec-h">⚔️ 逐席位正反对抗<span class="n">每格 = 该编辑的一次独立发言（上下文切断）；黑体小标签是该角色实际模型</span></div>';
   h += '<table class="dcb-table"><thead><tr><th style="width:98px">编辑席位</th><th>✅ 正方（支持）</th><th>❌ 反方（质疑）</th></tr></thead><tbody>';
   for (var i = 0; i < db.seats.length; i++) {
-    h += '<tr><td class="seat">' + _dtEsc(db.seats[i].seat) + '</td><td>' + _dtCellHtml(db.seats[i].pro, 'pro') + '</td><td>' + _dtCellHtml(db.seats[i].con, 'con') + '</td></tr>';
+    var _st = db.seats[i];
+    var _pt = _st.proTitle ? '<div class="dcb-roleline">' + _dtEsc(_st.proTitle) + '</div>' : '';
+    var _ct = _st.conTitle ? '<div class="dcb-roleline con">' + _dtEsc(_st.conTitle) + '</div>' : '';
+    h += '<tr><td class="seat">' + _dtEsc(_st.seat) + '</td><td>' + _pt + _dtCellHtml(_st.pro, 'pro') + '</td><td>' + _ct + _dtCellHtml(_st.con, 'con') + '</td></tr>';
   }
   return h + '</tbody></table></div>';
 }
@@ -3159,7 +3287,8 @@ function _dtBox(key, title, note, tableHtml) {
     '<button type="button" class="dg-btn" data-dga="h+" title="表格拉长 240px（不截断，可以一直拉）">↕ 拉长</button>' +
     '<button type="button" class="dg-btn" data-dga="full" title="整屏查看（Esc 退出），再拖右下角可任意大小">⛶ 全屏</button>' +
     '<button type="button" class="dg-btn" data-dga="fit" title="宽度铺满消息区">↔ 铺满</button>' +
-    '<button type="button" class="dg-btn" data-dga="reset" title="回到默认大小与列宽">↺ 复位</button></div>' +
+    '<button type="button" class="dg-btn" data-dga="reset" title="回到默认大小与列宽">↺ 复位</button>' +
+    '<button type="button" class="dg-btn" data-dga="fold" title="折叠这张表（再点一次展开）">▾ 折叠</button></div>' +
     '<div class="dg-scroll" title="拖动右下角可自由调整表格大小">' + tableHtml + '</div></div>';
 }
 
@@ -3457,6 +3586,14 @@ function _dgWire(root) {
   for (var i = 0; i < boxes.length; i++) _dgInit(boxes[i]);
 }
 
+function _dgFoldLabel(box) {
+  var b = box.querySelector('.dg-btn[data-dga="fold"]');
+  if (!b) return;
+  var folded = box.classList.contains('dg-fold');
+  b.textContent = folded ? '▸ 展开' : '▾ 折叠';
+  b.title = folded ? '展开这张表' : '折叠这张表（再点一次展开）';
+}
+
 function _dgColsPx(box) {
   var cols = box.querySelectorAll('colgroup col'), out = [];
   for (var i = 0; i < cols.length; i++) out.push(Math.round(cols[i].getBoundingClientRect().width));
@@ -3478,7 +3615,8 @@ function _dgSave(box) {
     localStorage.setItem('dgsize:' + (box.dataset.dgsid || '') + ':' + (box.dataset.dgk || ''), JSON.stringify({
       w: isNaN(w) ? 0 : w, h: isNaN(h) ? 0 : h,
       cols: dragged ? _dgColsPx(box) : null,
-      full: box.classList.contains('dg-full')
+      full: box.classList.contains('dg-full'),
+      fold: box.classList.contains('dg-fold')      // 2026-09-18 v4：折叠状态也记住
     }));
   } catch (e) {}
 }
@@ -3501,8 +3639,10 @@ function _dgInit(box) {
         if (total) tbl.style.width = total + 'px';
       }
       if (sz.full) box.classList.add('dg-full');
+      if (sz.fold) box.classList.add('dg-fold');
     }
   } catch (e) {}
+  _dgFoldLabel(box);
   var btns = box.querySelectorAll('.dg-btn');
   for (var b = 0; b < btns.length; b++) {
     btns[b].onclick = function (ev) {
@@ -3522,6 +3662,10 @@ function _dgInit(box) {
         }
       } else if (a === 'reset') {
         sc.style.width = ''; sc.style.height = ''; box.classList.remove('dg-full'); _dgReset(tbl);
+      } else if (a === 'fold') {
+        // 2026-09-18 v4：折叠/展开这张表（只看标题，看不到内容时不占地方）
+        box.classList.toggle('dg-fold');
+        _dgFoldLabel(box);
       }
       _dgSave(box);
       return false;
@@ -3576,6 +3720,7 @@ function debateTableHtml(db, meta) {
   var h = '<div class="dcb">';
   h += _dtHeaderHtml(db, meta);
   h += _dtFailSection(db);
+  h += _dtScenarioSection(db);  // 2026-09-18 v4：赛前场景预判（本场是什么问题 → 谁在辩、裁判按什么标准判）
   h += _dtModelsSection(db);
   h += _dtSeatsSection(db);
   h += _dtEvidenceSection(db);
@@ -3586,16 +3731,199 @@ function debateTableHtml(db, meta) {
   return h + '</div>';
 }
 
+// ===== 辩论卡片外壳：折叠 + 辩题醒目 + 结论放大（2026-09-18 v4）=====
+// 用户诉求：① 表格折叠、自己选看多少 ② 辩题醒目 ③ 一次分析里多场辩论不许堆在一起，
+// 每场都要落在它真正发生的那一刻，点开从上往下读 ④ 裁判结论放大、简洁、直接。
+var _dcbTimelineCtx = null;  // 会话回放时暂存的 {sid,msgEls,offset}，等提示条插完再按位置插卡片
+var _dcbFocusKey = '';       // 「载入更早对话并定位」的目标卡片
+var _debateKeys = {};   // sid -> {key:1}：已渲染过的辩论（实时卡片与时间线共用，防重复）
+var _debateSeq = {};    // sid -> {key:{idx,total}}：给卡片标「第 N 场 / 共 M 场」
+
+function _debateKeySet(sid) { if (!_debateKeys[sid]) _debateKeys[sid] = {}; return _debateKeys[sid]; }
+
+function _dcbKeyOf(obj) {
+  var rel = String((obj && (obj.rel_path || obj.path || obj.key)) || '');
+  var m = /debate_([0-9]{8}_[0-9]{6})/.exec(rel);
+  return m ? m[1] : rel;
+}
+
+function _dcbSquash(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+
+function _dcbVerdictOf(db) {
+  var v = _dcbSquash((db && (db.verdict || (db.judge && db.judge.verdict))) || '');
+  var conf = _dcbSquash((db && (db.confidence || (db.judge && db.judge.confidence))) || '');
+  var map = {
+    'ok': ['方案成立，可以照此执行', 'ok'], 'support': ['支持正方主张', 'ok'],
+    'support_pro': ['支持正方主张', 'ok'], 'pro': ['支持正方主张', 'ok'], 'pro_wins': ['支持正方主张', 'ok'],
+    'modify': ['方案要改，改完再用', 'warn'], 'modify_first': ['方案要改，改完再用', 'warn'],
+    'need_more_info': ['证据不足，先补数据再下结论', 'warn'], 'insufficient_evidence': ['证据不足，先补数据再下结论', 'warn'],
+    'reject': ['否决该方案', 'con'], 'support_con': ['支持反方主张', 'con'],
+    'con': ['支持反方主张', 'con'], 'con_wins': ['支持反方主张', 'con']
+  };
+  var hit = map[v.toLowerCase()];
+  return {
+    label: hit ? hit[0] : (v ? ('裁决：' + v) : '本次没有给出裁决'),
+    tone: hit ? hit[1] : 'none',
+    confCn: ({ high: '高', medium: '中', low: '低' })[conf.toLowerCase()] || conf
+  };
+}
+
+// 一句话依据：整理稿总结优先，其次裁判正文；草稿/原始 JSON 不作依据
+function _dcbOneLineOf(db) {
+  var cands = [], d = db && db.digest, j = (db && db.judge) || {};
+  if (d && typeof d === 'object') { if (d.summary) cands.push(d.summary); if (d.overview) cands.push(d.overview); }
+  if (j.reasoning) cands.push(j.reasoning);
+  if (typeof j.text === 'string' && j.text) cands.push(j.text);
+  for (var i = 0; i < cands.length; i++) {
+    var c = _dcbSquash(cands[i]);
+    if (!c || c.charAt(0) === '{' || c.indexOf('[reasoning') === 0 || c.indexOf('[找不到') === 0) continue;
+    if (c.length > 300) c = c.slice(0, 300) + '…';
+    return c;
+  }
+  return '';
+}
+
+function _dcbEntry(db, meta, extra) {
+  var v = _dcbVerdictOf(db);
+  var e = {
+    topic: (db && db.topic) || '',
+    conclusion: v.label, tone: v.tone, confCn: v.confCn,
+    why: _dcbOneLineOf(db),
+    nRole: (db && db.roleCount) || 0, nModel: ((db && db.modelSummary) || []).length,
+    nClaim: ((db && db.cells) || []).length,
+    hasDigest: !!(db && db.digest), failed: !!(db && db.failed),
+    kind: (db && db.kind) || '', format: (db && db.format) || '', level: (db && db.level) || '',
+    scenarioLabel: (db && db.scenario && (db.scenario.scenario_label || db.scenario.scenario)) || '',
+    mtime: (meta && meta.mtime_text) || '', idx: 0, total: 0
+  };
+  if (extra) for (var k in extra) if (extra.hasOwnProperty(k)) e[k] = extra[k];
+  return e;
+}
+
+function debateShellHtml(e) {
+  var h = '<div class="dcb-card"><div class="dcb-top" onclick="_dcbToggle(this)" title="点击展开/收起这场辩论的全部细节">';
+  h += '<div class="dcb-line1"><span class="dcb-badge">⚖️ 辩论</span>';
+  if (e.idx) h += '<span class="dcb-seq" data-dcbseq="1">第 ' + e.idx + ' 场' + (e.total > 1 ? (' / 共 ' + e.total + ' 场') : '') + '</span>';
+  else h += '<span class="dcb-seq" data-dcbseq="1">最新一场</span>';
+  if (e.mtime) h += '<span class="dcb-time">🕒 ' + _dtEsc(e.mtime) + '</span>';
+  if (e.format) h += '<span class="chip">' + _dtEsc(e.format) + '</span>';
+  if (e.level) h += '<span class="chip judge">' + _dtEsc(e.level) + '</span>';
+  if (e.scenarioLabel) h += '<span class="chip scen" title="辩论前先做了场景预判：席位身份与裁判评分维度都按这个场景生成">🎯 ' + _dtEsc(e.scenarioLabel) + '</span>';
+  h += '<span class="dcb-fold">▾ 展开全文</span></div>';
+  h += '<div class="dcb-topic"><span class="k">辩题</span><span class="t">' +
+       _dtEsc(e.topic || '（这场归档没记辩题，展开看正文）') + '</span></div>';
+  h += '<div class="dcb-concl tone-' + (e.tone || 'none') + '">';
+  h += '<div class="dcb-concl-main">' + _dtEsc(e.conclusion || '') + '</div>';
+  var mi = [];
+  if (e.scenarioLabel) mi.push('🎯 场景 ' + _dtEsc(e.scenarioLabel));
+  if (e.confCn) mi.push('置信度 ' + _dtEsc(e.confCn));
+  if (e.nRole) mi.push(e.kind === 'sampling' ? (e.nRole + ' 次独立调用') : (e.nRole + ' 位角色'));
+  if (e.nModel) mi.push(e.nModel + ' 个模型');
+  if (e.nClaim) mi.push(e.nClaim + ' 条论点');
+  if (e.hasDigest) mi.push('🧾 已整理');
+  if (e.failed) mi.push('⚠️ 有角色失败');
+  if (mi.length) h += '<div class="dcb-concl-meta">' + mi.join(' · ') + '</div>';
+  if (e.why) h += '<div class="dcb-concl-why">' + _dtEsc(e.why) + '</div>';
+  h += '</div>';
+  if (e.early) h += '<div class="dcb-early">⚠️ 这场辩论发生在更早的对话里（当前只加载了最近一段） · ' +
+    '<span class="dcb-link" onclick="event.stopPropagation();_dcbLoadAllAndFocus(this)">📜 载入更早对话并把它放回原位</span></div>';
+  h += '<div class="dcb-hint">▾ 点这里展开正文：' + (e.scenarioLabel ? '赛前场景预判 · ' : '') + '参战阵容与模型 · 逐席位正反对抗 · 证据链 · 共识/争议/缺口 · 整理稿 · 裁判裁决</div>';
+  h += '<span class="dcb-act" style="font-size:11px;color:var(--text-light);cursor:pointer" onclick="event.stopPropagation();reloadDebateCard(this)">🔄 重新加载</span>';
+  h += '</div><div class="dcb-body"></div></div>';
+  return h;
+}
+
+// 展开时才渲染正文（懒加载）：实时卡片用手上的归档，时间线卡片去 /debate/one 拉取。
+// 好处：一个会话十几场辩论也不会一次性渲染十几张巨型表格。
+function _dcbOpen(wrap) {
+  var body = wrap.querySelector('.dcb-body');
+  if (!body) return;
+  if (!body.dataset.built) {
+    body.innerHTML = '<div class="dcb-loading">⏳ 正在渲染这场辩论的全部细节…</div>';
+    var build = function (archive, meta) {
+      try {
+        var db = normalizeDebate(archive);
+        body.innerHTML = debateTableHtml(db, meta || {});
+        body.dataset.built = '1';
+        _dgWire(body);
+        _dcbWrapSections(body);
+      } catch (e) {
+        body.innerHTML = '<div class="dcb-loading">正文渲染失败：' + _dtEsc(String(e)) + '</div>';
+      }
+    };
+    if (wrap._dcbArchive) {
+      build(wrap._dcbArchive, wrap._dcbMeta || {});
+    } else {
+      var sid = wrap.dataset.sid || currentSid, rel = wrap.dataset.rel || '';
+      fetch('/api/results/' + encodeURIComponent(sid) + '/debate/one?rel=' + encodeURIComponent(rel) + '&ts=' + Date.now())
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j || !j.ok) { body.innerHTML = '<div class="dcb-loading">正文加载失败：' + _dtEsc((j && j.error) || '未知原因') + '</div>'; return; }
+          wrap._dcbArchive = j.debate;
+          wrap._dcbMeta = {
+            mtime_text: j.mtime || '', path: j.rel_path || rel,
+            download: '/api/file/download?path=' + encodeURIComponent(j.path || rel)
+          };
+          build(j.debate, wrap._dcbMeta);
+        })
+        .catch(function (e) { body.innerHTML = '<div class="dcb-loading">正文加载失败：' + _dtEsc(String(e)) + '</div>'; });
+    }
+  }
+  wrap.classList.add('dcb-open');
+}
+
+function _dcbToggle(headEl) {
+  var wrap = headEl && headEl.closest ? headEl.closest('.dcb-wrap') : null;
+  if (!wrap) return;
+  if (wrap.classList.contains('dcb-open')) { wrap.classList.remove('dcb-open'); return; }
+  _dcbOpen(wrap);
+}
+
+// 正文里每一节都能单独折叠（用户自己决定读哪几节）
+function _dcbWrapSections(root) {
+  var secs = root.querySelectorAll('.dcb-sec');
+  for (var i = 0; i < secs.length; i++) {
+    var sec = secs[i];
+    if (sec.dataset.dcbSec === '1') continue;
+    var head = sec.querySelector('.dcb-sec-h');
+    if (!head) continue;
+    sec.dataset.dcbSec = '1';
+    var kids = [];
+    for (var j = 0; j < sec.children.length; j++) if (sec.children[j] !== head) kids.push(sec.children[j]);
+    var box = document.createElement('div');
+    box.className = 'dcb-sec-body';
+    for (var k = 0; k < kids.length; k++) box.appendChild(kids[k]);
+    sec.appendChild(box);
+    head.classList.add('dcb-sec-toggle');
+    head.title = '点击折叠/展开本节';
+    head.onclick = function () { this.parentNode.classList.toggle('dcb-sec-fold'); };
+  }
+}
+
+function _dcbApplySeq(sid, list, total) {
+  var seq = _debateSeq[sid] || (_debateSeq[sid] = {});
+  for (var i = 0; i < list.length; i++) {
+    var key = list[i].key || list[i].rel_path;
+    seq[key] = { idx: i + 1, total: total };
+  }
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var wraps = box.querySelectorAll('.dcb-wrap[data-key]');
+  for (var w = 0; w < wraps.length; w++) {
+    var s = seq[wraps[w].dataset.key];
+    var el = wraps[w].querySelector('[data-dcbseq]');
+    if (!s || !el) continue;
+    el.textContent = '第 ' + s.idx + ' 场' + (s.total > 1 ? (' / 共 ' + s.total + ' 场') : '');
+  }
+}
+
+// 现实时卡片（辩论刚跑完）：直接插在当前对话位置，正文已在手上，展开即可看
 function renderDebateCard(payload) {
-  var sig = String(payload.path || '') + '|' + String(payload.mtime_epoch || payload.mtime || '');
+  var sig = String(payload.path || payload.rel_path || '') + '|' + String(payload.mtime_epoch || payload.mtime || '');
   if (sig === _lastDebateSig) return;
   _lastDebateSig = sig;
   var db = normalizeDebate(payload.debate || payload);
   var sid = currentSid;
-  var wrap = document.createElement('div');
-  wrap.className = 'dcb-wrap';
-  wrap.dataset.sid = sid || '';
-  if (payload.rel_path) wrap.dataset.rel = payload.rel_path;
   var mt = payload.mtime_text || '';
   if (!mt && payload.mtime) { try { mt = new Date(payload.mtime * 1000).toLocaleString(); } catch (e) { mt = String(payload.mtime); } }
   var meta = {
@@ -3603,10 +3931,107 @@ function renderDebateCard(payload) {
     skipped: (payload.skipped_newer || []).length || '',
     download: (payload.path || payload.rel_path) ? ('/api/file/download?path=' + encodeURIComponent(payload.path || payload.rel_path)) : ''
   };
-  wrap.innerHTML = debateTableHtml(db, meta);
-  _dgWire(wrap);
+  var wrap = document.createElement('div');
+  wrap.className = 'dcb-wrap';
+  wrap.dataset.sid = sid || '';
+  wrap.dataset.rel = payload.rel_path || '';
+  wrap.dataset.key = payload.key || _dcbKeyOf(payload);
+  wrap.innerHTML = debateShellHtml(_dcbEntry(db, meta));
+  wrap._dcbArchive = payload.debate || payload;
+  wrap._dcbMeta = meta;
   document.getElementById('messages').appendChild(wrap);
+  _debateKeySet(sid)[wrap.dataset.key] = 1;
+  // 卡片插在当前位置之后，后续流式文字必须另起一个气泡，否则会跑到卡片上面去
+  _dcbBreakBubble();
   scrollBottom();
+}
+
+// 让「这一轮还没写完的回答」另起一个气泡（卡片之后继续往下写）
+function _dcbBreakBubble() {
+  if (!currentAssistantEl && !currentBubble) return;
+  try { _flushStreamRender(); } catch (e) {}
+  currentAssistantEl = null;
+  currentBubble = null;
+  fullText = '';
+}
+
+// 时间线：把该会话每一场辩论插回它真正发生的位置（after_index = 那一刻已有多少条对话消息）
+async function loadDebateTimeline(sid, msgEls, offset, quiet) {
+  if (!sid) return null;
+  var seen = _debateKeySet(sid), added = 0;
+  try {
+    var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debates?ts=' + Date.now());
+    if (!r.ok) {
+      if (r.status === 404 && !quiet) _debateNotice('辩论时间线接口还没生效：这是服务端改动，重启 MemOmics 后再刷新即可');
+      return null;
+    }
+    var j = await r.json();
+    if (!j || !j.ok) { if (!quiet) loadLatestDebate(sid, 1, true); return null; }
+    if (sid !== currentSid) return null;   // 用户已经切到别的会话，丢弃
+    var list = j.debates || [], total = list.length;
+    _dcbApplySeq(sid, list, total);
+    var topAnchor = (msgEls && msgEls.length) ? msgEls[0] : null;
+    for (var i = 0; i < total; i++) {
+      var it = list[i], key = it.key || it.rel_path;
+      if (seen[key]) continue;
+      seen[key] = 1;
+      var wrap = _dcbBuildFromIndex(sid, it, i + 1, total,
+        (typeof it.after_index === 'number' && it.after_index >= 0 && it.after_index < (offset || 0)));
+      var pt = _dcbInsertPoint(it.after_index, msgEls, offset);
+      // 落在已加载窗口之前 → 统一插到第一条消息前面；锚点不往前挪，保证仍是时间正序
+      if (pt.top && topAnchor) { pt.el.insertBefore(wrap, topAnchor); }
+      else { pt.el.insertBefore(wrap, pt.before); }
+      added++;
+    }
+  } catch (e) { if (!quiet) _debateNotice('辩论时间线加载失败：' + e); }
+  return added;
+}
+
+function _dcbBuildFromIndex(sid, it, idx, total, early) {
+  var wrap = document.createElement('div');
+  wrap.className = 'dcb-wrap';
+  wrap.dataset.sid = sid;
+  wrap.dataset.rel = it.rel_path || '';
+  wrap.dataset.key = it.key || '';
+  wrap.dataset.mt = it.mtime_epoch || '';
+  wrap.innerHTML = debateShellHtml({
+    topic: it.topic || '', conclusion: it.conclusion || '', tone: it.tone || 'none',
+    confCn: it.confidence_cn || '', why: it.why || '', nRole: it.roles || 0,
+    nModel: (it.models || []).length, nClaim: 0, hasDigest: !!it.has_digest, failed: !!it.failed,
+    kind: '', format: it.format || '', level: it.level || '', mtime: it.mtime || '',
+    scenarioLabel: it.scenario_label || '',   // 折叠卡也能看到「这场按什么场景判的」
+    idx: idx, total: total, early: !!early
+  });
+  return wrap;
+}
+
+// 「载入更早对话并把它放回原位」：拉到全部消息后，整批卡片重新按真实位置插入
+function _dcbLoadAllAndFocus(el) {
+  var wrap = el && el.closest ? el.closest('.dcb-wrap') : null;
+  if (!wrap) return;
+  _dcbFocusKey = wrap.dataset.key || '';
+  loadAllMessages(currentSid);
+}
+
+function _dcbClearCards(sid) {
+  var box = document.getElementById('messages');
+  if (box) {
+    var cards = box.querySelectorAll('.dcb-wrap[data-key]');
+    for (var i = 0; i < cards.length; i++) if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
+  }
+  _debateKeys[sid] = {};
+}
+
+// 插到第 after_index 条对话消息之后；落在窗口之前就插到窗口最上方，窗口之后追加到末尾
+function _dcbInsertPoint(afterIndex, msgEls, offset) {
+  var box = document.getElementById('messages');
+  var rel = (afterIndex === undefined || afterIndex === null || afterIndex < 0) ? 1e9 : (afterIndex - (offset || 0));
+  if (!msgEls || !msgEls.length) return { el: box, before: null, top: false };
+  if (rel <= 0) return { el: box, before: msgEls[0], top: true };
+  if (rel >= msgEls.length) return { el: box, before: null, top: false };
+  var anchor = msgEls[rel - 1];
+  if (!anchor || !anchor.parentNode) return { el: box, before: null, top: false };
+  return { el: anchor.parentNode, before: anchor.nextSibling, top: false };
 }
 
 function _debateNotice(text) {
@@ -3651,29 +4076,48 @@ async function loadLatestDebate(sid, tries, quiet) {
   return null;
 }
 
+// 重新加载这一张卡片自己的归档（不是"全会话最新一场"）
 async function reloadDebateCard(el) {
   var wrap = el.closest ? el.closest('.dcb-wrap') : null;
-  var sid = (wrap && wrap.dataset.sid) || currentSid;
+  if (!wrap) return;
+  var sid = wrap.dataset.sid || currentSid;
   if (!sid) return;
+  var rel = wrap.dataset.rel || '';
+  var body = wrap.querySelector('.dcb-body');
+  var wasOpen = wrap.classList.contains('dcb-open');
   _lastDebateSig = '';
   try {
-    var r = await fetch('/api/results/' + encodeURIComponent(sid) + '/debate/latest?ts=' + Date.now());
+    var url = rel
+      ? ('/api/results/' + encodeURIComponent(sid) + '/debate/one?rel=' + encodeURIComponent(rel) + '&ts=' + Date.now())
+      : ('/api/results/' + encodeURIComponent(sid) + '/debate/latest?ts=' + Date.now());
+    var r = await fetch(url);
     if (!r.ok) { alert('加载失败：HTTP ' + r.status); return; }
     var j = await r.json();
-    if (!j || !j.ok) { alert('没找到辩论归档：' + ((j && j.error) || '未知原因')); return; }
-    var db = normalizeDebate(j.debate);
-    var meta = {
-      mtime_text: j.mtime_text || (j.mtime ? new Date(j.mtime * 1000).toLocaleString() : ''),
-      path: j.rel_path || '',
-      skipped: (j.skipped_newer || []).length || '',
-      download: (j.path || j.rel_path) ? ('/api/file/download?path=' + encodeURIComponent(j.path || j.rel_path)) : ''
+    if (!j || !j.ok) { alert('加载失败：' + ((j && j.error) || '未知原因')); return; }
+    wrap._dcbArchive = j.debate;
+    wrap._dcbMeta = {
+      mtime_text: j.mtime_text || j.mtime || '', path: j.rel_path || rel,
+      download: (j.path || rel) ? ('/api/file/download?path=' + encodeURIComponent(j.path || rel)) : ''
     };
-    if (wrap) {
-      wrap.innerHTML = debateTableHtml(db, meta);
-      _dgWire(wrap);
-      _lastDebateSig = String(j.path || '') + '|' + String(j.mtime_epoch || j.mtime || '');
-    }
+    if (j.rel_path) wrap.dataset.rel = j.rel_path;
+    _dcbRefreshShell(wrap);
+    if (body) { body.innerHTML = ''; delete body.dataset.built; }
+    if (wasOpen) _dcbOpen(wrap);
   } catch (e) { alert('加载失败：' + e); }
+}
+
+function _dcbRefreshShell(wrap) {
+  if (!wrap._dcbArchive) return;
+  var top = wrap.querySelector('.dcb-top');
+  if (!top) return;
+  var db = normalizeDebate(wrap._dcbArchive);
+  var tmp = document.createElement('div');
+  tmp.innerHTML = debateShellHtml(_dcbEntry(db, wrap._dcbMeta || {}));
+  var fresh = tmp.querySelector('.dcb-top');
+  if (fresh) top.parentNode.replaceChild(fresh, top);
+  var seq = (_debateSeq[wrap.dataset.sid || ''] || {})[wrap.dataset.key];
+  var el2 = wrap.querySelector('[data-dcbseq]');
+  if (seq && el2) el2.textContent = '第 ' + seq.idx + ' 场' + (seq.total > 1 ? (' / 共 ' + seq.total + ' 场') : '');
 }
 function addStatusNotice(content) {
   var div = document.createElement('div');
@@ -4935,17 +5379,26 @@ function loadAllMessages(sid) {
   fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
     if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
+    _debateKeys[sid] = {};   // 全部消息加载后，卡片重新按真实位置插入
+    var msgEls = [];
     (d.messages || []).forEach(function(m) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       // 2026-08-26: 增加前缀内容级过滤（[会话要求]/[相关历史记忆] 等 role=user 注入）
       if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content, m);
+      var _le = document.getElementById('messages').lastElementChild;
+      if (_le) msgEls.push(_le);
     });
     renderSessionStats(d.stats);
-    // 2026-09-18: 「加载全部消息」同样把辩论过程卡片补回来
+    // 2026-09-18: 「加载全部消息」→ 每场辩论插回它发生的位置（全部加载时 offset=0）
     _lastDebateSig = '';
-    loadLatestDebate(sid, 1, true);
+    loadDebateTimeline(sid, msgEls, (typeof d.shown_offset === 'number' ? d.shown_offset : 0), true).then(function () {
+      if (!_dcbFocusKey) return;
+      var el = document.querySelector('.dcb-wrap[data-key="' + _dcbFocusKey + '"]');
+      _dcbFocusKey = null;
+      if (el) el.scrollIntoView({ block: 'center' });
+    });
   });
 }
 
@@ -5122,18 +5575,21 @@ function switchSession(sid) {
     document.getElementById('messages').innerHTML = '';
     var msgs = d.messages || [];
     if (!msgs.length && !liveBubble) showNewSessionWelcome();
+    var msgEls = [];   // 每条消息的 DOM，辩论卡片按 after_index 插回对应位置
     msgs.forEach(function(m) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       // 2026-08-26: 前缀内容级过滤（与 loadAllMessages 同 helper）
       if (_isInjectMsg(m)) return;
       if (m.role === 'user') addUserMsg(m.content);
       else addAssistantMsg(m.content, m);
+      var _le = document.getElementById('messages').lastElementChild;
+      if (_le) msgEls.push(_le);
     });
     renderSessionStats(d.stats);
-    // 2026-09-18: 打开/切回会话时，把该会话最新一场辩论的过程卡片补渲染回来
-    // （此前只有「辩论刚跑完的那个页面」看得到卡片，刷新或切会话就消失了）
+    // 2026-09-18: 打开/切回会话时，把该会话的每一场辩论都插回它真正发生的位置
+    // （此前只有「辩论刚跑完的那个页面」看得到卡片，刷新或切会话就消失/堆在末尾）
     _lastDebateSig = '';
-    loadLatestDebate(sid, 1, true);
+    _dcbTimelineCtx = { sid: sid, msgEls: msgEls, offset: (typeof d.shown_offset === 'number' ? d.shown_offset : 0) };
     if (liveBubble) {
       document.getElementById('messages').appendChild(liveBubble);
       currentAssistantEl = liveBubble;
@@ -5152,6 +5608,10 @@ function switchSession(sid) {
         : '📜 加载更早的消息';
       moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">' + _moreText + '</span>';
       document.getElementById('messages').insertBefore(moreDiv, document.getElementById('messages').firstChild);
+    }
+    if (_dcbTimelineCtx && _dcbTimelineCtx.sid === sid) {
+      loadDebateTimeline(sid, _dcbTimelineCtx.msgEls, _dcbTimelineCtx.offset, true);
+      _dcbTimelineCtx = null;
     }
     refreshTodos();
     refreshResults();

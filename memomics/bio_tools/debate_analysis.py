@@ -530,7 +530,7 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 
 ## 辩论主题
 {topic}
-
+{scenario_line}
 ## 上下文
 {context}
 
@@ -548,7 +548,7 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 - 你不知道其他编辑的观点，请独立思考。
 {output_spec}"""
 
-_V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2）。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
+_V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
 
 ## 辩论主题
 {topic}
@@ -564,7 +564,7 @@ _V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2�
 
 {digest_section}{neutral_args}{evidence_section}{contract}
 
-## 评分 rubrics（替代主观“说服力”）
+{focus_section}## 评分 rubrics（替代主观“说服力”）
 {rubrics_hint}
 
 ## 裁决决策树（必须遵守）
@@ -574,7 +574,7 @@ _V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2�
 4. 若双方论证接近 → 只能 need_more_info + missing，不得强行二选一。
 
 ## 输出格式（严格 JSON）
-{{"rubrics": {{"evidence_quality": 1-10, "effect_size": 1-10, "confounding_control": 1-10, "prior_literature": 1-10, "reproducibility": 1-10, "pro_claim_coverage": 1-10, "con_claim_coverage": 1-10}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "missing": ["必要证据/数据清单"], "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
+{{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "missing": ["必要证据/数据清单"], "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
 
 _RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
 - effect_size：效应量大小与生物学意义
@@ -582,6 +582,80 @@ _RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
 - prior_literature：是否参考相关文献
 - reproducibility：是否可复现
 - pro/con_claim_coverage：正/反方是否覆盖完整（未覆盖给低分）"""
+
+
+# ==================== 赛前场景预判（2026-09-18，用户提出） ====================
+# 背景（用户原话）：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，
+# 是不是需要采取其他的裁判呢？所以辩论之前，也要分析一下场景呢？」
+# 问题：角色身份与裁判 rubric 长期硬编码生物学（marker gene / 批次效应 / 效应量 …）。
+# 当辩题其实是「图版式怎么改」「脚本怎么修」「目录怎么组织」时，生物学 rubric 会问错问题，
+# 裁判也会拿生信的标准打分 —— 结论看着专业，其实答非所问。
+# 做法：正式辩论前先花 1 次短调用做**场景预判**，产出：
+#   ① 主场景与判定依据 ② 裁判身份、必须逐条检查的要点 ③ 本场景的评分 rubric 键
+#   ④ 各角色槽位的专业身份与提问清单（槽位数量不变 → 调用数/路由/归档结构不动）
+# 预判失败或解析失败一律回退到原有生物学模板，绝不阻断辩论。
+
+_SCENARIO_LABELS = {
+    "bio_data": "生物学数据与结论",
+    "stats_design": "统计与实验设计",
+    "figure_layout": "图表版式与视觉呈现",
+    "code_engineering": "代码与工程实现",
+    "writing": "文档写作与表达",
+    "ops_environment": "运维环境与资源",
+    "general": "通用综合判断",
+}
+
+_SCENARIO_PROMPT = """你在为一场多角色辩论做**赛前场景预判**。辩论题目如下，请先判断它到底属于哪一类问题，再据此设计本次辩论的角色与裁判标准。
+
+## 辩论主题
+{topic}
+
+## 上下文
+{context}
+
+## 判断要求
+1. 先看主题真正在争论什么：是**生物学/实验结论**、**统计与实验设计**、**图表版式与视觉呈现**、
+   **代码与工程实现**、**文档写作**，还是**运维环境/资源**问题。可以复合，但必须给出一个主场景。
+2. 角色槽位固定：正方 3 席、反方 4 席（反方第 4 席专门负责「历史经验/踩过的坑」）。
+   你要为每个槽位起一个**符合本场景**的专业身份，并写出该身份必须追问的问题清单。
+   生物学辩题就用生物学/统计/生信身份；版式辩题应该是信息设计/期刊规范/可读性与色觉可达性
+   这类身份；代码辩题应该是软件工程/性能/测试与可维护性这类身份。**不许所有场景都套生物学**。
+3. 裁判 rubric：给出 5-7 个**本场景真正该看**的评分维度（英文 key + 中文名 + 打分说明）。
+   生物学场景可用 evidence_quality/effect_size/confounding_control；
+   版式场景应换成期刊规范符合度/信息层级/色觉与灰度可达性/最小改动成本 这类维度。
+4. 证据：说明本场景里「什么算证据」。生物学场景的证据是 PMID/DOI/实验数据；版式场景的证据是
+   期刊投稿规范原文、目标期刊已发表图样例、灰度和色盲模拟结果、实际渲染尺寸；代码场景的证据是
+   实测耗时/报错日志/版本 diff/测试结果。**不要照抄生物学证据标准**。
+5. 不确定就选 general，并在 why 里说明为何无法归类。
+
+## 输出格式（严格 JSON，不要输出任何其他文字）
+{{"scenario": "bio_data|stats_design|figure_layout|code_engineering|writing|ops_environment|general",
+  "scenario_label": "中文场景名（≤12字）",
+  "why": "一句话判定依据（≤60字）",
+  "judge_persona": "本场裁判身份一句话（例：期刊图版式与技术审稿编辑）",
+  "judge_focus": ["裁判必须逐条检查的要点（4-6 条）", "…"],
+  "rubric_keys": ["英文键名（5-7 个）", "…"],
+  "rubrics": [{{"key": "英文键名", "label": "中文名", "hint": "怎么打分"}}],
+  "evidence_types": ["本场景里什么算证据", "…"],
+  "pro_roles": [{{"title": "正方第1席身份（例：信息设计编辑（正方））", "task": "从…角度支持", "questions": ["该席必须回答的问题", "…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}],
+  "con_roles": [{{"title": "反方第1席身份", "task": "从…角度质疑", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "反方第4席的具体身份（负责历史经验/踩过的坑，不要照抄这句话）", "task": "从历史记录角度质疑", "questions": ["…"]}}]}}"""
+
+# 角色槽位 → 场景预判里的位置。槽位 label 保持原样（调用路由/归档键/UI 全都不变），
+# 只替换「展示身份 + 任务 + 提问清单」。
+_SCENARIO_ROLE_SLOTS = {
+    "pro_biology": ("pro_roles", 0),
+    "pro_statistics": ("pro_roles", 1),
+    "pro_bioinformatics": ("pro_roles", 2),
+    "con_biology": ("con_roles", 0),
+    "con_statistics": ("con_roles", 1),
+    "con_bioinformatics": ("con_roles", 2),
+    "con_history": ("con_roles", 3),
+}
+
+_SCENARIO_DEFAULT_RUBRIC_KEYS = ['"evidence_quality": 1-10', '"effect_size": 1-10',
+                                 '"confounding_control": 1-10', '"prior_literature": 1-10',
+                                 '"reproducibility": 1-10', '"pro_claim_coverage": 1-10',
+                                 '"con_claim_coverage": 1-10']
 
 
 # ==================== 裁判整理阶段（2026-09-18） ====================
@@ -786,8 +860,172 @@ def _attach_digest(result: dict, dg) -> None:
         result.update(_digest_fields(dg))
 
 
-def _role_title(label: str) -> str:
-    """角色展示名（中文），找不到就用原 label。"""
+def _scenario_parse(txt: str):
+    """从模型输出里解析场景预判 JSON；失败返回 None（不抛异常）。"""
+    if not txt:
+        return None
+    clean = str(txt).replace("```json", "").replace("```", "").strip()
+    for cand in [clean] + _extract_json_candidates(clean):
+        try:
+            o = json.loads(cand)
+        except Exception:
+            continue
+        if isinstance(o, dict) and (o.get("scenario") or o.get("judge_persona") or o.get("rubrics")):
+            return o
+    return None
+
+
+def _scenario_norm(obj):
+    """规范化场景预判：补默认值、裁长度、限 rubric 数量；缺关键字段返回 None。"""
+    if not isinstance(obj, dict):
+        return None
+    _sc = str(obj.get("scenario") or "general").strip().lower()
+    if _sc not in _SCENARIO_LABELS:
+        _sc = "general"
+    out = {
+        "scenario": _sc,
+        "scenario_label": str(obj.get("scenario_label") or _SCENARIO_LABELS[_sc]).strip()[:24],
+        "why": str(obj.get("why") or "").strip()[:200],
+        "judge_persona": str(obj.get("judge_persona") or "").strip()[:140],
+        "judge_focus": [str(x).strip()[:220] for x in (obj.get("judge_focus") or []) if str(x).strip()][:6],
+        "evidence_types": [str(x).strip()[:180] for x in (obj.get("evidence_types") or []) if str(x).strip()][:6],
+        "rubrics": [], "rubric_keys": [], "pro_roles": [], "con_roles": [],
+    }
+    _rs = []
+    for r in (obj.get("rubrics") or []):
+        if isinstance(r, dict) and r.get("key"):
+            _k = re.sub(r"[^0-9a-zA-Z_]", "", str(r["key"]))[:40]
+            if _k:
+                _rs.append({"key": _k, "label": str(r.get("label") or _k)[:40],
+                            "hint": str(r.get("hint") or "")[:180]})
+    _rs = _rs[:7]
+    if _rs:
+        out["rubrics"] = _rs
+        out["rubric_keys"] = [r["key"] for r in _rs]
+    else:
+        _ks = [re.sub(r"[^0-9a-zA-Z_]", "", str(k))[:40] for k in (obj.get("rubric_keys") or [])]
+        out["rubric_keys"] = [k for k in _ks if k][:7]
+        out["rubrics"] = [{"key": k, "label": k, "hint": ""} for k in out["rubric_keys"]]
+
+    def _roles(key, want):
+        got = []
+        for r in (obj.get(key) or []):
+            if isinstance(r, dict) and (r.get("title") or r.get("task")):
+                got.append({"title": str(r.get("title") or "").strip()[:70],
+                            "task": str(r.get("task") or "").strip()[:200],
+                            "questions": [str(q).strip()[:240] for q in (r.get("questions") or [])
+                                          if str(q).strip()][:6]})
+        return got[:want]
+
+    out["pro_roles"] = _roles("pro_roles", 3)
+    out["con_roles"] = _roles("con_roles", 4)
+    if not out["judge_persona"] and not out["rubrics"] and not out["pro_roles"] and not out["con_roles"]:
+        return None
+    return out
+
+
+def _analyze_scenario(topic: str, context: str, cfg: dict = None) -> dict:
+    """赛前场景预判（1 次调用，走 judge 路由 + 回退链）。
+
+    返回 {"scenario": {...}|None, "model": ..., "call_id": ..., "error": ...}。
+    任何失败都不抛异常：调用方拿到 scenario=None 就用原有生物学模板继续。
+    """
+    cfg = cfg or {}
+    out = {"scenario": None, "model": "", "call_id": "", "error": "", "raw": ""}
+    try:
+        if str(os.environ.get("MEMOMICS_DEBATE_NO_SCENARIO", "")).strip() == "1":
+            out["error"] = "skipped:env"
+            return out
+        _flag = cfg.get("scenario_analysis", True)
+        if _flag is False or str(_flag).strip().lower() in ("0", "false", "no", "off"):
+            out["error"] = "skipped:config"
+            return out
+        prompt = _SCENARIO_PROMPT.format(topic=topic, context=context)
+        r = _call_llm_role_resilient("judge", prompt, cfg, temperature=0.2)
+        out["model"] = (str(r.get("fallback_route") or _role_model_id("judge", cfg))
+                        if r.get("fallback_used") else _role_model_id("judge", cfg))
+        out["call_id"] = str(r.get("call_id") or "")
+        if r.get("error"):
+            out["error"] = "场景预判调用失败：" + str(r.get("error_detail") or r.get("error"))[:200]
+            return out
+        txt = str(r.get("content") or "")
+        if not txt.strip():
+            out["error"] = "场景预判输出为空（模型没给 content）"
+            return out
+        out["raw"] = txt[:1200]
+        obj = _scenario_parse(txt)
+        if obj is None:
+            out["error"] = "场景预判输出无法解析为 JSON（已按生物学默认标准继续）"
+            return out
+        norm = _scenario_norm(obj)
+        if norm is None:
+            out["error"] = "场景预判 JSON 缺关键字段（已按生物学默认标准继续）"
+            return out
+        norm["model"] = out["model"]
+        norm["call_id"] = out["call_id"]
+        out["scenario"] = norm
+        return out
+    except Exception as e:
+        out["error"] = "场景预判异常：" + str(e)[:200]
+        return out
+
+
+def _scenario_fields(res) -> dict:
+    """场景预判结果 → 归档字段（成功写 scenario；失败写 scenario_error 留痕，便于排查）。"""
+    if not isinstance(res, dict):
+        return {}
+    sc = res.get("scenario")
+    if isinstance(sc, dict):
+        return {"scenario": sc, "scenario_model": res.get("model", ""),
+                "scenario_call_id": res.get("call_id", "")}
+    d = {}
+    if res.get("error"):
+        d["scenario_error"] = str(res.get("error"))[:300]
+    if res.get("model"):
+        d["scenario_model"] = res["model"]
+    if res.get("raw"):
+        d["scenario_raw"] = str(res["raw"])[:1200]
+    return d
+
+
+def _scenario_role_spec(scenario, label: str):
+    """取场景预判为某个角色槽位设计的身份；没有则 None（回退生物学默认）。"""
+    if not isinstance(scenario, dict):
+        return None
+    slot = _SCENARIO_ROLE_SLOTS.get(label)
+    if not slot:
+        return None
+    key, i = slot
+    arr = scenario.get(key) or []
+    if isinstance(arr, list) and len(arr) > i and isinstance(arr[i], dict):
+        r = arr[i]
+        if r.get("title") or r.get("task") or r.get("questions"):
+            return r
+    return None
+
+
+def _scenario_line(scenario) -> str:
+    """角色 prompt 里的场景段（没有预判就返回空串）。"""
+    if not isinstance(scenario, dict):
+        return ""
+    _lab = scenario.get("scenario_label") or _SCENARIO_LABELS.get(scenario.get("scenario", ""), "")
+    if not _lab:
+        return ""
+    _t = f"\n## 本场场景（赛前预判）\n场景：{_lab}"
+    if scenario.get("why"):
+        _t += f"（判定依据：{scenario['why']}）"
+    _t += ("\n你的身份与提问清单已按该场景设定；某条问题在本场景确实不适用时可以跳过，"
+           "但要在 self_audit_failures 里写明原因。")
+    if scenario.get("evidence_types"):
+        _t += "\n本场景的证据标准：" + "；".join(scenario["evidence_types"][:4]) + "。"
+    return _t + "\n"
+
+
+def _role_title(label: str, scenario=None) -> str:
+    """角色展示名（中文）：场景预判给了本场身份就用它，否则用原 biology 默认名。"""
+    _sc = _scenario_role_spec(scenario, label)
+    if _sc and _sc.get("title"):
+        return _sc["title"]
     return (_V2_ROLE_QUESTIONS.get(label) or {}).get("title") or label
 
 
@@ -800,22 +1038,59 @@ def _evidence_block(evidence_cards: str = "") -> str:
 
 
 def _v2_role_prompt(label: str, topic: str, context: str, kb_info: str,
-                    history_errors: str = "", evidence_cards: str = "") -> str:
+                    history_errors: str = "", evidence_cards: str = "", scenario=None) -> str:
+    """角色 prompt。scenario=赛前场景预判结果时，用本场该槽位的身份/任务/提问替换生物学默认。"""
     spec = _V2_ROLE_QUESTIONS.get(label, _V2_ROLE_QUESTIONS["pro_biology"])
+    title, task, questions = spec["title"], spec["task"], spec["questions"]
+    _sc_role = _scenario_role_spec(scenario, label)
+    if _sc_role:
+        title = _sc_role.get("title") or title
+        task = _sc_role.get("task") or task
+        _qs = _sc_role.get("questions") or []
+        if _qs:
+            questions = "\n".join(f"{i+1}. {q}" for i, q in enumerate(_qs))
     kb_title = "历史报错记录" if label == "con_history" else "知识库参考"
     kb = history_errors if label == "con_history" else (kb_info or "无知识库参考")
     return _V2_ROLE_TEMPLATE.format(
-        title=spec["title"], task=spec["task"], topic=topic, context=context,
+        title=title, task=task, topic=topic, context=context,
+        scenario_line=_scenario_line(scenario),
         kb_title=kb_title, kb_info=kb,
         evidence_section=_evidence_block(evidence_cards),
-        contract=_EVIDENCE_CONTRACT + "\n\n", questions=spec["questions"],
+        contract=_EVIDENCE_CONTRACT + "\n\n", questions=questions,
         output_spec=_V2_OUTPUT_SPEC)
 
 
 def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments: str,
                      evidence_cards: str = "", neutral_args: str = "",
-                     roles: str = "3 正方 + 4 反方", digest: str = "") -> str:
+                     roles: str = "3 正方 + 4 反方", digest: str = "", scenario=None) -> str:
+    """裁判 prompt。scenario=赛前场景预判结果时，裁判身份/检查要点/评分维度全部按本场场景走
+    （排版题就不再拿生信的 effect_size/confounding 去打分）。"""
+    _sc = scenario if isinstance(scenario, dict) else None
+    persona = "生信分析多角色辩论的**裁判编辑**（v2）"
+    focus_section = ""
+    rubrics_hint = _RUBRICS_HINT
+    rubric_keys = ", ".join(_SCENARIO_DEFAULT_RUBRIC_KEYS)
+    if _sc:
+        if _sc.get("judge_persona"):
+            persona = f"{_sc['judge_persona']}，本场多角色辩论的**裁判编辑**（v2）"
+        _bits = []
+        if _sc.get("scenario_label"):
+            _bits.append(f"- 本场场景：{_sc['scenario_label']}"
+                         + (f"（判定依据：{_sc['why']}）" if _sc.get("why") else ""))
+        for _f in (_sc.get("judge_focus") or [])[:6]:
+            _bits.append(f"- {_f}")
+        if _sc.get("evidence_types"):
+            _bits.append("- 本场景的证据标准：" + "；".join(_sc["evidence_types"][:5])
+                         + "（不符合这些标准的论据一律按“无证据”处理）")
+        if _bits:
+            focus_section = "## 本场裁判必须逐条检查（赛前场景预判）\n" + "\n".join(_bits) + "\n\n"
+        if _sc.get("rubrics"):
+            rubrics_hint = "\n".join(
+                f"- {r['key']}：{r.get('label') or ''}"
+                + (f"——{r['hint']}" if r.get("hint") else "") for r in _sc["rubrics"])
+            rubric_keys = ", ".join(f'"{r["key"]}": 1-10' for r in _sc["rubrics"])
     return _V2_JUDGE_PROMPT.format(
+        persona=persona,
         n_pro="7位" if not neutral_args else "9位",
         roles=roles,
         topic=topic, context=context,
@@ -824,7 +1099,9 @@ def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments
         neutral_args=neutral_args or "",
         evidence_section=_evidence_block(evidence_cards),
         contract=_EVIDENCE_CONTRACT + "\n\n",
-        rubrics_hint=_RUBRICS_HINT)
+        focus_section=focus_section,
+        rubrics_hint=rubrics_hint,
+        rubric_keys=rubric_keys)
 
 
 def _use_v2_prompts(cfg: dict) -> bool:
@@ -1146,6 +1423,7 @@ def _load_debate_config() -> dict:
       debate:
         mode: homogeneous | adversarial | multi_model | temperature
         rounds: 1
+        scenario_analysis: true   # 赛前场景预判（非生物学辩题换裁判标准）；false 关闭
         judge: {model, provider}
         pro:   {model, provider}
         con:   {model, provider}
@@ -1168,6 +1446,10 @@ def _load_debate_config() -> dict:
         "evidence_mode": False,       # True 时注入证据卡/做引用校验
         "prompt_version": 2,          # 2=v2 证据契约 | 1=legacy（可用 MEMOMICS_DEBATE_LEGACY_PROMPTS=1 回退）
         "judge_digest": True,         # 2026-09-18: 裁决前先让裁判整理（草稿→清晰言论+论据；找不到证据如实写明）
+        # 2026-09-18: 赛前场景预判（+1 次调用，走 judge 路由）。用户提出「排版/技术类问题是不是该换裁判」
+        # → 辩论前先判本场属于哪类问题，再据此生成各席位身份与裁判评分维度；
+        # False 或 env MEMOMICS_DEBATE_NO_SCENARIO=1 则退回原有生物学模板。
+        "scenario_analysis": True,
         "max_tokens": {"judge": 8192, "role": 8192, "l1_role": 2048, "l1_judge": 8192},
     }
     try:
@@ -2001,7 +2283,7 @@ _L1_CON_PROMPT = """你是生信分析评审中的**反方编辑**。请就以�
 输出格式（严格 JSON）：
 {{"argument": "质疑理由（含风险点）", "risk_params": {{}} }}"""
 
-_L1_JUDGE_PROMPT = """你是生信分析评审的**裁判**。{n}组正反方编辑（独立评审、互不可见）对以下决策给出了意见，请总结双方并裁决。
+_L1_JUDGE_PROMPT = """你是{persona}。{n}组正反方编辑（独立评审、互不可见）对以下决策给出了意见，请总结双方并裁决。
 
 主题：{topic}
 背景：{context}
@@ -2013,7 +2295,7 @@ _L1_JUDGE_PROMPT = """你是生信分析评审的**裁判**。{n}组正反方编
 
 
 def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str,
-                               evidence_cards: str = "") -> str:
+                               evidence_cards: str = "", scenario=None, scenario_res=None) -> str:
     """C2(2026-08-11): L1 轻量采样辩论。
 
     架构（按用户要求）：使用当前选择的默认模型，正方与反方**上下文切断**独立采样，
@@ -2047,8 +2329,8 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
         if use_v2:
-            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev)
-            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev)
+            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev, scenario=scenario)
+            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev, scenario=scenario)
         else:
             pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
             con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
@@ -2084,9 +2366,13 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
     if use_v2:
         pro_args = "\n\n".join(s["pro"] for s in sample_records)
         con_args = "\n\n".join(s["con"] for s in sample_records)
-        judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev, digest=_dg_section)
+        judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev, digest=_dg_section,
+                                        scenario=scenario)
     else:
-        judge_prompt = _L1_JUDGE_PROMPT.format(n=len(debates_text), topic=topic,
+        _l1_persona = ("生信分析评审的**裁判**" if not isinstance(scenario, dict)
+                       or not scenario.get("judge_persona")
+                       else f"{scenario['judge_persona']}（本场评审的裁判）")
+        judge_prompt = _L1_JUDGE_PROMPT.format(persona=_l1_persona, n=len(debates_text), topic=topic,
                                                context=context, debates="\n\n".join(debates_text),
                                                digest_section=_dg_section)
     judge = _call_llm_sync(judge_prompt, "l1_judge", rc["api_key"], rc["base_url"],
@@ -2108,6 +2394,7 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         },
     }
     _attach_digest(result, digest_res)
+    result.update(_scenario_fields(scenario_res))
     if not judge.get("error"):
         try:
             obj = _parse_judge_json(judge["content"])
@@ -2325,8 +2612,16 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     bioinfo_kb_val = bioinfo_kb or kb
 
     # ========== C2(2026-08-11): L1 轻量采样辩论（默认模型上下文切断正反采样 + 裁判总结） ==========
+    # ========== 赛前场景预判（2026-09-18 用户要求） ==========
+    # 用户原话：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，是不是需要采取
+    # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
+    # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
+    scenario_res = _analyze_scenario(topic, context, cfg)
+    scenario = scenario_res.get("scenario") if isinstance(scenario_res, dict) else None
+
     if level == "L1":
-        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards)
+        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards,
+                                      scenario=scenario, scenario_res=scenario_res)
 
     try:
         # ========== 辩论轮次循环（P0：rounds>1 时轮间注入上一轮裁判摘要） ==========
@@ -2349,9 +2644,9 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
             if use_v2:
                 pro_tasks = [
-                    ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev) + round_note),
-                    ("pro_statistics", _v2_role_prompt("pro_statistics", topic, context, stat_kb, "", ev) + round_note),
-                    ("pro_bioinformatics", _v2_role_prompt("pro_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
+                    ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
+                    ("pro_statistics", _v2_role_prompt("pro_statistics", topic, context, stat_kb, "", ev, scenario=scenario) + round_note),
+                    ("pro_bioinformatics", _v2_role_prompt("pro_bioinformatics", topic, context, bioinfo_kb_val, "", ev, scenario=scenario) + round_note),
                 ]
             else:
                 pro_tasks = [
@@ -2367,10 +2662,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             # ========== 反方 4 专业编辑（互相不知道，也看不到正方，各用专属知识库） ==========
             if use_v2:
                 con_tasks = [
-                    ("con_biology", _v2_role_prompt("con_biology", topic, context, bio_kb, "", ev) + round_note),
-                    ("con_statistics", _v2_role_prompt("con_statistics", topic, context, stat_kb, "", ev) + round_note),
-                    ("con_bioinformatics", _v2_role_prompt("con_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
-                    ("con_history", _v2_role_prompt("con_history", topic, context, "", hist, ev) + round_note),
+                    ("con_biology", _v2_role_prompt("con_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
+                    ("con_statistics", _v2_role_prompt("con_statistics", topic, context, stat_kb, "", ev, scenario=scenario) + round_note),
+                    ("con_bioinformatics", _v2_role_prompt("con_bioinformatics", topic, context, bioinfo_kb_val, "", ev, scenario=scenario) + round_note),
+                    ("con_history", _v2_role_prompt("con_history", topic, context, "", hist, ev, scenario=scenario) + round_note),
                 ]
             else:
                 con_tasks = [
@@ -2391,7 +2686,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             neutral_args_v2 = ""
             if use_core9:
                 for _nl in ("design_review", "reproducibility_review"):
-                    _nr = _call_llm_role(_nl, _v2_role_prompt(_nl, topic, context, "通用知识库", "", ev), cfg)
+                    _nr = _call_llm_role(_nl, _v2_role_prompt(_nl, topic, context, "通用知识库", "", ev,
+                                                     scenario=scenario), cfg)
                     neutral_results[_nl] = _nr
                 neutral_args_v2 = "\n\n".join(
                     [f"### {_nl}\n{neutral_results[_nl]['content']}"
@@ -2401,25 +2697,26 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             # 实跑证据：8 个角色里常有 5-7 个不按 JSON 契约输出，只回 [reasoning草稿…]；
             # 裁判直接读草稿 → 卷面乱、论据挂不上锚点。这里先整理一遍，再交给裁判裁决。
             _failed_early = [
-                _role_title(_lbl) for _lbl, _r in (
+                _role_title(_lbl, scenario) for _lbl, _r in (
                     ("pro_biology", pro_bio), ("pro_statistics", pro_stat), ("pro_bioinformatics", pro_bioinfo),
                     ("con_biology", con_bio), ("con_statistics", con_stat), ("con_bioinformatics", con_bioinfo),
                     ("con_history", con_history))
                 if (_r or {}).get("error") or "辩论生成失败" in str((_r or {}).get("content", ""))
             ]
             _l2_blocks = [
-                _digest_block("正方 · " + _role_title("pro_biology"), pro_bio.get("content", "")),
-                _digest_block("正方 · " + _role_title("pro_statistics"), pro_stat.get("content", "")),
-                _digest_block("正方 · " + _role_title("pro_bioinformatics"), pro_bioinfo.get("content", "")),
-                _digest_block("反方 · " + _role_title("con_biology"), con_bio.get("content", "")),
-                _digest_block("反方 · " + _role_title("con_statistics"), con_stat.get("content", "")),
-                _digest_block("反方 · " + _role_title("con_bioinformatics"), con_bioinfo.get("content", "")),
-                _digest_block("反方 · " + _role_title("con_history"), con_history.get("content", "")),
+                _digest_block("正方 · " + _role_title("pro_biology", scenario), pro_bio.get("content", "")),
+                _digest_block("正方 · " + _role_title("pro_statistics", scenario), pro_stat.get("content", "")),
+                _digest_block("正方 · " + _role_title("pro_bioinformatics", scenario), pro_bioinfo.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_biology", scenario), con_bio.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_statistics", scenario), con_stat.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_bioinformatics", scenario), con_bioinfo.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_history", scenario), con_history.get("content", "")),
             ]
             for _nl, _nr in (neutral_results or {}).items():
-                _l2_blocks.append(_digest_block("中立 · " + _role_title(_nl), (_nr or {}).get("content", "")))
+                _l2_blocks.append(_digest_block("中立 · " + _role_title(_nl, scenario), (_nr or {}).get("content", "")))
             _dg_note = ("## 说明\n本场是多角色对抗（v3）：每个角色是独立 LLM 调用、上下文切断，"
-                        "正方看不到反方。请按角色整理上述发言。\n\n")
+                        "正方看不到反方。请按角色整理上述发言。\n\n"
+                        + (_scenario_line(scenario) if scenario else ""))
             if _failed_early:
                 _dg_note += ("## 注意\n以下角色本场调用失败、没有发言，请在整理结果里如实注明"
                              "「该角色本次没有输出」，不要替它们编造观点：" + "、".join(_failed_early) + "\n\n")
@@ -2440,7 +2737,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     "### 历史经验编辑（反方）\n" + con_history["content"],
                 ])
                 judge_prompt = _v2_judge_prompt(topic, context, pro_args_v2, con_args_v2, ev,
-                                                neutral_args=neutral_args_v2, digest=_dg_section)
+                                                neutral_args=neutral_args_v2, digest=_dg_section,
+                                                scenario=scenario)
             else:
                 judge_prompt = JUDGE_PROMPT.format(
                     topic=topic, context=context,
@@ -2544,6 +2842,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             "judge_verdict": judge["content"],
             # 2026-09-18: 裁判整理稿（草稿→清晰言论+论据；[找不到论据]=原文没有外部证据）
             **_digest_fields(digest_res),
+            # 2026-09-18: 赛前场景预判（角色身份与裁判 rubric 按本场场景生成；失败也留痕）
+            **_scenario_fields(scenario_res),
             # 2026-09-13: 裁判走回退路由时留痕（实验记录必须能看出真实使用的模型）
             "judge_fallback": ({"from_route": judge.get("fallback_from"),
                                 "detail": str(judge.get("fallback_detail", ""))[:200]}

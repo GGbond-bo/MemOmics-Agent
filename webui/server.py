@@ -6636,7 +6636,15 @@ async def get_messages(sid: str, limit: int = 100):
                 m["tool_count"] = _meta[_mi].get("tool_count", 0)
                 m["tool_names"] = _meta[_mi].get("tool_names", [])
             _mi += 1
-    return {"messages": normalized, "total": total, "stats": _stats}
+    # 2026-09-18: 给前端一个「窗口起点在整段对话里的绝对序号」，
+    # 辩论时间线据此把每场辩论插回它真正发生的位置（shown_total = 对话流消息总数）
+    try:
+        _shown_total = _debate_display_count(sid)
+    except Exception:
+        _shown_total = -1
+    _shown_offset = max(0, _shown_total - len(normalized)) if _shown_total >= 0 else 0
+    return {"messages": normalized, "total": total, "stats": _stats,
+            "shown_offset": _shown_offset, "shown_total": _shown_total}
 
 
 # ============ 会话删除 = 数据删除：结果目录连带清理 ============
@@ -11607,6 +11615,371 @@ def _load_latest_debate(sid: str):
         "skipped_newer": skipped,
         "debate": picked_data,
     }
+
+
+# ============ 辩论时间线（2026-09-18 v2：多场辩论各自回到它发生的位置）============
+# 用户诉求：一次分析里跑了好几场辩论时，卡片不能全堆在对话末尾 —— 每场要落在它真正
+# 发生的那一刻（前后就是当时的对话内容），点开才看细节。
+# 因此给每场辩论算一个 after_index：该场辩论开始前，对话流里已经有多少条
+# user/assistant 消息（与 /messages 完全同一套过滤规则），前端据此把卡片插回原位。
+_DEBATE_KEY_RE = re.compile(r"debate_(\d{8}_\d{6})")
+
+_DEBATE_VERDICT_MAP = {
+    "ok": ("方案成立，可以照此执行", "ok"),
+    "support": ("支持正方主张", "ok"),
+    "support_pro": ("支持正方主张", "ok"),
+    "pro": ("支持正方主张", "ok"),
+    "pro_wins": ("支持正方主张", "ok"),
+    "modify": ("方案要改，改完再用", "warn"),
+    "modify_first": ("方案要改，改完再用", "warn"),
+    "need_more_info": ("证据不足，先补数据再下结论", "warn"),
+    "insufficient_evidence": ("证据不足，先补数据再下结论", "warn"),
+    "reject": ("否决该方案", "con"),
+    "support_con": ("支持反方主张", "con"),
+    "con": ("支持反方主张", "con"),
+    "con_wins": ("支持反方主张", "con"),
+}
+
+
+def _debate_base_of(sid: str) -> str:
+    """会话的结果根目录（失败返回空串，绝不抛异常）。"""
+    base = ""
+    try:
+        base = _find_best_results_dir(sid) or ""
+    except Exception:
+        base = ""
+    if not base and sid in _sessions:
+        base = (_sessions.get(sid) or {}).get("results_dir") or ""
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    return base if (base and os.path.isdir(base)) else ""
+
+
+def _read_debate_file(p):
+    """读一份辩论归档；外层被 result_summary 包一层时自动剥掉。读不了返回 None。"""
+    try:
+        x = json.loads(Path(p).read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    if isinstance(x, dict) and "result_summary" in x and "pro_arguments" not in x:
+        inner = _extract_json_obj(x.get("result_summary"))
+        if isinstance(inner, dict):
+            x = inner
+    return x
+
+
+def _debate_richness(x) -> int:
+    """归档的信息量打分：同一场辩论常同时落 log/ 与 conclusions/ 两份，
+    取信息量大的那份（conclusions 副本常被截断）。"""
+    if not isinstance(x, dict):
+        return -1
+    n = 0
+    if x.get("pro_arguments") or x.get("pro_args") or x.get("samples"):
+        n += 40
+    if x.get("con_arguments") or x.get("con_args"):
+        n += 20
+    if x.get("judge_verdict"):
+        n += 15
+    if isinstance(x.get("judge_digest"), dict) and x.get("judge_digest"):
+        n += 25
+    if x.get("neutral_reviews"):
+        n += 8
+    if x.get("error"):
+        n -= 30
+    try:
+        n += min(len(json.dumps(x, ensure_ascii=False)) // 2000, 20)
+    except Exception:
+        pass
+    return n
+
+
+def _debate_display_count(sid: str, ts_epoch: float = 0.0) -> int:
+    """对话流（user/assistant，非注入）里的消息条数。
+
+    ts_epoch>0 时只数 timestamp <= ts_epoch 的（= 这场辩论开始前已经说完的话）。
+    失败返回 -1，前端会退化成「追加到末尾」。"""
+    try:
+        import sqlite3 as _sq
+        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return -1
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT content, timestamp FROM messages WHERE session_id=? AND role IN ('user','assistant') "
+                "AND content IS NOT NULL AND length(content)>0 ORDER BY id",
+                (sid,),
+            ).fetchall()
+        finally:
+            _conn.close()
+        n = 0
+        for _c, _ts in _rows:
+            if str(_c or "").lstrip().startswith(_INJECT_PREFIXES):
+                continue
+            if ts_epoch and not (_ts and float(_ts) <= float(ts_epoch)):
+                continue
+            n += 1
+        return n
+    except Exception:
+        return -1
+
+
+def _debate_verdict_bits(x: dict):
+    """(结论文字, tone, 置信度原文, 置信度中文)"""
+    v = str(x.get("verdict") or "").strip()
+    conf = str(x.get("confidence") or "").strip()
+    jv = x.get("judge_verdict")
+    if isinstance(jv, dict):
+        if not v:
+            v = str(jv.get("verdict") or "").strip()
+        if not conf:
+            conf = str(jv.get("confidence") or "").strip()
+    label, tone = _DEBATE_VERDICT_MAP.get(v.lower(), ("", "none"))
+    if not label:
+        label = ("本次没有给出裁决" if not v else ("裁决：" + v))
+        tone = "none"
+    conf_cn = {"high": "高", "medium": "中", "low": "低"}.get(conf.lower(), conf)
+    return label, tone, conf, conf_cn
+
+
+def _debate_one_line(x: dict, limit: int = 300) -> str:
+    """一句话依据：先说整理稿总结，其次裁判正文首句；都没有就给空串。"""
+    cands = []
+    d = x.get("judge_digest")
+    if isinstance(d, dict):
+        for k in ("summary", "overview", "note"):
+            if d.get(k):
+                cands.append(str(d.get(k)))
+    jv = x.get("judge_verdict")
+    if isinstance(jv, dict):
+        for k in ("reasoning", "summary", "conclusion", "text"):
+            if jv.get(k):
+                cands.append(str(jv.get(k)))
+    elif isinstance(jv, str) and jv.strip():
+        s = jv.strip()
+        if s.startswith("{"):
+            try:
+                o = json.loads(s)
+                if isinstance(o, dict):
+                    for k in ("reasoning", "summary", "conclusion", "text", "verdict_reason"):
+                        if o.get(k):
+                            cands.append(str(o.get(k)))
+            except Exception:
+                pass
+        else:
+            cands.append(s)
+    for k in ("reasoning", "summary"):
+        if x.get(k):
+            cands.append(str(x.get(k)))
+    for c in cands:
+        c = " ".join(str(c).split())
+        if not c:
+            continue
+        if c.startswith("{") or c.startswith("[reasoning"):
+            continue          # 裁判原始 JSON / 未精炼的 reasoning 草稿都不作一句话依据
+        if len(c) > limit:
+            cut = -1
+            for sep in ("。", "；", ". ", "! ", "? "):
+                i = c.find(sep, 40, limit)
+                if i > 0 and (cut < 0 or i < cut):
+                    cut = i + len(sep)
+            c = c[:cut] if cut > 0 else (c[:limit] + "…")
+        return c
+    return ""
+
+
+def _debate_topic_of(x: dict) -> str:
+    """辩题：优先 topic；老归档没记时退回 debate_config.topic / note 首行。"""
+    cands = [x.get("topic")]
+    cfg = x.get("debate_config")
+    if isinstance(cfg, dict):
+        cands.append(cfg.get("topic"))
+    note = x.get("note")
+    if isinstance(note, str) and note.strip():
+        cands.append(note.strip().splitlines()[0])
+    for c in cands:
+        c = " ".join(str(c or "").split())
+        if c:
+            return c
+    return ""
+
+
+def _debate_roles_of(x: dict):
+    """(正反角色名列表, 模型名列表)"""
+    names, models = [], []
+
+    def _addm(v):
+        s = str(v or "").strip()
+        if s and s not in models:
+            models.append(s)
+
+    for k in ("pro_arguments", "con_arguments"):
+        v = x.get(k)
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                names.append(str(kk))
+                if isinstance(vv, dict):
+                    _addm(vv.get("model") or vv.get("_model") or vv.get("llm"))
+        elif isinstance(v, list):
+            for e in v:
+                if isinstance(e, dict):
+                    names.append(str(e.get("role") or e.get("name") or e.get("seat") or "?"))
+                    _addm(e.get("model"))
+    if isinstance(x.get("samples"), list):
+        for i, e in enumerate(x["samples"]):
+            names.append("sample%d" % (i + 1))
+            if isinstance(e, dict):
+                _addm(e.get("pro_model") or e.get("model"))
+    _addm(x.get("judge_model"))
+    _addm(x.get("judge_digest_model"))
+    for e in (x.get("neutral_reviews") or []):
+        if isinstance(e, dict):
+            _addm(e.get("model"))
+    return names, models
+
+
+def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, key: str, mt: float):
+    label, tone, conf, conf_cn = _debate_verdict_bits(x)
+    names, models = _debate_roles_of(x)
+    d = x.get("judge_digest") if isinstance(x.get("judge_digest"), dict) else {}
+    # 2026-09-18 v4：赛前场景预判（辩论前先判「这是哪类问题」→ 席位身份与裁判 rubric 按场景生成）
+    sc = x.get("scenario") if isinstance(x.get("scenario"), dict) else {}
+    return {
+        "key": key,
+        "rel_path": rel,
+        "path": abspath,
+        "mtime": datetime.fromtimestamp(mt).strftime("%Y-%m-%d %H:%M:%S") if mt else "",
+        "mtime_epoch": mt,
+        "after_index": _debate_display_count(sid, mt),
+        "topic": _debate_topic_of(x),
+        "verdict": str(x.get("verdict") or "").strip(),
+        "confidence": conf,
+        "confidence_cn": conf_cn,
+        "conclusion": label,
+        "tone": tone,
+        "why": _debate_one_line(x),
+        "level": str(x.get("level") or "").strip(),
+        "format": str(x.get("debate_format") or "").strip(),
+        "roles": len(names),
+        "drafts": len(x.get("draft_only_roles") or []),
+        "has_digest": bool(d),
+        "failed": bool(x.get("error")),
+        # 场景预判：折叠卡片不加载全文也能显示「这场按什么场景/谁的尺子判的」
+        "scenario": str(sc.get("scenario") or "").strip(),
+        "scenario_label": str(sc.get("scenario_label") or "").strip(),
+        "scenario_why": str(sc.get("why") or "").strip(),
+        "scenario_judge": str(sc.get("judge_persona") or "").strip(),
+        "scenario_rubrics": [str((r or {}).get("key") or "").strip()
+                             for r in (sc.get("rubrics") or []) if isinstance(r, dict)][:8],
+        "scenario_error": str(x.get("scenario_error") or "").strip()[:200],
+        "has_scenario": bool(sc),
+        "models": models[:8],
+    }
+
+
+def _load_debate_index(sid: str):
+    """该会话全部辩论场次（时间正序）。
+
+    同一场辩论会落多份归档（log/ 全量 + conclusions/ 摘要副本），按文件名里的
+    时间戳 debate_YYYYMMDD_HHMMSS 归组，每组取信息量最大的那份。"""
+    base = _debate_base_of(sid)
+    if not base:
+        return {"ok": False, "error": "未找到该会话的结果目录", "base": str(base), "debates": []}
+    try:
+        files = [p for p in Path(base).rglob("debate_*.json") if p.is_file()]
+    except Exception as e:
+        return {"ok": False, "error": f"扫描辩论记录失败: {e}", "base": str(base).replace("\\", "/"), "debates": []}
+    if not files:
+        return {"ok": True, "count": 0, "base": str(base).replace("\\", "/"), "debates": []}
+    groups = {}
+    for p in files:
+        try:
+            st = p.stat()
+        except Exception:
+            continue
+        m = _DEBATE_KEY_RE.search(p.name)
+        key = m.group(1) if m else ("t%d" % int(st.st_mtime))
+        g = groups.setdefault(key, {"mt": st.st_mtime, "files": []})
+        g["mt"] = max(g["mt"], st.st_mtime)
+        g["files"].append((st.st_mtime, str(p)))
+    # 每个文件名时间戳先各自挑出信息量最大的那份
+    picked = []
+    for key in sorted(groups, key=lambda k: groups[k]["mt"]):
+        best = None
+        for _mt, ps in sorted(groups[key]["files"], key=lambda t: -t[0]):
+            x = _read_debate_file(ps)
+            if not isinstance(x, dict):
+                continue
+            sc = _debate_richness(x)
+            if best is None or sc > best[0]:
+                best = (sc, ps, x, _mt)
+        if best is None:
+            continue
+        picked.append({"key": key, "score": best[0], "path": best[1], "data": best[2], "mt": best[3]})
+
+    # 再合并「同一场辩论的重复归档」：时间相差很近、且辩题相同或一方没记辩题。
+    # 实测 conclusions/ 摘要副本的文件名时间戳会比 log/ 全量版晚 1 秒，必须合掉。
+    merged = []
+    for it in picked:
+        t_new = _debate_topic_of(it["data"])
+        if merged:
+            prev = merged[-1]
+            t_old = _debate_topic_of(prev["data"])
+            if (it["mt"] - prev["mt"]) <= 300 and (not t_new or not t_old or t_new == t_old):
+                if it["score"] > prev["score"]:
+                    merged[-1] = it
+                else:
+                    merged[-1]["mt"] = max(prev["mt"], it["mt"])
+                continue
+        merged.append(it)
+
+    out = []
+    for it in merged:
+        ps, x = it["path"], it["data"]
+        try:
+            rel = str(Path(ps).relative_to(base)).replace("\\", "/")
+        except Exception:
+            rel = Path(ps).name
+        out.append(_debate_index_entry(sid, base, rel, ps, x, it["key"], it["mt"]))
+    return {"ok": True, "count": len(out), "base": str(base).replace("\\", "/"), "debates": out}
+
+
+@app.get("/api/results/{sid}/debates")
+async def list_debates(sid: str):
+    """该会话全部辩论场次（时间正序，含 after_index = 插回对话流的位置）。"""
+    return JSONResponse(_load_debate_index(sid),
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/results/{sid}/debate/one")
+async def one_debate(sid: str, rel: str = ""):
+    """按 rel_path 取某一整场辩论的完整归档（前端展开卡片时才拉取）。"""
+    base = _debate_base_of(sid)
+    if not base or not rel:
+        return JSONResponse({"ok": False, "error": "缺少 path 或会话结果目录不存在"},
+                            headers={"Cache-Control": "no-store"})
+    try:
+        p = Path(base) / rel
+        rp, rb = os.path.realpath(str(p)), os.path.realpath(base)
+        if not rp.startswith(rb) or not Path(rp).name.startswith("debate_") or not rp.endswith(".json") or not os.path.isfile(rp):
+            return JSONResponse({"ok": False, "error": "路径不在本会话的辩论归档里"},
+                                headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"路径解析失败: {e}"}, headers={"Cache-Control": "no-store"})
+    x = _read_debate_file(rp)
+    if not isinstance(x, dict):
+        return JSONResponse({"ok": False, "error": "辩论归档读不出来（可能正在写或已损坏）"},
+                            headers={"Cache-Control": "no-store"})
+    try:
+        st = os.stat(rp)
+        mt, mts = st.st_mtime, datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        mt, mts = 0.0, ""
+    return JSONResponse({
+        "ok": True, "path": rp, "rel_path": str(Path(rp).relative_to(base)).replace("\\", "/"),
+        "mtime": mts, "mtime_epoch": mt, "debate": x,
+        "after_index": _debate_display_count(sid, mt),
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/results/{sid}/debate/latest")
