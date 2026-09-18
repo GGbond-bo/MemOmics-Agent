@@ -541,6 +541,13 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .fig-thumb img { width:100%; height:120px; object-fit:contain; background:#fff; }
 .fig-thumb .fig-thumb-name { background:rgba(0,0,0,0.7); color:#fff; font-size:10px; padding:3px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fig-thumb .fig-thumb-mtime { background:rgba(0,0,0,0.55); color:#ddd; font-size:9px; padding:1px 6px 3px; text-align:center; white-space:nowrap; }
+/* 图片下载按钮（2026-09-18）：缩略图右下角常驻小按钮，点击只下载、不触发预览（stopPropagation） */
+.fig-thumb .fig-thumb-media { position:relative; display:block; line-height:0; }
+.fig-thumb .fig-dl { position:absolute; right:6px; bottom:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1; color:#fff; background:rgba(0,0,0,0.55); border-radius:7px; text-decoration:none; cursor:pointer; opacity:0.85; transition:opacity 0.15s, background 0.15s, transform 0.15s; z-index:2; }
+.fig-thumb .fig-dl:hover { opacity:1; background:var(--primary); transform:scale(1.08); }
+.fig-preview-card .fig-actions { display:flex; align-items:center; gap:4px; }
+.fig-preview-card .fig-dl-lg { font-size:11px; color:var(--primary); text-decoration:none; padding:1px 7px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.75); cursor:pointer; }
+.fig-preview-card .fig-dl-lg:hover { background:var(--primary); color:#fff; }
 
 /* 文件预览 */
 .file-preview { padding:12px; }
@@ -7808,7 +7815,9 @@ async function loadFigures() {
     el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
       var v = f.mtime_epoch ? Math.round(f.mtime_epoch * 1000) : 0;
       var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '&v=' + v + '" loading="lazy">';
-      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '&v=' + v + '\',\'' + escapeHtml(f.name) + '\')">' + inner + '<div class="fig-thumb-name">' + escapeHtml(f.name) + '</div><div class="fig-thumb-mtime">🕐 ' + escapeHtml(f.mtime || '') + '</div></div>';
+      // 2026-09-18: 右下角下载按钮；onclick 里 stopPropagation，保证「点击查看大图」不受影响
+      var dlBtn = '<a class="fig-dl" href="' + f.url + '&v=' + v + '" download="' + escapeHtml(f.name) + '" onclick="event.stopPropagation();" title="下载 ' + escapeHtml(f.name) + '">⬇</a>';
+      return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '&v=' + v + '\',\'' + escapeHtml(f.name) + '\')"><div class="fig-thumb-media">' + inner + dlBtn + '</div><div class="fig-thumb-name">' + escapeHtml(f.name) + '</div><div class="fig-thumb-mtime">🕐 ' + escapeHtml(f.mtime || '') + '</div></div>';
     }).join('') + '</div>';
     el.scrollTop = st;
   } catch(e) {
@@ -7898,7 +7907,9 @@ function showFigurePreview(url, name) {
   } else {
     inner = '<img src="' + url + '" onclick="window.open(\'' + url + '\')" style="max-width:100%;max-height:500px;cursor:zoom-in;">';
   }
-  area.innerHTML = '<div class="fig-preview-card"><div class="fig-header"><span>🖼️ ' + escapeHtml(name) + '</span><span class="fig-close" onclick="closeFigurePreview()">✕</span></div>' + inner + '</div>';
+  // 2026-09-18: 大图预览标题栏也放一个下载入口（PDF 也能直接存下来）
+  var dlBig = '<a class="fig-dl-lg" href="' + url + '" download="' + escapeHtml(name) + '" title="下载 ' + escapeHtml(name) + '">⬇ 下载</a>';
+  area.innerHTML = '<div class="fig-preview-card"><div class="fig-header"><span>🖼️ ' + escapeHtml(name) + '</span><span class="fig-actions">' + dlBig + '<span class="fig-close" onclick="closeFigurePreview()">✕</span></span></div>' + inner + '</div>';
   area.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
