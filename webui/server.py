@@ -14347,8 +14347,16 @@ async def ws_endpoint(ws: WebSocket):
 _CLUSTER_FIELDS = (
     "enabled", "host", "user", "port", "key", "workdir", "scheduler",
     "partition", "queue", "local_root", "remote_root", "timeout", "job_dir",
+    "extra_ssh_options", "default_node", "node_policy",
 )
-_CLUSTER_ACTIONS = ("check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs")
+# 单个命名节点里允许覆盖的字段（前端节点编辑器渲染的就是这些；其余字段走共享配置）
+_CLUSTER_NODE_FIELDS = (
+    "name", "host", "port", "user", "key", "workdir", "note", "role",
+    "proxy_jump", "scheduler", "partition", "queue",
+)
+_CLUSTER_NODE_LIST_FIELDS = ("extra_ssh_options",)
+_CLUSTER_ACTIONS = ("locate", "nodes", "check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs")
+_CLUSTER_NODE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
 
 
 def _cluster_mod():
@@ -14367,6 +14375,35 @@ def _cluster_view() -> dict:
     out["config_path"] = str(rc._get_config_path())
     out["tool_visible"] = bool(rc.remote_cluster_enabled())
     out["job_dir_effective"] = cfg.get("job_dir")
+    # 命名节点：既回显「用户显式写了什么」（spec），也回显「实际会连什么」（effective）。
+    # effective 由 remote_cluster._node_table 算出来，和真正连的时候用的是同一份逻辑。
+    table = rc._node_table(cfg)
+    nodes = []
+    for name, entry in (cfg.get("nodes") or {}).items():
+        eff = table.get(name) or {}
+        spec = {"name": name}
+        for k in _CLUSTER_NODE_FIELDS:
+            if k == "name":
+                continue
+            val = entry.get(k)
+            if val not in (None, "", [], {}):
+                spec[k] = val
+        nodes.append({
+            "name": name,
+            "spec": spec,
+            "effective": {
+                "host": eff.get("host"), "user": eff.get("user"), "port": eff.get("port"),
+                "key": eff.get("key"), "workdir": eff.get("workdir"),
+                "job_dir": eff.get("job_dir"), "scheduler": eff.get("scheduler"),
+                "proxy_jump": str(entry.get("proxy_jump") or ""),
+                "note": eff.get("_note") or "",
+            },
+            "is_default": name == str(cfg.get("default_node") or ""),
+            "reachable_note": "",
+        })
+    out["nodes"] = nodes
+    out["nodes_effective_count"] = len(table)
+    out["node_policy"] = cfg.get("node_policy") or "ask"
     return out
 
 
@@ -14379,21 +14416,136 @@ def _cluster_yaml_scalar(value) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def _cluster_node_lines(nodes) -> list:
+    """生成 remote.nodes: 段（两级缩进）。名字非法/重复直接报错，不静默丢配置。"""
+    if isinstance(nodes, dict):
+        items = []
+        for name, spec in nodes.items():
+            if isinstance(spec, dict):
+                item = dict(spec)
+            elif spec in (None, ""):
+                item = {}
+            else:
+                item = {"host": spec}
+            item["name"] = name
+            items.append(item)
+    elif isinstance(nodes, (list, tuple)):
+        items = [dict(x) for x in nodes if isinstance(x, dict)]
+    else:
+        raise ValueError("nodes 必须是列表或字典")
+    seen = set()
+    lines = ["  nodes:"]
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        if not _CLUSTER_NODE_NAME_RE.match(name):
+            raise ValueError(
+                "节点名 %r 不合法：只允许字母/数字/点/下划线/短横线，且不超过 48 字符"
+                "（中文请写在 note 里，节点名会进入远端作业名和日志文件名）" % name)
+        low = name.lower()
+        if low in seen:
+            raise ValueError("节点名 %r 重复了（节点名用来选机器，不能重名）" % name)
+        seen.add(low)
+        spec = {}
+        for k in _CLUSTER_NODE_FIELDS:
+            if k == "name":
+                continue
+            val = item.get(k)
+            if val is None:
+                continue
+            if isinstance(val, str) and not val.strip():
+                continue
+            if k == "port":
+                try:
+                    val = int(str(val).strip())
+                except Exception:
+                    raise ValueError("节点 %r 的 port 不是数字：%r" % (name, item.get(k)))
+            spec[k] = val
+        extra = item.get("extra_ssh_options")
+        if extra:
+            spec["extra_ssh_options"] = extra if isinstance(extra, (list, tuple)) else [str(extra)]
+        if not spec:
+            lines.append("    %s: {}" % name)
+            continue
+        lines.append("    %s:" % name)
+        for k, v in spec.items():
+            if isinstance(v, (list, tuple)):
+                lines.append("      %s: [%s]" % (k, ", ".join(_cluster_yaml_scalar(x) for x in v)))
+            else:
+                lines.append("      %s: %s" % (k, _cluster_yaml_scalar(v)))
+    if len(lines) == 1:
+        return []
+    return lines
+
+
 def _cluster_write_config(values: dict) -> dict:
     rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)  # 合并的底：当前生效值
     path = rc._get_config_path()
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         text = ""
+    # 合并而不是替换：从当前生效配置起底，只覆盖前端提交的字段。
+    # 这样手写在 config.yaml 里、表单没有的字段（extra_ssh_options 等）不会被抹掉。
+    merged = {}
+    for key in _CLUSTER_FIELDS:
+        cur = cfg.get(key)
+        if key == "enabled":
+            merged[key] = bool(cur)
+        elif cur is not None and cur != "" and cur != [] and cur != {}:
+            merged[key] = cur
+    nodes_in = values.pop("nodes", None) if "nodes" in values else None
+    for key, val in values.items():
+        if key not in _CLUSTER_FIELDS:
+            continue
+        if key == "enabled":
+            merged[key] = bool(val) if not isinstance(val, str) else val.strip().lower() in ("1", "true", "yes", "on")
+            continue
+        if val is None or (isinstance(val, str) and not val.strip()):
+            merged.pop(key, None)  # 明确的空值 = 移除该字段，回落默认
+            continue
+        merged[key] = val
+    if nodes_in is not None:
+        old_nodes = cfg.get("nodes") or {}
+        if isinstance(nodes_in, dict):
+            seq = []
+            for name, spec in nodes_in.items():
+                item = dict(spec) if isinstance(spec, dict) else ({"host": spec} if spec else {})
+                item["name"] = name
+                seq.append(item)
+        else:
+            seq = list(nodes_in or [])
+        # 逐个节点并回原来的显式覆盖：前端没渲染的字段（extra_ssh_options/job_dir/timeout）
+        # 保留；前端显式给了空串的字段 = 用户清掉了这个覆盖，回落共享配置。
+        for item in seq:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            old = old_nodes.get(name) or {}
+            if not isinstance(old, dict):
+                old = {}
+            for k, v in list(item.items()):
+                if k == "name":
+                    continue
+                if isinstance(v, str) and not v.strip():
+                    item.pop(k)
+                    old.pop(k, None)
+            for k, v in old.items():
+                item.setdefault(k, v)
+        values["nodes"] = seq
     lines = ["remote:"]
     for key in _CLUSTER_FIELDS:
-        if key not in values:
+        if key not in merged:
             continue
-        val = values[key]
-        if val is None or (isinstance(val, str) and not val.strip()):
-            continue  # 空值不落盘，回落默认
-        lines.append("  %s: %s" % (key, _cluster_yaml_scalar(val)))
+        val = merged[key]
+        if isinstance(val, (list, tuple)):
+            lines.append("  %s: [%s]" % (key, ", ".join(_cluster_yaml_scalar(x) for x in val)))
+        else:
+            lines.append("  %s: %s" % (key, _cluster_yaml_scalar(val)))
+    if "nodes" in values:
+        lines += _cluster_node_lines(values["nodes"])
     block = "\n".join(lines) + "\n"
     # 顶层 remote: 块（后续行必须缩进；注释行以 # 开头，不会被误吞）
     pat = re.compile(r"(?m)^remote:[ \t]*\n(?:[ \t]+[^\n]*\n)*")
@@ -14438,9 +14590,9 @@ async def api_cluster_config(request: Request):
         return {"ok": False, "error": "请求体不是合法 JSON"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "请求体必须是 JSON 对象"}
-    values = {k: v for k, v in body.items() if k in _CLUSTER_FIELDS}
+    values = {k: v for k, v in body.items() if k in _CLUSTER_FIELDS or k == "nodes"}
     if not values:
-        return {"ok": False, "error": "没有可写入的字段（可选：%s）" % ", ".join(_CLUSTER_FIELDS)}
+        return {"ok": False, "error": "没有可写入的字段（可选：%s, nodes）" % ", ".join(_CLUSTER_FIELDS)}
     try:
         return {"ok": True, "config": _cluster_write_config(values)}
     except Exception as exc:

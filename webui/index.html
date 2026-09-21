@@ -899,6 +899,13 @@ table.dcb-table.dg-table th { position:relative; }
 #cluster-console .cc-cfg input, #cluster-console .cc-cfg select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; font-family:inherit; }
 #cluster-console .cc-cfg-actions { grid-column:1/-1; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 #cluster-console .cc-cfg-note { grid-column:1/-1; font-size:11px; color:var(--text-light); line-height:1.6; }
+#cluster-console .cc-nodes { grid-column:1/-1; display:flex; flex-direction:column; gap:6px; }
+#cluster-console .cc-node-row { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; align-items:center; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
+#cluster-console .cc-node-row input { width:100%; }
+#cluster-console .cc-node-row .cc-node-name { font-weight:600; }
+#cluster-console .cc-node-row .cc-node-ops { grid-column:4/-1; display:flex; gap:6px; justify-content:flex-end; }
+#cluster-console .cc-node-row .cc-node-eff { grid-column:1/4; font-size:11px; color:var(--text-light); align-self:center; }
+#cluster-console .cc-node-row.is-default { border-color:var(--primary); }
 #cluster-console .cc-out { flex:1; overflow-y:auto; padding:10px 14px; background:#0d1117; color:#d7e2ec; font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
 #cluster-console .cc-out .cc-time { color:#6b7684; }
 #cluster-console .cc-out .cc-sys { color:#7fb3ff; }
@@ -9955,7 +9962,9 @@ var CLUSTER_MODES = {
   cancel: { opt: 'cancel · 取消作业', ph: '作业号（留空 = 本次会话里最近看到的那个作业号）', hint: 'cancel：scancel / qdel / 按进程组整组 kill。留空只会用你这次会话里刚看见过的作业号，不会替你猜一个没见过的号——取消是不可逆操作。' },
   push:   { opt: 'push · 传上去',     ph: '本地路径 [远端路径]   例：E:/data/a.vcf   或   E:/data/a.vcf /root/data/', hint: 'push：本地 → 集群。配了 local_root/remote_root 后只写一边路径即可自动换算。' },
   pull:   { opt: 'pull · 拉下来',     ph: '远端路径 [本地路径]   例：/root/memomics_test/out.txt', hint: 'pull：集群 → 本地（产物拉回来接着用本机内核分析）。' },
+  locate: { opt: 'locate · 路径判定',  ph: '要判定的路径（用户给的原话就行）  例：shared.bam   或  /root/data/x.bam   或  E:/data/x.vcf', hint: 'locate：判定一个路径到底在本地还是在集群上——本机查原样/work//results 各会话目录/uploads，各节点查原样/工作目录（含 data/），返回 local / cluster / ambiguous（两边都有）/ missing。用户没说数据在哪时先跑这个，别猜。' },
   check:  { opt: 'check · 自检',      ph: '（不用输入，直接点执行）', hint: 'check：连通性 / 调度器 / CPU·内存 / 工作目录 / 已装工具自检。第一次连集群先跑这个。' },
+  nodes:  { opt: 'nodes · 节点体检',  ph: '（不用输入；上面的节点选一个就只查那一个）', hint: 'nodes：列出配置里的所有节点，逐个探连通性 + CPU核数 + 负载 + 工作目录剩余空间，用来判断「现在哪台空着」。' },
   jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' }
 };
 
@@ -9965,7 +9974,7 @@ function openClusterConsole() {
   el.style.display = 'flex';
   var sel = document.getElementById('cluster-mode');
   if (sel && !sel.options.length) {
-    var order = ['run', 'submit', 'status', 'logs', 'cancel', 'push', 'pull', 'check', 'jobs'];
+    var order = ['run', 'submit', 'status', 'logs', 'cancel', 'push', 'pull', 'locate', 'check', 'nodes', 'jobs'];
     for (var i = 0; i < order.length; i++) {
       var o = document.createElement('option');
       o.value = order[i];
@@ -10036,12 +10045,18 @@ async function clusterRefreshStatus() {
     _clusterCfg = d.config;
     clusterFillCfg(d.config);
     var c = d.config;
-    if (!c.enabled || !c.host || !c.user) {
+    var nl = c.nodes || [];
+    var names = [];
+    for (var ni = 0; ni < nl.length; ni++) names.push(nl[ni].name);
+    if (!c.enabled || (!c.host && !nl.length) || !c.user) {
       chip.className = 'cc-chip warn';
-      chip.textContent = '未配置：点「⚙️ 配置」填 host / user / key';
-    } else if (!c.key_exists) {
+      chip.textContent = '未配置：点「⚙️ 配置」填 host / user / key（或登记多个命名节点）';
+    } else if (!c.key_exists && !nl.length) {
       chip.className = 'cc-chip warn';
       chip.textContent = c.user + '@' + c.host + ':' + c.port + ' · 私钥文件不存在：' + c.key;
+    } else if (nl.length) {
+      chip.className = 'cc-chip ok';
+      chip.textContent = nl.length + ' 个节点：' + names.join(' / ') + ' · ' + (c.scheduler || 'auto');
     } else {
       chip.className = 'cc-chip ok';
       chip.textContent = c.user + '@' + c.host + ':' + c.port + ' · ' + (c.scheduler || 'auto') + ' · ' + (c.workdir || '~');
@@ -10081,6 +10096,163 @@ function clusterFillCfg(c) {
   clusterSetVal('cc-timeout', c.timeout);
   var sc = document.getElementById('cc-scheduler');
   if (sc) sc.value = c.scheduler || 'auto';
+  clusterSetVal('cc-default-node', c.default_node);
+  var np = document.getElementById('cc-node-policy');
+  if (np) np.value = c.node_policy || 'ask';
+  clusterFillNodes(c);
+  clusterFillNodeSelect();
+}
+
+function ccAttr(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// === 命名节点编辑器：一行一个节点，留空 = 继承上面的共享配置 ===
+function clusterNodeRow(spec, eff, isDefault) {
+  spec = spec || {};
+  eff = eff || {};
+  var row = document.createElement('div');
+  row.className = 'cc-node-row' + (isDefault ? ' is-default' : '');
+  function inh(v, dflt) { return (v == null || v === '') ? (dflt == null ? '空' : dflt) : v; }
+  row.innerHTML =
+    '<input class="cc-node-name" placeholder="节点名 如 ssh3" value="' + ccAttr(spec.name) + '">' +
+    '<input class="cc-node-host" placeholder="host（继承 ' + ccAttr(inh(eff.host)) + '）" value="' + ccAttr(spec.host) + '">' +
+    '<input class="cc-node-port" placeholder="port（继承 ' + ccAttr(inh(eff.port, 22)) + '）" value="' + ccAttr(spec.port) + '">' +
+    '<input class="cc-node-user" placeholder="user（继承 ' + ccAttr(inh(eff.user)) + '）" value="' + ccAttr(spec.user) + '">' +
+    '<input class="cc-node-key" placeholder="私钥（继承共享私钥）" value="' + ccAttr(spec.key) + '">' +
+    '<input class="cc-node-workdir" placeholder="工作目录（继承 ' + ccAttr(inh(eff.workdir, '~')) + '）" value="' + ccAttr(spec.workdir) + '">' +
+    '<input class="cc-node-proxy_jump" placeholder="跳板机 proxy_jump（可空）" value="' + ccAttr(spec.proxy_jump) + '">' +
+    '<input class="cc-node-note" placeholder="备注（中文写这里）" value="' + ccAttr(spec.note) + '">' +
+    '<div class="cc-node-eff"></div>' +
+    '<div class="cc-node-ops">' +
+      '<button class="cc-btn" onclick="clusterTestNode(this)">🔌 测试连接</button>' +
+      '<button class="cc-btn" onclick="clusterDelNode(this)">🗑 删除</button>' +
+    '</div>';
+  var effBox = row.querySelector('.cc-node-eff');
+  if (effBox) {
+    effBox.textContent = '实际会连：' + inh(eff.user, '?') + '@' + inh(eff.host, '?') + ':' + inh(eff.port, 22) +
+      '　目录 ' + inh(eff.workdir, '~') + '　调度器 ' + inh(eff.scheduler, 'auto') +
+      (isDefault ? '　★ 默认节点' : '');
+  }
+  return row;
+}
+
+function clusterFillNodes(c) {
+  var box = document.getElementById('cc-nodes');
+  if (!box) return;
+  box.innerHTML = '';
+  var nl = (c && c.nodes) || [];
+  for (var i = 0; i < nl.length; i++) {
+    box.appendChild(clusterNodeRow(nl[i].spec || { name: nl[i].name }, nl[i].effective || {}, !!nl[i].is_default));
+  }
+}
+
+function clusterAddNode() {
+  var box = document.getElementById('cc-nodes');
+  if (!box) return;
+  var c = _clusterCfg || {};
+  box.appendChild(clusterNodeRow({}, {
+    host: c.host, user: c.user, port: c.port, key: c.key,
+    workdir: c.workdir === '~' ? '' : c.workdir, scheduler: c.scheduler
+  }, false));
+}
+
+function clusterDelNode(btn) {
+  var row = btn && btn.closest ? btn.closest('.cc-node-row') : null;
+  if (row && row.parentNode) row.parentNode.removeChild(row);
+}
+
+function clusterCollectNodes() {
+  var rows = document.querySelectorAll('#cc-nodes .cc-node-row');
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var g = function (cls) { var el = row.querySelector('.' + cls); return el ? String(el.value || '').trim() : ''; };
+    var name = g('cc-node-name');
+    // 名字为空的行直接忽略（用户加了一半又不要了）
+    if (!name) continue;
+    out.push({
+      name: name, host: g('cc-node-host'), port: g('cc-node-port'), user: g('cc-node-user'),
+      key: g('cc-node-key'), workdir: g('cc-node-workdir'), proxy_jump: g('cc-node-proxy_jump'),
+      note: g('cc-node-note')
+    });
+  }
+  return out;
+}
+
+function clusterFillNodeSelect() {
+  var c = _clusterCfg || {};
+  var nl = c.nodes || [];
+  var sel = document.getElementById('cc-node');
+  if (!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '';
+  var auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = nl.length > 1 ? '（未指定节点）' :
+    (nl.length === 1 ? ('自动：' + nl[0].name) : '（未登记节点）');
+  sel.appendChild(auto);
+  for (var i = 0; i < nl.length; i++) {
+    var o = document.createElement('option');
+    o.value = nl[i].name;
+    o.textContent = nl[i].name + ' · ' + (((nl[i].effective || {}).host) || '') + (nl[i].is_default ? ' ★默认' : '');
+    sel.appendChild(o);
+  }
+  var want = cur || c.default_node || (nl.length === 1 ? nl[0].name : '');
+  sel.value = want;
+  if (sel.value !== want) sel.value = '';
+  clusterNodeChange();
+}
+
+function clusterNodeChange() {
+  var chip = document.getElementById('cluster-node-chip');
+  var sel = document.getElementById('cc-node');
+  var c = _clusterCfg || {};
+  var nl = c.nodes || [];
+  if (!chip) return;
+  if (!nl.length) { chip.style.display = 'none'; return; }
+  chip.style.display = '';
+  var name = sel ? String(sel.value || '') : '';
+  var hit = null;
+  for (var i = 0; i < nl.length; i++) { if (nl[i].name === name) hit = nl[i]; }
+  if (!hit) {
+    chip.className = 'cc-chip warn';
+    chip.textContent = nl.length > 1 ? '未指定节点：本次操作前先在上方选一个' : ('节点：' + nl[0].name);
+  } else {
+    var e = hit.effective || {};
+    chip.className = 'cc-chip ok';
+    chip.textContent = '当前节点 ' + hit.name + ' → ' + (e.user || '?') + '@' + (e.host || '?') + ':' + (e.port || 22);
+  }
+}
+
+async function clusterTestNode(btn) {
+  var row = btn && btn.closest ? btn.closest('.cc-node-row') : null;
+  var nameEl = row ? row.querySelector('.cc-node-name') : null;
+  var name = nameEl ? String(nameEl.value || '').trim() : '';
+  if (!name) { clusterPrint('✗ 先给这个节点起个名字（名字就是模型用的 node 参数），再测试连接', 'err'); return; }
+  var effBox = row ? row.querySelector('.cc-node-eff') : null;
+  clusterPrint('▸ 测试节点 ' + name + ' …（用的是**已保存**的配置，刚改的字段要先点保存）', 'sys');
+  try {
+    var r = await fetch('/api/cluster/exec', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'nodes', node: name })
+    });
+    var d = await r.json();
+    if (!d.ok) { clusterPrint('✗ ' + (d.error || '请求失败'), 'err'); return; }
+    var item = ((d.result || {}).nodes || [])[0] || {};
+    if (item.reachable) {
+      var msg = '✓ ' + name + ' 可连：' + (item.remote_hostname || '') + '　' + (item.nproc || '?') + ' 核　负载 ' +
+        item.load1 + '（每核 ' + item.load_per_cpu + '）　在线用户 ' + item.users + '　' + (item.workdir_df || '');
+      clusterPrint(msg, 'ok');
+      if (effBox) effBox.textContent = '✓ 连通 ' + (item.remote_hostname || '') + '　' + (item.nproc || '?') + ' 核　负载 ' + item.load1;
+    } else {
+      clusterPrint('✗ ' + name + ' 连不上：' + (item.error || '未知原因'), 'err');
+      if (effBox) effBox.textContent = '✗ 连不上：' + String(item.error || '').slice(0, 120);
+    }
+  } catch (e) {
+    clusterPrint('✗ 测试请求失败：' + e.message, 'err');
+  }
 }
 
 function clusterGetVal(id) {
@@ -10106,11 +10278,28 @@ async function clusterSaveCfg(andCheck) {
   if (!isNaN(port) && port > 0) body.port = port;
   var to = parseInt(clusterGetVal('cc-timeout'), 10);
   if (!isNaN(to) && to > 0) body.timeout = to;
+  var nodes = clusterCollectNodes();
+  var seen = {};
+  for (var i = 0; i < nodes.length; i++) {
+    var nm = nodes[i].name;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/.test(nm)) {
+      clusterPrint('✗ 节点名「' + nm + '」不合法：只能用字母/数字/点/下划线/短横线（≤48 字符），中文请写「备注」里', 'err');
+      return;
+    }
+    if (seen[nm.toLowerCase()]) { clusterPrint('✗ 节点名「' + nm + '」重复了，节点名是用来选机器的，不能重名', 'err'); return; }
+    seen[nm.toLowerCase()] = 1;
+  }
+  body.nodes = nodes;
+  body.default_node = clusterGetVal('cc-default-node');
+  var npEl = document.getElementById('cc-node-policy');
+  body.node_policy = npEl ? npEl.value : 'ask';
   try {
     var r = await fetch('/api/cluster/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var d = await r.json();
     if (!d.ok) { clusterPrint('✗ 保存失败：' + (d.error || '未知错误'), 'err'); return; }
-    clusterPrint('✓ 已写入 config.yaml 的 remote 段（host=' + (d.config.host || '空') + ', user=' + (d.config.user || '空') + ', scheduler=' + d.config.scheduler + '）', 'ok');
+    var nSaved = (d.config.nodes || []).length;
+    clusterPrint('✓ 已写入 config.yaml 的 remote 段（host=' + (d.config.host || '空') + ', user=' + (d.config.user || '空') +
+      ', scheduler=' + d.config.scheduler + (nSaved ? ', 节点=' + nSaved + ' 个' : '') + '）', 'ok');
     await clusterRefreshStatus();
     if (andCheck) { clusterQuick('check'); }
   } catch (e) {
@@ -10150,6 +10339,10 @@ function clusterBuildArgs(mode, text) {
     if (n && /^[0-9]+$/.test(n)) b.lines = parseInt(n, 10);
     return b;
   }
+  if (mode === 'locate') {
+    if (!t.trim()) { clusterPrint('✗ locate 需要给出要判定的路径', 'err'); return null; }
+    return { action: 'locate', path: t.trim() };
+  }
   if (mode === 'push') {
     if (!tk[0]) { clusterPrint('✗ push 需要本地路径', 'err'); return null; }
     var c = { action: 'push', local_path: tk[0] };
@@ -10165,6 +10358,13 @@ function clusterBuildArgs(mode, text) {
   return { action: mode };
 }
 
+function ccBytes(n) {
+  if (n == null || n === '') return '';
+  var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + u[i];
+}
+
 function clusterRenderResult(mode, res) {
   if (!res || res.ok === false) {
     clusterPrint('✗ ' + ((res && res.error) || '请求失败'), 'err');
@@ -10172,8 +10372,39 @@ function clusterRenderResult(mode, res) {
   }
   var r = res.result || {};
   var bad = (r.status === 'error');
+  if (mode === 'locate' && r.verdict) {
+    var vmap = { local: ['只在本地 → 本地跑，不用连集群', 'ok'],
+                 cluster: ['只在集群 → 远端跑，大文件别往本机拉', 'ok'],
+                 ambiguous: ['两边都有 → 别自己挑，问用户用哪一份', 'err'],
+                 missing: ['两边都没找到 → 别编路径，问用户', 'err'] };
+    var vm = vmap[r.verdict] || [String(r.verdict), 'sys'];
+    clusterPrint('▸ locate · ' + (r.path || '') + '   →   ' + vm[0], vm[1]);
+    if (r.scope) clusterPrint('   范围：' + r.scope, 'sys');
+    if (r.globs_expanded) clusterPrint('   （路径含通配符，已展开匹配）', 'sys');
+    var lh = (r.local && r.local.hits) || [], i2, hs, n2;
+    for (i2 = 0; i2 < lh.length; i2++) clusterPrint('   本机 ' + ccBytes(lh[i2].bytes) + '  ' + lh[i2].path, 'ok');
+    for (n2 in (r.remote || {})) {
+      hs = (r.remote[n2] && r.remote[n2].hits) || [];
+      for (i2 = 0; i2 < hs.length; i2++) clusterPrint('   集群 ' + n2 + ' ' + ccBytes(hs[i2].bytes) + '  ' + hs[i2].path, 'ok');
+    }
+    for (n2 in (r.remote_errors || {})) clusterPrint('   ✗ ' + n2 + '：' + r.remote_errors[n2], 'err');
+    if (!lh.length) clusterPrint('   本机查过：' + ((((r.local || {}).checked) || []).slice(0, 5).join('　') || '无'), 'sys');
+    clusterPrint('👉 ' + (r.advice || ''), 'sys');
+    return;
+  }
+  if (r.status === 'needs_node') {
+    clusterPrint('⚠️ 这次没指定节点，工具拒绝执行（配置了多个节点）', 'err');
+    if (r.error) clusterPrint(r.error, 'err');
+    var cand = r.nodes || [];
+    for (var ci = 0; ci < cand.length; ci++) {
+      clusterPrint('   • ' + cand[ci].name + ' → ' + (cand[ci].user || '') + '@' + (cand[ci].host || '') + (cand[ci].note ? ('　' + cand[ci].note) : ''), 'sys');
+    }
+    if (r.tip) clusterPrint(r.tip, 'sys');
+    clusterPrint('👉 在上面「节点」下拉里选一台，再点执行；不知道哪台空着就先点「🖥 节点体检」。', 'sys');
+    return;
+  }
   if (r.job_id) _clusterLastJob = String(r.job_id);
-  var head = '▸ ' + mode;
+  var head = '▸ ' + mode + (r.node ? (' · 节点 ' + r.node) : '');
   if (r.job_id) head += ' · job ' + r.job_id;
   if (r.state) head += ' · ' + r.state;
   if (r.scheduler && mode === 'check') head += ' · ' + r.scheduler;
@@ -10197,6 +10428,9 @@ async function clusterExec() {
   var text = box ? box.value : '';
   var payload = clusterBuildArgs(mode, text);
   if (!payload) return;
+  var nodeSel = document.getElementById('cc-node');
+  var nodeName = nodeSel ? String(nodeSel.value || '') : '';
+  if (nodeName) payload.node = nodeName;  // 多节点配置下这一步就是「用哪台机器」
   if (text.trim()) {
     _clusterHist.unshift(text.trim());
     _clusterHist = _clusterHist.slice(0, 50);
@@ -10204,8 +10438,9 @@ async function clusterExec() {
     try { localStorage.setItem('memomics_cluster_hist', JSON.stringify(_clusterHist)); } catch (e) {}
     if (box) box.value = '';
   }
-  if (!_clusterCfg || !_clusterCfg.enabled || !_clusterCfg.host || !_clusterCfg.user) {
-    clusterPrint('⚠️ 还没配置远端（config.yaml 的 remote 段）：先点「⚙️ 配置」填 host / user / 私钥并保存。', 'err');
+  var _hasTarget = !!(_clusterCfg && (_clusterCfg.host || (_clusterCfg.nodes || []).length));
+  if (mode !== 'locate' && (!_clusterCfg || !_clusterCfg.enabled || !_hasTarget || !_clusterCfg.user)) {
+    clusterPrint('⚠️ 还没配置远端（config.yaml 的 remote 段）：先点「⚙️ 配置」填 host / user / 私钥并保存（要配多个节点就填公共字段 + 添加命名节点）。', 'err');
     clusterToggleCfg(true);
     return;
   }
@@ -10829,8 +11064,10 @@ async function saveUpdateConfig(mode) {
     <div class="cc-head">
       <span class="cc-title">🖧 远端集群</span>
       <span class="cc-chip" id="cluster-chip">读取配置中…</span>
+      <span class="cc-chip" id="cluster-node-chip" style="display:none;"></span>
       <span class="cc-spacer"></span>
       <button class="cc-btn" onclick="clusterQuick('check')">🔌 自检</button>
+      <button class="cc-btn" onclick="clusterQuick('nodes')">🖥 节点体检</button>
       <button class="cc-btn" onclick="clusterQuick('jobs')">📋 作业</button>
       <button class="cc-btn" onclick="clusterToggleCfg()">⚙️ 配置</button>
       <button class="cc-btn" onclick="clusterClose()">✕ 关闭</button>
@@ -10853,7 +11090,20 @@ async function saveUpdateConfig(mode) {
       <label>本地根目录<input id="cc-local-root" placeholder="E:/data"></label>
       <label>远端根目录<input id="cc-remote-root" placeholder="/home/you/data"></label>
       <label>超时秒<input id="cc-timeout" placeholder="300"></label>
+      <label>默认节点 default_node<input id="cc-default-node" placeholder="留空 = 多节点时必须每次指定"></label>
+      <label>没指定节点时<select id="cc-node-policy">
+        <option value="ask">ask（多个节点时先问清用哪个）</option>
+        <option value="auto">auto（暂未实现，按 ask 处理）</option>
+      </select></label>
+      <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
+        <b>命名节点（可选）</b>：同一个集群有多个入口时（例：ssh3 满了换 ssh5 跑），在这里登记多个名字，
+        上面这些字段是所有节点共享的默认值；每个节点只填要覆盖的（留空 = 继承上面的值）。
+        节点名只能用字母/数字/点/下划线/短横线（中文写「备注」里，节点名会进入远端作业名和日志名）。
+        只登记 1 个节点时，模型说「用集群」直接用；登记了多个又没说用哪个，工具会拒绝执行并要求先问清用户。
+      </div>
+      <div class="cc-nodes" id="cc-nodes"></div>
       <div class="cc-cfg-actions">
+        <button class="cc-btn" onclick="clusterAddNode()">＋ 添加节点</button>
         <button class="cc-btn primary" onclick="clusterSaveCfg(false)">💾 保存</button>
         <button class="cc-btn" onclick="clusterSaveCfg(true)">💾 保存并自检</button>
         <span id="cluster-cfg-note" class="cc-cfg-note"></span>
@@ -10861,6 +11111,7 @@ async function saveUpdateConfig(mode) {
     </div>
     <div class="cc-out" id="cluster-out"></div>
     <div class="cc-input">
+      <select id="cc-node" onchange="clusterNodeChange()" title="用哪个节点（多节点配置时必选；只配了一个可留空）"></select>
       <select id="cluster-mode" onchange="clusterModeChange()"></select>
       <textarea id="cluster-cmd" rows="1" onkeydown="clusterKey(event)" placeholder="在这里输入命令，Enter 执行，Shift+Enter 换行"></textarea>
       <button class="cc-btn primary" id="cluster-run-btn" onclick="clusterExec()">执行</button>

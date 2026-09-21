@@ -94,6 +94,8 @@ _ENV_MAP = {
     "local_root": "MEMOMICS_REMOTE_LOCAL_ROOT",
     "remote_root": "MEMOMICS_REMOTE_REMOTE_ROOT",
     "timeout": "MEMOMICS_REMOTE_TIMEOUT",
+    "default_node": "MEMOMICS_REMOTE_NODE",
+    "node_policy": "MEMOMICS_REMOTE_NODE_POLICY",
 }
 
 _DEFAULT_CFG = {
@@ -112,6 +114,11 @@ _DEFAULT_CFG = {
     "timeout": 300,
     "max_output_chars": 20000,
     "extra_ssh_options": [],
+    # --- 多节点（MobaXterm 式命名节点）---
+    "nodes": {},                 # {名字: {} | "主机名" | {host/user/port/key/...}}
+    "default_node": "",          # 配了多个节点时可指定默认；留空则多节点必须显式指定
+    "node_policy": "ask",        # ask（没说就问）| 预留 auto（自动挑最闲）
+    "allow_unlisted_nodes": True,  # True: 传了未登记的名字时按裸主机连（并在返回里标注）
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -210,6 +217,10 @@ def _load_remote_config(force: bool = False) -> dict:
     cfg["extra_ssh_options"] = _as_list(cfg.get("extra_ssh_options"))
     cfg["local_root"] = str(cfg["local_root"] or "").strip()
     cfg["remote_root"] = str(cfg["remote_root"] or "").strip()
+    cfg["nodes"] = _normalize_nodes(raw.get("nodes"))
+    cfg["default_node"] = str(cfg.get("default_node") or "").strip()
+    cfg["node_policy"] = str(cfg.get("node_policy") or "ask").strip().lower() or "ask"
+    cfg["allow_unlisted_nodes"] = _truthy(cfg.get("allow_unlisted_nodes", True))
 
     _CFG_CACHE["mtime"] = mtime
     _CFG_CACHE["cfg"] = cfg
@@ -217,9 +228,237 @@ def _load_remote_config(force: bool = False) -> dict:
 
 
 def remote_cluster_enabled() -> bool:
-    """check_fn：没配置 remote: 段时工具对模型不可见。"""
+    """check_fn：没配置 remote: 段（或 nodes 段）时工具对模型不可见。"""
     cfg = _load_remote_config()
-    return bool(cfg["enabled"] and cfg["host"] and cfg["user"])
+    if not cfg["enabled"]:
+        return False
+    table = _node_table(cfg)
+    if not table:
+        return False
+    # user 可以是全局共享，也可以在某个节点上单独给
+    return bool(cfg["user"]) or any(str(t.get("user") or "").strip() for t in table.values())
+
+
+# ---------------------------------------------------------------------------
+# 多节点（命名节点）—— MobaXterm 式的命名连接，按名字选机器
+# ---------------------------------------------------------------------------
+
+_NODE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
+
+# 节点条目里允许覆盖的字段；其余一律跟共享配置走（同一个集群路径一样，没必要重复配）
+_NODE_OVERRIDE_KEYS = (
+    "host", "user", "port", "key", "workdir", "job_dir", "scheduler",
+    "partition", "queue", "timeout", "proxy_jump", "extra_ssh_options",
+    "note", "role",
+)
+
+_LITERAL_HOST_RE = re.compile(r"^(?:([^@\s]+)@)?([A-Za-z0-9._-]+)(?::(\d+))?$")
+
+
+def _normalize_nodes(raw) -> dict:
+    """把 config 的 nodes: 段规范化成 {名字: {显式覆盖字段}}。
+
+    支持三种写法（都合法，按需混用）::
+
+        remote:
+          nodes:
+            ssh3: {}                    # 名字本身就是 ssh 主机名 / ~/.ssh/config 里的别名
+            ssh5: ssh5.example.org      # 字符串 = 显式主机名
+            gpu1:                       # 完整写法：只写要覆盖的字段
+              host: 10.0.0.5
+              user: zhang
+              port: 2222
+              key: C:/Users/me/.ssh/id_gpu
+              proxy_jump: bastion.example.org
+              workdir: /data/zhang
+              note: 带 A100 的节点
+
+    名字只允许 [A-Za-z0-9._-]，因为节点名会进入远端作业名/日志名/pid 文件名。
+    中文等名字请写在 note 里。
+    """
+    if raw is None:
+        return {}
+    if isinstance(raw, (list, tuple)):
+        raw = {str(x).strip(): {} for x in raw if str(x).strip()}
+    if not isinstance(raw, dict):
+        logger.warning("remote.nodes 必须是字典或列表，已忽略（当前类型 %s）", type(raw).__name__)
+        return {}
+    out: dict = {}
+    for name, spec in raw.items():
+        key = str(name).strip()
+        if not key or key.startswith("_"):
+            continue
+        if not _NODE_NAME_RE.match(key):
+            logger.warning("remote.nodes 忽略非法节点名 %r（只允许字母数字和 . _ -，不超过 48 字符）", key)
+            continue
+        entry: dict = {}
+        if spec is None:
+            entry = {}
+        elif isinstance(spec, str):
+            entry = {"host": spec.strip() or key}
+        elif isinstance(spec, dict):
+            for k in _NODE_OVERRIDE_KEYS:
+                val = spec.get(k)
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    continue
+                entry[k] = _as_list(val) if k == "extra_ssh_options" else val
+        else:
+            logger.warning("remote.nodes.%s 的值类型不支持（%s），按空配置处理",
+                           key, type(spec).__name__)
+        entry.setdefault("host", key)   # 名字默认就当主机名/ssh 别名用
+        out[key] = entry
+    return out
+
+
+def _node_table(cfg: dict) -> dict:
+    """名字 → 展开后的连接配置（共享字段 + 节点覆盖 + 跳板机）。
+
+    没有 nodes 段时退化成单个节点（名字 = host），旧配置行为完全不变。
+    """
+    table: dict = {}
+    nodes = cfg.get("nodes") or {}
+    if not nodes:
+        host = str(cfg.get("host") or "").strip()
+        if host:
+            node = dict(cfg)
+            node["_name"] = host
+            node["_note"] = "（单节点配置，未命名）"
+            node["_role"] = ""
+            node["_shared"] = True
+            table[host] = node
+        return table
+
+    for name, entry in nodes.items():
+        node = dict(cfg)
+        node.update({k: v for k, v in entry.items() if k not in ("note", "role")})
+        node["_name"] = name
+        node["_note"] = str(entry.get("note") or "")
+        node["_role"] = str(entry.get("role") or "")
+        node["_shared"] = False
+        node["host"] = str(node.get("host") or name).strip()
+        # 节点覆盖了 workdir 但没覆盖 job_dir 时，作业目录要跟着走
+        if "workdir" in entry and "job_dir" not in entry:
+            node["job_dir"] = posixpath.join(str(node.get("workdir") or "~").rstrip("/"),
+                                             "memomics_jobs")
+        try:
+            node["port"] = int(str(node.get("port") or 22).strip() or 22)
+        except Exception:
+            node["port"] = 22
+        node["workdir"] = str(node.get("workdir") or "~").strip() or "~"
+        if not str(node.get("job_dir") or "").strip():
+            node["job_dir"] = posixpath.join(node["workdir"], "memomics_jobs")
+        # 连接层要的额外选项：节点自己的 + 跳板机（-o ProxyJump 对 ssh/scp 都有效）
+        extra = _as_list(node.get("extra_ssh_options"))
+        jump = str(entry.get("proxy_jump") or "").strip()
+        if jump and not any("proxyjump" in str(x).lower() or str(x) == "-J" for x in extra):
+            extra = extra + ["-o", "ProxyJump=%s" % jump]
+        node["extra_ssh_options"] = extra
+        table[name] = node
+    return table
+
+
+def _nodes_brief(table: dict) -> list:
+    return [{"name": n, "host": t.get("host"), "user": t.get("user"),
+             "note": t.get("_note") or "", "role": t.get("_role") or ""}
+            for n, t in table.items()]
+
+
+def _select_node(cfg: dict, requested: str = ""):
+    """按名字选节点 → (node_cfg, name, 错误JSON)。
+
+    选点策略（用户 2026-09 定的 ②）：
+      • 只配了 1 个节点 → 静默用它（用户说「用集群」就直接跑，不打断）
+      • 配了多个节点、调用没指定、也没配 default_node → **硬拦**，返回 status=needs_node
+        并列出候选，要求先问清用户；绝不自己挑一台
+      • 指定了名字 → 必须命中已配置节点（大小写不敏感）；未登记但形如主机名/别名时，
+        按裸主机连并在返回值里标注（allow_unlisted_nodes=false 可关掉这个兜底）
+    """
+    table = _node_table(cfg)
+    if not table:
+        return None, "", _err(
+            "没有可用的远端节点：请在 hermes_home/config.yaml 的 remote: 段配置 "
+            "host: <登录节点> 或 nodes: {名字: {host: ...}}"
+        )
+    req = str(requested or "").strip()
+
+    if req:
+        for name, node in table.items():
+            if name.lower() == req.lower():
+                return node, name, None
+        m = _LITERAL_HOST_RE.match(req)
+        if m and cfg.get("allow_unlisted_nodes", True):
+            user, host, port = m.group(1), m.group(2), m.group(3)
+            node = dict(cfg)
+            node["host"] = host
+            if user:
+                node["user"] = user
+            if port:
+                node["port"] = int(port)
+            node["_name"] = req
+            node["_note"] = "⚠️ 未登记在 nodes 里，按裸主机连接"
+            node["_role"] = ""
+            node["_shared"] = False
+            node["_unlisted"] = True
+            return node, req, None
+        return None, "", _err(
+            "节点名 %r 不在配置里，也不是合法主机名。已配置的节点：%s"
+            % (req, "、".join(table)),
+            nodes=_nodes_brief(table),
+            hint="要用哪个节点请先确认；名字写错了就改 node 参数，或先在 config.yaml 的 remote.nodes 里登记",
+        )
+
+    default_node = str(cfg.get("default_node") or "").strip()
+    if default_node:
+        for name, node in table.items():
+            if name.lower() == default_node.lower():
+                return node, name, None
+        return None, "", _err(
+            "remote.default_node=%r 不在 nodes 里，已配置：%s"
+            % (default_node, "、".join(table)),
+            nodes=_nodes_brief(table),
+        )
+
+    if len(table) == 1:
+        name = next(iter(table))
+        return table[name], name, None
+
+    # 多个节点 + 没指定 → 硬拦（这就是「没说就问清楚」）
+    return None, "", json.dumps({
+        "status": "needs_node",
+        "error": ("配置了多个远端节点，但这次调用没指定用哪个。"
+                  "**先问用户要在哪个节点上跑**，拿到答复后再用 node=\"<名字>\" 重新调用；"
+                  "不要自己挑一个，也不要用最近一次用过的。"),
+        "nodes": _nodes_brief(table),
+        "usage": "remote_cluster(action='submit', node='ssh3', command='...')",
+        "policy": cfg.get("node_policy") or "ask",
+        "tip": ("想挑最闲的节点：先 action='nodes' 看 load_per_cpu/idle_now，再把选中的名字传进来"
+                "（node_policy=auto 的自动择优还没实现，目前仍按 ask 处理）。"),
+    }, ensure_ascii=False, indent=2)
+
+
+def _node_slug(name: str) -> str:
+    """节点名 → 文件名安全的后缀（中文名会带短哈希，保证两个名字不会撞成同一个）。"""
+    raw = str(name or "").strip()
+    slug = re.sub(r"[^A-Za-z0-9._-]", "_", raw)
+    if not slug:
+        return "node"
+    if slug != raw:
+        slug = "%s-%s" % (slug, hashlib.md5(raw.encode("utf-8")).hexdigest()[:4])
+    return slug[:48]
+
+
+def _rec_matches_node(rec: dict, cfg: dict) -> bool:
+    """作业记录是否属于当前节点。
+
+    记录里**有** node 字段就必须按节点名严格比：多个节点可能是同一个集群的不同入口，
+    host 完全可能一样（例如 ssh3/ssh5 都指向同一台登录机），再退回比 host 会把
+    A 节点的作业当成 B 节点的。只有升级前的旧记录（没有 node 字段）才退化成比 host。
+    """
+    name = str(cfg.get("_name") or "")
+    rec_node = str(rec.get("node") or "")
+    if rec_node:
+        return bool(name) and rec_node == name
+    return bool(cfg.get("host")) and rec.get("host") == cfg.get("host")
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +588,8 @@ def _make_conn_class():
 
 
 def _conn_key(cfg: dict) -> str:
-    return "%s@%s:%s" % (cfg["user"], cfg["host"], cfg["port"])
+    # 键里带上密钥路径：同一个 host 用不同密钥/不同用户时不能复用同一条连接
+    return "%s@%s:%s|%s" % (cfg["user"], cfg["host"], cfg["port"], cfg.get("key") or "")
 
 
 def _get_conn(cfg: dict, force_reconnect: bool = False):
@@ -466,9 +706,17 @@ def _iter_jobs(limit: int = 200) -> list:
 
 def _find_job(cfg: dict, job_id: str):
     for rec in reversed(_iter_jobs()):
-        if str(rec.get("job_id")) == str(job_id) and rec.get("host") == cfg["host"]:
+        if str(rec.get("job_id")) == str(job_id) and _rec_matches_node(rec, cfg):
             return rec
     return None
+
+
+def _job_owner_node(job_id: str) -> str:
+    """这个 job_id 在记录里属于哪个节点（没有记录返回空串）。"""
+    for rec in reversed(_iter_jobs()):
+        if str(rec.get("job_id")) == str(job_id):
+            return str(rec.get("node") or "")
+    return ""
 
 
 def _map_local_to_remote(cfg: dict, local_path: str) -> str:
@@ -718,7 +966,7 @@ def _action_check(cfg: dict, args: dict) -> str:
         'echo "== versions =="',
         '(python3 -V 2>&1 || true); (Rscript -e \'cat(R.version.string)\' 2>&1 | head -1 || true)',
     ])
-    res = conn.execute(cmd, timeout=max(cfg["timeout"], 120), bounded_capture=True)
+    res = _exec_env(conn, cmd, timeout=max(cfg["timeout"], 120))
     output = res.get("output", "") or ""
     if _is_conn_error(output):
         _drop_conn(cfg)
@@ -734,7 +982,10 @@ def _action_check(cfg: dict, args: dict) -> str:
     remote_home = getattr(conn, "_remote_home", "")
     return _ok({
         "status": "ok" if res.get("returncode") == 0 else "partial",
+        "node": cfg.get("_name") or cfg["host"],
+        "node_note": cfg.get("_note") or "",
         "host": cfg["host"], "user": cfg["user"], "port": cfg["port"],
+        "nodes_configured": len(_node_table(cfg)),
         "remote_home": remote_home,
         "workdir": workdir,
         "workdir_missing": ("WORKDIR_MISSING" in output),
@@ -754,7 +1005,7 @@ def _action_run(cfg: dict, args: dict) -> str:
     timeout = int(args.get("timeout") or cfg["timeout"])
     if cwd:
         command = "cd %s && {\n%s\n}" % (shlex.quote(cwd), command)
-    res = conn.execute(command, timeout=timeout, bounded_capture=True)
+    res = _exec_env(conn, command, timeout=timeout)
     output = res.get("output", "") or ""
     rc = res.get("returncode")
     if _is_conn_error(output):
@@ -765,6 +1016,99 @@ def _action_run(cfg: dict, args: dict) -> str:
         "exit_code": rc,
         "output": _truncate(output, cfg["max_output_chars"]),
     })
+
+
+# ---------------------------------------------------------------------------
+# 产物分工：什么该拉回本机、什么该留在集群
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_PULL_FALLBACK_DIR = os.path.join(str(_REPO_ROOT), "results", "_cluster_pulls")
+
+# pull 的默认体积上限（MB）：超过就**拒绝执行**，让 agent 先去问用户。
+# 依据：WebUI 只能浏览 work/ 和 results/，能直接看的产物（表格/图/PDF/日志）
+# 都在 KB~几十 MB；一旦到上百 MB/GB，基本就是 BAM/FASTQ/矩阵/权重——那些本该留集群。
+_PULL_MAX_MB_DEFAULT = 512
+
+# Windows 上写的脚本是 CRLF，直接推给 Linux 跑会报 "\r: command not found" / python 语法错。
+_PUSH_TEXT_EXT = {".sh", ".bash", ".sbatch", ".pbs", ".py", ".r", ".pl", ".smk", ".nf",
+                  ".yaml", ".yml", ".json", ".csv", ".tsv", ".txt", ".cfg", ".conf",
+                  ".ini", ".md"}
+_PUSH_EXEC_EXT = {".sh", ".bash", ".sbatch", ".pbs", ".py", ".pl", ".r"}
+_PUSH_CRLF_SCAN_MAX = 64 * 1024 * 1024
+
+
+def _human_bytes(n) -> str:
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "?"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            if unit == "B":
+                return "%d%s" % (n, unit)
+            return "%.1f%s" % (n, unit)
+        n /= 1024.0
+    return "?"
+
+
+def _remote_stat(conn, remote_path: str) -> dict:
+    """远端路径的 kind/bytes；支持通配符。返回 {'items': [...], 'errors': [...]}。"""
+    items, errors = [], []
+    if _has_glob(remote_path):
+        got = _locate_remote_glob(conn, [remote_path], {"hits": [], "checked": [], "errors": []})
+        items, errors = got["hits"], got["errors"]
+    else:
+        res = _exec_env(conn, "LC_ALL=C ls -ld -- %s 2>&1 | head -1" % _sh_path(remote_path),
+                        timeout=60)
+        raw = (res.get("output") or "").strip()
+        parsed = _parse_ls_line(raw)
+        if parsed:
+            items = [{"path": remote_path, "kind": parsed[0], "bytes": parsed[1]}]
+        elif raw:
+            errors.append(raw.splitlines()[0][:200])
+    return {"items": items, "errors": errors}
+
+
+def _remote_bytes(conn, remote_path: str, kind: str):
+    """目录要算递归体积才知道该不该拉；文件用 ls 的 size 就够。"""
+    if kind != "dir":
+        return None
+    for cmd, mul in (("du -sb -- %s", 1), ("du -sk -- %s", 1024)):
+        res = _exec_env(conn, (cmd % _sh_path(remote_path)) + " 2>/dev/null | cut -f1",
+                        timeout=180)
+        txt = (res.get("output") or "").strip().splitlines()
+        if txt and txt[0].strip().isdigit():
+            return int(txt[0].strip()) * mul
+    return None
+
+
+def _crlf_prepare(local_abs: str, mode: str):
+    """把 Windows CRLF 文本转成 LF 副本再上传（本机原文件不动）。
+
+    mode: auto（默认，按后缀判断）| lf（强制转换）| keep（原样上传）
+    返回 (要上传的路径, 说明 dict 或 None)
+    """
+    ext = os.path.splitext(local_abs)[1].lower()
+    if mode == "keep":
+        return local_abs, None
+    if mode != "lf" and ext not in _PUSH_TEXT_EXT:
+        return local_abs, None
+    try:
+        if os.path.getsize(local_abs) > _PUSH_CRLF_SCAN_MAX:
+            return local_abs, None
+        with open(local_abs, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return local_abs, None
+    if b"\r\n" not in data:
+        return local_abs, None
+    fixed = data.replace(b"\r\n", b"\n")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext or ".tmp")
+    tmp.write(fixed)
+    tmp.close()
+    return tmp.name, {"crlf_fixed": True, "crlf_lines": data.count(b"\r\n"),
+                      "orig_bytes": len(data), "sent_bytes": len(fixed)}
 
 
 def _action_push(cfg: dict, args: dict) -> str:
@@ -779,26 +1123,41 @@ def _action_push(cfg: dict, args: dict) -> str:
         remote_path = _map_local_to_remote(cfg, local_abs)
         if not remote_path:
             return _err("未给 remote_path，且 remote.local_root/remote.remote_root 未配置，无法映射远端路径")
+    crlf_mode = str(args.get("crlf") or "auto").strip().lower()
+    send_path, crlf_info = _crlf_prepare(local_abs, crlf_mode)
     conn = _get_conn(cfg)
-    parent = posixpath.dirname(remote_path.rstrip("/")) or "."
-    mkdir = conn.execute("mkdir -p %s" % shlex.quote(parent), timeout=60)
-    if mkdir.get("returncode") != 0:
-        return _err("远端目录创建失败: %s" % (mkdir.get("output") or "").strip())
-    result = _scp_transfer(conn, local_abs, remote_path, upload=True)
-    if not result.get("ok"):
-        return _err("上传失败: %s" % result.get("error"))
-    # Windows 侧 scp 复制过来的权限位常常带 group/other 写（0707 之类），
-    # 集群是共享机器，统一收紧成"仅属主可读写"（0700/0600）。
-    conn.execute("chmod -R u+rwX,go-rwx %s" % shlex.quote(remote_path), timeout=60)
-    verify = conn.execute("du -sh %s 2>/dev/null; ls -ld %s" % (shlex.quote(remote_path),
-                                                                shlex.quote(remote_path)),
-                          timeout=60)
-    return _ok({
+    result, verify = {}, {}
+    try:
+        parent = posixpath.dirname(remote_path.rstrip("/")) or "."
+        mkdir = conn.execute("mkdir -p %s" % shlex.quote(parent), timeout=60)
+        if mkdir.get("returncode") != 0:
+            return _err("远端目录创建失败: %s" % (mkdir.get("output") or "").strip())
+        result = _scp_transfer(conn, send_path, remote_path, upload=True)
+        if not result.get("ok"):
+            return _err("上传失败: %s" % result.get("error"))
+        # Windows 侧 scp 复制过来的权限位常常带 group/other 写（0707 之类），
+        # 集群是共享机器，统一收紧成"仅属主可读写"（0700/0600）。
+        conn.execute("chmod -R u+rwX,go-rwx %s" % shlex.quote(remote_path), timeout=60)
+        if os.path.splitext(local_abs)[1].lower() in _PUSH_EXEC_EXT:
+            conn.execute("chmod u+x %s" % shlex.quote(remote_path), timeout=60)
+        verify = conn.execute("du -sh %s 2>/dev/null; ls -ld %s" % (shlex.quote(remote_path),
+                                                                    shlex.quote(remote_path)),
+                              timeout=60)
+    finally:
+        if crlf_info:
+            try:
+                os.unlink(send_path)
+            except OSError:
+                pass
+    payload = {
         "local_path": local_abs,
         "remote_path": remote_path,
         "transport": result.get("cmd_mode"),
         "remote_check": (verify.get("output") or "").strip(),
-    })
+    }
+    if crlf_info:
+        payload["crlf"] = dict(crlf_info, action="已转成 LF 再上传，本机原文件没动")
+    return _ok(payload)
 
 
 def _action_pull(cfg: dict, args: dict) -> str:
@@ -806,35 +1165,103 @@ def _action_pull(cfg: dict, args: dict) -> str:
     local_path = (args.get("local_path") or "").strip()
     if not remote_path:
         return _err("pull 需要 remote_path")
-    if not local_path:
-        local_path = _map_remote_to_local(cfg, remote_path)
-        if not local_path:
-            return _err("未给 local_path，且 remote.local_root/remote.remote_root 未配置，无法映射本地路径")
-    local_abs = os.path.abspath(local_path)
     conn = _get_conn(cfg)
-    exists = conn.execute("ls -ld %s" % shlex.quote(remote_path), timeout=60)
-    if exists.get("returncode") != 0:
-        return _err("远端路径不存在或无权限: %s" % (exists.get("output") or "").strip())
-    os.makedirs(os.path.dirname(local_abs) or ".", exist_ok=True)
-    result = _scp_transfer(conn, local_abs, remote_path, upload=False)
-    if not result.get("ok"):
-        return _err("下载失败: %s" % result.get("error"))
-    size = 0
-    if os.path.isdir(local_abs):
-        for root, _dirs, files in os.walk(local_abs):
-            for fname in files:
+    stat = _remote_stat(conn, remote_path)
+    items = stat["items"]
+    if not items:
+        why = ("；远端回了：" + "；".join(stat["errors"])) if stat["errors"] else ""
+        return _err("远端没找到（路径写错 / 没权限 / 通配符没匹配上）: %s%s" % (remote_path, why))
+    for it in items:
+        if it.get("kind") == "dir":
+            got = _remote_bytes(conn, it["path"], "dir")
+            if got is not None:
+                it["bytes"] = got
+    total = sum(int(it.get("bytes") or 0) for it in items)
+    # ★体积闸门：默认不给"手滑把 200GB 的 BAM 拖回本机"
+    max_mb = args.get("max_mb")
+    if max_mb is None:
+        max_mb = 0 if args.get("allow_large") else _PULL_MAX_MB_DEFAULT
+    else:
+        try:
+            max_mb = float(max_mb)
+        except (TypeError, ValueError):
+            max_mb = _PULL_MAX_MB_DEFAULT
+    if max_mb and total > max_mb * 1024 * 1024:
+        return _ok({
+            "status": "too_large",
+            "remote_path": remote_path,
+            "total_bytes": total, "total_human": _human_bytes(total),
+            "max_mb": max_mb,
+            "items": items[:20],
+            "hint": ("这份东西 %s，超过 pull 默认上限 %s MB。**先问用户要不要拉**；"
+                     "用户确认要拉，就带 max_mb=<更大的数字>（或 allow_large=true）再调一次。"
+                     "经验：表格/图/PDF/脚本/日志汇总（.csv .tsv .xlsx .png .pdf .svg .R .py .log）"
+                     "拉回本机 results/<会话目录>/，WebUI 才能直接看；"
+                     "BAM/FASTQ/大矩阵/模型权重留在集群。"
+                     % (_human_bytes(total), int(max_mb))),
+        })
+    # 目标路径：多命中/通配符 → 都放进一个目录；单个 → 尊重 local_path
+    if len(items) > 1:
+        base_dir = local_path or os.path.join(_PULL_FALLBACK_DIR,
+                                              os.path.basename(remote_path.rstrip("/")) or "pull")
+        targets = [(it, os.path.join(base_dir, os.path.basename(it["path"].rstrip("/"))))
+                   for it in items]
+    else:
+        it = items[0]
+        lp = local_path or _map_remote_to_local(cfg, it["path"]) or os.path.join(
+            _PULL_FALLBACK_DIR, os.path.basename(it["path"].rstrip("/")))
+        if it["kind"] != "dir" and os.path.isdir(lp):
+            lp = os.path.join(lp, os.path.basename(it["path"].rstrip("/")))
+        elif it["kind"] == "dir" and os.path.isdir(lp):
+            lp = os.path.join(lp, os.path.basename(it["path"].rstrip("/")))
+        targets = [(it, lp)]
+    # 不静默覆盖用户本机已有文件
+    if not args.get("overwrite"):
+        clash = [lp for _it, lp in targets if os.path.exists(lp)]
+        if clash:
+            return _ok({"status": "exists", "local_paths": clash[:10],
+                        "hint": ("本机已经有同名文件，没有覆盖。确认要覆盖就带 overwrite=true 再调一次；"
+                                 "或者换一个 local_path（建议 results/<会话目录>/）。")})
+    done, failed = [], []
+    for it, lp in targets:
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(lp)) or ".", exist_ok=True)
+        except OSError as exc:
+            failed.append({"remote_path": it["path"], "error": "本地目录创建失败: %s" % exc})
+            continue
+        res = _scp_transfer(conn, lp, it["path"], upload=False)
+        if res.get("ok"):
+            size = it.get("bytes")
+            if it["kind"] == "file" and os.path.exists(lp):
                 try:
-                    size += os.path.getsize(os.path.join(root, fname))
+                    size = os.path.getsize(lp)
                 except OSError:
                     pass
-    elif os.path.exists(local_abs):
-        size = os.path.getsize(local_abs)
-    return _ok({
+            done.append({"remote_path": it["path"], "local_path": lp, "bytes": size,
+                         "kind": it["kind"]})
+        else:
+            failed.append({"remote_path": it["path"], "error": res.get("error")})
+    if not done:
+        return _err("下载失败: %s" % (failed[0].get("error") if failed else "未知原因"),
+                    failed=failed)
+    local_out = done[0]["local_path"] if len(done) == 1 else os.path.dirname(done[0]["local_path"])
+    payload = {
+        "status": "ok" if not failed else "partial",
         "remote_path": remote_path,
-        "local_path": local_abs,
-        "transport": result.get("cmd_mode"),
-        "local_bytes": size,
-    })
+        "local_path": local_out,
+        "local_paths": [d["local_path"] for d in done],
+        "count": len(done),
+        "total_bytes": total,
+        "total_human": _human_bytes(total),
+        "transport": "scp",
+        "failed": failed,
+        "hint": "这只是拉回本机；要放进 WebUI 能看的目录，请确保落在 results/<会话目录>/ 或 work/ 下。",
+    }
+    return _ok(payload)
+
+
+
+
 
 
 def _action_submit(cfg: dict, args: dict) -> str:
@@ -843,7 +1270,13 @@ def _action_submit(cfg: dict, args: dict) -> str:
         return _err("submit 需要 command（要跑的作业命令）")
     conn = _get_conn(cfg)
     sched, _bins = _detect_scheduler(conn, cfg)
-    name = (args.get("job_name") or "memomics").strip().replace(" ", "_")
+    base_name = (args.get("job_name") or "memomics").strip().replace(" ", "_")
+    # 多个节点共用同一个文件系统时，同名作业的日志/pid 文件会互相覆盖
+    # （logs/<作业名>.log、logs/<作业名>.pid）→ 多节点时自动加节点后缀
+    node_tag = ""
+    if len(_node_table(cfg)) > 1:
+        node_tag = "_" + _node_slug(cfg.get("_name") or cfg["host"])
+    name = "%s%s" % (base_name, node_tag)
     workdir = args.get("cwd") or cfg["workdir"]
     script_text, out_log, err_log, pid_file = _build_job_script(
         cfg, sched, command, name,
@@ -900,7 +1333,7 @@ def _action_submit(cfg: dict, args: dict) -> str:
         if pid_match:
             job_id = pid_match.group(1)
     record = {
-        "ts": _now(), "host": cfg["host"], "user": cfg["user"],
+        "ts": _now(), "node": cfg.get("_name") or "", "host": cfg["host"], "user": cfg["user"],
         "scheduler": sched, "job_id": job_id, "name": name,
         "script": script_remote, "stdout": out_log, "stderr": err_log,
         "workdir": workdir, "command": command[:4000], "pid_file": pid_file,
@@ -908,6 +1341,7 @@ def _action_submit(cfg: dict, args: dict) -> str:
     _record_job(record)
     return _ok({
         "status": "submitted", "scheduler": sched, "job_id": job_id,
+        "node": cfg.get("_name") or "", "host": cfg["host"],
         "name": name, "script_remote": script_remote,
         "stdout": out_log, "stderr": err_log,
         "submit_output": _truncate(output, 1000),
@@ -979,9 +1413,17 @@ def _derive_state(sched: str, output: str) -> str:
 def _action_status(cfg: dict, args: dict) -> str:
     job_id = str(args.get("job_id") or "").strip()
     rec = _find_job(cfg, job_id) if job_id else None
+    cross_note = ""
+    if job_id and rec is None:
+        owner = _job_owner_node(job_id)
+        if owner and owner != (cfg.get("_name") or ""):
+            cross_note = ("job_id %s 的提交记录在节点 %r 上（现在选的是 %r）。"
+                          "同一个集群共享调度器时这样查没问题；"
+                          "如果那个节点用的是无调度器(setid)模式，作业号是那边的本机 PID，"
+                          "查不到就要换 node=%r 再查。" % (job_id, owner, cfg.get("_name") or cfg["host"], owner))
     assumed = False
     if not job_id:
-        recent = [r for r in _iter_jobs(50) if r.get("host") == cfg["host"]]
+        recent = [r for r in _iter_jobs(50) if _rec_matches_node(r, cfg)]
         if not recent:
             return _err("status 需要 job_id（本机还没有提交记录，先用 action='submit'）")
         rec = recent[-1]
@@ -1027,8 +1469,10 @@ def _action_status(cfg: dict, args: dict) -> str:
     state = _derive_state(sched, output)
     return _ok({
         "job_id": job_id, "scheduler": sched, "name": (rec or {}).get("name"),
+        "node": cfg.get("_name") or "", "host": cfg["host"],
         "state": state,
         **({"note": "未指定 job_id，用的是最近一次提交"} if assumed else {}),
+        **({"cross_node_note": cross_note} if cross_note else {}),
         "stdout": out_path or (rec or {}).get("stdout"),
         "stderr": err_path or (rec or {}).get("stderr"),
         "output": _truncate(output, cfg["max_output_chars"]),
@@ -1042,13 +1486,20 @@ def _action_logs(cfg: dict, args: dict) -> str:
     rec = _find_job(cfg, job_id) if job_id else None
     if not path:
         if rec is None:
-            recent = [r for r in _iter_jobs(20) if r.get("host") == cfg["host"]]
+            recent = [r for r in _iter_jobs(20) if _rec_matches_node(r, cfg)]
             if len(recent) == 1:
                 rec = recent[0]
         if rec is not None:
             job_id = job_id or str(rec.get("job_id") or "")
             path = str(rec.get("stdout") or "")
     if not path:
+        owner = _job_owner_node(job_id) if job_id else ""
+        if owner and owner != (cfg.get("_name") or ""):
+            return _err("job_id %s 的提交记录在节点 %r 上（现在选的是 %r），"
+                        "日志路径只有那边的记录里才有 → 请用 node=%r 再读，"
+                        "或直接给 path=远端日志文件"
+                        % (job_id, owner, cfg.get("_name") or cfg["host"], owner),
+                        job_id=job_id, owner_node=owner)
         return _err("logs 需要 job_id（最近一次提交）或 path（远端日志文件）")
     conn = _get_conn(cfg)
     # 记录里存的是作业文件名模板（slurm 是 %j 形式），读之前必须展开成真实文件名
@@ -1123,12 +1574,489 @@ def _action_jobs(cfg: dict, args: dict) -> str:
     return _ok({
         "scheduler": sched,
         "output": _truncate((res.get("output") or "").strip(), cfg["max_output_chars"]),
-        "local_records": [{k: r.get(k) for k in ("ts", "job_id", "name", "scheduler", "workdir")}
-                          for r in _iter_jobs(10) if r.get("host") == cfg["host"]][-5:],
+        "local_records": [{k: r.get(k) for k in ("ts", "node", "job_id", "name", "scheduler", "workdir")}
+                          for r in _iter_jobs(10) if _rec_matches_node(r, cfg)][-5:],
+    })
+
+
+# ---------------------------------------------------------------------------
+# 节点体检（action='nodes'）—— 列配置里的节点 + 连通性 + 负载
+# ---------------------------------------------------------------------------
+
+_NODE_PROBE = "\n".join([
+    "echo \"== host ==\"",
+    "hostname; whoami",
+    "echo \"== cpu ==\"",
+    "nproc 2>/dev/null || echo 0",
+    "echo \"== load ==\"",
+    "cat /proc/loadavg 2>/dev/null | cut -d' ' -f1-3 || uptime",
+    "echo \"== users ==\"",
+    "who 2>/dev/null | wc -l",
+    "echo \"== home ==\"",
+    "echo \"$HOME\"",
+    "echo \"== workdir ==\"",
+    "cd %s 2>/dev/null && { pwd; df -h . | tail -1; } || echo WORKDIR_MISSING",
+    "echo \"== sched ==\"",
+    _PROBE_SCHED,
+])
+
+
+def _probe_section(text: str, name: str) -> str:
+    m = re.search(r"== %s ==\n(.*?)(?=\n== |\Z)" % re.escape(name), text or "", re.S)
+    return (m.group(1) if m else "").strip()
+
+
+def _parse_node_probe(text: str) -> dict:
+    info: dict = {}
+    host_sec = _probe_section(text, "host").splitlines()
+    if host_sec:
+        info["remote_hostname"] = host_sec[0].strip()
+    if len(host_sec) > 1:
+        info["remote_user"] = host_sec[1].strip()
+    try:
+        info["nproc"] = int(_probe_section(text, "cpu").split()[0])
+    except Exception:
+        info["nproc"] = 0
+    load = _probe_section(text, "load").split()
+    for idx, key in enumerate(("load1", "load5", "load15")):
+        if len(load) > idx:
+            try:
+                info[key] = float(load[idx])
+            except Exception:
+                pass
+    try:
+        info["users"] = int(_probe_section(text, "users").split()[0])
+    except Exception:
+        info["users"] = None
+    home_sec = _probe_section(text, "home").splitlines()
+    if home_sec:
+        info["remote_home"] = home_sec[0].strip()
+    wd = _probe_section(text, "workdir")
+    if not wd or "WORKDIR_MISSING" in wd:
+        info["workdir_ok"] = False
+    else:
+        wd_lines = wd.splitlines()
+        info["workdir_ok"] = True
+        info["workdir"] = wd_lines[0].strip()
+        if len(wd_lines) > 1:
+            info["workdir_df"] = wd_lines[1].strip()
+    sched_sec = _probe_section(text, "sched")
+    if sched_sec:
+        bins = _parse_probe(sched_sec)
+        info["bins"] = {k: v for k, v in bins.items() if v}
+        if bins.get("sbatch") and bins.get("squeue"):
+            info["scheduler"] = "slurm"
+        elif bins.get("qsub") and bins.get("qstat"):
+            info["scheduler"] = "pbs"
+        else:
+            info["scheduler"] = "none"
+    return info
+
+
+def _action_nodes(cfg: dict, args: dict) -> str:
+    """列配置里的所有节点，逐个探连通性 + 负载（用于「哪个节点现在空着」和排查连不上）。
+
+    不选定节点也能调用；给了 node= 就只探那一个。
+    """
+    table = _node_table(cfg)
+    if not table:
+        return _err("没有配置任何远端节点：请在 config.yaml 的 remote: 段配 host 或 nodes")
+    only = str(args.get("node") or "").strip()
+    names = list(table)
+    if only:
+        names = [n for n in table if n.lower() == only.lower()]
+        if not names:
+            return _err("节点名 %r 不在配置里。已配置：%s" % (only, "、".join(table)),
+                        nodes=_nodes_brief(table))
+
+    items = []
+    for name in names:
+        node = table[name]
+        item: dict = {
+            "name": name, "note": node.get("_note") or "", "role": node.get("_role") or "",
+            "host": node.get("host"), "user": node.get("user"), "port": node.get("port"),
+            "workdir": node.get("workdir"), "reachable": False,
+        }
+        if not str(node.get("user") or "").strip():
+            item["error"] = "这个节点没有 user（全局 remote.user 和节点条目里都没给）"
+            items.append(item)
+            continue
+        try:
+            conn = _get_conn(node)
+            res = _exec_env(conn, _NODE_PROBE % shlex.quote(str(node.get("workdir") or "~")),
+                            timeout=min(int(node.get("timeout") or 60), 60))
+            out = res.get("output") or ""
+            item.update(_parse_node_probe(out))
+            bad = _is_conn_error(out) or res.get("returncode") != 0
+            item["reachable"] = not bad
+            if bad:
+                item["error"] = _truncate(out.strip(), 400)
+                if _is_conn_error(out):
+                    _drop_conn(node)
+        except Exception as exc:
+            item["error"] = str(exc)[:400]
+        nproc = int(item.get("nproc") or 0)
+        if nproc and item.get("load1") is not None:
+            item["load_per_cpu"] = round(float(item["load1"]) / nproc, 3)
+            item["idle_guess"] = item["load_per_cpu"] < 0.6
+        items.append(item)
+
+    reachable = [i for i in items if i.get("reachable")]
+    idle = [i["name"] for i in reachable if i.get("idle_guess")]
+    return _ok({
+        "status": "ok" if len(reachable) == len(items) else "partial",
+        "nodes": items,
+        "configured": len(table),
+        "reachable": len(reachable),
+        "idle_now": idle,
+        "policy": cfg.get("node_policy") or "ask",
+        "default_node": cfg.get("default_node") or "",
+        "summary": ("%d/%d 个节点可连；负载较低：%s"
+                    % (len(reachable), len(items), "、".join(idle) if idle else "无")),
+    })
+
+
+_BOUNDED_CAPTURE_OK = None
+
+
+def _exec_env(conn, command: str, timeout: int = None, cwd: str = None,
+              stdin_data: str = None) -> dict:
+    """调 environment.execute()：老版本 hermes 的 BaseEnvironment 不认 bounded_capture，自动降级。
+
+    这里刻意用签名探测而不是 try/except 包住 execute——否则命令内部的 TypeError 会被
+    误判成"版本不支持"，导致同一条命令被跑第二次（有副作用的命令会出事）。
+    """
+    global _BOUNDED_CAPTURE_OK
+    if _BOUNDED_CAPTURE_OK is None:
+        try:
+            import inspect
+            _BOUNDED_CAPTURE_OK = "bounded_capture" in inspect.signature(conn.execute).parameters
+        except Exception:
+            _BOUNDED_CAPTURE_OK = False
+    kw = {}
+    if timeout is not None:
+        kw["timeout"] = timeout
+    if cwd:
+        kw["cwd"] = cwd
+    if stdin_data is not None:
+        kw["stdin_data"] = stdin_data
+    if _BOUNDED_CAPTURE_OK:
+        kw["bounded_capture"] = True
+    return conn.execute(command, **kw)
+
+
+def _memomics_root() -> Path:
+    """仓库根目录（memomics/bio_tools/remote_cluster.py → 上三级）。"""
+    try:
+        return Path(__file__).resolve().parents[2]
+    except Exception:
+        return Path(os.getcwd())
+
+
+_WIN_ABS = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|//)")
+_GLOB_CHARS = "*?["
+
+
+def _path_flavor(raw: str) -> str:
+    """用户给的是哪种路径：win(Windows 盘符/UNC) / posix(远端绝对或 ~) / bare(相对或纯文件名)。"""
+    s = (raw or "").strip()
+    if _WIN_ABS.match(s):
+        return "win"
+    if s.startswith("/") or s.startswith("~"):
+        return "posix"
+    return "bare"
+
+
+def _sh_path(cand: str) -> str:
+    """候选路径在 shell 里的安全写法。注意 ~ 不能被整体加引号，否则 shell 不展开。"""
+    if cand == "~":
+        return '"$HOME"'
+    if cand.startswith("~/"):
+        return '"$HOME"' + shlex.quote(cand[1:])
+    return shlex.quote(cand)
+
+
+def _has_glob(raw: str) -> bool:
+    return any(ch in (raw or "") for ch in _GLOB_CHARS)
+
+
+_LS_MODE = re.compile(r"^[-dlbcsp][-rwxsStT]{9}[.+@]?$")
+
+
+def _parse_ls_line(line: str):
+    """解析 'LC_ALL=C ls -ld' 的首行 → (kind, bytes)；不是列表行（报错/空）返回 None。
+
+    必须严格认模式串：ls 的报错行 "ls: cannot access ...: No such file or directory"
+    首字符也是 'l'，宽松判断会把「不存在」当成「符号链接」，
+    结果是**任何路径都被判成存在**（差点发布出去的真 bug）。
+    """
+    line = (line or "").strip()
+    if not line or line.startswith("ls:"):
+        return None
+    if "No such file" in line or "Permission denied" in line or "not a directory" in line:
+        return None
+    parts = line.split()
+    if len(parts) < 5 or not _LS_MODE.match(parts[0]):
+        return None
+    try:
+        size = int(parts[4])
+    except ValueError:
+        size = None
+    kind = {"d": "dir", "l": "link"}.get(parts[0][0], "file")
+    return (kind, size)
+
+
+def _glob_local(raw: str, root: Path) -> list:
+    """本地通配符查找（*.tsv 这类）。只在会话常见目录里展开，避免全盘扫。"""
+    import glob as _glob
+    if os.path.isabs(raw):
+        pats = [raw]
+    else:
+        pats = [raw,
+                os.path.join(str(root), raw),
+                os.path.join(str(root), "work", raw),
+                os.path.join(str(root), "results", "*", raw),
+                os.path.join(str(root), "webui", "uploads", raw)]
+    out, seen = [], set()
+    for pat in pats:
+        try:
+            found = sorted(_glob.glob(pat))[:50]
+        except Exception:
+            continue
+        for p in found:
+            try:
+                ap = os.path.abspath(p)
+            except Exception:
+                continue
+            if ap in seen:
+                continue
+            seen.add(ap)
+            try:
+                isdir = os.path.isdir(ap)
+                out.append({"found_as": "glob:" + pat, "path": ap,
+                            "kind": "dir" if isdir else "file",
+                            "bytes": None if isdir else os.path.getsize(ap)})
+            except OSError:
+                continue
+    return out
+
+
+_REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
+                   '[ps.extend(glob.glob(p)) for p in sys.argv[1:]];'
+                   'ps=sorted(set(ps))[:50];'
+                   '[print(("D" if os.path.isdir(p) else "F")+":"+'
+                   'str(os.path.getsize(p) if os.path.isfile(p) else 0)+":"+p) for p in ps]')
+
+
+def _locate_remote_glob(conn, cands: list, out: dict) -> dict:
+    """远端通配符：借节点上的 python3 展开（shell 里带引号的 glob 不会自己展开）。"""
+    pats = " ".join(shlex.quote(c) for c in cands if c)
+    cmd = ("for PY in python3 python; do command -v $PY >/dev/null 2>&1 || continue; "
+           "$PY -c '%s' %s && break; done" % (_REMOTE_GLOB_PY, pats))
+    res = _exec_env(conn, cmd, timeout=60)
+    for line in (res.get("output") or "").strip().splitlines():
+        line = line.strip()
+        if line.count(":") < 2 or line[0] not in "DF":
+            if line:
+                out["errors"].append(line[:160])
+            continue
+        kind, size, path = line.split(":", 2)
+        try:
+            size = int(size)
+        except ValueError:
+            size = None
+        out["hits"].append({"path": path, "kind": "dir" if kind == "D" else "file", "bytes": size})
+    return out
+
+
+def _locate_local(raw: str, flavor: str = "bare") -> dict:
+    """在本机常见位置找这个路径：原样 / 仓库根 / work/ / results/（含各会话子目录）/ webui/uploads/。
+
+    flavor='win'（Windows 绝对路径）只按原样查：绝不把盘符路径拼到仓库子目录里，
+    更不会因为集群上碰巧有同名文件就把用户的本地文件判成集群数据。
+    """
+    root = _memomics_root()
+    unix = raw.replace("\\", "/")
+    base = unix.rstrip("/").rsplit("/", 1)[-1] if unix else ""
+    if _has_glob(raw):
+        return {"hits": _glob_local(raw, root), "checked": ["glob:" + raw], "root": str(root)}
+    cands = [("原样", raw)]
+    if flavor == "bare":
+        for sub in ("", "work", "results", "webui/uploads"):
+            cands.append((sub or "仓库根", os.path.join(str(root), sub, raw)))
+    if base and flavor == "bare" and not os.path.isabs(raw):
+        # 用户常只说文件名 → 去 results/<各个会话>/ 里找（最近的会话排前面）
+        try:
+            rdir = str(root / "results")
+            sess = [d for d in os.listdir(rdir) if os.path.isdir(os.path.join(rdir, d))]
+            sess.sort(key=lambda d: os.path.getmtime(os.path.join(rdir, d)), reverse=True)
+            for s in sess[:40]:
+                cands.append(("results/" + s, os.path.join(rdir, s, raw)))
+        except Exception:
+            pass
+    hits, seen, checked = [], set(), []
+    for tag, p in cands:
+        try:
+            ap = os.path.abspath(p)
+        except Exception:
+            continue
+        if ap in seen:
+            continue
+        seen.add(ap)
+        if len(checked) < 12:
+            checked.append(ap)
+        try:
+            if os.path.exists(ap):
+                isdir = os.path.isdir(ap)
+                hits.append({"found_as": tag, "path": ap, "kind": "dir" if isdir else "file",
+                             "bytes": None if isdir else os.path.getsize(ap)})
+        except Exception:
+            continue
+    return {"hits": hits, "checked": checked, "root": str(root)}
+
+
+def _locate_remote(node_cfg: dict, raw: str, flavor: str = "bare") -> dict:
+    """在某个节点上找这个路径：原样 / 工作目录下同名 / 工作目录 data/ 下同名。"""
+    workdir = str(node_cfg.get("workdir") or "~").rstrip("/")
+    unix = raw.replace("\\", "/")
+    base = os.path.basename(unix.rstrip("/")) if unix.strip() else ""
+    out = {"hits": [], "checked": [], "errors": []}
+    cands = [unix]
+    if base and flavor != "posix" and not unix.startswith("/"):
+        cands.append(workdir + "/" + base)
+        cands.append(workdir + "/data/" + base)
+    conn = _get_conn(node_cfg)
+    if _has_glob(unix):
+        out["checked"] = [c for c in cands if c]
+        return _locate_remote_glob(conn, out["checked"], out)
+    seen = set()
+    for cand in cands:
+        if not cand or cand in seen:
+            continue
+        seen.add(cand)
+        out["checked"].append(cand)
+        # ls -ld 一次问清「在不在/是文件还是目录/多大/有没有权限」：
+        # 不读文件内容（几 GB 的 BAM 也是瞬间），而且能区分"没有"和"没权限"。
+        res = _exec_env(conn, "LC_ALL=C ls -ld -- %s 2>&1 | head -1" % _sh_path(cand),
+                        timeout=min(int(node_cfg.get("timeout") or 60), 45))
+        lines = (res.get("output") or "").strip().splitlines()
+        line = lines[0].strip() if lines else ""
+        parsed = _parse_ls_line(line)
+        if parsed is None:
+            if line and ("Permission denied" in line or "not a directory" in line
+                         or "No such file" in line):
+                if "Permission denied" in line:
+                    out["errors"].append("无权限（%s 可能确实存在，但当前账号读不到）" % cand)
+            elif line:
+                out["errors"].append("%s: %s" % (cand, line[:120]))
+            continue
+        kind, size = parsed
+        if not any(h["path"] == cand for h in out["hits"]):
+            out["hits"].append({"path": cand, "kind": kind, "bytes": size})
+    return out
+
+
+def _fmt_bytes(n) -> str:
+    if n is None:
+        return "?"
+    try:
+        n = float(n)
+    except Exception:
+        return "?"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return ("%.1f%s" % (n, unit)) if unit != "B" else ("%dB" % int(n))
+        n /= 1024.0
+    return "?"
+
+
+def _action_locate(cfg: dict, args: dict) -> str:
+    """判定一个路径到底在本地还是集群上。
+
+    用户明说了按用户说的走；没说就查出来（本地常见目录 + 各节点），查不出来就问，
+    不许猜、不许编路径。远端没配置时也能用（只报本地那一半）。
+    """
+    raw = str(args.get("path") or args.get("local_path") or args.get("remote_path") or "").strip()
+    if not raw:
+        return _err("locate 需要给出要判定的路径：path='...'（直接用用户消息里的原话路径，不要自己拼）")
+    flavor = _path_flavor(raw)
+    local = _locate_local(raw, flavor)
+    table = _node_table(cfg)
+    only = str(args.get("node") or "").strip()
+    # Windows 盘符 / UNC 路径 = 本机文件，绝不拿到集群上去找：
+    # 集群上碰巧有同名文件会把本地数据判成集群数据，最坏情况是拿错数据去算。
+    skip_remote = (flavor == "win")
+    names = [] if skip_remote else list(table)
+    if only and not skip_remote:
+        names = [n for n in table if n.lower() == only.lower()]
+        if not names:
+            return _err("节点名 %r 不在配置里。已配置：%s" % (only, "、".join(table) or "无"),
+                        nodes=_nodes_brief(table))
+    remote, errs = {}, {}
+    for name in names[:6]:
+        try:
+            remote[name] = _locate_remote(table[name], raw, flavor)
+            if remote[name].get("errors"):
+                errs[name] = "；".join(remote[name]["errors"])[:300]
+        except Exception as exc:
+            errs[name] = str(exc)[:200]
+            _drop_conn(table[name])
+    rh = {n: v["hits"] for n, v in remote.items() if v.get("hits")}
+    lh = local["hits"]
+    if lh and rh:
+        verdict = "ambiguous"
+        advice = ("两边都找到了 → **不要自己挑**：把两边的大小报给用户问清楚用哪一份"
+                  "（本机 %s；远端 %s）。如果只是刚 push/pull 过的同一份，按用户最后提到的位置走。"
+                  % ("、".join(_fmt_bytes(h.get("bytes")) + " " + h["path"] for h in lh[:2]),
+                     "、".join("%s %s" % (n, _fmt_bytes(h.get("bytes"))) for n, hs in rh.items() for h in hs[:1])))
+    elif lh:
+        verdict = "local"
+        advice = ("本机找到了（%s）→ 按本地跑（execute_python / execute_r），"
+                  "输出照旧放 results/<会话目录>/，不要为了它去连集群。"
+                  % "、".join(h["path"] for h in lh[:2]))
+        if skip_remote:
+            advice += "（Windows 盘符路径，没拿去集群上找；集群同名文件不算数。）"
+    elif rh:
+        verdict = "cluster"
+        advice = ("本机没有、集群上有（%s）→ 这是集群数据：**原始大文件不要往本机拉**，"
+                  "用 remote_cluster 的 run/submit 在集群上算；表格/图片/脚本/日志这类小产物算完 "
+                  "pull 回 results/<会话目录>/，否则 WebUI 里看不到。"
+                  % "、".join("%s:%s" % (n, hs[0]["path"]) for n, hs in rh.items()))
+    else:
+        verdict = "missing"
+        if skip_remote:
+            advice = ("你给的这个本机路径（Windows 盘符）没找到，查过：%s。"
+                      "**先跟用户确认路径**（是不是盘符/目录写错了、或文件还没生成）；"
+                      "Windows 路径不会被拿去集群上找，如果数据其实在集群上，请用户给远端路径或说明哪个节点。"
+                      % ("、".join(local["checked"][:6]) or "无"))
+        elif not table:
+            advice = ("本机没找到，而且远端集群还没配置 → 请用户给准确路径，"
+                      "(或先在 WebUI「🖧 远端集群」里配好节点再查集群那一边)。")
+        else:
+            advice = ("本机和集群都没找到 → **不要编路径、也不要假设**："
+                      "把查过的位置报给用户（本机：%s；集群：%s），请他给准确路径，"
+                      "或确认是不是要先 push 上传。"
+                      % ("、".join(local["checked"][:5]) or "无",
+                         "；".join("%s: %s" % (n, "、".join(v["checked"][:3])) for n, v in remote.items()) or "无"))
+    return _ok({
+        "status": "ok",
+        "path": raw,
+        "verdict": verdict,
+        "local": local,
+        "remote": remote,
+        "remote_errors": errs,
+        "scope": "local-only（Windows 盘符路径，不去集群上找）" if skip_remote else "local+cluster",
+        "globs_expanded": _has_glob(raw),
+        "nodes_checked": names[:6],
+        "advice": advice,
+        "summary": ("路径 %r → %s" % (raw, {"local": "只在本地", "cluster": "只在集群",
+                                            "ambiguous": "两边都有", "missing": "两边都没找到"}[verdict])),
     })
 
 
 _ACTIONS = {
+    "locate": _action_locate,
+    "nodes": _action_nodes,
     "check": _action_check,
     "run": _action_run,
     "push": _action_push,
@@ -1144,23 +2072,45 @@ _ACTIONS = {
 def remote_cluster_handler(args=None, **kwargs) -> str:
     args = args or {}
     cfg = _load_remote_config()
+    action = str(args.get("action") or "").strip().lower()
+    if action == "locate":
+        # 路径判定：用户没说文件在哪时先用它查（远端没配也能用，只报本地那一半）
+        try:
+            return _action_locate(cfg, args)
+        except Exception as exc:
+            logger.exception("remote_cluster action=locate 失败")
+            return _err("locate 执行失败: %s" % exc)
     if not remote_cluster_enabled():
         return _err(
-            "远端集群未配置或未启用。请在 hermes_home/config.yaml 增加：\n"
-            "remote:\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
+            "远端集群未配置或未启用。请在 hermes_home/config.yaml 的 remote: 段配置，两种写法任选：\n"
+            "① 单节点：\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
             "  key: <私钥路径>\n  workdir: <远端工作目录>\n"
+            "② 多节点（命名节点，用 node= 选机器）：\n  enabled: true\n  user: <用户名>\n"
+            "  key: <私钥路径>\n  workdir: <共享工作目录>\n  nodes:\n    ssh3: {}\n    ssh5: {}\n"
             "（或用环境变量 MEMOMICS_REMOTE_ENABLED/HOST/USER/KEY/WORKDIR 临时覆盖）"
         )
-    action = str(args.get("action") or "").strip().lower()
     if action not in _ACTIONS:
         return _err("未知 action: %r（可选：%s）" % (action, ", ".join(sorted(_ACTIONS))))
+    if action == "nodes":
+        # 体检所有节点，不需要先选定一个
+        try:
+            return _action_nodes(cfg, args)
+        except Exception as exc:
+            logger.exception("remote_cluster action=nodes 失败")
+            return _err("nodes 执行失败: %s" % exc)
+
+    requested = str(args.get("node") or args.get("host") or "").strip()
+    node_cfg, node_name, err = _select_node(cfg, requested)
+    if err:
+        return err
     try:
-        return _ACTIONS[action](cfg, args)
+        return _ACTIONS[action](node_cfg, args)
     except Exception as exc:
-        logger.exception("remote_cluster action=%s 失败", action)
-        _drop_conn(cfg)
+        logger.exception("remote_cluster action=%s node=%s 失败", action, node_name)
+        _drop_conn(node_cfg)
         return _err("%s 执行失败: %s" % (action, exc),
-                    hint="连接类错误请先用 action='check' 排查（密钥/端口/跳板机/known_hosts）")
+                    node=node_name, host=node_cfg.get("host"),
+                    hint="连接类错误先用 action='nodes' 体检全部节点（或 action='check' 单节点）：密钥/端口/跳板机/known_hosts")
 
 
 SCHEMA = {
@@ -1175,10 +2125,37 @@ SCHEMA = {
         "禁止在登录节点跑重计算，会被管理员封号。\n"
         "  • submit —— 生成作业脚本并提交（Slurm 用 sbatch，PBS 用 qsub，无调度器则 setsid 脱离会话后台跑），"
         "返回 job_id；随后 status 看状态、logs 读日志、cancel 取消。\n"
-        "  • push / pull —— 本地 ↔ 远端传文件（大文件先 push 再 submit，产物 pull 回本地）。\n"
+        "  • push / pull —— 本地 ↔ 远端传文件（大文件先 push 再 submit，产物 pull 回本地）。"
+        "push 会自动处理 Windows 换行：.sh/.py/.R 等脚本带 CRLF 时转成 LF 再上传（本机文件不动，"
+        "用 crlf='keep' 可关掉）；pull 有体积闸门，超过 max_mb（默认 512MB）直接拒绝，"
+        "避免手滑把几百 GB 的 BAM 拖回本机。\n"
         "  • jobs   —— 列队列与最近提交记录。\n"
-        "连接配置在 hermes_home/config.yaml 的 remote: 段（host/user/port/key/workdir/scheduler/"
-        "local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
+        "  • locate —— **判定一个路径在本地还是在集群上**（用户没说数据在哪时先跑这个，再决定在哪儿算）；"
+        "远端没配置时也能用，只报本地那一半。\n"
+        "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
+        "不指定节点也能调用。\n"
+        "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 ssh3/ssh5）时，"
+        "用 node=\"<名字>\" 指定；**只配了一个节点时不用传，工具静默用它**。"
+        "配了多个又没传 node → 工具会拒绝执行并返回 status=needs_node + 候选列表，"
+        "此时必须**先问用户要用哪个节点**再重新调用，不许自己挑一个、也不许沿用上次那个。\n"
+        "【路径判定：先查清数据在哪，再决定在哪算——不要凭感觉】\n"
+        "  ① 用户说了位置 → 以用户为准：本地路径（E:/...、results/...、'我上传的文件'）就在本地跑"
+        "（execute_python/execute_r）；远端绝对路径（/home/you/...、/data/...）或明说'数据在集群上' → 用本工具。\n"
+        "  ② 用户没说 → **先用 action='locate' 查**，别猜也别默认："
+        "path 直接给用户消息里的原话路径，它会同时查本机（原样 / work/ / results/ 各会话目录 / webui/uploads/）"
+        "和各节点（原样 / 工作目录 / 工作目录/data/），返回 verdict=local|cluster|ambiguous|missing + 命中位置和大小。\n"
+        "  ③ verdict=ambiguous（两边都有）或 missing（两边都没有）→ **不要自己挑、不要编路径**："
+        "把候选位置和大小报给用户问清楚；missing 时把查过的地方一起报出来，请他给准确路径。\n"
+        "【产物分工】集群上只留大文件（原始数据/中间产物/BAM/FASTQ/大矩阵/模型权重），不要往本机拉；"
+        "表格/图/脚本/日志这类小产物必须 pull 回本地 results/<会话>/，否则 WebUI 里看不到"
+        "（WebUI 只浏览 work/ 和 results/）。判断标准："
+        ".csv/.tsv/.xlsx/.png/.pdf/.svg/.R/.py/.log 这类（KB~几十 MB）→ 拉回来；"
+        "超过 max_mb（默认 512MB）工具会返回 status=too_large 并拒绝，"
+        "**这时先问用户要不要拉**，确认了再带 max_mb 或 allow_large=true。"
+        "pull 支持通配符（远端 *.tsv 会展开成多个文件，放进 local_path 目录）和目录（递归）；"
+        "默认不覆盖本机已有同名文件（返回 status=exists，给 overwrite=true 才覆盖）。\n"
+        "连接配置在 hermes_home/config.yaml 的 remote: 段（host 或 nodes /user/port/key/workdir/"
+        "scheduler/local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
         "⚠️ 两点别搞混：① 本工具只把**命令/作业**送到远端，execute_python / execute_r 的持久内核仍在本地跑——"
         "要在集群上算就把代码写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"
         "push/pull 可用 local_root/remote_root 自动换算。"
@@ -1188,8 +2165,16 @@ SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs"],
+                "enum": ["locate", "nodes", "check", "run", "push", "pull", "submit", "status",
+                         "logs", "cancel", "jobs"],
                 "description": "要执行的动作",
+            },
+            "node": {
+                "type": "string",
+                "description": ("用哪个远端节点（remote.nodes 里配置的名字，如 ssh3/ssh5）。"
+                                "只配了一个节点时可省略；配了多个又没给这个参数，工具会拒绝执行"
+                                "并列出候选——这时必须先问用户要用哪个节点。"
+                                "也可以用 action='nodes' 先看各节点负载再决定。"),
             },
             "command": {
                 "type": "string",
@@ -1210,8 +2195,23 @@ SCHEMA = {
             "modules": {"type": "array", "items": {"type": "string"}, "description": "submit：作业开头 module load 的模块名列表"},
             "envs": {"type": "object", "description": "submit：作业环境变量 {名: 值}"},
             "dry_run": {"type": "boolean", "description": "submit 时 true = 只生成脚本不提交"},
-            "path": {"type": "string", "description": "logs：直接指定远端日志文件路径"},
+            "path": {"type": "string",
+                     "description": ("locate：要判定的路径（用用户消息里的原话，本地/远端都行）；"
+                                     "logs：直接指定远端日志文件路径")},
             "lines": {"type": "integer", "description": "logs：看末尾多少行（默认 100）"},
+            "max_mb": {"type": "number",
+                       "description": ("pull：允许拉回的最大体积（MB，默认 %d）。超过会返回 "
+                                       "status=too_large 并拒绝下载——先问用户；确认要拉再显式给更大的值。"
+                                       % _PULL_MAX_MB_DEFAULT)},
+            "allow_large": {"type": "boolean",
+                            "description": "pull：true = 不设体积上限（默认 false；超上限时一律先问用户）"},
+            "overwrite": {"type": "boolean",
+                          "description": ("pull：true = 允许覆盖本机同名文件"
+                                          "（默认 false，遇到同名返回 status=exists 等确认）")},
+            "crlf": {"type": "string", "enum": ["auto", "lf", "keep"],
+                     "description": ("push：Windows 换行处理。auto（默认）= .sh/.py/.R/.sbatch 等脚本"
+                                     "检测到 CRLF 自动转 LF 再上传（本机原文件不动）；"
+                                     "keep = 原样上传；lf = 强制转 LF。")},
         },
         "required": ["action"],
     },
