@@ -181,15 +181,15 @@ def test_ask_user_options_extreme(monkeypatch):
     monkeypatch.setattr(_server, "_session_emit", lambda s, m: None)
     monkeypatch.setattr(ask_user_mod, "_session_context", lambda: ("sx", ""))
 
-    # 超多选项 → 截断 6
+    # 超多选项 → 截断 8（P3 上调：确认表单常需 5-8 个勾选项，见 ask_user.py docstring）
     r = json.loads(ask_user_mod.ask_user("q", options=[f"o{i}" for i in range(20)]))
-    assert len(r["options"]) == 6
+    assert len(r["options"]) == 8
     # 重复选项 → 保留（截断即可，不强制去重）
     r2 = json.loads(ask_user_mod.ask_user("q", options=["same", "same", "same"]))
     assert len(r2["options"]) == 3
-    # 超长选项 → 截 80 字
+    # 超长选项 → 截 120 字（P3 上调：确认表单选项常带参数说明，8/80 → 8/120）
     r3 = json.loads(ask_user_mod.ask_user("q", options=["长" * 200]))
-    assert len(r3["options"][0]) <= 80
+    assert len(r3["options"][0]) <= 120
     # emoji/特殊字符选项不炸
     r4 = json.loads(ask_user_mod.ask_user("q", options=["🧬 继续", "<tag>", "a'b\"c"]))
     assert r4["ok"] is True and len(r4["options"]) == 3

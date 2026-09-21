@@ -421,6 +421,10 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 3. **置信度**：高 / 中 / 低（表示对裁决的信心程度）
 4. 如果建议修改，给出具体推荐参数
 5. 裁决理由（300字以内）
+6. **行动方案（必填，任何裁决都要给）**：decision（现在就该做的那一件事）+ next_actions
+   （至少 1 条你现在就能执行的动作：查什么/跑什么/补什么，带 expected）+ fallback
+   （若暂时补不齐证据，先走哪条临时路径、有什么风险、结论要打什么标注）
+   —— 只写"需要更多信息"而不给方案，等于没有裁决。
 
 **重要**：正方和反方是独立生成的（切断上下文），你不能假设他们看过彼此的论点。你需要综合判断哪方更有说服力。
 
@@ -440,6 +444,15 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
   }},
   "verdict": "support" | "modify" | "need_more_info",
   "confidence": "high" | "medium" | "low",
+  "decision": "一句话：现在就该做的那件事（禁止写'需要更多证据'）",
+  "next_actions": [
+    {{"action": "具体动作", "owner": "ai|user", "why": "为什么", "expected": "做完能得到什么",
+      "cost": "low|medium|high", "blocks": ["不做的话哪些动作必须停"]}}
+  ],
+  "fallback": {{"path": "补不齐证据时先走哪条路", "confidence": "low|medium",
+                "risk": "风险", "label": "结论要带的标注"}},
+  "reopen_condition": "出现什么新证据要回来重审",
+  "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够"],
   "recommended_params": {{}},
   "reasoning": "..."
 }}
@@ -575,13 +588,32 @@ _V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进�
 {rubrics_hint}
 
 ## 裁决决策树（必须遵守）
-1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing。
+0. 你的职责**不是判断"证据够不够"，而是决定"下一步怎么走"**。任何裁决都必须给出
+   decision（现在就做的那件事）+ next_actions（至少 1 条 ai 现在就能执行的动作）+ fallback。
+   只写"证据不足、建议补数据"而不给方案 = 没有完成裁决。
+1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing；
+   **同时必须给出**：① decision：现有证据下能确定到哪一步（可执行的边界，例："按证据更强的 X 先做，
+   结论标注低置信"）；② next_actions：补证据的具体动作（查哪个库/跑哪个对照/要用户给什么），带 expected；
+   ③ fallback：补不到证据时现在先走哪条临时路径 + 风险 + 结论要打的标注。
 2. 若 verdict=modify 但拿不出 recommended_params → 禁止输出该组合。
 3. 若 confidence=high 但 missing 非空 → confidence 必须降为 medium。
-4. 若双方论证接近 → 只能 need_more_info + missing，不得强行二选一。
+4. 若双方论证接近 → 不要强行二选一，但**必须给条件化决策**：decision 写清"若判据 A 成立走 X、
+   若 B 成立走 Y；拿到判据前先走风险更低的 Z"，并把 Z 写进 fallback。
+5. next_actions 不允许全部是 owner=user（把"等用户给数据"当唯一出路等于没给方案）：
+   至少 1 条必须是 ai 现在能自己做的（查文献/查库/补对照/算指标/先出草图/先跑小样本）。
+6. blocks 字段写清"这条不做的话哪些动作必须停"（例：不做批次校正就不许出差异结论），
+   它是后续流程的硬约束，写不出就说明 next_action 还不够具体。
 
 ## 输出格式（严格 JSON）
-{{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "missing": ["必要证据/数据清单"], "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
+{{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low",
+ "decision": "一句话：现在就该做的那件事（可执行，禁止写'需要更多证据'）",
+ "next_actions": [{{"action": "具体动作", "owner": "ai|user", "why": "为什么做", "expected": "做完能得到什么",
+                   "cost": "low|medium|high", "blocks": ["不做则必须停的动作"]}}],
+ "fallback": {{"path": "补不齐证据时先走哪条路", "confidence": "low|medium", "risk": "这么做的风险",
+               "label": "临时结论要带的标注（例：临时结论/低置信）"}},
+ "reopen_condition": "出现什么新证据要回来重审",
+ "recommended_params": {{}}, "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够"],
+ "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
 
 _RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
 - effect_size：效应量大小与生物学意义
@@ -2088,6 +2120,64 @@ def _extract_json_candidates(text: str) -> list:
 _ALLOWED_VERDICTS = {"support", "modify", "need_more_info", "ok"}
 
 
+def _extract_json_value(text: str, key: str):
+    """v3(2026-09-22): 从（可能残缺的）judge 文本里按括号平衡抽某个键的值。
+
+    用途：网关偶尔把思考链塞进 content，顶层 JSON 残缺；此时 verdict/confidence 能靠正则救回，
+    行动方案字段（decision/next_actions/fallback）也必须能救回 —— 否则又退化成"没有下一步"。
+    """
+    m = re.search(r'"%s"\s*:\s*' % re.escape(key), text)
+    if not m:
+        return None
+    i = m.end()
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    if i >= len(text):
+        return None
+    ch = text[i]
+    if ch == '"':
+        j, esc = i + 1, False
+        while j < len(text):
+            if esc:
+                esc = False
+            elif text[j] == "\\":
+                esc = True
+            elif text[j] == '"':
+                break
+            j += 1
+        try:
+            return json.loads(text[i:j + 1])
+        except Exception:
+            return text[i + 1:j]
+    if ch in "[{":
+        close = "]" if ch == "[" else "}"
+        depth, in_str, esc = 0, False, False
+        for j in range(i, len(text)):
+            c = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == ch:
+                depth += 1
+            elif c == close:
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[i:j + 1])
+                    except Exception:
+                        return None
+        return None
+    m2 = re.match(r'(-?\d+(?:\.\d+)?|true|false|null)', text[i:])
+    return json.loads(m2.group(1)) if m2 else None
+
+
 def _parse_judge_json(text: str) -> dict:
     """解析 judge 输出为结构化裁决 dict（A3 抽取，2026-08-11）。
 
@@ -2125,8 +2215,125 @@ def _parse_judge_json(text: str) -> dict:
                 _out["recommended_params"] = json.loads(_r.group(1))
             except Exception:
                 _out["recommended_params"] = {}
+        # v3(2026-09-22): 行动方案字段同样兜底抽取（缺失就交给 _ensure_decision_block 回填）
+        _dec = _extract_json_value(text, "decision")
+        if isinstance(_dec, str) and _dec.strip():
+            _out["decision"] = _dec.strip()[:400]
+        _ro = _extract_json_value(text, "reopen_condition")
+        if isinstance(_ro, str) and _ro.strip():
+            _out["reopen_condition"] = _ro.strip()[:300]
+        for _k, _t in (("missing", list), ("next_actions", list), ("fallback", dict)):
+            _v = _extract_json_value(text, _k)
+            if isinstance(_v, _t):
+                _out[_k] = _v
         return _out
     raise ValueError("judge JSON 中无有效 verdict")
+
+
+_DECISION_BACKFILL_NOTE = ("引擎回填：judge 未按契约给出 decision/next_actions，"
+                         "已按裁决与 missing 推导最小可行方案（不返回「没有下一步」的裁决）")
+
+
+_DECISION_FIELDS = ("decision", "next_actions", "fallback", "reopen_condition", "missing")
+
+
+def _copy_decision_fields(dst: dict, obj: dict) -> None:
+    """v3(2026-09-22): 把 judge 输出里的行动方案字段搬进 result。
+
+    judge 真的给了 decision/next_actions 时，顺带清掉上一轮回填留下的标记
+    （decision_source / 回填告警），避免把 judge 的产出误标成"引擎回填"。
+    """
+    for k in _DECISION_FIELDS:
+        v = obj.get(k)
+        if v:
+            dst[k] = v
+    _has = (str(obj.get("decision") or "").strip()
+            or (isinstance(obj.get("next_actions"), list) and bool(obj.get("next_actions"))))
+    if _has:
+        dst.pop("decision_source", None)
+        _w = dst.get("decision_warnings")
+        if isinstance(_w, list):
+            dst["decision_warnings"] = [x for x in _w if x != _DECISION_BACKFILL_NOTE]
+
+
+def _ensure_decision_block(result: dict) -> dict:
+    """v3(2026-09-22): 保证每次裁决都带「下一步」——把"辩论完没有行动"从根上堵死。
+
+    背景（用户原话 2026-09-22）：
+      "辩论的时候，老是辩论了一大堆，最终得出'证据不足，先补数据再下结论'这种垃圾的结论…
+       看了半天，辩论结果有用于下一步的进程吗？没有，辩论什么？"
+    实测原因：① 裁决契约里根本没有行动字段；② 决策树还明确要求"双方接近只能 need_more_info"。
+    做法：judge 给了就用它的；没给就按 verdict + missing 推导最小可行方案，
+    并标记 decision_source="engine_backfill" + decision_warnings（不假装是 judge 给的）。
+    """
+    try:
+        verdict = str(result.get("verdict") or "").lower()
+        conf = str(result.get("confidence") or "low").lower()
+        missing = result.get("missing") if isinstance(result.get("missing"), list) else []
+        missing = [str(m).strip() for m in missing if str(m).strip()]
+        _raw = result.get("next_actions") if isinstance(result.get("next_actions"), list) else []
+        actions = [a for a in _raw if isinstance(a, dict) and str(a.get("action") or "").strip()]
+        _judge_decision = str(result.get("decision") or "").strip()
+        # 幂等：上一轮已经回填过的内容不算 judge 给的（重裁/多次调用不会把来源标错）
+        _prev_backfill = result.get("decision_source") == "engine_backfill"
+        judge_supplied = bool(_judge_decision) and bool(actions) and not _prev_backfill
+
+        def _now_action():
+            return {
+                "action": "不等证据齐：用现有证据先产出可复核的中间结论（标注置信度）并继续非阻塞步骤",
+                "owner": "ai", "why": "补齐证据需要时间，流程不该因此空转",
+                "expected": "得到带标注的中间结论 + 明确的待复核清单", "cost": "low", "blocks": [],
+            }
+
+        if not actions:
+            for m in missing[:5]:
+                actions.append({
+                    "action": "补齐证据：%s" % m, "owner": "ai",
+                    "why": "这是本次裁决仍不确定的直接原因",
+                    "expected": "补齐后可判定该争点是否成立", "cost": "medium", "blocks": [],
+                })
+            actions.append(_now_action())
+        elif not any(str(a.get("owner") or "ai").lower() != "user" for a in actions):
+            # judge 只给了"等用户提供 X"这类动作 → 补一条 ai 现在就能做的
+            actions.append(_now_action())
+            result.setdefault("decision_warnings", []).append(
+                "judge 的 next_actions 全是 user 侧动作，已补一条 ai 现在就能执行的动作")
+
+        params = result.get("recommended_params") or {}
+        if _judge_decision:
+            decision = _judge_decision
+        elif verdict == "support":
+            decision = "按当前方案执行（置信度 %s）；执行中按 reopen_condition 盯是否需要回审" % conf
+        elif verdict == "modify":
+            decision = ("按修改后的参数执行：%s" % json.dumps(params, ensure_ascii=False)
+                        if params else "按 next_actions 修改后执行")
+        else:
+            decision = "先按证据更强的一方走最小可验证步骤，并行补齐 missing 列出的证据（结论标注低置信）"
+
+        fb = result.get("fallback")
+        if not isinstance(fb, dict) or not str(fb.get("path") or "").strip():
+            if verdict == "need_more_info":
+                fb = {"path": "不等证据齐，按证据更强的一方先走最小可验证步骤",
+                      "confidence": "low", "risk": "证据补齐后可能需要返工或修正方向",
+                      "label": "临时结论（证据未齐）"}
+            else:
+                fb = {"path": "按本次裁决执行", "confidence": conf,
+                      "risk": "与裁决前提不符时需回审", "label": ""}
+
+        result["decision"] = decision
+        result["next_actions"] = actions
+        result["fallback"] = fb
+        result["reopen_condition"] = (str(result.get("reopen_condition") or "").strip()
+                                      or "missing 中任一项被补齐、或出现与裁决前提相反的证据时重审")
+        result["has_ai_action"] = any(str(a.get("owner") or "ai").lower() != "user" for a in actions)
+        if judge_supplied:
+            result["decision_source"] = "judge"
+        else:
+            result["decision_source"] = "engine_backfill"
+            result.setdefault("decision_warnings", []).append(_DECISION_BACKFILL_NOTE)
+    except Exception as e:  # 回填绝不能把辩论本身搞崩
+        logger.warning(f"_ensure_decision_block failed: {e}")
+    return result
 
 
 def _check_consistency(result: dict) -> list:
@@ -2142,6 +2349,9 @@ def _check_consistency(result: dict) -> list:
         issues.append("verdict=need_more_info 但 confidence=high（信息不足不可能高置信）")
     if verdict == "modify" and not (result.get("recommended_params") or {}):
         issues.append("verdict=modify 但 recommended_params 为空（要求修改却无建议）")
+    # v3(2026-09-22): "说了证据不足，却指不出缺什么" = 用户吐槽的垃圾结论，直接判矛盾
+    if verdict == "need_more_info" and not (result.get("missing") or []):
+        issues.append("verdict=need_more_info 但 missing 为空（说了证据不足却指不出缺什么）")
     # v2(2026-08-27): 高置信 + 缺失证据清单 = 矛盾（证据不足还自称高置信）
     if conf == "high" and result.get("missing"):
         issues.append("confidence=high 但 missing 非空（证据不足不可能高置信）")
@@ -2298,7 +2508,14 @@ _L1_JUDGE_PROMPT = """你是{persona}。{n}组正反方编辑（独立评审、�
 {debates}
 
 {digest_section}输出格式（严格 JSON）：
-{{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "reasoning": "50字内总结"}}"""
+{{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low",
+ "decision": "一句话：现在就该做的那件事（禁止只写'需要更多证据'）",
+ "next_actions": [{{"action": "具体动作", "owner": "ai|user", "expected": "做完能得到什么"}}],
+ "fallback": {{"path": "补不齐证据时先走哪条路", "risk": "风险", "label": "结论标注"}},
+ "missing": ["缺什么证据 + 怎么补"], "recommended_params": {{}}, "reasoning": "50字内总结"}}
+裁决要求：无论证据是否充分，都必须给出 decision 与至少 1 条 owner=ai 的 next_actions；
+证据不足时 verdict=need_more_info，但仍要写 fallback（先走哪条临时路径 + 结论标注），
+禁止只喊"需要更多信息"就结束。"""
 
 
 def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str,
@@ -2408,6 +2625,7 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
             result["verdict"] = obj.get("verdict") or "need_more_info"
             result["confidence"] = obj.get("confidence") or "low"
             result["recommended_params"] = obj.get("recommended_params", {}) or {}
+            _copy_decision_fields(result, obj)   # v3: L1 也要给"下一步"
         except Exception as e:
             result["verdict_parse_error"] = str(e)[:100]
     else:
@@ -2415,6 +2633,8 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         result["judge_error"] = True
         result["judge_error_detail"] = "L1 judge LLM call failed (retry exhausted)"
 
+    # v3(2026-09-22): 无论 judge 给没给行动方案，裁决里必须有 decision/next_actions/fallback
+    _ensure_decision_block(result)
     # B2 一致性门禁（与 L2 同规则）
     issues = _check_consistency(result)
     if issues:
@@ -2918,6 +3138,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 result["rubrics"] = _judge_obj.get("rubrics") or {}
             if _judge_obj.get("missing"):
                 result["missing"] = _judge_obj.get("missing") or []
+            _copy_decision_fields(result, _judge_obj)   # v3: 行动方案字段
             if final_consensus and final_consensus.get("judge_count", 1) > 1:
                 result["judge_consensus"] = final_consensus
                 if final_consensus.get("majority_verdict"):
@@ -2941,6 +3162,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         # 实证 bug：_debates/ 中 3 条 need_more_info+high 矛盾裁决已进入缓存。
         # 矛盾裁决 → judge 独立重裁一次（上下文切断）→ 仍矛盾则强制降级 low，
         # 且禁止回流 skill_evolution（垃圾不得入库）。
+        _ensure_decision_block(result)   # v3: 保证裁决带"下一步"
         _issues = _check_consistency(result)
         if _issues:
             logger.warning(f"debate verdict inconsistent {_issues}; judge 重裁一次")
@@ -2952,6 +3174,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     result["confidence"] = _obj2.get("confidence") or result["confidence"]
                     result["recommended_params"] = _obj2.get("recommended_params", {}) or {}
                     result["scores"] = _obj2.get("scores", {}) or {}
+                    _copy_decision_fields(result, _obj2)   # v3: 重裁也可能带来新的行动方案
                     result["judge_rejudged"] = True
                     result["judge_verdict"] = _judge2["content"][:3000]
                     judge = _judge2

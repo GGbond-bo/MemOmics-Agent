@@ -139,9 +139,19 @@ def test_ask_user_delivers_and_ends_turn(monkeypatch):
     r = json.loads(ask_user_mod.ask_user("是要检查还是修复后继续？"))
     assert r["ok"] is True
     assert "结束本回合" in r["instruction"]
-    assert len(sent) == 2, "question + notice 双通道"
-    assert sent[0]["type"] == "question"
+    # P3: ask_form（前端弹窗）+ question（兼容旧通道）+ notice 三通道
+    assert len(sent) == 3, "ask_form + question + notice"
+    assert sent[0]["type"] == "ask_form"
+    assert sent[0]["form_id"] == r["form_id"] and sent[0]["question"] == "是要检查还是修复后继续？"
+    assert sent[1]["type"] == "question"
+    assert sent[2]["type"] == "notice"
     assert sess["_pending_questions"][0]["question"] == "是要检查还是修复后继续？"
+    # P3: 门禁置位（未答复前执行类工具被拦）
+    import enforcement as _enf
+    _es = _enf.get_enforcement("s-ask")
+    assert _enf.form_pending(_es) is True
+    assert _es.awaiting_form_id == r["form_id"]
+    _enf.reset_enforcement("s-ask")
 
 
 def test_ask_user_question_truncated():

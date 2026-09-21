@@ -1097,7 +1097,87 @@ def _build_grill_prompt(session, user_text, intent):
         "2. 物种/组织/实验条件是什么？\n"
         "3. 期望得到什么结果（图/表/报告）？\n"
         "4. 是要继续之前的任务，还是全新任务？\n"
-        "用户回答后再规划执行。"
+        "用户回答后再规划执行。" + _FORM_RULE_GRILL
+    )
+
+
+# ── P3(2026-09-22): 高代价任务的开工前意图确认（弹窗勾选） ──────────────────
+# 用户原话："在执行任务之前，先理解用户的意图，然后 grill 用户，把不清楚的问题
+# 问明白。做出弹窗供用户勾选，理解用户的意图之后再执行。"
+# 分工：_build_grill_prompt 管"连数据在哪都不知道"；本函数管"数据有了，但要做成
+# 什么没交代"——只问一次（REQUIREMENTS/plan/已答复过 → 不再问），并且会按铁律 35
+# 预置门禁（执行类工具在用户答复前被拦下）。
+_INTENT_CONFIRM_ENABLED = os.environ.get("MEMOMICS_INTENT_CONFIRM", "1").strip().lower() \
+    not in ("0", "false", "no", "off")
+_FORM_RULE_GRILL = (
+    "\n【P3 用法：确认弹窗】调用 ask_user 时带 options 发出可勾选表单（不要只用文字提问）："
+    "options 用对象形式 {'label':'选项','desc':'为什么这么选','recommended':true}；"
+    "多件事一次确认时 multi_select=true；kind='intent'。"
+    "表单答复前执行类工具会被系统拦下 —— 问完立即结束本回合，等用户勾选。"
+)
+_INTENT_HIGH_COST = (
+    "分析", "聚类", "注释", "降维", "富集", "拟时序", "通讯", "wgcna", "差异表达",
+    "degs", "集群", "投递", "提交作业", "入库", "报告", "出图", "跑流程", "建模",
+    "比对", "组装", "重跑", "重新做", "批量",
+)
+_INTENT_SPEC = (  # 已经交代了交付形态/关键参数 → 不必再问
+    "图", "表", "报告", "pdf", "docx", "html", "csv", "结论", "阈值", "参数",
+    "分辨率", "res=", "pca", "umap", "tsne", "marker", "物种", "分组", "版本",
+)
+_INTENT_BYPASS = ("直接做", "不用问", "别问", "无需确认", "不用确认", "直接开始", "直接跑")
+
+
+def _intent_already_confirmed(session) -> bool:
+    """本会话是否已经确认过意图（问过一次就不再问）。"""
+    try:
+        if session.get("_intent_confirmed"):
+            return True
+        if session.get("_ask_form_answers"):
+            return True
+        rd = session.get("results_dir") or ""
+        if rd and os.path.isfile(os.path.join(rd, "task_plan.md")):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _build_intent_confirm_prompt(session, user_text, intent):
+    """P3: 高代价任务（分析/集群投递/入库/报告）开工前的意图确认提示词。
+
+    触发：当前消息含高代价任务词 + 没有交代交付形态/关键参数（_INTENT_SPEC）
+          + 本会话还没确认过 + 不是轻量意图 + 不是"继续旧任务" + 用户没说"直接做"。
+    返回 "" 表示不触发（普通问答、只读、已确认过的后续轮次都不打扰）。
+    """
+    if not _INTENT_CONFIRM_ENABLED:
+        return ""
+    if not user_text or not str(user_text).strip():
+        return ""
+    t = str(user_text)
+    _tl = t.lower()
+    if any(w in t for w in ("继续", "接着", "下一步", "之前")):
+        return ""
+    if any(w in t for w in _INTENT_BYPASS):
+        return ""
+    if intent in ("chat", "self_intro", "knowledge_ask", "progress_check",
+                  "result_check", "literature", "cancel_task", "investigate"):
+        return ""
+    if _intent_already_confirmed(session):
+        return ""
+    if not any(s in _tl for s in _INTENT_HIGH_COST):
+        return ""
+    if any(s in _tl for s in _INTENT_SPEC):
+        return ""
+    return (
+        "[开工前意图确认 · 高代价任务先对齐目标]\n"
+        "用户要跑的是高代价任务（真实分析 / 集群投递 / 结果入库 / 出报告），"
+        "但目标、交付物、关键参数还没说清楚。**开工前先用 ask_user 弹确认表单**，"
+        "勾选后再动手（不要猜、不要先跑再说）：\n"
+        "1. 分析目标/科学问题是什么（这一步要回答什么）？\n"
+        "2. 期望交付物（图/表/HTML 报告/结论入库/集群产物）？\n"
+        "3. 关键参数与阈值（分辨率/分组列/物种注释版本/显著性标准）？\n"
+        "4. 规模与去处（本机跑还是投集群；结果存哪里）？\n"
+        "已经说过的事项不要再问；一次问清，然后按勾选结果直接开工。" + _FORM_RULE_GRILL
     )
 
 
@@ -4788,11 +4868,18 @@ _EXECUTION_POLICY = """
 用户回合中任务报错停止：只报告原因和可选方案，不要擅自修改后继续执行，等用户指示。
 只有自动轮（用户不在场）才自主修复重试。
 
-### 5. 开工前先问清楚（不确定就问，铁律）
-执行任务前，如果关键信息缺失——**数据在哪、物种/组织/条件、期望结果、
-交付形式、是否继续旧任务**——必须先调用 ask_user 问清楚（带选项），
-不要靠猜、不要靠意图推断、不要先跑再说。用户回答后再规划执行。
-原则：一次问清比十次返工便宜。
+### 5. 开工前先问清楚（不确定就问，铁律 · 意图确认弹窗）
+**高代价任务**——真实分析跑流程、集群投递（remote_cluster run/submit）、
+结果入库（save_knowledge/knowledge_write/conclusion_save）、出报告
+（generate_report/write_report）——**开工前必须先调 ask_user 弹出确认表单**，
+把不清楚的一次问明白：数据在哪、物种/组织/条件、期望交付形式、关键参数与阈值、
+是否继续旧任务。**不要靠猜、不要靠意图推断、不要先跑再说。**
+用法：options 传可勾选项（对象可带 desc 说明/recommended 推荐），
+多件事一起确认时 multi_select=true，kind="intent"。
+**硬约束**：表单没答复前，执行类/产物类工具会被系统直接拦下（白跑一趟），
+所以问完就结束本回合，等用户勾选或回复；用户答复会自动成为你的下一条消息。
+**不要问的**：纯问答、只读查询、状态播报、用户已明确给全参数的任务——直接做。
+原则：一次问清比十次返工便宜；但已有明确答案的事不要重复问。
 
 ### 6. 一切以用户为主
 问清目的 → 规划 → 执行 → 报错就解决，循环；用户打断才停，用户回答后继续。
@@ -5356,6 +5443,50 @@ def _build_pending_question_context(session, user_text):
             "用户本轮已回复确认（需要/要/是/好/同意…）。本次必须完成该请求（执行/整理/生成），"
             "不要只复述或延后；若用户同时提出了新问题，请一并回答，两者都要完成。"
         )
+    except Exception:
+        return ""
+
+
+def _build_ask_form_context(session, user_text):
+    """P3(2026-09-22): 把"确认弹窗的勾选结果"变成确定性上下文（只注入一次）。
+
+    为什么需要：弹窗答复经 chat 通道作为普通用户消息发出，模型可能把它当闲聊；
+    这里按 form_id 取回结构化答复（勾选项 + 其他补充），明确告诉模型"这就是答案，
+    按此执行、不要再问一遍"，与 DSH 的 PendingQuestion→QuestionComposer 绑定同理。
+    """
+    try:
+        _ans = session.get("_ask_form_answers") or []
+        if not _ans:
+            return ""
+        # 只看最近 10 分钟、还没注入过的答复
+        _now = time.time()
+        _pick = None
+        for _it in reversed(_ans):
+            if _it.get("injected"):
+                continue
+            _ts = _it.get("_ts") or 0
+            if _ts and (_now - _ts) > 600:
+                continue
+            _pick = _it
+            break
+        if _pick is None:
+            return ""
+        _pick["injected"] = True
+        _sel = _pick.get("selected") or []
+        _other = (_pick.get("other") or "").strip()
+        _lines = [
+            "【用户已在确认弹窗中答复 — 这是确定性答案，不是猜测】",
+            f"问题：{(_pick.get('question') or '')[:300]}",
+        ]
+        if _sel:
+            _lines.append("用户勾选：" + "；".join(str(x) for x in _sel))
+        if _other:
+            _lines.append("用户补充：" + _other[:300])
+        _lines.append(
+            "要求：按用户勾选的方案直接执行（该确认已满足\"开工前先问清楚\"的门禁），"
+            "不要再重复询问同一问题；若用户勾选了多个互斥项，按最先勾选的执行并在结尾说明。"
+        )
+        return "\n".join(_lines)
     except Exception:
         return ""
 
@@ -12042,6 +12173,91 @@ async def get_figure(sid: str, path: str = ""):
     return FileResponse(file_path, headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"})
 
 
+# --- P3(2026-09-22): 意图确认弹窗答复 ---
+
+class AskFormAnswerRequest(BaseModel):
+    session_id: str
+    form_id: str = ""
+    selected: list = []      # 勾选的选项文字
+    other: str = ""          # "其他"自由填写
+    question: str = ""       # 原问题（前端回传，用于审计兜底）
+
+
+@app.post("/api/ask_form/answer")
+async def ask_form_answer(req: AskFormAnswerRequest):
+    """接收确认弹窗的勾选结果：记录 → 解除执行门禁 → 前端再把它作为用户消息发出。
+
+    为什么这么设计：弹窗答复本身就是用户消息（沿用既有 chat 通道，零新轨道），
+    这里负责把它结构化留档（审计/复盘）+ 解除 enforcement 的执行门禁。
+    """
+    sid = (req.session_id or "").strip()
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    sess = _sessions[sid]
+    sel = [str(s).strip() for s in (req.selected or []) if str(s).strip()]
+    other = (req.other or "").strip()
+    if not sel and not other:
+        return JSONResponse({"error": "需要至少勾选一项或填写其他内容"}, status_code=400)
+    # 找到对应的待确认问题（按 form_id；没有则取最后一条未答复的）
+    _pend = sess.get("_pending_questions") or []
+    _hit = None
+    for _pq in reversed(_pend):
+        if req.form_id and _pq.get("form_id") == req.form_id:
+            _hit = _pq
+            break
+    if _hit is None:
+        for _pq in reversed(_pend):
+            if not _pq.get("answered"):
+                _hit = _pq
+                break
+    _q_text = (_hit or {}).get("question") or req.question or ""
+    if _hit is not None:
+        _hit["answered"] = True
+        _hit["answer"] = {"selected": sel, "other": other,
+                          "answered_at": datetime.now().strftime("%H:%M:%S")}
+    # 组装给模型看的人话（前端也用它作为用户消息）
+    _parts = []
+    if sel:
+        _parts.append("选中：" + "；".join(sel))
+    if other:
+        _parts.append("补充说明：" + other)
+    _answer_text = ("【用户对「" + _q_text[:120] + "」的确认答复】" + "；".join(_parts)) if _q_text \
+        else ("【用户确认答复】" + "；".join(_parts))
+    sess.setdefault("_ask_form_answers", []).append({
+        "form_id": req.form_id or (_hit or {}).get("form_id", ""),
+        "question": _q_text, "selected": sel, "other": other,
+        "answer_text": _answer_text,
+        "_ts": time.time(),
+        "injected": False,
+        "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    del sess["_ask_form_answers"][:-20]
+    # 用户答复了确认表单 = 意图已确认（本会话不再重复问）
+    sess["_intent_confirmed"] = True
+    # 解除执行门禁（P3：意图确认后才允许执行）
+    _gate_cleared = False
+    try:
+        from webui import enforcement as _enf_f
+        _es_f = _enf_f.get_enforcement(sid)
+        _gate_cleared = _enf_f.clear_awaiting_form(_es_f, req.form_id or "",
+                                                   {"selected": sel, "other": other,
+                                                    "question": _q_text})
+    except Exception as _e_f:
+        logger.warning(f"[ask_form] 解除门禁失败: {_e_f}")
+    try:
+        _session_emit(sess, {"type": "ask_form_answered", "form_id": req.form_id,
+                             "question": _q_text, "selected": sel, "other": other,
+                             "gate_cleared": _gate_cleared,
+                             "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+    except Exception:
+        pass
+    logger.info(f"[ask_form] sid={sid} form={req.form_id} selected={sel} other={other[:60]!r} gate_cleared={_gate_cleared}")
+    return {"ok": True, "question": _q_text, "selected": sel, "other": other,
+            "answer_text": _answer_text, "gate_cleared": _gate_cleared}
+
+
 # --- 待办 ---
 
 @app.get("/api/todos/{sid}")
@@ -12424,6 +12640,27 @@ async def ws_endpoint(ws: WebSocket):
             elif msg_type == "chat":
                 user_text = msg.get("message", msg.get("content", "")).strip()
                 image_urls = msg.get("images", []) or []
+                # P3(2026-09-22): 用户直接回消息 = 对确认弹窗的答复 → 立即解除执行门禁
+                # （弹窗提交走 /api/ask_form/answer 后也把答复当消息发回，会命中这里）
+                try:
+                    _pf_sid = msg.get("session_id") or session.get("id", "")
+                    from webui import enforcement as _enf_c
+                    _es_c = _enf_c.get_enforcement(_pf_sid)
+                    if _enf_c.clear_awaiting_form(_es_c, "", {"selected": [], "other": user_text[:200],
+                                                              "question": getattr(_es_c, "awaiting_form_question", "")}):
+                        _pq_list = session.get("_pending_questions") or []
+                        for _pq in reversed(_pq_list):
+                            if not _pq.get("answered"):
+                                _pq["answered"] = True
+                                _pq["answer"] = {"selected": [], "other": user_text[:200],
+                                                 "via": "chat"}
+                                break
+                    # 预置门禁（高代价任务还没弹表单）：用户这一轮消息本身就是对
+                    # "要做什么"的补充 → 解除，避免同一件事反复追问。
+                    if _enf_c.clear_intent_confirm(_es_c):
+                        session["_intent_confirmed"] = True
+                except Exception:
+                    pass
                 # 允许仅图片无文字
                 if not user_text and not image_urls:
                     continue
@@ -13018,6 +13255,33 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 pass
                         _session_emit(_s, _ev_complete)
+                        # P2(2026-09-22): 裁决 → 会话待办（辩论结果必须进入下一步进程）
+                        if tool_name == "debate_analysis":
+                            try:
+                                from webui import enforcement as _enf_plan
+                                _es_plan = _enf_plan.get_enforcement(_s["id"])
+                                _dt = list(getattr(_es_plan, "debate_todos", []) or [])
+                                _plan = dict(getattr(_es_plan, "debate_plan", {}) or {})
+                                if _dt:
+                                    # 注意：Hermes TodoStore 只有 {id, content, status} 三字段，
+                                    # 且没有 add()（只有 write(merge=True)）——写错会静默丢失待办。
+                                    if hasattr(_agent, "_todo_store") and _agent._todo_store is not None:
+                                        _agent._todo_store.write(
+                                            [{"id": t.get("id", ""), "content": t.get("title", ""),
+                                              "status": "pending"} for t in _dt], merge=True)
+                                        _cur = [t for t in _agent._todo_store.read() if isinstance(t, dict)]
+                                        _todos_pub = [{"id": t.get("id", ""),
+                                                       "title": t.get("title", t.get("content", "")),
+                                                       "status": t.get("status", "pending"),
+                                                       "module": t.get("module", "")} for t in _cur]
+                                    else:
+                                        _todos_pub = [{"id": t.get("id", ""), "title": t.get("title", ""),
+                                                       "status": t.get("status", "pending"), "module": "debate"} for t in _dt]
+                                    _session_emit(_s, {"type": "todos_update", "todos": _todos_pub,
+                                                       "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                                    logger.info(f"[DEBATE-PLAN] {len(_dt)} 条裁决待办已进入会话待办 decision={( _plan.get('decision') or '')[:60]}")
+                            except Exception as _e_plan:
+                                logger.warning(f"[DEBATE-PLAN] 待办同步失败: {_e_plan}")
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
                         # 2026-08-16 任务类型：管线启动命令 = 长任务运行时证据
@@ -13204,6 +13468,15 @@ async def ws_endpoint(ws: WebSocket):
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
                                 if todos and len(todos) > 0:
+                                    # P2(2026-09-22): 裁决待办完成状态回写（blocks 硬约束据此解除）
+                                    try:
+                                        from webui import enforcement as _enf_sync
+                                        _n_sync = _enf_sync.sync_debate_todos(
+                                            _enf_sync.get_enforcement(session["id"]), todos)
+                                        if _n_sync:
+                                            logger.info(f"[DEBATE-PLAN] 裁决待办状态同步 {_n_sync} 条")
+                                    except Exception:
+                                        pass
                                     _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
@@ -13789,11 +14062,34 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
 
+                        # P3(2026-09-22): 确认弹窗的结构化答复 → 确定性上下文（只注入一次）
+                        try:
+                            _form_ctx = _build_ask_form_context(_session, user_text or "")
+                            if _form_ctx:
+                                conversation_history.append({"role": "system", "content": _form_ctx})
+                        except Exception:
+                            pass
+
                         # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
+                        # P3(2026-09-22): grill 没触发时，高代价任务再补一层"意图确认"
+                        # （数据有了但要做成什么没交代）——并预置门禁：用户勾选前不许执行。
                         try:
                             _grill = _build_grill_prompt(_session, user_text or "", _intent)
                             if _grill:
                                 conversation_history.append({"role": "system", "content": _grill})
+                            else:
+                                _iconf = _build_intent_confirm_prompt(_session, user_text or "", _intent)
+                                if _iconf:
+                                    conversation_history.append({"role": "system", "content": _iconf})
+                                    try:
+                                        from webui import enforcement as _enf_ic
+                                        _es_ic = _enf_ic.get_enforcement(_session.get("id", ""))
+                                        _enf_ic.arm_intent_confirm(
+                                            _es_ic, "高代价任务（分析/投递/入库/报告）开工前意图未确认")
+                                        logger.info("[intent_confirm] session %s: 已预置门禁，等用户勾选",
+                                                    str(_session.get("id", ""))[:12])
+                                    except Exception as _e_ic:
+                                        logger.warning("[intent_confirm] arm failed: %s", _e_ic)
                         except Exception:
                             pass
 

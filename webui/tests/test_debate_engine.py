@@ -247,7 +247,98 @@ class TestConsistency:
         assert da._check_consistency({"verdict": "ok", "confidence": "high"}) == []
         assert da._check_consistency({"verdict": "modify", "confidence": "medium",
                                       "recommended_params": {"res": 0.8}}) == []
-        assert da._check_consistency({"verdict": "need_more_info", "confidence": "low"}) == []
+        # v3(2026-09-22): need_more_info 必须能指出缺什么，否则就是用户吐槽的"垃圾结论"
+        assert da._check_consistency({"verdict": "need_more_info", "confidence": "low",
+                                      "missing": ["缺批次信息 → 查 GEO 元数据"]}) == []
+
+    def test_need_more_info_without_missing_is_inconsistent(self):
+        """v3: 说了证据不足却指不出缺什么 = 矛盾裁决（不得静默通过）"""
+        issues = da._check_consistency({"verdict": "need_more_info", "confidence": "low"})
+        assert issues, "need_more_info 但 missing 为空必须判为矛盾"
+        assert any("missing" in i for i in issues)
+
+
+# ==================== v3 裁决必须带"下一步"（2026-09-22） ====================
+
+class TestDecisionBlock:
+    """用户原话："辩论了一大堆，最终得出'证据不足，先补数据再下结论'这种垃圾的结论…
+    辩论结果有用于下一步的进程吗？没有，辩论什么？"
+    本组测试锁死：任何裁决都必须带 decision + next_actions + fallback。"""
+
+    def test_both_sides_lack_evidence_still_yields_plan(self):
+        """正反双方都没证据（need_more_info）也不能空手而归 —— 必须给方案 + 临时路径"""
+        r = da._ensure_decision_block({"verdict": "need_more_info", "confidence": "low",
+                                       "missing": ["缺批次校正参数", "缺对照样本"]})
+        assert r["decision"].strip(), "decision 不能为空"
+        assert "证据不足" not in r["decision"]
+        assert len(r["next_actions"]) >= 1, "必须给出下一步动作"
+        assert r["fallback"]["path"].strip(), "必须给出临时路径"
+        assert r["fallback"]["label"], "临时结论必须带标注"
+        assert r["reopen_condition"].strip()
+        assert r["has_ai_action"] is True, "至少一条 ai 自己能执行的动作"
+
+    def test_missing_items_become_actions(self):
+        r = da._ensure_decision_block({"verdict": "need_more_info", "confidence": "low",
+                                       "missing": ["缺批次信息"]})
+        acts = [a["action"] for a in r["next_actions"]]
+        assert any("缺批次信息" in a for a in acts), "每条 missing 应转成一条补齐动作"
+
+    def test_judge_supplied_plan_is_kept(self):
+        """judge 真给了方案就用它的，引擎不得覆盖"""
+        r = da._ensure_decision_block({
+            "verdict": "need_more_info", "confidence": "low",
+            "decision": "先按 batch-corrected 矩阵出草图，结论标注低置信",
+            "next_actions": [{"action": "跑 sva 批次校正", "owner": "ai", "expected": "校正后矩阵"}],
+            "fallback": {"path": "先用原始矩阵 + 标注", "risk": "批次效应", "label": "临时"},
+            "missing": ["校准数据"],
+        })
+        assert r["decision_source"] == "judge"
+        assert r["decision"].startswith("先按 batch-corrected")
+        assert len(r["next_actions"]) == 1
+        assert r["fallback"]["path"] == "先用原始矩阵 + 标注"
+
+    def test_user_only_actions_get_ai_action_appended(self):
+        """judge 只给"等用户给数据" → 引擎补一条 ai 现在就能做的"""
+        r = da._ensure_decision_block({
+            "verdict": "need_more_info", "confidence": "low", "missing": ["用户提供原始数据"],
+            "next_actions": [{"action": "请用户提供原始数据", "owner": "user"}],
+        })
+        assert r["has_ai_action"] is True
+        assert any("user" in w for w in r.get("decision_warnings", []))
+
+    def test_engine_backfill_is_disclosed(self):
+        r = da._ensure_decision_block({"verdict": "support", "confidence": "medium",
+                                       "next_actions": [], "missing": []})
+        assert r["decision_source"] == "engine_backfill"
+        assert r.get("decision_warnings"), "回填必须标注来源，不得假装是 judge 给的"
+
+    def test_backfill_is_idempotent(self):
+        """重复调用不得把引擎回填标成 judge 给的"""
+        r = da._ensure_decision_block({"verdict": "need_more_info", "confidence": "low",
+                                       "missing": ["x"]})
+        r2 = da._ensure_decision_block(r)
+        assert r2["decision_source"] == "engine_backfill"
+        assert r2["decision"] == r["decision"]
+
+    def test_plan_fields_parsed_from_broken_json(self):
+        """网关把 JSON 弄残时，行动方案字段也要能兜底抽出来（否则又变成没有下一步）"""
+        broken = ('{"verdict": "need_more_info", "confidence": "low", "decision": "先按 X 走", '
+                  '"next_actions": [{"action": "查 GEO 元数据", "owner": "ai"}], '
+                  '"fallback": {"path": "用原始矩阵", "risk": "批次效应", "label": "临时"}, '
+                  '"missing": ["批次信息"]')
+        o = da._parse_judge_json(broken)
+        assert o["verdict"] == "need_more_info"
+        assert o["decision"] == "先按 X 走"
+        assert o["next_actions"][0]["action"] == "查 GEO 元数据"
+        assert o["fallback"]["path"] == "用原始矩阵"
+        assert o["missing"] == ["批次信息"]
+
+    def test_copy_decision_fields_clears_stale_backfill_mark(self):
+        r = {"decision_source": "engine_backfill", "decision_warnings": [da._DECISION_BACKFILL_NOTE]}
+        da._copy_decision_fields(r, {"decision": "judge 的方案",
+                                     "next_actions": [{"action": "a"}]})
+        assert r["decision"] == "judge 的方案"
+        assert "decision_source" not in r, "judge 给了方案就不该再标引擎回填"
 
     def test_inconsistent_result_never_reflows(self, monkeypatch):
         """B2 回归：矛盾裁决禁止进入 skill_evolution（垃圾不得入库）"""
@@ -280,9 +371,62 @@ class TestDebateGate:
         lvl, _, _ = enf.debate_gate(_mk_es("statistical"), "conclusion")
         assert lvl == enf.DEBATE_L1
 
-    def test_analysis_conclusion_default_l2(self):
-        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion")
+    def test_analysis_conclusion_without_fork_is_l1(self):
+        """P1(2026-09-22): 没分歧的结论不再无条件 L2（用户：不要为了辩论而辩论）"""
+        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "conclusion")
+        assert lvl == enf.DEBATE_L1
+        assert any("没有分歧" in r for r in reasons)
+
+    def test_conclusion_with_fork_is_l2(self):
+        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "conclusion", {"has_fork": True})
         assert lvl == enf.DEBATE_L2
+
+    def test_conclusion_with_two_options_is_l2(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion",
+                                    {"fork_options": ["harmony", "scanorama"]})
+        assert lvl == enf.DEBATE_L2
+
+    # ---- P1 "值不值得辩"过滤 ----
+
+    def test_single_option_skips_debate(self):
+        """只有 1 条可选路径 → 辩不出新东西"""
+        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "conclusion", {"n_options": 1})
+        assert lvl == enf.DEBATE_L0
+        assert any("可选路径" in r for r in reasons)
+
+    def test_fact_lookup_skips_debate(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "before_script", {"fact_lookup": True})
+        assert lvl == enf.DEBATE_L0
+
+    def test_readonly_skips_debate(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "before_script", {"readonly": True})
+        assert lvl == enf.DEBATE_L0
+
+    def test_linear_command_skips_debate(self):
+        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "before_script",
+                                          {"cmd": "ls -lh /data/raw && md5sum x.h5ad"})
+        assert lvl == enf.DEBATE_L0
+
+    def test_linear_signal_skips_debate(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "before_script", {"linear": True})
+        assert lvl == enf.DEBATE_L0
+
+    def test_repeat_topic_skips_debate(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion", {"repeat_topic": True})
+        assert lvl == enf.DEBATE_L0
+
+    def test_no_debate_flag_wins(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion", {"no_debate": True})
+        assert lvl == enf.DEBATE_L0
+
+    def test_worthiness_never_blocks_hard_signals(self):
+        """高影响/失败/冲突是硬信号：即使只有 1 条路径也必须辩（强制 L2）"""
+        lvl, _, force = enf.debate_gate(_mk_es("analysis"), "conclusion",
+                                        {"n_options": 1, "high_impact": True})
+        assert lvl == enf.DEBATE_L2 and force is True
+        lvl2, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion",
+                                     {"linear": True, "failed_retries": 2})
+        assert lvl2 == enf.DEBATE_L2
 
     def test_analysis_before_script_l1(self):
         lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "before_script")
@@ -300,10 +444,106 @@ class TestDebateGate:
         assert lvl == enf.DEBATE_L2 and force is True
 
     def test_budget_guard_downgrades(self):
-        """预算护栏：超预算非强制 L2 → 降 L1"""
-        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=3, budget=3), "conclusion")
+        """预算护栏：超预算的非强制 L2（有分歧）→ 降 L1"""
+        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=3, budget=3),
+                                              "conclusion", {"has_fork": True})
         assert lvl == enf.DEBATE_L1 and force is False
         assert any("预算" in r for r in reasons)
+
+
+# ==================== P2: 裁决驱动下一步 ====================
+
+def _verdict_json(**kw):
+    v = {
+        "verdict": "need_more_info", "confidence": "low", "level": "L2",
+        "topic": "批次校正 vs 直接出差异",
+        "decision": "先跑 sva 校正，再出差异结论；期间先出一版标注低置信的草图",
+        "next_actions": [
+            {"action": "跑 sva 批次校正", "owner": "ai", "expected": "校正后矩阵",
+             "blocks": ["出最终差异结论", "结果入库"]},
+            {"action": "请用户确认分组列", "owner": "user"},
+            {"action": "对比校正前后 PC1 占比", "owner": "ai"},
+        ],
+        "fallback": {"path": "用原始矩阵出草图", "risk": "批次效应未去除", "label": "临时"},
+        "reopen_condition": "拿到批次信息后重开",
+        "decision_source": "judge",
+    }
+    v.update(kw)
+    return json.dumps(v, ensure_ascii=False)
+
+
+class TestDecisionDrivesNextStep:
+    """P2(2026-09-22): 辩论结论必须进入下一步进程（待办 + 硬约束）。"""
+
+    def test_actions_become_session_todos(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        assert es.debate_plan["decision"].startswith("先跑 sva")
+        titles = [t["title"] for t in es.debate_todos]
+        assert titles == ["跑 sva 批次校正", "对比校正前后 PC1 占比"], titles
+        assert es.debate_plan["fallback"]["path"] == "用原始矩阵出草图"
+
+    def test_user_owned_actions_are_not_todos(self):
+        """要让用户提供的东西不算待办（那是提问，不是 AI 的下一步）"""
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json(next_actions=[
+            {"action": "请用户提供原始数据", "owner": "user"},
+            {"action": "先出一版草图", "owner": "ai"},
+        ]))
+        assert [t["title"] for t in es.debate_todos] == ["先出一版草图"]
+
+    def test_blocking_todo_is_first(self):
+        """硬约束待办排最前（先做挡住产物的那件事）"""
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        assert es.debate_todos[0]["blocks"], "带 blocks 的待办必须排第一"
+
+    def test_blocked_todo_blocks_high_impact_tool(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        blk = enf._debate_block_gate(es, "generate_report")
+        assert blk and blk["blocked"] is True
+        assert "跑 sva 批次校正" in blk["message"]
+        assert blk["debate_blocks"]
+
+    def test_no_block_when_verdict_has_no_blocks(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json(next_actions=[
+            {"action": "出草图", "owner": "ai"}]))
+        assert enf._debate_block_gate(es, "generate_report") is None
+
+    def test_config_can_disable_blocking(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        es.debate_enforce_blocks = False
+        assert enf._debate_block_gate(es, "generate_report") is None
+
+    def test_completed_todo_releases_block(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        _id = es.debate_todos[0]["id"]
+        assert enf.sync_debate_todos(es, [{"id": _id, "status": "completed"}]) == 1
+        assert enf.pending_debate_blocks(es) == []
+        assert enf._debate_block_gate(es, "generate_report") is None
+
+    def test_cancelled_todo_releases_block(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        enf.sync_debate_todos(es, [{"title": es.debate_todos[0]["title"], "status": "cancelled"}])
+        assert enf._debate_block_gate(es, "generate_report") is None
+
+    def test_plan_surfaces_in_state(self):
+        es = _mk_es()
+        enf._ingest_debate_plan(es, _verdict_json())
+        d = es.to_dict()
+        assert d["debate_decision"].startswith("先跑 sva")
+        assert d["debate_blocks_pending"] == 1
+        assert len(d["debate_todos"]) == 2
+
+    def test_broken_payload_does_not_crash(self):
+        es = _mk_es()
+        assert enf._ingest_debate_plan(es, "not json") == {}
+        assert enf._ingest_debate_plan(es, json.dumps({"verdict": "support"}))["decision"] == ""
 
 
 # ==================== A5 回调链路 ====================

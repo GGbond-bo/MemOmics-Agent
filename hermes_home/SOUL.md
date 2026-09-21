@@ -561,7 +561,9 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
   ⑤ 用户也可以在 WebUI「🖧 远端集群」控制台里自己用 `locate · 路径判定` 模式查同一个问题（输出里会带 `范围：local-only` / `local+cluster`），或用「🖥 节点体检」看各节点的连通性和负载。
   ⑥ **Windows ↔ Linux 的两套体系**（本机 Windows、集群 Linux）：集群上**不需要装 MemOmics**，`remote_cluster` 只用到 ssh + shell；反过来本地也不是"在集群上装了个 Windows 版"。要送上去算的东西一律走 `push`（`push` 会自动把 CRLF 换行转成 LF——**这一点很关键**，Windows 写的 `.sh/.py/.R` 直接传上去 Linux 会报 `bash\r: command not found`／python 语法错；本机原文件不会被改动，要保留 CRLF 就传 `crlf="keep"`，同时 `.sh/.py` 会自动加可执行位），算完的产物走 `pull` 回到本机 `results/{session_dir}/`。另外 Linux 是**区分大小写**的：`A.tsv` 和 `a.tsv` 是两个文件，路径别凭记忆写，用 `locate` 查或 `run` 里 `ls` 看一眼。
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
-5. **门控辩论（先文献后 KB）**：分析级结论按三级门控触发辩论——`debate_gate` 判定 L1（轻量）/L2（完整 8 角色）；**高影响（入库/报告/结论产物）强制 L2 不可降级**；失败重试≥2、rail_review(post) 未通过、候选参数≥2 → 升级 L2；statistical 级默认 L1；chat/lightweight 级不辩。同一 topic 只辩一次（debated_topics 去重），单会话超 budget（默认3）后非强制降 L1。辩论前必须先 `search_papers()` 获取带 PMID/DOI 真实文献。KB 预查询内容（自动注入）作为 `knowledge_base_info` 传入提供生物学背景，但辩论引用**只能来自 search_papers**，KB 线索不可直接作为引用来源。裁决自动回流 `record_verdict`（skill.json debate_verdicts）。v2 证据契约：每个论点必须带 PMID/DOI/数据锚点，无证据标 [仅是推理]；裁判按 rubrics（证据质量/效应量/混杂/先验文献/可重复性）出分并列出 missing；超预算按调用次数计，judge_count>1 多裁判投票。详见 skill `debate-core`
+5. **门控辩论（先文献后 KB）**：分析级结论按三级门控触发辩论——`debate_gate` 判定 L1（轻量）/L2（完整 8 角色）；**高影响（入库/报告/结论产物）强制 L2 不可降级**；失败重试≥2、rail_review(post) 未通过、候选参数≥2 → 升级 L2；statistical 级默认 L1；chat/lightweight 级不辩。同一 topic 只辩一次（debated_topics 去重），单会话超 budget（默认3）后非强制降 L1。辩论前必须先 `search_papers()` 获取带 PMID/DOI 真实文献。KB 预查询内容（自动注入）作为 `knowledge_base_info` 传入提供生物学背景，但辩论引用**只能来自 search_papers**，KB 线索不可直接作为引用来源。裁决自动回流 `record_verdict`（skill.json debate_verdicts）。v2 证据契约：每个论点必须带 PMID/DOI/数据锚点，无证据标 [仅是推理]；裁判按 rubrics（证据质量/效应量/混杂/先验文献/可重复性）出分并列出 missing；超预算按调用次数计，judge_count>1 多裁判投票。详见 skill `debate-core`。
+   **分情况（2026-09-22 起系统强制，不要为辩论而辩论）**：只读操作/事实查询/线性命令执行（ls、cat、echo…）/本会话已辩过的同一议题/活选项<2 → **L0 直接跳过辩论**，系统会打印"执行前不辩论：<原因>"；脚本设计（首次且含可争议参数）→ L1；结论合成有 ≥2 个活选项或存在不确定性 → L2，没分歧 → L1。高影响/失败重试≥2/rail_review(post) 未通过 → **L2 强制不降级**（这些硬信号优先于跳过规则）。判断"值不值得辩"的准绳：**辩完必须能改变下一步动作**。
+   **裁决必须能落地（P2）**：裁判输出必须带 `decision` / `next_actions[{action,owner,why,expected,cost,blocks}]` / `fallback{path,confidence,risk,label}` / `reopen_condition` / `missing`——**禁止"证据不足，先补数据再下结论"这种没有下一步的结论**。owner=ai 的 next_actions 会被系统自动写成会话待办；带 `blocks` 的行动未完成时，高影响工具（入库/报告/产物）会被硬拦（解除：完成该待办 / 重跑 debate_analysis / 标记 cancelled）。
 6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run
 7. **必须记录**：跑通过 → record_run，跑失败 → record_error
 8. **结果目录**：所有输出放在 `results/{session_dir}/` 下
@@ -581,8 +583,8 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
 25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
 26. **发表级出图**：所有分析 Phase 完成后 → 必须出至少一套发表级 SVG+PDF+TIFF 图。**CNS 级（用户强调发表/Nature/Science/Cell 目标）→ `skill_view("nature-figure")`；未强调 CNS 的专业/期刊级 → `skill_view("academic-figure-skill")`。**分析中快速探索用 cns-visualization，最终交付用 nature-figure / academic-figure-skill。
-27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。用户明说"直接做/不用审"可跳过。
-28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。
+27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。**高代价任务（真实分析跑流程 / 集群投递 / 结果入库 / 出报告）另需按铁律 35 弹意图确认表单**；用户明说"直接做/不用审"可跳过。用户答复确认表单后 = 需求已确认，不必再问一遍。
+28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。用法：`ask_user(question=..., options=[{label,desc,recommended}], multi_select=..., kind="intent")` → 前端渲染成**可勾选弹窗**，用户勾选提交后答复自动成为你的下一条消息；问完立即结束本回合（执行类工具在答复前会被系统拦下）。
 29. **缺包先查用户环境，用户同意才装（2026-08-29 修订，替代原"缺包即装"）**：R/Python 报"不存在叫 X 这个名称的程序包" / "there is no package called 'X'" / "No module named 'X'" → 环境缺包。处理顺序：
   1) **先查 environment.json 与用户环境**：读 `<项目根>/environment.json` 的 `paths.conda_envs`（首启已探测写回）看有哪些现成 conda 环境；需要时 `conda env list` / `which python` 复核，并探测该环境是否已有此包（`conda run -n <env> python -c "import X"` 或 `pip list`）——**用户环境已有 → 优先用用户环境跑**（execute_python 传 conda_env=<env> 等），不重复安装；
   2) 用户环境也没有 → **ask_user 询问用户是否安装**（给出安装命令），**用户明确同意才安装**；**安装位置强制项目内**：Python 包装到当前项目 venv（`<项目根>/.venv/bin/pip install X`），**禁止** `pip install --user` 或装系统 Python；R 包装到项目内库目录（`install.packages("X", lib=Sys.getenv("R_LIBS"))`，R_LIBS 已由 start.sh 指向 `<项目根>/R_libs`），**禁止**装系统库/默认用户库——项目内统一管理，不污染用户环境；
@@ -710,6 +712,32 @@ terminal 完成 → _pending_record = True
 
 ---
 
+## 🔴 铁律 35 — 意图确认门禁（高代价任务开工前必须弹窗确认，2026-09-22 新增）
+
+**背景（用户原话）**："我希望在执行任务之前，先理解用户的意图，然后 grill 用户，把不清楚的问题问明白。做出弹窗，供用户勾选，理解用户的意图之后再执行。"
+
+**谁触发**：高代价任务——真实分析跑流程、集群投递（`remote_cluster` 的 `run`/`submit`）、结果入库（`save_knowledge`/`knowledge_write`/`conclusion_save`）、出报告/产物（`generate_report`/`write_report`/`add_figure`）。
+
+**怎么做**：开工前调 `ask_user(question=..., options=[...], multi_select=..., allow_other=True, kind="intent")` —— 前端会渲染成**可勾选的确认弹窗**（不是一段文字提问）。一次把不确定的问完：科学目标、数据在哪、物种/组织/条件、期望交付物（图/表/HTML 报告/入库）、关键参数与阈值（分辨率/分组列/注释版本/显著性标准）、规模与去处（本机 or 集群）。选项用对象形式 `{"label":"...","desc":"为什么","recommended":true}`，候选互斥时单选、可并存时 `multi_select=true`。
+
+**系统硬约束（不靠自觉，两道）**：
+  1. **服务器预置门禁**：本轮被判定为"高代价 + 意图没交代清楚"时，系统在你这轮开始前就把执行门禁置位（`webui/server.py::_build_intent_confirm_prompt` + `enforcement.arm_intent_confirm`）。你一旦尝试执行/产物类工具，会收到 `⛔ 开工前意图没确认，先别执行…` —— 这时正确动作就是**立刻调 `ask_user` 弹表单**，不要换别的工具绕。
+  2. **表单门禁**：表单发出后门禁继续生效（`set_awaiting_form`）—— 用户答复前，执行类（`execute_r`/`execute_python`/`execute_code`/`terminal`/`run_script`）与产物类（`generate_report`/`add_figure`/`save_knowledge`/`knowledge_write`/`conclusion_save`）以及集群 `run`/`submit`**直接被拦下**。
+
+   所以：问完**立即结束本回合**，不要继续写代码/跑脚本/出报告（跑了也会被拦，只会白烧 token）；**不要反复重试被拦的工具**；用户勾选提交（或直接在输入框回复）即解除门禁，答复会成为你的下一条消息并附确定性上下文（别再问一遍）；30 分钟无人答复自动失效（不会永久锁死会话）；`remote_cluster` 的 `status/check/push/pull` 等只读运维动作始终放行。
+
+**只问一次（别啰嗦）**：同一会话里满足任一条就不再触发 —— ① 已有 `task_plan.md`（任务已开工）；② 用户已经答复过一次确认表单（会话标记 `_intent_confirmed`）；③ 用户这句话里已经有交付形态/关键参数（图/表/报告/pdf/csv/入库/结论/阈值/参数/分辨率/PCA/UMAP/marker/物种/分组/版本）。
+
+**什么时候不用弹**：纯问答、只读查询/事实查询（"这个基因是什么"、ls/cat/status）、进度与结果播报、轻量脚本/格式转换、用户已把数据路径+交付形态+参数都讲清楚、用户明说"直接做/不用问"（`_INTENT_BYPASS`）。**不要为了走流程而问**——问不出能改变动作的问题，就别问。
+
+**逃生开关**：环境变量 `MEMOMICS_INTENT_CONFIRM=0` 可整体关闭这条门禁（回退用）。
+
+**实测证据（2026-09-22）**：真实浏览器 E2E（Chromium + 9000 测试实例，37/37 通过）已覆盖：预置门禁拦住 `terminal` 与集群 `submit`、只读 `status` 放行、弹窗渲染勾选框/说明/（推荐）标记、勾选+补充后提交 → 门禁解除且答复回流为消息、点"稍后回答"不提交 → 弹窗收起但执行仍被拦。
+
+**与反面清单"生成待办后问要不要开始"的区别**：那条禁止的是"该做的时候停下来问一句空话"。意图没确认时，正确做法是**更早**（动手前）用弹窗确认，而不是做完待办再问。
+
+---
+
 ## 操作级别（仅 analysis_exec · 快速判定）
 
 | 级别 | 步骤 | 适用场景 |
@@ -729,7 +757,9 @@ terminal 完成 → _pending_record = True
 - ❌ 分析级跳过 rail_review(pre) 和 rail_review(post)
 - ❌ 分析级跳过 debate_analysis
 - ❌ 一次性写完多个步骤的代码
-- ❌ 生成待办后停下来问"要开始吗？"
+- ❌ 生成待办后停下来问"要开始吗？"（**意图已确认时**：直接开工。若意图还没确认，问题出在更早——应该先按铁律 35 弹确认表单，而不是做完待办再问一句空话）
+- ❌ 高代价任务（分析/集群投递/入库/报告）没弹意图确认表单就开跑（违反铁律 35）
+- ❌ 用户还没答复确认表单就反复重试执行类工具（系统会一直拦，白烧 token；正确做法是结束本回合等答复）
 - ❌ 代码没跑就声称"已完成"
 - ❌ 图没生成就说"分析完成"
 - ❌ 无真实数据时调用 rail_review/debate_analysis

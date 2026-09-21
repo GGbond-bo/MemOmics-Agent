@@ -435,6 +435,17 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .dcb-concl.tone-con { border-color:rgba(216,67,107,.42); background:rgba(216,67,107,.08); }
 .dcb-concl.tone-con .dcb-concl-main { color:var(--danger); }
 .dcb-concl.tone-none .dcb-concl-main { color:var(--text-light); font-size:20px; }
+/* 2026-09-22 v5：辩论的产出 = 下一步（decision/next_actions/fallback）——不许再出现"证据不足，先补数据"就结束 */
+.dcb-plan { margin-top:10px; padding:10px 12px; border-radius:10px; border:1px solid rgba(63,158,106,.38); background:rgba(63,158,106,.07); }
+.dcb-plan-h { font-size:12px; font-weight:800; color:var(--success); margin-bottom:6px; }
+.dcb-plan-dec { font-size:14.5px; font-weight:700; line-height:1.5; color:var(--text); }
+.dcb-plan-act { margin-top:6px; font-size:12.5px; line-height:1.55; color:var(--text); }
+.dcb-plan-act .own { display:inline-block; min-width:32px; margin-right:5px; padding:0 5px; border-radius:5px; font-size:10.5px; font-weight:700; text-align:center; background:rgba(63,158,106,.16); color:var(--success); }
+.dcb-plan-act .own.user { background:rgba(224,135,42,.18); color:var(--warning); }
+.dcb-plan-act .exp { color:var(--text-light); }
+.dcb-plan-fb { margin-top:6px; font-size:12px; line-height:1.55; color:var(--text-light); }
+.dcb-plan-fb b { color:var(--text); }
+.dcb-plan-warn { margin-top:6px; font-size:11.5px; color:var(--warning); }
 .dcb-early { margin-top:8px; font-size:11.5px; color:var(--warning); }
 .dcb-link { color:var(--primary); font-weight:700; cursor:pointer; text-decoration:underline; }
 .dcb-hint { margin-top:9px; font-size:11.5px; color:var(--primary); }
@@ -1642,7 +1653,8 @@ const _sessionScopedEventTypes = new Set([
   'agent_running', 'complete', 'cancelled', 'tool_start', 'tool_complete',
   'tool_progress', 'tool_gen', 'status', 'notice', 'notice_clear',
   'new_figure', 'event', 'steer_sent', 'clarify', 'todos', 'todos_update',
-  'context_usage', 'resource_state', 'timeout'
+  'context_usage', 'resource_state', 'timeout',
+  'ask_form', 'ask_form_answered'
 ]);
 
 // === WebSocket ===
@@ -1882,6 +1894,12 @@ function handleMessage(msg) {
   } else if (msg.type === 'status') {
     // status 只进时间线
     addProgressItem(msg.content.substring(0,40), 'pending', msg.category, msg.ts || _nowTs());
+  } else if (msg.type === 'ask_form') {
+    // P3: 意图确认弹窗（勾选后提交 → 答复作为用户消息发出）
+    showAskForm(msg);
+  } else if (msg.type === 'ask_form_answered') {
+    // 答复已被服务端记录（含用户直接在输入框回复的情况）→ 收起弹窗
+    if (!msg.form_id || !_askForm || _askForm.form_id === msg.form_id) { hideAskForm(); }
   } else if (msg.type === 'notice') {
     // notice 进时间线，带 key 以便 notice_clear 清除
     addProgressItem(msg.content.substring(0,40), 'done', '', msg.ts || _nowTs(), msg.key || '');
@@ -2213,6 +2231,138 @@ async function send(background) {
   ws.send(JSON.stringify({ type: 'chat', message: text, session_id: targetSid, background: background, images: imageUrls }));
 }
 
+// === P3(2026-09-22): 意图确认弹窗（ask_form） ===
+// 用户要求：执行任务之前先理解意图 → 弹窗让用户勾选 → 确认后再执行。
+// 这里只负责"收集答复"；提交后答复沿既有 chat 通道作为用户消息发出（不新开轨道），
+// 同时 POST /api/ask_form/answer 留档并解除后端的执行门禁。
+var _askForm = null;
+
+function _askFormEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function hideAskForm() {
+  var el = document.getElementById('askform-overlay');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+function showAskForm(msg) {
+  try {
+    // 只对当前会话显示（避免把别的会话的确认弹到用户脸上）
+    if (msg.session_id && currentSid && msg.session_id !== currentSid) { return; }
+    hideAskForm();
+    _askForm = {
+      form_id: msg.form_id || '',
+      kind: msg.kind || 'clarify',
+      header: msg.header || '需要你确认',
+      question: msg.question || msg.content || '',
+      options: (msg.options || []).slice(0, 8),
+      rich: msg.form_options || [],
+      multi: !!msg.multi_select,
+      allowOther: msg.allow_other !== false,
+      selected: []
+    };
+    var f = _askForm;
+    var ov = document.createElement('div');
+    ov.id = 'askform-overlay';
+    ov.setAttribute('style', 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;');
+    var card = document.createElement('div');
+    card.setAttribute('style', 'background:var(--panel,#1b1f27);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:12px;max-width:660px;width:100%;max-height:86vh;overflow:auto;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);font-size:14px;line-height:1.6;');
+    var kindTxt = f.kind === 'intent' ? '开工前意图确认' : (f.kind === 'plan' ? '方案选择' : '需要你确认');
+    var html = '';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+    html += '<span style="font-size:16px;font-weight:600;">❓ ' + _askFormEsc(f.header) + '</span>';
+    html += '<span style="font-size:11px;padding:1px 7px;border-radius:9px;background:rgba(90,150,255,.18);color:#7fb0ff;">' + _askFormEsc(kindTxt) + '</span>';
+    html += '</div>';
+    html += '<div style="white-space:pre-wrap;margin:6px 0 12px;color:var(--text,#e6e6e6);">' + _askFormEsc(f.question) + '</div>';
+    html += '<div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:6px;">' + (f.multi ? '可多选（勾选后提交）' : (f.options.length ? '单选（点选后提交）' : '请在下方填写')) + '</div>';
+    html += '<div id="askform-opts">';
+    for (var i = 0; i < f.options.length; i++) {
+      var lab = f.options[i];
+      var r = f.rich[i] || {};
+      var desc = r.desc || '';
+      var rec = r.recommended ? ' <span style="font-size:11px;color:#4ec97a;">（推荐）</span>' : '';
+      html += '<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border,#333a45);border-radius:8px;cursor:pointer;">';
+      html += '<input type="' + (f.multi ? 'checkbox' : 'radio') + '" name="askform-opt" value="' + _askFormEsc(lab) + '" style="margin-top:3px;flex:0 0 auto;">';
+      html += '<span><span>' + _askFormEsc(lab) + '</span>' + rec;
+      if (desc) { html += '<div style="font-size:12px;color:var(--muted,#9aa4b2);">' + _askFormEsc(desc) + '</div>'; }
+      html += '</span></label>';
+    }
+    html += '</div>';
+    if (f.allowOther) {
+      html += '<div style="margin-top:8px;"><div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:4px;">其他（补充说明／自定义选项）</div>';
+      html += '<textarea id="askform-other" rows="2" placeholder="没有合适选项时在这里写清楚…" style="width:100%;box-sizing:border-box;background:var(--bg,#12151b);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:8px;padding:8px;font-size:13px;resize:vertical;"></textarea></div>';
+    }
+    html += '<div id="askform-err" style="display:none;color:#ff6b6b;font-size:12px;margin-top:8px;"></div>';
+    html += '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">';
+    html += '<button id="askform-later" style="background:transparent;color:var(--muted,#9aa4b2);border:1px solid var(--border,#333a45);border-radius:8px;padding:7px 14px;cursor:pointer;">稍后回答</button>';
+    html += '<button id="askform-submit" style="background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:600;">提交并继续</button>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--muted,#9aa4b2);margin-top:8px;">提交后我会按你的选择继续；未提交前我不会开始执行（执行类操作会被拦下）。</div>';
+    card.innerHTML = html;
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    // 记住勾选状态
+    var _inputs = card.querySelectorAll('input[name="askform-opt"]');
+    for (var k = 0; k < _inputs.length; k++) {
+      _inputs[k].addEventListener('change', function() {
+        var sel = [];
+        var all = card.querySelectorAll('input[name="askform-opt"]');
+        for (var j = 0; j < all.length; j++) { if (all[j].checked) sel.push(all[j].value); }
+        _askForm.selected = sel;
+      });
+    }
+    document.getElementById('askform-later').addEventListener('click', function() {
+      // "稍后回答"= 不提交：弹窗收起但门禁保持，执行仍被拦（不会误开工）
+      hideAskForm();
+      addProgressItem('❓ 确认弹窗待回答', 'pending', '点标题栏「待确认」可重新打开', _nowTs());
+    });
+    document.getElementById('askform-submit').addEventListener('click', function() { _submitAskForm(); });
+    var _oth = document.getElementById('askform-other');
+    if (_oth) { _oth.addEventListener('keydown', function(ev) { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { _submitAskForm(); } }); }
+    try { setTimeout(function() { var s = document.getElementById('askform-submit'); if (s) s.focus(); }, 60); } catch (e2) {}
+  } catch (err) {
+    console.error('ask_form 渲染失败', err);
+  }
+}
+
+async function _submitAskForm() {
+  var f = _askForm;
+  if (!f) { return; }
+  var errEl = document.getElementById('askform-err');
+  var otherEl = document.getElementById('askform-other');
+  var other = otherEl ? String(otherEl.value || '').trim() : '';
+  var sel = (f.selected || []).slice();
+  if (!sel.length && !other) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '请至少勾选一项，或在「其他」里写清楚。'; }
+    return;
+  }
+  var btn = document.getElementById('askform-submit');
+  if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+  var ansText = '【确认答复】' + (f.question ? '针对「' + String(f.question).slice(0, 120) + '」：' : '');
+  var segs = [];
+  if (sel.length) { segs.push('选中：' + sel.join('；')); }
+  if (other) { segs.push('补充：' + other); }
+  ansText += segs.join('；');
+  var posted = false;
+  try {
+    var resp = await fetch('/api/ask_form/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: currentSid, form_id: f.form_id, selected: sel, other: other, question: f.question })
+    });
+    posted = !!(resp && resp.ok);
+  } catch (e) {
+    console.error('ask_form 答复上报失败', e);
+  }
+  hideAskForm();
+  // 答复本身作为用户消息发出（沿用既有通道：运行中会自动变成 steer 引导）
+  var input = document.getElementById('input');
+  if (!input) { addError('找不到输入框，答复未发送：' + ansText); return; }
+  if (input.value.trim()) { input.value = input.value.trim() + '\n' + ansText; } else { input.value = ansText; }
+  if (!posted) { addProgressItem('⚠️ 确认答复未上报（继续按消息发送）', 'done', '', _nowTs()); }
+  send();
+}
 // === 停止 agent ===
 function stopAgent() {
   if (!ws || ws.readyState !== 1) return;
@@ -2726,6 +2876,8 @@ function renderDebateBlock(toolBlock, debate) {
       html += '<div style="margin-top:4px;font-size:11px;color:var(--text-light);">正方 ' + (pn ? (ps / pn).toFixed(1) : '?') + ' vs 反方 ' + (cn ? (pc / cn).toFixed(1) : '?') + ' (平均分)</div>';
     }
   }
+  // v5(2026-09-22): 裁决必须带下一步 —— 工具调用当场就能看到该做什么
+  html += _dcbPlanCompactHtml(_dcbPlanOf(debate));
   html += '</div>';
   toolBlock.insertAdjacentHTML('beforeend', html);
 }
@@ -3029,7 +3181,14 @@ function normalizeDebate(d) {
     digestNote: d.judge_digest_note || '', digestRepaired: !!d.judge_digest_repaired,
     // 2026-09-18 v4：赛前场景预判（后端 scenario）。旧归档没有 → null，卡片照常渲染
     scenario: (d.scenario && typeof d.scenario === 'object') ? d.scenario : null,
-    scenarioModel: d.scenario_model || '', scenarioError: d.scenario_error || ''
+    scenarioModel: d.scenario_model || '', scenarioError: d.scenario_error || '',
+    // 2026-09-22 v5：裁决必须能驱动下一步（decision/next_actions/fallback 由引擎保证非空）
+    decision: d.decision || '',
+    nextActions: Array.isArray(d.next_actions) ? d.next_actions : [],
+    fallbackPlan: (d.fallback && typeof d.fallback === 'object') ? d.fallback : null,
+    reopenCondition: d.reopen_condition || '',
+    decisionSource: d.decision_source || '',
+    decisionWarnings: Array.isArray(d.decision_warnings) ? d.decision_warnings : []
   };
   function mkCell(rec, model, callId, score) {
     return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
@@ -3053,7 +3212,8 @@ function normalizeDebate(d) {
       j.winner = obj.winner || '';
       if (obj.pro_score !== undefined) j.proScore = obj.pro_score;
       if (obj.con_score !== undefined) j.conScore = obj.con_score;
-      j.reasoning = obj.reasoning || obj.summary || obj.analysis || obj.decision || '';
+      j.reasoning = obj.reasoning || obj.summary || obj.analysis || '';
+      j.decision = obj.decision || '';   // v5: decision 是独立字段，不再当 reasoning 用
       if (!j.recommended && obj.recommended_params) j.recommended = obj.recommended_params;
       if (j.reasoning && rawText && rawText.length > j.reasoning.length && rawText.indexOf(j.reasoning) !== 0) {
         j.text = rawText; j.showText = true;
@@ -3529,6 +3689,89 @@ function _dtDigestSection(db) {
   return h + '</div>';
 }
 
+// ===== 辩论的产出：下一步（2026-09-22 v5）=====
+// 用户原话："辩论了一大堆，最后得出'证据不足，先补数据再下结论'这种垃圾结论…
+// 辩论结果有用于下一步的进程吗？没有，辩论什么？"
+// 引擎 v3 起每次裁决都必须带 decision/next_actions/fallback → 卡片正面直接告诉用户该做什么。
+function _dcbPlanOf(db) {
+  db = db || {};
+  var acts = db.nextActions || db.next_actions || [];
+  if (!Array.isArray(acts)) acts = [];
+  var out = [];
+  for (var i = 0; i < acts.length; i++) {
+    var a = acts[i];
+    if (!a) continue;
+    if (typeof a === 'string') { out.push({ action: a, owner: 'ai', why: '', expected: '', cost: '', blocks: [] }); continue; }
+    if (typeof a !== 'object') continue;
+    var blocks = Array.isArray(a.blocks) ? a.blocks : (a.blocks ? [a.blocks] : []);
+    out.push({
+      action: _dcbSquash(a.action || a.step || ''),
+      owner: String(a.owner || 'ai').toLowerCase(),
+      why: _dcbSquash(a.why || a.reason || ''),
+      expected: _dcbSquash(a.expected || a.result || ''),
+      cost: _dcbSquash(a.cost || ''), blocks: blocks
+    });
+  }
+  var fb = db.fallbackPlan || db.fallback || null;
+  if (!(fb && typeof fb === 'object')) fb = null;
+  if (fb && !_dcbSquash(fb.path) && _dcbSquash(fb.action)) fb = { path: _dcbSquash(fb.action), risk: fb.risk, label: fb.label };
+  return {
+    decision: _dcbSquash(db.decision || ''),
+    actions: out, fallback: fb,
+    reopen: _dcbSquash(db.reopenCondition || db.reopen_condition || ''),
+    source: String(db.decisionSource || db.decision_source || ''),
+    warnings: db.decisionWarnings || db.decision_warnings || []
+  };
+}
+
+function _dtPlanSection(db) {
+  var p = _dcbPlanOf(db);
+  if (!p.decision && !p.actions.length && !p.fallback && !p.reopen) return '';
+  var h = '<div class="dcb-plan"><div class="dcb-plan-h">🎯 这场辩论的产出：下一步</div>';
+  if (p.decision) h += '<div class="dcb-plan-dec">' + _dtMdInline(p.decision) + '</div>';
+  for (var i = 0; i < p.actions.length; i++) {
+    var a = p.actions[i];
+    h += '<div class="dcb-plan-act"><span class="own' + (a.owner === 'user' ? ' user' : '') + '">' +
+         (a.owner === 'user' ? '你' : 'AI') + '</span>' + _dtMdInline(a.action);
+    if (a.expected) h += ' <span class="exp">→ ' + _dtMdInline(a.expected) + '</span>';
+    if (a.cost) h += ' <span class="exp">（成本 ' + _dtEsc(a.cost) + '）</span>';
+    if (a.why) h += '<div class="dcb-plan-fb">原因：' + _dtEsc(a.why) + '</div>';
+    if (a.blocks && a.blocks.length) h += '<div class="dcb-plan-fb">⛔ 不做则必须停：' + _dtEsc(a.blocks.join('；')) + '</div>';
+    h += '</div>';
+  }
+  if (p.fallback) {
+    h += '<div class="dcb-plan-fb">🛟 兜底路径：<b>' + _dtMdInline(String(p.fallback.path || '')) + '</b>';
+    if (p.fallback.risk) h += '；风险：' + _dtEsc(p.fallback.risk);
+    if (p.fallback.label) h += '；结论标注：<b>' + _dtEsc(p.fallback.label) + '</b>';
+    h += '</div>';
+  }
+  if (p.reopen) h += '<div class="dcb-plan-fb">🔁 重审条件：' + _dtEsc(p.reopen) + '</div>';
+  if (p.source === 'engine_backfill') h += '<div class="dcb-plan-warn">⚠️ 这条行动方案由引擎回填（本场裁判没按契约给出下一步）</div>';
+  for (var w = 0; w < p.warnings.length; w++) h += '<div class="dcb-plan-warn">⚠️ ' + _dtEsc(p.warnings[w]) + '</div>';
+  return h + '</div>';
+}
+
+// 卡片正面用的紧凑版：决策 + 前 3 条动作 + 兜底 + 重审（细节在展开后的正文里）
+function _dcbPlanCompactHtml(p) {
+  if (!p || (!p.decision && !p.actions.length && !p.fallback && !p.reopen)) return '';
+  var h = '<div class="dcb-plan">';
+  h += '<div class="dcb-plan-h">🎯 下一步' + (p.decision ? '' : '（这场辩论的产出）') + '</div>';
+  if (p.decision) h += '<div class="dcb-plan-dec">' + _dtMdInline(p.decision) + '</div>';
+  var n = Math.min(p.actions.length, 3);
+  for (var i = 0; i < n; i++) {
+    var a = p.actions[i];
+    h += '<div class="dcb-plan-act"><span class="own' + (a.owner === 'user' ? ' user' : '') + '">' +
+         (a.owner === 'user' ? '你' : 'AI') + '</span>' + _dtMdInline(a.action) +
+         (a.expected ? ' <span class="exp">→ ' + _dtMdInline(a.expected) + '</span>' : '') + '</div>';
+  }
+  if (p.actions.length > n) h += '<div class="dcb-plan-fb">… 另有 ' + (p.actions.length - n) + ' 条动作，展开看完整清单</div>';
+  if (p.fallback && p.fallback.path) h += '<div class="dcb-plan-fb">🛟 兜底：' + _dtEsc(p.fallback.path) +
+    (p.fallback.label ? '（' + _dtEsc(p.fallback.label) + '）' : '') + '</div>';
+  if (p.reopen) h += '<div class="dcb-plan-fb">🔁 重审：' + _dtEsc(p.reopen) + '</div>';
+  if (p.source === 'engine_backfill') h += '<div class="dcb-plan-warn">⚠️ 行动方案由引擎回填（本场裁判没按契约给出下一步）</div>';
+  return h + '</div>';
+}
+
 function _dtJudgeSection(db) {
   var j = db.judge || {};
   var hasAny = j.verdict || j.confidence || j.reasoning || j.text || j.recommended || j.error || Object.keys(db.rubrics).length;
@@ -3762,6 +4005,7 @@ function debateTableHtml(db, meta) {
   h += _dtNeutralSection(db);
   h += _dtDigestSection(db);   // 2026-09-18 v3：草稿 → 清晰言论 + 论据（裁决前的整理稿）
   h += _dtJudgeSection(db);
+  h += _dtPlanSection(db);   // v5: 裁决之后的下一步（决策 + 动作 + 兜底 + 重审条件）
   h += _dtFootHtml(db, meta);
   return h + '</div>';
 }
@@ -3791,7 +4035,7 @@ function _dcbVerdictOf(db) {
     'ok': ['方案成立，可以照此执行', 'ok'], 'support': ['支持正方主张', 'ok'],
     'support_pro': ['支持正方主张', 'ok'], 'pro': ['支持正方主张', 'ok'], 'pro_wins': ['支持正方主张', 'ok'],
     'modify': ['方案要改，改完再用', 'warn'], 'modify_first': ['方案要改，改完再用', 'warn'],
-    'need_more_info': ['证据不足，先补数据再下结论', 'warn'], 'insufficient_evidence': ['证据不足，先补数据再下结论', 'warn'],
+    'need_more_info': ['证据未齐，按下面的路径先推进', 'warn'], 'insufficient_evidence': ['证据未齐，按下面的路径先推进', 'warn'],
     'reject': ['否决该方案', 'con'], 'support_con': ['支持反方主张', 'con'],
     'con': ['支持反方主张', 'con'], 'con_wins': ['支持反方主张', 'con']
   };
@@ -3829,6 +4073,7 @@ function _dcbEntry(db, meta, extra) {
     hasDigest: !!(db && db.digest), failed: !!(db && db.failed),
     kind: (db && db.kind) || '', format: (db && db.format) || '', level: (db && db.level) || '',
     scenarioLabel: (db && db.scenario && (db.scenario.scenario_label || db.scenario.scenario)) || '',
+    plan: _dcbPlanOf(db),   // v5: 卡片正面直接显示"下一步"
     mtime: (meta && meta.mtime_text) || '', idx: 0, total: 0
   };
   if (extra) for (var k in extra) if (extra.hasOwnProperty(k)) e[k] = extra[k];
@@ -3860,6 +4105,7 @@ function debateShellHtml(e) {
   if (mi.length) h += '<div class="dcb-concl-meta">' + mi.join(' · ') + '</div>';
   if (e.why) h += '<div class="dcb-concl-why">' + _dtEsc(e.why) + '</div>';
   h += '</div>';
+  h += _dcbPlanCompactHtml(e.plan);   // v5: 辩论必须产出下一步
   if (e.early) h += '<div class="dcb-early">⚠️ 这场辩论发生在更早的对话里（当前只加载了最近一段） · ' +
     '<span class="dcb-link" onclick="event.stopPropagation();_dcbLoadAllAndFocus(this)">📜 载入更早对话并把它放回原位</span></div>';
   h += '<div class="dcb-hint">▾ 点这里展开正文：' + (e.scenarioLabel ? '赛前场景预判 · ' : '') + '参战阵容与模型 · 逐席位正反对抗 · 证据链 · 共识/争议/缺口 · 整理稿 · 裁判裁决</div>';

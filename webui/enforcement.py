@@ -99,6 +99,14 @@ def _is_readonly_terminal(cmd: str) -> bool:
 DEBATE_L0, DEBATE_L1, DEBATE_L2 = 0, 1, 2
 DEBATE_LEVEL_NAMES = {0: "L0-跳过", 1: "L1-轻量辩论", 2: "L2-完整辩论"}
 
+# P3(2026-09-22): 意图确认弹窗期间禁止执行的工具（读/查类不拦，避免把澄清本身卡死）
+_FORM_GATED_TOOLS = {
+    "terminal", "execute_r", "execute_python", "execute_code", "run_script",
+    "generate_report", "add_figure", "save_knowledge", "submit_skill",
+    "knowledge_write", "conclusion_save", "write_report", "deliver",
+}
+_FORM_PENDING_TTL = 1800.0  # 30 分钟无答复自动失效（用户走开不该永久锁死）
+
 # 高影响工具：命中即强制 L2（入库/报告/结论产物，不可降级）
 _DEBATE_HIGH_IMPACT_TOOLS = {
     "generate_report", "add_figure", "save_knowledge", "submit_skill",
@@ -221,9 +229,56 @@ def _looks_like_encoding_garbage(text: str) -> bool:
     return False
 
 
+# P1(2026-09-22): 线性/只读命令 —— 没有方案分歧，辩不出新东西
+_LINEAR_CMD_RE = re.compile(
+    r"^\s*(ls|dir|cat|head|tail|wc|file|which|whereis|pwd|cd|cp|mv|mkdir|rmdir|touch|"
+    r"wget|curl|unzip|tar|zip|scp|rsync|git|conda|mamba|pip|pip3|md5sum|sha256sum|du|df|"
+    r"find|grep|rg|sed|awk|sort|uniq|tree|stat|echo)\b", re.I)
+
+
+def _debate_worthiness(signals: dict):
+    """P1(2026-09-22): "值不值得辩"前置判断 —— 返回跳过理由字符串（None = 值得辩）。
+
+    用户原话："怎么什么问题都辩论呢？要分清楚情况。"
+    不辩的情况（辩论必须至少有 2 条活选项，且选哪条会改变下一步动作）：
+      ① 只有 ≤1 条可选路径（没有分歧）② 线性执行/已知流程
+      ③ 事实查询/只读获取（有唯一正确答案）④ 同一议题已辩过
+      ⑤ 调用方显式标注 no_debate
+    """
+    if signals.get("no_debate"):
+        return "调用方标注 no_debate：跳过辩论"
+    n = signals.get("n_options")
+    if n is not None:
+        try:
+            if int(n) < 2:
+                return f"只有 {int(n)} 条可选路径（没有分歧，辩不出新东西）：跳过辩论"
+        except Exception:
+            pass
+    if signals.get("fact_lookup"):
+        return "事实查询/只读获取（有唯一正确答案）：跳过辩论"
+    if signals.get("readonly"):
+        return "只读观察步骤（不产生新结论）：跳过辩论"
+    if signals.get("repeat_topic"):
+        return "同一议题已辩过（去重）：跳过辩论"
+    if signals.get("linear"):
+        return "线性执行/已知流程（无方案分歧）：跳过辩论"
+    _cmd = str(signals.get("cmd") or "")
+    if (_cmd and _LINEAR_CMD_RE.match(_cmd)
+            and not signals.get("uncertainty") and not signals.get("conflict")
+            and not signals.get("failed_retries")):
+        return "线性执行命令（无方案分歧、无异常信号）：跳过辩论"
+    return None
+
+
 def debate_gate(es: "EnforcementState", stage: str = "conclusion",
                 signals: dict = None) -> tuple:
     """三级门控判定 — 什么时候该辩论。
+
+    P1(2026-09-22) 分情况矩阵（用户要求"不要为了辩论而辩论"）：
+      只读/事实查询/线性执行/重复议题/活选项<2 → L0 不辩
+      analysis 级脚本设计与执行（首次，且脚本里有可争议参数）→ L1
+      结论合成：有 ≥2 条活选项 / 不确定 / 低置信 → L2；没有分歧 → L1
+      高影响（入库/报告/结论产物）、失败重试≥2、rail_review(post) 未通过 → L2（强制，不降级）
 
     Args:
         es: EnforcementState（读取 analysis_level / debate_count / debated_topics / budget）
@@ -247,6 +302,14 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     if es.analysis_level in ("chat", "lightweight"):
         return DEBATE_L0, ["chat/lightweight 级：无分析对象，跳过辩论"], force
 
+    # P1: 先判断"值不值得辩" —— 高影响/失败重试/冲突这些硬信号不受此过滤影响
+    _hard = (bool(signals.get("high_impact")) or int(signals.get("failed_retries", 0) or 0) >= 2
+             or bool(signals.get("last_error")) or bool(signals.get("conflict")))
+    if not _hard:
+        _skip = _debate_worthiness(signals)
+        if _skip:
+            return DEBATE_L0, [_skip], force
+
     impact = bool(signals.get("high_impact"))
     if impact:
         reasons.append("高影响（入库/报告/结论产物）：强制 L2")
@@ -261,18 +324,22 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
             failures = int(signals.get("failed_retries", 0)) + (1 if signals.get("last_error") else 0)
             conflict = bool(signals.get("conflict"))
             uncertainty = bool(signals.get("uncertainty"))
+            # P1: 有没有 ≥2 条"选哪条会改变下一步"的活选项
+            _opts = signals.get("fork_options") or []
+            _fork = bool(signals.get("has_fork")) or (isinstance(_opts, (list, tuple, set)) and len(_opts) >= 2)
             if failures >= 2:
                 level = DEBATE_L2
                 reasons.append(f"失败重试≥2（retries={failures}）：升级 L2")
             elif conflict:
                 level = DEBATE_L2
                 reasons.append("rail_review(post) 未通过/结果冲突：升级 L2")
+            elif uncertainty or _fork:
+                level = DEBATE_L2
+                reasons.append("结论合成且有 ≥2 条活选项/高不确定性：L2")
             elif stage == "conclusion":
-                level = DEBATE_L2
-                reasons.append("analysis 级结论合成前：默认 L2")
-            elif uncertainty:
-                level = DEBATE_L2
-                reasons.append("高不确定性：升级 L2")
+                # P1(2026-09-22): 没有分歧的结论不再无条件升 L2（避免"为辩论而辩论"）
+                level = DEBATE_L1
+                reasons.append("结论合成但没有分歧、没有高风险：L1（不升 L2）")
             else:
                 level = DEBATE_L1
                 reasons.append("analysis 级脚本设计/执行后：L1 轻量辩论")
@@ -309,6 +376,22 @@ class EnforcementState:
         self.debated_topics: set = set()  # P2: topic 级去重 — 同一主题只辩一次
         self.debate_count: int = 0  # P2: 单会话辩论次数（预算护栏）
         self.debate_budget: int = 3  # P2: 预算上限（config debate.budget 可覆盖）
+        # P2(2026-09-22): 裁决必须驱动下一步 —— 行动方案 + 由它生成的待办
+        self.debate_plan: dict = {}          # 最近一次裁决 {decision,next_actions,fallback,...}
+        self.debate_todos: list = []         # next_actions(owner=ai) → 会话待办
+        self.debate_enforce_blocks: bool = True  # config debate.enforce_blocks（默认开）
+        self._debate_block_hits: int = 0
+        # P3(2026-09-22): 意图确认弹窗未答复前，不许执行（用户要求"先问清楚再动手"）
+        self.awaiting_form_id: str = ""       # 正在等用户答复的表单 id
+        self.awaiting_form_question: str = ""  # 表单问题（用于拦截提示）
+        self.awaiting_form_ts: float = 0.0
+        # P3(2026-09-22) 预置意图确认门禁：高代价任务第一轮就置位（不依赖模型自觉），
+        # 模型调 ask_user 弹表单（或用户直接回消息）即解除。
+        self.intent_confirm: bool = False
+        self.intent_confirm_reason: str = ""
+        self.intent_confirm_ts: float = 0.0
+        self.form_block_hits: int = 0
+        self.form_answers: list = []          # 用户已提交的表单答复（审计用）
         self.token_used: int = 0  # C3(2026-08-11): 本会话辩论累计 token（usage 统计）
         self.token_budget: int = 0  # C3: token 预算上限（config debate.token_budget，0=不限）
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
@@ -349,6 +432,17 @@ class EnforcementState:
             "debated_topics": list(self.debated_topics),  # P2
             "debate_count": self.debate_count,  # P2
             "debate_budget": self.debate_budget,  # P2
+            "debate_decision": (self.debate_plan or {}).get("decision", ""),  # P2
+            "debate_todos": [{"id": t.get("id"), "title": t.get("title"), "status": t.get("status"),
+                              "blocks": t.get("blocks")} for t in (self.debate_todos or [])],  # P2
+            "debate_blocks_pending": len(pending_debate_blocks(self)),  # P2
+            "debate_block_hits": self._debate_block_hits,  # P2
+            "awaiting_form_id": self.awaiting_form_id,  # P3
+            "awaiting_form_question": self.awaiting_form_question,  # P3
+            "intent_confirm": self.intent_confirm,  # P3（预置门禁）
+            "intent_confirm_reason": self.intent_confirm_reason,  # P3
+            "form_answers": len(self.form_answers or []),  # P3
+            "form_block_hits": self.form_block_hits,  # P3
             "token_used": self.token_used,  # C3
             "token_budget": self.token_budget,  # C3
             "analysis_level": self.analysis_level,
@@ -358,7 +452,25 @@ class EnforcementState:
 
 
 # === 全局会话级状态存储 ===
-_session_enforcement: dict = {}
+# P3(2026-09-22) 修复模块分裂：enforcement.py 可能同时被加载成两个模块对象 ——
+#   `import enforcement`（webui/ 在 sys.path，脚本启动路径）
+#   `from webui import enforcement`（仓库根在 sys.path，server.py 里的用法）
+# 两者各自维护 _session_enforcement → 门禁状态分裂（ask_user 在一个实例置位，
+# tool_start_cb 在另一个实例查不到，门禁形同虚设）。
+# 修法：把状态字典挂到进程级共享模块上，两个实例拿到同一个 dict。
+def _shared_state_registry() -> dict:
+    import sys as _sys
+    import types as _types
+    _name = "_memomics_enforcement_registry"
+    _mod = _sys.modules.get(_name)
+    if _mod is None:
+        _mod = _types.ModuleType(_name)
+        _mod.states = {}
+        _sys.modules[_name] = _mod
+    return _mod.states
+
+
+_session_enforcement: dict = _shared_state_registry()
 
 
 def get_enforcement(session_id: str) -> EnforcementState:
@@ -417,6 +529,10 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             _b = ((_d.get("debate") or {}).get("budget")) or None
             if isinstance(_b, int) and _b > 0:
                 es.debate_budget = _b
+            # P2(2026-09-22): 裁决 blocks 是否硬约束（默认开；可 config 关掉）
+            _eb = ((_d.get("debate") or {}).get("enforce_blocks"))
+            if isinstance(_eb, bool):
+                es.debate_enforce_blocks = _eb
     except Exception:
         pass
 
@@ -485,6 +601,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             return {"blocked": True,
                     "message": _base + f"（已连续拦截 {es._blocked_attempts} 次）" + _hint}
 
+        # P3(2026-09-22): 意图确认门禁 —— 问完了没等到答复，不许开工
+        _fg = _form_gate(es, tool_name, args)
+        if _fg:
+            _emit("enforcement", action="blocked", message=_fg["message"],
+                  awaiting_form_id=_fg.get("awaiting_form_id", ""))
+            return _fg
+
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
             if skill:
@@ -542,7 +665,17 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             # analysis 级 + 该命令首次执行 + 门控判定 L1/L2 → 提示先辩脚本设计
             if (es.analysis_level == "analysis" and es._exec_retries[_key] == 1
                     and not es.debated_topics):
-                _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals={})
+                # P1(2026-09-22): 先分情况 —— 脚本里没有任何"可争议的参数选择"就别辩了
+                _b_sig = {"cmd": _cmd}
+                if not _param_checklist(_cmd):
+                    _b_sig["linear"] = True
+                if _is_readonly_terminal(_cmd):
+                    _b_sig["readonly"] = True
+                _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals=_b_sig)
+                if _b_level < DEBATE_L1 and _b_reasons:
+                    # 不辩也要说清楚为什么不辩（用户要求"分清楚情况"，不是静默跳过）
+                    _emit("enforcement", action="info",
+                          message=f"💬 执行前不辩论：{_b_reasons[0]}")
                 if _b_level >= DEBATE_L1:
                     _checks = _param_checklist(_cmd)
                     _check_txt = ""
@@ -572,6 +705,12 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 # 不阻断：目标未完成时模型继续执行以完成目标；完成后 record_run 解除。
 
         elif tool_name in _DEBATE_HIGH_IMPACT_TOOLS:
+            # P2(2026-09-22): 裁决硬约束优先 —— "不做 X 不许出 Y" 的 Y 就是这里
+            _blk = _debate_block_gate(es, tool_name)
+            if _blk:
+                _emit("enforcement", action="blocked", message=_blk["message"],
+                      debate_blocks=_blk.get("debate_blocks", []))
+                return _blk
             # P2(2026-08-10): 高影响工具 — 记录待触发信号（强制 L2）
             es._pending_high_impact = True
             _emit("enforcement", action="info",
@@ -873,6 +1012,17 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             es.debate_done = True
             # 保存辩论结论
             _save_debate_conclusion(es, result, args)
+            # P2(2026-09-22): 裁决 → 行动方案 + 待办（辩论必须驱动下一步）
+            _plan = _ingest_debate_plan(es, result)
+            if _plan:
+                _n = len(es.debate_todos)
+                _emit("enforcement", action="plan",
+                      decision=_plan.get("decision", ""),
+                      next_actions=[t.get("title") for t in es.debate_todos],
+                      fallback=(_plan.get("fallback") or {}).get("path", ""),
+                      decision_source=_plan.get("decision_source", ""),
+                      message=("🎯 裁决行动方案：" + (_plan.get("decision") or "(无 decision)")[:200]
+                               + (f"；已生成 {_n} 条会话待办" if _n else "")))
             # C3(2026-08-11): token 用量回收 — 辩论结果的 usage 累加到会话级预算
             try:
                 _r = json.loads(result) if isinstance(result, str) else result
@@ -902,6 +1052,244 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         "tool_complete_callback": tool_complete_cb,
         "tool_progress_callback": tool_progress_cb,
     }
+
+
+# ==================== P2(2026-09-22): 裁决驱动下一步 ====================
+# 用户原话："辩论结果有用于下一步的进程吗？没有，辩论什么？"
+# 做法：裁决的 next_actions 落成会话待办（前端可见、可被标记完成），
+# 其中的 blocks 成为硬约束：待办没完成前，高影响产物（入库/报告/结论）被拦住。
+
+def _ingest_debate_plan(es: EnforcementState, result) -> dict:
+    """解析辩论结果 → 存下行动方案 + 生成待办（owner=ai 的才生成）。"""
+    try:
+        r = result
+        if isinstance(r, str):
+            try:
+                r = json.loads(r)
+            except Exception:
+                return {}
+        if not isinstance(r, dict):
+            return {}
+        actions = r.get("next_actions") if isinstance(r.get("next_actions"), list) else []
+        plan = {
+            "topic": str(r.get("topic") or "")[:200],
+            "verdict": str(r.get("verdict") or ""),
+            "confidence": str(r.get("confidence") or ""),
+            "level": str(r.get("level") or ""),
+            "decision": str(r.get("decision") or ""),
+            "next_actions": actions,
+            "fallback": r.get("fallback") if isinstance(r.get("fallback"), dict) else {},
+            "reopen_condition": str(r.get("reopen_condition") or ""),
+            "decision_source": str(r.get("decision_source") or ""),
+            "decision_warnings": r.get("decision_warnings") if isinstance(r.get("decision_warnings"), list) else [],
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        es.debate_plan = plan
+        todos = []
+        for i, a in enumerate(actions[:6]):
+            if not isinstance(a, dict):
+                continue
+            if str(a.get("owner") or "ai").lower() == "user":
+                continue  # 需要用户提供的东西不生成待办（那是提问，不是待办）
+            blocks = a.get("blocks")
+            if isinstance(blocks, str):
+                blocks = [blocks]
+            if not isinstance(blocks, list):
+                blocks = []
+            todos.append({
+                "id": f"debate_todo_{es.debate_count}_{i}",
+                "title": str(a.get("action") or "")[:200],
+                "status": "pending",
+                "blocks": [str(b) for b in blocks if str(b).strip()],
+                "expected": str(a.get("expected") or "")[:200],
+                "from_debate": plan["ts"],
+            })
+        # 有 blocks 的排前面（硬约束优先）
+        todos.sort(key=lambda t: 0 if t["blocks"] else 1)
+        es.debate_todos = [t for t in todos if t["title"]]
+        return plan
+    except Exception as e:
+        logger.warning(f"_ingest_debate_plan failed: {e}")
+        return {}
+
+
+def sync_debate_todos(es: EnforcementState, todos) -> int:
+    """用 agent 的待办列表回写 es.debate_todos 的完成状态（返回变化条数）。"""
+    try:
+        live = {}
+        for t in (todos or []):
+            if not isinstance(t, dict):
+                continue
+            _id = str(t.get("id") or "")
+            _tt = str(t.get("title") or t.get("content") or "").strip()
+            _st = str(t.get("status") or "pending")
+            if _id:
+                live[_id] = _st
+            if _tt:
+                live[_tt] = _st
+        n = 0
+        for dt in getattr(es, "debate_todos", []) or []:
+            st = live.get(str(dt.get("id"))) or live.get(str(dt.get("title")))
+            if st and st != dt.get("status"):
+                dt["status"] = st
+                n += 1
+        return n
+    except Exception:
+        return 0
+
+
+def pending_debate_blocks(es: EnforcementState) -> list:
+    """未完成的、带硬约束的裁决待办。"""
+    out = []
+    for t in getattr(es, "debate_todos", []) or []:
+        if t.get("status") in ("completed", "cancelled"):
+            continue
+        if t.get("blocks"):
+            out.append(t)
+    return out
+
+
+# ==================== P3(2026-09-22): 意图确认弹窗门禁 ====================
+# 用户原话："在执行任务之前，先理解用户的意图，grill 用户把不清楚的问题问明白，
+# 做出弹窗供用户勾选，理解意图之后再执行。"
+# 机制：ask_user 弹出表单 → 未答复前执行类工具被拦 → 用户勾选提交（或直接回消息）
+# 即解除。这保证"先问清楚再动手"不是靠模型自觉，而是有硬门禁兜底。
+
+def form_pending(es: EnforcementState) -> bool:
+    """是否正在等用户回答意图确认表单（超时视为失效）。"""
+    if not getattr(es, "awaiting_form_id", ""):
+        return False
+    _ts = float(getattr(es, "awaiting_form_ts", 0.0) or 0.0)
+    if _ts and (time.time() - _ts) > _FORM_PENDING_TTL:
+        return False
+    return True
+
+
+def arm_intent_confirm(es: EnforcementState, reason: str = "") -> None:
+    """P3: 高代价任务开工前预置"意图未确认"门禁（不依赖模型自觉）。
+
+    与 form_pending 的区别：form_pending 表示"表单已经发出去了"；本函数表示"服务器
+    判定本轮属于高代价任务（分析/集群投递/入库/报告）且意图没交代清楚"——在模型还没
+    来得及弹表单时就把执行类工具锁上，防止"提示词写了但模型直接开跑"。
+    """
+    es.intent_confirm = True
+    es.intent_confirm_reason = str(reason or "")[:300]
+    es.intent_confirm_ts = time.time()
+
+
+def intent_confirm_pending(es: EnforcementState) -> bool:
+    """预置门禁是否生效（超时自动失效，避免用户走开锁死会话）。"""
+    if not getattr(es, "intent_confirm", False):
+        return False
+    _ts = float(getattr(es, "intent_confirm_ts", 0.0) or 0.0)
+    if _ts and (time.time() - _ts) > _FORM_PENDING_TTL:
+        return False
+    return True
+
+
+def clear_intent_confirm(es: EnforcementState) -> bool:
+    """解除预置门禁（用户答复/发新消息/表单送达即解除）。"""
+    _was = bool(getattr(es, "intent_confirm", False))
+    es.intent_confirm = False
+    es.intent_confirm_reason = ""
+    es.intent_confirm_ts = 0.0
+    return _was
+
+
+def set_awaiting_form(es: EnforcementState, form_id: str, question: str = "") -> None:
+    es.awaiting_form_id = str(form_id or "")
+    es.awaiting_form_question = str(question or "")[:300]
+    es.awaiting_form_ts = time.time()
+    # 表单真的发出去了 → 预置门禁由"未问"升级为"已问待答"（同一把锁，不叠加）
+    clear_intent_confirm(es)
+
+
+def clear_awaiting_form(es: EnforcementState, form_id: str = "", answer: dict = None) -> bool:
+    """用户答复/发新消息 → 解除门禁。返回是否真的解除了。"""
+    if not getattr(es, "awaiting_form_id", ""):
+        return False
+    if form_id and str(form_id) != str(es.awaiting_form_id):
+        return False
+    if isinstance(answer, dict):
+        try:
+            es.form_answers.append({**answer, "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+            del es.form_answers[:-20]
+        except Exception:
+            pass
+    es.awaiting_form_id = ""
+    es.awaiting_form_question = ""
+    es.awaiting_form_ts = 0.0
+    clear_intent_confirm(es)
+    return True
+
+
+def _form_gate(es: EnforcementState, tool_name: str, args=None):
+    """意图未确认 → 拦下执行类工具（None=放行）。
+
+    覆盖：执行代码类 + 高影响产物类 + 集群投递（remote_cluster 的 run/submit；
+    check/status/push/pull 等只读运维动作放行，避免连状态都查不了）。
+    """
+    _asked = form_pending(es)
+    _armed = intent_confirm_pending(es)
+    if not (_asked or _armed):
+        return None
+    _hit = tool_name in _FORM_GATED_TOOLS
+    if not _hit and tool_name == _REMOTE_CLUSTER_TOOL:
+        _act = str(_args_as_dict(args).get("action") or "").strip().lower()
+        _hit = _act in _REMOTE_CLUSTER_EXEC_ACTIONS
+    if not _hit:
+        return None
+    es.form_block_hits = int(getattr(es, "form_block_hits", 0)) + 1
+    if _asked:
+        _msg = chr(10).join([
+            "⛔ 意图还没确认，先别执行：你已经用 ask_user 问了用户「%s」，但用户还没回答（或还没提交勾选）。"
+            % ((getattr(es, "awaiting_form_question", "") or "?")[:120],),
+            "现在必须做的：结束本回合等用户答复。不要再尝试调用 %s 或任何执行/产物工具。" % (tool_name,),
+            "解除方式：① 用户在确认弹窗里勾选并提交；② 用户直接在输入框回复（也算答复）；"
+            "③ 30 分钟内无人答复则门禁自动失效。",
+        ])
+    else:
+        _reason = str(getattr(es, "intent_confirm_reason", "") or "")[:120]
+        _msg = chr(10).join([
+            "⛔ 开工前意图没确认，先别执行：本轮属于高代价任务（分析/集群投递/结果入库/出报告），"
+            "但目标/交付物/关键参数还没跟用户对齐" + (("（%s）" % _reason) if _reason else "") + "。",
+            "现在必须做的：立刻调 ask_user 弹「确认表单」——question 写清要确认什么，"
+            "options 给可勾选项（对象形式 label/desc/recommended），多件事用 multi_select=true，"
+            "kind=\"intent\"；然后结束本回合等用户勾选。不要写代码、不要跑脚本、不要出报告。",
+            "解除方式：① 用户提交勾选；② 用户直接回消息（也算确认）；③ 30 分钟无答复自动失效。",
+        ])
+    return {
+        "blocked": True,
+        "message": _msg,
+        "awaiting_form_id": es.awaiting_form_id,
+        "intent_confirm": bool(_armed),
+    }
+
+
+def _debate_block_gate(es: EnforcementState, tool_name: str):
+    """P2: 裁决 blocks 硬约束 —— 拦住高影响产物，返回 block dict（None=放行）。
+
+    语义：辩论裁决写了"不做 X 就不许出 Y" → Y 就是入库/报告/结论产物。
+    解除方式三条（都不依赖模型"猜"）：完成待办并标记完成 / 再辩一次覆盖 /
+    把待办标记 cancelled（用户明确要求跳过时）。
+    """
+    if not getattr(es, "debate_enforce_blocks", True):
+        return None
+    pend = pending_debate_blocks(es)
+    if not pend:
+        return None
+    es._debate_block_hits = getattr(es, "_debate_block_hits", 0) + 1
+    lines = []
+    for t in pend[:3]:
+        lines.append("  • [%s] %s  ← 不做则必须停：%s"
+                     % (t.get("id", ""), t.get("title", ""),
+                        "；".join(str(b) for b in (t.get("blocks") or [])[:3])))
+    msg = ("⛔ 辩论裁决的硬约束还没满足，本次 %s 被拦下（裁决要求先完成下列动作才允许产出高影响结果）：\n"
+           % tool_name + "\n".join(lines) +
+           "\n解除方式（三选一）：① 先完成该动作，再用 todo 工具把它标记 status='completed'；"
+           "② 再调一次 debate_analysis（新裁决覆盖旧约束）；"
+           "③ 用户明确要求跳过时，把该待办标记 status='cancelled' 后重试。")
+    return {"blocked": True, "message": msg, "debate_blocks": [t.get("id") for t in pend]}
 
 
 def _save_debate_conclusion(es: EnforcementState, result, args):

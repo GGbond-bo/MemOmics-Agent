@@ -505,11 +505,14 @@ class TestGateExtreme:
         assert lvl == enf.DEBATE_L2
 
     def test_budget_exact_boundary_still_l2(self):
-        lvl, _, _ = enf.debate_gate(_mk_es("analysis", count=2, budget=3), "conclusion")
+        # P1(2026-09-22): 结论级默认已改为"有分歧才 L2"，此测试只验证预算边界
+        lvl, _, _ = enf.debate_gate(_mk_es("analysis", count=2, budget=3), "conclusion",
+                                    {"has_fork": True})
         assert lvl == enf.DEBATE_L2
 
     def test_budget_zero_downgrades_all_non_force(self):
-        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=0, budget=0), "conclusion")
+        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=0, budget=0), "conclusion",
+                                              {"has_fork": True})
         assert lvl == enf.DEBATE_L1 and not force
 
     def test_force_with_budget_zero_stays_l2(self):

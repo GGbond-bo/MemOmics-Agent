@@ -40,23 +40,51 @@ def _session_context() -> tuple:
     return os.environ.get("MEMOMICS_SESSION_ID") or "", ""
 
 
-def ask_user(question: str, options: list = None) -> str:
-    """向用户提问澄清（异步：发问题→结束回合→用户回答成为新消息）。
+def _normalize_options(options) -> tuple:
+    """选项规范化 → (labels, rich)。
 
-    options（可选）：选项列表 → 前端渲染选择按钮（无前端支持时文本降级
-    "回复 1/2/3"），用户点选/回复后成为新消息。
+    P3(2026-09-22): 支持 dict 选项 {"label","desc","recommended"} → 前端弹窗渲染
+    勾选框 + 说明文字；纯字符串选项保持兼容。最多 8 项。
+    """
+    labels, rich = [], []
+    if isinstance(options, (list, tuple)):
+        for o in options[:8]:
+            if isinstance(o, dict):
+                lab = str(o.get("label") or o.get("title") or o.get("value") or "").strip()
+                if not lab:
+                    continue
+                lab = lab[:120]
+                labels.append(lab)
+                rich.append({"label": lab,
+                             "desc": str(o.get("desc") or o.get("description") or "")[:200],
+                             "recommended": bool(o.get("recommended"))})
+            else:
+                lab = str(o).strip()[:120]
+                if not lab:
+                    continue
+                labels.append(lab)
+                rich.append({"label": lab, "desc": "", "recommended": False})
+    return labels, rich
+
+
+def ask_user(question: str, options: list = None, multi_select: bool = False,
+             allow_other: bool = True, header: str = "", kind: str = "clarify") -> str:
+    """向用户提问澄清 / 弹出意图确认表单（异步：发问题→结束回合→用户回答成为新消息）。
+
+    options（可选）：字符串或 {label,desc,recommended} 列表 → 前端弹窗可勾选；
+    multi_select=True 可多选；allow_other=True 提供"其他"自由填写。
+    kind：clarify（澄清）| intent（开工前意图确认）| plan（方案选择）—— 仅用于标题与审计。
     """
     q = (question or "").strip()
     if not q:
         return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
     if len(q) > 500:
         q = q[:500]
-    opts = None
-    if isinstance(options, (list, tuple)):
-        opts = [str(o)[:80] for o in options][:6]  # 最多 6 个选项
-        if not opts:
-            opts = None
+    opts, opts_rich = _normalize_options(options)
+    if not opts:
+        opts, opts_rich = None, None
     sid, _rd = _session_context()
+    form_id = "form_" + time.strftime("%Y%m%d%H%M%S") + "_" + str(int(time.time() * 1000) % 1000)
     delivered = False
     if sid:
         try:
@@ -71,26 +99,55 @@ def ask_user(question: str, options: list = None) -> str:
                 _opt_txt = ""
                 if opts:
                     _opt_txt = "\n" + "\n".join(f"{i+1}) {o}" for i, o in enumerate(opts))
+                # P3(2026-09-22): 结构化确认事件（前端渲染勾选弹窗）
+                _server._session_emit(sess, {
+                    "type": "ask_form",
+                    "form_id": form_id,
+                    "kind": kind or "clarify",
+                    "header": (header or ("意图确认" if kind == "intent" else "需要你确认"))[:60],
+                    "question": q,
+                    "options": opts or [],
+                    "form_options": opts_rich or [],
+                    "multi_select": bool(multi_select),
+                    "allow_other": True if allow_other is None else bool(allow_other),
+                    "content": f"❓ {q}",
+                    "session_id": sid,
+                })
+                # 兼容旧通道（外部消费者/审计；前端不渲染旧的 question 事件）
                 _server._session_emit(sess, {
                     "type": "question",
                     "content": f"❓ {q}",
                     "question": q,
                     "options": opts or [],
+                    "form_id": form_id,
                     "session_id": sid,
                 })
                 _server._session_emit(sess, {
                     "type": "notice",
                     "content": f"❓ AI 需要确认：{q}{_opt_txt}"
-                              + ("\n（点击选项或直接回复序号/内容）" if opts else "\n（请在输入框直接回答）"),
+                              + ("\n（在弹窗里勾选后提交，或直接回复序号/内容）" if opts
+                                 else "\n（请在输入框直接回答）"),
                     "session_id": sid,
                 })
                 pending = sess.setdefault("_pending_questions", [])
                 with _LOCK:
-                    pending.append({"question": q, "options": opts or [],
-                                    "asked_at": time.strftime("%H:%M:%S")})
+                    pending.append({"form_id": form_id, "question": q, "options": opts or [],
+                                    "form_options": opts_rich or [],
+                                    "multi_select": bool(multi_select),
+                                    "allow_other": True if allow_other is None else bool(allow_other),
+                                    "kind": kind or "clarify",
+                                    "asked_at": time.strftime("%H:%M:%S"),
+                                    "answered": False})
                     # 上限：只保留最近 20 条待确认问题（防模型连问导致无限累积）
                     if len(pending) > 20:
                         del pending[:len(pending) - 20]
+                # P3: 意图确认门禁 —— 未答复前禁止执行类工具（硬约束，不靠模型自觉）
+                try:
+                    from webui import enforcement as _enf_a
+                    _es_a = _enf_a.get_enforcement(sid)
+                    _enf_a.set_awaiting_form(_es_a, form_id, q)
+                except Exception as _e_enf:
+                    logger.warning(f"[ask_user] 门禁置位失败: {_e_enf}")
                 delivered = True
         except Exception as e:
             logger.warning(f"[ask_user] 发送失败: {e}")
@@ -100,9 +157,12 @@ def ask_user(question: str, options: list = None) -> str:
                           ensure_ascii=False)
     return json.dumps({
         "ok": True,
+        "form_id": form_id,
         "question": q,
         "options": opts or [],
-        "instruction": ("❓ 问题已发送给用户。请立即结束本回合，不要再调用任何工具。"
+        "multi_select": bool(multi_select),
+        "instruction": ("❓ 问题已发送给用户（前端弹窗可勾选）。请立即结束本回合，不要再调用"
+                        "任何工具（执行类工具在用户答复前会被门禁拦下，白跑一趟）。"
                         "用户回答后会作为新消息发给你，届时再继续。"),
     }, ensure_ascii=False)
 
@@ -110,19 +170,31 @@ def ask_user(question: str, options: list = None) -> str:
 SCHEMA = {
     "name": "ask_user",
     "description": (
-        "向用户提问澄清（不确定时用，不要猜）。适用场景：开工前关键信息缺失（数据在哪/"
-        "物种组织/期望结果/是否继续旧任务）、用户意图不明确（例如只说'检查'没说'修复并"
-        "继续'）、需要用户决定是否继续任务、需要确认数据/路径/参数。可带 options 选项数组"
-        "（用户点选更省事）。调用后必须立即结束本回合等待用户回答；用户回答会成为下一条"
-        "消息。仅在确实需要用户输入时使用，不要滥用。"
+        "向用户提问澄清 / 弹出意图确认表单（不确定时用，不要猜）。必须用的场景："
+        "①高代价任务（真实分析/集群投递/结果入库/出报告）开工前确认意图；"
+        "②用户意图不明确（例如只说'检查'没说'修复并继续'）；"
+        "③关键信息缺失（数据在哪/物种组织/期望结果/是否继续旧任务/参数与阈值）。"
+        "传 options 会渲染成可勾选弹窗（可用 dict 带 desc 说明与 recommended 推荐），"
+        "multi_select=True 支持多选，allow_other=True 提供\"其他\"自由填写。"
+        "调用后必须立即结束本回合等待用户回答（执行类工具在答复前会被门禁拦下）；"
+        "用户回答会成为下一条消息。纯问答/只读查询不要问，别滥用。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "question": {"type": "string",
-                         "description": "向用户提出的澄清问题（简洁、具体）"},
-            "options": {"type": "array", "items": {"type": "string"},
-                        "description": "可选选项列表（最多 6 个，用户点选或回复序号）"}
+                         "description": "向用户提出的问题（简洁、具体、一次问清）"},
+            "options": {"type": "array",
+                        "description": ("可选项（最多 8 个）：字符串，或对象 "
+                                        "{\"label\":\"选项文字\",\"desc\":\"说明\",\"recommended\":true}"
+                                        "；前端渲染成勾选框")},
+            "multi_select": {"type": "boolean",
+                             "description": "是否允许多选（默认 false=单选）"},
+            "allow_other": {"type": "boolean",
+                            "description": "是否提供\"其他\"自由填写（默认 true）"},
+            "header": {"type": "string", "description": "弹窗标题（默认按 kind 生成）"},
+            "kind": {"type": "string", "enum": ["clarify", "intent", "plan"],
+                     "description": "clarify=澄清；intent=开工前意图确认；plan=方案选择"}
         },
         "required": ["question"]
     }
@@ -136,8 +208,14 @@ def _register():
             name="ask_user",
             toolset="memomics",
             schema=SCHEMA,
-            handler=lambda args, **kw: ask_user(args.get("question", ""),
-                                                args.get("options")),
+            handler=lambda args, **kw: ask_user(
+                args.get("question", ""),
+                args.get("options"),
+                multi_select=bool(args.get("multi_select", False)),
+                allow_other=args.get("allow_other", True),
+                header=args.get("header", ""),
+                kind=args.get("kind", "clarify"),
+            ),
             emoji="❓",
             max_result_size_chars=1_200,
         )
