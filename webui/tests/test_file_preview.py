@@ -759,3 +759,76 @@ def test_p7_new_figure_badge_survives_language_switch():
     assert "classList.add('tab-has-new')" in mark
     assert "appendChild" not in mark, "角标不能是子节点"
     assert "_p7OnLangChange" in _p7_func(html, "applyUILang"), "切语言要重写红点的 title"
+
+
+# ==================== G. P5.2：文件行显式「查看」按钮 ====================
+# 用户原话："文件查看那里，我希望增加'查看的图标'，点击查看就能查看里面的内容"。
+# 之前整行可点但没有任何视觉提示，行里唯一看得见的按钮是「下载」，很容易以为看不了内容。
+# 现在文件面板 / 结果面板每行一个 👁 查看按钮（目录行不给，点行进目录）。
+
+def _p52_block(html, name):
+    """取某个函数源码，到下一条顶层 function / var / 区块注释为止。
+
+    _p7_func 只看 "\nfunction "，而新代码后面紧跟的是 "async function ..."，
+    会一路吃到下一个普通 function —— 那样扫描的就不是这个函数了。
+    """
+    import re
+    i = html.find("function " + name + "(")
+    assert i > 0, name + " not found"
+    m = re.search(r"\n(?:async )?function |\nvar |\n// === ", html[i + 1:])
+    return html[i:i + 1 + m.start()] if m else html[i:]
+
+
+def test_p52_view_button_in_both_file_lists():
+    """文件面板（browseFiles）与结果面板（loadResultsFiles）都要有「查看」按钮。"""
+    html = _p7_html()
+    assert "function _fileViewBtn(" in html, "缺少按钮渲染函数"
+    assert "function viewFile(" in html, "缺少 viewFile 统一入口"
+    assert html.count("_fileViewBtn(f.path, f.name, 'files')") == 1, "文件面板没接上查看按钮"
+    assert html.count("_fileViewBtn(f.path, f.name, 'results')") == 1, "结果面板没接上查看按钮"
+    # 目录行不给查看按钮（没有内容可看）
+    assert html.count("var viewBtn = f.is_dir ? '' :") == 2
+    # 两个列表里按钮顺序一致：查看在前、下载在后
+    assert html.count("+ viewBtn + dlBtn + '</div>';") == 2
+    # 点「查看」不能连带触发整行 onclick（否则同一文件被打开两次）
+    assert "event.stopPropagation();viewFile(" in html
+    # 查看按钮不能变成下载按钮
+    btn = _p52_block(html, "_fileViewBtn")
+    assert "downloadFile" not in btn and "download-btn" not in btn
+    assert "view-btn" in btn
+
+
+def test_p52_view_click_goes_through_viewer():
+    """按钮和整行最终都进 openFileViewer：按钮走 viewFile，整行行为不变。"""
+    html = _p7_html()
+    vf = _p52_block(html, "viewFile")
+    assert "openFileViewer(" in vf, "viewFile 必须打开内嵌查看器"
+    assert "host === 'results' ? 'results' : 'files'" in vf, "两个面板的 host 要区分（结果面板要标已查看）"
+    # 整行点击的老路径仍在（不能因为加了按钮就把整行点开砍掉）
+    assert html.count('''onclick="' + (f.is_dir ? "browseFiles''') == 1
+    assert html.count('''onclick="' + (f.is_dir ? "browseResults''') == 1
+    # previewFile 收敛到 viewFile，避免两套入口各自演化
+    pf = _p7_func(html, "previewFile")
+    assert "viewFile(path" in pf
+    # 结果面板整行仍然直接开查看器（P5.1 的「已查看」标记链路不能断）
+    assert '''openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')''' in html
+
+
+def test_p52_view_button_labels_are_i18n():
+    """按钮文案必须走 t('view')：zh/en 两本字典都有，按钮块里不许硬编码中文。"""
+    import re
+    html = _p7_html()
+    assert "'view':'查看'" in html, "zh 字典缺 view"
+    assert "'view':'View'" in html, "en 字典缺 view"
+    btn = _p52_block(html, "_fileViewBtn")
+    assert "t('view')" in btn
+    cjk = re.compile(r"[\u4e00-\u9fff]")
+    for name in ("_fileViewBtn", "viewFile", "_jsArg"):
+        body = _p52_block(html, name)
+        body = re.sub(r"^\s*//.*$", "", body, flags=re.M)     # 行注释里可以有中文
+        body = re.sub(r"\s+//[^\n]*$", "", body, flags=re.M)  # 行尾注释同理
+        assert not cjk.search(body), name + " 里有硬编码中文，切英文会残留"
+    # 按钮样式存在（描边，弱于实心「下载」）
+    assert ".file-item .view-btn {" in html
+    assert ".file-item .view-btn:hover {" in html
+

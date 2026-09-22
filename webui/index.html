@@ -683,6 +683,9 @@ table.dcb-table.dg-table th { position:relative; }
 .file-item .file-size { font-size:10px; color:var(--text-light); }
 .file-item .file-mtime { font-size:10px; color:var(--text-light); white-space:nowrap; }
 .file-item .download-btn { font-size:11px; padding:2px 8px; border-radius:4px; background:var(--primary); color:#fff; border:none; cursor:pointer; }
+/* P5.2：文件行「查看」按钮 —— 描边（弱于实心的「下载」），和图片缩略图的 🔍 一个视觉体系 */
+.file-item .view-btn { font-size:11px; padding:2px 8px; border-radius:4px; background:transparent; color:var(--primary); border:1px solid var(--primary); cursor:pointer; white-space:nowrap; }
+.file-item .view-btn:hover { background:var(--primary); color:#fff; }
 /* Git 风格结果文件树 */
 .results-tree-header { padding:6px 12px; font-size:11px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:#f6f8fa; }
 .tree-breadcrumb { color:var(--text); display:flex; align-items:center; gap:2px; flex-wrap:wrap; font-size:12px; }
@@ -1191,7 +1194,7 @@ var I18N = {
     'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
-    'download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
+    'view':'查看','download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
     'detect_local':'🔍 检测本地模型 (Ollama/LM Studio/vLLM)','api_provider':'API 提供商',
     'model_default':'模型 (选择默认)','api_base':'API Base URL (自动填充)','api_key':'API Key',
     'save_key':'保存 Key','delete_key':'删除 Key','protocol':'传输协议',
@@ -1266,7 +1269,7 @@ var I18N = {
     'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
-    'download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
+    'view':'View','download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
     'detect_local':'🔍 Detect local models (Ollama/LM Studio/vLLM)','api_provider':'API Provider',
     'model_default':'Model (global default)','api_base':'API Base URL (auto-filled)','api_key':'API Key',
     'save_key':'Save Key','delete_key':'Delete Key','protocol':'Protocol',
@@ -7120,7 +7123,8 @@ async function browseFiles(path) {
     var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' || f.ext === '.tsv' ? '📊' : f.ext === '.R' || f.ext === '.py' ? '📜' : f.ext === '.yaml' || f.ext === '.yml' ? '📚' : '📄');
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
-    return '<div class="file-item" onclick="' + (f.is_dir ? "browseFiles('" + f.path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+    var viewBtn = f.is_dir ? '' : _fileViewBtn(f.path, f.name, 'files');
+    return '<div class="file-item" onclick="' + (f.is_dir ? "browseFiles('" + f.path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span><span class="file-size">' + sizeStr + '</span>' + viewBtn + dlBtn + '</div>';
   }).join('');
 }
 
@@ -7134,7 +7138,33 @@ function _isBinaryFile(name) {
 async function previewFile(path) {
   // 2026-09-22(P5)：文件面板统一走内嵌查看器（pdf/excel/word/图片/markdown 直接看，
   // 不再只弹「二进制文件不能预览」）
-  openFileViewer(path, path.split('/').pop(), 'files');
+  viewFile(path, path.split('/').pop(), 'files');
+}
+
+// 2026-09-22(P5.2)：文件行显式「查看」按钮。
+// 以前整行可点但没有任何视觉提示，行里唯一的按钮是「下载」，用户很容易以为看不了内容。
+// 现在每行一个 👁 描边按钮（与图片缩略图右上角的 🔍 同一套视觉），点它就打开查看器。
+function _jsArg(v) {
+  // 这个值要同时活过 HTML 属性（双引号）和 JS 字符串（单引号）两层
+  return String(v == null ? '' : v)
+    .replace(/\\/g, '\\\\').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, "\\'");
+}
+
+function _fileViewBtn(path, name, host) {
+  var label = escapeHtml(t('view'));
+  return '<button class="view-btn" title="' + label + '" onclick="event.stopPropagation();viewFile(\''
+    + _jsArg(path) + '\',\'' + _jsArg(name) + '\',\'' + _jsArg(host) + '\')">👁 ' + label + '</button>';
+}
+
+function viewFile(path, name, host) {
+  // 显式入口：文件面板 host=files，结果面板 host=results（结果面板会顺手标「已查看」）
+  if (!path) return;
+  try {
+    openFileViewer(path, name || String(path).split('/').pop(), host === 'results' ? 'results' : 'files');
+  } catch (e) {
+    console.warn('[viewFile] ' + e);
+  }
 }
 async function _legacyPreviewFile(path) {
   document.getElementById('file-list').style.display = 'none';
@@ -10059,7 +10089,8 @@ async function loadResultsFiles() {
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
     // P5.1 已查看角标：✓=看过，●=还没看过（点一下可手动切换）
     var seen = f.is_dir ? '' : '<span class="file-seen' + (f.viewed ? ' on' : '') + '" title="' + escapeHtml(f.viewed ? t('rs_viewed') : t('rs_unread')) + '" onclick="event.stopPropagation();toggleViewed(\'' + f.path + '\',' + (f.viewed ? 'false' : 'true') + ')">' + (f.viewed ? '✓' : '●') + '</span>';
-    return '<div class="file-item' + ((!f.is_dir && f.viewed) ? ' rv-seen' : '') + '" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + seen + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+    var viewBtn = f.is_dir ? '' : _fileViewBtn(f.path, f.name, 'results');
+    return '<div class="file-item' + ((!f.is_dir && f.viewed) ? ' rv-seen' : '') + '" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + seen + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + viewBtn + dlBtn + '</div>';
   }).join('');
   listEl.scrollTop = st;
 }
