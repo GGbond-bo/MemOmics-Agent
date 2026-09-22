@@ -11,6 +11,7 @@
   C. enforcement 门禁       execute_r/脚本/集群投递被拦；cat 脚本、write 代码放行；只读命令放行
   D. 确定性弹窗 + 答复语义 服务器自己弹窗（不靠模型自觉）；"只给代码"保持锁，"验证"解锁
 """
+import io
 import json
 import os
 import sys
@@ -338,3 +339,192 @@ def test_form_ans_marker_set_by_real_endpoint(client, new_session):
         "session_id": sid, "selected": ["用这些数据跑一遍验证"], "other": "",
         "question": "要不要用你的数据跑一遍验证？"})
     assert "_form_ans_marker" in server._sessions[sid]
+
+
+# ==================== F. 界面语言切换（P6-2：切英文时后端文案也要变英文） ====================
+
+_CJK_RE = __import__("re").compile(r"[一-鿿]")
+
+
+def _has_cjk(s):
+    return bool(_CJK_RE.search(str(s)))
+
+
+@pytest.fixture
+def ui_lang_restore(client):
+    """用完把界面语言恢复成 zh，避免污染同一进程里的其它测试。"""
+    yield
+    client.post("/api/ui/lang", json={"lang": "zh"})
+
+
+def test_ui_lang_endpoint_validates_and_stores(client, ui_lang_restore):
+    assert server._ui_lang() == "zh"          # 默认中文（没告知过就维持原样）
+    r = client.post("/api/ui/lang", json={"lang": "en"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "lang": "en"}
+    assert server._ui_lang() == "en"
+    for bad in ("fr", "", "english", "zh-CN-x"):
+        assert client.post("/api/ui/lang", json={"lang": bad}).status_code == 400
+    assert server._ui_lang() == "en"          # 非法值不改动现状
+    assert client.get("/api/ui/lang").json() == {"lang": "en"}   # 只读回读（自检/验证用）
+    assert client.post("/api/ui/lang", json={"lang": "zh"}).json()["lang"] == "zh"
+    assert client.get("/api/ui/lang").json() == {"lang": "zh"}
+    assert server._ui_lang() == "zh"
+
+
+def test_ui_lang_accepts_region_form(client, ui_lang_restore):
+    assert client.post("/api/ui/lang", json={"lang": "EN"}).json()["lang"] == "en"
+    assert server._ui_lang() == "en"
+
+
+def test_p4_form_switches_to_english(client, monkeypatch, ui_lang_restore):
+    """英文界面下，服务器自己发的确定性弹窗必须全英文（用户要求：切英文不能残留中文）。"""
+    sid = "sess-code-form-en"
+    sess = {"id": sid}
+    monkeypatch.setitem(server._sessions, sid, sess)
+    events = []
+    monkeypatch.setattr(server, "_session_emit", lambda s, e: events.append(e))
+    assert client.post("/api/ui/lang", json={"lang": "en"}).json()["lang"] == "en"
+    fid, ok = server._emit_code_edit_form(sess, ["E:/data/x.h5ad"])
+    assert ok is True
+    form = [e for e in events if e.get("type") == "ask_form"][0]
+    labels = [o["label"] for o in form["form_options"]]
+    assert labels == ["Code only, do not run", "Run a verification with this data",
+                      "Show me the change plan first"]
+    assert form["form_options"][0]["recommended"] is True
+    assert form["header"] == "Code change: verify with your data?"
+    for s in [form["question"], form["header"], form["content"]] + labels +              [o["desc"] for o in form["form_options"]]:
+        assert not _has_cjk(s), s
+    assert "x.h5ad" in form["question"]
+
+
+def test_p4_form_stays_chinese_by_default(monkeypatch):
+    sid = "sess-code-form-zh"
+    sess = {"id": sid}
+    monkeypatch.setitem(server._sessions, sid, sess)
+    events = []
+    monkeypatch.setattr(server, "_session_emit", lambda s, e: events.append(e))
+    server._emit_code_edit_form(sess, ["E:/data/x.h5ad"])
+    form = [e for e in events if e.get("type") == "ask_form"][0]
+    assert form["form_options"][0]["label"] == "只给我改好的代码，先别跑"
+    assert form["header"] == "改代码：要不要用你的数据验证？"
+
+
+def test_answer_english_code_only_keeps_lock(client, new_session, ui_lang_restore):
+    """英文按钮 "Code only, do not run" 里带 run —— 必须仍判成"只给代码"，不能误解锁。"""
+    sid = new_session
+    e = enf.get_enforcement(sid)
+    enf.arm_code_edit(e, "用户要求改代码", data=["E:/data/x.h5ad"])
+    r = client.post("/api/ask_form/answer", json={
+        "session_id": sid, "selected": ["Code only, do not run"], "other": ""})
+    assert r.json()["code_edit"] == "edit_only" and r.json()["gate_cleared"] is False
+    assert enf.code_edit_pending(e) is True
+    assert enf.code_edit_gate(e, "execute_r", {}) is not None
+
+
+def test_answer_english_verify_releases_lock(client, new_session, ui_lang_restore):
+    sid = new_session
+    e = enf.get_enforcement(sid)
+    enf.arm_code_edit(e, "用户要求改代码", data=["E:/data/x.h5ad"])
+    r = client.post("/api/ask_form/answer", json={
+        "session_id": sid, "selected": ["Run a verification with this data"], "other": ""})
+    assert r.json()["code_edit"] == "verify_ok" and r.json()["gate_cleared"] is True
+    assert enf.code_edit_pending(e) is False
+
+
+def test_answer_english_plan_first_keeps_lock(client, new_session, ui_lang_restore):
+    sid = new_session
+    e = enf.get_enforcement(sid)
+    enf.arm_code_edit(e, "用户要求改代码")
+    r = client.post("/api/ask_form/answer", json={
+        "session_id": sid, "selected": ["Show me the change plan first"], "other": ""})
+    assert r.json()["code_edit"] == "edit_only"
+    assert enf.code_edit_pending(e) is True
+
+
+def test_ask_user_notice_and_header_localized(client, monkeypatch, ui_lang_restore):
+    sid = "sess-ask-notice-en"
+    sess = {"id": sid}
+    monkeypatch.setitem(server._sessions, sid, sess)
+    events = []
+    monkeypatch.setattr(server, "_session_emit", lambda s, e: events.append(e))
+    assert client.post("/api/ui/lang", json={"lang": "en"}).json()["lang"] == "en"
+    au.emit_form_for_session(sess, "Run it?", options=["Yes", "No"], kind="intent", arm_gate=False)
+    form = [e for e in events if e.get("type") == "ask_form"][0]
+    notice = [e for e in events if e.get("type") == "notice"][0]
+    assert form["header"] == "Confirm intent"
+    assert not _has_cjk(form["header"])
+    assert not _has_cjk(notice["content"])
+    assert "Yes" in notice["content"]
+
+
+def test_ask_user_failure_error_follows_ui_lang(client, monkeypatch, ui_lang_restore):
+    """联系不上用户时的报错也要跟着语言走（中文断言在 test_ask_form.py 里）。"""
+    monkeypatch.setattr(au, "emit_form_for_session", lambda *a, **k: ("", False))
+    monkeypatch.setattr(au, "_session_context", lambda: ("sess-x", ""))
+    assert "无法联系用户" in au.ask_user("继续吗？")
+    client.post("/api/ui/lang", json={"lang": "en"})
+    out = au.ask_user("Continue?")
+    assert "Cannot reach the user" in out and not _has_cjk(out)
+
+
+# --- F2. 英文界面下前端发的是 [Confirmation] … Selected: …（后端必须照样认出来） ---
+
+EN_FE_ANSWER = '[Confirmation] Re: "You only asked me to change the code (no run)." Selected: Code only, do not run'
+
+
+def test_form_ans_english_wording_recognized():
+    assert server._is_form_answer_text(EN_FE_ANSWER) is True
+    assert server._is_form_answer_text('[User confirmation] Re: "x" Selected: y') is True
+
+
+def test_form_ans_english_normal_message_not_recognized():
+    for t in ("please fix this python script and run it", "selected cells look wrong, help me",
+              "confirmation is needed here, please ask me first"):
+        assert server._is_form_answer_text(t) is False, t
+
+
+def test_form_ans_english_prefix_rule_is_intentional():
+    """与中文前缀同规则：以 [Confirmation] 开头的消息一律当弹窗答复（前端就是这么拼的）。
+
+    代价是一句正好以 [Confirmation] 开头的话会被误判——和 【确认答复】 前缀的取舍一致，
+    换来的是"选了只给代码"那条消息永远不会被当成新需求（那才是真正危险的误判）。
+    """
+    assert server._is_form_answer_text("[Confirmation] is a great album") is True
+
+
+def test_form_ans_english_needs_fresh_marker_for_loose_phrasing():
+    """"Selected: xxx" 这种松措辞必须有 30 秒内的上报标记才算答复。"""
+    s = {"_form_ans_marker": time.time()}
+    assert server._is_form_answer_text("Selected: Code only, do not run", s) is True
+    assert server._is_form_answer_text("Selected: Code only, do not run") is False
+
+
+def test_frontend_english_answer_keeps_lock(client, new_session, ui_lang_restore):
+    """真实前端英文措辞走完整链路：POST 上报 → 答复消息被认成弹窗答复 → 锁不放。"""
+    sid = new_session
+    e = enf.get_enforcement(sid)
+    enf.arm_code_edit(e, "用户要求改代码", data=["E:/data/x.h5ad"])
+    r = client.post("/api/ask_form/answer", json={
+        "session_id": sid, "selected": ["Code only, do not run"], "other": "",
+        "question": "You only asked me to change the code (no run)."})
+    assert r.json()["code_edit"] == "edit_only"
+    assert server._is_form_answer_text(EN_FE_ANSWER, server._sessions[sid]) is True
+    assert enf.code_edit_pending(e) is True
+
+
+def test_frontend_answer_markers_follow_ui_lang(client, monkeypatch, ui_lang_restore):
+    """前端拼答复文本用的标记必须跟语言走（否则英文界面里用户消息会带中文）。"""
+    import re
+    html = io.open(os.path.join(server.MEMOMICS_DIR, "webui", "index.html"),
+                   encoding="utf-8").read()
+    assert "'af_ans_prefix'" in html and "t('af_ans_sel')" in html
+    i = html.find("var I18N = {")
+    j = html.find("var UI_LANG", i)
+    zh_i = html.find("'af_ans_prefix'", i)
+    en_i = html.find("'af_ans_prefix'", html.find("en: {", i))
+    assert "'【确认答复】'" in html[zh_i:zh_i + 60]
+    assert "'[Confirmation]'" in html[en_i:en_i + 60]
+    _sub = html.find("async function _submitAskForm")
+    _end = html.find("// === 停止 agent ===", _sub)
+    assert _sub > 0 and _end > _sub
+    assert "【确认答复】" not in html[_sub:_end]      # 渲染/答复逻辑里不许再写死中文标记

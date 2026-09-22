@@ -628,7 +628,9 @@ def _p5_regions():
         html = f.read()
     out = []
     for name, a, b in (("P5-VIEWER", "// === P5-VIEWER-BEGIN", "// === P5-VIEWER-END ==="),
-                       ("P5-SORT", "// === P5-SORT-BEGIN", "// === P5-SORT-END ===")):
+                       ("P5-SORT", "// === P5-SORT-BEGIN", "// === P5-SORT-END ==="),
+                       # P6-2：意图确认弹窗（P3 P4 用的就是它）也纳入扫描
+                       ("P3-ASKFORM", "// === P3(2026-09-22): 意图确认弹窗", "// === 停止 agent ===")):
         i, j = html.find(a), html.find(b)
         assert i > 0 and j > i, name + " 区块找不到"
         out.append((name, html[i:j]))
@@ -636,7 +638,10 @@ def _p5_regions():
 
 
 def test_p5_frontend_has_no_hardcoded_chinese():
-    """P5 前端区块里不许再有硬编码中文（文案必须走 t()/tf()，否则切英文会留中文）。"""
+    """P5 前端区块（含 P3/P4 的意图确认弹窗）里不许再有硬编码中文。
+
+    文案必须走 t()/tf()，否则切英文界面会残留中文。
+    """
     import re
     html, regions = _p5_regions()
     cjk = re.compile(r"[\u4e00-\u9fff]")

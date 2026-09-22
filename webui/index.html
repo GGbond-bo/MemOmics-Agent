@@ -1190,7 +1190,30 @@ var I18N = {
      'rv_no_table':'没有可显示的表格','rv_empty_parse':'解析结果是空的：{0}','rv_sheet_info':'工作表：{0}（{1} 行 × {2} 列）',
      'rv_col':'列 {0}','rv_sort_col_title':'点击按此列排序','rv_rows_note':'显示 {0} / {1} 行{2}　（点表头排序）','rv_cols_n':' · {0} 列',
      'rv_nb_empty':'空 notebook','rv_nb_no_cells':'没有单元格。','rv_out_err':'❌ 报错','rv_out_img':'🖼️ 图片输出','rv_out':'▶ 输出',
-     'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）'
+     'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）',
+    'af_kind_intent':'开工前意图确认',
+    'af_kind_plan':'方案选择',
+    'af_kind_clarify':'需要你确认',
+    'af_multi':'可多选（勾选后提交）',
+    'af_single':'单选（点选后提交）',
+    'af_fill':'请在下方填写',
+    'af_recommended':'（推荐）',
+    'af_other':'其他（补充说明／自定义选项）',
+    'af_other_ph':'没有合适选项时在这里写清楚…',
+    'af_later':'稍后回答',
+    'af_submit':'提交并继续',
+    'af_lock_note':'提交后我会按你的选择继续；未提交前我不会开始执行（执行类操作会被拦下）。',
+    'af_pending_prog':'❓ 确认弹窗待回答',
+    'af_pending_hint':'点标题栏「待确认」可重新打开',
+    'af_need_pick':'请至少勾选一项，或在「其他」里写清楚。',
+    'af_sending':'提交中…',
+    'af_no_input':'找不到输入框，答复未发送：',
+    'af_unreported':'⚠️ 确认答复未上报（继续按消息发送）',
+    'af_ans_prefix':'【确认答复】',
+    'af_ans_re':'针对「{0}」：',
+    'af_ans_sel':'选中：',
+    'af_ans_note':'补充：',
+    'af_ans_sep':'；'
   },
   en: {
     'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
@@ -1241,7 +1264,30 @@ var I18N = {
      'rv_no_table':'No table to display','rv_empty_parse':'The parse result is empty: {0}','rv_sheet_info':'Sheet: {0} ({1} rows × {2} cols)',
      'rv_col':'Col {0}','rv_sort_col_title':'Click to sort by this column','rv_rows_note':'Showing {0} / {1} rows{2}　(click a header to sort)','rv_cols_n':' · {0} cols',
      'rv_nb_empty':'Empty notebook','rv_nb_no_cells':'No cells.','rv_out_err':'❌ Error','rv_out_img':'🖼️ Image output','rv_out':'▶ Output',
-     'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)'
+     'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)',
+    'af_kind_intent':'Confirm intent before starting',
+    'af_kind_plan':'Choose a plan',
+    'af_kind_clarify':'Needs your confirmation',
+    'af_multi':'Multiple choice (tick, then submit)',
+    'af_single':'Single choice (pick one, then submit)',
+    'af_fill':'Please fill in the box below',
+    'af_recommended':'(recommended)',
+    'af_other':'Other (add detail / a custom option)',
+    'af_other_ph':'If none of the options fits, write it here…',
+    'af_later':'Answer later',
+    'af_submit':'Submit and continue',
+    'af_lock_note':'I will continue with your choice once you submit; until then nothing that executes will be started (such tools are blocked).',
+    'af_pending_prog':'❓ Confirmation dialog is waiting',
+    'af_pending_hint':'Reopen it from the pending-confirmation entry in the header',
+    'af_need_pick':'Tick at least one option, or write it under “Other”.',
+    'af_sending':'Submitting…',
+    'af_no_input':'Input box not found, answer not sent: ',
+    'af_unreported':'⚠️ The answer was not recorded (sending it as a message anyway)',
+    'af_ans_prefix':'[Confirmation]',
+    'af_ans_re':'Re: "{0}"',
+    'af_ans_sel':'Selected: ',
+    'af_ans_note':'Note: ',
+    'af_ans_sep':'; '
   }
 };
 var UI_LANG = 'zh';
@@ -1260,6 +1306,12 @@ function applyUILang(){
   // P5.1：排序条/查看器/文件列表都是 JS 动态生成的，切语言要按新语言重画一次
   //（后端返回的 note/error/hint 也带 lang 重取，所以英文界面里不会残留中文）
   if (typeof _p5OnLangChange === 'function') { try { _p5OnLangChange(); } catch (e) {} }
+  if (typeof _p3OnLangChange === 'function') { try { _p3OnLangChange(); } catch (e) {} }
+  // P6-2：把界面语言告诉后端 —— 后端自己生成、直接显示在界面上的文案（确认弹窗等）也要跟着切
+  try {
+    fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lang: UI_LANG }) }).catch(function(){});
+  } catch (e) {}
 }
 function toggleUILang(){ UI_LANG = (UI_LANG === 'zh') ? 'en' : 'zh'; try { localStorage.setItem('memomics_ui_lang', UI_LANG); } catch(e){} applyUILang(); }
 document.addEventListener('DOMContentLoaded', applyUILang);
@@ -2391,16 +2443,19 @@ function showAskForm(msg) {
     // 只对当前会话显示（避免把别的会话的确认弹到用户脸上）
     if (msg.session_id && currentSid && msg.session_id !== currentSid) { return; }
     hideAskForm();
+    var _prevForm = (_askForm && _askForm.form_id === (msg.form_id || '')) ? _askForm : null;
+    var _prevOther = _prevForm ? ((document.getElementById('askform-other') || {}).value || '') : '';
     _askForm = {
+      msg: msg,
       form_id: msg.form_id || '',
       kind: msg.kind || 'clarify',
-      header: msg.header || '需要你确认',
+      header: msg.header || t('af_kind_clarify'),
       question: msg.question || msg.content || '',
       options: (msg.options || []).slice(0, 8),
       rich: msg.form_options || [],
       multi: !!msg.multi_select,
       allowOther: msg.allow_other !== false,
-      selected: []
+      selected: _prevForm ? (_prevForm.selected || []).slice() : []
     };
     var f = _askForm;
     var ov = document.createElement('div');
@@ -2408,20 +2463,20 @@ function showAskForm(msg) {
     ov.setAttribute('style', 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;');
     var card = document.createElement('div');
     card.setAttribute('style', 'background:var(--panel,#1b1f27);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:12px;max-width:660px;width:100%;max-height:86vh;overflow:auto;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);font-size:14px;line-height:1.6;');
-    var kindTxt = f.kind === 'intent' ? '开工前意图确认' : (f.kind === 'plan' ? '方案选择' : '需要你确认');
+    var kindTxt = t(f.kind === 'intent' ? 'af_kind_intent' : (f.kind === 'plan' ? 'af_kind_plan' : 'af_kind_clarify'));
     var html = '';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
     html += '<span style="font-size:16px;font-weight:600;">❓ ' + _askFormEsc(f.header) + '</span>';
     html += '<span style="font-size:11px;padding:1px 7px;border-radius:9px;background:rgba(90,150,255,.18);color:#7fb0ff;">' + _askFormEsc(kindTxt) + '</span>';
     html += '</div>';
     html += '<div style="white-space:pre-wrap;margin:6px 0 12px;color:var(--text,#e6e6e6);">' + _askFormEsc(f.question) + '</div>';
-    html += '<div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:6px;">' + (f.multi ? '可多选（勾选后提交）' : (f.options.length ? '单选（点选后提交）' : '请在下方填写')) + '</div>';
+    html += '<div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:6px;">' + t(f.multi ? 'af_multi' : (f.options.length ? 'af_single' : 'af_fill')) + '</div>';
     html += '<div id="askform-opts">';
     for (var i = 0; i < f.options.length; i++) {
       var lab = f.options[i];
       var r = f.rich[i] || {};
       var desc = r.desc || '';
-      var rec = r.recommended ? ' <span style="font-size:11px;color:#4ec97a;">（推荐）</span>' : '';
+      var rec = r.recommended ? ' <span style="font-size:11px;color:#4ec97a;">' + t('af_recommended') + '</span>' : '';
       html += '<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border,#333a45);border-radius:8px;cursor:pointer;">';
       html += '<input type="' + (f.multi ? 'checkbox' : 'radio') + '" name="askform-opt" value="' + _askFormEsc(lab) + '" style="margin-top:3px;flex:0 0 auto;">';
       html += '<span><span>' + _askFormEsc(lab) + '</span>' + rec;
@@ -2430,18 +2485,27 @@ function showAskForm(msg) {
     }
     html += '</div>';
     if (f.allowOther) {
-      html += '<div style="margin-top:8px;"><div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:4px;">其他（补充说明／自定义选项）</div>';
-      html += '<textarea id="askform-other" rows="2" placeholder="没有合适选项时在这里写清楚…" style="width:100%;box-sizing:border-box;background:var(--bg,#12151b);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:8px;padding:8px;font-size:13px;resize:vertical;"></textarea></div>';
+      html += '<div style="margin-top:8px;"><div style="font-size:12px;color:var(--muted,#9aa4b2);margin-bottom:4px;">' + t('af_other') + '</div>';
+      html += '<textarea id="askform-other" rows="2" placeholder="' + _askFormEsc(t('af_other_ph')) + '" style="width:100%;box-sizing:border-box;background:var(--bg,#12151b);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:8px;padding:8px;font-size:13px;resize:vertical;"></textarea></div>';
     }
     html += '<div id="askform-err" style="display:none;color:#ff6b6b;font-size:12px;margin-top:8px;"></div>';
     html += '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">';
-    html += '<button id="askform-later" style="background:transparent;color:var(--muted,#9aa4b2);border:1px solid var(--border,#333a45);border-radius:8px;padding:7px 14px;cursor:pointer;">稍后回答</button>';
-    html += '<button id="askform-submit" style="background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:600;">提交并继续</button>';
+    html += '<button id="askform-later" style="background:transparent;color:var(--muted,#9aa4b2);border:1px solid var(--border,#333a45);border-radius:8px;padding:7px 14px;cursor:pointer;">' + t('af_later') + '</button>';
+    html += '<button id="askform-submit" style="background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:7px 16px;cursor:pointer;font-weight:600;">' + t('af_submit') + '</button>';
     html += '</div>';
-    html += '<div style="font-size:11px;color:var(--muted,#9aa4b2);margin-top:8px;">提交后我会按你的选择继续；未提交前我不会开始执行（执行类操作会被拦下）。</div>';
+    html += '<div style="font-size:11px;color:var(--muted,#9aa4b2);margin-top:8px;">' + t('af_lock_note') + '</div>';
     card.innerHTML = html;
     ov.appendChild(card);
     document.body.appendChild(ov);
+    // 切语言重画时把上一次的勾选/补充说明恢复回来（不能把用户已经选的弄丢）
+    if (_prevForm) {
+      var _all0 = card.querySelectorAll('input[name="askform-opt"]');
+      for (var q = 0; q < _all0.length; q++) {
+        if ((_askForm.selected || []).indexOf(_all0[q].value) >= 0) _all0[q].checked = true;
+      }
+      var _oth0 = document.getElementById('askform-other');
+      if (_oth0 && _prevOther) _oth0.value = _prevOther;
+    }
     // 记住勾选状态
     var _inputs = card.querySelectorAll('input[name="askform-opt"]');
     for (var k = 0; k < _inputs.length; k++) {
@@ -2455,15 +2519,20 @@ function showAskForm(msg) {
     document.getElementById('askform-later').addEventListener('click', function() {
       // "稍后回答"= 不提交：弹窗收起但门禁保持，执行仍被拦（不会误开工）
       hideAskForm();
-      addProgressItem('❓ 确认弹窗待回答', 'pending', '点标题栏「待确认」可重新打开', _nowTs());
+      addProgressItem(t('af_pending_prog'), 'pending', t('af_pending_hint'), _nowTs());
     });
     document.getElementById('askform-submit').addEventListener('click', function() { _submitAskForm(); });
     var _oth = document.getElementById('askform-other');
     if (_oth) { _oth.addEventListener('keydown', function(ev) { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { _submitAskForm(); } }); }
     try { setTimeout(function() { var s = document.getElementById('askform-submit'); if (s) s.focus(); }, 60); } catch (e2) {}
   } catch (err) {
-    console.error('ask_form 渲染失败', err);
+    console.error('ask_form render failed', err);
   }
+}
+
+function _p3OnLangChange() {
+  // P6-2：弹窗开着时切中/英 → 立刻按新语言重画（勾选状态保留）
+  if (_askForm && _askForm.msg) { try { showAskForm(_askForm.msg); } catch (e) {} }
 }
 
 async function _submitAskForm() {
@@ -2474,16 +2543,16 @@ async function _submitAskForm() {
   var other = otherEl ? String(otherEl.value || '').trim() : '';
   var sel = (f.selected || []).slice();
   if (!sel.length && !other) {
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '请至少勾选一项，或在「其他」里写清楚。'; }
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = t('af_need_pick'); }
     return;
   }
   var btn = document.getElementById('askform-submit');
-  if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
-  var ansText = '【确认答复】' + (f.question ? '针对「' + String(f.question).slice(0, 120) + '」：' : '');
+  if (btn) { btn.disabled = true; btn.textContent = t('af_sending'); }
+  var ansText = t('af_ans_prefix') + (f.question ? tf('af_ans_re', String(f.question).slice(0, 120)) : '');
   var segs = [];
-  if (sel.length) { segs.push('选中：' + sel.join('；')); }
-  if (other) { segs.push('补充：' + other); }
-  ansText += segs.join('；');
+  if (sel.length) { segs.push(t('af_ans_sel') + sel.join(t('af_ans_sep'))); }
+  if (other) { segs.push(t('af_ans_note') + other); }
+  ansText += segs.join(t('af_ans_sep'));
   var posted = false;
   try {
     var resp = await fetch('/api/ask_form/answer', {
@@ -2493,14 +2562,14 @@ async function _submitAskForm() {
     });
     posted = !!(resp && resp.ok);
   } catch (e) {
-    console.error('ask_form 答复上报失败', e);
+    console.error('ask_form answer report failed', e);
   }
   hideAskForm();
   // 答复本身作为用户消息发出（沿用既有通道：运行中会自动变成 steer 引导）
   var input = document.getElementById('input');
-  if (!input) { addError('找不到输入框，答复未发送：' + ansText); return; }
+  if (!input) { addError(t('af_no_input') + ansText); return; }
   if (input.value.trim()) { input.value = input.value.trim() + '\n' + ansText; } else { input.value = ansText; }
-  if (!posted) { addProgressItem('⚠️ 确认答复未上报（继续按消息发送）', 'done', '', _nowTs()); }
+  if (!posted) { addProgressItem(t('af_unreported'), 'done', '', _nowTs()); }
   send();
 }
 // === 停止 agent ===

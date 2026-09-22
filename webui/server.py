@@ -1422,9 +1422,10 @@ def _is_form_answer_text(text, session=None):
         except Exception:
             _fresh = False
     _t = str(text or "").lstrip()
-    if _t.startswith(("【用户对", "【确认答复")):
+    if _t.startswith(("【用户对", "【确认答复", "[Confirmation]", "[User confirmation")):
         return True
-    return bool(_fresh and ("选中：" in _t or "补充：" in _t or "补充说明：" in _t))
+    return bool(_fresh and ("选中：" in _t or "补充：" in _t or "补充说明：" in _t
+                            or "Selected:" in _t or "Note:" in _t))
 
 
 def _emit_code_edit_form(session, data):
@@ -1444,16 +1445,31 @@ def _emit_code_edit_form(session, data):
             _names.append(os.path.basename(str(_d).rstrip("/\\")) or str(_d))
         except Exception:
             _names.append(str(_d))
-    _short = "、".join(_names)
-    _q = ("你只让我改代码（没说要跑）。记忆里有你的数据：%s —— 要不要用这些数据跑一遍验证？" % _short)
-    _opts = [
-        {"label": "只给我改好的代码，先别跑", "desc": "我只要代码，不执行", "recommended": True},
-        {"label": "用这些数据跑一遍验证", "desc": "拿 %s 实测改动是否成立，报错也告诉我" % _short[:100]},
-        {"label": "先给我改动计划", "desc": "先说要改哪几处、为什么，再决定跑不跑"},
-    ]
+    _en = _ui_lang() == "en"
+    _short = (", ".join(_names) if _en else "、".join(_names))
+    if _en:
+        _q = ("You only asked me to change the code (no run). I have your data in memory: %s "
+              "— shall I verify the change with it?" % _short)
+        _opts = [
+            {"label": "Code only, do not run", "desc": "Just the code, no execution",
+             "recommended": True},
+            {"label": "Run a verification with this data",
+             "desc": "Test the change on %s and tell me about any error" % _short[:100]},
+            {"label": "Show me the change plan first",
+             "desc": "Say what will change and why before running anything"},
+        ]
+        _header = "Code change: verify with your data?"
+    else:
+        _q = ("你只让我改代码（没说要跑）。记忆里有你的数据：%s —— 要不要用这些数据跑一遍验证？" % _short)
+        _opts = [
+            {"label": "只给我改好的代码，先别跑", "desc": "我只要代码，不执行", "recommended": True},
+            {"label": "用这些数据跑一遍验证", "desc": "拿 %s 实测改动是否成立，报错也告诉我" % _short[:100]},
+            {"label": "先给我改动计划", "desc": "先说要改哪几处、为什么，再决定跑不跑"},
+        ]
+        _header = "改代码：要不要用你的数据验证？"
     try:
         return _emit_form(session, _q, options=_opts, kind="intent",
-                          header="改代码：要不要用你的数据验证？", arm_gate=False)
+                          header=_header, arm_gate=False)
     except Exception as _e_emit:
         logger.warning("[code_edit] 弹窗失败: %s", _e_emit)
         return "", False
@@ -10493,6 +10509,17 @@ def _p5_lang_of(lang) -> str:
     return "en" if str(lang or "").strip().lower().startswith("en") else "zh"
 
 
+# P6-2：界面语言（前端点中/英切换时会 POST /api/ui/lang 告知一次）。
+# 用来让**后端自己生成、直接显示在界面上**的文案也跟着切（如 P4 的确定性弹窗、ask_user 弹窗提示）。
+# 默认 zh：没告知过就维持原样，不会影响任何既有行为。
+_UI_LANG_STATE = {"lang": "zh"}
+
+
+def _ui_lang() -> str:
+    """当前界面语言（zh / en）。"""
+    return "en" if str(_UI_LANG_STATE.get("lang") or "zh").strip().lower().startswith("en") else "zh"
+
+
 def _p5_t(lang, zh, en, *args) -> str:
     s = en if _p5_lang_of(lang) == "en" else zh
     if args:
@@ -11564,6 +11591,29 @@ async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: 
 class ResultViewedRequest(BaseModel):
     path: str = ""            # 绝对路径或结果目录内的相对路径
     viewed: bool = True       # false = 取消「已查看」标记
+
+
+class UILangRequest(BaseModel):
+    lang: str = "zh"
+
+
+@app.post("/api/ui/lang")
+async def set_ui_lang(req: UILangRequest):
+    """P6-2：前端切换中/英时告知一次，让后端生成的界面文案（P4 弹窗等）跟着切。
+
+    单机单用户工具：这是一个进程级的界面偏好，不参与会话隔离。
+    """
+    _l = (req.lang or "").strip().lower()
+    if _l not in ("zh", "en"):
+        return JSONResponse({"error": "lang must be zh or en"}, status_code=400)
+    _UI_LANG_STATE["lang"] = _l
+    return {"ok": True, "lang": _l}
+
+
+@app.get("/api/ui/lang")
+async def get_ui_lang():
+    """P6-2：当前界面语言（只读，用于自检/验证）。"""
+    return {"lang": _ui_lang()}
 
 
 @app.post("/api/results/{sid}/viewed")
@@ -12867,11 +12917,18 @@ async def ask_form_answer(req: AskFormAnswerRequest):
         _es_cea = _enf_cea.get_enforcement(sid)
         if getattr(_es_cea, "code_edit", False) or _enf_cea.code_edit_pending(_es_cea):
             _ans_all = (" ".join(sel) + " " + other).strip()
-            _want_run = any(w in _ans_all for w in
-                            ("验证", "跑", "测试", "执行", "试一下", "试下", "run", "test",
-                             "verify", "execute"))
-            _want_no = any(w in _ans_all for w in
-                          ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+            _ans_low = _ans_all.lower()
+            # 英文按钮可能首字母大写（"Run a verification…"），英文关键词一律大小写无关
+            _want_run = (any(w in _ans_all for w in ("验证", "跑", "测试", "执行", "试一下", "试下"))
+                         or any(w in _ans_low for w in ("run", "test", "verify", "execute")))
+            # 中英都要认：英文按钮 "Code only, do not run" 里带 run，若不认这些否定词会被误判成「要跑」
+            _want_no = (any(w in _ans_all for w in
+                            ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+                        or any(w in _ans_low for w in
+                               ("code only", "only the code", "only code", "just the code",
+                                "just give me the code", "do not run", "don't run", "dont run",
+                                "not run", "no run", "without running", "do not execute",
+                                "don't execute", "no execution", "not execute")))
             if _want_run and not _want_no:
                 _enf_cea.clear_code_edit(_es_cea, grant_exec=True)
                 _gate_cleared = True

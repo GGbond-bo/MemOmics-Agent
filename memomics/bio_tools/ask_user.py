@@ -40,6 +40,23 @@ def _session_context() -> tuple:
     return os.environ.get("MEMOMICS_SESSION_ID") or "", ""
 
 
+def _ui_lang():
+    """界面语言（zh / en）：问已加载的 server 模块要（前端切语言时会告知），拿不到就按 zh。"""
+    try:
+        import sys as _s
+        _srv = _s.modules.get("server") or _s.modules.get("webui.server")
+        if _srv is not None and hasattr(_srv, "_ui_lang"):
+            return _srv._ui_lang()
+    except Exception:
+        pass
+    return "zh"
+
+
+def _ui(zh, en):
+    """按界面语言取文案（P6-2：切英文时弹窗提示不能还是中文）。"""
+    return en if _ui_lang() == "en" else zh
+
+
 def _normalize_options(options) -> tuple:
     """选项规范化 → (labels, rich)。
 
@@ -104,7 +121,8 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
                     "type": "ask_form",
                     "form_id": form_id,
                     "kind": kind or "clarify",
-                    "header": (header or ("意图确认" if kind == "intent" else "需要你确认"))[:60],
+                    "header": (header or (_ui("意图确认", "Confirm intent") if kind == "intent"
+                                           else _ui("需要你确认", "Needs your confirmation")))[:60],
                     "question": q,
                     "options": opts or [],
                     "form_options": opts_rich or [],
@@ -124,9 +142,12 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
                 })
                 _server._session_emit(sess, {
                     "type": "notice",
-                    "content": f"❓ AI 需要确认：{q}{_opt_txt}"
-                              + ("\n（在弹窗里勾选后提交，或直接回复序号/内容）" if opts
-                                 else "\n（请在输入框直接回答）"),
+                    "content": (f"❓ {q}{_opt_txt}" if _ui_lang() == "en"
+                                else f"❓ AI 需要确认：{q}{_opt_txt}")
+                              + (_ui("\n（在弹窗里勾选后提交，或直接回复序号/内容）",
+                                     "\n（Tick an option in the dialog and submit, or reply with the number/text）") if opts
+                                 else _ui("\n（请在输入框直接回答）",
+                                          "\n（Please answer directly in the input box）")),
                     "session_id": sid,
                 })
                 pending = sess.setdefault("_pending_questions", [])
@@ -154,7 +175,8 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
             logger.warning(f"[ask_user] 发送失败: {e}")
     if not delivered:
         return json.dumps({"ok": False,
-                           "error": "无法联系用户（会话不可用），请在回复中直接向用户提问"},
+                           "error": _ui("无法联系用户（会话不可用），请在回复中直接向用户提问",
+                                        "Cannot reach the user (session unavailable); ask the user directly in your reply")},
                           ensure_ascii=False)
     return form_id, delivered
 
@@ -188,7 +210,8 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
             logger.warning(f"[ask_user] 发送失败: {e}")
     if not delivered:
         return json.dumps({"ok": False,
-                           "error": "无法联系用户（会话不可用），请在回复中直接向用户提问"},
+                           "error": _ui("无法联系用户（会话不可用），请在回复中直接向用户提问",
+                                        "Cannot reach the user (session unavailable); ask the user directly in your reply")},
                           ensure_ascii=False)
     return json.dumps({
         "ok": True,
