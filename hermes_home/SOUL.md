@@ -180,11 +180,11 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" / "做一个skill" / "建个skill" / "没有对应的skill" | `skill_view("create-bio-skill")` ← 无脚本 + 主题有文章/官网/教程 → 自动建 skill 并注册 |
-| "写论文" / "写文章" / "论文写作" / "manuscript" | `skill_view("academic-paper-writing")` |
+| "写论文" / "写文章" / "论文写作" / "论文初稿" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 按分流决策树：用户给了脚本→`academic-figure-skill`（未强调CNS）；生信对象→`cns-visualization`；CSV/metadata→`scipilot-figure-skill` |
 | "CNS级别" / "发表级" + 任何图表名 | 两阶段：① 对应 skill 快速出图 → ② `skill_view("nature-figure")` 发表级重做 |
-| "发表级" / "投稿" / "manuscript" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 单独说"发表级"直接 nature-figure |
+| "发表级" / "投稿" / "投稿配图" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 单独说"发表级"直接 nature-figure |
 | "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 用户脚本检查/优化 + 专业期刊出图默认工具 |
 | "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
 | "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
@@ -198,11 +198,11 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "聚类" / "分群" / "cluster" | `skill_view("scrna-clustering")` |
 | "Seurat" / "SCTransform" / "NormalizeData" | `skill_view("scrnaseq-seurat-core-analysis")` |
 | "Scanpy" | `skill_view("scrnaseq-scanpy-core-analysis")` |
-| "空间转录组" / "spatial" / "spot" | `skill_view("spatial-transcriptomics")` |
-| "多组学" / "multi-omics" / "整合" | `skill_view("multi-omics-integration")` |
+| "空间转录组" / "空间转录组分析" / "spatial" | `skill_view("spatial-transcriptomics")` |
+| "多组学" / "multi-omics" / "多组学整合" | `skill_view("multi-omics-integration")` |
 | "生存分析" / "KM" / "预后" | `skill_view("survival-analysis")` |
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
-| "报错" / "error" / "出错" / "怎么修" / "不工作" / "跑不了" / "fix" / "debug" | `skill_view("error-recovery")` |
+| "报错" / "报错信息" / "出错" / "报错怎么修" / "不工作" / "跑不了" / "调试" / "traceback" / "error message" | `skill_view("error-recovery")` |
 | "技术路线" / "分析路线" / "怎么分析" / "研究方案" / "research plan" | `skill_view("research-plan")` |
 | "基金申请" / "课题申请" / "立项依据" / "开题报告" / "标书" / "grant proposal" | `skill_view("academic-research")` |
 | "深度调研" / "全面调研" / "deep research" | `skill_view("deep-research")` |
@@ -210,7 +210,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "文献综述" / "literature review" / "综述" | `skill_view("literature-review")` |
 | "提取参数" / "文献参数" / "parameter extraction" | `skill_view("literature-param-extraction")` |
 | "总结论文" / "解读" / "summarize paper" | `skill_view("paper-summary")` |
-| "总结这篇文章" / "解读这篇文献" / "这篇文章的研究思路" / "作者做了什么" | **文献精读，非调研**：优先 `skill_view("nature-reader")`（RED 必触发，全文中英对照精读器：图表/公式感知、源锚定、术语表，绝不降级为摘要；用户指定优先，2026-08-24）→ 精读后以专业编辑口吻解读；本地文献库未导入 → `literature_import` 后精读；只要摘要 → `summarize_paper` 快速路径。**禁止** skill_view('academic-research') / search_knowledge / search_papers 调研组合、禁止生成研究方案/文献表格（2026-08-24 修复："让我知道作者的研究思路"≠"设计研究思路"，前者是文献解读不是方案设计） |
+| "总结这篇文章" / "解读这篇文献" / "这篇文章的研究思路" / "作者做了什么" / "精读" / "复现这篇" | **文献精读，非调研**：优先 `skill_view("nature-reader")`（RED 必触发，全文中英对照精读器：图表/公式感知、源锚定、术语表，绝不降级为摘要；用户指定优先，2026-08-24）→ 精读后以专业编辑口吻解读；本地文献库未导入 → `literature_import` 后精读；只要摘要 → `summarize_paper` 快速路径。**禁止** skill_view('academic-research') / search_knowledge / search_papers 调研组合、禁止生成研究方案/文献表格（2026-08-24 修复："让我知道作者的研究思路"≠"设计研究思路"，前者是文献解读不是方案设计） |
 | "公共数据" / "下载数据集" / "GEO数据" | `skill_view("omics-dataset-retrieval")` |
 | "PPT" / "幻灯片" / "演示文稿" / "组会" | `skill_view("ppt-generator")` |
 | "Word" / "docx" / "word文档" | `skill_view("docx-generation")` |
@@ -892,5 +892,5 @@ terminal 完成 → _pending_record = True
 > ⚠️ `dnbc4tools-index-building` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行建库**——必须先向用户澄清 ①是否华大BGI/DNBelab平台 ②RNA索引还是ATAC索引 ③是否已有 ref.json 库 → 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）或非索引需求 → **不触发本 skill**，redirect 到对应流程。
 | "华大BGI单细胞分析" / "dnbc4tools 比对" / "dnbc4tools rna run" / "dnbc4tools atac run" / "dnbc4tools vdj run" / "DNBelab 完整流程" / "华大 RNA 分析流程" / "华大 ATAC 分析流程" / "DNBelab FASTQ 分析" / "华大单细胞比对流程" / "dnbc4tools multi" / "DNBelab 多样本" | `skill_view("dnbc4tools-analysis-workflow")` |
 > ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
-| "去AI味" / "去AI腔" / "humanize" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
+| "去AI味" / "去AI腔" / "降AI味" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
 <!-- AUTO_SKILL_INSERT_MARKER -->

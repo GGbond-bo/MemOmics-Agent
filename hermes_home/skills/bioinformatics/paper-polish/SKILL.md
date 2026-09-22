@@ -2,7 +2,7 @@
 name: paper-polish
 description: "学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张；触发词：润色、论文润色、去AI腔、中译英、polish"
 when_to_use: [paper-polish] 学术论文润色：语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张
-trigger_keywords: ["润色", "论文润色", "去AI腔", "去除AI味", "AI味", "像AI写的", "读着像AI", "AI写的", "polish", "中译英", "翻译成英文", "语言修改", "awkward wording", "overclaiming"]
+trigger_keywords: ["润色", "论文润色", "去AI腔", "去除AI味", "AI味", "像AI写的", "读着像AI", "AI写的", "语言润色", "中译英", "翻译成英文", "语言修改", "awkward wording", "overclaiming"]
 trigger_level: YEL 讨论触发
 
 

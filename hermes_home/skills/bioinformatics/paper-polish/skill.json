@@ -18,11 +18,12 @@
     "去AI腔",
     "去除AI味",
     "AI味",
-    "polish",
     "中译英",
     "翻译成英文",
     "语言修改",
     "awkward wording",
-    "overclaiming"
-  ]
+    "overclaiming",
+    "语言润色"
+  ],
+  "when_to_use": "学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张"
 }

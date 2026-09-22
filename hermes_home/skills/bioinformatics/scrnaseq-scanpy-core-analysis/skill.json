@@ -8,5 +8,12 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释",
+  "trigger_keywords": [
+    "Scanpy",
+    "scanpy",
+    "Scanpy流程"
+  ],
+  "trigger_level": "RED"
 }

@@ -92,5 +92,17 @@
       "script": "run_cellbender.ps1",
       "severity": "medium"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "CellBender",
+    "去背景",
+    "ambient RNA",
+    "filtered.h5",
+    "ptrepack",
+    "cellbender",
+    "空滴",
+    "背景RNA",
+    "环境RNA"
+  ],
+  "trigger_level": "RED"
 }

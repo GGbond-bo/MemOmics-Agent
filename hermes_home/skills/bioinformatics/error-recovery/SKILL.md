@@ -1,13 +1,13 @@
 ---
 name: error-recovery
 description: "分析报错后自动诊断根因并尝试修复。覆盖常见生信错误: 包缺失/版本不匹配/内存不足/数据类型转换/参数错误/文件路径。每次修复记录到 skill_evolution，累积修复经验。"
-when_to_use: "[error-recovery] 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'怎么修'/'这什么错'时触发"
+when_to_use: "[error-recovery] 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发"
 version: 1.0.0
 category: General Utility
 hermes:
   tags: [error, recovery, troubleshooting, debugging, fix]
   trigger_level: RED
-  keywords: "error / 报错 / 出错 / 修复 / 怎么修 / fix / debug"
+  keywords: "error / 报错 / 出错 / 修复 / 报错怎么修 / fix / debug"
 ---
 
 # 🔧 Error Recovery — 生信分析错误自动诊断与修复
@@ -184,3 +184,24 @@ hermes:
 | `SCTransform memory` | 150K+ cells | `SCTransform(..., conserve.memory=TRUE, return.only.var.genes=FALSE)` | — |
 | `harmony not found` | Python 装了 harmony 而非 harmonypy | `pip uninstall harmony && pip install harmonypy` | — |
 | `anndata.read_h5ad OOM` | 500K cells | `anndata.read_h5ad(path, backed='r')` | — |
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-28 | locate_grch38_gencode_files.sh | - | - |  |
+| - | - | - | 2026-08-28 | locate_grch38_gencode_files.sh | - | - |  |
+
+
+| - | - | - | 2026-08-30 | - | - | - |  |
+| - | - | - | 2026-08-30 | - | - | - |  |
+| - | - | - | 2026-08-30 | - | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| conda install -c conda-forge pybigwig -y 失败 exit=1 | 待查日志确认根因：pybigwig conda-forge 在 Windows/ | - |
+| ArchR addGroupCoverages 报错: HDF5. File accessibili | addGroupCoverages 在写 GroupCoverages 目录下的 | 按顺序尝试: 1) unlink GroupCoverages 目录 + force=TRUE 重跑 |
+

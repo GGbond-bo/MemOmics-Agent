@@ -36,12 +36,12 @@
   "trigger_level": "RED",
   "trigger_keywords": [
     "画图",
-    "可视化",
+    "数据可视化",
     "figure",
-    "plot",
     "发表级",
     "作图",
-    "出图"
+    "出图",
+    "画个图"
   ],
   "debate_verdicts": [
     {
@@ -268,5 +268,6 @@
       "script": "",
       "severity": "high"
     }
-  ]
+  ],
+  "when_to_use": "用户给了一个 CSV / Excel / DataFrame 说\"帮我画一下\"或\"用什么图好\""
 }

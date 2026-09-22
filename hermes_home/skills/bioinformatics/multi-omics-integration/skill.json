@@ -36,5 +36,14 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "https://satijalab.org/seurat/articles/integration_introduction.html",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "多组学",
+    "multi-omics",
+    "multi-omics-integration",
+    "multi omics integration",
+    "多组学整合",
+    "联合分析"
+  ],
+  "trigger_level": "RED"
 }

@@ -35,5 +35,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "深度调研",
+    "全面调研",
+    "deep research",
+    "deep-research"
+  ],
+  "trigger_level": "RED"
 }

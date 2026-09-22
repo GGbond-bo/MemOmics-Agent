@@ -33,5 +33,16 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "写论文",
+    "写文章",
+    "论文写作",
+    "academic-paper-writing",
+    "academic paper writing",
+    "academic",
+    "论文初稿",
+    "英文论文写作"
+  ],
+  "trigger_level": "RED"
 }

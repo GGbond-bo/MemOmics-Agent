@@ -173,6 +173,37 @@ def test_known_gaps_are_not_silently_closed(matcher, gap):
         % (gap["id"], gap["text"], hits, [gap["would_be"]]))
 
 
+# ---------- D2. 棘轮清零后的护栏（2026-09-23 P0-2b） ----------
+# 缺口清单与过度触发清单都已清零，但护栏不能跟着消失：
+# 转正的缺口文本必须留在 cases（must_hit），收敛的过度触发文本必须留在 distractors（零命中）。
+
+RETIRED_GAP_TEXTS = (
+    "线粒体比例太高，帮我把这批细胞过滤掉",
+    "帮我复现这篇论文的方法部分",
+    "这批数据要不要做批次校正",
+    "把跑出来的表格合并成一个 Excel",
+    "精读这篇论文，逐段解读一下",
+    "从这篇文献里提取实验参数",
+    "这个研究方向值得做吗？帮我评估一下可行性",
+)
+CONVERGED_OVER_TEXTS = (
+    "这个 analysis 的 core 思路是什么",
+    "Please help me design a plan for my holiday",
+)
+
+
+def test_retired_gaps_are_promoted_into_cases():
+    texts = {c["text"] for c in CASES}
+    missing = sorted(t for t in RETIRED_GAP_TEXTS if t not in texts)
+    assert not missing, "转正的缺口文本不在 cases 里（棘轮清零不能变成护栏清零）: %s" % missing
+
+
+def test_converged_over_triggers_are_pinned_as_distractors():
+    texts = {d["text"] if isinstance(d, dict) else d for d in DISTRACTORS}
+    missing = sorted(t for t in CONVERGED_OVER_TEXTS if t not in texts)
+    assert not missing, "收敛的过度触发文本不在 distractors 里: %s" % missing
+
+
 # ---------- E. 边界与极端输入 ----------
 
 @pytest.mark.parametrize("edge", EDGE_CASES, ids=_ids(EDGE_CASES))

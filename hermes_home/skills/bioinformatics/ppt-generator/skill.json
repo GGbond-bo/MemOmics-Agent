@@ -47,5 +47,16 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "PPT",
+    "幻灯片",
+    "演示文稿",
+    "组会",
+    "ppt-generator",
+    "ppt generator",
+    "ppt",
+    "做PPT"
+  ],
+  "trigger_level": "RED"
 }

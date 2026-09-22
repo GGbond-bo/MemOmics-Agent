@@ -21,6 +21,9 @@
     "score this idea",
     "is this a good research direction",
     "idea evaluation",
-    "research idea"
-  ]
+    "research idea",
+    "值得做吗",
+    "可行性"
+  ],
+  "when_to_use": "研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决"
 }

@@ -632,6 +632,7 @@ def check_keywords(entries: list = None, contract: dict = None) -> list:
     max_len = int(rules.get("max_len") or MAX_KW_LEN)
     max_kw = int(rules.get("max_per_skill") or MAX_KW)
     forbidden = {str(w).strip().lower() for w in (rules.get("forbidden_bare_ascii_words") or [])}
+    forbidden_cjk = {str(w).strip() for w in (rules.get("forbidden_bare_cjk_words") or [])}
     problems, offenders = [], {}
     for e in entries:
         name = e.get("name") or "?"
@@ -651,11 +652,15 @@ def check_keywords(entries: list = None, contract: dict = None) -> list:
                 kl = k.lower()
                 if kl in forbidden and " " not in k and k.isascii():
                     offenders.setdefault(kl, set()).add(name)
+                elif not k.isascii() and k in forbidden_cjk:
+                    # 裸中文通用词（整条触发词就是通用动词/名词）：同样只认完全相等，
+                    # 「差异分析」「多组学整合」这类领域短语不受影响（2026-09-23 P0-2b）。
+                    offenders.setdefault(k, set()).add(name)
     known_raw = (contract.get("ratchet") or {}).get("known_violations") or {}
     known = {str(w).lower(): {str(s) for s in (v or [])} for w, v in known_raw.items()}
     for w, owners in sorted(offenders.items()):
         if w not in known:
-            problems.append("新增裸通用词触发词: %s -> %s（改用短语或中文词）"
+            problems.append("新增裸通用词触发词: %s -> %s（改用短语或更具体的说法，如 deg analysis / 多组学整合）"
                             % (w, sorted(owners)))
         elif owners - known[w]:
             problems.append("裸通用词触发词蔓延: %s 新增 %s（同步收缩契约台账）"

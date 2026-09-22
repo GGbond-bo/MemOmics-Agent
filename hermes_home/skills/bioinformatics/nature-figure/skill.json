@@ -5,17 +5,16 @@
   "trigger_keywords": [
     "发表",
     "投稿",
-    "Nature",
-    "Science",
-    "Cell",
-    "manuscript",
     "publication figure",
     "期刊",
     "SCI",
     "paper figure",
     "figure contract",
     "SVG editable",
-    "TIFF 600dpi"
+    "TIFF 600dpi",
+    "顶刊",
+    "Nature风格",
+    "投稿配图"
   ],
   "when_to_use": "User needs publication-ready figures for journals. Not for EDA or quick exploration plots.",
   "dependencies": {
@@ -207,5 +206,6 @@
   ],
   "user_prefs": {
     "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
-  }
+  },
+  "trigger_level": "RED"
 }

@@ -49,6 +49,9 @@ prerequisites:
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| - | - | - | 2026-09-16 | thesis_placeholder_scan.sh | - | - |  |
+| - | - | - | 2026-09-16 | audit_citations.py | - | - |  |
+| - | - | - | 2026-09-16 | fix_fig_citations.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

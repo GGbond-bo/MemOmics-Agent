@@ -26,7 +26,7 @@
 | 5 | annotate_celltype_scRNA | When you need annotate celltype scRNA analysis | annotate_celltype_scRNA, annotate celltype scRNA, annotate, celltype | YEL 讨论触发 |
 | 6 | annotate_celltype_with_panhumanpy | When you need annotate celltype with panhumanpy analysis | annotate, celltype, panhumanpy | YEL 讨论触发 |
 | 7 | cell-cell-communication | Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis. | cell-cell-communication, cell cell communication, cell, communication | YEL 讨论触发 |
-| 8 | cellbender-remove-background | 10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本) | CellBender, 去背景, ambient RNA, filtered.h5, ptrepack, remove, background | RED 必触发 |
+| 8 | cellbender-remove-background | 10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本) | CellBender, 去背景, ambient RNA, filtered.h5, ptrepack, 空滴, 背景RNA, 环境RNA | RED 必触发 |
 | 9 | cellchat-v2 | 适用于: 多细胞类型, disease, aging, development | CellChat, 细胞通讯, cellchat-v2, cellchat v2 | RED 必触发 |
 | 10 | coexpression-network | Build gene co-expression networks to identify modules and hub genes from RNA-seq data. | coexpression-network, coexpression network, coexpression, network | YEL 讨论触发 |
 | 11 | create_harmony_embeddings_scRNA | When you need create harmony embeddings scRNA analysis | harmony, embeddings | YEL 讨论触发 |
@@ -50,9 +50,9 @@
 | 29 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
 | 30 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
 | 31 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
-| 32 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc | RED 必触发 |
-| 33 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, core | RED 必触发 |
-| 34 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, core | RED 必触发 |
+| 32 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
+| 33 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
+| 34 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
 | 35 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
 | 36 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
 | 37 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, remove, background | YEL 讨论触发 |
@@ -96,7 +96,7 @@
 | 15 | reconstruct_3d_face_from_mri | When you need reconstruct 3d face from mri analysis | reconstruct, face, mri | YEL 讨论触发 |
 | 16 | segment_and_quantify_cells_in_multiplexed_images | When you need segment and quantify cells in multiplexed images analysis | segment, quantify, cells, multiplexed | YEL 讨论触发 |
 | 17 | segment_with_nn_unet | When you need segment with nn unet analysis | segment_with_nn_unet, segment with nn unet, segment, unet | YEL 讨论触发 |
-| 18 | spatial-transcriptomics | 适用于: spatial, Visium/MERFISH/Slide-seq | 空间转录组, spot, spatial-transcriptomics, spatial transcriptomics, transcriptomics | RED 必触发 |
+| 18 | spatial-transcriptomics | 适用于: spatial, Visium/MERFISH/Slide-seq | 空间转录组, 空间转录组分析, spatial-transcriptomics, spatial transcriptomics, transcriptomics | RED 必触发 |
 
 ## 04_Bulk - Bulk/表观 (18 skills)
 
@@ -199,7 +199,7 @@
 | 3 | academic-thesis-docx | 用户给出学校论文撰写/装帧规范文件（.doc/.pdf）与写作素材（专利、项目、数据），要求按该规范撰写学位论文并产出可编辑 Word 交付物时使用。也用于已交付论文的按规范修订（补章、改格式、重出版次）。 | academic-thesis-docx, academic thesis docx, academic, thesis, docx | YEL 讨论触发 |
 | 4 | agent-loop-engineering | 防止 LLM '叙事代替执行'的框架级防御。触发:长链修复任务中 Agent 输出动作动词但无 tool call，或 rail_review(post) code_executed 过短。已部署 Guardian 快照回滚 + Planner/Executor 双阶段协议。 | loop engineering, agent reliability, tool call audit, narrative hallucination, 铁律 -1, 铁律 -2, 铁律 -3, 铁律 3b | YEL 讨论触发 |
 | 5 | alphafold2 | OpenAI4S 移植:Predict protein structure for monomers and multimers with Al... | alphafold2 | YEL 讨论触发 |
-| 6 | analysis-summary-report | 当已完成真实分析（有terminal执行结果+figures）且用户要求总结/报告时触发。文献综述/整理结果不触发。 | 生成总结, 分析总结, 跑完总结, analysis-summary-report, analysis summary report, summary | RED 必触发 |
+| 6 | analysis-summary-report | 当已完成真实分析（有terminal执行结果+figures）且用户要求总结/报告时触发。文献综述/整理结果不触发。 | 生成总结, 分析总结, 跑完总结, analysis-summary-report, analysis summary report, Excel, 结果汇总 | RED 必触发 |
 | 7 | animation-first-showcase | 用户要做一个给人看/演示/汇报的 HTML（展示自己、展示项目、演示功能、答辩、行业调研汇总）时；或用户抱怨已有 HTML 交付物「字太多、不直观」时 | animation-first-showcase, animation first showcase, animation, first, showcase | YEL 讨论触发 |
 | 8 | archr-atac-analysis | --- name: archr-atac-analysis description: > ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案… | archr-atac-analysis, archr atac analysis, archr | YEL 讨论触发 |
 | 9 | atac-paper-reproduction | --- name: atac-paper-reproduction description: > ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明… | 论文复现, 对比流程, 官方路径, official code, ATAC 复现 | YEL 讨论触发 |
@@ -225,7 +225,7 @@
 | 29 | diagram-design | 示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure) | diagram-design, diagram design, diagram, design | YEL 讨论触发 |
 | 30 | dnbc4tools-analysis-workflow | 用户提到 DNBelab/dnbc4tools/华大BGI/华大基因 单细胞 RNA 或 ATAC 的比对/分析流程 | dnbc4tools, workflow | YEL 讨论触发 |
 | 31 | dnbc4tools-index-building | 华大BGI DNBelab C系列高通量单细胞数据分析软件 dnbc4tools 的参考基因组索引构建流程（rna mkref=STAR 2.7.2b genomeGenerate + atac mkref=chromap + tools mkgtf GTF过滤校正）… | dnbc4tools, index, building | YEL 讨论触发 |
-| 32 | docx-generation | 需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用 | Word, docx, word文档, docx-generation, docx generation, generation | RED 必触发 |
+| 32 | docx-generation | 需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用 | Word, docx, word文档, docx-generation, docx generation, 导出Word | RED 必触发 |
 | 33 | evo2 | OpenAI4S 移植:Score, embed, and generate DNA sequences with Evo 2, a long-... | evo2 | YEL 讨论触发 |
 | 34 | figure-designer | 用户想表达某个结论但不知怎么设计图/图被说不好看不专业/要选图型或布局建议时使用。路由纪律:本技能只输出设计建议与QC审计，绝不代替出图；用户说'画个热图/帮我出图/生成图'一律按 SOUL.md 画图 Skill 选择策略走 academic-figure-skill（专业/期刊出图默认）/ nature-figure（CNS 级）/ cns-visualization（生信快速图）/ scip… | 设计图, 图设计, 图不好看, 图不专业, 选什么图, 图型选择, 布局建议, 图布局, 作图建议, 设计一张图, figure design, design a figure, choose the right chart, plot design | RED 必触发 |
 | 35 | genui | 回答中需要结构化呈现（要点/对比/流程/状态/数据/操作）时输出 dsh-ui 围栏，webui 自动渲染。纯文字问答不需要。 | 结构化展示, 可视化呈现, UI组件, 要点卡片, dsh-ui, genui, 交互面板, 数据图表, 流程步骤展示, 状态一览, render ui, interactive ui | RED 必触发 |
@@ -234,8 +234,8 @@
 | 38 | gse278576-atac-aging-comparison | --- name: gse278576-atac-aging-comparison description: > GSE278576 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026; bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus… | GSE278576, 人海马ATAC, hippocampus aging ATAC, 对比流程复现 | YEL 讨论触发 |
 | 39 | hdwgcna-official-workflow | [hdwgcna-official] 需要跑 hdWGCNA 官方完整 workflow、出官方标准图集、或遇到 hdWGCNA 加载失败/ModuleTraitCorrelation 报错/ModuleUMAPPlot future 超限/TOM 路径问题。 | hdwgcna, official, workflow | YEL 讨论触发 |
 | 40 | html-report | 当你需要 HTML报告 时触发 —— 生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好 | html-report, html report, html | YEL 讨论触发 |
-| 41 | human-skill | 用户要求对中文论文/报告做去 AI 味处理，或要求查重（重复率）、检查自我抄袭（如学位论文 vs 专利交底书同源）、投稿前 AI 痕迹自检。 | 去AI味, 去AI腔, humanize, human-skill, 查重, 重复率, 自我抄袭, AI痕迹, 像AI写的, AI腔 | RED 必触发 |
-| 42 | idea-evaluator | 研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决 | 评估研究想法, 这个想法值得做吗, 研究方向评估, novelty check, 评估可行性, score this idea, idea evaluation, research idea | RED 必触发 |
+| 41 | human-skill | 用户要求对中文论文/报告做去 AI 味处理，或要求查重（重复率）、检查自我抄袭（如学位论文 vs 专利交底书同源）、投稿前 AI 痕迹自检。 | 去AI味, 去AI腔, human-skill, 查重, 重复率, 自我抄袭, AI痕迹, 像AI写的, AI腔, 降AI味 | RED 必触发 |
+| 42 | idea-evaluator | 研究想法5维评估（Higher/Faster/Stronger/Cheaper/Broader）+生命周期/能力匹配/范式突破/致命缺陷审计，输出审稿人式裁决 | 评估研究想法, 这个想法值得做吗, 研究方向评估, novelty check, 评估可行性, score this idea, idea evaluation, research idea, 值得做吗, 可行性 | RED 必触发 |
 | 43 | image-ocr-fallback | User uploads a screenshot/table/figure-caption image and expects the text read back | image-ocr-fallback, image ocr fallback, image, ocr, fallback | YEL 讨论触发 |
 | 44 | input-data-integrity-audit | 拿到任何分析输入定义文件（基因集定义、通路清单、打分矩阵、样本元数据表）准备用它做打分/富集/溯源前；或用户问「这个是不是？」「该用哪份文件」；或你发现某组条目数整齐得可疑时。 | input, integrity, audit | YEL 讨论触发 |
 | 45 | interactive-html-deliverables | 用户要一个**给人看**的交互式网页交付物（汇报、展示、介绍、看板、评审演示），而不是分析报告的结论页时。若目标是「把分析结果写成报告」→ 用 bioinformatics-html-report。 | interactive, html, deliverables | YEL 讨论触发 |
@@ -251,20 +251,20 @@
 | 55 | mixed-design-deg | 多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor | 混合设计, 配对比较, pre, post, 重复测量, 随机效应 donor | YEL 讨论触发 |
 | 56 | molecular-cloning-design | [molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试 | molecular-cloning-design, molecular cloning design, molecular, cloning, design | YEL 讨论触发 |
 | 57 | multi-role-debate | --- name: multi-role-debate description: >- Run and troubleshoot multi-role structured LLM debates (pro 3 + con 4 + judge) for analysis conclusions and parameter choices… | multi-role-debate, multi role debate, multi, role, debate | YEL 讨论触发 |
-| 58 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, manuscript, Nature style, 期刊, SCI figure, 发表, Nature, Science, Cell, publication figure, SCI, paper figure, figure contract, SVG editable | RED 必触发 |
+| 58 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, 投稿配图, Nature style, 期刊, SCI figure, 发表, publication figure, SCI, paper figure, figure contract, SVG editable, TIFF 600dpi, 顶刊, Nature风格 | RED 必触发 |
 | 59 | nature-paper-card | 单篇论文深度拆解卡片:固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法） | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, 拆解这篇文献 | RED 必触发 |
-| 60 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper, deep reading, paper reading | RED 必触发 |
+| 60 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 精读, 复现这篇, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper | RED 必触发 |
 | 61 | nature-response | Nature风格修回信套件:逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿 | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复, 逐点回复, 大修回复, 小修回复, 回复审稿人, 修改稿回复, 标红修改, cover letter, 编辑邮件, 返修邮件 | RED 必触发 |
 | 62 | nature-reviewer | Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, manuscript review, peer review, referee report | RED 必触发 |
 | 63 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, nature, shared | YEL 讨论触发 |
 | 64 | openfold3 | OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc... | openfold3 | YEL 讨论触发 |
-| 65 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, polish, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming | RED 必触发 |
+| 65 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming, 语言润色 | RED 必触发 |
 | 66 | patent-analysis | 用户说"分析这篇专利""拆解这个专利""专利详细解读""解读专利""分析权利要求""竞品专利分析"等时触发。 | patent-analysis, patent analysis, patent | YEL 讨论触发 |
 | 67 | pdf-report-generation | PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成 | pdf-report-generation, pdf report generation, pdf, generation | YEL 讨论触发 |
 | 68 | pdf-translate | 适用于: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成 | pdf-translate, pdf translate, pdf, translate | YEL 讨论触发 |
 | 69 | pdf_reader | 当你需要 PDF 文献读取器 时触发 —— 读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换 | pdf_reader, pdf reader, pdf, reader | YEL 讨论触发 |
 | 70 | platform-execution-pitfalls | 任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。 | platform, execution, pitfalls | YEL 讨论触发 |
-| 71 | ppt-generator | 当你需要 PPT生成 时触发 —— AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入 | PPT, 幻灯片, 演示文稿, 组会, ppt-generator, ppt generator, generator | RED 必触发 |
+| 71 | ppt-generator | 当你需要 PPT生成 时触发 —— AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入 | PPT, 幻灯片, 演示文稿, 组会, ppt-generator, ppt generator, 做PPT | RED 必触发 |
 | 72 | ppt-html | 适用于: 文献解读后生成HTML报告 —— 图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示 | ppt-html, ppt html, ppt, html | YEL 讨论触发 |
 | 73 | ppt-master | 适用于: 文献解读后生成PPT, 分析报告制作PPT —— AI驱动的SVG-PPT生成系统，多角色协作:策划→执行→质量检查→导出 | ppt-master, ppt master, ppt, master | YEL 讨论触发 |
 | 74 | pptx-generation | PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件 | pptx-generation, pptx generation, pptx, generation | YEL 讨论触发 |
@@ -277,7 +277,7 @@
 | 81 | pubmed-mesh-indexing | 为论文输出官方 MeSH 主要标签（TaskA 式语义索引 benchmark） | MeSH, DeCS, 语义索引, 主要标签, mesh tags, MESINESP | YEL 讨论触发 |
 | 82 | scgpt | OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a... | scgpt | YEL 讨论触发 |
 | 83 | scientific-figure-export | 用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。 | 图太大, 图很糊, 导出尺寸, dpi, 保存格式, PNG还是PDF, pngquant | YEL 讨论触发 |
-| 84 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, plot, 发表级, 作图, 出图 | RED 必触发 |
+| 84 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
 | 85 | scrna-cns-figure-design | --- name: scrna-cns-figure-design category: bioinformatics description: >- CNS-level single-cell RNA-seq figure architecture and implementation… | scrna-cns-figure-design, scrna cns figure design, cns, design | YEL 讨论触发 |
 | 86 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
 | 87 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
@@ -293,10 +293,10 @@
 | 2 | code-writer | 当你需要 代码编写 时触发 —— 编写Python/R脚本，数据分析代码，函数封装，程序开发 | code-writer, code writer, code, writer | GRN 按需触发 |
 | 3 | computer-use | 控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。 | computer-use, computer use, computer | GRN 按需触发 |
 | 4 | create-bio-skill | 当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发 | 安装, 创建skill, 没有这个工具, 新工具, 做一个skill, 建个skill, 没有对应的skill, create-bio-skill | RED 必触发 |
-| 5 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, best, practices | RED 必触发 |
+| 5 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
 | 6 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |
-| 7 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'怎么修'/'这什么错'时触发 | 报错, error, 出错, 怎么修, 不工作, 跑不了, fix, debug | RED 必触发 |
-| 8 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, experimental, design, statistics | RED 必触发 |
+| 7 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发 | 报错, 报错信息, 出错, 报错怎么修, 不工作, 跑不了, 调试, traceback, error message | RED 必触发 |
+| 8 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, 实验设计, 统计方法, 统计检验 | RED 必触发 |
 | 9 | fig-split-program-heatmap-R | 用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图 | fig_split_v10 的 R 版, 18 程序打分热图出 R 版, 6组×亚群矩阵热图 R | GRN 按需触发 |
 | 10 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
 | 11 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
@@ -315,7 +315,7 @@
 | 3 | get_uce_embeddings_scRNA | When you need get uce embeddings scRNA analysis | get_uce_embeddings_scRNA, get uce embeddings scRNA, uce, embeddings | YEL 讨论触发 |
 | 4 | lipidomics-summary-stats | 脂质组学统计汇总:脂质定量数据→描述统计→差异分析→脂质类别分布→可视化 | lipidomics-summary-stats, lipidomics summary stats, lipidomics, summary, stats | YEL 讨论触发 |
 | 5 | map_to_ima_interpret_scRNA | When you need map to ima interpret scRNA analysis | map, ima, interpret | YEL 讨论触发 |
-| 6 | multi-omics-integration | 当你需要 多组学整合 (MOFA+) 时触发 —— MOFA+/DIABLO多组学整合。RNA+ATAC+Protein联合分析 | 多组学, multi-omics, 整合, multi-omics-integration, multi omics integration, multi, integration | RED 必触发 |
+| 6 | multi-omics-integration | 当你需要 多组学整合 (MOFA+) 时触发 —— MOFA+/DIABLO多组学整合。RNA+ATAC+Protein联合分析 | 多组学, multi-omics, 多组学整合, multi-omics-integration, multi omics integration, 联合分析 | RED 必触发 |
 | 7 | perform_gene_expression_nmf_analysis | When you need perform gene expression nmf analysis analysis | gene, expression, nmf | YEL 讨论触发 |
 | 8 | rgcca-multiblock | RGCCA多组学整合分析:多个数据块→正则化典型相关→共享变异→跨组学关联→组分可视化 | rgcca-multiblock, rgcca multiblock, rgcca, multiblock | YEL 讨论触发 |
 | 9 | simulate_renin_angiotensin_system_dynamics | When you need simulate renin angiotensin system dynamics analysis | simulate, renin, angiotensin, dynamics | YEL 讨论触发 |
@@ -326,19 +326,19 @@
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
-| 1 | academic-paper-writing | 适用于: 学术论文写作 —— 12-agent论文写作流水线，从大纲到完稿 | 写论文, 写文章, 论文写作, manuscript, academic-paper-writing, academic paper writing, academic, paper | RED 必触发 |
+| 1 | academic-paper-writing | 适用于: 学术论文写作 —— 12-agent论文写作流水线，从大纲到完稿 | 写论文, 写文章, 论文写作, 论文初稿, academic-paper-writing, academic paper writing, academic, 英文论文写作 | RED 必触发 |
 | 2 | academic-research | 适用于: 实验方案设计, 研究规划, 文献综述 —— 综合学术研究技能:实验方案设计、文献检索、研究规划 | 基金申请, 课题申请, 立项依据, 开题报告, 标书, grant proposal, academic-research, academic research | RED 必触发 |
 | 3 | advanced_web_search_claude | When you need advanced web search claude analysis | advanced, web, search, claude | YEL 讨论触发 |
-| 4 | deep-research | 适用于: 深度文献研究, 系统性综述 —— 13-agent深度研究团队，系统性文献检索+综述+PRISMA | 深度调研, 全面调研, deep research, deep-research, deep, research | RED 必触发 |
+| 4 | deep-research | 适用于: 深度文献研究, 系统性综述 —— 13-agent深度研究团队，系统性文献检索+综述+PRISMA | 深度调研, 全面调研, deep research, deep-research | RED 必触发 |
 | 5 | extract_pdf_content | When you need extract pdf content analysis | extract_pdf_content, extract pdf content, extract, pdf, content | YEL 讨论触发 |
 | 6 | extract_url_content | When you need extract url content analysis | extract_url_content, extract url content, extract, url, content | YEL 讨论触发 |
 | 7 | fetch_supplementary_info_from_doi | When you need fetch supplementary info from doi analysis | supplementary, info, doi | YEL 讨论触发 |
 | 8 | knowledge-base-curation | Auto-generated for knowledge-base-curation | knowledge-base-curation, knowledge base curation, knowledge, base, curation | YEL 讨论触发 |
-| 9 | literature-param-extraction | 拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时 | 提取参数, 文献参数, parameter extraction, param, extraction | RED 必触发 |
+| 9 | literature-param-extraction | 拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时 | 提取参数, 文献参数, parameter extraction, 实验参数, 参数提取 | RED 必触发 |
 | 10 | literature-preclinical | 当你需要 临床前文献提取 时触发 —— 从临床前文献提取关键发现、方法、模型、剂量。PubMed+LLM | literature-preclinical, literature preclinical, preclinical | YEL 讨论触发 |
 | 11 | literature-review | Auto-generated for literature-review | 文献综述, literature review, 综述, systematic review, 总结文献, 查文献, evidence synthesis | RED 必触发 |
-| 12 | omics-dataset-retrieval | 当你需要 组学数据集检索 (GEO/SRA) 时触发 —— GEO/SRA数据集检索和下载。元数据解析和筛选 | 公共数据, 下载数据集, GEO数据, omics-dataset-retrieval, omics dataset retrieval, dataset, retrieval | RED 必触发 |
-| 13 | paper-download | 当你需要 文献下载 时触发 —— 搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台 | 搜文献, 找论文, 下载论文, paper-download, paper download, paper, download | RED 必触发 |
+| 12 | omics-dataset-retrieval | 当你需要 组学数据集检索 (GEO/SRA) 时触发 —— GEO/SRA数据集检索和下载。元数据解析和筛选 | 公共数据, 下载数据集, GEO数据, omics-dataset-retrieval, omics dataset retrieval, 公共数据集, GEO数据集 | RED 必触发 |
+| 13 | paper-download | 当你需要 文献下载 时触发 —— 搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台 | 搜文献, 找论文, 下载论文, paper-download, paper download, 下载文献, PDF下载 | RED 必触发 |
 | 14 | paper-summary | 当你需要 AI文献总结 时触发 —— 深度AI文献解读:全文提取→结构化总结(15字段)→图表提取→报告生成 | 总结论文, 解读, summarize paper, 精读, 论文要点, 讲一下这篇 | RED 必触发 |
 | 15 | paper-translate | 当你需要 PDF翻译 时触发 —— 保留排版的PDF全文翻译，支持中英互译 | paper-translate, paper translate, paper, translate | YEL 讨论触发 |
 | 16 | query_alphafold | When you need query alphafold analysis | query_alphafold, query alphafold, alphafold | YEL 讨论触发 |
@@ -384,7 +384,7 @@
 | 56 | query_unichem | When you need query unichem analysis | query_unichem, query unichem, unichem | YEL 讨论触发 |
 | 57 | query_uniprot | When you need query uniprot analysis | query_uniprot, query uniprot, uniprot | YEL 讨论触发 |
 | 58 | query_worms | When you need query worms analysis | query_worms, query worms, worms | YEL 讨论触发 |
-| 59 | research-plan | 用户询问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"时自动触发 | 技术路线, 分析路线, 怎么分析, 研究方案, research plan, research-plan, research, plan | RED 必触发 |
+| 59 | research-plan | 用户询问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"时自动触发 | 技术路线, 分析路线, 怎么分析, 研究方案, research plan, research-plan, 研究计划, 分析方案 | RED 必触发 |
 | 60 | search_google | When you need search google analysis | search_google, search google, search, google | YEL 讨论触发 |
 | 61 | translate-book | 用户要求翻译整本书、翻译大段内容、把这本书翻译成中文时使用；需提供文件路径（PDF/DOCX/EPUB）和目标语言 | 翻译整本书, 整书翻译, 翻译这本书, 整本翻译, 把这本书翻译, 翻译全书, 全书翻译, 翻译大段, 大段内容翻译, 大段翻译, 这本书翻译成, translate book, translate the book, translate this book, book translation, 整本书翻成 | RED 必触发 |
 | 62 | web-research | 当你需要 网络调研 时触发 —— 网络搜索和调研，获取最新信息，综合多个来源生成报告 | web-research, web research, web, research | YEL 讨论触发 |

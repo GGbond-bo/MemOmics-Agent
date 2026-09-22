@@ -14,5 +14,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Best practices for data analyses with focused on user supplied data.",
+  "trigger_keywords": [
+    "最佳实践",
+    "best practice",
+    "guideline",
+    "practices"
+  ],
+  "trigger_level": "RED"
 }

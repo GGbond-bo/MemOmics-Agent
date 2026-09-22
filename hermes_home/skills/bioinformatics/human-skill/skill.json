@@ -1,0 +1,28 @@
+{
+  "id": "human-skill",
+  "name": "human-skill：中文论文学术文本的自检双件套",
+  "category": "general",
+  "language": "Python",
+  "description": "中文学位论文/学术文本两道自检：① 去 AI 味（AI 腔词表 + 句式模板 + 节奏均匀度扫描）② 查重（n-gram 重合率：论文内部自我重复 + 对自建源库如专利交底书/素材包）。触发词：去AI味、去AI腔、humanize、human-skill、查重、重复率、自我抄袭、检测AI痕迹、论文像AI写的。",
+  "starting_prompt": "使用 human-skill：中文论文学术文本的自检双件套 进行分析",
+  "source_dir": "skills/bioinformatics/human-skill",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "去AI味",
+    "去AI腔",
+    "human-skill",
+    "查重",
+    "重复率",
+    "自我抄袭",
+    "AI痕迹",
+    "像AI写的",
+    "AI腔",
+    "降AI味"
+  ],
+  "when_to_use": "用户要求对中文论文/报告做去 AI 味处理，或要求查重（重复率）、检查自我抄袭（如学位论文 vs 专利交底书同源）、投稿前 AI 痕迹自检。"
+}

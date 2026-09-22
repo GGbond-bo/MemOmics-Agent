@@ -8,18 +8,16 @@ visibility: "internal"
 keywords: "Word, docx, document, python-docx, Phylo, scientific, tables, figures, editable"
 version: "1.0"
 last-updated: "April 2026"
-description: >
-when_to_use: "[docx-generation] 需使用docx generation功能，适用于相关生信分析场景"
-  Generate professional, Phylo-branded Word documents from scientific analysis
-  results using python-docx. Use this skill whenever the agent needs to produce
-  a .docx deliverable. Only create when the user explicitly requests a Word
-  document, .docx, or editable report. Do NOT use for: simple markdown reports
-  viewed in-app, PDF deliverables (use pdf_report_generation), or spreadsheet
-  data (use CSV or xlsx).
+description: >-
+  [docx-generation] Word 文档的生成与读取。生成：用 python-docx 产出 .docx 交付物（Phylo 风格、
+  表格/图片/页眉页脚/题注）。读取：.docx 走 read_file；旧版 .doc（Word 97-2003 二进制）走 antiword；
+  扫描版 PDF 走 RapidOCR（详见 references/legacy-doc-and-scanned-pdf-extraction.md）。
+  仅当用户明确要求 Word/.docx/可编辑报告时创建。不适用：应用内 markdown 报告、
+  PDF 交付物（走 pdf-report-generation）、表格数据（CSV/xlsx）。
+when_to_use: "[docx-generation] 需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用"
 compatibility:
   pre_installed:
     - python-docx
----
 ---
 
 ## ⛔ MemOmics 强制规则（不可违反，优先级最高）
@@ -778,3 +776,12 @@ rendering." If figures are blank, unreadable, or clipped, regenerate and re-chec
 11. **Font inheritance is unreliable.** python-docx does not always inherit
     the Normal style font into headings, table cells, or list items. Always
     set `font.name = "Arial"` explicitly on every run.
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-09-16 | antiword_extract_doc | - | - |  |
+| human | brain | aging | 2026-09-16 | gen_thesis_docx.py | - | - |  |

@@ -8,11 +8,14 @@
 本文件把 contracts/skill_triggers.json 变成可执行契约：
   1. 契约文件结构 / 规则值 ↔ 代码常量（MIN_KW_LEN、MAX_KW_LEN、MAX_KW、停用词、豁免表）逐条相等；
   2. 匹配语义按契约断言（中文子串 / 英文实词全中 / 大小写无关 / 中英边界空白归一 / 文献库豁免）；
-  3. 关键词质量用棘轮：新增裸通用词、违规蔓延、修好却不清台账都必须报错；
-  4. 缓存必须绑定 SKILLS_INDEX 的 mtime（索引重建后立即可见）——旧实现这一条是红的。
+  3. 关键词质量用棘轮：新增裸通用词（裸英文词 + 裸中文通用词）、违规蔓延、修好却不清台账都必须报错；
+  4. 源头也要干净：skill.json / SKILL.md frontmatter / SOUL 必触发表里被 BOILERPLATE 静默丢弃或不生效的裸通用词同样算隐患；
+  5. 缓存必须绑定 SKILLS_INDEX 的 mtime（索引重建后立即可见）——旧实现这一条是红的。
+2026-09-23 P0-2b：台账 known_violations 已清零（33 条全部修完），蔓延 / 过期两个负向分支改用合成契约继续钉住。
 """
 import json
 import os
+import re
 import time
 
 import pytest
@@ -38,6 +41,44 @@ MATCHING = CONTRACT.get('matching') or {}
 RATCHET = CONTRACT.get('ratchet') or {}
 KNOWN = RATCHET.get('known_violations') or {}
 EXEMPT = ((CONTRACT.get('exemptions') or {}).get('local_literature') or {})
+FORBIDDEN_ASCII = {str(w).lower() for w in (RULES.get('forbidden_bare_ascii_words') or [])}
+FORBIDDEN_CJK = {str(w) for w in (RULES.get('forbidden_bare_cjk_words') or [])}
+# P0-2b 清零留痕：转正的正向用例文本 / 收敛的过度触发文本，护栏不能跟着清零一起消失
+RETIRED_GAP_TEXTS = [
+    '线粒体比例太高，帮我把这批细胞过滤掉',
+    '帮我复现这篇论文的方法部分',
+    '这批数据要不要做批次校正',
+    '把跑出来的表格合并成一个 Excel',
+    '精读这篇论文，逐段解读一下',
+    '从这篇文献里提取实验参数',
+    '这个研究方向值得做吗？帮我评估一下可行性',
+]
+CONVERGED_OVER_TEXTS = [
+    '这个 analysis 的 core 思路是什么',
+    'Please help me design a plan for my holiday',
+]
+
+
+def _bare_generic(word):
+    w = str(word).strip()
+    if not w:
+        return False
+    if w.isascii():
+        return ' ' not in w and w.lower() in FORBIDDEN_ASCII
+    return w in FORBIDDEN_CJK
+
+
+def _red_entries():
+    red = {e['name']: e for e in reg.scan_skills() if e.get('level') == 'RED'}
+    assert len(red) >= 40, 'RED 技能太少（%d），源头断言会形同虚设' % len(red)
+    return red
+
+
+def _contract_with_ledger(known):
+    """合成契约：真实台账已清零，蔓延 / 过期分支用合成台账继续钉住。"""
+    contract = json.loads(json.dumps(CONTRACT))
+    contract['ratchet']['known_violations'] = dict(known)
+    return contract
 
 
 @pytest.fixture(scope='module')
@@ -67,16 +108,25 @@ class TestContractFile:
     def test_ratchet_is_documented_as_monotone(self):
         rule = RATCHET.get('rule') or ''
         assert '只能减少' in rule, '棘轮语义必须在契约里写明（现：%s）' % rule
-        assert KNOWN, '台账不能为空：存量违规要么修掉、要么留档'
+        assert KNOWN == {}, (
+            '2026-09-23 P0-2b 后台账应为空（存量 33 条全部修完）；'
+            '若确有新存量，请连同原因一起留档: %s' % sorted(KNOWN))
+        assert RATCHET.get('zero_since'), '台账清零必须有留痕（ratchet.zero_since）'
 
     def test_known_violations_reference_real_skills(self, all_names):
         bad = sorted({s for owners in KNOWN.values() for s in owners} - all_names)
         assert not bad, '台账引用了不存在的技能（改名/删技能后要同步）: %s' % bad
 
     def test_known_violations_words_are_declared_forbidden(self):
-        forbidden = {w.lower() for w in RULES.get('forbidden_bare_ascii_words') or []}
-        extra = sorted(set(KNOWN) - forbidden)
-        assert not extra, '台账里的词必须先写进 forbidden_bare_ascii_words: %s' % extra
+        declared = FORBIDDEN_ASCII | FORBIDDEN_CJK
+        extra = sorted(set(KNOWN) - declared)
+        assert not extra, ('台账里的词必须先写进 forbidden_bare_ascii_words / '
+                           'forbidden_bare_cjk_words: %s' % extra)
+
+    def test_both_forbidden_lists_are_declared(self):
+        assert len(FORBIDDEN_ASCII) >= 30, '裸英文通用词清单被削了？只剩 %d 条' % len(FORBIDDEN_ASCII)
+        assert FORBIDDEN_CJK, '裸中文通用词清单不能为空（2026-09-23 P0-2b 上线）'
+        assert {'整合', '分析', '设计'} <= FORBIDDEN_CJK, sorted(FORBIDDEN_CJK)
 
 
 # ---------- B. 代码常量 == 契约规则值 ----------
@@ -86,6 +136,29 @@ class TestCodeMatchesContract:
         assert reg.MIN_KW_LEN == RULES['min_len']
         assert reg.MAX_KW_LEN == RULES['max_len']
         assert reg.MAX_KW == RULES['max_per_skill']
+
+    def test_keyword_filter_lists_match_contract(self):
+        """抽取阶段的「静默丢弃」词表也要单点真源（P0-2b 之前只存在于代码里）。"""
+        filters = CONTRACT.get('keyword_filters') or {}
+        assert filters.get('boilerplate'), '契约必须声明 boilerplate 词表'
+        assert set(reg.BOILERPLATE) == set(filters['boilerplate']), (
+            'BOILERPLATE 与契约不一致：代码多 %s / 契约多 %s'
+            % (sorted(set(reg.BOILERPLATE) - set(filters['boilerplate'])),
+               sorted(set(filters['boilerplate']) - set(reg.BOILERPLATE))))
+        assert set(reg.GENERIC_STOP) == set(filters['generic_stop']), (
+            'GENERIC_STOP 与契约不一致：代码多 %s / 契约多 %s'
+            % (sorted(set(reg.GENERIC_STOP) - set(filters['generic_stop'])),
+               sorted(set(filters['generic_stop']) - set(reg.GENERIC_STOP))))
+
+    def test_boilerplate_words_are_dropped_at_extraction(self):
+        """机制证明：BOILERPLATE 词在抽取阶段就被丢掉 —— 有效触发词视角永远看不到它们。"""
+        got = reg._split_keywords('分析, 可视化, 报告, 质控, deg analysis')
+        assert '质控' in got and 'deg analysis' in got, got
+        for w in ('分析', '可视化', '报告'):
+            assert w not in got, 'BOILERPLATE 词不该穿过抽取阶段: %s -> %s' % (w, got)
+        rows = _red_entries()
+        leaked = sorted({w for e in rows.values() for w in e['keywords']} & set(reg.BOILERPLATE))
+        assert not leaked, 'BOILERPLATE 词漏进了有效触发词: %s' % leaked
 
     def test_stopwords_are_pinned(self):
         assert set(server._EN_STOPWORDS) == set(MATCHING['stopwords']), (
@@ -168,12 +241,99 @@ class TestKeywordRatchet:
         assert any('新增裸通用词' in p for p in problems), problems
 
     def test_violation_spread_is_rejected(self):
-        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['core'])))
+        contract = _contract_with_ledger({'core': ['zz-other']})
+        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['core'])), contract=contract)
         assert any('蔓延' in p for p in problems), problems
+        assert not any('新增裸通用词' in p for p in problems), (
+            '台账里已有该词时只该报「蔓延」: %s' % problems)
 
     def test_stale_ratchet_entry_is_rejected(self):
-        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['质控'])))
+        contract = _contract_with_ledger({'core': ['zz-other']})
+        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['质控'])), contract=contract)
         assert any('台账过期' in p for p in problems), problems
+
+    def test_bare_cjk_generic_word_is_rejected(self):
+        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['整合'])))
+        assert any('新增裸通用词' in p and '整合' in p for p in problems), problems
+
+    def test_cjk_domain_phrases_are_allowed(self):
+        problems = reg.check_keywords(_entries(
+            ('zz-new', 'RED', ['多组学整合', '差异分析', '批次校正', '线粒体'])))
+        assert not any('通用词' in p for p in problems), (
+            '中文领域短语不该被通用词规则拦下：%s' % problems)
+
+    def test_mixed_cjk_ascii_keyword_is_allowed(self):
+        problems = reg.check_keywords(_entries(('zz-new', 'RED', ['QC质控', 'scrna-qc'])))
+        assert not any('通用词' in p for p in problems), problems
+
+    def test_short_ascii_acronym_rule_matches_contract(self):
+        """短缩写边界长度必须与契约一致（改语义必须同时改契约）。"""
+        rule = (CONTRACT.get('matching') or {}).get('short_ascii_boundary') or {}
+        assert rule.get('max_len') == server._SHORT_ASCII_KW_MAX, (
+            '短缩写边界长度与契约不一致：契约 %s / 代码 %s'
+            % (rule.get('max_len'), server._SHORT_ASCII_KW_MAX))
+
+    def test_short_ascii_acronym_does_not_match_inside_words(self):
+        """P0-2b 极端测试实抓：纯子串匹配把英文词片段当成了缩写触发词。"""
+        cases = [
+            ('science 课上学了什么', 'nature-figure'),
+            ('conscious 是什么意思', 'nature-figure'),
+            ('scissors 在哪买', 'nature-figure'),
+            ('帮我实现这个 algorithm', 'functional-enrichment'),
+            ('mrna 表达量怎么看', 'mendelian-randomization-twosamplemr'),
+            ('degree 是什么意思', 'deg-analysis'),
+        ]
+        for text, skill in cases:
+            hits = server._match_red_skill_triggers(text)
+            assert skill not in hits, '%s 误触发 %s: %s' % (text, skill, hits)
+
+    def test_short_ascii_acronym_still_hits_when_standalone(self):
+        """加了字母边界也不能伤召回：缩写独立出现（含汉字紧贴）必须照常命中。"""
+        cases = [
+            ('帮我做 SCI 级别的图', 'nature-figure'),
+            ('SCI配图怎么弄', 'nature-figure'),
+            ('QC 前先看看', 'scrna-qc'),
+            ('先做一下QC', 'scrna-qc'),
+            ('帮我做个 PPT', 'ppt-generator'),
+            ('GO 富集分析', 'functional-enrichment'),
+        ]
+        for text, skill in cases:
+            assert skill in server._match_red_skill_triggers(text), text
+
+    def test_live_sources_have_no_bare_generic_words(self):
+        """源头断言：比「有效触发词」更严 —— 被 BOILERPLATE 静默丢弃、被 16 条上限截断的尾巴都是隐患。
+
+        实测（P0-2b）：scipilot-figure-skill/skill.json 写的「可视化」被 BOILERPLATE 静默丢掉，
+        有效触发词里根本没有它，check_keywords 也就永远不会报 —— 只有查源头才发现。
+        """
+        leaks = []
+        for name, e in sorted(_red_entries().items()):
+            sj = os.path.join(e['dir'], 'skill.json')
+            if os.path.isfile(sj):
+                with open(sj, encoding='utf-8') as f:
+                    data = json.load(f)
+                for w in (data.get('trigger_keywords') or []):
+                    if _bare_generic(w):
+                        leaks.append('%s/skill.json -> %s' % (name, w))
+            md = os.path.join(e['dir'], 'SKILL.md')
+            if os.path.isfile(md):
+                with open(md, encoding='utf-8') as f:
+                    text = f.read()
+                m = re.search(r'trigger_keywords\s*[:：]\s*(\[[^\]]*\])', text)
+                if m:
+                    try:
+                        words = json.loads(m.group(1))
+                    except ValueError:
+                        words = [x.strip().strip('"') for x in m.group(1).strip('[]').split(',')]
+                    for w in words:
+                        if _bare_generic(w):
+                            leaks.append('%s/SKILL.md -> %s' % (name, w))
+        for name, words in sorted((reg._read_soul_red() or {}).items()):
+            for w in (words or []):
+                if _bare_generic(w):
+                    leaks.append('SOUL.md 必触发表 -> %s (%s)' % (w, name))
+        assert not leaks, ('源头还有裸通用词（会被 BOILERPLATE 静默丢弃 / 被 16 条上限截断，有效触发词视角看不见）:'
+                           + chr(10) + '  ' + (chr(10) + '  ').join(leaks))
 
     def test_shape_rules_have_teeth(self):
         bad = _entries(('zz-short', 'RED', ['x']),
@@ -234,9 +394,20 @@ class TestMatrixConsistency:
         for edge in MATRIX['edge_cases']:
             assert edge.get('max_hits', ceiling) <= ceiling
 
-    def test_matrix_ratchets_are_non_empty(self):
-        assert MATRIX['known_over_triggers'], '过度触发清单不能为空（否则回归无人看守）'
-        assert MATRIX['known_gaps'] is not None
+    def test_matrix_ratchets_are_converged(self):
+        """P0-2b：7 条缺口修好、2 条过度触发收敛 → 两个棘轮清单清零。
+
+        护栏不能跟着清零一起消失：转正的文本必须在 cases 里（must_hit 钉住），
+        收敛的文本必须在 distractors 里（零命中断言接管）。
+        """
+        assert MATRIX['known_gaps'] == [], '缺口清单应已清零: %s' % MATRIX['known_gaps']
+        assert MATRIX['known_over_triggers'] == [], '过度触发清单应已清零: %s' % MATRIX['known_over_triggers']
+        texts = {c['text'] for c in MATRIX['cases']}
+        missing = sorted(t for t in RETIRED_GAP_TEXTS if t not in texts)
+        assert not missing, '转正的缺口文本必须留在 cases 里: %s' % missing
+        dist = {d['text'] if isinstance(d, dict) else d for d in MATRIX['distractors']}
+        missing = sorted(t for t in CONVERGED_OVER_TEXTS if t not in dist)
+        assert not missing, '收敛的过度触发文本必须留在 distractors 里: %s' % missing
 
     def test_evidence_section_points_at_real_files(self):
         ev = CONTRACT['evidence']

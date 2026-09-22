@@ -32,5 +32,13 @@
   "success_count": 1,
   "user_prefs": {
     "last_used_script": ""
-  }
+  },
+  "trigger_keywords": [
+    "提取参数",
+    "文献参数",
+    "parameter extraction",
+    "实验参数",
+    "参数提取"
+  ],
+  "trigger_level": "RED"
 }

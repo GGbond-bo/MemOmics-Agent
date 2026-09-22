@@ -226,5 +226,15 @@
       "evidence": "MF_subset_2000 QC策略裁决: 不重过滤(验证性评估)成立, 59个双联体特征细胞保留但标注",
       "date": "2026-08-14 21:02:52"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "QC",
+    "质控",
+    "scrna-qc",
+    "scrna qc",
+    "线粒体",
+    "批次校正",
+    "批次效应"
+  ],
+  "trigger_level": "RED"
 }

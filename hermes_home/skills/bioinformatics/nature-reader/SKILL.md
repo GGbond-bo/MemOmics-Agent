@@ -1,6 +1,6 @@
 ---
 name: nature-reader
-description: "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读这篇文章"
+description: "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文, 精读论文, 论文翻译, 文献阅读, 帮我读这篇文章"
 when_to_use: "[nature-reader] 全文中英对照精读：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要"
 trigger_keywords: ["读论文", "精读论文", "论文翻译", "文献翻译", "文献阅读", "帮我读这篇文章", "帮我读这篇", "帮我读一下", "读一下这篇", "翻译这篇paper", "全文对照", "paper translation", "read this paper", "deep reading", "read this"]
 trigger_level: RED 必触发
@@ -83,3 +83,13 @@ The files under `references/` are deep references, not defaults. Open them on de
 - The dynamic layer keeps each invocation cheap: only the fragment relevant to this input enters context.
 - The router itself is short on purpose. Update fragments, not this file, when adding scope.
 - This structure mirrors `nature-writing` and `nature-polishing` so shared content lives in `nature-shared/`.
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-27 | nature_page_fetch.py | - | - |  |
+| - | - | - | 2026-08-27 | nature_page_fetch.py | - | - |  |
+| - | - | - | 2026-08-27 | nature_page_fetch.py | - | - |  |

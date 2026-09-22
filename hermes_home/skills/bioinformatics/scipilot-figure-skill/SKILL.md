@@ -325,6 +325,8 @@ pypdf>=4.0             # 可选；check_figure 字体嵌入检查
 kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 ```
 
+python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotlib.lines, seaborn, scipy（seaborn 用于箱线/regplot；matplotlib.lines 用于自定义图例句柄）
+
 可选依赖缺失时本技能仍能跑——会优雅降级并提示。
 
 ## Proven Scripts
@@ -352,9 +354,21 @@ kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 | Homo sapiens | skeletal_muscle | aging | 2026-08-20 | subcluster_top_scores_5sub.py | - | - |  |
 | Homo sapiens | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
 | - | - | - | 2026-08-20 | subcluster_violin_fig | - | - |  |
+| human, macaca fascicularis | hippocampus | aging | 2026-08-29 | celltype_stack_boxplot_v2.py | - | - |  |
+| human, macaca fascicularis | hippocampus | aging | 2026-08-29 | celltype_stack_boxplot_v2.py | - | - |  |
+| human | hippocampus | aging | 2026-08-29 | concordance_astro_opc.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_split_v10.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-21 | featureplot_nature_palettes.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-21 | palette_accessibility_check.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_source.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_args.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| cmd.exe /c '\"C:\\Program Files\\R\\R-4.5.3\\bin\\ | - | 在 MSYS bash 下经 cmd.exe 调用 R 4.5.3 时，外层单引号 + 内层双引号会 |
 | library(ComplexHeatmap): 不存在叫'ComplexHeatmap'这个名称的 | Rscript -e requireNamespace 用 R-4.5.3 主库 | - |
+| colorspace::simulate_cvd(col, type="deutan"): unused argument (type = "deutan") | colorspace 2.1.3 移除了 simulate_cvd 的 type 参数；deutan()/protan() 返回 sRGB 对象（nrow/ncol 不适用，直接取列会报 missing value where TRUE/FALSE needed） | 用 colorspace::coords(colorspace::deutan(colorspace::hex2RGB(cols))) 取 RGB 矩阵 → grDevices::rgb() 转 hex；L* 用 as(hex2RGB(cols),"LAB")[,"L"]，失败回退 rec709 亮度 100*(0.2126R+0.7152G+0.0722B) |
 

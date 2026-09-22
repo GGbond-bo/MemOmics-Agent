@@ -1,6 +1,6 @@
 {
   "schema": "memomics.skill-routing-matrix.v1",
-  "description": "Skill 路由回归矩阵：多场景 × 多意图 × 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；known_gaps 是「已确认缺口」棘轮，一旦被修复必须提升为 cases 条目。（2026-09-23 P0-2a：英文多词触发词收紧为「实词全中」、中英边界空白归一；over 清单随之收敛、human-space 缺口修复后已提升为用例 human-space-01。）",
+  "description": "Skill 路由回归矩阵：多场景 x 多意图 x 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；2026-09-23 P0-2b 后缺口清单与过度触发清单都已清零：修好的缺口提升成 cases（必须命中），收敛的过度触发句下沉成 distractors（必须零命中），护栏靠这两个清单继续看守。2026-09-23 P0-2b 极端测试追加：词片段误触发（science/algorithm/mRNA/degree）与裸「怎么修」全部收敛为 distractors 钉住。",
   "cases": [
     {
       "id": "scrna-qc-01",
@@ -515,6 +515,78 @@
         "idea-evaluator"
       ],
       "max_hits": 7
+    },
+    {
+      "id": "promoted-qc-mito",
+      "intent": "缺口转正",
+      "text": "线粒体比例太高，帮我把这批细胞过滤掉",
+      "must_hit": [
+        "scrna-qc"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "promoted-reproduce",
+      "intent": "缺口转正",
+      "text": "帮我复现这篇论文的方法部分",
+      "must_hit": [
+        "nature-reader"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "promoted-batch",
+      "intent": "缺口转正",
+      "text": "这批数据要不要做批次校正",
+      "must_hit": [
+        "scrna-qc"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "promoted-excel",
+      "intent": "缺口转正",
+      "text": "把跑出来的表格合并成一个 Excel",
+      "must_hit": [
+        "analysis-summary-report"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "promoted-nature-reader-taozhe",
+      "intent": "缺口转正",
+      "text": "精读这篇论文，逐段解读一下",
+      "must_hit": [
+        "nature-reader"
+      ],
+      "max_hits": 2
+    },
+    {
+      "id": "promoted-paramextract-shiyan",
+      "intent": "缺口转正",
+      "text": "从这篇文献里提取实验参数",
+      "must_hit": [
+        "literature-param-extraction"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "promoted-ideaeval-fangxiang",
+      "intent": "缺口转正",
+      "text": "这个研究方向值得做吗？帮我评估一下可行性",
+      "must_hit": [
+        "idea-evaluator"
+      ],
+      "max_hits": 1
+    },
+    {
+      "id": "error-02",
+      "intent": "报错短语",
+      "text": "数据跑不了怎么修",
+      "must_hit": [
+        "error-recovery"
+      ],
+      "max_hits": 2
     }
   ],
   "distractors": [
@@ -525,7 +597,15 @@
     "这个数据要不要用 DESeq2",
     "把结果整理成表格",
     "我今天心情不错，随便聊聊",
-    "帮我订个外卖"
+    "帮我订个外卖",
+    "这个 analysis 的 core 思路是什么",
+    "Please help me design a plan for my holiday",
+    "science 课上学了什么",
+    "conscious 是什么意思",
+    "帮我实现这个 algorithm",
+    "degree 是什么意思，学位英语怎么考",
+    "mrna 表达量怎么看",
+    "手机电量不够了，怎么修"
   ],
   "edge_cases": [
     {
@@ -583,69 +663,7 @@
       "max_hits": 4
     }
   ],
-  "known_gaps": [
-    {
-      "id": "gap-qc-mito",
-      "text": "线粒体比例太高，帮我把这批细胞过滤掉",
-      "would_be": "scrna-qc",
-      "reason": "只认 QC/质控 字样，自然口语（线粒体比例/过滤细胞）不触发"
-    },
-    {
-      "id": "gap-reproduce",
-      "text": "帮我复现这篇论文的方法部分",
-      "would_be": "nature-reader",
-      "reason": "复现/方法部分 不在任何 RED 触发词里"
-    },
-    {
-      "id": "gap-batch",
-      "text": "这批数据要不要做批次校正",
-      "would_be": "scrna-qc",
-      "reason": "批次校正 不在触发词里"
-    },
-    {
-      "id": "gap-excel",
-      "text": "把跑出来的表格合并成一个 Excel",
-      "would_be": "analysis-summary-report",
-      "reason": "表格合并/Excel 不在触发词里"
-    },
-    {
-      "id": "gap-nature-reader-taozhe",
-      "text": "精读这篇论文，逐段解读一下",
-      "would_be": "nature-reader",
-      "reason": "触发词是「精读论文」，中间插了「这篇」就断链（子串匹配的典型漏召回）"
-    },
-    {
-      "id": "gap-paramextract-shiyan",
-      "text": "从这篇文献里提取实验参数",
-      "would_be": "literature-param-extraction",
-      "reason": "触发词是「提取参数」，中间插了「实验」就断链"
-    },
-    {
-      "id": "gap-ideaeval-fangxiang",
-      "text": "这个研究方向值得做吗？帮我评估一下可行性",
-      "would_be": "idea-evaluator",
-      "reason": "触发词是「这个想法值得做吗」「评估可行性」，换词/插入「一下」即漏召回"
-    }
-  ],
-  "known_over_triggers": [
-    {
-      "id": "over-en-analysis-core",
-      "text": "这个 analysis 的 core 思路是什么",
-      "hits": [
-        "scrnaseq-scanpy-core-analysis",
-        "scrnaseq-seurat-core-analysis"
-      ],
-      "reason": "P0-2a 收紧「英文多词=实词全中」后 6→2：analysis summary report / deg analysis / survival analysis / power analysis 的单词级回退已消除。剩下 2 个是裸通用词 core 的子串命中（scrnaseq-*-core-analysis），属元数据问题，P0-2b 清词时收敛。"
-    },
-    {
-      "id": "over-en-design-plan",
-      "text": "Please help me design a plan for my holiday",
-      "hits": [
-        "experimental-design-statistics",
-        "research-plan"
-      ],
-      "reason": "P0-2a 收紧后 3→2：figure design / design a figure 的单词级回退已消除。剩下 experimental-design-statistics 与 research-plan 由裸通用词 design / plan 的子串命中造成，P0-2b 清词时收敛。"
-    }
-  ],
+  "known_gaps": [],
+  "known_over_triggers": [],
   "coverage_exempt": []
 }

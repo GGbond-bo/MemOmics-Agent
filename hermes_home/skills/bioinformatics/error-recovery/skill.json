@@ -49,5 +49,17 @@
       "description": "record_run 或 record_error 记录",
       "tool": "skill_evolution"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "报错",
+    "出错",
+    "报错怎么修",
+    "不工作",
+    "跑不了",
+    "调试",
+    "traceback",
+    "error message"
+  ],
+  "trigger_level": "RED",
+  "when_to_use": "当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发"
 }

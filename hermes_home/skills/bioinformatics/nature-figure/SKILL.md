@@ -209,3 +209,26 @@ save_pub_r <- function(plot, filename, width_mm = 183, height_mm = 120, dpi = 60
 | - | - | - | 2026-08-20 | fig_split_v10.py 口径验证 | - | - |  |
 | - | - | - | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
+
+
+| human | skeletal_muscle | muscle_fiber_type | 2026-09-04 | go_heatmap_env_probe | - | - |  |
+| human | skeletal_muscle | muscle_fiber_type | 2026-09-04 | go_heatmap_preprocess | - | - |  |
+| human | skeletal_muscle | muscle_fiber_type | 2026-09-04 | go_heatmap_MF16.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | check_scoreStress_artifact.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS_v3_transposed.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS_v3_transposed.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS_v3_transposed.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS_v3_transposed.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v4.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v4.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v5.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v5.R | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| 错误: 不是所有的abs(yc) < 1e-09都是TRUE 停止执行 | R 的 y 轴向上增长 → 按 yc=0 起累加会把 AXES 第一个轴放到图底 | 行布局从底向上累加改为从顶向下递减时，循环里对每个轴都减了一次 GAPY（含最后一个轴），导致总高多 |
+| readxl 未装；ComplexHeatmap requireNamespace=TRUE 预期在 | execute_r 持久内核 .libPaths 未包含 E:/R-libs/R | 改用 openxlsx::read.xlsx 读表；手动 .libPaths 加入 E:/R-lib |
+

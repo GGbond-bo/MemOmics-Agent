@@ -68,5 +68,13 @@
   "prerequisites": {
     "requires": [],
     "description": "空间数据直接开始"
-  }
+  },
+  "trigger_keywords": [
+    "空间转录组",
+    "spatial-transcriptomics",
+    "spatial transcriptomics",
+    "transcriptomics",
+    "空间转录组分析"
+  ],
+  "trigger_level": "RED"
 }

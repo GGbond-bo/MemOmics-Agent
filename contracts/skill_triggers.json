@@ -61,12 +61,99 @@
       "statistics",
       "summary"
     ],
+    "forbidden_bare_cjk_words": [
+      "分析",
+      "总结",
+      "生成",
+      "设计",
+      "处理",
+      "下载",
+      "检索",
+      "提取",
+      "评估",
+      "优化",
+      "可视化",
+      "整合",
+      "报告",
+      "图表",
+      "数据"
+    ],
     "forbidden_rationale": [
       "这些词是日常英文里的通用词/刊名，单独做关键词时区分度接近 0：",
       "实测「这个 analysis 的 core 思路是什么」命中 6 个技能、「Please help me design a plan for my holiday」命中 3 个。",
-      "要表达同样的意思请写成短语（deg analysis / study design / research plan / Nature style）或中文词（实验设计/统计方法）。"
+      "要表达同样的意思请写成短语（deg analysis / study design / research plan / Nature style）或中文词（实验设计/统计方法）。",
+      "中文侧同理：单个通用动词/名词（分析/总结/设计/整合…）单独做关键词区分度为 0，必须写成领域短语（多组学整合/差异分析/批次校正）。",
+      "2026-09-23 P0-2b 实测语料里只揪出 1 个（multi-omics-integration 的 整合），已替换为 多组学整合；其余中文触发词都是领域词（聚类/拟时序/质控/拷问），不是通用词。"
     ],
-    "forbidden_scope": "只作用于「裸 ASCII 单词」触发词（单个英文单词、无空格）。中文触发词不在此列：中文词基本是领域词，裸通用词风险集中在英文；CJK 通用词（总结/分析/设计 之类）留待 P0-2b 用中文停用词表单独治理。2026-09-23 已用负向测试确认：往本表里塞中文词不会误伤现存语料。"
+    "forbidden_scope": "裸 ASCII 单词（无空格、纯英文）+ 裸中文通用词（整条触发词就是停用词表里的词）都禁止，只对 RED 行生效。2026-09-23 P0-2b：RED 语料两个清单都已清零，ratchet.known_violations 收缩到 {}，此后新增即硬拦。注意有效触发词视角有盲区：被 keyword_filters 丢掉或超过 max_per_skill 截断的词看不见，所以 test_live_sources_have_no_bare_generic_words 直接查源头（skill.json / SKILL.md / SOUL 必触发表）。YEL/GRN 不在射程内（不进自动匹配）：实测 33 处裸通用词（cell/design/core/remove…）留在 YEL/GRN，属 P0-2c 候选，不影响 RED 行为。"
+  },
+  "keyword_filters": {
+    "why": [
+      "这两个集合在「触发词抽取」阶段就被丢弃（webui/skills_registry.py:192），词根本不进索引，",
+      "因此 check_keywords 的「有效触发词」视角永远看不到它们 —— 是静默黑洞，不是报错。",
+      "2026-09-23 P0-2b 实测：scipilot-figure-skill/skill.json 里写着 可视化，被 BOILERPLATE 静默丢掉，",
+      "作者以为配了触发词，实际从来没生效过，且没有任何提示（新增的源头断言就是抓这类词的）。",
+      "词表必须与代码常量逐字相等（测试断言 set(reg.BOILERPLATE) == set(契约)），否则清单漂移会变成静默的召回黑洞。",
+      "与 forbidden_bare_cjk_words 的重叠是有意的：BOILERPLATE 静默丢弃，forbidden 直接报错，报错优先。"
+    ],
+    "applies_at": "触发词抽取（skill.json 触发词 / SKILL.md 触发词行 / SOUL 必触发表 三处都会过这道筛子）",
+    "boilerplate": [
+      "analysis",
+      "atac",
+      "atacseq",
+      "bioinformatics",
+      "bulk",
+      "chip-seq",
+      "chipseq",
+      "data",
+      "figure",
+      "literature",
+      "omics",
+      "protein",
+      "proteomics",
+      "report",
+      "rna",
+      "sc-rna",
+      "scrna",
+      "scrnaseq",
+      "single cell",
+      "single-cell",
+      "skill",
+      "spatial",
+      "system",
+      "分析",
+      "可视化",
+      "图",
+      "工具",
+      "技能",
+      "报告",
+      "数据",
+      "文献",
+      "生信",
+      "论文"
+    ],
+    "generic_stop": [
+      "and",
+      "for",
+      "help",
+      "please",
+      "python",
+      "r",
+      "the",
+      "use",
+      "used",
+      "using",
+      "with",
+      "一下",
+      "什么",
+      "你的",
+      "可以",
+      "帮我",
+      "怎么",
+      "我的",
+      "这个",
+      "那个"
+    ]
   },
   "matching": {
     "case_fold": true,
@@ -114,7 +201,17 @@
     "max_hits_ceiling": 8,
     "max_hits_ceiling_note": "单条用户消息最多返回 8 个技能（回归矩阵断言上限），超过说明触发词过宽，应修元数据而不是放宽断言",
     "order": "按 SKILLS_INDEX.md 行序返回（稳定，便于测试与复现）",
-    "empty_text_returns": "[]"
+    "empty_text_returns": "[]",
+    "short_ascii_boundary": {
+      "applies_to": "纯 ASCII 且长度 <= max_len 的触发词（缩写：SCI/GO/QC/MR/KM/DEG/PPT/EDA）",
+      "max_len": 3,
+      "rule": "前后不能紧贴英文字母；汉字/数字/空白/标点相邻仍算命中（\"做QC\"、\"SCI图\"、\"(QC)\"）。",
+      "note": [
+        "2026-09-23 P0-2b 极端测试实抓：纯子串匹配让 science->SCI、algorithm->go、mRNA->MR、degree->DEG、scissors->SCI 全部误触发。",
+        "短缩写是高频英文词片段，必须加字母边界；长英文词（paper/plot/figure）保持子串匹配，以兼容 papers/plots 等变形。",
+        "实现：server._SHORT_ASCII_KW_MAX + _short_ascii_kw_match()，长度值由 test_skill_trigger_contract.py 与契约对账。"
+      ]
+    }
   },
   "exemptions": {
     "local_literature": {
@@ -137,116 +234,21 @@
   "ratchet": {
     "rule": "known_violations 只能减少不能增加：新增裸通用词关键词会被门禁拦下；被修好的条目必须从本表删除（测试会因条目过期而红，强制收缩）",
     "known_violations_asof": "2026-09-23",
-    "known_violations": {
-      "background": [
-        "cellbender-remove-background"
-      ],
-      "best": [
-        "data-analysis-best-practices"
-      ],
-      "cell": [
-        "nature-figure"
-      ],
-      "core": [
-        "scrnaseq-scanpy-core-analysis",
-        "scrnaseq-seurat-core-analysis"
-      ],
-      "dataset": [
-        "omics-dataset-retrieval"
-      ],
-      "debug": [
-        "error-recovery"
-      ],
-      "deep": [
-        "deep-research"
-      ],
-      "design": [
-        "experimental-design-statistics"
-      ],
-      "download": [
-        "paper-download"
-      ],
-      "error": [
-        "error-recovery"
-      ],
-      "experimental": [
-        "experimental-design-statistics"
-      ],
-      "extraction": [
-        "literature-param-extraction"
-      ],
-      "fix": [
-        "error-recovery"
-      ],
-      "generation": [
-        "docx-generation"
-      ],
-      "generator": [
-        "ppt-generator"
-      ],
-      "humanize": [
-        "human-skill"
-      ],
-      "integration": [
-        "multi-omics-integration"
-      ],
-      "manuscript": [
-        "academic-paper-writing",
-        "nature-figure"
-      ],
-      "multi": [
-        "multi-omics-integration"
-      ],
-      "nature": [
-        "nature-figure"
-      ],
-      "paper": [
-        "academic-paper-writing",
-        "paper-download"
-      ],
-      "param": [
-        "literature-param-extraction"
-      ],
-      "plan": [
-        "research-plan"
-      ],
-      "plot": [
-        "scipilot-figure-skill"
-      ],
-      "polish": [
-        "paper-polish"
-      ],
-      "remove": [
-        "cellbender-remove-background"
-      ],
-      "research": [
-        "deep-research",
-        "research-plan"
-      ],
-      "retrieval": [
-        "omics-dataset-retrieval"
-      ],
-      "science": [
-        "nature-figure"
-      ],
-      "spot": [
-        "spatial-transcriptomics"
-      ],
-      "statistics": [
-        "experimental-design-statistics"
-      ],
-      "summary": [
-        "analysis-summary-report"
-      ]
-    }
+    "known_violations": {},
+    "zero_since": "2026-09-23（P0-2b）：32 条裸 ASCII 词 + 1 条裸中文词全部修完，台账清零；测试用合成契约继续钉住「蔓延」分支。"
   },
   "evidence": {
-    "fixture": "webui/tests/fixtures/skill_routing_matrix.json（56 正向场景 + 8 干扰 + 10 极端 + 7 缺口棘轮 + 2 过度触发钉住）",
+    "fixture": "webui/tests/fixtures/skill_routing_matrix.json（P0-2b 后：64 正向场景 + 16 干扰 + 10 极端 + 0 缺口 + 0 过度触发钉住，缺口与过度触发全部修完转正）",
     "tests": [
       "webui/tests/test_skill_routing_matrix.py（路由回归矩阵：正向/干扰/过度触发钉住/缺口棘轮/边界/覆盖/不变量）",
       "webui/tests/test_skill_trigger_contract.py（本契约逐条钉住 + 关键词棘轮 + 缓存失效回归）",
       "webui/tests/test_skill_trigger_matrix.py（历史触发词矩阵：索引锚点可见性）"
     ],
     "gate": "scripts/check_skills_gate.py（索引一致性 + 上述测试，提交前与 CI 双侧执行）"
-  }
+  },
+  "changelog": [
+    "2026-09-23 P0-2a：加契约文件；修触发词缓存 mtime 失效（索引重建后新词不生效）；英文多词由「任一实词」收紧为「实词全中」；中英边界空格归一。",
+    "2026-09-23 P0-2b：清掉 21 个 RED 技能 + SOUL 必触发表里的 32 个裸英文通用词（改用短语/中文词）；补 7 个漏召回缺口（线粒体/批次校正/Excel/实验参数/精读/复现/可行性）；裸中文通用词清单上线；棘轮台账清零。",
+    "2026-09-23 P0-2b 极端测试补丁：短 ASCII 缩写加字母边界（science->SCI / algorithm->GO / mRNA->MR / degree->DEG 词片段误触发归零）；error-recovery 的裸「怎么修」收紧成「报错怎么修」；BOILERPLATE/GENERIC_STOP 静默丢弃词表纳入契约单点真源。"
+  ]
 }

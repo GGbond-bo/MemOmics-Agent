@@ -3543,6 +3543,27 @@ _LOCAL_LIT_RED_EXEMPT = frozenset({
     "paper-translate", "academic-paper-writing",
 })
 _LOCAL_LIT_EXEMPT_TRIGGERS = ("文献库", "文献库里", "/papers", ".pdf")
+# 短 ASCII 缩写（<=3 位）必须不与其它英文字母相邻
+# （= contracts/skill_triggers.json -> matching.short_ascii_boundary）
+# 旧实现纯子串匹配让 science->SCI、algorithm->go、mRNA->MR、degree->DEG 全部误触发；
+# 汉字/数字/空白相邻仍算命中（"做QC"、"SCI图"）。
+_SHORT_ASCII_KW_MAX = 3
+_SHORT_ASCII_RE_CACHE = {}
+
+
+def _short_ascii_kw_re(kw_l: str):
+    """短缩写触发词的正则（前后都不能紧贴英文字母），按词缓存。"""
+    r = _SHORT_ASCII_RE_CACHE.get(kw_l)
+    if r is None:
+        r = _SHORT_ASCII_RE_CACHE[kw_l] = re.compile(
+            r"(?<![a-z])%s(?![a-z])" % re.escape(kw_l))
+    return r
+
+
+def _short_ascii_kw_match(kw_l: str, t: str) -> bool:
+    return bool(_short_ascii_kw_re(kw_l).search(t))
+
+
 # CJK/ASCII 边界空白归一：中文用户写英文术语时常随手加空格（"做 QC" / "CNS 级别"），
 # 而触发词写的是紧凑形式（"CNS级别"）；不归一会造成「同一句话带空格不触发」的随机漏召回。
 _CJK_ASCII_GAP_RE = re.compile(
@@ -3566,6 +3587,8 @@ def _match_red_skill_triggers(user_text: str) -> list:
         deg-analysis / survival-analysis / power analysis 等 6 个技能（过度触发）。
       · 不用词边界（\b）判断：中文里英文词常与汉字紧贴（"做QC"、"跑DESeq2"），
         词边界会把这类真实说法判死。
+      · 但纯 ASCII 且 <=3 位的缩写（SCI/GO/QC/MR/KM/DEG/PPT/EDA）额外要求前后不紧贴英文字母：
+        "science" 不再命中 SCI、"algorithm" 不再命中 GO（P0-2b 极端测试实抓）。
     缓存绑定 SKILLS_INDEX mtime（P0-2 修复：旧实现只在 None 时构建一次，
     索引被 auto_register/技能编辑重建后仍用旧触发词，新技能永远匹配不到）。"""
     global _RED_TRIGGER_CACHE, _RED_TRIGGER_CACHE_MTIME
@@ -3600,6 +3623,12 @@ def _match_red_skill_triggers(user_text: str) -> list:
         for kw in triggers:
             kw_l = kw.lower()
             if len(kw_l) >= 2:
+                # 短 ASCII 缩写走「字母边界」匹配，避免 science/algorithm/mRNA/degree 这类词片段误触发（P0-2b）
+                if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
+                    if _short_ascii_kw_match(kw_l, t):
+                        matched = True
+                        break
+                    continue
                 if kw_l in t:
                     matched = True
                     break

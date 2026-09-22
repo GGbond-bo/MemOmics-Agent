@@ -39,5 +39,16 @@
   "proven_script": null,
   "error_count": 0,
   "success_count": 0,
-  "generated": true
+  "generated": true,
+  "trigger_keywords": [
+    "技术路线",
+    "分析路线",
+    "怎么分析",
+    "研究方案",
+    "research plan",
+    "research-plan",
+    "研究计划",
+    "分析方案"
+  ],
+  "trigger_level": "RED"
 }
