@@ -11,6 +11,7 @@
   - 同步注册进全局引用库（BibTeX/RIS，save_reference global_lib）
 - list_library(): 列出全部文献（用户导入 + agent 下载的 work/papers 索引合并）
 """
+import difflib
 import hashlib
 import json
 import logging
@@ -342,10 +343,18 @@ def _load_index(path: str) -> list:
         return []
 
 
+_INDEX_LOCK = threading.Lock()
+
+
 def _save_index(path: str, entries: list):
+    """原子写索引（tmp + os.replace）：防止并发任务（导入/翻译/知识提取同时改索引）
+    读到一个写了一半的 JSON——最坏会把整个 .pdf_index.json 变成空数组。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(entries, f, ensure_ascii=False, indent=2)
+    with _INDEX_LOCK:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
 
 def _collect_pdfs(paths) -> list:
@@ -1058,11 +1067,12 @@ def _classify_papers(entries: list) -> dict:
         "文献列表:\n" + json.dumps(items, ensure_ascii=False)
     )
     try:
-        from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
-        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-        r = _call_llm_sync(prompt, "lit_classify", cfg["api_key"], cfg["base_url"],
-                           cfg["model"], temperature=0.2, max_tokens=3000)
-        txt = r.get("content", "")
+        # 2026-09-17：改用 _llm_content（no_think + 推理占满自动重试）。实测原实现 max_tokens=3000
+        # 被 reasoning 全吃掉、无重试 → 11 篇 0/11 拿到 kb_category，静默退回规则标签
+        # （用户在文献库里看到的物种/方向是规则结果，后台 LLM 精细分类从未生效）。
+        txt = _llm_content(prompt, "lit_classify", temperature=0.2, max_tokens=8000,
+                           retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 [ 】\n",
+                           no_think=True)
         arr = _parse_json_array(txt)
         for it in arr:
             if isinstance(it, dict) and it.get("file"):
@@ -2538,15 +2548,928 @@ def _find_block_rect(path: str, page_no: int, text: str) -> list:
         return None
 
 
+# ── 批Q(2026-09-23)：句级锚定引擎（点译文任意一句 → 精确框出原文）────────────────────
+# 旧实现 _find_block_rect 只把"整段前 12/8/5/3 个词"在整页里 search_for 取第一个命中：
+#   ① 双栏 PDF 常命中另一栏的同词 → 高亮框错位；
+#   ② PDF→Markdown 的"段"可达数千字符，一次搜不到 → rect 为空（点译文毫无反应）。
+# 新实现：把 PDF 文本层按"行"重建（行内间距 >12pt 断行、行尾连字符合并），
+# 段落/句子用 token 锚定 + 贪婪扩展落到行区间 → 每句都有页码 + 逐行并集矩形。
+
+_ANCH_TOK_RE = re.compile(r"\w+(?:['\u2019\-/]\w+)*")
+_ANCH_SENT_RE = re.compile(r"[^.!?\u3002\uff01\uff1f]+(?:[.!?\u3002\uff01\uff1f]+[\"'\u201d\u2019)\]]*)?")
+_ANCH_HYPHEN_RE = re.compile(r"[-\u2010\u00ad]\s*$")
+_ANCH_TITLE_RE = re.compile(r"^#{1,6}\s*")
+_ANCH_GAP_BREAK = 12.0     # 行内视觉断档（pt）：大于此值视为分栏/分列，断开成两行
+_ANCH_LIG = {
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi", "\ufb04": "ffl",
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00ad": "",
+    "\u00a0": " ", "\u2002": " ", "\u2003": " ", "\u2007": " ", "\u2009": " ",
+    "\u200a": " ", "\u202f": " ", "\u3000": " ",
+}
+
+
+def _anch_norm_chars(s: str):
+    """归一化（大小写/连字/引号/空白）→ (归一化串, 每个字符对应的原串下标)。
+
+    连续空白折叠成单个空格：Markdown 里"行尾空格 + 换行"与 PDF 文本层的换行
+    归一化后必须一致，否则整句永远匹配不上（实测某句因此漏配）。
+    """
+    out, idx = [], []
+    prev_space = False
+    for i, ch in enumerate(s or ""):
+        lo = ch.lower()
+        rep = _ANCH_LIG.get(lo)
+        if rep is None:
+            rep = " " if ch.isspace() else lo
+        for r in rep:
+            if r == " ":
+                if prev_space:
+                    continue
+                prev_space = True
+            else:
+                prev_space = False
+            out.append(r)
+            idx.append(i)
+    return "".join(out), idx
+
+
+def _anch_norm_map(s: str):
+    """归一化（大小写/连字/引号/空白）并给出每个归一化字符对应的原串下标。"""
+    return _anch_norm_chars(s)
+
+
+def _anch_tokens(norm_text: str) -> list:
+    """归一化文本 → [(token, start, end)…]（锚定用的最小单位）。"""
+    out = []
+    for m in _ANCH_TOK_RE.finditer(norm_text or ""):
+        t = m.group(0).strip("-'/")
+        if len(t) >= 2:
+            out.append((t, m.start(), m.end()))
+    return out
+
+
+_ANCH_ABBREV = {"fig", "figs", "eq", "eqs", "no", "nos", "vs", "etc", "al", "ref", "refs",
+                "sec", "approx", "ca", "dr", "prof", "suppl", "supp", "resp", "sd", "sem",
+                "min", "max", "inc", "ltd", "co", "st", "chr", "tab", "table", "extended", "data"}
+
+
+def _anch_ends_abbrev(text: str, pos: int) -> bool:
+    """pos 处是否是"缩写/编号"造成的假句末（Fig. / e.g. / A. / 5d,）。"""
+    tail = (text or "")[max(0, pos - 18):pos]
+    ch = (tail[-1:] or "")
+    if ch in ",;:":
+        return True
+    w = re.search(r"([A-Za-z][A-Za-z\.]{0,12})\s*$", tail)
+    if not w:
+        return False
+    word = w.group(1).strip(".").lower()
+    if word in _ANCH_ABBREV:
+        return True
+    return len(word) == 1   # 单字母（人名缩写）不当句末
+
+
+def _sentence_ranges(text: str) -> list:
+    """句级切分（含末尾标点与右引号）→ [(start, end)…]（原串下标）。
+
+    缩写/编号（Fig. 3a,b / e.g. / A. Smith）不算句末；下一片段以小写字母开头时
+    也并回前句——否则会切出 "5e,f)." 这类永远定位不到的碎句。
+    """
+    out = []
+    for m in _ANCH_SENT_RE.finditer(text or ""):
+        raw = m.group(0)
+        a = m.start() + (len(raw) - len(raw.lstrip()))
+        b = m.end() - (len(raw) - len(raw.rstrip()))
+        if b - a < 2:
+            continue
+        if not out:
+            out.append([a, b])
+            continue
+        prev = out[-1]
+        nxt = text[a:a + 1]
+        prev_ch = text[prev[1] - 2:prev[1] - 1]
+        merge = (_anch_ends_abbrev(text, prev[1]) or nxt.islower()
+                 or (prev_ch.isdigit() and nxt.isdigit()))   # "88." + "5%" 不是句末
+        if merge:
+            prev[1] = b
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
+def _anch_gap_split(xs: list, gap: float = _ANCH_GAP_BREAK) -> list:
+    """按坐标间隔把一行切成若干段 → [[下标…]…]（栏/表格分列时用）。"""
+    out, cur = [], []
+    for i, x in enumerate(xs or []):
+        if cur and (x - xs[i - 1]) > gap:
+            out.append(cur)
+            cur = []
+        cur.append(i)
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _anch_push_line(lines: list, page_no: int, seg: list, blk: int = -1):
+    if not seg:
+        return
+    txt = "".join(c["c"] for c in seg).strip()
+    if not txt or not txt.strip("-\u2010\u00ad"):
+        return
+    lines.append({
+        "page": page_no, "blk": blk, "text": txt,
+        "x0": min(c["bbox"][0] for c in seg), "y0": min(c["bbox"][1] for c in seg),
+        "x1": max(c["bbox"][2] for c in seg), "y1": max(c["bbox"][3] for c in seg),
+    })
+
+
+def _pdf_line_layer(path: str) -> dict:
+    """PDF 文本层 → 行（按 PDF 自身阅读顺序逐页）＋页面尺寸。
+
+    行内字距 >_ANCH_GAP_BREAK 断成两行：双栏/多列表格同行文字不会被连成一行，
+    两栏各自的换行才能被正确识别为"续行"（供连字符合并与矩形并集使用）。
+    """
+    out = {"n_pages": 0, "page_wh": [], "lines": []}
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+    except Exception as e:
+        logger.warning(f"text layer open failed: {e}")
+        return out
+    try:
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            out["page_wh"].append((page.rect.width or 595.0, page.rect.height or 842.0))
+            raw = page.get_text("rawdict")
+            for bi, blk in enumerate(raw.get("blocks", [])):
+                if blk.get("type") != 0:
+                    continue
+                for ln in blk.get("lines", []):
+                    chars = [c for sp in ln.get("spans", []) for c in sp.get("chars", []) if c.get("c")]
+                    if not chars:
+                        continue
+                    seg = [chars[0]]
+                    for prev, ch in zip(chars, chars[1:]):
+                        if ch["bbox"][0] - prev["bbox"][2] > _ANCH_GAP_BREAK:
+                            _anch_push_line(out["lines"], pno, seg, bi)
+                            seg = []
+                        seg.append(ch)
+                    _anch_push_line(out["lines"], pno, seg, bi)
+    except Exception as e:
+        logger.warning(f"text layer build failed: {e}")
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+    out["n_pages"] = len(out["page_wh"])
+    return out
+
+
+def _anch_is_continuation(a: dict, b: dict) -> bool:
+    """b 是否是 a 的续行（同页同栏同块、紧邻下一行）——用于行尾连字符合并。
+
+    必须同块：否则上一栏末行会与下一栏首行被连成"一行"，矩形横跨两栏。
+    """
+    if a.get("page") != b.get("page") or a.get("blk") != b.get("blk"):
+        return False
+    h = max(1.0, a["y1"] - a["y0"])
+    gap = b["y0"] - a["y1"]
+    return -1.5 <= gap <= max(8.0, 2.2 * h) and abs(b["x0"] - a["x0"]) <= 45.0
+
+
+def _anch_index(lines: list, page_wh: list) -> dict:
+    """行列表 → 锚定索引（拼接文本 + 归一化映射 + token 表 + 每页区间）。"""
+    idx = {"lines": lines, "page_wh": page_wh, "ztext": "", "norm": "", "n2z": [],
+           "z2n": [], "atom_of_z": [], "atoms": [], "toks": [], "tok_starts": [],
+           "page_n": {}}
+    if not lines:
+        return idx
+    atoms, parts, pos = [], [], 0
+    i, n = 0, len(lines)
+    while i < n:
+        j = i
+        while (j + 1 < n and _ANCH_HYPHEN_RE.search(lines[j].get("text") or "")
+               and _anch_is_continuation(lines[j], lines[j + 1])):
+            j += 1
+        chunk = ""
+        for k in range(i, j + 1):
+            t = lines[k].get("text") or ""
+            if k < j and _ANCH_HYPHEN_RE.search(t):
+                t = _ANCH_HYPHEN_RE.sub("", t)
+            chunk += t
+        atoms.append({"lines": list(range(i, j + 1)), "z0": pos, "z1": pos + len(chunk)})
+        parts.append(chunk)
+        pos += len(chunk) + 1        # 行间以单个空格相接
+        i = j + 1
+    ztext = " ".join(parts)
+    atom_of_z = [0] * len(ztext)
+    for ai, a in enumerate(atoms):
+        for z in range(a["z0"], min(a["z1"] + 1, len(ztext))):
+            atom_of_z[z] = ai
+    norm, n2z = _anch_norm_chars(ztext)
+    z2n = [None] * (len(ztext) + 1)
+    for ni, zi in enumerate(n2z):
+        if z2n[zi] is None:
+            z2n[zi] = ni
+    nxt = len(n2z)
+    for zi in range(len(ztext), -1, -1):
+        if z2n[zi] is None:
+            z2n[zi] = nxt
+        else:
+            nxt = z2n[zi]
+    toks, starts, tok_pos, page_of_n = [], [], {}, []
+    for m in _ANCH_TOK_RE.finditer(norm):
+        t = m.group(0).strip("-'/")
+        if len(t) < 2:
+            continue
+        toks.append((t, m.start(), m.end()))
+        starts.append(m.start())
+        tok_pos.setdefault(t, []).append(len(toks) - 1)
+    page_n = {}
+    for a in atoms:
+        p = lines[a["lines"][0]]["page"]
+        z0 = a["z0"]
+        z1 = min(a["z1"], len(ztext) - 1) if ztext else 0
+        n0, n1 = z2n[z0], z2n[z1]
+        if p not in page_n:
+            page_n[p] = [n0, n1]
+        else:
+            page_n[p][0] = min(page_n[p][0], n0)
+            page_n[p][1] = max(page_n[p][1], n1)
+    page_of_n = [0] * (len(norm) + 1)
+    for ai, a in enumerate(atoms):
+        p = lines[a["lines"][0]]["page"]
+        n0, n1 = z2n[a["z0"]], z2n[min(a["z1"], max(0, len(ztext) - 1))]
+        for n in range(n0, min(n1 + 1, len(page_of_n))):
+            page_of_n[n] = p
+    idx.update({"ztext": ztext, "norm": norm, "n2z": n2z, "z2n": z2n,
+                "atom_of_z": atom_of_z, "atoms": atoms, "toks": toks,
+                "tok_starts": starts, "tok_pos": tok_pos, "page_n": page_n,
+                "page_of_n": page_of_n})
+    return idx
+
+
+def _anch_probes(qn: str, qtoks: list) -> list:
+    """按 token 边界截取探针（长→短；前 1–3 个 token 在 PDF 里缺失时允许跳过）。
+
+    探针必须完整 token 收尾（半截词永远匹配不上）；命中后由 _anch_refine 向两侧扩展
+    把整句补齐，因此"短而稳"的探针反而最容易成功。
+    """
+    out = []
+    if not qtoks:
+        return [(qn.strip()[:400], 0, 0, len(qn.strip()[:400]))]
+    for skip in (0, 1, 2, 3):
+        if skip >= len(qtoks) - 1:
+            break
+        s0 = qtoks[skip][1]
+        limits = (600, 320, 180, 90) if skip == 0 else (600,)
+        for limit in limits:
+            end, e0, e1 = None, 0, 0
+            for (_t, s, e) in qtoks[skip:]:
+                if e - s0 <= limit:
+                    end, e0, e1 = e, s0, e
+                else:
+                    break
+            if end and end - s0 >= 24:
+                out.append((qn[s0:end], skip, e0, e1))
+    return out
+
+
+def _anch_find_norm(norm: str, probe: str) -> int:
+    """探针在归一化文本中的位置（先精确；首端有胶连残留时从下一个完整 token 起找）。"""
+    if not probe:
+        return -1
+    hit = norm.find(probe)
+    if hit >= 0:
+        return hit
+    for cut in (1, 2, 3, 5):
+        p2 = probe[cut:]
+        if len(p2) < 24:
+            break
+        hit = norm.find(p2)
+        if hit >= 0:
+            return hit
+    return -1
+
+
+def _anch_refine(idx: dict, qtoks: list, n0: int, n1: int, q0: int = 0, q1: int = 0):
+    """贪婪向两侧扩展 token 覆盖 → (n0, n1, 覆盖率)。
+
+    q0/q1 是本次探针在"归一化 query"里的区间（query 坐标），覆盖率按 query token 算。
+    """
+    import bisect as _bs
+    toks, starts = idx["toks"], idx["tok_starts"]
+    norm = idx["norm"]
+
+    def _cross_sentence(a: int, b: int) -> bool:
+        """[a,b) 之间是否已经跨过句号（句号+空格+大写/数字）——跨过就不再扩展。"""
+        return re.search(r"[.!?][\"\')\]]?\s+[A-Z0-9\u2018\u201c]", norm[a:b]) is not None
+
+    qi = 0
+    while qi < len(qtoks) and qtoks[qi][2] <= n1:
+        qi += 1
+    ai = _bs.bisect_left(starts, n1)
+    edge = n1
+    while qi < len(qtoks) and ai < len(toks):
+        if (toks[ai][0] == qtoks[qi][0] and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
+                and not _cross_sentence(n1, toks[ai][1])):
+            edge = toks[ai][2]
+            n1 = toks[ai][2]
+            ai += 1
+            qi += 1
+        else:
+            break
+    qi = len(qtoks) - 1
+    while qi >= 0 and qtoks[qi][1] >= n0:
+        qi -= 1
+    ai = _bs.bisect_left(starts, n0) - 1
+    edge = n0
+    while qi >= 0 and ai >= 0:
+        if (toks[ai][0] == qtoks[qi][0] and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
+                and not _cross_sentence(toks[ai][2], n0)):
+            edge = toks[ai][1]
+            n0 = toks[ai][1]
+            ai -= 1
+            qi -= 1
+        else:
+            break
+    covered = sum(1 for (_t, s, e) in qtoks if s >= q0 and e <= q1) if q1 > q0 else 0
+    return n0, n1, covered / max(1, len(qtoks))
+
+
+def _anch_lines_rects(idx: dict, line_idx) -> list:
+    """行下标 → 按页并集的归一化矩形 [{"page","rect","li"}…]（跨页自动拆分）。"""
+    lines = idx["lines"]
+    wh = idx.get("page_wh") or []
+    groups = []
+    for li in sorted(set(line_idx)):
+        if li < 0 or li >= len(lines):
+            continue
+        ln = lines[li]
+        if groups and groups[-1]["page"] == ln["page"] and li == groups[-1]["li"][-1] + 1:
+            g = groups[-1]
+            g["li"].append(li)
+            g["x0"] = min(g["x0"], ln["x0"])
+            g["y0"] = min(g["y0"], ln["y0"])
+            g["x1"] = max(g["x1"], ln["x1"])
+            g["y1"] = max(g["y1"], ln["y1"])
+        else:
+            groups.append({"page": ln["page"], "li": [li], "x0": ln["x0"], "y0": ln["y0"],
+                           "x1": ln["x1"], "y1": ln["y1"]})
+    out = []
+    for g in groups:
+        w, h = wh[g["page"]] if g["page"] < len(wh) else (595.0, 842.0)
+        w = w or 595.0
+        h = h or 842.0
+        out.append({"page": g["page"], "li": g["li"],
+                    "rect": [round(g["x0"] / w, 4), round(g["y0"] / h, 4),
+                             round(g["x1"] / w, 4), round(g["y1"] / h, 4)]})
+    return out
+
+
+def _anch_span_rects(idx: dict, n0: int, n1: int) -> list:
+    """归一化区间 → 文本层行区间矩形。"""
+    n2z, atoms = idx["n2z"], idx["atoms"]
+    if not n2z or not atoms:
+        return []
+    z0 = n2z[max(0, min(n0, len(n2z) - 1))]
+    z1 = n2z[max(0, min(n1 - 1, len(n2z) - 1))]
+    a0 = idx["atom_of_z"][z0]
+    a1 = idx["atom_of_z"][min(z1, len(idx["atom_of_z"]) - 1)]
+    li = []
+    for ai in range(a0, a1 + 1):
+        li.extend(atoms[ai]["lines"])
+    return _anch_lines_rects(idx, li)
+
+
+def _anch_pages(idx: dict, qtoks: list) -> list:
+    """按 query token 命中数给候选页排名（全局探针失败时的逐页兜底）。"""
+    norm = idx["norm"]
+    score = {}
+    for t in [x[0] for x in qtoks[:40]]:
+        p = norm.find(t)
+        if p < 0:
+            continue
+        for pg, (n0, n1) in idx["page_n"].items():
+            if n0 <= p <= n1:
+                score[pg] = score.get(pg, 0) + 1
+                break
+    return [p for p, _s in sorted(score.items(), key=lambda kv: -kv[1])[:2]]
+
+
+def _anch_similarity(qn: str, seg: str) -> float:
+    """query 归一化文本与命中片段归一化文本的相似度（抗断字/空格差异）。"""
+    if not qn or not seg:
+        return 0.0
+    return difflib.SequenceMatcher(None, qn[:600], seg[:600]).ratio()
+
+
+def _anch_span_ok(reps: list) -> bool:
+    """矩形是否可信：跨行数不超上限，且不是"整页/整栏"式的大框。"""
+    if not reps:
+        return False
+    li = [x for rep in reps for x in rep.get("li") or []]
+    if not li or (max(li) - min(li)) > _ANCH_MAX_SPAN:
+        return False
+    for rep in reps:
+        r = rep.get("rect") or []
+        if len(r) == 4 and (r[2] - r[0]) > 0.55 and (r[3] - r[1]) > 0.55:
+            return False
+    return True
+
+
+def _anch_grow_from(idx: dict, qtoks: list, qi: int, ni: int):
+    """从"query 第 qi 个 token 命中文本层第 ni 个 token"出发向两侧对齐扩展。
+
+    比"从句子开头找探针"更稳：句子开头若是页眉残留/被截断，仍能从中间某处锚定。
+    """
+    toks = idx["toks"]
+    i, j = ni, qi
+    while i > 0 and j > 0 and toks[i - 1][0] == qtoks[j - 1][0]:
+        i -= 1
+        j -= 1
+    i0, j0 = i, j
+    i, j = ni, qi
+    while i + 1 < len(toks) and j + 1 < len(qtoks) and toks[i + 1][0] == qtoks[j + 1][0]:
+        i += 1
+        j += 1
+    run = i - i0 + 1
+    return toks[i0][1], toks[i][2], run / max(1, len(qtoks)), run
+
+
+def _anch_search(q: str, idx: dict, hint_pages=None) -> list:
+    """query → 文本层矩形（整篇定位失败时逐页重试）。"""
+    norm = idx["norm"]
+    qn, _qm = _anch_norm_map(q)
+    qtoks = _anch_tokens(qn)
+    if not qtoks:
+        return []
+    probes = _anch_probes(qn, qtoks)
+    best = None
+    for probe, _skip, q0, q1 in probes:
+        hit = _anch_find_norm(norm, probe)
+        if hit < 0:
+            continue
+        n0, n1, cov = _anch_refine(idx, qtoks, hit, hit + len(probe), q0, q1)
+        if cov < _ANCH_MATCH_FLOOR:
+            continue
+        sim = _anch_similarity(qn, norm[n0:n1])
+        if sim >= _ANCH_SIM_GOOD:
+            return _anch_span_rects(idx, n0, n1)
+        if best is None or sim > best[0]:
+            best = (sim, n0, n1)
+    if best and best[0] >= _ANCH_SIM_MIN:
+        reps = _anch_span_rects(idx, best[1], best[2])
+        if _anch_span_ok(reps):
+            return reps
+    for p in _anch_pages(idx, qtoks):
+        n0p, n1p = idx["page_n"][p]
+        sub = norm[n0p:n1p + 1]
+        for probe, _skip, q0, q1 in probes:
+            hit = sub.find(probe)
+            if hit < 0:
+                continue
+            n0, n1, cov = _anch_refine(idx, qtoks, n0p + hit, n0p + hit + len(probe), q0, q1)
+            reps = _anch_span_rects(idx, n0, n1) if cov >= 0.5 else []
+            if reps:
+                return reps
+    # 末级兜底：任取句中一个 token 命中处向两侧扩展，取覆盖最长的一段
+    best = None
+    tok_pos = idx.get("tok_pos") or {}
+    for qi in list(range(min(8, len(qtoks)))) + list(range(max(0, len(qtoks) - 4), len(qtoks))):
+        for ni in (tok_pos.get(qtoks[qi][0]) or [])[:8]:
+            n0, n1, cov, run = _anch_grow_from(idx, qtoks, qi, ni)
+            if run < 10 or cov < 0.45:
+                continue
+            pg = idx["page_of_n"][n0] if idx.get("page_of_n") else -1
+            score = (1 if (hint_pages and pg in hint_pages) else 0, round(cov, 3))
+            if best is None or score > best[0]:
+                best = (score, n0, n1)
+    if best:
+        reps = _anch_span_rects(idx, best[1], best[2])
+        if _anch_span_ok(reps):
+            return reps
+    return []
+
+
+def _anch_locate(query: str, idx: dict, memo: dict = None, hint_pages=None) -> list:
+    """把一段文本锚定到文本层行 → [{"page","rect","li"}…]。"""
+    q = _ANCH_TITLE_RE.sub("", (query or "").strip())
+    if len(q) < 6 or not idx.get("norm"):
+        return []
+    key = (q[:120], tuple(sorted(hint_pages)) if hint_pages else None)
+    if memo is not None and key in memo:
+        return memo[key]
+    res = _anch_search(q, idx, hint_pages=hint_pages)
+    if memo is not None:
+        memo[key] = res
+    return res
+
+
+def _anch_window(idx: dict, li0: int, li1: int, before: int = 0, after: int = 0,
+                 lo: int = -1, hi: int = -1) -> list:
+    """行区间 [li0,li1] 向两侧扩 before/after 行（lo/hi 为段落边界）→ 矩形。"""
+    a = max(0, li0 - before) if lo < 0 else max(lo, li0 - before)
+    b = (li1 + after) if hi < 0 else min(hi, li1 + after)
+    if b < a:
+        b = a
+    return _anch_lines_rects(idx, list(range(a, b + 1)))
+
+
+_ANCH_BRIDGE_LINES = 3      # 相邻句之间的空白行（页眉/夹注）允许跨过
+_ANCH_MAX_SPAN = 34         # 锚定跨行上限（超过视为误配，宁可不框也不要框错）
+_ANCH_MAX_GAP = 60          # 相邻 token 间允许的原始字符间隔（防"和/的"这类常用词把匹配拉飞）
+_ANCH_MATCH_FLOOR = 0.45    # 最低 token 覆盖率：低于此判为误配，宁可退回段落框
+_ANCH_SIM_GOOD = 0.78       # 归一化文本相似度闸门（防"匹配到别处的相似句子"）
+_ANCH_SIM_MIN = 0.55        # 最低可接受相似度
+
+def _anch_running_patterns(layer: dict) -> list:
+    """页眉/页脚/页码行的正则（批Q）。
+
+    Markdown 会把每页的 "532 | Nature | Vol 643 | 10 July 2025"、"Article" 混进段落，
+    这些"运行页眉"既不是正文、又常与其它页重复 → 锚定前必须先剥掉。
+    判据（从严，避免误伤正文）：① 页面上/下缘 5% 带内；② 行首是页码数字且行短；
+    ③ 同一行文本在 ≥3 个不同页面出现（running head）。
+    """
+    lines = layer.get("lines") or []
+    wh = layer.get("page_wh") or []
+    occ = {}
+    for ln in lines:
+        txt = (ln.get("text") or "").strip()
+        parts = txt.split()
+        if not parts or len(parts) > 18:
+            continue
+        p = ln.get("page", 0)
+        h = (wh[p][1] if p < len(wh) else 842.0) or 842.0
+        occ.setdefault(txt.lower(), []).append(
+            {"page": p, "y0": ln.get("y0", 0), "y1": ln.get("y1", 0), "h": h, "n": len(parts)})
+    pats = []
+    for key, rows in occ.items():
+        ntok = rows[0]["n"]
+        edge = any(r["y0"] < 0.05 * r["h"] or r["y1"] > 0.95 * r["h"] for r in rows)
+        numbered = ntok <= 12 and re.match(r"^\d{1,4}\s*(?:\||$)", key) is not None
+        pages = {r["page"] for r in rows}
+        ys = [r["y0"] for r in rows]
+        repeated = (len(pages) >= 5 and ntok <= 6
+                    and (max(ys) - min(ys)) <= 10.0)
+        if not (edge or numbered or repeated):
+            continue
+        pats.append(r"\s+".join(re.escape(x) for x in key.split()))
+    pats.sort(key=len, reverse=True)
+    return pats[:400]
+
+
+def _anch_strip_heads(text: str, pats: list) -> str:
+    """剥掉段落里混入的运行页眉/页脚（只影响锚定用的副本，不动译文展示）。"""
+    for pat in pats:
+        if not pat:
+            continue
+        # 词边界包夹：绝不允许把 "high" 这样的短页眉从 "highlighting" 里切掉
+        rx = r"(?<![A-Za-z0-9])" + pat + r"(?![A-Za-z0-9])"
+        if re.search(rx, text, flags=re.IGNORECASE):
+            text = re.sub(rx, " ", text, flags=re.IGNORECASE)
+    return text
+
+
+def _anch_running_heads(idx: dict) -> list:
+    return idx.get("head_pats") or []
+
+
+
+
+
+def _anch_prepare(text: str, idx: dict):
+    """段落 → (锚定用的 clean 文本, 句区间列表)。
+
+    先把 Markdown 标题前缀与混进段落的运行页眉剥掉再切句——切句结果必须与
+    译文侧（litSplitSentences）一致，否则译文句与原文句会错位一格。
+    """
+    title = _ANCH_TITLE_RE.match(text or "")
+    clean = text[title.end():] if title else (text or "")
+    clean = _anch_strip_heads(clean, _anch_running_heads(idx))
+    return clean, _sentence_ranges(clean)
+
+
+def _anchor_paragraph(text: str, idx: dict) -> dict:
+    """段落级锚定 → {page, rects, units, pre, post}（批Q 2026-09-23）。
+
+    逐句锚定：units[i] 与原文第 i 句一一对应（前端点译文任意一句 → 精确框原文那一句）；
+    rects = 已定位句子的行并集（段落级"整段定位"）；pre/post = 首/末句上下一行的上下文宽框。
+    句级定位失败的句子退化为 union 矩形并标 weak（前端虚线框），绝不整页乱框。
+    """
+    res = {"page": -1, "rects": [], "units": [], "pre": [], "post": []}
+    if not text or not idx.get("lines") or not idx.get("norm"):
+        return res
+    clean, sents = _anch_prepare(text, idx)
+    if not sents:
+        return res
+    memo = {}
+    found = [None] * len(sents)
+    for i, (s, e) in enumerate(sents):
+        found[i] = _anch_locate(clean[s:e], idx, memo)
+    located = [i for i, f in enumerate(found) if f]
+    # 第二轮：用已定位的邻近句所在页做提示重试（跨栏/跨页句子常靠这一步救回）
+    for i in [i for i, f in enumerate(found) if not f]:
+        if not located:
+            break
+        near = min(located, key=lambda j: abs(j - i))
+        hint = [found[near][0]["page"]]
+        found[i] = _anch_locate(clean[sents[i][0]:sents[i][1]], idx, memo, hint)
+        if found[i]:
+            located.append(i)
+    located.sort()
+    # 段级 = 已定位句行并集（相邻句间隔 ≤_ANCH_BRIDGE_LINES 行则补齐中间行）
+    li_all = []
+    for i in located:
+        sp = found[i]
+        li_all.extend(range(min(sp[0]["li"]), max(sp[0]["li"]) + 1))
+    li_all = sorted(set(li_all))
+    if len(li_all) > _ANCH_MAX_SPAN:
+        li_all = li_all[:_ANCH_MAX_SPAN]
+    rects = _anch_lines_rects(idx, li_all) if li_all else []
+    page = rects[0]["page"] if rects else -1
+    pre = post = rects
+    if located:
+        f0, f1 = found[located[0]], found[located[-1]]
+        pre = _anch_window(idx, min(f0[0]["li"]), max(f0[0]["li"]), before=2)
+        post = _anch_window(idx, min(f1[0]["li"]), max(f1[0]["li"]), after=2)
+    # 第三轮：位置推断——句子 i 没锚到，但前后句都锚到了 → 它必然夹在两者之间的行里
+    infer = {}
+    for i in range(len(sents)):
+        if found[i]:
+            continue
+        prev = max([j for j in located if j < i], default=None)
+        nxt = min([j for j in located if j > i], default=None)
+        cand = []
+        if prev is not None and nxt is not None:
+            a, b = found[prev][0], found[nxt][0]
+            la, lb = max(a["li"]), min(b["li"])
+            if a["page"] == b["page"] and 0 <= lb - la - 1 <= 12:
+                cand = _anch_lines_rects(idx, list(range(la + 1, lb)))
+        if not cand and prev is not None:
+            a = found[prev][0]
+            cand = _anch_window(idx, max(a["li"]), max(a["li"]), after=2)
+        if not cand and nxt is not None:
+            b = found[nxt][0]
+            cand = _anch_window(idx, min(b["li"]), min(b["li"]), before=2)
+        if cand and _anch_span_ok(cand):
+            infer[i] = cand
+    units = []
+    for i in range(len(sents)):
+        sp = found[i]
+        if sp and len(sp) == 1 and _anch_span_ok(sp):
+            units.append({"p": sp[0]["page"], "r": sp[0]["rect"]})
+        elif i in infer:
+            c0 = infer[i][0]
+            units.append({"p": c0["page"], "r": c0["rect"], "i": 1})
+        elif sp:
+            # 跨了页/栏：只留与最长片段同页的那部分，避免把整页都框进去
+            best = max(sp, key=lambda x: len(x.get("li") or []))
+            units.append({"p": best["page"], "r": best["rect"], "w": 1})
+        else:
+            units.append({"p": page, "r": (rects[0]["rect"] if rects else None), "w": 1})
+    res.update({"page": page, "rects": rects, "pre": pre, "post": post, "units": units})
+    return res
+
+
 def _bilingual_cache_path(stem: str) -> str:
     return os.path.join(_translations_dir(), f"{stem}.bilingual.json")
 
 
-_BILINGUAL_SCHEMA = 2  # 模块结构版本（变动时自动重建缓存）
+# ---------------------------------------------------------------- 批Q：中英句级配对
+_ANCH_CUE_RE = re.compile(r"[a-z]{0,3}\d{1,4}(?:[a-z]\d{0,2})?(?:[.,]\d+)*%?|[a-z]{4,}", re.I)
+_ANCH_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_ZH_HEAD_NUM_RE = re.compile(r"\d+")
 
 
-def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
-    """构建双语对照文档（批O4 2026-08-16）。
+def _anch_cues(text: str) -> list:
+    """句中的"锚点线索"：数字/编号（88.5%、2,293,951、CM08、E04、Fig. 3a）。
+
+    翻译会保留数字与编号的先后顺序，用它们做中英句对的骨架对齐（LCS），
+    比按句数比例切分稳得多——译文合并/拆句时也不会整段错位。
+    """
+    out = []
+    for m in _ANCH_CUE_RE.finditer(text or ""):
+        t = m.group(0).lower().strip(".")
+        if len(t) >= 2 and (t[:1].isdigit() or re.match(r"^[a-z]{1,3}\d", t)):
+            out.append(t)
+    return out
+
+
+def _anch_lcs_pairs(a: list, b: list) -> list:
+    """最长公共子序列的配对下标 → [(ia, ib)…]（单调递增）。"""
+    n, m = len(a), len(b)
+    if not n or not m:
+        return []
+    if n * m > 400000:            # 超大段落退化为空（调用方走比例对齐）
+        return []
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        row, nxt = dp[i], dp[i + 1]
+        for j in range(m - 1, -1, -1):
+            row[j] = nxt[j + 1] + 1 if a[i] == b[j] else max(nxt[j], row[j + 1])
+    pairs, i, j = [], 0, 0
+    while i < n and j < m:
+        if a[i] == b[j]:
+            pairs.append((i, j))
+            i += 1
+            j += 1
+        elif dp[i + 1][j] >= dp[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def _align_sentence_pairs(text_en: str, sents_en: list, text_zh: str, sents_zh: list) -> list:
+    """中文句 → 英文句下标（单调不减，长度 = 中文句数）。
+
+    骨架：两侧都出现的编号/数字做 LCS 配对；锚点之间按句数比例插值。
+    与译文侧 litSplitSentences 的切分规则保持一致（同样断句 → 下标可直连）。
+    """
+    nz, ne = len(sents_zh or []), len(sents_en or [])
+    if not nz or not ne:
+        return []
+    if nz == ne:
+        return list(range(ne))
+    flat_en = [(i, c) for i, (s, e) in enumerate(sents_en) for c in _anch_cues(text_en[s:e])]
+    flat_zh = [(k, c) for k, (s, e) in enumerate(sents_zh) for c in _anch_cues(text_zh[s:e])]
+    anchors = []
+    if flat_en and flat_zh:
+        for ia, ib in _anch_lcs_pairs([c for _, c in flat_en], [c for _, c in flat_zh]):
+            i, k = flat_en[ia][0], flat_zh[ib][0]
+            if anchors and (i <= anchors[-1][0] or k <= anchors[-1][1]):
+                continue
+            anchors.append([i, k])
+    out = [0] * nz
+    if not anchors:
+        for k in range(nz):
+            out[k] = min(ne - 1, int(round((k + 0.5) * ne / nz - 0.5)))
+        return out
+    i0, k0 = anchors[0]
+    for k in range(0, k0):
+        out[k] = max(0, min(ne - 1, int(round(i0 * (k + 1) / (k0 + 1)))))
+    for ai in range(len(anchors)):
+        i_a, k_a = anchors[ai]
+        out[k_a] = i_a
+        i_b, k_b = anchors[ai + 1] if ai + 1 < len(anchors) else (ne - 1, nz - 1)
+        span_k, span_i = k_b - k_a, i_b - i_a
+        for d in range(1, span_k):
+            out[k_a + d] = i_a + int(round(d * span_i / span_k)) if span_k else i_a
+    i_z, k_z = anchors[-1]
+    for k in range(k_z + 1, nz):
+        out[k] = i_z + int(round((k - k_z) * (ne - 1 - i_z) / max(1, nz - 1 - k_z)))
+    for k in range(1, nz):
+        if out[k] < out[k - 1]:
+            out[k] = out[k - 1]
+    return [max(0, min(ne - 1, x)) for x in out]
+
+
+def _zh_sentence_payload(en: str, zh: str, anchor: dict, idx, zh_heads: set) -> list:
+    """把一段中英对照切成"句子对" → [{z, u, w}]。
+
+    o=[start,end] 为译文句中该句在 zh 段落里的字符区间（前端按区间切片渲染，零漂移）；
+    u=对应原文句下标（_align_sentence_pairs）；w=1 表示该句锚定不可靠（前端画虚线框）。
+    只返回需要渲染的句子——运行页眉整句被丢弃。
+    """
+    if not zh or not (zh or "").strip():
+        return []
+    if not idx:
+        return [{"o": [s, e], "u": -1} for s, e in _sentence_ranges(zh)]
+    clean_en, sents_en = _anch_prepare(en or "", idx)
+    sents_zh = _sentence_ranges(zh)
+    if not sents_zh:
+        return []
+    pairs = _align_sentence_pairs(clean_en, sents_en, zh, sents_zh)
+    units = (anchor or {}).get("units") or []
+    out = []
+    for k, (s, e) in enumerate(sents_zh):
+        if _zh_head_only(zh[s:e], zh_heads):
+            continue
+        u = pairs[k] if k < len(pairs) else -1
+        unit = units[u] if 0 <= u < len(units) else None
+        item = {"o": [s, e], "u": u}
+        if unit is None or not unit.get("r") or unit.get("w"):
+            item["w"] = 1
+        out.append(item)
+    return out
+
+
+def _zh_running_keys(zh_text: str) -> set:
+    """中文译文里重复出现的运行页眉/页脚行（数字归一后统计出现次数）。"""
+    cnt = {}
+    for ln in (zh_text or "").splitlines():
+        ln = ln.strip()
+        if not (2 <= len(ln) <= 90):
+            continue
+        key = _ZH_HEAD_NUM_RE.sub("#", ln.lower())
+        if key.count("#") > 6:
+            continue
+        cnt[key] = cnt.get(key, 0) + 1
+    # 整行重复出现 >=3 次才算运行页眉；正文句子几乎不可能整行重复，
+    # 因此不会误伤（译文页眉里含"第643卷/2025年7月10日"这类中文，不能用"无中文"当判据）。
+    return {k for k, v in cnt.items() if v >= 3}
+
+
+def _zh_head_only(seg: str, keys: set) -> bool:
+    """该句是否只是重复出现的运行页眉/页脚 → 不渲染、不参与配对。
+
+    只认"重复出现"的整行（>=3 次）：参考文献条目等唯一内容一律保留。
+    """
+    t = (seg or "").strip()
+    if not t:
+        return True
+    key = _ZH_HEAD_NUM_RE.sub("#", " ".join(t.split()).lower())
+    if key in keys:
+        return True
+    return re.fullmatch(r"[\s\d|.–—]+", t) is not None   # 纯页码/分隔行
+
+
+_BILINGUAL_SCHEMA = 3  # 模块结构版本（变动时自动重建缓存；批Q 句级锚定 + 中英句对）
+
+
+def _anchor_cache_path(stem: str) -> str:
+    return os.path.join(_translations_dir(), f"{stem}.anchors.json")
+
+
+def _anchor_cache_ok(stem: str, md_path: str, zh_path: str) -> bool:
+    """句级锚点缓存是否仍可用（schema 一致，且不早于原文 md / 译文）。"""
+    p = _anchor_cache_path(stem)
+    if not os.path.isfile(p):
+        return False
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return False
+    if not data.get("paras") or data.get("_schema") != _BILINGUAL_SCHEMA:
+        return False
+    mt = os.path.getmtime(p)
+    for src in (md_path, zh_path):
+        if os.path.isfile(src) and os.path.getmtime(src) > mt:
+            return False
+    return True
+
+
+def build_anchor_map(pdf_path: str, md_path: str, stem: str = "",
+                     force: bool = False, progress_cb=None) -> list:
+    """原文段落 → 文本层句级锚点（批Q 2026-09-23）。
+
+    返回 [{"page","rects","pre","post","units":[{"p","r"}…]}…]，与 _md_blocks(md) 一一对应；
+    缓存 translations/<stem>.anchors.json（原文 md 更新时自动重建）。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    try:
+        with open(md_path, encoding="utf-8") as f:
+            md = f.read()
+    except Exception as e:
+        logger.warning(f"anchor md read failed: {e}")
+        return []
+    blocks = _md_blocks(md)
+    stem = stem or os.path.splitext(os.path.basename(md_path))[0]
+    cache_path = _anchor_cache_path(stem) if stem else ""
+    if cache_path and not force and _anchor_cache_ok(stem, md_path,
+                                                     os.path.join(_translations_dir(), f"{stem}.zh.md")):
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if len(data.get("paras") or []) == len(blocks):
+                return data["paras"]
+        except Exception as e:
+            logger.warning(f"anchor cache read failed: {e}")
+    if not os.path.isfile(pdf_path):
+        return [{"page": -1, "rects": [], "units": [], "pre": [], "post": []}] * len(blocks)
+    _cb("anchor", 0, len(blocks), "构建句级锚点（文本层逐行定位）…")
+    _layer = _pdf_line_layer(pdf_path)
+    idx = _anch_index(_layer["lines"], _layer["page_wh"])
+    idx["head_pats"] = _anch_running_patterns(_layer)
+    paras, n_hit, n_units, n_u_hit, done = [], 0, 0, 0, 0
+    for b in blocks:
+        a = _anchor_paragraph(b, idx)
+        if a.get("rects"):
+            n_hit += 1
+        n_units += len(a.get("units") or [])
+        n_u_hit += sum(1 for u in (a.get("units") or []) if u.get("r"))
+        paras.append(a)
+        done += 1
+        if done % 8 == 0 or done == len(blocks):
+            _cb("anchor", done, len(blocks),
+                f"句级锚点 {done}/{len(blocks)} 段（命中 {n_hit} 段 / {n_u_hit} 句）")
+    logger.info(f"anchor map {stem}: 段命中 {n_hit}/{len(blocks)}，句命中 {n_u_hit}/{n_units}")
+    if cache_path:
+        try:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump({"ok": True, "_schema": _BILINGUAL_SCHEMA, "stem": stem,
+                           "blocks": len(blocks), "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                           "paras": paras}, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"anchor cache write failed: {e}")
+    return paras
+
+
+def build_bilingual(file_or_title: str, rebuild: bool = False, progress_cb=None) -> str:
+    """构建双语对照文档（批O4 2026-08-16；批Q 2026-09-23 句级锚定）。
 
     结构：
       {ok, file, stem, title, pages, has_zh,
@@ -2554,7 +3477,8 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
        modules: [{id, title, start_page, end_page, paras: [
                   {page, en, zh, rect:[x0,y0,x1,y1]|null}]}]}
     模块边界优先取 PDF 书签（get_toc），无书签时按页眉字号检测，都无 → 单模块"全文"。
-    段落→页码靠逐页文本匹配；段落→矩形靠 search_for（点译文定位原文高亮）。
+    段落→页码/矩形走句级锚定（_anchor_paragraph）：文本层逐行定位，每句一个矩形，
+    前端点译文任意一句即可精确框选原文（整段命中率低时退回 _find_block_rect 整体搜索）。
     结果缓存 translations/<stem>.bilingual.json（md/zh 更新时自动重建）。
     """
     hit = _find_raw_entry(file_or_title)
@@ -2604,9 +3528,27 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
         pairs = _align_blocks_backend(blocks_en, blocks_zh)
     else:
         pairs = [[i, None] for i in range(len(blocks_en))]
-    # 段落 → 页码
+    # 段落 → 页码（批Q：优先用句级锚点的行级页号，命中更准）
     pages_text = _pdf_pages_text(pdf_path)
     page_of = _map_blocks_to_pages(blocks_en, pages_text) if pages_text else [-1] * len(blocks_en)
+    anchors = []
+    try:
+        anchors = build_anchor_map(pdf_path, md_path, stem=stem, progress_cb=progress_cb)
+    except Exception as e:
+        logger.warning(f"anchor map failed: {e}")
+    if anchors and len(anchors) == len(blocks_en):
+        for i, a in enumerate(anchors):
+            if (a or {}).get("page", -1) >= 0:
+                page_of[i] = a["page"]
+    # 批Q：中英句级配对（点译文任意一句 → 精确框原文那一句）
+    _zh_heads = _zh_running_keys(zh_text)
+    _anch_idx = None
+    try:
+        _lay = _pdf_line_layer(pdf_path)
+        _anch_idx = _anch_index(_lay["lines"], _lay["page_wh"])
+        _anch_idx["head_pats"] = _anch_running_patterns(_lay)
+    except Exception as e:
+        logger.warning(f"anchor index failed: {e}")
     # 模块边界
     toc = _pdf_toc(pdf_path)
     toc_source = "toc"
@@ -2643,8 +3585,15 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
                 continue
             en = blocks_en[ei] if ei is not None else ""
             zh = blocks_zh[zi] if zi is not None and zi < len(blocks_zh) else ""
-            rect = _find_block_rect(pdf_path, pg, en) if en else None
-            m["paras"].append({"page": pg, "en": en, "zh": zh, "rect": rect})
+            a = anchors[ei] if (ei is not None and ei < len(anchors)) else {}
+            rect = (a or {}).get("rects") or None
+            if not rect and en:
+                rect = _find_block_rect(pdf_path, pg, en)
+            m["paras"].append({"page": pg, "en": en, "zh": zh, "rect": rect,
+                               "pre": (a or {}).get("pre") or [],
+                               "post": (a or {}).get("post") or [],
+                               "units": (a or {}).get("units") or [],
+                               "zs": _zh_sentence_payload(en, zh, a, _anch_idx, _zh_heads)})
         m["id"] = idx
     out = json.dumps({
         "ok": True, "file": hit.get("file"), "stem": stem,
@@ -2652,7 +3601,8 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
         "has_zh": bool(blocks_zh), "toc_source": toc_source,
         "_schema": _BILINGUAL_SCHEMA,
         "modules": modules,
-        "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；点模块/段落自动定位原文页与高亮区域。",
+        "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；"
+                "点译文任意一句即框出对应原文（句级对齐），点原文页可回定位译文。",
     }, ensure_ascii=False)
     try:
         with open(cache_path, "w", encoding="utf-8") as f:

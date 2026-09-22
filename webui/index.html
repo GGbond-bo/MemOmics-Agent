@@ -991,6 +991,18 @@ table.dcb-table.dg-table th { position:relative; }
 .lit-pdf-page .lit-page-no { position:absolute; bottom:4px; right:6px; background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; pointer-events:none; }
 .lit-pdf-page.hl { outline:3px solid #4a90e2; outline-offset:-3px; }
 .lit-pdf-hl { position:absolute; background:rgba(74,144,217,0.35); border:2px solid #4a90e2; border-radius:2px; pointer-events:none; transition:opacity .4s; }
+.lit-pdf-hl.w { background:rgba(230,126,34,0.22); border:2px dashed #e67e22; }
+.lit-pdf-hl.cur { background:rgba(231,76,60,0.30); border:2px solid #e74c3c; box-shadow:0 0 0 2px rgba(231,76,60,0.25); }
+.lit-pdf-hl .lit-hl-tag { position:absolute; left:0; top:-19px; background:#e74c3c; color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; white-space:nowrap; }
+.lit-pdf-hl.dim { opacity:0.25; }
+.lit-sent { cursor:pointer; border-radius:3px; padding:0 1px; transition:background .12s; }
+.lit-sent:hover { background:rgba(74,144,217,0.22); }
+.lit-sent.cur { background:rgba(74,144,217,0.30); box-shadow:inset 0 -2px 0 var(--primary); }
+.lit-sent.w { border-bottom:1px dotted #e67e22; }
+.lit-sent-nav { display:flex; align-items:center; gap:6px; padding:5px 10px; border-top:1px solid var(--border); background:var(--panel); position:sticky; bottom:0; }
+.lit-sent-nav button { font-size:10.5px; padding:2px 9px; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
+.lit-sent-nav button:hover { background:var(--primary); color:#fff; }
+.lit-sent-nav .lit-sent-info { font-size:10.5px; color:var(--text-light); margin-left:auto; }
 .lit-mod-pane { overflow-y:auto; padding:2px 2px 2px 0; }
 .lit-mod-card { border:1px solid var(--border); border-radius:8px; margin-bottom:10px; background:var(--bg); overflow:hidden; }
 .lit-mod-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(74,144,217,0.08); border-bottom:1px solid var(--border); cursor:pointer; }
@@ -7983,6 +7995,7 @@ function litAlignBlocks(L, R) {
 // 批O4(2026-08-16)：真PDF原文 + 模块化译文 对照（通义千问式，点击互映射）
 var _litBi = null;
 var _litBiHlTimer = null;
+var _litBiSent = null;   // 批Q：当前选中的译文句 [模块, 段, 句]
 
 function litRenderBilingual(body, bi) {
   _litBi = bi;
@@ -7990,7 +8003,7 @@ function litRenderBilingual(body, bi) {
   var stem = bi.stem || '';
   var html = '<div class="lit-bi">' +
     '<div class="lit-bi-toolbar">' +
-    '<span>📄 左侧=原版 PDF（含图表） · 右侧=按模块译文 · 点模块/段落定位原文 · 点原文页回定位译文</span>' +
+    '<span>📄 左侧=原版 PDF · 右侧=逐句译文 · <b>点译文任意一句</b>即框出对应原文（虚线框=对齐存疑）· 点原文页回定位译文</span>' +
     '<span style="margin-left:auto;display:flex;gap:6px;">' +
     '<button onclick="litDownloadText(\'' + litJsStr(stem) + '.zh.md\', \'zh\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">' + t('download_trans') + '</button>' +
     '<button onclick="litForceTranslate(\'' + ref + '\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 重新翻译</button>' +
@@ -8010,6 +8023,12 @@ function litRenderBilingual(body, bi) {
       '<span class="lit-page-no">P' + (p + 1) + '</span>' +
       '</div>';
   }
+  pdfHtml += '<div class="lit-sent-nav">' +
+    '<button onclick="litBiStep(-1)" title="上一句（译文）">◀ 上一句</button>' +
+    '<button onclick="litBiStep(1)" title="下一句（译文）">下一句 ▶</button>' +
+    '<button onclick="litBiClearHl()" title="清除高亮">清除</button>' +
+    '<span class="lit-sent-info" id="lit-sent-info">点右侧译文任意一句 → 在此高亮原文对应句</span>' +
+    '</div>';
   document.getElementById('lit-pdf-pane').innerHTML = pdfHtml;
   // 目录条
   var outline = '';
@@ -8035,12 +8054,14 @@ function litRenderBilingual(body, bi) {
           }).join('') + '</div>';
       }
       (m.paras || []).forEach(function(pp, j) {
-        var zh = (pp.zh || '').trim();
-        if (!zh) return;
+        var zh = pp.zh || '';
+        if (!zh.trim()) return;
         var isH = /^#{1,6}\s/.test(pp.en || '');
+        // 批Q：逐句渲染——每个句子是独立可点元素，点它 → 精确定位原文那一句
+        var inner = litBiSentenceHtml(pp, i, j);
         modHtml += '<div class="lit-mod-para' + (isH ? ' h' : '') + '" id="lit-mod-para-' + i + '-' + j + '" data-page="' + pp.page + '" data-rect="' + encodeURIComponent(JSON.stringify(pp.rect || null)) + '"' +
-          ' onclick="litBiGoPara(' + i + ',' + j + ')" title="点击定位原文第 ' + (pp.page + 1) + ' 页">' +
-          escapeHtml(zh.replace(/^#{1,6}\s*/, '')) +
+          ' onclick="litBiGoPara(' + i + ',' + j + ', event)" title="点击任意句即定位原文第 ' + (pp.page + 1) + ' 页对应句">' +
+          inner +
           '<span class="lit-p-chip" title="定位到原文第 ' + (pp.page + 1) + ' 页">P' + (pp.page + 1) + '</span></div>';
       });
       modHtml += '</div>';
@@ -8056,24 +8077,147 @@ function litRenderBilingual(body, bi) {
   });
 }
 
+// 批Q：把一段译文切/渲染成逐句可点元素（区间由后端给出，前端只切片 → 零漂移）
+function litBiSentenceHtml(pp, mi, pj) {
+  var zh = pp.zh || '';
+  var zs = pp.zs || null;
+  if (!zs || !zs.length) {
+    // 老缓存无逐句数据：整段可点（退化但不报错）
+    return '<span class="lit-sent" data-mi="' + mi + '" data-pj="' + pj + '" data-si="0">' +
+      escapeHtml(zh.replace(/^#{1,6}\s*/, '')) + '</span>';
+  }
+  var out = '';
+  for (var k = 0; k < zs.length; k++) {
+    var o = zs[k].o || [];
+    var seg = zh.slice(o[0] || 0, o[1] || 0);
+    if (!seg) continue;
+    out += '<span class="lit-sent' + (zs[k].w ? ' w' : '') + '" data-mi="' + mi + '" data-pj="' + pj + '" data-si="' + k + '">' +
+      escapeHtml(seg.replace(/^#{1,6}\s*/, '')) + '</span>';
+  }
+  return out || escapeHtml(zh);
+}
+
+// 点译文句子 → 原文精确句框 + 该句所在行组；再点同一句取消
+function litBiGoSent(mi, pj, si) {
+  var bi = _litBi;
+  if (!bi) return;
+  var m = (bi.modules || [])[mi];
+  var pp = m && (m.paras || [])[pj];
+  if (!pp) return;
+  var zs = (pp.zs || [])[si];
+  var units = pp.units || [];
+  var u = zs ? zs.u : -1;
+  var unit = (u >= 0 && u < units.length) ? units[u] : null;
+  var rects = [];
+  if (unit && unit.r) {
+    rects.push({ p: unit.p, r: unit.r, w: zs.w });
+  } else {
+    // 兜底：整段框（弱）或 pre/post 上下文框
+    var fall = (pp.pre && pp.pre.length) ? pp.pre : (pp.rect ? [{ page: pp.page, rect: pp.rect }] : []);
+    fall.forEach(function(f) { rects.push({ p: f.page, r: f.rect, w: 1 }); });
+  }
+  var label = litBiSentLabel(pp, si);
+  var cur = document.querySelector('.lit-sent.cur');
+  var same = cur && cur.getAttribute('data-mi') === String(mi) && cur.getAttribute('data-pj') === String(pj) && cur.getAttribute('data-si') === String(si);
+  document.querySelectorAll('.lit-sent.cur').forEach(function(el) { el.classList.remove('cur'); });
+  if (same) { litBiClearHl(); return; }
+  var el = document.querySelector('.lit-sent[data-mi="' + mi + '"][data-pj="' + pj + '"][data-si="' + si + '"]');
+  if (el) el.classList.add('cur');
+  _litBiSent = [mi, pj, si];
+  litBiShowRects(rects, label);
+}
+
+// 首/末句的首尾片段（用于导航标签）
+function litBiSentLabel(pp, si) {
+  var zs = (pp.zs || [])[si];
+  if (!zs) return '';
+  var seg = (pp.zh || '').slice(zs.o[0], zs.o[1]).replace(/\s+/g, ' ').trim();
+  return seg.length > 18 ? seg.slice(0, 18) + '…' : seg;
+}
+
+// 在 PDF 面板上标出若干矩形（p/r/w），滚动到第一个，并画句号标签
+function litBiShowRects(rects, label) {
+  litBiClearHl(true);   // 保留译文句的 .cur 选中态
+  if (!rects || !rects.length) return;
+  var seen = {};
+  rects.forEach(function(it) {
+    var pgEl = document.getElementById('lit-pdf-page-' + it.p);
+    if (!pgEl || !it.r || it.r.length !== 4) return;
+    var hl = document.createElement('div');
+    hl.className = 'lit-pdf-hl' + (it.w ? ' w' : '') + (seen[it.p] ? ' dim' : ' cur');
+    hl.style.left = (it.r[0] * 100) + '%';
+    hl.style.top = (it.r[1] * 100) + '%';
+    hl.style.width = Math.max(1.2, (it.r[2] - it.r[0]) * 100) + '%';
+    hl.style.height = Math.max(0.8, (it.r[3] - it.r[1]) * 100) + '%';
+    if (label && !seen[it.p]) {
+      var tag = document.createElement('span');
+      tag.className = 'lit-hl-tag';
+      tag.textContent = '译文对应原文 · ' + label;
+      hl.appendChild(tag);
+    }
+    pgEl.appendChild(hl);
+    seen[it.p] = true;
+  });
+  var first = rects[0];
+  var pgEl = document.getElementById('lit-pdf-page-' + first.p);
+  if (pgEl) pgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (pgEl) pgEl.classList.add('hl');
+  var info = document.getElementById('lit-sent-info');
+  if (info) info.textContent = label ? ('已定位：' + label) : ('已定位第 ' + (first.p + 1) + ' 页');
+}
+
+// 上下句导航：在当前段内前后移动译文句选择
+function litBiStep(d) {
+  var bi = _litBi, cur = _litBiSent;
+  if (!bi || !cur) return;
+  var mi = cur[0], pj = cur[1], si = cur[2];
+  var m = (bi.modules || [])[mi];
+  var pp = m && (m.paras || [])[pj];
+  var n = ((pp || {}).zs || []).length;
+  if (!n) return;
+  var next = si + d;
+  if (next < 0) {                                  // 退到上一段末句
+    for (var j = pj - 1; j >= 0; j--) {
+      var pv = m.paras[j];
+      if (pv && (pv.zs || []).length) { pj = j; next = pv.zs.length - 1; break; }
+    }
+    if (next < 0) return;
+  } else if (next >= n) {                          // 进到下一段首句
+    for (var k = pj + 1; k < m.paras.length; k++) {
+      var nx = m.paras[k];
+      if (nx && (nx.zs || []).length) { pj = k; next = 0; break; }
+    }
+    if (next >= n) return;
+  }
+  var el = document.querySelector('.lit-sent[data-mi="' + mi + '"][data-pj="' + pj + '"][data-si="' + next + '"]');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  litBiGoSent(mi, pj, next);
+}
+
 function _litBiPdfPane() { return document.getElementById('lit-pdf-pane'); }
 function _litBiModPane() { return document.getElementById('lit-mod-pane'); }
 
-function litBiClearHl() {
+function litBiClearHl(keepSent) {
   document.querySelectorAll('.lit-pdf-page.hl').forEach(function(el) { el.classList.remove('hl'); });
   document.querySelectorAll('.lit-mod-head.hl').forEach(function(el) { el.classList.remove('hl'); });
   document.querySelectorAll('.lit-mod-para.hl').forEach(function(el) { el.classList.remove('hl'); });
   document.querySelectorAll('.lit-pdf-hl').forEach(function(el) { el.remove(); });
   if (_litBiHlTimer) { clearTimeout(_litBiHlTimer); _litBiHlTimer = null; }
+  if (!keepSent) {
+    document.querySelectorAll('.lit-sent.cur').forEach(function(el) { el.classList.remove('cur'); });
+    _litBiSent = null;
+    var info = document.getElementById('lit-sent-info');
+    if (info) info.textContent = '点右侧译文任意一句 → 在此高亮原文对应句';
+  }
 }
 
-function litBiGoPage(p, rect) {
+function litBiGoPage(p, rect, keep) {
   var pane = _litBiPdfPane();
   if (!pane) return;
   var pgEl = document.getElementById('lit-pdf-page-' + p);
   if (!pgEl) return;
-  pgEl.scrollIntoView({behavior: 'smooth', block: 'start'});
-  litBiClearHl();
+  pgEl.scrollIntoView({behavior: keep ? 'smooth' : 'start', block: keep ? 'center' : 'start'});
+  if (!keep) litBiClearHl();
   pgEl.classList.add('hl');
   if (rect && rect.length === 4) {
     var hl = document.createElement('div');
@@ -8084,11 +8228,13 @@ function litBiGoPage(p, rect) {
     hl.style.height = Math.max(1, (rect[3] - rect[1]) * 100) + '%';
     pgEl.appendChild(hl);
   }
-  _litBiHlTimer = setTimeout(function() {
-    pgEl.classList.remove('hl');
-    var h = pgEl.querySelector('.lit-pdf-hl');
-    if (h) h.remove();
-  }, 3000);
+  // 段落级定位才自动淡出；句级定位保持显示（由"清除"或点同一句取消）
+  if (!keep) {
+    _litBiHlTimer = setTimeout(function() {
+      pgEl.classList.remove('hl');
+      pgEl.querySelectorAll('.lit-pdf-hl').forEach(function(h) { h.remove(); });
+    }, 3000);
+  }
 }
 
 function litBiGoModule(i) {
@@ -8105,12 +8251,20 @@ function litBiGoModule(i) {
   }
 }
 
-function litBiGoPara(i, j) {
+function litBiGoPara(i, j, ev) {
   var bi = _litBi;
   if (!bi) return;
   var m = (bi.modules || [])[i];
   var pp = m && (m.paras || [])[j];
   if (!pp) return;
+  // 批Q：点在具体某一句上 → 走句级精确定位（不再整段高亮）
+  var t = ev && ev.target;
+  if (t && t.classList && t.classList.contains('lit-sent')) {
+    var si = parseInt(t.getAttribute('data-si'), 10) || 0;
+    if (ev.stopPropagation) ev.stopPropagation();
+    litBiGoSent(i, j, si);
+    return;
+  }
   var paraEl = document.getElementById('lit-mod-para-' + i + '-' + j);
   if (paraEl) paraEl.classList.add('hl');
   litBiGoPage(pp.page, pp.rect || null);

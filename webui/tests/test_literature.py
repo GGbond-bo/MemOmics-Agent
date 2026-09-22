@@ -565,6 +565,120 @@ class TestGetSummaryFix:
 
 
 # ---------------------------------------------------------------- 前端静态断言
+class TestSentenceAnchoring:
+    """批Q(2026-09-23)：句级锚定引擎——点译文任意一句 → 精确框原文那一句。"""
+
+    def test_norm_collapses_whitespace(self):
+        # Markdown 的"行尾空格+换行"与 PDF 文本层的换行必须归一化到同一个空格，
+        # 否则整句永远匹配不上（实测某句因此漏配）
+        a, _ = LL._anch_norm_map("some cells, such as vein \nendothelial")
+        b, _ = LL._anch_norm_map("some cells, such as vein endothelial")
+        assert a == b
+
+    def test_norm_ligature_and_case(self):
+        a, _ = LL._anch_norm_map("Oesopha\ufb01n")
+        assert a == "oesophafin"
+
+    def test_sentence_ranges_keeps_abbrev(self):
+        text = "As shown in Fig. 3a,b and Extended Data Fig. 5e,f). Next, we did X."
+        got = [text[s:e] for s, e in LL._sentence_ranges(text)]
+        assert len(got) == 2
+        assert got[0].endswith("5e,f).")
+
+    def test_sentence_ranges_splits_digit_fragment(self):
+        # "88." + "5%" 不是句末（实测这里曾切出 4 字符的碎句）
+        text = "The vast majority (88.\n5%) of subsets participated."
+        got = [text[s:e] for s, e in LL._sentence_ranges(text)]
+        assert len(got) == 1
+
+    def test_align_pairs_by_number_cues(self):
+        en = "We found 12 modules. Then 35 tissues were used. Finally 88.5% passed."
+        zs = "我们发现了 12 个模块。共 35 种组织。"       # 译文少一句 → 不能按比例硬切
+        se = LL._sentence_ranges(en)
+        sz = LL._sentence_ranges(zs)
+        pairs = LL._align_sentence_pairs(en, se, zs, sz)
+        assert len(pairs) == len(sz)
+        assert pairs[0] == 0                     # 12 → 第 1 句
+        assert pairs[1] == 1                     # 35 → 第 2 句
+
+    def test_align_is_monotonic(self):
+        en = "A 1 item. B 2 item. C 3 item. D 4 item."
+        zs = "甲 3。乙 4。"                       # 译文只覆盖后半段
+        pairs = LL._align_sentence_pairs(en, LL._sentence_ranges(en), zs, LL._sentence_ranges(zs))
+        assert pairs == sorted(pairs)
+        assert max(pairs) <= 3
+
+    def test_align_identical_counts_identity(self):
+        en, zs = "One. Two. Three.", "一。二。三。"
+        pairs = LL._align_sentence_pairs(en, LL._sentence_ranges(en), zs, LL._sentence_ranges(zs))
+        assert pairs == [0, 1, 2]
+
+    def test_strip_running_heads_safe(self):
+        # 短页眉只按词边界剥离，绝不允许把 "high" 从 "highlighting" 里切掉
+        pats = [r"high"]
+        assert "highlighting the" in LL._anch_strip_heads("highlighting the", pats)
+        out = LL._anch_strip_heads("high highlighting", pats)
+        assert "highlighting" in out and "high highlighting" not in out
+
+    def test_line_layer_splits_columns(self):
+        # 同一 y 上左栏结尾与右栏开头之间的大空白 → 必须切成两段（否则框横跨两栏）
+        rows = LL._anch_gap_split([0.0, 5.1, 10.2, 200.0, 205.1], 12.0)
+        assert rows == [[0, 1, 2], [3, 4]]
+        assert LL._anch_gap_split([0.0, 5.0, 10.0], 12.0) == [[0, 1, 2]]
+
+    def test_zh_head_only_flags_repeated_header(self):
+        zh = "Nature | 第643卷 | 2025年7月10日 | 535\n" * 3 + "正文内容在这里。"
+        keys = LL._zh_running_keys(zh)
+        assert LL._zh_head_only("Nature | 第643卷 | 2025年7月10日 | 535", keys) is True
+        assert LL._zh_head_only("正文内容在这里。", keys) is False
+
+    def test_zh_head_only_keeps_unique_text(self):
+        keys = LL._zh_running_keys("仅一行")
+        assert LL._zh_head_only("54. Xu, C. et al. Probabilistic harmonization.", keys) is False
+
+    def test_anchor_paragraph_units_align_with_sentences(self, tmp_path):
+        pdf_path = tmp_path / "anch.pdf"
+        _make_syn_pdf(pdf_path, toc=False)
+        layer = LL._pdf_line_layer(str(pdf_path))
+        idx = LL._anch_index(layer["lines"], layer["page_wh"])
+        text = "Page zero has marker hello world. It also has other words here."
+        a = LL._anchor_paragraph(text, idx)
+        clean, sents = LL._anch_prepare(text, idx)
+        assert len(a["units"]) == len(sents)
+        assert a["units"] and all(u.get("p") is not None for u in a["units"])
+
+    def test_anch_span_ok_rejects_whole_page(self):
+        assert LL._anch_span_ok([{"li": list(range(40)), "rect": [0.0, 0.0, 1.0, 1.0]}]) is False
+        assert LL._anch_span_ok([{"li": [3, 4], "rect": [0.1, 0.2, 0.5, 0.25]}]) is True
+
+    def test_anch_similarity_gate(self):
+        assert LL._anch_similarity("endothelial cells", "endothelial cells") > 0.9
+        assert LL._anch_similarity("endothelial cells", "completely different text") < 0.5
+
+
+class TestFrontendSentenceAlign:
+    """批Q：前端逐句渲染与句级定位。"""
+
+    def test_sentence_spans_and_nav(self):
+        assert "function litBiSentenceHtml" in HTML
+        assert "function litBiGoSent" in HTML
+        assert "function litBiShowRects" in HTML
+        assert "function litBiStep" in HTML
+        assert "lit-sent-info" in HTML
+        assert "lit-sent-nav" in HTML
+
+    def test_click_uses_sentence_index(self):
+        assert "data-si=" in HTML
+        assert "litBiGoSent(i, j, si)" in HTML
+        # 虚线框表示"对齐存疑"，不能静默画一个看着很准的实线框
+        assert "lit-pdf-hl.w" in HTML
+        assert "lit-sent.w" in HTML
+
+    def test_payload_uses_char_offsets(self):
+        assert "litBiSentenceHtml(pp, i, j)" in HTML
+        assert "zs[k].o" in HTML or "zs[k].o[" in HTML
+
+
 class TestFrontendLitWorkbench:
     def test_new_tabs_exist(self):
         assert 'id="lit-tab-cmp"' in HTML and 'id="lit-tab-know"' in HTML
