@@ -1001,11 +1001,45 @@ table.dcb-table.dg-table th { position:relative; }
 #cluster-console .cc-input select { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; font-family:inherit; }
 #cluster-console .cc-input textarea { flex:1; resize:vertical; min-height:34px; max-height:150px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
 #cluster-console .cc-hint { padding:0 14px 10px; font-size:11px; color:var(--text-light); }
-#env-check-panel { position:fixed; bottom:12px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:16px; max-width:360px; z-index:1000; display:none; }
-#env-check-panel h3 { margin:0 0 8px; font-size:14px; }
-#env-check-panel .env-row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; }
-#env-check-panel .env-ok { color:#22c55e; }
-#env-check-panel .env-no { color:#ef4444; }
+/* === 环境管理面板（2026-09-22）=== */
+#env-manager { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
+#env-manager .em-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1120px); height:min(90vh,900px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
+#env-manager .em-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; flex-wrap:wrap; }
+#env-manager .em-title { font-weight:600; }
+#env-manager .em-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tool-bg); color:var(--text-light); max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#env-manager .em-chip.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+#env-manager .em-chip.warn { background:rgba(239,68,68,0.15); color:#ef4444; }
+#env-manager .em-chip.busy { background:rgba(234,179,8,0.18); color:#eab308; }
+#env-manager .em-spacer { flex:1; }
+#env-manager .em-btn { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-family:inherit; }
+#env-manager .em-btn:hover { background:var(--primary-light); }
+#env-manager .em-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+#env-manager .em-btn:disabled { opacity:0.55; cursor:default; }
+#env-manager .em-tabs { display:flex; gap:6px; padding:8px 14px 0; border-bottom:1px solid var(--border); }
+#env-manager .em-tab { font-size:12px; padding:6px 12px; border:1px solid var(--border); border-bottom:none; border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg); color:var(--text-light); }
+#env-manager .em-tab.active { background:var(--panel); color:var(--text); font-weight:600; }
+#env-manager .em-body { flex:1; overflow:auto; padding:12px 14px 20px; font-size:12px; line-height:1.65; }
+#env-manager .em-sec { font-size:12.5px; font-weight:600; margin:14px 0 6px; color:var(--text); }
+#env-manager .em-sec:first-child { margin-top:2px; }
+#env-manager .em-card { border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin:6px 0; background:var(--tool-bg); }
+#env-manager .em-card.ok { border-left:3px solid #22c55e; }
+#env-manager .em-card.warn { border-left:3px solid #ef4444; }
+#env-manager .em-card.mut { border-left:3px solid var(--border); opacity:0.85; }
+#env-manager .em-card h4 { margin:0 0 4px; font-size:12.5px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+#env-manager .em-row { display:flex; gap:8px; font-size:11.5px; padding:1px 0; align-items:baseline; }
+#env-manager .em-row .em-name { min-width:122px; color:var(--text); flex-shrink:0; }
+#env-manager .em-row .em-val { color:var(--text-light); word-break:break-all; }
+#env-manager .em-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:6px; }
+#env-manager table.em-tbl { width:100%; border-collapse:collapse; font-size:11.5px; margin:4px 0 8px; }
+#env-manager table.em-tbl th, #env-manager table.em-tbl td { border:1px solid var(--border); padding:3px 6px; text-align:left; vertical-align:top; }
+#env-manager table.em-tbl th { background:rgba(74,144,217,0.10); }
+#env-manager .em-ok { color:#22c55e; }
+#env-manager .em-no { color:#ef4444; }
+#env-manager .em-mut { color:var(--text-light); }
+#env-manager .em-code { font-family:Consolas,monospace; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; white-space:pre-wrap; word-break:break-all; max-height:300px; overflow:auto; }
+#env-manager .em-warn { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.35); border-radius:8px; padding:8px 10px; margin:6px 0; }
+#env-manager .em-hint { font-size:11px; color:var(--text-light); margin-top:4px; }
+#env-manager .em-chips { display:flex; gap:6px; flex-wrap:wrap; }
 
 /* === 上下文窗口面板 === */
 .ctx-panel { padding:14px 16px; }
@@ -1154,7 +1188,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_cluster':'🖧 远端集群',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1229,7 +1263,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_cluster':'🖧 Cluster',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1350,8 +1384,8 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="switchView('context')" id="nav-context" data-i18n="nav_context">📐 上下文窗口</div>
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
       <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
+      <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
       <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
-      <div class="nav-item" onclick="showEnvCheck()" style="margin-top:auto;font-size:12px;color:#888;">🔧 环境检测</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
     <div class="sidebar-footer" style="padding-top:0;">
@@ -10904,46 +10938,395 @@ async function submitSetup() {
   }
 }
 
-// === 环境检测 ===
-async function showEnvCheck() {
+// === 环境管理（env_inventory，2026-09-22）===
+// 数据源：GET /api/env/inventory（只读缓存、秒回；refresh=1 只踢后台线程，前端轮询 state.status）
+//         GET /api/env/report.md（人看的 markdown，可复制 / 下载）
+// 和 agent 的 env_inventory 工具同源（同一个模块 + 同一份缓存文件），
+// 所以「用户在面板上看到的」和「agent 自己拿到的」永远一致。
+var EM = { tab: 'local', data: null, timer: null, polls: 0 };
+var EM_I18N = {
+  zh: {
+    em_title: '🧩 环境管理', em_tab_local: '本机环境', em_tab_cluster: '集群环境', em_tab_agent: 'Agent 怎么用',
+    em_refresh: '🔄 重新扫描', em_copy: '📋 复制报告', em_download: '⬇️ 下载 .md', em_close: '✕ 关闭',
+    em_scanning: '扫描中…', em_list_time: '清单', em_cached: '缓存', em_sec_ago: '秒前',
+    em_pending: '还没扫过，正在后台扫描（首次约 10~40 秒，R 全量探测最慢），扫完自动刷新。',
+    em_res: '资源', em_python: 'Python 环境', em_r: 'R 环境', em_cli: '命令行工具', em_conda: 'conda 环境',
+    em_warn: '需要注意', em_issues: '已知坑（environment.json 声明）', em_notes: 'environment.json 标注',
+    em_cpu: 'CPU', em_ram: '内存', em_gpu: 'GPU', em_disk: '磁盘', em_wsl: 'WSL', em_host: '主机',
+    em_pkgs_n: '关键包', em_missing_key: '缺关键包', em_cross: '跨版本加载（ABI 不保证）', em_libs: '库路径',
+    em_path: '路径', em_version: '版本', em_note: '说明', em_pkgs: '包数', em_name: '工具',
+    em_light: '未全量探测', em_none: '无', em_shared: '共享库', em_shared_off: '声明了但没挂载',
+    em_not_installed: '未安装 / 不在 PATH', em_ok: '正常',
+    em_cluster_off: '集群没配置 / 没启用', em_cluster_res: '资源与队列', em_cluster_nodes: '节点',
+    em_node_idle: '空闲', em_cluster_open: '🖧 打开远端集群面板', em_node_detail: '各节点已装环境（python / R / 工具版本）',
+    em_cluster_pending: '正在后台探测集群（要逐个 SSH，较慢），稍后自动更新。',
+    em_agent_intro: 'agent 已经注册了只读工具 env_inventory：直接问它「我本机有什么环境」「集群几个核、队列排到哪」，它自己调这个工具拿结果，不用你贴。',
+    em_agent_actions: '可用动作', em_agent_digest: 'agent 每轮开场就看到的紧凑环境卡片（只读缓存、不探测）',
+    em_agent_cache: '缓存文件', em_agent_home: 'hermes_home', em_act_md: '给人看的完整 markdown 报告',
+    em_act_overview: '本机 + 集群全量清单（refresh 会真探测）', em_act_local: '只清点本机', em_act_cluster: '只清点集群（SSH）',
+    em_copied: '✅ 报告已复制到剪贴板', em_copy_fail: '复制失败，已改为下载',
+    em_cores: '核', em_free: '可用', em_of: '共', em_more: '还有'
+  },
+  en: {
+    em_title: '🧩 Environments', em_tab_local: 'Local', em_tab_cluster: 'Cluster', em_tab_agent: 'For the agent',
+    em_refresh: '🔄 Rescan', em_copy: '📋 Copy report', em_download: '⬇️ Download .md', em_close: '✕ Close',
+    em_scanning: 'Scanning…', em_list_time: 'Scanned', em_cached: 'cached', em_sec_ago: 's ago',
+    em_pending: 'Not scanned yet — scanning in the background (10-40 s on first run, R full probe is slowest). It refreshes itself when done.',
+    em_res: 'Resources', em_python: 'Python environments', em_r: 'R environments', em_cli: 'CLI tools', em_conda: 'conda environments',
+    em_warn: 'Needs attention', em_issues: 'Known pitfalls (declared in environment.json)', em_notes: 'environment.json notes',
+    em_cpu: 'CPU', em_ram: 'RAM', em_gpu: 'GPU', em_disk: 'Disks', em_wsl: 'WSL', em_host: 'Host',
+    em_pkgs_n: 'Key packages', em_missing_key: 'Missing key packages', em_cross: 'Loaded cross-version (ABI not guaranteed)', em_libs: 'Library paths',
+    em_path: 'Path', em_version: 'Version', em_note: 'Note', em_pkgs: 'Packages', em_name: 'Tool',
+    em_light: 'not fully probed', em_none: 'none', em_shared: 'Shared library', em_shared_off: 'declared but not mounted',
+    em_not_installed: 'not installed / not on PATH', em_ok: 'ok',
+    em_cluster_off: 'Cluster not configured / not enabled', em_cluster_res: 'Resources & queues', em_cluster_nodes: 'Nodes',
+    em_node_idle: 'idle', em_cluster_open: '🖧 Open cluster console', em_node_detail: 'Installed environments per node (python / R / tool versions)',
+    em_cluster_pending: 'Probing the cluster in the background (SSH per node, slow); it updates itself.',
+    em_agent_intro: 'The agent has a read-only env_inventory tool: just ask "what environments do I have" or "how many cores does the cluster have, how busy is the queue" and it calls the tool itself.',
+    em_agent_actions: 'Actions', em_agent_digest: 'Compact environment card the agent sees at the start of every turn (cache only, no probing)',
+    em_agent_cache: 'Cache file', em_agent_home: 'hermes_home', em_act_md: 'full markdown report for humans',
+    em_act_overview: 'local + cluster full inventory (refresh really probes)', em_act_local: 'local only', em_act_cluster: 'cluster only (SSH)',
+    em_copied: '✅ Report copied to clipboard', em_copy_fail: 'Copy failed, downloading instead',
+    em_cores: 'cores', em_free: 'free', em_of: 'of', em_more: 'more'
+  }
+};
+function emT(k) {
+  var pack = (typeof UI_LANG !== 'undefined' && UI_LANG === 'en') ? EM_I18N.en : EM_I18N.zh;
+  return pack[k] || EM_I18N.zh[k] || k;
+}
+function emEsc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function emVal(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return emEsc(JSON.stringify(v));
+  return emEsc(String(v));
+}
+function emRow(name, val) {
+  return '<div class="em-row"><span class="em-name">' + name + '</span><span class="em-val">' + val + '</span></div>';
+}
+function emSec(title) { return '<div class="em-sec">' + title + '</div>'; }
+function emCard(title, tone, body) {
+  return '<div class="em-card ' + (tone || '') + '"><h4>' + title + '</h4>' + (body || '') + '</div>';
+}
+function emChip(text, tone) { return '<span class="em-chip ' + (tone || '') + '">' + emEsc(text) + '</span>'; }
+function emToggle(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = (el.style.display === 'inline') ? 'none' : 'inline';
+}
+function emCollapse(id, items, shown) {
+  var arr = items || [];
+  if (!arr.length) return emT('em_none');
+  var head = arr.slice(0, shown).map(emEsc).join('、');
+  if (arr.length <= shown) return head;
+  return head + ' <span class="em-more" onclick="emToggle(\'' + id + '\')">' + emT('em_more') +
+         ' ' + (arr.length - shown) + ' ▾</span><span id="' + id + '" style="display:none">、' +
+         arr.slice(shown).map(emEsc).join('、') + '</span>';
+}
+function emToast(msg) {
+  var t = document.getElementById('em-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'em-toast';
+    t.style.cssText = 'position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);' +
+      'color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;z-index:10001;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(function () { t.style.display = 'none'; }, 1800);
+}
+async function emCopyMd() {
   try {
-    var r = await fetch('/api/env/check');
+    var r = await fetch('/api/env/report.md');
+    var txt = await r.text();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(txt);
+      emToast(emT('em_copied'));
+    } else {
+      emToast(emT('em_copy_fail'));
+      window.open('/api/env/report.md?download=1', '_blank');
+    }
+  } catch (e) { emToast(emT('em_copy_fail')); }
+}
+function openEnvManager() {
+  var m = document.getElementById('env-manager');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'env-manager';
+    m.innerHTML = '<div class="em-box"><div class="em-head" id="em-head"></div>' +
+                  '<div class="em-tabs" id="em-tabs"></div><div class="em-body" id="em-body"></div></div>';
+    m.addEventListener('click', function (e) { if (e.target === m) emClose(); });
+    document.body.appendChild(m);
+  }
+  m.style.display = 'flex';
+  EM.polls = 0;
+  emHead();
+  emLoad(false);
+}
+function emClose() {
+  var m = document.getElementById('env-manager');
+  if (m) m.style.display = 'none';
+  if (EM.timer) { clearTimeout(EM.timer); EM.timer = null; }
+}
+function emTab(name) { EM.tab = name; emHead(); emBody(); }
+function emRefresh() { EM.polls = 0; emLoad(true); }
+async function emLoad(refresh) {
+  if (EM.timer) { clearTimeout(EM.timer); EM.timer = null; }
+  try {
+    var r = await fetch('/api/env/inventory?refresh=' + (refresh ? 1 : 0));
     var d = await r.json();
-    var panel = document.getElementById('env-check-panel');
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.id = 'env-check-panel';
-      document.body.appendChild(panel);
+    EM.data = d;
+    emHead();
+    emBody();
+    var st = d.state || {};
+    if ((d.pending || st.status === 'running') && EM.polls < 60) {
+      EM.polls += 1;
+      EM.timer = setTimeout(function () { emLoad(false); }, 3000);
     }
-    var html = '<h3>🔧 环境检测</h3>';
-    // Python
-    html += '<div class="env-row"><span>🐍 Python ' + (d.python.version||'') + '</span><span class="env-ok">✓</span></div>';
-    // R
-    if (d.r.ok) html += '<div class="env-row"><span>📊 R ' + (d.r.version||'') + '</span><span class="env-ok">✓</span></div>';
-    else html += '<div class="env-row"><span>📊 R</span><span class="env-no">✗ 未安装</span></div>';
-    // GPU
-    if (d.gpu.ok) html += '<div class="env-row"><span>🎮 ' + d.gpu.name + ' (' + d.gpu.vram_mb + 'MB)</span><span class="env-ok">✓</span></div>';
-    else { var gpuDbg = d.gpu.debug ? ' (路径: ' + (d.gpu.debug.found_path||'未找到') + (d.gpu.debug.error ? ', 错误: ' + d.gpu.debug.error : '') + ')' : ''; html += '<div class="env-row"><span>🎮 GPU' + gpuDbg + '</span><span class="env-no">未检测到 (可选)</span></div>'; }
-    // System
-    if (d.system.cpu_cores) html += '<div class="env-row"><span>💻 CPU/RAM/Disk</span><span>' + d.system.cpu_cores + '核 / ' + d.system.memory_gb + 'GB / ' + d.system.disk_free_gb + 'GB</span></div>';
-    // Key packages
-    var pkgNames = {'fastapi':'FastAPI','uvicorn':'Uvicorn','httpx':'HTTPX','psutil':'psutil','openai':'OpenAI','duckduckgo_search':'DuckDuckGo','tavily':'Tavily'};
-    var pkgMissing = [];
-    for (var k in pkgNames) { if (d.packages[k] === false) pkgMissing.push(pkgNames[k]); }
-    if (pkgMissing.length) html += '<div class="env-row"><span>📦 缺失包</span><span class="env-no">' + pkgMissing.join(', ') + '</span></div>';
-    else html += '<div class="env-row"><span>📦 Python 包</span><span class="env-ok">✓ 全部就绪</span></div>';
-    // R packages
-    var rMissing = [];
-    for (var k in d.packages) { if (k.startsWith('R:') && d.packages[k] === false) rMissing.push(k.substring(2)); }
-    if (d.r.ok) {
-      if (rMissing.length) html += '<div class="env-row"><span>📊 R 缺包</span><span class="env-no">' + rMissing.join(', ') + ' (按需自动装)</span></div>';
-      else html += '<div class="env-row"><span>📊 R 核心包</span><span class="env-ok">✓ 全部就绪</span></div>';
-    }
-    panel.innerHTML = html + '<div style="text-align:right;margin-top:8px"><button onclick="document.getElementById(\'env-check-panel\').style.display=\'none\'" style="font-size:11px;border:none;background:#eee;padding:2px 10px;border-radius:4px;cursor:pointer;">关闭</button></div>';
-    panel.style.display = 'block';
-  } catch(e) { console.error('env check failed', e); }
+  } catch (e) {
+    var body = document.getElementById('em-body');
+    if (body) body.innerHTML = '<div class="em-warn">环境管理接口失败：' + emVal(e && e.message ? e.message : e) + '</div>';
+  }
 }
 
+function emHead() {
+  var head = document.getElementById('em-head');
+  if (!head) return;
+  var st = (EM.data && EM.data.state) || {};
+  var loc = (EM.data && EM.data.local) || {};
+  var sy = loc.system || {};
+  var html = '<span class="em-title">' + emT('em_title') + '</span>';
+  html += emChip(emT('em_host') + '：' + (sy.hostname || '-') + (sy.os ? ' / ' + sy.os + ' ' + (sy.os_release || '') : ''));
+  if (st.status === 'running') html += emChip(emT('em_scanning') + (st.scope ? '（' + st.scope + '）' : ''), 'busy');
+  else if (loc.pending) html += emChip(emT('em_pending'), 'busy');
+  else if (loc.scanned_at) html += emChip(emT('em_list_time') + '：' + loc.scanned_at +
+        (loc.age_s === null || loc.age_s === undefined ? '' : '（' + emT('em_cached') + ' ' + Math.round(loc.age_s) + emT('em_sec_ago') + '）'), 'ok');
+  if (st.status === 'error') html += emChip('⚠️ ' + st.error, 'warn');
+  if (EM.data && EM.data.cluster && EM.data.cluster.configured) {
+    var cn = EM.data.cluster.nodes || [];
+    var rn = cn.filter(function (n) { return n.reachable; }).length;
+    html += emChip('🖧 ' + rn + ' / ' + cn.length + ' ' + emT('em_cluster_nodes'), rn ? 'ok' : 'warn');
+  }
+  html += '<span class="em-spacer"></span>';
+  html += '<button class="em-btn primary" onclick="emRefresh()">' + emT('em_refresh') + '</button>';
+  html += '<button class="em-btn" onclick="emCopyMd()">' + emT('em_copy') + '</button>';
+  html += '<button class="em-btn" onclick="window.open(\'/api/env/report.md?download=1\', \'_blank\')">' + emT('em_download') + '</button>';
+  html += '<button class="em-btn" onclick="emClose()">' + emT('em_close') + '</button>';
+  head.innerHTML = html;
+  var tabs = document.getElementById('em-tabs');
+  if (tabs) {
+    var defs = [['local', '🐍 ' + emT('em_tab_local')], ['cluster', '🖧 ' + emT('em_tab_cluster')],
+                ['agent', '🤖 ' + emT('em_tab_agent')]];
+    tabs.innerHTML = defs.map(function (d) {
+      return '<div class="em-tab' + (EM.tab === d[0] ? ' active' : '') + '" onclick="emTab(\'' + d[0] + '\')">' + d[1] + '</div>';
+    }).join('');
+  }
+}
+function emBody() {
+  var body = document.getElementById('em-body');
+  if (!body) return;
+  var d = EM.data || {};
+  if (EM.tab === 'cluster') body.innerHTML = emViewCluster(d.cluster || {});
+  else if (EM.tab === 'agent') body.innerHTML = emViewAgent(d);
+  else body.innerHTML = emViewLocal(d.local || {}, d.warnings || []);
+}
+function emViewLocal(local, warnings) {
+  if (local.pending) return '<div class="em-warn">' + emT('em_pending') + '</div>';
+  var sy = local.system || {}, out = '';
+  var ram = sy.ram || {}, disks = sy.disks || [], gpu = sy.gpu || {}, wsl = sy.wsl || {};
+  out += emSec('🧮 ' + emT('em_res'));
+  out += '<div class="em-grid">';
+  out += emCard(emT('em_cpu'), 'ok', emRow(emT('em_cores'), String(sy.cpu_logical || '?') +
+        (sy.cpu_model ? ' <span class="em-mut">' + emEsc(sy.cpu_model) + '</span>' : '')));
+  out += emCard(emT('em_ram'), 'ok', emRow(emT('em_free'),
+        (ram.free_gb === undefined ? '' : ram.free_gb + ' GB / ') + (ram.total_gb === undefined ? '?' : ram.total_gb + ' GB') +
+        ' <span class="em-mut">' + emEsc(ram.source || '') + '</span>'));
+  var gtxt = (gpu.ok && gpu.gpus && gpu.gpus.length)
+    ? gpu.gpus.map(function (k) { return emEsc(k.name) + ' ' + emEsc(k.vram_mb) +
+        (k.driver ? ' <span class="em-mut">driver ' + emEsc(k.driver) + '</span>' : ''); }).join('<br>')
+    : '<span class="em-no">' + emEsc(gpu.note || emT('em_none')) + '</span>';
+  out += emCard(emT('em_gpu'), gpu.ok ? 'ok' : 'warn', gtxt);
+  out += emCard(emT('em_disk'), 'ok', disks.length
+    ? disks.map(function (k) { return emEsc(k.path) + ' ' + emVal(k.free_gb) + ' GB / ' + emVal(k.total_gb) + ' GB'; }).join('<br>')
+    : emT('em_none'));
+  out += emCard(emT('em_wsl'), wsl.available ? 'ok' : 'mut', (wsl.distros && wsl.distros.length)
+    ? wsl.distros.map(function (w) { return emEsc(w.name) + ' (' + emEsc(w.state) + ', v' + emEsc(w.version) + ')'; }).join('<br>')
+    : '<span class="em-mut">' + emEsc(wsl.note || emT('em_none')) + '</span>');
+  out += '</div>';
+  if (warnings && warnings.length) {
+    out += emSec('⚠️ ' + emT('em_warn') + '（' + warnings.length + '）');
+    out += '<div class="em-warn">' + warnings.map(function (w) { return '• ' + emEsc(w); }).join('<br>') + '</div>';
+  }
+  var py = local.python || {}, cands = py.candidates || [];
+  out += emSec('🐍 ' + emT('em_python') + (py.default ? ' <span class="em-mut">' + emEsc(py.default) + '</span>' : ''));
+  cands.forEach(function (c) {
+    var pk = c.packages || {}, keys = Object.keys(pk);
+    var rows = emRow(emT('em_path'), emEsc(c.path));
+    rows += emRow(emT('em_version'), emEsc(c.version || (c.ok ? '?' : '—')));
+    if (keys.length) {
+      var lim = 6;
+      var txt = keys.slice(0, lim).map(function (k) { return emEsc(k + ' ' + pk[k]); }).join(' / ');
+      if (keys.length > lim) txt += ' …';
+      rows += emRow(emT('em_pkgs_n') + '（' + keys.length + '）', txt);
+    }
+    if (c.note) rows += emRow(emT('em_note'), emEsc(c.note));
+    out += emCard((c.ok ? '✅ ' : '❌ ') + emEsc(c.label), c.ok ? 'ok' : 'warn', rows);
+  });
+  var caps = local.capabilities || {}, ep = caps.execute_python || {};
+  if (ep.missing_key && ep.missing_key.length) {
+    out += emCard('⚠️ ' + emT('em_missing_key') + '（' + ep.missing_key.length + '）', 'warn',
+          emRow('execute_python', emCollapse('em-miss-py', ep.missing_key, 8)) +
+          '<div class="em-hint">用到的包由 check_env 自动装；装不上的可换集群环境</div>');
+  }
+  var shared = py.shared_libs || [];
+  if (shared.length) {
+    var mounted = py.declared_shared_mounted;
+    var srows = emRow(emT('em_path'), shared.map(function (s) {
+      return emEsc(s.path) + ' ' + (s.exists ? '<span class="em-ok">✓</span>' : '<span class="em-no">✗</span>') +
+             ' <span class="em-mut">' + emEsc(s.source || '') + '</span>'; }).join('<br>'));
+    if (mounted === false) srows += emRow('⚠️', '<span class="em-no">' + emT('em_shared_off') + '</span>');
+    out += emCard('📦 ' + emT('em_shared'), mounted === false ? 'warn' : 'ok', srows);
+  }
+  var rr = local.r || {}, insts = rr.installs || [];
+  out += emSec('📊 ' + emT('em_r'));
+  insts.forEach(function (i, idx) {
+    var rows = emRow('Rscript', emEsc(i.path));
+    if (i.pkg_count !== null && i.pkg_count !== undefined) rows += emRow(emT('em_pkgs'), emVal(i.pkg_count));
+    if (i.missing_key && i.missing_key.length) rows += emRow('<span class="em-no">' + emT('em_missing_key') +
+          '（' + i.missing_key.length + '）</span>', emCollapse('em-rmiss-' + idx, i.missing_key, 6));
+    var cv = i.cross_version_pkgs || {}, cvk = Object.keys(cv);
+    if (cvk.length) rows += emRow('<span class="em-no">' + emT('em_cross') + '</span>',
+          cvk.map(function (p) { return emEsc(p) + ' ← ' + emEsc(cv[p]); }).join('<br>'));
+    if (i.lib_paths && i.lib_paths.length) rows += emRow(emT('em_libs'), emEsc(i.lib_paths.join('  |  ')));
+    if (i.note) rows += emRow(emT('em_note'), emEsc(i.note));
+    var title = (i.ok ? '✅ ' : '• ') + emEsc(i.name) + ' <span class="em-mut">' + emEsc(i.version || '') + '</span>' +
+          (i.probed === 'light' ? ' <span class="em-mut">(' + emT('em_light') + ')</span>' : '');
+    out += emCard(title, i.ok ? (i.probed === 'full' ? 'ok' : 'mut') : 'mut', rows);
+  });
+  var cli = local.cli_tools || {}, items = cli.items || [];
+  var okItems = items.filter(function (x) { return x.ok; });
+  var missNames = items.filter(function (x) { return !x.ok; }).map(function (x) { return x.name; });
+  out += emSec('🧰 ' + emT('em_cli') + '（' + okItems.length + ' ✅ / ' + missNames.length + ' ✗）');
+  if (okItems.length) {
+    out += '<table class="em-tbl"><tr><th>' + emT('em_name') + '</th><th>' + emT('em_version') + '</th><th>' + emT('em_path') + '</th></tr>';
+    okItems.forEach(function (x) {
+      out += '<tr><td>' + emEsc(x.name) + '</td><td>' + emVal(x.version) + '</td><td class="em-mut">' + emEsc(x.path) + '</td></tr>';
+    });
+    out += '</table>';
+  }
+  if (missNames.length) out += '<div class="em-hint">' + emT('em_not_installed') + '：' + emCollapse('em-cli-miss', missNames, 12) +
+        ' <span class="em-mut">（要用时先 check_env 装，或投到集群）</span></div>';
+  var cd = local.conda || {};
+  var crows = emRow(emT('em_path'), emEsc(cd.path || '-')) + emRow(emT('em_version'), emEsc(cd.version || ''));
+  (cd.envs || []).forEach(function (e2) {
+    crows += emRow(e2.name, emEsc(e2.path || '') + (e2.python ? ' <span class="em-mut">python ' + emEsc(e2.python) + '</span>' : ''));
+  });
+  if (cd.canonical_note) crows += emRow('⚠️', '<span class="em-no">' + emEsc(cd.canonical_note) + '</span>');
+  out += emSec('🧩 ' + emT('em_conda'));
+  out += emCard((cd.available ? '✅ ' : '❌ ') + 'conda', (cd.available && !cd.canonical_note) ? 'ok' : 'warn', crows);
+  var ki = local.known_issues || {}, kik = Object.keys(ki);
+  if (kik.length) {
+    out += emSec('🕳️ ' + emT('em_issues'));
+    out += '<table class="em-tbl">' + kik.map(function (k) {
+      return '<tr><td>' + emEsc(k) + '</td><td>' + emEsc(ki[k]) + '</td></tr>'; }).join('') + '</table>';
+  }
+  var notes = local.canonical_notes || {}, nk = Object.keys(notes);
+  if (nk.length) {
+    out += emSec('📝 ' + emT('em_notes'));
+    out += '<div class="em-hint">' + nk.map(function (k) {
+      return '<b>' + emEsc(k) + '</b>：' + emEsc(notes[k]); }).join('<br>') + '</div>';
+  }
+  out += '<div class="em-hint">environment.json：' + emEsc(local.environment_json || '') +
+         ' ｜ hermes_home：' + emEsc(local.hermes_home || '') +
+         ' ｜ 本次探测耗时 ' + emVal(local.duration_s) + ' 秒</div>';
+  return out;
+}
+function emViewCluster(cl) {
+  if (cl.pending) return '<div class="em-warn">' + emT('em_cluster_pending') + '</div>';
+  var out = '';
+  var rows = emRow('enabled', emVal(cl.enabled)) + emRow('config', emEsc(cl.config_path || '')) +
+             emRow('scheduler', emEsc(cl.scheduler || '')) + emRow('node_policy', emEsc(cl.node_policy || '')) +
+             emRow('default_node', emEsc(cl.default_node || '-')) +
+             emRow('nodes_configured', emVal((cl.nodes_configured || []).join('、') || emT('em_none')));
+  out += emCard((cl.configured ? '✅ ' : '⚠️ ') + (cl.configured ? emT('em_cluster_nodes') : emT('em_cluster_off')),
+        cl.configured ? 'ok' : 'warn', rows);
+  if (!cl.configured) {
+    out += '<div class="em-warn">' + emEsc(cl.hint || '') + '</div>';
+    out += '<div style="margin:10px 0"><button class="em-btn primary" onclick="emClose(); openClusterConsole();">' +
+           emT('em_cluster_open') + '</button></div>';
+    return out;
+  }
+  var res = cl.resources || {};
+  out += emSec('🧮 ' + emT('em_cluster_res'));
+  out += '<div class="em-grid">';
+  out += emCard(emT('em_cores'), 'ok', emRow(emT('em_of'), emVal(res.total_cores) + ' ' + emT('em_cores')));
+  out += emCard(emT('em_cluster_nodes'), (res.reachable_nodes ? 'ok' : 'warn'),
+        emRow(emT('em_ok'), emVal(res.reachable_nodes) + ' / ' + emVal(res.configured_nodes)));
+  out += emCard('scheduler', 'ok', emEsc((res.schedulers || []).join('、') || emT('em_none')));
+  out += emCard('workdir', 'ok', (res.workdirs || []).map(emEsc).join('<br>') || emT('em_none'));
+  out += '</div>';
+  out += emCard('💤 ' + emT('em_node_idle'), 'ok', emEsc((res.idle_now || []).join('、') || emT('em_none')));
+  var nodes = cl.nodes || [];
+  if (nodes.length) {
+    out += emSec('🖧 ' + emT('em_cluster_nodes'));
+    out += '<table class="em-tbl"><tr><th>node</th><th>host</th><th>role</th><th>' + emT('em_cores') +
+           '</th><th>load1</th><th>' + emT('em_node_idle') + '</th><th>workdir</th><th>scheduler</th></tr>';
+    nodes.forEach(function (n) {
+      out += '<tr><td>' + emEsc(n.name) + (n.reachable ? ' <span class="em-ok">✓</span>'
+           : ' <span class="em-no">✗ ' + emEsc(n.error || '') + '</span>') + '</td>' +
+           '<td class="em-mut">' + emEsc(n.host || '') + '</td><td>' + emEsc(n.role || '') + '</td>' +
+           '<td>' + emVal(n.nproc) + '</td><td>' + emVal(n.load1) + '</td>' +
+           '<td>' + (n.idle_guess ? '✓' : '') + '</td>' +
+           '<td class="em-mut">' + emEsc(n.workdir || '') + (n.workdir_ok === false ? ' <span class="em-no">✗</span>' : '') + '</td>' +
+           '<td>' + emEsc(n.scheduler || '') + '</td></tr>';
+    });
+    out += '</table>';
+  }
+  var per = cl.per_node || {}, pk = Object.keys(per);
+  if (pk.length) {
+    out += emSec('🔍 ' + emT('em_node_detail'));
+    pk.forEach(function (name) {
+      var v = per[name] || {}, r2 = '';
+      if (v.error) r2 += emRow('error', '<span class="em-no">' + emEsc(v.error) + '</span>');
+      if (v.skipped) r2 += emRow(emT('em_note'), emEsc(v.skipped));
+      var vs = v.versions || {};
+      Object.keys(vs).forEach(function (k) { r2 += emRow(k, emEsc(vs[k])); });
+      var bs = v.bins || {};
+      Object.keys(bs).forEach(function (k) { r2 += emRow(k, emVal(bs[k])); });
+      if (v.workdir) r2 += emRow('workdir', emEsc(v.workdir));
+      if (v.remote_home) r2 += emRow('home', emEsc(v.remote_home));
+      if (v.output) r2 += '<div class="em-code" style="max-height:200px">' + emEsc(v.output) + '</div>';
+      out += emCard('🖧 ' + emEsc(name), v.error ? 'warn' : 'ok', r2);
+    });
+  }
+  if (cl.warnings && cl.warnings.length) {
+    out += '<div class="em-warn">' + cl.warnings.map(function (w) { return '• ' + emEsc(w); }).join('<br>') + '</div>';
+  }
+  return out;
+}
+function emViewAgent(d) {
+  var local = d.local || {};
+  var out = emSec('🤖 ' + emT('em_tab_agent'));
+  out += '<div>' + emT('em_agent_intro') + '</div>';
+  out += emCard(emT('em_agent_actions'), 'ok',
+        emRow('overview / refresh', emT('em_act_overview')) +
+        emRow('local', emT('em_act_local')) +
+        emRow('cluster', emT('em_act_cluster')) +
+        emRow('markdown', emT('em_act_md')));
+  out += emCard('📁 ' + emT('em_agent_cache'), 'mut',
+        emRow(emT('em_agent_cache'), emEsc(d.cache_path || '')) +
+        emRow(emT('em_agent_home'), emEsc(local.hermes_home || '')) +
+        emRow('environment.json', emEsc(local.environment_json || '')));
+  if (d.agent_digest) {
+    out += emSec('📇 ' + emT('em_agent_digest'));
+    out += '<div class="em-code">' + emEsc(d.agent_digest) + '</div>';
+  } else {
+    out += '<div class="em-hint">' + emT('em_pending') + '</div>';
+  }
+  return out;
+}
 // === 远端集群控制台（2026-09-19）===
 // WebUI 里直接敲 SSH 命令 / 交作业：走 /api/cluster/*，最终调用的是 remote_cluster 工具的同一个
 // handler，所以 UI 与 agent 的行为完全一致（只是 UI 不过 rail_review / 辩论门禁——那是给模型看的闸）。

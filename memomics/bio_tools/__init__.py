@@ -25,3 +25,4 @@ from . import vision_tool
 from . import reference_library
 from . import literature_library
 from . import remote_cluster
+from . import env_inventory

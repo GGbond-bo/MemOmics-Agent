@@ -6554,6 +6554,21 @@ def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
         pass
 
 
+def _env_digest_block() -> str:
+    """环境卡片（env_inventory 缓存）—— 追加在 ephemeral_system_prompt 后面。
+
+    只读缓存、绝不探测：本机首扫要 10~40 秒（R 全量探测最慢）、集群还要 SSH，
+    放这里会拖慢每次建 agent，也会让系统提示词前缀缓存失效（同样的教训见 KB 预取）。
+    缓存为空就返回空串，agent 自己按需调 env_inventory 工具。
+    """
+    try:
+        from memomics.bio_tools import env_inventory as _env
+        digest = _env.agent_digest()
+        return "\n\n" + digest if digest else ""
+    except Exception:
+        return ""
+
+
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
@@ -6592,7 +6607,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY,
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _env_digest_block(),
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -8799,6 +8814,98 @@ async def setup_config(req: Request):
     except Exception as e:
         print(f"[WARN] 写入 config.yaml 失败: {e}")
     return {"ok": True, "model": model, "base_url": base_url}
+
+
+# === 环境管理（env_inventory，2026-09-22 新增）===
+# 用户和 agent 都能看到：本机有什么环境（R/Python/生信 CLI/GPU/磁盘/已知坑）+
+# 集群有什么（节点/核数/负载/调度器/目录/已装工具与版本）。
+# 集群探测要 SSH（每节点最长 60 秒），绝不能卡在 HTTP 请求里：
+#   GET 只读缓存并立刻返回；refresh=1 只负责"踢一脚"后台线程，前端轮询 state.status。
+_ENV_INV_STATE = {"status": "idle", "scope": "", "started_at": 0, "finished_at": 0, "error": ""}
+_ENV_INV_LOCK = _threading.Lock()
+
+
+def _env_inv_module():
+    from memomics.bio_tools import env_inventory as _mod
+    return _mod
+
+
+def _env_inv_scan(scope="all"):
+    """后台线程里真探测。scope: all（本机+集群）/ local（只本机）/ cluster（只集群）。"""
+    with _ENV_INV_LOCK:
+        _ENV_INV_STATE.update({"status": "running", "scope": scope,
+                               "started_at": time.time(), "error": ""})
+    try:
+        mod = _env_inv_module()
+        if scope == "cluster":
+            mod.scan_cluster(force=True)
+        elif scope == "local":
+            mod.scan_local(force=True)
+        else:
+            mod.build_report(force=True, cluster=True)
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "ok", "finished_at": time.time()})
+    except Exception as e:
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "error", "error": f"{type(e).__name__}: {e}",
+                                   "finished_at": time.time()})
+
+
+def _env_inv_refresh(scope="all"):
+    """踢一脚后台刷新；已经在跑就返回 False（不重复探测）。"""
+    with _ENV_INV_LOCK:
+        if _ENV_INV_STATE.get("status") == "running":
+            return False
+    _threading.Thread(target=_env_inv_scan, args=(scope,), daemon=True,
+                      name="env-inventory-scan").start()
+    return True
+
+
+@app.get("/api/env/inventory")
+async def env_inventory_api(refresh: int = 0, cluster: int = 1, scope: str = ""):
+    """环境管理面板数据：本机 + 集群。
+
+    refresh=1 触发后台重扫（不阻塞）：返回当前缓存 + state.status=running，前端轮询刷新。
+    cluster=0 只清点本机（完全不碰 SSH）。任何情况下都先返回缓存，绝不空等。
+    """
+    mod = _env_inv_module()
+    report = mod.build_report(cache_only=True, cluster=bool(cluster))
+    local = report.get("local") or {}
+    cluster_data = report.get("cluster") or {}
+    pending = bool(local.get("pending")) or bool(cluster_data.get("pending"))
+    triggered = None
+    if refresh or pending:
+        triggered = _env_inv_refresh(scope or ("all" if cluster else "local"))
+    with _ENV_INV_LOCK:
+        state = dict(_ENV_INV_STATE)
+    if triggered is not None:
+        state["triggered"] = triggered
+    return {"ok": True, "state": state, "local": local, "cluster": cluster_data,
+            "warnings": report.get("warnings") or [], "pending": pending,
+            "agent_digest": report.get("agent_digest") or "",
+            "cache_path": mod._cache_path()}
+
+
+@app.get("/api/env/report.md")
+async def env_report_md(download: int = 0):
+    """人看的 markdown 环境报告（可下载存档 / 贴给同事）。只读缓存，秒回。"""
+    mod = _env_inv_module()
+    text = mod.render_markdown(cache_only=True)
+    headers = ({"Content-Disposition": 'attachment; filename="memomics-environment.md"'}
+               if download else {})
+    return Response(text, media_type="text/markdown; charset=utf-8", headers=headers)
+
+
+@app.on_event("startup")
+async def _env_inventory_warmup():
+    """启动后预热环境清单：后台线程，先等服务起来再扫，不拖慢启动。"""
+    def _warm():
+        time.sleep(8)
+        try:
+            _env_inv_module().build_report(force=False, cluster=True)
+        except Exception as e:
+            print(f"[WARN] 环境清单预热失败: {e}")
+    _threading.Thread(target=_warm, daemon=True, name="env-inventory-warmup").start()
 
 
 @app.get("/api/env/check")
