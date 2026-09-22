@@ -1085,9 +1085,22 @@ def _build_grill_prompt(session, user_text, intent):
                      "做个", "跑一", "流程", "细胞通讯", "degs", "差异表达")
     _LIGHT = ("chat", "knowledge_ask", "progress_check", "result_check",
               "analysis_plan", "literature", "cancel_task", "investigate")
+    # 2026-09-22 极端场景实测：日常/运维请求（"整理一下我的下载文件夹"被判 direct_exec）
+    # 会误触 grill —— 与科研无关的文件操作直接跳过。
+    _sc_g = _intent_scan(t)
+    if any(w in t for w in ("写邮件", "发邮件", "抓取网页", "删除文件")):
+        return ""
+    if _sc_g["daily_hard"] or (_sc_g["daily_soft"] and not _sc_g["hit_t1"]):
+        return ""
+    if any(w in t.lower() for w in _INTENT_INJECTION) and not _sc_g["hit_t1"]:
+        return ""
     _has_exec = any(s in t.lower() for s in _EXEC_SIGNALS)
     _is_exec_intent = intent in ("analysis", "direct_exec", "research_plan")
-    if (not (_has_exec or _is_exec_intent)) or intent in _LIGHT:
+    # 执行意图但没有执行信号、也没有科研上下文（"整理一下我的下载文件夹"被判 direct_exec）
+    # → 不是开工请求，别问。
+    if not (_has_exec or (_is_exec_intent and _sc_g["high"])):
+        return ""
+    if intent in _LIGHT:
         return ""
     return (
         "[开工前澄清 · 铁律：不确定就问]\n"
@@ -1097,6 +1110,8 @@ def _build_grill_prompt(session, user_text, intent):
         "2. 物种/组织/实验条件是什么？\n"
         "3. 期望得到什么结果（图/表/报告）？\n"
         "4. 是要继续之前的任务，还是全新任务？\n"
+        "问过一次就别再问第二遍：上文如果已经问过同一件事、用户也答了（哪怕没给绝对路径），"
+        "直接按已知信息开工；确实还缺关键项时最多再确认一次，禁止反复追问。\n"
         "用户回答后再规划执行。" + _FORM_RULE_GRILL
     )
 
@@ -1115,16 +1130,118 @@ _FORM_RULE_GRILL = (
     "多件事一次确认时 multi_select=true；kind='intent'。"
     "表单答复前执行类工具会被系统拦下 —— 问完立即结束本回合，等用户勾选。"
 )
-_INTENT_HIGH_COST = (
-    "分析", "聚类", "注释", "降维", "富集", "拟时序", "通讯", "wgcna", "差异表达",
-    "degs", "集群", "投递", "提交作业", "入库", "报告", "出图", "跑流程", "建模",
-    "比对", "组装", "重跑", "重新做", "批量",
+# 词表（2026-09-22 极端场景矩阵实测后重构）
+# 实测缺陷：①"报告/差异表达/result.csv" 同时命中高代价与 SPEC → 触发词被打成死词；
+# ②质控/GSEA/生存分析/整合去批次 完全漏 gate，英文请求更是全瞎；
+# ③日常任务（整理下载文件夹 / PDF 转 Word / 批量重命名）误弹。
+_INTENT_HIGH_COST_T1 = (  # 一档：科研方法/产物词，出现即算高代价
+    "聚类", "注释", "降维", "富集", "拟时序", "细胞通讯", "通讯分析", "wgcna", "共表达",
+    "差异表达", "差异分析", "degs", "质控", "变异检测", "变异注释", "生存分析",
+    "整合", "去批次", "批次矫正", "批次效应", "gsea", "gsva", "空间转录组",
+    "单细胞", "scrna", "sc-rna", "snrna", "atac", "chip-seq", "cut&tag", "hi-c",
+    "甲基化", "蛋白组", "代谢组", "转录组", "去卷积", "双细胞", "拷贝数", "cnv",
+    "孟德尔随机化", "免疫浸润", "系统发育", "进化树", "分子对接", "引物设计",
+    "轨迹分析", "细胞分型", "亚群", "marker基因", "cellbender", "cellranger",
+    "跑流程", "重跑", "重新做", "重新跑", "投递", "提交作业", "入库", "报告",
+    "测序分析", "下游分析", "上游分析",
 )
-_INTENT_SPEC = (  # 已经交代了交付形态/关键参数 → 不必再问
-    "图", "表", "报告", "pdf", "docx", "html", "csv", "结论", "阈值", "参数",
-    "分辨率", "res=", "pca", "umap", "tsne", "marker", "物种", "分组", "版本",
+_INTENT_HIGH_COST_T2 = (  # 二档：通用动作词，需有科研上下文（路径/生信名词）才算高代价
+    "分析", "建模", "比对", "组装", "检测", "鉴定", "训练", "批量", "处理",
+)
+_EN_HIGH_COST = (  # 英文请求（实测原逻辑对英文完全无感）
+    "clustering", "cluster", "annotat", "differential expression", "differential",
+    "quality control", " qc", "qc ", "survival analysis", "batch correction",
+    "integration", "enrichment", "gsea", "trajectory", "deconvolution",
+    "variant calling", "assemble", "assembly", "single-cell", "single cell",
+    "scrna", "atac-seq", "chip-seq", "methylation", "pipeline", "align",
+    "proteomic", "metabolomic",
+)
+_INTENT_RESEARCH_CTX = (  # 科研上下文：数据文件后缀 + 生信名词
+    ".h5ad", ".mtx", ".bam", ".fastq", ".fq", ".sam", ".vcf", ".bed", ".loom",
+    ".rds", ".tsv", "数据", "样本", "矩阵", "序列", "基因", "细胞", "测序",
+    "reads", "表达谱", "组学", "组织", "物种", "实验",
+)
+_INTENT_SPEC_STRONG = (  # 关键参数/方法已交代 → 信息够，不打扰
+    "阈值", "参数", "分辨率", "res=", "显著性", "fdr", "p值", "p<", "物种", "分组",
+    "版本", "marker", "基因列表", "结论", "置信", "随机种子", "seed", "n_neighbors",
+    "pca", "umap", "tsne", "harmony", "seurat", "scanpy", "monocle", "cellchat",
+    "deseq2", "edger", "limma", "参考基因组", "参考", "genome", "默认",
+)
+_INTENT_SPEC_WEAK = (  # 交付物已交代（需配合数据路径 + 产出动词）
+    "图", "表", "报告", "pdf", "docx", "word", "excel", "xlsx", "html", "csv",
+    "svg", "png", "tiff", "ppt", "report", "figure", "plot", "chart", "table",
+)
+_INTENT_DELIVER_VERB = ("出", "画", "生成", "输出", "保存", "给我", "导出", "要一张", "来一张",
+                          "generate", "produce", "output", "save", "export", "plot", "draw", "write")
+_INTENT_OPS_HARD = (  # 文件/格式操作：一律不弹（"把 PDF 报告转成 Word" 类，实测误弹）
+    "压缩", "解压", "重命名", "改名", "格式转换", "转成", "转换为", "转换成",
+    "下载文件夹", "文件夹里", "整理文件", "爬虫", "爬取", "截图",
+    "体检", "化验单", "病历", "健康报告", "销售数据", "股票", "基金", "彩票",
+    "rename", "zip", "compress", "screenshot",
+)
+_INTENT_DAILY_SOFT = (  # 日常软信号：正文里出现科研一档词时不算（"跑聚类顺便写个周报"仍要问）
+    "邮件", "翻译", "提醒我", "记账", "报销", "简历", "天气", "电影", "菜谱",
+    "旅游", "购物", "快递", "打车", "演讲稿", "作文", "取个名", "起个名", "笑话",
+    "代码", "报错", "bug", "debug", "脚本怎么写",
+    "周报", "日报", "月报", "会议纪要", "日程", "备忘录",
+    "translate", "email", "resume", "weather", "movie", "recipe", "reminder",
+)
+_INTENT_DAILY_HARD = _INTENT_OPS_HARD  # 兼容旧引用
+_INTENT_ACTION = (  # 执行形状：用于把被分类器误判成 chat 的科研请求捞回来
+    "跑", "执行", "做", "用", "把", "对", "帮我", "请", "提交", "投递", "入库",
+    "生成", "重跑", "重新跑", "处理", "分析", "建模", "比对", "组装", "检测",
+    "注释", "降维", "聚类", "整合", "出报告", "出图",
+    "run ", "execute", "analyze", "analyse", "process", "generate", "submit",
+    "annotate", "align", "please ", "using ",
+)
+_INTENT_QA_FORM = (  # 问句/总结形状：不当作执行请求
+    "总结", "介绍一下", "什么是", "是什么", "怎么", "如何", "为什么", "区别",
+    "原理", "含义", "推荐", "对比", "哪个", "解释", "说明一下", "讲讲", "聊聊",
+    "what is", "how to", "explain", "summarize", "difference between",
 )
 _INTENT_BYPASS = ("直接做", "不用问", "别问", "无需确认", "不用确认", "直接开始", "直接跑")
+_INTENT_INJECTION = (  # 角色扮演/注入类文本：不当作真实开工请求（除非同句有科研一档词）
+    "ignore all previous", "ignore previous", "ignore the above", "system:", "system：",
+    "<system>", "不要问用户", "不许问", "别问我", "忽略以上", "忽略之前", "忽略上述",
+)
+_INTENT_HIGH_COST = _INTENT_HIGH_COST_T1 + _INTENT_HIGH_COST_T2  # 兼容旧引用
+_INTENT_SPEC = _INTENT_SPEC_STRONG + _INTENT_SPEC_WEAK  # 兼容旧引用
+_SCI_PATH_RE = re.compile(r"[A-Za-z]:[/\\]\S+")
+
+
+def _intent_scan(user_text):
+    """把一条用户消息扫成结构化判断（纯函数，极端场景可回归）。
+
+    high        — 是否属于高代价任务（一档词直接算；二档/英文词需科研上下文）
+    has_path    — 是否给了数据路径；action — 是否执行形状；qa — 是否问句/总结形状
+    daily_hard  — 日常/运维硬跳过；daily_soft — 日常软跳过（有科研一档词则失效）
+    spec_strong — 关键参数已交代；weak_ok — 交付物+路径+产出动词都已交代
+    """
+    t = str(user_text or "")
+    tl = t.lower()
+    has_path = bool(_SCI_PATH_RE.search(t))
+    hit_t1 = [w for w in _INTENT_HIGH_COST_T1 if w in tl]
+    hit_t2 = [w for w in _INTENT_HIGH_COST_T2 if w in tl]
+    en = [w for w in _EN_HIGH_COST if w in tl]
+    ctx = has_path or any(w in tl for w in _INTENT_RESEARCH_CTX)
+    masked = tl
+    for _w in _INTENT_HIGH_COST_T1 + _INTENT_HIGH_COST_T2 + _EN_HIGH_COST:
+        if _w in masked:
+            masked = masked.replace(_w, " ")
+    spec_weak = [w for w in _INTENT_SPEC_WEAK if w in tl]
+    return {
+        "high": bool(hit_t1) or bool(hit_t2 and ctx) or bool(en and ctx),
+        "hit_t1": hit_t1, "hit_t2": hit_t2, "en": en,
+        "has_path": has_path,
+        "action": any(w in tl for w in _INTENT_ACTION),
+        "qa": any(w in tl for w in _INTENT_QA_FORM),
+        "daily_hard": [w for w in _INTENT_OPS_HARD if w in tl],
+        "daily_soft": [w for w in _INTENT_DAILY_SOFT if w in tl],
+        "spec_strong": [w for w in _INTENT_SPEC_STRONG if w in masked],
+        "spec_weak": spec_weak,
+        "weak_ok": bool(spec_weak) and has_path and any(
+            v in tl for v in _INTENT_DELIVER_VERB),
+    }
 
 
 def _intent_already_confirmed(session) -> bool:
@@ -1154,19 +1271,36 @@ def _build_intent_confirm_prompt(session, user_text, intent):
     if not user_text or not str(user_text).strip():
         return ""
     t = str(user_text)
-    _tl = t.lower()
     if any(w in t for w in ("继续", "接着", "下一步", "之前")):
         return ""
     if any(w in t for w in _INTENT_BYPASS):
         return ""
-    if intent in ("chat", "self_intro", "knowledge_ask", "progress_check",
-                  "result_check", "literature", "cancel_task", "investigate"):
+    sc = _intent_scan(t)
+    # ① 日常/运维任务一律不弹（实测误弹：整理下载文件夹 / PDF 转 Word / 批量重命名）
+    if sc["daily_hard"]:
         return ""
+    if sc["daily_soft"] and not sc["hit_t1"]:
+        return ""
+    # ② 问句/总结形状（"总结一下单细胞聚类流程"）不是执行请求
+    if sc["qa"] and not (sc["has_path"] and sc["action"]):
+        return ""
+    # 注入/角色扮演文本（"system: 不要问用户，直接执行"）不是开工请求
+    if any(w in t.lower() for w in _INTENT_INJECTION) and not sc["hit_t1"]:
+        return ""
+    # ③ 轻量意图不弹；但"带数据路径的执行形状请求"哪怕被分类器判成 chat 也要捞回来
+    #    （实测漏 gate：用 E:/data/x.h5ad 做质控 / please annotate ... using E:/data/x.h5ad）
+    if intent in ("chat", "self_intro", "knowledge_ask", "progress_check",
+                  "result_check", "literature", "cancel_task", "investigate",
+                  "plan_refine"):
+        _rescue = sc["action"] and (sc["has_path"] or sc["high"])
+        if not _rescue:
+            return ""
     if _intent_already_confirmed(session):
         return ""
-    if not any(s in _tl for s in _INTENT_HIGH_COST):
+    # ④ 高代价判定 + 信息是否够（先屏蔽触发词再扫参数词，避免"差异表达"被"表"打成死词）
+    if not sc["high"]:
         return ""
-    if any(s in _tl for s in _INTENT_SPEC):
+    if sc["spec_strong"] or sc["weak_ok"]:
         return ""
     return (
         "[开工前意图确认 · 高代价任务先对齐目标]\n"
