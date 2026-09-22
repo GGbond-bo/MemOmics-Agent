@@ -1,0 +1,14 @@
+# 可选路径：如果你已经在用 pre-commit（pip install pre-commit && pre-commit install），
+# 这份配置与 .githooks/pre-commit 等效 —— 两者只需其一（都启用会跑两遍）。
+#
+# 门禁内容见 scripts/check_skills_gate.py：SKILLS_INDEX.md 与磁盘逐字一致 +
+# 注册表/触发词/路由回归矩阵全绿。CI 侧由 .github/workflows/skills-gate.yml 兜底。
+repos:
+  - repo: local
+    hooks:
+      - id: memomics-skills-gate
+        name: MemOmics skill 门禁（索引一致性 + 路由回归矩阵）
+        entry: python scripts/check_skills_gate.py --quiet
+        language: system
+        pass_filenames: false
+        files: '^(hermes_home/(skills/|SKILLS_INDEX\.md$|SOUL(-detail)?\.md$)|webui/(skills_registry|auto_register)\.py$|webui/tests/(test_skill|fixtures/skill_routing_matrix\.json)|scripts/(check_skills_gate|install_git_hooks)\.py$|\.githooks/)'

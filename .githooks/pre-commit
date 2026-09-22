@@ -1,0 +1,59 @@
+#!/bin/sh
+# MemOmics skill 门禁 pre-commit hook（P0-1）
+#
+# 只在暂存区涉及「技能面」文件时触发，跑 scripts/check_skills_gate.py：
+#   1) SKILLS_INDEX.md 必须与磁盘上的 skill.json 逐字一致（索引漂移是历史事故源头）；
+#   2) 注册表护栏 + 触发词矩阵 + 路由回归矩阵（多场景/多意图/极端输入）必须全绿。
+#
+# 安装：python scripts/install_git_hooks.py   （等价于 git config core.hooksPath .githooks）
+# 跳过：SKILLS_GATE=0 git commit ...  或  git commit --no-verify
+# 卸载：git config --unset core.hooksPath
+
+if [ "${SKILLS_GATE:-1}" = "0" ]; then
+    echo "[skills-gate] SKILLS_GATE=0，跳过技能门禁"
+    exit 0
+fi
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+CHANGED=$(git diff --cached --name-only --diff-filter=ACDMR 2>/dev/null)
+if [ -z "$CHANGED" ]; then
+    exit 0
+fi
+
+# 技能面：技能目录 / 索引 / SOUL / 注册表与自动注册器 / 相关测试与门禁自身
+PATTERN='^(hermes_home/skills/|hermes_home/SKILLS_INDEX\.md$|hermes_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
+MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN")
+if [ -z "$MATCHED" ]; then
+    exit 0
+fi
+
+echo "[skills-gate] 暂存区涉及技能面文件，跑门禁："
+printf '%s\n' "$MATCHED" | sed 's/^/    /'
+
+# 选解释器：优先仓库 venv（依赖齐全），否则退到 PATH 上的 python
+PY=""
+for cand in ".venv/Scripts/python.exe" ".venv/bin/python" ".venv/bin/python3"; do
+    if [ -x "$cand" ]; then PY="$cand"; break; fi
+done
+if [ -z "$PY" ]; then
+    for cand in python3 python; do
+        if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
+    done
+fi
+if [ -z "$PY" ]; then
+    echo "[skills-gate] 找不到 python 解释器，无法跑门禁。"
+    echo "            安装 Python 后重试，或 SKILLS_GATE=0 git commit ... 跳过。"
+    exit 1
+fi
+
+"$PY" scripts/check_skills_gate.py --quiet
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo ""
+    echo "[skills-gate] 提交已被拦下：技能门禁未通过（exit=$status）。"
+    echo "            修好索引或测试后重新提交；确需跳过：SKILLS_GATE=0 git commit ..."
+    exit 1
+fi
+exit 0

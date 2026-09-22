@@ -1,0 +1,653 @@
+{
+  "schema": "memomics.skill-routing-matrix.v1",
+  "description": "Skill 路由回归矩阵：多场景 × 多意图 × 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；known_gaps 是「已确认缺口」棘轮，一旦被修复必须提升为 cases 条目。",
+  "cases": [
+    {
+      "id": "scrna-qc-01",
+      "intent": "直白",
+      "text": "我有一份 scRNA-seq 数据，先做质控和双细胞去除",
+      "must_hit": [
+        "scrna-qc"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "scrna-qc-02",
+      "intent": "口语",
+      "text": "单细胞数据 QC 该怎么做",
+      "must_hit": [
+        "scrna-qc"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "scrna-eda-01",
+      "intent": "口语",
+      "text": "先帮我看看这份单细胞数据的整体概览",
+      "must_hit": [
+        "scrna-eda"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "scrna-clustering-01",
+      "intent": "同义",
+      "text": "单细胞做完质控之后做聚类分群",
+      "must_hit": [
+        "scrna-qc",
+        "scrna-clustering"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "scanpy-01",
+      "intent": "英文工具名",
+      "text": "用 Scanpy 跑一遍单细胞标准流程",
+      "must_hit": [
+        "scrnaseq-scanpy-core-analysis"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "seurat-01",
+      "intent": "英文工具名",
+      "text": "用 Seurat 做 SCTransform 标准化",
+      "must_hit": [
+        "scrnaseq-seurat-core-analysis"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "trajectory-01",
+      "intent": "术语",
+      "text": "做完聚类做个拟时序轨迹分析",
+      "must_hit": [
+        "trajectory-analysis"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "cellchat-01",
+      "intent": "英文工具名",
+      "text": "用 CellChat 分析细胞通讯",
+      "must_hit": [
+        "cellchat-v2"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "cellbender-01",
+      "intent": "术语",
+      "text": "这批 10x 数据背景噪声大，用 CellBender 去背景",
+      "must_hit": [
+        "cellbender-remove-background"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "drug-discovery-01",
+      "intent": "术语",
+      "text": "从单细胞数据里找药物靶点，做药物重定位",
+      "must_hit": [
+        "scrna-disease-drug-discovery"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "deg-01",
+      "intent": "术语",
+      "text": "做差异基因分析，输出 DEG 列表",
+      "must_hit": [
+        "deg-analysis"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "enrichment-01",
+      "intent": "术语",
+      "text": "把这些基因做 GO/KEGG 富集分析",
+      "must_hit": [
+        "functional-enrichment"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "survival-01",
+      "intent": "术语",
+      "text": "做生存分析和 KM 曲线",
+      "must_hit": [
+        "survival-analysis"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "mr-01",
+      "intent": "术语",
+      "text": "用 GWAS 数据做两样本孟德尔随机化",
+      "must_hit": [
+        "mendelian-randomization-twosamplemr"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "spatial-01",
+      "intent": "直白",
+      "text": "给我做个空间转录组分析",
+      "must_hit": [
+        "spatial-transcriptomics"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "multiomics-01",
+      "intent": "术语",
+      "text": "多组学整合分析怎么做",
+      "must_hit": [
+        "multi-omics-integration"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "geo-01",
+      "intent": "术语",
+      "text": "帮我从 GEO 下载公共数据集",
+      "must_hit": [
+        "omics-dataset-retrieval"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "litreview-01",
+      "intent": "直白",
+      "text": "帮我写一份文献综述",
+      "must_hit": [
+        "literature-review"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "paperdownload-01",
+      "intent": "直白",
+      "text": "帮我搜文献然后下载论文",
+      "must_hit": [
+        "paper-download"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "papersummary-01",
+      "intent": "口语",
+      "text": "帮我总结论文要点",
+      "must_hit": [
+        "paper-summary"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "naturereader-01",
+      "intent": "口语",
+      "text": "帮我精读论文，逐段解读并做全文对照",
+      "must_hit": [
+        "nature-reader"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "papercard-01",
+      "intent": "术语",
+      "text": "拆解这篇文献，做一张论文卡片",
+      "must_hit": [
+        "nature-paper-card"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "paramextract-01",
+      "intent": "术语",
+      "text": "从这篇文献里提取参数，整理成表",
+      "must_hit": [
+        "literature-param-extraction"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "reviewer-01",
+      "intent": "口语",
+      "text": "帮我审一下这篇论文，给审稿意见",
+      "must_hit": [
+        "academic-paper-reviewer"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "naturereviewer-01",
+      "intent": "多关键词",
+      "text": "投稿前自审，用 Nature 审稿人的视角看这篇稿子",
+      "must_hit": [
+        "nature-reviewer"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "response-01",
+      "intent": "术语",
+      "text": "帮我写修回信，逐点回复审稿人",
+      "must_hit": [
+        "nature-response"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "presub-01",
+      "intent": "术语",
+      "text": "投稿前检查一下草稿，找问题",
+      "must_hit": [
+        "pre-submission-reviewer"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "polish-01",
+      "intent": "直白",
+      "text": "帮我把这段文字润色成英文",
+      "must_hit": [
+        "paper-polish"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "human-01",
+      "intent": "口语",
+      "text": "这段话太像AI写的了，帮我改一下，别被评委看出来",
+      "must_hit": [
+        "human-skill"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "writing-01",
+      "intent": "直白",
+      "text": "帮我写论文的 Introduction 部分",
+      "must_hit": [
+        "academic-paper-writing"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "translatebook-01",
+      "intent": "直白",
+      "text": "把这本书翻译成中文",
+      "must_hit": [
+        "translate-book"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "researchplan-01",
+      "intent": "术语",
+      "text": "帮我定个研究方案和技术路线",
+      "must_hit": [
+        "research-plan"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "ideaeval-01",
+      "intent": "口语",
+      "text": "这个想法值得做吗？帮我看看有没有新意",
+      "must_hit": [
+        "idea-evaluator"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "grill-01",
+      "intent": "口语",
+      "text": "来拷问一下我的方案，挑毛病",
+      "must_hit": [
+        "grill-me"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "expdesign-01",
+      "intent": "术语",
+      "text": "这个实验要做多少样本？帮我算个功效分析",
+      "must_hit": [
+        "experimental-design-statistics"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "grant-01",
+      "intent": "术语",
+      "text": "写基金申请的立项依据",
+      "must_hit": [
+        "academic-research"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "bestpractice-01",
+      "intent": "直白",
+      "text": "数据分析有哪些最佳实践",
+      "must_hit": [
+        "data-analysis-best-practices"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "error-01",
+      "intent": "口语",
+      "text": "跑代码报错了，帮我 fix 一下",
+      "must_hit": [
+        "error-recovery"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "summaryreport-01",
+      "intent": "口语",
+      "text": "跑完了，帮我生成总结报告",
+      "must_hit": [
+        "analysis-summary-report"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "heartbeat-01",
+      "intent": "口语",
+      "text": "这个任务还在跑吗？跑了多久了",
+      "must_hit": [
+        "heartbeat-monitor"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "createskill-01",
+      "intent": "口语",
+      "text": "没有这个工具，帮我做一个 skill",
+      "must_hit": [
+        "create-bio-skill"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "deepresearch-01",
+      "intent": "直白",
+      "text": "帮我做个深度调研",
+      "must_hit": [
+        "deep-research"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "html-01",
+      "intent": "直白",
+      "text": "生成一个 html 报告",
+      "must_hit": [
+        "bioinformatics-html-report"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "ppt-01",
+      "intent": "口语",
+      "text": "把这些结果做成组会用的 PPT",
+      "must_hit": [
+        "ppt-generator"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "docx-01",
+      "intent": "直白",
+      "text": "导出成 Word 文档",
+      "must_hit": [
+        "docx-generation"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "genui-01",
+      "intent": "术语",
+      "text": "用结构化展示把这些要点做成 UI 组件",
+      "must_hit": [
+        "genui"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "naturefigure-01",
+      "intent": "术语",
+      "text": "帮我画一个 Figure 1 的柱状图，要 CNS 级别",
+      "must_hit": [
+        "nature-figure"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "scipilot-01",
+      "intent": "术语",
+      "text": "画个箱线图和相关性矩阵",
+      "must_hit": [
+        "scipilot-figure-skill"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "academicfigure-01",
+      "intent": "术语",
+      "text": "做期刊出图，先检查我的出图脚本",
+      "must_hit": [
+        "academic-figure-skill"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "figuredesign-01",
+      "intent": "口语",
+      "text": "这张图不好看也不专业，帮我看看该选什么图型",
+      "must_hit": [
+        "figure-designer"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "cnsvis-01",
+      "intent": "术语",
+      "text": "画个 UMAP 和火山图",
+      "must_hit": [
+        "cns-visualization"
+      ],
+      "max_hits": 6
+    },
+    {
+      "id": "multi-intent-01",
+      "intent": "多意图",
+      "text": "先做质控和聚类，再画 UMAP，最后生成 html 报告",
+      "must_hit": [
+        "scrna-qc",
+        "scrna-clustering",
+        "cns-visualization",
+        "bioinformatics-html-report"
+      ],
+      "max_hits": 7
+    },
+    {
+      "id": "multi-intent-02",
+      "intent": "多意图",
+      "text": "做完差异分析后画火山图，再写一份文献综述",
+      "must_hit": [
+        "deg-analysis",
+        "cns-visualization",
+        "literature-review"
+      ],
+      "max_hits": 7
+    },
+    {
+      "id": "multi-intent-03",
+      "intent": "多意图",
+      "text": "帮我把这篇论文翻译一下，顺便总结论文要点并提取参数",
+      "must_hit": [
+        "nature-reader",
+        "paper-summary",
+        "literature-param-extraction"
+      ],
+      "max_hits": 7
+    },
+    {
+      "id": "multi-intent-04",
+      "intent": "多意图",
+      "text": "样本量怎么定？给我技术路线；这个想法值得做吗，帮我评估",
+      "must_hit": [
+        "experimental-design-statistics",
+        "research-plan",
+        "idea-evaluator"
+      ],
+      "max_hits": 7
+    }
+  ],
+  "distractors": [
+    "今天天气怎么样",
+    "谢谢",
+    "你好",
+    "帮我写个 Python 脚本处理数据",
+    "这个数据要不要用 DESeq2",
+    "把结果整理成表格",
+    "我今天心情不错，随便聊聊",
+    "帮我订个外卖"
+  ],
+  "edge_cases": [
+    {
+      "id": "edge-empty",
+      "text": "",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-space",
+      "text": "     ",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-punct",
+      "text": "。。。！！！",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-emoji",
+      "text": "🙂🙂🙂",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-html",
+      "text": "<script>alert(1)</script>",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-control",
+      "text": "\u0000\u0007\u001b",
+      "expect": "empty"
+    },
+    {
+      "id": "edge-repeat",
+      "text": "质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 质控 ",
+      "expect": "bounded",
+      "max_hits": 4
+    },
+    {
+      "id": "edge-junk",
+      "text": "asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl asdfjkl ",
+      "expect": "bounded",
+      "max_hits": 4
+    },
+    {
+      "id": "edge-mixedcase",
+      "text": "SCRNA-seq 质控 QC",
+      "expect": "bounded",
+      "max_hits": 4
+    },
+    {
+      "id": "edge-fullwidth",
+      "text": "做個單細胞分析",
+      "expect": "bounded",
+      "max_hits": 4
+    }
+  ],
+  "known_gaps": [
+    {
+      "id": "gap-qc-mito",
+      "text": "线粒体比例太高，帮我把这批细胞过滤掉",
+      "would_be": "scrna-qc",
+      "reason": "只认 QC/质控 字样，自然口语（线粒体比例/过滤细胞）不触发"
+    },
+    {
+      "id": "gap-reproduce",
+      "text": "帮我复现这篇论文的方法部分",
+      "would_be": "nature-reader",
+      "reason": "复现/方法部分 不在任何 RED 触发词里"
+    },
+    {
+      "id": "gap-batch",
+      "text": "这批数据要不要做批次校正",
+      "would_be": "scrna-qc",
+      "reason": "批次校正 不在触发词里"
+    },
+    {
+      "id": "gap-excel",
+      "text": "把跑出来的表格合并成一个 Excel",
+      "would_be": "analysis-summary-report",
+      "reason": "表格合并/Excel 不在触发词里"
+    },
+    {
+      "id": "gap-nature-reader-taozhe",
+      "text": "精读这篇论文，逐段解读一下",
+      "would_be": "nature-reader",
+      "reason": "触发词是「精读论文」，中间插了「这篇」就断链（子串匹配的典型漏召回）"
+    },
+    {
+      "id": "gap-paramextract-shiyan",
+      "text": "从这篇文献里提取实验参数",
+      "would_be": "literature-param-extraction",
+      "reason": "触发词是「提取参数」，中间插了「实验」就断链"
+    },
+    {
+      "id": "gap-human-space",
+      "text": "这段话太像 AI 写的了，帮我改得没有 AI 味",
+      "would_be": "human-skill",
+      "reason": "触发词是无空格的「像AI写的」，用户在中英之间打空格就漏召回"
+    },
+    {
+      "id": "gap-ideaeval-fangxiang",
+      "text": "这个研究方向值得做吗？帮我评估一下可行性",
+      "would_be": "idea-evaluator",
+      "reason": "触发词是「这个想法值得做吗」「评估可行性」，换词/插入「一下」即漏召回"
+    }
+  ],
+  "known_over_triggers": [
+    {
+      "id": "over-en-analysis-core",
+      "text": "这个 analysis 的 core 思路是什么",
+      "hits": [
+        "analysis-summary-report",
+        "deg-analysis",
+        "experimental-design-statistics",
+        "scrnaseq-scanpy-core-analysis",
+        "scrnaseq-seurat-core-analysis",
+        "survival-analysis"
+      ],
+      "reason": "英文触发词的单复数/单词级回退：analysis、core 这类通用单词命中 6 个技能。待 P0-2 触发词契约化时收敛（或改为「整词 + 至少两个词命中」）。"
+    },
+    {
+      "id": "over-en-design-plan",
+      "text": "Please help me design a plan for my holiday",
+      "hits": [
+        "experimental-design-statistics",
+        "figure-designer",
+        "research-plan"
+      ],
+      "reason": "design / plan 这类通用英文单词命中 3 个技能，与用户意图无关。同上待 P0-2 收敛。"
+    }
+  ],
+  "coverage_exempt": []
+}

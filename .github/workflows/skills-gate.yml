@@ -1,0 +1,93 @@
+# Skills Gate —— 技能面改动的 CI 门禁（P0-1）
+#
+# 与本地 .githooks/pre-commit 跑同一条命令（scripts/check_skills_gate.py）：
+#   1. SKILLS_INDEX.md 必须与磁盘上的 skill.json 逐字一致（防索引漂移）；
+#   2. 注册表护栏 + 触发词矩阵 + 路由回归矩阵（多场景 × 多意图 × 极端输入）全绿。
+#
+# 为什么单独一个工作流：技能面改动（355 个 skill 的元数据/索引/路由）与发版/冒烟无关，
+# 但一旦漂移就会让「该用的技能用不上」，所以给它一条独立、快速（<5 分钟）的红线。
+
+name: Skills Gate
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'hermes_home/skills/**'
+      - 'hermes_home/SKILLS_INDEX.md'
+      - 'hermes_home/SOUL.md'
+      - 'hermes_home/SOUL-detail.md'
+      - 'webui/skills_registry.py'
+      - 'webui/auto_register.py'
+      - 'webui/tests/test_skill*.py'
+      - 'webui/tests/fixtures/skill_routing_matrix.json'
+      - 'scripts/check_skills_gate.py'
+      - '.githooks/**'
+      - '.pre-commit-config.yaml'
+      - '.github/workflows/skills-gate.yml'
+  pull_request:
+    paths:
+      - 'hermes_home/skills/**'
+      - 'hermes_home/SKILLS_INDEX.md'
+      - 'hermes_home/SOUL.md'
+      - 'hermes_home/SOUL-detail.md'
+      - 'webui/skills_registry.py'
+      - 'webui/auto_register.py'
+      - 'webui/tests/test_skill*.py'
+      - 'webui/tests/fixtures/skill_routing_matrix.json'
+      - 'scripts/check_skills_gate.py'
+  workflow_dispatch:
+
+concurrency:
+  group: skills-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      # 装核心依赖：路由矩阵要 import webui/server.py（重依赖），装不上就会整组跳过 ——
+      # 那样门禁只剩「索引一致性」半条命，所以这里装齐再跑。
+      - name: Install core requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -r requirements.txt
+
+      - name: Run skills gate
+        run: python scripts/check_skills_gate.py --junit skills-gate-junit.xml
+
+      - name: Report routing matrix coverage (skips are visible, not silent)
+        if: always()
+        run: |
+          if [ -f skills-gate-junit.xml ]; then
+            head -c 400 skills-gate-junit.xml
+            echo
+            SKIPPED=$(grep -o 'skipped="[0-9]*"' skills-gate-junit.xml | head -1 | grep -o '[0-9]*')
+            echo "skipped=${SKIPPED:-unknown}"
+            if [ "${SKIPPED:-0}" != "0" ]; then
+              echo "::warning::有 $SKIPPED 个用例被跳过 —— 路由矩阵可能没真跑，请检查依赖是否装齐"
+            fi
+          else
+            echo "::warning::没有生成 junit 报告"
+          fi
+
+      - name: Upload junit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skills-gate-junit
+          path: skills-gate-junit.xml
+          if-no-files-found: ignore
