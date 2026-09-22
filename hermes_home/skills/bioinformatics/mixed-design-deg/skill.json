@@ -1,0 +1,33 @@
+{
+  "id": "mixed-design-deg",
+  "name": "混合设计 DEG 分析（组间独立 + 组内配对）",
+  "category": "scRNA",
+  "language": "R",
+  "description": "混合设计差异表达分析（组间独立比较 + 组内配对比较同存）：24 donors × 2 时间点的 aging/糖尿病/运动前后 DEG。pseudo-bulk + dream LMM (1|donor) 统一建模，禁止 cell-level MAST 当主分析。含同构高分文章源码证据库。",
+  "starting_prompt": "使用 混合设计 DEG 分析（组间独立 + 组内配对） 进行分析",
+  "source_dir": "skills/bioinformatics/mixed-design-deg",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "mixed-design",
+    "lmm",
+    "dream",
+    "pseudobulk",
+    "paired",
+    "repeated-measures",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "混合设计",
+    "配对比较",
+    "pre",
+    "post",
+    "重复测量",
+    "随机效应 donor"
+  ],
+  "when_to_use": "多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor"
+}

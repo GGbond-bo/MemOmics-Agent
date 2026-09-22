@@ -1,0 +1,33 @@
+{
+  "id": "scientific-figure-export",
+  "name": "发表级科学图表导出优化",
+  "category": "Visualization",
+  "language": "R+Python",
+  "description": ">-",
+  "starting_prompt": "使用 发表级科学图表导出优化 进行分析",
+  "source_dir": "skills/bioinformatics/scientific-figure-export",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "export",
+    "dpi",
+    "umap",
+    "png",
+    "raster",
+    "07_可视化"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "图太大",
+    "图很糊",
+    "导出尺寸",
+    "dpi",
+    "保存格式",
+    "PNG还是PDF",
+    "pngquant"
+  ],
+  "when_to_use": "用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。"
+}

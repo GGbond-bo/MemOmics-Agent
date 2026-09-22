@@ -40,5 +40,16 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "基金申请",
+    "课题申请",
+    "立项依据",
+    "开题报告",
+    "标书",
+    "grant proposal",
+    "academic-research",
+    "academic research"
+  ],
+  "trigger_level": "RED"
 }

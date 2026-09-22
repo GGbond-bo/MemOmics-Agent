@@ -1,0 +1,28 @@
+{
+  "id": "interactive-html-deliverables",
+  "name": "自包含交互式 HTML 交付物",
+  "category": "bioinformatics",
+  "language": "Python+JS",
+  "description": "构建自包含交互式 HTML 交付物（汇报展示页 / 数据看板 / 成果介绍页）：浅色主题设计令牌、10+ 类交互组件、分段落盘拼接、浏览器实测验收、数字可溯源、演讲者模式。触发：做成 html / 展示页 / 汇报页 / 介绍页 / 数据看板 / dashboard / 主题不要太暗 / 多一些交互 / 丰富专业有未来感 / 给老师同学展示。",
+  "starting_prompt": "使用 自包含交互式 HTML 交付物 进行分析",
+  "source_dir": "skills/bioinformatics/interactive-html-deliverables",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "html",
+    "visualization",
+    "dashboard",
+    "showcase",
+    "interactive",
+    "deliverable"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "interactive",
+    "html",
+    "deliverables"
+  ],
+  "when_to_use": "用户要一个**给人看**的交互式网页交付物（汇报、展示、介绍、看板、评审演示），而不是分析报告的结论页时。若目标是「把分析结果写成报告」→ 用 bioinformatics-html-report。"
+}

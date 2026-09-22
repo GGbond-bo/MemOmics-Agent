@@ -1,0 +1,27 @@
+{
+  "id": "user-script-figure-optimization",
+  "name": "用户已有绘图脚本的优化（以脚本为基线）",
+  "category": "Visualization",
+  "language": "R+Python",
+  "description": ">-",
+  "starting_prompt": "使用 用户已有绘图脚本的优化（以脚本为基线） 进行分析",
+  "source_dir": "skills/bioinformatics/user-script-figure-optimization",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "ggplot2",
+    "seurat",
+    "umap",
+    "publication-figure",
+    "user-script",
+    "07_可视化"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "按 nature 优化」「帮我改一下我的脚本"
+  ],
+  "when_to_use": "用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样"
+}

@@ -1,0 +1,26 @@
+{
+  "id": "cn-degree-thesis-writing",
+  "name": "中文学位论文撰写与格式合规",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 中文学位论文撰写与格式合规 进行分析",
+  "source_dir": "skills/bioinformatics/cn-degree-thesis-writing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "毕业论文",
+    "学位论文",
+    "硕士论文",
+    "撰写规范",
+    "装帧规范",
+    "论文格式",
+    "封面扉页",
+    "原创性声明"
+  ],
+  "when_to_use": "--- name: cn-degree-thesis-writing description: >- 中文学位论文（本科/硕士/博士毕业论文）撰写与「校内格式规范」合规。用于:读取学校《学位论文撰写及装帧规范》 原件 → 按硕/博适用性标注 → 按规范骨架撰写章节 → 格式自查 → 产出符合规范的 .docx / 标注版速查…"
+}

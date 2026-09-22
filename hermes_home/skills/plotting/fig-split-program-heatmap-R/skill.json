@@ -1,0 +1,34 @@
+{
+  "id": "fig-split-program-heatmap-R",
+  "name": "程序打分矩阵热图（R / base graphics 版）",
+  "category": "user-skill",
+  "language": "R",
+  "source": "user",
+  "description": "骨骼肌肌纤维 AUCell 程序打分矩阵热图（base graphics 零依赖 R 版）：18 程序 × 6 组 / 5 效应(Cohen's d) / 10 亚群三型版式，RdBu_r 双色带 + 行分组色条 + 亚群 45° 标签，一次出 6 图 × PNG/PDF/SVG/TIFF @300dpi",
+  "when_to_use": "用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图",
+  "parameters": {
+    "OUT": "输出目录（务必独立子目录，避免覆盖 Python 版）",
+    "META_CSV": "细胞级打分 CSV（type / annotation_L3 / samplename / *_AUC）",
+    "EFF_CSV": "五效应统计 CSV（effect / sub / score / d / q）",
+    "cmap": "RdBu_r 11 锚点线性插值 256 级 LUT",
+    "norm_effect": "TwoSlopeNorm(-3, 0, 3)",
+    "norm_zscore": "TwoSlopeNorm(-2, 0, 2)",
+    "xaxs_yaxs": "必须 'i'（否则色块压缩 ~7%）",
+    "lut_index": "floor(b*256)+1"
+  },
+  "proven_params": [
+    "par(xaxs='i', yaxs='i') 必须显式设置",
+    "色表索引 floor(b*256)+1（写 255 偏一档）",
+    "展平序：聚合矩阵取 亚群 × type 维度（匹配 Python 亚群最快）",
+    "输出目录独立（figures/R_version/）避免覆盖 Python 版"
+  ],
+  "proven_script": "scripts/fig_split_v10.R",
+  "error_count": 3,
+  "success_count": 1,
+  "trigger_keywords": [
+    "fig_split_v10 的 R 版",
+    "18 程序打分热图出 R 版",
+    "6组×亚群矩阵热图 R"
+  ],
+  "trigger_level": "GRN"
+}

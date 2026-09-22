@@ -1,0 +1,80 @@
+{
+  "id": "cross-species-atac-annotation",
+  "name": "Cross-Species ATAC-seq Cell Type Annotation",
+  "category": "user-skill",
+  "language": "Python",
+  "description": ">",
+  "starting_prompt": "使用 Cross-Species ATAC-seq Cell Type Annotation 进行分析",
+  "source_dir": "skills/bioinformatics/cross-species-atac-annotation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "cross",
+    "species",
+    "annotation"
+  ],
+  "success_count": 4,
+  "proven_script": "annotate_subcluster_alignment.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "read_monkey_predictedAnno.R",
+      "params": "monkey_Hf_ATAC_final.rds (341MB ArchRProject, 265909 cells)",
+      "date": "2026-08-27",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读取猴脑真实 predictedAnno 列：19 亚群（ODC 44021 / DG Ex 28854 / Astrocyte 23548 / CA1_SUB s.f. Ex 16457 / Microglia 9388 / CA2_4 EX 7833 / EC L3_5 EX 6878 / OPC 6574 / EC L6 EX 3669 / EC L2 EX 3226 / CGE CNR1 "
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "annotate_human_30clusters.py",
+      "params": "human_40_markerList.csv 30亚群 marker + 脑细胞 marker 字典加权打分",
+      "date": "2026-08-27",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "30 亚群 marker 字典打分完成：C1-6→OPC, C7-12→Astrocyte, C14-16→MGE Inh, C17-19→ExN(原文), C20/22→Microglia, C21→VS, C23→Microglia_activated, C30→ODC, C13/25/26/28/29→保留原文(噪声嫌疑/低置信)。打分矩阵存 marker_scoring_matrix.cs"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "",
+      "script": "human_subcluster_annotation_final.csv (annotate_subcluster_alignment)",
+      "params": "human_40_markerList.csv 28 clusters (C24/C27不存在); 猴脑19亚群命名对齐; ExN按marker命名",
+      "date": "2026-08-27",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人脑28亚群注释完成：OPC×6/Astro×6/Micro×2/ODC/MGE×2/CGE/活化Mic/巨噬×1 对齐猴脑19亚群命名；CA1 Ex/CA1-SUB Ex/CTX-deep Ex 按marker给名字；C13伪影、C25/C26/C28/C29噪声保留原文；修正C21从VS→Macrophage(CCL18/CCL3/CCL23证据)"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "annotate_subcluster_alignment.py",
+      "params": "human_40_markerList.csv 28 clusters (C24/C27不存在); 猴脑19亚群命名对齐; ExN区域marker字典核查(WFS1/SORL1/GRIK1/NR4A2/PROX1); debate L1 结论 need_more_info→命名加like后缀降候选级",
+      "date": "2026-08-27",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人脑28亚群注释最终版: 23群对齐猴脑19亚群名(OPC×6/Astro×6/ODC/MGE SST/PVALB/CGE/Micro×2/活化Mic/Macrophage); 3群人脑独有ExN按marker命名(CA1-like Ex*/CA1-SUB-like Ex*/CTX-deep Ex); 5群低置信/噪声保留原文(C13伪影, C25/C26 OR嗅觉受体噪声, C28/C29低置信"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "annotate_subcluster_alignment.py"
+  },
+  "when_to_use": "--- name: cross-species-atac-annotation description: > Cross-species ATAC-seq cell type annotation strategy: align fine-grained subclusters where possible…"
+}

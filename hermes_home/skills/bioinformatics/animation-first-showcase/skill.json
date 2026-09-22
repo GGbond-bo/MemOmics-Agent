@@ -1,0 +1,23 @@
+{
+  "id": "animation-first-showcase",
+  "name": "动画优先展示页（Animation-First Showcase HTML）",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "演示型 HTML 展示页（showcase / 答辩 / 汇报 / 给人演示）的动画优先写法。触发：用户要做 HTML 展示页、演示某个系统或项目、给老师同学看、答辩或汇报用；或用户抱怨已有 HTML 交付物「字太多、不直观」。",
+  "starting_prompt": "使用 动画优先展示页（Animation-First Showcase HTML） 进行分析",
+  "source_dir": "skills/bioinformatics/animation-first-showcase",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "animation-first-showcase",
+    "animation first showcase",
+    "animation",
+    "first",
+    "showcase"
+  ],
+  "when_to_use": "用户要做一个给人看/演示/汇报的 HTML（展示自己、展示项目、演示功能、答辩、行业调研汇总）时；或用户抱怨已有 HTML 交付物「字太多、不直观」时"
+}

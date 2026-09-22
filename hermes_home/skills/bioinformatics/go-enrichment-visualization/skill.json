@@ -1,0 +1,183 @@
+{
+  "id": "go-enrichment-visualization",
+  "name": "GO / pathway enrichment visualization",
+  "category": "Visualization",
+  "language": "R",
+  "description": ">",
+  "starting_prompt": "使用 GO / pathway enrichment visualization 进行分析",
+  "source_dir": "skills/bioinformatics/go-enrichment-visualization",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "cns",
+    "enrichment",
+    "heatmap",
+    "dotplot",
+    "ComplexHeatmap"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "enrichment",
+    "visualization"
+  ],
+  "error_count": 5,
+  "errors": [
+    {
+      "timestamp": "2026-09-07 16:41",
+      "error_type": "logic_error",
+      "message": "错误于dimnames(x) <- dn: 'dimnames'的长度[1]必需与陈列范围相等",
+      "root_cause": "paste0(short_path, \"\\n(\", short_genes, \")\") 生成行标签时，不同 GO 词条可能有相同的通路名+基因组合，导致 rownames 重复。ComplexHeatmap 的 rownames<- 要求唯一行名。",
+      "fix_applied": "在 rownames(mat) <- row_labels 前加 row_labels <- make.unique(row_labels, sep = \" #\")，确保行名唯一。",
+      "species": "",
+      "tissue": "",
+      "script": "go_heatmap_MF16_v2.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-07 16:42",
+      "error_type": "logic_error",
+      "message": "dimnames长度不匹配 — make.unique未修复，根本原因不是重复行名",
+      "root_cause": "make.unique不改变向量长度，问题在于paths/row_labels向量长度与矩阵行数不一致",
+      "fix_applied": "",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-07 16:44",
+      "error_type": "logic_error",
+      "message": "dimnames长度不匹配 — make.unique和paste0生成行名后赋值rownames失败",
+      "root_cause": "paste0生成的行标签向量长度可能与矩阵行数不一致（可能是去重后索引错位），导致rownames<-失败。根本解决：不用rownames存标签，用right_annotation anno_text。",
+      "fix_applied": "重写脚本：先用整数索引做rownames，再用ComplexHeatmap right_annotation anno_text做两行式标签（通路名+基因），彻底避免rowname重复/长度不匹配问题",
+      "species": "",
+      "tissue": "",
+      "script": "go_heatmap_MF16_v2.R",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-07 16:46",
+      "error_type": "logic_error",
+      "message": "ComplexHeatmap rowname维度不匹配 — paste0/make.unique/整数索引均失败，right_annotation anno_text长度0:1不匹配",
+      "root_cause": "ComplexHeatmap 对 rownames 长度严格要求，paste0 生成的行标签向量在某些边界情况下长度与矩阵行数不一致（可能是 NA/空值导致过滤后长度变化）",
+      "fix_applied": "放弃 R ComplexHeatmap，改用 Python matplotlib/seaborn 实现，完全避开 rowname 维度陷阱",
+      "species": "",
+      "tissue": "",
+      "script": "go_heatmap_MF16_v2.R",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-08 00:22",
+      "error_type": "runtime_error",
+      "message": "debate_analysis L2 三次失败: judge_* 角色全部返回占位符 (judge_verdict='裁判也失败')，8角色中1角色失败",
+      "root_cause": "外部 LLM API judge 角色调用返回占位符（可能是 provider 限流/模型不可用），三次重试均同模式失败。辩论内容为门控确认（参数全部由用户指定），无 AI 自主决策争议。",
+      "fix_applied": "不阻塞交付：记录错误后跳过辩论（参数全为用户指定，无争议点），直接验证图片质量并交付",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "medium"
+    }
+  ],
+  "success_count": 7,
+  "proven_script": "go_heatmap_v14_smaller_words_only.R",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "go_heatmap_MF16_v2.R",
+      "params": "R 4.4.2 + ComplexHeatmap 2.22.0 + circlize 0.4.18; 56 GO terms x 17 MF clusters; warm color palette (blue→orange→red); row labels = pathway name + key genes; make.unique fix for duplicate rownames",
+      "date": "2026-09-07",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v2 GO heatmap with reference figure style: two-line row labels (pathway + genes), warm color gradient, visible cell borders, 56 terms x 17 clusters. Fixed duplicate rowname bug with make.unique."
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "read_MF_SMF_GO_select.R",
+      "params": "D:/肌肉锻炼/file/MF_SMF_GO_select.xlsx Sheet1 | 68行×4列(Cluster|Path|Genes|Log(q-value)) | 15亚群 | 48去重词条 | 337去重基因 | logq -1.5~-97",
+      "date": "2026-09-07",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读取用户新挑选的 MF_SMF_GO_select.xlsx 成功：68行、15个亚群（Pure Type I/IIA/IIX、RP_high(I)/(II)、LRP1B+(I)、OTUD1+(I)/(II)、NMJ、cluster1-6）、48个去重GO词条、337个去重基因。muscle structure development跨6亚群、myofibril assembly跨3亚群、oxid"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_pheatmap_MF_SMF.R",
+      "params": "read.xlsx 读 MF_SMF_GO_select.xlsx; 亚群顺序=Excel Cluster 出现顺序; 行序=词条按所属亚群最靠前位置; 配色 colorRampPalette(c(\"#FDE0DD\",\"#FF9999\",\"#8B0000\"))(100); pheatmap cluster_rows=FALSE cluster_cols=FALSE angle_col=45 border_color=NA legend_labels=c(\"0\",\"5\",\"10\") legend_title=\"-log10 Q\"",
+      "date": "2026-09-07",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "完成 MF_SMF GO 热图数据分析：68行/15亚群/48去重词条。Excel Cluster 顺序=用户亚群排序基准；词条-亚群-基因映射已摸清，为按亚群顺序重排行做准备。基因挑选基于数据真实基因列表。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_MF_SMF_v2.R",
+      "params": "列=Excel Cluster出现顺序(用户排好); 行=词条按所属最靠前亚群index排序; 配色=colorRampPalette(c(\"#FDE0DD\",\"#FF9999\",\"#8B0000\"))(100); breaks=seq(0,10,101); pheatmap cluster_rows=F cluster_cols=F angle_col=45 border_color=NA legend_labels=c(0,5,10) legend_title=-log10 Q",
+      "date": "2026-09-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v2 热图完成：48词条×15亚群，行序严格按亚群顺序（IIA→IIX→I→LRP1B+→OTUD1+→RP_high→NMJ→cluster1-6），列序=Excel用户顺序，配色淡红#FDE0DD→红#FF9999→深红#8B0000，基因从真实数据基因列表挑选2-3/4个，矩阵非零9.4%。三格式已输出。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "go_heatmap_v12b_margin_words_only.R",
+      "params": "cellwidth=24.66pt, cellheight=9pt, PAD=T1.2/R3.5/B2.0/L4.5cm, canvas=11.92x8.33in, res=300",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v12b 词条版热图：48词条×15亚群，画布按内容实测反推，零裁切，左4.5/右3.5cm边距"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v13_margin_words_only.R",
+      "params": "Wi=10.23in, Hi=11.5in, padding T1.0/R4.0/B1.8/L5.0cm, cellwidth=NULL(保持v12本体), YlOrRd pal #FFF7EC→#7F0000, fontsize_row=8, fontsize_col=9, angle_col=45",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v13: 严格基于 v12 只加大左右边距（左2.8→5.0、右1.8→4.0 cm），画布宽 8.5→10.23in（增量=边距增量，保证热图本体宽度像素级不变），48词条×15亚群零裁切，三格式输出"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v14_smaller_words_only.R",
+      "params": "Wi=9.2in, Hi=10.4in, padding T1.0/R4.0/B1.8/L5.0cm, YlOrRd 5档(#FFF7EC→#7F0000), 0-10, 48词条×15亚群, cellwidth未设(自适应), fontsize_row=8, angle_col=45",
+      "date": "2026-09-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v14 缩小版：画布 9.2×10.4 in（v13 的 90%），热图本体随画布等比缩小、边距保持 v13 值不变；三格式输出 PNG(2760×3120)/PDF/SVG，dim 48×15 确认"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "go_heatmap_v14_smaller_words_only.R"
+  },
+  "when_to_use": "--- name: go-enrichment-visualization description: > Visualize curated GO/KEGG/pathway enrichment results (hand-picked terms with -log10(q)) as publication-grade heatmaps or dotplots for single-cell /…"
+}

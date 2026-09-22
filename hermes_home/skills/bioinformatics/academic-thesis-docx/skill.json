@@ -1,0 +1,129 @@
+{
+  "id": "academic-thesis-docx",
+  "name": "按高校规范撰写学位论文并交付 DOCX",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "按高校学位论文规范（吉大等）撰写并生成合规 DOCX：规范附件解析→论文母本分片写 Markdown→渲染脚本出 DOCX（分章分节、逐节页眉、分节页码罗马/阿拉伯、图表题注、公式编号）→unzip 校验 header/footer XML。触发：'撰写毕业论文/学位论文'、'按硕士格式'、'学校论文规范'、'装帧规范'、'按我们学校的要求写论文'、'毕业论文 DOCX'、用户同时给出『学校规范文",
+  "starting_prompt": "使用 按高校规范撰写学位论文并交付 DOCX 进行分析",
+  "source_dir": "skills/bioinformatics/academic-thesis-docx",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "thesis",
+    "docx",
+    "python-docx",
+    "university-spec",
+    "academic-writing",
+    "deliverable"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "academic-thesis-docx",
+    "academic thesis docx",
+    "academic",
+    "thesis",
+    "docx"
+  ],
+  "success_count": 5,
+  "proven_script": "thesis_list_dedupe",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "paginate_thesis.py",
+      "params": "{\"base\":\"E:/MemOmics-Agent/results/memomics-293573bf/results/thesis\",\"interp\":\"PYTHONPATH=D:/Python/site-packages + Python312\",\"mode\":\"两遍生成(gen→paginate→gen)\"}",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "吉大硕士论文图/表编号与页码治理：①补正文叙述式引用7处(图3.1-3.7 全部有「如图X 所示」)；②发现并修正图/表编号与出现顺序倒置2处——图2.1/2.2 互换(网格构建流程=2.1, 三层证据框架=2.2)、表3.2/3.3/3.4 按出现序重排(分布特征=3.2, 175组扫描=3.3, 逐级收缩=3.4)，全局置换使引用自动跟随；③附表清单漏登记 表3.10 已补；④页码改用 pag"
+    },
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "wps_pages.py",
+      "params": "{\"probe\":\"WPS COM KWPS.Application CLSID {000209FF-0000-4b30-A977-D214852036FF}\",\"pywin32\":\"Python312 OK\",\"script\":\"scripts/wps_pages.py\",\"note\":\"取真实分页替代版心实算\"}",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "环境探测：本机装有 WPS，KWPS.Application COM 已注册；Python312 带 pywin32 → 可用 WPS Writer 逐段取真实页码（Information(3) 绝对页 / Information(1) 显示页），并可 ExportAsFixedFormat 导出 PDF 复核。已写 scripts/wps_pages.py（ReadOnly 打开、无字段更新、逐"
+    },
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "wps_writeback.py",
+      "params": {
+        "json": "_wps_pages.json",
+        "regex_fix": "目录块前有说明行，正则必须放宽为 [\\s\\S]*? 而非 \\n\\n",
+        "target": "part1_front.md"
+      },
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "WPS 实测页码回写 part1_front.md 成功：插图清单 11 行、附表清单 22 行、目录 58 行全部换成 WPS 真实页码；页码说明行由「版面示意，需 F9」改为「取自 WPS 实测分页（全文 86 页）」。踩坑：原正则要求「## 目　录」后紧跟代码围栏，实际中间有一行格式说明 → AssertionError，放宽为 [\\s\\S]*? 后通过。"
+    },
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "gen_thesis_docx.py",
+      "params": {
+        "docx_bytes": 2750589,
+        "interp": "Python312 + PYTHONPATH=D:/Python/site-packages",
+        "paragraphs": 617,
+        "tables": 42
+      },
+      "date": "2026-09-16",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "按写入的页码重出 DOCX 成功（2,750,589 B / 617 段 / 42 表 / 12 节 / 9 图）。但抽查发现目录页码整体偏 8 页（第1章 显示 9 应为 1）——根因是 WPS 页码映射的 body 基准被目录行污染，已单独记为 error 并修 wps_pages.py，待重取真实页码后再次回写重出。"
+    },
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "thesis_list_dedupe",
+      "params": {
+        "dup_removed": "表3.10",
+        "method": "inline",
+        "target": "part1_front.md 附表清单"
+      },
+      "date": "2026-09-16",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "附表清单去重：发现「表3.10 装置端复现与主流程的逐层基数对照」重复一行（此前手工补登记时与已有行撞车），已去重为 23 行（含表头，共 22 条表）。去重后末三行为 表4.1=42 / 表4.2=44 / 表4.3=45。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "thesis_list_dedupe"
+  },
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-09-16 22:31",
+      "error_type": "logic_error",
+      "message": "WPS 取到的页码映射被污染：body(第1章) 误取 abs 12（实为 abs 20），导致目录/清单页码整体偏 8 页；head 表混入目录行（如「摘要……… 12」）与格式说明长句（如「摘要：硕士约1000字…」），sec 表则全部取自目录行",
+      "root_cause": "doc.Paragraphs 会遍历到目录块与前置格式说明段落；这些段落的文本同样以「第N章/摘要/N.N」开头，被标题正则误判，且 setdefault 使其「首次出现」优先于正文真实标题",
+      "fix_applied": "① 跳过含「……」的目录行（continue）；② 标题键加长度限制（head ≤20 字、sec ≤30 字）排除格式说明长句；③ 节标题改为「取最后一次出现」（真实节标题必在目录之后），标题仍取首次；④ body 改为精确取「第1章绪论」键",
+      "species": "",
+      "tissue": "",
+      "script": "wps_pages.py",
+      "severity": "high"
+    }
+  ],
+  "when_to_use": "用户给出学校论文撰写/装帧规范文件（.doc/.pdf）与写作素材（专利、项目、数据），要求按该规范撰写学位论文并产出可编辑 Word 交付物时使用。也用于已交付论文的按规范修订（补章、改格式、重出版次）。"
+}

@@ -1,0 +1,31 @@
+{
+  "id": "matrix-heatmap-geometry",
+  "name": "矩阵热图几何与版式控制",
+  "category": "bioinformatics",
+  "language": "R",
+  "description": ">-",
+  "starting_prompt": "使用 矩阵热图几何与版式控制 进行分析",
+  "source_dir": "skills/bioinformatics/matrix-heatmap-geometry",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "heatmap",
+    "R",
+    "base-graphics",
+    "publication",
+    "geometry",
+    "pheatmap"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "matrix-heatmap-geometry",
+    "matrix heatmap geometry",
+    "matrix",
+    "heatmap",
+    "geometry"
+  ],
+  "when_to_use": "--- name: matrix-heatmap-geometry description: >- R 矩阵热图的几何与版式控制（base graphics / pheatmap / ComplexHeatmap / ggplot2）:按目标纸宽反解色块尺寸、 边距与画布联动、行列标签对齐、色标与分组色条的绘制顺序、可编辑矢量导出、以及「哪些行/哪根轴该上图」的口径决策…"
+}

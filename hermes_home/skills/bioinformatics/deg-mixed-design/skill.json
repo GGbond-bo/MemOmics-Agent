@@ -1,0 +1,32 @@
+{
+  "id": "deg-mixed-design",
+  "name": "混合设计 DEG：组间独立 + 组内配对（split-plot / repeated measures）",
+  "category": "scRNA",
+  "language": "R",
+  "description": "混合设计差异表达分析（组间独立比较 + 组内配对/重复测量）。使用场景：多组（如 Young/Old/T2D）× 运动前后取样的 scRNA/bulk 数据，需同时算组间主效应、配对时间效应与组×时间交互。推荐 pseudobulk + dream/muscat 混合模型，MAST 作敏感性验证",
+  "starting_prompt": "使用 混合设计 DEG：组间独立 + 组内配对（split-plot / repeated measures） 进行分析",
+  "source_dir": "skills/bioinformatics/deg-mixed-design",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "mixed-design",
+    "paired",
+    "repeated-measures",
+    "pseudobulk",
+    "dream",
+    "muscat",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "deg-mixed-design",
+    "deg mixed design",
+    "deg",
+    "mixed",
+    "design"
+  ],
+  "when_to_use": "多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis"
+}
