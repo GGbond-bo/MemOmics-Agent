@@ -3590,6 +3590,469 @@ def _match_red_skill_triggers(user_text: str) -> list:
     return hits
 
 
+# === P8(置顶 skill): 会话级优先技能 + skill 元数据 + 文件树 ===
+# 需求：用户在前端把某个 skill「置顶」到本会话 → 优先而非独占：
+#   1) 每回合注入「置顶优先」路由指令（优先级高于自动路由）；
+#   2) 用户消息命中该 skill 触发词时，额外预载 SKILL.md 全文（硬注入兜底，对齐 RED 的不可跳过强度）；
+#   3) 与自动路由命中的其他 skill（含 RED）冲突时，以置顶 skill 为准。
+
+_SKILL_META_CACHE = {}       # name -> (sig, meta)
+_PINNED_SKILLS_CACHE = {}    # sid -> [names]
+_PINNED_MAX = 5              # 单会话最多置顶数
+_PINNED_FULLTEXT_BUDGET = 40000   # 命中触发词时预载 SKILL.md 的字符上限
+
+
+def _skill_roots():
+    """skill 搜索根（与 /api/skills 扫描目录保持一致）"""
+    from pathlib import Path as _P8
+    cands = [
+        _P8(SKILLS_DIR),
+        _P8(HERMES_HOME_DIR) / "skills" / "bioinformatics",
+        _P8(HERMES_HOME_DIR) / "skills" / "plotting",
+    ]
+    out = []
+    for c in cands:
+        try:
+            if c.is_dir() and c not in out:
+                out.append(c)
+        except Exception:
+            continue
+    return out
+
+
+def _find_skill_dir(name: str):
+    """按名字定位 skill 目录（含路径穿越防护；找不到返回 None）"""
+    name = (name or "").strip()
+    if (not name) or (".." in name) or ("/" in name) or ("\\" in name) or name.startswith("."):
+        return None
+    for root in _skill_roots():
+        d = root / name
+        try:
+            if d.is_dir():
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def _skill_frontmatter(text: str) -> dict:
+    """解析 SKILL.md 的 YAML frontmatter（部分 skill 没有 skill.json，用原生元数据兜底）"""
+    if not text or not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    out = {}
+    for line in text[3:end].splitlines():
+        if ":" not in line or line.strip().startswith("#"):
+            continue
+        k, v = line.split(":", 1)
+        k = k.strip().lower()
+        v = v.strip().strip('"').strip("'")
+        if not k or not v:
+            continue
+        if k in ("name", "description", "when_to_use", "category", "language", "domain", "trigger_level"):
+            out[k] = v
+        elif k in ("tags", "aliases", "trigger_keywords"):
+            v2 = v.strip()
+            if v2.startswith("[") and v2.endswith("]"):
+                v2 = v2[1:-1]
+            items = [x.strip().strip('"').strip("'") for x in v2.split(",")]
+            out[k] = [x for x in items if x]
+    return out
+
+
+def _skill_meta(name: str) -> dict:
+    """skill 元数据：skill.json 优先、SKILL.md frontmatter 兜底；按 mtime 缓存，找不到返回 {}"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return {}
+    sj = d / "skill.json"
+    md = d / "SKILL.md"
+    try:
+        sig = tuple(int(p.stat().st_mtime) for p in (sj, md) if p.exists())
+    except Exception:
+        sig = ()
+    hit = _SKILL_META_CACHE.get(name)
+    if hit and hit[0] == sig:
+        return hit[1]
+    data = {}
+    if sj.exists():
+        try:
+            with open(sj, encoding="utf-8", errors="replace") as f:
+                data = json.load(f) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:
+            data = {}
+    md_text = ""
+    if md.exists():
+        try:
+            with open(md, encoding="utf-8", errors="replace") as f:
+                md_text = f.read()
+        except Exception:
+            md_text = ""
+    fm = _skill_frontmatter(md_text)
+
+    def _pick(*keys):
+        for src in (data, fm):
+            for k in keys:
+                v = src.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+        return ""
+
+    def _list(*keys):
+        out = []
+        for src in (data, fm):
+            for k in keys:
+                v = src.get(k)
+                if isinstance(v, str):
+                    v = [x.strip() for x in v.split(",")]
+                if isinstance(v, (list, tuple)):
+                    for x in v:
+                        x = str(x).strip()
+                        if x and x not in out:
+                            out.append(x)
+        return out
+
+    meta = {
+        "name": name,
+        "display": _pick("name") or name,
+        "description": _pick("description", "detailed_description")[:400],
+        "when_to_use": _pick("when_to_use", "trigger_scenario")[:600],
+        "category": _pick("category", "domain"),
+        "language": _pick("language"),
+        "trigger_level": _pick("trigger_level"),
+        "trigger_keywords": _list("trigger_keywords"),
+        "aliases": _list("aliases"),
+        "tags": _list("tags"),
+        "dir": str(d).replace("\\", "/"),
+        "has_skill_md": md.exists(),
+        "has_skill_json": sj.exists(),
+        "skill_md_size": len(md_text),
+    }
+    _SKILL_META_CACHE[name] = (sig, meta)
+    return meta
+
+
+def _skill_trigger_hit(meta: dict, user_text: str):
+    """置顶 skill 的触发判定：用该 skill 自己的 trigger_keywords/aliases/名字（比 RED 的领域级关键词更细）"""
+    if not user_text or not meta:
+        return []
+    low = user_text.lower()
+    hits = []
+    seen = set()
+    cands = []
+    for k in list(meta.get("trigger_keywords") or []) + list(meta.get("aliases") or []):
+        cands.append(k)
+    nm = meta.get("name") or ""
+    dp = meta.get("display") or ""
+    if len(nm) >= 3:
+        cands.append(nm)
+    if len(dp) >= 3 and dp != nm:
+        cands.append(dp)
+    for k in cands:
+        kl = str(k or "").lower().strip()
+        if not kl or kl in seen:
+            continue
+        seen.add(kl)
+        if len(kl) >= 2 and kl in low:
+            hits.append(k)
+        elif " " in kl:
+            parts = [p for p in kl.split() if len(p) >= 3]
+            if parts and all(p in low for p in parts):
+                hits.append(k)
+    return hits[:8]
+
+
+def _read_skill_md_text(name: str, limit: int = 0) -> str:
+    """读 SKILL.md 全文（limit>0 时截断并标注）"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return ""
+    md = d / "SKILL.md"
+    if not md.exists():
+        return ""
+    try:
+        with open(md, encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+    except Exception:
+        return ""
+    if limit and len(txt) > limit:
+        return txt[:limit] + "\n\n[... SKILL.md 过长已截断，仅保留前 " + str(limit) + " 字符；完整内容请调用 skill_view(name='" + name + "') ...]"
+    return txt
+
+
+def _build_pinned_skill_block(names, user_text: str = "", lang: str = "zh") -> str:
+    """置顶 skill 注入块：优先而非独占。普通情况给路由优先级 + 冲突裁决；
+    命中触发词时额外预载 SKILL.md 全文（硬注入兜底）。"""
+    metas = []
+    missing = []
+    for n in (names or []):
+        m = _skill_meta(n)
+        if m:
+            metas.append(m)
+        elif str(n or "").strip():
+            missing.append(str(n).strip())
+    if not metas and not missing:
+        return ""
+    zh = (lang != "en")
+    hits_all = []
+    for m in metas:
+        h = _skill_trigger_hit(m, user_text)
+        if h:
+            hits_all.append((m, h))
+    L = []
+    if zh:
+        L.append("【系统指令：用户置顶技能 — 优先级高于自动路由，不可跳过】")
+        L.append("用户已在本会话置顶以下技能（优先使用，不是独占：与置顶技能无关的任务照常走自动路由）：")
+    else:
+        L.append("[SYSTEM: user-pinned skills — HIGHER priority than automatic routing, do not skip]")
+        L.append("The user pinned the following skills for this session (preferred, NOT exclusive: unrelated tasks still use normal routing):")
+    for m in metas:
+        head = "- " + m["name"]
+        dp = m.get("display") or ""
+        if dp and dp != m["name"]:
+            head += " (" + dp + ")"
+        L.append(head)
+        if m.get("description"):
+            L.append("    " + ("description: " if not zh else "说明：") + m["description"][:200])
+        if m.get("when_to_use"):
+            L.append("    " + ("use when: " if not zh else "适用场景：") + m["when_to_use"][:300])
+        kw = (m.get("trigger_keywords") or [])[:14]
+        if kw:
+            L.append("    " + ("triggers: " if not zh else "触发词：") + ", ".join(kw))
+    for n in missing:
+        if zh:
+            L.append("- " + n + "（⚠ 未找到该技能：本机不存在或已被删除。不要假装使用它，也不要凭名字编造它的流程；请如实告诉用户置顶技能缺失。）")
+        else:
+            L.append("- " + n + " (⚠ skill not found on this machine. Do NOT pretend to use it or invent its workflow; tell the user the pinned skill is missing.)")
+    if zh:
+        L.append("")
+        L.append("⚙ 路由规则（必须遵守）：")
+        L.append("1. 只要本轮任务落在置顶技能的适用范围内（用户点名、或任务与该适用场景相符），必须优先调用 skill_view(name='<置顶技能名>') 加载其完整指令，并按它的流程/规范/参数执行。")
+        L.append("2. 置顶技能与自动路由命中的其他 skill（含 RED 必触发技能、领域技能）规则冲突时，一律以置顶技能为准；其他 skill 只能补充信息，不得覆盖置顶技能规定的输出规范、流程与参数。")
+        L.append("3. 置顶技能不是禁用其他技能：与置顶技能无关的任务，照常按自动路由使用其他 skill。")
+        L.append("4. 若置顶技能缺少完成任务所需的关键信息（如输出语言/参数），先向用户确认，不要擅自替换成别的 skill。")
+    else:
+        L.append("")
+        L.append("Routing rules (mandatory):")
+        L.append("1. If this turn falls into a pinned skill's scope (user named it, or the task matches its use-when), you MUST call skill_view(name='<pinned skill>') first and follow its workflow/rules/parameters.")
+        L.append("2. When a pinned skill conflicts with any other auto-routed skill (including RED mandatory skills), the pinned skill wins; others may only add information, never override its output spec, workflow or parameters.")
+        L.append("3. Pinning is NOT disabling: unrelated tasks still follow normal routing.")
+        L.append("4. If the pinned skill needs missing key inputs (output language/params), ask the user — do not silently substitute another skill.")
+    if hits_all:
+        m0, h0 = hits_all[0]
+        full = _read_skill_md_text(m0["name"], _PINNED_FULLTEXT_BUDGET)
+        if zh:
+            L.append("")
+            L.append("【置顶技能已命中触发词 → 立即执行，禁止跳过】")
+            L.append("用户消息命中置顶技能「" + m0["name"] + "」的触发词：" + ", ".join(str(x) for x in h0))
+            L.append("1. 第一件事：调用 skill_view(name='" + m0["name"] + "') 加载完整指令（禁止跳过、禁止凭固有知识直接处理）。")
+        else:
+            L.append("")
+            L.append("[Pinned skill trigger matched — execute now, do not skip]")
+            L.append("User message matched pinned skill '" + m0["name"] + "' on: " + ", ".join(str(x) for x in h0))
+            L.append("1. First action: call skill_view(name='" + m0["name"] + "') to load its full instructions (never skip).")
+        if full:
+            if zh:
+                L.append("2. 以下是该技能 SKILL.md 全文（已预载为兜底；仍须调用 skill_view 以获得脚本/模板等关联文件）：")
+            else:
+                L.append("2. Full SKILL.md is preloaded below as a fallback (still call skill_view to get linked scripts/templates):")
+            L.append("<<<PINNED_SKILL_MD_BEGIN>>>")
+            L.append(full)
+            L.append("<<<PINNED_SKILL_MD_END>>>")
+    if missing and zh:
+        L.append("⚠ 置顶技能缺失时：照常按自动路由处理本轮任务，不要因为缺技能就停下不动。")
+    elif missing:
+        L.append("⚠ When a pinned skill is missing: proceed with normal routing for this turn; do not stall.")
+    L.append("")
+    return "\n".join(L) + "\n"
+
+
+def _pinned_skills_get(sid: str) -> list:
+    """读会话置顶 skill（内存 → state.db kv → []）"""
+    if not sid:
+        return []
+    s = _sessions.get(sid)
+    if isinstance(s, dict) and isinstance(s.get("pinned_skills"), list):
+        return list(s["pinned_skills"])
+    if sid in _PINNED_SKILLS_CACHE:
+        return list(_PINNED_SKILLS_CACHE[sid])
+    names = []
+    try:
+        db = _get_session_db()
+        if db is not None and hasattr(db, "_conn"):
+            row = db._conn.execute("SELECT value FROM kv WHERE key=?", ("pinned_skills:" + sid,)).fetchone()
+            if row and row[0]:
+                v = json.loads(row[0])
+                if isinstance(v, list):
+                    names = [str(x) for x in v if str(x).strip()]
+    except Exception as e:
+        logger.debug("[pinned] 读取失败: %s", e)
+    _PINNED_SKILLS_CACHE[sid] = list(names)
+    if isinstance(s, dict):
+        s["pinned_skills"] = list(names)
+    return names
+
+
+def _pinned_skills_set(sid: str, names) -> list:
+    """写会话置顶 skill（内存 + state.db kv），返回清洗后的列表"""
+    clean = []
+    for n in (names or []):
+        n = str(n or "").strip()
+        if n and n not in clean:
+            clean.append(n)
+    clean = clean[:_PINNED_MAX]
+    _PINNED_SKILLS_CACHE[sid] = list(clean)
+    s = _sessions.get(sid)
+    if isinstance(s, dict):
+        s["pinned_skills"] = list(clean)
+    try:
+        db = _get_session_db()
+        if db is not None and hasattr(db, "_conn"):
+            db._conn.execute(
+                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                ("pinned_skills:" + sid, json.dumps(clean, ensure_ascii=False)),
+            )
+            db._conn.commit()
+    except Exception as e:
+        logger.warning("[pinned] 落盘失败: %s", e)
+    return clean
+
+
+def _skill_usage_get(sid: str) -> dict:
+    """本会话实际加载过哪些 skill（内存优先；重启/切会话后从 tool_calls_log 重建）"""
+    if not sid:
+        return {}
+    s = _sessions.get(sid)
+    if isinstance(s, dict) and isinstance(s.get("_skills_used"), dict) and s["_skills_used"]:
+        return dict(s["_skills_used"])
+    used = {}
+    try:
+        import sqlite3 as _p8_sqlite
+        conn = _p8_sqlite.connect(os.path.join(HERMES_HOME_DIR, "state.db"), timeout=10)
+        conn.execute("PRAGMA busy_timeout=5000")
+        rows = conn.execute(
+            "SELECT args_json FROM tool_calls_log WHERE session_id=? AND tool_name='skill_view' ORDER BY id DESC LIMIT 200",
+            (sid,),
+        ).fetchall()
+        conn.close()
+        for r in rows:
+            try:
+                nm = (json.loads((r[0] or "{}")) or {}).get("name")
+            except Exception:
+                nm = None
+            if nm:
+                nm = str(nm)
+                used[nm] = used.get(nm, 0) + 1
+    except Exception as e:
+        logger.debug("[skill_usage] 回读失败: %s", e)
+    if isinstance(s, dict):
+        s["_skills_used"] = dict(used)
+    return used
+
+
+def _skill_usage_note(sid: str, name: str, session=None) -> None:
+    """记录一次 skill 加载 + 推 skill_used 事件（前端据此点亮「已使用」徽标）"""
+    if not sid or not name:
+        return
+    s = session if isinstance(session, dict) else _sessions.get(sid)
+    cnt = 1
+    if isinstance(s, dict):
+        used = s.get("_skills_used")
+        if not isinstance(used, dict):
+            used = {}
+        used[str(name)] = int(used.get(str(name), 0)) + 1
+        s["_skills_used"] = used
+        cnt = used[str(name)]
+    try:
+        _session_emit(s if isinstance(s, dict) else {"id": sid},
+                      {"type": "skill_used", "skill": str(name), "session_id": sid, "used": cnt})
+    except Exception:
+        pass
+
+
+def _skill_files_tree(name: str, max_files: int = 600) -> dict:
+    """skill 目录下的完整文件树（绝对路径直接交给查看器预览；跳过隐藏文件）"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return {}
+    files = []
+
+    def walk(cur, rel=""):
+        try:
+            entries = sorted(cur.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        except Exception:
+            return
+        for p in entries:
+            if len(files) >= max_files:
+                return
+            if p.name.startswith("."):
+                continue
+            r = (rel + "/" + p.name) if rel else p.name
+            try:
+                if p.is_dir():
+                    files.append({"name": p.name, "rel": r, "path": str(p).replace("\\", "/"),
+                                  "is_dir": True, "size": 0, "ext": ""})
+                    walk(p, r)
+                else:
+                    st = p.stat()
+                    files.append({"name": p.name, "rel": r, "path": str(p).replace("\\", "/"),
+                                  "is_dir": False, "size": st.st_size,
+                                  "ext": p.suffix.lower().lstrip("."), "mtime": int(st.st_mtime)})
+            except Exception:
+                continue
+
+    walk(d)
+    files.sort(key=lambda x: (x["rel"] not in ("SKILL.md", "skill.json"), x["rel"]))
+    return {"name": name, "dir": str(d).replace("\\", "/"), "files": files[:max_files],
+            "truncated": len(files) > max_files, "total": len(files)}
+
+
+def _pinned_item(name: str) -> dict:
+    """前端 chip 需要的置顶条目（使用次数由端点补）"""
+    m = _skill_meta(name)
+    if not m:
+        return {"name": name, "display": name, "missing": True, "description": "", "when_to_use": "",
+                "trigger_keywords": [], "trigger_level": "", "category": "", "dir": ""}
+    m = dict(m)
+    m["missing"] = False
+    return m
+
+
+def _pinned_expect_emit(session, user_text: str) -> list:
+    """P8: 本回合命中触发词的置顶 skill → 前端显示「本轮应加载」，未加载则在回合结束时告警。"""
+    try:
+        pinned = _pinned_skills_get(session.get("id") or "")
+    except Exception:
+        pinned = []
+    exp = []
+    for n in pinned:
+        m = _skill_meta(n)
+        if not m:
+            continue
+        hits = _skill_trigger_hit(m, user_text)
+        if hits:
+            exp.append({"name": n, "hits": hits[:6]})
+    try:
+        session["_pinned_expected"] = [x["name"] for x in exp]
+    except Exception:
+        pass
+    if exp:
+        try:
+            _session_emit(session, {"type": "skill_expect", "skills": exp,
+                                    "ts": datetime.now().strftime("%H:%M:%S"),
+                                    "session_id": session.get("id")})
+        except Exception:
+            pass
+    return exp
+
+
+# === P8 end ===
+
+
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
 import re as _re_mod
 
@@ -4261,8 +4724,12 @@ def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str
     return ""
 
 
-def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "") -> str:
-    """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
+def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "",
+                           pinned: list = None) -> str:
+    """根据意图+领域构建系统指令（硬注入，LLM无法跳过）
+
+    P8: pinned = 用户在本会话置顶的 skill 名字列表（优先而非独占，见 _build_pinned_skill_block）。
+    """
     # === RED 必触发预检：用户消息命中 RED skill 触发词 → 前置强约束先 skill_view ===
     # 审稿/润色/拆解等文献类任务常被意图分类器分到弱约束分支（literature/chat），
     # agent 会跳过 skill_view 直接按固有知识处理。这里在意图注入之外兜底：
@@ -4270,6 +4737,8 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     # 注意：不覆盖原意图注入，作为前置段拼接。
     red_prefix = ""
     red_hits = _match_red_skill_triggers(user_text)
+    # P8: 置顶 skill 块 —— 优先级高于自动路由；命中触发词时预载 SKILL.md 全文
+    pinned_prefix = _build_pinned_skill_block(pinned or [], user_text, session_lang)
     if red_hits:
         zh = session_lang == "zh"
         red_prefix = "\n".join([
@@ -4292,7 +4761,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]) + "\n"
     if intent == "chat":
-        return red_prefix
+        return pinned_prefix + red_prefix
     if intent == "self_intro":
         # 硬注入固定自我介绍，LLM 禁止自由发挥
         return (
@@ -4555,7 +5024,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return red_prefix + "\n".join(lines)
+            return pinned_prefix + red_prefix + "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -4601,7 +5070,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return red_prefix + "\n".join(lines)
+    return pinned_prefix + red_prefix + "\n".join(lines)
 
 
 # Progress text map (moved down from above)
@@ -11474,6 +11943,49 @@ async def list_enabled_skills():
     return {"enabled_skills": items, "count": len(items)}
 
 
+@app.get("/api/skills/catalog")
+async def skills_catalog(q: str = "", category: str = "", limit: int = 0):
+    """P8: 置顶选择器用的 skill 清单（含触发等级/触发词/适用场景/禁用状态）"""
+    try:
+        base = await list_skills()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    disabled = _read_disabled_skills()
+    kw = (q or "").strip().lower()
+    items = []
+    for it in (base.get("skills") or []):
+        name = it.get("name") or ""
+        if not name:
+            continue
+        if category and it.get("category") != category:
+            continue
+        meta = _skill_meta(name)
+        row = {
+            "name": name,
+            "display": (meta.get("display") or name),
+            "description": (meta.get("description") or it.get("description") or "")[:300],
+            "when_to_use": (meta.get("when_to_use") or "")[:400],
+            "trigger_keywords": (meta.get("trigger_keywords") or [])[:20],
+            "aliases": (meta.get("aliases") or [])[:10],
+            "trigger_level": meta.get("trigger_level") or "",
+            "category": it.get("category") or "",
+            "scripts_count": it.get("scripts_count") or 0,
+            "has_skill_md": bool(it.get("has_skill_md")),
+            "disabled": name in disabled,
+            "dir": meta.get("dir") or it.get("path") or "",
+        }
+        if kw:
+            hay = " ".join([name, row["display"], row["description"], row["when_to_use"],
+                            " ".join(row["trigger_keywords"]), row["category"]]).lower()
+            if kw not in hay:
+                continue
+        items.append(row)
+    items.sort(key=lambda x: (x["disabled"], x["trigger_level"] != "RED", x["name"].lower()))
+    if limit and limit > 0:
+        items = items[:limit]
+    return {"skills": items, "total": len(items), "pinned_max": _PINNED_MAX}
+
+
 @app.get("/api/skills/{name}")
 async def get_skill_detail(name: str):
     """获取 skill 详情 (SKILL.md + 脚本列表)"""
@@ -11505,6 +12017,41 @@ async def get_skill_detail(name: str):
             if f.is_file():
                 result["references"].append({"name": f.name, "size": f.stat().st_size})
     return result
+
+
+@app.get("/api/skills/{name}/files")
+async def skill_files(name: str):
+    """P8: skill 目录完整文件树（WebUI 里浏览该 skill 的全部文件与脚本）"""
+    data = _skill_files_tree(name)
+    if not data:
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+    return data
+
+
+class PinnedSkillsRequest(BaseModel):
+    skills: list = []
+
+
+@app.get("/api/sessions/{sid}/skills")
+async def get_session_pinned_skills(sid: str):
+    """P8: 会话置顶 skill + 本会话实际加载记录（前端 chip / 徽标 / 审计数据源）"""
+    pinned = _pinned_skills_get(sid)
+    used = _skill_usage_get(sid)
+    return {
+        "session_id": sid,
+        "pinned": [_pinned_item(n) for n in pinned],
+        "used": used,
+        "used_names": sorted(used.keys()),
+        "pinned_max": _PINNED_MAX,
+    }
+
+
+@app.post("/api/sessions/{sid}/skills")
+async def set_session_pinned_skills(sid: str, req: PinnedSkillsRequest):
+    """P8: 设置本会话置顶 skill（优先而非独占；与全局启用/禁用互不影响）"""
+    clean = _pinned_skills_set(sid, req.skills or [])
+    used = _skill_usage_get(sid)
+    return {"ok": True, "session_id": sid, "pinned": [_pinned_item(n) for n in clean], "used": used}
 
 
 # --- 动态创建技能 ---
@@ -13670,7 +14217,9 @@ async def ws_endpoint(ws: WebSocket):
                 if _intent == "self_intro":
                     _skill_ctx = None
                 else:
-                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
+                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
+                                                      pinned=_pinned_skills_get(session["id"]))
+                    _pinned_expect_emit(session, user_text)  # P8: 置顶技能触发词命中 → 前端标记「本轮应加载」
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
                 # === 自我介绍快速回复（绕过 agent LLM）===
@@ -14003,6 +14552,12 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_live_tool_ts"] = time.time()
                         _s.pop("_live_tool_warned", None)  # 每个工具各自一次 30min 长工具提醒
                         _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                        # P8: 记录本会话实际加载过的 skill（前端徽标 + 每轮审计数据源）
+                        try:
+                            if tool_name == "skill_view" and isinstance(args, dict) and args.get("name"):
+                                _skill_usage_note(_s["id"], str(args["name"]), _s)
+                        except Exception:
+                            pass
 
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
                         _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", tool_name)

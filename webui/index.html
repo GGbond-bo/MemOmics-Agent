@@ -851,6 +851,56 @@ table.dcb-table.dg-table th { position:relative; }
 .skill-detail { padding:12px; }
 .skill-detail pre { background:var(--code-bg); color:var(--code-fg); padding:10px; border-radius:6px; overflow:auto; font-size:12px; max-height:600px; white-space:pre-wrap; word-break:break-word; }
 
+/* === P8(置顶 skill): 输入框技能选择器 + skill 文件树 === */
+.chat-skill-bar { max-width:90%; margin:0 auto 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sk-pick-btn { display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:3px 10px; border-radius:14px;
+  border:1px dashed var(--border); background:var(--tool-bg); color:var(--text-light); cursor:pointer; }
+.sk-pick-btn:hover { border-color:var(--primary); color:var(--primary); }
+.sk-pick-btn.on { border-style:solid; border-color:var(--primary); color:var(--primary); background:rgba(96,125,205,0.10); }
+.sk-chips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.sk-chip { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:2px 6px 2px 9px; border-radius:12px;
+  border:1px solid var(--primary); color:var(--primary); background:rgba(96,125,205,0.10); max-width:300px; }
+.sk-chip .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.sk-chip .mk { font-size:10px; opacity:0.9; }
+.sk-chip .x { cursor:pointer; opacity:0.55; font-size:11px; padding:0 2px; }
+.sk-chip .x:hover { opacity:1; }
+.sk-chip.used { border-color:var(--success); color:var(--success); background:rgba(63,158,106,0.10); }
+.sk-chip.miss { border-color:var(--warning); color:var(--warning); background:rgba(224,135,42,0.12); }
+.sk-chip.none { border-color:var(--border); color:var(--text-light); background:var(--tool-bg); }
+.skp-mask { position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.45); z-index:3200;
+  display:flex; align-items:center; justify-content:center; }
+.skp-panel { width:min(780px,93vw); max-height:82vh; display:flex; flex-direction:column; background:var(--panel);
+  border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:0 14px 44px rgba(0,0,0,0.32); }
+.skp-head { display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--border); }
+.skp-head b { font-size:13px; }
+.skp-sub { font-size:11px; color:var(--text-light); flex:1; }
+.skp-close { background:none; border:none; cursor:pointer; color:var(--text-light); font-size:14px; }
+.skp-search { margin:10px 14px 0; padding:7px 10px; border:1px solid var(--border); border-radius:8px;
+  background:var(--tool-bg); color:var(--text); font-size:12.5px; }
+.skp-body { flex:1; overflow:auto; padding:10px 14px 14px; }
+.skp-cat { font-size:11px; font-weight:700; color:var(--text-light); margin:10px 0 6px; }
+.skp-item { display:flex; gap:9px; align-items:flex-start; padding:7px 9px; border:1px solid var(--border);
+  border-radius:9px; margin-bottom:6px; cursor:pointer; }
+.skp-item:hover { border-color:var(--primary); }
+.skp-item.sel { border-color:var(--primary); background:rgba(96,125,205,0.08); }
+.skp-item.dis { opacity:0.55; }
+.skp-item .cb { font-size:14px; color:var(--primary); line-height:1.5; }
+.skp-item .t { font-size:12.5px; font-weight:600; color:var(--text); }
+.skp-item .d { font-size:11.5px; color:var(--text-light); margin-top:2px; line-height:1.5; }
+.skp-item .lv { font-size:10px; padding:0 5px; border-radius:7px; border:1px solid var(--border); color:var(--text-light); }
+.skp-item .lv.red { color:var(--danger); border-color:rgba(216,67,107,0.4); }
+.skp-foot { display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid var(--border); }
+.skp-hint { flex:1; font-size:11px; color:var(--text-light); }
+.skp-btn { padding:5px 13px; border-radius:8px; border:1px solid var(--primary); background:var(--primary); color:#fff; cursor:pointer; font-size:12px; }
+.skp-btn.ghost { background:none; color:var(--text-light); border-color:var(--border); }
+.sk-tree { margin-top:4px; max-height:280px; overflow:auto; border:1px solid var(--border); border-radius:7px; background:var(--code-bg); padding:4px 0; }
+.sk-tree-d { font-size:11.5px; color:var(--text-light); font-weight:600; padding:1px 6px; }
+.sk-tree-f { font-size:11.5px; color:var(--text); padding:2px 6px; cursor:pointer; font-family:Consolas,monospace; }
+.sk-tree-f:hover { background:rgba(96,125,205,0.14); }
+.sk-tree-f .sz { color:var(--text-light); font-size:10px; }
+#panel-skills.rv-open { display:flex !important; flex-direction:column; }
+#panel-skills.rv-open > *:not(.rv-viewer) { display:none !important; }
+
 /* 滚动条 */
 ::-webkit-scrollbar { width:6px; height:6px; }
 ::-webkit-scrollbar-track { background:transparent; }
@@ -1254,7 +1304,16 @@ var I18N = {
     'af_ans_sel':'选中：',
     'af_ans_note':'补充：',
     'af_ans_sep':'；',
-    'rs_new_fig':'🆕 有新图片'
+    'rs_new_fig':'🆕 有新图片',
+    'sk_pick':'技能','sk_pick_title':'为本会话选择优先使用的 skill（优先而非独占）',
+    'sk_none':'未置顶技能（自动路由）','sk_title':'置顶技能（本会话优先使用）',
+    'sk_sub':'置顶 = 优先，不是独占：不相关的任务仍走自动路由','sk_search':'搜索技能名 / 触发词 / 适用场景',
+    'sk_clear':'清空','sk_done':'完成','sk_loading':'加载中…',
+    'sk_used_times':'本会话已加载 {0} 次','sk_not_used':'本会话尚未加载','sk_expected':'本轮命中触发词，应优先加载',
+    'sk_unpin':'取消置顶','sk_pin':'置顶此技能','sk_pinned_n':'已置顶 {0}/{1}','sk_hint_n':'已置顶 {0}/{1}（优先使用，非独占）',
+    'sk_no_match':'没有匹配的技能','sk_max':'最多置顶 {0} 个技能','sk_disabled':'已禁用','sk_kw':'触发：',
+    'sk_no_session':'请先创建或选择一个会话','sk_missed':'⚠️ 本轮命中了置顶技能触发词，但未加载：{0}',
+    'sk_files':'技能文件（点击查看内容）'
   },
   en: {
     'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
@@ -1329,7 +1388,16 @@ var I18N = {
     'af_ans_sel':'Selected: ',
     'af_ans_note':'Note: ',
     'af_ans_sep':'; ',
-  'rs_new_fig':'🆕 New image'
+  'rs_new_fig':'🆕 New image',
+    'sk_pick':'Skills','sk_pick_title':'Choose skills to prioritize in this session (priority, not exclusive)',
+    'sk_none':'No pinned skill (auto routing)','sk_title':'Pinned skills (prioritized in this session)',
+    'sk_sub':'Pinned = priority, not exclusive: unrelated tasks still use auto routing','sk_search':'Search skill name / trigger / use case',
+    'sk_clear':'Clear','sk_done':'Done','sk_loading':'Loading…',
+    'sk_used_times':'Loaded {0} time(s) in this session','sk_not_used':'Not loaded yet in this session','sk_expected':'Trigger matched this turn — load it first',
+    'sk_unpin':'Unpin','sk_pin':'Pin this skill','sk_pinned_n':'Pinned {0}/{1}','sk_hint_n':'Pinned {0}/{1} (priority, not exclusive)',
+    'sk_no_match':'No matching skill','sk_max':'At most {0} pinned skills','sk_disabled':'disabled','sk_kw':'Triggers:',
+    'sk_no_session':'Create or select a session first','sk_missed':'⚠️ Pinned skill triggers matched this turn but were not loaded: {0}',
+    'sk_files':'Skill files (click to view content)'
   }
 };
 var UI_LANG = 'zh';
@@ -1350,6 +1418,7 @@ function applyUILang(){
   if (typeof _p5OnLangChange === 'function') { try { _p5OnLangChange(); } catch (e) {} }
   if (typeof _p3OnLangChange === 'function') { try { _p3OnLangChange(); } catch (e) {} }
   if (typeof _p7OnLangChange === 'function') { try { _p7OnLangChange(); } catch (e) {} }
+  if (typeof _p8OnLangChange === 'function') { try { _p8OnLangChange(); } catch (e) {} }
   // P6-2：把界面语言告诉后端 —— 后端自己生成、直接显示在界面上的文案（确认弹窗等）也要跟着切
   try {
     fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1428,6 +1497,12 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       </div>
       <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;" data-i18n="steer_hint">
         💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）
+      </div>
+      <div class="chat-skill-bar" id="chat-skill-bar">
+        <button type="button" class="sk-pick-btn" id="sk-pick-btn" onclick="openSkillPicker()" data-i18n-title="sk_pick_title" title="为本会话选择优先使用的 skill（优先而非独占）">
+          🧩 <span data-i18n="sk_pick">技能</span>
+        </button>
+        <div class="sk-chips" id="sk-chips"></div>
       </div>
       <div class="input-info">
         <span data-i18n="enter_hint">Enter发送 · Shift+Enter换行</span>
@@ -1582,6 +1657,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="skill-detail" id="skill-detail" style="display:none;">
         <button class="back-btn" onclick="closeSkillDetail()">← 返回列表</button>
         <h3 id="skill-detail-name"></h3>
+        <button type="button" id="skill-detail-pin" class="skp-btn ghost" style="display:none;margin:2px 0 6px;"></button>
         <div id="skill-detail-scripts"></div>
         <pre id="skill-detail-md"></pre>
       </div>
@@ -1982,6 +2058,7 @@ function handleMessage(msg) {
       if (msg.title) document.getElementById('chat-title').textContent = msg.title;
       updateSessionList();
       refreshResults();  // 刷新结果面板以匹配新会话
+      loadPinnedSkills(msg.session_id);  // P8: 载入该会话的置顶 skill + 使用记录
     }
     return;
   }
@@ -2118,6 +2195,13 @@ function handleMessage(msg) {
       // 滚动补偿逻辑移到 _doStreamRender 内（渲染时才测量，避免中间态跳动）
       _scheduleStreamRender();
     }
+  } else if (msg.type === 'skill_used') {
+    // P8: 后端确认某个 skill 真的被加载了（skill_view 调用）
+    onSkillUsed(msg.skill);
+  } else if (msg.type === 'skill_expect') {
+    // P8: 本轮消息命中了置顶技能的触发词 → 必须优先加载，未加载则本轮结束时告警
+    onSkillExpect(msg.skills || []);
+    if (typeof msg.ts === 'string') {}
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
@@ -2254,6 +2338,7 @@ function handleMessage(msg) {
     _scheduleResultsRefresh(2500);
     refreshTodos();
     updateSessionList();
+    _p8Audit();  // P8: 本轮命中的置顶技能是否真的加载过
   } else if (msg.type === 'error') {
     if (currentAssistantEl && currentAssistantEl.classList.contains('thinking')) currentAssistantEl.remove();
     hideLiveStatus('❌ 运行出错');
@@ -2275,6 +2360,7 @@ function handleMessage(msg) {
     hideLiveStatus('⏹️ 已停止');
     _stopLiveStatusTicker();
     addError('任务已取消');
+    _p8Audit();  // P8: 同上（取消也做一次审计）
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
     setFloatBar(false);
@@ -2783,7 +2869,7 @@ function renderSessionStats(stats) {
 }
 
 // === 工具名显示映射 + token 格式化（2026-08-23） ===
-var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库', remote_cluster:'集群执行' };
+var _toolLabels = { search_files:'搜索文件', vision_describe:'读图', execute_r:'R执行', execute_python:'Python执行', terminal:'终端命令', read_file:'读文件', write_file:'写文件', rail_review:'执行审查', debate_analysis:'辩论', generate_report:'生成报告', skill_view:'技能查看', p8_audit:'置顶技能未加载', web_search:'联网搜索', process:'进程管理', todo:'待办', cronjob:'定时任务', session_search:'回忆检索', memory:'记忆', scan_data:'扫描数据', env_check:'环境检查', kb_search:'知识库', remote_cluster:'集群执行' };
 function _toolLabel(n) { return _toolLabels[n] || n; }
 function _fmtTokens(n) {
   n = n || 0;
@@ -2871,7 +2957,8 @@ var _toolIcons = {
   'run_script': '▶️', 'execute': '▶️', 'scan_data': '🔬', 'kb_search': '📚',
   'knowledge_search': '📚', 'list_files': '📂', 'ls': '📂', 'glob': '📂',
   'install_package': '📦', 'web_extract': '🌐', 'web_search': '🌐',
-  'debate_analysis': '🎭', 'review': '🔍'
+  'debate_analysis': '🎭', 'review': '🔍',
+  'skill_view': '🧩', 'p8_audit': '⚠️'
 };
 
 function _toolIcon(tool) {
@@ -5855,6 +5942,7 @@ function deleteSession(sid) {
     _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
     if (currentSid === sid) {
       currentSid = null;
+      _p8.pinned = []; _p8.used = {}; renderSkillChips();  // P8: 会话被删，清掉 chip
       document.getElementById('messages').innerHTML = '';
       try { localStorage.removeItem('memomics_last_session'); } catch(e) {}
       if (_allSessions.length > 0) {
@@ -6035,6 +6123,7 @@ function switchSession(sid) {
   currentSid = sid;
   // 记住当前会话（2026-08-08：刷新后 autoSelectLatestSession 优先恢复它）
   try { localStorage.setItem('memomics_last_session', sid); } catch(e) {}
+  loadPinnedSkills(sid);  // P8: 切会话/刷新恢复会话时同步该会话的置顶 skill
 
   // === 会话级独立模型：切会话时实时从后端拉会话级 current 刷新下拉框+徽章 ===
   // （2026-08-08 重构：原来用 _allSessions 列表缓存的 model 字段猜测，
@@ -6227,7 +6316,7 @@ function switchView(view) {
   // P5：换成别的视图时，把内嵌查看器关掉（它是面板内的覆盖层，换面板后就成了残留）
   var _rvEl = document.getElementById('rv-viewer');
   if (_rvEl && _rvEl.style.display !== 'none') {
-    var _rvHostPanel = _rvState.host === 'files' ? panelMap.files : panelMap.results;
+    var _rvHostPanel = _rvState.host === 'files' ? panelMap.files : (_rvState.host === 'skills' ? panelMap.skills : panelMap.results);
     if (panelMap[view] !== _rvHostPanel) closeFileViewer();
   }
   if (view === 'files') browseFiles('');
@@ -9735,6 +9824,171 @@ window.addEventListener('resize', function() {
   }, 150);
 });
 
+// === P8(置顶 skill): 输入框技能选择 + 使用可见性 ===
+// 语义：置顶 = 本会话「优先使用」，不是「只用它」。与置顶技能无关的任务照常走自动路由。
+var _p8 = { pinned: [], used: {}, catalog: null, expected: [], turnUsed: {}, max: 5 };
+
+function _p8Sid() { return (typeof currentSid !== 'undefined' && currentSid) ? currentSid : null; }
+function _p8Esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s); }
+function _p8JsArg(s) { return String(s == null ? '' : s).replace(/\\/g, '/').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function _p8Pinned(name) { for (var i = 0; i < _p8.pinned.length; i++) { if (_p8.pinned[i].name === name) return true; } return false; }
+function _p8IsExpected(name) { for (var i = 0; i < _p8.expected.length; i++) { if (_p8.expected[i].name === name) return true; } return false; }
+
+async function loadPinnedSkills(sid) {
+  var id = sid || _p8Sid();
+  if (!id) { _p8.pinned = []; _p8.used = {}; renderSkillChips(); return; }
+  try {
+    var r = await fetch('/api/sessions/' + encodeURIComponent(id) + '/skills');
+    var d = await r.json();
+    if (_p8Sid() === id) {
+      _p8.pinned = (d && d.pinned) || [];
+      _p8.used = (d && d.used) || {};
+      _p8.max = (d && d.pinned_max) || _p8.max;
+    }
+  } catch (e) { _p8.pinned = []; _p8.used = {}; }
+  renderSkillChips();
+}
+
+function renderSkillChips() {
+  var box = document.getElementById('sk-chips');
+  if (!box) return;
+  var btn = document.getElementById('sk-pick-btn');
+  var html = '';
+  for (var i = 0; i < _p8.pinned.length; i++) {
+    var p = _p8.pinned[i], n = p.name, usedN = _p8.used[n] || 0, exp = _p8IsExpected(n);
+    var cls = p.missing ? 'none' : (usedN > 0 ? 'used' : (exp ? 'miss' : ''));
+    var mk = p.missing ? '❓' : (usedN > 0 ? '✓' + usedN : (exp ? '⟳' : '🧩'));
+    var tip = (p.description || n) + '｜' + (usedN > 0 ? tf('sk_used_times', usedN) : t('sk_not_used'));
+    if (exp) tip += '｜' + t('sk_expected');
+    html += '<span class="sk-chip ' + cls + '" title="' + _p8Esc(tip) + '">' +
+            '<span class="mk">' + mk + '</span><span class="nm">' + _p8Esc(p.display || n) + '</span>' +
+            '<span class="x" title="' + _p8Esc(t('sk_unpin')) + '" onclick="unpinSkill(\'' + _p8JsArg(n) + '\')">✕</span></span>';
+  }
+  if (!_p8.pinned.length) html = '<span class="sk-chip none" title="' + _p8Esc(t('sk_pick_title')) + '">' + _p8Esc(t('sk_none')) + '</span>';
+  box.innerHTML = html;
+  if (btn) { if (_p8.pinned.length) btn.classList.add('on'); else btn.classList.remove('on'); }
+}
+
+async function openSkillPicker() {
+  var mask = document.getElementById('skp-mask');
+  if (!mask) return;
+  mask.style.display = 'flex';
+  var body = document.getElementById('skp-body');
+  if (!_p8.catalog) {
+    if (body) body.innerHTML = '<div class="skp-cat">' + _p8Esc(t('sk_loading')) + '</div>';
+    try {
+      var r = await fetch('/api/skills/catalog');
+      var d = await r.json();
+      _p8.catalog = (d && d.skills) || [];
+      _p8.max = (d && d.pinned_max) || _p8.max;
+    } catch (e) { _p8.catalog = []; }
+  }
+  renderSkillPicker();
+}
+function closeSkillPicker() { var m = document.getElementById('skp-mask'); if (m) m.style.display = 'none'; }
+function clearPinnedSkills() { savePinnedSkills([]); }
+
+function _skpItemHtml(it) {
+  var sel = _p8Pinned(it.name);
+  var lv = it.trigger_level ? '<span class="lv' + (String(it.trigger_level).indexOf('RED') >= 0 ? ' red' : '') + '">' + _p8Esc(it.trigger_level) + '</span>' : '';
+  var kw = (it.trigger_keywords || []).slice(0, 6).join(' · ');
+  return '<div class="skp-item' + (sel ? ' sel' : '') + (it.disabled ? ' dis' : '') + '" onclick="togglePinSkill(\'' + _p8JsArg(it.name) + '\')">' +
+    '<span class="cb">' + (sel ? '☑' : '☐') + '</span>' +
+    '<span style="flex:1;min-width:0;">' +
+      '<span class="t">' + _p8Esc(it.display || it.name) + '</span> ' + lv +
+      (it.disabled ? ' <span class="lv">' + _p8Esc(t('sk_disabled')) + '</span>' : '') +
+      '<div class="d">' + _p8Esc(it.description || '') + '</div>' +
+      (kw ? '<div class="d">' + _p8Esc(t('sk_kw')) + ' ' + _p8Esc(kw) + '</div>' : '') +
+    '</span></div>';
+}
+
+function renderSkillPicker() {
+  var box = document.getElementById('skp-body');
+  if (!box) return;
+  var el = document.getElementById('skp-search');
+  var q = (el && el.value ? el.value : '').trim().toLowerCase();
+  var cats = {}, order = [];
+  for (var i = 0; i < _p8.catalog.length; i++) {
+    var it = _p8.catalog[i];
+    if (q) {
+      var hay = [it.name, it.display, it.description, it.when_to_use, (it.trigger_keywords || []).join(' '), it.category].join(' ').toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    var c = it.category || '-';
+    if (!cats[c]) { cats[c] = []; order.push(c); }
+    cats[c].push(it);
+  }
+  var html = '';
+  if (_p8.pinned.length) {
+    html += '<div class="skp-cat">' + _p8Esc(tf('sk_pinned_n', _p8.pinned.length, _p8.max)) + '</div>';
+    for (var k = 0; k < _p8.pinned.length; k++) html += _skpItemHtml(_p8.pinned[k]);
+  }
+  for (var o = 0; o < order.length; o++) {
+    html += '<div class="skp-cat">' + _p8Esc(order[o]) + ' · ' + cats[order[o]].length + '</div>';
+    for (var m = 0; m < cats[order[o]].length; m++) html += _skpItemHtml(cats[order[o]][m]);
+  }
+  if (!order.length && !_p8.pinned.length) html += '<div class="skp-cat">' + _p8Esc(t('sk_no_match')) + '</div>';
+  box.innerHTML = html;
+  var hint = document.getElementById('skp-hint');
+  if (hint) hint.textContent = tf('sk_hint_n', _p8.pinned.length, _p8.max);
+}
+
+async function togglePinSkill(name) {
+  var names = [], found = false;
+  for (var i = 0; i < _p8.pinned.length; i++) { if (_p8.pinned[i].name === name) found = true; else names.push(_p8.pinned[i].name); }
+  if (!found) {
+    if (_p8.pinned.length >= _p8.max) { alert(tf('sk_max', _p8.max)); return; }
+    names.push(name);
+  }
+  await savePinnedSkills(names);
+}
+async function unpinSkill(name) {
+  var names = [];
+  for (var i = 0; i < _p8.pinned.length; i++) { if (_p8.pinned[i].name !== name) names.push(_p8.pinned[i].name); }
+  await savePinnedSkills(names);
+}
+async function savePinnedSkills(names) {
+  var id = _p8Sid();
+  if (!id) { alert(t('sk_no_session')); return; }
+  try {
+    var r = await fetch('/api/sessions/' + encodeURIComponent(id) + '/skills', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skills: names })
+    });
+    var d = await r.json();
+    if (_p8Sid() === id && d && d.pinned) { _p8.pinned = d.pinned; if (d.used) _p8.used = d.used; }
+  } catch (e) {}
+  renderSkillChips();
+  var mask = document.getElementById('skp-mask');
+  if (mask && mask.style.display !== 'none') renderSkillPicker();
+}
+
+function onSkillUsed(name) {
+  if (!name) return;
+  _p8.used[name] = (_p8.used[name] || 0) + 1;
+  _p8.turnUsed[name] = (_p8.turnUsed[name] || 0) + 1;
+  renderSkillChips();
+}
+function onSkillExpect(list) { _p8.expected = list || []; _p8.turnUsed = {}; renderSkillChips(); }
+function _p8TurnReset() { _p8.turnUsed = {}; _p8.expected = []; renderSkillChips(); }
+function _p8Audit() {
+  var miss = [];
+  for (var i = 0; i < _p8.expected.length; i++) { if (!_p8.turnUsed[_p8.expected[i].name]) miss.push(_p8.expected[i].name); }
+  _p8.expected = [];
+  renderSkillChips();
+  if (miss.length && typeof addProgressItem === 'function') {
+    addProgressItem('p8_audit', 'done', tf('sk_missed', miss.join(', ')), (typeof _nowTs === 'function' ? _nowTs() : ''));
+  }
+}
+function _p8OnLangChange() {
+  renderSkillChips();
+  var m = document.getElementById('skp-mask');
+  if (m && m.style.display !== 'none') renderSkillPicker();
+}
+function openSkillFile(path, rel) {
+  if (!path) return;
+  if (typeof openFileViewer === 'function') openFileViewer(path, rel, 'skills');
+}
+
 // === Skill 浏览 ===
 var _allSkills = [];
 var _skillFilter = 'all';
@@ -9802,21 +10056,51 @@ function renderSkillList(skills, filter) {
 }
 
 async function viewSkill(name) {
-  var r = await fetch('/api/skills/' + name);
+  var r = await fetch('/api/skills/' + encodeURIComponent(name));
   var d = await r.json();
   document.getElementById('skill-list').style.display = 'none';
   document.getElementById('skill-detail').style.display = '';
+  var _pk = document.getElementById('panel-skills');
+  if (_pk) _pk.classList.remove('rv-open');
   document.getElementById('skill-detail-name').textContent = d.name;
-  var scriptsHtml = '';
-  if (d.scripts && d.scripts.length) {
-    scriptsHtml = '<div style="margin:8px 0;"><strong>脚本:</strong><br>' + d.scripts.map(function(s) {
-      return '<span style="font-size:12px;color:var(--text-light);">📜 ' + escapeHtml(s.name) + ' (' + formatSize(s.size) + ')</span>';
-    }).join('<br>') + '</div>';
+  // P8: 详情页也能直接置顶/取消置顶
+  var _pb = document.getElementById('skill-detail-pin');
+  if (_pb) {
+    _pb.style.display = '';
+    _pb.textContent = _p8Pinned(d.name) ? '📌 ' + t('sk_unpin') : '📌 ' + t('sk_pin');
+    _pb.onclick = function () { togglePinSkill(d.name); };
   }
-  if (d.references && d.references.length) {
-    scriptsHtml += '<div style="margin:8px 0;"><strong>参考文档:</strong><br>' + d.references.map(function(r) {
-      return '<span style="font-size:12px;color:var(--text-light);">📄 ' + escapeHtml(r.name) + '</span>';
-    }).join('<br>') + '</div>';
+  var scriptsHtml = '';
+  // P8: 完整文件树 —— 该 skill 目录下的每个文件/脚本都能点开看内容（查看器 host = skills）
+  try {
+    var fr = await fetch('/api/skills/' + encodeURIComponent(name) + '/files');
+    var fd = await fr.json();
+    if (fd && fd.files && fd.files.length) {
+      scriptsHtml += '<div style="margin:8px 0;"><strong>' + escapeHtml(t('sk_files')) + '</strong>'
+        + ' <span style="font-size:11px;color:var(--text-light);">' + fd.files.length + (fd.truncated ? '+' : '') + '</span>'
+        + '<div class="sk-tree">' + fd.files.map(function (f) {
+            var depth = f.rel.split('/').length - 1;
+            var pad = 6 + depth * 13;
+            if (f.is_dir) return '<div class="sk-tree-d" style="padding-left:' + pad + 'px;">📁 ' + escapeHtml(f.rel.split('/').pop()) + '</div>';
+            var icon = /\.(R|r|py|sh|pl|jl)$/.test(f.rel) ? '📜' : (/\.(md|txt|json|ya?ml|csv|tsv)$/i.test(f.rel) ? '📄' : '📎');
+            return '<div class="sk-tree-f" style="padding-left:' + pad + 'px;" title="' + escapeHtml(f.path) + '"'
+              + ' onclick="openSkillFile(\'' + _p8JsArg(f.path) + '\',\'' + _p8JsArg(f.rel) + '\')">'
+              + icon + ' ' + escapeHtml(f.rel.split('/').pop())
+              + ' <span class="sz">' + formatSize(f.size) + '</span></div>';
+          }).join('') + '</div></div>';
+    }
+  } catch (e) {}
+  if (!scriptsHtml) {
+    if (d.scripts && d.scripts.length) {
+      scriptsHtml = '<div style="margin:8px 0;"><strong>脚本:</strong><br>' + d.scripts.map(function(s) {
+        return '<span style="font-size:12px;color:var(--text-light);">📜 ' + escapeHtml(s.name) + ' (' + formatSize(s.size) + ')</span>';
+      }).join('<br>') + '</div>';
+    }
+    if (d.references && d.references.length) {
+      scriptsHtml += '<div style="margin:8px 0;"><strong>参考文档:</strong><br>' + d.references.map(function(r) {
+        return '<span style="font-size:12px;color:var(--text-light);">📄 ' + escapeHtml(r.name) + '</span>';
+      }).join('<br>') + '</div>';
+    }
   }
   document.getElementById('skill-detail-scripts').innerHTML = scriptsHtml;
   document.getElementById('skill-detail-md').textContent = d.skill_md || '(无 SKILL.md)';
@@ -10205,7 +10489,7 @@ function _rvKindIcon(kind, name) {
   return '📄';
 }
 function _rvHost(host) {
-  var id = (host === 'files') ? 'panel-files' : 'panel-results';
+  var id = (host === 'files') ? 'panel-files' : (host === 'skills' ? 'panel-skills' : 'panel-results');
   return document.getElementById(id) || document.getElementById('panel-results');
 }
 function _rvMsg(text, isErr) {
@@ -10216,7 +10500,7 @@ function _rvMsg(text, isErr) {
   if (text) { clearTimeout(_rvState._msgTimer); _rvState._msgTimer = setTimeout(function(){ if (m) m.textContent = ''; }, 3500); }
 }
 
-/** 打开查看器（host: 'results' | 'files'） */
+/** 打开查看器（host: 'results' | 'files' | 'skills'） */
 async function openFileViewer(path, name, host) {
   if (!path) return;
   var panel = _rvHost(host);
@@ -10236,7 +10520,7 @@ async function openFileViewer(path, name, host) {
   _rvState.sheetIdx = 0;
   _rvState.sortCol = -1;
   _rvState.mdRaw = false;
-  _rvState.host = host === 'files' ? 'files' : 'results';
+  _rvState.host = (host === 'files' || host === 'skills') ? host : 'results';
   el.style.display = 'flex';
   el.innerHTML = _rvBarHtml() + '<div class="rv-body" id="rv-body"><div class="rv-loading">' + _rve(tf('rv_opening', _rvState.name)) + '</div></div>';
   _rvState._marked = false;
@@ -12526,6 +12810,24 @@ async function saveUpdateConfig(mode) {
       <button class="cc-btn primary" id="cluster-run-btn" onclick="clusterExec()">执行</button>
     </div>
     <div class="cc-hint" id="cluster-hint"></div>
+  </div>
+</div>
+
+<!-- === P8(置顶 skill): 技能选择弹窗 === -->
+<div class="skp-mask" id="skp-mask" style="display:none;">
+  <div class="skp-panel">
+    <div class="skp-head">
+      <b data-i18n="sk_title">置顶技能（本会话优先使用）</b>
+      <span class="skp-sub" data-i18n="sk_sub">置顶 = 优先，不是独占：不相关的任务仍走自动路由</span>
+      <button type="button" class="skp-close" onclick="closeSkillPicker()">✕</button>
+    </div>
+    <input type="text" class="skp-search" id="skp-search" oninput="renderSkillPicker()" data-i18n-ph="sk_search" placeholder="搜索技能名 / 触发词 / 适用场景">
+    <div class="skp-body" id="skp-body"></div>
+    <div class="skp-foot">
+      <span class="skp-hint" id="skp-hint"></span>
+      <button type="button" class="skp-btn ghost" onclick="clearPinnedSkills()" data-i18n="sk_clear">清空</button>
+      <button type="button" class="skp-btn" onclick="closeSkillPicker()" data-i18n="sk_done">完成</button>
+    </div>
   </div>
 </div>
 
