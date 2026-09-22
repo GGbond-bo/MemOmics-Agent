@@ -219,7 +219,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" / "之前那个脚本" / "那个分析" / "那个代码" | 先读 `skills/user-scripts/INDEX.md` 匹配 → `skill_evolution(action="query_logs") + recall_experience()` |
 | "算显著性" / "显著性检验" / "细胞比例检验" / "独立比较" / "配对比较" / "组间比较" / "算P值" | 先查 `skills/user-scripts/INDEX.md` statistics 类 → 有旧脚本复用；无 → AI 编写 → 验证 → 认可 → 沉淀 `skills/statistics/` |
 | "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
-| 任何数据库名 (query_*/search_*) | 对应 `skill_view("query_xxx")` |
+| 任何数据库名（KEGG / UniProt / PDB / GEO / ChEMBL…） | 到 SKILLS_INDEX.md 的 `11_文献搜索` 节按名字找对应 skill 再 skill_view；找不到用 skill_search。**不要照抄占位名 query_xxx** |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
 | "结构化展示" / "可视化呈现" / "UI组件" / "要点卡片" / "dsh-ui" / "genui" / "交互面板" | `skill_view("genui")` ← 回答正文输出 ```dsh-ui 围栏，webui 自动渲染成卡片/表格/图表/流程（2026-08-22 集成） |
 
