@@ -637,7 +637,7 @@ table.dcb-table.dg-table th { position:relative; }
 .chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
 
 /* === 右侧面板 === */
-.info-panel { width:clamp(320px, 380px, 60vw); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+.info-panel { width:clamp(360px, 520px, 72vw); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 /* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原默认 380px） */
 .info-panel-resizer { width:6px; flex-shrink:0; cursor:ew-resize; background:linear-gradient(90deg, transparent 2px, rgba(149,165,166,0.45) 2px, rgba(149,165,166,0.45) 4px, transparent 4px); transition:background 0.15s; position:relative; z-index:20; }
 .info-panel-resizer:hover { background:linear-gradient(90deg, transparent 1px, var(--primary) 1px, var(--primary) 5px, transparent 5px); }
@@ -729,6 +729,72 @@ table.dcb-table.dg-table th { position:relative; }
 .fig-preview-card .fig-dl-lg { font-size:11px; color:var(--primary); text-decoration:none; padding:1px 7px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.75); cursor:pointer; }
 .fig-preview-card .fig-dl-lg:hover { background:var(--primary); color:#fff; }
 
+/* === P5-VIEWER-CSS-BEGIN (2026-09-22) 结果文件内嵌查看器 === */
+#panel-results, #panel-files { position:relative; }
+.rv-viewer { flex:1 1 auto; min-height:0; display:none; flex-direction:column; background:var(--panel); }
+/* 查看器打开时（面板加 .rv-open）：把列表/图墙/旧内嵌预览藏掉，查看器自动占满剩余高度。
+   这样面板顶部的 面包屑/标签栏/排序条 依然可见可点，不用先关预览。 */
+#panel-results.rv-open #results-figures, #panel-results.rv-open #results-list, #panel-results.rv-open #figure-preview-area { display:none !important; }
+#panel-files.rv-open #file-list, #panel-files.rv-open #file-preview { display:none !important; }
+.rv-bar { display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); background:var(--bg); flex-wrap:wrap; }
+.rv-name { font-size:12px; font-weight:600; color:var(--text); max-width:42%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rv-meta { font-size:10px; color:var(--text-light); }
+.rv-msg { font-size:10px; color:var(--success); }
+.rv-spacer { flex:1; }
+.rv-btn { font-size:11px; padding:2px 8px; border-radius:5px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; white-space:nowrap; }
+.rv-btn:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+.rv-btn.danger { color:var(--danger); font-weight:600; }
+.rv-body { flex:1; overflow:auto; padding:10px 12px; min-height:0; }
+.rv-loading { padding:24px; text-align:center; font-size:12px; color:var(--text-light); }
+.rv-note { font-size:10px; color:var(--text-light); padding:6px 2px; line-height:1.6; }
+.rv-warn { font-size:11px; line-height:1.7; color:var(--warning); background:rgba(183,121,31,0.10); border:1px solid rgba(183,121,31,0.30); border-radius:6px; padding:6px 10px; margin-bottom:8px; }
+.rv-pre { background:var(--code-bg); color:var(--code-fg); padding:10px; border-radius:6px; font-size:12px; overflow:auto; white-space:pre; line-height:1.5; }
+.rv-pre.wrap { white-space:pre-wrap; word-break:break-word; }
+.rv-md { font-size:13px; line-height:1.7; color:var(--text); word-break:break-word; }
+.rv-md h1 { font-size:18px; margin:10px 0 6px; } .rv-md h2 { font-size:16px; margin:10px 0 6px; } .rv-md h3 { font-size:14px; margin:8px 0 4px; }
+.rv-md code { background:var(--code-bg); color:var(--code-fg); padding:1px 4px; border-radius:3px; font-size:12px; }
+.rv-md pre { background:var(--code-bg); color:var(--code-fg); padding:8px; border-radius:6px; overflow:auto; font-size:12px; }
+.rv-md table { border-collapse:collapse; width:100%; font-size:12px; }
+.rv-md th, .rv-md td { border:1px solid var(--border); padding:4px 6px; text-align:left; }
+.rv-md img { max-width:100%; }
+.rv-doc { font-size:13px; line-height:1.75; color:var(--text); word-break:break-word; }
+.rv-doc h1 { font-size:18px; margin:12px 0 8px; border-bottom:1px solid var(--border); padding-bottom:4px; }
+.rv-doc h2 { font-size:16px; margin:10px 0 6px; }
+.rv-doc h3 { font-size:14px; margin:8px 0 4px; }
+.rv-doc p { margin:6px 0; }
+.rv-doc li { margin-left:18px; list-style:disc; }
+.rv-doc table { border-collapse:collapse; width:100%; margin:8px 0; font-size:12px; }
+.rv-doc th, .rv-doc td { border:1px solid var(--border); padding:4px 6px; text-align:left; vertical-align:top; }
+.rv-doc img { max-width:100%; }
+.rv-tablewrap { overflow:auto; max-height:calc(100vh - 250px); border:1px solid var(--border); border-radius:6px; }
+.rv-table { border-collapse:collapse; font-size:12px; width:100%; }
+.rv-table th { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--border); padding:5px 8px; text-align:left; cursor:pointer; white-space:nowrap; font-weight:600; }
+.rv-table th:hover { color:var(--primary); }
+.rv-table td { border-bottom:1px solid var(--border); padding:4px 8px; vertical-align:top; word-break:break-word; }
+.rv-table tbody tr:nth-child(even) { background:rgba(127,127,127,0.06); }
+.rv-table td.rv-num { text-align:right; font-variant-numeric:tabular-nums; }
+.rv-idx { color:var(--text-light); font-size:10px; text-align:right; white-space:nowrap; }
+.rv-sheets { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; }
+.rv-sheet { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border); background:var(--bg); cursor:pointer; }
+.rv-sheet:hover { border-color:var(--primary); }
+.rv-sheet.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.rv-imgwrap { text-align:center; }
+.rv-img { max-width:100%; height:auto; border-radius:6px; cursor:zoom-in; background:#fff; }
+.rv-img.actual { max-width:none; cursor:zoom-out; }
+.rv-pdf { width:100%; height:calc(100vh - 220px); min-height:420px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+.rv-iframe { width:100%; height:calc(100vh - 220px); min-height:420px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+.rv-cell { margin-bottom:12px; }
+.rv-cell-src { background:var(--code-bg); color:var(--code-fg); padding:8px; border-radius:6px; font-size:12px; overflow:auto; white-space:pre; }
+.rv-out { background:var(--bg); border-left:3px solid var(--primary); padding:6px 8px; margin-top:4px; border-radius:4px; font-size:11px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+.rv-out-err { border-left-color:var(--danger); color:var(--danger); }
+.rv-card { border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center; }
+.rv-toolbar2 { display:flex; gap:6px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+.sort-chip { font-size:11px; padding:2px 9px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text-light); cursor:pointer; }
+.sort-chip:hover { border-color:var(--primary); color:var(--primary); }
+.sort-chip.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.fig-thumb .fig-zoom { position:absolute; right:6px; top:6px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1; color:#fff; background:rgba(0,0,0,0.55); border-radius:7px; cursor:pointer; opacity:0.85; z-index:2; }
+.fig-thumb .fig-zoom:hover { opacity:1; background:var(--primary); transform:scale(1.08); }
+/* === P5-VIEWER-CSS-END === */
 /* 文件预览 */
 .file-preview { padding:12px; }
 .file-preview pre { background:var(--code-bg); color:var(--code-fg); padding:10px; border-radius:6px; overflow:auto; font-size:12px; max-height:500px; white-space:pre-wrap; word-break:break-word; }
@@ -1210,7 +1276,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
   </div>
 
   <!-- === 右侧栏拖拽手柄（2026-08-08 恢复：按住左右拖动调整宽度，双击还原 380px） === -->
-  <div class="info-panel-resizer" id="info-panel-resizer" title="按住左右拖动调整右侧栏宽度（双击还原 380px）"></div>
+  <div class="info-panel-resizer" id="info-panel-resizer" title="按住左右拖动调整右侧栏宽度（双击还原默认 520px）"></div>
 
   <!-- === 右侧面板 === -->
   <div class="info-panel" id="info-panel">
@@ -1257,6 +1323,13 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div id="results-tabs" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;">
         <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;" data-i18n="tab_figures">🖼️ 图片</span>
         <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);" data-i18n="tab_files">📁 文件</span>
+      </div>
+      <!-- 排序条（P5 2026-09-22）：默认「最新在上」——用户要求最新出的文件排最上面 -->
+      <div id="results-sortbar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);align-items:center;gap:6px;">
+        <span>排序</span>
+        <span id="sort-time" class="sort-chip active" onclick="setResultsSort('time_desc')" title="按修改时间倒序：最新生成的在最上面">🕐 最新在上</span>
+        <span id="sort-name" class="sort-chip" onclick="setResultsSort('name')" title="按名称排序（目录优先）">🔤 按名称</span>
+        <span id="results-count" style="margin-left:auto;"></span>
       </div>
       <!-- 图片缩略图网格 -->
       <div id="results-figures" style="display:none;padding:8px;overflow-y:auto;flex:1;"></div>
@@ -5961,6 +6034,12 @@ function switchView(view) {
 
   document.getElementById(panelMap[view]).style.display = '';
 
+  // P5：换成别的视图时，把内嵌查看器关掉（它是面板内的覆盖层，换面板后就成了残留）
+  var _rvEl = document.getElementById('rv-viewer');
+  if (_rvEl && _rvEl.style.display !== 'none') {
+    var _rvHostPanel = _rvState.host === 'files' ? panelMap.files : panelMap.results;
+    if (panelMap[view] !== _rvHostPanel) closeFileViewer();
+  }
   if (view === 'files') browseFiles('');
   if (view === 'kb') { switchKbView(_kbMode || 'browse'); browseKb(currentPath.kb || ''); }
   else { pauseKbGraph3D(); }
@@ -6866,6 +6945,11 @@ function _isBinaryFile(name) {
 }
 
 async function previewFile(path) {
+  // 2026-09-22(P5)：文件面板统一走内嵌查看器（pdf/excel/word/图片/markdown 直接看，
+  // 不再只弹「二进制文件不能预览」）
+  openFileViewer(path, path.split('/').pop(), 'files');
+}
+async function _legacyPreviewFile(path) {
   document.getElementById('file-list').style.display = 'none';
   document.getElementById('file-preview').style.display = '';
   var name = path.split('/').pop();
@@ -9392,7 +9476,7 @@ function initInfoPanelResizer() {
   var panel = document.getElementById('info-panel');
   if (!rz || !panel || rz._bound) return;
   rz._bound = true;
-  var MIN_W = 380;  // 右侧面板最小宽度
+  var MIN_W = 340;  // 右侧面板最小宽度（2026-09-22：380→340，配合默认 520 的文件预览）
   function recenterGraph() {
     if (window._kbCy) {
       _kbCy.resize();
@@ -9666,12 +9750,14 @@ async function refreshResults() {
   if (!currentSid) {
     document.getElementById('results-path').textContent = '请先选择或新建会话';
     document.getElementById('results-tabs').style.display = 'none';
+    document.getElementById('results-sortbar').style.display = 'none';
     document.getElementById('results-figures').style.display = 'none';
     document.getElementById('figure-preview-area').style.display = 'none';
     document.getElementById('results-list').innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-light);">📋 请先在左侧选择一个会话，或新建会话开始分析。<br>分析结果将自动保存到当前会话目录。</div>';
     return;
   }
   document.getElementById('results-tabs').style.display = 'block';
+  document.getElementById('results-sortbar').style.display = 'flex';
   // 并行加载图片和文件，根据实际内容自动选择默认标签
   var figPromise = loadFigures();
   var filePromise = loadResultsFiles();
@@ -9698,14 +9784,16 @@ setInterval(function() {
 
 async function loadFigures() {
   try {
-    var r = await fetch('/api/results/' + currentSid + '/figures');
+    var r = await fetch('/api/results/' + currentSid + '/figures?sort=' + (_resultsSort === 'name' ? 'name' : 'time_desc'));
     var d = await r.json();
-    var figs = d.figures || [];
+    var figs = _sortItems(d.figures || [], _resultsSort, 'mtime_epoch');
     var el = document.getElementById('results-figures');
+    _lastFigItems = figs; _lastFigBase = d.base || '';
     _lastFiguresCount = figs.length;
     // 签名:会话+文件名+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
     var sig = currentSid + '||' + figs.map(function(f) { return f.name + '|' + f.size + '|' + (f.mtime_epoch || f.mtime || ''); }).join(',');
     if (!figs.length) sig += '|empty';
+    _renderSortBar();
     if (sig === _lastFiguresSig) return;
     _lastFiguresSig = sig;
     var st = el.scrollTop;
@@ -9714,11 +9802,11 @@ async function loadFigures() {
       return;
     }
     // 平坦网格：当前会话所有图片统一展示（URL 附带文件修改时间戳，防止浏览器缓存旧图）
-    el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f) {
+    el.innerHTML = '<div class="fig-thumb-grid">' + figs.map(function(f, _fi) {
       var v = f.mtime_epoch ? Math.round(f.mtime_epoch * 1000) : 0;
       var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '&v=' + v + '" loading="lazy">';
       // 2026-09-18: 右下角下载按钮；onclick 里 stopPropagation，保证「点击查看大图」不受影响
-      var dlBtn = '<a class="fig-dl" href="' + f.url + '&v=' + v + '" download="' + escapeHtml(f.name) + '" onclick="event.stopPropagation();" title="下载 ' + escapeHtml(f.name) + '">⬇</a>';
+      var dlBtn = '<a class="fig-dl" href="' + f.url + '&v=' + v + '" download="' + escapeHtml(f.name) + '" onclick="event.stopPropagation();" title="下载 ' + escapeHtml(f.name) + '">⬇</a>' + '<span class="fig-zoom" onclick="event.stopPropagation();openFigViewer(' + _fi + ')" title="在右侧面板内嵌查看（带排序/下载/系统打开）">⤢</span>';
       return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '&v=' + v + '\',\'' + escapeHtml(f.name) + '\')"><div class="fig-thumb-media">' + inner + dlBtn + '</div><div class="fig-thumb-name">' + escapeHtml(f.name) + '</div><div class="fig-thumb-mtime">🕐 ' + escapeHtml(f.mtime || '') + '</div></div>';
     }).join('') + '</div>';
     el.scrollTop = st;
@@ -9728,14 +9816,16 @@ async function loadFigures() {
 }
 
 async function loadResultsFiles() {
-  var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || ''));
+  var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || '') + '&sort=' + (_resultsSort === 'name' ? 'name' : 'time_desc'));
   var d = await r.json();
   var sessionId = d.session_id || currentSid;
-  var items = d.items || [];
+  var items = _sortItems(d.items || [], _resultsSort, 'mtime');
+  _lastResultItems = items;
   _lastFilesCount = items.length;
   // 签名:会话+路径+文件名+类型+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
   var sig = currentSid + '||' + currentPath.results + '||' + items.map(function(f) { return f.name + '|' + (f.is_dir ? 1 : 0) + '|' + f.size + '|' + (f.mtime || ''); }).join(',');
   if (!items.length) sig += '|empty';
+  _renderSortBar();
   if (sig === _lastFilesSig) return;
   _lastFilesSig = sig;
   var listEl = document.getElementById('results-list');
@@ -9767,12 +9857,14 @@ async function loadResultsFiles() {
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
     var mtimeStr = f.is_dir ? '' : '<span class="file-mtime">' + escapeHtml(f.mtime_str || '') + '</span>';
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
-    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "previewFile('" + f.path + "')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
   listEl.scrollTop = st;
 }
 
 function switchResultsTab(tab) {
+  // 2026-09-22(P5)：查看器是整面板覆盖层，切标签/换视图时先关掉，免得挡住标签栏
+  if (_rvIsOpen()) closeFileViewer();
   resultsTab = tab;
   document.getElementById('tab-figures').style.background = tab === 'figures' ? 'var(--primary)' : '';
   document.getElementById('tab-figures').style.color = tab === 'figures' ? '#fff' : 'var(--text-light)';
@@ -9780,6 +9872,7 @@ function switchResultsTab(tab) {
   document.getElementById('tab-files').style.color = tab === 'files' ? '#fff' : 'var(--text-light)';
   document.getElementById('results-figures').style.display = tab === 'figures' ? 'block' : 'none';
   document.getElementById('results-list').style.display = tab === 'files' ? 'block' : 'none';
+  _renderSortBar();
 }
 
 function browseResults(relPath) {
@@ -9819,6 +9912,385 @@ function closeFigurePreview() {
   document.getElementById('figure-preview-area').style.display = 'none';
   document.getElementById('figure-preview-area').innerHTML = '';
 }
+
+// === P5-VIEWER-BEGIN (2026-09-22) 分析结果文件内嵌查看器 ===
+// 用户原话："分析结果有图片和文件，我希望文件能够直接点开查看，能够按照时间顺序排列，
+// 最新出的文件排在最上面。主要包括 txt, excel, word, md, pdf 等等文件，这些有办法直接
+// 在 webUI 打开吗？" —— 全部在服务端转成结构化数据（webui/preview_convert.py），
+// 前端只负责渲染：离线、零 CDN、面板内自适应。
+var _rvState = { path: '', name: '', data: null, sheetIdx: 0, sortCol: -1, sortDir: 1, mdRaw: false, host: 'results' };
+
+var RV_LANG = { '.py':'python','.r':'r','.rmd':'r','.sh':'bash','.ps1':'powershell','.js':'javascript','.ts':'typescript','.json':'json','.jsonl':'json','.yaml':'yaml','.yml':'yaml','.xml':'xml','.css':'css','.sql':'sql','.java':'java','.cpp':'cpp','.c':'c','.go':'go','.rs':'rust','.jl':'julia','.toml':'ini','.ini':'ini','.cfg':'ini','.txt':'plaintext','.log':'plaintext','.md':'markdown','.bat':'dos','.cmd':'dos' };
+
+function _rve(s) { return escapeHtml(s == null ? '' : String(s)); }
+function _rvExtOf(name) { var m = /\.([A-Za-z0-9]+)$/.exec(name || ''); return m ? '.' + m[1].toLowerCase() : ''; }
+function _rvKindIcon(kind, name) {
+  var e = _rvExtOf(name);
+  if (kind === 'image') return '🖼️';
+  if (kind === 'pdf') return '📕';
+  if (kind === 'excel' || kind === 'table') return '📊';
+  if (kind === 'word') return '📝';
+  if (kind === 'notebook') return '📓';
+  if (kind === 'markdown') return '📄';
+  if (kind === 'code') return '⌨️';
+  if (kind === 'html') return '🌐';
+  if (kind === 'binary') return '📦';
+  if (e === '.csv' || e === '.tsv') return '📊';
+  return '📄';
+}
+function _rvHost(host) {
+  var id = (host === 'files') ? 'panel-files' : 'panel-results';
+  return document.getElementById(id) || document.getElementById('panel-results');
+}
+function _rvMsg(text, isErr) {
+  var m = document.getElementById('rv-msg');
+  if (!m) return;
+  m.textContent = text || '';
+  m.style.color = isErr ? 'var(--danger)' : 'var(--success)';
+  if (text) { clearTimeout(_rvState._msgTimer); _rvState._msgTimer = setTimeout(function(){ if (m) m.textContent = ''; }, 3500); }
+}
+
+/** 打开查看器（host: 'results' | 'files'） */
+async function openFileViewer(path, name, host) {
+  if (!path) return;
+  var panel = _rvHost(host);
+  if (!panel) return;
+  var el = document.getElementById('rv-viewer');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'rv-viewer';
+    el.className = 'rv-viewer';
+    document.body.appendChild(el);
+  }
+  if (el.parentNode !== panel) panel.appendChild(el);
+  panel.classList.add('rv-open');
+  _rvState.path = path;
+  _rvState.name = name || path.split('/').pop();
+  _rvState.data = null;
+  _rvState.sheetIdx = 0;
+  _rvState.sortCol = -1;
+  _rvState.mdRaw = false;
+  _rvState.host = host === 'files' ? 'files' : 'results';
+  el.style.display = 'flex';
+  el.innerHTML = _rvBarHtml() + '<div class="rv-body" id="rv-body"><div class="rv-loading">⏳ 正在打开 ' + _rve(_rvState.name) + ' …</div></div>';
+  try {
+    var r = await fetch('/api/file/preview?path=' + encodeURIComponent(path));
+    var d = await r.json();
+    if (d && d.error && !d.kind) { _rvState.data = { kind: 'binary', error: d.error }; }
+    else { _rvState.data = d; }
+  } catch (e) {
+    _rvState.data = { kind: 'binary', error: '预览请求失败：' + e };
+  }
+  _rvRender();
+}
+
+function closeFileViewer() {
+  var el = document.getElementById('rv-viewer');
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+  if (el.parentNode && el.parentNode.classList) el.parentNode.classList.remove('rv-open');
+  _rvState.data = null;
+  _rvState.path = '';
+}
+function _rvIsOpen() {
+  var el = document.getElementById('rv-viewer');
+  return !!(el && el.style.display !== 'none' && el.parentNode && el.parentNode.offsetParent !== null);
+}
+
+function _rvBarHtml() {
+  var d = _rvState.data || {};
+  var meta = d.meta || {};
+  var bits = [];
+  if (meta.size_str) bits.push(meta.size_str);
+  if (meta.mtime_str) bits.push(meta.mtime_str);
+  if (d.kind === 'pdf' && d.pages) bits.push(d.pages + ' 页');
+  if (d.kind === 'excel' && d.sheets) bits.push(d.sheets.length + ' 个工作表');
+  if (d.kind === 'word' && d.paragraphs) bits.push(d.paragraphs + ' 段 / ' + (d.tables || 0) + ' 表');
+  if (d.kind === 'text' && d.total_lines) bits.push(d.total_lines + ' 行');
+  if (d.encoding) bits.push(d.encoding);
+  if (d.engine) bits.push('引擎 ' + d.engine);
+  var kindIcon = d.kind ? _rvKindIcon(d.kind, _rvState.name) : '📄';
+  var zoomBtn = (d.kind === 'image') ? '<span class="rv-btn" onclick="_rvAct(\'zoom\')" title="切换 原始大小 / 适应宽度">🔍</span>' : '';
+  var mdBtn = (d.kind === 'markdown') ? '<span class="rv-btn" onclick="_rvAct(\'mdraw\')" title="切换 渲染 / 源码">' + (d.mdRaw ? '渲染' : '源码') + '</span>' : '';
+  return '<div class="rv-bar">' +
+    '<span style="font-size:13px;">' + kindIcon + '</span>' +
+    '<span class="rv-name" title="' + _rve(_rvState.path) + '">' + _rve(_rvState.name) + '</span>' +
+    '<span class="rv-meta">' + _rve(bits.join(' · ')) + '</span>' +
+    '<span class="rv-msg" id="rv-msg"></span>' +
+    '<span class="rv-spacer"></span>' +
+    mdBtn + zoomBtn +
+    '<span class="rv-btn" onclick="_rvAct(\'raw\')" title="在新标签页打开原始文件">↗ 原文件</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'download\')" title="下载到本机">⬇ 下载</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'sys\')" title="用系统默认程序打开（word/excel 原生打开）">🖥 系统打开</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'folder\')" title="在文件管理器中定位">📂 定位</span>' +
+    '<span class="rv-btn danger" onclick="_rvAct(\'close\')" title="关闭预览（Esc）">✕</span>' +
+    '</div>';
+}
+
+function _rvAct(a) {
+  var p = _rvState.path;
+  var d = _rvState.data || {};
+  if (a === 'close') { closeFileViewer(); return; }
+  if (a === 'download') { window.open('/api/file/download?path=' + encodeURIComponent(p), '_blank'); return; }
+  if (a === 'raw') { window.open(d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(p)), '_blank'); return; }
+  if (a === 'zoom') {
+    var img = document.querySelector('#rv-body .rv-img');
+    if (img) { var on = img.classList.toggle('actual'); _rvMsg(on ? '原始大小（可横向滚动）' : '适应面板宽度'); }
+    return;
+  }
+  if (a === 'mdraw') {
+    _rvState.mdRaw = !_rvState.mdRaw;
+    _rvRender();
+    return;
+  }
+  if (a === 'sys' || a === 'folder') {
+    (async function() {
+      try {
+        var r = await fetch('/api/file/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, action: a === 'folder' ? 'folder' : 'system' }) });
+        var j = await r.json();
+        _rvMsg(j.ok ? (j.message || '已交给系统') : ('失败：' + (j.error || r.status)), !j.ok);
+      } catch (e) { _rvMsg('失败：' + e, true); }
+    })();
+    return;
+  }
+}
+
+function _rvRender() {
+  var body = document.getElementById('rv-body');
+  if (!body) return;
+  var bar = document.querySelector('#rv-viewer .rv-bar');
+  if (bar) bar.outerHTML = _rvBarHtml();
+  var d = _rvState.data || {};
+  var meta = d.meta || {};
+  var html = '';
+  if (meta.exists === false) { body.innerHTML = _rvCard('🗑️', '文件不存在', '可能已被删除或移动。'); return; }
+
+  // 截断/降级提示
+  var warns = [];
+  if (d.note) warns.push(d.note);
+  if (d.truncated) warns.push('内容较大，仅显示前一部分' + (d.total_lines ? '（共 ' + d.total_lines + ' 行）' : '') + '，完整内容请下载或用系统程序打开。');
+  if (d.truncated_rows) warns.push('表格较大，仅显示前 ' + d.rows_shown + ' 行，共 ' + d.total_rows + ' 行。');
+  if (d.error) warns.push(d.error);
+  var warnHtml = warns.length ? '<div class="rv-warn">⚠️ ' + warns.map(_rve).join('<br>') + '</div>' : '';
+
+  var kind = d.kind || 'binary';
+  if (kind === 'text' || kind === 'code') {
+    var ext = _rvExtOf(_rvState.name);
+    if (kind === 'code' && typeof renderCodeBlockHtml === 'function') {
+      html = renderCodeBlockHtml({ code: d.text || '', complete: true }, (RV_LANG[ext] || ext.replace('.', '') || 'code'));
+    } else {
+      html = '<pre class="rv-pre wrap">' + _rve(d.text || '') + '</pre>';
+    }
+  } else if (kind === 'markdown') {
+    if (_rvState.mdRaw) html = '<pre class="rv-pre wrap">' + _rve(d.text || '') + '</pre>';
+    else html = '<div class="rv-md">' + renderMarkdown(d.text || '') + '</div>';
+  } else if (kind === 'table' || kind === 'excel') {
+    html = _rvSheetsHtml(d);
+  } else if (kind === 'word') {
+    html = '<div class="rv-doc">' + (d.html || '') + '</div>';
+  } else if (kind === 'notebook') {
+    html = _rvNotebookHtml(d);
+  } else if (kind === 'pdf') {
+    html = '<embed class="rv-pdf" src="' + (d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path))) + '" type="application/pdf">' +
+      '<div class="rv-note">浏览器内嵌不了 PDF？点「↗ 原文件」在新标签打开，或用「🖥 系统打开」交给本机阅读器。</div>';
+  } else if (kind === 'image') {
+    var raw = d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path));
+    html = '<div class="rv-imgwrap"><img class="rv-img" src="' + raw + '&v=' + Date.now() + '" alt="' + _rve(_rvState.name) + '" onclick="_rvAct(\'zoom\')"></div>' +
+      '<div class="rv-note">点击图片可切换「适应面板 / 原始大小」。</div>';
+  } else if (kind === 'html') {
+    var raw2 = d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path));
+    html = '<iframe class="rv-iframe" src="' + raw2 + '&v=' + Date.now() + '" sandbox="allow-scripts allow-popups allow-forms"></iframe>' +
+      '<div class="rv-note">HTML 报告在沙箱 iframe 中渲染（可执行自身脚本，但访问不到本页数据）。打不开就点「↗ 原文件」。</div>';
+  } else {
+    html = _rvCard(_rvKindIcon(kind, _rvState.name),
+      '这个文件不能直接显示',
+      (d.hint || '二进制/专用格式文件。') + '<br>' + _rve(meta.name || _rvState.name) + ' · ' + _rve(meta.size_str || '') +
+      '<div class="rv-toolbar2">' +
+      '<span class="rv-btn" onclick="_rvAct(\'sys\')">🖥 用系统程序打开</span>' +
+      '<span class="rv-btn" onclick="_rvAct(\'folder\')">📂 在文件夹中定位</span>' +
+      '<span class="rv-btn" onclick="_rvAct(\'download\')">⬇ 下载</span></div>');
+  }
+  body.innerHTML = warnHtml + html;
+  if (kind === 'code' || kind === 'notebook') { if (typeof initHighlight === 'function') initHighlight(); }
+}
+
+function _rvCard(icon, title, desc) {
+  return '<div class="rv-card"><div style="font-size:38px;margin-bottom:6px;">' + icon + '</div>' +
+    '<div style="font-size:14px;font-weight:600;margin-bottom:6px;">' + _rve(title) + '</div>' +
+    '<div style="font-size:12px;color:var(--text-light);line-height:1.7;">' + desc + '</div></div>';
+}
+
+// --- 表格 / Excel ---
+function _rvSheetsHtml(d) {
+  var sheets = d.sheets || [];
+  if (!sheets.length) return _rvCard('📊', '没有可显示的表格', '解析结果是空的：' + _rve(d.error || ''));
+  var idx = Math.min(_rvState.sheetIdx, sheets.length - 1);
+  var tabs = '';
+  if (sheets.length > 1) {
+    tabs = '<div class="rv-sheets">' + sheets.map(function(s, i) {
+      return '<span class="rv-sheet' + (i === idx ? ' active' : '') + '" onclick="_rvSetSheet(' + i + ')">' + _rve(s.name || ('Sheet' + (i + 1))) + '</span>';
+    }).join('') + '</div>';
+  }
+  var s = sheets[idx];
+  var rows = (s.rows || []).slice();
+  if (s.name) tabs = '<div class="rv-note" style="padding:0 0 6px;">工作表：' + _rve(s.name) + '（' + (s.total_rows != null ? s.total_rows : rows.length) + ' 行 × ' + (s.columns || []).length + ' 列）</div>' + tabs;
+  return tabs + '<div id="rv-table-host">' + _rvTableHtml(s, rows) + '</div>';
+}
+function _rvSetSheet(i) {
+  _rvState.sheetIdx = i;
+  _rvState.sortCol = -1;
+  var d = _rvState.data || {};
+  var host = document.getElementById('rv-table-host');
+  if (!host) { _rvRender(); return; }
+  var s = (d.sheets || [])[i] || {};
+  var tabs = document.querySelector('#rv-body .rv-sheets');
+  if (tabs) {
+    var kids = tabs.children;
+    for (var k = 0; k < kids.length; k++) kids[k].className = 'rv-sheet' + (k === i ? ' active' : '');
+  }
+  var note = document.querySelector('#rv-body .rv-note');
+  if (note && s.name) note.textContent = '工作表：' + s.name + '（' + (s.total_rows != null ? s.total_rows : (s.rows || []).length) + ' 行 × ' + (s.columns || []).length + ' 列）';
+  host.innerHTML = _rvTableHtml(s, (s.rows || []).slice());
+}
+function _rvTableHtml(s, rows) {
+  var cols = s.columns || [];
+  var html = '<div class="rv-tablewrap"><table class="rv-table"><thead><tr><th class="rv-idx">#</th>';
+  for (var c = 0; c < cols.length; c++) {
+    var mark = _rvState.sortCol === c ? (_rvState.sortDir > 0 ? ' ▲' : ' ▼') : '';
+    html += '<th onclick="_rvSortBy(' + c + ')" title="点击按此列排序">' + _rve(cols[c] || ('列' + (c + 1))) + mark + '</th>';
+  }
+  html += '</tr></thead><tbody id="rv-tbody">' + _rvRowsHtml(rows) + '</tbody></table></div>';
+  var shown = rows.length;
+  var total = (s.total_rows != null) ? s.total_rows : shown;
+  html += '<div class="rv-note">显示 ' + shown + ' / ' + total + ' 行' + (cols.length ? ' · ' + cols.length + ' 列' : '') + '　（点表头排序）</div>';
+  return html;
+}
+function _rvRowsHtml(rows) {
+  var out = '';
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || [];
+    out += '<tr><td class="rv-idx">' + (i + 1) + '</td>';
+    for (var j = 0; j < row.length; j++) {
+      var v = row[j];
+      var cls = (v !== '' && v != null && !isNaN(v)) ? ' class="rv-num"' : '';
+      out += '<td' + cls + '>' + _rve(v) + '</td>';
+    }
+    out += '</tr>';
+  }
+  return out;
+}
+function _rvSortBy(c) {
+  var d = _rvState.data || {};
+  var s = (d.sheets || [])[_rvState.sheetIdx] || {};
+  if (!s.rows) return;
+  if (_rvState.sortCol === c) _rvState.sortDir = -_rvState.sortDir; else { _rvState.sortCol = c; _rvState.sortDir = 1; }
+  var dir = _rvState.sortDir;
+  s.rows.sort(function(a, b) {
+    var x = a[c], y = b[c];
+    var nx = parseFloat(x), ny = parseFloat(y);
+    var num = (x !== '' && y !== '' && !isNaN(nx) && !isNaN(ny));
+    if (num) return (nx - ny) * dir;
+    return String(x == null ? '' : x).localeCompare(String(y == null ? '' : y)) * dir;
+  });
+  var tb = document.getElementById('rv-tbody');
+  if (tb) tb.innerHTML = _rvRowsHtml(s.rows);
+  var ths = document.querySelectorAll('#rv-body .rv-table thead th');
+  for (var k = 0; k < ths.length; k++) {
+    var txt = ths[k].textContent.replace(/ [▲▼]$/, '');
+    ths[k].textContent = txt + (k === c + 1 ? (dir > 0 ? ' ▲' : ' ▼') : '');
+  }
+}
+
+// --- Notebook ---
+function _rvNotebookHtml(d) {
+  var cells = d.cells || [];
+  if (!cells.length) return _rvCard('📓', '空 notebook', '没有单元格。');
+  var html = '<div class="rv-cells">';
+  for (var i = 0; i < cells.length; i++) {
+    var c = cells[i];
+    var n = '[' + (i + 1) + '] ';
+    if (c.type === 'markdown') {
+      html += '<div class="rv-cell"><div class="rv-md">' + renderMarkdown(c.source || '') + '</div></div>';
+    } else if (c.type === 'raw') {
+      html += '<div class="rv-cell"><pre class="rv-cell-src">' + _rve(c.source || '') + '</pre></div>';
+    } else {
+      html += '<div class="rv-cell">' + (typeof renderCodeBlockHtml === 'function'
+        ? renderCodeBlockHtml({ code: c.source || '', complete: true }, 'python')
+        : '<pre class="rv-cell-src">' + _rve(c.source || '') + '</pre>');
+      var outs = c.outputs || [];
+      for (var k = 0; k < outs.length; k++) {
+        var o = outs[k];
+        var cls = (o.type === 'error') ? 'rv-out rv-out-err' : 'rv-out';
+        var head = o.type === 'error' ? '❌ 报错' : (o.type === 'image' ? '🖼️ 图片输出' : '▶ 输出');
+        if (o.type === 'image' && o.data) {
+          html += '<div class="' + cls + '"><img src="data:' + _rve(o.mime || 'image/png') + ';base64,' + o.data + '" style="max-width:100%;"></div>';
+        } else if (o.data) {
+          html += '<div class="' + cls + '"><b>' + head + '</b><br><img src="' + o.data + '" style="max-width:100%;"></div>';
+        } else {
+          html += '<div class="' + cls + '"><b>' + head + '</b><br>' + _rve(o.text || '') + '</div>';
+        }
+      }
+      html += '</div>';
+    }
+  }
+  return html + '</div><div class="rv-note">共 ' + cells.length + ' 个单元格' + (d.truncated ? '（已截断）' : '') + '</div>';
+}
+
+// Esc 关闭预览
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && _rvIsOpen()) { closeFileViewer(); }
+});
+// === P5-VIEWER-END ===
+
+// === P5-SORT-BEGIN (2026-09-22) 结果排序：默认最新在最上面 ===
+var _resultsSort = 'time_desc';
+try { var _rs = localStorage.getItem('memomics.resultsSort'); if (_rs === 'name' || _rs === 'time_desc') _resultsSort = _rs; } catch (e) {}
+var _lastResultItems = [], _lastFigItems = [], _lastFigBase = '';
+
+function setResultsSort(mode) {
+  _resultsSort = (mode === 'name') ? 'name' : 'time_desc';
+  try { localStorage.setItem('memomics.resultsSort', _resultsSort); } catch (e) {}
+  _renderSortBar();
+  loadResultsFiles(true);
+  loadFigures(true);
+}
+function _renderSortBar() {
+  var bar = document.getElementById('results-sortbar');
+  if (!bar) return;
+  var tOn = _resultsSort === 'time_desc';
+  var timeEl = document.getElementById('sort-time'), nameEl = document.getElementById('sort-name');
+  if (timeEl) timeEl.className = 'sort-chip' + (tOn ? ' active' : '');
+  if (nameEl) nameEl.className = 'sort-chip' + (!tOn ? ' active' : '');
+  var cnt = document.getElementById('results-count');
+  if (cnt) {
+    cnt.textContent = (resultsTab === 'figures')
+      ? ('共 ' + _lastFigItems.length + ' 张图')
+      : ('共 ' + _lastResultItems.length + ' 项');
+  }
+}
+function _sortItems(items, mode, timeKey) {
+  var arr = items.slice();
+  if (mode === 'name') {
+    arr.sort(function(a, b) {
+      var ad = a.is_dir ? 0 : 1, bd = b.is_dir ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      return String(a.name || '').toLowerCase().localeCompare(String(b.name || '').toLowerCase());
+    });
+  } else {
+    arr.sort(function(a, b) { return (Number(b[timeKey]) || 0) - (Number(a[timeKey]) || 0); });
+  }
+  return arr;
+}
+/** 点击图片缩略图右上角 ⤢：在右侧面板内嵌查看（用绝对路径走统一查看器） */
+function openFigViewer(i) {
+  var f = _lastFigItems[i];
+  if (!f) return;
+  var rel = f.rel_path || f.name || '';
+  var abs = ((_lastFigBase || '') + '/' + rel).split(String.fromCharCode(92)).join('/');
+  openFileViewer(abs, f.name, 'results');
+}
+// === P5-SORT-END ===
 
 // === 待办 ===
 async function refreshTodos() {

@@ -10478,6 +10478,152 @@ async def download_file(path: str):
     return FileResponse(path, filename=os.path.basename(path))
 
 
+# ============ P5 结果文件直读（2026-09-22）：预览 / 原始字节 / 系统打开 ============
+# 用户需求：分析结果里的文件要能直接点开看（txt/md/csv/excel/word/pdf/图片…），
+# 并且按时间倒序、最新的排最上面。转换全部在服务端做（webui/preview_convert.py），
+# 不引前端 CDN、不依赖随包环境缺的库。
+_PREVIEW_ROOTS = [WORK_DIR, RESULTS_DIR, MEMOMICS_DIR]
+_SYSOPEN_ENABLED = (os.environ.get("MEMOMICS_SYSOPEN", "1").strip().lower()
+                    not in ("0", "false", "no", "off"))
+
+_FILE_MIME = {
+    ".md": "text/markdown; charset=utf-8", ".markdown": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8", ".log": "text/plain; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8", ".tsv": "text/tab-separated-values; charset=utf-8",
+    ".json": "application/json; charset=utf-8", ".jsonl": "application/x-ndjson; charset=utf-8",
+    ".yaml": "text/yaml; charset=utf-8", ".yml": "text/yaml; charset=utf-8",
+    ".pdf": "application/pdf", ".svg": "image/svg+xml", ".png": "image/png",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".bmp": "image/bmp", ".ico": "image/x-icon", ".tif": "image/tiff", ".tiff": "image/tiff",
+    ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".ipynb": "application/x-ipynb+json",
+}
+
+
+def _guess_media(path: str) -> str:
+    import mimetypes
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _FILE_MIME:
+        return _FILE_MIME[ext]
+    mt, _ = mimetypes.guess_type(path)
+    if not mt:
+        return "application/octet-stream"
+    if mt.startswith("text/") and "charset" not in mt:
+        return mt + "; charset=utf-8"
+    return mt
+
+
+def _preview_resolve(path: str):
+    """校验路径（限制在 work/results/项目根内，防任意文件读取）。返回 (full, err_response)"""
+    from webui.security import resolve_within_roots, UnsafePathError
+    if not path:
+        return "", JSONResponse({"error": "缺少 path 参数"}, status_code=400)
+    try:
+        full = str(resolve_within_roots(path, _PREVIEW_ROOTS))
+    except UnsafePathError as e:
+        return "", JSONResponse({"error": str(e)}, status_code=403)
+    except Exception as e:
+        return "", JSONResponse({"error": str(e)}, status_code=400)
+    if not os.path.exists(full):
+        return "", JSONResponse({"error": "文件不存在：%s" % os.path.basename(full)}, status_code=404)
+    return full, None
+
+
+@app.get("/api/file/preview")
+async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_cols: int = 0):
+    """把任意结果文件转成 WebUI 能直接显示的结构（只读）。
+
+    返回 kind：text / code / markdown / table / excel / word / notebook / pdf / image /
+    html / binary / missing，附 meta、download_url、raw_url。
+    """
+    import functools
+    from urllib.parse import quote
+    full, err = _preview_resolve(path)
+    if err is not None:
+        return err
+    try:
+        from webui import preview_convert as _pc
+    except Exception as e:
+        return JSONResponse({"error": "预览模块不可用：%s" % e}, status_code=500)
+    if os.path.isdir(full):
+        return JSONResponse({"kind": "missing", "meta": _pc.file_meta(full),
+                             "error": "这是一个目录，不能预览"}, status_code=200)
+    kw = {}
+    if sheet:
+        kw["sheet"] = sheet
+    if max_rows and int(max_rows) > 0:
+        kw["max_rows"] = min(int(max_rows), 5000)
+    if max_cols and int(max_cols) > 0:
+        kw["max_cols"] = min(int(max_cols), 200)
+    try:
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, functools.partial(_pc.preview, full, **kw))
+    except Exception as e:
+        data = {"kind": "binary", "meta": _pc.file_meta(full),
+                "error": "预览失败：%s: %s" % (type(e).__name__, e)}
+    data["path"] = full.replace(os.sep, "/")
+    data["download_url"] = "/api/file/download?path=" + quote(full)
+    data["raw_url"] = "/api/file/raw?path=" + quote(full)
+    return JSONResponse(data, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/file/raw")
+async def file_raw(path: str, dl: int = 0):
+    """原样返回文件字节：图片/PDF/HTML 用来内嵌渲染（dl=1 强制下载）。"""
+    from urllib.parse import quote
+    full, err = _preview_resolve(path)
+    if err is not None:
+        return err
+    if not os.path.isfile(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    fname = os.path.basename(full)
+    disp = "attachment" if dl else "inline"
+    return FileResponse(full, media_type=_guess_media(full), headers={
+        "Content-Disposition": "%s; filename=\"%s\"; filename*=UTF-8''%s" % (disp, quote(fname), quote(fname)),
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "X-Content-Type-Options": "nosniff",
+    })
+
+
+class FileOpenRequest(BaseModel):
+    path: str = ""
+    action: str = "system"   # system（默认程序打开）| folder（在资源管理器里定位）
+
+
+@app.post("/api/file/open")
+async def file_open(req: FileOpenRequest):
+    """用系统默认程序打开 / 在文件管理器里定位（P5，仅桌面端有意义）。
+
+    保守设计：只允许 work/results/项目根内的已存在文件；MEMOMICS_SYSOPEN=0 一键关闭。
+    """
+    import subprocess
+    if not _SYSOPEN_ENABLED:
+        return JSONResponse({"ok": False, "error": "「系统打开」已被禁用（MEMOMICS_SYSOPEN=0）"}, status_code=403)
+    full, err = _preview_resolve(req.path)
+    if err is not None:
+        return err
+    action = (req.action or "system").strip().lower()
+    if action not in ("system", "folder"):
+        return JSONResponse({"ok": False, "error": "action 只支持 system / folder"}, status_code=400)
+    try:
+        if os.name == "nt":
+            if action == "folder":
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(full)])
+            else:
+                os.startfile(full)  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open"] + (["-R"] if action == "folder" else []) + [full])
+        else:
+            target = os.path.dirname(full) if action == "folder" else full
+            subprocess.Popen(["xdg-open", target])
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": "打开失败：%s: %s" % (type(e).__name__, e)}, status_code=500)
+    return {"ok": True, "action": action, "path": full.replace(os.sep, "/"),
+            "message": "已交给系统默认程序打开" if action == "system" else "已在文件管理器中定位"}
+
+
 @app.get("/api/papers")
 async def serve_papers(path: str = ""):
     """文献原文/产物只读服务（批N1 2026-08-16）：仅限 hermes_home/papers/ 内。
@@ -11284,8 +11430,13 @@ language: {req.language}
 
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
-async def list_results(sid: str, path: str = ""):
-    """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）"""
+async def list_results(sid: str, path: str = "", sort: str = "time_desc"):
+    """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）
+
+    sort（P5 2026-09-22）：
+      - time_desc（默认）：按修改时间倒序 —— 最新出的文件排最上面（用户明确要求）
+      - name：目录在前 + 名称升序（旧行为）
+    """
     # 每次都扫描磁盘，不依赖内存中的 results_dir
     base = _find_best_results_dir(sid)
     if not base and sid in _sessions:
@@ -11301,11 +11452,23 @@ async def list_results(sid: str, path: str = ""):
     if not os.path.isdir(target):
         return {"items": [], "path": target, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
     items = []
+    _sort_mode = (sort or "time_desc").strip().lower()
+    if _sort_mode in ("name", "name_asc"):
+        _iter_key = lambda x: (not x.is_dir(), x.name.lower())
+    else:  # time_desc：纯按 mtime 倒序，目录与文件混排，最新在最上面
+        def _iter_key(x):
+            try:
+                return -x.stat().st_mtime
+            except OSError:
+                return 0
     try:
-        for p in sorted(Path(target).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        for p in sorted(Path(target).iterdir(), key=_iter_key):
             if p.name.startswith("."):
                 continue
-            _st = p.stat()
+            try:
+                _st = p.stat()
+            except OSError:
+                continue
             items.append({
                 "name": p.name,
                 "path": str(p).replace("\\", "/"),
@@ -11316,7 +11479,7 @@ async def list_results(sid: str, path: str = ""):
                 "mtime": _st.st_mtime,
                 "mtime_str": datetime.fromtimestamp(_st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             })
-        return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base),
+        return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "sort": _sort_mode, "results_name": os.path.basename(base),
                 "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)},
                 headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
     except Exception as e:
@@ -12430,8 +12593,11 @@ async def latest_debate(sid: str):
 
 
 @app.get("/api/results/{sid}/figures")
-async def list_figures(sid: str):
-    """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）"""
+async def list_figures(sid: str, sort: str = "time_desc"):
+    """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）
+
+    sort（P5 2026-09-22）：time_desc（默认，最新出的图排最上面）/ time_asc（旧行为）/ name
+    """
     # 每次实时扫描
     base = _find_best_results_dir(sid)
     if not base and sid in _sessions:
@@ -12443,7 +12609,19 @@ async def list_figures(sid: str):
     figures = []
     img_exts = {'.png', '.jpg', '.jpeg', '.svg', '.pdf'}
     try:
-        for p in sorted(Path(base).rglob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0):
+        def _fig_mtime(x):
+            try:
+                return x.stat().st_mtime
+            except OSError:
+                return 0
+        _sort_mode = (sort or "time_desc").strip().lower()
+        if _sort_mode == "name":
+            _fig_key = lambda x: x.name.lower()
+        elif _sort_mode == "time_asc":
+            _fig_key = _fig_mtime
+        else:
+            _fig_key = lambda x: -_fig_mtime(x)
+        for p in sorted(Path(base).rglob("*"), key=_fig_key):
             if p.is_file() and p.suffix.lower() in img_exts:
                 rel = str(p.relative_to(base)).replace("\\", "/")
                 parts = rel.split("/")
@@ -12461,7 +12639,7 @@ async def list_figures(sid: str):
                 })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"figures": figures, "base": base.replace("\\", "/"), "session_id": sid},
+    return JSONResponse({"figures": figures, "base": base.replace("\\", "/"), "session_id": sid, "sort": _sort_mode},
                         headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
