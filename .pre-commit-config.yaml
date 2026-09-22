@@ -11,4 +11,4 @@ repos:
         entry: python scripts/check_skills_gate.py --quiet
         language: system
         pass_filenames: false
-        files: '^(hermes_home/(skills/|SKILLS_INDEX\.md$|SOUL(-detail)?\.md$)|webui/(skills_registry|auto_register)\.py$|webui/tests/(test_skill|fixtures/skill_routing_matrix\.json)|scripts/(check_skills_gate|install_git_hooks)\.py$|\.githooks/)'
+        files: '^(hermes_home/(skills/|SKILLS_INDEX\.md$|SOUL(-detail)?\.md$)|webui/(skills_registry|auto_register)\.py$|webui/tests/(test_skill|fixtures/skill_routing_matrix\.json)|contracts/skill_triggers\.json$|webui/server\.py$|scripts/(check_skills_gate|install_git_hooks)\.py$|\.githooks/)'

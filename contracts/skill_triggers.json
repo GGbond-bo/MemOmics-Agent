@@ -1,0 +1,252 @@
+{
+  "schema": "memomics.skill-triggers-contract.v1",
+  "updated": "2026-09-23",
+  "owner": "webui/skills_registry.py + webui/server.py",
+  "why": [
+    "触发词是「用户说什么 → 用哪个 skill」的唯一开关：索引里的 RED 行会被 server 做消息级自动匹配，",
+    "匹配错了会出现两种事故 —— 该触发的没触发（用户以为技能不存在），不该触发的乱触发（抢占 skill_view）。",
+    "本文件把这件事的规则写成机器可读的契约：规则值（长度/条数/停用词/豁免词/上限）由代码引用，",
+    "由 webui/tests/test_skill_trigger_contract.py 逐条钉住；任何人改了语义而没改契约，测试会红。"
+  ],
+  "truth_chain": [
+    "hermes_home/skills/<name>/skill.json#trigger_keywords  （人工维护的真相源，优先级最高）",
+    "hermes_home/skills/<name>/SKILL.md frontmatter        （次之；注意 normalize_meta(existing=) 会保留 skill.json 里的旧词）",
+    "hermes_home/SOUL.md 必触发表                          （人工用户口径，合并时排在最前）",
+    "hermes_home/SKILLS_INDEX.md                            （派生产物：唯一被注入 system prompt 的形态）",
+    "webui/server.py:_match_red_skill_triggers()            （运行时匹配器，只吃索引里的 RED 行）"
+  ],
+  "sources_precedence": {
+    "rule": "skill.json > SKILL.md frontmatter > 自动派生；SOUL 必触发表命中时其词条前置合并，最后截断到 max_per_skill",
+    "gotcha": "webui/auto_register.py 生成的 skill.json 用 normalize_meta(existing=旧值)：只改 SKILL.md 不会新增关键词，必须直接编辑 skill.json"
+  },
+  "keyword_rules": {
+    "min_len": 2,
+    "max_len": 24,
+    "max_per_skill": 16,
+    "per_skill_unique": true,
+    "red_requires_at_least_one": true,
+    "red_only_rules_apply_to": "只对 RED 行做「通用词」检查（只有 RED 行进自动匹配）",
+    "forbidden_bare_ascii_words": [
+      "analysis",
+      "background",
+      "best",
+      "cell",
+      "core",
+      "dataset",
+      "debug",
+      "deep",
+      "design",
+      "download",
+      "error",
+      "experimental",
+      "extraction",
+      "fix",
+      "generation",
+      "generator",
+      "humanize",
+      "integration",
+      "manuscript",
+      "multi",
+      "nature",
+      "paper",
+      "param",
+      "plan",
+      "plot",
+      "polish",
+      "remove",
+      "research",
+      "retrieval",
+      "science",
+      "spot",
+      "statistics",
+      "summary"
+    ],
+    "forbidden_rationale": [
+      "这些词是日常英文里的通用词/刊名，单独做关键词时区分度接近 0：",
+      "实测「这个 analysis 的 core 思路是什么」命中 6 个技能、「Please help me design a plan for my holiday」命中 3 个。",
+      "要表达同样的意思请写成短语（deg analysis / study design / research plan / Nature style）或中文词（实验设计/统计方法）。"
+    ],
+    "forbidden_scope": "只作用于「裸 ASCII 单词」触发词（单个英文单词、无空格）。中文触发词不在此列：中文词基本是领域词，裸通用词风险集中在英文；CJK 通用词（总结/分析/设计 之类）留待 P0-2b 用中文停用词表单独治理。2026-09-23 已用负向测试确认：往本表里塞中文词不会误伤现存语料。"
+  },
+  "matching": {
+    "case_fold": true,
+    "cjk": "substring",
+    "cjk_ascii_boundary_space": "ignored",
+    "cjk_ascii_boundary_space_note": [
+      "中英之间打空格视为同一个触发面：\"CNS 级别\" 与 \"CNS级别\"、\"做 QC\" 与 \"做QC\" 等价（server._tighten_cjk_ascii）。",
+      "2026-09-23 P0-2a 加入：此前用户随手打空格就漏召回（fixture 缺口 gap-human-space 即此类），同一句话两种命运。"
+    ],
+    "ascii_multi_word": "all_content_words",
+    "ascii_multi_word_note": [
+      "含空格的英文关键词按「实词全中」匹配（去掉停用词后，关键词的每个词都要在用户消息里按空格切出的词集合中出现）。",
+      "2026-09-23 P0-2 由「任一实词命中」收紧为「全部实词命中」：旧规则下 'deg analysis' 只因用户说了 analysis 就命中 deg-analysis。",
+      "不用词边界（\\b）：中文里 English token 常与汉字紧贴（'做QC'、'跑DESeq2'），词边界会把这类真实说法判死。"
+    ],
+    "stopwords": [
+      "this",
+      "that",
+      "the",
+      "a",
+      "an",
+      "for",
+      "to",
+      "with",
+      "is",
+      "are",
+      "of",
+      "and",
+      "or",
+      "in",
+      "on",
+      "my",
+      "me",
+      "i",
+      "you",
+      "can",
+      "do",
+      "does",
+      "be",
+      "it",
+      "its",
+      "as"
+    ],
+    "min_keyword_len_enforced": 2,
+    "max_hits_ceiling": 8,
+    "max_hits_ceiling_note": "单条用户消息最多返回 8 个技能（回归矩阵断言上限），超过说明触发词过宽，应修元数据而不是放宽断言",
+    "order": "按 SKILLS_INDEX.md 行序返回（稳定，便于测试与复现）",
+    "empty_text_returns": "[]"
+  },
+  "exemptions": {
+    "local_literature": {
+      "when": [
+        "文献库",
+        "文献库里",
+        "/papers",
+        ".pdf"
+      ],
+      "excludes": [
+        "literature-review",
+        "paper-summary",
+        "paper-download",
+        "paper-translate",
+        "academic-paper-writing"
+      ],
+      "why": "本地文献库有专用工具（summarize_paper / kb_extract_from_paper / literature_import），全局文献类 RED skill 不该抢 skill_view"
+    }
+  },
+  "ratchet": {
+    "rule": "known_violations 只能减少不能增加：新增裸通用词关键词会被门禁拦下；被修好的条目必须从本表删除（测试会因条目过期而红，强制收缩）",
+    "known_violations_asof": "2026-09-23",
+    "known_violations": {
+      "background": [
+        "cellbender-remove-background"
+      ],
+      "best": [
+        "data-analysis-best-practices"
+      ],
+      "cell": [
+        "nature-figure"
+      ],
+      "core": [
+        "scrnaseq-scanpy-core-analysis",
+        "scrnaseq-seurat-core-analysis"
+      ],
+      "dataset": [
+        "omics-dataset-retrieval"
+      ],
+      "debug": [
+        "error-recovery"
+      ],
+      "deep": [
+        "deep-research"
+      ],
+      "design": [
+        "experimental-design-statistics"
+      ],
+      "download": [
+        "paper-download"
+      ],
+      "error": [
+        "error-recovery"
+      ],
+      "experimental": [
+        "experimental-design-statistics"
+      ],
+      "extraction": [
+        "literature-param-extraction"
+      ],
+      "fix": [
+        "error-recovery"
+      ],
+      "generation": [
+        "docx-generation"
+      ],
+      "generator": [
+        "ppt-generator"
+      ],
+      "humanize": [
+        "human-skill"
+      ],
+      "integration": [
+        "multi-omics-integration"
+      ],
+      "manuscript": [
+        "academic-paper-writing",
+        "nature-figure"
+      ],
+      "multi": [
+        "multi-omics-integration"
+      ],
+      "nature": [
+        "nature-figure"
+      ],
+      "paper": [
+        "academic-paper-writing",
+        "paper-download"
+      ],
+      "param": [
+        "literature-param-extraction"
+      ],
+      "plan": [
+        "research-plan"
+      ],
+      "plot": [
+        "scipilot-figure-skill"
+      ],
+      "polish": [
+        "paper-polish"
+      ],
+      "remove": [
+        "cellbender-remove-background"
+      ],
+      "research": [
+        "deep-research",
+        "research-plan"
+      ],
+      "retrieval": [
+        "omics-dataset-retrieval"
+      ],
+      "science": [
+        "nature-figure"
+      ],
+      "spot": [
+        "spatial-transcriptomics"
+      ],
+      "statistics": [
+        "experimental-design-statistics"
+      ],
+      "summary": [
+        "analysis-summary-report"
+      ]
+    }
+  },
+  "evidence": {
+    "fixture": "webui/tests/fixtures/skill_routing_matrix.json（56 正向场景 + 8 干扰 + 10 极端 + 7 缺口棘轮 + 2 过度触发钉住）",
+    "tests": [
+      "webui/tests/test_skill_routing_matrix.py（路由回归矩阵：正向/干扰/过度触发钉住/缺口棘轮/边界/覆盖/不变量）",
+      "webui/tests/test_skill_trigger_contract.py（本契约逐条钉住 + 关键词棘轮 + 缓存失效回归）",
+      "webui/tests/test_skill_trigger_matrix.py（历史触发词矩阵：索引锚点可见性）"
+    ],
+    "gate": "scripts/check_skills_gate.py（索引一致性 + 上述测试，提交前与 CI 双侧执行）"
+  }
+}

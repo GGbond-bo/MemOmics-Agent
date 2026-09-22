@@ -1,6 +1,6 @@
 {
   "schema": "memomics.skill-routing-matrix.v1",
-  "description": "Skill 路由回归矩阵：多场景 × 多意图 × 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；known_gaps 是「已确认缺口」棘轮，一旦被修复必须提升为 cases 条目。",
+  "description": "Skill 路由回归矩阵：多场景 × 多意图 × 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；known_gaps 是「已确认缺口」棘轮，一旦被修复必须提升为 cases 条目。（2026-09-23 P0-2a：英文多词触发词收紧为「实词全中」、中英边界空白归一；over 清单随之收敛、human-space 缺口修复后已提升为用例 human-space-01。）",
   "cases": [
     {
       "id": "scrna-qc-01",
@@ -263,6 +263,15 @@
         "human-skill"
       ],
       "max_hits": 5
+    },
+    {
+      "id": "human-space-01",
+      "intent": "口语",
+      "text": "这段话太像 AI 写的了，帮我改得没有 AI 味",
+      "must_hit": [
+        "human-skill"
+      ],
+      "max_hits": 3
     },
     {
       "id": "writing-01",
@@ -612,12 +621,6 @@
       "reason": "触发词是「提取参数」，中间插了「实验」就断链"
     },
     {
-      "id": "gap-human-space",
-      "text": "这段话太像 AI 写的了，帮我改得没有 AI 味",
-      "would_be": "human-skill",
-      "reason": "触发词是无空格的「像AI写的」，用户在中英之间打空格就漏召回"
-    },
-    {
       "id": "gap-ideaeval-fangxiang",
       "text": "这个研究方向值得做吗？帮我评估一下可行性",
       "would_be": "idea-evaluator",
@@ -629,24 +632,19 @@
       "id": "over-en-analysis-core",
       "text": "这个 analysis 的 core 思路是什么",
       "hits": [
-        "analysis-summary-report",
-        "deg-analysis",
-        "experimental-design-statistics",
         "scrnaseq-scanpy-core-analysis",
-        "scrnaseq-seurat-core-analysis",
-        "survival-analysis"
+        "scrnaseq-seurat-core-analysis"
       ],
-      "reason": "英文触发词的单复数/单词级回退：analysis、core 这类通用单词命中 6 个技能。待 P0-2 触发词契约化时收敛（或改为「整词 + 至少两个词命中」）。"
+      "reason": "P0-2a 收紧「英文多词=实词全中」后 6→2：analysis summary report / deg analysis / survival analysis / power analysis 的单词级回退已消除。剩下 2 个是裸通用词 core 的子串命中（scrnaseq-*-core-analysis），属元数据问题，P0-2b 清词时收敛。"
     },
     {
       "id": "over-en-design-plan",
       "text": "Please help me design a plan for my holiday",
       "hits": [
         "experimental-design-statistics",
-        "figure-designer",
         "research-plan"
       ],
-      "reason": "design / plan 这类通用英文单词命中 3 个技能，与用户意图无关。同上待 P0-2 收敛。"
+      "reason": "P0-2a 收紧后 3→2：figure design / design a figure 的单词级回退已消除。剩下 experimental-design-statistics 与 research-plan 由裸通用词 design / plan 的子串命中造成，P0-2b 清词时收敛。"
     }
   ],
   "coverage_exempt": []

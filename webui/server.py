@@ -3527,20 +3527,54 @@ def _read_skills_index():
 
 
 # RED 必触发 skill 触发词缓存（解析自 SKILLS_INDEX.md）
+# 规则契约见 contracts/skill_triggers.json；规则值由
+# webui/tests/test_skill_trigger_contract.py 逐条钉住（改语义必须同时改契约）。
 _RED_TRIGGER_CACHE = None  # [(skill_name, [triggers...]), ...]
+_RED_TRIGGER_CACHE_MTIME = None  # 缓存对应的 SKILLS_INDEX mtime：索引重建后必须重解析
+# 英文多词触发词的停用词（= contracts/skill_triggers.json → matching.stopwords）
+_EN_STOPWORDS = frozenset({
+    "this", "that", "the", "a", "an", "for", "to", "with",
+    "is", "are", "of", "and", "or", "in", "on", "my", "me",
+    "i", "you", "can", "do", "does", "be", "it", "its", "as",
+})
+# 本地文献库豁免（批K 2026-08-16）= contracts/skill_triggers.json → exemptions.local_literature
+_LOCAL_LIT_RED_EXEMPT = frozenset({
+    "literature-review", "paper-summary", "paper-download",
+    "paper-translate", "academic-paper-writing",
+})
+_LOCAL_LIT_EXEMPT_TRIGGERS = ("文献库", "文献库里", "/papers", ".pdf")
+# CJK/ASCII 边界空白归一：中文用户写英文术语时常随手加空格（"做 QC" / "CNS 级别"），
+# 而触发词写的是紧凑形式（"CNS级别"）；不归一会造成「同一句话带空格不触发」的随机漏召回。
+_CJK_ASCII_GAP_RE = re.compile(
+    r"(?<=[0-9A-Za-z])[ \t]+(?=[^\x00-\x7f])|(?<=[^\x00-\x7f])[ \t]+(?=[0-9A-Za-z])")
+
+
+def _tighten_cjk_ascii(s: str) -> str:
+    """去掉 ASCII 与中日韩字符之间的空白：'CNS 级别'→'CNS级别'，'做 QC'→'做QC'。"""
+    return _CJK_ASCII_GAP_RE.sub("", s)
 
 
 def _match_red_skill_triggers(user_text: str) -> list:
-    """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做子串匹配。
+    """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做匹配。
     返回命中的 skill 名列表（按索引顺序）。空消息/无命中 → []。
-    缓存随 SKILLS_INDEX mtime 失效（由 _read_skills_index 的重读隐式保证：
-    这里每次直接重新解析，索引 50KB 解析开销 < 1ms，可忽略）。"""
-    global _RED_TRIGGER_CACHE
+
+    匹配语义（契约 contracts/skill_triggers.json → matching）：
+      · 大小写无关；中文等无空格关键词走子串匹配（"质控" 命中 "先做质控和双细胞去除"）；
+      · 含空格的英文关键词走「实词全中」——去掉停用词后每个词都要出现在
+        用户消息按空格切出的词集合里（"deg analysis" 需要 deg 与 analysis 同时出现）。
+        2026-09-23 P0-2 由「任一实词命中」收紧：旧规则下用户只说 analysis 就会命中
+        deg-analysis / survival-analysis / power analysis 等 6 个技能（过度触发）。
+      · 不用词边界（\b）判断：中文里英文词常与汉字紧贴（"做QC"、"跑DESeq2"），
+        词边界会把这类真实说法判死。
+    缓存绑定 SKILLS_INDEX mtime（P0-2 修复：旧实现只在 None 时构建一次，
+    索引被 auto_register/技能编辑重建后仍用旧触发词，新技能永远匹配不到）。"""
+    global _RED_TRIGGER_CACHE, _RED_TRIGGER_CACHE_MTIME
     if not user_text:
         return []
     idx = _read_skills_index()
-    if _RED_TRIGGER_CACHE is None:
+    if _RED_TRIGGER_CACHE is None or _RED_TRIGGER_CACHE_MTIME != _SKILLS_INDEX_MTIME:
         _RED_TRIGGER_CACHE = []
+        _RED_TRIGGER_CACHE_MTIME = _SKILLS_INDEX_MTIME
         for line in idx.splitlines():
             if not line.startswith("|"):
                 continue
@@ -3559,6 +3593,7 @@ def _match_red_skill_triggers(user_text: str) -> list:
                 _RED_TRIGGER_CACHE.append((name, triggers))
     t = user_text.lower()
     t_words = set(t.split())  # 英文词级匹配用
+    t_tight = _tighten_cjk_ascii(t)  # 边界空白归一后的文本（"CNS 级别" -> "cns级别"）
     hits = []
     for name, triggers in _RED_TRIGGER_CACHE:
         matched = False
@@ -3568,13 +3603,14 @@ def _match_red_skill_triggers(user_text: str) -> list:
                 if kw_l in t:
                     matched = True
                     break
-                # 英文触发词：词级交集（"review paper" 命中 "Can you review this manuscript?" 的 review）
+                # 归一后再判一次："CNS级别" ← "CNS 级别"、"AI腔" ← "AI 腔"（见 _tighten_cjk_ascii）
+                if _tighten_cjk_ascii(kw_l) in t_tight:
+                    matched = True
+                    break
+                # 英文多词触发词：实词全中（"review paper" 需要 review 与 paper 同时出现）
                 if " " in kw_l and t_words:
-                    _STOP = {"this", "that", "the", "a", "an", "for", "to", "with",
-                             "is", "are", "of", "and", "or", "in", "on", "my", "me",
-                             "i", "you", "can", "do", "does", "be", "it", "its", "as"}
-                    kw_words = set(w for w in kw_l.split() if w not in _STOP)
-                    if kw_words and any(w in t_words for w in kw_words):
+                    kw_words = set(w for w in kw_l.split() if w not in _EN_STOPWORDS)
+                    if kw_words and kw_words <= t_words:
                         matched = True
                         break
         if matched:
@@ -3582,10 +3618,8 @@ def _match_red_skill_triggers(user_text: str) -> list:
     # 批K(2026-08-16)：本地文献库操作豁免全局文献类 RED skills——
     # "总结文献库里…" 不应被 literature-review(触发词'总结') / paper-summary(触发词'paper')
     # 抢占 skill_view，本地文献库有专用工具（summarize_paper / kb_extract_from_paper / literature_import）。
-    _LOCAL_LIT_RED_EXEMPT = {"literature-review", "paper-summary", "paper-download",
-                             "paper-translate", "academic-paper-writing"}
-    if hits and ("文献库" in user_text or "文献库里" in user_text or "/papers" in user_text
-                 or ".pdf" in user_text.lower()):
+    _lower = user_text.lower()
+    if hits and any(t in user_text or t in _lower for t in _LOCAL_LIT_EXEMPT_TRIGGERS):
         hits = [h for h in hits if h not in _LOCAL_LIT_RED_EXEMPT]
     return hits
 

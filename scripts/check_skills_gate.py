@@ -33,6 +33,7 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_skills_registry.py"),
     os.path.join("webui", "tests", "test_skill_trigger_matrix.py"),
     os.path.join("webui", "tests", "test_skill_routing_matrix.py"),
+    os.path.join("webui", "tests", "test_skill_trigger_contract.py"),
 ]
 
 

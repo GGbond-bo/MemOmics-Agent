@@ -37,6 +37,8 @@ HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.join(_ROOT, "hermes_home"
 SKILLS_DIR = os.path.join(HERMES_HOME, "skills")
 INDEX_PATH = os.path.join(HERMES_HOME, "SKILLS_INDEX.md")
 SOUL_PATH = os.path.join(HERMES_HOME, "SOUL.md")
+# 触发词契约（规则值单点真源：长度/条数/停用词/豁免词/通用词台账）
+CONTRACT_PATH = os.path.join(_ROOT, "contracts", "skill_triggers.json")
 
 # 分类分节（保持既有 15 节顺序与标题，本次不改分类体系）
 SECTIONS = [
@@ -605,8 +607,69 @@ def report(entries: list, verbose: bool = True) -> dict:
     return info
 
 
+def load_contract(path: str = None) -> dict:
+    """读取触发词契约 contracts/skill_triggers.json（规则值单点真源）。"""
+    with open(path or CONTRACT_PATH, encoding="utf-8") as f:
+        return json.load(f) or {}
+
+
+def check_keywords(entries: list = None, contract: dict = None) -> list:
+    """按契约校验触发词，返回问题列表（空 = 通过）。
+
+    形状规则（长度 / 条数 / 去重 / RED 至少一条）对全部技能生效；
+    「裸 ASCII 通用词」只查 RED 行 —— 只有 RED 行会进 server 的自动匹配。
+    通用词用棘轮（ratchet）管理：契约 ratchet.known_violations 是存量违规台账，
+    新增违规、违规蔓延、以及「修好了却没从台账删掉」都会报问题：台账只能减不能增。
+    """
+    entries = entries if entries is not None else scan_skills()
+    if contract is None:
+        try:
+            contract = load_contract()
+        except (OSError, ValueError) as exc:
+            return ["触发词契约缺失/损坏: %s (%s)" % (CONTRACT_PATH, exc)]
+    rules = contract.get("keyword_rules") or {}
+    min_len = int(rules.get("min_len") or MIN_KW_LEN)
+    max_len = int(rules.get("max_len") or MAX_KW_LEN)
+    max_kw = int(rules.get("max_per_skill") or MAX_KW)
+    forbidden = {str(w).strip().lower() for w in (rules.get("forbidden_bare_ascii_words") or [])}
+    problems, offenders = [], {}
+    for e in entries:
+        name = e.get("name") or "?"
+        kws = [str(k).strip() for k in (e.get("keywords") or []) if str(k).strip()]
+        dup = sorted({k for k in kws if kws.count(k) > 1})
+        if dup:
+            problems.append("触发词重复: %s -> %s" % (name, dup))
+        if len(kws) > max_kw:
+            problems.append("触发词超上限(%d 条): %s -> %d 条" % (max_kw, name, len(kws)))
+        for k in kws:
+            if not (min_len <= len(k) <= max_len):
+                problems.append("触发词长度越界(%d..%d): %s -> %s" % (min_len, max_len, name, k))
+        if e.get("level") == "RED":
+            if not kws:
+                problems.append("RED 技能无触发词: %s" % name)
+            for k in kws:
+                kl = k.lower()
+                if kl in forbidden and " " not in k and k.isascii():
+                    offenders.setdefault(kl, set()).add(name)
+    known_raw = (contract.get("ratchet") or {}).get("known_violations") or {}
+    known = {str(w).lower(): {str(s) for s in (v or [])} for w, v in known_raw.items()}
+    for w, owners in sorted(offenders.items()):
+        if w not in known:
+            problems.append("新增裸通用词触发词: %s -> %s（改用短语或中文词）"
+                            % (w, sorted(owners)))
+        elif owners - known[w]:
+            problems.append("裸通用词触发词蔓延: %s 新增 %s（同步收缩契约台账）"
+                            % (w, sorted(owners - known[w])))
+    for w, owners in sorted(known.items()):
+        gone = sorted(owners - offenders.get(w, set()))
+        if gone:
+            problems.append("契约台账过期: %s 已不再违规 %s，请从 ratchet.known_violations 删除"
+                            % (w, gone))
+    return problems
+
+
 def check(entries: list = None) -> list:
-    """一致性检查：返回问题列表（空 = 索引与磁盘一致且格式合法）。"""
+    """一致性检查：返回问题列表（空 = 索引与磁盘一致、格式合法、触发词合规）。"""
     entries = entries if entries is not None else scan_skills()
     try:
         with open(INDEX_PATH, encoding="utf-8") as f:
@@ -648,6 +711,7 @@ def check(entries: list = None) -> list:
     disk = {e["name"] for e in entries}
     problems.extend("索引缺少技能: %s" % n for n in sorted(disk - seen)[:10])
     problems.extend("索引多余技能: %s" % n for n in sorted(seen - disk)[:10])
+    problems.extend(check_keywords(entries))
     return problems
 
 
@@ -691,7 +755,7 @@ def main(argv=None) -> int:
             for p in problems[:40]:
                 print("  - " + p)
             return 2
-        print("SKILLS_INDEX.md 与磁盘一致，格式合法")
+        print("SKILLS_INDEX.md 与磁盘一致，格式合法；触发词符合 contracts/skill_triggers.json")
         return 0
     info = build(write=True, backfill_json=args.backfill_json) if args.build else report(scan_skills())
     if args.json:

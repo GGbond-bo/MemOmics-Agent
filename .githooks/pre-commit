@@ -23,7 +23,7 @@ if [ -z "$CHANGED" ]; then
 fi
 
 # 技能面：技能目录 / 索引 / SOUL / 注册表与自动注册器 / 相关测试与门禁自身
-PATTERN='^(hermes_home/skills/|hermes_home/SKILLS_INDEX\.md$|hermes_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
+PATTERN='^(hermes_home/skills/|hermes_home/SKILLS_INDEX\.md$|hermes_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|contracts/skill_triggers\.json$|webui/server\.py$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
 MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN")
 if [ -z "$MATCHED" ]; then
     exit 0
