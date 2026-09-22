@@ -67,26 +67,27 @@ def _normalize_options(options) -> tuple:
     return labels, rich
 
 
-def ask_user(question: str, options: list = None, multi_select: bool = False,
-             allow_other: bool = True, header: str = "", kind: str = "clarify") -> str:
-    """向用户提问澄清 / 弹出意图确认表单（异步：发问题→结束回合→用户回答成为新消息）。
+def emit_form_for_session(sess, question: str, options: list = None, multi_select: bool = False,
+                          allow_other: bool = True, header: str = "", kind: str = "clarify",
+                          arm_gate: bool = True) -> tuple:
+    """把确认表单直接发给指定会话（服务器侧确定性弹窗入口）→ (form_id, delivered)。
 
-    options（可选）：字符串或 {label,desc,recommended} 列表 → 前端弹窗可勾选；
-    multi_select=True 可多选；allow_other=True 提供"其他"自由填写。
-    kind：clarify（澄清）| intent（开工前意图确认）| plan（方案选择）—— 仅用于标题与审计。
+    P4(2026-09-22)：此前只有"模型调 ask_user"一条路 —— 弹不弹全看模型自觉。有些场景
+    服务器自己就知道该问（例如用户只说"帮我改下脚本"，而记忆里正好有他的数据可以验证），
+    这时由服务器直接弹窗，不依赖模型。ask_user 内部也走这里，一套逻辑两条入口。
+
+    arm_gate=False：不置 P3 意图确认门禁（调用方自己有更精确的锁，如代码修改模式）。
     """
     q = (question or "").strip()
-    if not q:
-        return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
     if len(q) > 500:
         q = q[:500]
     opts, opts_rich = _normalize_options(options)
     if not opts:
         opts, opts_rich = None, None
-    sid, _rd = _session_context()
+    sid = str((sess or {}).get("id") or "")
     form_id = "form_" + time.strftime("%Y%m%d%H%M%S") + "_" + str(int(time.time() * 1000) % 1000)
     delivered = False
-    if sid:
+    if sid and q:
         try:
             # 取已加载的 server 模块实例（conftest 以 "server" 名加载；
             # `import webui.server` 会重新执行模块 → 新实例、monkeypatch/会话落空）
@@ -94,7 +95,6 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
             _server = _sys.modules.get("server") or _sys.modules.get("webui.server")
             if _server is None:  # pragma: no cover - 常规运行经 webui.server 入口加载
                 import webui.server as _server
-            sess = _server._sessions.get(sid)
             if sess:
                 _opt_txt = ""
                 if opts:
@@ -142,13 +142,48 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
                     if len(pending) > 20:
                         del pending[:len(pending) - 20]
                 # P3: 意图确认门禁 —— 未答复前禁止执行类工具（硬约束，不靠模型自觉）
-                try:
-                    from webui import enforcement as _enf_a
-                    _es_a = _enf_a.get_enforcement(sid)
-                    _enf_a.set_awaiting_form(_es_a, form_id, q)
-                except Exception as _e_enf:
-                    logger.warning(f"[ask_user] 门禁置位失败: {_e_enf}")
+                if arm_gate:
+                    try:
+                        from webui import enforcement as _enf_a
+                        _es_a = _enf_a.get_enforcement(sid)
+                        _enf_a.set_awaiting_form(_es_a, form_id, q)
+                    except Exception as _e_enf:
+                        logger.warning(f"[ask_user] 门禁置位失败: {_e_enf}")
                 delivered = True
+        except Exception as e:
+            logger.warning(f"[ask_user] 发送失败: {e}")
+    if not delivered:
+        return json.dumps({"ok": False,
+                           "error": "无法联系用户（会话不可用），请在回复中直接向用户提问"},
+                          ensure_ascii=False)
+    return form_id, delivered
+
+
+def ask_user(question: str, options: list = None, multi_select: bool = False,
+             allow_other: bool = True, header: str = "", kind: str = "clarify") -> str:
+    """向用户提问澄清 / 弹出意图确认表单（异步：发问题→结束回合→用户回答成为新消息）。
+
+    options（可选）：字符串或 {label,desc,recommended} 列表 → 前端弹窗可勾选；
+    multi_select=True 可多选；allow_other=True 提供"其他"自由填写。
+    kind：clarify（澄清）| intent（开工前意图确认）| plan（方案选择）—— 仅用于标题与审计。
+    """
+    q = (question or "").strip()
+    if not q:
+        return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
+    opts, _rich = _normalize_options(options)
+    sid, _rd = _session_context()
+    form_id, delivered = "", False
+    if sid:
+        try:
+            # 取已加载的 server 模块实例（conftest 以 "server" 名加载；
+            # `import webui.server` 会重新执行模块 → 新实例、monkeypatch/会话落空）
+            import sys as _sys
+            _server = _sys.modules.get("server") or _sys.modules.get("webui.server")
+            if _server is None:  # pragma: no cover - 常规运行经 webui.server 入口加载
+                import webui.server as _server
+            form_id, delivered = emit_form_for_session(
+                _server._sessions.get(sid), q, options=options, multi_select=multi_select,
+                allow_other=allow_other, header=header, kind=kind)
         except Exception as e:
             logger.warning(f"[ask_user] 发送失败: {e}")
     if not delivered:
@@ -158,7 +193,7 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
     return json.dumps({
         "ok": True,
         "form_id": form_id,
-        "question": q,
+        "question": q[:500],
         "options": opts or [],
         "multi_select": bool(multi_select),
         "instruction": ("❓ 问题已发送给用户（前端弹窗可勾选）。请立即结束本回合，不要再调用"
@@ -173,7 +208,8 @@ SCHEMA = {
         "向用户提问澄清 / 弹出意图确认表单（不确定时用，不要猜）。必须用的场景："
         "①高代价任务（真实分析/集群投递/结果入库/出报告）开工前确认意图；"
         "②用户意图不明确（例如只说'检查'没说'修复并继续'）；"
-        "③关键信息缺失（数据在哪/物种组织/期望结果/是否继续旧任务/参数与阈值）。"
+        "③关键信息缺失（数据在哪/物种组织/期望结果/是否继续旧任务/参数与阈值）；"
+        "④只改代码不跑（用户给你脚本让你改，记忆里有他的数据）——问「要不要用你的数据验证」。"
         "传 options 会渲染成可勾选弹窗（可用 dict 带 desc 说明与 recommended 推荐），"
         "multi_select=True 支持多选，allow_other=True 提供\"其他\"自由填写。"
         "调用后必须立即结束本回合等待用户回答（执行类工具在答复前会被门禁拦下）；"

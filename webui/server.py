@@ -1315,6 +1315,181 @@ def _build_intent_confirm_prompt(session, user_text, intent):
     )
 
 
+# ==================== P4(2026-09-22): 代码修改模式（只改不跑）====================
+# 用户原话："如果我给一些脚本和代码，让 MemOmics 自己帮我改一下、完善一下，它会不会自己
+#           跑去执行呢？什么时候执行脚本，什么时候只是改代码呢？如果只是修改代码，能不能
+#           直接给修改后的代码呢？如果记忆里有用户的数据，是不是可以弹窗问用户需不需要用
+#           数据验证一下呢？"
+# 落地：① 判定"改代码" → 只改不跑（enforcement.code_edit 硬锁，不靠模型自觉）；
+#       ② 记忆里正好有他的数据 → **服务器直接弹窗**问"要不要用这些数据跑一遍验证"；
+#       ③ 答复语义：选"只给代码" → 锁继续；选"用数据验证" → 解锁并允许执行。
+_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "1") != "0"
+
+# 改动动词（用户明确要求"把这东西变一下"）—— 不含 写/编写/生成（那是新做任务，另走 grill/确认）
+_CODE_EDIT_VERBS = (
+    "改一下", "改下", "改改", "改成", "改为", "改一改", "修改", "修一下", "修下", "修好", "修正",
+    "优化", "完善", "重构", "重写", "改进", "增强", "补上", "加上", "加个", "增加", "去掉",
+    "换成", "替换", "调优", "调试", "修 bug", "fix", "refactor", "optimize", "improve",
+    "rewrite", "debug", "patch",
+)
+# 代码信号（说明这轮真的在动代码，而不是在聊数据/结果）
+_CODE_EDIT_HINTS = (
+    "脚本", "代码", "源码", "函数", "程序", "报错信息", "命令行",
+    ".py", ".r ", ".r\u3000", ".rmd", ".sh", ".ipynb", ".js", ".ts", ".pl", ".cpp", ".sql",
+    "```", "def ", "#!/", "library(", "rscript", "python 脚本", "脚本文件",
+    "script", "function", "snippet", "notebook",
+)
+# "跑起来"信号（用户自己说了要跑 → 不锁，只提示"改完再跑"）
+_CODE_EDIT_RUN = (
+    "跑", "执行", "运行", "实测", "验证", "测试", "试一下", "试下", "出图", "重新出图",
+    "重跑", "再跑", "重画", "run", "execute", "test", "verify", "replot", "render",
+)
+# 可验证的数据文件后缀 / 目录名（从记忆里挑"他的数据"）
+_CODE_DATA_EXTS = (".h5ad", ".h5", ".hdf5", ".mtx", ".csv", ".tsv", ".txt", ".xlsx", ".xls",
+                   ".parquet", ".bam", ".sam", ".vcf", ".fastq", ".fq", ".fasta", ".fa",
+                   ".gtf", ".gff", ".gff3", ".bed", ".rds", ".rda", ".rdata", ".loom",
+                   ".zarr", ".h5seurat", ".bigwig", ".bw", ".mzml", ".fcs", ".cel", ".gz")
+_CODE_DATA_DIRS = ("data", "raw", "rawdata", "raw_data", "dataset", "datasets", "数据", "原始数据")
+
+
+def _code_edit_mode(text):
+    """本轮是不是"改代码"？返回 "edit"（只改不跑）|"verify"（用户说了要跑）|""（不是改代码）。
+
+    判定 = 改动动词 + 代码信号；再看到"跑/验证/测试/出图"就说明用户自己要跑 → 不锁。
+    纯提问（"这段代码为什么报错"）没有改动动词 → 不进入本模式，仍走调查/澄清。
+    """
+    if not _CODE_EDIT_ENABLED:
+        return ""
+    t = (text or "").strip()
+    if not t or len(t) > 4000:
+        return ""
+    low = t.lower()
+    if not any(v in low for v in _CODE_EDIT_VERBS):
+        return ""
+    if not any(h in low for h in _CODE_EDIT_HINTS):
+        return ""
+    if any(r in low for r in _CODE_EDIT_RUN):
+        return "verify"
+    return "edit"
+
+
+def _find_memory_data(session, text="", limit=3):
+    """从会话记忆里找"用户自己的数据"路径（供"要不要用你的数据跑一遍验证"用）。
+
+    来源：results/<sid>/REQUIREMENTS.md（用户历轮说过、被持久化的路径）+ 本轮消息里的路径。
+    只认数据类后缀或 data/raw/数据 目录，避免把输出目录、代码路径当成数据。
+    """
+    _hits = []
+
+    def _add(p):
+        p = (p or "").strip().strip("\"'").rstrip("，,。；;）)]}")
+        if p and p not in _hits:
+            _hits.append(p)
+
+    try:
+        for _ln in (_read_requirements(session, limit=12) or []):
+            for _m in re.findall(r"[A-Za-z]:[/\\][^\s，。；;）)]+", str(_ln)):
+                _add(_m)
+    except Exception:
+        pass
+    for _m in re.findall(r"[A-Za-z]:[/\\][^\s，。；;）)]+", text or ""):
+        _add(_m)
+    _ok = []
+    for _p in _hits:
+        _low = _p.lower()
+        _is_data = any(_low.endswith(_e) for _e in _CODE_DATA_EXTS)
+        if not _is_data:
+            _is_data = any(("\\" + _d + "\\") in _low or ("/" + _d + "/") in _low
+                           for _d in _CODE_DATA_DIRS)
+        if _is_data and not any(_low.endswith(_c) for _c in (".py", ".r", ".rmd", ".sh", ".ipynb")):
+            _ok.append(_p)
+    return _ok[:limit]
+
+
+def _is_form_answer_text(text, session=None):
+    """这一轮的用户消息是不是「确认弹窗的答复」？（P4 修：前端措辞与后端不一致）
+
+    前端 `_submitAskForm` 把答复拼成人话再当用户消息发出（【确认答复】针对「…」：选中：…），
+    后端 `/api/ask_form/answer` 生成的是【用户对「…」的确认答复】—— 只认一个前缀会导致
+    "选了只给代码" 的那条消息被当成新消息，把代码修改锁悄悄放掉。现在两种前缀都认，
+    另外 POST 上报时打一个 30 秒内有效的一次性时间戳标记（pop 消费，防前缀再改一次又失效）。
+    """
+    _fresh = False
+    if session is not None:
+        try:
+            _mk = float(session.pop("_form_ans_marker", 0) or 0)
+            _fresh = bool(_mk) and (time.time() - _mk) < 30.0
+        except Exception:
+            _fresh = False
+    _t = str(text or "").lstrip()
+    if _t.startswith(("【用户对", "【确认答复")):
+        return True
+    return bool(_fresh and ("选中：" in _t or "补充：" in _t or "补充说明：" in _t))
+
+
+def _emit_code_edit_form(session, data):
+    """代码修改模式的确定性弹窗：记忆里有数据 → 问"要不要用这些数据跑一遍验证"。
+
+    与 P3 的区别：这个弹窗由**服务器**直接发（不依赖模型记得调 ask_user），
+    arm_gate=False 是因为代码修改模式自己有更精确的锁（code_edit_gate）。
+    """
+    try:
+        from memomics.bio_tools.ask_user import emit_form_for_session as _emit_form
+    except Exception as _e_imp:
+        logger.warning("[code_edit] ask_user 不可用: %s", _e_imp)
+        return "", False
+    _names = []
+    for _d in (data or [])[:3]:
+        try:
+            _names.append(os.path.basename(str(_d).rstrip("/\\")) or str(_d))
+        except Exception:
+            _names.append(str(_d))
+    _short = "、".join(_names)
+    _q = ("你只让我改代码（没说要跑）。记忆里有你的数据：%s —— 要不要用这些数据跑一遍验证？" % _short)
+    _opts = [
+        {"label": "只给我改好的代码，先别跑", "desc": "我只要代码，不执行", "recommended": True},
+        {"label": "用这些数据跑一遍验证", "desc": "拿 %s 实测改动是否成立，报错也告诉我" % _short[:100]},
+        {"label": "先给我改动计划", "desc": "先说要改哪几处、为什么，再决定跑不跑"},
+    ]
+    try:
+        return _emit_form(session, _q, options=_opts, kind="intent",
+                          header="改代码：要不要用你的数据验证？", arm_gate=False)
+    except Exception as _e_emit:
+        logger.warning("[code_edit] 弹窗失败: %s", _e_emit)
+        return "", False
+
+
+def _build_code_edit_prompt(session, user_text, mode, data_hint=None):
+    """代码修改模式的回合指令：只改不跑 / 改完再跑，都要"直接给修改后的完整代码"。"""
+    _rd = session.get("results_dir") or "results/<sid>"
+    _head = ("[代码修改模式 · 只改不跑]" if mode != "verify"
+             else "[代码修改模式 · 改完再跑]")
+    _lines = [_head,
+              "本轮判定：用户给的是代码/脚本，要的是「改代码」——先给代码，别自作主张跑分析。"]
+    if mode != "verify":
+        _lines.append("用户没说跑 → 本回合**不要执行**：terminal 跑脚本、execute_r/execute_python、"
+                      "集群投递都会被硬门禁拦下（读文件、写文件、给代码不受影响）。")
+    else:
+        _lines.append("用户自己说了要跑 → 改完可以直接跑，跑完把结果/报错如实告诉他。")
+    _lines += [
+        "交付方式（这是用户最在意的）：",
+        "  1. 在回复里直接给出**修改后的完整代码**（一个代码块，能直接复制运行，别只给 diff 片段）；",
+        "  2. 逐条说明：改了哪几处、为什么改、有什么影响/风险；",
+        "  3. 要落盘就写到 %s\\scripts\\ 并告知路径（写文件不拦）。" % _rd,
+        "用户的脚本是基准（SOUL 铁律）：不许按你的风格重写，不做无关重构；只改他要求的地方，"
+        "参数/小修/规范化可以顺手修，但要明确说出来。",
+    ]
+    _hint = [str(x) for x in (data_hint or [])][:3]
+    if _hint:
+        _lines.append("记忆里有他的数据可用于验证：%s" % "；".join(_hint))
+        _lines.append("想验证就先问：调 ask_user 问「要不要用这些数据跑一遍验证」，"
+                      "用户勾选同意后再执行（不同意就只给代码）。")
+    else:
+        _lines.append("记忆里没有他数据的路径：要验证就先 ask_user 问数据在哪，别自己找数据跑。")
+    _lines.append("如果用户答复里说「只给代码/先别跑」，本回合就只给代码，一个字都不要跑。")
+    return chr(10).join(_lines)
+
+
 def _build_task_resume_prompt(session):
     """检测是否有未完成的主线任务（task_plan.md 或未完成待办）。
 
@@ -12359,6 +12534,9 @@ async def ask_form_answer(req: AskFormAnswerRequest):
         _parts.append("补充说明：" + other)
     _answer_text = ("【用户对「" + _q_text[:120] + "」的确认答复】" + "；".join(_parts)) if _q_text \
         else ("【用户确认答复】" + "；".join(_parts))
+    # P4(2026-09-22): 前端提交弹窗后自己拼消息再发（措辞与 _answer_text 不同）→
+    # 打一个 30 秒有效的一次性标记，让下一轮能可靠认出"这是弹窗答复，不是新需求"
+    sess["_form_ans_marker"] = time.time()
     sess.setdefault("_ask_form_answers", []).append({
         "form_id": req.form_id or (_hit or {}).get("form_id", ""),
         "question": _q_text, "selected": sel, "other": other,
@@ -12380,16 +12558,44 @@ async def ask_form_answer(req: AskFormAnswerRequest):
                                                     "question": _q_text})
     except Exception as _e_f:
         logger.warning(f"[ask_form] 解除门禁失败: {_e_f}")
+    # P4(2026-09-22): 代码修改模式的答复语义 —— 与 P3 不同："答复"不默认解锁。
+    #   选"只给我改好的代码，先别跑" → 锁继续（这正是他的本意）
+    #   选"用这些数据跑一遍验证"   → 解锁并允许执行
+    _ce_state = ""
+    try:
+        from webui import enforcement as _enf_cea
+        _es_cea = _enf_cea.get_enforcement(sid)
+        if getattr(_es_cea, "code_edit", False) or _enf_cea.code_edit_pending(_es_cea):
+            _ans_all = (" ".join(sel) + " " + other).strip()
+            _want_run = any(w in _ans_all for w in
+                            ("验证", "跑", "测试", "执行", "试一下", "试下", "run", "test",
+                             "verify", "execute"))
+            _want_no = any(w in _ans_all for w in
+                          ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+            if _want_run and not _want_no:
+                _enf_cea.clear_code_edit(_es_cea, grant_exec=True)
+                _gate_cleared = True
+                _ce_state = "verify_ok"
+            else:
+                _enf_cea.arm_code_edit(
+                    _es_cea, "用户选择：只给代码、不要执行（答复：%s）" % _ans_all[:80],
+                    data=getattr(_es_cea, "code_edit_data", []) or [])
+                _ce_state = "edit_only"
+            logger.info(f"[code_edit] sid={sid} 答复={_ans_all[:60]!r} → {_ce_state}")
+    except Exception as _e_cea:
+        logger.warning(f"[code_edit] 答复处理失败: {_e_cea}")
     try:
         _session_emit(sess, {"type": "ask_form_answered", "form_id": req.form_id,
                              "question": _q_text, "selected": sel, "other": other,
                              "gate_cleared": _gate_cleared,
+                             "code_edit": _ce_state,
                              "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
     except Exception:
         pass
     logger.info(f"[ask_form] sid={sid} form={req.form_id} selected={sel} other={other[:60]!r} gate_cleared={_gate_cleared}")
     return {"ok": True, "question": _q_text, "selected": sel, "other": other,
-            "answer_text": _answer_text, "gate_cleared": _gate_cleared}
+            "answer_text": _answer_text, "gate_cleared": _gate_cleared,
+            "code_edit": _ce_state}
 
 
 # --- 待办 ---
@@ -14207,25 +14413,73 @@ async def ws_endpoint(ws: WebSocket):
                         # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
                         # P3(2026-09-22): grill 没触发时，高代价任务再补一层"意图确认"
                         # （数据有了但要做成什么没交代）——并预置门禁：用户勾选前不许执行。
+                        # P4(2026-09-22): 代码修改模式优先 —— 用户给脚本让"改一下"时只改不跑；
+                        # 记忆里正好有他的数据 → **服务器自己**弹窗问"要不要用数据验证"。
+                        _ce_mode, _ce_data = "", []
                         try:
-                            _grill = _build_grill_prompt(_session, user_text or "", _intent)
-                            if _grill:
-                                conversation_history.append({"role": "system", "content": _grill})
-                            else:
-                                _iconf = _build_intent_confirm_prompt(_session, user_text or "", _intent)
-                                if _iconf:
-                                    conversation_history.append({"role": "system", "content": _iconf})
-                                    try:
-                                        from webui import enforcement as _enf_ic
-                                        _es_ic = _enf_ic.get_enforcement(_session.get("id", ""))
-                                        _enf_ic.arm_intent_confirm(
-                                            _es_ic, "高代价任务（分析/投递/入库/报告）开工前意图未确认")
-                                        logger.info("[intent_confirm] session %s: 已预置门禁，等用户勾选",
-                                                    str(_session.get("id", ""))[:12])
-                                    except Exception as _e_ic:
-                                        logger.warning("[intent_confirm] arm failed: %s", _e_ic)
-                        except Exception:
-                            pass
+                            _ce_mode = _code_edit_mode(user_text or "")
+                            _is_form_ans = _is_form_answer_text(user_text or "", _session)
+                            from webui import enforcement as _enf_ce
+                            _es_ce = _enf_ce.get_enforcement(_session.get("id", ""))
+                            if _ce_mode == "edit":
+                                _ce_data = _find_memory_data(_session, user_text or "")
+                                _enf_ce.arm_code_edit(
+                                    _es_ce, "用户要求改代码、没说要跑：%s" % (user_text or "")[:60],
+                                    data=_ce_data)
+                                if _ce_data and not _session.get("_code_edit_asked"):
+                                    _fid_ce, _ok_ce = _emit_code_edit_form(_session, _ce_data)
+                                    _session["_code_edit_asked"] = bool(_ok_ce)
+                                    if _ok_ce:
+                                        logger.info("[code_edit] session %s: 已弹窗问验证（%d 条数据）",
+                                                    str(_session.get("id", ""))[:12], len(_ce_data))
+                            elif _ce_mode != "verify" and not _is_form_ans \
+                                    and _enf_ce.code_edit_pending(_es_ce):
+                                # 锁还开着，但用户这轮说的是别的（不是弹窗答复）→ 语境变了，解锁
+                                _enf_ce.clear_code_edit(_es_ce)
+                                logger.info("[code_edit] 用户新消息 → 解锁代码修改模式")
+                        except Exception as _e_ce0:
+                            logger.warning("[code_edit] 预置失败: %s", _e_ce0)
+                        if _ce_mode:
+                            try:
+                                conversation_history.append({
+                                    "role": "system",
+                                    "content": _build_code_edit_prompt(_session, user_text or "",
+                                                                       _ce_mode, _ce_data)})
+                                logger.info("[code_edit] session %s mode=%s data=%d asked=%s",
+                                            str(_session.get("id", ""))[:12], _ce_mode, len(_ce_data),
+                                            bool(_session.get("_code_edit_asked")))
+                            except Exception as _e_ce1:
+                                logger.warning("[code_edit] 指令注入失败: %s", _e_ce1)
+                        else:
+                            # P4: 上一轮锁着"只改代码"、这轮用户说了别的（非弹窗答复）→ 解锁
+                            try:
+                                from webui import enforcement as _enf_ce2
+                                _es_ce2 = _enf_ce2.get_enforcement(_session.get("id", ""))
+                                if _enf_ce2.code_edit_pending(_es_ce2) and not \
+                                        _is_form_answer_text(user_text or "", _session):
+                                    _enf_ce2.clear_code_edit(_es_ce2)
+                                    logger.info("[code_edit] 用户新消息 → 解锁代码修改模式")
+                            except Exception:
+                                pass
+                            try:
+                                _grill = _build_grill_prompt(_session, user_text or "", _intent)
+                                if _grill:
+                                    conversation_history.append({"role": "system", "content": _grill})
+                                else:
+                                    _iconf = _build_intent_confirm_prompt(_session, user_text or "", _intent)
+                                    if _iconf:
+                                        conversation_history.append({"role": "system", "content": _iconf})
+                                        try:
+                                            from webui import enforcement as _enf_ic
+                                            _es_ic = _enf_ic.get_enforcement(_session.get("id", ""))
+                                            _enf_ic.arm_intent_confirm(
+                                                _es_ic, "高代价任务（分析/投递/入库/报告）开工前意图未确认")
+                                            logger.info("[intent_confirm] session %s: 已预置门禁，等用户勾选",
+                                                        str(_session.get("id", ""))[:12])
+                                        except Exception as _e_ic:
+                                            logger.warning("[intent_confirm] arm failed: %s", _e_ic)
+                            except Exception:
+                                pass
 
                         # 2026-08-16 修复「问下一个问题被旧上下文占据」：
                         # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，

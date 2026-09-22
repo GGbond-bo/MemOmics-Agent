@@ -392,6 +392,14 @@ class EnforcementState:
         self.intent_confirm_ts: float = 0.0
         self.form_block_hits: int = 0
         self.form_answers: list = []          # 用户已提交的表单答复（审计用）
+        # P4(2026-09-22): 代码修改模式 —— 用户给脚本/代码让"改一下"时，只许改不许跑
+        # 用户原话："如果我给一些脚本和代码让 MemOmics 帮我改，它会不会自己跑去执行？"
+        self.code_edit: bool = False          # 代码修改模式已置位（未获准执行）
+        self.code_edit_reason: str = ""
+        self.code_edit_ts: float = 0.0
+        self.code_edit_verify: bool = False   # 用户已同意"用我的数据跑一遍验证"
+        self.code_edit_block_hits: int = 0
+        self.code_edit_data: list = []        # 记忆里可供验证的数据路径（弹窗/提示用）
         self.token_used: int = 0  # C3(2026-08-11): 本会话辩论累计 token（usage 统计）
         self.token_budget: int = 0  # C3: token 预算上限（config debate.token_budget，0=不限）
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
@@ -443,6 +451,10 @@ class EnforcementState:
             "intent_confirm_reason": self.intent_confirm_reason,  # P3
             "form_answers": len(self.form_answers or []),  # P3
             "form_block_hits": self.form_block_hits,  # P3
+            "code_edit": self.code_edit,  # P4
+            "code_edit_verify": self.code_edit_verify,  # P4
+            "code_edit_block_hits": self.code_edit_block_hits,  # P4
+            "code_edit_data": len(self.code_edit_data or []),  # P4
             "token_used": self.token_used,  # C3
             "token_budget": self.token_budget,  # C3
             "analysis_level": self.analysis_level,
@@ -607,6 +619,12 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             _emit("enforcement", action="blocked", message=_fg["message"],
                   awaiting_form_id=_fg.get("awaiting_form_id", ""))
             return _fg
+
+        # P4(2026-09-22): 代码修改模式门禁 —— 用户要的是"改代码"，不是"跑分析"
+        _ce = code_edit_gate(es, tool_name, args)
+        if _ce:
+            _emit("enforcement", action="blocked", message=_ce["message"], code_edit=True)
+            return _ce
 
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
@@ -1264,6 +1282,90 @@ def _form_gate(es: EnforcementState, tool_name: str, args=None):
         "awaiting_form_id": es.awaiting_form_id,
         "intent_confirm": bool(_armed),
     }
+
+
+# ==================== P4(2026-09-22): 代码修改模式门禁 ====================
+# 用户原话："如果我给一些脚本和代码，让 MemOmics 自己帮我改一下、完善一下，
+#           它会不会自己跑去执行呢？什么时候执行脚本，什么时候只是改代码呢？
+#           如果只是修改代码，能不能直接给修改后的代码呢？"
+# 机制：服务器判定本轮是"改代码"（有代码/脚本 + 有改动动词，且用户没说要跑）→ 置位 code_edit：
+#   · 拦：execute_r / execute_python / execute_code / run_script / 集群 run,submit /
+#         terminal 的非只读命令（真在跑代码的）
+#   · 放：读文件、写文件、给代码（cat/findstr 读用户脚本、write 落盘改好的代码都不受影响）
+#   · 要跑必须用户点头：弹窗勾"用数据验证" / 用户直接回消息说要跑 / 30 分钟 TTL
+# 语义与 P3 一致，但"答复"不默认解锁 —— 用户选"只要代码"时锁继续生效（这是他的本意）。
+
+_CODE_EDIT_TTL = _FORM_PENDING_TTL  # 30 分钟无后续自动失效，不永久锁死
+_CODE_EDIT_GATED_TOOLS = {"execute_r", "execute_python", "execute_code", "run_script"}
+
+
+def arm_code_edit(es: EnforcementState, reason: str = "", data=None) -> bool:
+    """进入代码修改模式：只改不跑。data=记忆里可供验证的数据路径（可空）。"""
+    es.code_edit = True
+    es.code_edit_verify = False          # 新一轮请求 = 重新决策（不沿用上次的同意）
+    es.code_edit_reason = str(reason or "")[:300]
+    es.code_edit_ts = time.time()
+    if data is not None:
+        es.code_edit_data = [str(x)[:200] for x in list(data)[:5]]
+    return True
+
+
+def code_edit_pending(es: EnforcementState) -> bool:
+    """代码修改模式是否仍在拦执行（超时 → False）。
+
+    注意：用户同意"用数据验证"走 clear_code_edit()，锁本身会被清掉；
+    code_edit_verify 只是"本轮是否获准"的标记（审计用），不参与判定 ——
+    否则一次同意就等于本会话永久放行，违背"什么时候跑、什么时候只改"的可预测性。
+    """
+    if not getattr(es, "code_edit", False):
+        return False
+    _ts = float(getattr(es, "code_edit_ts", 0.0) or 0.0)
+    if _ts and (time.time() - _ts) > _CODE_EDIT_TTL:
+        return False
+    return True
+
+
+def clear_code_edit(es: EnforcementState, grant_exec: bool = False) -> bool:
+    """退出代码修改模式。grant_exec=True 表示用户同意执行（本会话后续不再拦）。"""
+    _was = bool(getattr(es, "code_edit", False))
+    es.code_edit = False
+    es.code_edit_reason = ""
+    es.code_edit_ts = 0.0
+    if grant_exec:
+        es.code_edit_verify = True
+    return _was
+
+
+def code_edit_gate(es: EnforcementState, tool_name: str, args=None):
+    """代码修改模式：拦执行类工具（None=放行）。"""
+    if not code_edit_pending(es):
+        return None
+    _d = _args_as_dict(args)
+    _hit = False
+    if tool_name == "terminal":
+        # 只读命令放行：读用户脚本、看目录、grep 报错都必须能做
+        _hit = not _is_readonly_terminal(str(_d.get("command") or ""))
+    elif tool_name in _CODE_EDIT_GATED_TOOLS:
+        _hit = True
+    elif tool_name == _REMOTE_CLUSTER_TOOL:
+        _hit = str(_d.get("action") or "").strip().lower() in _REMOTE_CLUSTER_EXEC_ACTIONS
+    if not _hit:
+        return None
+    es.code_edit_block_hits = int(getattr(es, "code_edit_block_hits", 0)) + 1
+    _data = getattr(es, "code_edit_data", []) or []
+    _lines = [
+        "⛔ 代码修改模式：用户要的是「改代码」，不是「跑分析」，现在别执行。",
+        "本轮判定依据：用户给了代码/脚本并要求修改，但没说要跑（%s）。" % (
+            str(getattr(es, "code_edit_reason", "") or "改代码")[:120],),
+        "现在该做的：把修改后的【完整代码】直接写出来（回复里给代码块；需要落盘就写到 "
+        "results/<sid>/scripts/），逐条说明改了什么、为什么；用户脚本是基准，不许重写他的风格。",
+        "被拦的工具：%s。" % (tool_name,),
+    ]
+    if _data:
+        _lines.append("记忆里有用户的数据可用于验证：%s" % ("；".join(str(x) for x in _data[:3]),))
+    _lines.append("解除方式：① ask_user 问用户「要不要用你的数据跑一遍验证」，用户勾选同意；"
+                  "② 用户直接回消息说要跑/验证/测试；③ 30 分钟无后续自动失效。")
+    return {"blocked": True, "message": chr(10).join(_lines), "code_edit": True}
 
 
 def _debate_block_gate(es: EnforcementState, tool_name: str):
