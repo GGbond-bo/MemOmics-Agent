@@ -160,5 +160,16 @@
   },
   "user_prefs": {
     "last_used_script": "traj_scvelo.py"
-  }
+  },
+  "trigger_keywords": [
+    "轨迹",
+    "trajectory",
+    "拟时序",
+    "pseudotime",
+    "Monocle",
+    "Slingshot",
+    "RNA velocity",
+    "scVelo"
+  ],
+  "trigger_level": "RED"
 }

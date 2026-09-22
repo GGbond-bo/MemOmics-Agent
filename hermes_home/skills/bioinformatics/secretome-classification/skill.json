@@ -19,5 +19,11 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "secretome-classification",
+    "secretome classification",
+    "secretome",
+    "classification"
+  ],
+  "when_to_use": "✅ Conditioned medium / supernatant proteomics (LC-MS/MS, label-free, TMT)"
 }

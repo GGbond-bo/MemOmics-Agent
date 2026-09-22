@@ -76,5 +76,16 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "安装",
+    "创建skill",
+    "没有这个工具",
+    "新工具",
+    "做一个skill",
+    "建个skill",
+    "没有对应的skill",
+    "create-bio-skill"
+  ],
+  "trigger_level": "RED"
 }

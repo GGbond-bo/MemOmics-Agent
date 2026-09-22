@@ -12,7 +12,16 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": [],
+  "trigger_keywords": [
+    "亚群比例",
+    "L3 boxplot",
+    "Proportion (%",
+    "6组箱线图",
+    "FDR标注",
+    "p值标注",
+    "画哪几组",
+    "逆转衰老"
+  ],
   "success_count": 10,
   "proven_script": "10_final_3grp_cluster3_pfdr.R",
   "proven_params": [
@@ -159,5 +168,6 @@
       "evidence": "L1辩论裁决(modify, high): raw p标注探索图可接受但须注明未校正; 结论需pseudobulk(DESeq2 FDR<0.1)验证; 警惕批次效应与10vs7小样本个体异质性; cluster1随运动升高与'运动逆转去神经'知识库矛盾需谨慎解读",
       "date": "2026-08-17 02:16:49"
     }
-  ]
+  ],
+  "when_to_use": "scRNA-seq 注释后比较各亚群在 6 组（3 条件×Pre/Post，个体配对）中的比例变化，判断\"逆转衰老/逆转糖尿病/运动共同趋势\"，并对已有 AUCell 打分列做同样的跨组差异分析。包含:分组映射、base_id 配对检验、Cliff's delta 效应量方向约定、双 FDR（亚群内+全局）、探索用 raw p 值/定稿用 FDR 标注、egg::set_panel_size 固定…"
 }

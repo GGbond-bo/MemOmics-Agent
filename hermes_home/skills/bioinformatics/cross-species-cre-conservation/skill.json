@@ -12,5 +12,11 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "cross",
+    "species",
+    "cre",
+    "conservation"
+  ],
+  "when_to_use": "--- name: cross-species-cre-conservation category: GWAS/Genetics python_packages: - docx # python-docx（交底书 docx 生成/校验） - pandas - numpy - matplotlib - PIL # pillow（出图健康检测:单一颜色/空白图判定） description: > Cr…"
 }

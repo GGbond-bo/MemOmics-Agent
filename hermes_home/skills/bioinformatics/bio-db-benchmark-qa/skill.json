@@ -12,5 +12,15 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "benchmarker",
+    "密封答案",
+    "考试题",
+    "TaskA",
+    "TaskB",
+    "TaskC",
+    "dbqa2",
+    "MESINESP"
+  ],
+  "when_to_use": "用户给出 E:\\benchmarker\\...\\*_考试题.json 路径，要求\"作答/测试/开始完成\"，随后可能提供 *_密封答案.json 要求\"对一下/评分\"。这类考试的特点:每道题是一个事实型问题…"
 }

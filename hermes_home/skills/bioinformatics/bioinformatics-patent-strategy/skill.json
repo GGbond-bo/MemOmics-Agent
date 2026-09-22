@@ -12,5 +12,15 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "专利",
+    "patent",
+    "权利要求",
+    "claims",
+    "A25",
+    "智力活动",
+    "交底书",
+    "可专利性"
+  ],
+  "when_to_use": "--- name: bioinformatics-patent-strategy description: > Bioinformatics method patent strategy and drafting…"
 }

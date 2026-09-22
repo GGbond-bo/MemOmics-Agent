@@ -12,5 +12,15 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "跨物种调控元件",
+    "CRCA",
+    "调控保守性",
+    "B类基因",
+    "BNIP3验证",
+    "CRE保守性",
+    "TF footprinting跨物种",
+    "regulatory conservation"
+  ],
+  "when_to_use": "--- name: cross-species-regulatory-conservation description: > Cross-species gene regulatory element conservation assessment (CRCA) framework…"
 }

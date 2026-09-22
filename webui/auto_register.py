@@ -42,9 +42,17 @@ def _parse_skill_md(skill_dir: str) -> dict:
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Extract YAML-style frontmatter between --- markers
+    # frontmatter 解析统一走 skills_registry._parse_frontmatter（同一套口径）：
+    # 老实现是「逐行 key: value」，遇到 `description: >-` 块标量只取到字面量 `>-`，
+    # 续行全丢 —— 生成出来的 skill.json 描述就是垃圾（2026-09 实测：'description': '>-'）。
     meta = {}
-    fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    reg = _registry()
+    if reg is not None:
+        try:
+            meta = dict(reg._parse_frontmatter(content) or {})
+        except Exception:  # noqa: BLE001 — 解析器异常时退回老逻辑，不能阻断注册
+            meta = {}
+    fm_match = None if meta else re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
     if fm_match:
         fm = fm_match.group(1)
         # Parse simple key: value pairs
@@ -211,7 +219,11 @@ def auto_register_to_index(skill_dir: str) -> bool:
         with open(index_path, 'r', encoding='utf-8') as f:
             # 新索引是 5 列编号行（| 12 | skill | ... |），老判定 | name | 匹配不到
             existed = bool(re.search(r'\|\s*(?:\d+\s*\|\s*)?' + re.escape(skill_name) + r'\s*\|', f.read()))
-        skills_registry.build(write=True)
+        # backfill_json=True：把 skill.json 里空/垃圾的 when_to_use、trigger_keywords、
+        # trigger_level 用索引口径补齐（只补空，不覆盖人工填写值）。运行期写 skill.json 的
+        # 路径不止一条（auto_generate_skill_json 会搬 SKILL.md frontmatter），不在这里收敛，
+        # 那份脏值会一直躺在磁盘上并进下一次注册。
+        skills_registry.build(write=True, backfill_json=True)
         print(f"[auto-register] Rebuilt SKILLS_INDEX.md "
               f"({'added' if not existed else 'refreshed'}: {skill_name})")
         return not existed
@@ -386,7 +398,7 @@ def rebuild_index_descriptions() -> dict:
     if reg is None:
         return {"ok": False, "error": "skills_registry unavailable"}
     try:
-        info = reg.build(write=True)
+        info = reg.build(write=True, backfill_json=True)  # 同上：重建索引时顺手修掉 skill.json 里的垃圾字段
     except Exception as e:  # noqa: BLE001 — 启动期索引重建失败不能拖垮服务
         print(f"[auto-register] index rebuild failed: {e}", flush=True)
         return {"ok": False, "error": str(e)}

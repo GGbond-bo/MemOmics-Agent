@@ -154,5 +154,16 @@
       "script": "",
       "severity": "medium"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "EDA",
+    "数据探索",
+    "看看数据",
+    "概览",
+    "scrna-eda",
+    "scrna eda",
+    "eda"
+  ],
+  "trigger_level": "RED",
+  "when_to_use": "有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发"
 }

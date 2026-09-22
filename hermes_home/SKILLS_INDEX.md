@@ -201,26 +201,26 @@
 | 5 | alphafold2 | OpenAI4S 移植:Predict protein structure for monomers and multimers with Al... | alphafold2 | YEL 讨论触发 |
 | 6 | analysis-summary-report | 当已完成真实分析（有terminal执行结果+figures）且用户要求总结/报告时触发。文献综述/整理结果不触发。 | 生成总结, 分析总结, 跑完总结, analysis-summary-report, analysis summary report, Excel, 结果汇总 | RED 必触发 |
 | 7 | animation-first-showcase | 用户要做一个给人看/演示/汇报的 HTML（展示自己、展示项目、演示功能、答辩、行业调研汇总）时；或用户抱怨已有 HTML 交付物「字太多、不直观」时 | animation-first-showcase, animation first showcase, animation, first, showcase | YEL 讨论触发 |
-| 8 | archr-atac-analysis | --- name: archr-atac-analysis description: > ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案… | archr-atac-analysis, archr atac analysis, archr | YEL 讨论触发 |
-| 9 | atac-paper-reproduction | --- name: atac-paper-reproduction description: > ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明… | 论文复现, 对比流程, 官方路径, official code, ATAC 复现 | YEL 讨论触发 |
+| 8 | archr-atac-analysis | ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案… | archr-atac-analysis, archr atac analysis, archr | YEL 讨论触发 |
+| 9 | atac-paper-reproduction | ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明。 关键技巧:官方补充表含 cCRE/peak 全集时直接复用坐标做片段计数，跳过本地 peak calling（免装 MACS3/snapatac2）… | 论文复现, 对比流程, 官方路径, official code, ATAC 复现 | YEL 讨论触发 |
 | 10 | atac-seq-memomics | ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出 | atac-seq-memomics, atac seq memomics, seq, memomics | YEL 讨论触发 |
 | 11 | bio-db-benchmark-qa | 用户给出 E:\benchmarker\...\*_考试题.json 路径，要求"作答/测试/开始完成"，随后可能提供 *_密封答案.json 要求"对一下/评分"。这类考试的特点:每道题是一个事实型问题… | benchmarker, 密封答案, 考试题, TaskA, TaskB, TaskC, dbqa2, MESINESP | YEL 讨论触发 |
 | 12 | bioinformatics-html-report | 当需要生成生信分析HTML报告时触发 — 包含图表、辩论记录、参数来源、生物结论的完整报告 | html | RED 必触发 |
-| 13 | bioinformatics-patent-strategy | --- name: bioinformatics-patent-strategy description: > Bioinformatics method patent strategy and drafting… | 专利, patent, 权利要求, claims, A25, 智力活动, 交底书, 可专利性 | YEL 讨论触发 |
+| 13 | bioinformatics-patent-strategy | Bioinformatics method patent strategy and drafting. Covers A25 (intellectual activity rules) defense, claim structuring for bioinformatics workflows, dual-patent architectures… | 专利, patent, 权利要求, claims, A25, 智力活动, 交底书, 可专利性 | YEL 讨论触发 |
 | 14 | boltz | OpenAI4S 移植:Structure prediction for protein, nucleic-acid, and small-mo... | boltz | YEL 讨论触发 |
 | 15 | borzoi | OpenAI4S 移植:Predict genome-wide functional tracks (RNA-seq, CAGE, DNase,... | borzoi | YEL 讨论触发 |
 | 16 | cellbender-batch-pipeline | 10+ 样本需要串行跑 CellBender（总时长 > 1 小时） | 批量cellbender, 多样本去污染, 后台运行cellbender | YEL 讨论触发 |
 | 17 | celltype-proportion-comparison | scRNA-seq 注释后比较各亚群在 6 组（3 条件×Pre/Post，个体配对）中的比例变化，判断"逆转衰老/逆转糖尿病/运动共同趋势"，并对已有 AUCell 打分列做同样的跨组差异分析。包含:分组映射、base_id 配对检验、Cliff's delta 效应量方向约定、双 FDR（亚群内+全局）、探索用 raw p 值/定稿用 FDR 标注、egg::set_panel_size 固定… | 亚群比例, L3 boxplot, Proportion (%, 6组箱线图, FDR标注, p值标注, 画哪几组, 逆转衰老 | YEL 讨论触发 |
 | 18 | chai1 | OpenAI4S 移植:Structure prediction for protein, nucleic-acid, and small-mo... | chai1 | YEL 讨论触发 |
-| 19 | cn-degree-thesis-writing | --- name: cn-degree-thesis-writing description: >- 中文学位论文（本科/硕士/博士毕业论文）撰写与「校内格式规范」合规。用于:读取学校《学位论文撰写及装帧规范》 原件 → 按硕/博适用性标注 → 按规范骨架撰写章节 → 格式自查 → 产出符合规范的 .docx / 标注版速查… | 毕业论文, 学位论文, 硕士论文, 撰写规范, 装帧规范, 论文格式, 封面扉页, 原创性声明 | YEL 讨论触发 |
+| 19 | cn-degree-thesis-writing | 中文学位论文（本科/硕士/博士毕业论文）撰写与「校内格式规范」合规。用于:读取学校《学位论文撰写及装帧规范》 原件 → 按硕/博适用性标注 → 按规范骨架撰写章节 → 格式自查 → 产出符合规范的 .docx / 标注版速查… | 毕业论文, 学位论文, 硕士论文, 撰写规范, 装帧规范, 论文格式, 封面扉页, 原创性声明 | YEL 讨论触发 |
 | 20 | cns-visualization | 当你需要 CNS级可视化 时触发 —— Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey | UMAP, DotPlot, 小提琴图, 火山图, 热图, Sankey, Violin, FeaturePlot, SpatialPlot | RED 必触发 |
 | 21 | competitor-agent-research | 用户问自己(MemOmics)与另一个科研/生信 AI Agent 的差距，要求从能力和架构上调研对比 | XX agent 差距, 调研一下 XX 的能力和架构, 竞品分析, biomini, Biomni, 架构双维对比。 | YEL 讨论触发 |
 | 22 | cross-species-annotation | 跨物种单细胞RNA-seq细胞类型注释方法 | cross-species-annotation, cross species annotation, cross, species, annotation | YEL 讨论触发 |
-| 23 | cross-species-atac-annotation | --- name: cross-species-atac-annotation description: > Cross-species ATAC-seq cell type annotation strategy: align fine-grained subclusters where possible… | cross, species, annotation | YEL 讨论触发 |
-| 24 | cross-species-atac-conservation | --- name: cross-species-atac-conservation description: > 纯 ATAC-seq 跨物种 CRE 保守性定量评估方法（专利方案）。 三层递进:L1 序列保守 → L2 染色质可及性保守 → L3 TF 结合动态保守。 核心创新:B 类 CRE 检出（序列+可及性保守，但 TF 足迹分歧）… | 跨物种 CRE, ATAC 保守性, CRE 可代替性, 调控元件保守性评估 | YEL 讨论触发 |
-| 25 | cross-species-cre-conservation | --- name: cross-species-cre-conservation category: GWAS/Genetics python_packages: - docx # python-docx（交底书 docx 生成/校验） - pandas - numpy - matplotlib - PIL # pillow（出图健康检测:单一颜色/空白图判定） description: > Cr… | cross, species, cre, conservation | YEL 讨论触发 |
-| 26 | cross-species-regulatory-conservation | --- name: cross-species-regulatory-conservation description: > Cross-species gene regulatory element conservation assessment (CRCA) framework… | 跨物种调控元件, CRCA, 调控保守性, B类基因, BNIP3验证, CRE保守性, TF footprinting跨物种, regulatory conservation | YEL 讨论触发 |
-| 27 | debate-core | --- name: debate-core description: >- MemOmics 辩论核心技能（P0-P3，2026-08-10；P1/P0/P2 补丁 2026-09-22）。 什么时候**不值得**辩（P1 分情况矩阵:只读/事实查询/线性执行/重复议题/活选项<2 → L0）、 何时该辩论（三级门控 L0/L1/L2 + 五类触发信号）、裁决必须能落地（P0:decision/… | debate-core, debate core, debate, core | YEL 讨论触发 |
+| 23 | cross-species-atac-annotation | Cross-species ATAC-seq cell type annotation strategy: align fine-grained subclusters where possible keep species-specific names for non-overlapping populations… | cross, species, annotation | YEL 讨论触发 |
+| 24 | cross-species-atac-conservation | 纯 ATAC-seq 跨物种 CRE 保守性定量评估方法（专利方案）。 三层递进:L1 序列保守 → L2 染色质可及性保守 → L3 TF 结合动态保守。 核心创新:B 类 CRE 检出（序列+可及性保守，但 TF 足迹分歧）。 不需要 RNA/Hi-C/ChIP——纯 ATAC 数据即可运行完整评估… | 跨物种 CRE, ATAC 保守性, CRE 可代替性, 调控元件保守性评估 | YEL 讨论触发 |
+| 25 | cross-species-cre-conservation | Cross-species CRE (cis-regulatory element) conservation assessment: five-layer pipeline (sequence → epigenetic → 3D → functional → CRECS) quantifying whether one species' regulatory elements (e.g… | cross, species, cre, conservation | YEL 讨论触发 |
+| 26 | cross-species-regulatory-conservation | Cross-species gene regulatory element conservation assessment (CRCA) framework. Five-layer evaluation: R1 sequence conservation → R2 CRE chromatin accessibility (ATAC-driven) → R3 TF binding dynamics… | 跨物种调控元件, CRCA, 调控保守性, B类基因, BNIP3验证, CRE保守性, TF footprinting跨物种, regulatory conservation | YEL 讨论触发 |
+| 27 | debate-core | 任何涉及结论/参数裁决的时刻:rail_review(post) 后、结论合成前、入库/报告前 参数候选≥2 或结果冲突/重试失败时。SOUL.md 铁律 #5 强制场景。 | debate-core, debate core, debate, core | YEL 讨论触发 |
 | 28 | deg-mixed-design | 多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis | deg-mixed-design, deg mixed design, deg, mixed, design | YEL 讨论触发 |
 | 29 | diagram-design | 示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure) | diagram-design, diagram design, diagram, design | YEL 讨论触发 |
 | 30 | dnbc4tools-analysis-workflow | 用户提到 DNBelab/dnbc4tools/华大BGI/华大基因 单细胞 RNA 或 ATAC 的比对/分析流程 | dnbc4tools, workflow | YEL 讨论触发 |
@@ -229,9 +229,9 @@
 | 33 | evo2 | OpenAI4S 移植:Score, embed, and generate DNA sequences with Evo 2, a long-... | evo2 | YEL 讨论触发 |
 | 34 | figure-designer | 用户想表达某个结论但不知怎么设计图/图被说不好看不专业/要选图型或布局建议时使用。路由纪律:本技能只输出设计建议与QC审计，绝不代替出图；用户说'画个热图/帮我出图/生成图'一律按 SOUL.md 画图 Skill 选择策略走 academic-figure-skill（专业/期刊出图默认）/ nature-figure（CNS 级）/ cns-visualization（生信快速图）/ scip… | 设计图, 图设计, 图不好看, 图不专业, 选什么图, 图型选择, 布局建议, 图布局, 作图建议, 设计一张图, figure design, design a figure, choose the right chart, plot design | RED 必触发 |
 | 35 | genui | 回答中需要结构化呈现（要点/对比/流程/状态/数据/操作）时输出 dsh-ui 围栏，webui 自动渲染。纯文字问答不需要。 | 结构化展示, 可视化呈现, UI组件, 要点卡片, dsh-ui, genui, 交互面板, 数据图表, 流程步骤展示, 状态一览, render ui, interactive ui | RED 必触发 |
-| 36 | go-enrichment-visualization | --- name: go-enrichment-visualization description: > Visualize curated GO/KEGG/pathway enrichment results (hand-picked terms with -log10(q)) as publication-grade heatmaps or dotplots for single-cell /… | enrichment, visualization | YEL 讨论触发 |
-| 37 | grill-me | --- name: grill-me description: >- 对方案/设计/计划进行连环拷问式面试（relentless interview），像苛刻的 审查者一样逐个击破漏洞，直到方案无可挑剔。源自 Reasonix grill-me 技能， 移植为 MemOmics 原生 skill… | 拷问, 挑毛病, grill, 方案打磨, 设计审查, 帮我审方案, 面试方案 | RED 必触发 |
-| 38 | gse278576-atac-aging-comparison | --- name: gse278576-atac-aging-comparison description: > GSE278576 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026; bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus… | GSE278576, 人海马ATAC, hippocampus aging ATAC, 对比流程复现 | YEL 讨论触发 |
+| 36 | go-enrichment-visualization | User has a curated enrichment table (Cluster / GO term / Log(q-value)) and wants a CNS-level enrichment heatmap or dotplot. e.g… | enrichment, visualization | YEL 讨论触发 |
+| 37 | grill-me | 方案打磨/设计审查:方案/设计/计划刚产出时、重大决策落地前 debate/rail_review 前的预检、多方案选型时。用户说"拷问一下""帮我挑毛病" "这个方案行不行"时必触发。 | 拷问, 挑毛病, grill, 方案打磨, 设计审查, 帮我审方案, 面试方案 | RED 必触发 |
+| 38 | gse278576-atac-aging-comparison | GSE278576 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026 bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus… | GSE278576, 人海马ATAC, hippocampus aging ATAC, 对比流程复现 | YEL 讨论触发 |
 | 39 | hdwgcna-official-workflow | [hdwgcna-official] 需要跑 hdWGCNA 官方完整 workflow、出官方标准图集、或遇到 hdWGCNA 加载失败/ModuleTraitCorrelation 报错/ModuleUMAPPlot future 超限/TOM 路径问题。 | hdwgcna, official, workflow | YEL 讨论触发 |
 | 40 | html-report | 当你需要 HTML报告 时触发 —— 生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好 | html-report, html report, html | YEL 讨论触发 |
 | 41 | human-skill | 用户要求对中文论文/报告做去 AI 味处理，或要求查重（重复率）、检查自我抄袭（如学位论文 vs 专利交底书同源）、投稿前 AI 痕迹自检。 | 去AI味, 去AI腔, human-skill, 查重, 重复率, 自我抄袭, AI痕迹, 像AI写的, AI腔, 降AI味 | RED 必触发 |
@@ -240,7 +240,7 @@
 | 44 | input-data-integrity-audit | 拿到任何分析输入定义文件（基因集定义、通路清单、打分矩阵、样本元数据表）准备用它做打分/富集/溯源前；或用户问「这个是不是？」「该用哪份文件」；或你发现某组条目数整齐得可疑时。 | input, integrity, audit | YEL 讨论触发 |
 | 45 | interactive-html-deliverables | 用户要一个**给人看**的交互式网页交付物（汇报、展示、介绍、看板、评审演示），而不是分析报告的结论页时。若目标是「把分析结果写成报告」→ 用 bioinformatics-html-report。 | interactive, html, deliverables | YEL 讨论触发 |
 | 46 | literature-full-summary | 文献全文思路提炼。触发场景:用户要求'总结/解读/提炼这篇文章的思路'、'这篇文章讲了什么'、文献库一键全文提炼。 | literature-full-summary, literature full summary, full, summary | YEL 讨论触发 |
-| 47 | matrix-heatmap-geometry | --- name: matrix-heatmap-geometry description: >- R 矩阵热图的几何与版式控制（base graphics / pheatmap / ComplexHeatmap / ggplot2）:按目标纸宽反解色块尺寸、 边距与画布联动、行列标签对齐、色标与分组色条的绘制顺序、可编辑矢量导出、以及「哪些行/哪根轴该上图」的口径决策… | matrix-heatmap-geometry, matrix heatmap geometry, matrix, heatmap, geometry | YEL 讨论触发 |
+| 47 | matrix-heatmap-geometry | 出或改**矩阵型热图**（基因集×亚群、基因×样本、GO 词条×亚群、效应值×亚群）并关心版式、期刊尺寸、矢量导出或口径取舍时。 纯 UMAP/Violin/DotPlot 不需要；调色板选择不需要。 | matrix-heatmap-geometry, matrix heatmap geometry, matrix, heatmap, geometry | YEL 讨论触发 |
 | 48 | mesh-decs-semantic-indexing | [MeSH/DeCS语义索引] 提取PubMed文献MeSH主要标签 / MESINESP西语文献DeCS编码 / 语义索引benchmark / 文献标引 / semantic indexing / meshMajor / decsCodes | mesh, decs, semantic, indexing | YEL 讨论触发 |
 | 49 | mesh-decs-tag-extraction | 用户给论文 title/abstract/PMID，要求输出 MeSH 主要标签 / MeSH 词 / 语义索引标签 | 语义索引, MeSH标签, MeSH主要标签, DeCS编码, meshMajor, decsCodes, benchmarker, 试卷作答 | YEL 讨论触发 |
 | 50 | mesh-semantic-indexing | User provides PMIDs (or title+abstract) and wants MeSH major topics (typically 5-10 labels/article) | mesh-semantic-indexing, mesh semantic indexing, mesh, semantic, indexing | YEL 讨论触发 |
@@ -250,7 +250,7 @@
 | 54 | metascape-gene-list-prep | 用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 Metascape 导入格式的基因列表: | metascape, 基因列表, top100, DEG转Metascape, 按亚群取基因, 合并Metascape表。 | YEL 讨论触发 |
 | 55 | mixed-design-deg | 多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor | 混合设计, 配对比较, pre, post, 重复测量, 随机效应 donor | YEL 讨论触发 |
 | 56 | molecular-cloning-design | [molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试 | molecular-cloning-design, molecular cloning design, molecular, cloning, design | YEL 讨论触发 |
-| 57 | multi-role-debate | --- name: multi-role-debate description: >- Run and troubleshoot multi-role structured LLM debates (pro 3 + con 4 + judge) for analysis conclusions and parameter choices… | multi-role-debate, multi role debate, multi, role, debate | YEL 讨论触发 |
+| 57 | multi-role-debate | 需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要 多角色裁决、用户要求"先正方再反方最后LLM判决"时。 | multi-role-debate, multi role debate, multi, role, debate | YEL 讨论触发 |
 | 58 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, 投稿配图, Nature style, 期刊, SCI figure, 发表, publication figure, SCI, paper figure, figure contract, SVG editable, TIFF 600dpi, 顶刊, Nature风格 | RED 必触发 |
 | 59 | nature-paper-card | 单篇论文深度拆解卡片:固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法） | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, 拆解这篇文献 | RED 必触发 |
 | 60 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 精读, 复现这篇, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper | RED 必触发 |
@@ -278,7 +278,7 @@
 | 82 | scgpt | OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a... | scgpt | YEL 讨论触发 |
 | 83 | scientific-figure-export | 用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。 | 图太大, 图很糊, 导出尺寸, dpi, 保存格式, PNG还是PDF, pngquant | YEL 讨论触发 |
 | 84 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
-| 85 | scrna-cns-figure-design | --- name: scrna-cns-figure-design category: bioinformatics description: >- CNS-level single-cell RNA-seq figure architecture and implementation… | scrna-cns-figure-design, scrna cns figure design, cns, design | YEL 讨论触发 |
+| 85 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns, design | YEL 讨论触发 |
 | 86 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
 | 87 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
 | 88 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |

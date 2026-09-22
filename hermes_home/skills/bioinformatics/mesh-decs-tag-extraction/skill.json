@@ -12,5 +12,15 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "语义索引",
+    "MeSH标签",
+    "MeSH主要标签",
+    "DeCS编码",
+    "meshMajor",
+    "decsCodes",
+    "benchmarker",
+    "试卷作答"
+  ],
+  "when_to_use": "用户给论文 title/abstract/PMID，要求输出 MeSH 主要标签 / MeSH 词 / 语义索引标签"
 }

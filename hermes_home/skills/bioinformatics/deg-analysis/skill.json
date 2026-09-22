@@ -276,5 +276,14 @@
       "script": "",
       "severity": "medium"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "DEG",
+    "差异分析",
+    "差异基因",
+    "deg-analysis",
+    "deg analysis",
+    "deg"
+  ],
+  "trigger_level": "RED"
 }

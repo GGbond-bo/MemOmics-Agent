@@ -107,5 +107,16 @@
   "success_count": 4,
   "user_prefs": {
     "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
-  }
+  },
+  "trigger_keywords": [
+    "UMAP",
+    "DotPlot",
+    "小提琴图",
+    "火山图",
+    "热图",
+    "Sankey",
+    "Violin",
+    "FeaturePlot"
+  ],
+  "trigger_level": "RED"
 }

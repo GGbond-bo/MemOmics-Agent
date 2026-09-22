@@ -22,6 +22,12 @@
     "referee",
     "mock peer review",
     "manuscript critique",
-    "novelty assessment"
-  ]
+    "novelty assessment",
+    "pre-submission review",
+    "manuscript review",
+    "peer review",
+    "referee report",
+    "pre-submission self-review"
+  ],
+  "when_to_use": "Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking"
 }

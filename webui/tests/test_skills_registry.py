@@ -12,9 +12,13 @@ D. 幂等：重建结果与磁盘文件逐字一致（check() 为空）
 E. 对齐：SOUL.md 必触发表里的技能必须真实存在且索引里是 RED
 F. 精度：真实用户话术命中正确的 RED skill，闲聊/无关请求零误触发
 """
+import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from collections import Counter
 
 import pytest
@@ -354,3 +358,181 @@ def test_auto_generate_skill_json_keeps_metadata_clean(entries):
     finally:
         with open(p, "wb") as f:
             f.write(backup)
+
+
+# ---------- H. frontmatter 解析 / 使用场景噪音 ----------
+# 事故（2026-09 极测发现）：SKILL.md 用 `description: >-` 这类块标量时，旧解析器只取冒号右边的
+# 字面量（`>`），描述被判成垃圾 → 使用场景退化成「首段兜底」，把 `--- name: ... category: ...`
+# 整段 frontmatter 写进索引（15 个技能中招，archr-atac-analysis / debate-core / grill-me 等）。
+
+def test_frontmatter_block_scalar_is_folded():
+    md = ("---\n"
+          "name: demo-skill\n"
+          "description: >-\n"
+          "  ArchR scATAC-seq 全流程：环境搭建 → Arrow 加载 → QC。\n"
+          "  Signac 作为备选方案。\n"
+          "tags: [a, b]\n"
+          "---\n\n"
+          "## 正文\n真正的内容。\n")
+    meta = reg._parse_frontmatter(md)
+    assert meta["name"] == "demo-skill"
+    assert meta["description"].startswith("ArchR scATAC-seq 全流程")
+    assert "Signac 作为备选方案。" in meta["description"], meta["description"]
+    assert meta["tags"] == ["a", "b"], meta["tags"]
+    usage, src = reg.extract_usage(md, meta, {}, "demo-skill")
+    assert not usage.startswith("---"), usage
+    assert "description:" not in usage, usage
+
+
+def test_frontmatter_pipe_scalar_and_unclosed_block():
+    """| 块标量同样要拼行；只有开头 `---`（未闭合）时也不能整段放弃。"""
+    closed = "---\nname: demo-pipe\ndescription: |\n  第一行说明。\n  第二行说明。\n---\n\n正文。\n"
+    assert reg._parse_frontmatter(closed)["description"] == "第一行说明。 第二行说明。"
+    unclosed = "---\nname: demo-open\ndescription: 一句话说清什么时候用这个技能。\n\n正文第一段。\n"
+    assert reg._parse_frontmatter(unclosed)["description"] == "一句话说清什么时候用这个技能。"
+
+
+def test_usage_fallback_strips_frontmatter_noise():
+    """描述彻底解析不出时，首段兜底也不能把 `---`/`key:` 行写进使用场景。"""
+    md = ("---\nname: demo3\ncategory: Whatever\npython_packages:\n  - pandas\n"
+          "description: >\n  真的描述在这里，足够长的一句话描述。\n---\n\n"
+          "正文第一段，长度足够触发兜底逻辑。\n")
+    meta = reg._parse_frontmatter(md)
+    meta.pop("description", None)          # 模拟解析失败
+    usage, src = reg.extract_usage(md, {}, meta, "demo3")
+    assert not usage.startswith("---"), usage
+    assert not reg.FM_NOISE_RE.match(usage), usage
+
+
+def test_live_usage_has_no_frontmatter_noise(entries):
+    bad = []
+    for e in entries:
+        u = (e["usage"] or "").strip()
+        if u.startswith("---") or reg.FM_NOISE_RE.match(u):
+            bad.append((e["name"], u[:60]))
+    assert not bad, "使用场景里混进了 frontmatter 噪音（SKILL.md 的 description 解析失败）: %s" % bad[:10]
+
+
+def test_live_json_when_to_use_has_no_frontmatter_noise(entries):
+    bad = []
+    for e in entries:
+        p = os.path.join(e["dir"], "skill.json")
+        try:
+            with open(p, encoding="utf-8") as f:
+                data = json.load(f) or {}
+        except (OSError, ValueError):
+            continue
+        u = str(data.get("when_to_use") or "").strip()
+        if u.startswith("---") or reg.FM_NOISE_RE.match(u):
+            bad.append((e["name"], u[:60]))
+    assert not bad, "skill.json 的 when_to_use 是 frontmatter 噪音（跑 --build 回填干净值）: %s" % bad[:10]
+
+
+# ---------- I. 索引必须能由「已提交源码」复现 ----------
+
+def _staged_text(rel_path):
+    """取暂存区（即将提交）的文件文本；未跟踪/不在暂存区返回 None。"""
+    p = subprocess.run(["git", "show", ":" + rel_path], cwd=ROOT,
+                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if p.returncode != 0:
+        return None
+    return p.stdout.decode("utf-8", "replace")
+
+
+def _derive(md_text, sj, name, section, soul_map):
+    """按 scan_skills 的口径，从「一份源码」推出 (触发级别, 使用场景, 触发词)。
+
+    刻意复刻 scan_skills 的每一步（md frontmatter → json 覆盖 → SOUL 必触发表前置词），
+    断言的是「索引真正会显示什么」，而不是「文件里有没有某个键」。
+    """
+    meta = reg._parse_frontmatter(md_text or "")
+    level, _ = reg.resolve_level(name, meta, sj, section, set(soul_map))
+    usage, _ = reg.extract_usage(md_text or "", meta, sj, name)
+    kws, _ = reg.extract_keywords(md_text or "", meta, sj, name)
+    if soul_map.get(name):
+        have = []
+        for k in list(soul_map[name]) + list(kws):
+            if k not in have:
+                have.append(k)
+        kws = have[:reg.MAX_KW]
+    return level, usage, kws
+
+
+def test_index_is_reproducible_from_committed_metadata(entries):
+    """索引行只能由「已提交的元数据」决定 —— 本地回填但没入库的字段必须清零。
+
+    事故（P0-1b / P0-1c）：索引是按工作区渲染的，而 16 个技能的 trigger_keywords /
+    when_to_use 只在本地被回填过（有的 skill.json / SKILL.md 甚至从未入 git）。
+    用 git worktree 检出同一个提交后，15 行的触发词与使用场景和工作区不同 ——
+    门禁在 checkout 里红、工作区却全绿，谁都不知道索引到底以哪份为准。
+
+    判定口径：固定用**工作区的 SKILL.md**（那是人类内容，本地改动算内容漂移不算元数据漂移），
+    只比对「工作区 skill.json」与「暂存区 skill.json」派生出的索引三要素是否一致。
+    不一致说明这份 json 元数据是索引的真凶，却没进版本库。
+    """
+    if subprocess.run(["git", "rev-parse", "--git-dir"], cwd=ROOT,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        pytest.skip("当前目录不是 git 仓库，跳过入库一致性断言")
+    soul_map = reg._read_soul_red()
+    drift, untracked = [], []
+    for e in entries:
+        sjp = os.path.join(e["dir"], "skill.json")
+        mdp = os.path.join(e["dir"], "SKILL.md")
+        sj_raw = _staged_text(os.path.relpath(sjp, ROOT).replace(os.sep, "/"))
+        if sj_raw is None:
+            untracked.append(e["name"])
+            continue
+        try:
+            sj_staged = json.loads(sj_raw) or {}
+        except ValueError:
+            drift.append((e["name"], "暂存区 skill.json 解析失败"))
+            continue
+        try:
+            with open(sjp, encoding="utf-8") as f:
+                sj_work = json.load(f) or {}
+        except (OSError, ValueError):
+            sj_work = {}
+        md_work = ""
+        if os.path.isfile(mdp):
+            with open(mdp, encoding="utf-8") as f:
+                md_work = f.read()
+        a = _derive(md_work, sj_work, e["name"], e["section"], soul_map)
+        b = _derive(md_work, sj_staged, e["name"], e["section"], soul_map)
+        bad = [k for k, x, y in zip(("level", "usage", "keywords"), a, b) if x != y]
+        if bad:
+            drift.append((e["name"], "+".join(bad)))
+    assert not untracked, "这些技能的 skill.json 还没入 git（全新 checkout 的索引会多行或少行）: %s" % untracked[:12]
+    assert not drift, (
+        "skill.json 里物化的元数据没进版本库，全新 checkout 的索引会与工作区不一致"
+        "（提交这些字段，或删掉本地回填值让索引退回 SKILL.md 口径）: %s" % drift[:12])
+
+
+# ---------- J. 注册路径写出的元数据必须干净 ----------
+
+def test_auto_generate_skill_json_parses_block_scalar():
+    """SKILL.md 用 description: >- 块标量时，生成的 skill.json 描述/使用场景不能是垃圾。
+
+    回归点：auto_register._parse_skill_md 老实现是逐行 key: value，遇到块标量只取到字面量
+    >-，缩进续行全部丢掉 —— 生成的 skill.json 里 description 就是 '>-'、when_to_use 为空，
+    随后被索引/注入读走。现在 frontmatter 解析统一走 skills_registry._parse_frontmatter。
+    """
+    import auto_register
+    md = ("---\nname: demo-block-scalar\ncategory: GWAS/Genetics\npython_packages:\n  - pandas\n"
+          "description: >-\n  ArchR scATAC-seq 全流程：环境搭建 → QC。\n  Signac 作为备选。\n"
+          "tags: [a, b]\n---\n\n## 使用场景\n需要在单细胞 ATAC 上跑完整流程时使用。\n")
+    tmp = tempfile.mkdtemp(prefix="skill-fm-")
+    try:
+        with open(os.path.join(tmp, "SKILL.md"), "w", encoding="utf-8") as f:
+            f.write(md)
+        parsed = auto_register._parse_skill_md(tmp)
+        assert parsed["description"].startswith("ArchR scATAC-seq"), \
+            "块标量描述没拼行: %r" % parsed.get("description")
+        assert auto_register.auto_generate_skill_json(tmp, force=True) is True
+        with open(os.path.join(tmp, "skill.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        desc = str(data.get("description") or "")
+        usage = str(data.get("when_to_use") or "")
+        assert desc.startswith("ArchR scATAC-seq") and "Signac" in desc, desc
+        assert usage and not reg._is_junk_usage(usage), "生成的 when_to_use 是垃圾: %r" % usage
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

@@ -12,5 +12,15 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "RED",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "心跳",
+    "监控",
+    "heartbeat",
+    "进度汇报",
+    "跑多久了",
+    "还在跑吗",
+    "heartbeat-monitor",
+    "heartbeat monitor"
+  ],
+  "when_to_use": "长任务心跳监控 — 独立后台进程持续记录进度，Agent 随时读取汇报"
 }

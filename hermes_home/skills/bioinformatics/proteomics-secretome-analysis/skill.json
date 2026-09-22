@@ -12,5 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "分泌蛋白组",
+    "secretome",
+    "条件培养基",
+    "上清蛋白",
+    "conditioned medium"
+  ],
+  "when_to_use": "conditioned medium secretome, supernatant proteomics"
 }

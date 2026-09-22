@@ -106,6 +106,12 @@ PLACEHOLDER_RE = re.compile(r"需使用\s*[^，。]{0,30}功能[，,]?\s*适用�
 JUNK_USAGE = {"", ">", ">-", "--", "n/a", "none", "todo", "-"}
 
 FM_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+# frontmatter 键名白名单：用来识别「本该解析却没解析、结果漏进使用场景」的噪音行
+FM_NOISE_RE = re.compile(
+    r"^(?:---\s*)?(?:name|description|category|tags?|triggers?|trigger_keywords|when_to_use|"
+    r"aliases?|python_packages?|version|author|license|icon|level|section|keywords?|"
+    r"display_name|name_zh)\s*:", re.I)
+FM_BLOCK_SCALARS = ("|", "|-", "|+", ">", ">-", ">+")
 USAGE_HEAD_RE = re.compile(
     r"^#{1,4}\s*(使用场景|适用场景|何时使用|什么时候用|应用场景|When to use|When To Use|Use when)\s*[:：]?\s*$",
     re.M | re.I)
@@ -126,7 +132,25 @@ def _clean(text) -> str:
 
 def _is_junk_usage(t) -> bool:
     t = _clean(t)
-    return (t.lower() in JUNK_USAGE) or len(t) < 6 or bool(PLACEHOLDER_RE.search(t))
+    return (t.lower() in JUNK_USAGE) or len(t) < 6 or t.startswith("---") \
+        or bool(FM_NOISE_RE.match(t)) or bool(PLACEHOLDER_RE.search(t))
+
+
+def _strip_fm_noise(text: str) -> str:
+    """剥掉首段里混进来的 frontmatter 残留（`---` 行、`key: value`、缩进续行、列表项）。
+
+    只在正文开始前剥：一旦读到真正的正文行就原样保留，避免误伤正文里的「Note: ...」。
+    """
+    out = []
+    for line in (text or "").split("\n"):
+        s = line.strip()
+        if not out:
+            if not s or s.startswith("---"):
+                continue
+            if FM_NOISE_RE.match(s) or re.match(r"^[-*]\s+\S", s) or line[:1] in (" ", "\t"):
+                continue
+        out.append(s)
+    return " ".join(out)
 
 
 def _clip(text, limit: int = MAX_USAGE_CHARS) -> str:
@@ -142,13 +166,32 @@ def _clip(text, limit: int = MAX_USAGE_CHARS) -> str:
 
 
 def _parse_frontmatter(md_text: str) -> dict:
-    """解析 SKILL.md 的 YAML frontmatter（不依赖 pyyaml，兼容列表与字符串）。"""
-    m = FM_RE.match(md_text or "")
-    if not m:
-        return {}
-    meta, list_key = {}, None
-    for raw in m.group(1).split("\n"):
+    """解析 SKILL.md 的 YAML frontmatter（不依赖 pyyaml，兼容列表、块标量与未闭合）。
+
+    块标量（`description: >-` / `|`）必须把后续缩进行拼进来：此前只取冒号右边的字面量，
+    `>` 会被当成描述原文并判为垃圾，使用场景随即退化成「首段兜底」，把
+    `--- name: ... category: ...` 这类 frontmatter 噪音写进索引（2026-09 实测 15 个技能中招）。
+    未闭合的 frontmatter（只有开头 `---`）也按同样口径解析，而不是整段放弃。
+    """
+    text = md_text or ""
+    m = FM_RE.match(text)
+    if m:
+        block = m.group(1)
+    else:
+        m = re.match(r"^---\s*\n(.*?)(?:\n---\s*(?:\n|$)|\n\s*\n|\n(?=#{1,6}\s)|\Z)",
+                     text, re.DOTALL)
+        if not m:
+            return {}
+        block = m.group(1)
+    meta, list_key, block_key = {}, None, None
+    for raw in block.split("\n"):
         line = raw.rstrip()
+        indented = bool(line) and line[:1] in (" ", "\t")
+        if block_key and indented:
+            meta[block_key] = (str(meta.get(block_key) or "") + " " + _clean(line.strip())).strip()
+            continue
+        if not indented:
+            block_key = None
         if not line.strip() or line.strip().startswith("#"):
             continue
         if re.match(r"^\s*[-*]\s+", line) and list_key:
@@ -161,6 +204,10 @@ def _parse_frontmatter(md_text: str) -> dict:
         key, _, val = line.partition(":")
         key, val = key.strip(), val.strip()
         list_key = key
+        if val in FM_BLOCK_SCALARS:
+            meta[key] = ""
+            block_key = key
+            continue
         if val == "":
             meta[key] = []
         elif val.startswith("[") and val.endswith("]"):
@@ -279,7 +326,7 @@ def extract_usage(md_text: str, meta: dict, sj: dict, name: str = "") -> tuple:
         if val and not _is_junk_usage(val):
             return _clip(_strip_name_prefix(val, name), 200), src
     for para in re.split(r"\n\s*\n", md_text or ""):
-        p = _clean(re.sub(r"^#{1,4}.*$", "", para, flags=re.M))
+        p = _clean(_strip_fm_noise(re.sub(r"^#{1,4}.*$", "", para, flags=re.M)))
         if len(p) >= 20:
             return _clip(_strip_name_prefix(p, name), 200), "md.首段(兜底)"
     return "", "缺失"
