@@ -9,8 +9,14 @@ pwsh scripts/gate_memory.ps1        # 只跑上下文/记忆相关用例（离�
 python -m pytest -m memory -q       # 等价：按 memory marker 全跑
 ```
 
-全量回归：`python -m pytest webui/tests -q`（唯一一间既有失败是 `test_frontend_ux::test_single_script_block`
-的 index.html 结构断言，与上下文/记忆无关，未触碰前端）。
+全量回归：`python -m pytest webui/tests -q` —— 2026-09-22 清完最后 10 条既有失败后 **1167 项全绿**（1 项 skip；
+日志里 `_schedule_self_check` 的 "coroutine was never awaited" RuntimeWarning 是既有噪声，不是失败）。
+
+那 10 条既有失败的去向（都属于"测试过期"，不是产品 bug）：
+- `test_debate_extreme` 7 条：v3 流程（赛前场景预判 + 每轮首席整理）上线后角色调用数变了，断言还停在"每轮 8 次"；
+  现按 `1 + 轮数×(辩论角色 + 1 整理 + 裁判数)` 记账，整理稿用合法 JSON fixture（重排路径另有 2 条专测）。
+- `test_frontend_ux` 2 条：index.html 拆出独立 i18n script 块（1 块 → 2 块）；"流式防跳动"注释随 2026-08-27 节流重命名消失。
+- `test_theme_backgrounds` 1 条：写死 6 个主题，第 7 个（pink）加进来后过期；现改为与 CSS 里的主题清单互校。
 
 ## 覆盖什么
 

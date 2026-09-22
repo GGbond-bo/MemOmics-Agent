@@ -75,7 +75,7 @@ def _isolate_machine_state(monkeypatch):
 
 
 def _role_reply(label, content=None):
-    """构造 8 角色 mock 回复。"""
+    """构造角色 mock 回复。"""
     content = content or f"[{label} 论点]"
     return {
         "content": content,
@@ -86,15 +86,56 @@ def _role_reply(label, content=None):
     }
 
 
-def _patch_call_role(monkeypatch, fail_labels=(), judge_content=None):
-    """monkeypatch _call_llm_role：按 label 返回，可注入失败/自定义裁判文本。"""
+# v3（2026-09-18）裁决前多了一次「首席整理编辑」调用，它要的是整理清单 JSON，不是裁决 JSON。
+# mock 必须分得清这两件事：否则整理永远解析失败、每轮白多一次「重排」调用，计数断言就把
+# fixture 的毛病当成产品行为记下来了（重排路径由 TestDigestRepair 专门覆盖）。
+_DIGEST_JSON = (
+    '{"pro_points":[{"claim":"正方主张（fixture）","evidence":"[仅是推理]",'
+    '"evidence_status":"仅推理","source_role":"pro_biology","draft_flag":false,"note":""}],'
+    '"con_points":[],"agreements":["双方认同点（fixture）"],"conflicts":[],"evidence_gaps":[],'
+    '"draft_roles":[],"summary":"整理稿（fixture）"}'
+)
+
+
+def _digest_prompt_heads():
+    """整理/重排两个官方 prompt 的「开头片段」（模板里第一个占位符之前的固定文字）。"""
+    heads = []
+    for _name in ("_JUDGE_DIGEST_PROMPT", "_JUDGE_DIGEST_REPAIR_PROMPT"):
+        head = str(getattr(da, _name, "") or "").split("{", 1)[0].strip()
+        if head:
+            heads.append(head)
+    assert heads, "整理 prompt 模板没找到，fixture 判别失效"
+    return heads
+
+
+def _is_digest_prompt(prompt):
+    """判断这次 judge 调用是不是「整理」阶段（正常整理 / 只要求格式化的重排轮）。
+
+    只认**开头**：最终裁决的 prompt 里会引用整理稿（正文含「首席整理编辑」字样），
+    按「包含」判别会把裁决调用误判成整理 → 裁决解析不到 verdict（实测 need_more_info）。
+    """
+    t = str(prompt or "").lstrip()
+    return any(t.startswith(h) for h in _digest_prompt_heads())
+
+
+def _patch_call_role(monkeypatch, fail_labels=(), judge_content=None, digest_fail=0):
+    """monkeypatch _call_llm_role：按 label 返回，可注入失败/自定义裁判文本。
+
+    digest_fail=N：让前 N 次「整理」调用返回无法解析的草稿（覆盖重排/两次都失败路径）。
+    """
     calls = []
+    _digest_seen = [0]
     def fake(label, prompt, cfg, temperature=None):
         calls.append((label, prompt, cfg))
         if label in fail_labels:
             return {**_role_reply(label), "error": True,
                     "content": f"[{label} 辩论生成失败]"}
         if label == "judge":
+            if _is_digest_prompt(prompt):
+                _digest_seen[0] += 1
+                if _digest_seen[0] <= digest_fail:
+                    return _role_reply(label, "[reasoning草稿] 我先想想……（故意不含 JSON）")
+                return _role_reply(label, _DIGEST_JSON)
             return _role_reply(label, judge_content or '{"verdict":"ok","confidence":"high","recommended_params":{},"scores":{"pro_biology":7}}')
         return _role_reply(label)
     monkeypatch.setattr(da, "_call_llm_role", fake)
@@ -125,6 +166,28 @@ def _mk_cfg(**kw):
     return cfg
 
 
+# ==================== v3 角色调用账本（2026-09-22 现状） ====================
+# 一次 L2 辩论的角色调用 = 1 次赛前场景预判（judge）
+#                        + 每轮[辩论角色 + 1 次首席整理（judge）+ judge_count 次裁判]。
+# 场景预判见 5838957f、首席整理见 3721d0e0（都写在生产流程里，测试要跟着走）。
+_CORE7_LABELS = ("pro_biology", "pro_statistics", "pro_bioinformatics",
+                 "con_biology", "con_statistics", "con_bioinformatics", "con_history")
+_CORE9_LABELS = _CORE7_LABELS + ("design_review", "reproducibility_review")
+_DEBATERS_CORE7 = len(_CORE7_LABELS)
+_DEBATERS_CORE9 = len(_CORE9_LABELS)
+_SCENARIO_CALLS = 1
+_DIGEST_CALLS_PER_ROUND = 1
+
+
+def _expected_role_calls(rounds, debaters=_DEBATERS_CORE7, judge_count=1):
+    """按 v3 流程算角色调用总数（rounds 已经是钳制后的实际轮数）。"""
+    return _SCENARIO_CALLS + rounds * (debaters + _DIGEST_CALLS_PER_ROUND + judge_count)
+
+
+def _count_label(calls, labels):
+    return len([1 for lab, _, _ in calls if lab in labels])
+
+
 # ==================== E1 输入极端 ====================
 
 class TestInputExtreme:
@@ -148,12 +211,13 @@ class TestInputExtreme:
         assert h == da._topic_hash("t", big, "f")
 
     def test_rounds_clamped_to_one_offline(self, monkeypatch, tmp_debates_dir):
-        """rounds=0 应钳制为 1 轮（8 次角色调用），不触网。"""
+        """rounds=0 应钳制为 1 轮（每个辩论角色只跑 1 次），不触网。"""
         monkeypatch.setattr(da, "_load_debate_config", lambda: _mk_cfg())
         monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
         calls = _patch_call_role(monkeypatch)
         da.debate_analysis("t", "c", rounds=0, auto_kb=False)
-        assert len(calls) == 8
+        assert _count_label(calls, _CORE7_LABELS) == _DEBATERS_CORE7
+        assert len(calls) == _expected_role_calls(1)
 
     def test_level_invalid_falls_back_l2(self, monkeypatch, tmp_debates_dir, no_keys):
         # 确保无 key -> fallback，不触网
@@ -423,7 +487,9 @@ class TestL2FlowOffline:
         assert obj["recommended_params"] == {"res": 0.8}
         assert obj["isolation_verification"]["pro_isolated"]
         assert obj["isolation_verification"]["judge_sees_all"]
-        assert len(calls) == 8
+        # v3 账本：场景预判 1 + 1 轮(7 角色 + 1 整理 + 1 裁判)；整理稿合法就不该有重排调用
+        assert len(calls) == _expected_role_calls(1)
+        assert "judge_digest" in obj and "judge_digest_error" not in obj
         # 缓存 key = fingerprint 版本
         fp = obj["debate_config"]["fingerprint"]
         assert (tmp_debates_dir / f"{da._topic_hash('t', 'c', fp)}.json").exists()
@@ -439,14 +505,16 @@ class TestL2FlowOffline:
         out, calls = self._run(monkeypatch, tmp_debates_dir, topic="", context="")
         obj = json.loads(out)
         assert obj["topic"] == ""
-        assert len(calls) == 8
+        assert len(calls) == _expected_role_calls(1)
 
     def test_rounds_loop_count(self, monkeypatch, tmp_debates_dir):
         monkeypatch.setattr(da, "_load_debate_config", lambda: _mk_cfg(rounds=3))
         monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
         calls = _patch_call_role(monkeypatch)
         da.debate_analysis("t", "c", auto_kb=False)
-        assert len(calls) == 24  # 3 轮 × 8 角色
+        # 3 轮：每个辩论角色跑 3 次 + 每轮 1 次整理 + 每轮 1 次裁判
+        assert _count_label(calls, _CORE7_LABELS) == 3 * _DEBATERS_CORE7
+        assert len(calls) == _expected_role_calls(3)
 
     def test_rounds_upper_cap_applied(self, monkeypatch, tmp_debates_dir):
         # v2 加固：rounds 受 rounds_max(默认5) 上限保护；请求 99 轮只跑 5 轮
@@ -454,7 +522,8 @@ class TestL2FlowOffline:
         monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
         calls = _patch_call_role(monkeypatch)
         da.debate_analysis("t", "c", auto_kb=False)
-        assert len(calls) == 5 * 8
+        assert _count_label(calls, _CORE7_LABELS) == 5 * _DEBATERS_CORE7
+        assert len(calls) == _expected_role_calls(5)
 
 
 # ==================== E8 门控极端 ====================
@@ -615,8 +684,11 @@ class TestV2Features:
         monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
         calls = _patch_call_role(monkeypatch)
         out = da.debate_analysis("t", "c", auto_kb=False)
-        # core9: pro3 + con4 + neutral2 + judge1 = 10 次角色调用
-        assert len(calls) == 10
+        # core9: pro3 + con4 + neutral2 = 9 个辩论角色 + 1 次正式裁判 = 10 次「角色」调用
+        # （另有 1 次赛前场景预判 + 1 次首席整理，不算角色发言）
+        assert _count_label(calls, _CORE9_LABELS) == _DEBATERS_CORE9
+        assert _count_label(calls, ("judge",)) == _SCENARIO_CALLS + _DIGEST_CALLS_PER_ROUND + 1
+        assert len(calls) == _expected_role_calls(1, debaters=_DEBATERS_CORE9)
         obj = json.loads(out)
         assert set(obj.get("neutral_reviews", {}).keys()) == {"design_review", "reproducibility_review"}
 
@@ -626,8 +698,10 @@ class TestV2Features:
         calls = _patch_call_role(monkeypatch)
         out = da.debate_analysis("t", "c", auto_kb=False)
         obj = json.loads(out)
-        # pro3 + con4 = 7 角色 + 3 裁判 = 10
-        assert len(calls) == 10
+        # pro3 + con4 = 7 个辩论角色 + 3 次裁判；judge 标识另有场景预判 1 次 + 整理 1 次
+        assert _count_label(calls, _CORE7_LABELS) == _DEBATERS_CORE7
+        assert _count_label(calls, ("judge",)) == _SCENARIO_CALLS + _DIGEST_CALLS_PER_ROUND + 3
+        assert len(calls) == _expected_role_calls(1, judge_count=3)
         assert obj["judge_consensus"]["judge_count"] == 3
         assert obj["judge_consensus"]["majority_verdict"] == "ok"
         assert obj["judge_consensus"]["agreement"] == 1.0
@@ -955,4 +1029,38 @@ class TestCurrentModelRouting:
             "api_key": "sk-b", "model": "m-b"})
         f2 = da._debate_fingerprint("homogeneous", 1, {}, {})
         assert f1 != f2 and "cur=" in f2
+
+
+# ==================== E10 v3 整理阶段重排路径（2026-09-22 补测） ====================
+
+class TestDigestRepair:
+    """首席整理编辑（judge_digest）的两次调用：
+
+    第一次不是 JSON → 自动重排一次（只要求格式化）；两次都失败 → 留痕但不废掉整场辩论。
+    这条路径原来只被「mock 对 judge 一律回裁决 JSON」的旧 fixture 意外踩到，没有断言。
+    """
+
+    def _run(self, monkeypatch, tmp_debates_dir, digest_fail):
+        monkeypatch.setattr(da, "_load_debate_config", lambda: _mk_cfg())
+        monkeypatch.setattr(da, "_load_provider_keys", lambda: {"deepseek": {"api_key": "k", "base_url": "https://x/v1"}})
+        monkeypatch.setattr(da, "_reflow_verdict", lambda r: None)
+        calls = _patch_call_role(monkeypatch, digest_fail=digest_fail)
+        out = da.debate_analysis("t", "c", auto_kb=False)
+        return json.loads(out), calls
+
+    def test_repair_call_used_when_digest_not_json(self, monkeypatch, tmp_debates_dir):
+        obj, calls = self._run(monkeypatch, tmp_debates_dir, digest_fail=1)
+        assert obj["judge_digest_repaired"] is True
+        assert "第一次" in obj["judge_digest_note"]
+        assert obj["judge_digest"]["summary"].startswith("整理稿")
+        # 重排就是多出来的那一次 judge 调用
+        assert len(calls) == _expected_role_calls(1) + 1
+
+    def test_digest_double_failure_keeps_verdict(self, monkeypatch, tmp_debates_dir):
+        obj, calls = self._run(monkeypatch, tmp_debates_dir, digest_fail=2)
+        assert obj["verdict"] == "ok"                  # 整理失败不废掉整场辩论
+        assert "两次都没有给出 JSON" in obj["judge_digest_error"]
+        assert "judge_digest" not in obj               # 没整理稿就不写这个字段
+        assert len(calls) == _expected_role_calls(1) + 1
+
 

@@ -36,7 +36,15 @@ class TestThemeColors:
         assert m, "THEME_PRESETS not found"
         ids = re.findall(r"id:'([a-z]+)'", m.group(1))
         assert set(NEW_THEMES) <= set(ids)
-        assert len(ids) == 6, "expected 6 themes, got %d" % len(ids)
+        # 主题清单以 CSS 为准（light 是 :root 默认，没有独立 [data-theme] 块）：
+        # 每个有样式的主题都必须有对应预设，预设也不许多出没有样式的 id。
+        # 原来这里写死 6，2026-09 加了第 7 个主题（pink）就过期了。
+        css_themes = set(re.findall(r'\[data-theme="([a-z]+)"\]', src)) | {"light"}
+        assert css_themes == set(ids), (
+            "CSS 主题 %s 与 THEME_PRESETS %s 不一致（加主题时两处都要改）"
+            % (sorted(css_themes), sorted(ids))
+        )
+        assert len(ids) == len(set(ids)), "THEME_PRESETS 有重复 id"
 
     def test_parchment_has_texture_only(self):
         """羊皮纸有质感层；其他主题无背景层；无粒子/装饰/角标。"""

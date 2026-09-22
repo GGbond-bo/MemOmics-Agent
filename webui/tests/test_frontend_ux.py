@@ -261,10 +261,20 @@ class TestGotoBottom:
 
 # ---------------------------------------------------------------- 场景10：脚本结构完整性
 class TestScriptIntegrity:
-    """多角度：单 script 块、关键函数不缺失、无残留旧函数"""
+    """多角度：内联 script 块结构、关键函数不缺失、无残留旧函数"""
 
-    def test_single_script_block(self):
-        assert len(_script_blocks()) == 1
+    def test_inline_script_blocks(self):
+        """内联 script 结构（2026-09-22 现状）：i18n 字典块 + 主应用块，共 2 块。
+
+        原来整页只有 1 个 script 块，P5 界面双语把 i18n 拆成了独立块（14KB），
+        主块 470KB。这里守的是「只有这两块、没有重复注入/残留的空块」，
+        块数变了必须同步改这个用例（别再让"既有失败"挂着）。
+        """
+        blocks = _script_blocks()
+        assert len(blocks) == 2, "内联 script 块数变了：%d" % len(blocks)
+        assert not any(not b.strip() for b in blocks), "存在空 script 块"
+        assert any("var I18N = {" in b for b in blocks), "i18n 块丢了"
+        assert any("let currentSid = null;" in b for b in blocks), "主应用块丢了"
 
     def test_removed_old_min_48(self):
         # 旧 min=48 逻辑已移除
@@ -277,7 +287,8 @@ class TestScriptIntegrity:
         assert HTML.count("function setFloatBar") == 1
 
     def test_modified_segments_balanced(self):
-        # 本次改造的 4 个代码区块必须括号配平（字符串/注释已剥离，区块内无正则量词）
+        # 3 个核心交互区块必须括号配平（字符串/注释已剥离，区块内无正则量词）。
+        # 标记随代码重构会改名：找不到标记说明这里过期了，按现状更新（不是"既有失败"）。
         def seg(start, end):
             i = HTML.find(start)
             assert i != -1, "marker not found: %s" % start
@@ -288,8 +299,9 @@ class TestScriptIntegrity:
         segments = [
             # 区块1：grip 拖拽 IIFE
             ("// === 输入框拖拽拉伸（2026-08-11", "})();"),
-            # 区块2：流式 delta 防跳动
-            ("// 防跳动：用户在上方阅读时", "} else { scrollBottom(); }"),
+            # 区块2：流式渲染节流 + 阅读锚点补偿（2026-08-27 重构；旧的
+            #        「// 防跳动：用户在上方阅读时」注释已随重命名消失）
+            ("// === 流式渲染节流（2026-08-27", "}, 150);\n}"),
             # 区块3：智能滚动 + 回到底部浮条
             ("// 智能滚动：用户离开底部阅读时", "m.scrollTop = m.scrollHeight;\n}"),
         ]
