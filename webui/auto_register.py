@@ -20,6 +20,19 @@ def init(skills_dir: str, index_path: str, soul_path: str):
     SOUL_PATH = soul_path
 
 
+def _registry():
+    """按需导入 skills_registry（server.py 以 webui/ 为 sys.path，包方式则 from webui）。"""
+    try:
+        import skills_registry  # noqa: PLC0415 — 延迟导入，避免与 server.py 的 sys.path 顺序打架
+        return skills_registry
+    except Exception:
+        try:
+            from webui import skills_registry  # noqa: PLC0415
+            return skills_registry
+        except Exception:
+            return None
+
+
 def _parse_skill_md(skill_dir: str) -> dict:
     """从 SKILL.md frontmatter 提取元数据"""
     md_path = os.path.join(skill_dir, "SKILL.md")
@@ -155,23 +168,64 @@ def auto_generate_skill_json(skill_dir: str, force: bool = False) -> bool:
         "trigger_level": meta.get('trigger_level', 'YEL'),
         "trigger_keywords": meta.get('trigger_keywords', []),
     }
+    # 从 SKILL.md 搬来的触发词/使用场景可能是长句、逗号粘连、分类水词，
+    # 一律先过 skills_registry.normalize_meta()，保证写出来的 skill.json 与索引同一口径。
+    reg = _registry()
+    if reg is not None:
+        old = {}
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    old = json.load(f) or {}
+            except (OSError, ValueError):
+                old = {}
+        try:
+            data = reg.normalize_meta(meta['id'], data, existing=old)
+        except TypeError:   # 老版本 skills_registry 没有 existing 形参
+            data = reg.normalize_meta(meta['id'], data)
+        except Exception as e:  # noqa: BLE001 — 规范化失败也要能落盘
+            print(f"[auto-register] normalize_meta failed ({e}); write raw metadata")
     
-    with open(json_path, 'w', encoding='utf-8') as f:
+    with open(json_path, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"[auto-register] Generated skill.json for {meta['id']}")
     return True
 
 
 def auto_register_to_index(skill_dir: str) -> bool:
-    """自动添加到 SKILLS_INDEX.md"""
+    """自动添加到 SKILLS_INDEX.md
+
+    2026-09-23 起改为「整表重建」（webui/skills_registry.py）：旧实现只会在表尾追加
+    一行，且表头 5 列 / 追加行 4 列导致错列，触发词回退成分类水词（rna, scrna…），
+    355 个技能里有 82 个始终没有索引行。重建后索引 = 磁盘全量技能，新技能自动出现。
+    下面的老追加逻辑保留为兜底（重建失败时才走）。
+    """
     meta = _parse_skill_md(skill_dir)
-    skill_name = meta['id']
-    
+    skill_name = meta.get('id') or os.path.basename(str(skill_dir).rstrip('/\\'))
+    try:
+        try:
+            import skills_registry  # server.py 以 webui/ 为 sys.path 时
+        except Exception:
+            from webui import skills_registry  # 包方式导入
+        index_path = SKILLS_INDEX_PATH or skills_registry.INDEX_PATH
+        with open(index_path, 'r', encoding='utf-8') as f:
+            # 新索引是 5 列编号行（| 12 | skill | ... |），老判定 | name | 匹配不到
+            existed = bool(re.search(r'\|\s*(?:\d+\s*\|\s*)?' + re.escape(skill_name) + r'\s*\|', f.read()))
+        skills_registry.build(write=True)
+        print(f"[auto-register] Rebuilt SKILLS_INDEX.md "
+              f"({'added' if not existed else 'refreshed'}: {skill_name})")
+        return not existed
+    except Exception as e:  # noqa: BLE001 — 兜底走老逻辑
+        print(f"[auto-register] skills_registry rebuild unavailable ({e}); falling back to append")
+
+    if not SKILLS_INDEX_PATH:
+        print("[auto-register] SKILLS_INDEX_PATH 未初始化（未调用 init()），跳过索引注册")
+        return False
     with open(SKILLS_INDEX_PATH, 'r', encoding='utf-8') as f:
         index = f.read()
     
     # Already registered?
-    if f'| {skill_name} |' in index:
+    if re.search(r'\|\s*(?:\d+\s*\|\s*)?' + re.escape(skill_name) + r'\s*\|', index):
         return False
     
     # Determine category section
@@ -315,86 +369,30 @@ def register_skill(skill_dir: str,
 
 
 def rebuild_index_descriptions() -> dict:
-    """修复 SKILLS_INDEX.md 中描述为空的历史条目（只追加不更新导致）。
+    """重建 SKILLS_INDEX.md —— 统一委托 skills_registry，索引只有一个生成口径。
 
-    遍历 bioinformatics 下所有 skill 目录，重新解析 SKILL.md frontmatter，
-    把索引行里 Description / Keywords 为空的单元格补全。
-    不动已有内容的单元格（保留手工优化），不动 trigger_level。
+    历史实现是「就地补格」：重新解析 SKILL.md frontmatter，当索引单元格里的词数少于
+    SKILL.md 里的 trigger_keywords 时，用**原始列表**整格覆盖写入，而且是默认文本模式
+    （Windows 下变 CRLF）。实测后果：5 行被写成逗号粘连的长句（academic-paper-reviewer
+    一格 19 个词：帮我审一下, 审一下这篇, ... review this, review the），全文 58802 字节，
+    每次服务启动都会重犯 —— 这正是「注册触发场景没写好」的现场之一。
+
+    现在整表交给 skills_registry.build()：触发词清洗 + 限长 + 等级与 SOUL 必触发表对齐后再
+    渲染。返回键（ok / filled_desc / filled_keywords）保持不变，供启动日志继续使用。
     """
     if not SKILLS_BIO_DIR:
         return {"ok": False, "error": "not initialized"}
-
-    with open(SKILLS_INDEX_PATH, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-
-    filled_desc, filled_kw = 0, 0
-    for d in sorted(os.listdir(SKILLS_BIO_DIR)):
-        full = os.path.join(SKILLS_BIO_DIR, d)
-        if not os.path.isdir(full) or d.startswith('.') or d.startswith('_'):
-            continue
-        md = os.path.join(full, "SKILL.md")
-        if not os.path.exists(md):
-            continue
-        meta = _parse_skill_md(full)
-        desc = str(meta.get('description', '') or '')[:100]
-        if not desc:
-            # 兜底：从 when_to_use 提取（去掉 "[skillname] " 前缀）
-            wtu = str(meta.get('when_to_use', '') or '').strip()
-            if wtu:
-                if wtu.startswith('['):
-                    wtu = wtu.split(']', 1)[-1].strip()
-                desc = wtu[:100]
-        tks = meta.get('trigger_keywords', []) or []
-        tags = meta.get('tags', []) or []
-        if not desc and not tks:
-            continue  # 本身没有可补内容
-
-        # tags 兜底泛词（rna, scrna, scrnaseq 等）对触发识别无用；
-        # SKILL.md 有真实 trigger_keywords 时用真词覆盖
-        tag_fallback = ', '.join(tags[:10])
-
-        for i, line in enumerate(lines):
-            if not line.startswith('|') or line.startswith('| #') or line.startswith('|---'):
-                continue
-            cells = line.split('|')
-            # 两种行格式兼容（split 后首尾是空串，序号列在 cells[1]）：
-            #   老格式: | N | name | desc | keywords | trigger |   → cells[1] 数字
-            #   新格式: | name | desc | keywords | trigger |        → cells[1] 是名字
-            if len(cells) < 5:
-                continue
-            if cells[1].strip().isdigit():
-                # 老格式: | N | name | desc | kw | trigger |
-                if len(cells) < 7:
-                    continue
-                name_col, desc_col, kw_col = 2, 3, 4
-            else:
-                # 新格式: | name | desc | kw | trigger |
-                name_col, desc_col, kw_col = 1, 2, 3
-            name = cells[name_col].strip()
-            if name != d:
-                continue
-            updated = False
-            if not cells[desc_col].strip() and desc:
-                cells[desc_col] = f' {desc} '
-                filled_desc += 1
-                updated = True
-            cur_kw = cells[kw_col].strip()
-            if tks:
-                want_kw = ', '.join(tks)
-                cur_kw_n = len([k for k in cur_kw.split(',') if k.strip()]) if cur_kw else 0
-                # 覆盖条件：当前列为空 / 是 tags 兜底泛词 / 词数少于 SKILL.md 真触发词
-                # （历史条目多为 [:5] 截断或 tags 兜底，需升级为完整 trigger_keywords）
-                if not cur_kw or cur_kw == tag_fallback or cur_kw_n < len(tks):
-                    cells[kw_col] = f' {want_kw} '
-                    filled_kw += 1
-                    updated = True
-            if updated:
-                lines[i] = '|'.join(cells)
-
-    with open(SKILLS_INDEX_PATH, 'w', encoding='utf-8') as f:
-        f.writelines(lines)
-    print(f"[auto-register] Index rebuild: filled {filled_desc} descriptions, {filled_kw} keyword cells", flush=True)
-    return {"ok": True, "filled_desc": filled_desc, "filled_keywords": filled_kw}
+    reg = _registry()
+    if reg is None:
+        return {"ok": False, "error": "skills_registry unavailable"}
+    try:
+        info = reg.build(write=True)
+    except Exception as e:  # noqa: BLE001 — 启动期索引重建失败不能拖垮服务
+        print(f"[auto-register] index rebuild failed: {e}", flush=True)
+        return {"ok": False, "error": str(e)}
+    rows = int(info.get("total") or 0)
+    print(f"[auto-register] Index rebuilt via skills_registry: {rows} rows", flush=True)
+    return {"ok": True, "filled_desc": 0, "filled_keywords": 0, "rows": rows}
 
 
 def scan_and_register_all():

@@ -163,8 +163,7 @@ class TestDistractorNoFalseTrigger:
         idx = _index_text()
         for name in NEW_SKILLS:
             row = _skill_row(idx, name)
-            cells = row.split("|")
-            trigger_cell = cells[-2] if "RED" in cells[-2] else cells[-3]
+            _desc, trigger_cell, _lv = _skill_cells(row)
             kws = [k.strip().lower() for k in trigger_cell.split(",") if k.strip()]
             hit = [k for k in kws if k and k in utterance.lower()]
             assert not hit, f"干扰项「{utterance}」误命中 {name} 触发词 {hit}"
