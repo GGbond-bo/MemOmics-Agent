@@ -3427,12 +3427,20 @@ def _zh_sentence_payload(en: str, zh: str, anchor: dict, idx, zh_heads: set) -> 
     pairs = _align_sentence_pairs(clean_en, sents_en, zh, sents_zh)
     units = (anchor or {}).get("units") or []
     out = []
+    # 区间必须首尾相接：_sentence_ranges 会裁掉句首尾空白，句间残留（如参考文献编号
+    # "1."）若不并入下一句就会在渲染时凭空消失（实测 47 个编号被吞）。
+    cursor = 0
     for k, (s, e) in enumerate(sents_zh):
-        if _zh_head_only(zh[s:e], zh_heads):
+        kind = _zh_head_kind(zh[s:e], zh_heads)
+        if kind == "head":
+            cursor = e                      # 页眉整句丢弃，连它前面的间隙一起丢
             continue
+        if kind == "num":
+            continue                        # 编号不单独成句，字符留给下一句（cursor 不动）
         u = pairs[k] if k < len(pairs) else -1
         unit = units[u] if 0 <= u < len(units) else None
-        item = {"o": [s, e], "u": u}
+        item = {"o": [cursor, e], "u": u}
+        cursor = e
         if unit is None or not unit.get("r") or unit.get("w"):
             item["w"] = 1
         out.append(item)
@@ -3455,21 +3463,33 @@ def _zh_running_keys(zh_text: str) -> set:
     return {k for k, v in cnt.items() if v >= 3}
 
 
-def _zh_head_only(seg: str, keys: set) -> bool:
-    """该句是否只是重复出现的运行页眉/页脚 → 不渲染、不参与配对。
+def _zh_head_kind(seg: str, keys: set) -> str:
+    """该片段是"页眉/散文"里的哪一种 → 'head' | 'num' | ''。
 
-    只认"重复出现"的整行（>=3 次）：参考文献条目等唯一内容一律保留。
+    'head'：重复出现的运行页眉/页脚（>=3 次相同整行）→ 整句丢弃。
+    'num'：纯编号/分隔片段（"48."、"1."）→ 不单独成句，但字符必须并入下一句，
+           否则渲染时参考文献编号会凭空消失（实测 47 个编号被吞）。
     """
     t = (seg or "").strip()
     if not t:
-        return True
+        return "head"
     key = _ZH_HEAD_NUM_RE.sub("#", " ".join(t.split()).lower())
     if key in keys:
-        return True
-    return re.fullmatch(r"[\s\d|.–—]+", t) is not None   # 纯页码/分隔行
+        return "head"
+    if re.fullmatch(r"[\s\d|.–—]+", t):
+        return "num"
+    return ""
+
+
+def _zh_head_only(seg: str, keys: set) -> bool:
+    """兼容旧调用：是否整句丢弃（页眉或纯空片段）。"""
+    return _zh_head_kind(seg, keys) == "head"
 
 
 _BILINGUAL_SCHEMA = 3  # 模块结构版本（变动时自动重建缓存；批Q 句级锚定 + 中英句对）
+# 锚定引擎版本：算法改动必须 +1，否则老缓存（算法旧、结果差）会一直生效，
+# 用户看到的就是"改了没效果"（本文件曾因此连踩两次）。
+_ANCHOR_ENGINE = "q3"
 
 
 def _anchor_cache_path(stem: str) -> str:
@@ -3486,7 +3506,8 @@ def _anchor_cache_ok(stem: str, md_path: str, zh_path: str) -> bool:
             data = json.load(f)
     except Exception:
         return False
-    if not data.get("paras") or data.get("_schema") != _BILINGUAL_SCHEMA:
+    if (not data.get("paras") or data.get("_schema") != _BILINGUAL_SCHEMA
+            or data.get("_engine") != _ANCHOR_ENGINE):
         return False
     mt = os.path.getmtime(p)
     for src in (md_path, zh_path):
@@ -3545,6 +3566,7 @@ def build_anchor_map(pdf_path: str, md_path: str, stem: str = "",
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump({"ok": True, "_schema": _BILINGUAL_SCHEMA, "stem": stem,
+                           "_engine": _ANCHOR_ENGINE,
                            "blocks": len(blocks), "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                            "paras": paras}, f, ensure_ascii=False)
         except Exception as e:
@@ -3588,7 +3610,8 @@ def build_bilingual(file_or_title: str, rebuild: bool = False, progress_cb=None)
                     _cached = f.read()
                 try:
                     _cj = json.loads(_cached)
-                    if _cj.get("_schema") == _BILINGUAL_SCHEMA:
+                    if (_cj.get("_schema") == _BILINGUAL_SCHEMA
+                            and _cj.get("_engine") == _ANCHOR_ENGINE):
                         return _cached
                 except Exception:
                     pass
@@ -3689,7 +3712,7 @@ def build_bilingual(file_or_title: str, rebuild: bool = False, progress_cb=None)
         "ok": True, "file": hit.get("file"), "stem": stem,
         "title": hit.get("title") or "", "pages": len(pages_text),
         "has_zh": bool(blocks_zh), "toc_source": toc_source,
-        "_schema": _BILINGUAL_SCHEMA,
+        "_schema": _BILINGUAL_SCHEMA, "_engine": _ANCHOR_ENGINE,
         "modules": modules,
         "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；"
                 "点译文任意一句即框出对应原文（句级对齐），点原文页可回定位译文。",

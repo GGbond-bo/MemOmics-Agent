@@ -679,6 +679,29 @@ class TestFrontendSentenceAlign:
         assert "zs[k].o" in HTML or "zs[k].o[" in HTML
 
 
+
+class TestFrontendSentenceBehavior:
+    """批Q：逐句渲染/定位的真实行为测试。
+
+    不是字符串断言——真的把 index.html 里的前端函数抽出来，在桩 DOM 上跑，
+    验证"点第 N 句 → 只画第 N 句的框""再点取消""跨段导航""存疑句虚线"等行为。
+    """
+
+    def test_frontend_harness_passes(self):
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            pytest.skip("node 不可用")
+        harness = os.path.join(TESTS_DIR, "lit_bilingual_frontend.cjs")
+        env = dict(os.environ, LIT_INDEX_HTML=HTML_PATH)
+        r = subprocess.run([node, harness], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=env, timeout=120)
+        out = (r.stdout or "") + (r.stderr or "")
+        assert "0 fail" in out, out[-2000:]
+        assert r.returncode == 0, out[-2000:]
+
+
 class TestFrontendLitWorkbench:
     def test_new_tabs_exist(self):
         assert 'id="lit-tab-cmp"' in HTML and 'id="lit-tab-know"' in HTML

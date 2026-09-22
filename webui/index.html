@@ -8118,8 +8118,8 @@ function litBiGoSent(mi, pj, si) {
     if (!rects.length && pp.rect) rects.push({ p: pp.page, r: pp.rect, w: 1 });
   }
   var label = litBiSentLabel(pp, si);
-  var cur = document.querySelector('.lit-sent.cur');
-  var same = cur && cur.getAttribute('data-mi') === String(mi) && cur.getAttribute('data-pj') === String(pj) && cur.getAttribute('data-si') === String(si);
+  // 以自身状态判断"再点同一句 → 取消"：比从 DOM 反查属性稳（属性缺失/重渲染都不误判）
+  var same = !!_litBiSent && _litBiSent[0] === mi && _litBiSent[1] === pj && _litBiSent[2] === si;
   document.querySelectorAll('.lit-sent.cur').forEach(function(el) { el.classList.remove('cur'); });
   if (same) { litBiClearHl(); return; }
   var el = document.querySelector('.lit-sent[data-mi="' + mi + '"][data-pj="' + pj + '"][data-si="' + si + '"]');
