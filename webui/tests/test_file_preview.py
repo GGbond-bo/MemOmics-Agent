@@ -691,3 +691,71 @@ def test_figures_newest_first_by_default(client, res_dir):
     assert [f["name"] for f in j["figures"]] == ["f_new.png", "f_mid.png", "f_old.png"]
     j2 = client.get("/api/results/" + sid + "/figures", params={"sort": "time_asc"}).json()
     assert [f["name"] for f in j2["figures"]] == ["f_old.png", "f_mid.png", "f_new.png"]
+
+
+# ==================== F. P7：运行中结果面板不被后台刷新抢走 ====================
+
+def _p7_html():
+    with io.open(os.path.join(server.MEMOMICS_DIR, "webui", "index.html"), encoding="utf-8") as f:
+        return f.read()
+
+
+def _p7_func(html, name):
+    """取顶层 function name(...) {...} 的源码（到下一条顶层 function 为止）。
+
+    只做静态断言用；运行期行为由 E2E（真实 Chromium）验证。
+    """
+    i = html.find("function " + name + "(")
+    assert i > 0, name + " not found"
+    j = html.find("\nfunction ", i + 1)
+    return html[i:j if j > 0 else len(html)]
+
+
+def test_p7_results_tab_follows_user_pick():
+    """运行中面板每 5 秒自动刷一次：用户点过的标签不许被刷回另一个标签。
+
+    事故：点「图片」→ 下一次刷新（没图只有文件）自动切回「文件」。
+    """
+    import re
+    html = _p7_html()
+    body = _p7_func(html, "refreshResults")
+    assert "_resultsTabPick" in body, "refreshResults 必须尊重用户选过的标签"
+    assert body.index("if (_picked)") < body.index("else if (resultsTab === 'figures'"), \
+        "自动选标签只能作为「用户没选过」的兜底"
+    sw = _p7_func(html, "switchResultsTab")
+    assert "userPicked" in sw and "_resultsTabPick = { sid: currentSid, tab: tab }" in sw
+    # 关键：只有真的换标签才关查看器（原来每次刷新都把用户正在看的文件关掉）
+    assert "if (tab !== resultsTab && _rvIsOpen()) closeFileViewer();" in sw
+    assert not re.search(r"^\s*if \(_rvIsOpen\(\)\) closeFileViewer\(\);", sw, re.M), \
+        "不许再无条件 closeFileViewer()"
+    # 标签按钮必须把「这是用户点的」传进去
+    assert "switchResultsTab('figures', true)" in html and "switchResultsTab('files', true)" in html
+
+
+def test_p7_new_figure_does_not_steal_panel():
+    """运行中新出图：用户正在看文件时不许被大图抢屏，只在「图片」标签点个红点。"""
+    html = _p7_html()
+    body = _p7_func(html, "handleNewFigure")
+    assert "resultsTab === 'figures'" in body and "_rvIsOpen()" in body
+    assert "_markNewFigure()" in body, "不抢屏时必须有提示点，否则用户不知道出了新图"
+    assert body.index("if (_panelVisible") < body.index("showFigurePreview(fig.url, fig.name)"), \
+        "showFigurePreview 不许无条件调用"
+
+
+def test_p7_session_switch_resets_panels():
+    """换会话：上一会话的文件查看器和大图预览区都不能留在面板上。"""
+    html = _p7_html()
+    body = _p7_func(html, "switchSession")
+    assert "closeFileViewer()" in body
+    assert "getElementById('figure-preview-area')" in body
+    assert "_clearNewFigureMark()" in body
+
+
+def test_p7_new_figure_badge_survives_language_switch():
+    """红点用 CSS 伪元素画：applyUILang() 会重写标签 textContent，子节点角标会被抹掉。"""
+    html = _p7_html()
+    assert "#tab-figures.tab-has-new::after" in html
+    mark = _p7_func(html, "_markNewFigure")
+    assert "classList.add('tab-has-new')" in mark
+    assert "appendChild" not in mark, "角标不能是子节点"
+    assert "_p7OnLangChange" in _p7_func(html, "applyUILang"), "切语言要重写红点的 title"

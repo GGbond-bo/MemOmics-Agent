@@ -736,6 +736,9 @@ table.dcb-table.dg-table th { position:relative; }
    这样面板顶部的 面包屑/标签栏/排序条 依然可见可点，不用先关预览。 */
 #panel-results.rv-open #results-figures, #panel-results.rv-open #results-list, #panel-results.rv-open #figure-preview-area { display:none !important; }
 #panel-files.rv-open #file-list, #panel-files.rv-open #file-preview { display:none !important; }
+/* 2026-09-22(P7)：新图不抢屏时在「图片」标签后面点个红点。用伪元素画 ——
+   applyUILang() 会重写标签的 textContent，子节点式的角标会被一起抹掉。 */
+#tab-figures.tab-has-new::after { content: ' \25cf'; color:#ff5c5c; font-size:10px; }
 .rv-bar { display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); background:var(--bg); flex-wrap:wrap; }
 .rv-name { font-size:12px; font-weight:600; color:var(--text); max-width:42%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rv-meta { font-size:10px; color:var(--text-light); }
@@ -1213,7 +1216,8 @@ var I18N = {
     'af_ans_re':'针对「{0}」：',
     'af_ans_sel':'选中：',
     'af_ans_note':'补充：',
-    'af_ans_sep':'；'
+    'af_ans_sep':'；',
+    'rs_new_fig':'🆕 有新图片'
   },
   en: {
     'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
@@ -1287,7 +1291,8 @@ var I18N = {
     'af_ans_re':'Re: "{0}"',
     'af_ans_sel':'Selected: ',
     'af_ans_note':'Note: ',
-    'af_ans_sep':'; '
+    'af_ans_sep':'; ',
+  'rs_new_fig':'🆕 New image'
   }
 };
 var UI_LANG = 'zh';
@@ -1307,6 +1312,7 @@ function applyUILang(){
   //（后端返回的 note/error/hint 也带 lang 重取，所以英文界面里不会残留中文）
   if (typeof _p5OnLangChange === 'function') { try { _p5OnLangChange(); } catch (e) {} }
   if (typeof _p3OnLangChange === 'function') { try { _p3OnLangChange(); } catch (e) {} }
+  if (typeof _p7OnLangChange === 'function') { try { _p7OnLangChange(); } catch (e) {} }
   // P6-2：把界面语言告诉后端 —— 后端自己生成、直接显示在界面上的文案（确认弹窗等）也要跟着切
   try {
     fetch('/api/ui/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1439,8 +1445,8 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div id="figure-preview-area" style="display:none;"></div>
       <!-- 分类标签 -->
       <div id="results-tabs" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;">
-        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures')" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;" data-i18n="tab_figures">🖼️ 图片</span>
-        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files')" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);" data-i18n="tab_files">📁 文件</span>
+        <span id="tab-figures" class="results-tab active" onclick="switchResultsTab('figures', true)" style="cursor:pointer;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;" data-i18n="tab_figures">🖼️ 图片</span>
+        <span id="tab-files" class="results-tab" onclick="switchResultsTab('files', true)" style="cursor:pointer;padding:2px 10px;margin-left:4px;color:var(--text-light);" data-i18n="tab_files">📁 文件</span>
       </div>
       <!-- 排序条（P5 2026-09-22）：默认「最新在上」——用户要求最新出的文件排最上面 -->
       <div id="results-sortbar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);align-items:center;gap:6px;">
@@ -1824,6 +1830,9 @@ const _introLines = [
 ];
 let currentPath = { files: '', kb: '', results: '' };
 var resultsTab = 'figures';
+// 2026-09-22(P7)：用户手动点过的标签按会话记下来。运行中结果面板每 5 秒自动刷一次，
+// 原来每次刷新都重算标签（没图片就强制切回「文件」）→ 用户点的「图片」被抢走。
+var _resultsTabPick = { sid: '', tab: '' };
 let models = [];
 let currentModel = {};
 let progressTimelineEl = null;
@@ -6001,6 +6010,14 @@ function switchSession(sid) {
   document.getElementById('todo-list').innerHTML = '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>';
   document.getElementById('results-figures').innerHTML = '';
   document.getElementById('results-list').innerHTML = '';
+  // 2026-09-22(P7)：换会话时关掉上一会话的文件查看器 + 清掉大图预览区
+  // （原来大图预览区跨会话残留：切到别的会话，面板顶上还挂着上一个会话的图）
+  try { if (_rvIsOpen()) closeFileViewer(); } catch (e) {}
+  try {
+    var _fpa = document.getElementById('figure-preview-area');
+    if (_fpa) { _fpa.style.display = 'none'; _fpa.innerHTML = ''; }
+    _clearNewFigureMark();
+  } catch (e) {}
 
   // === 恢复新会话的渲染状态 ===
   var cached = _ensureSessionRenderCache(sid);
@@ -9899,7 +9916,12 @@ async function refreshResults() {
   var filePromise = loadResultsFiles();
   await Promise.all([figPromise, filePromise]);
   // 自动选标签：有文件没有图片 → 切到文件标签；否则保持用户上次选择或默认图片
-  if (resultsTab === 'figures' && !_lastFiguresCount && _lastFilesCount) {
+  // 2026-09-22(P7)：本会话用户手动点过标签 → 一律听用户的，后台刷新不许改
+  // （用户原话：点击图片栏，又跳回文件栏）
+  var _picked = (_resultsTabPick.sid && _resultsTabPick.sid === currentSid) ? _resultsTabPick.tab : '';
+  if (_picked) {
+    resultsTab = _picked;
+  } else if (resultsTab === 'figures' && !_lastFiguresCount && _lastFilesCount) {
     resultsTab = 'files';
   }
   switchResultsTab(resultsTab);
@@ -10008,9 +10030,13 @@ async function loadResultsFiles() {
   listEl.scrollTop = st;
 }
 
-function switchResultsTab(tab) {
-  // 2026-09-22(P5)：查看器是整面板覆盖层，切标签/换视图时先关掉，免得挡住标签栏
-  if (_rvIsOpen()) closeFileViewer();
+function switchResultsTab(tab, userPicked) {
+  // 2026-09-22(P7)：userPicked=true 表示这是用户点标签（记下来，后台刷新不再覆盖）
+  if (userPicked && currentSid) _resultsTabPick = { sid: currentSid, tab: tab };
+  // 只在「真的换标签」时才关查看器。刷新链路会反复调用本函数（把 tab 原样传进来），
+  // 原来无条件 closeFileViewer() → 正在看的文件被刷掉（用户原话：看里面的东西又被刷新出来）
+  if (tab !== resultsTab && _rvIsOpen()) closeFileViewer();
+  if (tab === 'figures') _clearNewFigureMark();
   resultsTab = tab;
   document.getElementById('tab-figures').style.background = tab === 'figures' ? 'var(--primary)' : '';
   document.getElementById('tab-figures').style.color = tab === 'figures' ? '#fff' : 'var(--text-light)';
@@ -10026,9 +10052,38 @@ function browseResults(relPath) {
   refreshResults();
 }
 
+/** 2026-09-22(P7)：新图不抢屏时，在「图片」标签上点一个红点，提醒用户有新图。
+ *  红点用 CSS 伪元素画（.tab-has-new::after）—— 切语言时 applyUILang() 会重写标签文字，
+ *  子节点式的角标会被一起抹掉；title 也挂在标签本身，切语言时重新写一次。 */
+function _markNewFigure() {
+  var el = document.getElementById('tab-figures');
+  if (!el || el.classList.contains('tab-has-new')) return;
+  el.classList.add('tab-has-new');
+  el.title = t('rs_new_fig');
+}
+function _clearNewFigureMark() {
+  var el = document.getElementById('tab-figures');
+  if (!el) return;
+  el.classList.remove('tab-has-new');
+  el.removeAttribute('title');
+}
+function _p7OnLangChange() {
+  var el = document.getElementById('tab-figures');
+  if (el && el.classList.contains('tab-has-new')) el.title = t('rs_new_fig');
+}
+
 function handleNewFigure(fig) {
-  showFigurePreview(fig.url, fig.name);
-  if (document.getElementById('panel-results').style.display !== 'none' && currentSid) {
+  // 2026-09-22(P7)：只在用户「正盯着图片墙」时才自动弹大图。
+  // 原来不管用户在干什么都强弹 + 滚动到它，用户正在看文件时会被抢走
+  // （用户原话：看里面的东西又被刷新出来）
+  var _panelVisible = document.getElementById('panel-results').style.display !== 'none';
+  var _readingFile = _rvIsOpen();
+  if (_panelVisible && resultsTab === 'figures' && !_readingFile) {
+    showFigurePreview(fig.url, fig.name);
+  } else if (_panelVisible) {
+    _markNewFigure();
+  }
+  if (_panelVisible && currentSid) {
     refreshResults();
   }
 }
