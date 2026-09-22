@@ -8,5 +8,11 @@
     "last_used_script": "",
     "preferred_params": {},
     "notes": ""
-  }
+  },
+  "when_to_use": "代谢组学统计分析 / 代谢物差异分析 / LC-MS差异 / GC-MS差异 / PLS-DA / OPLS-DA / VIP / 代谢标志物 / 代谢组火山图 / metabolomics / metabolic biomarker / peak intensity matrix 差异对比",
+  "trigger_keywords": [
+    "metabolomics",
+    "statistical"
+  ],
+  "trigger_level": "YEL"
 }

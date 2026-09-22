@@ -14,5 +14,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Guidance for interpreting DepMap essentiality scores and correlations correctly.",
+  "trigger_keywords": [
+    "gene-essentiality",
+    "gene essentiality",
+    "gene",
+    "essentiality"
+  ],
+  "trigger_level": "YEL"
 }

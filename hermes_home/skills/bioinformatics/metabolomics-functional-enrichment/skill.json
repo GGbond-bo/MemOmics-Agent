@@ -8,5 +8,12 @@
     "last_used_script": "",
     "preferred_params": {},
     "notes": ""
-  }
+  },
+  "when_to_use": "代谢组功能富集 / 代谢通路 / MetPA / MSEA / mummichog / 代谢物通路富集 / metabolite set enrichment / metabolic pathway analysis / KEGG代谢通路 / HMDB富集",
+  "trigger_keywords": [
+    "metabolomics",
+    "functional",
+    "enrichment"
+  ],
+  "trigger_level": "YEL"
 }

@@ -18,5 +18,13 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "metascape",
+    "基因列表",
+    "top100",
+    "DEG转Metascape",
+    "按亚群取基因",
+    "合并Metascape表。"
+  ],
+  "when_to_use": "用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 Metascape 导入格式的基因列表:"
 }

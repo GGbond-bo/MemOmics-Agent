@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "openfold3"
+  ],
+  "when_to_use": "OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc..."
 }

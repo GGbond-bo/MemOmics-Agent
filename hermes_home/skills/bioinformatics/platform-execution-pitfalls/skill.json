@@ -18,7 +18,11 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": [],
+  "trigger_keywords": [
+    "platform",
+    "execution",
+    "pitfalls"
+  ],
   "success_count": 8,
   "proven_script": "background_sleep_task_verify",
   "proven_params": [
@@ -129,5 +133,6 @@
   ],
   "user_prefs": {
     "last_used_script": "background_sleep_task_verify"
-  }
+  },
+  "when_to_use": "任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。"
 }

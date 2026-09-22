@@ -12,5 +12,11 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "nature-shared",
+    "nature shared",
+    "nature",
+    "shared"
+  ],
+  "when_to_use": "Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec"
 }

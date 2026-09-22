@@ -8,5 +8,12 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions.",
+  "trigger_keywords": [
+    "genetic",
+    "variant",
+    "annotation"
+  ],
+  "trigger_level": "YEL"
 }

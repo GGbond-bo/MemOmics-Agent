@@ -19,5 +19,13 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "XX agent 差距",
+    "调研一下 XX 的能力和架构",
+    "竞品分析",
+    "biomini",
+    "Biomni",
+    "架构双维对比。"
+  ],
+  "when_to_use": "用户问自己(MemOmics)与另一个科研/生信 AI Agent 的差距，要求从能力和架构上调研对比"
 }

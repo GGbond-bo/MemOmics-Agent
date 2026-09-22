@@ -12,5 +12,11 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "literature-full-summary",
+    "literature full summary",
+    "full",
+    "summary"
+  ],
+  "when_to_use": "文献全文思路提炼。触发场景:用户要求'总结/解读/提炼这篇文章的思路'、'这篇文章讲了什么'、文献库一键全文提炼。"
 }

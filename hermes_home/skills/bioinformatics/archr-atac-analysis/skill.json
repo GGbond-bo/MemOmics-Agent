@@ -12,5 +12,10 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "archr-atac-analysis",
+    "archr atac analysis",
+    "archr"
+  ],
+  "when_to_use": "ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案…"
 }

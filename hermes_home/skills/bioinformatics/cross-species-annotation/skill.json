@@ -12,5 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "cross-species-annotation",
+    "cross species annotation",
+    "cross",
+    "species",
+    "annotation"
+  ],
+  "when_to_use": "跨物种单细胞RNA-seq细胞类型注释方法"
 }

@@ -19,5 +19,12 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "pubmed-mesh-annotation",
+    "pubmed mesh annotation",
+    "pubmed",
+    "mesh",
+    "annotation"
+  ],
+  "when_to_use": "用户要求给文献输出 MeSH 标签 / MeSH 主要主题词 / 语义索引标注 / 给论文打 MeSH 词时加载。核心知识:query_ncbi esummary 不含 MeSH，必须用 efetch MEDLINE 格式提取 MH 行，* 前缀 = Major Topic。"
 }

@@ -11,8 +11,13 @@
   "chains_to": [],
   "tags": [],
   "aliases": [],
-  "trigger_level": "RED 必触发",
-  "trigger_keywords": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "跨物种 CRE",
+    "ATAC 保守性",
+    "CRE 可代替性",
+    "调控元件保守性评估"
+  ],
   "success_count": 1,
   "proven_script": "p4_crecs_scores.py",
   "proven_params": [
@@ -42,5 +47,6 @@
       "evidence": "辩论证据（2026-08-11 8角色L2辩论）：裁判 verdict=modify, confidence=high。反方4角色全面占优（8/9/8/8 vs 正方7/5/7）。核心攻击点：1) con_statistics 9分——单一benchmark无多重比较校正（5方法×8管线×10指标）、仅6数据集功效不足、ARI对聚类数敏感+ArchR默认参数未调优不公平、'致命'阈值r>0.75未经过假设检验、r²仅>0.56需比较效应量比值；2) con_history 8分——违反铁律-4多源验证（仅Luo 2024单一来源），物种误判教训（mulatta→fascicularis）警示单",
       "date": "2026-08-11 23:23:07"
     }
-  ]
+  ],
+  "when_to_use": "纯 ATAC-seq 跨物种 CRE 保守性定量评估方法（专利方案）。 三层递进:L1 序列保守 → L2 染色质可及性保守 → L3 TF 结合动态保守。 核心创新:B 类 CRE 检出（序列+可及性保守，但 TF 足迹分歧）。 不需要 RNA/Hi-C/ChIP——纯 ATAC 数据即可运行完整评估…"
 }

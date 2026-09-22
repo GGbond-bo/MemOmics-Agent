@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "alphafold2"
+  ],
+  "when_to_use": "OpenAI4S 移植:Predict protein structure for monomers and multimers with Al..."
 }

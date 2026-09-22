@@ -12,5 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "molecular-cloning-design",
+    "molecular cloning design",
+    "molecular",
+    "cloning",
+    "design"
+  ],
+  "when_to_use": "[molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试"
 }

@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件",
+  "trigger_keywords": [
+    "pptx-generation",
+    "pptx generation",
+    "pptx",
+    "generation"
+  ],
+  "trigger_level": "YEL"
 }

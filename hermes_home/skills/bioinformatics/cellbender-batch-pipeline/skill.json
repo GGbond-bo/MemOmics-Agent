@@ -16,5 +16,10 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "批量cellbender",
+    "多样本去污染",
+    "后台运行cellbender"
+  ],
+  "when_to_use": "10+ 样本需要串行跑 CellBender（总时长 > 1 小时）"
 }

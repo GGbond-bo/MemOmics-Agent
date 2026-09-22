@@ -179,5 +179,5 @@
   "user_prefs": {
     "last_used_script": "go_heatmap_v14_smaller_words_only.R"
   },
-  "when_to_use": "--- name: go-enrichment-visualization description: > Visualize curated GO/KEGG/pathway enrichment results (hand-picked terms with -log10(q)) as publication-grade heatmaps or dotplots for single-cell /…"
+  "when_to_use": "User has a curated enrichment table (Cluster / GO term / Log(q-value)) and wants a CNS-level enrichment heatmap or dotplot. e.g…"
 }

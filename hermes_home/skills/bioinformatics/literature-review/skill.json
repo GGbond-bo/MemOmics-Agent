@@ -8,5 +8,16 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Auto-generated for literature-review",
+  "trigger_keywords": [
+    "文献综述",
+    "literature review",
+    "综述",
+    "systematic review",
+    "总结文献",
+    "查文献",
+    "evidence synthesis"
+  ],
+  "trigger_level": "RED"
 }

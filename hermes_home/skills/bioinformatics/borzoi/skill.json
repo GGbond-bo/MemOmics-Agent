@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "borzoi"
+  ],
+  "when_to_use": "OpenAI4S 移植:Predict genome-wide functional tracks (RNA-seq, CAGE, DNase,..."
 }

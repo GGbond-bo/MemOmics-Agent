@@ -12,7 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": [],
+  "trigger_keywords": [
+    "atac-seq-memomics",
+    "atac seq memomics",
+    "seq",
+    "memomics"
+  ],
   "success_count": 2,
   "proven_script": "P1_da_young_old.R",
   "proven_params": [
@@ -91,5 +96,6 @@
       "evidence": "Luo et al. Genome Biol 2024 (PMID 39152456) benchmark + ArchR (PMID 33633365)/SnapATAC (PMID 33637727)/SnapATAC2 (PMID 38191932) 原论文 + 本项目 40 样本实战",
       "date": "2026-08-14 15:14:43"
     }
-  ]
+  ],
+  "when_to_use": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出"
 }

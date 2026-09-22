@@ -15,5 +15,12 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图)",
+  "trigger_keywords": [
+    "rnaseq",
+    "differential",
+    "expression"
+  ],
+  "trigger_level": "YEL"
 }

@@ -18,5 +18,11 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "debate-core",
+    "debate core",
+    "debate",
+    "core"
+  ],
+  "when_to_use": "任何涉及结论/参数裁决的时刻:rail_review(post) 后、结论合成前、入库/报告前 参数候选≥2 或结果冲突/重试失败时。SOUL.md 铁律 #5 强制场景。"
 }

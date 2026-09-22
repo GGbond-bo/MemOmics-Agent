@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis.",
+  "trigger_keywords": [
+    "cell-cell-communication",
+    "cell cell communication",
+    "cell",
+    "communication"
+  ],
+  "trigger_level": "YEL"
 }

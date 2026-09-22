@@ -104,5 +104,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "when_to_use": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出",
+  "trigger_keywords": [
+    "atac-seq",
+    "atac seq",
+    "seq"
+  ],
+  "trigger_level": "YEL"
 }

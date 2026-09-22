@@ -22,5 +22,5 @@
     "TF footprinting跨物种",
     "regulatory conservation"
   ],
-  "when_to_use": "--- name: cross-species-regulatory-conservation description: > Cross-species gene regulatory element conservation assessment (CRCA) framework…"
+  "when_to_use": "Cross-species gene regulatory element conservation assessment (CRCA) framework. Five-layer evaluation: R1 sequence conservation → R2 CRE chromatin accessibility (ATAC-driven) → R3 TF binding dynamics…"
 }

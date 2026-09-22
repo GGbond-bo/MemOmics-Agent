@@ -12,7 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": [],
+  "trigger_keywords": [
+    "scrna-cns-figure-design",
+    "scrna cns figure design",
+    "cns",
+    "design"
+  ],
   "success_count": 3,
   "proven_script": "phase4_rss_perturbation.R",
   "proven_params": [
@@ -58,5 +63,6 @@
   ],
   "user_prefs": {
     "last_used_script": "phase4_rss_perturbation.R"
-  }
+  },
+  "when_to_use": "CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields…"
 }

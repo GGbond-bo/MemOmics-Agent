@@ -27,5 +27,5 @@
     "heatmap",
     "geometry"
   ],
-  "when_to_use": "--- name: matrix-heatmap-geometry description: >- R 矩阵热图的几何与版式控制（base graphics / pheatmap / ComplexHeatmap / ggplot2）:按目标纸宽反解色块尺寸、 边距与画布联动、行列标签对齐、色标与分组色条的绘制顺序、可编辑矢量导出、以及「哪些行/哪根轴该上图」的口径决策…"
+  "when_to_use": "出或改**矩阵型热图**（基因集×亚群、基因×样本、GO 词条×亚群、效应值×亚群）并关心版式、期刊尺寸、矢量导出或口径取舍时。 纯 UMAP/Violin/DotPlot 不需要；调色板选择不需要。"
 }

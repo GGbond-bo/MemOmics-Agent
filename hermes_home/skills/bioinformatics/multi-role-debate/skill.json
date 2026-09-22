@@ -18,5 +18,12 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "multi-role-debate",
+    "multi role debate",
+    "multi",
+    "role",
+    "debate"
+  ],
+  "when_to_use": "需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要 多角色裁决、用户要求\"先正方再反方最后LLM判决\"时。"
 }

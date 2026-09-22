@@ -8,5 +8,12 @@
     "last_used_script": "",
     "preferred_params": {},
     "notes": ""
-  }
+  },
+  "when_to_use": "用户提供代谢组峰表（LC-MS/GC-MS/NMR 导出），需要完整流程（QC→归一化→差异→富集→可视化）时触发。",
+  "trigger_keywords": [
+    "metabolomics",
+    "full",
+    "pipeline"
+  ],
+  "trigger_level": "YEL"
 }

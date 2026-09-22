@@ -12,7 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": [],
+  "trigger_keywords": [
+    "wakeup-progress-check",
+    "wakeup progress check",
+    "wakeup",
+    "progress"
+  ],
   "success_count": 6,
   "proven_script": "fig_C1_5sub_vs_pure_v2.py",
   "proven_params": [
@@ -97,5 +102,6 @@
   ],
   "user_prefs": {
     "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
-  }
+  },
+  "when_to_use": "新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在…"
 }

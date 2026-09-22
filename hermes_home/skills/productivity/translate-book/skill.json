@@ -29,5 +29,6 @@
     "translate this book",
     "book translation",
     "整本书翻成"
-  ]
+  ],
+  "when_to_use": "用户要求翻译整本书、翻译大段内容、把这本书翻译成中文时使用；需提供文件路径（PDF/DOCX/EPUB）和目标语言"
 }

@@ -12,5 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "image-ocr-fallback",
+    "image ocr fallback",
+    "image",
+    "ocr",
+    "fallback"
+  ],
+  "when_to_use": "User uploads a screenshot/table/figure-caption image and expects the text read back"
 }

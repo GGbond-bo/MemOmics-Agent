@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "chai1"
+  ],
+  "when_to_use": "OpenAI4S 移植:Structure prediction for protein, nucleic-acid, and small-mo..."
 }

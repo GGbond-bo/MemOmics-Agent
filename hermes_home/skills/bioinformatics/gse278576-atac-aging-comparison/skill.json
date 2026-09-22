@@ -11,8 +11,13 @@
   "chains_to": [],
   "tags": [],
   "aliases": [],
-  "trigger_level": "RED 必触发",
-  "trigger_keywords": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "GSE278576",
+    "人海马ATAC",
+    "hippocampus aging ATAC",
+    "对比流程复现"
+  ],
   "success_count": 3,
   "proven_script": "",
   "proven_params": [
@@ -58,5 +63,6 @@
   ],
   "user_prefs": {
     "last_used_script": ""
-  }
+  },
+  "when_to_use": "GSE278576 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026 bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus…"
 }

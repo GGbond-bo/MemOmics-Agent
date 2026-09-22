@@ -8,5 +8,14 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "脂质组学统计汇总:脂质定量数据→描述统计→差异分析→脂质类别分布→可视化",
+  "trigger_keywords": [
+    "lipidomics-summary-stats",
+    "lipidomics summary stats",
+    "lipidomics",
+    "summary",
+    "stats"
+  ],
+  "trigger_level": "YEL"
 }

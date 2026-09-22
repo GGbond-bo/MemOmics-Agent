@@ -11,5 +11,11 @@
     "not_trigger": "10X→Cell Ranger；bulk RNA→标准STAR/hisat2；非BGI平台→其他skill；只讨论→只回答",
     "platform": "仅Linux x86-64（闭源二进制）；Windows本机不硬跑，提供WSL2/集群/云服务器"
   },
-  "notes": "2026-08-28 基于官方仓库 MGI-tech-bioinformatics/DNBelab_C_Series_HT_scRNA-analysis-software tag 2.1.3 完整调查创建；索引构建见 dnbc4tools-index-building；官方文档事实核录见 references/dnbc4tools-v213-official-facts.md"
+  "notes": "2026-08-28 基于官方仓库 MGI-tech-bioinformatics/DNBelab_C_Series_HT_scRNA-analysis-software tag 2.1.3 完整调查创建；索引构建见 dnbc4tools-index-building；官方文档事实核录见 references/dnbc4tools-v213-official-facts.md",
+  "when_to_use": "用户提到 DNBelab/dnbc4tools/华大BGI/华大基因 单细胞 RNA 或 ATAC 的比对/分析流程",
+  "trigger_keywords": [
+    "dnbc4tools",
+    "workflow"
+  ],
+  "trigger_level": "YEL"
 }

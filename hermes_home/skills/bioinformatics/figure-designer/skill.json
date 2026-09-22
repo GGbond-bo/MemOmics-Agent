@@ -28,5 +28,6 @@
     "choose the right chart",
     "figure looks unprofessional",
     "plot design"
-  ]
+  ],
+  "when_to_use": "用户想表达某个结论但不知怎么设计图/图被说不好看不专业/要选图型或布局建议时使用。路由纪律:本技能只输出设计建议与QC审计，绝不代替出图；用户说'画个热图/帮我出图/生成图'一律按 SOUL.md 画图 Skill 选择策略走 academic-figure-skill（专业/期刊出图默认）/ nature-figure（CNS 级）/ cns-visualization（生信快速图）/ scip…"
 }

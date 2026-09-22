@@ -17,5 +17,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly.",
+  "trigger_keywords": [
+    "pathway-enrichment",
+    "pathway enrichment",
+    "pathway",
+    "enrichment"
+  ],
+  "trigger_level": "YEL"
 }

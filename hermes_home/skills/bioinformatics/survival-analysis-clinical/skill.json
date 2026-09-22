@@ -8,5 +8,11 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "临床生存分析:临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物",
+  "trigger_keywords": [
+    "survival",
+    "clinical"
+  ],
+  "trigger_level": "YEL"
 }

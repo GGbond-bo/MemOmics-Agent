@@ -8,5 +8,12 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows.",
+  "trigger_keywords": [
+    "phylo-create-skill",
+    "phylo create skill",
+    "phylo"
+  ],
+  "trigger_level": "GRN"
 }

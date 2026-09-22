@@ -19,5 +19,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv.",
+  "trigger_keywords": [
+    "adaptyv-api",
+    "adaptyv api",
+    "adaptyv",
+    "api"
+  ],
+  "trigger_level": "GRN"
 }

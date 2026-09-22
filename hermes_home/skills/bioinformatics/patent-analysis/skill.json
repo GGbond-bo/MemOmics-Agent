@@ -19,5 +19,10 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "patent-analysis",
+    "patent analysis",
+    "patent"
+  ],
+  "when_to_use": "用户说\"分析这篇专利\"\"拆解这个专利\"\"专利详细解读\"\"解读专利\"\"分析权利要求\"\"竞品专利分析\"等时触发。"
 }

@@ -22,5 +22,12 @@
     "last_used_script": "",
     "preferred_params": {},
     "notes": "v1.1.0 (2026-08-28): 用户特别指定触发门禁——触发前必须先澄清厂家(BGI/DNBelab)与索引类型(RNA/ATAC)，未确认不触发"
-  }
+  },
+  "when_to_use": "华大BGI DNBelab C系列高通量单细胞数据分析软件 dnbc4tools 的参考基因组索引构建流程（rna mkref=STAR 2.7.2b genomeGenerate + atac mkref=chromap + tools mkgtf GTF过滤校正）…",
+  "trigger_keywords": [
+    "dnbc4tools",
+    "index",
+    "building"
+  ],
+  "trigger_level": "YEL"
 }

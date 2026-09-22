@@ -12,5 +12,13 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "MeSH",
+    "DeCS",
+    "语义索引",
+    "主要标签",
+    "mesh tags",
+    "MESINESP"
+  ],
+  "when_to_use": "为论文输出官方 MeSH 主要标签（TaskA 式语义索引 benchmark）"
 }

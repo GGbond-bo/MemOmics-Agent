@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "sgRNA设计:基因序列→CRISPR靶点扫描→效率+脱靶评分→最优sgRNA推荐→文库设计",
+  "trigger_keywords": [
+    "sgrna-design",
+    "sgrna design",
+    "sgrna",
+    "design"
+  ],
+  "trigger_level": "YEL"
 }

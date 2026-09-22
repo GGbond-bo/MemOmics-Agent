@@ -8,5 +8,14 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Design optimized microplate layouts with randomization, edge effect mitigation, and covariate balancing.",
+  "trigger_keywords": [
+    "microplate-layout-design",
+    "microplate layout design",
+    "microplate",
+    "layout",
+    "design"
+  ],
+  "trigger_level": "YEL"
 }

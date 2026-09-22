@@ -76,5 +76,5 @@
   "user_prefs": {
     "last_used_script": "annotate_subcluster_alignment.py"
   },
-  "when_to_use": "--- name: cross-species-atac-annotation description: > Cross-species ATAC-seq cell type annotation strategy: align fine-grained subclusters where possible…"
+  "when_to_use": "Cross-species ATAC-seq cell type annotation strategy: align fine-grained subclusters where possible keep species-specific names for non-overlapping populations…"
 }

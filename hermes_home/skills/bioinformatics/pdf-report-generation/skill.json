@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成",
+  "trigger_keywords": [
+    "pdf-report-generation",
+    "pdf report generation",
+    "pdf",
+    "generation"
+  ],
+  "trigger_level": "YEL"
 }

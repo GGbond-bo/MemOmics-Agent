@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "ChIP-Atlas peak富集分析:peak列表→基因组区域注释→motif富集→GO/KEGG通路富集→调控网络",
+  "trigger_keywords": [
+    "chip",
+    "atlas",
+    "peak",
+    "enrichment"
+  ],
+  "trigger_level": "YEL"
 }

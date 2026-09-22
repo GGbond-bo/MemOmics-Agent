@@ -49,8 +49,19 @@
   },
   "safety": {
     "failsafe": true,
-    "dangerous_actions": ["close", "delete", "format"],
+    "dangerous_actions": [
+      "close",
+      "delete",
+      "format"
+    ],
     "confirmation_required": true,
     "abort_key": "鼠标移到屏幕左上角(0,0)"
-  }
+  },
+  "when_to_use": "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。",
+  "trigger_keywords": [
+    "computer-use",
+    "computer use",
+    "computer"
+  ],
+  "trigger_level": "GRN"
 }

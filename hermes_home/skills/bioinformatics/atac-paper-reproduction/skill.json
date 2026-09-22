@@ -11,6 +11,13 @@
   "chains_to": [],
   "tags": [],
   "aliases": [],
-  "trigger_level": "YEL 讨论触发",
-  "trigger_keywords": []
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "论文复现",
+    "对比流程",
+    "官方路径",
+    "official code",
+    "ATAC 复现"
+  ],
+  "when_to_use": "ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明。 关键技巧:官方补充表含 cCRE/peak 全集时直接复用坐标做片段计数，跳过本地 peak calling（免装 MACS3/snapatac2）…"
 }

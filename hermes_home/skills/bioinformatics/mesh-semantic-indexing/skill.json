@@ -12,5 +12,12 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "mesh-semantic-indexing",
+    "mesh semantic indexing",
+    "mesh",
+    "semantic",
+    "indexing"
+  ],
+  "when_to_use": "User provides PMIDs (or title+abstract) and wants MeSH major topics (typically 5-10 labels/article)"
 }

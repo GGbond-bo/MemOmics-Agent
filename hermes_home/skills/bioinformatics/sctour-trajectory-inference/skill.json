@@ -74,5 +74,12 @@
       "score": 9,
       "result": "路线A run1_balanced验证方向：Zone1(0.22/72y)→Zone2(0.39/68y)→NMJ(0.43/59y)→Zone5(0.67/57y)→Zone6(0.66/54y)。低伪时间=病理(Zone1, 72岁最高龄)，高伪时间=健康(Zone5/6, 54-57岁年轻)。Zone1内部梯度：底部MYH7+(慢肌)→中部RUNX1+++(去神经)→上部COL19A1+(N"
     }
-  ]
+  ],
+  "when_to_use": "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。",
+  "trigger_keywords": [
+    "sctour",
+    "trajectory",
+    "inference"
+  ],
+  "trigger_level": "YEL"
 }

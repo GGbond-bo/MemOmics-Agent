@@ -41,5 +41,13 @@
   ],
   "user_prefs": {
     "last_used_script": "subsample_10k_random.py"
-  }
+  },
+  "when_to_use": "分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集",
+  "trigger_keywords": [
+    "stratified-subsampling",
+    "stratified subsampling",
+    "stratified",
+    "subsampling"
+  ],
+  "trigger_level": "YEL"
 }

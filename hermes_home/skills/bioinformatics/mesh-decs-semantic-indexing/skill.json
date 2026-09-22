@@ -12,5 +12,11 @@
   "tags": [],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "mesh",
+    "decs",
+    "semantic",
+    "indexing"
+  ],
+  "when_to_use": "[MeSH/DeCS语义索引] 提取PubMed文献MeSH主要标签 / MESINESP西语文献DeCS编码 / 语义索引benchmark / 文献标引 / semantic indexing / meshMajor / decsCodes"
 }

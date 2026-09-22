@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "RGCCA多组学整合分析:多个数据块→正则化典型相关→共享变异→跨组学关联→组分可视化",
+  "trigger_keywords": [
+    "rgcca-multiblock",
+    "rgcca multiblock",
+    "rgcca",
+    "multiblock"
+  ],
+  "trigger_level": "YEL"
 }

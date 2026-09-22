@@ -8,5 +8,16 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "scRNA疾病药物发现pipeline:scRNA数据→靶点识别→化合物筛选→已有药重定位→候选药物+证据强度→结果排序",
+  "trigger_keywords": [
+    "药物靶点",
+    "靶点发现",
+    "drug target",
+    "药物重定位",
+    "disease",
+    "drug",
+    "discovery"
+  ],
+  "trigger_level": "RED"
 }

@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "proteinmpnn"
+  ],
+  "when_to_use": "OpenAI4S 移植:Inverse-fold a protein backbone (PDB structure) into amino-a..."
 }

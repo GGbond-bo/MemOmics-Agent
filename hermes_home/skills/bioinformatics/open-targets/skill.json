@@ -8,5 +8,13 @@
   "user_score": 0,
   "auto_score": 0,
   "approved": false,
-  "steps": []
+  "steps": [],
+  "when_to_use": "Open Targets平台查询:疾病/靶点→靶点-疾病关联证据→遗传/组学/文献→药物开发管线",
+  "trigger_keywords": [
+    "open-targets",
+    "open targets",
+    "open",
+    "targets"
+  ],
+  "trigger_level": "YEL"
 }

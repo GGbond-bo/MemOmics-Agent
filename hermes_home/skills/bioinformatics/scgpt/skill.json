@@ -15,5 +15,8 @@
   ],
   "aliases": [],
   "trigger_level": "YEL",
-  "trigger_keywords": []
+  "trigger_keywords": [
+    "scgpt"
+  ],
+  "when_to_use": "OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a..."
 }
