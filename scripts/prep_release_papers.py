@@ -7,7 +7,7 @@
    即使不重写也能按文件名在库内找到 PDF）。
 2. 清空 imported_from / imported_by（用户源路径与导入人标识不进包）。
 3. 删除运行态文件：.binding.json（会话绑定）、*.part.json（断点续译进度）、
-   *.bilingual.json（对照缓存，首开自动重建）。
+   *.bilingual.json（对照缓存）、*.anchors.json（句级锚点缓存）——首开自动重建。
 用法: python scripts/prep_release_papers.py <pkg_dir>
 """
 import json
@@ -24,7 +24,8 @@ def scrub(pkg_dir: str) -> int:
     removed = 0
     for root, _dirs, files in os.walk(papers):
         for f in files:
-            if f == ".binding.json" or f.endswith(".part.json") or f.endswith(".bilingual.json"):
+            if (f == ".binding.json" or f.endswith(".part.json")
+                    or f.endswith(".bilingual.json") or f.endswith(".anchors.json")):
                 p = os.path.join(root, f)
                 os.remove(p)
                 removed += 1

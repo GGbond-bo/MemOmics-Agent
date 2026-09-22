@@ -2836,18 +2836,22 @@ def _anch_probes(qn: str, qtoks: list) -> list:
     return out
 
 
-def _anch_find_norm(norm: str, probe: str) -> int:
-    """探针在归一化文本中的位置（先精确；首端有胶连残留时从下一个完整 token 起找）。"""
+def _anch_find_norm(norm: str, probe: str, start: int = 0) -> int:
+    """探针在归一化文本中的位置（先精确；首端有胶连残留时从下一个完整 token 起找）。
+
+    start>0 时从该处往后继续找——同一探针在长文里会出现多次（方法/图注模板相似），
+    必须逐个比相似度再决定，不能先到先得。
+    """
     if not probe:
         return -1
-    hit = norm.find(probe)
+    hit = norm.find(probe, start)
     if hit >= 0:
         return hit
     for cut in (1, 2, 3, 5):
         p2 = probe[cut:]
         if len(p2) < 24:
             break
-        hit = norm.find(p2)
+        hit = norm.find(p2, start)
         if hit >= 0:
             return hit
     return -1
@@ -2866,32 +2870,70 @@ def _anch_refine(idx: dict, qtoks: list, n0: int, n1: int, q0: int = 0, q1: int 
         """[a,b) 之间是否已经跨过句号（句号+空格+大写/数字）——跨过就不再扩展。"""
         return re.search(r"[.!?][\"\')\]]?\s+[A-Z0-9\u2018\u201c]", norm[a:b]) is not None
 
+    def _step(sign: int):
+        """向一侧扩展一格：优先直连；否则允许"跳过 1-2 个多余 token"（容断字/漏词）。
+
+        返回 (新 ai, 新 qi, 新 edge, 用掉的跳跃数) 或 None。
+        跳跃必须同时受字符间隔 _ANCH_MAX_GAP 与跨句检测约束，避免匹配拉飞。
+        """
+        return None
+
+    # 起点：query 侧从"探针覆盖范围之后"继续（q1 是 query 坐标！不能拿它跟目标坐标 n1 比），
+    #       目标侧从探针在文本层里的结束位置继续。
     qi = 0
-    while qi < len(qtoks) and qtoks[qi][2] <= n1:
+    while qi < len(qtoks) and qtoks[qi][2] <= max(q1, 0):
         qi += 1
     ai = _bs.bisect_left(starts, n1)
-    edge = n1
-    while qi < len(qtoks) and ai < len(toks):
-        if (toks[ai][0] == qtoks[qi][0] and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
-                and not _cross_sentence(n1, toks[ai][1])):
-            edge = toks[ai][2]
-            n1 = toks[ai][2]
-            ai += 1
-            qi += 1
+    edge, skips = n1, 0
+    while qi < len(qtoks) and ai < len(toks) and skips <= _ANCH_MAX_SKIP:
+        direct = (toks[ai][0] == qtoks[qi][0] and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
+                  and not _cross_sentence(n1, toks[ai][1]))
+        if direct:
+            edge, n1, ai, qi = toks[ai][2], toks[ai][2], ai + 1, qi + 1
+            continue
+        # 目标层多出 token（PDF 有 "a" 而 md 没有）→ 跳过它
+        tskip = next((k for k in range(1, _ANCH_SKIP_T + 1)
+                      if ai + k < len(toks) and toks[ai + k][0] == qtoks[qi][0]
+                      and 0 <= toks[ai + k][1] - edge <= _ANCH_MAX_GAP
+                      and not _cross_sentence(n1, toks[ai + k][1])), None)
+        # query 层多出 token（md 有而 PDF 没有）→ 跳过它
+        qskip = next((k for k in range(1, _ANCH_SKIP_Q + 1)
+                      if qi + k < len(qtoks) and toks[ai][0] == qtoks[qi + k][0]
+                      and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
+                      and not _cross_sentence(n1, toks[ai][1])), None)
+        if tskip is not None and (qskip is None or tskip <= qskip):
+            ai += tskip
+            skips += tskip
+        elif qskip is not None:
+            qi += qskip
+            skips += qskip
         else:
             break
     qi = len(qtoks) - 1
-    while qi >= 0 and qtoks[qi][1] >= n0:
+    while qi >= 0 and qtoks[qi][1] >= max(q0, 0):
         qi -= 1
     ai = _bs.bisect_left(starts, n0) - 1
-    edge = n0
-    while qi >= 0 and ai >= 0:
-        if (toks[ai][0] == qtoks[qi][0] and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
-                and not _cross_sentence(toks[ai][2], n0)):
-            edge = toks[ai][1]
-            n0 = toks[ai][1]
-            ai -= 1
-            qi -= 1
+    edge, skips = n0, 0
+    while qi >= 0 and ai >= 0 and skips <= _ANCH_MAX_SKIP:
+        direct = (toks[ai][0] == qtoks[qi][0] and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
+                  and not _cross_sentence(toks[ai][2], n0))
+        if direct:
+            edge, n0, ai, qi = toks[ai][1], toks[ai][1], ai - 1, qi - 1
+            continue
+        tskip = next((k for k in range(1, _ANCH_SKIP_T + 1)
+                      if ai - k >= 0 and toks[ai - k][0] == qtoks[qi][0]
+                      and 0 <= edge - toks[ai - k][2] <= _ANCH_MAX_GAP
+                      and not _cross_sentence(toks[ai - k][2], n0)), None)
+        qskip = next((k for k in range(1, _ANCH_SKIP_Q + 1)
+                      if qi - k >= 0 and toks[ai][0] == qtoks[qi - k][0]
+                      and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
+                      and not _cross_sentence(toks[ai][2], n0)), None)
+        if tskip is not None and (qskip is None or tskip <= qskip):
+            ai -= tskip
+            skips += tskip
+        elif qskip is not None:
+            qi -= qskip
+            skips += qskip
         else:
             break
     covered = sum(1 for (_t, s, e) in qtoks if s >= q0 and e <= q1) if q1 > q0 else 0
@@ -2979,7 +3021,7 @@ def _anch_span_ok(reps: list) -> bool:
     return True
 
 
-def _anch_grow_from(idx: dict, qtoks: list, qi: int, ni: int):
+def _anch_grow_from(idx: dict, qtoks: list, qi: int, ni: int):  # noqa: D401
     """从"query 第 qi 个 token 命中文本层第 ni 个 token"出发向两侧对齐扩展。
 
     比"从句子开头找探针"更稳：句子开头若是页眉残留/被截断，仍能从中间某处锚定。
@@ -3006,20 +3048,36 @@ def _anch_search(q: str, idx: dict, hint_pages=None) -> list:
     if not qtoks:
         return []
     probes = _anch_probes(qn, qtoks)
+    hint = set(hint_pages or [])
     best = None
     for probe, _skip, q0, q1 in probes:
-        hit = _anch_find_norm(norm, probe)
-        if hit < 0:
-            continue
-        n0, n1, cov = _anch_refine(idx, qtoks, hit, hit + len(probe), q0, q1)
-        if cov < _ANCH_MATCH_FLOOR:
-            continue
-        sim = _anch_similarity(qn, norm[n0:n1])
-        if sim >= _ANCH_SIM_GOOD:
-            return _anch_span_rects(idx, n0, n1)
-        if best is None or sim > best[0]:
-            best = (sim, n0, n1)
-    if best and best[0] >= _ANCH_SIM_MIN:
+        # 扫描该探针的所有出现位置再取最优——段落模板相似（方法/图注/重复句式）时
+        # "先到先得"会把第 2 页的段锚到第 1 页（实测合成样例），必须比相似度。
+        start = 0
+        seen_pos = 0
+        while seen_pos < _ANCH_SCAN_MAX:
+            hit = _anch_find_norm(norm, probe, start)
+            if hit < 0:
+                break
+            start = hit + 1
+            seen_pos += 1
+            n0, n1, cov = _anch_refine(idx, qtoks, hit, hit + len(probe), q0, q1)
+            if cov < _ANCH_MATCH_FLOOR:
+                continue
+            sim = _anch_similarity(qn, norm[n0:n1])
+            if sim < _ANCH_SIM_MIN:
+                continue
+            pg = idx["page_of_n"][n0] if idx.get("page_of_n") else -1
+            # 先按"相似度量级"排序，量级相同时优先段落已知页（歧义句靠上下文页消歧），
+            # 最后才用精细相似度——"同模板重复句"必须让位给同页候选。
+            score = (round(sim, 1), 1 if (hint and pg in hint) else 0, round(sim, 3), -n0)
+            if best is None or score > best[0]:
+                best = (score, n0, n1)
+            if score[0] >= 0.999 and score[1]:
+                break
+        if best and best[0][0] >= 0.999 and best[0][1]:
+            break
+    if best and best[0][0] >= _ANCH_SIM_MIN:
         reps = _anch_span_rects(idx, best[1], best[2])
         if _anch_span_ok(reps):
             return reps
@@ -3081,6 +3139,10 @@ _ANCH_BRIDGE_LINES = 3      # 相邻句之间的空白行（页眉/夹注）允�
 _ANCH_MAX_SPAN = 34         # 锚定跨行上限（超过视为误配，宁可不框也不要框错）
 _ANCH_MAX_GAP = 60          # 相邻 token 间允许的原始字符间隔（防"和/的"这类常用词把匹配拉飞）
 _ANCH_MATCH_FLOOR = 0.45    # 最低 token 覆盖率：低于此判为误配，宁可退回段落框
+_ANCH_SCAN_MAX = 60         # 每个探针最多检查多少个出现位置（再取最优相似度）
+_ANCH_SKIP_T = 3            # 扩展时允许跳过的目标 token 数（PDF 多词）
+_ANCH_SKIP_Q = 2            # 扩展时允许跳过的 query token 数（md 多词）
+_ANCH_MAX_SKIP = 10         # 单侧扩展允许的累计跳跃上限
 _ANCH_SIM_GOOD = 0.78       # 归一化文本相似度闸门（防"匹配到别处的相似句子"）
 _ANCH_SIM_MIN = 0.55        # 最低可接受相似度
 
@@ -3139,14 +3201,32 @@ def _anch_running_heads(idx: dict) -> list:
 
 
 
+_ANCH_MD_HYPHEN_RE = re.compile(r"([A-Za-z]{2,})[-\u2010]\n\s*([a-z]{2,})")
+
+
+def _anch_join_md_hyphens(text: str) -> str:
+    """"approxi-\nmately" → "approximately"（只用于锚定副本）。
+
+    PDF 文本层里换行断字是同一行的两段，Markdown 却保留连字符+换行；
+    不先接回去，含断字的整句永远匹配不上（实测该文有 151 处）。
+    真连字符（single-cell、two-tailed）的下一段以大写/数字开头，不受影响。
+    """
+    prev = None
+    while prev != text:
+        prev = text
+        text = _ANCH_MD_HYPHEN_RE.sub(lambda m: m.group(1) + m.group(2), text)
+    return text
+
+
 def _anch_prepare(text: str, idx: dict):
     """段落 → (锚定用的 clean 文本, 句区间列表)。
 
-    先把 Markdown 标题前缀与混进段落的运行页眉剥掉再切句——切句结果必须与
-    译文侧（litSplitSentences）一致，否则译文句与原文句会错位一格。
+    先剥 Markdown 标题前缀、接回断字、剥掉混入段落的运行页眉，再切句；
+    切句结果与译文侧（_sentence_ranges）一致，句对才能一一对应。
     """
     title = _ANCH_TITLE_RE.match(text or "")
     clean = text[title.end():] if title else (text or "")
+    clean = _anch_join_md_hyphens(clean)
     clean = _anch_strip_heads(clean, _anch_running_heads(idx))
     return clean, _sentence_ranges(clean)
 
@@ -3165,9 +3245,12 @@ def _anchor_paragraph(text: str, idx: dict) -> dict:
     if not sents:
         return res
     memo = {}
+    # 段落整体先锚一次：拿到"这一段在第几页" → 句级歧义（模板重复句）靠它消歧
+    par = _anch_locate(clean, idx, memo)
+    hint0 = [par[0]["page"]] if par else None
     found = [None] * len(sents)
     for i, (s, e) in enumerate(sents):
-        found[i] = _anch_locate(clean[s:e], idx, memo)
+        found[i] = _anch_locate(clean[s:e], idx, memo, hint0)
     located = [i for i, f in enumerate(found) if f]
     # 第二轮：用已定位的邻近句所在页做提示重试（跨栏/跨页句子常靠这一步救回）
     for i in [i for i, f in enumerate(found) if not f]:
@@ -3459,6 +3542,7 @@ def build_anchor_map(pdf_path: str, md_path: str, stem: str = "",
     logger.info(f"anchor map {stem}: 段命中 {n_hit}/{len(blocks)}，句命中 {n_u_hit}/{n_units}")
     if cache_path:
         try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump({"ok": True, "_schema": _BILINGUAL_SCHEMA, "stem": stem,
                            "blocks": len(blocks), "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -3586,10 +3670,16 @@ def build_bilingual(file_or_title: str, rebuild: bool = False, progress_cb=None)
             en = blocks_en[ei] if ei is not None else ""
             zh = blocks_zh[zi] if zi is not None and zi < len(blocks_zh) else ""
             a = anchors[ei] if (ei is not None and ei < len(anchors)) else {}
-            rect = (a or {}).get("rects") or None
-            if not rect and en:
-                rect = _find_block_rect(pdf_path, pg, en)
-            m["paras"].append({"page": pg, "en": en, "zh": zh, "rect": rect,
+            rects = (a or {}).get("rects") or []
+            if not rects and en:
+                _fr = _find_block_rect(pdf_path, pg, en)
+                if _fr:
+                    rects = [{"page": pg, "rect": _fr, "li": []}]
+            # rect 保持"单个扁平矩形"的老形状（旧前端/外部调用方依赖），
+            # rects 是批Q新增的多行并集列表 [{page, rect, li}…]
+            m["paras"].append({"page": pg, "en": en, "zh": zh,
+                               "rect": (rects[0]["rect"] if rects else None),
+                               "rects": rects,
                                "pre": (a or {}).get("pre") or [],
                                "post": (a or {}).get("post") or [],
                                "units": (a or {}).get("units") or [],

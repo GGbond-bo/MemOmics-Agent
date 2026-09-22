@@ -8112,9 +8112,10 @@ function litBiGoSent(mi, pj, si) {
   if (unit && unit.r) {
     rects.push({ p: unit.p, r: unit.r, w: zs.w });
   } else {
-    // 兜底：整段框（弱）或 pre/post 上下文框
-    var fall = (pp.pre && pp.pre.length) ? pp.pre : (pp.rect ? [{ page: pp.page, rect: pp.rect }] : []);
-    fall.forEach(function(f) { rects.push({ p: f.page, r: f.rect, w: 1 }); });
+    // 兜底：该段所有已定位行（弱框）→ pre/post 上下文 → 单矩形
+    var src = (pp.rects && pp.rects.length) ? pp.rects : ((pp.pre && pp.pre.length) ? pp.pre : []);
+    src.forEach(function(f) { rects.push({ p: f.page, r: f.rect, w: 1 }); });
+    if (!rects.length && pp.rect) rects.push({ p: pp.page, r: pp.rect, w: 1 });
   }
   var label = litBiSentLabel(pp, si);
   var cur = document.querySelector('.lit-sent.cur');
