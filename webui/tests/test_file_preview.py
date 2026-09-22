@@ -11,11 +11,14 @@
   B. 接口层  /api/file/preview、/api/file/raw、/api/file/open —— 越权路径必须拒；
              MIME/内联下载语义正确
   C. 排序    /api/results/{sid} 与 /figures 默认"最新在最上面"（用户明确要求）
+  D. P5.1   目录永远在上、文件按时间倒序；已查看标记（提醒还有哪些没看）；
+            中英双语（切英文不许残留中文）；路径跟着安装位置走、不绑开发机
 """
 import io
 import json
 import os
 import sys
+import time
 import zipfile
 
 import pytest
@@ -433,16 +436,241 @@ def test_results_listing_newest_first_by_default(client, res_dir):
 
 
 @pytest.mark.api
-def test_results_listing_newest_dir_also_floats_up(client, res_dir):
+def test_results_dirs_first_never_mixed_with_files(client, res_dir):
+    """P5.1 用户原话：目录优先，目录都在最上面，按照26字母的顺序。然后文件放在目录下面，
+    按照生成时间，最新的在上面。不要把目录和文件混了。
+    对抗性 mtime：就算某个目录比所有文件都旧、某个文件比目录新，也不许越位。"""
     sid, d = res_dir
-    _touch(os.path.join(d, "old.txt"), "1", mtime=1_600_000_000)
-    sub = os.path.join(d, "task_latest")
-    os.makedirs(sub, exist_ok=True)
-    os.utime(sub, (1_900_000_000, 1_900_000_000))
-    _touch(os.path.join(d, "mid.txt"), "1", mtime=1_700_000_000)
+    for n in ("z_dir", "a_dir", "m_dir"):
+        os.makedirs(os.path.join(d, n), exist_ok=True)
+    os.utime(os.path.join(d, "z_dir"), (1_900_000_000, 1_900_000_000))   # 目录里最新
+    os.utime(os.path.join(d, "a_dir"), (1_500_000_000, 1_500_000_000))   # 目录里最旧
+    os.utime(os.path.join(d, "m_dir"), (1_600_000_000, 1_600_000_000))
+    _touch(os.path.join(d, "m_new.md"), "1", mtime=1_800_000_000)        # 文件里最新
+    _touch(os.path.join(d, "b_old.txt"), "1", mtime=1_400_000_000)       # 比所有目录都旧
     j = client.get("/api/results/" + sid).json()
-    assert [i["name"] for i in j["items"]][0] == "task_latest"
+    assert [i["name"] for i in j["items"]] == ["a_dir", "m_dir", "z_dir", "m_new.md", "b_old.txt"], \
+        "目录必须全部排在文件前面，目录之间按 A->Z，文件按时间倒序"
+    assert [i["is_dir"] for i in j["items"]] == [True, True, True, False, False]
+    j2 = client.get("/api/results/" + sid, params={"sort": "name"}).json()
+    assert [i["name"] for i in j2["items"]] == ["a_dir", "m_dir", "z_dir", "b_old.txt", "m_new.md"]
+
+
+@pytest.mark.api
+def test_results_subdir_listing_also_dirs_first(client, res_dir):
+    """子目录里同样：目录在上、文件在下（别只在根目录生效）。"""
+    sid, d = res_dir
+    sub = os.path.join(d, "00_task")
+    os.makedirs(os.path.join(sub, "inner"), exist_ok=True)
+    _touch(os.path.join(sub, "r1.txt"), "1", mtime=1_700_000_000)
+    _touch(os.path.join(sub, "r2.txt"), "1", mtime=1_800_000_000)
+    j = client.get("/api/results/" + sid, params={"path": "00_task"}).json()
+    assert [i["name"] for i in j["items"]] == ["inner", "r2.txt", "r1.txt"]
     assert j["items"][0]["is_dir"] is True
+
+
+@pytest.mark.api
+def test_viewed_mark_persists_and_counts(client, res_dir):
+    """P5.1 已查看：打开过的文件打标记，未查看计数要准（提醒用户还有哪些没看）。"""
+    sid, d = res_dir
+    f1 = _touch(os.path.join(d, "one.txt"), "1")
+    _touch(os.path.join(d, "two.txt"), "2")
+    j = client.get("/api/results/" + sid).json()
+    assert j["unread"] == 2 and j["viewed_count"] == 0
+    assert all(i["viewed"] is False for i in j["items"])
+    assert all(i["rel_path"] for i in j["items"])       # 前端要用 rel_path 做标记 key
+
+    r = client.post("/api/results/%s/viewed" % sid, json={"path": f1, "viewed": True})
+    assert r.status_code == 200 and r.json()["viewed"] is True and r.json()["rel"] == "one.txt"
+    assert os.path.isfile(os.path.join(d, ".viewed.json"))   # 真的落盘（换浏览器也记得）
+    j = client.get("/api/results/" + sid).json()
+    assert j["unread"] == 1 and j["viewed_count"] == 1
+    assert [i["viewed"] for i in j["items"] if i["name"] == "one.txt"] == [True]
+    assert ".viewed.json" not in [i["name"] for i in j["items"]]   # 点开头的不许出现在列表
+
+    r = client.post("/api/results/%s/viewed" % sid, json={"path": f1, "viewed": False})
+    assert r.json()["viewed"] is False
+    j = client.get("/api/results/" + sid).json()
+    assert j["unread"] == 2 and j["viewed_count"] == 0
+
+    r = client.post("/api/results/%s/viewed" % sid, json={"path": "two.txt"})   # 相对路径也认
+    assert r.status_code == 200 and r.json()["rel"] == "two.txt"
+    sub = os.path.join(d, "00_task")
+    os.makedirs(sub, exist_ok=True)
+    f3 = _touch(os.path.join(sub, "deep.csv"), "a,b")
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": f3}).status_code == 200
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": "00_task/deep.csv"}).status_code == 200
+
+
+@pytest.mark.api
+def test_viewed_mark_validation(client, res_dir, workdir):
+    """越权/不存在/空的 path 一律拒；目录不接受标记。"""
+    sid, d = res_dir
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": ""}).status_code == 400
+    outside = _touch(os.path.join(workdir, "outside.txt"), "x")
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": outside}).status_code == 403
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": os.path.join(d, "nope.txt")}).status_code == 404
+    os.makedirs(os.path.join(d, "adir"), exist_ok=True)
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": os.path.join(d, "adir")}).status_code == 400
+    r = client.post("/api/results/no-such-session-xyz/viewed", json={"path": os.path.join(d, "one.txt")})
+    assert r.status_code == 404
+
+
+@pytest.mark.api
+def test_viewed_expires_when_file_is_rewritten(client, res_dir):
+    """看过之后文件又被重新生成（同名新结果）→ 重新算「未查看」，别让用户以为已经看过了。"""
+    sid, d = res_dir
+    f = _touch(os.path.join(d, "rep.txt"), "v1", mtime=1_700_000_000)
+    assert client.post("/api/results/%s/viewed" % sid, json={"path": f}).status_code == 200
+    j = client.get("/api/results/" + sid).json()
+    assert [i["viewed"] for i in j["items"] if i["name"] == "rep.txt"] == [True]
+    assert j["unread"] == 0 and j["viewed_count"] == 1
+    _touch(os.path.join(d, "rep.txt"), "v2 rewritten", mtime=time.time() + 5)
+    j = client.get("/api/results/" + sid).json()
+    assert [i["viewed"] for i in j["items"] if i["name"] == "rep.txt"] == [False]
+    assert j["unread"] == 1 and j["viewed_count"] == 0
+
+
+@pytest.mark.api
+@pytest.mark.skipif(bool(os.environ.get("MEMOMICS_DATA_DIR")),
+                    reason="环境变量已覆盖数据目录，默认值断言不适用")
+def test_data_paths_follow_install_location():
+    """P6-3：work/results 默认就在安装目录下，代码里不许出现开发机绝对路径。"""
+    assert server.DATA_DIR == server.MEMOMICS_DIR
+    assert server.WORK_DIR == os.path.join(server.MEMOMICS_DIR, "work")
+    assert server.RESULTS_DIR == os.path.join(server.MEMOMICS_DIR, "results")
+    assert server._PREVIEW_ROOTS == [server.WORK_DIR, server.RESULTS_DIR, server.MEMOMICS_DIR]
+    src = io.open(os.path.join(server.MEMOMICS_DIR, "webui", "server.py"), encoding="utf-8").read()
+    for bad in ("E:/MemOmics-Agent", "E:\\\\MemOmics-Agent", "C:\\\\Users\\\\23136"):
+        assert bad not in src, "server.py 里还留着开发机路径: " + bad
+
+
+# ==================== D. P5.1 中英双语 ====================
+
+@pytest.mark.api
+def test_results_listing_note_localized(client, res_dir):
+    sid, d = res_dir
+    j = client.get("/api/results/" + sid, params={"lang": "en"}).json()
+    assert "no analysis results yet" in j["note"] and not any("\u4e00" <= c <= "\u9fff" for c in j["note"])
+    j2 = client.get("/api/results/" + sid).json()
+    assert "尚未产生分析结果" in j2["note"]
+    j3 = client.get("/api/results/" + sid, params={"lang": "zh-CN"}).json()
+    assert "尚未产生分析结果" in j3["note"]
+
+
+@pytest.mark.api
+def test_preview_and_open_messages_localized(client, res_dir):
+    sid, d = res_dir
+    r = client.get("/api/file/preview", params={"path": os.path.join(d, "nope.txt"), "lang": "en"})
+    assert r.status_code == 404 and r.json()["error"].startswith("File not found")
+    r = client.get("/api/file/preview", params={"path": d, "lang": "en"})
+    assert r.status_code == 200 and r.json()["kind"] == "missing" and "directory" in r.json()["error"]
+    r = client.get("/api/file/preview", params={"path": d})               # 默认中文
+    assert "这是一个目录" in r.json()["error"]
+    r = client.get("/api/file/preview")                                   # 缺 path
+    assert r.status_code == 400 and "缺少 path" in r.json()["error"]
+    r = client.get("/api/file/preview", params={"lang": "en"})
+    assert r.status_code == 400 and r.json()["error"] == "Missing path parameter"
+
+    f = _touch(os.path.join(d, "x.txt"), "hi")
+    r = client.post("/api/file/open", json={"path": f, "action": "explode", "lang": "en"})
+    assert r.status_code == 400 and r.json()["error"] == "action must be system or folder"
+    r = client.post("/api/file/open", json={"path": f, "action": "explode"})
+    assert r.status_code == 400 and "只支持" in r.json()["error"]
+
+
+@pytest.mark.api
+def test_preview_body_and_note_localized(client, res_dir):
+    """真正转出来的 hint 也要跟着语言走，不能只有报错双语。"""
+    sid, d = res_dir
+    p = _touch(os.path.join(d, "big.txt"), "line\n" * 10)
+    en = client.get("/api/file/preview", params={"path": p, "lang": "en"}).json()
+    zh = client.get("/api/file/preview", params={"path": p, "lang": "zh"}).json()
+    assert en["kind"] == zh["kind"] == "text"
+    assert en["text"] == zh["text"]                         # 文件内容本身不翻译
+    binp = os.path.join(d, "blob.bin")
+    with open(binp, "wb") as fh:
+        fh.write(bytes(range(256)) * 4)
+    en = client.get("/api/file/preview", params={"path": binp, "lang": "en"}).json()
+    zh = client.get("/api/file/preview", params={"path": binp, "lang": "zh"}).json()
+    assert en["hint"] != zh["hint"] and "Binary" in en["hint"]
+
+
+# ==================== E. 语言状态线程安全 + 前端零硬编码中文 ====================
+
+def test_preview_convert_lang_is_thread_local():
+    """server.py 用 run_in_executor 调 preview()：两个线程同时用不同语言，不许串。"""
+    import threading
+    from webui import preview_convert as _pc
+    assert hasattr(_pc, "_LANG_LOCAL"), "语言状态必须是 threading.local，不能是模块全局"
+    results, barrier = {}, threading.Barrier(2, timeout=10)
+
+    def worker(lang):
+        _pc.set_lang(lang)
+        barrier.wait()
+        seen = set()
+        for _ in range(400):
+            seen.add(_pc.T("中文", "English"))
+            seen.add(_pc.lang_now())
+        results[lang] = seen
+
+    ts = [threading.Thread(target=worker, args=(x,)) for x in ("zh", "en")]
+    [t.start() for t in ts]
+    [t.join(15) for t in ts]
+    assert results["zh"] == {"中文", "zh"}
+    assert results["en"] == {"English", "en"}
+    _pc.set_lang("zh")
+
+
+def _p5_regions():
+    """(完整 html, [(名字, 代码)]) —— 前端 P5 区块"""
+    with io.open(os.path.join(server.MEMOMICS_DIR, "webui", "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    out = []
+    for name, a, b in (("P5-VIEWER", "// === P5-VIEWER-BEGIN", "// === P5-VIEWER-END ==="),
+                       ("P5-SORT", "// === P5-SORT-BEGIN", "// === P5-SORT-END ===")):
+        i, j = html.find(a), html.find(b)
+        assert i > 0 and j > i, name + " 区块找不到"
+        out.append((name, html[i:j]))
+    return html, out
+
+
+def test_p5_frontend_has_no_hardcoded_chinese():
+    """P5 前端区块里不许再有硬编码中文（文案必须走 t()/tf()，否则切英文会留中文）。"""
+    import re
+    html, regions = _p5_regions()
+    cjk = re.compile(r"[\u4e00-\u9fff]")
+    bad = []
+    for name, body in regions:
+        body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+        body = re.sub(r"^\s*//.*$", "", body, flags=re.M)
+        body = re.sub(r"\s+//[^\n]*$", "", body, flags=re.M)   # 行尾注释（注释里可以有中文）
+        for line in body.split("\n"):
+            if cjk.search(line):
+                bad.append("%s: %s" % (name, line.strip()[:120]))
+    assert not bad, "还有硬编码中文：\n" + "\n".join(bad)
+
+
+def test_i18n_dicts_have_identical_p5_keys():
+    """zh / en 两本字典键必须完全一致，且前端用到的键都得存在（缺一个英文界面就露中文）。"""
+    import re
+    html, _ = _p5_regions()
+    i = html.find("var I18N = {")
+    j = html.find("var UI_LANG", i)
+    block = html[i:j]
+    zh_i, en_i = block.find("zh: {"), block.find("en: {")
+    zh = set(re.findall(r"'([A-Za-z0-9_]+)'\s*:", block[zh_i:en_i]))
+    en = set(re.findall(r"'([A-Za-z0-9_]+)'\s*:", block[en_i:]))
+    assert zh and len(zh) == len(en), "zh=%d en=%d" % (len(zh), len(en))
+    assert zh == en, "键不一致: %s" % sorted(zh ^ en)
+    used = set(re.findall(r"\btf?\(\s*'([A-Za-z0-9_]+)'", html))
+    used |= set(re.findall(r'data-i18n(?:-title|-ph)?="([A-Za-z0-9_]+)"', html))
+    missing = sorted(k for k in used if k not in zh)
+    assert not missing, "前端用到但字典里没有的键: %s" % missing
+    need = {"rs_up", "rs_root", "rs_viewed", "rs_unread", "rs_unread_only", "rs_unread_done",
+            "rs_session", "rs_count_figs", "rs_count_items", "rs_count_unread", "rs_figs_empty",
+            "rs_figs_failed", "rv_opening", "rv_sys", "rv_folder", "rv_download", "rv_cannot_show"}
+    assert not (need - zh), "缺少键: %s" % sorted(need - zh)
 
 
 @pytest.mark.api

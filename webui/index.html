@@ -794,6 +794,12 @@ table.dcb-table.dg-table th { position:relative; }
 .sort-chip.active { background:var(--primary); color:#fff; border-color:var(--primary); }
 .fig-thumb .fig-zoom { position:absolute; right:6px; top:6px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1; color:#fff; background:rgba(0,0,0,0.55); border-radius:7px; cursor:pointer; opacity:0.85; z-index:2; }
 .fig-thumb .fig-zoom:hover { opacity:1; background:var(--primary); transform:scale(1.08); }
+/* P5.1（2026-09-22）：已查看标记 —— 一眼看出哪些结果文件还没打开过 */
+.file-seen { font-size:10px; line-height:15px; color:var(--text-light); border:1px solid var(--border); border-radius:8px; padding:0 5px; margin-left:6px; cursor:pointer; opacity:0.7; flex:none; }
+.file-seen:hover { border-color:var(--primary); color:var(--primary); opacity:1; }
+.file-seen.on { color:var(--success); border-color:var(--success); }
+.file-item.rv-seen .file-name { color:var(--text-light); }
+.file-item.rv-seen .file-icon { opacity:0.55; }
 /* === P5-VIEWER-CSS-END === */
 /* 文件预览 */
 .file-preview { padding:12px; }
@@ -1157,7 +1163,34 @@ var I18N = {
     'base_url':'Base URL','model_id':'模型 ID','default_size':'默认尺寸 (横屏/竖屏在 config 里可另配)',
     'default_size2':'默认尺寸','imagegen_size_ph':'1024x1024 或 2K','not_connected':'未连接',
     'memory_ph':'输入要追加的记忆内容...','mem_append':'追加','mem_overwrite':'覆盖',
-    'drag_grip':'↑ 向上拖动拉大输入框（双击还原 100px）'
+    'drag_grip':'↑ 向上拖动拉大输入框（双击还原 100px）',
+'rs_sort':'排序','rs_sort_latest':'🕐 最新在上','rs_sort_latest_title':'目录永远在最上面；文件按修改时间倒序，最新生成的在最上面',
+     'rs_sort_name':'🔤 按名称','rs_sort_name_title':'目录永远在最上面，其余按名称排序',
+     'rs_unread_only':'🔵 只看未查看','rs_unread_only_title':'只显示还没打开看过的文件',
+     'rs_count_items':'共 {0} 项','rs_count_figs':'共 {0} 张图','rs_count_unread':' · 未查看 {0}','rs_all_viewed':' · 全部已查看',
+     'rs_empty_results':'暂无分析结果','rs_unread_done':'🎉 没有未查看的文件了','rs_show_all':'显示全部文件',
+     'rs_up':'返回上一级','rs_root':'🏠 根目录','rs_session':'会话 {0}',
+     'rs_figs_empty':'暂无图片。分析过程中生成的图会自动出现在这里。','rs_figs_failed':'加载图片失败',
+     'rs_dl_title':'下载 {0}','rs_zoom_title':'在右侧面板内嵌查看（带排序/下载/系统打开）',
+     'rs_viewed':'已查看（点击改成未查看）','rs_unread':'未查看（点击标成已查看）',
+     'rv_opening':'⏳ 正在打开 {0} …','rv_fetch_failed':'预览请求失败：{0}','rv_engine':'引擎 {0}',
+     'rv_pages':'{0} 页','rv_sheets_n':'{0} 个工作表','rv_paras':'{0} 段 / {1} 表','rv_lines_n':'{0} 行',
+     'rv_zoom_title':'切换 原始大小 / 适应宽度','rv_md_title':'切换 渲染 / 源码','rv_render':'渲染','rv_source':'源码',
+     'rv_raw':'↗ 原文件','rv_raw_title':'在新标签页打开原始文件','rv_download':'⬇ 下载','rv_download_title':'下载到本机',
+     'rv_sys':'🖥 系统打开','rv_sys_title':'用系统默认程序打开（word/excel 原生打开）','rv_folder':'📂 定位','rv_folder_title':'在文件管理器中定位',
+     'rv_close_title':'关闭预览（Esc）','rv_actual':'原始大小（可横向滚动）','rv_fit':'适应面板宽度',
+     'rv_sent':'已交给系统','rv_failed':'失败：{0}','rv_missing':'文件不存在','rv_missing_desc':'可能已被删除或移动。',
+     'rv_trunc':'内容较大，仅显示前一部分{0}，完整内容请下载或用系统程序打开。','rv_trunc_lines':'（共 {0} 行）',
+     'rv_trunc_rows':'表格较大，仅显示前 {0} 行，共 {1} 行。',
+     'rv_note_pdf':'浏览器内嵌不了 PDF？点「↗ 原文件」在新标签打开，或用「🖥 系统打开」交给本机阅读器。',
+     'rv_note_img':'点击图片可切换「适应面板 / 原始大小」。',
+     'rv_note_html':'HTML 报告在沙箱 iframe 中渲染（可执行自身脚本，但访问不到本页数据）。打不开就点「↗ 原文件」。',
+     'rv_cannot_show':'这个文件不能直接显示','rv_binary_default':'二进制/专用格式文件。',
+     'rv_sys_open':'🖥 用系统程序打开','rv_reveal':'📂 在文件夹中定位',
+     'rv_no_table':'没有可显示的表格','rv_empty_parse':'解析结果是空的：{0}','rv_sheet_info':'工作表：{0}（{1} 行 × {2} 列）',
+     'rv_col':'列 {0}','rv_sort_col_title':'点击按此列排序','rv_rows_note':'显示 {0} / {1} 行{2}　（点表头排序）','rv_cols_n':' · {0} 列',
+     'rv_nb_empty':'空 notebook','rv_nb_no_cells':'没有单元格。','rv_out_err':'❌ 报错','rv_out_img':'🖼️ 图片输出','rv_out':'▶ 输出',
+     'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）'
   },
   en: {
     'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
@@ -1181,12 +1214,42 @@ var I18N = {
     'base_url':'Base URL','model_id':'Model ID','default_size':'Default size (landscape/portrait configurable)',
     'default_size2':'Default size','imagegen_size_ph':'1024x1024 or 2K','not_connected':'Not connected',
     'memory_ph':'Memory content to append...','mem_append':'Append','mem_overwrite':'Overwrite',
-    'drag_grip':'↑ Drag up to enlarge input (double-click to reset)'
+    'drag_grip':'↑ Drag up to enlarge input (double-click to reset)',
+'rs_sort':'Sort','rs_sort_latest':'🕐 Newest first','rs_sort_latest_title':'Folders always stay on top; files are ordered by modification time, newest first',
+     'rs_sort_name':'🔤 By name','rs_sort_name_title':'Folders always stay on top; everything else sorted by name',
+     'rs_unread_only':'🔵 Unviewed only','rs_unread_only_title':'Show only the files you have not opened yet',
+     'rs_count_items':'{0} items','rs_count_figs':'{0} images','rs_count_unread':' · {0} unviewed','rs_all_viewed':' · all viewed',
+     'rs_empty_results':'No analysis results yet','rs_unread_done':'🎉 Nothing left unviewed','rs_show_all':'Show all files',
+     'rs_up':'Up one level','rs_root':'🏠 Root','rs_session':'Session {0}',
+     'rs_figs_empty':'No images yet. Figures generated during analysis will appear here automatically.','rs_figs_failed':'Failed to load images',
+     'rs_dl_title':'Download {0}','rs_zoom_title':'Open inline in the right panel (sort / download / system app)',
+     'rs_viewed':'Viewed (click to mark as unviewed)','rs_unread':'Not viewed (click to mark as viewed)',
+     'rv_opening':'⏳ Opening {0} …','rv_fetch_failed':'Preview request failed: {0}','rv_engine':'engine {0}',
+     'rv_pages':'{0} pages','rv_sheets_n':'{0} sheets','rv_paras':'{0} paragraphs / {1} tables','rv_lines_n':'{0} lines',
+     'rv_zoom_title':'Toggle actual size / fit width','rv_md_title':'Toggle rendered / source','rv_render':'Rendered','rv_source':'Source',
+     'rv_raw':'↗ Raw file','rv_raw_title':'Open the raw file in a new tab','rv_download':'⬇ Download','rv_download_title':'Download to this computer',
+     'rv_sys':'🖥 System app','rv_sys_title':'Open with the system default app (native Word/Excel)','rv_folder':'📂 Reveal','rv_folder_title':'Reveal in the file manager',
+     'rv_close_title':'Close preview (Esc)','rv_actual':'Actual size (scroll horizontally)','rv_fit':'Fit panel width',
+     'rv_sent':'Handed to the system','rv_failed':'Failed: {0}','rv_missing':'File not found','rv_missing_desc':'It may have been deleted or moved.',
+     'rv_trunc':'Large file — showing only the beginning{0}. Download it or open it with a system app for the full content.','rv_trunc_lines':' ({0} lines total)',
+     'rv_trunc_rows':'Large table — showing the first {0} rows out of {1}.',
+     'rv_note_pdf':'Cannot embed the PDF? Click “↗ Raw file” to open it in a new tab, or “🖥 System app” to use the local reader.',
+     'rv_note_img':'Click the image to toggle between fit-to-panel and actual size.',
+     'rv_note_html':'The HTML report renders in a sandboxed iframe (its own scripts run, but it cannot reach this page). If it fails, click “↗ Raw file”.',
+     'rv_cannot_show':'This file cannot be displayed inline','rv_binary_default':'Binary / proprietary format.',
+     'rv_sys_open':'🖥 Open with system app','rv_reveal':'📂 Reveal in folder',
+     'rv_no_table':'No table to display','rv_empty_parse':'The parse result is empty: {0}','rv_sheet_info':'Sheet: {0} ({1} rows × {2} cols)',
+     'rv_col':'Col {0}','rv_sort_col_title':'Click to sort by this column','rv_rows_note':'Showing {0} / {1} rows{2}　(click a header to sort)','rv_cols_n':' · {0} cols',
+     'rv_nb_empty':'Empty notebook','rv_nb_no_cells':'No cells.','rv_out_err':'❌ Error','rv_out_img':'🖼️ Image output','rv_out':'▶ Output',
+     'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)'
   }
 };
 var UI_LANG = 'zh';
 try { UI_LANG = localStorage.getItem('memomics_ui_lang') || 'zh'; } catch(e) {}
 function t(key){ var d = I18N[UI_LANG] || I18N.zh; return (d[key] != null) ? d[key] : (I18N.zh[key] || key); }
+// P5.1：带参数的文案（'共 {0} 项' → '共 3 项'）。已有 t() 不支持占位符，故加这一个。
+function tf(key){ var s = t(key); var a = Array.prototype.slice.call(arguments, 1);
+  return String(s).replace(/\{(\d+)\}/g, function(m, i){ return (a[+i] != null) ? String(a[+i]) : m; }); }
 function applyUILang(){
   document.querySelectorAll('[data-i18n]').forEach(function(el){ var v = t(el.getAttribute('data-i18n')); if (v) el.textContent = v; });
   document.querySelectorAll('[data-i18n-ph]').forEach(function(el){ var v = t(el.getAttribute('data-i18n-ph')); if (v) el.placeholder = v; });
@@ -1194,6 +1257,9 @@ function applyUILang(){
   var btn = document.getElementById('lang-toggle');
   if (btn) btn.textContent = (UI_LANG === 'zh') ? 'EN' : '中';
   document.documentElement.lang = (UI_LANG === 'zh') ? 'zh-CN' : 'en';
+  // P5.1：排序条/查看器/文件列表都是 JS 动态生成的，切语言要按新语言重画一次
+  //（后端返回的 note/error/hint 也带 lang 重取，所以英文界面里不会残留中文）
+  if (typeof _p5OnLangChange === 'function') { try { _p5OnLangChange(); } catch (e) {} }
 }
 function toggleUILang(){ UI_LANG = (UI_LANG === 'zh') ? 'en' : 'zh'; try { localStorage.setItem('memomics_ui_lang', UI_LANG); } catch(e){} applyUILang(); }
 document.addEventListener('DOMContentLoaded', applyUILang);
@@ -1326,9 +1392,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       </div>
       <!-- 排序条（P5 2026-09-22）：默认「最新在上」——用户要求最新出的文件排最上面 -->
       <div id="results-sortbar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);align-items:center;gap:6px;">
-        <span>排序</span>
-        <span id="sort-time" class="sort-chip active" onclick="setResultsSort('time_desc')" title="按修改时间倒序：最新生成的在最上面">🕐 最新在上</span>
-        <span id="sort-name" class="sort-chip" onclick="setResultsSort('name')" title="按名称排序（目录优先）">🔤 按名称</span>
+        <span data-i18n="rs_sort">排序</span>
+        <span id="sort-time" class="sort-chip active" onclick="setResultsSort('time_desc')" data-i18n="rs_sort_latest" data-i18n-title="rs_sort_latest_title" title="目录永远在最上面；文件按修改时间倒序，最新生成的在最上面">🕐 最新在上</span>
+        <span id="sort-name" class="sort-chip" onclick="setResultsSort('name')" data-i18n="rs_sort_name" data-i18n-title="rs_sort_name_title" title="目录永远在最上面，其余按名称排序">🔤 按名称</span>
+        <span id="sort-unread" class="sort-chip" style="display:none;margin-left:6px;" onclick="toggleUnreadFilter()" data-i18n="rs_unread_only" data-i18n-title="rs_unread_only_title" title="只显示还没打开看过的文件">🔵 只看未查看</span>
         <span id="results-count" style="margin-left:auto;"></span>
       </div>
       <!-- 图片缩略图网格 -->
@@ -9791,14 +9858,14 @@ async function loadFigures() {
     _lastFigItems = figs; _lastFigBase = d.base || '';
     _lastFiguresCount = figs.length;
     // 签名:会话+文件名+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
-    var sig = currentSid + '||' + figs.map(function(f) { return f.name + '|' + f.size + '|' + (f.mtime_epoch || f.mtime || ''); }).join(',');
+    var sig = UI_LANG + '||' + currentSid + '||' + figs.map(function(f) { return f.name + '|' + f.size + '|' + (f.mtime_epoch || f.mtime || ''); }).join(',');
     if (!figs.length) sig += '|empty';
     _renderSortBar();
     if (sig === _lastFiguresSig) return;
     _lastFiguresSig = sig;
     var st = el.scrollTop;
     if (!figs.length) {
-      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">暂无图片。分析过程中生成的图会自动出现在这里。</div>';
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">' + escapeHtml(t('rs_figs_empty')) + '</div>';
       return;
     }
     // 平坦网格：当前会话所有图片统一展示（URL 附带文件修改时间戳，防止浏览器缓存旧图）
@@ -9806,24 +9873,26 @@ async function loadFigures() {
       var v = f.mtime_epoch ? Math.round(f.mtime_epoch * 1000) : 0;
       var inner = f.ext === '.pdf' ? '<div style="height:100px;display:flex;align-items:center;justify-content:center;font-size:24px;">📄</div>' : '<img src="' + f.url + '&v=' + v + '" loading="lazy">';
       // 2026-09-18: 右下角下载按钮；onclick 里 stopPropagation，保证「点击查看大图」不受影响
-      var dlBtn = '<a class="fig-dl" href="' + f.url + '&v=' + v + '" download="' + escapeHtml(f.name) + '" onclick="event.stopPropagation();" title="下载 ' + escapeHtml(f.name) + '">⬇</a>' + '<span class="fig-zoom" onclick="event.stopPropagation();openFigViewer(' + _fi + ')" title="在右侧面板内嵌查看（带排序/下载/系统打开）">⤢</span>';
+      var dlBtn = '<a class="fig-dl" href="' + f.url + '&v=' + v + '" download="' + escapeHtml(f.name) + '" onclick="event.stopPropagation();" title="' + escapeHtml(tf('rs_dl_title', f.name)) + '">⬇</a>' + '<span class="fig-zoom" onclick="event.stopPropagation();openFigViewer(' + _fi + ')" title="' + escapeHtml(t('rs_zoom_title')) + '">⤢</span>';
       return '<div class="fig-thumb" onclick="showFigurePreview(\'' + f.url + '&v=' + v + '\',\'' + escapeHtml(f.name) + '\')"><div class="fig-thumb-media">' + inner + dlBtn + '</div><div class="fig-thumb-name">' + escapeHtml(f.name) + '</div><div class="fig-thumb-mtime">🕐 ' + escapeHtml(f.mtime || '') + '</div></div>';
     }).join('') + '</div>';
     el.scrollTop = st;
   } catch(e) {
-    document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">加载图片失败</div>';
+    document.getElementById('results-figures').innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-light);">' + escapeHtml(t('rs_figs_failed')) + '</div>';
   }
 }
 
 async function loadResultsFiles() {
-  var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || '') + '&sort=' + (_resultsSort === 'name' ? 'name' : 'time_desc'));
+  var r = await fetch('/api/results/' + currentSid + '?path=' + encodeURIComponent(currentPath.results || '') + '&sort=' + (_resultsSort === 'name' ? 'name' : 'time_desc') + '&lang=' + UI_LANG);
   var d = await r.json();
   var sessionId = d.session_id || currentSid;
   var items = _sortItems(d.items || [], _resultsSort, 'mtime');
   _lastResultItems = items;
   _lastFilesCount = items.length;
-  // 签名:会话+路径+文件名+类型+大小+修改时间。内容没变就跳过重绘(小幅刷新不闪烁)
-  var sig = currentSid + '||' + currentPath.results + '||' + items.map(function(f) { return f.name + '|' + (f.is_dir ? 1 : 0) + '|' + f.size + '|' + (f.mtime || ''); }).join(',');
+  var shown = _visibleResultItems(items);
+  _lastFilesShown = shown.length;
+  // 签名:语言+是否只看未查看+会话+路径+名字+类型+大小+修改时间+已查看。内容没变就跳过重绘(小幅刷新不闪烁)
+  var sig = UI_LANG + '||' + (_showUnreadOnly ? 'u' : 'a') + '||' + currentSid + '||' + currentPath.results + '||' + shown.map(function(f) { return f.name + '|' + (f.is_dir ? 1 : 0) + '|' + f.size + '|' + (f.mtime || '') + '|' + (f.viewed ? 1 : 0); }).join(',');
   if (!items.length) sig += '|empty';
   _renderSortBar();
   if (sig === _lastFilesSig) return;
@@ -9831,7 +9900,7 @@ async function loadResultsFiles() {
   var listEl = document.getElementById('results-list');
   var st = listEl.scrollTop;
   var pathParts = (d.path || '').split('/').filter(function(p){return p;});
-  var breadcrumb = '<span style="color:var(--primary);font-weight:600;cursor:pointer;" onclick="currentPath.results=\'\';loadResultsFiles()">' + escapeHtml(d.results_name || ('会话 ' + sessionId)) + '</span>';
+  var breadcrumb = '<span style="color:var(--primary);font-weight:600;cursor:pointer;" onclick="currentPath.results=\'\';loadResultsFiles()">' + escapeHtml(d.results_name || tf('rs_session', sessionId)) + '</span>';
   var accumPath = '';
   for (var i = 0; i < pathParts.length; i++) {
     accumPath += (i > 0 ? '/' : '') + pathParts[i];
@@ -9844,20 +9913,28 @@ async function loadResultsFiles() {
     parts.pop();
     parentPath = parts.join('/');
   }
-  var backBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--primary);color:#fff;border:none;cursor:pointer;margin-left:6px;">⬆️ 返回上一级</button>' : '';
-  var rootBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;margin-left:4px;">🏠 根目录</button>' : '';
+  var backBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--primary);color:#fff;border:none;cursor:pointer;margin-left:6px;">⬆️ ' + escapeHtml(t('rs_up')) + '</button>' : '';
+  var rootBtn = currentPath.results ? ' <button class="back-btn" onclick="currentPath.results=\'\';loadResultsFiles()" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text);border:none;cursor:pointer;margin-left:4px;">' + escapeHtml(t('rs_root')) + '</button>' : '';
   document.getElementById('results-path').innerHTML = breadcrumb + backBtn + rootBtn;
   if (!items.length) {
-    listEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + (d.note || '暂无分析结果') + '</div>';
+    listEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">' + escapeHtml(d.note || t('rs_empty_results')) + '</div>';
     return;
   }
-  var upItem = currentPath.results ? '<div class="file-item" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="color:var(--primary);"><span class="file-icon">⬆️</span><span class="file-name">返回上一级</span></div>' : '';
-  listEl.innerHTML = upItem + items.map(function(f) {
+  var upItem = currentPath.results ? '<div class="file-item" onclick="currentPath.results=\'' + parentPath + '\';loadResultsFiles()" style="color:var(--primary);"><span class="file-icon">⬆️</span><span class="file-name">' + escapeHtml(t('rs_up')) + '</span></div>' : '';
+  if (!shown.length) {   // 只看未查看：这一层全看完了
+    listEl.innerHTML = upItem + '<div style="padding:12px;font-size:12px;color:var(--text-light);">' + escapeHtml(t('rs_unread_done')) +
+      ' <span style="color:var(--primary);cursor:pointer;" onclick="toggleUnreadFilter()">' + escapeHtml(t('rs_show_all')) + '</span></div>';
+    listEl.scrollTop = st;
+    return;
+  }
+  listEl.innerHTML = upItem + shown.map(function(f) {
     var icon = f.is_dir ? '📁' : (f.ext === '.png' || f.ext === '.jpg' ? '🖼️' : f.ext === '.csv' ? '📊' : f.ext === '.rds' ? '💾' : '📄');
     var sizeStr = f.is_dir ? '' : formatSize(f.size);
     var mtimeStr = f.is_dir ? '' : '<span class="file-mtime">' + escapeHtml(f.mtime_str || '') + '</span>';
     var dlBtn = f.is_dir ? '' : '<button class="download-btn" onclick="event.stopPropagation();downloadFile(\'' + f.path + '\')">' + t('download') + '</button>';
-    return '<div class="file-item" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
+    // P5.1 已查看角标：✓=看过，●=还没看过（点一下可手动切换）
+    var seen = f.is_dir ? '' : '<span class="file-seen' + (f.viewed ? ' on' : '') + '" title="' + escapeHtml(f.viewed ? t('rs_viewed') : t('rs_unread')) + '" onclick="event.stopPropagation();toggleViewed(\'' + f.path + '\',' + (f.viewed ? 'false' : 'true') + ')">' + (f.viewed ? '✓' : '●') + '</span>';
+    return '<div class="file-item' + ((!f.is_dir && f.viewed) ? ' rv-seen' : '') + '" onclick="' + (f.is_dir ? "browseResults('" + f.rel_path + "')" : "openFileViewer('" + f.path + "','" + escapeHtml(f.name) + "','results')") + '"><span class="file-icon">' + icon + '</span><span class="file-name">' + escapeHtml(f.name) + '</span>' + seen + mtimeStr + '<span class="file-size">' + sizeStr + '</span>' + dlBtn + '</div>';
   }).join('');
   listEl.scrollTop = st;
 }
@@ -9972,14 +10049,22 @@ async function openFileViewer(path, name, host) {
   _rvState.mdRaw = false;
   _rvState.host = host === 'files' ? 'files' : 'results';
   el.style.display = 'flex';
-  el.innerHTML = _rvBarHtml() + '<div class="rv-body" id="rv-body"><div class="rv-loading">⏳ 正在打开 ' + _rve(_rvState.name) + ' …</div></div>';
+  el.innerHTML = _rvBarHtml() + '<div class="rv-body" id="rv-body"><div class="rv-loading">' + _rve(tf('rv_opening', _rvState.name)) + '</div></div>';
+  _rvState._marked = false;
   try {
-    var r = await fetch('/api/file/preview?path=' + encodeURIComponent(path));
+    // lang：后端 note/error/hint 也按当前界面语言返回，英文界面里不会残留中文
+    var r = await fetch('/api/file/preview?path=' + encodeURIComponent(path) + '&lang=' + UI_LANG);
     var d = await r.json();
     if (d && d.error && !d.kind) { _rvState.data = { kind: 'binary', error: d.error }; }
     else { _rvState.data = d; }
   } catch (e) {
-    _rvState.data = { kind: 'binary', error: '预览请求失败：' + e };
+    _rvState.data = { kind: 'binary', error: tf('rv_fetch_failed', e) };
+  }
+  // P5.1：标记「已查看」（只针对分析结果目录里的文件；文件浏览面板不动它）
+  // 读不到的文件（missing）不算看过
+  if (_rvState.host === 'results' && !(_rvState.data && _rvState.data.kind === 'missing')) {
+    _rvState._marked = true;
+    _markViewed(path, true);
   }
   _rvRender();
 }
@@ -9992,6 +10077,11 @@ function closeFileViewer() {
   if (el.parentNode && el.parentNode.classList) el.parentNode.classList.remove('rv-open');
   _rvState.data = null;
   _rvState.path = '';
+  if (_rvState._marked) {   // P5.1：打开过就刷新列表，角标/未查看计数立刻更新
+    _rvState._marked = false;
+    _lastFilesSig = '';
+    try { loadResultsFiles(); } catch (e) {}
+  }
 }
 function _rvIsOpen() {
   var el = document.getElementById('rv-viewer');
@@ -10004,15 +10094,15 @@ function _rvBarHtml() {
   var bits = [];
   if (meta.size_str) bits.push(meta.size_str);
   if (meta.mtime_str) bits.push(meta.mtime_str);
-  if (d.kind === 'pdf' && d.pages) bits.push(d.pages + ' 页');
-  if (d.kind === 'excel' && d.sheets) bits.push(d.sheets.length + ' 个工作表');
-  if (d.kind === 'word' && d.paragraphs) bits.push(d.paragraphs + ' 段 / ' + (d.tables || 0) + ' 表');
-  if (d.kind === 'text' && d.total_lines) bits.push(d.total_lines + ' 行');
+  if (d.kind === 'pdf' && d.pages) bits.push(tf('rv_pages', d.pages));
+  if (d.kind === 'excel' && d.sheets) bits.push(tf('rv_sheets_n', d.sheets.length));
+  if (d.kind === 'word' && d.paragraphs) bits.push(tf('rv_paras', d.paragraphs, d.tables || 0));
+  if (d.kind === 'text' && d.total_lines) bits.push(tf('rv_lines_n', d.total_lines));
   if (d.encoding) bits.push(d.encoding);
-  if (d.engine) bits.push('引擎 ' + d.engine);
+  if (d.engine) bits.push(tf('rv_engine', d.engine));
   var kindIcon = d.kind ? _rvKindIcon(d.kind, _rvState.name) : '📄';
-  var zoomBtn = (d.kind === 'image') ? '<span class="rv-btn" onclick="_rvAct(\'zoom\')" title="切换 原始大小 / 适应宽度">🔍</span>' : '';
-  var mdBtn = (d.kind === 'markdown') ? '<span class="rv-btn" onclick="_rvAct(\'mdraw\')" title="切换 渲染 / 源码">' + (d.mdRaw ? '渲染' : '源码') + '</span>' : '';
+  var zoomBtn = (d.kind === 'image') ? '<span class="rv-btn" onclick="_rvAct(\'zoom\')" title="' + _rve(t('rv_zoom_title')) + '">🔍</span>' : '';
+  var mdBtn = (d.kind === 'markdown') ? '<span class="rv-btn" onclick="_rvAct(\'mdraw\')" title="' + _rve(t('rv_md_title')) + '">' + _rve(d.mdRaw ? t('rv_render') : t('rv_source')) + '</span>' : '';
   return '<div class="rv-bar">' +
     '<span style="font-size:13px;">' + kindIcon + '</span>' +
     '<span class="rv-name" title="' + _rve(_rvState.path) + '">' + _rve(_rvState.name) + '</span>' +
@@ -10020,11 +10110,11 @@ function _rvBarHtml() {
     '<span class="rv-msg" id="rv-msg"></span>' +
     '<span class="rv-spacer"></span>' +
     mdBtn + zoomBtn +
-    '<span class="rv-btn" onclick="_rvAct(\'raw\')" title="在新标签页打开原始文件">↗ 原文件</span>' +
-    '<span class="rv-btn" onclick="_rvAct(\'download\')" title="下载到本机">⬇ 下载</span>' +
-    '<span class="rv-btn" onclick="_rvAct(\'sys\')" title="用系统默认程序打开（word/excel 原生打开）">🖥 系统打开</span>' +
-    '<span class="rv-btn" onclick="_rvAct(\'folder\')" title="在文件管理器中定位">📂 定位</span>' +
-    '<span class="rv-btn danger" onclick="_rvAct(\'close\')" title="关闭预览（Esc）">✕</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'raw\')" title="' + _rve(t('rv_raw_title')) + '">' + _rve(t('rv_raw')) + '</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'download\')" title="' + _rve(t('rv_download_title')) + '">' + _rve(t('rv_download')) + '</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'sys\')" title="' + _rve(t('rv_sys_title')) + '">' + _rve(t('rv_sys')) + '</span>' +
+    '<span class="rv-btn" onclick="_rvAct(\'folder\')" title="' + _rve(t('rv_folder_title')) + '">' + _rve(t('rv_folder')) + '</span>' +
+    '<span class="rv-btn danger" onclick="_rvAct(\'close\')" title="' + _rve(t('rv_close_title')) + '">✕</span>' +
     '</div>';
 }
 
@@ -10036,7 +10126,7 @@ function _rvAct(a) {
   if (a === 'raw') { window.open(d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(p)), '_blank'); return; }
   if (a === 'zoom') {
     var img = document.querySelector('#rv-body .rv-img');
-    if (img) { var on = img.classList.toggle('actual'); _rvMsg(on ? '原始大小（可横向滚动）' : '适应面板宽度'); }
+    if (img) { var on = img.classList.toggle('actual'); _rvMsg(on ? t('rv_actual') : t('rv_fit')); }
     return;
   }
   if (a === 'mdraw') {
@@ -10047,10 +10137,10 @@ function _rvAct(a) {
   if (a === 'sys' || a === 'folder') {
     (async function() {
       try {
-        var r = await fetch('/api/file/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, action: a === 'folder' ? 'folder' : 'system' }) });
+        var r = await fetch('/api/file/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p, action: a === 'folder' ? 'folder' : 'system', lang: UI_LANG }) });
         var j = await r.json();
-        _rvMsg(j.ok ? (j.message || '已交给系统') : ('失败：' + (j.error || r.status)), !j.ok);
-      } catch (e) { _rvMsg('失败：' + e, true); }
+        _rvMsg(j.ok ? (j.message || t('rv_sent')) : tf('rv_failed', (j.error || r.status)), !j.ok);
+      } catch (e) { _rvMsg(tf('rv_failed', e), true); }
     })();
     return;
   }
@@ -10064,13 +10154,13 @@ function _rvRender() {
   var d = _rvState.data || {};
   var meta = d.meta || {};
   var html = '';
-  if (meta.exists === false) { body.innerHTML = _rvCard('🗑️', '文件不存在', '可能已被删除或移动。'); return; }
+  if (meta.exists === false) { body.innerHTML = _rvCard('🗑️', t('rv_missing'), t('rv_missing_desc')); return; }
 
   // 截断/降级提示
   var warns = [];
   if (d.note) warns.push(d.note);
-  if (d.truncated) warns.push('内容较大，仅显示前一部分' + (d.total_lines ? '（共 ' + d.total_lines + ' 行）' : '') + '，完整内容请下载或用系统程序打开。');
-  if (d.truncated_rows) warns.push('表格较大，仅显示前 ' + d.rows_shown + ' 行，共 ' + d.total_rows + ' 行。');
+  if (d.truncated) warns.push(tf('rv_trunc', d.total_lines ? tf('rv_trunc_lines', d.total_lines) : ''));
+  if (d.truncated_rows) warns.push(tf('rv_trunc_rows', d.rows_shown, d.total_rows));
   if (d.error) warns.push(d.error);
   var warnHtml = warns.length ? '<div class="rv-warn">⚠️ ' + warns.map(_rve).join('<br>') + '</div>' : '';
 
@@ -10093,23 +10183,23 @@ function _rvRender() {
     html = _rvNotebookHtml(d);
   } else if (kind === 'pdf') {
     html = '<embed class="rv-pdf" src="' + (d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path))) + '" type="application/pdf">' +
-      '<div class="rv-note">浏览器内嵌不了 PDF？点「↗ 原文件」在新标签打开，或用「🖥 系统打开」交给本机阅读器。</div>';
+      '<div class="rv-note">' + _rve(t('rv_note_pdf')) + '</div>';
   } else if (kind === 'image') {
     var raw = d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path));
     html = '<div class="rv-imgwrap"><img class="rv-img" src="' + raw + '&v=' + Date.now() + '" alt="' + _rve(_rvState.name) + '" onclick="_rvAct(\'zoom\')"></div>' +
-      '<div class="rv-note">点击图片可切换「适应面板 / 原始大小」。</div>';
+      '<div class="rv-note">' + _rve(t('rv_note_img')) + '</div>';
   } else if (kind === 'html') {
     var raw2 = d.raw_url || ('/api/file/raw?path=' + encodeURIComponent(_rvState.path));
     html = '<iframe class="rv-iframe" src="' + raw2 + '&v=' + Date.now() + '" sandbox="allow-scripts allow-popups allow-forms"></iframe>' +
-      '<div class="rv-note">HTML 报告在沙箱 iframe 中渲染（可执行自身脚本，但访问不到本页数据）。打不开就点「↗ 原文件」。</div>';
+      '<div class="rv-note">' + _rve(t('rv_note_html')) + '</div>';
   } else {
     html = _rvCard(_rvKindIcon(kind, _rvState.name),
-      '这个文件不能直接显示',
-      (d.hint || '二进制/专用格式文件。') + '<br>' + _rve(meta.name || _rvState.name) + ' · ' + _rve(meta.size_str || '') +
+      t('rv_cannot_show'),
+      (d.hint || t('rv_binary_default')) + '<br>' + _rve(meta.name || _rvState.name) + ' · ' + _rve(meta.size_str || '') +
       '<div class="rv-toolbar2">' +
-      '<span class="rv-btn" onclick="_rvAct(\'sys\')">🖥 用系统程序打开</span>' +
-      '<span class="rv-btn" onclick="_rvAct(\'folder\')">📂 在文件夹中定位</span>' +
-      '<span class="rv-btn" onclick="_rvAct(\'download\')">⬇ 下载</span></div>');
+      '<span class="rv-btn" onclick="_rvAct(\'sys\')">' + _rve(t('rv_sys_open')) + '</span>' +
+      '<span class="rv-btn" onclick="_rvAct(\'folder\')">' + _rve(t('rv_reveal')) + '</span>' +
+      '<span class="rv-btn" onclick="_rvAct(\'download\')">' + _rve(t('rv_download')) + '</span></div>');
   }
   body.innerHTML = warnHtml + html;
   if (kind === 'code' || kind === 'notebook') { if (typeof initHighlight === 'function') initHighlight(); }
@@ -10124,7 +10214,7 @@ function _rvCard(icon, title, desc) {
 // --- 表格 / Excel ---
 function _rvSheetsHtml(d) {
   var sheets = d.sheets || [];
-  if (!sheets.length) return _rvCard('📊', '没有可显示的表格', '解析结果是空的：' + _rve(d.error || ''));
+  if (!sheets.length) return _rvCard('📊', t('rv_no_table'), tf('rv_empty_parse', _rve(d.error || '')));
   var idx = Math.min(_rvState.sheetIdx, sheets.length - 1);
   var tabs = '';
   if (sheets.length > 1) {
@@ -10134,7 +10224,7 @@ function _rvSheetsHtml(d) {
   }
   var s = sheets[idx];
   var rows = (s.rows || []).slice();
-  if (s.name) tabs = '<div class="rv-note" style="padding:0 0 6px;">工作表：' + _rve(s.name) + '（' + (s.total_rows != null ? s.total_rows : rows.length) + ' 行 × ' + (s.columns || []).length + ' 列）</div>' + tabs;
+  if (s.name) tabs = '<div class="rv-note" style="padding:0 0 6px;">' + tf('rv_sheet_info', _rve(s.name), (s.total_rows != null ? s.total_rows : rows.length), (s.columns || []).length) + '</div>' + tabs;
   return tabs + '<div id="rv-table-host">' + _rvTableHtml(s, rows) + '</div>';
 }
 function _rvSetSheet(i) {
@@ -10150,7 +10240,7 @@ function _rvSetSheet(i) {
     for (var k = 0; k < kids.length; k++) kids[k].className = 'rv-sheet' + (k === i ? ' active' : '');
   }
   var note = document.querySelector('#rv-body .rv-note');
-  if (note && s.name) note.textContent = '工作表：' + s.name + '（' + (s.total_rows != null ? s.total_rows : (s.rows || []).length) + ' 行 × ' + (s.columns || []).length + ' 列）';
+  if (note && s.name) note.textContent = tf('rv_sheet_info', s.name, (s.total_rows != null ? s.total_rows : (s.rows || []).length), (s.columns || []).length);
   host.innerHTML = _rvTableHtml(s, (s.rows || []).slice());
 }
 function _rvTableHtml(s, rows) {
@@ -10158,12 +10248,12 @@ function _rvTableHtml(s, rows) {
   var html = '<div class="rv-tablewrap"><table class="rv-table"><thead><tr><th class="rv-idx">#</th>';
   for (var c = 0; c < cols.length; c++) {
     var mark = _rvState.sortCol === c ? (_rvState.sortDir > 0 ? ' ▲' : ' ▼') : '';
-    html += '<th onclick="_rvSortBy(' + c + ')" title="点击按此列排序">' + _rve(cols[c] || ('列' + (c + 1))) + mark + '</th>';
+    html += '<th onclick="_rvSortBy(' + c + ')" title="' + _rve(t('rv_sort_col_title')) + '">' + _rve(cols[c] || tf('rv_col', c + 1)) + mark + '</th>';
   }
   html += '</tr></thead><tbody id="rv-tbody">' + _rvRowsHtml(rows) + '</tbody></table></div>';
   var shown = rows.length;
   var total = (s.total_rows != null) ? s.total_rows : shown;
-  html += '<div class="rv-note">显示 ' + shown + ' / ' + total + ' 行' + (cols.length ? ' · ' + cols.length + ' 列' : '') + '　（点表头排序）</div>';
+  html += '<div class="rv-note">' + tf('rv_rows_note', shown, total, (cols.length ? tf('rv_cols_n', cols.length) : '')) + '</div>';
   return html;
 }
 function _rvRowsHtml(rows) {
@@ -10205,7 +10295,7 @@ function _rvSortBy(c) {
 // --- Notebook ---
 function _rvNotebookHtml(d) {
   var cells = d.cells || [];
-  if (!cells.length) return _rvCard('📓', '空 notebook', '没有单元格。');
+  if (!cells.length) return _rvCard('📓', t('rv_nb_empty'), t('rv_nb_no_cells'));
   var html = '<div class="rv-cells">';
   for (var i = 0; i < cells.length; i++) {
     var c = cells[i];
@@ -10222,7 +10312,7 @@ function _rvNotebookHtml(d) {
       for (var k = 0; k < outs.length; k++) {
         var o = outs[k];
         var cls = (o.type === 'error') ? 'rv-out rv-out-err' : 'rv-out';
-        var head = o.type === 'error' ? '❌ 报错' : (o.type === 'image' ? '🖼️ 图片输出' : '▶ 输出');
+        var head = _rve(o.type === 'error' ? t('rv_out_err') : (o.type === 'image' ? t('rv_out_img') : t('rv_out')));
         if (o.type === 'image' && o.data) {
           html += '<div class="' + cls + '"><img src="data:' + _rve(o.mime || 'image/png') + ';base64,' + o.data + '" style="max-width:100%;"></div>';
         } else if (o.data) {
@@ -10234,7 +10324,7 @@ function _rvNotebookHtml(d) {
       html += '</div>';
     }
   }
-  return html + '</div><div class="rv-note">共 ' + cells.length + ' 个单元格' + (d.truncated ? '（已截断）' : '') + '</div>';
+  return html + '</div><div class="rv-note">' + tf('rv_nb_cells', cells.length, (d.truncated ? t('rv_truncated') : '')) + '</div>';
 }
 
 // Esc 关闭预览
@@ -10243,17 +10333,54 @@ document.addEventListener('keydown', function(e) {
 });
 // === P5-VIEWER-END ===
 
-// === P5-SORT-BEGIN (2026-09-22) 结果排序：默认最新在最上面 ===
+// === P5-SORT-BEGIN (2026-09-22 / P5.1 目录优先 + 已查看) 结果列表排序 ===
 var _resultsSort = 'time_desc';
 try { var _rs = localStorage.getItem('memomics.resultsSort'); if (_rs === 'name' || _rs === 'time_desc') _resultsSort = _rs; } catch (e) {}
+var _showUnreadOnly = false;   // P5.1「只看未查看」
+try { _showUnreadOnly = localStorage.getItem('memomics.resultsUnreadOnly') === '1'; } catch (e) {}
 var _lastResultItems = [], _lastFigItems = [], _lastFigBase = '';
+var _lastFilesShown = 0;
 
 function setResultsSort(mode) {
   _resultsSort = (mode === 'name') ? 'name' : 'time_desc';
   try { localStorage.setItem('memomics.resultsSort', _resultsSort); } catch (e) {}
+  _lastFilesSig = '';
   _renderSortBar();
-  loadResultsFiles(true);
-  loadFigures(true);
+  loadResultsFiles();
+  loadFigures();
+}
+/** P5.1：只看未查看（目录始终保留，方便进子目录接着看） */
+function toggleUnreadFilter() {
+  _showUnreadOnly = !_showUnreadOnly;
+  try { localStorage.setItem('memomics.resultsUnreadOnly', _showUnreadOnly ? '1' : '0'); } catch (e) {}
+  _lastFilesSig = '';
+  _renderSortBar();
+  loadResultsFiles();
+}
+function _visibleResultItems(items) {
+  if (!_showUnreadOnly) return items;
+  return items.filter(function(f) { return f.is_dir || !f.viewed; });
+}
+/** P5.1：标记「已查看」（viewed=false 撤销）。先改内存，落库失败也不影响继续看。 */
+async function _markViewed(path, viewed) {
+  var v = (viewed !== false);
+  for (var i = 0; i < _lastResultItems.length; i++) {
+    if (_lastResultItems[i].path === path) { _lastResultItems[i].viewed = v; break; }
+  }
+  if (!currentSid) return;
+  try {
+    await fetch('/api/results/' + currentSid + '/viewed', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path, viewed: v })
+    });
+  } catch (e) {}
+}
+/** 点行尾小角标：手动在「已查看 / 未查看」之间切换 */
+async function toggleViewed(path, viewed) {
+  await _markViewed(path, viewed);
+  _lastFilesSig = '';
+  _renderSortBar();
+  loadResultsFiles();
 }
 function _renderSortBar() {
   var bar = document.getElementById('results-sortbar');
@@ -10262,25 +10389,51 @@ function _renderSortBar() {
   var timeEl = document.getElementById('sort-time'), nameEl = document.getElementById('sort-name');
   if (timeEl) timeEl.className = 'sort-chip' + (tOn ? ' active' : '');
   if (nameEl) nameEl.className = 'sort-chip' + (!tOn ? ' active' : '');
+  var files = _lastResultItems.filter(function(f) { return !f.is_dir; });
+  var unread = files.filter(function(f) { return !f.viewed; }).length;
+  var unEl = document.getElementById('sort-unread');
+  if (unEl) {
+    unEl.style.display = (resultsTab === 'files' && files.length) ? '' : 'none';
+    unEl.className = 'sort-chip' + (_showUnreadOnly ? ' active' : '');
+  }
   var cnt = document.getElementById('results-count');
   if (cnt) {
-    cnt.textContent = (resultsTab === 'figures')
-      ? ('共 ' + _lastFigItems.length + ' 张图')
-      : ('共 ' + _lastResultItems.length + ' 项');
+    if (resultsTab === 'figures') {
+      cnt.textContent = tf('rs_count_figs', _lastFigItems.length);
+    } else {
+      var txt = tf('rs_count_items', _lastResultItems.length);
+      if (files.length) txt += (unread ? tf('rs_count_unread', unread) : t('rs_all_viewed'));
+      if (_showUnreadOnly) txt += ' · ' + t('rs_unread_only');
+      cnt.textContent = txt;
+    }
   }
 }
+/** 排序：目录永远在最上面（目录之间按名称 A→Z），文件排在目录下面。
+    用户 2026-09-22 明确要求：目录优先、不与文件混排；最新生成的文件排在文件区最上面。
+    mode='time_desc' → 文件按修改时间倒序；mode='name' → 全部按名称升序。*/
 function _sortItems(items, mode, timeKey) {
   var arr = items.slice();
-  if (mode === 'name') {
-    arr.sort(function(a, b) {
-      var ad = a.is_dir ? 0 : 1, bd = b.is_dir ? 0 : 1;
-      if (ad !== bd) return ad - bd;
-      return String(a.name || '').toLowerCase().localeCompare(String(b.name || '').toLowerCase());
-    });
-  } else {
-    arr.sort(function(a, b) { return (Number(b[timeKey]) || 0) - (Number(a[timeKey]) || 0); });
-  }
+  arr.sort(function(a, b) {
+    var ad = a.is_dir ? 0 : 1, bd = b.is_dir ? 0 : 1;
+    if (ad !== bd) return ad - bd;
+    var an = String(a.name || '').toLowerCase(), bn = String(b.name || '').toLowerCase();
+    if (mode === 'name') return an.localeCompare(bn);
+    if (ad === 0) return an.localeCompare(bn);
+    return (Number(b[timeKey]) || 0) - (Number(a[timeKey]) || 0);
+  });
   return arr;
+}
+/** 切换中英文时重画：排序条/文件列表/图墙/已打开的查看器
+    （后端 note/error/hint 也会带 lang 重取，所以英文界面里不会残留中文） */
+function _p5OnLangChange() {
+  try { _renderSortBar(); } catch (e) {}
+  if (typeof currentSid !== 'undefined' && currentSid) {
+    try { _lastFilesSig = ''; loadResultsFiles(); } catch (e) {}
+    try { _lastFiguresSig = ''; loadFigures(); } catch (e) {}
+  }
+  if (typeof _rvIsOpen === 'function' && _rvIsOpen() && _rvState.path) {
+    try { openFileViewer(_rvState.path, _rvState.name, _rvState.host); } catch (e) {}
+  }
 }
 /** 点击图片缩略图右上角 ⤢：在右侧面板内嵌查看（用绝对路径走统一查看器） */
 function openFigViewer(i) {

@@ -18,9 +18,51 @@ import io
 import json
 import os
 import re
+import threading
 import zipfile
 from datetime import datetime
 from xml.etree import ElementTree as ET
+
+# ---------------------------------------------------------------- 多语言
+# P5.1（2026-09-22）：后端只按 lang 输出「固定文案」，前端不做中文解析 —— UI 切英文时
+# 整条链路（含 note / error / hint）都是英文。默认 zh，既有行为与既有测试不受影响。
+# 说明：server.py 用 run_in_executor 调 preview()，请求可能落在不同工作线程上；
+# 所以语言状态放 threading.local（每线程一份），而不是模块级全局，避免并发请求串语言。
+_LANG_LOCAL = threading.local()
+
+
+def _get_lang() -> str:
+    return getattr(_LANG_LOCAL, "lang", "zh")
+
+
+def set_lang(lang) -> str:
+    """设置本次预览的文案语言（zh / en），返回生效值。"""
+    _LANG_LOCAL.lang = "en" if str(lang or "").strip().lower().startswith("en") else "zh"
+    return _LANG_LOCAL.lang
+
+
+def lang_now() -> str:
+    return _get_lang()
+
+
+def T(zh: str, en: str, *args) -> str:
+    """按当前语言取文案；给了 args 就走 %-格式化（格式化失败时原样返回，绝不抛）。"""
+    s = en if _get_lang() == "en" else zh
+    if args:
+        try:
+            return s % args
+        except Exception:
+            return s
+    return s
+
+
+def hint_for(ext: str) -> str:
+    """二进制/专用格式的「这是什么文件」说明，按语言取。"""
+    pair = BINARY_HINTS.get(ext or "")
+    if pair:
+        return pair[1] if _get_lang() == "en" else pair[0]
+    return "Binary / proprietary format" if _get_lang() == "en" else "二进制/专用格式"
+
 
 # ---------------------------------------------------------------- 分类
 
@@ -39,26 +81,47 @@ PDF_EXTS = {".pdf"}
 HTML_EXTS = {".html", ".htm"}
 NOTEBOOK_EXTS = {".ipynb"}
 # 明确知道的二进制（给出「为什么看不了」的解释，而不是笼统的未知类型）
+# 值统一是 (中文, English) 二元组：按 lang 取，见 hint_for()
 BINARY_HINTS = {
-    ".rds": "R 序列化对象（RDS）", ".rdata": "R 工作空间（RData）", ".rda": "R 数据（RDA）",
-    ".h5ad": "AnnData/HDF5 单细胞对象", ".h5": "HDF5 数据", ".hdf5": "HDF5 数据",
-    ".loom": "Loom 单细胞对象", ".mtx": "稀疏矩阵（MatrixMarket）",
-    ".bam": "BAM 比对文件", ".bai": "BAM 索引", ".sam": "SAM 比对文件",
-    ".cram": "CRAM 比对文件", ".bed": "BED 区间文件", ".bigwig": "BigWig 覆盖度",
-    ".bw": "BigWig 覆盖度", ".wig": "Wiggle 覆盖度",
-    ".parquet": "Parquet 列式数据", ".feather": "Feather 列式数据", ".arrow": "Arrow 数据",
-    ".npy": "NumPy 数组", ".npz": "NumPy 压缩数组", ".pkl": "Python pickle",
-    ".pickle": "Python pickle", ".joblib": "joblib 序列化对象",
-    ".zip": "压缩包", ".gz": "gzip 压缩文件", ".bz2": "bzip2 压缩文件",
-    ".tar": "tar 归档", ".7z": "7z 压缩包", ".rar": "rar 压缩包",
-    ".xls": "旧版 Excel（.xls，二进制格式）", ".doc": "旧版 Word（.doc，二进制格式）",
-    ".ppt": "旧版 PowerPoint", ".pptx": "PowerPoint 演示文稿",
-    ".hic": "Hi-C 接触矩阵", ".cool": "cool 矩阵", ".mcool": "multi-cool 矩阵",
-    ".fastq": "FASTQ 测序数据", ".fq": "FASTQ 测序数据", ".fasta": "FASTA 序列",
-    ".fa": "FASTA 序列", ".gtf": "GTF 注释", ".gff": "GFF 注释", ".gff3": "GFF3 注释",
-    ".vcf": "VCF 变异文件", ".bcf": "BCF 变异文件", ".tif": "TIFF 图像", ".tiff": "TIFF 图像",
-    ".eps": "EPS 矢量图", ".ps": "PostScript", ".psd": "Photoshop 文件",
-    ".ai": "Illustrator 文件", ".sbml": "SBML 模型", ".cel": "Affymetrix CEL",
+    ".rds": ("R 序列化对象（RDS）", "R serialized object (RDS)"),
+    ".rdata": ("R 工作空间（RData）", "R workspace image (RData)"),
+    ".rda": ("R 数据（RDA）", "R data file (RDA)"),
+    ".h5ad": ("AnnData/HDF5 单细胞对象", "AnnData/HDF5 single-cell object"),
+    ".h5": ("HDF5 数据", "HDF5 data"), ".hdf5": ("HDF5 数据", "HDF5 data"),
+    ".loom": ("Loom 单细胞对象", "Loom single-cell object"),
+    ".mtx": ("稀疏矩阵（MatrixMarket）", "Sparse matrix (MatrixMarket)"),
+    ".bam": ("BAM 比对文件", "BAM alignment"), ".bai": ("BAM 索引", "BAM index"),
+    ".sam": ("SAM 比对文件", "SAM alignment"),
+    ".cram": ("CRAM 比对文件", "CRAM alignment"),
+    ".bed": ("BED 区间文件", "BED intervals"),
+    ".bigwig": ("BigWig 覆盖度", "BigWig coverage"), ".bw": ("BigWig 覆盖度", "BigWig coverage"),
+    ".wig": ("Wiggle 覆盖度", "Wiggle coverage"),
+    ".parquet": ("Parquet 列式数据", "Parquet columnar data"),
+    ".feather": ("Feather 列式数据", "Feather columnar data"),
+    ".arrow": ("Arrow 数据", "Arrow data"),
+    ".npy": ("NumPy 数组", "NumPy array"), ".npz": ("NumPy 压缩数组", "NumPy compressed array"),
+    ".pkl": ("Python pickle", "Python pickle"), ".pickle": ("Python pickle", "Python pickle"),
+    ".joblib": ("joblib 序列化对象", "joblib serialized object"),
+    ".zip": ("压缩包", "ZIP archive"), ".gz": ("gzip 压缩文件", "gzip file"),
+    ".bz2": ("bzip2 压缩文件", "bzip2 file"),
+    ".tar": ("tar 归档", "tar archive"), ".7z": ("7z 压缩包", "7z archive"),
+    ".rar": ("rar 压缩包", "rar archive"),
+    ".xls": ("旧版 Excel（.xls，二进制格式）", "Legacy Excel (.xls, binary)"),
+    ".doc": ("旧版 Word（.doc，二进制格式）", "Legacy Word (.doc, binary)"),
+    ".ppt": ("旧版 PowerPoint", "Legacy PowerPoint"),
+    ".pptx": ("PowerPoint 演示文稿", "PowerPoint presentation"),
+    ".hic": ("Hi-C 接触矩阵", "Hi-C contact matrix"),
+    ".cool": ("cool 矩阵", "cool matrix"), ".mcool": ("multi-cool 矩阵", "multi-cool matrix"),
+    ".fastq": ("FASTQ 测序数据", "FASTQ reads"), ".fq": ("FASTQ 测序数据", "FASTQ reads"),
+    ".fasta": ("FASTA 序列", "FASTA sequence"), ".fa": ("FASTA 序列", "FASTA sequence"),
+    ".gtf": ("GTF 注释", "GTF annotation"), ".gff": ("GFF 注释", "GFF annotation"),
+    ".gff3": ("GFF3 注释", "GFF3 annotation"),
+    ".vcf": ("VCF 变异文件", "VCF variants"), ".bcf": ("BCF 变异文件", "BCF variants"),
+    ".tif": ("TIFF 图像", "TIFF image"), ".tiff": ("TIFF 图像", "TIFF image"),
+    ".eps": ("EPS 矢量图", "EPS vector graphic"), ".ps": ("PostScript", "PostScript"),
+    ".psd": ("Photoshop 文件", "Photoshop document"),
+    ".ai": ("Illustrator 文件", "Illustrator document"),
+    ".sbml": ("SBML 模型", "SBML model"), ".cel": ("Affymetrix CEL", "Affymetrix CEL"),
 }
 
 # 文本读入上限（超过只给头部，前端提示下载完整文件）
@@ -193,8 +256,9 @@ def preview_text(path: str, kind: str = "text") -> dict:
     cut = bool(truncated or line_cut)
     return {"kind": kind, "text": text, "encoding": enc,
             "truncated": cut,
-            "truncated_reason": ("文件较大，仅显示前 %d 行 / %s"
-                                 % (MAX_TEXT_LINES, human_size(MAX_TEXT_BYTES))) if cut else "",
+            "truncated_reason": T("文件较大，仅显示前 %d 行 / %s",
+                                  "Large file — showing the first %d lines / %s",
+                                  MAX_TEXT_LINES, human_size(MAX_TEXT_BYTES)) if cut else "",
             "total_lines": total_lines}
 
 
@@ -234,7 +298,7 @@ def _grid_to_sheet(name: str, rows, total_rows=None, total_cols=None) -> dict:
     body = [list(r) for r in rows[1:]] if rows else []
     if not header or all((h or "") == "" for h in header):
         width0 = len(body[0]) if body else len(header)
-        header = ["列%d" % (i + 1) for i in range(width0)]
+        header = [T("列%d", "Col %d", i + 1) for i in range(width0)]
         body = [list(r) for r in rows]
     width = max([len(header)] + [len(r) for r in body]) if body else len(header)
     header = (header + [""] * width)[:width]
@@ -251,7 +315,7 @@ def preview_table(path: str, max_rows: int = MAX_TABLE_ROWS, max_cols: int = MAX
     text, truncated, enc = read_text_file(path, max_bytes=2_000_000)
     if not text:
         return {"kind": "table", "sheets": [{"name": os.path.basename(path), "columns": [], "rows": []}],
-                "truncated": truncated, "note": "文件为空或无法解码"}
+                "truncated": truncated, "note": T("文件为空或无法解码", "File is empty or cannot be decoded")}
     delim = _sniff_delim(text[:8192])
     reader = csv.reader(io.StringIO(text), delimiter=delim)
     rows, total, wide = [], 0, False
@@ -457,9 +521,10 @@ def _spreadsheetml_2003(path: str, max_rows: int, max_cols: int, only_sheet=None
     try:
         root = ET.parse(path).getroot()
     except Exception as e:
-        raise ValueError("不是 XML 表格：%s" % e)
+        raise ValueError(T("不是 XML 表格：%s", "Not an XML spreadsheet: %s", e))
     if _local(root.tag) != "Workbook":
-        raise ValueError("不是 SpreadsheetML 工作簿（根节点 %s）" % _local(root.tag))
+        raise ValueError(T("不是 SpreadsheetML 工作簿（根节点 %s）",
+                           "Not a SpreadsheetML workbook (root node %s)", _local(root.tag)))
     sheets, truncated = [], False
     for ws in root:
         if _local(ws.tag) != "Worksheet":
@@ -515,7 +580,7 @@ def _spreadsheetml_2003(path: str, max_rows: int, max_cols: int, only_sheet=None
             truncated = True
             break
     if not sheets:
-        raise ValueError("SpreadsheetML 里没有工作表")
+        raise ValueError(T("SpreadsheetML 里没有工作表", "No worksheet inside the SpreadsheetML"))
     return sheets, truncated
 
 
@@ -535,10 +600,10 @@ def preview_excel(path: str, sheet=None, max_rows: int = MAX_TABLE_ROWS, max_col
                 err = (err + " / " if err else "") + "%s" % e2
         if not sheets:
             return {"kind": "excel", "sheets": [], "truncated": False, "engine": "",
-                    "error": "无法解析该表格：%s" % err}
+                    "error": T("无法解析该表格：%s", "Cannot parse this spreadsheet: %s", err)}
     if not sheets:
         return {"kind": "excel", "sheets": [], "truncated": truncated, "engine": engine,
-                "error": err or "没有可显示的工作表"}
+                "error": err or T("没有可显示的工作表", "No worksheet to display")}
     return {"kind": "excel", "sheets": sheets, "truncated": bool(truncated), "engine": engine, "error": err}
 
 
@@ -625,10 +690,12 @@ def preview_docx(path: str) -> dict:
         finally:
             zf.close()
     except Exception as e:
-        return {"kind": "word", "html": "", "error": "无法解析该 Word 文件：%s" % e}
+        return {"kind": "word", "html": "",
+                "error": T("无法解析该 Word 文件：%s", "Cannot parse this Word file: %s", e)}
     body = root.find(_W + "body")
     if body is None:
-        return {"kind": "word", "html": "", "error": "文档结构异常（没有 body）"}
+        return {"kind": "word", "html": "",
+                "error": T("文档结构异常（没有 body）", "Malformed document (no body element)")}
     html, n_par, n_tbl, chars, truncated = [], 0, 0, 0, False
     for child in body:
         if child.tag == _W + "p":
@@ -654,7 +721,8 @@ def preview_notebook(path: str) -> dict:
         with open(path, encoding="utf-8", errors="replace") as f:
             nb = json.load(f)
     except Exception as e:
-        return {"kind": "notebook", "cells": [], "error": "无法解析 .ipynb：%s" % e}
+        return {"kind": "notebook", "cells": [],
+                "error": T("无法解析 .ipynb：%s", "Cannot parse this .ipynb: %s", e)}
     cells, truncated, img_total = [], False, 0
     all_cells = nb.get("cells") or []
     for c in all_cells[:MAX_NOTEBOOK_CELLS]:
@@ -706,7 +774,8 @@ def preview_pdf(path: str) -> dict:
             except Exception:
                 pass
     except Exception as e:
-        info["error"] = "无法读取 PDF 信息（浏览器内嵌阅读不受影响）：%s" % e
+        info["error"] = T("无法读取 PDF 信息（浏览器内嵌阅读不受影响）：%s",
+                          "Cannot read PDF metadata (inline viewing is unaffected): %s", e)
     return info
 
 
@@ -753,14 +822,21 @@ def _text_fallback(path: str, meta: dict, original_kind: str, reason: str) -> di
 
 # ---------------------------------------------------------------- 分发
 
-def preview(path: str, sheet=None, max_rows: int = MAX_TABLE_ROWS, max_cols: int = MAX_TABLE_COLS):
-    """把任意文件转成前端能直接显示的结构。永远返回 dict，带 kind。"""
+def preview(path: str, sheet=None, max_rows: int = MAX_TABLE_ROWS, max_cols: int = MAX_TABLE_COLS,
+            lang: str = "zh"):
+    """把任意文件转成前端能直接显示的结构。永远返回 dict，带 kind。
+
+    lang: "zh"（默认）| "en" —— 只影响 note / error / hint 这些固定文案。
+    """
+    set_lang(lang)
     meta = file_meta(path)
     kind = kind_of(path)
     if not meta.get("exists"):
-        return {"kind": "missing", "meta": meta, "error": "文件不存在或已被删除"}
+        return {"kind": "missing", "meta": meta,
+                "error": T("文件不存在或已被删除", "File does not exist or was deleted")}
     if not os.path.isfile(path):
-        return {"kind": "missing", "meta": meta, "error": "这是一个目录，不能预览"}
+        return {"kind": "missing", "meta": meta,
+                "error": T("这是一个目录，不能预览", "This is a directory and cannot be previewed")}
     out = {"kind": kind, "meta": meta, "name": meta["name"], "ext": meta["ext"], "error": ""}
     try:
         if kind == "markdown":
@@ -780,7 +856,7 @@ def preview(path: str, sheet=None, max_rows: int = MAX_TABLE_ROWS, max_cols: int
         elif kind in ("image", "html"):
             out["inline"] = True   # 交给浏览器直接用原始字节渲染
         else:
-            out["hint"] = BINARY_HINTS.get(meta["ext"], "二进制/专用格式")
+            out["hint"] = hint_for(meta["ext"])
 
         # 内容嗅探兜底：扩展名与内容不符时（下载失败的错误页、纯文本占位文件），
         # 直接当文本显示，别让用户只看到一句「无法解析」。
@@ -788,15 +864,21 @@ def preview(path: str, sheet=None, max_rows: int = MAX_TABLE_ROWS, max_cols: int
             empty = not (out.get("sheets") or out.get("html") or out.get("cells"))
             if (out.get("error") or empty) and _looks_like_text(path):
                 return _text_fallback(path, meta, kind,
-                                      "这个 .%s 文件的内容其实不是可解析的表格/文档（可能是下载失败或占位文件），以下是原文"
-                                      % (meta.get("ext") or "").lstrip("."))
+                                      T("这个 .%s 文件的内容其实不是可解析的表格/文档（可能是下载失败或占位文件），以下是原文",
+                                        "The content of this .%s file is not a parsable spreadsheet/document "
+                                        "(probably a failed download or a placeholder). Raw content below.",
+                                        (meta.get("ext") or "").lstrip(".")))
         elif kind in ("pdf", "binary") and meta.get("ext") != ".svg" and meta.get("size", 0) < 65536:
             if _looks_like_text(path):
                 return _text_fallback(path, meta, kind,
-                                      "这个 .%s 文件的内容不是二进制数据（可能是下载失败或占位文本），以下是原文"
-                                      % (meta.get("ext") or "").lstrip("."))
+                                      T("这个 .%s 文件的内容不是二进制数据（可能是下载失败或占位文本），以下是原文",
+                                        "The content of this .%s file is not binary data "
+                                        "(probably a failed download or placeholder text). Raw content below.",
+                                        (meta.get("ext") or "").lstrip(".")))
         return out
     except Exception as e:  # 兜底：任何异常都不许冒泡成 500
         return {"kind": "binary", "meta": meta, "name": meta["name"], "ext": meta["ext"],
-                "hint": BINARY_HINTS.get(meta["ext"], ""),
-                "error": "预览失败，可下载后用本地软件打开：%s: %s" % (type(e).__name__, e)}
+                "hint": hint_for(meta["ext"]) if meta["ext"] in BINARY_HINTS else "",
+                "error": T("预览失败，可下载后用本地软件打开：%s: %s",
+                           "Preview failed — download the file and open it locally: %s: %s",
+                           type(e).__name__, e)}

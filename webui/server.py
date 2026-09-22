@@ -3453,8 +3453,11 @@ for p in _CHINA_PROVIDERS:
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
 _lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
-WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
-RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
+# P6-3 路径可移植：work/results 默认就在安装目录下（解压到哪就是哪，不绑定任何开发机路径）；
+# 需要把数据放到大盘/独立卷时，设置环境变量 MEMOMICS_DATA_DIR 即可（代码目录仍固定在安装位置）。
+DATA_DIR = os.path.abspath(os.environ.get("MEMOMICS_DATA_DIR") or MEMOMICS_DIR)
+WORK_DIR = os.path.join(DATA_DIR, "work")
+RESULTS_DIR = os.path.join(DATA_DIR, "results")
 # P1-4：注入可写路径白名单（沙箱 degraded 模式拦截用；可被外部 env 覆盖）
 os.environ.setdefault("MEMOMICS_ALLOWED_WRITE_ROOTS", ";".join([RESULTS_DIR, _uploads_dir]))
 
@@ -10248,7 +10251,7 @@ async def list_files(path: str = ""):
 
 # ============ 2026-09-17 文献导入提速：目录 PDF 计数缓存 ============
 # 现象：点导入 → 选目录，每打开一层就要等几秒到几十秒。根因是列表接口每次都对该目录
-# 做一次递归 os.walk 数 PDF（实测 E:/ 单次 32.7s，E:/MemOmics-Agent 0.8s）。
+# 做一次递归 os.walk 数 PDF（实测：扫整个磁盘分区单次 32.7s，扫项目目录 0.8s）。
 # 现在改为：内存缓存 + 命中即返回；未命中时后台线程预热并立刻返回 pdf_count=null，
 # 前端先渲染列表、再轮询 /api/lit/pdf_count 把数字补上（不阻塞浏览）。
 _LIT_PDF_COUNT_CACHE = {}
@@ -10483,6 +10486,44 @@ async def download_file(path: str):
 # 并且按时间倒序、最新的排最上面。转换全部在服务端做（webui/preview_convert.py），
 # 不引前端 CDN、不依赖随包环境缺的库。
 _PREVIEW_ROOTS = [WORK_DIR, RESULTS_DIR, MEMOMICS_DIR]
+
+
+def _p5_lang_of(lang) -> str:
+    """P5.1：请求语言（zh 默认 / en）。只影响预览与打开接口里的固定文案。"""
+    return "en" if str(lang or "").strip().lower().startswith("en") else "zh"
+
+
+def _p5_t(lang, zh, en, *args) -> str:
+    s = en if _p5_lang_of(lang) == "en" else zh
+    if args:
+        try:
+            return s % args
+        except Exception:
+            return s
+    return s
+
+
+# ---- 「已查看」标记（P5.1）------------------------------------------------
+# 存 <结果目录>/.viewed.json：点开头，list_results 扫描时自动忽略，不污染结果目录。
+# key = 结果目录内的相对路径（正斜杠），value = 首次标记时间戳。
+_VIEWED_FILE = ".viewed.json"
+
+
+def _viewed_load(base: str) -> dict:
+    try:
+        with open(os.path.join(base, _VIEWED_FILE), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _viewed_save(base: str, data: dict) -> None:
+    p = os.path.join(base, _VIEWED_FILE)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, p)
 _SYSOPEN_ENABLED = (os.environ.get("MEMOMICS_SYSOPEN", "1").strip().lower()
                     not in ("0", "false", "no", "off"))
 
@@ -10515,11 +10556,11 @@ def _guess_media(path: str) -> str:
     return mt
 
 
-def _preview_resolve(path: str):
+def _preview_resolve(path: str, lang: str = "zh"):
     """校验路径（限制在 work/results/项目根内，防任意文件读取）。返回 (full, err_response)"""
     from webui.security import resolve_within_roots, UnsafePathError
     if not path:
-        return "", JSONResponse({"error": "缺少 path 参数"}, status_code=400)
+        return "", JSONResponse({"error": _p5_t(lang, "缺少 path 参数", "Missing path parameter")}, status_code=400)
     try:
         full = str(resolve_within_roots(path, _PREVIEW_ROOTS))
     except UnsafePathError as e:
@@ -10527,12 +10568,14 @@ def _preview_resolve(path: str):
     except Exception as e:
         return "", JSONResponse({"error": str(e)}, status_code=400)
     if not os.path.exists(full):
-        return "", JSONResponse({"error": "文件不存在：%s" % os.path.basename(full)}, status_code=404)
+        return "", JSONResponse({"error": _p5_t(lang, "文件不存在：%s", "File not found: %s",
+                                               os.path.basename(full))}, status_code=404)
     return full, None
 
 
 @app.get("/api/file/preview")
-async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_cols: int = 0):
+async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_cols: int = 0,
+                       lang: str = "zh"):
     """把任意结果文件转成 WebUI 能直接显示的结构（只读）。
 
     返回 kind：text / code / markdown / table / excel / word / notebook / pdf / image /
@@ -10540,17 +10583,19 @@ async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_c
     """
     import functools
     from urllib.parse import quote
-    full, err = _preview_resolve(path)
+    full, err = _preview_resolve(path, lang)
     if err is not None:
         return err
     try:
         from webui import preview_convert as _pc
     except Exception as e:
-        return JSONResponse({"error": "预览模块不可用：%s" % e}, status_code=500)
+        return JSONResponse({"error": _p5_t(lang, "预览模块不可用：%s", "Preview module unavailable: %s", e)},
+                            status_code=500)
     if os.path.isdir(full):
         return JSONResponse({"kind": "missing", "meta": _pc.file_meta(full),
-                             "error": "这是一个目录，不能预览"}, status_code=200)
-    kw = {}
+                             "error": _p5_t(lang, "这是一个目录，不能预览", "This is a directory and cannot be previewed")},
+                status_code=200)
+    kw = {"lang": _p5_lang_of(lang)}
     if sheet:
         kw["sheet"] = sheet
     if max_rows and int(max_rows) > 0:
@@ -10562,7 +10607,7 @@ async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_c
         data = await loop.run_in_executor(None, functools.partial(_pc.preview, full, **kw))
     except Exception as e:
         data = {"kind": "binary", "meta": _pc.file_meta(full),
-                "error": "预览失败：%s: %s" % (type(e).__name__, e)}
+                "error": _p5_t(lang, "预览失败：%s: %s", "Preview failed: %s: %s", type(e).__name__, e)}
     data["path"] = full.replace(os.sep, "/")
     data["download_url"] = "/api/file/download?path=" + quote(full)
     data["raw_url"] = "/api/file/raw?path=" + quote(full)
@@ -10589,7 +10634,8 @@ async def file_raw(path: str, dl: int = 0):
 
 class FileOpenRequest(BaseModel):
     path: str = ""
-    action: str = "system"   # system（默认程序打开）| folder（在资源管理器里定位）
+    action: str = "system"   # system（默认程序打开）| folder（在文件管理器里定位）
+    lang: str = "zh"         # P5.1：固定文案语言（zh / en）
 
 
 @app.post("/api/file/open")
@@ -10600,13 +10646,16 @@ async def file_open(req: FileOpenRequest):
     """
     import subprocess
     if not _SYSOPEN_ENABLED:
-        return JSONResponse({"ok": False, "error": "「系统打开」已被禁用（MEMOMICS_SYSOPEN=0）"}, status_code=403)
-    full, err = _preview_resolve(req.path)
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "「系统打开」已被禁用（MEMOMICS_SYSOPEN=0）",
+                                                        "\"Open with system app\" is disabled (MEMOMICS_SYSOPEN=0)")},
+                            status_code=403)
+    full, err = _preview_resolve(req.path, req.lang)
     if err is not None:
         return err
     action = (req.action or "system").strip().lower()
     if action not in ("system", "folder"):
-        return JSONResponse({"ok": False, "error": "action 只支持 system / folder"}, status_code=400)
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "action 只支持 system / folder",
+                                                        "action must be system or folder")}, status_code=400)
     try:
         if os.name == "nt":
             if action == "folder":
@@ -10619,9 +10668,14 @@ async def file_open(req: FileOpenRequest):
             target = os.path.dirname(full) if action == "folder" else full
             subprocess.Popen(["xdg-open", target])
     except Exception as e:
-        return JSONResponse({"ok": False, "error": "打开失败：%s: %s" % (type(e).__name__, e)}, status_code=500)
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "打开失败：%s: %s",
+                                                        "Failed to open: %s: %s", type(e).__name__, e)},
+                            status_code=500)
     return {"ok": True, "action": action, "path": full.replace(os.sep, "/"),
-            "message": "已交给系统默认程序打开" if action == "system" else "已在文件管理器中定位"}
+            "message": _p5_t(req.lang,
+                             "已交给系统默认程序打开" if action == "system" else "已在文件管理器中定位",
+                             "Handed to the system default application" if action == "system"
+                             else "Revealed in the file manager")}
 
 
 @app.get("/api/papers")
@@ -11430,12 +11484,15 @@ language: {req.language}
 
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
-async def list_results(sid: str, path: str = "", sort: str = "time_desc"):
+async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):
     """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）
 
-    sort（P5 2026-09-22）：
-      - time_desc（默认）：按修改时间倒序 —— 最新出的文件排最上面（用户明确要求）
-      - name：目录在前 + 名称升序（旧行为）
+    sort（P5 2026-09-22 / P5.1 修订）：
+      - time_desc（默认）：**目录全部在最上面（按名称 A→Z）**，文件排在目录下面、按修改时间倒序
+        —— 用户要求「最新出的文件排最上面，不要把目录和文件混了」
+      - name：目录在前 + 名称升序（旧行为，目录同样永远在最上面）
+
+    每项带 viewed（P5.1）：是否已被用户打开看过，见 <结果目录>/.viewed.json。
     """
     # 每次都扫描磁盘，不依赖内存中的 results_dir
     base = _find_best_results_dir(sid)
@@ -11444,23 +11501,34 @@ async def list_results(sid: str, path: str = "", sort: str = "time_desc"):
     if not base:
         base = os.path.join(RESULTS_DIR, sid)
     if not os.path.isdir(base) or not any(Path(base).iterdir()):
-        return {"items": [], "path": base, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
+        return {"items": [], "path": base,
+                "note": _p5_t(lang, "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。",
+                              "This session has no analysis results yet. They will appear here once analysis starts."),
+                "base": base.replace("\\", "/")}
     # 同步更新内存
     if sid in _sessions and os.path.abspath(_sessions[sid].get("results_dir","")) != os.path.abspath(base):
         _sessions[sid]["results_dir"] = base
     target = os.path.join(base, path) if path else base
     if not os.path.isdir(target):
-        return {"items": [], "path": target, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
+        return {"items": [], "path": target,
+                "note": _p5_t(lang, "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。",
+                              "This session has no analysis results yet. They will appear here once analysis starts."),
+                "base": base.replace("\\", "/")}
     items = []
+    _viewed = _viewed_load(base)
     _sort_mode = (sort or "time_desc").strip().lower()
     if _sort_mode in ("name", "name_asc"):
-        _iter_key = lambda x: (not x.is_dir(), x.name.lower())
-    else:  # time_desc：纯按 mtime 倒序，目录与文件混排，最新在最上面
         def _iter_key(x):
+            return (0 if x.is_dir() else 1, x.name.lower())
+    else:
+        # 目录永远在最上面，且目录之间按名称 A→Z；文件按 mtime 倒序（最新在最上面）
+        def _iter_key(x):
+            if x.is_dir():
+                return (0, x.name.lower(), 0)
             try:
-                return -x.stat().st_mtime
+                return (1, "", -x.stat().st_mtime)
             except OSError:
-                return 0
+                return (1, "", 0)
     try:
         for p in sorted(Path(target).iterdir(), key=_iter_key):
             if p.name.startswith("."):
@@ -11469,21 +11537,75 @@ async def list_results(sid: str, path: str = "", sort: str = "time_desc"):
                 _st = p.stat()
             except OSError:
                 continue
+            _rel = str(p.relative_to(base)).replace("\\", "/")
             items.append({
                 "name": p.name,
                 "path": str(p).replace("\\", "/"),
                 "is_dir": p.is_dir(),
+                # 看过了 & 看完之后文件没再被改写 才算「已查看」（重新分析覆盖同名文件会重新变回未查看）
+                "viewed": (bool(_viewed.get(_rel)) and _st.st_mtime <= float(_viewed.get(_rel) or 0))
+                          if p.is_file() else False,
                 "size": _st.st_size if p.is_file() else 0,
                 "ext": p.suffix.lower() if p.is_file() else "",
-                "rel_path": str(p.relative_to(base)).replace("\\", "/"),
+                "rel_path": _rel,
                 "mtime": _st.st_mtime,
                 "mtime_str": datetime.fromtimestamp(_st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             })
+        _unread = sum(1 for it in items if not it["is_dir"] and not it.get("viewed"))
         return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "sort": _sort_mode, "results_name": os.path.basename(base),
+                "unread": _unread,
+                "viewed_count": sum(1 for it in items if it["viewed"]),
                 "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)},
                 headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+class ResultViewedRequest(BaseModel):
+    path: str = ""            # 绝对路径或结果目录内的相对路径
+    viewed: bool = True       # false = 取消「已查看」标记
+
+
+@app.post("/api/results/{sid}/viewed")
+async def mark_result_viewed(sid: str, req: ResultViewedRequest):
+    """把结果文件标成「已查看」（P5.1，提醒用户还有哪些文件没看）。
+
+    - 前端在右侧面板打开文件后调用；viewed=false 可撤销
+    - 只写 <结果目录>/.viewed.json（点开头，列表扫描自动忽略，不污染结果目录）
+    - 越界路径 403，结果目录不存在 404；不接受目录
+    """
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
+        base = _sessions[sid]["results_dir"]
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not os.path.isdir(base):
+        return JSONResponse({"error": "No results directory for this session"}, status_code=404)
+    raw = (req.path or "").strip()
+    if not raw:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    root = os.path.abspath(base)
+    full = os.path.abspath(raw if os.path.isabs(raw) else os.path.join(root, raw))
+    if full != root and not full.startswith(root + os.sep):
+        return JSONResponse({"error": "Path is outside the session results directory"}, status_code=403)
+    key = os.path.relpath(full, root).replace(os.sep, "/")
+    if key in ("", ".") or key.startswith(".."):
+        return JSONResponse({"error": "Invalid path"}, status_code=400)
+    if os.path.isdir(full):
+        return JSONResponse({"error": "Directories cannot be marked as viewed"}, status_code=400)
+    if not os.path.exists(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    data = _viewed_load(root)
+    if req.viewed:
+        data.setdefault(key, time.time())
+    else:
+        data.pop(key, None)
+    try:
+        _viewed_save(root, data)
+    except Exception as e:
+        return JSONResponse({"error": "Cannot write viewed state: %s" % e}, status_code=500)
+    return {"ok": True, "path": full.replace(os.sep, "/"), "rel": key,
+            "viewed": bool(req.viewed), "viewed_count": len(data)}
 
 
 # ============ 结果完成契约（P0-2）：analysis_manifest 协议 ============
