@@ -8,7 +8,7 @@
 
 它做两件事，任何一件不过就非零退出：
   1. webui/skills_registry.check()：SKILLS_INDEX.md 必须与磁盘 355 个技能逐字一致（只读，不写文件）；
-  2. pytest 跑六份聚焦测试：注册表护栏、触发词矩阵、路由回归矩阵、触发词契约，
+  2. pytest 跑 TEST_FILES 里的聚焦测试：注册表护栏、触发词矩阵、路由回归矩阵、触发词契约，
      加上 P0-3 命中可见性、P0-2d 置顶判定词边界（后两份是 P0-3/P0-2d 落地时补进门的，
      否则契约文件写了没人执行 —— 这两条正是「技能面改动」的验收面）；
   最后打印一行结论（含技能数/RED 数与耗时），便于 hook 与 CI 日志抓取。
@@ -42,6 +42,7 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_p1_2_change_review.py"),
     os.path.join("webui", "tests", "test_p1_3_citations.py"),
     os.path.join("webui", "tests", "test_p1_4_outline.py"),
+    os.path.join("webui", "tests", "test_p2_1_middleware.py"),
 ]
 
 

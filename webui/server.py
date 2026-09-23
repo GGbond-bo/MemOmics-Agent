@@ -74,6 +74,54 @@ from typing import Optional
 
 app = FastAPI(title="MemOmics WebUI v2")
 
+# === P2-1 入口侧中间件链（2026-09-23）：request_id / 路由归类 / 会话守卫 / 限流 / 审计 ===
+# 设计前提：只观察不拦截，默认行为与接链之前完全一致（A/B 对拍见
+# webui/tests/test_p2_1_middleware.py）；要拦必须显式设环境变量：
+#     MEMOMICS_MW=0                 整条链不生效（连请求头都不加）
+#     MEMOMICS_MW_SESSION_ENFORCE=1 会话守卫真的返回 404
+#     MEMOMICS_MW_RATE_LIMIT=120    每 60 秒每 IP+路径前缀的请求上限
+#     MEMOMICS_MW_ERROR_ENVELOPE=1  未捕获异常返回带 request_id 的 JSON 500
+# 中间件出任何问题都不许影响启动，所以这里包一层 try/except。
+_entry_mw = None
+_MW_INSTALLED = False
+try:
+    try:
+        from webui import entry_middleware as _entry_mw
+    except ImportError:
+        import entry_middleware as _entry_mw
+    _MW_INSTALLED = bool(_entry_mw.install(app))
+except Exception as _mw_err:  # pragma: no cover - 只在环境异常时走到
+    _entry_mw = None
+    _MW_INSTALLED = False
+    print("[WARN] 入口中间件未挂载: %s" % _mw_err)
+
+
+@app.get("/api/middleware/audit")
+async def middleware_audit(limit: int = 50, routes: int = 0):
+    """入口链的只读状态：最近 N 条请求记录 + 计数器（本机调试用）。
+    routes=1 时附带「真实路由 vs 冻结清单」的漂移报告，用于门禁自查。"""
+    if _entry_mw is None:
+        return JSONResponse({"enabled": False, "installed": False, "items": [], "stats": {}})
+    try:
+        payload = {
+            "enabled": _entry_mw.enabled(),
+            "installed": _MW_INSTALLED,
+            "stats": _entry_mw.stats(),
+            "items": _entry_mw.recent(limit),
+        }
+        if routes:
+            ra = _entry_mw.route_audit(app)
+            payload["routes"] = {
+                "total": len(ra["actual"]),
+                "added": ra["added"],
+                "removed": ra["removed"],
+                "reclassified": ra["reclassified"],
+                "unclassified": ra["unclassified"],
+            }
+        return JSONResponse(payload)
+    except Exception as _e:
+        return JSONResponse({"error": str(_e)}, status_code=500)
+
 import logging
 # Enable Hermes weixin debug logging
 logging.getLogger("gateway.platforms.weixin").setLevel(logging.DEBUG)
@@ -2688,6 +2736,15 @@ def _build_task_plan_context(session):
 
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
+
+# === P2-1 入口中间件：把「会话是否存在」注入会话守卫 ===
+# 守卫拿到 False 且开了 MEMOMICS_MW_SESSION_ENFORCE 才会拦；任何异常都放行，
+# 绝不因为中间件把人挡在门外（fail-open）。
+if _entry_mw is not None:
+    try:
+        _entry_mw.configure(session_exists=lambda _sid: bool(_sid) and _sid in _sessions)
+    except Exception:
+        pass
 _SERVER_STARTED_STR = datetime.now().strftime("%m-%d %H:%M")
 _bg_tasks = {}       # session_id -> background task info
 # === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
