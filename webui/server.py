@@ -107,6 +107,7 @@ async def middleware_audit(limit: int = 50, routes: int = 0):
             "enabled": _entry_mw.enabled(),
             "installed": _MW_INSTALLED,
             "stats": _entry_mw.stats(),
+            "threads": (_thread_state.stats() if _thread_state is not None else {}),
             "items": _entry_mw.recent(limit),
         }
         if routes:
@@ -2745,6 +2746,24 @@ if _entry_mw is not None:
         _entry_mw.configure(session_exists=lambda _sid: bool(_sid) and _sid in _sessions)
     except Exception:
         pass
+
+# === P2-2 显式 ThreadState（2026-09-23）：把「一个会话的活状态」从裸字典键收进显式对象 ===
+# 体检实测：会话字典上 95 个隐式键、207 个写入点、499 个读取点，没有 schema、没有锁；
+# 全文件仅 2 把锁且都不护会话状态，而 308 个同步 handler 跑在线程池里（约 40 线程）。
+# 唯一被当"并发护栏"的 session["_user_turn_active"] 只有 1 个读取点（自检/心跳忙判定），
+# 用户第二条消息进来根本不看它 → 同一会话可以两个回合同时在飞。
+# 本层默认**只记账**：不发事件、不阻塞、不改任何返回值；重叠回合被计成 conflicts，
+# 可在 GET /api/middleware/audit 的 threads 字段观察。要真拦并发见 MEMOMICS_THREAD_SERIALIZE。
+_thread_state = None
+_THREAD_STATE_INSTALLED = False
+try:
+    try:
+        from webui import thread_state as _thread_state
+    except ImportError:
+        import thread_state as _thread_state
+    _THREAD_STATE_INSTALLED = True
+except Exception as _ts_err:  # 环境异常绝不影响主流程（fail-open）
+    print("[WARN] ThreadState 未挂载: %s" % _ts_err)
 _SERVER_STARTED_STR = datetime.now().strftime("%m-%d %H:%M")
 _bg_tasks = {}       # session_id -> background task info
 # === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
@@ -15881,6 +15900,9 @@ async def ws_endpoint(ws: WebSocket):
                 # 同一 agent 上交错流, single-writer 护栏砍掉在飞流导致工具参数被截断为空。
                 # 在 self_intro/agent创建失败/run_agent finally 三处清除。
                 session["_user_turn_active"] = True
+                # P2-2：显式回合记账（只记账，不改行为）。同一会话第二个回合起飞时计 conflicts。
+                if _thread_state is not None:
+                    _thread_state.mark_turn_start(session["id"], source="user")
                 # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
                 # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
@@ -16052,6 +16074,8 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
                     await ws.send_text(json.dumps({"type": "complete", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
                     session["_user_turn_active"] = False  # 并发护栏: 快速回复路径结束后清除
+                    if _thread_state is not None:
+                        _thread_state.mark_turn_end(session["id"])
                     continue  # 跳过 agent 调用
 
                 # 发送 session_id（thinking 已在消息到达时即时发送）
@@ -16072,6 +16096,8 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
                         session["_user_turn_active"] = False  # 并发护栏: 失败路径也需清除
+                        if _thread_state is not None:
+                            _thread_state.mark_turn_end(session["id"])
                         continue
 
                 # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
@@ -17632,6 +17658,8 @@ async def ws_endpoint(ws: WebSocket):
                         _session["running_agent"] = None
                         _session["running_task"] = None
                         _session["_user_turn_active"] = False  # 并发护栏: 用户回合结束清除
+                        if _thread_state is not None:
+                            _thread_state.mark_turn_end(_session["id"])
                         # LoopX 执行层：用户回合交付记录（cadence 数据源）
                         try:
                             from memomics.loopx_bridge import LoopXBridge
