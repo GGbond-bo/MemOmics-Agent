@@ -404,6 +404,34 @@ class Task:
                 pass
 
     @staticmethod
+    def _fmt_sec(sec) -> str:
+        """秒 → 人话（<60s 用 `Ns`，否则 `M:SS`）。"""
+        try:
+            total = int(max(0.0, float(sec)))
+        except (TypeError, ValueError):
+            return ""
+        return ("%d:%02d" % (total // 60, total % 60)) if total >= 60 else ("%ds" % total)
+
+    def _auto_summary(self, status: str) -> str:
+        """自动任务小结：完成/失败 · 阶段进度 · 耗时 · 产物数 · 退出码（成功就不提退出码）。"""
+        stages = self.data.get("stages") or []
+        done = len([one for one in stages if one.get("status") == "done"])
+        outs = len(self.data.get("outputs") or [])
+        head = {"done": "完成", "failed": "失败", "cancelled": "已取消",
+                "interrupted": "中断"}.get(status or "", status or "结束")
+        bits = [head]
+        if stages:
+            bits.append("%d/%d 段" % (done, len(stages)))
+        took = self._fmt_sec(self.data.get("duration_sec"))
+        if took:
+            bits.append(took)
+        if outs:
+            bits.append("%d 个产物" % outs)
+        if status and status != "done" and self.data.get("exit_code") is not None:
+            bits.append("退出码 %s" % self.data.get("exit_code"))
+        return " · ".join(bits)[:600]
+
+    @staticmethod
     def _age(iso: str) -> float:
         try:
             t = datetime.fromisoformat(iso)
@@ -501,6 +529,11 @@ class Task:
                     st["sec"] = round(self._age(st.get("started_at") or utc_now()), 1)
             self.data["duration_sec"] = round(
                 self._age(self.data.get("started_at") or utc_now()), 1)
+            # 任务小结：以前只有脚本自己调 note() 才有，实测 22 个真任务 summary 全空 ——
+            # 面板「任务小结」那一行永远不出现。这里给一个只用真数据拼的兜底（不猜），
+            # 脚本显式 note() 仍然优先。
+            if not self.data.get("summary"):
+                self.data["summary"] = self._auto_summary(status)
             self.data["alive"] = False
         self.flush()
 

@@ -103,6 +103,37 @@ def test_a4_param_output_note(tr):
     assert t.data["summary"] == "一句话说明"
 
 
+def test_a5_finish_writes_auto_summary_without_guessing(tr):
+    """实测 22 个真任务 summary 全空（只有脚本自己调 note() 才有），面板「任务小结」
+    那一行永远不出现。收尾必须用真数据拼一句：完成 · 2/2 段 · N 个产物。"""
+    t = tr.new_task("小结", stages=["读入", "训练"])
+    t.stage("读入")
+    t.stage("训练")
+    t.output("x.csv")
+    t.output("y.png")
+    t.finish("done", exit_code=0)
+    smy = t.data["summary"]
+    assert smy.startswith("完成"), smy
+    assert "2/2 段" in smy and "2 个产物" in smy, smy
+    assert "退出码" not in smy, "成功的任务不必提退出码（噪音）：" + smy
+
+
+def test_a6_explicit_note_wins_over_auto_summary(tr):
+    t = tr.new_task("小结优先")
+    t.note("脚本自己写的小结")
+    t.finish("done")
+    assert t.data["summary"] == "脚本自己写的小结"
+
+
+def test_a7_failure_summary_carries_exit_code_and_partial_stage(tr):
+    t = tr.new_task("失败小结", stages=["读入", "训练", "出图"])
+    t.stage("读入")
+    t.stage("训练")
+    t.finish("failed", error="boom", exit_code=3)
+    smy = t.data["summary"]
+    assert smy.startswith("失败") and "1/3 段" in smy and "退出码 3" in smy, smy
+
+
 # ------------------------------------------------------- B 跨语言标记 / 解码
 def test_b1_smart_decode_utf8_gbk_invalid(tr):
     assert tr.smart_decode("已解码".encode("utf-8")) == "已解码"
