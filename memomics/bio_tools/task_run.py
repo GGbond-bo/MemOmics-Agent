@@ -133,10 +133,29 @@ def proc_alive(pid, create_time=None) -> bool:
         return False
     if ps is None:
         if os.name == "nt":
+            # 没有 psutil 时的存活判定。两条纪律：
+            #  1) 绝不用 os.kill(pid, 0) —— Windows 上它走 TerminateProcess，
+            #     会把"检查存活"变成"真把人家杀了"（CPython 文档明写的行为）。
+            #  2) 先问内核 OpenProcess/GetExitCodeProcess，tasklist 只做兜底。
+            try:
+                import ctypes
+                k32 = ctypes.windll.kernel32
+                h = k32.OpenProcess(0x1000, False, int(pid))   # QUERY_LIMITED_INFORMATION
+                if not h:
+                    return False
+                try:
+                    code = ctypes.c_ulong()
+                    if not k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                        return False
+                    return code.value == 259                    # STILL_ACTIVE
+                finally:
+                    k32.CloseHandle(h)
+            except Exception:
+                pass
             try:
                 r = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
-                                   capture_output=True, text=True, timeout=15)
-                return str(pid) in (r.stdout or "")
+                                   capture_output=True, timeout=15)
+                return str(pid) in smart_decode(r.stdout or b"")
             except Exception:
                 return False
         try:
@@ -229,16 +248,22 @@ def env_snapshot(python_exe=None, r_exe=None) -> dict:
         r = subprocess.run([env["python"], "-c", "import sys;print(sys.version.split()[0])"],
                            capture_output=True, text=True, timeout=20)
         if r.returncode == 0:
-            env["python_version"] = (r.stdout or "").strip()
+            # 只取版本号：本机 sitecustomize 会往 stdout 打横幅
+            # （实测 "[sitecustomize] torch.save patched v4..." 曾把版本号带成两行）
+            _txt = (r.stdout or "").strip()
+            _ver = re.findall(r"\d+\.\d+\.\d+", _txt)
+            env["python_version"] = _ver[-1] if _ver else (
+                _txt.splitlines()[-1].strip() if _txt else "")
     except Exception:
         pass
     if env.get("rscript") and os.path.isfile(env["rscript"]):
         try:
             rr = subprocess.run([env["rscript"], "--version"], capture_output=True,
                                 text=True, timeout=20)
-            txt = ((rr.stdout or "") + (rr.stderr or "")).strip().splitlines()
-            if txt:
-                env["r_version_line"] = txt[0][:80]
+            txt = [ln.strip() for ln in ((rr.stdout or "") + (rr.stderr or "")).splitlines() if ln.strip()]
+            _pick = next((ln for ln in txt if "R version" in ln or "Rscript" in ln), txt[0] if txt else "")
+            if _pick:
+                env["r_version_line"] = _pick[:80]
         except Exception:
             pass
     if env.get("rscript"):
@@ -307,6 +332,24 @@ class Task:
     def flush(self) -> None:
         with self._lock:
             self.data["updated_at"] = utc_now()
+            # 契约是"两个写者"：任务进程写进度，服务端写取消意图/兜底终态。
+            # 落盘前先认领磁盘上的控制字段，否则收尾那次整份覆盖会把 cancel_requested
+            # 抹掉（2026-09-24 真机路由取消实测踩到：状态对了但标记没了）。
+            try:
+                foreign = _read_json(self.path)
+                if isinstance(foreign, dict):
+                    for k in ("cancel_requested", "cancel_by", "cancel_requested_at"):
+                        if foreign.get(k) is not None and self.data.get(k) != foreign.get(k):
+                            self.data[k] = foreign[k]
+                    if (foreign.get("status") in TERMINAL_STATES
+                            and self.data.get("status") not in TERMINAL_STATES):
+                        # 服务端已经兜底落终态（15s 升级杀之后）—— 别用内存里的旧状态复活它
+                        self.data["status"] = foreign["status"]
+                        for k in ("ended_at", "exit_code", "error", "duration_sec", "alive"):
+                            if foreign.get(k) is not None:
+                                self.data[k] = foreign[k]
+            except Exception:
+                pass
             try:
                 _atomic_write_json(self.path, self.data)
             except Exception:
@@ -390,6 +433,10 @@ class Task:
                     if st.get("status") in ("pending", "running"):
                         st["status"] = "done"
                         st["ended_at"] = now
+            if status == "running" and not cur.get("started_at"):
+                # 真 bug（2026-09-24 面板实测）：new_task 预建的 pending 阶段没有 started_at，
+                # 收口时 sec 算成 0.0 —— 面板时间线会显示"训练 0.0s"，明明跑了 4 分钟。
+                cur["started_at"] = now
             cur["status"] = status
             if detail:
                 cur["detail"] = detail[:300]
@@ -512,6 +559,7 @@ def new_task(title: str, type: str = "other", session_id: str = "", session_dir:
         "cmd": (cmd or "")[:1000],
         "env": {},
         "proc": {},
+        "wrapper": proc_identity(os.getpid()),
         "params": dict(params or {}),
         "stages": stage_names,
         "stage_total": len(stage_names),
@@ -665,6 +713,58 @@ def kill_tree(pid) -> dict:
         pass
     return out
 
+def request_cancel(task_id: str, by: str = "api") -> dict:
+    """面板/服务端专用：只写"取消意图"（原子落盘），不碰进程。
+
+    写 cancel_requested=True + status="cancelling"。wrapper 在退出路径读到该标记后，
+    终态落成 cancelled（而不是 failed）；杀进程由调用方按 pid+创建时间核对后再做。
+    """
+    t = load_task(task_id)
+    if t is None:
+        return {"ok": False, "error": "任务不存在：%s" % task_id}
+    t.data["cancel_requested"] = True
+    t.data["cancel_by"] = by
+    t.data["cancel_requested_at"] = utc_now()
+    if (t.data.get("status") or "") in LIVE_STATES:
+        t.data["status"] = "cancelling"
+    t.flush()
+    return {"ok": True, "task_id": t.data.get("task_id"), "status": t.data.get("status"),
+            "cancel_requested_at": t.data["cancel_requested_at"]}
+
+
+def kill_registered_process(data: dict, key: str = "proc") -> dict:
+    """按契约里登记的 pid + 创建时间杀那棵子树；身份不符（PID 被复用）一律不杀。
+
+    返回 {attempted, killed, pid, reason, detail}。永远只杀登记过的那一个 pid 树，
+    绝不按进程名匹配 —— 面板点"取消"不能变成误杀别人的任务。
+    """
+    rec = (data or {}).get(key) or {}
+    pid = rec.get("pid")
+    ctime = rec.get("create_time")
+    if not pid:
+        return {"attempted": False, "killed": False, "pid": None, "reason": "契约里没有登记 PID"}
+    # 先只看"pid 还在不在"，再看"是不是同一个进程" —— 两件事必须分开说：
+    # proc_alive(pid, ctime) 会把"PID 复用"也报成"已不在"，话术会骗人（真机测试暴露）。
+    if not proc_alive(pid):
+        return {"attempted": False, "killed": False, "pid": pid, "reason": "进程已不在（无需杀）"}
+    ident = proc_identity(pid)
+    if ctime and not ident.get("create_time"):
+        # 没有 psutil 就没法核对创建时间：宁可不动手，也不赌 PID 没被复用
+        return {"attempted": False, "killed": False, "pid": pid,
+                "reason": "拿不到创建时间，无法确认身份（防 PID 复用），拒绝杀"}
+    if ctime and ident.get("create_time"):
+        try:
+            if abs(float(ident["create_time"]) - float(ctime)) > 1.0:
+                return {"attempted": False, "killed": False, "pid": pid,
+                        "reason": "PID 已被复用（创建时间不符），拒绝杀"}
+        except (TypeError, ValueError):
+            pass
+    detail = kill_tree(pid)
+    time.sleep(0.2)
+    dead = not proc_alive(pid, ctime)
+    return {"attempted": True, "killed": dead, "pid": pid,
+            "reason": "已杀" if dead else "仍在运行（可能已自行退出或权限不足）", "detail": detail}
+
 
 # ---------------------------------------------------------------------------
 # 打点便捷函数：脚本里 import 就能用（有 wrapper 直接更新契约，没 wrapper 打标记行）
@@ -771,6 +871,7 @@ def run_command(cmd, type: str = "other", title: str = "", stages=None, params=N
             task.data["pid"] = ident.get("pid")
             task.data["wrapper"] = proc_identity(os.getpid())
         task.flush()
+        task.touch_heartbeat()      # 立刻采一次 CPU/内存：面板刚打开时不该是空的
         try:
             for raw in iter(proc.stdout.readline, b""):
                 line = smart_decode(raw)
@@ -804,9 +905,9 @@ def run_command(cmd, type: str = "other", title: str = "", stages=None, params=N
         rc = proc.wait()
     except FileNotFoundError as e:
         rc = 127
-        task.log("[wrapper] 命令不存在：%s" % e)
+        task.log("[wrapper] 命令不存在：%s（命令：%s）" % (e, " ".join(str(c) for c in cmd[:4])))
         if echo:
-            print("[wrapper] 命令不存在：%s" % e)
+            print("[wrapper] 命令不存在：%s（命令：%s）" % (e, " ".join(str(c) for c in cmd[:4])))
     except Exception as e:
         rc = 126
         task.log("[wrapper] 包装失败：%s" % e)
@@ -856,17 +957,29 @@ def run_demo(stages, sec_per_stage: float = 3.0, title: str = "演示任务（�
     with task._lock:
         task.data["proc"] = proc_identity(os.getpid())
         task.data["pid"] = os.getpid()
+    task.touch_heartbeat()      # 立刻采一次 CPU/内存：面板刚打开时不该是空的
     task.open_log(_default_log_path(session_dir, task.task_id))
     task.start_heartbeat()
     task.log("[demo] 阶段：%s" % "、".join(stage_list))
     ticks = max(3, int(sec_per_stage / 0.5))
-    for name in stage_list:
+    n_stage = len(stage_list)
+    for si, name in enumerate(stage_list):
         task.stage(name)
         for i in range(ticks):
             time.sleep(0.5)
-            task.progress((i + 1) / float(ticks), "%s %d/%d" % (name, i + 1, ticks))
+            # 整任务进度单调递增（每阶段清零会变成锯齿，面板上看着像倒退）
+            done = (si + (i + 1) / float(ticks)) / float(n_stage)
+            task.progress(done, "%s %d/%d（总 %d%%）" % (name, i + 1, ticks, round(100 * done)))
             task.log("[demo] %s %d/%d" % (name, i + 1, ticks))
-    task.output(os.path.join(session_dir, "results", "demo_out.txt"))
+    out_dir = os.path.join(session_dir, "results")
+    out_file = os.path.join(out_dir, "demo_out.txt")
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        with open(out_file, "w", encoding="utf-8") as f:
+            f.write(("演示任务产物：验证面板能列出真实存在的产物（%s）" % task.task_id) + chr(10))
+    except OSError:
+        pass
+    task.output(out_file)
     task.note("演示任务：验证面板能显示阶段/进度/日志/产物，不代表任何真实分析。")
     task.finish("done", exit_code=0)
     task.stop_heartbeat()
@@ -924,7 +1037,8 @@ def main(argv=None) -> int:
     p.add_argument("--session-dir", default="", help="会话目录（默认自动探测）")
     p.add_argument("--session-id", default="", help="会话 id（默认取目录名）")
     p.add_argument("--quiet", action="store_true", help="不回显子进程输出（仍写日志）")
-    p.add_argument("--demo", default="", help="演示模式：阶段:秒数 逗号分隔，不跑真活")
+    p.add_argument("--demo", nargs="?", const="", default=None,
+                   help="演示模式：阶段:秒数 逗号分隔（不带值 = 默认三阶段），不跑真活")
     p.add_argument("--list", action="store_true", help="列出任务")
     p.add_argument("--show", default="", help="查看某任务契约（JSON）")
     p.add_argument("--tail", type=int, default=0, help="配合 --show 附日志尾部行数")
@@ -937,21 +1051,26 @@ def main(argv=None) -> int:
         return _cmd_list(args)
     if args.show:
         return _cmd_show(args)
-    if args.demo:
+    if args.demo is not None:
+        spec = args.demo or "读入:3,训练:3,收尾:3"
         stages, sec = [], 3.0
-        for part in args.demo.split(","):
+        for part in spec.split(","):
             part = part.strip()
             if not part:
                 continue
             if ":" in part:
                 nm, _, s = part.partition(":")
-                stages.append(nm.strip())
                 try:
                     sec = float(s)
                 except Exception:
-                    pass
+                    print("[task] --demo 解析失败：%r（应为 阶段:秒数，如 读入:3,训练:5）" % part)
+                    return 2
+                stages.append(nm.strip() or ("阶段%d" % (len(stages) + 1)))
             else:
                 stages.append(part)
+        if not stages:
+            print("[task] --demo 没解析出阶段：%r" % spec)
+            return 2
         return run_demo(stages, sec, title=args.title or "演示任务（不跑真活）",
                         type=args.type, session_dir=args.session_dir)
 

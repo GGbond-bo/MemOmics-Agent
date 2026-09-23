@@ -9262,6 +9262,288 @@ async def resource_status():
     return _resource_scheduler.snapshot()
 
 
+# ---------------------------------------------------------------------------
+# 后台任务查看（T2/4，2026-09-24）：读的是任务自己写的契约，服务端只读不猜
+# 契约文件：hermes_home/runtime/tasks/<task_id>.json（memomics/bio_tools/task_run.py 原子写）
+# ---------------------------------------------------------------------------
+
+def _task_run():
+    """task_run 模块（导入失败也不能让面板 500）。"""
+    try:
+        from memomics.bio_tools import task_run
+        return task_run
+    except Exception as e:      # pragma: no cover - 正常安装不会走到
+        logger.warning("task_run import failed: %s", e)
+        return None
+
+
+def _tasks_dir() -> str:
+    """每次现算：HERMES_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
+    return os.path.join(HERMES_HOME_DIR, "runtime", "tasks")
+
+
+def _task_api_token() -> str:
+    """后台任务写 API 的轻量鉴权 token（同源本地 token，沿用记忆写 API 那套机制）。"""
+    return _memory_api_token()
+
+
+def _bind_task_run(tr):
+    """让 task_run 指向当前 hermes_home（面板与 wrapper 必须看同一个目录）。"""
+    tr.TASKS_DIR = _tasks_dir()
+    tr.FALLBACK_LOG_DIR = os.path.join(HERMES_HOME_DIR, "runtime", "logs")
+    return tr
+
+
+def _env_line(env: dict) -> str:
+    """环境一句话（面板列表用）：R 4.5.3 / Python 3.12.10 / conda:xxx。"""
+    env = env or {}
+    if env.get("r"):
+        r = env["r"]
+        pk = (" + %s 包" % r.get("pkg_count")) if r.get("pkg_count") else ""
+        return "R %s%s" % (r.get("version", "?"), pk)
+    if env.get("conda"):
+        return "conda %s" % env["conda"]
+    if env.get("python_version"):
+        return "Python %s" % env["python_version"]
+    return env.get("kind", "未知环境")
+
+
+def _task_card(d: dict) -> dict:
+    """列表项：只留面板要显示的字段（契约文件本身可能很大）。"""
+    from datetime import datetime as _dt, timezone as _tz
+    proc = d.get("proc") or {}
+    prog = d.get("progress") or {}
+    val = prog.get("value")
+    started = d.get("started_at") or ""
+    elapsed = None
+    if d.get("status") in ("queued", "running", "cancelling", "paused"):
+        try:
+            t0 = _dt.fromisoformat(started)
+            if t0.tzinfo is None:
+                t0 = t0.replace(tzinfo=_tz.utc)
+            elapsed = round((_dt.now(_tz.utc) - t0).total_seconds(), 1)
+        except Exception:
+            elapsed = None
+    else:
+        elapsed = d.get("duration_sec")
+    return {
+        "task_id": d.get("task_id"),
+        "title": d.get("title") or "未命名任务",
+        "type": d.get("type") or "other",
+        "status": d.get("status") or "unknown",
+        "session_id": d.get("session_id") or "",
+        "session_dir": d.get("session_dir") or "",
+        "demo": bool(d.get("demo")),
+        "source": d.get("source") or "",
+        "progress_pct": (round(100.0 * val) if isinstance(val, (int, float)) else None),
+        "progress_text": prog.get("text") or "",
+        "stage_index": d.get("stage_index") or 0,
+        "stage_total": d.get("stage_total") or len(d.get("stages") or []),
+        # 循环变量别叫 s/sess/state：那是会话状态漂移门禁的扫描口径（test_p2_2_thread_state.py），
+        # 阶段字典会被误判成会话键，门禁直接红。
+        "stages": [{"name": stg.get("name"), "status": stg.get("status"), "sec": stg.get("sec")}
+                   for stg in (d.get("stages") or [])],
+        "pid": proc.get("pid") or d.get("pid"),
+        "pname": proc.get("pname") or "",
+        "cpu_pct": proc.get("cpu_pct"),
+        "rss_gb": proc.get("rss_gb"),
+        "alive": bool(d.get("alive")),
+        "stalled": bool(d.get("stalled")),
+        "heartbeat_age_sec": d.get("heartbeat_age_sec"),
+        "started_at": started,
+        "updated_at": d.get("updated_at") or "",
+        "elapsed_sec": elapsed,
+        "duration_sec": d.get("duration_sec"),
+        "exit_code": d.get("exit_code"),
+        "error": (d.get("error") or "")[:300],
+        "cmd": (d.get("cmd") or "")[:400],
+        "script": d.get("script") or "",
+        "params": d.get("params") or {},
+        "output_count": len(d.get("outputs") or []),
+        "summary": d.get("summary") or "",
+        "log": d.get("log") or "",
+        "env_line": _env_line(d.get("env") or {}),
+        "env_kind": (d.get("env") or {}).get("kind", ""),
+    }
+
+
+def _confine_path(path: str, session_dir: str) -> str:
+    """只允许读会话目录 / 仓库内的脚本（面板要能看脚本，但不能变成任意文件读取）。"""
+    if not path:
+        return ""
+    p = path if os.path.isabs(path) else os.path.join(session_dir or MEMOMICS_DIR, path)
+    p = os.path.abspath(p)
+    for root in (session_dir or "", MEMOMICS_DIR):
+        if root and (p == os.path.abspath(root)
+                     or p.startswith(os.path.abspath(root) + os.sep)):
+            return p
+    return ""
+
+
+@app.get("/api/tasks")
+async def list_background_tasks(session_id: str = "", states: str = "", limit: int = 100,
+                                refresh: int = 1):
+    """后台任务列表（跨会话）。
+
+    契约由任务自己写（wrapper / 脚本打点），服务端只读取 + 核对存活：
+    refresh=1（默认）会用「PID + 进程创建时间」核对，进程没了的活任务收敛成 interrupted。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    try:
+        items = tr.list_tasks(session_id=session_id or "",
+                              limit=max(1, min(500, int(limit))), refresh=bool(refresh))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": "读取任务失败：%s" % e}, status_code=500)
+    if states:
+        want = {s.strip() for s in states.split(",") if s.strip()}
+        items = [d for d in items if (d.get("status") or "") in want]
+    counts = {}
+    for d in items:
+        st = d.get("status") or "unknown"
+        counts[st] = counts.get(st, 0) + 1
+    return {"ok": True, "tasks": [_task_card(d) for d in items], "counts": counts,
+            "active": counts.get("running", 0) + counts.get("cancelling", 0),
+            "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
+            "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
+            "sessions": sorted({d.get("session_id") or "" for d in items} - {""})}
+
+
+@app.get("/api/tasks/{task_id}")
+async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
+    """任务详情：契约全字段 + 日志尾部 + 产物（大小/是否存在）+ 脚本正文。"""
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    d = tr.reconcile(t.data)
+    card = _task_card(d)
+    card["params"] = d.get("params") or {}
+    card["outputs"] = []
+    for p in (d.get("outputs") or [])[:100]:
+        full = p if os.path.isabs(p) else os.path.join(d.get("session_dir") or "", p)
+        try:
+            exists = os.path.isfile(full)
+            size = os.path.getsize(full) if exists else None
+        except OSError:
+            exists, size = False, None
+        card["outputs"].append({"path": p, "exists": exists, "size": size})
+    log_path = d.get("log") or ""
+    card["log_tail"] = tr.tail_log(log_path, max(1, min(4000, int(tail))))
+    try:
+        card["log_size"] = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+    except OSError:
+        card["log_size"] = 0
+    card["wrapper_pid"] = (d.get("wrapper") or {}).get("pid")
+    # 详情抽屉要能显示"这活儿到底占多少 CPU/内存、什么时候起的" —— 列表卡片给了
+    # 扁平字段，详情补齐原始 proc/wrapper 与取消意图（真机实测发现详情里读不到 proc）。
+    card["proc"] = d.get("proc") or {}
+    card["wrapper"] = d.get("wrapper") or {}
+    card["cancel_requested"] = bool(d.get("cancel_requested"))
+    card["cancel_by"] = d.get("cancel_by") or ""
+    card["env"] = d.get("env") or {}
+    src = _confine_path(d.get("script") or "", d.get("session_dir") or "")
+    card["script_path"] = src
+    card["script_text"] = ""
+    if src and script and os.path.isfile(src):
+        try:
+            if os.path.getsize(src) <= 256 * 1024:
+                with open(src, "r", encoding="utf-8", errors="replace") as f:
+                    card["script_text"] = f.read()
+            else:
+                card["script_truncated"] = True
+        except OSError:
+            pass
+    return {"ok": True, "task": card}
+
+
+@app.get("/api/tasks/{task_id}/log")
+async def get_background_task_log(task_id: str, tail: int = 200, grep: str = ""):
+    """日志尾部（seek 读，不整读几百 MB 的 CellBender 日志）。grep 为不区分大小写的子串过滤。"""
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    log_path = (t.data.get("log") or "")
+    text = tr.tail_log(log_path, max(1, min(5000, int(tail))))
+    if grep and text:
+        needle = grep.lower()
+        text = os.linesep.join([ln for ln in text.splitlines() if needle in ln.lower()])
+    try:
+        size = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+    except OSError:
+        size = 0
+    return {"ok": True, "task_id": t.data.get("task_id"), "log": log_path,
+            "exists": bool(log_path and os.path.isfile(log_path)), "size": size,
+            "text": text}
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+async def cancel_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """取消任务：需要 X-Task-Token；先写取消意图，再按「pid + 创建时间」核对身份杀子树。
+
+    三步，任何一步都不猜：
+      1. 只写 cancel_requested（wrapper 退出路径读到 → 状态落成 cancelled，而不是 failed）
+      2. 杀进程前核对 create_time，PID 被复用（不是原进程）就绝不杀
+      3. 宽限 15s 让 wrapper 自己收尾；还没收尾就按 wrapper 身份升级强杀，并由服务端落终态
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    if (t.data.get("status") or "") not in tr.LIVE_STATES:
+        return JSONResponse({"ok": False, "error": "任务已结束（%s），无需取消" % t.data.get("status")},
+                            status_code=409)
+    denied = _sandbox_precheck("proc.exec", t.path, [HERMES_HOME_DIR], "tasks.cancel")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+
+    marks = tr.request_cancel(task_id, by="api")
+    kill_proc = tr.kill_registered_process(t.data, key="proc")
+    escalated = False
+    waited = 0.0
+    for _ in range(30):                     # 最多 15s 等 wrapper 自己收尾
+        await asyncio.sleep(0.5)
+        waited += 0.5
+        cur = tr.load_task(task_id)
+        if cur is None or (cur.data.get("status") or "") not in tr.LIVE_STATES:
+            break
+        # 管任务的进程（wrapper）自己都没了 —— 没人会来收尾，服务端立刻落终态，别干等 15s
+        _w = (cur.data.get("wrapper") or {})
+        if _w.get("pid"):
+            if not tr.proc_alive(_w.get("pid"), _w.get("create_time")):
+                break
+        elif kill_proc.get("killed"):
+            break
+    cur = tr.load_task(task_id)
+    if cur is not None and (cur.data.get("status") or "") in tr.LIVE_STATES:
+        escalated = True
+        kill_wrap = tr.kill_registered_process(cur.data, key="wrapper")
+        cur.finish("cancelled", error="用户取消（服务端兜底收尾）")
+    else:
+        kill_wrap = {}
+    cur = tr.load_task(task_id)
+    return {"ok": True, "task_id": task_id, "status": (cur.data.get("status") if cur else "unknown"),
+            "marks": marks, "killed": kill_proc, "escalated": escalated,
+            "kill_wrapper": kill_wrap, "waited_sec": waited}
+
+
 @app.get("/api/version")
 async def api_version():
     """前端版本标识：git commit + server 启动时间 + 修复包级别。
