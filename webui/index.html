@@ -1011,7 +1011,13 @@ table.dcb-table.dg-table th { position:relative; }
 .skp-hint { flex:1; font-size:11px; color:var(--text-light); }
 .skp-btn { padding:5px 13px; border-radius:8px; border:1px solid var(--primary); background:var(--primary); color:#fff; cursor:pointer; font-size:12px; }
 .skp-btn.ghost { background:none; color:var(--text-light); border-color:var(--border); }
-.sk-tree { margin-top:4px; max-height:280px; overflow:auto; border:1px solid var(--border); border-radius:7px; background:var(--code-bg); padding:4px 0; }
+/* 2026-09-23 修「技能文件（点击查看内容）太黑、看不见」：
+   原来容器底色借用 --code-bg（抄代码块），在浅色主题下是一整块近黑，
+   而子项文字又用 --text/--text-light（浅色主题下是深色）→ 实测对比度
+   低到 1.02~1.52:1，等于黑字印在黑板上，文件名列几乎不可读。
+   修法：这里本质是「文件列表」，跟同面板的 .skp-item 保持一套视觉——
+   浅底 + 边框 + --text/--text-light，不再借代码块的深色底。 */
+.sk-tree { margin-top:4px; max-height:280px; overflow:auto; border:1px solid var(--border); border-radius:7px; background:var(--panel); padding:4px 0; }
 .sk-tree-d { font-size:11.5px; color:var(--text-light); font-weight:600; padding:1px 6px; }
 .sk-tree-f { font-size:11.5px; color:var(--text); padding:2px 6px; cursor:pointer; font-family:Consolas,monospace; }
 .sk-tree-f:hover { background:rgba(96,125,205,0.14); }
@@ -1266,6 +1272,10 @@ table.dcb-table.dg-table th { position:relative; }
 /* 代码块复制按钮 */
 .code-block {
   background: var(--code-bg, #263238);
+  /* 2026-09-23：自带文字色，别只依赖 .bubble pre 提供颜色——
+     文件查看器 #rv-body 也用这个类渲染代码，脱离 .bubble 时
+     会字色继承 body(--text) → 浅色主题下深字压深底，看不见。 */
+  color: var(--code-fg, #eceff1);
   border: 1px solid var(--border, #334155);
   border-radius: 8px;
   margin: 8px 0;
