@@ -15,8 +15,7 @@
   "trigger_keywords": [
     "public-data-download",
     "public data download",
-    "public",
-    "download"
+    "public"
   ],
   "when_to_use": "精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。"
 }

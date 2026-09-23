@@ -38,5 +38,11 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "https://raw.githubusercontent.com/constantAmateur/SoupX/refs/heads/master/README.md",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "soupx-remove-background",
+    "soupx remove background",
+    "soupx",
+    "环境rna"
+  ]
 }

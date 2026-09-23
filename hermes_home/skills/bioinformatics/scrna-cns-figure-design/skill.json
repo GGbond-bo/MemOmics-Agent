@@ -15,8 +15,7 @@
   "trigger_keywords": [
     "scrna-cns-figure-design",
     "scrna cns figure design",
-    "cns",
-    "design"
+    "cns"
   ],
   "success_count": 3,
   "proven_script": "phase4_rss_perturbation.R",

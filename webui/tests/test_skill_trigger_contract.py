@@ -12,6 +12,7 @@
   4. 源头也要干净：skill.json / SKILL.md frontmatter / SOUL 必触发表里被 BOILERPLATE 静默丢弃或不生效的裸通用词同样算隐患；
   5. 缓存必须绑定 SKILLS_INDEX 的 mtime（索引重建后立即可见）——旧实现这一条是红的。
 2026-09-23 P0-2b：台账 known_violations 已清零（33 条全部修完），蔓延 / 过期两个负向分支改用合成契约继续钉住。
+2026-09-23 P0-2c：检查范围由 RED 扩到全等级（YEL 侧实测 32 处裸通用词，全部来自技能名分词回填，已清完并堵住派生口）。
 """
 import json
 import os
@@ -72,6 +73,13 @@ def _red_entries():
     red = {e['name']: e for e in reg.scan_skills() if e.get('level') == 'RED'}
     assert len(red) >= 40, 'RED 技能太少（%d），源头断言会形同虚设' % len(red)
     return red
+
+
+def _all_entries():
+    """P0-2c：通用词规则对全部等级生效，源头断言也必须扫全量（355 行），不能只看 RED。"""
+    rows = {e['name']: e for e in reg.scan_skills()}
+    assert len(rows) >= 300, '技能总数太少（%d），全等级断言会形同虚设' % len(rows)
+    return rows
 
 
 def _contract_with_ledger(known):
@@ -149,6 +157,24 @@ class TestCodeMatchesContract:
             'GENERIC_STOP 与契约不一致：代码多 %s / 契约多 %s'
             % (sorted(set(reg.GENERIC_STOP) - set(filters['generic_stop'])),
                sorted(set(filters['generic_stop']) - set(reg.GENERIC_STOP))))
+
+    def test_forbidden_lists_match_contract(self):
+        """报错型词表（forbidden）也必须与代码常量逐字相等（P0-2c 起名称分词直接引用它）。"""
+        assert set(reg.FORBIDDEN_BARE_ASCII) == FORBIDDEN_ASCII, (
+            'FORBIDDEN_BARE_ASCII 与契约不一致：代码多 %s / 契约多 %s'
+            % (sorted(set(reg.FORBIDDEN_BARE_ASCII) - FORBIDDEN_ASCII),
+               sorted(FORBIDDEN_ASCII - set(reg.FORBIDDEN_BARE_ASCII))))
+        assert set(reg.FORBIDDEN_BARE_CJK) == FORBIDDEN_CJK, (
+            'FORBIDDEN_BARE_CJK 与契约不一致：代码多 %s / 契约多 %s'
+            % (sorted(set(reg.FORBIDDEN_BARE_CJK) - FORBIDDEN_CJK),
+               sorted(FORBIDDEN_CJK - set(reg.FORBIDDEN_BARE_CJK))))
+
+    def test_generic_word_rules_apply_to_every_level(self):
+        scope = RULES.get('generic_word_rules_apply_to') or ''
+        assert '全部' in scope, '契约必须写明通用词规则适用于全部等级：%s' % scope
+        assert not RULES.get('red_only_rules_apply_to'), 'P0-2c 起范围不再是 RED 专属'
+        assert 'P0-2c' in (RULES.get('forbidden_scope') or ''), (
+            'forbidden_scope 必须留下 P0-2c 的范围变更痕迹')
 
     def test_boilerplate_words_are_dropped_at_extraction(self):
         """机制证明：BOILERPLATE 词在抽取阶段就被丢掉 —— 有效触发词视角永远看不到它们。"""
@@ -305,9 +331,12 @@ class TestKeywordRatchet:
 
         实测（P0-2b）：scipilot-figure-skill/skill.json 写的「可视化」被 BOILERPLATE 静默丢掉，
         有效触发词里根本没有它，check_keywords 也就永远不会报 —— 只有查源头才发现。
+
+        P0-2c：范围由 RED 扩到全等级 —— YEL/GRN 的触发词是「置顶技能自动触发」(_skill_trigger_hit)
+        与 skill 目录搜索的直接输入，一个 cell / design 同样会让技能在无关句子里被命中。
         """
         leaks = []
-        for name, e in sorted(_red_entries().items()):
+        for name, e in sorted(_all_entries().items()):
             sj = os.path.join(e['dir'], 'skill.json')
             if os.path.isfile(sj):
                 with open(sj, encoding='utf-8') as f:
@@ -344,10 +373,62 @@ class TestKeywordRatchet:
         for want in ('长度越界', '触发词重复', 'RED 技能无触发词', '超上限'):
             assert want in joined, '形状规则漏检 %s:' % want + chr(10) + joined
 
-    def test_non_red_generic_word_is_allowed(self):
-        problems = reg.check_keywords(_entries(('zz-yel', 'YEL', ['analysis'])))
-        assert not any('通用词' in p for p in problems), (
-            '只有 RED 行进自动匹配，YEL/GRN 不该被通用词规则拦下：%s' % problems)
+    def test_non_red_generic_word_is_rejected(self):
+        """P0-2c：翻转 —— YEL/GRN 的裸通用词同样必须报错。
+
+        P0-2b 时这里断言「放行」（只有 RED 进自动匹配）；实测 YEL 侧藏了 32 处
+        （cell/design/core/remove…），它们会被置顶技能触发和目录搜索直接吃掉，所以范围扩到全等级。
+        """
+        for level, word in (('YEL', 'analysis'), ('GRN', 'cell'), ('YEL', 'design')):
+            problems = reg.check_keywords(_entries(('zz-nonred', level, [word])))
+            assert any('通用词' in p and 'zz-nonred' in p for p in problems), (
+                '%s 的裸通用词 %s 必须被拦下（P0-2c 之前放行）: %s' % (level, word, problems))
+
+    def test_name_derivation_never_emits_bare_generic_words(self):
+        """根因回归（P0-2c）：脏数据的来源是「技能名分词 → 回填 skill.json」，必须堵在派生口。"""
+        for name in ('design_primer', 'soupx-remove-background', 'debate-core', 'nature-shared',
+                     'analyze_cell_senescence_and_apoptosis', 'core-remove-cell'):
+            toks = reg._token_keywords(name)
+            bad = [t for t in toks if _bare_generic(t)]
+            assert not bad, '%s 的名称分词仍然产出裸通用词: %s' % (name, bad)
+        # 名字本身（含空格的短语形态）不受影响，否则技能连自己的名字都搜不到
+        kw = reg._name_keywords('design_primer', {})
+        assert 'design primer' in kw, kw
+
+    def test_cleaned_yel_skills_keep_domain_phrases(self):
+        """清理不能把召回一起清掉：删掉的裸词必须在同一条触发词里有领域短语兜底。"""
+        rows = _all_entries()
+        want = {
+            'design_primer': 'design primer',
+            'sgrna-design': 'sgrna design',
+            'doubletfinder-remove-doublets': 'remove doublets',
+            'public-data-download': 'public data download',
+            'quantify_and_cluster_cell_motility': 'cell motility',
+            'web-research': '网络调研',
+            'soupx-remove-background': '环境rna',
+        }
+        for name, phrase in sorted(want.items()):
+            e = rows.get(name)
+            assert e, '技能不见了: %s' % name
+            kws = [str(k).lower() for k in e['keywords']]
+            assert phrase.lower() in kws, '%s 丢了兜底短语 %s（现有 %s）' % (name, phrase, kws)
+
+    def test_every_level_shares_one_ruler(self):
+        """极端：三种等级同一把尺子；同时确认规则没有被做成「见到 cell 就报错」。"""
+        for level in ('RED', 'YEL', 'GRN'):
+            for word in ('cell', 'design', 'core', 'remove'):
+                problems = reg.check_keywords(_entries(('zz-%s' % level.lower(), level, [word])))
+                assert any('通用词' in p for p in problems), (
+                    '%s 的 %s 没被拦下: %s' % (level, word, problems))
+        ok = reg.check_keywords(_entries(('zz-phrase', 'YEL',
+                                          ['cell motility', '环境rna', 'deg analysis', 'golden gate'])))
+        assert not [p for p in ok if '通用词' in p], (
+            '领域短语不该被通用词规则误伤: %s' % ok)
+        # 中文侧同理：整条就是通用动词才报错，「多组学整合」这类短语放行
+        bad = reg.check_keywords(_entries(('zz-cjk-bad', 'YEL', ['整合'])))
+        assert any('通用词' in p for p in bad), bad
+        good = reg.check_keywords(_entries(('zz-cjk-ok', 'YEL', ['多组学整合'])))
+        assert not [p for p in good if '通用词' in p], good
 
     def test_check_wires_keyword_rules(self, monkeypatch):
         monkeypatch.setattr(reg, 'check_keywords', lambda *a, **k: ['人造问题'])

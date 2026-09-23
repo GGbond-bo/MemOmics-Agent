@@ -95,6 +95,22 @@ GENERIC_STOP = {
     "python", "r",
 }
 # 名称分词时丢弃的动词/虚词
+# 裸通用词（与契约 keyword_rules.forbidden_bare_ascii_words / forbidden_bare_cjk_words 逐字相等，
+# 由 test_skill_trigger_contract.py 钉住）。与 BOILERPLATE 的区别：这些词在抽取阶段**不丢弃**
+# （静默丢弃会变成黑洞，作者以为配了触发词其实没生效），而是交给 check_keywords 直接报错。
+# 名称分词也必须避开它们：2026-09-23 P0-2c 实测 32 处 YEL 裸通用词（cell/design/core/remove…）
+# 全部来自「技能名分词 → 回填 skill.json」，不挡在派生口，清完还会长回来。
+FORBIDDEN_BARE_ASCII = {
+    "analysis", "background", "best", "cell", "core", "dataset", "debug", "deep",
+    "design", "download", "error", "experimental", "extraction", "fix", "generation",
+    "generator", "humanize", "integration", "manuscript", "multi", "nature", "paper",
+    "param", "plan", "plot", "polish", "remove", "research", "retrieval", "science",
+    "spot", "statistics", "summary",
+}
+FORBIDDEN_BARE_CJK = {
+    "下载", "优化", "分析", "可视化", "图表", "处理", "总结", "报告", "提取",
+    "数据", "整合", "检索", "生成", "设计", "评估",
+}
 NAME_TOKEN_STOP = {
     "analyze", "analysis", "create", "generate", "build", "compute", "calculate",
     "perform", "run", "make", "plot", "check", "list", "query", "get", "fetch",
@@ -276,9 +292,15 @@ def _keywords_from_body(md_text: str) -> list:
 
 
 def _token_keywords(name: str) -> list:
-    """把长 snake_case / kebab 名称拆成有信息量的词元当触发词。"""
+    """把长 snake_case / kebab 名称拆成有信息量的词元当触发词。
+
+    裸通用词（cell/design/core/remove…）在这里就被挡掉：它们是「名称词元」而不是有人写下的触发词，
+    放进去只会让所有带 design_/cell_ 的技能共享同一个几乎无区分度的词（P0-2c 的 32 处脏数据
+    就是这么来的 —— 分词产出 → 回填进 skill.json → 变成「人工维护的真相源」）。
+    """
     toks = [t for t in re.split(r"[-_\s]+", str(name or "").lower())
-            if len(t) >= 3 and t not in NAME_TOKEN_STOP and t not in BOILERPLATE]
+            if len(t) >= 3 and t not in NAME_TOKEN_STOP and t not in BOILERPLATE
+            and t not in FORBIDDEN_BARE_ASCII]
     return toks[:4]
 
 
@@ -664,7 +686,9 @@ def check_keywords(entries: list = None, contract: dict = None) -> list:
     """按契约校验触发词，返回问题列表（空 = 通过）。
 
     形状规则（长度 / 条数 / 去重 / RED 至少一条）对全部技能生效；
-    「裸 ASCII 通用词」只查 RED 行 —— 只有 RED 行会进 server 的自动匹配。
+    「裸通用词」2026-09-23 P0-2c 起对**全部等级**生效：YEL/GRN 虽然不进 server 的自动匹配，
+    但它们的触发词会被 skill 目录搜索和「置顶技能自动触发」(_skill_trigger_hit) 直接使用，
+    一个 cell / design 就会让带这些名字片的技能在任意句子里被命中。
     通用词用棘轮（ratchet）管理：契约 ratchet.known_violations 是存量违规台账，
     新增违规、违规蔓延、以及「修好了却没从台账删掉」都会报问题：台账只能减不能增。
     """
@@ -692,17 +716,16 @@ def check_keywords(entries: list = None, contract: dict = None) -> list:
         for k in kws:
             if not (min_len <= len(k) <= max_len):
                 problems.append("触发词长度越界(%d..%d): %s -> %s" % (min_len, max_len, name, k))
-        if e.get("level") == "RED":
-            if not kws:
-                problems.append("RED 技能无触发词: %s" % name)
-            for k in kws:
-                kl = k.lower()
-                if kl in forbidden and " " not in k and k.isascii():
-                    offenders.setdefault(kl, set()).add(name)
-                elif not k.isascii() and k in forbidden_cjk:
-                    # 裸中文通用词（整条触发词就是通用动词/名词）：同样只认完全相等，
-                    # 「差异分析」「多组学整合」这类领域短语不受影响（2026-09-23 P0-2b）。
-                    offenders.setdefault(k, set()).add(name)
+        if e.get("level") == "RED" and not kws:
+            problems.append("RED 技能无触发词: %s" % name)
+        for k in kws:
+            kl = k.lower()
+            if kl in forbidden and " " not in k and k.isascii():
+                offenders.setdefault(kl, set()).add(name)
+            elif not k.isascii() and k in forbidden_cjk:
+                # 裸中文通用词（整条触发词就是通用动词/名词）：同样只认完全相等，
+                # 「差异分析」「多组学整合」这类领域短语不受影响（2026-09-23 P0-2b）。
+                offenders.setdefault(k, set()).add(name)
     known_raw = (contract.get("ratchet") or {}).get("known_violations") or {}
     known = {str(w).lower(): {str(s) for s in (v or [])} for w, v in known_raw.items()}
     for w, owners in sorted(offenders.items()):

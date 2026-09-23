@@ -43,5 +43,10 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "https://raw.githubusercontent.com/chris-mcginnis-ucsf/DoubletFinder/master/README.md",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "doubletfinder",
+    "remove doublets",
+    "doublets"
+  ]
 }

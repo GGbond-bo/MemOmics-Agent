@@ -25,8 +25,7 @@
     "deg-mixed-design",
     "deg mixed design",
     "deg",
-    "mixed",
-    "design"
+    "mixed"
   ],
   "when_to_use": "多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis"
 }

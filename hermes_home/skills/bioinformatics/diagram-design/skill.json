@@ -19,5 +19,10 @@
   "parameters": {
     "output_dir": "results/<sid>/diagrams/",
     "png_conversion": "svglib svg2rlg + reportlab renderPM"
-  }
+  },
+  "trigger_keywords": [
+    "diagram-design",
+    "diagram design",
+    "diagram"
+  ]
 }

@@ -25,7 +25,7 @@
 | 4 | analyze_rna_secondary_structure_features | When you need analyze rna secondary structure features analysis | secondary, structure, features | YEL 讨论触发 |
 | 5 | annotate_celltype_scRNA | When you need annotate celltype scRNA analysis | annotate_celltype_scRNA, annotate celltype scRNA, annotate, celltype | YEL 讨论触发 |
 | 6 | annotate_celltype_with_panhumanpy | When you need annotate celltype with panhumanpy analysis | annotate, celltype, panhumanpy | YEL 讨论触发 |
-| 7 | cell-cell-communication | Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis. | cell-cell-communication, cell cell communication, cell, communication | YEL 讨论触发 |
+| 7 | cell-cell-communication | Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis. | cell-cell-communication, cell cell communication, communication | YEL 讨论触发 |
 | 8 | cellbender-remove-background | 10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本) | CellBender, 去背景, ambient RNA, filtered.h5, ptrepack, 空滴, 背景RNA, 环境RNA | RED 必触发 |
 | 9 | cellchat-v2 | 适用于: 多细胞类型, disease, aging, development | CellChat, 细胞通讯, cellchat-v2, cellchat v2 | RED 必触发 |
 | 10 | coexpression-network | Build gene co-expression networks to identify modules and hub genes from RNA-seq data. | coexpression-network, coexpression network, coexpression, network | YEL 讨论触发 |
@@ -33,8 +33,8 @@
 | 12 | create_scvi_embeddings_scRNA | When you need create scvi embeddings scRNA analysis | scvi, embeddings | YEL 讨论触发 |
 | 13 | deg-analysis | 适用于: 有分组的scRNA-seq —— Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正 | DEG, 差异分析, 差异基因, deg-analysis, deg analysis | RED 必触发 |
 | 14 | disease-progression-longitudinal | 当你需要 纵向疾病进展 时触发 —— 纵向数据: LME → 轨迹建模 | disease, progression, longitudinal | YEL 讨论触发 |
-| 15 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove, doublets | YEL 讨论触发 |
-| 16 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell, cycle, phase | YEL 讨论触发 |
+| 15 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove doublets, doublets | YEL 讨论触发 |
+| 16 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell cycle, cycle, phase | YEL 讨论触发 |
 | 17 | functional-enrichment | 当你需要 功能富集 (GSEA + ORA) 时触发 —— GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB | 富集分析, GO, KEGG, pathway, functional-enrichment, functional enrichment, functional, enrichment | RED 必触发 |
 | 18 | gene-essentiality | Guidance for interpreting DepMap essentiality scores and correlations correctly. | gene-essentiality, gene essentiality, gene, essentiality | YEL 讨论触发 |
 | 19 | gene_set_enrichment_analysis | When you need gene set enrichment analysis analysis | gene, set, enrichment | YEL 讨论触发 |
@@ -46,7 +46,7 @@
 | 25 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
 | 26 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
 | 27 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
-| 28 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell, motility | YEL 讨论触发 |
+| 28 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
 | 29 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
 | 30 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
 | 31 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
@@ -55,7 +55,7 @@
 | 34 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
 | 35 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
 | 36 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
-| 37 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, remove, background | YEL 讨论触发 |
+| 37 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
 | 38 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
 | 39 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
 | 40 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
@@ -106,7 +106,7 @@
 | 2 | analyze_copy_number_purity_ploidy_and_focal_events | When you need analyze copy number purity ploidy and focal events analysis | copy, number, purity, ploidy | YEL 讨论触发 |
 | 3 | analyze_ddr_network_in_cancer | When you need analyze ddr network in cancer analysis | ddr, network, cancer | YEL 讨论触发 |
 | 4 | analyze_genomic_region_overlap | When you need analyze genomic region overlap analysis | genomic, region, overlap | YEL 讨论触发 |
-| 5 | bayesian_finemapping_with_deep_vi | When you need bayesian finemapping with deep vi analysis | bayesian, finemapping, deep | YEL 讨论触发 |
+| 5 | bayesian_finemapping_with_deep_vi | When you need bayesian finemapping with deep vi analysis | bayesian, finemapping, deep vi | YEL 讨论触发 |
 | 6 | bulk-omics-clustering | 当你需要 Bulk 多组学聚类 时触发 —— 多组学数据聚类: ConsensusClustering → 亚型发现 | bulk-omics-clustering, bulk omics clustering, clustering | YEL 讨论触发 |
 | 7 | bulk-rnaseq-counts-to-de-deseq2 | 当你需要 Bulk RNA-seq DESeq2 时触发 —— Bulk RNA-seq差异表达: 计数矩阵 → DESeq2 → 差异基因 → 富集 | rnaseq, counts, deseq2 | YEL 讨论触发 |
 | 8 | bulk-rnaseq-differential-expression | 有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图) | rnaseq, differential, expression | YEL 讨论触发 |
@@ -220,9 +220,9 @@
 | 24 | cross-species-atac-conservation | 纯 ATAC-seq 跨物种 CRE 保守性定量评估方法（专利方案）。 三层递进:L1 序列保守 → L2 染色质可及性保守 → L3 TF 结合动态保守。 核心创新:B 类 CRE 检出（序列+可及性保守，但 TF 足迹分歧）。 不需要 RNA/Hi-C/ChIP——纯 ATAC 数据即可运行完整评估… | 跨物种 CRE, ATAC 保守性, CRE 可代替性, 调控元件保守性评估 | YEL 讨论触发 |
 | 25 | cross-species-cre-conservation | Cross-species CRE (cis-regulatory element) conservation assessment: five-layer pipeline (sequence → epigenetic → 3D → functional → CRECS) quantifying whether one species' regulatory elements (e.g… | cross, species, cre, conservation | YEL 讨论触发 |
 | 26 | cross-species-regulatory-conservation | Cross-species gene regulatory element conservation assessment (CRCA) framework. Five-layer evaluation: R1 sequence conservation → R2 CRE chromatin accessibility (ATAC-driven) → R3 TF binding dynamics… | 跨物种调控元件, CRCA, 调控保守性, B类基因, BNIP3验证, CRE保守性, TF footprinting跨物种, regulatory conservation | YEL 讨论触发 |
-| 27 | debate-core | 任何涉及结论/参数裁决的时刻:rail_review(post) 后、结论合成前、入库/报告前 参数候选≥2 或结果冲突/重试失败时。SOUL.md 铁律 #5 强制场景。 | debate-core, debate core, debate, core | YEL 讨论触发 |
-| 28 | deg-mixed-design | 多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis | deg-mixed-design, deg mixed design, deg, mixed, design | YEL 讨论触发 |
-| 29 | diagram-design | 示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure) | diagram-design, diagram design, diagram, design | YEL 讨论触发 |
+| 27 | debate-core | 任何涉及结论/参数裁决的时刻:rail_review(post) 后、结论合成前、入库/报告前 参数候选≥2 或结果冲突/重试失败时。SOUL.md 铁律 #5 强制场景。 | debate-core, debate core, debate | YEL 讨论触发 |
+| 28 | deg-mixed-design | 多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis | deg-mixed-design, deg mixed design, deg, mixed | YEL 讨论触发 |
+| 29 | diagram-design | 示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure) | diagram-design, diagram design, diagram | YEL 讨论触发 |
 | 30 | dnbc4tools-analysis-workflow | 用户提到 DNBelab/dnbc4tools/华大BGI/华大基因 单细胞 RNA 或 ATAC 的比对/分析流程 | dnbc4tools, workflow | YEL 讨论触发 |
 | 31 | dnbc4tools-index-building | 华大BGI DNBelab C系列高通量单细胞数据分析软件 dnbc4tools 的参考基因组索引构建流程（rna mkref=STAR 2.7.2b genomeGenerate + atac mkref=chromap + tools mkgtf GTF过滤校正）… | dnbc4tools, index, building | YEL 讨论触发 |
 | 32 | docx-generation | 需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用 | Word, docx, word文档, docx-generation, docx generation, 导出Word | RED 必触发 |
@@ -239,7 +239,7 @@
 | 43 | image-ocr-fallback | User uploads a screenshot/table/figure-caption image and expects the text read back | image-ocr-fallback, image ocr fallback, image, ocr, fallback | YEL 讨论触发 |
 | 44 | input-data-integrity-audit | 拿到任何分析输入定义文件（基因集定义、通路清单、打分矩阵、样本元数据表）准备用它做打分/富集/溯源前；或用户问「这个是不是？」「该用哪份文件」；或你发现某组条目数整齐得可疑时。 | input, integrity, audit | YEL 讨论触发 |
 | 45 | interactive-html-deliverables | 用户要一个**给人看**的交互式网页交付物（汇报、展示、介绍、看板、评审演示），而不是分析报告的结论页时。若目标是「把分析结果写成报告」→ 用 bioinformatics-html-report。 | interactive, html, deliverables | YEL 讨论触发 |
-| 46 | literature-full-summary | 文献全文思路提炼。触发场景:用户要求'总结/解读/提炼这篇文章的思路'、'这篇文章讲了什么'、文献库一键全文提炼。 | literature-full-summary, literature full summary, full, summary | YEL 讨论触发 |
+| 46 | literature-full-summary | 文献全文思路提炼。触发场景:用户要求'总结/解读/提炼这篇文章的思路'、'这篇文章讲了什么'、文献库一键全文提炼。 | literature-full-summary, literature full summary, full | YEL 讨论触发 |
 | 47 | matrix-heatmap-geometry | 出或改**矩阵型热图**（基因集×亚群、基因×样本、GO 词条×亚群、效应值×亚群）并关心版式、期刊尺寸、矢量导出或口径取舍时。 纯 UMAP/Violin/DotPlot 不需要；调色板选择不需要。 | matrix-heatmap-geometry, matrix heatmap geometry, matrix, heatmap, geometry | YEL 讨论触发 |
 | 48 | mesh-decs-semantic-indexing | [MeSH/DeCS语义索引] 提取PubMed文献MeSH主要标签 / MESINESP西语文献DeCS编码 / 语义索引benchmark / 文献标引 / semantic indexing / meshMajor / decsCodes | mesh, decs, semantic, indexing | YEL 讨论触发 |
 | 49 | mesh-decs-tag-extraction | 用户给论文 title/abstract/PMID，要求输出 MeSH 主要标签 / MeSH 词 / 语义索引标签 | 语义索引, MeSH标签, MeSH主要标签, DeCS编码, meshMajor, decsCodes, benchmarker, 试卷作答 | YEL 讨论触发 |
@@ -249,36 +249,36 @@
 | 53 | metabolomics-statistical-analysis | 代谢组学统计分析 / 代谢物差异分析 / LC-MS差异 / GC-MS差异 / PLS-DA / OPLS-DA / VIP / 代谢标志物 / 代谢组火山图 / metabolomics / metabolic biomarker / peak intensity matrix 差异对比 | metabolomics, statistical | YEL 讨论触发 |
 | 54 | metascape-gene-list-prep | 用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 Metascape 导入格式的基因列表: | metascape, 基因列表, top100, DEG转Metascape, 按亚群取基因, 合并Metascape表。 | YEL 讨论触发 |
 | 55 | mixed-design-deg | 多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor | 混合设计, 配对比较, pre, post, 重复测量, 随机效应 donor | YEL 讨论触发 |
-| 56 | molecular-cloning-design | [molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试 | molecular-cloning-design, molecular cloning design, molecular, cloning, design | YEL 讨论触发 |
-| 57 | multi-role-debate | 需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要 多角色裁决、用户要求"先正方再反方最后LLM判决"时。 | multi-role-debate, multi role debate, multi, role, debate | YEL 讨论触发 |
+| 56 | molecular-cloning-design | [molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试 | molecular-cloning-design, molecular cloning design, molecular, cloning | YEL 讨论触发 |
+| 57 | multi-role-debate | 需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要 多角色裁决、用户要求"先正方再反方最后LLM判决"时。 | multi-role-debate, multi role debate, role, debate | YEL 讨论触发 |
 | 58 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, 投稿配图, Nature style, 期刊, SCI figure, 发表, publication figure, SCI, paper figure, figure contract, SVG editable, TIFF 600dpi, 顶刊, Nature风格 | RED 必触发 |
 | 59 | nature-paper-card | 单篇论文深度拆解卡片:固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法） | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, 拆解这篇文献 | RED 必触发 |
 | 60 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 精读, 复现这篇, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper | RED 必触发 |
 | 61 | nature-response | Nature风格修回信套件:逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿 | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复, 逐点回复, 大修回复, 小修回复, 回复审稿人, 修改稿回复, 标红修改, cover letter, 编辑邮件, 返修邮件 | RED 必触发 |
 | 62 | nature-reviewer | Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, manuscript review, peer review, referee report | RED 必触发 |
-| 63 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, nature, shared | YEL 讨论触发 |
+| 63 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, shared | YEL 讨论触发 |
 | 64 | openfold3 | OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc... | openfold3 | YEL 讨论触发 |
 | 65 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming, 语言润色 | RED 必触发 |
 | 66 | patent-analysis | 用户说"分析这篇专利""拆解这个专利""专利详细解读""解读专利""分析权利要求""竞品专利分析"等时触发。 | patent-analysis, patent analysis, patent | YEL 讨论触发 |
-| 67 | pdf-report-generation | PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成 | pdf-report-generation, pdf report generation, pdf, generation | YEL 讨论触发 |
+| 67 | pdf-report-generation | PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成 | pdf-report-generation, pdf report generation, pdf | YEL 讨论触发 |
 | 68 | pdf-translate | 适用于: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成 | pdf-translate, pdf translate, pdf, translate | YEL 讨论触发 |
 | 69 | pdf_reader | 当你需要 PDF 文献读取器 时触发 —— 读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换 | pdf_reader, pdf reader, pdf, reader | YEL 讨论触发 |
 | 70 | platform-execution-pitfalls | 任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。 | platform, execution, pitfalls | YEL 讨论触发 |
 | 71 | ppt-generator | 当你需要 PPT生成 时触发 —— AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入 | PPT, 幻灯片, 演示文稿, 组会, ppt-generator, ppt generator, 做PPT | RED 必触发 |
 | 72 | ppt-html | 适用于: 文献解读后生成HTML报告 —— 图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示 | ppt-html, ppt html, ppt, html | YEL 讨论触发 |
 | 73 | ppt-master | 适用于: 文献解读后生成PPT, 分析报告制作PPT —— AI驱动的SVG-PPT生成系统，多角色协作:策划→执行→质量检查→导出 | ppt-master, ppt master, ppt, master | YEL 讨论触发 |
-| 74 | pptx-generation | PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件 | pptx-generation, pptx generation, pptx, generation | YEL 讨论触发 |
+| 74 | pptx-generation | PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件 | pptx-generation, pptx generation, pptx | YEL 讨论触发 |
 | 75 | pre-submission-reviewer | 论文已写完、临近投稿（1周内），需要投稿前全面体检时使用。路由纪律:nature-reviewer 判科学质量（Nature五轴:原创性/重要性/技术严谨性，用户说'Nature预审/预审科学质量'走它），academic-paper-reviewer 是模拟完整同行评审（用户说'审稿/模拟审稿人'走它）… | 投稿前审查, 投稿前检查, 投前审, 查草稿, 检查草稿, 投稿前体检, 找问题, proofread, check the draft, find issues, 语法检查, 图表质量, AI腔 | RED 必触发 |
 | 76 | professional-paper-interpretation | 专业编辑视角论文解读:叙事逻辑分析 + 研究思路拆解 + 结构化写作逻辑。区别于 paper-summary 的字段导向提取，本 skill 侧重'作者为什么这样做、逻辑链是什么、文章怎么组织的'。触发词:专业编辑角度、编辑视角、研究思路、这篇文章讲了什么、帮我解读一下、这篇文章做了什么、帮我从编辑角度分析 | 专业编辑角度, 编辑视角, 研究思路, 这篇文章讲了什么, 帮我解读一下, 这篇文章做了什么, 帮我从编辑角度分析 | YEL 讨论触发 |
 | 77 | proteinmpnn | OpenAI4S 移植:Inverse-fold a protein backbone (PDB structure) into amino-a... | proteinmpnn | YEL 讨论触发 |
 | 78 | proteomics-secretome-analysis | conditioned medium secretome, supernatant proteomics | 分泌蛋白组, secretome, 条件培养基, 上清蛋白, conditioned medium | YEL 讨论触发 |
-| 79 | public-data-download | 精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。 | public-data-download, public data download, public, download | YEL 讨论触发 |
+| 79 | public-data-download | 精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。 | public-data-download, public data download, public | YEL 讨论触发 |
 | 80 | pubmed-mesh-annotation | 用户要求给文献输出 MeSH 标签 / MeSH 主要主题词 / 语义索引标注 / 给论文打 MeSH 词时加载。核心知识:query_ncbi esummary 不含 MeSH，必须用 efetch MEDLINE 格式提取 MH 行，* 前缀 = Major Topic。 | pubmed-mesh-annotation, pubmed mesh annotation, pubmed, mesh, annotation | YEL 讨论触发 |
 | 81 | pubmed-mesh-indexing | 为论文输出官方 MeSH 主要标签（TaskA 式语义索引 benchmark） | MeSH, DeCS, 语义索引, 主要标签, mesh tags, MESINESP | YEL 讨论触发 |
 | 82 | scgpt | OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a... | scgpt | YEL 讨论触发 |
 | 83 | scientific-figure-export | 用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。 | 图太大, 图很糊, 导出尺寸, dpi, 保存格式, PNG还是PDF, pngquant | YEL 讨论触发 |
 | 84 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
-| 85 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns, design | YEL 讨论触发 |
+| 85 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns | YEL 讨论触发 |
 | 86 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
 | 87 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
 | 88 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |
@@ -313,7 +313,7 @@
 | 1 | generate_embeddings_with_state | When you need generate embeddings with state analysis | embeddings, state | YEL 讨论触发 |
 | 2 | generate_transcriptformer_embeddings | When you need generate transcriptformer embeddings analysis | transcriptformer, embeddings | YEL 讨论触发 |
 | 3 | get_uce_embeddings_scRNA | When you need get uce embeddings scRNA analysis | get_uce_embeddings_scRNA, get uce embeddings scRNA, uce, embeddings | YEL 讨论触发 |
-| 4 | lipidomics-summary-stats | 脂质组学统计汇总:脂质定量数据→描述统计→差异分析→脂质类别分布→可视化 | lipidomics-summary-stats, lipidomics summary stats, lipidomics, summary, stats | YEL 讨论触发 |
+| 4 | lipidomics-summary-stats | 脂质组学统计汇总:脂质定量数据→描述统计→差异分析→脂质类别分布→可视化 | lipidomics-summary-stats, lipidomics summary stats, lipidomics, stats | YEL 讨论触发 |
 | 5 | map_to_ima_interpret_scRNA | When you need map to ima interpret scRNA analysis | map, ima, interpret | YEL 讨论触发 |
 | 6 | multi-omics-integration | 当你需要 多组学整合 (MOFA+) 时触发 —— MOFA+/DIABLO多组学整合。RNA+ATAC+Protein联合分析 | 多组学, multi-omics, 多组学整合, multi-omics-integration, multi omics integration, 联合分析 | RED 必触发 |
 | 7 | perform_gene_expression_nmf_analysis | When you need perform gene expression nmf analysis analysis | gene, expression, nmf | YEL 讨论触发 |
@@ -340,7 +340,7 @@
 | 12 | omics-dataset-retrieval | 当你需要 组学数据集检索 (GEO/SRA) 时触发 —— GEO/SRA数据集检索和下载。元数据解析和筛选 | 公共数据, 下载数据集, GEO数据, omics-dataset-retrieval, omics dataset retrieval, 公共数据集, GEO数据集 | RED 必触发 |
 | 13 | paper-download | 当你需要 文献下载 时触发 —— 搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台 | 搜文献, 找论文, 下载论文, paper-download, paper download, 下载文献, PDF下载 | RED 必触发 |
 | 14 | paper-summary | 当你需要 AI文献总结 时触发 —— 深度AI文献解读:全文提取→结构化总结(15字段)→图表提取→报告生成 | 总结论文, 解读, summarize paper, 精读, 论文要点, 讲一下这篇 | RED 必触发 |
-| 15 | paper-translate | 当你需要 PDF翻译 时触发 —— 保留排版的PDF全文翻译，支持中英互译 | paper-translate, paper translate, paper, translate | YEL 讨论触发 |
+| 15 | paper-translate | 当你需要 PDF翻译 时触发 —— 保留排版的PDF全文翻译，支持中英互译 | paper-translate, paper translate, translate | YEL 讨论触发 |
 | 16 | query_alphafold | When you need query alphafold analysis | query_alphafold, query alphafold, alphafold | YEL 讨论触发 |
 | 17 | query_arxiv | When you need query arxiv analysis | query_arxiv, query arxiv, arxiv | YEL 讨论触发 |
 | 18 | query_cbioportal | When you need query cbioportal analysis | query_cbioportal, query cbioportal, cbioportal | YEL 讨论触发 |
@@ -387,7 +387,7 @@
 | 59 | research-plan | 用户询问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"时自动触发 | 技术路线, 分析路线, 怎么分析, 研究方案, research plan, research-plan, 研究计划, 分析方案 | RED 必触发 |
 | 60 | search_google | When you need search google analysis | search_google, search google, search, google | YEL 讨论触发 |
 | 61 | translate-book | 用户要求翻译整本书、翻译大段内容、把这本书翻译成中文时使用；需提供文件路径（PDF/DOCX/EPUB）和目标语言 | 翻译整本书, 整书翻译, 翻译这本书, 整本翻译, 把这本书翻译, 翻译全书, 全书翻译, 翻译大段, 大段内容翻译, 大段翻译, 这本书翻译成, translate book, translate the book, translate this book, book translation, 整本书翻成 | RED 必触发 |
-| 62 | web-research | 当你需要 网络调研 时触发 —— 网络搜索和调研，获取最新信息，综合多个来源生成报告 | web-research, web research, web, research | YEL 讨论触发 |
+| 62 | web-research | 当你需要 网络调研 时触发 —— 网络搜索和调研，获取最新信息，综合多个来源生成报告 | web-research, web research, web, 网络调研 | YEL 讨论触发 |
 
 ## 12_分子生物学 - 分子克隆 (21 skills)
 
@@ -397,9 +397,9 @@
 | 2 | annotate_open_reading_frames | When you need annotate open reading frames analysis | annotate, open, reading, frames | YEL 讨论触发 |
 | 3 | annotate_plasmid | When you need annotate plasmid analysis | annotate_plasmid, annotate plasmid, annotate, plasmid | YEL 讨论触发 |
 | 4 | blast_sequence | When you need blast sequence analysis | blast_sequence, blast sequence, blast, sequence | YEL 讨论触发 |
-| 5 | design_golden_gate_oligos | When you need design golden gate oligos analysis | design, golden, gate, oligos | YEL 讨论触发 |
-| 6 | design_primer | When you need design primer analysis | design_primer, design primer, design, primer | YEL 讨论触发 |
-| 7 | design_verification_primers | When you need design verification primers analysis | design, verification, primers | YEL 讨论触发 |
+| 5 | design_golden_gate_oligos | When you need design golden gate oligos analysis | golden gate, golden, gate, oligos | YEL 讨论触发 |
+| 6 | design_primer | When you need design primer analysis | design_primer, design primer, primer | YEL 讨论触发 |
+| 7 | design_verification_primers | When you need design verification primers analysis | verification primers, verification, primers | YEL 讨论触发 |
 | 8 | digest_sequence | When you need digest sequence analysis | digest_sequence, digest sequence, digest, sequence | YEL 讨论触发 |
 | 9 | find_restriction_enzymes | When you need find restriction enzymes analysis | find_restriction_enzymes, find restriction enzymes, find, restriction, enzymes | YEL 讨论触发 |
 | 10 | find_restriction_sites | When you need find restriction sites analysis | find_restriction_sites, find restriction sites, find, restriction, sites | YEL 讨论触发 |
@@ -409,8 +409,8 @@
 | 14 | get_plasmid_sequence | When you need get plasmid sequence analysis | get_plasmid_sequence, get plasmid sequence, plasmid, sequence | YEL 讨论触发 |
 | 15 | golden_gate_assembly | When you need golden gate assembly analysis | golden_gate_assembly, golden gate assembly, golden, gate, assembly | YEL 讨论触发 |
 | 16 | interspecies_gene_conversion | When you need interspecies gene conversion analysis | interspecies, gene, conversion | YEL 讨论触发 |
-| 17 | microplate-layout-design | Design optimized microplate layouts with randomization, edge effect mitigation, and covariate balancing. | microplate-layout-design, microplate layout design, microplate, layout, design | YEL 讨论触发 |
-| 18 | pcr-primer-design | 当你需要 PCR 引物设计 时触发 —— PCR引物设计: Primer3 → 特异性验证 | pcr-primer-design, pcr primer design, pcr, primer, design | YEL 讨论触发 |
+| 17 | microplate-layout-design | Design optimized microplate layouts with randomization, edge effect mitigation, and covariate balancing. | microplate-layout-design, microplate layout design, microplate, layout | YEL 讨论触发 |
+| 18 | pcr-primer-design | 当你需要 PCR 引物设计 时触发 —— PCR引物设计: Primer3 → 特异性验证 | pcr-primer-design, pcr primer design, pcr, primer | YEL 讨论触发 |
 | 19 | pcr_simple | When you need pcr simple analysis | pcr_simple, pcr simple, pcr, simple | YEL 讨论触发 |
 | 20 | perform_pcr_and_gel_electrophoresis | When you need perform pcr and gel electrophoresis analysis | pcr, gel, electrophoresis | YEL 讨论触发 |
 | 21 | phylogenetics-toolkit | 系统发育分析工具包:序列比对→建树(ML/NJ/MP)→树可视化→进化距离→祖先重建 | phylogenetics-toolkit, phylogenetics toolkit, phylogenetics, toolkit | YEL 讨论触发 |
@@ -421,7 +421,7 @@
 |---|---|---|---|---|
 | 1 | analyze_thrombus_histology | When you need analyze thrombus histology analysis | thrombus, histology | YEL 讨论触发 |
 | 2 | quantify_amyloid_beta_plaques | When you need quantify amyloid beta plaques analysis | quantify, amyloid, beta, plaques | YEL 讨论触发 |
-| 3 | quantify_cell_cycle_phases_from_microscopy | When you need quantify cell cycle phases from microscopy analysis | quantify, cell, cycle, phases | YEL 讨论触发 |
+| 3 | quantify_cell_cycle_phases_from_microscopy | When you need quantify cell cycle phases from microscopy analysis | quantify, cell cycle, cycle, phases | YEL 讨论触发 |
 | 4 | quantify_corneal_nerve_fibers | When you need quantify corneal nerve fibers analysis | quantify, corneal, nerve, fibers | YEL 讨论触发 |
 | 5 | run_3d_chondrogenic_aggregate_assay | When you need run 3d chondrogenic aggregate assay analysis | chondrogenic, aggregate, assay | YEL 讨论触发 |
 
@@ -429,10 +429,10 @@
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
-| 1 | analyze_cell_senescence_and_apoptosis | When you need analyze cell senescence and apoptosis analysis | cell, senescence, apoptosis | YEL 讨论触发 |
-| 2 | analyze_cfse_cell_proliferation | When you need analyze cfse cell proliferation analysis | cfse, cell, proliferation | YEL 讨论触发 |
+| 1 | analyze_cell_senescence_and_apoptosis | When you need analyze cell senescence and apoptosis analysis | cell senescence, senescence, apoptosis | YEL 讨论触发 |
+| 2 | analyze_cfse_cell_proliferation | When you need analyze cfse cell proliferation analysis | cfse, cell proliferation, proliferation | YEL 讨论触发 |
 | 3 | isolate_purify_immune_cells | When you need isolate purify immune cells analysis | isolate, purify, immune, cells | YEL 讨论触发 |
-| 4 | perform_facs_cell_sorting | When you need perform facs cell sorting analysis | facs, cell, sorting | YEL 讨论触发 |
+| 4 | perform_facs_cell_sorting | When you need perform facs cell sorting analysis | facs, cell sorting, sorting | YEL 讨论触发 |
 | 5 | secretome-classification | ✅ Conditioned medium / supernatant proteomics (LC-MS/MS, label-free, TMT) | secretome-classification, secretome classification, secretome, classification | YEL 讨论触发 |
 | 6 | track_immune_cells_under_flow | When you need track immune cells under flow analysis | track, immune, cells, under | YEL 讨论触发 |
 
@@ -441,6 +441,6 @@
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
 | 1 | analyze_crispr_genome_editing | When you need analyze crispr genome editing analysis | crispr, genome, editing | YEL 讨论触发 |
-| 2 | design_knockout_sgrna | When you need design knockout sgrna analysis | design_knockout_sgrna, design knockout sgrna, design, knockout, sgrna | YEL 讨论触发 |
+| 2 | design_knockout_sgrna | When you need design knockout sgrna analysis | design_knockout_sgrna, design knockout sgrna, knockout, sgrna | YEL 讨论触发 |
 | 3 | pooled-crispr-screens | 当你需要 CRISPR 筛选分析 时触发 —— Pooled CRISPR: MAGeCK → 基因必需性 | pooled-crispr-screens, pooled crispr screens, pooled, crispr, screens | YEL 讨论触发 |
-| 4 | sgrna-design | sgRNA设计:基因序列→CRISPR靶点扫描→效率+脱靶评分→最优sgRNA推荐→文库设计 | sgrna-design, sgrna design, sgrna, design | YEL 讨论触发 |
+| 4 | sgrna-design | sgRNA设计:基因序列→CRISPR靶点扫描→效率+脱靶评分→最优sgRNA推荐→文库设计 | sgrna-design, sgrna design, sgrna | YEL 讨论触发 |

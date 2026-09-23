@@ -17,7 +17,7 @@
   ],
   "sources_precedence": {
     "rule": "skill.json > SKILL.md frontmatter > 自动派生；SOUL 必触发表命中时其词条前置合并，最后截断到 max_per_skill",
-    "gotcha": "webui/auto_register.py 生成的 skill.json 用 normalize_meta(existing=旧值)：只改 SKILL.md 不会新增关键词，必须直接编辑 skill.json"
+    "gotcha": "webui/auto_register.py 生成的 skill.json 用 normalize_meta(existing=旧值)：只改 SKILL.md 不会新增关键词，必须直接编辑 skill.json；反向同理 —— 派生口修好后，早期已经落进 skill.json 的脏词不会自己消失，必须像 P0-2c 那样显式清理（31 个文件）"
   },
   "keyword_rules": {
     "min_len": 2,
@@ -25,7 +25,7 @@
     "max_per_skill": 16,
     "per_skill_unique": true,
     "red_requires_at_least_one": true,
-    "red_only_rules_apply_to": "只对 RED 行做「通用词」检查（只有 RED 行进自动匹配）",
+    "generic_word_rules_apply_to": "对全部行（RED/YEL/GRN）做「通用词」检查；2026-09-23 P0-2b 之前只查 RED 行，P0-2c 起扩到全等级",
     "forbidden_bare_ascii_words": [
       "analysis",
       "background",
@@ -83,9 +83,12 @@
       "实测「这个 analysis 的 core 思路是什么」命中 6 个技能、「Please help me design a plan for my holiday」命中 3 个。",
       "要表达同样的意思请写成短语（deg analysis / study design / research plan / Nature style）或中文词（实验设计/统计方法）。",
       "中文侧同理：单个通用动词/名词（分析/总结/设计/整合…）单独做关键词区分度为 0，必须写成领域短语（多组学整合/差异分析/批次校正）。",
-      "2026-09-23 P0-2b 实测语料里只揪出 1 个（multi-omics-integration 的 整合），已替换为 多组学整合；其余中文触发词都是领域词（聚类/拟时序/质控/拷问），不是通用词。"
+      "2026-09-23 P0-2b 实测语料里只揪出 1 个（multi-omics-integration 的 整合），已替换为 多组学整合；其余中文触发词都是领域词（聚类/拟时序/质控/拷问），不是通用词。",
+      "2026-09-23 P0-2c 定位到 YEL 32 处脏词的共同根因：技能名分词（webui/skills_registry.py _token_keywords）把名字里的 cell/design/core/remove… 当成触发词，",
+      "再经 backfill 写进 skill.json，于是「自动派生」摇身变成「人工维护的真相源」。已在派生口加过滤（t not in FORBIDDEN_BARE_ASCII）——",
+      "不挡在派生口，清完还会长回来。代码常量与契约两份清单由测试钉住逐字相等（reg.FORBIDDEN_BARE_ASCII / FORBIDDEN_BARE_CJK）。"
     ],
-    "forbidden_scope": "裸 ASCII 单词（无空格、纯英文）+ 裸中文通用词（整条触发词就是停用词表里的词）都禁止，只对 RED 行生效。2026-09-23 P0-2b：RED 语料两个清单都已清零，ratchet.known_violations 收缩到 {}，此后新增即硬拦。注意有效触发词视角有盲区：被 keyword_filters 丢掉或超过 max_per_skill 截断的词看不见，所以 test_live_sources_have_no_bare_generic_words 直接查源头（skill.json / SKILL.md / SOUL 必触发表）。YEL/GRN 不在射程内（不进自动匹配）：实测 33 处裸通用词（cell/design/core/remove…）留在 YEL/GRN，属 P0-2c 候选，不影响 RED 行为。"
+    "forbidden_scope": "裸 ASCII 单词（无空格、纯英文）+ 裸中文通用词（整条触发词就是停用词表里的词）都禁止，2026-09-23 P0-2c 起对全部 355 行（RED 50 / YEL 294 / GRN 11）生效，此前只对 RED 行生效。P0-2b 清掉 RED 32+1 处；P0-2c 又清掉 YEL 32 处（31 个技能：design x11 / cell x7 / remove x2 / summary x2 / generation x2 / core / deep / multi / nature / paper / download / research / background），GRN 0 处 —— 三色合计清零，ratchet.known_violations 保持空表，此后新增即硬拦。为什么 YEL/GRN 也要清：它们不进 server 的消息级自动匹配，但触发词是「置顶技能自动触发」(_skill_trigger_hit) 和 skill 目录搜索的直接输入 —— 一个 cell 会让 cell-* 技能在任意含 cell 字样的句子里被命中（连 excellent 都算），一个 design 会让 11 个设计类技能同时被搜出来。注意有效触发词视角有盲区：被 keyword_filters 丢掉或超过 max_per_skill 截断的词看不见，所以 test_live_sources_have_no_bare_generic_words 直接查源头（skill.json / SKILL.md / SOUL 必触发表）。"
   },
   "keyword_filters": {
     "why": [
@@ -235,7 +238,7 @@
     "rule": "known_violations 只能减少不能增加：新增裸通用词关键词会被门禁拦下；被修好的条目必须从本表删除（测试会因条目过期而红，强制收缩）",
     "known_violations_asof": "2026-09-23",
     "known_violations": {},
-    "zero_since": "2026-09-23（P0-2b）：32 条裸 ASCII 词 + 1 条裸中文词全部修完，台账清零；测试用合成契约继续钉住「蔓延」分支。"
+    "zero_since": "2026-09-23（P0-2b）：RED 侧 32 条裸 ASCII 词 + 1 条裸中文词全部修完，台账清零；测试用合成契约继续钉住「蔓延」分支。2026-09-23（P0-2c）：YEL 侧 32 条（31 个技能）也清完，检查范围由 RED 扩到全等级，名称分词口加过滤防复发，台账仍为空表。"
   },
   "evidence": {
     "fixture": "webui/tests/fixtures/skill_routing_matrix.json（P0-2b 后：64 正向场景 + 16 干扰 + 10 极端 + 0 缺口 + 0 过度触发钉住，缺口与过度触发全部修完转正）",
@@ -249,6 +252,8 @@
   "changelog": [
     "2026-09-23 P0-2a：加契约文件；修触发词缓存 mtime 失效（索引重建后新词不生效）；英文多词由「任一实词」收紧为「实词全中」；中英边界空格归一。",
     "2026-09-23 P0-2b：清掉 21 个 RED 技能 + SOUL 必触发表里的 32 个裸英文通用词（改用短语/中文词）；补 7 个漏召回缺口（线粒体/批次校正/Excel/实验参数/精读/复现/可行性）；裸中文通用词清单上线；棘轮台账清零。",
-    "2026-09-23 P0-2b 极端测试补丁：短 ASCII 缩写加字母边界（science->SCI / algorithm->GO / mRNA->MR / degree->DEG 词片段误触发归零）；error-recovery 的裸「怎么修」收紧成「报错怎么修」；BOILERPLATE/GENERIC_STOP 静默丢弃词表纳入契约单点真源。"
+    "2026-09-23 P0-2b 极端测试补丁：短 ASCII 缩写加字母边界（science->SCI / algorithm->GO / mRNA->MR / degree->DEG 词片段误触发归零）；error-recovery 的裸「怎么修」收紧成「报错怎么修」；BOILERPLATE/GENERIC_STOP 静默丢弃词表纳入契约单点真源。",
+    "2026-09-23 P0-2c：清掉 YEL 32 处裸通用词（31 个技能，design x11/cell x7/remove x2/summary x2/generation x2/core/deep/multi/nature/paper/download/research/background），全部来自「技能名分词 → 回填 skill.json」；",
+    "名称分词口加过滤（根因修复，防复发）；check_keywords 的通用词检查由 RED 扩到全等级；源头断言同步扩到全等级；test_non_red_generic_word_is_allowed 翻转为 test_non_red_generic_word_is_rejected；GRN 侧 0 处。"
   ]
 }
