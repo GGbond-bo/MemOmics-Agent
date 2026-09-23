@@ -3812,8 +3812,68 @@ def _skill_meta(name: str) -> dict:
     return meta
 
 
+# P0-2d(2026-09-23)：置顶 skill 触发判定的词边界。
+# 旧实现是纯子串匹配（`kl in low`），纯英文短词会从别的单词肚子里命中：
+#   cell ⊂ excellent、core ⊂ score、GO ⊂ category/logout、find ⊂ DoubletFinder、
+#   flow ⊂ workflow、set ⊂ dataset、code ⊂ encode、sites ⊂ websites、
+#   genomic ⊂ 10xgenomics、processing ⊂ preprocessing、grn ⊂ sgrna。
+# 规则分两档（档 1 与 RED 路由共用同一套 short_ascii_boundary，档 2 只用于置顶判定）：
+#   档 1 纯 ASCII 且 <=3 位（GO/SCI/QC/set/map）：左右都不许紧贴英文字母（复用 _short_ascii_kw_match）；
+#   档 2 更长的 ASCII（find/flow/code/processing）：左边不许贴字母数字（词首边界），
+#        右边允许常见词形变化（cells/primers/genes/combined）或非字母，其余一律不算命中。
+# 含 CJK/标点的关键词仍走子串：中文没有词边界（"做primer设计"、"网络调研" 必须照命中）。
+_KW_INFLECT_SUFFIXES = ("ing", "es", "ed", "s", "d")
+_KW_LEFT_BLOCK_RE = re.compile(r"[a-z0-9]")
+
+
+def _is_en_letter(ch: str) -> bool:
+    """只认英文字母：Python 的 str.isalpha() 对汉字也返回 True（"设计".isalpha()），
+    用它会把 'primer' 在 '做primer设计' 里判成「尾巴接字母」而误杀（P0-2d 实测踩到）。"""
+    return bool(ch) and ch.isascii() and ch.isalpha()
+
+
+def _kw_inflected(tail: str) -> bool:
+    """命中尾巴是不是词形变化（cells / primers / genes / combined）。"""
+    for suf in _KW_INFLECT_SUFFIXES:
+        if tail.startswith(suf):
+            nxt = tail[len(suf):len(suf) + 1]
+            if not _is_en_letter(nxt):
+                return True
+    return False
+
+
+def _kw_boundary_hit(text_low: str, kw_l: str) -> bool:
+    """ASCII 触发词的边界命中判定（P0-2d）。非 ASCII（CJK/混合）不用本函数。"""
+    if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
+        return _short_ascii_kw_match(kw_l, text_low)
+    n = len(kw_l)
+    start = 0
+    while True:
+        i = text_low.find(kw_l, start)
+        if i < 0:
+            return False
+        if i == 0 or not _KW_LEFT_BLOCK_RE.match(text_low[i - 1]):
+            tail = text_low[i + n:i + n + 4]
+            if not _is_en_letter(tail[:1]) or _kw_inflected(tail):
+                return True
+        start = i + 1
+
+
+def _kw_any_hit(text_low: str, kw_l: str) -> bool:
+    """一个候选词（含 CJK/多词短语）在文本里算不算命中。"""
+    return _kw_boundary_hit(text_low, kw_l) if kw_l.isascii() else (kw_l in text_low)
+
+
 def _skill_trigger_hit(meta: dict, user_text: str):
-    """置顶 skill 的触发判定：用该 skill 自己的 trigger_keywords/aliases/名字（比 RED 的领域级关键词更细）"""
+    """置顶 skill 的触发判定：用该 skill 自己的 trigger_keywords/aliases/名字（比 RED 的领域级关键词更细）
+
+    P0-2d(2026-09-23)：由「纯子串」收紧为「词边界」——
+      · ASCII 候选走 _kw_boundary_hit（档 1 短缩写左右都不贴字母；档 2 词首边界 + 允许词形变化尾巴）；
+      · 多词短语的「实词全中」兜底同样逐词走边界，修掉 "cell cycle" 只因句子散落着 cell 与 cycle 就命中；
+      · 含 CJK/标点的候选仍走子串（中文无词边界，"做primer设计"/"网络调研" 照旧命中）。
+    量化（439 篇 SKILL.md、424 万字符语料）：1226 个 ASCII 候选里 216 个存在「词中命中」，
+    全部 89933 次出现里有 13839 次（15.4%）落在别的单词内部；改后 24 处误命中归零、
+    真阳性零丢失（12 句真实说法 + 480000 组「句子×技能」对，新命中恒为旧命中的子集）。"""
     if not user_text or not meta:
         return []
     low = user_text.lower()
@@ -3833,11 +3893,12 @@ def _skill_trigger_hit(meta: dict, user_text: str):
         if not kl or kl in seen:
             continue
         seen.add(kl)
-        if len(kl) >= 2 and kl in low:
+        if len(kl) >= 2 and _kw_any_hit(low, kl):
             hits.append(k)
         elif " " in kl:
+            # 多词短语的兜底：允许词序散开，但每个实词都要自己踩在词首边界上（P0-2d）
             parts = [p for p in kl.split() if len(p) >= 3]
-            if parts and all(p in low for p in parts):
+            if parts and all(_kw_any_hit(low, p) for p in parts):
                 hits.append(k)
     return hits[:8]
 
@@ -8823,10 +8884,8 @@ async def discover_custom_models(payload: dict):
         for proxy in (_PROXY, None):
             try:
                 req = _ur.Request(_url, headers=headers)
-                # 2026-08-26: build_opener 嵌套修复（else 分支直接返回 OpenerDirector）
-                opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                          if proxy else _ur.build_opener())
-                with opener.open(req, timeout=20) as r:
+                # 2026-09-23: 统一走 _url_opener（certifi 信任库 + 代理/直连）
+                with _url_opener(proxy).open(req, timeout=20) as r:
                     data = json.loads(r.read().decode("utf-8", "replace"))
                 # OpenAI 兼容三种形态：data[] / models[] / object=list 的 data
                 raw_models = data.get("data") or data.get("models") or []
@@ -9175,24 +9234,122 @@ def _background_update_check() -> None:
     _th.Thread(target=_run, daemon=True, name="memomics-auto-update-check").start()
 
 
-def _http_get_json(url: str, timeout: int = 20) -> dict:
-    """带代理的 GET JSON：先走本机代理，失败降级直连。"""
+# === 更新检查的 TLS 信任库（2026-09-23）===
+# 用户报障：点"检查更新"偶发
+#   <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+#    unable to get local issuer certificate (_ssl.c:1010)>
+# 根因：urllib 走 Python 默认 SSL 上下文，在 Windows 上信任锚取自系统证书存储
+# （ssl.enum_certificates 先 LocalMachine 后退 CurrentUser）。实测本机只载入 54 张，
+# 而随包 certifi 有 119 张 —— 系统存储缺签发链时 GitHub 证书就验不过，检查直接失败。
+# 修法：显式用 certifi 构建上下文（开发环境与打包 Python 均已带 certifi），
+# 取不到才回退系统默认；绝不关闭证书校验。
+_SSL_CTX_CACHE = None
+
+
+def _ssl_context():
+    """优先 certifi 信任锚的 SSL 上下文；certifi 不可用则回退系统默认。"""
+    global _SSL_CTX_CACHE
+    if _SSL_CTX_CACHE is not None:
+        return _SSL_CTX_CACHE
+    import ssl as _ssl
+    try:
+        import certifi
+        _SSL_CTX_CACHE = _ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        _SSL_CTX_CACHE = _ssl.create_default_context()
+    return _SSL_CTX_CACHE
+
+
+def _url_opener(proxy):
+    """构建带 TLS 上下文与可选代理的 opener。
+
+    2026-09-23 两个真实缺陷（用户报障"检查更新偶发失败"的根因）：
+    1. TLS 上下文用 Python 默认值 → Windows 取系统证书存储（本机仅 54 张信任锚），
+       而随包 certifi 有 119 张；缺签发链时报
+       "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"。
+    2. 所谓"失败降级直连"其实没直连 —— build_opener() 会自动挂一个读系统代理的
+       ProxyHandler，而本机注册表 ProxyEnable=1 指向 127.0.0.1:6478，于是两轮尝试
+       走的是同一个代理、同一个失败原因，"双路兜底"形同虚设。
+       现改为 proxy=None 时显式 ProxyHandler({})（空字典=禁用全部代理）才真正直连。
+    """
     import urllib.request as _ur
-    headers = {"User-Agent": "MemOmics-Updater", "Accept": "application/vnd.github+json"}
+    handlers = [_ur.HTTPSHandler(context=_ssl_context())]
+    handlers.append(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy
+                    else _ur.ProxyHandler({}))   # 空字典 = 真直连，不读系统代理
+    return _ur.build_opener(*handlers)
+
+
+def _http_get_text(url: str, timeout: int = 20) -> str:
+    """GET 纯文本（CDN 镜像源用：无 API 配额限制）。"""
+    import urllib.request as _ur
     last_err = None
     for proxy in (_PROXY, None):
         try:
-            req = _ur.Request(url, headers=headers)
-            # 2026-08-26: 修复 build_opener 嵌套 —— else 分支把 build_opener() 结果
-            # （OpenerDirector）当 Handler 再传进 build_opener → Linux 无代理降级
-            # 直连时抛 "expected BaseHandler instance, got OpenerDirector"（实测）
-            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                      if proxy else _ur.build_opener())
-            with opener.open(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8", "replace"))
+            req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
+            with _url_opener(proxy).open(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", "replace")
         except Exception as e:
             last_err = e
             continue
+    raise last_err
+
+
+def _asset_exists(tag: str, name: str, timeout: int = 15) -> bool:
+    """探测 release 资产是否存在（HEAD/Range 探测，不下载正文）。
+
+    API 配额用尽时的回退：tag 已知则资产 URL 可推导，但资产不一定都在，
+    所以用 1 字节 Range 请求确认，避免给用户一个 404 的更新按钮。
+    """
+    import urllib.request as _ur
+    url = f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{name}"
+    for proxy in (_PROXY, None):
+        try:
+            req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater", "Range": "bytes=0-0"})
+            with _url_opener(proxy).open(req, timeout=timeout) as r:
+                if r.status in (200, 206):
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def _net_error_hint(err) -> str:
+    """把网络异常翻译成可操作的中文提示（TLS 证书问题单独说明）。"""
+    txt = str(err)
+    low = txt.lower()
+    if "certificate" in low and ("verify failed" in low or "local issuer" in low):
+        return ("TLS 证书校验失败：本机信任库缺少 GitHub 证书的签发链。"
+                "已改用 certifi 信任库并自动重试；若持续失败，请检查本机代理 "
+                "127.0.0.1:6478 是否在改写 HTTPS 流量，或到 GitHub Releases 手动下载安装包覆盖更新。"
+                "原始错误：" + txt[:160])
+    if "rate limit" in low or "403" in txt:
+        return ("GitHub API 访问受限（匿名调用每小时 60 次配额用尽）。"
+                "已自动改用 CDN 镜像获取版本；你也可稍后重试或直接到 Release 页手动下载。"
+                "原始错误：" + txt[:160])
+    if "timed out" in low or "timeout" in low:
+        return "连接 GitHub 超时（网络或代理不可用，可稍后重试）。原始错误：" + txt[:160]
+    if "getaddrinfo" in low or "name or service not known" in low or "11001" in txt:
+        return "DNS 解析失败（无网络或代理故障）。原始错误：" + txt[:160]
+    return txt[:200]
+
+
+def _http_get_json(url: str, timeout: int = 20, retries: int = 2) -> dict:
+    """带代理的 GET JSON：certifi 信任库 + 代理/直连双路 + 瞬时失败重试。"""
+    import urllib.request as _ur
+    headers = {"User-Agent": "MemOmics-Updater", "Accept": "application/vnd.github+json"}
+    last_err = None
+    tries = max(1, int(retries))
+    for attempt in range(tries):
+        for proxy in (_PROXY, None):
+            try:
+                req = _ur.Request(url, headers=headers)
+                with _url_opener(proxy).open(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode("utf-8", "replace"))
+            except Exception as e:
+                last_err = e
+                continue
+        if attempt + 1 < tries:
+            time.sleep(1.5 * (attempt + 1))
     raise last_err
 
 
@@ -9359,10 +9516,9 @@ def _download_file(url: str, dest: str, timeout: int = 1800) -> None:
             raise RuntimeError("已取消")
         try:
             req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
-            # 2026-08-26: 同 _http_get_json 的 build_opener 嵌套修复（无代理降级直连）
-            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                      if proxy else _ur.build_opener())
-            with opener.open(req, timeout=timeout) as r, open(dest, "wb") as f:
+            # 2026-09-23: 统一走 _url_opener（挂 certifi 信任库 + 代理/直连），
+            # 下载大包时同样会撞上缺签发链的 CERTIFICATE_VERIFY_FAILED
+            with _url_opener(proxy).open(req, timeout=timeout) as r, open(dest, "wb") as f:
                 _UPDATE_TASK["total_bytes"] = int(r.headers.get("Content-Length") or 0)
                 while True:
                     if _UPDATE_TASK["cancelled"]:
@@ -9519,22 +9675,57 @@ async def update_check():
     except Exception:
         pass
     try:
-        rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
-        tag = rel.get("tag_name", "")
-        tag_date = (rel.get("published_at") or "")[:10]
-        assets = rel.get("assets") or []
-        # 2026-08-23: 更新包优先级 —— 轻量代码包 MemOmics-update.zip（跨平台，~22MB）优先，
-        # 老用户升级只下载代码；找不到才回退平台完整包（新装机用，542MB）。
-        upd_asset = next((a for a in assets if a.get("name") == "MemOmics-update.zip"), None)
-        asset_name = _platform_asset()
-        full_asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
-        asset = upd_asset or full_asset
+        tag = tag_date = ""
+        assets = []
+        try:
+            rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
+            tag = rel.get("tag_name", "")
+            tag_date = (rel.get("published_at") or "")[:10]
+            assets = rel.get("assets") or []
+            result["source"] = "api"
+        except Exception as api_err:
+            # 2026-09-23: GitHub REST 匿名配额只有 60 次/小时，超了返回
+            # "HTTP Error 403: rate limit exceeded"，此前会直接把整个检查判失败。
+            # 退路：raw.githubusercontent 的 VERSION（CDN，无配额）+ 按约定拼资产名
+            # （tag 已知则 asset URL 是可推导的，不需要 API 列举）。
+            result["source"] = "cdn"
+            result["api_error"] = _net_error_hint(api_err)
+            ver_txt = _http_get_text(f"{_GITHUB_RAW}/VERSION").strip()
+            m = re.search(r"v\d{4}-\d{2}-\d{2}", ver_txt)
+            if not m:
+                raise RuntimeError(
+                    "GitHub API 受限（" + str(api_err)[:80] + "）且 CDN 回退未取到版本号")
+            tag = m.group(0)
+            result["remote_note"] = "GitHub API 配额用尽，已用 CDN 镜像获取版本；更新包地址按约定推导"
+        if assets:
+            # 更新包优先级 —— 轻量代码包 MemOmics-update.zip（跨平台）优先，
+            # 老用户升级只下载代码；找不到才回退平台完整包（新装机用）。
+            upd_asset = next((a for a in assets if a.get("name") == "MemOmics-update.zip"), None)
+            asset_name = _platform_asset()
+            full_asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
+            asset = upd_asset or full_asset
+        elif tag:
+            # CDN 回退：tag 已知 → release 资产 URL 可推导（下载前会先探测存在性）
+            asset_name = _platform_asset()
+            upd_name = "MemOmics-update.zip"
+            if _asset_exists(tag, upd_name):
+                asset = {"name": upd_name, "size": 0,
+                         "browser_download_url": f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{upd_name}"}
+            elif asset_name and _asset_exists(tag, asset_name):
+                asset = {"name": asset_name, "size": 0,
+                         "browser_download_url": f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{asset_name}"}
+            else:
+                asset = None
+        else:
+            asset = None
+        _aname = (asset or {}).get("name", "")
         result["remote"] = {
             "tag": tag, "tag_date": tag_date,
-            "asset_name": asset.get("name", "") if asset else "",
+            "asset_name": _aname,
             "asset_size_mb": round((asset.get("size") or 0) / 1048576, 1) if asset else 0,
-            "asset_url": asset.get("browser_download_url", "") if asset else "",
-            "asset_kind": "update" if upd_asset else ("full" if full_asset else ""),
+            "asset_url": (asset or {}).get("browser_download_url", ""),
+            "asset_kind": ("update" if _aname == "MemOmics-update.zip"
+                           else ("full" if _aname else "")),
             "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest",
         }
         local_ver = local.get("version") or "unknown"
@@ -9554,7 +9745,7 @@ async def update_check():
                 result["status"] = "update_available"
                 result["update_mode"] = "zip_overlay" if asset else "manual"
     except Exception as e:
-        result["error"] = str(e)[:200]
+        result["error"] = _net_error_hint(e)
         result["status"] = "unable_to_check"
     return result
 

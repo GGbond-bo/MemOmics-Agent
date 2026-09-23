@@ -12954,6 +12954,9 @@ async function checkForUpdate(showAll) {
       html += '<div style="color:var(--warning);font-weight:600;">🔄 发现新版本</div>';
       html += '<div style="margin-top:4px;">GitHub 最新：<code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '</div>';
       html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
+      if (d.source === 'cdn' && d.remote_note) {
+        html += '<div style="margin-top:6px;color:var(--text-light);">ℹ️ ' + escapeHtml(d.remote_note) + '</div>';
+      }
       if (d.update_mode === 'zip_overlay' && remote.asset_name) {
         if (remote.asset_kind === 'update') {
           html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>轻量代码更新包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 仅覆盖代码文件（保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
@@ -12971,13 +12974,15 @@ async function checkForUpdate(showAll) {
     } else if (status === 'local_ahead') {
       // 2026-08-26: 开发版明确展示与远端发布版的差异（不误导为"已最新"）
       html += '<div style="color:var(--primary);font-weight:600;">📌 开发版 · GitHub 已有新发布</div>';
-      html += '<div style="color:var(--text-light);margin-top:4px;">本地是开发版 <code>' + escapeHtml(local.version) + '</code>，GitHub 最新发布 <code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '。开发仓库请用 git 方式更新（不提供一键覆盖，避免冲掉开发代码）。</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">本地是开发版 <code>' + escapeHtml(local.version) + '</code>，GitHub 最新发布 <code>' + escapeHtml(remote.tag || '?') + '</code>' + (remote.tag_date ? '（' + escapeHtml(remote.tag_date) + '）' : '') + '。</div>';
+      html += '<div style="color:var(--text-light);margin-top:4px;">开发仓库由 git 管理（本仓库即发布源），一键覆盖会冲掉未提交的开发改动，因此这里不提供。更新请用 <code>git pull</code> / <code>git checkout</code>；发布包请见 Release 页。</div>';
       html += '<div style="margin-top:6px;"><a href="' + escapeHtml(remote.tag_url || '') + '" target="_blank" rel="noopener" style="color:var(--primary);">查看 Release 详情 ↗</a></div>';
       updateStatusDot('开发版', 'var(--primary)');
     } else {
       html += '<div style="color:var(--danger);font-weight:600;">⚠️ 无法检查更新</div>';
       html += '<div style="color:var(--text-light);margin-top:4px;">' + escapeHtml(d.error || '网络或 GitHub 访问失败，请稍后重试') + '</div>';
-      html += '<div style="color:var(--text-light);margin-top:4px;">检查地址：https://github.com/GGbond-bo/MemOmics-Agent</div>';
+      html += '<div style="margin-top:8px;"><button onclick="checkForUpdate(true)" style="padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:var(--tool-bg);color:var(--text);font-size:12px;cursor:pointer;">🔄 重试</button></div>';
+      html += '<div style="margin-top:8px;color:var(--text-light);">检查地址：<a href="https://github.com/GGbond-bo/MemOmics-Agent/releases/latest" target="_blank" rel="noopener" style="color:var(--primary);">github.com/GGbond-bo/MemOmics-Agent ↗</a>（可直接手动下载安装包覆盖更新）</div>';
       updateStatusDot('检查失败', 'var(--danger)');
     }
     // 2026-08-23 迁移 MiMo-Code：autoupdate 策略设置
