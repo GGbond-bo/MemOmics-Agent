@@ -224,3 +224,28 @@ console.log(JSON.stringify({ lazy: afterLazy, force: afterForce, stop: afterStop
     assert got["force"] == 1, "进面板要起一个轮询"
     assert got["stop"] == 0, "切走面板要停掉轮询"
     assert got["tick"] == 2000
+
+
+def test_render_detail_explains_where_outputs_and_scripts_are():
+    """产物解析与脚本读取的两种"说不出话"情况，面板都得把话说清楚。"""
+    mod = _write_module()
+    task = dict(LIVE_TASK)
+    task["script_text"] = ""
+    task["script_path"] = ""
+    task["script_note"] = "脚本在会话目录/仓库之外，面板不读（安全策略）：D:/out/qc.R"
+    task["outputs"] = [
+        {"path": "t5_qc_box.png", "exists": True, "size": 4698, "abs": "/sess/results/t5_qc_box.png"},
+        {"path": "never.csv", "exists": False, "size": None, "abs": "/sess/never.csv"},
+    ]
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskDetail(%s);
+console.log(JSON.stringify({ html: out.store['task-detail'].innerHTML }));
+""" % json.dumps(task, ensure_ascii=False)
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout, "node 没输出：%s" % r.stderr
+    h = json.loads(r.stdout.strip().splitlines()[-1])["html"]
+    assert "面板不读" in h and "安全策略" in h and "D:/out/qc.R" in h
+    assert "→ /sess/results/t5_qc_box.png" in h and "4698 B" in h
+    assert "文件不存在" in h

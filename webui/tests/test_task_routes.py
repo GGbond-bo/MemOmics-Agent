@@ -188,6 +188,8 @@ def test_c1_detail_404_and_confined_script(client, tr, tasks_dir, tmp_path):
                script="C:" + os.sep + "Windows" + os.sep + "win.ini")
     d2 = client.get("/api/tasks/" + t2.task_id).json()["task"]
     assert d2["script_text"] == "" and d2["script_path"] == ""
+    # 够不着要说人话，不能让用户以为这个任务压根没脚本
+    assert "安全策略" in d2["script_note"] and "win.ini" in d2["script_note"]
 
 
 def test_c2_detail_outputs_exist_and_size(client, tr, tasks_dir, tmp_path):
@@ -200,8 +202,37 @@ def test_c2_detail_outputs_exist_and_size(client, tr, tasks_dir, tmp_path):
     out = {o["path"]: o for o in d["outputs"]}
     assert out[str(real)]["exists"] is True and out[str(real)]["size"] == 1234
     assert out[str(tmp_path / "missing.csv")]["exists"] is False
+    assert out[str(real)]["abs"] == str(real)
     assert d["wrapper_pid"] == os.getpid()
     assert "env" in d and d["cmd"] == ""
+
+
+def test_c3_relative_output_resolves_under_results_and_cwd(client, tr, tasks_dir, tmp_path):
+    """真机踩到的坑：脚本按约定打相对路径 #TASK:OUTPUT t5_qc_box.png，产物其实落在
+    <会话>/results/ 下，旧代码只按会话目录拼一次 → 文件明明在，面板显示"不存在"。"""
+    sess = tmp_path / "memomics-y"
+    (sess / "results").mkdir(parents=True)
+    real = sess / "results" / "box.png"
+    real.write_bytes(b"png" * 100)
+    t = _make(tr, tasks_dir, title="相对产物", session_dir=str(sess))
+    t.output("box.png")
+    t.output("results/box.png")
+    t.output("cwd_only.csv")
+    cwd = tmp_path / "workdir"
+    cwd.mkdir()
+    (cwd / "cwd_only.csv").write_text("a,b\n", encoding="utf-8")
+    t.data["cwd"] = str(cwd)
+    t.output("nowhere.txt")
+    t.flush()
+    d = client.get("/api/tasks/" + t.task_id).json()["task"]
+    out = {o["path"]: o for o in d["outputs"]}
+    assert out["box.png"]["exists"] is True and out["box.png"]["size"] == 300
+    assert out["box.png"]["abs"] == str(real)
+    assert out["results/box.png"]["exists"] is True
+    assert out["cwd_only.csv"]["exists"] is True and out["cwd_only.csv"]["abs"] == str(cwd / "cwd_only.csv")
+    assert out["nowhere.txt"]["exists"] is False and out["nowhere.txt"]["size"] is None
+    # 解析不出来也要给出"找过哪里"，不能返回空串让面板没法提示
+    assert out["nowhere.txt"]["abs"].endswith("nowhere.txt")
 
 
 # ------------------------------------------------------------------ D 日志

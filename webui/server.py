@@ -9380,6 +9380,32 @@ def _confine_path(path: str, session_dir: str) -> str:
     return ""
 
 
+def _resolve_output(raw: str, session_dir: str, cwd: str = "") -> str:
+    """产物路径解析：绝对路径照用；相对路径依次在 会话目录 → 会话/results → 任务 cwd → 仓库 下找。
+
+    2026-09-24 真机踩到：脚本按约定打 `#TASK:OUTPUT t5_qc_box.png`（相对路径），
+    产物落在 <会话>/results/ 下，而旧代码只按会话目录拼一次，于是文件明明在、
+    面板却显示"不存在"。产物真假是面板的核心承诺，不能糊。
+    """
+    if not raw:
+        return ""
+    cands = []
+    if os.path.isabs(raw):
+        cands.append(raw)
+    else:
+        for base in (session_dir or "", os.path.join(session_dir or "", "results"),
+                     cwd or "", MEMOMICS_DIR):
+            if base:
+                cands.append(os.path.join(base, raw))
+    for c in cands:
+        try:
+            if os.path.isfile(c):
+                return os.path.abspath(c)
+        except OSError:
+            continue
+    return os.path.abspath(cands[0]) if cands else ""
+
+
 @app.get("/api/tasks")
 async def list_background_tasks(session_id: str = "", states: str = "", limit: int = 100,
                                 refresh: int = 1):
@@ -9426,13 +9452,13 @@ async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
     card["params"] = d.get("params") or {}
     card["outputs"] = []
     for p in (d.get("outputs") or [])[:100]:
-        full = p if os.path.isabs(p) else os.path.join(d.get("session_dir") or "", p)
+        full = _resolve_output(p, d.get("session_dir") or "", d.get("cwd") or "")
         try:
             exists = os.path.isfile(full)
             size = os.path.getsize(full) if exists else None
         except OSError:
             exists, size = False, None
-        card["outputs"].append({"path": p, "exists": exists, "size": size})
+        card["outputs"].append({"path": p, "exists": exists, "size": size, "abs": full})
     log_path = d.get("log") or ""
     card["log_tail"] = tr.tail_log(log_path, max(1, min(4000, int(tail))))
     try:
@@ -9450,6 +9476,11 @@ async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
     src = _confine_path(d.get("script") or "", d.get("session_dir") or "")
     card["script_path"] = src
     card["script_text"] = ""
+    # 面板要能看脚本 —— 但只读会话目录/仓库内的（防任意文件读取）。够不着就说清楚，
+    # 不能让用户以为"这个任务压根没脚本"。
+    card["script_note"] = ""
+    if not src and (d.get("script") or ""):
+        card["script_note"] = "脚本在会话目录/仓库之外，面板不读（安全策略）：%s" % d.get("script")
     if src and script and os.path.isfile(src):
         try:
             if os.path.getsize(src) <= 256 * 1024:

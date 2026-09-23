@@ -825,6 +825,11 @@ def run_command(cmd, type: str = "other", title: str = "", stages=None, params=N
                     session_id=session_id, session_dir=session_dir, script=script,
                     cmd=" ".join(str(c) for c in cmd), stages=stages, params=params,
                     demo=demo)
+    # 子进程的工作目录就是这里（Popen cwd=os.getcwd()）—— 相对产物路径要靠它找回真身
+    try:
+        task.data["cwd"] = os.getcwd()
+    except Exception:
+        pass
     try:
         task.data["env"] = env_snapshot()
     except Exception:

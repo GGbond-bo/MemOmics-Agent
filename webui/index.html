@@ -7430,16 +7430,19 @@ function renderTaskDetail(t) {
   h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">实际命令</div>';
   h += '<pre style="' + _taskPre + '">' + escapeHtml(t.cmd || '（未记录）') + '</pre>';
   var body = t.script_text || '';
+  var sNote = t.script_note || '';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
-  h += '<span style="font-size:12px;font-weight:600;">' + (body ? '脚本内容' : '脚本内容（未读取）') + '</span>';
+  h += '<span style="font-size:12px;font-weight:600;">' + (body ? '脚本内容' : (sNote ? '脚本内容（面板不读）' : '脚本内容（未读取）')) + '</span>';
   if (body) h += '<button onclick="taskToggleScript()" style="' + _taskBtn + '">显示 / 隐藏</button>';
   h += '</div>';
   if (body) h += '<pre id="task-script-body" style="display:none;' + _taskPre + '">' + escapeHtml(body) + '</pre>';
+  if (!body && sNote) h += '<div style="font-size:11px;color:var(--text-light);word-break:break-all;">' + escapeHtml(sNote) + '</div>';
   var outs = t.outputs || [];
   if (outs.length) {
     h += '<div style="font-size:12px;font-weight:600;margin:4px 0;">产物（' + outs.length + '）</div>';
     outs.forEach(function(o) {
-      h += '<div style="font-size:12px;padding:2px 0;word-break:break-all;">' + (o.exists ? '📄' : '❓') + ' ' + escapeHtml(o.path) + ' <span style="color:var(--text-light);">' + (o.exists ? (o.size || 0) + ' B' : '文件不存在') + '</span></div>';
+      var where = (o.abs && o.abs !== o.path) ? ' <span style="color:var(--text-light);">→ ' + escapeHtml(o.abs) + '</span>' : '';
+      h += '<div style="font-size:12px;padding:2px 0;word-break:break-all;">' + (o.exists ? '📄' : '❓') + ' ' + escapeHtml(o.path) + where + ' <span style="color:var(--text-light);">' + (o.exists ? (o.size || 0) + ' B' : '文件不存在') + '</span></div>';
     });
   }
   h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
