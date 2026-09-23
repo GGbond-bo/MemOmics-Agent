@@ -1383,7 +1383,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'⏱ 任务','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'view':'查看','download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1473,7 +1473,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'⏱ Tasks','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'view':'View','download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1609,6 +1609,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory" data-i18n="nav_memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context" data-i18n="nav_context">📐 上下文窗口</div>
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
+      <div class="nav-item" onclick="switchView('tasks')" id="nav-tasks" data-i18n="nav_tasks">⏱ 任务</div>
       <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
       <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
       <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
@@ -2091,6 +2092,24 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           <button onclick="weixinSendReply()" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">发送</button>
         </div>
       </div>
+    </div>
+
+    <div id="panel-tasks" style="display:none;">
+      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>⏱ 后台任务</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="task-counts" style="font-size:11px;color:var(--text-light);"></span>
+          <button onclick="loadTasks(true)" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;font-size:12px;">🔄 刷新</button>
+        </div>
+      </div>
+      <div id="task-list" style="height:calc(100vh - 168px);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;">
+        <div class="ctx-empty" id="task-empty">
+          <div class="ctx-empty-icon">⏱</div>
+          <div>这里会列出所有后台任务</div>
+          <div style="font-size:11px;margin-top:4px;">谁在跑、在哪个环境跑、PID 多少、跑到哪一步、日志到哪儿了，一眼看全</div>
+        </div>
+      </div>
+      <div id="task-detail" style="display:none;height:calc(100vh - 168px);overflow-y:auto;padding:8px;"></div>
     </div>
 
 <script>
@@ -6501,8 +6520,8 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
-  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', weixin: 'panel-weixin' };
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin'];
+  var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', weixin: 'panel-weixin', tasks: 'panel-tasks' };
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin', 'tasks'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
@@ -6510,7 +6529,7 @@ function switchView(view) {
   // 显示对应右侧面板
   var panelId = panelMap[view];
   if (panelId) {
-    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-weixin'].forEach(function(p) {
+    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-weixin', 'panel-tasks'].forEach(function(p) {
       document.getElementById(p).style.display = 'none';
     });
   }
@@ -6532,6 +6551,8 @@ function switchView(view) {
   if (view === 'memory') loadMemory();
   if (view === 'context') refreshContextUsage();
   if (view === 'weixin') weixinRefresh();
+  // T3：任务面板只在看得见的时候轮询，切走就停（别在后台白刷接口）
+  if (view === 'tasks') { loadTasks(true); } else { stopTaskPoll(); }
   if (view === 'chat') refreshInfoPanel();
 }
 
@@ -7256,6 +7277,198 @@ function toggleWeixinAgent() {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'weixin_agent_toggle', enabled: _weixinAgentEnabled }));
   }
+}
+
+// === 后台任务面板（T3）：谁在跑、在哪跑、跑到哪一步 ===
+// 数据来自 /api/tasks（跨会话），2 秒轮询一次；列表 + 详情两层，详情里能看阶段时间线、
+// 关键参数、脚本正文、产物真假、日志尾部，跑着的任务还能就地取消（带令牌）。
+var _taskState = { timer: null, id: null, token: '' };
+var _taskLive = ['running', 'queued', 'paused', 'cancelling'];
+
+function taskStatusIcon(st) {
+  var m = { queued: '🕒', running: '🏃', paused: '⏸️', cancelling: '⏳', done: '✅', failed: '❌', cancelled: '🚫', interrupted: '⚠️' };
+  return m[st] || '•';
+}
+
+function taskFmtSec(s) {
+  if (s === null || s === undefined || s === '') return '-';
+  var n = Math.round(Number(s));
+  if (isNaN(n)) return '-';
+  if (n < 60) return n + 's';
+  if (n < 3600) return Math.floor(n / 60) + 'm' + (n % 60) + 's';
+  return Math.floor(n / 3600) + 'h' + Math.floor((n % 3600) / 60) + 'm';
+}
+
+function stopTaskPoll() {
+  if (_taskState.timer) { clearInterval(_taskState.timer); _taskState.timer = null; }
+}
+
+function startTaskPoll() {
+  stopTaskPoll();
+  _taskState.timer = setInterval(function() {
+    var el = document.getElementById('panel-tasks');
+    if (!el || el.style.display === 'none') { stopTaskPoll(); return; }
+    loadTasks(false);
+  }, 2000);
+}
+
+function loadTasks(force) {
+  var el = document.getElementById('panel-tasks');
+  if (el && el.style.display === 'none' && force) { /* 手动刷新也允许 */ }
+  if (force) startTaskPoll();
+  fetch('/api/tasks?refresh=1&limit=100').then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || !d.ok) return;
+    if (d.api_token) _taskState.token = d.api_token;
+    renderTaskList(d);
+    if (_taskState.id) refreshTaskDetail();
+  }).catch(function() {});
+}
+
+function renderTaskList(d) {
+  var box = document.getElementById('task-list');
+  if (!box) return;
+  var tasks = d.tasks || [];
+  var c = d.counts || {};
+  var countsEl = document.getElementById('task-counts');
+  if (countsEl) {
+    countsEl.textContent = '运行 ' + (c.running || 0) + ' · 排队 ' + (c.queued || 0) + ' · 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) + (d.sandbox ? ' · 沙箱 ' + d.sandbox : '');
+  }
+  if (!tasks.length) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--text-light);padding:12px;">还没有后台任务。让 Agent 跑个脚本或 CellBender，这里就会出现。</div>';
+    return;
+  }
+  var html = '';
+  tasks.forEach(function(t) {
+    var live = _taskLive.indexOf(t.status) >= 0;
+    var pct = Math.max(0, Math.min(100, Number(t.progress_pct || 0)));
+    html += '<div class="task-row" data-id="' + escapeHtml(t.task_id) + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;' + (live ? 'border-left:3px solid var(--primary);' : 'opacity:.85;') + '">';
+    html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
+    html += '<span style="font-size:13px;font-weight:600;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
+    html += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
+    var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
+    if (stg) html += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(stg) + '</div>';
+    if (t.stalled) html += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 心跳停了 ' + taskFmtSec(t.heartbeat_age_sec) + '（可能卡住或已崩）</div>';
+    html += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--primary);"></div></div>';
+    html += '</div>';
+  });
+  box.innerHTML = html;
+  var rows = box.querySelectorAll('.task-row');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].onclick = (function(el) { return function() { openTaskDetail(el.getAttribute('data-id')); }; })(rows[i]);
+  }
+}
+
+function openTaskDetail(id) {
+  _taskState.id = id;
+  document.getElementById('task-list').style.display = 'none';
+  document.getElementById('task-detail').style.display = '';
+  refreshTaskDetail();
+  if (!_taskState.timer) startTaskPoll();
+}
+
+function closeTaskDetail() {
+  _taskState.id = null;
+  var d = document.getElementById('task-detail');
+  if (d) { d.style.display = 'none'; d.innerHTML = ''; }
+  var l = document.getElementById('task-list');
+  if (l) l.style.display = 'flex';
+}
+
+function refreshTaskDetail() {
+  if (!_taskState.id) return;
+  var want = _taskState.id;
+  fetch('/api/tasks/' + encodeURIComponent(want) + '?tail=300').then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || !d.ok || !d.task) return;
+    if (_taskState.id !== want) return;
+    renderTaskDetail(d.task);
+  }).catch(function() {});
+}
+
+function taskKv(k, v) {
+  return '<div style="display:flex;gap:8px;font-size:12px;padding:2px 0;"><span style="color:var(--text-light);min-width:92px;flex:none;">' + escapeHtml(k) + '</span><span style="word-break:break-all;">' + escapeHtml(String(v === null || v === undefined ? '' : v)) + '</span></div>';
+}
+
+var _taskBtn = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;font-size:12px;';
+var _taskPre = 'font-size:11px;white-space:pre-wrap;word-break:break-all;background:rgba(127,127,127,.08);padding:6px;border-radius:4px;margin:0 0 8px;max-height:320px;overflow-y:auto;';
+
+function renderTaskDetail(t) {
+  var live = _taskLive.indexOf(t.status) >= 0;
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">';
+  h += '<button onclick="closeTaskDetail()" style="' + _taskBtn + '">← 返回列表</button>';
+  h += '<span style="font-size:11px;color:var(--text-light);">每 2 秒自动刷新</span>';
+  h += '</div>';
+  h += '<div style="font-size:15px;font-weight:600;margin:8px 0 4px;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</div>';
+  var st = t.status + (t.cancel_requested ? '（已请求取消，来自 ' + (t.cancel_by || '') + '）' : '');
+  h += taskKv('状态', st);
+  h += taskKv('任务 ID', t.task_id);
+  h += taskKv('类型 / 会话', (t.type || '') + ' / ' + (t.session_id || ''));
+  h += taskKv('运行环境', t.env_line || '');
+  h += taskKv('工作目录', t.session_dir || '');
+  h += taskKv('进程', (t.pid ? 'PID ' + t.pid + (t.proc && t.proc.pname ? ' ' + t.proc.pname : '') : '（已结束）') + (t.wrapper_pid ? ' · 包装进程 ' + t.wrapper_pid : ''));
+  h += taskKv('CPU / 内存', (t.cpu_pct === null || t.cpu_pct === undefined ? '-' : t.cpu_pct + '%') + ' / ' + (t.rss_gb === null || t.rss_gb === undefined ? '-' : t.rss_gb + ' GB'));
+  h += taskKv('开始 / 耗时', (t.started_at || '-') + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec));
+  if (t.exit_code !== null && t.exit_code !== undefined) h += taskKv('退出码', t.exit_code);
+  if (t.error) h += taskKv('错误', t.error);
+  if (t.summary) h += taskKv('任务小结', t.summary);
+  if (t.script_path || t.script) h += taskKv('源脚本', t.script_path || t.script);
+  h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+  if (t.stages && t.stages.length) {
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">阶段时间线</div>';
+    t.stages.forEach(function(s) {
+      h += '<div style="display:flex;gap:8px;font-size:12px;padding:2px 0;"><span style="min-width:120px;">' + taskStatusIcon(s.status) + ' ' + escapeHtml(s.name) + '</span><span style="color:var(--text-light);">' + escapeHtml(s.status) + ' · ' + taskFmtSec(s.sec) + '</span></div>';
+    });
+    h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+  }
+  var keys = Object.keys(t.params || {});
+  if (keys.length) {
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">关键参数</div>';
+    keys.forEach(function(k) { h += taskKv(k, t.params[k]); });
+    h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+  }
+  h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">实际命令</div>';
+  h += '<pre style="' + _taskPre + '">' + escapeHtml(t.cmd || '（未记录）') + '</pre>';
+  var body = t.script_text || '';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+  h += '<span style="font-size:12px;font-weight:600;">' + (body ? '脚本内容' : '脚本内容（未读取）') + '</span>';
+  if (body) h += '<button onclick="taskToggleScript()" style="' + _taskBtn + '">显示 / 隐藏</button>';
+  h += '</div>';
+  if (body) h += '<pre id="task-script-body" style="display:none;' + _taskPre + '">' + escapeHtml(body) + '</pre>';
+  var outs = t.outputs || [];
+  if (outs.length) {
+    h += '<div style="font-size:12px;font-weight:600;margin:4px 0;">产物（' + outs.length + '）</div>';
+    outs.forEach(function(o) {
+      h += '<div style="font-size:12px;padding:2px 0;word-break:break-all;">' + (o.exists ? '📄' : '❓') + ' ' + escapeHtml(o.path) + ' <span style="color:var(--text-light);">' + (o.exists ? (o.size || 0) + ' B' : '文件不存在') + '</span></div>';
+    });
+  }
+  h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+  h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">日志尾部 · ' + (t.log_size || 0) + ' B' + (t.log ? ' · ' + escapeHtml(t.log) : '') + '</div>';
+  h += '<pre id="task-log" style="' + _taskPre + '">' + escapeHtml(t.log_tail || '（暂无日志）') + '</pre>';
+  if (live) h += '<button id="task-cancel-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🚫 取消这个任务</button>';
+  var box = document.getElementById('task-detail');
+  box.innerHTML = h;
+  var log = document.getElementById('task-log');
+  if (log) log.scrollTop = log.scrollHeight;
+  var btn = document.getElementById('task-cancel-btn');
+  if (btn) btn.onclick = function() { cancelTask(t.task_id); };
+}
+
+function taskToggleScript() {
+  var el = document.getElementById('task-script-body');
+  if (el) el.style.display = (el.style.display === 'none' ? '' : 'none');
+}
+
+function cancelTask(id) {
+  if (!confirm('确定取消这个任务？子进程会被结束，已经写出来的中间文件会保留。')) return;
+  fetch('/api/tasks/' + encodeURIComponent(id) + '/cancel', { method: 'POST', headers: { 'X-Task-Token': _taskState.token } }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.ok) {
+      alert('已取消：' + d.status + '（等待 ' + d.waited_sec + ' 秒' + (d.escalated ? '，wrapper 没自己收尾，服务端已强制收尾' : '') + '）');
+    } else {
+      alert('取消失败：' + ((d && d.error) || '未知错误'));
+    }
+    loadTasks(false);
+  }).catch(function(e) { alert('取消失败：' + e); });
 }
 
 function weixinRefresh() {
