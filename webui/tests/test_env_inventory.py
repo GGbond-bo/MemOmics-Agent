@@ -171,9 +171,93 @@ def test_cached_local_serves_fresh_cache_without_probing(home, monkeypatch):
     assert got["python"]["default"].endswith("python.exe")
 
 
-def test_cached_local_stale_beyond_ttl_is_pending(home):
+def test_cached_local_stale_beyond_ttl_still_serves_data(home):
+    """2026-09-23 改：过期不等于没扫过。
+
+    旧行为是过期就回 pending，面板退回「还没扫过，正在后台扫描」，
+    上次扫到的清单（R 版本 / 缺包 / 警告）全部看不见 —— 用户反馈"环境清单没保存住"。
+    新行为：有数据就先给数据（stale + age_s），同时 needs_refresh 让后台重扫。
+    """
     ei._write_cache(local=_canned_local(), local_at=ei._now() - (ei._LOCAL_TTL + 60))
+    got = ei.cached_local()
+    assert got.get("pending") is not True, "过期不该丢成 pending"
+    assert got["stale"] is True and got["needs_refresh"] is True
+    assert got["cached"] is True
+    # 关键：内容必须还在，用户还能看到上次扫出来的东西
+    assert got["python"]["default"].endswith("python.exe")
+    assert got["warnings"] == _canned_local()["warnings"]
+    assert got["age_s"] > ei._LOCAL_TTL
+
+
+def test_cached_local_empty_cache_is_still_pending(home):
+    """真没扫过（没有数据）时仍然是 pending —— 别把这条也就此改掉。"""
     assert ei.cached_local()["pending"] is True
+
+
+# ---------------------------------------------------------------------------
+# verify：便宜地"再确认一遍"（指纹没变就不重扫）
+# ---------------------------------------------------------------------------
+def test_fingerprint_is_cheap_and_never_probes(home, monkeypatch):
+    """指纹必须是纯 stat：不跑解释器、不探测（毫秒级）。"""
+    monkeypatch.setattr(ei, "_probe_python", _boom)
+    monkeypatch.setattr(ei, "_probe_r", _boom)
+    monkeypatch.setattr(ei, "_probe_conda", _boom)
+    monkeypatch.setattr(ei, "_probe_cli_tools", _boom)
+    monkeypatch.setattr(ei, "_run", _boom)
+    fp = ei._fingerprint()          # 不许探测
+    assert set(fp.keys()) == {"environment_json", "python", "r", "conda"}
+
+
+def test_verify_rescans_first_time_then_reuses(home, monkeypatch):
+    """首次确认要真扫一次；之后指纹没变 → 一次探测都不做。"""
+    calls = []
+    monkeypatch.setattr(ei, "scan_local",
+                        lambda force=False: calls.append(force) or {"scanned_at": "t", "platform": "nt"})
+    first = ei.verify()
+    assert first["changed"] is True and first["rescanned"] is True
+    assert calls == [True]
+    calls.clear()
+    second = ei.verify()
+    assert second["changed"] is False and second["rescanned"] is False
+    assert calls == [], "没变就不该重扫"
+
+
+def test_verify_rescans_when_site_packages_changes(home, monkeypatch):
+    """装了个包（site-packages mtime 变）→ 必须被指纹抓到并重扫。"""
+    calls = []
+    monkeypatch.setattr(ei, "scan_local",
+                        lambda force=False: calls.append(force) or {"scanned_at": "t", "platform": "nt"})
+    ei.verify()
+    calls.clear()
+    fp = ei._read_cache().get("fingerprint")
+    fp["python"]["site_packages"] = [99999.0, 1]
+    ei._write_cache(fingerprint=fp)
+    got = ei.verify()
+    assert got["changed"] is True and got["rescanned"] is True
+    assert any("python" in r for r in got["reasons"])
+    assert calls == [True]
+
+
+def test_verify_survives_scan_failure(home, monkeypatch):
+    """重扫失败不能把确认本身弄崩，也不能丢掉旧清单。"""
+    ei._write_cache(local=_canned_local(), local_at=ei._now(),
+                    fingerprint={"environment_json": "DIFFERENT", "python": None, "r": None, "conda": None})
+    monkeypatch.setattr(ei, "scan_local", _boom)
+    got = ei.verify()
+    assert got["ok"] is True
+    assert got["rescanned"] is False
+    assert any("重扫失败" in r for r in got["reasons"])
+    assert ei.cached_local()["python"]["default"].endswith("python.exe"), "旧清单必须还在"
+
+
+def test_verify_force_rescans_even_when_unchanged(home, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ei, "scan_local",
+                        lambda force=False: calls.append(force) or {"scanned_at": "t", "platform": "nt"})
+    ei.verify()
+    calls.clear()
+    got = ei.verify(force_rescan=True)
+    assert got["rescanned"] is True and calls == [True]
 
 
 def test_write_cache_merges_and_stamps_version(home):
@@ -208,13 +292,60 @@ def test_cluster_configured_fresh_uses_cache(home, monkeypatch):
     assert isinstance(got["age_s"], (int, float))
 
 
-def test_cluster_configured_stale_returns_pending(home, monkeypatch):
+def test_cluster_configured_stale_returns_pending_when_no_data(home, monkeypatch):
+    """已配置、缓存过期、且**没有任何旧数据** → 才回 pending。"""
     monkeypatch.setattr(ei, "scan_cluster", _boom)
     monkeypatch.setattr(ei, "cluster_configured", lambda: _configured())
     got = ei.cached_cluster()
     assert got["pending"] is True and got["configured"] is True
     assert got["config_path"] == "X:/hermes_home/config.yaml"
     assert got["nodes_configured"] == ["ssh3"]
+
+
+def test_cluster_configured_stale_serves_last_nodes(home, monkeypatch):
+    """2026-09-23：过期但上次探到的节点清单要留着（stale），别丢成 pending。"""
+    monkeypatch.setattr(ei, "scan_cluster", _boom)
+    monkeypatch.setattr(ei, "cluster_configured", lambda: _configured())
+    ei._write_cache(cluster={"configured": True, "nodes": [{"name": "ssh3", "reachable": True}],
+                             "resources": {"total_cores": 64}},
+                    cluster_at=ei._now() - (ei._CLUSTER_TTL + 60))
+    got = ei.cached_cluster()
+    assert got.get("pending") is not True
+    assert got["stale"] is True and got["needs_refresh"] is True
+    # 上次探到的节点与资源必须还在
+    assert got["nodes"][0]["name"] == "ssh3"
+    assert got["resources"]["total_cores"] == 64
+    # 配置态仍然以现算为准（这条不变量不能被污染）
+    assert got["config_path"] == "X:/hermes_home/config.yaml"
+
+
+def test_invalidate_keeps_data_and_marks_force(home):
+    """2026-09-23：invalidate 不再删数据。
+
+    以前 invalidate 直接置 None —— 点「🔄 重新扫描」先把旧清单删掉，
+    这次万一扫失败（R 全量探测超时 / 集群 SSH 卡住），旧清单就永久没了。
+    """
+    ei._write_cache(local=_canned_local(), local_at=ei._now())
+    ei.invalidate("all")
+    data = ei._read_cache(reload=True)
+    assert data["local"]["python"]["default"].endswith("python.exe"), "数据不该被删"
+    assert data["local_force"] is True and data["cluster_force"] is True
+    assert data["local_at"] == 0, "时间戳要清零，这样才会真重扫"
+    # 过期视图仍能拿到内容
+    got = ei.cached_local()
+    assert got["stale"] is True and got["python"]["default"].endswith("python.exe")
+
+
+def test_scan_local_clears_force_flag(home, monkeypatch):
+    """扫成功后必须清 force，否则 _fresh 永远为假 → 每轮都重扫。"""
+    ei.invalidate("local")
+    monkeypatch.setattr(ei, "_probe_system", lambda: {})
+    monkeypatch.setattr(ei, "_probe_python", lambda: {})
+    monkeypatch.setattr(ei, "_probe_r", lambda: {})
+    monkeypatch.setattr(ei, "_probe_cli_tools", lambda: {})
+    monkeypatch.setattr(ei, "_probe_conda", lambda: {})
+    ei.scan_local(force=True)
+    assert ei._read_cache(reload=True).get("local_force") is False
 
 
 def test_scan_cluster_unconfigured_hint_and_cache(home, monkeypatch):
@@ -360,7 +491,7 @@ def test_handler_never_raises(home, monkeypatch):
 def test_schema_shape():
     assert ei.SCHEMA["name"] == "env_inventory"
     enum = ei.SCHEMA["parameters"]["properties"]["action"]["enum"]
-    assert set(enum) == {"overview", "local", "cluster", "refresh", "markdown"}
+    assert set(enum) == {"overview", "local", "cluster", "refresh", "markdown", "verify"}
     assert "🧩" in ei.SCHEMA["description"] or "环境" in ei.SCHEMA["description"]
     assert ei.SCHEMA["parameters"]["properties"]["node"]["default"] == ""
 
@@ -494,6 +625,40 @@ def test_frontend_modal_wiring():
                   "openClusterConsole()", "EM_I18N", "emT("):
         assert token in text, token
     assert "setTimeout(function () { emLoad(false); }, 3000)" in text
+
+
+def test_frontend_stale_and_verify_wired():
+    """2026-09-23：面板要能显示过期清单 + 有「确认环境」按钮。"""
+    text = _read_index()
+    for token in ("emStaleNote", "emVerify()", "/api/env/verify", "em_verify_tip",
+                  "em_verify_same", "em_verify_changed", "em-stale"):
+        assert token in text, token
+    # 过期提示不能靠 pending 分支（那样等于又回到"没扫过"）
+    assert "loc.stale ? 'busy' : 'ok'" in text
+    assert "if (local.stale) out += emStaleNote(local);" in text
+    # cluster 那个 out 必须先声明再拼接（TDZ 回归）
+    seg = text[text.index("function emViewCluster(cl)"):]
+    seg = seg[:seg.index("var rows =")]
+    assert seg.index("var out = ''") < seg.index("emStaleNote"), "out 要先声明"
+
+
+def test_frontend_i18n_has_stale_and_verify_keys():
+    text = _read_index()
+    start = text.index("var EM_I18N = {")
+    end = text.index("function emT(k)", start)
+    block = text[start:end]
+    for key in ("em_stale", "em_stale_tip", "em_verify", "em_verify_tip",
+                "em_verify_same", "em_verify_changed", "em_verify_fail"):
+        # 键是对象字面量（无引号）：em_stale: / em_verify_same: 各出现两次（zh + en）
+        assert block.count(key + ":") == 2, "%s 必须中英各一处" % key
+
+
+def test_api_verify_endpoint_exists():
+    with open(os.path.join(WEBUI, "server.py"), encoding="utf-8") as fh:
+        text = fh.read()
+    assert '@app.post("/api/env/verify")' in text
+    # verify 会真扫（10~45 秒）→ 必须挪出事件循环
+    assert "await asyncio.to_thread(mod.verify)" in text
 
 
 def test_frontend_cluster_tab_explains_how_to_configure():

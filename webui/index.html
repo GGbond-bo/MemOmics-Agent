@@ -1210,6 +1210,8 @@ table.dcb-table.dg-table th { position:relative; }
 #env-manager .em-body { flex:1; overflow:auto; padding:12px 14px 20px; font-size:12px; line-height:1.65; }
 #env-manager .em-sec { font-size:12.5px; font-weight:600; margin:14px 0 6px; color:var(--text); }
 #env-manager .em-sec:first-child { margin-top:2px; }
+#env-manager .em-stale { font-size:11.5px; line-height:1.6; margin:4px 0 8px; padding:6px 9px; border-radius:7px;
+  background:var(--tool-bg); color:var(--text-light); border:1px solid var(--border); }
 #env-manager .em-card { border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin:6px 0; background:var(--tool-bg); }
 #env-manager .em-card.ok { border-left:3px solid #22c55e; }
 #env-manager .em-card.warn { border-left:3px solid #ef4444; }
@@ -12339,6 +12341,9 @@ var EM_I18N = {
     em_refresh: '🔄 重新扫描', em_copy: '📋 复制报告', em_download: '⬇️ 下载 .md', em_close: '✕ 关闭',
     em_scanning: '扫描中…', em_list_time: '清单', em_cached: '缓存', em_sec_ago: '秒前',
     em_pending: '还没扫过，正在后台扫描（首次约 10~40 秒，R 全量探测最慢），扫完自动刷新。',
+    em_stale: '缓存', em_stale_tip: '以下为上次扫描结果（已过 %s），后台正在重新扫描，完成后自动更新；重扫失败也会保留这份清单。',
+    em_verify: '✅ 确认环境', em_verify_tip: '毫秒级检查环境变没变：没变就直接复用这份清单，变了才重新扫描',
+    em_verify_same: '✅ 环境没变（%s），清单直接复用', em_verify_changed: '🔄 检测到环境变化（%s），已重新扫描', em_verify_fail: '⚠️ 确认失败：%s',
     em_res: '资源', em_python: 'Python 环境', em_r: 'R 环境', em_cli: '命令行工具', em_conda: 'conda 环境',
     em_warn: '需要注意', em_issues: '已知坑（environment.json 声明）', em_notes: 'environment.json 标注',
     em_cpu: 'CPU', em_ram: '内存', em_gpu: 'GPU', em_disk: '磁盘', em_wsl: 'WSL', em_host: '主机',
@@ -12361,6 +12366,9 @@ var EM_I18N = {
     em_refresh: '🔄 Rescan', em_copy: '📋 Copy report', em_download: '⬇️ Download .md', em_close: '✕ Close',
     em_scanning: 'Scanning…', em_list_time: 'Scanned', em_cached: 'cached', em_sec_ago: 's ago',
     em_pending: 'Not scanned yet — scanning in the background (10-40 s on first run, R full probe is slowest). It refreshes itself when done.',
+    em_stale: 'cached', em_stale_tip: 'Showing the previous scan (%s old). A rescan runs in the background and updates automatically; if it fails, this list is kept.',
+    em_verify: '✅ Verify', em_verify_tip: 'Fast check for environment changes: reuse this list if nothing changed, rescan only if it did',
+    em_verify_same: '✅ Environment unchanged (%s) — list reused', em_verify_changed: '🔄 Environment changed (%s) — rescanned', em_verify_fail: '⚠️ Verify failed: %s',
     em_res: 'Resources', em_python: 'Python environments', em_r: 'R environments', em_cli: 'CLI tools', em_conda: 'conda environments',
     em_warn: 'Needs attention', em_issues: 'Known pitfalls (declared in environment.json)', em_notes: 'environment.json notes',
     em_cpu: 'CPU', em_ram: 'RAM', em_gpu: 'GPU', em_disk: 'Disks', em_wsl: 'WSL', em_host: 'Host',
@@ -12461,6 +12469,25 @@ function emClose() {
 }
 function emTab(name) { EM.tab = name; emHead(); emBody(); }
 function emRefresh() { EM.polls = 0; emLoad(true); }
+// 2026-09-23：便宜地"确认一遍"——指纹没变就复用清单，变了才重扫（毫秒级 vs 10~45 秒）
+async function emVerify() {
+  var btn = null;
+  try {
+    var r = await fetch('/api/env/verify', { method: 'POST' });
+    var d = await r.json();
+    if (!d || d.ok === false) {
+      emToast(emT('em_verify_fail').replace('%s', emVal(d && d.error ? d.error : '?')));
+      return;
+    }
+    var age = (d.age_s === null || d.age_s === undefined) ? '?' : (Math.round(d.age_s) + emT('em_sec_ago'));
+    emToast(d.changed ? emT('em_verify_changed').replace('%s', emVal((d.reasons || []).join('、')))
+                      : emT('em_verify_same').replace('%s', age));
+    EM.polls = 0;
+    emLoad(false);   // 重扫过就拿新数据；没扫过也是原样
+  } catch (e) {
+    emToast(emT('em_verify_fail').replace('%s', emVal(e && e.message ? e.message : e)));
+  }
+}
 async function emLoad(refresh) {
   if (EM.timer) { clearTimeout(EM.timer); EM.timer = null; }
   try {
@@ -12490,8 +12517,10 @@ function emHead() {
   html += emChip(emT('em_host') + '：' + (sy.hostname || '-') + (sy.os ? ' / ' + sy.os + ' ' + (sy.os_release || '') : ''));
   if (st.status === 'running') html += emChip(emT('em_scanning') + (st.scope ? '（' + st.scope + '）' : ''), 'busy');
   else if (loc.pending) html += emChip(emT('em_pending'), 'busy');
+  // 2026-09-23：过期数据也照常显示（标 busy 提示正在后台重扫），不再退回"还没扫过"
   else if (loc.scanned_at) html += emChip(emT('em_list_time') + '：' + loc.scanned_at +
-        (loc.age_s === null || loc.age_s === undefined ? '' : '（' + emT('em_cached') + ' ' + Math.round(loc.age_s) + emT('em_sec_ago') + '）'), 'ok');
+        (loc.age_s === null || loc.age_s === undefined ? '' : '（' + (loc.stale ? emT('em_stale') : emT('em_cached')) + ' ' + Math.round(loc.age_s) + emT('em_sec_ago') + '）'),
+        loc.stale ? 'busy' : 'ok');
   if (st.status === 'error') html += emChip('⚠️ ' + st.error, 'warn');
   if (EM.data && EM.data.cluster && EM.data.cluster.configured) {
     var cn = EM.data.cluster.nodes || [];
@@ -12499,6 +12528,7 @@ function emHead() {
     html += emChip('🖧 ' + rn + ' / ' + cn.length + ' ' + emT('em_cluster_nodes'), rn ? 'ok' : 'warn');
   }
   html += '<span class="em-spacer"></span>';
+  html += '<button class="em-btn" title="' + emT('em_verify_tip') + '" onclick="emVerify()">' + emT('em_verify') + '</button>';
   html += '<button class="em-btn primary" onclick="emRefresh()">' + emT('em_refresh') + '</button>';
   html += '<button class="em-btn" onclick="emCopyMd()">' + emT('em_copy') + '</button>';
   html += '<button class="em-btn" onclick="window.open(\'/api/env/report.md?download=1\', \'_blank\')">' + emT('em_download') + '</button>';
@@ -12513,6 +12543,12 @@ function emHead() {
     }).join('');
   }
 }
+// 2026-09-23：过期清单提示条（不遮挡内容，只是说明数据来源与正在重扫）
+function emStaleNote(x) {
+  var age = (x && x.age_s !== null && x.age_s !== undefined) ? Math.round(x.age_s) + emT('em_sec_ago') : '';
+  var tip = emT('em_stale_tip').replace('%s', age);
+  return '<div class="em-stale">⏳ ' + emEsc(tip) + '</div>';
+}
 function emBody() {
   var body = document.getElementById('em-body');
   if (!body) return;
@@ -12524,6 +12560,8 @@ function emBody() {
 function emViewLocal(local, warnings) {
   if (local.pending) return '<div class="em-warn">' + emT('em_pending') + '</div>';
   var sy = local.system || {}, out = '';
+  // 2026-09-23：过期清单照常展示，只用一条提示说明"这是上次的、正在重扫"
+  if (local.stale) out += emStaleNote(local);
   var ram = sy.ram || {}, disks = sy.disks || [], gpu = sy.gpu || {}, wsl = sy.wsl || {};
   out += emSec('🧮 ' + emT('em_res'));
   out += '<div class="em-grid">';
@@ -12635,6 +12673,8 @@ function emViewLocal(local, warnings) {
 function emViewCluster(cl) {
   if (cl.pending) return '<div class="em-warn">' + emT('em_cluster_pending') + '</div>';
   var out = '';
+  // 2026-09-23：集群过期清单也照常展示（放在 out 初始化之后，别踩 TDZ）
+  if (cl.stale) out += emStaleNote(cl);
   var rows = emRow('enabled', emVal(cl.enabled)) + emRow('config', emEsc(cl.config_path || '')) +
              emRow('scheduler', emEsc(cl.scheduler || '')) + emRow('node_policy', emEsc(cl.node_policy || '')) +
              emRow('default_node', emEsc(cl.default_node || '-')) +

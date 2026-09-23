@@ -331,10 +331,36 @@ def _write_cache(**updates) -> dict:
         return data
 
 
+def _forced(scope: str) -> bool:
+    """被 invalidate() 标过"下次要真扫"——不算新鲜，但数据仍在。"""
+    return bool(_read_cache().get(scope + "_force"))
+
+
 def _fresh(scope: str, ttl: int) -> bool:
     data = _read_cache()
+    if data.get(scope + "_force"):
+        return False
     ts = float(data.get(scope + "_at") or 0)
     return bool(data.get(scope)) and (_now() - ts) < ttl
+
+
+def _stale_view(scope: str) -> dict:
+    """过期/被标脏但**仍有数据**时的降级视图。
+
+    2026-09-23 修「环境清单不能持久保存」：以前只要过了 TTL（本机 1 小时），
+    cached_*() 就丢掉全部内容只回 pending，面板退回「还没扫过，正在后台扫描」，
+    上次扫到的 R 版本/缺包/警告全部不可见——用户看到的就是"没保存住"。
+    现在：有数据就先给数据（标 stale + 年龄），同时 needs_refresh 让后台去重扫，
+    扫完自动替换。用户永远能看到上一次的清单。
+    """
+    data = dict(_read_cache().get(scope) or {})
+    if not data:
+        return {}
+    data["cached"] = True
+    data["stale"] = True
+    data["needs_refresh"] = True
+    data["age_s"] = _age(scope)
+    return data
 
 
 def _age(scope: str):
@@ -343,14 +369,21 @@ def _age(scope: str):
 
 
 def invalidate(scope: str = "all") -> dict:
-    """清缓存：scope = local | cluster | all。"""
+    """标脏：让下次扫描真的重探（scope = local | cluster | all）。
+
+    2026-09-23 修「重扫失败会把清单弄丢」：以前这里直接把 local/cluster 置 None
+    ——点了「🔄 重新扫描」先把上次扫好的清单删掉，这次万一扫失败（R 全量探测超时、
+    集群 SSH 卡住），旧清单就**永久没了**，且不是"过期"而是"被删"。
+    现在只清时间戳 + 立 *_force 标记（数据留着），重扫成功后由 _write_cache 原子替换；
+    重扫失败则旧数据原样保留、只记错误。
+    """
     scope = (scope or "all").lower()
     updates = {}
     for name in (("local", "cluster") if scope == "all" else (scope,)):
         if name not in ("local", "cluster"):
             continue
-        updates[name] = None
         updates[name + "_at"] = 0
+        updates[name + "_force"] = True
     return _write_cache(**updates)
 
 
@@ -982,7 +1015,8 @@ def scan_local(force: bool = False) -> dict:
     local["warnings"] = _local_warnings(local)
     local["duration_s"] = round(_now() - started, 1)
     local["cached"] = False
-    _write_cache(local=local, local_at=_now())
+    # 2026-09-23：扫完清掉 force 标记，否则 _fresh 永远为假 → 每轮都重扫
+    _write_cache(local=local, local_at=_now(), local_force=False)
     return local
 
 
@@ -1087,7 +1121,7 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
         base["hint"] = _cluster_hint(state)
         base["cached"] = False
         if not node and not state.get("error"):
-            _write_cache(cluster=base, cluster_at=_now())
+            _write_cache(cluster=base, cluster_at=_now(), cluster_force=False)
         return base
     try:
         rc = _cluster_module()
@@ -1156,18 +1190,143 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
         base["warnings"].append("所有节点负载都不低（load/核数 ≥ 0.6），投作业前先看队列")
     base["cached"] = False
     if not node:
-        _write_cache(cluster=base, cluster_at=_now())
+        _write_cache(cluster=base, cluster_at=_now(), cluster_force=False)
     return base
 
 
 # ===========================================================================
 # 汇总 / 渲染
 # ===========================================================================
+# ===========================================================================
+# 指纹：便宜的"再确认一遍"（2026-09-23）
+# ===========================================================================
+# 用户诉求：环境清单要能持久保存，下次分析时不重扫、只**确认一遍**——
+# 变了就重扫、缺包就补，没变就直接复用（复用 1 小时 TTL 的清单）。
+#
+# 全量探测 10~45 秒（R 全量最贵）不能每次分析都跑；但只看"装没装东西"用
+# 几个 mtime 就够：pip / install.packages / conda 装包都会动这些目录的 mtime。
+_FP_STAT_TIMEOUT = 1.0
+
+
+def _fp_stat(path: str):
+    """一个路径的 (mtime, size)；不存在给 None。绝不抛异常。"""
+    try:
+        st = os.stat(path)
+        return [round(st.st_mtime, 1), st.st_size]
+    except OSError:
+        return None
+
+
+def _fingerprint() -> dict:
+    """当前环境的廉价指纹：几个 stat 就出结果（毫秒级），用来判断"变没变"。
+
+    刻意**不**包含包版本号——那要跑解释器（慢）。装/卸包一定会动
+    site-packages 的 mtime，所以"装了新包"必然被这个指纹抓到。
+    """
+    env_json = os.path.join(_app_root(), "environment.json")
+    fp = {
+        "environment_json": _fp_stat(env_json),
+        "python": None,
+        "r": None,
+        "conda": None,
+    }
+    # 主力 Python：解释器 + 它的 site-packages（装包会动 mtime）
+    try:
+        py_block = (_read_environment_json() or {}).get("paths", {}).get("python", {}) or {}
+        py = py_block.get("default") or _declared_default("python") or sys.executable or ""
+        if py:
+            sp = None
+            try:
+                sp = os.path.join(os.path.dirname(os.path.abspath(py)), "..", "Lib", "site-packages")
+                if not os.path.isdir(sp):
+                    sp = os.path.join(os.path.dirname(os.path.abspath(py)), "..", "lib")
+            except Exception:
+                sp = None
+            fp["python"] = {"exe": _fp_stat(py), "site_packages": _fp_stat(os.path.normpath(sp))
+                            if sp else None, "path": py}
+    except Exception:
+        pass
+    # 主力 R：解释器 + 已声明的库目录
+    try:
+        r_default = _declared_default("r") or (_r_env().get("default") or "")
+        if r_default:
+            libs = []
+            for d in _declared_r_libs(""):
+                libs.append([d, _fp_stat(d)])
+            fp["r"] = {"exe": _fp_stat(r_default), "libs": libs, "path": r_default}
+    except Exception:
+        pass
+    # conda：只看已知位置的存在性/时间（绝不调 _probe_conda —— 那会真去跑 conda --version）
+    try:
+        cands = []
+        env_root = os.environ.get("CONDA_PREFIX") or ""
+        if env_root:
+            cands.append(env_root)
+        for rel in ("miniconda3", "anaconda3", "miniconda", "miniforge3"):
+            cands.append(os.path.join(os.path.expanduser("~"), rel))
+            cands.append(os.path.join("C:\\", rel))
+            cands.append(os.path.join(_app_root(), rel))
+        # 显式声明的 conda 环境目录优先
+        for p in _declared_paths("conda_envs") or []:
+            cands.append(str(p))
+        seen = []
+        for c in cands:
+            c = os.path.normpath(str(c))
+            if c and c not in seen:
+                seen.append(c)
+        fp["conda"] = [[c, _fp_stat(os.path.join(c, "envs"))] for c in seen]
+    except Exception:
+        pass
+    return fp
+
+
+def verify(force_rescan: bool = False) -> dict:
+    """分析前/面板打开时的"确认一遍"：指纹没变就直接复用清单，变了才重扫。
+
+    返回 {"ok", "changed", "reasons", "age_s", "stale", "rescanned", "digest"}。
+    这是给"下次遇到分析再确认一遍"用的：毫秒级，不陪 R 全量探测。
+    """
+    cache = _read_cache()
+    old_fp = cache.get("fingerprint")
+    now_fp = _fingerprint()
+    reasons = []
+    if old_fp is None:
+        reasons.append("还没有指纹（首次）")
+    else:
+        for key in ("environment_json", "python", "r", "conda"):
+            if old_fp.get(key) != now_fp.get(key):
+                reasons.append("%s 变了" % key)
+    changed = bool(reasons)
+    rescanned = False
+    if force_rescan or changed:
+        # 变了才真扫（走 scan_local 全量）；没变时一个探测都不做
+        try:
+            scan_local(force=True)
+            _write_cache(fingerprint=now_fp)
+            rescanned = True
+        except Exception as exc:
+            reasons.append("重扫失败：%s" % exc)
+    elif not _read_cache().get("fingerprint"):
+        _write_cache(fingerprint=now_fp)
+    local = cached_local()
+    out = {"ok": True, "changed": changed, "reasons": reasons, "rescanned": rescanned,
+           "age_s": local.get("age_s"), "stale": bool(local.get("stale")),
+           "scanned_at": local.get("scanned_at")}
+    try:
+        out["digest"] = agent_digest()
+    except Exception:
+        out["digest"] = ""
+    return out
+
+
 def cached_local() -> dict:
     """只读缓存的本机清单，绝不探测（HTTP 接口用）。
 
     没有缓存就返回 pending —— 本机首扫 10~40 秒（R 全量探测最慢），
     让请求等这个数字是不可接受的，交给后台线程 + 前端轮询。
+
+    2026-09-23：过期但**有数据**时不再回 pending，而是回旧数据 + needs_refresh
+    （见 _stale_view）——清单要能持久看到，不能一过 TTL 就"假装没扫过"。
     """
     if _fresh("local", _LOCAL_TTL):
         data = dict(_read_cache().get("local") or {})
@@ -1175,6 +1334,9 @@ def cached_local() -> dict:
             data["cached"] = True
             data["age_s"] = _age("local")
             return data
+    stale = _stale_view("local")
+    if stale:
+        return stale
     return {"pending": True, "scanned_at": "", "age_s": None,
             "hint": "本机环境还没清点过（首次约 10~40 秒，主要在等 R 全量探测）；已在后台扫描"}
 
@@ -1185,6 +1347,9 @@ def cached_cluster() -> dict:
     未配置时是纯本地判断（读 config.yaml，毫秒级），每次现算；已配置且缓存新鲜
     才用缓存，过期则返回 pending 由调用方起后台刷新 —— 一次 nodes/check 探测
     可能要几十秒，不能在 HTTP 请求里等。
+
+    2026-09-23：集群**配置态**永远现算（那条不变量不变）；但配置态成立、
+    缓存只是过期时，先回上次的节点清单 + needs_refresh，不再丢成 pending。
     """
     if _fresh("cluster", _CLUSTER_TTL):
         data = dict(_read_cache().get("cluster") or {})
@@ -1197,6 +1362,12 @@ def cached_cluster() -> dict:
         # 未配置是纯本地判断（读 config.yaml，不 SSH，毫秒级）：必须现算，
         # 否则用户在「🖧 远端集群」面板刚填完配置，这里还要等 TTL 才认。
         return scan_cluster(force=True)
+    stale = _stale_view("cluster")
+    if stale and stale.get("configured"):
+        stale["config_path"] = state.get("config_path") or stale.get("config_path", "")
+        stale["enabled"] = state.get("enabled", stale.get("enabled"))
+        stale["nodes_configured"] = state.get("nodes") or stale.get("nodes_configured") or []
+        return stale
     return {"pending": True, "configured": True, "enabled": state.get("enabled", False),
             "config_path": state.get("config_path", ""),
             "nodes_configured": state.get("nodes", []),
@@ -1483,6 +1654,8 @@ SCHEMA = {
         "解释器版本与已装包、R 各版本与库路径与缺失关键包、生信 CLI 工具、conda、GPU、"
         "磁盘）/ cluster（集群节点、核数、负载、调度器、目录、已装工具与版本）/ "
         "refresh（强制重新探测：本机约 5-20 秒，集群每节点最长 60 秒）/ "
+        "verify（**便宜地再确认一遍**：毫秒级，指纹没变就直接复用清单，变了才重扫 —— "
+        "分析开工前用它，代替无脑重扫）/ "
         "markdown（人看的报告）。结果有缓存（本机 1 小时 / 集群 10 分钟），不会每次都真探测。"
         "本机清单缓存在 <hermes_home>/env_inventory.json，WebUI 的「🧩 环境管理」面板"
         "与它同源 —— 用户看到的和你用的是同一份。"
@@ -1492,8 +1665,8 @@ SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["overview", "local", "cluster", "refresh", "markdown"],
-                "description": "要哪部分（默认 overview）",
+                "enum": ["overview", "local", "cluster", "refresh", "markdown", "verify"],
+                "description": "要哪部分（默认 overview）；verify = 便宜地确认环境有没有变（毫秒级，变了才重扫）",
                 "default": "overview",
             },
             "node": {
@@ -1510,7 +1683,9 @@ def env_inventory_handler(action: str = "overview", node: str = "", **kwargs) ->
     _ = kwargs
     action = (action or "overview").strip().lower()
     try:
-        if action == "local":
+        if action == "verify":
+            payload = dict(verify(), local=cached_local())
+        elif action == "local":
             payload = {"ok": True, "local": scan_local(force=False)}
         elif action == "cluster":
             payload = {"ok": True, "cluster": scan_cluster(force=False, node=node)}

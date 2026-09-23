@@ -581,7 +581,11 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 20. **kernel 会话隔离（2026-08-13 起）**：每个会话有自己的持久 kernel（execute_r/execute_python 按会话 ID 隔离）——同一会话内变量/已加载包跨调用保留，**不同会话间不共享**。不要假设上个会话的变量还在；换会话 = 新内核，需要重新 load/library。
 21. **知识入库走 save_knowledge（2026-08-13 起）**：把文献结论/学习参数/分析经验写入知识库必须用 `save_knowledge` 工具——铁轨强制：data_driven/domain_convention 来源必须带 evidence（引用原文），verified=unverified 拒绝入库。不要绕过铁轨直接写 KB 文件。
 24. **自动沉淀门禁**：terminal 完成 → 强制 record_run → 才能跑下一个 terminal
-25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复
+25. **环境持久化**：每次分析启动 → 先读 `environment.json` → `validate_env.py` 验证 → 失效路径自动探测修复。
+    **环境清单复用（2026-09-23）**：开工前调 `env_inventory(action="verify")` **确认一遍**（毫秒级）——
+    指纹没变就直接复用上次清点结果（含缺包/警告），变了才重扫；**不要**无脑调 `action="refresh"`
+    重扫（本机要 10~45 秒，R 全量探测最贵）。缺包仍按铁律 29：先查用户环境 → 用户同意才装；
+    装完环境变了，下次 verify 会自动发现并刷新清单。
 26. **发表级出图**：所有分析 Phase 完成后 → 必须出至少一套发表级 SVG+PDF+TIFF 图。**CNS 级（用户强调发表/Nature/Science/Cell 目标）→ `skill_view("nature-figure")`；未强调 CNS 的专业/期刊级 → `skill_view("academic-figure-skill")`。**分析中快速探索用 cns-visualization，最终交付用 nature-figure / academic-figure-skill。
 27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。**高代价任务（真实分析跑流程 / 集群投递 / 结果入库 / 出报告）另需按铁律 35 弹意图确认表单**；用户明说"直接做/不用审"可跳过。用户答复确认表单后 = 需求已确认，不必再问一遍。
 28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。用法：`ask_user(question=..., options=[{label,desc,recommended}], multi_select=..., kind="intent")` → 前端渲染成**可勾选弹窗**，用户勾选提交后答复自动成为你的下一条消息；问完立即结束本回合（执行类工具在答复前会被系统拦下）。
@@ -654,7 +658,11 @@ terminal 完成 → _pending_record = True
   1. read_file("E:/MemOmics-Agent/environment.json")   ← 全局环境文件
   2. terminal("python scripts/validate_env.py --verbose")
   3. exit 0 → 继续 | exit 1 → 已修复→继续 | exit 2 → 阻断
+  4. env_inventory(action="verify")  ← 再确认一遍环境变没变（毫秒级；没变直接复用清单）
 ```
+> 第 4 步只做"确认"：指纹（解释器/site-packages/R 库/conda 的 mtime）没变 → 不重扫；
+> 变了（装/卸包、换 R 版本）→ 自动重扫。清单持久存 `hermes_home/env_inventory.json`，
+> 过期也不会被丢掉（面板/webUI 显示"上次清单 + 正在重扫"）。
 
 > 📋 环境文件格式、R版本列表、验证脚本逻辑 → `SOUL-detail.md`
 

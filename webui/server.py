@@ -10200,8 +10200,11 @@ async def env_inventory_api(refresh: int = 0, cluster: int = 1, scope: str = "")
     local = report.get("local") or {}
     cluster_data = report.get("cluster") or {}
     pending = bool(local.get("pending")) or bool(cluster_data.get("pending"))
+    # 2026-09-23：过期数据仍然返回（面板不再回退成"没扫过"），但必须照样踢后台刷新，
+    # 否则 stale 的数据会一直卡着不更新 —— 这里把 needs_refresh 也算作要刷新。
+    stale = bool(local.get("needs_refresh")) or bool(cluster_data.get("needs_refresh"))
     triggered = None
-    if refresh or pending:
+    if refresh or pending or stale:
         triggered = _env_inv_refresh(scope or ("all" if cluster else "local"))
     with _ENV_INV_LOCK:
         state = dict(_ENV_INV_STATE)
@@ -10209,8 +10212,29 @@ async def env_inventory_api(refresh: int = 0, cluster: int = 1, scope: str = "")
         state["triggered"] = triggered
     return {"ok": True, "state": state, "local": local, "cluster": cluster_data,
             "warnings": report.get("warnings") or [], "pending": pending,
+            "stale": stale,
             "agent_digest": report.get("agent_digest") or "",
             "cache_path": mod._cache_path()}
+
+
+@app.post("/api/env/verify")
+async def env_verify_api():
+    """便宜地"确认一遍"环境（毫秒级）：指纹没变就复用缓存，变了才重扫。
+
+    2026-09-23：用户要的"下次遇到分析再确认一遍"落在这里 ——
+    不陪 R 全量探测（10~45 秒），但装/卸包一定被指纹抓到。
+    """
+    mod = _env_inv_module()
+    try:
+        # verify 在"环境变了"时会真扫（本机 10~45 秒）→ 必须挪出事件循环，
+        # 否则这几十秒里整个 WebUI 的 HTTP 都停摆（照仓库惯例用 to_thread）。
+        result = await asyncio.to_thread(mod.verify)
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+    if result.get("rescanned"):
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "ok", "finished_at": time.time()})
+    return result
 
 
 @app.get("/api/env/report.md")

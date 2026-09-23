@@ -47,6 +47,14 @@
 | `version` | 缓存结构版本（`_CACHE_VERSION`，结构变了就作废旧缓存） |
 | `local` / `local_at` | 本机清单 + 完成时间戳，TTL `_LOCAL_TTL = 3600`（1 小时） |
 | `cluster` / `cluster_at` | 集群清单 + 时间戳，TTL `_CLUSTER_TTL = 600`（10 分钟，SSH 慢、状态变得快） |
+| `local_force` / `cluster_force` | 被 `invalidate()` 标脏（下次要真扫），但**数据仍保留** |
+| `fingerprint` | 环境指纹（解释器 / site-packages / R 库 / conda 的 mtime），给 `verify()` 比"变没变"用 |
+
+**持久性（2026-09-23 修）**：清单**过 TTL 不再丢掉**。以前一过 1 小时 `cached_local()` 就只回
+`pending`，面板退回「还没扫过，正在后台扫描」，上次扫到的 R 版本/缺包/警告全部不可见（用户反馈
+"环境清单没保存住"）。现在过期也照常返回内容（`stale: true` + `age_s`），同时 `needs_refresh`
+让后台去重扫、扫完原子替换；**重扫失败也保留旧清单**（`invalidate()` 只清时间戳+立标记，不再置 `None`
+—— 以前点「🔄 重新扫描」会先把旧清单删掉，这次万一扫失败旧清单就永久没了）。
 
 - 写缓存：`_write_cache(**updates)` 先合并再 `os.replace` 原子替换（写一半被打断也不会留下坏 JSON）。
 - 读缓存：`_read_cache()` 按 mtime 记忆化（`_CACHE_MEM`），进程内不反复读盘。
@@ -60,7 +68,8 @@
 
 | 接口 | 行为 |
 | --- | --- |
-| `GET /api/env/inventory?refresh=0&cluster=1&scope=` | **只读缓存**，秒回；`refresh=1` 时顺手踢一次后台扫描并返回 `state.triggered` |
+| `GET /api/env/inventory?refresh=0&cluster=1&scope=` | **只读缓存**，秒回；`refresh=1` 时顺手踢一次后台扫描并返回 `state.triggered`。返回 `stale: true` 表示"给的是上次清单、正在重扫" |
+| `POST /api/env/verify` | **便宜地"确认一遍"**：指纹没变直接复用清单（实测 **1 ms**），变了才真扫（首次 40 s）。跑在线程里，不阻塞事件循环 |
 | `GET /api/env/report.md` | 给人看的完整 markdown 报告（`?download=1` 加 attachment 头） |
 
 响应里的 `agent_digest` 就是注入给 agent 的那段文本，`state` 是扫描状态（`idle` / `running` / `ok` / `error`）。
@@ -68,13 +77,17 @@
 ## 4. 工具 `env_inventory`（agent 侧只读入口）
 
 ```
-env_inventory(action="overview" | "local" | "cluster" | "refresh" | "markdown", node="")
+env_inventory(action="overview" | "local" | "cluster" | "refresh" | "markdown" | "verify", node="")
 ```
 
 - `overview`（默认）：本机 + 集群全量清单，`force=False`。**缓存新鲜就直接用（秒回）；缓存过期会真扫**
   （本机全量约 10~45 秒，agent 调用时会等这么久）——想要秒回的信息，每轮开场注入的缓存摘要里已经有了。
 - `local` / `cluster`：只清点一边；`cluster` 可带 `node` 只探某个节点。
 - `refresh`：`force=True`，真探测（约 10~45 秒）；人点面板的「🔄 重新扫描」走的就是它。
+- `verify`：**分析开工前的"再确认一遍"**（铁律 25 第 4 步）。毫秒级指纹比对（解释器 /
+  site-packages / R 库 / conda 目录的 mtime + 大小）——没变就直接复用清单、一次探测都不做；
+  变了（装/卸包、换 R 版本）才自动重扫。实测首次 40 s、之后 **1 ms**。
+  它不替代 `refresh`：`refresh` 是"我现在就要最新全量"，`verify` 是"确认还能不能复用"。
 - `markdown`：返回完整报告文本，agent 可以直接贴给用户。
 
 工具**永不抛异常**：任何失败都返回 `{"ok": false, "status": "error", "error": "类型: 消息"}`。

@@ -9,6 +9,7 @@
   "/api/env/check": "local",
   "/api/env/inventory": "local",
   "/api/env/report.md": "local",
+  "/api/env/verify": "local",
   "/api/file/download": "local",
   "/api/file/open": "local",
   "/api/file/preview": "local",
