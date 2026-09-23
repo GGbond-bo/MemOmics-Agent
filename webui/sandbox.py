@@ -35,12 +35,15 @@ from urllib.parse import urlsplit, urlunsplit
 VERSION = "p2-3.1"
 
 FS_ACTIONS = ("fs.read", "fs.write", "fs.list", "fs.delete")
-NET_ACTIONS = ("net.fetch",)
+#: net.fetch = 出网拉取公网资源（默认拒绝，需要授权）；
+#: net.local = 本机服务发现（Ollama/LM Studio/vLLM 之类），只认环回、默认放行——
+#:             两者策略相反，所以是两个动作，不能混成一个。
+NET_ACTIONS = ("net.fetch", "net.local")
 OTHER_ACTIONS = ("proc.exec",)
 ACTIONS = FS_ACTIONS + NET_ACTIONS + OTHER_ACTIONS
 
 #: 读语义的动作（对目录 roots 生效）
-READ_LIKE = {"fs.read", "fs.list", "net.fetch"}
+READ_LIKE = {"fs.read", "fs.list", "net.fetch", "net.local"}
 #: 写语义的动作（需要可写授权）
 WRITE_LIKE = {"fs.write", "fs.delete"}
 
@@ -80,10 +83,14 @@ class Grant:
     """一条显式授权：某动作 + 某资源（路径树 / 域名）+ 有效期。"""
 
     __slots__ = ("token", "action", "resource", "created_at", "expires_at", "reason",
-                 "writable", "hits")
+                 "writable", "hits", "_clock")
 
     def __init__(self, token: str, action: str, resource: str, created_at: float,
-                 expires_at: float, reason: str = "", writable: bool = True):
+                 expires_at: float, reason: str = "", writable: bool = True,
+                 clock: Optional[Callable[[], float]] = None):
+        # 时钟与 provider 保持一致：否则注入假时钟时 created_at/expires_at 用假时间、
+        # ttl_left 用真实时间，同一条授权自己跟自己矛盾（测试会立刻抓出来）。
+        self._clock = clock or time.time
         self.token = token
         self.action = action
         self.resource = resource
@@ -95,7 +102,7 @@ class Grant:
 
     @property
     def ttl_left(self) -> float:
-        return self.expires_at - time.time()
+        return self.expires_at - self._clock()
 
     def as_dict(self) -> Dict[str, Any]:
         return {"token": self.token, "action": self.action, "resource": self.resource,
@@ -234,7 +241,7 @@ class SandboxProvider:
         with self._lock:
             self._seq += 1
             token = "%s-%d" % (action.replace(".", ""), self._seq)
-            g = Grant(token, action, norm, now, now + ttl, reason, writable)
+            g = Grant(token, action, norm, now, now + ttl, reason, writable, clock=self._clock)
             self._grants[token] = g
             self.counts["granted"] += 1
         return g
@@ -409,6 +416,21 @@ class SandboxProvider:
         if not addrs:
             return Decision(action, _safe_resource(raw), False, "url_dns_fail",
                             "域名没有解析出任何地址", mode=mode)
+        if action == "net.local":
+            # 「本机服务」与「公网请求」是两种相反的能力：
+            # net.local 只认环回（自己机器上的 Ollama/LM Studio/vLLM），且默认放行；
+            # 任何非环回地址都进不来——云元数据 169.254.169.254 属链路本地，同样挡在这里。
+            for a in addrs:
+                try:
+                    loop = ipaddress.ip_address(a).is_loopback
+                except Exception:
+                    loop = False
+                if not loop:
+                    return Decision(action, _safe_resource(raw), False, "local_not_loopback",
+                                    "net.local 只允许环回地址，%s（%s）不是本机" % (a, host),
+                                    mode=mode, pinned_ips=addrs)
+            return Decision(action, _safe_resource(raw), True, "ok_local",
+                            "本机服务（环回）默认放行：%s" % host, mode=mode, pinned_ips=addrs)
         # 防 rebinding：**全部**解析地址都必须是公网；任何一个不合法就整条拒绝
         for a in addrs:
             bad = classify_ip(a)
@@ -567,6 +589,15 @@ def require(action: str, resource: Any, **kw: Any) -> Decision:
     return _PROVIDER.require(action, resource, **kw)
 
 
+def purge_expired() -> int:
+    return _PROVIDER.purge_expired()
+
+
+def grants() -> List[Dict[str, Any]]:
+    """当前授权清单（含 TTL 余量）——"我到底授权了什么"必须随时能看见。"""
+    return _PROVIDER.grants()
+
+
 def audit(limit: int = 50, codes: bool = False) -> Dict[str, Any]:
     return _PROVIDER.audit(limit, codes)
 
@@ -584,7 +615,8 @@ __all__ = [
     "READ_LIKE", "WRITE_LIKE", "DEFAULT_TTL_S", "DEFAULT_MAX_AUDIT",
     "SandboxDenied", "Grant", "Decision", "SandboxProvider",
     "classify_ip", "provider", "set_provider", "enabled", "enforce_enabled",
-    "grant", "revoke", "check", "gate", "require", "audit", "stats", "reset",
+    "grant", "revoke", "grants", "purge_expired", "check", "gate", "require",
+    "audit", "stats", "reset",
 ]
 
 

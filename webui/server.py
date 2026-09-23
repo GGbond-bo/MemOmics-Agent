@@ -130,7 +130,10 @@ async def sandbox_audit(limit: int = 50, codes: int = 0):
     codes=1 时附带按拒绝码聚合的计数，便于看清"如果要强制，会拦掉什么"。"""
     try:
         from webui import sandbox as _sandbox
-        return JSONResponse(_sandbox.audit(limit=limit, codes=bool(codes)))
+        body = _sandbox.audit(limit=limit, codes=bool(codes))
+        if _net_guard is not None:      # 出网侧视角：多少钉住 IP、多少走代理（代理钉不住 IP）
+            body["netguard"] = _net_guard.stats()
+        return JSONResponse(body)
     except Exception as _e:
         return JSONResponse({"error": str(_e)}, status_code=500)
 
@@ -2775,6 +2778,18 @@ try:
     _THREAD_STATE_INSTALLED = True
 except Exception as _ts_err:  # 环境异常绝不影响主流程（fail-open）
     print("[WARN] ThreadState 未挂载: %s" % _ts_err)
+
+# === P2-3b 出网闸门（2026-09-23）：WebUI 自己发起的出网请求统一从这里走 ===
+# 默认观察模式：判定照算、账照记，但请求仍走老路径，行为零变更；要真拦见 MEMOMICS_SANDBOX_ENFORCE。
+# 强制模式下钉住批准的 IP 再连（防 DNS rebinding 的那道 TOCTOU 缝），重定向逐跳重新过门。
+_net_guard = None
+try:
+    try:
+        from webui import netguard as _net_guard
+    except ImportError:
+        import netguard as _net_guard
+except Exception as _ng_err:  # 环境异常绝不影响主流程（fail-open）
+    print("[WARN] NetGuard 未挂载: %s" % _ng_err)
 _SERVER_STARTED_STR = datetime.now().strftime("%m-%d %H:%M")
 _bg_tasks = {}       # session_id -> background task info
 # === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
@@ -8888,9 +8903,17 @@ async def detect_local_models():
     found = []
     for name, url in candidates:
         try:
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=2) as r:
-                d = _json.loads(r.read().decode("utf-8"))
+            if _net_guard is not None:
+                # net.local：本机服务发现只认环回、默认放行（不该要授权，强制模式下也要能用）
+                with _net_guard.urlopen(url, timeout=2.0,
+                                        headers={"Accept": "application/json"},
+                                        action="net.local",
+                                        source="api.models.local") as r:
+                    d = _json.loads(r.read().decode("utf-8"))
+            else:
+                req = urllib.request.Request(url, headers={"Accept": "application/json"})
+                with urllib.request.urlopen(req, timeout=2) as r:
+                    d = _json.loads(r.read().decode("utf-8"))
             for m in d.get("data", []):
                 mid = m.get("id") or m.get("model") or ""
                 if not mid:
@@ -9258,6 +9281,33 @@ _GITHUB_REPO = "GGbond-bo/MemOmics-Agent"
 _GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}"
 _GITHUB_RAW = f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main"
 _PROXY = "http://127.0.0.1:6478"
+#: 检查更新这条自带功能的固定外部依赖（强制模式下需要显式自授权，见下）
+_UPDATE_HOST = "api.github.com"
+
+
+def _sandbox_ensure_app_grants() -> None:
+    """强制模式下给自己人打窄授权：只授权固定主机、只授权 net.fetch、理由写清、全进审计。
+
+    为什么需要它：api.github.com 是"检查更新"的固定依赖。一开强制、它又没授权，
+    更新检查会立刻死掉——"安全了但功能废了"不是我们要的结果。所以把自依赖显式声明出来，
+    而不是偷偷放行。授权是 TTL 的，本函数幂等：过期会被清掉并补打，调用方每次出网前调一次即可。
+    观察模式（默认）下什么都不做。
+    """
+    try:
+        from webui import sandbox as _sb
+        if not (_sb.enabled() and _sb.enforce_enabled()):
+            return
+        _sb.purge_expired()
+        have = {g.get("resource") for g in _sb.grants()
+                if g.get("action") == "net.fetch" and (g.get("ttl_left") or 0) > 0}
+        if _UPDATE_HOST not in have:
+            _sb.grant("net.fetch", _UPDATE_HOST, ttl_s=3600.0,
+                      reason="应用自更新检查（强制模式下的显式自依赖）", writable=False)
+    except Exception as _e:
+        print("[WARN] 应用自授权失败: %s" % _e)
+
+
+_sandbox_ensure_app_grants()
 
 
 def _get_update_config() -> dict:
@@ -9466,6 +9516,12 @@ def _http_get_json(url: str, timeout: int = 20, retries: int = 2) -> dict:
     for attempt in range(tries):
         for proxy in (_PROXY, None):
             try:
+                if _net_guard is not None:
+                    _sandbox_ensure_app_grants()      # 强制模式下补齐自依赖授权（TTL 到期自动续）
+                    with _net_guard.urlopen(url, timeout=timeout, headers=headers,
+                                            proxy=proxy, action="net.fetch",
+                                            source="update.check") as r:
+                        return json.loads(r.read().decode("utf-8", "replace"))
                 req = _ur.Request(url, headers=headers)
                 with _url_opener(proxy).open(req, timeout=timeout) as r:
                     return json.loads(r.read().decode("utf-8", "replace"))
