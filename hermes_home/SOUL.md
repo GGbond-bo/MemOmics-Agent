@@ -597,6 +597,11 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
   跑图前必查：ggplot2/dplyr/scales 在不在（`Rscript -e 'cat(requireNamespace("ggplot2", quietly=TRUE))'`）。
 30. **terminal 超时/长任务（2026-08-14 起）**：收到 `Command timed out after N seconds`（exit_code 124）→ **不要原样重试**：要么 timeout 调到 ≥300，要么 background=True 后轮询。安装包/跑分析脚本这类预计超过 60 秒的任务，**从一开始就** background=True 或 timeout≥300。Windows 下命令里路径必须用 `E:/...` 或 `E:\\...`，禁止用 `/e/...`（MSYS 风格在 cmd 里无效）。**画图/分析优先用 execute_r/execute_python（持久 kernel，变量/已加载包跨调用保留），不要用 terminal 跑 Rscript 重开进程**；批量出图在一个脚本里完成（ggsave 循环），或逐张调用时文件名带递增序号。
 31. **记忆治理语法（2026-08-14 起）**：写入 MEMORY.md/USER.md 时在内容开头标注元数据：用户明确强调"记住这个/这个很重要"的 → `[imp:0.9][pinned:1]`（pinned 条目永不降级）；环境坑/工具 bug → `[imp:0.7]`；项目事实/默认参数 → `[imp:0.5]`；一次性/临时信息 → `[imp:0.3]`。元数据会被系统剥离后写入文件（不进入注入视图），登记到记忆索引供分层治理。不得随意给 [pinned:1]——只有用户明确强调才可。
+32. **长任务一律走统一包装器（2026-09-24 起）**：预计超过 60 秒的活（QC / 聚类 / 注释 / CellBender / CellChat / 批量出表）**必须**用 `memomics/bio_tools/task_run.py` 起，不要自己 `start /b`、`subprocess.Popen` 之后就不管——那样用户面板里看不见、取消没有依据、进程崩了没人收尾。
+    1) 启动：`python memomics/bio_tools/task_run.py --type qc --title "PBMC QC" --session-dir results/<sid> --stages 读入,过滤,出图 --param 最小基因数=200 --script results/<sid>/qc.R -- /path/Rscript.exe qc.R --in x.rds`（`--` 之后才是真命令；`--script` 指向主脚本，面板里能直接看正文）；
+    2) 打点：脚本里按行打印即可，**任何语言都能用、不需要装任何包**（R 就 `cat("#TASK:PROGRESS 0.4 过滤中\n")`）：`#TASK:STAGE 阶段名` / `#TASK:PROGRESS 0.42 说明` / `#TASK:PARAM 键=值` / `#TASK:OUTPUT 产物路径`；
+    3) 查看：WebUI 左侧 **⏱ 任务** 面板（谁在跑、在哪个环境跑、PID、当前阶段、进度、CPU/内存、日志尾部、产物真假、一键取消），命令行 `--list` / `--show <id> --tail 40`；
+    4) 取消：面板上点取消即可（带令牌；先登记取消意图，再按 PID + 创建时间核对身份后才杀，绝不误杀；已经写出来的中间文件保留）。
 
 > 📋 铁律 12-21 详细规则（task_plan.md、长任务追踪、心跳部署、后台进程模式等）→ `SOUL-detail.md`
 
