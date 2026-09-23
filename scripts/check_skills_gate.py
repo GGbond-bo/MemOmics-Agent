@@ -50,6 +50,7 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_p2_4_partial_enforce.py"),
     os.path.join("webui", "tests", "test_memory_panel_write.py"),
     os.path.join("webui", "tests", "test_memory_govern.py"),
+    os.path.join("webui", "tests", "test_task_run.py"),
 ]
 
 
