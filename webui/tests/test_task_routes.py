@@ -207,6 +207,25 @@ def test_c2_detail_outputs_exist_and_size(client, tr, tasks_dir, tmp_path):
     assert "env" in d and d["cmd"] == ""
 
 
+def test_b4_card_exposes_current_stage_name(client, tr, tasks_dir):
+    """面板列表读的是 card["stage"]（阶段 1/2：训练），契约里没有这个字段就得派生出来，
+    否则真机上永远显示「阶段 1/2：」——冒号后面空着。"""
+    t = _make(tr, tasks_dir, title="阶段名放在卡片上", stages=["读入", "训练", "出图"])
+    t.stage("训练")
+    t.flush()
+    card = [c for c in client.get("/api/tasks").json()["tasks"] if c["task_id"] == t.task_id][0]
+    assert card["stage"] == "训练"
+    assert card["stage_index"] == 1 and card["stage_total"] == 3
+    # 阶段全部跑完（没有 running 的）就不该硬编一个名字
+    t.finish("done")
+    card2 = [c for c in client.get("/api/tasks").json()["tasks"] if c["task_id"] == t.task_id][0]
+    assert card2["stage"] == ""
+    # 没有阶段的任务也不能炸
+    t3 = _make(tr, tasks_dir, title="没有阶段", stages=None)
+    card3 = [c for c in client.get("/api/tasks").json()["tasks"] if c["task_id"] == t3.task_id][0]
+    assert card3["stage"] == "" and card3["stage_total"] == 0
+
+
 def test_c3_relative_output_resolves_under_results_and_cwd(client, tr, tasks_dir, tmp_path):
     """真机踩到的坑：脚本按约定打相对路径 #TASK:OUTPUT t5_qc_box.png，产物其实落在
     <会话>/results/ 下，旧代码只按会话目录拼一次 → 文件明明在，面板显示"不存在"。"""

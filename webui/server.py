@@ -9339,6 +9339,10 @@ def _task_card(d: dict) -> dict:
         "progress_text": prog.get("text") or "",
         "stage_index": d.get("stage_index") or 0,
         "stage_total": d.get("stage_total") or len(d.get("stages") or []),
+        # 当前阶段名。面板一直读的是 stage，而契约里只有 stages[]/stage_index，
+        # 于是列表永远显示「阶段 1/4：」（冒号后面空着）—— 真机实测发现，补上。
+        "stage": next((stg.get("name") or "" for stg in (d.get("stages") or [])
+                       if stg.get("status") == "running"), ""),
         # 循环变量别叫 s/sess/state：那是会话状态漂移门禁的扫描口径（test_p2_2_thread_state.py），
         # 阶段字典会被误判成会话键，门禁直接红。
         "stages": [{"name": stg.get("name"), "status": stg.get("status"), "sec": stg.get("sec")}
