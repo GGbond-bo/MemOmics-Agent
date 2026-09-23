@@ -22,6 +22,8 @@ on:
       - 'webui/server.py'
       - 'contracts/skill_triggers.json'
       - 'webui/tests/test_skill*.py'
+      - 'webui/tests/test_p0*.py'
+      - 'webui/tests/test_p1*.py'
       - 'webui/tests/fixtures/skill_routing_matrix.json'
       - 'scripts/check_skills_gate.py'
       - '.githooks/**'
@@ -38,6 +40,8 @@ on:
       - 'webui/server.py'
       - 'contracts/skill_triggers.json'
       - 'webui/tests/test_skill*.py'
+      - 'webui/tests/test_p0*.py'
+      - 'webui/tests/test_p1*.py'
       - 'webui/tests/fixtures/skill_routing_matrix.json'
       - 'scripts/check_skills_gate.py'
   workflow_dispatch:

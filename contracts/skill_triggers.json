@@ -214,7 +214,38 @@
         "短缩写是高频英文词片段，必须加字母边界；长英文词（paper/plot/figure）保持子串匹配，以兼容 papers/plots 等变形。",
         "实现：server._SHORT_ASCII_KW_MAX + _short_ascii_kw_match()，长度值由 test_skill_trigger_contract.py 与契约对账。"
       ]
-    }
+    },
+    "pinned_skill_boundary": {
+      "applies_to": "置顶 skill 的触发判定（server._skill_trigger_hit：trigger_keywords/aliases/name/display 四个来源合起来判）",
+      "tier1": {
+        "when": "纯 ASCII、字母数字、长度 <= max_len",
+        "max_len": 3,
+        "rule": "左右都不许紧贴英文字母（复用 RED 的 _short_ascii_kw_match，即上面同一套 short_ascii_boundary）"
+      },
+      "tier2": {
+        "when": "更长的 ASCII 触发词（find/flow/code/processing/genomics）",
+        "rule": "左边不许贴字母或数字（词首边界）；右边只允许词形变化或非英文字母",
+        "inflect_suffixes": [
+          "ing",
+          "es",
+          "ed",
+          "s",
+          "d"
+        ]
+      },
+      "cjk": "substring",
+      "multiword_parts": "「实词全中」兜底同样逐词走词首边界（旧实现在 excellent cycle 里只因散落着 cell 与 cycle 就命中 cell cycle）",
+      "invariant": "new_hits_subset_of_legacy",
+      "max_hits_ceiling": 8,
+      "why": "置顶判定决定「要不要硬预载整份 SKILL.md」，误触发会让无关技能霸占上下文；旧实现纯子串，实测 14 例英文词片段误触发。"
+    },
+    "pinned_skill_boundary_note": [
+      "2026-09-23 P0-2d 实测（439 篇 SKILL.md、424 万字符语料）：1226 个 ASCII 候选里 216 个存在「词中命中」，89933 次出现中 13839 次（15.4%）落在别的单词内部。",
+      "真实误触发 14 例：cell⊂excellent、core⊂score、GO⊂category/logout/ongoing/non-negotiable、find⊂DoubletFinder、flow⊂workflow、set⊂dataset/settings、code⊂encode、sites⊂websites、genomic⊂10xgenomics、processing⊂preprocessing、grn⊂sgrna、gate⊂investigate、Excel⊂excellent、ima⊂estimate。",
+      "词形变化与中文紧贴照旧命中：cells/genes/primers/Golden Gate、做primer设计、网络调研、环境rna；含 CJK 的候选仍走子串（中文没有词边界）。",
+      "RED 路由（_match_red_skill_hits）本次不动，但同一类洞还在：长度 >= 4 的英文触发词仍是子串匹配，实测「这个脚本写得 excellent」会命中 analysis-summary-report 的 Excel —— 已在此记录，作为后续项单独评估。",
+      "实现：server._kw_boundary_hit/_kw_any_hit/_kw_inflected + _KW_INFLECT_SUFFIXES；测试 webui/tests/test_p0_2d_trigger_boundary.py（内含 legacy 参照实现，钉住「只准收窄」不变量）。"
+    ]
   },
   "exemptions": {
     "local_literature": {
@@ -245,7 +276,8 @@
     "tests": [
       "webui/tests/test_skill_routing_matrix.py（路由回归矩阵：正向/干扰/过度触发钉住/缺口棘轮/边界/覆盖/不变量）",
       "webui/tests/test_skill_trigger_contract.py（本契约逐条钉住 + 关键词棘轮 + 缓存失效回归）",
-      "webui/tests/test_skill_trigger_matrix.py（历史触发词矩阵：索引锚点可见性）"
+      "webui/tests/test_skill_trigger_matrix.py（历史触发词矩阵：索引锚点可见性）",
+      "webui/tests/test_p0_2d_trigger_boundary.py（置顶判定词边界：14 例误触发归零 + 真阳性零丢失 + 只准收窄不变量）"
     ],
     "gate": "scripts/check_skills_gate.py（索引一致性 + 上述测试，提交前与 CI 双侧执行）"
   },
@@ -253,6 +285,7 @@
     "2026-09-23 P0-2a：加契约文件；修触发词缓存 mtime 失效（索引重建后新词不生效）；英文多词由「任一实词」收紧为「实词全中」；中英边界空格归一。",
     "2026-09-23 P0-2b：清掉 21 个 RED 技能 + SOUL 必触发表里的 32 个裸英文通用词（改用短语/中文词）；补 7 个漏召回缺口（线粒体/批次校正/Excel/实验参数/精读/复现/可行性）；裸中文通用词清单上线；棘轮台账清零。",
     "2026-09-23 P0-2b 极端测试补丁：短 ASCII 缩写加字母边界（science->SCI / algorithm->GO / mRNA->MR / degree->DEG 词片段误触发归零）；error-recovery 的裸「怎么修」收紧成「报错怎么修」；BOILERPLATE/GENERIC_STOP 静默丢弃词表纳入契约单点真源。",
+    "2026-09-23 P0-2d：置顶判定 _skill_trigger_hit 由纯子串收紧为词边界（档1 短缩写左右不贴字母 = 复用 RED 规则；档2 长词词首边界 + 允许词形变化尾巴；多词短语兜底逐词踩词首边界）；14 例英文词片段误触发归零，真阳性零丢失，新命中恒为旧命中子集；RED 侧同类洞（>=4 长词仍子串）已记录待评估。",
     "2026-09-23 P0-2c：清掉 YEL 32 处裸通用词（31 个技能，design x11/cell x7/remove x2/summary x2/generation x2/core/deep/multi/nature/paper/download/research/background），全部来自「技能名分词 → 回填 skill.json」；",
     "名称分词口加过滤（根因修复，防复发）；check_keywords 的通用词检查由 RED 扩到全等级；源头断言同步扩到全等级；test_non_red_generic_word_is_allowed 翻转为 test_non_red_generic_word_is_rejected；GRN 侧 0 处。"
   ]

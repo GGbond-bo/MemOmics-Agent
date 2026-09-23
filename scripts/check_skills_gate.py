@@ -8,7 +8,9 @@
 
 它做两件事，任何一件不过就非零退出：
   1. webui/skills_registry.check()：SKILLS_INDEX.md 必须与磁盘 355 个技能逐字一致（只读，不写文件）；
-  2. pytest 跑三份聚焦测试：注册表护栏、触发词矩阵、路由回归矩阵（多场景 × 多意图 × 极端输入）；
+  2. pytest 跑六份聚焦测试：注册表护栏、触发词矩阵、路由回归矩阵、触发词契约，
+     加上 P0-3 命中可见性、P0-2d 置顶判定词边界（后两份是 P0-3/P0-2d 落地时补进门的，
+     否则契约文件写了没人执行 —— 这两条正是「技能面改动」的验收面）；
   最后打印一行结论（含技能数/RED 数与耗时），便于 hook 与 CI 日志抓取。
 
 为什么不用「全量 pytest」：全量 1253 例要跑十几分钟，提交前不可接受；技能面的风险
@@ -34,6 +36,8 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_skill_trigger_matrix.py"),
     os.path.join("webui", "tests", "test_skill_routing_matrix.py"),
     os.path.join("webui", "tests", "test_skill_trigger_contract.py"),
+    os.path.join("webui", "tests", "test_p0_3_skill_visibility.py"),
+    os.path.join("webui", "tests", "test_p0_2d_trigger_boundary.py"),
 ]
 
 
