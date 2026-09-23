@@ -5638,6 +5638,16 @@ def _session_emit(session, msg_dict):
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
     msg_type = msg_dict.get("type", "")
+    # P1-1(2026-09-23): 待办事件的唯一回写收口。
+    # 历史问题：四个推送点（debate 计划 / 心跳匹配 / 裁决同步 / 管线兜底）都只发 WS
+    # 事件、不回写 session["todos"]，于是刷新或切回会话时 /api/todos 拿到的还是
+    # 会话初始化时的 []。放在 emit 收口处统一回写（+落 state.db），未来新增推送点
+    # 也自动生效，不必每处再记得补一行。
+    if msg_type in ("todos", "todos_update"):
+        try:
+            _sync_session_todos(session, msg_dict.get("todos"))
+        except Exception as _e_todo_sync:
+            logger.warning(f"[todos] 回写会话失败: {_e_todo_sync}")
     # 记录最后事件时间（stall watchdog 用：5 分钟无事件 = LLM 卡死）
     session["_last_event_ts"] = time.time()
     # reasoning 流式文本：按 turn 合并持久化（刷新/重连后恢复 💭 思考过程）
@@ -14233,16 +14243,233 @@ async def ask_form_answer(req: AskFormAnswerRequest):
             "code_edit": _ce_state}
 
 
-# --- 待办 ---
+# --- P1-1 (2026-09-23): 会话目标条（goal）+ 待办持久化 ---
+#
+# 借鉴 deer-flow 的两条语义（backend/.../agents/thread_state.py:120-137 的 merge_todos/merge_goal）：
+#   · None = 本次没动它 → 保留旧值（别把「没传」当成「清空」）
+#   · []   = 显式清空
+# 数据形状参考 agents/goal_state.py:22-31（objective/status/created_at/updated_at）。
+# 不抄 deer-flow 的「自动续跑 + LLM 评估器」——MemOmics 这一层只做「目标 + 进度上屏」。
 
-@app.get("/api/todos/{sid}")
-async def get_todos(sid: str):
-    """获取会话待办"""
+_GOAL_MAX_LEN = 4000
+_GOAL_STATUSES = ("active", "done", "blocked", "cancelled")
+
+
+def _kv_get(key, default=None):
+    """读 Hermes state.db 的 kv 表（与微信会话映射同一张表，见 _get_session_db）。"""
+    try:
+        db = _get_session_db()
+        if not db or not getattr(db, "_conn", None):
+            return default
+        row = db._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        if row and row[0] not in (None, ""):
+            return row[0]
+    except Exception:
+        pass
+    return default
+
+
+def _kv_set(key, value):
+    try:
+        db = _get_session_db()
+        if not db or not getattr(db, "_conn", None):
+            return False
+        db._conn.execute(
+            "INSERT INTO kv (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+        db._conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[kv] 写入失败 key={key}: {e}")
+        return False
+
+
+def _todos_public(todos):
+    """把任意来源的待办归一成前端认识的四项 {id,title,status,module}。"""
+    out = []
+    if not isinstance(todos, list):
+        return out
+    for t in todos:
+        if not isinstance(t, dict):
+            continue
+        out.append({
+            "id": str(t.get("id", "") or ""),
+            "title": str(t.get("title") or t.get("content") or t.get("name") or ""),
+            "status": str(t.get("status") or "pending"),
+            "module": str(t.get("module", "") or ""),
+        })
+    return out
+
+
+def _kv_ns(kind, sid):
+    return f"memomics_{kind}:{sid}"
+
+
+def _sync_session_todos(session, todos, persist=True):
+    """把待办写回会话（None = 保留旧值，[] = 显式清空），内容变了才落库。
+
+    返回归一化后的列表。revision 供前端做乐观更新对账（抄 deer-flow
+    use-active-goal.ts:15-68 的「服务器一回报就丢弃本地覆盖」）。
+    """
+    if todos is None:
+        return _todos_public(session.get("todos"))
+    pub = _todos_public(todos)
+    sid = session.get("id", "")
+    try:
+        blob = json.dumps(pub, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        blob = ""
+    if session.get("_todos_blob") != blob:
+        session["todos"] = pub
+        session["_todos_blob"] = blob
+        session["todos_revision"] = int(session.get("todos_revision", 0) or 0) + 1
+        if persist and sid:
+            _kv_set(_kv_ns("todos", sid), blob)
+    return pub
+
+
+def _session_todos(session):
+    """读会话待办：内存优先，其次 state.db（服务重启后仍在）。"""
+    todos = session.get("todos")
+    if todos:
+        return _todos_public(todos)
+    sid = session.get("id", "")
+    if sid:
+        raw = _kv_get(_kv_ns("todos", sid))
+        if raw:
+            try:
+                cached = json.loads(raw)
+            except Exception:
+                cached = None
+            if isinstance(cached, list) and cached:
+                session["todos"] = _todos_public(cached)
+                session["_todos_blob"] = raw
+                return session["todos"]
+    return _todos_public(todos)
+
+
+def _goal_get(session):
+    """读会话目标：内存优先，其次 state.db。"""
+    goal = session.get("goal")
+    if isinstance(goal, dict) and goal.get("objective"):
+        return goal
+    sid = session.get("id", "")
+    if sid:
+        raw = _kv_get(_kv_ns("goal", sid))
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict) and parsed.get("objective"):
+                session["goal"] = parsed
+                return parsed
+    return None
+
+
+def _goal_set(session, objective, status="active", source="manual"):
+    objective = (objective or "").strip()
+    if not objective:
+        return None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    old = _goal_get(session) or {}
+    goal = {
+        "objective": objective[:_GOAL_MAX_LEN],
+        "status": status if status in _GOAL_STATUSES else "active",
+        "source": source if source in ("manual", "auto") else "manual",
+        "created_at": old.get("created_at") or now,
+        "updated_at": now,
+        "revision": int(old.get("revision", 0) or 0) + 1,
+    }
+    session["goal"] = goal
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("goal", sid), json.dumps(goal, ensure_ascii=False))
+    return goal
+
+
+def _goal_clear(session):
+    session["goal"] = None
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("goal", sid), "")
+
+
+def _goal_payload(session):
+    """给前端的统一目标条载荷（progress / goal 两个端点共用一份形状）。"""
+    return {
+        "goal": _goal_get(session),
+        "todos": _session_todos(session),
+        "todos_revision": int(session.get("todos_revision", 0) or 0),
+    }
+
+
+class GoalRequest(BaseModel):
+    objective: str = ""
+    status: str = "active"
+    source: str = "manual"
+
+
+@app.get("/api/sessions/{sid}/goal")
+async def get_session_goal(sid: str):
+    """P1-1: 会话目标（目标条数据源）"""
     if sid not in _sessions:
         _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
-    return {"todos": _sessions[sid].get("todos", [])}
+    session = _sessions[sid]
+    return _goal_payload(session)
+
+
+@app.put("/api/sessions/{sid}/goal")
+async def put_session_goal(sid: str, req: GoalRequest):
+    """P1-1: 设置会话目标（objective 为空 = 无效；要清空请用 DELETE）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    objective = (req.objective or "").strip()
+    if not objective:
+        return JSONResponse({"error": "objective 不能为空"}, status_code=400)
+    if len(objective) > _GOAL_MAX_LEN:
+        return JSONResponse({"error": f"objective 过长（>{_GOAL_MAX_LEN}）"}, status_code=400)
+    if req.status not in _GOAL_STATUSES:
+        return JSONResponse({"error": f"status 必须是 {list(_GOAL_STATUSES)}"}, status_code=400)
+    session = _sessions[sid]
+    goal = _goal_set(session, objective, status=req.status, source=req.source)
+    payload = _goal_payload(session)
+    _session_emit(session, {"type": "goal_update", **payload,
+                            "ts": datetime.now().strftime("%H:%M:%S")})
+    return {"ok": True, **payload}
+
+
+@app.delete("/api/sessions/{sid}/goal")
+async def delete_session_goal(sid: str):
+    """P1-1: 清空会话目标"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    _goal_clear(session)
+    payload = _goal_payload(session)
+    _session_emit(session, {"type": "goal_update", **payload,
+                            "ts": datetime.now().strftime("%H:%M:%S")})
+    return {"ok": True, **payload}
+
+
+# --- 待办 ---
+
+@app.get("/api/todos/{sid}")
+async def get_todos(sid: str):
+    """获取会话待办（P1-1 起：内存 + state.db 双读，刷新/重启不丢）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    return {"todos": _session_todos(session),
+            "revision": int(session.get("todos_revision", 0) or 0)}
 
 @app.get("/api/sessions/{sid}/progress")
 async def get_progress(sid: str):
@@ -14260,6 +14487,9 @@ async def get_progress(sid: str):
         "is_running": bool(session.get("running_agent") or session.get("running_task")),
         # 2026-08-23: 最近一次工具调用（刷新后状态条显示 agent 在干什么）
         "last_tool": _last_tool_of(sid),
+        # P1-1(2026-09-23): 目标条数据随进度接口一起下发 —— 前端刷新/切会话时
+        # 本来就要拉这个接口，零新增请求即可恢复目标 + 待办。
+        **_goal_payload(session),
         "session_id": sid,
     }
 
@@ -16343,10 +16573,15 @@ async def ws_endpoint(ws: WebSocket):
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         # 尝试提取 todo
+                        # P1-1 修正：原代码调 _agent.get_todos()，该方法在 Hermes 全仓 grep
+                        # 0 命中（根本不存在）→ 这个分支恒为 []，等于每轮结束什么都没同步。
+                        # 真源是 _todo_store.read()；四个推送点的回写统一走 _session_emit
+                        # 收口，这里只在 store 非空时补齐一次（store 空时不清空已有待办）。
                         try:
-                            todos = _agent.get_todos() if hasattr(_agent, "get_todos") else []
-                            if todos:
-                                _session["todos"] = todos if isinstance(todos, list) else []
+                            _tstore = getattr(_agent, "_todo_store", None)
+                            _cur_todos = [t for t in _tstore.read() if isinstance(t, dict)] if _tstore is not None else []
+                            if _cur_todos:
+                                _sync_session_todos(_session, _cur_todos)
                         except Exception:
                             pass
                         # 回合结束：循环检测（重复表述）
