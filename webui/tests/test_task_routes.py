@@ -360,3 +360,54 @@ def test_g1_pending_stage_gets_started_at(tr, tasks_dir):
     for st in t.data["stages"]:
         assert st.get("started_at"), st
         assert st.get("ended_at"), st
+
+
+# ------------------------------------------------- H 路径穿越 / 越界（T9 真机补测）
+def test_h1_task_id_traversal_rejected_everywhere(client, tr, tasks_dir, home):
+    """任务 id 就是契约文件名 —— 任何 ../、绝对路径、反斜杠都必须在路由层被拒且不泄漏内容。
+
+    三条读路由（详情 / 日志 / 取消）都要挡住：能读到一份会话外的文件就是越权，
+    能取消一个不存在的 id 就是误伤。
+    """
+    (home / "secret.txt").write_text("TOP-SECRET", encoding="utf-8")
+    bad = [
+        "..%2F..%2Fsecret.txt",
+        "..%2f..%2fsecret.txt",
+        "%2e%2e%2f%2e%2e%2fsecret.txt",
+        "....//....//secret.txt",
+        "..\\..\\secret.txt",
+        "..%5C..%5Csecret.txt",
+        "C%3A%5CWindows%5Cwin.ini",
+        "%2Fetc%2Fpasswd",
+        "%00secret",
+        "nope.json",
+        "nope",
+    ]
+    for raw in bad:
+        r = client.get("/api/tasks/" + raw)
+        assert r.status_code in (400, 404), "%s 竟然返回 %s" % (raw, r.status_code)
+        assert "TOP-SECRET" not in r.text
+        # 回显的是用户自己发来的 id（JSON 转义过），文件内容一个字节都不许带出来
+        assert "[fonts]" not in r.text.lower()
+        lg = client.get("/api/tasks/" + raw + "/log")
+        assert lg.status_code in (400, 404), "%s/log 竟然返回 %s" % (raw, lg.status_code)
+        assert "TOP-SECRET" not in lg.text
+        cx = client.post("/api/tasks/" + raw + "/cancel",
+                         headers={"X-Task-Token": server._task_api_token()})
+        assert cx.status_code in (400, 404), "%s/cancel 竟然返回 %s" % (raw, cx.status_code)
+
+
+def test_h2_detail_never_reads_script_outside_session_or_repo(client, tr, tasks_dir, tmp_path):
+    """脚本正文只允许读会话目录/仓库内的文件；越界的文件一个字节都不给。"""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "evil.R"
+    secret.write_text("# SECRET-SCRIPT" + chr(10), encoding="utf-8")
+    t = _make(tr, tasks_dir, title="越界脚本")
+    t.data["script"] = str(secret)   # 契约里脚本正文的键就是 script
+    t.flush()
+    d = client.get("/api/tasks/" + t.task_id, params={"script": 1}).json()["task"]
+    assert "SECRET-SCRIPT" not in json.dumps(d, ensure_ascii=False)
+    assert d.get("script_text") == ""
+    assert "安全策略" in (d.get("script_note") or "")
+

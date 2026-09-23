@@ -9410,25 +9410,49 @@ def _resolve_output(raw: str, session_dir: str, cwd: str = "") -> str:
     return os.path.abspath(cands[0]) if cands else ""
 
 
-@app.get("/api/tasks")
-async def list_background_tasks(session_id: str = "", states: str = "", limit: int = 100,
-                                refresh: int = 1):
-    """后台任务列表（跨会话）。
+# === 后台任务面板的实时推送（WS）==========================================
+# 面板进视图发 task_subscribe、切走发 task_unsubscribe；订阅期间服务端每 1.5s 比一次
+# 「任务目录指纹」，变了才推整份列表 —— 客户端不用高频轮询，多开几个标签也只扫一份。
+_TASK_WS_CLIENTS: set = set()
+_TASK_WATCH_TASK = None
+_TASK_WATCH_SIG = None
 
-    契约由任务自己写（wrapper / 脚本打点），服务端只读取 + 核对存活：
-    refresh=1（默认）会用「PID + 进程创建时间」核对，进程没了的活任务收敛成 interrupted。
-    """
+
+def _tasks_fingerprint():
+    """契约目录指纹：条数 + 最新 mtime + 总字节（任务每次 flush 都会变）。"""
+    root = _tasks_dir()
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return (0, 0.0, 0)
+    count, latest, total = 0, 0.0, 0
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            info = os.stat(os.path.join(root, name))
+        except OSError:
+            continue
+        count += 1
+        latest = max(latest, info.st_mtime)
+        total += info.st_size
+    return (count, round(latest, 3), total)
+
+
+def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
+                   refresh: int = 1) -> dict:
+    """任务列表载荷 —— HTTP 路由与 WS 推送共用一份，免得两边漂移。"""
     tr = _task_run()
     if tr is None:
-        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+        return {"ok": False, "error": "task_run 模块不可用", "tasks": [], "counts": {}}
     _bind_task_run(tr)
     try:
         items = tr.list_tasks(session_id=session_id or "",
-                              limit=max(1, min(500, int(limit))), refresh=bool(refresh))
+                              limit=max(1, min(500, int(limit or 100))), refresh=bool(refresh))
     except Exception as e:
-        return JSONResponse({"ok": False, "error": "读取任务失败：%s" % e}, status_code=500)
+        return {"ok": False, "error": "读取任务失败：%s" % e, "tasks": [], "counts": {}}
     if states:
-        want = {s.strip() for s in states.split(",") if s.strip()}
+        want = {one.strip() for one in states.split(",") if one.strip()}
         items = [d for d in items if (d.get("status") or "") in want]
     counts = {}
     for d in items:
@@ -9439,6 +9463,60 @@ async def list_background_tasks(session_id: str = "", states: str = "", limit: i
             "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
             "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
             "sessions": sorted({d.get("session_id") or "" for d in items} - {""})}
+
+
+async def _task_ws_broadcast(payload: dict) -> None:
+    """把任务列表推给所有订阅者；推不动（连接没了）就地摘掉。"""
+    dead = []
+    text = json.dumps(payload, ensure_ascii=False)
+    for sock in list(_TASK_WS_CLIENTS):
+        try:
+            await sock.send_text(text)
+        except Exception:
+            dead.append(sock)
+    for sock in dead:
+        _TASK_WS_CLIENTS.discard(sock)
+
+
+async def _task_watch_loop() -> None:
+    """订阅期间的后台扫描：指纹变了才推，没人订阅就自己退出。"""
+    global _TASK_WATCH_SIG
+    while _TASK_WS_CLIENTS:
+        sig = _tasks_fingerprint()
+        if sig != _TASK_WATCH_SIG:
+            _TASK_WATCH_SIG = sig
+            payload = _tasks_payload(limit=100, refresh=1)
+            if payload.get("ok"):
+                await _task_ws_broadcast(payload)
+        await asyncio.sleep(1.5)
+    _TASK_WATCH_SIG = None
+
+
+def _ensure_task_watch() -> None:
+    """有订阅者就把扫描任务拉起来（懒启动：没人看面板就不占 CPU）。"""
+    global _TASK_WATCH_TASK
+    if not _TASK_WS_CLIENTS:
+        return
+    if _TASK_WATCH_TASK is None or _TASK_WATCH_TASK.done():
+        try:
+            _TASK_WATCH_TASK = asyncio.get_running_loop().create_task(_task_watch_loop())
+        except RuntimeError:
+            _TASK_WATCH_TASK = None
+
+
+@app.get("/api/tasks")
+async def list_background_tasks(session_id: str = "", states: str = "", limit: int = 100,
+                                refresh: int = 1):
+    """后台任务列表（跨会话）。
+
+    契约由任务自己写（wrapper / 脚本打点），服务端只读取 + 核对存活：
+    refresh=1（默认）会用「PID + 进程创建时间」核对，进程没了的活任务收敛成 interrupted。
+    """
+    payload = _tasks_payload(session_id=session_id, states=states, limit=limit, refresh=refresh)
+    if not payload.get("ok"):
+        code = 503 if "不可用" in str(payload.get("error") or "") else 500
+        return JSONResponse({"ok": False, "error": payload.get("error")}, status_code=code)
+    return payload
 
 
 @app.get("/api/tasks/{task_id}")
@@ -16353,6 +16431,18 @@ async def ws_endpoint(ws: WebSocket):
                 }, ensure_ascii=False))
                 continue
 
+            # 后台任务面板订阅/退订：订阅当场回一份快照，之后由扫描循环按变化推
+            if msg_type == "task_subscribe":
+                _TASK_WS_CLIENTS.add(ws)
+                _ensure_task_watch()
+                snapshot = _tasks_payload(limit=100, refresh=1)
+                snapshot["type"] = "tasks"
+                await ws.send_text(json.dumps(snapshot, ensure_ascii=False))
+                continue
+            if msg_type == "task_unsubscribe":
+                _TASK_WS_CLIENTS.discard(ws)
+                continue
+
             sid = msg.get("session_id")
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
             session = _get_or_create_session(sid)
@@ -18470,6 +18560,7 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         # WS 断开 - 只断开 WS 引用，不杀 agent（agent 继续在后台运行）
         _detach_ws(ws)
+        _TASK_WS_CLIENTS.discard(ws)  # 任务面板订阅也要摘掉，免得往死连接推
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:

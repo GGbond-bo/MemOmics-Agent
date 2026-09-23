@@ -39,7 +39,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, taskFmtSec: taskFmtSec, taskStatusIcon: taskStatusIcon, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, taskFmtSec: taskFmtSec, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -56,6 +56,9 @@ global.clearInterval = function(id) { timers[id - 1] = null; };
 global.fetch = function() { return Promise.reject(new Error('harness 不联网')); };
 global.alert = function() {};
 global.confirm = function() { return true; };
+// T9：面板用全局 ws 发订阅消息（index.html 里那个聊天连接），这里给个假 socket
+global.WebSocket = { OPEN: 1 };
+global.ws = { readyState: 1, sent: [], send: function(t) { this.sent.push(t); } };
 const out = { timers: function() { return timers.filter(Boolean).length; }, store: store, P: null };
 out.P = require(process.argv[2]);
 module.exports = out;
@@ -108,7 +111,13 @@ def test_panel_mounted_in_shell():
         'id="task-detail"',
         "tasks: 'panel-tasks'",
         "'panel-tasks']",
-        "if (view === 'tasks') { loadTasks(true); } else { stopTaskPoll(); }",
+        "if (view === 'tasks') { loadTasks(true); taskSubscribe(); } else { stopTaskPoll(); taskUnsubscribe(); }",
+        # T9：面板靠 WS 订阅拿实时推送，切走退订；没订阅上才退回 2 秒轮询
+        "type: 'task_subscribe'",
+        "type: 'task_unsubscribe'",
+        "if (msg.type === 'tasks') {",
+        "_taskWsLive = true;",
+        "var ms = _taskWsLive ? 8000 : 2000;",
     ]:
         assert token in html, "index.html 少了挂载点：" + token
     # 面板必须只在任务视图里出现，别的视图的隐藏列表也得带上它

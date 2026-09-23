@@ -2190,6 +2190,13 @@ function setStatus(text, color) {
 // === 消息处理 ===
 function handleMessage(msg) {
 
+  // === 后台任务推送（面板订阅后由服务端按变化推，不用轮询）===
+  if (msg.type === 'tasks') {
+    _taskWsLive = true;
+    renderTaskList(msg);
+    if (_taskState.id) refreshTaskDetail();
+    return;
+  }
   // === 微信消息分发 ===
   if (msg.type === 'weixin_message' || msg.type === 'weixin_list' || msg.type === 'weixin_status') {
     handleWeixinMessage(msg);
@@ -6552,7 +6559,7 @@ function switchView(view) {
   if (view === 'context') refreshContextUsage();
   if (view === 'weixin') weixinRefresh();
   // T3：任务面板只在看得见的时候轮询，切走就停（别在后台白刷接口）
-  if (view === 'tasks') { loadTasks(true); } else { stopTaskPoll(); }
+  if (view === 'tasks') { loadTasks(true); taskSubscribe(); } else { stopTaskPoll(); taskUnsubscribe(); }
   if (view === 'chat') refreshInfoPanel();
 }
 
@@ -7284,6 +7291,7 @@ function toggleWeixinAgent() {
 // 关键参数、脚本正文、产物真假、日志尾部，跑着的任务还能就地取消（带令牌）。
 var _taskState = { timer: null, id: null, token: '' };
 var _taskLive = ['running', 'queued', 'paused', 'cancelling'];
+var _taskWsLive = false;  // WS 订阅上了就用推送，轮询退成 8 秒兜底
 
 function taskStatusIcon(st) {
   var m = { queued: '🕒', running: '🏃', paused: '⏸️', cancelling: '⏳', done: '✅', failed: '❌', cancelled: '🚫', interrupted: '⚠️' };
@@ -7305,11 +7313,34 @@ function stopTaskPoll() {
 
 function startTaskPoll() {
   stopTaskPoll();
+  // 订阅上 WS 就降到 8 秒兜底（真实变化走推送）；没订阅上维持 2 秒轮询。
+  var ms = _taskWsLive ? 8000 : 2000;
   _taskState.timer = setInterval(function() {
     var el = document.getElementById('panel-tasks');
     if (!el || el.style.display === 'none') { stopTaskPoll(); return; }
     loadTasks(false);
-  }, 2000);
+  }, ms);
+}
+
+// 面板进视图订阅、切走退订：订阅当场回快照，之后服务端只在契约变化时推。
+function taskSubscribe() {
+  _taskWsLive = false;
+  try {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'task_subscribe' }));
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function taskUnsubscribe() {
+  _taskWsLive = false;
+  try {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'task_unsubscribe' }));
+    }
+  } catch (e) {}
 }
 
 function loadTasks(force) {
