@@ -5,7 +5,8 @@
     POST /api/memory/write {"mode":"append","content":"一行"} -> 413
     {"error":"超出记忆限额：29557/10000 字符…","current":29530,"limit":10000}
 MEMORY.md 已 29530 字符、USER.md 已 22039 字符，而 server.py 把限额**硬编码**成
-10000（注释还声称"与 config.yaml 保持一致"），config.yaml 里其实写的是 30000。
+10000（注释还声称"与 config.yaml 保持一致"），config.yaml 里其实写的是 30000
+（2026-09-24 用户选择 C 方案，真机已提到 60000：29530 字符的记忆离顶格太近了）。
 => 记忆栏的「追加」「覆盖」在这台机器上 100% 失败：用户说"添加没有用"。
 
 这个文件锁死这条规则：**限额只认 config.yaml**，且绝不退回一个小数字。
@@ -120,14 +121,22 @@ def test_b1_append_works_on_a_file_already_over_10k(client, tmp_home, mem_token)
     assert r.json()["size"] == os.path.getsize(str(p))
 
 
-def test_b2_over_limit_is_413_and_writes_nothing(client, tmp_home, mem_token):
+def test_b2_over_limit_is_413_and_writes_nothing(monkeypatch, client, tmp_home, mem_token):
+    """超限额要 413 且一个字节都不写。
+
+    限额在这里固定成 30000（不读真机 config）——2026-09-24 真机限额已提到 60000，
+    29990 字符不再超限；把限额钉住，这条测试才不会随 config 漂移而失效。
+    """
+    monkeypatch.setattr(server, "_hermes_config_read",
+                        lambda: ({"memory": {"memory_char_limit": 30000,
+                                             "user_char_limit": 30000}}, {}))
     p = tmp_home / "memories" / "MEMORY.md"
     p.write_text("条" * 29990, encoding="utf-8")
     before = p.read_text(encoding="utf-8")
     r = _write(client, mem_token, "MEMORY.md", "x" * 40, "append")
     assert r.status_code == 413
     b = r.json()
-    assert b["limit"] == server._MEMORY_DEFAULT_LIMIT
+    assert b["limit"] == 30000
     assert b["current"] == 29990
     assert "config.yaml" in b["error"]          # 报错要能指路，不能只说"超限"
     assert p.read_text(encoding="utf-8") == before   # 一个字节都没写

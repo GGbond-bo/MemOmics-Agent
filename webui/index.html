@@ -1881,10 +1881,11 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     <!-- 记忆面板 -->
     <div id="panel-memory" style="display:none;">
       <div class="info-header">🧠 外置记忆 (跨会话)
-        <button onclick="governMemory()" title="重新扫描记忆条目并打分（L1/L2/L3 分级统计）" style="float:right;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧹 治理</button>
+        <button onclick="governMemory()" title="记忆体检（只读）：占用/余量、条目分层、可归档候选；确认后才归档（先整档备份，内容一字不删）" style="float:right;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧹 治理</button>
       </div>
       <div style="padding:10px 14px;">
         <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">Agent 的记忆会跨会话保留。可查看/编辑/追加。</div>
+        <div id="memory-usage" style="margin-bottom:10px;"></div>
         <div id="memory-entries" style="margin-bottom:10px;"></div>
         <div class="settings-group">
           <label>选择记忆文件</label>
@@ -12038,6 +12039,7 @@ async function loadMemory() {
     var r = await fetch('/api/memory');
     var d = await r.json();
     if (d.api_token) { memoryApiToken = d.api_token; }
+    renderMemoryUsage(d.usage);
     var entries = d.entries || [];
     var html = '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">记忆文件:</div>';
     entries.forEach(function(e) {
@@ -12111,22 +12113,100 @@ async function writeMemory(mode) {
   }
 }
 
+// 记忆占用条：限额真相源=config.yaml（服务端算好 pct/headroom 回传）
+function renderMemoryUsage(usage) {
+  var el = document.getElementById('memory-usage');
+  if (!el) return;
+  if (!usage) { el.innerHTML = ''; return; }
+  var html = '';
+  Object.keys(usage).forEach(function(n) {
+    var u = usage[n] || {};
+    var pct = (u.pct === null || u.pct === undefined) ? 0 : u.pct;
+    var color = pct >= 95 ? 'var(--danger)' : (pct >= 80 ? 'var(--warning)' : 'var(--success)');
+    html += '<div style="margin-bottom:6px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-light);margin-bottom:2px;">' +
+      '<span>' + escapeHtml(n) + '</span><span>' + (u.chars || 0) + ' / ' + (u.limit || 0) + ' 字符 (' + pct + '%)</span></div>' +
+      '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
+      '<div style="height:100%;width:' + Math.max(0, Math.min(100, pct)) + '%;background:' + color + ';"></div></div></div>';
+  });
+  el.innerHTML = html;
+}
+
+// 治理第一步：体检（只读）。2026-09-24 重做：老实现点了只重算索引，用户看到"治理没有用"。
 async function governMemory() {
   var result = document.getElementById('memory-result');
-  result.textContent = '治理中…';
+  result.textContent = '体检中…（只读，不改任何记忆）';
   result.style.color = 'var(--text-light)';
   try {
-    var r = await fetch('/api/memory/govern', { method: 'POST' });
+    var r = await fetch('/api/memory/govern', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({mode: 'dry', threshold: 0.7})
+    });
     var d = await r.json();
+    if (d.error && !d.candidates) {
+      result.style.color = 'var(--danger)';
+      result.textContent = '❌ ' + d.error;
+      return;
+    }
+    renderMemoryUsage(d.usage);
+    var f = d.files || {};
+    var lines = Object.keys(f).map(function(n) {
+      var x = f[n] || {};
+      return escapeHtml(n) + '：' + (x.chars || 0) + '/' + (x.limit || 0) + ' 字符（' + (x.pct === null ? '-' : x.pct) + '%，余 ' + (x.headroom || 0) + '）· ' + (x.entries || 0) + ' 条';
+    });
+    var cands = d.candidates || [];
+    var html = '<div style="font-size:12px;">🧪 <b>记忆体检（本次未改动任何内容）</b></div>' +
+      '<div style="font-size:11px;color:var(--text-light);margin:4px 0;">' + lines.join('<br>') + '</div>' +
+      '<div style="font-size:11px;color:var(--text-light);">分层 ' +
+        Object.keys(d.layers || {}).map(function(k){ return k + ':' + d.layers[k]; }).join(' ') + ' · ' + escapeHtml(d.note || '') + '</div>' +
+      '<div style="font-size:12px;margin-top:6px;">可归档（条目自标 imp ≤ ' + d.threshold + '）：<b>' + cands.length + '</b> 条，预计释放 <b>' + (d.freed_estimate || 0) + '</b> 字符' +
+        (d.skipped_too_short ? '（另有 ' + d.skipped_too_short + ' 条太短、换索引行腾不出地方，已跳过）' : '') + '</div>';
+    if (cands.length) {
+      html += '<div style="font-size:11px;color:var(--text-light);max-height:120px;overflow:auto;margin:6px 0;background:var(--bg);padding:6px;border-radius:4px;">' +
+        cands.slice(0, 12).map(function(c) {
+          return '· [' + escapeHtml(c.target) + '] imp=' + c.imp + ' ' + c.chars + ' 字符 · ' + escapeHtml((c.preview || '').slice(0, 40));
+        }).join('<br>') + (cands.length > 12 ? '<br>… 其余 ' + (cands.length - 12) + ' 条' : '') + '</div>' +
+        '<button class="save-btn" style="background:var(--warning);font-size:12px;" onclick="applyMemoryGovern(' + d.threshold + ')">归档这 ' + cands.length + ' 条（先备份，内容不删）</button>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--success);margin-top:6px;">✅ 没有可归档条目 —— 记忆里没有"自标低价值"的条目，不必动。</div>';
+    }
+    result.innerHTML = html;
+    result.style.color = 'var(--text)';
+  } catch(e) {
+    result.style.color = 'var(--danger)';
+    result.textContent = '❌ 网络错误: ' + e.message;
+  }
+}
+
+// 治理第二步：确认后归档（需要 token；服务端先备份再改，内容进 archive 永不删除）
+async function applyMemoryGovern(threshold) {
+  if (!confirm('归档 imp ≤ ' + threshold + ' 的低价值条目？\n\n· 会先把 MEMORY.md / USER.md / index.json 备份到 memories/.backup/\n· 归档内容一字不删，进 memories/archive/<月份>.md\n· 原位置只留一行索引，随时可回滚')) return;
+  var result = document.getElementById('memory-result');
+  result.textContent = '归档中…';
+  result.style.color = 'var(--text-light)';
+  try {
+    var r = await fetch('/api/memory/govern', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-Memory-Token': memoryApiToken},
+      body: JSON.stringify({mode: 'apply', threshold: threshold})
+    });
+    var d = await r.json();
+    if (r.status === 409) {
+      result.style.color = 'var(--danger)';
+      result.innerHTML = '⚠️ 已拦下：候选占比超过安全线（' + (d.guard && d.guard.ratio) + ' > ' + (d.guard && d.guard.limit) + '）—— 阈值可能写错了，本次一个字节未改。';
+      return;
+    }
     if (d.ok) {
+      var arch = d.archived || [];
       result.style.color = 'var(--success)';
-      var stats = d.stats || {};
-      var statStr = Object.keys(stats).map(function(k) { return k + ':' + stats[k]; }).join(' ');
-      result.textContent = '✅ 治理完成 · 共 ' + d.total + ' 条 · ' + statStr;
+      result.innerHTML = '✅ 已归档 <b>' + arch.length + '</b> 条，释放 <b>' + (d.freed || 0) + '</b> 字符 · MEMORY.md ' +
+        ((d.before || {})['MEMORY.md'] || 0) + ' → ' + ((d.after || {})['MEMORY.md'] || 0) + ' 字符' +
+        '<div style="font-size:11px;color:var(--text-light);margin-top:4px;">备份：' + escapeHtml(d.backup || '') + '<br>归档：' + escapeHtml(d.archive_file || '') + '（内容一字未删）</div>';
       loadMemory();
     } else {
       result.style.color = 'var(--danger)';
-      result.textContent = '❌ ' + (d.error || '治理失败');
+      result.textContent = '❌ ' + (d.error || '归档失败');
     }
   } catch(e) {
     result.style.color = 'var(--danger)';

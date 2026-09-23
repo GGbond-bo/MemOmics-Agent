@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import time
 
-from .memory_score import build_index, parse_entries, score_entry, decide_layer
+from .memory_score import (build_index, parse_entries, parse_meta, score_entry,
+                           decide_layer)
 
 MEMORIES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "hermes_home", "memories")
@@ -23,6 +26,18 @@ INDEX_PATH = os.path.join(MEMORIES_DIR, "index.json")
 ARCHIVE_DIR = os.path.join(MEMORIES_DIR, "archive")
 MEMORY_FILE = os.path.join(MEMORIES_DIR, "MEMORY.md")
 USER_FILE = os.path.join(MEMORIES_DIR, "USER.md")
+BACKUP_DIR = os.path.join(MEMORIES_DIR, ".backup")
+
+# 2026-09-24: 条目自称的低价值标注（内容前缀，不是 META_RE 元数据）。
+# 实测本机 219 条里，全部分数落在 0.325~0.475，L1→L2 的 score<0.3 规则永远不触发
+# → 治理永远搬不动东西，而记忆文件已经 98% 满。所以补一条"按自知重要性归档"的通道：
+# 只归档 agent 自己在条目开头写了 [imp:0.6]/[imp:0.7] 的条目（它自己都标了低价值）。
+_INLINE_IMP_RE = re.compile(r"^\[imp:([0-9.]+)\]")
+# 单次归档不得超过条目总数的 60%：防参数写错一次把记忆掏空（要越过得显式 force）
+MAX_ARCHIVE_RATIO = 0.6
+# 归档一条至少得真腾出这么多字符，否则不动（索引行本身也要占地方：
+# 短条目换索引行反而会变长 —— 治理的目的是腾空间，腾不出来就别碰）
+MIN_FREE_GAIN = 40
 
 
 def _facts_lookup():
@@ -245,3 +260,203 @@ def _replace_entry_with_index_line(path: str, entry_text: str, ent: dict):
                 f.write(new_text)
     except Exception as e:
         print(f"[MemoryGovernor] 替换索引行失败: {e}")
+# ---------------------------------------------------------------------------
+# 2026-09-24 追加：体检（只读）+ 按"自知重要性"归档（真腾地方、永不删除内容）
+#
+# 背景（真机实测）：run_governance 的唯一流转判据是 score<0.3，而本机 219 条记忆
+# 分数全在 0.325~0.475 → 0 条达标 → 治理点了等于没点；同时 MEMORY.md 已 29530/30000
+# 字符，写什么都顶格。这里补一条显式、可解释、可回滚的通道。
+# ---------------------------------------------------------------------------
+
+
+def _read_text(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+def inline_importance(entry_text):
+    """条目开头的 [imp:x] 自称重要性；带正式元数据或没标 → None。
+
+    为什么排掉带 META_RE 元数据的条目：那些归 run_governance 管（有 pinned 保底），
+    两条通道各管一段，避免"用户铁律被人肉标了低分"被误归档。
+    """
+    text = (entry_text or "").strip()
+    if not text:
+        return None
+    if parse_meta(text):
+        return None
+    m = _INLINE_IMP_RE.match(text)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except Exception:
+        return None
+
+
+def _index_line(ent_text, imp, kind, archive_name):
+    """归档后留在原文件里的一行索引（前缀必须是 [L3→外置]，parse_entries 会跳过它）。
+
+    刻意写短：它是留着占地方的成本，摘要 36 字够 agent 知道"这条在归档里"，要细节
+    就去读 archive/<月>.md（那里一字不少）。
+    """
+    summary = " ".join(ent_text.split())[:36]
+    return "[L3→外置] imp=%s %s (%s)" % (imp, summary, archive_name)
+
+
+def survey(threshold=0.7, limits=None):
+    """只读体检：占用/余量、分层统计、分数分布、可归档候选、预计释放字符。零改动。"""
+    limits = limits or {}
+    archive_name = time.strftime("%Y-%m") + ".md"
+    files, candidates = {}, []
+    total_entries = 0
+    skipped_short = 0
+    for kind, path in (("memory", MEMORY_FILE), ("user", USER_FILE)):
+        name = os.path.basename(path)
+        text = _read_text(path)
+        entries = parse_entries(text)
+        total_entries += len(entries)
+        limit = limits.get(name) or 0
+        files[name] = {
+            "chars": len(text),
+            "entries": len(entries),
+            "limit": limit,
+            "pct": round(100.0 * len(text) / limit, 1) if limit else None,
+            "headroom": (limit - len(text)) if limit else None,
+        }
+        for i, ent in enumerate(entries):
+            imp = inline_importance(ent)
+            if imp is None or imp > threshold + 1e-9:
+                continue
+            line = _index_line(ent, imp, kind, archive_name)
+            if len(ent) - len(line) < MIN_FREE_GAIN:
+                skipped_short += 1
+                continue
+            candidates.append({
+                "target": name,
+                "index": i,
+                "imp": imp,
+                "chars": len(ent),
+                "freed": max(0, len(ent) - len(line)),
+                "preview": " ".join(ent.split())[:80],
+            })
+    idx = build_index(MEMORY_FILE, USER_FILE, _facts_lookup())
+    scores = sorted(float(v.get("score", 0.0) or 0.0) for v in idx["entries"].values())
+    freed = sum(c["freed"] for c in candidates)
+    ratio = (len(candidates) / float(total_entries)) if total_entries else 0.0
+    return {
+        "threshold": threshold,
+        "files": files,
+        "layers": idx.get("stats", {}),
+        "total_entries": total_entries,
+        "score": {
+            "min": scores[0] if scores else None,
+            "median": scores[len(scores) // 2] if scores else None,
+            "max": scores[-1] if scores else None,
+            "below_0_3": sum(1 for s in scores if s < 0.3),
+        },
+        "candidates": candidates,
+        "skipped_too_short": skipped_short,
+        "min_free_gain": MIN_FREE_GAIN,
+        "freed_estimate": freed,
+        "guard": {"ratio": round(ratio, 3), "limit": MAX_ARCHIVE_RATIO,
+                  "ok": ratio <= MAX_ARCHIVE_RATIO or not candidates},
+        "note": ("L1→L2 自动下沉需要 score<0.3，当前达标 %d 条"
+                 % sum(1 for s in scores if s < 0.3)),
+    }
+
+
+def _backup_files(ts):
+    """整档备份 MEMORY.md / USER.md / index.json 到 memories/.backup/<ts>/。"""
+    dest = os.path.join(BACKUP_DIR, ts)
+    os.makedirs(dest, exist_ok=True)
+    for path in (MEMORY_FILE, USER_FILE, INDEX_PATH):
+        if os.path.isfile(path):
+            shutil.copy2(path, os.path.join(dest, os.path.basename(path)))
+    return dest
+
+
+def archive_low_value(threshold=0.7, dry_run=True, limits=None, force=False):
+    """把"自己标了低价值"的条目归档到 archive/YYYY-MM.md，并在原文件留一行索引。
+
+    - dry_run=True（默认）：只出报告，一个字节都不写。
+    - apply：先整档备份到 memories/.backup/<ts>/，再归档；内容永不删除（archive 只增）。
+    - 单次归档超过条目总数 60% 时拒绝执行（要显式 force=True）。
+    返回 {ok, dry_run, threshold, archived, freed, before, after, backup, ...}
+    """
+    limits = limits or {}
+    sv = survey(threshold, limits)
+    cands = sv["candidates"]
+    total = sv["total_entries"]
+    report = {
+        "ok": True, "dry_run": bool(dry_run), "threshold": threshold,
+        "archived": list(cands), "freed": sv["freed_estimate"],
+        "before": {k: v["chars"] for k, v in sv["files"].items()},
+        "after": {}, "backup": None, "guard": sv["guard"],
+        "archive_file": os.path.join(ARCHIVE_DIR, time.strftime("%Y-%m") + ".md"),
+        # 体检字段整包带上：面板一次请求就能画占用条 + 候选清单 + 分层，
+        # 不用再打第二个接口（真机踩过：接口只回 archived，面板读 candidates 显示"0 条"）
+        "files": sv["files"], "layers": sv["layers"], "score": sv["score"],
+        "total_entries": sv["total_entries"], "candidates": list(cands),
+        "freed_estimate": sv["freed_estimate"],
+        "skipped_too_short": sv["skipped_too_short"],
+        "min_free_gain": sv["min_free_gain"], "note": sv["note"],
+    }
+    if not cands:
+        report["after"] = dict(report["before"])
+        report["note"] = "没有可归档条目（严格小于等于阈值的 [imp:x] 条目）"
+        return report
+    if not sv["guard"]["ok"] and not force:
+        report["ok"] = False
+        report["guard_blocked"] = True
+        report["note"] = ("候选占 %.0f%% > 上限 %.0f%%，已拒绝执行（确认无误会重跑并带 force）"
+                          % (100.0 * sv["guard"]["ratio"], 100.0 * MAX_ARCHIVE_RATIO))
+        report["after"] = dict(report["before"])
+        return report
+    if dry_run:
+        report["after"] = {
+            k: v["chars"] - sum(c["freed"] for c in cands if c["target"] == k)
+            for k, v in sv["files"].items()
+        }
+        return report
+
+    # ---- apply ----
+    report["backup"] = _backup_files(time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    by_target = {}
+    for c in cands:
+        by_target.setdefault(c["target"], []).append(c)
+    for kind, path in (("memory", MEMORY_FILE), ("user", USER_FILE)):
+        name = os.path.basename(path)
+        picks = by_target.get(name)
+        if not picks:
+            continue
+        text = _read_text(path)
+        news = text
+        for c in picks:
+            ent = None
+            for e in parse_entries(text):
+                if (" ".join(e.split())[:80] == c["preview"]):
+                    ent = e
+                    break
+            if ent is None:
+                continue
+            with open(report["archive_file"], "a", encoding="utf-8") as f:
+                f.write("\n---\n[%s] imp=%s archived=%s threshold=%s\n%s\n"
+                        % (kind, c["imp"], stamp, threshold, ent))
+            news = news.replace(ent, _index_line(
+                ent, c["imp"], kind, os.path.basename(report["archive_file"])), 1)
+        if news != text:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(news)
+    init_index(verbose=False)
+    report["after"] = {name: len(_read_text(os.path.join(MEMORIES_DIR, name)))
+                       for name in report["before"]}
+    report["freed"] = sum(max(0, report["before"][k] - report["after"][k])
+                          for k in report["before"])
+    return report
+

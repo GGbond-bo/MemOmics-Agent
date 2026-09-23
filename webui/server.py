@@ -15687,15 +15687,66 @@ def _memory_char_limit(filename: str) -> int:
         return _MEMORY_DEFAULT_LIMIT
 
 
-@app.post("/api/memory/govern")
-async def memory_govern():
-    """记忆治理：重新扫描打分并生成索引（2026-08-14）。
+def _memory_usage():
+    """记忆文件占用/限额（面板占用条 + 治理体检共用；限额真相源=config.yaml）。"""
+    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    out = {}
+    for name in ("MEMORY.md", "USER.md"):
+        path = os.path.join(mem_dir, name)
+        chars = 0
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    chars = len(f.read())
+            except Exception:
+                chars = 0
+        limit = _memory_char_limit(name)
+        out[name] = {"chars": chars, "limit": limit,
+                     "pct": round(100.0 * chars / limit, 1) if limit else None,
+                     "headroom": max(0, limit - chars)}
+    return out
 
-    只读操作（不迁移条目）——L1/L2/L3 实际流转需显式 apply 才执行。"""
+
+@app.post("/api/memory/govern")
+async def memory_govern(payload: dict = None, request: Request = None):
+    """记忆治理（2026-09-24 重做 —— 原实现只重算索引，点了等于没点）。
+
+    mode="dry"（默认，只读）：占用/余量、分层、分数分布、可归档候选、预计释放字符。
+    mode="apply"：把"自己标了低价值"（条目开头 [imp:x] ≤ threshold）的条目归档到
+        memories/archive/YYYY-MM.md，原位置留一行索引；动前整档备份到
+        memories/.backup/<ts>/；内容永不删除。apply 需要 X-Memory-Token。
+    旧前端不带 body 调用 → 走 dry，纯只读，向后兼容。
+    """
+    payload = payload or {}
+    mode = str(payload.get("mode", "dry")).lower()
+    try:
+        threshold = float(payload.get("threshold", 0.7))
+    except Exception:
+        threshold = 0.7
+    limits = {k: v["limit"] for k, v in _memory_usage().items()}
     try:
         from memomics.memory_governance import governor
-        idx = governor.init_index(verbose=False)
-        return {"ok": True, "stats": idx["stats"], "total": sum(idx["stats"].values())}
+        if mode in ("apply", "run"):
+            _token = (request.headers.get("x-memory-token", "") if request else "") \
+                or str(payload.get("token", ""))
+            if _token != _memory_api_token():
+                return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"},
+                                    status_code=401)
+            _target = os.path.join(HERMES_HOME_DIR, "memories", "MEMORY.md")
+            _denied = _sandbox_precheck("fs.write", _target, [MEMOMICS_DIR], "memory.govern")
+            if _denied:
+                return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
+            rep = governor.archive_low_value(threshold=threshold, dry_run=False,
+                                             limits=limits, force=bool(payload.get("force")))
+            rep["mode"] = "apply"
+        else:
+            rep = governor.archive_low_value(threshold=threshold, dry_run=True,
+                                             limits=limits)
+            rep["mode"] = "dry"
+        rep["usage"] = _memory_usage()
+        if not rep.get("ok", True):
+            return JSONResponse(rep, status_code=409)
+        return rep
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -15704,7 +15755,8 @@ async def memory_govern():
 async def get_memory():
     """读取外置记忆内容（响应携带写 API token，供同源页面使用）"""
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
-    result = {"entries": [], "api_token": _memory_api_token()}
+    result = {"entries": [], "api_token": _memory_api_token(),
+              "usage": _memory_usage()}
     # MEMORY.md — agent 自己的记忆
     memory_md = os.path.join(mem_dir, "MEMORY.md")
     if os.path.exists(memory_md):
