@@ -7782,6 +7782,18 @@ async def rename_results_dir(sid: str, body: dict = None):
     if output_root and os.path.isdir(os.path.dirname(output_root)):
         user_dir = os.path.join(output_root, new_name)
 
+    # P2-4：这一处会真的写（results/ 下的主目录）也真的删（用户目录里的同名目录），两类动作都过门。
+    # 观察模式只记账；强制 fs.write/fs.delete 后，越出应用数据根的用户目录会被拦下——
+    # 老逻辑是"父目录存在就照删照拷"，用户传个路径就能删掉那底下同名目录，太宽了。
+    _app_roots = [RESULTS_DIR, WORK_DIR, MEMOMICS_DIR]
+    _denied = _sandbox_precheck("fs.write", new_dir, _app_roots, "sessions.rename_results")
+    if not _denied and user_dir:
+        _denied = _sandbox_precheck("fs.delete" if os.path.exists(user_dir) else "fs.write",
+                                    user_dir, _app_roots, "sessions.rename_results.user_root")
+    if _denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % _denied},
+                            status_code=403)
+
     # 重命名目录 (results/ 下的主目录)
     if os.path.abspath(old_dir) != os.path.abspath(new_dir):
         if os.path.isdir(old_dir):
@@ -8290,6 +8302,13 @@ async def _purge_session_results(sid: str, extra_paths=None) -> dict:
     for ap in targets:
         err = ""
         ok = False
+        # P2-4：删动作过门（目标本来就必须是会话自己的 results 目录；强制 fs.delete 后越界即拦，
+        # 并且在批量删除里如实报成 failed，而不是整个接口 500）
+        _denied = _sandbox_precheck("fs.delete", ap, [RESULTS_DIR], "sessions.purge_results")
+        if _denied:
+            failed.append({"path": ap.replace("\\", "/"),
+                           "error": "sandbox denied: %s" % _denied})
+            continue
         for attempt in range(3):
             try:
                 await loop.run_in_executor(None, _force_rmtree, ap)
@@ -9222,6 +9241,10 @@ async def upload_image(file: UploadFile = File(...)):
     uid = str(uuid.uuid4())[:8]
     fname = f"{ts}_{uid}{ext}"
     fpath = os.path.join(_uploads_dir, fname)
+    # P2-4：写盘前过沙箱门（观察模式不拦；强制 fs.write 且越界/无授权 -> 403，一个字节都不落盘）
+    _denied = _sandbox_precheck("fs.write", fpath, [_uploads_dir], "upload.image")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
     with open(fpath, "wb") as f:
         f.write(contents)
     url = f"/uploads/{fname}"
@@ -9285,6 +9308,57 @@ _PROXY = "http://127.0.0.1:6478"
 _UPDATE_HOST = "api.github.com"
 
 
+def _sandbox_env_grants() -> None:
+    """运维用环境变量显式声明的可写/可删目录（渐进强制下的逃生舱，幂等）。
+
+    MEMOMICS_SANDBOX_GRANT_DIRS="D:/Desktop;E:/out"（分号或 os.pathsep 分隔）。
+    为什么要有它：沙箱的 TTL 授权故意没有远程 API（线上临时开授权就是开后门），
+    所以"我就是要往这个目录写"必须由启动环境显式声明，且理由进审计、随时可查。
+    只在对应动作被强制时才打；观察模式下一律不动。
+    """
+    try:
+        from webui import sandbox as _sb
+        raw = os.environ.get("MEMOMICS_SANDBOX_GRANT_DIRS", "")
+        if not raw.strip():
+            return
+        actions = [a for a in ("fs.write", "fs.delete") if _sb.enforce_action(a)]
+        if not actions:
+            return
+        _sb.purge_expired()
+        dirs = [d.strip() for d in re.split(r"[;%s]" % re.escape(os.pathsep), raw) if d.strip()]
+        have = {(g.get("action"), os.path.normcase(g.get("resource") or ""))
+                for g in _sb.grants() if (g.get("ttl_left") or 0) > 0}
+        for d in dirs:
+            ap = os.path.abspath(os.path.expanduser(d))
+            for act in actions:
+                if (act, os.path.normcase(ap)) in have:
+                    continue
+                _sb.grant(act, ap, ttl_s=7 * 86400.0,
+                          reason="运维环境变量声明：MEMOMICS_SANDBOX_GRANT_DIRS", writable=True)
+    except Exception as _e:
+        print("[WARN] 可写目录授权失败: %s" % _e)
+
+
+def _sandbox_precheck(action: str, path, roots, source: str = "server") -> str:
+    """写/删类集成点的统一门：返回 "" 放行；非空 = 拒绝理由（调用方回 403）。
+
+    与 security.resolve_within_roots 的区别很重要：这里**不做包含判定**——
+    包含判定是老代码自己的规矩（roots 只当作策略提示交给沙箱）。
+    观察模式（默认）下沙箱不拦人，老行为一个字节都不变；
+    只有该动作被显式强制（MEMOMICS_SANDBOX_ENFORCE=fs.write 之类）才可能返回理由。
+    沙箱自身的任何异常都被吞掉：安全组件宁可少拦，也绝不能把正常功能打挂。
+    """
+    try:
+        import webui.sandbox as _sb
+        _sandbox_env_grants()
+        d = _sb.gate(action, str(path), roots=[str(r) for r in roots], source=source)
+        if d.blocked:
+            return "%s (%s)" % (d.code, d.reason)
+    except Exception:
+        return ""
+    return ""
+
+
 def _sandbox_ensure_app_grants() -> None:
     """强制模式下给自己人打窄授权：只授权固定主机、只授权 net.fetch、理由写清、全进审计。
 
@@ -9295,7 +9369,7 @@ def _sandbox_ensure_app_grants() -> None:
     """
     try:
         from webui import sandbox as _sb
-        if not (_sb.enabled() and _sb.enforce_enabled()):
+        if not _sb.enforce_action("net.fetch"):
             return
         _sb.purge_expired()
         have = {g.get("resource") for g in _sb.grants()
@@ -14975,6 +15049,12 @@ def _revert_file_change(session, change_id):
     cur_sha = _sha12("" if kind == "missing" else current)
     if cur_sha != (rec.get("sha_after") or ""):
         return 409, {"error": "文件在本次改动之后又被修改过，拒绝覆盖（请先人工确认）"}
+    # P2-4：回滚既是"写回去"也可能是"删掉它"，按真实动作分别过门
+    # （观察模式不拦；强制 fs.write/fs.delete 后越界或无授权 -> 403，绝不半途写坏文件）
+    _act = "fs.write" if rec.get("_before_exists") else "fs.delete"
+    _denied = _sandbox_precheck(_act, path, [_SERVER_ROOT], "changes.revert")
+    if _denied:
+        return 403, {"error": "sandbox denied: %s" % _denied}
     try:
         if not rec.get("_before_exists"):
             # 改动前文件不存在 → 回滚 = 删除它

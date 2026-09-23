@@ -46,6 +46,7 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_p2_2_thread_state.py"),
     os.path.join("webui", "tests", "test_p2_3_sandbox.py"),
     os.path.join("webui", "tests", "test_p2_3b_netguard.py"),
+    os.path.join("webui", "tests", "test_p2_4_partial_enforce.py"),
 ]
 
 

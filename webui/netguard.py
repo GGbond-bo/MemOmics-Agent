@@ -33,7 +33,7 @@ try:                                    # 包内导入（webui 作为包）
 except ImportError:                     # 直接以脚本/单文件方式运行
     import sandbox as _sandbox          # type: ignore
 
-VERSION = "p2-3b.1"
+VERSION = "p2-3b.2"
 
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024
@@ -232,7 +232,9 @@ def fetch(url: str, *, action: str = "net.fetch", timeout: float = DEFAULT_TIMEO
     meth = (method or ("POST" if data is not None else "GET")).upper()
     hops = 0
     while True:
-        mode_enforce = _sandbox.enforce_enabled() and _sandbox.enabled()
+        # 渐进上线：只有 net.fetch 自己被强制时才钉 IP 直连；
+        # 若只强制了 fs.* 而 net.fetch 还在观察，就走回老路径（不改变出网行为）。
+        mode_enforce = _sandbox.enforce_action(action) if _sandbox is not None else False
         d = _decide(action, cur, sid, source)
         eff_proxy = _effective_proxy(cur, proxy)
         if mode_enforce and d.allow and not eff_proxy:

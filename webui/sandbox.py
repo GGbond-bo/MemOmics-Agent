@@ -24,6 +24,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -32,7 +33,7 @@ from collections import deque
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 from urllib.parse import urlsplit, urlunsplit
 
-VERSION = "p2-3.1"
+VERSION = "p2-4.1"
 
 FS_ACTIONS = ("fs.read", "fs.write", "fs.list", "fs.delete")
 #: net.fetch = 出网拉取公网资源（默认拒绝，需要授权）；
@@ -46,6 +47,9 @@ ACTIONS = FS_ACTIONS + NET_ACTIONS + OTHER_ACTIONS
 READ_LIKE = {"fs.read", "fs.list", "net.fetch", "net.local"}
 #: 写语义的动作（需要可写授权）
 WRITE_LIKE = {"fs.write", "fs.delete"}
+
+#: 强制模式的"全量"写法：老语义（=1）必须继续等于"全部都拦"，不许因为渐进上线而变味。
+_ENFORCE_ALL_TOKENS = ("1", "true", "yes", "on", "all", "*")
 
 DEFAULT_TTL_S = 3600.0
 DEFAULT_MAX_AUDIT = 2000
@@ -306,7 +310,9 @@ class SandboxProvider:
               pinned_ips: Optional[Sequence[str]] = None, sid: str = "",
               source: str = "") -> Decision:
         """纯策略判定：只算不拦。任何内部异常都变成拒绝（fail-closed）。"""
-        mode = "enforce" if enforce_enabled() else "observe"
+        # 渐进上线：是否真拦是**按动作**决定的（fs.write 可以先强制，fs.read 继续观察），
+        # 所以 mode 必须落在这一次的 action 上，而不是全局一个开关。
+        mode = "enforce" if enforce_action(action) else "observe"
         try:
             if action not in ACTIONS:
                 return Decision(action, _safe_resource(resource), False, "unknown_action",
@@ -510,6 +516,8 @@ class SandboxProvider:
             items = list(self._audit)[-max(1, int(limit)):][::-1]
             out: Dict[str, Any] = {"name": self.name, "enabled": enabled(),
                                    "enforce": enforce_enabled(), "mode": sandbox_mode(),
+                                   "enforce_actions": sorted(enforce_actions()),
+                                   "enforce_unknown": enforce_unknown(),
                                    "total": len(self._audit), "max": self._max_audit,
                                    "counts": dict(self.counts), "items": items,
                                    "grants": self.grants(), "version": VERSION}
@@ -522,6 +530,8 @@ class SandboxProvider:
         with self._lock:
             return {"name": self.name, "enabled": enabled(), "enforce": enforce_enabled(),
                     "mode": sandbox_mode(),
+                    "enforce_actions": sorted(enforce_actions()),
+                    "enforce_unknown": enforce_unknown(),
                     "counts": dict(self.counts), "audited": len(self._audit),
                     "max": self._max_audit, "grants": len(self._grants),
                     "codes": len(self._codes), "actions": list(ACTIONS),
@@ -557,15 +567,70 @@ def enabled() -> bool:
     return os.environ.get("MEMOMICS_SANDBOX", "1") not in ("0", "false", "no", "off")
 
 
+def _parse_enforce(raw: str) -> Tuple[frozenset, List[str]]:
+    """把强制配置解析成 (动作集合, 没认出来的词)。认不出来必须能看见，不能静默降级。"""
+    out: set = set()
+    unknown: List[str] = []
+    for token in re.split(r"[,\s;]+", (raw or "").strip().lower()):
+        if not token or token in ("0", "false", "no", "off"):
+            continue
+        if token in _ENFORCE_ALL_TOKENS:
+            return frozenset(ACTIONS), unknown
+        hit = False
+        for a in ACTIONS:
+            if a == token or (token.endswith(".*") and a.startswith(token[:-1])):
+                out.add(a)
+                hit = True
+        if not hit:
+            unknown.append(token)
+    return frozenset(out), unknown
+
+
+def _enforce_raw() -> str:
+    return "%s,%s" % (os.environ.get("MEMOMICS_SANDBOX_ENFORCE", ""),
+                      os.environ.get("MEMOMICS_SANDBOX_ENFORCE_ACTIONS", ""))
+
+
+def enforce_actions() -> frozenset:
+    """当前**真正会拦**的动作集合（渐进上线的唯一开关）。
+
+    - `MEMOMICS_SANDBOX_ENFORCE=1`（或 true/yes/on/all/*）→ 全部动作，老语义不变；
+    - 否则按逗号分隔写动作名：`fs.write,fs.delete,net.fetch`，也认 `fs.*` / `net.*`；
+    - `MEMOMICS_SANDBOX_ENFORCE_ACTIONS` 与它取并集（两个名字都认，写错一个不至于静默失效）；
+    - `MEMOMICS_SANDBOX=0` 时一律为空：整体关闭优先于任何强制配置。
+    """
+    if not enabled():
+        return frozenset()
+    return _parse_enforce(_enforce_raw())[0]
+
+
+def enforce_unknown() -> List[str]:
+    """强制配置里没认出来的词（拼错动作名时，审计里必须看得见，而不是悄悄变成观察模式）。"""
+    if not enabled():
+        return []
+    return _parse_enforce(_enforce_raw())[1]
+
+
+def enforce_action(action: str) -> bool:
+    """这一个动作现在会不会真的拦。集成点判断"我这层要不要拦"只该问它。"""
+    return action in enforce_actions()
+
+
 def enforce_enabled() -> bool:
-    return os.environ.get("MEMOMICS_SANDBOX_ENFORCE", "") not in ("", "0", "false", "no")
+    """是否处于"有动作会被真拦"的状态（全量强制的老语义是它的子集）。"""
+    return bool(enforce_actions())
 
 
 def sandbox_mode() -> str:
-    """一句话说清当前状态：disabled（整体关）/ enforce（真拦）/ observe（只记账）。"""
+    """一句话说清当前状态：
+    disabled（整体关）/ observe（只记账）/ partial（分动作强制）/ enforce（全部都拦）。
+    """
     if not enabled():
         return "disabled"
-    return "enforce" if enforce_enabled() else "observe"
+    acts = enforce_actions()
+    if not acts:
+        return "observe"
+    return "enforce" if acts >= set(ACTIONS) else "partial"
 
 
 def grant(action: str, resource: str, ttl_s: Optional[float] = None, reason: str = "",
@@ -615,6 +680,7 @@ __all__ = [
     "READ_LIKE", "WRITE_LIKE", "DEFAULT_TTL_S", "DEFAULT_MAX_AUDIT",
     "SandboxDenied", "Grant", "Decision", "SandboxProvider",
     "classify_ip", "provider", "set_provider", "enabled", "enforce_enabled",
+    "enforce_actions", "enforce_action", "enforce_unknown",
     "grant", "revoke", "grants", "purge_expired", "check", "gate", "require",
     "audit", "stats", "reset",
 ]
