@@ -15664,8 +15664,27 @@ def _memory_api_token() -> str:
         pass
     return _tok
 
-# 记忆文件限额（与 hermes_home/config.yaml memory 段保持一致）
-_MEMORY_CHAR_LIMITS = {"USER.md": 10000, "MEMORY.md": 10000}
+# 记忆文件限额：真相源是 hermes_home/config.yaml 的 memory_char_limit / user_char_limit
+# （Hermes MemoryStore 用的就是这两个数）。
+# 2026-09-23 修：原来硬编码 10000，而 config.yaml 写的是 30000 —— 于是记忆栏的
+# 「追加/覆盖」在这台机器上 100% 被 413 挡死（MEMORY.md 早已 29530 字符），
+# 用户看到的就是"添加完全没用"。注释当时声称"与 config 保持一致"，其实从来没读过 config。
+_MEMORY_LIMIT_KEYS = {"USER.md": "user_char_limit", "MEMORY.md": "memory_char_limit"}
+_MEMORY_DEFAULT_LIMIT = 30000
+
+
+def _memory_char_limit(filename: str) -> int:
+    """取记忆文件限额：config.yaml 优先，读不到就退回默认值（绝不再硬编码一个小数）。"""
+    _name = os.path.basename(str(filename or "MEMORY.md"))
+    _key = _MEMORY_LIMIT_KEYS.get(_name, "memory_char_limit")
+    try:
+        _cfg, _raw = _hermes_config_read()
+        _mem = (_cfg or {}).get("memory") or {}
+        _val = _mem.get(_key) or _mem.get("memory_char_limit") or _MEMORY_DEFAULT_LIMIT
+        _val = int(_val)
+        return _val if _val > 0 else _MEMORY_DEFAULT_LIMIT
+    except Exception:
+        return _MEMORY_DEFAULT_LIMIT
 
 
 @app.post("/api/memory/govern")
@@ -15719,8 +15738,8 @@ async def write_memory(payload: dict, request: Request):
     if not target.endswith(".md"):
         return JSONResponse({"error": "Only .md files allowed"}, status_code=400)
     file_path = os.path.join(mem_dir, os.path.basename(target))
-    # 限额检查（防记忆无限膨胀，对齐 MemoryStore char limit）
-    _limit = _MEMORY_CHAR_LIMITS.get(os.path.basename(target), 10000)
+    # 限额检查（防记忆无限膨胀；数值与 Hermes MemoryStore 同源：config.yaml）
+    _limit = _memory_char_limit(target)
     _existing = ""
     if mode != "overwrite" and os.path.exists(file_path):
         with open(file_path, encoding="utf-8", errors="replace") as f:
@@ -15728,9 +15747,15 @@ async def write_memory(payload: dict, request: Request):
     _new_total = len((_existing + "\n\n" + content) if _existing else content)
     if _new_total > _limit:
         return JSONResponse({
-            "error": f"超出记忆限额：{_new_total}/{_limit} 字符。请先删除/压缩旧条目再写入。",
+            "error": (f"超出记忆限额：{_new_total}/{_limit} 字符"
+                      f"（限额取自 hermes_home/config.yaml 的 memory_char_limit / user_char_limit）。"
+                      f"请先删除或压缩旧条目，或用「🧹 治理」归档低价值条目再写入。"),
             "current": len(_existing), "limit": _limit,
         }, status_code=413)
+    # P2-4：写动作过沙箱门（观察模式不拦；强制 fs.write 后越界/无授权 -> 403 且不落盘）
+    _denied = _sandbox_precheck("fs.write", file_path, [MEMOMICS_DIR], "memory.write")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
     if mode == "overwrite":
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -15751,6 +15776,10 @@ async def delete_memory(filename: str, request: Request):
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
     file_path = os.path.join(mem_dir, os.path.basename(filename))
     if os.path.exists(file_path):
+        # P2-4：删动作过沙箱门（观察模式不拦；强制 fs.delete 后越界/无授权 -> 403）
+        _denied = _sandbox_precheck("fs.delete", file_path, [MEMOMICS_DIR], "memory.delete")
+        if _denied:
+            return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
         os.remove(file_path)
         return {"ok": True}
     return JSONResponse({"error": "Not found"}, status_code=404)
