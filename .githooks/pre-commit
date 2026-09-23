@@ -33,9 +33,11 @@ echo "[skills-gate] 暂存区涉及技能面文件，跑门禁："
 printf '%s\n' "$MATCHED" | sed 's/^/    /'
 
 # 选解释器：优先仓库 venv（依赖齐全），否则退到 PATH 上的 python
+# 用 -f 而不是 -x：Windows 上 MSYS 的 -x 对 .exe 判定不稳（实测选不中 venv，
+# 退到商店垫片 python -> 没 pytest -> 门禁把每次提交都拦下）。能不能跑由门禁自证。
 PY=""
 for cand in ".venv/Scripts/python.exe" ".venv/bin/python" ".venv/bin/python3"; do
-    if [ -x "$cand" ]; then PY="$cand"; break; fi
+    if [ -f "$cand" ]; then PY="$cand"; break; fi
 done
 if [ -z "$PY" ]; then
     for cand in python3 python; do

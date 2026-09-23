@@ -25,6 +25,7 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,7 +48,65 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_p2_3_sandbox.py"),
     os.path.join("webui", "tests", "test_p2_3b_netguard.py"),
     os.path.join("webui", "tests", "test_p2_4_partial_enforce.py"),
+    os.path.join("webui", "tests", "test_memory_panel_write.py"),
 ]
+
+
+def _safe_stdio():
+    """打印绝不能用编码把提交拦下来（Windows 控制台默认 GBK/cp936）。
+
+    2026-09-24 事故：hook 里的子进程输出按 utf-8 errors="replace" 解码后带回 U+FFFD，
+    print 到 cp936 控制台直接 UnicodeEncodeError —— 门禁"失败"的真实原因被自己的
+    崩溃盖掉，看起来像"测试没过"。这里把所有输出降级为 replace，永远打得出来。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass
+
+
+def _python_candidates():
+    """跑 pytest 的候选解释器：先自己，再仓库 venv，最后 PATH。
+
+    为什么需要：hook 可能被任何 python 拉起（本机 python 指向 Windows 商店垫片 =
+    系统 Python，里面没装 pytest）。门禁要能自己找到"带 pytest 的那个"。
+    """
+    cands = [sys.executable]
+    for rel in (os.path.join(".venv", "Scripts", "python.exe"),
+                os.path.join(".venv", "bin", "python"),
+                os.path.join(".venv", "bin", "python3"),
+                os.path.join("venv", "Scripts", "python.exe"),
+                os.path.join("venv", "bin", "python")):
+        cands.append(os.path.join(ROOT, rel))
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found:
+            cands.append(found)
+    out, seen = [], set()
+    for c in cands:
+        key = os.path.normcase(os.path.abspath(c))
+        if c and key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
+
+
+def _has_pytest(py):
+    try:
+        r = subprocess.run([py, "-c", "import pytest"], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=180)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def pick_python():
+    """返回第一个能 import pytest 的解释器；都没有就退回 sys.executable。"""
+    for py in _python_candidates():
+        if os.path.isfile(py) and _has_pytest(py):
+            return py
+    return sys.executable
 
 
 def _load_registry():
@@ -118,7 +177,16 @@ def run_pytest(quiet, junit_path=None):
             os.remove(xml_path)
         except OSError:
             pass
-    cmd = [sys.executable, "-m", "pytest"] + TEST_FILES + [
+    # 解释器必须自己找：hook/CI 可能用没装 pytest 的 python 拉起本脚本
+    #（本机实测：PATH 上的 python = Windows 商店垫片 -> 系统 Python，没 pytest，
+    #  于是每次提交都被"门禁未通过"拦下，而真实原因只是解释器选错了）
+    py = pick_python()
+    if not _has_pytest(py):
+        print("[skills-gate] x 找不到带 pytest 的解释器（试过 %d 个候选）：" % len(_python_candidates()))
+        print("            用仓库 venv 重跑：%s scripts/check_skills_gate.py" % os.path.join(ROOT, ".venv", "Scripts", "python.exe"))
+        print("            仅本次跳过门禁：SKILLS_GATE=0 git commit ...")
+        return False, "缺 pytest（没找到带 pytest 的解释器）"
+    cmd = [py, "-m", "pytest"] + TEST_FILES + [
         "-p", "no:warnings", "--no-header", "-rs", "--junitxml=" + xml_path]
     try:
         proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
@@ -131,6 +199,8 @@ def run_pytest(quiet, junit_path=None):
         return False, "测试超时"
 
     out = proc.stdout.decode("utf-8", "replace")
+    if not quiet and py != sys.executable:
+        print("[skills-gate] 用解释器: %s" % py)
     passed = failed = skipped = 0
     counts = _counts_from_junit(xml_path)
     if counts:
@@ -170,6 +240,7 @@ def main(argv=None):
     ap.add_argument("--junit", metavar="PATH", default=None,
                     help="把 pytest 的 junit-xml 写到指定路径（CI 用来核对跳过数）")
     args = ap.parse_args(argv)
+    _safe_stdio()
 
     if args.list:
         print("1. webui/skills_registry.check()：SKILLS_INDEX.md vs 磁盘（只读）")
