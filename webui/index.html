@@ -547,6 +547,37 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 .anchor.kb { background:rgba(96,125,205,0.14); color:var(--primary); border-color:rgba(96,125,205,0.3); }
 .anchor.data { background:rgba(63,158,106,0.12); color:var(--success); border-color:rgba(63,158,106,0.28); }
 .anchor.sum { background:var(--tool-bg); }
+.anchor.cite { cursor:pointer; transition:filter .12s, box-shadow .12s; }
+.anchor.cite:hover { filter:brightness(1.25); box-shadow:0 0 0 1px rgba(120,170,255,0.45); }
+/* P1-3 可点击引用：点锚点 → 看原文摘录 */
+#cite-overlay { display:none; position:fixed; inset:0; z-index:9700; background:rgba(6,8,14,0.72); align-items:center; justify-content:center; padding:24px; }
+#cite-overlay.visible { display:flex; }
+.cite-box { width:min(880px, 94vw); max-height:86vh; display:flex; flex-direction:column; background:var(--panel-bg,#141925); border:1px solid var(--border,#2a3350); border-radius:12px; box-shadow:0 18px 48px rgba(0,0,0,0.55); overflow:hidden; }
+.cite-ov-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border,#2a3350); }
+.cite-ov-title { font-size:13px; font-weight:600; }
+.cite-x { background:transparent; border:0; color:var(--muted,#8b95ad); font-size:14px; cursor:pointer; padding:2px 6px; }
+.cite-ov-body { padding:14px 16px 16px; overflow:auto; }
+.cite-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.cite-badge { font-size:11px; padding:1px 8px; border-radius:999px; border:1px solid transparent; }
+.cite-badge.ok { background:rgba(63,158,106,0.16); color:var(--success,#3f9e6a); border-color:rgba(63,158,106,0.35); }
+.cite-badge.ext { background:rgba(96,125,205,0.16); color:var(--primary,#607dcd); border-color:rgba(96,125,205,0.35); }
+.cite-badge.miss { background:rgba(216,67,107,0.14); color:var(--danger,#d8436b); border-color:rgba(216,67,107,0.32); }
+.cite-badge.note { background:rgba(224,135,42,0.14); color:var(--warning,#e0872a); border-color:rgba(224,135,42,0.32); }
+.cite-kind { font-size:11px; color:var(--muted,#8b95ad); }
+.cite-val { font-family:Consolas,monospace; font-size:12px; word-break:break-all; }
+.cite-path { font-size:11px; color:var(--muted,#8b95ad); margin:6px 0 8px; word-break:break-all; }
+.cite-approx { color:var(--warning,#e0872a); }
+.cite-note { font-size:12px; color:var(--text,#dfe4f0); background:var(--tool-bg,rgba(255,255,255,0.04)); border-left:2px solid var(--border,#2a3350); padding:8px 10px; border-radius:6px; margin-bottom:8px; }
+.cite-code { background:rgba(0,0,0,0.28); border:1px solid var(--border,#2a3350); border-radius:8px; padding:8px 0; overflow:auto; max-height:46vh; }
+.cite-line { display:flex; gap:10px; font-family:Consolas,monospace; font-size:12px; line-height:1.55; padding:0 10px; white-space:pre; }
+.cite-line.hit { background:rgba(96,125,205,0.18); }
+.cite-ln { color:var(--muted,#6b7794); min-width:38px; text-align:right; opacity:.6; }
+.cite-lt { color:var(--text,#dfe4f0); }
+.cite-more { font-size:11px; color:var(--muted,#8b95ad); margin-top:6px; }
+.cite-load, .cite-err { font-size:12px; color:var(--muted,#8b95ad); }
+.cite-err { color:var(--danger,#d8436b); }
+.cite-mono { font-family:Consolas,monospace; }
+.cite-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
 .anchor.none { background:rgba(216,67,107,0.12); color:var(--danger); border-color:rgba(216,67,107,0.3); }
 .chip.warn { color:var(--warning); border-color:rgba(224,135,42,0.35); background:rgba(224,135,42,0.10); }
 .dcb-note { margin-top:7px; font-size:11px; color:var(--text-light); }
@@ -2974,7 +3005,8 @@ function addAssistantMsg(text, meta) {
     }
     foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
   }
-  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + renderMarkdown(text) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
+  // P1-3: 回答里的 [KB源:x] / [数据:y] / [DOI:z] 渲染成可点击的引用标签
+  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
   // 2026-08-23 修复：initMermaid 必须在节点入 DOM 之后调用——
   // 之前先调用再 append，querySelectorAll 找不到 → 历史加载（刷新）的 mermaid 永不渲染
@@ -3435,7 +3467,9 @@ function _dtAnchors(ev) {
     var kk = String(k), cls = '';
     if (/^KB/i.test(kk) || kk === '来源' || kk === '资料') cls = 'kb';
     else if (/^数据$/i.test(kk) || /^DATA$/i.test(kk)) cls = 'data';
-    return '<span class="anchor ' + cls + '" title="证据锚点：' + _dtEsc(kk) + '">' + _dtEsc(kk) + (v ? ':' + _dtEsc(v) : '') + '</span>';
+    // P1-3: 有具体目标的锚点变成可点击（点开核对原文/外链），没有目标的保持原样
+    if (v) return '<span class="anchor cite ' + cls + '" data-cite="' + _citeAttr(m) + '" onclick="openCitation(this)" title="证据锚点：' + _dtEsc(kk) + '（点击核对原文）">' + _dtEsc(kk) + ':' + _dtEsc(v) + '</span>';
+    return '<span class="anchor ' + cls + '" title="证据锚点：' + _dtEsc(kk) + '">' + _dtEsc(kk) + '</span>';
   });
   out = out.replace(/\[\s*(找不到论据|找不到证据|未找到证据|无证据)\s*\]/g, '<span class="anchor none" title="原文没有任何外部证据支撑这条陈述">找不到论据</span>');
   out = out.replace(/\[\s*(仅是推理|推理|无外部证据|推断)\s*\]/g, '<span class="anchor infer" title="该论点没有外部证据支撑，只是推理">仅是推理</span>');
@@ -6391,7 +6425,7 @@ function switchSession(sid) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = d.partial_text;
-      if (currentBubble) currentBubble.innerHTML = renderMarkdown(fullText);
+      if (currentBubble) currentBubble.innerHTML = _citeWrapHtml(renderMarkdown(fullText));
     }
     // 只有本地缓存为空且 WS progress_replay 也没填进度时才用 HTTP 重放
     if (d.progress_log && d.progress_log.length > 0 && !cached.hasSnapshot && !progressTimelineEl && progressItems.length === 0) {
@@ -11626,6 +11660,138 @@ async function revertChange() {
   } catch (e) { alert('回滚失败：' + e); }
 }
 
+// === P1-3 可点击引用（[KB源:x]/[数据:y]/[DOI:z] → 点开核对原文/外链） ===
+var _citeCur = null;
+var _CITE_RE = /\[\s*(DOI|PMID|PMIDs|KB源|KB|数据|DATA|资料|URL|链接|来源)\s*[:：]?\s*([^\]<\n]{0,300})\]/gi;
+
+function _citeAttr(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 正文经过 markdown 渲染后尖括号/& 已经变成实体，这里先还原再重新转义，
+// 否则带 & 或引号的锚点会被二次转义：显示变样，回给后端的也变成 &amp; 这种脏值
+function _citeUnesc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+}
+
+// 把回答正文里还是纯文本的锚点换成可点标签；代码块/行内代码原样保留
+function _citeWrapHtml(html) {
+  if (!html) return html;
+  var parts = String(html).split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>)/g);
+  for (var i = 0; i < parts.length; i++) {
+    if (/^<(pre|code)/i.test(parts[i])) continue;
+    parts[i] = parts[i].replace(_CITE_RE, function (m, kind, value) {
+      var raw = _citeUnesc(m);
+      var label = _citeAttr(kind + (value ? ':' + _citeUnesc(value) : ''));
+      return '<span class="anchor cite" data-cite="' + _citeAttr(raw) + '" onclick="openCitation(this)" title="点击核对原文">' + label + '</span>';
+    });
+  }
+  return parts.join('');
+}
+
+async function openCitation(el) {
+  var raw = el && el.getAttribute ? (el.getAttribute('data-cite') || '') : '';
+  if (!raw) return;
+  var ov = document.getElementById('cite-overlay');
+  if (!ov) return;
+  document.getElementById('cite-ov-body').innerHTML = '<div class="cite-load">正在核对原文…</div>';
+  ov.classList.add('visible');
+  var sid = (typeof currentSid !== 'undefined' && currentSid) ? currentSid : '';
+  try {
+    var r = await fetch('/api/citations/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: raw, session_id: sid })
+    });
+    var d = await r.json();
+    renderCitation((d.items || [])[0], raw, r.ok ? '' : (d.error || '解析失败'));
+  } catch (e) {
+    renderCitation(null, raw, String(e));
+  }
+}
+
+function renderCitation(it, raw, err) {
+  var body = document.getElementById('cite-ov-body');
+  if (!body) return;
+  if (err || !it) {
+    body.innerHTML = '<div class="cite-err">解析失败：' + escapeHtml(err || '没有结果') +
+      '<br><span class="cite-mono">' + escapeHtml(raw) + '</span></div>';
+    _citeCur = null;
+    return;
+  }
+  var meta = { resolved: ['已找到原文', 'ok'], external: ['外部链接', 'ext'], missing: ['找不到', 'miss'], note: ['仅是推理', 'note'] };
+  var st = meta[it.status] || [it.status, ''];
+  var h = '<div class="cite-head"><span class="cite-badge ' + st[1] + '">' + st[0] + '</span>' +
+    '<span class="cite-kind">' + escapeHtml(it.label || it.kind || '') + '</span>' +
+    '<span class="cite-val">' + escapeHtml(it.value || raw) + '</span></div>';
+  if (it.status === 'missing' || it.status === 'note') {
+    h += '<div class="cite-note">' + escapeHtml(it.reason || '没有找到可核对的目标') + '</div>';
+  }
+  if (it.rel) {
+    h += '<div class="cite-path" title="' + _citeAttr(it.path) + '">' + escapeHtml(it.rel) +
+      (it.approx ? ' <span class="cite-approx">（按文件名匹配）</span>' : '') +
+      (it.hit_line ? ' · 命中第 ' + it.hit_line + ' 行' : '') + '</div>';
+  }
+  if (it.lines && it.lines.length) {
+    h += '<div class="cite-code">';
+    for (var i = 0; i < it.lines.length; i++) {
+      var L = it.lines[i];
+      h += '<div class="cite-line' + (it.hit_line && L.n === it.hit_line ? ' hit' : '') + '">' +
+        '<span class="cite-ln">' + L.n + '</span><span class="cite-lt">' + escapeHtml(L.text) + '</span></div>';
+    }
+    h += '</div>';
+    if (it.truncated) h += '<div class="cite-more">… 这里只是摘录（该文件共 ' + it.total_lines + ' 行），全文请用下面的按钮打开</div>';
+  }
+  var btns = [];
+  if (it.rel && it.rel.indexOf('knowledge_base/') === 0) btns.push('<button class="chg-ov-btn" onclick="citeOpenKb()">在知识库打开</button>');
+  if (it.url) btns.push('<button class="chg-ov-btn" onclick="citeOpenUrl()">打开链接</button>');
+  btns.push('<button class="chg-ov-btn" onclick="citeCopy(this)">复制引用</button>');
+  btns.push('<button class="chg-ov-btn primary" onclick="closeCitation()">关闭</button>');
+  h += '<div class="cite-actions">' + btns.join('') + '</div>';
+  body.innerHTML = h;
+  _citeCur = { item: it, raw: raw };
+}
+
+function citeOpenKb() {
+  if (!_citeCur || !_citeCur.item || !_citeCur.item.rel) return;
+  var p = _citeCur.item.path || '';
+  var rel = _citeCur.item.rel.replace(/^knowledge_base\//, '');
+  closeCitation();
+  if (typeof switchView === 'function') switchView('kb');
+  if (typeof previewKb === 'function') previewKb(p || rel);
+}
+
+function citeOpenUrl() {
+  if (!_citeCur || !_citeCur.item || !_citeCur.item.url) return;
+  window.open(_citeCur.item.url, '_blank', 'noopener');
+}
+
+function citeCopy(btn) {
+  if (!_citeCur) return;
+  var raw = _citeCur.raw || '';
+  if (typeof fallbackCopy === 'function') fallbackCopy(raw);
+  if (btn) {
+    var old = btn.textContent;
+    btn.textContent = '✓ 已复制';
+    setTimeout(function () { btn.textContent = old; }, 1200);
+  }
+}
+
+function closeCitation() {
+  var ov = document.getElementById('cite-overlay');
+  if (ov) ov.classList.remove('visible');
+  _citeCur = null;
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    var ov = document.getElementById('cite-overlay');
+    if (ov && ov.classList.contains('visible')) closeCitation();
+  }
+});
+
 // === 待办 ===
 async function refreshTodos() {
   if (!currentSid) return;
@@ -13562,5 +13728,15 @@ async function saveUpdateConfig(mode) {
     <div class="chg-ov-diff" id="chg-ov-diff"></div>
   </div>
 </div>
+<div id="cite-overlay">
+  <div class="cite-box">
+    <div class="cite-ov-head">
+      <span class="cite-ov-title" id="cite-ov-title">核对引用</span>
+      <button class="cite-x" onclick="closeCitation()" title="关闭">✕</button>
+    </div>
+    <div class="cite-ov-body" id="cite-ov-body"></div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -14884,6 +14884,319 @@ async def revert_session_change(sid: str, change_id: str):
     return JSONResponse(body, status_code=code)
 
 
+# --- P1-3 可点击引用 --------------------------------------------------------
+# 回答里原本只是「看着像标签、点不动」的文字（[KB源:x] / [数据:y] / [DOI:z] / [PMID:n] / [URL:u]），
+# 现在解析成一个可核对的目标：知识库/数据文件给出原文摘录（含命中行号），
+# DOI/PMID/URL 给出外链，解析不到就明说「找不到」并给原因。
+# 只读、不联网：摘录一律来自本机文件，且只能读知识库/数据目录内的内容。
+
+_CITE_MAX_TEXT = 20000          # 单次解析的文本上限（防超长回答拖垮解析）
+_CITE_MAX_ITEMS = 40            # 单条消息最多解析多少个锚点
+_CITE_EXCERPT_LINES = 24        # 摘录行数
+_CITE_EXCERPT_CHARS = 4000      # 摘录字符上限
+_CITE_MAX_MATCHES = 8           # 同名候选文件上限
+_CITE_MAX_VALUE = 300           # 单个锚点值的字符上限（和前端正则保持一致）
+
+_CITE_RE = re.compile(
+    r"\[\s*(DOI|PMID|PMIDs|KB源|KB|数据|DATA|资料|URL|链接|来源)\s*[:：]?\s*([^\]]*)\]",
+    re.IGNORECASE,
+)
+_CITE_NOTE_RE = re.compile(
+    r"\[\s*(找不到论据|找不到证据|未找到证据|无证据|仅是推理|推理|无外部证据|推断)\s*\]"
+)
+_CITE_KB_KINDS = ("kb源", "kb", "来源", "资料")
+_CITE_DATA_KINDS = ("数据", "data")
+_CITE_URL_KINDS = ("url", "链接")
+
+
+def _cite_kind(raw_kind: str) -> str:
+    """把方括号里的中文/英文标签归一到 5 类。"""
+    kl = (raw_kind or "").strip().lower()
+    if kl == "doi":
+        return "doi"
+    if kl in ("pmid", "pmids"):
+        return "pmid"
+    if kl in _CITE_KB_KINDS:
+        return "kb"
+    if kl in _CITE_DATA_KINDS:
+        return "data"
+    if kl in _CITE_URL_KINDS:
+        return "url"
+    return "other"
+
+
+def _cite_extract(text, limit: int = _CITE_MAX_ITEMS):
+    """抽出证据锚点：保序、按 (类别,值) 去重、限量。"""
+    found = []
+    if not text:
+        return found
+    s = text[:_CITE_MAX_TEXT]
+    for m in _CITE_RE.finditer(s):
+        found.append((m.start(), "anchor", _cite_kind(m.group(1)), m.group(1).strip(), (m.group(2) or "").strip(), m.group(0)))
+    for m in _CITE_NOTE_RE.finditer(s):
+        found.append((m.start(), "note", "note", m.group(1).strip(), m.group(1).strip(), m.group(0)))
+    found.sort(key=lambda x: x[0])
+    out, seen = [], set()
+    for _pos, _t, kind, label, value, raw in found:
+        value = value[:_CITE_MAX_VALUE]      # 超长值没有可核对的可能，直接截断（别把响应撑爆）
+        raw = raw[:_CITE_MAX_VALUE + 8]
+        key = (kind, value.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"kind": kind, "label": label, "value": value, "raw": raw})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _cite_external_url(kind: str, value: str) -> str:
+    """DOI/PMID → 权威外链；URL → 只放行 http(s)（挡住 javascript:/file: 之类）。"""
+    v = (value or "").strip().strip("<>").strip()
+    if not v:
+        return ""
+    if kind == "doi":
+        v = re.sub(r"^(https?://(dx\.)?doi\.org/|doi:\s*)", "", v, flags=re.IGNORECASE).strip()
+        if not re.match(r"^10\.\d{4,9}/\S+$", v):
+            return ""
+        return "https://doi.org/" + v
+    if kind == "pmid":
+        m = re.search(r"\d{4,9}", v)
+        return ("https://pubmed.ncbi.nlm.nih.gov/%s/" % m.group(0)) if m else ""
+    if re.match(r"^https?://", v, re.IGNORECASE):
+        # 带空白/尖括号/引号的“网址”不是合法 URL，放行只会把脏串带到前端
+        if re.search(r"""[\s<>"'{}|\\^\u0060]""", v):
+            return ""
+        return v[:500]
+    return ""
+
+
+def _cite_safe_roots(session=None):
+    """允许读取的根目录：知识库 + 数据目录（+ 本会话结果目录）。"""
+    roots = [os.path.abspath(KB_DIR), os.path.abspath(DATA_DIR)]
+    if session:
+        rd = (session.get("results_dir") or "").strip()
+        if rd:
+            try:
+                roots.append(os.path.abspath(rd))
+            except Exception:
+                pass
+    uniq = []
+    for r in roots:
+        if r not in uniq:
+            uniq.append(r)
+    return uniq
+
+
+def _cite_inside(abs_path: str, roots) -> bool:
+    p = os.path.abspath(abs_path)
+    for r in roots:
+        if p == r or p.startswith(r + os.sep):
+            return True
+    return False
+
+
+def _cite_rel(abs_path: str) -> str:
+    """给前端一个可读的相对标识（知识库/数据根下）。"""
+    pairs = (("knowledge_base", KB_DIR), ("data", DATA_DIR))
+    for name, root in pairs:
+        try:
+            r = os.path.abspath(root)
+            if abs_path == r or abs_path.startswith(r + os.sep):
+                return name + "/" + os.path.relpath(abs_path, r).replace("\\", "/")
+        except Exception:
+            continue
+    return os.path.basename(abs_path)
+
+
+def _cite_find_files(value: str, roots, limit: int = _CITE_MAX_MATCHES):
+    """找候选文件 → [(绝对路径, 是否精确命中)]。
+
+    优先级：直给路径（相对/绝对）→ 同名或同词干 → 文件名子串（词干≥4 才算，
+    免得 "win.ini" 这种短片断匹配到无关文件）。所有候选必须落在允许的根内，
+    含 .. 的相对路径、盘符路径一律拒绝。
+    """
+    v = (value or "").strip().strip('"').strip("'").strip().replace("\\", "/")
+    if not v:
+        return []
+    parts = [p for p in v.split("/") if p not in ("", ".")]
+    if ".." in parts or v.startswith("/") or re.match(r"^[a-zA-Z]:", v):
+        return []
+    out, seen = [], set()
+
+    def _add(p, exact):
+        try:
+            ap = os.path.abspath(p)
+        except Exception:
+            return
+        if ap in seen or not os.path.isfile(ap) or not _cite_inside(ap, roots):
+            return
+        seen.add(ap)
+        out.append((ap, exact))
+
+    for r in roots:
+        _add(os.path.join(r, v), True)
+    if out:
+        return out[:limit]
+    base = os.path.basename(v)
+    if len(base) < 3:
+        return []
+    stem = os.path.splitext(base)[0].lower()
+    bl = base.lower()
+    for r in roots:
+        if not os.path.isdir(r):
+            continue
+        try:
+            for dirpath, dirnames, filenames in os.walk(r):
+                dirnames[:] = [d for d in dirnames if d not in _CHANGE_SKIP_DIRS]
+                for fn in filenames:
+                    fl = fn.lower()
+                    exact = fl == bl or os.path.splitext(fl)[0] == stem
+                    fuzzy = (not exact) and len(stem) >= 4 and bl in fl
+                    if exact or fuzzy:
+                        _add(os.path.join(dirpath, fn), exact)
+                        if len(out) >= limit:
+                            return out
+        except Exception:
+            continue
+    return out
+
+
+def _cite_excerpt(abs_path: str, needle: str = ""):
+    """读一段摘录（复用 P1-2 的只读读法：二进制/超大/缺失都有明确原因）。"""
+    kind, text = _read_text_for_change(abs_path)
+    if kind != "exists" or text is None:
+        return None, _change_skip_reason_text(kind)
+    lines = text.splitlines()
+    start, hit = 0, 0
+    nl = (needle or "").lower()
+    if nl and len(nl) >= 3:
+        for i, ln in enumerate(lines):
+            if nl in ln.lower():
+                hit = i + 1
+                start = max(0, i - 2)
+                break
+    chunk = lines[start:start + _CITE_EXCERPT_LINES]
+    body = "\n".join(chunk)
+    more = (start + _CITE_EXCERPT_LINES) < len(lines)
+    return {
+        "lines": [{"n": start + i + 1, "text": t[:400]} for i, t in enumerate(chunk)],
+        "start_line": start + 1,
+        "total_lines": len(lines),
+        "hit_line": hit,
+        "text": body[:_CITE_EXCERPT_CHARS],
+        "truncated": bool(more or len(body) > _CITE_EXCERPT_CHARS),
+    }, ""
+
+
+def _cite_resolve_item(item, session=None):
+    """解析单个锚点 → 可展示的结果（resolved/external/missing/note 四种状态）。"""
+    kind = item.get("kind") or "other"
+    value = (item.get("value") or "").strip()
+    rec = {"kind": kind, "label": item.get("label") or "", "value": value, "raw": item.get("raw") or "",
+           "status": "missing", "reason": "", "title": "", "url": "", "path": "", "rel": "",
+           "lines": [], "start_line": 0, "total_lines": 0, "hit_line": 0, "text": "",
+           "truncated": False, "alternatives": [], "approx": False}
+    if kind == "note":
+        rec["status"] = "note"
+        rec["reason"] = "原文写明这条结论只是推理" if ("推理" in value or "推断" in value) else "原文写明找不到论据"
+        return rec
+    if kind in ("doi", "pmid", "url"):
+        url = _cite_external_url(kind, value)
+        if url:
+            rec.update(status="external", url=url, title=value or url)
+        else:
+            rec["reason"] = "不是有效的 DOI / PMID / 网址"
+        return rec
+    if not value:
+        rec["reason"] = "锚点没写具体目标"
+        return rec
+    roots = _cite_safe_roots(session)
+    files = _cite_find_files(value, roots)
+    if not files:
+        rec["reason"] = "知识库/数据目录里找不到「%s」" % value[:80]
+        return rec
+    abs_path, exact = files[0]
+    if not _cite_inside(abs_path, roots):
+        rec["reason"] = "目标不在允许读取的目录内"
+        return rec
+    rec["approx"] = not exact          # 靠文件名模糊匹配到的 → 前端要标明
+    exc, why = _cite_excerpt(abs_path, value if kind == "data" else "")
+    rec["path"] = abs_path.replace("\\", "/")
+    rec["rel"] = _cite_rel(abs_path)
+    rec["title"] = os.path.basename(abs_path)
+    rec["alternatives"] = [_cite_rel(p) for p, _e in files[1:]]
+    if exc is None:
+        rec["reason"] = why or "这个文件读不了"
+        return rec
+    rec.update(exc)
+    rec["status"] = "resolved"
+    return rec
+
+
+def _cite_resolve(text: str, session=None):
+    """把一段文本里的所有证据锚点解析出来。"""
+    items = [_cite_resolve_item(it, session) for it in _cite_extract(text or "")]
+    summary = {"total": len(items), "resolved": 0, "external": 0, "missing": 0, "note": 0,
+               "truncated_text": max(0, len(text or "") - _CITE_MAX_TEXT)}
+    for it in items:
+        summary[it["status"]] = summary.get(it["status"], 0) + 1
+    return {"summary": summary, "items": items}
+
+
+def _cite_last_assistant_index(msgs):
+    for i in range(len(msgs) - 1, -1, -1):
+        if (msgs[i].get("role") or "") == "assistant":
+            return i
+    return None
+
+
+class CiteResolveReq(BaseModel):
+    text: str = ""
+    session_id: Optional[str] = None
+
+
+@app.post("/api/citations/resolve")
+async def citations_resolve(req: CiteResolveReq):
+    """把一段文本里的证据锚点解析成可核对的目标（只读、不联网）。"""
+    text = req.text or ""
+    if len(text) > _CITE_MAX_TEXT * 5:
+        return JSONResponse({"error": "文本过长（上限 %d 字符）" % (_CITE_MAX_TEXT * 5)}, status_code=413)
+    sess = None
+    if req.session_id:
+        sess = _sessions.get(req.session_id)
+        if sess is None:
+            _restore_single_session(req.session_id)
+            sess = _sessions.get(req.session_id)
+    out = _cite_resolve(text, sess)
+    out["ok"] = True
+    if req.session_id:
+        out["session_id"] = req.session_id
+    return out
+
+
+@app.get("/api/sessions/{sid}/citations")
+async def session_citations(sid: str, msg: int = -1):
+    """解析某条消息里的证据锚点（msg=-1 = 最后一条助手消息）。"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    msgs = _sessions[sid].get("messages") or []
+    if not msgs:
+        return JSONResponse({"error": "该会话还没有消息"}, status_code=404)
+    idx = msg if msg >= 0 else _cite_last_assistant_index(msgs)
+    if idx is None or idx < 0 or idx >= len(msgs):
+        return JSONResponse({"error": "消息下标越界", "total_messages": len(msgs)}, status_code=404)
+    m = msgs[idx]
+    if (m.get("role") or "") != "assistant":
+        return JSONResponse({"error": "只有助手消息才有证据锚点", "role": m.get("role"),
+                             "total_messages": len(msgs)}, status_code=400)
+    out = _cite_resolve(m.get("content") or "", _sessions[sid])
+    out.update({"ok": True, "session_id": sid, "msg_index": idx, "total_messages": len(msgs)})
+    return out
+
+
 # --- 待办 ---
 
 @app.get("/api/todos/{sid}")
