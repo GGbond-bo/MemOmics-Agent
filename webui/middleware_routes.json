@@ -42,6 +42,7 @@
   "/api/literature/summary": "public",
   "/api/literature/translate": "public",
   "/api/memory": "public",
+  "/api/memory/entry": "public",
   "/api/memory/govern": "public",
   "/api/memory/write": "public",
   "/api/memory/{filename}": "public",

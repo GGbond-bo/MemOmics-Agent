@@ -129,11 +129,19 @@ def init_index(verbose=True) -> dict:
                     idx["entries"][_k] = _v
         except Exception:
             pass
-    # 重算 stats
+    # 重算 stats —— 2026-09-24: 只数 "kind:int" 的真实文件条目。
+    # 老实现把所有键都算进去，把 50 个 user:reg:*/memory:reg:* 登记键也算成记忆条目
+    # （真机 200 条记忆显示成 250 条），面板上的"分层统计"因此虚高，属于误导性数字。
     _stats = {"L1": 0, "L2": 0, "L3": 0}
-    for _v in idx["entries"].values():
-        _stats[_v.get("layer", "L1")] = _stats.get(_v.get("layer", "L1"), 0) + 1
+    _other = 0
+    for _k, _v in idx["entries"].items():
+        _p = _k.split(":")
+        if len(_p) == 2 and _p[1].isdigit():
+            _stats[_v.get("layer", "L1")] = _stats.get(_v.get("layer", "L1"), 0) + 1
+        else:
+            _other += 1
     idx["stats"] = _stats
+    idx["stats_other_keys"] = _other
     with open(INDEX_PATH, "w", encoding="utf-8") as f:
         json.dump(idx, f, ensure_ascii=False, indent=2)
     if verbose:
@@ -459,4 +467,79 @@ def archive_low_value(threshold=0.7, dry_run=True, limits=None, force=False):
     report["freed"] = sum(max(0, report["before"][k] - report["after"][k])
                           for k in report["before"])
     return report
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-24 追加：条目清单（只读）+ 删除单条记忆（用户显式操作）
+#
+# 用户要求"记忆支持删除"：面板里逐条可见、逐条可删。删是真删，所以先备份 + 前端二次确认。
+# ---------------------------------------------------------------------------
+
+
+def _entry_files():
+    return (("MEMORY.md", MEMORY_FILE), ("USER.md", USER_FILE))
+
+
+def list_entries(preview_chars=100):
+    """给面板用的条目清单（只读）：序号、字符数、自称重要性、pinned、预览。"""
+    out = {}
+    for name, path in _entry_files():
+        text = _read_text(path)
+        items = []
+        for i, ent in enumerate(parse_entries(text)):
+            meta = parse_meta(ent) or {}
+            items.append({
+                "index": i,
+                "chars": len(ent),
+                "imp": inline_importance(ent),
+                "pinned": (1 if meta.get("pinned") else 0) if meta else None,
+                "preview": " ".join(ent.split())[:preview_chars],
+            })
+        out[name] = {"path": path, "count": len(items), "items": items}
+    return out
+
+
+def delete_entry(target, index, backup=True):
+    """删掉 target 里第 index 条记忆（用户点的删除 —— 含铁律，想删就删）。
+
+    安全约定：先整档备份到 memories/.backup/<ts>/；未知文件 / 序号越界 / 条目定位失败
+    一律**不改动任何字节**。与"归档"不同，这是真删（archive/ 里的历史不受影响）。
+    """
+    name = os.path.basename(str(target or "").strip())
+    paths = dict(_entry_files())
+    if name not in paths:
+        return {"ok": False, "error": "未知记忆文件: %s（只支持 MEMORY.md / USER.md）" % target}
+    path = paths[name]
+    if not os.path.isfile(path):
+        return {"ok": False, "error": "记忆文件不存在: %s" % name}
+    text = _read_text(path)
+    entries = parse_entries(text)
+    try:
+        i = int(index)
+    except Exception:
+        return {"ok": False, "error": "条目序号非法: %r" % (index,)}
+    if i < 0 or i >= len(entries):
+        return {"ok": False, "error": "条目序号越界: %d（当前共 %d 条）" % (i, len(entries))}
+    ent = entries[i]
+    before = len(text)
+    # 连分隔符一起删，避免留下空的 § 块（空块会被 parse_entries 当成一条空记忆）
+    if ("\n§\n" + ent) in text:
+        news = text.replace("\n§\n" + ent, "", 1)
+    elif (ent + "\n§\n") in text:
+        news = text.replace(ent + "\n§\n", "", 1)
+    else:
+        news = text.replace(ent, "", 1)
+    if news and not news.endswith("\n"):
+        news += "\n"
+    if news == text:
+        return {"ok": False, "error": "条目定位失败，未改动任何内容"}
+    bdir = _backup_files(time.strftime("%Y%m%d-%H%M%S")) if backup else None
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(news)
+    init_index(verbose=False)
+    return {"ok": True, "target": name, "index": i,
+            "removed": " ".join(ent.split())[:80], "removed_chars": len(ent),
+            "before": {"chars": before, "count": len(entries)},
+            "after": {"chars": len(news), "count": len(parse_entries(news))},
+            "freed": max(0, before - len(news)), "backup": bdir}
 

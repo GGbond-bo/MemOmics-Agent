@@ -301,6 +301,86 @@ def test_c5_get_memory_carries_usage(client, tmp_home):
         assert u["chars"] > 0 and u["pct"] is not None and u["headroom"] >= 0
 
 
+# --- D. 逐条删除（用户要求"记忆支持删除"）---------------------------------
+
+def test_d1_delete_entry_removes_exactly_one_and_backs_up(gov, tmp_home):
+    from memomics.memory_governance.memory_score import parse_entries
+    mem, usr = _seed(tmp_home)
+    before = mem.read_text(encoding="utf-8")
+    usr_before = usr.read_text(encoding="utf-8")
+    rep = gov.delete_entry("MEMORY.md", 1)
+    assert rep["ok"] is True
+    after = mem.read_text(encoding="utf-8")
+    assert "#TAIL-低价值笔记B#" not in after                       # 删的就是第 1 条
+    assert "#TAIL-低价值笔记A#" in after and "普通条目C没有标注" in after
+    assert rep["before"]["count"] == 3 and rep["after"]["count"] == 2
+    assert len(parse_entries(after)) == 2
+    assert rep["removed_chars"] > 0
+    assert rep["freed"] == rep["before"]["chars"] - rep["after"]["chars"]
+    assert rep["backup"] and os.path.isdir(rep["backup"])
+    assert open(os.path.join(rep["backup"], "MEMORY.md"), encoding="utf-8").read() == before
+    assert usr.read_text(encoding="utf-8") == usr_before           # 另一个文件一字节不动
+
+
+def test_d2_bad_index_or_target_changes_nothing(gov, tmp_home):
+    mem, _ = _seed(tmp_home)
+    snap = mem.read_bytes()
+    for bad in (-1, 3, 99, "abc", None):
+        r = gov.delete_entry("MEMORY.md", bad)
+        assert r["ok"] is False, bad
+        assert mem.read_bytes() == snap
+    r = gov.delete_entry("NOPE.md", 0)
+    assert r["ok"] is False and "未知" in r["error"]
+    assert mem.read_bytes() == snap
+    r = gov.delete_entry("USER.md", 0)      # USER.md 也存在（此例只验证能定位）
+    assert r["ok"] is True and mem.read_bytes() == snap
+
+
+def test_d3_delete_first_and_last_leaves_no_empty_entries(gov, tmp_home):
+    from memomics.memory_governance.memory_score import parse_entries
+    mem, _ = _seed(tmp_home)
+    assert gov.delete_entry("MEMORY.md", 0)["ok"] is True          # 删第一条（A）
+    assert gov.delete_entry("MEMORY.md", 1)["ok"] is True          # 剩下的 [B, C] 里删最后一条（C）
+    text = mem.read_text(encoding="utf-8")
+    entries = parse_entries(text)
+    assert len(entries) == 1                                       # 不留空白条目
+    assert all(e.strip() for e in entries)
+    assert "#TAIL-低价值笔记B#" in text                             # 只剩 B
+    assert "普通条目C没有标注" not in text
+
+
+def test_d4_route_delete_entry(client, gov, tmp_home, mem_token):
+    mem, _ = _seed(tmp_home)
+    snap = mem.read_bytes()
+    # 没有 token -> 401（同时证明这条路由没被 /api/memory/{filename} 抢走：那条会先报 400）
+    r = client.request("DELETE", "/api/memory/entry",
+                       json={"target": "MEMORY.md", "index": 0})
+    assert r.status_code == 401, r.text
+    h = {"X-Memory-Token": mem_token}
+    assert client.request("DELETE", "/api/memory/entry",
+                          json={"target": "x.md", "index": 0}, headers=h).status_code == 400
+    assert client.request("DELETE", "/api/memory/entry",
+                          json={"target": "MEMORY.md", "index": 99}, headers=h).status_code == 404
+    assert mem.read_bytes() == snap                                # 三次失败调用零改动
+    r = client.request("DELETE", "/api/memory/entry",
+                       json={"target": "MEMORY.md", "index": 0}, headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["ok"] is True and d["after"]["count"] == 2
+    assert d["usage"]["MEMORY.md"]["chars"] == len(mem.read_text(encoding="utf-8"))
+    assert "#TAIL-低价值笔记A#" not in mem.read_text(encoding="utf-8")
+
+
+def test_d5_get_memory_exposes_parsed_entries(client, gov, tmp_home):
+    _seed(tmp_home)
+    d = client.get("/api/memory").json()
+    p = d["parsed"]["MEMORY.md"]
+    assert p["count"] == 3 and len(p["items"]) == 3
+    assert [it["imp"] for it in p["items"]] == [0.6, 0.7, None]
+    assert p["items"][0]["chars"] > 0 and p["items"][0]["preview"].startswith("[imp:0.6]")
+    assert d["parsed"]["USER.md"]["count"] == 2
+
+
 def test_c6_govern_apply_passes_the_sandbox_gate(sb, client, gov, tmp_home, mem_token):
     _seed(tmp_home)
     r = client.post("/api/memory/govern", json={"mode": "apply", "threshold": 0.7},

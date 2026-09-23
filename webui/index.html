@@ -1887,9 +1887,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">Agent 的记忆会跨会话保留。可查看/编辑/追加。</div>
         <div id="memory-usage" style="margin-bottom:10px;"></div>
         <div id="memory-entries" style="margin-bottom:10px;"></div>
+        <div id="memory-entry-list" style="margin-bottom:10px;"></div>
         <div class="settings-group">
           <label>选择记忆文件</label>
-          <select id="memory-target" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--panel);color:var(--text);">
+          <select id="memory-target" onchange="renderMemoryEntries()" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--panel);color:var(--text);">
             <option value="MEMORY.md">MEMORY.md (Agent记忆)</option>
             <option value="USER.md">USER.md (用户偏好)</option>
           </select>
@@ -12034,12 +12035,15 @@ function loadSettings() {
 
 // === 外置记忆 ===
 var memoryApiToken = '';  // P1-10: GET /api/memory 返回的写 API token
+var memoryParsed = {};     // 2026-09-24: GET /api/memory 的条目清单（逐条删除用）
 async function loadMemory() {
   try {
     var r = await fetch('/api/memory');
     var d = await r.json();
     if (d.api_token) { memoryApiToken = d.api_token; }
     renderMemoryUsage(d.usage);
+    memoryParsed = d.parsed || {};
+    renderMemoryEntries();
     var entries = d.entries || [];
     var html = '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">记忆文件:</div>';
     entries.forEach(function(e) {
@@ -12130,6 +12134,63 @@ function renderMemoryUsage(usage) {
       '<div style="height:100%;width:' + Math.max(0, Math.min(100, pct)) + '%;background:' + color + ';"></div></div></div>';
   });
   el.innerHTML = html;
+}
+
+// 逐条删除：2026-09-24 用户要求"记忆支持删除"。删是真删，所以服务端先备份 + 这里二次确认。
+function renderMemoryEntries() {
+  var el = document.getElementById('memory-entry-list');
+  if (!el) return;
+  var target = document.getElementById('memory-target').value;
+  var pack = (memoryParsed || {})[target] || null;
+  if (!pack) { el.innerHTML = '<div style="font-size:11px;color:var(--text-light);">条目清单不可用</div>'; return; }
+  var items = pack.items || [];
+  var html = '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">记忆条目（' + items.length + ' 条，可逐条删除）</div>' +
+    '<div style="max-height:260px;overflow:auto;background:var(--bg);border-radius:6px;padding:6px;">';
+  if (!items.length) {
+    html += '<div style="font-size:11px;color:var(--text-light);">（空）</div>';
+  }
+  items.forEach(function(it) {
+    var tag = (it.imp === null || it.imp === undefined) ? (it.pinned ? '📌 pinned' : '—') : ('imp=' + it.imp);
+    html += '<div style="display:flex;gap:6px;align-items:flex-start;font-size:11px;padding:4px 2px;border-bottom:1px solid var(--border);">' +
+      '<span style="color:var(--text-light);min-width:30px;">#' + it.index + '</span>' +
+      '<span style="flex:1;word-break:break-word;">' + escapeHtml(it.preview) + '</span>' +
+      '<span style="color:var(--text-light);white-space:nowrap;">' + tag + ' · ' + it.chars + '字</span>' +
+      '<button onclick="deleteMemoryEntry(' + it.index + ')" title="删除这一条记忆（服务端会先整档备份）" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--danger);color:#fff;border:none;cursor:pointer;">🗑</button>' +
+      '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function deleteMemoryEntry(index) {
+  var target = document.getElementById('memory-target').value;
+  var pack = (memoryParsed || {})[target] || {items: []};
+  var it = (pack.items || [])[index] || {};
+  if (!confirm('删除 ' + target + ' 第 #' + index + ' 条记忆？\n\n' + (it.preview || '') +
+      '\n\n· 这是真删（不像治理归档会留下副本）\n· 服务端会先把整个文件备份到 memories/.backup/，可回滚')) return;
+  var result = document.getElementById('memory-result');
+  result.textContent = '删除中…';
+  result.style.color = 'var(--text-light)';
+  try {
+    var r = await fetch('/api/memory/entry', {
+      method: 'DELETE',
+      headers: {'Content-Type':'application/json', 'X-Memory-Token': memoryApiToken},
+      body: JSON.stringify({target: target, index: index})
+    });
+    var d = await r.json();
+    if (d.ok) {
+      result.style.color = 'var(--success)';
+      result.innerHTML = '✅ 已删除 ' + target + ' 第 #' + d.index + ' 条（' + d.removed_chars + ' 字符）：' + escapeHtml(d.removed || '') +
+        '<div style="font-size:11px;color:var(--text-light);margin-top:4px;">剩余 ' + ((d.after || {}).count || 0) + ' 条 · 备份：' + escapeHtml(d.backup || '') + '</div>';
+      loadMemory();
+    } else {
+      result.style.color = 'var(--danger)';
+      result.textContent = '❌ ' + (d.error || '删除失败');
+    }
+  } catch(e) {
+    result.style.color = 'var(--danger)';
+    result.textContent = '❌ 网络错误: ' + e.message;
+  }
 }
 
 // 治理第一步：体检（只读）。2026-09-24 重做：老实现点了只重算索引，用户看到"治理没有用"。

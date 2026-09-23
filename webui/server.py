@@ -15757,6 +15757,12 @@ async def get_memory():
     mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
     result = {"entries": [], "api_token": _memory_api_token(),
               "usage": _memory_usage()}
+    try:
+        from memomics.memory_governance import governor
+        result["parsed"] = governor.list_entries()
+    except Exception as e:
+        result["parsed"] = {}
+        result["parsed_error"] = str(e)
     # MEMORY.md — agent 自己的记忆
     memory_md = os.path.join(mem_dir, "MEMORY.md")
     if os.path.exists(memory_md):
@@ -15815,6 +15821,39 @@ async def write_memory(payload: dict, request: Request):
         with open(file_path, "a", encoding="utf-8") as f:
             f.write("\n\n" + content)
     return {"ok": True, "path": file_path.replace("\\", "/"), "size": os.path.getsize(file_path)}
+
+
+@app.delete("/api/memory/entry")
+async def memory_delete_entry(payload: dict = None, request: Request = None):
+    """删除单条记忆（面板逐条 🗑）—— 2026-09-24 用户要求"记忆支持删除"。
+
+    与"治理归档"不同，这是真删，所以：token 鉴权 + 服务端先整档备份 + 未知文件/越界
+    一律不动字节。路由必须注册在 /api/memory/{filename} 之前，否则 "entry" 会被当成文件名。
+    """
+    payload = payload or {}
+    _token = (request.headers.get("x-memory-token", "") if request else "") \
+        or str(payload.get("token", ""))
+    if _token != _memory_api_token():
+        return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"},
+                            status_code=401)
+    target = os.path.basename(str(payload.get("target", "MEMORY.md")))
+    if target not in ("MEMORY.md", "USER.md"):
+        return JSONResponse({"error": "只允许 MEMORY.md / USER.md"}, status_code=400)
+    file_path = os.path.join(HERMES_HOME_DIR, "memories", target)
+    _denied = _sandbox_precheck("fs.write", file_path, [MEMOMICS_DIR], "memory.entry_delete")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
+    try:
+        from memomics.memory_governance import governor
+        rep = governor.delete_entry(target, payload.get("index"))
+        rep["usage"] = _memory_usage()
+        if not rep.get("ok"):
+            _err = str(rep.get("error", ""))
+            _code = 404 if ("越界" in _err or "未知" in _err or "不存在" in _err) else 400
+            return JSONResponse(rep, status_code=_code)
+        return rep
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @app.delete("/api/memory/{filename}")
