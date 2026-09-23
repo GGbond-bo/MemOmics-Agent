@@ -7,12 +7,15 @@
   C. 门面 + 真实 server——审计接口暴露 threads、真会话 sid 能记账
   D. 极端验收——两会话交错 500 轮零串扰（含 4 线程真并发，barrier 保证重叠）
   E. 边界——脏 sid、注册表淘汰、万级回合、重置
+  F. 串行化门（P2-2 补丁）——MEMOMICS_THREAD_SERIALIZE=1 时同会话回合真串行：conflicts 归零，
+     含原子性（TOCTOU）、超时 fail-open、僵尸租约自愈、/ws 入口真实调用顺序
 
 纪律：所有测试都是 offline（本地 server + TestClient），不联网、不调用真实模型。
 关键坑：测试绝对不能自己 import thread_state——那会拿到**另一个模块对象**，
 注册表是另一份，什么都测不到。统一用 server._thread_state。
 """
 import ast
+import asyncio
 import os
 import sys
 import threading
@@ -467,3 +470,223 @@ def test_e4_check_schema_reports_unknown():
     assert chk["ok"] is False
     assert chk["unknown"] == ["完全不认识的键"]
     assert chk["total"] == 2                            # 非字符串键被忽略
+
+
+# ==================================================== F. 串行化门（P2-2 补丁）
+class _StubAgent:
+    """最小 agent stub：让 /ws 回合能走到记账点，不联网、不调真实模型。"""
+    _interrupt_requested = False
+    _pending_steer_lock = None
+    _steer_lock = None
+
+    def __init__(self):
+        self._pending_steer = []
+
+    def clear_interrupt(self):
+        self._interrupt_requested = False
+
+    def run_conversation(self, *a, **k):
+        return "stub-ok"
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return lambda *a, **k: None
+
+
+def test_f1_gate_is_free_when_off(_flag_guard):
+    """串行化关着时：立刻放行、不碰注册表——默认路径零开销、零行为变更。"""
+    os.environ.pop("MEMOMICS_THREAD_SERIALIZE", None)
+    TS.reset()
+    assert asyncio.run(TS.wait_turn_idle("f1-sid")) is True
+    assert TS.stats()["sessions"] == 0, "关着的时候不该创建任何会话账目"
+    # 关着的时候 begin_turn_serialized 就该等价于 mark_turn_start
+    tid = asyncio.run(TS.begin_turn_serialized("f1-sid", source="user"))
+    assert tid is not None and tid.startswith("f1-sid")
+    assert TS.stats()["sessions"] == 1
+    assert TS.stats()["serialized_waits"] == 0
+    TS.mark_turn_end("f1-sid", tid)
+    TS.reset()
+
+
+def test_f2_gate_waits_for_previous_turn(_flag_guard):
+    """开门后：上一个回合没结束，新回合就得等；等到才记账 → conflicts 为 0。"""
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.reset()
+    sid = "f2-sid"
+    tid0 = TS.mark_turn_start(sid)
+    releases = []
+
+    def release_later():
+        time.sleep(0.25)
+        releases.append(TS.mark_turn_end(sid, tid0))
+
+    th = threading.Thread(target=release_later)
+    th.start()
+    t0 = time.time()
+    assert asyncio.run(TS.wait_turn_idle(sid, timeout=5.0)) is True
+    elapsed = time.time() - t0
+    th.join(timeout=5)
+    assert elapsed >= 0.2, "没等就放行了：%.3fs" % elapsed
+    assert not TS.turn_active(sid)
+    st = TS.get_state(sid).snapshot()
+    assert st["serialized_waits"] == 1
+    assert st["wait_timeouts"] == 0
+    assert st["conflicts"] == 0
+    TS.reset()
+
+
+def test_f3_concurrent_gated_entries_never_conflict(_flag_guard):
+    """极端：8 个线程同时抢同一会话的回合入口（都走门）→ 真串行、conflicts 恒为 0。
+
+    这是"门必须原子"的验收：如果空闲判定和记账之间有 TOCTOU 缝隙，这里会漏出 conflicts。
+    """
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.reset()
+    sid = "f3-sid"
+    n = 8
+    errors = []
+    barrier = threading.Barrier(n)
+
+    def worker():
+        try:
+            barrier.wait(timeout=10)
+            tid = asyncio.run(TS.begin_turn_serialized(sid, timeout=20.0, poll=0.01))
+            assert tid, "门没给出回合 id"
+            time.sleep(0.02)                    # 模拟"回合在干活"
+            TS.mark_turn_end(sid, tid)
+        except Exception as exc:                # pragma: no cover
+            errors.append(repr(exc))
+
+    ths = [threading.Thread(target=worker) for _ in range(n)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join(timeout=60)
+    assert not errors, errors
+    st = TS.get_state(sid).snapshot()
+    assert st["total_turns"] == n
+    assert st["conflicts"] == 0, "门上方的并发仍然踩了：%s" % st["last_conflict"]
+    assert st["active"] == []
+    assert st["overflows"] == 0
+    assert st["serialized_waits"] >= 1, "8 个并发至少该有一个真的等过"
+    TS.reset()
+
+
+def test_f4_timeout_is_fail_open_and_honest(_flag_guard):
+    """等到超时 → 记 wait_timeouts、按原行为放行（fail-open），并把这次冲突如实记下来。"""
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.reset()
+    sid = "f4-sid"
+    tid0 = TS.mark_turn_start(sid)
+    tid1 = asyncio.run(TS.begin_turn_serialized(sid, timeout=0.15, poll=0.02))
+    assert tid1 is not None, "超时必须放行，不能把用户消息卡死"
+    st = TS.get_state(sid).snapshot()
+    assert st["wait_timeouts"] == 1
+    assert st["conflicts"] == 1, "fail-open 放行后的重叠必须如实记账"
+    TS.mark_turn_end(sid, tid1)
+    TS.mark_turn_end(sid, tid0)
+    TS.reset()
+
+
+def test_f5_stale_lease_self_heals(_flag_guard):
+    """僵尸回合（线程被强杀/连接异常退出留下占位）超过阈值 → 清掉放行，不会永久卡死会话。"""
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.reset()
+    sid = "f5-sid"
+    tid0 = TS.mark_turn_start(sid)
+    st = TS.get_state(sid)
+    rec = st._active[tid0]
+    rec.started_at -= (TS.DEFAULT_STALE_TURN_S + 600)      # 伪造成两小时前的僵尸
+    t0 = time.time()
+    tid1 = asyncio.run(TS.begin_turn_serialized(sid, timeout=2.0, poll=0.02))
+    assert tid1 is not None
+    assert time.time() - t0 < 1.0, "僵尸租约没被清掉，会话被卡死了"
+    snap = st.snapshot()
+    assert snap["stale_dropped"] == 1
+    assert snap["conflicts"] == 0
+    TS.mark_turn_end(sid, tid1)
+    TS.reset()
+
+
+def test_f6_gate_disabled_module_is_free(_flag_guard):
+    """整体关掉 MEMOMICS_THREAD_STATE=0 → 门也必须立刻放行（fail-open 到"没这个模块"）。"""
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.set_enabled(False)
+    os.environ["MEMOMICS_THREAD_STATE"] = "0"
+    TS.reset()
+    tid = asyncio.run(TS.begin_turn_serialized("f6-sid"))
+    assert tid is None                       # 关掉就彻底不记账
+    assert TS.stats()["sessions"] == 0
+    TS.set_enabled(True)
+    os.environ.pop("MEMOMICS_THREAD_STATE")
+    TS.reset()
+
+
+def test_f8_without_gate_the_hole_is_real(_flag_guard):
+    """A/B 的 A 面：关掉串行化（= P2-2 之前的现有行为）→ 并发入口必然踩车。
+
+    这条是 f3 的对照组，证明 f3 的 conflicts==0 是"门"挣来的，不是测试本身造不出重叠。
+    """
+    os.environ.pop("MEMOMICS_THREAD_SERIALIZE", None)
+    TS.reset()
+    sid = "f8-sid"
+    n = 8
+    barrier = threading.Barrier(n)
+    errors = []
+
+    def worker():                               # 完全走老路径：直接记账，没有门
+        try:
+            barrier.wait(timeout=10)
+            tid = TS.mark_turn_start(sid)
+            time.sleep(0.03)
+            TS.mark_turn_end(sid, tid)
+        except Exception as exc:                # pragma: no cover
+            errors.append(repr(exc))
+
+    ths = [threading.Thread(target=worker) for _ in range(n)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join(timeout=60)
+    assert not errors, errors
+    st = TS.get_state(sid).snapshot()
+    assert st["total_turns"] == n
+    assert st["conflicts"] >= 1, "对照组没踩车，说明这个测试造不出重叠，f3 的结论不成立"
+    assert st["serialized_waits"] == 0
+    TS.reset()
+
+
+def test_f7_ws_entry_calls_gate_before_accounting(client, new_session, monkeypatch, _flag_guard):
+    """真 /ws 入口必须过门，且**先过门后记账**（顺序错了就等于没串行化）。"""
+    sid = new_session
+    os.environ["MEMOMICS_THREAD_SERIALIZE"] = "1"
+    TS.reset()
+    calls = []
+    real_gate, real_start = TS.begin_turn_serialized, TS.mark_turn_start
+
+    async def spy_gate(s, source="user", **kw):
+        calls.append(("gate", s, source))
+        return await real_gate(s, source, **kw)
+
+    def spy_start(s, source="user"):
+        calls.append(("start", s, source))
+        return real_start(s, source)
+
+    monkeypatch.setattr(TS, "begin_turn_serialized", spy_gate)
+    monkeypatch.setattr(TS, "mark_turn_start", spy_start)
+    monkeypatch.setattr(server, "_create_agent", lambda *a, **k: _StubAgent())
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "switch_session", "session_id": sid})
+            ws.send_json({"type": "chat", "message": "你好", "session_id": sid})
+            deadline = time.time() + 20
+            while time.time() < deadline and not calls:
+                time.sleep(0.05)
+        assert calls, "真 /ws 回合没有调用串行化门"
+        assert calls[0][0] == "gate" and calls[0][1] == sid, calls
+        snap = TS.get_state(sid).snapshot()
+        assert snap["total_turns"] >= 1, "记账没落在真会话上"
+        assert snap["conflicts"] == 0
+    finally:
+        cleanup_session(sid)

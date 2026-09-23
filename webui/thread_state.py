@@ -33,6 +33,7 @@ MEMOMICS_THREAD_SERIALIZE=1 并用 wait_for_idle()（本文件已提供，接线
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import time
@@ -44,8 +45,10 @@ __all__ = [
     "ThreadState", "ThreadRegistry", "TurnRecord",
     "enabled", "set_enabled", "should_serialize", "serialize_timeout",
     "get_state", "mark_turn_start", "mark_turn_end", "turn_active",
-    "wait_for_idle", "drop", "reset", "registry", "stats",
+    "wait_for_idle", "wait_turn_idle", "begin_turn_serialized", "drop", "reset",
+    "registry", "stats",
     "MAX_ACTIVE_PER_SESSION", "MAX_SESSIONS", "MAX_RECENT_TURNS",
+    "DEFAULT_STALE_TURN_S", "stale_after",
 ]
 
 VERSION = "p2-2.1"
@@ -133,6 +136,7 @@ MAX_ACTIVE_PER_SESSION = 16     # 单会话同时活跃回合上限（超过只�
 MAX_SESSIONS = 2000             # 注册表会话数上限（LRU 淘汰）
 MAX_RECENT_TURNS = 20           # 每会话保留的最近回合环形缓冲
 DEFAULT_SERIALIZE_TIMEOUT = 1800.0  # wait_for_idle 默认最长等待 30 分钟
+DEFAULT_STALE_TURN_S = 3600.0      # 超过这么久还没收尾的回合按僵尸处理（串行化自愈）
 
 
 class TurnRecord(object):
@@ -166,7 +170,7 @@ class ThreadState(object):
 
     __slots__ = ("sid", "created_at", "_lock", "_cond", "_seq", "_active",
                  "_recent", "total_turns", "conflicts", "overflows", "_last_conflict",
-                 "_last_turn_at")
+                 "_last_turn_at", "serialized_waits", "wait_timeouts", "stale_dropped")
 
     def __init__(self, sid: str):
         self.sid = sid
@@ -181,6 +185,9 @@ class ThreadState(object):
         self.overflows = 0
         self._last_conflict: Optional[Dict[str, Any]] = None
         self._last_turn_at = 0.0
+        self.serialized_waits = 0    # 串行化门真的等过几次
+        self.wait_timeouts = 0       # 等到超时（fail-open 放行）几次
+        self.stale_dropped = 0       # 僵尸回合被清掉几次
 
     # -- 记账 ------------------------------------------------------------
     def begin_turn(self, source: str = "user") -> Optional[TurnRecord]:
@@ -244,10 +251,30 @@ class ThreadState(object):
                 "total_turns": self.total_turns,
                 "conflicts": self.conflicts,
                 "overflows": self.overflows,
+                "serialized_waits": self.serialized_waits,
+                "wait_timeouts": self.wait_timeouts,
+                "stale_dropped": self.stale_dropped,
                 "last_conflict": self._last_conflict,
                 "last_turn_at": round(self._last_turn_at, 3),
                 "age_s": round(time.time() - self.created_at, 1),
             }
+
+    def drop_stale(self, max_age: float = DEFAULT_STALE_TURN_S) -> int:
+        """清掉超过 max_age 还没收尾的僵尸回合。串行化门的自愈阀——回合线程若是被
+        强杀/连接异常退出，活跃账目会永久占位；这里让后来的回合能继续走。"""
+        with self._lock:
+            now = time.time()
+            dead = [r for r in self._active.values() if now - r.started_at > max_age]
+            for rec in dead:
+                self._active.pop(rec.turn_id, None)
+                rec.ended_at = now
+                self._recent.append(rec)
+                self.stale_dropped += 1
+            if len(self._recent) > MAX_RECENT_TURNS:
+                del self._recent[:-MAX_RECENT_TURNS]
+            if dead:
+                self._cond.notify_all()
+            return len(dead)
 
     def wait_for_idle(self, timeout: float = DEFAULT_SERIALIZE_TIMEOUT) -> bool:
         """等到本会话没有活跃回合。串行化模式用（默认不接线）。"""
@@ -316,6 +343,9 @@ class ThreadRegistry(object):
                 "total_turns": sum(s.total_turns for s in states),
                 "conflicts": conflicts,
                 "overflows": sum(s.overflows for s in states),
+                "serialized_waits": sum(s.serialized_waits for s in states),
+                "wait_timeouts": sum(s.wait_timeouts for s in states),
+                "stale_dropped": sum(s.stale_dropped for s in states),
                 "evicted": self.evicted,
                 "serialize": should_serialize(),
                 "worst": [{"sid": s.sid[:12], "conflicts": s.conflicts,
@@ -350,6 +380,13 @@ def should_serialize() -> bool:
         return os.environ.get("MEMOMICS_THREAD_SERIALIZE", "0") == "1"
     except Exception:
         return False
+
+
+def stale_after() -> float:
+    try:
+        return float(os.environ.get("MEMOMICS_THREAD_STALE_S", DEFAULT_STALE_TURN_S))
+    except Exception:
+        return DEFAULT_STALE_TURN_S
 
 
 def serialize_timeout() -> float:
@@ -407,6 +444,83 @@ def wait_for_idle(sid: Any, timeout: Optional[float] = None) -> bool:
         return st.wait_for_idle(serialize_timeout() if timeout is None else timeout)
     except Exception:
         return True
+
+
+async def wait_turn_idle(sid: Any, timeout: Optional[float] = None, poll: float = 0.05) -> bool:
+    """串行化门（P2-2 补丁）：等同一会话上一个回合收尾再开新回合。
+
+    - 没开 MEMOMICS_THREAD_SERIALIZE 时**立刻返回 True**，不碰注册表、零开销、零行为变更；
+    - 开着的时候在事件循环里 await 轮询（不阻塞 loop，其他会话照常跑）；
+    - 超过 timeout 还没等到 → 记 wait_timeouts 并返回 False（fail-open，调用方按原行为继续）；
+    - 活跃回合超过 MEMOMICS_THREAD_STALE_S 视为僵尸，直接清掉（自愈，防死锁）。
+
+    返回 True = 可以开新回合（空闲 / 已等到 / 串行化关着），False = 等超时了。
+    """
+    try:
+        if not should_serialize() or not enabled():
+            return True
+        st = _REGISTRY.get(sid)
+        if st is None:
+            return True
+        deadline = time.time() + (serialize_timeout() if timeout is None else float(timeout))
+        stale = stale_after()
+        waited = False
+        while st.busy():
+            st.drop_stale(stale)
+            if not st.busy():
+                break
+            if time.time() >= deadline:
+                with st._lock:
+                    st.wait_timeouts += 1
+                return False
+            waited = True
+            await asyncio.sleep(poll)
+        if waited:
+            with st._lock:
+                st.serialized_waits += 1
+        return True
+    except Exception:
+        return True
+
+
+async def begin_turn_serialized(sid: Any, source: str = "user",
+                              timeout: Optional[float] = None,
+                              poll: float = 0.05) -> Optional[str]:
+    """串行化门 + 记账的**原子**版本（P2-2 补丁给 /ws 用的就是它）。
+
+    为什么必须原子：分开写（先等空闲、再记账）会有 TOCTOU 缝隙——两个线程都等到空闲、
+    然后都记账，conflicts 照样 +1。这里把"确认空闲"和"记账"放在同一把锁里，
+    所以门上方的并发调用不会互相踩，conflicts 恒为 0。
+
+    串行化关着时等价于 mark_turn_start（零开销、零行为变更）。
+    等超时 → 记 wait_timeouts，仍然按原行为放行（fail-open），返回 turn_id。
+    """
+    try:
+        if not should_serialize() or not enabled():
+            return mark_turn_start(sid, source)
+        st = _REGISTRY.get(sid)
+        if st is None:
+            return mark_turn_start(sid, source)
+        deadline = time.time() + (serialize_timeout() if timeout is None else float(timeout))
+        stale = stale_after()
+        waited = False
+        while True:
+            st.drop_stale(stale)
+            with st._lock:                     # ← 原子：空闲判定 + 记账同锁
+                if not st._active:
+                    if waited:
+                        st.serialized_waits += 1
+                    rec = st.begin_turn(source)
+                    return rec.turn_id if rec else None
+            if time.time() >= deadline:
+                with st._lock:
+                    st.wait_timeouts += 1
+                    rec = st.begin_turn(source)  # fail-open：按原行为继续
+                return rec.turn_id if rec else None
+            waited = True
+            await asyncio.sleep(poll)
+    except Exception:
+        return None
 
 
 def drop(sid: Any) -> bool:

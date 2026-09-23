@@ -15900,9 +15900,13 @@ async def ws_endpoint(ws: WebSocket):
                 # 同一 agent 上交错流, single-writer 护栏砍掉在飞流导致工具参数被截断为空。
                 # 在 self_intro/agent创建失败/run_agent finally 三处清除。
                 session["_user_turn_active"] = True
-                # P2-2：显式回合记账（只记账，不改行为）。同一会话第二个回合起飞时计 conflicts。
+                # P2-2：显式回合记账（默认只记账，不改行为；同一会话第二个回合起飞时计 conflicts）。
+                # P2-2 补丁：MEMOMICS_THREAD_SERIALIZE=1 时先过串行化门——等同会话上一个回合收尾
+                # 再开新回合，conflicts 归零；默认关 = 立刻返回、零开销、行为与以前完全一致。
                 if _thread_state is not None:
-                    _thread_state.mark_turn_start(session["id"], source="user")
+                    if await _thread_state.begin_turn_serialized(session["id"], source="user") is None:
+                        logger.warning("[ThreadState] session %s: 串行化门等待超时，按原行为继续",
+                                       session["id"][:12])
                 # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
                 # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
