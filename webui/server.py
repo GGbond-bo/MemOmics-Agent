@@ -21,6 +21,7 @@ import traceback
 import uuid
 import re
 import time
+import hashlib
 import shutil
 from pathlib import Path
 from datetime import datetime
@@ -9251,23 +9252,43 @@ def _background_update_check() -> None:
 # 根因：urllib 走 Python 默认 SSL 上下文，在 Windows 上信任锚取自系统证书存储
 # （ssl.enum_certificates 先 LocalMachine 后退 CurrentUser）。实测本机只载入 54 张，
 # 而随包 certifi 有 119 张 —— 系统存储缺签发链时 GitHub 证书就验不过，检查直接失败。
-# 修法：显式用 certifi 构建上下文（开发环境与打包 Python 均已带 certifi），
-# 取不到才回退系统默认；绝不关闭证书校验。
+# 修法：取 certifi ∪ 系统证书库（只取 certifi 会让装了 HTTPS 中间人安全软件的
+# 用户从"偶尔失败"变成"稳定失败"—— 那类根证书只在系统库里）。绝不关闭证书校验。
 _SSL_CTX_CACHE = None
 
 
 def _ssl_context():
-    """优先 certifi 信任锚的 SSL 上下文；certifi 不可用则回退系统默认。"""
+    """certifi ∪ 系统证书库 的 SSL 上下文（取并集，绝不关闭校验）。
+
+    2026-09-23 用户报障后定位到：这条链路上"只取一边"会各坏一种用户。
+      · 只信系统库（Python 默认）：安装包用户的系统库可能滞后/精简（实测随包
+        运行时只读到 54 张），缺 GitHub 签发链 → "unable to get local issuer
+        certificate"，也就是用户反馈的那个错；
+      · 只信 certifi：公司/安全软件做 HTTPS 中间人时，其自签根证书只装在
+        Windows 证收库里、certifi 没有（实测"仅系统库独有"的根有 21 张）
+        → 这些用户会从"偶尔能连"变成"稳定连不上"，等于修一个坏一个。
+    并集同时覆盖两种情形（实测随包运行时 150 + 54 → 172，⊇ 任一单独来源）。
+    加载全部失败才退化为系统默认（依旧开着校验）。
+    """
     global _SSL_CTX_CACHE
     if _SSL_CTX_CACHE is not None:
         return _SSL_CTX_CACHE
     import ssl as _ssl
+    ctx = None
     try:
         import certifi
-        _SSL_CTX_CACHE = _ssl.create_default_context(cafile=certifi.where())
+        ctx = _ssl.create_default_context(cafile=certifi.where())
     except Exception:
-        _SSL_CTX_CACHE = _ssl.create_default_context()
-    return _SSL_CTX_CACHE
+        try:
+            ctx = _ssl.create_default_context()
+        except Exception:
+            return _ssl.create_default_context()
+    try:
+        ctx.load_default_certs()   # 并上系统库：补中间人根证书/本机专有 CA
+    except Exception:
+        pass
+    _SSL_CTX_CACHE = ctx
+    return ctx
 
 
 def _url_opener(proxy):
@@ -10873,6 +10894,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
 
         def _wx_tool_start_cb(tool_name, args=None):
             _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            # P1-2(2026-09-23): 改动复核 —— 微信通道同样抓「改前」快照
+            try:
+                _snapshot_before_change(session, tool_name, args)
+            except Exception:
+                pass
 
         def _wx_tool_complete_cb(tool_name, result_str=""):
             _ev_wx = {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid}
@@ -10886,6 +10912,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
                 except Exception:
                     pass
             _session_emit(session, _ev_wx)
+            # P1-2(2026-09-23): 改动复核 —— 微信通道（complete 回调没有 args）→ 结算该工具留下的全部待结算项
+            try:
+                _finalize_file_change(session, tool_name)
+            except Exception:
+                pass
             # 扫描新生成的图片 → 推送 new_figure 事件
             try:
                 base = session.get("results_dir", "")
@@ -14458,6 +14489,401 @@ async def delete_session_goal(sid: str):
     return {"ok": True, **payload}
 
 
+# --- P1-2 (2026-09-23): 改动复核（跑前跑后快照 + diff + 单文件回滚） ---
+#
+# 借鉴 deer-flow 的部分（workspace_changes/types.py:63-116 的 WorkspaceFileChange 形状、
+# :18-26 的体积上限、api.py:18-48 的「轻量列表 / 完整内容两次取」）：
+#   path / change_type / lines_added / lines_removed / sha 前后值 / 轻量列表带预览。
+# deer-flow 没有的部分（这里是自己设计的，别处抄不到）：
+#   · 单文件回滚（POST .../revert）：写回改前内容，且要求当前内容仍等于改动后的 sha，
+#     否则 409 拒绝——防止把用户/别的程序后来的修改一起覆盖掉。
+#   · 跳过的改动也要能看见（超大/二进制文件不记 diff，但列表里给出原因）。
+
+_WRITER_TOOLS = {"write_file", "patch", "edit_file", "str_replace", "apply_patch", "create_file"}
+_CHANGE_MAX_FILE_BYTES = 262144     # 单文件快照上限 256KB（超过只记"跳过+原因"）
+_CHANGE_MAX_KEEP = 200              # 每会话保留最近 200 条
+_CHANGE_MAX_DIFF_LINES = 400        # 单条 diff 最多存 400 行
+_CHANGE_MAX_STORE_BYTES = 262144    # 落 state.db 的总量上限 256KB（超了从最旧的丢）
+_CHANGE_MAX_SKIPPED = 50
+_CHANGE_PREVIEW_LINES = 12
+_CHANGE_SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules",
+                     ".ipynb_checkpoints", ".mypy_cache", ".pytest_cache", ".idea"}
+
+_SERVER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _change_path_from_args(args):
+    """从工具参数里取目标路径（write_file/patch 用 path，别的工具可能用 file_path/file）。"""
+    if not isinstance(args, dict):
+        return ""
+    for k in ("path", "file_path", "file", "filename", "target"):
+        v = args.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip().strip('"').strip("'")
+    return ""
+
+
+def _change_skip_reason(abs_path):
+    parts = set(re.split(r"[\\/]+", abs_path))
+    if parts & _CHANGE_SKIP_DIRS:
+        return "缓存/依赖目录"
+    return ""
+
+
+def _change_skip_reason_text(kind):
+    return {"binary": "二进制/目录", "toolarge": f"超过 {_CHANGE_MAX_FILE_BYTES // 1024}KB",
+            "error": "读取失败"}.get(kind, "不可读")
+
+
+def _read_text_for_change(abs_path):
+    """读文件做快照。返回 (kind, text)：kind ∈ exists|missing|binary|toolarge|error"""
+    try:
+        if not os.path.exists(abs_path):
+            return "missing", None
+        if os.path.isdir(abs_path):
+            return "binary", None
+        size = os.path.getsize(abs_path)
+        if size > _CHANGE_MAX_FILE_BYTES:
+            return "toolarge", None
+        with open(abs_path, "rb") as f:
+            raw = f.read()
+        if b"\x00" in raw[:8192]:
+            return "binary", None
+        try:
+            return "exists", raw.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                return "exists", raw.decode("utf-8", errors="replace")
+            except Exception:
+                return "binary", None
+    except Exception:
+        return "error", None
+
+
+def _sha12(text):
+    if text is None:
+        return ""
+    try:
+        return hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+    except Exception:
+        return ""
+
+
+def _unified_diff_text(path, before, after):
+    """生成 unified diff；返回 (diff_text, added, removed, truncated)"""
+    import difflib as _dl
+    b = (before or "").splitlines(keepends=True)
+    a = (after or "").splitlines(keepends=True)
+    name = os.path.basename(path) or path
+    lines = list(_dl.unified_diff(b, a, fromfile=f"改前/{name}", tofile=f"改后/{name}", n=3))
+    added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+    truncated = False
+    if len(lines) > _CHANGE_MAX_DIFF_LINES:
+        lines = lines[:_CHANGE_MAX_DIFF_LINES]
+        truncated = True
+    return "".join(lines), added, removed, truncated
+
+
+def _change_note_skipped(session, path, reason):
+    lst = session.setdefault("_changes_skipped", [])
+    lst.append({"path": path, "reason": reason, "ts": datetime.now().strftime("%H:%M:%S")})
+    if len(lst) > _CHANGE_MAX_SKIPPED:
+        del lst[:len(lst) - _CHANGE_MAX_SKIPPED]
+
+
+def _snapshot_before_change(session, tool_name, args):
+    """工具执行前：把「改前」内容抓下来（此时文件还没被改）。"""
+    if tool_name not in _WRITER_TOOLS:
+        return None
+    path = _change_path_from_args(args)
+    if not path:
+        return None
+    try:
+        abs_path = os.path.abspath(path)
+    except Exception:
+        return None
+    reason = _change_skip_reason(abs_path)
+    if reason:
+        _change_note_skipped(session, abs_path, reason)
+        return None
+    kind, text = _read_text_for_change(abs_path)
+    if kind in ("binary", "toolarge", "error"):
+        _change_note_skipped(session, abs_path, _change_skip_reason_text(kind))
+        return None
+    pending = session.setdefault("_changes_pending", {})
+    pending[abs_path] = {"tool": tool_name, "before": text, "before_exists": kind == "exists",
+                         "ts": time.time()}
+    # 上限保护：pending 不该堆积（正常一次工具调用一进一出）
+    if len(pending) > 20:
+        for k in list(pending)[:-10]:
+            pending.pop(k, None)
+    return abs_path
+
+
+def _finalize_file_change(session, tool_name, args=None, result=None):
+    """工具执行后：对比「改后」内容，产出 diff 记录并推给前端。
+
+    args 给定时按它的 path 结算；args 为 None（微信通道的 complete 回调不带 args）
+    时，结算本会话里该工具留下的全部待结算项。
+    """
+    if tool_name not in _WRITER_TOOLS:
+        return None
+    pending = session.get("_changes_pending") or {}
+    if args is None or not _change_path_from_args(args):
+        targets = [p for p, s in pending.items() if s.get("tool") == tool_name]
+        rec = None
+        for p in targets:
+            rec = _finalize_one_change(session, tool_name, p) or rec
+        return rec
+    try:
+        abs_path = os.path.abspath(_change_path_from_args(args))
+    except Exception:
+        return None
+    return _finalize_one_change(session, tool_name, abs_path)
+
+
+def _finalize_one_change(session, tool_name, abs_path):
+    """结算单个路径：读改后内容 → diff → 记一条 → 推送。"""
+    pending = session.get("_changes_pending") or {}
+    snap = pending.pop(abs_path, None)
+    if snap is None:
+        return None          # 执行前没抓到（跳过或非本工具写的）→ 不记
+    kind, after_text = _read_text_for_change(abs_path)
+    if kind == "missing":
+        after_text, status = "", "deleted"
+    elif kind in ("binary", "toolarge", "error"):
+        _change_note_skipped(session, abs_path, _change_skip_reason_text(kind))
+        return None
+    else:
+        status = "added" if not snap.get("before_exists") else "modified"
+    before_text = snap.get("before")
+    if (before_text or "") == (after_text or "") and status != "deleted":
+        return None          # 内容没变（工具重写了同样内容）→ 不污染列表
+    diff_text, added, removed, truncated = _unified_diff_text(abs_path, before_text, after_text)
+    rec = {
+        "id": "chg_" + uuid.uuid4().hex[:10],
+        "path": abs_path,
+        "rel_path": _change_rel_path(session, abs_path),
+        "tool": tool_name,
+        "status": status,
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "added": added,
+        "removed": removed,
+        "truncated": truncated,
+        "sha_before": _sha12(before_text),
+        "sha_after": _sha12(after_text),
+        "diff": diff_text,
+        "preview": diff_text.splitlines()[:_CHANGE_PREVIEW_LINES],
+        "revertible": True,
+        # 回滚用的改前内容只放内存（不落库：体积大且含数据路径），重启后只能看不能回滚
+        "_before_text": before_text,
+        "_before_exists": bool(snap.get("before_exists")),
+    }
+    changes = session.setdefault("changes", [])
+    changes.append(rec)
+    if len(changes) > _CHANGE_MAX_KEEP:
+        del changes[:len(changes) - _CHANGE_MAX_KEEP]
+    _persist_changes(session)
+    _session_emit(session, {"type": "changes_update", **_changes_payload(session, light=True)})
+    return rec
+
+
+def _change_rel_path(session, abs_path):
+    for base in (session.get("results_dir") or "", _SERVER_ROOT):
+        if base:
+            try:
+                rel = os.path.relpath(abs_path, base)
+                if not rel.startswith(".."):
+                    return rel.replace("\\", "/")
+            except Exception:
+                pass
+    return abs_path
+
+
+def _changes_persist_blob(session):
+    """落库内容：只存元数据 + diff（不存改前全文），并按总量上限从最旧的丢。"""
+    keep = []
+    total = 0
+    for rec in reversed(session.get("changes", [])):
+        item = {k: v for k, v in rec.items() if not k.startswith("_")}
+        try:
+            size = len(json.dumps(item, ensure_ascii=False))
+        except Exception:
+            continue
+        if total + size > _CHANGE_MAX_STORE_BYTES:
+            break
+        total += size
+        keep.append(item)
+    keep.reverse()
+    return json.dumps({"schema": "memomics.changes/1", "changes": keep}, ensure_ascii=False)
+
+
+def _persist_changes(session):
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("changes", sid), _changes_persist_blob(session))
+
+
+def _restore_changes(session):
+    """进程重启后从 state.db 读回改动列表（只读不复写；revertible=False）。"""
+    if session.get("changes"):
+        return session["changes"]
+    sid = session.get("id", "")
+    if not sid:
+        return []
+    raw = _kv_get(_kv_ns("changes", sid))
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+    items = parsed.get("changes") if isinstance(parsed, dict) else None
+    out = []
+    for it in (items or []):
+        if not isinstance(it, dict) or not it.get("path"):
+            continue
+        it = dict(it)
+        it["revertible"] = False      # 重启后没有改前全文 → 只能复核，不能回滚
+        it["restored"] = True
+        out.append(it)
+    session["changes"] = out
+    return out
+
+
+def _changes_payload(session, light=True, change_id=None):
+    _restore_changes(session)
+    changes = session.get("changes", [])
+    skipped = session.get("_changes_skipped", [])
+    def _public(rec):
+        return {k: v for k, v in rec.items() if not k.startswith("_")}
+
+    if change_id:
+        for rec in changes:
+            if rec.get("id") == change_id:
+                return _public(rec)
+        return None
+    if not light:
+        return {"changes": [_public(c) for c in changes], "skipped": list(skipped)}
+    light_list = []
+    for rec in changes:
+        light_list.append({k: v for k, v in rec.items() if k not in ("diff",) and not k.startswith("_")})
+    files = len({c.get("path") for c in changes})
+    return {
+        "summary": {
+            "changes": len(changes),
+            "files": files,
+            "added": sum(int(c.get("added") or 0) for c in changes),
+            "removed": sum(int(c.get("removed") or 0) for c in changes),
+            "skipped": len(skipped),
+            "revertible": sum(1 for c in changes if c.get("revertible")),
+        },
+        "changes": light_list,
+        "skipped": list(skipped),
+    }
+
+
+def _change_revert_allowed(path):
+    """回滚白名单：只允许写回会话 results_dir 或仓库根目录内的文件。"""
+    try:
+        abs_path = os.path.abspath(path)
+    except Exception:
+        return False
+    roots = [_SERVER_ROOT]
+    for base in roots:
+        try:
+            if os.path.commonpath([abs_path, base]) == os.path.abspath(base):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _revert_file_change(session, change_id):
+    """回滚单条改动：把改前内容写回去。
+
+    安全闸（自己设计的部分）：当前文件内容必须仍等于该条改动后的 sha，
+    否则说明之后又有人改过它 → 409，绝不覆盖别人的修改。
+    """
+    _restore_changes(session)
+    rec = None
+    for c in session.get("changes", []):
+        if c.get("id") == change_id:
+            rec = c
+            break
+    if rec is None:
+        return 404, {"error": "改动记录不存在"}
+    if not rec.get("revertible") or "_before_text" not in rec:
+        return 409, {"error": "这条改动是重启前记录的，只有 diff 没有改前全文，无法回滚"}
+    path = rec.get("path") or ""
+    if not _change_revert_allowed(path):
+        return 403, {"error": f"路径不在允许回滚的范围内：{path}"}
+    kind, current = _read_text_for_change(path)
+    if kind in ("binary", "toolarge", "error"):
+        return 409, {"error": f"当前文件不可读（{kind}），拒绝回滚"}
+    cur_sha = _sha12("" if kind == "missing" else current)
+    if cur_sha != (rec.get("sha_after") or ""):
+        return 409, {"error": "文件在本次改动之后又被修改过，拒绝覆盖（请先人工确认）"}
+    try:
+        if not rec.get("_before_exists"):
+            # 改动前文件不存在 → 回滚 = 删除它
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(rec.get("_before_text") or "")
+    except Exception as e:
+        return 500, {"error": f"写回失败：{e}"}
+    rec["status"] = "reverted"
+    rec["revertible"] = False
+    rec["_before_text"] = None
+    _persist_changes(session)
+    _session_emit(session, {"type": "changes_update", **_changes_payload(session, light=True)})
+    return 200, {"ok": True, "path": path, "restored": bool(rec.get("_before_exists")),
+                 **_changes_payload(session, light=True)}
+
+
+@app.get("/api/sessions/{sid}/changes")
+async def get_session_changes(sid: str, full: int = 0):
+    """P1-2: 会话改动复核（默认轻量列表；full=1 时连 diff 一起给）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    payload = _changes_payload(session, light=(not full))
+    payload["session_id"] = sid
+    return payload
+
+
+@app.get("/api/sessions/{sid}/changes/{change_id}")
+async def get_session_change_detail(sid: str, change_id: str):
+    """P1-2: 单条改动的完整 diff（列表接口刻意不下发 diff，避免大文件刷屏）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    rec = _changes_payload(_sessions[sid], change_id=change_id)
+    if rec is None:
+        return JSONResponse({"error": "改动记录不存在"}, status_code=404)
+    return {"change": rec, "session_id": sid}
+
+
+@app.post("/api/sessions/{sid}/changes/{change_id}/revert")
+async def revert_session_change(sid: str, change_id: str):
+    """P1-2: 回滚单条改动（带 sha 一致性闸门，拒绝覆盖后续修改）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    code, body = _revert_file_change(_sessions[sid], change_id)
+    body["session_id"] = sid
+    return JSONResponse(body, status_code=code)
+
+
 # --- 待办 ---
 
 @app.get("/api/todos/{sid}")
@@ -15414,6 +15840,11 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_live_tool_ts"] = time.time()
                         _s.pop("_live_tool_warned", None)  # 每个工具各自一次 30min 长工具提醒
                         _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                        # P1-2(2026-09-23): 改动复核 —— 执行前抓「改前」快照（此时文件尚未被改）
+                        try:
+                            _snapshot_before_change(_s, tool_name, args)
+                        except Exception as _e_snap:
+                            logger.warning(f"[changes] 快照失败: {_e_snap}")
                         # P8: 记录本会话实际加载过的 skill（前端徽标 + 每轮审计数据源）
                         try:
                             if tool_name == "skill_view" and isinstance(args, dict) and args.get("name"):
@@ -15476,6 +15907,11 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 pass
                         _session_emit(_s, _ev_complete)
+                        # P1-2(2026-09-23): 改动复核 —— 工具跑完结算 before/after，产出 diff 并推送
+                        try:
+                            _finalize_file_change(_s, tool_name, args)
+                        except Exception as _e_chg:
+                            logger.warning(f"[changes] 结算失败: {_e_chg}")
                         # P2(2026-09-22): 裁决 → 会话待办（辩论结果必须进入下一步进程）
                         if tool_name == "debate_analysis":
                             try:

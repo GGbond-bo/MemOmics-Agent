@@ -28,11 +28,25 @@ SRC = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding
 
 
 class TestTlsContext:
-    def test_context_prefers_certifi(self):
-        """信任锚应来自 certifi（119 张），明显多于 Windows 系统存储（本机 54 张）"""
+    def test_context_is_union_of_both_stores(self):
+        """信任锚必须是 certifi ∪ 系统库，少于任一单独来源就说明并集没生效
+
+        用户环境实测（随包运行时）：仅 certifi 150、仅系统库 54、并集 172。
+        只取一边会各坏一种用户：系统库缺 GitHub 签发链（用户报障的成因）；
+        certifi 缺企业/安全软件的中间人根证书（那些用户会从偶尔失败变稳定失败）。
+        """
+        import ssl
         ctx = server._ssl_context()
-        n = len(ctx.get_ca_certs())
-        assert n >= 100, f"信任锚过少（{n}），疑似回退到系统存储"
+        n_union = len(ctx.get_ca_certs())
+        n_sys = len(ssl.create_default_context().get_ca_certs())
+        try:
+            import certifi
+            n_certifi = len(ssl.create_default_context(cafile=certifi.where()).get_ca_certs())
+        except Exception:
+            n_certifi = 0
+        assert n_union >= max(n_certifi, n_sys), \
+            f"并集({n_union}) 少于单独来源 certifi={n_certifi} / 系统={n_sys}"
+        assert n_union > 0, "信任锚为空"
 
     def test_context_is_cached(self):
         """重复调用返回同一上下文（避免每次请求重建）"""

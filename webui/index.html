@@ -378,6 +378,35 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 #goal-bar .gb-btn:hover { background:var(--primary-light); color:var(--primary); }
 #goal-bar .gb-todos { padding:4px 12px 8px 12px; max-height:180px; overflow-y:auto; border-top:1px solid var(--border); }
 #goal-bar.collapsed .gb-todos { display:none; }
+/* P1-2 改动复核 */
+.chg-summary { font-size:11px; font-weight:400; color:var(--text-light); margin-left:6px; }
+.chg-item { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; cursor:pointer; }
+.chg-item:hover { background:var(--primary-light); }
+.chg-badge { flex:0 0 auto; font-size:10px; padding:1px 5px; border-radius:4px; color:#fff; background:#8b949e; }
+.chg-badge.added { background:#2d8659; }
+.chg-badge.modified { background:#4a90d9; }
+.chg-badge.deleted { background:#c0392b; }
+.chg-badge.reverted { background:#8b949e; }
+.chg-path { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+.chg-stat { flex:0 0 auto; font-family:ui-monospace,Consolas,monospace; font-size:11px; }
+.chg-ts { flex:0 0 auto; font-size:10px; color:var(--text-light); }
+.chg-skip { font-size:11px; color:var(--text-light); margin-top:4px; }
+#change-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; z-index:9000; }
+#change-overlay.visible { display:flex; align-items:center; justify-content:center; }
+.chg-ov-box { width:min(900px,92vw); max-height:82vh; background:var(--bg,#fff); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.35); }
+.chg-ov-head { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); }
+.chg-ov-title { font-weight:600; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chg-ov-meta { font-size:11px; color:var(--text-light); padding:0 12px 6px 12px; }
+.chg-ov-full { font-size:11px; color:var(--text-light); padding:0 12px 8px 12px; word-break:break-all; font-family:ui-monospace,Consolas,monospace; }
+.chg-ov-diff { flex:1 1 auto; overflow:auto; font-family:ui-monospace,Consolas,monospace; font-size:12px; line-height:1.45; padding:8px 12px 14px 12px; background:var(--bg-soft,#f6f8fa); white-space:pre; }
+.chg-line { white-space:pre; }
+.chg-line.add { background:rgba(45,134,89,0.14); color:#1a6b41; }
+.chg-line.del { background:rgba(192,57,43,0.14); color:#8e2b20; }
+.chg-line.hunk { color:#4a90d9; }
+.chg-line.hdr { color:#8b949e; }
+.chg-ov-btn { border:1px solid var(--border); background:transparent; color:var(--text); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; }
+.chg-ov-btn.primary { border-color:#2d8659; color:#2d8659; }
+.chg-ov-btn.primary:disabled { opacity:0.5; cursor:not-allowed; }
 #live-status { position: sticky; top: 0; z-index: 30; margin: 4px 0 8px 0; padding: 6px 12px; background: rgba(74,144,217,0.12); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text, #333); display: none; backdrop-filter: blur(2px); }
 #live-status.stalled { background: #fff4e5; border-color: #f0a020; color: #8a5a00; }
 #live-status.done { background: rgba(45,134,89,0.1); border-color: #2d8659; color: #2d8659; }
@@ -1615,6 +1644,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           <div id="todo-list" style="font-size:12px;color:var(--text-light);">暂无待办</div>
         </div>
         <div class="info-section">
+          <h3>改动复核 <span id="changes-summary" class="chg-summary"></span></h3>
+          <div id="changes-list" style="font-size:12px;color:var(--text-light);">本会话还没有文件改动</div>
+        </div>
+        <div class="info-section">
           <h3 data-i18n="tool_status">工具状态</h3>
           <div class="item"><span class="name">scan_data</span><span class="badge">就绪</span></div>
           <div class="item"><span class="name">search_knowledge</span><span class="badge">就绪</span></div>
@@ -2318,7 +2351,7 @@ function handleMessage(msg) {
     // notice 进时间线，带 key 以便 notice_clear 清除
     addProgressItem(msg.content.substring(0,40), 'done', '', msg.ts || _nowTs(), msg.key || '');
     if (msg.content.includes('todo') || msg.content.includes('待办')) {
-      refreshTodos();
+      refreshTodos(); refreshChanges();
     }
   } else if (msg.type === 'notice_clear') {
     // Hermes notice_clear_callback: 按 key 清除对应通知
@@ -2428,7 +2461,7 @@ function handleMessage(msg) {
     // 出完图自动小幅刷新结果面板:立即 + 2.5 秒后补刷(最后落盘的文件也出现)
     refreshResults();
     _scheduleResultsRefresh(2500);
-    refreshTodos();
+    refreshTodos(); refreshChanges();
     updateSessionList();
     _p8Audit();  // P8: 本轮命中的置顶技能是否真的加载过
   } else if (msg.type === 'error') {
@@ -2451,6 +2484,9 @@ function handleMessage(msg) {
   } else if (msg.type === 'goal_update') {
     // P1-1: 目标变更（PUT/DELETE /api/sessions/{sid}/goal 后服务端广播）
     applyGoalPayload(msg);
+  } else if (msg.type === 'changes_update') {
+    // P1-2: 文件改动结算（write_file/patch 跑完后服务端广播轻量列表）
+    _changes.data = msg; renderChanges(msg);
   } else if (msg.type === 'cancelled') {
     hideLiveStatus('⏹️ 已停止');
     _stopLiveStatusTicker();
@@ -6291,7 +6327,7 @@ function switchSession(sid) {
     var hasLiveSnapshot = cached.hasSnapshot && cached.running;
     if (hasLiveSnapshot) {
       // 同页面切回已有完整快照的会话：快照已含全部历史，跳过 HTTP 重渲染防重复
-      refreshTodos();
+      refreshTodos(); refreshChanges();
       refreshResults();
       return;
     }
@@ -6341,7 +6377,7 @@ function switchSession(sid) {
       loadDebateTimeline(sid, _dcbTimelineCtx.msgEls, _dcbTimelineCtx.offset, true);
       _dcbTimelineCtx = null;
     }
-    refreshTodos();
+    refreshTodos(); refreshChanges();
     refreshResults();
   });
 
@@ -11476,6 +11512,120 @@ async function clearGoal() {
   } catch (e) { addError('清空目标失败：' + e); }
 }
 
+// === P1-2 改动复核（跑前跑后快照 → diff → 单文件回滚） ===
+var _changes = { sid: '', data: null, open: null };
+
+function _chgStatusText(s) {
+  return { added: '新增', modified: '修改', deleted: '删除', reverted: '已回滚' }[s] || s || '';
+}
+
+async function refreshChanges() {
+  var el = document.getElementById('changes-list');
+  if (!currentSid) { _changes = { sid: '', data: null, open: null }; renderChanges(null); return; }
+  try {
+    var r = await fetch('/api/sessions/' + currentSid + '/changes');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (!d || d.session_id !== currentSid) return;   // 会话已切换，丢弃过期响应
+    _changes.sid = currentSid;
+    _changes.data = d;
+    renderChanges(d);
+  } catch (e) { if (el) el.innerHTML = '<span style="font-size:12px;color:var(--text-light);">改动列表读取失败</span>'; }
+}
+
+function renderChanges(d) {
+  var el = document.getElementById('changes-list');
+  var sum = document.getElementById('changes-summary');
+  if (!el) return;
+  if (!d || !d.changes || !d.changes.length) {
+    var skipOnly = d && d.skipped && d.skipped.length;
+    el.innerHTML = '<span style="font-size:12px;color:var(--text-light);">' +
+      (skipOnly ? '没有可复核的文本改动（有 ' + skipOnly + ' 个被跳过的文件）' : '本会话还没有文件改动') + '</span>';
+    if (sum) sum.textContent = '';
+    if (skipOnly) el.innerHTML += _renderSkipped(d.skipped);
+    return;
+  }
+  if (sum) {
+    sum.textContent = d.summary.files + ' 个文件 · +' + d.summary.added + ' / −' + d.summary.removed +
+      (d.summary.skipped ? ' · 跳过 ' + d.summary.skipped : '');
+  }
+  var html = '';
+  for (var i = d.changes.length - 1; i >= 0; i--) {   // 最新的排最前
+    var c = d.changes[i];
+    html += '<div class="chg-item" onclick="openChangeDiff(' + JSON.stringify(c.id) + ')" title="' + escapeHtml(c.path) + '">' +
+      '<span class="chg-badge ' + escapeHtml(c.status) + '">' + _chgStatusText(c.status) + '</span>' +
+      '<span class="chg-path">' + escapeHtml(c.rel_path || c.path) + '</span>' +
+      '<span class="chg-stat"><span style="color:#2d8659">+' + (c.added || 0) + '</span> <span style="color:#c0392b">−' + (c.removed || 0) + '</span></span>' +
+      '<span class="chg-ts">' + escapeHtml(c.ts || '') + (c.revertible ? '' : ' · 只读') + '</span></div>';
+  }
+  el.innerHTML = html + _renderSkipped(d.skipped);
+}
+
+function _renderSkipped(skipped) {
+  if (!skipped || !skipped.length) return '';
+  var names = [];
+  for (var i = 0; i < skipped.length && i < 5; i++) {
+    var s = skipped[i];
+    names.push(escapeHtml(String(s.path || '').split(/[\\/]/).pop()) + '（' + escapeHtml(s.reason || '') + '）');
+  }
+  return '<div class="chg-skip">未记录 diff：' + names.join('、') +
+    (skipped.length > 5 ? ' 等 ' + skipped.length + ' 个' : '') + '</div>';
+}
+
+function _renderDiffHtml(diff) {
+  var lines = String(diff || '').split('\n');
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    var cls = 'ctx';
+    if (l.indexOf('+++') === 0 || l.indexOf('---') === 0) cls = 'hdr';
+    else if (l.indexOf('@@') === 0) cls = 'hunk';
+    else if (l.charAt(0) === '+') cls = 'add';
+    else if (l.charAt(0) === '-') cls = 'del';
+    out.push('<div class="chg-line ' + cls + '">' + escapeHtml(l === '' ? ' ' : l) + '</div>');
+  }
+  return out.join('');
+}
+
+async function openChangeDiff(id) {
+  try {
+    var r = await fetch('/api/sessions/' + currentSid + '/changes/' + id);
+    if (!r.ok) return;
+    var c = (await r.json()).change;
+    if (!c) return;
+    _changes.open = c;
+    document.getElementById('chg-ov-title').textContent = c.rel_path || c.path;
+    document.getElementById('chg-ov-meta').textContent = '工具 ' + c.tool + ' · ' + (c.created_at || c.ts) +
+      ' · +' + c.added + ' / −' + c.removed + (c.truncated ? ' · diff 已截断（改动行数过多）' : '');
+    document.getElementById('chg-ov-full').textContent = c.path;
+    document.getElementById('chg-ov-diff').innerHTML = _renderDiffHtml(c.diff);
+    var btn = document.getElementById('chg-ov-revert');
+    btn.disabled = !c.revertible;
+    btn.textContent = c.revertible ? '回滚此文件' : (c.restored ? '不可回滚（重启前记录）' : '不可回滚');
+    document.getElementById('change-overlay').classList.add('visible');
+  } catch (e) {}
+}
+
+function closeChangeDiff() {
+  var ov = document.getElementById('change-overlay');
+  if (ov) ov.classList.remove('visible');
+  _changes.open = null;
+}
+
+async function revertChange() {
+  var c = _changes.open;
+  if (!c || !c.revertible) return;
+  if (!confirm('把 ' + (c.rel_path || c.path) + ' 恢复成改动前的内容？\n\n若该文件在这次改动之后又被改过，系统会拒绝覆盖并报错。')) return;
+  try {
+    var r = await fetch('/api/sessions/' + currentSid + '/changes/' + c.id + '/revert', { method: 'POST' });
+    var d = await r.json();
+    if (!r.ok) { alert('回滚被拒绝：' + (d.error || r.status)); return; }
+    closeChangeDiff();
+    renderChanges(d);
+    if (typeof refreshResults === 'function') refreshResults();
+  } catch (e) { alert('回滚失败：' + e); }
+}
+
 // === 待办 ===
 async function refreshTodos() {
   if (!currentSid) return;
@@ -13400,5 +13550,17 @@ async function saveUpdateConfig(mode) {
   </div>
 </div>
 
+<div id="change-overlay">
+  <div class="chg-ov-box">
+    <div class="chg-ov-head">
+      <span class="chg-ov-title" id="chg-ov-title">改动</span>
+      <button class="chg-ov-btn" onclick="closeChangeDiff()">关闭</button>
+      <button class="chg-ov-btn primary" id="chg-ov-revert" onclick="revertChange()">回滚此文件</button>
+    </div>
+    <div class="chg-ov-meta" id="chg-ov-meta"></div>
+    <div class="chg-ov-full" id="chg-ov-full"></div>
+    <div class="chg-ov-diff" id="chg-ov-diff"></div>
+  </div>
+</div>
 </body>
 </html>
