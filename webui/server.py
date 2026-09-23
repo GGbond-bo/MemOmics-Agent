@@ -123,6 +123,17 @@ async def middleware_audit(limit: int = 50, routes: int = 0):
     except Exception as _e:
         return JSONResponse({"error": str(_e)}, status_code=500)
 
+
+@app.get("/api/sandbox/audit")
+async def sandbox_audit(limit: int = 50, codes: int = 0):
+    """P2-3：能力沙箱的只读状态（默认观察模式——判定照算、账照记，但不拦人）。
+    codes=1 时附带按拒绝码聚合的计数，便于看清"如果要强制，会拦掉什么"。"""
+    try:
+        from webui import sandbox as _sandbox
+        return JSONResponse(_sandbox.audit(limit=limit, codes=bool(codes)))
+    except Exception as _e:
+        return JSONResponse({"error": str(_e)}, status_code=500)
+
 import logging
 # Enable Hermes weixin debug logging
 logging.getLogger("gateway.platforms.weixin").setLevel(logging.DEBUG)
