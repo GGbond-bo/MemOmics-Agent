@@ -200,6 +200,9 @@ start_fixed.bat
 test_enforcement_block.py
 test_p0*.py
 test_p1*.py
+# 上面两条是给仓库根目录的临时脚本用的；正式测试在 webui/tests/ 下，必须入库
+!webui/tests/test_p0*.py
+!webui/tests/test_p1*.py
 test_proc_watchdog_e2e.py
 test_realdata_multiscene.py
 

@@ -3575,9 +3575,9 @@ def _tighten_cjk_ascii(s: str) -> str:
     return _CJK_ASCII_GAP_RE.sub("", s)
 
 
-def _match_red_skill_triggers(user_text: str) -> list:
+def _match_red_skill_hits(user_text: str) -> list:
     """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做匹配。
-    返回命中的 skill 名列表（按索引顺序）。空消息/无命中 → []。
+    返回命中列表（按索引顺序）：[{"name","keyword","rule"}]；空消息/无命中 → []。
 
     匹配语义（契约 contracts/skill_triggers.json → matching）：
       · 大小写无关；中文等无空格关键词走子串匹配（"质控" 命中 "先做质控和双细胞去除"）；
@@ -3590,7 +3590,13 @@ def _match_red_skill_triggers(user_text: str) -> list:
       · 但纯 ASCII 且 <=3 位的缩写（SCI/GO/QC/MR/KM/DEG/PPT/EDA）额外要求前后不紧贴英文字母：
         "science" 不再命中 SCI、"algorithm" 不再命中 GO（P0-2b 极端测试实抓）。
     缓存绑定 SKILLS_INDEX mtime（P0-2 修复：旧实现只在 None 时构建一次，
-    索引被 auto_register/技能编辑重建后仍用旧触发词，新技能永远匹配不到）。"""
+    索引被 auto_register/技能编辑重建后仍用旧触发词，新技能永远匹配不到）。
+
+    P0-3（2026-09-23）：在原有匹配之上只多记一件事——「为什么命中」：
+    keyword = 索引里真实存在的那条触发词，rule = 命中所走的规则名
+    （substring / cjk-gap / short-ascii / multiword）。_match_red_skill_triggers 是本函数的
+    名字投影，路由结果逐句不变（契约测试 + 路由矩阵逐条钉住）。
+    """
     global _RED_TRIGGER_CACHE, _RED_TRIGGER_CACHE_MTIME
     if not user_text:
         return []
@@ -3619,38 +3625,45 @@ def _match_red_skill_triggers(user_text: str) -> list:
     t_tight = _tighten_cjk_ascii(t)  # 边界空白归一后的文本（"CNS 级别" -> "cns级别"）
     hits = []
     for name, triggers in _RED_TRIGGER_CACHE:
-        matched = False
         for kw in triggers:
             kw_l = kw.lower()
-            if len(kw_l) >= 2:
-                # 短 ASCII 缩写走「字母边界」匹配，避免 science/algorithm/mRNA/degree 这类词片段误触发（P0-2b）
-                if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
-                    if _short_ascii_kw_match(kw_l, t):
-                        matched = True
-                        break
-                    continue
-                if kw_l in t:
-                    matched = True
-                    break
+            if len(kw_l) < 2:
+                continue
+            rule = ""
+            # 短 ASCII 缩写走「字母边界」匹配，避免 science/algorithm/mRNA/degree 这类词片段误触发（P0-2b）
+            if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
+                if _short_ascii_kw_match(kw_l, t):
+                    rule = "short-ascii"
+            elif kw_l in t:
+                rule = "substring"
+            elif _tighten_cjk_ascii(kw_l) in t_tight:
                 # 归一后再判一次："CNS级别" ← "CNS 级别"、"AI腔" ← "AI 腔"（见 _tighten_cjk_ascii）
-                if _tighten_cjk_ascii(kw_l) in t_tight:
-                    matched = True
-                    break
+                rule = "cjk-gap"
+            elif " " in kw_l and t_words:
                 # 英文多词触发词：实词全中（"review paper" 需要 review 与 paper 同时出现）
-                if " " in kw_l and t_words:
-                    kw_words = set(w for w in kw_l.split() if w not in _EN_STOPWORDS)
-                    if kw_words and kw_words <= t_words:
-                        matched = True
-                        break
-        if matched:
-            hits.append(name)
+                kw_words = set(w for w in kw_l.split() if w not in _EN_STOPWORDS)
+                if kw_words and kw_words <= t_words:
+                    rule = "multiword"
+            if rule:
+                hits.append({"name": name, "keyword": kw, "rule": rule})
+                break
     # 批K(2026-08-16)：本地文献库操作豁免全局文献类 RED skills——
     # "总结文献库里…" 不应被 literature-review(触发词'总结') / paper-summary(触发词'paper')
     # 抢占 skill_view，本地文献库有专用工具（summarize_paper / kb_extract_from_paper / literature_import）。
     _lower = user_text.lower()
     if hits and any(t in user_text or t in _lower for t in _LOCAL_LIT_EXEMPT_TRIGGERS):
-        hits = [h for h in hits if h not in _LOCAL_LIT_RED_EXEMPT]
+        hits = [h for h in hits if h["name"] not in _LOCAL_LIT_RED_EXEMPT]
     return hits
+
+
+def _match_red_skill_triggers(user_text: str) -> list:
+    """命中 RED 技能名列表（按索引顺序）。
+
+    P0-3 起是 _match_red_skill_hits 的名字投影：匹配语义、命中顺序、本地文献豁免
+    完全一致，只是不再丢弃「命中理由」（理由由 _match_red_skill_hits 返回、由
+    _red_hit_emit 推给前端）。保持本函数签名与语义不变——契约测试与路由矩阵依赖它。
+    """
+    return [h["name"] for h in _match_red_skill_hits(user_text)]
 
 
 # === P8(置顶 skill): 会话级优先技能 + skill 元数据 + 文件树 ===
@@ -4112,6 +4125,338 @@ def _pinned_expect_emit(session, user_text: str) -> list:
             pass
     return exp
 
+
+# === P0-3(2026-09-23): 命中可见性 + 显式 /skill-name 调用 ===
+# 痛点 1（命中不可见）：用户看到 agent 用了某个技能，却不知道「为什么是它」——触发词藏在
+#   SKILLS_INDEX.md 的表格里，命中了哪条、走哪条匹配规则，人和模型都看不到，出了问题无从排查。
+# 痛点 2（只能靠猜）：想指定某个技能，只能把触发词碰运气写进句子里；触发词一改就断链。
+# 本区块只做两件事：
+#   A. 把命中理由说清楚：_match_red_skill_hits 给出 name+keyword+rule（路由本身逐句不变），
+#      _red_hit_emit 推 skill_hit 事件 → 前端 chip 直接显示「命中哪条触发词、走哪条规则」；
+#   B. 给一个确定性入口：/skill-name → _parse_skill_invocations 解析 → _build_explicit_skill_block
+#      硬注入（预载 SKILL.md 全文），优先级：显式调用 > 置顶技能 > RED 自动命中。
+
+_EXPLICIT_MAX = 4                  # 单条消息最多生效的显式调用数（防一句话塞 20 个技能）
+_EXPLICIT_CANDIDATE_MAX = 5        # 歧义 / 相近建议最多列几个
+_EXPLICIT_UNKNOWN_MAX = 3          # 未知技能最多提醒几个
+_EXPLICIT_FULLTEXT_BUDGET = 40000  # 每个显式技能预载 SKILL.md 的字符上限（与置顶一致）
+# 应用级斜杠命令：本身不是技能名（真实技能名优先命中，见 _parse_skill_invocations）
+_SLASH_RESERVED = ("papers", "help", "clear")
+# 本机最长技能名 60 字符（analyze_accelerated_stability_of_pharmaceutical_formulations），
+# 80 以上绝不可能是技能名（哈希/路径残片），静默忽略——但绝不截断后当成技能名报出来。
+_SLASH_TOKEN_MAX = 80
+# 斜杠后必须紧跟 ASCII 字母数字或下划线（技能目录里有 _debates 这类内部技能），
+# 名字里只允许技能目录名的实际字符集 [A-Za-z0-9._-]；以 . 开头的一律不算（/.. 穿越）。
+# 刻意不设长度上限：正则截断会把 /<200 个字符> 变成「64 个字符的技能名」，
+# 用户看到的将是他没打过的名字；长度过滤放在匹配之后（见 _SLASH_TOKEN_MAX）。
+_SLASH_TOKEN_RE = re.compile(r"/([A-Za-z0-9_][A-Za-z0-9._-]*)")
+# 斜杠左侧允许的边界字符：空白 / 中英标点 / 括号。除此之外的字符（字母数字、: / \ = 、<）
+# 说明这个斜杠属于 URL、路径或分数（http://a/b、work/papers/x、E:/work、1/2、//x）→ 不算调用。
+# 注意这里刻意不含 ASCII 冒号：Windows 盘符路径 E:/work 的斜杠左边正是冒号。
+_SLASH_BOUNDARY = set(" \t\r\n，,、。；;！!？?“”\"'‘’()[]{}【】<>《》")
+_SKILL_NAME_CACHE = None           # {小写技能名: 真实技能名}
+_SKILL_NAME_CACHE_SIG = None       # 技能目录签名（变了才重建）
+
+
+def _skill_name_sig():
+    """技能目录签名（每个根目录的 mtime + 子目录数）。目录没变就不重建名字索引。
+
+    不用逐个 stat 355 个技能目录：每句话都要解析斜杠命令，签名本身必须便宜。
+    """
+    sig = []
+    for r in _skill_roots():
+        try:
+            st = r.stat()
+            n = sum(1 for p in r.iterdir() if p.is_dir())
+            sig.append((str(r), int(st.st_mtime), n))
+        except Exception:
+            sig.append((str(r), 0, 0))
+    return tuple(sig)
+
+
+def _skill_name_index() -> dict:
+    """{小写技能名: 真实技能名}（扫盘一次后缓存，目录签名变了自动重建）"""
+    global _SKILL_NAME_CACHE, _SKILL_NAME_CACHE_SIG
+    sig = _skill_name_sig()
+    if _SKILL_NAME_CACHE is not None and _SKILL_NAME_CACHE_SIG == sig:
+        return _SKILL_NAME_CACHE
+    idx = {}
+    for r in _skill_roots():
+        try:
+            for p in r.iterdir():
+                if p.is_dir() and not p.name.startswith("."):
+                    idx.setdefault(p.name.lower(), p.name)
+        except Exception:
+            continue
+    _SKILL_NAME_CACHE = idx
+    _SKILL_NAME_CACHE_SIG = sig
+    return idx
+
+
+def _normalize_skill_token(tok) -> str:
+    """斜杠 token 归一：去空白、转小写、去掉尾部多打的 - . _
+
+    刻意不 strip 开头的下划线：技能目录里有 _debates 这类内部技能，"_" 是名字的一部分，
+    吃掉它会把 /_deb 误解析成 debate-core（极端测试实抓）。
+    """
+    return str(tok or "").strip().lower().rstrip("-._")
+
+
+def _tight_seps(s) -> str:
+    """去掉 - _ . 空格 后的小写形式：singlecell ↔ single-cell ↔ single_cell 视为同一个名字。"""
+    return re.sub(r"[-_.\s]+", "", str(s or "").lower())
+
+
+def _suggest_skills(token, limit: int = _EXPLICIT_CANDIDATE_MAX) -> list:
+    """给拼错/没写全的技能名找相近技能：前缀 → 名字是 token 的前缀 → 互为子串 → difflib。
+
+    完全不像就返回 []——宁可如实说「本机没有这个技能」，也不硬凑一个错的技能给用户。
+    """
+    t = _normalize_skill_token(token)
+    if len(t) < 3:
+        return []
+    idx = _skill_name_index()
+    low = list(idx.keys())
+    out = []
+
+    def _take(seq):
+        for n in seq:
+            real = idx.get(n)
+            if real and real not in out:
+                out.append(real)
+
+    _take(sorted(n for n in low if n.startswith(t)))
+    if len(out) < limit:
+        # 分隔符变体：/singlecell 应该能想到 single-cell-*（用户不会记得是连字符还是下划线）
+        tight_t = _tight_seps(t)
+        if len(tight_t) >= 3:
+            _take(sorted(n for n in low if _tight_seps(n).startswith(tight_t)))
+    if len(out) < limit:
+        _take(sorted(n for n in low if len(n) >= 3 and t.startswith(n)))
+    if len(out) < limit:
+        _take(sorted(n for n in low if len(n) >= 4 and (t in n or n in t)))
+    if len(out) < limit:
+        try:
+            import difflib
+            _take(difflib.get_close_matches(t, low, n=limit, cutoff=0.75))
+        except Exception:
+            pass
+    return out[:limit]
+
+
+def _parse_skill_invocations(user_text: str) -> dict:
+    """解析消息里的 /skill-name 显式调用（确定性入口，优先级最高）。
+
+    只认「真的技能名」：
+      · 斜杠左边必须是空白/中英标点/括号——URL（http://a/b）、路径（work/papers/x、E:/work）、
+        分数（1/2）、双斜杠（//name）的斜杠左边是字母数字或 : / \\ = → 一律不算调用；
+      · 应用级命令（/papers /help /clear）不算技能，也不算「未知技能」（用户没犯错）；
+      · 技能名大小写不敏感；下划线写法等价连字符写法（/scrna_qc → scrna-qc）；
+      · 唯一前缀自动补全（/academic-researc → academic-research）；前缀有 ≥2 个候选时
+        绝不猜，交回候选让用户确认；找不到就报 unknown + 相近建议（不许静默丢弃）。
+
+    超过 _EXPLICIT_MAX 的调用进 overflow（不是静默丢弃）：模型会被告知「这几个没生效」，
+    由它转告用户分批点名——用户以为点名了 6 个，实际只生效 4 个，这事必须说。
+
+    返回 {"raw": [...], "resolved": [{"token","name"}], "unknown": [...],
+          "ambiguous": [{"token","candidates"}], "overflow": [name]}；没有斜杠 → 全空（零开销早退）。
+    """
+    out = {"raw": [], "resolved": [], "unknown": [], "ambiguous": [], "overflow": []}
+    text = user_text or ""
+    if "/" not in text:
+        return out
+    idx = _skill_name_index()
+    low = list(idx.keys())
+    seen = set()
+    for m in _SLASH_TOKEN_RE.finditer(text):
+        i = m.start()
+        if i > 0 and text[i - 1] not in _SLASH_BOUNDARY:
+            continue                      # URL / 路径 / 分数 / 双斜杠里的斜杠
+        if m.end() < len(text) and text[m.end()] == "/":
+            continue                      # 像路径（/etc/passwd、/data/raw），不是技能命令
+        tok = m.group(1).rstrip('-._')
+        if not tok or tok.isdigit():
+            continue                      # 空名、纯数字（/2026）都不是技能
+        if len(tok) > _SLASH_TOKEN_MAX:
+            continue                      # 超长乱串（哈希/长路径残片），不是技能名也不是用户笔误
+        key = _normalize_skill_token(tok)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        name = idx.get(key)
+        if name is None:
+            for v in (key.replace("_", "-"), key.replace("-", "_")):
+                if v != key and v in idx:
+                    name = idx[v]
+                    break
+        if name is None and key in _SLASH_RESERVED:
+            continue                      # 应用级命令：不是技能，也不是未知技能
+        out["raw"].append(tok)
+        if name:
+            if len(out["resolved"]) < _EXPLICIT_MAX:
+                out["resolved"].append({"token": tok, "name": name})
+            else:
+                out["overflow"].append(name)
+            continue
+        starts = sorted(n for n in low if n.startswith(key))
+        if len(starts) == 1:
+            if len(out["resolved"]) < _EXPLICIT_MAX:
+                out["resolved"].append({"token": tok, "name": idx[starts[0]]})
+            else:
+                out["overflow"].append(idx[starts[0]])
+            continue
+        if len(starts) > 1:
+            out["ambiguous"].append({"token": tok,
+                                     "candidates": [idx[n] for n in starts[:_EXPLICIT_CANDIDATE_MAX]]})
+            continue
+        if len(out["unknown"]) < _EXPLICIT_UNKNOWN_MAX:
+            out["unknown"].append(tok)
+    return out
+
+
+def _build_explicit_skill_block(inv: dict, lang: str = "zh") -> str:
+    """显式 /skill-name 注入块：优先级高于置顶技能与 RED 自动命中，点名即预载 SKILL.md 全文。
+
+    未知技能与歧义名前缀也在这里说清楚（给出相近建议 / 候选清单 + 要求先跟用户确认），
+    避免模型「假装加载了一个不存在的技能」。没有任何显式调用 → 返回空串（不污染普通回合）。
+    """
+    if not isinstance(inv, dict):
+        return ""
+    res = list(inv.get("resolved") or [])
+    unk = list(inv.get("unknown") or [])
+    amb = list(inv.get("ambiguous") or [])
+    if not res and not unk and not amb:
+        return ""
+    zh = (lang != "en")
+    L = []
+    if zh:
+        L.append("【系统指令：用户显式点名技能 — 最高优先级，不可跳过】")
+    else:
+        L.append("[SYSTEM: user explicitly invoked skills — TOP priority, do not skip]")
+    if res:
+        if zh:
+            L.append("用户在本轮消息里用斜杠命令显式点名了以下技能（这是确定性指令，不是自动路由的猜测）：")
+        else:
+            L.append("The user explicitly named these skills with a slash command this turn (a deterministic instruction, not a routing guess):")
+        for r in res:
+            nm = r.get("name") or ""
+            tk = r.get("token") or nm
+            L.append("- " + nm + ("（用户输入 /" + tk + "）" if zh else " (user typed /" + tk + ")"))
+        L.append("")
+        if zh:
+            L.append("执行规则（必须遵守）：")
+        else:
+            L.append("Rules (mandatory):")
+        for r in res:
+            nm = r.get("name") or ""
+            if zh:
+                L.append("1. 第一件事：调用 skill_view(name='" + nm + "') 加载该技能的完整指令（禁止跳过、禁止凭固有知识直接作答）。")
+            else:
+                L.append("1. First action: call skill_view(name='" + nm + "') to load its full instructions (never skip, never answer from your own knowledge first).")
+        if zh:
+            L.append("2. 显式调用优先级最高：与置顶技能、RED 必触发技能、领域自动路由冲突时，一律以显式点名的技能为准，其他技能只能补充信息。")
+            L.append("3. 显式点名意味着「按这个技能的流程做」：不要用别的技能替换它，也不要只介绍这个技能是什么。")
+        else:
+            L.append("2. Explicit invocation outranks everything: user-pinned skills, RED mandatory skills and automatic domain routing all yield to the explicitly named skill; others may only add information.")
+            L.append("3. An explicit invocation means \"run this skill's workflow\": do not substitute another skill, and do not merely describe what the skill is.")
+        if zh:
+            L.append("4. 以下是该技能 SKILL.md 全文（已预载为兜底；仍须调用 skill_view 以获得脚本/模板等关联文件）：")
+        else:
+            L.append("4. Full SKILL.md is preloaded below as a fallback (still call skill_view to get linked scripts/templates):")
+        ove = [str(x) for x in (inv.get("overflow") or [])]
+        if ove:
+            joined_o = "、".join(ove) if zh else ", ".join(ove)
+            if zh:
+                L.append("⚠ 本机一次最多处理 " + str(_EXPLICIT_MAX) + " 个显式点名；下面这些名字这轮没生效：" + joined_o +
+                         "。请如实告诉用户「一次最多 4 个，请分批点名」，不要假装已经加载了它们。")
+            else:
+                L.append("⚠ At most " + str(_EXPLICIT_MAX) + " explicit skills per message; these were NOT loaded this turn: " + joined_o +
+                         ". Tell the user plainly (at most 4 per message, please name them in batches) and never pretend they were loaded.")
+        for r in res:
+            nm = r.get("name") or ""
+            full = _read_skill_md_text(nm, _EXPLICIT_FULLTEXT_BUDGET)
+            L.append("<<<EXPLICIT_SKILL_MD_BEGIN>>>")
+            L.append("### /" + nm)
+            L.append(full if full else ("（未能读取 SKILL.md：请调用 skill_view(name='" + nm + "') 获取）" if zh else "(SKILL.md not readable here; call skill_view(name='" + nm + "') instead)"))
+            L.append("<<<EXPLICIT_SKILL_MD_END>>>")
+    for a in amb:
+        tk = a.get("token") or ""
+        cands = [str(x) for x in (a.get("candidates") or [])]
+        joined = "、".join(cands) if zh else ", ".join(cands)
+        if zh:
+            L.append("- " + tk + "（⚠ 名字有歧义：本机有多个技能以此为前缀 —— " + joined +
+                     "。先向用户确认要用哪一个（把候选列出来），得到确认前不要自己选一个执行。）")
+        else:
+            L.append("- " + tk + " (⚠ ambiguous: several skills on this machine share this prefix — " + joined +
+                     ". Ask the user which one they mean (list the candidates); do not pick one on your own.)")
+    for tok in unk:
+        sug = _suggest_skills(tok)
+        joined = ("、".join(sug) if zh else ", ".join(sug)) or ("无" if zh else "none")
+        if zh:
+            L.append("- " + tok + "（⚠ 本机没有这个技能：可能拼错、已改名或已删除。相近技能：" + joined +
+                     "。请先如实告诉用户「本机没有这个技能」，把相近技能列出来让用户确认要不要改用；" +
+                     "不要假装加载它，也不要凭名字编造它的流程。）")
+        else:
+            L.append("- " + tok + " (⚠ no such skill on this machine: misspelled, renamed or deleted. Close matches: " + joined +
+                     ". Tell the user plainly that the skill does not exist, list the close matches and let them decide;" +
+                     " never pretend to load it and never invent its workflow from the name.)")
+    L.append("")
+    return "\n".join(L) + "\n"
+
+
+def _red_hit_emit(session, user_text: str) -> list:
+    """P0-3：把本回合 RED 命中「为什么」推给前端（skill_hit），并在会话里留存。
+
+    前端 chip 直接显示命中哪条触发词、走哪条规则；会话里的 _red_hits 供重连/刷新复现。
+    未命中 → 不发事件（不打扰用户）。
+    """
+    try:
+        hits = _match_red_skill_hits(user_text or "")
+    except Exception:
+        hits = []
+    if not hits:
+        return []
+    payload = [{"name": h["name"], "keyword": h["keyword"], "rule": h["rule"], "level": "RED"} for h in hits]
+    try:
+        session["_red_hits"] = payload
+    except Exception:
+        pass
+    try:
+        _session_emit(session, {"type": "skill_hit", "skills": payload,
+                                "ts": datetime.now().strftime("%H:%M:%S"),
+                                "session_id": session.get("id")})
+    except Exception:
+        pass
+    return hits
+
+
+def _skill_invoke_emit(session, inv: dict) -> dict:
+    """P0-3：显式 /skill-name 调用事件（skill_invoke）→ 前端回显点名结果。
+
+    resolved / unknown / ambiguous 三类都要如实回显：用户输入的东西不能被静默丢弃。
+    没有显式调用 → 返回 None 且不发事件。
+    """
+    if not isinstance(inv, dict):
+        return None
+    res = list(inv.get("resolved") or [])
+    unk = list(inv.get("unknown") or [])
+    amb = [dict(a) for a in (inv.get("ambiguous") or [])]
+    ove = list(inv.get("overflow") or [])
+    if not res and not unk and not amb and not ove:
+        return None
+    payload = {"type": "skill_invoke", "resolved": res, "unknown": unk, "ambiguous": amb,
+               "overflow": ove,
+               "suggestions": {t: _suggest_skills(t) for t in unk},
+               "ts": datetime.now().strftime("%H:%M:%S"),
+               "session_id": session.get("id")}
+    try:
+        _session_emit(session, payload)
+    except Exception:
+        pass
+    return payload
+
+
+# === P0-3 end ===
 
 # === P8 end ===
 
@@ -4788,16 +5133,21 @@ def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str
 
 
 def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "",
-                           pinned: list = None) -> str:
+                           pinned: list = None, explicit: dict = None) -> str:
     """根据意图+领域构建系统指令（硬注入，LLM无法跳过）
 
     P8: pinned = 用户在本会话置顶的 skill 名字列表（优先而非独占，见 _build_pinned_skill_block）。
+    P0-3: explicit = _parse_skill_invocations 的解析结果（用户斜杠点名）。优先级：
+          显式调用 > 置顶技能 > RED 自动命中——三段注入按这个顺序拼接。
     """
     # === RED 必触发预检：用户消息命中 RED skill 触发词 → 前置强约束先 skill_view ===
     # 审稿/润色/拆解等文献类任务常被意图分类器分到弱约束分支（literature/chat），
     # agent 会跳过 skill_view 直接按固有知识处理。这里在意图注入之外兜底：
     # 命中 RED 触发词 → 注入最高优先级指令，强制先加载对应 skill。
     # 注意：不覆盖原意图注入，作为前置段拼接。
+    # P0-3: 用户斜杠点名的技能（显式调用）——最高优先级，先于置顶与 RED 注入
+    explicit_inv = explicit if isinstance(explicit, dict) else _parse_skill_invocations(user_text)
+    explicit_prefix = _build_explicit_skill_block(explicit_inv, session_lang)
     red_prefix = ""
     red_hits = _match_red_skill_triggers(user_text)
     # P8: 置顶 skill 块 —— 优先级高于自动路由；命中触发词时预载 SKILL.md 全文
@@ -4824,7 +5174,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]) + "\n"
     if intent == "chat":
-        return pinned_prefix + red_prefix
+        return explicit_prefix + pinned_prefix + red_prefix
     if intent == "self_intro":
         # 硬注入固定自我介绍，LLM 禁止自由发挥
         return (
@@ -5087,7 +5437,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return pinned_prefix + red_prefix + "\n".join(lines)
+            return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -5133,7 +5483,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return pinned_prefix + red_prefix + "\n".join(lines)
+    return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
 
 
 # Progress text map (moved down from above)
@@ -12049,6 +12399,26 @@ async def skills_catalog(q: str = "", category: str = "", limit: int = 0):
     return {"skills": items, "total": len(items), "pinned_max": _PINNED_MAX}
 
 
+@app.get("/api/skills/resolve")
+async def resolve_skill(q: str = ""):
+    """P0-3: 解析 /skill-name（前端斜杠补全 + 歧义/未知/相近建议）。
+
+    注意：必须注册在 /api/skills/{name} 之前，否则 /resolve 会被当成技能名吞掉。
+    """
+    inv = _parse_skill_invocations(q or "")
+    first = inv["resolved"][0]["name"] if inv["resolved"] else ""
+    return {
+        "query": q or "",
+        "raw": inv["raw"],
+        "resolved": inv["resolved"],
+        "unknown": inv["unknown"],
+        "ambiguous": inv["ambiguous"],
+        "overflow": inv["overflow"],
+        "suggestions": [s for t in inv["unknown"] for s in _suggest_skills(t)][:8],
+        "skill": _pinned_item(first) if first else {},
+    }
+
+
 @app.get("/api/skills/{name}")
 async def get_skill_detail(name: str):
     """获取 skill 详情 (SKILL.md + 脚本列表)"""
@@ -14277,16 +14647,24 @@ async def ws_endpoint(ws: WebSocket):
                 # RED 必触发预检在 _build_skill_injection 内部完成：
                 # chat/self_intro 意图也调用（命中 RED 触发词 → 返回强约束注入；
                 # 未命中 → chat 返回空字符串，self_intro 由下方快速回复处理）
-                if _intent == "self_intro":
+                # P0-3: 显式 /skill-name 调用 —— 用户点名的技能优先级最高（高于置顶与 RED）
+                _explicit_inv = _parse_skill_invocations(user_text)
+                # 显式点名时不走自我介绍快速回复，改走 chat 注入（否则固定的自我介绍会盖掉显式块）
+                _inj_intent = "chat" if (_intent == "self_intro" and _explicit_inv["resolved"]) else _intent
+                if _intent == "self_intro" and not _explicit_inv["resolved"]:
                     _skill_ctx = None
                 else:
-                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
-                                                      pinned=_pinned_skills_get(session["id"]))
+                    _skill_ctx = _build_skill_injection(_inj_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
+                                                      pinned=_pinned_skills_get(session["id"]),
+                                                      explicit=_explicit_inv)
                     _pinned_expect_emit(session, user_text)  # P8: 置顶技能触发词命中 → 前端标记「本轮应加载」
+                    _red_hit_emit(session, user_text)        # P0-3: RED 命中原因 → 前端 chip 显示「为什么」
+                    _skill_invoke_emit(session, _explicit_inv)  # P0-3: 显式点名结果（命中/未知/歧义）→ 前端回显
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
                 # === 自我介绍快速回复（绕过 agent LLM）===
-                if _intent == "self_intro":
+                # P0-3: 用户显式点名了技能时不走快速回复（点名的东西最大）
+                if _intent == "self_intro" and not _explicit_inv["resolved"]:
                     _intro_zh = (
                         "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
                         "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"

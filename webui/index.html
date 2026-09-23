@@ -851,6 +851,32 @@ table.dcb-table.dg-table th { position:relative; }
 .skill-detail { padding:12px; }
 .skill-detail pre { background:var(--code-bg); color:var(--code-fg); padding:10px; border-radius:6px; overflow:auto; font-size:12px; max-height:600px; white-space:pre-wrap; word-break:break-word; }
 
+/* === P0-3(2026-09-23): 命中可见性 chip + 斜杠命令补全 === */
+.sk3-hits { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.sk3-hit { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:2px 8px; border-radius:12px;
+  border:1px solid var(--danger,#d9534f); color:var(--danger,#d9534f); background:rgba(217,83,79,0.10); max-width:460px; cursor:help; }
+.sk3-hit .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sk3-hit .kw { opacity:0.9; font-family:var(--mono,monospace); }
+.sk3-hit .rule { font-size:10px; opacity:0.78; border-left:1px solid currentColor; padding-left:5px; }
+.sk3-hit .x { cursor:pointer; opacity:0.55; padding:0 2px; }
+.sk3-hit .x:hover { opacity:1; }
+.sk3-hit.ok { border-color:var(--success); color:var(--success); background:rgba(63,158,106,0.10); }
+.sk3-hit.warn { border-color:var(--warning); color:var(--warning); background:rgba(224,135,42,0.12); }
+.sk3-hit.none { border-color:var(--border); color:var(--text-light); background:var(--tool-bg); cursor:default; }
+.sk3-slash { display:none; max-width:90%; margin:0 auto 4px; }
+.sk3-slash.on { display:block; }
+.sk3-slash-list { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden;
+  max-height:220px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.25); }
+.sk3-item { display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+.sk3-item:hover, .sk3-item.sel { background:var(--primary-light,rgba(96,125,205,0.12)); }
+.sk3-item.none { color:var(--text-light); font-size:11px; cursor:default; }
+.sk3-item .nm { font-weight:600; white-space:nowrap; }
+.sk3-item .ds { flex:1; color:var(--text-light); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sk3-item .lv { font-size:10px; padding:0 5px; border-radius:8px; border:1px solid var(--border); color:var(--text-light); }
+.sk3-item .lv.red { border-color:var(--danger,#d9534f); color:var(--danger,#d9534f); }
+.sk3-item .lv.yel { border-color:var(--warning); color:var(--warning); }
+.sk3-item .lv.grn { border-color:var(--success); color:var(--success); }
+
 /* === P8(置顶 skill): 输入框技能选择器 + skill 文件树 === */
 .chat-skill-bar { max-width:90%; margin:0 auto 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .sk-pick-btn { display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:3px 10px; border-radius:14px;
@@ -1325,7 +1351,13 @@ var I18N = {
     'sk_unpin':'取消置顶','sk_pin':'置顶此技能','sk_pinned_n':'已置顶 {0}/{1}','sk_hint_n':'已置顶 {0}/{1}（优先使用，非独占）',
     'sk_no_match':'没有匹配的技能','sk_max':'最多置顶 {0} 个技能','sk_disabled':'已禁用','sk_kw':'触发：',
     'sk_no_session':'请先创建或选择一个会话','sk_missed':'⚠️ 本轮命中了置顶技能触发词，但未加载：{0}',
-    'sk_files':'技能文件（点击查看内容）'
+    'sk_files':'技能文件（点击查看内容）',
+    'sk3_hit_title':'本轮命中','sk3_hit_why':'为什么是它：命中触发词「{0}」，走 {1} 规则',
+    'sk3_rule_substring':'子串匹配','sk3_rule_cjkgap':'中英紧邻匹配','sk3_rule_shortascii':'短词词边界匹配','sk3_rule_multiword':'多词全含匹配',
+    'sk3_invoke':'你点名的','sk3_unknown':'本机没有这个技能','sk3_ambiguous':'名字有歧义（先跟用户确认）',
+    'sk3_slash_hint':'输入 / 点名技能 · ↑↓ 选择 · Enter/Tab 补全 · Esc 关闭','sk3_no_match':'没有匹配的技能',
+    'sk3_clear':'清空命中提示','sk3_unknown_tip':'核对技能名：可能拼错、改名或已删除',
+    'sk3_overflow':'超出上限未生效（一次最多 4 个，请分批点名）'
   },
   en: {
     'title_chat':'Bio Data Analysis Chat','status_connecting':'Connecting...','send':'Send','stop':'⏹ Stop',
@@ -1409,7 +1441,13 @@ var I18N = {
     'sk_unpin':'Unpin','sk_pin':'Pin this skill','sk_pinned_n':'Pinned {0}/{1}','sk_hint_n':'Pinned {0}/{1} (priority, not exclusive)',
     'sk_no_match':'No matching skill','sk_max':'At most {0} pinned skills','sk_disabled':'disabled','sk_kw':'Triggers:',
     'sk_no_session':'Create or select a session first','sk_missed':'⚠️ Pinned skill triggers matched this turn but were not loaded: {0}',
-    'sk_files':'Skill files (click to view content)'
+    'sk_files':'Skill files (click to view content)',
+    'sk3_hit_title':'Matched this turn','sk3_hit_why':'Why: matched trigger "{0}" via {1}',
+    'sk3_rule_substring':'substring match','sk3_rule_cjkgap':'CJK-adjacent match','sk3_rule_shortascii':'short-token word boundary','sk3_rule_multiword':'all words present',
+    'sk3_invoke':'You named it','sk3_unknown':'no such skill on this machine','sk3_ambiguous':'ambiguous name (confirm with the user first)',
+    'sk3_slash_hint':'Type / to name a skill · Up/Down to choose · Enter/Tab to complete · Esc to close','sk3_no_match':'No matching skill',
+    'sk3_clear':'Clear the hit display','sk3_unknown_tip':'Check the skill name: misspelled, renamed or deleted',
+    'sk3_overflow':'over the per-message limit (max 4 — please name them in batches)'
   }
 };
 var UI_LANG = 'zh';
@@ -1510,11 +1548,17 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;" data-i18n="steer_hint">
         💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）
       </div>
+      <!-- P0-3: 输入框 / 技能补全（数据以后端 _parse_skill_invocations 为准） -->
+      <div class="sk3-slash" id="sk3-slash">
+        <div class="sk3-slash-list" id="sk3-slash-list"></div>
+      </div>
       <div class="chat-skill-bar" id="chat-skill-bar">
         <button type="button" class="sk-pick-btn" id="sk-pick-btn" onclick="openSkillPicker()" data-i18n-title="sk_pick_title" title="为本会话选择优先使用的 skill（优先而非独占）">
           🧩 <span data-i18n="sk_pick">技能</span>
         </button>
         <div class="sk-chips" id="sk-chips"></div>
+        <!-- P0-3: 本轮命中解释（为什么是它）+ 显式点名结果 -->
+        <div class="sk3-hits" id="sk3-hits"></div>
       </div>
       <div class="input-info">
         <span data-i18n="enter_hint">Enter发送 · Shift+Enter换行</span>
@@ -2214,6 +2258,12 @@ function handleMessage(msg) {
     // P8: 本轮消息命中了置顶技能的触发词 → 必须优先加载，未加载则本轮结束时告警
     onSkillExpect(msg.skills || []);
     if (typeof msg.ts === 'string') {}
+  } else if (msg.type === 'skill_hit') {
+    // P0-3: 后端报告本轮命中的技能，并说明「命中哪条触发词、走哪条匹配规则」
+    onSkillHit(msg.skills || []);
+  } else if (msg.type === 'skill_invoke') {
+    // P0-3: 用户 /skill-name 显式点名的结果（命中 / 未知 / 歧义）
+    onSkillInvoke(msg);
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
@@ -10136,6 +10186,7 @@ function _p8Audit() {
 }
 function _p8OnLangChange() {
   renderSkillChips();
+  if (typeof _sk3OnLangChange === 'function') _sk3OnLangChange();  // P0-3: 命中 chip / 补全列表跟着切语言
   var m = document.getElementById('skp-mask');
   if (m && m.style.display !== 'none') renderSkillPicker();
 }
@@ -10143,6 +10194,201 @@ function openSkillFile(path, rel) {
   if (!path) return;
   if (typeof openFileViewer === 'function') openFileViewer(path, rel, 'skills');
 }
+
+// === P0-3(2026-09-23): 命中可见性（为什么是它）+ 显式 /skill-name 调用 ===
+// 痛点：用户只看到「用了技能」，不知道「为什么用它」；想指定技能只能碰运气把触发词写进句子。
+// 这里只做两件事：把命中理由画成 chip（触发词 + 匹配规则）；给输入框加 / 补全。
+// 权威解析始终在后端 _parse_skill_invocations / /api/skills/resolve，前端只负责展示。
+var _sk3 = { hits: [], invoke: null, slash: [], sel: 0, open: false, catalog: null };
+
+function _sk3Esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s); }
+function _sk3JsArg(s) { return String(s == null ? '' : s).replace(/\\/g, '/').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function _sk3RuleName(rule) {
+  var r = String(rule || '');
+  if (r === 'short-ascii') return t('sk3_rule_shortascii');
+  if (r === 'cjk-gap') return t('sk3_rule_cjkgap');
+  if (r === 'multiword') return t('sk3_rule_multiword');
+  return t('sk3_rule_substring');
+}
+
+function _sk3RenderHits() {
+  var box = document.getElementById('sk3-hits');
+  if (!box) return;
+  var html = '', i;
+  if (_sk3.hits.length) {
+    html += '<span class="sk3-hit none" title="' + _sk3Esc(t('sk3_hit_title')) + '">' + _sk3Esc(t('sk3_hit_title')) + '</span>';
+    for (i = 0; i < _sk3.hits.length; i++) {
+      var h = _sk3.hits[i] || {};
+      var why = tf('sk3_hit_why', h.keyword || '', _sk3RuleName(h.rule));
+      html += '<span class="sk3-hit" title="' + _sk3Esc(why) + '">' +
+              '<span class="nm">' + _sk3Esc(h.name || '') + '</span>' +
+              '<span class="kw">' + _sk3Esc(h.keyword || '') + '</span>' +
+              '<span class="rule">' + _sk3Esc(_sk3RuleName(h.rule)) + '</span></span>';
+    }
+  }
+  var inv = _sk3.invoke;
+  if (inv) {
+    var rs = inv.resolved || [], un = inv.unknown || [], am = inv.ambiguous || [], sg = inv.suggestions || {};
+    for (i = 0; i < rs.length; i++) {
+      html += '<span class="sk3-hit ok" title="' + _sk3Esc(t('sk3_invoke')) + '">' +
+              '<span class="nm">/' + _sk3Esc(rs[i].name || '') + '</span>' +
+              '<span class="rule">' + _sk3Esc(t('sk3_invoke')) + '</span></span>';
+    }
+    for (i = 0; i < un.length; i++) {
+      var tok = un[i], sug = sg[tok] || [];
+      html += '<span class="sk3-hit warn" title="' + _sk3Esc(t('sk3_unknown_tip')) + '">' +
+              '<span class="nm">/' + _sk3Esc(tok) + '</span>' +
+              '<span class="rule">' + _sk3Esc(t('sk3_unknown')) +
+              (sug.length ? ' &rarr; ' + _sk3Esc(sug.join(' / ')) : '') + '</span></span>';
+    }
+    var ov = inv.overflow || [];
+    for (i = 0; i < ov.length; i++) {
+      html += '<span class="sk3-hit warn" title="' + _sk3Esc(t('sk3_overflow')) + '">' +
+              '<span class="nm">/' + _sk3Esc(ov[i]) + '</span>' +
+              '<span class="rule">' + _sk3Esc(t('sk3_overflow')) + '</span></span>';
+    }
+    for (i = 0; i < am.length; i++) {
+      var cands = (am[i].candidates || []).join(' / ');
+      html += '<span class="sk3-hit warn" title="' + _sk3Esc(t('sk3_ambiguous')) + '">' +
+              '<span class="nm">/' + _sk3Esc(am[i].token || '') + '</span>' +
+              '<span class="rule">' + _sk3Esc(t('sk3_ambiguous')) + (cands ? ' &rarr; ' + _sk3Esc(cands) : '') + '</span></span>';
+    }
+  }
+  if (html) {
+    html += '<span class="sk3-hit none" title="' + _sk3Esc(t('sk3_clear')) + '">' +
+            '<span class="x" onclick="_sk3Clear()">&#10005;</span></span>';
+  }
+  box.innerHTML = html;
+}
+
+function onSkillHit(list) { _sk3.hits = (list && list.length) ? list : []; _sk3RenderHits(); }
+
+function onSkillInvoke(msg) {
+  if (!msg) { _sk3.invoke = null; _sk3RenderHits(); return; }
+  _sk3.invoke = { resolved: msg.resolved || [], unknown: msg.unknown || [],
+                  ambiguous: msg.ambiguous || [], overflow: msg.overflow || [],
+                  suggestions: msg.suggestions || {} };
+  _sk3RenderHits();
+  var un = _sk3.invoke.unknown;
+  if (un.length && !(_sk3.invoke.suggestions[un[0]] || []).length) _sk3Suggest(un[0]);
+}
+
+async function _sk3Suggest(tok) {
+  try {
+    var r = await fetch('/api/skills/resolve?q=' + encodeURIComponent('/' + tok));
+    var d = await r.json();
+    if (d && d.suggestions && d.suggestions.length && _sk3.invoke) {
+      _sk3.invoke.suggestions[tok] = d.suggestions;
+      _sk3RenderHits();
+    }
+  } catch (e) {}
+}
+
+function _sk3Clear() { _sk3.hits = []; _sk3.invoke = null; _sk3RenderHits(); }
+
+async function _sk3LoadCatalog() {
+  if (_sk3.catalog) return _sk3.catalog;
+  if (typeof _p8 !== 'undefined' && _p8.catalog && _p8.catalog.length) { _sk3.catalog = _p8.catalog; return _sk3.catalog; }
+  try {
+    var r = await fetch('/api/skills/catalog');
+    var d = await r.json();
+    _sk3.catalog = (d && d.skills) || [];
+  } catch (e) { _sk3.catalog = []; }
+  return _sk3.catalog;
+}
+
+function _sk3TokenAtCaret() {
+  var el = document.getElementById('input');
+  if (!el) return null;
+  var v = el.value || '';
+  var pos = (typeof el.selectionStart === 'number') ? el.selectionStart : v.length;
+  var head = v.slice(0, pos);
+  var m = /(^|[ \t\r\n，,、。；;！!？?()\[\]{}【】<>《》])\/([A-Za-z0-9_][A-Za-z0-9._-]*)$/.exec(head);
+  if (!m) return null;
+  return { tok: m[2], start: pos - m[2].length - 1 };
+}
+
+function _sk3RenderSlash() {
+  var box = document.getElementById('sk3-slash'), list = document.getElementById('sk3-slash-list');
+  if (!box || !list) return;
+  if (!_sk3.open) { box.classList.remove('on'); return; }
+  var html = '<div class="sk3-item none">' + _sk3Esc(_sk3.slash.length ? t('sk3_slash_hint') : t('sk3_no_match')) + '</div>';
+  for (var i = 0; i < _sk3.slash.length; i++) {
+    var it = _sk3.slash[i], nm = String(it.name || ''), lv = String(it.trigger_level || '');
+    var cls = lv.indexOf('RED') >= 0 ? 'red' : (lv.indexOf('YEL') >= 0 ? 'yel' : (lv.indexOf('GRN') >= 0 ? 'grn' : ''));
+    html += '<div class="sk3-item' + (i === _sk3.sel ? ' sel' : '') + '" onmousedown="event.preventDefault(); _sk3InsertSlash(\'' + _sk3JsArg(nm) + '\')">' +
+            '<span class="nm">/' + _sk3Esc(nm) + '</span>' +
+            (lv ? '<span class="lv ' + cls + '">' + _sk3Esc(lv) + '</span>' : '') +
+            '<span class="ds">' + _sk3Esc(it.description || it.display || '') + '</span></div>';
+  }
+  list.innerHTML = html;
+  box.classList.add('on');
+}
+
+async function _sk3SlashMaybe() {
+  var hit = _sk3TokenAtCaret();
+  if (!hit) { _sk3CloseSlash(); return; }
+  var cat = await _sk3LoadCatalog();
+  var q = hit.tok.toLowerCase(), out = [];
+  for (var i = 0; i < cat.length; i++) {
+    var n = String(cat[i].name || '');
+    if (!n || cat[i].disabled) continue;
+    if (n.toLowerCase().indexOf(q) === 0) out.push(cat[i]);
+    if (out.length >= 8) break;
+  }
+  _sk3.slash = out; _sk3.sel = 0; _sk3.open = true;
+  _sk3RenderSlash();
+}
+
+function _sk3InsertSlash(name) {
+  var el = document.getElementById('input');
+  var hit = _sk3TokenAtCaret();
+  if (el && hit) {
+    var v = el.value || '';
+    var after = v.slice(hit.start + hit.tok.length + 1);
+    el.value = v.slice(0, hit.start) + '/' + name + ' ' + after;
+    var caret = hit.start + name.length + 2;
+    try { el.focus(); el.setSelectionRange(caret, caret); } catch (e) {}
+  }
+  _sk3CloseSlash();
+}
+
+function _sk3CloseSlash() {
+  _sk3.open = false; _sk3.slash = []; _sk3.sel = 0;
+  var box = document.getElementById('sk3-slash');
+  if (box) box.classList.remove('on');
+}
+
+function _sk3SlashKey(ev) {
+  if (!_sk3.open || !_sk3.slash.length) {
+    if (_sk3.open && ev.key === 'Escape') { ev.preventDefault(); _sk3CloseSlash(); return; }
+    // 新一轮消息发出时清掉上一轮的命中 chip（后端只在命中时才发事件，不主动清）
+    if (ev.key === 'Enter' && !ev.shiftKey) _sk3Clear();
+    return;
+  }
+  if (ev.key === 'ArrowDown') { _sk3.sel = (_sk3.sel + 1) % _sk3.slash.length; ev.preventDefault(); _sk3RenderSlash(); }
+  else if (ev.key === 'ArrowUp') { _sk3.sel = (_sk3.sel - 1 + _sk3.slash.length) % _sk3.slash.length; ev.preventDefault(); _sk3RenderSlash(); }
+  else if (ev.key === 'Enter' || ev.key === 'Tab') {
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    _sk3InsertSlash(String((_sk3.slash[_sk3.sel] || {}).name || ''));
+  } else if (ev.key === 'Escape') { ev.preventDefault(); _sk3CloseSlash(); }
+}
+
+function _sk3OnLangChange() { _sk3RenderHits(); _sk3RenderSlash(); }
+
+(function _sk3Bind() {
+  var el = document.getElementById('input');
+  if (el) {
+    el.addEventListener('keydown', _sk3SlashKey);
+    el.addEventListener('input', function () { _sk3SlashMaybe(); });
+    el.addEventListener('blur', function () { setTimeout(_sk3CloseSlash, 180); });
+  }
+  var btn = document.getElementById('send');
+  if (btn) btn.addEventListener('click', function () { _sk3Clear(); });
+})();
+
+// === P0-3 end ===
 
 // === Skill 浏览 ===
 var _allSkills = [];
