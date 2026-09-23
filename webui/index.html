@@ -578,6 +578,21 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 .cite-err { color:var(--danger,#d8436b); }
 .cite-mono { font-family:Consolas,monospace; }
 .cite-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+/* === P1-4 会话大纲：右侧可点目录 === */
+#outline-list { display:flex; flex-direction:column; gap:2px; max-height:240px; overflow-y:auto; }
+#outline-list .out-none { font-size:12px; color:var(--text-light); }
+#outline-list .out-more { font-size:11px; color:var(--text-light); padding:4px 2px; }
+#outline-list .out-row { padding:6px 8px; border-radius:8px; border-left:2px solid transparent; cursor:pointer; }
+#outline-list .out-row:hover { background:rgba(127,127,127,0.12); }
+#outline-list .out-row.active { background:rgba(64,158,255,0.14); border-left-color:#409eff; }
+#outline-list .out-head { display:flex; gap:6px; align-items:baseline; }
+#outline-list .out-num { flex:0 0 auto; min-width:18px; text-align:center; font-size:11px; border-radius:6px; background:rgba(127,127,127,0.18); padding:0 4px; }
+#outline-list .out-title { flex:1 1 auto; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#outline-list .out-sub { color:var(--text-light); font-size:11px; padding-left:24px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#outline-list .out-badges { padding-left:24px; }
+#outline-list .out-badge { font-size:11px; color:var(--text-light); }
+.message.turn-flash .bubble { animation:turnFlash 1.5s ease-out 1; }
+@keyframes turnFlash { 0% { box-shadow:0 0 0 3px rgba(64,158,255,0.55); } 100% { box-shadow:0 0 0 3px rgba(64,158,255,0); } }
 .anchor.none { background:rgba(216,67,107,0.12); color:var(--danger); border-color:rgba(216,67,107,0.3); }
 .chip.warn { color:var(--warning); border-color:rgba(224,135,42,0.35); background:rgba(224,135,42,0.10); }
 .dcb-note { margin-top:7px; font-size:11px; color:var(--text-light); }
@@ -1351,7 +1366,7 @@ var I18N = {
     'input_ph':'输入您的分析需求... (Enter发送, Shift+Enter换行)\n支持粘贴截图、拖拽图片到输入框',
     'upload_img':'上传图片 (或粘贴/拖拽)','goto_bottom':'▼ 回到底部','steer_hint':'💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）',
     'enter_hint':'Enter发送 · Shift+Enter换行','info_title':'分析信息','cur_session':'当前会话',
-    'todo':'待办列表','todo_empty':'暂无待办','tool_status':'工具状态','ready':'就绪',
+    'todo':'待办列表','todo_empty':'暂无待办','outline':'会话大纲','outline_empty':'本会话还没有问答','outline_hidden':'前面还有 {n} 轮','tool_status':'工具状态','ready':'就绪',
     'kb':'知识库','yaml_tpl':'YAML 模板','runtime_health':'运行健康','runtime_load':'点击 🔄 加载',
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
@@ -1441,7 +1456,7 @@ var I18N = {
     'input_ph':'Describe your analysis... (Enter to send, Shift+Enter for newline)\nPaste screenshots or drag images here',
     'upload_img':'Upload image (or paste/drag)','goto_bottom':'▼ Back to bottom','steer_hint':'💡 Agent is running — type to steer (won\'t interrupt current tool)',
     'enter_hint':'Enter to send · Shift+Enter for newline','info_title':'Analysis Info','cur_session':'Current Session',
-    'todo':'To-do List','todo_empty':'No to-dos yet','tool_status':'Tool Status','ready':'Ready',
+    'todo':'To-do List','todo_empty':'No to-dos yet','outline':'Chat Outline','outline_empty':'No turns in this session yet','outline_hidden':'{n} earlier turns','tool_status':'Tool Status','ready':'Ready',
     'kb':'Knowledge Base','yaml_tpl':'YAML Templates','runtime_health':'Runtime Health','runtime_load':'Click 🔄 to load',
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
@@ -1669,6 +1684,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="info-section">
           <h3 data-i18n="cur_session">当前会话</h3>
           <div class="item"><span class="name" id="cur-session">无</span></div>
+        </div>
+        <div class="info-section">
+          <h3>会话大纲 <span id="outline-count" class="chg-summary"></span></h3>
+          <div id="outline-list" style="font-size:12px;color:var(--text-light);">本会话还没有问答</div>
         </div>
         <div class="info-section">
           <h3 data-i18n="todo">待办列表</h3>
@@ -2973,7 +2992,7 @@ function copyMessage(el) {
   });
 }
 
-function addUserMsg(text, imageUrls) {
+function addUserMsg(text, imageUrls, turn) {
   var div = document.createElement('div');
   div.className = 'message user';
   var imgsHtml = '';
@@ -2985,6 +3004,8 @@ function addUserMsg(text, imageUrls) {
   var textHtml = text ? '<div>' + escapeHtml(text) + '</div>' : '';
   div.innerHTML = '<div class="role"><span>你</span></div><div class="bubble">' + imgsHtml + textHtml + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
+  // P1-4: 挂轮次（带 turn 的是历史回放，没带的是本会话新提问，自增）
+  _registerTurnEl(div, (turn && turn > 0) ? turn : (_turnSeq + 1), 'user');
   scrollBottom();
 }
 
@@ -3008,6 +3029,8 @@ function addAssistantMsg(text, meta) {
   // P1-3: 回答里的 [KB源:x] / [数据:y] / [DOI:z] 渲染成可点击的引用标签
   div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
+  // P1-4: 回答归到当前轮次（历史回放用后端给的 turn，实时消息用当前轮）
+  _registerTurnEl(div, (meta && meta.turn && meta.turn > 0) ? meta.turn : _turnSeq, 'assistant');
   // 2026-08-23 修复：initMermaid 必须在节点入 DOM 之后调用——
   // 之前先调用再 append，querySelectorAll 找不到 → 历史加载（刷新）的 mermaid 永不渲染
   initMermaid();
@@ -6174,7 +6197,7 @@ function loadAllMessages(sid) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       // 2026-08-26: 增加前缀内容级过滤（[会话要求]/[相关历史记忆] 等 role=user 注入）
       if (_isInjectMsg(m)) return;
-      if (m.role === 'user') addUserMsg(m.content);
+      if (m.role === 'user') addUserMsg(m.content, null, m.turn);
       else addAssistantMsg(m.content, m);
       var _le = document.getElementById('messages').lastElementChild;
       if (_le) msgEls.push(_le);
@@ -6378,7 +6401,7 @@ function switchSession(sid) {
       // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
       // 2026-08-26: 前缀内容级过滤（与 loadAllMessages 同 helper）
       if (_isInjectMsg(m)) return;
-      if (m.role === 'user') addUserMsg(m.content);
+      if (m.role === 'user') addUserMsg(m.content, null, m.turn);
       else addAssistantMsg(m.content, m);
       var _le = document.getElementById('messages').lastElementChild;
       if (_le) msgEls.push(_le);
@@ -11792,6 +11815,166 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// === P1-4 会话大纲（一轮 = 一条提问 + 它之后的回答，点一下跳过去） ===
+// 轮次号来自后端 messages.turn（历史回放用它对齐）；本会话新消息按用户提问自增。
+// 目录直接从对话流 DOM 推导，不缓存状态 —— 切会话、清空消息都不会残留。
+var _turnSeq = 0;            // 当前轮次（用户提问数）
+var _activeTurn = 0;         // 目录里高亮的那一轮
+var _outlineMax = 200;       // 最多渲染多少轮（与后端 _OUTLINE_MAX_TURNS 对齐）
+var _outlineTimer = null;
+
+function _turnOf(el) {
+  var t = el && el.getAttribute ? parseInt(el.getAttribute('data-turn'), 10) : NaN;
+  return isNaN(t) ? 0 : t;
+}
+
+function _registerTurnEl(el, turn, role) {
+  if (!el) return;
+  var t = (turn && turn > 0) ? turn : _turnSeq;
+  if (t < 1) t = 0;                       // 开场白：还没有用户提问
+  el.setAttribute('data-turn', String(t));
+  if (t > _turnSeq) _turnSeq = t;
+  if (role === 'user' && t > 0) {
+    if (!document.getElementById('msg-' + t + '-user')) el.id = 'msg-' + t + '-user';
+  } else if (role === 'assistant' && t > 0) {
+    if (!document.getElementById('msg-' + t + '-assistant')) el.id = 'msg-' + t + '-assistant';
+  }
+  _outlineDirty();
+}
+
+function _outlineDirty() {
+  if (_outlineTimer) return;
+  _outlineTimer = setTimeout(function() { _outlineTimer = null; refreshOutline(); }, 200);
+}
+
+// 气泡正文（跳过复制按钮/页脚/图片，免得「📋 复制」混进摘要）
+function _bubbleText(el) {
+  if (!el || !el.querySelector) return '';
+  var b = el.querySelector('.bubble');
+  if (!b) return '';
+  var parts = [];
+  for (var i = 0; i < b.childNodes.length; i++) {
+    var n = b.childNodes[i];
+    if (n.nodeType === 1 && n.classList && (n.classList.contains('copy-btn') || n.classList.contains('msg-meta') || n.classList.contains('msg-image'))) continue;
+    parts.push(n.textContent || '');
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function _outlineTurns() {
+  var box = document.getElementById('messages');
+  if (!box) return [];
+  var els = box.querySelectorAll('.message[data-turn]');
+  var map = {}, order = [];
+  for (var i = 0; i < els.length; i++) {
+    var t = _turnOf(els[i]);
+    if (t < 1) continue;
+    if (!map[t]) { map[t] = []; order.push(t); }
+    map[t].push(els[i]);
+  }
+  order.sort(function(a, b) { return a - b; });
+  return order.map(function(t) { return { turn: t, els: map[t] }; });
+}
+
+function _countCiteChips(els) {
+  var n = 0;
+  for (var i = 0; i < els.length; i++) {
+    if (els[i].querySelectorAll) n += els[i].querySelectorAll('.anchor.cite').length;
+  }
+  return n;
+}
+
+function refreshOutline() {
+  var list = document.getElementById('outline-list');
+  if (!list) return;
+  var turns = _outlineTurns();
+  var badge = document.getElementById('outline-count');
+  if (badge) badge.textContent = turns.length ? (turns.length + ' 轮') : '';
+  if (!turns.length) {
+    list.innerHTML = '<div class="out-none">' + escapeHtml(t('outline_empty')) + '</div>';
+    return;
+  }
+  var hidden = Math.max(0, turns.length - _outlineMax);
+  var show = turns.slice(-_outlineMax);
+  var html = '';
+  if (hidden) html += '<div class="out-more">…' + escapeHtml(t('outline_hidden').replace('{n}', String(hidden))) + '</div>';
+  show.forEach(function(item) {
+    var q = '', a = '';
+    for (var i = 0; i < item.els.length; i++) {
+      var txt = _bubbleText(item.els[i]);
+      if (!txt) continue;
+      if (item.els[i].classList.contains('user')) { if (!q) q = txt; }
+      else if (!a) a = txt;
+    }
+    var cites = _countCiteChips(item.els);
+    html += '<div class="out-row' + (item.turn === _activeTurn ? ' active' : '') + '" data-out="' + item.turn + '"'
+      + ' onclick="jumpToTurn(' + item.turn + ')" title="点击跳到这一轮">'
+      + '<div class="out-head"><span class="out-num">' + item.turn + '</span><span class="out-title">' + escapeHtml(q || '（无提问）') + '</span></div>'
+      + (a ? '<div class="out-sub">' + escapeHtml(a.length > 90 ? a.slice(0, 90) + '…' : a) + '</div>' : '')
+      + (cites ? '<div class="out-badges"><span class="out-badge">🔗 引用 ' + cites + '</span></div>' : '')
+      + '</div>';
+  });
+  list.innerHTML = html;
+  _markActiveTurn();
+}
+
+function jumpToTurn(turn) {
+  turn = parseInt(turn, 10);
+  if (!turn) return;
+  var el = document.getElementById('msg-' + turn + '-user') || document.querySelector('.message[data-turn="' + turn + '"]');
+  if (!el) return;
+  _autoScroll = false;                   // 跳过去后别被流式输出拽回底部（和手动上滑同一套）
+  if (typeof _refreshGotoBottom === 'function') _refreshGotoBottom();
+  try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { el.scrollIntoView(); }
+  el.classList.remove('turn-flash');
+  void el.offsetWidth;                   // 强制重排，让高亮动画能重播
+  el.classList.add('turn-flash');
+  setTimeout(function() { el.classList.remove('turn-flash'); }, 1600);
+  _activeTurn = turn;
+  _markActiveTurn();
+}
+
+function _markActiveTurn() {
+  var list = document.getElementById('outline-list');
+  if (!list) return;
+  var rows = list.querySelectorAll('.out-row');
+  for (var i = 0; i < rows.length; i++) {
+    var on = parseInt(rows[i].getAttribute('data-out'), 10) === _activeTurn;
+    rows[i].classList.toggle('active', on);
+    if (on) {
+      var top = rows[i].offsetTop, h = list.clientHeight;   // 只滚目录自己，不动整页
+      if (top < list.scrollTop || top > list.scrollTop + h - 24) list.scrollTop = Math.max(0, top - h / 2);
+    }
+  }
+}
+
+// 滚动时同步高亮：视口最上面那条消息属于哪一轮
+function _syncActiveTurnFromScroll() {
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var els = box.querySelectorAll('.message[data-turn]');
+  if (!els.length) return;
+  var top = box.getBoundingClientRect().top;
+  for (var i = 0; i < els.length; i++) {
+    var r = els[i].getBoundingClientRect();
+    if (r.bottom <= top + 1) continue;
+    var t = _turnOf(els[i]);
+    if (t > 0) { if (t !== _activeTurn) { _activeTurn = t; _markActiveTurn(); } break; }
+  }
+}
+
+(function() {
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var last = 0;
+  box.addEventListener('scroll', function() {
+    var now = Date.now();
+    if (now - last < 150) return;        // 滚动事件很密，节流到 150ms
+    last = now;
+    _syncActiveTurnFromScroll();
+  });
+})();
+
 // === 待办 ===
 async function refreshTodos() {
   if (!currentSid) return;
@@ -11803,6 +11986,7 @@ async function refreshTodos() {
     if (typeof d.revision === 'number') _goalBar.revision = d.revision;
     renderTodos(d.todos || []);
   } catch(e) {}
+  if (typeof refreshOutline === 'function') refreshOutline();
 }
 
 function renderTodos(todos) {

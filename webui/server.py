@@ -8057,7 +8057,13 @@ async def get_messages(sid: str, limit: int = 100):
     except Exception:
         pass
     _mi = 0
+    _turn = 0
+    # P1-4: 每条消息带上轮次号（一条用户提问 = 一轮，它之后的回答都归这一轮），
+    # 前端据此把右侧目录项和对话气泡对上号；还没有提问时的开场白记为第 0 轮。
     for m in normalized:
+        if m.get("role") == "user":
+            _turn += 1
+        m["turn"] = _turn
         if m.get("role") in ("user", "assistant"):
             if _mi in _meta:
                 m["elapsed"] = _meta[_mi].get("elapsed")
@@ -15195,6 +15201,131 @@ async def session_citations(sid: str, msg: int = -1):
     out = _cite_resolve(m.get("content") or "", _sessions[sid])
     out.update({"ok": True, "session_id": sid, "msg_index": idx, "total_messages": len(msgs)})
     return out
+
+
+# --- P1-4 会话大纲 ---
+# 会话一长就翻不动：每一轮（一条提问 + 它之后的回答）生成一条目录项，前端点一下就跳过去。
+# 过滤规则与 /api/sessions/{sid}/messages 完全一致（系统注入、工具消息不进目录）；
+# 只读、不联网、不写盘；轮数、摘要长度、扫描条数都封顶，免得大会话把面板拖垮。
+
+_OUTLINE_MAX_TURNS = 200      # 目录最多返回多少轮（超出只留最近这些轮）
+_OUTLINE_SCAN_MSGS = 4000     # 最多扫描多少条消息
+_OUTLINE_TITLE_CHARS = 60     # 提问摘要长度
+_OUTLINE_HEAD_CHARS = 100     # 回答摘要长度
+
+
+def _outline_title(text, limit: int = _OUTLINE_TITLE_CHARS):
+    """取第一条像样的行当摘要：剥掉 markdown 噪声、压空白、截断；全空返回空串。"""
+    s = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    for line in s.split("\n"):
+        ln = line.strip().lstrip("#>*+-•· \t").strip()
+        if not ln:
+            continue
+        ln = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", ln)        # 图片 → 去掉
+        ln = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", ln)  # 链接 → 留文字
+        ln = re.sub(r"`+", "", ln)                             # 行内代码反引号
+        ln = re.sub(r"\s+", " ", ln).strip()
+        if ln:
+            return ln[:limit]
+    return ""
+
+
+def _outline_visible_msgs(session, limit=None):
+    """筛出会出现在对话流里的消息（与 /messages 同一套过滤）。
+
+    limit 默认取模块级 _OUTLINE_SCAN_MSGS（调用时读，方便测试收紧窗口）。
+    """
+    if limit is None:
+        limit = _OUTLINE_SCAN_MSGS
+    msgs = session.get("messages") or []
+    if limit and limit > 0 and len(msgs) > limit:
+        msgs = msgs[-limit:]
+    out = []
+    for m in msgs:
+        role = m.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        content = m.get("content")
+        if content is None:
+            content = m.get("text")
+        if not isinstance(content, str):
+            content = "" if content is None else str(content)
+        if content.lstrip().startswith(_INJECT_PREFIXES):
+            continue
+        item = {"role": role, "content": content, "time": m.get("time") or ""}
+        try:
+            item["tool_count"] = int(m.get("tool_count") or 0)
+        except Exception:
+            item["tool_count"] = 0
+        out.append(item)
+    return out
+
+
+def _session_outline(session):
+    """把会话切成一轮一轮，给前端做目录。
+
+    一轮 = 一条用户提问 + 它之后、下一条提问之前的全部回答。
+    提问还没被回答也建轮（正在跑的那一轮在目录里能看见）。
+    """
+    turns = []
+    leading = 0
+    for m in _outline_visible_msgs(session):
+        if m["role"] == "user":
+            turns.append({
+                "turn": len(turns) + 1,
+                "question": _outline_title(m["content"]),
+                "time": m["time"],
+                "answers": 0,
+                "answer_head": "",
+                "chars": 0,
+                "tools": 0,
+                "anchors": 0,
+            })
+            continue
+        if not turns:
+            leading += 1          # 开场白：还没有用户提问
+            continue
+        t = turns[-1]
+        t["answers"] += 1
+        t["chars"] += len(m["content"])
+        if not t["answer_head"]:
+            t["answer_head"] = _outline_title(m["content"], _OUTLINE_HEAD_CHARS)
+        try:
+            t["tools"] += int(m.get("tool_count") or 0)
+        except Exception:
+            pass
+        try:
+            t["anchors"] += len(_cite_extract(m["content"]))
+        except Exception:
+            pass
+    total_turns = len(turns)
+    hidden = 0
+    if total_turns > _OUTLINE_MAX_TURNS:
+        hidden = total_turns - _OUTLINE_MAX_TURNS
+        turns = turns[-_OUTLINE_MAX_TURNS:]
+    return {"turns": turns, "total_turns": total_turns, "leading": leading,
+            "hidden_turns": hidden, "truncated": hidden > 0}
+
+
+@app.get("/api/sessions/{sid}/outline")
+async def session_outline(sid: str):
+    """会话大纲：每条提问一轮，带回答摘要和角标，供右侧面板做可点目录。"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    # 只加载一个窗口（和 /messages 一样），大会话不为了目录把整段历史解进内存
+    if not session.get("_messages_loaded"):
+        try:
+            _win = max(int(_OUTLINE_SCAN_MSGS), 200)
+            if len(session.get("messages") or []) < _win:
+                session["messages"] = _load_session_messages(sid, limit=_win)
+        except Exception:
+            pass
+    data = _session_outline(session)
+    data.update({"ok": True, "session_id": sid, "title": session.get("title") or ""})
+    return data
 
 
 # --- 待办 ---

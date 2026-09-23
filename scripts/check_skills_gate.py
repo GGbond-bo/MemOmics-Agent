@@ -41,6 +41,7 @@ TEST_FILES = [
     os.path.join("webui", "tests", "test_p1_1_goal_bar.py"),
     os.path.join("webui", "tests", "test_p1_2_change_review.py"),
     os.path.join("webui", "tests", "test_p1_3_citations.py"),
+    os.path.join("webui", "tests", "test_p1_4_outline.py"),
 ]
 
 
