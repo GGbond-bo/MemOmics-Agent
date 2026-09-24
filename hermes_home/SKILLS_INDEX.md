@@ -15,7 +15,7 @@
 
 ---
 
-## 01_RNA - 单细胞转录组 (41 skills)
+## 01_RNA - 单细胞转录组 (43 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -33,33 +33,35 @@
 | 12 | create_scvi_embeddings_scRNA | When you need create scvi embeddings scRNA analysis | scvi, embeddings | YEL 讨论触发 |
 | 13 | deg-analysis | 适用于: 有分组的scRNA-seq —— Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正 | DEG, 差异分析, 差异基因, deg-analysis, deg analysis | RED 必触发 |
 | 14 | disease-progression-longitudinal | 当你需要 纵向疾病进展 时触发 —— 纵向数据: LME → 轨迹建模 | disease, progression, longitudinal | YEL 讨论触发 |
-| 15 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove doublets, doublets | YEL 讨论触发 |
-| 16 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell cycle, cycle, phase | YEL 讨论触发 |
-| 17 | functional-enrichment | 当你需要 功能富集 (GSEA + ORA) 时触发 —— GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB | 富集分析, GO, KEGG, pathway, functional-enrichment, functional enrichment, functional, enrichment | RED 必触发 |
-| 18 | gene-essentiality | Guidance for interpreting DepMap essentiality scores and correlations correctly. | gene-essentiality, gene essentiality, gene, essentiality | YEL 讨论触发 |
-| 19 | gene_set_enrichment_analysis | When you need gene set enrichment analysis analysis | gene, set, enrichment | YEL 讨论触发 |
-| 20 | get_gene_set_enrichment_analysis_supported_database_list | When you need get gene set enrichment analysis supported database list analysis | gene, set, enrichment, supported | YEL 讨论触发 |
-| 21 | get_rna_seq_archs4 | When you need get rna seq archs4 analysis | get_rna_seq_archs4, get rna seq archs4, seq, archs4 | YEL 讨论触发 |
-| 22 | grn-pyscenic | 当你需要 基因调控网络 (pySCENIC) 时触发 —— pySCENIC基因调控网络推断。TF调控子/aUCell活性评分 | grn-pyscenic, grn pyscenic, grn, pyscenic | YEL 讨论触发 |
-| 23 | hdwgcna | 适用于: 异质性高, >5K细胞, disease, aging | hdwgcna | YEL 讨论触发 |
-| 24 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
-| 25 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
-| 26 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
-| 27 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
-| 28 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
-| 29 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
-| 30 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
-| 31 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
-| 32 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
-| 33 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
-| 34 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
-| 35 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
-| 36 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
-| 37 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
-| 38 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
-| 39 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
-| 40 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
-| 41 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
+| 15 | doublet-detection | 双细胞（doublet）检测与判定:scDblFinder / DoubletFinder（R）与 scrublet（Python）选型与执行，含多样本·每样本细胞数少的数据策略决策、双细胞率判读区间、'要不要剔除'的判定准则与交付口径。触发:'检测双细胞' / '双细胞比例高不高' / '要不要剔除 doublet' / 'doublet rate' / '去双胞'。 | doublet-detection, doublet detection, doublet, detection | YEL 讨论触发 |
+| 16 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove doublets, doublets | YEL 讨论触发 |
+| 17 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell cycle, cycle, phase | YEL 讨论触发 |
+| 18 | functional-enrichment | 当你需要 功能富集 (GSEA + ORA) 时触发 —— GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB | 富集分析, GO, KEGG, pathway, functional-enrichment, functional enrichment, functional, enrichment | RED 必触发 |
+| 19 | gene-essentiality | Guidance for interpreting DepMap essentiality scores and correlations correctly. | gene-essentiality, gene essentiality, gene, essentiality | YEL 讨论触发 |
+| 20 | gene_set_enrichment_analysis | When you need gene set enrichment analysis analysis | gene, set, enrichment | YEL 讨论触发 |
+| 21 | get_gene_set_enrichment_analysis_supported_database_list | When you need get gene set enrichment analysis supported database list analysis | gene, set, enrichment, supported | YEL 讨论触发 |
+| 22 | get_rna_seq_archs4 | When you need get rna seq archs4 analysis | get_rna_seq_archs4, get rna seq archs4, seq, archs4 | YEL 讨论触发 |
+| 23 | grn-pyscenic | 当你需要 基因调控网络 (pySCENIC) 时触发 —— pySCENIC基因调控网络推断。TF调控子/aUCell活性评分 | grn-pyscenic, grn pyscenic, grn, pyscenic | YEL 讨论触发 |
+| 24 | hdwgcna | 适用于: 异质性高, >5K细胞, disease, aging | hdwgcna | YEL 讨论触发 |
+| 25 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
+| 26 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
+| 27 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
+| 28 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
+| 29 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
+| 30 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
+| 31 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
+| 32 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
+| 33 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
+| 34 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
+| 35 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
+| 36 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
+| 37 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
+| 38 | single-cell-cellcycle-scoring | 单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score | single, cellcycle, scoring | YEL 讨论触发 |
+| 39 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
+| 40 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
+| 41 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
+| 42 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
+| 43 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
 
 ## 02_ATAC - ATAC/染色质 (10 skills)
 

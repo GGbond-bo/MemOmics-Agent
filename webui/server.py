@@ -19329,6 +19329,17 @@ async def ws_endpoint(ws: WebSocket):
                         _session["_user_turn_active"] = False  # 并发护栏: 用户回合结束清除
                         if _thread_state is not None:
                             _thread_state.mark_turn_end(_session["id"])
+                        # 技能索引自愈（2026-09-24）：agent 会话中途用 write 直接造出来的技能目录不在
+                        # 启动 scan 范围内，不补就永远不进 SKILLS_INDEX.md（模型唯一能看到的技能清单）。
+                        # 廉价判定（列目录 + 读索引），真缺行才整表重建；失败绝不影响回合收尾。
+                        try:
+                            _sync_info = auto_register.sync_new_skills()
+                            if _sync_info.get("rebuilt") or _sync_info.get("json_generated"):
+                                logger.info(
+                                    "[MemOmics] 技能索引自愈：补 %d 行 / 补 %d 个 skill.json"\
+                                    % (len(_sync_info.get("missing") or []), len(_sync_info.get("json_generated") or [])))
+                        except Exception as _e_sync:
+                            logger.info(f"[MemOmics] skill index sync skipped: {_e_sync}")
                         # LoopX 执行层：用户回合交付记录（cadence 数据源）
                         try:
                             from memomics.loopx_bridge import LoopXBridge

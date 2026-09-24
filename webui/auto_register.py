@@ -407,6 +407,77 @@ def rebuild_index_descriptions() -> dict:
     return {"ok": True, "filled_desc": 0, "filled_keywords": 0, "rows": rows}
 
 
+def sync_new_skills(verbose: bool = False) -> dict:
+    """会话中途新造出来的技能，立刻补进 SKILLS_INDEX.md（2026-09-24 真机事故）。
+
+    现场：wave4 真机测试期间磁盘上多出一个技能目录 trajectory-conclusion-validation，
+    SKILLS_INDEX.md 里没有它的行 —— 而 SKILLS_INDEX.md 是唯一会被注入 system prompt 的
+    技能清单，缺行就等于模型永远看不到这个技能；同一条漂移还会让
+    webui/tests/test_skills_registry.py 的「索引行集合 == 磁盘技能集合」两条断言直接红。
+    原因：索引只在进程启动 scan_and_register_all() 和「注册技能」工具里重建，agent 自己用
+    write 直接写文件造出来的技能，要等到下一次重启才进索引。
+
+    这里做一次廉价前置判定：只列目录名 + 读一次索引，不解析 355 个 SKILL.md；真的缺行才触发
+    整表重建（重建口径仍然只有 skills_registry.build() 一个）。
+    """
+    if not SKILLS_BIO_DIR:
+        return {"ok": False, "error": "not initialized"}
+    reg = _registry()
+    if reg is None:
+        return {"ok": False, "error": "skills_registry unavailable"}
+    # 只扫产品自己的技能面（hermes_home/skills/bioinformatics）。Hermes 框架自带的那批只有
+    # SKILL.md 的技能（apple-notes / arxiv / notion …）**故意不进索引**，避免污染模型触发面
+    # —— 见 skills_registry.scan_skills() 的注释。2026-09-24 实测：若对整棵 skills/ 树补
+    # skill.json，索引会从 357 行涨到 440 行，把 83 个无关技能灌进触发面（已回滚）。
+    # 规则同 scan_skills：跳过 . / _ 开头目录 + 只收带 skill.json 的目录。
+    root = SKILLS_BIO_DIR or getattr(reg, "SKILLS_DIR", None)
+    disk = set()
+    need_json = []
+    try:
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            base = os.path.basename(dirpath)
+            if base.startswith("_"):
+                continue
+            if "skill.json" in files:
+                disk.add(base)
+            elif "SKILL.md" in files:
+                need_json.append(dirpath)
+    except OSError as e:
+        return {"ok": False, "error": f"scan failed: {e}"}
+    # 第二种漂移（2026-09-24 真机抓到：hermes_home/skills/bioinformatics/doublet-detection 只有
+    # SKILL.md + references/，没有 skill.json）：WebUI 技能选择器直接读 SKILL.md，所以用户「选得到」；
+    # 索引只收带 skill.json 的目录，所以模型「触发不到」。这里补 skill.json（与启动 scan 同一动作），
+    # 补完它才会进入下面的索引比对。
+    json_generated = []
+    for d in need_json:
+        try:
+            if auto_generate_skill_json(d):
+                json_generated.append(os.path.basename(d))
+                disk.add(os.path.basename(d))
+        except Exception as e:  # noqa: BLE001 — 单个技能生成失败不能拖垮回合收尾
+            print(f"[auto-register] sync_new_skills: skill.json 生成失败 {d}: {e}", flush=True)
+    indexed = set()
+    try:
+        with open(reg.INDEX_PATH, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"\|\s*\d+\s*\|\s*([^|]+?)\s*\|", line)
+                if m:
+                    indexed.add(m.group(1).strip())
+    except FileNotFoundError:
+        # 索引文件不存在（全新安装 / 被删）→ 不是错误，视作「一行都没有」，走下面的重建分支
+        indexed = set()
+    except OSError as e:
+        return {"ok": False, "error": f"index unreadable: {e}"}
+    missing = sorted(disk - indexed)
+    if not missing and not json_generated:
+        return {"ok": True, "rebuilt": False, "missing": [], "json_generated": []}
+    if verbose:
+        print(f"[auto-register] sync_new_skills: 索引缺 {len(missing)} 个技能 {missing[:5]} → 重建", flush=True)
+    info = rebuild_index_descriptions()
+    return {"ok": bool(info.get("ok")), "rebuilt": True, "missing": missing,
+            "json_generated": sorted(json_generated), "rows": info.get("rows", 0)}
+
 def scan_and_register_all():
     """启动时扫描所有 skill 目录，补全缺失的 skill.json + 索引条目"""
     if not SKILLS_BIO_DIR:
