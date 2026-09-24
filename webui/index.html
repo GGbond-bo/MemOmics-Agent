@@ -7576,13 +7576,19 @@ function liveSectionHtml(live) {
   return h + '</div>';
 }
 
+// 这些工具本来就慢：跑着不算"卡住"（真机实测 debate_analysis 4-7 分钟、长 R 脚本十几分钟）
+var LONG_TOOL_CN = { debate_analysis: '多角色辩论', execute_r: 'R 长脚本',
+                     execute_python: 'Python 长脚本', terminal: '命令行任务', cellbender: 'CellBender' };
+
 function liveSessionRowHtml(s) {
   s = s || {};
   var bits = [];
   if (s.elapsed_sec !== null && s.elapsed_sec !== undefined) bits.push('已跑 ' + taskFmtSec(s.elapsed_sec));
+  var toolCn = LONG_TOOL_CN[s.last_tool] || '';
   if (s.last_tool) {
-    bits.push('在做 ' + s.last_tool + ((s.tool_age_sec !== null && s.tool_age_sec !== undefined)
-      ? '（' + taskFmtSec(s.tool_age_sec) + '前）' : ''));
+    bits.push('在做 ' + (toolCn ? toolCn + '（' + s.last_tool + '）' : s.last_tool) +
+      ((s.tool_age_sec !== null && s.tool_age_sec !== undefined)
+        ? '，已 ' + taskFmtSec(s.tool_age_sec) : ''));
   }
   if (s.todos_total) bits.push('计划 ' + (s.todos_done || 0) + '/' + s.todos_total + ' 步');
   var proc = s.proc || {};
@@ -7595,9 +7601,16 @@ function liveSessionRowHtml(s) {
   if (s.ask) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(s.ask) + '</div>';
   if (bits.length) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(bits.join(' · ')) + '</div>';
   if (s.doing) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">当前步骤：' + escapeHtml(s.doing) + '</div>';
-  if (s.stalled) h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 最近一次工具调用超过 3 分钟没动静（可能卡住或已崩）</div>';
+  if (s.stalled) {
+    h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 这一步超过预期时长（' +
+         (s.tool_expect_sec ? taskFmtSec(s.tool_expect_sec) : '3m0s') + '）还没动静，可能卡住或已崩</div>';
+  } else if (toolCn) {
+    h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(toolCn) +
+         '本身就要几分钟，慢是正常的</div>';
+  }
+  // 消息条数在跑的时候还是 1（工具调用不算消息），报出来只会让人以为"啥也没干"
   h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(String(s.sid || '').slice(0, 18)) +
-       ' · ' + (s.msg_count || 0) + ' 条消息</div></div>';
+       ((s.msg_count > 1) ? ' · ' + s.msg_count + ' 条消息' : '') + '</div></div>';
   return h;
 }
 

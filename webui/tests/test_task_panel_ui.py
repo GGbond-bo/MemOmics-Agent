@@ -925,7 +925,8 @@ console.log(JSON.stringify({ html: out.store['task-list'].innerHTML, counts: out
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout.strip().splitlines()[-1])
     h = got["html"]
-    for token in ["memomics-live01", "骨骼肌 QC", "已跑 12m5s", "在做 execute_r", "计划 2/6 步",
+    for token in ["memomics-live01", "骨骼肌 QC", "已跑 12m5s", "在做 R 长脚本（execute_r），已 12s",
+                  "计划 2/6 步",
                   "PID 12345", "812 MB", "当前步骤：按样本汇总 QC 指标", "分析进行中", "data-live-sid"]:
         assert token in h, "面板里看不到 %s" % token
     assert "还没有后台任务" not in h, "有会话在跑，却提示「还没有后台任务」"
@@ -933,7 +934,9 @@ console.log(JSON.stringify({ html: out.store['task-list'].innerHTML, counts: out
 
     stuck = dict(LIVE_SESSION)
     stuck["stalled"] = True
+    stuck["last_tool"] = "search_knowledge"      # 普通工具：沉默 400s 才算不对劲
     stuck["tool_age_sec"] = 400
+    stuck["tool_expect_sec"] = 180
     stuck["title"] = "<script>alert(1)</script>"
     drive2 = HARNESS + """
 const P = out.P;
@@ -944,6 +947,22 @@ console.log(JSON.stringify({ row: P.liveSessionRowHtml(%s) }));
     row = json.loads(r2.stdout.strip().splitlines()[-1])["row"]
     assert "没动静" in row, "卡住的会话没标出来"
     assert "<script>alert(1)</script>" not in row and "&lt;script&gt;" in row, "标题没转义"
+
+    # 慢工具不该被误报成卡住：真机实测 debate_analysis 一跑 4-7 分钟、长 R 脚本十几分钟
+    slow = dict(LIVE_SESSION)
+    slow["last_tool"] = "debate_analysis"
+    slow["tool_age_sec"] = 232
+    slow["tool_expect_sec"] = 900
+    slow["stalled"] = False
+    drive4 = HARNESS + """
+const P = out.P;
+console.log(JSON.stringify({ row: P.liveSessionRowHtml(%s) }));
+""" % json.dumps(slow, ensure_ascii=False)
+    r4 = _run_node(drive4, mod)
+    row4 = json.loads(r4.stdout.strip().splitlines()[-1])["row"]
+    assert "多角色辩论" in row4 and "已 3m52s" in row4, row4[:300]
+    assert "没动静" not in row4, "辩论跑 4 分钟被误报成卡住"
+    assert "慢是正常的" in row4
 
     drive3 = HARNESS + """
 const P = out.P;

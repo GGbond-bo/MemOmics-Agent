@@ -9950,6 +9950,13 @@ def _tasks_fingerprint():
     return (count, round(latest, 3), total)
 
 
+# 真机实测（2026-09-24）：debate_analysis 一跑就是 4-7 分钟（3 正 + 3 反 + 评委），
+# 长 R 脚本十几分钟也正常 —— 统一按 180 秒判"卡住"会把正常干活的会话全标成告警。
+# 按工具给一个"合理的沉默时长"，超过才提示可能卡住。
+_TOOL_EXPECT_SEC = {"debate_analysis": 900, "execute_r": 1800, "execute_python": 1800,
+                    "terminal": 1800, "cellbender": 3600}
+
+
 def _live_session_cards(limit: int = 20) -> list:
     """正在跑的会话（只读快照）。
 
@@ -9998,7 +10005,9 @@ def _live_session_cards(limit: int = 20) -> list:
                 "elapsed_sec": int(now - start) if start else None,
                 "last_tool": live_tool,
                 "tool_age_sec": int(now - tool_ts) if tool_ts else None,
-                "stalled": bool(live_tool) and bool(tool_ts) and (now - tool_ts) > 180,
+                "tool_expect_sec": _TOOL_EXPECT_SEC.get(live_tool, 180),
+                "stalled": bool(live_tool) and bool(tool_ts)
+                           and (now - tool_ts) > _TOOL_EXPECT_SEC.get(live_tool, 180),
                 "todos_total": len(todos),
                 "todos_done": sum(1 for t in todos if t.get("status") == "completed"),
                 "doing": (doing[0].get("title") or "")[:110] if doing else "",

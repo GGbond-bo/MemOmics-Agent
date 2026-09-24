@@ -1153,16 +1153,22 @@ def test_n3_stalled_and_odd_sessions_do_not_break_the_list(client, tr, tasks_dir
     """工具 3 分钟没动静要标卡住；字段缺失/爆量也不许把整个列表带崩。"""
     tr.TASKS_DIR = tasks_dir
     monkeypatch.setattr(server, "_sessions", {
-        "memomics-stuck": _live_session(id="memomics-stuck", _live_tool_ts=time.time() - 400),
+        # 普通工具沉默 400s = 卡住；辩论/长脚本跑 400s 属于正常（真机实测）
+        "memomics-stuck": _live_session(id="memomics-stuck", _live_tool="search_knowledge",
+                                        _live_tool_ts=time.time() - 400),
+        "memomics-debating": _live_session(id="memomics-debating", _live_tool="debate_analysis",
+                                           _live_tool_ts=time.time() - 400),
         "memomics-nofield": {"id": "memomics-nofield", "running_agent": object()},
         "memomics-fat": _live_session(id="memomics-fat", title="x" * 4000,
                                       messages=[{"role": "user", "content": "y" * 4000}]),
         "memomics-bad": "这不是字典",
     })
     d = client.get("/api/tasks?limit=50&refresh=0").json()
-    assert d["live_count"] == 3, [x["sid"] for x in d["live_sessions"]]
+    assert d["live_count"] == 4, [x["sid"] for x in d["live_sessions"]]
     by = {x["sid"]: x for x in d["live_sessions"]}
     assert by["memomics-stuck"]["stalled"] is True
+    assert by["memomics-debating"]["stalled"] is False, "辩论跑 400 秒被误报成卡住"
+    assert by["memomics-debating"]["tool_expect_sec"] == 900
     assert by["memomics-nofield"]["elapsed_sec"] is None
     assert len(by["memomics-fat"]["title"]) <= 4000 and len(by["memomics-fat"]["ask"]) <= 110
 
