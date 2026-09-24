@@ -1,0 +1,28 @@
+{
+  "id": "single-cell-cellcycle-scoring",
+  "name": "单细胞/单核细胞周期打分：判读、验证与统计",
+  "category": "bioinformatics",
+  "language": "R",
+  "description": "单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score /",
+  "starting_prompt": "使用 单细胞/单核细胞周期打分：判读、验证与统计 进行分析",
+  "source_dir": "skills/bioinformatics/single-cell-cellcycle-scoring",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "cell-cycle",
+    "scrna",
+    "snrna",
+    "seurat",
+    "statistics",
+    "validity-control"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "single",
+    "cellcycle",
+    "scoring"
+  ],
+  "when_to_use": "单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score"
+}
