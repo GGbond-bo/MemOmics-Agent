@@ -2122,11 +2122,13 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           <span id="task-counts" style="font-size:11px;color:var(--text-light);"></span>
           <button id="task-scope-btn" class="dock-btn" onclick="toggleTaskScope()" title="只看当前会话 / 看全部会话">全部会话</button>
           <button class="dock-btn" onclick="loadTasks(true)" title="立即刷新">↻</button>
+          <button class="dock-btn" id="task-clean-btn" onclick="taskCleanup()" title="清掉已结束的任务（在跑/排队的不动；产出文件不动）">🧹 清理</button>
           <button class="dock-btn" onclick="closeTaskDock()" title="关闭（Esc）">✕</button>
         </div>
       </div>
     <div id="panel-tasks" style="display:none;">
       <div id="task-queue" style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);line-height:1.75;"></div>
+      <div id="task-clean-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);"></div>
       <div id="task-list" style="padding:8px;display:flex;flex-direction:column;gap:6px;">
         <div class="ctx-empty" id="task-empty">
           <div class="ctx-empty-icon">⏱</div>
@@ -7551,6 +7553,7 @@ function renderTaskList(d) {
     countsEl.textContent = '运行 ' + (c.running || 0) + ' · 排队 ' + (c.queued || 0) + ' · 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) + (d.sandbox ? ' · 沙箱 ' + d.sandbox : '');
   }
   taskBadge(c);
+  taskCleanHint(d);
   var tasks = all;
   var mineSid = _taskCurrentSid();
   if (_taskScope === 'current' && mineSid) {
@@ -7596,6 +7599,17 @@ function renderTaskList(d) {
   for (var i = 0; i < rows.length; i++) {
     rows[i].onclick = (function(el) { return function() { openTaskDetail(el.getAttribute('data-id')); }; })(rows[i]);
   }
+  // 🗑 不能冒泡到行上（否则点删除会先打开详情，确认框都看不全）
+  var dels = box.querySelectorAll('.task-del-btn');
+  for (var k = 0; k < dels.length; k++) {
+    dels[k].onclick = (function(el) {
+      return function(ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        if (ev && ev.preventDefault) ev.preventDefault();
+        taskDelete(el.getAttribute('data-del'));
+      };
+    })(dels[k]);
+  }
 }
 
 function taskRowHtml(t, mine) {
@@ -7606,7 +7620,8 @@ function taskRowHtml(t, mine) {
   h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
   h += '<span style="font-size:13px;font-weight:600;">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
   var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
-  h += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt + '</span>';
+  h += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt +
+       (!live ? ' <button class="task-del-btn" data-del="' + escapeHtml(t.task_id) + '" title="删掉这条记录（契约 + 日志；产出的文件不动）" style="' + _taskBtn + 'padding:0 5px;font-size:10px;line-height:16px;margin-left:4px;">🗑</button>' : '') + '</span>';
   h += '</div>';
   h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
   var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
@@ -7733,6 +7748,8 @@ function renderTaskDetail(t) {
   } else if (t.retry_reason && (t.status === 'failed' || t.status === 'interrupted' || t.incomplete)) {
     h += '<div style="font-size:11px;color:var(--text-light);">🔁 不能重试：' + escapeHtml(t.retry_reason) + '</div>';
   }
+  // T16：已结束的任务能删（在跑的不给这个按钮 —— 要停就先取消）
+  if (!live) h += '<button id="task-del-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🗑 删掉这条记录</button>';
   var box = document.getElementById('task-detail');
   box.innerHTML = h;
   var log = document.getElementById('task-log');
@@ -7741,6 +7758,8 @@ function renderTaskDetail(t) {
   if (btn) btn.onclick = function() { cancelTask(t.task_id); };
   var rbtn = document.getElementById('task-retry-btn');
   if (rbtn) rbtn.onclick = function() { retryTask(t.task_id); };
+  var dbtn = document.getElementById('task-del-btn');
+  if (dbtn) dbtn.onclick = function() { taskDelete(t.task_id); };
 }
 
 function taskRetryDelayText(sec) {
@@ -7786,6 +7805,70 @@ function retryTask(id) {
     }
     loadTasks(true);
   }).catch(function(e) { alert('重试失败：' + e); });
+}
+
+function taskCleanHint(d) {
+  // T16：这行既回答「怎么清理」，也回答「什么时候会自动没」
+  var box = document.getElementById('task-clean-bar');
+  if (!box) return;
+  var c = (d && d.counts) || {};
+  var ends = (c.done || 0) + (c.failed || 0) + (c.cancelled || 0) + (c.interrupted || 0);
+  var cl = (d && d.cleanup) || {};
+  var bits = [];
+  if (ends) {
+    bits.push('可清理 ' + ends + ' 条（完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) +
+              ' · 取消 ' + (c.cancelled || 0) + ' · 中断 ' + (c.interrupted || 0) + '）');
+  } else {
+    bits.push('没有可清理的（在跑 / 排队的不算）');
+  }
+  if (cl.auto) {
+    bits.push('结束超 ' + (cl.ttl_hours || 0) + ' 小时自动清理');
+  } else {
+    bits.push('自动清理关着（' + (cl.env || 'MEMOMICS_TASK_TTL_HOURS') + '=0）');
+  }
+  box.innerHTML = '<span>🧹 ' + escapeHtml(bits.join(' · ')) + '</span>' +
+    (ends ? '<button class="dock-btn" onclick="taskCleanup()">清理已结束</button>' : '');
+}
+
+function taskDelete(id) {
+  // 删一条记录：契约 + 日志一起删；产出文件不动（那是用户的数据，不是任务记录）。
+  var other = taskSessionLabel(id);
+  if (!confirm('删掉这条任务记录？\n· 契约和日志会删掉\n· 产出的文件（results 里的数据）不动\n· 正在跑的任务不给删，要先取消' + other)) return;
+  fetch('/api/tasks/' + encodeURIComponent(id), { method: 'DELETE', headers: { 'X-Task-Token': _taskState.token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.ok) {
+        if (_taskState.id === id) closeTaskDetail();
+        loadTasks(true);
+      } else {
+        alert('删不掉：' + ((d && d.error) || '未知错误'));
+      }
+    }).catch(function(e) { alert('删不掉：' + e); });
+}
+
+function taskCleanup() {
+  // 批量清已结束的：范围跟着当前的「全部会话 / 只看当前会话」，别让用户以为只清了眼前的
+  var c = (_taskLast && _taskLast.counts) || {};
+  var ends = (c.done || 0) + (c.failed || 0) + (c.cancelled || 0) + (c.interrupted || 0);
+  if (!ends) { alert('没有可清理的：在跑和排队的任务不会被删除。'); return; }
+  var mine = (_taskScope === 'current');
+  var scopeTxt = mine ? '当前会话' : '全部会话';
+  if (!confirm('清理' + scopeTxt + '已结束的任务？\n· 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) +
+               ' · 取消 ' + (c.cancelled || 0) + ' · 中断 ' + (c.interrupted || 0) +
+               '\n· 在跑 / 排队的一条都不动\n· 产出的文件不动\n\n（只看得到当前会话时，就只清当前会话的）')) return;
+  fetch('/api/tasks/cleanup', {
+    method: 'POST',
+    headers: { 'X-Task-Token': _taskState.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: mine ? _taskCurrentSid() : '' })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.ok) {
+      alert('清理完成：删了 ' + d.deleted_count + ' 条' +
+            (d.kept_count ? ('，' + d.kept_count + ' 条没动（还在跑或删不掉）') : '') + '。');
+    } else {
+      alert('清理失败：' + ((d && d.error) || '未知错误'));
+    }
+    loadTasks(true);
+  }).catch(function(e) { alert('清理失败：' + e); });
 }
 
 function weixinRefresh() {

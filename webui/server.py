@@ -9505,6 +9505,11 @@ async def _retry_later(d: dict, plan: dict, delay: float) -> None:
     except asyncio.CancelledError:      # pragma: no cover - 进程退出时取消
         _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
         return
+    # T16：这条任务可能已经被删了（人工清理 / 到点自动过期）—— 删了就别再把它复活。
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if tid and not os.path.isfile(os.path.join(_tasks_dir(), tid + ".json")):
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+        return
     try:
         _spawn_retry(d, plan)
     except Exception as e:              # pragma: no cover - 兜底，别让后台任务炸日志
@@ -9522,6 +9527,201 @@ def _tasks_dir() -> str:
 def _task_api_token() -> str:
     """后台任务写 API 的轻量鉴权 token（同源本地 token，沿用记忆写 API 那套机制）。"""
     return _memory_api_token()
+
+
+# ---------------------------------------------------------------------------
+# T16(2026-09-24)：任务清理 —— 人工删一条 / 批量清已结束 / 到点自动过期。
+# 三条硬规矩：
+#   ① 活着的一律不删（queued/running/paused/cancelling）—— 要删先取消；
+#   ② 只删契约 .json 和它自己的 <task_id>.log；产出文件（results/ 里的数据）一律不动；
+#   ③ 过期时间可调：MEMOMICS_TASK_TTL_HOURS（小时，默认 12；设 0 = 关掉自动清理）。
+# 人工批量清理**不看 TTL**（用户点了就清已结束的）；TTL 只管"到点没人管自动清"。
+# ---------------------------------------------------------------------------
+_TASK_TTL_ENV = "MEMOMICS_TASK_TTL_HOURS"
+_TASK_TTL_HOURS_DEFAULT = 12.0
+_TASK_SWEEP_MIN_GAP = 60.0
+_TASK_SWEEP_AT = [0.0]
+
+
+def _task_ttl_hours(override=None) -> float:
+    """保留多少小时（0 = 不自动清）。override > 环境变量 > 默认 12h。"""
+    raw = override
+    if raw is None or raw == "":
+        raw = os.environ.get(_TASK_TTL_ENV, "")
+    if raw is None or raw == "":
+        return _TASK_TTL_HOURS_DEFAULT
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return _TASK_TTL_HOURS_DEFAULT
+
+
+def _task_live_states(tr) -> tuple:
+    return tuple(getattr(tr, "LIVE_STATES", ("queued", "running", "paused", "cancelling")))
+
+
+def _task_terminal_states(tr) -> tuple:
+    return tuple(getattr(tr, "TERMINAL_STATES", ("done", "failed", "cancelled", "interrupted")))
+
+
+def _task_ended_ts(d: dict, path: str = "") -> float:
+    """任务什么时候结束的（epoch 秒）：finished_at → started_at+耗时 → 契约文件 mtime。
+
+    时间戳解析不了就退回 mtime —— 过期判定宁可晚一点，也不能因为格式怪就误删。
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    def _parse(text):
+        try:
+            got = _dt.fromisoformat(str(text).strip())
+        except (TypeError, ValueError):
+            return None
+        if got.tzinfo is None:
+            got = got.replace(tzinfo=_tz.utc)
+        return got.timestamp()
+
+    fin = _parse(d.get("finished_at"))
+    if fin:
+        return float(fin)
+    started = _parse(d.get("started_at"))
+    if started:
+        try:
+            return float(started) + float(d.get("duration_sec") or 0.0)
+        except (TypeError, ValueError):
+            return float(started)
+    try:
+        return os.path.getmtime(path) if path and os.path.isfile(path) else 0.0
+    except OSError:
+        return 0.0
+
+
+def _task_log_candidates(tr, d: dict) -> list:
+    """这条任务的日志可能在哪几个地方 —— 只认"正好叫 <task_id>.log"的文件名。
+
+    契约里记的 log 最准；但老契约/单元夹具可能没记（或记的是别处），所以再按
+    task_run 的默认规则补几个候选：会话目录/log/、任务目录/、任务目录兄弟 logs/。
+    文件名不等于是这条任务的日志的一律不要 —— 契约被改坏也删不到别人的文件。
+    """
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if not tid:
+        return []
+    want = tid + ".log"
+    cands = [str(d.get("log") or "")]
+    sess = str(d.get("session_dir") or "")
+    if sess:
+        try:
+            cands.append(tr._default_log_path(sess, tid))
+        except Exception:
+            cands.append(os.path.join(sess, "log", want))
+    cands.append(os.path.join(_tasks_dir(), want))
+    cands.append(os.path.join(os.path.dirname(_tasks_dir()), "logs", want))
+    out = []
+    for p in cands:
+        if p and os.path.basename(p) == want and p not in out:
+            out.append(p)
+    return out
+
+
+def _task_delete_files(tr, d: dict) -> list:
+    """删一条任务的记录：契约 .json + 它自己的日志（产出文件一律不动）。"""
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if not tid:
+        return []
+    targets = [os.path.join(_tasks_dir(), tid + ".json")] + _task_log_candidates(tr, d)
+    gone = []
+    for p in targets:
+        try:
+            if os.path.isfile(p):
+                os.remove(p)
+                gone.append(p)
+        except OSError as e:      # pragma: no cover - 文件被占用/权限不够就记一笔
+            logger.warning("任务清理：删不掉 %s（%s）", p, e)
+    _RETRY_INFLIGHT.pop(tid, None)      # 排定但还没启动的重试不再复活（_retry_later 还会再核一次）
+    return gone
+
+
+def _task_delete_one(tr, task_id: str) -> dict:
+    """删一条已结束的任务。在跑/排队的一律拒绝（409），让用户先取消 —— 不偷偷杀进程。"""
+    t = tr.load_task(task_id)
+    if t is None:
+        return {"task_id": task_id, "ok": False, "code": 404, "reason": "任务不存在：%s" % task_id}
+    d = tr.reconcile(t.data) or t.data
+    status = str(d.get("status") or "")
+    if status in _task_live_states(tr):
+        return {"task_id": task_id, "ok": False, "code": 409, "status": status,
+                "reason": "任务还在跑（%s），先取消再删" % status}
+    gone = _task_delete_files(tr, d)
+    return {"task_id": task_id, "ok": True, "status": status, "removed": gone,
+            "title": d.get("title") or "", "incomplete": bool(d.get("incomplete"))}
+
+
+def _tasks_cleanup(states=None, session_id: str = "", ttl_hours=None, dry_run: bool = False) -> dict:
+    """批量清理 —— 面板上的「🧹 清理已结束」和到点自动过期走的是同一段代码。
+
+    ttl_hours=None：不看时间，把所有已结束的清掉（人工操作）；
+    ttl_hours>0   ：只清结束超过这么久的老任务（自动过期）。
+    """
+    tr = _task_run()
+    if tr is None:
+        return {"ok": False, "error": "task_run 模块不可用", "deleted": [], "deleted_count": 0}
+    _bind_task_run(tr)
+    want = tuple(states or _task_terminal_states(tr))
+    live = _task_live_states(tr)
+    ttl = _task_ttl_hours(ttl_hours) if ttl_hours is not None else 0.0
+    now = time.time()
+    try:
+        items = tr.list_tasks(session_id=session_id or "", limit=500, refresh=1)
+    except Exception as e:
+        return {"ok": False, "error": "读取任务失败：%s" % e, "deleted": [], "deleted_count": 0}
+    deleted, kept, notdue = [], [], []
+    for d in items:
+        tid = str(d.get("task_id") or "")
+        status = str(d.get("status") or "")
+        if not tid or status not in want:
+            continue
+        if status in live:                      # 双保险：过滤器写错也删不到活任务
+            kept.append({"task_id": tid, "reason": "还在跑（%s）" % status})
+            continue
+        if ttl > 0:
+            ended = _task_ended_ts(d, os.path.join(_tasks_dir(), tid + ".json"))
+            age = (now - ended) if ended else 0.0
+            if ended and age < ttl * 3600.0:
+                notdue.append({"task_id": tid, "left_sec": round(ttl * 3600.0 - age, 1)})
+                continue
+        entry = {"task_id": tid, "title": d.get("title") or "", "status": status}
+        if dry_run:
+            deleted.append(entry)
+            continue
+        one = _task_delete_one(tr, tid)
+        if one.get("ok"):
+            entry["removed"] = one.get("removed")
+            deleted.append(entry)
+        else:
+            kept.append({"task_id": tid, "reason": one.get("reason") or "删不掉"})
+    return {"ok": True, "deleted": deleted, "deleted_count": len(deleted),
+            "kept": kept[:50], "kept_count": len(kept),
+            "notdue": notdue[:50], "notdue_count": len(notdue),
+            "ttl_hours": ttl, "dry_run": bool(dry_run),
+            "states": list(want), "session_id": session_id or ""}
+
+
+def _task_auto_sweep() -> dict:
+    """到点自动过期（列表接口顺带跑，60s 最多一次）。返回给面板看的策略说明。"""
+    ttl = _task_ttl_hours()
+    info = {"ttl_hours": ttl, "auto": ttl > 0, "swept": None, "env": _TASK_TTL_ENV}
+    if ttl <= 0:
+        return info
+    now = time.time()
+    if now - _TASK_SWEEP_AT[0] < _TASK_SWEEP_MIN_GAP:
+        return info
+    _TASK_SWEEP_AT[0] = now
+    try:
+        res = _tasks_cleanup(ttl_hours=ttl)
+        info["swept"] = int(res.get("deleted_count") or 0)
+    except Exception as e:      # pragma: no cover - 清理失败绝不能拖垮列表
+        logger.warning("任务自动过期失败：%s", e)
+        info["error"] = str(e)
+    return info
 
 
 def _bind_task_run(tr):
@@ -9757,6 +9957,7 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
     if tr is None:
         return {"ok": False, "error": "task_run 模块不可用", "tasks": [], "counts": {}}
     _bind_task_run(tr)
+    sweep = _task_auto_sweep()      # T16：到点自动过期（60s 最多一次），删完再列，免得刚删的又出现
     try:
         items = tr.list_tasks(session_id=session_id or "",
                               limit=max(1, min(500, int(limit or 100))), refresh=bool(refresh))
@@ -9778,6 +9979,7 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
             "active": counts.get("running", 0) + counts.get("cancelling", 0),
             "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
             "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
+            "cleanup": sweep, "cleanup_states": list(_task_terminal_states(tr)),
             "sessions": sorted({d.get("session_id") or "" for d in items} - {""})}
 
 
@@ -10032,6 +10234,83 @@ async def retry_background_task(task_id: str, payload: dict = None, request: Req
     return {"ok": True, "scheduled": False, "task_id": task_id, "retry": plan,
             "attempt": plan["attempt"], "delay_sec": 0,
             "cmd": str(t.data.get("cmd") or ""), "spawned": spawned}
+
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """删掉一条**已经结束**的任务记录（契约 .json + 它自己的日志）。
+
+    三条硬规矩：
+      1. 在跑 / 排队 / 暂停的一律不删（409，让用户先取消）—— 清理接口绝不偷偷杀进程；
+      2. 只删任务记录，产出文件（results/ 里的数据）一个都不动；
+      3. token 与取消/重试同一把（X-Task-Token），跨会话删除面板还会再问一次。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    safe = os.path.basename(str(task_id or ""))
+    denied = _sandbox_precheck("fs.delete", os.path.join(_tasks_dir(), safe + ".json"),
+                               [HERMES_HOME_DIR, _tasks_dir()], "tasks.delete")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    one = _task_delete_one(tr, task_id)
+    if not one.get("ok"):
+        return JSONResponse({"ok": False, "error": one.get("reason"), "task_id": task_id,
+                             "status": one.get("status", "")},
+                            status_code=int(one.get("code") or 409))
+    return {"ok": True, "task_id": task_id, "status": one.get("status"),
+            "title": one.get("title", ""), "removed": one.get("removed") or []}
+
+
+@app.post("/api/tasks/cleanup")
+async def cleanup_background_tasks(payload: dict = None, request: Request = None):
+    """批量清理已结束的任务（默认 done/failed/cancelled/interrupted 全清）。
+
+    payload 可选：
+      states    只清这些状态（默认四类终态）；
+      session_id 只清这个会话的（空 = 所有会话，跨会话可见就得跨会话可清）；
+      ttl_hours 只清结束超过这么多小时的老任务（不传 = 不看时间，人工清就是立刻清）；
+      dry_run   true 只报数不删（面板先让用户看清要删什么）。
+    在跑/排队的一律不动，这条在 _tasks_cleanup 里是硬判断，不是靠调用方自觉。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    states = payload.get("states") or None
+    if isinstance(states, str):
+        states = [s.strip() for s in states.split(",") if s.strip()]
+    if states:
+        bad = [s for s in states if s not in _task_terminal_states(tr)]
+        if bad:
+            return JSONResponse({"ok": False, "error": "不能清这些状态：%s（只允许 %s）"
+                                 % ("/".join(bad), "/".join(_task_terminal_states(tr)))},
+                                status_code=400)
+    ttl = payload.get("ttl_hours")
+    try:
+        ttl = None if ttl in (None, "") else float(ttl)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "ttl_hours 得是数字（小时）"}, status_code=400)
+    denied = _sandbox_precheck("fs.delete", _tasks_dir(), [HERMES_HOME_DIR, _tasks_dir()],
+                               "tasks.cleanup")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    res = _tasks_cleanup(states=states, session_id=str(payload.get("session_id") or ""),
+                         ttl_hours=ttl, dry_run=bool(payload.get("dry_run")))
+    if not res.get("ok"):
+        return JSONResponse(res, status_code=500)
+    return res
 
 
 @app.get("/api/version")

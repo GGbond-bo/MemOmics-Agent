@@ -103,6 +103,7 @@
   "/api/skills/{name}/files": "public",
   "/api/skills/{name}/toggle": "public",
   "/api/tasks": "public",
+  "/api/tasks/cleanup": "public",
   "/api/tasks/{task_id}": "public",
   "/api/tasks/{task_id}/cancel": "public",
   "/api/tasks/{task_id}/log": "public",

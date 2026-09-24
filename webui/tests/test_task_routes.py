@@ -20,6 +20,7 @@
 
 纪律：HERMES_HOME_DIR 指到 tmp，绝不许碰真机 hermes_home。
 """
+import asyncio
 import importlib.util
 import json
 import os
@@ -896,6 +897,207 @@ def test_l6_failed_task_keeps_old_behaviour(client, tr, tasks_dir):
     assert card["status"] == "failed" and card["incomplete"] is False
     assert card["stage_pending"] == 1 and card["retry_allowed"] is True
     assert card["stage_unfinished"] == ["训练"] and card["retry_note"] == ""
+
+
+# ------------------------------------------------- M 任务清理（T16，用户实测反馈）
+def _ended_ago(tr, tasks_dir, hours, **kw):
+    """造一条「结束于 N 小时前」的已结束契约（直接改时间戳，不靠等）。"""
+    from datetime import datetime, timedelta, timezone
+    t = _make(tr, tasks_dir, **kw)
+    t.finish("done", exit_code=0)
+    path = os.path.join(tasks_dir, t.task_id + ".json")
+    d = json.load(open(path, encoding="utf-8"))
+    stamp = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+    d["started_at"] = stamp
+    d["finished_at"] = stamp
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False)
+    return t
+
+
+def _log_of(tasks_dir, task_id):
+    d = json.load(open(os.path.join(tasks_dir, task_id + ".json"), encoding="utf-8"))
+    p = d.get("log") or os.path.join(tasks_dir, task_id + ".log")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("任务自己的日志" + chr(10))
+    return p
+
+
+def test_m1_delete_needs_token_and_unknown_404(client, tr, tasks_dir, home, token):
+    t = _make(tr, tasks_dir, title="待删任务")
+    t.finish("done", exit_code=0)
+    path = os.path.join(tasks_dir, t.task_id + ".json")
+    assert client.delete("/api/tasks/" + t.task_id).status_code == 401
+    assert client.delete("/api/tasks/" + t.task_id,
+                         headers={"X-Task-Token": "bad"}).status_code == 401
+    assert client.delete("/api/tasks/qc-19700101-000000-zzzz",
+                         headers={"X-Task-Token": token}).status_code == 404
+    assert os.path.isfile(path), "401/404 之后文件必须原封不动"
+
+
+def test_m2_delete_same_traversal_guard_as_read_routes(client, tr, tasks_dir, home, token):
+    """删除是破坏性操作，越界 id 更要挡住；而且不许碰任务目录外的任何文件。"""
+    (home / "secret.txt").write_text("TOP-SECRET", encoding="utf-8")
+    (home / "secret.json").write_text('{"task_id": "x"}', encoding="utf-8")
+    bad = ["..%2F..%2Fsecret.txt", "..%2f..%2fsecret.json", "....//....//secret.txt",
+           "..\\..\\secret.txt", "C%3A%5CWindows%5Cwin.ini", "%00secret", "nope.json"]
+    for raw in bad:
+        r = client.delete("/api/tasks/" + raw, headers={"X-Task-Token": token})
+        assert r.status_code in (400, 404), "%s 竟然返回 %s" % (raw, r.status_code)
+        assert "TOP-SECRET" not in r.text
+    assert (home / "secret.txt").read_text(encoding="utf-8") == "TOP-SECRET"
+    assert (home / "secret.json").is_file()
+
+
+def test_m3_delete_removes_contract_and_own_log_only(client, tr, tasks_dir, token, tmp_path):
+    """删记录 = 契约 + 它自己的日志；产出的数据文件一个都不许动。"""
+    out_dir = tmp_path / "results"
+    out_dir.mkdir()
+    keep = out_dir / "cellbender.h5"
+    keep.write_text("这是用户的数据", encoding="utf-8")
+    t = _make(tr, tasks_dir, title="有产物的任务")
+    t.data["outputs"] = [str(keep)]
+    t.finish("done", exit_code=0)
+    logp = _log_of(tasks_dir, t.task_id)
+    assert client.get("/api/tasks/" + t.task_id).status_code == 200
+    r = client.delete("/api/tasks/" + t.task_id, headers={"X-Task-Token": token})
+    assert r.status_code == 200 and r.json()["ok"] is True, r.text
+    assert r.json()["status"] == "done"
+    assert not os.path.isfile(os.path.join(tasks_dir, t.task_id + ".json"))
+    assert not os.path.isfile(logp)
+    assert keep.is_file(), "清理任务记录把用户的数据一起删了"
+    assert client.get("/api/tasks/" + t.task_id).status_code == 404
+    assert _card(client, t.task_id) is None
+
+
+def test_m4_delete_refuses_every_live_state(client, tr, tasks_dir, token):
+    """在跑/排队/暂停/正在取消：一条都不许删，理由要说"先取消"。"""
+    for st in ("queued", "running", "paused", "cancelling"):
+        t = _make(tr, tasks_dir, title="活任务-" + st)
+        raw = json.load(open(os.path.join(tasks_dir, t.task_id + ".json"), encoding="utf-8"))
+        raw["status"] = st
+        with open(os.path.join(tasks_dir, t.task_id + ".json"), "w", encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False)
+        r = client.delete("/api/tasks/" + t.task_id, headers={"X-Task-Token": token})
+        assert r.status_code == 409, "%s 竟然删掉了：%s" % (st, r.text)
+        assert "先取消" in r.json()["error"]
+        assert os.path.isfile(os.path.join(tasks_dir, t.task_id + ".json")), st
+
+
+def test_m5_cleanup_dry_run_and_arg_validation(client, tr, tasks_dir, token):
+    a = _ended_ago(tr, tasks_dir, 1, title="刚完成A")
+    b = _failed(tr, tasks_dir, title="失败B")
+    live = _make(tr, tasks_dir, title="在跑的C")
+    r = client.post("/api/tasks/cleanup", json={"dry_run": True},
+                    headers={"X-Task-Token": token})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    got = {x["task_id"] for x in body["deleted"]}
+    assert got == {a.task_id, b.task_id} and body["deleted_count"] == 2
+    assert live.task_id not in got
+    assert os.path.isfile(os.path.join(tasks_dir, a.task_id + ".json")), "dry_run 不许真删"
+    # 想清活状态 -> 400；ttl 不是数字 -> 400；错 token -> 401
+    r2 = client.post("/api/tasks/cleanup", json={"states": ["running"]},
+                     headers={"X-Task-Token": token})
+    assert r2.status_code == 400 and "只允许" in r2.json()["error"]
+    r3 = client.post("/api/tasks/cleanup", json={"ttl_hours": "很久"},
+                     headers={"X-Task-Token": token})
+    assert r3.status_code == 400
+    assert client.post("/api/tasks/cleanup", json={}).status_code == 401
+    assert os.path.isfile(os.path.join(tasks_dir, a.task_id + ".json"))
+
+
+def test_m6_cleanup_really_deletes_and_spares_live(client, tr, tasks_dir, token):
+    a = _ended_ago(tr, tasks_dir, 1, title="完成A")
+    b = _failed(tr, tasks_dir, title="失败B")
+    c = _make(tr, tasks_dir, title="排队C")
+    ba = _log_of(tasks_dir, a.task_id)
+    r = client.post("/api/tasks/cleanup", json={}, headers={"X-Task-Token": token})
+    assert r.status_code == 200 and r.json()["deleted_count"] == 2, r.text
+    assert not os.path.isfile(os.path.join(tasks_dir, a.task_id + ".json"))
+    assert not os.path.isfile(ba)
+    assert not os.path.isfile(os.path.join(tasks_dir, b.task_id + ".json"))
+    assert os.path.isfile(os.path.join(tasks_dir, c.task_id + ".json")), "排队任务被误清"
+    assert r.json()["kept"] == [] and r.json()["states"] == ["done", "failed", "cancelled", "interrupted"]
+
+
+def test_m7_cleanup_honours_session_scope(client, tr, tasks_dir, token):
+    a = _make(tr, tasks_dir, title="A会话完成", session_id="memomics-aaa")
+    a.finish("done", exit_code=0)
+    b = _make(tr, tasks_dir, title="B会话完成", session_id="memomics-bbb")
+    b.finish("done", exit_code=0)
+    r = client.post("/api/tasks/cleanup", json={"session_id": "memomics-aaa"},
+                    headers={"X-Task-Token": token})
+    assert r.status_code == 200 and r.json()["deleted_count"] == 1, r.text
+    assert not os.path.isfile(os.path.join(tasks_dir, a.task_id + ".json"))
+    assert os.path.isfile(os.path.join(tasks_dir, b.task_id + ".json"))
+
+
+def test_m8_cleanup_ttl_only_takes_old_ones(client, tr, tasks_dir, token):
+    old = _ended_ago(tr, tasks_dir, 30, title="30小时前")
+    fresh = _ended_ago(tr, tasks_dir, 1, title="1小时前")
+    r = client.post("/api/tasks/cleanup", json={"ttl_hours": 12},
+                    headers={"X-Task-Token": token})
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted_count"] == 1 and r.json()["notdue_count"] == 1
+    assert not os.path.isfile(os.path.join(tasks_dir, old.task_id + ".json"))
+    assert os.path.isfile(os.path.join(tasks_dir, fresh.task_id + ".json"))
+    assert r.json()["notdue"][0]["left_sec"] > 0
+
+
+def test_m9_list_route_auto_expires_and_reports_policy(client, tr, tasks_dir, monkeypatch):
+    """到点自动清理：列表接口顺带跑，策略（默认 12h / 0 = 关掉）必须能配置。"""
+    old = _ended_ago(tr, tasks_dir, 30, title="古早任务")
+    fresh = _ended_ago(tr, tasks_dir, 1, title="刚完成")
+    monkeypatch.setattr(server, "_TASK_SWEEP_AT", [0.0])       # 绕过节流（真机 60s 一次）
+    d = client.get("/api/tasks").json()
+    assert d["cleanup"]["ttl_hours"] == 12.0 and d["cleanup"]["auto"] is True
+    assert d["cleanup"]["swept"] == 1
+    assert not os.path.isfile(os.path.join(tasks_dir, old.task_id + ".json"))
+    assert os.path.isfile(os.path.join(tasks_dir, fresh.task_id + ".json"))
+    # 策略可配：0 = 关掉自动清理；数字 = 小时；写坏了退回默认
+    monkeypatch.setenv("MEMOMICS_TASK_TTL_HOURS", "0")
+    monkeypatch.setattr(server, "_TASK_SWEEP_AT", [0.0])
+    old2 = _ended_ago(tr, tasks_dir, 40, title="古早任务2")
+    d2 = client.get("/api/tasks").json()
+    assert d2["cleanup"]["ttl_hours"] == 0.0 and d2["cleanup"]["auto"] is False
+    assert d2["cleanup"]["swept"] is None
+    assert os.path.isfile(os.path.join(tasks_dir, old2.task_id + ".json")), "关掉自动清理还被删了"
+    monkeypatch.setenv("MEMOMICS_TASK_TTL_HOURS", "1.5")
+    assert server._task_ttl_hours() == 1.5
+    assert server._task_ttl_hours(3) == 3.0
+    assert server._task_ttl_hours("不是数字") == 12.0
+
+
+def test_m10_deleted_task_is_not_resurrected_by_pending_retry(client, tr, tasks_dir, token, monkeypatch):
+    """删掉的任务不许被"已经排定的重试"复活 —— 那会凭空多出一条幽灵任务。"""
+    t = _failed(tr, tasks_dir, cmd="python -c pass")
+    d0 = json.load(open(os.path.join(tasks_dir, t.task_id + ".json"), encoding="utf-8"))
+    plan = server._retry_plan(d0)
+    assert plan["allowed"] is True
+    assert client.delete("/api/tasks/" + t.task_id,
+                         headers={"X-Task-Token": token}).status_code == 200
+    called = []
+    monkeypatch.setattr(server, "_spawn_retry", lambda d, p: called.append(p))
+    server._RETRY_INFLIGHT[plan["root"]] = {"plan": plan}
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(server._retry_later(d0, plan, 0.01))
+    finally:
+        loop.close()
+    assert called == [], "任务都删了还把重试拉起来 = 幽灵任务复活"
+    assert plan["root"] not in server._RETRY_INFLIGHT
+    # 对照：没被删的任务照旧拉起（护栏不能把功能一起关掉）
+    t2 = _failed(tr, tasks_dir, cmd="python -c pass", title="没删的失败任务")
+    d2 = json.load(open(os.path.join(tasks_dir, t2.task_id + ".json"), encoding="utf-8"))
+    loop2 = asyncio.new_event_loop()
+    try:
+        loop2.run_until_complete(server._retry_later(d2, server._retry_plan(d2), 0.01))
+    finally:
+        loop2.close()
+    assert len(called) == 1
+
 
 
 

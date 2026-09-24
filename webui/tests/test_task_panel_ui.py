@@ -40,7 +40,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -601,5 +601,118 @@ console.log(JSON.stringify({ row: row, detail: detail, wired: wired, cleanHtml: 
     assert "读入" in d and "训练" in d and "出图" in d
     # 真跑完的任务：警告和重试都不该出现（别把正常任务也搞成黄的）
     assert "没跑完阶段" not in got["cleanHtml"] and "task-retry-btn" not in got["cleanHtml"]
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t16_cleanup_hint_and_row_delete_button():
+    """列表要回答"怎么清、什么时候自动清"，已结束的行要有 🗑，在跑的行不许有。"""
+    mod = _write_module()
+    done = dict(HALF_TASK, status="done", incomplete=False, stage_pending=0,
+                stage_unfinished=[], retry_allowed=False, retry_note="", duration_sec=12.0)
+    payload = {"ok": True, "counts": {"running": 1, "queued": 0, "done": 1, "failed": 1},
+               "cleanup": {"ttl_hours": 12.0, "auto": True, "swept": 0, "env": "MEMOMICS_TASK_TTL_HOURS"},
+               "tasks": [LIVE_TASK, done]}
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskList(%s);
+console.log(JSON.stringify({ rows: out.store['task-list'].innerHTML,
+                             hint: out.store['task-clean-bar'].innerHTML }));
+const off = %s;
+P.renderTaskList(off);
+console.log(JSON.stringify({ hint: out.store['task-clean-bar'].innerHTML }));
+const none = { ok: true, counts: { running: 2, done: 0, failed: 0 }, cleanup: off.cleanup, tasks: [] };
+P.renderTaskList(none);
+console.log(JSON.stringify({ hint: out.store['task-clean-bar'].innerHTML }));
+""" % (json.dumps(payload, ensure_ascii=False),
+       json.dumps({"ok": True, "counts": {"running": 0, "done": 1, "failed": 1},
+                   "cleanup": {"ttl_hours": 0.0, "auto": False, "swept": None,
+                               "env": "MEMOMICS_TASK_TTL_HOURS"},
+                   "tasks": [done]}, ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    outs = [json.loads(x) for x in r.stdout.strip().splitlines()[-3:]]
+    rows, hint = outs[0]["rows"], outs[0]["hint"]
+    # 提示行：可清理几条 + 多久自动清
+    assert "可清理 2 条" in hint and "完成 1" in hint and "失败 1" in hint, hint
+    assert "结束超 12 小时自动清理" in hint and "taskCleanup()" in hint, hint
+    # 🗑 只给已结束的行
+    assert rows.count("task-del-btn") == 1, rows.count("task-del-btn")
+    assert 'data-del="' + done["task_id"] + '"' in rows
+    assert 'data-del="' + LIVE_TASK["task_id"] + '"' not in rows, "在跑的任务也给了删除按钮"
+    # 关掉自动清理要说清楚，不能装作没这回事
+    off_hint = outs[1]["hint"]
+    assert "自动清理关着" in off_hint and "MEMOMICS_TASK_TTL_HOURS=0" in off_hint, off_hint
+    assert "可清理 2 条" in off_hint
+    none_hint = outs[2]["hint"]
+    assert "没有可清理的" in none_hint and "taskCleanup()" not in none_hint, none_hint
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t16_delete_only_for_finished_and_wired():
+    """详情：已结束给「删掉这条记录」并且真的接上了事件；在跑的不给。"""
+    mod = _write_module()
+    done = dict(HALF_TASK, status="done", incomplete=False, stage_pending=0, stage_unfinished=[],
+                retry_allowed=False, retry_note="", duration_sec=12.0)
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskDetail(%s);
+const doneHtml = out.store['task-detail'].innerHTML;
+const wired = typeof out.store['task-del-btn'].onclick;
+P.renderTaskDetail(%s);
+const liveHtml = out.store['task-detail'].innerHTML;
+console.log(JSON.stringify({ doneHtml: doneHtml, wired: wired, liveHtml: liveHtml }));
+""" % (json.dumps(done, ensure_ascii=False), json.dumps(LIVE_TASK, ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    assert "task-del-btn" in got["doneHtml"] and "删掉这条记录" in got["doneHtml"]
+    assert got["wired"] == "function", "删除按钮没接事件（点了没反应）"
+    assert "task-del-btn" not in got["liveHtml"], "在跑的任务也给了删除按钮 —— 会误导用户"
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t16_delete_and_cleanup_talk_to_the_right_api():
+    """删除/清理真的打到 DELETE /api/tasks/{id} 和 POST /api/tasks/cleanup，带 token，会话范围跟着筛选走。"""
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+const calls = [];
+const confirms = [];
+global.fetch = function(url, opts) {
+  calls.push({ url: url, method: (opts && opts.method) || 'GET', headers: (opts && opts.headers) || {}, body: (opts && opts.body) || '' });
+  return Promise.resolve({ json: function() { return Promise.resolve({ ok: true, deleted_count: 2, kept_count: 1 }); } });
+};
+global.confirm = function(msg) { confirms.push(msg); return true; };
+global.currentSid = 'memomics-mine';
+P._taskState.token = 'TOK-16';
+P.renderTaskList({ ok: true, counts: { done: 1, failed: 1, running: 1 }, tasks: [%s] });
+P.taskDelete('qc-2026 a/b');
+P.taskCleanup();
+P.toggleTaskScope();
+P.taskCleanup();
+setTimeout(function() {
+  console.log(JSON.stringify({ calls: calls, confirms: confirms, scope: P.scope() }));
+}, 80);
+""" % json.dumps(dict(HALF_TASK, status="done"), ensure_ascii=False)
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    calls = got["calls"]
+    dele = [c for c in calls if c["method"] == "DELETE"]
+    assert len(dele) == 1, calls
+    assert dele[0]["url"].endswith("/qc-2026%20a%2Fb"), dele[0]["url"]
+    assert dele[0]["headers"]["X-Task-Token"] == "TOK-16"
+    posts = [c for c in calls if c["method"] == "POST" and "cleanup" in c["url"]]
+    assert len(posts) == 2, calls
+    assert posts[0]["url"].endswith("/api/tasks/cleanup")
+    assert posts[0]["headers"]["X-Task-Token"] == "TOK-16"
+    assert json.loads(posts[0]["body"]) == {"session_id": ""}, posts[0]["body"]
+    assert json.loads(posts[1]["body"]) == {"session_id": "memomics-mine"}, posts[1]["body"]
+    assert got["scope"] == "current"
+    # 两处确认都要把"产出文件不动""在跑的不删"说在前面，别让人以为删了数据
+    assert any("产出" in m for m in got["confirms"]), got["confirms"]
+    assert any("正在跑" in m for m in got["confirms"]), got["confirms"]
+
+
 
 
