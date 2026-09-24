@@ -7375,7 +7375,8 @@ function renderTaskList(d) {
     html += '<div class="task-row" data-id="' + escapeHtml(t.task_id) + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;' + (live ? 'border-left:3px solid var(--primary);' : 'opacity:.85;') + '">';
     html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
     html += '<span style="font-size:13px;font-weight:600;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
-    html += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + '</span>';
+    var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
+    html += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt + '</span>';
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
     var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
@@ -7440,6 +7441,7 @@ function renderTaskDetail(t) {
   h += taskKv('进程', (t.pid ? 'PID ' + t.pid + (t.proc && t.proc.pname ? ' ' + t.proc.pname : '') : '（已结束）') + (t.wrapper_pid ? ' · 包装进程 ' + t.wrapper_pid : ''));
   h += taskKv('CPU / 内存', (t.cpu_pct === null || t.cpu_pct === undefined ? '-' : t.cpu_pct + '%') + ' / ' + (t.rss_gb === null || t.rss_gb === undefined ? '-' : t.rss_gb + ' GB'));
   h += taskKv('开始 / 耗时', (t.started_at || '-') + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec));
+  if (t.eta_sec) h += taskKv('预计还要', taskFmtSec(t.eta_sec) + '（' + (t.eta_basis || '') + (t.eta_confidence ? ' · 可信度' + t.eta_confidence : '') + '）');
   if (t.exit_code !== null && t.exit_code !== undefined) h += taskKv('退出码', t.exit_code);
   if (t.error) h += taskKv('错误', t.error);
   if (t.summary) h += taskKv('任务小结', t.summary);

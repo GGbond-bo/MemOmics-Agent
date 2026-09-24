@@ -118,6 +118,11 @@ def test_panel_mounted_in_shell():
         "if (msg.type === 'tasks') {",
         "_taskWsLive = true;",
         "var ms = _taskWsLive ? 8000 : 2000;",
+        # T10：列表/详情都要显示「还要多久」（来自阶段历史，带出处）
+        "' · 还要 '",
+        "t.eta_sec",
+        "预计还要",
+        "t.eta_basis",
     ]:
         assert token in html, "index.html 少了挂载点：" + token
     # 面板必须只在任务视图里出现，别的视图的隐藏列表也得带上它
@@ -156,6 +161,11 @@ LIVE_TASK = {
     "progress_pct": 55,
     "heartbeat_age_sec": 1.0,
     "summary": "",
+    "eta_sec": 245.0,
+    "eta_text": "4:05",
+    "eta_basis": "按 12 次同类型历史",
+    "eta_source": "history",
+    "eta_confidence": "高",
     "script_path": "E:/MemOmics-Agent/results/memomics-b145cef6/qc.R",
     "script_text": "print('hi')\n",
     "cancel_requested": False,
@@ -176,8 +186,21 @@ console.log(JSON.stringify({ html: out.store['task-list'].innerHTML, counts: out
     assert r.stdout, "node 没输出：%s" % r.stderr
     got = json.loads(r.stdout.strip().splitlines()[-1])
     h = got["html"]
-    for token in ["4242", "R 4.5.3", "memomics-b145cef6", "训练", "阶段 2/3", "width:55%", "🏃"]:
+    for token in ["4242", "R 4.5.3", "memomics-b145cef6", "训练", "阶段 2/3", "width:55%", "🏃",
+                  "还要 4m5s"]:
         assert token in h, "列表里看不到 %s" % token
+    # 没有 ETA 的任务（头一回跑、或已结束）不许硬编一个"还要"出来
+    no_eta = dict(LIVE_TASK)
+    no_eta["eta_sec"] = None
+    no_eta["eta_text"] = ""
+    drive2 = HARNESS + """
+const P = out.P;
+P.renderTaskList({ tasks: %s, counts: { running: 1 }, ok: true });
+console.log(JSON.stringify({ html: out.store['task-list'].innerHTML }));
+""" % json.dumps([no_eta], ensure_ascii=False)
+    r2 = _run_node(drive2, mod)
+    assert r2.returncode == 0, r2.stderr
+    assert "还要" not in json.loads(r2.stdout.strip().splitlines()[-1])["html"], "没 ETA 却显示了「还要」"
     assert "<script>alert(1)</script>" not in h, "标题没转义 —— 有注入风险"
     assert "&lt;script&gt;" in h
     assert "运行 1" in got["counts"] and "沙箱 observe" in got["counts"]
@@ -196,7 +219,8 @@ console.log(JSON.stringify({ html: out.store['task-detail'].innerHTML }));
     h = json.loads(r.stdout.strip().splitlines()[-1])["html"]
     for token in ["阶段时间线", "读入", "训练", "关键参数", "样本数", "实际命令", "Rscript qc.R",
                   "脚本内容", "task-script-body", "产物（2）", "文件不存在", "日志尾部",
-                  "task-cancel-btn", "取消这个任务", "包装进程 4241", "87.5%", "3.25 GB"]:
+                  "task-cancel-btn", "取消这个任务", "包装进程 4241", "87.5%", "3.25 GB",
+                  "预计还要", "4m5s", "按 12 次同类型历史", "可信度高"]:
         assert token in h, "详情里看不到 %s" % token
     # 终态任务不该再给取消按钮
     done = dict(LIVE_TASK)

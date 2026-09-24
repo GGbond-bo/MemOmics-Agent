@@ -411,3 +411,110 @@ def test_h2_detail_never_reads_script_outside_session_or_repo(client, tr, tasks_
     assert d.get("script_text") == ""
     assert "安全策略" in (d.get("script_note") or "")
 
+
+# ------------------------------------------------- I 阶段历史推 ETA（T10）
+def _history_sample(tr, tasks_dir, sec_map, script="qc.R"):
+    """造一条"真跑过"的历史任务 —— 走真实 API（stage/finish），不手塞 sec。
+
+    契约里 stages[].sec 是 stage()/finish() 按 started_at 现算的（进程真经过这段才有的数），
+    所以这里把 started_at 往回拨，再让 stage()/finish() 自己收口 —— 和真任务落盘形状一致。
+    """
+    from datetime import datetime, timedelta, timezone
+    names = list(sec_map.keys())
+    t = _make(tr, tasks_dir, title="历史样本", script=script, stages=names)
+    now = datetime.now(timezone.utc)
+    for idx, name in enumerate(names):
+        row = t.data["stages"][idx]
+        row["status"] = "running"
+        row["started_at"] = (now - timedelta(seconds=sec_map[name])).isoformat(timespec="seconds")
+        if idx + 1 < len(names):
+            t.stage(names[idx + 1])          # 切段 → 上一段 done + sec
+        else:
+            t.finish("done", exit_code=0)    # 收尾 → 最后一段 done + sec
+    return t
+
+
+def _running_after_first_stage(tr, tasks_dir, first_sec, running_sec, script="qc.R", ttype="qc",
+                               stages=("读入", "计算")):
+    """造一条「第一段跑完、第二段正在跑」的活任务。"""
+    from datetime import datetime, timedelta, timezone
+    t = _make(tr, tasks_dir, title="正在跑", script=script, type=ttype, stages=list(stages))
+    now = datetime.now(timezone.utc)
+    t.data["status"] = "running"
+    t.data["started_at"] = (now - timedelta(seconds=first_sec + running_sec)).isoformat(timespec="seconds")
+    t.data["stages"][0].update({
+        "status": "running",
+        "started_at": (now - timedelta(seconds=first_sec + running_sec)).isoformat(timespec="seconds")})
+    t.stage(stages[1])      # 切段：第一段 done + sec，第二段 running
+    t.data["status"] = "running"
+    t.data["stages"][1]["started_at"] = (now - timedelta(seconds=running_sec)).isoformat(timespec="seconds")
+    t.flush()
+    return t
+
+
+def _card(client, task_id, **params):
+    q = {"limit": 200}
+    q.update(params)
+    for c in client.get("/api/tasks", params=q).json()["tasks"]:
+        if c["task_id"] == task_id:
+            return c
+    return None
+
+
+def test_i1_card_eta_comes_from_stage_history(client, tr, tasks_dir):
+    """同类型跑够历史后，活任务要给「还要多久」，并且写清出处（按几次历史）。"""
+    for _ in range(3):
+        _history_sample(tr, tasks_dir, {"读入": 10, "计算": 30})
+    run = _running_after_first_stage(tr, tasks_dir, first_sec=10, running_sec=5)
+    card = _card(client, run.task_id)
+    assert card["eta_source"] == "history", card
+    assert 20 <= card["eta_sec"] <= 30, "计算段历史 30s、已跑 5s，还 25s 上下，实测 %s" % card["eta_sec"]
+    assert card["eta_confidence"] == "高" and "3 次" in card["eta_basis"]
+    assert card["eta_text"] and card["eta_text"] == tr.Task._fmt_sec(card["eta_sec"]), card
+    assert card["eta_sec"] >= 20 and card["eta_sec"] <= 31
+    done_card = _card(client, _history_sample(tr, tasks_dir, {"读入": 10}).task_id)
+    assert done_card["eta_sec"] is None and done_card["eta_source"] == ""
+
+
+def test_i2_history_survives_status_filter_and_detail_matches_list(client, tr, tasks_dir):
+    """历史必须在「按状态过滤」之前汇总：只看 running 时 ETA 不能凭空消失。"""
+    for _ in range(3):
+        _history_sample(tr, tasks_dir, {"读入": 10, "计算": 30})
+    run = _running_after_first_stage(tr, tasks_dir, first_sec=10, running_sec=5)
+    only_run = _card(client, run.task_id, states="running")
+    assert only_run is not None and only_run["eta_source"] == "history", only_run
+    detail = client.get("/api/tasks/" + run.task_id).json()["task"]
+    assert detail["eta_source"] == "history"
+    assert abs(detail["eta_sec"] - only_run["eta_sec"]) <= 1.0
+
+
+def test_i3_no_history_means_no_fake_eta(client, tr, tasks_dir):
+    """头一回跑、没有任何历史 —— 不许拍脑袋：没进度就不给数，有进度也只标按进度外推 + 低可信度。"""
+    from datetime import datetime, timedelta, timezone
+    lonely = _make(tr, tasks_dir, title="头一回跑", script="first.R", type="qc", stages=["读入", "计算"])
+    now = datetime.now(timezone.utc)
+    lonely.data["status"] = "running"
+    lonely.data["started_at"] = (now - timedelta(seconds=20)).isoformat(timespec="seconds")
+    lonely.data["stages"][0].update({
+        "status": "running",
+        "started_at": (now - timedelta(seconds=20)).isoformat(timespec="seconds")})
+    lonely.flush()
+    card = _card(client, lonely.task_id)
+    assert card["eta_sec"] is None and card["eta_text"] == "" and card["eta_basis"] == "", card
+    lonely.data["progress"] = {"value": 0.5, "text": "一半"}
+    lonely.flush()
+    card2 = _card(client, lonely.task_id)
+    assert card2["eta_source"] == "progress" and card2["eta_confidence"] == "低", card2
+    assert 15 <= card2["eta_sec"] <= 25, card2
+
+
+def test_i4_stage_longer_than_history_never_gives_negative_eta(client, tr, tasks_dir):
+    """实际比历史慢很多时：剩余不能算成负数（面板上不许出现「还要 -3s」）。"""
+    for _ in range(3):
+        _history_sample(tr, tasks_dir, {"读入": 10, "计算": 4, "出图": 20})
+    run = _running_after_first_stage(tr, tasks_dir, first_sec=10, running_sec=999,
+                                     stages=("读入", "计算", "出图"))
+    card = _card(client, run.task_id)
+    assert card["eta_sec"] is not None and card["eta_sec"] >= 15, card
+    assert card["eta_sec"] <= 30, "只剩出图 20s 上下，超时的那段不能倒扣成负数"
+

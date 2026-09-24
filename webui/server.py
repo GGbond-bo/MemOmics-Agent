@@ -9277,6 +9277,28 @@ def _task_run():
         return None
 
 
+def _task_eta():
+    """阶段历史推 ETA 模块（导入失败就退回"不给数"，面板照常能用）。"""
+    try:
+        from memomics.bio_tools import task_eta
+        return task_eta
+    except Exception as e:      # pragma: no cover - 正常安装不会走到
+        logger.warning("task_eta import failed: %s", e)
+        return None
+
+
+def _task_history(items) -> dict:
+    """把「已跑完任务的阶段耗时」汇成历史，供 ETA 使用（一次汇总，全列表共用）。"""
+    mod = _task_eta()
+    if mod is None:
+        return {}
+    try:
+        return mod.collect_history(items or [])
+    except Exception as e:      # pragma: no cover - 纯计算，出错就退化成不给数
+        logger.warning("task_eta collect failed: %s", e)
+        return {}
+
+
 def _tasks_dir() -> str:
     """每次现算：HERMES_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
     return os.path.join(HERMES_HOME_DIR, "runtime", "tasks")
@@ -9308,8 +9330,12 @@ def _env_line(env: dict) -> str:
     return env.get("kind", "未知环境")
 
 
-def _task_card(d: dict) -> dict:
-    """列表项：只留面板要显示的字段（契约文件本身可能很大）。"""
+def _task_card(d: dict, history: dict = None) -> dict:
+    """列表项：只留面板要显示的字段（契约文件本身可能很大）。
+
+    history（可选）：阶段耗时历史 —— 给了就算「还要多久」（T10），
+    没历史 / 任务已结束 / 信息不足时 eta_sec 为 None，面板就不显示这一行。
+    """
     from datetime import datetime as _dt, timezone as _tz
     proc = d.get("proc") or {}
     prog = d.get("progress") or {}
@@ -9326,7 +9352,20 @@ def _task_card(d: dict) -> dict:
             elapsed = None
     else:
         elapsed = d.get("duration_sec")
+    eta = {}
+    mod = _task_eta()
+    if mod is not None:
+        try:
+            eta = mod.estimate(d, history or {})
+        except Exception as e:  # pragma: no cover - 估算失败不该拖垮列表
+            logger.warning("task_eta estimate failed: %s", e)
+            eta = {}
     return {
+        "eta_sec": eta.get("sec"),
+        "eta_text": eta.get("text") or "",
+        "eta_basis": eta.get("basis") or "",
+        "eta_source": eta.get("source") or "",
+        "eta_confidence": eta.get("confidence") or "",
         "task_id": d.get("task_id"),
         "title": d.get("title") or "未命名任务",
         "type": d.get("type") or "other",
@@ -9451,6 +9490,9 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
                               limit=max(1, min(500, int(limit or 100))), refresh=bool(refresh))
     except Exception as e:
         return {"ok": False, "error": "读取任务失败：%s" % e, "tasks": [], "counts": {}}
+    # 历史要在「按状态过滤」之前汇总：过滤成只看 running 时，历史仍然得是全量的，
+    # 否则面板一筛选，ETA 就集体变成"看不到"。
+    history = _task_history(items)
     if states:
         want = {one.strip() for one in states.split(",") if one.strip()}
         items = [d for d in items if (d.get("status") or "") in want]
@@ -9458,7 +9500,7 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
     for d in items:
         st = d.get("status") or "unknown"
         counts[st] = counts.get(st, 0) + 1
-    return {"ok": True, "tasks": [_task_card(d) for d in items], "counts": counts,
+    return {"ok": True, "tasks": [_task_card(d, history) for d in items], "counts": counts,
             "active": counts.get("running", 0) + counts.get("cancelling", 0),
             "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
             "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
@@ -9530,7 +9572,11 @@ async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
     if t is None:
         return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
     d = tr.reconcile(t.data)
-    card = _task_card(d)
+    try:
+        history = _task_history(tr.list_tasks(limit=500, refresh=0))
+    except Exception:  # pragma: no cover - 历史拿不到就不给 ETA
+        history = {}
+    card = _task_card(d, history)
     card["params"] = d.get("params") or {}
     card["outputs"] = []
     for p in (d.get("outputs") or [])[:100]:
