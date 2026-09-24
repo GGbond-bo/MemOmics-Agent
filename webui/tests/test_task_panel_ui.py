@@ -40,7 +40,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, taskStatusTone: taskStatusTone, taskStatusText: taskStatusText, taskHeroLine: taskHeroLine, taskCoreParams: taskCoreParams, taskFoldToggle: taskFoldToggle, taskRowHtml: taskRowHtml, liveSectionHtml: liveSectionHtml, liveSessionRowHtml: liveSessionRowHtml, openLiveSession: openLiveSession, bindTaskRowClicks: bindTaskRowClicks, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, taskStatusTone: taskStatusTone, taskStatusText: taskStatusText, taskHeroLine: taskHeroLine, taskCoreParams: taskCoreParams, taskFoldToggle: taskFoldToggle, taskRowHtml: taskRowHtml, liveSectionHtml: liveSectionHtml, liveSessionRowHtml: liveSessionRowHtml, openLiveSession: openLiveSession, bindTaskRowClicks: bindTaskRowClicks, refreshLiveDetail: refreshLiveDetail, renderLiveDetail: renderLiveDetail, liveToolLabel: liveToolLabel, liveBytes: liveBytes, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -910,6 +910,9 @@ def test_t18_running_sessions_are_visible_and_clickable():
     assert "d.live_sessions" in html, "面板没读服务端的活会话字段"
     assert "data-live-sid" in html and "openLiveSession" in html, "活会话行没接点击"
     assert "querySelectorAll('.task-live-row')" in html, "活会话行没绑定点击"
+    # 2026-09-24 二次反馈后：点活会话先开"详情"（参数/环境/产物），想去对话再点按钮
+    assert "fetch('/api/live_session/'" in html, "点活会话没去拉详情接口"
+    assert "renderLiveDetail" in html and "_taskState.live" in html, "活会话详情没接线"
     # 活会话行不能混进 .task-row：任务行的点击绑定会把 onclick 抢成 openTaskDetail，
     # 而 openTaskDetail 对会话 id 只会 404 —— 点了没反应就是这么来的。
     assert 'class="task-live-row"' in html, "活会话行混了 task-row 的 class"
@@ -979,3 +982,92 @@ console.log(JSON.stringify({ a: P.liveSectionHtml([]), b: P.liveSectionHtml(unde
 
 
 
+
+
+# ------------------------------------------- T19 活会话详情：参数 / 环境 / 产物 / 辩论
+# 用户原话（2026-09-24）："我点击后台任务之后，没办法看到该任务的详细信息，比如参数，主要环境等等。"
+# 面板必须自己回答"拿什么参数、在什么环境里跑的、出了什么产物"，而不是只把人丢进对话里。
+LIVE_DETAIL = {
+    "ok": True, "sid": "memomics-live01", "title": "骨骼肌 QC", "ask": "帮我看下这批数据的质控",
+    "live": True, "is_running": True, "elapsed_sec": 725, "msg_count": 3,
+    "current": {"sid": "memomics-live01", "last_tool": "execute_r", "tool_age_sec": 12,
+                "tool_expect_sec": 1800, "stalled": False, "proc": {"pid": 12345, "rss_mb": 812},
+                "elapsed_sec": 725},
+    "todos": [{"title": "读数据", "status": "completed"}, {"title": "算 QC 指标", "status": "in_progress"}],
+    "tools": [{"ts": "2026-09-24T16:20:01", "tool": "execute_r",
+               "args": 'obj <- readRDS("E:/release/_memtest/data/MF_2000.rds")',
+               "result": '{"status": "success", "output": "51227 x 2132"}'}],
+    "stats": {"tool_calls": 7, "tools": {"execute_r": 2}, "skills": ["scrna-qc"],
+              "rail_pre": 1, "rail_post": 0, "debate_calls": 0, "files_written": 1},
+    "debates": [{"file": "debate_x.json", "topic": "MT 阈值 15% 是否为空操作", "verdict": "need_more_info",
+                 "confidence": "low", "decision": "先补阈值敏感性分析再定去留", "next_actions": 3,
+                 "mtime": 1.0}],
+    "artifacts": [{"rel": "results/qc_metrics_summary.csv", "size": 4096, "mtime": 1.0},
+                  {"rel": "figures/qc_violin.png", "size": 204800, "mtime": 1.0}],
+    "env": {"python": "E:/MemOmics-Agent/.venv/Scripts/python.exe", "cwd": "E:/MemOmics-Agent",
+            "r_version": "R-4.5.3", "rscript": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
+            "r_lib_user": "E:/R-libs/R-4.5.3", "r_pkg_count": 258, "r_key_pkgs": ["Seurat", "harmony"],
+            "memomics_env": {"MEMOMICS_PORT": "8899"}, "env_updated": "2026-09-24"},
+    "paths": {"session_dir": "E:/MemOmics-Agent/results/memomics-live01",
+              "system_log": "E:/MemOmics-Agent/results/memomics-live01/log/system_log.jsonl",
+              "tasks_dir": "C:/hermes_home/runtime/tasks"},
+    "task": None,
+}
+
+
+def test_t19_live_detail_shows_params_environment_and_artifacts():
+    """详情页要摊开：入参原文、R/Python 环境、产物清单、辩论裁决；按钮能进会话。"""
+    if not NODE:
+        pytest.skip("本机没有 node，跳过页面 JS 实测")
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+const calls = [], switched = [];
+global.fetch = function(u) {
+  calls.push(String(u));
+  return Promise.resolve({ json: function() { return Promise.resolve(%s); } });
+};
+global.switchSession = function(sid) { switched.push(sid); };
+P.openLiveSession('memomics-live01');
+setTimeout(function() {
+  var box = out.store['task-detail'];
+  var go = out.store['live-goto-chat'];
+  if (go && go.onclick) go.onclick();
+  console.log(JSON.stringify({ calls: calls, switched: switched, live: P._taskState.live,
+                               tab: P._taskState.id, html: box.innerHTML }));
+}, 50);
+""" % json.dumps(LIVE_DETAIL, ensure_ascii=False)
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    assert got["calls"] and "/api/live_session/memomics-live01" in got["calls"][0], got["calls"]
+    assert got["live"] == "memomics-live01" and got["tab"] is None, "详情页没把状态切到活会话"
+    h = got["html"]
+    for token in ["你的要求", "帮我看下这批数据的质控", "运行参数", "readRDS",
+                  "MF_2000.rds", "主要环境", "R-4.5.3", "Rscript", "E:/R-libs/R-4.5.3", "Seurat",
+                  "MEMOMICS_PORT", "产物（2 个文件）", "results/qc_metrics_summary.csv", "4.0 KB",
+                  "辩论记录（1 次）", "need_more_info", "先补阈值敏感性分析再定去留",
+                  "切到会话", "PID 12345", "工具调用 7 次", "铁轨审查"]:
+        assert token in h, "详情里看不到 %s" % token
+    assert got["switched"] == ["memomics-live01"], "「切到会话」没真的切过去"
+    # 读不到详情要说人话，不许留空白页
+    drive2 = HARNESS + """
+const P = out.P;
+P.renderLiveDetail({ ok: false, error: 'boom' });
+console.log(JSON.stringify({ html: out.store['task-detail'].innerHTML }));
+"""
+    r2 = _run_node(drive2, mod)
+    assert r2.returncode == 0, r2.stderr
+    h2 = json.loads(r2.stdout.strip().splitlines()[-1])["html"]
+    assert "读不到会话详情" in h2 and "boom" in h2
+    # 注入必须转义
+    drive3 = HARNESS + """
+const P = out.P;
+var d = %s; d.title = '<img src=x onerror=alert(1)>';
+P.renderLiveDetail(d);
+console.log(JSON.stringify({ html: out.store['task-detail'].innerHTML }));
+""" % json.dumps(LIVE_DETAIL, ensure_ascii=False)
+    r3 = _run_node(drive3, mod)
+    assert r3.returncode == 0, r3.stderr
+    h3 = json.loads(r3.stdout.strip().splitlines()[-1])["html"]
+    assert "<img" not in h3 and "&lt;img" in h3

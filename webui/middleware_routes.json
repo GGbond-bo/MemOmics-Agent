@@ -41,6 +41,7 @@
   "/api/literature/summarize-all": "public",
   "/api/literature/summary": "public",
   "/api/literature/translate": "public",
+  "/api/live_session/{sid}": "public",
   "/api/memory": "public",
   "/api/memory/entry": "public",
   "/api/memory/govern": "public",

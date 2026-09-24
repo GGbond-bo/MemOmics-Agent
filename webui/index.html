@@ -7339,7 +7339,7 @@ function toggleWeixinAgent() {
 // === 后台任务面板（T3）：谁在跑、在哪跑、跑到哪一步 ===
 // 数据来自 /api/tasks（跨会话），2 秒轮询一次；列表 + 详情两层，详情里能看阶段时间线、
 // 关键参数、脚本正文、产物真假、日志尾部，跑着的任务还能就地取消（带令牌）。
-var _taskState = { timer: null, id: null, token: '' };
+var _taskState = { timer: null, id: null, live: null, token: '' };
 var _taskLive = ['running', 'queued', 'paused', 'cancelling'];
 var _taskWsLive = false;  // WS 订阅上了就用推送，轮询退成 8 秒兜底
 
@@ -7381,6 +7381,7 @@ function startTaskPoll() {
   _taskState.timer = setInterval(function() {
     var el = document.getElementById('panel-tasks');
     if (!el || el.style.display === 'none') { stopTaskPoll(); return; }
+    if (_taskState.id || _taskState.live) refreshTaskDetail();   // 详情页开着就刷详情，别刷了列表看不见
     loadTasks(false);
   }, ms);
 }
@@ -7622,11 +7623,149 @@ function bindTaskRowClicks(box) {
   }
 }
 
+// 2026-09-24 用户反馈："点后台任务看不到详细信息，比如参数、主要环境"。
+// 之前点活会话只是切过去看对话；现在先开详情页（参数/环境/产物/辩论/日志），想去对话再点按钮。
 function openLiveSession(sid) {
-  try { closeTaskDock(); } catch (e) {}
   if (!sid) return;
-  try { if (typeof switchSession === 'function') { switchSession(sid); return; } } catch (e) {}
-  try { if (typeof showToast === 'function') showToast('会话 ' + sid + ' 正在跑，去左侧会话列表点它'); } catch (e) {}
+  _taskState.live = sid;
+  _taskState.id = null;
+  var l = document.getElementById('task-list'); if (l) l.style.display = 'none';
+  var dd = document.getElementById('task-detail');
+  if (dd) {
+    dd.style.display = '';
+    dd.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text-light);">正在读取 ' +
+                   escapeHtml(sid) + ' 的详情…</div>';
+  }
+  refreshLiveDetail();
+  if (!_taskState.timer) startTaskPoll();
+}
+
+function refreshLiveDetail() {
+  var want = _taskState.live;
+  if (!want) return;
+  fetch('/api/live_session/' + encodeURIComponent(want) + '?tools=12')
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (_taskState.live === want) renderLiveDetail(d); })
+    .catch(function() {});
+}
+
+function liveBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function liveToolLabel(t) { return LONG_TOOL_CN[t] ? LONG_TOOL_CN[t] + '（' + t + '）' : String(t || ''); }
+
+function liveEnvStr(v) {
+  if (v === null || v === undefined) return '';
+  return (typeof v === 'string') ? v : JSON.stringify(v);
+}
+
+function renderLiveDetail(d) {
+  var box = document.getElementById('task-detail');
+  if (!box) return;
+  if (!d || d.ok === false) {
+    box.innerHTML = '<div style="padding:14px;font-size:12px;color:#c0504d;">读不到会话详情：' +
+      escapeHtml((d && d.error) || '未知错误') + '</div>';
+    return;
+  }
+  if (_taskFoldOwner !== d.sid) { _taskFold = {}; _taskFoldOwner = d.sid; }
+  var cur = d.current || {}, st = d.stats || {}, e = d.env || {};
+  var h = '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;">';
+  h += '<button onclick="closeTaskDetail()" style="' + _taskBtn + '">← 返回列表</button>';
+  h += '<div style="flex:1;min-width:110px;font-weight:600;font-size:13px;">' +
+       (d.is_running ? '🏃 ' : '') + escapeHtml(d.title || d.sid) + '</div>';
+  h += '<button id="live-goto-chat" style="' + _taskBtn + '">💬 切到会话</button>';
+  h += '<button id="live-refresh" style="' + _taskBtn + '">🔃 刷新</button></div>';
+  h += '<div style="padding:10px 12px;overflow-y:auto;flex:1;">';
+
+  var bits = [];
+  bits.push(d.is_running ? '正在跑' : '没在跑');
+  if (d.elapsed_sec) bits.push('已跑 ' + taskFmtSec(d.elapsed_sec));
+  if (cur.last_tool) bits.push('在做 ' + liveToolLabel(cur.last_tool) +
+    ((cur.tool_age_sec === null || cur.tool_age_sec === undefined) ? '' : '，已 ' + taskFmtSec(cur.tool_age_sec)));
+  if (cur.proc && cur.proc.pid) bits.push('PID ' + cur.proc.pid + ' · ' + Math.round(cur.proc.rss_mb || 0) + ' MB');
+  if (st.tool_calls) bits.push('工具调用 ' + st.tool_calls + ' 次');
+  h += '<div style="font-size:12px;margin-bottom:6px;">' + escapeHtml(bits.join(' · ')) + '</div>';
+  if (cur.stalled) h += '<div style="font-size:11px;color:#e0a030;margin-bottom:4px;">⚠️ 这一步超过预期时长还没动静（可能卡住或已崩）</div>';
+  if (d.ask) h += taskKv('你的要求', d.ask);
+  h += taskKv('会话', String(d.sid || '') + (d.msg_count > 1 ? ' · ' + d.msg_count + ' 条消息' : ''));
+  if (st.skills && st.skills.length) h += taskKv('触发的技能', st.skills.join(' · '));
+  if (st.rail_pre || st.rail_post) h += taskKv('铁轨审查', 'pre ' + (st.rail_pre || 0) + ' 次 · post ' + (st.rail_post || 0) + ' 次');
+  if (d.todos && d.todos.length) {
+    var done = d.todos.filter(function(t) { return t.status === 'completed'; }).length;
+    var doing = d.todos.filter(function(t) { return t.status === 'in_progress'; });
+    h += taskKv('计划', done + '/' + d.todos.length + ' 步完成' + (doing.length ? ' · 当前：' + (doing[0].title || '') : ''));
+  }
+
+  var tools = d.tools || [], tInner = '';
+  if (!tools.length) tInner = '<div style="font-size:12px;color:var(--text-light);">还没有工具调用记录</div>';
+  tools.forEach(function(t) {
+    tInner += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin:0 0 6px;">' +
+      '<div style="font-size:12px;font-weight:600;">' + escapeHtml(liveToolLabel(t.tool)) +
+      ' <span style="color:var(--text-light);font-weight:400;">' +
+      escapeHtml(String(t.ts || '').replace('T', ' ').slice(0, 19)) + '</span></div>';
+    if (t.args) tInner += '<pre style="' + _taskPre + '">' + escapeHtml(t.args) + '</pre>';
+    if (t.result) tInner += '<div style="font-size:11px;color:var(--text-light);white-space:pre-wrap;word-break:break-all;">↳ ' +
+      escapeHtml(String(t.result).slice(0, 300)) + '</div>';
+    tInner += '</div>';
+  });
+  h += taskFold('live-params', '运行参数 · 最近 ' + tools.length + ' 次工具调用（含入参原文）', tInner, true);
+
+  var eInner = '';
+  eInner += taskKv('R 版本', e.r_version || '（environment.json 里没有）');
+  eInner += taskKv('Rscript', e.rscript || '');
+  eInner += taskKv('R 库路径', e.r_lib_user || e.r_libs_user || '');
+  if (e.r_pkg_count !== undefined) eInner += taskKv('R 包数', e.r_pkg_count);
+  if (e.r_key_pkgs && e.r_key_pkgs.length) eInner += taskKv('关键包', e.r_key_pkgs.join(', '));
+  eInner += taskKv('Python', e.python || '');
+  if (e.python_declared) eInner += taskKv('声明的 Python', e.python_declared);
+  eInner += taskKv('工作目录', e.cwd || '');
+  if (e.platform) eInner += taskKv('平台', liveEnvStr(e.platform));
+  if (e.gpu) eInner += taskKv('GPU', liveEnvStr(e.gpu));
+  var mem = e.memomics_env || {};
+  Object.keys(mem).forEach(function(k) { eInner += taskKv(k, mem[k]); });
+  if (e.env_updated) eInner += taskKv('环境清单更新', e.env_updated);
+  if (e.env_error) eInner += taskKv('环境清单', '读取失败：' + e.env_error);
+  h += taskFold('live-env', '主要环境（R / Python / 库路径 / GPU）', eInner, true);
+
+  var arts = d.artifacts || [], aInner = '';
+  if (!arts.length) aInner = '<div style="font-size:12px;color:var(--text-light);">还没有落盘产物（分析可能还在读数据/算）</div>';
+  arts.forEach(function(a) {
+    aInner += '<div style="display:flex;gap:8px;font-size:12px;padding:2px 0;">' +
+      '<span style="flex:1;word-break:break-all;">' + escapeHtml(a.rel) + '</span>' +
+      '<span style="color:var(--text-light);white-space:nowrap;">' + liveBytes(a.size) + '</span></div>';
+  });
+  h += taskFold('live-artifacts', '产物（' + arts.length + ' 个文件）', aInner, arts.length > 0 && arts.length <= 12);
+
+  var dbs = d.debates || [], dInner = '';
+  if (!dbs.length) dInner = '<div style="font-size:12px;color:var(--text-light);">这次还没有辩论记录</div>';
+  dbs.forEach(function(b) {
+    dInner += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin:0 0 6px;font-size:12px;">' +
+      '<div style="font-weight:600;">' + escapeHtml(b.topic || '(无题目)') + '</div>' +
+      '<div style="color:var(--text-light);">裁决 ' + escapeHtml(b.verdict || '-') + ' · 置信度 ' + escapeHtml(b.confidence || '-') +
+      (b.next_actions === null || b.next_actions === undefined ? '' : ' · 下一步 ' + b.next_actions + ' 条') + '</div>' +
+      (b.decision ? '<div style="margin-top:4px;">' + escapeHtml(b.decision) + '</div>' : '') + '</div>';
+  });
+  h += taskFold('live-debate', '辩论记录（' + dbs.length + ' 次）', dInner, dbs.length > 0);
+
+  var pth = d.paths || {};
+  var pInner = taskKv('会话目录', pth.session_dir || '') + taskKv('系统日志', pth.system_log || '') +
+               taskKv('后台任务目录', pth.tasks_dir || '');
+  if (d.task) pInner += taskKv('契约任务', (d.task.task_id || '') + ' · ' + (d.task.status || ''));
+  h += taskFold('live-paths', '日志与路径', pInner, false);
+  h += '</div>';
+
+  box.innerHTML = h;
+  var gb = document.getElementById('live-goto-chat');
+  if (gb) gb.onclick = function() {
+    try { closeTaskDock(); } catch (err) {}
+    try { if (typeof switchSession === 'function') switchSession(d.sid); } catch (err2) {}
+  };
+  var rb = document.getElementById('live-refresh');
+  if (rb) rb.onclick = function() { refreshLiveDetail(); };
 }
 
 function renderTaskList(d) {
@@ -7737,6 +7876,7 @@ function openTaskDetail(id) {
 
 function closeTaskDetail() {
   _taskState.id = null;
+  _taskState.live = null;
   var d = document.getElementById('task-detail');
   if (d) { d.style.display = 'none'; d.innerHTML = ''; }
   var l = document.getElementById('task-list');
@@ -7744,6 +7884,7 @@ function closeTaskDetail() {
 }
 
 function refreshTaskDetail() {
+  if (_taskState.live) { refreshLiveDetail(); return; }   // 详情页看的是活会话时，刷新走活会话接口
   if (!_taskState.id) return;
   var want = _taskState.id;
   fetch('/api/tasks/' + encodeURIComponent(want) + '?tail=300').then(function(r) { return r.json(); }).then(function(d) {

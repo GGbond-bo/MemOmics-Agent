@@ -10021,6 +10021,240 @@ def _live_session_cards(limit: int = 20) -> list:
     return out[:limit]
 
 
+# === 活会话详情（2026-09-24 用户反馈：点了后台任务看不到参数、主要环境） ===
+# 面板原来点活会话只是"切过去看对话"，可用户要的是"这活到底拿什么参数、在什么环境下跑的"。
+# 这里把运行时可查的事实全部摊开：最近的工具调用（含入参原文）、跑分析用的 R/Python 环境、
+# 已经落盘的产物、辩论记录、日志路径；拿不到的一律留空，不编。
+_LIVE_ARTIFACT_DIRS = ("results", "figures", "scripts", "conclusions")
+
+
+def _live_artifacts(sid: str, limit: int = 40) -> list:
+    """会话落盘产物（结果表/图/脚本/结论），按修改时间倒序。"""
+    base = os.path.join(RESULTS_DIR, sid)
+    out = []
+    for sub in _LIVE_ARTIFACT_DIRS:
+        d = os.path.join(base, sub)
+        if not os.path.isdir(d):
+            continue
+        try:
+            names = os.listdir(d)
+        except Exception:
+            continue
+        for fn in names:
+            p = os.path.join(d, fn)
+            try:
+                st = os.stat(p)
+            except Exception:
+                continue
+            if not os.path.isfile(p):
+                continue
+            out.append({"rel": sub + "/" + fn, "size": st.st_size, "mtime": st.st_mtime})
+    out.sort(key=lambda x: -(x.get("mtime") or 0))
+    return out[:limit]
+
+
+def _session_tool_trace(sid: str, limit: int = 12) -> list:
+    """会话最近的工具调用（工具 + 入参 + 结果摘要）——"参数"最硬的一手证据。"""
+    p = os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl")
+    if not os.path.isfile(p):
+        return []
+    lines = []
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.strip():
+                    lines.append(line)
+    except Exception:
+        return []
+    out = []
+    for line in lines[-max(1, limit):]:
+        try:
+            e = json.loads(line)
+        except Exception:
+            continue
+        out.append({"ts": str(e.get("ts") or ""), "tool": str(e.get("tool") or ""),
+                    "args": str(e.get("args") or "")[:900],
+                    "result": str(e.get("result_preview") or "")[:400]})
+    out.reverse()                     # 最新的排前面
+    return out
+
+
+def _session_stats(sid: str) -> dict:
+    """"跑成什么样"的粗账：工具次数、用过哪些技能、审查/辩论几次。"""
+    p = os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl")
+    stats = {"tool_calls": 0, "tools": {}, "skills": [], "rail_pre": 0, "rail_post": 0,
+             "debate_calls": 0, "files_written": 0}
+    if not os.path.isfile(p):
+        return stats
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                t = str(e.get("tool") or "")
+                if not t:
+                    continue
+                stats["tool_calls"] += 1
+                stats["tools"][t] = stats["tools"].get(t, 0) + 1
+                args = str(e.get("args") or "")
+                if t == "skill_view":
+                    m = re.search(r"['\"]name['\"]\s*:\s*['\"]([^'\"]+)", args)
+                    if m and m.group(1) not in stats["skills"]:
+                        stats["skills"].append(m.group(1))
+                elif t == "rail_review":
+                    if "pre" in args:
+                        stats["rail_pre"] += 1
+                    if "post" in args:
+                        stats["rail_post"] += 1
+                elif t == "debate_analysis":
+                    stats["debate_calls"] += 1
+                elif t in ("write_file", "patch", "execute_r", "execute_python"):
+                    if t in ("write_file", "patch"):
+                        stats["files_written"] += 1
+    except Exception:
+        pass
+    return stats
+
+
+def _session_debates(sid: str, limit: int = 5) -> list:
+    """本会话的辩论记录（题目/裁决/置信度/结论/下一步）——用户最想知道的"它到底怎么判的"。"""
+    d = os.path.join(RESULTS_DIR, sid, "log")
+    if not os.path.isdir(d):
+        return []
+    out = []
+    try:
+        names = sorted([n for n in os.listdir(d) if n.startswith("debate_") and n.endswith(".json")])
+    except Exception:
+        return []
+    for fn in names[-limit:]:
+        try:
+            with open(os.path.join(d, fn), encoding="utf-8", errors="replace") as f:
+                j = json.load(f)
+        except Exception:
+            continue
+        na = j.get("next_actions")
+        out.append({"file": fn,
+                    "topic": str(j.get("topic") or "")[:300],
+                    "verdict": str(j.get("verdict") or ""),
+                    "confidence": str(j.get("confidence") or ""),
+                    "decision": str(j.get("decision") or "")[:600],
+                    "next_actions": len(na) if isinstance(na, list) else None,
+                    "mtime": os.path.getmtime(os.path.join(d, fn))})
+    out.reverse()
+    return out
+
+
+def _session_env_facts() -> dict:
+    """跑分析用的主要环境：R/Python 可执行文件、库路径、GPU —— 用户问"主要环境"要的就是这些。"""
+    facts = {"python": sys.executable or "", "cwd": os.getcwd(),
+             "r_libs_user": os.environ.get("R_LIBS_USER") or ""}
+    try:
+        with open(os.path.join(MEMOMICS_DIR, "environment.json"), encoding="utf-8") as f:
+            env = json.load(f)
+        for ver, info in list(((env.get("paths") or {}).get("r") or {}).items())[:1]:
+            facts["r_version"] = str(ver)
+            facts["rscript"] = str((info or {}).get("bin") or "")
+            facts["r_lib_user"] = str((info or {}).get("lib_user") or facts["r_libs_user"])
+            facts["r_pkg_count"] = (info or {}).get("pkg_count")
+            facts["r_key_pkgs"] = list((info or {}).get("key_pkgs") or [])[:8]
+        py = ((env.get("paths") or {}).get("python") or {})
+        if isinstance(py, dict) and py:
+            k0 = list(py)[0]
+            facts["python_declared"] = str((py.get(k0) or {}).get("bin") or k0) if isinstance(py.get(k0), dict) else str(py.get(k0))
+        facts["platform"] = env.get("platform")
+        facts["gpu"] = env.get("gpu")
+        ki = env.get("known_issues")
+        facts["known_issues"] = [str(x)[:200] for x in (ki or [])[:3]] if isinstance(ki, list) else []
+        facts["env_updated"] = str(env.get("_last_updated") or "")
+    except Exception as e:
+        facts["env_error"] = str(e)
+    facts["memomics_env"] = {k: v for k, v in os.environ.items() if k.startswith("MEMOMICS_")}
+    return facts
+
+
+def _live_session_detail(sid: str, tool_limit: int = 12) -> dict:
+    """活会话详情：它是谁、在跑什么、拿什么参数、什么环境、出了什么产物、日志在哪。"""
+    s = _sessions.get(sid)
+    if s is None:
+        try:
+            _restore_single_session(sid)
+        except Exception:
+            pass
+        s = _sessions.get(sid)
+    cards = {}
+    try:
+        for c in _live_session_cards(limit=200):
+            if c.get("sid") == sid:
+                cards = c
+                break
+    except Exception:
+        cards = {}
+    ask = ""
+    if s:
+        msgs = s.get("messages") or []
+        if msgs:
+            ask = str(msgs[0].get("content") or msgs[0].get("text") or "")
+        elif s.get("_first_msg"):
+            ask = str(s.get("_first_msg") or "")
+    if not ask:
+        try:
+            for m in _load_session_messages(sid, limit=6) or []:
+                c0 = str(m.get("content") or m.get("text") or "")
+                if (m.get("role") or "") == "user" and c0 and not c0.lstrip().startswith(_INJECT_PREFIXES):
+                    ask = c0
+                    break
+        except Exception:
+            pass
+    task = None
+    try:
+        tr = _task_run()
+        if tr is not None:
+            _bind_task_run(tr)
+            mine = tr.list_tasks(session_id=sid, limit=5, refresh=True)
+            if mine:
+                task = mine[0]
+    except Exception:
+        task = None
+    detail = {
+        "ok": True,
+        "sid": sid,
+        "title": (s or {}).get("title") or "",
+        "ask": ask.strip(),
+        "live": bool(cards),
+        "is_running": bool(cards) or bool((s or {}).get("running_agent") or (s or {}).get("running_task")),
+        "elapsed_sec": cards.get("elapsed_sec"),
+        "last_active": (s or {}).get("last_active") or (s or {}).get("created") or "",
+        "created": (s or {}).get("created") or "",
+        "msg_count": cards.get("msg_count") if cards else (s or {}).get("_msg_count"),
+        "current": cards or None,
+        "todos": [t for t in ((s or {}).get("todos") or []) if isinstance(t, dict)][:20],
+        "tools": _session_tool_trace(sid, limit=tool_limit),
+        "stats": _session_stats(sid),
+        "debates": _session_debates(sid),
+        "artifacts": _live_artifacts(sid),
+        "env": _session_env_facts(),
+        "paths": {"session_dir": os.path.join(RESULTS_DIR, sid),
+                  "system_log": os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl"),
+                  "tasks_dir": _tasks_dir()},
+        "task": task,
+    }
+    return detail
+
+
+@app.get("/api/live_session/{sid}")
+async def api_live_session(sid: str, tools: int = 12):
+    """活会话详情（参数 / 环境 / 产物 / 日志）—— 后台任务面板点进去看的就是这个。"""
+    try:
+        return JSONResponse(_live_session_detail(sid, tool_limit=max(1, min(60, int(tools or 12)))))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
 def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
                    refresh: int = 1) -> dict:
     """任务列表载荷 —— HTTP 路由与 WS 推送共用一份，免得两边漂移。"""

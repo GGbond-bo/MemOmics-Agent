@@ -1188,3 +1188,61 @@ def test_n4_session_with_its_own_live_task_is_not_listed_twice(client, tr, tasks
     assert any(x["task_id"] == t.task_id and x["status"] == "running" for x in d["tasks"]), d["tasks"]
     assert d["live_count"] == 0, [x["sid"] for x in d["live_sessions"]]
 
+
+
+def test_n5_live_session_detail_exposes_params_env_and_artifacts(client, tr, tasks_dir, tmp_path, monkeypatch):
+    """点活会话要能看到"参数 + 环境 + 产物 + 辩论"（2026-09-24 用户二次反馈）。
+
+    用户原话：「我点击后台任务之后，没办法看到该任务的详细信息，比如参数，主要环境等等」。
+    详情只读运行时事实：system_log 里的工具入参、environment.json 的 R/Python、落盘产物、辩论 json。
+    """
+    tr.TASKS_DIR = tasks_dir
+    res = tmp_path / "results"
+    sid = "memomics-live01"
+    d = res / sid
+    (d / "log").mkdir(parents=True)
+    (d / "results").mkdir(parents=True)
+    rows = [
+        {"ts": "2026-09-24T16:20:00", "tool": "skill_view",
+         "args": "{'name': 'scrna-qc'}", "result_preview": "ok"},
+        {"ts": "2026-09-24T16:20:01", "tool": "execute_r",
+         "args": "{'code': 'obj <- readRDS(\"E:/release/_memtest/data/MF_2000.rds\")'}",
+         "result_preview": "51227 x 2132"},
+    ]
+    with open(os.path.join(d, "log", "system_log.jsonl"), "w", encoding="utf-8") as f:
+        for r0 in rows:
+            f.write(json.dumps(r0, ensure_ascii=False) + "\n")
+    with open(os.path.join(d, "results", "qc_metrics_summary.csv"), "w", encoding="utf-8") as f:
+        f.write("sample,n\nA,100\n")
+    with open(os.path.join(d, "log", "debate_20260924_abcd.json"), "w", encoding="utf-8") as f:
+        json.dump({"topic": "MT 阈值 15% 是否为空操作", "verdict": "need_more_info", "confidence": "low",
+                   "decision": "先补阈值敏感性分析", "next_actions": ["a", "b", "c"]}, f, ensure_ascii=False)
+    monkeypatch.setattr(server, "RESULTS_DIR", str(res))
+    monkeypatch.setattr(server, "_sessions", {sid: _live_session()})
+
+    det = client.get("/api/live_session/" + sid + "?tools=5").json()
+    assert det["ok"] is True and det["sid"] == sid
+    assert det["is_running"] is True and det["current"]["last_tool"] == "execute_r"
+    # 参数：最近的工具调用倒序，且带原始入参（用户要的"参数"就是这些）
+    assert [t["tool"] for t in det["tools"]] == ["execute_r", "skill_view"], det["tools"]
+    assert "readRDS" in det["tools"][0]["args"] and "MF_2000.rds" in det["tools"][0]["args"]
+    st = det["stats"]
+    assert st["tool_calls"] == 2 and st["skills"] == ["scrna-qc"], st
+    # 产物：相对会话目录 + 大小
+    assert [a["rel"] for a in det["artifacts"]] == ["results/qc_metrics_summary.csv"], det["artifacts"]
+    assert det["artifacts"][0]["size"] > 0
+    # 辩论：裁决与下一步条数
+    assert det["debates"][0]["verdict"] == "need_more_info"
+    assert det["debates"][0]["next_actions"] == 3
+    # 主要环境：R/Python 与库路径
+    e = det["env"]
+    assert e["python"] and e["cwd"]
+    assert e.get("r_version") or e.get("env_error"), e
+    if e.get("rscript"):
+        assert "Rscript" in e["rscript"]
+    assert det["paths"]["system_log"].endswith(os.path.join("log", "system_log.jsonl"))
+    assert det["paths"]["session_dir"].endswith(sid)
+
+    # 查无此会话：给空事实，不许 500
+    nope = client.get("/api/live_session/memomics-nosuch").json()
+    assert nope["ok"] is True and nope["tools"] == [] and nope["artifacts"] == [] and nope["debates"] == []

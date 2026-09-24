@@ -73,7 +73,12 @@ def test_local_models_structure(client):
 
 
 def test_local_models_detection(client, monkeypatch):
-    """模拟 Ollama 在 11434 响应 → 探测到模型 + base_url 正确"""
+    """模拟 Ollama 在 11434 响应 → 探测到模型 + base_url 正确
+
+    2026-09-24：/api/models/local 已经统一走网络守卫（P2），只 monkeypatch
+    urllib.request.urlopen 拦不住，这条测试一直是假红（count=0）。两处都换成
+    假实现，才算真测到"解析 data[] + 拼 base_url"这段。
+    """
     import io
     import json as _json
 
@@ -98,6 +103,10 @@ def test_local_models_detection(client, monkeypatch):
 
     import urllib.request as _ur
     monkeypatch.setattr(_ur, "urlopen", fake_urlopen)
+    import server as _srv
+    if getattr(_srv, "_net_guard", None) is not None:
+        monkeypatch.setattr(_srv._net_guard, "urlopen",
+                            lambda url, **kw: fake_urlopen(_ur.Request(url)))
     d = client.get("/api/models/local").json()
     assert d["count"] == 2
     ids = [m["id"] for m in d["models"]]
