@@ -106,6 +106,7 @@
   "/api/tasks/{task_id}": "public",
   "/api/tasks/{task_id}/cancel": "public",
   "/api/tasks/{task_id}/log": "public",
+  "/api/tasks/{task_id}/retry": "public",
   "/api/todos/{sid}": "session",
   "/api/ui/lang": "public",
   "/api/update/apply": "local",

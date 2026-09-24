@@ -7512,12 +7512,28 @@ function renderTaskDetail(t) {
   h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">日志尾部 · ' + (t.log_size || 0) + ' B' + (t.log ? ' · ' + escapeHtml(t.log) : '') + '</div>';
   h += '<pre id="task-log" style="' + _taskPre + '">' + escapeHtml(t.log_tail || '（暂无日志）') + '</pre>';
   if (live) h += '<button id="task-cancel-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🚫 取消这个任务</button>';
+  // 失败任务一键重试：能不能重试是后端算好的（retry_backoff 的退避 + 上限），面板只负责画
+  if (t.retry_allowed) {
+    // 只在有参数的按钮上挂 onclick —— 内联 onclick 里拼 id 会被引号咬到，统一走 addEventListener
+    h += '<button id="task-retry-btn" style="' + _taskBtn + 'border-color:#4a8f4a;color:#4a8f4a;">🔁 重试（第 ' + t.retry_attempt + ' 次 · ' + taskRetryDelayText(t.retry_delay_sec) + '）</button>';
+  } else if (t.retry_reason && (t.status === 'failed' || t.status === 'interrupted')) {
+    h += '<div style="font-size:11px;color:var(--text-light);">🔁 不能重试：' + escapeHtml(t.retry_reason) + '</div>';
+  }
   var box = document.getElementById('task-detail');
   box.innerHTML = h;
   var log = document.getElementById('task-log');
   if (log) log.scrollTop = log.scrollHeight;
   var btn = document.getElementById('task-cancel-btn');
   if (btn) btn.onclick = function() { cancelTask(t.task_id); };
+  var rbtn = document.getElementById('task-retry-btn');
+  if (rbtn) rbtn.onclick = function() { retryTask(t.task_id); };
+}
+
+function taskRetryDelayText(sec) {
+  // 退避等待说人话：0/空 → 立即；否则 2s / 5s / 15s 这种
+  var n = Number(sec);
+  if (!n || n <= 0) return '立即启动';
+  return taskFmtSec(n) + ' 后启动';
 }
 
 function taskToggleScript() {
@@ -7535,6 +7551,24 @@ function cancelTask(id) {
     }
     loadTasks(false);
   }).catch(function(e) { alert('取消失败：' + e); });
+}
+
+function retryTask(id) {
+  // 真重跑：后端照契约里的命令重新拉一个 wrapper，隔 retry_backoff 的退避时间启动
+  fetch('/api/tasks/' + encodeURIComponent(id) + '/retry', { method: 'POST', headers: { 'X-Task-Token': _taskState.token } }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.ok) {
+      var nth = '第 ' + d.attempt + ' 次重试';
+      if (d.scheduled) {
+        alert('已排上' + nth + '，' + taskFmtSec(d.delay_sec) + ' 后自动拉起（新任务会出现在列表里）。');
+      } else {
+        var pid = (d.spawned && d.spawned.pid) ? ('（wrapper pid ' + d.spawned.pid + '）') : '';
+        alert(nth + '已启动' + pid + '，稍等一秒列表里就会出现新任务。');
+      }
+    } else {
+      alert('重试失败：' + ((d && d.error) || '未知错误'));
+    }
+    loadTasks(true);
+  }).catch(function(e) { alert('重试失败：' + e); });
 }
 
 function weixinRefresh() {

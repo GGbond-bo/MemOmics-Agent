@@ -39,7 +39,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -130,6 +130,13 @@ def test_panel_mounted_in_shell():
         "⏳ 排队 ",
         " · 已等 ",
         "队首已等超 30s",
+        # T12：失败任务一键重试（按钮亮/灰都由后端算好的 retry_* 字段决定）
+        "function retryTask(id)",
+        "'/retry'",
+        "task-retry-btn",
+        "function taskRetryDelayText(sec)",
+        "🔁 重试（第 ",
+        "🔁 不能重试：",
     ]:
         assert token in html, "index.html 少了挂载点：" + token
     # 面板必须只在任务视图里出现，别的视图的隐藏列表也得带上它
@@ -322,3 +329,50 @@ console.log(JSON.stringify({ busy: busy, idle: idle }));
     idle = got["idle"]
     assert "队列空" in idle and "排队" not in idle.split("队列空")[1][:20]
     assert "队首已等超" not in idle
+
+
+FAILED_TASK = dict(LIVE_TASK, status="failed", retry_allowed=True, retry_reason="", retry_root="",
+                   retry_used=0, retry_attempt=1, retry_delay_sec=2.0, retry_max=3,
+                   error="Rscript 退出码 1：找不到 Seurat")
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_render_detail_retry_button_and_grey_reason():
+    """失败任务：能重试就给按钮（写明第几次/多久后启动），不能重试就把理由写出来。"""
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskDetail(%s);
+const html = out.store["task-detail"].innerHTML;
+const wired = typeof out.store["task-retry-btn"].onclick;
+P.renderTaskDetail(%s);
+const grey = out.store["task-detail"].innerHTML;
+P.renderTaskDetail(%s);
+const done = out.store["task-detail"].innerHTML;
+console.log(JSON.stringify({ html: html, wired: wired, grey: grey, done: done,
+                             delay0: P.taskRetryDelayText(0), delay5: P.taskRetryDelayText(5),
+                             delay15: P.taskRetryDelayText(15),
+                             retryFn: typeof P.retryTask }));
+""" % (
+        json.dumps(FAILED_TASK, ensure_ascii=False),
+        json.dumps(dict(FAILED_TASK, retry_allowed=False, retry_used=3,
+                        retry_reason="已经连着重试 3 次（上限 3 次），先看日志再动手"),
+                   ensure_ascii=False),
+        json.dumps(dict(LIVE_TASK, status="done", retry_allowed=False, retry_reason="任务没失败（done），不用重试",
+                        retry_used=0, retry_attempt=1, retry_delay_sec=2.0, retry_max=3),
+                   ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    h = got["html"]
+    for token in ["task-retry-btn", "重试（第 1 次", "2s 后启动"]:
+        assert token in h, "详情里看不到 %s：%s" % (token, h)
+    assert "取消这个任务" not in h, "已失败的任务不该还有取消按钮"
+    assert got["wired"] == "function", "重试按钮没接上点击（点了没反应）"
+    assert got["retryFn"] == "function"
+    assert got["delay0"] == "立即启动" and got["delay5"] == "5s 后启动" and got["delay15"] == "15s 后启动"
+    # 用完了：按钮消失、理由留下
+    assert "task-retry-btn" not in got["grey"] and "不能重试" in got["grey"]
+    assert "已经连着重试 3 次" in got["grey"]
+    # 没失败的任务：连"不能重试"那句话都不该出现（免得列表里到处是灰字）
+    assert "不能重试" not in got["done"] and "task-retry-btn" not in got["done"]

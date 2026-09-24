@@ -9315,6 +9315,199 @@ def _task_history(items) -> dict:
         return {}
 
 
+def _live_states() -> tuple:
+    """task_run 认为"还活着"的状态集合（拿不到就退回保守默认）。"""
+    tr = _task_run()
+    return tuple(getattr(tr, "LIVE_STATES", None) or ("queued", "running", "cancelling", "paused"))
+
+
+def _retry_root(d: dict) -> str:
+    """重试链的根 —— A 失败重试出 B、B 再失败重试出 C，三者的根始终是 A 的 task_id。"""
+    params = d.get("params") or {}
+    return str(params.get("重试根") or params.get("重试来源") or d.get("task_id") or "")
+
+
+def _retry_index(items, pending=None) -> dict:
+    """{根 id: {"used": 已重试次数, "live": 还在跑（或已排定）的那次重试 id}}。
+
+    一次汇总全列表共用（和 ETA 的历史汇总同一个套路）：列表里每张卡片都要知道
+    "这个任务还能不能再重试"，不能每张卡片各扫一遍目录。
+    `pending` 是"已经排定、还没落地的重试根"——退避要等几秒，那几秒里契约还不存在，
+    不把它算进去的话连点两下就会排出两个一模一样的一次重试。
+    """
+    live_states = _live_states()
+    index = {}
+    for d in items or []:
+        root = _retry_root(d)
+        if not root or root == str(d.get("task_id") or ""):
+            continue            # 只统计"重试出来的任务"，根本身不算一次重试
+        slot = index.setdefault(root, {"used": 0, "live": ""})
+        try:
+            nth = int((d.get("params") or {}).get("第几次重试") or 0)
+        except Exception:
+            nth = 0
+        slot["used"] = max(slot["used"], nth)
+        if (d.get("status") or "") in live_states and not slot["live"]:
+            slot["live"] = str(d.get("task_id") or "")
+    for root in (pending or ()):
+        slot = index.setdefault(str(root), {"used": 0, "live": ""})
+        if not slot["live"]:
+            slot["live"] = "已排定（等退避）"
+    return index
+
+
+# 失败到"可以重试"的终态：failed（真失败）/ interrupted（进程没了或服务重启留下的残局）。
+# cancelled 是用户自己按停的，面板不给重试按钮 —— 想重跑直接说一声就行。
+_RETRY_STATES = ("failed", "interrupted")
+try:
+    from webui.runtime.retry_backoff import RetryBackoff
+except ImportError:      # pragma: no cover - 兼容把 webui/ 当根目录的启动方式
+    from runtime.retry_backoff import RetryBackoff
+
+_retry_backoff = RetryBackoff()     # 2s / 5s / 15s / 45s，连续 3 次后不再硬重试
+# 已经排定退避、还没拉起来的那次重试：重试根 -> 排定时间。见 _retry_index 的 pending。
+_RETRY_INFLIGHT = {}
+
+
+def _retry_plan(d: dict, index: dict = None) -> dict:
+    """能不能重试、算第几次、隔多久 —— 退避策略全部由 RetryBackoff 说了算，不另发明一套。
+
+    返回字段：allowed / reason / root / used / attempt / delay_sec / max_retries。
+    """
+    task_id = str(d.get("task_id") or "")
+    status = str(d.get("status") or "")
+    root = _retry_root(d) or task_id
+    slot = (index if index is not None else {}).get(root) or {}
+    used = int(slot.get("used") or 0)
+    attempt = used + 1
+    plan = {"root": root, "used": used, "attempt": attempt,
+            "delay_sec": _retry_backoff.next_delay(attempt),
+            "max_retries": _retry_backoff.max_failures,
+            "allowed": True, "reason": ""}
+    if status not in _RETRY_STATES:
+        plan.update(allowed=False, reason="任务没失败（%s），不用重试" % (status or "未知"))
+    elif not (d.get("cmd") or ""):
+        plan.update(allowed=False, reason="这份契约没记下实际命令，重跑会变成瞎猜")
+    elif slot.get("live"):
+        plan.update(allowed=False, reason="上一次重试还在跑（%s），等它结束" % slot["live"])
+    elif _retry_backoff.exhausted(used):
+        plan.update(allowed=False, reason="已经连着重试 %d 次（上限 %d 次），先看日志再动手"
+                    % (used, _retry_backoff.max_failures))
+    return plan
+
+
+def _split_cmd(cmd):
+    """把契约里的命令还原成参数列表。
+
+    契约里 cmd 是**给人看的字符串**（为了面板显示拼过），重跑要拆回 token。
+    只认双引号包裹（Windows 上 "C:\\Program Files\\..." 这种），不解释 shell 语法 ——
+    管道/重定向/变量展开一律当普通字符，宁可跑出来报错，也不偷偷换个意思执行。
+    """
+    if isinstance(cmd, (list, tuple)):
+        return [str(x) for x in cmd if str(x)]
+    text = str(cmd or "").strip()
+    if not text:
+        return []
+    try:
+        import shlex
+        parts = shlex.split(text, posix=False)
+    except Exception:
+        parts = text.split()
+    out = []
+    for p in parts:
+        p = str(p)
+        if len(p) >= 2 and p[0] == '"' and p[-1] == '"':
+            p = p[1:-1]
+        if p:
+            out.append(p)
+    return out
+
+
+def _spawn_retry(d: dict, plan: dict) -> tuple:
+    """真起一个 wrapper 重跑原命令；返回 (结果字典, 错误串)，二者必有一个为空。
+
+    只搬契约里已有的东西（cmd/type/title/stages/script/params/session），
+    外加三个溯源参数：重试来源 / 重试根 / 第几次重试 —— 面板据此画重试链。
+    """
+    import subprocess as _sp
+    tr = _task_run()
+    if tr is None:
+        return None, "task_run 模块不可用"
+    argv_cmd = _split_cmd(d.get("cmd"))
+    if not argv_cmd:
+        return None, "没有可重跑的命令"
+    wrapper = getattr(tr, "__file__", "") or os.path.join(MEMOMICS_DIR, "memomics", "bio_tools", "task_run.py")
+    python = sys.executable or "python"
+    title = str(d.get("title") or d.get("task_id") or "任务")
+    argv = [python, wrapper, "--type", str(d.get("type") or "other"),
+            "--title", "%s（重试 %d/%d）" % (title, plan["attempt"], plan["max_retries"])]
+    stages = [str(stg.get("name") or "") for stg in (d.get("stages") or []) if stg.get("name")]
+    if stages:
+        argv += ["--stages", ",".join(stages)]
+    if d.get("script"):
+        argv += ["--script", str(d["script"])]
+    if d.get("session_dir"):
+        argv += ["--session-dir", str(d["session_dir"])]
+    if d.get("session_id"):
+        argv += ["--session-id", str(d["session_id"])]
+    if d.get("demo"):
+        argv += ["--demo"]
+    for k, v in (d.get("params") or {}).items():
+        argv += ["--param", "%s=%s" % (k, v)]
+    # 溯源参数放最后：dict 里同名键会被它们覆盖，重试的重试也只会指向直接上一级。
+    argv += ["--param", "重试来源=%s" % str(d.get("task_id") or ""),
+             "--param", "重试根=%s" % plan["root"],
+             "--param", "第几次重试=%d" % plan["attempt"]]
+    argv += ["--"] + argv_cmd
+    env = dict(os.environ)
+    # wrapper 按 env 找任务目录：必须显式钉到服务端正在读的那个 HERMES_HOME，
+    # 否则测试/多实例下会写去另一个目录，面板永远看不到这次重试。
+    env["MEMOMICS_TASKS_DIR"] = _tasks_dir()
+    env["MEMOMICS_RUNTIME_DIR"] = os.path.dirname(_tasks_dir())
+    cwd = str(d.get("cwd") or "")
+    if not (cwd and os.path.isdir(cwd)):
+        cwd = str(d.get("session_dir") or "")
+    if not (cwd and os.path.isdir(cwd)):
+        cwd = MEMOMICS_DIR
+    log_dir = os.path.join(HERMES_HOME_DIR, "runtime", "logs")
+    result = {"argv": argv, "cwd": cwd, "pid": None, "log": ""}
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError:
+        log_dir = ""
+    flags = getattr(_sp, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    log_path = os.path.join(log_dir, "retry-%s.log" % time.strftime("%Y%m%d-%H%M%S")) if log_dir else ""
+    try:
+        if log_path:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                proc = _sp.Popen(argv, cwd=cwd, env=env, stdout=fh, stderr=fh,
+                                 stdin=_sp.DEVNULL, creationflags=flags)
+        else:
+            proc = _sp.Popen(argv, cwd=cwd, env=env, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                             stdin=_sp.DEVNULL, creationflags=flags)
+    except Exception as e:
+        return None, "拉起重试进程失败：%s" % e
+    result["pid"] = proc.pid
+    result["log"] = log_path
+    return result, ""
+
+
+async def _retry_later(d: dict, plan: dict, delay: float) -> None:
+    """退避等待后再拉起重试（等待期间服务端该干嘛干嘛，不阻塞请求）。"""
+    try:
+        await asyncio.sleep(max(0.0, float(delay or 0)))
+    except asyncio.CancelledError:      # pragma: no cover - 进程退出时取消
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+        return
+    try:
+        _spawn_retry(d, plan)
+    except Exception as e:              # pragma: no cover - 兜底，别让后台任务炸日志
+        logger.warning("retry spawn failed: %s", e)
+    finally:
+        # 拉起来（或失败）之后就把名额放开：契约已经落地，_retry_index 看得到它了。
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+
+
 def _tasks_dir() -> str:
     """每次现算：HERMES_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
     return os.path.join(HERMES_HOME_DIR, "runtime", "tasks")
@@ -9346,11 +9539,13 @@ def _env_line(env: dict) -> str:
     return env.get("kind", "未知环境")
 
 
-def _task_card(d: dict, history: dict = None) -> dict:
+def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
     """列表项：只留面板要显示的字段（契约文件本身可能很大）。
 
     history（可选）：阶段耗时历史 —— 给了就算「还要多久」（T10），
     没历史 / 任务已结束 / 信息不足时 eta_sec 为 None，面板就不显示这一行。
+    retries（可选）：重试链索引（T12）—— 给了就算「还能不能再重试 / 第几次」，
+    面板据此决定重试按钮是亮的还是灰的（后端算，面板不自己猜）。
     """
     from datetime import datetime as _dt, timezone as _tz
     proc = d.get("proc") or {}
@@ -9376,7 +9571,20 @@ def _task_card(d: dict, history: dict = None) -> dict:
         except Exception as e:  # pragma: no cover - 估算失败不该拖垮列表
             logger.warning("task_eta estimate failed: %s", e)
             eta = {}
+    try:
+        rp = _retry_plan(d, retries or {})
+    except Exception as e:      # pragma: no cover - 纯计算，算不出来就不给按钮
+        logger.warning("retry plan failed: %s", e)
+        rp = {"allowed": False, "reason": "", "root": "", "used": 0, "attempt": 1,
+              "delay_sec": 0.0, "max_retries": 0}
     return {
+        "retry_allowed": bool(rp.get("allowed")),
+        "retry_reason": rp.get("reason") or "",
+        "retry_root": rp.get("root") or "",
+        "retry_used": rp.get("used") or 0,
+        "retry_attempt": rp.get("attempt") or 0,
+        "retry_delay_sec": rp.get("delay_sec") or 0,
+        "retry_max": rp.get("max_retries") or 0,
         "eta_sec": eta.get("sec"),
         "eta_text": eta.get("text") or "",
         "eta_basis": eta.get("basis") or "",
@@ -9509,6 +9717,8 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
     # 历史要在「按状态过滤」之前汇总：过滤成只看 running 时，历史仍然得是全量的，
     # 否则面板一筛选，ETA 就集体变成"看不到"。
     history = _task_history(items)
+    # 重试索引同样要在过滤前算：只看 failed 时，重试链上"还在跑的那次"也要算进去。
+    retries = _retry_index(items, _RETRY_INFLIGHT)
     if states:
         want = {one.strip() for one in states.split(",") if one.strip()}
         items = [d for d in items if (d.get("status") or "") in want]
@@ -9516,7 +9726,7 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
     for d in items:
         st = d.get("status") or "unknown"
         counts[st] = counts.get(st, 0) + 1
-    return {"ok": True, "tasks": [_task_card(d, history) for d in items], "counts": counts,
+    return {"ok": True, "tasks": [_task_card(d, history, retries) for d in items], "counts": counts,
             "active": counts.get("running", 0) + counts.get("cancelling", 0),
             "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
             "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
@@ -9589,10 +9799,14 @@ async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
         return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
     d = tr.reconcile(t.data)
     try:
-        history = _task_history(tr.list_tasks(limit=500, refresh=0))
+        _all = tr.list_tasks(limit=500, refresh=0)
+    except Exception:  # pragma: no cover - 拿不到全量列表就退化成"只有自己"
+        _all = [d]
+    try:
+        history = _task_history(_all)
     except Exception:  # pragma: no cover - 历史拿不到就不给 ETA
         history = {}
-    card = _task_card(d, history)
+    card = _task_card(d, history, _retry_index(_all, _RETRY_INFLIGHT))
     card["params"] = d.get("params") or {}
     card["outputs"] = []
     for p in (d.get("outputs") or [])[:100]:
@@ -9717,6 +9931,59 @@ async def cancel_background_task(task_id: str, payload: dict = None, request: Re
     return {"ok": True, "task_id": task_id, "status": (cur.data.get("status") if cur else "unknown"),
             "marks": marks, "killed": kill_proc, "escalated": escalated,
             "kill_wrapper": kill_wrap, "waited_sec": waited}
+
+
+@app.post("/api/tasks/{task_id}/retry")
+async def retry_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """失败任务一键重试：按 retry_backoff 的退避间隔重跑契约里记下的那条命令。
+
+    三条硬规矩：
+      1. 只重跑契约里**已经记下来的命令**（cmd + 脚本/阶段/参数/会话目录原样搬），不自己发挥；
+      2. 隔多久、还能不能重试，全由 webui.runtime.retry_backoff 决定（2s/5s/15s，连续 3 次后停），
+         服务端不另写一套退避；
+      3. 重试出来的任务在契约里带 重试来源 / 重试根 / 第几次重试（面板画重试链、算上限）。
+    需要和取消同一把 token；只对 failed / interrupted 生效（cancelled 是用户主动停的，不给按钮）。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    try:
+        all_items = tr.list_tasks(limit=500, refresh=0)
+    except Exception:      # pragma: no cover - 扫不到全量就只按本任务算
+        all_items = [t.data]
+    plan = _retry_plan(t.data, _retry_index(all_items, _RETRY_INFLIGHT))
+    if not plan["allowed"]:
+        return JSONResponse({"ok": False, "error": plan["reason"], "retry": plan}, status_code=409)
+    denied = _sandbox_precheck("proc.exec", t.path, [HERMES_HOME_DIR], "tasks.retry")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    # 退避 >0 时不在请求里干等（面板不用吊着），排个后台任务到点再拉起来。
+    if plan["delay_sec"] > 0:
+        _RETRY_INFLIGHT[plan["root"]] = time.time()
+        try:
+            asyncio.ensure_future(_retry_later(t.data, plan, plan["delay_sec"]))
+        except Exception as e:          # pragma: no cover - 排不上就当场放开名额
+            _RETRY_INFLIGHT.pop(plan["root"], None)
+            return JSONResponse({"ok": False, "error": "排定重试失败：%s" % e, "retry": plan},
+                                status_code=409)
+        return {"ok": True, "scheduled": True, "task_id": task_id, "retry": plan,
+                "attempt": plan["attempt"], "delay_sec": plan["delay_sec"],
+                "cmd": str(t.data.get("cmd") or "")}
+    spawned, err = _spawn_retry(t.data, plan)
+    if err:
+        return JSONResponse({"ok": False, "error": err, "retry": plan}, status_code=409)
+    return {"ok": True, "scheduled": False, "task_id": task_id, "retry": plan,
+            "attempt": plan["attempt"], "delay_sec": 0,
+            "cmd": str(t.data.get("cmd") or ""), "spawned": spawned}
 
 
 @app.get("/api/version")

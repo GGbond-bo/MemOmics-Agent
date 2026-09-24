@@ -12,9 +12,11 @@
   C. 详情：日志尾部、产物存在性与大小、脚本正文只允许读会话目录/仓库内的文件。
   D. 日志接口：seek 读尾部，支持 grep，日志缺失不报错。
   E. 取消：无 token 401、未知 404、已结束 409、真任务能真取消且子进程真的没了。
-  F. 路由清单：4 条新路由已进 webui/middleware_routes.json（漏了就会 drift）。
+  F. 路由清单：新增路由都进了 webui/middleware_routes.json（漏了就会 drift）。
   G. 阶段时间线：预建的 pending 阶段被点亮后必须有 started_at，sec 不能是 0.0
      （2026-09-24 真机面板实测踩到的 bug）。
+  J. 失败任务一键重试（T12）：只重跑契约里记下的命令；退避/上限全用 retry_backoff；
+     重试任务带 重试来源/重试根/第几次重试；并且必须真起进程真跑完（不是写份契约就算）。
 
 纪律：HERMES_HOME_DIR 指到 tmp，绝不许碰真机 hermes_home。
 """
@@ -337,7 +339,7 @@ def test_f1_new_routes_in_manifest():
         data = json.load(f)
     raw = json.dumps(data, ensure_ascii=False)
     for route in ("/api/tasks", "/api/tasks/{task_id}", "/api/tasks/{task_id}/log",
-                  "/api/tasks/{task_id}/cancel"):
+                  "/api/tasks/{task_id}/cancel", "/api/tasks/{task_id}/retry"):
         assert route in raw, "路由没进 middleware_routes.json：" + route
     total = data.get("total") or len(data)
     assert total >= 131, "路由数不对：%s（跑 --snapshot 同步）" % total
@@ -517,4 +519,204 @@ def test_i4_stage_longer_than_history_never_gives_negative_eta(client, tr, tasks
     card = _card(client, run.task_id)
     assert card["eta_sec"] is not None and card["eta_sec"] >= 15, card
     assert card["eta_sec"] <= 30, "只剩出图 20s 上下，超时的那段不能倒扣成负数"
+
+# --------------------------------------------- J 失败任务一键重试（T12）
+def _failed(tr, tasks_dir, cmd="python -c pass", title="失败任务", **kw):
+    """造一条「真失败过」的契约：状态 failed + 退出码 3 + 记着实际命令。"""
+    t = _make(tr, tasks_dir, title=title, **kw)
+    if cmd is not None:
+        t.data["cmd"] = cmd
+    t.finish("failed", exit_code=3, error="脚本炸了")
+    return t
+
+
+def _retry_contracts(tasks_dir, root):
+    """任务目录里「根是 root」的重试契约（按第几次重试排序）。"""
+    out = []
+    for fn in os.listdir(tasks_dir):
+        if not fn.endswith(".json"):
+            continue
+        d = json.load(open(os.path.join(tasks_dir, fn), encoding="utf-8"))
+        params = d.get("params") or {}
+        if str(params.get("重试根") or "") == str(root):
+            out.append(d)
+    return sorted(out, key=lambda x: int((x.get("params") or {}).get("第几次重试") or 0))
+
+
+def test_j1_retry_requires_token_and_unknown_404(client, tr, tasks_dir, token):
+    t = _failed(tr, tasks_dir, cmd="python -c pass")
+    assert client.post("/api/tasks/%s/retry" % t.task_id,
+                       headers={"X-Task-Token": "bad"}).status_code == 401
+    assert client.post("/api/tasks/nope/retry", headers={"X-Task-Token": "bad"}).status_code == 401
+    assert client.post("/api/tasks/nope/retry",
+                       headers={"X-Task-Token": token}).status_code == 404
+
+
+def test_j2_retry_only_for_failed_with_recorded_cmd(client, tr, tasks_dir, token):
+    """只对 failed/interrupted 且契约里真记了命令的任务开重试 —— 其它一律 409 说清原因。"""
+    hdr = {"X-Task-Token": token}
+    done = _make(tr, tasks_dir, title="跑完了")
+    done.finish("done", exit_code=0)
+    r = client.post("/api/tasks/%s/retry" % done.task_id, headers=hdr)
+    assert r.status_code == 409 and "没失败" in r.json()["error"], r.text
+    assert r.json()["retry"]["allowed"] is False
+
+    cancelled = _make(tr, tasks_dir, title="用户停的")
+    cancelled.finish("cancelled", error="用户取消")
+    assert client.post("/api/tasks/%s/retry" % cancelled.task_id, headers=hdr).status_code == 409
+
+    nocmd = _failed(tr, tasks_dir, cmd="", title="没记命令")
+    r3 = client.post("/api/tasks/%s/retry" % nocmd.task_id, headers=hdr)
+    assert r3.status_code == 409 and "实际命令" in r3.json()["error"], r3.text
+
+    # interrupted（进程没了/服务重启留下的残局）也算失败，允许重试
+    broke = _make(tr, tasks_dir, title="残局", cmd="python -c pass")
+    broke.data["status"] = "interrupted"
+    broke.flush()
+    assert server._retry_plan(broke.data, {})["allowed"] is True
+
+
+def test_j3_retry_refused_while_previous_retry_still_running(client, tr, tasks_dir, token):
+    """上一次重试还在跑时不能再叠一次（同一根只允许一个在飞的），免得点两下起两个。"""
+    hdr = {"X-Task-Token": token}
+    t = _failed(tr, tasks_dir, cmd="python -c pass", title="原任务")
+    live = _make(tr, tasks_dir, title="重试 1",
+                 params={"重试来源": t.task_id, "重试根": t.task_id, "第几次重试": "1"})
+    r = client.post("/api/tasks/%s/retry" % t.task_id, headers=hdr)
+    assert r.status_code == 409 and "还在跑" in r.json()["error"], r.text
+    assert live.task_id in r.json()["error"]
+    # 那次重试自己失败了 -> 可以再试：第 2 次，间隔按退避是 5s
+    live.finish("failed", exit_code=1, error="又炸了")
+    plan = server._retry_plan(t.data, server._retry_index(tr.list_tasks(limit=500, refresh=0)))
+    assert plan["allowed"] is True and plan["attempt"] == 2 and plan["delay_sec"] == 5.0
+
+
+def test_j4_retry_backoff_limits_after_three(client, tr, tasks_dir, token):
+    """退避与上限全部来自 retry_backoff：2s/5s/15s 递增，连续 3 次后不再硬重试。"""
+    hdr = {"X-Task-Token": token}
+    assert server._retry_backoff.next_delay(1) == 2.0
+    assert server._retry_backoff.next_delay(3) == 15.0
+    t = _failed(tr, tasks_dir, cmd="python -c pass", title="连炸三次")
+    for nth in ("1", "2", "3"):
+        _make(tr, tasks_dir, title="重试 %s" % nth,
+              params={"重试来源": t.task_id, "重试根": t.task_id, "第几次重试": nth}).finish(
+                  "failed", exit_code=1, error="又炸了")
+    r = client.post("/api/tasks/%s/retry" % t.task_id, headers=hdr)
+    assert r.status_code == 409 and "上限" in r.json()["error"], r.text
+    card = _card(client, t.task_id)
+    assert card["retry_allowed"] is False and card["retry_used"] == 3 and card["retry_max"] == 3
+    assert card["retry_reason"], card
+
+
+def test_j5_card_exposes_retry_plan_before_any_retry(client, tr, tasks_dir):
+    """失败卡片要直接告诉面板「能重试、第几次、隔多久」，不用面板自己猜。"""
+    t = _failed(tr, tasks_dir, cmd="python -c pass", title="可重试")
+    card = _card(client, t.task_id)
+    assert card["retry_allowed"] is True and card["retry_attempt"] == 1
+    assert card["retry_delay_sec"] == 2.0 and card["retry_max"] == 3
+    assert card["retry_reason"] == "" and card["retry_root"] == t.task_id
+    detail = client.get("/api/tasks/" + t.task_id).json()["task"]
+    assert detail["retry_allowed"] is True and detail["retry_delay_sec"] == 2.0
+    # 跑得好好的任务：不给重试按钮
+    run = _make(tr, tasks_dir, title="在跑", cmd="python -c pass")
+    assert _card(client, run.task_id)["retry_allowed"] is False
+
+
+def test_j6_split_cmd_quotes_only_never_shell():
+    """契约里的命令是字符串（为显示拼的）—— 拆回参数只认双引号，绝不解释 shell 语法。"""
+    chrome = r"C:\Program Files\Py\python.exe"
+    got = server._split_cmd(r'"%s" -X utf8 "C:\tmp a\s.py"' % chrome)
+    assert got[0] == chrome and got[1] == "-X"
+    assert got[-1] == r"C:\tmp a\s.py", got
+    assert server._split_cmd(["a", "b"]) == ["a", "b"]
+    assert server._split_cmd("") == [] and server._split_cmd(None) == []
+    # 管道 / && 一律当普通参数：宁可跑出来报错，也不偷偷变成 shell 执行
+    assert server._split_cmd("a && b | c") == ["a", "&&", "b", "|", "c"]
+
+
+def test_j7_retry_really_respawns_and_runs(client, tr, tasks_dir, home, token, monkeypatch):
+    """一键重试必须真起进程真跑完 —— 不是只写一份契约就算数。
+
+    这里把退避压成 0（只为测试快），其余全走真链路：路由 -> _spawn_retry -> 真 wrapper ->
+    真子进程写文件；最后核对重试任务的溯源字段、脚本/阶段搬运、退出码。
+    """
+    from webui.runtime.retry_backoff import RetryBackoff
+    monkeypatch.setattr(server, "_retry_backoff",
+                        RetryBackoff(base_delays=(0, 0, 0), max_failures=3))
+    sess = home / "sess"
+    sess.mkdir()
+    marker = home / "retry_marker.txt"
+    child = home / "retry_child.py"
+    child.write_text("import pathlib" + chr(10) +
+                     "pathlib.Path(r'%s').write_text('重试真的跑了', encoding='utf-8')" % marker + chr(10),
+                     encoding="utf-8")
+    cmd_str = '"%s" -X utf8 "%s"' % (sys.executable, child)
+    t = _failed(tr, tasks_dir, cmd=cmd_str, title="要重试的任务", type="qc",
+                session_dir=str(sess), script=str(child), stages=["跑起来"])
+    hdr = {"X-Task-Token": token}
+    r = client.post("/api/tasks/%s/retry" % t.task_id, headers=hdr)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True and body["attempt"] == 1 and body["scheduled"] is False
+    assert body["delay_sec"] == 0 and (body["spawned"] or {}).get("pid"), body
+    # 重试进程必须落在原会话目录里跑（中间文件才接得上）
+    assert str(body["spawned"]["cwd"]).lower() == str(sess).lower(), body["spawned"]
+
+    newd = None
+    for _ in range(80):
+        time.sleep(0.25)
+        rows = _retry_contracts(tasks_dir, t.task_id)
+        if rows:
+            newd = json.load(open(os.path.join(tasks_dir, rows[0]["task_id"] + ".json"),
+                                  encoding="utf-8"))
+            if newd.get("status") in ("done", "failed"):
+                break
+    assert newd, "重试任务没落地到服务端正读的目录"
+    assert newd["task_id"] != t.task_id
+    assert str(newd["params"]["重试来源"]) == t.task_id
+    assert str(newd["params"]["重试根"]) == t.task_id
+    assert str(newd["params"]["第几次重试"]) == "1"
+    assert "（重试 1/3）" in newd["title"], newd["title"]
+    assert newd["type"] == "qc" and newd["script"] == str(child)
+    assert [st["name"] for st in newd["stages"]] == ["跑起来"]
+    assert newd["status"] == "done" and newd["exit_code"] == 0, newd
+    assert marker.is_file(), "重试的子进程没真执行"
+    assert "重试真的跑了" in marker.read_text(encoding="utf-8")
+    # 面板列表里这条重试也在，而且它自己是 done（不给重试按钮）
+    card = _card(client, newd["task_id"])
+    assert card is not None and card["status"] == "done" and card["retry_allowed"] is False
+    # 原任务还能再重试 -> 第 2 次，并且也要真跑完（等它收尾，别留野进程）
+    r2 = client.post("/api/tasks/%s/retry" % t.task_id, headers=hdr)
+    assert r2.status_code == 200 and r2.json()["attempt"] == 2, r2.text
+    second = None
+    for _ in range(80):
+        time.sleep(0.25)
+        rows = _retry_contracts(tasks_dir, t.task_id)
+        if len(rows) >= 2:
+            second = json.load(open(os.path.join(tasks_dir, rows[-1]["task_id"] + ".json"),
+                                    encoding="utf-8"))
+            if second.get("status") in ("done", "failed"):
+                break
+    assert second is not None and str(second["params"]["第几次重试"]) == "2", second
+    assert second["status"] == "done", second
+
+
+def test_j8_second_click_while_retry_is_queued_is_refused(client, tr, tasks_dir, monkeypatch):
+    """连点两下不能排出两次重试：退避那几秒里契约还没落地，名额也得先占住。"""
+    t = _failed(tr, tasks_dir, cmd="python -c pass", title="连点两下")
+    items = tr.list_tasks(limit=500, refresh=0)
+    assert server._retry_plan(t.data, server._retry_index(items))["allowed"] is True
+    # 模拟"已排定退避中的那次"：索引里该根立刻变成有人在跑
+    idx = server._retry_index(items, [t.task_id])
+    assert idx[t.task_id]["live"] == "已排定（等退避）"
+    plan = server._retry_plan(t.data, idx)
+    assert plan["allowed"] is False and "还在跑" in plan["reason"], plan
+    monkeypatch.setitem(server._RETRY_INFLIGHT, t.task_id, time.time())
+    card = _card(client, t.task_id)
+    assert card["retry_allowed"] is False and "还在跑" in card["retry_reason"], card
+    # 拉起来之后名额放开，链上的真实状态接管
+    monkeypatch.delitem(server._RETRY_INFLIGHT, t.task_id)
+    assert _card(client, t.task_id)["retry_allowed"] is True
+
+
 

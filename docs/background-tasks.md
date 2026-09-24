@@ -13,6 +13,8 @@
 - 活任务还能看到**还要多久**：列表状态后面 ` · 还要 4m5s`，详情多一行「预计还要」+ 出处 + 可信度（见 2.2）。
 - 面板**顶部一条资源队列**：`CPU 8/8 核 · 内存 6/16 GB · 运行中 1 · ⏳ 排队 2`，
   下面逐行列出排队的人（`#1 跑 ATAC · memomics-811918 · 已等 4m5s · 需 2 核/2 GB`），在跑的带 `▶`（见 2.3）。
+- 失败的任务（`failed` / `interrupted`）详情里有**一键重试**：`🔁 重试（第 2 次 · 5s 后启动）`，
+  重试出来的任务名字带 `（重试 2/3）`、参数里写清 `重试来源 / 重试根 / 第几次重试`（见 2.4）。
 
 ## 2. 接口
 
@@ -22,6 +24,7 @@
 | GET | `/api/tasks/{id}?tail=200&script=1` | 详情：**`{ok, task:{...}}`**（注意是嵌套的），含 stages/outputs/params/log_tail/script_text/env/proc |
 | GET | `/api/tasks/{id}/log?tail=200&grep=WARN` | 日志尾部（seek 读，不整读几百 MB），`grep` 是不区分大小写的子串过滤，结果在 `text` |
 | POST | `/api/tasks/{id}/cancel` | 需要 `X-Task-Token`（从 `/api/tasks` 的 `api_token` 拿），返回 wait/escalated/killed/kill_wrapper/marks |
+| POST | `/api/tasks/{id}/retry` | 同一把 `X-Task-Token`；按 retry_backoff 的退避重跑契约里的命令，返回 `scheduled/attempt/delay_sec/spawned`；不能重试时 409 + 中文理由（见 2.4） |
 | GET | `/api/middleware/audit?routes=1` | 路由清单漂移（`added`/`removed` 是**列表**，空列表=没漂移） |
 
 ### 2.1 实时推送（复用已有的 `/ws`，不新开端口也不新增路由）
@@ -74,6 +77,27 @@
 
 要复现排队，把容量压小即可：`MEMOMICS_CPU_CORES=1`、`MEMOMICS_MEMORY_GB=2`（GPU 走 `MEMOMICS_GPU_SLOTS`）；
 不给覆盖就按机器自动探测（CPU = 核数-1，内存 = 可用内存×0.8）。
+### 2.4 失败任务一键重试（retry_backoff）
+
+失败任务（`failed` / `interrupted`）详情里多一个 `🔁 重试（第 N 次 · 5s 后启动）`。
+按钮亮不亮**由后端算好**：列表卡片/详情都带 `retry_allowed / retry_attempt / retry_delay_sec /
+retry_reason / retry_used / retry_max / retry_root`，面板只负责画，不自己猜。
+
+| 关键点 | 约定 |
+| --- | --- |
+| 重跑什么 | **只重跑契约里已经记下的命令**（`cmd` + `type/title/stages/script/params/session_dir/session_id` 原样搬），服务端不自己发明参数 |
+| 命令怎么还原 | 契约里 `cmd` 是给人看的**字符串**，重跑要拆回 token：只认双引号包裹，**不解释 shell 语法** —— 管道、`&&`、重定向一律当普通参数；宁可跑出来报错，也不偷偷换个意思执行 |
+| 隔多久 | 用 `webui/runtime/retry_backoff.py` 的 `RetryBackoff`：2s / 5s / 15s（表尾 45s），第 N 次重试取第 N 个间隔 |
+| 还能几次 | 同一条链最多 3 次（`MAX_FAILURES=3`：连续失败 3 次后不再硬重试） |
+| 什么时候不给 | 任务没失败（done/running…）、契约里没记命令、**上一次重试还在跑**（含"已排定、还在等退避"的那几秒 —— 连点两下不会排出两次）、已经用满 3 次 —— 一律 409 + 中文理由 |
+| 溯源 | 重试任务的参数里写死 `重试来源`（直接上一级）、`重试根`（最初的 task_id）、`第几次重试`；`重试根` 相同即同一条重试链，上限按链上最大次数算 |
+| 退避等待放哪 | 服务端 `asyncio` 后台等，请求立刻返回 `scheduled=true` + `delay_sec`（面板不用吊在 15s 的请求上）；退避为 0 时同步拉起 |
+
+说清楚三条边界（别当成 bug）：
+- 重试**不占资源租约** —— 后台任务本来就不走 `ResourceScheduler`（那是「每轮对话」的租约），重试沿用同一约定；
+- 重试进程的 cwd 依次取 原任务 `cwd` → 会话目录 → 仓库根；
+- 重试**没有幂等保证**：命令再跑一遍，产物可能被覆盖或追加，动手前先看日志和产物。
+
 ## 3. 契约（memomics/bio_tools/task_run.py）
 
 字段：`task_id/title/type/status/session_id/session_dir/log/pid/started_at/finished_at/duration_sec/
@@ -172,3 +196,37 @@ T5 极端场景实测（真实 R 分析 / 4 组表格 / Europe PMC 文献下载 
 
 回归测试：`webui/tests/test_task_ws.py`（订阅协议 / 退订摘连接 / 指纹 / 失败不撒谎）+
 `test_task_routes.py::test_h1`（穿越三路由）、`test_h2`（越界脚本不读）。
+
+### T12 失败任务一键重试真机实测（8899，2026-09-24）
+
+`E:\release\_t12\retry_verify.py` 24 项断言全过（`T12_RETRY_RC=0`，37.4 s）：
+先真起一次 wrapper 造出**真失败**的任务（`qc-20260924-121142-88c6`，`failed / exit=3`，真跑了 3.7 s），
+然后全程走 HTTP 点重试。
+
+| 断言 | 实测 |
+| --- | --- |
+| 鉴权与 404 | 坏 token → 401；不存在的任务 → 404；done 任务 → 409「任务没失败（done），不用重试」 |
+| 第一次重试排定 | `200 {scheduled:true, delay_sec:2.0, attempt:1}`（请求不吊在退避上） |
+| **连点第二下** | 409「上一次重试还在跑（已排定（等退避）），等它结束」 |
+| 重试任务落地 | `qc-20260924-121149-720b`：参数 `{重试来源, 重试根, 第几次重试=1}`、标题 `（重试 1/3）`、`type=qc` 与脚本/阶段原样搬过去 |
+| 命令真被执行 | 重试任务 `exit=3`，子进程留下的痕迹 2 个（原任务 1 + 重试 1） |
+| 重试「重试」 | 第 2 次：`attempt=2, delay_sec=5.0`，`重试根` 仍是最初那个 → `qc-20260924-121159-5a39` |
+| 第三次 | `attempt=3, delay_sec=15.0` → `qc-20260924-121220-5b12`，退避 15s 也没耽误落地 |
+| 没有多跑 | 三次重试后子进程痕迹**正好 4 个**（原任务 + 3 次重试），连点没排出重复 |
+| 用满 3 次 | 409「已经连着重试 3 次（上限 3 次），先看日志再动手」；卡片 `retry_used=3 / retry_max=3 / retry_allowed=false` |
+| 路由清单 | `/api/middleware/audit?routes=1` → `added=[] removed=[] total=132` |
+| 前端就位 | 8899 真下发的页面（737 229 字节）里有 `task-retry-btn` / `function retryTask(id)` / `'/retry'` |
+
+**修之前真的会连点排出两次**（12:08 那一轮，旧代码）：同一秒里出现 `qc-20260924-120841-58f8` 与
+`qc-20260924-120841-a32c` 两份重试契约、两份日志各 126 字节 —— 才补的 `_RETRY_INFLIGHT`
+（"已排定、还在等退避"也占名额），改完第二下就是 409。
+
+测试工具自己也踩了一个坑：子进程并发「读-改-写」同一个计数文件会丢更新（三个进程只留下两三行），
+改成**每次跑写一个独立文件**再计数，才数得准 —— 这条是验证脚本的坑，写在这里免得下次再踩。
+
+单测：`test_task_routes.py::test_j1..j8`（8 项：token/404、只对 failed 且记了命令的开重试、
+上一次还在跑就拒、退避上限、卡片计划字段、命令拆分只认引号不解释 shell、**真起进程真跑完的端到端重试**、
+连点名额守卫）+ `test_task_panel_ui.py::test_render_detail_retry_button_and_grey_reason`
+（node 假 DOM 真跑渲染：按钮文案"第 1 次 · 2s 后启动"、点击已接线、用满后按钮消失只剩理由）。
+回归：全量 `scripts/check_skills_gate.py` **783 例通过 / 跳过 2**（79.8 s）。
+
