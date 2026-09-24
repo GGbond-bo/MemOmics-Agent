@@ -816,6 +816,82 @@ console.log(JSON.stringify({ done: done, run: run, q: q }));
     assert "🏃 正在跑 · " in got["run"] and "var(--primary)" in got["run"]
     assert "⏳ 排队中 · " in got["q"] and "#e0a030" in got["q"]
 
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t17_extreme_payloads_do_not_break_the_panel():
+    """极端载荷：字段缺光 / 状态没见过 / 参数和产物爆量 / 标题带脚本 —— 面板不许崩、不许漏 undefined。"""
+    mod = _write_module()
+    cases = {
+        "empty": {},
+        "weird_status": dict(LIVE_TASK, status="weird", stage=None, stages=[], stage_total=0),
+        # 26 个占位名 + 4 个真参数：真参数必须挤进第一屏，占位名一个都不许露头
+        "fat": dict(LIVE_TASK, status="done", duration_sec=61.0, progress_pct=100,
+                    params=dict([("参数%02d" % i, "v%d" % i) for i in range(26)] +
+                                [("样本数", "12"), ("细胞数", "8000"),
+                                 ("组织", "骨骼肌"), ("最小基因数", "200")]),
+                    outputs=[{"path": "results/o%02d.png" % i, "exists": i % 2 == 0,
+                              "size": i * 100} for i in range(60)]),
+        "only_retry_params": dict(LIVE_TASK, params={"重试来源": "a", "重试根": "b", "第几次重试": "2"}),
+        "no_log_no_outputs": dict(LIVE_TASK, log_tail=None, log=None, outputs=[], stages=[], stage_total=0),
+        "xss": dict(LIVE_TASK, title='<img src=x onerror=alert(1)>',
+                    params={"样本数": '<script>alert(2)</script>'},
+                    outputs=[{"path": '<b>evil</b>', "exists": True, "size": 1}]),
+        "nulls": dict(LIVE_TASK, title="", task_id="qc-null-0001", pid=None, cpu_pct=None, rss_gb=None,
+                      elapsed_sec=None, duration_sec=None, exit_code=None, eta_sec=None,
+                      progress_pct=None, stage=None, stages=[], stage_total=0, status="interrupted"),
+    }
+    drive = HARNESS + """
+const P = out.P;
+const cases = JSON.parse(process.argv[3]);
+const res = {};
+Object.keys(cases).forEach(function(k) {
+  try { P.renderTaskDetail(cases[k]); res[k] = { html: out.store['task-detail'].innerHTML, err: '' }; }
+  catch (e) { res[k] = { html: '', err: String(e && e.message || e) }; }
+});
+console.log(JSON.stringify(res));
+"""
+    r = _run_node(drive, mod, json.dumps(cases, ensure_ascii=False))
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+
+    for k, v in got.items():
+        assert not v["err"], "%s 渲染崩了：%s" % (k, v["err"])
+        h = v["html"]
+        assert h, "%s 什么都没渲染出来" % k
+        for bad in ("undefined", ">null<", "NaN"):
+            assert bad not in h, "%s 的界面里漏出了 %s" % (k, bad)
+
+    # 没见过的状态：照原样显示，不装作完成
+    assert "weird" in got["weird_status"]["html"]
+
+    # 爆量：核心参数最多 4 个，其余进折叠区；60 个产物一个不丢
+    fat = got["fat"]["html"]
+    assert fat.count('class="task-key"') == 4, fat.count('class="task-key"')
+    _grid = fat[fat.index("task-key-grid"):fat.index("产物（")]
+    for _k in ("样本数", "细胞数", "组织", "最小基因数"):
+        assert _k in _grid, "真参数被挤出第一屏：" + _k
+    assert "参数00" not in _grid and "参数25" not in _grid, "占位名占了第一屏"
+    assert "其余参数（26）" in fat
+    assert fat.count('class="task-out"') == 60
+    assert "产物（60）" in fat
+
+    # 只有记账参数时：不画空的关键参数区
+    only = got["only_retry_params"]["html"]
+    assert "关键参数" not in only and "其余参数（3）" in only
+
+    # 没有阶段/没有日志也要有话说
+    plain = got["no_log_no_outputs"]["html"]
+    assert "阶段时间线" not in plain and "（暂无日志）" in plain
+
+    # 注入必须被转义
+    xss = got["xss"]["html"]
+    assert "<img" not in xss and "<script" not in xss and "<b>evil</b>" not in xss
+    assert "&lt;script&gt;" in xss
+
+    # 全空字段：不崩，且说得出"正在跑"之外的中断结论
+    n = got["nulls"]["html"]
+    assert "⚠️ 中断" in n and "进程没了（中断）" in n
+
+
 
 
 

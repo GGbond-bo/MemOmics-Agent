@@ -7741,14 +7741,18 @@ function taskHeroLine(t, live) {
   if (t.status === 'paused') return '已暂停' + (t.stage ? '（停在「' + t.stage + '」）' : '');
   return '取消请求已发出，等进程收尾';
 }
+// 关键词白名单：命中这些词的参数才配上第一屏（"参数" 这种空词不算 —— 名字里只有"参数"的参数本身就没信息量）
 var _TASK_CORE_HINT = ['样本', '细胞', '组织', '物种', '基因组', '参考', '分组', '比较', '阈值', '方法',
-                       '输入', '数据', '分辨率', '最小', '目标', '基因', '通路', '参数'];
+                       '输入', '数据', '分辨率', '最小', '目标', '基因', '通路'];
+// 纯占位名（参数01 / param2）和重试记账一律进折叠区，不许把真正有意义的参数挤出第一屏
+var _TASK_NOISE_KEY = /^(参数|param|arg|p)\d*$/i;
 function taskCoreParams(t) {
   // 挑"这条任务真正在算什么"的参数放显眼处；重试来源这类记账信息不配占版面
   var keys = Object.keys(t.params || {});
   var core = [], rest = [], mid = [];
   keys.forEach(function(k) {
-    if (/^(重试|retry)/i.test(k)) { rest.push(k); return; }
+    // 「第几次重试」「重试来源」「重试根」都是记账信息 —— 只要带“重试”就永不进第一屏
+    if (/重试|retry/i.test(k) || _TASK_NOISE_KEY.test(k)) { rest.push(k); return; }
     var hit = _TASK_CORE_HINT.some(function(w) { return k.indexOf(w) >= 0; });
     (hit ? core : mid).push(k);
   });
