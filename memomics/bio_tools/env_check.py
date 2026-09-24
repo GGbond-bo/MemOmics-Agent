@@ -288,6 +288,19 @@ def check_env(packages, language="both", auto_install=True):
     r_pkgs = [p for p in r_pkgs if p not in PYTHON_PACKAGES_BIO]
     py_pkgs = [p for p in py_pkgs if p not in R_PACKAGES_BIO]
 
+    # 2026-09-24 真机修复（memomics-ccdd8647 案例）：language="both"（默认）下，名字没登记在
+    # PYTHON_PACKAGES_BIO / R_PACKAGES_BIO 里的包会同时进 r_pkgs 和 py_pkgs —— R 里装着就进
+    # installed，Python 里 import 不到又进 missing；rail_review(pre) 只看 missing，于是拦执行。
+    # 真实案例：cluster（R 基础推荐包，R 里 requireNamespace 返回 TRUE）被判
+    # "Missing packages: cluster"，同一会话 17:10、17:25 两次拦住聚类，用户白等。
+    # 规则：名字不在 Python 生信名单里时先按 R 查，R 查不到再按 Python 兜底；
+    # 最后一律保证同一个包不同时出现在 installed 与 missing。
+    _ambiguous = []
+    if language not in ("R", "Python"):
+        _ambiguous = [p for p in packages
+                      if p not in PYTHON_PACKAGES_BIO and p not in R_PACKAGES_BIO]
+        py_pkgs = [p for p in py_pkgs if p not in _ambiguous]
+
     # 先用缓存——24小时内检查过的包直接返回
     _needs_check_r = []
     _needs_check_py = []
@@ -305,11 +318,18 @@ def check_env(packages, language="both", auto_install=True):
             _needs_check_py.append(pkg)
 
     # 只检查缓存里没有的包
+    _fallback_py = []
     if _needs_check_r and language in ("R", "both"):
         r_status = _check_r_packages(_needs_check_r)
         for pkg, ok in r_status.items():
             if ok:
                 result["installed"][pkg] = "R"
+            elif pkg in _ambiguous:
+                # 语言未登记的包：R 里没有不代表真的没有，交给 Python 兜底再判，别急着报 missing
+                _fallback_py.append(pkg)
+                if auto_install:
+                    if _install_r_package(pkg):
+                        result["installed_now"][pkg] = "R"
             else:
                 result["missing"][pkg] = "R"
                 if auto_install:
@@ -326,6 +346,19 @@ def check_env(packages, language="both", auto_install=True):
                 if auto_install:
                     if _install_python_package(pkg):
                         result["installed_now"][pkg] = "Python"
+
+    # 语言未登记的名字：R 里没有，再按 Python 试一次（生信里 Python 包常常不叫 R 那个名字）
+    if _fallback_py:
+        for pkg, ok in _check_python_packages(_fallback_py).items():
+            if ok:
+                result["installed"][pkg] = "Python"
+            else:
+                result["missing"][pkg] = "R"
+
+    # 兜底不变式：同一个包不许既 installed 又 missing（rail_review 只认 missing，会误拦）
+    for _p in list(result["missing"]):
+        if _p in result["installed"]:
+            del result["missing"][_p]
 
     # Re-check after install
     if auto_install and result["installed_now"]:
