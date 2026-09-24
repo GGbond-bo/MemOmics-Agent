@@ -137,7 +137,7 @@ def test_b1_list_shape(client, tr, tasks_dir):
     card = next(x for x in d["tasks"] if x["task_id"] == t.task_id)
     for key in ("title", "type", "status", "pid", "pname", "progress_pct", "stage_index",
                 "stage_total", "stages", "elapsed_sec", "env_line", "log", "summary",
-                "output_count", "params", "alive", "stalled", "session_id"):
+                "output_count", "params", "alive", "stalled", "session_id", "session_title"):
         assert key in card, "列表卡片缺字段：" + key
     assert card["title"] == "列表任务" and card["stage_total"] == 2
     assert card["stages"][0]["name"] == "读入"
@@ -717,6 +717,105 @@ def test_j8_second_click_while_retry_is_queued_is_refused(client, tr, tasks_dir,
     # 拉起来之后名额放开，链上的真实状态接管
     monkeypatch.delitem(server._RETRY_INFLIGHT, t.task_id)
     assert _card(client, t.task_id)["retry_allowed"] is True
+# ------------------------------------------- K 会话标注（T13：不同会话不串）
+def _card_by_id(client, task_id):
+    return next(x for x in client.get("/api/tasks").json()["tasks"] if x["task_id"] == task_id)
+
+
+def test_k1_card_carries_session_title(client, tr, tasks_dir, monkeypatch):
+    """每条卡片都要带"属于哪个会话的名字" —— 只给一串 memomics-xxxx 等于没标。"""
+    t = _make(tr, tasks_dir, title="标会话", session_id="memomics-aaa")
+    monkeypatch.setattr(server, "_session_title", lambda sid: "骨骼肌 QC 跑通")
+    card = _card_by_id(client, t.task_id)
+    assert card["session_id"] == "memomics-aaa"
+    assert card["session_title"] == "骨骼肌 QC 跑通", card
+
+
+def test_k2_session_title_helper_never_raises_and_is_cached(monkeypatch):
+    """查会话名要稳且要便宜：查不到给空串（面板显示 id），同一会话 30 秒内只查一次库。"""
+    server._SESSION_TITLE_MEMO.clear()
+    calls = {"n": 0}
+
+    class _DB:
+        def get_session_title(self, sid):
+            calls["n"] += 1
+            return "骨骼肌 QC 跑通" if sid == "memomics-known" else None
+
+        def get_session(self, sid):
+            return None
+
+    monkeypatch.setattr(server, "_get_session_db", lambda: _DB())
+    assert server._session_title("memomics-known") == "骨骼肌 QC 跑通"
+    assert server._session_title("memomics-known") == "骨骼肌 QC 跑通"
+    assert calls["n"] == 1, "同一会话重复查库了 —— 面板 2 秒拉一次列表，会打爆 DB"
+    assert server._session_title("memomics-none") == ""
+    for bad in ("", None, "memomics-\u0000", "x" * 500):
+        assert isinstance(server._session_title(bad), str), "诡异输入把列表带崩了"
+
+    def _boom():
+        raise RuntimeError("state.db 挂了")
+
+    monkeypatch.setattr(server, "_get_session_db", _boom)
+    server._SESSION_TITLE_MEMO.clear()
+    assert server._session_title("memomics-any") == "", "取不到名字是常态，不该抛"
+
+
+def test_k3_title_falls_back_to_last_user_message_and_is_trimmed(monkeypatch):
+    """没标题（新会话）就退回最近一句用户话；长标题截断，别把抽屉撑破。"""
+    server._SESSION_TITLE_MEMO.clear()
+    monkeypatch.setattr(server, "_queue_label", lambda sess: "帮我把这批单细胞 QC 跑一遍")
+    monkeypatch.setattr(server, "_get_session_db", lambda: _DBNoTitle())
+    assert server._session_title("memomics-brandnew") == "帮我把这批单细胞 QC 跑一遍"
+    # 标题只有默认占位（新会话）时也该退回用户那句话
+    server._SESSION_TITLE_MEMO.clear()
+    monkeypatch.setattr(server, "_get_session_db", lambda: _DBPlaceholder())
+    assert server._session_title("memomics-brandnew") == "帮我把这批单细胞 QC 跑一遍"
+    # 超长标题截到 60 字
+    server._SESSION_TITLE_MEMO.clear()
+    monkeypatch.setattr(server, "_queue_label", lambda sess: "")
+    monkeypatch.setattr(server, "_get_session_db", lambda: _DBLong())
+    got = server._session_title("memomics-long")
+    assert len(got) == 60 and got.startswith("很长的标题")
+
+
+class _DBNoTitle:
+    def get_session_title(self, sid):
+        return None
+
+    def get_session(self, sid):
+        return {"session_id": sid}
+
+
+class _DBPlaceholder:
+    def get_session_title(self, sid):
+        return "新会话"
+
+    def get_session(self, sid):
+        return {"session_id": sid}
+
+
+class _DBLong:
+    def get_session_title(self, sid):
+        return "很长的标题" * 40
+
+    def get_session(self, sid):
+        return {}
+
+
+def test_k4_task_list_still_works_when_db_is_dead(client, tr, tasks_dir, monkeypatch):
+    """库挂了、会话名取不到时，/api/tasks 也必须正常返回（名字退化成空串）。"""
+
+    def _boom():
+        raise RuntimeError("state.db 挂了")
+
+    t = _make(tr, tasks_dir, title="库挂了也得能看见", session_id="memomics-aaa")
+    monkeypatch.setattr(server, "_get_session_db", _boom)
+    server._SESSION_TITLE_MEMO.clear()
+    d = client.get("/api/tasks").json()
+    assert d["ok"] is True
+    card = next(x for x in d["tasks"] if x["task_id"] == t.task_id)
+    assert card["session_title"] == "" and card["session_id"] == "memomics-aaa"
+
 
 
 

@@ -9539,6 +9539,36 @@ def _env_line(env: dict) -> str:
     return env.get("kind", "未知环境")
 
 
+# T13(2026-09-24)：任务要标清楚"属于哪个会话"——只给一串 memomics-xxxx 等于没标。
+# 会话名走 state.db（索引查询，很便宜），30 秒缓存一次：一次列表 100 条任务不该查 100 次库。
+_SESSION_TITLE_MEMO = {}
+
+
+def _session_title(sid: str) -> str:
+    """会话显示名：标题优先，没标题就退回最近一句用户话，都没有就空（面板显示 id）。"""
+    sid = (sid or "").strip()
+    if not sid:
+        return ""
+    now = time.time()
+    hit = _SESSION_TITLE_MEMO.get(sid)
+    if hit and now - hit[0] < 30:
+        return hit[1]
+    title = ""
+    try:
+        db = _get_session_db()
+        if db is not None:
+            if hasattr(db, "get_session_title"):
+                title = str(db.get_session_title(sid) or "").strip()
+            if (not title or title in ("新会话", "New Chat")) and hasattr(db, "get_session"):
+                sess = db.get_session(sid) or {}
+                title = _queue_label(sess) or title
+    except Exception:  # pragma: no cover - 库里查不到就当没名字，不能拖垮列表
+        title = ""
+    title = " ".join(str(title).split())[:60]
+    _SESSION_TITLE_MEMO[sid] = (now, title)
+    return title
+
+
 def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
     """列表项：只留面板要显示的字段（契约文件本身可能很大）。
 
@@ -9595,6 +9625,7 @@ def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
         "type": d.get("type") or "other",
         "status": d.get("status") or "unknown",
         "session_id": d.get("session_id") or "",
+        "session_title": _session_title(d.get("session_id") or ""),
         "session_dir": d.get("session_dir") or "",
         "demo": bool(d.get("demo")),
         "source": d.get("source") or "",

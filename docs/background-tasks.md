@@ -1,11 +1,13 @@
-# 后台任务面板（⏱ 任务）
+# 后台任务（右侧抽屉 · 跨会话）
 
 > 目标：用户随时能回答「现在在跑什么、在哪跑、什么环境、PID 多少、跑到哪一步、产物在哪、日志怎么说、能不能停」。
 > 契约由任务自己写（wrapper / 脚本打点），服务端只读取 + 核对存活；面板只显示，不猜。
 
 ## 1. 面板（webui/index.html）
 
-- 左侧导航 `⏱ 任务`（`id="nav-tasks"`）→ 面板 `id="panel-tasks"`；
+- 入口在**顶部横栏**（"生信分析对话"右边）：胶囊 `⏱ 后台任务`（`id="nav-tasks"`，T13 从左侧导航搬过来），
+  旁边挂实时徽标（`🏃2` 在跑 / `⏳1` 在排 / 全闲但有失败时 `❌9`）；点一下从**右侧滑出抽屉** `id="task-dock"`（430px，不动当前视图），Esc 关闭；
+- 抽屉里：会话筛选 `全部会话 / 只看当前会话`（记住选择）、立即刷新、关闭；下面的面板仍是 `id="panel-tasks"`；
 - 列表：状态图标 + 标题 + 类型 + 会话 + PID + 阶段 `阶段 2/4：出图` + 进度条 + 耗时 + 环境行；
 - 详情抽屉：状态/进度/阶段时间线（每段耗时）/关键参数/实际命令/脚本内容/产物（存在与否 + 字节数）/日志尾部（可 grep）/取消按钮；
 - 进视图订阅 WS 推送（服务端只在契约变化时推），切走即退订；没订阅上才退回 2000 ms 轮询
@@ -15,12 +17,17 @@
   下面逐行列出排队的人（`#1 跑 ATAC · memomics-811918 · 已等 4m5s · 需 2 核/2 GB`），在跑的带 `▶`（见 2.3）。
 - 失败的任务（`failed` / `interrupted`）详情里有**一键重试**：`🔁 重试（第 2 次 · 5s 后启动）`，
   重试出来的任务名字带 `（重试 2/3）`、参数里写清 `重试来源 / 重试根 / 第几次重试`（见 2.4）。
+- **跨会话不串**（T13）：列表按会话分组，组头写 `💬 当前会话：骨骼肌 QC 跑通` / `💬 别的会话：ATAC 比对` + 任务数，
+  当前会话永远排最前（组头高亮），别的会话的卡片压暗（`.task-row.other`）；详情多一行「所属会话」写明 `就是当前会话 / ⚠️ 不是当前会话`；
+  取消 / 重试别的会话的任务会再确认一次，并在弹窗里点名是哪个会话。
+- 抽屉开着走 2s 面板轮询 + WS 推送；**关着也要让徽标是真的**：20s 一次 `refresh=1`（顺带核对进程，
+  免得进程早没了还挂着"在跑"）。
 
 ## 2. 接口
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/tasks?refresh=1&limit=100&states=running` | 列表；`refresh=1` 用 PID + 进程创建时间核对存活，进程没了就把活任务收敛成 `interrupted` |
+| GET | `/api/tasks?refresh=1&limit=100&states=running` | 列表；`refresh=1` 用 PID + 进程创建时间核对存活，进程没了就把活任务收敛成 `interrupted`；每张卡片带 `session_id` + `session_title`（T13） |
 | GET | `/api/tasks/{id}?tail=200&script=1` | 详情：**`{ok, task:{...}}`**（注意是嵌套的），含 stages/outputs/params/log_tail/script_text/env/proc |
 | GET | `/api/tasks/{id}/log?tail=200&grep=WARN` | 日志尾部（seek 读，不整读几百 MB），`grep` 是不区分大小写的子串过滤，结果在 `text` |
 | POST | `/api/tasks/{id}/cancel` | 需要 `X-Task-Token`（从 `/api/tasks` 的 `api_token` 拿），返回 wait/escalated/killed/kill_wrapper/marks |
@@ -229,4 +236,42 @@ T5 极端场景实测（真实 R 分析 / 4 组表格 / Europe PMC 文献下载 
 连点名额守卫）+ `test_task_panel_ui.py::test_render_detail_retry_button_and_grey_reason`
 （node 假 DOM 真跑渲染：按钮文案"第 1 次 · 2s 后启动"、点击已接线、用满后按钮消失只剩理由）。
 回归：全量 `scripts/check_skills_gate.py` **783 例通过 / 跳过 2**（79.8 s）。
+
+### T13 改名「后台任务」+ 顶部横栏入口 + 跨会话标注真机实测（8899，2026-09-24）
+
+`E:\release\_t13\dock_verify.py` 26 项断言全过（`T13_DOCK_RC=0`）：
+真起两条 300s 长跑任务（一条真会话、一条库里没有的合成会话），全程走 8899 的真 HTTP，
+再把 **/api/tasks 的真 payload** 喂给 node 影子 DOM 真渲染一遍。
+
+| 断言 | 实测 |
+| --- | --- |
+| 8899 真下发的页面 | 有 `class="chat-nav-chip" id="nav-tasks"` / `id="task-nav-badge"` / `id="task-dock"` / `id="task-scope-btn"` |
+| 旧入口撤掉 | 页面里已无 `onclick="switchView('tasks')" id="nav-tasks"`；左侧导航那一行只剩注释 |
+| 改名 | `'nav_tasks':'后台任务'` / `'nav_tasks':'Background Tasks'` |
+| 老逻辑不破 | `#panel-tasks` 仍在（`loadTasks`/`startTaskPoll` 靠它的 display 判断开没开），且已从"换视图就全隐藏"的表里摘出 |
+| 老入口兜底 | `if (view === 'tasks') { openTaskDock(); return; }` 在页面里 |
+| 卡片带会话名 | 16 张卡片全部有 `session_title`（字符串） |
+| **真会话真标题** | 卡片 `session_title='只回复：C收到'`，与会话列表 `/api/sessions` 的标题**逐字一致**（读 state.db） |
+| 库里没有的会话 | `session_title=''`（退化成空串，不报错、不假装有名字） |
+| 详情接口 | `/api/tasks/{id}` 也带 `session_title='只回复：C收到'` |
+| 分组渲染 | 列表出现 `💬 当前会话：只回复：C收到` 与 `💬 别的会话：t13-live-other`，两条任务都看得见（不藏） |
+| 置顶 + 压暗 | 当前会话组在别的会话之前；别的会话卡片带 `task-row other`（`opacity:.62`），当前会话不带 |
+| 徽标 | 两条真在跑时顶栏徽标是 ` 🏃2`；提示写清 `跑 2 · 排队 0 · 完成 5 · 失败 9` |
+| 跨会话提醒 | 自己的任务无警告；别的会话的任务返回「⚠️ 注意：这是会话「t13-live-other」的任务，不是当前会话的。」 |
+| 只看当前会话 | 切一下之后列表里只剩当前会话那条，别的会话那条消失；按钮文案变「只看当前会话」 |
+| 抽屉开合 | 开→`#task-dock` 带 `open` + `#panel-tasks` 显示 `''`；关→反过来 |
+| 路由清单 | `/api/middleware/audit?routes=1` → `added=[] removed=[] total=132`（T13 没加路由） |
+
+收尾：实测任务当场取消（`cancel` 200，子进程被杀）+ 契约文件删掉，面板不留残渣。
+
+**可见性怎么定的（用户让 agent 决定）：跨会话全看得见，但一定标清是谁的。**
+后台任务吃的是这台机器的 CPU/内存/GPU —— 藏起来就变成"机器卡了却不知道谁在跑"；
+真正会"串"的不是看得见，而是**点错**：所以每条都标会话名、当前会话置顶高亮、别的会话压暗、
+想专心就一键「只看当前会话」，并且动别人的任务（取消/重试）会再确认一次并点名会话。
+
+单测：`test_task_panel_ui.py::test_t13_dock_marks_which_session_and_pins_current`（node 假 DOM：
+开抽屉起 2s 面板轮询 / 关抽屉只剩 20s 徽标轮询、当前会话置顶、别的会话压暗、徽标 🏃1⏳1、
+跨会话警告、筛选生效、自己没任务时指路）+ `test_task_routes.py::test_k1..k4`
+（卡片带会话名、helper 30s 缓存只查一次库、没标题退回最近一句用户话、超长截 60 字、**库挂了也要正常返回**）。
+
 

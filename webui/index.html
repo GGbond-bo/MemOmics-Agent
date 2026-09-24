@@ -313,6 +313,23 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 
 /* === 中间聊天区 === */
 .chat-area { flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
+/* T13(2026-09-24): 后台任务 —— 入口搬到顶部横栏（生信分析对话旁边），点开是右侧抽屉，不切走当前视图 */
+.chat-nav-chip { display:inline-flex; align-items:center; gap:5px; margin-left:10px; padding:3px 11px; border:1px solid var(--border); border-radius:14px; background:transparent; cursor:pointer; font-size:12px; color:var(--text); user-select:none; white-space:nowrap; flex:none; }
+.chat-nav-chip:hover { background:var(--border); }
+.chat-nav-chip.active { border-color:var(--primary); color:var(--primary); }
+.chat-nav-badge { font-size:11px; color:var(--text-light); }
+.chat-nav-badge.live { color:#2f9e44; font-weight:600; }
+#task-dock { position:fixed; top:0; right:0; bottom:0; width:430px; max-width:94vw; background:var(--panel); border-left:1px solid var(--border); box-shadow:-10px 0 28px rgba(0,0,0,.28); z-index:80; display:flex; flex-direction:column; transform:translateX(102%); transition:transform .18s ease; }
+#task-dock.open { transform:none; }
+#task-dock .dock-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); flex:none; }
+#task-dock .dock-btn { padding:3px 9px; border:1px solid var(--border); border-radius:4px; background:transparent; cursor:pointer; font-size:12px; color:var(--text); }
+#task-dock .dock-btn.on { border-color:var(--primary); color:var(--primary); }
+#panel-tasks { flex:1; min-height:0; overflow-y:auto; }
+.task-group { margin-bottom:10px; }
+.task-row.other { opacity:.62; }        /* 别的会话：看得见（不藏），但明显不是自己的 */
+.task-group-head { font-size:11px; color:var(--text-light); padding:4px 2px; border-bottom:1px dashed var(--border); margin-bottom:5px; }
+.task-group.current > .task-group-head { color:var(--primary); font-weight:600; border-bottom-color:var(--primary); }
+@media (max-width:820px) { #task-dock { width:100vw; max-width:100vw; } }
 .chat-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
 .chat-header .title { font-size:15px; font-weight:500; }
 .chat-header .model-badge { font-size:12px; padding:3px 10px; border-radius:10px; background:var(--primary-light); color:var(--primary); }
@@ -1383,7 +1400,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'⏱ 任务','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'后台任务','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'view':'查看','download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1473,7 +1490,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'⏱ Tasks','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'Background Tasks','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'view':'View','download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1609,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="switchView('memory')" id="nav-memory" data-i18n="nav_memory">🧠 记忆</div>
       <div class="nav-item" onclick="switchView('context')" id="nav-context" data-i18n="nav_context">📐 上下文窗口</div>
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
-      <div class="nav-item" onclick="switchView('tasks')" id="nav-tasks" data-i18n="nav_tasks">⏱ 任务</div>
+      <!-- T13: 「后台任务」入口已搬到顶部横栏（#nav-tasks 那个胶囊），左侧导航不再重复 -->
       <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
       <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
       <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
@@ -1624,7 +1641,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
   <!-- === 中间聊天区 === -->
   <div class="chat-area">
     <div class="chat-header">
-      <div class="title" id="chat-title">生信分析对话</div>
+      <div style="display:flex; align-items:center; min-width:0; flex:1;">
+        <div class="title" id="chat-title">生信分析对话</div>
+        <div class="chat-nav-chip" id="nav-tasks" onclick="toggleTaskDock()" title="正在跑 / 在排队的后台任务（跨会话，点开看详情）">⏱ <span data-i18n="nav_tasks">后台任务</span><span class="chat-nav-badge" id="task-nav-badge"></span></div>
+      </div>
       <div style="display:flex; align-items:center; gap:12px;">
         <button id="lang-toggle" onclick="toggleUILang()" title="Switch language / 切换语言" style="font-size:11px;padding:2px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;">EN</button>
         <span class="model-badge" id="model-badge">未连接</span>
@@ -2094,24 +2114,29 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       </div>
     </div>
 
-    <div id="panel-tasks" style="display:none;">
-      <div class="info-header" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>⏱ 后台任务</span>
-        <div style="display:flex;gap:8px;align-items:center;">
+    <!-- T13(2026-09-24): 后台任务抽屉 —— 顶部横栏点开，右侧滑出，列表/详情都在里面 -->
+    <div id="task-dock" aria-hidden="true">
+      <div class="dock-head">
+        <span style="font-size:13px;font-weight:600;">⏱ 后台任务</span>
+        <div style="display:flex;gap:6px;align-items:center;">
           <span id="task-counts" style="font-size:11px;color:var(--text-light);"></span>
-          <button onclick="loadTasks(true)" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;font-size:12px;">🔄 刷新</button>
+          <button id="task-scope-btn" class="dock-btn" onclick="toggleTaskScope()" title="只看当前会话 / 看全部会话">全部会话</button>
+          <button class="dock-btn" onclick="loadTasks(true)" title="立即刷新">↻</button>
+          <button class="dock-btn" onclick="closeTaskDock()" title="关闭（Esc）">✕</button>
         </div>
       </div>
+    <div id="panel-tasks" style="display:none;">
       <div id="task-queue" style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-light);line-height:1.75;"></div>
-      <div id="task-list" style="height:calc(100vh - 214px);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;">
+      <div id="task-list" style="padding:8px;display:flex;flex-direction:column;gap:6px;">
         <div class="ctx-empty" id="task-empty">
           <div class="ctx-empty-icon">⏱</div>
           <div>这里会列出所有后台任务</div>
           <div style="font-size:11px;margin-top:4px;">谁在跑、在哪个环境跑、PID 多少、跑到哪一步、日志到哪儿了，一眼看全</div>
         </div>
       </div>
-      <div id="task-detail" style="display:none;height:calc(100vh - 168px);overflow-y:auto;padding:8px;"></div>
-    </div>
+      <div id="task-detail" style="display:none;padding:8px;"></div>
+    </div><!-- /#panel-tasks -->
+    </div><!-- /#task-dock -->
 
 <script>
 // === 全局状态 ===
@@ -6528,8 +6553,11 @@ function switchSession(sid) {
 
 // === 视图切换 ===
 function switchView(view) {
+  // T13: 后台任务是右侧抽屉，不再是整屏视图 —— 老代码里的 switchView('tasks') 在这里兜住
+  if (view === 'tasks') { openTaskDock(); return; }
+  // T13: 'tasks' 不再是"整屏视图"，改成右侧抽屉（见 openTaskDock），所以不在这里的面板表里
   var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', weixin: 'panel-weixin', tasks: 'panel-tasks' };
-  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin', 'tasks'];
+  var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin'];
   views.forEach(function(v) {
     document.getElementById('nav-' + v).classList.toggle('active', v === view);
   });
@@ -6537,7 +6565,7 @@ function switchView(view) {
   // 显示对应右侧面板
   var panelId = panelMap[view];
   if (panelId) {
-    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-weixin', 'panel-tasks'].forEach(function(p) {
+    ['panel-info', 'panel-results', 'panel-files', 'panel-kb', 'panel-skills', 'panel-settings', 'panel-memory', 'panel-context', 'panel-weixin'].forEach(function(p) {
       document.getElementById(p).style.display = 'none';
     });
   }
@@ -7385,34 +7413,169 @@ function renderResources(res) {
   box.innerHTML = h;
 }
 
+// === T13(2026-09-24)：后台任务抽屉（顶部横栏入口） ===
+// 会话不串的取舍：后台任务吃的是这台机器的 CPU/内存/GPU —— 藏起来会变成"机器卡了却不知道谁在跑"，
+// 所以默认「全部会话可见」，但①每条任务都标清属于哪个会话 ②当前会话置顶高亮、别的会话压暗
+// ③想专心就一键切「只看当前会话」 ④取消/重试别的会话的任务会再确认一次（写明是哪个会话）。
+var _taskDockOpen = false;
+var _taskScope = 'all';           // all | current（记住选择）
+var _taskLast = null;             // 最近一次列表载荷：切筛选不用再求一次接口
+var _taskSessions = {};           // task_id -> {sid, title}：跨会话确认时要知道是哪条会话的
+var _taskBadgeTimer = null;
+try { _taskScope = localStorage.getItem('memomics-task-scope') || 'all'; } catch (e) {}
+
+// currentSid 是页面全局的"当前会话"；测试里这段 JS 会被单独抽出来跑，取不到就当作没有当前会话
+function _taskCurrentSid() {
+  try { return (typeof currentSid !== 'undefined' && currentSid) ? currentSid : ''; } catch (e) { return ''; }
+}
+
+function openTaskDock() {
+  _taskDockOpen = true;
+  var dock = document.getElementById('task-dock');
+  if (dock) { dock.classList.add('open'); dock.setAttribute('aria-hidden', 'false'); }
+  var chip = document.getElementById('nav-tasks');
+  if (chip) chip.classList.add('active');
+  var body = document.getElementById('panel-tasks');
+  if (body) body.style.display = '';     // 老代码（startTaskPoll/loadTasks）靠这个判断"面板开着没"
+  stopTaskBadgePoll();                   // 抽屉开着就靠任务轮询/WS 推送，不用徽标轮询
+  syncTaskScopeBtn();
+  loadTasks(true);
+  taskSubscribe();
+}
+
+function closeTaskDock() {
+  _taskDockOpen = false;
+  var dock = document.getElementById('task-dock');
+  if (dock) { dock.classList.remove('open'); dock.setAttribute('aria-hidden', 'true'); }
+  var chip = document.getElementById('nav-tasks');
+  if (chip) chip.classList.remove('active');
+  var body = document.getElementById('panel-tasks');
+  if (body) body.style.display = 'none';
+  stopTaskPoll();
+  taskUnsubscribe();
+  startTaskBadgePoll();                  // 关掉后徽标也得是真的，改成 20 秒一次轻量看
+}
+
+function toggleTaskDock() { if (_taskDockOpen) { closeTaskDock(); } else { openTaskDock(); } }
+
+function syncTaskScopeBtn() {
+  var b = document.getElementById('task-scope-btn');
+  if (!b) return;
+  b.textContent = (_taskScope === 'current' ? '只看当前会话' : '全部会话');
+  b.classList.toggle('on', _taskScope === 'current');
+}
+
+function toggleTaskScope() {
+  _taskScope = (_taskScope === 'current' ? 'all' : 'current');
+  try { localStorage.setItem('memomics-task-scope', _taskScope); } catch (e) {}
+  syncTaskScopeBtn();
+  if (_taskLast) renderTaskList(_taskLast); else loadTasks(true);
+}
+
+function stopTaskBadgePoll() { if (_taskBadgeTimer) { clearInterval(_taskBadgeTimer); _taskBadgeTimer = null; } }
+
+function startTaskBadgePoll() {
+  stopTaskBadgePoll();
+  refreshTaskBadge();
+  _taskBadgeTimer = setInterval(function() {
+    if (_taskDockOpen) { stopTaskBadgePoll(); return; }
+    refreshTaskBadge();
+  }, 20000);
+}
+
+function refreshTaskBadge() {
+  // refresh=1 会核对进程（PID+创建时间）：不然进程早没了，徽标还挂着"在跑"
+  fetch('/api/tasks?limit=100&refresh=1').then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || !d.ok) return;
+    if (d.api_token) _taskState.token = d.api_token;
+    taskBadge(d.counts || {});
+    if (_taskDockOpen) renderTaskList(d);
+  }).catch(function() {});
+}
+
+function taskBadge(c) {
+  var el = document.getElementById('task-nav-badge');
+  if (!el) return;
+  var run = (c.running || 0) + (c.cancelling || 0), wait = (c.queued || 0), bad = (c.failed || 0);
+  var bits = [];
+  if (run) bits.push('🏃' + run);
+  if (wait) bits.push('⏳' + wait);
+  if (!run && !wait && bad) bits.push('❌' + bad);
+  el.textContent = bits.length ? (' ' + bits.join(' ')) : '';
+  el.className = 'chat-nav-badge' + (run ? ' live' : '');
+  var chip = document.getElementById('nav-tasks');
+  if (chip) {
+    chip.title = '后台任务（跨会话）：跑 ' + run + ' · 排队 ' + wait + ' · 完成 ' + (c.done || 0) +
+                 ' · 失败 ' + bad + ' · 共 ' + (Object.keys(c).reduce(function(a, k) { return a + c[k]; }, 0)) + ' 个';
+  }
+}
+
+function taskSessionLabel(id) {
+  var s = _taskSessions[id];
+  if (!s || !s.sid) return '';
+  if (_taskCurrentSid() && s.sid !== _taskCurrentSid()) {
+    return '\n⚠️ 注意：这是会话「' + (s.title || s.sid) + '」的任务，不是当前会话的。';
+  }
+  return '';
+}
+
+// 兜底：Esc 关抽屉 + 页面一加载就把顶栏徽标点起来（测试里这段 JS 会被单独抽出来跑，没 DOM 就跳过）
+if (typeof document !== 'undefined' && document.getElementById && document.addEventListener) {
+  document.addEventListener('keydown', function(e) {
+    if ((e.key === 'Escape' || e.key === 'Esc') && _taskDockOpen) closeTaskDock();
+  });
+  if (document.getElementById('task-nav-badge')) startTaskBadgePoll();
+}
+
 function renderTaskList(d) {
+  _taskLast = d;                   // 切「只看当前会话」时不用再求一次接口
   var box = document.getElementById('task-list');
   if (!box) return;
-  var tasks = d.tasks || [];
+  var all = d.tasks || [];
   var c = d.counts || {};
   var countsEl = document.getElementById('task-counts');
   if (countsEl) {
     countsEl.textContent = '运行 ' + (c.running || 0) + ' · 排队 ' + (c.queued || 0) + ' · 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) + (d.sandbox ? ' · 沙箱 ' + d.sandbox : '');
   }
+  taskBadge(c);
+  var tasks = all;
+  var mineSid = _taskCurrentSid();
+  if (_taskScope === 'current' && mineSid) {
+    tasks = all.filter(function(t) { return (t.session_id || '') === mineSid; });
+  }
   if (!tasks.length) {
-    box.innerHTML = '<div style="font-size:12px;color:var(--text-light);padding:12px;">还没有后台任务。让 Agent 跑个脚本或 CellBender，这里就会出现。</div>';
+    box.innerHTML = '<div style="font-size:12px;color:var(--text-light);padding:12px;">' +
+      (_taskScope === 'current'
+        ? '当前会话还没有后台任务。切到「全部会话」能看到别的会话在跑什么（当前共 ' + all.length + ' 个）。'
+        : '还没有后台任务。让 Agent 跑个脚本或 CellBender，这里就会出现。') + '</div>';
     return;
   }
-  var html = '';
+  // 按会话分组：当前会话永远排最前，其余按最近有动静排；组标题把"哪个会话"写清楚
+  var groups = [], index = {};
   tasks.forEach(function(t) {
-    var live = _taskLive.indexOf(t.status) >= 0;
-    var pct = Math.max(0, Math.min(100, Number(t.progress_pct || 0)));
-    html += '<div class="task-row" data-id="' + escapeHtml(t.task_id) + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;' + (live ? 'border-left:3px solid var(--primary);' : 'opacity:.85;') + '">';
-    html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
-    html += '<span style="font-size:13px;font-weight:600;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
-    var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
-    html += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
-    var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
-    if (stg) html += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(stg) + '</div>';
-    if (t.stalled) html += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 心跳停了 ' + taskFmtSec(t.heartbeat_age_sec) + '（可能卡住或已崩）</div>';
-    html += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--primary);"></div></div>';
+    var sid = t.session_id || '';
+    if (!index[sid]) { index[sid] = { sid: sid, title: t.session_title || '', items: [], newest: '' }; groups.push(index[sid]); }
+    var g = index[sid];
+    if (!g.title && t.session_title) g.title = t.session_title;
+    g.items.push(t);
+    var stamp = String(t.started_at || '');
+    if (stamp > g.newest) g.newest = stamp;
+  });
+  groups.sort(function(a, b) {
+    if (mineSid && a.sid === mineSid) return -1;
+    if (mineSid && b.sid === mineSid) return 1;
+    if (a.newest === b.newest) return 0;
+    return (a.newest < b.newest) ? 1 : -1;
+  });
+  var html = '';
+  groups.forEach(function(g) {
+    var mine = !!(mineSid && g.sid === mineSid);
+    var name = g.title || g.sid || '未知会话';
+    html += '<div class="task-group' + (mine ? ' current' : '') + '">';
+    html += '<div class="task-group-head">' + (mine ? '💬 当前会话' : '💬 别的会话') + '：' + escapeHtml(name) +
+            (g.sid ? ' <span style="font-size:10px;">' + escapeHtml(String(g.sid).slice(0, 18)) + '</span>' : '') +
+            ' · ' + g.items.length + ' 个' + (mine ? '' : '（动它们之前会再确认一次）') + '</div>';
+    g.items.forEach(function(t) { html += taskRowHtml(t, mine); });
     html += '</div>';
   });
   box.innerHTML = html;
@@ -7420,6 +7583,25 @@ function renderTaskList(d) {
   for (var i = 0; i < rows.length; i++) {
     rows[i].onclick = (function(el) { return function() { openTaskDetail(el.getAttribute('data-id')); }; })(rows[i]);
   }
+}
+
+function taskRowHtml(t, mine) {
+  var live = _taskLive.indexOf(t.status) >= 0;
+  var pct = Math.max(0, Math.min(100, Number(t.progress_pct || 0)));
+  _taskSessions[t.task_id] = { sid: t.session_id || '', title: t.session_title || '' };
+  var h = '<div class="task-row' + (mine ? '' : ' other') + '" data-id="' + escapeHtml(t.task_id) + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;' + (live ? 'border-left:3px solid var(--primary);' : (mine ? 'opacity:.85;' : '')) + '">';
+  h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
+  h += '<span style="font-size:13px;font-weight:600;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
+  var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
+  h += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt + '</span>';
+  h += '</div>';
+  h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
+  var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
+  if (stg) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(stg) + '</div>';
+  if (t.stalled) h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 心跳停了 ' + taskFmtSec(t.heartbeat_age_sec) + '（可能卡住或已崩）</div>';
+  h += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--primary);"></div></div>';
+  h += '</div>';
+  return h;
 }
 
 function openTaskDetail(id) {
@@ -7457,6 +7639,7 @@ var _taskPre = 'font-size:11px;white-space:pre-wrap;word-break:break-all;backgro
 
 function renderTaskDetail(t) {
   var live = _taskLive.indexOf(t.status) >= 0;
+  _taskSessions[t.task_id] = { sid: t.session_id || '', title: t.session_title || '' };
   var h = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">';
   h += '<button onclick="closeTaskDetail()" style="' + _taskBtn + '">← 返回列表</button>';
   h += '<span style="font-size:11px;color:var(--text-light);">每 2 秒自动刷新</span>';
@@ -7465,7 +7648,10 @@ function renderTaskDetail(t) {
   var st = t.status + (t.cancel_requested ? '（已请求取消，来自 ' + (t.cancel_by || '') + '）' : '');
   h += taskKv('状态', st);
   h += taskKv('任务 ID', t.task_id);
-  h += taskKv('类型 / 会话', (t.type || '') + ' / ' + (t.session_id || ''));
+  h += taskKv('类型', t.type || '');
+  var _mine = !!(_taskCurrentSid() && t.session_id === _taskCurrentSid());
+  h += taskKv('所属会话', (t.session_title ? t.session_title + '（' : '') + (t.session_id || '未知') + (t.session_title ? '）' : '') +
+              (t.session_id ? (_taskCurrentSid() ? (_mine ? ' · 就是当前会话' : ' · ⚠️ 不是当前会话') : '') : ''));
   h += taskKv('运行环境', t.env_line || '');
   h += taskKv('工作目录', t.session_dir || '');
   h += taskKv('进程', (t.pid ? 'PID ' + t.pid + (t.proc && t.proc.pname ? ' ' + t.proc.pname : '') : '（已结束）') + (t.wrapper_pid ? ' · 包装进程 ' + t.wrapper_pid : ''));
@@ -7542,7 +7728,8 @@ function taskToggleScript() {
 }
 
 function cancelTask(id) {
-  if (!confirm('确定取消这个任务？子进程会被结束，已经写出来的中间文件会保留。')) return;
+  var other = taskSessionLabel(id);
+  if (!confirm('确定取消这个任务？子进程会被结束，已经写出来的中间文件会保留。' + other)) return;
   fetch('/api/tasks/' + encodeURIComponent(id) + '/cancel', { method: 'POST', headers: { 'X-Task-Token': _taskState.token } }).then(function(r) { return r.json(); }).then(function(d) {
     if (d && d.ok) {
       alert('已取消：' + d.status + '（等待 ' + d.waited_sec + ' 秒' + (d.escalated ? '，wrapper 没自己收尾，服务端已强制收尾' : '') + '）');
@@ -7555,6 +7742,8 @@ function cancelTask(id) {
 
 function retryTask(id) {
   // 真重跑：后端照契约里的命令重新拉一个 wrapper，隔 retry_backoff 的退避时间启动
+  var other = taskSessionLabel(id);
+  if (other && !confirm('要重试的是别的会话的任务：' + other.trim())) return;
   fetch('/api/tasks/' + encodeURIComponent(id) + '/retry', { method: 'POST', headers: { 'X-Task-Token': _taskState.token } }).then(function(r) { return r.json(); }).then(function(d) {
     if (d && d.ok) {
       var nth = '第 ' + d.attempt + ' 次重试';

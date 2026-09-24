@@ -39,13 +39,17 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
 
 
 HARNESS = """
 const store = {};
 function el(id) {
-  if (!store[id]) store[id] = { id: id, innerHTML: '', textContent: '', style: { display: 'none' },
+  if (!store[id]) store[id] = { id: id, innerHTML: '', textContent: '', title: '', className: '', style: { display: 'none' },
+    // T13：抽屉靠 classList 开合，影子 DOM 也得有
+    classList: { _s: {}, add: function(c) { this._s[c] = true; }, remove: function(c) { delete this._s[c]; },
+                 toggle: function(c, on) { if (on) { this._s[c] = true; } else { delete this._s[c]; } },
+                 contains: function(c) { return !!this._s[c]; } },
     querySelectorAll: function() { return []; }, getAttribute: function() { return null; }, setAttribute: function() {}, scrollTop: 0, scrollHeight: 0, onclick: null };
   return store[id];
 }
@@ -59,7 +63,9 @@ global.confirm = function() { return true; };
 // T9：面板用全局 ws 发订阅消息（index.html 里那个聊天连接），这里给个假 socket
 global.WebSocket = { OPEN: 1 };
 global.ws = { readyState: 1, sent: [], send: function(t) { this.sent.push(t); } };
-const out = { timers: function() { return timers.filter(Boolean).length; }, store: store, P: null };
+const out = { timers: function() { return timers.filter(Boolean).length; },
+              mss: function() { return timers.filter(Boolean).map(function(t) { return t.ms; }); },
+              store: store, P: null };
 out.P = require(process.argv[2]);
 module.exports = out;
 """
@@ -101,17 +107,35 @@ def test_panel_js_parses():
 def test_panel_mounted_in_shell():
     html = _html()
     for token in [
-        'id="nav-tasks"',
-        "switchView('tasks')",
+        # T13：入口从左侧导航搬到顶部横栏（"生信分析对话"旁边），变成带实时徽标的胶囊
+        'class="chat-nav-chip" id="nav-tasks"',
+        'onclick="toggleTaskDock()"',
+        'id="task-nav-badge"',
         'data-i18n="nav_tasks"',
-        "\'nav_tasks\':\'⏱ 任务\'",
-        "\'nav_tasks\':\'⏱ Tasks\'",
+        "'nav_tasks':'后台任务'",
+        "'nav_tasks':'Background Tasks'",
+        'id="task-dock"',
+        'id="task-scope-btn"',
         'id="panel-tasks"',
         'id="task-list"',
         'id="task-detail"',
-        "tasks: 'panel-tasks'",
-        "'panel-tasks']",
-        "if (view === 'tasks') { loadTasks(true); taskSubscribe(); } else { stopTaskPoll(); taskUnsubscribe(); }",
+        # 老代码里还有别处会调 switchView('tasks')，必须还能开抽屉
+        "if (view === 'tasks') { openTaskDock(); return; }",
+        "function openTaskDock()",
+        "function closeTaskDock()",
+        "function toggleTaskDock()",
+        "function toggleTaskScope()",
+        "function refreshTaskBadge()",
+        "function startTaskBadgePoll()",
+        "function taskBadge(c)",
+        "function taskRowHtml(t, mine)",
+        "function taskSessionLabel(id)",
+        "memomics-task-scope",
+        "session_title",
+        "只看当前会话",
+        "当前会话",
+        "别的会话",
+        "所属会话",
         # T9：面板靠 WS 订阅拿实时推送，切走退订；没订阅上才退回 2 秒轮询
         "type: 'task_subscribe'",
         "type: 'task_unsubscribe'",
@@ -139,8 +163,9 @@ def test_panel_mounted_in_shell():
         "🔁 不能重试：",
     ]:
         assert token in html, "index.html 少了挂载点：" + token
-    # 面板必须只在任务视图里出现，别的视图的隐藏列表也得带上它
-    assert html.count("panel-tasks") >= 5
+    # 抽屉里的面板不能被"换视图就全隐藏"的那张表连坐（否则切个视图就把抽屉内容藏了）
+    assert "'panel-weixin'].forEach(" in html and "'panel-tasks']" not in html
+    assert html.count("panel-tasks") >= 4
 
 
 LIVE_TASK = {
@@ -376,3 +401,135 @@ console.log(JSON.stringify({ html: html, wired: wired, grey: grey, done: done,
     assert "已经连着重试 3 次" in got["grey"]
     # 没失败的任务：连"不能重试"那句话都不该出现（免得列表里到处是灰字）
     assert "不能重试" not in got["done"] and "task-retry-btn" not in got["done"]
+
+# T13(2026-09-24)：入口搬到顶部横栏 + 右侧抽屉 + 跨会话不串
+CURRENT_SID = "memomics-b145cef6"
+OTHER_SID = "memomics-aaaa1111"
+MY_TASK = dict(LIVE_TASK, task_id="qc-mine", session_id=CURRENT_SID, session_title="骨骼肌 QC 跑通")
+OTHER_TASK = dict(LIVE_TASK, task_id="qc-other", title="别人的 ATAC", session_id=OTHER_SID,
+                  session_title="ATAC 比对（另一个会话）", status="queued", pid=None)
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t13_dock_marks_which_session_and_pins_current():
+    """不同会话的后台任务必须标清是谁的：当前会话置顶高亮、别的会话压暗，动它之前先说清是哪个会话。"""
+    mod = _write_module()
+    drive = HARNESS + """
+global.currentSid = %s;                        // 页面里 currentSid 是全局变量
+const P = out.P;
+P.openTaskDock();
+const opened = { open: P.dockOpen(), openClass: out.store['task-dock'].classList.contains('open'),
+                 body: out.store['panel-tasks'].style.display, mss: out.mss() };
+P.renderTaskList({ ok: true, sandbox: 'observe', counts: { running: 1, queued: 1, done: 0, failed: 0 },
+                   tasks: %s });
+const all = out.store['task-list'].innerHTML;
+const badge = out.store['task-nav-badge'].textContent;
+const tip = out.store['nav-tasks'].title;
+const toldMine = P.taskSessionLabel('qc-mine');
+const toldOther = P.taskSessionLabel('qc-other');
+P.toggleTaskScope();
+const scopeTxt = out.store['task-scope-btn'].textContent;
+const scopeVal = P.scope();
+const onlyMine = out.store['task-list'].innerHTML;
+P.renderTaskList({ ok: true, counts: { running: 1, queued: 1, done: 0, failed: 0 }, tasks: [%s] });
+const emptyMine = out.store['task-list'].innerHTML;
+P.closeTaskDock();
+const closed = { open: P.dockOpen(), openClass: out.store['task-dock'].classList.contains('open'),
+                 body: out.store['panel-tasks'].style.display, mss: out.mss() };
+console.log(JSON.stringify({ opened: opened, all: all, badge: badge, tip: tip, toldMine: toldMine,
+                             toldOther: toldOther, scopeTxt: scopeTxt, scopeVal: scopeVal,
+                             onlyMine: onlyMine, emptyMine: emptyMine, closed: closed }));
+""" % (json.dumps(CURRENT_SID), json.dumps([MY_TASK, OTHER_TASK], ensure_ascii=False),
+       json.dumps(OTHER_TASK, ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout, "node 没输出：%s" % r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+
+    # 抽屉开合：开着 → classList 开 + 面板可见 + 走 2s 面板轮询；关着 → 反过来 + 20s 徽标轮询
+    assert got["opened"]["open"] is True and got["opened"]["openClass"] is True
+    assert got["opened"]["body"] == "", "抽屉开了 #panel-tasks 还是 display:none —— 老轮询逻辑会以为面板没开"
+    assert 2000 in got["opened"]["mss"], "抽屉开着没起面板轮询：%s" % got["opened"]["mss"]
+    assert got["closed"]["open"] is False and got["closed"]["openClass"] is False
+    assert got["closed"]["body"] == "none"
+    assert got["closed"]["mss"] == [20000], "抽屉关了要只剩 20s 的徽标轮询，实际 %s" % got["closed"]["mss"]
+
+    # 会话标清楚：当前会话在前、别的会话在后，别的会话卡片压暗
+    allh = got["all"]
+    assert "💬 当前会话" in allh and "骨骼肌 QC 跑通" in allh
+    assert "💬 别的会话" in allh and "ATAC 比对（另一个会话）" in allh
+    assert allh.index("💬 当前会话") < allh.index("💬 别的会话"), "当前会话没排到最前"
+    assert "task-row other" in allh, "别的会话的卡片没压暗 —— 用户分不出哪条是自己的"
+    assert allh.index("task-row other") > allh.index("💬 别的会话")
+    assert "task-row other" not in allh[:allh.index("💬 别的会话")], "当前会话的卡片不该被压暗"
+    assert "qc-other" in allh and "qc-mine" in allh, "两个会话的任务都得看得见（不藏）"
+
+    # 顶栏徽标/提示不能骗人
+    assert "🏃1" in got["badge"] and "⏳1" in got["badge"], "徽标没显示在跑/在排：%r" % got["badge"]
+    assert "跑 1" in got["tip"] and "排队 1" in got["tip"]
+
+    # 动别的会话的任务之前必须知道是谁的
+    assert got["toldMine"] == "", "自己的任务不该弹跨会话警告：%r" % got["toldMine"]
+    assert "不是当前会话" in got["toldOther"] and "ATAC 比对（另一个会话）" in got["toldOther"]
+
+    # 只看当前会话
+    assert got["scopeVal"] == "current" and "只看当前会话" in got["scopeTxt"]
+    assert "qc-mine" in got["onlyMine"] and "qc-other" not in got["onlyMine"], "「只看当前会话」没生效"
+    assert "切到「全部会话」" in got["emptyMine"], "自己没任务时要指路，不能一片空白"
+
+# T13 边界（极端输入不能把抽屉搞崩 / 不能漏标会话）
+def test_t13_edge_cases_no_sid_injection_and_many_sessions():
+    """没会话 id、标题里带 HTML、五十个会话、当前会话未知 —— 都得稳。"""
+    mod = _write_module()
+    evil = dict(LIVE_TASK, task_id="qc-evil", session_id="memomics-evil",
+                session_title="<img src=x onerror=alert(1)>会话名", status="done")
+    orphan = dict(LIVE_TASK, task_id="qc-orphan", session_id="", session_title="", status="done")
+    many = [dict(LIVE_TASK, task_id="qc-%02d" % i, session_id="memomics-s%02d" % i,
+                 session_title="会话 %02d" % i, status="done") for i in range(50)]
+    drive = HARNESS + """
+const P = out.P;
+const payload = { ok: true, counts: { running: 0, queued: 0, done: 52, failed: 0 },
+                  tasks: %s };
+// 1) 有当前会话
+global.currentSid = 'memomics-s07';
+P.renderTaskList(payload);
+const withSid = out.store['task-list'].innerHTML;
+const badge = out.store['task-nav-badge'].textContent;
+const tip = out.store['nav-tasks'].title;
+// 2) 当前会话未知（比如刚打开页面还没选中会话）：不许把任务藏起来
+global.currentSid = null;
+P.renderTaskList(payload);
+const noSid = out.store['task-list'].innerHTML;
+// 3) 筛选「只看当前会话」但当前会话未知：退化成全看，不能白屏
+P.toggleTaskScope();
+P.renderTaskList(payload);
+const noSidFiltered = out.store['task-list'].innerHTML;
+P.renderTaskList({ ok: true, counts: { running: 0 }, tasks: [] });
+const emptyAll = out.store['task-list'].innerHTML;
+console.log(JSON.stringify({ withSid: withSid, noSid: noSid, noSidFiltered: noSidFiltered,
+                             emptyAll: emptyAll, badge: badge, tip: tip }));
+""" % json.dumps([evil, orphan] + many, ensure_ascii=False)
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    h = got["withSid"]
+    # 会话名里的 HTML 必须被转义（会话名来自用户输入，不能当 HTML 塞进抽屉）
+    assert "<img src=x onerror=alert(1)>" not in h, "会话名没转义 —— 有注入风险"
+    assert "&lt;img src=x onerror=alert(1)&gt;" in h
+    # 没有会话 id 的任务归到"未知会话"，绝不能算成"当前会话"
+    assert "未知会话" in h
+    assert h.index("未知会话") > h.index("💬 当前会话")
+    # 五十个会话都分组渲染出来，且当前会话（s07）在别的会话前面
+    assert "会话 49" in h and "会话 00" in h
+    assert h.index("会话 07") < h.index("会话 00"), "当前会话没排到最前"
+    # 当前会话未知：两条任务照样看得见，不因为它没归组就消失
+    assert "qc-evil" in got["noSid"] and "qc-orphan" in got["noSid"]
+    # 当前会话未知 + 「只看当前会话」：退化成全看，不能白屏
+    assert "qc-evil" in got["noSidFiltered"] and "还没有后台任务" not in got["noSidFiltered"]
+    # 真的没任务时给的是"还没有"，不是报错
+    assert "还没有后台任务" in got["emptyAll"]
+    # 全闲且有失败时才用 ❌ 顶班；这里 done=52 没有失败 -> 徽标空
+    assert got["badge"] == "", "没在跑没排队没失败时徽标应该空着：%r" % got["badge"]
+    assert "跑 0" in got["tip"]
+
+
