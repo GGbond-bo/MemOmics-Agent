@@ -9950,6 +9950,68 @@ def _tasks_fingerprint():
     return (count, round(latest, 3), total)
 
 
+def _live_session_cards(limit: int = 20) -> list:
+    """正在跑的会话（只读快照）。
+
+    现场：用户点开「后台任务」看到空的 —— 因为后台任务契约只记录显式用
+    task_run 包装的活儿，而用户真正在等的是"哪个会话正在跑分析"。
+    这里把活着的会话也列出来（不伪造状态，字段全部来自运行时）：
+      在干什么（最近一次工具）、跑了多久、有没有卡住（工具 3 分钟没动静）、
+      计划做到第几步（session["todos"]）、占了多少内存。
+    """
+    out = []
+    try:
+        sessions = list(_sessions.values())
+    except Exception:
+        return out
+    now = time.time()
+    for s in sessions:
+        try:
+            if not (s.get("running_agent") or s.get("running_task") or s.get("bg_running")
+                    or s.get("_user_turn_active")):
+                continue
+            msgs = s.get("messages") or []
+            if msgs:
+                ask = (msgs[0].get("content") or msgs[0].get("text") or "")
+            else:
+                ask = s.get("_first_msg") or ""
+            todos = [t for t in (s.get("todos") or []) if isinstance(t, dict)]
+            doing = [t for t in todos if t.get("status") == "in_progress"]
+            pending = [t for t in todos if t.get("status") == "pending"]
+            live_tool = s.get("_live_tool") or ""
+            tool_ts = s.get("_live_tool_ts") or 0
+            proc = {}
+            try:
+                hist = s.get("_proc_hist") or []
+                if hist and hist[-1][1]:
+                    _pid, _cpu, _io, _rss = hist[-1][1][0]
+                    proc = {"pid": _pid, "cpu_s": round(_cpu, 1), "rss_mb": round(_rss / 1048576.0, 0)}
+            except Exception:
+                proc = {}
+            start = s.get("_turn_start_ts") or 0
+            out.append({
+                "sid": s.get("id") or "",
+                "title": s.get("title") or "",
+                "ask": (ask or "").replace("\n", " ")[:110],
+                "msg_count": len(msgs) if s.get("_messages_loaded", True) else int(s.get("_msg_count") or 0),
+                "last_active": s.get("last_active") or s.get("created") or "",
+                "elapsed_sec": int(now - start) if start else None,
+                "last_tool": live_tool,
+                "tool_age_sec": int(now - tool_ts) if tool_ts else None,
+                "stalled": bool(live_tool) and bool(tool_ts) and (now - tool_ts) > 180,
+                "todos_total": len(todos),
+                "todos_done": sum(1 for t in todos if t.get("status") == "completed"),
+                "doing": (doing[0].get("title") or "")[:110] if doing else "",
+                "next": (pending[0].get("title") or "")[:110] if pending else "",
+                "bg_running": bool(s.get("bg_running")),
+                "proc": proc or None,
+            })
+        except Exception:
+            continue
+    out.sort(key=lambda x: (x.get("last_active") or ""), reverse=True)
+    return out[:limit]
+
+
 def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
                    refresh: int = 1) -> dict:
     """任务列表载荷 —— HTTP 路由与 WS 推送共用一份，免得两边漂移。"""
@@ -9975,7 +10037,13 @@ def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
     for d in items:
         st = d.get("status") or "unknown"
         counts[st] = counts.get(st, 0) + 1
+    # 用户点开「后台任务」要看到的是"谁在跑" —— 契约任务之外，把活着的会话也带上。
+    # 已经用自己的任务行显示过的会话不重复列（免得同一条会话出现两次）。
+    busy_sids = {d.get("session_id") or "" for d in items
+                 if (d.get("status") or "") in tuple(tr.LIVE_STATES)}
+    live = [c for c in _live_session_cards() if c.get("sid") and c.get("sid") not in busy_sids]
     return {"ok": True, "tasks": [_task_card(d, history, retries) for d in items], "counts": counts,
+            "live_sessions": live, "live_count": len(live),
             "active": counts.get("running", 0) + counts.get("cancelling", 0),
             "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
             "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),

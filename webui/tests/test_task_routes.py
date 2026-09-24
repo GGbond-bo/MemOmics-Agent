@@ -1099,6 +1099,86 @@ def test_m10_deleted_task_is_not_resurrected_by_pending_retry(client, tr, tasks_
     assert len(called) == 1
 
 
+# ------------------------------------------- N 会话级"正在跑"（2026-09-24 用户实测反馈）
+# 用户原话：「后台任务那里看不到后台正在运行的任务，也无法点击」。
+# 实测：/api/tasks 返回 tasks=[] / counts={}，而 /api/sessions 里有 5 条 is_running=true——
+# 面板只认 task_run 契约，agent 没用契约时用户就一片空白。所以载荷必须补一份
+# 只读的"活会话"快照（在跑什么、跑了多久、计划第几步、占多少内存），且不许和任务行重复。
+def _live_session(**kw):
+    s = {"id": "memomics-live01", "title": "骨骼肌 QC", "created": "2026-09-24 16:00:00",
+         "last_active": "2026-09-24 16:20:00",
+         "messages": [{"role": "user", "content": "帮我看下这批数据的质控"}],
+         "running_agent": object(), "bg_running": False,
+         "todos": [{"id": "1", "title": "按样本汇总 QC", "status": "in_progress"},
+                   {"id": "2", "title": "聚类", "status": "pending"},
+                   {"id": "3", "title": "注释", "status": "completed"}],
+         "_turn_start_ts": time.time() - 321, "_live_tool": "execute_r",
+         "_live_tool_ts": time.time() - 12, "_proc_hist": []}
+    s.update(kw)
+    return s
 
 
+def test_n1_idle_sessions_never_show_up_as_running(client, tr, tasks_dir, monkeypatch):
+    """闲着的会话不许冒充"正在跑" —— 否则面板天天挂着一排假进度。"""
+    tr.TASKS_DIR = tasks_dir
+    monkeypatch.setattr(server, "_sessions", {
+        "memomics-idle": {"id": "memomics-idle", "title": "闲着", "created": "2026-09-24 16:00:00",
+                          "last_active": "2026-09-24 16:01:00", "messages": []},
+        "memomics-null": {"id": "memomics-null"},
+    })
+    d = client.get("/api/tasks?limit=50&refresh=0").json()
+    assert d["ok"] is True
+    assert d["tasks"] == []
+    assert d["live_sessions"] == [], d["live_sessions"]
+    assert d["live_count"] == 0
+
+
+def test_n2_running_session_shows_what_it_is_doing(client, tr, tasks_dir, monkeypatch):
+    """在跑的会话：说得出现在干什么、跑了多久、计划第几步、吃多少内存。"""
+    tr.TASKS_DIR = tasks_dir
+    monkeypatch.setattr(server, "_sessions", {"memomics-live01": _live_session()})
+    d = client.get("/api/tasks?limit=50&refresh=0").json()
+    assert d["live_count"] == 1, d
+    one = d["live_sessions"][0]
+    assert one["sid"] == "memomics-live01" and one["title"] == "骨骼肌 QC"
+    assert one["last_tool"] == "execute_r" and one["tool_age_sec"] >= 10
+    assert one["todos_total"] == 3 and one["todos_done"] == 1, one
+    assert one["doing"] == "按样本汇总 QC" and one["next"] == "聚类"
+    assert one["elapsed_sec"] >= 320
+    assert "质控" in one["ask"]
+    assert one["stalled"] is False
+
+
+def test_n3_stalled_and_odd_sessions_do_not_break_the_list(client, tr, tasks_dir, monkeypatch):
+    """工具 3 分钟没动静要标卡住；字段缺失/爆量也不许把整个列表带崩。"""
+    tr.TASKS_DIR = tasks_dir
+    monkeypatch.setattr(server, "_sessions", {
+        "memomics-stuck": _live_session(id="memomics-stuck", _live_tool_ts=time.time() - 400),
+        "memomics-nofield": {"id": "memomics-nofield", "running_agent": object()},
+        "memomics-fat": _live_session(id="memomics-fat", title="x" * 4000,
+                                      messages=[{"role": "user", "content": "y" * 4000}]),
+        "memomics-bad": "这不是字典",
+    })
+    d = client.get("/api/tasks?limit=50&refresh=0").json()
+    assert d["live_count"] == 3, [x["sid"] for x in d["live_sessions"]]
+    by = {x["sid"]: x for x in d["live_sessions"]}
+    assert by["memomics-stuck"]["stalled"] is True
+    assert by["memomics-nofield"]["elapsed_sec"] is None
+    assert len(by["memomics-fat"]["title"]) <= 4000 and len(by["memomics-fat"]["ask"]) <= 110
+
+
+def test_n4_session_with_its_own_live_task_is_not_listed_twice(client, tr, tasks_dir, monkeypatch):
+    """同一会话既有契约任务又在跑：只留任务那行（能看日志/取消），别画两遍。"""
+    tr.TASKS_DIR = tasks_dir
+    t = _make(tr, tasks_dir, title="契约在跑", session_id="memomics-live01")
+    raw = json.load(open(os.path.join(tasks_dir, t.task_id + ".json"), encoding="utf-8"))
+    raw["status"] = "running"
+    raw["pid"] = os.getpid()
+    raw["alive"] = True
+    json.dump(raw, open(os.path.join(tasks_dir, t.task_id + ".json"), "w", encoding="utf-8"),
+              ensure_ascii=False)
+    monkeypatch.setattr(server, "_sessions", {"memomics-live01": _live_session()})
+    d = client.get("/api/tasks?limit=50&refresh=0").json()
+    assert any(x["task_id"] == t.task_id and x["status"] == "running" for x in d["tasks"]), d["tasks"]
+    assert d["live_count"] == 0, [x["sid"] for x in d["live_sessions"]]
 

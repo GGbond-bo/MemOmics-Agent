@@ -40,7 +40,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, taskStatusTone: taskStatusTone, taskStatusText: taskStatusText, taskHeroLine: taskHeroLine, taskCoreParams: taskCoreParams, taskFoldToggle: taskFoldToggle, taskRowHtml: taskRowHtml, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, taskStatusTone: taskStatusTone, taskStatusText: taskStatusText, taskHeroLine: taskHeroLine, taskCoreParams: taskCoreParams, taskFoldToggle: taskFoldToggle, taskRowHtml: taskRowHtml, liveSectionHtml: liveSectionHtml, liveSessionRowHtml: liveSessionRowHtml, openLiveSession: openLiveSession, bindTaskRowClicks: bindTaskRowClicks, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -138,7 +138,7 @@ def test_panel_mounted_in_shell():
         "function toggleTaskScope()",
         "function refreshTaskBadge()",
         "function startTaskBadgePoll()",
-        "function taskBadge(c)",
+        "function taskBadge(c, liveN)",
         "function taskRowHtml(t, mine)",
         "function taskSessionLabel(id)",
         "memomics-task-scope",
@@ -890,6 +890,69 @@ console.log(JSON.stringify(res));
     # 全空字段：不崩，且说得出"正在跑"之外的中断结论
     n = got["nulls"]["html"]
     assert "⚠️ 中断" in n and "进程没了（中断）" in n
+
+# ------------------------------------------- T18 会话级"正在跑"（2026-09-24 用户实测反馈）
+# 用户原话：「后台任务那里看不到后台正在运行的任务，也无法点击」——
+# 机器上真有会话在跑分析（会话活的，但没有走 task_run 契约），面板却是空的。
+# 契约任务之外必须把活着的会话画出来，并且点得动（切到那条会话看进度）。
+LIVE_SESSION = {
+    "sid": "memomics-live01", "title": "骨骼肌 QC", "ask": "帮我看下这批数据的质控",
+    "msg_count": 3, "last_active": "2026-09-24 16:20:00", "elapsed_sec": 725,
+    "last_tool": "execute_r", "tool_age_sec": 12, "stalled": False,
+    "todos_total": 6, "todos_done": 2, "doing": "按样本汇总 QC 指标", "next": "聚类",
+    "bg_running": False, "proc": {"pid": 12345, "rss_mb": 812},
+}
+
+
+def test_t18_running_sessions_are_visible_and_clickable():
+    """活会话要看得见、点得动；没活会话时不许冒空壳。"""
+    html = _html()
+    assert "d.live_sessions" in html, "面板没读服务端的活会话字段"
+    assert "data-live-sid" in html and "openLiveSession" in html, "活会话行没接点击"
+    assert "querySelectorAll('.task-live-row')" in html, "活会话行没绑定点击"
+    # 活会话行不能混进 .task-row：任务行的点击绑定会把 onclick 抢成 openTaskDetail，
+    # 而 openTaskDetail 对会话 id 只会 404 —— 点了没反应就是这么来的。
+    assert 'class="task-live-row"' in html, "活会话行混了 task-row 的 class"
+    if not NODE:
+        pytest.skip("本机没有 node，跳过页面 JS 实测")
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskList({ tasks: [], counts: {}, ok: true, live_sessions: [%s] });
+console.log(JSON.stringify({ html: out.store['task-list'].innerHTML, counts: out.store['task-counts'].textContent }));
+""" % json.dumps(LIVE_SESSION, ensure_ascii=False)
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    h = got["html"]
+    for token in ["memomics-live01", "骨骼肌 QC", "已跑 12m5s", "在做 execute_r", "计划 2/6 步",
+                  "PID 12345", "812 MB", "当前步骤：按样本汇总 QC 指标", "分析进行中", "data-live-sid"]:
+        assert token in h, "面板里看不到 %s" % token
+    assert "还没有后台任务" not in h, "有会话在跑，却提示「还没有后台任务」"
+    assert "会话进行中 1" in got["counts"], got["counts"]
+
+    stuck = dict(LIVE_SESSION)
+    stuck["stalled"] = True
+    stuck["tool_age_sec"] = 400
+    stuck["title"] = "<script>alert(1)</script>"
+    drive2 = HARNESS + """
+const P = out.P;
+console.log(JSON.stringify({ row: P.liveSessionRowHtml(%s) }));
+""" % json.dumps(stuck, ensure_ascii=False)
+    r2 = _run_node(drive2, mod)
+    assert r2.returncode == 0, r2.stderr
+    row = json.loads(r2.stdout.strip().splitlines()[-1])["row"]
+    assert "没动静" in row, "卡住的会话没标出来"
+    assert "<script>alert(1)</script>" not in row and "&lt;script&gt;" in row, "标题没转义"
+
+    drive3 = HARNESS + """
+const P = out.P;
+console.log(JSON.stringify({ a: P.liveSectionHtml([]), b: P.liveSectionHtml(undefined) }));
+"""
+    r3 = _run_node(drive3, mod)
+    got3 = json.loads(r3.stdout.strip().splitlines()[-1])
+    assert got3["a"] == "" and got3["b"] == "", "没活会话却画了个空分组"
+
 
 
 

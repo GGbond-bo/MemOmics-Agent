@@ -7522,25 +7522,29 @@ function refreshTaskBadge() {
   fetch('/api/tasks?limit=100&refresh=1').then(function(r) { return r.json(); }).then(function(d) {
     if (!d || !d.ok) return;
     if (d.api_token) _taskState.token = d.api_token;
-    taskBadge(d.counts || {});
+    taskBadge(d.counts || {}, (d.live_sessions || []).length);
     if (_taskDockOpen) renderTaskList(d);
   }).catch(function() {});
 }
 
-function taskBadge(c) {
+function taskBadge(c, liveN) {
   var el = document.getElementById('task-nav-badge');
   if (!el) return;
+  c = c || {};
+  var live = Number(liveN || 0);
   var run = (c.running || 0) + (c.cancelling || 0), wait = (c.queued || 0), bad = (c.failed || 0);
+  var busy = run + live;                 // 顶栏徽标 = 任务在跑 + 会话在跑（用户只关心"机器还在忙"）
   var bits = [];
-  if (run) bits.push('🏃' + run);
+  if (busy) bits.push('🏃' + busy);
   if (wait) bits.push('⏳' + wait);
-  if (!run && !wait && bad) bits.push('❌' + bad);
+  if (!busy && !wait && bad) bits.push('❌' + bad);
   el.textContent = bits.length ? (' ' + bits.join(' ')) : '';
-  el.className = 'chat-nav-badge' + (run ? ' live' : '');
+  el.className = 'chat-nav-badge' + (busy ? ' live' : '');
   var chip = document.getElementById('nav-tasks');
   if (chip) {
-    chip.title = '后台任务（跨会话）：跑 ' + run + ' · 排队 ' + wait + ' · 完成 ' + (c.done || 0) +
-                 ' · 失败 ' + bad + ' · 共 ' + (Object.keys(c).reduce(function(a, k) { return a + c[k]; }, 0)) + ' 个';
+    chip.title = '后台任务（跨会话）：跑 ' + run + ' · 会话进行中 ' + live + ' · 排队 ' + wait +
+                 ' · 完成 ' + (c.done || 0) + ' · 失败 ' + bad + ' · 共 ' +
+                 (Object.keys(c).reduce(function(a, k) { return a + c[k]; }, 0)) + ' 个任务';
   }
 }
 
@@ -7561,17 +7565,70 @@ if (typeof document !== 'undefined' && document.getElementById && document.addEv
   if (document.getElementById('task-nav-badge')) startTaskBadgePoll();
 }
 
+// === 会话级"正在跑"（2026-09-24 用户实测反馈）===
+// 「后台任务」点开是空的，可机器上明明有会话在跑分析 —— 契约任务只记录用 task_run
+// 包装过的活儿。这里把活着的会话也画成一行：点一下就切到那个会话看它跑什么。
+function liveSectionHtml(live) {
+  if (!live || !live.length) return '';
+  var h = '<div class="task-group current"><div class="task-group-head">🏃 正在跑的会话：' +
+          live.length + ' 个（点一下切过去看）</div>';
+  live.forEach(function(s) { h += liveSessionRowHtml(s); });
+  return h + '</div>';
+}
+
+function liveSessionRowHtml(s) {
+  s = s || {};
+  var bits = [];
+  if (s.elapsed_sec !== null && s.elapsed_sec !== undefined) bits.push('已跑 ' + taskFmtSec(s.elapsed_sec));
+  if (s.last_tool) {
+    bits.push('在做 ' + s.last_tool + ((s.tool_age_sec !== null && s.tool_age_sec !== undefined)
+      ? '（' + taskFmtSec(s.tool_age_sec) + '前）' : ''));
+  }
+  if (s.todos_total) bits.push('计划 ' + (s.todos_done || 0) + '/' + s.todos_total + ' 步');
+  var proc = s.proc || {};
+  if (proc.pid) bits.push('PID ' + proc.pid + (proc.rss_mb ? ' · ' + proc.rss_mb + ' MB' : ''));
+  // 只给 .task-live-row：任务行的点击绑定认 .task-row，别让两边抢同一行的 onclick
+  var h = '<div class="task-live-row" data-live-sid="' + escapeHtml(s.sid || '') + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;border-left:3px solid var(--primary);margin-bottom:6px;">';
+  h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
+  h += '<span style="font-size:13px;font-weight:600;">🏃 ' + escapeHtml(s.title || s.sid || '会话') + '</span>';
+  h += '<span style="font-size:11px;color:var(--primary);font-weight:600;white-space:nowrap;">分析进行中</span></div>';
+  if (s.ask) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(s.ask) + '</div>';
+  if (bits.length) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(bits.join(' · ')) + '</div>';
+  if (s.doing) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">当前步骤：' + escapeHtml(s.doing) + '</div>';
+  if (s.stalled) h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 最近一次工具调用超过 3 分钟没动静（可能卡住或已崩）</div>';
+  h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(String(s.sid || '').slice(0, 18)) +
+       ' · ' + (s.msg_count || 0) + ' 条消息</div></div>';
+  return h;
+}
+
+function bindTaskRowClicks(box) {
+  if (!box || !box.querySelectorAll) return;
+  var lives = box.querySelectorAll('.task-live-row');
+  for (var i = 0; i < lives.length; i++) {
+    lives[i].onclick = (function(el) { return function() { openLiveSession(el.getAttribute('data-live-sid')); }; })(lives[i]);
+  }
+}
+
+function openLiveSession(sid) {
+  try { closeTaskDock(); } catch (e) {}
+  if (!sid) return;
+  try { if (typeof switchSession === 'function') { switchSession(sid); return; } } catch (e) {}
+  try { if (typeof showToast === 'function') showToast('会话 ' + sid + ' 正在跑，去左侧会话列表点它'); } catch (e) {}
+}
+
 function renderTaskList(d) {
   _taskLast = d;                   // 切「只看当前会话」时不用再求一次接口
   var box = document.getElementById('task-list');
   if (!box) return;
   var all = d.tasks || [];
+  // 用户点开「后台任务」最想看到的是"现在谁在跑" —— 契约任务之外，服务端把活着的会话也带上了
+  var live = d.live_sessions || [];
   var c = d.counts || {};
   var countsEl = document.getElementById('task-counts');
   if (countsEl) {
-    countsEl.textContent = '运行 ' + (c.running || 0) + ' · 排队 ' + (c.queued || 0) + ' · 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) + (d.sandbox ? ' · 沙箱 ' + d.sandbox : '');
+    countsEl.textContent = '运行 ' + (c.running || 0) + ' · 排队 ' + (c.queued || 0) + ' · 完成 ' + (c.done || 0) + ' · 失败 ' + (c.failed || 0) + (live.length ? ' · 会话进行中 ' + live.length : '') + (d.sandbox ? ' · 沙箱 ' + d.sandbox : '');
   }
-  taskBadge(c);
+  taskBadge(c, live.length);
   taskCleanHint(d);
   var tasks = all;
   var mineSid = _taskCurrentSid();
@@ -7579,10 +7636,14 @@ function renderTaskList(d) {
     tasks = all.filter(function(t) { return (t.session_id || '') === mineSid; });
   }
   if (!tasks.length) {
-    box.innerHTML = '<div style="font-size:12px;color:var(--text-light);padding:12px;">' +
-      (_taskScope === 'current'
+    var liveOnly = liveSectionHtml(live);
+    var hint = live.length
+      ? '以上会话正在跑分析（还没走「后台任务」契约：只有用 task_run 包装的脚本/长命令才有 PID、阶段和日志）。'
+      : (_taskScope === 'current'
         ? '当前会话还没有后台任务。切到「全部会话」能看到别的会话在跑什么（当前共 ' + all.length + ' 个）。'
-        : '还没有后台任务。让 Agent 跑个脚本或 CellBender，这里就会出现。') + '</div>';
+        : '还没有后台任务。让 Agent 跑个脚本或 CellBender，这里就会出现。');
+    box.innerHTML = liveOnly + '<div style="font-size:12px;color:var(--text-light);padding:12px;">' + hint + '</div>';
+    bindTaskRowClicks(box);
     return;
   }
   // 按会话分组：当前会话永远排最前，其余按最近有动静排；组标题把"哪个会话"写清楚
@@ -7602,7 +7663,7 @@ function renderTaskList(d) {
     if (a.newest === b.newest) return 0;
     return (a.newest < b.newest) ? 1 : -1;
   });
-  var html = '';
+  var html = liveSectionHtml(live);
   groups.forEach(function(g) {
     var mine = !!(mineSid && g.sid === mineSid);
     var name = g.title || g.sid || '未知会话';
@@ -7614,6 +7675,7 @@ function renderTaskList(d) {
     html += '</div>';
   });
   box.innerHTML = html;
+  bindTaskRowClicks(box);
   var rows = box.querySelectorAll('.task-row');
   for (var i = 0; i < rows.length; i++) {
     rows[i].onclick = (function(el) { return function() { openTaskDetail(el.getAttribute('data-id')); }; })(rows[i]);
