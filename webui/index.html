@@ -12460,7 +12460,7 @@ function renderGoalBar() {
   var goal = _goalBar.goal;
   var todos = _goalBar.todos || [];
   var hasTodo = todos.length > 0;
-  if (!goal && !hasTodo) { bar.classList.remove('visible'); _syncFloatBarOffset(); return; }
+  if (!goal && !hasTodo) { bar.classList.remove('visible'); _syncGoalBarWidth(); _syncFloatBarOffset(); return; }
   bar.classList.add('visible');
   if (!_goalBar.editing) {
     var t = document.getElementById('gb-goal-text');
@@ -12498,6 +12498,7 @@ function renderGoalBar() {
   bar.classList.toggle('collapsed', !!_goalBar.collapsed);
   var tg = document.getElementById('gb-toggle');
   if (tg) tg.textContent = _goalBar.collapsed ? '▸' : '▾';
+  _syncGoalBarWidth();
   _syncFloatBarOffset();
 }
 
@@ -12508,6 +12509,32 @@ function _syncFloatBarOffset() {
   if (!fb) return;
   var gb = document.getElementById('goal-bar');
   fb.style.bottom = (118 + (gb ? gb.offsetHeight : 0)) + 'px';
+}
+
+/** 2026-09-24：目标条宽度对齐输入框（textarea#input）。
+ *  以前写死 max-width:90%，而 .input-row 里输入框两侧还有上传按钮(40px)+间距+发送按钮，
+ *  实测比输入框宽一截。这里直接量输入框的实宽与左边缘，跟着它对齐；
+ *  侧栏/右侧面板/窗口变化由 ResizeObserver 跟随，不在 CSS 里写「按钮宽度」这类魔法数字。
+ *  JS 没跑起来时退回 CSS 的 max-width:90%，不会变全宽。 */
+var _gbWidthObserved = false;
+function _syncGoalBarWidth() {
+  var bar = document.getElementById('goal-bar');
+  var inp = document.getElementById('input');
+  if (!bar || !inp) return;
+  var host = bar.parentElement;
+  if (!host) return;
+  var ir = inp.getBoundingClientRect();
+  if (!ir.width) return;
+  var hr = host.getBoundingClientRect();
+  bar.style.maxWidth = 'none';
+  bar.style.width = ir.width + 'px';
+  bar.style.marginLeft = Math.max(0, Math.round(ir.left - hr.left)) + 'px';
+  bar.style.marginRight = 'auto';
+  if (!_gbWidthObserved && typeof ResizeObserver !== 'undefined') {
+    _gbWidthObserved = true;
+    try { new ResizeObserver(function() { _syncGoalBarWidth(); }).observe(inp); }
+    catch (e) { _gbWidthObserved = false; }
+  }
 }
 
 function toggleGoalBar() { _goalBar.collapsed = !_goalBar.collapsed; renderGoalBar(); }
