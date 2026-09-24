@@ -84,6 +84,53 @@ def _normalize_options(options) -> tuple:
     return labels, rich
 
 
+def _live_server(sid: str = ""):
+    """拿"正在跑的那个" server 模块实例（多个候选时优先认识这个会话的那个）。
+
+    2026-09-24 真机事故（memomics-c8aacf1e / 条目 06b-annot-9000）：生产是
+    `python webui/server.py` 起来的 → 模块名是 __main__，既不是 "server" 也不是
+    "webui.server"。老代码只认这两个名字，找不到就 `import webui.server` —— 那会**再执行一遍
+    模块、造出第二个实例**，它的 _sessions 是空的 → ask_user 明明拿到了 sid，却查不到会话，
+    于是静默返回「无法联系用户（会话不可用）」，意图确认表单永远弹不到前端
+    （铁律 28/35 的"开工前必须弹确认表单"形同虚设）。
+    测试里一直没暴露：conftest 恰好以 "server" 名字加载模块，命中老代码第一分支。
+    """
+    try:
+        import sys as _sys
+    except Exception:  # pragma: no cover
+        return None
+    cands = []
+    for _name in ("server", "webui.server", "__main__"):
+        _m = _sys.modules.get(_name)
+        if _m is not None and hasattr(_m, "_sessions") and hasattr(_m, "_session_emit"):
+            cands.append(_m)
+    for _m in list(_sys.modules.values()):  # 兜底：入口名被改过也在所不惜
+        if _m not in cands and hasattr(_m, "_sessions") and hasattr(_m, "_session_emit"):
+            cands.append(_m)
+    if not cands:
+        return None
+    if sid:
+        for _m in cands:
+            try:
+                if sid in _m._sessions:
+                    return _m
+            except Exception:
+                pass
+    return cands[0]
+
+
+def _unreachable_reason(sid: str, srv) -> str:
+    """把"为什么联系不上用户"写清楚（下次出问题一眼看出是没 sid 还是实例不对）。"""
+    if not sid:
+        return _ui("会话上下文为空（没拿到 sid）", "no session id in context")
+    if srv is None:
+        return _ui("没找到正在运行的 server 模块实例", "running server instance not found")
+    if sid not in getattr(srv, "_sessions", {}):
+        return _ui("server 实例里没有这个会话（实例/入口名不匹配）",
+                   "session not present in the server instance")
+    return _ui("发送时异常", "emit failed")
+
+
 def emit_form_for_session(sess, question: str, options: list = None, multi_select: bool = False,
                           allow_other: bool = True, header: str = "", kind: str = "clarify",
                           arm_gate: bool = True) -> tuple:
@@ -106,12 +153,10 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
     delivered = False
     if sid and q:
         try:
-            # 取已加载的 server 模块实例（conftest 以 "server" 名加载；
-            # `import webui.server` 会重新执行模块 → 新实例、monkeypatch/会话落空）
-            import sys as _sys
-            _server = _sys.modules.get("server") or _sys.modules.get("webui.server")
-            if _server is None:  # pragma: no cover - 常规运行经 webui.server 入口加载
-                import webui.server as _server
+            # 取"正在跑的那个" server 实例：优先认识本会话的那个（见 _live_server 注释里的真机事故）
+            _server = _live_server(sid)
+            if _server is None:
+                raise RuntimeError("没找到正在运行的 server 模块实例")
             if sess:
                 _opt_txt = ""
                 if opts:
@@ -194,24 +239,24 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
         return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
     opts, _rich = _normalize_options(options)
     sid, _rd = _session_context()
+    # 2026-09-24 真机修复：生产入口是 `python webui\server.py`（模块名 __main__），
+    # 老写法只认 "server"/"webui.server"，找不到就 import webui.server → 第二个实例、空 _sessions
+    # → 表单永远弹不出来。现在按"谁认识这个 sid"选实例。
+    _srv = _live_server(sid) if sid else None
     form_id, delivered = "", False
-    if sid:
+    if sid and _srv is not None:
         try:
-            # 取已加载的 server 模块实例（conftest 以 "server" 名加载；
-            # `import webui.server` 会重新执行模块 → 新实例、monkeypatch/会话落空）
-            import sys as _sys
-            _server = _sys.modules.get("server") or _sys.modules.get("webui.server")
-            if _server is None:  # pragma: no cover - 常规运行经 webui.server 入口加载
-                import webui.server as _server
             form_id, delivered = emit_form_for_session(
-                _server._sessions.get(sid), q, options=options, multi_select=multi_select,
+                _srv._sessions.get(sid), q, options=options, multi_select=multi_select,
                 allow_other=allow_other, header=header, kind=kind)
         except Exception as e:
             logger.warning(f"[ask_user] 发送失败: {e}")
     if not delivered:
+        _why = _unreachable_reason(sid, _srv)
+        logger.warning(f"[ask_user] 表单没能送达用户: {_why} (sid={sid or '空'})")
         return json.dumps({"ok": False,
-                           "error": _ui("无法联系用户（会话不可用），请在回复中直接向用户提问",
-                                        "Cannot reach the user (session unavailable); ask the user directly in your reply")},
+                           "error": _ui("无法联系用户（会话不可用：%s），请在回复中直接向用户提问" % _why,
+                                        "Cannot reach the user (session unavailable: %s); ask the user directly in your reply" % _why)},
                           ensure_ascii=False)
     return json.dumps({
         "ok": True,

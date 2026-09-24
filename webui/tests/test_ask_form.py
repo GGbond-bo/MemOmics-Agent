@@ -217,6 +217,38 @@ def test_ask_user_without_session_reports_failure(monkeypatch):
     out = json.loads(au.ask_user("q?"))
     assert out["ok"] is False and "无法联系用户" in out["error"]
 
+def test_ask_user_finds_server_instance_named_main(ask_env, monkeypatch):
+    """真机事故回归（2026-09-24 / memomics-c8aacf1e）：
+
+    生产入口是 `python webui/server.py` → 模块名变成 __main__。老代码只查
+    sys.modules["server"] / ["webui.server"]，查不到就 `import webui.server` →
+    又造一个实例、_sessions 是空的 → ask_user 静默返回「无法联系用户（会话不可用）」，
+    意图确认表单永远弹不到前端。这条测试把"server 实例挂在别的名字下"这一生产条件固化下来。
+    """
+    import sys
+    import types
+    sid, sess, events = ask_env
+    fake_main = types.ModuleType("__main__")
+    fake_main._sessions = server._sessions          # 同一个会话表
+    fake_main._session_emit = server._session_emit  # 同一个发送口
+    monkeypatch.delitem(sys.modules, "server", raising=False)
+    monkeypatch.delitem(sys.modules, "webui.server", raising=False)
+    monkeypatch.setitem(sys.modules, "__main__", fake_main)
+
+    out = json.loads(au.ask_user("入口名是 __main__ 时还能弹表单吗？", options=["能", "不能"],
+                                 kind="intent"))
+    assert out["ok"] is True, "生产入口名（__main__）下弹不出表单：%s" % out
+    assert [e for e in events if e.get("type") == "ask_form"], "没发出 ask_form 事件"
+
+
+def test_ask_user_error_says_why(monkeypatch):
+    """联系不上用户时要写清原因（没 sid / 没实例 / 实例里没这个会话），别再只说一句不可用。"""
+    monkeypatch.setattr(au, "_session_context", lambda: ("", ""))
+    out = json.loads(au.ask_user("q?"))
+    assert out["ok"] is False
+    assert "无法联系用户" in out["error"] and "会话上下文为空" in out["error"]
+
+
 
 # ==================== C. 答复回流（HTTP + 上下文） ====================
 
