@@ -1,0 +1,21 @@
+{
+  "id": "analysis-output-validity-gates",
+  "name": "分析产出有效性门（Analysis Output Validity Gates）",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "生信流程「跑完 ≠ 结果有效」的产出有效性自证门 + 失败归因（内存 vs 代码）。覆盖静默无效产出（exit 0、日志全 ✓、文件齐全但数值全是垃圾，如 AUCell 矩阵全 0、regulon 基因变单字符）与归因错层（把 dask worker OOM 当代码 bug 反复改）。触发:跑完了/为什么全是0/结果可疑/AUCell全0/产出无效/exit 0 但没结果/FutureCancel",
+  "starting_prompt": "使用 分析产出有效性门（Analysis Output Validity Gates） 进行分析",
+  "source_dir": "skills/bioinformatics/analysis-output-validity-gates",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "output",
+    "validity",
+    "gates"
+  ],
+  "when_to_use": "生信流程「跑完 ≠ 结果有效」的产出有效性自证门 + 失败归因（内存 vs 代码）。覆盖静默无效产出（exit 0、日志全 ✓、文件齐全但数值全是垃圾，如 AUCell 矩阵全 0、regulon 基因变单字符）与归因错层（把 dask worker OOM 当代码 bug 反复改）。触发:跑完了/为什么全是0/结果可疑/AUCell全0/产出无效/exit 0 但没结果/FutureCancel"
+}
