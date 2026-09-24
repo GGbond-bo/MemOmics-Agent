@@ -39,7 +39,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, taskFmtSec: taskFmtSec, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -123,6 +123,13 @@ def test_panel_mounted_in_shell():
         "t.eta_sec",
         "预计还要",
         "t.eta_basis",
+        # T11：任务面板顶部要有资源队列（谁在跑 / 谁在排 / 排第几 / 等了多久）
+        'id="task-queue"',
+        "function renderResources(res)",
+        "'/api/resources'",
+        "⏳ 排队 ",
+        " · 已等 ",
+        "队首已等超 30s",
     ]:
         assert token in html, "index.html 少了挂载点：" + token
     # 面板必须只在任务视图里出现，别的视图的隐藏列表也得带上它
@@ -282,3 +289,36 @@ console.log(JSON.stringify({ html: out.store['task-detail'].innerHTML }));
     assert "面板不读" in h and "安全策略" in h and "D:/out/qc.R" in h
     assert "→ /sess/results/t5_qc_box.png" in h and "4698 B" in h
     assert "文件不存在" in h
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_render_resources_shows_queue_positions():
+    """排队的人要能看见自己排第几、等了多久 —— 空队列也必须说"队列空"。"""
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+const res = { capacity: { cpu_cores: 8, memory_gb: 16.0, gpu_slots: 1 },
+              used: { cpu_cores: 8, memory_gb: 6.0, gpu_slots: 1 },
+              available: { cpu_cores: 0, memory_gb: 10.0, gpu_slots: 0 },
+              queue: { admission: "cooperative_fifo", active: 1, waiting: 2, head_wait_sec: 41.0, max_wait_sec: 41.0 },
+              active: [{ lease_id: "l1", session_id: "memomics-b145cef6", label: "跑 QC <b>", held_sec: 41.0, cpu_cores: 6, memory_gb: 4.0, gpu_slots: 1 }],
+              waiting: [{ session_id: "memomics-aaaa1111", position: 1, label: "ATAC 比对", waited_sec: 41.0, cpu_cores: 2, memory_gb: 2.0, gpu_slots: 0 },
+                        { session_id: "memomics-bbbb2222", position: 2, label: "", waited_sec: 3.0, cpu_cores: 1, memory_gb: 2.0, gpu_slots: 0 }] };
+P.renderResources(res);
+const busy = out.store["task-queue"].innerHTML;
+P.renderResources({ capacity: { cpu_cores: 8, memory_gb: 16.0, gpu_slots: 0 }, used: { cpu_cores: 0, memory_gb: 0.0, gpu_slots: 0 },
+                   queue: { active: 0, waiting: 0, head_wait_sec: 0, max_wait_sec: 0 }, active: [], waiting: [] });
+const idle = out.store["task-queue"].innerHTML;
+console.log(JSON.stringify({ busy: busy, idle: idle }));
+"""
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    busy = got["busy"]
+    for token in ["CPU 8/8 核", "内存 6/16 GB", "GPU 1/1", "运行中 1", "⏳ 排队 2",
+                  "#1", "#2", "ATAC 比对", "已等 41s", "需 2 核/2 GB",
+                  "memomics-aaa", "memomics-bbb", "▶ 跑 QC &lt;b&gt;", "已占用 41s", "队首已等超 30s"]:
+        assert token in busy, "队列条看不到 %s：%s" % (token, busy)
+    assert "<b>" not in busy, "会话标题没转义 —— 有注入风险"
+    idle = got["idle"]
+    assert "队列空" in idle and "排队" not in idle.split("队列空")[1][:20]
+    assert "队首已等超" not in idle

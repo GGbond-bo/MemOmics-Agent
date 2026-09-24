@@ -2986,6 +2986,22 @@ def _session_resource_request(session):
         return ResourceRequest()
 
 
+def _queue_label(session):
+    """资源队列里显示"谁在排队"：会话标题优先，退而求其次用最近一句用户话。"""
+    try:
+        title = str(session.get("title") or "").strip()
+        if title and title not in ("新会话", "New Chat"):
+            return title[:60]
+        for m in reversed(session.get("messages") or []):
+            if isinstance(m, dict) and m.get("role") == "user":
+                txt = " ".join(str(m.get("content") or "").split())
+                if txt:
+                    return txt[:60]
+    except Exception:
+        pass
+    return ""
+
+
 def _register_job_limits(session, req):
     """把 Job Object 硬限制注入会话 terminal 环境（不碰全局 os.environ）"""
     try:
@@ -18447,7 +18463,10 @@ async def ws_endpoint(ws: WebSocket):
                     session["running_agent"] = agent
                     _res_req = _session_resource_request(session)
                     try:
-                        _lease = await asyncio.wait_for(_resource_scheduler.acquire(session["id"], _res_req), timeout=60)
+                        _lease = await asyncio.wait_for(
+                            _resource_scheduler.acquire(session["id"], _res_req,
+                                                        label=_queue_label(session)),
+                            timeout=60)
                     except Exception:
                         # 排队超时/容量不足 → 无租约降级运行（不阻塞聊天）
                         _lease = None

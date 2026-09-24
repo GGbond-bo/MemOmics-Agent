@@ -11,6 +11,8 @@
 - 进视图订阅 WS 推送（服务端只在契约变化时推），切走即退订；没订阅上才退回 2000 ms 轮询
   （订阅成功则把轮询降到 8000 ms 兜底）。轮询只在任务视图里跑，不打扰别的页面。
 - 活任务还能看到**还要多久**：列表状态后面 ` · 还要 4m5s`，详情多一行「预计还要」+ 出处 + 可信度（见 2.2）。
+- 面板**顶部一条资源队列**：`CPU 8/8 核 · 内存 6/16 GB · 运行中 1 · ⏳ 排队 2`，
+  下面逐行列出排队的人（`#1 跑 ATAC · memomics-811918 · 已等 4m5s · 需 2 核/2 GB`），在跑的带 `▶`（见 2.3）。
 
 ## 2. 接口
 
@@ -53,6 +55,25 @@
 没历史又没进度就**不给数**（宁可不显示，也不编一个）；任务结束后 ETA 一律为空。
 时间戳全部按 UTC 解析（契约写的是 `+00:00`）。
 
+### 2.3 排队视图（谁在跑 / 谁在排 / 排第几）
+
+`webui/runtime/resources.py` 的 `ResourceScheduler` 是唯一裁判（协作式 FIFO：每轮对话开始时拿租约、结束归还）。
+`GET /api/resources` 现在把队列讲清楚（**老字段一个没动，全是新增**）：
+
+| 字段 | 含义 |
+| --- | --- |
+| `queue.active` / `queue.waiting` | 在跑几个 / 排了几个 |
+| `queue.head_wait_sec` / `queue.max_wait_sec` | 队首等了多久 / 最久等了多久（秒；面板上超 30s 会标黄提醒容量不够） |
+| `active[].label` / `held_sec` / `acquired_at` | 谁在跑（会话标题，没有就退回最近一句用户话）、占了多久、什么时候拿到的 |
+| `waiting[].position` | 排第几（从 1 数起；严格 FIFO，所以就是真实位次） |
+| `waiting[].label` / `enqueued_at` / `waited_sec` | 谁在排、什么时候开始排、已经等了多久 |
+
+等待/占用时长用**单调时钟**算（改系统时间不影响），时间戳一律 UTC ISO。
+队首不满足就**整队等着**（后到的小请求不插队）—— 这是有意的：面板上「排第几」才可信；
+代价是一个超大请求会挡住后面的人（`test_resources_queue.py::test_d1` 把这个行为钉住了，改策略前先看它）。
+
+要复现排队，把容量压小即可：`MEMOMICS_CPU_CORES=1`、`MEMOMICS_MEMORY_GB=2`（GPU 走 `MEMOMICS_GPU_SLOTS`）；
+不给覆盖就按机器自动探测（CPU = 核数-1，内存 = 可用内存×0.8）。
 ## 3. 契约（memomics/bio_tools/task_run.py）
 
 字段：`task_id/title/type/status/session_id/session_dir/log/pid/started_at/finished_at/duration_sec/
@@ -124,6 +145,30 @@ T5 极端场景实测（真实 R 分析 / 4 组表格 / Europe PMC 文献下载 
 单测：`webui/tests/test_task_eta.py`（12 项：格式化与契约逐值对齐、UTC 解析、历史分组均值、
 兜底、负数钳位、无依据不给数）+ `test_task_routes.py::test_i1..i4`（历史汇总先于状态过滤、
 详情与列表一致、没历史不撒谎、超时不为负）+ 面板 JS 真跑断言 ETA 显示与缺失。
+
+
+### T11 资源队列真机实测（8899 + 临时 8898 限 1 核，2026-09-24）
+
+`E:\release\_t11\queue_verify.py` 14 项断言全过（`T11_QUEUE_RC=0`）：8899 查结构 + 真下发页面；
+排队用临时实例 8898（`MEMOMICS_CPU_CORES=1`、`MEMOMICS_MEMORY_GB=2`）压出来 —— 三个**真会话、真模型轮次**先后发同一句指令。
+
+| 断言 | 实测 |
+| --- | --- |
+| 8899 快照带队列汇总 | `queue{admission,active,waiting,head_wait_sec,max_wait_sec}`，容量 19 核 / 20.8 GB / 1 GPU |
+| 8899 页面真的有队列条 | 实际下发的 HTML（735 631 字节）里有 `id="task-queue"` + `renderResources` + `/api/resources` |
+| 真排队 | 93 个采样点里 77 个 `waiting>0`，最多同时 2 个排队 |
+| 位次与名字 | `#1 只回复：B收到`（memomics-bc06085d）· `#2 只回复：C收到`（memomics-81191800） |
+| 等待在真涨 | 同一会话 `waited_sec` 0.7 → 26.0 s（另一路 0.0 → 31.5 s） |
+| 占用时长 | `active[].held_sec` 最大 27.6 s |
+| 容量没被突破 | 全程 `max(active)==1`（1 核容量） |
+| 排队的真进来了 | 收尾样本 `active=0 waiting=0`（三个会话全部跑完） |
+| 临时会话清理 | 三个 `results/memomics-*` 跑完即删，8898 临时实例已退出 |
+
+单测：`webui/tests/test_resources_queue.py`（10 项：env 覆盖容量、位次/名字/等待时长、取消排队不留幽灵、
+取消队首不卡死、严格 FIFO 不插队、超容量不留队列、GPU 排队、老字段不丢）
++ `test_task_panel_ui.py::test_render_resources_shows_queue_positions`（node 假 DOM 真跑渲染：
+`#1/#2`、`已等 41s`、`队首已等超 30s`、会话标题转义）。
+回归：全量 `scripts/check_skills_gate.py` 774 例通过 / 跳过 2。
 
 回归测试：`webui/tests/test_task_ws.py`（订阅协议 / 退订摘连接 / 指纹 / 失败不撒谎）+
 `test_task_routes.py::test_h1`（穿越三路由）、`test_h2`（越界脚本不读）。

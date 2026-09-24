@@ -5,9 +5,16 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import time
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from typing import Any
+
+
+def _utc_now() -> str:
+    """时间戳一律 UTC ISO —— 和任务契约同一个写法（面板按同一套解析）"""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 @dataclass(frozen=True)
@@ -19,6 +26,13 @@ class ResourceCapacity:
     @classmethod
     def detect(cls) -> "ResourceCapacity":
         cpu = max(1, (os.cpu_count() or 2) - 1)
+        # 显式覆盖：压小容量好复现排队（运维也能主动限流），不给就按机器来
+        configured_cpu = os.environ.get("MEMOMICS_CPU_CORES")
+        if configured_cpu:
+            try:
+                cpu = max(1, int(configured_cpu))
+            except ValueError:
+                pass
         memory = 8.0
         try:
             import psutil
@@ -29,6 +43,12 @@ class ResourceCapacity:
             )
         except Exception:
             pass
+        configured_memory = os.environ.get("MEMOMICS_MEMORY_GB")
+        if configured_memory:
+            try:
+                memory = max(0.5, float(configured_memory))
+            except ValueError:
+                pass
         configured_gpu_slots = os.environ.get("MEMOMICS_GPU_SLOTS")
         if configured_gpu_slots is not None:
             try:
@@ -62,16 +82,35 @@ class ResourceLease:
     lease_id: str
     session_id: str
     request: ResourceRequest
+    label: str = ""
+    acquired_at: str = ""
+    acquired_monotonic: float = 0.0
+
+
+@dataclass(frozen=True)
+class QueuedWaiter:
+    """排队记录：面板要能说清"谁在排、排第几、等了多久"。"""
+
+    ticket: str
+    session_id: str
+    request: ResourceRequest
+    label: str = ""
+    enqueued_at: str = ""
+    enqueued_monotonic: float = 0.0
 
 
 class ResourceScheduler:
-    """FIFO admission controller shared by all analysis sessions."""
+    """FIFO admission controller shared by all analysis sessions.
+
+    严格 FIFO：队首不满足就**整队等着**，后到的小请求不插队 —— 所以面板上的
+    "排第几"就是真实位次（这也意味着一个超大请求会挡住后面的人，是刻意保留的行为）。
+    """
 
     def __init__(self, capacity: ResourceCapacity) -> None:
         self.capacity = capacity
         self._condition = asyncio.Condition()
         self._active: dict[str, ResourceLease] = {}
-        self._waiting: list[tuple[str, str, ResourceRequest]] = []
+        self._waiting: list[QueuedWaiter] = []
 
     def _used(self) -> ResourceRequest:
         leases = self._active.values()
@@ -89,25 +128,40 @@ class ResourceScheduler:
             and used.gpu_slots + request.gpu_slots <= self.capacity.gpu_slots
         )
 
-    async def acquire(self, session_id: str, request: ResourceRequest) -> ResourceLease:
+    async def acquire(self, session_id: str, request: ResourceRequest, label: str = "") -> ResourceLease:
         if not session_id:
             raise ValueError("session_id is required")
         request.validate(self.capacity)
         ticket = uuid.uuid4().hex
-        waiter = (ticket, session_id, request)
+        waiter = QueuedWaiter(
+            ticket=ticket,
+            session_id=session_id,
+            request=request,
+            label=str(label or "")[:80],
+            enqueued_at=_utc_now(),
+            enqueued_monotonic=time.monotonic(),
+        )
         async with self._condition:
             self._waiting.append(waiter)
             try:
                 await self._condition.wait_for(
-                    lambda: self._waiting[0][0] == ticket and self._fits(request)
+                    lambda: self._waiting[0].ticket == ticket and self._fits(request)
                 )
                 self._waiting.pop(0)
-                lease = ResourceLease(ticket, session_id, request)
+                lease = ResourceLease(
+                    ticket,
+                    session_id,
+                    request,
+                    waiter.label,
+                    _utc_now(),
+                    time.monotonic(),
+                )
                 self._active[ticket] = lease
                 self._condition.notify_all()
                 return lease
             except BaseException:
-                self._waiting[:] = [entry for entry in self._waiting if entry[0] != ticket]
+                # 排队中途被取消（超时/断线）也要摘干净：队列里不留幽灵
+                self._waiting[:] = [entry for entry in self._waiting if entry.ticket != ticket]
                 self._condition.notify_all()
                 raise
 
@@ -120,6 +174,29 @@ class ResourceScheduler:
 
     def snapshot(self) -> dict[str, Any]:
         used = self._used()
+        now = time.monotonic()
+        waiting = [
+            {
+                "session_id": entry.session_id,
+                "position": idx + 1,
+                "label": entry.label,
+                "enqueued_at": entry.enqueued_at,
+                "waited_sec": round(max(0.0, now - entry.enqueued_monotonic), 1),
+                **asdict(entry.request),
+            }
+            for idx, entry in enumerate(self._waiting)
+        ]
+        active = [
+            {
+                "lease_id": lease.lease_id,
+                "session_id": lease.session_id,
+                "label": lease.label,
+                "acquired_at": lease.acquired_at,
+                "held_sec": round(max(0.0, now - lease.acquired_monotonic), 1),
+                **asdict(lease.request),
+            }
+            for lease in self._active.values()
+        ]
         return {
             "enforcement": {
                 "admission": "cooperative_fifo",
@@ -134,16 +211,13 @@ class ResourceScheduler:
                 "memory_gb": round(self.capacity.memory_gb - used.memory_gb, 2),
                 "gpu_slots": self.capacity.gpu_slots - used.gpu_slots,
             },
-            "active": [
-                {
-                    "lease_id": lease.lease_id,
-                    "session_id": lease.session_id,
-                    **asdict(lease.request),
-                }
-                for lease in self._active.values()
-            ],
-            "waiting": [
-                {"session_id": session_id, **asdict(request)}
-                for _, session_id, request in self._waiting
-            ],
+            "queue": {
+                "admission": "cooperative_fifo",
+                "active": len(active),
+                "waiting": len(waiting),
+                "head_wait_sec": waiting[0]["waited_sec"] if waiting else 0.0,
+                "max_wait_sec": max([w["waited_sec"] for w in waiting], default=0.0),
+            },
+            "active": active,
+            "waiting": waiting,
         }
