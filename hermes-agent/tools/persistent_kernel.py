@@ -546,6 +546,40 @@ class _SessionKernelPool(KernelPool):
         except Exception:
             pass  # 环境文件缺失/格式异常不阻塞执行，worker 用 R 默认库
         if out:
+            # 2026-09-24 真机事故（11c-go-9000 / sid memomics-6cb793a7）：这里只注入
+            # environment.json 的 lib_user（E:/R-libs/R-4.5.3）就 return 了，于是持久 kernel
+            # 的 .libPaths() 只剩「主力库 + R 自带」两项 —— clusterProfiler 这类装在用户自建库
+            # （C:\Users\23136\R\R-4.5.3-library）里的包，在 execute_r 里一律
+            # "there is no package called 'clusterProfiler'"；而同一个包用 check_env 走的
+            # memomics._r_lib_env()（候选库 11 个）明明能找到。
+            # docs/ENVIRONMENT_MANAGEMENT.md 说两处"完全同一个 R_LIBS"，实测并不是。
+            # 修法：把领域层那份候选库并进来，但**只收与本机 R 版本匹配的**——
+            # 混进 4.4.2/4.6.1 的库正是 14-cellchat 那次「程序包'sp'是用R版本4.4.3 来建造的」的成因。
+            try:
+                from memomics.bio_tools.env_check import _r_lib_env as _domain_lib_env
+                _ver = ""
+                try:
+                    _sec = KernelPool._env_json_r_section()
+                    _def = _sec.get("default", "") or ""
+                    if _def:
+                        _ver = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(_def))))
+                except Exception:
+                    _ver = ""
+                _main = (out.get("R_LIBS") or "").strip()
+                _merged = [p for p in _main.split(os.pathsep) if p.strip()]
+                for _p in (_domain_lib_env().get("R_LIBS") or "").split(os.pathsep):
+                    _p = _p.strip()
+                    if not _p or _p in _merged:
+                        continue
+                    # 版本不匹配的库一律不并：宁可找不到（报缺包、让用户装），
+                    # 也不要加载进来在运行中途炸（F2/sp 的真实事故）
+                    if _ver and _ver not in _p:
+                        continue
+                    _merged.append(_p)
+                if _merged:
+                    out["R_LIBS"] = os.pathsep.join(_merged)
+            except Exception:
+                pass  # 领域层不可用时保持原样（打包后的精简环境可能没有 memomics）
             return out
         # ── paths.r 为空（Linux/macOS 发行版）→ 运行时探测 .libPaths() ──
         try:
