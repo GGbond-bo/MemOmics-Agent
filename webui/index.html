@@ -329,6 +329,25 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .task-row.other { opacity:.62; }        /* 别的会话：看得见（不藏），但明显不是自己的 */
 .task-group-head { font-size:11px; color:var(--text-light); padding:4px 2px; border-bottom:1px dashed var(--border); margin-bottom:5px; }
 .task-group.current > .task-group-head { color:var(--primary); font-weight:600; border-bottom-color:var(--primary); }
+/* T17：详情面板的层次 —— 结论大字、参数加粗、杂项折叠 */
+.task-hero { border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin:0 0 8px; display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 8px; }
+.task-hero-title { font-size:16px; font-weight:700; line-height:1.35; word-break:break-all; flex:1 1 100%; }
+.task-hero-pill { font-size:12px; font-weight:700; border:1px solid; border-radius:10px; padding:1px 8px; white-space:nowrap; }
+.task-hero-line { font-size:13px; font-weight:700; flex:1 1 100%; word-break:break-all; line-height:1.5; }
+.task-hero-sub { font-size:11px; color:var(--text-light); flex:1 1 100%; word-break:break-all; }
+.task-hero-bar { flex:1 1 100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.task-acts { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 8px; }
+.task-sec { font-size:12px; font-weight:700; margin:10px 0 5px; }
+.task-key-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.task-key { border:1px solid var(--border); border-radius:5px; padding:5px 7px; min-width:0; }
+.task-key-k { font-size:10px; color:var(--text-light); display:block; }
+.task-key-v { font-size:15px; font-weight:700; word-break:break-all; }
+.task-out { font-size:12px; padding:3px 0; word-break:break-all; }
+.task-stg { display:flex; gap:8px; font-size:12px; padding:2px 0; }
+.task-stg.now { font-weight:700; }
+.task-fold { border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin:0 0 8px; }
+.task-fold > summary { cursor:pointer; font-size:12px; font-weight:700; }
+.task-fold[open] > summary { margin-bottom:2px; }
 @media (max-width:820px) { #task-dock { width:100vw; max-width:100vw; } }
 .chat-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
 .chat-header .title { font-size:15px; font-weight:500; }
@@ -7620,7 +7639,7 @@ function taskRowHtml(t, mine) {
   h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
   h += '<span style="font-size:13px;font-weight:600;">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
   var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
-  h += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt +
+  h += '<span style="font-size:11px;color:' + taskStatusTone(t.status) + ';font-weight:600;white-space:nowrap;">' + escapeHtml(taskStatusText(t.status)) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt +
        (!live ? ' <button class="task-del-btn" data-del="' + escapeHtml(t.task_id) + '" title="删掉这条记录（契约 + 日志；产出的文件不动）" style="' + _taskBtn + 'padding:0 5px;font-size:10px;line-height:16px;margin-left:4px;">🗑</button>' : '') + '</span>';
   h += '</div>';
   h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(t.type || '') + (t.session_id ? ' · ' + escapeHtml(t.session_id) : '') + (t.pid ? ' · PID ' + escapeHtml(String(t.pid)) : '') + (t.env_line ? ' · ' + escapeHtml(t.env_line) : '') + '</div>';
@@ -7666,14 +7685,104 @@ function taskKv(k, v) {
 var _taskBtn = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;font-size:12px;';
 var _taskPre = 'font-size:11px;white-space:pre-wrap;word-break:break-all;background:rgba(127,127,127,.08);padding:6px;border-radius:4px;margin:0 0 8px;max-height:320px;overflow-y:auto;';
 
+/* T17：面板看着累的根因是"什么都一样重"。这里给状态一个颜色 + 一句人话结论，
+   标题/结论/核心参数加粗放大，命令、PID、CPU、日志这些挪进折叠区（默认收起，点开才占地方）。 */
+var _taskFold = {};             // 折叠区开合状态
+var _taskFoldOwner = null;      // 换任务就重置（不然上一条的展开状态会串到下一条）
+function taskStatusTone(st) {
+  if (st === 'done') return '#4a8f4a';
+  if (st === 'failed' || st === 'interrupted') return '#c0504d';
+  if (st === 'cancelled') return '#8a8a8a';
+  if (st === 'running') return 'var(--primary)';
+  return '#e0a030';                                  // queued / paused / cancelling
+}
+function taskStatusText(st) {
+  var m = { running: '🏃 正在跑', queued: '⏳ 排队中', paused: '⏸ 已暂停', cancelling: '🚫 正在取消',
+            done: '✅ 完成', failed: '❌ 失败', cancelled: '🚫 已取消', interrupted: '⚠️ 中断' };
+  return m[st] || st;
+}
+function taskHeroLine(t, live) {
+  // 一句话说清"跑成什么样了" —— 用户第一眼要的就是这句，不是 done/failed 两个英文单词
+  var ec = (t.exit_code === null || t.exit_code === undefined) ? null : t.exit_code;
+  var tot = t.stage_total || (t.stages || []).length;
+  var dn = (t.stages || []).filter(function(x) { return x.status === 'done'; }).length;
+  if (live) {
+    var bits = [];
+    if (t.stage) {
+      var seg = (t.stage_index && tot) ? ('（第 ' + t.stage_index + '/' + tot + ' 段）')
+                                        : (tot ? ('（共 ' + tot + ' 段）') : '');
+      bits.push('正在跑「' + t.stage + '」' + seg);
+    }
+    var pct = Math.round(Number(t.progress_pct || 0));
+    if (pct > 0) bits.push(pct + '%');
+    bits.push('已跑 ' + taskFmtSec(t.elapsed_sec));
+    if (t.eta_sec) bits.push('还要约 ' + taskFmtSec(t.eta_sec));
+    if (t.stalled) bits.push('⚠️ 心跳停了 ' + taskFmtSec(t.heartbeat_age_sec) + '，可能卡住了');
+    return bits.join(' · ');
+  }
+  if (t.status === 'done') {
+    if (t.incomplete) {
+      return '只跑到第 ' + dn + ' 段就退出了（退出码 ' + (ec === null ? '-' : ec) + '） · 还有 ' +
+             (tot - dn) + ' 段没跑 · 用时 ' + taskFmtSec(t.duration_sec);
+    }
+    return (tot ? tot + '/' + tot + ' 段全跑完' : '跑完了') + ' · 用时 ' + taskFmtSec(t.duration_sec);
+  }
+  if (t.status === 'failed') {
+    return '失败' + (ec === null ? '' : '（退出码 ' + ec + '）') + (t.error ? '：' + t.error : '') +
+           ' · 用时 ' + taskFmtSec(t.duration_sec);
+  }
+  if (t.status === 'cancelled') {
+    return '已取消' + (tot ? '（当时跑到第 ' + dn + '/' + tot + ' 段）' : '') + ' · 用时 ' + taskFmtSec(t.duration_sec);
+  }
+  if (t.status === 'interrupted') {
+    return '进程没了（中断）' + (ec === null ? '' : '（退出码 ' + ec + '）') + ' · 用时 ' + taskFmtSec(t.duration_sec);
+  }
+  if (t.status === 'queued') return '在队列里等着' + (t.queue_position ? '（排第 ' + t.queue_position + '）' : '');
+  if (t.status === 'paused') return '已暂停' + (t.stage ? '（停在「' + t.stage + '」）' : '');
+  return '取消请求已发出，等进程收尾';
+}
+var _TASK_CORE_HINT = ['样本', '细胞', '组织', '物种', '基因组', '参考', '分组', '比较', '阈值', '方法',
+                       '输入', '数据', '分辨率', '最小', '目标', '基因', '通路', '参数'];
+function taskCoreParams(t) {
+  // 挑"这条任务真正在算什么"的参数放显眼处；重试来源这类记账信息不配占版面
+  var keys = Object.keys(t.params || {});
+  var core = [], rest = [], mid = [];
+  keys.forEach(function(k) {
+    if (/^(重试|retry)/i.test(k)) { rest.push(k); return; }
+    var hit = _TASK_CORE_HINT.some(function(w) { return k.indexOf(w) >= 0; });
+    (hit ? core : mid).push(k);
+  });
+  var picked = core.concat(mid).slice(0, 4);
+  var other = core.concat(mid).slice(4).concat(rest);
+  return { core: picked, rest: other };
+}
+function taskFoldToggle(key, open) { _taskFold[key] = !!open; }
+function taskFold(key, title, inner, dflt) {
+  var open = (_taskFold[key] === undefined) ? !!dflt : !!_taskFold[key];
+  return '<details class="task-fold"' + (open ? ' open' : '') +
+         ' ontoggle="taskFoldToggle(\'' + key + '\', this.open)"><summary>' + escapeHtml(title) +
+         '</summary><div style="margin-top:6px;">' + inner + '</div></details>';
+}
+
 function renderTaskDetail(t) {
   var live = _taskLive.indexOf(t.status) >= 0;
   _taskSessions[t.task_id] = { sid: t.session_id || '', title: t.session_title || '' };
+  if (_taskFoldOwner !== t.task_id) { _taskFold = {}; _taskFoldOwner = t.task_id; }
+  var tone = taskStatusTone(t.status);
   var h = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">';
   h += '<button onclick="closeTaskDetail()" style="' + _taskBtn + '">← 返回列表</button>';
   h += '<span style="font-size:11px;color:var(--text-light);">每 2 秒自动刷新</span>';
   h += '</div>';
-  h += '<div style="font-size:15px;font-weight:600;margin:8px 0 4px;">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</div>';
+  h += '<div class="task-hero">';
+  h += '<div class="task-hero-title">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</div>';
+  h += '<span class="task-hero-pill" style="border-color:' + tone + ';color:' + tone + ';">' + escapeHtml(taskStatusText(t.status)) + '</span>';
+  h += '<div class="task-hero-line" style="color:' + tone + ';">' + escapeHtml(taskHeroLine(t, live)) + '</div>';
+  h += '<div class="task-hero-sub">' + escapeHtml([t.type || '', t.env_line || '', (t.session_title || t.session_id || '未知会话')].filter(Boolean).join(' · ')) + '</div>';
+  if (live) {
+    var _pct = Math.max(0, Math.min(100, Number(t.progress_pct || 0)));
+    h += '<div class="task-hero-bar"><div style="height:100%;width:' + _pct + '%;background:' + tone + ';"></div></div>';
+  }
+  h += '</div>';
   // T15：最显眼的位置留给"其实没干完"。别让人只看到一个 ✅ 就以为全跑完了。
   if (t.incomplete && !live) {
     var _tot = t.stage_total || (t.stages || []).length;
@@ -7686,70 +7795,103 @@ function renderTaskDetail(t) {
          (taskStageLeft(t) ? '<br>还没跑：<b>' + escapeHtml(taskStageLeft(t)) + '</b>' : '') +
          '<br>下面时间线里灰着的那几段就是没跑到的 —— 想接着跑就点重试。</div>';
   }
-  var st = t.status + (t.cancel_requested ? '（已请求取消，来自 ' + (t.cancel_by || '') + '）' : '');
-  h += taskKv('状态', st);
-  h += taskKv('任务 ID', t.task_id);
-  h += taskKv('类型', t.type || '');
-  var _mine = !!(_taskCurrentSid() && t.session_id === _taskCurrentSid());
-  h += taskKv('所属会话', (t.session_title ? t.session_title + '（' : '') + (t.session_id || '未知') + (t.session_title ? '）' : '') +
-              (t.session_id ? (_taskCurrentSid() ? (_mine ? ' · 就是当前会话' : ' · ⚠️ 不是当前会话') : '') : ''));
-  h += taskKv('运行环境', t.env_line || '');
-  h += taskKv('工作目录', t.session_dir || '');
-  h += taskKv('进程', (t.pid ? 'PID ' + t.pid + (t.proc && t.proc.pname ? ' ' + t.proc.pname : '') : '（已结束）') + (t.wrapper_pid ? ' · 包装进程 ' + t.wrapper_pid : ''));
-  h += taskKv('CPU / 内存', (t.cpu_pct === null || t.cpu_pct === undefined ? '-' : t.cpu_pct + '%') + ' / ' + (t.rss_gb === null || t.rss_gb === undefined ? '-' : t.rss_gb + ' GB'));
-  h += taskKv('开始 / 耗时', (t.started_at || '-') + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec));
-  if (t.eta_sec) h += taskKv('预计还要', taskFmtSec(t.eta_sec) + '（' + (t.eta_basis || '') + (t.eta_confidence ? ' · 可信度' + t.eta_confidence : '') + '）');
-  if (t.exit_code !== null && t.exit_code !== undefined) h += taskKv('退出码', t.exit_code);
-  if (t.error) h += taskKv('错误', t.error);
-  if (t.summary) h += taskKv('任务小结', t.summary);
-  if (t.script_path || t.script) h += taskKv('源脚本', t.script_path || t.script);
-  h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
-  if (t.stages && t.stages.length) {
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">阶段时间线</div>';
-    t.stages.forEach(function(s) {
-      h += '<div style="display:flex;gap:8px;font-size:12px;padding:2px 0;"><span style="min-width:120px;">' + taskStatusIcon(s.status) + ' ' + escapeHtml(s.name) + '</span><span style="color:var(--text-light);">' + escapeHtml(s.status) + ' · ' + taskFmtSec(s.sec) + '</span></div>';
+  // 动作摆在结论下面：要取消 / 要重试 / 要删，一眼就能点到，不用滚到底
+  var acts = '';
+  if (live) acts += '<button id="task-cancel-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🚫 取消这个任务</button>';
+  if (t.retry_allowed) {
+    acts += '<button id="task-retry-btn" style="' + _taskBtn + 'border-color:#4a8f4a;color:#4a8f4a;">🔁 重试（第 ' + t.retry_attempt + ' 次 · ' + taskRetryDelayText(t.retry_delay_sec) + '）</button>';
+  }
+  if (!live) acts += '<button id="task-del-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🗑 删掉这条记录</button>';
+  if (acts) h += '<div class="task-acts">' + acts + '</div>';
+  if (t.retry_allowed && t.retry_note) h += '<div style="font-size:11px;color:#e0a030;margin:-4px 0 8px;">' + escapeHtml(t.retry_note) + '</div>';
+  if (!t.retry_allowed && t.retry_reason && (t.status === 'failed' || t.status === 'interrupted' || t.incomplete)) {
+    h += '<div style="font-size:11px;color:var(--text-light);margin:-4px 0 8px;">🔁 不能重试：' + escapeHtml(t.retry_reason) + '</div>';
+  }
+  // 核心参数：加粗放大，最多 4 个；其余进折叠区
+  var pk = taskCoreParams(t);
+  if (pk.core.length) {
+    h += '<div class="task-sec">关键参数</div><div class="task-key-grid">';
+    pk.core.forEach(function(k) {
+      h += '<div class="task-key"><span class="task-key-k">' + escapeHtml(k) + '</span><span class="task-key-v">' +
+           escapeHtml(String(t.params[k])) + '</span></div>';
     });
-    h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+    h += '</div>';
   }
-  var keys = Object.keys(t.params || {});
-  if (keys.length) {
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">关键参数</div>';
-    keys.forEach(function(k) { h += taskKv(k, t.params[k]); });
-    h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
-  }
-  h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">实际命令</div>';
-  h += '<pre style="' + _taskPre + '">' + escapeHtml(t.cmd || '（未记录）') + '</pre>';
-  var body = t.script_text || '';
-  var sNote = t.script_note || '';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
-  h += '<span style="font-size:12px;font-weight:600;">' + (body ? '脚本内容' : (sNote ? '脚本内容（面板不读）' : '脚本内容（未读取）')) + '</span>';
-  if (body) h += '<button onclick="taskToggleScript()" style="' + _taskBtn + '">显示 / 隐藏</button>';
-  h += '</div>';
-  if (body) h += '<pre id="task-script-body" style="display:none;' + _taskPre + '">' + escapeHtml(body) + '</pre>';
-  if (!body && sNote) h += '<div style="font-size:11px;color:var(--text-light);word-break:break-all;">' + escapeHtml(sNote) + '</div>';
+  // 产物：用户最想知道的"结果在哪"，所以排在参数后面、日志前面
   var outs = t.outputs || [];
   if (outs.length) {
-    h += '<div style="font-size:12px;font-weight:600;margin:4px 0;">产物（' + outs.length + '）</div>';
+    h += '<div class="task-sec">产物（' + outs.length + '）</div>';
     outs.forEach(function(o) {
-      var where = (o.abs && o.abs !== o.path) ? ' <span style="color:var(--text-light);">→ ' + escapeHtml(o.abs) + '</span>' : '';
-      h += '<div style="font-size:12px;padding:2px 0;word-break:break-all;">' + (o.exists ? '📄' : '❓') + ' ' + escapeHtml(o.path) + where + ' <span style="color:var(--text-light);">' + (o.exists ? (o.size || 0) + ' B' : '文件不存在') + '</span></div>';
+      var where = (o.abs && o.abs !== o.path) ? ' <span style="color:var(--text-light);font-weight:400;">→ ' + escapeHtml(o.abs) + '</span>' : '';
+      h += '<div class="task-out">' + (o.exists ? '📄' : '❓') + ' <b>' + escapeHtml(o.path) + '</b>' + where +
+           ' <span style="color:var(--text-light);font-weight:400;">' + (o.exists ? (o.size || 0) + ' B' : '文件不存在') + '</span></div>';
     });
   }
-  h += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
-  h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">日志尾部 · ' + (t.log_size || 0) + ' B' + (t.log ? ' · ' + escapeHtml(t.log) : '') + '</div>';
-  h += '<pre id="task-log" style="' + _taskPre + '">' + escapeHtml(t.log_tail || '（暂无日志）') + '</pre>';
-  if (live) h += '<button id="task-cancel-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🚫 取消这个任务</button>';
-  // 失败任务一键重试：能不能重试是后端算好的（retry_backoff 的退避 + 上限），面板只负责画
-  if (t.retry_allowed) {
-    // 只在有参数的按钮上挂 onclick —— 内联 onclick 里拼 id 会被引号咬到，统一走 addEventListener
-    h += '<button id="task-retry-btn" style="' + _taskBtn + 'border-color:#4a8f4a;color:#4a8f4a;">🔁 重试（第 ' + t.retry_attempt + ' 次 · ' + taskRetryDelayText(t.retry_delay_sec) + '）</button>';
-    // T15：退出码 0 但没跑完阶段的任务也能重试，按钮旁边必须说清为什么
-    if (t.retry_note) h += '<div style="font-size:11px;color:#e0a030;margin-top:4px;">' + escapeHtml(t.retry_note) + '</div>';
-  } else if (t.retry_reason && (t.status === 'failed' || t.status === 'interrupted' || t.incomplete)) {
-    h += '<div style="font-size:11px;color:var(--text-light);">🔁 不能重试：' + escapeHtml(t.retry_reason) + '</div>';
+  // T15：最显眼的位置留给"其实没干完"。别让人只看到一个 ✅ 就以为全跑完了。
+  if (t.incomplete && !live) {
+    var _tot = t.stage_total || (t.stages || []).length;
+    var _dn = (t.stages || []).filter(function(x) { return x.status === 'done'; }).length;
+    var _why = (t.status === 'cancelled')
+      ? ('任务被取消时，声明的 ' + _tot + ' 段里只跑完 ' + _dn + ' 段。')
+      : ('脚本声明了 ' + _tot + ' 段，只跑到第 ' + _dn + ' 段就退出了（退出码 ' + (t.exit_code === null || t.exit_code === undefined ? '-' : t.exit_code) + '）。');
+    h += '<div style="border:1px solid #e0a030;border-left:3px solid #e0a030;border-radius:4px;padding:6px 8px;margin:0 0 8px;font-size:12px;line-height:1.6;">' +
+         '<b>' + (t.status === 'cancelled' ? '🚫 取消时没跑完' : '⚠️ 没跑完阶段') + '</b>：' + _why +
+         (taskStageLeft(t) ? '<br>还没跑：<b>' + escapeHtml(taskStageLeft(t)) + '</b>' : '') +
+         '<br>下面时间线里灰着的那几段就是没跑到的 —— 想接着跑就点重试。</div>';
   }
-  // T16：已结束的任务能删（在跑的不给这个按钮 —— 要停就先取消）
-  if (!live) h += '<button id="task-del-btn" style="' + _taskBtn + 'border-color:#c0504d;color:#c0504d;">🗑 删掉这条记录</button>';
+  if (t.cancel_requested) {
+    h += '<div style="font-size:11px;color:#e0a030;margin:-4px 0 8px;">已请求取消（来自 ' + escapeHtml(t.cancel_by || '') + '），等进程收尾。</div>';
+  }
+  // 阶段时间线：一行一段，正在跑的那段加粗 —— 一眼看出现在断在哪
+  if (t.stages && t.stages.length) {
+    h += '<div class="task-sec">阶段时间线</div>';
+    t.stages.forEach(function(s) {
+      var running = (s.status === 'running');
+      h += '<div class="task-stg' + (running ? ' now' : '') + '"><span style="min-width:120px;">' + taskStatusIcon(s.status) + ' ' +
+           (running ? '<b>' + escapeHtml(s.name) + '</b>' : escapeHtml(s.name)) + '</span>' +
+           '<span style="color:var(--text-light);">' + escapeHtml(s.status) + ' · ' + taskFmtSec(s.sec) + '</span></div>';
+    });
+  }
+  // 日志：失败/中断的任务默认展开（它就是最该看的东西），其它默认收起
+  var logInner = '<pre id="task-log" style="' + _taskPre + '">' + escapeHtml(t.log_tail || '（暂无日志）') + '</pre>';
+  h += taskFold('log', '日志尾部 · ' + (t.log_size || 0) + ' B' + (t.log ? ' · ' + t.log : ''), logInner,
+                t.status === 'failed' || t.status === 'interrupted');
+  // 其余参数 + 技术细节：默认收起。PID / 路径 / 命令 / 脚本这些"要看才有用"的不占第一屏。
+  var pk2 = taskCoreParams(t);
+  if (pk2.rest.length) {
+    var restHtml = '';
+    pk2.rest.forEach(function(k) { restHtml += taskKv(k, t.params[k]); });
+    h += taskFold('params', '其余参数（' + pk2.rest.length + '）', restHtml, false);
+  }
+  var _mine = !!(_taskCurrentSid() && t.session_id === _taskCurrentSid());
+  var ec = (t.exit_code === null || t.exit_code === undefined) ? null : t.exit_code;
+  var tech = '';
+  tech += taskKv('任务 ID', t.task_id);
+  tech += taskKv('所属会话', (t.session_title ? t.session_title + '（' : '') + (t.session_id || '未知') + (t.session_title ? '）' : '') +
+                 (t.session_id ? (_taskCurrentSid() ? (_mine ? ' · 就是当前会话' : ' · ⚠️ 不是当前会话') : '') : ''));
+  tech += taskKv('工作目录', t.session_dir || '');
+  tech += taskKv('运行环境', t.env_line || '');
+  tech += taskKv('进程', (t.pid ? 'PID ' + t.pid + (t.proc && t.proc.pname ? ' ' + t.proc.pname : '') : '（已结束）') + (t.wrapper_pid ? ' · 包装进程 ' + t.wrapper_pid : ''));
+  tech += taskKv('CPU / 内存', (t.cpu_pct === null || t.cpu_pct === undefined ? '-' : t.cpu_pct + '%') + ' / ' + (t.rss_gb === null || t.rss_gb === undefined ? '-' : t.rss_gb + ' GB'));
+  tech += taskKv('开始 / 耗时', (t.started_at || '-') + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec));
+  if (t.eta_sec) tech += taskKv('预计还要', taskFmtSec(t.eta_sec) + '（' + (t.eta_basis || '') + (t.eta_confidence ? ' · 可信度' + t.eta_confidence : '') + '）');
+  if (ec !== null) tech += taskKv('退出码', ec);
+  if (t.error) tech += taskKv('错误', t.error);
+  if (t.summary) tech += taskKv('任务小结', t.summary);
+  if (t.script_path || t.script) tech += taskKv('源脚本', t.script_path || t.script);
+  if (t.log) tech += taskKv('日志文件', t.log);
+  tech += '<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+  tech += '<div class="task-sec" style="margin-top:0;">实际命令</div>';
+  tech += '<pre style="' + _taskPre + '">' + escapeHtml(t.cmd || '（未记录）') + '</pre>';
+  var body = t.script_text || '';
+  var sNote = t.script_note || '';
+  tech += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+  tech += '<span style="font-size:12px;font-weight:700;">' + (body ? '脚本内容' : (sNote ? '脚本内容（面板不读）' : '脚本内容（未读取）')) + '</span>';
+  if (body) tech += '<button onclick="taskToggleScript()" style="' + _taskBtn + '">显示 / 隐藏</button>';
+  tech += '</div>';
+  if (body) tech += '<pre id="task-script-body" style="display:none;' + _taskPre + '">' + escapeHtml(body) + '</pre>';
+  if (!body && sNote) tech += '<div style="font-size:11px;color:var(--text-light);word-break:break-all;">' + escapeHtml(sNote) + '</div>';
+  h += taskFold('tech', '技术细节（命令 · 进程 · 路径 · 脚本）', tech, false);
   var box = document.getElementById('task-detail');
   box.innerHTML = h;
   var log = document.getElementById('task-log');

@@ -40,7 +40,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskCleanHint: taskCleanHint, taskDelete: taskDelete, taskCleanup: taskCleanup, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, taskStatusTone: taskStatusTone, taskStatusText: taskStatusText, taskHeroLine: taskHeroLine, taskCoreParams: taskCoreParams, taskFoldToggle: taskFoldToggle, taskRowHtml: taskRowHtml, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -712,6 +712,111 @@ setTimeout(function() {
     # 两处确认都要把"产出文件不动""在跑的不删"说在前面，别让人以为删了数据
     assert any("产出" in m for m in got["confirms"]), got["confirms"]
     assert any("正在跑" in m for m in got["confirms"]), got["confirms"]
+
+
+# T17(2026-09-24)：用户实测反馈 —— "展示面板重点不突出，看不到关键信息"
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t17_detail_puts_the_answer_first():
+    """详情第一屏只留三件事：这是什么任务、跑成什么样、核心参数。命令/PID/日志都收进折叠区。"""
+    mod = _write_module()
+    live = dict(LIVE_TASK, params={"样本数": "12", "最小基因数": "200", "重试来源": "qc-x", "重试根": "r"})
+    failed = dict(FAILED_TASK, duration_sec=9.0, exit_code=3)
+    done = dict(LIVE_TASK, status="done", pid=None, duration_sec=723.0, progress_pct=100,
+                eta_sec=None, stages=[{"name": "读入", "status": "done", "sec": 2.8},
+                                      {"name": "训练", "status": "done", "sec": 700.0},
+                                      {"name": "收尾", "status": "done", "sec": 20.0}])
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskDetail(%s);
+const live = out.store['task-detail'].innerHTML;
+P.renderTaskDetail(%s);
+const failed = out.store['task-detail'].innerHTML;
+P.renderTaskDetail(%s);
+const done = out.store['task-detail'].innerHTML;
+console.log(JSON.stringify({ live: live, failed: failed, done: done,
+  tone: [P.taskStatusTone('done'), P.taskStatusTone('failed'), P.taskStatusTone('running'), P.taskStatusTone('queued')],
+  text: [P.taskStatusText('done'), P.taskStatusText('running'), P.taskStatusText('queued')] }));
+""" % (json.dumps(live, ensure_ascii=False), json.dumps(failed, ensure_ascii=False),
+       json.dumps(done, ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+
+    # 状态：颜色 + 人话，不再让人先翻译 done/failed
+    assert got["tone"] == ["#4a8f4a", "#c0504d", "var(--primary)", "#e0a030"], got["tone"]
+    assert got["text"][:3] == ["✅ 完成", "🏃 正在跑", "⏳ 排队中"], got["text"]
+
+    # 在跑：标题 + 结论一句话 + 进度条
+    h = got["live"]
+    assert 'class="task-hero-title"' in h and 'class="task-hero-pill"' in h, h[:400]
+    assert "🏃 正在跑" in h
+    assert "正在跑「训练」（第 2/3 段） · 55% · 已跑 2m5s · 还要约 4m5s" in h, h[:600]
+    assert 'class="task-hero-bar"' in h and "width:55%" in h
+    # 核心参数加粗放大；重试来源这种记账信息不许占第一屏
+    assert 'class="task-key-v">12<' in h, "核心参数没加粗放大"
+    assert h.index("样本数") < h.index("其余参数（2）") and h.index("重试来源") > h.index("其余参数（2）")
+    # 第一屏就该是"没跑的折叠着"：在跑的任务里日志和技术细节都收着
+    assert 'task-fold" open' not in h, "在跑的任务第一屏就摊开了折叠区"
+    assert "技术细节（命令 · 进程 · 路径 · 脚本）" in h and "日志尾部" in h
+
+    # 失败：日志自动摊开（那才是最该看的），结论直接说失败原因
+    f = got["failed"]
+    assert "失败（退出码 3）：Rscript 退出码 1：找不到 Seurat" in f, f[:600]
+    assert "taskFoldToggle('log'" in f and 'task-fold" open' in f, "失败任务没把日志摊开"
+    assert "🔁 重试（第 1 次 · 2s 后启动）" in f
+
+    # 跑完：不用点开就知道全跑完了、用了多久
+    d = got["done"]
+    assert "3/3 段全跑完 · 用时 12m3s" in d, d[:600]
+    assert "task-del-btn" in d and "task-cancel-btn" not in d
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t17_folds_keep_user_choice_across_polls():
+    """用户点开的技术细节，不能被 2 秒一次的自动重画收回去；换任务才重置。"""
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskDetail(%s);
+const before = out.store['task-detail'].innerHTML;
+P.taskFoldToggle('tech', true);                    // 用户点开"技术细节"
+P.renderTaskDetail(%s);                            // 2 秒后轮询重画（innerHTML 整个换掉）
+const after = out.store['task-detail'].innerHTML;
+P.renderTaskDetail(%s);                            // 换一条任务
+const switched = out.store['task-detail'].innerHTML;
+console.log(JSON.stringify({ before: before, after: after, switched: switched }));
+""" % (json.dumps(LIVE_TASK, ensure_ascii=False), json.dumps(LIVE_TASK, ensure_ascii=False),
+       json.dumps(dict(LIVE_TASK, task_id="qc-other-0001"), ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    assert 'task-fold" open' not in got["before"], "一开始就把折叠区摊开了"
+    assert "open ontoggle=\"taskFoldToggle('tech'" in got["after"], "用户点开的折叠区被重画收回去了"
+    assert "open ontoggle=\"taskFoldToggle('tech'" not in got["switched"], "换任务还留着上一条的展开状态"
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t17_row_status_is_human_and_colored():
+    """列表行也别再显示 done / running 这种英文状态词。"""
+    mod = _write_module()
+    drive = HARNESS + """
+const P = out.P;
+const done = P.taskRowHtml(%s, true);
+const run = P.taskRowHtml(%s, true);
+const q = P.taskRowHtml(%s, true);
+console.log(JSON.stringify({ done: done, run: run, q: q }));
+""" % (json.dumps(dict(LIVE_TASK, status="done"), ensure_ascii=False),
+       json.dumps(LIVE_TASK, ensure_ascii=False),
+       json.dumps(dict(LIVE_TASK, status="queued", pid=None), ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    assert "✅ 完成 · " in got["done"] and ">done<" not in got["done"], got["done"][:400]
+    assert "#4a8f4a" in got["done"], "完成的任务状态没上色"
+    assert "🏃 正在跑 · " in got["run"] and "var(--primary)" in got["run"]
+    assert "⏳ 排队中 · " in got["q"] and "#e0a030" in got["q"]
+
+
 
 
 
