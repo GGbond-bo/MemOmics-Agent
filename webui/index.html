@@ -1670,7 +1670,16 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="status"><span class="dot"></span> <span id="status-text">连接中...</span></div>
       </div>
     </div>
-    <!-- P1-1(2026-09-23): 会话目标条（goal + 待办常驻）-->
+    <div class="chat-messages" id="messages">
+      <!-- 欢迎画面由 newSession() 动态生成 -->
+    </div>
+    <!-- 输出中悬浮浮条：仅"回到底部"（停止按钮在底部输入区，不重复） -->
+    <div class="chat-float-bar" id="chat-float-bar" style="display:none;">
+      <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出" data-i18n="goto_bottom">▼ 回到底部</button>
+    </div>
+    <!-- P1-1(2026-09-23): 会话目标条（goal + 待办常驻）
+         2026-09-24: 从聊天区上方移到输入框上方（贴近输入区、常驻可见）；右侧「待办列表」面板同日下线，
+         待办只在这一处渲染，不再同源两视图重复。 -->
     <div id="goal-bar">
       <div class="gb-progress"><div id="gb-progress-fill"></div></div>
       <div class="gb-row">
@@ -1682,13 +1691,6 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <button class="gb-btn" id="gb-clear" onclick="clearGoal()" title="清空目标" style="display:none;">✕</button>
       </div>
       <div class="gb-todos" id="gb-todos"></div>
-    </div>
-    <div class="chat-messages" id="messages">
-      <!-- 欢迎画面由 newSession() 动态生成 -->
-    </div>
-    <!-- 输出中悬浮浮条：仅"回到底部"（停止按钮在底部输入区，不重复） -->
-    <div class="chat-float-bar" id="chat-float-bar" style="display:none;">
-      <button class="float-goto-bottom" id="float-goto-bottom" onclick="resumeAutoScroll()" style="display:none;" title="回到最新输出" data-i18n="goto_bottom">▼ 回到底部</button>
     </div>
     <div class="chat-input" id="chat-input">
       <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
@@ -1740,10 +1742,6 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="info-section">
           <h3>会话大纲 <span id="outline-count" class="chg-summary"></span></h3>
           <div id="outline-list" style="font-size:12px;color:var(--text-light);">本会话还没有问答</div>
-        </div>
-        <div class="info-section">
-          <h3 data-i18n="todo">待办列表</h3>
-          <div id="todo-list" style="font-size:12px;color:var(--text-light);">暂无待办</div>
         </div>
         <div class="info-section">
           <h3>改动复核 <span id="changes-summary" class="chg-summary"></span></h3>
@@ -6408,7 +6406,7 @@ function switchSession(sid) {
 
   // === 立即清除旧会话的 DOM（不等 fetch，防止残留） ===
   document.getElementById('messages').innerHTML = '';
-  document.getElementById('todo-list').innerHTML = '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>';
+  // 2026-09-24: 右侧「待办列表」面板已下线，这里不再重置它（元素不存在会 TypeError）
   document.getElementById('results-figures').innerHTML = '';
   document.getElementById('results-list').innerHTML = '';
   // 2026-09-22(P7)：换会话时关掉上一会话的文件查看器 + 清掉大图预览区
@@ -12462,7 +12460,7 @@ function renderGoalBar() {
   var goal = _goalBar.goal;
   var todos = _goalBar.todos || [];
   var hasTodo = todos.length > 0;
-  if (!goal && !hasTodo) { bar.classList.remove('visible'); return; }
+  if (!goal && !hasTodo) { bar.classList.remove('visible'); _syncFloatBarOffset(); return; }
   bar.classList.add('visible');
   if (!_goalBar.editing) {
     var t = document.getElementById('gb-goal-text');
@@ -12500,6 +12498,16 @@ function renderGoalBar() {
   bar.classList.toggle('collapsed', !!_goalBar.collapsed);
   var tg = document.getElementById('gb-toggle');
   if (tg) tg.textContent = _goalBar.collapsed ? '▸' : '▾';
+  _syncFloatBarOffset();
+}
+
+/** 2026-09-24：目标条移到输入框上方后，「回到底部」浮条要跟着抬高，否则会压在目标条上。
+ *  目标条隐藏时 offsetHeight 为 0，等于自动回到原位。 */
+function _syncFloatBarOffset() {
+  var fb = document.getElementById('chat-float-bar');
+  if (!fb) return;
+  var gb = document.getElementById('goal-bar');
+  fb.style.bottom = (118 + (gb ? gb.offsetHeight : 0)) + 'px';
 }
 
 function toggleGoalBar() { _goalBar.collapsed = !_goalBar.collapsed; renderGoalBar(); }
@@ -12979,26 +12987,10 @@ async function refreshTodos() {
 }
 
 function renderTodos(todos) {
-  // P1-1: 目标条与右侧待办面板共用同一份数据（WS todos_update 的唯一落点）
+  // P1-1: WS todos_update 的唯一落点 —— 只写目标条这一处
+  // 2026-09-24: 右侧「待办列表」面板已下线（与目标条同源两视图重复）；目标条已移到输入框上方
   _goalBar.todos = Array.isArray(todos) ? todos : [];
   renderGoalBar();
-  var el = document.getElementById('todo-list');
-  if (!todos || !todos.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text-light);">暂无待办</span>'; el.style.maxHeight = ''; return; }
-  var done = todos.filter(function(t) { return t.status === 'completed'; }).length;
-  var total = todos.length;
-  var pct = total > 0 ? Math.round(done / total * 100) : 0;
-  var html = '<div style="margin-bottom:8px;font-size:12px;color:var(--text-light);display:flex;justify-content:space-between;"><span>📋 待办清单</span><span>' + done + '/' + total + ' (' + pct + '%)</span></div>';
-  html += '<div style="height:3px;background:var(--border);border-radius:2px;margin-bottom:8px;"><div style="height:100%;width:' + pct + '%;background:var(--success,#2d8659);border-radius:2px;transition:width 0.3s;"></div></div>';
-  html += todos.map(function(t) {
-    var status = t.status || 'pending';
-    var icon = status === 'completed' ? '✅' : status === 'in_progress' ? '🔄' : status === 'cancelled' ? '❌' : '⬜';
-    var cls = status === 'completed' ? ' done' : status === 'in_progress' ? ' in-progress' : status === 'cancelled' ? ' cancelled' : '';
-    var text = escapeHtml(t.content || t.title || t.text || '');
-    return '<div class="todo-item' + cls + '"><span class="todo-icon">' + icon + '</span><span class="todo-text">' + text + '</span></div>';
-  }).join('');
-  el.innerHTML = html;
-  el.style.maxHeight = '400px';
-  el.style.overflowY = 'auto';
 }
 
 // P1+P2+P3: Enhanced plan panel rendering
