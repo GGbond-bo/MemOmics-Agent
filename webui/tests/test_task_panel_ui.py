@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -88,9 +89,19 @@ def _run_node(js: str, *args):
             pass
 
 
+_TMPDIR = None
+
+
 def _write_module() -> str:
-    """把面板那段 JS 落成真实文件，好让 node require 它。"""
-    path = os.path.join(HERE, "_t3_panel.js")
+    """把面板那段 JS 落成真实文件，好让 node require 它。
+
+    写系统临时目录，不写仓库（以前写在 tests/ 下，跑一次测试仓库就多一个
+    未跟踪的 _t3_panel.js）。整个测试会话共用一个目录，退出时由系统清理。
+    """
+    global _TMPDIR
+    if _TMPDIR is None:
+        _TMPDIR = tempfile.mkdtemp(prefix="memomics_t3panel_")
+    path = os.path.join(_TMPDIR, "_t3_panel.js")
     with open(path, "w", encoding="utf-8") as f:
         f.write(_panel_js())
     return path
