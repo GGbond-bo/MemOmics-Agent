@@ -16098,6 +16098,27 @@ async def delete_session_goal(sid: str):
     return {"ok": True, **payload}
 
 
+@app.delete("/api/sessions/{sid}/todos")
+async def delete_session_todos(sid: str):
+    """P1-1(2026-09-24): 清空会话待办 —— 目标条上「清空」按钮的落点。
+
+    只清展示副本（session["todos"] + state.db 的 kv），**不动** agent 的
+    _todo_store：那本书是 agent 自己的执行状态，下次它推新待办时这里照样会出现。
+    语义同 goal：[] = 显式清空（_sync_session_todos 会涨 revision 并广播）。
+    """
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    _sync_session_todos(session, [], persist=True)
+    payload = {"todos": [], "revision": int(session.get("todos_revision", 0) or 0)}
+    _session_emit(session, {"type": "todos_update", "todos": [],
+                            "ts": datetime.now().strftime("%H:%M:%S"),
+                            "session_id": session["id"]})
+    return {"ok": True, **payload}
+
+
 # --- P1-2 (2026-09-23): 改动复核（跑前跑后快照 + diff + 单文件回滚） ---
 #
 # 借鉴 deer-flow 的部分（workspace_changes/types.py:63-116 的 WorkspaceFileChange 形状、

@@ -233,6 +233,50 @@ def test_goal_persisted_blob_is_valid_json(client, new_session):
     finally:
         _cleanup_kv(sid)
 
+# --- C2. 清空待办（2026-09-24：用户问"待办结束之后怎么关掉"） ----------------
+
+def test_delete_todos_endpoint_clears_and_broadcasts(client, new_session):
+    """清空待办：HTTP 后 /api/todos 空、session 内存空、WS 广播一条 todos_update([])。"""
+    sid = new_session
+    try:
+        sess = server._sessions[sid]
+        server._session_emit(sess, {"type": "todos_update",
+                                    "todos": [{"id": "1", "title": "跑 QC", "status": "completed"}]})
+        assert [t["title"] for t in client.get(f"/api/todos/{sid}").json()["todos"]] == ["跑 QC"]
+        rev_before = client.get(f"/api/todos/{sid}").json()["revision"]
+
+        r = client.delete(f"/api/sessions/{sid}/todos")
+        assert r.status_code == 200, r.text
+        assert r.json()["todos"] == []
+        assert client.get(f"/api/todos/{sid}").json()["todos"] == []
+        assert sess["todos"] == []
+        assert sess["todos_revision"] > rev_before, "清空也要涨 revision（前端靠它对账）"
+        # 广播：目标条上的待办段靠这条事件关掉（不吃本地状态）
+        last = sess["progress_log"][-1]
+        assert last["type"] == "todos_update"
+        assert last.get("todos") == []
+    finally:
+        _cleanup_kv(sid)
+
+
+def test_delete_todos_keeps_goal(client, new_session):
+    """两个 ✕ 各管各的：清待办不能顺手把目标也清了。"""
+    sid = new_session
+    try:
+        client.put(f"/api/sessions/{sid}/goal", json={"objective": "别被清掉"})
+        sess = server._sessions[sid]
+        server._session_emit(sess, {"type": "todos_update", "todos": [{"id": "1", "title": "X"}]})
+        assert client.delete(f"/api/sessions/{sid}/todos").status_code == 200
+        assert client.get(f"/api/sessions/{sid}/goal").json()["goal"]["objective"] == "别被清掉"
+    finally:
+        _cleanup_kv(sid)
+
+
+def test_delete_todos_unknown_session_404(client):
+    r = client.delete("/api/sessions/does-not-exist-p1-1-todos/todos")
+    assert r.status_code == 404
+
+
 # --- D. 前端接线（静态守卫） -------------------------------------------------
 # 这些断言很"浅"，但守的正是「后端有接口、前端没接」这类真空洞：
 # P1 之前的引用/待办就出现过"数据在、上不了屏"。
@@ -257,4 +301,10 @@ def test_frontend_goal_bar_wired():
     assert "applyGoalPayload(d);" in html, "progress 兜底未恢复目标"
     # 请求路径必须与后端一致
     assert "'/api/sessions/' + currentSid + '/goal'" in html
+    # 2026-09-24：待办段的关闭入口 + 宽度对齐输入框
+    assert 'id="gb-clear-todos"' in html, "清空待办按钮缺失"
+    assert "function clearTodos" in html, "清空待办未接线"
+    assert "'/api/sessions/' + currentSid + '/todos'" in html, "清空待办请求路径与后端不一致"
+    assert "function _syncGoalBarWidth" in html, "目标条宽度未对齐输入框"
+    assert "autoDoneSig" in html, "全部完成后自动收起未实现"
 

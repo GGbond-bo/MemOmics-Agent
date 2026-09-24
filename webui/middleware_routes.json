@@ -89,6 +89,7 @@
   "/api/sessions/{sid}/rename": "session",
   "/api/sessions/{sid}/rename-results": "session",
   "/api/sessions/{sid}/skills": "session",
+  "/api/sessions/{sid}/todos": "session",
   "/api/sessions/{sid}/wakeup": "session",
   "/api/setup/config": "public",
   "/api/setup/status": "public",
