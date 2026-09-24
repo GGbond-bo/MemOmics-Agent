@@ -17,6 +17,10 @@
   下面逐行列出排队的人（`#1 跑 ATAC · memomics-811918 · 已等 4m5s · 需 2 核/2 GB`），在跑的带 `▶`（见 2.3）。
 - 失败的任务（`failed` / `interrupted`）详情里有**一键重试**：`🔁 重试（第 2 次 · 5s 后启动）`，
   重试出来的任务名字带 `（重试 2/3）`、参数里写清 `重试来源 / 重试根 / 第几次重试`（见 2.4）。
+- **阶段没跑完就不给 ✅**（T15）：脚本用 `--stages` 声明了几段、实际只跑到第几段，契约都记着；
+  退出码 0 但后几段还是 `pending` 的任务，列表图标是 `⚠️`、行里直接写「没跑完：声明的 3 段里还有 2 段没跑到（训练、出图）」，
+  详情顶部一条橙色警告说清"只跑到第 N 段就退出了（退出码 0）"，并且**这种任务也能点重试**（它没干完活）。
+  真跑完的、失败的、取消的语义都不受影响（见 3 与 5-T15）。
 - **跨会话不串**（T13）：列表按会话分组，组头写 `💬 当前会话：骨骼肌 QC 跑通` / `💬 别的会话：ATAC 比对` + 任务数，
   当前会话永远排最前（组头高亮），别的会话的卡片压暗（`.task-row.other`）；详情多一行「所属会话」写明 `就是当前会话 / ⚠️ 不是当前会话`；
   取消 / 重试别的会话的任务会再确认一次，并在弹窗里点名是哪个会话。
@@ -109,7 +113,9 @@ retry_reason / retry_used / retry_max / retry_root`，面板只负责画，不�
 
 字段：`task_id/title/type/status/session_id/session_dir/log/pid/started_at/finished_at/duration_sec/
 exit_code/error/summary/progress{value,text}/params{}/outputs[]/stages[{name,status,sec}]/stage_index/stage_total/
-env{}/proc{}/wrapper{}/cancel_requested/cancel_by/cwd`。
+env{}/proc{}/wrapper{}/cancel_requested/cancel_by/cwd`，
+外加 T15 的两个诚实字段：`incomplete`（true = 退出码 0 但声明的阶段没跑完）、
+`stage_unfinished[]`（还没跑到的阶段名）。老契约没这两个字段，服务端按 `stages[].status == "pending"` 现场算，不依赖字段。
 
 脚本打点（四个标记，全部可选，缺了也能跑）：
 
@@ -273,5 +279,33 @@ T5 极端场景实测（真实 R 分析 / 4 组表格 / Europe PMC 文献下载 
 开抽屉起 2s 面板轮询 / 关抽屉只剩 20s 徽标轮询、当前会话置顶、别的会话压暗、徽标 🏃1⏳1、
 跨会话警告、筛选生效、自己没任务时指路）+ `test_task_routes.py::test_k1..k4`
 （卡片带会话名、helper 30s 缓存只查一次库、没标题退回最近一句用户话、超长截 60 字、**库挂了也要正常返回**）。
+
+### T15 阶段没跑完不许说「完成」（8899，2026-09-24）
+
+用户实测反馈的原话是：「后台任务很多都是有阶段1，阶段2，为什么只跑完阶段1就算完成呢？」
+查下来是真的：`finish()` 只看子进程退出码，**rc=0 就写 `done`**，而声明了却没跑到的阶段只是静静地
+留在 `pending`；小结 `完成 · 1/3 段` 里的「完成」两个字太大，把「3 段只跑了 1 段」盖住了。
+
+`E:\release\_t15\live_stages.py`（真机 8899 + 真 wrapper 真跑脚本）26 项断言全过（`T15_LIVE ok=26 fail=0`），
+`E:\release\_t15\panel_live.py`（把 /api/tasks 的真 payload 喂给 node 影子 DOM 真渲染面板）9 项全过（`T15_PANEL ok=9 fail=0`）：
+| 断言 | 实测 |
+| --- | --- |
+| 声明 3 段只跑 1 段、exit 0 | 契约 `status=done` + `exit_code=0`（事实不改写）**且** `incomplete=true` + `stage_unfinished=["训练","出图"]` |
+| 小结口径 | `完成（但有 2 段没跑到） · 1/3 段 · …`（两件事同时说，谁也不盖谁） |
+| 接口卡片 | `incomplete=true` / `stage_pending=2` / `stage_unfinished=["训练","出图"]` / `retry_allowed=true` + `retry_note` |
+| 能重试 | POST retry → 200 排定，6s 后重试契约真落盘（`第几次重试=1`） |
+| 真跑完的任务 | 不被误伤：无 `incomplete`、小结 `完成 · 3/3 段`、retry 仍 409「没失败」 |
+| 失败的任务 | 不被搅乱：`failed` + 退出码 3 + **不叠** `incomplete`、小结仍以「失败」开头、重试照旧允许 |
+| 老契约（文件里没新字段） | 服务端现场算，照样 `incomplete=true` |
+| 没声明阶段的任务 | `incomplete=false`（零误报） |
+| 跑到一半取消 | `cancelled` + `incomplete=true` + 没跑到的 `出图` 列出来，小结仍说「已取消」不冒充完成 |
+| 面板真渲染 | 半截任务图标 `⚠️`（不是 ✅）、行里写「没跑完：声明的 3 段里还有 2 段没跑到（训练、出图）」、详情顶部橙色警告 + 重试按钮；全跑完的那条仍是 ✅ |
+
+收尾：实测任务只留下 1 条「T15半截任务」当 ⚠️ 样本（其余当场删掉契约 + 日志）。
+
+单测：`test_task_run.py::test_h1..h6`（契约字段 + 小结口径 + 失败不叠加 + 无阶段不误报 + 取消 + 标记行通道）、
+`test_task_routes.py::test_l1..l6`（卡片字段、老契约现场算、半截任务可重试、真跑完仍拒、失败卡回归护栏）、
+`test_task_panel_ui.py::test_t15_unfinished_stages_never_look_done`（node 假 DOM：图标 ⚠️、行内警告、详情警告块、重试接线、正常任务不受影响）。
+
 
 

@@ -357,3 +357,69 @@ def test_g1_cli_list_and_show(tr, capsys):
 
 def test_g2_cli_requires_command(tr, capsys):
     assert tr.main([]) == 2
+
+
+# ------------------------------------- H 阶段没跑完就不许说「完成」（T15，用户实测反馈）
+# 原始现象：脚本用 --stages 声明 3 段，只跑到第 1 段就 exit 0，契约写 done、
+# 面板给个 ✅ 完成 —— 用户看到的就是「阶段 1 跑完就算完成」。
+def test_h1_finish_records_stages_never_reached(tr):
+    t = tr.new_task("三段只跑一段", type="qc", stages=["读入", "训练", "过滤"])
+    t.finish("done", exit_code=0)
+    d = t.data
+    assert d["status"] == "done" and d["exit_code"] == 0      # 退出码 0 是事实
+    assert d["incomplete"] is True                            # 没跑完也是事实
+    # new_task 会把第 1 段置成 running，finish(done) 把它收口成 done —— 所以"没跑到"的是后两段
+    assert d["stage_unfinished"] == ["训练", "过滤"]
+    assert [s["status"] for s in d["stages"]] == ["done", "pending", "pending"]
+    assert "完成" in d["summary"] and "2 段没跑到" in d["summary"]
+    assert "1/3 段" in d["summary"]
+
+
+def test_h2_all_stages_done_is_not_flagged(tr):
+    t = tr.new_task("两段都跑完", stages=["读入", "训练"])
+    t.stage("读入", "done")
+    t.stage("训练", "done")
+    t.finish("done", exit_code=0)
+    assert not t.data.get("incomplete")
+    assert not t.data.get("stage_unfinished")
+    assert t.data["summary"].startswith("完成 ")
+    assert "没跑到" not in t.data["summary"]
+
+
+def test_h3_failed_stays_failed_not_incomplete(tr):
+    """失败本来就不叫完成，别再叠一层「没跑完」把话说乱。"""
+    t = tr.new_task("炸了", stages=["A", "B"])
+    t.finish("failed", exit_code=3, error="脚本炸了")
+    assert t.data["status"] == "failed"
+    assert t.data["stage_unfinished"] == ["B"]           # A 是 running，收口成 failed 了
+    assert not t.data.get("incomplete")
+    assert t.data["summary"].startswith("失败")
+
+
+def test_h4_no_stage_declared_never_flagged(tr):
+    """没声明阶段的普通任务（绝大多数）不能被误伤成「没跑完」。"""
+    t = tr.new_task("随手跑一条命令", type="other")
+    t.finish("done", exit_code=0)
+    assert not t.data.get("incomplete") and not t.data.get("stage_unfinished")
+    assert t.data["summary"] == "完成" or t.data["summary"].startswith("完成 · ")
+
+
+def test_h5_cancelled_records_leftover_but_keeps_its_own_wording(tr):
+    t = tr.new_task("跑到一半被停", stages=["A", "B", "C"])
+    t.stage("A", "done")
+    t.stage("B")
+    t.finish("cancelled", error="用户取消")
+    assert t.data["status"] == "cancelled"
+    assert t.data["incomplete"] is True
+    assert t.data["stage_unfinished"] == ["C"]
+    assert t.data["summary"].startswith("已取消")           # 取消就是取消，不写"完成"
+
+
+def test_h6_marker_channel_also_flags(tr):
+    """跨语言打点通道（#TASK:STAGE）走同一条路：只打了一段照样算没跑完。"""
+    t = tr.new_task("标记行只打一段", stages=["读入", "比对", "出图"])
+    assert t.handle_marker("#TASK:STAGE 读入") is True
+    t.finish("done", exit_code=0)
+    assert t.data["incomplete"] is True
+    assert t.data["stage_unfinished"] == ["比对", "出图"]
+    assert t.data["stages"][0]["status"] == "done"

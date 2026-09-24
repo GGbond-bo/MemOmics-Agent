@@ -419,6 +419,10 @@ class Task:
         outs = len(self.data.get("outputs") or [])
         head = {"done": "完成", "failed": "失败", "cancelled": "已取消",
                 "interrupted": "中断"}.get(status or "", status or "结束")
+        left = self.data.get("stage_unfinished") or []
+        if status == "done" and left:
+            # 别让「完成」两个字盖过「还有阶段没跑」—— 这两件事必须同时出现在小结里。
+            head = "完成（但有 %d 段没跑到）" % len(left)
         bits = [head]
         if stages:
             bits.append("%d/%d 段" % (done, len(stages)))
@@ -527,6 +531,16 @@ class Task:
                     st["status"] = "done" if status == "done" else "failed"
                     st["ended_at"] = utc_now()
                     st["sec"] = round(self._age(st.get("started_at") or utc_now()), 1)
+            # T15（用户实测反馈）：脚本用 --stages 声明了 3 段，只跑到第 1 段就 exit 0，
+            # 契约照样写 done、小结还写「完成 · 1/3 段」—— 面板上就是「阶段 1 跑完就算完成」。
+            # 退出码 0 是真的（进程确实没报错），但**没跑到的阶段也是真的**：
+            # 两个事实都记下来，谁看都骗不了自己。
+            left = [str(st.get("name") or "") for st in self.data.get("stages", [])
+                    if st.get("status") == "pending"]
+            if left:
+                self.data["stage_unfinished"] = left[:50]
+                if status in ("done", "cancelled"):
+                    self.data["incomplete"] = True
             self.data["duration_sec"] = round(
                 self._age(self.data.get("started_at") or utc_now()), 1)
             # 任务小结：以前只有脚本自己调 note() 才有，实测 22 个真任务 summary 全空 ——

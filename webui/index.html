@@ -7327,6 +7327,19 @@ function taskStatusIcon(st) {
   return m[st] || '•';
 }
 
+// T15：退出码 0 但声明的阶段还有 pending —— 那不是 ✅，是"没干完活"。
+// 用户实测反馈就是这条：脚本声明 2~4 段，只跑完第 1 段就 exit 0，面板照样给个 ✅ 完成。
+function taskIconFor(t) {
+  t = t || {};
+  if (t.incomplete && _taskLive.indexOf(t.status) < 0) return '⚠️';
+  return taskStatusIcon(t.status);
+}
+
+function taskStageLeft(t) {
+  var names = (t && t.stage_unfinished) || [];
+  return names.length ? names.join('、') : '';
+}
+
 function taskFmtSec(s) {
   if (s === null || s === undefined || s === '') return '-';
   var n = Math.round(Number(s));
@@ -7591,7 +7604,7 @@ function taskRowHtml(t, mine) {
   _taskSessions[t.task_id] = { sid: t.session_id || '', title: t.session_title || '' };
   var h = '<div class="task-row' + (mine ? '' : ' other') + '" data-id="' + escapeHtml(t.task_id) + '" style="border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;' + (live ? 'border-left:3px solid var(--primary);' : (mine ? 'opacity:.85;' : '')) + '">';
   h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">';
-  h += '<span style="font-size:13px;font-weight:600;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
+  h += '<span style="font-size:13px;font-weight:600;">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</span>';
   var etaTxt = (live && t.eta_sec) ? ' · 还要 ' + taskFmtSec(t.eta_sec) : '';
   h += '<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">' + escapeHtml(t.status) + ' · ' + taskFmtSec(live ? t.elapsed_sec : t.duration_sec) + etaTxt + '</span>';
   h += '</div>';
@@ -7599,6 +7612,7 @@ function taskRowHtml(t, mine) {
   var stg = (t.stages && t.stages.length) ? ('阶段 ' + (t.stage_index || 0) + '/' + (t.stage_total || t.stages.length) + '：' + (t.stage || '')) : '';
   if (stg) h += '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + escapeHtml(stg) + '</div>';
   if (t.stalled) h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 心跳停了 ' + taskFmtSec(t.heartbeat_age_sec) + '（可能卡住或已崩）</div>';
+  if (t.incomplete && !live) h += '<div style="font-size:11px;color:#e0a030;margin-top:3px;">⚠️ 没跑完：声明的 ' + (t.stage_total || (t.stages || []).length) + ' 段里还有 ' + (t.stage_pending || 0) + ' 段没跑到（' + escapeHtml(taskStageLeft(t)) + '）</div>';
   h += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--primary);"></div></div>';
   h += '</div>';
   return h;
@@ -7644,7 +7658,19 @@ function renderTaskDetail(t) {
   h += '<button onclick="closeTaskDetail()" style="' + _taskBtn + '">← 返回列表</button>';
   h += '<span style="font-size:11px;color:var(--text-light);">每 2 秒自动刷新</span>';
   h += '</div>';
-  h += '<div style="font-size:15px;font-weight:600;margin:8px 0 4px;">' + taskStatusIcon(t.status) + ' ' + escapeHtml(t.title || t.task_id) + '</div>';
+  h += '<div style="font-size:15px;font-weight:600;margin:8px 0 4px;">' + taskIconFor(t) + ' ' + escapeHtml(t.title || t.task_id) + '</div>';
+  // T15：最显眼的位置留给"其实没干完"。别让人只看到一个 ✅ 就以为全跑完了。
+  if (t.incomplete && !live) {
+    var _tot = t.stage_total || (t.stages || []).length;
+    var _dn = (t.stages || []).filter(function(x) { return x.status === 'done'; }).length;
+    var _why = (t.status === 'cancelled')
+      ? ('任务被取消时，声明的 ' + _tot + ' 段里只跑完 ' + _dn + ' 段。')
+      : ('脚本声明了 ' + _tot + ' 段，只跑到第 ' + _dn + ' 段就退出了（退出码 ' + (t.exit_code === null || t.exit_code === undefined ? '-' : t.exit_code) + '）。');
+    h += '<div style="border:1px solid #e0a030;border-left:3px solid #e0a030;border-radius:4px;padding:6px 8px;margin:0 0 8px;font-size:12px;line-height:1.6;">' +
+         '<b>' + (t.status === 'cancelled' ? '🚫 取消时没跑完' : '⚠️ 没跑完阶段') + '</b>：' + _why +
+         (taskStageLeft(t) ? '<br>还没跑：<b>' + escapeHtml(taskStageLeft(t)) + '</b>' : '') +
+         '<br>下面时间线里灰着的那几段就是没跑到的 —— 想接着跑就点重试。</div>';
+  }
   var st = t.status + (t.cancel_requested ? '（已请求取消，来自 ' + (t.cancel_by || '') + '）' : '');
   h += taskKv('状态', st);
   h += taskKv('任务 ID', t.task_id);
@@ -7702,7 +7728,9 @@ function renderTaskDetail(t) {
   if (t.retry_allowed) {
     // 只在有参数的按钮上挂 onclick —— 内联 onclick 里拼 id 会被引号咬到，统一走 addEventListener
     h += '<button id="task-retry-btn" style="' + _taskBtn + 'border-color:#4a8f4a;color:#4a8f4a;">🔁 重试（第 ' + t.retry_attempt + ' 次 · ' + taskRetryDelayText(t.retry_delay_sec) + '）</button>';
-  } else if (t.retry_reason && (t.status === 'failed' || t.status === 'interrupted')) {
+    // T15：退出码 0 但没跑完阶段的任务也能重试，按钮旁边必须说清为什么
+    if (t.retry_note) h += '<div style="font-size:11px;color:#e0a030;margin-top:4px;">' + escapeHtml(t.retry_note) + '</div>';
+  } else if (t.retry_reason && (t.status === 'failed' || t.status === 'interrupted' || t.incomplete)) {
     h += '<div style="font-size:11px;color:var(--text-light);">🔁 不能重试：' + escapeHtml(t.retry_reason) + '</div>';
   }
   var box = document.getElementById('task-detail');

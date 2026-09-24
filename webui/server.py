@@ -9384,7 +9384,13 @@ def _retry_plan(d: dict, index: dict = None) -> dict:
             "delay_sec": _retry_backoff.next_delay(attempt),
             "max_retries": _retry_backoff.max_failures,
             "allowed": True, "reason": ""}
-    if status not in _RETRY_STATES:
+    # T15：退出码 0 但还有阶段没跑到的任务，也算"该重跑"—— 它没干完活。
+    left = [stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"]
+    unwound = bool(d.get("incomplete")) or bool(status == "done" and left)
+    if unwound and status == "done":
+        plan["note"] = ("任务退出码 0，但还有 %d 段没跑到（%s），可以重跑"
+                        % (len(left), "、".join([str(x) for x in left[:3]]) or "见阶段时间线"))
+    if status not in _RETRY_STATES and not unwound:
         plan.update(allowed=False, reason="任务没失败（%s），不用重试" % (status or "未知"))
     elif not (d.get("cmd") or ""):
         plan.update(allowed=False, reason="这份契约没记下实际命令，重跑会变成瞎猜")
@@ -9609,6 +9615,8 @@ def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
               "delay_sec": 0.0, "max_retries": 0}
     return {
         "retry_allowed": bool(rp.get("allowed")),
+        # T15：允许重试但理由值得说的时候给一句（例如"退出码 0 但还有 3 段没跑到"）
+        "retry_note": rp.get("note") or "",
         "retry_reason": rp.get("reason") or "",
         "retry_root": rp.get("root") or "",
         "retry_used": rp.get("used") or 0,
@@ -9633,6 +9641,15 @@ def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
         "progress_text": prog.get("text") or "",
         "stage_index": d.get("stage_index") or 0,
         "stage_total": d.get("stage_total") or len(d.get("stages") or []),
+        # T15：阶段没跑完就不许说「完成」。老契约没这两个字段，这里按 stages 现场算；
+        # 于是面板不用改判断逻辑，incomplete 就是"退出码 0 但还有阶段是 pending"。
+        "stage_pending": len(d.get("stage_unfinished") or [
+            stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"]),
+        "stage_unfinished": (d.get("stage_unfinished") or [
+            stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"])[:8],
+        "incomplete": bool(d.get("incomplete")) or bool(
+            d.get("status") in ("done", "cancelled")
+            and [stg for stg in (d.get("stages") or []) if stg.get("status") == "pending"]),
         # 当前阶段名。面板一直读的是 stage，而契约里只有 stages[]/stage_index，
         # 于是列表永远显示「阶段 1/4：」（冒号后面空着）—— 真机实测发现，补上。
         "stage": next((stg.get("name") or "" for stg in (d.get("stages") or [])

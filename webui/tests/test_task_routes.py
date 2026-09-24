@@ -556,6 +556,10 @@ def test_j2_retry_only_for_failed_with_recorded_cmd(client, tr, tasks_dir, token
     """只对 failed/interrupted 且契约里真记了命令的任务开重试 —— 其它一律 409 说清原因。"""
     hdr = {"X-Task-Token": token}
     done = _make(tr, tasks_dir, title="跑完了")
+    # T15 之后：done 且阶段全跑完，才是"真的不用重试"。留一段 pending 的会被判成
+    # "没跑完阶段"（那是要重跑的），所以这里先把阶段收口。
+    for stg in done.data["stages"]:
+        stg["status"] = "done"
     done.finish("done", exit_code=0)
     r = client.post("/api/tasks/%s/retry" % done.task_id, headers=hdr)
     assert r.status_code == 409 and "没失败" in r.json()["error"], r.text
@@ -815,6 +819,83 @@ def test_k4_task_list_still_works_when_db_is_dead(client, tr, tasks_dir, monkeyp
     assert d["ok"] is True
     card = next(x for x in d["tasks"] if x["task_id"] == t.task_id)
     assert card["session_title"] == "" and card["session_id"] == "memomics-aaa"
+
+
+# ------------------------------------------------- L 阶段没跑完（T15，用户实测反馈）
+def _half_done(tr, tasks_dir, **kw):
+    """造一条「退出码 0 但阶段没跑完」的契约：声明 3 段，只跑第 1 段。"""
+    kw.setdefault("title", "半截任务")
+    kw.setdefault("stages", ["读入", "训练", "出图"])
+    t = _make(tr, tasks_dir, **kw)
+    t.stage("读入", "done")
+    t.finish("done", exit_code=0)
+    return t
+
+
+def test_l1_card_flags_unfinished_stages(client, tr, tasks_dir):
+    t = _half_done(tr, tasks_dir)
+    card = _card(client, t.task_id)
+    assert card["status"] == "done"                    # 退出码 0 不改写
+    assert card["incomplete"] is True
+    assert card["stage_pending"] == 2
+    assert card["stage_unfinished"] == ["训练", "出图"]
+    assert card["stage_total"] == 3
+    assert "2 段没跑到" in card["summary"], card["summary"]
+
+
+def test_l2_card_not_flagged_when_all_stages_ran(client, tr, tasks_dir):
+    t = _make(tr, tasks_dir, title="全跑完", stages=["A", "B"])
+    t.stage("A", "done")
+    t.stage("B", "done")
+    t.finish("done", exit_code=0)
+    card = _card(client, t.task_id)
+    assert card["incomplete"] is False and card["stage_pending"] == 0
+    assert card["stage_unfinished"] == []
+
+
+def test_l3_old_contract_without_flags_is_computed_on_the_fly(client, tr, tasks_dir):
+    """老契约里没有 incomplete / stage_unfinished 字段 —— 服务端必须现场算，不能靠字段。"""
+    t = _half_done(tr, tasks_dir)
+    path = os.path.join(tasks_dir, t.task_id + ".json")
+    raw = json.load(open(path, encoding="utf-8"))
+    raw.pop("incomplete", None)
+    raw.pop("stage_unfinished", None)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(raw, f, ensure_ascii=False)
+    card = _card(client, t.task_id)
+    assert card["incomplete"] is True and card["stage_pending"] == 2
+
+
+def test_l4_done_but_unfinished_is_retryable(client, tr, tasks_dir, token):
+    """没干完活的"成功"任务也能重试：它跟失败一样需要再来一次。"""
+    t = _half_done(tr, tasks_dir, cmd="python -c pass")
+    card = _card(client, t.task_id)
+    assert card["retry_allowed"] is True, card["retry_reason"]
+    assert "2 段没跑到" in card["retry_note"], card["retry_note"]
+    r = client.post("/api/tasks/%s/retry" % t.task_id, headers={"X-Task-Token": token})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True and body["attempt"] == 1 and body["delay_sec"] == 2.0
+    assert body["cmd"] == "python -c pass"
+    assert body["task_id"] == t.task_id and body["scheduled"] is True
+
+
+def test_l5_plain_done_task_still_refuses_retry(client, tr, tasks_dir, token):
+    t = _make(tr, tasks_dir, title="真的跑完了", cmd="python -c pass", stages=["A", "B"])
+    t.stage("A", "done")
+    t.stage("B", "done")
+    t.finish("done", exit_code=0)
+    r = client.post("/api/tasks/%s/retry" % t.task_id, headers={"X-Task-Token": token})
+    assert r.status_code == 409 and "没失败" in r.json()["error"], r.text
+
+
+def test_l6_failed_task_keeps_old_behaviour(client, tr, tasks_dir):
+    """回归护栏：失败任务的卡片字段和以前一样（没被 T15 改坏）。"""
+    t = _failed(tr, tasks_dir, cmd="python -c pass")
+    card = _card(client, t.task_id)
+    assert card["status"] == "failed" and card["incomplete"] is False
+    assert card["stage_pending"] == 1 and card["retry_allowed"] is True
+    assert card["stage_unfinished"] == ["训练"] and card["retry_note"] == ""
 
 
 

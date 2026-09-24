@@ -40,7 +40,7 @@ def _panel_js() -> str:
     block = html[i:j]
     m = re.search(r"function escapeHtml\(s\) \{.*?\n\}", html, re.S)
     assert m, "index.html 里找不到 escapeHtml —— 面板渲染靠它防注入"
-    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
+    return m.group(0) + "\n\n" + block + "\nmodule.exports = { loadTasks: loadTasks, stopTaskPoll: stopTaskPoll, renderTaskList: renderTaskList, renderTaskDetail: renderTaskDetail, renderResources: renderResources, taskFmtSec: taskFmtSec, taskRetryDelayText: taskRetryDelayText, retryTask: retryTask, taskStatusIcon: taskStatusIcon, taskIconFor: taskIconFor, taskStageLeft: taskStageLeft, taskSubscribe: taskSubscribe, taskUnsubscribe: taskUnsubscribe, taskWsLive: function() { return _taskWsLive; }, openTaskDock: openTaskDock, closeTaskDock: closeTaskDock, toggleTaskDock: toggleTaskDock, toggleTaskScope: toggleTaskScope, syncTaskScopeBtn: syncTaskScopeBtn, taskBadge: taskBadge, taskSessionLabel: taskSessionLabel, dockOpen: function() { return _taskDockOpen; }, scope: function() { return _taskScope; }, _taskState: _taskState };"
 
 
 HARNESS = """
@@ -542,5 +542,64 @@ console.log(JSON.stringify({ withSid: withSid, noSid: noSid, noSidFiltered: noSi
     # 全闲且有失败时才用 ❌ 顶班；这里 done=52 没有失败 -> 徽标空
     assert got["badge"] == "", "没在跑没排队没失败时徽标应该空着：%r" % got["badge"]
     assert "跑 0" in got["tip"]
+
+
+# T15(2026-09-24)：用户实测反馈 —— 阶段 1 跑完就显示 ✅ 完成，其实后面几段根本没跑
+HALF_TASK = dict(LIVE_TASK, task_id="qc-half", title="只跑了一段", status="done", pid=None,
+                 stage_total=3, stage_pending=2, stage_unfinished=["训练", "出图"],
+                 incomplete=True, exit_code=0, duration_sec=9.0,
+                 retry_allowed=True, retry_attempt=1, retry_delay_sec=2.0, retry_max=3,
+                 retry_note="任务退出码 0，但还有 2 段没跑到（训练、出图），可以重跑",
+                 stages=[{"name": "读入", "status": "done", "sec": 2.0},
+                         {"name": "训练", "status": "pending", "sec": None},
+                         {"name": "出图", "status": "pending", "sec": None}])
+
+
+@pytest.mark.skipif(not NODE, reason="本机没有 node，跳过页面 JS 实测")
+def test_t15_unfinished_stages_never_look_done():
+    """没跑完阶段的"成功"任务：列表给 ⚠️、详情顶上摆警告、还能点重试。"""
+    mod = _write_module()
+    clean = dict(HALF_TASK, incomplete=False, stage_pending=0, stage_unfinished=[],
+                 retry_allowed=False, retry_note="")
+    drive = HARNESS + """
+const P = out.P;
+P.renderTaskList({ ok: true, counts: { running: 0, done: 1 }, tasks: [%s] });
+const row = out.store['task-list'].innerHTML;
+P.renderTaskDetail(%s);
+const detail = out.store['task-detail'].innerHTML;
+const wired = typeof out.store['task-retry-btn'].onclick;
+P.renderTaskDetail(%s);
+const cleanHtml = out.store['task-detail'].innerHTML;
+console.log(JSON.stringify({ row: row, detail: detail, wired: wired, cleanHtml: cleanHtml,
+                             icon: P.taskIconFor(%s), liveIcon: P.taskIconFor(%s),
+                             leaves: P.taskStageLeft(%s) }));
+""" % (json.dumps(HALF_TASK, ensure_ascii=False),
+       json.dumps(HALF_TASK, ensure_ascii=False),
+       json.dumps(clean, ensure_ascii=False),
+       json.dumps(HALF_TASK, ensure_ascii=False),
+       json.dumps(dict(LIVE_TASK), ensure_ascii=False),
+       json.dumps(HALF_TASK, ensure_ascii=False))
+    r = _run_node(drive, mod)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    # 图标：done + 没跑完 -> ⚠️；还在跑的任务图标不受影响
+    assert got["icon"] == "⚠️", got["icon"]
+    assert got["liveIcon"] == "🏃", got["liveIcon"]
+    assert got["leaves"] == "训练、出图"
+    # 列表行：不能只显示 ✅ 完成，要把"还有 2 段没跑到"写在脸上
+    row = got["row"]
+    assert "⚠️ 只跑了一段" in row, row
+    assert "没跑完：声明的 3 段里还有 2 段没跑到（训练、出图）" in row, row
+    assert "✅ 只跑了一段" not in row
+    # 详情：顶部警告 + 重试按钮 + 为什么能重试
+    d = got["detail"]
+    assert "没跑完阶段" in d and "还没跑：<b>训练、出图</b>" in d, d
+    assert "退出码 0" in d
+    assert "task-retry-btn" in d and got["wired"] == "function"
+    assert "还有 2 段没跑到（训练、出图），可以重跑" in d
+    # 阶段时间线里没跑的必须是 pending 字样，别混成 done
+    assert "读入" in d and "训练" in d and "出图" in d
+    # 真跑完的任务：警告和重试都不该出现（别把正常任务也搞成黄的）
+    assert "没跑完阶段" not in got["cleanHtml"] and "task-retry-btn" not in got["cleanHtml"]
 
 
