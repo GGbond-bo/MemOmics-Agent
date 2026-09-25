@@ -1,0 +1,33 @@
+type: kb_entry
+name: annotate_celltype_scRNA_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-27 06:32
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- annotate_celltype_scRNA_empirical
+content: 'skill: annotate_celltype_scRNA
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  src=task4/annotation_8classes_by_marker.csv; classes=ExN,InN,Astro,Micro,OPC,ODC,VS,ChP;
+  top15/class
+
+
+  result_summary:
+
+  从 human_40 by_marker.csv 聚合 8 大类完整代表基因表（每类 top15 按出现 cluster 数排序）：ExN 27基因(ASCL1/CHAD/FEZF2/CACNG4/FOXG1...)、InN
+  17(GAD1/SOX6/DLX6/DLX1/CCK/PVALB...)、Astro 15(CST3/GFAP/ALDH1L1/HSPB8/EDNRB/AQP4...)、Micro
+  12(GPNMB/C1QC/IRF8/CCL3/SIGLEC7...)、OPC 9(SOX1/COL20A1/CSPG4/OPCML/VIPR2...)、ODC
+  3(TMEM100/OPALIN/MAG)、VS 15(CSPG4/CLDN5/PDGFRB/EGFL7/PECAM1...)、ChP 5(SLC13A4/FOXJ1/CLIC6/UGT1A1/OTOF)。产出
+  task4/annotation_8classes_genes_full.csv (1433B)。'
+evidence: 'record_run(annotate_celltype_scRNA): 从 human_40 by_marker.csv 聚合 8 大类完整代表基因表（每类
+  top15 按出现 cluster 数排序）：ExN 27基因(ASCL1/CHAD/FEZF2/CACNG4/FOXG1...)、InN 17(GAD1/SOX6/DLX6/DLX1/CCK/PVALB...)、Astro
+  15(CST3/GFAP/ALDH1L1/HSPB8/EDNRB/AQP4...)、Mi'

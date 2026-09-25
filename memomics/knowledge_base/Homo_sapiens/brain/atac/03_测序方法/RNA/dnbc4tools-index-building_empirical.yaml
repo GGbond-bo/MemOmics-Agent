@@ -1,0 +1,31 @@
+type: kb_entry
+name: dnbc4tools-index-building_empirical
+species: Homo_sapiens
+tissue: brain
+direction: atac
+assay_type: RNA
+last_updated: 2026-09-01 01:46
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- dnbc4tools-index-building_empirical
+content: 'skill: dnbc4tools-index-building
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  url=ftp://ftp.cngb.org/pub/CNSA/data7/CNP0008672/Single_Cell/CSE0000574/, method=curl
+  -s --connect-timeout 20 --max-time 60
+
+
+  result_summary:
+
+  FTP 目录列举成功：确认 dnbc4tools-3.1.tar.gz (527,613,238 bytes ≈503MB) 与 dnbc4tools-3.0.tar.gz
+  (537,527,818 bytes) 存在于华大 CNSA 官方 FTP（CNP0008672/CSE0000574），另有 test1_barcodes/features/matrix
+  测试数据。链接 = 官方发布渠道确认。'
+evidence: 'record_run(dnbc4tools-index-building): FTP 目录列举成功：确认 dnbc4tools-3.1.tar.gz
+  (527,613,238 bytes ≈503MB) 与 dnbc4tools-3.0.tar.gz (537,527,818 bytes) 存在于华大 CNSA
+  官方 FTP（CNP0008672/CSE0000574），另有 test1_barcodes/features/matrix 测试数据。链接 = 官方发布渠道确认'

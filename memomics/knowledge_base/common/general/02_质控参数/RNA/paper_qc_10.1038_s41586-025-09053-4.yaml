@@ -1,0 +1,63 @@
+type: kb_entry
+domain: common
+name: paper_qc_10.1038_s41586-025-09053-4
+doi: "10.1038/s41586-025-09053-4"
+direction: general
+assay_type: RNA
+last_updated: 2026-09-23 02:17
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_qc_10.1038_s41586-025-09053-4
+content: '- quality control = stringent (exact thresholds not specified)（Used to obtain
+  2,293,951 high-quality cells from 706 healthy samples across 35 human tissues）
+
+  - Gene counts per cell = 500–8,000 genes（保留高质量细胞）
+
+  - Total gene counts per cell = 1,000–100,000 counts（保留高质量细胞）
+
+  - Mitochondrial gene counts = <20%（保留高质量细胞）
+
+  - Doublet score = ≤90th percentile（Scrublet去除双细胞）
+
+  - High-quality cells per sample = ≥50（排除样本）
+
+  - Common transcriptome genes = 21,812 genes（统一不同人类基因组注释版本）
+
+  - CCC = 0 to 1; 1 indicates maximum stability（Classification stability for NMF rank
+  selection）
+
+  - CCC rank criteria = ρk−2 < ρk−1 < ρk and ρk > ρk+1（Criteria for consistent stability;
+  optimal rank maximizes CCC）
+
+  - RNA-seq sample exclusion = highest score < 0.2（Excluded 278/12,240 (2.3%) samples
+  to ensure robust CMT classification）
+
+  - negative module scores = 0（Set negative AddModuleScore values to zero）
+
+  - Ro/e enrichment = Ro/e > 1（Tissue enrichment definition）
+
+  - FDR = <0.05（DEG and enrichment significance thresholds）
+
+  - log2-transformed fold change = >log2(1.2)（CM-dependent DEGs）
+
+  - normalized cytokine expression = >0.1（cytokine network inclusion threshold）
+
+  - minimum samples per tissue = ≥5（exclude tissues with fewer than five samples）
+
+  - age information = excluded if missing（age association analysis）
+
+  - coefficient = >0.5（Specifically correlated cell-subset pairs）
+
+  - FDR = <0.05（Specifically correlated cell-subset pairs and DEGs）
+
+  - specificity = >0.95（Specifically correlated cell-subset pairs）
+
+  - log2-transformed fold change = >log2(1.2)（DEGs in tumour versus adjacent non-tumour
+  samples）
+
+  - QC = donor, sample and cell numbers reported before and after QC（Pan-cancer scRNA-seq
+  datasets）'
+evidence: DOI 10.1038/s41586-025-09053-4 | Cross-tissue multicellular coordination
+  and its rewiring in cancer | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41586-025-09053-4.pdf

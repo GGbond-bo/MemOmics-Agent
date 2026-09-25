@@ -1,0 +1,28 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: monkey
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 19:27
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"figure":"da_fdr_diagnosis.png","panels":"p分布vsBH门槛 + BH q曲线"}
+
+
+  result_summary:
+
+  FDR 诊断图产出：5296656 tile，min_p=1.18e-7、min_q=0.6265、q<0.05 计数=0；BH 恒等式 q_min=p_min*n
+  精确成立；门槛 9.44e-9，现差 12.5 倍'
+evidence: 'record_run(cross-species-cre-conservation): FDR 诊断图产出：5296656 tile，min_p=1.18e-7、min_q=0.6265、q<0.05
+  计数=0；BH 恒等式 q_min=p_min*n 精确成立；门槛 9.44e-9，现差 12.5 倍'

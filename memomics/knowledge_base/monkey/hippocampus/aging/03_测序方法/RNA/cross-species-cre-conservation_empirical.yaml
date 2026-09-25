@@ -1,0 +1,32 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: monkey
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 02:28
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  readRDS dgCMatrix; colClasses=c("NULL",NA,"NULL","NULL") 只读 seqnames 列；rowSums/rowMeans
+  走稀疏；jsonlite 落 JSON；png 4 面板 QC
+
+
+  result_summary:
+
+  猴侧复核通过：20×6,085,841 dgCMatrix，值域 0–0.9988（mean 0.00186），nnzero 101,675,165，行名=样本
+  M1…Y7；⚠️ 矩阵 colnames 全空 → tile 身份须按位置取 monkey_tile_coords.csv（nrow=6,085,841=ncol，位置对应成立）；坐标
+  NC_088375.1:0-499（0-based, 500bp，21 条序列）；年龄仅 4 个离散簇（Y5/M10-12/O22-23/V28-31）；每样本非零
+  tile 3,686,698–5,566,123（样本间深度差异明显大于人侧）'
+evidence: 'record_run(cross-species-cre-conservation): 猴侧复核通过：20×6,085,841 dgCMatrix，值域
+  0–0.9988（mean 0.00186），nnzero 101,675,165，行名=样本 M1…Y7；⚠️ 矩阵 colnames 全空 → tile 身份须按位置取
+  monkey_tile_coords.csv（nrow=6,085,841=ncol，位置对应成立）；坐标 NC_088375.1:0-499（0-based,'

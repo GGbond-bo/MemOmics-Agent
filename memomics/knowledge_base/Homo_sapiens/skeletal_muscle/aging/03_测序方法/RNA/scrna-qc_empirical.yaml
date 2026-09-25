@@ -1,0 +1,34 @@
+type: kb_entry
+name: scrna-qc_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 20:44
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scrna-qc_empirical
+content: 'skill: scrna-qc
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"seeds":"1:5","inj":160,"nExp":160,"pK":0.01,"f1_mean":0.310,"f1_CI95":0.026,"fpr":0.0518}
+
+
+  result_summary:
+
+  R 侧多 seed（5 seeds）DoubletFinder benchmark 完成，达到 L2 裁决的升格条件：**DF nExp160 → recall
+  0.310±0.026、真细胞误判 5.18%、precision 0.310、F1 0.310±0.026（CI [0.284,0.336]）**，与 scrublet
+  rate7.5% 的 F1 0.256±0.011（CI [0.245,0.267]）**置信区间不重叠** → DF nExp160 稳健地优于 scrublet，且
+  FPR 5.18% 接近 5% 阈值。三档最终排序：DF_nExp160 (F1 0.310) > SC_rate7p5 (0.256) > SC_rate0p8
+  (0.226，且误判 32.8% 假阳性爆炸)。结论：本数据双细胞检测能力整体弱（F1≤0.34），DF nExp160 为最优操作档；检测真阳性下界 = 0.310×160/2132
+  ≈ 2.3%。工程坑记录：R 中 `X[, i1] + X[, i2]` 合成矩阵会继承原列名 → CreateSeuratObject 报 Duplicate
+  rownames，必须重命名列。产出：multiseed_benchmark_doubletfinder.csv + _summary.csv。'
+evidence: 'record_run(scrna-qc): R 侧多 seed（5 seeds）DoubletFinder benchmark 完成，达到 L2
+  裁决的升格条件：**DF nExp160 → recall 0.310±0.026、真细胞误判 5.18%、precision 0.310、F1 0.310±0.026（CI
+  [0.284,0.336]）**，与 scrublet rate7.5% 的 F1 0.256±0.011（CI [0.2'

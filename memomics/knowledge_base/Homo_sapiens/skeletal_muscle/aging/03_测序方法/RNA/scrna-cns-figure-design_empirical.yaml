@@ -1,0 +1,32 @@
+type: kb_entry
+name: scrna-cns-figure-design_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-18 17:18
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scrna-cns-figure-design_empirical
+content: 'skill: scrna-cns-figure-design
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  base graphics 零依赖；纸宽反解色块 183mm；SUBS 顺序按用户指定（Pure Type IIA>IIX>I>LRP1B+(I)>OTUD1+(I)>OTUD1+(II)>RP_high(I)>RP_high(II)>RSS>Specialized
+  MF）；删除左侧纤维型注释条(FIBER/FCOL)+旋转类型名；行内 z-score ddof=0；RdBu_r ±2；MAI=c(1.10,1.00,0.62,0.74)；GAPX=0.22；300dpi
+  png/cairo_pdf/svglite/tiff-lzw
+
+
+  result_summary:
+
+  FigA3 CNS v2：两套图（17程序/5轴 + 18程序/6组含Artifact）各 4 格式 = 8 文件全部写出非空（png 122-125KB /
+  pdf 45KB / svg 63-65KB / tiff 413KB）。左栏注释条已删除，亚群次序改为用户指定顺序；行内 z-score 值不随行序变化（仅重排）。旧
+  v1 已归档 archive_superseded/*_v1_strip.*'
+evidence: 'record_run(scrna-cns-figure-design): FigA3 CNS v2：两套图（17程序/5轴 + 18程序/6组含Artifact）各
+  4 格式 = 8 文件全部写出非空（png 122-125KB / pdf 45KB / svg 63-65KB / tiff 413KB）。左栏注释条已删除，亚群次序改为用户指定顺序；行内
+  z-score 值不随行序变化（仅重排）。旧 v1 已归档 archive_superseded/*_v1_stri'

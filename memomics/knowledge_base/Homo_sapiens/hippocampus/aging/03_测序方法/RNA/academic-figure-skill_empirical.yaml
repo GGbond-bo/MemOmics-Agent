@@ -1,0 +1,39 @@
+type: kb_entry
+name: academic-figure-skill_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-12 15:12
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- academic-figure-skill_empirical
+content: 'skill: academic-figure-skill
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"fig4_fix": "legend -> fig.legend(loc=''lower center'', bbox_to_anchor=(0.5,-0.055),
+  ncol=4) 移出绘图区; suptitle 四方法横评->三基线横评", "fig2_fix": "弃矩匹配 gamma 拟合曲线，改为只呈现归档统计量（obs
+  6285 / null_mean 258.4 / SD 1075.14 / ratio 24.3228 / p 0.005 / n_units 525137），数据源
+  results/置换检验统计.csv", "new_scripts": ["scripts/10_make_figures_permutation_core.py",
+  "scripts/11_export_permutation_stats.R", "scripts/10_gen_disclosure_docx_v12.py"],
+  "table1": "7 -> 9 方法（补 基线②b meta|Z|>=3.92 5534/1890=34.2%/精度24.9%、基线③b 仅猴侧|Z2|>=12
+  67/35=52.2%/精度52.2%）", "table3": "重写为 12 步，出图拆分为 04_make_figures_v10.py(图1/4/5)
+  + 10_make_figures_permutation_core.py(图2/3)", "docx": "v12 = 1,262,442 B / 85 段
+  / 6 表 / 5 图"}
+
+
+  result_summary:
+
+  交底书 v12 定稿：5 张附图全部重出并复核（图4 遮挡消除，9 个数值标签全可读含 58.7%(827/1409)；图2 改为只呈现归档统计量不再绘制拟合曲线；图3
+  数据源改为交付目录两份 CSV）。表1 7->9 方法、表3 重写 12 步与磁盘一致。验收 38 PASS / 0 FAIL；陈旧字符串（四方法横评/07_age_shuffle.R/08_gen_disclosure_docx_v10.py/v10
+  交底书/12.3/95.5%）零命中；docx 内 5 张 media 与磁盘 figures/ SHA256 逐字节一致；core 口径未变 357/16/19/16,029/16,010/221,069。L1
+  辩论裁决 support(high)。'
+evidence: 'record_run(academic-figure-skill): 交底书 v12 定稿：5 张附图全部重出并复核（图4 遮挡消除，9 个数值标签全可读含
+  58.7%(827/1409)；图2 改为只呈现归档统计量不再绘制拟合曲线；图3 数据源改为交付目录两份 CSV）。表1 7->9 方法、表3 重写 12 步与磁盘一致。验收
+  38 PASS / 0 FAIL；陈旧字符串（四方法横评/07_age_shuffle.R/08_gen_disclosure_docx'

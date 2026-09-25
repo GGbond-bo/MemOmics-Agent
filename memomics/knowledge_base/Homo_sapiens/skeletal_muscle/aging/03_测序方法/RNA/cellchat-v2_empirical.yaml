@@ -1,0 +1,35 @@
+type: kb_entry
+name: cellchat-v2_empirical
+dois: ["10.3390/ijms22052455", "10.3390/nu16193271"]
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 19:07
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cellchat-v2_empirical
+content: 'skill: cellchat-v2
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  search_papers 短查询（"PTPRM muscle"、"sarcopenia neuromuscular junction NRG1 ERBB"，≤5
+  词才命中，长查询返回 0）+ save_reference(global_lib) 登记 PMID 12895029 / 33671084
+
+
+  result_summary:
+
+  辩论要求 owner=ai 的文献锚点任务完成（action 3）。关键证据：① PMID 12895029（Koop 2003, Int J Dev Biol）证明
+  RPTPmu/PTPRM 是"内皮细胞异质性 marker"——说明肌纤维群中 PTPRM 信号存在内皮/血管细胞来源可能，直接支撑辩论反方对 PTPRM 63.3%
+  的技术假象质疑；② PMID 33671084（Ohkawara 2021）分泌信号分子在 NMJ 生理/病理中的作用（NRG/ERBB 轴）；③ PMID 39408239（sarcopenia
+  targets 2024, 被引 49）、33815879（Terminal Schwann Cell Aging NMJ, 被引 45）、39657086（NMJ
+  regeneration in aging 2025）支持衰老 NMJ 退化背景。检索经验：search_papers 查询词过长（>5 词含基因名堆叠）会返回
+  0 结果，需拆成短查询。'
+evidence: 'record_run(cellchat-v2): 辩论要求 owner=ai 的文献锚点任务完成（action 3）。关键证据：① PMID
+  12895029（Koop 2003, Int J Dev Biol）证明 RPTPmu/PTPRM 是"内皮细胞异质性 marker"——说明肌纤维群中 PTPRM
+  信号存在内皮/血管细胞来源可能，直接支撑辩论反方对 PTPRM 63.3% 的技术假象质疑；② PMID 33671084（Ohkawara'

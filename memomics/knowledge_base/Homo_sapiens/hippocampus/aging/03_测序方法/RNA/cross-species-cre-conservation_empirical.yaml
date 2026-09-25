@@ -1,0 +1,32 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 02:25
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  human npz+token 索引重建 tile 名 chr:start-start+499；chr 编码 0-based(chr1..chr22,X)；抽样
+  1/37 做分布直方图；matplotlib 4 面板 QC
+
+
+  result_summary:
+
+  Phase0-A 人侧复核：40×6,062,095 float32；值域 0–0.77482（mean 0.004416）；0 NaN；tile 步长恒 500bp；tile
+  名 chr1:0-499 … chrX:156040500-156040999（无 -1 后缀）；tiles/chr 合计 6,062,095（与猴 6,085,841
+  差 23,746 = 两参考基因组差异）；每样本非零 tile 5,373,869–5,581,560；产出 phase0_human_check.json +
+  figures/phase0_human_tile_qc.png(144,132 B)'
+evidence: 'record_run(cross-species-cre-conservation): Phase0-A 人侧复核：40×6,062,095
+  float32；值域 0–0.77482（mean 0.004416）；0 NaN；tile 步长恒 500bp；tile 名 chr1:0-499 … chrX:156040500-156040999（无
+  -1 后缀）；tiles/chr 合计 6,062,095（与猴 6,085,841 差 23,746 = 两参考基因组差异）；每样本非零'

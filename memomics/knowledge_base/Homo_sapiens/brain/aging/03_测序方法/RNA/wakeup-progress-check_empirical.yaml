@@ -1,0 +1,34 @@
+type: kb_entry
+name: wakeup-progress-check_empirical
+species: Homo_sapiens
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-12 09:52
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup-progress-check_empirical
+content: 'skill: wakeup-progress-check
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"session":"memomics-7839e23a","wakeup_source":"user_message (LoopX paused)","target":"E:/专利/交付_跨物种衰老可替代性专利
+  v10","checks":["md/docx mtime+size stat","token residue scan (12.3/582/357/221069)","docx
+  v10 结构解析 (222段/5图/表5 11项)","claims.md 14项 vs docx表5 11项 比对"]}
+
+
+  result_summary:
+
+  唤醒轮核查：唤醒源=用户消息（LoopX paused，非死循环）。发现交付件已被推进到 v10（mtime 09-12 05:5x，晚于 task_plan
+  04:22）：A22.3 v10 已删除「12.3× 富集」循环论证并改三基线横评（反向混入率+召回率）、新增统一同源元件网格+per-tile 门控归一化、docx
+  v10=1,299,875B/222段/5图（"12.3"/"循环论证" 0 命中）。本轮未改交付件，新增 E:/专利/提交前核查清单.md（11,139B）：列
+  6 项形式缺口（发明名称缺"染色质"、claims 14项 vs docx表5 11项、disclosure.md 缺附图说明/装置实施例、版本号未更新、申请人信息待填+3
+  个 Word 锁文件）+ 1 项战略待拍板（统一网格放独权还是从属，建议提入独权）+ 可并入草稿。'
+evidence: 'record_run(wakeup-progress-check): 唤醒轮核查：唤醒源=用户消息（LoopX paused，非死循环）。发现交付件已被推进到
+  v10（mtime 09-12 05:5x，晚于 task_plan 04:22）：A22.3 v10 已删除「12.3× 富集」循环论证并改三基线横评（反向混入率+召回率）、新增统一同源元件网格+per-tile
+  门控归一化、docx v10=1,299,875B/222段/5图（"12.3"/"循环论证"'

@@ -1,0 +1,32 @@
+type: kb_entry
+name: gse278576-atac-aging-comparison_empirical
+species: other
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-02 21:14
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- gse278576-atac-aging-comparison_empirical
+content: 'skill: gse278576-atac-aging-comparison
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  scaleTo=NULL, divideN=FALSE, ArchR 1.0.3
+
+
+  result_summary:
+
+  L3 报错 "All tiles filtered out!" 根因：ArchR 1.0.3 getGroupSE 默认 divideN=TRUE（除以组内细胞数），即使
+  scaleTo=NULL 也返回"每细胞平均 counts"（小数）；rowSums(cnt) >= 2*ncol 阈值永远不过 → sum(keep)==0。修复：getGroupSE(...,
+  scaleTo=NULL, divideN=FALSE) 同时关闭两者才返回原始总 counts。已从本地 R 源码逐行确认（getGroupSE 函数体 divideN
+  分支）。'
+evidence: 'record_run(gse278576-atac-aging-comparison): L3 报错 "All tiles filtered
+  out!" 根因：ArchR 1.0.3 getGroupSE 默认 divideN=TRUE（除以组内细胞数），即使 scaleTo=NULL 也返回"每细胞平均
+  counts"（小数）；rowSums(cnt) >= 2*ncol 阈值永远不过 → sum(keep)==0。修复：getGroupSE(..., scaleTo=NULL,
+  d'

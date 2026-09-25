@@ -1,0 +1,28 @@
+type: kb_entry
+name: patent-analysis_empirical
+species: Homo_sapiens
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 22:22
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- patent-analysis_empirical
+content: 'skill: patent-analysis
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  XML→纯文本抽取（去 ref-list/back/front + 去标签），3 篇 → 53816/57245/80742 字符
+
+
+  result_summary:
+
+  3 篇跨物种方法学论文全文转纯文本成功，供方法学比对（ortholog/conservation/permutation/transferability/normalization
+  词频统计）'
+evidence: 'record_run(patent-analysis): 3 篇跨物种方法学论文全文转纯文本成功，供方法学比对（ortholog/conservation/permutation/transferability/normalization
+  词频统计）'

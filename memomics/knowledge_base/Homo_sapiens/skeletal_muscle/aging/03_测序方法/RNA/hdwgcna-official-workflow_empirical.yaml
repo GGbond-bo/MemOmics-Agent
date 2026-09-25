@@ -1,0 +1,35 @@
+type: kb_entry
+name: hdwgcna-official-workflow_empirical
+dois: ["10.1371/journal.pcbi.1001057", "10.1186/s12859-022-04861-1", "10.1371/journal.pcbi.1013697"]
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 21:48
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- hdwgcna-official-workflow_empirical
+content: 'skill: hdwgcna-official-workflow
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  execute_code + EuropePMC REST core API 抓 5 篇摘要逐字原文 (21283776/35963997/37426759/41231963/19114008)
+
+
+  result_summary:
+
+  5 篇摘要逐字取证完成，三条关键证据: ①PMID 41231963(LSMetacell 2025) 原文逐字"uncontrolled library size
+  variance in traditional metacells inflates false-positive correlations and distorts
+  co-expression networks"→ 直接支持"我们未做 library-size 稳定化的 metacell 可能产生假阳性相关"；②PMID 35963997(SuperCell)
+  定位在 tens to hundreds of thousands of cells / 1.46M 细胞案例, 机理是 capitalize on the redundancy
+  inherent to scRNA-seq → 120 细胞冗余不足, metacell 前提不成立；③PMID 21283776 摘要只讲"aggregate
+  multiple preservation statistics into summary preservation statistics", **摘要内无 Zsummary
+  阈值数字 → 辩论中禁止引用具体阈值(10/2), 只引方法论**。规避了凭记忆编造阈值。'
+evidence: 'record_run(hdwgcna-official-workflow): 5 篇摘要逐字取证完成，三条关键证据: ①PMID 41231963(LSMetacell
+  2025) 原文逐字"uncontrolled library size variance in traditional metacells inflates
+  false-positive correlations and distorts co-expression networks"→ 直接支持"我们未'

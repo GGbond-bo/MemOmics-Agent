@@ -1,0 +1,30 @@
+type: kb_entry
+name: dnbc4tools-analysis-workflow_empirical
+species: Homo_sapiens
+tissue: brain
+direction: atac
+assay_type: RNA
+last_updated: 2026-09-01 10:51
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- dnbc4tools-analysis-workflow_empirical
+content: 'skill: dnbc4tools-analysis-workflow
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  官方 scATAC.md + io.md 输出规范核对；WSL 输出目录检查
+
+
+  result_summary:
+
+  官方 ATAC 输出=all.merge.fragments.tsv.gz + raw_peak_matrix/ + filter_peak_matrix/(peaks.bed.gz+barcodes.tsv.gz+matrix.mtx.gz)
+  + singlecell.csv，成功标志=Analysis Finished，输出在 outdir/name/output/ 下。READS_QC_FILTER
+  的 atac.reads.{r1,r2,cb}.fq 是中间件不是交付产物。'
+evidence: 'record_run(dnbc4tools-analysis-workflow): 官方 ATAC 输出=all.merge.fragments.tsv.gz
+  + raw_peak_matrix/ + filter_peak_matrix/(peaks.bed.gz+barcodes.tsv.gz+matrix.mtx.gz)
+  + singlecell.csv，成功标志=Analysis Finished，输出在 outdir/name/output/ 下。READS_QC_FI'

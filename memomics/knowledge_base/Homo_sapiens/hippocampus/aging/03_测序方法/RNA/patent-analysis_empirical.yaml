@@ -1,0 +1,28 @@
+type: kb_entry
+name: patent-analysis_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 10:27
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- patent-analysis_empirical
+content: 'skill: patent-analysis
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  只读三源验证: nvidia-smi + tasklist + ls -la E:/专利/交付_跨物种衰老可替代性专利/ + ls -la E:/专利/file/
+
+
+  result_summary:
+
+  Plan B(v21三柱)执行状态核查: GPU 6%空闲/无python·R进程/交付目录仅4份v21文档(03:21-03:26)，无任何v21计算产出(l1_v21_baseline.py有脚本无输出)。判定:
+  Plan B 未跑，停在 Phase0 完成。'
+evidence: 'record_run(patent-analysis): Plan B(v21三柱)执行状态核查: GPU 6%空闲/无python·R进程/交付目录仅4份v21文档(03:21-03:26)，无任何v21计算产出(l1_v21_baseline.py有脚本无输出)。判定:
+  Plan B 未跑，停在 Phase0 完成。'

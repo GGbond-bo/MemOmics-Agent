@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-08-21 13:01
+last_updated: 2026-09-24 20:25
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,23 +12,21 @@ auto_trigger:
 - cns-visualization_empirical
 content: 'skill: cns-visualization
 
-  quality_score: 10.0
+  quality_score: 9.0
 
 
   params_used:
 
-  {"data": "E:/骨骼肌锻炼/MF_AUCell_meta.csv (508662 cells)", "jobs": ["LRP1B+(I)=AMPK_PGC1a",
-  "OTUD1+(I)=scoreInflammatory", "OTUD1+(II)=scoreAtrophy", "RP_high(I)=scoreROS",
-  "RP_high(II)=Glycolysis"], "comparison": "each vs Pure Type I/IIA/IIX", "stats":
-  "Cohen''s d stars (***>=0.8, **>=0.5, *>=0.3, ns)", "colors": "main=#A8D8EA, pure=#5DADE2/#FFB347/#CC7A00
-  (蓝橙)", "output": "PNG(300)+SVG+PDF+TIFF(600)"}
+  {"script":"04_figures.py","phase":"post-review 通过（完整脚本 172 行传入）","debate":"L2 8角色，scenario=bio_data（单细胞降维基准），verdict=modify，confidence=medium"}
 
 
   result_summary:
 
-  5张 FigC1 亚群小提琴图在当前会话重新生成成功：LRP1B+(I) AMPK_PGC1a d=[0.21,0.333,0.68]、OTUD1+(I) Inflammatory
-  d=[0.12,0.35,0.355]、OTUD1+(II) Atrophy d=[0.298,0.106,0.165]、RP_high(I) ROS d=[0.381,0.661,0.712]、RP_high(II)
-  Glycolysis d=[0.487,0.142,0.386]，每张 PNG+SVG+PDF+TIFF 四格式齐。'
-evidence: 'record_run(cns-visualization): 5张 FigC1 亚群小提琴图在当前会话重新生成成功：LRP1B+(I) AMPK_PGC1a
-  d=[0.21,0.333,0.68]、OTUD1+(I) Inflammatory d=[0.12,0.35,0.355]、OTUD1+(II) Atrophy
-  d=[0.298,0.106,0.165]、RP_high(I) ROS d=[0.381,0.661,0.712]、RP_high(II)'
+  图集通过 post 审查 + L2 辩论完成。裁判 rubrics：metric_adequacy 7 / evidence_transparency 6 /
+  fair_comparison 5 / confounding_control 3 / biological_validity 3 / robustness_sensitivity
+  3 / generalization_scope 2。裁决 modify：可下"本数据同参下 PCA30 略贴近已有 L3"弱结论，但 ① 两者均未产生干净分群
+  ② 不可外推"scVI 不如 PCA"。3 个 blocks：未出多 seed/bootstrap CI 前不得称"稳定优势"；未做批次混杂对照前不得把 PCA
+  优势归因亚型可分性；未统一输入（PCA 吃 SCT 表达 vs scVI 吃 raw counts）前不得下算法优劣结论 → 转 Phase 5 补齐'
+evidence: 'record_run(cns-visualization): 图集通过 post 审查 + L2 辩论完成。裁判 rubrics：metric_adequacy
+  7 / evidence_transparency 6 / fair_comparison 5 / confounding_control 3 / biological_validity
+  3 / robustness_sensitivity 3 / generalization_scope 2。裁决'

@@ -1,0 +1,29 @@
+type: kb_entry
+name: bioinformatics-patent-strategy_empirical
+species: other
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 23:01
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bioinformatics-patent-strategy_empirical
+content: 'skill: bioinformatics-patent-strategy
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  M2_repro_gene_conservation_all.csv (16029 genes); 人40例/猴20例供体; tile级Pearson r
+
+
+  result_summary:
+
+  审查员点1判定闭合：tile级单元统计量确认为Pearson r（权2原文+06脚本stouffer()实读）→ Fisher-Z适用（分支①）。实测p机器零饱和真实存在：人侧19.07%/猴侧2.1%的基因级p落机器eps。同向率0.4636复现。n_tiles_h
+  1-4952(中位66)/n_tiles_m 1-3011(中位51)。猴n=20>4 → Fisher-Z可用但需winsorize。'
+evidence: 'record_run(bioinformatics-patent-strategy): 审查员点1判定闭合：tile级单元统计量确认为Pearson
+  r（权2原文+06脚本stouffer()实读）→ Fisher-Z适用（分支①）。实测p机器零饱和真实存在：人侧19.07%/猴侧2.1%的基因级p落机器eps。同向率0.4636复现。n_tiles_h
+  1-4952(中位66)/n_tiles_m 1-3011(中位51)。猴n=20>4 → Fisher-Z可用但需winsori'

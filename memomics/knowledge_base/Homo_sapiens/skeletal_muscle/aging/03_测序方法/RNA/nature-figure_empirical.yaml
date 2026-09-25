@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-08-20 19:19
+last_updated: 2026-09-24 20:26
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,20 +12,20 @@ auto_trigger:
 - nature-figure_empirical
 content: 'skill: nature-figure
 
-  quality_score: 9.0
+  quality_score: 10.0
 
 
   params_used:
 
-  {"jobs":5,"template":"fig_C1_AMPK_violin_4sub.py","star_eff":"d>=0.8***,0.5**,0.3*,else
-  ns","violin_width":0.70,"alpha":0.85,"ylim":"data_max*1.28","formats":"png300,svg,pdf,tiff600"}
+  GRP_HUE 键改 Y/O/OD + stopifnot(!any(is.na(...))) 自检; R 侧 png::readPNG 子采样像素验证(逐目标
+  hex 计数 + 三分带 colored%)
 
 
   result_summary:
 
-  5亚群vs3纯纤维小提琴图重画成功: LRP1B+(I)-AMPK_PGC1a d=[0.21,0.33,0.68]; OTUD1+(I)-scoreInflammatory
-  d=[0.12,0.35,0.36]; OTUD1+(II)-scoreAtrophy d=[0.30,0.11,0.17] 全ns; RP_high(I)-scoreROS
-  d=[0.38,0.66,0.71]; RP_high(II)-Glycolysis d=[0.49,0.14,0.39]. 每图4格式共20文件, 删除31个旧violin入备份.'
-evidence: 'record_run(nature-figure): 5亚群vs3纯纤维小提琴图重画成功: LRP1B+(I)-AMPK_PGC1a d=[0.21,0.33,0.68];
-  OTUD1+(I)-scoreInflammatory d=[0.12,0.35,0.36]; OTUD1+(II)-scoreAtrophy d=[0.30,0.11,0.17]
-  全ns; RP_high(I)-scoreROS d=[0.38,0.66,0.71]; RP_h'
+  v2 修复后像素验证通过: 6 个组别色全部出现(#8CD3C0 n=2043 / #009E73 n=3124 / #8CC0DC n=15660 / #0072B2
+  n=2811 / #ECB78C n=3377 / #D55E00 n=2930), band3(panel e/f) colored 3.35% 已恢复; 补充图
+  S1 同样 6 色齐全'
+evidence: 'record_run(nature-figure): v2 修复后像素验证通过: 6 个组别色全部出现(#8CD3C0 n=2043 / #009E73
+  n=3124 / #8CC0DC n=15660 / #0072B2 n=2811 / #ECB78C n=3377 / #D55E00 n=2930), band3(panel
+  e/f) colored 3.35% 已恢复; 补充图 S1 同样 6 色齐全'

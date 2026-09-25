@@ -1,0 +1,32 @@
+type: kb_entry
+name: cross-species-atac-annotation_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-27 13:01
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-atac-annotation_empirical
+content: 'skill: cross-species-atac-annotation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  human_40_markerList.csv 28 clusters (C24/C27不存在); 猴脑19亚群命名对齐; ExN区域marker字典核查(WFS1/SORL1/GRIK1/NR4A2/PROX1);
+  debate L1 结论 need_more_info→命名加like后缀降候选级
+
+
+  result_summary:
+
+  人脑28亚群注释最终版: 23群对齐猴脑19亚群名(OPC×6/Astro×6/ODC/MGE SST/PVALB/CGE/Micro×2/活化Mic/Macrophage);
+  3群人脑独有ExN按marker命名(CA1-like Ex*/CA1-SUB-like Ex*/CTX-deep Ex); 5群低置信/噪声保留原文(C13伪影,
+  C25/C26 OR嗅觉受体噪声, C28/C29低置信)。修正C21: VS→Macrophage(CCL18/CCL3/CCL23证据)。产出 task4/human_subcluster_annotation_final.csv
+  + scripts/annotate_subcluster_alignment.py'
+evidence: 'record_run(cross-species-atac-annotation): 人脑28亚群注释最终版: 23群对齐猴脑19亚群名(OPC×6/Astro×6/ODC/MGE
+  SST/PVALB/CGE/Micro×2/活化Mic/Macrophage); 3群人脑独有ExN按marker命名(CA1-like Ex*/CA1-SUB-like
+  Ex*/CTX-deep Ex); 5群低置信/噪声保留原文(C13伪影, C25/C26 OR嗅觉受体噪声, C28/C29低置信'

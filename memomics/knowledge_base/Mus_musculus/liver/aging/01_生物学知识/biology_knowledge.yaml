@@ -4,6 +4,7 @@
 # 文献来源: 综合PubMed搜索 (liver aging scRNA-seq/spatial/bulk/ATAC)
 
 species: Mus musculus
+dois: ["10.1158/0008-5472.CAN-15-1544", "10.1007/s00264-023-05688-y", "10.1038/s43587-023-00513-y", "10.1096/fj.202302282R"]
 tissue: liver
 direction: aging
 updated: '2026-07-07'

@@ -1,0 +1,29 @@
+type: kb_entry
+name: patent-analysis_empirical
+species: monkey
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 05:13
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- patent-analysis_empirical
+content: 'skill: patent-analysis
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  Monkey symmetric composition-adjusted DA: 模型A log2CPM~Age / B ~Age+CLR(8 celltypes,去Unknown)
+  / C ~CLR; 538420 peak x 21 个体; 0.5 零替换
+
+
+  result_summary:
+
+  猴侧组织级 Age 显著 peak = 0/538420（人侧 309/525137）；方差分解唯一归组成 95.3% vs 唯一归 Age 6.4%（人侧 96.8%/4.5%）→
+  两侧同构：组织级信号均以组成为主，猴侧连 Age 信号都不存在'
+evidence: 'record_run(patent-analysis): 猴侧组织级 Age 显著 peak = 0/538420（人侧 309/525137）；方差分解唯一归组成
+  95.3% vs 唯一归 Age 6.4%（人侧 96.8%/4.5%）→ 两侧同构：组织级信号均以组成为主，猴侧连 Age 信号都不存在'

@@ -1,0 +1,34 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: Homo_sapiens
+tissue: hippocampus vs caudate nucleus
+direction: cross-species aging
+assay_type: RNA
+last_updated: 2026-09-03 16:58
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"l3_source": "GSE67978_H3K27ac_real_hits", "chain": "rheMac3ToHg38.over.chain.gz",
+  "human_files": "GSM1660034/35/36", "monkey_files": "GSM1660010/11/12", "classification":
+  "D(l1=0) / B(h3k_m=1&h3k_h=0) / A(h3k_h=1&h3k_m=1) / C(else)"}
+
+
+  result_summary:
+
+  CRECS v3 阈值校准: 修复 L2 chr 前缀 bug (hg38_chr ''1''→''chr1'' 统一, 锚点 272307) + L3 从池级
+  Jaccard 常量改为真实 H3K27ac 逐 tile 命中 (人3+猴3 GSE67978, 猴 rheMac3→hg38 liftover 97% 成功)
+  → 新分类 A=47 B=49 C=450 D=454。关键: v2.2 的 B=364 (池级常量伪实证) 缩至 B=49 真实证据候选 (保守+人活性失去+猴活性保留);
+  猴DA锚点平移 set 匹配仍为0 (坐标网格不对齐, 锚点窗start≠tile start), 以 H3K27ac 真实活性替代'
+evidence: 'record_run(cross-species-cre-conservation): CRECS v3 阈值校准: 修复 L2 chr 前缀
+  bug (hg38_chr ''1''→''chr1'' 统一, 锚点 272307) + L3 从池级 Jaccard 常量改为真实 H3K27ac 逐 tile
+  命中 (人3+猴3 GSE67978, 猴 rheMac3→hg38 liftover 97% 成功) → 新分类 A=47 B=49 C=450 D=454。关键:
+  v2.2 的 B='

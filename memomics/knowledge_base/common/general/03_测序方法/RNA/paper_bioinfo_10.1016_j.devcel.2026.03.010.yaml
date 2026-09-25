@@ -1,6 +1,7 @@
 type: kb_entry
 domain: common
 name: paper_bioinfo_10.1016_j.devcel.2026.03.010
+doi: "10.1016/j.devcel.2026.03.010"
 direction: general
 assay_type: RNA
 last_updated: 2026-08-16 03:44

@@ -1,0 +1,29 @@
+type: kb_entry
+name: academic-thesis-docx_empirical
+species: Homo_sapiens
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-16 22:32
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- academic-thesis-docx_empirical
+content: 'skill: academic-thesis-docx
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {''dup_removed'': ''表3.10'', ''method'': ''inline'', ''target'': ''part1_front.md
+  附表清单''}
+
+
+  result_summary:
+
+  附表清单去重：发现「表3.10 装置端复现与主流程的逐层基数对照」重复一行（此前手工补登记时与已有行撞车），已去重为 23 行（含表头，共 22 条表）。去重后末三行为
+  表4.1=42 / 表4.2=44 / 表4.3=45。'
+evidence: 'record_run(academic-thesis-docx): 附表清单去重：发现「表3.10 装置端复现与主流程的逐层基数对照」重复一行（此前手工补登记时与已有行撞车），已去重为
+  23 行（含表头，共 22 条表）。去重后末三行为 表4.1=42 / 表4.2=44 / 表4.3=45。'

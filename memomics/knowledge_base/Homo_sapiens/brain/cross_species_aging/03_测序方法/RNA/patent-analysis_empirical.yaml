@@ -1,0 +1,30 @@
+type: kb_entry
+name: patent-analysis_empirical
+species: Homo_sapiens
+tissue: brain
+direction: cross-species aging
+assay_type: RNA
+last_updated: 2026-09-03 16:30
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- patent-analysis_empirical
+content: 'skill: patent-analysis
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"chain": "rheMac3ToHg38.over.chain.gz", "human_peaks_n": 123286, "monkey_peaks_n":
+  131358, "liftover_success": "127469/131358", "tiles": 1000}
+
+
+  result_summary:
+
+  GSE67978 外部验证完成。B 类 364 tiles 猴尾状核 H3K27ac 命中 22.3% 显著高于人 13.7% (OR=0.556, p=3.7e-3)，猴侧
+  B 富集于 A/D (p=2.7e-5/5.2e-8)；人侧 B vs A/D 不显著。原始假设"B 类人活性高猴无活性"被证伪，B 类重新定性待辩论裁决。'
+evidence: 'record_run(patent-analysis): GSE67978 外部验证完成。B 类 364 tiles 猴尾状核 H3K27ac
+  命中 22.3% 显著高于人 13.7% (OR=0.556, p=3.7e-3)，猴侧 B 富集于 A/D (p=2.7e-5/5.2e-8)；人侧 B vs
+  A/D 不显著。原始假设"B 类人活性高猴无活性"被证伪，B 类重新定性待辩论裁决。'

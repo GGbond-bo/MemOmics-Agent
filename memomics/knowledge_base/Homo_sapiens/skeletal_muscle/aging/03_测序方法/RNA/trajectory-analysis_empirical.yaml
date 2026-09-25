@@ -1,0 +1,34 @@
+type: kb_entry
+name: trajectory-analysis_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 19:35
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- trajectory-analysis_empirical
+content: 'skill: trajectory-analysis
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  step5b 独立嵌入(Monocle 自有 UMAP root=Y_112)+Sling 同嵌入，bootstrap 500×；step5c 共享嵌入 bootstrap
+  500× + D3 三端点(前3 TypeI端)多 root 敏感性
+
+
+  result_summary:
+
+  Step5b/5c 完成。① 独立嵌入 Spearman(M3_own, Sling_own)=0.619，bootstrap 95%CI [0.586, 0.650]（n=1696，CI
+  下限>0.5 → 可作两法一致性主值）；共享嵌入 0.901、CI [0.890, 0.910]。② D3 多 root 敏感性：Y_14/Y_2/Y_35 →
+  vs D4 0.936/0.940/0.834、vs Slingshot 0.818/0.860/0.870，ρ_MYH7 −0.543/−0.521/−0.512、ρ_age
+  +0.097~+0.100 → 镜像伪影可复现，D3 旧反向取消反证资格。产出 results/step5b_independent_embedding_bootstrap.csv,
+  step5c_shared_embedding_bootstrap.csv, step5c_D3_multroot.csv；结论文档 results/trajectory_conclusions.md
+  已更新 CI 数值'
+evidence: 'record_run(trajectory-analysis): Step5b/5c 完成。① 独立嵌入 Spearman(M3_own, Sling_own)=0.619，bootstrap
+  95%CI [0.586, 0.650]（n=1696，CI 下限>0.5 → 可作两法一致性主值）；共享嵌入 0.901、CI [0.890, 0.910]。②
+  D3 多 root 敏感性：Y_14/Y_2/Y_35 → vs D4 0.936/0.940/0.834、'

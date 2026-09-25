@@ -1,0 +1,33 @@
+type: kb_entry
+name: bioinformatics-html-report_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: general
+assay_type: RNA
+last_updated: 2026-09-16 22:49
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bioinformatics-html-report_empirical
+content: 'skill: bioinformatics-html-report
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  animation-first, 10 slides, scroll-snap, no external deps, CSS keyframes + vanilla
+  JS
+
+
+  result_summary:
+
+  展示页 v2 动画版交付：正文 20588 字→1888 字(-91%)，文件 117KB→40KB。10 页全屏：hero 轨道动画 / 数字滚动 / 8 节点流水线火花动画
+  / 闸门打回-修复-放行循环 / 7 角色辩论交互 / 自进化循环 / 2020-2026 时间线 / 6 竞品可展开卡 / 三阶段路线 / 收尾。实测零 JS
+  报错，交互全部验证通过（计数器 350/168/495/189、辩论 3正4反8束裁决0.82、闸门 c3 NO→自动修复→全绿、卡片展开）。修 2 处缺陷：①
+  滚轮翻页在内容高于屏幕时卡死→加 scrollHeight 守卫 ② 轨道标签 translateX 被旋转动画覆盖导致偏移倾斜→改 upright/uprightR
+  关键帧保留定位。'
+evidence: 'record_run(bioinformatics-html-report): 展示页 v2 动画版交付：正文 20588 字→1888 字(-91%)，文件
+  117KB→40KB。10 页全屏：hero 轨道动画 / 数字滚动 / 8 节点流水线火花动画 / 闸门打回-修复-放行循环 / 7 角色辩论交互 / 自进化循环
+  / 2020-2026 时间线 / 6 竞品可展开卡 / 三阶段路线 / 收尾。实测零 JS 报错，交互全部验证通过（计数器 350/168/495/18'

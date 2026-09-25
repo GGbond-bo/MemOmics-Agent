@@ -1,0 +1,36 @@
+type: kb_entry
+name: create_harmony_embeddings_scRNA_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 17:33
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- create_harmony_embeddings_scRNA_empirical
+content: 'skill: create_harmony_embeddings_scRNA
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  RunHarmony(group.by.vars=samplename, reduction=pca, dims.use=1:14, theta=2, lambda=1,
+  harmony 2.0.5); RunUMAP(reduction=harmony_sn/harmony_raw, dims=1:14, n.neighbors=30,
+  min.dist=0.3, seed=42); 自实现 iLISI/ASW/熵 + 50 次置换零模型; 参数扫描 dims{10,14,20,30}×theta{0.5,1,2}
+  + 自实现 ARI/NMI
+
+
+  result_summary:
+
+  RUN_OK。混杂诊断=48/48 样本各属 1 个 type（样本与条件嵌套、无技术重复），24 受试者×2 样本(Pre/Post)。混开三态对比: raw
+  PCA iLISI=0.121/ASW(b)=-0.100/同样本占比=0.239(z=310)/熵=0.520(z=-133)；Harmony θ=2 d1:14
+  iLISI=0.224/ASW(b)=-0.163/self=0.074(z=70)/熵=0.663(z=-60)；对象内旧 harmony iLISI=0.321/self=0.035(z=22)。判定规则
+  4/4 通过=批次已明显混开（但 z_self 仍 70 ≫ 0，残差批次信号存在）。ASW(cluster) -0.025→+0.023 未塌陷=亚群结构保留。扫描结论:
+  dims=1:14/θ=2 在网格中 ARI 最高(0.367)且 self 最低(0.074)，dims 增大到 20/30 无明显增益。产物: results/{harmony_before_after_metrics,harmony_param_scan,cross_samplename_by_type,sample_meta}.csv
+  + data/harmony_umap_percell.csv + data/harmony_metrics.rds'
+evidence: 'record_run(create_harmony_embeddings_scRNA): RUN_OK。混杂诊断=48/48 样本各属 1 个
+  type（样本与条件嵌套、无技术重复），24 受试者×2 样本(Pre/Post)。混开三态对比: raw PCA iLISI=0.121/ASW(b)=-0.100/同样本占比=0.239(z=310)/熵=0.520(z=-133)；Harmony
+  θ=2 d1:14 iLISI=0.224/ASW(b)=-0.163/self=0.074'

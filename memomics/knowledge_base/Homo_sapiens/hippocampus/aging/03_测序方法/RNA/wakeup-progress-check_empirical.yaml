@@ -1,0 +1,31 @@
+type: kb_entry
+name: wakeup-progress-check_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-14 00:20
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup-progress-check_empirical
+content: 'skill: wakeup-progress-check
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  nrows=5 head + os.walk E:/专利/M2 + glob 06_repro*.py
+
+
+  result_summary:
+
+  v20 §五 step1 混杂溯源 侦察完成：① v20 草案确认存在（6174B/09-13 23:23，§五列5项pending）② 配对数据定位 = results/v4anchor_continuous_pairs.csv（列
+  symbol/Z_monkey/Z_human/p_monkey/p_human/n_tiles_m/n_tiles_h）③ 协变量源 = M2/ 下 human_ageDA_all.csv(443MB)+monkey_ageDA_all.csv(456MB)+repro_full_pipeline.py(28KB)，另有
+  FIX_v10/ 全套中间产物（unified_grid/depth_correction/drift_removal/combined 含 tauA_sweep_by_condition.csv、concordance_4conditions.csv）④
+  pipeline 脚本已复制到交付目录 scripts/06_repro_full_pipeline.py'
+evidence: 'record_run(wakeup-progress-check): v20 §五 step1 混杂溯源 侦察完成：① v20 草案确认存在（6174B/09-13
+  23:23，§五列5项pending）② 配对数据定位 = results/v4anchor_continuous_pairs.csv（列 symbol/Z_monkey/Z_human/p_monkey/p_human/n_tiles_m/n_tiles_h）③
+  协变量源 = M2/ 下 human_'

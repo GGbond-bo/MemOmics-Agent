@@ -1,0 +1,33 @@
+type: kb_entry
+name: gse278576-atac-aging-comparison_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 01:44
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- gse278576-atac-aging-comparison_empirical
+content: 'skill: gse278576-atac-aging-comparison
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  tileSize=500, binarize口径, 比例=rowSums/nCells, 40 arrow 文件, float32 稠密预分配
+
+
+  result_summary:
+
+  人侧 tile 均值矩阵提取成功。根因定位：人侧数据是裸 .arrow 文件（GSM8549615_hc77.arrow 后缀，40 个平铺在 E:/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC/，无
+  Save-ArchR-Project.rds、无 sub_ 前缀目录）。箭头内 TileMatrix 结构：Info/FeatureDF=6062095 tile
+  坐标(seqnames+start, tileSize=500)，Info/CellNames=细胞名，23 染色体(chr1..chrX)各存 rowSums/rowMeansLog2/indptr/indices/data(CSC稀疏)。直接读各染色体
+  rowSums/nCells=覆盖细胞比例，拼成 40×6062095 矩阵，非零率 91.65%。关键坑：①勿找 project rds——直接 h5py 读
+  .arrow 的 TileMatrix 键 ②勿重构稀疏矩阵——ArchR 已预存 rowSums ③勿用 python list 累积非零元素(4000万+
+  会 MemoryError)——预分配 float32 稠密矩阵 970MB。'
+evidence: 'record_run(gse278576-atac-aging-comparison): 人侧 tile 均值矩阵提取成功。根因定位：人侧数据是裸
+  .arrow 文件（GSM8549615_hc77.arrow 后缀，40 个平铺在 E:/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC/，无
+  Save-ArchR-Project.rds、无 sub_ 前缀目录）。箭头内 TileMatrix 结构：Info/FeatureDF=6062095 tile'

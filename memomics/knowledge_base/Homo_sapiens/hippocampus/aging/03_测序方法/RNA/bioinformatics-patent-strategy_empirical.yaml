@@ -1,0 +1,35 @@
+type: kb_entry
+name: bioinformatics-patent-strategy_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-12 17:39
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bioinformatics-patent-strategy_empirical
+content: 'skill: bioinformatics-patent-strategy
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"permutation_B": 200, "seed": 20260912, "tau_A": 12, "alpha": 0.05, "abstract_chars":
+  300, "figures": "black-white-lineart", "tables": 8}
+
+
+  result_summary:
+
+  v15 技术交底书定稿（第三轮 5 项）：① 附图 1–5 改黑白线条版（patent/figures_bw/，彩色像素 0.000%，符合审查指南 2.4）；②
+  指定摘要附图 = 图 1；③ 新增 §十 检索记录（3 组检索式 + IPC 建议主分类 G16B 40/00 + 对比文件 D1–D3）；④ 新增 §三（补充）（十三）权
+  5(2) 同源对应关系置换实施例（实跑：门控触发 894 vs 673.0±18.7，1.33×，p<0.005；核心元件 357 vs 340.1±16.3，1.05×，p=0.164；同向率
+  41.31%/39.93%/46.36% vs 随机 50.30%/50.54%/50.20%，下侧 p<0.005；Wilson CI 已补）；⑤ 新增 §十一
+  权 10 下游用途实施例（用途一/二实测、用途三实施方式）；⑥ 权 12 补 bin 级三档门控实施例（75/24/8 单元，z=+3.85/+3.09/+3.27）。产物：技术交底书_已填写_附图版_v15.docx（1,263,902
+  B / 8 表 / 5 图 / 摘要 300 字）；验收 48 PASS / 0 FAIL；7 份交付 md 与 run_all.sh 同步 v15。'
+evidence: 'record_run(bioinformatics-patent-strategy): v15 技术交底书定稿（第三轮 5 项）：① 附图 1–5
+  改黑白线条版（patent/figures_bw/，彩色像素 0.000%，符合审查指南 2.4）；② 指定摘要附图 = 图 1；③ 新增 §十 检索记录（3
+  组检索式 + IPC 建议主分类 G16B 40/00 + 对比文件 D1–D3）；④ 新增 §三（补充）（十三）权 5(2) 同源对应关系置换实施例（实跑：门控触发
+  894 vs'

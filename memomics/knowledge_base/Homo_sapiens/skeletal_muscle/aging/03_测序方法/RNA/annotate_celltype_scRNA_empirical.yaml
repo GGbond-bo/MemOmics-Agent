@@ -1,0 +1,36 @@
+type: kb_entry
+name: annotate_celltype_scRNA_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 17:34
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- annotate_celltype_scRNA_empirical
+content: 'skill: annotate_celltype_scRNA
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"script":"annotate_mf2000_dotplot.R","grouping":"seurat_clusters(res=0.8, 18群)","assay":"SCT","dotplot":"scale=TRUE,col.min=-2,col.max=2,dot.scale=6,facet
+  by 8 marker classes","panel_n":"35 markers (排除 MYH4)","DE":"FindAllMarkers only.pos
+  min.pct=0.25 logfc=0.25","export":"PNG 300dpi + cairo_pdf + svglite::svglite","cnt":"TypeI
+  6群(859细胞), TypeIIa 1群(211), IIa/IIx mixed 5群(564), TypeIIx 1群(230), IIx/IIa mixed
+  4群(268)", "fonts":"windowsFont msyh(PNG) + cairo_pdf/svglite(矢量) — 普通 pdf() 设备对
+  msyh 报 invalid font type"}
+
+
+  result_summary:
+
+  MF_2000(2132细胞) 18 群 marker 注释完成：Type I 6群(0/1/5/7/14/17，859细胞)、Type IIa 1群(C8,
+  211)、Type IIa/IIx mixed 5群(C2/3/4/6/13, 564)、Type IIx 1群(C9, 230)、Type IIx/I mixed(C10,198)/Type
+  IIx/IIa mixed(C11/12/15,115)；C12 附带 NMJ/denervation 信号。DE 5197 基因；QC 全群 median pct.mt
+  0.21-1.38%、nFeature 786-3548。产出 dotplot PNG/PDF/SVG + UMAP 对比图 + 5 张结果表。'
+evidence: 'record_run(annotate_celltype_scRNA): MF_2000(2132细胞) 18 群 marker 注释完成：Type
+  I 6群(0/1/5/7/14/17，859细胞)、Type IIa 1群(C8, 211)、Type IIa/IIx mixed 5群(C2/3/4/6/13,
+  564)、Type IIx 1群(C9, 230)、Type IIx/I mixed(C10,198)/Type IIx/IIa mixed(C11/12/15'

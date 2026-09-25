@@ -1,0 +1,32 @@
+type: kb_entry
+name: scrna-clustering_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 20:41
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scrna-clustering_empirical
+content: 'skill: scrna-clustering
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"step":"第二轮裁决交付物生成（附表+翻转判据+裁决稿）","verdict2":"modify / 定级甲（算法层无优劣）+目标效度限定","rubrics2":"input_route_parity
+  8 / stability_and_ci 8 / pre_registered_condition 9 / confounding_control 7 / effect_size_practical
+  6 / target_validity 4 / external_validity 3"}
+
+
+  result_summary:
+
+  第二轮 L2 辩论完成：verdict=modify，最终定级=甲（算法层 PCA≈scVI 无优劣，PCA 表面优势归因 SCTransform 预处理路线）+
+  目标效度限定；乙（工作流条件性支持）仅降为限域备注。3 个 owner=ai blocks 待执行：①最终裁决稿（禁写"PCA算法优于scVI"）②三张证据附表
+  ③翻转判据清单。转 06_final_verdict.py 执行'
+evidence: 'record_run(scrna-clustering): 第二轮 L2 辩论完成：verdict=modify，最终定级=甲（算法层 PCA≈scVI
+  无优劣，PCA 表面优势归因 SCTransform 预处理路线）+ 目标效度限定；乙（工作流条件性支持）仅降为限域备注。3 个 owner=ai blocks
+  待执行：①最终裁决稿（禁写"PCA算法优于scVI"）②三张证据附表 ③翻转判据清单。转 06_final_verdict.py 执行'

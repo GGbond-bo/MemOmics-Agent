@@ -1,0 +1,30 @@
+type: kb_entry
+name: platform-execution-pitfalls_empirical
+species: Homo_sapiens
+tissue: NA
+direction: platform_smoke_test
+assay_type: RNA
+last_updated: 2026-09-12 15:37
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- platform-execution-pitfalls_empirical
+content: 'skill: platform-execution-pitfalls
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {\"path\": \"E:/tmp/memomics-test/work/slow.py\", \"mode\": \"foreground\", \"workdir\":
+  \"E:/tmp/memomics-test/work\", \"timeout\": 300, \"sleep_sec\": 60}
+
+
+  result_summary:
+
+  slow.py 前台完整跑完：START → sleep 60s → DONE → elapsed: 60.0s，exit_code=0，无截断。验证前台 terminal
+  单条命令可完整阻塞 60s 并回收全量 stdout（timeout=300 足够，前台上限 600s）。'
+evidence: 'record_run(platform-execution-pitfalls): slow.py 前台完整跑完：START → sleep 60s
+  → DONE → elapsed: 60.0s，exit_code=0，无截断。验证前台 terminal 单条命令可完整阻塞 60s 并回收全量 stdout（timeout=300
+  足够，前台上限 600s）。'

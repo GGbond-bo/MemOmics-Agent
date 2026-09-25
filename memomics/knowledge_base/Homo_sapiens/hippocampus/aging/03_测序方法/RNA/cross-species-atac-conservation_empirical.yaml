@@ -1,0 +1,32 @@
+type: kb_entry
+name: cross-species-atac-conservation_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 15:14
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-atac-conservation_empirical
+content: 'skill: cross-species-atac-conservation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  Rscript 4.5.3 --vanilla; probe_agegroup_structure.R 第二次运行(tail); cor(x, character)
+  行为测试; requireNamespace("clinfun")
+
+
+  result_summary:
+
+  实测三结论: ① cor(x, Age_group字符型) 报错 "''y''必需是数值" → 直接换变量脚本必崩; ② as.numeric(factor(Age_group))
+  默认字母序 = Exceptionally old=1/Middle=2/Old=3/Young=4 → 完全反向, r 符号全会翻转(静默灾难); ③ 两侧
+  Age_group 水平名完全一致(Exceptionally old/Middle/Old/Young); ④ 人侧个体级四组各 n=10(共40, 更正此前误报的9);
+  ⑤ clinfun 包本地不可用(FALSE) → JT 检验需自行实现或置换; ⑥ R 4.5.3 OK。'
+evidence: 'record_run(cross-species-atac-conservation): 实测三结论: ① cor(x, Age_group字符型)
+  报错 "''y''必需是数值" → 直接换变量脚本必崩; ② as.numeric(factor(Age_group)) 默认字母序 = Exceptionally
+  old=1/Middle=2/Old=3/Young=4 → 完全反向, r 符号全会翻转(静默灾难); ③ 两侧 Age_group 水平名完全一致(Exceptionally'

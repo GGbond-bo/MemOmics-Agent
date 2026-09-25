@@ -1,0 +1,30 @@
+type: kb_entry
+name: atac-paper-reproduction_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-03 01:30
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- atac-paper-reproduction_empirical
+content: 'skill: atac-paper-reproduction
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  getGroupSE rowData start=tile index（每染色体独立1起；CSV end=(idx-1)*500 伪坐标）→ 真实坐标 start=(idx-1)*500+1,
+  end=idx*500；r/p/q 不动；就地 fread/fwrite 修正 6 文件
+
+
+  result_summary:
+
+  human_all 5,555,247 tiles / monkey_all 5,296,656 tiles 坐标修正成功；human up=22 / down=28（q<0.1）；monkey
+  up=0/down=0（20样本+FDR 严格，真实结果非 bug）。坐标换算规律经染色体切换点扫描验证（各染色体 idx 独立重置）'
+evidence: 'record_run(atac-paper-reproduction): human_all 5,555,247 tiles / monkey_all
+  5,296,656 tiles 坐标修正成功；human up=22 / down=28（q<0.1）；monkey up=0/down=0（20样本+FDR
+  严格，真实结果非 bug）。坐标换算规律经染色体切换点扫描验证（各染色体 idx 独立重置）'

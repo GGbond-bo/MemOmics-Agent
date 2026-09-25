@@ -1,0 +1,29 @@
+type: kb_entry
+name: functional-enrichment_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 19:22
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- functional-enrichment_empirical
+content: 'skill: functional-enrichment
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  复用 memomics-32a6e57c/results/deg_YPost_vs_OPost.csv; 列=gene,avg_log2FC,p_val,p_val_adj,direction,sig
+
+
+  result_summary:
+
+  DEG 输入核对: 8081 检出基因(universe); sig 列 1422 DEG (Up_in_Y_Post 1027 / Down_in_Y_Post
+  395), 阈值 padj<0.05 & |log2FC|>=0.5; 弹窗提示的 406(314/92) 与文件不一致, 以文件为准'
+evidence: 'record_run(functional-enrichment): DEG 输入核对: 8081 检出基因(universe); sig 列
+  1422 DEG (Up_in_Y_Post 1027 / Down_in_Y_Post 395), 阈值 padj<0.05 & |log2FC|>=0.5;
+  弹窗提示的 406(314/92) 与文件不一致, 以文件为准'

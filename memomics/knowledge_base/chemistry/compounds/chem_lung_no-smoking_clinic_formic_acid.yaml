@@ -1,0 +1,23 @@
+type: kb_entry
+domain: chemistry
+name: chem_lung_no-smoking_clinic_formic_acid
+doi: "10.1038/s41467-024-54434-4"
+chem_category: compounds
+last_updated: 2026-09-17 17:38
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_lung_no-smoking_clinic_formic_acid
+content: '- 靶点: na
+
+  - 剂量: 0.2%; 0.1%
+
+  - IC50/EC50: na
+
+  - 模型: peptide elution/LC mobile phase
+
+  - 效应: acidification/elution'
+evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
+  cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
+  | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf

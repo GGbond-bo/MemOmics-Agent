@@ -1,0 +1,32 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: Macaca_fascicularis
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-11 20:11
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 10.0
+
+
+  params_used:
+
+  正本 anchor() 逐字复刻（mid=(s+e)//2, WINDOW=2000, searchsorted 反查 + first-overlap-wins）+
+  continuous 猴输入 E:/专利/monkey_ageDA_continuous.csv + human M2/human_ageDA_all.csv
+  + ortholog monkey_human_orthologs_full.csv
+
+
+  result_summary:
+
+  零差异复现达成：monkey 2302409/5674190 tiles hit → 39687 基因；human 2440045/5555247 tiles
+  hit → 16104 基因；ortholog pairs=16031，与正本 n 完全一致（此前用重写 anchor 只得 16012，19 对残差根因 =
+  anchor 实现差异，非输入表）。'
+evidence: 'record_run(cross-species-cre-conservation): 零差异复现达成：monkey 2302409/5674190
+  tiles hit → 39687 基因；human 2440045/5555247 tiles hit → 16104 基因；ortholog pairs=16031，与正本
+  n 完全一致（此前用重写 anchor 只得 16012，19 对残差根因 = anchor 实现差异，非输入表）。'

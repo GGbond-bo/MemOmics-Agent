@@ -1,5 +1,6 @@
 # 猕猴海马体细胞类型知识
 species: Macaca mulatta
+dois: ["10.1007/s13238-021-00852-9", "10.1038/s41422-022-00678-y", "10.1186/s13073-025-01469-x", "10.7554/eLife.89507", "10.1371/journal.pone.0311374", "10.1007/s11357-025-01834-z", "10.1093/molbev/msaf020"]
 tissue: hippocampus
 direction: aging
 

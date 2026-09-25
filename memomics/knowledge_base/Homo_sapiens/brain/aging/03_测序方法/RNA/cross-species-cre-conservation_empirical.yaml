@@ -1,0 +1,34 @@
+type: kb_entry
+name: cross-species-cre-conservation_empirical
+species: Homo_sapiens
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-14 00:32
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-cre-conservation_empirical
+content: 'skill: cross-species-cre-conservation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  rerun with 三口径零假设复现(零假设A/B/C); nperm=1000; qcut(|Z_h|,10); strong=|Z_h|>=12
+
+
+  result_summary:
+
+  v20 step1 复跑（含三口径零假设复现）**逐位命中专利记载值**：零假设B 强效应池期望=0.4136（专利 0.4136 ✓）、z=-0.041（专利
+  -0.041 ✓）；零假设C z=-6.527（专利 -6.527 ✓）；零假设A 强效应池 0.5045（专利 200次置换 0.503 ✓）。**关键新证据**：零假设B
+  全池期望=0.4636 **恒等于**观测 0.4636（因该口径期望由 |Z₁| 层内实测同向率加权构成，脚本 21_null_convention_comparison.py
+  L36-37）→ 全样本口径下零假设B 不构成独立证据（构造性/循环），独立零假设应为 A=0.5049/0.5045。其余结论同前次（技术质量 nFrags
+  1.78×/NucleosomeRatio 9.9×/BlacklistRatio 猴恒0；控制覆盖度后 r=-0.1035 不变号；分层 Q8-Q10 r≈-0.15）。产出
+  6 文件（confounder_check.csv/json + tech_quality/composition/strata/perm_null.csv +
+  fig png/pdf）'
+evidence: 'record_run(cross-species-cre-conservation): v20 step1 复跑（含三口径零假设复现）**逐位命中专利记载值**：零假设B
+  强效应池期望=0.4136（专利 0.4136 ✓）、z=-0.041（专利 -0.041 ✓）；零假设C z=-6.527（专利 -6.527 ✓）；零假设A
+  强效应池 0.5045（专利 200次置换 0.503 ✓）。**关键新证据**：零假设B 全池期望=0.4636 **恒等于**观测 0.4636（因该'

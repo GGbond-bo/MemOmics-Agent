@@ -1,0 +1,30 @@
+type: kb_entry
+name: cross-species-atac-conservation_empirical
+species: Macaca_fascicularis
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-11 15:22
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-atac-conservation_empirical
+content: 'skill: cross-species-atac-conservation
+
+  quality_score: 10.0
+
+
+  params_used:
+
+  monkey=5,296,656 rows; human=5,555,247 rows; cols=chr/start/end/r/p/q; tile width=500
+  (start diff 500, end=start+499); monkey p<0.05=310,488; monkey q<0.1=0; human p<0.05=354,153;
+  human q<0.1=50 (up22/down28); monkey r median=0.040, human r median=-0.038
+
+
+  result_summary:
+
+  用户自跑 age-DA 全表核对通过：猴 FDR 全灭（up/down 空 = 20例+全局BH 数学必然，非bug）；猴侧 p<0.05 未校正 31 万 tiles
+  可支撑 M3 方向门控；人侧 up22/down28 与早期实证记录逐字吻合'
+evidence: 'record_run(cross-species-atac-conservation): 用户自跑 age-DA 全表核对通过：猴 FDR 全灭（up/down
+  空 = 20例+全局BH 数学必然，非bug）；猴侧 p<0.05 未校正 31 万 tiles 可支撑 M3 方向门控；人侧 up22/down28 与早期实证记录逐字吻合'

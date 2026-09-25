@@ -1,0 +1,29 @@
+type: kb_entry
+name: docx-generation_empirical
+species: Homo_sapiens
+tissue: brain
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-16 17:28
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- docx-generation_empirical
+content: 'skill: docx-generation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"output":"docx","format_std":"吉林大学研究生学位论文撰写及装帧规范(2023-03)","body_font":"宋体小四","heading_font":"黑体","header_font":"楷体小五+单划线","page_num":"前置upperRoman/主体decimal
+  restart","figures":9,"tables":41,"sections":12}
+
+
+  result_summary:
+
+  按吉大硕士规范生成 2.0MB DOCX（516段/41表/9图/12节）；页眉逐节=章编号及标题（楷体小五+单划线）已逐节验证；前置罗马数字页码、主体阿拉伯数字
+  restart 生效'
+evidence: 'record_run(docx-generation): 按吉大硕士规范生成 2.0MB DOCX（516段/41表/9图/12节）；页眉逐节=章编号及标题（楷体小五+单划线）已逐节验证；前置罗马数字页码、主体阿拉伯数字
+  restart 生效'

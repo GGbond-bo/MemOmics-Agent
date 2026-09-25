@@ -1,0 +1,986 @@
+type: kb_entry
+name: paper_bio_lung_no-smoking_clinic
+doi: "10.1038/s41467-024-54434-4"
+species: other
+tissue: lung
+direction: cancer
+assay_type: RNA
+last_updated: 2026-09-17 17:38
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bio_lung_no-smoking_clinic
+content: '## 结论
+
+  - NSCLC is histologically classified into LUAD and LSCC, but some tumors are histologically
+  ambiguous and other pathophysiological or microenvironmental factors may be more
+  prominent.
+
+  - Integrative multiomics analyses were performed using data from 229 patients in
+  a Korean NSCLC cohort and 462 patients from previous multiomics studies.
+
+  - Histological examination reveals five molecular subtypes.
+
+  - One NSCLC subtype has PI3K-Akt pathway upregulation, a high proportion of metastasis,
+  and poor survival outcomes regardless of any specific NSCLC histology.
+
+  - Proliferative subtypes are present in LUAD and LSCC and show strong associations
+  with whole genome doubling (WGD) events.
+
+  - Comprehensive characterization of the immune microenvironment reveals various
+  immune cell compositions and neoantigen loads across molecular subtypes, which predict
+  different prognoses.
+
+  - Immunological subtypes exhibit a hot tumor-enriched state and higher efficacy
+  of adjuvant therapy.
+
+  - TCGA identified molecular pathways of lung cancer and classified LSCC into classical,
+  basal, secretory, and primitive subtypes, and LUAD into terminal respiratory unit,
+  proximal inflammatory, and proximal proliferative subtypes.
+
+  - Proteomic and proteogenomic approaches have been introduced to identify novel
+  lung cancer subtypes and their druggable targets.
+
+  - Many proteogenomic studies focus on a single NSCLC subtype, excluding ambiguous
+  or discrepant pathological classifications and producing cohorts that may not represent
+  the real NSCLC population.
+
+  - Sensitive prediction of postoperative survival beyond conventional prognostic
+  factors is needed for personalized surgical oncology, requiring multiomics analysis
+  of well-annotated clinical data.
+
+  - Adjuvant chemotherapy after surgery is the primary treatment for locally advanced
+  lung cancer and largely relies on platinum doublet and platinum-based regimens plus
+  a cytotoxic agent, but few studies have investigated the molecular basis of response
+  and consensus biomarkers are lacking.
+
+  - This study conducted comprehensive multiomics analysis to define molecular subtypes
+  of NSCLC using a Korean discovery cohort of 229 patients and a replication cohort
+  of 462 NSCLC patients from previous multiomics studies.
+
+  - The study integrated a large-scale single-cell RNA sequencing dataset of NSCLC
+  to evaluate cellular specificity and histopathological relevance, and included histological
+  review for tumor-infiltrating lymphocytes, neoantigens, cryptic peptides, and adjuvant
+  therapy efficacy.
+
+  - Genomic, transcriptomic, proteomic, phosphoproteomic, and acetylproteomic datasets
+  were generated from NSCLC samples.
+
+  - WES identified 33,301 somatic small mutations, 470,836 copy-number alterations,
+  and a 2.7 tumor mutation burden score in 229 tumors.
+
+  - Bulk RNA-seq produced 60,688 transcripts, of which 20,088 were selected for subsequent
+  analysis.
+
+  - TMT-based proteomics quantified 10,788 proteins, 40,738 phosphosites, and 5,975
+  acetylation sites in at least 30% of samples.
+
+  - NMF clustering of integrated proteomic, phosphoproteomic, and acetylproteomic
+  data identified five multiomics subtypes: metabolic (Subtype 1), alveolar-like (Subtype
+  2), proliferative (Subtype 3), hypoxic (Subtype 4), and immunogenic (Subtype 5).
+
+  - Subtype 1 was mainly LUAD females with EGFR and TP53 mutations, high whole genome
+  doubling, enriched CDKN2A copy number loss, and upregulation of oxidative phosphorylation,
+  mitochondrial matrix, and cellular respiration.
+
+  - Subtype 2 was mainly LUAD with EGFR mutations, no whole genome doubling, lower
+  TP53 mutation frequency, and much lower tumor mutational burden.
+
+  - The Korean NSCLC cohort included 139 LUADs, 63 LSCCs, and 27 other tumor types,
+  with approximately 40% late-stage disease and 51% lymph node metastases.
+
+  - 在韩国 NSCLC 患者队列的多组学数据中，通过 NMF 聚类鉴定出五个多组学亚型。
+
+  - 五个亚型与临床变量显著相关，包括组织学、TNM 分期、病理 N、复发状态、辅助治疗、全基因组加倍、免疫特征、吸烟、性别和年龄。
+
+  - 五个亚型的核心特征为 Alveolar-like、Proliferative、Hypoxic、Immunogenic 和 Metabolic。
+
+  - 通路富集分析显示亚型涉及 TNFα/NFKB、PI3K-Akt、缺氧、细胞周期/E2F、Notch、IL33、EGFR1 和氧化磷酸化等通路。
+
+  - 基因组改变包括 TP53、EGFR、KRAS、ERBB2、PIK3CA、MET、ALK、RET、ROS1 等癌基因/驱动基因，以及 CDKN2A、STK11、KEAP1、RB1、PPP2R1A、SMARCA4
+  等肿瘤抑制基因。
+
+  - Subtype 2 is characterized by significant upregulation of phosphorylation in IL-33
+  and Notch pathways, implicating these features in early tumorigenesis and early-stage
+  disease.
+
+  - Subtype 3 is a chromosomally unstable, tumor suppressor-deficient proliferative
+  subtype associated with WGD, TP53 and PIK3CA mutations, LSCC, male sex, smoking,
+  and cell cycle pathway enrichment.
+
+  - Subtype 4 is a chromosomally stable mesenchymal subtype enriched for metastasis
+  and phosphorylation in hypoxia, PI3K-Akt, and neutrophil degranulation pathways.
+
+  - Subtype 5 is a high-immune, chromosomally stable, tumor-suppressor-driven inflammatory
+  subtype with TIL-associated patterns, TNFα/NF-κB enrichment, and KRAS mutation enrichment.
+
+  - NMF subtype classification was replicated in external NSCLC cohorts; Subtypes
+  1, 2, 3, and 5 overlapped with known subtypes, whereas Subtype 4 was distinct and
+  requires further clinical and molecular characterization.
+
+  - Subtype 4 is predominantly characterized by phosphorylated sites and enriched
+  kinase activity of CSNK2A1 and GSK3B in PI3K-AKT signaling.
+
+  - SLK (S347) phosphorylation is upregulated in Subtype 4, associated with poor prognosis,
+  and is a key marker phosphorylated by CSNK2A1 and linked to ErbB2/PI3K signaling.
+
+  - LRRFIP1 (S581) phosphorylation is upregulated in Subtype 4, associated with poor
+  prognosis, and may promote EMT, invasion, and metastasis via Wnt/β-catenin signaling.
+
+  - Subtype 4 includes numerous prognostic features in HIF-1 and PI3K-AKT signaling
+  pathways.
+
+  - ANGPT2 increases in a hypoxic environment and promotes release of pro-angiogenic
+  cytokines such as VEGF through HIF-1 accumulation.
+
+  - Increased acetylation of TIMP3 at K65 is presumably involved in the ANGPT2-induced
+  hypertensive response.
+
+  - CDKN1B is significantly downregulated and is a favorable prognostic feature in
+  the cohort.
+
+  - A novel NSCLC subtype, Subtype 4, is associated with poor survival.
+
+  - CSNK2A1 and GSK3B are significantly upregulated kinases in Subtype 4.
+
+  - Poor prognosis markers include phosphorylated sites on SLK (S347) and LRRFIP1
+  (S581).
+
+  - The poor prognosis of Subtype 4 is linked to HIF-1, VEGF, PI3K-AKT, and NF-κB
+  signaling pathways.
+
+  - Subtype-specific survival differences and metastasis status were assessed in NSCLC.
+
+  - Reduced CDKN1B expression in Subtype 4 implies an advanced phenotype, consistent
+  with increased cancer metastasis risk upon CDKN1B loss.
+
+  - Subtype 4 was associated with significantly poorer survival than other subtypes
+  in the Korean NSCLC cohort (P = 8.4 × 10−3, log-rank test), possibly influenced
+  by stage distribution and high metastasis rate.
+
+  - Metastasis was not the sole cause of poor survival in Subtype 4, because survival
+  did not differ between Subtype 4 patients with and without metastasis (P = 9.5 ×
+  10−1), and non-metastatic Subtype 4 patients still had worse survival (P = 2.6 ×
+  10−2).
+
+  - No significant overall survival difference was found between Subtype 4 and other
+  subtypes in the combined CPTAC cohort (P = 7.9 × 10−1), suggesting ethnicity and
+  treatment-record effects.
+
+  - DEG sets of all five subtypes were significantly upregulated in tumor cell types
+  (FDR < 0.001, permutation).
+
+  - Subtypes 1 and 3 were enriched for LUAD/LUAD mitotic and LSCC/LSCC mitotic cell
+  types, respectively, suggesting actively proliferating tumor components.
+
+  - Subtypes 2, 4, and 5 had neutrophil-enriched DEGsubtype sets; tumor-associated
+  neutrophils were enriched in Subtypes 4 and 5, with the largest proportion in Subtype
+  4.
+
+  - Subtype 2 showed enrichment for alveolar-type fibroblasts and endothelial cells,
+  resembling normal alveolar interstitium, and had less lymphovascular invasion and
+  lymph node metastasis.
+
+  - Subtype 5 showed enrichment of most immune-related cell types, reflecting high
+  tumor-infiltrating lymphocyte patterns.
+
+  - Histopathology supported molecular subtypes: Subtypes 1/2 were well-to-moderately
+  differentiated adenocarcinomas; Subtype 1 had more high-grade patterns; Subtype
+  3 was mainly squamous cell carcinoma with high mitotic activity and necrosis and
+  scarce stroma; Subtype 4 had desmoplastic stroma; Subtype 5 had high immune infiltration.
+
+  - Subtype 3 is a proliferative NSCLC subtype characterized by whole-genome doubling,
+  CN14 signature enrichment, chromosome 3q amplification, SOX2 amplification co-occurring
+  with TP53 mutations, and higher TMB.
+
+  - Subtype 3 showed upregulation of proteins, PTMs, and kinases in cell cycle pathways,
+  including SRSF1, SRSF2, and XPO1.
+
+  - DNA repair and autophagy-related kinases were significantly upregulated (FDR <
+  0.1) and may be activated in response to WGD to promote adaptation to hypoxia/nutrient
+  depletion, stabilize the genome, and support cell survival.
+
+  - In Subtype 3 LSCC, CDK1, CDK2, CDK4 and DNA damage/nutrient deprivation response
+  kinases were activated; putative WGD drivers include TP53 mutations and chromosome
+  3q copy number amplification containing cell cycle genes.
+
+  - Unlike Subtype 1, CHEK1 and EEF2K play important roles after WGD; EEF2K inactivates
+  EEF2 by phosphorylation under dietary restriction, contributing to cell survival.
+
+  - Subtypes 1 and 3 represent proliferative subtypes that have undergone WGD in LUAD
+  and LSCC, respectively; selinexor may be an effective treatment for Subtype 3 but
+  requires further validation.
+
+  - Three major immune clusters (HTE, CTE, and NAT-enriched) were identified across
+  205 tumors and 85 NATs, with HTE enriched in immune cells/pathways and CTE enriched
+  in epithelial, cell cycle, and glycolysis features.
+
+  - HTE status and high enrichment of CD8+ T cells, CD4+ T cells, B cells, and NK
+  cells correlate with favorable prognosis, whereas epithelial/neutrophil enrichment
+  and Treg-enriched HTE correlate with worse survival.
+
+  - XPO1 protein is elevated in Subtype 3, and WGD-positive LSCC organoids show higher
+  sensitivity to selinexor.
+
+  - Most immunomodulators, mainly cancer cell ligands and immune cell receptors, were
+  positively correlated with HTE tumors and most immune cells, but not with epithelial
+  cells.
+
+  - VEGF-A expression and activity were negatively correlated with HTE tumors and
+  negatively associated with TILs, unlike other immunomodulators.
+
+  - Ten immunomodulators showed significant correlations with immune cluster status,
+  with a consistent correlation direction in this cohort and other lung cancer multiomics
+  studies.
+
+  - Immune cell enrichment and HTE status were associated with overall survival and
+  relapse-free survival in hazard ratio analyses.
+
+  - SMARCA4 mutations are positively correlated with SLAMF7 expression at both RNA
+  and protein levels and with HTE status, suggesting SMARCA4 as a potential regulator
+  of the immunomodulator SLAMF7.
+
+  - Subtype 5 is immunogenic, has the highest HTE feature gene expression, and shows
+  highest activation of CD8+ and CD4+ T cells, Treg cells, B cells, NK cells, neutrophils,
+  and macrophage marker genes.
+
+  - Neutrophils and Tregs are enriched in Subtype 5, which may be linked to its intermediate
+  survival despite the strongest HTE tumor signal.
+
+  - The highest frequencies of SMARCA4 mutations and SLAMF7 overexpression were observed
+  in Subtype 5.
+
+  - HTE tumors are positively associated with better prognosis in NSCLC and are enriched
+  in immunogenic Subtype 5, which is positively associated with SMARCA4 mutations
+  targeting SLAMF7.
+
+  - 85,430 neoantigen candidates and 775 cryptic MAPs were inferred; non-annotated
+  isoforms, pseudogenes, and UTRs accounted for 90.97% of cryptic MAP sources.
+
+  - Only confirmed cryptic MAPs showed a strong positive correlation with improved
+  survival, and recurrent cryptic MAPs were significantly correlated with prolonged
+  survival, indicating prognostic value in NSCLC.
+
+  - Cryptic MAPs positively correlated with most immune cell types, including HTE
+  status; patients with high cryptic MAP load and HTE status had the longest survival,
+  while those with low cryptic MAP load and CTE status had the worst survival.
+
+  - Multiomics Subtype 5 was most enriched in the low cryptic MAP load and HTE groups.
+
+  - A similar survival trend and multiomics subtype distribution were obtained when
+  the immune cluster was replaced with antigen processing and presentation machinery
+  (APM) and TIL pattern.
+
+  - Patients with Subtype 5 showed moderate survival, low cryptic MAP load with HTE,
+  and activated APM.
+
+  - Subtype 5 was consistent with a large proportion of TILs observed in single-cell
+  and histopathological analyses.
+
+  - Patients with Subtype 5 showed high activity of the TNF-α pathway via NF-κB in
+  addition to APM.
+
+  - A high load of neoantigens or cryptic MAPs was associated with prolonged overall
+  survival, whereas a high hazard ratio indicated the opposite.
+
+  - Patients with recurrent cryptic MAPs versus those without recurrent cryptic MAPs
+  showed a survival difference (P = 0.017).
+
+  - Four groups stratified by cryptic MAP load and immune cluster showed survival
+  differences (P = 0.021 for Red versus Purple).
+
+  - Multiomics subtypes were enriched across the four cryptic MAP/immune cluster groups
+  using Fisher’s exact test with Benjamini–Hochberg adjustment.
+
+  - Recurrence-free survival according to CTx or CRTx treatment status differed by
+  multiomics subtype, with Subtype 5 showing P = 0.0016.
+
+  - Multiomics analysis of 229 Korean NSCLC patients identified five subtypes enriched
+  for WGD, oncogenes, metastasis, and immune microenvironment.
+
+  - Phosphoproteome was the most informative for subtype identification, contributing
+  80% (911/1,134) of features, while global proteome and acetylome also helped decode
+  signaling pathways across subtypes.
+
+  - Subtype classification was validated by integrating multiomics data from 462 NSCLC
+  patients and aligned with previously established multiomics subtypes.
+
+  - Subtype 4 was associated with high metastasis and poor outcomes independent of
+  histology, with desmoplastic stroma, increased hypoxia phosphorylation, PI3K-Akt
+  activation, and upregulated SLK/LRRFIP1 phosphorylation.
+
+  - Subtype 3 had high chromosomal instability and XPO1 expression, a highly proliferative
+  phenotype with TP53 and cell-cycle gene amplification, and was sensitive to selinexor
+  in patient-derived organoids with WGD.
+
+  - Subtype 1 had limited WGD in LUAD, EGFR and tumor suppressor mutations, no marked
+  XPO1 increase, and did not show strong selinexor efficacy.
+
+  - Subtype 5 was enriched in an inflammatory tumor microenvironment with immunosuppressive
+  Tregs and neutrophils, had low cryptic MAP load, showed substantial survival improvement
+  with adjuvant chemotherapy or chemoradiation, and may benefit from immune checkpoint
+  inhibitors.
+
+  - SLAMF7 was identified as an immunomodulator significantly associated with HTE
+  and SMARCA4 mutations in Subtype 5, and SLAMF7/SMARCA4 are promising targets for
+  enhancing cancer immunotherapy.
+
+  - Cryptic MAPs derived from noncoding and non-annotated transcripts were confirmed
+  by proteomics, correlated with favorable survival and immune cell enrichment, and
+  may facilitate cancer vaccine development.
+
+  - Adjuvant chemotherapy did not significantly alter survival of node-positive patients
+  with Subtypes 1 or 2 enriched in driver oncogene alterations, suggesting targeted
+  therapies may be better for EGFR-mutant LUAD.
+
+  - Multiomics profiling complements histopathology for functional characterization
+  of the tumor immune microenvironment, with HTE signature activated in Subtype 2
+  but repressed in Subtype 4.
+
+  - Limitations include exome-based WGD inference, possible ethnic differences, limited
+  normal samples for cryptic MAP confirmation, and the need for prospective trials
+  such as selinexor testing in WGD subtypes.
+
+  - After excluding cases without lymph node metastasis at surgical resection and
+  21 cases with inadequate nucleic acid quality metrics, 229 patients were finally
+  enrolled.
+
+  - All enrolled patients were re-staged according to the 8th lung cancer TNM stage.
+
+  - Tumor-infiltrating lymphocyte patterns were reviewed and classified according
+  to Saltz et al.
+
+  - 通过蛋白质组、磷酸化蛋白质组和乙酰化蛋白质组多组学NMF分析可识别患者亚型。
+
+  - 本队列与既往CPTAC LUAD和LSCC队列的联合NMF分析用于比较NSCLC亚型一致性，并在462例NSCLC研究中验证亚型分类稳健性。
+
+  - 从非编码区和新型异构体来源的肽段中，经严格过滤最终获得1045条新序列用于后续分析。
+
+  - PTM-SEA和GSVA用于评估NMF亚型相关的磷酸化及通路/信号特征。
+
+  - Five NMF subtypes were compared for overall survival in NSCLC using Kaplan-Meier
+  estimation and log-rank tests, with pairwise comparisons to identify poor-prognosis
+  subtypes.
+
+  - Feature-wise survival analyses were performed for protein and PTM features by
+  comparing top 50% vs bottom 50% expression groups; prognostic direction was assigned
+  by the sign of Cox proportional-hazards coefficient.
+
+  - Differential CNVs, DEGs, and DEPs were identified using linear regression and
+  DESeq2, adjusting for pathological diagnosis and batch effects.
+
+  - Cryptic peptides with substantial expression (FPKM >= 1) in tumor samples were
+  defined as confirmed cryptic peptides.
+
+  - Patients were categorized by cryptic peptide load and immune landscape status
+  (HTE/CTE and high/low APM) to assess multi-omics subtype over-representation using
+  a two-sided Fisher''s exact test.
+
+  - APM status was determined based on the KEGG pathway enrichment score of Antigen_Processing_and_Presentation.
+
+  - Patient-derived lung tumoroids were cultured and used for drug screening.
+
+  - Selinexor was tested in lung tumoroids, and IC50 values were determined using
+  GraphPad Prism.
+
+
+  ## 细胞类型
+
+  - immune cells
+
+  - NSCLC tumor cells
+
+  - lung adenocarcinoma (LUAD)
+
+  - lung squamous cell carcinoma (LSCC)
+
+  - tumor-infiltrating lymphocytes (TILs)
+
+  - tumor-infiltrating lymphocytes
+
+  - neutrophils
+
+  - LUAD
+
+  - LUAD mitotic cell
+
+  - LSCC
+
+  - LSCC mitotic cell
+
+  - neutrophil
+
+  - NAT-associated neutrophil (NAN)
+
+  - tumor-associated neutrophil (TAN)
+
+  - alveolar-type fibroblast
+
+  - endothelial cell
+
+  - immune-related cell
+
+  - tumor-infiltrating lymphocyte (TIL)
+
+  - inflammatory cell
+
+  - tumor cell
+
+  - CD8+ T cells
+
+  - CD4+ T cells
+
+  - regulatory T cells (Treg)
+
+  - B cells
+
+  - natural killer (NK) cells
+
+  - dendritic cells (DCs)
+
+  - monocytes
+
+  - macrophages
+
+  - epithelial cells
+
+  - LUAD tumor cells
+
+  - LSCC tumor cells
+
+  - CD4 T cells
+
+  - CD8 T cells
+
+  - DC
+
+  - Epithelial cells
+
+  - Monocytes
+
+  - Macrophages
+
+  - NK cells
+
+  - Neutrophils
+
+  - Tregs
+
+  - Plasma cell
+
+  - Mast cell
+
+  - cDC
+
+  - pDC
+
+  - DC mature
+
+  - T cell CD4
+
+  - T cell CD8
+
+  - T cell regulatory
+
+  - Tumor cells LUSC
+
+  - Tumor cells LUAD
+
+  - Tumor cells LUSC mitotic
+
+  - Tumor cells LUAD mitotic
+
+  - Tumor cells LUAD EMT
+
+  - TILs
+
+  - NSCLC tumor
+
+  - normal adjacent to tumor (NAT)
+
+  - Treg cells
+
+  - T cells
+
+  - desmoplastic stromal cells
+
+  - tumor_primary
+
+  - normal_adjacent
+
+
+  ## 通路
+
+  - PI3K-Akt pathway
+
+  - EGFR pathway
+
+  - oxidative phosphorylation
+
+  - mitochondrial matrix
+
+  - cellular respiration
+
+  - HALLMARK_TNFA_SIGNALING_VIA_NFKB
+
+  - HALLMARK_ALLOGRAFT_REJECTION
+
+  - PATH-WP_PI3K-Akt_Signaling_Pathway
+
+  - HALLMARK_HYPOXIA
+
+  - REACTOME_NEUTROPHIL_DEGRANULATION
+
+  - GOCC_SECRETORY_GRANULE
+
+  - HALLMARK_G2M_CHECKPOINT
+
+  - HALLMARK_E2F_TARGETS
+
+  - KINASE-PSP_CDK2
+
+  - PATH-NP_NOTCH_PATHWAY
+
+  - PATH-NP_IL33_PATHWAY
+
+  - PATH-NP_EGFR1_PATHWAY
+
+  - CELLULAR_RESPIRATION
+
+  - HALLMARK_OXIDATIVE_PHOSPHORYLATION
+
+  - GOCC_MITOCHONDRIAL_MATRIX
+
+  - metabolic pathways
+
+  - IL-33 pathway
+
+  - Notch pathway
+
+  - E2F/MYC target
+
+  - G2M checkpoint
+
+  - CDK target
+
+  - cell cycle-related pathways
+
+  - hypoxia
+
+  - PI3K-Akt signaling
+
+  - neutrophil degranulation
+
+  - TNFα signaling via NF-κB
+
+  - EMT
+
+  - Wnt/β-catenin signaling
+
+  - HIF-1 signaling
+
+  - ErbB2/PI3K signaling
+
+  - immune-related pathways
+
+  - HIF-1 signaling pathway
+
+  - VEGF signaling pathway
+
+  - PI3K-AKT signaling pathway
+
+  - NF-κB signaling pathway
+
+  - ANGPT2-HIF-1-VEGF axis
+
+  - Angiogenesis and vascular hyperpermeability
+
+  - Hypertension and vascular remodeling
+
+  - cell cycle pathway
+
+  - E2F target
+
+  - MYC targets v1
+
+  - MYC targets v2
+
+  - DNA repair
+
+  - autophagy
+
+  - DNA damage response
+
+  - nutrient deprivation response
+
+  - cell cycle
+
+  - EMT signaling
+
+  - glycolysis
+
+  - EEF2K-EEF2 phosphorylation
+
+  - WGD-related pathway
+
+  - Recognition of tumor cells
+
+  - Trafficking and infiltration
+
+  - Checkpoint expression
+
+  - Inhibitor cells
+
+  - Priming and activation
+
+  - Tcell immunity
+
+  - Inhibitory molecules
+
+  - SMARCA4–SLAMF7 immunomodulatory regulatory axis
+
+  - TNF-α pathway via NF-κB
+
+  - NF-κB pathway
+
+  - Antigen processing and presentation machinery (APM)
+
+  - MHC class I
+
+  - TCR
+
+  - Cell activation
+
+  - Inflammation
+
+  - Cell proliferation
+
+  - HTE signature
+
+  - immune checkpoint
+
+  - MHC-binding prediction
+
+  - Hallmark pathway gene sets
+
+  - PTM modification site-specific signatures
+
+  - kinase/phosphatase and substrate interactions
+
+  - Antigen_Processing_and_Presentation
+
+
+  ## 基因 Marker
+
+  - EGFR：NSCLC/LUAD tumor cells，na，EGFR mutations are enriched in Subtype 1 and Subtype
+  2, and the EGFR pathway is upregulated in both subtypes.
+
+  - TP53：NSCLC/LUAD tumor cells，na，TP53 mutations occur in Subtype 1 and show significantly
+  lower frequency in Subtype 2.
+
+  - CDKN2A：NSCLC tumor cells，down，CDKN2A copy number loss is significantly enriched
+  in Subtype 1 (OR 3.63, P = 2.35 × 10−2).
+
+  - TP53：NSCLC tumor cells，na，肿瘤抑制基因，改变包括截断突变、拷贝数缺失或两者兼有
+
+  - CDKN2A：NSCLC tumor cells，na，其他肿瘤抑制基因，可为拷贝数缺失
+
+  - STK11：NSCLC tumor cells，na，其他肿瘤抑制基因改变
+
+  - KEAP1：NSCLC tumor cells，na，其他肿瘤抑制基因改变
+
+  - RB1：NSCLC tumor cells，na，其他肿瘤抑制基因改变
+
+  - PPP2R1A：NSCLC tumor cells，na，其他肿瘤抑制基因改变
+
+  - SMARCA4：NSCLC tumor cells，na，其他肿瘤抑制基因改变
+
+  - EGFR：NSCLC tumor cells，na，癌基因改变，包括 L858R、Exon19 del 和其他 SNV
+
+  - KRAS：NSCLC tumor cells，na，其他癌基因改变，包括移码缺失、框内缺失/插入和错义突变，可与 PIK3CA 共变
+
+  - ERBB2：NSCLC tumor cells，na，其他癌基因改变，包括移码缺失、框内缺失/插入和错义突变
+
+  - PIK3CA：NSCLC tumor cells，na，其他癌基因改变，包括移码缺失、框内缺失/插入和错义突变，可与 KRAS 共变
+
+  - MET：NSCLC tumor cells，na，其他癌基因改变，包括外显子跳跃
+
+  - ALK：NSCLC tumor cells，na，其他癌基因改变，包括基因融合
+
+  - ROS1：NSCLC tumor cells，na，其他癌基因改变，包括基因融合
+
+  - RET：NSCLC tumor cells，na，其他癌基因改变，包括基因融合
+
+  - TP53：NSCLC tumor，na，Subtype 3 associated with TP53 mutations (OR 13.5, P=4.6e-10);
+  four Subtype 5 cases had concurrent KRAS/TP53 mutation.
+
+  - PIK3CA：NSCLC tumor，na，Subtype 3 associated with PIK3CA mutations (OR 3.89, P=3.16e-2).
+
+  - KRAS：NSCLC tumor，na，Subtype 5 enriched for KRAS mutation (OR 4.51, P=3.53e-2).
+
+  - STK11：NSCLC tumor，na，Subtype 5 had STK11 mutation in 1 case; trend not statistically
+  significant.
+
+  - KEAP1：NSCLC tumor，na，Subtype 5 had KEAP1 mutation in 1 case; trend not statistically
+  significant.
+
+  - CSNK2A1：NSCLC tumor，up，Kinase activity enriched in Subtype 4 (FDR=2.3e-7); phosphorylates
+  PI3K-AKT proteins and activates SLK.
+
+  - GSK3B：NSCLC tumor，up，Kinase activity enriched in Subtype 4 (FDR=1.9e-2); involved
+  in PI3K-AKT signaling.
+
+  - SLK (S347)：NSCLC tumor，up，Phosphorylation upregulated in Subtype 4 (adjusted P=8.0e-3);
+  associated with poor prognosis (P=3.0e-6); marker phosphorylated by CSNK2A1 and
+  downstream of ErbB2/PI3K.
+
+  - LRRFIP1 (S581)：NSCLC tumor，up，Phosphorylation upregulated in Subtype 4 (adjusted
+  P=1.3e-2); associated with poor prognosis (P=1.2e-3); may promote EMT via Wnt/β-catenin
+  signaling.
+
+  - ANGPT2：na，up，Increased in hypoxic environment; promotes pro-angiogenic cytokines
+  such as VEGF through HIF-1 accumulation.
+
+  - TIMP3：na，up，Increased acetylation at K65, presumably involved in ANGPT2-induced
+  hypertensive response.
+
+  - CDKN1B：na，down，Significantly downregulated (adjusted P = 7.1 × 10−11); favorable
+  prognostic feature (P = 1.3 × 10−4).
+
+  - CSNK2A1：NSCLC Subtype 4，up，Significantly upregulated kinase activity in Subtype
+  4 (FDR < 0.05).
+
+  - GSK3B：NSCLC Subtype 4，up，Significantly upregulated kinase activity in Subtype
+  4 (FDR < 0.05).
+
+  - SLK：NSCLC Subtype 4，up，Phosphorylated at S347; poor prognosis marker in Subtype
+  4.
+
+  - LRRFIP1：NSCLC Subtype 4，up，Phosphorylated at S581; poor prognosis marker in Subtype
+  4.
+
+  - CDKN1B：NSCLC tumor, Subtype 4，down，Reduced expression in Subtype 4; loss increases
+  cancer metastasis risk and implies advanced phenotype.
+
+  - SOX2：NSCLC tumor, Subtype 3，up，Amplification on chromosome 3q and co-occurrence
+  with TP53 mutations compared with other subtypes (OR: 16.4).
+
+  - TP53：NSCLC tumor, Subtype 3，na，Mutations significantly co-occur with SOX2 amplification
+  compared with other subtypes (OR: 16.4).
+
+  - SRSF1：NSCLC tumor, Subtype 3，up，Upregulated protein and PTMs S199/K179 in cell
+  cycle pathways.
+
+  - SRSF2：NSCLC tumor, Subtype 3，up，Upregulated protein and PTMs T25/S26 in cell cycle
+  pathways.
+
+  - XPO1：NSCLC tumor, Subtype 3，up，Upregulated protein K693 in cell cycle pathways.
+
+  - SOX2：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; many cell cycle genes reside in this region.
+
+  - ATR：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; cell cycle gene.
+
+  - STAG1：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; cell cycle gene.
+
+  - GSK3B：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; cell cycle gene.
+
+  - TFDP2：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; cell cycle gene.
+
+  - MCM2：Subtype 3 LSCC tumor cells，up，Located in chromosome 3q copy number amplification
+  in Subtype 3 WGD; cell cycle gene.
+
+  - TP53：Subtype 3 LSCC tumor cells，na，Putative driver mutation of WGD in Subtype
+  3.
+
+  - CDK1：Subtype 3 LSCC tumor cells，up，Activated in Subtype 3 LSCC together with DNA
+  damage and nutrient deprivation response kinases.
+
+  - CDK2：Subtype 3 LSCC tumor cells，up，Activated in Subtype 3 LSCC together with DNA
+  damage and nutrient deprivation response kinases.
+
+  - CDK4：Subtype 3 LSCC tumor cells，up，Activated in Subtype 3 LSCC together with DNA
+  damage and nutrient deprivation response kinases.
+
+  - CHEK1：Subtype 3 LSCC tumor cells，up，Plays an important role after WGD in Subtype
+  3, unlike Subtype 1.
+
+  - EEF2K：Subtype 3 LSCC tumor cells，up，Plays an important role after WGD; inactivates
+  EEF2 by phosphorylation under dietary restriction, contributing to cell survival.
+
+  - EEF2：Subtype 3 LSCC tumor cells，down，Inactivated by EEF2K phosphorylation under
+  dietary restriction.
+
+  - XPO1：Subtype 3 LSCC tumor cells，up，Elevated protein expression in Subtype 3; target
+  of selinexor.
+
+  - VEGFA：TILs; tumor，down，VEGF-A expression and activity negatively correlated with
+  HTE tumors and TILs.
+
+  - SLAMF7：immune cells，na，RNA and protein expression analyzed across multi-omics
+  subtypes and immune clusters.
+
+  - SMARCA4：tumor cells，na，Mutation frequency analyzed in WT vs mutation groups.
+
+  - CCL5：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - GZMA：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - SELP：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - ICOS：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - CD40：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - ENTPD1：immune cells，na，Immunomodulator included in correlation heatmaps across
+  cohorts.
+
+  - BTLA：immune cells，na，Immunomodulator included in correlation heatmaps across cohorts.
+
+  - SRRM2：na，na，Gene shown in correlation heatmap.
+
+  - SEMA5A：na，na，Gene shown in correlation heatmap.
+
+  - PLXNB2：na，na，Gene shown in correlation heatmap.
+
+  - KALRN：na，na，Gene shown in correlation heatmap.
+
+  - IL21R：immune cells，na，Gene shown in correlation heatmap.
+
+  - KMT2C：na，na，Gene shown in correlation heatmap.
+
+  - COL5A1：na，na，Gene shown in correlation heatmap.
+
+  - SMARCA4：NSCLC tumor，na，driver gene; mutation positively correlated with SLAMF7
+  expression and HTE status, highest mutation frequency in Subtype 5
+
+  - SLAMF7：NSCLC tumor/immune microenvironment，up，immunomodulator; RNA and protein
+  overexpression positively correlated with SMARCA4 mutation and HTE status, highest
+  in Subtype 5
+
+  - TAP1：antigen-presenting cells，up，Activated antigen processing and presentation
+  machinery (APM) in multiomics Subtype 5.
+
+  - TAP2：antigen-presenting cells，up，Activated APM in multiomics Subtype 5.
+
+  - CD8A：CD8 T cells，up，Large TIL proportion and immunogenic Subtype 5.
+
+  - B2M：antigen-presenting cells，up，Activated APM in multiomics Subtype 5.
+
+  - HLA-G：antigen-presenting cells，up，Immunogenic Subtype 5 and APM/immune activation.
+
+  - IL18：immune cells，up，NF-κB pathway activation in Subtype 5.
+
+  - TNFAIP8：immune cells，up，TNF-α/NF-κB pathway activation in Subtype 5.
+
+  - TNFAIP2：immune cells，up，TNF-α/NF-κB pathway activation in Subtype 5.
+
+  - TNFAIP6：immune cells，up，TNF-α/NF-κB pathway activation in Subtype 5.
+
+  - XPO1：NSCLC tumor cells，up，High expression in Subtype 3 with chromosomal instability;
+  associated with selinexor response; not markedly increased in Subtype 1.
+
+  - TP53：NSCLC tumor cells，na，Co-occurring with cell-cycle gene amplification in Subtype
+  3.
+
+  - EGFR：LUAD tumor cells，na，Co-occurring mutations with tumor suppressor genes in
+  Subtype 1; EGFR-mutant LUAD shows minimal benefit from cytotoxic chemotherapy.
+
+  - SLK：NSCLC tumor cells，up，Upregulated phosphorylation in Subtype 4 and predicts
+  poor survival.
+
+  - LRRFIP1：NSCLC tumor cells，up，Upregulated phosphorylation in Subtype 4 and predicts
+  poor survival.
+
+  - SLAMF7：immune cells，na，Immunomodulator significantly associated with HTE and SMARCA4
+  mutations in Subtype 5; promising immunotherapy target.
+
+  - SMARCA4：NSCLC tumor cells，na，Mutations associated with SLAMF7 and HTE in Subtype
+  5; linked to immune checkpoint inhibitor efficacy.
+
+  - CD274：tumor cells，na，PD-L1 immunostaining is a biomarker of positive tumor immune
+  response in Subtype 5.
+
+
+  ## 类器官/培养条件
+
+  - lung organoids; WGD-positive LSCC organoids：human | 培养基 — | 细胞因子  | 基质 — | —
+
+  - patient-derived NSCLC organoid：human | 培养基 — | 细胞因子  | 基质 — | —
+
+  - patient-derived lung tumoroid：human | 培养基 DMEM/F12 supplemented with 20 ng/ml
+  bFGF, 50 ng/ml human EGF, N2, B27, 10 μM ROCK inhibitor, and 1% penicillin/streptomycin
+  | 细胞因子 bFGF, human EGF | 基质 Matrigel | media replaced every 4 days; drug screening
+  after 6 days
+
+
+  ## 化合物/化学信息
+
+  - platinum doublet：靶点 — | 剂量 — | IC50 — | 模型 locally advanced lung cancer adjuvant
+  chemotherapy | primary adjuvant chemotherapy regimen; improved patient survival
+
+  - pemetrexed：靶点 — | 剂量 — | IC50 — | 模型 NSCLC adjuvant chemotherapy | cytotoxic agent
+  used with platinum-based regimens
+
+  - gemcitabine：靶点 — | 剂量 — | IC50 — | 模型 NSCLC adjuvant chemotherapy | cytotoxic
+  agent used with platinum-based regimens
+
+  - vinorelbine：靶点 — | 剂量 — | IC50 — | 模型 NSCLC adjuvant chemotherapy | cytotoxic
+  agent used with platinum-based regimens
+
+  - paclitaxel：靶点 — | 剂量 — | IC50 — | 模型 NSCLC adjuvant chemotherapy | cytotoxic agent
+  used with platinum-based regimens
+
+  - selinexor：靶点 XPO1 | 剂量 — | IC50 — | 模型 lung organoids / WGD-positive LSCC organoids
+  | Higher sensitivity in WGD-positive LSCC organoids; may be effective for patients
+  with Subtype 3, requiring further validation.
+
+  - selinexor：靶点 XPO1 | 剂量 — | IC50 — | 模型 patient-derived organoid; Subtype 3 with
+  WGD | effective against Subtype 3 with WGD; did not show strong efficacy in Subtype
+  1
+
+  - 1,4-dithiothreitol (DTT)：靶点 protein disulfide bonds | 剂量 20 mM | IC50 na | 模型
+  protein lysates | reduction at 95 °C for 10 min
+
+  - iodoacetamide：靶点 cysteine thiols | 剂量 40 mM | IC50 na | 模型 protein lysates | alkylation
+  in dark at RT for 30 min
+
+  - phosphoric acid：靶点 na | 剂量 12%, 1/10 sample volume | IC50 na | 模型 S-Trap sample
+  preparation | formation of colloidal status
+
+  - TEAB：靶点 na | 剂量 100 mM; 50 mM digestion buffer; 10 mM mobile phase | IC50 na |
+  模型 S-Trap/TMT/LC | buffer
+
+  - formic acid：靶点 na | 剂量 0.2%; 0.1% | IC50 na | 模型 peptide elution/LC mobile phase
+  | acidification/elution
+
+  - hydroxylamine：靶点 TMT labeling reaction | 剂量 5% | IC50 na | 模型 TMTpro labeling
+  | quenching
+
+  - EDTA：靶点 metal ions | 剂量 100 mM | IC50 na | 模型 IMAC bead preparation | strips Ni
+  from Ni-NTA beads
+
+  - FeCl3：靶点 Ni-NTA agarose beads | 剂量 10 mM | IC50 na | 模型 IMAC phosphopeptide enrichment
+  | Fe3+ immobilization
+
+  - trifluoroacetic acid (TFA)：靶点 na | 剂量 0.1%; 0.15% | IC50 na | 模型 phospho/acetyl
+  peptide enrichment | acidification/elution
+
+  - TMT：靶点 — | 剂量 — | IC50 — | 模型 global/phospho/acetyl proteomics | 用于肽段定量；通道间总肽丰度归一化，并通过co-isolation阈值和reporter
+  S/N阈值过滤低质量定量值
+
+  - Selinexor：靶点 — | 剂量 8 concentrations (values not specified) | IC50 determined
+  using GraphPad Prism (value not specified) | 模型 patient-derived lung tumoroids,
+  384-well plates, 250 cells per well | cell viability quantified by CellTiter-Glo
+  3D after 6 days
+
+  - DMSO：靶点 — | 剂量 vehicle | IC50 — | 模型 patient-derived lung tumoroids | negative
+  control'
+evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
+  cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
+  | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf

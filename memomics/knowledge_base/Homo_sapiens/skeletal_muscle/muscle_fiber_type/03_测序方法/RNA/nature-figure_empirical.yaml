@@ -1,0 +1,28 @@
+type: kb_entry
+name: nature-figure_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: muscle_fiber_type
+assay_type: RNA
+last_updated: 2026-09-04 17:15
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-figure_empirical
+content: 'skill: nature-figure
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  R 4.4.2 + ComplexHeatmap 2.22.0；行=56 GO词条，列=17亚群，值=-log10(q)，NA灰；row_split按亚群分组不聚类；colorRamp2
+  分段 c(0,2,5,10,20,60,100) 处理 outlier 97；导出 png(1900x2700@300dpi)/pdf/svg(7.5x10.5in)
+
+
+  result_summary:
+
+  GO 富集热图成功生成：56 词条 × 17 亚群，导出 figures/GO_heatmap_MF16.png/.pdf/.svg 三格式'
+evidence: 'record_run(nature-figure): GO 富集热图成功生成：56 词条 × 17 亚群，导出 figures/GO_heatmap_MF16.png/.pdf/.svg
+  三格式'

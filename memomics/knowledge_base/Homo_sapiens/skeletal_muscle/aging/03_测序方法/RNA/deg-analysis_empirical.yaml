@@ -1,0 +1,34 @@
+type: kb_entry
+name: deg-analysis_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 16:44
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- deg-analysis_empirical
+content: 'skill: deg-analysis
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  细胞级: FindMarkers(wilcox, ident.1=Y_Post, ident.2=O_Post, logfc.threshold=0, min.pct=0.10,
+  BH); pseudobulk: 按 samplename 聚合 RNA counts → log2CPM → 样本级 Wilcoxon rank-sum (Y_Post
+  n=10 vs O_Post n=7) + BH; 阈值 padj<0.05 & |log2FC|>=0.5
+
+
+  result_summary:
+
+  Y_Post(759 cells/10 samples) vs O_Post(2320 cells/7 samples): 细胞级 padj<0.05&|lfc|>=0.5
+  → Down 395 / Up 1027 (8081 基因检测); pseudobulk 样本级 → Down 57 / Up 63 (14304 基因); 双方法下调交集
+  45 个基因，方向零冲突。下调 top: RUNX1(-3.58), KCNQ5, PDLIM3, ANKRD1, TGFB2, OSBPL8, RNF115,
+  MYH9, ENAH, RIPOR2。样本 QC: Old_2C_Post 仅 12 细胞为最弱样本(min rho=0.676)，其余样本 median rho
+  0.83-0.88。'
+evidence: 'record_run(deg-analysis): Y_Post(759 cells/10 samples) vs O_Post(2320 cells/7
+  samples): 细胞级 padj<0.05&|lfc|>=0.5 → Down 395 / Up 1027 (8081 基因检测); pseudobulk
+  样本级 → Down 57 / Up 63 (14304 基因); 双方法下调交集 45 个基因，方向零冲突。下调 top: RUNX1'

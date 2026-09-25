@@ -1,0 +1,276 @@
+type: kb_entry
+name: paper_bio_CACIMAR
+doi: "10.1093/bib/bbae283"
+species: other
+tissue: other
+direction: other
+assay_type: RNA
+last_updated: 2026-09-17 17:40
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bio_CACIMAR
+content: '## 结论
+
+  - CACIMAR 是一个利用 scRNA-seq 数据进行跨物种细胞身份、标记、调控和互作分析的工具。
+
+  - CACIMAR 基于保守特征的加权求和模型构建不同保守性分数，用于衡量细胞类型、调控网络和细胞间互作的保守性。
+
+  - 利用小鼠、斑马鱼和鸡视网膜再生的公开 scRNA-seq 数据，CACIMAR 展示四项主要功能。
+
+  - CACIMAR 可识别进化距离较远物种中的保守细胞类型。
+
+  - CACIMAR 可识别进化保守或物种特异性的标记基因。
+
+  - CACIMAR 可识别保守的胞内调控，包括细胞类型特异性调控子网络和调控因子。
+
+  - CACIMAR 可识别保守的细胞间互作。
+
+  - CACIMAR 有助于理解物种进化的细胞和分子机制。
+
+  - CACIMAR was demonstrated for cross-species conservation analysis using publicly
+  available scRNA-seq data from mouse, zebrafish, and chick during retinal regeneration.
+
+  - CACIMAR effectively identified conserved markers, cell types, intracellular regulations,
+  and intercellular interactions in the retina among mouse, zebrafish, and chick.
+
+  - The datasets included control and NMDA-treated retinas from mouse, zebrafish,
+  and chick.
+
+  - Zebrafish Müller glia modularized regulatory network contained 2202 genes and
+  192 transcription factors divided into 10 modules.
+
+  - Chick Müller glia regulatory networks contained 1777 genes and 66 transcription
+  factors in eight modules.
+
+  - CSRN was designed to score conservation of regulatory networks/subnetworks using
+  fractions of homologous genes and homologous interactions.
+
+  - Regulatory networks from two species are considered conserved if they match each
+  other and CSRN is higher than the third quantile of non-zero CSRN values; conservation
+  across all species requires conservation in any two of n species.
+
+  - Evolutionarily conserved regulators are defined as transcription factors with
+  homologs and expression in the conserved cell type from at least two species, belonging
+  to conserved regulatory modules, and significantly regulating genes in any module
+  by IReNA (FDR < 0.01).
+
+  - Conserved intercellular interactions are assessed using ligand-receptor interactions
+  from the Consensus database in LIANA and are considered conserved if CSII is greater
+  than the third quantile of CSII.
+
+  - CACIMAR was developed to identify evolutionarily conserved cell types, markers,
+  intracellular regulations, and intercellular interactions.
+
+  - CACIMAR is a computational method for cross-species scRNA-seq analysis that identifies
+  conserved cell types, markers, intracellular regulations, and intercellular interactions.
+
+  - CACIMAR workflow involves single-cell clustering, cell–cell interaction construction,
+  marker and regulatory network identification per species, conservation scoring using
+  homologous genes, and identification of conserved features.
+
+  - Cell type conservation score (CSCT) is defined as the fraction of summed statistical
+  powers of shared markers divided by summed powers of all markers; higher CSCT indicates
+  greater conservation.
+
+  - CACIMAR was demonstrated using public scRNA-seq data from retinal regeneration
+  in mice, zebrafish, and chick, representing evolutionarily distant species.
+
+  - Seurat AUC analysis identified markers for all retinal cell types; 1933 mouse,
+  787 zebrafish, and 387 chick markers were identified from genes expressed in at
+  least 5% of cells.
+
+  - Cones from mice, zebrafish, and chick separately had 81, 104, and 34 markers.
+
+  - 基于 CSCT 热图和系统发育树，鉴定出跨小鼠、斑马鱼和鸡保守的视网膜细胞类型。
+
+  - 四个细胞类型在三物种中均保守，包括静息 Müller 胶质细胞、GABAergic 无长突细胞、视网膜神经节细胞和视锥细胞。
+
+  - 七个细胞类型在小鼠和斑马鱼间保守，如活化 Müller 胶质细胞、小胶质细胞、视网膜色素上皮和视杆细胞。
+
+  - 多数斑马鱼细胞类型（11/15）在小鼠中保守，且没有仅鸡与小鼠或斑马鱼保守的细胞类型。
+
+  - 系统发育树将视杆和视锥归为同一光感受器分支。
+
+  - CACIMAR 能准确识别保守细胞类型，即使对进化距离远的物种；水平细胞和甘氨酸能无长突细胞未识别为保守，可能因跨物种保守性差且标准严格。
+
+  - 鉴定出 24 个三物种保守标记，包括静息 Müller 胶质细胞中 Rlbp1/rlbp1a/RLBP1；小鼠-斑马鱼保守细胞类型中鉴定出 157 个保守标记。
+
+  - 鸡视网膜神经节细胞具有最高保守标记比例（63.9%），斑马鱼视杆和小鼠视锥保守标记比例分别为 50% 和 27.2%。
+
+  - 静息 Müller 胶质、活化 Müller 胶质和 GABAergic 无长突细胞在三物种中具有保守调控网络；视网膜神经节细胞和视锥的调控网络仅在小鼠和斑马鱼间保守。
+
+  - 小鼠和斑马鱼 11 个保守细胞类型中有 10 个调控网络保守，且静息 Müller 胶质调控网络保守分数最高。
+
+  - Müller 胶质中鉴定出两个三物种保守调控模块，其中一个与 RNA 剪接相关；另有三对仅两物种保守模块，其中斑马鱼模块 6 和鸡模块 8 富集 DNA 复制和细胞周期。
+
+  - 在 Müller 胶质调控网络中鉴定出 60 个任意两物种间保守的同源调节因子，包括 Pou2f1/pou2f1b/POU2F1；两个三物种保守模块中鉴定出
+  9 个调节因子，Smarca5/smarca5/SMARCA5 是三物种唯一保守。
+
+  - 使用 LIANA 中 SingleCellSignalR 计算细胞间互作权重，观察到小鼠和斑马鱼之间相似的互作模式。
+
+  - 在小鼠、斑马鱼和鸡视网膜中鉴定出保守细胞类型、保守标志物、保守调控网络及保守细胞间互作。
+
+  - 小鼠与斑马鱼中11种保守细胞类型之间的互作呈强正相关（R > 0.66），而鸡与小鼠/斑马鱼的互作模式不同（R < 0.21）。
+
+  - 视锥细胞与保守细胞类型的互作在小鼠和斑马鱼间呈正相关，但在鸡与小鼠或斑马鱼间呈负相关。
+
+  - 活化Müller胶质细胞与保守细胞类型的互作在小鼠和斑马鱼间相关性最高（R = 0.82）。
+
+  - 三种物种共保守的4种细胞类型中，视锥细胞与视锥细胞、静息Müller胶质细胞和GABA能无长突细胞具有保守互作。
+
+  - 视锥细胞自身互作的保守评分最高，包含App–Rpsa和App–Aplp2等保守配体-受体互作。
+
+  - 小鼠和斑马鱼共保守的11种细胞类型中，视锥细胞与双极细胞互作保守性最高，与视网膜组织中视锥双极细胞主要与视锥细胞互作一致。
+
+  - Müller胶质细胞调控网络模块在物种间具有保守性（CSRN），包含同源/保守转录因子和保守互作。
+
+  - 开发了 CACIMAR，用于基于保守性评分进行跨物种 scRNA-seq 数据的保守性分析，可评估细胞类型、标志物、胞内调控和细胞间相互作用的保守性。
+
+  - 使用小鼠、斑马鱼和鸡的公开视网膜再生 scRNA-seq 数据，CACIMAR 能识别进化距离较远物种间的保守细胞类型。
+
+  - CACIMAR 可鉴定保守的细胞类型特异性调控网络和子网络，并在 Müller 胶质细胞中识别保守调控模块和调控因子。
+
+  - 锥体细胞在跨物种中与锥体细胞、Müller 胶质细胞和 GABA 能无长突细胞保持保守相互作用，并与其他细胞类型包括双极细胞保持保守相互作用。
+
+  - 甘氨酸能无长突细胞和水平细胞的胞内调控网络不保守，但这些保守性较差的细胞类型与其他细胞类型具有保守相互作用，提示胞内调控与细胞间相互作用在物种进化中承受不同选择压力。
+
+  - 保守细胞类型推断有助于跨物种细胞类型标签转移，并有助于发现细胞类型、标志物、调控和相互作用的进化起源。
+
+
+  ## 细胞类型
+
+  - Müller glia cells
+
+  - primate microglia
+
+  - Müller glial cells
+
+  - resting Müller glia
+
+  - activated Müller glia
+
+  - zebrafish Müller glia
+
+  - chick Müller glia
+
+  - cones
+
+  - retinal cell types
+
+  - resting Müller glial cells
+
+  - GABAergic amacrine cells
+
+  - retinal ganglion cells
+
+  - activated Müller glial cells
+
+  - microglia
+
+  - retinal pigment epithelium
+
+  - rods
+
+  - horizontal cells
+
+  - glycinergic amacrine cells
+
+  - Müller glia
+
+  - chick retinal ganglion cells
+
+  - photoreceptors
+
+  - Müller glial cells (MG)
+
+  - bipolar cells (BC)
+
+  - cone bipolar cells
+
+  - amacrine cells (AC)
+
+  - retinal ganglion cells (RGC)
+
+  - vascular/endothelial cells (V/E)
+
+  - retinal pigment epithelium (RPE)
+
+  - 锥体细胞（cones）
+
+  - 双极细胞（bipolar cells）
+
+  - Müller胶质细胞（Müller glial cells）
+
+  - GABA能无长突细胞（GABAergic amacrine cells）
+
+  - 甘氨酸能无长突细胞（glycinergic amacrine cells）
+
+  - 水平细胞（horizontal cells）
+
+
+  ## 通路
+
+  - RNA splicing
+
+  - DNA replication
+
+  - cell cycle
+
+  - retinal regeneration
+
+  - neuronal progenitor cell proliferation
+
+  - cell-cell interaction
+
+  - App–Rpsa ligand-receptor interaction
+
+  - App–Aplp2 ligand-receptor interaction
+
+  - cone–cone conserved intercellular interaction
+
+  - cone–resting Müller glia conserved interaction
+
+  - cone–GABAergic amacrine cell conserved interaction
+
+  - cone–bipolar cell conserved interaction
+
+  - Müller glia conserved regulatory network (CSRN)
+
+
+  ## 基因 Marker
+
+  - Rlbp1/rlbp1a/RLBP1：resting Müller glial cells，na，在三种物种保守的静息 Müller 胶质细胞中作为保守标记基因被鉴定
+
+  - Pou2f1/pou2f1b/POU2F1：Müller glial cells，na，在任意两种物种的 Müller 胶质细胞调控网络中保守的同源调节因子
+
+  - Nfia/nfia：Müller glial cells，na，在小鼠和斑马鱼中保守的调节因子，位于三物种保守调控模块中
+
+  - Pax6/pax6a：Müller glial cells，na，在小鼠和斑马鱼中保守的调节因子，位于三物种保守调控模块中
+
+  - Sox4/sox4a：Müller glial cells，na，在小鼠和斑马鱼中保守的调节因子，位于三物种保守调控模块中
+
+  - medf2d/MEF2D：Müller glial cells，na，在斑马鱼和鸡中保守的调节因子，位于三物种保守调控模块中
+
+  - sox5/SOX5：Müller glial cells，na，在斑马鱼和鸡中保守的调节因子，位于三物种保守调控模块中
+
+  - egr1/Egr1：Müller glial cells，na，在斑马鱼和鸡中保守的调节因子，位于三物种保守调控模块中
+
+  - Smarca5/smarca5/SMARCA5：Müller glial cells，na，唯一在三个物种中均保守的调节因子，位于三物种保守调控模块中
+
+  - App：cones，na，在三种物种共保守的视锥细胞自身互作中，App–Rpsa和App–Aplp2为保守配体-受体互作。
+
+  - Rpsa：cones，na，在三种物种共保守的视锥细胞自身互作中，App–Rpsa为保守配体-受体互作。
+
+  - Aplp2：cones，na，在三种物种共保守的视锥细胞自身互作中，App–Aplp2为保守配体-受体互作。
+
+
+  ## 化合物/化学信息
+
+  - N-methyl-D-aspartate (NMDA)：靶点 na | 剂量 na | IC50 na | 模型 mouse, zebrafish, and
+  chick retinas; control vs NMDA-treated retinal regeneration scRNA-seq datasets |
+  Treatment condition used in scRNA-seq datasets; NMDA-treated retinas compared with
+  controls'
+evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
+  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'

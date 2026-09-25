@@ -1,0 +1,29 @@
+type: kb_entry
+name: go-enrichment-visualization_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 13:59
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- go-enrichment-visualization_empirical
+content: 'skill: go-enrichment-visualization
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  Wi=9.2in, Hi=10.4in, padding T1.0/R4.0/B1.8/L5.0cm, YlOrRd 5档(#FFF7EC→#7F0000),
+  0-10, 48词条×15亚群, cellwidth未设(自适应), fontsize_row=8, angle_col=45
+
+
+  result_summary:
+
+  v14 缩小版：画布 9.2×10.4 in（v13 的 90%），热图本体随画布等比缩小、边距保持 v13 值不变；三格式输出 PNG(2760×3120)/PDF/SVG，dim
+  48×15 确认'
+evidence: 'record_run(go-enrichment-visualization): v14 缩小版：画布 9.2×10.4 in（v13 的 90%），热图本体随画布等比缩小、边距保持
+  v13 值不变；三格式输出 PNG(2760×3120)/PDF/SVG，dim 48×15 确认'

@@ -1,0 +1,28 @@
+type: kb_entry
+name: annotate_celltype_scRNA_empirical
+species: monkey
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-27 03:48
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- annotate_celltype_scRNA_empirical
+content: 'skill: annotate_celltype_scRNA
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"embedding":"UMAPHarmony","map8":"18亚类→8大类","ambig_rule":"second>20% && second_name!=main","ambig_clusters":"C14,C26,C3"}
+
+
+  result_summary:
+
+  猴脑海马ATAC完整注释交付：30簇最终注释表(27簇8大类纯净+3簇Ambig_requery带说明)，4张UMAP图，注释写回cellColData。Ambig裁决：C14极小簇ExN×Astro保守Ambig、C26
+  CP×VS差6.3pp不硬归、C3 Micro×ExN混入标注。rail_review(post)通过'
+evidence: 'record_run(annotate_celltype_scRNA): 猴脑海马ATAC完整注释交付：30簇最终注释表(27簇8大类纯净+3簇Ambig_requery带说明)，4张UMAP图，注释写回cellColData。Ambig裁决：C14极小簇ExN×Astro保守Ambig、C26
+  CP×VS差6.3pp不硬归、C3 Micro×ExN混入标注。rail_review(post)通过'

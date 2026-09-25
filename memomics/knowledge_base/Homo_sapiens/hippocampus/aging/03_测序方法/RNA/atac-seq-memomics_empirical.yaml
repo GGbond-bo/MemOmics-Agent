@@ -1,0 +1,30 @@
+type: kb_entry
+name: atac-seq-memomics_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-27 22:46
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- atac-seq-memomics_empirical
+content: 'skill: atac-seq-memomics
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  Table_S1.tsv → Donor→Age_group; 40 multiome samples (GSM8549615-8549654) 全部匹配; C1-C30
+  → ExN/InN/Astro/Micro/OPC/ODC/Unknown
+
+
+  result_summary:
+
+  人脑 40 样本年龄映射建立成功：40/40 匹配，Age 20-89 岁分 4 组（20-40/40-60/60-80/80-100），265,909 细胞全部写入
+  Age + Age_group 列。产出 task2/human_Hf_ATAC_40_withAge.rds + human_donor_age_map.csv'
+evidence: 'record_run(atac-seq-memomics): 人脑 40 样本年龄映射建立成功：40/40 匹配，Age 20-89 岁分 4
+  组（20-40/40-60/60-80/80-100），265,909 细胞全部写入 Age + Age_group 列。产出 task2/human_Hf_ATAC_40_withAge.rds
+  + human_donor_age_map.csv'

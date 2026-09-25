@@ -1,6 +1,7 @@
 type: kb_entry
 domain: chemistry
 name: chem_10.1038_s41467-025-56896-6_famotidine
+doi: "10.1038/s41467-025-56896-6"
 chem_category: compounds
 last_updated: 2026-08-18 01:57
 source: literature

@@ -1,0 +1,31 @@
+type: kb_entry
+name: patent-analysis_empirical
+species: other
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 04:44
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- patent-analysis_empirical
+content: 'skill: patent-analysis
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  R 读 human_GroupSE_byindividual.rds / monkey_GroupSE_byIndividual.rds 结构（SummarizedExperiment,
+  assay=PeakMatrix）
+
+
+  result_summary:
+
+  决定性结构发现：两个 GroupSE 均为 groupBy=Sample 的【个体级】pseudobulk（human 525137 peak×40 个体，monkey
+  538420×21），colData 含连续 Age；【不含细胞类型维度】→ 组成校正无法在矩阵内部完成，必须外接 per-individual 细胞类型组成表。猴侧确认存在
+  M4 个体（Age=10, nCells=61, FRIP 0.288 = 低质量样本）。'
+evidence: 'record_run(patent-analysis): 决定性结构发现：两个 GroupSE 均为 groupBy=Sample 的【个体级】pseudobulk（human
+  525137 peak×40 个体，monkey 538420×21），colData 含连续 Age；【不含细胞类型维度】→ 组成校正无法在矩阵内部完成，必须外接
+  per-individual 细胞类型组成表。猴侧确认存在 M4 个体（Age=10, nCells=61, FR'

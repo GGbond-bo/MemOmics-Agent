@@ -1,0 +1,31 @@
+type: kb_entry
+name: scrna-eda_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 16:22
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- scrna-eda_empirical
+content: 'skill: scrna-eda
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"check":"MT gene reality","MT_genes":37,"MTpct_vs_counts_r":1.0,"mt_median_pct":0.36,"check2":"library
+  nesting vs samplename"}
+
+
+  result_summary:
+
+  辩论点名核查完成：① percent.mt 经 counts 层重算验证为真实值（r=1.0000，37 个 MT- 基因，median 0.36%），推翻"基于
+  SCT 计算"的猜测；② C 后缀与 O/OD 分组 100% 绑定（零例外），但生物学语义数据无法推断；③ library(65) 完全嵌套于 samplename(43)，无跨组批次混杂。产出
+  MF120_sample_group_map.csv。裁决 need_more_info/low confidence。'
+evidence: 'record_run(scrna-eda): 辩论点名核查完成：① percent.mt 经 counts 层重算验证为真实值（r=1.0000，37
+  个 MT- 基因，median 0.36%），推翻"基于 SCT 计算"的猜测；② C 后缀与 O/OD 分组 100% 绑定（零例外），但生物学语义数据无法推断；③
+  library(65) 完全嵌套于 samplename(43)，无跨组批次混杂。产出 MF120_sample_group_'

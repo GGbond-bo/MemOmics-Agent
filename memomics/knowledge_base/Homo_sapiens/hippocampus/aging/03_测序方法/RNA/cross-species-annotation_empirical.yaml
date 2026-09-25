@@ -1,0 +1,30 @@
+type: kb_entry
+name: cross-species-annotation_empirical
+species: Homo_sapiens
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-08-27 11:53
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-annotation_empirical
+content: 'skill: cross-species-annotation
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  alignment_map: C1-C6→OPC, C7-C12→Astrocyte, C13→C13, C14-C16/C18→Inhibitory, C17/C19→Excitatory,
+  C20-C23→Microglia, C25-C26/C28-C29→保留原文, C30→ODC, C24/C27→Unknown
+
+
+  result_summary:
+
+  人脑海马 ATAC 细分亚群对齐注释完成：265,909 细胞，12 个注释类别。能对齐的用猴脑名字（OPC/Astrocyte/Inhibitory/Excitatory/Microglia/ODC），不能对齐的保留原文名字（C13/C25/C26/C28/C29）。C24/C27
+  不在 marker list 中标记为 Unknown。'
+evidence: 'record_run(cross-species-annotation): 人脑海马 ATAC 细分亚群对齐注释完成：265,909 细胞，12
+  个注释类别。能对齐的用猴脑名字（OPC/Astrocyte/Inhibitory/Excitatory/Microglia/ODC），不能对齐的保留原文名字（C13/C25/C26/C28/C29）。C24/C27
+  不在 marker list 中标记为 Unknown。'

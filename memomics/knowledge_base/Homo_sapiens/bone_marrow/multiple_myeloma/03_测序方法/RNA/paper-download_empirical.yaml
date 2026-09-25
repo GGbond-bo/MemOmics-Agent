@@ -1,0 +1,33 @@
+type: kb_entry
+name: paper-download_empirical
+species: Homo_sapiens
+tissue: bone_marrow
+direction: multiple_myeloma
+assay_type: RNA
+last_updated: 2026-09-14 21:02
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper-download_empirical
+content: 'skill: paper-download
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  PIL RGB 转换 + dpi=300 保存 PNG; reportlab canvas pagesize=(w/300*inch, h/300*inch)
+  drawImage 全页嵌入 → PDF; 图注从 Europe PMC fullTextXML <fig id="Fig2"> 提取
+
+
+  result_summary:
+
+  产出 3 文件: Fig2_single_cell_immune_atlas_MM.png (1,988,586 B, 2163x2698), .pdf (1,970,689
+  B, 页面 7.21x8.99 in @300dpi), Fig2_caption.txt (3,315 B, 2,879 字图注含 a–l 面板)。健康检查
+  non-white 比例 0.2295 / 均值亮度 234.7 = 非空白。vision_describe OCR 确认内容为 Fig2 (panel b UMAP
+  标记基因 CD3D/LYZ/HBB/CD79A/MZB1, panel c 细胞组成 CD4T 30.51% CD8T 23.39%)。PNG→PDF 页面尺寸换算
+  = 像素/300。'
+evidence: 'record_run(paper-download): 产出 3 文件: Fig2_single_cell_immune_atlas_MM.png
+  (1,988,586 B, 2163x2698), .pdf (1,970,689 B, 页面 7.21x8.99 in @300dpi), Fig2_caption.txt
+  (3,315 B, 2,879 字图注含 a–l 面板)。健康检查 non-white 比例 0.2295 / 均值亮度 234.7'

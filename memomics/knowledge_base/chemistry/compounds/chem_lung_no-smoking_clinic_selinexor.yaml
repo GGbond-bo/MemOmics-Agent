@@ -1,0 +1,23 @@
+type: kb_entry
+domain: chemistry
+name: chem_lung_no-smoking_clinic_Selinexor
+doi: "10.1038/s41467-024-54434-4"
+chem_category: compounds
+last_updated: 2026-09-17 17:38
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_lung_no-smoking_clinic_Selinexor
+content: '- 靶点: —
+
+  - 剂量: 8 concentrations (values not specified)
+
+  - IC50/EC50: determined using GraphPad Prism (value not specified)
+
+  - 模型: patient-derived lung tumoroids, 384-well plates, 250 cells per well
+
+  - 效应: cell viability quantified by CellTiter-Glo 3D after 6 days'
+evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
+  cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
+  | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf

@@ -1,0 +1,28 @@
+type: kb_entry
+name: cross-species-atac-conservation_empirical
+species: monkey
+tissue: hippocampus
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-13 16:32
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cross-species-atac-conservation_empirical
+content: 'skill: cross-species-atac-conservation
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  R base plot 4 面板：p值分布(连续vs阶段)、统计量SD/理论、留一稳定性箱线、方向一致性散点；1800×1400 res150
+
+
+  result_summary:
+
+  生成 figures/stage_vs_cont_monkey_peaks.png (54KB, 4 面板)。A:p值分布偏向1(保守) B:连续0.60×/阶段0.62×收缩
+  C:阶段留一更稳 D:两版r=0.89 一致率84.8%。'
+evidence: 'record_run(cross-species-atac-conservation): 生成 figures/stage_vs_cont_monkey_peaks.png
+  (54KB, 4 面板)。A:p值分布偏向1(保守) B:连续0.60×/阶段0.62×收缩 C:阶段留一更稳 D:两版r=0.89 一致率84.8%。'

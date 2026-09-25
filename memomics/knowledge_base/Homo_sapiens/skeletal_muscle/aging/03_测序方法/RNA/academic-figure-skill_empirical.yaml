@@ -1,0 +1,33 @@
+type: kb_entry
+name: academic-figure-skill_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-15 22:09
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- academic-figure-skill_empirical
+content: 'skill: academic-figure-skill
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  版式: 16.5x8.4in CELL=1.0 PANEL_GAP=1.8 axis(2)at=NROWS-0.5-row_pos 色块条x_strip=-1.25
+  w=0.6 srt=90; 验证: SVG元素层(5轴色命中)+PNG栅格层(PIL采样x=880逐色等比例202/201/201/151/101)+OCR文字层(标签上移半格+5轴名可读)
+  三层交叉
+
+
+  result_summary:
+
+  FigA2 v3 完成并三层验证。经验固化：(1) R base graphics 里 draw_cbar 这类用 par(fig=..,new=TRUE)+plot.window
+  的辅助函数会重置坐标系，任何后于它调用的绘图函数都会画到画布外——所有分组色块/标注必须在其之前调用；(2) axis(2) 的 at 必须用单元格中心(NROWS-0.5-row_pos)而非底边；(3)
+  base graphics 图的验证链=SVG元素层(搜颜色/rgb%)+PNG栅格层(PIL逐列采样比色)+OCR文字层，三层都过才算数；(4) R 的 svg()
+  把文字写成 glyph 引用(无 <text> 节点)，且颜色写成 rgb(%) 百分比——用十六进制 grep 会假阴性'
+evidence: 'record_run(academic-figure-skill): FigA2 v3 完成并三层验证。经验固化：(1) R base graphics
+  里 draw_cbar 这类用 par(fig=..,new=TRUE)+plot.window 的辅助函数会重置坐标系，任何后于它调用的绘图函数都会画到画布外——所有分组色块/标注必须在其之前调用；(2)
+  axis(2) 的 at 必须用单元格中心(NROWS-0.5-row_pos)而非底边；(3) base'

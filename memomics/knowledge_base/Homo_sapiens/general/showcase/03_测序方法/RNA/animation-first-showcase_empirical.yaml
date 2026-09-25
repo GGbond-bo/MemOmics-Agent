@@ -1,0 +1,32 @@
+type: kb_entry
+name: animation-first-showcase_empirical
+species: Homo_sapiens
+tissue: general
+direction: showcase
+assay_type: RNA
+last_updated: 2026-09-16 23:03
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- animation-first-showcase_empirical
+content: 'skill: animation-first-showcase
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"file":"MemOmics_Showcase.html","pages":11,"size_kb":48,"hero":"canvas粒子网络+三层轨道+流动带+数字条,
+  gwrap=min(50vh,540px,72vw)","removed":"竞品对比章节(s8 cards)","added":["s8 循环流: cyc-ring+cyc-arm(10.8s)+6节点顺序点亮(1.8s)+三股stream
+  lane","s9 阶梯流: 6级rung(24-94%)+ascend虚线上流+converge双汇流带"],"id_renumber":["s8","s9","s10","s11"],"js_triggers":"s8→cycle(),
+  s9→ladder(), s10→road()","verified":{"js_errors":0,"slides":11,"dup_ids":0,"canvas_nonEmpty_px":3276,"cycOn":[0],"rungOn":[2],"keyboard":"ArrowRight→pager
+  03/11","counter":"350/168/495/189","gate":"全部通过→放行"}}
+
+
+  result_summary:
+
+  展示页改为动画优先+未来导向：封面加粒子网络/三层轨道/流动带/数字条并放大；删除竞品对比章节；新增两页流动过程图（科研循环流、AI能力阶梯流+汇流带）。11
+  页，48KB，单文件零依赖，浏览器实测 js_errors=0、全部动效在跑。'
+evidence: 'record_run(animation-first-showcase): 展示页改为动画优先+未来导向：封面加粒子网络/三层轨道/流动带/数字条并放大；删除竞品对比章节；新增两页流动过程图（科研循环流、AI能力阶梯流+汇流带）。11
+  页，48KB，单文件零依赖，浏览器实测 js_errors=0、全部动效在跑。'

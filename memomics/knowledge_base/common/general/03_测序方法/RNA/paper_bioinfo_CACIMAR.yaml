@@ -1,0 +1,239 @@
+type: kb_entry
+domain: common
+name: paper_bioinfo_CACIMAR
+doi: "10.1093/bib/bbae283"
+direction: general
+assay_type: RNA
+last_updated: 2026-09-17 17:40
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_bioinfo_CACIMAR
+content: '## 测序方法
+
+  - scRNA-seq | 平台 — | 建库 — | 深度 —
+
+
+  ## 分析流程
+
+  - 单物种内单细胞聚类分析 → 鉴定细胞类型、标记、胞内调控和胞间互作 → 计算基于标记统计功效的保守性分数 → 构建特征加权求和模型衡量胞内调控和胞间互作保守性
+
+  - Use publicly available scRNA-seq datasets of retinal regeneration from mouse,
+  zebrafish, and chick, including control and NMDA-treated retinas
+
+  - Establish homologous genes across species using vertebrate homology data from
+  MGI by same HomoloGene ID
+
+  - Generate a cross-species homologous gene matrix with homologous genes as rows
+  and species as columns
+
+  - Identify cell type-specific marker genes in each species using Seurat FindAllMarkers
+
+  - Select markers with power >0.35 and log-scale expression difference >0.1
+
+  - Calculate marker power as MP = 2 × absolute(AUC - 0.5)
+
+  - Determine shared markers by examining homologs of cell type-specific markers;
+  choose homolog with highest power if multiple
+
+  - Calculate cell type conservation score CSCT as summed power of shared markers
+  divided by summed power of all markers
+
+  - Compute distances between cell types as 1 - CSCT
+
+  - Construct cell type phylogenetic tree using UPGMA via R stats hclust
+
+  - Identify conserved cell types based on CSCT, phylogenetic clustering, at least
+  two shared markers, CSCT above third quartile of non-zero CSCT values, and mutual
+  matching
+
+  - Visualize CSCT values with three-dimensional heatmap and phylogenetic tree with
+  ggtree
+
+  - Identify conserved markers as homologous markers from conserved cell types
+
+  - Reconstruct cell type-specific gene regulatory networks using GENIE3 from IReNA
+  with 500 randomly selected cells per cell type
+
+  - Select gene regulation pairs containing at least one transcription factor from
+  TRANSFAC
+
+  - Reconstruct cell type-specific regulatory network using top 300 gene regulation
+  pairs
+
+  - Build modularized regulatory networks for resting and activated Müller glia in
+  mouse, zebrafish, and chick using IReNA
+
+  - Divide genes in mouse or zebrafish regulatory networks into ten K-means modules
+  and chick Müller glia regulatory network into eight modules
+
+  - scRNA-seq data → modularized regulatory network construction → CSRN calculation
+  for each pair of cell type-specific regulatory networks → conserved regulatory network/module
+  identification → conserved regulator definition → ligand-receptor analysis with
+  LIANA/SingleCellSignalR and Consensus database → gene filtering and LRscore/weight
+  calculation → CSII calculation → conserved intercellular interaction identification
+  → network/interaction visualization
+
+  - scRNA-seq data from multiple species → single-cell clustering to define cell types
+  → construct cell–cell interactions within each species → identify cell type-specific
+  markers and regulatory networks within each species → calculate conservation scores
+  using homologous genes → identify conserved cell types, markers, intracellular regulations,
+  and intercellular interactions
+
+  - Seurat AUC analysis → identify markers of all retinal cell types → filter genes
+  expressed in at least 5% of cells → identify markers per species → calculate statistical
+  powers for all cell type-specific markers → identify shared markers across species
+  using homologs → compute CSCT as summed powers of shared markers divided by summed
+  powers of all markers → heatmap conservation between cell types
+
+  - 跨物种 scRNA-seq 数据 → CACIMAR 计算 CSCT 并构建系统发育树 → 识别三物种/两物种保守细胞类型 → 比较同源基因鉴定保守或物种特异性标记
+  → IReNA 重构小鼠、斑马鱼、鸡各视网膜细胞类型调控网络 → 计算 CSRN → 模块化调控网络并识别保守模块 → 鉴定保守转录因子 → LIANA 中 SingleCellSignalR
+  计算细胞间互作权重 → 比较细胞间互作保守性
+
+  - 跨物种scRNA-seq数据整合（小鼠、斑马鱼、鸡） → 计算细胞类型保守性评分(CSCT) → 构建细胞类型系统发育树 → 鉴定保守标志物 → 计算调控网络保守性评分(CSRN)
+  → 计算细胞间互作保守性评分(CSII)
+
+  - 每个物种独立进行单细胞聚类 → 结合同源信息计算保守性评分 → 使用保守性评分和系统发育树识别跨物种保守细胞类型 → 鉴定保守细胞类型特异性标志物和胞内调控网络
+  → 通过CACIMAR分析细胞间相互作用
+
+
+  ## 软件/包
+
+  - CACIMAR （）：使用 scRNA-seq 数据进行跨物种细胞身份、标记、调控和互作分析，识别保守细胞类型、标记基因、胞内调控和胞间互作
+
+  - SAMap （）：整合跨物种 scRNA-seq 数据以识别保守细胞类型
+
+  - Seurat （）：整合跨物种 scRNA-seq 数据以识别保守细胞类型
+
+  - CAME （）：基于深度神经网络进行跨物种调控程序分析
+
+  - Nvwa （）：基于深度神经网络进行跨物种调控程序分析
+
+  - CACIMAR （）：Cross-species conservation analysis of scRNA-seq data
+
+  - Seurat 4.0（R）：Identify marker genes for each cell type using FindAllMarkers
+
+  - stats (hclust) （R）：Construct phylogenetic tree using UPGMA
+
+  - ggtree （R）：Visualize phylogenetic tree
+
+  - IReNA （R）：Network inference, K-means modularization, and conserved regulatory
+  subnetwork analysis
+
+  - GENIE3 （R）：Random forest-based gene regulatory network inference within IReNA
+
+  - Cytoscape 3.9.1（）：regulatory network visualization
+
+  - LIANA 0.1.5（R）：ligand-receptor interaction analysis using the Consensus database
+
+  - SingleCellSignalR （R）：ligand-receptor analysis and LRscore calculation within
+  LIANA
+
+  - sankeyD3 0.3.2（R）：visualization of cell–cell interaction patterns via sankeyNetwork
+
+  - circlize 0.4.15（R）：displaying CSII via chordDiagram
+
+  - pheatmap 1.0.12（R）：heatmap visualization of intercellular interactions and conserved
+  ligand-receptor pairs
+
+  - IReNA （R）：identification of significant transcription factor regulation (FDR <
+  0.01)
+
+  - CACIMAR （）：Analyze cross-species scRNA-seq data to identify conserved cell types,
+  markers, intracellular regulations, and intercellular interactions
+
+  - Seurat （R）：AUC analysis to identify markers of all retinal cell types
+
+  - CACIMAR （）：跨物种保守性分析（CSCT、CSRN），识别保守细胞类型、标记、调控网络、转录因子和细胞间互作
+
+  - IReNA （）：重构调控网络、识别显著调控转录因子、构建模块化调控网络
+
+  - LIANA （）：细胞间相互作用分析，包含 SingleCellSignalR 算法
+
+  - SingleCellSignalR （）：计算细胞-细胞互作权重
+
+  - CACIMAR （R）：跨物种 scRNA-seq 数据保守性分析，识别保守细胞类型、细胞类型特异性标志物、胞内调控和细胞间相互作用
+
+  - Seurat （）：现有方法，通过直接聚类跨物种单细胞识别保守细胞类型，但受强批次效应影响
+
+  - Harmony （）：现有方法，通过直接聚类跨物种单细胞识别保守细胞类型，但受强批次效应影响
+
+  - SAMap （）：现有方法，通过直接聚类跨物种单细胞识别保守细胞类型，但受强批次效应影响
+
+
+  ## 关键参数
+
+  - Seurat FindAllMarkers.power threshold = >0.35（marker gene selection）
+
+  - Seurat FindAllMarkers.log-scale expression difference = >0.1（marker gene selection）
+
+  - CACIMAR.marker power formula = MP = 2 × |AUC – 0.5|（marker power calculation）
+
+  - CACIMAR.cell type distance = 1 - CSCT（phylogenetic tree construction）
+
+  - CACIMAR.CSCT threshold = third quartile of non-zero CSCT values（conserved cell
+  type criterion）
+
+  - CACIMAR.shared marker count = at least 2（conserved cell type criterion）
+
+  - IReNA.randomly selected cells per cell type = 500（gene regulatory network inference）
+
+  - IReNA.top gene regulation pairs = 300（cell type-specific regulatory network reconstruction）
+
+  - IReNA.number of K-means modules = 10 for mouse/zebrafish; 8 for chick（modularized
+  regulatory networks）
+
+  - TRANSFAC.transcription factor requirement = at least one TF per gene regulation
+  pair（selecting gene regulation pairs）
+
+  - SingleCellSignalR (LIANA).LRscore = >0.5（ligand-receptor pair inclusion; threshold
+  may be changed depending on scRNA-seq data characteristics）
+
+  - CSRN.conservation threshold = third quantile of non-zero CSRN values（identification
+  of conserved regulatory networks or modules）
+
+  - CSII.conservation threshold = third quantile of CSII（identification of conserved
+  cell–cell interactions）
+
+  - IReNA.FDR = <0.01（definition of transcription factors that significantly regulate
+  genes in any module）
+
+  - CACIMAR.CSCT = fraction of summed powers of shared markers divided by summed powers
+  of all markers（cell type conservation score）
+
+  - CACIMAR.regulatory network conservation score = weighted sum of conserved genes
+  and regulatory relationships（regulatory network conservation）
+
+  - CACIMAR.feature conservation representation = statistical powers or summed weights（cell
+  types, markers, intracellular regulations, and intercellular interactions）
+
+  - CACIMAR.CSCT = （基于跨物种细胞类型保守性评分构建系统发育树并识别保守细胞类型）
+
+  - CACIMAR.CSRN = 保守基因相对所有基因与保守调控关系相对所有调控关系的加权和（评估不同物种细胞类型间调控网络的保守性）
+
+  - IReNA.modules = 小鼠/斑马鱼 Müller 胶质细胞各 10 个调控模块；鸡 Müller 胶质细胞 1777 个差异表达基因分为 8 个模块（模块化调控网络分析）
+
+  - IReNA.transcription factors = 66（鉴定显著调控鸡 Müller 胶质细胞各模块的转录因子）
+
+  - SingleCellSignalR/LIANA.cell-cell interaction weights = （计算各物种细胞间互作权重以评估保守性）
+
+
+  ## 数据库
+
+  - Mouse Genome Informatics (MGI)：Vertebrate homology data for establishing homologous
+  genes across species using HomoloGene ID
+
+  - TRANSFAC：Select gene regulation pairs containing at least one transcription factor
+
+  - Consensus：ligand-receptor interaction database used in LIANA for conserved intercellular
+  interaction analysis
+
+  - homologous gene database：identify all homologous genes across mice, zebrafish,
+  and chick for cross-species comparisons
+
+  - GitHub: single-cell-retinal-regeneration：获取已处理的视网膜再生 scRNA-seq 数据
+
+  - GitHub: CACIMAR：获取 CACIMAR R 包'
+evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
+  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'

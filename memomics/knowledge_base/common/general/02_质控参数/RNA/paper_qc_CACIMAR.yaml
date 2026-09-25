@@ -1,0 +1,19 @@
+type: kb_entry
+domain: common
+name: paper_qc_CACIMAR
+doi: "10.1093/bib/bbae283"
+direction: general
+assay_type: RNA
+last_updated: 2026-09-17 17:40
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_qc_CACIMAR
+content: '- expressed cells per gene = <10 cells removed（per species before ligand-receptor
+  analysis）
+
+  - gene expression filter = expressed in at least 5% of cells（genes used for marker
+  identification in mice, zebrafish, and chick）'
+evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
+  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'

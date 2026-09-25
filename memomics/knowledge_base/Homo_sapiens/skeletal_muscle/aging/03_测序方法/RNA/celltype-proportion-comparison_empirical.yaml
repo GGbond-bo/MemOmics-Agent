@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-08-17 18:00
+last_updated: 2026-09-24 19:56
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,13 +17,14 @@ content: 'skill: celltype-proportion-comparison
 
   params_used:
 
-  Specialized MF cluster3 3柱正式版 (Y_Pre/O_Pre/O_Post), 24×32mm, p+FDR两版, PDF+PNG, 补0口径,
-  2比较: Y_Pre vs O_Pre + O_Pre vs O_Post
+  样本级单位(48 samples/24 donors); 比例补0口径; AUCell 14 打分样本均值; 5 比较 = YvsO/MW + OvsOD/MW
+  + 3 配对 Wilcoxon; Cliff delta 方向翻转(正=后项高)
 
 
   result_summary:
 
-  cluster3 衰老上升显著: YvsO p=0.0234 FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156
-  FDR=0.0234 +2.30pp。2比较BH后均显著'
-evidence: 'record_run(celltype-proportion-comparison): cluster3 衰老上升显著: YvsO p=0.0234
-  FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156 FDR=0.0234 +2.30pp。2比较BH后均显著'
+  MF_2000 数据准备完成: UMAP坐标2132 / 比例表480行(sample x 10亚群 x 6组) / 14打分x48样本 / 统计50(比例)+70(打分)行
+  / dotplot 20基因x10亚群。RSS 衰老 p=0.00159 显著; SMF 老年运动 p=0.11 趋势; 每样本细胞数中位45(抽样版)'
+evidence: 'record_run(celltype-proportion-comparison): MF_2000 数据准备完成: UMAP坐标2132
+  / 比例表480行(sample x 10亚群 x 6组) / 14打分x48样本 / 统计50(比例)+70(打分)行 / dotplot 20基因x10亚群。RSS
+  衰老 p=0.00159 显著; SMF 老年运动 p=0.11 趋势; 每样本细胞数中位45(抽样版)'

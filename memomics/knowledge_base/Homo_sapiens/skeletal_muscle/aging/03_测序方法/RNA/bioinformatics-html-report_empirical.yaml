@@ -1,0 +1,30 @@
+type: kb_entry
+name: bioinformatics-html-report_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 16:42
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bioinformatics-html-report_empirical
+content: 'skill: bioinformatics-html-report
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  ReportBuilder + auto_fill_from_logs(collect_session_data("memomics-0f9b1172"))；1
+  图(MF120_EDA_overview) + 5 表(group_summary/sample_map/celltype_by_group/QC_quantiles/conditional_decision_rules)
+  + L2 辩论记录 + 9 callout；结论按 L2 裁判 recommended_params 逐条降级
+
+
+  result_summary:
+
+  MF_120 EDA 自包含 HTML 报告 195.6 KB 交付（reports/MF120_EDA_report.html）：含图1张+5表+结论/方法/风险点+日志溯源；L2
+  辩论裁决 need_more_info(低置信)，四条结论已改降级版并附条件化判定表'
+evidence: 'record_run(bioinformatics-html-report): MF_120 EDA 自包含 HTML 报告 195.6 KB
+  交付（reports/MF120_EDA_report.html）：含图1张+5表+结论/方法/风险点+日志溯源；L2 辩论裁决 need_more_info(低置信)，四条结论已改降级版并附条件化判定表'

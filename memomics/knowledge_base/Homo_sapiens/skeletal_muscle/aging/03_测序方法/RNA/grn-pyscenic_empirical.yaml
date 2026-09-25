@@ -1,0 +1,33 @@
+type: kb_entry
+name: grn-pyscenic_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 20:10
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- grn-pyscenic_empirical
+content: 'skill: grn-pyscenic
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  N_WORKERS=2, N_HVG=3000(HVG限库内∩cisTarget), prune=distributed Client, reuse_adjacencies=False,
+  seed=42, TF=1620(in-db), 基因子集=2904(100%在库内), RNA data层 log-normalized
+
+
+  result_summary:
+
+  MF_2000 人骨骼肌 2132 nuclei pySCENIC 全流程完成(11.8 min): GRNBoost2→6205模块→cisTarget分布式剪枝→264
+  regulons→AUCell (2132×264)。6个产出全部非空(adjacencies 7.4MB/modules 7.4MB/regulons 238KB/aucell_matrix
+  2.2MB)。根因修复: HVG必须先∩库基因否则模块被80%可映射检查大量skip(60模块只剩1); cisTarget必须走dask.distributed
+  Client(scatter broadcast annotations), multiprocessing调度器会内联GB级annotations导致MemoryError/custom_multiprocessing在Windows
+  spawn下Worker未重写__reduce__直接崩'
+evidence: 'record_run(grn-pyscenic): MF_2000 人骨骼肌 2132 nuclei pySCENIC 全流程完成(11.8
+  min): GRNBoost2→6205模块→cisTarget分布式剪枝→264 regulons→AUCell (2132×264)。6个产出全部非空(adjacencies
+  7.4MB/modules 7.4MB/regulons 238KB/aucell_matrix 2.2MB)。根因修复: HVG'

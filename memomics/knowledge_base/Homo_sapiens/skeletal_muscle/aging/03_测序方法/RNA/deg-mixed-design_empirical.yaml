@@ -1,0 +1,30 @@
+type: kb_entry
+name: deg-mixed-design_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-24 17:23
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- deg-mixed-design_empirical
+content: 'skill: deg-mixed-design
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  pseudobulk=ct %*% sparse.model.matrix(~0+sample); filterByExpr(group); 设计矩阵 ~grp+time+grp:time,
+  Young_Pre 参照
+
+
+  result_summary:
+
+  设计矩阵校验通过(秩6/6非奇异, 对比向量代数正确); pseudobulk 48样本 lib 126K-420K(中位274K), 零比例0.61-0.74;
+  filterByExpr 保留6625基因(12.9%); 分层可行性: TypeI(中位17细胞)/TypeII(25)可分层, RSS 10/48样本零细胞不可分层'
+evidence: 'record_run(deg-mixed-design): 设计矩阵校验通过(秩6/6非奇异, 对比向量代数正确); pseudobulk 48样本
+  lib 126K-420K(中位274K), 零比例0.61-0.74; filterByExpr 保留6625基因(12.9%); 分层可行性: TypeI(中位17细胞)/TypeII(25)可分层,
+  RSS 10/48样本零细胞不可分层'

@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-08-20 01:02
+last_updated: 2026-09-15 20:02
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,18 +12,20 @@ auto_trigger:
 - scipilot-figure-skill_empirical
 content: 'skill: scipilot-figure-skill
 
-  quality_score: 9.0
+  quality_score: 8.0
 
 
   params_used:
 
-  meta=MF_AUCell_meta.csv, 18 program scores, subcluster z-score (跨10亚群行内标准化), top3
-  per subcluster
+  {"script":"fig_A3_transposed_v2.R","layout":"transposed: subtype=y(10 rows), program=x(18
+  cols)","cell_in":0.42,"axis_gap":0.25,"artifact_gap":0.7,"axis_label_pt":6.4,"subtype_label_pt":7.6,"xlabel_pt":6.2,"xlabel_angle":45,"title_pt":9,"canvas_in":"9.89x6.44","palette":"RdBu_r","norm":"TwoSlopeNorm(-2,0,2)","dpi":300}
 
 
   result_summary:
 
-  FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
-  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'
-evidence: 'record_run(scipilot-figure-skill): FigA3 数据源 z-score 矩阵已复算：每个亚群 top3 高表达打分确定。RSS=Fibrosis(+2.36)/SenMayo(+1.51)/Denervation(+0.56)
-  代谢全面塌陷(Autophagy -2.97)；SMF=Denervation(+2.73)/RegMyon(+2.58)/Fibrosis(+1.42)。'
+  FigA3 转置版（亚群 y 轴 / 基因集 x 轴）+ 6 轴生物机制分类脚本编写完成并过 pre/post 审查。布局要点：色块正方形 0.42in（x/y
+  单位等长，画布 9.89x6.44in）；轴色条移到顶部横排 + 轴名横排；x 轴基因集标签 45°/6.2pt 锚定各自列中心（adj=c(1,1)）；y 轴亚群水平标签行中心对齐（las=1）；Artifact(QC)
+  轴后间隙 0.7（其余 0.25）实现视觉隔离——依 L2 辩论共识。分类：6 轴（Artifact/Metabolism/Nutrient/Contractile/Inflamm-aging/Decompensation）。'
+evidence: 'record_run(scipilot-figure-skill): FigA3 转置版（亚群 y 轴 / 基因集 x 轴）+ 6 轴生物机制分类脚本编写完成并过
+  pre/post 审查。布局要点：色块正方形 0.42in（x/y 单位等长，画布 9.89x6.44in）；轴色条移到顶部横排 + 轴名横排；x 轴基因集标签
+  45°/6.2pt 锚定各自列中心（adj=c(1,1)）；y 轴亚群水平标签行中心对齐（las=1）；Artifact(QC) 轴后间隙 0.'

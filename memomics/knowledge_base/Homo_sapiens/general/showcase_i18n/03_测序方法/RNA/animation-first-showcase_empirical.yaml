@@ -1,0 +1,29 @@
+type: kb_entry
+name: animation-first-showcase_empirical
+species: Homo_sapiens
+tissue: general
+direction: showcase-i18n
+assay_type: RNA
+last_updated: 2026-09-17 11:49
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- animation-first-showcase_empirical
+content: 'skill: animation-first-showcase
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"deliverable":"reports/MemOmics_Showcase_EN.html","bytes":79614,"pages":9,"shots":9,"scripts":["build_showcase_en.py","verify_showcase.py","shot_en_pages.py","diag_en_overflow.py"]}
+
+
+  result_summary:
+
+  英文版展示页交付完成并通过全部验收：reports/MemOmics_Showcase_EN.html 79,614 字节 / 9 页；9 张全页截图 figures/showcase_en_pages/（338-447KB）。三档分辨率（1920x1080/1366x768/1280x600）：页数=9、圆点=9、超出视口=0、最小字号
+  14px、第1页元素全可见、零 JS 错误；马车动效在跑、模块点击有响应。中文版回归三档全过。翻译表 268/268 命中、汉字残留 0、CJK 标点残留 0。'
+evidence: 'record_run(animation-first-showcase): 英文版展示页交付完成并通过全部验收：reports/MemOmics_Showcase_EN.html
+  79,614 字节 / 9 页；9 张全页截图 figures/showcase_en_pages/（338-447KB）。三档分辨率（1920x1080/1366x768/1280x600）：页数=9、圆点=9、超出视口=0、最小字号
+  14px、第1页元素全可见、零 JS 错误；马车动效在跑、'

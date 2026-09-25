@@ -1,5 +1,6 @@
 type: kb_entry
 name: exercise_skeletal_muscle_acute_signaling_network
+dois: ["10.1016/j.freeradbiomed.2024.07.026）提出用多组学+多细胞（单细胞/单核）策略无偏解析急性运动回合与长期训练中的骨骼肌可塑性，以支持个体化训练方案设计。", "10.1016/j.freeradbiomed.2024.07.026"]
 species: Homo sapiens
 tissue: skeletal muscle
 direction: exercise
