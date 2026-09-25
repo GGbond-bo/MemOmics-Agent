@@ -2,6 +2,10 @@
 # MemOmics Knowledge Base — 文献驱动
 # 更新日期: 2026-07-07
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+last_updated: "2026-07-07"
+
 species: Homo sapiens
 tissue: liver
 direction: aging

@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "HAND2_2025_NatCommun_pacemaker_ATAC_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/heart_san/HAND2_2025_NatCommun_pacemaker_ATAC.pdf
   dissected_at: '2026-07-12T18:02:10.026093'

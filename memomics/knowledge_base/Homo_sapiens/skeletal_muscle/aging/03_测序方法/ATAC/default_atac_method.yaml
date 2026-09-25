@@ -4,6 +4,10 @@
 # 📖 文献来源: PubMed搜索 (skeletal muscle aging ATAC-seq), 2025年7月更新
 # 搜索日期: 2026-06-28 | 结果数: 42篇相关论文
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+auto_trigger:
+  - "default_atac_method"
+
 direction: aging
 doi: "10.1016/j.celrep.2025.115959"
 omics: atac

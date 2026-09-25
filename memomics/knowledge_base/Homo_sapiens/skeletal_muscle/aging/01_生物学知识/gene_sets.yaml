@@ -1,5 +1,9 @@
 # 骨骼肌衰老 — 基因集
 # 注意: 详细生物学知识请见 biology_knowledge.yaml
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: default_seed
+last_updated: "2026-07-03"
+
 gene_sets:
   sasp:
     description: 衰老相关分泌表型

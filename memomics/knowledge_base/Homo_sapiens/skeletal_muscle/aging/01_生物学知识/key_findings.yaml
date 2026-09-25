@@ -1,5 +1,9 @@
 # 骨骼肌衰老 — 关键发现
 # 详细生物学知识请见 biology_knowledge.yaml
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: default_seed
+last_updated: "2026-07-03"
+
 findings:
   - finding: 衰老骨骼肌中 type 2 (快肌) 纤维选择性萎缩, type 1 (慢肌) 相对保留
     evidence: 约 30% type 2 纤维丢失

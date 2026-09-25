@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "Nature_2026_spatial_atlas_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/liver_aging/Nature_2026_spatial_atlas.pdf
   dissected_at: '2026-07-12T17:29:44.596808'

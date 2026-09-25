@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "bioRxiv_2025_MERFISH_heart_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/heart_san/bioRxiv_2025_MERFISH_heart.pdf
   dissected_at: '2026-07-12T18:02:19.940534'

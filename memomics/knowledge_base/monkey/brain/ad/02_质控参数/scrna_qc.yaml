@@ -1,3 +1,11 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+type: kb_entry
+name: "scrna_qc"
+auto_trigger:
+  - "scrna_qc"
+verified: unverified
+quality: medium
+
 doublet_method: DoubletFinder
 last_updated: '2026-06-25'
 mt_percent: 20

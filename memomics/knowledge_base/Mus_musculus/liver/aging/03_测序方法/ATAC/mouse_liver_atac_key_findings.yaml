@@ -1,4 +1,7 @@
 # 小鼠肝脏 衰老方向 ATAC-seq 关键发现（文献更新版）
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+
 direction: aging
 doi: "10.1038/s43587-023-00513-y"
 omics: atac

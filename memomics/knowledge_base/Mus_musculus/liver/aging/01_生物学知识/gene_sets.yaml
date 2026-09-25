@@ -1,6 +1,10 @@
 # 小鼠肝脏衰老 — 基因集（文献更新版 v2）
 # MemOmics Knowledge Base — 文献驱动
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+last_updated: "2026-07-07"
+
 species: Mus musculus
 tissue: liver
 direction: aging

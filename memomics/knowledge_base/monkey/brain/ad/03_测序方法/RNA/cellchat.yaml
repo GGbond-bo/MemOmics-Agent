@@ -1,3 +1,8 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+auto_trigger:
+  - "cellchat"
+last_updated: "2026-07-02"
+
 analysis_type: cellchat
 species: monkey
 tissue: brain

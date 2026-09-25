@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "10.3389_fimmu.2026.1787641_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/10.3389_fimmu.2026.1787641.pdf
   dissected_at: '2026-07-12T17:30:18.338297'

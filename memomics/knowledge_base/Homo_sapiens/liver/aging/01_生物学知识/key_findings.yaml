@@ -2,11 +2,14 @@
 # MemOmics Knowledge Base — 文献驱动
 # 更新日期: 2026-07-07
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+
 species: Homo sapiens
 dois: ["10.1007/s00264-023-05688-y", "10.1111/acel.13968", "10.1007/s11357-023-00928-w", "10.1038/s43587-023-00513-y", "10.1096/fj.202302282R", "10.1097/HEP.0000000000001451"]
 tissue: liver
 direction: aging
-last_updated: 2026-07-07
+last_updated: "2026-07-07"
 literature_search_query: "liver aging single cell RNA-seq ATAC spatial bulk human mouse"
 
 # ─── 衰老核心发现 ──────────────────────────────────────────

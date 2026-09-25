@@ -2,6 +2,9 @@
 # MemOmics Knowledge Base — 文献驱动
 # 更新日期: 2026-07-07
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+last_updated: "2026-09-25"
+
 direction: aging
 dois: ["10.1016/j.gpb.2020.06.002", "10.1186/s41232-025-00364-1"]
 omics: bulk

@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "Lim_2024_NatCommun_SAN_CD34_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/heart_san/Lim_2024_NatCommun_SAN_CD34.pdf
   dissected_at: '2026-07-12T18:01:59.162608'

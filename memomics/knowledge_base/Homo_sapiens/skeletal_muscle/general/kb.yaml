@@ -6,10 +6,13 @@
 #   [共识推断] = 多篇文献综合推断
 #   [待验证]   = 需要更多文献支持
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+
 species: human
 tissue: skeletal_muscle
 data_type: snRNA-seq  # 本数据集确认为snRNA-seq (MT%<1%)
-last_updated: 2026-06-24
+last_updated: "2026-06-24"
 literature_search_query: "human skeletal muscle single nucleus RNA-seq"
 
 # ─── QC阈值 ───────────────────────────────────────────────

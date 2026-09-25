@@ -1,3 +1,13 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+type: kb_entry
+name: "methods_index"
+source: default_seed
+auto_trigger:
+  - "methods_index"
+verified: unverified
+quality: medium
+last_updated: "2026-07-07"
+
 rna:
   cellchat:
     analysis_type: cellchat

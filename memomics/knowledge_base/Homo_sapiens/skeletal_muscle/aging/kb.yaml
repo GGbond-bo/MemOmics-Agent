@@ -3,10 +3,13 @@
 #
 # 📖 文献来源标注: [直接引用] / [共识推断] / [待验证]
 
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+
 species: human
 tissue: skeletal_muscle
 direction: aging
-last_updated: 2026-06-24
+last_updated: "2026-06-24"
 literature_search_query: "aging skeletal muscle single cell nucleus RNA-seq human"
 
 # ─── 衰老核心发现 ──────────────────────────────────────────

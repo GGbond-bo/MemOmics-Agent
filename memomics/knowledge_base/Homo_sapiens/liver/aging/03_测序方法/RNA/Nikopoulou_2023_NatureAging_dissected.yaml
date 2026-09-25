@@ -1,3 +1,9 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+source: literature
+auto_trigger:
+  - "Nikopoulou_2023_NatureAging_dissected"
+last_updated: "2026-07-12"
+
 metadata:
   source: work/papers/liver_aging/Nikopoulou_2023_NatureAging.pdf
   dissected_at: '2026-07-12T17:30:55.008371'

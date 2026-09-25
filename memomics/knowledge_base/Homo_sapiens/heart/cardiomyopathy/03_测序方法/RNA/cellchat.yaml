@@ -1,3 +1,7 @@
+# 元数据补齐（脚本只补机械可推导字段；evidence 不在此列）
+auto_trigger:
+  - "cellchat"
+
 analysis_type: cellchat
 date: '2026-06-27'
 methods:
