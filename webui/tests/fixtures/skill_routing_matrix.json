@@ -677,6 +677,15 @@
         "nature-paper2ppt"
       ],
       "max_hits": 4
+    },
+    {
+      "id": "nature-academic-search-01",
+      "intent": "术语",
+      "text": "帮我多源检索这个方向的文献，PubMed 和 Crossref 都要",
+      "must_hit": [
+        "nature-academic-search"
+      ],
+      "max_hits": 2
     }
   ],
   "distractors": [

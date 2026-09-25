@@ -1,0 +1,26 @@
+{
+  "id": "nature-academic-search",
+  "name": "Academic Search — Router",
+  "category": "literature",
+  "language": "Python",
+  "description": "Search literature across sources, verify or manage citations, and build MeSH strategies or citation-impact audits. Use for 文献检索、引文核对、参考文献管理、严格他引 and evidence-backed citer profiles; not for translating",
+  "starting_prompt": "使用 Academic Search — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-academic-search",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "多源文献检索",
+    "引文核对",
+    "参考文献管理",
+    "严格他引",
+    "MeSH词表",
+    "检索桥",
+    "查PubMed和Crossref",
+    "多源检索"
+  ],
+  "when_to_use": "Search literature across sources, verify or manage citations, and build MeSH strategies or citation-impact audits. Use for 文献检索、引文核对、参考文献管理、严格他引 and evidence-backed citer profiles; not for translating"
+}
