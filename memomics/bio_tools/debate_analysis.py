@@ -88,6 +88,89 @@ def get_session_model_config() -> dict:
     cfg = _model_cfg_var.get()
     return cfg if isinstance(cfg, dict) else {}
 
+
+# ==================== 辩论进度上报（2026-09-26 用户反馈「有时候会卡住，长时间不输出内容」） ====================
+# 实测根因：一场辩论 = 场景预判 + 7 席位 + 裁判，席位调用是**非流式** HTTP
+# （_call_llm_sync 里 httpx.Client(timeout=120)，每席位最多 3 次重试，8 席位按
+# max_workers=3 分波跑）→ 最坏十几分钟；而工具全程只在开始时发一次 tool.started，
+# 中途什么都不发。日志实测：62 次 debate_analysis，最慢 1253s，其次 971/934/902/900/
+# 880/877/872/860/856s —— 用户看到的就是「聊天区 15-20 分钟一个字都不新增」。
+# 这里把「阶段开始/结束、席位完成、瞬时失败重试、30 秒心跳」推到前端进度时间线。
+_PROGRESS_MIN_GAP = 1.0          # 同类进度最短间隔，防刷屏
+_PROGRESS_LAST_TS = 0.0
+_PROGRESS_LOCK = threading.Lock()
+
+
+def _emit_progress(content: str, status: str = "pending") -> None:
+    """把一条辩论进度推给前端时间线。任何失败都吞掉 —— 进度上报绝不能影响辩论本身。"""
+    global _PROGRESS_LAST_TS
+    try:
+        now = time.time()
+        with _PROGRESS_LOCK:
+            if now - _PROGRESS_LAST_TS < _PROGRESS_MIN_GAP:
+                return
+            _PROGRESS_LAST_TS = now
+        sid = get_session_sid()
+        if not sid:
+            return
+        # 复用 ask_user 里那套「找到正在跑的 server 实例」的解析（入口名被改过也能命中）
+        from memomics.bio_tools.ask_user import _live_server
+        srv = _live_server(sid)
+        if srv is None:
+            return
+        sess = (getattr(srv, "_sessions", None) or {}).get(sid)
+        if not sess:
+            return
+        srv._session_emit(sess, {
+            "type": "tool_progress",
+            "tool": "debate_analysis",
+            "content": str(content)[:180],
+            "status": status,
+            "session_id": sid,
+        })
+    except Exception as _e:      # pragma: no cover - 纯防御
+        logger.debug(f"debate progress emit failed: {_e}")
+
+
+class _ProgressHeartbeat:
+    """辩论/裁判期间每 30 秒报一次「还在跑 + 已用多久」。
+
+    没有它，用户看到的就是 15 分钟死寂（日志实测最慢一场 1253s）。
+    """
+
+    def __init__(self, label: str, interval: float = 30.0, max_seconds: float = 2700.0):
+        self.label = label
+        self.interval = max(5.0, float(interval))
+        # 自限寿命：万一某条路径异常退出没 stop()，最多刷 45 分钟就自己停，
+        # 不会变成一个永远在后台报"进行中"的幽灵线程
+        self.max_seconds = max(60.0, float(max_seconds))
+        self._stop = threading.Event()
+        self._t0 = time.time()
+        self._thread = None
+
+    def start(self):
+        self._t0 = time.time()
+        self._thread = threading.Thread(target=self._loop, daemon=True,
+                                        name="debate-progress-heartbeat")
+        self._thread.start()
+        return self
+
+    def _loop(self):
+        while not self._stop.wait(self.interval):
+            # 注意：elapsed 是取整的秒数，拿它比 max_seconds 会永远为假（int(0.9)=0）
+            if (time.time() - self._t0) > self.max_seconds:
+                return
+            _emit_progress(f"{self.label}进行中：已用 {self.elapsed}s，暂无输出", "pending")
+
+    def stop(self, done_text: str = "") -> None:
+        self._stop.set()
+        if done_text:
+            _emit_progress(done_text, "done")
+
+    @property
+    def elapsed(self) -> int:
+        return int(time.time() - self._t0)
+
 SCHEMA = {
     "name": "debate_analysis",
     "description": (
@@ -1203,13 +1286,18 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
         count = 1
     raw = []
     objs = []
-    for i in range(count):
-        jr = _call_llm_role_resilient("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
-        raw.append(jr)
-        try:
-            objs.append(_parse_judge_json(jr.get("content", "")))
-        except Exception:
-            pass
+    _hb = _ProgressHeartbeat(f"裁判汇总（{count} 位裁判）").start()
+    try:
+        for i in range(count):
+            jr = _call_llm_role_resilient("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
+            raw.append(jr)
+            try:
+                objs.append(_parse_judge_json(jr.get("content", "")))
+            except Exception:
+                pass
+            _emit_progress(f"裁判 {i + 1}/{count} 已给出裁决（累计 {_hb.elapsed}s）", "done")
+    finally:
+        _hb.stop(f"裁判汇总完成（{len(objs)}/{count} 位有效，用时 {_hb.elapsed}s）")
     consensus = {
         "judge_count": count,
         "valid_judges": len(objs),
@@ -1384,6 +1472,7 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
             return label, _call_llm_role(label, prompt, cfg)
         except Exception as e:
             logger.warning(f"debate {label} call failed: {e}")
+            _emit_progress(f"席位 {label} 调用失败（{str(e)[:60]}），本轮该席位按失败计", "done")
             return label, {
                 "content": f"[{label} 辩论生成失败]",
                 "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
@@ -1398,16 +1487,31 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     except Exception:
         _mw = 3
     max_workers = max(1, min(_mw, len(tasks) or 1))
-    if max_workers <= 1:
-        for label, prompt in tasks:
-            _l, _r = _run_one(label, prompt)
-            results[_l] = _r
-    else:
-        with ThreadPoolExecutor(max_workers=max_workers) as _ex:
-            _futures = [_ex.submit(_run_one, label, prompt) for label, prompt in tasks]
-            for _f in _futures:
-                _l, _r = _f.result()
+    # 席位阶段最耗时（非流式 HTTP × 最多 3 次重试），全程挂心跳，别让界面死寂
+    _hb = _ProgressHeartbeat(f"席位辩论（{len(tasks)} 席 · 并发 {max_workers}）").start()
+    _t0 = time.time()
+    _done = 0
+
+    def _seat_done(_label):
+        nonlocal _done
+        _done += 1
+        _emit_progress(f"席位 {_label} 完成（{_done}/{len(tasks)}，累计 {int(time.time() - _t0)}s）", "done")
+
+    try:
+        if max_workers <= 1:
+            for label, prompt in tasks:
+                _l, _r = _run_one(label, prompt)
                 results[_l] = _r
+                _seat_done(_l)
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as _ex:
+                _futures = [_ex.submit(_run_one, label, prompt) for label, prompt in tasks]
+                for _f in _futures:
+                    _l, _r = _f.result()
+                    results[_l] = _r
+                    _seat_done(_l)
+    finally:
+        _hb.stop()
     return results
 
 
@@ -2550,6 +2654,7 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         _l1_judge_max = 8192
     # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
     _keep = 800 if use_v2 else 500
+    _hb = _ProgressHeartbeat(f"L1 采样（{n_samples} 组 × 2 次调用）").start()
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
         if use_v2:
@@ -2570,6 +2675,8 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
                                "pro_call_id": pro["call_id"], "con_call_id": con["call_id"],
                                "pro_draft_only": str(pro["content"]).startswith("[reasoning草稿"),
                                "con_draft_only": str(con["content"]).startswith("[reasoning草稿")})
+        _emit_progress(f"L1 第 {i + 1}/{n_samples} 组采样完成（累计 {_hb.elapsed}s）", "done")
+    _hb.stop()
 
     if not debates_text:
         return _fallback_debate(topic, context, kb, "")
@@ -2843,10 +2950,17 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     # 用户原话：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，是不是需要采取
     # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
     # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
-    scenario_res = _analyze_scenario(topic, context, cfg)
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）", "pending")
+    _hb_scene = _ProgressHeartbeat("场景预判").start()
+    try:
+        scenario_res = _analyze_scenario(topic, context, cfg)
+    finally:
+        _hb_scene.stop()
     scenario = scenario_res.get("scenario") if isinstance(scenario_res, dict) else None
+    _emit_progress(f"场景预判完成：{str(scenario)[:40]}（用时 {_hb_scene.elapsed}s）", "done")
 
     if level == "L1":
+        _emit_progress("进入 L1 轻量采样辩论", "pending")
         return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards,
                                       scenario=scenario, scenario_res=scenario_res)
 
@@ -2983,7 +3097,13 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             if primary_judge and not primary_judge.get("error"):
                 judge = primary_judge
             else:
-                judge = _call_llm_role_resilient("judge", judge_prompt, cfg)
+                # 备用裁判单跑，同样可能 3 次重试 × 120s —— 也挂心跳，别静默
+                _emit_progress("主裁判结果无效，走备用裁判重试", "pending")
+                _hb_j = _ProgressHeartbeat("备用裁判").start()
+                try:
+                    judge = _call_llm_role_resilient("judge", judge_prompt, cfg)
+                finally:
+                    _hb_j.stop()
             final_judge = judge
             final_consensus = consensus
 
