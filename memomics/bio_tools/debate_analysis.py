@@ -178,10 +178,14 @@ class _ProgressHeartbeat:
 # 三道闸：
 #   1) 单次 HTTP 上限 120s → 60s（MEMOMICS_DEBATE_HTTP_TIMEOUT 可覆盖）
 #   2) 配置类错误（401/403/模型不存在/MissingSessionID）不再重试 3 次
-#   3) 整场辩论总预算（默认 480s = 8 分钟，MEMOMICS_DEBATE_BUDGET 可覆盖）：
+#   3) 整场辩论总预算（默认 900s = 15 分钟，MEMOMICS_DEBATE_BUDGET 可覆盖）：
 #      预算耗尽后 _call_llm_sync 直接返回失败，不再发 HTTP —— 剩下的席位/轮次
 #      毫秒级跑完，整场不会再挂 20 分钟
-_DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "480") or 480)
+# 预算取值有实测依据：扫 hermes_home/logs/agent.log*（324 个 debate_analysis 时长样本）
+# 得 min 1.0 / p25 59 / 中位 100.9 / p75 325.1 / p90 585.6 / max 1252.7 秒，
+# >480s 占 15.7%、>600s 占 8.6%。所以硬上限定 900s：只砍真正病态的长尾
+# （p90 以上约 8%），不会把正常的长辩论一起误杀。
+_DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "900") or 900)
 _HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
 _DEADLINES: dict = {}
 _DEADLINE_LOCK = threading.Lock()
