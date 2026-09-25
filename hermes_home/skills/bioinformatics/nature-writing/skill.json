@@ -19,7 +19,13 @@
     "写引言",
     "写讨论",
     "投稿信",
-    "manuscript drafting"
+    "manuscript drafting",
+    "章节起草",
+    "正文压缩",
+    "论证重构",
+    "Methods小节",
+    "写方法学",
+    "首次投稿材料"
   ],
   "when_to_use": "Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on"
 }

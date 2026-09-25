@@ -1,0 +1,32 @@
+{
+  "id": "statistical-design-review",
+  "name": "统计方案审查（Statistical Design Review）",
+  "category": "general",
+  "language": "Python",
+  "description": "审查/审计已提出的统计方案与实验设计:分析单位（伪重复）、多重比较校正、比例/组成数据的相关分析、样本量与功效、预注册。触发:\\\"审一下这个统计方案\\\" / \\\"指出问题并给出正确做法\\\" / \\\"这样用 t 检验两两比较合适吗\\\" / \\\"Pearson 分析相关性对不对\\\" / \\\"每组 6 只够吗\\\" / 统计设计审查 / statistical plan review / pseudore",
+  "starting_prompt": "使用 统计方案审查（Statistical Design Review） 进行分析",
+  "source_dir": "skills/bioinformatics/statistical-design-review",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "审统计方案",
+    "统计方案审查",
+    "统计设计审查",
+    "实验单位",
+    "伪重复",
+    "pseudoreplication",
+    "多重比较",
+    "两两 t 检验",
+    "每组 6 只",
+    "Pearson 相关",
+    "比例相关",
+    "功效不足",
+    "统计方法审查",
+    "statistical plan review"
+  ],
+  "when_to_use": "审查/审计已提出的统计方案与实验设计:分析单位（伪重复）、多重比较校正、比例/组成数据的相关分析、样本量与功效、预注册。触发:\\\"审一下这个统计方案\\\" / \\\"指出问题并给出正确做法\\\" / \\\"这样用 t 检验两两比较合适吗\\\" / \\\"Pearson 分析相关性对不对\\\" / \\\"每组 6 只够吗\\\" / 统计设计审查 / statistical plan review / pseudore"
+}

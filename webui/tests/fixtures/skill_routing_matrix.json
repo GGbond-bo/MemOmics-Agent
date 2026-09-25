@@ -686,6 +686,15 @@
         "nature-academic-search"
       ],
       "max_hits": 2
+    },
+    {
+      "id": "statistical-design-review-01",
+      "intent": "直白",
+      "text": "审一下这个统计方案：每组 6 只小鼠，多个时间点两两做 t 检验",
+      "must_hit": [
+        "statistical-design-review"
+      ],
+      "max_hits": 2
     }
   ],
   "distractors": [

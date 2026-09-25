@@ -195,7 +195,7 @@
 | 22 | survival-analysis | 适用于: disease, 有生存数据 —— KM曲线+Cox回归+风险评分模型+时间依赖ROC | 生存分析, KM, 预后, survival-analysis, survival analysis, survival | RED 必触发 |
 | 23 | survival-analysis-clinical | 临床生存分析:临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物 | survival, clinical | YEL 讨论触发 |
 
-## 08_报告 - 报告/可视化 (98 skills)
+## 08_报告 - 报告/可视化 (99 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -269,7 +269,7 @@
 | 68 | nature-reviewer | Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, manuscript review, peer review, referee report | RED 必触发 |
 | 69 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, shared | YEL 讨论触发 |
 | 70 | nature-statistics | Audit or improve manuscript statistical reporting, including experimental units, replication, uncertainty, tests, and figure statistics. Use for 统计审查、统计方法小节、图注统计 and reviewer concerns; compute new ana | 统计审查, 统计报告, 样本量, 重复数, 误差棒, 伪重复, pseudoreplication, 统计方法审查 | RED 必触发 |
-| 71 | nature-writing | Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on | 写论文, 手稿撰写, 起草摘要, 写引言, 写讨论, 投稿信, manuscript drafting | RED 必触发 |
+| 71 | nature-writing | Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on | 写论文, 手稿撰写, 起草摘要, 写引言, 写讨论, 投稿信, manuscript drafting, 章节起草, 正文压缩, 论证重构, Methods小节, 写方法学, 首次投稿材料 | RED 必触发 |
 | 72 | openfold3 | OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc... | openfold3 | YEL 讨论触发 |
 | 73 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming, 语言润色 | RED 必触发 |
 | 74 | patent-analysis | 用户说"分析这篇专利""拆解这个专利""专利详细解读""解读专利""分析权利要求""竞品专利分析"等时触发。 | patent-analysis, patent analysis, patent | YEL 讨论触发 |
@@ -293,10 +293,11 @@
 | 92 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
 | 93 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns | YEL 讨论触发 |
 | 94 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
-| 95 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
-| 96 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |
-| 97 | wakeup-progress-check | 新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在… | wakeup-progress-check, wakeup progress check, wakeup, progress | YEL 讨论触发 |
-| 98 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
+| 95 | statistical-design-review | 审查/审计已提出的统计方案与实验设计:分析单位（伪重复）、多重比较校正、比例/组成数据的相关分析、样本量与功效、预注册。触发:\"审一下这个统计方案\" / \"指出问题并给出正确做法\" / \"这样用 t 检验两两比较合适吗\" / \"Pearson 分析相关性对不对\" / \"每组 6 只够吗\" / 统计设计审查 / statistical plan review / pseudore | 审统计方案, 统计方案审查, 统计设计审查, 实验单位, 伪重复, pseudoreplication, 多重比较, 两两 t 检验, 每组 6 只, Pearson 相关, 比例相关, 功效不足, 统计方法审查, statistical plan review | RED 必触发 |
+| 96 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
+| 97 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |
+| 98 | wakeup-progress-check | 新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在… | wakeup-progress-check, wakeup progress check, wakeup, progress | YEL 讨论触发 |
+| 99 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 
 ## 09_内置 - Hermes系统 (17 skills)
 
