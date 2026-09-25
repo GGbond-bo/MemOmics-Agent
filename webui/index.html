@@ -2250,6 +2250,9 @@ function setStatus(text, color) {
 function handleMessage(msg) {
   // 运行中每 5 秒把画面落一次盘 → 跑到一半刷新，交互框也基本原样回来
   if (_viewIsStreamEvent(msg.type)) _viewRunStart();
+  // 2026-09-26：任何"界面上真出现了新东西"的事件都要盖时间戳，
+  // 静默计时（状态条上的"已 N 秒无新输出"）才有数据。
+  if (_ACTIVITY_TYPES[msg.type]) _lastActivityTs = Date.now();
 
   // === 后台任务推送（面板订阅后由服务端按变化推，不用轮询）===
   if (msg.type === 'tasks') {
@@ -2523,7 +2526,9 @@ function handleMessage(msg) {
       // 心跳消息 — 显示为独立的进度条目
       addProgressItem(msg.content, 'pending', '', msg.ts || _nowTs());
     } else if (msg.content) {
-      addProgressItem(msg.tool + ': ' + msg.content.substring(0,40), 'pending', '', msg.ts || _nowTs());
+      // 2026-09-26：后端现在会带 status（辩论席位完成=done），别再一律挂成 pending；
+      // 内容也从 40 字放宽到 80 字，"席位 pro_biology 完成（1/8，累计 92s）"要看得全。
+      addProgressItem(msg.tool + ': ' + msg.content.substring(0,80), msg.status || 'pending', '', msg.ts || _nowTs());
     }
   } else if (msg.type === 'new_figure') {
     // 分析过程中生成了新图 → 自动展示 + 刷新结果面板
@@ -3176,6 +3181,10 @@ function _nowTs() {
 
 // === 运行状态条（实时可见"还在跑/跑了多久/在干什么"，2026-08-14）===
 var _runStartTs = null, _lastHeartbeatTs = 0, _lastApiCalls = 0, _lastTool = '', _lastStalled = false, _lastTurns = 0, _liveStatusTimer = null;
+// 2026-09-26：最后一次"界面有新内容"的时刻。此前 _lastActivityTs 只在 tool_progress
+// 分支里赋值（而且是隐式全局），delta/reasoning 都不算 → 静默计时根本没数据可用。
+var _lastActivityTs = 0;
+var _ACTIVITY_TYPES = { delta: 1, reasoning: 1, thinking: 1, tool_start: 1, tool_progress: 1, progress: 1, tool_complete: 1, status: 1 };
 
 function _fmtDur(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
@@ -3195,15 +3204,29 @@ function _ensureLiveStatus() {
   return el;
 }
 
+// 距离上一次"界面有新内容"过了多少秒。运行起点也算进去，免得上一轮留下的旧
+// 时间戳把新的一轮直接算成"已经静默半小时"。
+function _silentSeconds(now) {
+  now = now || Date.now();
+  var base = Math.max(_lastActivityTs || 0, _runStartTs || 0);
+  if (!base) return 0;
+  return Math.max(0, Math.floor((now - base) / 1000));
+}
+
 function updateLiveStatus(elapsed, apiCalls, tool, stalled, turns) {
   var el = _ensureLiveStatus();
   if (!el) return;
   el.style.display = 'block';
-  el.className = stalled ? 'stalled' : '';
+  var silent = _silentSeconds();
+  el.className = (stalled || silent >= 120) ? 'stalled' : '';
   var parts = ['🔄 运行中', '已用 ' + _fmtDur(elapsed)];
   if (apiCalls !== undefined && apiCalls !== null) parts.push(apiCalls + ' 次工具调用');
   if (tool) parts.push('当前: ' + tool);
   if (turns) parts.push('第 ' + turns + ' 轮');
+  // 2026-09-26 用户反馈「有时候会卡住，长时间不输出内容」。实测长工具（一场
+  // debate_analysis 15-21 分钟）期间聊天区一个字都不新增，用户分不清是在跑还是死了。
+  // 这里把"静默了多久"直接写在状态条上（状态条 sticky 在消息区顶部，一定看得见）。
+  if (silent >= 60) parts.push('⏳ 已 ' + silent + ' 秒无新输出');
   if (stalled) parts.push('⚠️ 同一工具超过 3 分钟 — 可能卡住，可直接输入引导');
   el.textContent = parts.join(' · ');
 }
@@ -3233,11 +3256,13 @@ function _startLiveStatusTicker() {
   _liveStatusTimer = setInterval(function () {
     if (!agentRunning || !_runStartTs) return;
     var now = Date.now();
-    // 心跳丢失超过 60s 时用本地时钟兜底（WS 断流也能看出计时在走）
-    if (!_lastHeartbeatTs || now - _lastHeartbeatTs > 60000) {
+    // 心跳丢失超过 60s 时用本地时钟兜底（WS 断流也能看出计时在走）；
+    // 静默超过 60s 时也要每秒刷 —— 否则"已 N 秒无新输出"这个数字自己不会走，
+    // 用户看到的还是像卡死。（2026-09-26）
+    if (_silentSeconds(now) >= 60 || !_lastHeartbeatTs || now - _lastHeartbeatTs > 60000) {
       updateLiveStatus((now - _runStartTs) / 1000, _lastApiCalls, _lastTool, _lastStalled, _lastTurns);
     }
-  }, 15000);
+  }, 1000);
 }
 
 // 工具调用 → 友好的中文描述
