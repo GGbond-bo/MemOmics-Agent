@@ -220,7 +220,8 @@ pipeline:
       - 使用ArchR Peak2GeneLinks进行cis-regulatory推断
     source: "Dos Santos et al., 2025; Kim et al., 2023"
 
-source: "MemOmics literature-driven KB — ATAC-seq (文献检索: skeletal muscle aging ATAC-seq, 42篇论文)"
+source: literature
+source_note: "MemOmics literature-driven KB — ATAC-seq (文献检索: skeletal muscle aging ATAC-seq, 42篇论文)"
 species: human
 tissue: skeletal_muscle
 updated: "2026-06-28"

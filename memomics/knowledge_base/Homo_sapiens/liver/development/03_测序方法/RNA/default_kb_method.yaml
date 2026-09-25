@@ -81,7 +81,8 @@ pipeline:
     method: hdWGCNA
     package: hdWGCNA
     reference: Morabito et al. 2023, Cell Reports Methods
-source: MemOmics default KB (15 methods, literature-verified)
+source: default_seed
+source_note: "MemOmics default KB (15 methods, literature-verified)"
 species: human
 tissue: liver
 updated: '2026-06-26'

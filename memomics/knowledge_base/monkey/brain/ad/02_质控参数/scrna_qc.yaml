@@ -13,6 +13,7 @@ nCount_high: 50000
 nFeature_high: 8000
 nFeature_low: 200
 note: 默认参数, 建议从文献中更新
-source: Seurat 官方默认值 + 多数文献共识
+source: default_seed
+source_note: "Seurat 官方默认值 + 多数文献共识"
 species: monkey
 tissue: brain

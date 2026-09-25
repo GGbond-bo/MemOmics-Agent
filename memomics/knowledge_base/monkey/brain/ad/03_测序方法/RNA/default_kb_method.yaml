@@ -46,5 +46,6 @@ qc_thresholds:
   nFeature_high: 6000
   nFeature_low: 200
   notes: 从摘要推断 + 默认值
-source: monkey brain ad atlas (默认知识库)
+source: default_seed
+source_note: "monkey brain ad atlas (默认知识库)"
 title: monkey brain ad 默认方法

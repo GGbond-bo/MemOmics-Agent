@@ -21,6 +21,7 @@ key_findings:
   - DEG
   related_pathways: []
 pathways: []
-source: monkey brain ad atlas (默认知识库)
+source: default_seed
+source_note: "monkey brain ad atlas (默认知识库)"
 species_specific:
   notes: '物种: monkey'

@@ -4,8 +4,8 @@ species: Homo sapiens
 tissue: skeletal muscle
 direction: aging
 updated: '2026-07-03'
-source: literature + curated
-
+source: literature
+source_note: "literature + curated"
 # 细胞类型与 marker genes (scRNA-seq 骨骼肌)
 cell_types:
   # 主要细胞类型

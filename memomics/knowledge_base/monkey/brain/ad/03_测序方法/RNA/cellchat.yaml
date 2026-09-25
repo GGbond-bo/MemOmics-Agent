@@ -10,7 +10,8 @@ direction: ad
 omics: rna
 language: R
 depth_score: 17
-source: Jin et al. 2021 Nature Protocols
+source: literature
+source_note: "Jin et al. 2021 Nature Protocols"
 parameters: {}
 code: '
 

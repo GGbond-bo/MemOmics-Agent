@@ -77,7 +77,8 @@ pipeline:
       min_cells: 3
       min_genes: 200
       min_counts: 1000
-source: "Updated 2026-07-07 from Nature Aging 2023, FASEB 2024, Nature Genetics 2023, BMC Genomics 2015"
+source: literature
+source_note: "Updated 2026-07-07 from Nature Aging 2023, FASEB 2024, Nature Genetics 2023, BMC Genomics 2015"
 species: mouse
 tissue: liver
 updated: '2026-07-07'
