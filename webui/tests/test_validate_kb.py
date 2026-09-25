@@ -121,6 +121,33 @@ def test_shared_doi_across_entries_is_warn(tmp_path):
     assert "duplicate_record_doi" not in rules
 
 
+def test_method_spec_does_not_require_verified_quality(tmp_path):
+    """方法/流程规格（pipeline/methods）不是知识条目，不该被要求 verified/quality/evidence。"""
+    _write(tmp_path, "cellchat.yaml", L.join([
+        "analysis_type: cellchat", "methods:", "  - CellChat", "source: literature",
+        "auto_trigger:", "  - cellchat", "date: '2026-01-01'", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    for r in ("missing_verified", "missing_quality", "missing_evidence", "missing_name",
+              "missing_type", "missing_last_updated"):
+        assert r not in rules, (r, rules)
+
+
+def test_index_blank_source_is_not_error(tmp_path):
+    """index.yaml 顶层 source: 留空是历史正常写法，不该报 source_not_string。"""
+    _write(tmp_path, "index.yaml", L.join([
+        "type: common_resource", "source:", "resources:", "  - path: a.yaml", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "source_not_string" not in rules, rules
+
+
+def test_blank_name_does_not_trigger_filename_mismatch(tmp_path):
+    """name 为空时不要顺手报 name 与文件名不一致。"""
+    _write(tmp_path, "atac_seq.yaml", L.join([
+        "filters:", "  min_cells: 200", "source: default_seed", "date: '2026-01-01'", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "name_filename_mismatch" not in rules, rules
+
+
 def test_same_doi_same_name_in_other_dir_is_not_duplicate(tmp_path):
     """同名文件在不同物种/组织目录下共引同一篇（Homo/Mus 的 key_findings）是正常数据。"""
     for sub in ("Homo_sapiens", "Mus_musculus"):

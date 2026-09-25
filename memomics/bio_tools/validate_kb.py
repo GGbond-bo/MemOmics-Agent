@@ -64,6 +64,31 @@ METADATA_KEYS = {"type", "name", "species", "tissue", "direction", "assay_type",
 PAYLOAD_KEYS = ("content", "resources", "pipeline", "entries", "items", "methods",
                 "knowledge", "findings", "data", "sections", "summary", "results")
 
+#: KB 里的记录原型。215 个 YAML 其实是 6 种东西，用同一套必填字段去卡只会刷屏噪声：
+#:   index        —— 资源索引（resources:）
+#:   method_spec  —— 方法/流程规格（pipeline:/methods:/filters:），app 直接照着跑
+#:   aggregate    —— 聚合型知识（gene_sets:/cell_types:/key_findings:），一篇引多篇
+#:   compound     —— 化学/试剂条目（chem_*，文件名里就带 DOI）
+#:   evidence_entry —— 论文条目（paper_*）与实测回流（*_empirical）
+#:   entry        —— 普通知识条目（默认，最严）
+ARCHETYPE_REQUIRED = {
+    "index": set(),
+    "method_spec": {"source", "auto_trigger", "time"},
+    "aggregate": {"source", "time", "doi", "pmid"},
+    "compound": {"name", "type", "source", "evidence", "time", "doi"},
+    "evidence_entry": {"name", "type", "source", "evidence", "verified", "quality", "time",
+                       "auto_trigger", "doi", "pmid"},
+    "entry": {"name", "type", "source", "evidence", "verified", "quality", "time",
+              "auto_trigger", "doi", "pmid"},
+}
+
+#: 这些载荷键说明文件是「方法/流程规格」而不是知识条目。
+_METHOD_PAYLOAD = {"pipeline", "steps", "commands", "methods", "filters", "params",
+                   "workflow", "analysis_type", "pipeline_spec", "recipe"}
+_INDEX_PAYLOAD = {"resources", "index", "catalog"}
+_AGGREGATE_PAYLOAD = {"gene_sets", "cell_types", "findings", "key_findings", "biology",
+                      "markers", "pathways", "knowledge", "summary_table"}
+
 VALID_VERIFIED = {"verified", "partially_verified", "unverified"}
 VALID_QUALITY = {"high", "medium", "low", "unknown"}
 
@@ -98,6 +123,24 @@ def suggest_source(raw: str) -> str:
     return ""
 
 
+def archetype(rel: str, doc: dict) -> str:
+    """判断这条 KB 记录是哪种原型（决定「必填字段」是哪几个）。"""
+    base = os.path.basename(rel).lower()
+    stem = os.path.splitext(base)[0]
+    keys = set(doc.keys())
+    if base == "index.yaml" or (keys & _INDEX_PAYLOAD and not (keys & _METHOD_PAYLOAD)):
+        return "index"
+    if stem.startswith("chem_"):
+        return "compound"
+    if stem.startswith("paper_") or "_empirical" in stem:
+        return "evidence_entry"
+    if keys & _METHOD_PAYLOAD or stem.startswith("default_"):
+        return "method_spec"
+    if keys & _AGGREGATE_PAYLOAD or stem.endswith("_key_findings"):
+        return "aggregate"
+    return "entry"
+
+
 def check_file(path: str, root: str, strict: bool = False) -> list:
     """对单个 YAML 做检查，返回 findings 列表（每条含 rule/level/detail）。"""
     rel = os.path.relpath(path, root).replace(os.sep, "/")
@@ -121,20 +164,26 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
         return out
 
     stem = os.path.splitext(os.path.basename(path))[0]
+    arch = archetype(rel, doc)
+    req = ARCHETYPE_REQUIRED.get(arch, ARCHETYPE_REQUIRED["entry"])
+
+    def need(field):
+        return field in req
 
     # --- 标识：type / name / auto_trigger ---
-    if _is_blank(doc.get("type")):
+    if need("type") and _is_blank(doc.get("type")):
         add("missing_type", "warn" if not strict else "error", "缺 type（不是 kb_entry）")
     name = doc.get("name")
-    if _is_blank(name):
+    if need("name") and _is_blank(name):
         add("missing_name", "warn" if not strict else "error", "缺 name")
-    elif str(name) != stem:
+    elif not _is_blank(name) and str(name) != stem:
         add("name_filename_mismatch", "warn" if not strict else "error",
             "name=%s 与文件名 %s 不一致" % (name, stem))
 
     trig = doc.get("auto_trigger")
     if _is_blank(trig):
-        add("missing_auto_trigger", "warn", "缺 auto_trigger（检索/自动加载拿不到它）")
+        if need("auto_trigger"):
+            add("missing_auto_trigger", "warn", "缺 auto_trigger（检索/知识图谱拿不到它）")
     elif not isinstance(trig, list):
         add("auto_trigger_not_list", "error", "auto_trigger 不是列表（%s）" % type(trig).__name__)
     else:
@@ -148,7 +197,9 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     # --- source：脏值/自然语言 ---
     src = doc.get("source")
     if _is_blank(src):
-        add("missing_source", "warn", "缺 source（无法追溯来源）")
+        # 空 source：只有该原型要求 source 时才提醒；index.yaml 顶层 source: 留空是正常写法
+        if need("source"):
+            add("missing_source", "warn", "缺 source（无法追溯来源）")
     elif not isinstance(src, str):
         add("source_not_string", "error", "source 不是字符串（%s）" % type(src).__name__)
     else:
@@ -161,21 +212,25 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
                 "source=%r 非规范值%s" % (src[:60], ("，建议 %s" % sug) if sug else ""))
 
     # --- 时间/质量/可信度 ---
-    lu = doc.get("last_updated")
+    # 时间字段有三种写法：last_updated / updated / date —— 都算数，别只认一种
+    lu = doc.get("last_updated") or doc.get("updated") or doc.get("date")
     if _is_blank(lu):
-        add("missing_last_updated", "warn", "缺 last_updated")
+        if need("time"):
+            add("missing_last_updated", "warn", "缺 last_updated（updated/date 也算）")
     elif isinstance(lu, (_dt.date, _dt.datetime)):
         add("last_updated_parsed_as_date", "warn",
             "last_updated 未加引号，被 YAML 解析成日期对象（%s）" % lu)
 
     ver = doc.get("verified")
     if _is_blank(ver):
-        add("missing_verified", "warn", "缺 verified")
+        if need("verified"):
+            add("missing_verified", "warn", "缺 verified")
     elif str(ver) not in VALID_VERIFIED:
         add("verified_unknown_value", "warn", "verified=%s 不在 %s" % (ver, sorted(VALID_VERIFIED)))
     q = doc.get("quality")
     if _is_blank(q):
-        add("missing_quality", "warn", "缺 quality")
+        if need("quality"):
+            add("missing_quality", "warn", "缺 quality")
     elif str(q) not in VALID_QUALITY:
         add("quality_unknown_value", "warn", "quality=%s 不在 %s" % (q, sorted(VALID_QUALITY)))
 
@@ -197,7 +252,7 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     if payload_key == "content" and body and \
             set(x.strip().lower() for x in body[:40] if x.strip()) <= {"na", "n/a", "-", ""}:
         add("placeholder_content", "warn", "content 全是 na/占位符，没有可用信息")
-    if _is_blank(doc.get("evidence")):
+    if _is_blank(doc.get("evidence")) and need("evidence"):
         add("missing_evidence", "warn", "缺 evidence（无法核对来源）")
 
     doi_field = doc.get("doi")
@@ -206,12 +261,20 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     if _is_blank(doi_field) and isinstance(doc.get("metadata"), dict):
         doi_field = doc["metadata"].get("doi")
     doi_in_text = DOI_RE.findall(blob)
-    if _is_blank(doi_field) and not doi_in_text:
+    if need("doi") and _is_blank(doi_field) and not doi_in_text:
         add("missing_doi", "warn", "全文没有 DOI（引用回填的候选）")
-    if not PMID_RE.search(blob):
+    if need("pmid") and not PMID_RE.search(blob) and not doc.get("pmids"):
         add("missing_pmid", "warn", "全文没有 PMID")
 
     return out
+
+
+def _loads_ok(path: str) -> bool:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return isinstance(yaml.safe_load(fh), dict)
+    except Exception:
+        return False
 
 
 def scan(root: str = DEFAULT_ROOT, strict: bool = False) -> dict:
@@ -275,6 +338,10 @@ def scan(root: str = DEFAULT_ROOT, strict: bool = False) -> dict:
         "by_level": dict(Counter(f["level"] for f in findings)),
         "with_doi_field": sum(len(v) for v in by_doi.values()),
         "distinct_doi": len(by_doi),
+        "by_archetype": dict(Counter(
+            archetype(os.path.relpath(p, root).replace(os.sep, "/"),
+                      yaml.safe_load(open(p, encoding="utf-8")) or {})
+            for p in files if _loads_ok(p))),
     }
     return {"findings": findings, "stats": stats}
 
