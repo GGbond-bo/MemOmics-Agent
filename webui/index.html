@@ -374,6 +374,30 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .reasoning-block summary:hover { background:var(--primary-light); }
 .reasoning-block .reasoning-content { padding:8px 12px; font-size:12px; color:var(--text-light); font-style:italic; white-space:pre-wrap; max-height:300px; overflow-y:auto; }
 
+/* 交互框「最新思考」条（2026-09-25）：默认只显示最新一行、快速闪过；点击看全文 */
+.think-strip { display:none; align-items:center; gap:8px; max-width:90%; margin:0 auto 6px; padding:5px 12px;
+  font-size:12px; color:var(--text-light); background:var(--tool-bg); border:1px solid var(--border);
+  border-radius:6px; cursor:pointer; overflow:hidden; }
+.think-strip.show { display:flex; }
+.think-strip:hover { border-color:var(--primary); background:var(--primary-light); }
+.think-strip .ts-icon { flex:0 0 auto; opacity:.8; }
+.think-strip .ts-text { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:italic; }
+.think-strip .ts-text.ts-flash { animation:tsFlash .45s ease-out; }
+.think-strip .ts-more { flex:0 0 auto; font-size:11px; color:var(--primary); opacity:.85; }
+.think-strip.done { opacity:.7; }
+@keyframes tsFlash { from { opacity:.1; transform:translateY(5px); } to { opacity:1; transform:none; } }
+#think-overlay { display:none; position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,.45); }
+#think-overlay.show { display:flex; align-items:center; justify-content:center; }
+#think-overlay .think-box { width:min(860px,92vw); max-height:80vh; display:flex; flex-direction:column;
+  background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.28); }
+#think-overlay .think-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border);
+  font-size:13px; color:var(--text); }
+#think-overlay .think-title { flex:1 1 auto; }
+#think-overlay .think-x { background:transparent; border:none; color:var(--text-light); font-size:15px; cursor:pointer; }
+#think-overlay .think-body { padding:12px 16px; overflow:auto; font-size:13px; line-height:1.7; color:var(--text-light);
+  white-space:pre-wrap; word-break:break-word; }
+#think-overlay .think-body.think-empty { font-style:italic; }
+
 /* 工具块 */
 .tool-block { background:var(--tool-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:6px 0; font-size:13px; }
 .tool-block .tool-header { display:flex; align-items:center; gap:6px; font-weight:500; color:var(--primary); font-size:13px; }
@@ -1696,6 +1720,12 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     <div class="chat-input" id="chat-input">
       <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
       <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
+      <!-- 交互框「最新思考」条：默认只显示最新一行，点击看全文（2026-09-25） -->
+      <div class="think-strip" id="think-strip" onclick="openThinkModal()" title="点击查看完整思考过程">
+        <span class="ts-icon">💭</span>
+        <span class="ts-text" id="think-strip-text"></span>
+        <span class="ts-more">全文</span>
+      </div>
       <div class="input-row">
         <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)" data-i18n-title="upload_img">
           🖼️
@@ -2381,6 +2411,7 @@ function handleMessage(msg) {
     if (msg.reasoning_log && msg.reasoning_log.length) {
       reasoningText = msg.reasoning_log.join('\n\n');
       updateReasoningBlock();
+      updateThinkStrip(!!msg.is_running);   // 刷新/切会话重放历史思考时，也恢复"最新思考"条
     }
     var log = msg.progress_log || [];
     log.forEach(function(item) {
@@ -2432,6 +2463,7 @@ function handleMessage(msg) {
   } else if (msg.type === 'reasoning') {
     reasoningText += (msg.content || '');
     updateReasoningBlock();
+    updateThinkStrip(true);   // 交互框里"快速闪过"最新一条思考
   } else if (msg.type === 'delta') {
     if (!currentAssistantEl || !currentBubble) {
       currentAssistantEl = addAssistantMsg('');
@@ -2590,6 +2622,7 @@ function handleMessage(msg) {
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
     agentRunning = false;
+    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     setFloatBar(false);
@@ -2610,6 +2643,7 @@ function handleMessage(msg) {
     document.getElementById('stop').classList.remove('active');
     setFloatBar(false);
     agentRunning = false;
+    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
   } else if (msg.type === 'todos') {
@@ -2632,6 +2666,7 @@ function handleMessage(msg) {
     document.getElementById('stop').classList.remove('active');
     setFloatBar(false);
     agentRunning = false;
+    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
@@ -2804,6 +2839,8 @@ async function send(background) {
   clearPendingImages();
   fullText = '';
   reasoningText = '';
+  _thinkStripShown = '';
+  updateThinkStrip(false);   // 新一轮开始 → 收起上一条思考
   currentAssistantEl = null;
   currentBubble = null;
   progressTimelineEl = null;
@@ -3383,6 +3420,72 @@ function addThinking() {
   scrollBottom();
   return div;
 }
+
+// === 交互框「最新思考」条（2026-09-25）===
+// 需求：默认只显示最新一条思考、快速闪过；点击查看完整思考过程（全文）。
+// 设计：数据源就是流式累加的 reasoningText（不额外存一份，零额外内存）；
+//       只在末行变化时重放一次 CSS 闪烁动画，避免每个 token 都动 DOM。
+var _thinkStripShown = '';
+// 只剥 markdown 列表前缀，别把 "2026 年" 这种正文数字也吃掉
+var _THINK_PREFIX_RE = /^\s*(?:[>#]+|[-*•]+|\d+[.)、）])\s*/;
+function _thinkLineIn(chunk) {
+  var parts = String(chunk || '').split('\n');
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var s = parts[i].replace(_THINK_PREFIX_RE, '').trim();
+    if (s) return s;
+  }
+  return '';
+}
+function _thinkLatestLine(text) {
+  var t = String(text == null ? '' : text).replace(/\r/g, '');
+  if (!t) return '';
+  // 真机上一条长思考能累到几十万字、reasoning 事件数千条 —— 只扫尾部 800 字（O(1)），
+  // 否则每条事件都 split 全文会变成 O(n²)。
+  var line = _thinkLineIn(t.length > 800 ? t.slice(-800) : t);
+  if (line) return line;
+  return t.length > 800 ? _thinkLineIn(t) : '';
+}
+function updateThinkStrip(running) {
+  var box = document.getElementById('think-strip');
+  var txt = document.getElementById('think-strip-text');
+  if (!box || !txt) return;
+  var line = _thinkLatestLine(reasoningText);
+  if (!line) { box.classList.remove('show'); _thinkStripShown = ''; return; }
+  box.classList.add('show');
+  if (running === undefined || running === null) {
+    running = (typeof agentRunning !== 'undefined') ? !!agentRunning : false;
+  }
+  if (running) { box.classList.remove('done'); } else { box.classList.add('done'); }
+  if (line !== _thinkStripShown) {
+    _thinkStripShown = line;
+    // 思考是从左往右流出来的，最新内容在尾巴上 —— 长行显示尾部
+    txt.textContent = line.length > 160 ? ('…' + line.slice(-160)) : line;
+    txt.classList.remove('ts-flash');
+    void txt.offsetWidth;   // 强制重排，让同一个元素能重放动画（"快速闪过"）
+    txt.classList.add('ts-flash');
+  }
+}
+function openThinkModal() {
+  var ov = document.getElementById('think-overlay');
+  var body = document.getElementById('think-body');
+  var title = document.getElementById('think-title');
+  if (!ov || !body) return;
+  var text = reasoningText || '';
+  body.textContent = text || '（本轮还没有思考内容）';
+  if (body.classList) body.classList.toggle('think-empty', !text);
+  if (title) title.textContent = '完整思考过程' + (text ? '（' + text.length + ' 字）' : '');
+  ov.classList.add('show');
+  body.scrollTop = 0;
+}
+function closeThinkModal() {
+  var ov = document.getElementById('think-overlay');
+  if (ov) ov.classList.remove('show');
+}
+document.addEventListener('keydown', function(ev) {
+  if (ev.key !== 'Escape') return;
+  var ov = document.getElementById('think-overlay');
+  if (ov && ov.classList.contains('show')) closeThinkModal();
+});
 
 function updateReasoningBlock() {
   if (!currentAssistantEl) {
@@ -6352,6 +6455,8 @@ function _restoreSessionSnapshot(cache) {
   messagesEl.innerHTML = cache.messageHtml || '';
   fullText = cache.fullText || '';
   reasoningText = cache.reasoningText || '';
+  _thinkStripShown = '';
+  updateThinkStrip(!!cache.running);   // 切回会话时恢复"最新思考"条
   progressItems = cache.items.slice();
   progressTimelineEl = messagesEl.querySelector('.progress-timeline');
   currentAssistantEl = null;
@@ -15130,6 +15235,16 @@ async function saveUpdateConfig(mode) {
       <button class="cite-x" onclick="closeCitation()" title="关闭">✕</button>
     </div>
     <div class="cite-ov-body" id="cite-ov-body"></div>
+  </div>
+</div>
+<!-- 交互框「最新思考」全文浮层（2026-09-25） -->
+<div id="think-overlay" onclick="if(event.target===this)closeThinkModal()">
+  <div class="think-box">
+    <div class="think-head">
+      <span>💭</span><span class="think-title" id="think-title">完整思考过程</span>
+      <button class="think-x" onclick="closeThinkModal()" title="关闭 (Esc)">✕</button>
+    </div>
+    <div class="think-body" id="think-body"></div>
   </div>
 </div>
 
