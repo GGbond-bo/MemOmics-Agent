@@ -260,6 +260,14 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
         doi_field = [x for x in doc["dois"] if isinstance(x, str) and x.strip()] or None
     if _is_blank(doi_field) and isinstance(doc.get("metadata"), dict):
         doi_field = doc["metadata"].get("doi")
+    # PMID 也要认「结构化字段」：顶层 pmid / pmids 列表 / metadata.pmid。
+    # 旧实现只扫正文文本（blob），于是 DOI->PMID 权威回填写进去的 pmid 字段被判成"没有 PMID"，
+    # 规则文案说"全文没有 PMID"、代码却只看正文 —— 这是第四类同源误报。
+    pmid_field = doc.get("pmid")
+    if _is_blank(pmid_field) and isinstance(doc.get("pmids"), list):
+        pmid_field = [x for x in doc["pmids"] if isinstance(x, str) and x.strip()] or None
+    if _is_blank(pmid_field) and isinstance(doc.get("metadata"), dict):
+        pmid_field = doc["metadata"].get("pmid")
     doi_in_text = DOI_RE.findall(blob)
     # 引用类字段要看「这条记录是什么来的」：data_driven（record_run 回流）与 default_seed（内置种子）
     # 本来就没有、也不该有文献 DOI/PMID —— 第三类误报同源：拿文献条目的尺子去量实测记录。
@@ -267,7 +275,7 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     _cite_na = _prov in ("data_driven", "default_seed") or _prov.startswith("data_driven")
     if need("doi") and not _cite_na and _is_blank(doi_field) and not doi_in_text:
         add("missing_doi", "warn", "全文没有 DOI（引用回填的候选）")
-    if need("pmid") and not _cite_na and not PMID_RE.search(blob) and not doc.get("pmids"):
+    if need("pmid") and not _cite_na and not PMID_RE.search(blob) and _is_blank(pmid_field):
         add("missing_pmid", "warn", "全文没有 PMID")
 
     return out

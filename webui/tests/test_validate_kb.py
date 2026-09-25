@@ -187,6 +187,29 @@ def test_dois_list_counts_as_structured(tmp_path):
     assert "missing_doi" not in rules
 
 
+def test_structured_pmid_field_counts_as_citation(tmp_path):
+    """顶层 pmid / pmids 列表 / metadata.pmid 都算「有 PMID」。
+
+    规则文案写的是"全文没有 PMID"，代码却只扫正文文本（blob）—— 于是用 DOI->PMID
+    权威互换回填写进 pmid 字段的条目，仍被报成缺 PMID（第四类同源误报：
+    判据只看一种写法，看不见结构化字段）。
+    """
+    body = ["content: '正文里没有任何引用文本'", ""]
+    a = _write(tmp_path, "a.yaml", L.join(
+        ["type: kb_entry", "name: a", "source: literature",
+         "pmid: '34798047'", "doi: '10.1016/j.neuron.2021.10.036'"] + body))
+    b = _write(tmp_path, "b.yaml", L.join(
+        ["type: kb_entry", "name: b", "source: literature",
+         "pmids:", "- '34798047'", "doi: '10.1016/j.neuron.2021.10.036'"] + body))
+    c = _write(tmp_path, "c.yaml", L.join(
+        ["type: kb_entry", "name: c", "source: literature",
+         "metadata:", "  pmid: '34798047'", "  doi: '10.1016/j.neuron.2021.10.036'"] + body))
+    for path in (a, b, c):
+        rules = [f["rule"] for f in vk.check_file(path, str(tmp_path))]
+        assert "missing_pmid" not in rules, (path, rules)
+        assert "missing_doi" not in rules, (path, rules)
+
+
 def test_baseline_only_gates_new_errors(tmp_path):
     empty = L.join(["type: kb_entry", "name: old", "content: ''", ""])
     _write(tmp_path, "old.yaml", empty)
