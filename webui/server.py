@@ -13071,6 +13071,54 @@ async def weixin_send(body: dict = None):
 
 
 
+@app.post("/api/weixin/send_image")
+async def weixin_send_image(body: dict = None):
+    """发送本地图片到微信（给 scripts/desktop_shot.py 这类本机工具用）。
+
+    背景（2026-09-25）：/api/weixin/send 只能发文本，图片发送只存在于进程内
+    （_send_weixin_image），于是「computer_use 截图 → 发微信」在纯聊天会话里没有出口：
+    聊天会话不创建 results 目录，_scan_new_figures 也就扫不到图。这里补一个显式出口。
+
+    安全：只允许已存在的图片文件（扩展名白名单），复用 _gate_weixin_send 的
+    5 秒间隔 / 60 秒去重限流，发送目标沿用 _weixin_state 的会话（与文本一致）。
+    """
+    global _weixin_msg_store
+    body = body or {}
+    path = str(body.get("path", "") or "").strip()
+    caption = str(body.get("caption", "") or "").strip()
+    if not path:
+        return JSONResponse({"ok": False, "error": "缺少 path"}, status_code=400)
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        return JSONResponse({"ok": False, "error": "只允许图片文件（png/jpg/jpeg/webp/gif），收到: %s" % (ext or "无扩展名")},
+                            status_code=400)
+    if not os.path.isfile(path):
+        return JSONResponse({"ok": False, "error": "文件不存在: %s" % path}, status_code=404)
+    if _weixin_adapter is None:
+        return {"ok": False, "error": "微信未连接"}
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = -1
+    print(f"[MemOmics] 微信发图: {path} ({size} 字节)", flush=True)
+    ok = await _send_weixin_image(path, caption)
+    if not ok:
+        return {"ok": False, "error": "发送失败或被限流（5 秒间隔 / 60 秒去重）", "path": path}
+    try:
+        _append_weixin_msg({
+            "id": str(int(time.time() * 1000)),
+            "sender_id": _weixin_state["account_id"],
+            "sender_name": "我",
+            "text": "[图片] " + os.path.basename(path) + ((" — " + caption) if caption else ""),
+            "context_token": _weixin_state.get("context_token", ""),
+            "ts": int(time.time()),
+            "direction": "out",
+        })
+    except Exception:
+        pass
+    return {"ok": True, "path": path, "bytes": size}
+
+
 @app.get("/api/files")
 async def list_files(path: str = ""):
     """列出目录文件 — 限制在 work/ 和 results/ 内"""

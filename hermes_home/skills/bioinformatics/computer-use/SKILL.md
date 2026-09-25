@@ -73,10 +73,10 @@ prerequisites:
 
 - **不抢焦点是默认**：`delivery_mode` 默认 `background`，输入直接投递给目标窗口；`focus_app` 默认不 raise。
 - **默认目标 = 最前台窗口**，可能抓到覆盖层（实测抓到过 `NVIDIA Overlay.exe`，整张图近乎全黑）。**要整屏必须显式 `app="screen"`**（等价哨兵：`desktop` / `fullscreen` / `all`），它会解析到桌面/任务栏这类真实窗口。
-- `mode="som"` 返回"带编号覆盖的 PNG + elements"，视觉模型首选；纯文本模型用 `mode="ax"`（只给元素树，无图）。
+- **`mode` 决定拿回什么（2026-09-25 同一屏同一时刻实测）**：`vision` → PNG + **0 个元素**；`som` → PNG + **130 个元素**（带编号覆盖）；`ax` → **130 个元素**（本机同样带图）。**本机主模型是纯文本、且没配 vision provider，所以绝不要用 `vision`**：它拿到一张自己看不见的图，日志里只有 `No LLM provider configured for task=vision`，等于白截。要"看见"就用 `som`。
 - `max_elements` 默认 100、上限 1000：Electron/IDE 能发布 500+ 节点，被截断时结果里带 `total_elements` / `truncated_elements`，可用 `app=` 缩小范围或调高上限。
 - 元素编号来自**最近一次** `capture(mode="som")`；窗口变了要重新 capture 再点。
-- capture 返回的是 base64 PNG（实测整屏 1568x882 约 440KB）；要落盘就自己写文件，微信推送走服务端 `_send_weixin_image()`。
+- capture 返回的是 base64 PNG（实测整屏 1568x882 约 440KB，是 DPI 缩放后的尺寸；同一台 4K 机器另有 3840x2160 原生的通路），**后端没有 save_path —— 图只进模型上下文，不进磁盘**。要在磁盘上留一张、或要发微信，见下节。
 
 ## 标准工作流（截屏 → 定位 → 操作 → 验证）
 
@@ -114,6 +114,24 @@ computer_use(action="focus_app", app="notepad")     # 默认不置顶
 computer_use(action="type", text="Hello")
 ```
 
+## 截图落盘 + 发到微信（2026-09-25 真机打通，两条通路）
+
+`computer_use` 的 PNG **不落盘**，而"新图片自动推微信"只认磁盘上的文件，中间必须有人写一步盘。
+两条通路都实机跑通过：
+
+| 通路 | 怎么做 | 什么时候用 |
+|------|--------|-----------|
+| 显式（推荐） | `python scripts/desktop_shot.py --send-wechat --caption "桌面截图"` | 明确要发某一张；`--out` 指定路径、`--app` 指定窗口、`--json` 给机器读 |
+| 自动 | 把图写进会话目录 `results/<session_id>/figures/` | 分析流程里批量出图；新文件会被服务端 `_scan_new_figures()` 自动推微信 |
+
+要点（都是实测，不是推测）：
+
+- 显式通路走 `POST /api/weixin/send_image`（服务端 127.0.0.1:8899），内部复用 `_send_weixin_image`，只收已存在的图片文件（扩展名白名单）。
+- **限流**：同一路径 60 秒内只发一次、两次发送间隔 ≥5 秒（`_gate_weixin_send`）；被限流返回 `ok:false`，那是限流不是发送失败。
+- **纯聊天会话没有 results 目录**（`session["results_dir"]` 是分析时才懒建的），所以自动通路在纯聊天里根本不会触发 —— 这正是显式通路存在的理由。
+- **跑脚本要用对解释器**：仓库 `.venv\Scripts\python.exe` 与本机 miniconda 都实测 exit=0；某些 python 下 `tools.computer_use` 的依赖门禁会抛 `FeatureUnavailable(... mcp==1.26.0 ... starlette==1.0.1)`，那是"解释器选错"，不是驱动坏了。脚本现在会把当前 `sys.executable` 和推荐的 `.venv` 路径一起打出来。
+- **发微信是不可撤回的对外动作**：用户没有明确授权时先问一句。本轮实测 agent 因为同一会话里另有"不要发别的消息"，主动停下来弹确认框要授权 —— 这是正确行为，别绕过。
+
 ## 安全与边界
 
 - `capture` 无副作用；**其余 action 受审批门控**（Hermes 侧 approval / MemOmics 侧确认门）。
@@ -130,6 +148,9 @@ computer_use(action="type", text="Hello")
 | 截图近乎全黑 / elements=0 | 默认目标是最前台窗口，命中了覆盖层 | 显式 `app="screen"` 或指定 `app`/`pid`/`window_id` |
 | UIA 枚举 >2000ms 退回 Win32 列表 | 桌面节点太多（驱动自己的降级策略） | 用 `app=` 缩小到具体窗口 |
 | Linux 报无显示 | 无图形会话 / 未设 DISPLAY | 设 `DISPLAY` 或 `XDG_SESSION_TYPE=wayland` |
+| `capture(mode="vision")` 元素 0 个、模型说"看不见" | 本机没配 vision provider，图进了上下文但没人能读 | 改用 `mode="som"` / `mode="ax"` |
+| 跑 `desktop_shot.py` 报 `FeatureUnavailable ... not importable` | python 解释器选错（依赖门禁把 mcp/starlette 版本钉死） | 用 `.venv\Scripts\python.exe` 重跑；脚本会打印当前 `sys.executable` |
+| 发了图但微信没动静 | 命中 60 秒去重 / 5 秒间隔限流，或适配器没连 | 看服务日志 `[MemOmics] 微信发图:` 与 `/api/weixin/status` |
 
 ## References
 

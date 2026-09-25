@@ -125,6 +125,7 @@
   "/api/weixin/qr-login": "public",
   "/api/weixin/qr-poll": "public",
   "/api/weixin/send": "public",
+  "/api/weixin/send_image": "public",
   "/api/weixin/status": "public",
   "/api/weixin/test": "public",
   "/assets": "static",
