@@ -171,6 +171,48 @@ class _ProgressHeartbeat:
     def elapsed(self) -> int:
         return int(time.time() - self._t0)
 
+
+# ==================== 辩论总预算（2026-09-26） ====================
+# 单次调用的时间上限 × 重试次数 × 分波数是乘起来的：8 席位 / 并发 3 / 3 次重试
+# × 120s ≈ 18 分钟。日志实测最慢一场 1253s，用户看到的就是「卡住」。
+# 三道闸：
+#   1) 单次 HTTP 上限 120s → 60s（MEMOMICS_DEBATE_HTTP_TIMEOUT 可覆盖）
+#   2) 配置类错误（401/403/模型不存在/MissingSessionID）不再重试 3 次
+#   3) 整场辩论总预算（默认 480s = 8 分钟，MEMOMICS_DEBATE_BUDGET 可覆盖）：
+#      预算耗尽后 _call_llm_sync 直接返回失败，不再发 HTTP —— 剩下的席位/轮次
+#      毫秒级跑完，整场不会再挂 20 分钟
+_DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "480") or 480)
+_HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
+_DEADLINES: dict = {}
+_DEADLINE_LOCK = threading.Lock()
+
+
+def _set_debate_deadline(seconds: float = 0.0) -> float:
+    """开一场辩论时登记截止时间（按会话隔离）。返回 0 表示不限时。"""
+    budget = float(seconds) if seconds and float(seconds) > 0 else _DEBATE_BUDGET_DEFAULT
+    if budget <= 0:
+        return 0.0
+    dl = time.time() + budget
+    sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        _now = time.time()
+        # 顺手清掉两小时前的僵尸登记，别让 dict 无限长
+        for _k in [k for k, v in _DEADLINES.items() if v < _now - 7200]:
+            _DEADLINES.pop(_k, None)
+        _DEADLINES[sid] = dl
+    return dl
+
+
+def _budget_left() -> float:
+    """本场辩论还剩多少秒；没登记预算返回 inf（不干预）。"""
+    sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        dl = _DEADLINES.get(sid, 0.0)
+    if not dl:
+        return float("inf")
+    return dl - time.time()
+
+
 SCHEMA = {
     "name": "debate_analysis",
     "description": (
@@ -1401,9 +1443,26 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
 
     last_error = ""
     for attempt in range(3):
+        # 总预算闸：预算耗尽就立刻放弃，不再发 HTTP（否则整场辩论能挂到 20 分钟）
+        _left = _budget_left()
+        if _left <= 0:
+            logger.warning(f"debate {label} 放弃：本场辩论总预算已耗尽（{_DEBATE_BUDGET_DEFAULT}s）")
+            return {
+                "content": f"[{label} 辩论生成失败：本场辩论超出总预算，已放弃该角色]",
+                "call_id": call_id,
+                "isolation_verified": True,
+                "messages_count": 1,
+                "error": True,
+                "error_detail": "budget_exhausted",
+                "error_model": f"{model} @ {base_url}",
+                "transient": False,
+                "budget_exhausted": True,
+            }
+        # 单次超时不许超过剩余预算，否则最后一枪还能多跑 60 秒
+        _timeout = _HTTP_TIMEOUT_DEFAULT if _left == float("inf") else max(5.0, min(_HTTP_TIMEOUT_DEFAULT, _left))
         _detail = ""
         try:
-            with httpx.Client(timeout=120) as client:
+            with httpx.Client(timeout=_timeout) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     headers=headers, json=payload
@@ -1438,6 +1497,11 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
                 _detail = f"{type(e).__name__}: {e}"
             last_error = _detail[:400]
             logger.warning(f"debate {label} attempt {attempt+1} failed: {e} | detail={last_error}")
+            # 2026-09-26：配置类错误（401/403/400/MissingSessionID/模型不存在）重试
+            # 3 次纯属浪费——每次都必然同样失败，只是把 3 倍时间烧掉。
+            if not _is_transient_error(last_error):
+                logger.warning(f"debate {label} 判定为配置类错误，不再重试：{last_error[:160]}")
+                break
             time.sleep(3)
 
     return {
@@ -1468,6 +1532,19 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     （异构/对抗/温度模式）。cfg=None 时行为=现状（环境变量单模型）。
     """
     def _run_one(label, prompt):
+        # 预算已耗尽就别再排这一席了（否则每个席位还要各自跑一遍重试逻辑）
+        if _budget_left() <= 0:
+            _emit_progress(f"席位 {label} 跳过：辩论总预算已耗尽", "done")
+            return label, {
+                "content": f"[{label} 辩论生成失败：本场辩论超出总预算，已跳过]",
+                "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
+                "isolation_verified": True,
+                "messages_count": 1,
+                "error": True,
+                "error_detail": "budget_exhausted",
+                "transient": False,
+                "budget_exhausted": True,
+            }
         try:
             return label, _call_llm_role(label, prompt, cfg)
         except Exception as e:
@@ -1497,6 +1574,10 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
         _done += 1
         _emit_progress(f"席位 {_label} 完成（{_done}/{len(tasks)}，累计 {int(time.time() - _t0)}s）", "done")
 
+    # 席位在线程池里跑，而 contextvars 不会自动跟着新线程走 —— 手工把当前上下文
+    # 复制进每个席位线程。否则子线程里 get_session_sid() 为空：总预算闸形同虚设、
+    # 席位级进度上报也会被静默丢弃（2026-09-26 被 test_debate_budget 抓出来）。
+    _ctx = _contextvars.copy_context()
     try:
         if max_workers <= 1:
             for label, prompt in tasks:
@@ -1505,7 +1586,7 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
                 _seat_done(_l)
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as _ex:
-                _futures = [_ex.submit(_run_one, label, prompt) for label, prompt in tasks]
+                _futures = [_ex.submit(_ctx.copy().run, _run_one, label, prompt) for label, prompt in tasks]
                 for _f in _futures:
                     _l, _r = _f.result()
                     results[_l] = _r
@@ -2950,7 +3031,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     # 用户原话：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，是不是需要采取
     # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
     # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
-    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）", "pending")
+    # 整场辩论的总预算（2026-09-26）：预算耗尽后 _call_llm_sync 不再发 HTTP，
+    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟
+    _set_debate_deadline()
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_DEBATE_BUDGET_DEFAULT)}s", "pending")
     _hb_scene = _ProgressHeartbeat("场景预判").start()
     try:
         scenario_res = _analyze_scenario(topic, context, cfg)
@@ -3124,10 +3208,23 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                             "model": str(_r.get("error_model", "")),
                             "detail": str(_r.get("error_detail", "placeholder content"))[:300],
                         }
+                # 2026-09-26：失败也别把已经跑完的席位全丢了。把成功席位的论点一并回传，
+                # 上层还能接着用；预算耗尽时明确标注，便于区分「配置错」和「超时放弃」。
+                _ok_roles = {}
+                for _r in _all_roles:
+                    if not isinstance(_r, dict):
+                        continue
+                    if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
+                        continue
+                    _ok_roles[str(_r.get("call_id", "?"))] = str(_r.get("content", ""))[:2000]
+                _budget_out = _budget_left() <= 0
                 return json.dumps({
                     "topic": topic,
                     "debate_format": "多角色对抗（v3）",
                     "error": True,
+                    "partial_seats": len(_ok_roles),
+                    "partial_arguments": _ok_roles,
+                    "budget_exhausted": _budget_out,
                     "failed_roles": len(_failed_roles),
                     "failed_role_ids": _failed_roles,
                     "failed_role_details": _fail_details,
