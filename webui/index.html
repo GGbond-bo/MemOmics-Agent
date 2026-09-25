@@ -2492,6 +2492,12 @@ function handleMessage(msg) {
       if (msg.debate && msg.debate.ok) { renderDebateCard(msg.debate); }
       else { loadLatestDebate(currentSid, 3); }
     }
+    // 2026-09-26: 工具完成 → 结果面板自动刷新。这段原本写在下面另一个重复的
+    // tool_complete 分支里，而 else-if 链第一个命中就结束 —— 那个分支永远走不到，
+    // 等于这个刷新从来没生效过。现在合并到这里，重复分支已删。
+    if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
+      refreshResults();
+    }
   } else if (msg.type === 'status') {
     // status 只进时间线
     addProgressItem(msg.content.substring(0,40), 'pending', msg.category, msg.ts || _nowTs());
@@ -2533,11 +2539,6 @@ function handleMessage(msg) {
   } else if (msg.type === 'new_figure') {
     // 分析过程中生成了新图 → 自动展示 + 刷新结果面板
     if (msg.figure) handleNewFigure(msg.figure);
-  } else if (msg.type === 'tool_complete') {
-    // 工具完成 → 如果结果面板打开且是当前会话，自动刷新图片和文件
-    if (msg.session_id === currentSid && document.getElementById('panel-results').style.display !== 'none') {
-      refreshResults();
-    }
   } else if (msg.type === 'event') {
     // Hermes 统一事件流（session:compress 等）
     if (msg.event_type === 'session:compress') {
@@ -2658,11 +2659,6 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
-  } else if (msg.type === 'new_figure') {
-    // 分析过程中生成了新图片——自动展示
-    if (msg.figure) {
-      handleNewFigure(msg.figure);
-    }
   } else if (msg.type === 'context_usage') {
     renderContextUsage(msg.data, msg.error);
   }
