@@ -101,12 +101,42 @@ def test_noncanonical_source_gets_suggestion(tmp_path):
 
 
 def test_duplicate_record_doi_is_error(tmp_path):
+    """同名 + 同 DOI 写两份 = 真重复，error。"""
     for stem in ("a", "b"):
         _write(tmp_path, stem + ".yaml", L.join([
-            "type: kb_entry", "name: " + stem, "doi: 10.1038/abc", "content: 'b'", ""]))
+            "type: kb_entry", "name: same_entry", "doi: 10.1038/abc", "content: 'b'", ""]))
     rep = vk.scan(str(tmp_path))
     dup = [f for f in rep["findings"] if f["rule"] == "duplicate_record_doi"]
     assert len(dup) == 1 and dup[0]["level"] == "error"
+
+
+def test_shared_doi_across_entries_is_warn(tmp_path):
+    """不同条目共引同一篇文献（化合物库、聚合型 key_findings）是正常数据，只提醒不拦。"""
+    for stem in ("cmp1", "cmp2"):
+        _write(tmp_path, stem + ".yaml", L.join([
+            "type: kb_entry", "name: " + stem, "doi: 10.1038/shared", "content: 'b'", ""]))
+    rep = vk.scan(str(tmp_path))
+    rules = {f["rule"]: f["level"] for f in rep["findings"]}
+    assert rules.get("doi_shared_by_entries") == "warn"
+    assert "duplicate_record_doi" not in rules
+
+
+def test_same_doi_same_name_in_other_dir_is_not_duplicate(tmp_path):
+    """同名文件在不同物种/组织目录下共引同一篇（Homo/Mus 的 key_findings）是正常数据。"""
+    for sub in ("Homo_sapiens", "Mus_musculus"):
+        _write(tmp_path / sub, "key_findings.yaml", L.join([
+            "type: kb_entry", "name: key_findings", "doi: 10.1/shared", "content: 'b'", ""]))
+    rep = vk.scan(str(tmp_path))
+    rules = [f["rule"] for f in rep["findings"]]
+    assert "duplicate_record_doi" not in rules
+
+
+def test_dois_list_counts_as_structured(tmp_path):
+    """dois: [...] 列表也算已结构化（聚合型条目引用多篇）。"""
+    p = _write(tmp_path, "agg.yaml", L.join([
+        "type: kb_entry", "name: agg", "dois: [\"10.1/a\", \"10.1/b\"]", "content: 'b'", ""]))
+    rules = [f["rule"] for f in vk.check_file(p, str(tmp_path))]
+    assert "missing_doi" not in rules
 
 
 def test_baseline_only_gates_new_errors(tmp_path):

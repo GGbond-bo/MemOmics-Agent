@@ -200,7 +200,11 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     if _is_blank(doc.get("evidence")):
         add("missing_evidence", "warn", "缺 evidence（无法核对来源）")
 
-    doi_field = doc.get("doi") or (doc.get("metadata") or {}).get("doi") if isinstance(doc.get("metadata"), dict) else doc.get("doi")
+    doi_field = doc.get("doi")
+    if _is_blank(doi_field) and isinstance(doc.get("dois"), list):
+        doi_field = [x for x in doc["dois"] if isinstance(x, str) and x.strip()] or None
+    if _is_blank(doi_field) and isinstance(doc.get("metadata"), dict):
+        doi_field = doc["metadata"].get("doi")
     doi_in_text = DOI_RE.findall(blob)
     if _is_blank(doi_field) and not doi_in_text:
         add("missing_doi", "warn", "全文没有 DOI（引用回填的候选）")
@@ -220,7 +224,10 @@ def scan(root: str = DEFAULT_ROOT, strict: bool = False) -> dict:
     for p in files:
         findings.extend(check_file(p, root, strict=strict))
 
-    # 结构化 DOI 字段的重复 = 错误（同一条记录写了两份）
+    # 结构化 DOI 的重复分两种，混在一起判会把正常数据判成错误：
+    #   a) 同名条目 + 同 DOI   = 同一条记录写了两份 -> error；
+    #   b) 不同名条目共引同一篇文献（化合物库一个 paper 抽取几十个化合物、
+    #      聚合型 key_findings 引用同一篇）= 正常，只提醒 -> warn。
     by_doi = defaultdict(list)
     for p in files:
         try:
@@ -228,22 +235,46 @@ def scan(root: str = DEFAULT_ROOT, strict: bool = False) -> dict:
                 doc = yaml.safe_load(fh)
         except Exception:
             continue
-        if isinstance(doc, dict):
-            md = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
-            d = doc.get("doi") or md.get("doi")
-            if isinstance(d, str) and d.strip():
-                by_doi[d.strip().lower()].append(os.path.relpath(p, root).replace(os.sep, "/"))
-    for doi, paths in sorted(by_doi.items()):
-        if len(paths) > 1:
-            for rel in paths[1:]:
+        if not isinstance(doc, dict):
+            continue
+        md = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
+        ds = []
+        if isinstance(doc.get("doi"), str) and doc["doi"].strip():
+            ds.append(doc["doi"].strip())
+        if isinstance(doc.get("dois"), list):
+            ds.extend(x.strip() for x in doc["dois"] if isinstance(x, str) and x.strip())
+        if not ds and isinstance(md.get("doi"), str) and md["doi"].strip():
+            ds.append(md["doi"].strip())
+        rel = os.path.relpath(p, root).replace(os.sep, "/")
+        # 条目身份 = 所在目录 + 名字：同名文件在不同物种/组织目录下是不同条目
+        # （Homo_sapiens/.../key_findings.yaml 与 Mus_musculus/.../key_findings.yaml 共引同一篇很正常）
+        name = str(doc.get("name") or "").strip().lower() or os.path.splitext(os.path.basename(p))[0].lower()
+        ident = os.path.dirname(rel).lower() + "/" + name
+        for d in ds:
+            by_doi[d.lower()].append((rel, ident))
+    for doi, entries in sorted(by_doi.items()):
+        if len(entries) < 2:
+            continue
+        groups = defaultdict(list)
+        for rel, name in entries:
+            groups[name].append(rel)
+        for name, rels in groups.items():
+            for rel in rels[1:]:
                 findings.append({"rule": "duplicate_record_doi", "level": "error", "path": rel,
-                                 "detail": "DOI %s 已在 %s 出现" % (doi, paths[0])})
+                                 "detail": "DOI %s 与同名条目 %s 重复（同一条记录写了两份）" % (doi, rels[0])})
+        if len(groups) > 1:
+            firsts = [sorted(v)[0] for v in groups.values()]
+            for rel in sorted(firsts)[1:]:
+                findings.append({"rule": "doi_shared_by_entries", "level": "warn", "path": rel,
+                                 "detail": "DOI %s 被 %d 个不同条目共引（多化合物/聚合条目属正常，确认一下即可）"
+                                           % (doi, len(groups))})
 
     stats = {
         "files": len(files),
         "by_rule": dict(Counter(f["rule"] for f in findings)),
         "by_level": dict(Counter(f["level"] for f in findings)),
         "with_doi_field": sum(len(v) for v in by_doi.values()),
+        "distinct_doi": len(by_doi),
     }
     return {"findings": findings, "stats": stats}
 
