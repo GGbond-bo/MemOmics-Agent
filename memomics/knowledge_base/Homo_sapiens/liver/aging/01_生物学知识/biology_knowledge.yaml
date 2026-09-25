@@ -6,6 +6,7 @@
 #            NatComm 2025 MERFISH PDF 2.8MB, Nature 2026 spatial atlas PDF 100MB)
 # 部分付费论文仅获取到PubMed XML摘要 (FASEB 2024, Aging Cell 2023, Hepatology 2025)
 
+pmid: "38102480"
 species: Homo sapiens
 dois: ["10.1093/procel/pwad055", "10.1186/s41232-025-00364-1"]
 tissue: liver
