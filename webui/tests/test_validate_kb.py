@@ -132,6 +132,27 @@ def test_method_spec_does_not_require_verified_quality(tmp_path):
         assert r not in rules, (r, rules)
 
 
+def test_data_driven_entry_needs_no_citation(tmp_path):
+    """record_run 回流的实测条目按设计就没有文献 DOI/PMID，不该报缺引用。"""
+    _write(tmp_path, "cellchat-v2_empirical.yaml", L.join([
+        "type: kb_entry", "name: cellchat-v2_empirical", "source: data_driven",
+        "evidence: 'run log: record_run(cellchat)'", "verified: partially_verified",
+        "quality: high", "last_updated: '2026-01-01'", "auto_trigger:", "  - cellchat-v2_empirical",
+        "content: 'params'", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "missing_doi" not in rules and "missing_pmid" not in rules, rules
+
+
+def test_literature_entry_still_requires_citation(tmp_path):
+    """文献来源的条目缺 DOI/PMID 仍要提醒（这是真待办，不是噪声）。"""
+    _write(tmp_path, "paper_demo.yaml", L.join([
+        "type: kb_entry", "name: paper_demo", "source: literature",
+        "evidence: '某文'", "verified: unverified", "quality: medium",
+        "last_updated: '2026-01-01'", "auto_trigger:", "  - paper_demo", "content: 'x'", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "missing_doi" in rules and "missing_pmid" in rules, rules
+
+
 def test_index_blank_source_is_not_error(tmp_path):
     """index.yaml 顶层 source: 留空是历史正常写法，不该报 source_not_string。"""
     _write(tmp_path, "index.yaml", L.join([

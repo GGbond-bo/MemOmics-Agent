@@ -261,9 +261,13 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     if _is_blank(doi_field) and isinstance(doc.get("metadata"), dict):
         doi_field = doc["metadata"].get("doi")
     doi_in_text = DOI_RE.findall(blob)
-    if need("doi") and _is_blank(doi_field) and not doi_in_text:
+    # 引用类字段要看「这条记录是什么来的」：data_driven（record_run 回流）与 default_seed（内置种子）
+    # 本来就没有、也不该有文献 DOI/PMID —— 第三类误报同源：拿文献条目的尺子去量实测记录。
+    _prov = str(doc.get("source") or "").strip().lower()
+    _cite_na = _prov in ("data_driven", "default_seed") or _prov.startswith("data_driven")
+    if need("doi") and not _cite_na and _is_blank(doi_field) and not doi_in_text:
         add("missing_doi", "warn", "全文没有 DOI（引用回填的候选）")
-    if need("pmid") and not PMID_RE.search(blob) and not doc.get("pmids"):
+    if need("pmid") and not _cite_na and not PMID_RE.search(blob) and not doc.get("pmids"):
         add("missing_pmid", "warn", "全文没有 PMID")
 
     return out
