@@ -48,10 +48,16 @@ CANONICAL_SOURCES = {"literature", "data_driven", "default_seed", "manual", "cur
 
 #: 自然语言 source → 规范值（只用于给建议，不自动改写数据）。
 SOURCE_SUGGESTIONS = (
+    # 顺序即优先级：先认「内置种子」再认「文献」，因为 default_kb_method.yaml 这类文件的
+    # source 常常写成「MemOmics default KB (15 methods, literature-verified)」——
+    # 两种标记都在，但它本质是内置种子，按文献判会误放行引用要求。
+    ("default_seed", ("memomics default kb", "default kb", "seed", "默认知识库", "默认值", "内置")),
     ("literature", ("literature", "literature-verified", "curated from", "literature-driven",
-                    "paper", "pubmed", "literature search", "文献")),
+                    "paper", "pubmed", "literature search", "文献", "et al", "nature",
+                    "science", "faseb", "doi:", "doi 10.")),
     ("data_driven", ("data_driven", "data-driven", "empirical", "经验", "实测")),
-    ("default_seed", ("memomics default kb", "default kb", "seed", "默认知识库")),
+    ("derived", ("同步", "synced", "derived", "源自", "移植", "数据特异")),
+    ("manual", ("手工", "手动", "manual")),
 )
 
 #: 元数据键：这些键只描述条目本身，不承载知识正文。
@@ -86,6 +92,11 @@ ARCHETYPE_REQUIRED = {
 _METHOD_PAYLOAD = {"pipeline", "steps", "commands", "methods", "filters", "params",
                    "workflow", "analysis_type", "pipeline_spec", "recipe"}
 _INDEX_PAYLOAD = {"resources", "index", "catalog"}
+#: 参数规格载荷：QC/降维这类「一堆阈值」的文件是 method_spec，不是普通知识条目
+#: （scrna_qc.yaml 靠 filters: 命中了，snrna_qc.yaml 只有 mt_percent/nCount_high 就漏了）。
+_PARAM_PAYLOAD = {"mt_percent", "mt_high", "ncount_high", "ncount_low", "nfeature_high",
+                  "nfeature_low", "doublet_method", "min_cells", "min_genes", "min_features",
+                  "resolution", "dims", "pc_num", "threshold", "thresholds", "linked_to"}
 _AGGREGATE_PAYLOAD = {"gene_sets", "cell_types", "findings", "key_findings", "biology",
                       "markers", "pathways", "knowledge", "summary_table"}
 
@@ -128,13 +139,14 @@ def archetype(rel: str, doc: dict) -> str:
     base = os.path.basename(rel).lower()
     stem = os.path.splitext(base)[0]
     keys = set(doc.keys())
-    if base == "index.yaml" or (keys & _INDEX_PAYLOAD and not (keys & _METHOD_PAYLOAD)):
+    if base == "index.yaml" or stem.endswith("_index") or stem == "link" \
+            or (keys & _INDEX_PAYLOAD and not (keys & _METHOD_PAYLOAD)):
         return "index"
     if stem.startswith("chem_"):
         return "compound"
     if stem.startswith("paper_") or "_empirical" in stem:
         return "evidence_entry"
-    if keys & _METHOD_PAYLOAD or stem.startswith("default_"):
+    if keys & (_METHOD_PAYLOAD | _PARAM_PAYLOAD) or stem.startswith("default_"):
         return "method_spec"
     if keys & _AGGREGATE_PAYLOAD or stem.endswith("_key_findings"):
         return "aggregate"
@@ -176,7 +188,7 @@ def check_file(path: str, root: str, strict: bool = False) -> list:
     name = doc.get("name")
     if need("name") and _is_blank(name):
         add("missing_name", "warn" if not strict else "error", "缺 name")
-    elif not _is_blank(name) and str(name) != stem:
+    elif not _is_blank(name) and str(name).strip().lower() != stem.lower():
         add("name_filename_mismatch", "warn" if not strict else "error",
             "name=%s 与文件名 %s 不一致" % (name, stem))
 

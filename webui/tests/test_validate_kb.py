@@ -210,6 +210,47 @@ def test_structured_pmid_field_counts_as_citation(tmp_path):
         assert "missing_doi" not in rules, (path, rules)
 
 
+def test_name_case_only_difference_is_not_mismatch(tmp_path):
+    """name 与文件名只差大小写不算不一致（chem_*_Selinexor vs chem_*_selinexor）。"""
+    _write(tmp_path, "chem_x_selinexor.yaml", L.join([
+        "type: kb_entry", "name: chem_x_Selinexor", "source: literature",
+        "content: 'b'", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "name_filename_mismatch" not in rules, rules
+
+
+def test_param_spec_and_index_files_need_no_evidence(tmp_path):
+    """参数规格/索引/链接类文件不该被要求 evidence。
+
+    第五次同源误报：拿「普通知识条目」的必填字段去卡一堆阈值（snrna_qc 只有
+    mt_percent/nCount_high）、一张方法索引（methods_index）、一个跨库链接（LINK）。
+    """
+    _write(tmp_path, "snrna_qc.yaml", L.join([
+        "type: kb_entry", "name: snrna_qc", "source: derived", "auto_trigger:", "  - snrna_qc",
+        "verified: unverified", "quality: medium", "last_updated: '2026-01-01'",
+        "doublet_method: DoubletFinder", "mt_percent: 5", "nCount_high: 40000", ""]))
+    _write(tmp_path, "methods_index.yaml", L.join([
+        "type: kb_entry", "name: methods_index", "source: default_seed",
+        "auto_trigger:", "  - methods_index", "verified: unverified", "quality: medium",
+        "last_updated: '2026-01-01'", "rna:", "  cellchat:", "    depth_score: 17", ""]))
+    _write(tmp_path, "LINK.yaml", L.join([
+        "type: kb_entry", "name: LINK", "source: derived", "auto_trigger:", "  - LINK",
+        "verified: unverified", "quality: medium", "updated: '2026-01-01'",
+        "linked_to: human/skeletal_muscle/aging/", ""]))
+    rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
+    assert "missing_evidence" not in rules, rules
+
+
+def test_default_kb_source_suggests_seed(tmp_path):
+    """内置种子方法库的 source 写成「MemOmics default KB (... literature-verified)」时，
+    建议值应是 default_seed 而不是 literature —— 它本质是内置种子，不是某篇文献。"""
+    p = _write(tmp_path, "sug2.yaml", L.join([
+        "type: kb_entry", "name: sug2",
+        "source: MemOmics default KB (15 methods, literature-verified)", "content: 'b'", ""]))
+    hit = [f for f in vk.check_file(p, str(tmp_path)) if f["rule"] == "source_noncanonical"]
+    assert hit and "default_seed" in hit[0]["detail"], hit
+
+
 def test_baseline_only_gates_new_errors(tmp_path):
     empty = L.join(["type: kb_entry", "name: old", "content: ''", ""])
     _write(tmp_path, "old.yaml", empty)
