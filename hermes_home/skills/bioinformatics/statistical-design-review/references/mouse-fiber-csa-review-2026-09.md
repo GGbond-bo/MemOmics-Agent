@@ -16,8 +16,12 @@ P2：只报 P 无效应量/CI；比较族未定义。
 |---|---|---|
 | 纤维当 n=288，两两 t 检验（未校正） | 0.123 / **3.73e-05** / **1.65e-03** | ✗ 虚假显著 |
 | 每只小鼠均值（n=6/组）+ ANOVA + Tukey | 0.783 / 0.174 / 0.457（p adj） | ✓ 全 n.s. |
-| LMM `CSA ~ Group + (1\|Mouse)` | GroupC p=0.091；**ICC=0.313**（小鼠 0.431 / 残差 0.946） | ✓ 推荐 |
-| 假设检查（均值法残差） | Shapiro p=0.599；Levene p=0.243 | 前提满足 |
+| LMM `CSA ~ Group + (1\|Mouse)` | GroupC p=**0.077**（GroupB 0.512）；**ICC=0.289**（小鼠 0.401 / 残差 0.987） | ✓ 推荐 |
+| 假设检查（均值法残差） | Shapiro p=0.195；Levene p=0.205 | 前提满足 |
+
+> 复现口径（2026-09-25 本会话重跑，`set.seed(42)`，3 组 × 6 只 × **16 根/只**）：
+> 纤维层 n=288（不是 96/其他数——`n_fiber` 一改，"纤维当 n"的 n 随之变，报数前必须回看脚本参数）。
+> 与上一版记录的差异（旧版 ICC=0.313 / LMM p=0.091）来自模拟参数不同，**以当次实际输出为准，不要引用旧数字**。
 
 功效（n=6/组，α=0.05）：d=0.5 → **0.12**；0.8 → 0.24；1.2 → 0.47；1.5 → 0.65；3 组 ANOVA（between.var=0.25、within.var=1）→ **0.27**。
 
@@ -66,3 +70,23 @@ P2：只报 P 无效应量/CI；比较族未定义。
 - 裁决 `missing` 四项已在交付里如实转述：真实数据 ICC/残差诊断、比例分布与组别混杂、正式功效曲线、预注册 SAP。
 - **rail_review(post)**：第一次不带图 → failed（`未生成任何图片`）；补四联诊断图后（`output_dir` 传会话根）→ passed、
   `figure_count=1`。属"产物口径/真实交付"类，补图正确；⚠️ 该图不是凑数，它是审查的证据本身。
+
+### 6.1 第二次复现（2026-09-25 新会话，同一审查重跑）实测增量
+
+- **复用旧脚本的正确姿势**：`search_files(pattern="stats_review*", target="files")` 命中上一会话的
+  `scripts/stats_review_demo_pseudoreplication.R` + `scripts/stats_review_figures.R` → 复制到**当前** `results/<sid>/scripts/`，
+  只改 `out_dir` 与要统一的参数（`n_fiber` 20→16）→ `execute_r(source("<abs>", encoding="utf-8"))` 两个脚本一次跑通。
+  **没有再写第二份实现**；旧会话目录保持只读。
+- **带上图一次过 rail_review(post)**：`output_dir` 传当次会话根 → `passed=true`、`figure_count=1`
+  （旧记录里"第一次 failed 因无图"的坑，只要一开始就出图即可避免）。唯一 warning 是
+  `No error handling in code (tryCatch/try)`——审查探针脚本属可接受。
+- **出图核验**：`vision_describe(figure)` OCR 读到四个中文面板标题与 `d=0.5 时 power = 0.12`、
+  `常规目标 0.80`、`组 A/B/C`，文件 273,376 bytes ⇒ 非空白、字体正常。**这是"图已真实生成"的证据**，
+  比只看 `file.info()$size` 更硬。
+- **L1 辩论的新细节（比上一版更差）**：场景预判正常（`opencode-go/deepseek-v4-pro` 判 `stats_design`，rubric 齐全），
+  但 **6 个正反方席位里 5 席只回 reasoning 草稿**（`draft_roles` 列了 5 个），仅第 3 组反方按契约输出且**内容被截断**
+  （`con_points: []`、`evidence_gaps` 报"找不到论据"）；裁判主路由调用失败，
+  `judge_digest` 回退 `dcs-cloud/deepseek-flash` 且第一次也只给草稿、第二次（仅格式化）才输出 JSON
+  （`judge_digest_repaired: true`、`judge_digest_note` 有记录）。
+  ⇒ 汇报口径：**"裁判依据上下文数据与规则裁决，正反方未按契约输出"**，confidence 按 medium 处理；
+  裁决本身（verdict=modify、recommended_params、missing 六项）与审查一致，可直接采用。

@@ -28,5 +28,25 @@
     "统计方法审查",
     "statistical plan review"
   ],
-  "when_to_use": "审查/审计已提出的统计方案与实验设计:分析单位（伪重复）、多重比较校正、比例/组成数据的相关分析、样本量与功效、预注册。触发:\\\"审一下这个统计方案\\\" / \\\"指出问题并给出正确做法\\\" / \\\"这样用 t 检验两两比较合适吗\\\" / \\\"Pearson 分析相关性对不对\\\" / \\\"每组 6 只够吗\\\" / 统计设计审查 / statistical plan review / pseudore"
+  "when_to_use": "审查/审计已提出的统计方案与实验设计:分析单位（伪重复）、多重比较校正、比例/组成数据的相关分析、样本量与功效、预注册。触发:\\\"审一下这个统计方案\\\" / \\\"指出问题并给出正确做法\\\" / \\\"这样用 t 检验两两比较合适吗\\\" / \\\"Pearson 分析相关性对不对\\\" / \\\"每组 6 只够吗\\\" / 统计设计审查 / statistical plan review / pseudore",
+  "success_count": 1,
+  "proven_script": "stats_review_demo_pseudoreplication.R",
+  "proven_params": [
+    {
+      "species": "mouse",
+      "tissue": "skeletal_muscle",
+      "direction": "statistical_review",
+      "script": "stats_review_demo_pseudoreplication.R",
+      "params": "set.seed(42); n_mouse=6; n_fiber=16; effect=0.5; sd_mouse=0.6; sd_fiber=1; alpha=0.05; lmer(CSA~Group+(1|Mouse)); TukeyHSD; power.t.test(n=6,delta=0.5..1.5); qlogis+spearman+residual partial cor",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "小鼠CSA统计方案审查（模拟演示）：纤维当n=288两两t未校正->A-C p=3.73e-05(虚假显著)；小鼠均值n=6/组+ANOVA+Tukey->p adj=0.783/0.174/0.457全n.s.；LMM CSA~Group+(1|Mouse) ICC=0.289(小鼠0.401/残差0.987)。比例-握力：raw Pearson r=0.907 / logit Spearman"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "stats_review_demo_pseudoreplication.R"
+  }
 }

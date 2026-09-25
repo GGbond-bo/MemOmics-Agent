@@ -1,0 +1,31 @@
+type: kb_entry
+name: nature-academic-search_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-25 17:59
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-academic-search_empirical
+content: 'skill: nature-academic-search
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  lit_bridge.py search "skeletal muscle aging single-cell RNA sequencing" --sources
+  pubmed,crossref --limit 3 --no-dedup --json
+
+
+  result_summary:
+
+  exit 0，errors=[] 两源均连通。count=6（PubMed 3 条含 PMID：38751367 jcsm.13484 2024 卫星细胞-FAP/FGF7、33244879
+  jcsm.12643 2021 脂肪浸润脂质组、40810394 jcsm.70045 2025 类器官衰老；Crossref 3 条：10.1093/geroni/igaf122.235、10.1111/acel.70485
+  Aging Cell 2026 人肌衰老 snRNA-seq、10.1093/geroni/igaf122.1534）。--no-dedup 保证每源各 3 条。纯只读，零文件落盘。'
+evidence: 'record_run(nature-academic-search): exit 0，errors=[] 两源均连通。count=6（PubMed
+  3 条含 PMID：38751367 jcsm.13484 2024 卫星细胞-FAP/FGF7、33244879 jcsm.12643 2021 脂肪浸润脂质组、40810394
+  jcsm.70045 2025 类器官衰老；Crossref 3 条：10.1093/geroni/igaf122.235、10.1111/a'

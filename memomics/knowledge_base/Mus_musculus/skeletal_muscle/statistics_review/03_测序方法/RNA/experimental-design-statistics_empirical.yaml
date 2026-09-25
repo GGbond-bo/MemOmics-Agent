@@ -1,0 +1,33 @@
+type: kb_entry
+name: experimental-design-statistics_empirical
+species: Mus_musculus
+tissue: skeletal_muscle
+direction: statistics_review
+assay_type: RNA
+last_updated: 2026-09-25 17:44
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- experimental-design-statistics_empirical
+content: 'skill: experimental-design-statistics
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"fig":"stats_review_pseudoreplication_diagnostics.png 2600x2100 res200 cairo","panels":"A
+  -log10(P) 错误vs正确 / B 嵌套结构 boxplot+鼠均值 / C power vs n(d=0.5,0.8,1.2) / D 比例-握力散点(raw
+  Pearson|logit Spearman|偏相关)","font":"Microsoft YaHei cairo（中文正常）"}
+
+
+  result_summary:
+
+  4-panel 诊断图生成成功（figures/stats_review_pseudoreplication_diagnostics.png）。A：错误做法 p=1.23e-1/3.73e-5/1.65e-3
+  → -log10(P) 最高约 4.4，而 Tukey p adj=0.783/0.174/0.457（全部 n.s.）；C：n=6 时 power d0.5=0.12/d0.8=0.24/d1.2=0.47；D：raw
+  r=0.91 vs logit Spearman rho=0.94 vs 偏相关 0.88。base graphics + cairo + Microsoft
+  YaHei 可正常渲染中文标签。'
+evidence: 'record_run(experimental-design-statistics): 4-panel 诊断图生成成功（figures/stats_review_pseudoreplication_diagnostics.png）。A：错误做法
+  p=1.23e-1/3.73e-5/1.65e-3 → -log10(P) 最高约 4.4，而 Tukey p adj=0.783/0.174/0.457（全部
+  n.s.）；C：n=6 时 power d0.5=0.12/d0.8=0.24/'

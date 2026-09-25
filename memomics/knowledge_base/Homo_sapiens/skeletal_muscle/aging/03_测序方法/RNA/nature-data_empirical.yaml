@@ -1,0 +1,33 @@
+type: kb_entry
+name: nature-data_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-25 17:56
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-data_empirical
+content: 'skill: nature-data
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"task": "metadata + data availability statement (no analysis)", "samples": "12
+  old + 12 young", "platform": "10x Genomics", "ontology_verified": ["UBERON:0001134
+  skeletal muscle tissue", "EFO:0009922 10x 3'' v3"], "skill": "nature-data v2.2.0
+  (workflow.md 8-step + FAIR checklist + statement-patterns)"}
+
+
+  result_summary:
+
+  依据 nature-data skill 的 8 步工作流与 FAIR 清单，产出人骨骼肌 scRNA-seq（12老+12年轻，10x）的 DataCite
+  元数据字段、24 样本样本级元数据表、CELLxGENE obs schema 字段、README 模板、Data/Code Availability 中英文声明草案与缺失字段清单；ontology
+  实测核验 UBERON:0001134 / EFO:0009922（OLS4 API）。仅文档撰写，未跑分析。'
+evidence: 'record_run(nature-data): 依据 nature-data skill 的 8 步工作流与 FAIR 清单，产出人骨骼肌
+  scRNA-seq（12老+12年轻，10x）的 DataCite 元数据字段、24 样本样本级元数据表、CELLxGENE obs schema 字段、README
+  模板、Data/Code Availability 中英文声明草案与缺失字段清单；ontology 实测核验 UBERON:0001134'

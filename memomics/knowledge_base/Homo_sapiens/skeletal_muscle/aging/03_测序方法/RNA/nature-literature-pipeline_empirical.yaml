@@ -1,0 +1,32 @@
+type: kb_entry
+name: nature-literature-pipeline_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-25 17:33
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-literature-pipeline_empirical
+content: 'skill: nature-literature-pipeline
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"sources": "europepmc,pubmed,openalex", "lookback_days_initial": 120, "pool": 30,
+  "top": 5, "scoring": "topic35/method20/journal15/network10/applied10/archival10",
+  "cron": "not_scheduled"}
+
+
+  result_summary:
+
+  首次建库检索成功：原始74→合并57→过滤22→新文献22；六维打分后交付 top5 日报 + 5 篇 A 类笔记，索引59键/22篇。踩坑：PubMed 摘要解析用
+  .//ArticleIdList 会抓到参考文献 DOI（已修为 ./PubmedData/ArticleIdList + ELocationID 兜底）；literature/log
+  目录需先建；digest 按 uid 匹配脆弱已加归一化标题兜底。'
+evidence: 'record_run(nature-literature-pipeline): 首次建库检索成功：原始74→合并57→过滤22→新文献22；六维打分后交付
+  top5 日报 + 5 篇 A 类笔记，索引59键/22篇。踩坑：PubMed 摘要解析用 .//ArticleIdList 会抓到参考文献 DOI（已修为 ./PubmedData/ArticleIdList
+  + ELocationID 兜底）；literature/log 目录需先建；digest 按 uid 匹配脆弱'

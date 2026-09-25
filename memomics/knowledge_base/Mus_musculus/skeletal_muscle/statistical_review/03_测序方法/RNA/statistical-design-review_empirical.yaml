@@ -1,0 +1,33 @@
+type: kb_entry
+name: statistical-design-review_empirical
+species: Mus_musculus
+tissue: skeletal_muscle
+direction: statistical_review
+assay_type: RNA
+last_updated: 2026-09-25 18:18
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- statistical-design-review_empirical
+content: 'skill: statistical-design-review
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  set.seed(42); n_mouse=6; n_fiber=16; effect=0.5; sd_mouse=0.6; sd_fiber=1; alpha=0.05;
+  lmer(CSA~Group+(1|Mouse)); TukeyHSD; power.t.test(n=6,delta=0.5..1.5); qlogis+spearman+residual
+  partial cor
+
+
+  result_summary:
+
+  小鼠CSA统计方案审查（模拟演示）：纤维当n=288两两t未校正->A-C p=3.73e-05(虚假显著)；小鼠均值n=6/组+ANOVA+Tukey->p
+  adj=0.783/0.174/0.457全n.s.；LMM CSA~Group+(1|Mouse) ICC=0.289(小鼠0.401/残差0.987)。比例-握力：raw
+  Pearson r=0.907 / logit Spearman rho=0.940 / 控制组别偏相关 r=0.885。功效 n=6/组：d=0.5->0.12,
+  0.8->0.24, 1.2->0.47, 1.5->0.65，3组ANOVA->0.27。四联诊断图 273KB 落盘'
+evidence: 'record_run(statistical-design-review): 小鼠CSA统计方案审查（模拟演示）：纤维当n=288两两t未校正->A-C
+  p=3.73e-05(虚假显著)；小鼠均值n=6/组+ANOVA+Tukey->p adj=0.783/0.174/0.457全n.s.；LMM CSA~Group+(1|Mouse)
+  ICC=0.289(小鼠0.401/残差0.987)。比例-握力：raw Pearson r=0.907 / logit Spearman'

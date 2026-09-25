@@ -33,10 +33,13 @@ trigger_keywords: ["审统计方案", "统计方案审查", "统计设计审查"
 |---|---|---|
 | 纤维当 n=288，两两 t 检验 | 3.7e-05 / 1.6e-03 | ✗ 虚假显著 |
 | 每只小鼠均值（n=6/组）+ ANOVA + Tukey | 0.174 / 0.457（p adj）| ✓ |
-| LMM `y ~ Group + (1\|Mouse)` | 0.091（C vs A），**ICC=0.313** | ✓ 推荐 |
+| LMM `y ~ Group + (1\|Mouse)` | 0.077（C vs A），**ICC=0.289** | ✓ 推荐 |
 
-话术：**"同一批数据，原方案报出 P<0.001，正确做法是阴性"**；ICC≈0.31 = 个体间方差占 1/3 ⇒ 子样本不独立的量化证据。
+话术：**"同一批数据，原方案报出 P<0.001，正确做法是阴性"**；ICC≈0.29 = 个体间方差占近 1/3 ⇒ 子样本不独立的量化证据。
 功效（n=6/组，α=0.05）：d=0.5 → **0.12**；0.8 → 0.24；1.2 → 0.47；1.5 → 0.65；3 组 ANOVA → **0.27**。
+
+> ⚠️ 上表数字**绑定当时脚本参数**（`set.seed(42)`、3 组×6 只×**16 根/只**、d=0.5）。改了根数/效应量就变
+> （旧版记的 ICC=0.313 / p=0.091 即另一组参数所致）。**引用前先回看当次脚本参数与实际输出，不要照抄本表。**
 
 现成探针：`scripts/stats_plan_audit_demo.R`（改开头参数即可套用到任何"多层测量 + 多组比较"设计）。
 
@@ -141,6 +144,11 @@ C 功效缺口（power vs n 三条线 + n=6 标注）/ D 比例-表型散点（�
   裁判依据上下文数据与规则裁决"**并按中等置信处理；不要包装成满血 L2，也不要编造辩论轮次。
 - 裁决的 `missing` = 交付里要写的"待补证据"清单。
 - 纯审查回合不建 task_plan、不跑分析管线；但**模拟演示脚本与诊断图要落盘**并给出绝对路径。
+- **重跑同类审查先复用旧脚本，不要重写第二份**（2026-09-25 实测）：`search_files(pattern="stats_review*", target="files")`
+  找到上一会话产物 → 复制到**当前** `results/<sid>/scripts/`（只改 `out_dir` 和本次要调的参数，绝不覆写旧会话目录）
+  → `execute_r(source("<abs path>", encoding = "utf-8"))` 跑通 → 先核对打印的个体数/纤维数 → 出图
+  → rail_review(post)（`output_dir` 传当次会话根）= passed、`figure_count=1`。
+- 交付里的每个数字必须来自**当次实际输出**；旧案例文件/本 SKILL.md 的数字只是参考，参数一改就变。
 
 ## Pitfalls
 
@@ -149,6 +157,17 @@ C 功效缺口（power vs n 三条线 + n=6 标注）/ D 比例-表型散点（�
 - ⛔ 别把"不显著"写成"无差异"、把关联写成因果、把效应量大写成"显著"。
 - ⛔ `aggregate()` 遇字符型分组列报 `non-numeric-alike`（stdout 全丢）→ 按分组聚合一律 `tapply`。
 - ⚠️ 缺包（emmeans/betareg/ppcor）先查用户环境、问过再装，装到项目内库（铁律 29）。
+- ⚠️ **模拟数据里个体 ID 必须由「组别」生成，不能由「只序」生成**（2026-09-25 实测踩到）：
+  `sprintf("%s%02d", c("A","B","C")[m], m)` 会让 18 只小鼠重名成 6 只 → `tapply(..., Mouse, mean)`
+  把跨组纤维并成一只，Tukey/箱线全部失真。信号：`boxplot(CSA ~ Mouse)` 只画出 6 个箱子、
+  或 `length(unique(d$Mouse)) != n_group * n_mouse`。**跑完先打印个体数核对**：
+  `cat(length(unique(d$Mouse)), nrow(d))` 应为 `18` 与 `288`。
+- ⚠️ **数字脚本与图脚本必须共用同一 `set.seed` + 同一套参数**（2026-09-25 复现时踩到）：两份模拟分开写，
+  极易一份 `n_fiber=20`、另一份 `n_fiber=16` → 报告里的 p 值表与诊断图**互相矛盾**（本次已统一为 16 根/只）。
+  同理**图例/文字里的 n 要随参数走**：旧版图例写"纤维当 n=96"而实际已是 288，属自相矛盾的证据，改参数后必须同步图例。
+- ⚠️ **出图后核验非空白**：`vision_describe(图路径)` 应能 OCR 出四个面板标题与关键数值
+  （本次读到"A 伪重复的代价 / B 嵌套结构 / C 功效缺口 / D 比例-表型"与 `d=0.5 时 power = 0.12`）。
+  读不到标题 = 字体或空白问题，先修再交付。
 
 ## 配套文件
 
@@ -162,3 +181,11 @@ C 功效缺口（power vs n 三条线 + n=6 标注）/ D 比例-表型散点（�
 - McKinnon Reish et al. 2024, *Appl Environ Microbiol*, DOI 10.1128/aem.01033-24（PMID 39082810）— 伪重复的常见形态。
 - Zhang et al. 2024, *Comput Struct Biotechnol J*, DOI 10.1016/j.csbj.2024.11.003（PMID 39624165）— 比例/组成数据变换。
 - skill `nature-statistics` → `references/common-failure-modes.md`（P0 伪重复 / 未校正多重比较 / 分析单位不匹配）。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| mouse | skeletal_muscle | statistical_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
