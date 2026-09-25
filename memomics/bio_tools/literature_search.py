@@ -16,12 +16,21 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
 import subprocess
 from datetime import datetime
 from pathlib import Path
+
+# Scrapling 无头抓取的最长等待（秒）。实测事故（2026-09-25 paper2ppt 实跑）：
+# StealthyFetcher.fetch(headless=True, solve_cloudflare=True, network_idle=True) 没有任何
+# 超时，遇到 Cloudflare 挑战页会一直等，整轮对话卡在 download_pdf 上（心跳 stalled=true，
+# 5 分钟以上无进展，只能等驱动侧 900s 掐断）。httpx/urllib 两条路各自只有 60s，唯独这条没有。
+# 这里给无头兜底加硬超时：到点就放弃这条策略（线程是 daemon，不会拖住进程退出），
+# 让工具尽快返回失败，由上层决定换源还是走 HTML fallback。
+SCRAPLING_FETCH_TIMEOUT = int(os.environ.get("MEMOMICS_SCRAPLING_TIMEOUT", "120"))
 
 
 # ============ Source 1: PubMed ============
@@ -476,16 +485,33 @@ def _download_url_to_file(url: str, output_dir: Path, filename_hint: str = "") -
         except ImportError:
             sf_error = "Scrapling not installed (pip install scrapling[fetchers])"
         if sf_error is None:
-            try:
-                page = StealthyFetcher.fetch(url, headless=True, solve_cloudflare=True, network_idle=True)
-                sf_content = page.body if hasattr(page, "body") else b""
+            # 硬超时：Scrapling 自身没有超时参数，跑在 daemon 线程里 join(timeout)，
+            # 到点就放弃（线程继续在后台自生自灭，不阻塞本轮返回）。
+            _sf_box = {}
+
+            def _sf_fetch():
+                try:
+                    _sf_box["page"] = StealthyFetcher.fetch(
+                        url, headless=True, solve_cloudflare=True, network_idle=True)
+                except Exception as e:  # 线程内异常必须自己接住，否则静默丢失
+                    _sf_box["err"] = e
+
+            _sf_thread = threading.Thread(target=_sf_fetch, daemon=True)
+            _sf_thread.start()
+            _sf_thread.join(SCRAPLING_FETCH_TIMEOUT)
+            if _sf_thread.is_alive():
+                sf_error = (f"Scrapling timeout after {SCRAPLING_FETCH_TIMEOUT}s "
+                            f"(headless fetch hung, thread abandoned)")
+            elif "err" in _sf_box:
+                sf_error = f"Scrapling error: {str(_sf_box['err'])[:120]}"
+            else:
+                page = _sf_box.get("page")
+                sf_content = getattr(page, "body", b"") or b""
                 if sf_content and sf_content[:5] == b"%PDF-":
                     content = sf_content
                     is_pdf = True
                 else:
                     sf_error = f"Scrapling returned non-PDF (status={getattr(page, 'status', '?')}, size={len(sf_content)})"
-            except Exception as e:
-                sf_error = f"Scrapling error: {str(e)[:120]}"
         # 记录 Scrapling 状态到结果中（不静默吞掉）
         if not is_pdf and sf_error:
             import sys

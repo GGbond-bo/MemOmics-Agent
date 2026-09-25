@@ -947,3 +947,83 @@ class TestImportSpeedup:
         after = json.loads(idx.read_text(encoding="utf-8"))
         assert after[0]["tags"]["species"] == ["mouse"]
         assert after[0]["tags"]["tissue"] == ["skeletal_muscle"]
+
+
+# ---------------------------------------------------------------- 无头兜底硬超时（2026-09-25 实跑事故）
+class TestScraplingHardTimeout:
+    """paper2ppt 实跑卡死复盘：整轮对话挂在 download_pdf 上（心跳 stalled=true，
+    330s 无进展，最后被驱动侧 900s 掐断）。
+
+    根因：httpx 与 urllib 两条路各自只有 60s 超时，唯独第三条兜底
+    StealthyFetcher.fetch(headless=True, solve_cloudflare=True, network_idle=True)
+    没有任何超时参数——碰到 Cloudflare 挑战页会一直等。
+    修法：把无头抓取放进 daemon 线程 join(SCRAPLING_FETCH_TIMEOUT)，到点放弃该策略。
+    """
+
+    def _stub_failing_http(self, monkeypatch):
+        import sys as _sys
+        import types
+        from memomics.bio_tools import literature_search as LS
+
+        fake_httpx = types.ModuleType("httpx")
+
+        class _Client:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def get(self, *a, **k):
+                raise RuntimeError("httpx down")
+
+        fake_httpx.Client = _Client
+        monkeypatch.setitem(_sys.modules, "httpx", fake_httpx)
+
+        def _boom(*a, **k):
+            raise RuntimeError("urllib down")
+
+        monkeypatch.setattr(LS.urllib.request, "urlopen", _boom)
+        return LS
+
+    def test_hung_headless_fetch_returns_fast(self, tmp_path, monkeypatch):
+        """无头抓取不返回时，工具必须快速失败而不是把整轮对话挂住。"""
+        import sys as _sys
+        import time
+        import types
+
+        LS = self._stub_failing_http(monkeypatch)
+        calls = []
+        fake_fetchers = types.ModuleType("scrapling.fetchers")
+
+        class _Stealthy:
+            @staticmethod
+            def fetch(url, **kw):
+                calls.append(kw)
+                time.sleep(30)          # 模拟 Cloudflare 挑战页：永不返回
+                raise AssertionError("unreachable")
+
+        fake_fetchers.StealthyFetcher = _Stealthy
+        fake_scrapling = types.ModuleType("scrapling")
+        fake_scrapling.fetchers = fake_fetchers
+        monkeypatch.setitem(_sys.modules, "scrapling", fake_scrapling)
+        monkeypatch.setitem(_sys.modules, "scrapling.fetchers", fake_fetchers)
+        monkeypatch.setattr(LS, "SCRAPLING_FETCH_TIMEOUT", 1)
+
+        out = tmp_path / "papers"
+        out.mkdir()
+        t0 = time.time()
+        res = LS._download_url_to_file("https://example.org/paper.pdf", out)
+        dt = time.time() - t0
+        assert calls, "没走到无头兜底，测试没测到目标路径"
+        assert dt < 10, "无头兜底卡死时必须快速返回，实际 %.1fs" % dt
+        assert res["success"] is False
+        assert "timeout" in res.get("scrapling_status", ""), res
+
+    def test_default_timeout_is_bounded(self):
+        """默认超时必须是有限值（防止有人改回「无限等待」）。"""
+        from memomics.bio_tools import literature_search as LS
+        assert 10 <= LS.SCRAPLING_FETCH_TIMEOUT <= 600, LS.SCRAPLING_FETCH_TIMEOUT
