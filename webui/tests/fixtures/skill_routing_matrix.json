@@ -587,6 +587,96 @@
         "error-recovery"
       ],
       "max_hits": 2
+    },
+    {
+      "id": "nature-ref-verifier-01",
+      "intent": "直白",
+      "text": "投稿前帮我核对参考文献，逐条校验文献信息",
+      "must_hit": [
+        "nature-ref-verifier"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-citation-01",
+      "intent": "口语",
+      "text": "给这个结论找引用，看看能引哪几篇",
+      "must_hit": [
+        "nature-citation"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-literature-pipeline-01",
+      "intent": "口语",
+      "text": "帮我建个文献追踪，每天把新文献过一遍",
+      "must_hit": [
+        "nature-literature-pipeline"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-polishing-01",
+      "intent": "同义",
+      "text": "这段话英文不太地道，帮我做学术润色",
+      "must_hit": [
+        "nature-polishing"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "nature-writing-01",
+      "intent": "直白",
+      "text": "帮我起草摘要和引言，从这些结果出发",
+      "must_hit": [
+        "nature-writing"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-statistics-01",
+      "intent": "术语",
+      "text": "投稿前帮我审一下统计报告，看看样本量和误差棒写得对不对",
+      "must_hit": [
+        "nature-statistics"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "nature-data-01",
+      "intent": "术语",
+      "text": "数据可用性声明该怎么写",
+      "must_hit": [
+        "nature-data"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-experiment-log-01",
+      "intent": "口语",
+      "text": "把今天的实验记录整理成日志",
+      "must_hit": [
+        "nature-experiment-log"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "nature-proposal-writer-01",
+      "intent": "直白",
+      "text": "帮我写开题报告的研究内容和技术路线",
+      "must_hit": [
+        "nature-proposal-writer"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "nature-paper2ppt-01",
+      "intent": "口语",
+      "text": "把这篇论文做成组会PPT",
+      "must_hit": [
+        "nature-paper2ppt"
+      ],
+      "max_hits": 4
     }
   ],
   "distractors": [

@@ -195,7 +195,7 @@
 | 22 | survival-analysis | 适用于: disease, 有生存数据 —— KM曲线+Cox回归+风险评分模型+时间依赖ROC | 生存分析, KM, 预后, survival-analysis, survival analysis, survival | RED 必触发 |
 | 23 | survival-analysis-clinical | 临床生存分析:临床信息+表达→Kaplan-Meier→Cox回归→log-rank test→预后标志物 | survival, clinical | YEL 讨论触发 |
 
-## 08_报告 - 报告/可视化 (91 skills)
+## 08_报告 - 报告/可视化 (98 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -257,39 +257,46 @@
 | 56 | mixed-design-deg | 多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor | 混合设计, 配对比较, pre, post, 重复测量, 随机效应 donor | YEL 讨论触发 |
 | 57 | molecular-cloning-design | [molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试 | molecular-cloning-design, molecular cloning design, molecular, cloning | YEL 讨论触发 |
 | 58 | multi-role-debate | 需要跑多角色辩论、debate_analysis 连续失败、参数/结论需要 多角色裁决、用户要求"先正方再反方最后LLM判决"时。 | multi-role-debate, multi role debate, role, debate | YEL 讨论触发 |
-| 59 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, 投稿配图, Nature style, 期刊, SCI figure, 发表, publication figure, SCI, paper figure, figure contract, SVG editable, TIFF 600dpi, 顶刊, Nature风格 | RED 必触发 |
-| 60 | nature-paper-card | 单篇论文深度拆解卡片:固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法） | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, 拆解这篇文献 | RED 必触发 |
-| 61 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 精读, 复现这篇, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper | RED 必触发 |
-| 62 | nature-response | Nature风格修回信套件:逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿 | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复, 逐点回复, 大修回复, 小修回复, 回复审稿人, 修改稿回复, 标红修改, cover letter, 编辑邮件, 返修邮件 | RED 必触发 |
-| 63 | nature-reviewer | Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, manuscript review, peer review, referee report | RED 必触发 |
-| 64 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, shared | YEL 讨论触发 |
-| 65 | openfold3 | OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc... | openfold3 | YEL 讨论触发 |
-| 66 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming, 语言润色 | RED 必触发 |
-| 67 | patent-analysis | 用户说"分析这篇专利""拆解这个专利""专利详细解读""解读专利""分析权利要求""竞品专利分析"等时触发。 | patent-analysis, patent analysis, patent | YEL 讨论触发 |
-| 68 | pdf-report-generation | PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成 | pdf-report-generation, pdf report generation, pdf | YEL 讨论触发 |
-| 69 | pdf-translate | 适用于: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成 | pdf-translate, pdf translate, pdf, translate | YEL 讨论触发 |
-| 70 | pdf_reader | 当你需要 PDF 文献读取器 时触发 —— 读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换 | pdf_reader, pdf reader, pdf, reader | YEL 讨论触发 |
-| 71 | platform-execution-pitfalls | 任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。 | platform, execution, pitfalls | YEL 讨论触发 |
-| 72 | ppt-generator | 当你需要 PPT生成 时触发 —— AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入 | PPT, 幻灯片, 演示文稿, 组会, ppt-generator, ppt generator, 做PPT | RED 必触发 |
-| 73 | ppt-html | 适用于: 文献解读后生成HTML报告 —— 图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示 | ppt-html, ppt html, ppt, html | YEL 讨论触发 |
-| 74 | ppt-master | 适用于: 文献解读后生成PPT, 分析报告制作PPT —— AI驱动的SVG-PPT生成系统，多角色协作:策划→执行→质量检查→导出 | ppt-master, ppt master, ppt, master | YEL 讨论触发 |
-| 75 | pptx-generation | PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件 | pptx-generation, pptx generation, pptx | YEL 讨论触发 |
-| 76 | pre-submission-reviewer | 论文已写完、临近投稿（1周内），需要投稿前全面体检时使用。路由纪律:nature-reviewer 判科学质量（Nature五轴:原创性/重要性/技术严谨性，用户说'Nature预审/预审科学质量'走它），academic-paper-reviewer 是模拟完整同行评审（用户说'审稿/模拟审稿人'走它）… | 投稿前审查, 投稿前检查, 投前审, 查草稿, 检查草稿, 投稿前体检, 找问题, proofread, check the draft, find issues, 语法检查, 图表质量, AI腔 | RED 必触发 |
-| 77 | professional-paper-interpretation | 专业编辑视角论文解读:叙事逻辑分析 + 研究思路拆解 + 结构化写作逻辑。区别于 paper-summary 的字段导向提取，本 skill 侧重'作者为什么这样做、逻辑链是什么、文章怎么组织的'。触发词:专业编辑角度、编辑视角、研究思路、这篇文章讲了什么、帮我解读一下、这篇文章做了什么、帮我从编辑角度分析 | 专业编辑角度, 编辑视角, 研究思路, 这篇文章讲了什么, 帮我解读一下, 这篇文章做了什么, 帮我从编辑角度分析 | YEL 讨论触发 |
-| 78 | proteinmpnn | OpenAI4S 移植:Inverse-fold a protein backbone (PDB structure) into amino-a... | proteinmpnn | YEL 讨论触发 |
-| 79 | proteomics-secretome-analysis | conditioned medium secretome, supernatant proteomics | 分泌蛋白组, secretome, 条件培养基, 上清蛋白, conditioned medium | YEL 讨论触发 |
-| 80 | public-data-download | 精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。 | public-data-download, public data download, public | YEL 讨论触发 |
-| 81 | pubmed-mesh-annotation | 用户要求给文献输出 MeSH 标签 / MeSH 主要主题词 / 语义索引标注 / 给论文打 MeSH 词时加载。核心知识:query_ncbi esummary 不含 MeSH，必须用 efetch MEDLINE 格式提取 MH 行，* 前缀 = Major Topic。 | pubmed-mesh-annotation, pubmed mesh annotation, pubmed, mesh, annotation | YEL 讨论触发 |
-| 82 | pubmed-mesh-indexing | 为论文输出官方 MeSH 主要标签（TaskA 式语义索引 benchmark） | MeSH, DeCS, 语义索引, 主要标签, mesh tags, MESINESP | YEL 讨论触发 |
-| 83 | scgpt | OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a... | scgpt | YEL 讨论触发 |
-| 84 | scientific-figure-export | 用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。 | 图太大, 图很糊, 导出尺寸, dpi, 保存格式, PNG还是PDF, pngquant | YEL 讨论触发 |
-| 85 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
-| 86 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns | YEL 讨论触发 |
-| 87 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
-| 88 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
-| 89 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |
-| 90 | wakeup-progress-check | 新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在… | wakeup-progress-check, wakeup progress check, wakeup, progress | YEL 讨论触发 |
-| 91 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
+| 59 | nature-data | Draft or audit manuscript Data/Code Availability statements, dataset access routes, repository plans, and FAIR metadata. Use for 数据可用性声明、数据共享、数据仓库选择 and dataset citations; not general data cleaning or | 数据可用性, 数据可得性声明, 代码可用性, 数据仓储, 登录号, FAIR, availability statement | RED 必触发 |
+| 60 | nature-experiment-log | 标准化实验日志记录——直接上传或读取本地图片、语音和文字，产出带 YAML frontmatter 的 Markdown；可选集成飞书 CLI 与 Obsidian。 | 实验日志, 实验记录, 记录实验, 日志模板, 语音记录 | RED 必触发 |
+| 61 | nature-figure | User needs publication-ready figures for journals. Not for EDA or quick exploration plots. | CNS级别, 发表级, 投稿, 投稿配图, Nature style, 期刊, SCI figure, 发表, publication figure, SCI, paper figure, figure contract, SVG editable, TIFF 600dpi, 顶刊, Nature风格 | RED 必触发 |
+| 62 | nature-paper-card | 单篇论文深度拆解卡片:固定01-16节（文献定位/研究问题/背景路线/核心洞见/方法模块逻辑/关键公式/实验→主张证据链/结论边界/作者局限/批判分析/知识连接/可测试研究想法） | 拆解文献, 文献拆解, 拆解论文, paper card, 论文卡片, 深度拆解, 单篇论文分析, evidence chain, 证据链分析, 拆解这篇文献 | RED 必触发 |
+| 63 | nature-paper2ppt | Create or improve a Chinese academic PPTX from a scientific paper or research reading notes, with source figures and speaker notes. Use for 论文做PPT、文献汇报、组会PPT and paper-based conference or defense pres | 论文转PPT, 文献做成PPT, 组会PPT, 学术PPT, paper2ppt | RED 必触发 |
+| 64 | nature-polishing | Polish, translate, or tighten existing academic prose while preserving facts, terminology, and evidence boundaries. Use for 论文润色、学术翻译、正文精简, or manuscript LaTeX layout fixes. Use nature-writing when th | 英文润色, 学术润色, 期刊语言, 语言打磨, 收紧表达, polish manuscript | RED 必触发 |
+| 65 | nature-proposal-writer | Compose, revise, or audit research proposals, opening reports, and research plans from supporting evidence. Use for 研究计划、开题报告、科研项目申请书. Invoked as researchwrite for compatibility; use nature-writing fo | 开题报告, 申报书, 标书, 研究计划, 立项依据, 基金申请, proposal | RED 必触发 |
+| 66 | nature-reader | 全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要 | 总结这篇文章, 解读这篇文献, 这篇文章的研究思路, 作者做了什么, 精读, 复现这篇, 读论文, 精读论文, 论文翻译, 文献翻译, 文献阅读, 帮我读这篇文章, 翻译这篇paper, 全文对照, paper translation, read this paper | RED 必触发 |
+| 67 | nature-response | Nature风格修回信套件:逐点回复（按审稿人隔离）、rebuttal、修回cover letter、LaTeX模板、标红修改稿 | 修回信, 返修, rebuttal, response to reviewers, 审稿意见回复, 逐点回复, 大修回复, 小修回复, 回复审稿人, 修改稿回复, 标红修改, cover letter, 编辑邮件, 返修邮件 | RED 必触发 |
+| 68 | nature-reviewer | Nature风格投稿前预审（审稿人视角）:原创性/科学重要性/跨学科读者/技术严谨性/非专业可读性五轴评估，输出Major/Minor/blocking | Nature审稿, 预审, 投稿前自审, 审稿人视角, 审稿意见模拟, 帮我审一下论文, referee, mock peer review, manuscript critique, novelty assessment, pre-submission review, manuscript review, peer review, referee report | RED 必触发 |
+| 69 | nature-shared | Internal shared-reference support package for installed nature-writing, nature-polishing, nature-reader, and nature-paper2ppt skills. Do not invoke it as a standalone user workflow. Load only the spec | nature-shared, nature shared, shared | YEL 讨论触发 |
+| 70 | nature-statistics | Audit or improve manuscript statistical reporting, including experimental units, replication, uncertainty, tests, and figure statistics. Use for 统计审查、统计方法小节、图注统计 and reviewer concerns; compute new ana | 统计审查, 统计报告, 样本量, 重复数, 误差棒, 伪重复, pseudoreplication, 统计方法审查 | RED 必触发 |
+| 71 | nature-writing | Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on | 写论文, 手稿撰写, 起草摘要, 写引言, 写讨论, 投稿信, manuscript drafting | RED 必触发 |
+| 72 | openfold3 | OpenAI4S 移植:Structure prediction using OpenFold3, an open-weights PyTorc... | openfold3 | YEL 讨论触发 |
+| 73 | paper-polish | 学术论文润色:语法/流畅度修复、语气按证据强度校准、去除AI腔、中译英投稿级改写；绝不编造数据/引用/主张 | 润色, 论文润色, 去AI腔, 去除AI味, AI味, 中译英, 翻译成英文, 语言修改, awkward wording, overclaiming, 语言润色 | RED 必触发 |
+| 74 | patent-analysis | 用户说"分析这篇专利""拆解这个专利""专利详细解读""解读专利""分析权利要求""竞品专利分析"等时触发。 | patent-analysis, patent analysis, patent | YEL 讨论触发 |
+| 75 | pdf-report-generation | PDF报告生成:分析结果/图表/表格→LaTeX/HTML→PDF报告→自动排版→可重复生成 | pdf-report-generation, pdf report generation, pdf | YEL 讨论触发 |
+| 76 | pdf-translate | 适用于: 学术论文翻译, 保留排版PDF翻译, 公式和图表保留翻译, 中英对照PDF生成 | pdf-translate, pdf translate, pdf, translate | YEL 讨论触发 |
+| 77 | pdf_reader | 当你需要 PDF 文献读取器 时触发 —— 读取 PDF 论文，提取正文、图表、表格、元数据，支持批量处理和 Markdown 转换 | pdf_reader, pdf reader, pdf, reader | YEL 讨论触发 |
+| 78 | platform-execution-pitfalls | 任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。 | platform, execution, pitfalls | YEL 讨论触发 |
+| 79 | ppt-generator | 当你需要 PPT生成 时触发 —— AI驱动的PPT生成系统，支持16:9暗色主题，自动布局，图表插入 | PPT, 幻灯片, 演示文稿, 组会, ppt-generator, ppt generator, 做PPT | RED 必触发 |
+| 80 | ppt-html | 适用于: 文献解读后生成HTML报告 —— 图文并茂的HTML文献报告生成，支持9项结构化总结+Figure展示 | ppt-html, ppt html, ppt, html | YEL 讨论触发 |
+| 81 | ppt-master | 适用于: 文献解读后生成PPT, 分析报告制作PPT —— AI驱动的SVG-PPT生成系统，多角色协作:策划→执行→质量检查→导出 | ppt-master, ppt master, ppt, master | YEL 讨论触发 |
+| 82 | pptx-generation | PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件 | pptx-generation, pptx generation, pptx | YEL 讨论触发 |
+| 83 | pre-submission-reviewer | 论文已写完、临近投稿（1周内），需要投稿前全面体检时使用。路由纪律:nature-reviewer 判科学质量（Nature五轴:原创性/重要性/技术严谨性，用户说'Nature预审/预审科学质量'走它），academic-paper-reviewer 是模拟完整同行评审（用户说'审稿/模拟审稿人'走它）… | 投稿前审查, 投稿前检查, 投前审, 查草稿, 检查草稿, 投稿前体检, 找问题, proofread, check the draft, find issues, 语法检查, 图表质量, AI腔 | RED 必触发 |
+| 84 | professional-paper-interpretation | 专业编辑视角论文解读:叙事逻辑分析 + 研究思路拆解 + 结构化写作逻辑。区别于 paper-summary 的字段导向提取，本 skill 侧重'作者为什么这样做、逻辑链是什么、文章怎么组织的'。触发词:专业编辑角度、编辑视角、研究思路、这篇文章讲了什么、帮我解读一下、这篇文章做了什么、帮我从编辑角度分析 | 专业编辑角度, 编辑视角, 研究思路, 这篇文章讲了什么, 帮我解读一下, 这篇文章做了什么, 帮我从编辑角度分析 | YEL 讨论触发 |
+| 85 | proteinmpnn | OpenAI4S 移植:Inverse-fold a protein backbone (PDB structure) into amino-a... | proteinmpnn | YEL 讨论触发 |
+| 86 | proteomics-secretome-analysis | conditioned medium secretome, supernatant proteomics | 分泌蛋白组, secretome, 条件培养基, 上清蛋白, conditioned medium | YEL 讨论触发 |
+| 87 | public-data-download | 精确下载公共组学数据集（指定物种+组织+assay类型）。不做全量调查，直接搜最佳候选并开始下载。 | public-data-download, public data download, public | YEL 讨论触发 |
+| 88 | pubmed-mesh-annotation | 用户要求给文献输出 MeSH 标签 / MeSH 主要主题词 / 语义索引标注 / 给论文打 MeSH 词时加载。核心知识:query_ncbi esummary 不含 MeSH，必须用 efetch MEDLINE 格式提取 MH 行，* 前缀 = Major Topic。 | pubmed-mesh-annotation, pubmed mesh annotation, pubmed, mesh, annotation | YEL 讨论触发 |
+| 89 | pubmed-mesh-indexing | 为论文输出官方 MeSH 主要标签（TaskA 式语义索引 benchmark） | MeSH, DeCS, 语义索引, 主要标签, mesh tags, MESINESP | YEL 讨论触发 |
+| 90 | scgpt | OpenAI4S 移植:Embed and annotate single-cell expression data with scGPT, a... | scgpt | YEL 讨论触发 |
+| 91 | scientific-figure-export | 用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。 | 图太大, 图很糊, 导出尺寸, dpi, 保存格式, PNG还是PDF, pngquant | YEL 讨论触发 |
+| 92 | scipilot-figure-skill | 用户给了一个 CSV / Excel / DataFrame 说"帮我画一下"或"用什么图好" | 柱状图, 箱线图, 散点图, 折线图, 分布图, 相关性矩阵, 画图, 数据可视化, 发表级, 作图, 出图, 画个图 | RED 必触发 |
+| 93 | scrna-cns-figure-design | CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields… | scrna-cns-figure-design, scrna cns figure design, cns | YEL 讨论触发 |
+| 94 | scrna-trajectory-analysis | [trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。 | trajectory | YEL 讨论触发 |
+| 95 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
+| 96 | user-script-figure-optimization | 用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样 | 按 nature 优化」「帮我改一下我的脚本 | YEL 讨论触发 |
+| 97 | wakeup-progress-check | 新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在… | wakeup-progress-check, wakeup progress check, wakeup, progress | YEL 讨论触发 |
+| 98 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 
 ## 09_内置 - Hermes系统 (17 skills)
 
@@ -329,7 +336,7 @@
 | 10 | split_modalities | When you need split modalities analysis | split_modalities, split modalities, split, modalities | YEL 讨论触发 |
 | 11 | unsupervised_celltype_transfer_between_scRNA_datasets | When you need unsupervised celltype transfer between scRNA datasets analysis | unsupervised, celltype, transfer, between | YEL 讨论触发 |
 
-## 11_文献搜索 - 文献/数据库 (62 skills)
+## 11_文献搜索 - 文献/数据库 (65 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -344,57 +351,60 @@
 | 9 | literature-param-extraction | 拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时 | 提取参数, 文献参数, parameter extraction, 实验参数, 参数提取 | RED 必触发 |
 | 10 | literature-preclinical | 当你需要 临床前文献提取 时触发 —— 从临床前文献提取关键发现、方法、模型、剂量。PubMed+LLM | literature-preclinical, literature preclinical, preclinical | YEL 讨论触发 |
 | 11 | literature-review | Auto-generated for literature-review | 文献综述, literature review, 综述, systematic review, 总结文献, 查文献, evidence synthesis | RED 必触发 |
-| 12 | omics-dataset-retrieval | 当你需要 组学数据集检索 (GEO/SRA) 时触发 —— GEO/SRA数据集检索和下载。元数据解析和筛选 | 公共数据, 下载数据集, GEO数据, omics-dataset-retrieval, omics dataset retrieval, 公共数据集, GEO数据集 | RED 必触发 |
-| 13 | paper-download | 当你需要 文献下载 时触发 —— 搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台 | 搜文献, 找论文, 下载论文, paper-download, paper download, 下载文献, PDF下载 | RED 必触发 |
-| 14 | paper-summary | 当你需要 AI文献总结 时触发 —— 深度AI文献解读:全文提取→结构化总结(15字段)→图表提取→报告生成 | 总结论文, 解读, summarize paper, 精读, 论文要点, 讲一下这篇 | RED 必触发 |
-| 15 | paper-translate | 当你需要 PDF翻译 时触发 —— 保留排版的PDF全文翻译，支持中英互译 | paper-translate, paper translate, translate | YEL 讨论触发 |
-| 16 | query_alphafold | When you need query alphafold analysis | query_alphafold, query alphafold, alphafold | YEL 讨论触发 |
-| 17 | query_arxiv | When you need query arxiv analysis | query_arxiv, query arxiv, arxiv | YEL 讨论触发 |
-| 18 | query_cbioportal | When you need query cbioportal analysis | query_cbioportal, query cbioportal, cbioportal | YEL 讨论触发 |
-| 19 | query_chatnt | When you need query chatnt analysis | query_chatnt, query chatnt, chatnt | YEL 讨论触发 |
-| 20 | query_chembl | When you need query chembl analysis | query_chembl, query chembl, chembl | YEL 讨论触发 |
-| 21 | query_clinicaltrials | When you need query clinicaltrials analysis | query_clinicaltrials, query clinicaltrials, clinicaltrials | YEL 讨论触发 |
-| 22 | query_clinvar | When you need query clinvar analysis | query_clinvar, query clinvar, clinvar | YEL 讨论触发 |
-| 23 | query_dailymed | When you need query dailymed analysis | query_dailymed, query dailymed, dailymed | YEL 讨论触发 |
-| 24 | query_dbsnp | When you need query dbsnp analysis | query_dbsnp, query dbsnp, dbsnp | YEL 讨论触发 |
-| 25 | query_drug_interactions | When you need query drug interactions analysis | query_drug_interactions, query drug interactions, drug, interactions | YEL 讨论触发 |
-| 26 | query_emdb | When you need query emdb analysis | query_emdb, query emdb, emdb | YEL 讨论触发 |
-| 27 | query_encode | When you need query encode analysis | query_encode, query encode, encode | YEL 讨论触发 |
-| 28 | query_ensembl | When you need query ensembl analysis | query_ensembl, query ensembl, ensembl | YEL 讨论触发 |
-| 29 | query_fda_adverse_events | When you need query fda adverse events analysis | query_fda_adverse_events, query fda adverse events, fda, adverse, events | YEL 讨论触发 |
-| 30 | query_geo | When you need query geo analysis | query_geo, query geo, geo | YEL 讨论触发 |
-| 31 | query_gnomad | When you need query gnomad analysis | query_gnomad, query gnomad, gnomad | YEL 讨论触发 |
-| 32 | query_gtopdb | When you need query gtopdb analysis | query_gtopdb, query gtopdb, gtopdb | YEL 讨论触发 |
-| 33 | query_gwas_catalog | When you need query gwas catalog analysis | query_gwas_catalog, query gwas catalog, gwas, catalog | YEL 讨论触发 |
-| 34 | query_interpro | When you need query interpro analysis | query_interpro, query interpro, interpro | YEL 讨论触发 |
-| 35 | query_iucn | When you need query iucn analysis | query_iucn, query iucn, iucn | YEL 讨论触发 |
-| 36 | query_jaspar | When you need query jaspar analysis | query_jaspar, query jaspar, jaspar | YEL 讨论触发 |
-| 37 | query_kegg | When you need query kegg analysis | query_kegg, query kegg, kegg | YEL 讨论触发 |
-| 38 | query_monarch | When you need query monarch analysis | query_monarch, query monarch, monarch | YEL 讨论触发 |
-| 39 | query_mpd | When you need query mpd analysis | query_mpd, query mpd, mpd | YEL 讨论触发 |
-| 40 | query_openfda | When you need query openfda analysis | query_openfda, query openfda, openfda | YEL 讨论触发 |
-| 41 | query_opentarget | When you need query opentarget analysis | query_opentarget, query opentarget, opentarget | YEL 讨论触发 |
-| 42 | query_paleobiology | When you need query paleobiology analysis | query_paleobiology, query paleobiology, paleobiology | YEL 讨论触发 |
-| 43 | query_pdb | When you need query pdb analysis | query_pdb, query pdb, pdb | YEL 讨论触发 |
-| 44 | query_pdb_identifiers | When you need query pdb identifiers analysis | query_pdb_identifiers, query pdb identifiers, pdb, identifiers | YEL 讨论触发 |
-| 45 | query_pride | When you need query pride analysis | query_pride, query pride, pride | YEL 讨论触发 |
-| 46 | query_pubchem | When you need query pubchem analysis | query_pubchem, query pubchem, pubchem | YEL 讨论触发 |
-| 47 | query_pubmed | When you need query pubmed analysis | query_pubmed, query pubmed, pubmed | YEL 讨论触发 |
-| 48 | query_quickgo | When you need query quickgo analysis | query_quickgo, query quickgo, quickgo | YEL 讨论触发 |
-| 49 | query_reactome | When you need query reactome analysis | query_reactome, query reactome, reactome | YEL 讨论触发 |
-| 50 | query_regulomedb | When you need query regulomedb analysis | query_regulomedb, query regulomedb, regulomedb | YEL 讨论触发 |
-| 51 | query_remap | When you need query remap analysis | query_remap, query remap, remap | YEL 讨论触发 |
-| 52 | query_scholar | When you need query scholar analysis | query_scholar, query scholar, scholar | YEL 讨论触发 |
-| 53 | query_stringdb | When you need query stringdb analysis | query_stringdb, query stringdb, stringdb | YEL 讨论触发 |
-| 54 | query_synapse | When you need query synapse analysis | query_synapse, query synapse, synapse | YEL 讨论触发 |
-| 55 | query_ucsc | When you need query ucsc analysis | query_ucsc, query ucsc, ucsc | YEL 讨论触发 |
-| 56 | query_unichem | When you need query unichem analysis | query_unichem, query unichem, unichem | YEL 讨论触发 |
-| 57 | query_uniprot | When you need query uniprot analysis | query_uniprot, query uniprot, uniprot | YEL 讨论触发 |
-| 58 | query_worms | When you need query worms analysis | query_worms, query worms, worms | YEL 讨论触发 |
-| 59 | research-plan | 用户询问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"时自动触发 | 技术路线, 分析路线, 怎么分析, 研究方案, research plan, research-plan, 研究计划, 分析方案 | RED 必触发 |
-| 60 | search_google | When you need search google analysis | search_google, search google, search, google | YEL 讨论触发 |
-| 61 | translate-book | 用户要求翻译整本书、翻译大段内容、把这本书翻译成中文时使用；需提供文件路径（PDF/DOCX/EPUB）和目标语言 | 翻译整本书, 整书翻译, 翻译这本书, 整本翻译, 把这本书翻译, 翻译全书, 全书翻译, 翻译大段, 大段内容翻译, 大段翻译, 这本书翻译成, translate book, translate the book, translate this book, book translation, 整本书翻成 | RED 必触发 |
-| 62 | web-research | 当你需要 网络调研 时触发 —— 网络搜索和调研，获取最新信息，综合多个来源生成报告 | web-research, web research, web, 网络调研 | YEL 讨论触发 |
+| 12 | nature-citation | Find and verify Nature/CNS-family literature supporting manuscript claims, with claim-to-source mapping and reference-manager export. Use for Nature系列引用、CNS支撑文献、分段补引用 when this journal scope is reques | 找引用, 补引用, 引用匹配, 论点找文献, 引用溯源, claim引用, citation | RED 必触发 |
+| 13 | nature-literature-pipeline | Complete automated literature discovery pipeline: multi-source search → six-dimension scoring → fine reading → formatted delivery → archival. Combines a configurable engine with daily cron-driven appl | 文献流水线, 文献追踪, 每日文献, 文献筛选, 文献打分, 批量筛文献, 文献推送 | RED 必触发 |
+| 14 | nature-ref-verifier | 对学术文献逐条执行多源交叉验证，逐字段对比作者、标题、年份、卷期、页码 标记卷年/DOI年冲突、作者顺序异常、页码偏差等问题，输出结构化验证报告。 可批量处理整篇论文/开题报告的参考文献列表，也可单条校验，支持与 Zotero 同步修正。 | 核对参考文献, 参考文献核对, 校验文献, 文献验证, 引用核对, 参考文献错误, DOI校验, reference check | RED 必触发 |
+| 15 | omics-dataset-retrieval | 当你需要 组学数据集检索 (GEO/SRA) 时触发 —— GEO/SRA数据集检索和下载。元数据解析和筛选 | 公共数据, 下载数据集, GEO数据, omics-dataset-retrieval, omics dataset retrieval, 公共数据集, GEO数据集 | RED 必触发 |
+| 16 | paper-download | 当你需要 文献下载 时触发 —— 搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台 | 搜文献, 找论文, 下载论文, paper-download, paper download, 下载文献, PDF下载 | RED 必触发 |
+| 17 | paper-summary | 当你需要 AI文献总结 时触发 —— 深度AI文献解读:全文提取→结构化总结(15字段)→图表提取→报告生成 | 总结论文, 解读, summarize paper, 精读, 论文要点, 讲一下这篇 | RED 必触发 |
+| 18 | paper-translate | 当你需要 PDF翻译 时触发 —— 保留排版的PDF全文翻译，支持中英互译 | paper-translate, paper translate, translate | YEL 讨论触发 |
+| 19 | query_alphafold | When you need query alphafold analysis | query_alphafold, query alphafold, alphafold | YEL 讨论触发 |
+| 20 | query_arxiv | When you need query arxiv analysis | query_arxiv, query arxiv, arxiv | YEL 讨论触发 |
+| 21 | query_cbioportal | When you need query cbioportal analysis | query_cbioportal, query cbioportal, cbioportal | YEL 讨论触发 |
+| 22 | query_chatnt | When you need query chatnt analysis | query_chatnt, query chatnt, chatnt | YEL 讨论触发 |
+| 23 | query_chembl | When you need query chembl analysis | query_chembl, query chembl, chembl | YEL 讨论触发 |
+| 24 | query_clinicaltrials | When you need query clinicaltrials analysis | query_clinicaltrials, query clinicaltrials, clinicaltrials | YEL 讨论触发 |
+| 25 | query_clinvar | When you need query clinvar analysis | query_clinvar, query clinvar, clinvar | YEL 讨论触发 |
+| 26 | query_dailymed | When you need query dailymed analysis | query_dailymed, query dailymed, dailymed | YEL 讨论触发 |
+| 27 | query_dbsnp | When you need query dbsnp analysis | query_dbsnp, query dbsnp, dbsnp | YEL 讨论触发 |
+| 28 | query_drug_interactions | When you need query drug interactions analysis | query_drug_interactions, query drug interactions, drug, interactions | YEL 讨论触发 |
+| 29 | query_emdb | When you need query emdb analysis | query_emdb, query emdb, emdb | YEL 讨论触发 |
+| 30 | query_encode | When you need query encode analysis | query_encode, query encode, encode | YEL 讨论触发 |
+| 31 | query_ensembl | When you need query ensembl analysis | query_ensembl, query ensembl, ensembl | YEL 讨论触发 |
+| 32 | query_fda_adverse_events | When you need query fda adverse events analysis | query_fda_adverse_events, query fda adverse events, fda, adverse, events | YEL 讨论触发 |
+| 33 | query_geo | When you need query geo analysis | query_geo, query geo, geo | YEL 讨论触发 |
+| 34 | query_gnomad | When you need query gnomad analysis | query_gnomad, query gnomad, gnomad | YEL 讨论触发 |
+| 35 | query_gtopdb | When you need query gtopdb analysis | query_gtopdb, query gtopdb, gtopdb | YEL 讨论触发 |
+| 36 | query_gwas_catalog | When you need query gwas catalog analysis | query_gwas_catalog, query gwas catalog, gwas, catalog | YEL 讨论触发 |
+| 37 | query_interpro | When you need query interpro analysis | query_interpro, query interpro, interpro | YEL 讨论触发 |
+| 38 | query_iucn | When you need query iucn analysis | query_iucn, query iucn, iucn | YEL 讨论触发 |
+| 39 | query_jaspar | When you need query jaspar analysis | query_jaspar, query jaspar, jaspar | YEL 讨论触发 |
+| 40 | query_kegg | When you need query kegg analysis | query_kegg, query kegg, kegg | YEL 讨论触发 |
+| 41 | query_monarch | When you need query monarch analysis | query_monarch, query monarch, monarch | YEL 讨论触发 |
+| 42 | query_mpd | When you need query mpd analysis | query_mpd, query mpd, mpd | YEL 讨论触发 |
+| 43 | query_openfda | When you need query openfda analysis | query_openfda, query openfda, openfda | YEL 讨论触发 |
+| 44 | query_opentarget | When you need query opentarget analysis | query_opentarget, query opentarget, opentarget | YEL 讨论触发 |
+| 45 | query_paleobiology | When you need query paleobiology analysis | query_paleobiology, query paleobiology, paleobiology | YEL 讨论触发 |
+| 46 | query_pdb | When you need query pdb analysis | query_pdb, query pdb, pdb | YEL 讨论触发 |
+| 47 | query_pdb_identifiers | When you need query pdb identifiers analysis | query_pdb_identifiers, query pdb identifiers, pdb, identifiers | YEL 讨论触发 |
+| 48 | query_pride | When you need query pride analysis | query_pride, query pride, pride | YEL 讨论触发 |
+| 49 | query_pubchem | When you need query pubchem analysis | query_pubchem, query pubchem, pubchem | YEL 讨论触发 |
+| 50 | query_pubmed | When you need query pubmed analysis | query_pubmed, query pubmed, pubmed | YEL 讨论触发 |
+| 51 | query_quickgo | When you need query quickgo analysis | query_quickgo, query quickgo, quickgo | YEL 讨论触发 |
+| 52 | query_reactome | When you need query reactome analysis | query_reactome, query reactome, reactome | YEL 讨论触发 |
+| 53 | query_regulomedb | When you need query regulomedb analysis | query_regulomedb, query regulomedb, regulomedb | YEL 讨论触发 |
+| 54 | query_remap | When you need query remap analysis | query_remap, query remap, remap | YEL 讨论触发 |
+| 55 | query_scholar | When you need query scholar analysis | query_scholar, query scholar, scholar | YEL 讨论触发 |
+| 56 | query_stringdb | When you need query stringdb analysis | query_stringdb, query stringdb, stringdb | YEL 讨论触发 |
+| 57 | query_synapse | When you need query synapse analysis | query_synapse, query synapse, synapse | YEL 讨论触发 |
+| 58 | query_ucsc | When you need query ucsc analysis | query_ucsc, query ucsc, ucsc | YEL 讨论触发 |
+| 59 | query_unichem | When you need query unichem analysis | query_unichem, query unichem, unichem | YEL 讨论触发 |
+| 60 | query_uniprot | When you need query uniprot analysis | query_uniprot, query uniprot, uniprot | YEL 讨论触发 |
+| 61 | query_worms | When you need query worms analysis | query_worms, query worms, worms | YEL 讨论触发 |
+| 62 | research-plan | 用户询问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"时自动触发 | 技术路线, 分析路线, 怎么分析, 研究方案, research plan, research-plan, 研究计划, 分析方案 | RED 必触发 |
+| 63 | search_google | When you need search google analysis | search_google, search google, search, google | YEL 讨论触发 |
+| 64 | translate-book | 用户要求翻译整本书、翻译大段内容、把这本书翻译成中文时使用；需提供文件路径（PDF/DOCX/EPUB）和目标语言 | 翻译整本书, 整书翻译, 翻译这本书, 整本翻译, 把这本书翻译, 翻译全书, 全书翻译, 翻译大段, 大段内容翻译, 大段翻译, 这本书翻译成, translate book, translate the book, translate this book, book translation, 整本书翻成 | RED 必触发 |
+| 65 | web-research | 当你需要 网络调研 时触发 —— 网络搜索和调研，获取最新信息，综合多个来源生成报告 | web-research, web research, web, 网络调研 | YEL 讨论触发 |
 
 ## 12_分子生物学 - 分子克隆 (21 skills)
 

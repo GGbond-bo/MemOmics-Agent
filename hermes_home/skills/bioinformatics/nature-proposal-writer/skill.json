@@ -1,0 +1,32 @@
+{
+  "id": "nature-proposal-writer",
+  "name": "researchwrite — proposal-first 科研写作 pipeline",
+  "category": "general",
+  "language": "Python",
+  "description": "Compose, revise, or audit research proposals, opening reports, and research plans from supporting evidence. Use for 研究计划、开题报告、科研项目申请书. Invoked as researchwrite for compatibility; use nature-writing fo",
+  "starting_prompt": "使用 researchwrite — proposal-first 科研写作 pipeline 进行分析",
+  "source_dir": "skills/bioinformatics/nature-proposal-writer",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "research",
+    "writing",
+    "proposal",
+    "revision",
+    "qa",
+    "multi-agent"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "开题报告",
+    "申报书",
+    "标书",
+    "研究计划",
+    "立项依据",
+    "基金申请",
+    "proposal"
+  ],
+  "when_to_use": "Compose, revise, or audit research proposals, opening reports, and research plans from supporting evidence. Use for 研究计划、开题报告、科研项目申请书. Invoked as researchwrite for compatibility; use nature-writing fo"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "nature-literature-pipeline",
+  "name": "Nature Literature Pipeline",
+  "category": "literature",
+  "language": "Python",
+  "description": "Complete automated literature discovery pipeline: multi-source search → six-dimension scoring → fine reading → formatted delivery → archival. Combines a configurable engine with daily cron-driven appl",
+  "starting_prompt": "使用 Nature Literature Pipeline 进行分析",
+  "source_dir": "skills/bioinformatics/nature-literature-pipeline",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "research",
+    "literature",
+    "pipeline",
+    "cron",
+    "automation",
+    "discovery"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "文献流水线",
+    "文献追踪",
+    "每日文献",
+    "文献筛选",
+    "文献打分",
+    "批量筛文献",
+    "文献推送"
+  ],
+  "when_to_use": "Complete automated literature discovery pipeline: multi-source search → six-dimension scoring → fine reading → formatted delivery → archival. Combines a configurable engine with daily cron-driven appl"
+}

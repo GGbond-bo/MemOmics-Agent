@@ -1,0 +1,30 @@
+{
+  "id": "nature-experiment-log",
+  "name": "experiment-log — 实验日志标准化",
+  "category": "general",
+  "language": "Python",
+  "description": "标准化实验日志记录——直接上传或读取本地图片、语音和文字，产出带 YAML frontmatter 的 Markdown；可选集成飞书 CLI 与 Obsidian。",
+  "starting_prompt": "使用 experiment-log — 实验日志标准化 进行分析",
+  "source_dir": "skills/bioinformatics/nature-experiment-log",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "research",
+    "experiment",
+    "logging",
+    "feishu",
+    "obsidian",
+    "automation"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "实验日志",
+    "实验记录",
+    "记录实验",
+    "日志模板",
+    "语音记录"
+  ],
+  "when_to_use": "标准化实验日志记录——直接上传或读取本地图片、语音和文字，产出带 YAML frontmatter 的 Markdown；可选集成飞书 CLI 与 Obsidian。"
+}

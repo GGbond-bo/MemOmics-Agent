@@ -291,7 +291,9 @@ def auto_register_to_index(skill_dir: str) -> bool:
     
     # Update section count
     old_header = index[section_pos:index.find('\n', section_pos)]
-    import re
+    # 这里曾有一句函数内 import re：它会让 re 成为整个函数的局部名，于是上面
+    # re.search(...) 在赋值前就抛 UnboundLocalError —— 主重建路径与下面的兜底追加
+    # 一起失效（register_skill 直接抛异常）。模块顶部第 7 行已 import re，删掉即可。
     count_match = re.search(r'\((\d+) skills\)', old_header)
     if count_match:
         new_count = int(count_match.group(1)) + 1

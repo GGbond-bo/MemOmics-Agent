@@ -1,0 +1,25 @@
+{
+  "id": "nature-data",
+  "name": "Nature Data Availability — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "Draft or audit manuscript Data/Code Availability statements, dataset access routes, repository plans, and FAIR metadata. Use for 数据可用性声明、数据共享、数据仓库选择 and dataset citations; not general data cleaning or",
+  "starting_prompt": "使用 Nature Data Availability — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-data",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "数据可用性",
+    "数据可得性声明",
+    "代码可用性",
+    "数据仓储",
+    "登录号",
+    "FAIR",
+    "availability statement"
+  ],
+  "when_to_use": "Draft or audit manuscript Data/Code Availability statements, dataset access routes, repository plans, and FAIR metadata. Use for 数据可用性声明、数据共享、数据仓库选择 and dataset citations; not general data cleaning or"
+}

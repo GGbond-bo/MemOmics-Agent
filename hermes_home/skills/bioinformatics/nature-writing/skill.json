@@ -1,0 +1,25 @@
+{
+  "id": "nature-writing",
+  "name": "Nature-Style Scientific Writing — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on",
+  "starting_prompt": "使用 Nature-Style Scientific Writing — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-writing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "写论文",
+    "手稿撰写",
+    "起草摘要",
+    "写引言",
+    "写讨论",
+    "投稿信",
+    "manuscript drafting"
+  ],
+  "when_to_use": "Draft or restructure scientific manuscript arguments, sections, and initial-submission materials from author-provided evidence. Use for 论文写作、章节起草、论证重构、正文压缩、首次投稿材料. Use nature-polishing for language-on"
+}

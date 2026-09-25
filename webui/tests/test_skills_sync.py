@@ -127,3 +127,35 @@ def test_turn_end_hook_is_wired():
     with open(server_py, encoding="utf-8") as f:
         src = f.read()
     assert "auto_register.sync_new_skills()" in src
+
+def test_register_skill_writes_index_row(sandbox):
+    """回归（2026-09 实测 Bug）：auto_register_to_index 里藏着一句函数内 import re。
+
+    函数内 import 会让 re 成为**整个函数**的局部名，于是重建路径里的 re.search(...)
+    在赋值前就抛 UnboundLocalError，兜底追加路径（同样用 re.search）也一起炸。
+    后果：skill.json 生成成功、SKILLS_INDEX.md 永远不落行 —— 走「注册技能」装进来的
+    技能（本次 10 个 nature-* 就是走这条路）模型永远看不到，且异常信息只出现在日志里。
+    """
+    skills_dir, index = sandbox
+    _write_skill(str(skills_dir), "delta-skill")
+    _write_index(str(index), [])
+
+    res = auto_register.register_skill("delta-skill", ["甲触发", "乙触发"])
+    assert res["ok"] is True, res
+    assert "SKILLS_INDEX registered" in res["actions"], res
+    assert "delta-skill" in index.read_text(encoding="utf-8"), "注册后索引里必须有行"
+
+
+def test_register_to_index_never_uses_function_local_re(sandbox):
+    """同一个 Bug 的白盒断言：auto_register_to_index 函数体内不许再 import re。"""
+    import ast
+
+    src = open(auto_register.__file__, encoding="utf-8").read()
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "auto_register_to_index")
+    local_imports = [n for n in ast.walk(fn)
+                     if isinstance(n, (ast.Import, ast.ImportFrom))]
+    names = [a.name for n in local_imports for a in n.names]
+    assert "re" not in names, "函数内 import re 会让 re 变成局部名，整条注册路径失效"
+
