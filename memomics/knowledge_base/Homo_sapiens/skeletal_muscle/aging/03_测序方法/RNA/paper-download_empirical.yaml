@@ -1,0 +1,32 @@
+type: kb_entry
+name: paper-download_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-25 18:47
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper-download_empirical
+content: 'skill: paper-download
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  doi=10.1038/s41586-024-07348-6; UA=Chrome/124; url=https://www.nature.com/articles/s41586-024-07348-6.pdf
+
+
+  result_summary:
+
+  download_pdf 三策略全败(europepmc_pdf_render/unpaywall/doi_redirect 均 httpx+urllib+scrapling
+  失败)。根因定位: ①Unpaywall 用测试邮箱被拒(422 Please use your own email address) ②europepmc.org/articles/PMCxxx?pdf=render
+  返回 403 Cloudflare ③NCBI oa.fcgi 路径已 404 失效。成功路径: EuropePMC search 取 PMCID→fullTextXML
+  200(确认 OA)→ 直接 curl Nature OA PDF(https://www.nature.com/articles/<slug>.pdf, 带
+  Chrome UA) http=200 size=63,207,993 真 PDF。fitz 验证 43 页 60.3MB 首页标题正确。'
+evidence: 'record_run(paper-download): download_pdf 三策略全败(europepmc_pdf_render/unpaywall/doi_redirect
+  均 httpx+urllib+scrapling 失败)。根因定位: ①Unpaywall 用测试邮箱被拒(422 Please use your own email
+  address) ②europepmc.org/articles/PMCxxx?pdf=render 返回'

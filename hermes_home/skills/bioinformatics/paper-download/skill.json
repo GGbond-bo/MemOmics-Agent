@@ -38,10 +38,66 @@
   ],
   "detailed_description": "搜索并下载学术论文PDF，支持arXiv/PubMed/bioRxiv等平台\n\n分析步骤:\n  - 搜索论文: 根据关键词搜索学术数据库\n  - 下载PDF: 下载论文PDF到work/papers/目录",
   "when_to_use": "当你需要 文献下载 时触发",
-  "proven_params": [],
-  "proven_script": null,
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "bone_marrow",
+      "direction": "multiple_myeloma",
+      "script": "europepmc_fullTextXML_figure_locate.sh",
+      "params": "PMCID=PMC12858409; endpoint=https://www.ebi.ac.uk/europepmc/webservices/rest/{PMCID}/fullTextXML; grep xlink:href",
+      "date": "2026-09-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Europe PMC fullTextXML 拉取成功(277KB)，从 xlink:href 提取到全部图件文件名，Figure 2 = 43018_2025_1072_Fig2_HTML.jpg (+.gif)。DOI 10.1038/s43018-025-01072-4, Nature Cancer 2026, PMID 41514053。"
+    },
+    {
+      "species": "human",
+      "tissue": "bone_marrow",
+      "direction": "multiple_myeloma",
+      "script": "springernature_figure_download.sh",
+      "params": "curl -L -A \"<Chrome UA>\" -H \"Referer: https://www.nature.com/articles/s43018-025-01072-4/figures/2\" https://media.springernature.com/full/springer-static/image/art%3A10.1038%2Fs43018-025-01072-4/MediaObjects/43018_2025_1072_Fig2_HTML.png",
+      "date": "2026-09-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Fig2 下载成功: fig2_springer.png 2,230,697 bytes, PNG 2163x2698 RGBA (http 200 image/png)。关键经验: media.springernature.com 图件必须带浏览器 User-Agent + nature.com Referer 才返回真实文件；不加 UA 时返回 200 但 0 字节。NCBI PMC bin "
+    },
+    {
+      "species": "human",
+      "tissue": "bone_marrow",
+      "direction": "multiple_myeloma",
+      "script": "figure_png_to_pdf_300dpi.py",
+      "params": "PIL RGB 转换 + dpi=300 保存 PNG; reportlab canvas pagesize=(w/300*inch, h/300*inch) drawImage 全页嵌入 → PDF; 图注从 Europe PMC fullTextXML <fig id=\"Fig2\"> 提取",
+      "date": "2026-09-14",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "产出 3 文件: Fig2_single_cell_immune_atlas_MM.png (1,988,586 B, 2163x2698), .pdf (1,970,689 B, 页面 7.21x8.99 in @300dpi), Fig2_caption.txt (3,315 B, 2,879 字图注含 a–l 面板)。健康检查 non-white 比例 0.2295 / 均值亮度 234.7"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "nature_oa_pdf_curl.sh",
+      "params": "doi=10.1038/s41586-024-07348-6; UA=Chrome/124; url=https://www.nature.com/articles/s41586-024-07348-6.pdf",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "download_pdf 三策略全败(europepmc_pdf_render/unpaywall/doi_redirect 均 httpx+urllib+scrapling 失败)。根因定位: ①Unpaywall 用测试邮箱被拒(422 Please use your own email address) ②europepmc.org/articles/PMCxxx?pdf=render 返回"
+    }
+  ],
+  "proven_script": "nature_oa_pdf_curl.sh",
   "error_count": 0,
-  "success_count": 0,
+  "success_count": 4,
+  "user_prefs": {
+    "last_used_script": "nature_oa_pdf_curl.sh"
+  },
   "trigger_keywords": [
     "搜文献",
     "找论文",

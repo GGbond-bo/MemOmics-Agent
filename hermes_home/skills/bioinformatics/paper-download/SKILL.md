@@ -53,6 +53,26 @@ prerequisites:
 
 > 详细步骤 + 实例见 `references/preprint-fallback.md`
 
+## Nature/OA 直连 PDF（download_pdf 全败时的首选，比预印本回退更快）
+
+实测 2026-09-25（DOI 10.1038/s41586-024-07348-6）：`download_pdf` 三策略全败，但文章本身是 **OA**，可直接 curl 到正式发表版 PDF（43 页 60.3MB），无需降级到预印本。
+
+1. **先判 OA**（别急着放弃）：EuropePMC search 拿到 PMCID，再试 fullTextXML —— **返回 200 = PMC 有全文 = 大概率 OA**
+   ```
+   curl -s "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:%22<DOI>%22&format=json&resultType=core"
+   curl -s -o fc.xml -w "http=%{http_code}\n" "https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML"
+   ```
+   `fc.xml` 里 `xlink:href="41586_2024_Article_7348.pdf"` 就是官方 PDF 文件名（拿到即知道该刊确实提供 PDF）。
+2. **直连 Nature 系 OA PDF**（Springer Nature 全平台同规律）：
+   ```
+   curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+     -H "Accept: application/pdf,*/*" --max-time 150 -o paper.pdf \
+     "https://www.nature.com/articles/<DOI-slug>.pdf"      # 注意 .pdf 直接后缀，不是 /pdf
+   ```
+   ⛔ 不带 UA 会拿到 HTML 或 403；实测带 UA → `http=200 type=application/pdf size=63,207,993`。
+3. **验证页数用 fitz 不用 file**：`file` 报 30 页、`fitz.open().page_count` 实为 43 页 —— 以 fitz 为准（本 skill 已有此坑，再次实测确认）。
+4. 下载后（非 download_pdf 渠道）**手动 `literature_import(paths=[...])`** 入库，才会登记 DOI/期刊/年份 + 写入 references.bib/ris。
+
 ## Figure Download（抓取已发表论文的单张 Figure / Extended Data）
 
 适用：用户要"论文的 Figure N" / "把这张图下载下来" / "figure2 给我 pdf"。
@@ -80,7 +100,10 @@ prerequisites:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| download_pdf 全部策略失败 (paywall/Cloudflare) | 正式发表版需订阅或被反爬拦截 | 执行 **Preprint Fallback** → 从 bioRxiv 下载预印本 |
+| download_pdf 全部策略失败 (paywall/Cloudflare) | 正式发表版需订阅或被反爬拦截 | ① **先判 OA**：EuropePMC fullTextXML 返 200 → 走 **Nature/OA 直连 PDF**（见上节，正式版优先）；② 非 OA → 执行 **Preprint Fallback** → 从 bioRxiv 下载预印本 |
+| Unpaywall 返回 422 `Please use your own email address` | 用了 `test@example.com` 之类占位邮箱 | 换成真实邮箱重试，或直接跳过 Unpaywall 走 PMC fullTextXML 判 OA |
+| `europepmc.org/articles/<PMCID>?pdf=render` 返回 403 | EuropePMC 前端被 Cloudflare 拦（脚本无头请求） | 不要在此重试；改用 nature.com/pmc 直连或预印本 |
+| `www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi` 返回 404 | NCBI 该接口路径已变更/下线 | 改用 EuropePMC fullTextXML 判 OA + Nature 直连取 PDF |
 | file 命令显示 PDF 仅 3 页但实际 37 页 | file(1) 仅检查文件头，Safari PDF header 误导 | 用 `fitz.open().page_count` 验证实际页数 |
 | EuropePMC PDF render 返回 404 | 文章为订阅制，PMC 未托管 PDF | 走 Preprint Fallback 流程 |
 | Springer 图件返回 200 但 size 0 字节 | 缺浏览器 User-Agent / Referer | 补 `-A "<Chrome UA>" -H "Referer: https://www.nature.com/..."` 重下，核对 `%{size_download}` |
@@ -103,6 +126,7 @@ prerequisites:
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | europepmc_fullTextXML_figure_locate.sh | - | - |  |
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | springernature_figure_download.sh | - | - |  |
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | figure_png_to_pdf_300dpi.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | nature_oa_pdf_curl.sh | - | - |  |
 ## References
 
 - Source: MemOmics built-in (v1.1.0)
