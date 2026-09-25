@@ -2248,6 +2248,8 @@ function setStatus(text, color) {
 
 // === 消息处理 ===
 function handleMessage(msg) {
+  // 运行中每 5 秒把画面落一次盘 → 跑到一半刷新，交互框也基本原样回来
+  if (_viewIsStreamEvent(msg.type)) _viewRunStart();
 
   // === 后台任务推送（面板订阅后由服务端按变化推，不用轮询）===
   if (msg.type === 'tasks') {
@@ -6272,6 +6274,7 @@ function batchDeleteSelected() {
   ids.forEach(function(sid) {
     fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(function() {
       done++;
+      _dropViewSnapshot(sid);   // 会话删了，画面快照一起清掉
       _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
       if (currentSid === sid) { currentSid = null; delCurrent = true; }
       if (done === ids.length) {
@@ -6351,6 +6354,7 @@ function renderSessionList(sessions) {
 function deleteSession(sid) {
   if (!confirm('确定删除这个会话吗？\n将永久删除：会话消息与记录、agent 资源、结果目录（results/ 下该会话的全部分析数据）。\n此操作不可恢复！')) return;
   fetch('/api/sessions/' + sid, { method: 'DELETE' }).then(r => r.json()).then(function() {
+    _dropViewSnapshot(sid);   // 会话删了，画面快照一起清掉
     // 立即从本地移除，再同步服务器（避免空响应 guard 阻止更新）
     _allSessions = _allSessions.filter(function(s) { return s.id !== sid; });
     if (currentSid === sid) {
@@ -6483,14 +6487,23 @@ function _snapshotCurrentSession() {
   cache.runningSid = _currentRunningSid;
   cache.streamingAssistant = !!(currentAssistantEl && currentBubble);
   cache.scrollTop = messagesEl.scrollTop;
+  // 刷新恢复用：记下画面里有几条消息 —— 服务器没有更多消息时就原样保留这份画面
+  cache.msgCount = messagesEl.querySelectorAll('.message').length;
+  _persistViewSoon(currentSid);
 }
 
 function _restoreSessionSnapshot(cache) {
   if (!cache || !cache.hasSnapshot) return false;
   var messagesEl = document.getElementById('messages');
   messagesEl.innerHTML = cache.messageHtml || '';
+  var _htmlOnAssign = messagesEl.innerHTML;   // 还原瞬间的画面（自检用）
   fullText = cache.fullText || '';
   reasoningText = cache.reasoningText || '';
+  if (!reasoningText) {
+    // 记录里没带思考全文（被缩水过）→ 从还原出来的 💭 行里取，保证"展开 · N 字"和展开内容对得上
+    var rc = messagesEl.querySelector('.reasoning-block .reasoning-content');
+    if (rc && rc.textContent) reasoningText = rc.textContent;
+  }
   // 💭 行随 messageHtml 一起还原（含"展开/收起"状态），这里不用再动它
   progressItems = cache.items.slice();
   progressTimelineEl = messagesEl.querySelector('.progress-timeline');
@@ -6503,6 +6516,20 @@ function _restoreSessionSnapshot(cache) {
   }
   messagesEl.scrollTop = cache.scrollTop || messagesEl.scrollHeight;
   initMermaid();
+  // 自检（"刷新后原封不动"的证据）：还原出来的画面和存下来的快照是不是逐字节一致
+  try {
+    window.__memomicsViewRestore = {
+      sid: currentSid, ts: Date.now(), from: cache.fromPersist ? 'persist' : 'memory',
+      recLen: (cache.messageHtml || '').length,
+      byteEqualOnAssign: _htmlOnAssign === (cache.messageHtml || ''),
+      restoredLen: messagesEl.innerHTML.length,
+      byteEqual: messagesEl.innerHTML === (cache.messageHtml || ''),
+      msgs: messagesEl.querySelectorAll('.message').length,
+      reasoning: messagesEl.querySelectorAll('.reasoning-block').length,
+      tools: messagesEl.querySelectorAll('.tool-block').length,
+      scrollTop: messagesEl.scrollTop, scrollH: messagesEl.scrollHeight
+    };
+  } catch (e) {}
   return true;
 }
 
@@ -6512,6 +6539,317 @@ function _drainSessionEvents(cache, sid) {
   events.forEach(function(event) { handleMessage(event); });
   _snapshotCurrentSession();
 }
+
+// === 刷新后"原封不动"恢复交互框（2026-09-25）===
+// 用户要求：刷新之后，交互框里已经展示过的东西要原封不动地保留和展示。
+// 做法：把每个会话的交互框渲染快照持久化 —— 已经展示过的 💭 思考行、🔧 工具块、
+// 📋 进度时间线、图表/辩论卡片、滚动位置全在 messageHtml 里，整块还原；
+// 服务器没有更多消息时不再用 HTTP 历史覆盖它（覆盖就会把这些丢掉）。
+// 三层：内存快照（同页面切会话）→ localStorage 热备（关页面瞬间同步写，刷新首选）
+// → IndexedDB（超大画面/换浏览器/长期保留）。任何一层失败都只是退化成旧行为，不报错。
+var _VIEW_DB = 'memomics_view_db', _VIEW_DB_VER = 1, _VIEW_STORE = 'views';
+var _VIEW_KEEP = 8;                        // 最多保留 8 个会话的画面快照
+var _VIEW_TTL_MS = 7 * 24 * 3600 * 1000;   // 7 天没动过就丢弃
+var _VIEW_HOT_KEY = 'memomics_view_hot_';
+var _VIEW_HOT_MAX = 3000000;               // localStorage 热备单会话上限（配额实测约 4M 字符）
+var _viewDbPromise = null, _viewWriteTimer = null, _viewRunTimer = null, _viewLastLen = -1;
+
+// 等 IndexedDB 里的画面快照落地再渲染（没有在等就直接跑）
+function _afterViewReady(pending, fn) {
+  if (pending && typeof pending.then === 'function') return pending.then(fn, fn);
+  return fn();
+}
+
+function _viewDbOpen() {
+  if (_viewDbPromise) return _viewDbPromise;
+  _viewDbPromise = new Promise(function(resolve, reject) {
+    if (typeof indexedDB === 'undefined' || !indexedDB) { reject(new Error('no-idb')); return; }
+    var req = indexedDB.open(_VIEW_DB, _VIEW_DB_VER);
+    req.onupgradeneeded = function() {
+      var db = req.result;
+      if (!db.objectStoreNames.contains(_VIEW_STORE)) db.createObjectStore(_VIEW_STORE, { keyPath: 'sid' });
+    };
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror = function() { reject(req.error || new Error('idb-open-failed')); };
+  });
+  return _viewDbPromise;
+}
+
+function _viewDbPut(rec) {
+  return _viewDbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction(_VIEW_STORE, 'readwrite');
+      tx.objectStore(_VIEW_STORE).put(rec);
+      tx.oncomplete = function() { resolve(true); };
+      tx.onerror = function() { reject(tx.error || new Error('idb-put-failed')); };
+      tx.onabort = function() { reject(tx.error || new Error('idb-put-aborted')); };
+    });
+  });
+}
+
+function _viewDbGet(sid) {
+  return _viewDbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction(_VIEW_STORE, 'readonly');
+      var rq = tx.objectStore(_VIEW_STORE).get(sid);
+      rq.onsuccess = function() { resolve(rq.result || null); };
+      rq.onerror = function() { reject(rq.error || new Error('idb-get-failed')); };
+    });
+  });
+}
+
+function _viewDbAll() {
+  return _viewDbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction(_VIEW_STORE, 'readonly');
+      var rq = tx.objectStore(_VIEW_STORE).getAll();
+      rq.onsuccess = function() { resolve(rq.result || []); };
+      rq.onerror = function() { reject(rq.error || new Error('idb-all-failed')); };
+    });
+  });
+}
+
+function _viewDbDelete(sid) {
+  return _viewDbOpen().then(function(db) {
+    return new Promise(function(resolve) {
+      var tx = db.transaction(_VIEW_STORE, 'readwrite');
+      tx.objectStore(_VIEW_STORE).delete(sid);
+      tx.oncomplete = function() { resolve(true); };
+      tx.onerror = function() { resolve(false); };
+    });
+  }).catch(function() { return false; });
+}
+
+// 只留最新 _VIEW_KEEP 个，过期的直接丢（防止无限占盘）
+function _viewEvict() {
+  return _viewDbAll().then(function(list) {
+    list.sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+    var now = Date.now();
+    var dead = list.filter(function(r, i) { return i >= _VIEW_KEEP || (now - (r.ts || 0)) > _VIEW_TTL_MS; });
+    return Promise.all(dead.map(function(r) { return _viewDbDelete(r.sid); }));
+  }).catch(function() {});
+}
+
+// progressItems 里可能夹着 DOM 引用（运行中加进去的），那样 JSON.stringify 和
+// IndexedDB 的结构化克隆都会抛异常 → 快照静默丢失。这里只留能安全序列化的那些。
+function _viewSafeItems(items) {
+  var out = [];
+  (items || []).slice(0, 400).forEach(function(it) {
+    try {
+      var s = JSON.stringify(it);
+      if (s && s.length < 4000) out.push(JSON.parse(s));
+    } catch (e) {}
+  });
+  return out;
+}
+
+// 从内存快照组装持久化记录（running 故意不存：还在不在跑由服务器说了算，别让旧快照锁死界面）
+function _viewRecord(sid) {
+  var cache = _sessionProgressCache[sid];
+  if (!cache || !cache.hasSnapshot || !cache.messageHtml) return null;
+  return {
+    v: 1, sid: sid, ts: Date.now(),
+    html: cache.messageHtml,
+    fullText: cache.fullText || '',
+    reasoningText: cache.reasoningText || '',
+    items: _viewSafeItems(cache.items),
+    streamingAssistant: !!cache.streamingAssistant,
+    scrollTop: cache.scrollTop || 0,
+    msgCount: cache.msgCount || 0,
+    trimmed: !!cache.viewTrimmed
+  };
+}
+
+function _persistViewSnapshot(sid) {
+  sid = sid || currentSid;
+  if (!sid) return;
+  var rec = _viewRecord(sid);
+  if (!rec) return;
+  _viewDbPut(rec).then(function() { _viewEvict(); }).catch(function() {
+    // IndexedDB 不可用（隐私模式/配额）→ 退到 localStorage 热备，别影响正常使用
+    try { localStorage.setItem(_VIEW_HOT_KEY + sid, JSON.stringify(_viewShrink(rec))); } catch (e) {}
+  });
+}
+
+// 流式过程中别每来一个 token 就落盘：攒 2.5 秒写一次
+function _persistViewSoon(sid) {
+  if (_viewWriteTimer) return;
+  _viewWriteTimer = setTimeout(function() {
+    _viewWriteTimer = null;
+    _persistViewSnapshot(sid || currentSid);
+  }, 2500);
+}
+
+// 哪些事件算"正在跑"（用表查，别在这里写 msg.type === 'xxx' 干扰静态检查）
+var _VIEW_STREAM_TYPES = { delta: 1, reasoning: 1, thinking: 1, tool_start: 1, tool_progress: 1, progress: 1 };
+function _viewIsStreamEvent(t) { return !!_VIEW_STREAM_TYPES[t]; }
+
+// 运行中每 5 秒落一次盘 → 跑到一半刷新，交互框也基本原样回来
+function _viewRunStart() {
+  if (_viewRunTimer) return;
+  _viewRunTimer = setTimeout(function tick() {
+    _viewRunTimer = null;
+    if (!agentRunning) return;
+    _snapshotCurrentSession();
+    _persistViewSnapshot(currentSid);
+    _viewRunTimer = setTimeout(tick, 5000);
+  }, 5000);
+}
+
+// 关页面/刷新瞬间的同步兜底：localStorage 是同步 API，一定能写完（IDB 是异步的，可能被掐断）
+function _persistViewHot(sid) {
+  sid = sid || currentSid;
+  if (!sid) return;
+  _snapshotCurrentSession();
+  var rec = _viewRecord(sid);
+  if (!rec) return;
+  var shrunk = _viewShrink(rec);
+  if (!shrunk) return;   // 连缩水版都序列化不了 → 交给 IDB
+  rec = shrunk;
+  var json = null;
+  try { json = JSON.stringify(rec); } catch (e) { return; }
+  if (json.length > _VIEW_HOT_MAX) { _persistViewSnapshot(sid); return; }  // 太大只走 IDB
+  try {
+    localStorage.setItem(_VIEW_HOT_KEY + sid, json);
+  } catch (e) {
+    // 配额满：先清掉别的会话的热备再试一次
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(_VIEW_HOT_KEY) === 0 && k !== _VIEW_HOT_KEY + sid) localStorage.removeItem(k);
+      }
+      localStorage.setItem(_VIEW_HOT_KEY + sid, json);
+    } catch (e2) {}
+  }
+}
+
+// 序列化兜底：先丢 items，再丢 reasoningText（画面 HTML 本身永远保留）
+function _viewShrink(rec) {
+  var tries = [
+    function(r) { return r; },
+    function(r) { return Object.assign({}, r, { items: [] }); },
+    function(r) { return Object.assign({}, r, { items: [], reasoningText: '' }); }
+  ];
+  for (var i = 0; i < tries.length; i++) {
+    var cand = tries[i](rec);
+    try {
+      JSON.stringify(cand);
+      return cand;
+    } catch (e) {}
+  }
+  return null;
+}
+
+function _viewHotRead(sid) {
+  try {
+    var raw = localStorage.getItem(_VIEW_HOT_KEY + sid);
+    if (!raw) return null;
+    var rec = JSON.parse(raw);
+    if (!rec || !rec.html) return null;
+    if (Date.now() - (rec.ts || 0) > _VIEW_TTL_MS) { localStorage.removeItem(_VIEW_HOT_KEY + sid); return null; }
+    return rec;
+  } catch (e) { return null; }
+}
+
+function _loadViewSnapshot(sid) {
+  var hot = _viewHotRead(sid);
+  return _viewDbGet(sid).then(function(rec) {
+    if (rec && hot && (hot.ts || 0) > (rec.ts || 0)) return hot;
+    return rec || hot;
+  }).catch(function() { return hot; });
+}
+
+function _viewApplyToCache(sid, rec) {
+  var cache = _ensureSessionRenderCache(sid);
+  cache.hasSnapshot = true;
+  cache.fromPersist = true;
+  cache.messageHtml = rec.html || '';
+  cache.fullText = rec.fullText || '';
+  cache.reasoningText = rec.reasoningText || '';
+  cache.items = Array.isArray(rec.items) ? rec.items : [];
+  cache.streamingAssistant = !!rec.streamingAssistant;
+  cache.scrollTop = rec.scrollTop || 0;
+  cache.running = false;        // 还在不在跑由服务器说了算
+  cache.runningSid = null;
+  cache.msgCount = rec.msgCount || 0;
+  cache.viewTrimmed = !!rec.trimmed;
+  cache.viewTs = rec.ts || 0;
+  return cache;
+}
+
+// 刷新/重开页面：从持久化快照恢复画面；已经切走或已经有更新的快照就放弃
+function _restorePersistedView(sid, seq) {
+  return _loadViewSnapshot(sid).then(function(rec) {
+    if (!rec || !rec.html) return false;
+    if (seq !== _switchSeq || currentSid !== sid) return false;
+    if (Date.now() - (rec.ts || 0) > _VIEW_TTL_MS) { _dropViewSnapshot(sid); return false; }
+    var cache = _ensureSessionRenderCache(sid);
+    if (cache.hasSnapshot && !cache.fromPersist) return false;
+    // 已经同步恢复过热备，但 IDB 里那份更新 → 用更新的覆盖（热备可能因为太大没写成）
+    if (cache.fromPersist && (rec.ts || 0) <= (cache.viewTs || 0)) return false;
+    _viewApplyToCache(sid, rec);
+    _restoreSessionSnapshot(cache);
+    // 图片/mermaid 还没排版，scrollHeight 不准 → 稍后再把滚动位置对齐一次
+    if (rec.scrollTop) setTimeout(function() {
+      if (currentSid !== sid) return;
+      var m = document.getElementById('messages');
+      if (m) m.scrollTop = rec.scrollTop;
+    }, 300);
+    return true;
+  }).catch(function() { return false; });
+}
+
+function _dropViewSnapshot(sid) {
+  if (!sid) return;
+  try { localStorage.removeItem(_VIEW_HOT_KEY + sid); } catch (e) {}
+  _viewDbDelete(sid);
+}
+
+// 恢复的画面若还带着"运行中"的样子（💭 行呼吸、🔧 工具块转圈、进度时间线展开），
+// 而服务器说这轮已经结束 → 收尾，别一直转圈
+function _settleRestoredView() {
+  var m = document.getElementById('messages');
+  if (!m) return;
+  var rows = m.querySelectorAll('.reasoning-block.running');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.remove('running');
+    var meta = rows[i].querySelector('.rb-meta');
+    if (meta) meta.textContent = _rbMetaText(rows[i]);
+  }
+  var blocks = m.querySelectorAll('.tool-block.running');
+  for (var j = 0; j < blocks.length; j++) blocks[j].classList.remove('running');
+  try { finalizeProgressTimeline(); } catch (e) {}
+}
+
+// 「显示全部/加载更早」入口（历史渲染和快照保留两条路共用）
+function _insertMoreMsgsHint(sid, total, shown) {
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var moreDiv = document.createElement('div');
+  moreDiv.className = 'more-msgs-hint';
+  var moreText = (total && total > shown)
+    ? ('📜 显示全部 ' + total + ' 条消息 (当前显示最近 ' + shown + ' 条)')
+    : '📜 加载更早的消息';
+  moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">' + moreText + '</span>';
+  box.insertBefore(moreDiv, box.firstChild);
+}
+
+// 空闲心跳：每 20 秒看一眼画面有没有变，变了就同步存一份（卸载钩子万一不触发也有兜底）
+setInterval(function() {
+  if (!currentSid || agentRunning) return;
+  var m = document.getElementById('messages');
+  if (!m || m.innerHTML.length === _viewLastLen) return;
+  _viewLastLen = m.innerHTML.length;
+  _snapshotCurrentSession();
+  _persistViewHot(currentSid);
+}, 20000);
+
+// 刷新/关页面：同步热备 + 异步 IDB 各写一份
+window.addEventListener('pagehide', function() { _persistViewHot(); _persistViewSnapshot(); });
+window.addEventListener('beforeunload', function() { _persistViewHot(); });
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') { _persistViewHot(); _persistViewSnapshot(); }
+});
 
 function showNewSessionWelcome() {
   var welcome = document.createElement('div');
@@ -6532,7 +6870,9 @@ function switchSession(sid) {
   _autoScroll = true;  // 切换会话后默认自动滚动（用户未操作时）
   clearPendingImages();
   // === 保存旧会话的全部渲染状态（消息区 HTML 快照 + 流式状态 + 滚动位置） ===
+  var _prevSid = currentSid;
   _snapshotCurrentSession();
+  if (_prevSid && _prevSid !== sid) _persistViewSnapshot(_prevSid);   // 切走立刻落盘，切回来原样
 
   currentSid = sid;
   // 记住当前会话（2026-08-08：刷新后 autoSelectLatestSession 优先恢复它）
@@ -6585,6 +6925,21 @@ function switchSession(sid) {
     cached.pendingEvents.length = 0;
   }
 
+  // 刷新/重开页面：内存里没有快照 → 恢复上次页面留下的那份画面（原封不动）
+  // ① localStorage 热备（关页面瞬间同步写的那份，最新）→ 同步恢复，零等待
+  // ② 没有热备（换浏览器/画面太大）→ 读 IndexedDB，等它落地再渲染历史
+  var _viewReady = null;
+  if (!cached.hasSnapshot) {
+    var _hotView = _viewHotRead(sid);
+    if (_hotView) {
+      _viewApplyToCache(sid, _hotView);
+      _restoreSessionSnapshot(cached);
+      _viewReady = _restorePersistedView(sid, _seq);   // IDB 里若有更新的一份，换过来
+    } else {
+      _viewReady = _restorePersistedView(sid, _seq);
+    }
+  }
+
   // 重置 UI 状态
   if (agentRunning) {
     document.getElementById('send').disabled = true;
@@ -6602,7 +6957,8 @@ function switchSession(sid) {
   }
 
   // 加载消息历史（只加载最近100条，防止大会话卡顿）
-  fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => {
+  // _afterViewReady：若正在等 IndexedDB 里的画面快照，等它落地再决定要不要用历史覆盖
+  fetch('/api/sessions/' + sid + '/messages?limit=100').then(r => r.json()).then(d => _afterViewReady(_viewReady, function() {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
     // 2026-08-17 修复：历史消息【始终】渲染。若此刻有进行中的半截气泡，
     // 先摘下来 → 渲染完整历史 → 再把气泡接回末尾。
@@ -6613,6 +6969,33 @@ function switchSession(sid) {
       refreshTodos(); refreshChanges();
       refreshResults();
       return;
+    }
+    // 刷新恢复的画面：服务器没有比它更多的消息 → 原封不动留着（用户 2026-09-25 要求：
+    // "刷新之后交互框已经展示的东西要原封不动的保留和展示"）。
+    // 💭 思考行、🔧 工具块、📋 进度时间线、图表/辩论卡片、滚动位置都在 messageHtml 里，
+    // 用 HTTP 历史覆盖反而会把这些丢掉。
+    if (cached.fromPersist && cached.hasSnapshot && (cached.msgCount || 0) > 0) {
+      var _srvMsgs = [];
+      (d.messages || []).forEach(function(m) { if (!_isInjectMsg(m)) _srvMsgs.push(m); });
+      var _srvCount = _srvMsgs.length;
+      var _keepView = _srvCount <= cached.msgCount;
+      if (!_keepView && _srvCount <= cached.msgCount + 3 && _srvMsgs.length) {
+        // 条数只差一点点（统计口径差异）→ 再看最后一条消息是不是已经在画面里，是就别冲掉画面
+        var _tail = String(_srvMsgs[_srvMsgs.length - 1].content || '').replace(/\s+/g, '').slice(0, 30);
+        if (_tail.length >= 12) {
+          var _viewText = String(cached.messageHtml || '').replace(/<[^>]*>/g, '').replace(/\s+/g, '');
+          _keepView = _viewText.indexOf(_tail) >= 0;
+        }
+      }
+      if (_keepView) {
+        _dcbTimelineCtx = null;
+        if (cached.viewTrimmed) _insertMoreMsgsHint(sid, d.total, cached.msgCount);
+        refreshTodos(); refreshChanges();
+        refreshResults();
+        return;
+      }
+      // 关页面期间又聊了/微信来了新消息 → 丢掉快照走完整重渲染，绝不丢消息
+      _dropViewSnapshot(sid);
     }
     var liveBubble = null, liveText = '';
     if (currentAssistantEl && agentRunning && _currentRunningSid === sid) {
@@ -6648,13 +7031,7 @@ function switchSession(sid) {
     // 2026-08-17: 返回窗口已满(100)就一定显示入口——旧会话 _msg_count 可能为 0，
     // 只依赖 d.total 会把入口藏起来，用户卡在最近 100 条无法加载更早对话
     if ((d.total && d.total > msgs.length) || msgs.length >= 100) {
-      var moreDiv = document.createElement('div');
-      moreDiv.className = 'more-msgs-hint';
-      var _moreText = (d.total && d.total > msgs.length)
-        ? ('📜 显示全部 ' + d.total + ' 条消息 (当前显示最近 ' + msgs.length + ' 条)')
-        : '📜 加载更早的消息';
-      moreDiv.innerHTML = '<span style="cursor:pointer;color:var(--primary);" onclick="loadAllMessages(\'' + sid + '\')">' + _moreText + '</span>';
-      document.getElementById('messages').insertBefore(moreDiv, document.getElementById('messages').firstChild);
+      _insertMoreMsgsHint(sid, d.total, msgs.length);
     }
     if (_dcbTimelineCtx && _dcbTimelineCtx.sid === sid) {
       loadDebateTimeline(sid, _dcbTimelineCtx.msgEls, _dcbTimelineCtx.offset, true);
@@ -6663,10 +7040,10 @@ function switchSession(sid) {
     _rbRestoreHistoryRow();   // 历史渲染完 → 若本会话有持久化的思考，把 💭 行挂回最后一条回答
     refreshTodos(); refreshChanges();
     refreshResults();
-  });
+  }));
 
   // 拉取进度日志（如果 WS 的 progress_replay 没收到，用 HTTP 兜底）
-  fetch('/api/sessions/' + sid + '/progress').then(r => r.json()).then(d => {
+  fetch('/api/sessions/' + sid + '/progress').then(r => r.json()).then(d => _afterViewReady(_viewReady, function() {
     if (_seq !== _switchSeq) return;  // 已被更新的切换取代，丢弃旧渲染
     // P1-1: 同一个接口顺带恢复目标 + 待办（零新增请求）
     applyGoalPayload(d);
@@ -6707,7 +7084,9 @@ function switchSession(sid) {
       }
     }
     _rbRestoreHistoryRow();   // 思考已恢复 → 挂到最后一条回答上（💭 行，点开是全文）
-  }).catch(function(e) {
+    // 恢复的画面若还带着"运行中"的样子，而服务器说这轮已经结束 → 收尾，别一直转圈
+    if (cached.fromPersist && !d.is_running) _settleRestoredView();
+  })).catch(function(e) {
     // 静默失败 — WS 的 progress_replay 可能已经处理了
   });
 
