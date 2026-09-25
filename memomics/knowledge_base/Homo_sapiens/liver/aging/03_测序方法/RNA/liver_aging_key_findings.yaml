@@ -101,6 +101,7 @@ analysis_params:
     params:
       min_cells_per_cluster: 50
 
-source: |
-  Literature-driven, curated from PubMed search (liver aging scRNA-seq)
-  Total papers integrated: 10+
+source: literature
+sources:
+  - "Literature-driven, curated from PubMed search (liver aging scRNA-seq)"
+  - "Total papers integrated: 10+"

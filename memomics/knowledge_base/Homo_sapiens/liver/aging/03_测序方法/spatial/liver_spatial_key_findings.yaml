@@ -103,7 +103,8 @@ analysis_params:
       method: "Seurat/FindTransferAnchors + label transfer"
       note: "MERFISH基因数有限(~300-500 genes)，需snRNA-seq补全转录组"
 
-source: |
+source: literature
+sources:
   - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
   - "Nature Communications 2025 (PMID: 39747095)"
   - "Yakubovsky et al. 2026, Nature (PMID: 41986723, DOI: 10.1038/s41586-026-10377-y)"

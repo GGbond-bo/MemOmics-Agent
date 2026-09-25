@@ -1,12 +1,14 @@
 #!/bin/sh
-# MemOmics skill 门禁 pre-commit hook（P0-1）
+# MemOmics pre-commit hook：技能门禁（P0-1）+ 知识库门禁
 #
-# 只在暂存区涉及「技能面」文件时触发，跑 scripts/check_skills_gate.py：
+# 技能面（暂存区命中 hermes_home/skills 等）-> scripts/check_skills_gate.py：
 #   1) SKILLS_INDEX.md 必须与磁盘上的 skill.json 逐字一致（索引漂移是历史事故源头）；
 #   2) 注册表护栏 + 触发词矩阵 + 路由回归矩阵（多场景/多意图/极端输入）必须全绿。
+# 知识库（暂存区命中 memomics/knowledge_base）-> memomics/bio_tools/validate_kb.py：
+#   结构/载荷/来源/DOI 体检，error 级问题按基线只拦「新增」（历史脏数据用基线冻结）。
 #
 # 安装：python scripts/install_git_hooks.py   （等价于 git config core.hooksPath .githooks）
-# 跳过：SKILLS_GATE=0 git commit ...  或  git commit --no-verify
+# 跳过：SKILLS_GATE=0 git commit ...  /  KB_GATE=0 git commit ...  或  git commit --no-verify
 # 卸载：git config --unset core.hooksPath
 
 if [ "${SKILLS_GATE:-1}" = "0" ]; then
@@ -24,13 +26,16 @@ fi
 
 # 技能面：技能目录 / 索引 / SOUL / 注册表与自动注册器 / 相关测试与门禁自身
 PATTERN='^(hermes_home/skills/|hermes_home/SKILLS_INDEX\.md$|hermes_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|contracts/skill_triggers\.json$|webui/server\.py$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
-MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN")
-if [ -z "$MATCHED" ]; then
+# 排除知识库自己的测试：KB 测试由下面的 kb-gate 负责，不该把整个技能面门禁拖进来
+MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN" | grep -v -E '^webui/tests/test_validate_kb\.py$')
+
+# 知识库面：KB 数据 / 校验器 / 其测试
+KB_PATTERN='^(memomics/knowledge_base/|memomics/bio_tools/validate_kb\.py$|memomics/bio_tools/validate_kb_baseline\.json$|webui/tests/test_validate_kb\.py$)'
+KB_MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$KB_PATTERN")
+
+if [ -z "$MATCHED" ] && [ -z "$KB_MATCHED" ]; then
     exit 0
 fi
-
-echo "[skills-gate] 暂存区涉及技能面文件，跑门禁："
-printf '%s\n' "$MATCHED" | sed 's/^/    /'
 
 # 选解释器：优先仓库 venv（依赖齐全），否则退到 PATH 上的 python
 # 用 -f 而不是 -x：Windows 上 MSYS 的 -x 对 .exe 判定不稳（实测选不中 venv，
@@ -50,12 +55,29 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
-"$PY" scripts/check_skills_gate.py --quiet
-status=$?
-if [ "$status" -ne 0 ]; then
-    echo ""
-    echo "[skills-gate] 提交已被拦下：技能门禁未通过（exit=$status）。"
-    echo "            修好索引或测试后重新提交；确需跳过：SKILLS_GATE=0 git commit ..."
-    exit 1
+if [ -n "$MATCHED" ]; then
+    echo "[skills-gate] 暂存区涉及技能面文件，跑门禁："
+    printf '%s\n' "$MATCHED" | sed 's/^/    /'
+    "$PY" scripts/check_skills_gate.py --quiet
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo ""
+        echo "[skills-gate] 提交已被拦下：技能门禁未通过（exit=$status）。"
+        echo "            修好索引或测试后重新提交；确需跳过：SKILLS_GATE=0 git commit ..."
+        exit 1
+    fi
+fi
+
+if [ -n "$KB_MATCHED" ] && [ "${KB_GATE:-1}" != "0" ]; then
+    echo "[kb-gate] 暂存区涉及知识库文件，跑 validate_kb："
+    printf '%s\n' "$KB_MATCHED" | sed 's/^/    /'
+    "$PY" -X utf8 -W ignore memomics/bio_tools/validate_kb.py --quiet
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "[kb-gate] 提交已被拦下：知识库门禁未通过（error 级问题）。明细："
+        "$PY" -X utf8 -W ignore memomics/bio_tools/validate_kb.py 2>&1 | tail -n 25
+        echo "            修好数据后重新提交；确需跳过：KB_GATE=0 git commit ..."
+        exit 1
+    fi
 fi
 exit 0

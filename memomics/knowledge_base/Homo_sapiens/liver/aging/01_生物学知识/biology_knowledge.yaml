@@ -10,25 +10,25 @@ species: Homo sapiens
 tissue: liver
 direction: aging
 updated: '2026-07-07'
-source: |
-  - Lin et al. 2024, FASEB Journal (PMID: 38334462) — 小鼠肝脏衰老scRNA-seq
-  - Nikopoulou et al. 2023, Nature Aging (PMID: 37946043) — 空间+scATAC+scRNA多组学
-  - Hepatology 2024 (PMC10871588, PMID: 38334462关联) — 肝脏免疫衰老scRNA-seq
-  - Hepatology 2025 (PMID: 40622856) — 衰老破坏肝细胞区域化稳态
-  - Nature Communications 2025 (PMID: 39747095) — 人类肝脏MERFISH空间转录组
-  - Journal of Hepatology 2024 (PMID: 38936380) — 多倍体缓冲肝细胞衰老
-  - Tabula Muris Senis (PMID: 32214236) — 小鼠多器官衰老图谱
-  - BMC Genomics 2015 (PMID: 26542215) — 小鼠肝脏衰老bulk转录组
-  - scAgeCom (PMID: 37169972) — 衰老细胞间通讯
-  - Yang et al. 2024, Protein Cell (DOI: 10.1093/procel/pwad055) — 灵长类肝脏衰老snRNA-seq
-  - Gyenis et al. 2023, Nature Genetics (PMID: 36646902) — 小鼠肝脏衰老转录stress
-  - Geroscience 2023 (PMID: 37726433) — PCSK9肝脏衰老调控因子
-  - Aging Cell 2023 (PMID: 37602516) — FOXO1抑制减轻肝脏炎症衰老
-  - Hepatol Commun 2023 (PMID: 36724124) — 衰老肝脏内皮细胞scRNA-seq
-  - White et al. 2015, BMC Genomics (PMID: 26542215) — 小鼠肝脏衰老bulk转录组
-  - Inflammation & Regeneration 2025 (DOI: 10.1186/s41232-025-00364-1) — 肝脏衰老脂质组+转录组
-  - Nature Reviews Gastro 2025 (PMID: 40033000) — 肝脏衰老综合综述
-
+source: literature
+sources:
+  - "Lin et al. 2024, FASEB Journal (PMID: 38334462) — 小鼠肝脏衰老scRNA-seq"
+  - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043) — 空间+scATAC+scRNA多组学"
+  - "Hepatology 2024 (PMC10871588, PMID: 38334462关联) — 肝脏免疫衰老scRNA-seq"
+  - "Hepatology 2025 (PMID: 40622856) — 衰老破坏肝细胞区域化稳态"
+  - "Nature Communications 2025 (PMID: 39747095) — 人类肝脏MERFISH空间转录组"
+  - "Journal of Hepatology 2024 (PMID: 38936380) — 多倍体缓冲肝细胞衰老"
+  - "Tabula Muris Senis (PMID: 32214236) — 小鼠多器官衰老图谱"
+  - "BMC Genomics 2015 (PMID: 26542215) — 小鼠肝脏衰老bulk转录组"
+  - "scAgeCom (PMID: 37169972) — 衰老细胞间通讯"
+  - "Yang et al. 2024, Protein Cell (DOI: 10.1093/procel/pwad055) — 灵长类肝脏衰老snRNA-seq"
+  - "Gyenis et al. 2023, Nature Genetics (PMID: 36646902) — 小鼠肝脏衰老转录stress"
+  - "Geroscience 2023 (PMID: 37726433) — PCSK9肝脏衰老调控因子"
+  - "Aging Cell 2023 (PMID: 37602516) — FOXO1抑制减轻肝脏炎症衰老"
+  - "Hepatol Commun 2023 (PMID: 36724124) — 衰老肝脏内皮细胞scRNA-seq"
+  - "White et al. 2015, BMC Genomics (PMID: 26542215) — 小鼠肝脏衰老bulk转录组"
+  - "Inflammation & Regeneration 2025 (DOI: 10.1186/s41232-025-00364-1) — 肝脏衰老脂质组+转录组"
+  - "Nature Reviews Gastro 2025 (PMID: 40033000) — 肝脏衰老综合综述"
 # 肝脏细胞类型与 marker genes
 cell_types:
   # ─── 实质细胞 ──────────────────────────────────────────

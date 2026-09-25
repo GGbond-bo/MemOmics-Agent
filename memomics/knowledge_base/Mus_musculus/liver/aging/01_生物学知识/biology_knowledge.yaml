@@ -7,20 +7,20 @@ species: Mus musculus
 tissue: liver
 direction: aging
 updated: '2026-07-07'
-source: |
-  - Lin et al. 2024, FASEB Journal (PMID: 38334462)
-  - Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)
-  - Gyenis et al. 2023, Nature Genetics (PMID: 36646902)
-  - Hepatology 2024 (PMC10871588)
-  - White et al. 2015, BMC Genomics (PMID: 26542215)
-  - Geroscience 2023 - PCSK9 liver aging (PMC10643490)
-  - Aging Cell 2023 - FOXO1 inflamm-aging (PMC10577549)
-  - Hepatol Commun 2023 - Liver EC aging (PMC9894352)
-  - J Transl Med 2023 - NAFLD fibrosis (PMC10326954)
-  - Nature Reviews Gastro 2025 - Liver aging review
-  - Tabula Muris Senis (mouse aging atlas)
-  - Inflammation & Regeneration 2025
-
+source: literature
+sources:
+  - "Lin et al. 2024, FASEB Journal (PMID: 38334462)"
+  - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
+  - "Gyenis et al. 2023, Nature Genetics (PMID: 36646902)"
+  - "Hepatology 2024 (PMC10871588)"
+  - "White et al. 2015, BMC Genomics (PMID: 26542215)"
+  - "Geroscience 2023 - PCSK9 liver aging (PMC10643490)"
+  - "Aging Cell 2023 - FOXO1 inflamm-aging (PMC10577549)"
+  - "Hepatol Commun 2023 - Liver EC aging (PMC9894352)"
+  - "J Transl Med 2023 - NAFLD fibrosis (PMC10326954)"
+  - "Nature Reviews Gastro 2025 - Liver aging review"
+  - "Tabula Muris Senis (mouse aging atlas)"
+  - "Inflammation & Regeneration 2025"
 # 小鼠肝脏细胞类型与 marker genes
 # (注: 标记基因为小鼠同源基因，首字母大写)
 cell_types:

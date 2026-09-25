@@ -76,7 +76,8 @@ analysis_params:
     method: "ArchR: addGeneIntegrationMatrix / Signac: FindTransferAnchors"
     note: "建议与scRNA-seq联合分析，将ATAC数据映射到RNA定义的细胞类型"
 
-source: |
+source: literature
+sources:
   - "Nikopoulou et al. 2023, Nature Aging (PMID: 37946043)"
   - "Frontiers Physiology 2021 — Liver Zonation review"
   - "Corces et al. 2017, Nature Methods — snATAC-seq protocol"

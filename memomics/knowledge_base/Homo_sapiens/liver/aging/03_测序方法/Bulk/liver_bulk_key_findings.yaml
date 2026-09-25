@@ -89,7 +89,8 @@ analysis_params:
     down: [CYP3A4, CYP2E1, ALB, PCK1, G6PC, GCK, HNF4A, PPARGC1A, SIRT1, ATG5, BECN1]
     note: "这些标志基因在bulk RNA-seq中易于检测，可作为肝脏衰老的转录组特征"
 
-source: |
+source: literature
+sources:
   - "BMC Genomics 2015 (PMID: 26542215)"
   - "Genomics Proteomics Bioinformatics 2020 (DOI: 10.1016/j.gpb.2020.06.002)"
   - "PubMed 2025 (PMID: 41508419) — Multi-organ aging"
