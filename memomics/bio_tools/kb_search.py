@@ -8,6 +8,7 @@ v4: FTS5 + trigram upgrade
 - Fallback to os.walk if FTS5 unavailable
 """
 import json
+import math
 import os
 import re
 import time
@@ -121,11 +122,34 @@ SYNONYMS = {
     "multiome": ["multiome", "multi-ome", "10x multiome"],
     "cite_seq": ["cite-seq", "cite_seq", "adt", "antibody", "蛋白质抗体"],
     "vdj": ["vdj", "vdj-seq", "tcr", "bcr", "immune repertoire", "免疫组库"],
+    # 化合物/药物 — 知识库 chemistry/compounds 里全是英文名文件，中文提问必须能对上
+    "rapamycin": ["rapamycin", "雷帕霉素", "sirolimus", "西罗莫司"],
+    "tamoxifen": ["tamoxifen", "他莫昔芬"],
+    "buprenorphine": ["buprenorphine", "丁丙诺啡"],
+    "lidocaine": ["lidocaine", "xylocaine", "利多卡因"],
+    "gemcitabine": ["gemcitabine", "吉西他滨"],
+    "paclitaxel": ["paclitaxel", "紫杉醇"],
+    "pemetrexed": ["pemetrexed", "培美曲塞"],
+    "vinorelbine": ["vinorelbine", "长春瑞滨"],
+    "fexofenadine": ["fexofenadine", "非索非那定"],
+    "famotidine": ["famotidine", "法莫替丁"],
+    "selinexor": ["selinexor", "塞利尼索"],
+    "nmda": ["nmda", "n-methyl-d-aspartate", "谷氨酸"],
+    "dmso": ["dmso", "二甲基亚砜"],
+    "edta": ["edta", "乙二胺四乙酸"],
+    "tmt": ["tmt", "串联质谱标签"],
+    "wgcna": ["wgcna", "hdwgcna", "共表达网络", "共表达", "co-expression"],
+    "gwas": ["gwas", "全基因组关联", "关联分析"],
 }
 
 
 # === 短词黑名单：这些词长度 <=3，在子串匹配中容易误命中 ===
 _SHORT_WORD_BLACKLIST = {"ad", "qc", "go", "dm", "ra", "hd", "als"}
+
+# 通用中文词：几乎所有知识文件都"沾"得上，进检索只会稀释排序（问 "GWAS 方法" 时
+# 「方法」不该把一堆 default_kb_method.yaml 抬起来）。
+_CJK_STOPWORDS = {"方法", "参数", "阈值", "图谱", "分析", "数据", "结果", "流程",
+                  "知识", "相关", "研究", "如何", "怎么", "什么", "以及", "进行"}
 
 # === 文件内容缓存 ===
 _file_cache = {}
@@ -257,6 +281,14 @@ def _expand_query(query: str) -> list:
     """Expand query with synonyms for semantic matching."""
     query_lower = query.lower()
     queries = [query_lower]
+    # 中文没有空格分词：整串丢给 trigram FTS 几乎零命中（"骨骼肌衰老" 要求文件里恰好连着出现这五个字）。
+    # 这里把连续 CJK 串切成 3-gram、英文/数字按词切开，先把召回抬起来，排序交给 BM25 + 路径权重。
+    for run in re.findall(r"[\u4e00-\u9fff]+", query or ""):
+        if len(run) <= 3:
+            queries.append(run)
+        else:
+            queries.extend(run[i:i + 3] for i in range(len(run) - 2))
+    queries.extend(w.lower() for w in re.findall(r"[A-Za-z0-9_.+-]{2,}", query or ""))
     for key, syns in SYNONYMS.items():
         # 如果 query 包含 key 或任何 synonym，加入所有 synonyms
         all_terms = [key] + syns
@@ -403,6 +435,85 @@ def _init_fts() -> bool:
             return False
 
 
+_NON_SPECIES_DIRS = {"common", "chemistry", "error_memory", "other"}
+
+# 工具/流程同名文件（cellchat.yaml / wgcna.yaml / gwas.yaml ...）—— 问工具就是问它们
+_TOOL_FILES = {"cellchat", "cellchat-v2", "trajectory", "wgcna", "hdwgcna", "gwas", "deg",
+               "spatial", "scrna_qc", "atac_seq", "scenic", "monocle", "harmony", "doublet",
+               "soupx", "cellbender", "scvi", "velocyto", "infercnv", "spatialde", "cellranger"}
+
+
+def _archetype_weight(fname: str) -> float:
+    """按知识条目「原型」微调排序（与 validate_kb.py 的原型划分对齐）。
+
+    论文/经验条目（paper_*、*_empirical）擅长回答「有没有人做过」，不擅长回答「参数是多少」；
+    问 CellChat 参数时，cellchat.yaml 应该压过一篇恰好反复提到 CellChat 的论文条目。
+    """
+    n = (fname or "").lower()
+    if n.startswith("paper_") or n.endswith("_empirical.yaml"):
+        return -20.0
+    stem = n[:-5] if n.endswith(".yaml") else n
+    if "method" in n or stem in _TOOL_FILES:
+        return 30.0
+    if stem == "index":
+        return 10.0
+    if any(k in n for k in ("key_findings", "biology_knowledge", "gene_sets", "cell_types", "atlas")):
+        return 15.0
+    return 0.0
+_KB_SPECIES_ROOTS_CACHE = None
+
+
+def _kb_species_roots() -> set:
+    """知识库顶层里哪些目录算「物种根」（用来给别的物种文件降权）。"""
+    global _KB_SPECIES_ROOTS_CACHE
+    if _KB_SPECIES_ROOTS_CACHE is not None:
+        return _KB_SPECIES_ROOTS_CACHE
+    roots = set()
+    kb_root = _find_kb_root()
+    if kb_root is not None:
+        try:
+            for name in os.listdir(kb_root):
+                if os.path.isdir(os.path.join(kb_root, name)) and name.lower() not in _NON_SPECIES_DIRS:
+                    roots.add(name.lower())
+        except OSError:
+            pass
+    _KB_SPECIES_ROOTS_CACHE = roots
+    return roots
+
+
+def _structured_boost(rel_path, species_variants, tissue_variants, direction_variants,
+                      fname="", queries=()) -> int:
+    """结构化路径权重（v5）。
+
+    旧值 species+25 / tissue+15 / direction+10 远小于 BM25 的量级（FTS5 原始分在 100 上下），
+    实测后果：问「人骨骼肌衰老」，第一名是 exercise 目录、第三名是肝；问「小鼠肝衰老」，
+    人肝排在小鼠肝前面；问「小鼠肺纤维化」，回来一堆小鼠肝。只给几十点权重是压不住的，
+    所以物种 +400 / 组织 +200 / 方向 +120，并且**指定了物种时给别的物种根降权**，
+    让「同物种 > 通用目录（common/chemistry）> 别的物种」这个顺序稳定成立。
+    """
+    boost = _archetype_weight(fname)
+    rel_lower = rel_path.lower()
+    # 用 _word_match 而不是裸子串：方向 "ad" 只有 2 字符，裸子串会命中 academic-thesis-docx
+    # 这种文件名，把整个 Homo_sapiens/brain/aging 目录顶到 Homo_sapiens/brain/ad 前面。
+    if species_variants:
+        if any(_word_match(sv, rel_lower) for sv in species_variants):
+            boost += 400
+        else:
+            top = rel_path.replace("\\", "/").split("/", 1)[0].lower()
+            if top and top in _kb_species_roots():
+                boost -= 200
+    if tissue_variants and any(_word_match(tv, rel_lower) for tv in tissue_variants):
+        boost += 200
+    if direction_variants and any(_word_match(dv, rel_lower) for dv in direction_variants):
+        boost += 120
+    if fname:
+        # 文件名命中是强信号：问 "CellChat"/"wgcna" 时，叫这个名字的文件应该压过任何正文里
+        # 恰好提过一嘴的长文。只算 >=4 字符的词，避免 "qc"/"deg" 这类短词把一堆文件抬上来。
+        fname_lower = fname.lower()
+        boost += min(300, 60 * sum(1 for q in queries if len(q) >= 3 and q.lower() in fname_lower))
+    return boost
+
+
 def _search_kb(query: str, species: str = "", tissue: str = "", direction: str = "") -> dict:
     """Search knowledge base files with enhanced logic (v3)."""
     kb_root = _find_kb_root()
@@ -427,6 +538,8 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
             q_clean = q.strip().replace('"', '').replace("'", "")
             if not q_clean:
                 continue
+            if q_clean in _CJK_STOPWORDS:
+                continue
             if len(q_clean) < 3:
                 # P1-9(2026-08-13): trigram tokenizer 对 <3 字符的词（中文双字词
                 # 如"质控/聚类"、英文缩写如"qc"）生成不了 token，MATCH 静默零命中。
@@ -436,13 +549,18 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                 fts_terms.append(f'"{q_clean}"')
             else:
                 fts_terms.append(q_clean)
-        if fts_terms and not short_terms:
+        # 短词（<3 字符）trigram 造不出 token，但**不能因此整条查询退回 os.walk 子串打分**：
+        # 同义词表里有「人/鼠/肝/肺/肌」这类单字，中文查询几乎条条都带一个，于是几乎条条退回，
+        # 退回去的评分是纯词频，"谁的文件大谁赢"（biology_knowledge.yaml 永远第一）。
+        # 现在改成：能进 FTS 的词照常走 BM25，短词降级成候选过滤条件。
+        short_terms = [t for t in short_terms if len(t) >= 2]  # 单字同义词噪声太大，直接丢
+        if fts_terms:
             fts_query = " OR ".join(fts_terms)
             # 查询串行化：_fts_conn 是跨线程共享的内存库连接
             _fts_lock.acquire()
             try:
                 rows = _fts_conn.execute(
-                    "SELECT rowid, rank FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT 30",
+                    "SELECT rowid, rank FROM kb_fts WHERE kb_fts MATCH ? ORDER BY rank LIMIT 200",
                     (fts_query,)
                 ).fetchall()
                 for row in rows:
@@ -450,29 +568,56 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                     info = _fts_file_map.get(rowid, {})
                     rel_path = info.get("path", "")
                     content = info.get("content", "")
-                    # Path boosting
-                    path_boost = 0
-                    if species_variants:
-                        for sv in species_variants:
-                            if sv.lower() in rel_path.lower():
-                                path_boost += 25; break
-                    if tissue_variants:
-                        for tv in tissue_variants:
-                            if tv.lower() in rel_path.lower():
-                                path_boost += 15; break
-                    if direction_variants:
-                        for dv in direction_variants:
-                            if dv.lower() in rel_path.lower():
-                                path_boost += 10; break
-                    fts_score = max(0, 100 + int(rank))
+                    path_boost = _structured_boost(
+                        rel_path, species_variants, tissue_variants, direction_variants,
+                        os.path.basename(rel_path), queries)
+                    # FTS5 的 rank 是 bm25()：**越负越相关**。旧代码 100+int(rank) 把强匹配算成了低分，
+                    # 排序整个反过来（实测：问 CellChat，真正命中 cellchat.yaml 的候选排在只沾了一个
+                    # 通用词的 default_kb_method.yaml 后面）。
+                    fts_score = max(0.0, -float(rank)) * 10.0
                     content_lower = content.lower()
+                    # 短词只加分、不过滤：过滤会直接零召回（问 "GWAS 方法"，gwas.yaml 正文里没有
+                    # 「方法」两个字，就被一刀切掉了）。
+                    short_hits = sum(1 for t in short_terms if _word_match(t, content_lower))
                     matched_terms = [q for q in queries if _word_match(q, content_lower)][:5]
                     snippet = content[:2000]
                     results.append({
-                        "file": rel_path, "score": fts_score + path_boost,
+                        "file": rel_path, "score": fts_score + path_boost + 4 * short_hits,
                         "matched_terms": matched_terms, "path_boost": path_boost,
                         "snippet": snippet[:1500]
                     })
+                # 结构化兜底：调用方点名了 species/tissue/direction，就把对应目录的文件也纳入候选。
+                # 知识库是按物种/组织/方向组织的，路径命中本身就是强信号；只靠正文词命中会漏掉
+                # 那些用英文写、正文里根本没出现中文查询词的目录（实测：问「小鼠肺纤维化」，
+                # 正文命中把一堆小鼠肝文件抬了上来，而 Mus_musculus/lung/fibrosis/ 一个都没进候选）。
+                if species_variants or tissue_variants or direction_variants:
+                    have = {r["file"] for r in results}
+                    for root, _dirs, files in os.walk(kb_root):
+                        for fname in files:
+                            if not fname.endswith(('.yaml', '.yml', '.json', '.md')):
+                                continue
+                            try:
+                                rel_path = str((Path(root) / fname).relative_to(kb_root))
+                            except ValueError:
+                                continue
+                            if rel_path in have:
+                                continue
+                            rel_lower = rel_path.lower()
+                            if species_variants and not any(sv.lower() in rel_lower for sv in species_variants):
+                                continue
+                            if tissue_variants and not any(tv.lower() in rel_lower for tv in tissue_variants):
+                                continue
+                            if direction_variants and not any(dv.lower() in rel_lower for dv in direction_variants):
+                                continue
+                            boost = _structured_boost(rel_path, species_variants, tissue_variants,
+                                                      direction_variants, fname, queries)
+                            content = _read_file_cached(Path(root) / fname) or ""
+                            results.append({
+                                "file": rel_path, "score": 50 + boost,
+                                "matched_terms": [], "path_boost": boost,
+                                "snippet": content[:1500]
+                            })
+
                 # Deduplicate and sort
                 seen = {}
                 for r in results:
@@ -498,24 +643,9 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
             except ValueError:
                 continue
 
-            # 路径优先匹配 — 如果指定了 species/tissue/direction，优先匹配路径
-            # 权重设置：species > tissue > direction，因为物种匹配最重要
-            path_boost = 0
-            if species_variants:
-                for sv in species_variants:
-                    if sv.lower() in rel_path.lower():
-                        path_boost += 25  # 物种匹配权重最高
-                        break  # 每类最多加一次
-            if tissue_variants:
-                for tv in tissue_variants:
-                    if tv.lower() in rel_path.lower():
-                        path_boost += 15  # 组织匹配次之
-                        break
-            if direction_variants:
-                for dv in direction_variants:
-                    if dv.lower() in rel_path.lower():
-                        path_boost += 10  # 方向匹配再次之
-                        break
+            # 路径优先匹配 — 如果指定了 species/tissue/direction，优先匹配路径（v5 权重见 _structured_boost）
+            path_boost = _structured_boost(rel_path, species_variants, tissue_variants,
+                                           direction_variants, fname, queries)
 
             # 读取文件内容（带缓存）
             content = _read_file_cached(fpath)

@@ -1,0 +1,267 @@
+{
+  "schema": "memomics.kb-retrieval-golden.v1",
+  "top_k": 5,
+  "note": "黄金检索集：26 条真实意图查询，命中判据是「top_k 内至少一条结果落在期望目录/文件名上」。期望值写的是意图（问人骨骼肌衰老就该回到 Homo_sapiens/skeletal_muscle/aging/），不是把当前输出抄下来——所以它是回归护栏，不是快照。known_gap 的用例只统计不断言（覆盖缺口要留痕，不要靠删用例粉饰）。",
+  "cases": [
+    {
+      "id": "kb-01",
+      "query": "骨骼肌衰老 标记基因",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "expect_prefix": [
+        "Homo_sapiens/skeletal_muscle/aging/"
+      ]
+    },
+    {
+      "id": "kb-02",
+      "query": "小鼠骨骼肌衰老",
+      "species": "mouse",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "expect_prefix": [
+        "Mus_musculus/skeletal_muscle/aging/"
+      ]
+    },
+    {
+      "id": "kb-03",
+      "query": "肝衰老 单细胞图谱",
+      "species": "human",
+      "tissue": "liver",
+      "direction": "aging",
+      "expect_prefix": [
+        "Homo_sapiens/liver/aging/"
+      ]
+    },
+    {
+      "id": "kb-04",
+      "query": "小鼠肝衰老 ATAC",
+      "species": "mouse",
+      "tissue": "liver",
+      "direction": "aging",
+      "expect_prefix": [
+        "Mus_musculus/liver/aging/"
+      ]
+    },
+    {
+      "id": "kb-05",
+      "query": "海马 衰老 细胞类型",
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "expect_prefix": [
+        "Homo_sapiens/hippocampus/aging/"
+      ]
+    },
+    {
+      "id": "kb-06",
+      "query": "阿尔茨海默 脑 单核",
+      "species": "human",
+      "tissue": "brain",
+      "direction": "ad",
+      "expect_prefix": [
+        "Homo_sapiens/brain/ad/"
+      ]
+    },
+    {
+      "id": "kb-07",
+      "query": "猴 阿尔茨海默 脑",
+      "species": "monkey",
+      "tissue": "brain",
+      "direction": "ad",
+      "expect_prefix": [
+        "monkey/brain/ad/"
+      ]
+    },
+    {
+      "id": "kb-08",
+      "query": "肺纤维化 小鼠",
+      "species": "mouse",
+      "tissue": "lung",
+      "direction": "fibrosis",
+      "expect_prefix": [
+        "Mus_musculus/lung/fibrosis/"
+      ]
+    },
+    {
+      "id": "kb-09",
+      "query": "心肌病 心脏 RNA",
+      "species": "human",
+      "tissue": "heart",
+      "direction": "cardiomyopathy",
+      "expect_prefix": [
+        "Homo_sapiens/heart/cardiomyopathy/"
+      ]
+    },
+    {
+      "id": "kb-10",
+      "query": "骨骼肌 运动 急性信号",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "expect_prefix": [
+        "Homo_sapiens/skeletal_muscle/exercise/"
+      ]
+    },
+    {
+      "id": "kb-11",
+      "query": "肌节再生",
+      "species": "mouse",
+      "tissue": "skeletal_muscle",
+      "direction": "regeneration",
+      "expect_prefix": [
+        "Mus_musculus/skeletal_muscle/sarcomere regeneration/"
+      ]
+    },
+    {
+      "id": "kb-12",
+      "query": "多发性骨髓瘤 单细胞",
+      "species": "human",
+      "tissue": "bone_marrow",
+      "direction": "multiple_myeloma",
+      "expect_prefix": [
+        "Homo_sapiens/bone_marrow/multiple_myeloma/"
+      ]
+    },
+    {
+      "id": "kb-13",
+      "query": "CellChat 细胞通讯 参数",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "cellchat"
+      ]
+    },
+    {
+      "id": "kb-14",
+      "query": "单细胞质控 线粒体比例 阈值",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "scrna_qc.yaml",
+        "scrna-qc"
+      ]
+    },
+    {
+      "id": "kb-15",
+      "query": "差异表达分析 方法",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "deg-",
+        "deg_",
+        "deg.yaml"
+      ]
+    },
+    {
+      "id": "kb-16",
+      "query": "轨迹推断 pseudotime",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "trajectory"
+      ]
+    },
+    {
+      "id": "kb-17",
+      "query": "共表达网络 WGCNA",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "wgcna"
+      ]
+    },
+    {
+      "id": "kb-18",
+      "query": "空间转录组 方法",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "spatial"
+      ]
+    },
+    {
+      "id": "kb-19",
+      "query": "GWAS 方法",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "gwas"
+      ]
+    },
+    {
+      "id": "kb-20",
+      "query": "基因集 富集 通路",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "enrichment",
+        "gene_sets"
+      ]
+    },
+    {
+      "id": "kb-21",
+      "query": "雷帕霉素 化合物",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_contains": [
+        "rapamycin"
+      ]
+    },
+    {
+      "id": "kb-22",
+      "query": "ATAC 染色质可及性 骨骼肌",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "expect_prefix": [
+        "Homo_sapiens/skeletal_muscle/aging/03_测序方法/ATAC/"
+      ]
+    },
+    {
+      "id": "kb-23",
+      "query": "斑马鱼 心脏 发育",
+      "species": "zebrafish",
+      "tissue": "heart",
+      "direction": "development",
+      "known_gap": true,
+      "gap_note": "zebrafish/ 目录是空的（覆盖缺口），检索只能靠同义词命中别处文件"
+    },
+    {
+      "id": "kb-24",
+      "query": "猕猴 海马 衰老",
+      "species": "Macaca_fascicularis",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "expect_prefix": [
+        "Macaca_fascicularis/"
+      ]
+    },
+    {
+      "id": "kb-25",
+      "query": "骨骼肌 纤维类型",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "muscle_fiber_type",
+      "known_gap": true,
+      "gap_note": "muscle_fiber_type 没进方向同义词表，路径权重拿不到，靠正文命中排不上来"
+    },
+    {
+      "id": "kb-26",
+      "query": "量子计算 拓扑绝缘体",
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "expect_none": true
+    }
+  ]
+}
