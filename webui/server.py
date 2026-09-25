@@ -60,6 +60,20 @@ try:
 except ModuleNotFoundError:
     pass
 
+# === computer_use：cua-driver 定位引导（2026-09-25）===
+# 必须在 Hermes 的 tools.computer_use 被 import 之前跑：cua_backend 在 import 时读一次
+# HERMES_CUA_DRIVER_CMD，之后只用 shutil.which() 判断可用性。官方安装器把二进制放进
+# 用户目录并追加到 User PATH，而 PATH 是进程启动时的快照 —— 不重开终端就找不到，
+# computer_use 会整个从模型工具表里消失（现象＝"MemOmics 不能操控电脑"）。
+try:
+    from webui import cua_bootstrap
+except ImportError:
+    import cua_bootstrap
+try:
+    cua_bootstrap.ensure_cua_driver_env(log=print)
+except Exception as _cua_err:  # 定位失败绝不影响服务启动
+    print("[computer_use] cua-driver 定位异常: %r" % (_cua_err,))
+
 # === MiMo-Code 上下文架构迁移（2026-08-21）：P1-P5（预算/writer/四层记忆/分段重建/增量压缩）===
 try:
     from webui import context_arch

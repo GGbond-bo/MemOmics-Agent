@@ -3,8 +3,8 @@
   "name": "电脑控制",
   "category": "system",
   "language": "Python",
-  "description": "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。",
-  "starting_prompt": "帮我操作电脑",
+  "description": "控制电脑: 截屏 + 鼠标点击/拖拽 + 键盘输入 + 窗口管理（Hermes computer_use 工具, cua-driver 驱动, Windows/macOS/Linux 同一套 action）",
+  "starting_prompt": "帮我截个屏，看看屏幕上现在有什么",
   "source_dir": "skills/built_in/computer-use",
   "memomics_module": "电脑控制",
   "chains_from": [],
@@ -17,51 +17,70 @@
     "mouse",
     "keyboard",
     "window-management",
-    "ocr"
+    "截屏",
+    "电脑控制"
   ],
   "steps": [
     {
       "name": "截屏观察",
-      "description": "截取当前屏幕, 了解屏幕内容",
-      "tool": "screen_capture"
+      "description": "computer_use(action='capture', mode='som', app='screen') 拿整屏 PNG + 可交互元素编号",
+      "tool": "computer_use"
     },
     {
       "name": "定位目标",
-      "description": "通过OCR或图像匹配定位目标元素",
-      "tool": "screen_ocr"
+      "description": "用上一步返回的 element 编号定位（比像素坐标可靠得多）",
+      "tool": "computer_use"
     },
     {
       "name": "执行操作",
-      "description": "鼠标点击/键盘输入/窗口切换",
-      "tool": "mouse_click"
+      "description": "click / double_click / right_click / drag / scroll / type / key / set_value / focus_app",
+      "tool": "computer_use"
     },
     {
       "name": "验证结果",
-      "description": "再次截屏确认操作效果",
-      "tool": "screen_capture"
+      "description": "再 capture 一次确认操作生效；未达目标回到定位步骤",
+      "tool": "computer_use"
     }
   ],
   "parameters": {
-    "screenshot_quality": 85,
-    "ocr_language": "chi_sim+eng",
-    "failsafe": true,
-    "action_delay": 0.3
+    "capture_mode": "som",
+    "default_app": "screen",
+    "max_elements": 100,
+    "delivery_mode": "background",
+    "driver": "cua-driver",
+    "driver_cmd_env": "HERMES_CUA_DRIVER_CMD",
+    "verified_on": "Windows 10.0.26200 x86_64 / cua-driver 0.28.3 / 2026-09-25"
   },
   "safety": {
-    "failsafe": true,
+    "capture_side_effect_free": true,
+    "approval_required_for_actions": true,
     "dangerous_actions": [
       "close",
       "delete",
-      "format"
+      "send",
+      "pay",
+      "publish"
     ],
     "confirmation_required": true,
-    "abort_key": "鼠标移到屏幕左上角(0,0)"
+    "background_delivery_default": true,
+    "focus_steal_default": false,
+    "note": "旧版声明的 failsafe（鼠标甩到左上角中止）是 pyautogui 的机制, cua-driver 没有, 已删除"
   },
-  "when_to_use": "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。",
+  "when_to_use": "用户要截屏、看屏幕、点按钮、在桌面软件里输入文字、切换窗口时触发；唯一入口是 Hermes 的 computer_use 工具",
   "trigger_keywords": [
     "computer-use",
     "computer use",
-    "computer"
+    "computer",
+    "截屏",
+    "截图",
+    "截个屏",
+    "屏幕截图",
+    "看屏幕",
+    "操作电脑",
+    "控制电脑",
+    "桌面软件",
+    "键盘输入",
+    "点击按钮"
   ],
   "trigger_level": "GRN"
 }

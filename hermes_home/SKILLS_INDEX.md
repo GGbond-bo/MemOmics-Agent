@@ -306,7 +306,7 @@
 | 1 | adaptyv-api | Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv. | adaptyv-api, adaptyv api, adaptyv, api | GRN 按需触发 |
 | 2 | analysis-output-validity-gates | 生信流程「跑完 ≠ 结果有效」的产出有效性自证门 + 失败归因（内存 vs 代码）。覆盖静默无效产出（exit 0、日志全 ✓、文件齐全但数值全是垃圾，如 AUCell 矩阵全 0、regulon 基因变单字符）与归因错层（把 dask worker OOM 当代码 bug 反复改）。触发:跑完了/为什么全是0/结果可疑/AUCell全0/产出无效/exit 0 但没结果/FutureCancel | output, validity, gates | YEL 讨论触发 |
 | 3 | code-writer | 当你需要 代码编写 时触发 —— 编写Python/R脚本，数据分析代码，函数封装，程序开发 | code-writer, code writer, code, writer | GRN 按需触发 |
-| 4 | computer-use | 控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。 | computer-use, computer use, computer | GRN 按需触发 |
+| 4 | computer-use | 用户要截屏、看屏幕、点按钮、在桌面软件里输入文字、切换窗口时触发；唯一入口是 Hermes 的 computer_use 工具 | computer-use, computer use, computer, 截屏, 截图, 截个屏, 屏幕截图, 看屏幕, 操作电脑, 控制电脑, 桌面软件, 键盘输入, 点击按钮 | GRN 按需触发 |
 | 5 | create-bio-skill | 当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发 | 安装, 创建skill, 没有这个工具, 新工具, 做一个skill, 建个skill, 没有对应的skill, create-bio-skill | RED 必触发 |
 | 6 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
 | 7 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |

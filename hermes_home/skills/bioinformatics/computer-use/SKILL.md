@@ -1,14 +1,14 @@
 ---
 name: computer-use
-description: "控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。"
-when_to_use: "[computer-use] 控制电脑: 截屏+鼠标点击/拖拽+键盘输入+窗口管理+OCR文字识别。让LLM能操作任何桌面软件。"
-version: 1.0.0
+description: "控制电脑: 截屏 + 鼠标点击/拖拽 + 键盘输入 + 窗口管理（走 Hermes computer_use 工具, cua-driver 驱动）"
+when_to_use: "[computer-use] 用户要截屏、看屏幕、点按钮、在桌面软件里输入、切窗口时触发 —— 唯一入口是 computer_use 工具"
+version: 2.0.0
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
 metadata:
   hermes:
-    tags: [computer-use, desktop, automation, screenshot, mouse, keyboard, window-management, ocr, 电脑控制]
+    tags: [computer-use, desktop, automation, screenshot, mouse, keyboard, window-management, 电脑控制, 截屏]
     difficulty: basic
     language: Python
     category: General Utility
@@ -26,113 +26,117 @@ prerequisites:
 
 # 电脑控制 (Computer Use)
 
-控制电脑: 截屏 + 鼠标点击/拖拽 + 键盘输入 + 窗口管理 + OCR 文字识别。
+**唯一入口是 Hermes 的 `computer_use` 工具** —— 不是 shell 命令、不是 pyautogui 脚本、不是本技能目录里的脚本（`scripts/` 为空）。
+旧版本文档里出现的 `screen_capture` / `screen_ocr` / `mouse_click` / `keyboard_type` / `window_list` 等**都不是真实工具**（2026-09-25 全仓扫描确认：这些名字在任何代码里都不存在），照抄会浪费一整轮。
 
-适用场景: 操作任何桌面软件、自动化 GUI 任务、填写表单、截图分析、窗口管理
+## 一句话用法
 
-## When to Use
+`computer_use(action="capture", app="screen")` → 拿到整屏 PNG + 带编号的可交互元素 → `computer_use(action="click", element=7)` → 再 capture 验证。
 
-当你需要 **操作用户的电脑** 时使用此 skill。典型场景:
-- "帮我打开记事本写一段话"
-- "截个屏看看我现在屏幕上是什么"
-- "帮我点击屏幕上的某个按钮"
-- "帮我在这个软件里输入文字"
-- "列出当前打开的所有窗口"
-- "把XX窗口最大化"
+## 依赖：cua-driver（外部二进制，不是 pip 包）
 
-## 核心工作流 (截屏-分析-操作-验证 循环)
-
-```
-1. screen_capture()     → 截取当前屏幕, LLM 分析截图
-2. screen_ocr()         → (可选) OCR 识别屏幕文字, 获取元素坐标
-3. mouse_click() / keyboard_type() / keyboard_hotkey()  → 执行操作
-4. screen_capture()     → 再次截屏, 验证操作是否成功
-5. 如未达到目标, 回到 step 2
-```
-
-## 可用工具
-
-### 截屏 & 视觉
-| 工具 | 说明 |
+| 操作 | 命令 |
 |------|------|
-| `screen_capture` | 截取全屏/区域/窗口, 返回 base64 图片 |
-| `screen_ocr` | 截屏 + OCR 识别文字, 返回文字+坐标 |
+| 看状态 | `hermes computer-use status` |
+| 体检 | `hermes computer-use doctor` |
+| 安装/升级 | `hermes computer-use install`（macOS / Windows / Linux 同一命令） |
+| 自定义路径 | 环境变量 `HERMES_CUA_DRIVER_CMD` 指向二进制绝对路径 |
 
-### 鼠标
-| 工具 | 说明 |
-|------|------|
-| `mouse_click` | 点击坐标/图像匹配, 支持双击/右键 |
-| `mouse_drag` | 拖拽 |
-| `mouse_scroll` | 滚轮 |
-| `mouse_move` | 移动鼠标 (不点击) |
+- MemOmics 启动时由 `webui/cua_bootstrap.py` 自动定位（PATH 未刷新也能找到官方安装目录），日志里会出现 `[computer_use] cua-driver -> <路径>`。
+- 找不到二进制时**不报错**：工具会整个从模型工具表里消失 —— 现象是"MemOmics 不能操控电脑"，实际只是没装驱动。
+- 2026-09-25 本机实测：cua-driver 0.28.3（Windows 10.0.26200 / x86_64），`doctor` 全绿。
 
-### 键盘
-| 工具 | 说明 |
-|------|------|
-| `keyboard_type` | 输入文字 (支持中文) |
-| `keyboard_hotkey` | 组合键 (如 "ctrl,c") |
-| `keyboard_press` | 单键 (enter/esc/tab/...) |
+## 平台矩阵（同一套 action，三平台不同后端）
 
-### 窗口管理
-| 工具 | 说明 |
-|------|------|
-| `window_list` | 列出所有窗口 |
-| `window_focus` | 激活/最小化/最大化/关闭窗口 |
-| `window_move` | 移动/调整窗口大小 |
+| 平台 | UI 读取 | 输入投递 | 额外权限 |
+|------|---------|----------|----------|
+| Windows | UIAutomation（`cua-driver-uia.exe`） | SendInput / PostMessage（不抢焦点） | 无（安装时零前置条件） |
+| macOS | Accessibility（AX）+ 私有 SkyLight SPI | `SLPSPostEventRecordTo` | 辅助功能 + 屏幕录制（TCC 授权） |
+| Linux | AT-SPI（X11 与 Wayland） | XTest / virtual-keyboard | 需要 `DISPLAY` 或 `XDG_SESSION_TYPE=wayland`；alpha 质量 |
 
-### 辅助
-| 工具 | 说明 |
-|------|------|
-| `clipboard_get` | 读取剪贴板 |
-| `clipboard_set` | 写入剪贴板 |
-| `wait` | 等待 N 秒 |
+## 动作表（真实 action 枚举，共 14 个）
 
-## 安全机制
+| action | 关键参数 | 说明 |
+|--------|----------|------|
+| `capture` | `mode`(som/vision/ax), `app`, `pid`, `window_id`, `max_elements` | 截屏 + 元素树；**无副作用** |
+| `click` / `double_click` / `right_click` / `middle_click` | `element` 或 `coordinate`, `button`, `modifiers`, `delivery_mode` | 点击 |
+| `drag` | `from_element`/`to_element` 或 `from_coordinate`/`to_coordinate` | 拖拽 |
+| `scroll` | `direction`(up/down/left/right), `amount`(默认 3) | 滚轮 |
+| `type` | `text` | 输入文字（按当前键盘布局） |
+| `key` | `keys` 如 `ctrl+s` / `return` / `escape` | 组合键/单键 |
+| `set_value` | `value`, `element` | 下拉框/滑块**直接设值**，不弹原生菜单、不抢焦点 |
+| `wait` | `seconds`（≤30） | 等待渲染 |
+| `list_apps` / `list_windows` | — | 枚举可见应用/窗口（含 pid、window_id） |
+| `focus_app` | `app`, `raise_window`（默认 false） | 切目标；默认**不置顶**，不打断用户 |
 
-- **FAILSAFE=True**: 鼠标快速移到屏幕左上角 (0,0) 立即中止所有操作
-- **坐标范围检查**: 点击坐标超出屏幕会拒绝
-- **危险操作确认**: 关闭窗口/删除等操作需要用户确认
-- **中文输入安全**: 通过剪贴板粘贴, 避免输入法干扰
+## 关键行为（2026-09-25 真机实测，别凭直觉写）
 
-## 常用操作示例
+- **不抢焦点是默认**：`delivery_mode` 默认 `background`，输入直接投递给目标窗口；`focus_app` 默认不 raise。
+- **默认目标 = 最前台窗口**，可能抓到覆盖层（实测抓到过 `NVIDIA Overlay.exe`，整张图近乎全黑）。**要整屏必须显式 `app="screen"`**（等价哨兵：`desktop` / `fullscreen` / `all`），它会解析到桌面/任务栏这类真实窗口。
+- `mode="som"` 返回"带编号覆盖的 PNG + elements"，视觉模型首选；纯文本模型用 `mode="ax"`（只给元素树，无图）。
+- `max_elements` 默认 100、上限 1000：Electron/IDE 能发布 500+ 节点，被截断时结果里带 `total_elements` / `truncated_elements`，可用 `app=` 缩小范围或调高上限。
+- 元素编号来自**最近一次** `capture(mode="som")`；窗口变了要重新 capture 再点。
+- capture 返回的是 base64 PNG（实测整屏 1568x882 约 440KB）；要落盘就自己写文件，微信推送走服务端 `_send_weixin_image()`。
 
-### 打开记事本并输入文字
+## 标准工作流（截屏 → 定位 → 操作 → 验证）
+
 ```
-1. keyboard_hotkey("win,r")           → 打开运行
-2. keyboard_type("notepad")           → 输入 notepad
-3. keyboard_press("enter")            → 回车
-4. wait(1)                            → 等待记事本启动
-5. keyboard_type("Hello World")       → 输入文字
-```
-
-### 截屏并识别屏幕文字
-```
-1. screen_capture()                   → 截全屏
-2. screen_ocr()                       → OCR 识别文字+坐标
-3. 根据 OCR 结果中的文字坐标, mouse_click(x, y)
+1. capture(mode="som", app="screen")        # 先看清楚：有哪些窗口、元素编号
+2. 选 element=N（比像素坐标可靠得多）
+3. click / type / set_value / key
+4. 再 capture 一次验证；没达到目标就回到 2
 ```
 
-### 切换窗口
+## 示例
+
+### 看屏幕上有什么（最常用）
 ```
-1. window_list()                      → 列出所有窗口
-2. window_focus("浏览器", "activate")  → 激活浏览器窗口
-3. screen_capture()                   → 截屏确认
+computer_use(action="capture", app="screen", mode="som")
+→ 报告：窗口列表 + 桌面图标 + 元素编号；不要逐字转录用户的私人内容
 ```
 
-## 坐标系统
+### 点一个按钮
+```
+computer_use(action="capture", app="Edge")          # 先拿编号
+computer_use(action="click", element=12)            # 按编号点，不要猜坐标
+computer_use(action="capture", app="Edge")          # 验证
+```
 
-- 原点 (0,0) 在屏幕**左上角**
-- X 轴向右增大, Y 轴向下增大
-- `screen_capture()` 返回的 `width/height` 是屏幕分辨率
-- `screen_ocr()` 返回的 `words[].x/y` 是文字在截图中的坐标
+### 在下拉框里选值（不弹菜单）
+```
+computer_use(action="set_value", element=5, value="Blue")
+```
+
+### 切窗口 / 输入
+```
+computer_use(action="list_windows")                 # 拿到 pid/window_id
+computer_use(action="focus_app", app="notepad")     # 默认不置顶
+computer_use(action="type", text="Hello")
+```
+
+## 安全与边界
+
+- `capture` 无副作用；**其余 action 受审批门控**（Hermes 侧 approval / MemOmics 侧确认门）。
+- 危险动作（关闭/删除/发送/支付/发布）必须先向用户说清"我要点哪里"，得到确认再执行。
+- 不要主动操作聊天/邮件/银行类私人窗口；用户在场且明确要求时才动。
+- 旧文档里的 `FAILSAFE=True`（鼠标甩到左上角中止）**是 pyautogui 的机制，cua-driver 没有**，不要承诺。
+
+## 排错对照表
+
+| 现象 | 真实原因 | 处理 |
+|------|----------|------|
+| `doctor` 说 not installed | 二进制不在 PATH，且未设 `HERMES_CUA_DRIVER_CMD` | `hermes computer-use install`，或重启 MemOmics（bootstrap 会重新定位） |
+| 工具在模型工具表里根本不出现 | 同上 —— 可用性检查失败时工具被整体摘掉 | 先看服务日志里的 `[computer_use]` 行 |
+| 截图近乎全黑 / elements=0 | 默认目标是最前台窗口，命中了覆盖层 | 显式 `app="screen"` 或指定 `app`/`pid`/`window_id` |
+| UIA 枚举 >2000ms 退回 Win32 列表 | 桌面节点太多（驱动自己的降级策略） | 用 `app=` 缩小到具体窗口 |
+| Linux 报无显示 | 无图形会话 / 未设 DISPLAY | 设 `DISPLAY` 或 `XDG_SESSION_TYPE=wayland` |
 
 ## References
 
-- Source: MemOmics built-in
-- Category: system
-- Language: Python
-- Dependencies: pyautogui, mss, pygetwindow, pytesseract, PIL, cv2
-
+- 上游文档: `hermes-agent/website/docs/user-guide/features/computer-use.md`
+- 工具实现: `hermes-agent/tools/computer_use/{schema.py, tool.py, cua_backend.py, doctor.py}`
+- MemOmics 定位引导: `webui/cua_bootstrap.py`
+- 安装器（PS 5.1 需打补丁用 curl，见 2026-09-25 事故记录）
 
 ---
 
@@ -149,8 +153,8 @@ prerequisites:
 - **辩论结果自动归档**到 results/.../log/debate_*.json
 
 ### 触发场景
-- 参数选择有多个合理选项时（如分辨率 0.4 vs 0.6 vs 0.8）
-- 结果可能受方法选择影响时（如不同注释方法给出不同结果）
+- 参数选择有多个合理选项时（如截图区域全屏 vs 指定窗口、元素编号 vs 像素坐标）
+- 结果可能受方法选择影响时（如 UIA 元素树 vs OCR 定位）
 - 生物结论需要验证可靠性时
 - QC 阈值不确定时（如 MT% 阈值 10% vs 15% vs 20%）
 
