@@ -374,29 +374,18 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .reasoning-block summary:hover { background:var(--primary-light); }
 .reasoning-block .reasoning-content { padding:8px 12px; font-size:12px; color:var(--text-light); font-style:italic; white-space:pre-wrap; max-height:300px; overflow-y:auto; }
 
-/* 交互框「最新思考」条（2026-09-25）：默认只显示最新一行、快速闪过；点击看全文 */
-.think-strip { display:none; align-items:center; gap:8px; max-width:90%; margin:0 auto 6px; padding:5px 12px;
-  font-size:12px; color:var(--text-light); background:var(--tool-bg); border:1px solid var(--border);
-  border-radius:6px; cursor:pointer; overflow:hidden; }
-.think-strip.show { display:flex; }
-.think-strip:hover { border-color:var(--primary); background:var(--primary-light); }
-.think-strip .ts-icon { flex:0 0 auto; opacity:.8; }
-.think-strip .ts-text { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:italic; }
-.think-strip .ts-text.ts-flash { animation:tsFlash .45s ease-out; }
-.think-strip .ts-more { flex:0 0 auto; font-size:11px; color:var(--primary); opacity:.85; }
-.think-strip.done { opacity:.7; }
+/* 思考行（2026-09-25）：就是原来「💭 思考过程」那一行 —— 默认只显示最新一条思考、快速闪过；
+   点开（原生 details）看全文，运行中展开的内容持续更新并自动跟到最新 */
+.reasoning-block summary { display:flex; align-items:center; gap:6px; }
+.reasoning-block .rb-icon { flex:0 0 auto; opacity:.85; }
+.reasoning-block .rb-text { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:italic; }
+.reasoning-block .rb-text.rb-flash { animation:tsFlash .45s ease-out; }
+.reasoning-block .rb-meta { flex:0 0 auto; font-size:11px; color:var(--primary); opacity:.85; }
+.reasoning-block.running summary { color:var(--text); }
+.reasoning-block.running .rb-icon { animation:tsPulse 1.4s ease-in-out infinite; }
+.reasoning-block .reasoning-content { transition:max-height .2s; }
 @keyframes tsFlash { from { opacity:.1; transform:translateY(5px); } to { opacity:1; transform:none; } }
-#think-overlay { display:none; position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,.45); }
-#think-overlay.show { display:flex; align-items:center; justify-content:center; }
-#think-overlay .think-box { width:min(860px,92vw); max-height:80vh; display:flex; flex-direction:column;
-  background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.28); }
-#think-overlay .think-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border);
-  font-size:13px; color:var(--text); }
-#think-overlay .think-title { flex:1 1 auto; }
-#think-overlay .think-x { background:transparent; border:none; color:var(--text-light); font-size:15px; cursor:pointer; }
-#think-overlay .think-body { padding:12px 16px; overflow:auto; font-size:13px; line-height:1.7; color:var(--text-light);
-  white-space:pre-wrap; word-break:break-word; }
-#think-overlay .think-body.think-empty { font-style:italic; }
+@keyframes tsPulse { 0%,100% { opacity:.5; } 50% { opacity:1; } }
 
 /* 工具块 */
 .tool-block { background:var(--tool-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:6px 0; font-size:13px; }
@@ -1720,12 +1709,6 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     <div class="chat-input" id="chat-input">
       <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
       <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
-      <!-- 交互框「最新思考」条：默认只显示最新一行，点击看全文（2026-09-25） -->
-      <div class="think-strip" id="think-strip" onclick="openThinkModal()" title="点击查看完整思考过程">
-        <span class="ts-icon">💭</span>
-        <span class="ts-text" id="think-strip-text"></span>
-        <span class="ts-more">全文</span>
-      </div>
       <div class="input-row">
         <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)" data-i18n-title="upload_img">
           🖼️
@@ -2410,8 +2393,7 @@ function handleMessage(msg) {
     // 服务端持久化的思考文本（刷新/重连后恢复 💭 思考过程）
     if (msg.reasoning_log && msg.reasoning_log.length) {
       reasoningText = msg.reasoning_log.join('\n\n');
-      updateReasoningBlock();
-      updateThinkStrip(!!msg.is_running);   // 刷新/切会话重放历史思考时，也恢复"最新思考"条
+      updateReasoningBlock(!!msg.is_running);   // 刷新/切会话重放：💭 行恢复最新一条思考，点开仍是全文
     }
     var log = msg.progress_log || [];
     log.forEach(function(item) {
@@ -2462,8 +2444,7 @@ function handleMessage(msg) {
     addProgressItem(msg.step, msg.status, msg.detail, msg.ts);
   } else if (msg.type === 'reasoning') {
     reasoningText += (msg.content || '');
-    updateReasoningBlock();
-    updateThinkStrip(true);   // 交互框里"快速闪过"最新一条思考
+    updateReasoningBlock(true);   // 💭 行只显示最新一条思考（快速闪过），点开是全文
   } else if (msg.type === 'delta') {
     if (!currentAssistantEl || !currentBubble) {
       currentAssistantEl = addAssistantMsg('');
@@ -2622,7 +2603,7 @@ function handleMessage(msg) {
     document.getElementById('send').disabled = false;
     document.getElementById('stop').classList.remove('active');
     agentRunning = false;
-    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
+    finishReasoningBlock();   // 收尾：💭 行转为"已完成"并标出字数，仍可点开看全文
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     setFloatBar(false);
@@ -2643,7 +2624,7 @@ function handleMessage(msg) {
     document.getElementById('stop').classList.remove('active');
     setFloatBar(false);
     agentRunning = false;
-    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
+    finishReasoningBlock();   // 收尾：💭 行转为"已完成"并标出字数，仍可点开看全文
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
   } else if (msg.type === 'todos') {
@@ -2666,7 +2647,7 @@ function handleMessage(msg) {
     document.getElementById('stop').classList.remove('active');
     setFloatBar(false);
     agentRunning = false;
-    updateThinkStrip(false);   // 收尾：思考条转为"已完成"淡色，仍可点击看全文
+    finishReasoningBlock();   // 收尾：💭 行转为"已完成"并标出字数，仍可点开看全文
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
@@ -2839,8 +2820,6 @@ async function send(background) {
   clearPendingImages();
   fullText = '';
   reasoningText = '';
-  _thinkStripShown = '';
-  updateThinkStrip(false);   // 新一轮开始 → 收起上一条思考
   currentAssistantEl = null;
   currentBubble = null;
   progressTimelineEl = null;
@@ -3421,11 +3400,12 @@ function addThinking() {
   return div;
 }
 
-// === 交互框「最新思考」条（2026-09-25）===
-// 需求：默认只显示最新一条思考、快速闪过；点击查看完整思考过程（全文）。
-// 设计：数据源就是流式累加的 reasoningText（不额外存一份，零额外内存）；
+// === 思考行：💭「思考过程」那一行（2026-09-25）===
+// 需求：那一行默认只显示最新一条思考、快速闪过；点开看全文，且运行中能看到持续更新的内容。
+// 设计：不新增任何一行 —— 摘要行就是原来的 <summary>，全文就是原来的 .reasoning-content；
+//       数据源就是流式累加的 reasoningText（不额外存一份，零额外内存）；
 //       只在末行变化时重放一次 CSS 闪烁动画，避免每个 token 都动 DOM。
-var _thinkStripShown = '';
+var _rbLineShown = '';
 // 只剥 markdown 列表前缀，别把 "2026 年" 这种正文数字也吃掉
 var _THINK_PREFIX_RE = /^\s*(?:[>#]+|[-*•]+|\d+[.)、）])\s*/;
 function _thinkLineIn(chunk) {
@@ -3445,63 +3425,119 @@ function _thinkLatestLine(text) {
   if (line) return line;
   return t.length > 800 ? _thinkLineIn(t) : '';
 }
-function updateThinkStrip(running) {
-  var box = document.getElementById('think-strip');
-  var txt = document.getElementById('think-strip-text');
-  if (!box || !txt) return;
+
+function _rbFlash(el) {
+  if (!el || !el.classList) return;
+  el.classList.remove('rb-flash');
+  void el.offsetWidth;   // 强制重排，让同一个元素能重放动画（"快速闪过"）
+  el.classList.add('rb-flash');
+}
+function _rbMetaText(el) {
+  // 每行自己的字数：实时行取当前 reasoningText，历史回放行取挂载时记下的 _rbLen
+  var n = (el && el._rbLen != null) ? el._rbLen : (reasoningText ? reasoningText.length : 0);
+  return (el.open ? '收起' : '展开') + (n ? ' · ' + n + ' 字' : '');
+}
+function _rbMakeBlock(running) {
+  var block = document.createElement('details');
+  block.className = 'reasoning-block' + (running ? ' running' : '');
+  // 摘要行 = 💭 + 最新一条思考（快速闪过）+ 展开/收起提示；点开就是原生 details 展开全文
+  block.innerHTML = '<summary><span class="rb-icon">💭</span><span class="rb-text">思考过程</span><span class="rb-meta">展开</span></summary><div class="reasoning-content"></div>';
+  block.addEventListener('toggle', function() {
+    var m = block.querySelector('.rb-meta');
+    if (m) m.textContent = _rbMetaText(block);
+  });
+  return block;
+}
+// 给指定的消息元素挂一行 💭（刷新/切会话时把服务端持久化的思考挂回历史回答）
+function _rbAttach(hostEl, text, running) {
+  if (!hostEl || !text) return null;
+  var old = hostEl.querySelector('.reasoning-block');
+  if (old) return old;
+  var block = _rbMakeBlock(running);
+  block._rbLen = text.length;
+  var content = block.querySelector('.reasoning-content');
+  if (content) content.textContent = text;
+  var line = _thinkLatestLine(text);
+  var txt = block.querySelector('.rb-text');
+  if (txt && line) txt.textContent = line.length > 160 ? ('…' + line.slice(-160)) : line;
+  var meta = block.querySelector('.rb-meta');
+  if (meta) meta.textContent = _rbMetaText(block);
+  var bubble = hostEl.querySelector('.bubble');
+  if (bubble) bubble.before(block); else hostEl.appendChild(block);
+  return block;
+}
+// 刷新/切会话：历史渲染完之后，把本会话持久化的思考挂回最后一条回答（💭 行 → 点开是全文）
+function _rbRestoreHistoryRow() {
+  if (!reasoningText) return;
+  var box = document.getElementById('messages');
+  if (!box || box.querySelector('.reasoning-block')) return;
+  var list = box.querySelectorAll('.message.assistant');
+  if (!list.length) return;
+  var host = list[list.length - 1];
+  if (!host.querySelector('.bubble')) return;
+  _rbAttach(host, reasoningText, agentRunning);
+}
+function _rbRender(block, running) {
+  var txt = block.querySelector('.rb-text');
+  var meta = block.querySelector('.rb-meta');
   var line = _thinkLatestLine(reasoningText);
-  if (!line) { box.classList.remove('show'); _thinkStripShown = ''; return; }
-  box.classList.add('show');
+  if (txt) {
+    if (line && line !== _rbLineShown) {
+      _rbLineShown = line;
+      // 思考是从左往右流出来的，最新内容在尾巴上 —— 长行显示尾部
+      txt.textContent = line.length > 160 ? ('…' + line.slice(-160)) : line;
+      _rbFlash(txt);
+    } else if (!line && _rbLineShown) {
+      _rbLineShown = '';
+      txt.textContent = '思考过程';
+    }
+  }
+  if (meta) meta.textContent = _rbMetaText(block);
+  if (running) block.classList.add('running'); else block.classList.remove('running');
+}
+function updateReasoningBlock(running) {
   if (running === undefined || running === null) {
     running = (typeof agentRunning !== 'undefined') ? !!agentRunning : false;
   }
-  if (running) { box.classList.remove('done'); } else { box.classList.add('done'); }
-  if (line !== _thinkStripShown) {
-    _thinkStripShown = line;
-    // 思考是从左往右流出来的，最新内容在尾巴上 —— 长行显示尾部
-    txt.textContent = line.length > 160 ? ('…' + line.slice(-160)) : line;
-    txt.classList.remove('ts-flash');
-    void txt.offsetWidth;   // 强制重排，让同一个元素能重放动画（"快速闪过"）
-    txt.classList.add('ts-flash');
+  if (!currentAssistantEl && !running) {
+    // 刷新/切会话回放一个已完成的任务：挂到最后一条真实回答上，别凭空多一个空气泡
+    var _hist = document.querySelectorAll('#messages .message.assistant');
+    if (_hist.length) {
+      currentAssistantEl = _hist[_hist.length - 1];
+      currentBubble = currentAssistantEl.querySelector('.bubble');
+    }
   }
-}
-function openThinkModal() {
-  var ov = document.getElementById('think-overlay');
-  var body = document.getElementById('think-body');
-  var title = document.getElementById('think-title');
-  if (!ov || !body) return;
-  var text = reasoningText || '';
-  body.textContent = text || '（本轮还没有思考内容）';
-  if (body.classList) body.classList.toggle('think-empty', !text);
-  if (title) title.textContent = '完整思考过程' + (text ? '（' + text.length + ' 字）' : '');
-  ov.classList.add('show');
-  body.scrollTop = 0;
-}
-function closeThinkModal() {
-  var ov = document.getElementById('think-overlay');
-  if (ov) ov.classList.remove('show');
-}
-document.addEventListener('keydown', function(ev) {
-  if (ev.key !== 'Escape') return;
-  var ov = document.getElementById('think-overlay');
-  if (ov && ov.classList.contains('show')) closeThinkModal();
-});
-
-function updateReasoningBlock() {
   if (!currentAssistantEl) {
     // 如果还没有 assistant 消息元素, 创建一个空气泡
     currentAssistantEl = addAssistantMsg('');
+    if (!currentAssistantEl) return;   // 系统注入消息会被过滤掉，此时没有可挂的宿主
     currentBubble = currentAssistantEl.querySelector('.bubble');
   }
   var existing = currentAssistantEl.querySelector('.reasoning-block');
   if (!existing) {
-    existing = document.createElement('details');
-    existing.className = 'reasoning-block';
-    existing.innerHTML = '<summary>💭 思考过程 (点击展开)</summary><div class="reasoning-content"></div>';
-    currentAssistantEl.querySelector('.bubble') ? currentAssistantEl.querySelector('.bubble').before(existing) : currentAssistantEl.appendChild(existing);
+    _rbLineShown = '';   // 新气泡 → 允许再闪一次
+    existing = _rbAttach(currentAssistantEl, reasoningText, running) || _rbMakeBlock(running);
   }
-  existing.querySelector('.reasoning-content').textContent = reasoningText;
+  existing._rbLen = reasoningText ? reasoningText.length : 0;
+  var content = existing.querySelector('.reasoning-content');
+  if (content) {
+    // 必须先判断"更新前是否贴着底部"，再写新内容 —— 顺序反了会永远跟不上
+    // （内容一长就被判定成"用户自己翻上去了"，从此不再自动跟）
+    var stick = running && existing.open &&
+      (content.scrollHeight - content.scrollTop - content.clientHeight) < 40;
+    content.textContent = reasoningText;
+    if (stick) content.scrollTop = content.scrollHeight;
+  }
+  _rbRender(existing, running);
   scrollBottom();
+}
+// 收尾：思考行转为"已完成"（图标不再呼吸、提示带上字数），仍可点开看全文
+function finishReasoningBlock() {
+  var el = currentAssistantEl ? currentAssistantEl.querySelector('.reasoning-block') : null;
+  if (!el) return;
+  el.classList.remove('running');
+  var meta = el.querySelector('.rb-meta');
+  if (meta) meta.textContent = _rbMetaText(el);
 }
 
 function addToolBlock(tool, args, running) {
@@ -6455,8 +6491,7 @@ function _restoreSessionSnapshot(cache) {
   messagesEl.innerHTML = cache.messageHtml || '';
   fullText = cache.fullText || '';
   reasoningText = cache.reasoningText || '';
-  _thinkStripShown = '';
-  updateThinkStrip(!!cache.running);   // 切回会话时恢复"最新思考"条
+  // 💭 行随 messageHtml 一起还原（含"展开/收起"状态），这里不用再动它
   progressItems = cache.items.slice();
   progressTimelineEl = messagesEl.querySelector('.progress-timeline');
   currentAssistantEl = null;
@@ -6625,6 +6660,7 @@ function switchSession(sid) {
       loadDebateTimeline(sid, _dcbTimelineCtx.msgEls, _dcbTimelineCtx.offset, true);
       _dcbTimelineCtx = null;
     }
+    _rbRestoreHistoryRow();   // 历史渲染完 → 若本会话有持久化的思考，把 💭 行挂回最后一条回答
     refreshTodos(); refreshChanges();
     refreshResults();
   });
@@ -6652,6 +6688,11 @@ function switchSession(sid) {
         handleMessage(item);
       });
     }
+    // 2026-09-25: HTTP 兜底也恢复服务端持久化的思考（WS 的 progress_replay 没收到时，
+    // 刷新/切会话仍能看到 💭 思考过程 → 点开是全文）
+    if (d.reasoning_log && d.reasoning_log.length) {
+      reasoningText = d.reasoning_log.join('\n\n');
+    }
     if (d.is_running) {
       agentRunning = true;
       document.getElementById('send').disabled = true;
@@ -6665,6 +6706,7 @@ function switchSession(sid) {
         if (_ls) _ls.textContent = '🔄 运行中 · 最近工具: ' + _toolLabel(d.last_tool) + ' · 详情见上方进度';
       }
     }
+    _rbRestoreHistoryRow();   // 思考已恢复 → 挂到最后一条回答上（💭 行，点开是全文）
   }).catch(function(e) {
     // 静默失败 — WS 的 progress_replay 可能已经处理了
   });
@@ -15237,16 +15279,5 @@ async function saveUpdateConfig(mode) {
     <div class="cite-ov-body" id="cite-ov-body"></div>
   </div>
 </div>
-<!-- 交互框「最新思考」全文浮层（2026-09-25） -->
-<div id="think-overlay" onclick="if(event.target===this)closeThinkModal()">
-  <div class="think-box">
-    <div class="think-head">
-      <span>💭</span><span class="think-title" id="think-title">完整思考过程</span>
-      <button class="think-x" onclick="closeThinkModal()" title="关闭 (Esc)">✕</button>
-    </div>
-    <div class="think-body" id="think-body"></div>
-  </div>
-</div>
-
 </body>
 </html>
