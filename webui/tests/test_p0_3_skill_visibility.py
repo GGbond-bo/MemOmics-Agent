@@ -486,10 +486,12 @@ def test_d4_turn_start_wiring_in_server_source():
     assert "_skill_invoke_emit(" in src, "回合开始要发显式调用事件"
     assert "explicit=" in src and "_parse_skill_invocations(user_text)" in src, \
         "注入时要带上显式调用解析结果"
-    i = src.find('if _intent == "self_intro"')
-    assert i > 0
-    seg = src[i:i + 400]
-    assert "resolved" in seg, "用户显式点名技能时不能被自我介绍快速回复吃掉"
+    # 2026-09-26: 自我介绍"快速回复"（绕过 LLM 的固定文案）已整体删除，
+    # 显式点名不会再被它吃掉 —— 这里改成断言那条路径彻底不存在。
+    assert "_SELF_INTRO_ZH" not in src and "_SELF_INTRO_EN" not in src, \
+        "固定自我介绍文案应已删除"
+    assert "跳过 agent 调用" not in src, "不应再有绕过 LLM 的快速回复分支"
+    assert "_inj_intent = _intent" in src, "self_intro 也要照常构建注入并走 agent"
 
 
 # ==================== E. 前端 ====================

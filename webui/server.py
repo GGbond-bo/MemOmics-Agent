@@ -4813,32 +4813,34 @@ def _detect_domain_from_text(text: str) -> str:
     return best_domain
 
 
-# === 自我介绍文案（WebUI 与微信路径共用，绕过 LLM）===
-_SELF_INTRO_ZH = (
-    "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
-    "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
-    "## 核心能力\n\n"
-    "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
-    "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
-    "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
-    "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
-    "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
-    "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
-    "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
-    "有什么需要帮忙的，直接告诉我！"
+# === 自我介绍：不再有"写好的介绍"（2026-09-26 用户要求）===
+# 历史做法：命中"介绍"类关键词就把一段固定文案直接发给用户（完全不经过大模型），
+# 或者在提示词里硬要求"必须逐字输出"。两个问题：
+#   1) 关键词误命中 —— "介绍一下我这个数据集/这段代码"也会被吃掉，答非所问；
+#   2) 回答永远是同一段，不看上下文、不看用户当前进度、不看用户语言。
+# 现在只保留一份"事实参考"给模型看（不是发给用户的成品文案），由模型结合上下文
+# 自己组织回答：真在问身份就用这些事实自然作答，在问别的就正常回答那个问题。
+_SELF_FACTS_ZH = (
+    "关于 MemOmics 的真实事实（供你参考，不是要照抄的文案）：\n"
+    "- 身份：基于 Hermes 框架的自进化多组学生信分析平台；不是聊天机器人，而是能自己扫描数据、分析、出报告的自主 Agent，用户不用写代码。\n"
+    "- 数据扫描：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等格式，检测物种、组织、细胞数、注释状态，推荐分析路径。\n"
+    "- 完整流程：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC → 生存分析 → 报告生成。\n"
+    "- 双引擎：默认 R/Seurat，数据量大于 60 万细胞自动切 Python/Scanpy；缺包自动安装（BiocManager/remotes/pip/conda）。\n"
+    "- 技能库：内置 270+ 生信技能模板（Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等），分析时自动套用对应技能的参数与模板。\n"
+    "- 铁轨审查：环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查，不通过就阻断纠正。\n"
+    "- 知识库：内置生信知识库（物种/组织/方向三维索引），分析时自动检索生物学背景并结合文献先验。\n"
+    "- 结果管理：结果按 results/<模块>/<方法>/{figures,results,scripts,data} 分目录存放，可追溯可复现。\n"
 )
-_SELF_INTRO_EN = (
-    "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
-    "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
-    "## Core Capabilities\n\n"
-    "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
-    "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
-    "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
-    "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
-    "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
-    "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
-    "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
-    "What can I help you with? Just let me know!"
+_SELF_FACTS_EN = (
+    "Facts about MemOmics (reference material, not text to copy verbatim):\n"
+    "- Identity: a self-evolving multi-omics bioinformatics platform built on the Hermes framework; an autonomous agent that scans data, runs analyses and writes reports - users write no code.\n"
+    "- Data scanning: auto-detects scRNA-seq / scATAC-seq / spatial transcriptomics / bulk RNA-seq, plus species, tissue, cell counts and annotation status; recommends an analysis path.\n"
+    "- Pipeline: QC (decontamination -> doublet filtering -> normalization) -> dimensionality reduction -> clustering -> annotation -> DE -> pathway enrichment -> cell communication -> trajectory -> SCENIC -> survival analysis -> report.\n"
+    "- Dual engine: R/Seurat by default, auto-switches to Python/Scanpy above 600K cells; auto-installs missing packages (BiocManager/remotes/pip/conda).\n"
+    "- Skills: 270+ built-in bioinformatics skill templates (Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy, ...).\n"
+    "- Rail review: environment check -> package install -> parameter validation -> result quality -> figure check -> code review; blocks and corrects on failure.\n"
+    "- Knowledge base: species/tissue/direction 3D index, combined with literature priors.\n"
+    "- Results: stored under results/<module>/<method>/{figures,results,scripts,data}; traceable and reproducible.\n"
 )
 
 # === 图路由：意图分类 + 技能触发注入 ===
@@ -4848,7 +4850,7 @@ def _classify_intent(text: str):
     """五级意图识别。Returns: (intent, confidence, meta_dict)
     
     Intent flow:
-      self_intro    — 自介快回，绕过LLM
+      self_intro    — 身份/能力提问，正常走 LLM（按语境作答，不再有固定文案）
       chat          — 纯闲聊，不注入skill
       research_plan — 设计研究方案，文献驱动
       direct_exec   — 参数已定，直接执行（跳过规划，保留审查）
@@ -5370,31 +5372,17 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     if intent == "chat":
         return explicit_prefix + pinned_prefix + red_prefix
     if intent == "self_intro":
-        # 硬注入固定自我介绍，LLM 禁止自由发挥
-        return (
-            "【系统指令：自我介绍 — 必须逐字输出以下内容，禁止修改、禁止缩写、禁止自己编】\n\n"
-            "请直接输出以下固定内容作为回复，不要改动任何字：\n\n"
-            "> 我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n"
-            "> \n"
-            "> 我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n"
-            "> \n"
-            "> ## 核心能力\n"
-            "> \n"
-            "> **数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n"
-            "> \n"
-            "> **完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n"
-            "> \n"
-            "> **R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n"
-            "> \n"
-            "> **内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n"
-            "> \n"
-            "> **铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n"
-            "> \n"
-            "> **知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n"
-            "> \n"
-            "> **结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n"
-            "> \n"
-            "> 有什么需要帮忙的，直接告诉我！"
+        # 2026-09-26: 不再硬注入"必须逐字输出"的成品文案 —— 改成给模型事实参考 +
+        # 语境判断要求，由模型决定怎么答（这才是"结合上下文语境"）。
+        return explicit_prefix + pinned_prefix + red_prefix + (
+            "【身份问题参考资料 —— 先判断用户在问什么，再决定怎么答】\n"
+            "判断规则：\n"
+            "1) 用户在问你的身份/能力（你是谁、你能做什么、介绍一下你自己…）：用下面的事实结合当前对话语境自然作答。"
+            "用户已经知道的不必重复；他正在做的事可以顺带对上（例如刚给了数据、刚跑完某一步）。"
+            "用用户的语言回答，篇幅按问题大小来，不要整段照抄。\n"
+            "2) 用户其实在问别的（某个数据集/代码/流程/结果文件/参数）：正常回答那个问题，不要输出能力清单，也不要自我介绍。\n"
+            "3) 拿不准时按用户字面问题回答。\n\n"
+            + (_SELF_FACTS_ZH if session_lang == "zh" else _SELF_FACTS_EN) + "\n"
         )
     zh = session_lang == "zh"
     lines = ["【系统指令：自动路由 - 必须遵守】",
@@ -5693,7 +5681,7 @@ _PROGRESS_TEXT = {
         "generating_report": "正在生成报告", "debating": "正在辩论",
         "reviewing": "正在审查", "writing_code": "正在写代码",
         "completed": "已完成",
-        "intro_reasoning": "用户询问系统身份，触发自我介绍快速回复模板，无需调用 LLM。",
+        "intro_reasoning": "用户询问系统身份，交给模型结合上下文作答。",
         "initializing_engine": "正在初始化分析引擎",
         "loading_skills": "加载 355 个生信技能模板...",
         "engine_ready": "引擎就绪，分析环境已就绪",
@@ -5709,7 +5697,7 @@ _PROGRESS_TEXT = {
         "generating_report": "Generating report", "debating": "Debating",
         "reviewing": "Reviewing", "writing_code": "Writing code",
         "completed": "Completed",
-        "intro_reasoning": "User asked about system identity. Self-introduction fast-reply template triggered, no LLM call needed.",
+        "intro_reasoning": "User asked about system identity - answering from context via the model.",
         "initializing_engine": "Initializing analysis engine",
         "loading_skills": "Loading 355 bioinformatics skill templates...",
         "engine_ready": "Engine ready, analysis environment initialized",
@@ -12456,38 +12444,6 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         except Exception:
             pass
 
-    # === 自我介绍快速回复（绕过 agent LLM，与 WebUI 路径对齐）===
-    # 2026-08-14: 微信路径此前缺 self_intro 快回 → 模型限流时"你是谁"永远无回复
-    try:
-        _wx_intent, _wx_conf, _wx_extra = _classify_intent(text)
-    except Exception:
-        _wx_intent = "chat"
-    if _wx_intent == "self_intro":
-        _intro = _SELF_INTRO_EN if session.get("lang") == "en" else _SELF_INTRO_ZH
-        session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin-agent"})
-        if len(session["messages"]) > 200:
-            session["messages"] = session["messages"][-200:]
-        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        session["running_agent"] = False
-        session["running_task"] = None
-        _persist_session_message(session, "assistant", _intro)
-        _session_emit(session, {"type": "delta", "content": _intro, "session_id": sid})
-        _session_emit(session, {"type": "complete", "content": _intro, "session_id": sid})
-        _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
-        wx_msg = {"id": str(int(time.time() * 1000)), "sender_id": _weixin_state["account_id"], "sender_name": "Agent", "text": _intro, "context_token": "", "ts": int(time.time()), "direction": "out"}
-        _append_weixin_msg(wx_msg)
-        for ws_client in list(_WEIXIN_WS_CLIENTS):
-            try:
-                await ws_client.send_text(json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False))
-            except Exception:
-                pass
-        if _weixin_adapter:
-            try:
-                send_result = await _send_weixin_important(_intro, chat_id_override=sender_id)
-                print(f"[MemOmics] 微信Agent回复(自介快回): success={send_result}", flush=True)
-            except Exception as e:
-                print(f"[MemOmics] 微信自介回复发送失败: {e}", flush=True)
-        return
 
     try:
         # 分析级别检测
@@ -17768,67 +17724,21 @@ async def ws_endpoint(ws: WebSocket):
 
                 # RED 必触发预检在 _build_skill_injection 内部完成：
                 # chat/self_intro 意图也调用（命中 RED 触发词 → 返回强约束注入；
-                # 未命中 → chat 返回空字符串，self_intro 由下方快速回复处理）
+                # 未命中 → chat 返回空字符串，self_intro 返回「按语境作答 + 事实参考」）
                 # P0-3: 显式 /skill-name 调用 —— 用户点名的技能优先级最高（高于置顶与 RED）
                 _explicit_inv = _parse_skill_invocations(user_text)
-                # 显式点名时不走自我介绍快速回复，改走 chat 注入（否则固定的自我介绍会盖掉显式块）
-                _inj_intent = "chat" if (_intent == "self_intro" and _explicit_inv["resolved"]) else _intent
-                if _intent == "self_intro" and not _explicit_inv["resolved"]:
-                    _skill_ctx = None
-                else:
-                    _skill_ctx = _build_skill_injection(_inj_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
-                                                      pinned=_pinned_skills_get(session["id"]),
-                                                      explicit=_explicit_inv)
-                    _pinned_expect_emit(session, user_text)  # P8: 置顶技能触发词命中 → 前端标记「本轮应加载」
-                    _red_hit_emit(session, user_text)        # P0-3: RED 命中原因 → 前端 chip 显示「为什么」
-                    _skill_invoke_emit(session, _explicit_inv)  # P0-3: 显式点名结果（命中/未知/歧义）→ 前端回显
+                # 2026-09-26: self_intro 不再走"写好的介绍"快速回复，和别的意图一样交给
+                # agent LLM 回答。这里统一构建注入：self_intro 分支现在给的是
+                # "按语境作答 + 事实参考"，不是逐字文案。
+                _inj_intent = _intent
+                _skill_ctx = _build_skill_injection(_inj_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
+                                                  pinned=_pinned_skills_get(session["id"]),
+                                                  explicit=_explicit_inv)
+                _pinned_expect_emit(session, user_text)  # P8: 置顶技能触发词命中 → 前端标记「本轮应加载」
+                _red_hit_emit(session, user_text)        # P0-3: RED 命中原因 → 前端 chip 显示「为什么」
+                _skill_invoke_emit(session, _explicit_inv)  # P0-3: 显式点名结果（命中/未知/歧义）→ 前端回显
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
-                # === 自我介绍快速回复（绕过 agent LLM）===
-                # P0-3: 用户显式点名了技能时不走快速回复（点名的东西最大）
-                if _intent == "self_intro" and not _explicit_inv["resolved"]:
-                    _intro_zh = (
-                        "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
-                        "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
-                        "## 核心能力\n\n"
-                        "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
-                        "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
-                        "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
-                        "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
-                        "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
-                        "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
-                        "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
-                        "有什么需要帮忙的，直接告诉我！"
-                    )
-                    _intro_en = (
-                        "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
-                        "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
-                        "## Core Capabilities\n\n"
-                        "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
-                        "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
-                        "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
-                        "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
-                        "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
-                        "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
-                        "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
-                        "What can I help you with? Just let me know!"
-                    )
-                    _intro = _intro_en if session.get("lang") == "en" else _intro_zh
-                    session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
-                    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    _persist_session_message(session, "assistant", _intro)
-                    await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                    await asyncio.sleep(1.0)  # 让前端有时间渲染思考状态
-                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "done", "detail": _pt(session, "completed"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "complete", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
-                    session["_user_turn_active"] = False  # 并发护栏: 快速回复路径结束后清除
-                    if _thread_state is not None:
-                        _thread_state.mark_turn_end(session["id"])
-                    continue  # 跳过 agent 调用
 
                 # 发送 session_id（thinking 已在消息到达时即时发送）
                 _session_emit(session, {"type": "session", "session_id": session["id"], "title": session["title"]})
