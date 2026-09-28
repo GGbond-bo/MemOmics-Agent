@@ -264,17 +264,52 @@ class TestScriptIntegrity:
     """多角度：内联 script 块结构、关键函数不缺失、无残留旧函数"""
 
     def test_inline_script_blocks(self):
-        """内联 script 结构（2026-09-22 现状）：i18n 字典块 + 主应用块，共 2 块。
+        """内联 script 结构（2026-09-28 现状）：i18n 字典块 + 主应用块 + 片头动画块，共 3 块。
 
         原来整页只有 1 个 script 块，P5 界面双语把 i18n 拆成了独立块（14KB），
-        主块 470KB。这里守的是「只有这两块、没有重复注入/残留的空块」，
+        主块 470KB；2026-09-28 加入片头动画（开场动画）时又追加了第 3 块，
+        它自成一体（片源/时机/画面选择 + 播放器），刻意不并进主块以便整块摘除。
+        这里守的是「只有这几块、没有重复注入/残留的空块」，
         块数变了必须同步改这个用例（别再让"既有失败"挂着）。
         """
         blocks = _script_blocks()
-        assert len(blocks) == 2, "内联 script 块数变了：%d" % len(blocks)
+        assert len(blocks) == 3, "内联 script 块数变了：%d" % len(blocks)
         assert not any(not b.strip() for b in blocks), "存在空 script 块"
         assert any("var I18N = {" in b for b in blocks), "i18n 块丢了"
         assert any("let currentSid = null;" in b for b in blocks), "主应用块丢了"
+        # 片头块：自带片源清单与这两个入口，任一丢失都说明被误删/截断
+        assert any("INTRO_CLIPS" in b and "function maybePlayIntro" in b for b in blocks), "片头动画块丢了"
+
+    def test_intro_sidebar_entry_replaced_theme_cycler(self):
+        """侧栏入口：原「🎨 背景」换成「🎬 片头设置」，且设置页的配色主题仍在。
+
+        背景快捷切换（cycleTheme）在 2026-09-28 被片头设置入口取代；该函数本身
+        保留未删，配色主题的正规入口一直是「设置 → 配色主题」，不许被一起删掉。
+        """
+        assert 'onclick="openIntroSettings()"' in HTML, "片头设置入口丢了"
+        assert 'onclick="cycleTheme()"' not in HTML, "侧栏旧「背景」入口应已移除"
+        assert 'id="theme-options"' in HTML, "设置页的配色主题选择器不应被删"
+        assert "function cycleTheme()" in HTML, "cycleTheme 函数应保留（未删除）"
+        assert "function openIntroSettings()" in HTML and "function renderIntroSettings()" in HTML
+
+    def test_intro_clips_are_local_assets(self):
+        """片头素材必须落在 /assets/intro/ 下，且四段片源都在清单里。
+
+        片头是本地文件（webui/assets/intro/*.mp4，由 /assets 静态挂载提供），
+        不引任何外链——离线安装包里也必须能播。
+        """
+        assert "/assets/intro/" in HTML
+        for clip in ("brand.mp4", "cyberpunk.mp4", "awakening.mp4", "startup.mp4"):
+            assert "/assets/intro/" + clip in HTML, "片源清单缺 " + clip
+        assert "http://" not in HTML.split("INTRO_CLIPS")[1].split("]")[0], "片源清单不许出现外链"
+
+    def test_intro_settings_persist_and_can_be_disabled(self):
+        """片头选择存 localStorage，且「关闭」是合法取值（用户有权不要片头）。"""
+        assert "memomics-intro" in HTML
+        assert "localStorage.setItem(INTRO_KEY" in HTML
+        assert "'off'" in HTML, "必须支持关闭片头"
+        # 与既有主题同一个 localStorage 套路
+        assert "memomics-theme" in HTML
 
     def test_removed_old_min_48(self):
         # 旧 min=48 逻辑已移除

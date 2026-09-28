@@ -1661,7 +1661,9 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <!-- T13: 「后台任务」入口已搬到顶部横栏（#nav-tasks 那个胶囊），左侧导航不再重复 -->
       <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
       <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
-      <div class="nav-item" onclick="cycleTheme()" style="font-size:12px;color:#888;" title="切换背景主题">🎨 背景</div>
+      <!-- 2026-09-28：原「🎨 背景」（cycleTheme 快捷切换）改为片头设置入口；
+           配色主题仍在「设置 → 配色主题」里，功能未动。cycleTheme() 函数保留未删。 -->
+      <div class="nav-item" onclick="openIntroSettings()" id="nav-intro" style="font-size:12px;color:#888;" title="片头动画设置：选片源、选播放时机，也可以彻底关闭">🎬 片头设置</div>
     </div>
     <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
     <div class="sidebar-footer" style="padding-top:0;">
@@ -15679,5 +15681,197 @@ async function saveUpdateConfig(mode) {
     <div class="cite-ov-body" id="cite-ov-body"></div>
   </div>
 </div>
+<!-- === 片头动画（开场动画）：片源可选、时机可选、可关闭 === -->
+<style>
+  #intro-overlay { position:fixed; left:0; top:0; width:100%; height:100%; z-index:10000; background:#000; display:none; align-items:center; justify-content:center; }
+  #intro-overlay.on { display:flex; }
+  #intro-video { width:100%; height:100%; }
+  #intro-overlay.fit-cover #intro-video { object-fit:cover; }
+  #intro-overlay.fit-contain #intro-video { object-fit:contain; }
+  #intro-skip { position:absolute; right:18px; bottom:18px; padding:6px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.35); background:rgba(0,0,0,.35); color:#fff; font-size:12px; cursor:pointer; letter-spacing:.5px; }
+  #intro-skip:hover { background:rgba(0,0,0,.65); }
+  .intro-choice { display:flex; gap:8px; flex-wrap:wrap; }
+  .intro-card { flex:1 1 calc(50% - 8px); min-width:148px; padding:9px 11px; border:2px solid var(--border); border-radius:8px; cursor:pointer; font-size:12px; line-height:1.45; background:var(--bg); }
+  .intro-card.active { border-color:var(--primary); background:var(--primary-light); }
+  .intro-card .intro-sub { color:var(--text-light); font-size:11px; }
+</style>
+<div id="intro-overlay" class="fit-cover">
+  <video id="intro-video" playsinline preload="auto" muted></video>
+  <button id="intro-skip" onclick="closeIntro()" title="跳过片头（Esc）">跳过 ▶</button>
+</div>
+
+<div id="intro-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:9998;">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;width:min(92vw,560px);max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.35);">
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;">🎬 片头设置
+      <span style="margin-left:auto;cursor:pointer;color:var(--text-light);font-size:14px;" onclick="closeIntroSettings()" title="关闭">✕</span>
+    </div>
+    <div style="padding:14px 16px;font-size:12px;line-height:1.7;color:var(--text);">
+      <div style="margin-bottom:14px;">
+        <label style="display:block;margin-bottom:6px;font-weight:600;">片源</label>
+        <div class="intro-choice" id="intro-clip-options"></div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;margin-bottom:6px;font-weight:600;">播放时机</label>
+        <div class="intro-choice" id="intro-when-options"></div>
+      </div>
+      <div>
+        <label style="display:block;margin-bottom:6px;font-weight:600;">画面</label>
+        <div class="intro-choice" id="intro-fit-options"></div>
+      </div>
+      <div id="intro-note" style="margin-top:10px;color:var(--text-light);"></div>
+    </div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);justify-content:flex-end;">
+      <button onclick="previewIntro()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">▶ 预览</button>
+      <button onclick="closeIntroSettings()" style="padding:6px 16px;border-radius:6px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;">完成</button>
+    </div>
+  </div>
+</div>
+<script>
+// === 片头动画：选择存 localStorage（与 memomics-theme 同一套做法，不依赖后端）===
+var INTRO_KEY = 'memomics-intro';
+var INTRO_DAY_KEY = 'memomics-intro-lastday';
+var INTRO_CLIPS = [
+  { id:'brand',     name:'DeepSeek 品牌片头',     sub:'深蓝净色 · 7.05 s', file:'/assets/intro/brand.mp4' },
+  { id:'cyberpunk', name:'DeepSeek 赛博朋克片头', sub:'霓虹赛博 · 7.05 s', file:'/assets/intro/cyberpunk.mp4' },
+  { id:'awakening', name:'DeepSeek 数字角色苏醒', sub:'角色苏醒 · 7.05 s', file:'/assets/intro/awakening.mp4' },
+  { id:'startup',   name:'DeepSeek 启动问题',     sub:'启动故障 · 8.05 s', file:'/assets/intro/startup.mp4' }
+];
+var INTRO_WHENS = [
+  { id:'always', name:'每次打开应用', sub:'刷新就播' },
+  { id:'daily',  name:'每天首次打开', sub:'同一天只播一次' },
+  { id:'off',    name:'关闭',         sub:'完全不播' }
+];
+var INTRO_FITS = [
+  { id:'cover',   name:'铺满屏幕', sub:'裁掉超出部分，不留黑边' },
+  { id:'contain', name:'完整显示', sub:'长宽比不符时留黑边' }
+];
+
+function introCfg() {
+  var raw = null;
+  try { raw = JSON.parse(localStorage.getItem(INTRO_KEY) || 'null'); } catch (e) { raw = null; }
+  var c = (raw && typeof raw === 'object') ? raw : {};
+  var clipOk = c.clip === 'off' || INTRO_CLIPS.some(function (x) { return x.id === c.clip; });
+  var whenOk = INTRO_WHENS.some(function (x) { return x.id === c.when; });
+  return {
+    clip: clipOk ? c.clip : 'brand',
+    when: whenOk ? c.when : 'always',
+    fit: c.fit === 'contain' ? 'contain' : 'cover'
+  };
+}
+function introSave(cfg) {
+  try { localStorage.setItem(INTRO_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+function introClipById(id) {
+  for (var i = 0; i < INTRO_CLIPS.length; i++) { if (INTRO_CLIPS[i].id === id) return INTRO_CLIPS[i]; }
+  return null;
+}
+
+var _introTimer = null;
+/** 播放片头；连不上/解码不了时不困住用户 —— 到点自动放行。 */
+function introPlay(clip) {
+  if (!clip) return;
+  var ov = document.getElementById('intro-overlay');
+  var v = document.getElementById('intro-video');
+  if (!ov || !v) return;
+  v.src = clip.file;
+  ov.className = 'fit-' + introCfg().fit;
+  ov.classList.add('on');
+  var done = false;
+  function finish() {
+    if (done) return;
+    done = true;
+    if (_introTimer) { clearTimeout(_introTimer); _introTimer = null; }
+    try { v.pause(); } catch (e) {}
+    ov.classList.remove('on');
+    v.removeAttribute('src');
+    try { v.load(); } catch (e) {}
+  }
+  window._introFinish = finish;
+  v.onended = finish;
+  v.onerror = finish;
+  // 看门狗：12 秒还没画出第一帧就走人（文件缺失/浏览器不支持编码时尤其重要）
+  _introTimer = setTimeout(function () {
+    if (v.readyState < 2) finish();
+  }, 12000);
+  var p = v.play();
+  if (p && typeof p.catch === 'function') { p.catch(function () { finish(); }); }
+}
+function closeIntro() {
+  if (typeof window._introFinish === 'function') window._introFinish();
+}
+function maybePlayIntro() {
+  var cfg = introCfg();
+  if (cfg.when === 'off' || cfg.clip === 'off') return;
+  var today = new Date().toISOString().slice(0, 10);
+  if (cfg.when === 'daily') {
+    try { if (localStorage.getItem(INTRO_DAY_KEY) === today) return; } catch (e) {}
+  }
+  try { localStorage.setItem(INTRO_DAY_KEY, today); } catch (e) {}
+  introPlay(introClipById(cfg.clip));
+}
+function openIntroSettings() {
+  renderIntroSettings();
+  document.getElementById('intro-modal').style.display = 'flex';
+}
+function closeIntroSettings() {
+  document.getElementById('intro-modal').style.display = 'none';
+}
+function previewIntro() {
+  var cfg = introCfg();
+  var clip = introClipById(cfg.clip === 'off' ? 'brand' : cfg.clip);
+  closeIntroSettings();
+  introPlay(clip);
+}
+function renderIntroSettings() {
+  var cfg = introCfg();
+  function cards(boxId, items, current, onPick) {
+    var box = document.getElementById(boxId);
+    if (!box) return;
+    box.innerHTML = '';
+    items.forEach(function (it) {
+      var d = document.createElement('div');
+      d.className = 'intro-card' + (it.id === current ? ' active' : '');
+      var t = document.createElement('div');
+      t.textContent = it.name;
+      var s = document.createElement('div');
+      s.className = 'intro-sub';
+      s.textContent = it.sub || '';
+      d.appendChild(t); d.appendChild(s);
+      d.onclick = function () { onPick(it.id); };
+      box.appendChild(d);
+    });
+  }
+  var clipItems = INTRO_CLIPS.map(function (c) { return { id: c.id, name: c.name, sub: c.sub }; });
+  clipItems.push({ id: 'off', name: '不要片头', sub: '与「播放时机=关闭」等效' });
+  cards('intro-clip-options', clipItems, cfg.clip, function (id) {
+    var c = introCfg(); c.clip = id; introSave(c); renderIntroSettings();
+  });
+  cards('intro-when-options', INTRO_WHENS, cfg.when, function (id) {
+    var c = introCfg(); c.when = id; introSave(c); renderIntroSettings();
+  });
+  cards('intro-fit-options', INTRO_FITS, cfg.fit, function (id) {
+    var c = introCfg(); c.fit = id; introSave(c); renderIntroSettings();
+  });
+  var note = document.getElementById('intro-note');
+  if (note) {
+    if (cfg.when === 'off' || cfg.clip === 'off') {
+      note.textContent = '当前：不会播放片头。设置只存在这台机器的浏览器里（localStorage）。';
+    } else {
+      var nm = introClipById(cfg.clip);
+      note.textContent = '当前：' + (nm ? nm.name : cfg.clip) + '，' +
+        (cfg.when === 'daily' ? '每天首次打开时播一次' : '每次打开应用时播') +
+        '。点「▶ 预览」可以马上看一次。';
+    }
+  }
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  var ov = document.getElementById('intro-overlay');
+  if (ov && ov.classList.contains('on')) { closeIntro(); return; }
+  var m = document.getElementById('intro-modal');
+  if (m && m.style.display === 'flex') { closeIntroSettings(); }
+});
+maybePlayIntro();
+</script>
 </body>
 </html>
