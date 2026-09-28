@@ -293,15 +293,31 @@ class TestScriptIntegrity:
         assert "function openIntroSettings()" in HTML and "function renderIntroSettings()" in HTML
 
     def test_intro_clips_are_local_assets(self):
-        """片头素材必须落在 /assets/intro/ 下，且四段片源都在清单里。
+        """片头素材必须落在 /assets/intro/<品牌>/ 下，四段片源都在清单里。
 
-        片头是本地文件（webui/assets/intro/*.mp4，由 /assets 静态挂载提供），
-        不引任何外链——离线安装包里也必须能播。
+        片头是本地文件（webui/assets/intro/{memomics,deepseek}/*.mp4，由 /assets 静态
+        挂载提供），不引任何外链——离线安装包里也必须能播。
         """
         assert "/assets/intro/" in HTML
-        for clip in ("brand.mp4", "cyberpunk.mp4", "awakening.mp4", "startup.mp4"):
-            assert "/assets/intro/" + clip in HTML, "片源清单缺 " + clip
-        assert "http://" not in HTML.split("INTRO_CLIPS")[1].split("]")[0], "片源清单不许出现外链"
+        for clip in ("brand", "cyberpunk", "awakening", "startup"):
+            assert "'" + clip + "'" in HTML, "片源清单缺 " + clip
+        # 地址由 introSrc() 拼出：/assets/intro/<品牌>/<片名>.mp4
+        assert "function introSrc(clipId, brand)" in HTML
+        assert "'/assets/intro/' + b + '/' + clipId + '.mp4'" in HTML
+        # 只看 introSrc 的函数体：地址必须是本地路径，不许出现任何 http(s) 外链
+        _src_fn = HTML.split("function introSrc")[1].split("\n}")[0]
+        assert "http" not in _src_fn, "片源地址不许出现外链"
+
+    def test_intro_brand_mode_switch(self):
+        """「品牌」模式：默认 MemOmics 版，可切回 DeepSeek 原版（片内标识是烧进视频的，
+        只能靠两套文件而不是 CSS 覆盖，所以两套文件都必须随包发）。"""
+        assert "INTRO_BRANDS" in HTML, "品牌清单丢了"
+        assert "'memomics'" in HTML and "'deepseek'" in HTML
+        assert "intro-brand-options" in HTML, "对话框缺「品牌」分组"
+        # 默认必须是 MemOmics（除非用户显式存过 deepseek）
+        assert "c.brand === 'deepseek' ? 'deepseek' : 'memomics'" in HTML
+        # 预览/播放都走 introSrc，不能有人绕过品牌直接读死路径
+        assert "v.src = introSrc(clip.id, introCfg().brand)" in HTML
 
     def test_intro_settings_persist_and_can_be_disabled(self):
         """片头选择存 localStorage，且「关闭」是合法取值（用户有权不要片头）。"""

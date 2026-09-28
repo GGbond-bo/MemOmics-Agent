@@ -15714,6 +15714,10 @@ async function saveUpdateConfig(mode) {
         <label style="display:block;margin-bottom:6px;font-weight:600;">播放时机</label>
         <div class="intro-choice" id="intro-when-options"></div>
       </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;margin-bottom:6px;font-weight:600;">品牌</label>
+        <div class="intro-choice" id="intro-brand-options"></div>
+      </div>
       <div>
         <label style="display:block;margin-bottom:6px;font-weight:600;">画面</label>
         <div class="intro-choice" id="intro-fit-options"></div>
@@ -15730,12 +15734,23 @@ async function saveUpdateConfig(mode) {
 // === 片头动画：选择存 localStorage（与 memomics-theme 同一套做法，不依赖后端）===
 var INTRO_KEY = 'memomics-intro';
 var INTRO_DAY_KEY = 'memomics-intro-lastday';
-var INTRO_CLIPS = [
-  { id:'brand',     name:'DeepSeek 品牌片头',     sub:'深蓝净色 · 7.05 s', file:'/assets/intro/brand.mp4' },
-  { id:'cyberpunk', name:'DeepSeek 赛博朋克片头', sub:'霓虹赛博 · 7.05 s', file:'/assets/intro/cyberpunk.mp4' },
-  { id:'awakening', name:'DeepSeek 数字角色苏醒', sub:'角色苏醒 · 7.05 s', file:'/assets/intro/awakening.mp4' },
-  { id:'startup',   name:'DeepSeek 启动问题',     sub:'启动故障 · 8.05 s', file:'/assets/intro/startup.mp4' }
+// 每段片有两种品牌版本：memomics = 已把片内 DeepSeek 标识换成 MemOmics 的版本，
+// deepseek = 原版。选哪版由「品牌」决定，见 introBrand()。
+var INTRO_BRANDS = [
+  { id:'memomics', name:'MemOmics',        sub:'默认：片内标识已换成 MemOmics' },
+  { id:'deepseek', name:'DeepSeek（原版）', sub:'保留原始 DeepSeek 标识' }
 ];
+var INTRO_CLIPS = [
+  { id:'brand',     name:'品牌片头',     sub:'深蓝净色 · 7.05 s' },
+  { id:'cyberpunk', name:'赛博朋克片头', sub:'霓虹赛博 · 7.05 s' },
+  { id:'awakening', name:'数字角色苏醒', sub:'角色苏醒 · 7.05 s' },
+  { id:'startup',   name:'启动问题',     sub:'启动故障 · 8.05 s' }
+];
+/** 片源地址：/assets/intro/<品牌>/<片名>.mp4（本地文件，无外链） */
+function introSrc(clipId, brand) {
+  var b = (brand === 'deepseek') ? 'deepseek' : 'memomics';
+  return '/assets/intro/' + b + '/' + clipId + '.mp4';
+}
 var INTRO_WHENS = [
   { id:'always', name:'每次打开应用', sub:'刷新就播' },
   { id:'daily',  name:'每天首次打开', sub:'同一天只播一次' },
@@ -15755,7 +15770,8 @@ function introCfg() {
   return {
     clip: clipOk ? c.clip : 'brand',
     when: whenOk ? c.when : 'always',
-    fit: c.fit === 'contain' ? 'contain' : 'cover'
+    fit: c.fit === 'contain' ? 'contain' : 'cover',
+    brand: c.brand === 'deepseek' ? 'deepseek' : 'memomics'
   };
 }
 function introSave(cfg) {
@@ -15773,7 +15789,7 @@ function introPlay(clip) {
   var ov = document.getElementById('intro-overlay');
   var v = document.getElementById('intro-video');
   if (!ov || !v) return;
-  v.src = clip.file;
+  v.src = introSrc(clip.id, introCfg().brand);
   ov.className = 'fit-' + introCfg().fit;
   ov.classList.add('on');
   var done = false;
@@ -15852,13 +15868,17 @@ function renderIntroSettings() {
   cards('intro-fit-options', INTRO_FITS, cfg.fit, function (id) {
     var c = introCfg(); c.fit = id; introSave(c); renderIntroSettings();
   });
+  cards('intro-brand-options', INTRO_BRANDS, cfg.brand, function (id) {
+    var c = introCfg(); c.brand = id; introSave(c); renderIntroSettings();
+  });
   var note = document.getElementById('intro-note');
   if (note) {
     if (cfg.when === 'off' || cfg.clip === 'off') {
       note.textContent = '当前：不会播放片头。设置只存在这台机器的浏览器里（localStorage）。';
     } else {
       var nm = introClipById(cfg.clip);
-      note.textContent = '当前：' + (nm ? nm.name : cfg.clip) + '，' +
+      var bd = cfg.brand === 'deepseek' ? 'DeepSeek 原版' : 'MemOmics 品牌';
+      note.textContent = '当前：' + bd + ' · ' + (nm ? nm.name : cfg.clip) + '，' +
         (cfg.when === 'daily' ? '每天首次打开时播一次' : '每次打开应用时播') +
         '。点「▶ 预览」可以马上看一次。';
     }
