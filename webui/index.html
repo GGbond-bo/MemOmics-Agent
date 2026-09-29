@@ -1402,47 +1402,51 @@ table.dcb-table.dg-table th { position:relative; }
 #bg-art { position:fixed; z-index:-1; pointer-events:none; display:none; background-repeat:no-repeat;
   /* 几何由 syncBgArtBox() 按「中间交互区」(.chat-area) 的实测矩形写入；拿不到尺寸时退回整屏 */
   left:0; top:0; width:100vw; height:100vh; }
-#bg-art::after {   /* 可读性纱层：吃主题底色，亮/暗主题自动跟着变 */
-  content:""; position:absolute; inset:0; background:var(--bg); opacity:.42;
+#bg-art::after {   /* 可读性纱层：底色吃主题的 --bg，浓度也跟着主题走 —— 晨景薄、夜景厚 */
+  content:""; position:absolute; inset:0; background:var(--bg); opacity:.13;
 }
+html[data-theme="dark"] #bg-art::after { opacity:.24; }
 html[data-bg]:not([data-bg="none"]) #bg-art { display:block; }
 /* 羊皮纸/樱花的纹理层自带不透明底色，会把背景图整个盖住 —— 选了背景图就让位 */
 html[data-bg]:not([data-bg="none"]) body::before,
 html[data-bg]:not([data-bg="none"]) body::after { display:none !important; }
 
-html[data-bg="palace-day"] #bg-art {
-  background-image:url("/assets/backgrounds/palace-day.webp"); background-size:cover; background-position:center; }
-html[data-bg="palace-night"] #bg-art {
-  background-image:url("/assets/backgrounds/palace-night.webp"); background-size:cover; background-position:center; }
-html[data-bg="palace-day"] #bg-art::after,
-html[data-bg="palace-night"] #bg-art::after { opacity:.26; }
-
-/* 鲸鱼娘：夜宫殿打底，人物用 ::before 叠上去（::after 纱层再压一层，人物才不跳） */
-html[data-bg="maid-left"] #bg-art,
-html[data-bg="maid-right"] #bg-art,
-html[data-bg="maid-duo"] #bg-art {
-  background-image:url("/assets/backgrounds/palace-night.webp"); background-size:cover; background-position:center; }
-html[data-bg="maid-left"] #bg-art::before,
-html[data-bg="maid-right"] #bg-art::before,
-html[data-bg="maid-duo"] #bg-art::before { content:""; position:absolute; inset:0; background-repeat:no-repeat; }
-html[data-bg="maid-left"] #bg-art::before {
-  background-image:url("/assets/backgrounds/maid-left.webp"); background-position:left bottom; background-size:auto 88%; }
-html[data-bg="maid-right"] #bg-art::before {
-  background-image:url("/assets/backgrounds/maid-right.webp"); background-position:right bottom; background-size:auto 88%; }
-html[data-bg="maid-duo"] #bg-art::before {
-  background-image:url("/assets/backgrounds/maid-left.webp"), url("/assets/backgrounds/maid-right.webp");
-  background-position:left bottom, right bottom; background-size:auto 80%, auto 80%; }
-html[data-bg^="maid-"] #bg-art::after { opacity:.22; }
-
-/* Q 版角色：深海底色 + 右下角人物 */
+/* 宫殿：只有「晨 / 夜」两张底图，跟着配色主题的亮暗自动换 —— 不再拆成两个选项。
+   三个带图的背景都以它为底，亮暗一致。 */
+html[data-bg="palace"] #bg-art,
+html[data-bg="maid"] #bg-art,
 html[data-bg="chibi"] #bg-art {
-  background-image:radial-gradient(circle at 74% 80%, rgba(197,164,104,.22) 0%, rgba(197,164,104,0) 48%),
-                   linear-gradient(160deg, #101a33 0%, #16233f 55%, #0d1730 100%); }
+  background-image:url("/assets/backgrounds/palace-day.webp"); background-size:cover; background-position:center; }
+html[data-theme="dark"][data-bg="palace"] #bg-art,
+html[data-theme="dark"][data-bg="maid"] #bg-art,
+html[data-theme="dark"][data-bg="chibi"] #bg-art {
+  background-image:url("/assets/backgrounds/palace-night.webp"); }
+
+/* 鲸鱼娘：左右两位一起站进同一张背景（不再拆成「左 / 右」两个选项）。
+   尺寸由 syncBgArtBox() 按交互区算好写进 --bg-char-size-*，保证左右都露得出来。 */
+html[data-bg="maid"] #bg-art::before,
+html[data-bg="chibi"] #bg-art::before { content:""; position:absolute; inset:0; background-repeat:no-repeat; }
+html[data-bg="maid"] #bg-art::before {
+  background-image:url("/assets/backgrounds/maid-left.webp"), url("/assets/backgrounds/maid-right.webp");
+  background-position:left bottom, right bottom;
+  background-size:var(--bg-char-size-l, auto 78%), var(--bg-char-size-r, auto 78%); }
+
+/* Q 版角色：同样踩在宫殿上，右下角站一只 */
 html[data-bg="chibi"] #bg-art::before {
-  content:""; position:absolute; inset:0; background-repeat:no-repeat;
   background-image:url("/assets/backgrounds/chibi.webp");
-  background-position:right 4% bottom; background-size:auto 62%; }
-html[data-bg="chibi"] #bg-art::after { opacity:.22; }
+  background-position:right bottom;
+  background-size:var(--bg-char-size-r, auto 62%); }
+
+/* 有角色时把中间内容列收窄，给两侧腾出站位（具体收多少由 syncBgArtBox() 算）
+   —— 消息列和输入框三行一起收，否则底部的输入框仍会压住角色 */
+html[data-bg="maid"] .chat-messages,
+html[data-bg="chibi"] .chat-messages,
+html[data-bg="maid"] .chat-input .input-row,
+html[data-bg="maid"] .chat-input .input-info,
+html[data-bg="maid"] .chat-input .input-grip,
+html[data-bg="chibi"] .chat-input .input-row,
+html[data-bg="chibi"] .chat-input .input-info,
+html[data-bg="chibi"] .chat-input .input-grip { max-width:var(--bg-content-w, 90%); }
 </style>
 </head>
 <body>
@@ -8958,6 +8962,7 @@ function setTheme(theme) {
   if (!valid) theme = 'light';  // 白名单校验，未知值回退
   document.documentElement.setAttribute('data-theme', theme);
   document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
+  if (typeof syncBgArtBox === 'function') syncBgArtBox();   // 宫殿晨/夜随亮暗切换，重算一次保持一致
   try { localStorage.setItem('memomics-theme', theme); } catch(e) {}
 }
 function cycleTheme() {
@@ -8972,14 +8977,40 @@ function cycleTheme() {
 // 插画出自第三方皮肤 maid-atelier（深海女仆工坊），授权 CC BY-NC-SA 4.0 ——
 // 署名 / 非商业性使用 / 相同方式共享。完整署名链见 webui/assets/backgrounds/NOTICE.txt。
 var BACKGROUNDS = [
-  {id:'none',         label:'🚫 无背景',      tip:'只保留配色主题'},
-  {id:'palace-day',   label:'🏛 深海宫殿·晨',  tip:'宫殿白天场景（铺满）'},
-  {id:'palace-night', label:'🌌 深海宫殿·夜',  tip:'宫殿夜晚场景（铺满）'},
-  {id:'maid-duo',     label:'🐋 鲸鱼娘·双人',  tip:'夜宫殿 + 左右两位女仆鲸鱼娘'},
-  {id:'maid-left',    label:'🐋 鲸鱼娘·左',    tip:'夜宫殿 + 左侧女仆鲸鱼娘'},
-  {id:'maid-right',   label:'🐋 鲸鱼娘·右',    tip:'夜宫殿 + 右侧女仆鲸鱼娘'},
-  {id:'chibi',        label:'🐧 Q 版角色',     tip:'交互框边上的那只 Q 版角色'},
+  {id:'none',   label:'🚫 无背景',      tip:'只保留配色主题'},
+  {id:'palace', label:'🏛 深海宫殿',     tip:'宫殿场景，跟随深色/浅色主题自动切换夜/晨'},
+  {id:'maid',   label:'🐋 鲸鱼娘·双人',  tip:'宫殿 + 左右两位女仆鲸鱼娘；中间内容列会自动收窄给它们让位'},
+  {id:'chibi',  label:'🐧 Q 版角色',     tip:'宫殿 + 右下角那只 Q 版角色；中间内容列会自动收窄给它让位'},
 ];
+
+// 哪些背景带角色、角色在图里的宽高比 —— 用来算「人物占多宽、内容列该收多少」。
+// 左：maid-atelier-maid-left-v5.webp（834x1500）；右：maid-right-v6.webp（789x1500）；
+// Q 版：chibi.webp（620x553，比高还宽的横向图）。share = 人物宽度占交互区宽度的比例。
+var _BG_ART_CHARS = {
+  maid:  {l:{share:0.22, aspect:834/1500}, r:{share:0.21, aspect:789/1500}},
+  chibi: {l:null,                          r:{share:0.30, aspect:620/553}},
+};
+
+// 把中间内容列收窄，让角色露出来。先按交互区宽度的比例定人物宽度，再用高度封顶；
+// 区域太窄时反过来压人物，优先保住内容可读宽度（边界：不留窄到没法用的内容列）。
+function _bgArtFitChars(W, H, bg) {
+  var cfg = _BG_ART_CHARS[bg];
+  if (!cfg) return null;
+  var lw = cfg.l ? Math.round(W * cfg.l.share) : 0;
+  var rw = cfg.r ? Math.round(W * cfg.r.share) : 0;
+  var hCap = H * 0.86;                                  // 人物别高过交互区
+  if (cfg.l && lw / cfg.l.aspect > hCap) lw = Math.round(hCap * cfg.l.aspect);
+  if (cfg.r && rw / cfg.r.aspect > hCap) rw = Math.round(hCap * cfg.r.aspect);
+  var reserve = (lw + rw) * 0.94;                       // 与内容列轻微交叠，人物才像「站在旁边」而不是被框住
+  var content = Math.round(W - reserve);
+  if (content < 380) {                                  // 太窄：等比压人物，保住 380px 内容宽度
+    var k = Math.max(0.2, (W - 380) / Math.max(1, reserve));
+    lw = Math.round(lw * k); rw = Math.round(rw * k);
+    content = 380;
+  }
+  if (content > W * 0.9) content = Math.round(W * 0.9);
+  return {lw:lw, rw:rw, content:content};
+}
 function renderBackgroundOptions() {
   var box = document.getElementById('bg-options');
   if (!box) return;
@@ -9026,6 +9057,22 @@ function syncBgArtBox() {
   el.style.top = Math.round(r.top) + 'px';
   el.style.width = Math.round(r.width) + 'px';
   el.style.height = Math.round(r.height) + 'px';
+
+  // 带角色的背景：顺带算出人物宽度与内容列宽度（挂在 documentElement 上，
+  // 因为 --bg-content-w 要给 #bg-art 之外的 .chat-messages / .chat-input 用）
+  var root = document.documentElement;
+  var fit = _bgArtFitChars(Math.round(r.width), Math.round(r.height),
+                           root.getAttribute('data-bg') || 'none');
+  if (fit) {
+    if (fit.lw) el.style.setProperty('--bg-char-size-l', fit.lw + 'px auto');
+    else el.style.removeProperty('--bg-char-size-l');
+    el.style.setProperty('--bg-char-size-r', fit.rw + 'px auto');
+    root.style.setProperty('--bg-content-w', fit.content + 'px');
+  } else {
+    el.style.removeProperty('--bg-char-size-l');
+    el.style.removeProperty('--bg-char-size-r');
+    root.style.removeProperty('--bg-content-w');
+  }
 }
 function initBgArtBox() {
   syncBgArtBox();

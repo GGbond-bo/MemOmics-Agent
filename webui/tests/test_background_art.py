@@ -15,7 +15,7 @@ NOTICE_PATH = os.path.join(BG_DIR, "NOTICE.txt")
 ASSETS = ["palace-day.webp", "palace-night.webp", "maid-left.webp",
           "maid-right.webp", "chibi.webp"]
 # BACKGROUNDS 里除 none 之外的全部 id
-BG_IDS = ["palace-day", "palace-night", "maid-duo", "maid-left", "maid-right", "chibi"]
+BG_IDS = ["palace", "maid", "chibi"]
 
 
 @pytest.fixture(scope="module")
@@ -103,12 +103,55 @@ def test_background_box_falls_back_when_area_unmeasurable(html):
     assert "100vw" in body and "100vh" in body, "兜底没有退回整屏"
 
 
-def test_background_character_size_is_relative_not_viewport(html):
-    """人物尺寸必须是区域内百分比 —— 用 vh 就等于又绑回视口，等于没适配。"""
+def test_background_character_size_is_not_viewport_relative(html):
+    """人物尺寸不能绑视口单位 —— 用 vh 就等于又绑回视口，等于没适配。"""
     seg = html.split("=== 背景图（皮肤插画")[1].split("</style>")[0]
-    assert "88vh" not in seg and "80vh" not in seg and "62vh" not in seg, \
-        "背景段还在用 vh 定位人物，不随交互区缩放"
-    assert "auto 88%" in seg and "auto 80%" in seg and "auto 62%" in seg
+    # 只盯 background-size：整屏兜底用 100vh 是合理的，不该一起禁掉
+    assert not re.search(r"background-size:[^;}]*vh", seg), \
+        "background-size 还在用视口单位，人物不随交互区缩放"
+    # 尺寸由 JS 按交互区算好写进 CSS 变量，兜底值也是区域内百分比
+    assert "var(--bg-char-size-l," in seg and "var(--bg-char-size-r," in seg
+    assert "auto 78%" in seg and "auto 62%" in seg
+
+
+def test_background_palace_follows_theme_darkness(html):
+    """宫殿不再拆成晨/夜两个选项：亮主题用晨景，深色主题自动换夜景。"""
+    assert 'html[data-bg="palace"] #bg-art' in html
+    assert 'html[data-bg="palace-day"]' not in html, "旧的「宫殿·晨」选项残留"
+    assert 'html[data-bg="palace-night"]' not in html, "旧的「宫殿·夜」选项残留"
+    for bg in ("palace", "maid", "chibi"):
+        assert f'html[data-theme="dark"][data-bg="{bg}"] #bg-art' in html, \
+            f"{bg} 在深色主题下没有切到夜景"
+    assert "palace-night.webp" in html
+
+
+def test_background_left_right_merged_into_one(html):
+    """左右两个角色要合成一个选项，不能再有单独的「左」「右」。"""
+    assert 'html[data-bg="maid-left"]' not in html
+    assert 'html[data-bg="maid-right"]' not in html
+    seg = html.split('html[data-bg="maid"] #bg-art::before {')[1].split("}")[0]
+    assert "maid-left.webp" in seg and "maid-right.webp" in seg, \
+        "合成选项里没同时带上左右两位角色"
+
+
+def test_background_content_column_narrows_for_characters(html):
+    """带角色的背景要把中间内容列收窄 —— 消息列和输入框那三行都要收，否则底部输入框仍压住角色。"""
+    for bg in ("maid", "chibi"):
+        for sel in (".chat-messages", ".chat-input .input-row",
+                    ".chat-input .input-info", ".chat-input .input-grip"):
+            assert f'html[data-bg="{bg}"] {sel}' in html, f"{bg} 没给 {sel} 收窄"
+    assert "max-width:var(--bg-content-w, 90%)" in html
+    # 纯宫殿背景不该收窄内容
+    assert 'html[data-bg="palace"] .chat-messages' not in html
+
+
+def test_background_char_fit_guards_narrow_area(html):
+    """边界：交互区太窄时必须反过来压人物，不能把内容列压成负数或窄到不可用。"""
+    assert "_BG_ART_CHARS" in html, "缺少角色宽高比配置"
+    body = html.split("function _bgArtFitChars(W, H, bg)")[1].split("\n}")[0]
+    assert "content < 380" in body, "缺少内容列最小宽度兜底"
+    assert "Math.max(0.2" in body, "人物压缩没有下限"
+    assert "H * 0.86" in body, "人物高度没有封顶"
 
 
 def test_background_assets_all_local(html):
