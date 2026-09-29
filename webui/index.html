@@ -5375,6 +5375,55 @@ function splitMsgBlocks(text) {
   }
   return segs;
 }
+/* === markdown 表格单元格切分（两个渲染入口共用）===
+   坑：markdown 里 |coef| 这种「绝对值竖线」必须写成 \|coef\|，而单元格是按 | 切的
+   —— 直接 line.split('|') 会把一个单元格切成三格，表头于是比数据行多出好几列，
+   整张表看起来就是散的（用户 2026-09 报的「明明是一块的，展示时老是分开」）。 */
+function mdSplitRow(line) {
+  var out = [], cur = '', i = 0;
+  while (i < line.length) {
+    var ch = line.charAt(i);
+    if (ch === '\\') {
+      var nx = line.charAt(i + 1);
+      if (nx === '|') { cur += '|'; i += 2; continue; }        // \| → 单元格里的真竖线
+      if (nx === '\\') { cur += '\\'; i += 2; continue; }   // \\ → 真反斜杠，后面的 | 仍是分隔符
+    }
+    if (ch === '|') { out.push(cur); cur = ''; i++; continue; }
+    cur += ch; i++;
+  }
+  out.push(cur);
+  return out;
+}
+function mdRenderTable(block) {
+  var lines = block.split('\n');
+  var rows = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line || line.charAt(0) !== '|') continue;
+    var cells = mdSplitRow(line);
+    if (cells.length && cells[0].trim() === '') cells.shift();
+    if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+    if (cells.length < 2) continue;
+    if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
+    rows.push(cells.map(function(c) { return c.trim(); }));
+  }
+  if (rows.length === 0) return block;
+  // 列数以表头为准，少补空、多截断 —— 个别行多写一个 | 也不至于让整表错位
+  var cols = rows[0].length;
+  for (var r = 0; r < rows.length; r++) {
+    while (rows[r].length < cols) rows[r].push('');
+    if (rows[r].length > cols) rows[r].length = cols;
+  }
+  var t = '<table><thead><tr>';
+  for (var c0 = 0; c0 < cols; c0++) t += '<th>' + rows[0][c0] + '</th>';
+  t += '</tr></thead><tbody>';
+  for (var r2 = 1; r2 < rows.length; r2++) {
+    t += '<tr>';
+    for (var c = 0; c < cols; c++) t += '<td>' + rows[r2][c] + '</td>';
+    t += '</tr>';
+  }
+  return t + '</tbody></table>';
+}
 function renderTextSegment(text) {
   if (!text) return '';
   var html = escapeHtml(text);
@@ -5383,30 +5432,7 @@ function renderTextSegment(text) {
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
-    var lines = block.split('\n');
-    var rows = [];
-    for (var i2 = 0; i2 < lines.length; i2++) {
-      var line = lines[i2].trim();
-      if (!line || line.charAt(0) !== '|') continue;
-      var cells = line.split('|');
-      if (cells.length && cells[0].trim() === '') cells.shift();
-      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
-      if (cells.length < 2) continue;
-      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
-      rows.push(cells);
-    }
-    if (rows.length === 0) return block;
-    var t = '<table><thead><tr>';
-    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
-    t += '</tr></thead><tbody>';
-    for (var r2 = 1; r2 < rows.length; r2++) {
-      t += '<tr>';
-      for (var c2 = 0; c2 < rows[r2].length; c2++) t += '<td>' + rows[r2][c2].trim() + '</td>';
-      t += '</tr>';
-    }
-    return t + '</tbody></table>';
-  });
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, mdRenderTable);
   html = html.replace(/\n/g, '<br>');
   return html;
 }
@@ -5505,31 +5531,8 @@ function renderMarkdown(text) {
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // 表格：连续 | 行块合并为一张表（首行 <th> 表头，分隔行忽略）——修复表头与内容错位
-  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, function(block) {
-    var lines = block.split('\n');
-    var rows = [];
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
-      if (!line || line.charAt(0) !== '|') continue;
-      var cells = line.split('|');
-      if (cells.length && cells[0].trim() === '') cells.shift();
-      if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
-      if (cells.length < 2) continue;
-      if (cells.every(function(c) { return /^[-: ]+$/.test(c.trim()); })) continue;
-      rows.push(cells);
-    }
-    if (rows.length === 0) return block;
-    var t = '<table><thead><tr>';
-    for (var c0 = 0; c0 < rows[0].length; c0++) t += '<th>' + rows[0][c0].trim() + '</th>';
-    t += '</tr></thead><tbody>';
-    for (var r = 1; r < rows.length; r++) {
-      t += '<tr>';
-      for (var c = 0; c < rows[r].length; c++) t += '<td>' + rows[r][c].trim() + '</td>';
-      t += '</tr>';
-    }
-    return t + '</tbody></table>';
-  });
+  // 表格：连续 | 行块合并为一张表（首行 <th> 表头，分隔行忽略）
+  html = html.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm, mdRenderTable);
   // 先把 \n → <br>（此时 MERMAID/GENUI/CODE 块仍是占位符，不受影响）
   html = html.replace(/\n/g, '<br>');
   // 恢复 Mermaid 块（闭合 → 图表占位 div；未闭合流式 → 代码块预览）

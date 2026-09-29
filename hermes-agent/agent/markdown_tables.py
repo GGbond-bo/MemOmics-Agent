@@ -62,15 +62,91 @@ def _pad_to_width(s: str, target: int) -> str:
     return s + " " * max(0, target - _disp_width(s))
 
 
+def _is_escaped(s: str, idx: int) -> bool:
+    """True when s[idx] sits behind an odd run of backslashes."""
+
+    k = idx - 1
+    bs = 0
+    while k >= 0 and s[k] == "\\":
+        bs += 1
+        k -= 1
+    return bs % 2 == 1
+
+
+def _split_cells(s: str) -> List[str]:
+    """Split on unescaped pipes only; a backslash-pipe is a real pipe inside one cell.
+
+    A table whose columns mean "absolute value" writes the header as
+    + backslash-pipe coef backslash-pipe > 0.20. Splitting on every pipe chops
+    that single cell into three, and because _render_block then sizes the grid
+    with max(len(row)) the whole table gets re-emitted several columns wider
+    than its body -- the "table falls apart" report this exists to prevent.
+    """
+
+    cells: List[str] = []
+    cur: List[str] = []
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if ch == "\\":
+            nxt = s[i + 1] if i + 1 < n else ""
+            if nxt == "|":
+                cur.append("|")
+                i += 2
+                continue
+            if nxt == "\\":
+                cur.append("\\")
+                i += 2
+                continue
+        if ch == "|":
+            cells.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    cells.append("".join(cur))
+    return cells
+
+
+def _escape_cell(cell: str) -> str:
+    """Inverse of the unescaping done by _split_cells.
+
+    Only pipes need escaping, plus a backslash that directly precedes one.
+    A lone backslash (a Windows path, a regex) is left untouched so tables
+    that never contained a pipe stay byte-identical.
+    """
+
+    out: List[str] = []
+    i = 0
+    n = len(cell)
+    while i < n:
+        ch = cell[i]
+        if ch == "\\" and i + 1 < n and cell[i + 1] == "|":
+            out.append("\\\\")
+        elif ch == "|":
+            out.append("\\|")
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def split_table_row(row: str) -> List[str]:
-    """Split ``| a | b | c |`` into ``["a", "b", "c"]`` with trims."""
+    """Split a pipe row into trimmed cells, honouring backslash-escaped pipes.
+
+    A backslash-pipe is one cell containing a literal pipe, not a separator.
+    Cells come back unescaped (so display-width math sees what the reader
+    sees); _escape_cell re-escapes them on the way out.
+    """
 
     s = row.strip()
     if s.startswith("|"):
         s = s[1:]
-    if s.endswith("|"):
+    if s.endswith("|") and not _is_escaped(s, len(s) - 1):
         s = s[:-1]
-    return [c.strip() for c in s.split("|")]
+    return [c.strip() for c in _split_cells(s)]
 
 
 def is_table_divider(row: str) -> bool:
@@ -113,20 +189,29 @@ def _render_block(rows: List[List[str]], available_width: int | None = None) -> 
     user report this code path is meant to address.
     """
 
-    ncols = max(len(r) for r in rows)
-    rows = [r + [""] * (ncols - len(r)) for r in rows]
+    # Column count comes from the header (GFM rule): a body row that carries an
+    # extra pipe gets truncated, it must never widen the whole grid -- widening
+    # is what turned a mis-split header into a table that "falls apart".
+    ncols = len(rows[0]) if rows else 0
+    padded = [r[:ncols] + [""] * (ncols - len(r)) for r in rows]
+
+    # Escape first, then measure.  In the plain text this module exists to line
+    # up, an escaped pipe is two cells wide, so the width maths and the bytes
+    # that actually get printed have to agree on that number.
+    escaped = [[_escape_cell(c) for c in r] for r in padded]
 
     widths = [
-        max(_MIN_COL_WIDTH, *(_disp_width(r[c]) for r in rows))
+        max(_MIN_COL_WIDTH, *(_disp_width(r[c]) for r in escaped))
         for c in range(ncols)
     ]
 
     # Total horizontal width for the rendered row:
-    #   `| ` + cell + ` ` for each column, plus the final closing `|`.
+    #   "| " + cell + " " for each column, plus the final closing "|".
     horizontal_width = sum(widths) + 3 * ncols + 1
 
     if available_width is not None and horizontal_width > max(available_width, 20):
-        return _render_vertical(rows, ncols, available_width)
+        # The vertical form drops every pipe, so it wants the unescaped text.
+        return _render_vertical(padded, ncols, available_width)
 
     def _row(cells: List[str]) -> str:
         return (
@@ -135,9 +220,9 @@ def _render_block(rows: List[List[str]], available_width: int | None = None) -> 
             + " |"
         )
 
-    out = [_row(rows[0])]
+    out = [_row(escaped[0])]
     out.append("|" + "|".join("-" * (w + 2) for w in widths) + "|")
-    for r in rows[1:]:
+    for r in escaped[1:]:
         out.append(_row(r))
     return out
 
