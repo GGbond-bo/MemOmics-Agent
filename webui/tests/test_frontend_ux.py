@@ -362,3 +362,85 @@ class TestScriptIntegrity:
                 assert t.count(a) == t.count(z), (
                     "segment %r unbalanced %s%s: %d vs %d" % (start, a, z, t.count(a), t.count(z))
                 )
+
+
+# --- 粘贴：文字优先，别把文字粘成图片（2026-09 用户报） -----------------------
+
+def _fn_body(name):
+    """按大括号配平抽出 index.html 里某个顶层函数的源码。"""
+
+    at = HTML.find("function %s(" % name)
+    assert at != -1, "index.html 里找不到 %s()" % name
+    i = HTML.index("{", at)
+    depth = 0
+    for j in range(i, len(HTML)):
+        if HTML[j] == "{":
+            depth += 1
+        elif HTML[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return HTML[at:j + 1]
+    raise AssertionError("%s() 的大括号没闭合" % name)
+
+
+def test_paste_prefers_text_over_clipboard_image():
+    """从网页/Excel/Word 复制文字时，剪贴板里同时有文字和一份位图。
+
+    旧实现只要发现 image 就 preventDefault，把整次粘贴吞掉：用户粘一段文字，
+    结果贴进来一张图、文字没了（浏览器实测：剪贴板带 text/plain + image/png 时，
+    输入框文字为空、图片附件 +1）。有文字的剪贴板必须完全不插手。
+    """
+    body = _fn_body("handlePaste")
+    assert "_clipboardHasText" in body, "handlePaste 没判断剪贴板里有没有文字"
+    i_text = body.index("_clipboardHasText")
+    i_prevent = body.index("preventDefault")
+    assert i_text < i_prevent, "preventDefault 排在判断文字之前，文字照样会被吞"
+    assert "return" in body[i_text:i_prevent], "判断有文字后没有提前返回"
+
+    helper = _fn_body("_clipboardHasText")
+    assert "text/plain" in helper, "没检查 text/plain"
+    assert "text/html" in helper, "没检查 text/html"
+
+
+def test_paste_still_attaches_pure_image():
+    """回归：纯截图（剪贴板里没有文字）仍然要能当附件贴进来。"""
+
+    body = _fn_body("handlePaste")
+    assert "addImagePreview" in body, "纯图粘贴这条路被删掉了"
+    assert "getAsFile" in body, "没取图片 blob"
+    assert "indexOf('image')" in body, "没判 image 类型"
+
+
+def test_paste_of_text_only_is_never_intercepted():
+    """边界：剪贴板里根本没有图片时，一个字节都不该拦。"""
+
+    body = _fn_body("handlePaste")
+    i_guard = body.index("if (!imageItem) return;")
+    i_prevent = body.index("preventDefault")
+    assert i_guard < i_prevent, "没有图片时也可能走到 preventDefault"
+
+
+def test_drop_only_intercepts_images():
+    """同类问题：拖进来的不是图片时不能拦，否则拖一段文字进输入框毫无反应。"""
+
+    body = _fn_body("handleDrop")
+    i_has = body.index("hasImage")
+    i_prevent = body.index("preventDefault")
+    assert i_has < i_prevent, "没先判断有没有图片就 preventDefault"
+    assert "if (!hasImage) return;" in body, "非图片没有提前返回"
+    assert "addImagePreview" in body, "图片拖放这条路被删掉了"
+    # dragover 仍须无条件 preventDefault，否则元素不是合法放置目标
+    over = _fn_body("handleDragOver")
+    assert "preventDefault" in over, "dragover 不再 preventDefault，图片就拖不进来了"
+
+
+def test_multi_image_callbacks_capture_their_own_file():
+    """多图回调必须各自捕获自己的 file。
+
+    循环里的 var 是共享的，用 IIFE 固定住才不会让所有回调都拿到最后一个文件名
+    （图片字节取自 dataUrl，所以内容没错，错的是文件名）。
+    """
+    for fn in ("handleDrop", "handleFileSelect"):
+        body = _fn_body(fn)
+        assert "})(file);" in body or "})(file)" in body, \
+            "%s 里的 file 没被 IIFE 固定住（多选/多拖时文件名会串）" % fn

@@ -2798,21 +2798,41 @@ function clearPendingImages() {
   renderImagePreviews();
 }
 
-// 粘贴事件 — 支持截图粘贴
-function handlePaste(e) {
-  var items = e.clipboardData && e.clipboardData.items;
-  if (!items) return;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image') === 0) {
-      e.preventDefault();
-      var blob = items[i].getAsFile();
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        addImagePreview(ev.target.result, blob);
-      };
-      reader.readAsDataURL(blob);
+// 剪贴板里有没有可粘贴的文字（text/plain 或 text/html 都算）
+function _clipboardHasText(cd) {
+  try {
+    var types = cd.types;
+    if (types && typeof types.indexOf === 'function') {
+      if (types.indexOf('text/plain') >= 0 || types.indexOf('text/html') >= 0) return true;
     }
+    if (cd.getData && cd.getData('text/plain')) return true;
+  } catch (err) { /* 个别浏览器不许读，按「没有文字」处理 */ }
+  return false;
+}
+
+// 粘贴事件 — 支持截图粘贴，但文字优先
+//
+// 坑：从网页 / Excel / Word 复制文字时，剪贴板里往往同时有 text/plain 和一份位图。
+// 旧实现只要发现 image 就 preventDefault，把整次粘贴吞掉 —— 用户粘一段文字，
+// 结果贴进来一张图、文字没了。所以：剪贴板里有文字就完全不插手，交给浏览器。
+function handlePaste(e) {
+  var cd = e.clipboardData;
+  if (!cd) return;
+  var items = cd.items || [];
+  var imageItem = null;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type && items[i].type.indexOf('image') === 0) { imageItem = items[i]; break; }
   }
+  if (!imageItem) return;              // 没有图片：不拦，正常粘文字
+  if (_clipboardHasText(cd)) return;   // 有文字：文字优先，不要这张位图
+  e.preventDefault();                  // 纯图（截图 / 复制图片）才拦下来当附件
+  var blob = imageItem.getAsFile();
+  if (!blob) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    addImagePreview(ev.target.result, blob);
+  };
+  reader.readAsDataURL(blob);
 }
 
 // 拖拽事件
@@ -2828,19 +2848,25 @@ function handleDragLeave(e) {
   document.getElementById('chat-input').classList.remove('drop-active');
 }
 
+// 拖放：只有拖进来图片才拦；拖文字/链接要让浏览器自己插进输入框
+// （dragover 里仍然无条件 preventDefault —— 不这样元素就不是合法放置目标了）
 function handleDrop(e) {
+  var files = (e.dataTransfer && e.dataTransfer.files) || [];
+  var hasImage = false;
+  for (var i = 0; i < files.length; i++) {
+    if (files[i].type && files[i].type.indexOf('image') === 0) { hasImage = true; break; }
+  }
+  document.getElementById('chat-input').classList.remove('drop-active');
+  if (!hasImage) return;                 // 不是图片：不插手，交给浏览器默认行为
   e.preventDefault();
   e.stopPropagation();
-  document.getElementById('chat-input').classList.remove('drop-active');
-  var files = e.dataTransfer && e.dataTransfer.files;
-  if (!files) return;
-  for (var i = 0; i < files.length; i++) {
-    if (files[i].type.indexOf('image') === 0) {
+  for (var j = 0; j < files.length; j++) {
+    if (files[j].type.indexOf('image') === 0) {
       var reader = new FileReader();
-      var file = files[i];
-      reader.onload = function(ev) {
-        addImagePreview(ev.target.result, file);
-      };
+      var file = files[j];
+      reader.onload = (function(f) { return function(ev) {
+        addImagePreview(ev.target.result, f);
+      }; })(file);
       reader.readAsDataURL(file);
     }
   }
@@ -2854,9 +2880,11 @@ function handleFileSelect(e) {
     if (files[i].type.indexOf('image') === 0) {
       var reader = new FileReader();
       var file = files[i];
-      reader.onload = function(ev) {
-        addImagePreview(ev.target.result, file);
-      };
+      // 用 IIFE 把 file 固定住：循环里的 var 是共享的，多选几张时
+      // 每个回调都会拿到最后一个文件的名字（图片字节取自 dataUrl，不受影响）
+      reader.onload = (function(f) { return function(ev) {
+        addImagePreview(ev.target.result, f);
+      }; })(file);
       reader.readAsDataURL(file);
     }
   }
