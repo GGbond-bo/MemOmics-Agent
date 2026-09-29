@@ -103,7 +103,7 @@
 | 17 | segment_with_nn_unet | When you need segment with nn unet analysis | segment_with_nn_unet, segment with nn unet, segment, unet | YEL 讨论触发 |
 | 18 | spatial-transcriptomics | 适用于: spatial, Visium/MERFISH/Slide-seq | 空间转录组, 空间转录组分析, spatial-transcriptomics, spatial transcriptomics, transcriptomics | RED 必触发 |
 
-## 04_Bulk - Bulk/表观 (18 skills)
+## 04_Bulk - Bulk/表观 (19 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -115,16 +115,17 @@
 | 6 | bulk-omics-clustering | 当你需要 Bulk 多组学聚类 时触发 —— 多组学数据聚类: ConsensusClustering → 亚型发现 | bulk-omics-clustering, bulk omics clustering, clustering | YEL 讨论触发 |
 | 7 | bulk-rnaseq-counts-to-de-deseq2 | 当你需要 Bulk RNA-seq DESeq2 时触发 —— Bulk RNA-seq差异表达: 计数矩阵 → DESeq2 → 差异基因 → 富集 | rnaseq, counts, deseq2 | YEL 讨论触发 |
 | 8 | bulk-rnaseq-differential-expression | 有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图) | rnaseq, differential, expression | YEL 讨论触发 |
-| 9 | detect_and_annotate_somatic_mutations | When you need detect and annotate somatic mutations analysis | detect, annotate, somatic, mutations | YEL 讨论触发 |
-| 10 | detect_and_characterize_structural_variations | When you need detect and characterize structural variations analysis | detect, characterize, structural, variations | YEL 讨论触发 |
-| 11 | find_sequence_mutations | When you need find sequence mutations analysis | find_sequence_mutations, find sequence mutations, find, sequence, mutations | YEL 讨论触发 |
-| 12 | fit_genomic_prediction_model | When you need fit genomic prediction model analysis | fit, genomic, prediction, model | YEL 讨论触发 |
-| 13 | genetic-variant-annotation | Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions. | genetic, variant, annotation | YEL 讨论触发 |
-| 14 | gwas-to-function-twas | 当你需要 GWAS TWAS 分析 时触发 —— GWAS → TWAS功能分析: 关联信号 → 基因优先级 → 功能验证 | gwas-to-function-twas, gwas to function twas, gwas, function, twas | YEL 讨论触发 |
-| 15 | liftover_coordinates | When you need liftover coordinates analysis | liftover_coordinates, liftover coordinates, liftover, coordinates | YEL 讨论触发 |
-| 16 | mendelian-randomization-twosamplemr | 当你需要 孟德尔随机化 时触发 —— 两样本MR: 工具变量 → MR分析 → 敏感性分析 | GWAS, 孟德尔, MR, mendelian, randomization, twosamplemr | RED 必触发 |
-| 17 | milor | 适用于: 有分组的scRNA-seq, aging, disease, >5样本 | milor | YEL 讨论触发 |
-| 18 | polygenic-risk-score-prs-catalog | 当你需要 多基因风险评分 时触发 —— PRS计算: GWAS → PRS → 风险分层 | polygenic, risk, score, prs | YEL 讨论触发 |
+| 9 | deg-threshold-and-false-discovery-audit | DEG 效应量阈值的溯源与假发现审计:任何 /logFC///coef/ 阈值取多少、要不要筛、为什么显著基因数异常多时使用。含 Seurat FindMarkers 默认值的版本差异、MAST 官方无阈值参数的源码级实证、pseudobulk vs 细胞级方法的权威文献结论、正对照校准法。 | deg, threshold, false, discovery | YEL 讨论触发 |
+| 10 | detect_and_annotate_somatic_mutations | When you need detect and annotate somatic mutations analysis | detect, annotate, somatic, mutations | YEL 讨论触发 |
+| 11 | detect_and_characterize_structural_variations | When you need detect and characterize structural variations analysis | detect, characterize, structural, variations | YEL 讨论触发 |
+| 12 | find_sequence_mutations | When you need find sequence mutations analysis | find_sequence_mutations, find sequence mutations, find, sequence, mutations | YEL 讨论触发 |
+| 13 | fit_genomic_prediction_model | When you need fit genomic prediction model analysis | fit, genomic, prediction, model | YEL 讨论触发 |
+| 14 | genetic-variant-annotation | Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions. | genetic, variant, annotation | YEL 讨论触发 |
+| 15 | gwas-to-function-twas | 当你需要 GWAS TWAS 分析 时触发 —— GWAS → TWAS功能分析: 关联信号 → 基因优先级 → 功能验证 | gwas-to-function-twas, gwas to function twas, gwas, function, twas | YEL 讨论触发 |
+| 16 | liftover_coordinates | When you need liftover coordinates analysis | liftover_coordinates, liftover coordinates, liftover, coordinates | YEL 讨论触发 |
+| 17 | mendelian-randomization-twosamplemr | 当你需要 孟德尔随机化 时触发 —— 两样本MR: 工具变量 → MR分析 → 敏感性分析 | GWAS, 孟德尔, MR, mendelian, randomization, twosamplemr | RED 必触发 |
+| 18 | milor | 适用于: 有分组的scRNA-seq, aging, disease, >5样本 | milor | YEL 讨论触发 |
+| 19 | polygenic-risk-score-prs-catalog | 当你需要 多基因风险评分 时触发 —— PRS计算: GWAS → PRS → 风险分层 | polygenic, risk, score, prs | YEL 讨论触发 |
 
 ## 05_蛋白 - 蛋白/免疫 (26 skills)
 
