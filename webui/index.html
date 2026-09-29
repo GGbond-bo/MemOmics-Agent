@@ -1399,7 +1399,9 @@ table.dcb-table.dg-table th { position:relative; }
    插画来自第三方皮肤 maid-atelier（CC BY-NC-SA 4.0，禁止商业使用），
    署名链与完整条款见 webui/assets/backgrounds/NOTICE.txt。
    独立一层放在 z-index:-1，靠对话区透出来 —— 与羊皮纸/樱花同一套机制。 */
-#bg-art { position:fixed; inset:0; z-index:-1; pointer-events:none; display:none; background-repeat:no-repeat; }
+#bg-art { position:fixed; z-index:-1; pointer-events:none; display:none; background-repeat:no-repeat;
+  /* 几何由 syncBgArtBox() 按「中间交互区」(.chat-area) 的实测矩形写入；拿不到尺寸时退回整屏 */
+  left:0; top:0; width:100vw; height:100vh; }
 #bg-art::after {   /* 可读性纱层：吃主题底色，亮/暗主题自动跟着变 */
   content:""; position:absolute; inset:0; background:var(--bg); opacity:.42;
 }
@@ -1424,12 +1426,12 @@ html[data-bg="maid-left"] #bg-art::before,
 html[data-bg="maid-right"] #bg-art::before,
 html[data-bg="maid-duo"] #bg-art::before { content:""; position:absolute; inset:0; background-repeat:no-repeat; }
 html[data-bg="maid-left"] #bg-art::before {
-  background-image:url("/assets/backgrounds/maid-left.webp"); background-position:left bottom; background-size:auto 88vh; }
+  background-image:url("/assets/backgrounds/maid-left.webp"); background-position:left bottom; background-size:auto 88%; }
 html[data-bg="maid-right"] #bg-art::before {
-  background-image:url("/assets/backgrounds/maid-right.webp"); background-position:right bottom; background-size:auto 88vh; }
+  background-image:url("/assets/backgrounds/maid-right.webp"); background-position:right bottom; background-size:auto 88%; }
 html[data-bg="maid-duo"] #bg-art::before {
   background-image:url("/assets/backgrounds/maid-left.webp"), url("/assets/backgrounds/maid-right.webp");
-  background-position:left bottom, right bottom; background-size:auto 80vh, auto 80vh; }
+  background-position:left bottom, right bottom; background-size:auto 80%, auto 80%; }
 html[data-bg^="maid-"] #bg-art::after { opacity:.22; }
 
 /* Q 版角色：深海底色 + 右下角人物 */
@@ -1439,7 +1441,7 @@ html[data-bg="chibi"] #bg-art {
 html[data-bg="chibi"] #bg-art::before {
   content:""; position:absolute; inset:0; background-repeat:no-repeat;
   background-image:url("/assets/backgrounds/chibi.webp");
-  background-position:right 4% bottom; background-size:auto 62vh; }
+  background-position:right 4% bottom; background-size:auto 62%; }
 html[data-bg="chibi"] #bg-art::after { opacity:.22; }
 </style>
 </head>
@@ -9000,7 +9002,43 @@ function setBackground(id) {
   document.querySelectorAll('#bg-options .theme-btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.bg === id);
   });
+  syncBgArtBox();   // 切换后立刻贴合当前交互区，避免先铺满整屏再跳一下
   try { localStorage.setItem('memomics-bg', id); } catch(e) {}
+}
+
+// 背景层自动适配「中间交互区」(.chat-area) 的大小。
+// 背景只在对话区可见（左右栏是不透明的），若按视口定位，一拖右栏宽度人物就跑到面板背后；
+// 所以这里用实测矩形兜住它：拖右栏 / 缩窗口 / 改缩放 / 折叠侧栏都能跟上。
+// 只改几何，不碰配色 —— 配色主题仍是独立的一条轴。
+var _bgArtObserver = null;
+function syncBgArtBox() {
+  var el = document.getElementById('bg-art');
+  if (!el) return;
+  var area = document.querySelector('.chat-area');
+  var r = area ? area.getBoundingClientRect() : null;
+  if (!r || r.width < 1 || r.height < 1) {
+    // 边界：交互区还没布局（或被隐藏）时退回整屏，绝不留 0 尺寸的空窗
+    el.style.left = '0px'; el.style.top = '0px';
+    el.style.width = '100vw'; el.style.height = '100vh';
+    return;
+  }
+  el.style.left = Math.round(r.left) + 'px';
+  el.style.top = Math.round(r.top) + 'px';
+  el.style.width = Math.round(r.width) + 'px';
+  el.style.height = Math.round(r.height) + 'px';
+}
+function initBgArtBox() {
+  syncBgArtBox();
+  if (window.ResizeObserver) {
+    var area = document.querySelector('.chat-area');
+    if (area) {
+      if (_bgArtObserver) _bgArtObserver.disconnect();
+      _bgArtObserver = new ResizeObserver(function() { syncBgArtBox(); });
+      _bgArtObserver.observe(area);   // 拖右栏手柄、缩窗口都会触发
+    }
+  }
+  window.addEventListener('resize', syncBgArtBox);
+  window.addEventListener('orientationchange', syncBgArtBox);
 }
 
 // === 文件浏览 ===
@@ -13986,6 +14024,7 @@ try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) s
 try { var savedBg = localStorage.getItem('memomics-bg'); if (savedBg) setBackground(savedBg); } catch(e) {}
 renderThemeButtons();
 renderBackgroundOptions();
+initBgArtBox();
 
 // === 图片粘贴/拖拽事件监听 ===
 var chatInputEl = document.getElementById('chat-input');

@@ -83,6 +83,34 @@ def test_background_unknown_id_falls_back(html):
     assert "id = 'none'" in body, "setBackground 未回退到 none"
 
 
+def test_background_layer_tracks_chat_area(html):
+    """背景层要跟着「中间交互区」走：实测矩形 + ResizeObserver + 开机初始化。"""
+    assert "function syncBgArtBox()" in html
+    assert "function initBgArtBox()" in html
+    assert "initBgArtBox();" in html, "开机没初始化背景层几何"
+    body = html.split("function initBgArtBox()")[1].split("\n}")[0]
+    assert ".chat-area" in body, "没有观测中间交互区"
+    assert "ResizeObserver" in body, "没有用 ResizeObserver，拖右栏不会跟随"
+    assert "window.addEventListener('resize'" in body
+    sb = html.split("function setBackground(id)")[1].split("\n}")[0]
+    assert "syncBgArtBox()" in sb, "切换背景后没立刻贴合"
+
+
+def test_background_box_falls_back_when_area_unmeasurable(html):
+    """边界：交互区量不到尺寸时必须退回整屏，不能留 0 尺寸空窗。"""
+    body = html.split("function syncBgArtBox()")[1].split("\n}")[0]
+    assert "r.width < 1 || r.height < 1" in body, "缺少 0 尺寸兜底"
+    assert "100vw" in body and "100vh" in body, "兜底没有退回整屏"
+
+
+def test_background_character_size_is_relative_not_viewport(html):
+    """人物尺寸必须是区域内百分比 —— 用 vh 就等于又绑回视口，等于没适配。"""
+    seg = html.split("=== 背景图（皮肤插画")[1].split("</style>")[0]
+    assert "88vh" not in seg and "80vh" not in seg and "62vh" not in seg, \
+        "背景段还在用 vh 定位人物，不随交互区缩放"
+    assert "auto 88%" in seg and "auto 80%" in seg and "auto 62%" in seg
+
+
 def test_background_assets_all_local(html):
     """URL 必须是站内相对路径 —— 不能引入外部图床（离线可用 + 无外链风险）。"""
     section = html.split("=== 背景图（皮肤插画")[1].split("// === 文件浏览")[0]
