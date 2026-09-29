@@ -445,6 +445,14 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
    「未记录 diff」提示留在滚动区外面，否则文件一多就被埋到列表底部看不见。 */
 #changes-list { font-size:12px; color:var(--text-light); max-height:min(48vh, 400px); overflow-y:auto; overscroll-behavior:contain; }
 #changes-skipped:empty { display:none; }
+/* 页面过期提示条。WebUI 是单页应用：标签页开着就一直跑加载时那份 index.html，
+   服务端换了代码也不会自动生效，用户只能靠手动硬刷新 —— 不知道要刷新时就会
+   以为「改了没用」。检测到服务端页面变了就在顶部提示，点一下刷新。 */
+#stale-banner { display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:9998; align-items:center; gap:10px; padding:8px 14px; border-radius:10px; font-size:13px; background:var(--warning,#b8860b); color:#fff; box-shadow:0 4px 16px rgba(0,0,0,.28); max-width:92vw; }
+#stale-banner button { background:rgba(255,255,255,.22); border:1px solid rgba(255,255,255,.55); color:#fff; border-radius:6px; padding:3px 12px; cursor:pointer; font-size:13px; flex:0 0 auto; }
+#stale-banner button:hover { background:rgba(255,255,255,.36); }
+/* 从剪贴板吃掉一张图时的一行说明，免得用户以为是「粘文字变成了图片」 */
+#paste-hint { display:none; font-size:11px; color:var(--text-light); padding:2px 0 4px 0; }
 #change-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; z-index:9000; }
 #change-overlay.visible { display:flex; align-items:center; justify-content:center; }
 .chg-ov-box { width:min(900px,92vw); max-height:82vh; background:var(--bg,#fff); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.35); }
@@ -1472,6 +1480,10 @@ html[data-bg="chibi"] .img-upload-btn { margin-left:var(--bg-input-balance, 0px)
 <body>
 <!-- 皮肤背景图落在 z-index:-1 的独立层：面板不透明，靠对话区（.chat-area 不设底色）透出来 -->
 <div id="bg-art" aria-hidden="true"></div>
+<div id="stale-banner" role="status">
+  <span>🔄 这个标签页跑的还是旧版页面，刷新后才能用上服务端新的前端改动</span>
+  <button onclick="location.reload()">立即刷新</button>
+</div>
 <div class="pink-decor" aria-hidden="true">
   <i class="pd-petal" style="--x:6%;--w:11px;--d:26s;--delay:-3s;--o:0.55"></i>
   <i class="pd-petal" style="--x:16%;--w:8px;--d:34s;--delay:-14s;--o:0.45"></i>
@@ -1784,7 +1796,8 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     </div>
     <div class="chat-input" id="chat-input">
       <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
-      <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
+      <div id="paste-hint"></div>
+        <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
       <div class="input-row">
         <label class="img-upload-btn" title="上传图片 (或粘贴/拖拽)" data-i18n-title="upload_img">
           🖼️
@@ -2826,6 +2839,8 @@ function handlePaste(e) {
   if (!imageItem) return;              // 没有图片：不拦，正常粘文字
   if (_clipboardHasText(cd)) return;   // 有文字：文字优先，不要这张位图
   e.preventDefault();                  // 纯图（截图 / 复制图片）才拦下来当附件
+  // 说清楚为什么：用户以为自己在粘文字，实际剪贴板里只有图片时最容易误解
+  _pasteHint('已从剪贴板添加图片（剪贴板里没有文字，只有图片）');
   var blob = imageItem.getAsFile();
   if (!blob) return;
   var reader = new FileReader();
@@ -14142,6 +14157,42 @@ try { var savedBg = localStorage.getItem('memomics-bg'); if (savedBg) setBackgro
 renderThemeButtons();
 renderBackgroundOptions();
 initBgArtBox();
+
+// 粘贴/拖放的一行说明：6 秒后自己消失
+var _pasteHintTimer = null;
+function _pasteHint(msg) {
+  var el = document.getElementById('paste-hint');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(_pasteHintTimer);
+  _pasteHintTimer = setTimeout(function() { el.style.display = 'none'; }, 6000);
+}
+
+// === 页面过期检测 ===
+// 单页应用开着就不会重新拉 index.html，所以服务端改过的前端代码到不了已经打开的
+// 标签页。用户不知道要刷新，就会以为「改了没用」。这里定期把服务端的 index.html
+// 取回来算指纹，变了就在顶部提示，点一下刷新。（实测服务端返回的字节与磁盘文件
+// 完全一致，所以内容指纹是可靠的。）
+var _pageFingerprint = null;
+function _htmlFingerprint(s) {
+  var h = 2166136261;
+  for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+  return h;
+}
+async function _checkStalePage() {
+  try {
+    var r = await fetch('/', { cache: 'no-store' });
+    var fp = _htmlFingerprint(await r.text());
+    if (_pageFingerprint === null) { _pageFingerprint = fp; return; }   // 首次只记基线
+    if (fp !== _pageFingerprint) {
+      var el = document.getElementById('stale-banner');
+      if (el) el.style.display = 'flex';
+    }
+  } catch (e) { /* 取不到就算了，别打扰用户 */ }
+}
+setTimeout(_checkStalePage, 10000);
+setInterval(_checkStalePage, 300000);   // 每 5 分钟
 
 // === 图片粘贴/拖拽事件监听 ===
 var chatInputEl = document.getElementById('chat-input');

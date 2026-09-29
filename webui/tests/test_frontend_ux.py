@@ -444,3 +444,46 @@ def test_multi_image_callbacks_capture_their_own_file():
         body = _fn_body(fn)
         assert "})(file);" in body or "})(file)" in body, \
             "%s 里的 file 没被 IIFE 固定住（多选/多拖时文件名会串）" % fn
+
+
+# --- 页面过期检测（2026-09-29）------------------------------------------------
+
+
+def test_stale_page_detector():
+    """单页应用开着就不会重新拉 index.html，必须有机制让用户知道页面已过期。
+
+    用户报「粘贴还是不可以」时，服务端早就是新代码了 —— 差的只是一次刷新。
+    实测：本机一个无头浏览器里的页面从 09-28 00:50 开着，到 09-29 仍在跑旧代码。
+    """
+
+    assert 'id="stale-banner"' in HTML, "缺少过期提示条"
+    assert "function _checkStalePage()" in HTML
+    assert "function _htmlFingerprint(" in HTML
+    body = _fn_body("_checkStalePage")
+    # 比的是「服务端现在的页面」与「加载时那份」的内容指纹：只比 git rev 会漏掉
+    # 未提交的前端改动（rev 不变），而那正是本项目的日常改法
+    assert "fetch('/', { cache: 'no-store' })" in body, "没取服务端页面来比"
+    assert "_htmlFingerprint" in body
+    assert "_pageFingerprint" in body
+    assert "=== null" in body, "没记首次基线，第一次检测会被当成「变了」而误报"
+    assert "location.reload" not in body, "不允许自动刷新：用户可能正在写东西"
+    assert "setInterval(_checkStalePage" in HTML, "没有定期检查"
+    # 刷新入口必须由用户点，且真的能刷新
+    assert "location.reload()" in HTML
+
+
+def test_paste_hint_explains_clipboard_image():
+    """从剪贴板拿走一张图时必须说明原因。
+
+    否则用户以为自己粘的是文字，只会看到「文字变成图片了」而不知为何。
+    """
+
+    body = _fn_body("handlePaste")
+    assert "_pasteHint(" in body, "拦下图片时没有给任何说明"
+    i_prevent = body.index("preventDefault")
+    i_hint = body.index("_pasteHint(")
+    assert i_prevent < i_hint, "说明要在确认要拦之后才给（文字路径不该出提示）"
+    helper = _fn_body("_pasteHint")
+    assert "paste-hint" in helper
+    assert "setTimeout" in helper, "说明不会自己消失，会一直挂在输入框上"
+    assert 'id="paste-hint"' in HTML
