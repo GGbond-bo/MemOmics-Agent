@@ -1395,9 +1395,57 @@ table.dcb-table.dg-table th { position:relative; }
 .code-copy:hover {
   background: rgba(128, 128, 128, 0.28);
 }
+/* === 背景图（皮肤插画；与「配色主题」正交，两轴可自由组合） ===
+   插画来自第三方皮肤 maid-atelier（CC BY-NC-SA 4.0，禁止商业使用），
+   署名链与完整条款见 webui/assets/backgrounds/NOTICE.txt。
+   独立一层放在 z-index:-1，靠对话区透出来 —— 与羊皮纸/樱花同一套机制。 */
+#bg-art { position:fixed; inset:0; z-index:-1; pointer-events:none; display:none; background-repeat:no-repeat; }
+#bg-art::after {   /* 可读性纱层：吃主题底色，亮/暗主题自动跟着变 */
+  content:""; position:absolute; inset:0; background:var(--bg); opacity:.42;
+}
+html[data-bg]:not([data-bg="none"]) #bg-art { display:block; }
+/* 羊皮纸/樱花的纹理层自带不透明底色，会把背景图整个盖住 —— 选了背景图就让位 */
+html[data-bg]:not([data-bg="none"]) body::before,
+html[data-bg]:not([data-bg="none"]) body::after { display:none !important; }
+
+html[data-bg="palace-day"] #bg-art {
+  background-image:url("/assets/backgrounds/palace-day.webp"); background-size:cover; background-position:center; }
+html[data-bg="palace-night"] #bg-art {
+  background-image:url("/assets/backgrounds/palace-night.webp"); background-size:cover; background-position:center; }
+html[data-bg="palace-day"] #bg-art::after,
+html[data-bg="palace-night"] #bg-art::after { opacity:.26; }
+
+/* 鲸鱼娘：夜宫殿打底，人物用 ::before 叠上去（::after 纱层再压一层，人物才不跳） */
+html[data-bg="maid-left"] #bg-art,
+html[data-bg="maid-right"] #bg-art,
+html[data-bg="maid-duo"] #bg-art {
+  background-image:url("/assets/backgrounds/palace-night.webp"); background-size:cover; background-position:center; }
+html[data-bg="maid-left"] #bg-art::before,
+html[data-bg="maid-right"] #bg-art::before,
+html[data-bg="maid-duo"] #bg-art::before { content:""; position:absolute; inset:0; background-repeat:no-repeat; }
+html[data-bg="maid-left"] #bg-art::before {
+  background-image:url("/assets/backgrounds/maid-left.webp"); background-position:left bottom; background-size:auto 88vh; }
+html[data-bg="maid-right"] #bg-art::before {
+  background-image:url("/assets/backgrounds/maid-right.webp"); background-position:right bottom; background-size:auto 88vh; }
+html[data-bg="maid-duo"] #bg-art::before {
+  background-image:url("/assets/backgrounds/maid-left.webp"), url("/assets/backgrounds/maid-right.webp");
+  background-position:left bottom, right bottom; background-size:auto 80vh, auto 80vh; }
+html[data-bg^="maid-"] #bg-art::after { opacity:.22; }
+
+/* Q 版角色：深海底色 + 右下角人物 */
+html[data-bg="chibi"] #bg-art {
+  background-image:radial-gradient(circle at 74% 80%, rgba(197,164,104,.22) 0%, rgba(197,164,104,0) 48%),
+                   linear-gradient(160deg, #101a33 0%, #16233f 55%, #0d1730 100%); }
+html[data-bg="chibi"] #bg-art::before {
+  content:""; position:absolute; inset:0; background-repeat:no-repeat;
+  background-image:url("/assets/backgrounds/chibi.webp");
+  background-position:right 4% bottom; background-size:auto 62vh; }
+html[data-bg="chibi"] #bg-art::after { opacity:.22; }
 </style>
 </head>
 <body>
+<!-- 皮肤背景图落在 z-index:-1 的独立层：面板不透明，靠对话区（.chat-area 不设底色）透出来 -->
+<div id="bg-art" aria-hidden="true"></div>
 <div class="pink-decor" aria-hidden="true">
   <i class="pd-petal" style="--x:6%;--w:11px;--d:26s;--delay:-3s;--o:0.55"></i>
   <i class="pd-petal" style="--x:16%;--w:8px;--d:34s;--delay:-14s;--o:0.45"></i>
@@ -2084,6 +2132,15 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="settings-group">
           <label>配色主题</label>
           <div class="theme-options" id="theme-options"><!-- 动态渲染（THEME_PRESETS） --></div>
+        </div>
+        <div class="settings-group">
+          <label>背景图</label>
+          <div class="theme-options" id="bg-options"><!-- 动态渲染（BACKGROUNDS） --></div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.65;">
+            背景插画来自第三方皮肤 <b>深海女仆工坊</b>（maid-atelier），授权
+            <b>CC BY-NC-SA 4.0</b>：需署名、<b>禁止商业性使用</b>、衍生须同协议共享。
+            署名链与完整条款见 <code>webui/assets/backgrounds/NOTICE.txt</code>，不选背景图即完全不加载。
+          </div>
         </div>
       </div>
     </div>
@@ -8908,6 +8965,44 @@ function cycleTheme() {
   setTheme(ids[(i + 1) % ids.length]);
 }
 
+// === 背景图（皮肤插画）===
+// 与「配色主题」是两条独立的轴：配色管颜色变量，背景管插画层，可以任意组合。
+// 插画出自第三方皮肤 maid-atelier（深海女仆工坊），授权 CC BY-NC-SA 4.0 ——
+// 署名 / 非商业性使用 / 相同方式共享。完整署名链见 webui/assets/backgrounds/NOTICE.txt。
+var BACKGROUNDS = [
+  {id:'none',         label:'🚫 无背景',      tip:'只保留配色主题'},
+  {id:'palace-day',   label:'🏛 深海宫殿·晨',  tip:'宫殿白天场景（铺满）'},
+  {id:'palace-night', label:'🌌 深海宫殿·夜',  tip:'宫殿夜晚场景（铺满）'},
+  {id:'maid-duo',     label:'🐋 鲸鱼娘·双人',  tip:'夜宫殿 + 左右两位女仆鲸鱼娘'},
+  {id:'maid-left',    label:'🐋 鲸鱼娘·左',    tip:'夜宫殿 + 左侧女仆鲸鱼娘'},
+  {id:'maid-right',   label:'🐋 鲸鱼娘·右',    tip:'夜宫殿 + 右侧女仆鲸鱼娘'},
+  {id:'chibi',        label:'🐧 Q 版角色',     tip:'交互框边上的那只 Q 版角色'},
+];
+function renderBackgroundOptions() {
+  var box = document.getElementById('bg-options');
+  if (!box) return;
+  box.innerHTML = '';
+  var cur = document.documentElement.getAttribute('data-bg') || 'none';
+  BACKGROUNDS.forEach(function(p) {
+    var b = document.createElement('div');
+    b.className = 'theme-btn' + (cur === p.id ? ' active' : '');
+    b.dataset.bg = p.id;
+    b.title = p.tip;
+    b.textContent = p.label;
+    b.onclick = function() { setBackground(p.id); };
+    box.appendChild(b);
+  });
+}
+function setBackground(id) {
+  var valid = BACKGROUNDS.some(function(p) { return p.id === id; });
+  if (!valid) id = 'none';   // 白名单校验，未知值回退（和 setTheme 一致）
+  document.documentElement.setAttribute('data-bg', id);
+  document.querySelectorAll('#bg-options .theme-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.bg === id);
+  });
+  try { localStorage.setItem('memomics-bg', id); } catch(e) {}
+}
+
 // === 文件浏览 ===
 async function browseFiles(path) {
   currentPath.files = path;
@@ -13888,7 +13983,9 @@ document.getElementById('input').addEventListener('input', function() {
 
 // 恢复配色
 try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) setTheme(savedTheme); } catch(e) {}
+try { var savedBg = localStorage.getItem('memomics-bg'); if (savedBg) setBackground(savedBg); } catch(e) {}
 renderThemeButtons();
+renderBackgroundOptions();
 
 // === 图片粘贴/拖拽事件监听 ===
 var chatInputEl = document.getElementById('chat-input');
