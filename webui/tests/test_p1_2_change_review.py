@@ -445,3 +445,25 @@ def test_finalize_without_args_batches_pending(tmpdir):
     assert rec is not None
     assert len(sess["changes"]) == 2
     assert not sess.get("_changes_pending"), "结算后不应残留待结算项"
+
+
+def test_frontend_change_list_scrolls_instead_of_pushing_sections_down():
+    """文件多时改动列表必须自己内部滚动。
+
+    用户 2026-09 报：改动复核的文件一多，就把右侧面板下面的板块一路推下去。
+    实测 40 个文件时列表高达 960px，工具状态被推到 1183px、知识库 1423px，
+    双双掉出 950px 的视口；加上限并内部滚动后两者回到 623 / 863px。
+    """
+    html = _index_html()
+    assert "#changes-list {" in html, "改动列表没有独立样式块"
+    seg = html.split("#changes-list {")[1].split("}")[0]
+    assert "max-height:" in seg, "改动列表没有高度上限"
+    assert "overflow-y:auto" in seg, "改动列表不能滚动"
+    assert "min(48vh" in seg, "上限没跟着窗口高度走（矮窗口会占太多）"
+
+    # 「未记录 diff」提示必须在滚动区外面：留在列表里会被文件埋掉
+    assert 'id="changes-skipped"' in html, "缺少滚动区外的提示位"
+    body = html.split("function renderChanges(")[1].split("\n}")[0]
+    assert "changes-skipped" in body, "提示没写到滚动区外的容器"
+    assert "_renderSkipped" in body, "提示渲染函数没接上"
+    assert "html + _renderSkipped" not in body, "提示还拼在列表里（会被一起滚走）"

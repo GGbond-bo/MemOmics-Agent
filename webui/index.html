@@ -440,6 +440,11 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chg-stat { flex:0 0 auto; font-family:ui-monospace,Consolas,monospace; font-size:11px; }
 .chg-ts { flex:0 0 auto; font-size:10px; color:var(--text-light); }
 .chg-skip { font-size:11px; color:var(--text-light); margin-top:4px; }
+/* 改动复核：文件多时列表自己内部滚动（与 #outline-list 同一套做法），不再把下面的
+   工具状态/知识库一路推下去。上限跟着窗口高度走，矮窗口少占点、大屏多显示几条。
+   「未记录 diff」提示留在滚动区外面，否则文件一多就被埋到列表底部看不见。 */
+#changes-list { font-size:12px; color:var(--text-light); max-height:min(48vh, 400px); overflow-y:auto; overscroll-behavior:contain; }
+#changes-skipped:empty { display:none; }
 #change-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; z-index:9000; }
 #change-overlay.visible { display:flex; align-items:center; justify-content:center; }
 .chg-ov-box { width:min(900px,92vw); max-height:82vh; background:var(--bg,#fff); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.35); }
@@ -1830,7 +1835,8 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         </div>
         <div class="info-section">
           <h3>改动复核 <span id="changes-summary" class="chg-summary"></span></h3>
-          <div id="changes-list" style="font-size:12px;color:var(--text-light);">本会话还没有文件改动</div>
+          <div id="changes-list">本会话还没有文件改动</div>
+          <div id="changes-skipped" class="chg-skip"></div>
         </div>
         <div class="info-section">
           <h3 data-i18n="tool_status">工具状态</h3>
@@ -13404,14 +13410,16 @@ async function refreshChanges() {
 
 function renderChanges(d) {
   var el = document.getElementById('changes-list');
+  var skipEl = document.getElementById('changes-skipped');
   var sum = document.getElementById('changes-summary');
   if (!el) return;
+  if (skipEl) skipEl.innerHTML = '';
   if (!d || !d.changes || !d.changes.length) {
     var skipOnly = d && d.skipped && d.skipped.length;
     el.innerHTML = '<span style="font-size:12px;color:var(--text-light);">' +
       (skipOnly ? '没有可复核的文本改动（有 ' + skipOnly + ' 个被跳过的文件）' : '本会话还没有文件改动') + '</span>';
     if (sum) sum.textContent = '';
-    if (skipOnly) el.innerHTML += _renderSkipped(d.skipped);
+    if (skipOnly && skipEl) skipEl.innerHTML = _renderSkipped(d.skipped);   // 滚动区外
     return;
   }
   if (sum) {
@@ -13427,7 +13435,8 @@ function renderChanges(d) {
       '<span class="chg-stat"><span style="color:#2d8659">+' + (c.added || 0) + '</span> <span style="color:#c0392b">−' + (c.removed || 0) + '</span></span>' +
       '<span class="chg-ts">' + escapeHtml(c.ts || '') + (c.revertible ? '' : ' · 只读') + '</span></div>';
   }
-  el.innerHTML = html + _renderSkipped(d.skipped);
+  el.innerHTML = html;
+  if (skipEl) skipEl.innerHTML = _renderSkipped(d.skipped);   // 滚动区外，别被列表埋掉
 }
 
 function _renderSkipped(skipped) {
