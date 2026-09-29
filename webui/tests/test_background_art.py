@@ -138,11 +138,34 @@ def test_background_content_column_narrows_for_characters(html):
     """带角色的背景要把中间内容列收窄 —— 消息列和输入框那三行都要收，否则底部输入框仍压住角色。"""
     for bg in ("maid", "chibi"):
         for sel in (".chat-messages", ".chat-input .input-row",
-                    ".chat-input .input-info", ".chat-input .input-grip"):
+                    ".chat-input .input-info", ".chat-input .input-grip",
+                    ".chat-skill-bar", ".sk3-slash"):
             assert f'html[data-bg="{bg}"] {sel}' in html, f"{bg} 没给 {sel} 收窄"
     assert "max-width:var(--bg-content-w, 90%)" in html
     # 纯宫殿背景不该收窄内容
     assert 'html[data-bg="palace"] .chat-messages' not in html
+
+
+def test_background_input_box_is_balanced(html):
+    """输入框本身要居中：行内右侧按钮组比左侧上传按钮宽，必须补左外边距才不偏左。"""
+    for bg in ("maid", "chibi"):
+        assert f'html[data-bg="{bg}"] .img-upload-btn' in html, f"{bg} 没给上传按钮补平衡边距"
+        assert f'html[data-bg="{bg}"] .chat-input button' in html, f"{bg} 没收紧按钮"
+    assert "margin-left:var(--bg-input-balance, 0px)" in html
+    body = html.split("function syncBgArtBox()")[1].split("\n}")[0]
+    assert "--bg-input-balance" in body, "没有人算平衡量"
+    assert "- 200" in body, "平衡时没有保住输入框最小宽度（会把它压瘪）"
+    assert "Math.min(need, room)" in body, "没有取「需要的量」和「放得下的量」的较小值"
+
+
+def test_background_input_balance_untouched_without_characters(html):
+    """边界：纯宫殿 / 无背景时绝不能动输入框布局 —— 默认 UI 必须原样。"""
+    for bg in ("palace", "none"):
+        assert f'html[data-bg="{bg}"] .img-upload-btn' not in html, f"{bg} 不该补平衡边距"
+        assert f'html[data-bg="{bg}"] .chat-input button' not in html, f"{bg} 不该收紧按钮"
+    body = html.split("function syncBgArtBox()")[1].split("\n}")[0]
+    assert "root.style.removeProperty('--bg-input-balance')" in body, \
+        "退出角色背景时没把平衡边距清掉"
 
 
 def test_background_char_fit_guards_narrow_area(html):

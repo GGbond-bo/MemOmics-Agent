@@ -1437,16 +1437,31 @@ html[data-bg="chibi"] #bg-art::before {
   background-position:right bottom;
   background-size:var(--bg-char-size-r, auto 62%); }
 
-/* 有角色时把中间内容列收窄，给两侧腾出站位（具体收多少由 syncBgArtBox() 算）
-   —— 消息列和输入框三行一起收，否则底部的输入框仍会压住角色 */
-html[data-bg="maid"] .chat-messages,
-html[data-bg="chibi"] .chat-messages,
-html[data-bg="maid"] .chat-input .input-row,
-html[data-bg="maid"] .chat-input .input-info,
-html[data-bg="maid"] .chat-input .input-grip,
-html[data-bg="chibi"] .chat-input .input-row,
-html[data-bg="chibi"] .chat-input .input-info,
-html[data-bg="chibi"] .chat-input .input-grip { max-width:var(--bg-content-w, 90%); }
+/* 有角色时把中间内容列收窄，给两侧腾出站位（具体收多少由 syncBgArtBox() 算）。
+   整块输入区都要一起收 —— 只收消息列和输入行的话，下面的技能栏/斜杠补全还是 90% 宽，
+   看上去就像输入框没跟上面一条线对齐。 */
+html[data-bg="maid"] .chat-messages, html[data-bg="chibi"] .chat-messages,
+html[data-bg="maid"] .chat-input .input-grip, html[data-bg="chibi"] .chat-input .input-grip,
+html[data-bg="maid"] .chat-input .input-row, html[data-bg="chibi"] .chat-input .input-row,
+html[data-bg="maid"] .chat-input .input-info, html[data-bg="chibi"] .chat-input .input-info,
+html[data-bg="maid"] .chat-skill-bar, html[data-bg="chibi"] .chat-skill-bar,
+html[data-bg="maid"] .sk3-slash, html[data-bg="chibi"] .sk3-slash {
+  max-width:var(--bg-content-w, 90%); margin-left:auto; margin-right:auto; }
+/* 这两个的 margin 是内联写死的，只能用 !important 才收得动 */
+html[data-bg="maid"] #steer-hint, html[data-bg="chibi"] #steer-hint,
+html[data-bg="maid"] #image-preview-area, html[data-bg="chibi"] #image-preview-area {
+  max-width:var(--bg-content-w, 90%) !important;
+  margin-left:auto !important; margin-right:auto !important; }
+
+/* 输入框本身居中：行内是 [#上传][输入框][发送][停止]，右侧按钮组天生比左侧宽，
+   输入框就被挤得偏左；背景模式内容列更窄，偏左更显眼。所以
+   ① 按钮收紧留出空间 ② 给上传按钮补一段左外边距，使左右留白相等。
+   补多少由 syncBgArtBox() 实测按钮宽度后写进 --bg-input-balance，并保证输入框
+   至少剩 200px —— 宁可少补一点也不把输入框压瘪。 */
+html[data-bg="maid"] .chat-input button,
+html[data-bg="chibi"] .chat-input button { padding:0 12px; }
+html[data-bg="maid"] .img-upload-btn,
+html[data-bg="chibi"] .img-upload-btn { margin-left:var(--bg-input-balance, 0px); }
 </style>
 </head>
 <body>
@@ -9072,6 +9087,21 @@ function syncBgArtBox() {
     el.style.removeProperty('--bg-char-size-l');
     el.style.removeProperty('--bg-char-size-r');
     root.style.removeProperty('--bg-content-w');
+  }
+
+  // 输入框居中：让上传按钮左侧的留白等于右侧按钮组（含间隙）的宽度，
+  // 输入框左右留白才相等。margin 不影响 offsetWidth，可以在已应用的状态下安全测量。
+  var row = document.querySelector('.input-row');
+  var up = document.querySelector('.img-upload-btn');
+  var send = document.getElementById('send');
+  var stop = document.getElementById('stop');
+  if (fit && row && up && send && stop) {
+    var gap = parseFloat(getComputedStyle(row).columnGap) || 8;
+    var need = send.offsetWidth + stop.offsetWidth + gap - up.offsetWidth;
+    var room = row.clientWidth - (up.offsetWidth + send.offsetWidth + stop.offsetWidth + 3 * gap) - 200;
+    root.style.setProperty('--bg-input-balance', Math.round(Math.max(0, Math.min(need, room))) + 'px');
+  } else {
+    root.style.removeProperty('--bg-input-balance');
   }
 }
 function initBgArtBox() {
