@@ -15942,6 +15942,54 @@ def _kv_set(key, value):
         return False
 
 
+def _seed_agent_todos(agent, todos, id_prefix="auto"):
+    """把一批待办写进 agent 的 TodoStore，返回实际写入的条目。
+
+    ⚠️ TodoStore 只有 write(todos, merge=True) / read() / has_items() —— 没有 add()。
+    这里原来调 _todo_store.add(...)，抛 AttributeError 又被 except 吞掉：待办只留在
+    session["_pipeline_todos"] 里、进不了 store。前端读 store 为空 → 回落到那份原始清单
+    （状态全是 pending）→ 完成状态再也不会更新，界面上的待办就一直挂着不划掉。
+    另外 TodoStore 只保留 {id, content, status} 三个字段，多给的会被 _validate 丢掉；
+    merge 模式还要求必须有 id（没 id 直接跳过），所以 id 必须兜底生成。
+    """
+    store = getattr(agent, "_todo_store", None)
+    if store is None:
+        return []
+    items = []
+    for i, td in enumerate(todos or []):
+        if not isinstance(td, dict):
+            continue
+        title = td.get("title") or td.get("content") or td.get("name") or ""
+        item = {
+            "id": str(td.get("id") or ("%s_%d" % (id_prefix, i))),
+            "content": str(title),
+        }
+        # 只有源里真的带了 status 才写。无条件补 "pending" 会踩 merge 的坑：
+        # write(merge=True) 见到 status 就覆盖，等于把已经 completed 的条目打回未完成 ——
+        # pipeline 每推一次清单，完成进度就被抹一次。缺 status 时不写，新建条目由
+        # TodoStore._validate 自己落默认值 pending，两边都对。
+        if td.get("status"):
+            item["status"] = str(td["status"])
+        items.append(item)
+    if not items:
+        return []
+    store.write(items, merge=True)
+    return items
+
+
+def _should_emit_todos(todos, prev_todos):
+    """这份待办要不要推给前端。
+
+    非空 → 推。空 → 只有「之前有、现在没了」才推一次：原来这里写的是
+    `if todos and len(todos) > 0`，于是「待办被清空」这件事永远到不了前端 ——
+    列表就一直挂在输入框上方不动（用户 2026-09-30 报的现象之一）。
+    服务端已经空了、页面还挂着旧清单，就是这么来的。
+    """
+    if todos:
+        return True
+    return bool(prev_todos)
+
+
 def _todos_public(todos):
     """把任意来源的待办归一成前端认识的四项 {id,title,status,module}。"""
     out = []
@@ -18218,16 +18266,11 @@ async def ws_endpoint(ws: WebSocket):
                                             _s["_pipeline_todos"] = result_obj.get("todos", result_obj.get("modules", []))
                                             # 如果有 todos，写入 store
                                             if result_obj.get("todos"):
-                                                for td in result_obj["todos"]:
-                                                    _agent._todo_store.add({
-                                                        "title": td.get("title", td.get("name", "")),
-                                                        "module": td.get("module", td.get("id", "")),
-                                                        "skill": td.get("skill", ""),
-                                                        "status": "pending",
-                                                        "description": td.get("description", td.get("desc", ""))
-                                                    })
-                                    except Exception:
-                                        pass
+                                                _seed_agent_todos(_agent, result_obj["todos"], "pipe")
+                                    except Exception as _e_seed:
+                                        # 以前这里是 except: pass —— add() 不存在被静默吞掉，
+                                        # 待办进不了 store，前端永远显示全 pending。别再吞了。
+                                        logger.warning(f"[todos] pipeline 待办写入 store 失败: {_e_seed}")
                                 # ⚡ 桥接: todo_manage → _agent._todo_store
                                 if tool_name == "todo_manage" and hasattr(_agent, "_todo_store"):
                                     try:
@@ -18313,7 +18356,8 @@ async def ws_endpoint(ws: WebSocket):
                                                     if best:
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
-                                if todos and len(todos) > 0:
+                                # 空清单也要推（见 _should_emit_todos）：清空必须让前端知道
+                                if _should_emit_todos(todos, session.get("todos")):
                                     # P2(2026-09-22): 裁决待办完成状态回写（blocks 硬约束据此解除）
                                     try:
                                         from webui import enforcement as _enf_sync
@@ -19182,8 +19226,7 @@ async def ws_endpoint(ws: WebSocket):
                                     default_ids = ["02", "03", "04"]
                                     pipe_todos = modules_to_todos(default_ids)
                                     if pipe_todos:
-                                        for td in pipe_todos:
-                                            _agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
+                                        _seed_agent_todos(_agent, pipe_todos, "auto")
                                         _session_emit(_session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                         _session_emit(_session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                 except Exception as e:

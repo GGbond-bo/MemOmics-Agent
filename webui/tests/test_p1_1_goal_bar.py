@@ -308,3 +308,141 @@ def test_frontend_goal_bar_wired():
     assert "function _syncGoalBarWidth" in html, "目标条宽度未对齐输入框"
     assert "autoDoneSig" in html, "全部完成后自动收起未实现"
 
+
+# --- D. TodoStore.add() 死调用（真实 bug，2026-09-30） -------------------------
+# 症状：界面上的待办完成一步也划不掉，一直挂在输入框上方不动。
+# 根因：server.py 两处调 _agent._todo_store.add(...)，而 TodoStore 只有
+#   write(merge=True) / read() / has_items() —— 没有 add()。抛出的 AttributeError 被
+#   except 吞掉（只在 errors.log 留一行 auto-todos failed），于是待办只写进
+#   session["_pipeline_todos"]、进不了 store；前端读 store 为空就回落到那份原始清单
+#   （状态全是 pending），完成状态再也不会更新。
+# 与 B 同类：调用了一个在后端根本不存在的方法。
+
+
+def _todo_store_class():
+    """加载真实的 TodoStore（todo_tool.py 只依赖 json/typing，可以单独加载）。"""
+    import importlib.util
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, "hermes-agent", "tools", "todo_tool.py")
+    spec = importlib.util.spec_from_file_location("_memomics_todo_tool", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.TodoStore
+
+
+def test_should_emit_todos_pushes_the_clear():
+    """空清单不是「没什么可推」—— 它是一次状态变化，必须推（否则页面挂着旧清单不动）。"""
+    # 非空：一律推
+    assert server._should_emit_todos([{"id": "1"}], None) is True
+    assert server._should_emit_todos([{"id": "1"}], [{"id": "1"}]) is True
+    # 空但之前有：这是「清空」，必须推 —— 这条就是这次修的
+    assert server._should_emit_todos([], [{"id": "1"}]) is True
+    assert server._should_emit_todos(None, [{"id": "1"}]) is True
+    # 空且之前就空：没变化，不推（别每次工具调用都刷一遍）
+    assert server._should_emit_todos([], []) is False
+    assert server._should_emit_todos([], None) is False
+
+
+def test_todos_emit_site_uses_should_emit_helper():
+    """接线检查：推送点必须真的用上判定函数（别再退回 len(todos) > 0）。"""
+    src = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8").read()
+    assert "_should_emit_todos(todos, session.get(\"todos\"))" in src
+    assert "if todos and len(todos) > 0:" not in src, "旧的 len(todos) > 0 判定又回来了"
+
+
+def test_server_never_calls_todo_store_add():
+    """server.py 里不许再出现 _todo_store.add( —— TodoStore 没有这个方法。"""
+    import ast
+    src = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8").read()
+    # 用 AST 找真正的调用点：<x>._todo_store.add(...)。
+    # 不用文本匹配 —— 注释和文档字符串里提到这个词不算调用（第一版就是这么误伤的）。
+    bad = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add":
+            continue
+        val = node.func.value
+        if isinstance(val, ast.Attribute) and val.attr == "_todo_store":
+            bad.append(node.lineno)
+    assert not bad, "又调 TodoStore.add() 了（该方法不存在），行号: %s" % bad
+
+
+def test_todo_store_really_has_no_add():
+    """钉住前提：TodoStore 没有 add()。哪天上游补上了，这条会失败并提示重写。"""
+    store = _todo_store_class()()
+    assert not hasattr(store, "add"), "TodoStore 现在有 add() 了？上面的结论要重写"
+    for m in ("write", "read", "has_items"):
+        assert hasattr(store, m), "TodoStore 缺 %s" % m
+
+
+class _FakeAgent:
+    """只要有 _todo_store 就够 —— _seed_agent_todos 只碰这一个属性。"""
+
+
+
+def test_every_method_called_on_todo_store_exists():
+    """泛化防线：server.py 里对 _todo_store 调的每个方法都必须真的存在。
+
+    这次的 add() 是第三例同类事故（前两例：get_todos()、todo_manage 幻影工具名）。
+    与其每次等用户报，不如把「调用了不存在的方法」变成一条会失败的测试。
+    """
+    import ast
+    # 按实例取，不按类取：_items 是 __init__ 里挂的实例属性，
+    # dir(cls) 看不到它（第一版就是这么误报的）。
+    methods = {n for n in dir(_todo_store_class()()) if not n.startswith("__")}
+    src = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8").read()
+    bad = []
+    for node in ast.walk(ast.parse(src)):
+        # 只看 <某物>._todo_store.<方法> 这种真实的属性访问
+        if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Attribute):
+            continue
+        if node.value.attr != "_todo_store":
+            continue
+        if node.attr not in methods:
+            bad.append((node.attr, node.lineno))
+    assert not bad, "调用了 TodoStore 上不存在的方法（方法, 行号）: %s；实际可用: %s" % (
+        bad[:5], sorted(methods))
+
+
+def test_seed_agent_todos_writes_into_real_store():
+    """修复本身：_seed_agent_todos 必须真的把待办写进 TodoStore。"""
+    a = _FakeAgent()
+    a._todo_store = _todo_store_class()()
+    todos = [
+        {"id": "01", "title": "数据质控", "module": "01", "skill": "s1"},
+        {"id": "02", "title": "聚类注释", "status": "completed"},
+    ]
+    written = server._seed_agent_todos(a, todos, "pipe")
+    assert len(written) == 2
+    got = {x["id"]: x for x in a._todo_store.read()}
+    assert set(got) == {"01", "02"}, "待办没进 store（就是这次修的 bug）"
+    assert got["01"]["content"] == "数据质控", "title 没落到 content"
+    assert got["01"]["status"] == "pending", "缺 status 应落 pending"
+    assert got["02"]["status"] == "completed", "已有 status 必须原样保留"
+
+
+def test_seed_agent_todos_edges():
+    """边界：没 id 兜底生成、非字典跳过、空输入不写也不清空、无 store 不炸。"""
+    a = _FakeAgent()
+    a._todo_store = _todo_store_class()()
+    # merge=True 时没 id 的条目会被静默跳过 —— 必须兜底生成 id
+    written = server._seed_agent_todos(a, [{"title": "没有 id 的一条"}, "字符串不是字典"], "auto")
+    assert len(written) == 1 and written[0]["id"] == "auto_0"
+    assert [x["content"] for x in a._todo_store.read()] == ["没有 id 的一条"]
+    assert server._seed_agent_todos(a, [], "auto") == []
+    assert server._seed_agent_todos(a, None, "auto") == []
+    assert [x["content"] for x in a._todo_store.read()] == ["没有 id 的一条"], "空输入不该清空已有待办"
+    assert server._seed_agent_todos(_FakeAgent(), [{"title": "x"}]) == [], "没有 _todo_store 不该炸"
+
+
+def test_seed_agent_todos_keeps_status_on_rewrite():
+    """合并语义：同一 id 再灌一次不能把已完成的打回 pending。"""
+    a = _FakeAgent()
+    a._todo_store = _todo_store_class()()
+    server._seed_agent_todos(a, [{"id": "01", "title": "第一步", "status": "completed"}], "x")
+    assert a._todo_store.read()[0]["status"] == "completed"
+    # 再灌一次同 id（模拟 pipeline 重复推送）：仍应保留 completed
+    server._seed_agent_todos(a, [{"id": "01", "title": "第一步"}], "x")
+    assert a._todo_store.read()[0]["status"] == "completed"
+
