@@ -1451,6 +1451,12 @@ def get_enforcement_report(session_id: str) -> dict:
         "rail_pre_done": es.rail_pre_done,
         "rail_post_done": es.rail_post_done,
         "debate_done": es.debate_done,
+        # 裁决待办的实时状态 + 还卡着几道硬门禁。不暴露这两个字段的话，用户报
+        # 「待办做完了也不划掉」时只能靠猜（2026-09-30 那次就是）。形状与 to_dict 一致。
+        "debate_todos": [{"id": t.get("id"), "title": t.get("title"),
+                          "status": t.get("status"), "blocks": t.get("blocks")}
+                         for t in (getattr(es, "debate_todos", []) or [])],
+        "debate_blocks_pending": len(pending_debate_blocks(es)),
         "terminal_count": es.terminal_count,
         "warnings": es.warnings,
         "conclusions_dir": es.conclusions_dir,

@@ -381,6 +381,74 @@ class _FakeAgent:
 
 
 
+def test_enforcement_report_exposes_debate_todos():
+    """诊断字段：不暴露它，「这条裁决待办为什么卡着」就只能靠猜。"""
+    from webui import enforcement
+    sid = "test-enf-report-" + uuid.uuid4().hex[:8]
+    es = enforcement.get_enforcement(sid)
+    es.debate_todos = [
+        {"id": "d1", "title": "第一步", "status": "pending", "blocks": ["terminal"]},
+        {"id": "d2", "title": "第二步", "status": "completed"},
+    ]
+    rep = enforcement.get_enforcement_report(sid)
+    assert [t["id"] for t in rep["debate_todos"]] == ["d1", "d2"]
+    assert rep["debate_todos"][0]["status"] == "pending"
+    assert rep["debate_todos"][1]["status"] == "completed"
+    assert rep["debate_blocks_pending"] == 1, "只有 d1 既没完成又带硬约束"
+
+
+def test_seed_agent_todos_treats_pending_as_no_opinion():
+    """单调规则：源里写 pending = 没意见，不许把 store 里已完成的打回未完成。
+
+    write(merge=True) 见到 status 就覆盖，所以「顺手补一个默认 pending」等于
+    每次推清单都抹一次完成进度。新建条目不受影响（_validate 自己落 pending）。
+    """
+    a = _FakeAgent()
+    a._todo_store = _todo_store_class()()
+    a._todo_store.write([{"id": "01", "content": "第一步", "status": "completed"}], merge=True)
+    server._seed_agent_todos(a, [{"id": "01", "title": "第一步", "status": "pending"}], "x")
+    assert a._todo_store.read()[0]["status"] == "completed"
+    # 反向仍然成立：明确说完成就必须写进去
+    a._todo_store.write([{"id": "02", "content": "第二步", "status": "pending"}], merge=True)
+    server._seed_agent_todos(a, [{"id": "02", "title": "第二步", "status": "completed"}], "x")
+    assert [x["status"] for x in a._todo_store.read()] == ["completed", "completed"]
+
+
+def test_debate_reseed_never_un_completes_a_todo():
+    """用户 2026-09-30 报的那份 3 条全 ⬜ 的待办：裁决待办做完了也不划掉。
+
+    真实链路：debate_analysis 跑完 → 把 es.debate_todos 写进 store。原来那句是
+        write([{..., "status": "pending"} for t in _dt], merge=True)
+    —— merge 见到 status 就覆盖，于是画火山图那轮每跑一次辩论，agent 勾掉的
+    完成状态就被抹一次，怎么勾都是 ⬜。
+    """
+    a = _FakeAgent()
+    a._todo_store = _todo_store_class()()
+    debate = [
+        {"id": "d1", "title": "在当前workspace检索旧柱子图/火山图脚本、R历史…", "status": "pending"},
+        {"id": "d2", "title": "按临时参数生成5张火山的PNG/PDF/SVG…", "status": "pending"},
+        {"id": "d3", "title": "不等证据齐：先产出可复核的中间结论…", "status": "pending"},
+    ]
+    server._seed_agent_todos(a, debate, "debate")  # 裁决第一次生成
+    assert [x["status"] for x in a._todo_store.read()] == ["pending"] * 3
+    # agent 做完了前两步
+    a._todo_store.write([{"id": "d1", "status": "completed"},
+                         {"id": "d2", "status": "completed"}], merge=True)
+    # 之后再跑裁决：_dt 同步过（completed）和没同步过（还是 pending）两种都要扛住
+    synced = [dict(t, status="completed" if t["id"] != "d3" else "pending") for t in debate]
+    for src in (synced, debate):
+        server._seed_agent_todos(a, src, "debate")
+        got = {x["id"]: x["status"] for x in a._todo_store.read()}
+        assert got == {"d1": "completed", "d2": "completed", "d3": "pending"}, got
+
+
+def test_debate_todo_site_uses_seed_helper():
+    """接线检查：裁决推送点必须走 _seed_agent_todos（别再手写 status）。"""
+    src = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8").read()
+    assert '_seed_agent_todos(_agent, _dt, "debate")' in src, "裁决待办推送点没接上助手"
+    assert '"status": "pending"} for t in' not in src, "又有批量写入在硬写 pending 了"
+
+
 def test_every_method_called_on_todo_store_exists():
     """泛化防线：server.py 里对 _todo_store 调的每个方法都必须真的存在。
 

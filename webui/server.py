@@ -15964,12 +15964,14 @@ def _seed_agent_todos(agent, todos, id_prefix="auto"):
             "id": str(td.get("id") or ("%s_%d" % (id_prefix, i))),
             "content": str(title),
         }
-        # 只有源里真的带了 status 才写。无条件补 "pending" 会踩 merge 的坑：
-        # write(merge=True) 见到 status 就覆盖，等于把已经 completed 的条目打回未完成 ——
-        # pipeline 每推一次清单，完成进度就被抹一次。缺 status 时不写，新建条目由
-        # TodoStore._validate 自己落默认值 pending，两边都对。
-        if td.get("status"):
-            item["status"] = str(td["status"])
+        # 状态是单调的：只有源里明确说「完成/取消」才写，pending 一律当「没意见」不写。
+        # 理由：write(merge=True) 见到 status 就覆盖，所以只要把 pending 写进去，
+        # 就等于把已经 completed 的条目打回未完成 —— pipeline 每推一次清单、裁决每跑一次，
+        # 完成进度就被抹一次（用户 2026-09-30 报的两份待办都是这么来的）。
+        # 不写 pending 也没有副作用：新建条目由 TodoStore._validate 自己落默认值 pending。
+        _st = str(td.get("status") or "").strip().lower()
+        if _st and _st != "pending":
+            item["status"] = _st
         items.append(item)
     if not items:
         return []
@@ -18160,9 +18162,14 @@ async def ws_endpoint(ws: WebSocket):
                                     # 注意：Hermes TodoStore 只有 {id, content, status} 三字段，
                                     # 且没有 add()（只有 write(merge=True)）——写错会静默丢失待办。
                                     if hasattr(_agent, "_todo_store") and _agent._todo_store is not None:
-                                        _agent._todo_store.write(
-                                            [{"id": t.get("id", ""), "content": t.get("title", ""),
-                                              "status": "pending"} for t in _dt], merge=True)
+                                        # 别再把 status 无条件写成 pending：write(merge=True) 见到
+                                        # status 就覆盖，于是每跑一次裁决就把 agent 已标记的
+                                        # completed 打回未完成 —— 裁决待办做完也不划掉就是这么来的
+                                        # （用户 2026-09-30 报的这份 3 条全 ⬜ 的待办）。
+                                        # _seed_agent_todos 只在源里真有 status 时才写它，
+                                        # 而 _dt 的 status 由 sync_debate_todos 从 store 同步过来，
+                                        # 已经是可信值。
+                                        _seed_agent_todos(_agent, _dt, "debate")
                                         _cur = [t for t in _agent._todo_store.read() if isinstance(t, dict)]
                                         _todos_pub = [{"id": t.get("id", ""),
                                                        "title": t.get("title", t.get("content", "")),
