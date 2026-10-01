@@ -2221,8 +2221,12 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             _bridge = LoopXBridge(session["id"], _rd2, user_online=True)
             _dec = _bridge.should_run()
             _state = str(_dec.get("state") or "")
-            _HARD_STOP = {"blocked", "blocked_health", "paused", "throttled"}
-            if not _dec.get("should_run") and _state in _HARD_STOP and not urgent:
+            # 2026-10-02 修复：原来只认 blocked/blocked_health/paused/throttled 四个硬停状态，
+            # 于是桥接即使（在证据充分的前提下）说「该等」，只要 state 是 waiting 就照样唤醒 ——
+            # 循环没有任何刹车。现在 should_run=False 一律尊重（urgent 除外，紧急事件照旧穿透）。
+            # 桥接侧已经把关：waiting/skip 只有在产出窗口内确无真实写入时才返回 False；
+            # LoopX 不可用时桥接给的是安全默认 True，所以 fail-open 语义没变。
+            if not _dec.get("should_run") and not urgent:
                 _reason = str(_dec.get("reason") or "loopx quota 判定停止")[:80]
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: LoopX {_state} 停止唤醒 ({_reason})")
                 return
@@ -2273,7 +2277,14 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 _retry_n = s.setdefault("_wakeup_retry_n", 0)
                 if _retry_n < 3:
                     s["_wakeup_retry_n"] = _retry_n + 1
-                    s["_urgent_wakeup"] = True
+                    # 2026-10-02 修复：原来无条件设 _urgent_wakeup=True。urgent 会把延迟压到
+                    # 3 秒（见下面 if urgent: delay = 3），并且绕开「外部工作无新进展就跳过
+                    # LLM 唤醒」的省 token 闸门 —— 两者相乘就是 3 秒一轮的重试风暴
+                    # （实测日志 #1/3 #2/3 #3/3，每轮都打 urgent wakeup triggered）。
+                    # 本来就紧急的（真错误/待审阅事件）才保持紧急重排；普通唤醒撞上运行中
+                    # 回合，按常规延迟重排即可。
+                    if urgent:
+                        s["_urgent_wakeup"] = True
                     logger.info(f"[SelfCheck] session {sid[:12]}: 唤醒遇运行中回合，重排 #{_retry_n + 1}/3")
                     _schedule_self_check(s, agent, loop, trigger=trigger)
                 else:
