@@ -25,12 +25,9 @@ related_skills: [cli-anything, computer-use, academic-figure-skill]
 4. 关键参数多值 + `debate_analysis`；5. 执行后 `rail_review(post)`；
 6. 结果落 `results/<sid>/`；7. 出错/成功走 `skill_evolution(record_error/record_run)`。
 
-> ⚠️ **本 skill 尚未落地到索引（两步收工必做）**
-> `skills_registry.scan_skills()` 会**跳过没有 `skill.json` 的技能**（源码 `if "skill.json" not in files: continue`）。
-> 所以本 skill 现在**不会触发**。收工前必须：
-> 1. 复制 `templates/skill.json` → 本目录 `skill.json`（填好 name / trigger_keywords / trigger_level）
-> 2. `python -m webui.skills_registry --build` → `python scripts/check_skills_gate.py` → 通过后 `git add` 本目录
-> 细则见 `skill_view("skill-registration-and-routing")`。
+> ✅ **已落地到索引（2026-10-04 19:08，提交 `235ea5ed`）**：顶层 `skill.json` 已补齐（RED，16 触发词），
+> 门禁 PASS（387 技能：RED 66 / YEL 308 / GRN 13；876 例通过），实测 matcher 命中本技能。
+> 新建技能时的收工管道与失败签名 → `skill_view("skill-registration-and-routing")`。
 
 ---
 

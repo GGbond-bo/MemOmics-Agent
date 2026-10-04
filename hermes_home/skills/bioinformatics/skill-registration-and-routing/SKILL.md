@@ -28,12 +28,16 @@ related_skills: [create-bio-skill]
 
 # 技能注册与触发路由（新建/改触发词后的必做管道）
 
-> ⚠️ **本 skill 自身尚未落地（收工三步）**：`scan_skills()` 会**跳过没有 `skill.json` 的技能**
-> （源码 `if "skill.json" not in files: continue`），而 `skill_manage(action="create")` **不会**自动生成 skill.json。
-> → 本 skill 现在**不进索引、不会触发**。收工前必须：
-> 1. 复制 `templates/skill.json` → 本目录 `skill.json`（填 name / trigger_keywords / trigger_level）
-> 2. `python -m webui.skills_registry --build` → `python scripts/check_skills_gate.py` → 通过后 `git add` 本目录
-> 3. 复核：`python scripts/verify_skill_registration.py skill-registration-and-routing`
+> ⚠️ **每次新建技能的必做收工步**：`skill_manage(action="create")` **不会**自动生成 `skill.json`，
+> 而 `scan_skills()` 的源码是 `if "skill.json" not in files: continue` ——
+> **顶层没有 skill.json 的技能 = 不进索引 = 永不触发**。
+> 2026-10-04 本 skill 自己就栽在这：只在 `templates/` 里放了 skill.json，顶层漏写 →
+> 一次漏文件换来**三连锁门禁转红**（picker/索引漂移 + `templates` 幽灵技能 + 未入 git），
+> 完整证据链见 `references/new-skill-json-missing-cascade.md`。
+> 收工三步：
+> 1. 复制 `templates/skill.json.template` → 本目录 `skill.json`（填 name / trigger_keywords / trigger_level）
+> 2. `python -m webui.skills_registry --build` → `python scripts/check_skills_gate.py` → 通过后 `git add` 整目录
+> 3. 复核：`python scripts/verify_skill_registration.py <skill-name>`
 >
 > **一句话铁律：`register_skill` 返回 success ≠ 技能能被触发。**
 > 2026-10-04 实测：`register_skill` 成功、SOUL.md 已写入，但真实 matcher 命中为 `[]`——
@@ -44,8 +48,9 @@ related_skills: [create-bio-skill]
 ### ✅ 该用
 - 新建了 skill（或改了触发词）→ **收工前必须过本 skill 的 7 步管道**
 - 出现任一失败签名：真实 matcher 返回 `[]` / 索引行关键词看着像名称分词 /
-  `test_webui_picker_and_prompt_index_agree` 红 / `test_every_red_skill_is_covered` 红 /
-  `test_index_is_reproducible_from_committed_metadata` 红 / `git commit` 被 `[skills-gate]` 拦下
+  `test_webui_picker_and_prompt_index_agree` 红（`WebUI 有索引里没有的技能` / `索引缺少技能: <支撑目录名>`）/
+  `test_every_red_skill_is_covered` 红 / `test_index_is_reproducible_from_committed_metadata` 红 /
+  新建技能后**首次提交**就报 `这些技能的 skill.json 还没入 git` / `git commit` 被 `[skills-gate]` 拦下
 - 用户说「技能没被触发」「建完技能怎么验证」「注册了但命不中」
 
 ### ⛔ 不该用
@@ -109,7 +114,16 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 
 > 🔧 **一键体检（8 项）**：`python scripts/verify_skill_registration.py <skill-name>`
 > 📋 **完整机制 / 失败签名 / 排查命令**：`references/skill-registration-pipeline.md`
-> 📄 **skill.json 起手模板**：`templates/skill.json`
+> 📄 **skill.json 起手模板**：`templates/skill.json.template`（**必须带 `.template` 后缀**，理由见下方支撑目录铁律）
+>
+> 🚫 **支撑目录命名铁律**：`templates/` `references/` `scripts/` 里**绝不能出现字面名为 `skill.json` 的文件**。
+> 扫描器是 `os.walk` 全树遍历 + `if "skill.json" not in files: continue` —— 任何含 skill.json 的目录都会
+> 变成一个技能（**目录名即技能名**），于是 `templates/skill.json` 会在索引里生出名叫 `templates` 的幽灵技能，
+> 门禁报 `索引缺少技能: templates`。模板一律加 `.template` 后缀（`skill.json.template`）。
+>
+> 🚫 **RED 用例必须字面含关键词**：matcher 是**子串匹配**（`kw in text`），新用例的文案里必须真的出现
+> `trigger_keywords` 里某一条的**原样字串**——写「帮我用 ExtendScript 批量改 Illustrator 里的文字」，
+> 而不是同义改写「用脚本批处理 AI 文件」；否则**用例自己先红**，看着像技能没注册成功。
 
 ## Parameters
 
@@ -136,6 +150,12 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 | `register_skill` 返回 `already_registered` 且关键词没更新 | 该 action 对已注册技能**不更新关键词** | 手改 `SOUL.md` 注册行，或改 `skill.json` 后重建索引 |
 | 两次 `--build` 后索引字节数不同 | 非确定性回填在写文件 | 复核 skill.json 是否被改写；索引应可复现 |
 | frontmatter 写了 `trigger_keywords` 仍不生效 | skill.json 优先级更高 | 挪到 skill.json |
+| `索引缺少技能: templates`（幽灵技能叫支撑目录名） | 支撑目录里放了**字面名为 `skill.json`** 的文件；`os.walk` 全树遍历，任何含 skill.json 的目录都被当成技能 | 模板改名 `skill.json.template` → 重建索引 → 门禁（`references/new-skill-json-missing-cascade.md`） |
+| `WebUI 有索引里没有的技能: ['<新技能>']` | 新建技能**顶层漏写 skill.json** → `list_skills()` 列出它、`scan_skills()` 跳过它 | 补顶层 skill.json（≥2 条关键词，建议 10–17 条）后重建 |
+| `这些技能的 skill.json 还没入 git`（新建技能时必现） | 刚创建的 skill.json 未跟踪；索引可复现性测试读的是**暂存区** | `git add <技能目录>` **整目录**（连带 templates/ references/ scripts/） |
+| 某 skill.json 的 diff **只有换行符**（`--numstat` 显示 N/N 对称、`git diff` 全是 `+...\r`） | 写它的代码缺 `newline="\n"`（`webui/server.py` 的技能写接口），Windows 下 `\n` 被翻成 `\r\n`；**内容逐字节相同** | 无内容损失 → `git checkout -- <file>` 还原；**别把它当真改动提交** |
+| 提交前发现几百个 skill.json 变脏，怀疑是自己弄的 | 结论要靠 mtime，不靠感觉 | 按 mtime 分桶统计（`os.path.getmtime` 按日期计数），再与**会话起始快照的 git 计数**对齐——本轮 416 M 全程未变，299 个是 09-23 遗留积压，与我无关 |
+| 连续多轮重跑门禁被系统判「循环失控」 | 为换解释器/换 grep 反复跑同一个 ~95 s 的门禁 | **一次跑完取汇总**：`.venv/Scripts/python.exe -m pytest ... -q \| tail`（pytest 一律走项目 venv），PASS 就停手；只有出现 `failed` 汇总行才带着报错原文重跑一次 |
 
 ## Proven Scripts
 
@@ -153,6 +173,8 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 - 建技能的内容规范：`skill_view("create-bio-skill")`（该 skill 的注册章节与实际机制有历史偏差，见
   `references/skill-registration-pipeline.md` §6）
 - 本 skill 的详细机制笔记：`references/skill-registration-pipeline.md`
+- 缺顶层 skill.json 的**三连锁失败链**（逐条报错原文 + 根因 + 修法 + 复核证据）：
+  `references/new-skill-json-missing-cascade.md`
 
 ---
 
