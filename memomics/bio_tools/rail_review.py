@@ -154,13 +154,14 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
                 fpath = _os.path.join(root, f)
                 if f.lower().endswith(('.png', '.jpg', '.jpeg', '.svg', '.tiff')):
                     figure_count += 1
-                    # 问题7: 检测图片大小（<5KB → 强制重新生成）
+                    # 问题7: 检测图片大小（<5KB；2026-10-04 修误报：小图先看像素证据再判定）
+                    fsize = None
                     try:
                         fsize = _os.path.getsize(fpath)
-                        if fsize < 5 * 1024:  # < 5KB
-                            figure_issues.append(f"图片太小 ({fsize}B): {f} — 可能是空白图或错误图，必须重新生成")
                     except Exception:
                         figure_issues.append(f"无法读取图片大小: {f}")
+                    small = fsize is not None and fsize < 5 * 1024
+                    small_handled = False  # 像素检测已确认的小图（有内容→放行/空白→已有 issue）
                     # 用 PIL 检测空白/NA (只查 PNG/JPG)
                     if f.lower().endswith(('.png', '.jpg', '.jpeg')):
                         try:
@@ -175,8 +176,14 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
                                 else:
                                     flat = arr.flatten()
                                 unique_count = len(_np.unique(flat, axis=0)) if arr.ndim == 3 else len(_np.unique(flat))
+                                small_handled = True
                                 if unique_count <= 2:
                                     figure_issues.append(f"图片几乎全为单一颜色 ({unique_count} 种值): {f} — 可能是空白图，必须重新生成")
+                                elif small:
+                                    figure_warnings.append(
+                                        f"图片较小 ({fsize}B): {f} — 像素检测到 {unique_count} 种颜色，判定为有效内容（非空白/非错误图），已放行；"
+                                        f"如为交付图请人工确认分辨率是否足够"
+                                    )
                                 # 检测 NA 比例
                                 if _np.any(_np.isnan(arr.astype(float)) if arr.dtype.kind == 'f' else False):
                                     na_ratio = _np.isnan(arr.astype(float)).sum() / arr.size
@@ -186,6 +193,9 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
                             pass  # PIL 未安装则跳过深度检测
                         except Exception:
                             figure_issues.append(f"图片可能损坏无法打开: {f} — 必须重新生成")
+                    # 小图且无法用像素检测确认（SVG/TIFF/无 PIL）→ 维持原严格判定
+                    if small and not small_handled:
+                        figure_issues.append(f"图片太小 ({fsize}B): {f} — 可能是空白图或错误图，必须重新生成")
                 elif f.lower().endswith(('.csv', '.tsv', '.rds', '.h5ad', '.txt', '.json')):
                     result_files.append(f)
         # 图片数量检查（强制；报告/加载类步骤豁免——本身不产图，否则死锁）
@@ -195,7 +205,7 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
             figure_issues.append(f"图片数量不足 ({figure_count} 张) — 关键步骤({module_id})至少需要 2-3 张图，必须补充")
         if not result_files:
             warnings.append("No result files found in output directory")
-        # 问题7: 图片健康度问题作为 issues（阻断，不是 warnings）
+        # 问题7: 图片健康度问题作为 issues（阻断）；小图有像素证据时降级为 warning（2026-10-04）
         issues.extend(figure_issues)
         warnings.extend(figure_warnings)
     elif output_dir:

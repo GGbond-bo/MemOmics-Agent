@@ -3,7 +3,7 @@ name: cli-anything
 description: "通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控：用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）。触发：操控软件 / 批量控制桌面软件 / 软件自动化 / agent-native CLI / cli-hub / CLI-Anything / 给某软件做个 CLI / 批量改 Illustrator 文件。"
 version: 1.0.0
 trigger_level: RED
-trigger_keywords: [CLI-Anything, cli-hub, 操控软件, 操控, 软件自动化, 批量控制桌面软件, agent-native CLI, harness, 做个CLI, 做个命令行, 包装成CLI, 批量改, 统一字号, inkscape, 矢量图批量, 批处理软件, Illustrator自动化]
+trigger_keywords: [CLI-Anything, cli-hub, 操控, 软件自动化, 批量控制桌面软件, agent-native CLI, harness, 做个CLI, 做个命令行, 包装成CLI, 批量改, 统一字号, inkscape, 矢量图批量, 批处理软件, Illustrator自动化]
 author: MemOmics (auto-created)
 license: MIT
 platforms: [windows, linux, macos]
@@ -211,6 +211,34 @@ $AI --json probe --text "MemOmics Illustrator CLI" --size 14
 #  "png":"C:\\...\\Temp/memomics_cli_probe.png","png_exists":true,"png_bytes":2395}
 ```
 
+**全链路闭环命令（2026-10-04 新增，基线本体已实测）**
+```bash
+$AI --json new-doc --width 800 --height 600        # 新建未保存文档（返回 doc_count/artboard_rect）
+$AI --json rect --x 60 --y 60 --w 300 --h 180 --color "#e04040"   # x=距左, y=距顶(屏幕语义)
+$AI --json text-add --content "标题" --x 70 --y 300 --size 40 --color "#111111"
+$AI --json recolor --color "#00aa55" --index 0     # 改矩形颜色；--index -1=全部；--target text 改文字色
+$AI --json move --index 0 --dx 200 --dy 120        # 位移；dx右+, dy下+；--target text 同理
+$AI --json items                                   # 数字核对：矩形/文字的 bounds/fill/size
+$AI --json export /abs/path.png -f png --bg white  # 拍白底 PNG（透明底在像素统计里会呈黑色！）
+$AI --json close-untitled [--dry-run]              # 关闭 harness 留下的未保存「未标题-*」文档（含空文档）
+```
+
+**🔁 全链路闭环配方（画 → 导出 → 看图 → 调整 → 再看图）**
+
+> 「看图」用平台自带 `vision_describe`（本地 OCR + 主色 + 图形检测 + ASCII 亮度图，纯文本模型可读）。每轮三件套缺一不可：**命令 → 导出 PNG → vision_describe(路径)**；调整必须**依据上一轮看图的结论**，不许盲改。
+
+```text
+1. new-doc --width 800 --height 600
+2. 画第一版：rect / text-add → export r1.png --bg white → vision_describe(r1.png)
+   核对证据：OCR 是否读出文字（长句可能被拆成多段，属正常）？主色是否含目标色？
+3. 调整（按第 2 步结论选）：recolor 改色 / text-set --size 改字号 / move 位移 / text-add 加内容
+4. 再 export r2.png --bg white → vision_describe → 用证据确认调整生效（主色/OCR 变了）
+5. 数字交叉核对：items（bounds/fill/size）+ info
+6. 收尾：close-untitled 清场 → doctor 确认 doc_count=0（绝不保存任何文档）
+```
+
+**验收证据格式（每轮）**：命令 + 原始 JSON 关键字段 → PNG 绝对路径 + 字节数 → 看图结论（OCR 列表 + 主色列表）。
+
 ## Proven Scripts
 
 > 经实际运行验证成功的脚本记录。`skill_evolution(action="record_run")` 自动追加至此表。
@@ -235,6 +263,19 @@ $AI --json probe --text "MemOmics Illustrator CLI" --size 14
 | - | software_control | cli-anything | 2026-10-04 | sha256 evidence for probe PNG (source vs archived) | - | - |  |
 | - | software_control | cli-anything | 2026-10-04 | cp -r harness to isolated_patch_harness | - | - |  |
 | - | software_control | cli-anything | 2026-10-04 | gradient-probe rerun on isolated patch (var viaCollection=false) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator existence check + ai_loop_A dir | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator subcommand --help contract probe (round-A) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A_round1 draw+export | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A_round2 recolor+text-set+export | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A_round3 move+text-add+export | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A_round3 pixel-level color audit (PIL) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A cleanup + doctor doc_count=0 + sha256 | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_A color-cluster adjudication (top5 vs pixel-level) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_B_preflight exe check + ai_loop_B dir | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_B_round1 draw(white text + dark rect)+export v1 | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_B_round2 recolor text #111111 + export v2 + items | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | v2 | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | loop_B artifact manifest + PNG verify + sha256 + pixel recheck | - | - |  |
 ## Common Issues
 
 | 报错 | 根因 | 解决 |
@@ -242,6 +283,11 @@ $AI --json probe --text "MemOmics Illustrator CLI" --size 14
 | bridge failed rc=2: JS_FAIL/Error 2: viaCollection 未定义（gradient-probe） | harness 自带 JSX 引用未声明变量（ES3 直接抛 Error 2）；且失败时 `newDoc.close()` 走不到 → 会遗留一个未保存的「未标题-1」文档在 Illustrator 里 | ✅ 已修（2026-10-04，基线本体）：JSON 拼装处补 `var viaCollection = false;`。复测 `--json gradient-probe` rc=0 / applied_via_gradientcolor=true。遗留文档用 JSX `d.close(SaveOptions.DONOTSAVECHANGES)` 清（仅限未保存的「未标题-*」且 pathItems=1/textFrames=0） |
 | `non-JSON payload: ..."artboard_rect":[(0),(300),(400),(0)]`（doctor/info/artboards/text-list，有文档打开时 exit 2） | JSX 把数组元素包了括号 `[(0),(300)...]` → **不是合法 JSON**，json.loads 直接抛错 | ✅ 已修（2026-10-04）：三处（JSX_INFO / JSX_ARTBOARDS / JSX_TEXT_LIST）改回 `[0,300,400,0]`；复测 doctor/artboards/text-list 有文档打开时均 rc=0 |
 | 中文文档名/画板名回显乱码（`"active_doc":"δ-1"` 之类） | cscript 控制台按 OEM 代码页输出（中文机 = GBK），而 `run_jsx` 按 UTF-8 解码（errors=replace）→ 中文变 U+FFFD/杂字 | ✅ 已修（2026-10-04）：`run_jsx` 改「先 UTF-8 严格 → 失败退 GBK/cp936 → 再退 replace」解码；复测中文名正确回显（未标题-1 / 画板 1） |
+| 导出 PNG 交给 vision_describe，主色显示 `#000000 88%`（明明画的是白底） | PNG24 默认**透明底**，像素统计把 alpha 当黑 | 导出加 `--bg white`（拍平到白底）再看图（2026-10-04 实测：加 --bg white 后主色 `#e0e0e0 90%`+目标色正确） |
+| `rect/text-add` 画出来位置不对 / 跑出画板 | 坐标是**屏幕语义**：x=距左、y=**距顶**；而 `items` 返回的 bounds 是 Illustrator 原生坐标（y 向上）——两者不要混读 | 用 `items` 的 bounds 核对；`move` 的 dy 正=向下（内部已换算） |
+| `recolor` 报 `bad color: 'zzz' (expect #RRGGBB)` | 颜色格式非法（exit 2，属正常防呆） | 用 `#RRGGBB`（支持 `#RGB` 缩写） |
+| `new-doc` 后立刻查 `saved` 是 `true`，和直觉不符 | 新建文档在**首次修改前** AI 报告 saved=true；一旦画了东西变 false | 无影响；`close-untitled` 已同时覆盖「空文档」与「未保存」两种状态（2026-10-04 修） |
+| rail_review(post) 对 **before/after 对照图**报「图片太小 (…B) — 必须重新生成」 | 旧版门禁把 `<5KB` 一律当疑似空白（面向交付图口径），缺 `artifact_role / expected_blank` 维度 → 会误杀刻意缺陷态对照图（2026-10-04 会话 B 实测：2419B 的 v1 是"白字白底"缺陷物证，重生成=毁掉差分基线） | ✅ 已修（2026-10-04）：小图先做像素证据（>2 色 → warning 放行；空白/损坏仍阻断；SVG/TIFF 无像素检测维持严格）。⚠️ **运行中的 MemOmics 服务器进程持有旧模块——重启后生效**。对照图请用 `artifact_manifest.json` 标注 role/expected_blank（勿重生成） |
 | `No such option '--json'` | `--json` 是 group 级选项 | 移到子命令**之前**：`cli-anything-x --json <cmd>` |
 | `Got unexpected extra argument (xxx)` | 该子命令只收选项不收位置参数 | 先 `<子命令> --help` 核实（如 `diagram set --text "..."`） |
 | `{"project_open": false}` / `No project is open` | **session 不跨进程** | 每条命令带 `--project <file>`，或进 REPL |

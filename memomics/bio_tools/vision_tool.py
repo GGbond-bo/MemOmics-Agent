@@ -201,7 +201,11 @@ def _format_describe(desc):
         for o in sorted(desc["ocr"], key=lambda x: (x["y"], x["x"]))[:40]:
             lines.append(f'  - "{o["text"]}" @({o["x"]},{o["y"]}) 置信={o["conf"]}')
     else:
-        lines.append("OCR 文本: 无（OCR 引擎不可用）")
+        _eng = _get_ocr_engine()
+        if not _eng:
+            lines.append("OCR 文本: 无（OCR 引擎不可用——未安装 rapidocr_onnxruntime 或被 MEMOMICS_VISION_NO_OCR 禁用）")
+        else:
+            lines.append("OCR 文本: 无（OCR 引擎正常，未检出文本；原图可能无字、字太小或对比度不足）")
     if desc.get("ascii"):
         lines.append("ASCII 亮度图 (64x32, 越亮字符越密):")
         lines.append(desc["ascii"])
