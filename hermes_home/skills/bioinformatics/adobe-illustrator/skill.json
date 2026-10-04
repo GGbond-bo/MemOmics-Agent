@@ -1,0 +1,20 @@
+{
+  "name": "adobe-illustrator",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "category": "system",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "Illustrator",
+    "操控AI",
+    "操作AI",
+    "AI里",
+    "AI文件",
+    "AI脚本",
+    "AI画板",
+    "画板",
+    "ExtendScript",
+    "JSX脚本"
+  ],
+  "when_to_use": "用户提到 Illustrator / 操控AI / 操作AI / AI文件 / 画板 / ExtendScript / JSX脚本，或要在 Adobe Illustrator 里画图、改字、批量统一字号、导出 PNG/PDF/SVG、看图后调整时加载。含 16 命令手册、全链路闭环配方（画→导出→vision看图→调整→复看）、版本适配表与坑表、自带脚本库，新用户可 5 分钟上手。"
+}

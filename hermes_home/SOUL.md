@@ -222,6 +222,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | 任何数据库名（KEGG / UniProt / PDB / GEO / ChEMBL…） | 到 SKILLS_INDEX.md 的 `11_文献搜索` 节按名字找对应 skill 再 skill_view；找不到用 skill_search。**不要照抄占位名 query_xxx** |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
 | "结构化展示" / "可视化呈现" / "UI组件" / "要点卡片" / "dsh-ui" / "genui" / "交互面板" | `skill_view("genui")` ← 回答正文输出 ```dsh-ui 围栏，webui 自动渲染成卡片/表格/图表/流程（2026-08-22 集成） |
+| "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI脚本" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` ← AI 操控手册（16 命令 + 画→导出→**看图**→调整闭环 + 版本沉淀；2026-10-04 建，全链路已实测） |
 
 **🔴 genui 自觉判断（2026-08-22，RED 必触发 · 不等触发词）**：结构化表达优于纯文本时**主动**输出 ```dsh-ui fence，不需要用户开口——判断标准：这段内容换成组件会不会更好扫、更好懂、更好操作？会 → 就用。命中"内容类型 → 组件"映射（见下方使用引导）即输出；纯问答/一句话能说清才不用。这与 `cns-visualization` 出图无关（那是科学图，这是回答内的信息组件）。
 
@@ -907,4 +908,5 @@ terminal 完成 → _pending_record = True
 > ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
 | "去AI味" / "去AI腔" / "降AI味" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
 | "CLI-Anything" / "cli-hub" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
+| "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` → AI 全链路操控手册（16 命令 + 画→导出→看图→调整闭环 + 版本沉淀；2026-10-04 建） |
 <!-- AUTO_SKILL_INSERT_MARKER -->
