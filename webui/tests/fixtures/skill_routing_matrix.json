@@ -722,6 +722,24 @@
         "statistical-design-review"
       ],
       "max_hits": 2
+    },
+    {
+      "id": "skill-registration-and-routing-01",
+      "intent": "口语",
+      "text": "新建技能后命不中，matcher命中为空，帮我查一下触发词回填的问题",
+      "must_hit": [
+        "skill-registration-and-routing"
+      ],
+      "max_hits": 4
+    },
+    {
+      "id": "windows-com-app-automation-01",
+      "intent": "直白",
+      "text": "帮我用 ExtendScript 批量改 Illustrator 里的文字，这个软件没有CLI",
+      "must_hit": [
+        "windows-com-app-automation"
+      ],
+      "max_hits": 4
     }
   ],
   "distractors": [

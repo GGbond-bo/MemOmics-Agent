@@ -1,0 +1,28 @@
+{
+  "name": "<skill-name>",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "包名或工具名",
+    "英文功能词",
+    "中文功能描述",
+    "用户口语同义词",
+    "缩写或变体",
+    "触发场景2",
+    "触发场景3",
+    "触发场景4",
+    "触发场景5",
+    "触发场景6"
+  ],
+  "success_count": 0,
+  "proven_script": "",
+  "proven_params": [],
+  "user_prefs": {
+    "last_used_script": "",
+    "preferred_params": {},
+    "notes": ""
+  },
+  "error_log": [],
+  "debate_verdicts": []
+}

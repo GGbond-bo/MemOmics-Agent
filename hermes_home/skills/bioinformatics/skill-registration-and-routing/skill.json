@@ -1,0 +1,26 @@
+{
+  "name": "skill-registration-and-routing",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "技能注册",
+    "触发生效",
+    "触发不生效",
+    "命不中",
+    "索引重建",
+    "SKILLS_INDEX",
+    "trigger_keywords",
+    "技能门禁",
+    "skills-gate",
+    "skill_routing_matrix",
+    "register_skill",
+    "路由矩阵",
+    "技能没被触发",
+    "新建技能",
+    "触发词回填",
+    "matcher命中为空",
+    "注册技能"
+  ],
+  "when_to_use": "新建/改动词技能后让它真的能被触发：SKILLS_INDEX 重建、trigger_keywords 优先级与回填覆盖、WebUI 扫描根、路由矩阵用例、skills-gate 提交门禁。触发：新技能注册后命不中 / matcher 返回空 / 触发不生效 / 索引重建 / 技能门禁。"
+}
