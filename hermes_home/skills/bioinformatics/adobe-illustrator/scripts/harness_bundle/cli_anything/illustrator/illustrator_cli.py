@@ -82,15 +82,32 @@ def text_list(ctx: click.Context) -> None:
 
 
 @cli.command("text-set")
-@click.option("--size", type=float, default=None, help="Set font size (pt) on all text frames")
-@click.option("--font", default=None, help="Set font PostScript name, e.g. ArialMT")
+@click.option("--size", type=float, default=None, help="Target font size (pt)")
+@click.option("--font", default=None, help="Font PostScript name, e.g. ArialMT")
+@click.option("--align", type=click.Choice(["left", "center", "right"]), default=None,
+              help="Paragraph justification for the matched frames")
+@click.option("--index", type=int, default=-1, show_default=True,
+              help="Only this text frame (-1 = all that match)")
+@click.option("--pattern", default=None,
+              help="Only frames whose contents contain this text (case-insensitive)")
+@click.option("--from-size", "from_size", type=float, default=None,
+              help="Only frames whose CURRENT size equals this, ±0.15pt (style-based batch set)")
 @click.pass_context
-def text_set(ctx: click.Context, size: float | None, font: str | None) -> None:
-    """Batch-set font size / font on every text frame of the ACTIVE document (no save)."""
-    if size is None and font is None:
-        click.echo("error: pass --size and/or --font")
+def text_set(ctx: click.Context, size: float | None, font: str | None, align: str | None,
+             index: int, pattern: str | None, from_size: float | None) -> None:
+    """Restyle MATCHING text frames of the ACTIVE document (filters AND-combined; no save).
+
+    Examples:
+      text-set --from-size 6 --size 5          # shrink all 6pt annotations to 5pt
+      text-set --pattern "FDR=" --size 5       # shrink significance labels
+      text-set --index 3 --size 7 --align center
+    """
+    if size is None and font is None and align is None:
+        click.echo("error: pass --size and/or --font and/or --align")
         sys.exit(2)
-    res = _guard(be.run_jsx, be.jsx_text_set(size, font), timeout=ctx.obj["timeout"])
+    res = _guard(lambda: be.run_jsx(
+        be.jsx_text_set(size, font, align, index, pattern, from_size),
+        timeout=ctx.obj["timeout"]))
     _emit(res, ctx.obj["json"])
 
 
@@ -188,14 +205,18 @@ def recolor(ctx: click.Context, color: str, index: int, target: str) -> None:
 
 
 @cli.command("move")
-@click.option("--index", type=int, required=True)
+@click.option("--index", type=int, default=None, help="Item index (not needed for --target all)")
 @click.option("--dx", type=float, default=0.0, show_default=True, help="positive = right")
 @click.option("--dy", type=float, default=0.0, show_default=True, help="positive = DOWN")
-@click.option("--target", type=click.Choice(["path", "text"]), default="path", show_default=True)
+@click.option("--target", type=click.Choice(["path", "text", "all"]), default="path", show_default=True)
 @click.pass_context
-def move(ctx: click.Context, index: int, dx: float, dy: float, target: str) -> None:
-    """Move one rectangle / text frame of the ACTIVE document (no save)."""
-    res = _guard(be.run_jsx, be.jsx_move(index, dx, dy, target), timeout=ctx.obj["timeout"])
+def move(ctx: click.Context, index: int | None, dx: float, dy: float, target: str) -> None:
+    """Move a rectangle / text frame / ALL page items of the ACTIVE document (no save)."""
+    if target != "all" and index is None:
+        click.echo("error: --index is required unless --target all")
+        sys.exit(2)
+    res = _guard(be.run_jsx, be.jsx_move(index if index is not None else -1, dx, dy, target),
+                 timeout=ctx.obj["timeout"])
     _emit(res, ctx.obj["json"])
 
 
@@ -223,6 +244,65 @@ def close_untitled(ctx: click.Context, dry_run: bool) -> None:
     _emit(res, ctx.obj["json"])
 
 
+@cli.command("open")
+@click.argument("path", type=click.Path())
+@click.pass_context
+def open_file(ctx: click.Context, path: str) -> None:
+    """Open an .ai/.pdf/.svg file as a document (editable text when AI can).
+
+    The opened document is NEVER saved; close it with `close-doc --force` when done.
+    """
+    res = _guard(be.run_jsx, be.jsx_open(path), timeout=ctx.obj["timeout"])
+    _emit(res, ctx.obj["json"])
+
+
+@cli.command("place")
+@click.argument("path", type=click.Path())
+@click.option("--x", type=float, default=None, help="px from artboard LEFT")
+@click.option("--y", type=float, default=None, help="px from artboard TOP")
+@click.option("--w", type=float, default=None, help="Scale to this width (aspect kept if only one)")
+@click.option("--h", type=float, default=None, help="Scale to this height")
+@click.pass_context
+def place(ctx: click.Context, path: str, x: float, y: float, w: float, h: float) -> None:
+    """Place a file as a LINKED item in the ACTIVE document (text NOT editable; no save)."""
+    res = _guard(lambda: be.run_jsx(be.jsx_place(path, x, y, w, h), timeout=ctx.obj["timeout"]))
+    _emit(res, ctx.obj["json"])
+
+
+@cli.command("bounds")
+@click.pass_context
+def bounds(ctx: click.Context) -> None:
+    """Union bounds of all page items (native coords + artboard-screen coords)."""
+    res = _guard(be.run_jsx, be.JSX_BOUNDS, timeout=ctx.obj["timeout"])
+    _emit(res, ctx.obj["json"])
+
+
+@cli.command("artboard-set")
+@click.option("--index", type=int, default=0, show_default=True)
+@click.option("--w", type=float, required=True, help="New artboard width")
+@click.option("--h", type=float, required=True, help="New artboard height")
+@click.option("--x", type=float, default=None, help="Optional left offset (px)")
+@click.option("--y", type=float, default=None, help="Optional top offset (px, down+)")
+@click.pass_context
+def artboard_set(ctx: click.Context, index: int, w: float, h: float, x: float, y: float) -> None:
+    """Resize one artboard (origin kept unless --x/--y; no save)."""
+    res = _guard(lambda: be.run_jsx(be.jsx_artboard_set(index, w, h, x, y),
+                                    timeout=ctx.obj["timeout"]))
+    _emit(res, ctx.obj["json"])
+
+
+@cli.command("close-doc")
+@click.option("--all", "all_docs", is_flag=True, help="Close every open document")
+@click.option("--force", is_flag=True, help="Allow closing NAMED (non-未标题) documents")
+@click.option("--dry-run", is_flag=True, help="Report only, close nothing")
+@click.pass_context
+def close_doc(ctx: click.Context, all_docs: bool, force: bool, dry_run: bool) -> None:
+    """Close the ACTIVE document (or --all) WITHOUT saving (named docs need --force)."""
+    res = _guard(lambda: be.run_jsx(be.jsx_close_doc(all_docs, force, dry_run),
+                                    timeout=ctx.obj["timeout"]))
+    _emit(res, ctx.obj["json"])
+
+
 @cli.command()
 @click.pass_context
 def repl(ctx: click.Context) -> None:
@@ -240,7 +320,7 @@ def repl(ctx: click.Context) -> None:
         if raw in (":q", "quit", "exit"):
             return
         if raw in (":h", "help"):
-            click.echo(" :q | :h | :info | :artboards | :textlist | :set <pt> | :probe")
+            click.echo(" :q | :h | :info | :artboards | :textlist | :bounds | :set <pt> | :probe")
             continue
         try:
             if raw == ":info":
@@ -249,6 +329,8 @@ def repl(ctx: click.Context) -> None:
                 _emit(be.run_jsx(be.JSX_ARTBOARDS, timeout=ctx.obj["timeout"]), ctx.obj["json"])
             elif raw == ":textlist":
                 _emit(be.run_jsx(be.JSX_TEXT_LIST, timeout=ctx.obj["timeout"]), ctx.obj["json"])
+            elif raw == ":bounds":
+                _emit(be.run_jsx(be.JSX_BOUNDS, timeout=ctx.obj["timeout"]), ctx.obj["json"])
             elif raw.startswith(":set "):
                 size = float(raw.split()[1])
                 _emit(be.run_jsx(be.jsx_text_set(size=size), timeout=ctx.obj["timeout"]), ctx.obj["json"])

@@ -1,6 +1,6 @@
 ---
 name: adobe-illustrator
-description: Adobe Illustrator（AI）全链路操控手册 — 16 个 cli 命令、画→导出→看图→调整闭环、版本沉淀、自带脚本库
+description: Adobe Illustrator（AI）全链路操控手册 — 21 个 cli 命令（含打开/画板/批量改字/导出/清场）、面板导入配方、画→导出→看图→调整闭环、版本沉淀、自带脚本库
 trigger_level: RED
 trigger_keywords: ["Illustrator", "操控AI", "操作AI", "AI里", "AI文件", "AI脚本", "AI画板", "画板", "ExtendScript", "JSX脚本"]
 category: system
@@ -12,14 +12,14 @@ category: system
 > 支持 **画 → 导出 → 看图 → 调整 → 复看** 完整闭环。本技能 = 命令大全 + 配方 + 脚本 + 版本沉淀规程，
 > 新用户 5 分钟上手，老用户按版本持续沉淀经验。
 
-**阅读顺序**：`🔒 铁律` → `🚀 快速开始` → 按任务查 `📖 命令大全` / `🔁 闭环配方` / `🧰 批量配方`。
+**阅读顺序**：`🔒 铁律` → `🚀 快速开始` → 按任务查 `📖 命令大全` / `🔁 闭环配方` / `🧰 批量配方` / `🖼️ 面板导入配方`。
 
 ---
 
 ## 🔒 铁律（不许违背）
 
 1. **绝不保存用户文档**：harness 全程 `DONOTSAVECHANGES`；禁止 save / saveAs / 另存为。
-2. **只动自己新建的「未标题-*」**：收尾必须 `close-untitled` 清场（先 `--dry-run` 看，再实关）。
+2. **只动自己新建/打开的副本**：未导出过的用 `close-untitled` 清场（先 `--dry-run`）；`open` 打开的或已导出过的文档改用 `close-doc --dry-run` → `close-doc --force`（命名文档必须 `--force`；同样绝不保存）。
 3. **不碰用户文件**：当前 harness 只操作**活动文档**，不打开/不覆盖用户 .ai 文件；要读用户文件内容先问用户。
 4. **分步执行**：一次一条命令；写操作后核对返回 JSON（`changed` / `ok` / `bounds` / `fill`），不要静默连招。
 5. **证据格式**：动作给「命令 + 原始 JSON 关键字段 + 产物路径」；看图给「OCR 列表 + 主色列表」；收尾给 `doctor` 的 `doc_count=0`。
@@ -82,7 +82,7 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 
 > 与 `cli-anything`、`windows-com-app-automation` 可**同时命中**（互补：框架/桥建设 vs 本操作手册）。
 
-## 📖 命令大全（16 条）
+## 📖 命令大全（21 条）
 
 ### 只读类
 
@@ -91,27 +91,32 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 | `doctor` | 桥检查（顺带版本） | `bridge` / `cscript` / `illustrator.version` / `doc_count` |
 | `info` | 活动文档概况 | `version` `doc_count` `active_doc` `saved` `path` `artboard_count` `active_artboard` `artboard_rect` `layer_count` `text_frame_count` `path_item_count` |
 | `artboards` | 画板清单 | 每项 `index/name/rect(原生坐标)/active` |
-| `text-list` | 文字清单 | 每项 `index/contents/font/size/bounds` |
+| `bounds` ⭐ | 全文档内容联合边界 | `page_items` `textframes` `pathitems` `bounds`(原生) `bounds_screen`(屏幕语义；做布局数学用这个) |
+| `text-list` | 文字清单 | 每项 `index/contents/font/size/align/bounds` |
 | `items` | 对象清单（矩形+文字） | `pathitems[]`（`index/fill/bounds`）+ `textframes[]`（`index/size/fill/contents`），各 ≤40 |
-| `probe [--text T --size N]` | 冒烟：隔离文档画+导出+关闭 | 导出路径与字节（产物**固定**落 `%TEMP%/memomics_cli_probe.png`；当前无 `--out` 参数，要归档就 `cp` 到目标目录） |
+| `probe [--text T --size N]` | 冒烟：隔离文档画+导出+关闭 | `png_bytes`（产物**固定**落 `%TEMP%/memomics_cli_probe.png`；当前无 `--out` 参数，要归档就 `cp` 到目标目录） |
 | `gradient-probe` | 渐变工作流探测（复用现有渐变） | `applied_via_gradientcolor` 等 |
 
-### 写入类（全部不保存；需先 `new-doc` 或已有活动文档）
+### 写入类（全部不保存；需先 `new-doc` / `open` / 已有活动文档）
 
 | 命令 | 参数 | 示例 / 注意 |
 |------|------|------------|
 | `new-doc` | `--width 800 --height 600` | 新建**未标题**文档；返回 `created/doc_count/artboard_rect` |
+| `open` ⭐ | `<文件路径>` | 打开 .ai/.pdf/.svg 为文档 —— **PDF 文字保留可编辑**（30.0.0 实测 28 帧全在）；不保存；收尾 `close-doc --force` |
+| `place` ⭐ | `<文件路径> [--x --y --w --h]` | 置入为**链接图**（文字不可编辑；要改字必须用 `open`）；`--w`/`--h` 等比缩放 |
 | `rect` | `--x --y --w --h --color "#RRGGBB"` | x=距左、y=距顶；返回 `bounds`（原生坐标） |
-| `text-add` | `--content T --x --y --size --color --font` | `--font` 用 PostScript 名（如 `ArialMT`） |
+| `text-add` | `--content T --x --y --size --color --font` | `--font` 用 PostScript 名（如 `ArialMT`）；返回 `size`=**实际落盘值**（另附 `size_requested`） |
 | `recolor` | `--color C [--index -1\|i] [--target path\|text]` | `-1`=全部；返回 `changed/total/fill` |
-| `move` | `--index i --dx --dy [--target]` | dx 正=右，dy 正=**下**；返回移动后 `bounds` |
-| `text-set` | `--size N` / `--font PS名` | 作用于**全部**文字帧；返回 `changed/skipped` |
-| `export` | `<输出路径> -f pdf\|svg\|png [--bg transparent\|white]` | 看图必加 `--bg white`；返回 `exists/bytes/format` |
-| `close-untitled` | `[--dry-run]` | 关未保存「未标题-*」（含空文档）；返回 `closed/kept/docs_after` |
+| `move` ⭐ | `[--index i] --dx --dy --target path\|text\|all` | dx 正=右，dy 正=**下**；`--target all`=整体平移（只动层直属顶层项，嵌套自动跟随）；返回 `moved/nested_skipped/bounds` |
+| `text-set` ⭐ | `[--size N] [--font PS名] [--align left\|center\|right] [--index i] [--pattern 子串] [--from-size N]` | 过滤器**可组合**（AND）：`--from-size 6 --size 5` = 把所有 6pt 降为 5pt；`--index -1`=不限；返回 `changed/skipped/touched[]` |
+| `artboard-set` ⭐ | `--w --h [--index 0] [--x --y]` | 改画板尺寸（默认保原点、画布向下/右展开）；A4 = `--w 595.28 --h 841.89` |
+| `export` | `<输出路径> -f pdf\|svg\|png [--bg transparent\|white]` | 看图必加 `--bg white`；⚠️ PDF=saveAs、PNG/SVG=exportFile，**都会把文档关联/更名为导出文件**（收尾改用 `close-doc --force`） |
+| `close-untitled` | `[--dry-run]` | 关未保存「未标题-*」（含空文档）；**只在任何导出之前有效**；返回 `closed/kept/docs_after` |
+| `close-doc` ⭐ | `[--all] [--force] [--dry-run]` | 关活动（或 `--all`）文档，一律不保存；命名文档默认拒关，确认是自己的副本后加 `--force` |
 
 ### 交互
 
-`repl`（无子命令时默认进入）：`:h` 帮助、`:info`、`:artboards`、`:textlist`、`:set <pt>`、`:probe`、`:q` 退出。
+`repl`（无子命令时默认进入）：`:h`、`:info`、`:artboards`、`:textlist`、`:bounds`、`:set <pt>`、`:probe`、`:q`。
 
 ## 📐 坐标、颜色与导出约定
 
@@ -145,11 +150,44 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 ## 🧰 批量与进阶配方
 
 - **统一字号**：`text-list`（先看基线）→ `text-set --size 28` → `text-list`（复验全变）。
+- **按现状分组改字号**：`text-set --from-size <当前pt> --size <目标pt>`（可加 `--pattern` 再收窄）。
 - **批量换色**：`recolor --color "#111111" --index -1 --target text` 一次改全部文字；矩形同理 `--target path`。
-- **多格式交付**：同文档连发 `export out.pdf` / `export out.svg` / `export out.png --bg white`。
+- **整体排版**：`bounds` 看联合边界 → `move --target all --dx … --dy …` 一次性挪整套内容。
+- **多格式交付**：同文档连发 `export out.pdf` / `export out.svg` / `export out.png --bg white`（注意导出会把文档更名）。
 - **快速迭代**：进 `repl` 用 `:set 28` 这类短命令做手感调试，正式留痕再走完整命令行。
-- **当前覆盖边界（诚实版）**：仅"当前活动文档 + 新建文档"；**未实现**打开/另存副本/圆形/图层/嵌入图片（见下方路线图）。
-  需要这些能力时按「经验沉淀规程」扩展 harness，不要假装支持。
+- **当前覆盖边界（诚实版）**：可操作"当前活动文档 + 新建文档 + `open` 打开的文件（.ai/.pdf/.svg）"；**未实现**另存副本/圆形/图层管理/嵌入（place 是链接图）。`open` 不支持指定 PDF 页码（多页可能整册打开）。
+  需要更多能力时按「经验沉淀规程」扩展 harness，不要假装支持。
+
+## 🖼️ 面板导入配方（PDF/SVG 面板 → A4 上半区 + 字号规范化）⭐
+
+> 已实测：`boxplot_16_O_ex (2).pdf`（576×288pt，28 个文字帧、544 路径、182 组）。
+> 一键脚本：`python "<SKILL>/scripts/panel_to_a4.py" --pdf <in.pdf> --out <dir>`（默认标题7/正文6/注释5，占上半区）。
+
+```
+open <面板PDF>                                 # ① 导入（文字可编辑；saved=true 正常）
+bounds                                         # ② 取 content 联合边界（用 bounds_screen）
+artboard-set --w 595.28 --h 841.89             # ③ A4 纵向（保原点，画布向下展开）
+# ④ 整体居中进上半区，数学（全部用屏幕语义）：
+#    dx = 297.64 − cx            cx = (bounds_screen[0]+bounds_screen[2])/2
+#    dy = −(288 − 210.47 − cy)   cy = (bounds_screen[1]+bounds_screen[3])/2   （288=原画板高）
+move --target all --dx <dx> --dy <dy>          # 只平移顶层项（实测 moved=63, nested_skipped=691）
+text-set --from-size 6 --size 5                # ⑤ FDR= 注释 → 5pt（touched 10）
+text-set --from-size 7 --size 6                # ⑥ 列头 O_Pre/O_Post → 6pt（touched 2）
+text-set --from-size 8 --size 6                # ⑦ 类别+刻度（7.998≈8）→ 6pt（touched 14）
+text-set --from-size 9 --size 6                # ⑧ 轴名 → 6pt（touched 1）
+text-set --pattern "Aged Exercise" --size 7 --align center   # ⑨ 标题 7pt+居中
+# ⑩ 标题水平居中：text-list 按 contents 找到标题 index 与 bounds，
+#    move --target text --index i --dx (297.64 − 标题中心x) --dy 0
+text-list                                      # ⑪ 复验：{'5.0':10,'6.0':17,'7.0':1}，标题 align=center
+bounds                                         # ⑫ 复验：bounds_screen[3] ≤ 420.9（只占上半页）
+export <out>/panel.png -f png --bg white       # ⑬ 预览
+export <out>/panel.pdf -f pdf                  # ⑭ 矢量交付（导出 PDF 文字仍可编辑）
+close-doc --dry-run && close-doc --force       # ⑮ 清场（不保存）
+doctor                                         # ⑯ doc_count 回到基线
+```
+
+**要点**：① 分组改字号用 `--from-size`，改完必须 `text-list` 复验；② 所有布局数学用 `bounds_screen`，不要混用原生坐标；
+③ 顺序若颠倒（先改字号再缩放）字号会失真 —— 先几何、后字号；④ 终验可另用 PyMuPDF 读导出 PDF 交叉复核（字号直方图 + 位置）。
 
 ## 🧪 版本适配与经验沉淀（本技能的核心机制）
 
@@ -157,7 +195,8 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 
 | Illustrator 版本 | 环境 | 状态 | 备注 |
 |---|---|---|---|
-| 30.0.0 | Windows 11 | ✅ 全量验证（2026-10-04） | 16 命令全通；会话 A（3轮）/B（2轮）+ 复现哈希一致 |
+| 30.0.0 | Windows 11 | ✅ 全量验证（2026-10-05） | **21 命令回归 36/36 ×2 轮**；`open` 导入 PDF 全文字可编辑（28 帧）；面板任务端到端 ×4（含 `panel_to_a4.py` 一键复现，PNG 25099B 逐字节同）+ PyMuPDF 交叉复核 |
+| 30.0.0 | Windows 11 | ✅ 早期验证（2026-10-04） | 16 命令全通；会话 A（3轮）/B（2轮）+ 复现哈希一致 |
 
 **沉淀规程（遇到差异/新需求时四步走）**：
 1. **留痕**：`skill_evolution(action="record_run"/"record_error", …)` 记录命令、版本、现象、结论。
@@ -175,6 +214,7 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 |------|------|------|
 | `ai.py` | 统一入口：自动找已装 exe（env → 仓库 venv → PATH），找不到用自带快照 | `python ai.py --json <子命令> …`；`--which` 看选用路径；`--bundled` 强制快照 |
 | `loop_demo.py` | 全链路演示（画→导出×3→清场；含 sha256 摘要与看图提示） | `python loop_demo.py --out <OUT>` |
+| `panel_to_a4.py` ⭐ | 面板配方一键化：PDF/SVG → A4 上半区 + 字号规范（标题7/正文6/注释5 可调）+ PNG/PDF 交付 | `python panel_to_a4.py --pdf <in> --out <dir>` |
 | `harness_bundle/` | harness 自包含快照（零安装回退；与已装版同步维护） | 由 `ai.py` 自动使用 |
 
 ## ⚠️ 坑表（Common Issues）
@@ -196,6 +236,17 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 | `new-doc` 后 `saved=true` 和直觉不符 | 新建文档在首次修改前 AI 报告 saved=true | 无影响；`close-untitled` 同时覆盖「空文档」与「未保存」 |
 | rail_review(post) 对 **before/after 对照图**报「图片太小，必须重新生成」 | 旧版门禁 `<5KB` 一律当疑似空白，缺对照图维度 | ✅ 代码已修（先验像素证据；空白/损坏仍阻断）。⚠️ 服务器旧进程重启后生效；对照图用 `artifact_manifest.json` 标注 role。**2026-10-04 复测**：未重启的进程仍误报，且门禁**递归扫描 output_dir 全树**（把 2584B 冒烟图移进 `smoke/` 子目录也无法规避）；`artifact_manifest.json` 的 role 字段亦未被门禁采纳。此时凭像素证据（`vision_describe` 的 OCR+主色+ASCII 亮度图）判定非空白即可，**不要反复重跑 rail_review**（会触发系统循环检测） |
 | 平台把 `xxx.png` 文件名当"技能名"去解析（`skill_invoke unknown`） | 平台解析器把消息里的文件名误判为技能引用（无害） | 无动作；知道即可 |
+| `move --target all` 后元素位移不一致（有的移 2×/3×，布局散架） | `document.pageItems` **包含嵌套子项**，逐项 `translate` 时组内元素按嵌套层级被重复移动 | ✅ 已修（2026-10-05）：只平移 `parent.typename=="Layer"` 的顶层项，嵌套随祖先走；返回 `moved/nested_skipped` |
+| `text-add` 后字号偶发停在 12pt（AI 默认），回执却显示请求值 | 新帧**首次字符属性写入偶发被丢弃** | ✅ 已修（2026-10-05）：读→写→读 有界重试（≤3）；回执 `size`=实际值、`size_requested`=请求值 |
+| `close-untitled` 关不掉刚导出过的文档（`kept:[...]`，docs_after 不动） | `export`（PDF=saveAs；PNG/SVG=exportFile）**都会把文档关联/更名为导出文件名** | 时序：`close-untitled` 只在**任何导出之前**有效；已导出的文档用 `close-doc --dry-run` → `close-doc --force` |
+| `text-set --index i` 打错目标 / 复验对不上 | `textFrames` 枚举序 = **z-order**（新加的在最前），随操作会变 | 先 `text-list` 按 `contents` 反查 index，再操作；操作后复验 |
+| 长会话中 AI 偶发闪退（事件日志 Application Error 1000 / ucrtbase.dll / 0xc0000409，2026-10-05 00:39 实测 1 次；24h 仅 1 次） | Illustrator 自身 fail-fast（非 harness 语法错误） | 重启 AI（先 `doctor` 确认 `doc_count=0` 无未保存损失）；桥接层已加「连接级失败自动重试一次」（仅 COM_FAIL/空输出；**JS_FAIL 不自动重试**——先只读复核状态再决定重发） |
+| `close-doc` 报 `refused:[...]` | 护栏：命名文档默认拒关 | 确认是自己打开/导出的副本后加 `--force` |
+| 多页 PDF `open` 后整册进来 | AI 按默认 PDF 设置导入，harness 未传页号 | 现版不支持指定页；需要单页先拆分 PDF |
+| 大文档 SVG 导出体积很大（实测 3 项小文档 → 32MB） | SVG 默认保留编辑数据 | 正常现象；交付优先 PDF/PNG |
+| `text-set --align center` 后墨迹位置自己挪了（标题墨迹左边界 41.98 → 17.92），只改 align 的标题**并不在页面中线上** | 段落在帧内重新排版会改变墨迹位置（帧内重排 ≠ 帧平移） | **居中两步走**：先 `--align center`，再 `text-list` 取**居中后**的 bounds 算视觉中心，补一次 `move --target text --index i --dx (297.64 − 中心x) --dy 0`（2026-10-05 实测：补 dx=+255.663 后中心 297.6395，与验收 297.64 差 0.002pt） |
+| 用 PyMuPDF 复核导出 PDF 时，把内容算成"下半页"（明明图在上半区） | PyMuPDF 的 bbox 原点在**页面左上、y 向下**（与 PDF 原生"左下原点 y 向上"相反）；误按 `H − bbox[3]` 换算会把上下颠倒 | 直接**把 bbox 当"距顶距离"用**（`y0`=距顶、`y1`=距底），不要再减页面高度；渲染 `get_pixmap(dpi=150)` 出 PNG 与导出 PNG 互证最稳（2026-10-05 实测：TEXT y[71.097, 350.500] ≤ A4 半页线 420.945） |
+| 导出后 AI 里文字帧数/bounds 与 `bounds` 命令口径小幅不一致（如标题 top 72.483 vs PDF 71.097） | `text-list` 报文字**墨迹 bounds**，`bounds` 报 pageItem **几何 bounds**；PDF span bbox 含字体 ascent/descent | 属正常口径差（<1.5pt）；**验收用同一口径内部自洽即可**，不要混用两个口径下结论 |
 
 ## ✅ Proven Scripts
 
@@ -204,6 +255,9 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 | 2026-10-04 | 3 轮闭环（红→绿+字号60→位移+加蓝字，每轮 vision 复看） | ✅ 会话 A 实测通过；每轮命令 JSON+PNG+OCR/主色三重证据 |
 | 2026-10-04 | 白字白底缺陷 → 看图发现 → recolor 黑 → 复看 | ✅ 会话 B 实测通过（OCR 0→1 条，暗像素 0→8.54%） |
 | 2026-10-04 | 同序列重跑复现性 | ✅ 3 张 PNG sha256 与首跑**逐字节一致** |
+| 2026-10-05 | 21 命令全量回归矩阵（真实 AI COM，36 项断言） | ✅ 连续两轮 **36/36 PASS**（报告 `_memomics_test/matrix_out/cmd_matrix_report.json`） |
+| 2026-10-05 | 面板任务：`boxplot_16_O_ex (2).pdf` → 新建 A4（595.28×841.89）+ 上半区 + 字号 6/5/7 + 标题居中 | ✅ 端到端 ×3；PyMuPDF 独立复核：28 spans、{5:10, 6:17, 7:1}、y 71.1–350.5（≤420.9）、标题 7.00pt cx=297.64 |
+| 2026-10-05 | `scripts/panel_to_a4.py` 一键版（参数化：--pdf/--out/--title/--body/--annot） | ✅ PASS；PNG 25099B 与手工序列**逐字节一致**（报告 `panel_script_out/panel_to_a4_report.json`） |
 
 ## 🔗 相关技能
 
@@ -231,3 +285,21 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 |-------|-------|----------|
 | rail_review(post) 反复报 "图片太小 (2584B): probe_newuser" | 图片健康门禁的 <5KB 阈值未考虑「冒烟/对照小图」场景；未重启的旧进程仍生效 | 凭像素证据（vision_describe 的 OCR 置信 1.0 + 主色 #e04040 33.8%）判定非空白即可，不阻断交付；勿反复重跑（触发循环检测）。代码修复在 `rail_review.py`，服务重启后生效。完整口径见上方坑表 |
 
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py doctor (panel_to_a4 实战 步骤0) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py open (panel_to_a4 步骤1) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py bounds+text-list (panel_to_a4 步骤2基线) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py artboard-set A4 (panel_to_a4 步骤3) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py move --target all (panel_to_a4 步骤4) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py text-set×5 分组改字号 (panel_to_a4 步骤5-9) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py move --target text --index 0 (panel_to_a4 步骤10) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py export png+pdf (panel_to_a4 步骤11) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | PyMuPDF 交叉复核导出 PDF (panel_to_a4 步骤12) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | vision 复核 pdf_render_check.png (panel_to_a4 步骤13) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | ai.py close-doc 清场 (panel_to_a4 步骤14) | - | - |  |
+| - | software_control | adobe-illustrator | 2026-10-05 | panel_to_a4 拆步全链路 (boxplot_16_O_ex (2).pdf) | - | - |  |

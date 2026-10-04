@@ -16,9 +16,9 @@
     "ExtendScript",
     "JSX脚本"
   ],
-  "when_to_use": "用户提到 Illustrator / 操控AI / 操作AI / AI文件 / 画板 / ExtendScript / JSX脚本，或要在 Adobe Illustrator 里画图、改字、批量统一字号、导出 PNG/PDF/SVG、看图后调整时加载。含 16 命令手册、全链路闭环配方（画→导出→vision看图→调整→复看）、版本适配表与坑表、自带脚本库，新用户可 5 分钟上手。",
-  "success_count": 6,
-  "proven_script": "relocate_probe_png",
+  "when_to_use": "用户提到 Illustrator / 操控AI / 操作AI / AI文件 / 画板 / ExtendScript / JSX脚本，或要在 Adobe Illustrator 里画图、改字、批量统一字号、导入 PDF/SVG 面板排版、导出 PNG/PDF/SVG、看图后调整时加载。含 21 命令手册、全链路闭环配方（画→导出→vision看图→调整→复看）、面板导入配方（PDF→A4 上半区+字号规范）、版本适配表与坑表、自带脚本库，新用户可 5 分钟上手。",
+  "success_count": 18,
+  "proven_script": "panel_to_a4 拆步全链路 (boxplot_16_O_ex (2).pdf)",
   "proven_params": [
     {
       "species": "",
@@ -97,10 +97,174 @@
       "approved": false,
       "custom_script": false,
       "result": "probe 冒烟图 2584B 移入 ai_newuser/smoke/ 子目录；主目录仅留 r1_newuser.png 7277B + artifact_manifest.json，规避 rail_review 旧版 <5KB 误报"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py doctor (panel_to_a4 实战 步骤0)",
+      "params": "{\"cmd\":\"--json doctor\"}",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "基线探活通过：bridge=true, cscript=C:\\WINDOWS\\system32\\cscript.EXE, illustrator.version=30.0.0, doc_count=0, active_doc=null；exit_code=0"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py open (panel_to_a4 步骤1)",
+      "params": "{\"cmd\":\"--json open \\\"D:/肌肉锻炼/Figure S2/boxplot_16_O_ex (2).pdf\\\"\"}",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "open 导入成功：opened=true, artboard_rect=[0,288,576,0]（576×288pt 与预期一致），text_frame_count=28, path_item_count=544, group_item_count=182, doc_count=1, saved=true（不落盘），error=null"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py bounds+text-list (panel_to_a4 步骤2基线)",
+      "params": "{\"cmds\":[\"--json bounds\",\"--json text-list\"]}",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "基线双层证据：bounds page_items=754/bounds_screen=[3.226,3.081,571.520,284.207]；text-list count=28（标题10pt、列头7pt×2、轴名9pt、类别7.998×10、刻度8pt×4、注释6pt×10）"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py artboard-set A4 (panel_to_a4 步骤3)",
+      "params": "{\"cmd\":\"--json artboard-set --w 595.28 --h 841.89\"}",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "A4 画板设置成功：before=[0,288,576,0] → after=[0,288,595.28,-553.89]（保顶部原点、向下展开；屏幕口径 595.28×841.89），saved=false；内容 bounds_screen 不变（3.226,3.081,571.520,284.207），天然落在上半区"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py move --target all (panel_to_a4 步骤4)",
+      "params": "{\"cmd\":\"--json move --target all --dx 10.266953125 --dy 66.82845703125\"}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "整体平移成功：moved=63, nested_skipped=691, ok=true；bounds_screen=[13.493,69.910,581.787,351.035] → 中心=297.64/210.47（A4 中线×上半区中心精确命中），底边 351.035 ≤ 420.9"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py text-set×5 分组改字号 (panel_to_a4 步骤5-9)",
+      "params": "{\"cmds\":[\"text-set --from-size 6 --size 5\",\"text-set --from-size 7 --size 6\",\"text-set --from-size 8 --size 6\",\"text-set --from-size 9 --size 6\",\"text-set --pattern Aged Exercise --size 7 --align center\"]}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "字号规范化全部命中：6->5 changed=10(touched 18-27)、7->6 changed=2(1,2)、8->6 changed=14(4-17)、9->6 changed=1(3)、标题pattern 7pt+align=center changed=1(0)；text-list 复验直方图={5.0:10, 6.0:17, 7.0:1}"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py move --target text --index 0 (panel_to_a4 步骤10)",
+      "params": "{\"cmd\":\"--json move --target text --index 0 --dx 255.66319660546875 --dy 0\"}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "标题水平居中：moved=1, ok=true；标题 bounds x=273.586/321.693 → 中心 297.6395≈297.64（A4 中线）；bounds_screen=[16.067,72.483,581.787,350.504] 底边 350.504≤420.9"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py export png+pdf (panel_to_a4 步骤11)",
+      "params": "{\"cmds\":[\"export boxplot_16_O_ex_A4.png -f png --bg white\",\"export boxplot_16_O_ex_A4.pdf -f pdf\"]}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "双格式导出成功：PNG exists=true bytes=25087（--bg white 白底）；PDF exists=true bytes=356976（export=saveAs，文档更名为导出名，saved=true 属正常）"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "PyMuPDF 交叉复核导出 PDF (panel_to_a4 步骤12)",
+      "params": "{\"tool\":\"PyMuPDF 交叉复核\",\"pdf\":\"boxplot_16_O_ex_A4.pdf\"}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "导出 PDF 独立复核：pages=1, page_rect=[0,0,595.28,841.89]（A4✓）, span_count=28（文字可编辑，未轮廓化✓）, size_hist={5.0:10, 6.0:17, 7.0:1}（与验收直方图一致✓）, TITLE 'Aged Exercise' 7.0pt cx=297.64（A4中线✓）"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "vision 复核 pdf_render_check.png (panel_to_a4 步骤13)",
+      "params": {
+        "tool": "vision_describe 渲染图复核"
+      },
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "渲染图看图证据：OCR 32 条（标题/6刻度/轴名/10 FDR 注/8 类别名全读出），ASCII 亮度图墨迹仅集中在上 1/3（第5-11行/共32行），主色 #e0e0e0 97.3% 白底"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "ai.py close-doc 清场 (panel_to_a4 步骤14)",
+      "params": {
+        "cmds": [
+          "close-doc --dry-run",
+          "close-doc --force",
+          "doctor"
+        ]
+      },
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "清场通过：dry-run docs_before=1 refused=[boxplot_16_O_ex_A4.pdf]（护栏生效）；--force 后 closed=[boxplot_16_O_ex_A4.pdf] docs_after=0；doctor 复核 bridge=true version=30.0.0 doc_count=0 active_doc=null（回到开工基线，全程未保存用户"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "adobe-illustrator",
+      "script": "panel_to_a4 拆步全链路 (boxplot_16_O_ex (2).pdf)",
+      "params": "{\"pdf\": \"D:/肌肉锻炼/Figure S2/boxplot_16_O_ex (2).pdf\", \"artboard\": \"A4 595.28x841.89\", \"move_all\": {\"dx\": 10.266953125, \"dy\": 66.82845703125}, \"text_sets\": [\"6->5\", \"7->6\", \"8->6\", \"9->6\", \"pattern Aged Exercise ->7+center\"], \"title_move_dx\": 255.66319660546875}",
+      "date": "2026-10-05",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "面板→A4 上半区端到端通过：字号直方图 AI 侧与 PyMuPDF 侧均为 {5.0:10, 6.0:17, 7.0:1}（验收✓）；bounds_screen 底边 350.504≤420.9（✓）；标题中心 x=297.6395≈297.64（✓）；产物 PNG 25087B + PDF 356976B（28 spans 文字可编辑）+ 渲染复核 OCR 32 条；源文件 sha256 未变"
     }
   ],
   "user_prefs": {
-    "last_used_script": "relocate_probe_png"
+    "last_used_script": "panel_to_a4 拆步全链路 (boxplot_16_O_ex (2).pdf)"
   },
   "error_count": 1,
   "errors": [
