@@ -162,6 +162,7 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 
 > 已实测：`boxplot_16_O_ex (2).pdf`（576×288pt，28 个文字帧、544 路径、182 组）。
 > 一键脚本：`python "<SKILL>/scripts/panel_to_a4.py" --pdf <in.pdf> --out <dir>`（默认标题7/正文6/注释5，占上半区）。
+> 核对/交付：`python "<SKILL>/scripts/font_compare.py" --orig <原图.pdf> --final <成品.pdf> --out <dir>`（字号直方图 + 原/成品对照图 + 300dpi 预览）。
 
 ```
 open <面板PDF>                                 # ① 导入（文字可编辑；saved=true 正常）
@@ -187,7 +188,7 @@ doctor                                         # ⑯ doc_count 回到基线
 ```
 
 **要点**：① 分组改字号用 `--from-size`，改完必须 `text-list` 复验；② 所有布局数学用 `bounds_screen`，不要混用原生坐标；
-③ 顺序若颠倒（先改字号再缩放）字号会失真 —— 先几何、后字号；④ 终验可另用 PyMuPDF 读导出 PDF 交叉复核（字号直方图 + 位置）。
+③ 顺序若颠倒（先改字号再缩放）字号会失真 —— 先几何、后字号；④ 终验可另用 PyMuPDF 读导出 PDF 交叉复核（字号直方图 + 位置），或直接跑 `font_compare.py`；⑤ 交付收敛：**一张图只留一份最终版**（PDF + 300dpi 预览 + 对照图），不要多版散放；AI 导出的 72dpi PNG **不进交付**（5~7px 高看不清，易被误判「字号没变」），核对一律看对照图。
 
 ## 🧪 版本适配与经验沉淀（本技能的核心机制）
 
@@ -196,6 +197,7 @@ doctor                                         # ⑯ doc_count 回到基线
 | Illustrator 版本 | 环境 | 状态 | 备注 |
 |---|---|---|---|
 | 30.0.0 | Windows 11 | ✅ 全量验证（2026-10-05） | **21 命令回归 36/36 ×2 轮**；`open` 导入 PDF 全文字可编辑（28 帧）；面板任务端到端 ×4（含 `panel_to_a4.py` 一键复现，PNG 25099B 逐字节同）+ PyMuPDF 交叉复核 |
+| 30.0.0 | Windows 11 | ✅ 交付收敛复测（2026-10-05） | 工具化：`font_compare.py`（对照图 + 300dpi + JSON）；原/成品复核 28/28 spans：[6×10·7×2·8×14·9×1·10×1] → [5×10·6×17·7×1]；字体名 Helvetica→Arial 口径入坑表；O_ex 成品样例入仓 `examples/` |
 | 30.0.0 | Windows 11 | ✅ 早期验证（2026-10-04） | 16 命令全通；会话 A（3轮）/B（2轮）+ 复现哈希一致 |
 
 **沉淀规程（遇到差异/新需求时四步走）**：
@@ -215,6 +217,7 @@ doctor                                         # ⑯ doc_count 回到基线
 | `ai.py` | 统一入口：自动找已装 exe（env → 仓库 venv → PATH），找不到用自带快照 | `python ai.py --json <子命令> …`；`--which` 看选用路径；`--bundled` 强制快照 |
 | `loop_demo.py` | 全链路演示（画→导出×3→清场；含 sha256 摘要与看图提示） | `python loop_demo.py --out <OUT>` |
 | `panel_to_a4.py` ⭐ | 面板配方一键化：PDF/SVG → A4 上半区 + 字号规范（标题7/正文6/注释5 可调）+ PNG/PDF 交付 | `python panel_to_a4.py --pdf <in> --out <dir>` |
+| `font_compare.py` ⭐ | 字号对照验收/交付：原↔成品同比例对照图 + 按关键字放大对 + 300dpi 预览 + JSON 证据 | `python font_compare.py --orig <原图> --final <成品> --out <dir>` |
 | `harness_bundle/` | harness 自包含快照（零安装回退；与已装版同步维护） | 由 `ai.py` 自动使用 |
 
 ## ⚠️ 坑表（Common Issues）
@@ -247,6 +250,8 @@ doctor                                         # ⑯ doc_count 回到基线
 | `text-set --align center` 后墨迹位置自己挪了（标题墨迹左边界 41.98 → 17.92），只改 align 的标题**并不在页面中线上** | 段落在帧内重新排版会改变墨迹位置（帧内重排 ≠ 帧平移） | **居中两步走**：先 `--align center`，再 `text-list` 取**居中后**的 bounds 算视觉中心，补一次 `move --target text --index i --dx (297.64 − 中心x) --dy 0`（2026-10-05 实测：补 dx=+255.663 后中心 297.6395，与验收 297.64 差 0.002pt） |
 | 用 PyMuPDF 复核导出 PDF 时，把内容算成"下半页"（明明图在上半区） | PyMuPDF 的 bbox 原点在**页面左上、y 向下**（与 PDF 原生"左下原点 y 向上"相反）；误按 `H − bbox[3]` 换算会把上下颠倒 | 直接**把 bbox 当"距顶距离"用**（`y0`=距顶、`y1`=距底），不要再减页面高度；渲染 `get_pixmap(dpi=150)` 出 PNG 与导出 PNG 互证最稳（2026-10-05 实测：TEXT y[71.097, 350.500] ≤ A4 半页线 420.945） |
 | 导出后 AI 里文字帧数/bounds 与 `bounds` 命令口径小幅不一致（如标题 top 72.483 vs PDF 71.097） | `text-list` 报文字**墨迹 bounds**，`bounds` 报 pageItem **几何 bounds**；PDF span bbox 含字体 ascent/descent | 属正常口径差（<1.5pt）；**验收用同一口径内部自洽即可**，不要混用两个口径下结论 |
+| 交付后用户质疑「字号没变 / 看不清」 | AI `exportFile` 的 PNG 默认 **72dpi**：A4 上 5~7pt 文字只有 5~7px 高，缩略图上看不出差异 | 用户可见预览一律用**成品 PDF 渲 300dpi**（`font_compare.py`）；自证用「PDF 文本层字号直方图 + 原↔成品同比例对照图」，不要拿 72dpi PNG 当证据 |
+| 字体名对不上：原 PDF 是 Helvetica，导入/导出后变成 Arial | Windows 无 Helvetica，AI 打开 PDF 时**自动替换为 Arial**（度量兼容，肉眼几乎无差） | 默认接受替换；用户/期刊指定字体名时先在 AI 内显式改用并在交付说明里**如实标注当前字体名**（本成品 = ArialMT/Arial-BoldMT，见 `font_compare_report.json` 的 `fonts` 字段） |
 
 ## ✅ Proven Scripts
 
@@ -258,6 +263,7 @@ doctor                                         # ⑯ doc_count 回到基线
 | 2026-10-05 | 21 命令全量回归矩阵（真实 AI COM，36 项断言） | ✅ 连续两轮 **36/36 PASS**（报告 `_memomics_test/matrix_out/cmd_matrix_report.json`） |
 | 2026-10-05 | 面板任务：`boxplot_16_O_ex (2).pdf` → 新建 A4（595.28×841.89）+ 上半区 + 字号 6/5/7 + 标题居中 | ✅ 端到端 ×3；PyMuPDF 独立复核：28 spans、{5:10, 6:17, 7:1}、y 71.1–350.5（≤420.9）、标题 7.00pt cx=297.64 |
 | 2026-10-05 | `scripts/panel_to_a4.py` 一键版（参数化：--pdf/--out/--title/--body/--annot） | ✅ PASS；PNG 25099B 与手工序列**逐字节一致**（报告 `panel_script_out/panel_to_a4_report.json`） |
+| 2026-10-05 | `scripts/font_compare.py` 字号对照工具化 + 交付收敛（唯一成品 + 300dpi 预览） | ✅ 实测复现：对照图/直方图与 PDF 复核一致；成品样例 + README 入仓 `examples/boxplot_16_O_ex_A4/` |
 
 ## 🔗 相关技能
 
