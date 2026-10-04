@@ -3,6 +3,33 @@
   "description": "Skill 路由回归矩阵：多场景 x 多意图 x 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；2026-09-23 P0-2b 后缺口清单与过度触发清单都已清零：修好的缺口提升成 cases（必须命中），收敛的过度触发句下沉成 distractors（必须零命中），护栏靠这两个清单继续看守。2026-09-23 P0-2b 极端测试追加：词片段误触发（science/algorithm/mRNA/degree）与裸「怎么修」全部收敛为 distractors 钉住。",
   "cases": [
     {
+      "id": "figure-layout-geometry-01",
+      "intent": "口语",
+      "text": "标签压住元素了，帮我做个版式自检",
+      "must_hit": [
+        "figure-layout-geometry"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "cli-anything-01",
+      "intent": "直白",
+      "text": "CLI-Anything 是干什么的？帮我装一下 cli-hub",
+      "must_hit": [
+        "cli-anything"
+      ],
+      "max_hits": 2
+    },
+    {
+      "id": "cli-anything-02",
+      "intent": "口语",
+      "text": "帮我把这批 Illustrator 文件批量改一下字号",
+      "must_hit": [
+        "cli-anything"
+      ],
+      "max_hits": 2
+    },
+    {
       "id": "scrna-qc-01",
       "intent": "直白",
       "text": "我有一份 scRNA-seq 数据，先做质控和双细胞去除",

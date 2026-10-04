@@ -1,0 +1,120 @@
+{
+  "name": "cli-anything",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "CLI-Anything",
+    "cli-hub",
+    "操控软件",
+    "操控",
+    "软件自动化",
+    "批量控制桌面软件",
+    "agent-native CLI",
+    "harness",
+    "做个CLI",
+    "做个命令行",
+    "包装成CLI",
+    "批量改",
+    "统一字号",
+    "inkscape",
+    "矢量图批量",
+    "批处理软件",
+    "Illustrator自动化"
+  ],
+  "upstream": {
+    "repo": "https://github.com/HKUDS/CLI-Anything",
+    "license": "Apache-2.0",
+    "tech_report": "arXiv:2606.03854",
+    "hub": "https://hkuds.github.io/CLI-Anything/",
+    "pypi": "cli-anything-hub"
+  },
+  "success_count": 5,
+  "proven_script": "cli-anything-illustrator gradient-probe",
+  "proven_params": [
+    {
+      "date": "2026-10-04",
+      "script": "cli-anything-mermaid",
+      "install": "cli-hub install mermaid",
+      "params_used": "{\"entry\":\"cli-anything-mermaid\",\"group_opt\":\"--json before subcommand\",\"state\":\"--project <file> per invocation\",\"output\":\"out.svg 15154B\"}",
+      "result_summary": "Hub 路径实跑通：project new --sample flowchart -> diagram set --text -> export render out.svg（15,154 B 真 SVG）。发现两坑：group 级 --json 必须在子命令前；session 不跨进程（project_open=false）。",
+      "auto_score": 8,
+      "approved": false
+    },
+    {
+      "date": "2026-10-04",
+      "script": "cli-anything-illustrator (self-built harness)",
+      "params_used": "{\"backend\":\"cscript -> COM Illustrator.Application.DoJavaScriptFile\",\"commands\":[\"doctor\",\"info\",\"artboards\",\"text-list\",\"text-set\",\"export\",\"probe\",\"repl\"],\"probe_result\":\"pathitems=1 textframes=1 png_bytes=2395\"}",
+      "result_summary": "自建 Illustrator harness 真跑通：doctor bridge=true，probe 独立建文档+矩形+文字+导 PNG 2395B+不保存关闭。修复 CMYK Red swatch Error 1302（RGB 文档无 CMYK 色板 -> 改 new RGBColor()）。",
+      "auto_score": 9,
+      "approved": false
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "cli-anything-illustrator (self-built harness)",
+      "params": "{\"backend\":\"cscript -> COM Illustrator.Application.DoJavaScriptFile\",\"commands\":[\"doctor\",\"info\",\"artboards\",\"text-list\",\"text-set\",\"export\",\"probe\",\"repl\"],\"install\":\"pip install -e . (project venv)\",\"probe\":\"--text 'MemOmics Illustrator CLI' --size 14\"}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "自建 Illustrator harness 实跑通：doctor bridge=true(cscript C:\\WINDOWS\\system32\\cscript.EXE)；probe 独立建文档 pathitems=1 textframes=1 导 PNG 2395B 不保存关闭；产物已复制 figures/illustrator_cli_probe.png。修复 CMYK Red swatch"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "cli-anything-mermaid",
+      "params": "{\"entry\":\"cli-anything-mermaid\",\"install\":\"cli-hub install mermaid\",\"group_opt\":\"--json before subcommand\",\"state\":\"--project <file> per invocation (session not cross-process)\",\"flow\":\"project new --sample flowchart --theme dark -o flow.json -> diagram set --text -> export render out.svg -f svg\"}",
+      "date": "2026-10-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CLI-Hub 路径实跑通：装 mermaid harness（Requires: nothing）并出真产物 out.svg 15,154 B（viewBox 405x417）。实测两坑：group 级 --json 必须在子命令前（否则 No such option）；session 不跨进程（project_open=false，需 --project 或 REPL）；另发现上游 bug：无"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "cli-anything-illustrator gradient-probe",
+      "params": "{\"command\":\"cli-anything-illustrator --json gradient-probe\",\"approach\":\"GradientColor workaround\",\"isolated_doc\":true}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "渐变绕过实测成功：applied_via_gradientcolor=true, error=null。三条实测事实：①新建 RGB 文档 swatches 里 typename 只有 \"Swatch\"、渐变 count=0；②doc.gradients 有 5 个；③fillColor=gradients[0] 报 Internal error（中文 locale 乱码），必须 new Grad"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "cli-anything-illustrator gradient-probe",
+    "preferred_params": {
+      "install_target": "project venv (.venv)",
+      "json_flag_position": "before subcommand",
+      "state_handling": "--project per process or REPL",
+      "safety": "never save user documents (DONOTSAVECHANGES)"
+    },
+    "notes": "本地实测（2026-10-04）：CLI-Hub v0.4.1；官方 hermes-skill 已装到 hermes_home/skills/cli-anything-hermes；registry 内无 Illustrator harness -> 自建。"
+  },
+  "error_log": [
+    {
+      "date": "2026-10-04",
+      "harness": "mermaid",
+      "error_message": "Error: No project is open + Traceback (ExportOptionsPNG24 share path)",
+      "root_cause": "mermaid harness 在无项目时未优雅报错，直接抛 Python traceback",
+      "fix_applied": "先 project new/--project 打开项目再调用 export；上游 bug，已记入 Common Issues"
+    },
+    {
+      "date": "2026-10-04",
+      "harness": "illustrator (self-built)",
+      "error_message": "JS_FAIL|Error 1302: No such element -> rect.fillColor = newDoc.swatches.getByName(\"CMYK Red\").color",
+      "root_cause": "文档以 DocumentColorSpace.RGB 创建，其色板库无 CMYK 色板名",
+      "fix_applied": "改为 new RGBColor() 直接设 r/g/b，不依赖色板名；已写入 backend 注释与 SKILL.md 坑表"
+    }
+  ],
+  "debate_verdicts": [],
+  "when_to_use": "通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控:用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）…"
+}

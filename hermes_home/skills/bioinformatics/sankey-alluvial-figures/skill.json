@@ -1,0 +1,30 @@
+{
+  "id": "sankey-alluvial-figures",
+  "name": "桑基 / 冲积图：布局归一化与几何自检",
+  "category": "bioinformatics",
+  "language": "Python+R",
+  "description": "桑基图/冲积图（Sankey / Alluvial / 流向图）的布局归一化与几何自检:节点高度必须按「可用高度」归一而非按数据权重 列间隙用固定比例、相邻节点禁止重叠，标签中心必须与所属色块中心重合（像素级断言）。含多组共同 DEG 流向图 （亚群 ↔ 基因、三组共同上/下调）的版式惯例、四格式导出与改版备份规程。 触发:桑基图 / 冲积图 / sankey / alluvial / 流向图 /",
+  "starting_prompt": "使用 桑基 / 冲积图：布局归一化与几何自检 进行分析",
+  "source_dir": "skills/bioinformatics/sankey-alluvial-figures",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "sankey",
+    "alluvial",
+    "layout",
+    "geometry",
+    "publication"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "sankey-alluvial-figures",
+    "sankey alluvial figures",
+    "sankey",
+    "alluvial",
+    "figures"
+  ],
+  "when_to_use": "桑基图/冲积图（Sankey / Alluvial / 流向图）的布局归一化与几何自检:节点高度必须按「可用高度」归一而非按数据权重 列间隙用固定比例、相邻节点禁止重叠，标签中心必须与所属色块中心重合（像素级断言）。含多组共同 DEG 流向图 （亚群 ↔ 基因、三组共同上/下调）的版式惯例、四格式导出与改版备份规程。 触发:桑基图 / 冲积图 / sankey / alluvial / 流向图"
+}

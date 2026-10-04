@@ -1,0 +1,29 @@
+{
+  "id": "overlapping-gene-assignment-audit",
+  "name": "重叠基因的 reads / UMI 归属审计",
+  "category": "bioinformatics",
+  "language": "shell+Python",
+  "description": "回答「重叠 / 反义基因之间，reads 或 UMI 到底算谁的」类方法学质疑，并产出可复现审计包 （BED6 + 一条命令复现 + 诚实边界 + 索引图）。触发词:反义 lncRNA / antisense / head-to-head 重叠基因 / gene-span overlap / \"how can we distinguish A vs B reads\" / reads 归属 / UM",
+  "starting_prompt": "使用 重叠基因的 reads / UMI 归属审计 进行分析",
+  "source_dir": "skills/bioinformatics/overlapping-gene-assignment-audit",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "annotation",
+    "gtf",
+    "bed",
+    "strandedness",
+    "antisense",
+    "audit-pack",
+    "reproducibility"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "反义 lncRNA",
+    "antisense",
+    "head-to-head"
+  ],
+  "when_to_use": "回答「重叠 / 反义基因之间，reads 或 UMI 到底算谁的」类方法学质疑，并产出可复现审计包 （BED6 + 一条命令复现 + 诚实边界 + 索引图）。触发词:反义 lncRNA / antisense / head-to-head 重叠基因 / gene-span overlap / \"how can we distinguish A vs B reads\" / reads 归属 / UM"
+}

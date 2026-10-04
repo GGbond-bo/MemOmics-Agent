@@ -1,0 +1,37 @@
+{
+  "id": "deg-updown-counts-by-subcluster",
+  "name": "DEG 各比较组 × 亚群 上下调基因数量柱状图",
+  "category": "user-skill",
+  "language": "Python",
+  "source": "user-requested",
+  "description": "骨骼肌 DEG 各比较组 × 亚群的上调/下调基因数量柱状图（matplotlib 五联面板）：下调蓝在左、上调红在右，每柱标注自身基因数，五面板共享 symlog(linthresh=1) 统一 x 轴 + 十倍阶梯刻度，柱端进入最外侧 20% 自动改柱内白字防重合；导出 png@400/pdf/svg/tiff@600",
+  "when_to_use": "已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示）",
+  "parameters": {
+    "OUT": "输出目录（task2/figures）",
+    "SRC": "计数矩阵 CSV（deg_subcluster_updown_coef025_matrix.csv）",
+    "SUBS": "8 亚群顺序：Pure I / IIA / IIX / LRP1B+(I) / RP_high(I) / RP_high(II) / OTUD1+(I) / OTUD1+(II)",
+    "PANELS": "五联面板：Aging / DM / Ex_Young / Ex_Old / Ex_DM",
+    "colors": "up #B2182B 在右，down #2166AC 在左",
+    "xscale": "symlog(linthresh=1) + 十倍阶梯刻度 0/10/100/1,000/10,000（五面板统一）",
+    "label_rule": "每柱标自身基因数；frac>0.80 改柱内白字右对齐",
+    "fig_size": "180 x 88 mm",
+    "MF_VARIANT": "right=箭头在数字右侧 | center=箭头贴中心线内侧（入库版硬编码 center）"
+  },
+  "proven_params": [
+    "计数顺序 = 蓝 Down 在左 | 红 Up 在右（用户确认口径）",
+    "五面板共享 symlog(linthresh=1) 统一 x 轴，禁止各面板独立缩放",
+    "柱端 frac>0.80 改柱内白字，防数值标签越出面板",
+    "左侧用单一「MF」模块竖带，禁止家族括号+旋转家族名（会与亚群名压叠）",
+    "变体必须硬编码另存为独立可跑版，否则用户找不到对应脚本"
+  ],
+  "proven_script": "scripts/fig_deg_updown_8sub_MF_v7b_arrows_at_center.py",
+  "error_count": 4,
+  "success_count": 1,
+  "trigger_keywords": [
+    "DEG 各比较组亚群基因数量图",
+    "updown 8sub 柱状图",
+    "上调下调数量柱状图",
+    "五面板统一 symlog 柱状图"
+  ],
+  "trigger_level": "GRN"
+}

@@ -1,0 +1,37 @@
+{
+  "id": "deg-volcano-5comps-8sub-R",
+  "name": "DEG 五比较组 × 8 亚群火山图（R / ggplot2 版）",
+  "category": "user-skill",
+  "language": "R",
+  "source": "user",
+  "description": "骨骼肌 DEG 五比较组 × 8 亚群火山图（ggplot2 + ggrepel）：背景灰柱 + 全部基因抖动点 + top5 基因标注 + y=0 彩色亚群标签块 + p3 主题；14×7 inch @300dpi，8 亚群自定义色板 + 配套文字色，支持用户确认的单点补标补丁 EXTRA_LABELS",
+  "when_to_use": "已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标",
+  "parameters": {
+    "SRC_FILE": "多对比 DEG 工作簿（每 sheet 一对比，含 celltype/regulation/coef/fdr）",
+    "OUT": "输出目录（task3/figures）",
+    "W_IN_H_IN": "14 x 7 inch @300dpi（必须够宽，否则亚群名挤叠）",
+    "COMPS": "Aging=Y_Pre_vs_O_Pre / DM=O_Pre_vs_OD_Pre / Ex_Young=Y_Pre_vs_Y_Post / Ex_Old=O_Pre_vs_O_Post / Ex_DM=OD_Pre_vs_OD_Post",
+    "ORDER": "Pure Type I / IIA / IIX / LRP1B+(I) / RP_high(I) / RP_high(II) / OTUD1+(I) / OTUD1+(II)",
+    "mycol": "#2f3084 #76a5d9 #43a8a8 #3c75a9 #197638 #a44395 #f9a213 #dba478",
+    "labelcol": "white black black black white white black black",
+    "style": "点径 1.5 / 标签 size=6 / 轴标题 13 / 图例 15（用户原稿，勿改）",
+    "top_n": 5,
+    "EXTRA_LABELS": "单点补标通道：只补指定基因标签，不改颜色/位置/y 轴范围"
+  },
+  "proven_params": [
+    "画布 14x7 inch —— 8x6 时色块宽(1.415in) 与标签宽(1.415in) 临界导致亚群名挤叠",
+    "必须用已过滤表（FDR<0.05 & |coef|>=0.25），否则会画出大片空的「不显著」灰柱",
+    "补标拼接用 dplyr::bind_rows，禁止 base::rbind（对 tbl_df 报 numbers of columns do not match）",
+    "补标是逐点确认制，只补用户指定那一处"
+  ],
+  "proven_script": "scripts/42_volcano5_8sub_FINAL.R",
+  "error_count": 4,
+  "success_count": 1,
+  "trigger_keywords": [
+    "火山图 R 版",
+    "5 比较组 8 亚群火山图",
+    "DEG 火山图带亚群标签块",
+    "volcano 8sub FINAL"
+  ],
+  "trigger_level": "GRN"
+}

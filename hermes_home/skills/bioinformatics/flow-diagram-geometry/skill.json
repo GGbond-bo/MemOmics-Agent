@@ -1,0 +1,31 @@
+{
+  "id": "flow-diagram-geometry",
+  "name": "流向图（桑基）几何与文字碰撞控制",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "桑基 / 流向图（Sankey、Alluvial、冲击图）的几何与文字碰撞控制:两侧节点数悬殊时的独立归一化布局 链路流量守恒与交叉控制、宽度语义的图注防误读、列标题 / 图例 / 脚注三类文字碰撞的修法 以及用 OCR 坐标 + 像素行带法验收文字是否重叠。触发:桑基图 / 桑葚图 / 桑基 / Sankey / alluvial 流向图 / 冲击图 / 两侧节点数悬殊 / 标签被压住 / 文字",
+  "starting_prompt": "使用 流向图（桑基）几何与文字碰撞控制 进行分析",
+  "source_dir": "skills/bioinformatics/flow-diagram-geometry",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "sankey",
+    "alluvial",
+    "flow",
+    "geometry",
+    "publication",
+    "matplotlib"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "flow-diagram-geometry",
+    "flow diagram geometry",
+    "flow",
+    "diagram",
+    "geometry"
+  ],
+  "when_to_use": "桑基 / 流向图（Sankey、Alluvial、冲击图）的几何与文字碰撞控制:两侧节点数悬殊时的独立归一化布局 链路流量守恒与交叉控制、宽度语义的图注防误读、列标题 / 图例 / 脚注三类文字碰撞的修法 以及用 OCR 坐标 + 像素行带法验收文字是否重叠。触发:桑基图 / 桑葚图 / 桑基 / Sankey / alluvial 流向图 / 冲击图 / 两侧节点数悬殊 / 标签被压住 / 文字"
+}
