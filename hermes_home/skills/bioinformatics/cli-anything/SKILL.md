@@ -225,10 +225,23 @@ $AI --json probe --text "MemOmics Illustrator CLI" --size 14
 | - | - | - | 2026-10-04 | cli-anything-illustrator (self-built harness) | - | - |  |
 | - | - | - | 2026-10-04 | cli-anything-mermaid | - | - |  |
 | - | - | - | 2026-10-04 | cli-anything-illustrator gradient-probe | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator --help (CLI contract probe) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | doctor) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator --json doctor | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator probe --help (param contract) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator --json probe (Chinese text, isolated doc) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | archive illustrator_cli_probe.png to session results | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cli-anything-illustrator --json gradient-probe (triage + L2 verdict) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | sha256 evidence for probe PNG (source vs archived) | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | cp -r harness to isolated_patch_harness | - | - |  |
+| - | software_control | cli-anything | 2026-10-04 | gradient-probe rerun on isolated patch (var viaCollection=false) | - | - |  |
 ## Common Issues
 
 | 报错 | 根因 | 解决 |
 |------|------|------|
+| bridge failed rc=2: JS_FAIL/Error 2: viaCollection 未定义（gradient-probe） | harness 自带 JSX 引用未声明变量（ES3 直接抛 Error 2）；且失败时 `newDoc.close()` 走不到 → 会遗留一个未保存的「未标题-1」文档在 Illustrator 里 | ✅ 已修（2026-10-04，基线本体）：JSON 拼装处补 `var viaCollection = false;`。复测 `--json gradient-probe` rc=0 / applied_via_gradientcolor=true。遗留文档用 JSX `d.close(SaveOptions.DONOTSAVECHANGES)` 清（仅限未保存的「未标题-*」且 pathItems=1/textFrames=0） |
+| `non-JSON payload: ..."artboard_rect":[(0),(300),(400),(0)]`（doctor/info/artboards/text-list，有文档打开时 exit 2） | JSX 把数组元素包了括号 `[(0),(300)...]` → **不是合法 JSON**，json.loads 直接抛错 | ✅ 已修（2026-10-04）：三处（JSX_INFO / JSX_ARTBOARDS / JSX_TEXT_LIST）改回 `[0,300,400,0]`；复测 doctor/artboards/text-list 有文档打开时均 rc=0 |
+| 中文文档名/画板名回显乱码（`"active_doc":"δ-1"` 之类） | cscript 控制台按 OEM 代码页输出（中文机 = GBK），而 `run_jsx` 按 UTF-8 解码（errors=replace）→ 中文变 U+FFFD/杂字 | ✅ 已修（2026-10-04）：`run_jsx` 改「先 UTF-8 严格 → 失败退 GBK/cp936 → 再退 replace」解码；复测中文名正确回显（未标题-1 / 画板 1） |
 | `No such option '--json'` | `--json` 是 group 级选项 | 移到子命令**之前**：`cli-anything-x --json <cmd>` |
 | `Got unexpected extra argument (xxx)` | 该子命令只收选项不收位置参数 | 先 `<子命令> --help` 核实（如 `diagram set --text "..."`） |
 | `{"project_open": false}` / `No project is open` | **session 不跨进程** | 每条命令带 `--project <file>`，或进 REPL |

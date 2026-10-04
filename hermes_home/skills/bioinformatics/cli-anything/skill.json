@@ -29,8 +29,8 @@
     "hub": "https://hkuds.github.io/CLI-Anything/",
     "pypi": "cli-anything-hub"
   },
-  "success_count": 5,
-  "proven_script": "cli-anything-illustrator gradient-probe",
+  "success_count": 15,
+  "proven_script": "gradient-probe rerun on isolated patch (var viaCollection=false)",
   "proven_params": [
     {
       "date": "2026-10-04",
@@ -87,10 +87,148 @@
       "approved": false,
       "custom_script": false,
       "result": "渐变绕过实测成功：applied_via_gradientcolor=true, error=null。三条实测事实：①新建 RGB 文档 swatches 里 typename 只有 \"Swatch\"、渐变 count=0；②doc.gradients 有 5 个；③fillColor=gradients[0] 报 Internal error（中文 locale 乱码），必须 new Grad"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator --help (CLI contract probe)",
+      "params": "{\"entry\": \"E:/MemOmics-Agent/.venv/Scripts/cli-anything-illustrator.exe\", \"mode\": \"help\"}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CLI 契约确认（exit 0）：9 个子命令 = doctor / info / artboards / export / probe / gradient-probe / text-list / text-set / repl。group 级选项 --json 与 --timeout（默认180s）必须写在子命令之前。有 repl 子命令。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator subcommand --help (probe/gradient-probe/doctor)",
+      "params": "{\"entry\": \"E:/MemOmics-Agent/.venv/Scripts/cli-anything-illustrator.exe\", \"mode\": \"subcommand-help\", \"probed\": [\"doctor --help\", \"probe --help\", \"gradient-probe --help\"]}",
+      "date": "2026-10-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "子命令契约确认：doctor 无参数（仅 --help）；probe 与 gradient-probe 均为纯选项子命令（help 输出未列必填位置参数，probe 实参以 --text/--size 传入）。门禁机制实测：同轮并行 terminal 只有第一条放行，后续被铁律24拦 —— 必须串行（terminal → record_run → terminal）。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator --json doctor",
+      "params": "{\"entry\": \"E:/MemOmics-Agent/.venv/Scripts/cli-anything-illustrator.exe --json doctor\"}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "doctor 探活通过：bridge=true，cscript=C:\\WINDOWS\\system32\\cscript.EXE（System32 fallback 命中），illustrator.doc_count=0 / active_doc=null（无用户文档打开，退出码 0，JSON 可解析）。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator probe --help (param contract)",
+      "params": "{\"entry\": \"cli-anything-illustrator probe --help\", \"params\": {\"--text\": \"默认 MemOmics CLI probe\", \"--size\": \"默认 12.0\"}, \"note\": \"probe 无输出目录选项 → PNG 落 Temp，需人工复制留档\"}",
+      "date": "2026-10-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "probe 契约确认：仅两个选项 --text TEXT（默认 \"MemOmics CLI probe\"）/ --size FLOAT（默认 12.0），纯选项子命令无位置参数；行为 = 独立新文档 → 矩形+文字 → 导 PNG → 不保存关闭。无 --out 参数，产物路径只能从返回 JSON 的 png 字段取。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator --json probe (Chinese text, isolated doc)",
+      "params": "{\"entry\": \"cli-anything-illustrator --json probe\", \"--text\": \"MemOmics 操控测试 2026-10-04\", \"--size\": 14}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "probe 隔离写测试通过：pathitems=1 / textframes=1 / size=14 / png_exists=true / png_bytes=3088 / png=C:\\Users\\23136\\AppData\\Local\\Temp\\memomics_cli_probe.png；独立新文档不保存关闭（doc_count 仍 0）。⚠️ 已知坑：返回 JSON 的 text 字段中"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "archive illustrator_cli_probe.png to session results",
+      "params": {
+        "cmd": "install -D -v <temp>/memomics_cli_probe.png <sid>/software_control/cli_tests/illustrator_cli_probe.png"
+      },
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "产物留档成功：install -D 自动创建 software_control/cli_tests 两级目录并复制 PNG（3088 B，与源字节一致）。会话内绝对路径 E:/MemOmics-Agent/results/memomics-68bbad55/software_control/cli_tests/illustrator_cli_probe.png。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator --json gradient-probe (triage + L2 verdict)",
+      "params": "{\"step\": \"gradient-probe triage\", \"verdict\": \"modify\", \"confidence\": \"medium\", \"scenario\": \"code_engineering\", \"defect\": \"illustrator_backend.py:331 使用 viaCollection 未声明\", \"fix_suggestion\": \"var viaCollection = false;\"}",
+      "date": "2026-10-04",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "gradient-probe 步骤收口：exit 2 / JS_FAIL Error 2（viaCollection 未声明，源码 L331 已核实；同段 applied=~L280、viaGradientColor=L302 均有 var 声明，独缺 viaCollection）。已按规则 7 记 record_error 并写入 Common Issues。L2 辩论（场景=code_engi"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "sha256 evidence for probe PNG (source vs archived)",
+      "params": {
+        "cmd": "sha256sum <temp>/memomics_cli_probe.png <sid>/.../illustrator_cli_probe.png"
+      },
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "哈希证据链闭合：源 PNG 与留档 PNG sha256 均为 7eab1e2651dc58204c8c7b7c2131f0ef9cf204d175a72626e2b3ccda6a3df1a1（逐字节一致），配合 400x300/5 色分布/OCR 置信度1.0 → rail_review「3088B 疑似空白图」判定为误报（裁判待办①完成）。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cp -r harness to isolated_patch_harness",
+      "params": {
+        "cmd": "cp -r <original harness> <sid>/software_control/isolated_patch_harness"
+      },
+      "date": "2026-10-04",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "隔离副本建立：被验 harness（results/memomics-ad6fdb02/.../agent-harness）整体复制到 results/memomics-68bbad55/software_control/isolated_patch_harness，原 baseline 未被修改（遵守裁判 test_isolation 要求）。另：rail_review「图片太小/疑似空白」阈值"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "gradient-probe rerun on isolated patch (var viaCollection=false)",
+      "params": {
+        "cmd": "PYTHONPATH=<isolated_patch_harness> .venv/Scripts/python.exe -m cli_anything.illustrator --json gradient-probe"
+      },
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "隔离副本补 var viaCollection=false; 后 gradient-probe 重跑 rc=0：{\"gradients_collection\":5,\"swatch_typenames\":[\"Swatch\"],\"applied_via_swatch\":false,\"applied_via_collection\":false,\"applied_via_gradientcolor\":tr"
     }
   ],
   "user_prefs": {
-    "last_used_script": "cli-anything-illustrator gradient-probe",
+    "last_used_script": "gradient-probe rerun on isolated patch (var viaCollection=false)",
     "preferred_params": {
       "install_target": "project venv (.venv)",
       "json_flag_position": "before subcommand",
@@ -115,6 +253,29 @@
       "fix_applied": "改为 new RGBColor() 直接设 r/g/b，不依赖色板名；已写入 backend 注释与 SKILL.md 坑表"
     }
   ],
-  "debate_verdicts": [],
-  "when_to_use": "通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控:用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）…"
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.6,
+      "evidence": "[数据] probe 3088B/400x300/5色/OCR1.0/sha256=7eab1e26…df1a1(源=留档一致) → rail_review 体积 failed 为误报；[数据] gradient-probe exit2 JS_FAIL Error 2，illustrator_backend.py:331 用 viaCollection 全文件无声明，同段 applied/viaGradientColor 均有 var → 上游代码缺陷；[数据] 隔离副本补 var viaCollection=false; 重跑 rc=0 error=null applied_via_grad",
+      "date": "2026-10-04 20:26:07"
+    }
+  ],
+  "when_to_use": "通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控:用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）…",
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-10-04 20:07",
+      "error_type": "runtime_error",
+      "message": "bridge failed rc=2: JS_FAIL|Error 2: viaCollection 未定义 (中文 locale 乱码显示为 \"δ\"). Line: 73 -> out += '\"applied_via_collection\":' + (viaCollection ? 'true' : 'false') + ',';",
+      "root_cause": "harness 自带的 gradient-probe JSX 在第 73 行用三元表达式引用变量 viaCollection，但该变量从未声明（ExtendScript ES3 无变量提升/未声明引用即 Error 2: undefined）。属 harness 上游代码缺陷，与 Illustrator 本体、COM 桥、色板均无关（同一 harness 的 probe/doctor 路径正常）。",
+      "fix_applied": "待修：在 gradient-probe 的 JSX 第 73 行之前补 var viaCollection = false;（或在赋值分支里先初始化）。ExtendScript 是 ES3，未声明变量在条件表达式中引用即抛 Error 2。本次未擅自改动用户 harness，已向用户报告并给出精确修法。",
+      "species": "-",
+      "tissue": "software_control",
+      "script": "cli-anything-illustrator --json gradient-probe",
+      "severity": "medium"
+    }
+  ]
 }
