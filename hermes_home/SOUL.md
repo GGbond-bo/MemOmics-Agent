@@ -906,5 +906,5 @@ terminal 完成 → _pending_record = True
 | "华大BGI单细胞分析" / "dnbc4tools 比对" / "dnbc4tools rna run" / "dnbc4tools atac run" / "dnbc4tools vdj run" / "DNBelab 完整流程" / "华大 RNA 分析流程" / "华大 ATAC 分析流程" / "DNBelab FASTQ 分析" / "华大单细胞比对流程" / "dnbc4tools multi" / "DNBelab 多样本" | `skill_view("dnbc4tools-analysis-workflow")` |
 > ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
 | "去AI味" / "去AI腔" / "降AI味" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
-| "CLI-Anything" / "cli-hub" / "操控软件" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
+| "CLI-Anything" / "cli-hub" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
 <!-- AUTO_SKILL_INSERT_MARKER -->
