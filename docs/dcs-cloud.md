@@ -113,6 +113,21 @@ dcs_cloud:
 
 验证记录（真账号、真文件，2026-10-07）：入队 3 个真文件（260 B / 13 MB / 17 MB）→ 中间进度 **22 → 32 → 36 → 53 → 70 → 100%**，最大并发 1，落盘字节与云上 `size` 逐一相等（合计 30,455,553 B）；真取消在 12% 时变成 `cancelled`（已落盘 11,392,148 B）；离线回归 `pytest webui/tests/test_dcs_cloud_connector.py -k dl_`（假下载器 `webui/tests/fixtures/fake_dcs_download.py`：真进程、真落盘、分块写）。
 
+## 🧪 GenPilot（智能分析工作区）实测 —— 2026-10-07
+
+用户问：「MemOmics 好像不能链接云平台的 GenPilot，你试试能不能调用和访问」。实测结论：**工作区这一面能连，网页 AI 助手那一面现在连不了**。
+
+| 面向 | 状态 | 证据 / 边界 |
+|------|------|-------------|
+| **智能分析工作区**（GenPilot 真正干活的地方 = OpenSandbox / StereNote 容器） | ✅ **通** | 走 `dcs terminal open/exec/close`（CLI 内部 = `POST {copilot_base_url}/chat_svr/intelligent_analysis_start_workspace`）。真账号实测：`container_open` 1.5s 拿到 task `NB2026…` + workspace `zhangbo11_5015…`；`container_exec` 回显 `genpilot-ok`、`whoami=zhangbo11`、用户组 `dcs_genpilot`、Python 3.12.3、48 核可见；`/work` 直接挂项目 HPC（`jdfsms6.ms.sz.hpc:…/P25Z10200N1075`，400T 池剩 52T），里头就是项目成员的工作目录、`Analysis/`、`.ipynb`；`container_close` → `closed_remote: true`（关完 `terminal_url`/`task_id` 清空，不占资源） |
+| **GenPilot 网页对话 / 智能分析编排** | ❌ 现阶连不了 | `https://genpilot-release.dcs.cloud` 可达（TLS 证书 = 武汉华大基因 `*.dcs.cloud`，IP 119.23.225.11），但 `/chat_svr/intelligent_analysis_get_workspace_status` 等一律 `401 {"ret":300001,"msg":"Session Expired, please re-login."}`；`/chat_svr/get_user_id` 是 POST 端点，无平台 JWT 时回 `ret:100001` + `user_id:0`。**PAT 不是 JWT**（48 字符不透明串），`Bearer` / `token` / `x-access-token` / `Cookie` 四种写法都不被接受；CLI 里也只有那 5 个 `/chat_svr/` 工作区端点，没有任何 chat/completions 命令 |
+
+**这些端点是怎么查到的**：`dcs.exe` 是 Go 二进制，字符串里躺着 `*terminal.CopilotClient`、`CopilotBaseURL yaml:"copilot_base_url"`、`copilot POST %s`、`/chat_svr/{get_user_id, intelligent_analysis_start_workspace, intelligent_analysis_close_workspace, intelligent_analysis_get_workspace_status, intelligent_analysis_get_resource_cfg}`、`copilot get_user_id: JWT sub user_* is not valid for Copilot` 以及提示 `dcs config set user_id <numeric_id>`。也就是说：CLI 靠**登录时换来的平台 JWT**（`~/.dcs/config.yaml` 的 `token: aes256gcm:***`）+ 数字 `user_id`（本机已设 `11996`）去调 Copilot —— **这条只有 CLI 自己走得通**。
+
+**要接 GenPilot 对话，只有两条路**：① 官方开放 API（或给 PAT 加 Copilot 权限）——建议直接问 DCS 支持；② 复用浏览器登录态（`cld:token` 型会话令牌）＝方案 C，用户 2026-10-07 已否，不做。
+
+**结论：**「在云上跑分析」的正路 = `dcs_cloud(action="container_open" | "container_exec" | "container_close")` —— 那个容器就是 GenPilot 的智能分析工作区，`/work` 里就是项目数据；重任务再走 `analysis` / `workflow` 投递。
+
 ## 🗣️ 「在云平台跑分析」怎么走：开工前确认协议
 
 用户说「帮我在云平台跑分析 / 投递任务」时，**不问清不动手**（对齐仓库铁律 27 / 28 / 35）：
