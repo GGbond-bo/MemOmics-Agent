@@ -3401,6 +3401,7 @@ function addUserMsg(text, imageUrls, turn) {
   // P1-4: 挂轮次（带 turn 的是历史回放，没带的是本会话新提问，自增）
   _registerTurnEl(div, (turn && turn > 0) ? turn : (_turnSeq + 1), 'user');
   scrollBottom();
+  return div;
 }
 
 function addAssistantMsg(text, meta) {
@@ -6729,21 +6730,79 @@ function _isInjectMsg(m) {
   return false;
 }
 
+// === 历史回放：同一轮的多个 LLM 片段合并回一个气泡（2026-10-07）===
+// 实时流里「一条用户提问 = 一个气泡」：delta 一直往同一个 currentAssistantEl 里累加，
+// 中间的工具调用只进进度时间线。但历史里 Hermes 每次 LLM 调用都存成独立的 assistant
+// 消息（中间夹 tool 消息），回放时若一条一个气泡，同一轮就被拆成一串碎片 —— 每片还各带
+// 自己的 ⏱/🛠/📋 复制按钮，看着像很多条回答（刷新/切会话后必现，用户 2026-10-07 报）。
+// 这里按 turn（一条用户提问 = 一轮）合并连续 assistant 片段：文本按原顺序拼接、
+// 耗时与工具数按整轮累加，与实时显示一致；整轮无文本（纯工具调用）不生成空气泡。
+// msgEls 仍按「源消息序号」逐条占位（被合并的片段指向它所属的那个气泡），
+// 辩论时间线 _dcbInsertPoint(msgEls[rel-1]) 的插入位置因此不受影响。
+function _renderHistoryFlow(msgs) {
+  var box = document.getElementById('messages');
+  var msgEls = [];
+  var lastEl = null;   // 最近一个真实气泡：空片段占位时指回它，别把锚点弄丢
+  var group = null;
+  function flushGroup() {
+    if (!group) return;
+    var text = '', elapsed = 0, hasElapsed = false, tools = 0, names = [];
+    group.items.forEach(function(m) {
+      var seg = String(m.content == null ? '' : m.content);
+      // Hermes 对「空响应」写入的哨兵 "(empty)"（run_agent.py / conversation_loop.py）：
+      // 实时流里这种片段什么都不显示，回放也不能把它当正文拼进去。
+      if (seg.trim() && seg.trim() !== '(empty)') {
+        if (!text) text = seg;
+        else text += (/[\n\r]$/.test(text) ? '' : '\n\n') + seg;
+      }
+      if (m.elapsed !== undefined && m.elapsed !== null) {
+        elapsed += Number(m.elapsed) || 0;
+        hasElapsed = true;
+      }
+      tools += Number(m.tool_count) || 0;
+      var tn = m.tool_names || [];
+      for (var i = 0; i < tn.length; i++) {
+        if (tn[i] && names.indexOf(tn[i]) < 0 && names.length < 12) names.push(tn[i]);
+      }
+    });
+    var el = null;
+    if (text) {
+      el = addAssistantMsg(text, {
+        turn: group.turn,
+        elapsed: hasElapsed ? Math.round(elapsed * 10) / 10 : undefined,
+        tool_count: tools,
+        tool_names: names
+      });
+    }
+    if (el) lastEl = el;
+    group.idx.forEach(function(i) { msgEls[i] = el || lastEl || null; });
+    group = null;
+  }
+  (msgs || []).forEach(function(m, i) {
+    if (_isInjectMsg(m)) return;   // 注入/工具消息不渲染，但索引继续对齐
+    if (m.role === 'user') {
+      flushGroup();
+      addUserMsg(m.content, null, m.turn);
+      lastEl = box.lastElementChild || lastEl;
+      msgEls[i] = lastEl;
+      return;
+    }
+    var t = (m.turn === undefined || m.turn === null) ? 0 : m.turn;
+    if (group && group.turn === t) { group.items.push(m); group.idx.push(i); return; }
+    flushGroup();
+    group = { turn: t, items: [m], idx: [i] };
+  });
+  flushGroup();
+  return msgEls;
+}
+
 function loadAllMessages(sid) {
   fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
     if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
     document.getElementById('messages').innerHTML = '';
     _debateKeys[sid] = {};   // 全部消息加载后，卡片重新按真实位置插入
-    var msgEls = [];
-    (d.messages || []).forEach(function(m) {
-      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
-      // 2026-08-26: 增加前缀内容级过滤（[会话要求]/[相关历史记忆] 等 role=user 注入）
-      if (_isInjectMsg(m)) return;
-      if (m.role === 'user') addUserMsg(m.content, null, m.turn);
-      else addAssistantMsg(m.content, m);
-      var _le = document.getElementById('messages').lastElementChild;
-      if (_le) msgEls.push(_le);
-    });
+    // 2026-10-07: 历史回放也走「同轮合并」渲染（与实时流一致，不再一轮拆成多气泡）
+    var msgEls = _renderHistoryFlow(d.messages || []);
     renderSessionStats(d.stats);
     // 2026-09-18: 「加载全部消息」→ 每场辩论插回它发生的位置（全部加载时 offset=0）
     _lastDebateSig = '';
@@ -7318,16 +7377,9 @@ function switchSession(sid) {
     document.getElementById('messages').innerHTML = '';
     var msgs = d.messages || [];
     if (!msgs.length && !liveBubble) showNewSessionWelcome();
-    var msgEls = [];   // 每条消息的 DOM，辩论卡片按 after_index 插回对应位置
-    msgs.forEach(function(m) {
-      // 2026-08-23: 系统注入/工具消息不进对话流（防刷新后系统唤醒消息刷屏）
-      // 2026-08-26: 前缀内容级过滤（与 loadAllMessages 同 helper）
-      if (_isInjectMsg(m)) return;
-      if (m.role === 'user') addUserMsg(m.content, null, m.turn);
-      else addAssistantMsg(m.content, m);
-      var _le = document.getElementById('messages').lastElementChild;
-      if (_le) msgEls.push(_le);
-    });
+    // 每条消息的 DOM（与源消息序号对齐），辩论卡片按 after_index 插回对应位置。
+    // 2026-10-07: 走「同轮合并」渲染 —— 同一轮的多个 LLM 片段合成一个气泡（= 实时流的展示）。
+    var msgEls = _renderHistoryFlow(msgs);
     renderSessionStats(d.stats);
     // 2026-09-18: 打开/切回会话时，把该会话的每一场辩论都插回它真正发生的位置
     // （此前只有「辩论刚跑完的那个页面」看得到卡片，刷新或切会话就消失/堆在末尾）
