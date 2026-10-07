@@ -183,6 +183,40 @@ def _kb_root():
     return None
 
 
+def _preserve_external_fields(entry: dict, entry_path: str) -> dict:
+    """重写已有条目时保留外部补写的字段（doi/pmid 引用回填等），防止覆盖丢失。
+
+    2026-10-07 事故修复：重提炼批量重写条目时冲掉了此前「KB 引用回填」补的
+    doi/pmid 字段（38 个文件）。此后所有重写都会把旧文件里存在的、本次不产出的
+    字段原样带回（doi/pmid 放回 name 之后，其余追加末尾）。
+    """
+    try:
+        if yaml is None or not os.path.isfile(entry_path):
+            return entry
+        with open(entry_path, encoding="utf-8") as f:
+            old = yaml.safe_load(f)
+        if not isinstance(old, dict):
+            return entry
+        carried = {k: v for k, v in old.items()
+                   if k not in entry and v not in (None, "", [], {})}
+        if not carried:
+            return entry
+        out = {}
+        for k, v in entry.items():
+            out[k] = v
+            if k == "name":
+                for pk in ("doi", "pmid"):
+                    if pk in carried:
+                        out[pk] = carried.pop(pk)
+        for k, v in carried.items():
+            out[k] = v
+        logger.info("save_knowledge: 保留既有字段 %s → %s", sorted(out.keys() - entry.keys()), entry_path)
+        return out
+    except Exception as e:
+        logger.warning("save_knowledge: 保留旧字段失败（不影响写入）: %s", e)
+        return entry
+
+
 def save_knowledge(name: str = "", content: str = "", source: str = "manual",
                    evidence: str = "", verified: str = "partially_verified",
                    category: str = "bioinformatics", force: bool = False,
@@ -256,6 +290,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
@@ -294,6 +329,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
@@ -345,6 +381,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
