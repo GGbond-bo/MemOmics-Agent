@@ -688,6 +688,61 @@ table.dcb-table.dg-table th { position:relative; }
 .dg-st { margin-top:2px; font-size:10px; color:var(--text-light); }
 .dg-st.warn { color:var(--warning); }
 .dg-note { margin-top:3px; font-size:10px; color:var(--text-light); line-height:1.55; }
+
+/* === 知识图谱·星空主题（2026-10-07 美化：2D 深空星云画布 + 双击内容弹窗） === */
+/* 2D 平面图画布：深空渐变 + 星云晕 + 内发光。cytoscape 画布透明，直接透出这层背景 */
+#kb-graph-canvas {
+  background:
+    radial-gradient(1100px 620px at 74% 16%, rgba(72,116,255,0.17), rgba(72,116,255,0) 62%),
+    radial-gradient(860px 620px at 16% 84%, rgba(155,89,182,0.16), rgba(155,89,182,0) 64%),
+    radial-gradient(640px 460px at 50% 52%, rgba(24,34,78,0.55), rgba(24,34,78,0) 72%),
+    linear-gradient(180deg, #0a1027 0%, #0b1026 55%, #080c1d 100%);
+  border:1px solid #2a3560;
+  border-radius:10px;
+  box-shadow: inset 0 0 70px rgba(30,50,130,0.28), 0 8px 26px rgba(0,0,0,0.35);
+}
+/* 前景闪烁星尘（cytoscape 之上，pointer-events 穿透，纯装饰） */
+.kb-stars { position:absolute; inset:0; pointer-events:none; overflow:hidden; border-radius:10px; z-index:5; }
+.kb-stars i { position:absolute; border-radius:50%; background:#fff; opacity:0.15; animation:kbTwinkle var(--d,4s) ease-in-out infinite; animation-delay:var(--dl,0s); }
+@keyframes kbTwinkle { 0%,100% { opacity:0.10; transform:scale(0.8); } 50% { opacity:0.85; transform:scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .kb-stars i { animation:none; opacity:0.3; } }
+
+/* 双击节点 → 内容弹窗（深空玻璃拟态卡片） */
+#kb-node-modal { position:fixed; inset:0; z-index:9650; display:none; align-items:center; justify-content:center; background:rgba(5,8,20,0.62); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+#kb-node-modal.visible { display:flex; animation:kbmFade .18s ease-out; }
+@keyframes kbmFade { from { opacity:0; } to { opacity:1; } }
+#kb-node-modal .kbm-card {
+  width:min(880px, 92vw); max-height:84vh; display:flex; flex-direction:column; border-radius:14px; overflow:hidden;
+  background:linear-gradient(180deg, rgba(21,28,58,0.98), rgba(12,17,38,0.98));
+  border:1px solid rgba(120,160,255,0.30);
+  box-shadow:0 24px 70px rgba(0,0,0,0.60), 0 0 0 1px rgba(120,160,255,0.08), 0 0 46px rgba(80,120,255,0.14);
+  color:#e6ecff; animation:kbmPop .24s cubic-bezier(.2,1.15,.3,1);
+  /* 局部变量：renderKbYaml 等复用 var(--text/--border/--bg) 的输出在深色卡片里保持可读 */
+  --text:#dfe6ff; --text-light:#8ea0d0; --bg:#131a36; --panel:#131a36; --border:#2a3560; --primary:#6ea8ff; --tool-bg:#17204a;
+}
+@keyframes kbmPop { from { transform:translateY(16px) scale(.965); opacity:0; } to { transform:none; opacity:1; } }
+#kb-node-modal .kbm-head { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid rgba(120,160,255,0.18); background:linear-gradient(90deg, rgba(80,120,255,0.16), rgba(155,89,182,0.10), rgba(0,0,0,0)); }
+#kb-node-modal .kbm-title { font-size:15px; font-weight:700; color:#f0f4ff; word-break:break-all; line-height:1.4; }
+#kb-node-modal .kbm-badge { display:inline-block; font-size:10px; padding:1px 8px; border-radius:999px; border:1px solid rgba(120,160,255,0.42); color:#a9c0ff; background:rgba(80,120,255,0.14); white-space:nowrap; }
+#kb-node-modal .kbm-badge.green { border-color:rgba(63,220,139,0.45); color:#5fe8a4; background:rgba(46,234,139,0.12); }
+#kb-node-modal .kbm-badge.orange { border-color:rgba(255,179,92,0.5); color:#ffbf80; background:rgba(255,179,92,0.12); }
+#kb-node-modal .kbm-badge.red { border-color:rgba(255,107,122,0.5); color:#ff8b98; background:rgba(255,107,122,0.12); }
+#kb-node-modal .kbm-path { font-size:10.5px; color:#8ea0d0; font-family:Consolas,monospace; padding:5px 16px; border-bottom:1px dashed rgba(120,160,255,0.16); word-break:break-all; }
+#kb-node-modal .kbm-body { flex:1 1 auto; min-height:0; padding:12px 16px 16px; overflow-y:auto; font-size:12.5px; line-height:1.65; }
+#kb-node-modal .kbm-body::-webkit-scrollbar-thumb { background:#33417a; }
+#kb-node-modal .kbm-loading { color:#8ea0d0; padding:18px 4px; }
+#kb-node-modal .kbm-err { color:#ff8b98; padding:10px 4px; }
+#kb-node-modal .kbm-pre { white-space:pre-wrap; word-break:break-word; margin:0; font-size:12px; line-height:1.65; color:#d7e0fa; }
+#kb-node-modal .kbm-raw { margin-top:10px; border:1px solid #2a3560; border-radius:8px; padding:6px 10px; background:rgba(127,140,200,0.06); }
+#kb-node-modal .kbm-raw summary { cursor:pointer; font-size:11.5px; color:#8ea0d0; }
+#kb-node-modal .kbm-raw pre { margin:6px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; color:#a9b6e6; max-height:300px; overflow-y:auto; }
+#kb-node-modal .kbm-dir-head { font-size:12px; color:#a9c0ff; padding:2px 0 10px; }
+#kb-node-modal .kbm-child { padding:7px 10px; border:1px solid rgba(120,160,255,0.16); border-radius:8px; margin-bottom:6px; cursor:pointer; font-size:12.5px; display:flex; align-items:center; gap:6px; background:rgba(127,140,200,0.05); transition:background .12s, border-color .12s, transform .12s; }
+#kb-node-modal .kbm-child:hover { background:rgba(110,168,255,0.14); border-color:rgba(120,160,255,0.45); transform:translateX(3px); }
+#kb-node-modal .kbm-btn { font-size:11px; padding:4px 12px; border-radius:7px; border:1px solid rgba(120,160,255,0.5); background:rgba(80,120,255,0.18); color:#cdd9ff; cursor:pointer; white-space:nowrap; }
+#kb-node-modal .kbm-btn:hover { background:rgba(110,168,255,0.32); color:#fff; }
+#kb-node-modal .kbm-x { background:none; border:none; color:#8ea0d0; font-size:15px; cursor:pointer; padding:2px 7px; border-radius:6px; }
+#kb-node-modal .kbm-x:hover { color:#fff; background:rgba(255,255,255,0.10); }
 .dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
 .dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
 .dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
@@ -1219,39 +1274,39 @@ table.dcb-table.dg-table th { position:relative; }
 .lit-sum-field div { color:var(--text); white-space:pre-wrap; font-size:12px; line-height:1.7; margin-top:2px; }
 /* === 环境检测面板 === */
 /* === 远端集群控制台（2026-09-19）=== */
-#cluster-console { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
-#cluster-console .cc-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1080px); height:min(88vh,860px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
-#cluster-console .cc-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; flex-wrap:wrap; }
-#cluster-console .cc-title { font-weight:600; }
-#cluster-console .cc-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tool-bg); color:var(--text-light); max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#cluster-console .cc-chip.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
-#cluster-console .cc-chip.warn { background:rgba(239,68,68,0.15); color:#ef4444; }
-#cluster-console .cc-spacer { flex:1; }
-#cluster-console .cc-btn { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-family:inherit; }
-#cluster-console .cc-btn:hover { background:var(--primary-light); }
-#cluster-console .cc-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
-#cluster-console .cc-btn:disabled { opacity:0.55; cursor:default; }
-#cluster-console .cc-cfg { padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; font-size:12px; max-height:46%; overflow-y:auto; }
-#cluster-console .cc-cfg label { display:flex; flex-direction:column; gap:3px; color:var(--text-light); }
-#cluster-console .cc-cfg input, #cluster-console .cc-cfg select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; font-family:inherit; }
-#cluster-console .cc-cfg-actions { grid-column:1/-1; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-#cluster-console .cc-cfg-note { grid-column:1/-1; font-size:11px; color:var(--text-light); line-height:1.6; }
-#cluster-console .cc-nodes { grid-column:1/-1; display:flex; flex-direction:column; gap:6px; }
-#cluster-console .cc-node-row { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; align-items:center; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
-#cluster-console .cc-node-row input { width:100%; }
-#cluster-console .cc-node-row .cc-node-name { font-weight:600; }
-#cluster-console .cc-node-row .cc-node-ops { grid-column:4/-1; display:flex; gap:6px; justify-content:flex-end; }
-#cluster-console .cc-node-row .cc-node-eff { grid-column:1/4; font-size:11px; color:var(--text-light); align-self:center; }
-#cluster-console .cc-node-row.is-default { border-color:var(--primary); }
-#cluster-console .cc-out { flex:1; overflow-y:auto; padding:10px 14px; background:#0d1117; color:#d7e2ec; font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
-#cluster-console .cc-out .cc-time { color:#6b7684; }
-#cluster-console .cc-out .cc-sys { color:#7fb3ff; }
-#cluster-console .cc-out .cc-err { color:#ff8a8a; }
-#cluster-console .cc-out .cc-ok { color:#7ee787; }
-#cluster-console .cc-input { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); align-items:flex-end; }
-#cluster-console .cc-input select { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; font-family:inherit; }
-#cluster-console .cc-input textarea { flex:1; resize:vertical; min-height:34px; max-height:150px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
-#cluster-console .cc-hint { padding:0 14px 10px; font-size:11px; color:var(--text-light); }
+.cc-console { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
+.cc-console .cc-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1080px); height:min(88vh,860px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
+.cc-console .cc-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; flex-wrap:wrap; }
+.cc-console .cc-title { font-weight:600; }
+.cc-console .cc-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tool-bg); color:var(--text-light); max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cc-console .cc-chip.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+.cc-console .cc-chip.warn { background:rgba(239,68,68,0.15); color:#ef4444; }
+.cc-console .cc-spacer { flex:1; }
+.cc-console .cc-btn { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-family:inherit; }
+.cc-console .cc-btn:hover { background:var(--primary-light); }
+.cc-console .cc-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+.cc-console .cc-btn:disabled { opacity:0.55; cursor:default; }
+.cc-console .cc-cfg { padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; font-size:12px; max-height:46%; overflow-y:auto; }
+.cc-console .cc-cfg label { display:flex; flex-direction:column; gap:3px; color:var(--text-light); }
+.cc-console .cc-cfg input, .cc-console .cc-cfg select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; font-family:inherit; }
+.cc-console .cc-cfg-actions { grid-column:1/-1; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.cc-console .cc-cfg-note { grid-column:1/-1; font-size:11px; color:var(--text-light); line-height:1.6; }
+.cc-console .cc-nodes { grid-column:1/-1; display:flex; flex-direction:column; gap:6px; }
+.cc-console .cc-node-row { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; align-items:center; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
+.cc-console .cc-node-row input { width:100%; }
+.cc-console .cc-node-row .cc-node-name { font-weight:600; }
+.cc-console .cc-node-row .cc-node-ops { grid-column:4/-1; display:flex; gap:6px; justify-content:flex-end; }
+.cc-console .cc-node-row .cc-node-eff { grid-column:1/4; font-size:11px; color:var(--text-light); align-self:center; }
+.cc-console .cc-node-row.is-default { border-color:var(--primary); }
+.cc-console .cc-out { flex:1; overflow-y:auto; padding:10px 14px; background:#0d1117; color:#d7e2ec; font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+.cc-console .cc-out .cc-time { color:#6b7684; }
+.cc-console .cc-out .cc-sys { color:#7fb3ff; }
+.cc-console .cc-out .cc-err { color:#ff8a8a; }
+.cc-console .cc-out .cc-ok { color:#7ee787; }
+.cc-console .cc-input { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); align-items:flex-end; }
+.cc-console .cc-input select { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; font-family:inherit; }
+.cc-console .cc-input textarea { flex:1; resize:vertical; min-height:34px; max-height:150px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
+.cc-console .cc-hint { padding:0 14px 10px; font-size:11px; color:var(--text-light); }
 /* === 环境管理面板（2026-09-22）=== */
 #env-manager { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
 #env-manager .em-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1120px); height:min(90vh,900px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
@@ -1518,7 +1573,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'后台任务','nav_cluster':'🖧 远端集群','nav_env_mgr':'🧩 环境管理',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'后台任务','nav_cluster':'🖧 远端集群','nav_dcs':'☁️ DCS 云','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'view':'查看','download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1608,7 +1663,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'Background Tasks','nav_cluster':'🖧 Cluster','nav_env_mgr':'🧩 Environments',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'Background Tasks','nav_cluster':'🖧 Cluster','nav_dcs':'☁️ DCS Cloud','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'view':'View','download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1746,6 +1801,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="switchView('weixin')" id="nav-weixin" data-i18n="nav_weixin">💬 微信消息</div>
       <!-- T13: 「后台任务」入口已搬到顶部横栏（#nav-tasks 那个胶囊），左侧导航不再重复 -->
       <div class="nav-item" onclick="openClusterConsole()" id="nav-cluster" data-i18n="nav_cluster">🖧 远端集群</div>
+      <div class="nav-item" onclick="openDcsConsole()" id="nav-dcs" data-i18n="nav_dcs">☁️ DCS 云</div>
       <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
       <!-- 2026-09-28：原「🎨 背景」（cycleTheme 快捷切换）改为片头设置入口；
            配色主题仍在「设置 → 配色主题」里，功能未动。cycleTheme() 函数保留未删。 -->
@@ -11161,17 +11217,31 @@ function switchKbView(mode) {
 }
 
 // 2026-08-14: 2D/3D 共享节点配色（文件按质量/验证状态，错误红色，目录按层级）
+// 2026-10-07 美化：整体提亮为霓虹色板（深空画布上更通透），语义不变
 function kbNodeColor(n) {
-  if (!n) return '#bdc3c7';
-  if (n.type === 'error') return '#e74c3c';
+  if (!n) return '#c3cbdd';
+  if (n.type === 'error') return '#ff6b7a';
   if (n.type === 'file') {
-    if (n.quality === 'high' && n.verified === 'verified') return '#27ae60';
-    if (n.verified === 'unverified') return '#e67e22';
-    if (n.quality === 'high') return '#2ecc71';
-    return '#95a5a6';
+    if (n.quality === 'high' && n.verified === 'verified') return '#2eea8b';
+    if (n.verified === 'unverified') return '#ffb35c';
+    if (n.quality === 'high') return '#6ee7a0';
+    return '#9aa7c7';
   }
   var d = String(n.id || '').split('/').length - 1;
-  return ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'][Math.min(d, 4)];
+  return ['#b07aff', '#5aa9ff', '#3ddc97', '#ffb84d', '#8fa3c8'][Math.min(d, 4)];
+}
+
+// 2D 节点的样式类（cytoscape 选择器用：渐变发光球按类别上色）
+function kbNodeClass(n) {
+  if (n.type === 'error') return 'kb-err';
+  if (n.type === 'file') {
+    if (n.quality === 'high' && n.verified === 'verified') return 'kb-f-ver';
+    if (n.verified === 'unverified') return 'kb-f-unv';
+    if (n.quality === 'high') return 'kb-f-high';
+    return 'kb-file';
+  }
+  var d = Math.min(String(n.id || '').split('/').length - 1, 4);
+  return 'kb-d' + d;
 }
 
 function loadCytoscape(cb) {
@@ -11200,48 +11270,103 @@ function loadKbGraph() {
     _kbGraphData = d;
     var _kdp = _kbTakeNodeDetail();   // 重建会清空 #kb-graph，先把面板摘出来
     el.innerHTML = '<div style="font-size:10px;color:var(--text-light);padding:2px 8px;display:flex;align-items:center;justify-content:space-between;">' +
-      '<span>物种🟣 组织🔵 方向🟢 分类🟠 ｜ 文件: 绿=已验证 浅绿=高质量 灰=普通 橙=未验证 ｜ 错误🔴 ｜ 灰线=层级 红虚线=方法共享</span>' +
+      '<span>物种🟣 组织🔵 方向🟢 分类🟠 ｜ 文件: 绿=已验证 浅绿=高质量 灰=普通 橙=未验证 ｜ 错误🔴 ｜ 细线=层级 橙色流光=方法共享 ｜ <b>单击</b>看邻居详情 · <b>双击</b>打开内容</span>' +
       '<span style="white-space:nowrap;">' +
       '<button id="kb-btn-3d" onclick="toggleKbGraph3D()" title="3D 星球视图：节点分布在球面，可像地球一样拖拽旋转" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🌐 星球视图</button>' +
       ' <button onclick="reloadKbGraphData()" title="重新加载知识库数据（知识库新增内容后点击，也可等待自动检测）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📥 重新加载</button>' +
       ' <button onclick="refreshKbGraph()" title="重新布局并居中" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">🔄 刷新布局</button>' +
       '</span></div>' +
       '<div id="kb-species-bar" style="padding:3px 8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;border-bottom:1px solid var(--border);"></div>' +
-      '<div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);background:#ffffff;border:1px solid #dde2ea;border-radius:6px;"></div>' +
+      '<div id="kb-graph-canvas" style="width:100%;height:calc(70vh - 24px);position:relative;overflow:hidden;"></div>' +
       '<div id="kb-graph-3d" style="display:none;width:100%;height:100%;"></div>';
     _kbPutNodeDetail(el, _kdp);
     _kbLastSig = kbGraphSig(d);
     renderKbSpeciesBar(d);
     loadCytoscape(function() {
       if (typeof cytoscape === 'undefined') { renderKbGraphFallback(el, d); return; }
-      var colors = ['#9b59b6', '#3498db', '#27ae60', '#e67e22', '#bdc3c7'];
       var nodes = d.nodes.map(function(n) {
         var depth = n.id.split('/').length - 1;
         var color = kbNodeColor(n);
-        return { data: { id: n.id, label: n.label, color: color, weight: Math.max(1.15, 2.6 - depth * 0.35), path: n.path, ntype: n.type } };
+        return { data: { id: n.id, label: n.label, color: color, weight: Math.max(1.15, 2.6 - depth * 0.35), path: n.path, ntype: n.type }, classes: kbNodeClass(n) };
       });
       var edges = d.edges.map(function(e, i) {
         return { data: { id: 'e' + i, source: e.source, target: e.target, type: e.type } };
       });
+      // 重建前销毁旧实例（连同流光定时器），避免泄漏
+      if (window._kbCy) { try { if (_kbCy._dashT) clearInterval(_kbCy._dashT); _kbCy.destroy(); } catch (e) {} window._kbCy = null; }
+      // 发光球渐变：珍珠亮核 → 本色 → 微暗收边（核心收敛在小半径，节点颜色清晰可辨）
+      function _kbShade(hex, f) {
+        var m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex;
+        var v = parseInt(m[1], 16);
+        var r = (v >> 16) & 255, g = (v >> 8) & 255, b = v & 255;
+        var t = f < 0 ? 0 : 255, p = Math.abs(f);
+        r = Math.round(r + (t - r) * p); g = Math.round(g + (t - g) * p); b = Math.round(b + (t - b) * p);
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+      }
+      function _g(base) { return _kbShade(base, 0.72) + ' ' + base + ' ' + _kbShade(base, -0.18); }
       var cy = cytoscape({
         container: document.getElementById('kb-graph-canvas'),
         elements: { nodes: nodes, edges: edges },
+        wheelSensitivity: 0.3,
+        boxSelectionEnabled: false,
         style: [
-          { selector: 'node', style: { 'label': 'data(label)', 'font-size': 9, 'text-valign': 'bottom', 'text-margin-y': 2, 'width': 'mapData(weight,1.15,2.6,13,30)', 'height': 'mapData(weight,1.15,2.6,13,30)', 'background-color': 'data(color)', 'border-width': 1, 'border-color': '#555', 'text-wrap': 'ellipsis', 'text-max-width': '90px' } },
-          { selector: 'edge', style: { 'width': 1, 'line-color': '#888', 'opacity': 0.5, 'curve-style': 'bezier' } },
-          { selector: 'edge[type="related"]', style: { 'line-color': '#e74c3c', 'line-style': 'dashed', 'opacity': 0.7 } },
-          { selector: 'node.search-hit', style: { 'border-color': '#f39c12', 'border-width': 4, 'z-index': 10 } }
+          { selector: 'node', style: {
+            'label': 'data(label)',
+            'font-size': 'mapData(weight,1.15,2.6,8.5,12.5)',
+            'font-weight': 600,
+            'color': '#e8efff',
+            'text-outline-color': 'rgba(6,10,26,0.92)',
+            'text-outline-width': 2,
+            'text-valign': 'bottom', 'text-margin-y': 3,
+            'text-wrap': 'ellipsis', 'text-max-width': '110px',
+            'width': 'mapData(weight,1.15,2.6,13,32)',
+            'height': 'mapData(weight,1.15,2.6,13,32)',
+            'background-fill': 'radial-gradient',
+            'background-gradient-stop-positions': '0% 45% 100%',
+            'border-width': 1.4,
+            'border-opacity': 0.95
+          } },
+          { selector: 'node.kb-d0', style: { 'background-gradient-stop-colors': _g('#b07aff'), 'border-color': '#e3d1ff' } },
+          { selector: 'node.kb-d1', style: { 'background-gradient-stop-colors': _g('#5aa9ff'), 'border-color': '#cfe4ff' } },
+          { selector: 'node.kb-d2', style: { 'background-gradient-stop-colors': _g('#3ddc97'), 'border-color': '#c8f5e2' } },
+          { selector: 'node.kb-d3', style: { 'background-gradient-stop-colors': _g('#ffb84d'), 'border-color': '#ffe4ba' } },
+          { selector: 'node.kb-d4', style: { 'background-gradient-stop-colors': _g('#8fa3c8'), 'border-color': '#dbe4f6' } },
+          { selector: 'node.kb-file', style: { 'background-gradient-stop-colors': _g('#9aa7c7'), 'border-color': '#dfe6f6' } },
+          { selector: 'node.kb-f-ver', style: { 'background-gradient-stop-colors': _g('#2eea8b'), 'border-color': '#b5f6d5' } },
+          { selector: 'node.kb-f-high', style: { 'background-gradient-stop-colors': _g('#6ee7a0'), 'border-color': '#d0f7e0' } },
+          { selector: 'node.kb-f-unv', style: { 'background-gradient-stop-colors': _g('#ffb35c'), 'border-color': '#ffdfb8' } },
+          { selector: 'node.kb-err', style: { 'background-gradient-stop-colors': _g('#ff6b7a'), 'border-color': '#ffc9d1' } },
+          { selector: 'edge', style: { 'width': 1, 'line-color': '#4d5f8f', 'opacity': 0.5, 'curve-style': 'bezier' } },
+          { selector: 'edge[type="related"]', style: { 'line-color': '#ff9d6e', 'line-style': 'dashed', 'line-dash-pattern': [7, 5], 'width': 1.5, 'opacity': 0.85 } },
+          { selector: 'node.search-hit', style: { 'border-color': '#ffd166', 'border-width': 4, 'z-index': 10 } },
+          { selector: 'node.kb-hover', style: { 'border-width': 3, 'z-index': 9 } }
         ],
-        layout: { name: 'cose', animate: false, padding: 20, nodeRepulsion: 6000, idealEdgeLength: 60 }
+        layout: { name: 'cose', animate: true, animationDuration: 900, padding: 30, nodeRepulsion: 6000, idealEdgeLength: 60 }
       });
       _kbCy = cy;
+      // 前景星尘（闪烁小星点，纯装饰，不拦截交互）
+      kbAddStarTwinkle(document.getElementById('kb-graph-canvas'));
+      // 方法共享边：虚线流动（数据在图谱里"流"起来）
+      var _dashOff = 0;
+      cy._dashT = setInterval(function() {
+        if (cy.destroyed()) { clearInterval(cy._dashT); return; }
+        _dashOff -= 0.9;
+        cy.$('edge[type="related"]').style('line-dash-offset', _dashOff);
+      }, 50);
       if (_kbFocusSpecies) applyFocusKb2D();
       initKbDetailResizer();
+      var _tapNodeId = null, _tapNodeTs = 0;
       cy.on('tap', 'node', function(evt) {
         var n = evt.target.data();
+        var now = Date.now();
+        var isDbl = (_tapNodeId === n.id && now - _tapNodeTs < 320);
+        _tapNodeId = n.id; _tapNodeTs = now;
         highlightKbNeighbors(cy, evt.target);
         showKbNodeDetail(n);
+        if (isDbl) { _tapNodeId = null; _tapNodeTs = 0; openKbNodeModal(n); }
       });
+      cy.on('mouseover', 'node', function(evt) { evt.target.addClass('kb-hover'); });
+      cy.on('mouseout', 'node', function(evt) { evt.target.removeClass('kb-hover'); });
       cy.on('tap', function(evt) {
         if (evt.target === cy) { hideKbNodeDetail(); resetKbHighlight(cy); }
       });
@@ -11332,6 +11457,7 @@ function applyFocusKb3D() {
     var on = !sp || isKbSpeciesNode(m.userData.node.id, sp);
     m.visible = on;
     if (m.userData.sprite) m.userData.sprite.visible = on;
+    if (m.userData.glow) m.userData.glow.visible = on;
   });
   _kb3D.edges.forEach(function(m) {
     var on = !sp || (isKbSpeciesNode(m.userData.source, sp) && isKbSpeciesNode(m.userData.target, sp));
@@ -11365,6 +11491,136 @@ function startKbWatcher() {
       _kbLastSig = sig;
     }).catch(function() {});
   }, 30000);
+}
+
+/* ================= 知识图谱 前景星尘 + 双击内容弹窗（2026-10-07 美化） ================= */
+// 在 2D 画布上撒两层会呼吸的星尘（cytoscape 画布之上，pointer-events 穿透）
+function kbAddStarTwinkle(container) {
+  if (!container) return;
+  var seed = 20261007;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed % 10000) / 10000; }
+  [46, 30].forEach(function(count, li) {
+    var div = document.createElement('div');
+    div.className = 'kb-stars';
+    var html = '';
+    for (var i = 0; i < count; i++) {
+      var sz = (li === 0 ? 1.3 : 2.1) + rnd() * 1.3;
+      html += '<i style="left:' + (rnd() * 100).toFixed(2) + '%;top:' + (rnd() * 100).toFixed(2) + '%;width:' + sz.toFixed(1) + 'px;height:' + sz.toFixed(1) + 'px;--d:' + (2.6 + rnd() * 4.2).toFixed(1) + 's;--dl:' + (rnd() * 4).toFixed(1) + 's;"></i>';
+    }
+    div.innerHTML = html;
+    container.appendChild(div);
+  });
+}
+
+// 双击节点 → 深空玻璃卡片看内容：文件=结构化 YAML+原文，目录=子项下钻，错误=症状详情
+var _kbNodeModal = null;
+
+function kbGraphNodeById(id) {
+  var d = _kbGraphData;
+  if (!d || !d.nodes) return null;
+  if (!d._byId) { d._byId = {}; d.nodes.forEach(function(n) { d._byId[n.id] = n; }); }
+  return d._byId[id] || null;
+}
+
+function _kbModalEnsure() {
+  if (_kbNodeModal) return _kbNodeModal;
+  var el = document.createElement('div');
+  el.id = 'kb-node-modal';
+  el.innerHTML = '<div class="kbm-card" role="dialog" aria-modal="true">' +
+    '<div class="kbm-head"><span id="kbm-icon" style="font-size:18px;">📚</span>' +
+    '<span class="kbm-title" id="kbm-title"></span>' +
+    '<span id="kbm-badges" style="display:flex;gap:5px;flex-wrap:wrap;"></span>' +
+    '<span style="flex:1;"></span>' +
+    '<button id="kbm-open" class="kbm-btn" style="display:none;">在浏览视图中打开</button>' +
+    '<button class="kbm-x" onclick="closeKbNodeModal()" title="关闭 (Esc)">✕</button></div>' +
+    '<div class="kbm-path" id="kbm-path"></div>' +
+    '<div class="kbm-body" id="kbm-body"></div></div>';
+  el.addEventListener('click', function(ev) { if (ev.target === el) closeKbNodeModal(); });
+  document.body.appendChild(el);
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape' && _kbNodeModal && _kbNodeModal.classList.contains('visible')) closeKbNodeModal();
+  });
+  _kbNodeModal = el;
+  return el;
+}
+
+function closeKbNodeModal() {
+  if (_kbNodeModal) _kbNodeModal.classList.remove('visible');
+}
+
+function openKbNodeModal(n) {
+  if (!n) return;
+  var el = _kbModalEnsure();
+  var full = kbGraphNodeById(n.id) || n;
+  var ntype = full.ntype || full.type || '';
+  var icon = document.getElementById('kbm-icon');
+  var title = document.getElementById('kbm-title');
+  var badges = document.getElementById('kbm-badges');
+  var pathEl = document.getElementById('kbm-path');
+  var body = document.getElementById('kbm-body');
+  var openBtn = document.getElementById('kbm-open');
+  icon.textContent = ntype === 'file' ? '📚' : (ntype === 'error' ? '🧯' : '📁');
+  title.textContent = full.label || full.id;
+  pathEl.textContent = full.path || full.id || '';
+  var bh = '<span class="kbm-badge">' + (ntype === 'file' ? '文件' : ntype === 'error' ? '错误记忆' : '目录') + '</span>';
+  if (full.quality === 'high') bh += '<span class="kbm-badge green">高质量</span>';
+  if (full.verified === 'verified') bh += '<span class="kbm-badge green">✓ 已验证</span>';
+  else if (full.verified === 'unverified') bh += '<span class="kbm-badge orange">未验证</span>';
+  badges.innerHTML = bh;
+  if (ntype === 'file' && full.path) {
+    openBtn.style.display = '';
+    openBtn.onclick = function() { closeKbNodeModal(); previewKb(full.path); };
+  } else { openBtn.style.display = 'none'; openBtn.onclick = null; }
+  el.classList.add('visible');
+  if (ntype === 'file' && full.path) {
+    body.innerHTML = '<div class="kbm-loading">✨ 正在读取知识条目…</div>';
+    fetch('/api/kb/file?path=' + encodeURIComponent(full.path)).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) { body.innerHTML = '<div class="kbm-err">读取失败：' + escapeHtml(d.error) + '</div>'; return; }
+      var html = '';
+      if (d.parsed && typeof d.parsed === 'object') {
+        html += renderKbYaml(d.parsed, 0);
+        if (d.content) html += '<details class="kbm-raw"><summary>查看 YAML 原文（' + String(d.content.length) + ' 字符）</summary><pre>' + escapeHtml(d.content) + '</pre></details>';
+      } else {
+        html += '<pre class="kbm-pre">' + escapeHtml(d.content || '（空文件）') + '</pre>';
+      }
+      body.innerHTML = html;
+    }).catch(function(e2) { body.innerHTML = '<div class="kbm-err">读取失败：' + escapeHtml(e2 && e2.message || e2) + '</div>'; });
+  } else if (ntype === 'error') {
+    body.innerHTML = '<div style="padding:4px 0;line-height:1.7;"><b style="color:#ff8b98;">错误类型：</b>' + escapeHtml(full.label) + '</div>' +
+      (full.detail ? '<div style="padding:2px 0;line-height:1.7;"><b style="color:#ffbf80;">症状：</b>' + escapeHtml(full.detail) + '</div>' : '') +
+      '<div style="color:#8ea0d0;font-size:11px;margin-top:10px;">🧯 错误记忆由 Agent 自动沉淀，用于避免重复踩坑。</div>';
+  } else {
+    var kids = [];
+    ((_kbGraphData && _kbGraphData.edges) || []).forEach(function(e) {
+      if (e.type === 'hierarchy' && e.source === full.id) {
+        var kn = kbGraphNodeById(e.target);
+        if (kn) kids.push(kn);
+      }
+    });
+    var fcount = 0;
+    ((_kbGraphData && _kbGraphData.nodes) || []).forEach(function(x) {
+      if (x.type === 'file' && String(x.id).indexOf(full.id + '/') === 0) fcount++;
+    });
+    var html = '<div class="kbm-dir-head">📂 包含 <b>' + kids.length + '</b> 个直接子项 · 共 <b>' + fcount + '</b> 个知识条目（点子项继续下钻）</div>';
+    if (!kids.length) html += '<div style="color:#8ea0d0;">（空目录）</div>';
+    kids.forEach(function(k) {
+      var kt = k.type === 'file' ? '📚' : (k.type === 'error' ? '🧯' : '📁');
+      var extra = '';
+      if (k.type === 'file') {
+        if (k.verified === 'verified') extra += '<span class="kbm-badge green">✓ 已验证</span>';
+        else if (k.verified === 'unverified') extra += '<span class="kbm-badge orange">未验证</span>';
+        if (k.quality === 'high') extra += '<span class="kbm-badge green">高质量</span>';
+      }
+      html += '<div class="kbm-child" data-kid="' + escapeHtml(k.id) + '"><span>' + kt + '</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(k.label) + '</span>' + extra + '</div>';
+    });
+    body.innerHTML = html;
+    body.querySelectorAll('.kbm-child').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var kn = kbGraphNodeById(row.getAttribute('data-kid'));
+        if (kn) openKbNodeModal(kn);
+      });
+    });
+  }
 }
 
 /* ================= 知识图谱 3D 星球/星空模式（2026-08-06 版恢复） ================= */
@@ -11479,6 +11735,7 @@ function disposeKbGraph3D() {
     if (_kb3D.renderer.domElement.parentNode) _kb3D.renderer.domElement.parentNode.removeChild(_kb3D.renderer.domElement);
     _kb3D.renderer.dispose();
     if (_kb3D.onPointerMove) _kb3D.renderer.domElement.removeEventListener('pointermove', _kb3D.onPointerMove);
+    if (_kb3D.onDblClick) _kb3D.renderer.domElement.removeEventListener('dblclick', _kb3D.onDblClick);
     if (_kb3D.controls && _kb3D.controls.dispose) { try { _kb3D.controls.dispose(); } catch (e) {} }
   }
   if (_kb3D.scene) {
@@ -11494,29 +11751,41 @@ function disposeKbGraph3D() {
 }
 
 function makeLabelSprite(text) {
+  // 2026-10-07 美化：圆角胶囊标签（深色半透明底 + 淡蓝描边 + 亮白文字）
   var t = String(text == null ? '' : text);
   var canvas = document.createElement('canvas');
-  var fontSize = 28;
-  var pad = 4;
+  var fontSize = 26;
+  var padX = 14, padY = 7, lineGap = 4;
   var ctx = canvas.getContext('2d');
-  ctx.font = 'bold ' + fontSize + 'px sans-serif';
+  ctx.font = '600 ' + fontSize + 'px "Segoe UI","Microsoft YaHei",sans-serif';
   var lines = t.split('\n');
   var maxW = 0;
   lines.forEach(function(l) { maxW = Math.max(maxW, ctx.measureText(l).width); });
-  canvas.width = Math.ceil(maxW) + pad * 2;
-  canvas.height = fontSize * lines.length + pad * 2 + 6;
-  ctx.font = 'bold ' + fontSize + 'px sans-serif';
-  ctx.textBaseline = 'top';
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = 'rgba(8,12,28,0.9)';
-  lines.forEach(function(l, i) { ctx.strokeText(l, pad, pad + i * fontSize); });
-  ctx.fillStyle = '#ffffff';
-  lines.forEach(function(l, i) { ctx.fillText(l, pad, pad + i * fontSize); });
+  canvas.width = Math.ceil(maxW) + padX * 2;
+  canvas.height = fontSize * lines.length + padY * 2 + (lines.length - 1) * lineGap;
+  ctx.font = '600 ' + fontSize + 'px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.textBaseline = 'middle';
+  var w = canvas.width, h = canvas.height, r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(r, 0.75);
+  ctx.arcTo(w - 0.75, 0.75, w - 0.75, h - 0.75, r);
+  ctx.arcTo(w - 0.75, h - 0.75, 0.75, h - 0.75, r);
+  ctx.arcTo(0.75, h - 0.75, 0.75, 0.75, r);
+  ctx.arcTo(0.75, 0.75, w - 0.75, 0.75, r);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(8,13,30,0.72)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150,180,255,0.38)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#f2f6ff';
+  lines.forEach(function(l, i) { ctx.fillText(l, padX, padY + fontSize / 2 + i * (fontSize + lineGap)); });
   var tex = new THREE.CanvasTexture(canvas);
   tex.minFilter = THREE.LinearFilter;
   var mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, opacity: 1 });
   var sprite = new THREE.Sprite(mat);
-  var k = 0.14;
+  sprite.renderOrder = 3;   // 标签永远画在光晕之上
+  var k = 0.13;
   sprite.scale.set(canvas.width * k, canvas.height * k, 1);
   return sprite;
 }
@@ -11550,6 +11819,25 @@ function makeStarSpriteTexture() {
   var tex = new THREE.CanvasTexture(c);
   tex.minFilter = THREE.LinearFilter;
   return tex;
+}
+
+// 2026-10-07 美化：径向渐隐光斑纹理（节点光晕 / 星云 / 流动粒子共用一张，按材质着色）
+var _kbGlowTex = null;
+function makeGlowTexture() {
+  if (_kbGlowTex) return _kbGlowTex;
+  var c = document.createElement('canvas');
+  c.width = c.height = 128;
+  var ctx = c.getContext('2d');
+  var g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.90)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.42)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.12)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  _kbGlowTex = new THREE.CanvasTexture(c);
+  _kbGlowTex.minFilter = THREE.LinearFilter;
+  return _kbGlowTex;
 }
 
 function buildKbGraph3D(data) {
@@ -11612,21 +11900,62 @@ function buildKbGraph3D(data) {
     var pts = new THREE.Points(geo, mat);
     scene.add(pts);
   }
-  addStars(450, 9, 0xffffff, 0.85);   // 普通星：白色五角星
-  addStars(90, 16, 0xfff4d6, 0.9);    // 亮星：暖白大星
-  addStars(40, 20, 0xa8c8ff, 0.85);   // 蓝星：淡蓝大星
+  addStars(600, 9, 0xffffff, 0.85);   // 普通星：白色五角星
+  addStars(120, 16, 0xfff4d6, 0.9);   // 亮星：暖白大星
+  addStars(55, 20, 0xa8c8ff, 0.85);   // 蓝星：淡蓝大星
+
+  // 2026-10-07 美化：远处星云（三团加色叠加的彩色雾团，营造深空层次）
+  var glowTex = makeGlowTexture();
+  function addNebula(colorHex, x, y, z, scale, opacity) {
+    var m = new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(colorHex), transparent: true, opacity: opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+    var s = new THREE.Sprite(m);
+    s.position.set(x, y, z);
+    s.scale.set(scale, scale, 1);
+    scene.add(s);
+  }
+  addNebula(0x5a3fd6, -330, 150, -280, 640, 0.15);   // 紫星云
+  addNebula(0x1f5fd6, 320, -130, -320, 720, 0.13);   // 蓝星云
+  addNebula(0x0f8fa8, 60, 280, 260, 560, 0.10);      // 青星云
 
   // 淡色球壳线框，勾勒星球轮廓（半径跟随 R）
   scene.add(new THREE.Mesh(
     new THREE.SphereGeometry(R * 1.03, 48, 24),
-    new THREE.MeshBasicMaterial({ color: 0x88aaff, wireframe: true, transparent: true, opacity: 0.06 })
+    new THREE.MeshBasicMaterial({ color: 0x88aaff, wireframe: true, transparent: true, opacity: 0.035 })
   ));
 
-  // 灯光
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  // 2026-10-07 美化：大气辉光（菲涅尔边缘光，只在球体剪影轮廓处一圈亮蓝晕，不糊球面）
+  scene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(R * 1.07, 48, 24),
+    new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(0x4a80ff) } },
+      vertexShader: 'varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 uColor; varying vec3 vN; void main(){ float f = pow(max(0.0, 1.0 - abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)))), 2.8); gl_FragColor = vec4(uColor, 1.0) * f * 0.85; }',
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
+    })
+  ));
+
+  // 2026-10-07 美化：两道行星环（慢速反向旋转，土星感）
+  var ring1 = new THREE.Mesh(
+    new THREE.RingGeometry(R * 1.26, R * 1.285, 128),
+    new THREE.MeshBasicMaterial({ color: 0x6f8fff, transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring1.rotation.x = Math.PI / 2 - 0.34;
+  scene.add(ring1);
+  var ring2 = new THREE.Mesh(
+    new THREE.RingGeometry(R * 1.44, R * 1.455, 128),
+    new THREE.MeshBasicMaterial({ color: 0xb07aff, transparent: true, opacity: 0.055, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring2.rotation.x = Math.PI / 2 + 0.20;
+  scene.add(ring2);
+
+  // 灯光：主光 + 冷蓝补光（背光面不死黑，球体更立体）
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   var dl = new THREE.DirectionalLight(0xffffff, 0.7);
   dl.position.set(80, 120, 160);
   scene.add(dl);
+  var pl = new THREE.PointLight(0x6f8fff, 0.65, R * 7);
+  pl.position.set(-R * 1.6, -R * 0.9, R * 1.3);
+  scene.add(pl);
 
   // 球面布局（fibonacci sphere，节点均匀分布在球面）
   // R 已在上面按节点数自适应计算
@@ -11653,11 +11982,24 @@ function buildKbGraph3D(data) {
     var size = Math.max(1.15, 2.6 - (depth || 0) * 0.35);
     var mesh = new THREE.Mesh(
       new THREE.SphereGeometry(size, 20, 20),
-      new THREE.MeshPhongMaterial({ color: new THREE.Color(color), emissive: new THREE.Color(color).multiplyScalar(isVerified ? 0.5 : 0.22), shininess: 40 })
+      // transparent:true 让点击选中时的"压暗"真正作用于球体（2026-10-07 修复：原 opacity 对不透明材质无效）
+      new THREE.MeshPhongMaterial({ color: new THREE.Color(color), emissive: new THREE.Color(color).multiplyScalar(isVerified ? 0.62 : 0.3), specular: 0xaabbff, shininess: 55, transparent: true })
     );
     mesh.position.copy(pos);
     mesh.userData.node = { id: n.id, label: n.label, path: n.path, ntype: n.type };
     scene.add(mesh);
+    // 2026-10-07 美化：节点光晕（加色叠加的小光斑，让节点像星体一样发光；已验证的更亮更大）
+    var glowBase = isVerified ? 0.6 : 0.38;
+    var glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(color), transparent: true, opacity: glowBase, blending: THREE.AdditiveBlending, depthWrite: false }));
+    var gs = size * (isVerified ? 6.0 : 4.4);
+    glow.scale.set(gs, gs, 1);
+    glow.position.copy(pos);
+    glow.renderOrder = 1;
+    scene.add(glow);
+    mesh.userData.glow = glow;
+    mesh.userData.glowBase = glowBase;
+    mesh.userData.verified = isVerified;
+    mesh.userData.phase = (i * 0.618) % (Math.PI * 2);
     nodeMeshes.push(mesh);
     meshByNode[n.id] = mesh;
     var sprite = makeLabelSprite(n.label);
@@ -11670,8 +12012,9 @@ function buildKbGraph3D(data) {
     mesh.userData.sprite = sprite;
   });
 
-  // 边：沿球面拱起的弧线（红 = 方法共享，灰 = 层级）
+  // 边：沿球面拱起的弧线（橙 = 方法共享，蓝灰 = 层级）
   var edgeMeshes = [];
+  var flowCurves = [];   // 方法共享边的曲线（喂给流动粒子）
   edges.forEach(function(e) {
     var a = meshByNode[e.source], b = meshByNode[e.target];
     if (!a || !b) return;
@@ -11679,17 +12022,32 @@ function buildKbGraph3D(data) {
     var mid = p1.clone().add(p2).multiplyScalar(0.5);
     var lift = (mid.length() > 0.01 ? mid.clone().normalize() : new THREE.Vector3(0, 1, 0));
     var ctrl = lift.multiplyScalar(R * 1.22);
-    var pts = new THREE.QuadraticBezierCurve3(p1, ctrl, p2).getPoints(28);
+    var curve = new THREE.QuadraticBezierCurve3(p1, ctrl, p2);
+    var pts = curve.getPoints(28);
     var geo = new THREE.BufferGeometry().setFromPoints(pts);
     var mat = new THREE.LineBasicMaterial({
-      color: e.type === 'related' ? 0xff5252 : 0x8899aa,
-      transparent: true, opacity: 0.55
+      color: e.type === 'related' ? 0xff8a5c : 0x6f83b8,
+      transparent: true, opacity: e.type === 'related' ? 0.75 : 0.32
     });
     var line = new THREE.Line(geo, mat);
     line.userData.source = e.source;
     line.userData.target = e.target;
+    line.userData.etype = e.type;
     scene.add(line);
     edgeMeshes.push(line);
+    if (e.type === 'related' && flowCurves.length < 40) flowCurves.push({ curve: curve, line: line });
+  });
+
+  // 2026-10-07 美化：流动粒子（小光点沿方法共享边奔流 = 知识关联在"呼吸"）
+  var flowPts = [];
+  flowCurves.forEach(function(fc) {
+    for (var k = 0; k < 2; k++) {
+      var fm = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffc38a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+      fm.scale.set(2.3, 2.3, 1);
+      fm.renderOrder = 2;
+      scene.add(fm);
+      flowPts.push({ mesh: fm, curve: fc.curve, line: fc.line, t: Math.random(), speed: 0.10 + Math.random() * 0.12 });
+    }
   });
 
   // 点击选中：高亮节点与邻居，点空白恢复
@@ -11715,6 +12073,7 @@ function buildKbGraph3D(data) {
         var on = (mm === m || nb.indexOf(mm.userData.node.id) >= 0);
         mm.material.opacity = on ? 1 : 0.12;
         if (mm.userData.sprite) mm.userData.sprite.material.opacity = on ? 1 : 0.15;
+        if (mm.userData.glow) mm.userData.glow.material.opacity = on ? mm.userData.glowBase : 0.05;
       });
       edgeMeshes.forEach(function(mm) {
         mm.material.opacity = (mm.userData.source === nid || mm.userData.target === nid) ? 0.95 : 0.08;
@@ -11723,12 +12082,23 @@ function buildKbGraph3D(data) {
     } else {
       selNode = null;
       hideKbNodeDetail();
-      nodeMeshes.forEach(function(mm) { mm.material.opacity = 1; if (mm.userData.sprite) mm.userData.sprite.material.opacity = mm.userData.labelHidden ? 0 : 0.35; });
-      edgeMeshes.forEach(function(mm) { mm.material.opacity = 0.55; });
+      nodeMeshes.forEach(function(mm) { mm.material.opacity = 1; if (mm.userData.sprite) mm.userData.sprite.material.opacity = mm.userData.labelHidden ? 0 : 0.35; if (mm.userData.glow) mm.userData.glow.material.opacity = mm.userData.glowBase; });
+      edgeMeshes.forEach(function(mm) { mm.material.opacity = mm.userData.etype === 'related' ? 0.75 : 0.32; });
     }
   }
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+  // 2026-10-07：双击节点 → 打开内容弹窗（dblclick 与 OrbitControls 拖拽旋转不冲突）
+  function onDblClick(ev) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    var hits = raycaster.intersectObjects(nodeMeshes, false);
+    if (hits.length) openKbNodeModal(hits[0].object.userData.node);
+  }
+  renderer.domElement.addEventListener('dblclick', onDblClick);
 
   // 2026-08-14: 悬停显示标签（节流 40ms）
   var hoverTimer = null;
@@ -11762,7 +12132,10 @@ function buildKbGraph3D(data) {
   controls.autoRotateSpeed = 0.6;
   renderer.domElement.addEventListener('pointerdown', pauseRotate);
 
+  var clock = new THREE.Clock();
   function tick() {
+    var dt = Math.min(clock.getDelta(), 0.1);
+    var tt = clock.elapsedTime;
     controls.update();
     var cw = container.clientWidth, ch = container.clientHeight;
     if (cw > 0 && ch > 0 && (Math.abs(cw - W) > 4 || Math.abs(ch - H) > 4)) {
@@ -11771,10 +12144,32 @@ function buildKbGraph3D(data) {
       camera.updateProjectionMatrix();
       renderer.setSize(W, H);
     }
+    // 流动粒子：沿方法共享边奔流（边被物种聚焦隐藏时粒子同步隐藏）
+    for (var fi = 0; fi < flowPts.length; fi++) {
+      var fp = flowPts[fi];
+      fp.mesh.visible = fp.line.visible;
+      if (!fp.mesh.visible) continue;
+      fp.t += dt * fp.speed;
+      if (fp.t > 1) fp.t -= 1;
+      fp.mesh.position.copy(fp.curve.getPoint(fp.t));
+      fp.mesh.material.opacity = 0.55 + 0.4 * Math.sin(tt * 6 + fi * 1.7);
+    }
+    // 已验证节点：光晕缓慢呼吸（无选中节点时才呼吸，避免顶掉选中压暗）
+    if (!selNode) {
+      for (var vi = 0; vi < nodeMeshes.length; vi++) {
+        var vm = nodeMeshes[vi];
+        if (vm.userData.verified && vm.userData.glow) {
+          vm.userData.glow.material.opacity = vm.userData.glowBase * (0.78 + 0.22 * Math.sin(tt * 2.2 + vm.userData.phase));
+        }
+      }
+    }
+    // 行星环缓慢反向旋转
+    ring1.rotation.z += dt * 0.05;
+    ring2.rotation.z -= dt * 0.03;
     renderer.render(scene, camera);
   }
 
-  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp, onPointerMove: onPointerMove, nodes: nodeMeshes, edges: edgeMeshes };
+  _kb3D = { scene: scene, camera: camera, renderer: renderer, controls: controls, tick: tick, raf: 0, onPointerDown: onPointerDown, onPointerUp: onPointerUp, onPointerMove: onPointerMove, onDblClick: onDblClick, nodes: nodeMeshes, edges: edgeMeshes };
   applyFocusKb3D();
   resumeKbGraph3D();
 }
@@ -15299,6 +15694,220 @@ function clusterQuick(action) {
 // 启动后检测
 setTimeout(checkFirstRun, 1000);
 
+// === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
+// 面板走 /api/dcs/*，与 agent 工具 dcs_cloud 共用同一个 handler（后端 memomics/connectors/dcs_cloud.py），
+// 所以 UI 里做的和模型做的是同一件事（UI 不过模型侧的门禁——那是给模型看的闸）。
+var _dcsBusy = false;
+
+var DCS_MODES = {
+  projects:        { opt: 'projects · 项目列表',      ph: '（不用输入，直接执行）', hint: '列出你有权限的 DCS 项目；刚绑定完先跑这个。' },
+  use_project:     { opt: 'use_project · 切项目',     ph: '项目 ID（P 开头）或项目名', hint: '切换当前项目，后面所有命令都作用于它。切项目后在线容器会话失效，需要重开。' },
+  current:         { opt: 'current · 当前用户/项目',  ph: '（不用输入）', hint: '看当前登录用户、所在项目与片区。' },
+  ls:              { opt: 'ls · 浏览 Files',          ph: '云上路径，例：/Files   留空 = 当前目录', hint: '浏览云上 Files；给文件路径则显示它的元数据（大小/创建者/时间）。' },
+  find:            { opt: 'find · 搜文件',            ph: '文件名通配，例：*.csv', hint: '按名字找文件；更多条件（-t f / -s +100M / -T 2026-01-01:2026-12-31）可直接写进输入框。' },
+  download:        { opt: 'download · 下载到本机',    ph: '云路径 + 本机目录，例：/Files/a.csv  E:/data', hint: '小文件走 web（≤200MB，不支持 FastQ/BAM/文件夹）；大文件用 raw 换 oss/raysync。' },
+  upload:          { opt: 'upload · 上传到云',        ph: '本机路径 + 云路径，例：E:/data/a.csv  /Files/', hint: '⚠️ 会占用云端存储并计费。小文件 web（≤100MB），大文件用 oss。' },
+  container_open:  { opt: 'container_open · 开容器',  ph: '（不用输入；可填规格 resource_id）', hint: '打开在线容器（与 GenPilot 智能分析同一套 OpenSandbox）。会占资源，用完记得关。' },
+  container_exec:  { opt: 'container_exec · 容器内执行', ph: 'shell 命令，例：ls -lh /work', hint: '在容器里跑命令（刚开的容器等 3–5 秒再执行）。重活请投离线任务，别在交互容器里长跑。' },
+  container_close: { opt: 'container_close · 关容器', ph: '（不用输入）', hint: '关闭在线容器、释放资源。' },
+  tasks:           { opt: 'tasks · 离线任务',         ph: '（不用输入；可填任务名，或第二个词写 -a）', hint: '列个性化分析（离线）任务；配合 task_logs 看日志。' },
+  task_logs:       { opt: 'task_logs · 看任务日志',   ph: '任务 ID（先用 tasks 查）', hint: '拉某个离线任务的日志。' },
+  raw:             { opt: 'raw · 原生命令',           ph: 'dcs 子命令，例：workflow ls -p', hint: '白名单逃生舱：project/data/table/terminal/analysis/workflow/image/billing/region/history（凭据类命令不允许）。' }
+};
+
+function openDcsConsole() {
+  var el = document.getElementById('dcs-console');
+  if (!el) return;
+  el.style.display = 'flex';
+  var sel = document.getElementById('dcs-mode');
+  if (sel && !sel.options.length) {
+    var order = ['projects', 'use_project', 'current', 'ls', 'find', 'download', 'upload',
+                 'container_open', 'container_exec', 'container_close', 'tasks', 'task_logs', 'raw'];
+    for (var i = 0; i < order.length; i++) {
+      var o = document.createElement('option');
+      o.value = order[i];
+      o.textContent = DCS_MODES[order[i]].opt;
+      sel.appendChild(o);
+    }
+    sel.value = 'projects';
+  }
+  dcsModeChange();
+  dcsLoad();
+  var box = document.getElementById('dcs-cmd');
+  if (box) box.focus();
+}
+
+function dcsClose() {
+  var el = document.getElementById('dcs-console');
+  if (el) el.style.display = 'none';
+}
+
+function dcsToggleCfg() {
+  var el = document.getElementById('dcs-cfg');
+  if (!el) return;
+  var shown = (el.style.display !== 'none' && el.style.display !== '');
+  el.style.display = shown ? 'none' : 'grid';
+}
+
+function dcsPrint(msg, cls) {
+  var out = document.getElementById('dcs-out');
+  if (!out) return;
+  var t = new Date().toTimeString().slice(0, 8);
+  var line = document.createElement('div');
+  if (cls) line.className = 'cc-' + cls;
+  line.textContent = '[' + t + '] ' + msg;
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+function dcsSetBusy(busy) {
+  _dcsBusy = busy;
+  var btn = document.getElementById('dcs-run-btn');
+  if (btn) { btn.disabled = busy; btn.textContent = busy ? '执行中…' : '执行'; }
+}
+
+function dcsLoad() {
+  fetch('/api/dcs/status').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { dcsPrint('✗ 状态读取失败：' + ((d && d.error) || '未知'), 'err'); return; }
+    var c = d.config || {};
+    var chip = document.getElementById('dcs-chip');
+    if (chip) {
+      chip.className = 'cc-chip ' + ((c.enabled && c.bound) ? 'ok' : 'warn');
+      chip.textContent = (c.enabled ? '已启用' : '未启用') + ' · ' +
+        (c.bound ? ('已绑定 ' + (c.user || c.pat_masked)) : '未绑定') + ' · CLI ' + (c.cli_found ? '✓' : '✗');
+      chip.title = 'CLI：' + (c.cli_path || '未找到');
+    }
+    var uc = document.getElementById('dcs-user-chip');
+    if (uc) {
+      if (c.bound) { uc.style.display = ''; uc.textContent = (c.user || c.pat_masked) + (c.default_project ? (' @' + c.default_project) : ''); }
+      else { uc.style.display = 'none'; }
+    }
+    var cfg = c.config || {};
+    var f = function (id, v) { var e = document.getElementById(id); if (e) e.value = (v === null || v === undefined) ? '' : v; };
+    f('dcs-base-url', c.base_url); f('dcs-region', c.region); f('dcs-default-project', c.default_project);
+    f('dcs-timeout', cfg.timeout); f('dcs-cli-path', cfg.cli_path);
+    var cb = function (id, v) { var e = document.getElementById(id); if (e) e.checked = !!v; };
+    cb('dcs-enabled', c.enabled); cb('dcs-allow-write', c.allow_write);
+    var vp = document.getElementById('dcs-vault-path');
+    if (vp && c.vault) vp.textContent = c.vault;
+  }).catch(function (e) { dcsPrint('✗ 状态读取失败：' + e.message, 'err'); });
+}
+
+function dcsBind() {
+  var el = document.getElementById('dcs-pat');
+  var pat = el ? el.value.trim() : '';
+  if (!pat) { dcsPrint('✗ 先粘贴 PAT（个人中心 → 访问令牌 → 创建）', 'err'); return; }
+  dcsPrint('⏳ 正在校验并绑定…', 'sys');
+  fetch('/api/dcs/bind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pat: pat }) })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var res = (d && d.result) || {};
+      if (res.status === 'ok') {
+        if (el) el.value = '';
+        dcsPrint('✓ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : ''), 'ok');
+        dcsPrint(JSON.stringify(res, null, 2));
+        dcsLoad();
+      } else {
+        dcsPrint('✗ 绑定失败：' + (res.error || (d && d.error) || '未知'), 'err');
+        if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
+      }
+    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+}
+
+function dcsUnbind() {
+  if (!confirm('解除绑定？\n\n会登出本机 dcs CLI 会话，并删除本机保存的 PAT。\n（DCS 平台上的令牌本身不受影响，需要时可在个人中心删除）')) return;
+  fetch('/api/dcs/unbind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function (r) { return r.json(); })
+    .then(function () { dcsPrint('✓ 已解绑（本机凭据已删除）', 'ok'); dcsLoad(); })
+    .catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+}
+
+function dcsSaveCfg() {
+  var body = {
+    enabled: document.getElementById('dcs-enabled').checked,
+    allow_write: document.getElementById('dcs-allow-write').checked,
+    base_url: document.getElementById('dcs-base-url').value.trim(),
+    region: document.getElementById('dcs-region').value.trim(),
+    default_project: document.getElementById('dcs-default-project').value.trim(),
+    cli_path: document.getElementById('dcs-cli-path').value.trim(),
+    timeout: parseInt(document.getElementById('dcs-timeout').value || '120', 10)
+  };
+  fetch('/api/dcs/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d && d.ok) { dcsPrint('✓ 设置已保存（写回 config.yaml 的 dcs_cloud: 段）', 'ok'); dcsLoad(); }
+      else { dcsPrint('✗ 保存失败：' + ((d && d.error) || '未知'), 'err'); }
+    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+}
+
+function dcsModeChange() {
+  var sel = document.getElementById('dcs-mode');
+  var box = document.getElementById('dcs-cmd');
+  var hint = document.getElementById('dcs-hint');
+  if (!sel || !DCS_MODES[sel.value]) return;
+  var m = DCS_MODES[sel.value];
+  if (box) box.placeholder = m.ph;
+  if (hint) hint.textContent = m.hint;
+}
+
+function dcsQuick(action) {
+  var sel = document.getElementById('dcs-mode');
+  if (sel) { sel.value = action; dcsModeChange(); }
+  var box = document.getElementById('dcs-cmd');
+  if (box && (action === 'projects' || action === 'current' || action === 'container_close')) box.value = '';
+  dcsExec();
+}
+
+function dcsKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); dcsExec(); }
+}
+
+function dcsBuildArgs() {
+  var sel = document.getElementById('dcs-mode');
+  var box = document.getElementById('dcs-cmd');
+  var action = sel ? sel.value : 'projects';
+  var text = box ? box.value.trim() : '';
+  var parts = text ? text.split(/\s+/) : [];
+  var args = { action: action };
+  if (action === 'use_project') { args.project = parts[0] || ''; }
+  else if (action === 'ls') { args.path = text; }
+  else if (action === 'find') { args.name = parts[0] || ''; }
+  else if (action === 'download' || action === 'upload') { args.path = parts[0] || ''; args.target = parts[1] || ''; }
+  else if (action === 'container_exec') { args.command = text; }
+  else if (action === 'container_open') { args.resource_id = parts[0] || ''; }
+  else if (action === 'task_logs') { args.task_id = parts[0] || ''; }
+  else if (action === 'tasks') { args.name = parts[0] || ''; if (parts[1] === '-a') args.all = true; }
+  else if (action === 'raw') { args.command = text; }
+  return args;
+}
+
+function dcsExec() {
+  if (_dcsBusy) return;
+  var args = dcsBuildArgs();
+  if (args.action === 'upload' && !confirm('上传到云端会占用存储并产生费用，确认继续？')) return;
+  var label = args.action + (args.path ? ('  ' + args.path) : '') +
+              (args.target ? ('  →  ' + args.target) : '') + (args.command ? ('  ' + args.command) : '');
+  dcsPrint('▶ ' + label, 'sys');
+  dcsSetBusy(true);
+  fetch('/api/dcs/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var res = (d && d.result) || {};
+      if (res.status === 'ok') {
+        var shown = JSON.parse(JSON.stringify(res));
+        delete shown.status;
+        dcsPrint(JSON.stringify(shown, null, 2), 'ok');
+        var box = document.getElementById('dcs-cmd');
+        if (box) box.value = '';
+      } else {
+        dcsPrint('✗ ' + (res.error || (d && d.error) || '未知错误'), 'err');
+        if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
+        if (res.detail) dcsPrint(JSON.stringify(res.detail, null, 2), 'err');
+      }
+    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); })
+    .finally(function () { dcsSetBusy(false); });
+}
+
 // === 上下文窗口 ===
 let ctxPollTimer = null;
 let ctxPollRunning = false;
@@ -15885,7 +16494,7 @@ async function saveUpdateConfig(mode) {
   </div>
 </div>
 <!-- === 远端集群控制台（2026-09-19）：WebUI 里直接敲 SSH 命令 / 交作业 === -->
-<div id="cluster-console">
+<div id="cluster-console" class="cc-console">
   <div class="cc-box">
     <div class="cc-head">
       <span class="cc-title">🖧 远端集群</span>
@@ -15943,6 +16552,58 @@ async function saveUpdateConfig(mode) {
       <button class="cc-btn primary" id="cluster-run-btn" onclick="clusterExec()">执行</button>
     </div>
     <div class="cc-hint" id="cluster-hint"></div>
+  </div>
+</div>
+
+<!-- === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）：账号绑定 + 项目/数据/容器/任务 === -->
+<div id="dcs-console" class="cc-console">
+  <div class="cc-box">
+    <div class="cc-head">
+      <span class="cc-title">☁️ DCS 云</span>
+      <span class="cc-chip" id="dcs-chip">读取状态中…</span>
+      <span class="cc-chip" id="dcs-user-chip" style="display:none;"></span>
+      <span class="cc-spacer"></span>
+      <button class="cc-btn" onclick="dcsQuick('projects')">📁 项目</button>
+      <button class="cc-btn" onclick="dcsQuick('ls')">🗂 数据</button>
+      <button class="cc-btn" onclick="dcsQuick('tasks')">📋 任务</button>
+      <button class="cc-btn" onclick="dcsToggleCfg()">⚙️ 设置</button>
+      <button class="cc-btn" onclick="dcsClose()">✕ 关闭</button>
+    </div>
+    <div class="cc-cfg" id="dcs-cfg" style="display:none;">
+      <label>启用连接器<input type="checkbox" id="dcs-enabled"></label>
+      <label>站点 base_url<input id="dcs-base-url" placeholder="https://www.dcs.cloud"></label>
+      <label>片区 region（可空）<input id="dcs-region" placeholder="留空 = 站点默认"></label>
+      <label>默认项目 ID（可空）<input id="dcs-default-project" placeholder="P…；留空 = 用 CLI 当前项目"></label>
+      <label>命令超时秒<input id="dcs-timeout" placeholder="120"></label>
+      <label>允许写操作（上传/开容器）<input type="checkbox" id="dcs-allow-write"></label>
+      <label>CLI 路径（可空 = 自动探测）<input id="dcs-cli-path" placeholder="留空自动找 %LOCALAPPDATA%\MemOmics\tools\dcs\dcs.exe"></label>
+      <div class="cc-cfg-note" style="grid-column:1/-1;">
+        <b>账号（PAT 访问令牌）</b>：打开
+        <a href="https://www.dcs.cloud" target="_blank" style="color:var(--primary);">www.dcs.cloud</a>
+        → 个人中心 → <b>访问令牌</b> → 创建（有效期最长 1 年）→ 复制，粘贴到下面。
+        令牌只存本机 <code id="dcs-vault-path">hermes_home/dcs_cloud.json</code>，不进日志、不随安装包分发；
+        在 DCS 侧删除令牌即刻失效。<b>MemOmics 不保存账号密码</b>（平台有双因子，密码自动登录本来就走不通）。
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          <input id="dcs-pat" type="password" placeholder="dcs_pat_…" style="flex:1;min-width:240px;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:12px;">
+          <button class="cc-btn primary" onclick="dcsBind()">🔗 绑定</button>
+          <button class="cc-btn" onclick="dcsUnbind()">解除绑定</button>
+          <span id="dcs-bind-note" class="cc-cfg-note" style="flex:1;"></span>
+        </div>
+        <div style="margin-top:6px;">没装命令行工具？跑一次 <code>scripts\install_dcs_cli.ps1</code>（官方 CDN 下载 + SHA256 校验）。</div>
+      </div>
+      <div class="cc-cfg-actions">
+        <button class="cc-btn primary" onclick="dcsSaveCfg()">💾 保存</button>
+        <button class="cc-btn" onclick="dcsLoad()">⟳ 刷新状态</button>
+        <span id="dcs-cfg-note" class="cc-cfg-note"></span>
+      </div>
+    </div>
+    <div class="cc-out" id="dcs-out"></div>
+    <div class="cc-input">
+      <select id="dcs-mode" onchange="dcsModeChange()"></select>
+      <textarea id="dcs-cmd" rows="1" onkeydown="dcsKey(event)" placeholder="在这里输入（Enter 执行，Shift+Enter 换行）"></textarea>
+      <button class="cc-btn primary" id="dcs-run-btn" onclick="dcsExec()">执行</button>
+    </div>
+    <div class="cc-hint" id="dcs-hint"></div>
   </div>
 </div>
 
