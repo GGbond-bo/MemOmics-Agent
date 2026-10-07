@@ -745,17 +745,24 @@ table.dcb-table.dg-table th { position:relative; }
 #kb-node-modal .kbm-x:hover { color:#fff; background:rgba(255,255,255,0.10); }
 
 /* === 证据链等级徽章（kb-evidence-v1，2026-10-07）：知识库弹窗 + 文献知识 tab 共用 === */
+/* 2026-10-07 对比度修复：基础配色面向浅色面板（深字浅底）；深色主题/深色弹窗（.kbm-card 固定深色）走亮字覆盖 */
 .ev-chain { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 12px; margin:2px 0 10px; border-radius:10px;
   border:1px solid rgba(120,160,255,0.30); background:linear-gradient(90deg, rgba(80,120,255,0.10), rgba(155,89,182,0.08), rgba(0,0,0,0)); }
-.ev-chain .ev-t { font-size:11px; font-weight:700; color:#6ea8ff; }
+.ev-chain .ev-t { font-size:11px; font-weight:700; color:var(--primary); }
 .ev-chain .ev-note { font-size:10px; color:var(--text-light); margin-left:auto; }
 .ev-lv { display:inline-block; font-size:10px; font-weight:700; padding:0 7px; border-radius:999px; border:1px solid transparent; white-space:nowrap; }
-.ev-lv.l3 { color:#ffd166; border-color:rgba(255,209,102,0.55); background:rgba(255,209,102,0.12); }
-.ev-lv.l2 { color:#5fe8a4; border-color:rgba(63,220,139,0.5); background:rgba(46,234,139,0.10); }
-.ev-lv.l1 { color:#6ea8ff; border-color:rgba(110,168,255,0.5); background:rgba(110,168,255,0.10); }
-.ev-lv.l0 { color:#a9b0c5; border-color:rgba(169,176,197,0.45); background:rgba(169,176,197,0.08); }
-.ev-lv.src { color:#8ea0d0; border-color:rgba(142,160,208,0.45); background:rgba(142,160,208,0.08); font-weight:600; }
+.ev-lv.l3 { color:#8a6400; border-color:rgba(200,150,0,0.55); background:rgba(255,193,7,0.20); }
+.ev-lv.l2 { color:#177a4c; border-color:rgba(46,160,100,0.5); background:rgba(46,160,100,0.12); }
+.ev-lv.l1 { color:#2b5fb3; border-color:rgba(70,120,220,0.5); background:rgba(70,120,220,0.10); }
+.ev-lv.l0 { color:#5f6b7a; border-color:rgba(110,120,135,0.5); background:rgba(120,130,145,0.10); }
+.ev-lv.src { color:#4a5a80; border-color:rgba(90,110,160,0.5); background:rgba(90,110,160,0.10); font-weight:600; }
 .ev-meta { font-size:10px; color:var(--text-light); }
+html[data-theme="dark"] .ev-lv.l3, #kb-node-modal .ev-lv.l3 { color:#ffd166; border-color:rgba(255,209,102,0.55); background:rgba(255,209,102,0.12); }
+html[data-theme="dark"] .ev-lv.l2, #kb-node-modal .ev-lv.l2 { color:#5fe8a4; border-color:rgba(63,220,139,0.5); background:rgba(46,234,139,0.10); }
+html[data-theme="dark"] .ev-lv.l1, #kb-node-modal .ev-lv.l1 { color:#9cc2ff; border-color:rgba(110,168,255,0.5); background:rgba(110,168,255,0.12); }
+html[data-theme="dark"] .ev-lv.l0, #kb-node-modal .ev-lv.l0 { color:#a9b0c5; border-color:rgba(169,176,197,0.45); background:rgba(169,176,197,0.08); }
+html[data-theme="dark"] .ev-lv.src, #kb-node-modal .ev-lv.src { color:#aebbdd; border-color:rgba(142,160,208,0.45); background:rgba(142,160,208,0.08); }
+html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:#6ea8ff; }
 .dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
 .dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
 .dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
@@ -16658,6 +16665,7 @@ function dcsLoad() {
     f('dcs-timeout', cfg.timeout); f('dcs-cli-path', cfg.cli_path);
     f('dcs-download-dir', c.download_dir || cfg.download_dir);
     if (c.download_dir) _dcsLastDir = c.download_dir;
+    if (!_dcsLastDir && c.download_dir_effective) _dcsLastDir = c.download_dir_effective;
     var cb = function (id, v) { var e = document.getElementById(id); if (e) e.checked = !!v; };
     cb('dcs-enabled', c.enabled); cb('dcs-allow-write', c.allow_write);
     var vp = document.getElementById('dcs-vault-path');
