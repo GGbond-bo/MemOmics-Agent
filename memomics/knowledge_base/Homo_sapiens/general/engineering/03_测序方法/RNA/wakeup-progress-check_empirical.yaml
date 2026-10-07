@@ -1,0 +1,28 @@
+type: kb_entry
+name: wakeup-progress-check_empirical
+species: Homo_sapiens
+tissue: general
+direction: engineering
+assay_type: RNA
+last_updated: 2026-10-01 18:13
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup-progress-check_empirical
+content: 'skill: wakeup-progress-check
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"round": 16, "check": "completion_contract_archive_state"}
+
+
+  result_summary:
+
+  唤醒#16 rail_review(post) 通过（issues=0，warnings 仅注释/错误处理两条非阻断）。核查完成契约归档状态：验证 task_plan.md
+  是否已归档为 task_plan.done.md，定位持续唤醒的残余根因。'
+evidence: 'record_run(wakeup-progress-check): 唤醒#16 rail_review(post) 通过（issues=0，warnings
+  仅注释/错误处理两条非阻断）。核查完成契约归档状态：验证 task_plan.md 是否已归档为 task_plan.done.md，定位持续唤醒的残余根因。'

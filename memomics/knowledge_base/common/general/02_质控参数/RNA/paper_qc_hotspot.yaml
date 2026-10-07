@@ -1,29 +1,42 @@
-pmid: "33951459"
 type: kb_entry
+domain: common
 name: paper_qc_hotspot
-doi: "10.1016/j.cels.2021.04.005"
-species: other
-tissue: other
-direction: other
+direction: general
 assay_type: RNA
-last_updated: 2026-08-15 15:14
+last_updated: 2026-10-07 17:28
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_qc_hotspot
-content: '- FDR = 0.05（空间自相关显著基因阈值）
+content: '- filtered_cells = 1,500（从人 PBMC 10x Genomics 样本中过滤得到 CD4+ T 细胞）
 
-  - IDR = 0.1（重复样本间重现性评估阈值）
+  - expression threshold = 12,000（scVI 全基因模型构建筛选）
 
-  - min_cells = 50 (cerebellum), 10 (lineage), 10 (selection threshold)（基因预过滤至少检测细胞数）
+  - FDR = <0.05（Hotspot 空间自相关显著性）
 
-  - min_UMI = 3000（CD4 T cell数据细胞过滤）
+  - IDR = 0.1（重复性评估阈值）
 
-  - max_mito = 16%（CD4 T cell数据细胞过滤）
+  - 基因表达检测细胞数阈值 = >50 cells（小鼠小脑Slide-seq数据预过滤，去除少于50个细胞中检测到的基因）
 
-  - protein_95th_percentile = 100 counts per 10,000（过滤背景蛋白表达）
+  - FDR = <0.05（Hotspot成对相关和模块识别的基因选择）
 
-  - FDR = 0.05 / 0.1（多种统计显著性阈值）'
+  - FDR = <0.1（DropViz标记基因选择显著性阈值）
+
+  - 基因表达细胞数 = >=10 cells（基因预过滤，去除少于10个细胞表达的基因）
+
+  - UMI counts = >=3000（CD4 T细胞分析中丢弃低mRNA UMI细胞）
+
+  - 线粒体基因比例 = <=16%（CD4 T细胞分析中丢弃高线粒体比例细胞）
+
+  - 表面蛋白高表达截断 = 20 counts/10,000（HVG和NBDisp一致性）
+
+  - 表面蛋白表达过滤 = 95th percentile <100 counts per 10,000（去除CD4 T细胞中不表达的表面蛋白背景噪声）
+
+  - 局部自相关/FDR阈值 = 0.05（基因选择与模块提取）'
 evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
   across modalities of single-cell genomics | E:/MemOmics-Agent/hermes_home/papers/hotspot.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

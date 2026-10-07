@@ -1,11 +1,9 @@
-pmid: "42019489"
 type: kb_entry
 domain: common
 name: paper_bioinfo_10.1016_j.devcel.2026.03.010
-doi: "10.1016/j.devcel.2026.03.010"
 direction: general
 assay_type: RNA
-last_updated: 2026-08-16 03:44
+last_updated: 2026-10-07 17:39
 source: literature
 verified: partially_verified
 quality: medium
@@ -13,31 +11,302 @@ auto_trigger:
 - paper_bioinfo_10.1016_j.devcel.2026.03.010
 content: '## 测序方法
 
-  - snRNA-seq (single-nucleus RNA-seq) | 平台 — | 建库 — | 深度 —
+  - 单核RNA-seq；单细胞RNA-seq；空间转录组学 | 平台 — | 建库 — | 深度 —
 
-  - scRNA-seq (single-cell RNA-seq) | 平台 — | 建库 — | 深度 —
+  - snRNA-seq (single-nucleus RNA sequencing) | 平台 — | 建库 全肌肉跖肌混合样本；获得75,343个核，其中Den
+  24,383、OVL 26,427 | 深度 —
+
+  - scRNA-seq (single-cell RNA sequencing) | 平台 — | 建库 FACS富集MuSCs、ECs、SCs及其他稀有细胞；去除Sca1+CD31−
+  FAPs和CD45+免疫细胞；获得19,879个细胞 | 深度 —
+
+  - spatial transcriptomics | 平台 — | 建库 片段提及但无细节 | 深度 —
+
+  - snRNA-seq | 平台 — | 建库 — | 深度 —
+
+  - single-nucleus transcriptomics (snRNA-seq) | 平台 — | 建库 — | 深度 —
+
+  - single-cell transcriptomics (scRNA-seq) | 平台 — | 建库 — | 深度 —
 
   - spatial transcriptomics | 平台 — | 建库 — | 深度 —
 
+  - bulk RNA-seq (human) | 平台 — | 建库 — | 深度 —
+
+  - single nuclei RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - single cell RNA-seq | 平台 — | 建库 — | 深度 —
+
   - bulk RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - scRNA-seq | 平台 BD FACSAria II（细胞分选） | 建库 10x Genomics Cell Multiplexing Oligos
+  (CMOs) | 深度 —
+
+  - scRNA-seq (10x Chromium Single Cell 3′ Reagent Kit v3.1 dual index) | 平台 Illumina
+  NextSeq | 建库 Single Cell 3′ Reagent Kit v3.1 (dual index) | 深度 —
+
+  - snRNA-seq (10x Chromium Single Cell 3′ Reagent Kit v3.1) | 平台 Illumina NextSeq
+  | 建库 Single Cell 3′ Reagent Kit v3.1 | 深度 —
+
+  - single cell analysis | 平台 — | 建库 — | 深度 —
+
+  - High-Dimensional Single-Cell Cartography | 平台 — | 建库 — | 深度 —
+
+  - Single-nucleus transcriptomics | 平台 — | 建库 — | 深度 —
+
+  - Single-nucleus RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - single-nucleus resolution transcriptome | 平台 — | 建库 — | 深度 —
+
+  - Single-nuclei sequencing | 平台 — | 建库 — | 深度 —
+
+  - Lineage tracing of nuclei | 平台 — | 建库 — | 深度 —
+
+  - droplet-based single-cell RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - single-nucleus RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - snRNA-seq (single-nucleus RNA-seq) | 平台 — | 建库 — | 深度 —
+
+  - scRNA-seq and snRNA-seq (integrated) | 平台 — | 建库 — | 深度 —
+
+  - Spatial transcriptomics | 平台 — | 建库 — | 深度 —
+
+  - scRNA-seq | 平台 10X Genomics Chromium | 建库 Single Cell 3′ Reagent Kit v3.1 (dual
+  index) | 深度 —
+
+  - snRNA-seq | 平台 10X Genomics Chromium | 建库 Chromium Nuclei Isolation Kit; Single
+  Cell 3′ Reagent Kit v3.1 (dual index) | 深度 —
+
+  - bulk RNA-seq | 平台 Illumina | 建库 NEBNext Ultra II RNA Library Prep Kit / NEBNext
+  Poly(A) mRNA Magnetic Isolation Module / Watchmaker mRNA Library Prep Kit v1.1.0823
+  / SMART-Seq mRNA LP kit | 深度 —
+
+  - spatial transcriptomics | 平台 10X Genomics Visium | 建库 Visium Spatial Tissue Optimization
+  Slide & Reagent Kit | 深度 —
 
 
   ## 分析流程
 
-  - FACS enrichment for rare populations → snRNA-seq and scRNA-seq → integration of
-  sn- and scRNA-seq datasets → unsupervised clustering → re-clustering of myonuclei
-  and Schwann cells → CellChat ligand-receptor inference → spatial transcriptomics
-  validation → 3D imaging validation
+  - 实验诱导小鼠骨骼肌萎缩/肥厚 → 单核/单细胞转录组测序 → 空间转录组/空间profiling → 高分辨率3D成像 → 细胞群与纤维类型特异性转录反应分析
+  → 人去神经/运动肌肉样本验证
+
+  - 小鼠跖肌取材：basal、Den、OVL，3或7天
+
+  - 全肌肉snRNA-seq获得75,343个核
+
+  - 无监督聚类与canonical lineage markers注释
+
+  - 分离肌肉scRNA-seq：FACS富集MuSCs、ECs、SCs等，去除Sca1+CD31− FAPs和CD45+免疫细胞，获得19,879个细胞
+
+  - 整合sn/scRNA-seq数据集
+
+  - 细胞状态与差异基因表达分析（Table S1）
+
+  - snRNA-seq肌核转录组聚类与UMAP分析 → 对41,240个肌核重新聚类 → 鉴定Myonuc1-3亚群 → 差异表达分析 → 功能富集分析
+
+  - SynM筛选与再聚类 → Den/OVL SynM差异表达分析 → 功能富集分析
+
+  - 单核/单细胞转录组 + 空间转录组 + 3D成像 → 整合分析NMJ前/后成分的形态、拓扑和基因表达动态
+
+  - CellChat计算建模 → 分析活化tSCs(aSC1)与去神经SynM的细胞通讯
+
+  - 植物肌（plantaris）样本采集 → 机械剪碎 → Liberase/0.3% dispase 37°C 1.5 h消化 → 过滤/离心 → FBS+10%
+  DMSO −80°C冻存 → 解冻 → FACS buffer重悬 → CD45/Sca-1/CD31抗体染色 → CMO室温孵育5 min → 洗涤重悬于0.05%
+  BSA PBS → BD FACSAria II分选 → scRNA-seq
+
+  - scRNA-seq：Cell Ranger v7.1.0 比对 GRCm39 → Dropkick v1.2.7 识别空滴和低质量 barcode → Solo
+  v1.3 拆分 CMO hashtags 并去除 doublets → Seurat v5.0.1 下游分析
+
+  - snRNA-seq：Cell Ranger v7.1.0 比对 GRCm39 → SoupX 去除 ambient RNA → DoubletFinder
+  去除 doublets → Seurat v5.0.1 下游分析
+
+  - scRNA-seq Samples A 和 A2：NormalizeData → FindVariableFeatures(1,500 features)
+  → ScaleData 回归细胞周期效应 → RunPCA(top 30 PCs) → Harmony(top 30 PCs) 整合 CMO-labeled samples
+  → RunUMAP → FindNeighbors/FindClusters(resolution 0.03) → 基于 canonical skeletal
+  muscle marker genes 注释细胞类型
+
+  - snRNA-seq：NormalizeData → FindVariableFeatures(2,000 features) → ScaleData 回归细胞周期效应
+  → RunPCA(top 40 PCs) → Harmony(top 40 PCs) 整合 → RunUMAP → FindNeighbors/FindClusters(resolution
+  0.1)
+
+  - scRNA-seq 与 snRNA-seq 整合：取各数据集 top 4,000 variable features 交集，并补充 myonuclear、NMJ、MTJ
+  cluster marker genes → ScaleData 回归细胞周期效应 → RunPCA(top 30 PCs) → Harmony(top 30
+  PCs) 整合 → RunUMAP → 转移细胞类型注释
+
+  - 单核细胞类型差异分析：选取每种条件下 scRNA 和 snRNA 均至少有 30 个细胞/核的细胞类型（ECs、FAPs、MuSCs、SCs），以 basal
+  为参考，用 Seurat FindMarkers 计算 Den 和 OVL 差异基因，保留两种模态均显著的基因
+
+  - myonuclear、NMJ、Schwann cell cluster 亚聚类：从 snRNA-seq 子集化后重复处理流程
+
+  - snRNA-seq：聚类/UMAP可视化 → marker基因鉴定 → 细胞类型丰度 → 肌核亚群与条件特异性DEG/功能富集 → atrophy/hypertrophy评分
+
+  - spatial transcriptomics：SynM marker表达评分 → 与相邻BTX染色切片重叠注释NMJ阳性spots → NMJ阳性vs阴性DEG/热图/Venn
+  → 预测细胞类型贡献 → 突触基因空间表达可视化
+
+  - sc/snRNA-seq整合 → UMAP降维可视化 → SC亚群鉴定 → 条件间亚群比例分析 → 配体-受体相互作用预测 → BMP/TGFβ/activin信号网络推断
+  → RNAscope验证 → 空间转录组NMJ阳性/阴性spot分析 → 人肌肉活检/公共数据集热图分析
 
 
   ## 软件/包
 
-  - CellChat （R）：配体-受体相互作用推断
+  - CellChat （R）：计算建模细胞间通讯，提示aSC1与去神经SynM间TGFβ/activin信号介导的crosstalk
+
+  - Fiji （Java）：图像处理、荧光定量和NMJ分析
+
+  - MyoSight （Java/Fiji plugin）：肌纤维横截面积（CSA）自动定量
+
+  - 3D Manager （Fiji plugin）：NMJ三维体积分析
+
+  - Cell Ranger v7.1.0（CLI）：scRNA-seq/snRNA-seq 数据预处理并比对至 GRCm39
+
+  - Dropkick v1.2.7（R）：识别空滴和低质量 barcode
+
+  - Solo v1.3（Python）：拆分 CMO hashtags 并去除 doublets
+
+  - Seurat v5.0.1（R）：下游分析、整合、聚类、注释、差异表达分析
+
+  - SoupX （R）：去除 snRNA-seq ambient RNA
+
+  - DoubletFinder （R）：去除 snRNA-seq doublets
+
+  - Harmony v1.2.0（R）：scRNA-seq/snRNA-seq 批次整合
+
+  - CellChat （R）：推断和分析细胞间通讯
+
+  - dropkick （）：Automated quality control and cell identification of droplet-based
+  single-cell data
+
+  - Solo （）：Doublet Identification in Single-Cell RNA-Seq via Semi-Supervised Deep
+  Learning
+
+  - SoupX （）：Removes ambient RNA contamination from droplet-based single-cell RNA
+  sequencing data
+
+  - Harmony （）：Fast, sensitive and accurate integration of single-cell data
+
+  - fastp （）：Ultra-fast all-in-one FASTQ preprocessor
+
+  - Salmon （）：Fast and bias-aware quantification of transcript expression
+
+  - edgeR （R）：Differential expression analysis of digital gene expression data
+
+  - Nextflow （）：Reproducible computational workflows
+
+  - MyoSight （）：Semi-automated image analysis of skeletal muscle cross sections
+
+  - nf-core （）：社区维护的生物信息学流程框架（参考文献65）。
+
+  - Cutadapt （Python）：去除高通量测序reads接头（参考文献66）。
+
+  - DESeq2 （R）：RNA-seq差异表达分析（参考文献68）。
+
+  - affy （R）：Affymetrix GeneChip探针水平分析（参考文献69）。
+
+  - Fiji （）：图像分析/开放平台
+
+  - BioRender （）：科学绘图
+
+  - GraphPad Prism 10（）：统计作图
+
+  - CellChat v2.1.2（R）：细胞通讯分析
+
+  - Cell Ranger v7.1.0（）：10X Genomics 单细胞数据预处理
+
+  - MyoSight （）：肌肉图像分析（Babcock et al.）
+
+  - Dropkick v1.2.7（Python）：细胞类型自动注释/过滤（Heiser et al.）
+
+  - Solo v1.3（Python）：双细胞检测（Bernstein et al.）
+
+  - Seurat v5.0.1（R）：单细胞数据分析
+
+  - SoupX （R）：环境 RNA 校正
+
+  - Harmony v1.2.0（R）：批次整合
+
+  - SpaceRanger v2.0.0（）：10X Visium 空间转录组预处理
+
+
+  ## 关键参数
+
+  - MyoSight.Li thresholding + particle size limits = 200–3000 μm2（肌纤维CSA定量）
+
+  - CUBIC.预固定冷冻肌肉修剪厚度 = 200–500 μm（CUBIC组织透明化前处理）
+
+  - RNAscope.Protease Plus处理 = 7 min at 40°C（多重荧光原位杂交）
+
+  - RNAscope.探针杂交 = 2 h at 40°C（Inhba/Ajap1/Col3a1探针杂交）
+
+  - 共聚焦成像.3D图像栈视野与深度 = 426.78 × 426.78 μm，深度50–100 μm（全装/RNAscope三维分析）
+
+  - NMJ分析.二维NMJ面积 = 最大强度投影+阈值掩膜（NMJ面积与支配面积定量）
+
+  - SoupX.rho = min(auto-estimated value, 0.154)（snRNA-seq ambient RNA 去除）
+
+  - DoubletFinder.doublet rate = well-specific estimated doublet rate based on nearest
+  10X multiplet-rate prediction（snRNA-seq doublet 去除）
+
+  - Seurat.FindVariableFeatures nfeatures = 1,500（scRNA-seq Samples A 和 A2）
+
+  - Seurat.RunPCA npcs = 30（scRNA-seq）
+
+  - Harmony.npcs = 30（scRNA-seq CMO-labeled samples 整合）
+
+  - Seurat.FindClusters resolution = 0.03（scRNA-seq 聚类）
+
+  - Seurat.FindVariableFeatures nfeatures = 2,000（snRNA-seq）
+
+  - Seurat.RunPCA npcs = 40（snRNA-seq）
+
+  - Harmony.npcs = 40（snRNA-seq 整合）
+
+  - Seurat.FindClusters resolution = 0.1（snRNA-seq 聚类）
+
+  - Seurat.top variable features = 4,000 from each dataset（scRNA-seq 与 snRNA-seq 整合）
+
+  - Seurat.FindMarkers marker gene thresholds = adjusted p < 0.001; log2 fold change
+  > 3.0; expression > 20% nuclei within cluster（myonuclear/NMJ/MTJ cluster marker
+  定义）
+
+  - Seurat.RunPCA npcs = 30（scRNA-seq 与 snRNA-seq 整合数据集）
+
+  - Harmony.npcs = 30（scRNA-seq 与 snRNA-seq 整合数据集）
+
+  - Seurat.FindMarkers DE thresholds = adjusted p < 0.05; |log2 fold change| > 0.15;
+  expression ≥ 5% cells/nuclei within enriched group（Den/OVL 与 basal 差异表达分析）
+
+
+  ## 参考基因组
+
+  GRCm39
 
 
   ## 数据库
 
-  - NCBI Gene Expression Omnibus (GEO)：储存原始sn/scRNA-seq、空间转录组和bulk RNA-seq数据，accession:
-  GSE294765, GSE311567, GSE312393'
+  - NCBI Gene Expression Omnibus (GEO)：存放原始单核/单细胞RNA-seq、空间转录组和bulk RNA-seq数据
+
+  - GEO GSE294765：数据登录号
+
+  - GEO GSE311567：数据登录号
+
+  - GEO GSE312393：数据登录号
+
+  - publicly available microarray dataset from human muscle biopsies after spinal
+  cord injury：分析INHBA（aSC1标志）及萎缩相关基因表达
+
+  - GEO:GSE294765：本文 scRNA-seq/snRNA-seq/bulk RNA-seq/spatial transcriptomics 数据
+
+  - GEO:GSE311567：本文 scRNA-seq/snRNA-seq/bulk RNA-seq/spatial transcriptomics 数据
+
+  - GEO:GSE312393：本文 scRNA-seq/snRNA-seq/bulk RNA-seq/spatial transcriptomics 数据
+
+  - GEO:GSE221736：Nicoletti et al. 去神经肌肉不同时间点 Schwann cells scRNA-seq 数据
+
+  - GEO:GSE21496：Urso et al. 人脊髓损伤肌肉 microarray 数据
+
+  - GEO:GSE21497：Urso et al. 人脊髓损伤肌肉 microarray 数据'
 evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
   junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

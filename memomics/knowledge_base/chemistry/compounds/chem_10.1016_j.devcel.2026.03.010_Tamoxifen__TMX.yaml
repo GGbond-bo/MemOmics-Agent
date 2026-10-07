@@ -1,0 +1,25 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.devcel.2026.03.010_Tamoxifen__TMX
+chem_category: compounds
+last_updated: 2026-10-07 17:39
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.devcel.2026.03.010_Tamoxifen__TMX
+content: '- 靶点: CreER
+
+  - 剂量: 2 mg per 25 g body weight, i.p., daily × 4 days
+
+  - IC50/EC50: —
+
+  - 模型: Plp1-CreER; Rosa26-LSL-tdTomato 或 Plp1-CreER; Rosa26-iDTR 小鼠
+
+  - 效应: 诱导 Cre 重组'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

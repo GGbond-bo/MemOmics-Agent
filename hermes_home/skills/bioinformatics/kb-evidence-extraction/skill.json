@@ -1,0 +1,26 @@
+{
+  "id": "kb-evidence-extraction",
+  "name": "知识库证据链提炼 Skill（L0-L3 可信度分级）",
+  "category": "Literature",
+  "language": "Python",
+  "description": "把文献库文献提炼成带证据链的知识库条目：生物学结论按 L0-L3 可信度分级（L0 无来源/L1 有来源未验证/L2 实验验证/L3 临床级），每条带验证方式与原文位置；测序方法/实验方法/参数类不做分级、只需标注文章来源。触发场景：提炼文献进知识库、补充知识库、构建证据链、评估知识可信度。",
+  "starting_prompt": "使用 知识库证据链提炼 Skill（L0-L3 可信度分级） 进行分析",
+  "source_dir": "skills/bioinformatics/kb-evidence-extraction",
+  "memomics_module": "",
+  "chains_from": ["literature-full-summary"],
+  "chains_to": ["knowledge-base-curation"],
+  "tags": ["evidence-chain", "kb", "extraction", "L0-L3"],
+  "aliases": ["证据链提炼", "知识提炼", "kb-extract"],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "kb-evidence-extraction",
+    "证据链",
+    "提炼进知识库",
+    "提炼知识",
+    "知识提取",
+    "证据分级",
+    "evidence chain",
+    "补充知识库"
+  ],
+  "when_to_use": "把文献库文献提炼成带证据链的知识库条目。触发场景：'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'。"
+}

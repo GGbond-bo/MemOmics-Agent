@@ -1,555 +1,226 @@
-pmid: "40437094"
 type: kb_entry
 name: paper_bio_10.1038_s41586-025-09053-4
-doi: "10.1038/s41586-025-09053-4"
 species: other
 tissue: other
 direction: cancer
 assay_type: RNA
-last_updated: 2026-09-23 02:17
+last_updated: 2026-10-07 18:10
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_bio_10.1038_s41586-025-09053-4
-content: '## 结论
+content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
-  - Compiled a comprehensive pan-tissue single-cell transcriptomic atlas from 35 human
-  tissues, comprising 2,293,951 high-quality cells from 706 healthy samples.
+  - **[L1]** 构建了覆盖35种人体组织、706个健康样本、2,293,951个高质量细胞的泛组织单细胞转录组图谱，揭示组织间细胞组成存在显著差异。　（验证：Results:
+  A single-cell atlas of the human 第1段：严格质控后获得2,293,951个高质量细胞、706个健康样本、35种组织；未列独立湿实验验证
+  ｜ 位置：Results: A single-cell atlas of the human 第1段）
 
-  - Revealed substantial inter-tissue variability in cellular composition.
+  - **[L1]** 使用scIB评估单细胞数据整合工具，BBKNN表现最佳，用于跨组织数据整合。　（验证：Extended Data Fig.2：scIB平台评估；原文未描述湿实验验证
+  ｜ 位置：Results 第1段 / Extended Data Fig.2）
 
-  - Identified 12 cross-tissue coordinated cellular modules with distinct cellular
-  compositions, tissue prevalences and spatial organizations.
+  - **[L1]** 通过细胞丰度协方差识别出12个具有不同细胞组成、组织流行性和空间组织的细胞模块。　（验证：Abstract/Results：基于细胞丰度协方差计算识别；片段未提供湿实验验证
+  ｜ 位置：Abstract）
 
-  - Demonstrated coordinated intercellular communication within cellular modules using
-  in situ spatial and in vivo perturbation data.
+  - **[L2]** 细胞模块内存在协调的细胞间通讯，并可由原位空间和体内扰动数据支持。　（验证：Abstract：使用原位空间和体内扰动数据（in situ
+  spatial and in vivo perturbation data）验证，片段未提供具体图号 ｜ 位置：Abstract）
 
-  - Two immune cellular modules in the spleen showed contrasting chronological dynamics
-  with ageing.
+  - **[L1]** 脾脏中两个免疫细胞模块随衰老呈现相反的时间动态。　（验证：Abstract：基于单细胞图谱的动态分析；片段未提供湿实验验证 ｜ 位置：Abstract）
 
-  - Breast multicellular changes revealed a menopausal trajectory associated with
-  fibroblast dynamics.
+  - **[L1]** 乳腺多细胞变化揭示了一条与成纤维细胞动态相关的绝经轨迹。　（验证：Abstract：基于单细胞图谱的分析；片段未提供湿实验验证 ｜ 位置：Abstract）
 
-  - Cancer progression involves simultaneous rewiring of two multicellular ecosystem
-  types: loss of tissue-specific healthy organization and emergence of a convergent
-  cancerous ecosystem.
+  - **[L1]** 跨癌种分析发现肿瘤进展中同时发生两类多细胞生态系统重编程：组织特异性健康组织结构丢失和趋同的癌性生态系统出现。　（验证：Abstract：跨癌种单细胞图谱分析；片段未提供湿实验验证
+  ｜ 位置：Abstract）
 
-  - 构建了跨性别、组织和数据集的泛组织人类单细胞转录组图谱，并实现有效整合。
+  - **[L2]** 研究构建了覆盖多组织的人类泛组织单细胞图谱，并揭示同一细胞类型内不同细胞亚群在不同组织间存在明显偏好。　（验证：基于多组织 scRNA-seq
+  图谱分析（Fig.1d），展示细胞亚群组织偏好（Supplementary Fig.2），并有空间转录组验证（Fig.1f） ｜ 位置：Results 第1段
+  / Fig.1d-f）
 
-  - 通过无监督细胞聚类和层级注释，使用经典标记建立了8个主要细胞类型。
+  - **[L2]** 内皮细胞可基于来源进行独特划分，例如来自血管或淋巴管。　（验证：scRNA-seq 细胞亚群分析（Fig.1d） ｜ 位置：Results
+  第1段 / Fig.1d）
 
-  - 图谱中约45%的细胞属于免疫细胞区室，为研究免疫细胞表型多样化提供了基础。
+  - **[L2]** 年龄相关记忆B细胞（ABC, B08）占总B细胞不足1%，除肝、骨髓和脾外，也出现在输尿管和骨骼肌等非预期部位。　（验证：scRNA-seq
+  图谱中亚群频率分析（Fig.1d） ｜ 位置：Results 第1段 / Fig.1d）
 
-  - 不同组织间细胞类型组成存在显著差异（P<2.2×10−16，卡方检验）。
+  - **[L2]** 成纤维细胞具有高度多样性，鉴定出12个成纤维细胞亚群；S01–S04分布最广且在生殖系统中显著减少；子宫特异性S11对应子宫内膜，S12对应子宫肌层。　（验证：scRNA-seq
+  亚群分析（Supplementary Fig.3a–d）及空间分辨转录组（Fig.1f） ｜ 位置：Results 第1段 / Fig.1e,f）
 
-  - 外周血和免疫器官/组织（骨髓、淋巴结、大网膜、脾、胸腺）以免疫细胞为主，符合其在免疫细胞产生、成熟或储存中的作用。
+  - **[L2]** 同一人体系统内的上皮细胞相似性高于不同系统之间的上皮细胞。　（验证：scRNA-seq 上皮细胞比较分析（Supplementary Fig.3e）
+  ｜ 位置：Results 第1段 / Supplementary Fig.3e）
 
-  - 生殖组织（子宫、阴道、睾丸）表现出更高比例的基质细胞。
+  - **[L2]** 开发了CoVarNet计算框架，通过细胞亚群频率协方差重建细胞模块（CM）网络，并在泛组织图谱中鉴定出12个CM；88.16%（67/76）非上皮细胞亚群参与至少一个CM，且多数CMT由多组织组成，表明CM具有跨组织特性。　（验证：CoVarNet分析（Fig.2a,b、Extended
+  Data Fig.3a–f）；与约12,000个GTEx RNA-seq profiles整合验证（Extended Data Fig.4a–e） ｜ 位置：Results
+  ''Identification of cross-tissue CMs'' / Fig.2a,b, Extended Data Fig.3–4）
 
-  - 对76个非上皮细胞亚群进行了无监督层级聚类。
+  - **[L2]** 12个CM具有特定人体系统偏好：CM04/05/06/09富集于免疫器官和外周血；CM07/12偏好生殖系统；CM02/03分布于泌尿和胃肠道；CM08富集于屏障组织；CM10为血管单元；CM11富集于肺、肾、肝和脂肪；CM01广泛分布，提示通用多细胞组织。　（验证：CM偏好分析（Fig.2c）并经GTEx外部数据验证（Extended
+  Data Fig.4f） ｜ 位置：Results ''CM annotations'' / Fig.2b–d）
 
-  - 成纤维细胞亚群的组织分布通过Ro/e（observed/expected细胞数比值）衡量，并按Shannon equitability从最普遍（S01）到最特异（S12）排序。
+  - **[L2]** 通过cell2location将CM映射到Visium空间转录组，CM08定位于表皮及邻近真皮层，CM10代表血管组件。　（验证：Visium空间转录组与cell2location映射（Extended
+  Data Fig.5a–c） ｜ 位置：Results ''Spatial characteristics of CMs'' / Extended Data Fig.5a–c）
 
-  - Visium空间转录组展示了成纤维细胞亚群在各组织中的空间分布。
+  - **[L2]** Xenium基因panel可区分CM02和CM03内多个细胞亚群，且基因转录本密度可代表单个CM的强度。　（验证：Xenium成像分析（Extended
+  Data Fig. 5i） ｜ 位置：Extended Data Fig. 5i / Results）
 
-  - 构建了泛组织单细胞图谱，并发现同一细胞类型内的细胞亚群对不同组织具有明显偏好。
+  - **[L2]** CM03在固有层显著富集，而CM02在组织中分布更均匀。　（验证：Xenium成像与定量，n=6，双尾配对Wilcoxon检验（Fig.
+  3d,e/Methods） ｜ 位置：Fig. 3d,e）
 
-  - 年龄相关记忆B细胞（ABC, B08）占B细胞少于1%，除肝、骨髓和脾外，也存在于输尿管和骨骼肌。
+  - **[L2]** CMs具有空间多细胞协调性，不同组织/样本中CM共定位评分和细胞谱系组成不同。　（验证：Visium空间转录组分析，n=34（Fig. 3a–c,f）
+  ｜ 位置：Fig. 3a–c,f）
 
-  - 鉴定出12个成纤维细胞亚群，S01–S04分布最广，生殖系统特异性亚群更局限于特定组织；子宫特异亚群S11对应子宫内膜，S12对应子宫肌层。
+  - **[L1]** 高CM活性单细胞样本中，CM内CellPhoneDB细胞–细胞互作计数高于低CM活性样本。　（验证：CellPhoneDB计算推断（Fig.
+  3g） ｜ 位置：Fig. 3g）
 
-  - 开发了CoVarNet计算框架，通过细胞亚群频率协方差重建细胞模块（CM）网络，并在泛组织图谱中鉴定出12个CM。
+  - **[L1]** CM02、CM03和CM05的细胞因子响应性存在差异，并可利用Immune Dictionary推断。　（验证：Immune Dictionary推断，CM-level
+  FDR取CM内所有亚群最小FDR（Fig. 3h） ｜ 位置：Fig. 3h）
 
-  - 大多数非上皮细胞亚群（67/76，88.16%）参与至少一个CM，17个参与多个CM，且网络无明确hub节点。
+  - **[L2]** 特定细胞因子基因在CM02、CM03或CM05及回肠细胞niche中富集，并呈现空间分布。　（验证：Visium空间表达检测与空间分布展示（Fig.
+  3i,j） ｜ 位置：Fig. 3i,j）
 
-  - 所有CM类型（CMT）均由多个组织组成，表明CM具有跨组织性质；GTEx bulk RNA-seq数据可恢复CMT且标志物表达一致。
+  - **[L2]** 绝经后乳腺样本中SCGB2A2、SCGB1D2等基因在多数细胞亚群中表达升高，与既往SCGB2A2作为乳腺癌检测生物标志物的报道一致。　（验证：人乳腺样本按绝经状态分组，Fig.4d展示样本平均表达热图；Fig.4f显示绝经前n=93、绝经后n=18，使用双尾非配对Wilcoxon检验。
+  ｜ 位置：Fig.4d；Fig.4f）
 
-  - CM表现出人体系统偏好：CM04/05/06/09富集于免疫器官和外周血，CM07/12富集于生殖系统，CM02/03分布于泌尿系统/胃肠道，CM08富集于屏障/黏膜相关组织，CM10为血管单元，CM11富集于肺/肾/肝/脂肪，CM01广泛分布。
+  - **[L2]** 绝经前乳腺样本中多种炎症基因（包括HLA基因）在多个细胞亚群中表达更高。　（验证：人乳腺细胞亚群表达比较，原文补充材料Supplementary
+  Table 6列出结果。 ｜ 位置：Supplementary Table 6）
 
-  - Visium空间转录组映射显示CM08定位于皮肤表皮及邻近真皮，CM10对应血管组件。
+  - **[L2]** CM12 MCP基因在乳腺样本中呈上/下调模式，CM12活性与绝经状态及成纤维细胞亚群S10、S06频率相关。　（验证：Fig.4d展示CM12
+  MCP基因跨乳腺样本表达；Fig.4f比较绝经前n=93与绝经后n=18的CM12活性及S10/S06频率，使用双尾非配对Wilcoxon检验；Fig.4h以PHATE显示CM12活性。
+  ｜ 位置：Fig.4d；Fig.4f；Fig.4h）
 
-  - 泛组织分析鉴定出12个跨组织细胞模块（CMs）。
+  - **[L2]** 乳腺成纤维细胞炎症评分沿拟时序变化，S06_Fb_ARID5B与S10_Fb_MXRA5等成纤维细胞亚群在组织中呈空间分布差异。　（验证：Fig.4g为Visium空间转录组分析并注释乳腺组织病理区域；Fig.4j为LOESS平滑的成纤维细胞炎症评分沿pseudotime趋势，误差带为95%置信区间。
+  ｜ 位置：Fig.4g；Fig.4j）
 
-  - CM02、CM03和CM05在小肠中显著富集，并呈现一致的空间模式。
+  - **[L2]** 脾脏样本中CM05和CM06活性随年龄组变化。　（验证：Fig.4a按年龄分组统计脾脏样本：<35 n=3；40–49 n=8；50–59
+  n=10；60–69 n=7；70–85 n=1，使用Kruskal–Wallis检验和双尾非配对Wilcoxon检验。 ｜ 位置：Fig.4a）
 
-  - CM05与C2生态位对齐，主要位于Peyer''s patch，包含naive B细胞、naive T细胞和滤泡辅助T细胞，重现黏膜免疫诱导模块。
+  - **[L1]** 绝经后乳腺CM12活性及炎症评分下降，提示乳腺作为生殖器官其局部炎症受雌激素影响，而非单纯随年龄增加。　（验证：Extended Data
+  Fig. 9a 炎症评分分析；Fig. 4f CM12活性比较 ｜ 位置：Results 前段 / Extended Data Fig. 9a, Fig. 4f）
 
-  - CM02和CM03与C1生态位对齐，主要位于肠道黏膜，包含IgA产生浆细胞、记忆和组织驻留记忆T细胞及固有免疫细胞，重现黏膜免疫效应模块。
+  - **[L1]** 成纤维细胞与绝经状态强相关，S10和S06在绝经后样本中显著减少；S10高表达COL1A1、COL1A2和COL3A1。　（验证：Fig.
+  4f 与 Extended Data Fig. 9b,c 单细胞亚群频率和基因表达分析 ｜ 位置：Results / Fig. 4f, Extended Data
+  Fig. 9b,c）
 
-  - CMs在六个供体样本中稳健存在，并在单个供体的四个连续回肠切片中观察到一致空间模式。
+  - **[L1]** 空间分析显示S10均匀分布于结缔组织，S06主要位于小叶；免疫亚群和S09成纤维细胞在乳腺导管组织中共定位，绝经后丰度变化较小。　（验证：Fig.
+  4g 与 Extended Data Fig. 9d 空间分布分析 ｜ 位置：Results / Fig. 4g, Extended Data Fig. 9d）
 
-  - 部分CM08亚群（如静脉内皮细胞E04）与CM10亚群重叠，提示不同CM在组织微环境中的相互联系。
+  - **[L1]** 基于CM12亚群频率可构建从绝经前到绝经后的绝经轨迹；S10沿轨迹持续下降，S06后期下降，S06/S09/S10炎症评分沿轨迹下降，尤其绝经后；该轨迹和成纤维细胞变化在外部队列中重复。　（验证：Fig.
+  4h-j 轨迹与炎症评分分析；Extended Data Fig. 9f,g 外部队列重复 ｜ 位置：Results / Fig. 4h-j, Extended
+  Data Fig. 9f,g）
 
-  - 高分辨率Xenium数据可实现细胞和组织内数百至数千基因的精准原位表征。
+  - **[L1]** 构建了包含1,062个临床样本、29种癌症类型、91个细胞亚群（含15个癌相关亚群）的泛癌单细胞转录组图谱。　（验证：Fig. 5a,b
+  与 Extended Data Fig. 10 单细胞图谱构建 ｜ 位置：Results / Fig. 5a,b, Extended Data Fig. 10）
 
-  - Integrating single-cell and spatial data is important, and single-cell-based approaches
-  show superior sensitivity for dissecting multicellular ecosystems.
+  - **[L1]** 肿瘤进展伴随健康CM活性降低和组织特异性多细胞生态系统破坏，同时出现跨癌种趋同的癌症相关生态系统；cCM02在肿瘤中富集并沿健康→癌旁→肿瘤逐步增加。　（验证：Fig.
+  5d-h 与 Extended Data Fig. 11-12 泛癌CM/cCM活性分析 ｜ 位置：Results / Fig. 5d-h, Extended
+  Data Fig. 11-12）
 
-  - CM spatial organization is strongly associated with composition, with highest
-  spatial concordance in CMs with more lymphocytes, followed by myeloid, stromal and
-  endothelial cells.
+  - **[L1]** cCM02的细胞间调控关键因子包括干扰素、IL-18和IL-15；DIALOGUE识别出与cCM02活性升高相关的MCP，特征为多数细胞亚群中S100A2、S100A9和S100A8上调。　（验证：Extended
+  Data Fig. 12e,f 细胞因子与DIALOGUE分析 ｜ 位置：Results / Extended Data Fig. 12e,f）
 
-  - Endothelial and stromal cells produce a wider variety of ligands than lymphocytes;
-  spatial proximity may enhance communication specificity in lymphocyte-enriched CMs,
-  whereas stromal/endothelial-enriched CMs generate more diverse signals over longer
-  distances.
+  - **[L3]** S100相关TME程序在TCGA外部队列中验证；在51例已知结局的浸润前肺病变中，进展为浸润性肺癌者该程序表达高于自发消退者，提示早期诊断潜力。　（验证：Fig.
+  5j TCGA外部验证；Fig. 5k 51例已知结局临床队列分析 ｜ 位置：Results / Fig. 5j,k）
 
-  - Cell–cell interactions were enhanced in samples with high CM activity except CM08,
-  implying tissue microenvironments shape distinct CM-dependent cellular phenotypes.
+  - **[L1]** 基于共现模式的多细胞互作分析框架能够捕捉局部和远端的多细胞相互作用，支持跨多种生物背景的整合多模态分析，并可能有助于理解系统性免疫和跨组织调控。　（位置：Discussion
+  第1段）
 
-  - Half of cell subsets showed responsive associations with at least one cytokine;
-  CMs with high colocalization scores tended to harbour more diverse cytokines, and
-  cellular phenotypes are collectively determined by intrinsic properties and local
-  stimuli.
+  - **[L0]** 当前框架未明确纳入上皮细胞、细胞外基质或微生物组成分；未来纳入这些要素可提供更全面的组织水平功能协调视角。　（位置：Discussion
+  第2段）
 
-  - CD8+ effector memory T cells (CD8T02) showed distinct cytokine responses across
-  CMs, with TNF identified in CM02, CM08 and CM09 but absent in CM04 and CM06.
+  - **[L0]** 将协调的细胞间网络与细胞内调控回路整合，并扩展到更大队列和更广泛表型，有助于深化对多细胞生态系统及其转化医学意义的理解。　（位置：Discussion
+  第2段）
 
-  - Cytokine spatial enrichment was validated in intestine, including IL7 and IL18
-  in the CM02/CM03 (C1) niche and LTA and LTB in the CM05 (C2) niche.
+  - **[L1]** 构建了覆盖35种人体组织的泛组织单细胞图谱，最终纳入706个样本、317个供者、2,293,951个高质量细胞，并注释为76个非上皮亚群和26个上皮细胞类型。　（位置：Methods:
+  Single-cell data collection and preprocessing of healthy samples; Single-cell data
+  integration and annotation）
 
-  - CMs recapitulate the complexity of multicellular ecosystems and highlight interplay
-  among diverse cell types in tissue microenvironments underlying tissue homeostasis.
+  - **[L1]** 在泛组织单细胞数据整合方法基准测试中，BBKNN表现最佳，并用于泛组织数据集整合。　（位置：Methods: Benchmarking integration
+  methods; Extended Data Fig. 2）
 
-  - Thymus-enriched CM09 activity was reduced in older individuals, with naive T cells
-  (CD8T01) and regulatory T cells (CD4T08) more abundant in younger individuals, consistent
-  with age-related thymic involution.
+  - **[L1]** CoVarNet可通过分析细胞亚群频率协变，利用NMF和相关性分析识别共现细胞亚群并构建细胞类型共现网络（CM networks）。　（位置：Methods:
+  CoVarNet framework）
 
-  - In spleen, CM05 increased chronologically and CM06 decreased with age; 80% (8/10)
-  of age-varying immune subsets were components of CM05 or CM06.
+  - **[L1]** CoVarNet通过NMF的30次一致性运行识别共现模块（CM），pan-tissue atlas的最佳rank为12，并将所有健康单细胞样本划分为12个CMT组。　（验证：30次运行一致性输出；Extended
+  Data Fig. 3a,b,e（CCC评估与CMT分组） ｜ 位置：Rank selection；CMT classifications of samples）
 
-  - Expansion of four CM05 subsets (B03, B05, CD4T03 and I06) was more pronounced
-  with ageing than that of previously reported ABCs (B08), suggesting roles in ageing.
+  - **[L1]** 在pan-tissue atlas中，基于Pearson相关、FDR和特异性指数筛选得到147对特异相关细胞亚群对，并用于构建CM网络。　（验证：Supplementary
+  Fig. 4；CM网络连接性用n=10,000置换检验 ｜ 位置：Specifically correlated subset pairs；Construction,
+  evaluation and visualization of CM networks）
 
-  - NR4A1-high CD4+ T cells (CD4T03) accumulate in spleen with ageing, potentially
-  due to immune tolerance and thymic involution.
+  - **[L1]** GTEx RNA-seq数据用于验证单细胞定义的CM；12,240个样本中排除278个最高CMT评分低于0.2的样本后，11,962个样本被分为12个CMT。　（验证：Extended
+  Data Fig. 4；排除278/12,240 (2.3%)样本 ｜ 位置：Integrative analysis of scRNA-seq and GTEx
+  RNA-seq；CMT classifications of RNA-seq samples）
 
-  - SCENIC analysis showed overlapping regulons in four CM05 subsets, with convergent
-  CM05 regulons increasing activity with ageing; shared signature genes include 20
-  transcription factor genes such as NR4A1 and NR4A2.
+  - **[L1]** 组织流行度通过Ro/e评估，Ro/e>1定义为组织富集，并用于比较细胞亚群和CM的组织分布。　（验证：Fig. 1e；Fig. 2c；Extended
+  Data Fig. 4f；Supplementary Fig. 2 ｜ 位置：Tissue prevalence of cell subsets and CMs）
 
-  - Eight key transcription factor genes (ATF3, FOS, FOSB, JUN, JUNB, JUND, KLF6 and
-  NFKB1) were both regulons and signature genes, acting as regulatory hubs targeting
-  common genes across cell types, aligning with AP-1 complex activation in immune
-  ageing.
+  - **[L1]** 空间转录组数据使用cell2location去卷积，按NMF权重聚合CM活性并计算共定位评分，从而在Visium/Xenium数据中量化CM。　（验证：Supplementary
+  Table 3；99th percentile scaling ｜ 位置：Analysis of spatial transcriptomics data）
 
-  - NR4A1, a key mediator of T cell dysfunction, was regulated by multiple key regulators
-  across cell types, suggesting possible immune dysfunction associated with ageing.
+  - **[L1]** 组织微环境以CM依赖方式广泛影响细胞亚群表型，CM相关差异表达基因可解释为对组织微环境中细胞因子的响应。　（验证：纯生信分析：对每个免疫亚群在对应CMT样本与其他CMT样本间鉴定DEGs（log2-transformed
+  fold changes > log2(1.2), FDR < 0.05, Student’s t-test）；原文未描述湿实验验证。 ｜ 位置：Cytokine
+  response analysis / CM-dependent DEGs of cell subsets）
 
-  - Breast-enriched CM12 comprises three specialized fibroblast subsets (S06, S09
-  and S10); DIALOGUE identified an MCP upregulated in pre-menopausal compared with
-  post-menopausal samples.
+  - **[L1]** CM具有较强组织偏好性，因此后续分析聚焦组织特异性关联。　（验证：纯生信分析：对每个CM拟合线性模型并报告adjusted R2与F检验FDR，排除样本数少于5的组织；原文未描述湿实验验证。
+  ｜ 位置：Association analysis of CM activity and phenotypic factors / Tissues）
 
-  - SCGB2A2 and SCGB1D2 expression increased in post-menopausal breast samples across
-  most subsets.
+  - **[L1]** 在泛癌单细胞图谱中，使用更严格的阈值（相关系数>0.5、FDR<0.05、specificity>0.95）可衍生每个癌症类型中特异相关的细胞亚群对，并用于八种癌症类型间比较。　（验证：无湿实验验证；基于
+  CoVarNet 相关性分析模块的纯生信分析 ｜ 位置：Co-occurrence of cell subsets in individual cancer types
+  段）
 
-  - Inflammatory genes including human leukocyte antigen genes were more highly expressed
-  in pre-menopausal breast samples across cell subsets.
+  - **[L1]** 通过 CoVarNet 对 91 个细胞亚群和 955 个样本的泛癌频率矩阵识别 cCM，并在单 CM 网络中以每个因子的 top 15
+  亚群作为共发生节点候选。　（验证：无湿实验验证；纯生信分析 ｜ 位置：Identification of cCMs using CoVarNet 段）
 
-  - CM05 and CM06 activities varied across spleen age groups.
+  - **[L1]** cCM02 活性可按健康 CM 相同流程在不同条件下量化，并通过重建健康/邻近非肿瘤与肿瘤/邻近非肿瘤样本的共发生网络探索其在肿瘤进展中的动态。　（验证：无湿实验验证；纯生信网络重建
+  ｜ 位置：Interrogation of cCM02 / cCM02 analysis Co-occurring network 段）
 
-  - CM12 activity and fibroblast subset S10/S06 frequencies differed between pre-menopausal
-  and post-menopausal breast samples.
+  - **[L1]** cCM02 各细胞亚群成分的肿瘤 vs 邻近非肿瘤 DEGs 可用于细胞因子分析；MCP 表达可在 TCGA RNA-seq 和侵袭前肺病变微阵列数据中计算。　（验证：无湿实验验证；TCGA/微阵列数据二次分析
+  ｜ 位置：cCM02 analysis Cytokine analysis / MCP analysis 段）
 
-  - Breast fibroblast subsets S10 and S06 showed spatial distributions in histopathological
-  regions including ductal tissue and lobule.
+  - **[L1]** 研究构建了跨组织/泛组织单细胞数据集，并对QC前后供体、样本、细胞数及基因数、平台和组织分布进行了统计。　（验证：Extended Data
+  Fig.1a-e：QC前后供体/样本/细胞数统计、基因数统计、每队列样本数、10x Genomics平台细胞百分比、每组织细胞数 ｜ 位置：Extended Data
+  Fig.1a-e）
 
-  - CM12 subset frequencies and fibroblast inflammatory scores varied along pseudotime.
+  - **[L1]** 在总图谱和子集图谱上对多种常用Python单细胞整合方法进行基准测试，并按scIB总体评分排名；UMAP显示按compartment或tissue着色的整合结果。　（验证：Extended
+  Data Fig.2a scIB基准测试，总体评分为批次校正40%与生物保守性60%加权；Extended Data Fig.2b UMAP可视化 ｜ 位置：Extended
+  Data Fig.2a-b）
 
-  - Convergent regulons in CM05 were associated with cell subsets B03, B05, CD4T03,
-  and I06 (permutation test P = 0.00042).
+  - **[L1]** 泛癌分析鉴定出四种细胞模块（CMs），并显示cCM在癌种、癌旁非肿瘤和肿瘤样本间活性存在差异。　（位置：Extended Data Fig.
+  11d, Extended Data Fig. 12a-c）
 
-  - Additional analysis confirmed decreased inflammatory scores after menopause, possibly
-  due to breast tissue being more strongly influenced by oestrogen and leading to
-  localized reductions in inflammation.
+  - **[L1]** 肿瘤进展过程中多细胞生态系统发生重连。　（位置：Extended Data Fig. 12d）
 
-  - Menopause induces coordinated phenotypic shifts among diverse subsets within CM12.
-
-  - Fibroblasts show strong association with menopause, with S10 and S06 markedly
-  decreased in post-menopausal samples.
-
-  - S10 fibroblasts highly express collagen genes COL1A1, COL1A2, and COL3A1, and
-  are uniformly distributed across connective tissue, whereas S06 is located primarily
-  in lobules.
-
-  - Immune subsets and S09 fibroblasts within CM12 colocalize in ductal tissues of
-  the breast with little abundance change after menopause.
-
-  - Post-menopausal women exhibit decreased CM12 activity compared with pre-menopausal
-  women, less pronounced in women over 50, suggesting CM12 recapitulates menopause-associated
-  changes rather than chronological variation.
-
-  - CM12 cell subset frequencies define a menopausal trajectory from pre-menopausal
-  to post-menopausal states, with S10 decreasing consistently and S06 decreasing later.
-
-  - S06, S09, and S10 fibroblasts exhibit decreased inflammatory scores along the
-  menopausal trajectory, particularly after menopause, and this was replicated in
-  an external breast dataset.
-
-  - A pan-cancer single-cell transcriptomic atlas comprising 1,062 clinical samples
-  from 29 cancer types identified 91 cell subsets, including 15 cancer-associated
-  subsets.
-
-  - Healthy CM activity is reduced in tumour samples across cancer types, while CM08
-  remains consistent across healthy, adjacent non-tumour, and tumour samples in cutaneous
-  squamous cell carcinoma.
-
-  - Cancer-associated subsets frequently co-occur across cancers, and four cancer-associated
-  CMs were identified, with cCM02 enriched in tumour samples and progressively increasing
-  from healthy to adjacent non-tumour to tumour.
-
-  - Tumour progression is marked by simultaneous rewiring of two multicellular ecosystems:
-  loss of tissue-specific healthy organizations and emergence of a convergent cancerous
-  ecosystem.
-
-  - Cytokine analysis of cCM02 identified interferon, IL-18, and IL-15 as key mediators,
-  and DIALOGUE identified an MCP associated with increased cCM02 activity characterized
-  by upregulation of S100A2, S100A9, and S100A8.
-
-  - The S100-family TME programme was validated in TCGA and showed higher expression
-  in pre-invasive lung lesions that progressed to invasive lung cancer versus those
-  undergoing spontaneous regression, suggesting potential for early cancer diagnosis.
-
-  - CoVarNet provides a computational framework for systematically identifying cross-tissue
-  co-occurring CMs and their rewiring in cancer, bridging cellular diversity and tissue
-  organization.
-
-  - Spatial datasets are often limited by gene coverage or resolution, whereas defining
-  fine-grained CMs from single-cell transcriptomes and mapping them onto spatial data
-  combines strengths of both modalities.
-
-  - Spatial mapping of CM02 and CM03 revealed distinct distributions.
-
-  - A pan-cancer single-cell atlas was built from healthy subsets (76) and cancer-associated
-  subsets (15).
-
-  - Eight cancer types with matched healthy, tumour and adjacent non-tumour samples
-  were used to characterize cancer-associated CMs identified by CoVarNet.
-
-  - Cancer involves rewiring of multicellular ecosystems.
-
-  - CM03 activity changes across healthy, adjacent non-tumour and tumour samples in
-  colorectal cancer; CM08 activity changes in head and neck squamous cell carcinoma.
-
-  - cCM02 activity changes across cancer types and in CRC and HNSC across healthy,
-  adjacent non-tumour and tumour samples.
-
-  - Co-occurring cCM02 network dynamics occur during tumour progression.
-
-  - The cCM02 programme is differentially expressed between tumour and adjacent non-tumour
-  samples across TCGA cancer types.
-
-  - cCM02 programme expression differs between pre-invasive lesions that spontaneously
-  regress and those that progress to cancer.
-
-  - Cell-subset co-occurrence patterns are detected across multiple cancer types,
-  with only pairs detected in at least three cancer types shown.
-
-  - The framework enables integrative, multimodal analysis across a wide range of
-  biological contexts.
-
-  - A co-occurrence pattern-based approach captures both local and distal multicellular
-  interactions, which may be essential for understanding complex networks such as
-  systemic immunity and cross-tissue regulation.
-
-  - The current framework does not explicitly incorporate epithelial cells, the extracellular
-  matrix, or microbiome components.
-
-  - Integrating coordinated intercellular networks with intracellular regulatory circuits
-  may provide a more nuanced understanding of tissue functions.
-
-  - Expanding the analysis to larger cohorts and a broader range of phenotypes will
-  advance understanding of multicellular ecosystems and their implications for translational
-  medicine.
-
-  - 构建了覆盖35种人体组织、来自33个数据集/26个队列的泛组织单细胞图谱。
-
-  - 经严格质控后纳入706个样本、317个供体、2,293,951个高质量细胞。
-
-  - 共注释出76个非上皮细胞亚群和26种上皮细胞类型。
-
-  - BBKNN在整合方法基准测试中表现最佳，被用于泛组织数据集整合。
-
-  - CoVarNet通过细胞亚群频率的协方差识别共现细胞模块（CM）网络。
-
-  - NMF用于从频率矩阵中解析细胞共现程序，采用nsNMF ranks 2–20。
-
-  - Consensus NMF output was derived from 30 runs, yielding k factors and their activities
-  in each sample.
-
-  - The optimal rank for pan-tissue NMF was 12 based on CCC stability criteria.
-
-  - CoVarNet identified 147 specifically correlated cell-subset pairs for the pan-tissue
-  atlas.
-
-  - Healthy single-cell samples across tissues were stratified into 12 CMT groups
-  based on the most abundant CM.
-
-  - GTEx bulk RNA-seq validation classified 11,962 of 12,240 samples into 12 CMTs
-  after excluding low-score samples.
-
-  - Spatial transcriptomics deconvolution with cell2location yielded expected cell
-  abundance per cell subset per spot.
-
-  - Colocalization score for each CM is defined as the proportion of Spearman correlations
-  between subset pairs, where at least one subset is within the CM, that are less
-  than or equal to the median correlation coefficient within the CM.
-
-  - Aggregation scores assess regional aggregation of cell-subset components within
-  CMs in spatial transcriptomics using global bivariate Moran’s I.
-
-  - CellCharter identifies cellular niches by clustering Visium spots based on gene
-  expression and spatial information, independently per sample to mitigate batch effects.
-
-  - Xenium in situ imaging characterizes spatial locations of CM02 and CM03 in intestinal
-  tissue using a designed gene panel and k-means clustering (k=2) to identify epithelium
-  and lamina propria regions.
-
-  - CellPhoneDB ligand–receptor-mediated cell–cell communication analysis derives
-  interaction counts among cell types or CMs, with subsampling to 1,000 cells per
-  subset, and results are validated using CellChat.
-
-  - Comparative CellPhoneDB analysis between high and low CM activity samples reveals
-  effects of tissue microenvironments on cellular crosstalk within CMs.
-
-  - CM-dependent DEGs of immune subsets (log2-transformed fold change > log2(1.2),
-  FDR < 0.05, Student’s t-test) are interpreted as cytokine responses within tissue
-  microenvironments associated with CMs.
-
-  - Cytokine response inference uses the Immune Dictionary, mouse-human ortholog conversion,
-  and hypergeometric enrichment to construct CM-specific cytokine networks.
-
-  - CM activities show strong tissue preferences and associations with sex, age groups,
-  and additional phenotypes such as alcohol consumption, childhood tuberculosis, menopause,
-  and menstrual cycle phases.
-
-  - Specifically correlated cell-subset pairs were derived per cancer type using CoVarNet
-  with coefficients >0.5, FDR <0.05 and specificity >0.95, and only these pairs were
-  compared across eight cancer types.
-
-  - cCMs were identified using CoVarNet from a pan-cancer frequency matrix of 91 subsets
-  and 955 samples, with the top 15 subsets of each factor used as co-occurring node
-  candidates in a single CM network.
-
-  - cCM02 activities were quantified across different conditions using the same procedure
-  as healthy CMs.
-
-  - Two cCM02 co-occurring networks were constructed with the same original cCM02
-  nodes and recalculated edges, one using healthy and adjacent non-tumour samples
-  and the other using tumour and adjacent non-tumour samples.
-
-  - For each cCM02 cell-subset component, DEGs in tumour versus adjacent non-tumour
-  samples were identified and used for cytokine analysis.
-
-  - MCP identification used only tumour and adjacent non-tumour samples, with overall
-  MCP expression calculated from TCGA RNA-seq datasets and microarray data of pre-invasive
-  lung lesions.
-
-  - Curated pan-tissue and pan-cancer scRNA-seq datasets are available from Zenodo
-  and can be interactively explored at http://cm.cancer-pku.cn; CoVarNet source code
-  is available on GitHub.
-
-  - Pan-tissue single-cell datasets were summarized for donor, sample, and cell numbers
-  before and after QC for scRNA-seq datasets.
-
-  - The intersecting gene sets of three commonly used versions of 10x Genomics gene
-  annotations were used for data integration.
-
-  - Python-based integration methods were benchmarked on the total atlas and a subset
-  atlas using the scIB platform, with overall scores calculated as a weighted mean
-  of batch correction (40%) and bio-conservation (60%).
-
-  - UMAP visualizations of total cells were colored by compartments or tissues across
-  different integration methods.
-
-  - NMF rank selection based on cophenetic correlation coefficients and consistency
-  identified a final rank of 12.
-
-  - Consensus modules (CMs) were defined from cell subsets, with top cell subsets
-  ranked by NMF weights for each factor.
-
-  - CM activities were assigned across scRNA-seq samples from 34 tissues, and each
-  sample was classified into a CMT based on its dominant CM.
-
-  - CMs were validated using GTEx RNA-seq data across 23 tissues, including CMT signature
-  gene expression and selected cell subset markers.
-
-  - Spatial characterization showed distributions of CM08, CM10, CM02, CM03, and CM05
-  in skin and ileum Visium sections.
-
-  - CellCharter identified cellular niches in ileum Visium sections, and CODEX imaging
-  revealed B cells, T cells, and DCs in intestinal Peyer’s patches.
-
-  - CM spatial organization and cell-cell interactions were analyzed using colocalization,
-  aggregation, CellPhoneDB, CellChat, and cytokine responsiveness metrics.
-
-  - CM activity was associated with tissue, sex, and age group, including age-related
-  changes in thymus CM09 and spleen immune subsets.
-
-  - CM05 spleen analysis highlighted NR4A1, NR4A2, and NR4A3 expression and a SCENIC
-  regulatory network with 17 convergent regulons and 8 key regulator TFs.
-
-  - CM12 breast analysis linked inflammatory scores and specialized fibroblast subsets
-  S10 and S06 to menopausal status and pseudotime.
-
-  - Pan-cancer single-cell datasets were summarized by donor, sample, and cell numbers
-  before and after QC across cancer types.
-
-  - 健康CM活性在健康、癌旁非肿瘤和肿瘤样本间存在差异（双尾非配对Wilcoxon检验）。
-
-  - cCMs进行了拓扑与统计评估，connectivity score定义为cCM网络内所有节点间观察到的边数与总可能边数之比。
-
-  - 每个cCM因子按NMF权重排序展示前20个细胞亚群。
-
-  - 泛癌分析识别出四个CMs，并以网络图展示细胞亚群、细胞类型和相关性特异性。
-
-  - 泛癌cCM活性分析中，每个样本按优势cCM分配cCMT。
-
-  - cCMs的组织流行度通过Ro/e度量。
-
-  - cCM02活性在跨癌种健康、癌旁非肿瘤和肿瘤样本间存在差异（双尾非配对Wilcoxon检验）。
-
-  - 图示肿瘤进展过程中多细胞生态系统的重连。
-
-  - 热图展示cCM02细胞亚群组分中响应的细胞因子。
-
-  - cCM02 MCP总体表达在不同细胞亚群及肿瘤与癌旁非肿瘤样本间分布不同（双尾非配对Wilcoxon检验）。
+  - **[L1]** cCM02的活性及其MCP整体表达在肿瘤与癌旁非肿瘤样本的不同细胞亚群中存在差异，且其细胞亚群对细胞因子具有响应异质性。　（位置：Extended
+  Data Fig. 12c,e,f）
 
 
   ## 细胞类型
 
-  - immune cells
+  - 免疫细胞
 
-  - fibroblasts
-
-  - B cells
-
-  - CD8+ T cells
-
-  - CD4+ T cells
-
-  - Endothelial cells
-
-  - Epithelial cells
-
-  - Innate lymphoid cells
-
-  - Myeloid cells
-
-  - Stromal cells
-
-  - non-epithelial cell subsets (76)
-
-  - ABC
-
-  - memory B cells
-
-  - naive B cells
-
-  - conventional dendritic cells
-
-  - dendritic cells
-
-  - germinal centre B cells
-
-  - γδ T cells
-
-  - immature neutrophils
-
-  - mucosal-associated invariant T cells
-
-  - mature neutrophils
-
-  - monocytes
-
-  - macrophages
-
-  - plasmacytoid dendritic cells
-
-  - cardiac muscle cells
-
-  - skeletal muscle cells
-
-  - smooth muscle cells
-
-  - effector memory T cells
-
-  - terminally differentiated effector memory or effector T cells
-
-  - follicular helper T cells
-
-  - memory T cells
-
-  - naive T cells
-
-  - regulatory T cells
-
-  - tissue-resident memory T cells
-
-  - CD16hi NK cells
-
-  - CD16lo NK cells
-
-  - pericytes
-
-  - mast cells
-
-  - melanocytes
-
-  - satellite cells
-
-  - glia
-
-  - ILC3
-
-  - MAIT cells
-
-  - plasmablasts
-
-  - plasma cells
-
-  - GCB cells
-
-  - Tfh
-
-  - Treg
-
-  - CD8 Tem
-
-  - CD8 Temra
-
-  - CD8 Trm
-
-  - CD4 Tm
-
-  - CD4 Tem
-
-  - capillary endothelial cells
-
-  - lymphatic endothelial cells
-
-  - vein endothelial cells
-
-  - artery endothelial cells
+  - 成纤维细胞
 
   - endothelial cells
+
+  - lymphatic endothelial cells
 
   - vascular endothelial cells
 
   - age-associated memory B cells (ABC, B08)
 
-  - germinal centre B cells (B09)
+  - B cells
 
-  - universal fibroblasts (S03, S05)
-
-  - uterus-specific fibroblasts (S11, S12)
+  - fibroblasts
 
   - epithelial cells
 
   - lymphocytes
 
+  - dendritic cells
+
+  - immune cells
+
   - T cells
+
+  - germinal centre B cells (B09)
 
   - neutrophils (M13, M14)
 
@@ -563,646 +234,308 @@ content: '## 结论
 
   - stromal cells
 
-  - IgA-producing plasma cells
+  - B细胞
 
-  - memory CD4 T cells
+  - CD4 T细胞
 
-  - tissue-resident memory CD8 T cells
+  - CD8 T细胞
 
-  - innate lymphoid cells
+  - NK细胞
 
-  - innate immune cells
+  - ILC3
 
-  - gamma delta T cells
+  - γδT细胞
 
-  - myeloid cells
+  - 浆细胞
 
-  - CD8+ effector memory T cells (CD8T02)
+  - 胶质细胞
 
-  - naive T cells (CD8T01)
+  - 上皮细胞
 
-  - regulatory T cells (CD4T08)
+  - 内皮细胞
 
-  - NR4A1-high CD4+ T cells (CD4T03)
+  - 基质细胞
 
-  - immune subsets
+  - 髓系细胞
 
-  - B03
+  - 淋巴细胞
 
-  - B05
+  - CM02/CM03/CM05等多细胞社区
 
-  - I06
+  - 乳腺细胞
 
-  - ABCs (B08)
+  - 乳腺成纤维细胞
 
-  - specialized fibroblast subsets S06, S09 and S10
+  - S06_Fb_ARID5B
 
-  - breast cells
+  - S09_Fb_CEBPB
 
-  - breast ductal tissue
+  - S10_Fb_MXRA5
 
-  - breast lobule
+  - CD4T06_Tm_ANXA1
 
-  - spleen cells
+  - CD8T03_Trm_ITGA1
 
-  - fibroblast S10_Fb_MXRA5
+  - E04_Vein_ACKR1
 
-  - fibroblast S06_Fb_ARID5B
+  - M08_Mph_NLRP3
 
-  - fibroblast S09_Fb_CEBPB
+  - CD4T03_Tn_NR4A1
 
-  - macrophage M08_Mph_NLRP3
+  - B05_Bm_NR4A2
 
-  - macrophage M07_Mph_FCN1
+  - I06_CD16loNK_NR4A2
 
-  - CD8 T CD8T03_Trm_ITGA1
+  - B03_Bn_NR4A2
 
-  - CD4 T CD4T06_Tm_ANXA1
+  - B06_Bm_ITGB1
 
-  - CD4 T CD4T03_Tn_NR4A1
+  - B08_ABC_FCRL5
 
-  - CD4 T CD4T05_Tm_LTB
+  - I03_CD16hiNK_GZMB
 
-  - endothelial E04_Vein_ACKR1
+  - CD4T05_Tm_LTB
 
-  - B cell B05_Bm_NR4A2
+  - B02_Bn_TCL1A
 
-  - B cell B03_Bn_NR4A2
+  - M07_Mph_FCN1
 
-  - B cell B06_Bm_ITGB1
+  - 脾脏细胞
 
-  - B cell B08_ABC_FCRL5
+  - 乳腺成纤维细胞（S06/S09/S10）
 
-  - B cell B02_Bn_TCL1A
+  - 乳腺免疫细胞
 
-  - NK cell I06_CD16loNK_NR4A2
+  - 乳腺上皮细胞
 
-  - NK cell I03_CD16hiNK_GZMB
+  - 乳腺导管/小叶相关细胞
 
-  - S10 fibroblasts
+  - CD8+ T细胞
 
-  - S06 fibroblasts
+  - 癌相关细胞亚群
 
-  - S09 fibroblasts
+  - 肿瘤微环境细胞
 
-  - cancer-associated cell subsets
+  - 泛癌肿瘤细胞
 
-  - CD4 T cells
+  - 非上皮细胞
 
-  - CD8 T cells
+  - 上皮细胞类型
 
-  - NK cells
+  - 细胞亚群
 
-  - fibroblasts/CAFs
+  - 细胞类型
 
-  - neutrophils
+  - 免疫细胞亚群
 
-  - CD8T07_Tex_CXCL13
+  - 固有层细胞
 
-  - CD4T09_Tex_CXCL13
+  - 泛癌图谱中的细胞亚群
 
-  - CD4T10_Th_ISG15
-
-  - CD8T08_Tc_ISG15
-
-  - B13_Bm_FCRL4
-
-  - B14_Bm_ISG15
-
-  - M17_Mph_C1QC
-
-  - M18_Mph_SPP1
-
-  - M19_Mph_ISG15
-
-  - M16_cDC_LAMP3
-
-  - E06_Tip_ESM1
-
-  - I10_CD16hiNK_DNAJB1
-
-  - S22_iCAF_IL6
-
-  - S23_myCAF_ACTA2
-
-  - S24_apCAF_CD74
-
-  - non-epithelial subsets
-
-  - epithelial cell types
-
-  - immune cell subsets
-
-  - cell subsets
-
-  - non-responsive cell subsets
-
-  - epithelium
-
-  - lamina propria
-
-  - nonepithelial subsets
-
-  - cell subsets across 34 tissues
+  - cCM02 细胞亚群
 
 
   ## 通路
 
-  - coordinated intercellular communication
+  - 配体–受体介导的细胞间通讯
 
-  - ligand-receptor-mediated cell-cell communication
+  - 细胞–细胞互作（CellPhoneDB）
 
-  - tissue-level signalling networks
+  - 细胞因子信号
 
-  - 黏膜免疫诱导模块
+  - IL-17C信号
 
-  - 黏膜免疫效应模块
+  - IL-17D信号
 
-  - IgA产生
+  - IL-13信号
 
-  - Ligand–receptor-mediated cell–cell communication
+  - IL-3信号
 
-  - Cytokine-mediated regulatory landscape
+  - EGF信号
 
-  - AP-1 complex (Jun/Fos) signalling
+  - LTα1β2信号
 
-  - Immune tolerance
+  - TL1A信号
 
-  - Thymic involution
+  - IL-21信号
 
-  - T cell dysfunction
+  - OSM信号
 
-  - Coordinated multicellular programmes (MCPs)
+  - IL-4信号
 
-  - SCENIC regulon networks
+  - IL-1信号
 
-  - Tissue microenvironment/niche signalling
+  - IL-7信号
 
-  - Intercellular communication
+  - IL-18信号
 
-  - CM05 regulon
+  - IL-15信号
 
-  - CM06 regulon
+  - IFN信号
 
-  - CM12 regulon
+  - TNF信号
 
-  - convergent regulons
+  - IL-2信号
 
-  - MCP gene expression
+  - IL-27信号
 
-  - fibroblast inflammatory score
+  - IL-12信号
 
-  - inflammatory signaling including HLA
+  - IL-10信号
 
-  - NFKB1/NFKB2
+  - CM05 convergent regulons
 
-  - AP-1 (JUN/JUNB/JUND/FOS/FOSB)
+  - CM06 convergent regulons
 
-  - ETS1/ELF1
+  - CM12 activity/MCP inflammatory program
 
-  - KLF2/KLF6
+  - NF-κB/JUN/FOS/ETS1/ELF1/CREM regulon
 
-  - CREM
+  - HLA/炎症反应
 
-  - ATF3
+  - 炎症评分/炎症信号
 
-  - NR3C1
+  - 雌激素相关信号
 
-  - interferon signalling
+  - 干扰素–IL-18–IL-15细胞间调控轴
 
-  - IL-18 signalling
+  - S100A2/A8/A9相关肿瘤微环境程序
 
-  - IL-15 signalling
+  - CoVarNet多细胞群落共现网络
 
-  - CD8+ T cell-derived IFNγ modulation
-
-  - S100A2/S100A9/S100A8 multicellular programme
-
-  - inflammatory score
-
-  - CXCL13–CXCR3
-
-  - ISG15/IFIT1/IFIT2/IRF7 interferon response
-
-  - IL6–MMP1–CXCL8 inflammatory CAF axis
-
-  - HLA-DRA/HLA-DPA1/CD74 antigen presentation
-
-  - ACTA2/COL10A1/LRRC15 myCAF ECM program
-
-  - C1QC complement
-
-  - SPP1 macrophage program
-
-  - ligand–receptor-mediated cell–cell communication
-
-  - cytokine response
-
-  - cytokine-mediated multicellular regulation
-
-  - immune response enrichment
-
-  - NR4A1/NR4A2/NR4A3 regulon network
-
-  - SCENIC regulon network
-
-  - CellPhoneDB cell-cell interaction
-
-  - CellChat ligand-receptor signaling
-
-  - cytokine responsiveness
-
-  - inflammatory signaling
+  - 配体–受体介导的细胞–细胞通讯
 
   - 细胞因子响应
+
+  - 细胞因子网络
+
+  - 免疫响应
 
 
   ## 基因 Marker
 
-  - DPEP1：Fibroblast S05，up，S05_Fb_DPEP1
+  - NR4A2：B细胞（B03_Bn），up，CM02/CM03相关Visium细胞亚群标记
 
-  - IGFBP2：Fibroblast S11，up，S11_Fb_IGFBP2
+  - NR4A2：CD16lo NK细胞（I06_CD16loNK），up，CM02/CM03相关Visium细胞亚群标记
 
-  - MMP11：Fibroblast S12，up，S12_Fb_MMP11
+  - HSPA1A：B细胞（B07_Bm），up，CM02/CM03相关Visium细胞亚群标记
 
-  - CD36：Pericyte S13，up，S13_Pericyte_CD36
+  - HSPA1A：CD8 Trm细胞（CD8T04_Trm），up，CM02/CM03相关Visium细胞亚群标记
 
-  - RERGL：Smooth muscle cell S14，up，S14_SMC_RERGL
+  - CCR7：CD4 Tn细胞（CD4T02_Tn），up，CM02/CM03相关Visium细胞亚群标记
 
-  - ACTG2：Smooth muscle cell S15，up，S15_SMC_ACTG2
+  - NR4A1：CD4 Tn细胞（CD4T03_Tn），up，CM02/CM03相关Visium细胞亚群标记
 
-  - FBLN5：Smooth muscle cell S16，up，S16_SMC_FBLN5
+  - IL6ST：CD4 Tfh细胞（CD4T04_Tfh），up，CM02/CM03相关Visium细胞亚群标记
 
-  - MMP8：Immature neutrophil M13，up，M13_immNeu_MMP8
+  - GZMK：CD8 Tem细胞（CD8T02_Tem），up，CM02/CM03相关Visium细胞亚群标记
 
-  - CXCR2：Mature neutrophil M14，up，M14_mNeu_CXCR2
+  - ANXA1：CD4 Tm细胞（CD4T06_Tm），up，CM02/CM03相关Visium细胞亚群标记
 
-  - PPARG：Macrophage M11，up，M11_Mph_PPARG
+  - ITGA1：CD8 Trm细胞（CD8T03_Trm），up，CM02/CM03相关Visium细胞亚群标记
 
-  - MT1X：Macrophage M12，up，M12_Mph_MT1X
+  - ITGA1：γδT细胞（I09_gdT），up，CM02/CM03相关Visium细胞亚群标记
 
-  - CD14：Monocyte M05，up，M05_Mo_CD14
+  - KIT：ILC3（I08_ILC3），up，CM02/CM03相关Visium细胞亚群标记
 
-  - FCGR3A：Monocyte M06，up，M06_Mo_FCGR3A
+  - IGHA2：浆细胞（B12_Plasma），up，CM02/CM03相关Visium细胞亚群标记
 
-  - FCN1：Macrophage M07，up，M07_Mph_FCN1
+  - CDH19：胶质细胞（S20_Glia），up，CM02/CM03相关Visium细胞亚群标记
 
-  - CD5L：Macrophage M10，up，M10_Mph_CD5L
+  - TCF21：成纤维细胞（S07_Fb），up，CM02/CM03相关Visium细胞亚群标记
 
-  - NLRP3：Macrophage M08，up，M08_Mph_NLRP3
+  - LTA：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - FOLR2：Macrophage M09，up，M09_Mph_FOLR2
+  - LTB：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - CPA3：Mast cell M15，up，M15_Mast_CPA3
+  - TNF：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - LILRA4：Plasmacytoid dendritic cell M04，up，M04_pDC_LILRA4
+  - IL1B：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - LAMP3：Conventional dendritic cell M03，up，M03_cDC_LAMP3
+  - IL7：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - CLEC9A：cDC1 M01，up，M01_cDC1_CLEC9A
+  - IL18：CM02/CM03/CM05相关niche，up，回肠cellular niche中检测到的富集细胞因子基因（Fig. 3i,j）
 
-  - CD1C：cDC2 M02，up，M02_cDC2_CD1C
+  - SCGB2A2：乳腺细胞（多数亚群），up，绝经后样本表达升高，Fig.4d，并与乳腺癌检测生物标志物报道一致
 
-  - GZMB：CD16hi NK cell I03，up，I03_CD16hiNK_GZMB
+  - SCGB1D2：乳腺细胞（多数亚群），up，绝经后样本表达升高，Fig.4d
 
-  - HSPA1A：CD16hi NK cell I04 / CD8 Trm，up，I04_CD16hiNK_HSPA1A; CD8T04_Trm_HSPA1A
+  - HLA（家族）：多个乳腺细胞亚群，up，绝经前样本表达更高，Supplementary Table 6
 
-  - CREM：CD16hi NK cell I01，up，I01_CD16hiNK_CREM
+  - JUN：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - SYNE2：CD16hi NK cell I02，up，I02_CD16hiNK_SYNE2
+  - GADD45A：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - CXCR6：CD16lo NK cell I07，up，I07_CD16loNK_CXCR6
+  - CLU：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - SELL：CD16lo NK cell I05，up，I05_CD16loNK_SELL
+  - LPL：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - NR4A2：CD16lo NK cell I06 / naive B / memory B，up，I06_CD16loNK_NR4A2; B03_Bn_NR4A2;
-  B05_Bm_NR4A2
+  - SPP1：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - ITGA1：γδ T cell I09 / CD8 Trm，up，I09_gdT_ITGA1; CD8T03_Trm_ITGA1
+  - TNFAIP2：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - SOX4：CD4 naive T cell，up，CD4T01_Tn_SOX4
+  - STC1：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - CCR7：CD4 naive T cell / CD8 naive T cell，up，CD4T02_Tn_CCR7; CD8T01_Tn_CCR7
+  - TNFRSF9：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - NR4A1：CD4 naive T cell，up，CD4T03_Tn_NR4A1
+  - AREG：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - IL6ST：Tfh，up，CD4T04_Tfh_IL6ST
+  - CXCL13：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - FOXP3：Treg，up，CD4T08_Treg_FOXP3
+  - BTG1：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - GZMK：CD8 Tem / CD4 Tem，up，CD8T02_Tem_GZMK; CD4T07_Tem_GZMK
+  - AZGP1：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - GZMH：CD8 Temra，up，CD8T05_Temra_GZMH
+  - THBS2：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - VIPR1：Capillary endothelial cell E03，up，E03_Capillary_VIPR1
+  - C17orf58：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - LYVE1：Lymphatic endothelial cell E05，up，E05_Lymph_LYVE1
+  - CXCL2：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - ACKR1：Vein endothelial cell E04，up，E04_Vein_ACKR1
+  - CFD：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - IGFBP3：Artery endothelial cell E01，up，E01_Artery_IGFBP3
+  - TNFAIP6：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - CA4：Capillary endothelial cell E02，up，E02_Capillary_CA4
+  - LILRB2：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - TNNT2：Cardiac muscle cell S17，up，S17_CMC_TNNT2
+  - LGMN：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - MYOZ1：Skeletal muscle cell S18，up，S18_SkMC_MYOZ1
+  - PDLIM1：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - LAMC1：Fibroblast S03，up，S03_Fb_LAMC1
+  - DCN：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - PI16：Fibroblast S01，up，S01_Fb_PI16
+  - FABP4：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - C7：Fibroblast S02，up，S02_Fb_C7
+  - CCR6：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - CD9：Fibroblast S04，up，S04_Fb_CD9
+  - SOCS3：乳腺细胞，na，CM12 MCP基因，Fig.4d热图中按上/下调分类
 
-  - TCF21：Fibroblast S07，up，S07_Fb_TCF21
+  - COL1A1：S10成纤维细胞，up，S10高表达胶原基因，与50岁以上女性此类成纤维细胞减少的既往报道一致
 
-  - PTGES：Fibroblast S08，up，S08_Fb_PTGES
+  - COL1A2：S10成纤维细胞，up，S10高表达胶原基因，与50岁以上女性此类成纤维细胞减少的既往报道一致
 
-  - MXRA5：Fibroblast S10，up，S10_Fb_MXRA5
+  - COL3A1：S10成纤维细胞，up，S10高表达胶原基因，与50岁以上女性此类成纤维细胞减少的既往报道一致
 
-  - ARID5B：Fibroblast S06，up，S06_Fb_ARID5B
+  - S100A2：cCM02相关肿瘤微环境多数细胞亚群，up，DIALOGUE识别的与cCM02活性升高相关的MCP中S100家族成员上调
 
-  - CEBPB：Fibroblast S09，up，S09_Fb_CEBPB
+  - S100A9：cCM02相关肿瘤微环境多数细胞亚群，up，DIALOGUE识别的与cCM02活性升高相关的MCP中S100家族成员上调
 
-  - DCT：Melanocyte S21，up，S21_Melanocyte_DCT
+  - S100A8：cCM02相关肿瘤微环境多数细胞亚群，up，DIALOGUE识别的与cCM02活性升高相关的MCP中S100家族成员上调
 
-  - CXCL14：Satellite cell S19，up，S19_Satellite_CXCL14
-
-  - CDH19：Glia S20，up，S20_Glia_CDH19
-
-  - SLC4A10：MAIT CD8 T cell，up，CD8T06_MAIT_SLC4A10
-
-  - LTB：CD4 memory T cell，up，CD4T05_Tm_LTB
-
-  - KIT：ILC3，up，I08_ILC3_KIT
-
-  - ANXA1：CD4 memory T cell，up，CD4T06_Tm_ANXA1
-
-  - MKI67：Plasmablast，up，B10_Plasmablast_MKI67
-
-  - IGHG2：Plasma cell，up，B11_Plasma_IGHG2
-
-  - IGHA2：Plasma cell，up，B12_Plasma_IGHA2
-
-  - RGS13：Germinal centre B cell，up，B09_GCB_RGS13
-
-  - TCL1A：Naive B cell，up，B02_Bn_TCL1A
-
-  - CD27：Memory B cell，up，B04_Bm_CD27
-
-  - FCRL5：Age-associated B cell，up，B08_ABC_FCRL5
-
-  - IGHM：Naive B cell，up，B01_Bn_IGHM
-
-  - ITGB1：Memory B cell，up，B06_Bm_ITGB1
-
-  - NR4A2：naive B cells，na，CM05相关Peyer''s patch亚群标记基因
-
-  - NR4A1：naive T cells，na，CM05相关Peyer''s patch亚群标记基因
-
-  - IL6ST：follicular helper T cells，na，CM05相关Peyer''s patch亚群标记基因
-
-  - IGHA2：IgA-producing plasma cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - ANXA1：memory CD4 T cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - ITGA1：tissue-resident memory CD8 T cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - HSPA1A：tissue-resident memory CD8 T cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - KIT：ILC3/innate immune cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - ITGA1：gamma delta T cells/innate immune cells，na，CM02/CM03肠道黏膜相关亚群标记基因
-
-  - ACKR1：vein endothelial cells，na，CM08亚群，与CM10亚群重叠
-
-  - TNF：CD8+ effector memory T cells (CD8T02)，na，Cytokine response identified in CM02,
-  CM08 and CM09 but absent in CM04 and CM06.
-
-  - IL7：—，up，Spatially enriched in the CM02/CM03 (C1) niche in intestine.
-
-  - IL18：—，up，Spatially enriched in the CM02/CM03 (C1) niche in intestine.
-
-  - LTA：—，up，Spatially enriched in the CM05 (C2) niche in intestine.
-
-  - LTB：—，up，Spatially enriched in the CM05 (C2) niche in intestine.
-
-  - NR4A1：NR4A1-high CD4+ T cells (CD4T03); CM05 subsets，up，Accumulates in spleen
-  with ageing; shared signature gene and regulon in CM05 subsets; regulated by multiple
-  key regulators across cell types.
-
-  - NR4A2：CM05 subsets，na，Shared signature gene among CM05 subsets.
-
-  - ATF3：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; acts as a regulatory hub targeting common genes across cell types.
-
-  - FOS：CM05 subsets，na，Key transcription factor gene that is both a regulon and signature
-  gene; AP-1 complex member associated with immune ageing.
-
-  - FOSB：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; AP-1 complex member associated with immune ageing.
-
-  - JUN：CM05 subsets，na，Key transcription factor gene that is both a regulon and signature
-  gene; AP-1 complex member associated with immune ageing.
-
-  - JUNB：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; AP-1 complex member associated with immune ageing.
-
-  - JUND：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; AP-1 complex member associated with immune ageing.
-
-  - KLF6：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; acts as a regulatory hub targeting common genes across cell types.
-
-  - NFKB1：CM05 subsets，na，Key transcription factor gene that is both a regulon and
-  signature gene; acts as a regulatory hub targeting common genes across cell types.
-
-  - SCGB2A2：breast cell subsets，up，CM12 MCP gene; increased in post-menopausal samples
-  across most subsets
-
-  - SCGB1D2：breast cell subsets，up，CM12 MCP gene; increased in post-menopausal samples
-  across most subsets
-
-  - HLA genes：breast cell subsets，up，inflammatory genes more highly expressed in pre-menopausal
-  samples across cell subsets
-
-  - JUN：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig. 4d
-
-  - GADD45A：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - CLU：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig. 4d
-
-  - LPL：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig. 4d
-
-  - SPP1：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - TNFAIP2：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - STC1：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - TNFRSF9：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - AREG：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - CXCL13：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - BTG1：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - AZGP1：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - THBS2：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - C17orf58：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - CXCL2：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - CFD：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig. 4d
-
-  - TNFAIP6：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - LILRB2：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - LGMN：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - PDLIM1：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - DCN：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig. 4d
-
-  - FABP4：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - CCR6：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - SOCS3：breast cells，na，CM12 MCP gene in breast samples; direction shown in Fig.
-  4d
-
-  - COL1A1：S10 fibroblasts，up，High expression in S10 fibroblasts associated with menopause
-
-  - COL1A2：S10 fibroblasts，up，High expression in S10 fibroblasts associated with menopause
-
-  - COL3A1：S10 fibroblasts，up，High expression in S10 fibroblasts associated with menopause
-
-  - S100A2：most cell subsets，up，Upregulated in a TME programme associated with increased
-  cCM02 activity
-
-  - S100A9：most cell subsets，up，Upregulated in a TME programme associated with increased
-  cCM02 activity
-
-  - S100A8：most cell subsets，up，Upregulated in a TME programme associated with increased
-  cCM02 activity
-
-  - IFNG：CD8+ T cells，na，CD8+ T cell-derived IFNγ identified as a critical modulator
-  of the TME compared with TNF
-
-  - CXCL13：CD8T07_Tex_CXCL13 / CD4T09_Tex_CXCL13，up，T-cell exhaustion/chemokine signature
-  in cancer-associated subsets
-
-  - LAYN：CD8T07_Tex_CXCL13，up，T-cell exhaustion signature
-
-  - CD8A：CD8 T cells，up，CD8 T-cell marker
-
-  - CD4：CD4 T cells，up，CD4 T-cell marker
-
-  - CD3G：T cells，up，T-cell marker
-
-  - CXCR3：T/NK cells，up，Chemokine receptor in cancer-associated subsets
-
-  - CCR1：Myeloid/T cells，up，Chemokine receptor in cancer-associated subsets
-
-  - MS4A1：B cells，up，B-cell marker
-
-  - FCRL4：B13_Bm_FCRL4，up，B-memory subset marker
-
-  - PECAM1：E06_Tip_ESM1，up，Endothelial tip-cell marker
-
-  - ESM1：E06_Tip_ESM1，up，Endothelial tip-cell marker
-
-  - NKG7：NK/CD8 T cells，up，Cytotoxic/NK marker
-
-  - FCGR3A：I10_CD16hiNK_DNAJB1，up，CD16hi NK marker
-
-  - DNAJB1：I10_CD16hiNK_DNAJB1，up，Stress-response marker in CD16hi NK subset
-
-  - HSPA1A：I10_CD16hiNK_DNAJB1，up，Stress-response marker in CD16hi NK subset
-
-  - LYZ：Macrophages/dendritic cells，up，Myeloid marker
-
-  - LAMP3：M16_cDC_LAMP3，up，cDC subset marker
-
-  - C1QC：M17_Mph_C1QC，up，Macrophage subset marker
-
-  - SPP1：M18_Mph_SPP1，up，Macrophage subset marker
-
-  - ISG15：CD4T10_Th_ISG15 / B14_Bm_ISG15 / CD8T08_Tc_ISG15 / M19_Mph_ISG15，up，Interferon-response
-  signature
-
-  - IFIT1：ISG15-positive subsets，up，Interferon-response signature
-
-  - IFIT2：ISG15-positive subsets，up，Interferon-response signature
-
-  - IRF7：ISG15-positive subsets，up，Interferon-response signature
-
-  - DCN：Fibroblasts，up，Fibroblast marker
-
-  - IL6：S22_iCAF_IL6，up，Inflammatory CAF marker
-
-  - MMP1：S22_iCAF_IL6，up，Inflammatory CAF/matrix-remodeling marker
-
-  - CXCL8：S22_iCAF_IL6，up，Inflammatory CAF/chemokine marker
-
-  - ACTA2：S23_myCAF_ACTA2，up，Myofibroblastic CAF marker
-
-  - COL10A1：S23_myCAF_ACTA2，up，Myofibroblastic CAF/ECM marker
-
-  - LRRC15：S23_myCAF_ACTA2，up，Myofibroblastic CAF/ECM marker
-
-  - CD74：S24_apCAF_CD74 / M16_cDC_LAMP3，up，Antigen-presentation-associated marker
-
-  - CCL19：S24_apCAF_CD74，up，Antigen-presenting CAF marker
-
-  - SLPI：S24_apCAF_CD74，up，Antigen-presenting CAF marker
-
-  - PTGIS：S24_apCAF_CD74，up，Antigen-presenting CAF marker
-
-  - HLA-DRA：M16_cDC_LAMP3 / S24_apCAF_CD74，up，Antigen-presentation marker
-
-  - HLA-DPA1：M16_cDC_LAMP3 / S24_apCAF_CD74，up，Antigen-presentation marker
-
-  - NR4A1：CM05 subsets，na，Expression analyzed in CM05 subsets and other cells within
-  the same cell types in spleen.
-
-  - NR4A2：CM05 subsets，na，Expression analyzed in CM05 subsets and other cells within
-  the same cell types in spleen.
-
-  - NR4A3：CM05 subsets，na，Expression analyzed in CM05 subsets and other cells within
-  the same cell types in spleen.
-
-  - CD21：B cells，na，CODEX imaging of intestinal Peyer’s patches; B cells marked by
-  CD21.
-
-  - CD3：T cells，na，CODEX imaging of intestinal Peyer’s patches; T cells marked by
-  CD3.
-
-  - CD11c：dendritic cells (DCs)，na，CODEX imaging of intestinal Peyer’s patches; DCs
-  marked by CD11c.'
+  - IFNG：CD8+ T细胞，na，文中引用近期研究指出CD8+ T细胞来源IFNγ是TME关键调节因子'
 evidence: DOI 10.1038/s41586-025-09053-4 | Cross-tissue multicellular coordination
   and its rewiring in cancer | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41586-025-09053-4.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  level_distribution:
+    L0: 2
+    L1: 35
+    L2: 18
+    L3: 1
+  max_level: L3
+  graded_conclusions: 56
+  level_meaning:
+    L0: 无文献来源（推测/常识性陈述）——仅作线索，待补源
+    L1: 有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信
+    L2: 有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信
+    L3: 有文献来源且经大量验证或临床实验/临床队列验证——非常可信

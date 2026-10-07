@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-15 22:09
+last_updated: 2026-10-02 00:18
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,17 +17,20 @@ content: 'skill: academic-figure-skill
 
   params_used:
 
-  版式: 16.5x8.4in CELL=1.0 PANEL_GAP=1.8 axis(2)at=NROWS-0.5-row_pos 色块条x_strip=-1.25
-  w=0.6 srt=90; 验证: SVG元素层(5轴色命中)+PNG栅格层(PIL采样x=880逐色等比例202/201/201/151/101)+OCR文字层(标签上移半格+5轴名可读)
-  三层交叉
+  {"script":"44d_mef2c_as1_audit_map.py","figure_mm":"183x138","dpi":300,"panels":3,"panel_B_labels":"markers
+  1/2/3 + 2-lane banner (y=0.92 / 1.03) + ylim 1.16","panel_A_3prime_text":"moved
+  inside axes y=0.035","panel_C_rows":10,"selfcheck":"text bbox pairwise, texts=74,
+  overlapping_pairs=0, eps=4px2@300dpi","formats":["png","svg","pdf"]}
 
 
   result_summary:
 
-  FigA2 v3 完成并三层验证。经验固化：(1) R base graphics 里 draw_cbar 这类用 par(fig=..,new=TRUE)+plot.window
-  的辅助函数会重置坐标系，任何后于它调用的绘图函数都会画到画布外——所有分组色块/标注必须在其之前调用；(2) axis(2) 的 at 必须用单元格中心(NROWS-0.5-row_pos)而非底边；(3)
-  base graphics 图的验证链=SVG元素层(搜颜色/rgb%)+PNG栅格层(PIL逐列采样比色)+OCR文字层，三层都过才算数；(4) R 的 svg()
-  把文字写成 glyph 引用(无 <text> 节点)，且颜色写成 rgb(%) 百分比——用十六进制 grep 会假阴性'
-evidence: 'record_run(academic-figure-skill): FigA2 v3 完成并三层验证。经验固化：(1) R base graphics
-  里 draw_cbar 这类用 par(fig=..,new=TRUE)+plot.window 的辅助函数会重置坐标系，任何后于它调用的绘图函数都会画到画布外——所有分组色块/标注必须在其之前调用；(2)
-  axis(2) 的 at 必须用单元格中心(NROWS-0.5-row_pos)而非底边；(3) base'
+  44d 审计核对图文字重叠修复完成。根因三处：①Panel B 三段长坐标标签与顶部加粗横幅同处 y≈1.02/1.095 层叠且 ①(15.9%)与②(33.3%)横向贴住；②Panel
+  A "3'' ends ~750 kb apart" 置于轴外 y=-0.02 压住 x 轴刻度线；③Panel C 未列三段坐标。修复：Panel B 改为轨道上数字标记
+  1/2/3 + 虚线引线 + 轴内两条独立横幅（说明行 y=0.92、坐标明细行 y=1.03），ylim 提至 1.16；Panel A 文字移入轴内 y=0.035、箭头
+  y=0.075；Panel C 扩为 10 行列出三段坐标。独立自检脚本 44d_text_overlap_check.py 在 300dpi 下取 74 处
+  Text 包围盒两两求交 → 重叠对 = 0 (PASS)；OCR 复核原糊成一片的 "the onlyhregborBuMBeoiusttingicansee"
+  已消失。产物 290,813 / 215,793 / 46,929 bytes。'
+evidence: 'record_run(academic-figure-skill): 44d 审计核对图文字重叠修复完成。根因三处：①Panel B 三段长坐标标签与顶部加粗横幅同处
+  y≈1.02/1.095 层叠且 ①(15.9%)与②(33.3%)横向贴住；②Panel A "3'' ends ~750 kb apart" 置于轴外 y=-0.02
+  压住 x 轴刻度线；③Panel C 未列三段坐标。修复：Panel B 改为轨道上数字标记 1/2/3 + 虚线引线 + 轴内两条'

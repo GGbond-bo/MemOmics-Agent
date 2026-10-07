@@ -1,0 +1,32 @@
+type: kb_entry
+name: nature-academic-search_empirical
+species: Homo_sapiens
+tissue: general
+direction: general
+assay_type: RNA
+last_updated: 2026-10-02 01:58
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-academic-search_empirical
+content: 'skill: nature-academic-search
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  assemble_full_doc.py + build_evidence.py + build_report_html.py : positioning.md
+  + 31 cards -> full md; cards->evidence.csv; HTML 107KB
+
+
+  result_summary:
+
+  交付物组装链跑通: (1) review/evidence.csv 31 条证据(strong 21/moderate 3/weak 7, 覆盖31 DOI);
+  (2) HTML 报告 107KB 含31竞品卡+分类过滤+漏斗/趋势图+证据表+50引用; (3) positioning_full.md 61KB 供 DOCX。踩坑:
+  子代理精读路线失败——3个子代理中2个 max_iterations 耗尽无完整JSON产出，且日志截断(…(+N chars))导致卡片无法回收；可靠替代=用脚本从
+  fullTextXML 抽取「含数字的结果句」+ aff 标签取机构，再由主代理撰写卡片(实测数字全部逐字来自原文)。'
+evidence: 'record_run(nature-academic-search): 交付物组装链跑通: (1) review/evidence.csv 31
+  条证据(strong 21/moderate 3/weak 7, 覆盖31 DOI); (2) HTML 报告 107KB 含31竞品卡+分类过滤+漏斗/趋势图+证据表+50引用;
+  (3) positioning_full.md 61KB 供 DOCX。踩坑: 子代理精读路线失败——3个子代理中2个 max_iteratio'

@@ -1,0 +1,32 @@
+type: kb_entry
+name: figures_empirical
+species: Homo_sapiens
+tissue: general
+direction: general
+assay_type: RNA
+last_updated: 2026-10-02 02:02
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- figures_empirical
+content: 'skill: figures
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  make_figures.py (matplotlib 3 figs, Arial, ASCII-only labels) + md2docx.py image
+  support + HTML base64 embed
+
+
+  result_summary:
+
+  交付图组定稿: Fig1 领域态势+漏斗 / Fig2 定位矩阵(六路线x三Gap, 右侧红括号标机会带) / Fig3 能力vs可信度散点(31系统). 各出
+  PNG+PDF+SVG 三格式, 无字形缺失, 灰度范围0-255非空白. 踩坑: matplotlib+Arial 下圈码①-⑥与中文标签(分类名/卡名)会缺字形
+  → 全部改 ASCII/英文; 用 warnings.simplefilter(''error'',UserWarning) 让字形缺失直接报错, 比事后 OCR
+  更早发现问题. HTML 用 base64 内嵌3图达966KB自包含.'
+evidence: 'record_run(figures): 交付图组定稿: Fig1 领域态势+漏斗 / Fig2 定位矩阵(六路线x三Gap, 右侧红括号标机会带)
+  / Fig3 能力vs可信度散点(31系统). 各出 PNG+PDF+SVG 三格式, 无字形缺失, 灰度范围0-255非空白. 踩坑: matplotlib+Arial
+  下圈码①-⑥与中文标签(分类名/卡名)会缺字形 → 全部改 ASCII/英文; 用 warnings.simplefil'

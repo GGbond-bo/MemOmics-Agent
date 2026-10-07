@@ -1,0 +1,34 @@
+type: kb_entry
+name: skill_evolution-engine-dir-resolution_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: tooling
+assay_type: RNA
+last_updated: 2026-10-01 15:19
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- skill_evolution-engine-dir-resolution_empirical
+content: 'skill: skill_evolution-engine-dir-resolution
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"script": "results/memomics-afd2d418/scripts/smoke_engine_after_restart.py", "probe":
+  "plotting/deg-volcano-5comps-8sub-R", "checks": ["engine size+mtime", "ENGINE_VERSION
+  content hash", "prefix resolution", "psutil cmdline-filtered webui/server.py start
+  vs engine mtime"], "exit_code": 0}
+
+
+  result_summary:
+
+  唤醒#12 复跑 smoke 全绿：引擎 64578B/mtime 2026-10-01 02:36:16；ENGINE_VERSION=sha256:7e22c3abad22@size:64578@mtime_ns:1790793376370109900@git:0ce87713；前缀解析
+  plotting/deg-volcano-5comps-8sub-R → hermes_home\skills\plotting\deg-volcano-5comps-8sub-R。webui
+  PID 43864/54408 启动 1790784256 < 引擎 1790793376 → 服务仍未重启（用户侧动作）。探针假阳性已二次修复（cmdline
+  过滤 + --port 8899 LISTEN + 祖先豁免），本轮结论正确无噪声。'
+evidence: 'record_run(skill_evolution-engine-dir-resolution): 唤醒#12 复跑 smoke 全绿：引擎
+  64578B/mtime 2026-10-01 02:36:16；ENGINE_VERSION=sha256:7e22c3abad22@size:64578@mtime_ns:1790793376370109900@git:0ce87713；前缀解析
+  plotting/deg-volcano-5comps-8sub-R → hermes_home\skil'

@@ -1,373 +1,480 @@
-pmid: "39971958"
 type: kb_entry
 name: paper_bio_10.1038_s41467-025-56896-6
-doi: "10.1038/s41467-025-56896-6"
 species: Homo_sapiens
 tissue: skeletal_muscle
 direction: other
 assay_type: RNA
-last_updated: 2026-08-18 01:57
+last_updated: 2026-10-07 17:55
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_bio_10.1038_s41467-025-56896-6
-content: '## 结论
+content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
-  - 人类骨骼肌纤维异质性是多维的，变异来源包括肌球蛋白重链亚型、代谢、核糖体和细胞连接蛋白。
+  - **[L2]** Human skeletal muscle fibers are heterogeneous beyond MYH-based classification;
+  heterogeneity is multidimensional.　（验证：原文摘要/结果；基于1050根单肌纤维转录组和1038根单肌纤维蛋白组（Fig.1A,
+  Supplementary Fig.1A, Supplementary Table1））
 
-  - 慢肌和快肌纤维簇可被鉴定，但2X型纤维在表型上与其他快肌纤维无显著区分。
+  - **[L2]** Metabolic, ribosomal, and cell junction proteins are sources of variation
+  between myofibers in addition to myosin heavy chain isoforms.　（验证：原文摘要/结果陈述；单肌纤维转录组/蛋白质组数据，具体图号未在片段中给出）
 
-  - 基于肌球蛋白重链的分类不能充分描述杆状体肌病中肌纤维的表型。
+  - **[L2]** Slow and fast fiber clusters are identified, but type 2X fibers are not
+  phenotypically distinct from other fast fibers.　（验证：原文摘要/结果陈述；单肌纤维转录组/蛋白质组数据，具体图号未在片段中给出）
 
-  - 杆状体肌病中单肌纤维蛋白质组显示向非氧化型纤维的协调转变，且独立于MYH型纤维类型。
+  - **[L2]** MYH-based classifications do not adequately describe myofiber phenotype
+  in nemaline myopathy.　（验证：原文摘要/结果陈述；对nemaline myopathy单肌纤维蛋白质组分析，具体图号未在片段中给出）
 
-  - 通过转录组和蛋白质组分别分析了1050和1038根单肌纤维，实现了单纤维水平的人类骨骼肌异质性研究。
+  - **[L2]** High-sensitivity, high-throughput single muscle fiber transcriptomic
+  and proteomic workflows were developed.　（验证：方法学开发；Fig.1A and Supplementary Fig.1A；转录组1050根/14健康成人，蛋白质组1038根/5健康成人（Supplementary
+  Table1））
 
-  - 开发了单肌纤维转录组和蛋白质组的高灵敏度高通量流程。
+  - **[L2]** 联合单纤维转录组和蛋白质组可检测大量转录本与蛋白，过滤后分别获得925和974根纤维数据，平均每根纤维检测4257±1557个基因和2015±234个蛋白。　（验证：1000
+  fiber transcriptomics and proteomics studies；过滤前后数据与均值见 Figs. 1A、Supplementary Dataset
+  1–4、Supplementary figs. 1B–C。 ｜ 位置：Results 第1段 / Fig.1A；Supplementary Dataset 1–4）
 
-  - 转录组分析通过样本特异分子条形码实现96根纤维混合处理，并进行每纤维约1M读段的深测序。
+  - **[L2]** MYH7/MYH2/MYH1表达排序并计算底部拐点可对肌纤维进行MYH分型；转录组和蛋白质组均显示多数为纯1型（34–35%）和2A型（36–38%），并检测到16–19%的2A/2X混合型。　（验证：Figs.1B–F
+  展示MYH动态范围曲线、阈值与分型分布；Supplementary Table 2 给出分型规则；Supplementary fig.2A 展示个体间变异。 ｜
+  位置：Results 第2段 / Figs.1B–F；Supplementary Table 2；Supplementary fig.2A）
 
-  - 蛋白质组采用21分钟短梯度与DIA-PASEF采集在timsTOF质谱仪上实现高通量与深度。
+  - **[L2]** 纯2X型肌纤维只能在RNA水平检测到，在蛋白质水平检测不到，提示快肌MYH表达至少部分受转录后调控。　（验证：RNA与蛋白分型分布对比见
+  Fig.1E–F；抗体dot blot验证见 Supplementary fig.2B。 ｜ 位置：Results 第2段 / Figs.1E–F；Supplementary
+  fig.2B）
 
-  - 健康成人供体分析中，转录组覆盖1050根纤维，蛋白质组覆盖1038根纤维。
+  - **[L2]** 蛋白质组学MYH分型与抗体dot blot对纯1型和2A型鉴定100%一致，且蛋白质组学对混合纤维和每根纤维内各MYH比例的定量更敏感。　（验证：使用antibody-based
+  dot blot技术验证，两种方法对pure type 1和type 2A鉴定100%一致，见 Supplementary fig.2B。 ｜ 位置：Results
+  第3段 / Supplementary fig.2B）
 
-  - 共检测到27237个转录本和2983个蛋白质；过滤后平均每纤维检测4257±1557个基因和2015±234个蛋白质。
+  - **[L2]** 基于全转录组或全蛋白质组的UMAP降维仅区分快、慢两类纤维，不能区分2A、2X或2A/2X混合型；MYH1以及ACTN3、MYLK2等经典2X标志物不能区分不同快肌纤维类型。　（验证：对6个主成分进行UMAP降维，转录组和蛋白质组UMAP及MYH特征图见
+  Fig.1G–J；MYH1、ACTN3、MYLK2特征见 Supplementary figs.4A–B；主成分分析见 Supplementary figs.3A–B。
+  ｜ 位置：Results 第4段 / Figs.1G–J；Supplementary figs.3A–B,4A–B）
 
-  - 个体内变异大于个体间，可能由纤维长度和横截面积差异导致。
+  - **[L2]** 肌纤维在转录组和蛋白质组中均不按参与者或测试日聚类，提示骨骼肌纤维的个体内变异大于个体间变异。　（验证：转录组和蛋白质组UMAP按参与者或测试日着色见
+  Supplementary figs.3C–E。 ｜ 位置：Results 第4段 / Supplementary figs.3C–E）
 
-  - 大多数蛋白质的变异系数低于20%。
+  - **[L2]** MYH1[+]纤维在整体转录组或蛋白质组层面并不能与其他快肌纤维明显区分，MYH1丰度不足以充分反映骨骼肌纤维的转录组/蛋白质组特征。　（验证：单纤维转录组与蛋白质组相关性分析及UMAP分析（Supplementary
+  figs. 4C–J） ｜ 位置：第一段 / Supplementary figs. 4C–J）
 
-  - 肌肉收缩相关基因（ACTA1、MYH2、MYH7、TNNT1、TNNT3）高表达。
+  - **[L2]** 仅基于单个肌球蛋白重链家族基因/蛋白亚型进行纤维分型可能不足以捕捉骨骼肌纤维的真实异质性；即使使用TPM3、TNNT1、MYL3、ATP2A2等经典慢肌纤维型蛋白，仍分别有约25%和33%的纤维不能被所有基因/蛋白亚型一致分类为纯慢肌纤维。　（验证：转录组与蛋白质组中慢肌亚型与MYH7的Pearson相关分析及分型分析（Supplementary
+  fig. 5A–D） ｜ 位置：Considerable skeletal muscle fiber heterogeneity beyond myosin heavy
+  chain isoforms 章节 / Supplementary fig. 5A–D）
 
-  - 转录组与蛋白质组共享大部分特征，平均UMI计数/LFQ强度相关系数r=0.52。
+  - **[L2]** MYH基于纤维类型主要解释PC2，而PC1代表独立于MYH纤维型的显著异质性，主要由转录组中的细胞-细胞黏附和核糖体含量、蛋白质组中的costamere和核糖体蛋白驱动，并呈连续梯度而非离散亚群。　（验证：PCA、UMAP与过表征分析（Fig.
+  2A–F；Supplementary figs. 6A–E；Supplementary Dataset 5–7） ｜ 位置：Considerable skeletal
+  muscle fiber heterogeneity beyond myosin heavy chain isoforms 章节 / Fig. 2A–F）
 
-  - Type 2X is not a distinct fiber type when the whole transcriptome or proteome
-  is considered.
+  - **[L2]** 慢/快肌纤维型相关变异（PC2驱动因素）在转录组与蛋白质组间高度相关（r=0.663），但独立于MYH纤维型的变异（PC1驱动因素）在转录组与蛋白质组间无相关（r=-0.027），提示该异质性在很大程度上受转录后调控。　（验证：PC1与PC2驱动因素在转录组和蛋白质组间的Pearson相关分析（Fig.
+  2G,H） ｜ 位置：Fiber heterogeneity is post-transcriptionally regulated by ribosomal
+  heterogeneity 章节 / Fig. 2G,H）
 
-  - MYH7 and MYH2 show pronounced on/off expression profiles, whereas MYH1 does not
-  discriminate fast fiber subtypes.
+  - **[L2]** 骨骼肌纤维存在核糖体异质性与专业化：核糖体蛋白可无监督聚类为三个簇，其中ribosomal_cluster_1与RPL38共调控并向PC1正方向升高，ribosomal_cluster_2与RPS13共调控并向PC1负方向升高，ribosomal_cluster_3可视为核心核糖体蛋白。　（验证：蛋白质组PCA、核糖体蛋白无监督层次聚类及80S核糖体结构映射（Fig.
+  3A–E；Supplementary fig. 7C,D；Supplementary Dataset 8） ｜ 位置：Fiber heterogeneity is
+  post-transcriptionally regulated by ribosomal heterogeneity 章节 / Fig. 3A–E）
 
-  - Most skeletal muscle fibers are pure type 1 (34–35%) or type 2A (36–38%), with
-  16–19% hybrid 2A/2X fibers.
+  - **[L2]** 核糖体异质性在骨骼肌纤维中呈转录后调控特征，因为PC1相关的不同核糖体特征在转录组中不可见。　（验证：转录组与蛋白质组中核糖体特征的比较分析（Supplementary
+  fig. 7B） ｜ 位置：Fiber heterogeneity is post-transcriptionally regulated by ribosomal
+  heterogeneity 章节 / Supplementary fig. 7B）
 
-  - Pure type 2X fibers were detected only at the RNA level, not at the protein level,
-  suggesting post-transcriptional regulation of fast MYH expression.
+  - **[L2]** Nemaline肌病使骨骼肌纤维向更快、氧化代谢更低的纤维类型转变。　（验证：对ACTA1-和TNNT1-NM患者及对照（n=3/组）单肌纤维蛋白质组分析，PCA投射到1000纤维健康数据集显示肌病纤维沿PC2下移并与健康快肌重叠；免疫组化验证纤维类型改变（Fig.6A-D,
+  Fig.6H-I）。 ｜ 位置：Fig.6 / Results）
 
-  - Proteomics-based fiber typing showed 100% agreement with antibody-based dot blot
-  for pure type 1 and type 2A fibers and was superior for detecting hybrid fibers.
+  - **[L2]** ACTA1-和TNNT1-NM对MYH基础纤维类型比例影响异质：ACTA1-NM呈1型纤维优势，TNNT1-NM呈1型纤维比例降低/快肌优势。　（验证：免疫组化显示ACTA1-NM患者1型纤维优势而TNNT1-NM相反（Fig.6A）；MYH基础纤维类型比例按参与者展示（Fig.6B），并见Supplementary
+  fig.11A。 ｜ 位置：Fig.6A-B / Supplementary fig.11A）
 
-  - 基于单一肌球蛋白重链(MYH)基因/蛋白异构体的纤维分型不足以捕获骨骼肌纤维的真正异质性
+  - **[L2]** 尽管ACTA1-NM在MYH基础上表现为1型纤维偏移，两种Nemaline肌病的单纤维蛋白质组均更接近快肌纤维。　（验证：单肌纤维蛋白质组PCA及投射到1000纤维健康PCA，显示多数Nemaline肌病纤维沿PC2下移并与健康快肌重叠，Fig.6C-D。
+  ｜ 位置：Fig.6C-D）
 
-  - 多基因/蛋白异构体联合分型会引入额外复杂性，即使对公认的慢纤维特异蛋白也是如此
+  - **[L2]** Nemaline肌病中发生协调的线粒体蛋白减少。　（验证：对差异丰富蛋白进行基因集富集分析，显示线粒体蛋白协调减少，Fig.6H-I。 ｜
+  位置：Fig.6H-I）
 
-  - MYH-based纤维类型只解释了PC2的变异，PC1的变异主要由细胞-细胞粘附、核糖体含量及costamere相关蛋白驱动
+  - **[L2]** ACTA1-和TNNT1-nemaline myopathy对蛋白质组的影响高度相关（r = 0.736）且具有合理重叠。　（验证：单纤维蛋白质组学相关性分析，Supplementary
+  fig. 11AB ｜ 位置：Results（Supplementary fig. 11AB））
 
-  - 慢/快纤维类型无关的异质性呈连续分布，而非离散亚群
+  - **[L2]** TNNT1-nemaline myopathy比ACTA1-nemaline myopathy更严重，表现为更明显的线粒体蛋白减少、免疫系统蛋白增加以及萎缩/发育不良。　（验证：单纤维蛋白质组差异分析、免疫/线粒体富集分析，Fig.
+  6A, 6G–H, Supplementary figs. 11C, 11H–I ｜ 位置：Results（Fig. 6A, 6G–H））
 
-  - 慢型标志蛋白(TPM3、TNNT1、MYL3、ATP2A2)与MYH7相关性高但非完全一致
+  - **[L2]** ACTA1-和TNNT1-nemaline myopathy均上调免疫系统过程；TNNT1-nemaline myopathy还上调细胞黏附。　（验证：富集分析，Fig.
+  6H ｜ 位置：Results（Fig. 6H））
 
-  - 转录组中约25%和蛋白质组中约33%的纤维未被所有慢型标志物归类为纯慢纤维
+  - **[L2]** 两组患者均过表达参与免疫反应和肌膜修复机制的细胞外蛋白，包括annexins（ANXA1/ANXA2/ANXA5）及其互作因子S100A11，提示对肌原纤维不稳定所致损伤的修复反应。　（验证：单纤维蛋白质组学检测，Supplementary
+  figs. 12B–C ｜ 位置：Results（Supplementary figs. 12B–C））
 
-  - Slow/fast fiber type-specific contractile and metabolic profiles are transcriptionally
-  regulated (PC2 transcriptome-proteome correlation r=0.663).
+  - **[L2]** MFAP4在TNNT1-nemaline myopathy中上调而在ACTA1-nemaline myopathy中不变；SKIC8在TNNT1-nemaline
+  myopathy中下调而在ACTA1中不受影响。　（验证：单纤维蛋白质组差异丰度分析，Supplementary fig. 11A ｜ 位置：Results（Supplementary
+  fig. 11A））
 
-  - Fiber type-independent variance is largely post-transcriptionally regulated, as
-  PC1 drivers show no transcriptome-proteome correlation (r=-0.027).
+  - **[L2]** ENSG00000232046_TR1_ORF437（LINC01798）在ACTA1-nemaline myopathy的1型和2A型纤维中较健康对照上调。　（验证：单纤维蛋白质组学，Supplementary
+  figs. 12A, Supplementary Dataset 24 ｜ 位置：Results（Supplementary figs. 12A））
 
-  - Ribosomal protein heterogeneity drives fiber type-independent heterogeneity in
-  skeletal muscle fibers.
+  - **[L2]** ENSG00000215483_TR14_ORF67和ENSG00000229425_TR25_ORF40仅在1型纤维中差异丰度。　（验证：单纤维蛋白质组学，Supplementary
+  Dataset 23 ｜ 位置：Results（Supplementary Dataset 23））
 
-  - Ribosomal proteins form three clusters: two specialized clusters coregulated with
-  RPL38 and RPS13, and one core cluster.
+  - **[L1]** ENSG00000215483_TR14_ORF67此前被报道参与细胞周期调控。　（位置：Results[56]）
 
-  - Ribosomal proteins with variable stoichiometry localize to the ribosome surface
-  and near the mRNA exit tunnel, supporting selective translation.
+  - **[L2]** 核糖体蛋白总体上不受nemaline myopathy影响，但RPS17在ACTA1-nemaline myopathy中下调。　（验证：单纤维蛋白质组学，Fig.
+  6E ｜ 位置：Results（Fig. 6E））
 
-  - LINC01405 在慢肌纤维中特异性高表达，且在骨骼肌中特异，可能参与纤维类型调控。
+  - **[L2]** TNNT1-nemaline myopathy的bulk肌肉活检蛋白质组可重现单纤维分析中的差异蛋白和生物过程，但丧失区分纤维类型及异质性效应的能力。　（验证：bulk蛋白质组分析，n=3/组，Supplementary
+  figs. 13A–D, Datasets 25–27 ｜ 位置：Results（Supplementary fig. 13））
 
-  - RP11-255P5.3（lnc-ERCC5-5）在快肌纤维中特异性高表达。
+  - **[L2]** 两种nemaline myopathy均使MYH-based fiber type与骨骼肌纤维代谢解偶联，向更快、低氧化的肌肉蛋白质组转变。　（验证：单纤维蛋白质组学与MYH分型比较，Fig.
+  6H, Supplementary figs. 11D–I ｜ 位置：Results/Discussion（Fig. 6H））
 
-  - LINC01405 被鉴定为编码微蛋白的基因，其中一个微蛋白产物呈慢肌纤维特异性。
+  - **[L2]** 单肌肉纤维蛋白质组学可揭示靶向免疫印迹难以显现的临床生物学，并说明仅依赖MYH分型描述表型适应存在局限。　（验证：单纤维蛋白质组学与bulk蛋白质组比较，Fig.
+  6, Supplementary fig. 13 ｜ 位置：Discussion）
 
-  - 在 1000 纤维蛋白质组数据中，从 305 个非编码转录本中鉴定出 197 个微蛋白，来自 22 个不同转录本，其中 71 个在慢肌和快肌纤维间差异调节。
+  - **[L2]** 人类骨骼肌纤维可能不应按MYH分为三类，而应按代谢和收缩特性分为慢肌和快肌两个聚类。　（验证：转录组/蛋白质组聚类分析仅稳定识别两个聚类，Discussion
+  ｜ 位置：Discussion）
 
-  - Type 2X fibers may not be a distinct sub-classification of skeletal muscle fibers.
+  - **[L2]** 骨骼肌纤维并非离散聚类，而是沿连续谱分布；除收缩和代谢特征外，细胞连接和翻译机器相关特征也可区分纤维，并存在独立于快慢肌类型的核糖体异质性。　（验证：对14名健康参与者进行单肌纤维转录组学（1000
+  fiber transcriptomics）和单肌纤维蛋白质组学分析；见 Discussion 与 1000 fiber transcriptomics 部分
+  ｜ 位置：Discussion 第1段 / 1000 fiber transcriptomics）
 
-  - Metabolic, ribosomal, and cell junction proteins are major determinants of skeletal
-  muscle fiber heterogeneity.
+  - **[L2]** 单肌纤维蛋白质组学可揭示骨骼肌临床病理生理，其信息深度可与 bulk 组织蛋白质组学相当，并能纳入纤维间异质性和肌纤维类型。　（验证：对
+  nemaline myopathy 患者单肌纤维进行蛋白质组学分析，并与 bulk 蛋白质组分析比较 ｜ 位置：Discussion 第2段）
 
-  - MYH-based fiber typing does not capture the complete heterogeneity of skeletal
-  muscle, particularly under perturbed conditions.
+  - **[L2]** ACTA1- 和 TNNT1-nemaline myopathy 患者肌纤维除 MYH 相关纤维类型比例改变外，还存在氧化和细胞外重塑，且与
+  MYH 纤维类型转换解耦；annexins 等应激相关分泌蛋白上调，可能参与肌膜修复。　（验证：对 ACTA1- 和 TNNT1-nemaline myopathy
+  患者与健康对照的单肌纤维蛋白质组比较，并参考既往 TNNT1 纤维化报道 ｜ 位置：Discussion 第2段）
 
-  - Nemaline myopathies induce a shift towards faster, less oxidative fibers regardless
-  of MYH-based fiber type.
+  - **[L2]** 数据挑战基于 MYH 的经典肌纤维类型定义，提示需要重新定义骨骼肌纤维分类和异质性。　（验证：单肌纤维转录组和蛋白质组揭示除 MYH 外的异质性来源
+  ｜ 位置：Discussion 最后一段）
 
-  - Clustering analyses identify only two distinct clusters (slow and fast fibers)
-  rather than three MYH-based types.
-
-  - Ribosomal heterogeneity across skeletal muscle fibers drives slow/fast-fiber-type-independent
-  heterogeneity.
-
-  - Single muscle fiber proteomics captures depth similar to bulk tissue omics and
-  additionally reveals inter-fiber heterogeneity.
-
-  - Upregulation of annexins in nemaline myopathy fibers may represent a cellular
-  response to rescue severely atrophying fibers.
+  - **[L2]** RNAscope联合免疫组化/免疫荧光可在人骨骼肌活检切片中检测LINC01405、Lnc-ERCC5-5/RP11-255P5.3等lncRNA，并通过MYH2、MYH7和TNNT1标记肌纤维及其亚型。　（验证：8
+  µm固定冰冻人肌肉活检切片进行RNAscope Multiplex Fluorescent Assay V2，3例个体共计数187根肌纤维；10 µm冰冻切片进行MYH7/MYH2与TNNT1免疫荧光染色并成像。
+  ｜ 位置：RNAscope；Immunostaining for muscle sections）
 
 
   ## 细胞类型
 
-  - type 1 muscle fiber
+  - skeletal muscle myofibers
 
-  - type 2A muscle fiber
+  - type 1 slow fibers
 
-  - type 2X muscle fiber
+  - type 2A fast fibers
 
-  - slow fiber
+  - type 2X fast fibers
 
-  - fast fiber
+  - hybrid fibers
+
+  - nemaline myopathy myofibers
 
   - 骨骼肌纤维
 
-  - type 1 (slow) muscle fiber
+  - 慢肌纤维
 
-  - type 2A (fast) muscle fiber
+  - 快肌纤维
 
-  - hybrid 2A/2X muscle fiber
+  - 1型肌纤维
 
-  - type 2X (fast) muscle fiber (not distinct as a separate fiber type)
+  - 2A型肌纤维
 
-  - skeletal muscle fiber
+  - 2X型肌纤维
 
-  - type 1 slow fiber
+  - 1/2A混合型肌纤维
 
-  - type 2A fiber
+  - 2A/2X混合型肌纤维
 
-  - type 2X fiber
+  - 人骨骼肌纤维
 
-  - hybrid type 2A/2X fiber
+  - 慢肌1型纤维
 
-  - hybrid type 1/2A fiber
+  - 快肌2A型纤维
 
-  - Type1
+  - 快肌2X型纤维
 
-  - Hybrid1/2A
+  - 2A/2X混合型纤维
 
-  - Type2A
+  - 1/2A混合型纤维
 
-  - Hybrid2A/2X
+  - hybrid 1/2A肌纤维
 
-  - Type2X
+  - 混合型2A/2X肌纤维
 
-  - slow skeletal muscle fibers
+  - 肌成肌细胞
 
-  - fast skeletal muscle fibers
+  - 肌核
 
-  - skeletal muscle fibers
+  - 单肌纤维
 
-  - type 2X fibers
+  - type 2X 纤维
 
-  - type 2A/2X hybrid fibers
+  - nemaline myopathy 肌纤维
 
-  - slow fibers
+  - 健康人骨骼肌纤维
 
-  - fast fibers
+  - 骨骼肌纤维（single muscle fiber）
 
-  - myonuclei
+  - human skeletal muscle fiber
 
-  - skeletal muscle fiber (m. vastus lateralis)
-
-  - muscle fiber
-
-  - type 1
-
-  - type 2A
-
-  - type 2X
-
-  - hybrid 1/2A
-
-  - hybrid 2A/2X
-
-  - hybrid 1/2X
-
-  - slow
-
-  - fast
-
-  - hybrid
-
-  - slow-twitch muscle fibers
-
-  - fast-twitch muscle fibers
+  - muscle fiber subtype
 
 
   ## 通路
 
-  - cell-cell adhesion
+  - 肌肉收缩
 
-  - costamere signaling
+  - 慢/快肌纤维型相关收缩与代谢程序
 
-  - ribosomal content/protein synthesis
+  - 细胞-细胞黏附
 
-  - contractile machinery
+  - 核糖体含量/细胞质核糖体
 
-  - metabolic pathways
+  - costamere力传递与信号
 
-  - Ribosomal heterogeneity/specialization
+  - 核糖体异质性与专业化
 
-  - Selective translation
+  - 选择性翻译
 
-  - ribosomal heterogeneity
+  - 转录后调控
 
-  - cell junction signaling
+  - 胰岛素信号
 
-  - oxidative metabolism
+  - 氧化磷酸化
 
-  - sarcolemma repair machinery
+  - 线粒体蛋白
 
-  - extracellular remodeling
+  - 细胞外基质
+
+  - 细胞黏附
+
+  - 免疫系统过程
+
+  - 肌膜修复机制
+
+  - 肌原纤维不稳定性损伤修复反应
+
+  - PAF1C–HOX基因转录调控
+
+  - 细胞周期调控
+
+  - 氧化代谢/快肌代谢转换
+
+  - 线粒体蛋白通路
+
+  - 核糖体蛋白
+
+  - 细胞连接（cell junction）
+
+  - 翻译机器（translation machinery）
+
+  - 核糖体异质性 / RPL3-RPL3L 旁系同源替换 / rRNA 2′O-methyl
+
+  - MYH-based 肌纤维类型转换
+
+  - 氧化重塑
+
+  - 细胞外重塑 / 纤维化
+
+  - 肌膜修复机器（sarcolemma repair）
+
+  - 应激相关分泌蛋白反应
 
 
   ## 基因 Marker
 
-  - MYH：skeletal muscle fibers，na，传统肌纤维分类基于肌球蛋白重链亚型（MYH）特征，定义type 1、type 2A和type 2X纤维。
+  - MYH isoforms：skeletal muscle myofibers，na，传统肌纤维分类标记；本文认为MYH不足以描述肌纤维异质性
 
-  - ACTA1：骨骼肌纤维，up，高表达，肌肉收缩相关
+  - MYH7：慢肌纤维/1型肌纤维，up，慢肌纤维标志，用于MYH分型；MYH7阳性定义纯1型纤维。
 
-  - MYH2：骨骼肌纤维，up，高表达，肌肉收缩相关
+  - MYH2：快肌纤维/2A型肌纤维，up，2A型标志，用于MYH分型；MYH2阳性定义2A型或2A/2X混合型。
 
-  - MYH7：骨骼肌纤维，up，高表达，肌肉收缩相关
+  - MYH1：快肌纤维/2X型相关，up，用于2X及2A/2X分型；但全转录组/蛋白质组UMAP不能区分不同快肌纤维类型。
 
-  - TNNT1：骨骼肌纤维，up，高表达，肌肉收缩相关
+  - ACTA1：骨骼肌纤维，up，肌肉收缩相关高表达特征。
 
-  - TNNT3：骨骼肌纤维，up，高表达，肌肉收缩相关
+  - TNNT1：骨骼肌纤维，up，肌肉收缩相关高表达特征。
 
-  - MYH7：type 1 (slow) muscle fiber，up，Defines type 1 fibers; has pronounced on/off
-  expression in transcriptomics and proteomics.
+  - TNNT3：骨骼肌纤维，up，肌肉收缩相关高表达特征。
 
-  - MYH2：type 2A (fast) muscle fiber，up，Defines type 2A fibers; has pronounced on/off
-  expression in transcriptomics and proteomics.
+  - ACTN3：2X型肌纤维相关，na，经典2X纤维标志物，但在全转录组或蛋白质组中不区分不同快肌纤维类型。
 
-  - MYH1：type 2X (fast) muscle fiber，up，Used to define type 2X fibers, but MYH1+ fibers
-  are not distinct from other fast fibers when whole transcriptome/proteome is considered.
+  - MYLK2：2X型肌纤维相关，na，经典2X纤维标志物，但在全转录组或蛋白质组中不区分不同快肌纤维类型。
 
-  - ACTN3：type 2X (fast) muscle fiber，na，Classical marker of type 2X fibers, but does
-  not discriminate between distinct fiber types in UMAP analysis.
+  - MYH7：慢肌1型纤维，up，慢肌纤维型标志；与TPM3、TNNT1、MYL3、ATP2A2慢亚型高度但不完全相关
 
-  - MYLK2：type 2X (fast) muscle fiber，na，Classical marker of type 2X fibers, but does
-  not discriminate between distinct fiber types in UMAP analysis.
+  - MYH2：快肌2A/2X及混合型纤维，up，快肌纤维型相关标志；与MYH7相比，MYH2与较多转录本/蛋白正相关
 
-  - MYH7：type 1 slow fiber，up，慢肌球蛋白重链亚型，作为慢纤维分型的主要参考
+  - MYH1：快肌2X纤维，up，MYH1[+]纤维可基于MYH定量在转录水平识别，但与其他快肌纤维在整体转录组/蛋白质组上不独立；少数转录本或蛋白与MYH1正相关
 
-  - TPM3：slow skeletal muscle fiber，up，established slow fiber type-specific protein；与MYH7高度相关但非完全一致
+  - TPM3：慢肌1型纤维，up，经典慢肌纤维型特异蛋白；与MYH7相关但不完美
 
-  - TNNT1：slow skeletal muscle fiber，up，established slow fiber type-specific protein；与MYH7相关
+  - TNNT1：慢肌1型纤维，up，经典慢肌纤维型特异蛋白；与MYH7相关但不完美
 
-  - MYL3：slow skeletal muscle fiber，up，established slow fiber type-specific protein；与MYH7相关
+  - MYL3：慢肌1型纤维，up，经典慢肌纤维型特异蛋白；与MYH7相关但不完美
 
-  - ATP2A2：slow skeletal muscle fiber，up，established slow fiber type-specific protein；与MYH7相关
+  - ATP2A2：慢肌1型纤维，up，经典慢肌纤维型特异蛋白；与MYH7相关但不完美
 
-  - CHCHD10：skeletal muscle fiber，na，与神经肌肉疾病相关，在纤维间呈连续表达，不依赖MYH纤维类型
+  - CHCHD10：骨骼肌纤维，na，与神经肌肉疾病相关；在UMAP上呈独立于MYH纤维型的连续表达梯度
 
-  - SLIT3：skeletal muscle fiber，na，与肌肉流失相关，呈MYH纤维类型非依赖的连续表达
+  - SLIT3：骨骼肌纤维，na，与肌肉丢失相关；在UMAP上呈独立于MYH纤维型的连续表达梯度
 
-  - CTDNEP1：skeletal muscle fiber，na，与肌肉疾病相关，呈连续表达模式
+  - CTDNEP1：骨骼肌纤维，na，与肌肉疾病相关；在UMAP上呈独立于MYH纤维型的连续表达梯度
 
-  - UGDH：skeletal muscle fiber，na，蛋白质组中与神经系统疾病相关，呈连续表达
+  - UGDH：骨骼肌纤维，na，蛋白质组中与神经系统疾病相关；呈独立于MYH纤维型的连续表达
 
-  - PHIP：skeletal muscle fiber，na，蛋白质组中与胰岛素信号相关，呈连续表达
+  - PHIP：骨骼肌纤维，na，蛋白质组中与胰岛素信号相关；呈独立于MYH纤维型的连续表达
 
-  - HIST1H2AB：skeletal muscle fiber，na，蛋白质组中与转录相关，呈连续表达
+  - HIST1H2AB：骨骼肌纤维，na，蛋白质组中与转录相关；呈独立于MYH纤维型的连续表达
 
-  - RPL38：skeletal muscle fiber，up，Major driver of PC1 positive direction; ribosomal
-  cluster 1; highly expressed in skeletal muscle
+  - RPL18：骨骼肌纤维，down，细胞质核糖体蛋白；在蛋白质组PC1负方向富集
 
-  - RPS13：skeletal muscle fiber，up，Major driver of PC1 negative direction; ribosomal
-  cluster 2; highly expressed in skeletal muscle
+  - RPS18：骨骼肌纤维，down，细胞质核糖体蛋白；在蛋白质组PC1负方向富集
 
-  - RPL18：skeletal muscle fiber，up，Enriched in the negative direction of PC1
+  - RPS13：骨骼肌纤维，down，在PC1负方向富集，并与ribosomal_cluster_2共调控；在骨骼肌中高表达
 
-  - RPS18：skeletal muscle fiber，up，Enriched in the negative direction of PC1
+  - RPL31：骨骼肌纤维，up，在蛋白质组PC1正方向为主要驱动蛋白之一
 
-  - RPL31：skeletal muscle fiber，up，Major driver in the positive direction of PC1
+  - RPL35：骨骼肌纤维，up，在蛋白质组PC1正方向为主要驱动蛋白之一
 
-  - RPL35：skeletal muscle fiber，up，Major driver in the positive direction of PC1
+  - RPL38：骨骼肌纤维，up，在PC1正方向富集，并与ribosomal_cluster_1共调控；在骨骼肌中高表达
 
-  - RPL10A：skeletal muscle fiber，na，Member of ribosomal cluster 1/2; previously shown
-  to regulate selective translation
+  - RPL10A：骨骼肌纤维，na，位于ribosomal_cluster_1或cluster_2，与选择性翻译和发育调控相关
 
-  - RPS19：skeletal muscle fiber，na，Member of ribosomal cluster 1/2; previously shown
-  to regulate selective translation
+  - RPS19：骨骼肌纤维，na，位于异质性核糖体蛋白簇，与选择性翻译调控相关
 
-  - RPS25：skeletal muscle fiber，na，Member of ribosomal cluster 1/2; previously shown
-  to regulate selective translation
+  - RPS25：骨骼肌纤维，na，位于异质性核糖体蛋白簇，与选择性翻译调控相关
 
-  - LINC01405：slow skeletal muscle fibers，up，慢肌纤维特异性表达；RNAscope 验证；编码微蛋白
+  - MYH7：1型肌纤维/慢肌纤维，down，TNNT1-NM中MYH7下调；ACTA1-NM患者表现为1型纤维比例增加。
 
-  - RP11-255P5.3：fast skeletal muscle fibers，up，快肌纤维特异性表达；对应 lnc-ERCC5-5；RNAscope
-  验证
+  - MYH2：快肌纤维/2A型肌纤维，down，ACTA1-NM中MYH2及快肌肌钙蛋白亚型下调。
 
-  - MYH1：type 2X fibers，na，mRNA expression high (70-90%) but no pure type 2X fibers
-  at protein level; hybrid 2A/2X fibers observed.
+  - TNNC2：快肌纤维，down，ACTA1-NM中快肌肌钙蛋白亚型下调。
 
-  - MYH2：type 2A/2X hybrid fibers，na，Protein abundance in hybrid fibers; no pure fast
-  fiber 100% for any MYH isoform.
+  - TNNI2：快肌纤维，down，ACTA1-NM中快肌肌钙蛋白亚型下调。
 
-  - ACTA1：nemaline myopathy muscle fibers，na，Associated with ACTA1-nemaline myopathy;
-  fiber type proportions differ from healthy controls.
+  - TNNT3：快肌纤维，down，ACTA1-NM中快肌肌钙蛋白亚型下调。
 
-  - TNNT1：nemaline myopathy muscle fibers，na，Associated with TNNT1-nemaline myopathy;
-  fibrosis previously reported.
+  - ACTA1：骨骼肌纤维，na，ACTA1致病变异驱动慢肌纤维优势，但异质性明显。
 
-  - MYH7：slow fiber，na，slow contractile isoform marker
+  - TNNT1：骨骼肌纤维，na，TNNT1-NM是唯一明确呈快肌纤维优势的Nemaline肌病亚型。
 
-  - TNNT1：slow fiber，na，slow contractile isoform marker
+  - ENSG00000215483_TR14_ORF67：1型肌纤维，na，也称为LINC00598或Lnc-FOXO1；仅在1型纤维中差异丰度；此前报道参与细胞周期调控[56]
 
-  - TPM3：slow fiber，na，slow contractile isoform marker
+  - ENSG00000229425_TR25_ORF40：1型肌纤维，na，也称为lncNRIP1-2；仅在1型纤维中差异丰度
 
-  - ATP2A2：slow fiber，na，slow contractile isoform marker
+  - ENSG00000232046_TR1_ORF437：1型肌纤维；2A型肌纤维，up，对应LINC01798；在ACTA1-nemaline myopathy中较健康对照上调
 
-  - MYL3：slow fiber，na，slow contractile isoform marker
+  - RPS17：骨骼肌纤维，down，在ACTA1-nemaline myopathy中下调；核糖体蛋白总体不受nemaline myopathy影响
 
-  - MYH2：fast fiber，na，fast contractile isoform marker
+  - ANXA1：骨骼肌纤维，up，两组患者中过表达的细胞外蛋白，参与免疫反应和肌膜修复机制
 
-  - MYH1：fast fiber，na，fast contractile isoform marker
+  - ANXA2：骨骼肌纤维，up，两组患者中过表达的细胞外蛋白，参与免疫反应和肌膜修复机制
 
-  - TNNT3：fast fiber，na，fast contractile isoform marker
+  - ANXA5：骨骼肌纤维，up，两组患者中过表达的细胞外蛋白，参与免疫反应和肌膜修复机制
 
-  - TPM1：fast fiber，na，fast contractile isoform marker
+  - S100A11：骨骼肌纤维，up，annexins互作因子；两组患者中过表达
 
-  - ATP2A1：fast fiber，na，fast contractile isoform marker
+  - MFAP4：骨骼肌纤维，up，促纤维化蛋白；在TNNT1-nemaline myopathy中上调，在ACTA1-nemaline myopathy中不变
 
-  - MYL1：fast fiber，na，fast contractile isoform marker
+  - SKIC8：骨骼肌纤维，down，PAF1C复合体组分，调控HOX基因转录；在TNNT1-nemaline myopathy中下调，在ACTA1-nemaline
+  myopathy中不受影响
 
-  - MYH7：slow-twitch skeletal muscle fibers，na，Antibody-based fiber typing and RNAscope
-  fiber subtype visualization
+  - MYH1：快肌纤维，na，MYH-based fiber type标记；MYH1 mRNA表达在70–90%时是否导致蛋白水平类似MYH1/MYH2尚不清楚
 
-  - MYH2：fast-twitch skeletal muscle fibers，na，Antibody-based fiber typing and RNAscope
-  fiber subtype visualization
+  - MYH2：快肌纤维，na，MYH-based fiber type标记；蛋白水平未识别到纯2X纤维
 
-  - TNNT1：skeletal muscle fibers，na，Immunostaining combined with MYH antibodies
+  - RPL3：骨骼肌纤维，na，核糖体异质性可通过 RPL3 旁系同源替换参与；与骨骼肌肥大相关
 
-  - RP11-255P5.3：skeletal muscle fibers，na，RNAscope detection
+  - RPL3L：骨骼肌纤维，na，核糖体异质性可通过 RPL3L 旁系同源替换参与；与骨骼肌肥大相关
 
-  - LINC01405：skeletal muscle fibers，na，RNAscope detection
+  - ACTA1：nemaline myopathy 肌纤维，na，ACTA1-nemaline myopathy 中纤维类型比例与健康对照存在差异
 
-  - Lnc-ERCC5-5-C1：skeletal muscle fibers，na，RNAscope detection
+  - TNNT1：nemaline myopathy 肌纤维，na，TNNT1-nemaline myopathy 中纤维类型比例与健康对照存在差异，既往报道纤维化
+
+  - MYH：骨骼肌纤维，na，经典 MYH-based 肌纤维类型分类/转换
+
+  - annexins：nemaline myopathy 肌纤维，up，细胞外空间应激相关分泌蛋白上调，参与肌膜修复机器，可能作为严重萎缩肌纤维的细胞救援反应
+
+  - ACTA1：骨骼肌纤维，na，3例重度杆状体肌病患者携带ACTA1致病变异，代表经典严重型
+
+  - TNNT1：骨骼肌纤维，na，3例杆状体肌病患者携带TNNT1致病变异，导致罕见进展型
+
+  - MYH7：骨骼肌纤维，na，抗体分型中使用 anti-MYH7 (A4.840)，稀释 1:200，用于基于 MYH 的纤维分型
+
+  - MYH2：骨骼肌纤维，na，抗体分型中使用 anti-MYH2 (A4.74)，稀释 1:200，用于基于 MYH 的纤维分型
+
+  - LINC01405：human skeletal muscle fiber，na，使用RNAscope探针LINC01405-C2 (#549201-C2)检测肌纤维内RNA点，点密度作为表达量。
+
+  - Lnc-ERCC5-5：human skeletal muscle fiber，na，使用RNAscope探针Lnc-ERCC5-5-C1 (#1276851-C1)检测；文中与RP11-255P5.3检测相关。
+
+  - RP11-255P5.3：human skeletal muscle fiber，na，文中列为RNAscope检测目标之一。
+
+  - MYH2：human skeletal muscle fiber，na，免疫染色标记肌纤维亚型；抗体A4.74-s (1:5)或SC71 (1:25)。
+
+  - MYH7：human skeletal muscle fiber，na，免疫染色标记肌纤维亚型；抗体A4.840 (1:5)或A4.951 (1:25)。
+
+  - TNNT1：human skeletal muscle fiber，na，与MYH7或MYH2联合免疫荧光标记；抗体HPA058448 (1:500)。
 
 
   ## 化合物/化学信息
 
-  - fexofenadine：靶点 histamine H1 receptor | 剂量 540 mg | IC50 — | 模型 human participants
-  | H1-receptor antagonist; does not affect resting skeletal muscle state
+  - lactose (placebo)：靶点 — | 剂量 未注明 | IC50 — | 模型 健康参与者，肌活检前 | 作为安慰剂对照
 
-  - famotidine：靶点 histamine H2 receptor | 剂量 40 mg | IC50 — | 模型 human participants
-  | H2-receptor antagonist; does not affect resting skeletal muscle state
+  - fexofenadine：靶点 H1-receptor | 剂量 540 mg | IC50 — | 模型 健康参与者，肌活检前40分钟 | 不改变静息骨骼肌状态；质控图中无基于条件的聚类
 
-  - xylocaine (lidocaine)：靶点 sodium channels (local anesthetic) | 剂量 0.5 mL of 1%
-  or 2-3 mL of 2% | IC50 — | 模型 human muscle biopsy | local anesthesia before muscle
-  biopsy'
+  - famotidine：靶点 H2-receptor | 剂量 40 mg | IC50 — | 模型 健康参与者，肌活检前40分钟 | 不改变静息骨骼肌状态；质控图中无基于条件的聚类
+
+  - Xylocaïne (lidocaine)：靶点 — | 剂量 0.5 mL, 1%, 不含肾上腺素 | IC50 — | 模型 m. vastus lateralis
+  经皮 Bergström 肌活检 | 局部麻醉
+
+  - Lidocaine (Xylocaine 2%, without epinephrine)：靶点 — | 剂量 2-3 mL | IC50 — | 模型 人体
+  m. vastus lateralis 肌肉活检 | 局部麻醉
+
+  - SDC：靶点 — | 剂量 1% | IC50 — | 模型 单肌纤维裂解缓冲液 | 裂解缓冲液成分
+
+  - Chloroacetamide (CAA)：靶点 — | 剂量 40 mM | IC50 — | 模型 单肌纤维裂解缓冲液 | 烷基化试剂
+
+  - Dithiothreitol (DTT)：靶点 — | 剂量 10 mM | IC50 — | 模型 单肌纤维裂解缓冲液 | 还原剂
+
+  - Tris：靶点 — | 剂量 50 mM, pH 8.5 | IC50 — | 模型 裂解/消化缓冲液 | 缓冲液
+
+  - EGTA：靶点 — | 剂量 7 mM | IC50 — | 模型 relaxing solution | 钙离子螯合剂
+
+  - MgATP：靶点 — | 剂量 4 mM | IC50 — | 模型 relaxing solution | 提供 MgATP
+
+  - Creatine phosphate：靶点 — | 剂量 14.5 mM | IC50 — | 模型 relaxing solution | 能量缓冲体系
+
+  - KCl：靶点 — | 剂量 至 ionic strength 180 mM | IC50 — | 模型 relaxing solution | 调节离子强度
+
+  - Trifluoroacetic acid (TFA)：靶点 — | 剂量 2% in isopropanol | IC50 — | 模型 肽段消化淬灭 |
+  终止消化
+
+  - LysC：靶点 — | 剂量 enzyme:protein 1:500 | IC50 — | 模型 单肌纤维/组织蛋白消化 | 蛋白酶消化
+
+  - Trypsin：靶点 — | 剂量 enzyme:protein 1:100 | IC50 — | 模型 单肌纤维/组织蛋白消化 | 蛋白酶消化
+
+  - Proteinase K：靶点 — | 剂量 — | IC50 — | 模型 SingleShot Cell Lysis kit | 去除不需要的蛋白
+
+  - DNase：靶点 — | 剂量 — | IC50 — | 模型 SingleShot Cell Lysis kit | 去除 DNA
+
+  - Paraformaldehyde (PFA)：靶点 — | 剂量 4% | IC50 — | 模型 10 µm human muscle cryosections
+  | 固定10 min
+
+  - Triton X-100：靶点 — | 剂量 0.1% | IC50 — | 模型 10 µm human muscle cryosections | 透化20
+  min
+
+  - Normal Goat Serum：靶点 — | 剂量 10% | IC50 — | 模型 10 µm human muscle cryosections
+  | 封闭1 h
+
+  - Donkey Serum：靶点 — | 剂量 5% | IC50 — | 模型 8 µm fixed-frozen human muscle sections
+  | RNAscope后封闭
+
+  - ProLong Diamond Antifade Mountant：靶点 — | 剂量 — | IC50 — | 模型 human muscle sections
+  | 封片'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
   beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  level_distribution:
+    L0: 0
+    L1: 1
+    L2: 38
+    L3: 0
+  max_level: L2
+  graded_conclusions: 39
+  level_meaning:
+    L0: 无文献来源（推测/常识性陈述）——仅作线索，待补源
+    L1: 有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信
+    L2: 有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信
+    L3: 有文献来源且经大量验证或临床实验/临床队列验证——非常可信

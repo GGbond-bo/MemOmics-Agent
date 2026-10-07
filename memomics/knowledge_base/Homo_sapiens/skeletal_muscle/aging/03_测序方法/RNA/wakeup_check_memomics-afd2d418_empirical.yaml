@@ -1,0 +1,31 @@
+type: kb_entry
+name: wakeup_check_memomics-afd2d418_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-01 19:50
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup_check_memomics-afd2d418_empirical
+content: 'skill: wakeup_check_memomics-afd2d418
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"wakeup_round": 18, "scope": "readonly", "checks": ["task_plan_mainline_checked=0",
+  "alerts.json=absent", "Rscript.exe=0", "python.exe=0", "figures_latest=smoke_engine_deploy_check.png(10-01
+  03:40)"]}
+
+
+  result_summary:
+
+  唤醒 #18 只读核查：主线区无未勾选、无 alerts.json、无 Rscript/python 分析进程 → 完成契约为空（无残留 in_progress）。新增可观测证据：figures/smoke_engine_deploy_check.png（10-01
+  03:40）已落盘。结论仍为「等待用户 4 项」：① 重启服务后 smoke ② eol 提案拍板 ③ 提交分组 ④ LoopX 暂停 A/B/C。系统文件未动。'
+evidence: 'record_run(wakeup_check_memomics-afd2d418): 唤醒 #18 只读核查：主线区无未勾选、无 alerts.json、无
+  Rscript/python 分析进程 → 完成契约为空（无残留 in_progress）。新增可观测证据：figures/smoke_engine_deploy_check.png（10-01
+  03:40）已落盘。结论仍为「等待用户 4 项」：① 重启服务后 smoke ② eol 提案拍板 ③ 提交分组 ④ LoopX 暂'

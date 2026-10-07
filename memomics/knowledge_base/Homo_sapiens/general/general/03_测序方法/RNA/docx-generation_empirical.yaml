@@ -1,0 +1,30 @@
+type: kb_entry
+name: docx-generation_empirical
+species: Homo_sapiens
+tissue: general
+direction: general
+assay_type: RNA
+last_updated: 2026-10-02 01:50
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- docx-generation_empirical
+content: 'skill: docx-generation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  which pandoc; .venv/Scripts/python.exe -c import docx; python -c import docx
+
+
+  result_summary:
+
+  解释器环境探测结论(可复用): 本机无 pandoc; 项目 .venv 无 python-docx; **系统 python (/d/Python312) 有
+  python-docx** → docx 生成一律走系统 python 的 md2docx.py, 不需要安装任何包, 也不需要问用户授权。持久内核(execute_python)无
+  docx, 不要在其中 import docx。'
+evidence: 'record_run(docx-generation): 解释器环境探测结论(可复用): 本机无 pandoc; 项目 .venv 无 python-docx;
+  **系统 python (/d/Python312) 有 python-docx** → docx 生成一律走系统 python 的 md2docx.py, 不需要安装任何包,
+  也不需要问用户授权。持久内核(execute_python)无 docx, 不要在其中 import docx。'

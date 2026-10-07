@@ -1,0 +1,32 @@
+type: kb_entry
+name: nature-academic-search_empirical
+species: Homo_sapiens
+tissue: general
+direction: methodology
+assay_type: RNA
+last_updated: 2026-10-02 02:25
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-academic-search_empirical
+content: 'skill: nature-academic-search
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  g2_systematic_search.py: 6 keyword groups x EuropePMC+arXiv+OpenAlex, 2023-2026
+
+
+  result_summary:
+
+  G2 系统检索(裁判必做项#1)完成: 496 条去重命中, 真最近邻 42 条. 决定性发现: G2/G3 非真空白 — ''evidence-gated''
+  术语已被 Evidence-Gated Memory Writing(ICIPAI 2026)使用; MetaClaw(2026) 同时命中可审计+多组学; RegenHarness(2026)
+  证据门控+递归自改进; An AI Agent for Fully Automated Multi-omic Analyses(2023) 多组学agent早已存在;
+  BIOGEN(2026) 与本项目重合度最高. 据此把三 Gap 从''真空白''改判为''局部空白/未耦合'', 引用库补 13 条最近邻至 63 条, 产出
+  review/g2_systematic_search.md + differentiation_table.md(四轴差异表).'
+evidence: 'record_run(nature-academic-search): G2 系统检索(裁判必做项#1)完成: 496 条去重命中, 真最近邻
+  42 条. 决定性发现: G2/G3 非真空白 — ''evidence-gated'' 术语已被 Evidence-Gated Memory Writing(ICIPAI
+  2026)使用; MetaClaw(2026) 同时命中可审计+多组学; RegenHarness(2026) 证据门控+递归自改进; An AI Agent'

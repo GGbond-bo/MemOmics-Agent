@@ -1474,6 +1474,12 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     except Exception as e:
         logger.warning(f"translated mark failed: {e}")
     _cb("done", len(blocks), len(blocks), "翻译完成")
+    # 2026-10-07：译完顺手重建双语对照缓存（句级锚定），对照视图打开零等待
+    try:
+        threading.Thread(target=lambda: build_bilingual(hit.get("file") or "", rebuild=True),
+                         daemon=True).start()
+    except Exception:
+        pass
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
                        "translation_file": f"hermes_home/papers/translations/{stem}.zh.md",
                        "blocks": len(blocks), "chars": len(zh)}, ensure_ascii=False, indent=2)
@@ -1785,8 +1791,11 @@ def summarize_all_papers(progress_cb=None) -> str:
                           ensure_ascii=False)
     _cb = progress_cb or (lambda *a, **k: None)
     n = len(pending)
-    results = []
-    for i, e in enumerate(pending):
+    results = [None] * n
+    # 2026-10-07 提速：篇级 2 路并发（篇内块级并发不变；MEMOMICS_LIT_PAPER_WORKERS 可调）
+    _pw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+
+    def _one(i, e):
         name = e.get("file") or e.get("title") or ""
         _cb("paper", i, n, f"[{i + 1}/{n}] 全文提炼: {e.get('title') or name}")
         try:
@@ -1796,8 +1805,14 @@ def summarize_all_papers(progress_cb=None) -> str:
             )))
         except Exception as ex:
             r = {"ok": False, "error": str(ex)[:200]}
-        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
-                        "error": r.get("error", "")})
+        return i, {"paper": e.get("title") or name, "ok": r.get("ok"),
+                   "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=_pw) as ex:
+        for fut in as_completed([ex.submit(_one, i, e) for i, e in enumerate(pending)]):
+            i, row = fut.result()
+            results[i] = row
+    results = [r for r in results if r]
     ok_n = sum(1 for r in results if r["ok"])
     _cb("done", n, n, f"全文提炼完成: {ok_n}/{n} 篇成功")
     return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
@@ -1807,8 +1822,98 @@ def summarize_all_papers(progress_cb=None) -> str:
 
 
 # ── 方向3：结构化知识提取（生物学知识 + 生信知识，批O 2026-08-16）──
+# 2026-10-07 证据链升级（kb-evidence-v1）：生物学结论按 L0-L3 可信度分级，每条带验证方式；
+# 方法/参数类（测序/流程/软件/参数/QC/数据库）不做可信度分级，只要求 source 溯源。
+_EVIDENCE_LEVELS = {
+    "L0": "无文献来源（推测/常识性陈述）——仅作线索，待补源",
+    "L1": "有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信",
+    "L2": "有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信",
+    "L3": "有文献来源且经大量验证或临床实验/临床队列验证——非常可信",
+}
+_EVIDENCE_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3}
+# 湿实验证据关键词（辅助判定 L2/L3；提示词与校验共用一份口径）
+_EVIDENCE_WET_KW = ("immunofluorescence", "immunohistochemistry", "western blot", "qpcr", "rt-qpcr",
+                    "elisa", "flow cytometry", "in vivo", "mouse model", "animal model",
+                    "knockout", "overexpression", "cell culture", "organoid", "免疫荧光",
+                    "免疫组化", "细胞实验", "动物实验", "类器官", "敲除", "过表达")
+_EVIDENCE_CLINICAL_KW = ("clinical trial", "clinical cohort", "patient cohort", "randomized",
+                         "prospective", "临床实验", "临床试验", "临床队列", "患者队列")
+
+
+def _norm_evidence_level(v) -> str:
+    """任意输入 → L0/L1/L2/L3（无法识别时给 L1 = 有文献来源但未验证，最保守的文献级）。"""
+    s = str(v or "").strip().upper()
+    if s in _EVIDENCE_ORDER:
+        return s
+    m = re.search(r"L\s*([0-3])", s)
+    return f"L{m.group(1)}" if m else "L1"
+
+
+def _normalize_conclusion_item(it) -> dict:
+    """结论条目归一化为 {text, evidence_level, validation, locator}（兼容旧字符串格式 → L1）。"""
+    if isinstance(it, str):
+        return {"text": it.strip(), "evidence_level": "L1", "validation": "", "locator": ""}
+    if not isinstance(it, dict):
+        return {"text": str(it), "evidence_level": "L1", "validation": "", "locator": ""}
+    return {
+        "text": str(it.get("text") or it.get("conclusion") or "").strip(),
+        "evidence_level": _norm_evidence_level(it.get("evidence_level") or it.get("level")),
+        "validation": str(it.get("validation") or "").strip(),
+        "locator": str(it.get("locator") or "").strip(),
+    }
+
+
+def _conclusion_text(c: dict) -> str:
+    return (c or {}).get("text") or ""
+
+
+def _evidence_chain_stats(knowledge: dict) -> dict:
+    """汇总一篇文献的证据链：各级条数 + 最高级（写入 YAML 顶层 evidence_chain 字段）。"""
+    bio = (knowledge or {}).get("biology") or {}
+    dist = {"L0": 0, "L1": 0, "L2": 0, "L3": 0}
+    for c in bio.get("conclusions") or []:
+        dist[_norm_evidence_level((c or {}).get("evidence_level"))] += 1
+    max_lv = "L0"
+    for lv in ("L3", "L2", "L1"):
+        if dist[lv] > 0:
+            max_lv = lv
+            break
+    return {"standard": "kb-evidence-v1", "level_distribution": dist,
+            "max_level": max_lv,
+            "graded_conclusions": sum(dist.values()),
+            "level_meaning": _EVIDENCE_LEVELS}
+
+
+def _normalize_knowledge_evidence(knowledge: dict) -> dict:
+    """提炼结果定稿前统一走这里：结论升级为证据链对象（旧字符串格式 → L1），并做 L 级合理性校验。
+
+    校验（写实防虚高）：声称 L2 但 validation 为空且不含湿实验关键词 → 降级 L1；
+    声称 L3 但无临床/队列关键词 → 降级 L2。
+    """
+    bio = (knowledge or {}).get("biology") or {}
+    out = []
+    for raw in bio.get("conclusions") or []:
+        c = _normalize_conclusion_item(raw)
+        if not c["text"]:
+            continue
+        blob = (c["validation"] + " " + c["text"]).lower()
+        if c["evidence_level"] == "L2" and not (c["validation"] or any(k in blob for k in _EVIDENCE_WET_KW)):
+            c["evidence_level"] = "L1"
+        if c["evidence_level"] == "L3" and not any(k in blob for k in _EVIDENCE_CLINICAL_KW):
+            c["evidence_level"] = "L2"
+        out.append(c)
+    if "biology" in (knowledge or {}):
+        knowledge["biology"]["conclusions"] = out
+    return knowledge
+
+
 _KNOWLEDGE_SCHEMA_HINT = (
-    '{"biology":{"conclusions":["主要发现/结论，每条一句"],'
+    '{"biology":{"conclusions":[{"text":"主要结论一句（中文）","evidence_level":"L0|L1|L2|L3（证据链分级：'
+    'L0=无文献来源的推测；L1=有文献来源但原文未做实验验证（综述转述/纯生信分析发现）；'
+    'L2=原文做了实验验证（免疫荧光/免疫组化/Western/qPCR/细胞实验/动物模型/类器官等湿实验）；'
+    'L3=经大量验证或临床实验/临床队列验证）","validation":"原文中支持该级别的验证方式描述'
+    '（如图3B 免疫荧光、队列 n=120；找不到验证描述时留空且级别只能给 L0/L1）",'
+    '"locator":"原文位置提示（章节/图号，如 Results 第2段 / Fig.3B）"}],'
     '"gene_markers":[{"gene":"基因名","cell_type":"细胞类型","direction":"up/down/na","context":"说明"}],'
     '"cell_types":["涉及的细胞类型"],"pathways":["关键通路/信号轴"],'
     '"organoid":[{"name":"类器官名","species":"物种","media":"培养基","cytokines":["细胞因子"],'
@@ -1842,8 +1947,27 @@ def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
     bi = k.get("bioinfo") or {}
     L = [f"# {title}", f"> {meta_line}", ""]
     L.append("## 🧬 生物学知识")
-    for label, key in (("📌 结论", "conclusions"), ("🫁 细胞类型", "cell_types"),
-                       ("🔀 通路", "pathways")):
+    # 证据链（kb-evidence-v1）：结论带 [L0-L3] 可信度级别 + 验证方式 + 原文位置
+    _concs = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
+    _concs = [c for c in _concs if c["text"]]
+    if _concs:
+        _stats = _evidence_chain_stats(k)
+        _dist = _stats["level_distribution"]
+        L.append("### 📌 结论（证据链分级 L0 无来源 → L1 有来源未验证 → L2 实验验证 → L3 临床级）")
+        L.append(f"> 本篇证据分布：L3×{_dist['L3']} · L2×{_dist['L2']} · L1×{_dist['L1']} · L0×{_dist['L0']}"
+                 f"（最高 {_stats['max_level']}）\n")
+        for c in _concs:
+            _line = f"- **[{c['evidence_level']}]** {c['text']}"
+            _meta = []
+            if c.get("validation"):
+                _meta.append(f"验证：{c['validation']}")
+            if c.get("locator"):
+                _meta.append(f"位置：{c['locator']}")
+            if _meta:
+                _line += "　（" + " ｜ ".join(_meta) + "）"
+            L.append(_line)
+        L.append("")
+    for label, key in (("🫁 细胞类型", "cell_types"), ("🔀 通路", "pathways")):
         vals = bio.get(key) or []
         if vals:
             L.append(f"### {label}\n" + "\n".join(f"- {v}" for v in vals) + "\n")
@@ -1935,6 +2059,10 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
     bio = k.get("biology") or {}
     bi = k.get("bioinfo") or {}
     assay = str(tags.get("assay") or "RNA").upper()
+    # 证据链汇总（kb-evidence-v1）：生物条目带 L0-L3 分布；方法/参数类按用户规则只做来源标注
+    chain = _evidence_chain_stats(k)
+    chain_source_only = {"standard": "kb-evidence-v1", "grading": "source_only",
+                         "note": "方法/参数/质控类知识不做可信度分级，来源见 evidence 字段"}
 
     def _record(r, extra_note: str = ""):
         rec = {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)}
@@ -1944,7 +2072,24 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
 
     # 1) 生物学知识条目 —— 每个物种一份（跨物种拆分）
     bio_parts = []
-    for label, key in (("结论", "conclusions"), ("细胞类型", "cell_types"), ("通路", "pathways")):
+    # 证据链（kb-evidence-v1）：结论逐条带 [L0-L3] 级别 + 验证方式 + 原文位置
+    conclusions = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
+    conclusions = [c for c in conclusions if c["text"]]
+    if conclusions:
+        _lines = []
+        for c in conclusions:
+            _seg = f"- **[{c['evidence_level']}]** {c['text']}"
+            _meta = []
+            if c.get("validation"):
+                _meta.append(f"验证：{c['validation']}")
+            if c.get("locator"):
+                _meta.append(f"位置：{c['locator']}")
+            if _meta:
+                _seg += "　（" + " ｜ ".join(_meta) + "）"
+            _lines.append(_seg)
+        bio_parts.append("## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）\n"
+                         + "\n".join(_lines))
+    for label, key in (("细胞类型", "cell_types"), ("通路", "pathways")):
         vals = bio.get(key) or []
         if vals:
             bio_parts.append(f"## {label}\n" + "\n".join(f"- {v}" for v in vals))
@@ -1975,7 +2120,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
                 source="literature", evidence=evidence,
                 verified="partially_verified",
                 species=sp, tissue=ti, direction=dr,
-                kb_category="01_生物学知识", assay_type=assay))
+                kb_category="01_生物学知识", assay_type=assay,
+                evidence_chain=chain))
             _record(r, f"species={sp}")
 
     # 2) 生信知识条目 —— 物种无关，common 域一份
@@ -2011,7 +2157,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             source="literature", evidence=evidence,
             verified="partially_verified",
             domain="common", direction="general",
-            kb_category="03_测序方法", assay_type=assay))
+            kb_category="03_测序方法", assay_type=assay,
+            evidence_chain=chain_source_only))
         _record(r, "domain=common")
 
     # 3) 质控参数条目 —— 物种无关，common 域
@@ -2024,7 +2171,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             content=content, source="literature", evidence=evidence,
             verified="partially_verified",
             domain="common", direction="general",
-            kb_category="02_质控参数", assay_type=assay))
+            kb_category="02_质控参数", assay_type=assay,
+            evidence_chain=chain_source_only))
         _record(r, "domain=common")
 
     # 4) 化合物条目 —— chemistry/compounds/ 每化合物一条（化学类文章）
@@ -2040,7 +2188,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             name=_safe_kb_name(stem, "chem") + f"_{slug}",
             content=c_content, source="literature", evidence=evidence,
             verified="partially_verified",
-            domain="chemistry", direction="compounds"))
+            domain="chemistry", direction="compounds",
+            evidence_chain=chain_source_only))
         _record(r, "domain=chemistry")
     return written, rejected
 
@@ -2079,6 +2228,12 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
         "规则：① 只提取文献明确给出的信息，没有的字段给空数组/空串，禁止编造 ② 基因名/参数值/"
         "阈值/版本号必须原文原样 ③ 参数要带 tool 和 context（如 resolution=0.8 用于聚类）"
         " ④ 化学信息要给剂量/IC50/模型 ⑤ 类器官要给培养基/细胞因子/基质条件。\n"
+        "⑥ 证据链（kb-evidence-v1，重要）：biology.conclusions 每条必须判 evidence_level——"
+        "只根据原文写实判定：原文明确描述了湿实验验证（免疫荧光/免疫组化/Western blot/qPCR/"
+        "细胞实验/动物模型/类器官等）才能给 L2，且 validation 字段必须写出验证方式与图号；"
+        "有临床实验/大队列验证才给 L3；只是作者声称或纯组学分析发现的给 L1；"
+        "没有文献依据的推测给 L0。禁止为了显得可信而拔高级别。"
+        "方法类内容（测序/流程/软件/参数/QC/数据库）不做可信度分级，只需如实提取并带来源。\n"
         f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
         f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
     )
@@ -2100,7 +2255,10 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
             def _know_prompt(_i, chunk):
                 return ("你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
                         "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
-                        "（该片段没涉及的字段给空数组/空串）\n" + chunk)
+                        "（该片段没涉及的字段给空数组/空串）\n"
+                        "证据链：conclusions 每条必须带 evidence_level（L0 无来源/L1 有来源未验证/"
+                        "L2 原文有湿实验验证/L3 临床级验证）+ validation（验证方式与图号，写实判定，"
+                        "找不到验证描述只能给 L0/L1）。\n" + chunk)
 
             # max_tokens 4000 → 10000：实测 24 块里 20 块把 4000 额度全用在 reasoning 上、
             # content 为空 → 每块都白跑一遍再重试。给足额度后一次成型（推理+JSON 都装得下）。
@@ -2119,7 +2277,9 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
             if len(merged) <= 14000:
                 txt = _llm_content(
                     base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
-                    "请合并去重后输出最终的完整 JSON 对象（不要其他文字）:\n" + merged,
+                    "请合并去重后输出最终的完整 JSON 对象（不要其他文字）"
+                    "（结论合并时保留 evidence_level/validation/locator 字段；同一结论有多个级别时取较低的级别，"
+                    "validation 合并写出全部验证依据）:\n" + merged,
                     "lit_knowledge_merge", temperature=0.3, max_tokens=12000,
                     retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
                     no_think=True)
@@ -2146,6 +2306,8 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
                     elif isinstance(v2, str) and v2 and not agg.get(k2):
                         agg[k2] = v2
             knowledge[sec] = agg
+    # 证据链归一化（kb-evidence-v1）：结论升级为带级别对象 + 写实校验（虚高降级）
+    knowledge = _normalize_knowledge_evidence(knowledge)
     bio = knowledge.get("biology") or {}
     bi = knowledge.get("bioinfo") or {}
     if not any(bio.values()) and not any(bi.values()):
@@ -2202,8 +2364,11 @@ def extract_all_knowledge(progress_cb=None) -> str:
                           ensure_ascii=False)
     _cb = progress_cb or (lambda *a, **k: None)
     n = len(pending)
-    results = []
-    for i, e in enumerate(pending):
+    results = [None] * n
+    # 2026-10-07 提速：篇级 2 路并发（篇内块级并发不变；MEMOMICS_LIT_PAPER_WORKERS 可调）
+    _pw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+
+    def _one(i, e):
         name = e.get("file") or e.get("title") or ""
         _cb("paper", i, n, f"[{i + 1}/{n}] 知识提取: {e.get('title') or name}")
         try:
@@ -2213,10 +2378,16 @@ def extract_all_knowledge(progress_cb=None) -> str:
             )))
         except Exception as ex:
             r = {"ok": False, "error": str(ex)[:200]}
-        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
-                        "written": len(r.get("written") or []),
-                        "rejected": len(r.get("rejected") or []),
-                        "error": r.get("error", "")})
+        return i, {"paper": e.get("title") or name, "ok": r.get("ok"),
+                   "written": len(r.get("written") or []),
+                   "rejected": len(r.get("rejected") or []),
+                   "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=_pw) as ex:
+        for fut in as_completed([ex.submit(_one, i, e) for i, e in enumerate(pending)]):
+            i, row = fut.result()
+            results[i] = row
+    results = [r for r in results if r]
     ok_n = sum(1 for r in results if r["ok"])
     _cb("done", n, n, f"知识提取完成: {ok_n}/{n} 篇成功")
     return json.dumps({
@@ -2225,6 +2396,126 @@ def extract_all_knowledge(progress_cb=None) -> str:
         "results": results,
         "note": "结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base 五级目录，带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
+
+
+# ── 一键全流程管线（2026-10-07）：翻译 + 9项摘要 + 证据链知识提取 + 双语缓存重建 ──
+def process_paper_full(file_or_title: str, progress_cb=None, force: bool = False) -> str:
+    """一篇文献的完整入库管线（幂等：已完成的步骤自动跳过，force=True 全部重跑）：
+
+    ① 学术中文翻译（段落级 1:1 对齐）→ ② 9 项全文摘要 → ③ 结构化知识提取（证据链 L0-L3）
+    → ④ 双语对照缓存重建（点译文句→框原文句，打开对照视图零等待）。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    hit = _find_raw_entry(file_or_title)
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    name = hit.get("file") or file_or_title
+    steps = {}
+
+    def _step_cb(label):
+        def _c(phase, done, total, detail):
+            _cb("step", 0, 4, f"[{label}] {detail}")
+        return _c
+
+    # ① 翻译
+    _cb("step", 1, 4, f"① 翻译: {name}")
+    try:
+        r = json.loads(translate_paper(name, progress_cb=_step_cb("翻译"), force=force))
+        steps["translate"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                              "error": r.get("error", "")}
+    except Exception as e:
+        steps["translate"] = {"ok": False, "error": str(e)[:200]}
+    # ② 9 项摘要
+    _cb("step", 2, 4, f"② 全文提炼(9项): {name}")
+    try:
+        r = json.loads(summarize_paper(name, progress_cb=_step_cb("提炼"), force=force))
+        steps["summarize"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                              "error": r.get("error", "")}
+    except Exception as e:
+        steps["summarize"] = {"ok": False, "error": str(e)[:200]}
+    # ③ 证据链知识提取
+    _cb("step", 3, 4, f"③ 知识提取(证据链): {name}")
+    try:
+        r = json.loads(extract_paper_knowledge(name, progress_cb=_step_cb("知识"), force=force))
+        steps["extract"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                            "written": len(r.get("written") or []), "error": r.get("error", "")}
+    except Exception as e:
+        steps["extract"] = {"ok": False, "error": str(e)[:200]}
+    # ④ 双语对照缓存重建（只有翻译存在才有意义；CPU 本地操作，秒级）
+    if steps["translate"].get("ok"):
+        _cb("step", 4, 4, f"④ 双语对照锚定: {name}")
+        try:
+            r = json.loads(build_bilingual(name, rebuild=True))
+            steps["bilingual"] = {"ok": bool(r.get("ok")),
+                                  "modules": len(r.get("modules") or []), "error": r.get("error", "")}
+        except Exception as e:
+            steps["bilingual"] = {"ok": False, "error": str(e)[:200]}
+    else:
+        steps["bilingual"] = {"ok": False, "error": "无译文，跳过"}
+    ok_all = all(s.get("ok") for s in steps.values() if s)
+    _cb("done", 4, 4, f"全流程完成: {name}")
+    return json.dumps({"ok": ok_all, "paper": hit.get("title") or name, "file": name,
+                       "steps": steps,
+                       "note": "翻译→提炼→证据链知识→双语锚定 四步全跑完（已完成步骤幂等跳过）"},
+                      ensure_ascii=False, indent=2)
+
+
+def process_all_papers(progress_cb=None, force: bool = False) -> str:
+    """全库一键全流程（并行 2 篇，MEMOMICS_LIT_PAPER_WORKERS 可覆盖；每篇内部块级仍并发）。
+
+    默认只处理"三步有缺"的文献（全部完成的一律跳过，零成本）；
+    force=True 重跑全部（谨慎：重新调用 LLM，124 篇要跑数小时）。
+    """
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空"}, ensure_ascii=False)
+    if force:
+        pending = lib
+    else:
+        pending = [e for e in lib if not (e.get("translated") and e.get("summary_done")
+                                          and e.get("knowledge_done"))]
+    if not pending:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0, "results": [],
+                           "note": "全部文献都已完成 翻译+提炼+知识提取"},
+                          ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(pending)
+    mw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+    results = []
+    _done = [0]
+    _lock = threading.Lock()
+
+    def _one(e):
+        name = e.get("file") or e.get("title") or ""
+        try:
+            r = json.loads(process_paper_full(name, force=force))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        with _lock:
+            _done[0] += 1
+            i = _done[0]
+        _cb("paper", i, n, f"[{i}/{n}] {'✅' if r.get('ok') else '❌'} {name[:60]}")
+        return {"paper": e.get("title") or name, "ok": r.get("ok"),
+                "steps": {k2: v2.get("ok") for k2, v2 in (r.get("steps") or {}).items()},
+                "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=mw) as ex:
+        futs = [ex.submit(_one, e) for e in pending]
+        for f in as_completed(futs):
+            try:
+                results.append(f.result())
+            except Exception as ex:
+                results.append({"paper": "?", "ok": False, "error": str(ex)[:200]})
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"全流程完成: {ok_n}/{n} 篇")
+    return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
+                       "results": results, "paper_workers": mw,
+                       "note": "翻译+9项提炼+证据链知识+双语锚定 四步管线；每篇已完成步骤幂等跳过。"},
+                      ensure_ascii=False, indent=2)
 
 
 # ── 元数据补全（批O 2026-08-16：引用格式正确性）──

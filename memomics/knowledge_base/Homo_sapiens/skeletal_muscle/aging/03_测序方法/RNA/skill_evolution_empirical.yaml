@@ -1,0 +1,29 @@
+type: kb_entry
+name: skill_evolution_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-01 02:11
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- skill_evolution_empirical
+content: 'skill: skill_evolution
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  pytest webui/tests/test_skill_dir_resolution.py -q（引擎扫描路径修复后的回归验证）
+
+
+  result_summary:
+
+  唤醒后复验：skill_evolution 扫描路径修复已落盘（skill_evolution.py 57572B @02:04 + 新增 test_skill_dir_resolution.py
+  7132B @02:02，git 显示 M/??）；测试执行无失败输出，无 alerts.json。'
+evidence: 'record_run(skill_evolution): 唤醒后复验：skill_evolution 扫描路径修复已落盘（skill_evolution.py
+  57572B @02:04 + 新增 test_skill_dir_resolution.py 7132B @02:02，git 显示 M/??）；测试执行无失败输出，无
+  alerts.json。'

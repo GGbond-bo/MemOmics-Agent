@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-24 17:23
+last_updated: 2026-09-25 23:01
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,14 +17,18 @@ content: 'skill: deg-mixed-design
 
   params_used:
 
-  pseudobulk=ct %*% sparse.model.matrix(~0+sample); filterByExpr(group); 设计矩阵 ~grp+time+grp:time,
-  Young_Pre 参照
+  {"fdr_families":["全表1100","每效应220","每score50","每效应x轴"],"ci":"Hedges-Olkin SE / 1/n+d^2/(2n)","power_sim":"2000
+  reps, d=0.2..0.8, n=7/10","validation":"hand-calc + statsmodels multipletests"}
 
 
   result_summary:
 
-  设计矩阵校验通过(秩6/6非奇异, 对比向量代数正确); pseudobulk 48样本 lib 126K-420K(中位274K), 零比例0.61-0.74;
-  filterByExpr 保留6625基因(12.9%); 分层可行性: TypeI(中位17细胞)/TypeII(25)可分层, RSS 10/48样本零细胞不可分层'
-evidence: 'record_run(deg-mixed-design): 设计矩阵校验通过(秩6/6非奇异, 对比向量代数正确); pseudobulk 48样本
-  lib 126K-420K(中位274K), 零比例0.61-0.74; filterByExpr 保留6625基因(12.9%); 分层可行性: TypeI(中位17细胞)/TypeII(25)可分层,
-  RSS 10/48样本零细胞不可分层'
+  效果量口径修正的配套审计（回应 L1 辩论 5 项 next_actions）。[A] FDR 族敏感性/220 格显著数：全表1100=71、每效应220=111、每score50=90(ExOld
+  14)、每效应×轴=133(ExOld 16/T2D 3/ExYoung 2) → 检验族实质改变星号分布。[B] 配对 QC：24 donors×2 时间点无孤儿、组别
+  donor 10/7/7 → 编号无误；donor 级 r(Pre,Post) 中位 ExYoung +0.495/ExOld +0.413/ExT2D −0.195；剔
+  <50 细胞格后 ExT2D 198 格仍 −0.208 → 负相关非噪声；22 格细胞数<50(最少 2)。[C] CI：Aging 中位宽 2.10(94/220
+  含 0)；运动 1.27-1.58。[D] 功效：n=7 配对(r=.32) d=0.8 仅 0.312、d=0.4 仅 0.113；n=10 配对 0.481/0.137。[E]
+  实现校验：Hedges g 与 d_av 手算差 0.00e+00、BH vs statsmodels 1.11e-16 全通过。'
+evidence: 'record_run(deg-mixed-design): 效果量口径修正的配套审计（回应 L1 辩论 5 项 next_actions）。[A]
+  FDR 族敏感性/220 格显著数：全表1100=71、每效应220=111、每score50=90(ExOld 14)、每效应×轴=133(ExOld 16/T2D
+  3/ExYoung 2) → 检验族实质改变星号分布。[B] 配对 QC：24 donors×2 时间点无孤儿、组别 donor 10/7/7'

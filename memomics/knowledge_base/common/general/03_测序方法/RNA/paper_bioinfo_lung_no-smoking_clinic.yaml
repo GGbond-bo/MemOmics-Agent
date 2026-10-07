@@ -1,11 +1,9 @@
-pmid: "39580524"
 type: kb_entry
 domain: common
 name: paper_bioinfo_lung_no-smoking_clinic
-doi: "10.1038/s41467-024-54434-4"
 direction: general
 assay_type: RNA
-last_updated: 2026-09-17 17:38
+last_updated: 2026-10-07 18:28
 source: literature
 verified: partially_verified
 quality: medium
@@ -13,878 +11,784 @@ auto_trigger:
 - paper_bioinfo_lung_no-smoking_clinic
 content: '## 测序方法
 
-  - whole-exome sequencing (WES) | 平台 — | 建库 — | 深度 228 NAT-matched tumors and 1 tumor-only
-  sample; tumor ~300X, NAT ~100X; sufficient for variant discovery
+  - whole-exome sequencing (WES) | 平台 — | 建库 — | 深度 肿瘤~300X，NAT~100X
 
-  - bulk RNA-seq | 平台 — | 建库 — | 深度 205 tumors and 85 matched NATs; approximately
-  120 M reads per sample
+  - bulk RNA-seq | 平台 — | 建库 — | 深度 约120 M reads/样本
 
-  - tandem mass tag (TMT)-based isobaric labeling proteomics | 平台 — | 建库 — | 深度 229
-  tumor samples and 26 matched NATs; 10,788 proteins
+  - single-cell RNA sequencing (scRNA-seq) | 平台 — | 建库 — | 深度 —
 
-  - phosphoproteomics | 平台 — | 建库 — | 深度 40,738 phosphosites observed in at least
-  30% of samples
+  - scRNA-seq (integrated single-cell RNA sequencing dataset) | 平台 — | 建库 — | 深度 —
 
-  - acetylproteomics | 平台 — | 建库 — | 深度 5,975 acetylation sites observed in at least
-  30% of samples
-
-  - single-cell RNA sequencing (scRNA-seq) | 平台 — | 建库 — | 深度 large-scale NSCLC dataset;
-  details not provided in fragment
-
-  - scRNA-seq | 平台 — | 建库 — | 深度 —
-
-  - WES | 平台 — | 建库 — | 深度 —
-
-  - single-cell | 平台 — | 建库 — | 深度 —
-
-  - exome sequencing | 平台 — | 建库 — | 深度 —
+  - single-cell（未指定技术） | 平台 — | 建库 — | 深度 —
 
   - Whole exome sequencing (WES) | 平台 Illumina NovaSeq | 建库 SureSelect V6-Post (Agilent,
-  CA, USA) | 深度 average 300x per tumor library; 100x per NAT and blood buffy coat
-  library
+  CA, USA) | 深度 肿瘤文库平均300x；NAT和blood buffy coat文库平均100x
 
-  - RNA-Seq | 平台 — | 建库 — | 深度 ≥1 RNA-Seq read（用于支持novel peptide筛选）
+  - RNA-Seq | 平台 — | 建库 — | 深度 —
 
-  - RNA-seq | 平台 — | 建库 — | 深度 —
+  - RNA-seq（Salmon 转录本定量） | 平台 — | 建库 — | 深度 —
 
 
   ## 分析流程
 
-  - WES → somatic small mutation detection → copy-number alteration detection → TMB
-  calculation
+  - WES/RNA-seq/蛋白质组/磷酸化蛋白质组/乙酰化蛋白质组数据生成 → 转录本过滤(60,688→20,088) → 蛋白质组/磷酸化/乙酰化整合 →
+  非负矩阵分解(NMF)聚类 → 鉴定5个多组学亚型
 
-  - bulk RNA-seq → gene expression quantification → alternative splicing isoform discovery
-  → transcript filtering (60,688 to 20,088 transcripts)
+  - 临床/组织学/TNM/生存/治疗反应注释与亚型特征关联分析
 
-  - TMT proteomics/phosphoproteomics/acetylproteomics → log2 ratio quantification
-  to common reference
+  - 整合单细胞RNA-seq数据集评估亚型细胞特异性与组织病理学相关性
 
-  - proteomic/phosphoproteomic/acetylproteomic integration → non-negative matrix factorization
-  clustering → five multiomics subtypes
+  - 临床信息整理（组织学、TNM分期、病理N、复发、辅助治疗）
 
-  - multiomics subtype characterization by genetic mutations, clinical phenotypes,
-  and molecular pathways
+  - 全局蛋白质组/磷酸化蛋白质组/乙酰化蛋白质组定量
 
-  - single-cell RNA-seq integration → cellular specificity and histopathological relevance
-  assessment
+  - 缺失值过滤：保留在229个样本中缺失<30%的特征
 
-  - histological review for tumor-infiltrating lymphocytes → neoantigen and cryptic
-  peptide identification → adjuvant therapy efficacy assessment
+  - NMF聚类鉴定5个多组学亚型
 
-  - Global/phospho/acetylproteomic quantification → 过滤 <30% 缺失特征 (229 样本) → NMF 聚类
-  → 临床变量富集 (Fisher 精确检验) → GSVA/PTM-SEA 通路富集
+  - 临床变量富集分析（Fisher精确检验，P<0.05）
 
-  - NMF clustering of proteome, phosphoproteome, and acetylome datasets to identify
-  NSCLC subtypes
+  - GSVA和PTM-SEA通路富集分析（FDR<0.05，permutation）
 
-  - Feature overlap analysis between NMF subtypes and previous NSCLC studies using
-  Fisher’s exact test
+  - CPTAC NSCLC多组学数据 → 联合NMF亚型聚类
 
-  - Combined NMF analysis integrating 447 patients from our and previous studies
+  - 亚型特征与既往NSCLC多组学亚型进行Fisher精确检验重叠分析
 
-  - Comparison with and without Korean cohort to assess subtype classification stability
+  - 磷酸化蛋白组数据 + 激酶-底物网络数据库(PHONEMeS) → 激酶活性评分
 
-  - Extraction of distinct NMF features (proteins, phosphorylation, acetylation) for
-  Subtype 4
+  - Subtype 4 vs 其他亚型差异表达/磷酸化分析
 
-  - Kinase activity analysis using phosphoproteomic data
+  - Wilcoxon rank-sum检验比较标志物表达
 
-  - Correlation analysis between kinase activity and expression levels
+  - log-rank检验进行癌症特异性总生存分析
 
-  - Survival analysis based on feature expression using log-rank test
+  - 各亚型 vs NAT的差异表达基因（DEG）计算 → 各亚型 vs 其他亚型的DEG（DEGsubtype）比较 → 与细胞类型特异性基因进行置换富集分析
+  → 与组织病理学特征相关分析 → 拷贝数签名/WGD分析 → TMB比较 → 蛋白质/PTM/激酶通路分析
 
-  - ROC curve analysis to evaluate SLK (S347) as a Subtype 4 marker
+  - UMAP 展示 Subtypes 1–5 特异性细胞类型 → 使用 DEGsubtype 计算模块评分 → 组织学与临床特征比较 → 联合 NMF 分析 →
+  WGD 相关 CN15/CN16 信号富集分析 → 激酶/突变/拷贝数分析
 
-  - Combined NMF subtyping
+  - 基因表达/蛋白活性与细胞类型或免疫簇富集评分进行回归分析
 
-  - Phosphoproteomic kinase activity estimation using PHONEMeS
+  - 免疫调节因子与HTE肿瘤及免疫细胞的相关性分析
 
-  - Differential expression analysis between Subtype 4 and other subtypes
+  - 免疫调节因子与TILs的相关性分析
 
-  - Survival analysis using log-rank tests
+  - 在本队列及CPTAC、Satpathy、Gillette等外部肺癌多组学队列中比较相关性方向
 
-  - Subtype overlap analysis using Fisher''s exact test
+  - 免疫簇/细胞类型与总生存/无复发生存的HR分析
 
-  - DEGs for each subtype compared to NAT samples
+  - cryptic MAP负荷/免疫簇/APM/TIL分组 → 多组学亚型富集分析（Fisher精确检验，Benjamini-Hochberg校正） → Kaplan-Meier生存分析（log-rank
+  Mantel-Cox检验） → 相关性分析（线性回归，协变量为样本批次和组织学诊断） → 单细胞和组织病理TIL分析
 
-  - DEGsubtype analysis (each subtype vs other subtypes)
+  - FFPE肿瘤和正常样本(NAT或血沉棕黄层)提取基因组DNA → SureSelect V6-Post构建WES文库 → Illumina NovaSeq测序
+  → bcl2fastq转换BCL为Fastq
 
-  - Permutation-based enrichment of DEG/DEGsubtype sets against cell type-specific
-  genes from integrated scRNA-seq dataset
+  - FastQC (v0.11.9) 质控/检查adaptor和overrepresented sequence → BWA-MEM (v0.7.17) 比对到GENCODE
+  GRCh38.p13 v32 primary assembly → Picard SortSam坐标排序和MarkDuplicates (v2.23.1) 标记重复
 
-  - Correlation of DEGsubtype findings with histopathological features
+  - GATK4 BQSR (v4.1.8.0) 使用dbSNP、Mills和1000G已知变异进行碱基质量重校准
 
-  - Multiomics/NMF analysis integrating CPTAC LUAD and LSCC datasets to identify Subtype
-  3
+  - GATK4 Mutect2 (v4.1.8.0) 体细胞变异检测：肿瘤-配对正常模式，一个无配对正常样本用tumor-only模式；panel-of-normals
+  somatic-hg38_1000g_pon.hg38.vcf.gz；germline去除 somatic-hg38_af-only-gnomad.hg38.vcf.gz
 
-  - Copy-number signature analysis and WGD assessment
+  - GATK4 GetPileupSummaries计算read支持参考 → GATK4 CalculateContamination计算交叉样本污染 → GATK4
+  FilterMutectCalls过滤 → GATK4 funcotator (v4.2.0.0) 注释 → maftools (v2.8.0570) 合并MAF
 
-  - TMB comparison between Subtype 3 and other subtypes
+  - GATK4 HaplotypeCaller (v4.1.8.0) 胚系变异检测 (-ERC GVCF, -G StandardAnnotation, -G
+  AS_StandardAnnotation) → GenomicsDBImport → GenotypeGVCFs联合基因分型 → VariantRecalibrator/ApplyVQSR对SNP和indel进行VQSR
+  → funcotator注释
 
-  - Protein, PTM, and kinase pathway analysis
+  - CNVkit (v0.9.871) 检测DNA体细胞拷贝数变异；绝对拷贝数≥4为amplification，≥2.5且<4为gain，0.5-1.5为原文截断的拷贝数状态标注
 
-  - copy number signature overlap → CNV enrichment → co-mutation analysis → protein-level
-  GSEA → kinase activity estimation → drug response/IC50 in organoids
+  - 蛋白裂解液离心（14,500 g, 4 °C, 5 min）→ BCA法测蛋白浓度
 
-  - cell type- and pathway-based clustering → immune cluster identification (HTE,
-  CTE, NAT-enriched) → scRNA-seq validation using top-300 DEGs → survival analysis
-  → pathway enrichment analysis comparing HTE and CTE
+  - DTT还原（95 °C, 10 min, 20 mM）→ 碘乙酰胺烷基化（40 mM, 室温暗处30 min）
 
-  - Regression analysis of gene expression or protein activity and enrichment scores
-  for cell type or immune clusters → correlation with HTE tumors, immune cells, epithelial
-  cells, and TILs → cross-cohort validation in this cohort and other lung cancer multiomics
-  studies
+  - 加入12%磷酸和S-trap结合缓冲液形成胶体→上S-Trap柱离心捕获→洗涤→Trypsin/Lys-C消化（37 °C, 6 h）
 
-  - Immune subtyping based on cell type and pathway enrichment scores → cell type-based
-  clustering with tumor and NAT samples and pathway-based clustering with tumor samples
+  - 依次用消化缓冲液、0.2%甲酸、0.2%甲酸/50%乙腈离心洗脱肽段→C18脱盐干燥→NanoDrop A205测肽浓度
 
-  - WES-derived somatic mutations in coding regions → neoantigen prediction → MS confirmation
-  of confirmed neoantigen candidates
+  - 构建common reference pool：从各样本取10 μg混合，用于每个TMT batch的134N通道
 
-  - Identification of peptides from non-coding and non-annotated transcripts → selection
-  of cryptic MHC class I-associated peptides (MAPs) → confirmation of cryptic MAPs
-  based on expression threshold
+  - TMTpro 16-plex标记：每样本250 μg肽，1 mg试剂，孵育1 h，取1.8 μg标记肽LC-MS/MS确认标记效率≥95%，羟胺淬灭，合并脱盐
 
-  - UMAP visualization of scRNA-seq data using DEGHTE and DEGCTE
+  - Mid-pH RP fractionation：Shimadzu LC20A，XBridge BEH C18，流速0.5 mL/min，梯度洗脱，收集96个fraction并合并为24个非连续fraction；取95%合并为12个非连续fraction用于PTM分析
 
-  - Linear regression model with sample batch and histological diagnosis covariates
-  for correlations between cryptic MAP number and immune/cell type enrichment scores
+  - 磷酸肽富集：IMAC，Ni-NTA琼脂糖，EDTA剥离，FeCl3加载，肽段结合30 min，上清用于后续乙酰肽富集，磷酸肽洗脱脱盐
 
-  - Kaplan-Meier survival analysis with log-rank Mantel-Cox test
+  - 乙酰赖氨酸肽富集：PTMScan Ac-K kit，IMAC洗脱物合并为4个fraction，IAP缓冲液溶解，乙酰赖氨酸抗体孵育4 °C 3 h，洗涤，0.15%
+  TFA洗脱，C18脱盐
 
-  - Enrichment analysis of multiomics subtypes using two-sided Fisher''s exact test
-  with Benjamini-Hochberg adjustment
+  - LC-MS/MS：Ultimate 3000 RSLC nano + Q Exactive HF-X，数据依赖采集，MS1 120,000分辨率，350–1500
+  m/z，AGC 3e6，Top15 MS2，用于全局蛋白质组和PTM分析
 
-  - Multiomics profiling (phosphoproteome/global proteome/acetylome) → subtype identification
-  → validation in 462 NSCLC patients → clinical/histopathological association → patient-derived
-  organoid drug testing
+  - 多阶段蛋白质组数据库搜索：1) 主数据库搜索鉴定 canonical peptides；2) 使用 CustomProDB 生成突变蛋白序列并结合 Unimod
+  2355 种修饰鉴定 variant/modified peptides；3) 从上一阶段未鉴定谱图中鉴定 novel peptides（假基因/lncRNA/UTR/新异构体/融合基因）→
+  每个阶段独立用 target-decoy 计算 FDR，仅保留 1% FDR 鉴定结果 → 上一阶段未鉴定谱图进入下一阶段
 
-  - MHC-binding prediction → immunopeptidomics validation for recurrent cryptic MAPs
+  - PSM重打分与验证：MS-GF+/Comet搜库 → Percolator重打分 → 1% FDR验证 → 剔除冲突PSM → BLAST比对（Uniprot/RefSeq/Gencode，允许≤1个氨基酸替换）
+  → 去除移码肽 → 要求≥1条RNA-Seq read和可定量PSM → 获得1045条新序列
 
-  - WES preprocessing: DNA isolation from FFPE tumor and normal samples (NATs or blood
-  buffy coat if NAT unavailable) → SureSelect V6-Post WES library generation → Illumina
-  NovaSeq sequencing → bcl2fastq BCL-to-Fastq → FastQC v0.11.9 QC → BWA v0.7.17 BWA-MEM
-  alignment to GENCODE GRCh38.p13 v32 → Picard SortSam → Picard MarkDuplicates v2.23.1
-  → GATK4 BQSR v4.1.8.0
+  - 蛋白定量：Proteome Discoverer v2.4/SequestHT搜库（UniProt human v2021.01+179污染物） → 过滤共隔离50%、reporter
+  S/N 10% → 批次内按common reference归一化 → log2 ratio
 
-  - Somatic variant calling: GATK4 Mutect2 v4.1.8.0 (paired normal mode; tumor-only
-  for one sample without matching normal) → GATK4 GetPileupSummaries → GATK4 CalculateContamination
-  → GATK4 FilterMutectCalls → GATK4 Funcotator v4.2.0.0 annotation → maftools v2.8.0
-  MAF merge
+  - 修饰位点定量：汇总修饰位点对应肽丰度 → 同全局蛋白TMT归一化 → 两组分归一化 → log2 ratio
 
-  - Germline variant calling: GATK4 HaplotypeCaller v4.1.8.0 in GVCF mode → GATK4
-  GenomicsDBImport v4.1.8.0 → GATK4 GenotypeGVCFs v4.1.8.0 → GATK4 VariantRecalibrator
-  and ApplyVQSR for SNP and indel recalibration → GATK4 Funcotator annotation
+  - 缺失值处理：保留所有肿瘤中缺失<30%的特征 → 使用impute R包KNN填补（k=5）
 
-  - Copy number alteration identification: CNVkit v0.9.8; amplification if absolute
-  copy number >=4; gain if absolute copy number >=2.5 and <4; genes with absolute
-  copy number 0.5–1.5 labeled by copy number status
+  - NMF分型：拼接全局蛋白、磷酸化蛋白、乙酰化蛋白矩阵 → 剔除标准差最低5%特征 → scale/z-score → NMF rank 2-10，Brunet算法，2000
+  max iterations，重复50次 → 根据cophenetic correlation coefficient选最佳k → 200 runs、5000
+  max iterations稳健聚类 → 样本分配，cluster membership ≥0.5为核心样本
 
-  - Protein lysate centrifugation (14,500 g, 4 °C, 5 min) → BCA protein quantification
-  → storage at -80 °C
+  - 联合NMF与既往NSCLC比较：整合本研究与CPTAC LUAD/LSCC队列 → 取共同特征 → NMF rank 5、200 runs、5000 max
+  iterations → 比较各研究亚型
 
-  - Reduction with 20 mM DTT at 95 °C for 10 min → alkylation with 40 mM iodoacetamide
-  in dark at RT for 30 min
+  - 既往研究分型稳健性比较：按各研究参数重新聚类（Gillette: 4 ranks/200 runs/5000 iterations；Satpathy: 5
+  ranks/500 runs/5000 iterations；Lehtio: 6 ranks/100 runs/5000 iterations；Xu 2020使用上调蛋白列表）
+  → Fisher exact检验OR/p
 
-  - S-Trap colloidal protein capture → tryptic digestion with Trypsin/Lys-C (1:25
-  w/w) at 37 °C for 6 h → peptide elution and C18 desalting
+  - 富集分析：磷酸化蛋白用PTM-SEA，全局/磷酸化/乙酰化蛋白用GSVA；使用MSigDB hallmark/KEGG/Reactome/WikiPathways/GO中200-1000个基因的通路；PTM-SEA使用±7
+  aa flanking序列、NES、nperm=100
 
-  - Common reference pool preparation and TMTpro 16-plex labeling with 250 μg peptide
-  per sample and 1 mg TMT reagent
+  - 选择 MSigDB Hallmark 通路基因集和 PTMsigDB 修饰位点特征 → ssGSEA/PTM signature 分析识别 NMF 亚型特征通路
 
-  - Labeling efficiency check by LC-MS/MS (≥95% fully labeled) → quenching with 5%
-  hydroxylamine → pooling and C18 desalting
+  - CNVkit 基因级拷贝数 → 计算 cytoband 均值 → 线性回归（Subtype + DX）→ BH 校正 → adj p<0.05 显著 CNV
 
-  - Mid-pH reversed-phase fractionation (96 fractions pooled to 24; 12 non-consecutive
-  fractions for PTM analysis)
+  - Salmon 转录本定量 → tximport 转为基因级表达矩阵 → DESeqDataSetFromTximport → DESeq2 负二项模型（Group
+  + DX + rna:batch）→ BH 校正 → adj p<0.05 显著 DEG
 
-  - IMAC phosphopeptide enrichment using Fe3+-charged Ni-NTA beads → acetylpeptide
-  enrichment using Ac-K antibody beads
+  - 蛋白/磷酸化/乙酰化特征 → 线性回归（Group + DX + Batch）→ BH 校正 → adj p<0.05 显著 DEP
 
-  - LC-MS/MS on Ultimate 3000 RSLC nano coupled to Q Exactive HF-X
+  - 229 例 NSCLC OS 数据 → Kaplan-Meier 生存曲线 → log-rank 比较五个 NMF 亚型 → BH 校正两两比较；feature-wise
+  top50% vs bottom50% → CPH 判定预后方向，log-rank nominal p<0.001
 
-  - 肽段鉴定（动态修饰、最小长度、Percolator重打分、1% FDR） → 冲突PSM剔除 → novel peptide BLAST过滤（UniProt/RefSeq/Gencode，≤1个氨基酸替换）
-  → 去移码肽段 → 保留至少1条RNA-Seq read且可定量PSM的肽段 → 蛋白/磷酸化/乙酰化定量（Proteome Discoverer v2.4 +
-  SequestHT，TMT归一化） → 缺失值过滤（<30%）和KNN插补（k=5） → NMF多组学亚型聚类（秩2-10，稳健聚类） → 与CPTAC LUAD/LSCC联合NMF及既往NSCLC研究验证
-  → PTM-SEA和GSVA通路/特征富集
+  - 磷酸化蛋白质组数据 → DEPP分析 → 使用PHONEMeS先验网络与decoupleR run_mlm推断激酶活性 → BH校正
 
-  - Select Hallmark pathway gene sets (MSigDB) for ssGSEA and PTM signatures database
-  (PTMsigDB) for modification site-specific signatures → identify differentially enriched
-  CNVs: convert gene-level copy numbers from CNVkit to cytoband-level by mean copy
-  numbers → linear regression with Subtype and DX covariates → BH-adjusted p < 0.05
-  → identify DEGs: import Salmon transcript-level estimates with tximport to gene-level
-  expression matrix → DESeqDataSetFromTximport → DESeq negative binomial model with
-  design Group + DX + rna:batch → BH-adjusted p < 0.05 → identify DEPs: linear regression
-  with Group, DX, and Batch covariates → BH-adjusted p < 0.05 → survival analysis:
-  Kaplan-Meier for five NMF subtypes with OS and NSCLC-death event, log-rank test,
-  pairwise BH adjustment → feature-wise survival: top 50% vs bottom 50% expression
-  for each protein/PTM using Kaplan-Meier, prognostic direction by Cox proportional-hazards
-  coefficient sign, log-rank nominal p < 0.001
+  - 单细胞数据集local_extended.rds → 基于DEGs生成subtype-specific基因集 → 与tumor_primary（及NAT比较时normal_adjacent）细胞类型特异性基因比较
 
-  - Select top 1% of features by statistical significance for survival-associated
-  features
+  - NSCLC转录组 → Xcell推断64种细胞类型富集分数 → z-score标准化 → CancerSubtypes共识聚类 → PAM三聚类 → 按NAT匹配和Xcell免疫分数划分HTE/CTE
 
-  - Estimate kinase activity from differentially expressed phosphorylation using decoupleR::run_mlm
-  with PHONEMeS prior knowledge network
+  - NSCLC肿瘤转录组 → GSVA七条免疫相关通路 → z-score标准化 → k-means二聚类 → 高通路富集为HTE
 
-  - Compare subtype-specific genes with cell type-specific genes from local_extended.rds
-  for single-cell subtype distribution
+  - 细胞类型富集/免疫簇状态 → MASS/GLM回归分析TILs；CoxPHFitter Cox回归分析OS/RFS，校正临床组织学和样本批次
 
-  - Perform cell type-based immune microenvironment clustering using Xcell enrichment
-  scores, z-score normalization, consensus clustering, and PAM
+  - 患者转录组 → ARACNe肺癌regulon网络 → viper推断蛋白活性 → 与免疫调节因子、细胞富集/免疫簇相关性分析；整合驱动突变数据库
 
-  - Perform pathway-based immune clustering using GSVA on seven curated immune-related
-  pathways, z-score normalization, and k-means
+  - Satpathy/Gillette/本队列 → 64种细胞类型富集分数z-score → 整合 → 共识聚类 → PAM三聚类映射NAT/HTE/CTE
 
-  - Test TIL patterns, overall survival, and relapse-free survival with cell types
-  and immune clusters using regression/Cox models
-
-  - Infer putative regulators associated with immune landscape using ARACNe regulon
-  networks, viper protein activity, immunomodulator correlation, and driver mutations
-
-  - Validate immune landscape in integrated NSCLC cohorts using z-score normalization,
-  consensus clustering, and PAM
-
-  - Predict neoantigens and cryptic peptides from mutated peptides and non-canonical
-  peptides using HLA typing, binding affinity prediction, and MS evidence
-
-  - HLA binding prediction for neoantigen candidates → confirmed cryptic peptides
-  with FPKM >= 1 in tumor samples
-
-  - Patients separated by high/low cryptic peptide load and by HTE/CTE or high/low
-  APM → four categories → over-representation of each multi-omics subtype calculated
-  by two-sided Fisher''s exact test
-
-  - CPTAC data preprocessing: discard features with >30% missing values across all
-  tumors → k-NN imputation using k=5 → downstream analyses
+  - 突变肽（9-12mer）→ OptiType鉴定HLA → MHCflurry/NetMHCpan预测结合 → MS确认为confirmed neoantigen；非经典肽来自假基因/lncRNA/UTR/新异构体
+  → 肿瘤表达过滤（FPKM<1为不表达）→ 出现于>2肿瘤且未在至少1正常样本中预测为cryptic peptide
 
 
   ## 软件/包
 
-  - non-negative matrix factorization (NMF) （）：clustering to identify multiomics subtypes
+  - NMF （）：多组学聚类鉴定NSCLC亚型
 
-  - NMF （R）：多组学亚型聚类
+  - NMF （R）：多组学NMF聚类
 
   - GSVA （R）：通路富集分析
 
-  - PTM-SEA （）：PTM 富集分析
+  - PTM-SEA （R）：磷酸化/修饰位点集富集分析
 
-  - PHONEMeS （）：Kinase-substrate network database used for kinase activity score estimation
+  - PHONEMeS （）：基于激酶-底物网络从磷酸化蛋白组数据估计激酶活性
 
-  - bcl2fastq （）：Convert Illumina BCL binary files to Fastq
+  - NMF （）：联合非负矩阵分解进行NSCLC亚型聚类
 
-  - FastQC v0.11.9（Java）：Sequencing read quality and adaptor/overrepresented sequence
-  check
+  - UMAP （）：展示单细胞类型特异性亚型特征
 
-  - BWA v0.7.17（C）：Alignment to reference genome using BWA-MEM
+  - NMF （）：联合 NMF 分析验证 WGD 阳性患者比例及亚型特征
 
-  - Picard SortSam/MarkDuplicates v2.23.1（Java）：Coordinate sorting and duplicate marking
+  - bcl2fastq （）：将Illumina BCL文件转换为Fastq文件
 
-  - GATK4 BQSR v4.1.8.0（Java）：Base quality score recalibration
+  - FastQC v0.11.9（）：测序read质量、adaptor和overrepresented sequence检查
 
-  - GATK4 Mutect2 v4.1.8.0（Java）：Somatic variant calling
+  - BWA v0.7.17（）：使用BWA-MEM比对到参考基因组
 
-  - GATK4 GetPileupSummaries v4.1.8.0（Java）：Read support reference for contamination
-  estimation
+  - Picard SortSam （）：按坐标排序BWA输出
 
-  - GATK4 CalculateContamination v4.1.8.0（Java）：Cross-sample contamination calculation
+  - Picard MarkDuplicates v2.23.1（）：检查/标记重复read，标注optical duplicates和library duplicates
 
-  - GATK4 FilterMutectCalls v4.1.8.0（Java）：Filter raw Mutect2 calls
+  - GATK4 BQSR v4.1.8.0（）：碱基质量分数重校准
 
-  - GATK4 Funcotator v4.2.0.0（Java）：Variant annotation
+  - GATK4 Mutect2 v4.1.8.0（）：体细胞变异检测
 
-  - maftools v2.8.0（R）：Merge annotated MAF files
+  - GATK4 GetPileupSummaries v4.1.8.0（）：创建已知变异位点read支持参考
 
-  - GATK4 HaplotypeCaller v4.1.8.0（Java）：Germline variant calling
+  - GATK4 CalculateContamination v4.1.8.0（）：计算交叉样本污染比例
 
-  - GATK4 GenomicsDBImport v4.1.8.0（Java）：Import single-sample GVCFs into GenomicsDB
+  - GATK4 FilterMutectCalls v4.1.8.0（）：过滤Mutect2原始变异
 
-  - GATK4 GenotypeGVCFs v4.1.8.0（Java）：Joint genotyping
+  - GATK4 funcotator v4.2.0.0（）：变异注释，生成注释VCF和MAF
 
-  - GATK4 VariantRecalibrator v4.1.8.0（Java）：VQSR recalibration
+  - maftools v2.8.0570（R）：合并注释MAF文件
 
-  - GATK4 ApplyVQSR v4.1.8.0（Java）：Apply VQSR
+  - GATK4 HaplotypeCaller v4.1.8.0（）：胚系变异检测
 
-  - CNVkit v0.9.8（Python）：Somatic copy number variation detection
+  - GATK4 GenomicsDBImport v4.1.8.0（）：导入单样本GVCF到GenomicsDB
 
-  - Proteome Discoverer v2.4（）：肽段/蛋白定量及TMT归一化
+  - GATK4 GenotypeGVCFs v4.1.8.0（）：联合基因分型
 
-  - SequestHT （）：蛋白数据库搜索
+  - GATK4 VariantRecalibrator v4.1.8.0（）：SNP/indel变异质量重校准
 
-  - Percolator （）：PSM重打分
+  - GATK4 ApplyVQSR v4.1.8.0（）：应用VQSR到联合VCF
 
-  - MS-GF+ （）：PSM冲突检测
+  - CNVkit v0.9.871（）：检测DNA体细胞拷贝数变异
 
-  - Comet （）：PSM冲突检测
+  - Proteome Discoverer v2.4（）：主数据库搜索
 
-  - BLAST （）：novel peptide序列比对过滤
+  - SequestHT （）：主数据库搜索引擎
 
-  - impute R package （R）：KNN缺失值插补
+  - Percolator （）：PSM 重打分并控制 FDR
 
-  - NMF R-package （R）：多组学NMF聚类分析
+  - ptmRS （）：磷酸化/乙酰化位点定位
 
-  - GSVA （R）：global/phospho/acetyl蛋白质组通路富集
+  - CustomProDB （）：基于患者胚系和体细胞突变生成变异蛋白序列
 
-  - PTM-SEA （R）：磷酸化蛋白质组PTM特征富集
+  - msconvert v3.0.1（）：MS raw 文件转换为 MGF
 
-  - ssGSEA2.0 （R）：通过ssgsea-cli.R运行PTM-SEA
+  - MODplus v1.0（）：在定制数据库中搜索变异和修饰肽段
 
-  - Salmon （）：transcript-level quantification
+  - MS-GF+ v2021.09（）：搜索非编码来源 novel peptides
 
-  - tximport （R）：import Salmon transcript-level estimates and convert to gene-level
-  expression matrix
+  - StringTie v2.1.7（）：预测 novel transcripts
 
-  - DESeq2 （R）：differential expression analysis using DESeq negative binomial model
+  - Arriba v1.2.0（）：预测融合基因
 
-  - CNVkit （Python）：gene-level copy number detection
+  - Comet v2021.02.0（）：匹配 novel isoform 三框翻译肽段
 
-  - MSigDB （）：Hallmark pathway gene sets for ssGSEA
+  - Proteome Discoverer v2.4（）：TMT肽段丰度归一化与蛋白定量
 
-  - PTMsigDB （）：modification site-specific signatures
+  - SequestHT （）：搜库引擎
 
-  - decoupleR （R）：Infer kinase activity from differentially expressed phosphorylation
-  using multivariate linear model (run_mlm)
+  - MS-GF+ （）：PSM搜库
 
-  - PHONEMeS （）：Prior knowledge network for kinase/phosphatase and substrate interactions
+  - Comet （）：PSM搜库
 
-  - Xcell （R）：Gene set enrichment analysis to infer enrichment scores of 64 cell types
+  - Percolator （）：PSM重打分与FDR验证
 
-  - CancerSubtypes （R）：Consensus clustering
+  - BLAST BLAST98（）：新肽序列与人类蛋白序列比对过滤
 
-  - MASS （R）：Regression analysis for TIL patterns
+  - impute （R）：KNN缺失值填补
 
-  - GLM （R）：Regression analysis for TIL patterns
+  - NMF （R）：多组学NMF聚类分型
 
-  - CoxPHFitter （Python）：Cox proportional hazards regression for overall survival
-  and relapse-free survival
+  - GSVA （R）：全局/磷酸化/乙酰化蛋白通路富集
 
-  - ARACNe （R）：Obtain regulon networks of lung cancer
+  - PTM-SEA （R）：磷酸化蛋白PTM特征富集
 
-  - viper （R）：Calculate protein activity from regulon networks
+  - ssGSEA2.0 （R）：PTM-SEA实现，通过ssgsea-cli.R运行
 
-  - GSVA （R）：Pathway enrichment scoring for immune-related pathways
+  - CNVkit （Python）：检测基因级拷贝数变异
 
-  - MHCflurry （）：Predict binding affinity of mutated peptides to patient HLAs
+  - Salmon （）：转录本水平定量
 
-  - NetMHCpan （）：Predict binding affinity of mutated peptides to patient HLAs
+  - tximport （R）：将 Salmon 转录本水平估计导入并转换为基因水平表达矩阵
 
-  - OptiType （）：Identify patient HLAs
+  - DESeq2 （R）：差异表达基因分析，使用 DESeq 函数和负二项分布模型
 
-  - GraphPad Prism （）：determination of IC50 values
+  - decoupleR （R）：推断激酶活性
 
-  - BLAST （）：Basic local alignment search tool
+  - PHONEMeS （）：提供激酶/磷酸酶-底物先验知识网络
 
-  - NMF （R）：Nonnegative matrix factorization
+  - Xcell （R）：推断64种细胞类型富集分数
 
-  - Non-smooth Non-negative Matrix Factorization （）：Biclustering of gene expression
-  data
+  - CancerSubtypes （R）：共识聚类
 
-  - GSVA （R）：Gene set variation analysis for microarray and RNA-seq data
+  - MASS （R）：TILs回归分析
 
-  - decoupleR （R）：Ensemble of computational methods to infer biological activities
-  from omics data
+  - GLM （R）：TILs回归分析
 
-  - PHONEMeS （）：Efficient modeling of signaling networks derived from large-scale
-  mass spectrometry data
+  - CoxPHFitter （Python）：Cox比例风险回归分析OS/RFS
 
-  - CancerSubtypes （R/Bioconductor）：Molecular cancer subtype identification, validation
-  and visualization
+  - ARACNe （R）：获取肺癌regulon网络
 
-  - ARACNe-AP （）：Gene network reverse engineering through adaptive partitioning inference
-  of mutual information
+  - viper （）：推断蛋白活性
 
-  - MHCflurry 2.0（）：Improved pan-allele prediction of MHC Class I-presented peptides
-  by incorporating antigen processing
+  - GSVA （）：基于免疫相关通路的富集评分
 
-  - NetMHCpan 4.1（）：Improved predictions of MHC antigen presentation
+  - MHCflurry （）：预测突变肽与HLA结合亲和力
 
-  - NetMHCIIpan 4.0（）：Improved predictions of MHC antigen presentation
+  - NetMHCpan （）：预测突变肽与HLA结合亲和力
 
-  - OptiType （）：Precision HLA typing from next-generation sequencing data
+  - OptiType （）：鉴定患者HLA
+
+  - Maftools （R）：分析癌症体细胞变异
+
+  - CNVkit （Python）：从靶向DNA测序中检测和可视化全基因组拷贝数
+
+  - FACETS （R）：高通量DNA测序的等位基因特异性拷贝数和克隆异质性分析
+
+  - DESeq2 （R）：RNA-seq数据的倍数变化和离散度估计
+
+  - HISAT （）：RNA-seq转录本水平表达分析中的比对
+
+  - StringTie （）：RNA-seq reads的转录组重建/转录本组装
+
+  - Ballgown （R）：RNA-seq转录本水平表达分析
+
+  - GffRead （）：GFF utilities
+
+  - GffCompare （）：GFF utilities
+
+  - IsoformSwitchAnalyzeR （R）：分析全基因组可变剪接变化及其功能后果
+
+  - DRIMSeq （R）：基因组学中多变量计数结果的Dirichlet-multinomial分析
+
+  - CPAT （）：基于无比对逻辑回归模型的编码潜力评估
+
+  - HMMER （）：序列同源性/profile HMM搜索
+
+  - SignalP 5.0（）：使用深度神经网络预测信号肽
+
+  - IUPred2A （）：依赖氧化还原状态和蛋白结合的背景依赖性蛋白无序预测
+
+  - STAR （）：超快速通用RNA-seq比对
+
+  - phosphoRS （）：使用质谱进行磷酸化位点定位
+
+  - customProDB （R）：从RNA-Seq数据生成定制蛋白数据库用于蛋白质组学搜索
+
+  - MODplus （）：使用质谱稳健且无限制地鉴定翻译后修饰
+
+  - MS-GF+ （）：蛋白质组学通用数据库搜索工具
+
+  - Comet （）：开源MS/MS序列数据库搜索工具
 
 
   ## 关键参数
 
-  - WES.read depth = tumor ~300X; NAT ~100X（variant discovery）
+  - WES.read depth = 肿瘤~300X，NAT~100X（变异发现）
 
-  - bulk RNA-seq.read depth = approximately 120 M reads per sample（deep coverage）
+  - bulk RNA-seq.read depth = 约120 M reads/样本（深度覆盖，基因表达定量和可变剪接异构体发现）
 
-  - transcriptomic analysis.transcript filtering = 60,688 transcripts acquired; 20,088
-  selected（low-count genes across samples）
+  - 蛋白质组/磷酸化蛋白质组/乙酰化蛋白质组.检测阈值 = 至少在30%样本中观察到（保留并定量蛋白、磷酸化位点、乙酰化位点）
 
-  - proteomics/phosphoproteomics/acetylproteomics.quantification threshold = observed
-  in at least 30% of samples（protein, phosphosite, and acetylation site quantification）
+  - 转录组.转录本选择 = 从60,688个转录本中保留20,088个（过滤低计数基因后进行后续分析）
 
-  - TMT proteomics.normalization = log2 ratio to common reference（protein/phosphosite/acetylation
-  quantification）
+  - 特征过滤.missing values = <30%（在229个样本中保留缺失率<30%的特征）
 
-  - TMB.score = 2.7（229 tumors）
+  - 临床变量富集.P值 = <0.05（双侧Fisher精确检验）
 
-  - NMF.number of subtypes = 5（multiomics clustering）
+  - GSVA/PTM-SEA.FDR = <0.05（置换检验，正富集z-score）
 
-  - Fisher''s exact test.odds ratio and P value = CDKN2A loss OR 3.63, P = 2.35 ×
-  10−2; lower TP53 mutation OR 0.04, P = 3.1 × 10−9（mutation enrichment comparisons）
+  - NMF.聚类数 = 5（鉴定五个多组学亚型）
 
-  - Wilcoxon rank-sum test.P value = Subtype 2 TMB = 0.9 vs others = 3.2, P = 3.6
-  × 10−10; pathway adjusted P values reported（clinical and molecular comparisons）
+  - Fisher exact test.adjustment = Benjamini-Hochberg（亚型重叠显著性调整，adjusted P ≤0.05）
 
-  - NMF.number of clusters = 5（识别多组学亚型）
+  - Survival analysis.test = log-rank（生存曲线P值）
 
-  - Fisher''s exact test.P value = <0.05 (two-sided)（临床变量富集显著性）
+  - Expression comparison.test = Wilcoxon rank-sum（Subtype 4与其他亚型标志物表达差异）
 
-  - GSVA/PTM-SEA.FDR = <0.05 (permutation)（通路富集显著性）
+  - Differential expression.test = two-sided t-test（CDKN1B差异表达，adjusted P=7.1×10−11）
 
-  - GSVA/PTM-SEA.enrichment score = positive z-score（展示显著正富集通路）
+  - Kinase activity.FDR threshold = <0.05（Subtype 4显著上调激酶CSNK2A1和GSK3B）
 
-  - Copy number analysis.copy number loss = absolute copy number <0.5（定义为纯合缺失）
+  - 差异激酶分析.FDR = < 0.1（Subtype 1 中显著上调激酶，如 RPS6KA3、CDK1、CDK2、CDK4）
 
-  - permutation.FDR = <0.001（DEG sets of all five subtypes significantly upregulated
-  in tumor cell types）
+  - Fisher 精确检验.OR = 4.8（Subtype 1 富集 CN15 信号）
 
-  - permutation.FDR = <0.01（DEGsubtype enrichment for cell types in Subtypes 1 and
-  3）
+  - Fisher 精确检验.OR = 5.3（Subtype 1 中 EGFR 与 TP53 或 CDKN2A 共突变）
 
-  - Fisher''s exact test.OR = 8.4（Association between Subtype 3 and CN14 signature）
+  - BWA.算法 = BWA-MEM（适用于70 bp至1 mbp的Illumina序列，快速准确）
 
-  - Fisher''s exact test.OR = 16.4（Co-occurrence of SOX2 amplification and TP53 mutations
-  in Subtype 3 vs other subtypes）
+  - GATK4 BQSR.known variants = dbSNP, Mills and 1000G gold standard indels（碱基质量重校准）
 
-  - Wilcoxon rank-sum test.P = 5.7 × 10−11（Greater TMB in Subtype 3 in Korean NSCLC
-  cohort）
+  - GATK4 HaplotypeCaller.-ERC = GVCF（以GVCF模式输出参考置信度分数）
 
-  - Wilcoxon rank-sum test.P = 6.9 × 10−6（Greater TMB in Subtype 3 in previous studies）
+  - GATK4 HaplotypeCaller.-G = StandardAnnotation, AS_StandardAnnotation（变异调用注释选项）
 
-  - log-rank test.P = 8.4 × 10−3（Poorer survival of Subtype 4 vs other subtypes in
-  Korean NSCLC cohort）
+  - GATK4 Mutect2.模式 = tumor with paired normal; tumor-only for one sample without
+  normal（排除胚系变异）
 
-  - log-rank test.P = 9.5 × 10−1（No survival variation between Subtype 4 patients
-  with and without metastasis）
+  - GATK4 Mutect2.panel-of-normals = somatic-hg38_1000g_pon.hg38.vcf.gz（体细胞变异检测）
 
-  - log-rank test.P = 2.6 × 10−2（Survival disadvantage for non-metastatic Subtype
-  4 patients）
+  - GATK4 Mutect2.germline resource = somatic-hg38_af-only-gnomad.hg38.vcf.gz（去除胚系变异）
 
-  - log-rank test.P = 7.9 × 10−1（No significant overall survival difference between
-  Subtype 4 and other subtypes in combined CPTAC cohort）
+  - GATK4 GetPileupSummaries.common somatic mutation sites VCF = somatic-hg38_small_exac_common_3.hg38.vcf.gz（来自gnomAD资源）
 
-  - GSEA.gene set = MSigDB hallmark v7.4（protein-level GSEA in Subtype 3）
+  - GATK4 VariantRecalibrator.training sets = HapMap, 1000G omni2.5, 1000G phase1
+  high confidence, dbSNP for SNP; Mills and 1000G gold standard indels, dbSNP for
+  indel（VQSR SNP/indel质量重校准）
 
-  - kinase activity estimation.FDR threshold = <0.05（significantly up- and downregulated
-  kinases）
+  - GATK4 Funcotator.transcript-selection-mode = CANONICAL（使用自定义转录本列表进行注释）
 
-  - DE/GSEA analysis.FDR threshold = <0.1（DNA repair/autophagy-related kinases upregulated;
-  phosphoproteome features displayed）
+  - GATK4 Funcotator.dataSources = funcotator_dataSources.v1.7.20200521s (somatic);
+  funcotator_dataSources.v1.7.20200521g (germline)（使用GATK4 4.2.0.0最新注释数据源）
 
-  - immune DEG enrichment.top DEGs = 300（HTE and CTE clusters）
+  - CNVkit.amplification = absolute copy number >= 4（拷贝数状态标注）
 
-  - copy number signature overlap.test = one-sided Fisher''s exact test（odds ratio
-  for copy number signatures）
+  - CNVkit.gain = absolute copy number >= 2.5 and < 4（拷贝数状态标注）
 
-  - co-mutation analysis.test = one-sided Fisher''s exact test（enriched co-mutations
-  in each subtype）
+  - CNVkit.0.5-1.5 = absolute copy number from 0.5 to 1.5（原文截断，可能为loss/deletion标注）
 
-  - linear regressions.FDR threshold = <0.1（top CNVs in Subtype 3）
+  - BCA assay.蛋白浓度 = BCA法测定（裂解液离心后）
 
-  - XPO1 expression comparison.test = Kruskal-Wallis test（Subtype 3 vs other subtypes）
+  - S-Trap spin column.离心 = 4000 g, 30 s（捕获蛋白后洗涤）
 
-  - drug response assay.replicates = 3 technical replicates（each organoid sample）
+  - Pierce Trypsin/Lys-C Mix.酶与蛋白比例 = 1:25 (w/w)（胰酶消化）
 
-  - cryptic MAP confirmation.expression threshold = previously determined expression
-  threshold（identification of confirmed cryptic MAPs）
+  - Pierce Trypsin/Lys-C Mix.孵育 = 37 °C, 6 h（蛋白消化）
 
-  - marker gene definition.top overexpressed genes = top 300 for HTE and top 30 for
-  highly cell type-enriched samples（marker genes for HTE and 10 cell types）
+  - TMTpro 16-plex.肽段上样量 = 250 μg/样本（TMT标记）
 
-  - survival analysis.log-rank Mantel-Cox test = n = 174（overall survival and relapse-free
-  survival related to cell types）
+  - TMTpro 16-plex.标记试剂用量 = 1 mg/样本（TMT标记）
 
-  - linear regression.covariates = sample batches and histological diagnosis（Correlation
-  between cryptic MAP number and enrichment scores of 10 cell types/immune cluster.）
+  - TMTpro 16-plex.标记孵育 = 1 h, 振荡（TMT标记）
 
-  - log-rank Mantel-Cox test.p-value = 0.017（Overall survival of patients with versus
-  without recurrent cryptic MAPs (n = 204).）
+  - TMTpro 16-plex.标记效率确认 = 每样本取1.8 μg标记肽进行LC-MS/MS（混合前QC）
 
-  - log-rank Mantel-Cox test.p-value = 0.021（Overall survival of four groups stratified
-  by cryptic MAP load and immune cluster (Red versus Purple).）
+  - Shimadzu LC20A.流速 = 0.5 mL/min（mid-pH RP分级）
 
-  - log-rank Mantel-Cox test.p-value = 0.0016（Recurrence-free survival of Subtype
-  5 by CTx or CRTx treatment status.）
+  - Shimadzu LC20A.梯度 = 5% 8 min, 40% 65 min, 44% 69 min, 60% 74–88 min, 5% 90 min（mid-pH
+  RP分级）
 
-  - two-sided Fisher''s exact test.adjustment = Benjamini-Hochberg（Enrichment analysis
-  of multiomics subtypes across four groups.）
+  - Shimadzu LC20A.收集fraction = 96个fraction，每0.91 min合并为24个非连续fraction（mid-pH RP分级）
 
-  - Kaplan-Meier.n = 204（Survival analysis by recurrent cryptic MAP status.）
+  - IMAC.Ni-NTA琼脂糖珠 = 300 μL（磷酸肽富集）
 
-  - Kaplan-Meier.n = 174（Survival analysis by cryptic MAP load and immune cluster.）
+  - IMAC.EDTA孵育 = 100 mM, 30 min, RT（剥离Ni2+）
 
-  - BWA.algorithm = BWA-MEM（Alignment of Illumina sequences 70 bp to 1 mbp）
+  - IMAC.FeCl3孵育 = 10 mM, 30 min, RT（加载Fe3+）
 
-  - GATK4 HaplotypeCaller.-ERC = GVCF（Reference confidence scores in GVCF mode）
+  - IMAC.磷酸肽结合 = 30 min, RT（磷酸肽富集）
 
-  - GATK4 HaplotypeCaller.-G = StandardAnnotation（Variant annotation）
+  - Ac-K enrichment.抗体孵育 = 4 °C, 3 h（乙酰赖氨酸肽富集）
 
-  - GATK4 HaplotypeCaller.-G = AS_StandardAnnotation（Variant annotation）
+  - Ac-K enrichment.洗脱 = 0.15% TFA, RT, 10 min（乙酰肽洗脱）
 
-  - GATK4 Mutect2.mode = tumor with paired normal; tumor-only for one sample without
-  matching normal（Exclude germline variants）
+  - Ultimate 3000 RSLC nano + Q Exactive HF-X.流速 = 0.3 μL/min（LC-MS/MS）
 
-  - GATK4 Mutect2.panel-of-normals = somatic-hg38_1000g_pon.hg38.vcf.gz（Somatic variant
-  calling）
+  - Ultimate 3000 RSLC nano + Q Exactive HF-X.梯度 = 2% 12 min, 8% 16 min, 25% 140 min,
+  35% 150 min, 85% 155–163 min, 2% 165–185 min（溶剂B）
 
-  - GATK4 Mutect2.germline resource = somatic-hg38_af-only-gnomad.hg38.vcf.gz（Germline
-  variant removal）
+  - Q Exactive HF-X.喷雾电压 = 1.5 kV（数据依赖采集）
 
-  - GATK4 GetPileupSummaries.common somatic mutation sites VCF = somatic-hg38_small_exac_common_3.hg38.vcf.gz（Contamination
-  estimation）
+  - Q Exactive HF-X.MS1分辨率 = 120,000（MS1）
 
-  - GATK4 Funcotator.transcript-selection-mode = CANONICAL（Annotation with custom
-  transcript list）
+  - Q Exactive HF-X.MS1质量范围 = 350–1500 m/z（MS1）
 
-  - GATK4 Funcotator.dataSources = funcotator_dataSources.v1.7.20200521s for somatic;
-  funcotator_dataSources.v1.7.20200521g for germline（Annotation）
+  - Q Exactive HF-X.AGC target = 3e6（MS1）
 
-  - CNVkit.amplification threshold = absolute copy number >=4（CNV labeling）
+  - Q Exactive HF-X.最大注入时间 = 50 ms（MS1）
 
-  - CNVkit.gain threshold = absolute copy number >=2.5 and <4（CNV labeling）
+  - Q Exactive HF-X.隔离窗口 = 0.7 m/z（MS2）
 
-  - CNVkit.loss threshold = absolute copy number 0.5–1.5（CNV labeling; fragment truncated）
+  - Q Exactive HF-X.TopN = Top 15（MS2触发）
 
-  - centrifuge.speed/temperature/time = 14,500 g / 4 °C / 5 min（protein lysate centrifugation）
+  - 分析柱.温度 = 50 °C（UHPLC分离）
 
-  - reduction.DTT concentration/temperature/time = 20 mM / 95 °C / 10 min（protein
-  lysate reduction）
+  - LC-MS/MS (PTM analysis).spray voltage = 2.1 kV（Exploris 480 DDA）
 
-  - alkylation.iodoacetamide concentration/temperature/time = 40 mM / RT / 30 min
-  dark（protein lysate alkylation）
+  - LC-MS/MS (PTM analysis).cycle time = 3 sec（数据依赖采集）
 
-  - S-Trap digestion.trypsin/Lys-C ratio/temperature/time = 1:25 w/w / 37 °C / 6 h（tryptic
-  digestion）
+  - LC-MS/MS (PTM analysis).mobile phase flow rate = 0.3 μL/min（UHPLC 分离）
 
-  - TMTpro labeling.peptide amount/reagent amount/incubation = 250 μg peptide / 1
-  mg reagent / 1 h shaking（16-plex labeling）
+  - LC-MS/MS (PTM analysis).solvents A/B = 0.1% formic acid in water / 0.1% formic
+  acid in ACN（UHPLC 分离）
 
-  - mid-pH RP fractionation.flow rate = 0.5 mL/min（peptide fractionation）
+  - LC-MS/MS (PTM analysis).LC gradient of solvent B = 2% in 14 min, 4% in 17 min,
+  16% in 120 min, 25% in 145 min, 85% from 150 min to 158 min, 4% from 160 min to
+  185 min（UHPLC 梯度）
 
-  - mid-pH RP fractionation.mobile phase B gradient = 5% in 8 min, 40% in 65 min,
-  44% in 69 min, 60% 74–88 min, 5% in 90 min（peptide fractionation）
+  - MS1.resolution = 120,000（PTM analysis）
 
-  - mid-pH RP fractionation.fraction collection/pooling = 96 fractions pooled into
-  24 non-consecutive fractions; 12 fractions for PTM（sample complexity reduction）
+  - MS1.mass range = 350 to 1500 m/z（PTM analysis）
 
-  - IMAC.Ni-NTA slurry volume = 300 μL（phosphopeptide enrichment）
+  - MS1.AGC target = 300%（PTM analysis）
 
-  - IMAC.EDTA incubation = 100 mM / 30 min RT（Ni-NTA bead preparation）
+  - MS1.maximum injection time = 50 ms（PTM analysis）
 
-  - IMAC.FeCl3 incubation = 10 mM / 30 min RT（Fe3+ charging）
+  - MS2.resolution = 45,000（PTM analysis）
 
-  - IMAC.phosphopeptide binding = 30 min RT gentle mixing（phosphopeptide enrichment）
+  - MS2.AGC target = 7.5e4（PTM analysis）
 
-  - acetylpeptide enrichment.antibody incubation = 4 °C / 3 h end-over-end turning（Ac-K
-  motif enrichment）
+  - MS2.maximum injection time = 120 ms（PTM analysis）
 
-  - acetylpeptide enrichment.elution = 0.15% TFA / RT / 10 min（acetyl peptide elution）
+  - MS2.collision energy = 38%（PTM analysis）
 
-  - LC-MS/MS.flow rate = 0.3 μL/min（nano-LC separation）
+  - MS2.isolation window = 0.7 m/z（PTM analysis）
 
-  - LC-MS/MS.solvent B gradient = 2% in 12 min, 8% in 16 min, 25% in 140 min, 35%
-  in 150 min, 85% 155–163 min, 2% 165–185 min（nano-LC separation）
+  - precursor selection.charge state = 2-6（PTM analysis）
 
-  - LC-MS/MS.spray voltage = 1.5 kV（data-dependent acquisition）
+  - precursor selection.intensity threshold = 1e4（PTM analysis）
 
-  - LC-MS/MS.MS1 resolution/mass range = 120,000 / 350–1500 m/z（MS1 spectra）
+  - dynamic exclusion.time = 45 sec（PTM analysis）
 
-  - LC-MS/MS.AGC target/max injection time/isolation window = 3e6 / 50 ms / 0.7 m/z（MS1/MS2
-  acquisition）
+  - dynamic exclusion.mass tolerance = +/- 10 ppm（PTM analysis）
 
-  - LC-MS/MS.Top N precursors = Top 15（MS/MS triggering）
+  - Proteome Discoverer v2.4/SequestHT.precursor mass tolerance = 10 ppm（主数据库搜索）
 
-  - 肽段鉴定.动态修饰 = oxidation +15.995 Da on Met（肽段搜索）
+  - Proteome Discoverer v2.4/SequestHT.fragment mass tolerance = 0.02 Da（主数据库搜索）
 
-  - 肽段鉴定.动态修饰 = deamidation +0.984 Da on Asn/Gln（肽段搜索）
+  - Proteome Discoverer v2.4/SequestHT.enzyme specificity = fully-tryptic, up to 2
+  missed cleavages（主数据库搜索）
 
-  - 肽段鉴定.minimum peptide length = 8 residues（肽段搜索）
+  - Proteome Discoverer v2.4/SequestHT.static modifications = carbamidomethylation
+  (+57.021 Da) on Cys; TMT (+304.207 Da) on peptide N terminus and Lys（主数据库搜索）
+
+  - Proteome Discoverer v2.4/SequestHT.dynamic modifications = oxidation (+15.995
+  Da) on Met; Met-loss (-131.040 Da) on protein N-terminal Met; deamidation (+0.984
+  Da) on Asn and Gln（主数据库搜索）
+
+  - Proteome Discoverer v2.4/SequestHT.minimum peptide length = 6 residues（主数据库搜索）
+
+  - Proteome Discoverer v2.4/SequestHT.additional dynamic modifications = phosphorylation
+  (+79.966 Da) on Ser/Thr/Tyr; acetylation (+42.016 Da) on protein N terminus and
+  Lys（磷酸化/乙酰化蛋白质组搜索）
+
+  - MODplus v1.0.precursor mass tolerance = 10 ppm（变异/修饰肽段搜索）
+
+  - MODplus v1.0.fragment mass tolerance = 0.01 Da（变异/修饰肽段搜索）
+
+  - MODplus v1.0.enzyme specificity = semi-tryptic, up to 2 missed cleavages（变异/修饰肽段搜索）
+
+  - MODplus v1.0.13C isotope error = -1 to +2（变异/修饰肽段搜索）
+
+  - MODplus v1.0.static modifications = carbamidomethylation on Cys; TMT on peptide
+  N terminus and Lys（变异/修饰肽段搜索）
+
+  - MODplus v1.0.dynamic modifications = all modifications in Unimod v2020.10 (2355
+  entries), including amino acid substitutions; multiply modified peptides allowed
+  within -150 to +350 Da（变异/修饰肽段搜索）
+
+  - MS-GF+ v2021.09.precursor mass tolerance = 10 ppm（novel peptides 搜索）
+
+  - MS-GF+ v2021.09.enzyme specificity = tryptic up to 2 missed cleavages, permitting
+  non-enzymatic terminals（novel peptides 搜索）
+
+  - MS-GF+ v2021.09.13C isotope error = no（novel peptides 搜索）
+
+  - MS-GF+ v2021.09.static modifications = carbamidomethylation on Cys; TMT on peptide
+  N terminus and Lys（novel peptides 搜索）
+
+  - MS-GF+ v2021.09.dynamic modifications = oxidation on Met; deamidation on Asn and
+  Gln（novel peptides 搜索）
+
+  - MS-GF+ v2021.09.minimum peptide length = 8 residues（novel peptides 搜索）
+
+  - Comet v2021.02.0.precursor mass tolerance = 10 ppm（novel isoform/融合基因肽段搜索）
+
+  - Comet v2021.02.0.enzyme specificity = semi-tryptic, up to 2 missed cleavages（novel
+  isoform/融合基因肽段搜索）
+
+  - Comet v2021.02.0.isotope error = no isotope error allowed（novel isoform/融合基因肽段搜索）
+
+  - Comet v2021.02.0.static modifications = carbamidomethylation on Cys; TMT on peptide
+  N terminus and Lys（novel isoform/融合基因肽段搜索）
+
+  - 搜库.动态修饰 = Met氧化(+15.995 Da); Asn/Gln脱酰胺(+0.984 Da)（PSM搜库）
+
+  - 搜库.最小肽段长度 = 8 residues（PSM搜库）
 
   - Percolator.FDR = 1%（PSM验证）
 
-  - BLAST.allowed amino acid substitution = ≤1（novel peptide过滤）
+  - BLAST.氨基酸替换 = ≤1个氨基酸替换（过滤与Uniprot/RefSeq/Gencode匹配的新肽）
 
-  - Proteome Discoverer v2.4/SequestHT.co-isolation threshold = 50%（TMT定量低质量值过滤）
+  - RNA-Seq.read支持 = ≥1条RNA-Seq read（保留新肽）
 
-  - Proteome Discoverer v2.4/SequestHT.average reporter S/N threshold = 10%（TMT定量低质量值过滤）
+  - Proteome Discoverer.co-isolation threshold = 50%（TMT定量过滤）
 
-  - 缺失值过滤.missing values = <30%（global/phospho/acetyl proteomics across tumors）
+  - Proteome Discoverer.average reporter S/N threshold = 10%（TMT定量过滤）
 
-  - impute R package.k = 5（KNN插补）
+  - impute.k = 5（KNN缺失值填补）
 
-  - NMF.factorization ranks = 2-10（选择最佳聚类数k）
+  - NMF.factorization ranks = 2-10（寻找最佳聚类数k）
 
-  - NMF.max iterations = 2000（秩选择的收敛）
+  - NMF.max iterations = 2000（初始NMF分析）
 
-  - NMF.repeats = 50（计算聚类统计）
+  - NMF.repeats = 50（计算聚类统计量）
 
-  - NMF.robust runs = 200（最佳k下的稳健聚类）
+  - NMF.robust runs = 200 runs, 5000 max iterations（最佳k下稳健聚类）
 
-  - NMF.max iterations = 5000（最佳k下的稳健聚类）
+  - NMF.core sample membership = ≥0.5（定义核心样本）
 
-  - NMF.core sample membership score = ≥0.5（定义core sample）
+  - 联合NMF.rank = 5（本研究与CPTAC LUAD/LSCC联合NMF）
 
-  - NMF combined.rank = 5（整合本队列与CPTAC LUAD/LSCC）
+  - Gillette study.NMF params = 4 ranks, 200 runs, 5000 max iterations（既往研究亚型重新聚类）
 
-  - NMF combined.runs = 200（联合NMF稳健聚类）
+  - Satpathy study.NMF params = 5 ranks, 500 runs, 5000 max iterations（既往研究亚型重新聚类）
 
-  - NMF combined.max iterations = 5000（联合NMF稳健聚类）
+  - Lehtio study.NMF params = 6 ranks, 100 runs, 5000 max iterations（既往研究亚型重新聚类）
 
-  - NMF validation Gillette study.ranks/runs/max iterations = 4/200/5000（既往研究亚型特征重聚类）
+  - GSVA.通路基因数 = >200且<1000 genes（通路富集筛选）
 
-  - NMF validation Satpathy study.ranks/runs/max iterations = 5/500/5000（既往研究亚型特征重聚类）
+  - PTM-SEA.flanking sequence = ±7 aa（PTM特征富集）
 
-  - NMF validation Lehtio study.ranks/runs/max iterations = 6/100/5000（既往研究亚型特征重聚类）
+  - PTM-SEA.sample.norm.Type = rank（PTM-SEA参数）
 
-  - GSVA.pathway gene count = >200 and <1000 genes（MSigDB通路过滤）
+  - PTM-SEA.output.score.Type = NES（PTM-SEA输出）
 
-  - PTM-SEA.flank amino acid sequence = +/-7 aa（PTM数据主标识符）
+  - PTM-SEA.nperm = 100（PTM-SEA置换次数）
 
-  - PTM-SEA.nperm = 100（富集分析）
+  - DESeq2.design = Group + DX + rna:batch（DEG 分析中控制病理诊断分类和 RNA 批次）
 
-  - PTM-SEA.sample.norm.Type = rank（ssgsea-cli.R）
+  - DESeq2.adjusted p-value threshold = <0.05（Benjamini-Hochberg）（DEG 显著性筛选）
 
-  - PTM-SEA.output.score.Type = NES（ssgsea-cli.R）
+  - CNVkit/线性回归.模型公式 = Cytoband level copy numbers = β0 + β1(Subtype) + β2(DX) + ε（识别各
+  NMF 亚型差异富集 cytoband 级 CNV，DX 为协变量）
 
-  - CNVkit.copy number conversion = gene-level to cytoband-level by mean copy numbers
-  in each cytoband（CNV analysis）
+  - CNVkit/线性回归.adjusted p-value threshold = <0.05（Benjamini-Hochberg）（显著 CNV 筛选）
 
-  - linear regression.model = Cytoband-level copy numbers = β0 + β1 Subtype + β2 DX
-  + ε（differentially enriched CNVs）
+  - DEP 线性回归.模型公式 = Y = β0 + β1(Group) + β2(DX) + β2(Batch) + ε（差异蛋白/磷酸化/乙酰化分析，Batch
+  为 TMT channel）
 
-  - DESeq2.design = Group + DX + rna:batch（DEG analysis）
+  - DEP 线性回归.adjusted p-value threshold = <0.05（Benjamini-Hochberg）（DEP 显著性筛选）
 
-  - linear regression.model = Y = β0 + β1 (Group) + β2 (DX) + β2 (Batch) + ε（DEP phosphorylation/acetylation
-  analysis）
+  - Kaplan-Meier/log-rank.OS 分析 = NSCLC-death 作为终点，右删失处理；log-rank 比较各亚型；Fig.2g 展示
+  pooled p（五 NMF 亚型生存比较）
 
-  - Kaplan-Meier.overall survival definition = time from tumor resection surgery to
-  NSCLC-induced death; 229 patients（survival analysis）
+  - Kaplan-Meier/CPH.feature-wise survival threshold = top 50% vs bottom 50% 表达；log-rank
+  nominal p < 0.001（蛋白/PTM 特征生存关联分析，CPH 系数符号判定预后方向）
 
-  - log-rank test.statistic = (O1 - E1)^2 / E1 + (O2 - E2)^2 / E2（survival curve comparison）
+  - log-rank/BH.pairwise adjusted p-value = Benjamini-Hochberg（亚型间两两生存比较）
 
-  - Cox proportional-hazards.model = h(t) = h0(t) × exp(b1x1)（prognostic direction）
+  - decoupleR.minimum size of regulons = 5（激酶活性推断）
 
-  - feature-wise survival.expression groups = top 50% vs bottom 50% expression（protein
-  and PTM feature survival analysis）
+  - decoupleR.deregulated phosphorylation = 1000（500 up, 500 down）（激酶活性推断）
 
-  - Survival feature selection.top features = top 1% by statistical significance（selection
-  of survival-associated features）
+  - decoupleR.method = MLM / run_mlm（激酶活性推断）
 
-  - decoupleR.regulon minimum size = 5（kinase activity estimation）
+  - decoupleR.connectivity matrix = Xij=1（phosphosite i是kinase j已知底物），否则0（激酶活性推断）
 
-  - decoupleR.deregulated phosphorylation input = 1000 (500 up-regulated, 500 down-regulated)（kinase
-  activity estimation）
+  - 统计校正.adjusted p-value = Benjamini-Hochberg（激酶活性p值校正）
 
-  - decoupleR.method = run_mlm (multivariate linear model)（kinase activity estimation）
+  - DEGs.adjusted p-value = <0.05（subtype-specific基因集生成）
 
-  - decoupleR.p-value adjustment = Benjamini-Hochberg（kinase activity estimation）
+  - Xcell.cell types = 64（细胞类型富集分数推断）
 
-  - Subtype-specific gene set generation.adjusted p-value = <0.05（differential gene
-  expression analysis）
+  - cell type-based clustering.samples = 205 tumors and 85 normal samples（免疫微环境分型）
 
-  - Subtype-specific gene set generation.fold change = significantly increased（differential
-  gene expression analysis）
+  - PAM.clusters = 3（细胞类型基础聚类和整合队列聚类）
 
-  - Cell type-based clustering.samples = 205 tumors and 85 normal samples（immune microenvironment
-  clustering）
+  - pathway-based clustering.samples = 205 tumor samples（免疫微环境分型）
 
-  - Xcell.cell types = 64（cell type enrichment score inference）
+  - GSVA.pathways = 7 curated immune-related pathways（通路富集评分）
 
-  - Cell type-based clustering.normalization = z-score（before consensus clustering）
+  - k-means.clusters = 2（通路基础免疫聚类）
 
-  - PAM.number of clusters = 3（cell type-based immune clusters）
+  - CoxPHFitter.covariates = clinical histology and sample batches（OS/RFS生存分析）
 
-  - Pathway-based clustering.samples = 205 tumor samples（immune microenvironment clustering）
+  - integrated cohort.patient counts = 202 (Satpathy et al.), 211 (Gillette et al.),
+  290 (our cohort)（免疫景观可重复性分析）
 
-  - GSVA.pathways = 7 curated immune-related pathways（pathway enrichment scoring）
+  - neoantigen prediction.peptide length = 9mer-12mer（canonical neoantigen预测）
 
-  - Pathway-based clustering.clustering method = k-means（identify two immune clusters）
+  - novel peptide filtering.FPKM = <1（视为不表达）
 
-  - Pathway-based clustering.number of clusters = 2（pathway-based immune clusters）
+  - cryptic peptide prediction.occurrence = >2 tumor samples and not in at least one
+  normal sample（cryptic peptide预测）
 
-  - Survival analysis.covariates = clinical histology and sample batches（all analyses
-  with immune cluster and cell types）
-
-  - Integrated cohort analysis.patient counts = 202 Satpathy et al., 211 Gillette
-  et al., 290 our cohort（immune landscape reproducibility）
-
-  - Integrated cohort analysis.normalization = z-score（enrichment scores of 64 cell
-  types per cohort）
-
-  - Integrated cohort analysis.clustering = consensus clustering followed by PAM（three
-  clusters mapped to NAT, HTE, CTE）
-
-  - Neoantigen prediction.peptide length = 9mer–12mer amino acids（canonical neoantigen
-  candidates）
-
-  - Neoantigen prediction.HLA typing = OptiType（patient HLAs for binding prediction）
-
-  - Neoantigen prediction.binding prediction tools = MHCflurry and NetMHCpan（mutated
-  peptide binding to patient HLAs）
-
-  - Neoantigen confirmation.evidence = MS experiments（confirmed neoantigens）
-
-  - Cryptic peptide prediction.novel isoform expression = FPKM < 1 = no expression（tumor-only
-  novel isoform transcripts）
-
-  - Cryptic peptide prediction.sample occurrence = >2 tumor samples and not in at
-  least one normal sample（cryptic peptide candidates）
-
-  - Cryptic peptide confirmation.FPKM = >= 1（tumor samples with substantial cryptic
-  peptide expression）
-
-  - k-NN imputation.k = 5（CPTAC global, phospho-, and acetyl-proteomics data imputation）
-
-  - Preprocessing.missing value threshold = >30%（discard features with more than 30%
-  missing values across all tumors）
-
-  - Statistical test.test = two-sided Fisher''s exact test（degree of over-representation
-  for each multi-omics subtype）
+  - HLA typing.method = OptiType（患者HLA鉴定）
 
 
   ## 参考基因组
 
-  GENCODE GRCh38.p13 v32 primary assembly (human); interval file V6_S07604514_hs_hg38_S07604514_Covered.bed
+  GENCODE GRCh38.p13 v32 primary assembly
 
 
   ## 数据库
 
-  - The Cancer Genome Atlas Research Network (TCGA)：identified molecular pathways
-  and classified lung cancer subtypes
+  - TCGA (The Cancer Genome Atlas)：肺癌分子通路鉴定与LSCC/LUAD亚型分类
 
-  - NCCN guidelines：guideline for adjuvant chemotherapy or radiation therapy administration
+  - HALLMARK：通路富集
 
-  - HALLMARK：通路富集分析
+  - REACTOME：通路富集
 
-  - REACTOME：通路富集分析
+  - GOCC：细胞组分富集
 
-  - GOCC：通路富集分析
+  - KINASE-PSP：激酶-底物/磷酸化位点集富集
 
-  - PATH-WP/WikiPathways：通路富集分析
+  - PATH-NP：通路富集
 
-  - KINASE-PSP：激酶/通路富集分析
+  - WikiPathways：通路富集
 
-  - CPTAC：Combined NSCLC proteome, phosphoproteome, and acetylome dataset for subtype
-  replication and validation
+  - CPTAC：NSCLC/LUAD/LSCC蛋白质组/多组学数据及生存验证
 
-  - PHONEMeS：Kinase-substrate network database for kinase activity estimation
+  - TCGA：NSCLC亚型相关signature/分型参考
 
-  - CPTAC：Multiomics/proteomics NSCLC datasets for validation and comparison
+  - PHONEMeS：激酶-底物网络数据库，用于激酶活性估计
 
-  - TCGA：Subtype-related signatures and comparison
+  - Kinase-substrate network database：激酶活性估计
 
-  - CPTAC：Combined LUAD and LSCC cohort for survival comparison, WGD/TMB analyses,
-  and proteogenomic comparison
+  - CPTAC cohort：外部验证免疫调节因子相关性
 
-  - Korean NSCLC cohort：Clinical significance and survival analyses of subtypes
+  - Satpathy cohort：外部验证免疫调节因子相关性
 
-  - integrated scRNA-seq dataset of NSCLC patients：Cell type-specific gene enrichment
-  analysis of subtype DEGs
+  - Gillette cohort：外部验证免疫调节因子相关性
 
-  - MSigDB：GSEA hallmark gene set v7.4
+  - dbSNP：BQSR已知变异；VQSR训练集/broad_hg38_v0_Homo_sapiens_assembly38.dbsnp138.vcf
 
-  - COSMIC v3：copy number signature and etiology
+  - Mills and 1000G project：BQSR和VQSR训练集
 
-  - CPTAC NSCLC/LSCC：validation cohort for WGD and subtype analyses
+  - HapMap project：VQSR SNP训练集
 
-  - multiple NSCLC scRNA-seq studies：validation of cell-type specificity of immune
-  clusters
+  - gnomAD：去除胚系变异和常见体细胞突变位点资源
 
-  - CPTAC cohort：Cross-cohort validation
+  - GENCODE：参考基因组
 
-  - Satpathy cohort：Cross-cohort validation
+  - GATK4 bucket resources：提供known variants、panel-of-normals、funcotator数据源等
 
-  - Gillette cohort：Cross-cohort validation
+  - Funcotator dataSources v1.7.20200521：变异注释数据源
 
-  - CPTAC：sample harvesting guidelines and validation cohorts
+  - UniProt human protein database v2021.01：主数据库 canonical peptide 搜索，97,795 entries
 
-  - Agilent SureSelect V6 target BED：Interval files for tools requiring interval files
+  - common contaminant proteins：污染物搜索，179 entries
 
-  - dbSNP：BQSR and VQSR known variants
+  - Unimod v2020.10：变异和修饰肽段搜索，2355 modifications
 
-  - Mills and 1000G gold standard indels：BQSR and VQSR indel training
+  - GENCODE transcript fasta v32：获取假基因/lncRNA/UTR RNA 序列用于 novel peptide 搜索
 
-  - 1000G panel-of-normals：Mutect2 panel-of-normals
+  - customized variant databases：结合 CustomProDB 生成的变异蛋白序列、16,130 个主数据库鉴定的 UniProt
+  人类蛋白和 179 个污染物蛋白
 
-  - gnomAD：Mutect2 germline variant removal
+  - Uniprot v2022.03 (226,999 entries)：新肽序列匹配过滤
 
-  - gnomAD small exac common：GetPileupSummaries common somatic mutation sites
+  - RefSeq v2022.09 (130,184 entries)：新肽序列匹配过滤
 
-  - HapMap：VQSR SNP training
+  - Gencode v41 (110,224 entries)：新肽序列匹配过滤
 
-  - 1000G omni2.5：VQSR SNP training
+  - UniProt human protein database v2021.01 (97,795 entries) + 179 common contaminants：蛋白/PTM定量搜库
 
-  - 1000G phase1 high confidence SNPs：VQSR SNP training
+  - MSigDB hallmark v2023.1.Hs：GSVA通路富集
 
-  - Funcotator data sources v1.7.20200521s/g：Funcotator annotation
+  - MSigDB KEGG v2023.1.Hs：GSVA通路富集
 
-  - UniProt：human protein序列搜索及novel peptide过滤（v2022.03, 226,999 entries；v2021.01,
-  97,795 entries）
+  - MSigDB Reactome v2023.1.Hs：GSVA通路富集
 
-  - RefSeq：novel peptide过滤（v2022.09, 130,184 entries）
+  - MSigDB WikiPathways v2023.1.Hs：GSVA通路富集
 
-  - Gencode：novel peptide过滤（v41, 110,224 entries）
+  - MSigDB GO v2023.1.Hs：GSVA通路富集
 
-  - common contaminant proteins：蛋白质组搜索（179 common contaminants）
+  - ptm.sig.db.all.flanking.human.v1.9.0.gmt：PTM-SEA数据库
 
-  - MSigDB：GSVA通路富集（hallmark, KEGG, Reactome, GO, WikiPathway）
+  - MSigDB：提供 Hallmark pathway gene sets 用于 ssGSEA 和 NMF 亚型特征通路识别
 
-  - PTM-SEA database：PTM特征富集（ptm.sig.db.all.flanking.human.v1.9.0.gmt）
+  - PTMsigDB：提供修饰位点特异性特征列表用于 PTM signature 分析
 
-  - MSigDB：Hallmark pathway gene sets for ssGSEA
+  - PHONEMeS：激酶/磷酸酶-底物先验知识网络
 
-  - PTMsigDB：modification site-specific signatures
+  - local_extended.rds (https://luca.icbi.at)：单细胞细胞类型特异性基因数据集
 
-  - PHONEMeS：Prior knowledge network of kinase/phosphatase and substrate interactions
+  - Oncovar：curated driver mutations
 
-  - local_extended.rds (https://luca.icbi.at)：Cell type-specific gene sets for single-cell
-  subtype distribution
+  - DriverDBv3：curated driver mutations
 
-  - Xcell curated gene signatures：Cell type enrichment scoring
+  - Intogen：curated driver mutations
 
-  - ARACNe lung cancer regulon networks：Protein activity inference
+  - Martínez-Jiménez et al. mutation catalogue：curated driver mutations
 
-  - Oncovar：Curated driver mutations
+  - Satpathy et al. cohort：独立NSCLC队列验证免疫景观
 
-  - DriverDBv3：Curated driver mutations
+  - Gillette et al. cohort：独立NSCLC队列验证免疫景观
 
-  - Intogen：Curated driver mutations
+  - COSMIC：癌症体细胞突变目录
 
-  - Martínez-Jiménez et al. mutation catalogue：Curated driver mutations
-
-  - KEGG：pathway enrichment score for Antigen_Processing_and_Presentation
-
-  - GDC data portal：download segment-level CNV data
-
-  - LinkedOmics：download global proteome, phosphoproteome, acetylproteome, and clinical
-  data including survival information
-
-  - CPTAC NSCLC：clinical data, MAF file, gene-level CNV, and proteomics data
-
-  - EGA：genomic and transcriptomic raw data under restricted access
-
-  - Korean Nucleotide Archive (KoNA)：data availability
-
-  - ProteomeXchange Consortium：deposition of raw mass spectrometry-based global, phosphoproteome,
-  and acetylome data
-
-  - jPOST：partner repository accession
-
-  - GitHub：code repository for analyses
-
-  - OncoVar：Integrated database and analysis platform for oncogenic driver variants
-  in cancers
-
-  - DriverDBv3：Multi-omics database for cancer driver gene research
-
-  - IntOGen：Integration and data mining of multidimensional oncogenomic data
-
-  - KEGG：Integrating viruses and cellular organisms
-
-  - jPOSTrepo：International standard data repository for proteomes'
+  - Pfam：蛋白家族数据库'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
   | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

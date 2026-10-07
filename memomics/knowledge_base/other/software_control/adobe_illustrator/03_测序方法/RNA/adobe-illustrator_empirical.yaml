@@ -1,0 +1,32 @@
+type: kb_entry
+name: adobe-illustrator_empirical
+species: other
+tissue: software_control
+direction: adobe-illustrator
+assay_type: RNA
+last_updated: 2026-10-05 00:56
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- adobe-illustrator_empirical
+content: 'skill: adobe-illustrator
+
+  quality_score: 10.0
+
+
+  params_used:
+
+  {"pdf": "D:/肌肉锻炼/Figure S2/boxplot_16_O_ex (2).pdf", "artboard": "A4 595.28x841.89",
+  "move_all": {"dx": 10.266953125, "dy": 66.82845703125}, "text_sets": ["6->5", "7->6",
+  "8->6", "9->6", "pattern Aged Exercise ->7+center"], "title_move_dx": 255.66319660546875}
+
+
+  result_summary:
+
+  面板→A4 上半区端到端通过：字号直方图 AI 侧与 PyMuPDF 侧均为 {5.0:10, 6.0:17, 7.0:1}（验收✓）；bounds_screen
+  底边 350.504≤420.9（✓）；标题中心 x=297.6395≈297.64（✓）；产物 PNG 25087B + PDF 356976B（28 spans
+  文字可编辑）+ 渲染复核 OCR 32 条；源文件 sha256 未变；close-doc --force 后 doc_count=0'
+evidence: 'record_run(adobe-illustrator): 面板→A4 上半区端到端通过：字号直方图 AI 侧与 PyMuPDF 侧均为 {5.0:10,
+  6.0:17, 7.0:1}（验收✓）；bounds_screen 底边 350.504≤420.9（✓）；标题中心 x=297.6395≈297.64（✓）；产物
+  PNG 25087B + PDF 356976B（28 spans 文字可编辑）+ 渲染复核 OCR 32 条；源文件 sha256 未变'

@@ -1,0 +1,30 @@
+type: kb_entry
+name: bioinformatics-html-report_empirical
+species: Homo_sapiens
+tissue: general
+direction: general
+assay_type: RNA
+last_updated: 2026-10-02 01:51
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bioinformatics-html-report_empirical
+content: 'skill: bioinformatics-html-report
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  build_report_html.py (stdlib-only md->html + cards grid + category filter + evidence
+  table + bib parser + funnel/trend CSS viz, zero CDN)
+
+
+  result_summary:
+
+  自包含 HTML 报告生成器 scripts/build_report_html.py 通过冒烟测试: 36KB, 45 条引用解析成功, 含漏斗图/年度趋势/路线卡/Gap表/竞品卡网格+分类过滤/证据表/参考文献。踩坑:
+  持久内核 exec() 不注入 __file__ → 需 try/except NameError 兜底 ROOT。'
+evidence: 'record_run(bioinformatics-html-report): 自包含 HTML 报告生成器 scripts/build_report_html.py
+  通过冒烟测试: 36KB, 45 条引用解析成功, 含漏斗图/年度趋势/路线卡/Gap表/竞品卡网格+分类过滤/证据表/参考文献。踩坑: 持久内核 exec()
+  不注入 __file__ → 需 try/except NameError 兜底 ROOT。'

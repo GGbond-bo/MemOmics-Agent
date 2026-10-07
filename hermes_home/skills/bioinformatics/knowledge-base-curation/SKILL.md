@@ -296,6 +296,7 @@ knowledge_base/{species}/{tissue}/{direction}/
 - 多篇引用用 `- ` 列表
 
 ## 相关技能
+- `kb-evidence-extraction` — 证据链提炼（kb-evidence-v1）：生物学结论 L0-L3 可信度分级入库，建库时的文献提炼统一走它（2026-10-07 起结论必须带 evidence_level/validation/locator）
 - `literature-param-extraction` — 从 PDF 提取生信参数（互补，焦点在 PDF 而非构建完整知识库）
 - `create-bio-skill` — 创建生信分析 skill（不同领域，构建分析模板而非知识库）
 

@@ -1,11 +1,9 @@
-pmid: "39059515"
 type: kb_entry
 domain: common
 name: paper_bioinfo_10.1016_j.freeradbiomed.2024.07.026
-doi: "10.1016/j.freeradbiomed.2024.07.026"
 direction: general
 assay_type: RNA
-last_updated: 2026-08-16 03:44
+last_updated: 2026-10-07 17:45
 source: literature
 verified: partially_verified
 quality: medium
@@ -17,9 +15,38 @@ content: '## 测序方法
 
   - snRNA-seq | 平台 — | 建库 — | 深度 —
 
+  - bulk RNA-seq | 平台 — | 建库 — | 深度 —
+
+  - single-cell multiome | 平台 — | 建库 — | 深度 —
+
+  - bulk transcriptome/RNA-seq/microarray | 平台 — | 建库 — | 深度 —
+
+  - proteome/acetylome | 平台 — | 建库 — | 深度 —
+
+  - DNA methylation/epigenome profiling | 平台 — | 建库 — | 深度 —
+
+  - FISH | 平台 — | 建库 — | 深度 —
+
+
+  ## 分析流程
+
+  - bulk RNA-seq与scRNA-seq/snRNA-seq反卷积 → 预测细胞类型对整体基因表达贡献
+
+  - scRNA-seq/snRNA-seq → 细胞或核聚类 → 运动或训练前后差异表达与亚群比较
+
+  - scRNA-seq/snRNA-seq + 空间技术 → 解析肌肉组织多细胞串扰动态
+
+  - 多组学（表观遗传、转录组、蛋白质组、磷酸化蛋白质组等）整合 → 系统水平研究运动适应
+
 
   ## 数据库
 
-  - MoTrPAC (Molecular Transducers of Physical Activity Consortium)：提供运动反应的系统水平多组学数据资源，用于研究运动对全身的影响。'
+  - MoTrPAC：提供运动活性分子转导研究和系统水平数据资源/蓝图
+
+  - PubMed：文献索引与检索'
 evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
   response and training adaptation in skeletal muscle | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

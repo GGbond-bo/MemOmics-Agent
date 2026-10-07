@@ -1,0 +1,32 @@
+type: kb_entry
+name: mixed-design-deg_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-25 23:40
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- mixed-design-deg_empirical
+content: 'skill: mixed-design-deg
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  解析计算（numpy）：按 48 样本设计构建 X(48×6)/Z(48×24)，V=ICC·ZZ''+（1−ICC）I，Cov(β̂)=(X''V⁻¹X)⁻¹；算
+  corr(Ex_Old, Aging) 与 corr(Aging, Ex_x_Aging)，并模拟纯伪影下 Ex_Old 显著基因的预期符号一致率（ICC 0–0.6）
+
+
+  result_summary:
+
+  共享项伪相关定量：corr(Ex_Old, Aging) = −0.542(ICC0) / −0.454(ICC0.3) / −0.343(ICC0.6)；纯伪影预期符号一致率
+  2.2%/6.3%/12.2%，实测 15.7% → 84% 反向完全可由共享 O_Pre 解释，不构成「运动逆转衰老」证据。⚠️ 修正既有认知：DiD(Ex_x_Aging)
+  与 Aging 共享 O_Pre 与 Y_Pre 两组均值，corr = −0.59~−0.71，并非无共享项；检验「向年轻靠拢」须用距离分析（样本到 Young
+  质心距离的配对检验）而非对比间相关。'
+evidence: 'record_run(mixed-design-deg): 共享项伪相关定量：corr(Ex_Old, Aging) = −0.542(ICC0)
+  / −0.454(ICC0.3) / −0.343(ICC0.6)；纯伪影预期符号一致率 2.2%/6.3%/12.2%，实测 15.7% → 84% 反向完全可由共享
+  O_Pre 解释，不构成「运动逆转衰老」证据。⚠️ 修正既有认知：DiD(Ex_x_Aging) 与 Aging 共享 O_Pre 与 Y_P'

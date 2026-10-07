@@ -1,22 +1,25 @@
 type: kb_entry
 domain: chemistry
-name: chem_10.1016_j.devcel.2026.03.010_buprenorphine
-doi: "10.1016/j.devcel.2026.03.010"
+name: chem_10.1016_j.devcel.2026.03.010_Buprenorphine
 chem_category: compounds
-last_updated: 2026-08-16 03:44
+last_updated: 2026-10-07 17:39
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- chem_10.1016_j.devcel.2026.03.010_buprenorphine
-content: '- 靶点: opioid receptor
+- chem_10.1016_j.devcel.2026.03.010_Buprenorphine
+content: '- 靶点: 阿片受体
 
-  - 剂量: 0.1 mg/kg (i.m.)
+  - 剂量: 0.1 mg/kg, intramuscular
 
   - IC50/EC50: —
 
-  - 模型: mouse surgery analgesia
+  - 模型: 小鼠手术前镇痛
 
   - 效应: 镇痛'
 evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
   junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

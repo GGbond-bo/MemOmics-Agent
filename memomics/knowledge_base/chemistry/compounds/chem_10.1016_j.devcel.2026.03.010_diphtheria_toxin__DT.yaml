@@ -1,22 +1,25 @@
 type: kb_entry
 domain: chemistry
-name: chem_10.1016_j.devcel.2026.03.010_diphtheria_toxin__DT
-doi: "10.1016/j.devcel.2026.03.010"
+name: chem_10.1016_j.devcel.2026.03.010_Diphtheria_toxin__DT
 chem_category: compounds
-last_updated: 2026-08-16 03:44
+last_updated: 2026-10-07 17:39
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- chem_10.1016_j.devcel.2026.03.010_diphtheria_toxin__DT
-content: '- 靶点: diphtheria toxin receptor (DTR)
+- chem_10.1016_j.devcel.2026.03.010_Diphtheria_toxin__DT
+content: '- 靶点: Plp1iDTR（Plp1+施万细胞）
 
-  - 剂量: 450 ng per 25 g body weight (i.p.)
+  - 剂量: —
 
   - IC50/EC50: —
 
-  - 模型: Plp1iDTR mice
+  - 模型: Plp1iDTR小鼠plantaris
 
-  - 效应: 选择性清除施万细胞'
+  - 效应: 处理7天诱导Plp1+细胞清除，伴随NMJ碎片化'
 evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
   junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

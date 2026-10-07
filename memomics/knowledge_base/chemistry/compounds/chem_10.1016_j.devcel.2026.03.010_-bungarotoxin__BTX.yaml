@@ -1,0 +1,25 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.devcel.2026.03.010_-bungarotoxin__BTX
+chem_category: compounds
+last_updated: 2026-10-07 17:39
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.devcel.2026.03.010_-bungarotoxin__BTX
+content: '- 靶点: 乙酰胆碱受体(AChR)/突触后NMJ
+
+  - 剂量: —
+
+  - IC50/EC50: —
+
+  - 模型: 小鼠跖肌NMJ免疫荧光及空间转录组相邻切片
+
+  - 效应: 标记突触后NMJ区域，Fig.3D、Fig.4A。'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

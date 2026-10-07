@@ -1,0 +1,31 @@
+type: kb_entry
+name: cli-anything_empirical
+species: other
+tissue: software_control
+direction: cli-anything
+assay_type: RNA
+last_updated: 2026-10-04 22:55
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cli-anything_empirical
+content: 'skill: cli-anything
+
+  quality_score: 10.0
+
+
+  params_used:
+
+  {''audit'': ''PNG verify + sha256 + PIL histogram + text-region dark_px'', ''manifest'':
+  ''artifact_manifest.json (role/expected_blank/sha256/bytes/dark_px)''}
+
+
+  result_summary:
+
+  闭环B独立复算+产物清单：v1 PNG verify=OK 800x600 2419B sha256=27826fba…e94a dark_px=0/17280(0.0%)
+  role=before_negative_control expected_blank=true；v2 verify=OK 800x600 6393B sha256=e170125a…de31
+  dark_px=1475/17280(8.54%) role=after_deliverable。manifest 落盘 ai_loop_B/artifact_manifest.json，doc_saved=false。'
+evidence: 'record_run(cli-anything): 闭环B独立复算+产物清单：v1 PNG verify=OK 800x600 2419B sha256=27826fba…e94a
+  dark_px=0/17280(0.0%) role=before_negative_control expected_blank=true；v2 verify=OK
+  800x600 6393B sha256=e170125a…de31 dark_px=1475/172'

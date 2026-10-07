@@ -1,23 +1,26 @@
 type: kb_entry
 domain: chemistry
-name: chem_lung_no-smoking_clinic_Selinexor
-doi: "10.1038/s41467-024-54434-4"
+name: chem_lung_no-smoking_clinic_selinexor
 chem_category: compounds
-last_updated: 2026-09-17 17:38
+last_updated: 2026-10-07 18:28
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- chem_lung_no-smoking_clinic_Selinexor
-content: '- 靶点: —
+- chem_lung_no-smoking_clinic_selinexor
+content: '- 靶点: XPO1
 
-  - 剂量: 8 concentrations (values not specified)
+  - 剂量: —
 
-  - IC50/EC50: determined using GraphPad Prism (value not specified)
+  - IC50/EC50: —
 
-  - 模型: patient-derived lung tumoroids, 384-well plates, 250 cells per well
+  - 模型: WGD 阳性 LUAD/LSCC 及 WGD 阴性对照肿瘤类器官
 
-  - 效应: cell viability quantified by CellTiter-Glo 3D after 6 days'
+  - 效应: WGD 阳性 LSCC 类器官中药物敏感性高于其他样本。'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
   | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

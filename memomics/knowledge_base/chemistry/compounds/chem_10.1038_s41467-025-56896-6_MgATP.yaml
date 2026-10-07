@@ -1,0 +1,25 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1038_s41467-025-56896-6_MgATP
+chem_category: compounds
+last_updated: 2026-10-07 17:55
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1038_s41467-025-56896-6_MgATP
+content: '- 靶点: —
+
+  - 剂量: 4 mM
+
+  - IC50/EC50: —
+
+  - 模型: relaxing solution
+
+  - 效应: 提供 MgATP'
+evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
+  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

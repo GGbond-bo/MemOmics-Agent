@@ -1,0 +1,34 @@
+type: kb_entry
+name: bulk-rnaseq-differential-expression_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-01 21:51
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- bulk-rnaseq-differential-expression_empirical
+content: 'skill: bulk-rnaseq-differential-expression
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  输入 GTF=gencode.v32.primary_assembly.annotation.gtf（2,900,496 行 / 1.33 GB）；单列前缀 chr5
+  + ''MEF2C'' 双级过滤；多转录本外显子区间合并（merge_intervals）；figsize 7.2×3.15 in @300dpi；x 轴 Mb
+  单位统一；输出 png/svg/pdf
+
+
+  result_summary:
+
+  从真实 GTF 解析出 MEF2C 基因座并出图（figures/44_MEF2C_locus_from_GTF.png|svg|pdf + results/44_mef2c_locus_stats.csv）。实测：MEF2C
+  chr5:88,717,117-88,904,257(−) protein_coding 56 转录本 / 36 外显子块 / 外显子总长 11,755 bp
+  / 跨度 187,141 bp；MEF2C-AS1 chr5:88,883,328-89,466,398(+) lncRNA 15 转录本 / 22 外显子块
+  / 外显子总长 7,865 bp / 跨度 583,071 bp；两者重叠 chr5:88,883,328-88,904,257 = 20,930 bp，5''
+  端相向（head-to-head）。修复了一处 Mb 单位重复换算导致画布 3.0e7 px 溢出的 bug。'
+evidence: 'record_run(bulk-rnaseq-differential-expression): 从真实 GTF 解析出 MEF2C 基因座并出图（figures/44_MEF2C_locus_from_GTF.png|svg|pdf
+  + results/44_mef2c_locus_stats.csv）。实测：MEF2C chr5:88,717,117-88,904,257(−) protein_coding
+  56 转录本 / 36 外显子块 / 外显子总长 11,755 bp / 跨度 1'

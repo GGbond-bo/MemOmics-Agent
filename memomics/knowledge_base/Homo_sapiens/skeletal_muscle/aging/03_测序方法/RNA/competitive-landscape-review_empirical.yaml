@@ -1,0 +1,27 @@
+type: kb_entry
+name: competitive-landscape-review_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-02 02:32
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- competitive-landscape-review_empirical
+content: 'skill: competitive-landscape-review
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  robust_json_fallback=True
+
+
+  result_summary:
+
+  解析 3 份子代理输出，成功提取竞品卡并合并入 cards.json，重建 evidence.csv 与交付文档'
+evidence: 'record_run(competitive-landscape-review): 解析 3 份子代理输出，成功提取竞品卡并合并入 cards.json，重建
+  evidence.csv 与交付文档'

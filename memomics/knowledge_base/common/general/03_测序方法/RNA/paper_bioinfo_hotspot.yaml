@@ -1,12 +1,9 @@
-pmid: "33951459"
 type: kb_entry
+domain: common
 name: paper_bioinfo_hotspot
-doi: "10.1016/j.cels.2021.04.005"
-species: other
-tissue: other
-direction: other
+direction: general
 assay_type: RNA
-last_updated: 2026-08-15 15:14
+last_updated: 2026-10-07 17:28
 source: literature
 verified: partially_verified
 quality: medium
@@ -14,125 +11,664 @@ auto_trigger:
 - paper_bioinfo_hotspot
 content: '## 测序方法
 
-  - scRNA-seq | 平台 10x Genomics | 建库 na | 深度 na
+  - single-cell RNA-seq | 平台 — | 建库 — | 深度 —
 
-  - Slide-seq (spatial transcriptomics) | 平台 Broad Institute Slide-seq portal | 建库
-  na | 深度 median UMIs/barcode 45
+  - single-cell RNA sequencing (scRNA-seq) | 平台 — | 建库 — | 深度 —
 
-  - CRISPR-Cas9 lineage tracing + scRNA-seq | 平台 na | 建库 na | 深度 na
+  - SymSim 模拟 scRNA-seq | 平台 SymSim | 建库 — | 深度 3,000 个细胞；5 个细胞亚群；500 个生物变异基因；4,500
+  个阴性对照基因
 
-  - 10x Genomics 5k PBMC protein (CITE-seq) | 平台 10x Genomics | 建库 scRNA-seq + surface
-  protein | 深度 —
+  - scRNA-seq (10x Genomics) | 平台 10x Genomics | 建库 — | 深度 1,500 个 CD4+ T 细胞
+
+  - single-cell mRNA-seq with surface protein abundance | 平台 — | 建库 — | 深度 —
+
+  - spatial transcriptomics (spatially indexed transcriptional libraries) | 平台 — |
+  建库 — | 深度 median UMIs/barcode = 45
+
+  - scRNA-seq/转录组（CD4+ T 细胞） | 平台 — | 建库 — | 深度 —
+
+  - spatial transcriptomics/spatial single-cell expression（小鼠小脑） | 平台 — | 建库 — | 深度
+  —
+
+  - 单细胞测序（小鼠 E8.5 胚胎，CRISPR Cas9 谱系追踪） | 平台 — | 建库 — | 深度 1,756 cells
+
+  - 空间索引转录文库（spatial indexed transcriptional libraries） | 平台 — | 建库 — | 深度 10,000
+  个空间索引转录文库子集
+
+  - 10x Genomics single-cell gene expression (5k_pbmc_protein_v3) | 平台 10x Genomics
+  | 建库 5k_pbmc_protein_v3 | 深度 —
+
+  - Slide-seq | 平台 Slide-seq | 建库 — | 深度 —
+
+  - scRNA-seq (UMI) | 平台 — | 建库 — | 深度 —
+
+  - Slide-Seq | 平台 — | 建库 — | 深度 —
+
+  - Slide-seq | 平台 — | 建库 — | 深度 —
+
+  - 10x Genomics 5k_pbmc_protein_v3 | 平台 10x Genomics | 建库 Digital gene expression
+  (DGE) | 深度 —
+
+  - SymSim模拟单细胞转录组 | 平台 SymSim | 建库 — | 深度 —
+
+  - Cell State Kernels/GSE122187表达数据 | 平台 NCBI GEO | 建库 — | 深度 —
+
+  - SymSim 模拟单细胞 RNA 测序 | 平台 — | 建库 — | 深度 模拟 variable reads/cell；通过下采样和 PCR 扩增模拟观测计数
+
+  - 10x Genomics scRNA-seq（PBMC CD4+/CD14+） | 平台 — | 建库 — | 深度 按 UMI 比例进行多种下采样
 
 
   ## 分析流程
 
-  - 计算细胞相似性图（KNN图） → 特征选择（局部自相关统计量Hx，用负二项或伯努利零模型） → 基因模块识别（局部相关统计量Hxy，层次聚类UPGMA）
+  - 计算细胞-细胞相似度 → 构建相似度图 → 识别信息基因 → 组织为基因模块 → 结合多模态相似度检测对应基因模块
 
-  - 下载barcode表达和位置信息 → 预处理过滤基因（<50 cells） → Hotspot特征选择（neighborhood=300, bernoulli模型）
-  → 配对相关和模块识别（FDR<0.05, neighborhood=30） → 计算模块分数并可视化
+  - 构建细胞间相似图/相似度映射 → 基于相似图进行特征选择，筛选非随机表达模式基因 → 对候选基因进行成对评估，构建 Z score 矩阵 → 聚类 Z score
+  矩阵形成基因模块
 
-  - 下载Chan et al.表达数据(GSE117542) → Cassiopeia-Greedy推断谱系 → PCA/log归一化 → 构建KNN图(30
-  neighbors) → Hotspot模块识别（tree/transcription metric） → 评估模块
+  - 选择细胞相似性定义（空间邻近/谱系树/表达谱相似性等） → 计算细胞间K最近邻相似图 → 对每个基因计算局部自相关统计量Hx → 使用零模型标准化表达并转换Z分数进行显著性检验
+  → 筛选显著基因 → 对基因对计算局部相关统计量Hxy → 使用UPGMA层次聚类合并高Z分数模块 → Z分数低于阈值或模块基因数超过配置上限时停止合并
 
-  - 下载10x PBMC蛋白数据 → 过滤细胞（UMI<3000, mito>16%） → 门控CD4+T/CD14+ → 特征选择(HVG/NBDisp/PCA/Hotspot)
-  → scVI(10 components) → Hotspot评估蛋白局部自相关
+  - SymSim 模拟单细胞 RNA-seq 表达数据 → scVI 推断低维隐空间 → Hotspot 在 scVI 隐空间中以欧氏距离构建最近邻图 → 基于负二项零模型计算
+  Hx/Hxy 统计量 → 特征选择与基因模块识别 → 与 HVG、NBDisp、PCA、WGCNA、ICA、Grnboost 等方法比较 → 用 precision-recall、模块分配准确度、GR
+  评分及 UMAP 可视化评估
+
+  - scVI 重训练于所选基因 → 生成相似性图 → 使用表面蛋白丰度计算 autocorrelation 评估特征选择质量
+
+  - Hotspot 选择 top 500 显著基因 → 模块识别 → 分析各模块基因表达程序
+
+  - 按细胞将 CD4+ T 细胞样本一分为二生成伪重复 → 在第一半计算 Hotspot Z scores 和 Pearson 相关系数 → 用 Spearman
+  相关比较其与 held-out 第二半 Pearson 相关
+
+  - 使用相同输入基因列表（top 1,000 highly variable genes）评估各方法模块分配跨重复一致性
+
+  - 空间转录组：Hotspot Bernoulli 模式 → 二维空间 K=300 最近邻图 → 鉴定 560 个显著空间自相关基因（FDR<0.05）→ 与
+  Seurat HVG 比较
+
+  - 在 CD14+ 单核细胞亚群重复伪重复/模块一致性分析
+
+  - CD4+ T 细胞特征选择：Hotspot/HVG/NBDisp/PCA → 变化选择阈值计算 MSigDB CD4+ T 细胞相关基因集平均基因相关性 →
+  选 top 1,000 基因 → scVI 构建潜在空间 → 计算 15 个表面蛋白局部自相关 Z 分数比较细胞状态
+
+  - CD4+ T 细胞模块评估：各方法 top 2,000 基因 → 比较局部自相关分布；Hotspot top 500 基因 → 基于成对局部相关分 12 模块；按细胞二分数据集
+  → 评估模块重复性、模块数、分配基因数
+
+  - 小鼠小脑空间转录组：Hotspot 鉴定显著空间自相关基因（845 genes, FDR<0.05）→ 基于成对空间相关分 6 个基因模块 → 计算模块评分可视化；用细胞类型
+  marker 基因富集关联细胞类型
+
+  - Hotspot 与 SpatialDE 比较：已知阳性检测（Saunders et al., 2018 marker genes）→ IDR 样本间重复性比较
+  → 运行时间随细胞/位置数增加比较
+
+  - 构建细胞-细胞相似性图（空间邻近、谱系树关系或表达 PCA 邻近的 KNN 图） → 局部自相关检验识别信息基因（FDR<0.05） → 基于局部表达相似性将基因分组为模块
+  → 与注释发育簇/表达空间比较解释模块
+
+  - 计算细胞-细胞度量（可来自基因表达或替代模态）
+
+  - Hotspot 识别与表达空间相关的特征
+
+  - 计算局部自相关分数
+
+  - 对多个区域或 guide RNA 重复检测并排序，筛选感兴趣特征用于后续分析
+
+  - 将 FDR<0.05 的 lineage autocorrelation 基因基于 pairwise lineage correlation 分为 5 个模块
+
+  - 将模块 summary scores 投影到表达数据 UMAP
+
+  - 用 Chan et al. (2019) 的 42 个手动注释 kernel 注释 lineage 来源模块
+
+  - 比较基因表达来源模块与 lineage 来源模块，识别 angioblast 等转录支持信号并展示 Pecam1
+
+  - 选择 informative genes（基于细胞-细胞相似性度量） → 将表达投射到细胞流形可视化（如 tSNE/UMAP）识别非随机视觉模式 → 使用
+  Geary''s C 作为检验统计量 → 通过置换进行显著性检验
+
+  - 标准化每个细胞的表达值：基于负二项（NBDisp）或伯努利零模型估计 E[xi] 和 E[xi^2] → 计算局部自相关统计量 H=Σ_(i,j)∈E wij
+  xi xj → 计算 E[H]、E[H^2]、var(H) 和 Z 分数 → 与正态分布比较得到 p 值 → Benjamini-Hochberg 校正 FDR
+
+  - Hotspot 基因模块构建：寻找高局部自相关的 informative genes → 评估基因间局部相关 local correlation → 对基因-基因亲和矩阵进行改进层次聚类
+
+  - 基因预过滤：去除少于50个细胞中检测到的基因 → Hotspot特征选择：邻域大小300，bernoulli模型建模基因检测概率 → 成对相关与模块识别：FDR<0.05，邻域大小降至30以识别更细空间模块
+  → spatialDE分析：预过滤少于50个细胞，最小length scale=50，模块length scale=350，10个components → 使用DropViz标记基因列表评估特征选择
+  → 使用IDR评估样本对间基因排序可重复性
+
+  - 小鼠胚胎发生谱系追踪数据：下载GEO GSE117542 Embryo 3 → Cassiopeia-Greedy推断发育谱系 → Hotspot tree
+  metric：基于推断谱系的30个最近邻构建KNN图；Hotspot transcription metric：对log2(x+1) counts-per-10,000进行PCA，基于30个最近邻构建KNN图
+
+  - 下载10x Genomics 5k_pbmc_protein_v3的DGE → 基于表面蛋白丰度过滤PBMC提取CD4+ T细胞和CD14+单核细胞 → 丢弃UMI<3000或线粒体基因比例>16%的细胞
+  → 蛋白丰度log(x+1)转换并按细胞均值中心化 → 手动阈值选择CD4+ T细胞(CD4>3, CD3>2.5, CD14<2)和CD14+单核细胞(CD14>2)
+
+  - HVG：counts以scale factor 10,000进行log-normalization → Seurat FindVariableGenes(x.low.cutoff=.01,
+  x.high.cutoff=3.04, y.cutoff=.5) → 按gene.dispersion.scaled降序排序
+
+  - NBDisp：M3Drop NBumiFitModel默认设置处理raw gene counts → 使用20 counts/10,000高表达截断 → 按q.value升序排序
+
+  - PCA：对log-transformed、scaled counts/10,000运行5个主成分 → 基因得分=前5主成分系数绝对值之和 → 按得分降序排序
+
+  - GR评分：下载MSigDB c7免疫签名集 → 筛选CD4相关基因集(含Th1/Th2/Tfh/Treg/Tconv/T/Th17/Tcell/NKTcell/CD4/Thymocyte且不含DC/PDC/Macrophage/BMDM/Monocyte/Neutrophil/Mast/B/BCell/NKCell/NK)
+  → 基因GR=出现于CD4相关基因集的数目 → 基因集GR=集合内平均GR
+
+  - 蛋白局部自相关评估：raw counts子集到待评估基因 → scVI运行10个latent components → Hotspot评估表面蛋白局部自相关
+  → 与简单阈值选择基因(至少在10个细胞表达)的第五次运行比较蛋白Z-score
+
+  - Hotspot蛋白建模与基因选择：蛋白丰度使用depth-adjusted normal model，先log转换，再线性回归去除每细胞总蛋白计数，按蛋白标准化；选基因时先用PCA
+  20 components构建细胞相似潜在空间；所有过程取top1000报告基因；过滤CD4 T细胞中不表达的表面蛋白(95百分位<100 counts/10,000)
+
+  - CD4 T细胞模块识别：对top1000高变基因运行scVI 10 components → 以该潜在空间输入Hotspot → 基于局部自相关从top500基因创建模块(fdr_threshold=0.05,
+  min_cluster_genes=15)
+
+  - UMAP投影：先运行PCA(top 20 components) → 再在转换空间运行UMAP(n_neighbors=30)
+
+  - Hotspot模块评估：使用Chan et al. (2019)数据，从NCBI GEO GSE122187下载Cell State Kernels → 对每个Hotspot模块，取712
+  kernel genes与模块基因交集 → 跨细胞类型标准化后绘制kernel值
+
+  - 模拟数据评估：使用SymSim三参数转录动力学模型生成模拟单细胞图谱，评估Hotspot在仅转录组数据中的性能
+
+  - SymSim: phylogenetic tree Newick 输入 → 生成 EVF → 动力学参数(on-rate/off-rate/synthesis
+  rate)分布匹配参考单细胞数据集 → Master Equation 采样稳态 mRNA 计数 → 下采样模拟 mRNA capture → 模拟 PCR 扩增与
+  variable reads/cell → 生成 synthetic full 和 observed transcriptomes
+
+  - 特征选择评估: 模拟数据中 EVF 耦合基因作为阳性集 → 运行 Seurat FindVariableGenes、NBDisp、PCA、Hotspot →
+  评估特征选择与 gene-to-EVF 真实模块
+
+  - 局部相关性与 Pearson 相关性比较: SymSim full profiles 作为 true correlations → observed profiles
+  计算 Pearson/local correlation → 将 pairwise gene correlation 展开为向量 → Spearman correlation
+  比较；10x PBMC 分半 → 参考半 Pearson 与 held-out half local/Pearson 比较 → UMI 下采样重复
+
+  - 基因计数矩阵输入 → NBDisp特征选择（NBumiFitModel → NBumiFeatureSelectionCombinedDrop method=''fdr''，按q.value升序）
+  → PCA特征选择（irlbaPcaFS，前5个主成分载荷绝对值之和排序） → 备选模块识别（WGCNA、Grnboost2、ICA、Pearsons） → 与Hotspot比较（真实转录谱用高变基因过滤后的同一输入基因；模拟谱用偶联到EVF的基因；PBMC数据按细胞对半分评估模块可重复性）
+  → K近邻参数敏感性分析
 
 
   ## 软件/包
 
-  - Hotspot 0.9.1（Python）：从单细胞数据中识别信息基因和基因模块
+  - Hotspot （Python）：基于图识别信息基因及基因模块
 
-  - scVI 0.2.4（Python）：非线性降维/潜在空间推断，用于构建细胞相似性图
+  - Hotspot （Python）：基于细胞相似图进行特征选择和基因模块识别；开源 Python 包
 
-  - Seurat 2.3.4（R）：高变基因选择比较
+  - Seurat （R）：scRNA-seq 分析；高度可变基因选择/非线性模型
 
-  - WGCNA 1.69（R）：基因共表达网络模块检测比较
+  - NBDisp （R）：基因选择
 
-  - GRNBoost na（Python）：基因调控网络/模块推断比较
+  - scVI （Python）：非线性细胞相似度模型
 
-  - SpatialDE 1.1.3（Python）：空间可变基因检测比较
+  - DCA （Python）：非线性细胞相似度模型
 
-  - SymSim 0.0.0.9000（R）：模拟单细胞RNA-seq数据
+  - SIMLR （）：非线性细胞相似度模型
 
-  - M3Drop 3.10.4（R）：NBDisp特征选择比较
+  - Harmony （R）：非线性细胞相似度模型/整合
 
-  - Scikit-learn 0.21.2（Python）：机器学习工具
+  - MNN （）：非线性细胞相似度模型/整合
 
-  - arboreto 0.1.5（Python）：GRNBoost实现
+  - WGCNA （R）：基因模块聚类比较
 
-  - Seurat 2.3（R）：HVG特征选择与单细胞分析
+  - GRNBoost （）：基因模块/调控网络比较
 
-  - M3Drop 3.10（R）：NBDisp特征选择
+  - SpatialDE （Python）：空间变异基因识别基准比较
 
-  - scVI （Python）：低维潜空间推断
+  - Hotspot （）：基于细胞相似图的局部自相关和局部相关，识别单细胞数据中的基因模块
 
-  - SymSim （R/Python）：模拟单细胞转录组
+  - PCA （）：生成降维空间以计算细胞间相似性
 
-  - WGCNA （R）：基因共表达模块识别
+  - diffusion maps （）：生成降维空间以计算细胞间相似性
 
-  - arboreto （Python）：Grnboost2基因调控网络推断
+  - ZINB-WaVE （）：因子模型，用于生成降维空间以计算细胞间相似性
 
-  - scikit-learn (FastICA) （Python）：ICA独立成分分析
+  - scVI （）：因子模型，用于生成降维空间以计算细胞间相似性
 
-  - fdrtool （R）：FDR校正
+  - DCA （）：因子模型，用于生成降维空间以计算细胞间相似性
 
-  - Cassiopeia-Greedy （Python）：谱系追踪树推断
+  - Harmony （）：样本整合的非线性方法，用于生成细胞相似性
+
+  - MNN （）：样本整合的非线性方法，用于生成细胞相似性
+
+  - UPGMA （）：层次聚类，用于将基因合并为模块
+
+  - Hotspot （）：特征选择、基因模块识别、Hx/Hxy 统计量计算
+
+  - scVI （）：推断低维隐空间，用于 Hotspot 最近邻图构建
+
+  - SymSim （）：模拟 scRNA-seq 数据
+
+  - Seurat HVG （）：高变基因选择，作为比较方法
+
+  - NBDisp （）：特征选择比较
+
+  - PCA-based feature selection （）：特征选择比较
+
+  - WGCNA （）：模块检测比较
+
+  - ICA with FDR gene-component thresholding （）：模块检测比较
+
+  - Grnboost （）：模块检测比较
+
+  - UMAP （）：降维可视化
+
+  - Hotspot （）：特征选择、模块识别、空间自相关分析
+
+  - scVI （）：重训练于所选基因并生成相似性图
+
+  - Seurat （R）：高变基因（HVG）方法实现
+
+  - NBDisp （）：基于过离散度的特征选择比较
+
+  - Hotspot （）：空间/局部自相关特征选择与基因模块检测
+
+  - Seurat HVG （R）：高变基因选择方法对比
+
+  - NBDisp （）：特征选择方法对比
+
+  - PCA-based procedure （）：特征选择方法对比
+
+  - scVI （Python）：构建潜在空间模型
+
+  - SpatialDE （）：空间表达模式检测方法对比
+
+  - IDR （）：重复性评估
+
+  - Hotspot （）：识别信息基因及基因模块
+
+  - SpatialDE （）：空间依赖表达方法比较
+
+  - BBKNN （）：复杂非线性表达状态模型/单细胞 RNA-seq 分析
+
+  - Scanorama （）：复杂非线性表达状态模型/单细胞 RNA-seq 分析
+
+  - scVI （）：复杂非线性表达状态模型/单细胞 RNA-seq 分析
+
+  - DCA （）：复杂非线性表达状态模型/单细胞 RNA-seq 分析
+
+  - LIGER （）：多模态整合方法（对照）
+
+  - MOFA+ （）：多模态整合方法（对照）
+
+  - Hotspot （）：识别与表达相关的基因/特征，计算局部自相关，衍生基因模块
+
+  - UMAP （）：降维可视化模块 summary scores
+
+  - Python v3.6.7（Python）：
+
+  - R v3.5.1（R）：
+
+  - SymSim v0.0.0.9000（）：
+
+  - scVI v0.2.4（Python）：
+
+  - Scikit-learn v0.21.2（Python）：
+
+  - Seurat v2.3.4（R）：
+
+  - M3Drops v3.10.4（）：
+
+  - WGCNA v1.69（R）：
+
+  - arboreto v0.1.5（Python）：
+
+  - SpatialDE v1.1.3（Python）：
+
+  - Hotspot v0.9.1（Python）：单细胞 RNA-seq 分析
+
+  - Hotspot （）：检测单细胞表达数据中的局部自相关、局部相关和基因模块
+
+  - Hotspot （）：基因模块识别、特征选择与per-cell module scores计算
+
+  - spatialDE （）：空间基因表达分析与空间模块识别
+
+  - Cassiopeia-Greedy （）：发育谱系推断
+
+  - UPGMA （）：自底向上聚类更新模块间Z-score
+
+  - Benjamini-Hochberg （）：FDR控制
+
+  - Hotspot （R）：局部自相关分析、基因选择、模块识别、表面蛋白局部自相关评估
+
+  - Seurat （R）：FindVariableGenes高变基因选择
+
+  - M3Drop （R）：NBumiFitModel进行NBDisp分析
+
+  - scVI （Python）：构建基因表达潜在空间
 
   - UMAP （Python）：降维可视化
+
+  - PCA （）：主成分分析
+
+  - SymSim （R）：生成模拟单细胞转录组
+
+  - MSigDB （）：c7免疫签名基因集
+
+  - NCBI GEO （）：下载GSE122187 Cell State Kernels
+
+  - 10x Genomics （）：公共5k_pbmc_protein_v3数据
+
+  - SymSim （R）：模拟单细胞转录组，生成 EVF、动力学参数和合成 count profiles
+
+  - Seurat 2.3（R）：FindVariableGenes 进行高变基因选择
+
+  - NBDisp （R）：表达零模型/特征选择；默认设置
+
+  - Hotspot （R）：基于 KNN 图和 NBDisp 零模型的局部相关性/特征选择
+
+  - scVI （Python）：推断潜在空间（10 components）用于构建细胞相似图
+
+  - PCA （R）：对 log(x+1) scaled counts per 10,000 降维，保留 top 5 components
+
+  - M3Drop 3.10（R）：NBDisp模型拟合、特征选择；PCA特征选择（irlbaPcaFS）
+
+  - WGCNA （R）：软阈值选择与基因模块构建
+
+  - Grnboost2 （Python）：通过arboreto运行，推断基因对重要性并构建模块
+
+  - Scikit-Learn （Python）：FastICA实现
+
+  - fdrtool （R）：对ICA基因-成分载荷计算FDR
+
+  - Hotspot （）：提供层次聚类过程参考；用于方法比较
 
 
   ## 关键参数
 
-  - Hotspot.K（邻居数） = 30（转录组相似性图的默认邻居数）
+  - Hotspot.K = 约30（可配置）（构建K最近邻相似图，每个细胞连接至K个最相似细胞）
 
-  - Hotspot.K（邻居数） = 300（空间转录组（Slide-seq）的邻居数）
+  - Hotspot.权重归一化 = 每个细胞的权重总和为1（相似图中K近邻权重计算）
 
-  - Hotspot.null_model = negative binomial（常规转录组数据的默认零模型）
+  - Hotspot.零模型 = 负二项（均值依赖文库大小）或 Bernoulli（极稀疏数据）（基因表达零分布，用于标准化和计算Z分数）
 
-  - Hotspot.null_model = bernoulli（极稀疏数据（如Slide-seq）的零模型）
+  - Hotspot.Z分数阈值 = 输入阈值（未给出具体数值）（UPGMA模块合并停止条件）
 
-  - Hotspot.FDR阈值 = 0.05（特征选择和模块显著性判断）
+  - Hotspot.模块基因数上限 = 可配置（未给出具体数值）（超过一定基因数的模块保持不合并）
 
-  - Hotspot.模块合并Z分数阈值 = 可配置（层次聚类停止阈值）
+  - SymSim.cells = 3000（模拟数据集）
 
-  - Hotspot.权重核 = 高斯核（带宽=到K=3邻居的距离）（默认边权重计算）
+  - SymSim.subpopulations = 5（模拟层次树中的细胞亚群数）
 
-  - Hotspot.min_cluster_genes = 15/30/50 depending dataset（模块识别最小基因数）
+  - SymSim.biologically_varying_genes = 500（与 EVF 耦合的基因，构成基因模块）
 
-  - Hotspot.fdr_threshold = 0.05（模块识别显著性阈值）
+  - SymSim.EVFs = 5（模拟协调生物变异的 extrinsic variation factors）
 
-  - Hotspot.neighborhood_size = 300 (feature selection), 30 (module detection)（KNN图邻居数）
+  - SymSim.negative_control_genes = 4500（独立变异基因，作为阴性对照）
 
-  - Hotspot.model = bernoulli / negative binomial / depth-adjusted normal（表达空模型）
+  - Hotspot.null_model = negative binomial distribution（定义 Hx 和 Hxy 统计量的零模型）
 
-  - Seurat FindVariableGenes.x.low.cutoff = 0.01 (PBMC) / 0.1 (sim)（HVG低表达阈值）
+  - Hotspot.distance_metric = Euclidean distance in scVI latent space（构建最近邻图）
 
-  - Seurat FindVariableGenes.x.high.cutoff = 3.04 (PBMC)（HVG高表达阈值）
+  - Hotspot.nearest_neighbors_graph_source = scVI latent space（特征选择与模块识别）
 
-  - Seurat FindVariableGenes.y.cutoff = 0.5（HVG离散度阈值）
+  - Hotspot.top significant genes = 500（选择后运行模块识别）
 
-  - scVI.n_latent = 10（潜空间维度）
+  - Hotspot.mode = bernoulli（小鼠小脑空间转录组，仅建模基因二值检测）
 
-  - UMAP.n_neighbors = 30（UMAP邻居数）
+  - Hotspot.K nearest neighbors = 300（二维空间最近邻图）
 
-  - WGCNA blockwiseModules.minModuleSize = 15（模块最小基因数）
+  - Hotspot.FDR = <0.05（空间自相关显著基因）
 
-  - WGCNA.mergeCutHeight = 0.25（模块合并阈值）
+  - 比较分析.input gene list = top 1,000 highly variable genes（模块分配跨重复一致性比较，避免特征选择影响）
+
+  - rank-sums test.p-value threshold = 0.05（HVG/PCA/Hotspot 特征选择差异检验）
+
+  - 伪重复.split = by cells in half（CD4+ T 细胞伪重复生成）
+
+  - 统计分析.Spearman correlation = （比较 Hotspot Z scores/Pearson coefficients 与 held-out
+  Pearson correlations）
+
+  - 空间转录组.median UMIs/barcode = 45（低深度）
+
+  - Hotspot.FDR = <0.05（小鼠小脑显著空间自相关基因阈值）
+
+  - Hotspot.top genes = 1,000（CD4+ T 细胞中用于 scVI 模型构建的特征数）
+
+  - Hotspot.top genes = 2,000（CD4+ T 细胞中比较局部自相关分布的特征数）
+
+  - Hotspot.top genes = 500（CD4+ T 细胞中用于模块划分的特征数）
+
+  - Hotspot.modules = 12（CD4+ T 细胞 top 500 基因分模块数）
+
+  - Hotspot.modules = 6（小鼠小脑空间基因模块数）
+
+  - scVI.expression threshold = 12,000（用于构建 all-gene scVI 模型的表达阈值）
+
+  - IDR.IDR level = 0.1（小脑样本对之间重复性比较）
+
+  - split-half.dataset split = by cells; half（CD4+ T 细胞模块重复性评估）
+
+  - Hotspot.FDR = <0.05（局部自相关检验识别发育相关基因）
+
+  - Hotspot.模块数 = 5（小鼠胚胎谱系追踪数据中发育相关基因分组）
+
+  - Hotspot.细胞数 = 1,756（Chan et al., 2019 小鼠 E8.5 胚胎谱系追踪数据）
+
+  - Hotspot.空间转录文库子集 = 10,000（与 SpatialDE 的运行时间/性能比较）
+
+  - Hotspot.运行时间 = 93 s（10,000 个空间索引转录文库子集，与 SpatialDE 的 6.2 days 对比）
+
+  - Hotspot.K = （邻域数量（number of neighbors）敏感性分析）
+
+  - Hotspot.FDR = <0.05（lineage autocorrelation 显著基因筛选）
+
+  - 表达展示.CP10K = gene counts per ten thousand UMIs（Fig.4E 基因表达可视化）
+
+  - Hotspot.feature selection test statistic = Geary''s C（基于细胞-细胞相似性度量选择 informative
+  genes，作为检验统计量）
+
+  - Hotspot.significance testing = permutations（Geary''s C 无明确零分布时使用置换检验）
+
+  - Hotspot.visualization = tSNE/UMAP（将基因表达投射到细胞流形可视化图以识别非随机视觉模式）
+
+  - Hotspot.K-nearest-neighbors = K=3（默认高斯核带宽设为到第K近邻的距离；类似 tSNE 的做法）
+
+  - Hotspot.权重 wij = 非负高斯核 wij = exp(-dij^2/si^2)，并按 Σ_j wij = 1 缩放（默认局部自相关权重）
+
+  - Hotspot.无权重方法 = wij = 1（若细胞 i,j 为邻居），否则 0（可选替代权重方案）
+
+  - Hotspot.稀疏图 = K-nearest-neighbors 图；wij 仅在邻居间非零且无自环（计算效率优化）
+
+  - Hotspot.零模型矩 = 逐细胞估计 E[xi] 和 E[xi^2]（纳入细胞测序深度差异）
+
+  - Hotspot.负二项零模型 = NBDisp；均值 bmgj 随文库大小线性变化；方差 = bmgj + bmgj^2/br_g（UMI scRNA-seq
+  常用模型）
+
+  - Hotspot.Bernoulli 零模型 = xgj ∈ {0,1}；logit(P(xgj=1)) = ag + bg * log10(nj)（极稀疏数据（如
+  Slide-Seq）替代模型）
+
+  - Hotspot.Bernoulli 分箱数 = 30（按 UMI 将细胞聚合为 30 个 bin 估计参数；10-50 bin 结果高度相似（Figure
+  S11A））
+
+  - Hotspot.标准化 = bxi = (xi - E[xi]) / sqrt(var(xi))（简化零模型计算）
+
+  - Hotspot.p 值 = Z 分数与正态分布比较（显著性检验；Q-Q 图见 Figure S5）
+
+  - Hotspot.多重检验校正 = Benjamini-Hochberg FDR（多基因检验）
+
+  - Hotspot.局部相关零模型 = 同时计算 P(Hxy|x) 和 P(Hxy|y)，保守保留最不显著（最接近 0）的 Z 分数（基因间局部相关评估）
+
+  - Hotspot.H^2 计算复杂度 = O(NK)（通过先假设边不共享节点再校正实现）
+
+  - Hotspot.权重形式 = H = Σ_(i,j)∈E wij xi xj（局部自相关统计量，与 Moran''s I 成比例）
+
+  - Hotspot.min_cluster_genes = （模块累积基因数超过该值则分配标签）
+
+  - Hotspot.fdr_threshold = （基于Benjamini-Hochberg设定最小显著Z-score；最大Z-score低于阈值则停止合并）
+
+  - Hotspot.neighborhood size = 300（小鼠小脑数据特征选择）
+
+  - Hotspot.model = bernoulli（小鼠小脑数据建模基因检测概率）
+
+  - Hotspot.neighborhood size = 30（小鼠小脑数据成对相关和模块识别，用于更细空间模块）
+
+  - Hotspot.FDR = <0.05（小鼠小脑数据用于成对相关和模块识别的基因选择）
+
+  - spatialDE.minimum length scale = 50（小鼠小脑数据重新计算length-scale）
+
+  - spatialDE.length scale = 350（小鼠小脑数据模块计算）
+
+  - spatialDE.components = 10（小鼠小脑数据模块计算；初始5个components不足以捕获全部空间模式）
+
+  - spatialDE.data subset = 12,000/32,000 barcodes（小鼠小脑数据因计算运行时间限制）
+
+  - DropViz.differential expression test = 1 vs all ranksums（为11个小脑细胞类型簇计算标记基因）
+
+  - DropViz.top genes = 100（每个小脑簇保留FDR<0.1的top 100标记基因）
+
+  - Hotspot/spatialDE.IDR = （评估四个小鼠小脑样本六对样本间基因排序可重复性）
+
+  - Hotspot tree metric.nearest neighbors = 30（基于推断谱系构建KNN图）
+
+  - Hotspot transcription metric.nearest neighbors = 30（基于log2(x+1) counts-per-10,000的PCA构建KNN图）
+
+  - Hotspot.gene prefilter = expressed in >=10 cells（所有分析中基因预过滤）
+
+  - Hotspot.model = negative binomial model with adjustment for library size（基因表达建模）
+
+  - Hotspot.local autocorrelation FDR threshold = 0.05（tree-metric中筛选通过FDR阈值的基因）
+
+  - Hotspot.top genes by Z-score = top 2000（transcription metric中评估pairwise local
+  correlations）
+
+  - Hotspot.local correlation FDR threshold = 0.05（模块提取）
+
+  - Hotspot.min_cluster_genes = 30（tree-metric模块提取）
+
+  - Hotspot.min_cluster_genes = 50（transcription-metric模块提取）
+
+  - UMAP.n_neighbors = 30（UMAP投影）
+
+  - PCA.components = top 20（UMAP前转换空间）
+
+  - PCA.components = 5（PCA procedure选择基因）
+
+  - PCA.score = sum of absolute value of top 5 PCA coefficients（基因排序）
+
+  - Seurat FindVariableGenes.scale factor = 10000（counts log-normalization）
+
+  - Seurat FindVariableGenes.x.low.cutoff = .01（高变基因选择）
+
+  - Seurat FindVariableGenes.x.high.cutoff = 3.04（对应20 UMI counts/10,000高截断）
+
+  - Seurat FindVariableGenes.y.cutoff = .5（高变基因选择）
+
+  - Seurat FindVariableGenes.ordering = gene.dispersion.scaled descending（输出基因排序）
+
+  - M3Drop NBumiFitModel.settings = default（NBDisp分析，raw gene counts）
+
+  - M3Drop.high-end cutoff = 20 counts/10,000（与HVG一致性）
+
+  - M3Drop.ordering = q.value ascending（输出基因排序）
+
+  - scVI.latent components = 10（蛋白局部自相关评估）
+
+  - scVI.components = 10（CD4 T细胞模块识别）
+
+  - Hotspot.top genes = top 1000 reported genes（所有程序评估）
+
+  - Hotspot.module genes = top 500 based on local autocorrelation（CD4 T细胞模块识别）
+
+  - Hotspot.fdr_threshold = 0.05（CD4 T细胞模块创建）
+
+  - Hotspot.min_cluster_genes = 15（CD4 T细胞模块创建）
+
+  - SymSim.model = three-parameter kinetic model of transcription（模拟单细胞转录组）
+
+  - SymSim.simulation_replicates = 10（每个重复生成 UMI count profiles）
+
+  - SymSim.cells = 3000（模拟细胞数）
+
+  - SymSim.genes = 5000（模拟基因数）
+
+  - SymSim.EVFs = 5（随群体结构变化的外源变异因子）
+
+  - SymSim.EVF-gene coupling = 2% (~100 genes per EVF)（定义阳性基因集和真实基因模块）
+
+  - SymSim.Newick tree = (((A:1,B:1):1,(C:0.5,D:0.5):1.5):1,E:3);（生成 5 个转录差异细胞群体）
+
+  - SymSim.EVF varying parameter = synthesis parameter only（on-rate/off-rate 随机分配并加
+  per-gene offset）
+
+  - Seurat FindVariableGenes.x.low.cutoff = 0.1（HVG 特征选择）
+
+  - Seurat FindVariableGenes.x.high.cutoff = 100（HVG 特征选择）
+
+  - Seurat FindVariableGenes.y.cutoff = 0.5（HVG 特征选择）
+
+  - Seurat FindVariableGenes.mean.function = ExpMean（Seurat 2.3 HVG）
+
+  - Seurat FindVariableGenes.dispersion.function = LogVMR（Seurat 2.3 HVG）
+
+  - PCA.top components = 5（保留 PCA 前 5 个成分用于基因排序和 Hotspot latent space）
+
+  - Hotspot.KNN neighbors = 300（构建 KNN 图）
+
+  - Hotspot.expression null model = NBDisp（来自 Andrews and Hemberg (2019)）
+
+  - scVI.n_components = 10（推断 latent space 用于局部相关性的细胞-细胞相似图）
+
+  - HVG correlation eval.x.low.cutoff = 0.1（相关性比较中的基因集选择，使用 x.low.cutoff 和 y.cutoff，不用
+  Hotspot 基因选择）
+
+  - HVG correlation eval.y.cutoff = 0.5（相关性比较中的基因集选择）
+
+  - M3Drop.NBumiFeatureSelectionCombinedDrop method = fdr（NBDisp特征选择）
+
+  - M3Drop.基因排序 = q.value升序（排序NBDisp结果基因）
+
+  - irlbaPcaFS.top N principal components = 5（PCA特征选择；除非另有说明）
+
+  - WGCNA pickSoftThreshold.R2阈值 = >0.9（选择power超参数，取R2超过0.9的最小值）
+
+  - WGCNA blockwiseModules.minModuleSize = 15（构建基因模块）
+
+  - WGCNA blockwiseModules.mergeCutHeight = 0.25（构建基因模块）
+
+  - WGCNA blockwiseModules.reassignThreshold = 0（构建基因模块）
+
+  - WGCNA blockwiseModules.pamRespectsDendro = FALSE（构建基因模块）
+
+  - Grnboost2.模块构建 = 对基因-基因矩阵行进行层次聚类；在importance值第90百分位切树；丢弃小于15个基因的模块（从Grnboost2输出构建模块）
+
+  - ICA FastICA.number of components = 5和10（ICA模块检测）
+
+  - ICA.FDR阈值 = <0.001；模拟谱使用<0.1（去除基因-成分关联）
+
+  - ICA.基因-成分关联 = 每个基因关联到载荷最大的成分（将载荷转换为清晰模块）
+
+  - Pearsons.minimum cluster size = 15（层次聚类分组）
+
+  - Pearsons.FDR阈值 = 0.05（相关性分组）
+
+  - Pearsons.FDR校正 = Benjamini-Hochberg（Pearson相关系数转换为T统计量、p值后校正）
+
+  - 敏感性分析.K（邻居数） = 100 <= K <= 300（K近邻图构建参数敏感性；性能通常随K增加而提升，最佳范围100-300）
+
+  - 与Hotspot比较.输入基因 = 真实转录谱：通过高变基因过滤的同一输入基因；模拟谱：偶联到EVF的基因（方法比较）
+
+  - 与Hotspot比较.可重复性评估 = PBMC数据按细胞对半分，计算基因在一半中被分配到同一模块且在另一半中也被分配到同一模块的比例（无ground truth时的评估）
+
+  - 与Hotspot比较.额外报告 = 各方法报告的模块数和分配到模块的基因数（排除因报告少基因/少模块导致的高可重复性）
 
 
   ## 数据库
 
-  - MSigDB：计算基因相关性评分（GR score）评估CD4+ T细胞生物学相关性
+  - MSigDB：提供 CD4+ T 细胞相关基因集，用于计算基因相关性（GR）评分
 
-  - DropViz：小鼠小脑细胞类型标记基因参考
+  - MSigDB：提供 CD4+ T 细胞相关基因集，用于基因相关性评分
 
-  - NCBI GEO (GSE117542, GSE122187)：小鼠胚胎发生谱系追踪表达数据及细胞状态核
+  - Saunders et al., 2018：提供小鼠小脑细胞类型 marker gene 集，用于已知阳性检测
 
-  - MSigDB (c7 immune signature set)：计算CD4 T细胞基因相关性评分
+  - GEO：Mouse Embryogenesis Lineage-Tracing Data (GSE117542) 数据获取
 
-  - 10x Genomics：5k PBMC protein v3数据集
+  - MSigDB：Molecular signatures database 3.0（文献引用）
 
-  - Broad Institute Slide-seq portal：小鼠小脑Slide-seq数据'
+  - Broad Institute Single Cell Portal Slide-seq study：下载四个小鼠小脑样本的barcode表达和位置信息
+
+  - DropViz：下载小鼠小脑原始表达数据并计算标记基因集
+
+  - NCBI GEO GSE117542：下载小鼠胚胎发生谱系追踪表达数据
+
+  - NCBI GEO GSE122187：下载Chan et al. (2019) Cell State Kernels
+
+  - 10x Genomics 5k_pbmc_protein_v3：公共PBMC scRNA-seq和表面蛋白数据
+
+  - MSigDB c7 immune signature set：计算基因相关性(GR)评分
+
+  - 10x PBMC dataset：提供 CD4+ 和 CD14+ 亚群转录谱，用于局部相关性与 Pearson 相关性比较'
 evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
   across modalities of single-cell genomics | E:/MemOmics-Agent/hermes_home/papers/hotspot.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

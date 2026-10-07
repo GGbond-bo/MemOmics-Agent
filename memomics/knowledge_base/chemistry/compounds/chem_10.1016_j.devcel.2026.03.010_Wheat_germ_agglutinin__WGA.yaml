@@ -1,0 +1,25 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.devcel.2026.03.010_Wheat_germ_agglutinin__WGA
+chem_category: compounds
+last_updated: 2026-10-07 17:39
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.devcel.2026.03.010_Wheat_germ_agglutinin__WGA
+content: '- 靶点: —
+
+  - 剂量: —
+
+  - IC50/EC50: —
+
+  - 模型: —
+
+  - 效应: 荧光标记/膜染色'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

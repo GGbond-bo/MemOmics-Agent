@@ -1,0 +1,37 @@
+type: kb_entry
+name: nature-figure_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-09-29 14:34
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- nature-figure_empirical
+content: 'skill: nature-figure
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"source":"D:/肌肉锻炼/DEG_file/merged_*.xlsx ALL_merged","variants":["clean_grid","rebalanced","grouped","mono_accent"],"rmax":[0.49,0.47,0.48,0.48],"fs":"7.0-7.2pt","fixes":["remove
+  in-canvas prose","raise font 5-6pt to 7-8pt","raise RMAX 0.44 to 0.47-0.49","neutral
+  titles"]}
+
+
+  result_summary:
+
+  CNS DEG landscape 4 refinements generated (same skeleton A hero circle matrix +
+  B/C/D evidence panels). Each fixed all 4 diagnosed defects: in-canvas sentences
+  removed, font raised to 7-8pt, RMAX 0.44 -> 0.47-0.49 (less whitespace), neutral
+  titles. Variants differ in layout strategy: clean_grid (minimal canvas, no ring,
+  pure white), rebalanced (height ratio 1.38 vs 2.05, B/C/D enlarged + shared bottom
+  legend), grouped (subcluster family separators + group labels), mono_accent (desaturated
+  palette, compact 178x140mm). 340,971 rows / 5 contrasts / 10 subclusters. Output
+  png+pdf to task2/figures/variants/.'
+evidence: 'record_run(nature-figure): CNS DEG landscape 4 refinements generated (same
+  skeleton A hero circle matrix + B/C/D evidence panels). Each fixed all 4 diagnosed
+  defects: in-canvas sentences removed, font raised to 7-8pt, RMAX 0.44'

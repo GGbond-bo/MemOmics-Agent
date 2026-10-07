@@ -1,0 +1,32 @@
+type: kb_entry
+name: research-plan_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-29 23:04
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- research-plan_empirical
+content: 'skill: research-plan
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {''interpreter'': ''C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe'',
+  ''input'': ''DEG_research_plan_v1.md (16718 B)'', ''output'': ''DEG_research_plan_v1.docx
+  (46933 B)'', ''cmd'': ''python results/memomics-afd2d418/scripts/plan_md_to_docx.py''}
+
+
+  result_summary:
+
+  md→docx 转换脚本运行成功：84 段落 / 14 表格 / 46,933 B。实现要点：管道表格转 Light Grid 表（首行加粗 8.5pt）、标题
+  4 级、代码块 Consolas 8.5pt、引用斜体灰、行内 **加粗** 简易解析、中文 Microsoft YaHei（含 eastAsia rFonts
+  设置）。'
+evidence: 'record_run(research-plan): md→docx 转换脚本运行成功：84 段落 / 14 表格 / 46,933 B。实现要点：管道表格转
+  Light Grid 表（首行加粗 8.5pt）、标题 4 级、代码块 Consolas 8.5pt、引用斜体灰、行内 **加粗** 简易解析、中文 Microsoft
+  YaHei（含 eastAsia rFonts 设置）。'

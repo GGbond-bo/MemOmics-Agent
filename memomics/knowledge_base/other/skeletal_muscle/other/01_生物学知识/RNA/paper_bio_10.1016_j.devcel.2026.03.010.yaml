@@ -1,119 +1,770 @@
-pmid: "42019489"
 type: kb_entry
 name: paper_bio_10.1016_j.devcel.2026.03.010
-doi: "10.1016/j.devcel.2026.03.010"
 species: other
 tissue: skeletal_muscle
 direction: other
 assay_type: RNA
-last_updated: 2026-08-16 03:44
+last_updated: 2026-10-07 17:39
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_bio_10.1016_j.devcel.2026.03.010
-content: '## 结论
+content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
-  - 构建了小鼠肢体骨骼肌在静息、萎缩和肥大状态下的单核和单细胞转录组图谱，结合空间转录组学。
+  - **[L2]** 本文构建了小鼠肢体骨骼肌在静息、实验诱导萎缩和肥厚状态下的单核/单细胞转录组图谱，并结合空间图谱揭示肌肉驻留细胞群和肌纤维类型特异性转录反应的变化。　（验证：实验诱导小鼠萎缩/肥厚模型，单核/单细胞转录组、空间转录组及高分辨率3D成像（SUMMARY）
+  ｜ 位置：SUMMARY）
 
-  - 发现条件依赖的细胞群变化和纤维类型特异性转录反应。
+  - **[L2]** 神经肌肉接头在萎缩和肥厚状态下发生广泛重塑，出现与状态相关的特化突触肌核（SynM）和终末施万细胞（tSC）。　（验证：高分辨率3D成像和空间转录组学在组织水平确认；去神经和运动人肌肉中观察到类似NMJ改变（SUMMARY）
+  ｜ 位置：SUMMARY）
 
-  - 神经肌肉接头(NMJ)发生广泛重塑，包括出现特化突触肌核(SynM)和终末施万细胞(tSCs)。
+  - **[L2]** 去神经和运动人肌肉中也可见类似神经肌肉接头改变，提示该图谱对人类肌肉可塑性研究及肌病治疗靶点发现具有转化意义。　（验证：人去神经和运动肌肉样本中观察到类似NMJ改变（SUMMARY）
+  ｜ 位置：SUMMARY）
 
-  - 萎缩导致NMJ轴突丢失和结构破坏，肥大保持NMJ完整性并扩展运动终板和SynM区域。
+  - **[L1]** 骨骼肌驻留细胞间通讯对维持肌肉稳态及协调损伤、机械负荷或神经输入丧失的反应至关重要。　（位置：Introduction 第1段）
 
-  - 去神经支配诱导终末施万细胞转分化为激活的tSC样细胞(aSC1)，通过TGFβ/activin信号与突触肌核通讯，可能促进肌肉萎缩。
+  - **[L2]** 该研究通过全肌肉snRNA-seq和FACS富集的scRNA-seq，构建了覆盖静息、去神经萎缩和功能过载肥大状态的骨骼肌转录组图谱。　（验证：小鼠跖肌basal/Den/OVL模型；snRNA-seq获得75,343个核，scRNA-seq获得19,879个细胞；Fig.1C–1F,
+  Fig.S1E–S1H ｜ 位置：Results 第2段 / Fig.1C–1F, Fig.S1）
 
-  - 人类去神经和运动肌肉中观察到类似的NMJ改变，支持小鼠模型的转化相关性。
+  - **[L2]** 去神经导致小鼠跖肌质量和肌纤维横截面积下降，功能过载导致增加，7天时出现显著变化。　（验证：小鼠Den/OVL模型3或7天；肌肉质量Fig.1B，CSA
+  Fig.S1A–S1B ｜ 位置：Results 第1段 / Fig.1B, Fig.S1A–S1B）
+
+  - **[L2]** snRNA-seq无监督聚类鉴定了骨骼肌主要细胞类型以及NMJ和MTJ两个特化肌核域。　（验证：75,343个核的无监督聚类与canonical
+  lineage markers注释；Fig.1C–1F ｜ 位置：Results 第2段 / Fig.1C–1F）
+
+  - **[L2]** 功能过载后MuSCs比例增加并呈现增殖/分化状态，3天时免疫细胞更丰富；去神经后肌核减少但MuSCs不扩增，FAPs比例增加。　（验证：sn/scRNA-seq细胞比例与差异表达分析；Fig.1F,
+  Fig.S2A–S2B, Table S1 ｜ 位置：Results 第3段 / Fig.1F, Fig.S2）
+
+  - **[L2]** 去神经肌肉中Schwann细胞发生转录重编程并上调轴突再生/迁移相关基因；功能过载中MuSCs、FAPs和ECs分别上调增殖/分化、ECM/机械感知和血管生成相关基因。　（验证：snRNA-seq差异表达分析；Fig.S1J–S1K,
+  Table S1 ｜ 位置：Results 第4段 / Fig.S1J–S1K）
+
+  - **[L2]** 去神经MuSCs停留于G1期并表达Islr及ECM相关基因Dcn、Col8a1，提示轴突丢失触发独特转录程序。　（验证：sn/scRNA-seq细胞周期与差异表达分析；Fig.S2A–S2B,
+  Table S1 ｜ 位置：Results 第4段 / Fig.S2A–S2B）
+
+  - **[L2]** 41,240个肌核在肌肉萎缩和生长条件下发生显著转录变化，UMAP嵌入尤其萎缩状态明显偏移。　（验证：snRNA-seq聚类与UMAP分析，图1D
+  ｜ 位置：Results 第1段 / Figure 1D）
+
+  - **[L2]** Den肌肉中快缩糖酵解IIb（Myh4+）和IIx（Myh1+）肌核比例在7天降至18%，IIa（Myh2+）肌核比例相对稳定。　（验证：snRNA-seq肌核亚群比例分析，图2C、图S2C
+  ｜ 位置：Results 第1段 / Figure 2C, Figure S2C）
+
+  - **[L2]** 肌核聚类揭示Myonuc1-3三个亚群，主要见于Den和OVL条件，在未扰动基础状态中极少。　（验证：重新聚类与亚群鉴定，图2A-2C；Table
+  S2 ｜ 位置：Results 第2段 / Figure 2A-2C）
+
+  - **[L2]** Myonuc1可能代表去神经支配肌核，表现为肌球蛋白转录本下调和去神经标志物上调，并激活肌肉消耗相关信号。　（验证：snRNA-seq差异表达与通路富集，图2D-2E；Table
+  S2，并与既往snRNA-seq去神经亚群一致 ｜ 位置：Results 第2段 / Figure 2D-2E, Table S2）
+
+  - **[L2]** Myonuc2和Myonuc3在OVL中增加，富集肌核融合和肌肉适应相关基因。　（验证：snRNA-seq差异表达分析，图2D-2E、图S2D-S2E；Table
+  S2 ｜ 位置：Results 第2段 / Figure 2D-2E, Figure S2D-S2E）
+
+  - **[L2]** Den肌核富集萎缩相关基因，OVL肌核富集肥厚相关基因，但两种条件均导致NMJ分子重塑。　（验证：snRNA-seq萎缩/肥厚评分与通路富集，图2F-2G、图S2G；Table
+  S2 ｜ 位置：Results 第3段 / Figure 2F-2G, Figure S2G）
+
+  - **[L2]** 突触肌核SynM仅占约1%总肌核，Den来源SynM在UMAP空间与基础及OVL来源SynM分离。　（验证：snRNA-seq SynM再聚类与UMAP分析，图3A、图S3A；Table
+  S3 ｜ 位置：Results 第4段 / Figure 3A, Figure S3A）
+
+  - **[L2]** Den SynM富集萎缩相关基因，OVL SynM富集生长相关转录本，与肌肉质量下降或增加一致。　（验证：snRNA-seq萎缩/肥厚评分，图S3B；肌肉质量数据见图1B
+  ｜ 位置：Results 第5段 / Figure S3B, Figure 1B）
+
+  - **[L2]** Den SynM下调肌肉收缩、钙稳态和肌节结构相关基因，OVL SynM富集生长、氨基酸代谢、Wnt信号和神经元迁移相关基因。　（验证：功能富集分析，图3B-3C、图S3C；Table
+  S3 ｜ 位置：Results 第6段 / Figure 3B-3C, Figure S3C）
+
+  - **[L2]** Den SynM具有独特转录变化，包括Spp1和Vat1l上调以及Chrne和Colq下调；OVL SynM没有独特调控基因集，但Col13a1和Dcaf8呈上调趋势。　（验证：SynM差异表达分析，图S3D；Table
+  S3 ｜ 位置：Results 第7段 / Figure S3D, Table S3）
+
+  - **[L2]** Den肌肉中超过92%的NMJ缺乏可检测的轴突终末接触，平均神经-AChR重叠仅7%，表明NMJ结构重塑。　（验证：CUBIC组织透明化+免疫荧光+高分辨3D全组织共聚焦成像，图3D-3E、图S3E
+  ｜ 位置：Results 第8段 / Figure 3D-3E, Figure S3E）
+
+  - **[L2]** 该研究构建了首个同时整合同一肌肉类型中肌萎缩与肌生长状态的骨骼肌适应综合图谱，并以细胞和分子分辨率揭示神经与机械应激下的动态变化。　（验证：结合单核/单细胞转录组、空间转录组与3D成像，并在小鼠去神经/过载模型及人肌组织中进行验证（Discussion
+  第1、4段；Fig.6J/K） ｜ 位置：Discussion 第1段、第4段；Fig.6J/K）
+
+  - **[L2]** 去神经与过载诱导NMJ前/后成分协调且相反的适应：SynM去神经后上调Scn5a，肥大时上调Gpc4；突触前SCs出现去神经特异激活的tSC样/aSC1群体。　（验证：单核/单细胞转录组、空间转录组与3D成像；RNAscope验证了萎缩NMJ处Inhba+
+  tSCs（Discussion 第2、5段） ｜ 位置：Discussion 第2段、第5段）
+
+  - **[L2]** 去神经肌肉中特异性出现NMJ定位的tSC样/aSC1亚群，表达activin信号组分，提示促萎缩作用；Inhba在长期去神经tSCs中持续表达。　（验证：RNAscope验证Inhba+
+  tSCs存在于萎缩NMJ（Discussion 第5段） ｜ 位置：Discussion 第5段）
+
+  - **[L1]** CellChat计算建模提示激活tSCs(aSC1)与去神经SynM的通讯主要由TGFβ/activin信号介导，可能触发肌肉消耗；但TGFβ信号增强尚未直接证明。　（验证：CellChat计算建模；原文指出该增强仍有待直接证明（Discussion
+  第5段） ｜ 位置：Discussion 第5段）
+
+  - **[L1]** 肌肉萎缩可能起源于NMJ：突触下核接收来自邻近活化Schwann细胞的促萎缩信号。　（验证：基于CellChat预测和RNAscope存在性验证，但直接证明待完成（Discussion
+  第5段） ｜ 位置：Discussion 第5段）
+
+  - **[L2]** 小鼠NMJ发现可在人类周围神经病（PAN相关神经病）和脊髓损伤早期患者肌肉中得到验证，提示NMJ信号轴为治疗靶点；人bulk RNA-seq中趋势一致且对性别差异稳健。　（验证：人PAN神经病患者及脊髓损伤患者肌肉样本；人bulk
+  RNA-seq队列（Discussion 第6段；Fig.6J/K） ｜ 位置：Discussion 第6段；Fig.6J/K）
+
+  - **[L1]** 该研究资源可用于研究调节神经肌肉接头功能和对抗肌肉萎缩的治疗策略。　（位置：RESOURCE AVAILABILITY 前一句）
+
+  - **[L2]** 部分发现经免疫荧光或 RNAscope 验证。　（验证：原文说明部分发现通过免疫荧光或 RNAscope 验证；片段未提供具体图号 ｜ 位置：Limitations
+  of the Study）
+
+  - **[L2]** 多数见解来自小鼠，但关键观察在小鼠和人样本中均得到确认，提示发现具有跨物种相关性。　（验证：原文说明关键观察在小鼠和人样本中确认；片段未提供具体图号
+  ｜ 位置：Limitations of the Study）
+
+  - **[L0]** 仍需进一步研究确定这些分子变化与肌肉可塑性的直接因果贡献。　（位置：Limitations of the Study）
+
+  - **[L1]** 去神经支配可激活纤维脂肪生成祖细胞中的 STAT3–IL-6 信号，促进肌纤维萎缩和纤维化。　（位置：参考文献 11）
+
+  - **[L1]** 单核转录组可揭示骨骼肌细胞的功能区室化及多核肌纤维的转录异质性。　（位置：参考文献 6, 7）
+
+  - **[L1]** 骨骼肌单细胞/单核测序可发现新的肌肉驻留细胞群体及亚突触特异性转录本。　（位置：参考文献 5, 13）
+
+  - **[L1]** 肌肉去神经支配促进胶质细胞与间充质细胞通过 NGFR 和 NGF 发生功能互作。　（位置：参考文献 22）
+
+  - **[L1]** ATF3 在 Wallerian 变性过程中的胶质细胞中上调。　（位置：参考文献 23）
+
+  - **[L1]** SPP1 通过结合 CD44 和 αvβ3 并经 PKCα 促进周围神经损伤后 Schwann 细胞增殖与存活。　（位置：参考文献 33）
+
+  - **[L1]** Schwann 细胞中 COL20A1 缺失会改变神经肌肉接头再生和小鼠运动活动。　（位置：参考文献 29）
+
+  - **[L1]** 胶质细胞 Wingless/Wnt 信号调节果蝇神经肌肉接头的谷氨酸受体聚集和突触生理。　（位置：参考文献 15）
+
+  - **[L1]** Lrp4 调节发育过程中细胞信号通路的细胞外整合。　（位置：参考文献 16）
+
+  - **[L1]** N-cadherin 通过 Slit2/3 介导的运动接触抑制指导神经再生所需的 Schwann 细胞集体迁移。　（位置：参考文献 24）
+
+  - **[L1]** Schwann 细胞利用 TAM 受体介导的吞噬作用和自噬清除神经损伤模型中的髓鞘。　（位置：参考文献 25）
+
+  - **[L1]** 在 SOD1 G37R ALS 小鼠模型中，神经肌肉接头胶质细胞特性与突触修复不相容。　（位置：参考文献 26）
+
+  - **[L1]** CellChat 可用于推断和分析细胞间通讯。　（位置：参考文献 31）
+
+  - **[L2]** 小鼠骨骼肌在萎缩和肥大过程中存在转录组图谱，揭示主要核群体及肌核异质性/状态特异性转录程序。　（验证：snRNA-seq，n=2 mice
+  per condition；UMAP/气泡图/功能富集，Fig.1C–F、Fig.2A–G；肌肉重量n=19–22，Fig.1B。 ｜ 位置：Highlights；Fig.1–2）
+
+  - **[L2]** 去神经和超负荷均引起突触肌核(SynM)转录重塑，不同SynM基因程序驱动NMJ重塑。　（验证：SynM重聚类snRNA-seq；NMJ免疫荧光/3D重建/EdU标记，n=3–6
+  mice，n=36–178 NMJs，Fig.3A–L。 ｜ 位置：Highlights；Fig.3）
+
+  - **[L1]** 去神经激活NMJ处tSCs (Inhba+)，并通过TGFβ/activin信号作用于SynM。　（位置：Highlights）
+
+  - **[L1]** 去神经和运动人肌肉表现出相似的NMJ相关改变。　（位置：Highlights）
+
+  - **[L2]** 空间转录组可识别萎缩和肥大肌肉中的NMJ阳性区域及突触肌核特征。　（验证：空间转录组，n=2 mice per condition；与相邻切片BTX染色重叠注释NMJ阳性spots，Fig.4A–H。
+  ｜ 位置：Fig.4）
+
+  - **[L2]** NMJ阳性空间spots呈现突触基因表达特征，包括Chrng、Chrna1、Scn5a和Gpc4的分布。　（验证：空间转录组，n=2 mice
+  per condition；feature/violin plots，Fig.4E–H。 ｜ 位置：Fig.4E–H）
+
+  - **[L2]** 去神经和过载干预后，终末施万细胞数量及其Ki67+增殖比例随时间变化，提示施万细胞对肌肉萎缩/肥大有异质性响应。　（验证：Fig.5A-C：Plp1-tdTomato小鼠plantaris免疫荧光，统计每个NMJ的tSC数（n=73–140
+  NMJs）及含Ki67+ tSC的NMJ比例（n=36–68 NMJs） ｜ 位置：Fig.5A-C）
+
+  - **[L2]** DT处理7天使Plp1iDTR小鼠基底plantaris出现NMJ碎片化，并改变肌纤维横截面积分布。　（验证：Fig.5D-G：Plp1WT和Plp1iDTR小鼠免疫荧光/组织学，统计NMJ碎片数（n=76–111
+  NMJs）及肌纤维CSA频率分布 ｜ 位置：Fig.5D-G）
+
+  - **[L2]** 整合sc/snRNA-seq鉴定出施万细胞亚群；Ajap1+和Inhba+核在NMJ中的比例及共表达模式经RNAscope验证。　（验证：Fig.5H-M：sc/snRNA-seq
+  UMAP与亚群比例分析；RNAscope检测Ajap1+、Inhba+核（n=39–68 NMJs） ｜ 位置：Fig.5H-M）
+
+  - **[L2]** 空间转录组显示NMJ阳性spot中aSC1标志基因表达高于非NMJ spot。　（验证：Fig.5N-O：空间转录组NMJ阳性/阴性spot定位及aSC1标志基因标准化表达和小提琴图
+  ｜ 位置：Fig.5N-O）
+
+  - **[L1]** 突触肌核与施万细胞之间存在预测的配体-受体通讯，BMP和TGFβ/activin信号网络在基底、去神经和过载条件下发生变化。　（验证：Fig.6A-E：基于snRNA-seq/scRNA-seq的配体-受体相互作用和信号网络预测，未做功能验证
+  ｜ 位置：Fig.6A-E）
+
+  - **[L2]** 人去神经肌肉活检中denervation和TGFβ/activin相关基因改变，INHBA与CHRNE转录本可在去神经肌肉中检出。　（验证：Fig.6F-H：人PAN肌肉活检n=5
+  denervated vs n=8 healthy controls的H&E/酯酶组织化学和基因热图，RNAscope n=3/组 ｜ 位置：Fig.6F-H）
+
+  - **[L1]** 人脊髓损伤后公共微阵列数据中INHBA（aSC1标志）与萎缩相关基因共变化。　（验证：Fig.6I：公共人肌肉活检微阵列数据集（SCI 2d/5d）热图
+  ｜ 位置：Fig.6I）
+
+  - **[L2]** 人运动后肌肉中肥大相关通路与RFLNA（aSC2标志）相关。　（验证：Fig.6J-K：人exercised与control肌肉样本n=3/组热图
+  ｜ 位置：Fig.6J-K）
 
 
   ## 细胞类型
 
+  - 骨骼肌纤维
+
+  - I型慢肌氧化纤维
+
+  - II型快肌糖酵解纤维
+
+  - 肌肉驻留细胞群
+
+  - 突触肌核（SynM）
+
+  - 终末施万细胞（tSC）
+
+  - 运动神经元
+
   - myonuclei
 
-  - synaptic myonuclei (SynM)
+  - myofiber body myonuclei
 
-  - terminal Schwann cells (tSCs)
+  - NMJ myonuclei
 
-  - activated Schwann cells (aSCs)
-
-  - myelinating Schwann cells (mSCs)
-
-  - muscle stem cells (MuSCs/satellite cells)
+  - MTJ myonuclei
 
   - fibro-adipogenic progenitors (FAPs)
 
   - mural cells
 
-  - vascular endothelial cells
+  - vascular endothelial cells (ECs)
+
+  - muscle stem cells (MuSCs)/satellite cells
 
   - immune cells
+
+  - Schwann cells (SCs)
+
+  - myelinating Schwann cells (Mpz+)
+
+  - non-myelinating Schwann cells (Nrxn1+)
+
+  - adipocytes
+
+  - 肌核(myonuclei)
+
+  - 突触肌核(SynM)
+
+  - Myonuc1
+
+  - Myonuc2
+
+  - Myonuc3
+
+  - IIb型快缩糖酵解肌核(Myh4+)
+
+  - IIx型快缩糖酵解肌核(Myh1+)
+
+  - IIa型快缩肌核(Myh2+)
+
+  - 慢缩I型肌核(Myh7+)
+
+  - NMJ
+
+  - 肌纤维/肌细胞
+
+  - 肌核
+
+  - 突触下肌核
+
+  - NMJ相关肌核（SynM）
+
+  - 肌肉干细胞（MuSCs）
+
+  - 纤维脂肪祖细胞（FAPs）
+
+  - 施万细胞（SCs）
+
+  - 髓鞘化施万细胞
+
+  - 非髓鞘化施万细胞
+
+  - 突触前施万细胞
+
+  - tSC样细胞
+
+  - 活化tSC（aSC1）
+
+  - 驻留肌肉细胞
+
+  - 骨骼肌（plantaris、soleus、gastrocnemius）
+
+  - Plp1+细胞
+
+  - 神经肌肉接头（NMJ）相关细胞
+
+  - 肌纤维
+
+  - 内皮细胞（EC）
+
+  - CD45+免疫细胞
+
+  - 谱系阴性细胞（Lin−）
+
+  - 神经肌肉接头（NMJ）endplate
+
+  - 内皮细胞 (ECs)
+
+  - 纤维脂肪生成祖细胞 (FAPs)
+
+  - 肌肉干细胞 (MuSCs)
+
+  - 施万细胞 (SCs)
+
+  - CD31+ 细胞
+
+  - CD31− 细胞
+
+  - Sca1−CD45− (Lin−) 细胞
+
+  - 肌核 myonuclear
+
+  - 神经肌肉接头 NMJ
+
+  - 肌腱连接 MTJ
+
+  - 骨骼肌细胞
+
+  - 骨骼肌干细胞
+
+  - 多核肌纤维
+
+  - 纤维脂肪生成祖细胞
+
+  - 间充质细胞
+
+  - 胶质细胞
+
+  - Schwann 细胞
+
+  - 终末 Schwann 细胞
+
+  - 神经肌肉接头胶质细胞
+
+  - Schwann细胞
+
+  - 骨骼肌
+
+  - 神经肌肉接头
+
+  - 膈肌
+
+  - 肌肉活检
+
+  - 骨骼肌祖细胞
+
+  - 骨骼肌细胞/肌纤维
+
+  - 终末施万细胞(tSCs)
+
+  - 运动神经元/神经末梢
+
+  - Schwann cells
+
+  - terminal Schwann cells (tSCs)
+
+  - aSC1 Schwann cells
+
+  - aSC2 Schwann cells
+
+  - synaptic myonuclei (SynM)
+
+  - myofibers
 
 
   ## 通路
 
-  - TGFβ/activin signaling
+  - 神经肌肉接头（NMJ）重塑
 
-  - Wnt signaling
+  - 细胞外基质（ECM）重塑
+
+  - 机械感知
+
+  - 血管生成
+
+  - 轴突再生/迁移
+
+  - 肌生成/增殖-分化
+
+  - 肌肉萎缩相关信号通路
+
+  - MAPK信号通路
+
+  - Hippo信号通路
+
+  - TGFβ信号通路
+
+  - Wnt信号通路
+
+  - 氨基酸代谢
+
+  - 神经元迁移
+
+  - 神经-肌肉通讯
+
+  - 突触后组织/修饰
+
+  - 突触前细胞功能调控
+
+  - NMJ重塑
+
+  - 肥厚相关基因程序
+
+  - 肌肉收缩/钙稳态/肌节结构
+
+  - TGFβ/activin信号
+
+  - activin信号通路
+
+  - 去神经诱导信号网络
+
+  - NMJ突触形成与成熟相关信号
+
+  - 神经肌肉接头（NMJ）信号轴（具体通路未说明）
+
+  - STAT3–IL-6
+
+  - Wnt/Wingless
+
+  - NGF–NGFR
+
+  - SPP1–CD44/αvβ3–PKCα
+
+  - Semaphorin 信号
+
+  - TAM 受体介导的吞噬
+
+  - Slit2/3 信号
+
+  - Lrp4 介导的信号整合
+
+  - Activin II型受体信号
+
+  - BMP信号
+
+  - Wnt信号
+
+  - 神经肌肉信号(neuromuscular signaling)
+
+  - 肌肉生长(muscle growth)
+
+  - 肌肉萎缩(atrophy)
 
   - BMP signaling
 
-  - MAPK signaling
+  - TGFβ/activin signaling
 
-  - Hippo signaling
+  - ligand-receptor interactions
 
-  - semaphorin-mediated axon guidance
+  - denervation-associated pathways
+
+  - hypertrophy-related pathways
 
 
   ## 基因 Marker
 
-  - Myog：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+  - Pax7：MuSC，na，MuSC状态定义/谱系标志
 
-  - Igfn1：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+  - Myod1：MuSC，na，MuSC状态定义
 
-  - Ampd3：denervated myonuclei/Myonuc1，up，去神经萎缩肌核标记
+  - Myog：MuSC，up，OVL MuSC分化相关；也用于MuSC状态定义
 
-  - Runx1：denervated myonuclei/Myonuc1，up，去神经相关基因
+  - Birc5：MuSC，up，OVL MuSC增殖相关
 
-  - Gadd45：denervated myonuclei/Myonuc1，up，去神经相关基因
+  - Mki67：MuSC，up，OVL MuSC增殖相关，S/G2/M期
 
-  - Scn5a：synaptic myonuclei (SynM)，up，去神经萎缩时SynM上调
+  - Tnni2：MuSC，up，OVL MuSC分化相关
 
-  - Gpc4：synaptic myonuclei (SynM)，up，肥大时SynM上调
+  - Islr：MuSC，up，Den MuSC激活相关，G1期
 
-  - Chrne：synaptic myonuclei (SynM)，down，去神经时突触基因下调
+  - Dcn：MuSC，up，Den MuSC ECM相关
 
-  - Colq：synaptic myonuclei (SynM)，down，去神经时突触基因下调
+  - Col8a1：MuSC，up，Den MuSC ECM相关
 
-  - Inhba：activated terminal Schwann cells (aSC1)，up，去神经时aSC1标记，表达于NMJ
+  - Mpz：Schwann cell，na，myelinating SC标志
 
-  - Ajap1：terminal Schwann cells (tSCs)，down，去神经时tSC标记下降
+  - Nrxn1：Schwann cell，na，non-myelinating SC标志
 
-  - Atf3：activated Schwann cells (aSCs)，up，轴突再生和迁移相关
+  - Atf3：Schwann cell，up，Den SC轴突再生/迁移相关
 
-  - Ngfr：activated Schwann cells (aSCs)，up，轴突再生相关
+  - Ngfr：Schwann cell，up，Den SC轴突再生/迁移相关
 
-  - Tnc：activated Schwann cells (aSCs)，up，细胞外基质重塑
+  - Tnc：Schwann cell，up，Den SC轴突再生/迁移相关
 
-  - Sostdc1：aSC2 subcluster，na，肥大相关aSC2标记
+  - Postn：FAP，up，OVL FAP ECM相关
 
-  - Col20a1：terminal Schwann cells (tSCs)，na，非髓鞘化SC/tSC标记
+  - Aspn：FAP，up，OVL FAP ECM相关
 
-  - Bche：terminal Schwann cells (tSCs)，na，非髓鞘化SC/tSC标记
+  - Adamtsl1：FAP，up，OVL FAP ECM相关
+
+  - Piezo2：FAP，up，OVL FAP机械感知相关
+
+  - Mmp14：EC，up，OVL EC血管生成相关
+
+  - Lrg1：EC，up，OVL EC血管生成相关
+
+  - Myh1：IIx型快缩糖酵解肌核，down，Den肌肉中Myh1+ IIx肌核比例降至18%
+
+  - Myh4：IIb型快缩糖酵解肌核，down，Den肌肉中Myh4+ IIb肌核比例降至18%；在Myonuc3中几乎不表达
+
+  - Myh2：IIa型快缩肌核，na，Den肌肉中Myh2+ IIa肌核相对比例保持稳定
+
+  - Myh7：慢缩I型肌核，down，基础状态下快缩跖肌中未检测到慢缩I型Myh7
+
+  - Myog：Myonuc1，up，去神经支配诱导标志物上调
+
+  - Igfn1：Myonuc1，up，去神经支配诱导标志物上调
+
+  - Ampd3：Myonuc1，up，去神经支配诱导标志物上调
+
+  - Runx1：Myonuc1，up，去神经支配相关关键基因
+
+  - Gadd45：Myonuc1，up，去神经支配相关关键基因
+
+  - Dlg2：Myonuc1，up，去神经支配相关关键基因
+
+  - Scn5a：Myonuc1，up，去神经支配相关关键基因
+
+  - Ckm：Myonuc1，down，代谢和结构标志物下调
+
+  - Ckmt2：Myonuc1，down，代谢和结构标志物下调
+
+  - Agbl1：Myonuc1，down，代谢和结构标志物下调
+
+  - Xirp2：Myonuc1，down，代谢和结构标志物下调
+
+  - Xirp2：Myonuc3，up，Myonuc3特征表达基因之一
+
+  - Egfr：Myonuc2/Myonuc3，up，与肌核融合相关基因表达增强
+
+  - Atf3：Myonuc2/Myonuc3，up，与肌肉适应相关基因表达增强
+
+  - Flnc：Myonuc2/Myonuc3，up，与肌肉适应相关基因表达增强
+
+  - Myh3：Myonuc2/Myonuc3，up，胚胎型肌球蛋白重链亚型，仅在这些新亚群中低表达
+
+  - Meg3：Myonuc2，up，Myonuc2差异表达基因
+
+  - Celf2：Myonuc2，up，Myonuc2差异表达基因
+
+  - Dclk1：Myonuc2，up，Myonuc2差异表达基因
+
+  - Auts2：Myonuc2，up，Myonuc2差异表达基因
+
+  - Scn2a：Myonuc3，up，Myonuc3特征表达基因
+
+  - Lmcd1：Myonuc3，up，Myonuc3特征表达基因
+
+  - Spp1：Den SynM，up，Den SynM独有上调基因
+
+  - Vat1l：Den SynM，up，Den SynM独有上调基因
+
+  - Chrne：Den SynM，down，突触基因下调
+
+  - Colq：Den SynM，down，突触基因下调
+
+  - Col13a1：OVL SynM，up，OVL SynM中呈上调趋势，与Den SynM相似
+
+  - Dcaf8：OVL SynM，up，OVL SynM中呈上调趋势，与Den SynM相似
+
+  - Ttn：Den SynM，down，肌肉收缩、钙稳态和肌节结构相关基因下调
+
+  - Tnnt3：Den SynM，down，肌肉收缩、钙稳态和肌节结构相关基因下调
+
+  - Scn5a：SynM（NMJ相关肌核/突触下肌核），up，去神经后短期内上调，编码心脏钠通道NaV1.5；提示去神经诱导的NaV1.5再表达起源于NMJ局部。
+
+  - Gpc4：SynM（NMJ相关肌核/突触下肌核），up，肥大肌肉SynM中上调，并与胚胎发育期Chrna1富集区域表达相关，可能参与突触形成/成熟信号。
+
+  - Inhba：tSC样/活化tSC（aSC1），up，去神经肌肉中NMJ定位亚群表达activin信号组分，长期去神经持续表达；RNAscope确认萎缩NMJ处Inhba+
+  tSCs。
+
+  - Chrna1：NMJ区域/胚胎期Chrna1富集区域，na，与Gpc4在胚胎发育期Chrna1富集区域表达相关，作为NMJ相关基因背景。
+
+  - Plp1：Plp1+谱系细胞，na，Plp1-CreER 用于与 Rosa26-LSL-tdTomato 或 Rosa26-iDTR 杂交，实现谱系标记或细胞清除
+
+  - Inhba：肌肉组织细胞（NMJ相关，具体类型未说明），na，RNAscope多重荧光原位杂交中的共同探针，与Ajap1或Col3a1配对；Inhba-C2偶联Opal
+  690，用于检测Inhba+细胞。
+
+  - Ajap1：肌肉组织细胞（NMJ相关，具体类型未说明），na，RNAscope探针Ajap1-C3与Inhba-C2配对，偶联Opal 570，用于检测Ajap1+细胞。
+
+  - Col3a1：肌肉组织细胞（NMJ相关，具体类型未说明），na，RNAscope探针Col3a1-C1与Inhba-C2配对，偶联Opal 570，用于检测Col3a1+细胞。
+
+  - Pecam1 (CD31)：内皮细胞，up，根据 CD31+ 染色分离内皮细胞；CD31+ 组分用于分离，CD31− 组分进一步富集 MuSCs 和 SCs
+
+  - Ly6a (Sca1)：Sca1−CD45− (Lin−) 细胞，down，从 CD31− 组分中收集 Sca1−CD45− (Lin−) 细胞以富集肌肉干细胞和施万细胞
+
+  - Ptprc (CD45)：Sca1−CD45− (Lin−) 细胞，down，从 CD31− 组分中收集 Sca1−CD45− (Lin−) 细胞以富集肌肉干细胞和施万细胞
+
+  - STAT3：纤维脂肪生成祖细胞，na，去神经支配激活 STAT3–IL-6 信号，促进肌纤维萎缩和纤维化（参考文献 11）
+
+  - IL6：纤维脂肪生成祖细胞，na，去神经支配激活 STAT3–IL-6 信号，促进肌纤维萎缩和纤维化（参考文献 11）
+
+  - NGFR：胶质细胞/间充质细胞，na，肌肉去神经支配促进胶质与间充质细胞通过 NGFR 和 NGF 互作（参考文献 22）
+
+  - NGF：胶质细胞/间充质细胞，na，肌肉去神经支配促进胶质与间充质细胞通过 NGFR 和 NGF 互作（参考文献 22）
+
+  - ATF3：胶质细胞，up，Wallerian 变性过程中胶质细胞 ATF3 上调（参考文献 23）
+
+  - SPP1：Schwann 细胞，na，SPP1 通过 CD44 和 αvβ3 经 PKCα 促进 Schwann 细胞增殖与存活（参考文献 33）
+
+  - CD44：Schwann 细胞，na，SPP1 的结合受体（参考文献 33）
+
+  - ITGAV/ITGB3：Schwann 细胞，na，SPP1 结合 αvβ3 受体（参考文献 33）
+
+  - PRKCA：Schwann 细胞，na，SPP1 通过 PKCα 促进 Schwann 细胞增殖与存活（参考文献 33）
+
+  - COL20A1：Schwann 细胞，down，Schwann 细胞中 COL20A1 缺失改变 NMJ 再生和运动活动（参考文献 29）
+
+  - LRP4：发育中细胞，na，Lrp4 调节细胞信号通路的细胞外整合（参考文献 16）
+
+  - CDH2：Schwann 细胞，na，N-cadherin 指导 Schwann 细胞集体迁移（参考文献 24）
+
+  - SLIT2：Schwann 细胞，na，Slit2/3 介导运动接触抑制（参考文献 24）
+
+  - SLIT3：Schwann 细胞，na，Slit2/3 介导运动接触抑制（参考文献 24）
+
+  - SOD1：胶质细胞，na，SOD1 G37R ALS 小鼠模型中胶质细胞特性与突触修复不相容（参考文献 26）
+
+  - LAMA2：Schwann细胞/骨骼肌，na，参考文献34：LAMA2神经病的人类发现及小鼠模型病理机制
+
+  - laminin-α2：Schwann细胞，na，参考文献35：层粘连蛋白-α2缺陷小鼠模型中周围神经病理和Schwann细胞分化异常
+
+  - ActRIIA/IIB：骨骼肌，na，参考文献36-37：阻断Activin II型受体可诱导骨骼肌肥大并防止萎缩
+
+  - BMP：骨骼肌，na，参考文献38,40：BMP信号控制肌肉质量
+
+  - Wnts：运动神经元，na，参考文献39：运动神经元Wnts调节神经肌肉接头发育
+
+  - 钠离子通道：骨骼肌，na，参考文献43-44：去神经支配后骨骼肌中TTX敏感和不敏感钠通道mRNA转录本的独立调节
+
+  - Smn1：骨骼肌，na，参考文献58：Smn1敲除骨骼肌模型中功能障碍线粒体积累
+
+  - Inhba：终末施万细胞(tSCs)，up，去神经后NMJ处tSCs激活并呈Inhba+，可能通过TGFβ/activin信号作用于SynM（Highlights）。
+
+  - Scn5a：突触肌核(SynM)/NMJ阳性区域，na，Fig.3K显示SynM中表达；Fig.4G–H显示在NMJ阳性与阴性空间spots中的表达分布。
+
+  - Gpc4：突触肌核(SynM)/NMJ阳性区域，na，Fig.3L显示SynM中表达；Fig.4G–H显示在NMJ阳性与阴性空间spots中的表达分布。
+
+  - Chrng：NMJ/突触后肌核，na，Fig.4E–F显示在NMJ阳性与阴性空间spots中的表达水平和空间分布；AChR相关基因。
+
+  - Chrna1：NMJ/突触后肌核，na，Fig.4E–F显示在NMJ阳性与阴性空间spots中的表达水平和空间分布；AChR相关基因。
+
+  - PCM1：肌核(myonuclei)，na，Fig.3H免疫荧光中标记肌核。
+
+  - Plp1：Schwann cells，na，Plp1-tdTomato标记SCs；Plp1iDTR用于DT诱导SC清除
+
+  - Ki67：terminal Schwann cells (tSCs)，up，增殖tSC标志；Fig.5A,C中统计Ki67+ tSCs
+
+  - Ajap1：aSC1 Schwann cells，up，aSC1标志基因；RNAscope检测NMJ中Ajap1+核
+
+  - Inhba：aSC1 Schwann cells，up，aSC1标志基因；TGFβ/activin相关配体；RNAscope检测
+
+  - RFLNA：aSC2 Schwann cells，up，aSC2标志基因；与肥大相关
+
+  - CHRNE：myonuclei，up，去神经相关基因；人RNAscope与INHBA共检
+
+  - Inhba：—，na，RNAscope 探针 Inhba-C2（ACD Bio-Techne Cat# 455871-C2）
+
+  - Ajap1：—，na，RNAscope 探针 Ajap1-C3（ACD Bio-Techne Cat# 549641-C3）
+
+  - Col20a1：—，na，RNAscope 探针 Col20a1-C1（ACD Bio-Techne Cat# 455771）
+
+  - INHBA：—，na，RNAscope 探针 INHBA-C2（ACD Bio-Techne Cat# 415111-C2）
+
+  - CHRNE：—，na，RNAscope 探针 CHRNE-C3（ACD Bio-Techne Cat# 1242771-C1）
 
 
   ## 化合物/化学信息
 
-  - tamoxifen：靶点 Cre-ER recombinase | 剂量 2 mg per 25 g body weight (i.p.) | IC50 —
-  | 模型 Plp1CreER mice | 诱导Cre重组
+  - Tamoxifen (TMX)：靶点 CreER | 剂量 2 mg per 25 g body weight, i.p., daily × 4 days
+  | IC50 — | 模型 Plp1-CreER; Rosa26-LSL-tdTomato 或 Plp1-CreER; Rosa26-iDTR 小鼠 | 诱导
+  Cre 重组
 
-  - diphtheria toxin (DT)：靶点 diphtheria toxin receptor (DTR) | 剂量 450 ng per 25 g
-  body weight (i.p.) | IC50 — | 模型 Plp1iDTR mice | 选择性清除施万细胞
+  - Diphtheria toxin (DT)：靶点 iDTR | 剂量 450 ng per 25 g, i.p., daily × 7 days | IC50
+  — | 模型 Plp1iDTR 小鼠 | 清除 Plp1+ 细胞
 
-  - EdU (5-ethynyl-2''-deoxyuridine)：靶点 DNA synthesis | 剂量 25.5 mg/kg (i.p.) | IC50
-  — | 模型 proliferation assay in mice | 标记增殖细胞
+  - EdU：靶点 DNA 合成/增殖细胞 | 剂量 25.5 mg/kg, i.p., daily | IC50 — | 模型 对照及去神经/超负荷等实验小鼠
+  | 体内 EdU 掺入用于增殖检测
 
-  - buprenorphine：靶点 opioid receptor | 剂量 0.1 mg/kg (i.m.) | IC50 — | 模型 mouse surgery
-  analgesia | 镇痛'
+  - Buprenorphine：靶点 阿片受体 | 剂量 0.1 mg/kg, intramuscular | IC50 — | 模型 小鼠手术前镇痛 | 镇痛
+
+  - Isoflurane：靶点 — | 剂量 — | IC50 — | 模型 小鼠麻醉 | 麻醉
+
+  - Chlorhexidine：靶点 — | 剂量 — | IC50 — | 模型 手术部位消毒 | 消毒
+
+  - 异戊烷（isopentane）：靶点 — | 剂量 — | IC50 — | 模型 肌肉组织冷冻 | 液氮预冷后快速冷冻组织
+
+  - PFA：靶点 组织固定 | 剂量 2%或4% | IC50 — | 模型 肌肉组织固定 | 固定组织/切片
+
+  - 蔗糖：靶点 冷冻保护 | 剂量 30% | IC50 — | 模型 肌肉组织冷冻保护 | 4°C过夜或室温2 h浸泡，用于冷冻保护
+
+  - Triton X-100：靶点 细胞膜透化 | 剂量 0.5%或1% | IC50 — | 模型 肌肉全装/冷冻切片透化 | 增加抗体/探针通透性
+
+  - BSA：靶点 非特异性结合封闭 | 剂量 5%（或0.05%） | IC50 — | 模型 免疫染色/流式重悬 | 封闭和稀释抗体
+
+  - DAPI：靶点 DNA | 剂量 1:500 | IC50 — | 模型 核染色 | 细胞核复染
+
+  - 生物素化α-银环蛇毒素：靶点 nAChR | 剂量 1:100 | IC50 — | 模型 NMJ标记 | 标记神经肌肉接头
+
+  - Liberase：靶点 胶原酶/蛋白酶 | 剂量 0.1 mg/g肌肉重量 | IC50 — | 模型 scRNA-seq组织消化 | 37°C 1.5 h消化肌肉组织
+
+  - Dispase：靶点 中性蛋白酶 | 剂量 0.3% | IC50 — | 模型 scRNA-seq组织消化 | 与Liberase联合消化
+
+  - DMSO：靶点 冷冻保护 | 剂量 10% | IC50 — | 模型 细胞冻存 | FBS中冻存细胞于−80°C
+
+  - CUBIC-1：靶点 组织透明化 | 剂量 过夜 | IC50 — | 模型 CUBIC组织透明化 | 全装组织透明化
+
+  - CUBIC-2：靶点 组织透明化/封片 | 剂量 过夜 | IC50 — | 模型 CUBIC组织透明化 | 透明化并作为封片介质
+
+  - WGA：靶点 糖蛋白/NMJ | 剂量 1:200 | IC50 — | 模型 NMJ染色 | 定义NMJ endplate
+
+  - Opal 690：靶点 荧光探针 | 剂量 — | IC50 — | 模型 RNAscope | 标记Inhba-C2探针
+
+  - Opal 570：靶点 荧光探针 | 剂量 — | IC50 — | 模型 RNAscope | 标记Ajap1-C3或Col3a1-C1探针
+
+  - Cell Multiplexing Oligos（CMOs）：靶点 细胞多重标记 | 剂量 室温5 min | IC50 — | 模型 scRNA-seq
+  | 10X Genomics CMO标记细胞样本
+
+  - 山羊血清：靶点 非特异性结合封闭 | 剂量 1% | IC50 — | 模型 FACS buffer | 流式染色封闭
+
+  - Fluoromount-G/ProLong Gold Antifade Mountant：靶点 — | 剂量 — | IC50 — | 模型 封片 | 切片封片保存
+
+  - DAPI：靶点 DNA | 剂量 — | IC50 — | 模型 分离的细胞核悬液 | 染色后荧光显微镜检查，确认细胞核完整性、圆形形态、单核为主且无残留碎片
+
+  - doxycycline：靶点 — | 剂量 — | IC50 — | 模型 laminin-α2-deficient mouse model of congenital
+  muscular dystrophy | 改善周围神经病理，包括异常Schwann细胞分化
+
+  - antibody blocking Activin Type II Receptors：靶点 Activin Type II Receptors | 剂量
+  — | IC50 — | 模型 — | 诱导强烈骨骼肌肥大并防止萎缩
+
+  - dual anti-ActRIIA/IIB antibody：靶点 ActRIIA/IIB | 剂量 — | IC50 — | 模型 — | 促进最大骨骼肌肥大
+
+  - EdU：靶点 DNA合成/S期 | 剂量 — | IC50 — | 模型 小鼠跖肌，basal/Den/OVL，每日EdU给药 | 标记肌核增生，量化EdU+
+  SynM，Fig.3H–J。
+
+  - α-bungarotoxin (BTX)：靶点 乙酰胆碱受体(AChR)/突触后NMJ | 剂量 — | IC50 — | 模型 小鼠跖肌NMJ免疫荧光及空间转录组相邻切片
+  | 标记突触后NMJ区域，Fig.3D、Fig.4A。
+
+  - DAPI：靶点 DNA | 剂量 — | IC50 — | 模型 免疫荧光 | 标记细胞核，Fig.3H、Fig.4A。
+
+  - Diphtheria toxin (DT)：靶点 Plp1iDTR（Plp1+施万细胞） | 剂量 — | IC50 — | 模型 Plp1iDTR小鼠plantaris
+  | 处理7天诱导Plp1+细胞清除，伴随NMJ碎片化
+
+  - Ethynyl-deoxyuridine (EdU)：靶点 DNA合成/增殖细胞 | 剂量 — | IC50 — | 模型 — | 列入关键资源，用于增殖检测
+
+  - Urea：靶点 — | 剂量 25% | IC50 — | 模型 CUBIC-based whole mount muscle clarification
+  | CUBIC-1/CUBIC-2 组织透明化组分
+
+  - Quadrol：靶点 — | 剂量 25% (80% wt/wt Quadrol) | IC50 — | 模型 CUBIC-based whole mount
+  muscle clarification | CUBIC-1 组织透明化组分
+
+  - Triton-X100：靶点 — | 剂量 1% | IC50 — | 模型 CUBIC-based whole mount muscle clarification
+  | CUBIC-1 组织透明化组分
+
+  - Triethanolamine (TEA)：靶点 — | 剂量 25% | IC50 — | 模型 CUBIC-based whole mount muscle
+  clarification | CUBIC-2 组织透明化组分
+
+  - Sucrose：靶点 — | 剂量 15% | IC50 — | 模型 CUBIC-based whole mount muscle clarification
+  | CUBIC-2 组织透明化组分
+
+  - Fetal bovine serum (FBS)：靶点 — | 剂量 — | IC50 — | 模型 — | 细胞培养/试剂
+
+  - UltraPure BSA：靶点 — | 剂量 — | IC50 — | 模型 — | 试剂
+
+  - Hematoxylin：靶点 — | 剂量 — | IC50 — | 模型 histology | 染色
+
+  - Eosin：靶点 — | 剂量 — | IC50 — | 模型 histology | 染色
+
+  - TRIzol：靶点 — | 剂量 — | IC50 — | 模型 — | RNA 提取
+
+  - Opal 570：靶点 — | 剂量 — | IC50 — | 模型 multiplex immunofluorescence | 荧光染料
+
+  - Opal 690：靶点 — | 剂量 — | IC50 — | 模型 multiplex immunofluorescence | 荧光染料
+
+  - Wheat germ agglutinin (WGA)：靶点 — | 剂量 — | IC50 — | 模型 — | 荧光标记/膜染色'
 evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
   junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  level_distribution:
+    L0: 1
+    L1: 21
+    L2: 36
+    L3: 0
+  max_level: L2
+  graded_conclusions: 58
+  level_meaning:
+    L0: 无文献来源（推测/常识性陈述）——仅作线索，待补源
+    L1: 有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信
+    L2: 有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信
+    L3: 有文献来源且经大量验证或临床实验/临床队列验证——非常可信

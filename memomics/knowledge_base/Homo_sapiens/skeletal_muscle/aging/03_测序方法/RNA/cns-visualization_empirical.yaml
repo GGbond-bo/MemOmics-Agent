@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-24 20:25
+last_updated: 2026-10-01 20:55
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,21 +12,19 @@ auto_trigger:
 - cns-visualization_empirical
 content: 'skill: cns-visualization
 
-  quality_score: 9.0
+  quality_score: 8.0
 
 
   params_used:
 
-  {"script":"04_figures.py","phase":"post-review 通过（完整脚本 172 行传入）","debate":"L2 8角色，scenario=bio_data（单细胞降维基准），verdict=modify，confidence=medium"}
+  {"src": "D:/肌肉锻炼/DEG_file/DEG_fdr05_coef025_5contrasts_formatted.xlsx", "sheets":
+  ["Y_EX","O_EX","DM_EX"], "intersection": "set.intersection 三组共同显著基因", "band_width":
+  "该(亚群,基因)对被几个条件共同支持(1/2/3)", "layout": "手写三次贝塞尔 + 独立左右布局", "export": "PNG300/SVG/PDF/TIFF"}
 
 
   result_summary:
 
-  图集通过 post 审查 + L2 辩论完成。裁判 rubrics：metric_adequacy 7 / evidence_transparency 6 /
-  fair_comparison 5 / confounding_control 3 / biological_validity 3 / robustness_sensitivity
-  3 / generalization_scope 2。裁决 modify：可下"本数据同参下 PCA30 略贴近已有 L3"弱结论，但 ① 两者均未产生干净分群
-  ② 不可外推"scVI 不如 PCA"。3 个 blocks：未出多 seed/bootstrap CI 前不得称"稳定优势"；未做批次混杂对照前不得把 PCA
-  优势归因亚型可分性；未统一输入（PCA 吃 SCT 表达 vs scVI 吃 raw counts）前不得下算法优劣结论 → 转 Phase 5 补齐'
-evidence: 'record_run(cns-visualization): 图集通过 post 审查 + L2 辩论完成。裁判 rubrics：metric_adequacy
-  7 / evidence_transparency 6 / fair_comparison 5 / confounding_control 3 / biological_validity
-  3 / robustness_sensitivity 3 / generalization_scope 2。裁决'
+  三组运动共同 DEG 桑基图 2 张（Up: 7 基因/56 带；Down: 2 基因/19 带），产出 PNG+SVG+PDF+TIFF 共 8 文件；含链接表
+  CSV'
+evidence: 'record_run(cns-visualization): 三组运动共同 DEG 桑基图 2 张（Up: 7 基因/56 带；Down: 2
+  基因/19 带），产出 PNG+SVG+PDF+TIFF 共 8 文件；含链接表 CSV'

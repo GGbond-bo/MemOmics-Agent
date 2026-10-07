@@ -1,24 +1,25 @@
 type: kb_entry
 domain: chemistry
 name: chem_CACIMAR_N-methyl-D-aspartate__NMDA
-doi: "10.1093/bib/bbae283"
 chem_category: compounds
-last_updated: 2026-09-17 17:40
+last_updated: 2026-10-07 18:12
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - chem_CACIMAR_N-methyl-D-aspartate__NMDA
-content: '- 靶点: na
+content: '- 靶点: —
 
-  - 剂量: na
+  - 剂量: —
 
-  - IC50/EC50: na
+  - IC50/EC50: —
 
-  - 模型: mouse, zebrafish, and chick retinas; control vs NMDA-treated retinal regeneration
-  scRNA-seq datasets
+  - 模型: 小鼠、斑马鱼和鸡视网膜（对照与NMDA处理）
 
-  - 效应: Treatment condition used in scRNA-seq datasets; NMDA-treated retinas compared
-  with controls'
+  - 效应: 用于获得对照与NMDA处理视网膜的scRNA-seq数据，以研究视网膜再生'
 evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
   markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

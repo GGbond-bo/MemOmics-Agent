@@ -1,0 +1,31 @@
+type: kb_entry
+name: deg-volcano-5comps-8sub-R_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-01 00:53
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- deg-volcano-5comps-8sub-R_empirical
+content: 'skill: deg-volcano-5comps-8sub-R
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"W_IN":14,"H_IN":7,"dpi":300,"COMPS":"Aging/DM/Ex_Young/Ex_Old/Ex_DM","ORDER":"8
+  subclusters","top_n":5,"style":"点径1.5/标签6/轴标题13/图例15"}
+
+
+  result_summary:
+
+  用户脚本沉淀入库：DEG 五比较组×8亚群火山图（R ggplot2+ggrepel，用户 notebook 原稿 1:1 复刻）。14×7in@300dpi，背景灰柱+全部基因抖动点+top5标注+y=0彩色亚群标签块+p3主题，含确认制单点补标通道
+  EXTRA_LABELS。沉淀到 skills/plotting/deg-volcano-5comps-8sub-R/（SKILL.md + skill.json
+  + scripts/），已登记 user-scripts/INDEX.md。4 条踩坑：画布8x6挤叠→14x7、须用已过滤表、rbind 对 tbl_df 报错→bind_rows、补标只补指定那一处。'
+evidence: 'record_run(deg-volcano-5comps-8sub-R): 用户脚本沉淀入库：DEG 五比较组×8亚群火山图（R ggplot2+ggrepel，用户
+  notebook 原稿 1:1 复刻）。14×7in@300dpi，背景灰柱+全部基因抖动点+top5标注+y=0彩色亚群标签块+p3主题，含确认制单点补标通道
+  EXTRA_LABELS。沉淀到 skills/plotting/deg-volcano-5comps-8sub-R/（SKILL.md + sk'

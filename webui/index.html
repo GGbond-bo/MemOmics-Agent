@@ -743,6 +743,19 @@ table.dcb-table.dg-table th { position:relative; }
 #kb-node-modal .kbm-btn:hover { background:rgba(110,168,255,0.32); color:#fff; }
 #kb-node-modal .kbm-x { background:none; border:none; color:#8ea0d0; font-size:15px; cursor:pointer; padding:2px 7px; border-radius:6px; }
 #kb-node-modal .kbm-x:hover { color:#fff; background:rgba(255,255,255,0.10); }
+
+/* === 证据链等级徽章（kb-evidence-v1，2026-10-07）：知识库弹窗 + 文献知识 tab 共用 === */
+.ev-chain { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 12px; margin:2px 0 10px; border-radius:10px;
+  border:1px solid rgba(120,160,255,0.30); background:linear-gradient(90deg, rgba(80,120,255,0.10), rgba(155,89,182,0.08), rgba(0,0,0,0)); }
+.ev-chain .ev-t { font-size:11px; font-weight:700; color:#6ea8ff; }
+.ev-chain .ev-note { font-size:10px; color:var(--text-light); margin-left:auto; }
+.ev-lv { display:inline-block; font-size:10px; font-weight:700; padding:0 7px; border-radius:999px; border:1px solid transparent; white-space:nowrap; }
+.ev-lv.l3 { color:#ffd166; border-color:rgba(255,209,102,0.55); background:rgba(255,209,102,0.12); }
+.ev-lv.l2 { color:#5fe8a4; border-color:rgba(63,220,139,0.5); background:rgba(46,234,139,0.10); }
+.ev-lv.l1 { color:#6ea8ff; border-color:rgba(110,168,255,0.5); background:rgba(110,168,255,0.10); }
+.ev-lv.l0 { color:#a9b0c5; border-color:rgba(169,176,197,0.45); background:rgba(169,176,197,0.08); }
+.ev-lv.src { color:#8ea0d0; border-color:rgba(142,160,208,0.45); background:rgba(142,160,208,0.08); font-weight:600; }
+.ev-meta { font-size:10px; color:var(--text-light); }
 .dt-who { display:inline-block; font-size:10px; font-weight:600; padding:0 6px; border-radius:9px; border:1px solid var(--border); background:var(--tool-bg); color:var(--text-light); }
 .dt-who.pro { color:var(--success); border-color:rgba(63,158,106,0.35); background:rgba(63,158,106,0.10); }
 .dt-who.con { color:var(--danger); border-color:rgba(216,67,107,0.35); background:rgba(216,67,107,0.10); }
@@ -1307,6 +1320,31 @@ table.dcb-table.dg-table th { position:relative; }
 .cc-console .cc-input select { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; font-family:inherit; }
 .cc-console .cc-input textarea { flex:1; resize:vertical; min-height:34px; max-height:150px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
 .cc-console .cc-hint { padding:0 14px 10px; font-size:11px; color:var(--text-light); }
+/* === ☁️ DCS 云浏览视图（2026-10-07）：可点击的目录/项目/任务行 === */
+.cc-console .cc-tabs { display:flex; gap:6px; }
+.cc-console .cc-tabs .cc-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+.cc-console .cc-browse { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.cc-console .dcs-crumbs { padding:8px 14px; font-size:12px; color:var(--text-light); border-bottom:1px solid var(--border); display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+.cc-console .dcs-crumbs a { color:var(--primary); cursor:pointer; text-decoration:none; }
+.cc-console .dcs-crumbs a:hover { text-decoration:underline; }
+.cc-console .dcs-rows { flex:1; overflow-y:auto; padding:6px 10px; }
+.cc-console .dcs-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; }
+.cc-console .dcs-row.clickable { cursor:pointer; }
+.cc-console .dcs-row.clickable:hover { background:var(--primary-light); }
+.cc-console .dcs-row .dcs-ico { width:18px; text-align:center; flex:none; }
+.cc-console .dcs-row .dcs-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cc-console .dcs-row .dcs-meta { color:var(--text-light); font-size:11px; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cc-console .dcs-badge { font-size:10px; padding:1px 6px; border-radius:8px; background:var(--tool-bg); color:var(--text-light); flex:none; }
+.cc-console .dcs-badge.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+.cc-console .dcs-badge.warn { background:rgba(239,68,68,0.15); color:#ef4444; }
+.cc-console .dcs-detail { padding:10px 14px; border-top:1px solid var(--border); background:var(--bg); font-size:12px; line-height:1.7; max-height:34%; overflow-y:auto; }
+.cc-console .dcs-detail code { font-size:11px; word-break:break-all; }
+.cc-console .dcs-actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.cc-console .dcs-empty { padding:18px 14px; color:var(--text-light); font-size:12px; text-align:center; white-space:pre-wrap; }
+.cc-console .dcs-loadmore { text-align:center; padding:8px; }
+.cc-console .dcs-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.cc-console .dcs-input { flex:1; min-width:220px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; }
+.cc-console .dcs-note { font-size:11px; color:var(--text-light); margin-top:6px; }
 /* === 环境管理面板（2026-09-22）=== */
 #env-manager { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
 #env-manager .em-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:min(96vw,1120px); height:min(90vh,900px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.45); }
@@ -9648,6 +9686,7 @@ async function loadLiteratureLibrary() {
     var html = '<div style="font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">📚 文献库共 ' + d.total + ' 篇' +
       '<span id="lit-binding-chip" style="font-size:10px;color:var(--text-light);">绑定加载中…</span>' +
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">' +
+      '<button onclick="litProcessAll()" title="一键全流程：对全部未完成文献跑 翻译→9项提炼→证据链知识→双语锚定（幂等跳过已完成步骤；篇级并发 2 路）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:linear-gradient(135deg,#6ea8ff,#9b6bff);color:#fff;border:none;cursor:pointer;">⚡ 一键全流程</button>' +
       '<button onclick="summarizeAllPapers()" title="只对未提炼的文章做 9 项全文提炼（思路/背景/问题/方法/结论/验证）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 一键全文提炼(未提炼 ' + nSum + ')</button>' +
       '<button onclick="extractAllKnowledge()" title="结构化知识提取：结论/基因marker/类器官/化学 + 测序方法/流程/软件包/参数，写入知识库" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🧠 一键知识提取(未提取 ' + nKnow + ')</button>' +
       '<button onclick="litEnrichAll()" title="Crossref 补全卷/期/页码/PMID，修正乱码作者与脏DOI（引用格式更完整）" style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🛠 补全元数据(' + nMeta + ')</button>' +
@@ -10702,7 +10741,32 @@ function litRenderKnowledge(body, d) {
     '<button onclick="litPaperTab(\'summary\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">💡 九项摘要</button></div>';
   // 生物学知识
   html += '<div class="lit-kb-sec"><h4>🧬 生物学知识</h4>';
-  if ((bio.conclusions || []).length) html += '<div style="margin-bottom:6px;"><b>📌 结论</b><ul>' + bio.conclusions.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
+  // 证据链（kb-evidence-v1）：结论逐条带 L0-L3 可信度级别（旧数据是字符串数组，兼容显示）
+  var _evConc = (bio.conclusions || []);
+  if (_evConc.length) {
+    var _evDist = {L0: 0, L1: 0, L2: 0, L3: 0}, _evNorm = [];
+    _evConc.forEach(function(x) {
+      var c = (typeof x === 'string') ? {text: x, evidence_level: 'L1', validation: '', locator: ''}
+              : {text: x.text || '', evidence_level: String(x.evidence_level || 'L1').toUpperCase(), validation: x.validation || '', locator: x.locator || ''};
+      if (!/L[0-3]/.test(c.evidence_level)) c.evidence_level = 'L1';
+      _evDist[c.evidence_level] = (_evDist[c.evidence_level] || 0) + 1;
+      _evNorm.push(c);
+    });
+    var _evMax = _evDist.L3 ? 'L3' : (_evDist.L2 ? 'L2' : (_evDist.L1 ? 'L1' : 'L0'));
+    html += '<div class="ev-chain"><span class="ev-t">⛓ 证据链</span>' +
+      '<span class="ev-lv l3">L3 临床级 ×' + _evDist.L3 + '</span>' +
+      '<span class="ev-lv l2">L2 实验验证 ×' + _evDist.L2 + '</span>' +
+      '<span class="ev-lv l1">L1 有来源未验证 ×' + _evDist.L1 + '</span>' +
+      '<span class="ev-lv l0">L0 无来源 ×' + _evDist.L0 + '</span>' +
+      '<span class="ev-note">本篇最高 ' + _evMax + '</span></div>';
+    html += '<div style="margin-bottom:6px;"><b>📌 结论</b><ul>' + _evNorm.map(function(c) {
+      var meta = [];
+      if (c.validation) meta.push('验证：' + c.validation);
+      if (c.locator) meta.push('位置：' + c.locator);
+      return '<li><span class="ev-lv ' + c.evidence_level.toLowerCase() + '">' + c.evidence_level + '</span> ' + escapeHtml(c.text) +
+        (meta.length ? ' <span class="ev-meta">（' + escapeHtml(meta.join(' ｜ ')) + '）</span>' : '') + '</li>';
+    }).join('') + '</ul></div>';
+  }
   if ((bio.cell_types || []).length) html += '<div style="margin-bottom:6px;"><b>🫁 细胞类型</b><ul>' + bio.cell_types.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
   if ((bio.pathways || []).length) html += '<div style="margin-bottom:6px;"><b>🔀 通路</b><ul>' + bio.pathways.map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join('') + '</ul></div>';
   if ((bio.gene_markers || []).length) {
@@ -11008,6 +11072,22 @@ async function extractAllPapers() {
     if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
     if (_litExtractTimer) clearInterval(_litExtractTimer);
     _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 1500);
+    litPollExtract(d.job_id);
+  } catch(e) {
+    litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
+  }
+}
+
+// 2026-10-07：一键全流程管线（翻译→提炼→证据链知识→双语锚定；幂等跳过已完成步骤）
+async function litProcessAll() {
+  if (!confirm('⚡ 一键全流程：对全部未完成文献逐篇跑 ①学术翻译 ②9项提炼 ③证据链知识提取(L0-L3) ④双语锚定。\n篇级并发 2 路，已完成的步骤自动跳过；耗时取决于缺多少篇（几分钟到数小时）。\n继续？')) return;
+  litProgressWrite('<span style="color:var(--text-light);">⚡ 提交全流程管线任务…</span>', _litModalOpen());
+  try {
+    var r = await fetch('/api/literature/process-all', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+    var d = await r.json();
+    if (d.error) { litProgressWrite('<span style="color:var(--danger);">' + escapeHtml(d.error) + '</span>', _litModalOpen()); return; }
+    if (_litExtractTimer) clearInterval(_litExtractTimer);
+    _litExtractTimer = setInterval(function() { litPollExtract(d.job_id); }, 2000);
     litPollExtract(d.job_id);
   } catch(e) {
     litProgressWrite('<span style="color:var(--danger);">提交失败: ' + escapeHtml(e.message || e) + '</span>', _litModalOpen());
@@ -11578,6 +11658,23 @@ function openKbNodeModal(n) {
       if (d.error) { body.innerHTML = '<div class="kbm-err">读取失败：' + escapeHtml(d.error) + '</div>'; return; }
       var html = '';
       if (d.parsed && typeof d.parsed === 'object') {
+        // 证据链（kb-evidence-v1）：条目带 L0-L3 分布时在顶部亮出可信度徽章
+        var ec = d.parsed.evidence_chain;
+        if (ec && typeof ec === 'object') {
+          var ed = ec.level_distribution || {};
+          if (ec.grading === 'source_only') {
+            html += '<div class="ev-chain"><span class="ev-t">⛓ 证据链</span>' +
+              '<span class="ev-lv src">方法/参数类 · 只需来源标注</span>' +
+              '<span class="ev-note">来源见 evidence 字段（kb-evidence-v1）</span></div>';
+          } else {
+            html += '<div class="ev-chain"><span class="ev-t">⛓ 证据链</span>' +
+              '<span class="ev-lv l3">L3 临床级 ×' + (ed.L3 || 0) + '</span>' +
+              '<span class="ev-lv l2">L2 实验验证 ×' + (ed.L2 || 0) + '</span>' +
+              '<span class="ev-lv l1">L1 有来源未验证 ×' + (ed.L1 || 0) + '</span>' +
+              '<span class="ev-lv l0">L0 无来源 ×' + (ed.L0 || 0) + '</span>' +
+              '<span class="ev-note">最高 ' + (ec.max_level || '—') + ' · 标准 ' + (ec.standard || 'kb-evidence-v1') + '</span></div>';
+          }
+        }
         html += renderKbYaml(d.parsed, 0);
         if (d.content) html += '<details class="kbm-raw"><summary>查看 YAML 原文（' + String(d.content.length) + ' 字符）</summary><pre>' + escapeHtml(d.content) + '</pre></details>';
       } else {
@@ -15695,58 +15792,52 @@ function clusterQuick(action) {
 setTimeout(checkFirstRun, 1000);
 
 // === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
-// 面板走 /api/dcs/*，与 agent 工具 dcs_cloud 共用同一个 handler（后端 memomics/connectors/dcs_cloud.py），
-// 所以 UI 里做的和模型做的是同一件事（UI 不过模型侧的门禁——那是给模型看的闸）。
-var _dcsBusy = false;
+// 面板走 /api/dcs/*，与 agent 工具 dcs_cloud 共用同一个 handler（后端 memomics/connectors/dcs_cloud.py）。
+// 两种视图：🌲 浏览 = 项目/目录/文件/任务都渲染成可点击的行（点文件夹进去、点文件看详情、点项目切换）；
+//           🧾 日志 = 原始 JSON（raw、容器输出、排查用）。
+var _dcsBusy = false, _dcsView = 'browse';
+var _dcsState = { kind: '', path: '', name: '', page: 1, total: 0, rows: [] };
 
 var DCS_MODES = {
-  projects:        { opt: 'projects · 项目列表',      ph: '（不用输入，直接执行）', hint: '列出你有权限的 DCS 项目；刚绑定完先跑这个。' },
+  projects:        { opt: 'projects · 项目列表',      ph: '（不用输入，直接执行）', hint: '列出你有权限的 DCS 项目；点一行看详情，可一键设为当前项目。' },
   use_project:     { opt: 'use_project · 切项目',     ph: '项目 ID（P 开头）或项目名', hint: '切换当前项目，后面所有命令都作用于它。切项目后在线容器会话失效，需要重开。' },
   current:         { opt: 'current · 当前用户/项目',  ph: '（不用输入）', hint: '看当前登录用户、所在项目与片区。' },
-  ls:              { opt: 'ls · 浏览 Files',          ph: '云上路径，例：/Files   留空 = 当前目录', hint: '浏览云上 Files；给文件路径则显示它的元数据（大小/创建者/时间）。' },
-  find:            { opt: 'find · 搜文件',            ph: '文件名通配，例：*.csv', hint: '按名字找文件；更多条件（-t f / -s +100M / -T 2026-01-01:2026-12-31）可直接写进输入框。' },
+  ls:              { opt: 'ls · 浏览 Files',          ph: '云上路径，例：/Files   留空 = /Files', hint: '浏览云上目录：点 📁 进下一层、点 📄 看元数据；面包屑可点回上层。' },
+  find:            { opt: 'find · 搜文件',            ph: '文件名通配，例：*.csv', hint: '按名字找文件（找的是当前目录下的，含子目录；搜索行可点开详情、直接下载）。' },
   download:        { opt: 'download · 下载到本机',    ph: '云路径 + 本机目录，例：/Files/a.csv  E:/data', hint: '小文件走 web（≤200MB，不支持 FastQ/BAM/文件夹）；大文件用 raw 换 oss/raysync。' },
   upload:          { opt: 'upload · 上传到云',        ph: '本机路径 + 云路径，例：E:/data/a.csv  /Files/', hint: '⚠️ 会占用云端存储并计费。小文件 web（≤100MB），大文件用 oss。' },
   container_open:  { opt: 'container_open · 开容器',  ph: '（不用输入；可填规格 resource_id）', hint: '打开在线容器（与 GenPilot 智能分析同一套 OpenSandbox）。会占资源，用完记得关。' },
-  container_exec:  { opt: 'container_exec · 容器内执行', ph: 'shell 命令，例：ls -lh /work', hint: '在容器里跑命令（刚开的容器等 3–5 秒再执行）。重活请投离线任务，别在交互容器里长跑。' },
+  container_exec:  { opt: 'container_exec · 容器内执行', ph: 'shell 命令，例：ls -lh /work', hint: '在容器里跑命令（刚开的容器等 3–5 秒再执行）。结果在「🧾 日志」视图里。' },
   container_close: { opt: 'container_close · 关容器', ph: '（不用输入）', hint: '关闭在线容器、释放资源。' },
-  tasks:           { opt: 'tasks · 离线任务',         ph: '（不用输入；可填任务名，或第二个词写 -a）', hint: '列个性化分析（离线）任务；配合 task_logs 看日志。' },
-  task_logs:       { opt: 'task_logs · 看任务日志',   ph: '任务 ID（先用 tasks 查）', hint: '拉某个离线任务的日志。' },
+  tasks:           { opt: 'tasks · 离线任务',         ph: '（不用输入）', hint: '列个性化分析（离线）任务；点一行看详情并可直接看日志。' },
+  task_logs:       { opt: 'task_logs · 看任务日志',   ph: '任务 ID（先用 tasks 查）', hint: '拉某个离线任务的日志（输出在 🧾 日志视图）。' },
   raw:             { opt: 'raw · 原生命令',           ph: 'dcs 子命令，例：workflow ls -p', hint: '白名单逃生舱：project/data/table/terminal/analysis/workflow/image/billing/region/history（凭据类命令不允许）。' }
 };
 
-function openDcsConsole() {
-  var el = document.getElementById('dcs-console');
-  if (!el) return;
-  el.style.display = 'flex';
-  var sel = document.getElementById('dcs-mode');
-  if (sel && !sel.options.length) {
-    var order = ['projects', 'use_project', 'current', 'ls', 'find', 'download', 'upload',
-                 'container_open', 'container_exec', 'container_close', 'tasks', 'task_logs', 'raw'];
-    for (var i = 0; i < order.length; i++) {
-      var o = document.createElement('option');
-      o.value = order[i];
-      o.textContent = DCS_MODES[order[i]].opt;
-      sel.appendChild(o);
-    }
-    sel.value = 'projects';
-  }
-  dcsModeChange();
-  dcsLoad();
-  var box = document.getElementById('dcs-cmd');
-  if (box) box.focus();
+// ---------- 基础 ----------
+function dcsEsc(s) {
+  return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
 }
 
-function dcsClose() {
-  var el = document.getElementById('dcs-console');
-  if (el) el.style.display = 'none';
+function dcsFmtSize(n) {
+  if (n === null || n === undefined || n === '') return '';
+  n = Number(n);
+  if (!isFinite(n) || n < 0) return '';
+  var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
 }
 
-function dcsToggleCfg() {
-  var el = document.getElementById('dcs-cfg');
-  if (!el) return;
-  var shown = (el.style.display !== 'none' && el.style.display !== '');
-  el.style.display = shown ? 'none' : 'grid';
+function dcsSetView(v) {
+  _dcsView = v;
+  var b = document.getElementById('dcs-browse'), o = document.getElementById('dcs-out');
+  var tb = document.getElementById('dcs-tab-browse'), tl = document.getElementById('dcs-tab-log');
+  if (b) b.style.display = (v === 'browse') ? 'flex' : 'none';
+  if (o) o.style.display = (v === 'log') ? 'block' : 'none';
+  if (tb) tb.className = 'cc-btn' + (v === 'browse' ? ' primary' : '');
+  if (tl) tl.className = 'cc-btn' + (v === 'log' ? ' primary' : '');
 }
 
 function dcsPrint(msg, cls) {
@@ -15766,10 +15857,447 @@ function dcsSetBusy(busy) {
   if (btn) { btn.disabled = busy; btn.textContent = busy ? '执行中…' : '执行'; }
 }
 
+function dcsCall(args, onOk) {
+  dcsSetBusy(true);
+  return fetch('/api/dcs/exec', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args)
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    var res = (d && d.result) || {};
+    dcsPrint('▶ ' + args.action + ' ' + JSON.stringify(Object.keys(args).filter(function (k) { return k !== 'action'; }).map(function (k) { return args[k]; })).slice(0, 120), 'sys');
+    if (res.status === 'ok') {
+      var shown = JSON.parse(JSON.stringify(res));
+      delete shown.status;
+      dcsPrint('✓ ' + args.action + ' 完成\n' + JSON.stringify(shown, null, 2), 'ok');
+      if (onOk) onOk(res);
+    } else {
+      var err = res.error || (d && d.error) || '未知错误';
+      dcsPrint('✗ ' + err + (res.hint ? ('\n提示：' + res.hint) : ''), 'err');
+      if (res.detail) dcsPrint(JSON.stringify(res.detail, null, 2), 'err');
+      dcsEmpty(err + (res.hint ? ('\n\n' + res.hint) : ''));
+    }
+    return res;
+  }).catch(function (e) {
+    dcsPrint('✗ 请求失败：' + e.message, 'err');
+    dcsEmpty('请求失败：' + e.message);
+  }).finally(function () { dcsSetBusy(false); });
+}
+
+// ---------- 浏览视图：渲染 ----------
+function dcsRowsEl() { return document.getElementById('dcs-rows'); }
+
+function dcsEmpty(msg) {
+  var el = dcsRowsEl();
+  if (el) el.innerHTML = '<div class="dcs-empty">' + dcsEsc(msg) + '</div>';
+}
+
+function dcsClearRows() {
+  var el = dcsRowsEl();
+  if (el) el.innerHTML = '<div class="dcs-empty">加载中…</div>';
+}
+
+function dcsRowEl(spec) {
+  var row = document.createElement('div');
+  row.className = 'dcs-row' + (spec.onOpen ? ' clickable' : '');
+  var ic = document.createElement('span'); ic.className = 'dcs-ico'; ic.textContent = spec.icon || '📄';
+  var nm = document.createElement('span'); nm.className = 'dcs-name'; nm.textContent = spec.name || '';
+  row.appendChild(ic); row.appendChild(nm);
+  if (spec.meta) {
+    var m = document.createElement('span'); m.className = 'dcs-meta'; m.textContent = spec.meta;
+    row.appendChild(m);
+  }
+  (spec.badges || []).forEach(function (b) {
+    var s = document.createElement('span'); s.className = 'dcs-badge ' + (b[1] || ''); s.textContent = b[0];
+    row.appendChild(s);
+  });
+  (spec.actions || []).forEach(function (a) {
+    var btn = document.createElement('button');
+    btn.className = 'cc-btn'; btn.textContent = a[0]; btn.title = a[2] || a[0];
+    btn.onclick = function (ev) { ev.stopPropagation(); a[1](); };
+    row.appendChild(btn);
+  });
+  if (spec.onOpen) row.onclick = spec.onOpen;
+  return row;
+}
+
+function dcsRender(rows, opts) {
+  var el = dcsRowsEl();
+  if (!el) return;
+  el.innerHTML = '';
+  if (!rows.length) {
+    el.innerHTML = '<div class="dcs-empty">' + dcsEsc((opts && opts.empty) || '（空）') + '</div>';
+    return;
+  }
+  rows.forEach(function (r) { el.appendChild(dcsRowEl(r)); });
+  if (opts && opts.more) {
+    var d = document.createElement('div'); d.className = 'dcs-loadmore';
+    var b = document.createElement('button'); b.className = 'cc-btn';
+    b.textContent = '⬇ 加载更多（已显示 ' + opts.loaded + ' / ' + opts.total + '）';
+    b.onclick = opts.more;
+    d.appendChild(b); el.appendChild(d);
+  }
+  el.scrollTop = 0;
+}
+
+function dcsCrumbs(items) {
+  var el = document.getElementById('dcs-crumbs');
+  if (!el) return;
+  el.innerHTML = '';
+  items.forEach(function (it, i) {
+    if (i) el.appendChild(document.createTextNode(' › '));
+    if (it.fn) {
+      var a = document.createElement('a'); a.textContent = it.label; a.onclick = it.fn;
+      el.appendChild(a);
+    } else {
+      var s = document.createElement('span'); s.textContent = it.label;
+      el.appendChild(s);
+    }
+  });
+}
+
+function dcsCrumbsFromPath(path) {
+  var parts = String(path || '/Files').split('/').filter(Boolean);
+  var acc = '', items = [], start = (parts[0] === 'Files') ? 1 : 0;
+  for (var i = start; i < parts.length; i++) {
+    acc += '/' + parts[i];
+    var target = acc;
+    items.push({ label: parts[i], fn: (function (t) { return function () { dcsNav(t, 1); }; })(target) });
+  }
+  items.unshift({ label: '☁️ Files', fn: function () { dcsNav('/Files', 1); } });
+  if (parts.length > 1) {
+    var up = '/' + parts.slice(0, -1).join('/');
+    items.push({ label: '⬆ 上级', fn: function () { dcsNav(up, 1); } });
+  }
+  dcsCrumbs(items);
+}
+
+function dcsDetail(pairs, actions) {
+  var el = document.getElementById('dcs-detail');
+  if (!el) return;
+  el.innerHTML = '';
+  el.style.display = 'block';
+  pairs.forEach(function (kv) {
+    var r = document.createElement('div');
+    r.innerHTML = '<b>' + dcsEsc(kv[0]) + '</b>：' + dcsEsc(kv[1] === null || kv[1] === undefined ? '' : kv[1]);
+    el.appendChild(r);
+  });
+  var box = document.createElement('div'); box.className = 'dcs-actions';
+  (actions || []).forEach(function (a) {
+    var b = document.createElement('button');
+    b.className = 'cc-btn primary'; b.textContent = a[0]; b.onclick = a[1];
+    box.appendChild(b);
+  });
+  var close = document.createElement('button');
+  close.className = 'cc-btn'; close.textContent = '收起';
+  close.onclick = function () { el.style.display = 'none'; };
+  box.appendChild(close);
+  el.appendChild(box);
+}
+
+// ---------- 浏览视图：项目 ----------
+function dcsShowProjects(page) {
+  page = page || 1;
+  if (page === 1) _dcsState = { kind: 'projects', path: '', name: '', page: 1, total: 0, rows: [] };
+  else _dcsState.page = page;
+  var st = _dcsState;
+  dcsSetView('browse');
+  dcsCrumbs([{ label: '📁 我的项目', fn: function () { dcsShowProjects(1); } }, { label: '第 ' + page + ' 页' }]);
+  if (page === 1) dcsClearRows();
+  dcsCall({ action: 'projects', page: page }, function (res) {
+    var box = res.projects || {};
+    var list = box.projects || [];
+    st.total = box.total || (st.rows.length + list.length);
+    list.forEach(function (p) { st.rows.push(p); });
+    var rows = st.rows.map(function (p) {
+      var badges = [];
+      if (p.current) badges.push(['当前', 'ok']);
+      if (p.is_arrears) badges.push(['欠费', 'warn']);
+      return {
+        icon: p.current ? '📌' : '📦',
+        name: p.project_name || p.project_id,
+        meta: p.project_id + (p.region ? (' · ' + p.region) : ''),
+        badges: badges,
+        onOpen: function () { dcsProjectDetail(p); }
+      };
+    });
+    dcsRender(rows, {
+      empty: '没有可见的项目', loaded: rows.length, total: st.total,
+      more: (rows.length < st.total) ? function () { dcsShowProjects(st.page + 1); } : null
+    });
+  });
+}
+
+function dcsProjectDetail(p) {
+  dcsDetail([
+    ['项目', p.project_name || ''],
+    ['ID', p.project_id || ''],
+    ['片区', p.region || ''],
+    ['计费组', p.billing_group || ''],
+    ['失败任务', p.failed_task_count === null || p.failed_task_count === undefined ? '' : String(p.failed_task_count)],
+    ['欠费', p.is_arrears ? '是（先充值再投递）' : '否'],
+    ['状态', p.current ? '当前项目' : '未选中']
+  ], [
+    p.current ? null : ['📌 设为当前项目', function () { dcsRun('use_project', { project: p.project_id }, '切换到 ' + p.project_id); }],
+    ['🗂 浏览它的数据', function () { dcsNav('/Files', 1); }],
+    ['📋 它的任务', function () { dcsShowTasks(1); }]
+  ].filter(Boolean));
+}
+
+// ---------- 浏览视图：目录 ----------
+function dcsNav(path, page) {
+  page = page || 1;
+  if (page === 1) _dcsState = { kind: 'ls', path: path || '/Files', name: '', page: 1, total: 0, rows: [] };
+  else _dcsState.page = page;
+  var st = _dcsState;
+  dcsSetView('browse');
+  dcsCrumbsFromPath(st.path);
+  if (page === 1) dcsClearRows();
+  dcsCall({ action: 'ls', path: st.path, long: true, page: page }, function (res) {
+    var box = res.entries || {};
+    var items = box.items || [];
+    st.total = (box.total === null || box.total === undefined) ? (st.rows.length + items.length) : box.total;
+    items.forEach(function (it) { st.rows.push(it); });
+    var base = String(box.path || st.path).replace(/\/+$/, '');
+    var rows = st.rows.map(function (it) {
+      var child = it.path || (base + '/' + (it.name || ''));
+      if (it.is_directory) {
+        return {
+          icon: '📁', name: it.name, meta: it.create_time || '', badges: [],
+          onOpen: function () { dcsNav(child, 1); },
+          actions: [['进入', function () { dcsNav(child, 1); }]]
+        };
+      }
+      var meta = [dcsFmtSize(it.size), it.create_time].filter(Boolean).join(' · ');
+      return {
+        icon: '📄', name: it.name, meta: meta,
+        badges: it.sn ? [[it.sn, '']] : [],
+        onOpen: function () { dcsFileDetail(it, child); },
+        actions: [['⬇ 下载', function () { dcsDownloadFile(child); }, '下载到本机']]
+      };
+    });
+    dcsRender(rows, {
+      empty: '目录是空的（或路径不存在）', loaded: rows.length, total: st.total,
+      more: (rows.length < st.total) ? function () { dcsNav(st.path, st.page + 1); } : null
+    });
+  });
+}
+
+function dcsFileDetail(it, full) {
+  dcsDetail([
+    ['文件', it.name || ''],
+    ['路径', full],
+    ['大小', dcsFmtSize(it.size) || '（未返回，点「刷新元数据」可查）'],
+    ['创建时间', it.create_time || ''],
+    ['SN / 实体', ((it.sn || '') + (it.entity_id ? (' / ' + it.entity_id) : '')) || '']
+  ], [
+    ['⬇ 下载到本机', function () { dcsDownloadFile(full); }],
+    ['ℹ️ 刷新元数据', function () {
+      dcsCall({ action: 'info', path: full }, function (r) {
+        dcsDetail([['元数据', JSON.stringify(r.info || r, null, 2)]], [['🧾 在日志里看', function () { dcsSetView('log'); }]]);
+      });
+    }]
+  ]);
+}
+
+var _dcsLastDir = '';
+
+// 调本机原生选择框（宿主进程弹 Windows 对话框），把结果填回输入框
+function dcsPickInto(inputId, kind) {
+  var inp = document.getElementById(inputId);
+  var note = document.getElementById('dcs-pick-note');
+  var setNote = function (t) { if (note) note.textContent = t; };
+  setNote('已请求系统选择框，请在弹出的窗口里选择…');
+  fetch('/api/dcs/pick', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: kind || 'dir', initial: inp ? inp.value : '' })
+  }).then(function (r) {
+    return r.text().then(function (t) {
+      var d = null;
+      try { d = JSON.parse(t); } catch (e) { d = null; }
+      return { status: r.status, ok: r.ok, body: d };
+    });
+  }).then(function (res) {
+    var d = res.body || {};
+    if (res.ok && d.ok && d.path) {
+      if (inp) inp.value = d.path;
+      _dcsLastDir = d.path;
+      setNote('✓ 已选择：' + d.path);
+    } else if (res.ok && d.cancelled) {
+      setNote('已取消选择');
+    } else if (res.status === 404 || res.status === 405) {
+      setNote('接口还不存在（HTTP ' + res.status + '）—— MemOmics 服务还是旧进程：重启服务后再点一次；'
+              + '现在也可以直接在输入框里手填路径。');
+    } else if (!res.ok) {
+      setNote('选择框请求失败（HTTP ' + res.status + '）：' + String(d && (d.detail || d.error) || '').slice(0, 120)
+              + '（可直接手填路径）');
+    } else {
+      setNote('选择框不可用：' + (d.error || '未知') + (d.hint ? ('（' + d.hint + '）') : '')
+              + ' —— 也可以直接在输入框手填路径。');
+    }
+    if (inp) inp.focus();
+  }).catch(function (e) {
+    setNote('选择框请求发不出去：' + e.message + '（服务可能刚重启，刷新页面再试）');
+    if (inp) inp.focus();
+  });
+}
+
+function dcsSaveDownloadDir(dir, quiet) {
+  if (!dir) return;
+  fetch('/api/dcs/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ download_dir: dir })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!quiet) dcsPrint(d && d.ok ? ('✓ 默认下载目录已保存：' + dir) : ('✗ 保存失败：' + ((d && d.error) || '未知')),
+                         (d && d.ok) ? 'ok' : 'err');
+  });
+}
+
+function dcsFormShell(title, note) {
+  var el = document.getElementById('dcs-detail');
+  if (!el) return null;
+  el.innerHTML = '';
+  el.style.display = 'block';
+  var t = document.createElement('div');
+  t.innerHTML = '<b>' + dcsEsc(title) + '</b>';
+  el.appendChild(t);
+  var f = document.createElement('div'); f.className = 'dcs-form';
+  el.appendChild(f);
+  var n = document.createElement('div'); n.className = 'dcs-note'; n.id = 'dcs-pick-note';
+  n.textContent = note || '';
+  el.appendChild(n);
+  return f;
+}
+
+function dcsBtn(text, cls, fn) {
+  var b = document.createElement('button');
+  b.className = 'cc-btn' + (cls ? (' ' + cls) : '');
+  b.textContent = text; b.onclick = fn;
+  return b;
+}
+
+function dcsInput(id, value, placeholder, width) {
+  var i = document.createElement('input');
+  i.id = id; i.className = 'dcs-input'; i.value = value || ''; i.placeholder = placeholder || '';
+  if (width) i.style.flex = 'none', i.style.width = width;
+  return i;
+}
+
+function dcsDownloadFile(path) {
+  var f = dcsFormShell('⬇ 下载到本机', '目标目录：可以手填，也可以点「📂 选择文件夹」用系统对话框选。');
+  if (!f) return;
+  f.appendChild(dcsInput('dcs-dl-dir', _dcsLastDir || 'E:/MemOmics-Agent/results/dcs', '本机目标目录，例 E:/data'));
+  f.appendChild(dcsBtn('📂 选择文件夹', '', function () { dcsPickInto('dcs-dl-dir', 'dir'); }));
+  f.appendChild(dcsBtn('⬇ 开始下载', 'primary', function () {
+    var dir = (document.getElementById('dcs-dl-dir') || {}).value || '';
+    if (!dir) { alert('先选或填一个本机目录'); return; }
+    _dcsLastDir = dir;
+    dcsRun('download', { path: path, target: dir, type: 'web' }, '下载 ' + path);
+  }));
+  f.appendChild(dcsBtn('📌 设为默认', '', function () {
+    dcsSaveDownloadDir((document.getElementById('dcs-dl-dir') || {}).value || '');
+  }));
+  f.appendChild(dcsBtn('取消', '', function () { document.getElementById('dcs-detail').style.display = 'none'; }));
+}
+
+function dcsUploadForm(localPath, cloudPath) {
+  var f = dcsFormShell('⬆ 上传到云（会占用云端存储并计费）',
+    '本机文件 + 云上目标目录。小文件走 web（≤100MB）；大文件用「🧾 日志」视图的 raw 换 oss。');
+  if (!f) return;
+  f.appendChild(dcsInput('dcs-ul-local', localPath || '', '本机文件路径，例 E:/data/result.csv'));
+  f.appendChild(dcsBtn('📄 选择文件', '', function () { dcsPickInto('dcs-ul-local', 'file'); }));
+  f.appendChild(dcsInput('dcs-ul-cloud', cloudPath || '/Files/', '云上目标目录，例 /Files/Muscle'));
+  f.appendChild(dcsBtn('⬆ 开始上传', 'primary', function () {
+    var lp = (document.getElementById('dcs-ul-local') || {}).value || '';
+    var cp = (document.getElementById('dcs-ul-cloud') || {}).value || '';
+    if (!lp || !cp) { alert('本机文件与云上目标都要填'); return; }
+    if (!confirm('上传到云端会占用存储并产生费用，确认继续？\n\n' + lp + '\n→ ' + cp)) return;
+    dcsRun('upload', { path: lp, target: cp, type: 'web' }, '上传 ' + lp);
+  }));
+  f.appendChild(dcsBtn('📌 记住目录', '', function () {
+    var lp = (document.getElementById('dcs-ul-local') || {}).value || '';
+    if (lp) dcsSaveDownloadDir(lp.replace(/[\\/][^\\/]*$/, ''));
+  }));
+  f.appendChild(dcsBtn('取消', '', function () { document.getElementById('dcs-detail').style.display = 'none'; }));
+}
+
+// ---------- 浏览视图：搜索 ----------
+function dcsShowFind(name, page) {
+  page = page || 1;
+  if (page === 1) _dcsState = { kind: 'find', path: '', name: name, page: 1, total: 0, rows: [] };
+  else _dcsState.page = page;
+  var st = _dcsState;
+  dcsSetView('browse');
+  dcsCrumbs([{ label: '🔍 搜索 ' + name, fn: function () { dcsShowFind(name, 1); } }, { label: '第 ' + page + ' 页' }]);
+  if (page === 1) dcsClearRows();
+  dcsCall({ action: 'find', name: name, page: page, page_size: 50 }, function (res) {
+    var box = res.matches || {};
+    var items = box.items || [];
+    st.total = box.total || (st.rows.length + items.length);
+    items.forEach(function (it) { st.rows.push(it); });
+    var rows = st.rows.map(function (it) {
+      var dir = String(it.path || '').replace(/\/+$/, '');
+      var full = dir ? (dir + '/' + it.name) : it.name;
+      return {
+        icon: '📄', name: it.name || '', meta: full + (it.size ? (' · ' + dcsFmtSize(it.size)) : ''),
+        badges: it.entity_id ? [[it.entity_id, '']] : [],
+        onOpen: function () { dcsFileDetail(it, full); },
+        actions: [['⬇ 下载', function () { dcsDownloadFile(full); }]]
+      };
+    });
+    dcsRender(rows, {
+      empty: '没找到匹配文件', loaded: rows.length, total: st.total,
+      more: (rows.length < st.total) ? function () { dcsShowFind(name, st.page + 1); } : null
+    });
+  });
+}
+
+// ---------- 浏览视图：任务 ----------
+function dcsShowTasks(page) {
+  page = page || 1;
+  if (page === 1) _dcsState = { kind: 'tasks', path: '', name: '', page: 1, total: 0, rows: [] };
+  else _dcsState.page = page;
+  var st = _dcsState;
+  dcsSetView('browse');
+  dcsCrumbs([{ label: '📋 离线任务', fn: function () { dcsShowTasks(1); } }, { label: '第 ' + page + ' 页' }]);
+  if (page === 1) dcsClearRows();
+  dcsCall({ action: 'tasks', page_size: 20, page: page }, function (res) {
+    var box = res.tasks || {};
+    var recs = box.records || [];
+    st.total = box.total || (st.rows.length + recs.length);
+    recs.forEach(function (t) { st.rows.push(t); });
+    var rows = st.rows.map(function (t) {
+      var badges = [];
+      return {
+        icon: '🧪', name: t.task_name || t.task_id,
+        meta: (t.task_id || '') + ' · ' + (t.create_user || '') + ' · ' + (t.create_time || ''),
+        badges: badges,
+        onOpen: function () { dcsTaskDetail(t); }
+      };
+    });
+    dcsRender(rows, {
+      empty: '没有任务', loaded: rows.length, total: st.total,
+      more: (rows.length < st.total) ? function () { dcsShowTasks(st.page + 1); } : null
+    });
+  });
+}
+
+function dcsTaskDetail(t) {
+  dcsDetail([
+    ['任务', t.task_name || ''],
+    ['ID', t.task_id || ''],
+    ['创建人', t.create_user || ''],
+    ['创建时间', t.create_time || ''],
+    ['统计', t.task_num || '']
+  ], [
+    ['📜 看日志', function () { dcsRun('task_logs', { task_id: t.task_id }, '取任务日志 ' + t.task_id); }],
+    ['🧾 在日志里看', function () { dcsSetView('log'); }]
+  ]);
+}
+
+// ---------- 状态 / 绑定 ----------
 function dcsLoad() {
   fetch('/api/dcs/status').then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) { dcsPrint('✗ 状态读取失败：' + ((d && d.error) || '未知'), 'err'); return; }
-    var c = d.config || {};
+    var c = d.config || {}, cfg = c.config || {};
     var chip = document.getElementById('dcs-chip');
     if (chip) {
       chip.className = 'cc-chip ' + ((c.enabled && c.bound) ? 'ok' : 'warn');
@@ -15782,10 +16310,11 @@ function dcsLoad() {
       if (c.bound) { uc.style.display = ''; uc.textContent = (c.user || c.pat_masked) + (c.default_project ? (' @' + c.default_project) : ''); }
       else { uc.style.display = 'none'; }
     }
-    var cfg = c.config || {};
     var f = function (id, v) { var e = document.getElementById(id); if (e) e.value = (v === null || v === undefined) ? '' : v; };
     f('dcs-base-url', c.base_url); f('dcs-region', c.region); f('dcs-default-project', c.default_project);
     f('dcs-timeout', cfg.timeout); f('dcs-cli-path', cfg.cli_path);
+    f('dcs-download-dir', c.download_dir || cfg.download_dir);
+    if (c.download_dir) _dcsLastDir = c.download_dir;
     var cb = function (id, v) { var e = document.getElementById(id); if (e) e.checked = !!v; };
     cb('dcs-enabled', c.enabled); cb('dcs-allow-write', c.allow_write);
     var vp = document.getElementById('dcs-vault-path');
@@ -15805,8 +16334,8 @@ function dcsBind() {
       if (res.status === 'ok') {
         if (el) el.value = '';
         dcsPrint('✓ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : ''), 'ok');
-        dcsPrint(JSON.stringify(res, null, 2));
         dcsLoad();
+        dcsShowProjects(1);
       } else {
         dcsPrint('✗ 绑定失败：' + (res.error || (d && d.error) || '未知'), 'err');
         if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
@@ -15818,7 +16347,7 @@ function dcsUnbind() {
   if (!confirm('解除绑定？\n\n会登出本机 dcs CLI 会话，并删除本机保存的 PAT。\n（DCS 平台上的令牌本身不受影响，需要时可在个人中心删除）')) return;
   fetch('/api/dcs/unbind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     .then(function (r) { return r.json(); })
-    .then(function () { dcsPrint('✓ 已解绑（本机凭据已删除）', 'ok'); dcsLoad(); })
+    .then(function () { dcsPrint('✓ 已解绑（本机凭据已删除）', 'ok'); dcsLoad(); dcsEmpty('已解绑'); })
     .catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
 }
 
@@ -15830,6 +16359,7 @@ function dcsSaveCfg() {
     region: document.getElementById('dcs-region').value.trim(),
     default_project: document.getElementById('dcs-default-project').value.trim(),
     cli_path: document.getElementById('dcs-cli-path').value.trim(),
+    download_dir: document.getElementById('dcs-download-dir').value.trim(),
     timeout: parseInt(document.getElementById('dcs-timeout').value || '120', 10)
   };
   fetch('/api/dcs/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -15838,6 +16368,42 @@ function dcsSaveCfg() {
       if (d && d.ok) { dcsPrint('✓ 设置已保存（写回 config.yaml 的 dcs_cloud: 段）', 'ok'); dcsLoad(); }
       else { dcsPrint('✗ 保存失败：' + ((d && d.error) || '未知'), 'err'); }
     }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+}
+
+// ---------- 打开 / 输入 ----------
+function openDcsConsole() {
+  var el = document.getElementById('dcs-console');
+  if (!el) return;
+  el.style.display = 'flex';
+  var sel = document.getElementById('dcs-mode');
+  if (sel && !sel.options.length) {
+    var order = ['projects', 'use_project', 'current', 'ls', 'find', 'download', 'upload',
+                 'container_open', 'container_exec', 'container_close', 'tasks', 'task_logs', 'raw'];
+    for (var i = 0; i < order.length; i++) {
+      var o = document.createElement('option');
+      o.value = order[i]; o.textContent = DCS_MODES[order[i]].opt;
+      sel.appendChild(o);
+    }
+    sel.value = 'projects';
+  }
+  dcsSetView(_dcsView);
+  dcsModeChange();
+  dcsLoad();
+  if (!_dcsState.rows.length) dcsShowProjects(1);
+  var box = document.getElementById('dcs-cmd');
+  if (box) box.focus();
+}
+
+function dcsClose() {
+  var el = document.getElementById('dcs-console');
+  if (el) el.style.display = 'none';
+}
+
+function dcsToggleCfg() {
+  var el = document.getElementById('dcs-cfg');
+  if (!el) return;
+  var shown = (el.style.display !== 'none' && el.style.display !== '');
+  el.style.display = shown ? 'none' : 'grid';
 }
 
 function dcsModeChange() {
@@ -15854,58 +16420,59 @@ function dcsQuick(action) {
   var sel = document.getElementById('dcs-mode');
   if (sel) { sel.value = action; dcsModeChange(); }
   var box = document.getElementById('dcs-cmd');
-  if (box && (action === 'projects' || action === 'current' || action === 'container_close')) box.value = '';
+  if (box) box.value = '';
+  if (action === 'projects') return dcsShowProjects(1);
+  if (action === 'tasks') return dcsShowTasks(1);
+  if (action === 'ls') return dcsNav('/Files', 1);
   dcsExec();
 }
+
+function parts0(text) { return text ? String(text).trim() : ''; }
 
 function dcsKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); dcsExec(); }
 }
 
-function dcsBuildArgs() {
-  var sel = document.getElementById('dcs-mode');
-  var box = document.getElementById('dcs-cmd');
-  var action = sel ? sel.value : 'projects';
-  var text = box ? box.value.trim() : '';
-  var parts = text ? text.split(/\s+/) : [];
+function dcsRun(action, extra, label) {
   var args = { action: action };
-  if (action === 'use_project') { args.project = parts[0] || ''; }
-  else if (action === 'ls') { args.path = text; }
-  else if (action === 'find') { args.name = parts[0] || ''; }
-  else if (action === 'download' || action === 'upload') { args.path = parts[0] || ''; args.target = parts[1] || ''; }
-  else if (action === 'container_exec') { args.command = text; }
-  else if (action === 'container_open') { args.resource_id = parts[0] || ''; }
-  else if (action === 'task_logs') { args.task_id = parts[0] || ''; }
-  else if (action === 'tasks') { args.name = parts[0] || ''; if (parts[1] === '-a') args.all = true; }
-  else if (action === 'raw') { args.command = text; }
-  return args;
+  if (extra) { for (var k in extra) { if (extra[k] !== undefined && extra[k] !== null && extra[k] !== '') args[k] = extra[k]; } }
+  dcsPrint('▶ ' + (label || action), 'sys');
+  return dcsCall(args, function () {
+    if (action === 'use_project') { dcsLoad(); dcsShowProjects(1); }
+    if (action === 'container_exec' || action === 'task_logs' || action === 'raw') dcsSetView('log');
+  });
 }
 
 function dcsExec() {
   if (_dcsBusy) return;
-  var args = dcsBuildArgs();
-  if (args.action === 'upload' && !confirm('上传到云端会占用存储并产生费用，确认继续？')) return;
-  var label = args.action + (args.path ? ('  ' + args.path) : '') +
-              (args.target ? ('  →  ' + args.target) : '') + (args.command ? ('  ' + args.command) : '');
-  dcsPrint('▶ ' + label, 'sys');
-  dcsSetBusy(true);
-  fetch('/api/dcs/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) })
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var res = (d && d.result) || {};
-      if (res.status === 'ok') {
-        var shown = JSON.parse(JSON.stringify(res));
-        delete shown.status;
-        dcsPrint(JSON.stringify(shown, null, 2), 'ok');
-        var box = document.getElementById('dcs-cmd');
-        if (box) box.value = '';
-      } else {
-        dcsPrint('✗ ' + (res.error || (d && d.error) || '未知错误'), 'err');
-        if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
-        if (res.detail) dcsPrint(JSON.stringify(res.detail, null, 2), 'err');
-      }
-    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); })
-    .finally(function () { dcsSetBusy(false); });
+  var sel = document.getElementById('dcs-mode');
+  var box = document.getElementById('dcs-cmd');
+  var action = sel ? sel.value : 'projects';
+  var text = box ? box.value.trim() : '';
+  if (action === 'projects') { if (box) box.value = ''; return dcsShowProjects(1); }
+  if (action === 'tasks') { if (box) box.value = ''; return dcsShowTasks(1); }
+  if (action === 'ls') { if (box) box.value = ''; return dcsNav(text || '/Files', 1); }
+  if (action === 'find') { if (box) box.value = ''; return dcsShowFind(text || '*.csv', 1); }
+
+  if (action === 'upload' && (!text || text.split(/\s+/).length < 2)) {
+    dcsSetView('browse');
+    return dcsUploadForm(parts0(text), '');
+  }
+  var parts = text ? text.split(/\s+/) : [];
+  var args = { action: action };
+  if (action === 'use_project') { args.project = parts[0] || ''; }
+  else if (action === 'download' || action === 'upload') { args.path = parts[0] || ''; args.target = parts[1] || ''; }
+  else if (action === 'container_exec') { args.command = text; }
+  else if (action === 'container_open') { args.resource_id = parts[0] || ''; }
+  else if (action === 'task_logs') { args.task_id = parts[0] || ''; }
+  else if (action === 'raw') { args.command = text; }
+
+  if (action === 'upload' && !confirm('上传到云端会占用存储并产生费用，确认继续？')) return;
+  dcsSetView('log');
+  dcsCall(args, function () {
+    if (action === 'use_project') { dcsLoad(); dcsShowProjects(1); }
+    if (action === 'download' || action === 'upload') { if (box) box.value = ''; }
+  });
 }
 
 // === 上下文窗口 ===
@@ -16555,7 +17122,7 @@ async function saveUpdateConfig(mode) {
   </div>
 </div>
 
-<!-- === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）：账号绑定 + 项目/数据/容器/任务 === -->
+<!-- === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）：账号绑定 + 可点击的项目/数据/任务浏览 === -->
 <div id="dcs-console" class="cc-console">
   <div class="cc-box">
     <div class="cc-head">
@@ -16563,9 +17130,14 @@ async function saveUpdateConfig(mode) {
       <span class="cc-chip" id="dcs-chip">读取状态中…</span>
       <span class="cc-chip" id="dcs-user-chip" style="display:none;"></span>
       <span class="cc-spacer"></span>
+      <span class="cc-tabs">
+        <button class="cc-btn primary" id="dcs-tab-browse" onclick="dcsSetView('browse')">🌲 浏览</button>
+        <button class="cc-btn" id="dcs-tab-log" onclick="dcsSetView('log')">🧾 日志</button>
+      </span>
       <button class="cc-btn" onclick="dcsQuick('projects')">📁 项目</button>
       <button class="cc-btn" onclick="dcsQuick('ls')">🗂 数据</button>
       <button class="cc-btn" onclick="dcsQuick('tasks')">📋 任务</button>
+      <button class="cc-btn" onclick="dcsQuick('upload')">⬆ 上传</button>
       <button class="cc-btn" onclick="dcsToggleCfg()">⚙️ 设置</button>
       <button class="cc-btn" onclick="dcsClose()">✕ 关闭</button>
     </div>
@@ -16575,6 +17147,9 @@ async function saveUpdateConfig(mode) {
       <label>片区 region（可空）<input id="dcs-region" placeholder="留空 = 站点默认"></label>
       <label>默认项目 ID（可空）<input id="dcs-default-project" placeholder="P…；留空 = 用 CLI 当前项目"></label>
       <label>命令超时秒<input id="dcs-timeout" placeholder="120"></label>
+      <label>默认下载目录<input id="dcs-download-dir" placeholder="留空 = 仓库 results/；可点右侧按钮选">
+        <span style="display:inline-flex;gap:6px;margin-top:2px;"><button class="cc-btn" type="button" onclick="dcsPickInto('dcs-download-dir','dir')">📂 选择</button></span>
+      </label>
       <label>允许写操作（上传/开容器）<input type="checkbox" id="dcs-allow-write"></label>
       <label>CLI 路径（可空 = 自动探测）<input id="dcs-cli-path" placeholder="留空自动找 %LOCALAPPDATA%\MemOmics\tools\dcs\dcs.exe"></label>
       <div class="cc-cfg-note" style="grid-column:1/-1;">
@@ -16597,7 +17172,12 @@ async function saveUpdateConfig(mode) {
         <span id="dcs-cfg-note" class="cc-cfg-note"></span>
       </div>
     </div>
-    <div class="cc-out" id="dcs-out"></div>
+    <div class="cc-browse" id="dcs-browse">
+      <div class="dcs-crumbs" id="dcs-crumbs">点「📁 项目」「🗂 数据」「📋 任务」开始浏览</div>
+      <div class="dcs-rows" id="dcs-rows"><div class="dcs-empty">加载中…</div></div>
+      <div class="dcs-detail" id="dcs-detail" style="display:none;"></div>
+    </div>
+    <div class="cc-out" id="dcs-out" style="display:none;"></div>
     <div class="cc-input">
       <select id="dcs-mode" onchange="dcsModeChange()"></select>
       <textarea id="dcs-cmd" rows="1" onkeydown="dcsKey(event)" placeholder="在这里输入（Enter 执行，Shift+Enter 换行）"></textarea>

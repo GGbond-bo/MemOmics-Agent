@@ -1,0 +1,40 @@
+type: kb_entry
+domain: common
+name: paper_qc_10.1016_j.devcel.2026.03.010
+direction: general
+assay_type: RNA
+last_updated: 2026-10-07 17:39
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- paper_qc_10.1016_j.devcel.2026.03.010
+content: '- 肌纤维颗粒大小限制 = 200–3000 μm2（MyoSight自动检测过滤；未检测到的肌纤维手动补充）
+
+  - RNA counts > = 40,000（scRNA-seq Sample A 去除）
+
+  - detected features = <700 或 >7,000（scRNA-seq Sample A 去除）
+
+  - mitochondrial reads = >6%（scRNA-seq Sample A 去除）
+
+  - ribosomal reads = <1.5%（scRNA-seq Sample A 去除）
+
+  - RNA counts > = 60,000（scRNA-seq Sample A2 去除）
+
+  - detected features = <1,200 或 >7,500（scRNA-seq Sample A2 去除）
+
+  - mitochondrial reads = >5%（scRNA-seq Sample A2 去除）
+
+  - ribosomal reads = <1.5%（scRNA-seq Sample A2 去除）
+
+  - RNA counts > = 20,000（snRNA-seq doublet 去除后排除）
+
+  - detected features = <300 或 >5,000（snRNA-seq doublet 去除后排除）
+
+  - mitochondrial reads = >5%（snRNA-seq doublet 去除后排除）'
+evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
+  junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

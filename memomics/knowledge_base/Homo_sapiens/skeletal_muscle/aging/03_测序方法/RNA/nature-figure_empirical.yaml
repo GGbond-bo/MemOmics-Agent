@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-24 20:26
+last_updated: 2026-09-29 17:41
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,20 +12,28 @@ auto_trigger:
 - nature-figure_empirical
 content: 'skill: nature-figure
 
-  quality_score: 10.0
+  quality_score: 9.0
 
 
   params_used:
 
-  GRP_HUE 键改 Y/O/OD + stopifnot(!any(is.na(...))) 自检; R 侧 png::readPNG 子采样像素验证(逐目标
-  hex 计数 + 三分带 colored%)
+  {"figsize_in": [7.087, 3.45], "panels": 5, "panel_order": ["Aging", "DM", "Ex_Young",
+  "Ex_Old", "Ex_DM"], "subclusters": 8, "excluded": ["RSS", "Specialized MF"], "scale":
+  "per-panel independent absolute (freescale)", "colors": {"up": "#B2182B", "down":
+  "#2166AC"}, "family_accent": {"condition": "#3D3B4F", "exercise": "#0F5F6E"}, "top_optimization":
+  "panel letters a-e + family super-header + accent rule + colored Sigma Up/Down +
+  full-width hairline + shared legend", "left_optimization": "rotated axis caption
+  + 2-tier group brackets (Pure fiber types / Derived subpopulations) + group separators
+  + right-aligned names", "export": ["png@400dpi", "pdf", "svg", "tiff@600dpi"], "final_size_mm":
+  [180.0, 87.6]}
 
 
   result_summary:
 
-  v2 修复后像素验证通过: 6 个组别色全部出现(#8CD3C0 n=2043 / #009E73 n=3124 / #8CC0DC n=15660 / #0072B2
-  n=2811 / #ECB78C n=3377 / #D55E00 n=2930), band3(panel e/f) colored 3.35% 已恢复; 补充图
-  S1 同样 6 色齐全'
-evidence: 'record_run(nature-figure): v2 修复后像素验证通过: 6 个组别色全部出现(#8CD3C0 n=2043 / #009E73
-  n=3124 / #8CC0DC n=15660 / #0072B2 n=2811 / #ECB78C n=3377 / #D55E00 n=2930), band3(panel
-  e/f) colored 3.35% 已恢复; 补充图 S1 同样 6 色齐全'
+  fig_deg_updown_8sub_freescale_v2_optimized 渲染成功：5 面板 × 8 亚群水平背离柱，仅优化顶部标题区与左侧标签区，柱区结构与基线完全一致（总计校验
+  Aging 16,535↑/380↓、DM 125/144、Ex_Young 61/38、Ex_Old 231/1,091、Ex_DM 107/119 逐项吻合；Aging
+  8 亚群合计 16,915）。顶部区带墨 7.76%、左侧区 4.56%，非白 12.44%，1555 色。产出 png 180,449 B / pdf 73,171
+  B / svg 52,101 B / tiff 760,954 B + source_data.csv'
+evidence: 'record_run(nature-figure): fig_deg_updown_8sub_freescale_v2_optimized 渲染成功：5
+  面板 × 8 亚群水平背离柱，仅优化顶部标题区与左侧标签区，柱区结构与基线完全一致（总计校验 Aging 16,535↑/380↓、DM 125/144、Ex_Young
+  61/38、Ex_Old 231/1,091、Ex_DM 107/119 逐项吻合；Aging 8 亚群合计 16,915）。顶'

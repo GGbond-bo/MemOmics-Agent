@@ -95,6 +95,13 @@ SCHEMA = {
                                "chemistry=化学类文章(chemistry/<类别>/，类别用 direction 传: "
                                "compounds/pharmacology/reactions/reagents/conditions)",
                 "default": "biology"
+            },
+            "evidence_chain": {
+                "type": "object",
+                "description": "证据链元数据（kb-evidence-v1）：{standard, max_level, level_distribution, "
+                               "graded_conclusions}；生物学结论用 L0-L3 分级，方法/参数类标 source_only。"
+                               "可选，写入 YAML 顶层，供知识库图谱/检索展示可信度。",
+                "default": None
             }
         },
         "required": ["name", "content"]
@@ -181,7 +188,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
                    category: str = "bioinformatics", force: bool = False,
                    species: str = "", tissue: str = "", direction: str = "",
                    kb_category: str = "01_生物学知识", assay_type: str = "RNA",
-                   domain: str = "biology") -> str:
+                   domain: str = "biology", evidence_chain: dict = None) -> str:
     """知识入库 — 铁轨强制验证，不可绕过。
 
     domain（批O3 2026-08-16）:
@@ -243,6 +250,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -279,6 +288,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -328,6 +339,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -404,6 +417,7 @@ def _register():
             args.get("kb_category", "01_生物学知识"),
             args.get("assay_type", "RNA"),
             args.get("domain", "biology"),
+            args.get("evidence_chain"),
         ),
     )
 

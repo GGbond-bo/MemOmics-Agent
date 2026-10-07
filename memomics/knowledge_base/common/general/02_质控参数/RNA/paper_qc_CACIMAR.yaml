@@ -1,20 +1,20 @@
-pmid: "38856169"
 type: kb_entry
 domain: common
 name: paper_qc_CACIMAR
-doi: "10.1093/bib/bbae283"
 direction: general
 assay_type: RNA
-last_updated: 2026-09-17 17:40
+last_updated: 2026-10-07 18:12
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_qc_CACIMAR
-content: '- expressed cells per gene = <10 cells removed（per species before ligand-receptor
-  analysis）
+content: '- expressed cells = >=10 cells（每个物种去除表达少于10个细胞的基因后计算细胞-细胞互作权重）
 
-  - gene expression filter = expressed in at least 5% of cells（genes used for marker
-  identification in mice, zebrafish, and chick）'
+  - 基因在细胞中表达比例 = 至少 5% 细胞（小鼠 7147、斑马鱼 4083、鸡 4559 个表达基因进入 marker 鉴定）'
 evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
   markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

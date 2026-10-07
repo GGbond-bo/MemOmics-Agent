@@ -1,127 +1,394 @@
-pmid: "33951459"
 type: kb_entry
 name: paper_bio_hotspot
-doi: "10.1016/j.cels.2021.04.005"
 species: other
 tissue: other
 direction: other
 assay_type: RNA
-last_updated: 2026-08-15 15:14
+last_updated: 2026-10-07 17:28
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_bio_hotspot
-content: '## 结论
+content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
-  - Hotspot是一种基于图的程序，用于识别单细胞基因组学中信息丰富的基因和基因模块。
+  - **[L1]** Hotspot 是一种基于图的通用方法，可在给定细胞-细胞相似度基础上识别信息基因并将其组织为基因模块。　（位置：SUMMARY / INTRODUCTION）
 
-  - 该方法通过共享相似细胞的信息来提高稀疏数据中的灵敏度。
+  - **[L1]** Hotspot 可整合任意线性或非线性降维方法，并通过共享相似细胞的信息提高稀疏单细胞数据中的检测灵敏度。　（位置：Highlights
+  / SUMMARY）
 
-  - 该方法可应用于大多数降维流程的下游分析。
+  - **[L1]** 在多模态数据中，Hotspot 可利用组织物理邻近、细胞谱系克隆相关性等替代相似度来识别相应基因模块。　（位置：SUMMARY / INTRODUCTION）
 
-  - 该方法还可用于检测多模态设置（RNA + X）中的基因模块。
+  - **[L1]** 应用示例中，Hotspot 能识别 T helper 细胞间细微转录变异相关基因、小脑空间依赖的基因表达模式以及胚胎发生过程中发育可遗传的表达程序。　（位置：SUMMARY）
 
-  - Hotspot在识别空间变异基因方面与SpatialDE性能相当，但计算速度快数个数量级。
+  - **[L1]** Hotspot可用于多种细胞相似度度量（如基因组、表观基因组或细胞谱系位置），只需将细胞间邻近关系抽象为加权图。　（验证：方法示意图 Figure
+  1A；无湿实验验证 ｜ 位置：Introduction/Figure 1A）
 
-  - Hotspot是第一个能够利用谱系追踪数据识别发育相关基因模块的方法。
+  - **[L1]** Hotspot利用相似图结构稳健评估邻近细胞间基因表达相似性，可缓解单细胞测序低灵敏度影响。　（验证：方法示意图 Figure 1B；无湿实验验证
+  ｜ 位置：Introduction/Figure 1B）
 
-  - Hotspot通过局部自相关识别基因模块，在空间转录组中优于spatialDE，在谱系追踪数据中可结合不同相似性图。
+  - **[L1]** Hotspot可识别表达谱相似的基因对，并将信息基因组织成模块。　（验证：方法示意图 Figure 1C；与 WGCNA、GRNBoost
+  比较（计算基准） ｜ 位置：Introduction/Figure 1C; Results）
 
-  - Hotspot性能随K增大而提高，但最优K通常为100-300。
+  - **[L1]** 应用于转录组相似度时，Hotspot可解决 scRNA-seq 中的基因选择和聚类问题，并适用于线性或非线性细胞相似度模型。　（验证：模拟数据与公开单细胞人
+  CD4+ 表达谱分析；与 WGCNA、GRNBoost 比较 ｜ 位置：Introduction; Results）
 
-  - 局部相关性在模拟和真实数据上比Pearson相关性更稳健，与真实相关性的Spearman秩相关更高。
+  - **[L1]** 在空间信息可用时，Hotspot可用物理距离定义相似度，识别空间变异基因并分组为原位表达模式，且计算时间显著少于 SpatialDE。　（验证：小鼠小脑公开数据；与
+  SpatialDE 基准比较；计算时间比较 ｜ 位置：Introduction; Results）
 
-  - 在CD4 T细胞转录组中，Hotspot选择的基因集在蛋白局部自相关上优于HVG、NBDisp和PCA方法。
+  - **[L1]** 在已知发育关系时，Hotspot可识别发育相关基因模块，并首次用于该目的。　（验证：小鼠胚胎发生 CRISPR-Cas9 谱系追踪公开数据
+  ｜ 位置：Introduction; Results）
+
+  - **[L1]** Hotspot 通过细胞相似性图将基因表达变化与其他单细胞数据（如空间邻近、谱系关系或表达谱相似性）关联起来。　（位置：正文第1段（To
+  compute the similarity map...））
+
+  - **[L1]** Hotspot 通过局部自相关统计量 Hx 检验每个基因表达与细胞相似性图的关联，并用零模型转换为 Z 分数进行排序和筛选。　（位置：正文第3-5段（We
+  then define a test statistic...））
+
+  - **[L1]** Hotspot 通过局部相关统计量 Hxy 量化两个基因在相似图同一区域的共表达，并用 UPGMA 层次聚类将显著局部自相关基因分组为模块。　（位置：正文模块识别段（For
+  the final module identification step...））
+
+  - **[L1]** 局部相关 Hxy 与 Pearson 相关系数不同：它使用不同细胞间表达值的乘积，因而对低检测率的共表达基因对更敏感。　（位置：正文局部相关段
+  / Figure S7）
+
+  - **[L1]** Hotspot 的零模型提供负二项分布（均值依赖文库大小）和 Bernoulli 分布（用于极稀疏数据）两种选项。　（位置：正文零模型段（Hotspot
+  provides two options...））
+
+  - **[L1]** Hotspot 在 SymSim 模拟 scRNA-seq 数据中的特征选择性能优于 HVG、NBDisp 和基于 PCA 的方法。　（验证：SymSim
+  模拟数据，3,000 个细胞、5 个细胞亚群、500 个生物变异基因和 4,500 个阴性对照基因；precision-recall 曲线见图 S1B。 ｜ 位置：Results
+  第3段 / Figure S1B）
+
+  - **[L1]** Hotspot 的成对 Hxy Z 分数比 Pearson 相关系数更能复现模拟数据中的真实基因相关性，且在测序深度降低时优势更明显。　（验证：使用模拟转录数据，以总细胞计数计算的
+  Pearson 相关系数为 ground truth，并在不同测序深度下比较 Spearman 相关；见图 S7A。 ｜ 位置：Results 第4段 / Figure
+  S7A）
+
+  - **[L1]** Hotspot 在模拟数据中的基因模块分配准确度优于 WGCNA 和 Grnboost 等方法，但不优于 ICA。　（验证：在模拟数据上运行
+  WGCNA、ICA with FDR thresholding、Grnboost，并与已知 gene-component 关联比较模块分配准确度；见图 S1C。
+  ｜ 位置：Results 第5段 / Figure S1C）
+
+  - **[L1]** 在 1,500 个 CD4+ T 细胞中，Hotspot 识别出参与 T 细胞状态决定、迁移、抑制性信号和共刺激等过程的关键基因，且这些基因常非过离散。　（验证：使用
+  10x Genomics 人 PBMC 样本中过滤得到的 1,500 个 CD4+ T 细胞进行 scRNA-seq 分析；见图 S6。 ｜ 位置：Results
+  第6段 / Figure S6）
+
+  - **[L1]** Hotspot 所选基因在 scVI 隐空间中的局部自相关高于其他特征选择方法，并能产生更清晰的基因模块和 UMAP 可视化模式。　（验证：在
+  1,500 个 CD4+ T 细胞中比较 Hotspot 与替代特征选择方法的 scVI 隐空间局部自相关，并展示 UMAP 投影；见图 2C 和图 S12。
+  ｜ 位置：Results 第6段 / Figure 2C, Figure S12）
+
+  - **[L1]** 基于 MSigDB CD4+ T 细胞相关基因集计算的 GR 评分显示，Hotspot 的基因生物学相关性优于 HVG 和 PCA，并在前几百个基因后持续优于
+  NBDisp。　（验证：对每个基因计算其所属 CD4+ T 细胞相关 MSigDB 基因集数量作为 GR 评分，并比较不同方法所选基因集平均 GR 评分；见图
+  2A。 ｜ 位置：Results 第7段 / Figure 2A）
+
+  - **[L1]** 在仅用所选基因重新训练 scVI 时，采用任何特征选择方法通常会提高基于 mRNA 相似图的表面蛋白自相关水平；Hotspot 的提升幅度大于其他比较方法，但
+  HVG、PCA 与 Hotspot 之间差异无统计学显著性（rank-sums test, p > 0.05）。　（验证：计算评估：Figure 2B 蛋白自相关；rank-sums
+  test p > 0.05 ｜ 位置：Figure 2B）
+
+  - **[L1]** Hotspot 选择 top 500 显著基因后进行模块识别，得到与已知 T 细胞生物学一致的表达程序：模块1/3区分 naive 与 activated
+  T 细胞；模块0富集 Th1 相关基因（IFNG、TBX21）；模块2富集细胞毒性相关基因（PRF1、GZMB）；模块6富集 Treg 相关基因（FOXP3、IL2RA、CTLA4、TIGIT）。　（验证：计算模块分析：Figure
+  2D ｜ 位置：Figure 2D）
+
+  - **[L1]** Hotspot 的成对局部相关 Z scores 比 Pearson 相关系数更对应 held-out 重复数据集中的相关性，并在同一 PBMC
+  数据集的 CD14+ 单核细胞亚群中重复。　（验证：伪重复/留出验证：Figures S7B and S7C ｜ 位置：Figures S7B and S7C）
+
+  - **[L1]** 在跨重复的模块分配一致性比较中，Hotspot 在检测更多模块且留下更少未分配基因的同时，产生更高重现率的同模块基因对；该结果在 CD14+
+  单核细胞亚群中重复。　（验证：伪重复一致性评估：Figure 2E, Figure S11B ｜ 位置：Figure 2E and Figure S11B）
+
+  - **[L1]** 将 Hotspot 应用于小鼠小脑 32,000 个空间索引转录文库，采用 Bernoulli 模式并以二维空间 K=300 最近邻构建图，鉴定出
+  560 个显著空间自相关基因（FDR<0.05）；这些基因富集小脑细胞类型 marker，且不同于基于高变异性的选择，包括 Plp1 和 Car8 等空间模式基因。　（验证：空间转录组计算分析：Figure
+  3A, 3B, S8, S13 ｜ 位置：Figure 3A, 3B, S8, S13）
+
+  - **[L1]** Hotspot 可用于 CD4+ T 细胞转录组数据的特征选择，所选基因可通过 MSigDB CD4+ T 细胞相关基因集、scVI 潜在空间及
+  15 个表面蛋白局部自相关 Z 评分进行评价。　（验证：Fig2A 计算 MSigDB CD4+ T 细胞相关基因集平均基因相关性；Fig2B 以 15 个表面蛋白局部自相关
+  Z 评分比较 scVI 模型；Fig2C 比较局部自相关分布；Fig2E 数据按细胞二分后评估模块重复性 ｜ 位置：Figure 2A–E）
+
+  - **[L1]** Hotspot 优先选择但非过离散方法选择的基因显示更清晰的空间模式，并形成更清晰的模块。　（验证：Figure S13 计算/可视化比较
+  ｜ 位置：Results 中 Figure S2A 后段落 / Figure S13）
+
+  - **[L1]** 在小鼠小脑空间单细胞表达数据中，Hotspot 鉴定到 845 个显著空间自相关基因（FDR<0.05），并基于成对空间相关将其分为 6
+  个基因模块。　（验证：Fig3A：845 genes, FDR<0.05 分组为 6 modules ｜ 位置：Figure 3A）
+
+  - **[L1]** 这些空间模块对应已知小脑细胞类型，并通过细胞类型特异性 marker 基因富集得到支持。　（验证：Fig3B：cerebellar cell-type-specific
+  marker gene enrichment ｜ 位置：Figure 3B）
+
+  - **[L1]** 小脑空间模块反映小脑主要结构，module-1 对应邻近颗粒层（module-6）的 Purkinje 层神经元，随后为白质少突胶质细胞（module-3）。　（验证：Fig3C：模块评分可视化小脑结构
+  ｜ 位置：正文 / Figure 3C）
+
+  - **[L1]** Hotspot 与 SpatialDE 在检测已知阳性及样本间重复性方面性能相似，且随细胞/位置数增加 Hotspot 运行速度更快。　（验证：FigS2B
+  已知阳性检测；FigS2D IDR 重复性；FigS2C 运行时间 ｜ 位置：Figure S2B–D）
+
+  - **[L1]** Hotspot 对 CD4+ T 细胞 top 500 基因可分出 12 个模块；不同方法在数据二分后比较模块重复性、模块数和分配基因数。　（验证：Fig2D
+  12 modules；Fig2E split-half reproducibility ｜ 位置：Figure 2D–E）
+
+  - **[L1]** Hotspot 可作为通用框架，在多模态（表达+X）或标准（仅表达）单细胞数据中识别信息基因并分组为连贯表达程序。　（验证：基于多个已发表单细胞数据集进行
+  Hotspot 计算分析（如 T helper 细胞、小鼠小脑空间数据、小鼠胚胎谱系追踪数据），未做湿实验验证；Discussion。 ｜ 位置：Discussion
+  第1段）
+
+  - **[L1]** 在识别空间依赖转录程序时，Hotspot 与专门方法 SpatialDE 性能相似，但处理时间显著更低（10,000 个空间索引转录文库子集：93
+  s vs 6.2 days）。　（验证：对 10,000 个空间索引转录文库子集进行运行时间和性能比较；Figure S2C、Figure S4。 ｜ 位置：Results
+  前段 / Figure S2C、S4）
+
+  - **[L1]** 在小鼠胚胎谱系追踪数据中，Hotspot 基于局部自相关检验识别出 2,554 个发育相关基因（FDR<0.05），并分为 5 个与发育变化相关的基因模块。　（验证：使用
+  Chan et al., 2019 的 1,756 个小鼠 E8.5 胚胎细胞进行 Hotspot 计算分析，FDR<0.05，模块数 5；Figure 4A。
+  ｜ 位置：Identifying developmentally associated expression in mouse embryogenesis /
+  Figure 4A）
+
+  - **[L1]** 这些发育相关基因模块可对应不同发育谱系，如内脏/定型内胚层、原始血、壁内胚层和滋养层分化。　（验证：与 Chan et al., 2019
+  注释的发育簇图谱比较解释模块；Figure 4C。 ｜ 位置：Figure 4C）
+
+  - **[L1]** 基于表达相似性可识别血管母细胞出现相关签名（如 Pecam1 高局部自相关），而基于谱系相似性未检测到该签名。　（验证：分别用表达差异和谱系信息构建相似图并比较结果；Figure
+  4D、Figure 4E。 ｜ 位置：Figure 4D-4E）
+
+  - **[L1]** Hotspot 可通过局部自相关识别具有关联表达模式的基因或特征。　（验证：原文基于模拟转录谱及小鼠小脑、小鼠胚胎 lineage-tracing、CD4
+  T 细胞转录组等计算分析；未做湿实验验证。 ｜ 位置：正文第1段 / STAR METHODS）
+
+  - **[L1]** Hotspot 可扩展至其他模态：如联合单细胞表达与 ATAC-seq 的染色质可及性，或 Perturb-seq 的 CRISPR guide
+  RNA，高局部自相关可指示与细胞表达状态强关联的区域或诱导更强表达变化的 guide。　（验证：仅引用 Angermueller et al., 2016 和
+  Dixit et al., 2016 等文献作为示例，原文未做湿实验验证。 ｜ 位置：正文第1段）
+
+  - **[L1]** 在小鼠胚胎发育中，2,554 个具有显著 lineage autocorrelation（FDR<0.05）的基因可基于 pairwise
+  lineage correlation 分为 5 个基因模块。　（验证：计算分析：FDR<0.05，基于 lineage autocorrelation 和 pairwise
+  lineage correlation 分模块。 ｜ 位置：Fig.4A）
+
+  - **[L1]** 模块 summary scores 可投影到表达数据的 UMAP 上展示。　（验证：计算可视化；未做湿实验验证。 ｜ 位置：Fig.4B）
+
+  - **[L1]** Chan et al. (2019) 的 42 个手动注释 kernel 可用于为 lineage 来源基因模块分配小鼠胚胎发育细胞类型的
+  putative labels。　（验证：使用已发表 kernel 注释；未做湿实验验证。 ｜ 位置：Fig.4C）
+
+  - **[L1]** Hotspot 能区分有转录支持的基因模块（如 angioblast）与仅有 lineage 支持的模块。　（验证：基于 Fig.4C–E
+  的模块 kernel 展示、angioblast kernel 与 Pecam1 标记基因表达展示；未做湿实验验证。 ｜ 位置：Fig.4C–E）
+
+  - **[L1]** Hotspot 可通过仅考虑共享邻居的边对，在 O(E) 时间内高效计算 H2_xy 的期望。　（位置：Computing E[H2_xy]
+  部分）
+
+  - **[L1]** Hotspot 使用自底向上 UPGMA 聚类、min_cluster_genes 和 fdr_threshold 参数，并通过 Benjamini-Hochberg
+  控制 FDR 来识别基因模块。　（位置：Clustering the gene-gene affinity matrix 部分）
+
+  - **[L1]** Hotspot 的 per-cell module score 通过选定零模型中心化、KNN 图平滑和单成分 PCA 计算，并报告 cell-loadings
+  作为模块分数。　（位置：Computing per-cell module scores 部分）
+
+  - **[L1]** 小鼠小脑 Slide-seq 数据分析中，Hotspot 与 spatialDE 被用于特征选择、空间模块识别，并以 DropViz 标记基因集和样本间
+  IDR 可重复性评估性能。　（位置：QUANTIFICATION AND STATISTICAL ANALYSIS / Analysis of mouse cerebellum
+  samples 部分）
+
+  - **[L1]** SymSim 通过外源变异因子（EVF）和动力学参数经 Master Equation 生成合成单细胞转录组，并在下采样、PCR 扩增和可变
+  reads/cell 后模拟观测数据；该转录模型比 Hotspot 默认的 depth-adjust negative binomial 模型更复杂。　（验证：基于
+  SymSim 模拟流程描述，使用 10 个模拟重复、3000 细胞、5000 基因；未做湿实验验证 ｜ 位置：Methods/Results 前述段落）
+
+  - **[L1]** 为评估特征选择，研究在模拟数据中将耦合到 EVF 的基因视为阳性集，并用 Seurat HVG、NBDisp、PCA 和 Hotspot
+  等方法比较。　（验证：模拟数据（10 个重复，3000 细胞，5000 基因，5 EVFs） ｜ 位置：When evaluating feature selection
+  段）
+
+  - **[L1]** 比较局部相关性与 Pearson 相关性时，使用 SymSim full/observed profiles 和 10x PBMC CD4+/CD14+
+  数据；局部相关 Z-score 经 scVI 潜在空间和 KNN 图计算，并通过 Spearman 相关与真实/重复样本相关性排序比较。　（验证：SymSim
+  模拟数据与 10x PBMC 数据计算比较，无湿实验验证 ｜ 位置：Comparison of local correlation with pearson correlation
+  段）
+
+  - **[L1]** 在K近邻图构建中，模块识别性能通常随K增大而提升，但最佳性能通常出现在K=100到300之间。　（验证：图S10敏感性分析，使用多个场景和数据集评估
+  ｜ 位置：Sensitivity analysis of K / Figure S10）
 
 
   ## 细胞类型
 
-  - CD4+ T细胞
+  - T helper cells
 
-  - Th1细胞
+  - human CD4+ T cells
 
-  - 调节性T细胞
+  - mouse cerebellum cells
 
-  - 细胞毒性T细胞
+  - mouse embryogenesis cells
 
-  - 初始T细胞
+  - CD4+ T 细胞
 
-  - 活化T细胞
+  - 人外周血单核细胞（PBMC）
 
-  - 少突胶质细胞
+  - 模拟的五种细胞亚群
 
-  - 浦肯野神经元
+  - CD4+ T cells
 
-  - 颗粒细胞
+  - naive T cells
 
-  - 内胚层细胞
+  - activated T cells
 
-  - 原始血细胞
+  - Th1 cells
 
-  - 壁内胚层细胞
+  - cytotoxic T cells
 
-  - 滋养层细胞
-
-  - 成血管细胞
+  - regulatory T cells
 
   - CD14+ monocytes
 
-  - mouse cerebellum cell types (11 annotated clusters)
+  - PBMC
+
+  - mouse cerebellar cell types
+
+  - oligodendrocytes
+
+  - Purkinje neurons
+
+  - 小鼠小脑 Purkinje 层神经元
+
+  - 小脑颗粒层细胞
+
+  - 少突胶质细胞
+
+  - 小脑细胞类型
+
+  - mouse cerebellar cells
+
+  - mouse embryonic cells
+
+  - visceral endoderm
+
+  - definitive endoderm
+
+  - primitive blood
+
+  - parietal endoderm
+
+  - trophoblasts
+
+  - angioblasts
+
+  - angioblast
+
+  - CD4 T细胞
+
+  - 小鼠小脑细胞
+
+  - 小鼠胚胎发育细胞
+
+  - PBMCs
+
+  - 小鼠小脑细胞类型（11个注释簇）
+
+  - CD4+ T细胞
+
+  - CD14+ 单核细胞
+
+  - Th1
+
+  - Th2
+
+  - Tfh
+
+  - Treg
+
+  - Tconv
+
+  - T细胞
+
+  - Th17
+
+  - NKT细胞
+
+  - 胸腺细胞
+
+  - CD4+ 细胞
+
+  - CD14+ 细胞
+
+  - 模拟细胞群体 A-E
+
+
+  ## 通路
+
+  - T 细胞状态决定
+
+  - T 细胞迁移/运输
+
+  - 抑制性信号
+
+  - 共刺激信号
+
+  - naive vs activated T cell expression program
+
+  - Th1 associated expression program
+
+  - cytotoxicity expression program
+
+  - regulatory T cell activity program
 
 
   ## 基因 Marker
 
-  - CCR7：CD4+ T细胞，na，模块1，区分初始和活化T细胞亚群
+  - CD4：human CD4+ T cells，na，使用公开的单细胞人 CD4+ 表达谱示例
 
-  - SELL：CD4+ T细胞，na，模块1（CD62L），区分初始和活化T细胞亚群
+  - CCR7：naive T cells，na，Module 1 includes CCR7 and SELL/CD62L；模块1/3可区分 naive 与 activated
+  T 细胞亚群
 
-  - IL7R：CD4+ T细胞，na，模块3，与S100A4一起区分初始和活化T细胞亚群
+  - SELL/CD62L：naive T cells，na，Module 1 includes CCR7 and SELL/CD62L；模块1/3可区分 naive
+  与 activated T 细胞亚群
 
-  - S100A4：CD4+ T细胞，na，模块3，与IL7R一起区分初始和活化T细胞亚群
+  - IL7R：T cells，na，Module 3 includes IL7R and S100A4；参与区分 naive 与 activated T 细胞亚群
 
-  - IFNG：Th1细胞，na，模块0，Th1相关基因
+  - S100A4：T cells，na，Module 3 includes IL7R and S100A4；参与区分 naive 与 activated T 细胞亚群
 
-  - TBX21：Th1细胞，na，模块0，Th1相关基因
+  - IFNG：Th1 cells，up，Module 0 高亮表达 Th1 相关基因的活化 T 细胞亚群
 
-  - PRF1：细胞毒性T细胞，na，模块2，细胞毒性相关基因
+  - TBX21：Th1 cells，up，Module 0 高亮表达 Th1 相关基因的活化 T 细胞亚群
 
-  - GZMB：细胞毒性T细胞，na，模块2，细胞毒性相关基因
+  - PRF1：cytotoxic T cells，up，Module 2 高亮表达细胞毒性相关基因的亚群
 
-  - FOXP3：调节性T细胞，na，模块6，调节性T细胞活性相关基因
+  - GZMB：cytotoxic T cells，up，Module 2 高亮表达细胞毒性相关基因的亚群
 
-  - IL2RA：调节性T细胞，na，模块6，调节性T细胞活性相关基因
+  - FOXP3：regulatory T cells，up，Module 6 聚集与 Treg 活性相关的基因
 
-  - CTLA4：调节性T细胞，na，模块6，抑制性受体
+  - IL2RA：regulatory T cells，up，Module 6 聚集与 Treg 活性相关的基因
 
-  - TIGIT：调节性T细胞，na，模块6，抑制性受体
+  - CTLA4：regulatory T cells，up，Module 6 聚集与 Treg 活性相关的抑制性受体基因
 
-  - Plp1：少突胶质细胞，na，小脑空间模块3，白质少突胶质细胞标志物
+  - TIGIT：regulatory T cells，up，Module 6 聚集与 Treg 活性相关的抑制性受体基因
 
-  - Car8：浦肯野神经元，na，小脑空间模块1，浦肯野神经元标志物
+  - Plp1：oligodendrocytes，up，小脑空间转录组中 Hotspot 高亮基因，oligodendrocyte marker，呈明显空间模式
 
-  - Cubn：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+  - Car8：Purkinje neurons，up，小脑空间转录组中 Hotspot 高亮基因，由 Purkinje neurons 表达，呈明显空间模式
 
-  - Amot：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+  - Cubn：visceral and definitive endoderm，na，module 1 标记基因，与内脏和定型内胚层相关
 
-  - Amn：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+  - Amot：visceral and definitive endoderm，na，module 1 标记基因，与内脏和定型内胚层相关
 
-  - Slc39a8：内胚层，na，发育模块1，脏壁内胚层/定型内胚层
+  - Amn：visceral and definitive endoderm，na，module 1 标记基因，与内脏和定型内胚层相关
 
-  - Hbb-bh1：原始血细胞，na，发育模块3，原始血液相关
+  - Slc39a8：visceral and definitive endoderm，na，module 1 标记基因，与内脏和定型内胚层相关
 
-  - Gata1：原始血细胞，na，发育模块3，原始血液相关
+  - Hbb-bh1：primitive blood，na，module 3 标记基因，与原始血相关
 
-  - Klf1：原始血细胞，na，发育模块3，原始血液相关
+  - Gata1：primitive blood，na，module 3 标记基因，与原始血相关
 
-  - Nfe2：原始血细胞，na，发育模块3，原始血液相关
+  - Klf1：primitive blood，na，module 3 标记基因，与原始血相关
 
-  - Srgn： parietal endoderm，na，发育模块4， parietal内胚层发育相关
+  - Nfe2：primitive blood，na，module 3 标记基因，与原始血相关
 
-  - Plac1：滋养层细胞，na，发育模块5，滋养层分化相关
+  - Srgn：parietal endoderm，na，module 4 标记基因，与壁内胚层发育相关
 
-  - Ascl2：滋养层细胞，na，发育模块5，滋养层分化相关
+  - Plac1：trophoblasts，na，module 5 标记基因，与滋养层分化相关
 
-  - Pecam1：成血管细胞，na，表达空间分析中检测到的成血管细胞标志物，在谱系分析中未检测到'
+  - Ascl2：trophoblasts，na，module 5 标记基因，与滋养层分化相关
+
+  - Pecam1：angioblasts，na，在仅基于表达的相似性分析中具有高局部自相关，提示血管母细胞出现签名
+
+  - Pecam1：angioblast，up，angioblast marker gene；Fig.4E 展示与 angioblast kernel 最相似细胞及
+  Pecam1 表达。
+
+  - CD4：CD4+ T细胞，up，选择标准：蛋白丰度均值中心化后 CD4 > 3
+
+  - CD3：CD4+ T细胞，up，选择标准：蛋白丰度均值中心化后 CD3 > 2.5
+
+  - CD14：CD4+ T细胞，down，排除单核细胞：蛋白丰度均值中心化后 CD14 < 2
+
+  - CD14：CD14+ 单核细胞，up，选择标准：蛋白丰度均值中心化后 CD14 > 2'
 evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
   across modalities of single-cell genomics | E:/MemOmics-Agent/hermes_home/papers/hotspot.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  level_distribution:
+    L0: 0
+    L1: 52
+    L2: 0
+    L3: 0
+  max_level: L1
+  graded_conclusions: 52
+  level_meaning:
+    L0: 无文献来源（推测/常识性陈述）——仅作线索，待补源
+    L1: 有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信
+    L2: 有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信
+    L3: 有文献来源且经大量验证或临床实验/临床队列验证——非常可信

@@ -1,22 +1,25 @@
 type: kb_entry
 domain: chemistry
 name: chem_10.1038_s41467-025-56896-6_fexofenadine
-doi: "10.1038/s41467-025-56896-6"
 chem_category: compounds
-last_updated: 2026-08-18 01:57
+last_updated: 2026-10-07 17:55
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - chem_10.1038_s41467-025-56896-6_fexofenadine
-content: '- 靶点: histamine H1 receptor
+content: '- 靶点: H1-receptor
 
   - 剂量: 540 mg
 
   - IC50/EC50: —
 
-  - 模型: human participants
+  - 模型: 健康参与者，肌活检前40分钟
 
-  - 效应: H1-receptor antagonist; does not affect resting skeletal muscle state'
+  - 效应: 不改变静息骨骼肌状态；质控图中无基于条件的聚类'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
   beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

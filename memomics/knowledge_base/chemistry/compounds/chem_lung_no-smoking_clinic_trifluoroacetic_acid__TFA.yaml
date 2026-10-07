@@ -1,23 +1,26 @@
 type: kb_entry
 domain: chemistry
 name: chem_lung_no-smoking_clinic_trifluoroacetic_acid__TFA
-doi: "10.1038/s41467-024-54434-4"
 chem_category: compounds
-last_updated: 2026-09-17 17:38
+last_updated: 2026-10-07 18:28
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - chem_lung_no-smoking_clinic_trifluoroacetic_acid__TFA
-content: '- 靶点: na
+content: '- 靶点: —
 
-  - 剂量: 0.1%; 0.15%
+  - 剂量: 0.1%/0.15%
 
-  - IC50/EC50: na
+  - IC50/EC50: —
 
-  - 模型: phospho/acetyl peptide enrichment
+  - 模型: 肽段脱盐/洗脱
 
-  - 效应: acidification/elution'
+  - 效应: 溶解和洗脱肽段'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
   | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

@@ -1,0 +1,31 @@
+type: kb_entry
+name: deg-analysis_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-09-29 15:20
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- deg-analysis_empirical
+content: 'skill: deg-analysis
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  fdr<0.05 & |coef|>0.25; sheet=ALL_merged; 5 contrasts; openpyxl single xlsx 5 sheets;
+  order by fdr asc
+
+
+  result_summary:
+
+  按 fdr<0.05 & abs(coef)>0.25 筛选 5 个比较组，导出单个 xlsx 5 sheets：Aging 23,178行/6,679基因；Ex_Old
+  1,846/985；DM 311/120；Ex_DM 246/120；Ex_Young 115/47。与 19 号脚本统计口径一致（自洽），xlsx 3.57
+  MB，manifest 落盘。'
+evidence: 'record_run(deg-analysis): 按 fdr<0.05 & abs(coef)>0.25 筛选 5 个比较组，导出单个 xlsx
+  5 sheets：Aging 23,178行/6,679基因；Ex_Old 1,846/985；DM 311/120；Ex_DM 246/120；Ex_Young
+  115/47。与 19 号脚本统计口径一致（自洽），xlsx 3.57 MB，manifest 落盘。'

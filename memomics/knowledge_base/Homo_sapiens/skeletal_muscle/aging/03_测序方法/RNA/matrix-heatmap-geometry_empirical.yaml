@@ -1,0 +1,32 @@
+type: kb_entry
+name: matrix-heatmap-geometry_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-04 22:55
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- matrix-heatmap-geometry_empirical
+content: 'skill: matrix-heatmap-geometry
+
+  quality_score: 8.0
+
+
+  params_used:
+
+  {"n_groups": 3, "groups": "Aging/Ex_Old/Ex_DM", "n_subclusters": 10, "color_scale":
+  "shared symmetric TwoSlopeNorm ±0.52 + RdBu_r", "cell_annotation": "coef 2 decimals",
+  "row_order": "n_sig_desc → max_abs_coef_desc", "footnote_offset": "-70pt offset
+  points", "export": "png/svg/pdf @300dpi", "panels": "11/4/2 genes"}
+
+
+  result_summary:
+
+  三组 HSP 方向矩阵图各 1 张 × 3 格式 = 9 文件（figures/HSP_direction_*.png/svg/pdf），矩阵落盘 results/HSP_direction_matrices.xlsx；Aging
+  44 格全 Up、Ex_Old 13 格（HSPA9/HSPD1 为 Down）、Ex_DM 4 格全 Up；像素级版式核验三图完全一致'
+evidence: 'record_run(matrix-heatmap-geometry): 三组 HSP 方向矩阵图各 1 张 × 3 格式 = 9 文件（figures/HSP_direction_*.png/svg/pdf），矩阵落盘
+  results/HSP_direction_matrices.xlsx；Aging 44 格全 Up、Ex_Old 13 格（HSPA9/HSPD1 为 Down）、Ex_DM
+  4 格全 Up；像素级版式核验三图完全一致'

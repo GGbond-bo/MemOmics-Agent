@@ -1,0 +1,25 @@
+type: kb_entry
+domain: chemistry
+name: chem_10.1016_j.freeradbiomed.2024.07.026_O2
+chem_category: compounds
+last_updated: 2026-10-07 17:45
+source: literature
+verified: partially_verified
+quality: medium
+auto_trigger:
+- chem_10.1016_j.freeradbiomed.2024.07.026_O2
+content: '- 靶点: ROS
+
+  - 剂量: —
+
+  - IC50/EC50: —
+
+  - 模型: 运动肌肉
+
+  - 效应: ROS母体分子'
+evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
+  response and training adaptation in skeletal muscle | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

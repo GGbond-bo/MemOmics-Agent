@@ -1,0 +1,29 @@
+type: kb_entry
+name: pptx-generation_empirical
+species: Homo_sapiens
+tissue: general
+direction: agent_review
+assay_type: RNA
+last_updated: 2026-10-05 02:11
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- pptx-generation_empirical
+content: 'skill: pptx-generation
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  python-pptx 深色/浅色学术风, 13.333x7.5in 16:9, 6页, 原生形状可编辑; 配套自包含HTML(零CDN, 6 section,
+  响应式+打印样式)
+
+
+  result_summary:
+
+  科研Agent范式对比+MemOmics机制6页PPT交付：PPTX 47.5KB/6页(校验通过)，HTML 24.7KB/6段(浏览器实测无JS错误，控制台0报错)。内容线：P1封面五系统定位→P2前四篇四失败模式对比表→P3
+  MemOmics四痛点→P4执行链强制质检+辩论门控L0/L1/L2→P5知识库三铁轨+闭环→P6边界自审。所有数字均有代码/磁盘出处。'
+evidence: 'record_run(pptx-generation): 科研Agent范式对比+MemOmics机制6页PPT交付：PPTX 47.5KB/6页(校验通过)，HTML
+  24.7KB/6段(浏览器实测无JS错误，控制台0报错)。内容线：P1封面五系统定位→P2前四篇四失败模式对比表→P3 MemOmics四痛点→P4执行链强制质检+辩论门控L0/L1/L2→P5知识库三铁轨+闭环→P6边界自审。所有数字均有代码/磁盘出处。'

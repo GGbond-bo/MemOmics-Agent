@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-24 16:44
+last_updated: 2026-09-30 15:54
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,23 +12,19 @@ auto_trigger:
 - deg-analysis_empirical
 content: 'skill: deg-analysis
 
-  quality_score: 8.0
+  quality_score: 9.0
 
 
   params_used:
 
-  细胞级: FindMarkers(wilcox, ident.1=Y_Post, ident.2=O_Post, logfc.threshold=0, min.pct=0.10,
-  BH); pseudobulk: 按 samplename 聚合 RNA counts → log2CPM → 样本级 Wilcoxon rank-sum (Y_Post
-  n=10 vs O_Post n=7) + BH; 阈值 padj<0.05 & |log2FC|>=0.5
+  只读核查第三轮：number_format=''0.0000'' 下实际显示为 0 的格数统计 + 排序方向判定 + 最小非零 fdr 边界
 
 
   result_summary:
 
-  Y_Post(759 cells/10 samples) vs O_Post(2320 cells/7 samples): 细胞级 padj<0.05&|lfc|>=0.5
-  → Down 395 / Up 1027 (8081 基因检测); pseudobulk 样本级 → Down 57 / Up 63 (14304 基因); 双方法下调交集
-  45 个基因，方向零冲突。下调 top: RUNX1(-3.58), KCNQ5, PDLIM3, ANKRD1, TGFB2, OSBPL8, RNF115,
-  MYH9, ENAH, RIPOR2。样本 QC: Old_2C_Post 仅 12 细胞为最弱样本(min rho=0.676)，其余样本 median rho
-  0.83-0.88。'
-evidence: 'record_run(deg-analysis): Y_Post(759 cells/10 samples) vs O_Post(2320 cells/7
-  samples): 细胞级 padj<0.05&|lfc|>=0.5 → Down 395 / Up 1027 (8081 基因检测); pseudobulk
-  样本级 → Down 57 / Up 63 (14304 基因); 双方法下调交集 45 个基因，方向零冲突。下调 top: RUNX1'
+  显示层确诊：fdr<5e-5 即显示 0.0000 → Y_Pre_vs_O_Pre 22692/23178=97.9%、O_Pre_vs_O_Post 98.6%、Y_Pre_vs_Y_Post
+  95.7%、OD_Pre_vs_OD_Post 94.7%、O_Pre_vs_OD_Pre 93.6%。表按 fdr 升序排列（fdr升序=1.000）→ 4478
+  个真实 0 全在第一屏，用户打开即见全是 0.0000。真实非零最小 fdr=1.63e-307（仍显示 0.0000）'
+evidence: 'record_run(deg-analysis): 显示层确诊：fdr<5e-5 即显示 0.0000 → Y_Pre_vs_O_Pre 22692/23178=97.9%、O_Pre_vs_O_Post
+  98.6%、Y_Pre_vs_Y_Post 95.7%、OD_Pre_vs_OD_Post 94.7%、O_Pre_vs_OD_Pre 93.6%。表按 fdr
+  升序排列（fdr升序=1.000）→ 4478 个真实 0 全在第一屏，用户打开即见'

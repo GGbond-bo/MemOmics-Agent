@@ -1,0 +1,32 @@
+type: kb_entry
+name: wakeup-progress-check_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: tooling
+assay_type: RNA
+last_updated: 2026-10-01 15:19
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- wakeup-progress-check_empirical
+content: 'skill: wakeup-progress-check
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"wakeup": "#12", "mode": "read-only", "script": "scripts/smoke_engine_after_restart.py",
+  "exit_code": 0}
+
+
+  result_summary:
+
+  唤醒#12 核查：task_plan 全 Phase complete（P1-P4），主线区无未勾选待办（4 项已改为「等待用户」普通条目）；产出 200 文件；smoke
+  复跑全绿但 webui PID 43864/54408 启动 1790784256 早于引擎 mtime 1790793376 → 仍待用户重启服务。本轮额外完成：①
+  rail_review(post) 首次未过（我只传了 shell 命令行，被判「代码过短/&&多步骤」）→ 改传完整脚本正文后通过 —— 教训：post 审查的
+  code_executed 必须传脚本全文，传命令行会误判。② 辩论按「同 topic 已辩（L2+L1 复审）、只读探针、结论不变、下一步为用户侧动作」跳过。'
+evidence: 'record_run(wakeup-progress-check): 唤醒#12 核查：task_plan 全 Phase complete（P1-P4），主线区无未勾选待办（4
+  项已改为「等待用户」普通条目）；产出 200 文件；smoke 复跑全绿但 webui PID 43864/54408 启动 1790784256 早于引擎 mtime
+  1790793376 → 仍待用户重启服务。本轮额外完成：① rail_review(post) 首次未过（我只传了 s'

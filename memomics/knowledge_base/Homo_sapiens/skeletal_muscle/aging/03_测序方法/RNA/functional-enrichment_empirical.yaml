@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-24 19:22
+last_updated: 2026-10-03 00:20
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,13 +17,12 @@ content: 'skill: functional-enrichment
 
   params_used:
 
-  复用 memomics-32a6e57c/results/deg_YPost_vs_OPost.csv; 列=gene,avg_log2FC,p_val,p_val_adj,direction,sig
+  N=7743(universe, 未过滤全表); n_list=7(UP)/2(DOWN); BH 假设检验数 M=10000; 超几何单尾精确检验(无 scipy，纯
+  math.comb)
 
 
   result_summary:
 
-  DEG 输入核对: 8081 检出基因(universe); sig 列 1422 DEG (Up_in_Y_Post 1027 / Down_in_Y_Post
-  395), 阈值 padj<0.05 & |log2FC|>=0.5; 弹窗提示的 406(314/92) 与文件不一致, 以文件为准'
-evidence: 'record_run(functional-enrichment): DEG 输入核对: 8081 检出基因(universe); sig 列
-  1422 DEG (Up_in_Y_Post 1027 / Down_in_Y_Post 395), 阈值 padj<0.05 & |log2FC|>=0.5;
-  弹窗提示的 406(314/92) 与文件不一致, 以文件为准'
+  小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2 基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。'
+evidence: 'record_run(functional-enrichment): 小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2
+  基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。'

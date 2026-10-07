@@ -1,103 +1,73 @@
-pmid: "39580524"
 type: kb_entry
 domain: common
 name: paper_qc_lung_no-smoking_clinic
-doi: "10.1038/s41467-024-54434-4"
 direction: general
 assay_type: RNA
-last_updated: 2026-09-17 17:38
+last_updated: 2026-10-07 18:28
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_qc_lung_no-smoking_clinic
-content: '- protein/phosphosite/acetylation detection = ≥30% of samples（observed and
-  quantified）
+content: '- 蛋白/磷酸化位点/乙酰化位点检测率 = 至少30%样本（质量控制后保留用于定量的特征）
 
-  - WES read depth = tumor ~300X, NAT ~100X（sufficient for variant discovery）
+  - 低表达基因过滤 = 60,688→20,088转录本（bulk RNA-seq后续分析）
 
-  - RNA-seq read depth = approximately 120 M reads per sample（deep coverage）
+  - WES覆盖深度 = 肿瘤~300X，NAT~100X（变异发现覆盖度）
 
-  - low-count gene filtering = selected 20,088 transcripts（transcriptomic analysis）
+  - 缺失率 = <30%（在229个样本中保留特征）
 
-  - missing value threshold = <30%（跨 229 个样本保留量化蛋白/PTM 特征）
+  - 样本数 = 229（多组学分析队列）
 
-  - cold ischemic time = <15 minutes（fresh frozen tumor and NAT tissue sample selection）
+  - Adapter sequence = <1% in all samples（FastQC检查后未进行额外trimming）
 
-  - adapter sequence proportion = <1% in all samples（FastQC; additional trimming skipped）
+  - Overrepresented sequence (ORS) = 无质量问题的ORS（FastQC(v0.11.9)检查）
 
-  - overrepresented sequences = no ORS quality problem（FastQC v0.11.9）
+  - 平均测序深度 = 肿瘤300x；NAT和blood buffy coat 100x（Illumina NovaSeq WES）
 
-  - average sequencing depth = 300x per tumor library; 100x per NAT/blood buffy coat
-  library（WES）
+  - Nucleic acid quality = 排除21例核酸质量指标不合格病例（患者入组前质控）
 
-  - nucleic acid quality = 21 cases excluded for inadequate metrics（Patient enrollment）
+  - 标记效率 = 每样本≥95% fully labeled MS/MS spectra（TMTpro 16-plex标记后、混合前）
 
-  - duplicate reads = optical duplicates and library duplicates annotated（Picard MarkDuplicates）
+  - 蛋白浓度 = BCA法测定（裂解液离心后）
 
-  - CNV amplification = absolute copy number >=4（CNVkit）
+  - 肽段浓度 = NanoDrop One A205（C18脱盐干燥后）
 
-  - CNV gain = absolute copy number >=2.5 and <4（CNVkit）
+  - FDR = 1%（每个搜索阶段分别用 target-decoy 策略计算）
 
-  - CNV loss = absolute copy number 0.5–1.5（CNVkit; fragment truncated）
+  - ptmRS probability = greater than 0.95（磷酸化/乙酰化位点定位可信阈值）
 
-  - TMT labeling efficiency = minimum 95% fully labeled MS/MS spectra in each sample（confirmation
-  before pooling）
+  - TMT reporter ion intensity = at least 20% of total intensity of all reporter ions（neoantigen
+  candidate 过滤）
 
-  - FDR = 1%（PSM验证）
+  - FPKM = greater than 0（选择假基因/lncRNA/UTR 转录本用于 novel peptide 搜索）
 
-  - minimum peptide length = 8 residues（肽段鉴定）
+  - peptide length = primary >=6 residues; novel >=8 residues（最小肽段长度）
 
-  - conflicting PSMs = MS-GF+和Comet结果冲突的PSM被剔除（PSM过滤）
+  - mass tolerance = +/- 10 ppm（动态排除质量容差）
 
-  - novel peptide human protein match = 允许≤1个氨基酸替换（BLAST过滤）
+  - PSM FDR = 1%（Percolator验证）
 
-  - frameshift peptides = 移除（聚焦非编码区和新型异构体来源肽段）
+  - co-isolation threshold = 50%（TMT定量低质量值过滤）
 
-  - peptide support = 至少1条RNA-Seq read和可定量PSM（获取gene-level unique peptides）
+  - average reporter S/N threshold = 10%（TMT定量低质量值过滤）
 
-  - missing values = <30%（跨肿瘤global/phospho/acetyl proteomics特征筛选）
+  - missing values = <30% across all tumors（保留全局蛋白/磷酸化/乙酰化特征）
 
-  - co-isolation threshold = 50%（TMT定量）
+  - minimum peptide length = 8 residues（搜库）
 
-  - average reporter S/N threshold = 10%（TMT定量）
+  - adjusted p-value = <0.05（subtype-specific DEGs筛选）
 
-  - core sample membership score = ≥0.5（NMF亚型core sample定义）
+  - FPKM = <1（视为不表达）
 
-  - NMF feature filtering = 排除标准差最低的5th percentile（NMF输入）
+  - novel peptide occurrence = >2 tumor samples and not in at least one normal sample（cryptic
+  peptide预测）
 
-  - pathway gene count = >200 and <1000 genes（GSVA通路过滤）
-
-  - adjusted p-value threshold = <0.05（significant CNVs (Benjamini-Hochberg)）
-
-  - adjusted p-value threshold = <0.05（differentially expressed genes (Benjamini-Hochberg)）
-
-  - adjusted p-value threshold = <0.05（differentially expressed proteins, phosphorylation,
-  and acetylation (Benjamini-Hochberg)）
-
-  - survival significance threshold = nominal p < 0.001（survival-associated features）
-
-  - multiple testing correction = Benjamini-Hochberg（CNV, DEG, DEP, and subtype pairwise
-  survival comparisons）
-
-  - adjusted p-value = <0.05（DEG significance for subtype-specific gene sets）
-
-  - FPKM = <1 indicates no expression（novel isoform expression for cryptic peptide
-  prediction）
-
-  - peptide length = 9–12 amino acids（canonical neoantigen candidate filtering）
-
-  - tumor sample occurrence = >2（cryptic peptide prediction）
-
-  - normal sample absence = not in at least one normal sample（cryptic peptide prediction）
-
-  - top features = top 1% by statistical significance（survival-associated feature
-  selection）
-
-  - missing value threshold = >30%（features with more than 30% missing values across
-  all tumors were discarded）
-
-  - FPKM = >= 1（confirmed cryptic peptides with substantial expression in tumor samples）'
+  - adjusted p-value = Benjamini-Hochberg（激酶活性p值校正）'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
   | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

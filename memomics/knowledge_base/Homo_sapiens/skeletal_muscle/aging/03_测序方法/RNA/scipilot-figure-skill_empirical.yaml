@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-15 20:02
+last_updated: 2026-09-29 16:26
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,20 +12,25 @@ auto_trigger:
 - scipilot-figure-skill_empirical
 content: 'skill: scipilot-figure-skill
 
-  quality_score: 8.0
+  quality_score: 9.0
 
 
   params_used:
 
-  {"script":"fig_A3_transposed_v2.R","layout":"transposed: subtype=y(10 rows), program=x(18
-  cols)","cell_in":0.42,"axis_gap":0.25,"artifact_gap":0.7,"axis_label_pt":6.4,"subtype_label_pt":7.6,"xlabel_pt":6.2,"xlabel_angle":45,"title_pt":9,"canvas_in":"9.89x6.44","palette":"RdBu_r","norm":"TwoSlopeNorm(-2,0,2)","dpi":300}
+  {"data": "deg_subcluster_updown_coef025_long.csv (fdr<0.05 & |coef|>0.25)", "layout":
+  "1x5 panels side-by-side, sharey, horizontal diverging bars", "excluded_subclusters":
+  ["RSS", "Specialized MF"], "kept_subclusters": 8, "colors": {"Up": "#B2182B", "Down":
+  "#2166AC"}, "version_A": "shared symlog linthresh=10 (cross-panel comparable)",
+  "version_B": "per-panel free linear scale", "figsize": "14.0x4.3 in @300dpi", "font":
+  "Arial->Helvetica->DejaVu", "formats": ["png", "pdf"]}
 
 
   result_summary:
 
-  FigA3 转置版（亚群 y 轴 / 基因集 x 轴）+ 6 轴生物机制分类脚本编写完成并过 pre/post 审查。布局要点：色块正方形 0.42in（x/y
-  单位等长，画布 9.89x6.44in）；轴色条移到顶部横排 + 轴名横排；x 轴基因集标签 45°/6.2pt 锚定各自列中心（adj=c(1,1)）；y 轴亚群水平标签行中心对齐（las=1）；Artifact(QC)
-  轴后间隙 0.7（其余 0.25）实现视觉隔离——依 L2 辩论共识。分类：6 轴（Artifact/Metabolism/Nutrient/Contractile/Inflamm-aging/Decompensation）。'
-evidence: 'record_run(scipilot-figure-skill): FigA3 转置版（亚群 y 轴 / 基因集 x 轴）+ 6 轴生物机制分类脚本编写完成并过
-  pre/post 审查。布局要点：色块正方形 0.42in（x/y 单位等长，画布 9.89x6.44in）；轴色条移到顶部横排 + 轴名横排；x 轴基因集标签
-  45°/6.2pt 锚定各自列中心（adj=c(1,1)）；y 轴亚群水平标签行中心对齐（las=1）；Artifact(QC) 轴后间隙 0.'
+  五比较组×8亚群上下调背离柱大图出图成功（4 文件）：版本A 共享 symlog 刻度（跨组可比）+ 版本B 各面板独立刻度（小组细节可读）。剔除 RSS/Specialized
+  MF 后各组合计 Aging 16,915(Up 16,535/Down 380) | Ex_Old 1,322(231/1,091) | DM 269(125/144)
+  | Ex_DM 226(107/119) | Ex_Young 99(61/38)。算术校验：各组总数 = 上轮 10 亚群总数 − RSS − SMF，5/5
+  全对。关键设计：Aging 最大 5,218 vs Ex_Young 最大 15（350 倍量级差）→ 单用共享线性刻度会让小组变零线，故双版本交付。'
+evidence: 'record_run(scipilot-figure-skill): 五比较组×8亚群上下调背离柱大图出图成功（4 文件）：版本A 共享 symlog
+  刻度（跨组可比）+ 版本B 各面板独立刻度（小组细节可读）。剔除 RSS/Specialized MF 后各组合计 Aging 16,915(Up 16,535/Down
+  380) | Ex_Old 1,322(231/1,091) | DM 269(125/144) | Ex_DM 226(107/119) | E'

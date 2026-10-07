@@ -1,11 +1,9 @@
-pmid: "40437094"
 type: kb_entry
 domain: common
 name: paper_bioinfo_10.1038_s41586-025-09053-4
-doi: "10.1038/s41586-025-09053-4"
 direction: general
 assay_type: RNA
-last_updated: 2026-09-23 02:17
+last_updated: 2026-10-07 18:10
 source: literature
 verified: partially_verified
 quality: medium
@@ -13,751 +11,486 @@ auto_trigger:
 - paper_bioinfo_10.1038_s41586-025-09053-4
 content: '## 测序方法
 
-  - scRNA-seq (single-cell transcriptomic atlas) | 平台 — | 建库 — | 深度 —
+  - scRNA-seq（泛组织单细胞转录组图谱） | 平台 — | 建库 — | 深度 —
 
-  - scRNA-seq | 平台 — | 建库 — | 深度 —
+  - single-cell RNA sequencing (scRNA-seq) | 平台 — | 建库 — | 深度 —
 
-  - Visium spatial transcriptomics | 平台 — | 建库 — | 深度 —
-
-  - RNA-seq | 平台 — | 建库 — | 深度 约12,000 GTEx profiles
+  - RNA-sequencing (RNA-seq), GTEx profiles (~12,000) | 平台 — | 建库 — | 深度 —
 
   - spatial transcriptomics (Visium) | 平台 Visium | 建库 — | 深度 —
 
-  - Xenium in situ spatial transcriptomics | 平台 10x Genomics Xenium | 建库 — | 深度 —
+  - Xenium空间转录组 | 平台 10x Genomics Xenium | 建库 用于区分CM02和CM03内细胞亚群的基因panel | 深度 —
 
-  - single-cell RNA-seq | 平台 — | 建库 — | 深度 —
+  - Visium空间转录组 | 平台 10x Genomics Visium | 建库 空间转录组 | 深度 —
 
-  - single-cell transcriptomics | 平台 — | 建库 — | 深度 —
+  - 单细胞转录组 | 平台 — | 建库 — | 深度 —
 
-  - scRNA-seq; 10x Genomics platform | 平台 10x Genomics | 建库 single-cell, not single-nucleus
-  | 深度 —
+  - Visium spatial transcriptomics | 平台 — | 建库 — | 深度 —
 
-  - bulk RNA-seq (GTEx) | 平台 — | 建库 — | 深度 —
+  - 单细胞RNA测序（scRNA-seq；片段未明确平台） | 平台 — | 建库 — | 深度 —
 
-  - Xenium spatial transcriptomics | 平台 — | 建库 — | 深度 —
-
-  - Xenium | 平台 Xenium | 建库 — | 深度 —
-
-  - Visium spatial transcriptomics | 平台 Visium | 建库 — | 深度 —
-
-  - single-cell data | 平台 — | 建库 — | 深度 —
-
-  - RNA-seq | 平台 — | 建库 — | 深度 —
-
-  - microarray | 平台 — | 建库 — | 深度 —
-
-  - spatially resolved transcriptomics | 平台 — | 建库 — | 深度 —
+  - scRNA-seq（单细胞转录组测序） | 平台 — | 建库 — | 深度 —
 
   - scRNA-seq | 平台 10x Genomics | 建库 — | 深度 —
 
-  - Slide-seq | 平台 — | 建库 — | 深度 —
+  - scRNA-seq | 平台 — | 建库 — | 深度 —
 
-  - GTEx RNA-seq | 平台 — | 建库 — | 深度 —
+  - GTEx bulk RNA-seq | 平台 — | 建库 — | 深度 —
 
-  - 10x Visium spatial transcriptomics | 平台 10x Visium | 建库 — | 深度 —
+  - Visium | 平台 — | 建库 — | 深度 —
+
+  - Xenium | 平台 — | 建库 — | 深度 —
+
+  - Xenium | 平台 Xenium | 建库 靶向基因panel | 深度 —
+
+  - Visium | 平台 10x Visium | 建库 — | 深度 —
+
+  - scRNA-seq（curated pan-tissue and pan-cancer datasets） | 平台 — | 建库 — | 深度 —
+
+  - RNA-seq（TCGA portal） | 平台 — | 建库 — | 深度 —
+
+  - microarray（pre-invasive lung lesions） | 平台 — | 建库 — | 深度 —
+
+  - scRNA-seq | 平台 10x Genomics（多种平台） | 建库 — | 深度 —
 
 
   ## 分析流程
 
-  - Stringent quality control to obtain 2,293,951 high-quality cells from 706 healthy
-  samples across 35 human tissues
+  - 严格质控（stringent quality control） → 使用scIB平台评估多种数据整合工具 → 选择BBKNN进行数据整合 → UMAP降维嵌入
+  → 基于细胞丰度协方差识别细胞模块 → 原位空间/体内扰动数据验证模块内细胞间通讯
 
-  - Evaluation of widely used data integration tools using scIB
+  - 多组织 scRNA-seq 细胞类型/亚群注释 → 细胞亚群频率协方差分析 → NMF鉴定因子并取top亚群作为共现节点 → 确定显著相关亚群对作为候选边
+  → 构建多个CM网络并进行拓扑/统计评估 → 鉴定12个CM → 按样本中最丰富CM划分CMT → 整合约12,000 GTEx RNA-seq profiles验证CMT/标志物一致性
+  → cell2location将CM映射到Visium空间转录组
 
-  - Selection of BBKNN as top-performing integration method
+  - Visium空间分布分析 → CellCharter鉴定cellular niches → Xenium基因panel区分CM02/CM03细胞亚群 → CellPhoneDB计算CM内CCI
+  → Immune Dictionary推断细胞因子响应 → Visium检测细胞因子基因表达与空间分布
 
-  - UMAP embedding for visualization
+  - 单细胞/空间转录组数据获取 → 细胞亚群注释与频率统计 → 按绝经状态/年龄分组比较 → CM05/CM06/CM12 regulon活性与MCP基因表达分析
+  → PHATE轨迹嵌入与拟时序推断 → Visium空间区域注释 → LOESS平滑成纤维细胞炎症评分趋势
 
-  - Covariance in cellular abundance to identify 12 cellular modules
+  - 构建跨组织/泛癌单细胞转录组图谱
 
-  - In situ spatial and in vivo perturbation data to demonstrate coordinated intercellular
-  communication within cellular modules
+  - CoVarNet识别共现多细胞群落（CMs）
 
-  - Analysis of ageing dynamics, breast menopausal trajectory and cancer rewiring
-  across cancer types
+  - 关联CM活性与绝经状态及相关表型
 
-  - 数据整合 → 无监督细胞聚类 → 层级细胞注释 → UMAP降维可视化 → 细胞类型组成分析（卡方检验） → 非上皮细胞亚群层级聚类 → 成纤维细胞亚群Ro/e组织偏好分析
-  → Visium空间分布映射
+  - 成纤维细胞亚群频率与空间定位分析
 
-  - 细胞类型/状态/亚群注释 → 将多细胞协调表示为共发生细胞网络 → CoVarNet使用NMF识别因子并取top亚群作为共发生节点 → 确定特异相关亚群对作为潜在边
-  → 连接节点和边构建多个CM网络 → 拓扑与统计评估 → 应用泛组织图谱鉴定12个CM → 以NMF系数矩阵作为CM活性并分类样本为CMT → 整合scRNA-seq与GTEx约12,000
-  RNA-seq验证 → 用cell2location将CM映射到Visium空间转录组
+  - 构建绝经轨迹并外部队列重复
 
-  - 样本-细胞亚群归一化频率 → 成对相关性 rij 计算 → 特异性评分 Spec(rij) → 拓扑评估/置换检验 → NMF → 鉴定12个跨组织CMs
-  → Ro/e评估组织富集 → CellCharter空间聚类验证C1/C2 niche → Xenium高分辨率原位基因表征
+  - 泛癌TME中鉴定cCMs并分析cCM02活性
 
-  - Integration of single-cell and spatial data → dissect multicellular ecosystems
+  - 细胞因子分析与DIALOGUE识别MCP
 
-  - Visium spatial data → spatial organization analysis of CM components
+  - TCGA外部验证及临床结局关联
 
-  - Single-cell data → CellPhoneDB ligand–receptor-mediated cell–cell communication
-  analysis
+  - 收集并筛选成人新鲜样本scRNA-seq数据集（10x Genomics单细胞，非单核；无/混合/免疫或非免疫富集）
 
-  - Immune Dictionary in vivo perturbation data → identify cell-type-specific cytokines
-  inducing cellular phenotypes
+  - 统一至21,812个共同基因（GRCh38 Ensembl 84/93、GENCODE v32/Ensembl 98）
 
-  - SCENIC → uncover regulators/regulons of CM05 subsets
+  - 质控：500–8,000 genes、1,000–100,000 counts、<20%线粒体、Scrublet去双细胞、排除<50高质量细胞样本
 
-  - DIALOGUE → identify CM12-related coordinated multicellular programmes (MCPs)
+  - 归一化：每细胞总计数scale factor 10,000 + log转换
 
-  - Cell subset frequency summarization → CM05/CM06 regulon activity by age group
-  → CM12 MCP gene expression by menopausal status → CM12 activity and fibroblast subset
-  frequency comparison → Visium spatial mapping of S10/S06 → PHATE trajectory embedding
-  → pseudotime ordering → LOESS smoothing of fibroblast inflammatory scores → statistical
-  testing (Kruskal–Wallis, Wilcoxon, permutation)
+  - HVG选择：去除免疫球蛋白/TCR/核糖体/热休克/线粒体基因
 
-  - CoVarNet applied to eight cancer types to identify cancer-associated CMs (cCMs)
+  - 回归总基因计数、线粒体百分比和细胞周期
 
-  - DIALOGUE analysis to identify an MCP associated with increased cCM02 activity
-  in tumour samples
+  - 中心化和缩放
 
-  - External breast dataset replication of menopausal trajectory and fibroblast changes
+  - PCA提取50个主成分
 
-  - TCGA validation of the S100-family TME programme
+  - BBKNN以dataset为批次变量整合
 
-  - Curation of pan-cancer single-cell datasets
+  - UMAP可视化
 
-  - Generation of pan-tissue and pan-cancer cell atlases
+  - Leiden聚类resolution=0.1
 
-  - Identification/characterization of cancer-associated CMs by CoVarNet
+  - DEG鉴定：log2FC>1、FDR<0.05、Student’s t-test
 
-  - Interrogation of healthy CMs in matched tumour and adjacent non-tumour samples
+  - 基于canonical markers/DEGs和CellTypist注释八种大类
 
-  - Spatial mapping of CM activities
+  - 进一步上下文特异性聚类非上皮细胞，排除上皮细胞，得到76个非上皮亚群和26个上皮细胞类型
 
-  - Evaluation across eight cancer types with matched healthy, tumour and adjacent
-  non-tumour samples
+  - pseudo-bulk平均表达
 
-  - 数据收集：筛选成人新鲜样本、非单核、10x Genomics单细胞数据 → QC：统一基因注释至21,812基因，排除低质量/生殖系细胞，保留500–8,000
-  genes、1,000–100,000 counts、<20% mito，Scrublet去双细胞，排除<50高质量细胞样本 → 预处理：total-count
-  normalization scale factor 10,000 → log transform → HVG选择(n_top_genes=2000, flavor=cell_ranger,
-  batch_key=datasetID) → 去除免疫球蛋白/TCR/核糖体/热休克/线粒体基因 → regress_out confounders → scaling
-  → PCA 50 PCs → BBKNN整合 → UMAP → Leiden resolution=0.1 → DEG鉴定 → CellTypist注释 → 多级聚类。
+  - 相关距离ward.D层次聚类，dendextend可视化
 
-  - CoVarNet：输入细胞亚群频率矩阵 → min-max normalization → NMF(nsNMF, ranks 2–20)识别共现节点 → 识别相关亚群对作为潜在边
-  → 构建CM网络 → 拓扑与统计评估。
+  - CoVarNet输入频率矩阵、min-max归一化、nsNMF ranks 2–20识别共现网络
 
-  - NMF consensus: 30 runs → derive consensus k factors and sample activities
+  - NMF 30次运行获得一致性输出 → 基于CCC选择最佳rank → 计算细胞亚群共现Pearson相关与特异性 → 筛选特异相关亚群对 → 构建CM网络并置换检验
+  → 按样本最丰富CM活性分配CMT标签 → GTEx RNA-seq预处理与CMT签名评分 → 对RNA-seq样本分类CMT → Ro/e组织富集分析 → cell2location空间去卷积
+  → 聚合CM活性与共定位评分
 
-  - Rank selection: compute CCC across ranks → apply criteria ρk−2 < ρk−1 < ρk and
-  ρk > ρk+1 → choose rank with maximum CCC; pan-tissue rank = 12
+  - 计算CM内subset pairs的Spearman相关系数集合S → 计算CM内中位相关系数r → 共定位分数为S中≤r的比例
 
-  - CoVarNet co-occurrence: Pearson correlation on subset frequency matrix → s×s correlation
-  matrix R → compute specificity index Spec(rij) and cutoff Cutoff(n,N) → identify
-  specifically correlated subset pairs (147 pan-tissue pairs)
+  - 使用spdep全局双变量Moran’s I计算空间转录组中CM细胞亚群组分的区域聚集分数
 
-  - CM network construction: top subsets as nodes → connect specifically correlated
-  subset pairs → remove isolated nodes → calculate connectivity score → permutation
-  test n=10,000 → visualize with igraph
+  - 使用CellCharter基于基因表达和空间信息聚类Visium spots鉴定细胞生态位 → 按样本独立分析以减少批次效应
 
-  - CMT classification of samples: use NMF coefficient matrix activities (sum = 1
-  per sample) → label each sample by most abundant CM → 12 CMT groups
+  - 使用已发表肠道Xenium数据设计基因panel区分CM02和CM03内多个细胞亚群 → 以转录本密度作为CM强度代理 → k-means(k=2)识别上皮/固有层区域
+  → 在肠黏膜6个区域测量CM强度
 
-  - GTEx RNA-seq preprocessing: retrieve TPM and metadata for 17,382 samples (V8)
-  → exclude cell lines → merge Cervix uteri into Uterus → retain 12,240 samples across
-  23 tissues → renormalize to library size 10,000 and log-transform
+  - 使用CellPhoneDB进行配体–受体介导的细胞–细胞通讯分析 → 对每个细胞亚群下采样至1000细胞 → 统计推断细胞–细胞相互作用特异性 → 按细胞类型或CM平均相互作用计数
+  → 用CellChat验证
 
-  - CMT classification of RNA-seq samples: identify DEGs among pseudo-bulk CMT samples
-  → top ten DEGs by fold change as CMT signature genes → AddModuleScore in Seurat
-  → set negative scores to zero → exclude samples with highest score <0.2 → classify
-  remaining 11,962 samples into 12 CMTs
+  - 按CM高/低活性分组进行CellPhoneDB比较分析 → 聚焦各CM组分的细胞亚群
 
-  - Tissue prevalence: compare observed vs expected cell numbers using Chi-square
-  → Ro/e = observed/expected → enrichment Ro/e > 1 → average CM activity per tissue
-  → compare bulk and single-cell Ro/e across 23 tissues → visualize with ComplexHeatmap
+  - 使用Immune Dictionary细胞因子签名数据库 → 通过clusterProfiler enricher进行细胞类型感知的免疫响应富集分析
 
-  - Spatial transcriptomics deconvolution: collect Visium/Xenium datasets → use integrated
-  scRNA-seq reference subsampled to 1,000 cells per subset → run cell2location with
-  N=5 and αy=20 → obtain expected cell abundance per cell subset per spot
+  - 构建CM特异性细胞因子网络 → 考虑细胞因子产生和响应 → 用igraph可视化
 
-  - Spatial CM activity: aggregate component cell-subset abundances within each CM
-  using NMF-derived weights → scale CM activities so 99th percentile across all CMs
-  = 1
+  - CM活性与组织、性别、年龄组及其他表型因素关联分析
 
-  - Colocalization scores: calculate cell-subset component colocalization within CMs
-  across Visium spots for individual spatial sections
+  - 使用 CoVarNet 相关性分析模块，按 coefficients>0.5、FDR<0.05、specificity>0.95 筛选每个癌症类型中特异相关的细胞亚群对
+  → 仅用这些细胞亚群对在八种癌症类型间比较
 
-  - Colocalization score: Spearman correlations between subset pairs where at least
-  one subset is within CM → median r → proportion of correlations ≤ r. Aggregation
-  score: global bivariate Moran’s I via spdep. Cellular niches: CellCharter clustering
-  Visium spots using gene expression and spatial information per sample. Xenium: design
-  gene panel → k-means (k=2) to identify epithelium/lamina propria → select six mucosal
-  areas → measure CM intensities. Cell–cell communication: subsample each cell subset
-  to 1,000 cells → CellPhoneDB statistical inference → average interaction counts
-  among cell types/CMs → validate with CellChat. Comparative analysis: high vs low
-  CM activity groups → CellPhoneDB on CM component subsets. Cytokine response: identify
-  CM-dependent DEGs with Scanpy (log2FC>log2(1.2), FDR<0.05, Student’s t-test) → build
-  cytokine signatures from Immune Dictionary → MGI ortholog conversion → hypergeometric
-  enrichment via clusterProfiler enricher (FDR<0.05) → construct CM-specific cytokine
-  networks (cytokine expression >0.1 in non-responsive subsets) → visualize with igraph.
-  Association analysis: linear model for CM activity vs tissue (≥5 samples, adjusted
-  R2, F-test FDR) → sex/age group comparisons → additional phenotype associations.
+  - 为泛癌图谱生成 91 个亚群 × 955 个样本的频率矩阵 → 使用 CoVarNet 识别 cCM，单 CM 网络中每个因子的 top 15 亚群作为共发生节点候选
 
-  - For each cancer type, derive specifically correlated cell-subset pairs using CoVarNet
-  correlation analysis module with coefficients >0.5, FDR <0.05 and specificity >0.95
-  → compare identified specifically correlated subset pairs across eight cancer types
+  - 用与健康 CM 相同流程量化不同条件下的 cCM02 活性
 
-  - Generate a frequency matrix consisting of 91 subsets and 955 samples for the pan-cancer
-  atlas → identify cCMs using CoVarNet with the top 15 subsets of each factor as co-occurring
-  node candidates in a single CM network
+  - 构建 cCM02 共发生网络：保持原始节点，分别在健康/邻近非肿瘤样本和肿瘤/邻近非肿瘤样本中重新计算边
 
-  - Measure cCM02 activities across different conditions using the same procedure
-  as in healthy CMs
+  - 对 cCM02 每个细胞亚群成分，在肿瘤 vs 邻近非肿瘤中鉴定 DEGs（log2-transformed fold changes > log2(1.2)、FDR<0.05、Student’s
+  t-test），并用于 cytokine analysis
 
-  - Construct two cCM02 co-occurring networks with nodes same as original cCM02 nodes
-  and edges recalculated in healthy+adjacent non-tumour samples and tumour+adjacent
-  non-tumour samples
+  - 仅用肿瘤和邻近非肿瘤样本进行 MCP 识别 → 计算 TCGA RNA-seq 和侵袭前肺病变微阵列数据中 MCP 总体表达
 
-  - For each cCM02 cell-subset component, identify DEGs in tumour samples compared
-  with adjacent non-tumour samples using log2-transformed fold changes >log2(1.2),
-  FDR <0.05 and Student’s t-test → perform cytokine analysis using identified DEGs
+  - 下载 TCGA 数据使用 TCGAbiolinks R 包；仅纳入肿瘤或邻近非肿瘤样本数 >10 的项目；下载侵袭前肺病变数据
 
-  - Identify MCPs using only tumour and adjacent non-tumour samples → calculate overall
-  expression of MCP for TCGA RNA-seq datasets and microarray data of pre-invasive
-  lung lesions → download TCGA datasets with TCGAbiolinks and include only projects
-  with more than ten tumour or adjacent non-tumour samples
+  - QC前后统计 → 取三种常用10x Genomics基因注释的交集基因集 → 数据整合 → 在总图谱和子集图谱上使用多种Python整合方法进行基准测试 →
+  用scIB计算总体评分（批次校正40% + 生物保守性60%） → 按总体评分排名 → UMAP可视化（按compartment或tissue着色）
 
-  - QC → data integration (intersecting gene sets from three 10x Genomics gene annotations)
-  → benchmarking data integration methods (scIB) → UMAP visualization
-
-  - NMF rank selection using cophenetic correlation coefficients and consistency →
-  choose final rank 12 → generate consensus plot for rank 12 → rank top 15 cell subsets
-  by NMF weights per factor/CM → evaluate CM topology/statistics with connectivity
-  score → calculate CM activities in scRNA-seq samples across 34 tissues → assign
-  CMT by dominant CM → calculate CM Shannon equitability across tissues
-
-  - GTEx RNA-seq validation: GTEx analysis pipeline → intersect tissues between GTEx
-  RNA-seq and curated scRNA-seq cohorts → calculate CM activities in RNA-seq samples
-  across 23 tissues → assign CMT by dominant CM → compare average expression of CMT
-  signature genes and selected cell subset markers between scRNA-seq and GTEx RNA-seq
-  grouped by CMT → measure tissue prevalence of CMs by Ro/e
-
-  - Spatial characterization: 10x Visium spatial distribution of CM08/CM10 and component
-  cell subsets in skin → calculate Moran’s I spatial aggregation within CMs across
-  sections → H&E staining, CM spatial distribution, and CellCharter cellular niches
-  in ileum Visium sections → CODEX imaging of intestinal Peyer’s patches → scRNA-seq
-  dot plot of gene panel differentiating CM02 and CM03 among colon cell subsets
-
-  - Cell-cell interaction and spatial metrics: define colocalization and aggregation
-  scores for CMs using 10x Visium → calculate CM aggregation scores and cellular composition
-  → CellPhoneDB cell-cell interaction analysis → CellChat interaction counts stratified
-  by ligand-receptor pair types → heat map of responsive cytokines among cell subsets
-  within CMs → assess cytokine responsiveness in CMs
-
-  - Association analysis: linear models for variance in CM activities explained by
-  tissue (adjusted R2) → Wilcoxon tests for sex associations in non-reproductive tissues
-  → Kruskal-Wallis tests for age-group associations → analyze CM09 activity and subset
-  frequencies in thymus by age → analyze immune subset frequencies in spleen by age
-  → analyze B08 subset frequency in spleen by age
-
-  - CM05 spleen analysis: Venn overlap of four CM05 subsets signature genes and signature
-  TFs → analyze NR4A1/NR4A2/NR4A3 expression in CM05 subsets and other cells within
-  same cell types → overlap SCENIC regulon TFs with signature TFs → build regulatory
-  network of 17 convergent regulons with key regulators highlighted → compare regulon
-  targets among cell types by hypergeometric tests
-
-  - CM12 breast analysis: compare inflammatory scores of CM12 subsets pre- and post-menopause
-  → associate menopausal status with nonepithelial subset frequencies → dot plot selected
-  signature genes of CM12-related specialized fibroblast subsets → spatial distribution
-  of CM12 cell subsets in breast spatial transcriptomics → compare CM12 activity and
-  S10/S06 fibroblast frequencies in under 50 and over 50 years → validate menopausal
-  trajectory in another breast dataset using PHATE and pseudotime → LOESS-smooth fibroblast
-  inflammatory scores along pseudotime
-
-  - Pan-cancer dataset overview: report donor, sample and cell numbers before and
-  after QC for scRNA-seq datasets → count samples per cohort → count cells per cancer
-  type
-
-  - CM/cCM活性分析 → cCM拓扑与统计评估（connectivity score） → NMF权重排序细胞亚群（top 20） → CM网络图展示 →
-  泛癌cCM活性分析与cCMT分配 → Ro/e组织流行度分析 → cCM02细胞因子响应热图 → cCM02 MCP总体表达分布分析
+  - CM/cCM鉴定 → cCM拓扑和统计评估（connectivity score） → NMF权重排序top 20细胞亚群 → CM网络图 → 按主导cCM分配cCMT并展示cCM活性
+  → Ro/e组织偏好分析 → cCM02响应细胞因子热图 → cCM02 MCP整体表达分布比较
 
 
   ## 软件/包
 
-  - scIB （Python）：evaluation platform for benchmarking single-cell data integration
-  tools
+  - scIB （）：评估多种单细胞数据整合工具
 
-  - BBKNN （Python）：single-cell data integration/harmonization
+  - BBKNN （）：单细胞数据整合（在评估中表现最佳）
 
-  - UMAP （Python）：dimensionality reduction and embedding visualization
+  - UMAP （）：降维与可视化
 
-  - UMAP （）：降维可视化
+  - CoVarNet （）：基于细胞亚群频率协方差重建细胞模块（CM）网络
 
-  - BioRender （）：图1a概览图绘制
+  - NMF （）：非负矩阵分解识别因子并优先排序细胞亚群
 
-  - CoVarNet （）：通过细胞亚群频率协方差重建细胞模块（CM）网络
+  - cell2location （Python）：将CM映射到Visium空间转录组数据
 
-  - NMF （）：识别因子并优先选择细胞亚群作为CM网络共发生节点
+  - CellCharter （Python）：鉴定cellular niches
 
-  - cell2location （）：将CM映射到空间转录组Visium数据
+  - CellPhoneDB （Python）：计算细胞–细胞互作计数
 
-  - CoVarNet （）：系统性鉴定跨组织细胞模块(CMs)
+  - Immune Dictionary （）：推断CM的细胞因子响应性
 
-  - CellCharter （）：无监督空间聚类验证CM组织
+  - PHATE （）：基于亲和力的轨迹嵌入可视化
 
-  - NMF （）：非负矩阵分解用于CM鉴定
+  - LOESS （R）：平滑成纤维细胞炎症评分沿pseudotime趋势
 
-  - CellPhoneDB （）：Ligand–receptor-mediated cell–cell communication analysis
+  - Kruskal–Wallis test （）：年龄组间CM05/CM06活性比较
 
-  - SCENIC （）：Uncover regulators/regulons of CM05 subsets
+  - two-tailed unpaired Wilcoxon test （）：绝经前/后及年龄组间比较
 
-  - DIALOGUE （）：Identify CM12-related coordinated multicellular programmes (MCPs)
+  - permutation test （）：CM05 convergent regulons显著性检验
 
-  - PHATE （）：potential of heat diffusion for affinity-based trajectory embedding visualization
+  - CoVarNet （）：识别跨组织、共现的多细胞群落（CMs）并分析癌症中的重编程
 
-  - LOESS （）：smoothed trend lines for fibroblast inflammatory scores along pseudotime
+  - DIALOGUE （）：识别与cCM02活性增加相关的MCP/细胞间通讯程序
 
-  - Kruskal–Wallis test （）：non-parametric comparison across age groups
-
-  - two-tailed unpaired Wilcoxon test （）：pre- versus post-menopausal comparisons
-
-  - permutation test （）：testing convergent regulons in CM05
-
-  - CoVarNet （）：Identify cross-tissue, co-occurring multicellular communities (CMs)
-  and their rewiring in cancer
-
-  - DIALOGUE （）：Identify an MCP associated with increased cCM02 activity in tumour
-  samples
-
-  - CoVarNet （）：Identify cancer-associated cell modules (CMs)
-
-  - BBKNN （）：fast batch alignment of single cell transcriptomes
-
-  - Cell2location （）：maps fine-grained cell types in spatial transcriptomics
-
-  - CellCharter （）：reveals spatial cell niches associated with tissue remodeling and
-  cell plasticity
-
-  - CellPhoneDB （）：inferring cell–cell communication from combined expression of multi-subunit
-  ligand–receptor complexes
-
-  - SCENIC （）：single-cell regulatory network inference and clustering
-
-  - BayesSpace （）：spatial transcriptomics at subspot resolution
-
-  - DIALOGUE （）：maps multicellular programs in tissue from single-cell or spatial
-  transcriptomics data
-
-  - Scanpy （Python）：QC、预处理、HVG选择、回归、PCA、BBKNN/UMAP/Leiden聚类
+  - Scanpy （Python）：scRNA-seq数据质控、预处理、整合、聚类和注释
 
   - Scrublet （Python）：双细胞检测
 
-  - scIB （Python）：整合方法基准评估
+  - scIB （Python）：整合方法基准测试
 
-  - BBKNN （Python）：数据集整合
+  - BBKNN （Python）：数据整合
 
-  - Harmony （Python）：整合方法基准比较
+  - Harmony （Python）：整合方法基准测试
 
-  - Scanorama （Python）：整合方法基准比较
+  - Scanorama （Python）：整合方法基准测试
 
-  - scVI （Python）：整合方法基准比较
+  - scVI （Python）：整合方法基准测试
 
-  - scANVI （Python）：整合方法基准比较
+  - scANVI （Python）：整合方法基准测试
 
-  - SCALEX （Python）：整合方法基准比较
+  - SCALEX （Python）：整合方法基准测试
 
-  - CellTypist （Python）：自动细胞类型注释
+  - CellTypist （Python）：自动细胞类型注释，使用Immune_All_High和Immune_All_Low模型
 
-  - NMF R package （R）：nsNMF解析细胞共现程序
+  - NMF （R）：频率矩阵NMF/nsNMF分析
 
-  - hclust （R）：非上皮细胞亚群层次聚类
+  - dendextend （R）：层次聚类可视化
 
-  - dendextend （R）：层次聚类结果可视化
+  - hclust （R）：层次聚类
 
-  - UMAP （Python）：二维可视化
+  - CoVarNet （）：识别共现模块（CM）并构建/评估CM网络
 
-  - CoVarNet （）：识别细胞类型间协同/共现CM网络
+  - NMF （）：降维识别CM因子及样本CM活性
 
-  - CoVarNet （）：Assess co-occurrence of cell subsets and identify specifically correlated
-  subset pairs using Pearson correlation and specificity cutoff.
+  - igraph （R）：CM网络可视化
 
-  - igraph （R）：Visualize CM networks.
+  - Seurat （R）：AddModuleScore计算RNA-seq样本的CMT签名评分
 
-  - Seurat （R）：Apply AddModuleScore to score RNA-seq samples using CMT signature sets.
+  - ComplexHeatmap （R）：结果热图可视化
 
-  - ComplexHeatmap （R）：Visualize tissue prevalence and comparative results.
+  - cell2location （Python）：空间转录组去卷积获得细胞亚群丰度
 
-  - cell2location （）：Bayesian deconvolution of spatial transcriptomics to resolve
-  fine-grained cell types and expected cell abundance per spot.
+  - spdep （R）：全局双变量Moran’s I计算聚集分数
 
-  - spdep （R）：global bivariate Moran’s I for aggregation scores
+  - CellCharter （R）：基于基因表达和空间信息聚类Visium spots鉴定细胞生态位
 
-  - CellCharter （）：identify cellular niches by clustering Visium spots
+  - CellPhoneDB （Python）：配体–受体介导的细胞–细胞通讯分析
 
-  - CellPhoneDB （Python）：ligand–receptor-mediated cell–cell communication analysis
+  - CellChat （R）：验证细胞–细胞通讯分析结果
 
-  - CellChat （R）：validate cell–cell communication results
+  - Scanpy （Python）：鉴定CM依赖性细胞亚群DEGs
 
-  - Scanpy （Python）：identify CM-dependent DEGs
+  - clusterProfiler （R）：细胞类型感知的免疫响应富集分析
 
-  - clusterProfiler （R）：cell-type-aware immune response enrichment analysis
+  - igraph （R）：细胞因子网络可视化
 
-  - igraph （R）：cytokine network visualization
+  - CoVarNet （）：相关性分析、cCM 识别、共发生网络构建
 
-  - CoVarNet （）：Correlation analysis, cCM identification, and co-occurring network
-  construction
+  - TCGAbiolinks （R）：下载 TCGA 数据集
 
-  - TCGAbiolinks （R）：Download TCGA datasets
+  - SCANPY （Python）：大规模单细胞基因表达数据分析
 
-  - SCANPY （Python）：large-scale single-cell gene expression data analysis
+  - Scrublet （Python）：单细胞转录组数据中细胞双联体计算识别
 
-  - Scrublet （Python）：computational identification of cell doublets in single-cell
-  transcriptomic data
+  - Harmony （R）：快速、灵敏、准确的单细胞数据整合
 
-  - Harmony （R）：fast, sensitive and accurate integration of single-cell data
+  - Scanorama （Python）：异质单细胞转录组高效整合
 
-  - Scanorama （Python）：efficient integration of heterogeneous single-cell transcriptomes
+  - scVI （Python）：单细胞转录组深度生成建模
 
-  - UMAP （Python/R）：dimensionality reduction for visualizing single-cell data
+  - UMAP （Python）：单细胞数据降维可视化
 
-  - CellChat （R）：inference and analysis of cell–cell communication
+  - NMF （R）：非负矩阵分解
 
-  - clusterProfiler 4.0（R）：universal enrichment tool for interpreting omics data
+  - ComplexHeatmap （R）：多维基因组数据复杂热图
 
-  - SCENIC （R）：scalable single-cell gene regulatory network analysis
+  - CellChat （R）：细胞-细胞通讯推断与分析
 
-  - Palantir （Python）：characterization of cell fate probabilities in single-cell data
+  - clusterProfiler 4.0（R）：组学数据通用富集分析
 
-  - TCGAbiolinks （R/Bioconductor）：integrative analysis of TCGA data
+  - SCENIC （R）：单细胞基因调控网络分析
 
-  - scIB （Python）：benchmarking data integration methods
+  - PHATE （Python）：高维生物数据结构和转换可视化
 
-  - NMF （R）：Non-negative matrix factorization for rank selection, consensus plot,
-  CM identification, and ranking cell subsets by NMF weights
+  - Palantir （Python）：单细胞数据细胞命运概率表征
 
-  - CellCharter （Python）：Identification of cellular niches in spatial transcriptomics
-  sections
+  - Seurat （R）：整合、多模态和可扩展单细胞分析的字典学习
 
-  - CellPhoneDB （Python）：Cell-cell interaction analysis based on scRNA-seq data
+  - TCGAbiolinks （R/Bioconductor）：TCGA数据整合分析
 
-  - CellChat （R）：Cell-cell interaction count analysis stratified by ligand-receptor
-  pair types
-
-  - SCENIC （R）：Regulon TF identification and regulatory network analysis
-
-  - PHATE （Python）：PHATE embedding of breast samples by menopausal status, pseudotime,
-  and fibroblast frequencies
-
-  - BioRender （）：创建肿瘤进展中多细胞生态系统重连的示意图
+  - scIB （Python）：单细胞数据整合方法基准测试平台
 
 
   ## 关键参数
 
-  - Chi-squared test.P-value = <2.2×10−16（细胞类型组成在不同组织间差异）
+  - Xenium.n = 6（CM02和CM03在肠道黏膜切片的成像定量）
 
-  - Ro/e.metric = observed/expected cell number ratio（成纤维细胞亚群组织偏好）
+  - Visium.n = 34（CM共定位评分跨样本分析）
 
-  - Shannon equitability.ordering = 从S01最普遍到S12最特异（成纤维细胞亚群排序）
+  - CellPhoneDB.样本数 = CM02 n=90; CM04 n=90; CM05 n=90; CM06 n=72; CM08 n=72; CM09
+  n=90（高/低CM活性单细胞样本中CM内CCI计数）
 
-  - CoVarNet.CM数量 = 12（泛组织分析）
+  - 统计分析.检验 = two-tailed paired Wilcoxon tests（Fig. 3e,g）
 
-  - CellCharter.空间聚类 = CM05与C2 niche对齐；CM02/CM03与C1 niche对齐（回肠切片空间验证）
+  - 统计分析.检验 = Kruskal−Wallis, P < 2.2 × 10−16（CM共定位评分相关分析）
 
-  - 样本设计.供体数量 = 6（CM稳健性验证）
+  - Immune Dictionary.CM-level FDR = CM内所有亚群中的最小FDR值（CM02、CM03和CM05细胞因子响应性推断）
 
-  - 样本设计.连续回肠切片数 = 4（单供体空间模式验证）
+  - Visium.细胞谱系比例阈值 = None: 0; 0 < low < 0.2; 0.2 ≤ medium < 0.4; high ≥ 0.4（CM网络内细胞谱系组成）
 
-  - Kruskal–Wallis tests.test type = non-parametric（age group comparisons in panels
-  a and b）
+  - Kruskal–Wallis.P = 0.00028；0.00044；6×10^-4；0.019；0.0022（CM05/CM06 activity across
+  age groups）
 
-  - two-tailed unpaired Wilcoxon tests.test type = two-tailed unpaired（pre- versus
-  post-menopausal comparisons in panels a and f）
+  - two-tailed unpaired Wilcoxon.P = 0.022；0.00041；4.1×10^-5；<2×10^-16（pre- vs post-menopausal
+  CM12/S06/S10及MCP表达比较）
 
-  - Permutation test.P value = 0.00042（convergent regulons in CM05）
+  - permutation test.P = 0.00042（CM05 convergent regulons）
 
-  - LOESS.error band = 95% confidence interval（trend lines in panel j）
+  - LOESS.confidence interval = 95% CI（fibroblast inflammatory score along pseudotime）
 
-  - Box plots.whiskers = 1.5× interquartile range（box plots in panels a and f）
+  - Scanpy.n_top_genes = 2000（HVG选择）
 
-  - Scanpy.gene filter = 500–8,000 genes（QC保留细胞）
+  - Scanpy.flavor = cell_ranger（HVG选择）
 
-  - Scanpy.gene counts filter = 1,000–100,000 counts（QC保留细胞）
+  - Scanpy.batch_key = datasetID（HVG选择）
 
-  - Scanpy.mitochondrial gene counts = <20%（QC保留细胞）
+  - Scanpy.resolution = 0.1（Leiden第一层聚类）
 
-  - Scrublet.doublet score threshold = >90th percentile removed（各队列去除双细胞）
+  - DEG鉴定.log2FC = >1（差异表达基因筛选）
 
-  - Scanpy.min high-quality cells per sample = >=50（排除样本）
+  - DEG鉴定.FDR = <0.05（差异表达基因筛选）
 
-  - Scanpy.normalize_total scale factor = 10,000（文库大小标准化）
+  - DEG鉴定.检验方法 = Student’s t-test（差异表达基因筛选）
 
-  - Scanpy.highly_variable_genes = n_top_genes=2000; flavor=cell_ranger; batch_key=datasetID（HVG选择）
+  - PCA.主成分数 = 50（降维与整合前处理）
 
-  - Scanpy.PCA components = 50（降维）
+  - scIB.总体评分权重 = 40/60（批次校正与生物变异保留的加权平均）
 
-  - BBKNN.batch variable = datasetID（数据集整合）
+  - scIB.排除指标 = kBET、HVG和trajectory的生物保守性（整合方法基准测试）
 
-  - Scanpy.leiden resolution = 0.1（第一级无监督聚类）
+  - BBKNN.batch变量 = dataset（数据整合）
 
-  - Scanpy.DEG thresholds = log2FC >1; FDR <0.05; Student''s t-test（差异表达基因鉴定）
+  - NMF.方法 = nsNMF（CoVarNet频率矩阵分解）
 
-  - CellTypist.models = Immune_All_High; Immune_All_Low（自动细胞注释）
+  - NMF.ranks = 2–20（CoVarNet频率矩阵分解）
 
-  - NMF R package.method; ranks = nsNMF; 2–20（CoVarNet共现程序解析）
+  - CoVarNet.归一化 = min-max（频率矩阵校正至0–1）
 
-  - hclust.method; distance = ward.D; correlation distance（非上皮细胞亚群层次聚类）
+  - CoVarNet.频率矩阵 = 76 subsets × 510 samples（泛组织图谱输入频率矩阵）
 
-  - CoVarNet.frequency matrix = 76 subsets × 510 samples（泛组织图谱细胞亚群频率矩阵）
+  - 层次聚类.距离 = correlation（非上皮亚群层次聚类）
 
-  - NMF.runs = 30（Consensus output robustness）
+  - 层次聚类.方法 = ward.D（非上皮亚群层次聚类）
 
-  - NMF.optimal rank = 12（Pan-tissue atlas rank selection）
+  - NMF/CoVarNet.runs = 30（一致性输出，获得k个因子及各样本活性）
 
-  - CoVarNet.correlation = Pearson correlation coefficient（Assess whether two cell
-  subsets co-occur）
+  - NMF/CoVarNet.optimal rank = 12（pan-tissue atlas最佳rank，基于CCC最大化）
 
-  - CoVarNet.specificity cutoff = Cutoff(n,N)=1−((n−1)×2−1)/((N−1)×2−1)（Automatic
-  specificity cutoff for specifically correlated subset pairs）
+  - CCC.criteria = ρk−2<ρk−1<ρk 且 ρk>ρk+1（NMF rank选择稳定性标准）
 
-  - CM network.permutation test n = 10,000（Statistical significance of connectivity
-  score on node labels）
+  - CoVarNet.correlation = Pearson相关系数（评估细胞亚群共现）
 
-  - CMT classification.CM activity sum per sample = 1（NMF coefficient matrix activities）
+  - CM网络.permutation test = n=10,000（评估连接性score统计显著性）
 
-  - CMT classification.CMT groups = 12（Healthy single-cell samples stratified）
+  - CMT分类.activity normalization = 每样本所有CM活性总和=1（按最丰富CM分配CMT标签）
 
-  - GTEx RNA-seq preprocessing.library size = 10,000（Re-normalization for comparability
-  with single-cell data）
+  - GTEx RNA-seq预处理.library size = 10,000（重归一化并与单细胞数据可比）
 
-  - GTEx RNA-seq preprocessing.log transformation = log-transformed（Gene expression
-  normalization）
+  - GTEx RNA-seq预处理.transform = log转换（表达数据标准化）
 
-  - CMT signature.top DEGs = 10（Ranked by fold change among pseudo-bulk CMT samples）
+  - Seurat AddModuleScore.CMT signature genes = 按fold change排序的前10个DEG（定义CMT签名基因并评分RNA-seq样本）
 
-  - Seurat AddModuleScore.negative score adjustment = zero（All negative scores adjusted
-  to zero）
+  - Seurat AddModuleScore.negative scores = 负分调整为0（CMT评分计算）
 
-  - Seurat AddModuleScore.sample exclusion threshold = highest score < 0.2（Excluded
-  278/12,240 (2.3%) samples for robust classification）
+  - GTEx CMT分类.score threshold = 最高分<0.2（排除278/12,240 (2.3%)样本）
 
-  - GTEx CMT classification.final samples = 11,962（Classified into 12 CMTs）
+  - 组织流行度.Ro/e = observed/expected，富集>1（细胞亚群和CM组织分布）
 
-  - cell2location.subsampling = 1,000 cells per cell subset（scRNA-seq reference preparation;
-  all available if fewer than 1,000）
+  - 空间去卷积.scRNA-seq subsampling = 每个细胞亚群1,000细胞；不足则全部（cell2location参考）
 
-  - cell2location.N = 5（Expected cell abundance per spot）
+  - cell2location.N = 5（每个spot预期细胞丰度）
 
-  - cell2location.αy = 20（Regularize within-experiment variation in RNA detection
-  sensitivity）
+  - cell2location.αy = 20（正则化RNA检测灵敏度实验内变异）
 
-  - Spatial CM activity.scaling = 99th percentile = 1（Scale CM activities for relative
-  magnitude comparison）
+  - 空间CM活性.scaling = 第99百分位设为1（比较CM相对大小）
 
-  - Tissue prevalence.Ro/e enrichment = Ro/e > 1（Enrichment definition）
+  - CellPhoneDB.每个细胞亚群下采样细胞数 = 1,000（全局分析中平衡各细胞亚群贡献；不足1,000则全部纳入）
 
-  - CellPhoneDB.subsampling cell number = 1,000 cells per cell subset（equalize contribution
-  of each cell subset in global analysis; include all cells if total <1,000）
+  - Scanpy.DEG阈值 = log2-transformed fold changes > log2(1.2), FDR < 0.05, Student’s
+  t-test（鉴定CM依赖性细胞亚群DEGs）
 
-  - k-means clustering.k = 2（identify spatial regions epithelium or lamina propria
-  in Xenium analysis）
+  - clusterProfiler.hypergeometric test FDR = < 0.05（细胞因子响应富集分析）
 
-  - DEG analysis (Scanpy).log2-transformed fold change = >log2(1.2)（CM-dependent DEGs
-  of immune subsets）
+  - 细胞因子网络.标准化表达阈值 = > 0.1（至少一个非响应细胞亚群中细胞因子基因标准化表达超过该值才纳入CM）
 
-  - DEG analysis (Scanpy).FDR = <0.05（CM-dependent DEGs of immune subsets）
+  - k-means.k = 2（Xenium数据中识别上皮或固有层组织区域）
 
-  - DEG analysis (Scanpy).statistical test = Student’s t-test（CM-dependent DEGs of
-  immune subsets）
+  - 线性模型.adjusted R2/FDR = adjusted R2；F检验FDR（CM活性与组织关联分析）
 
-  - clusterProfiler enricher.FDR = <0.05（hypergeometric test for cytokine response
-  enrichment）
+  - 年龄分组关联分析.年龄组 = <35, 35–39, 40–49, 50–59, 60–69, 70–85；乳腺数据集<50或≥50（CM活性与年龄组关联分析）
 
-  - cytokine network.normalized cytokine gene expression = >0.1（in at least one non-responsive
-  cell subset for inclusion in CM-specific network）
+  - CoVarNet.coefficients = >0.5（每个癌症类型中筛选特异相关细胞亚群对）
 
-  - association analysis.minimum samples per tissue = ≥5（exclude tissues with fewer
-  than five samples）
+  - CoVarNet.FDR = <0.05（每个癌症类型中筛选特异相关细胞亚群对）
 
-  - age association.age groups = <35, 35–39, 40–49, 50–59, 60–69, 70–85 years（age
-  group categorization）
+  - CoVarNet.specificity = >0.95（每个癌症类型中筛选特异相关细胞亚群对）
 
-  - breast dataset D03.age categories = <50 or ≥50 years（dataset with over 100 samples）
+  - CoVarNet.top subsets per factor = 15（泛癌分析中单 CM 网络的共发生节点候选）
 
-  - linear model.adjusted R2 = proportion of variance explained（CM activity vs tissue
-  association）
+  - CoVarNet.frequency matrix dimensions = 91 subsets × 955 samples（泛癌图谱 cCM 识别）
 
-  - linear model.FDR of F test = reported（robustness of tissue association）
+  - DEG analysis.log2-transformed fold changes = >log2(1.2)（cCM02 肿瘤 vs 邻近非肿瘤）
 
-  - sex comparison.FDR-adjusted significance = （CM activities between male and female
-  participants in non-reproductive tissues）
+  - DEG analysis.FDR = <0.05（cCM02 肿瘤 vs 邻近非肿瘤）
 
-  - additional phenotype association.specific CM-phenotype pairs = CM09-alcohol (lymph
-  node), CM06/CM11-childhood tuberculosis (lung), CM12-menopause (breast), CM07-menstrual
-  cycle phases (uterus)（phenotype association analyses）
+  - DEG analysis.test = Student’s t-test（cCM02 肿瘤 vs 邻近非肿瘤）
 
-  - CoVarNet.coefficient cutoff = >0.5（Derivation of specifically correlated cell-subset
-  pairs for each cancer type）
+  - MCP analysis.minimum samples per project = >10 tumour or adjacent non-tumour samples（TCGA
+  数据集纳入标准）
 
-  - CoVarNet.FDR cutoff = <0.05（Derivation of specifically correlated cell-subset
-  pairs for each cancer type）
+  - scIB.overall score weighting = 批次校正40%；生物保守性60%（Extended Data Fig.2a 总图谱和子集图谱基准测试）
 
-  - CoVarNet.specificity cutoff = >0.95（Derivation of specifically correlated cell-subset
-  pairs for each cancer type）
+  - 10x Genomics gene annotations.gene set = 三种常用版本基因注释的交集（Extended Data Fig.1b 用于数据整合）
 
-  - CoVarNet.top subsets per factor = 15（Co-occurring node candidates in a single
-  CM network for pan-cancer analysis）
+  - cCM network.connectivity score = observed edges / total possible edges among all
+  nodes within the cCM network（cCMs的拓扑和统计评估（Extended Data Fig. 11b））
 
-  - CoVarNet.frequency matrix dimensions = 91 subsets x 955 samples（Pan-cancer atlas
-  cCM identification）
+  - cCMT assignment.dominant cCM = each sample assigned to cCMT by its dominant cCM（cCM
+  activities across cancer types（Extended Data Fig. 12a））
 
-  - DEG analysis.log2-transformed fold change = >log2(1.2)（Tumour versus adjacent
-  non-tumour samples for cCM02 cell-subset components）
+  - Ro/e.tissue prevalence = measured by Ro/e（cCM组织流行度（Extended Data Fig. 12b））
 
-  - DEG analysis.FDR = <0.05（Tumour versus adjacent non-tumour samples for cCM02 cell-subset
-  components）
+  - Wilcoxon test.test = two-tailed unpaired Wilcoxon tests（健康、癌旁非肿瘤和肿瘤样本间比较（Extended
+  Data Fig. 11a; Extended Data Fig. 12c,f））
 
-  - DEG analysis.statistical test = Student’s t-test（Tumour versus adjacent non-tumour
-  samples for cCM02 cell-subset components）
-
-  - MCP analysis.minimum sample count per project = >10 tumour or adjacent non-tumour
-  samples（TCGA project inclusion）
-
-  - scIB.overall score weighting = batch correction 40%, bio-conservation 60%（benchmarking
-  integration methods on total atlas and subset atlas）
-
-  - 10x Genomics gene annotations.gene set intersection = three commonly used versions（data
-  integration）
-
-  - NMF.rank = 12（Final rank chosen based on cophenetic correlation coefficients and
-  consistency）
-
-  - NMF.top cell subsets ranked by NMF weights = 15（Top 15 cell subsets ranked per
-  factor/CM）
-
-  - CM network.connectivity score = ratio of observed edges to total possible edges
-  among all nodes within CM network（Topological/statistical evaluation of CMs）
-
-  - CMT assignment.dominant CM = sample assigned to CMT based on its dominant CM（scRNA-seq
-  and GTEx RNA-seq samples）
-
-  - CM Shannon equitability.metric = Shannon equitability across tissues（CM diversity
-  across tissues）
-
-  - GTEx validation.tissues = 23（GTEx RNA-seq samples across 23 tissues）
-
-  - scRNA-seq cohort.tissues = 34（CM activities in scRNA-seq samples across 34 tissues）
-
-  - Tissue prevalence.Ro/e = Ro/e（CM tissue prevalence measured for tissues profiled
-  by single-cell and bulk RNA-seq）
-
-  - Spatial aggregation.Moran’s I = Moran’s I（Spatial aggregation among cell subsets
-  within CM08 or CM10; averaged across six Visium sections from six donors）
-
-  - Spatial metrics.colocalization score = extent to which two cell subsets colocalize
-  within the same spots（10x Visium data）
-
-  - Spatial metrics.aggregation score = spatial adjacency of two cell subsets, including
-  colocalization and broader spatial relationships（10x Visium data）
-
-  - CM composition.lineage proportion thresholds = None = 0 < Low < 0.2 ≤ Medium <
-  0.4 ≤ High（Proportion of different cell lineages in all cell-subset nodes within
-  individual CM networks）
-
-  - CM cytokine responsiveness.CM FDR = minimum FDR value among all subsets within
-  the CM（Cytokine responsiveness in CMs）
-
-  - Breast analysis.age-group cutoff = under 50 years old vs over 50 years old（CM12
-  activity and S10/S06 fibroblast frequencies）
-
-  - Breast menopause validation.FDR dotted line = 0.05（Association between menopausal
-  status and nonepithelial subset frequencies）
-
-  - Statistical tests.significance thresholds = *P < 0.05, **P < 0.01, ***P < 0.001,
-  ****P < 0.0001（One-tailed unpaired Wilcoxon tests in GTEx validation）
-
-  - Box plots.box plot definition = center line median; box limits upper/lower quartiles;
-  whiskers 1.5× interquartile range（Used in multiple panels）
-
-  - CM05 analysis.convergent regulons = 17（Regulatory network of convergent regulons
-  in CM05）
-
-  - CM05 analysis.shared key regulator TFs = 8（Shared TFs between SCENIC regulon TFs
-  and signature TFs）
-
-  - CM05 analysis.CM05 subsets = 4（Venn overlap of four CM05 subsets in all signature
-  genes and signature TFs）
-
-  - connectivity score.定义 = observed edges / total possible edges among all nodes
-  within the cCM network（cCM拓扑与统计评估）
-
-  - NMF.展示细胞亚群数 = top 20（每个cCM因子的NMF权重排序）
-
-  - Ro/e.组织流行度度量 = Ro/e（cCMs的组织流行度）
-
-  - Wilcoxon test.检验类型 = two-tailed unpaired（健康、癌旁非肿瘤和肿瘤样本比较）
-
-  - box plot.whiskers = 1.5× interquartile range（箱线图定义）
+  - box plot.whiskers = 1.5× interquartile range（箱线图展示（Extended Data Fig. 11a,b; Extended
+  Data Fig. 12c））
 
 
   ## 参考基因组
 
-  GRCh38 (Ensembl 84, Ensembl 93, GENCODE v32/Ensembl 98); common set of 21,812 genes
+  GRCh38 (Ensembl 84, Ensembl 93, GENCODE v32/Ensembl 98)
 
 
   ## 数据库
 
-  - Human Cell Atlas：reference resource for comprehensive profiling of human tissues
-  and cell types
+  - Human Cell Atlas：人类组织单细胞图谱参考/背景
 
-  - GTEx：约12,000 RNA-seq profiles，用于验证CM/CMT
+  - GTEx (Genotype-Tissue Expression)：约12,000个bulk RNA-seq profiles用于整合验证CM/CMT
 
-  - pan-tissue single-cell atlas：泛组织单细胞图谱，网址 http://cm.cancer-pku.cn
+  - cm.cancer-pku.cn：泛组织单细胞图谱访问数据库
 
-  - Immune Dictionary：In vivo perturbation data to identify cell-type-specific cytokines
-  that induce cellular phenotypes.
+  - Immune Dictionary：推断细胞因子响应性
 
-  - The Cancer Genome Atlas (TCGA)：Validation of the S100-family TME programme
+  - CellPhoneDB：细胞–细胞互作分析
 
-  - CM atlas portal (http://cm.cancer-pku.cn)：Pan-cancer single-cell transcriptomic
-  atlas resource
+  - TCGA：外部数据验证S100相关TME程序
 
-  - TCGA：Differential expression of cCM02 programme across cancer types
+  - CM atlas resource (http://cm.cancer-pku.cn)：泛癌单细胞图谱和CM分析资源
 
-  - The Human Cell Atlas：single-cell transcriptomic atlas of humans
+  - GTEx Portal (V8 release)：获取17,382个bulk RNA-seq样本的TPM和元数据
 
-  - Tabula Sapiens：multiple-organ, single-cell transcriptomic atlas of humans
+  - Supplementary Table 3：提供空间转录组数据集accession和参考文献
 
-  - GTEx：Genotype-Tissue Expression project
+  - Immune Dictionary：提供86种细胞因子对细胞类型特异性响应的签名
 
-  - GTEx Portal (V8 release)：Retrieve gene TPM and metadata for 17,382 bulk RNA-seq
-  samples to validate CMs defined by single-cell data.
+  - Mouse Genome Informatics (MGI)：基于HMD_HumanPhenotype.rpt进行小鼠与人类直系同源基因一对一转换
 
-  - Supplementary Table 3：Accession numbers and references for published Visium and
-  Xenium spatial transcriptomics datasets.
+  - CellPhoneDB配体–受体数据库：配体–受体介导的细胞–细胞通讯统计推断
 
-  - Immune Dictionary：cytokine signatures for each cell type (supplementary table
-  3)
+  - Zenodo：下载 curated pan-tissue and pan-cancer scRNA-seq datasets（record 15169362）和分析代码（record
+  14175262）
 
-  - Mouse Genome Informatics (MGI) database：mouse-human ortholog conversion using
-  HMD_HumanPhenotype.rpt
+  - cm.cancer-pku.cn：交互式探索 curated pan-tissue/pan-cancer scRNA-seq datasets
 
-  - published intestinal Xenium data：characterize spatial locations of CM02 and CM03
+  - TCGA：获取 RNA-seq 数据集用于 MCP 表达分析
 
-  - TCGA：RNA-seq datasets for MCP expression calculation
+  - github.com/ucl-respiratory/preinvasive：下载侵袭前肺病变微阵列数据
 
-  - Zenodo：Curated pan-tissue and pan-cancer scRNA-seq datasets and analysis code
+  - GitHub QiangShiPKU/CoVarNet：CoVarNet 源代码
 
-  - GitHub：CoVarNet source code and pre-invasive lung lesion datasets
+  - Supplementary Table 3：列出使用的空间分辨转录组数据集
 
-  - cm.cancer-pku.cn：Interactive exploration of curated scRNA-seq datasets
+  - GTEx：人类组织遗传调控效应图谱
 
-  - Mouse Genome Database (MGD)：knowledgebase for mouse-human comparative biology
+  - MGD：小鼠-人类比较生物学知识库
 
-  - GTEx Consortium：atlas of genetic regulatory effects across human tissues
+  - TCGA：癌症基因组数据整合分析
 
-  - TCGA：integrative analysis of TCGA data
+  - Zenodo：跨组织多细胞协调及癌症重塑的数据和代码存储
 
-  - Zenodo：data and code availability for ''Cross-tissue multicellular coordination
-  and its rewiring in cancer''
-
-  - GTEx RNA-seq：Bulk RNA-seq validation of CMs across tissues
-
-  - HuBMAP portal：Source of CODEX imaging dataset of intestinal Peyer’s patches (dataset
-  ID: HBM785.FJVT.469)
-
-  - CellPhoneDB：Ligand-receptor interaction database for cell-cell interaction analysis
-
-  - CellChat：Ligand-receptor interaction database for cell-cell interaction count
-  analysis'
+  - 10x Genomics gene annotations：提供用于数据整合的基因注释'
 evidence: DOI 10.1038/s41586-025-09053-4 | Cross-tissue multicellular coordination
   and its rewiring in cancer | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41586-025-09053-4.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段

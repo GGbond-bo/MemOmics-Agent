@@ -1,0 +1,30 @@
+type: kb_entry
+name: user-script-figure-optimization_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-09-29 00:12
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- user-script-figure-optimization_empirical
+content: 'skill: user-script-figure-optimization
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"old_method_colors": {"up": "#E8A33D", "down": "#4EA8A0"}, "new_method_colors":
+  {"up": "#B2182B", "down": "#2166AC"}, "hatch": "//", "lang": "en", "font_chain":
+  "Arial->Helvetica->DejaVu Sans", "data_source": "task2/results/new_deg_contrast_overview.csv"}
+
+
+  result_summary:
+
+  DEG 上下调柱状图重出：老方法换独立配色（琥珀/青绿）+ 斜纹，全部标签改英文；4 图落盘（fig_new_deg_updown_bar / fig_deg_new_vs_old
+  各 png+pdf），复用既有统计量未重算，像素自检通过'
+evidence: 'record_run(user-script-figure-optimization): DEG 上下调柱状图重出：老方法换独立配色（琥珀/青绿）+
+  斜纹，全部标签改英文；4 图落盘（fig_new_deg_updown_bar / fig_deg_new_vs_old 各 png+pdf），复用既有统计量未重算，像素自检通过'

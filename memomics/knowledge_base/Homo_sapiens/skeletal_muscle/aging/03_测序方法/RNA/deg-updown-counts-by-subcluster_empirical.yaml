@@ -1,0 +1,30 @@
+type: kb_entry
+name: deg-updown-counts-by-subcluster_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-01 00:53
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- deg-updown-counts-by-subcluster_empirical
+content: 'skill: deg-updown-counts-by-subcluster
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  {"MF_VARIANT":"center","STEM":"fig_deg_updown_8sub_MF_v7b_arrows_at_center","SUBS":8,"PANELS":"Aging/DM/Ex_Young/Ex_Old/Ex_DM","xscale":"symlog(linthresh=1)","fig_size":"180x88mm"}
+
+
+  result_summary:
+
+  用户脚本沉淀入库：DEG 各比较组×8亚群上下调基因数量柱状图（v7b 版）。脚本 276 行，五联面板共享 symlog 统一轴，下蓝左/上红右，每柱标自身基因数（frac>0.80
+  改柱内白字）。沉淀到 skills/plotting/deg-updown-counts-by-subcluster/（SKILL.md + skill.json
+  + scripts/），已登记 user-scripts/INDEX.md。4 条踩坑记录：左侧家族括号压叠→改 MF 模块竖带、各面板独立缩放误导→统一 symlog、柱端标签越界→柱内白字、变体靠内核注入不留脚本→须硬编码另存。'
+evidence: 'record_run(deg-updown-counts-by-subcluster): 用户脚本沉淀入库：DEG 各比较组×8亚群上下调基因数量柱状图（v7b
+  版）。脚本 276 行，五联面板共享 symlog 统一轴，下蓝左/上红右，每柱标自身基因数（frac>0.80 改柱内白字）。沉淀到 skills/plotting/deg-updown-counts-by-subcluster/（SKILL.md
+  + skill.json + scripts/），已登记 user-scri'

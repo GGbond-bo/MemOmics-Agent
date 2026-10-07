@@ -1,54 +1,63 @@
-pmid: "39971958"
 type: kb_entry
 domain: common
 name: paper_qc_10.1038_s41467-025-56896-6
-doi: "10.1038/s41467-025-56896-6"
 direction: general
 assay_type: RNA
-last_updated: 2026-08-18 01:57
+last_updated: 2026-10-07 17:55
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
 - paper_qc_10.1038_s41467-025-56896-6
-content: '- detected genes per fiber = >1000（转录组和蛋白质组纤维过滤阈值）
+content: '- 检测基因数 = >1000（过滤标准，保留检测基因数超过1000的纤维）
 
-  - valid values within each fiber = 50%（转录组和蛋白质组纤维过滤阈值）
+  - 有效值比例 = 50%（每根纤维内，转录组和蛋白质组数据均要求）
 
-  - gene expression fraction = >30% of fibers（gene filtering）
+  - 蛋白变异系数 = <20%（多数>2000个蛋白的CV低于20%）
 
-  - UMI count = >=1000（sample quality filtering）
+  - 纳入纤维数 = 925 transcriptome / 974 proteome（过滤后用于下游生物信息学分析的纤维数）
 
-  - detected genes = >=1000（sample quality filtering）
+  - 每纤维最低定量蛋白数 = 1000（过滤后用于下游生信分析）
 
-  - read length = >20 nt（read trimming）
+  - 过滤后肌纤维数 = 250（从272根骨骼肌纤维中过滤得到）
 
-  - FastQC = passed（intermediate quality control）
+  - 每纤维平均定量蛋白数 = 1573 ± 359（过滤后）
 
-  - minimum valid protein intensity per sample = 50%（sample filtering）
+  - 检测蛋白数 = 2485（来自272根骨骼肌纤维）
 
-  - minimum valid values per protein = 30%（1000 fiber dataset）
+  - library pool quality = High sensitivity small DNA Fragment Analysis kit (Agilent
+  DNF-477-0500)（评估每个文库池质量）
 
-  - proteins quantified in at least one condition = 70%（myopathy dataset）
+  - read 长度 = <20 去除（cutadapt trimming 后去除过短 reads）
 
-  - precursor FDR = 1%（DIA-NN default）
+  - adapter-only reads = 去除（cutadapt trimming）
 
-  - peptide length = 7-30 amino acids（DIA-NN default）
+  - 基因表达比例 = <30% all fibers 去除（Seurat 初始过滤）
 
-  - minimum peptide length = 7（Fragpipe search）
+  - 最低 UMI counts = 1000（低质量样本过滤）
 
-  - missed cleavages = 2（Fragpipe search）
+  - 最低 detected genes = 1000（低质量样本过滤）
 
-  - FDR = 1%（Peptide precursor and protein level FDR in Spectronaut）
+  - 通过质控的 fibers 数 = 925（所有质控过滤后总计 925 fibers）
 
-  - adjusted p-value = <0.05（Threshold for significantly different genes/proteins）
+  - FastQC = 多个中间步骤（pipeline 中间步骤质量控制）
 
-  - log fold change = >1（Cutoff for significantly different genes/proteins）
+  - FDR = 1% at peptide precursor level and 1% at protein level（Spectronaut DIA 数据过滤）
 
-  - Xiao score = <0.05（Threshold for differentially expressed proteins in nemaline
-  myopathy）
+  - adjusted p-value = < 0.05（差异表达显著性阈值）
 
-  - RNAscope tissue quality control = Positive 3-plex probe (#320881) and negative
-  3-plex probe (#320871)（RNAscope Multiplex Fluorescent Assay V2）'
+  - log fold change cutoff = 1（差异表达显著性阈值）
+
+  - Xiao significance score = < 0.05（nemaline myopathy 差异表达判定）
+
+  - minimal ORF length = 75 nt（lncRNA 编码蛋白数据库构建）
+
+  - Positive 3-plex probe (#320881) = used（RNAscope组织质量控制）
+
+  - Negative 3-plex probe (#320871) = used（RNAscope组织质量控制）'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
   beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+evidence_chain:
+  standard: kb-evidence-v1
+  grading: source_only
+  note: 方法/参数/质控类知识不做可信度分级，来源见 evidence 字段
