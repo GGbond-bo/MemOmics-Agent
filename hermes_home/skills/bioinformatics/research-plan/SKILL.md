@@ -339,3 +339,13 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 - **`references/cross-species-hippocampus-aging-analysis.md`** — 跨物种海马衰老分析案例参考。
 - **`references/cross-species-replaceability-framework.md`** — 🔑 五层递进可代替性评估框架（Level 1-5: IRS+SDI+cos(θ)+Mixed Model+ABCD基因分类）。专利级跨物种方法论，比 S₁-S₅ 更严谨。
 - **`references/multi-group-subtype-deep-analysis.md`** — 复杂多组×亚型分析 Playbook。≥4 组 + 亚型分解的场景：伪bulk DEG/基因集评分/应答指数/多条件 DotPlot/轨迹推断。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-29 | DEG_research_plan_v1.md + plan_md_to_docx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | probe_python_docx_interpreters | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | plan_md_to_docx.py | - | - |  |

@@ -377,6 +377,18 @@ export_all(
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| TypeError: Regulon.__init__() missing 2 required p | ctxcore 0.2.0 的 Regulon.__init__ 需要 (nam | 不手搓 ctxcore Regulon（构造签名版本相关，易踩坑）；改为从真 regulon 克隆结 |
+| RuntimeError: AUCell 非零占比过低(0.374) —— 拒绝产出假结果 | 守门阈值「AUCell 非零占比 >50%」是拍脑袋设定，不反映 AUCell  | 替换为数据驱动判据（空模型对照）：同尺寸随机基因集跑 AUCell（shuffled control |
+| TypeError: BaseProcess._bootstrap() takes 1 positi | ctxcore/pyscenic 的 custom_multiprocessin | 放弃 custom_multiprocessing 路径（Windows spawn 与其自定义 P |
+| prune2df 走 custom_multiprocessing 时 Windows spawn  | - | 放弃 custom_multiprocessing 路径；改用库默认调度族 dask_multipr |
+| BrokenProcessPool: A process in the process pool w | - | 待修：skill run_grn_workflow.py 第 159 行 `prune2df(dbs |
+| R 下游统计三处静默/崩溃 bug：① as.data.frame() 默认 check.names | - | 全量重写 04_atrophy_tf_analysis.R 为 v2：as.data.frame(. |
+| memory_limit=0（禁用 dask 限制）后 GRNBoost2 仍报 MemoryErr | 二次修正根因：driver v3（memory_limit=0 + 4 work | 待实施：① 定位并清理孤儿 Rscript 进程（4 个共 ~9.6GB）② 降 n_workers |
+| 限制 workers=6 后 GRNBoost2 仍报 MemoryError((2132,1619 | 修正前次根因：不是单纯的 worker 数问题。WinError 1455「页面 | 待诊断：① 查 pagefile 大小与 commit charge（WinError 1455 = |
+| GRNBoost2 大规模 MemoryError((2132, 1620), dtype('flo | arboreto.grnboost2 默认 client_or_address= | 显式创建 dask LocalCluster 限制 worker 数（n_workers=6, th |
+| AttributeError: 'FeatherRankingDatabase' object ha | SKILL.md 的 Common Issues 表给的是老版本写法（set(d | 改用 db.genes —— ctxcore 0.2.0 的 FeatherRankingDatab |
+| execute_r 中执行 exec(open('xxx.R', encoding='utf-8') | 跨语言语法混淆：execute_python 的「运行脚本文件」写法是 exec | R 内核必须用 R 语法 source('路径', encoding='UTF-8')；exec(o |
+| ctxcore ERR ModuleNotFoundError: No module named ' | .venv 用 uv/pip 新版本创建，不再默认捆绑 setuptools → | 待修：① pip install setuptools 到 .venv（pkg_resources  |
 | **Memory error during GRNBoost2** | Dataset too large | Subsample to 5,000-10,000 cells or filter to top 2,000-5,000 variable genes |
 | **No regulons found** | TF names don't match gene symbols | Check TF list uses same nomenclature (HGNC/MGI); verify gene names in data |
 | **cisTarget database error** | Wrong format or corrupted file | Re-download databases; ensure using Feather v2 format (.feather) |
@@ -505,3 +517,104 @@ After completing pySCENIC analysis:
 
 ⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。
 ⛔ debate confidence=low → 调整参数重跑。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-24 | env_probe_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_probe_scenic_db.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_meta.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | check_scenic_deps.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | select_scenic_interpreter.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_export_matrix.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fig_scenic_input_overview.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | probe_ctxcore_api.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | verify_pyscenic_docs.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01b_export_counts.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fix_grn_workflow_indent.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | release_r_memory.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | test_grn_workflow_patch.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | diag_commit_limit.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | kill_scenic_run4.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | diag_orphan_kernel_tree.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | diag_commit_before_cleanup.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | kill_orphan_kernels.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | test_grn_workflow_patch.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | pytest_collect_grn_scope.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | pytest_run_grn_scope.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | verify_grn_workflow_patch_final.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_atrophy_tf_analysis.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 05_scenic_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_grnboost2_sensitivity.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 07_build_report.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | patch_skill_grn_prune.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 08_measure_scenic_mem.py | - | - |  |
+| - | - | - | 2026-09-24 | 08_measure_scenic_mem.py | - | - |  |
+| - | - | - | 2026-09-24 | 08_measure_scenic_mem.py | - | - |  |
+| - | - | - | 2026-09-24 | 09_smoke_prune_dist.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 10_mem_report.py | - | - |  |
+| - | - | - | 2026-09-24 | 10_mem_report.py | - | - |  |
+| - | - | - | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| - | - | - | 2026-09-24 | 10_mem_report.py | - | - |  |
+| - | - | - | 2026-09-24 | 11_check_run_health.py | - | - |  |
+| - | - | - | 2026-09-24 | 12_kill_stale_run.py | - | - |  |
+| - | - | - | 2026-09-24 | 12_kill_stale_run.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_run_scenic.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | run_grn_workflow.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 13_diag_targetgenes_dtype.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 13_diag_targetgenes_dtype.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 14_rebuild_regulons_aucell.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 17_null_weighted_shuffle.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 17_null_weighted_shuffle.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 16_resume_aucell_validate.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 15_atrophy_tf_mining.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 18_robustness_checks.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 18_robustness_checks.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 19_global_multipletest_and_covariate_audit.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 19_global_multipletest_and_covariate_audit.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 20_depth_confounding_audit.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 20_depth_confounding_audit.py | - | - |  |

@@ -27,6 +27,8 @@ cell_counts['proportion'] = cell_counts['n_cells']/cell_counts['total']
 
 # base_id 配对键
 full['base_id'] = full['samplename'].str.replace(r'_(Pre|Post)$', '', regex=True)
+# 注: 也可用 full['samplename'].str.replace(r'_(Pre|Post)$', '', regex=True)
+# 自身等价写法; 用户 R 版用 str_remove(samplename, '_(Pre|Post)$')
 
 # Cliff's delta 方向翻转（正值=后者组高，用户约定）
 def cliffs_delta(a, b):
@@ -120,3 +122,60 @@ zone6   0.1442  0.1179  0.1079  0.0922  0.0592   0.0241
 - **sed 克隆脚本的坑**：从 05 复制出 06 时 `sed 's/cluster1/cluster2/g'` 会把 `subcluster_map` 映射行 `zone1='cluster1'` 也替换成 `zone1='cluster2'`——克隆后必须检查映射行，用 patch 单独修复
 - **cluster2 实测（n=7/组）**：三比较全不显著——O 运动 p=0.578 / OD 运动 p=0.219 / O vs OD p=0.318；中位比例 O_Pre 5.4% → O_Post 2.4% / OD_Pre 9.9% → OD_Post 6.7%
 - 产出 `explore_4grp_cluster2_boxplot_p.png`（140×110mm, 300dpi）——探索阶段只出 raw p 版，等用户确认后再定稿（柱数规则 + FDR 版 + PDF）
+
+---
+
+## UMAP 分面图（subcluster × type）：几何自检 + 两个数据硬事实（2026-09-22）
+
+触发词：**"UMAP 分面图"** / "subcluster × type" / "6 组 UMAP" / "split.by 出图" / "按 Nature 优化这张 UMAP"。
+
+通用几何规则（`coord_fixed`、`pt.size`↔画布联动、像素量测、空带分诊、灰度可分性）在
+**`scientific-figure-export`** 的「图形几何自检」节 + `references/figure-geometry-audit.md`
++ `scripts/measure_figure_geometry.py`。此处只记本数据特有的事实。
+
+### ⛔ 本数据两个硬事实（先查再画，别猜）
+
+1. **`subcluster` 是字符型，不是因子**（`is.factor()` = FALSE）
+   - `levels(data$subcluster)` 返回 **NULL** ⇒ 拿它索引配色会**静默得到空向量**（`PRESET[NULL]`），
+     `all(!is.na(x))` 对空向量**恒为 TRUE** ⇒ 断言也拦不住，必须再加 `length(x) == 7`。
+   - `unique()` 顺序是乱的：实测 **zone6, NMJ, zone5, zone2, zone1, zone3, zone4**（不是 NMJ/zone1..zone6）。
+   - 修法：`data$subcluster <- factor(unname(as.character(data$subcluster)), levels = c("NMJ", paste0("zone", 1:6)))`
+   - 细胞数：NMJ 59 / zone1 3022 / zone2 822 / zone3 808 / zone4 1254 / zone5 4912 / zone6 753（和 = 11,630 ✓）
+
+2. **`type` 本来就是有序因子**（levels 依次 `Y_Pre, Y_Post, O_Pre, O_Post, OD_Pre, OD_Post`），**不要重排**
+   - 曾误判"字母序会把 OD 排前面"并自造 `TYPE_LAB[...]` 命名向量赋进 metadata →
+     `No cell overlap between new meta data and Seurat object` → 又把这个**自造 bug** 当成"用户的报错"修了两轮。
+   - ✅ 通用规则：**赋给 Seurat metadata 的向量一律 `unname()`**（命名向量的 names 会被拿去匹配 barcode → 零重叠）。
+
+### 几何实测（10,000 细胞级，26×8 in canvas）
+
+| 项 | A 版（用户原设定） | B 版（等比例） |
+|---|---|---|
+| 画布 | 26×8 in，透明底，`pt.size=2`，条带 9pt | 26×5 in，白底，`pt.size=2`（不变），条带 9pt |
+| 面板 | **3.64 × 7.2 in（1 : 1.98）** | 3.64 × 3.64 in（方形） |
+| 轴等比 | ✗（`ratio = NULL`，`DimPlot` 无 `coord_fixed`） | ✓ `+ coord_fixed(ratio = 1)` |
+| 内容宽高比 | 0.58–0.61（竖长） | 1.03–1.21（由数据范围决定，正常） |
+
+- `split.by` 的 6 个水平 → **1 行 × 6 列单排**（gtable `panel-1-1 … panel-6-1` 同一 ROW），不是 3×2。
+- **只砍画布高度**（26×8 → 26×5）：面板宽度不变 ⇒ 3.64 in ⇒ `pt.size=2` 视觉不变。
+  🔴 反面教材：曾把画布砍到 183 mm **同时**把 `pt.size` 砍到 0.25 ⇒ 点几乎看不见、被用户判"比原来的代码还要简陋"。
+- 填充率随细胞数单调（796 细胞 3.7% → 3,890 细胞 19.4%）= 渲染健康 ✓。
+
+### 近空带分诊（本例已定案，勿重查）
+
+图内 y≈175–250 px 有一条横贯全图的近空带。`UMAP_2` 直方图显示 **[4.9, 6.7] 段细胞数 < 5**（真稀疏），
+像素↔数据换算得空带 = 数据 **4.97–6.83**，与直方图空段严丝合缝 ⇒ 是 **zone6（中位 8.09）与主体
+（zone2/zone5 中位 3.00 / 1.91）之间的真实流形间隙，不是渲染伪影**。**不要当 bug 去裁切/改坐标范围。**
+
+### 配色变量不在盘上
+
+`specialized_mf_sub_colors` 全盘（`*.R/*.py/*.Rmd/*.txt/*.json/*.csv`）**搜不到定义**——
+它是用户交互会话里的变量，从未落盘。⇒ **先搜一次，搜不到就直接问用户要，或明确标注是占位色**；
+不要用占位色替用户宣称"你的配色达标"。
+（占位色实测灰度亮度 `zone2 = 0.573` vs `zone6 = 0.578`，ΔL = **0.005** ⇒ 灰度下不可分；
+但**这测的是占位色，不是用户的配色**，报告必须写明口径。）
+
+### 交付件（脚本 `umap_subcluster_by_type_run.R`）
+
+cairo_pdf / svglite(SVG) / ragg tiff(300dpi) / 白底预览 PNG / `SourceData_subcluster_by_type.csv`。
+⚠️ 26×8 in @300dpi TIFF ≈ **55 MB**（远超 Nature <10 MB 建议）——宽幅展示图另存，投稿版另出。

@@ -69,5 +69,14 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "https://lifelines.readthedocs.io/en/latest/Survival%20Analysis%20with%20lifelines.html",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "生存分析",
+    "KM",
+    "预后",
+    "survival-analysis",
+    "survival analysis",
+    "survival"
+  ],
+  "trigger_level": "RED"
 }

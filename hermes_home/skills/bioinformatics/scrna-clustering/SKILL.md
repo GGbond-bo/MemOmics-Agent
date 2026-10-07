@@ -13,7 +13,7 @@ metadata:
     language: R+Python
     category: scRNA
 prerequisites:
-  r_packages: ["SingleR", "celldex", "Seurat"]
+  r_packages: ["SingleR", "celldex", "Seurat", "cluster", "clustree", "ggplot2", "patchwork"]
   python_packages: ["scanpy", "celltypist"]
 ---
 
@@ -192,10 +192,52 @@ results/<模块>/<方法>/
 | - | - | - | 2026-08-14 | step5_marker_annotation.R | - | - |  |
 | - | - | - | 2026-08-14 | step5b_marker_stats_validation.R | - | - |  |
 | - | - | - | 2026-08-14 | verify_outputs.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | MF2000_load_inspect.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | recon_mf2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step1_clustering_multires.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2_umap_cluster_labels.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | cluster_resolution_compare_MF2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | cluster_resolution_compare_MF2000_final.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step4_validation_figure.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_resolution_0.5_vs_1.2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_scan_marker_qc.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | annotate_mf2000_dotplot.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_part3_fix_and_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_recluster_independent.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_recluster_independent.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | mf2000_consistency_analysis.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_export_for_scvi.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_diagnosis_python_kernel.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | locate_scvi_install_target.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | install_scvi_tools.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | diag_torch_torchvision_pair.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | trace_import_chain_torchvision.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_scvi_train.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 05_robustness.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 06_final_verdict.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| ① IndexError: single positional indexer is out-of- | 同一分析流水线中不同脚本产出的 CSV 列集合不同（03 只跑了原始 6 表示， | ① 跨脚本字段对齐问题：metrics_summary.csv(来自 03) 不含 PCA_raw3 |
+| KeyError: "['n_clusters_res0.8'] not in index"（03_ | 归一化/取前缀时用 split('_')[0] 对多下划线列名不安全（n_clu | ① 列名前缀 bug：原用 col.split('_')[0] 生成前缀，"n_clusters"  |
+| ValueError: Mix of label input types (string and n | annotation_L3 是字符串标签（10 个肌纤维亚型名），而 netwo | 把 confusion_matrix(labels, lab) 改为 confusion_matri |
+| RuntimeError: operator torchvision::nms does not e | scvi-tools 安装过程引入/保留了与 torch 2.11.0+cu12 | pip install scvi-tools 本身 exit=0 成功（附带装了 tensorboa |
+| ModuleNotFoundError: No module named 'scvi'（execut | check_env 探测的包清单来源与 execute_python 持久内核实 | ① 实测确认内核解释器 = C:/Users/23136/AppData/Local/Program |
+| 错误于RunLeiden(...): Package 'leidenbase' is require | R 4.5.3 库（E:/R-libs/R-4.5.3）未安装 leidenba | 改用 FindClusters(algorithm=1) = Louvain（igraph 实现，无 |
+| 即使删掉显式 conserve.memory=TRUE，execute_r 仍报 argument  | execute_r 的 SCTransform 铁轨注入与用户代码中的 SCTr | 绕过注入器匹配：用 do.call(SCTransform, list(object=..., vs |
+| formal argument "conserve.memory" matched by multi | execute_r 对 SCTransform 有铁轨自动注入（method=" | SCTransform 调用中删除显式 conserve.memory=TRUE（以及任何自动注入参 |
+| argument 3 matches multiple formal arguments — 在 e | 在 R 里重定义名为 exec 的函数会与 base/后续调用链冲突；脚本文件中 | 删除自定义 exec 包装，直接 source("scripts/xxx.R", encoding= |
+| '\/' is an unrecognized escape in character string | 通过 execute_r 传 R 代码时，字符串里的反斜杠转义（\\.）在传输层 | 去掉正则转义：改用 grep("res/cluster/leiden", ..., ignore.c |
+| all arguments must have the same length（bootstrap  | Seurat FindClusters 返回新对象，不回写原对象；扫描循环里只赋 | 扫描多分辨率时写成 `o <- FindClusters(obj, graph.name=G, re |
+| bootstrap 稳定性 ARI≈0.002（明显异常）：① n_clusters 取到 13（应 | Seruat subset 后旧的分辨率标签列全部保留，用 grep 批量取列会 | ① 取列 bug：subset 后 meta.data 仍保留全部 mf_snn_res.* 列，c |
 | R fails to read h5ad | Seurat v5 lacks ReadH5AD; hdf5r crashes in Rscript | Use `rhdf5` (Bioconductor) — see `references/rhdf5-load-h5ad-to-seurat.md` |
 | SCTransform OOM on 30k cells | scale.data is full dense matrix — huge save | Remove scale.data before saveRDS: `obj[["SCT"]]@scale.data <- new("matrix")` |
 | MT% = 0 after QC | Seurat's `_`→`-` renaming mismatches `^MT-` pattern | Verify with `grep("^MT-", rownames(obj))`; pattern is correct after rename |

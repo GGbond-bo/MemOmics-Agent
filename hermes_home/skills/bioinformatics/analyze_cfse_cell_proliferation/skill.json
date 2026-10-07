@@ -20,5 +20,6 @@
     "cfse",
     "cell proliferation",
     "proliferation"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

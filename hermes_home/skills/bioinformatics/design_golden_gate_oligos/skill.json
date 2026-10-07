@@ -22,5 +22,6 @@
     "golden",
     "gate",
     "oligos"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

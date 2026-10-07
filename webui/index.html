@@ -1309,6 +1309,39 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .cc-cfg { padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; font-size:12px; max-height:46%; overflow-y:auto; }
 .cc-console .cc-cfg label { display:flex; flex-direction:column; gap:3px; color:var(--text-light); }
 .cc-console .cc-cfg input, .cc-console .cc-cfg select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; font-family:inherit; }
+
+.cc-console .cc-submit { display:none; flex:1; overflow-y:auto; padding:10px 14px 16px; font-size:12px; }
+.cc-console .ds-tabs { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.cc-console .ds-tab { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px;
+  padding:4px 10px; cursor:pointer; font-size:12px; }
+.cc-console .ds-tab.ds-on { border-color:var(--accent,#58a6ff); color:var(--accent,#58a6ff); }
+.cc-console .ds-row { display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+.cc-console .ds-row > label { color:var(--muted,#8b949e); }
+.cc-console .ds-row input, .cc-console .ds-row select, .cc-console .ds-row textarea {
+  background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px;
+  padding:4px 7px; font-size:12px; }
+.cc-console .ds-row textarea { flex:1; min-width:260px; font-family:inherit; }
+.cc-console .ds-recent { margin-top:12px; border-top:1px solid var(--border); padding-top:8px; }
+.cc-console .ds-actions { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+.cc-console .ds-go { border-color:var(--accent,#58a6ff); color:var(--accent,#58a6ff); }
+.cc-console .ds-ptitle { color:var(--muted,#8b949e); margin:6px 0 2px; }
+.cc-console .ds-param { display:grid; grid-template-columns:190px minmax(200px,1fr); gap:3px 10px;
+  padding:5px 0; border-bottom:1px dashed var(--border); align-items:center; }
+.cc-console .ds-pname em { color:var(--muted,#8b949e); font-style:normal; font-size:11px; }
+.cc-console .ds-req { color:#ff7b72; }
+.cc-console .ds-pdesc { grid-column:2; color:var(--muted,#8b949e); font-size:11px; }
+.cc-console .ds-preview { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px;
+  white-space:pre-wrap; word-break:break-all; max-height:190px; overflow:auto; margin:6px 0; font-size:11.5px; }
+.cc-console .ds-preview.ds-bad, .cc-console .ds-result.ds-bad { border-color:#ff7b72; }
+.cc-console .ds-result { white-space:pre-wrap; word-break:break-all; padding:8px 10px; border-radius:8px;
+  border:1px solid var(--border); background:var(--bg); margin:8px 0; }
+.cc-console .ds-table { width:100%; border-collapse:collapse; }
+.cc-console .ds-table th, .cc-console .ds-table td { text-align:left; padding:4px 6px;
+  border-bottom:1px solid var(--border); font-size:11.5px; }
+.cc-console .ds-mono { font-family:ui-monospace,Consolas,monospace; }
+.cc-console .ds-hint { color:var(--muted,#8b949e); }
+
+.cc-console .cc-cfg.dcs-cfg-view { max-height:none; flex:1; overflow-y:auto; }
 .cc-console .cc-cfg-actions { grid-column:1/-1; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .cc-console .cc-cfg-note { grid-column:1/-1; font-size:11px; color:var(--text-light); line-height:1.6; }
 .cc-console .cc-nodes { grid-column:1/-1; display:flex; flex-direction:column; gap:6px; }
@@ -15837,7 +15870,7 @@ var DCS_MODES = {
   container_close: { opt: 'container_close · 关容器', ph: '（不用输入）', hint: '关闭在线容器、释放资源。' },
   tasks:           { opt: 'tasks · 离线任务',         ph: '（不用输入）', hint: '列个性化分析（离线）任务；点一行看详情并可直接看日志。' },
   task_logs:       { opt: 'task_logs · 看任务日志',   ph: '任务 ID（先用 tasks 查）', hint: '拉某个离线任务的日志（输出在 🧾 日志视图）。' },
-  raw:             { opt: 'raw · 原生命令',           ph: 'dcs 子命令，例：workflow ls -p', hint: '白名单逃生舱：project/data/table/terminal/analysis/workflow/image/billing/region/history（凭据类命令不允许）。' }
+  raw:             { opt: 'raw · 原生命令 / 投递',    ph: '例：analysis run -i "sh /work/x.sh" -l vf=32g,num_proc=8 -o /Files/out', hint: '白名单逃生舱（project/data/table/terminal/analysis/workflow/image/billing/region/history；凭据类不允许）。带空格的参数用引号括起来，或直接写 JSON 数组。' }
 };
 
 // ---------- 基础 ----------
@@ -16168,6 +16201,8 @@ function dcsMarkTabs() {
     'dcs-tab-projects': _dcsView === 'browse' && kind === 'projects',
     'dcs-tab-browse': _dcsView === 'browse' && kind !== 'projects' && kind !== 'tasks',
     'dcs-tab-tasks': _dcsView === 'browse' && kind === 'tasks',
+    'dcs-tab-submit': _dcsView === 'submit',
+    'dcs-tab-cfg': _dcsView === 'cfg',
     'dcs-tab-log': _dcsView === 'log',
     'dcs-tab-queue': _dcsView === 'queue'
   };
@@ -16185,10 +16220,17 @@ function dcsTabData() {
 function dcsSetView(v) {
   _dcsView = v;
   var b = document.getElementById('dcs-browse'), o = document.getElementById('dcs-out'),
-      q = document.getElementById('dcs-queue');
+      q = document.getElementById('dcs-queue'), c = document.getElementById('dcs-cfg'),
+      s = document.getElementById('dcs-submit');
   if (b) b.style.display = (v === 'browse') ? 'flex' : 'none';
   if (o) o.style.display = (v === 'log') ? 'block' : 'none';
   if (q) q.style.display = (v === 'queue') ? 'flex' : 'none';
+  if (s) s.style.display = (v === 'submit') ? 'block' : 'none';   // 🚀 投递也是互斥视图
+  // 设置是第四个视图：显示它就把别的收起来，绝不并排（用户反馈"怎么和其他栏混在一起"）
+  if (c) {
+    c.style.display = (v === 'cfg') ? 'grid' : 'none';
+    c.className = 'cc-cfg' + (v === 'cfg' ? ' dcs-cfg-view' : '');
+  }
   dcsMarkTabs();
 }
 
@@ -16465,7 +16507,8 @@ function dcsFileDetail(it, full) {
 
 var _dcsLastDir = '';
 var _dcsLastPath = '/Files';
-var _dcsOpenDefault = false;   // 面板打开时是否强制回项目视图   // 最后浏览过的数据路径（数据标签每次都回到它）
+var _dcsOpenDefault = false;   // 面板打开时是否强制回项目视图
+var _dcsCfgBack = 'browse';    // 关设置时回到哪个视图   // 最后浏览过的数据路径（数据标签每次都回到它）
 
 // 调本机原生选择框（宿主进程弹 Windows 对话框），把结果填回输入框
 function dcsPickInto(inputId, kind) {
@@ -16691,7 +16734,7 @@ function dcsLoad() {
     if (vp && c.vault) vp.textContent = c.vault;
     if (_dcsOpenDefault || !_dcsState.rows.length) {
       _dcsOpenDefault = false;
-      if (c.enabled && c.bound) { dcsShowProjects(1); }
+      if (c.enabled && c.bound) { if (_dcsView !== 'cfg') dcsShowProjects(1); }
       else {
         dcsCrumbs([{ label: '🗂 云上数据' }]);
         dcsRender([], { empty: '还没绑定 DCS 访问令牌（PAT）\n点右上「⚙️ 设置」→ 粘贴 dcs_pat_… → 「🔗 绑定」\n绑定后这里直接列出云上 /Files 的数据', loaded: 0, total: 0, more: null });
@@ -16764,6 +16807,7 @@ function openDcsConsole() {
     }
     sel.value = 'projects';
   }
+  if (_dcsView === 'cfg') _dcsView = 'browse';   // 从设置里关掉面板，重开不要停在设置
   dcsSetView(_dcsView);
   dcsModeChange();
   _dcsOpenDefault = true;   // 每次点开面板都回到「📁 项目」
@@ -16779,10 +16823,9 @@ function dcsClose() {
 }
 
 function dcsToggleCfg() {
-  var el = document.getElementById('dcs-cfg');
-  if (!el) return;
-  var shown = (el.style.display !== 'none' && el.style.display !== '');
-  el.style.display = shown ? 'none' : 'grid';
+  if (_dcsView === 'cfg') { dcsSetView(_dcsCfgBack || 'browse'); return; }
+  _dcsCfgBack = _dcsView;
+  dcsSetView('cfg');
 }
 
 function dcsModeChange() {
@@ -16851,6 +16894,237 @@ function dcsExec() {
   dcsCall(args, function () {
     if (action === 'use_project') { dcsLoad(); dcsShowProjects(1); }
     if (action === 'download' || action === 'upload') { if (box) box.value = ''; }
+  });
+}
+
+
+// === 🚀 投递（WDL 流程 / 离线作业，2026-10-07）===
+// 只读的表单数据走 flows / flow_form / images；投递走 flow_run / analysis_run；
+// 预检走 dry_run（连接器只回 argv，不提交不计费，也不受只读开关影响）。
+var _dsFlows = [], _dsForm = null, _dsKind = 'wdl', _dsBusy = false;
+
+function dcsTabSubmit() { dcsSetView('submit'); dsBoot(); }
+
+function dsBoot() {
+  if (!_dsFlows.length) dsLoadFlows();
+  dsLoadTasks();
+}
+
+function dsKind(k) {
+  _dsKind = k;
+  var w = document.getElementById('ds-wdl'), s = document.getElementById('ds-shell');
+  var bw = document.getElementById('ds-kind-wdl'), bs = document.getElementById('ds-kind-shell');
+  if (w) w.style.display = (k === 'wdl') ? 'block' : 'none';
+  if (s) s.style.display = (k === 'shell') ? 'block' : 'none';
+  if (bw) bw.className = 'ds-tab' + (k === 'wdl' ? ' ds-on' : '');
+  if (bs) bs.className = 'ds-tab' + (k === 'shell' ? ' ds-on' : '');
+  if (k === 'shell') dsLoadImages();
+}
+
+function _dsEsc(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function dsPost(action, extra) {
+  var body = { action: action };
+  for (var k in (extra || {})) if (extra[k] !== undefined) body[k] = extra[k];
+  return dcsQPost('/api/dcs/exec', body);
+}
+
+function dsShow(id, text, bad) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'block';
+  el.className = (id === 'ds-result' ? 'ds-result' : 'ds-preview') + (bad ? ' ds-bad' : '');
+  el.textContent = text;
+}
+
+function dsVal(id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
+
+function dsStamp() {
+  var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+}
+
+function dsLoadFlows() {
+  var sel = document.getElementById('ds-flow');
+  if (sel) sel.innerHTML = '<option value="">加载中…</option>';
+  return dsPost('flows', { page_size: 200 }).then(function (res) {
+    if (res.__err) { if (sel) sel.innerHTML = '<option value="">拉列表失败：' + _dsEsc(res.__err) + '</option>'; return; }
+    _dsFlows = res.flows || [];
+    var html = '<option value="">选流程（共 ' + _dsFlows.length + ' 个）</option>';
+    for (var i = 0; i < _dsFlows.length; i++) {
+      var f = _dsFlows[i];
+      html += '<option value="' + _dsEsc(f.name) + '">' + _dsEsc(f.name) +
+              (f.tag ? ' · ' + _dsEsc(f.tag) : '') + (f.price ? ' · ' + _dsEsc(f.price) : '') + '</option>';
+    }
+    if (sel) sel.innerHTML = html;
+  });
+}
+
+function dsFlowChange() {
+  var name = dsVal('ds-flow'), meta = document.getElementById('ds-flow-meta');
+  var box = document.getElementById('ds-params');
+  if (!name) { if (box) box.innerHTML = ''; if (meta) meta.textContent = ''; return; }
+  if (meta) meta.textContent = '拉参数…';
+  return dsPost('flow_form', { flow: name }).then(function (res) {
+    if (res.__err) { if (meta) meta.textContent = '✗ ' + res.__err; return; }
+    _dsForm = res;
+    var pr = (res.pricing || {}).price || '以平台为准';
+    if (meta) meta.textContent = '版本 ' + (res.version || '-') + ' · 计费 ' + pr + ' · ' + (res.inputs || []).length + ' 个参数';
+    if (!dsVal('ds-out')) { var o = document.getElementById('ds-out'); if (o) o.value = '/Files/' + name + '_' + dsStamp(); }
+    var v = document.getElementById('ds-ver'); if (v) v.value = '';
+    dsRenderParams(res.inputs || []);
+  });
+}
+
+function dsRenderParams(inputs) {
+  var box = document.getElementById('ds-params');
+  if (!box) return;
+  if (!inputs.length) { box.innerHTML = '<div class="ds-hint">这个流程没声明输入参数（可用 --table 参数表提交）</div>'; return; }
+  var html = '<div class="ds-ptitle">参数（<b class="ds-req">*</b> = 必填）</div>';
+  for (var i = 0; i < inputs.length; i++) {
+    var p = inputs[i], id = 'ds-p-' + i, isArr = String(p.type || '').indexOf('Array') === 0;
+    html += '<label class="ds-param">' +
+      '<span class="ds-pname">' + (p.required ? '<b class="ds-req">*</b>' : '') + _dsEsc(p.name) +
+      ' <em>' + _dsEsc(p.type || '') + '</em></span>' +
+      (isArr
+        ? '<textarea id="' + id + '" data-pname="' + _dsEsc(p.name) + '" data-req="' + (p.required ? '1' : '') +
+          '" rows="2" placeholder="多个值用逗号分隔">' + _dsEsc(p.default) + '</textarea>'
+        : '<input id="' + id + '" data-pname="' + _dsEsc(p.name) + '" data-req="' + (p.required ? '1' : '') +
+          '" value="' + _dsEsc(p.default) + '">') +
+      '<span class="ds-pdesc" title="' + _dsEsc(p.description) + '">' + _dsEsc(String(p.description || '').slice(0, 110)) + '</span>' +
+      '</label>';
+  }
+  box.innerHTML = html;
+}
+
+function dsCollectWdl() {
+  var inputs = {}, miss = [], nodes = document.querySelectorAll('#ds-params [data-pname]');
+  for (var i = 0; i < nodes.length; i++) {
+    var nm = nodes[i].getAttribute('data-pname'), v = String(nodes[i].value || '').trim();
+    if (v) inputs[nm] = v;
+    else if (nodes[i].getAttribute('data-req') === '1') miss.push(nm);
+  }
+  return { inputs: inputs, missing: miss, count: nodes.length };
+}
+
+function dsWdlArgs(dry) {
+  return { flow: dsVal('ds-flow'), version: dsVal('ds-ver'), inputs: dsCollectWdl().inputs,
+           output_path: dsVal('ds-out'), entity: dsVal('ds-entity'), dry_run: !!dry };
+}
+
+function dsPreview() {
+  if (_dsKind === 'wdl') {
+    var c = dsCollectWdl(), flow = dsVal('ds-flow');
+    if (!flow) { dsShow('ds-preview', '先在左边选一个流程', true); return; }
+    dsShow('ds-preview', '预检中…');
+    dsPost('flow_run', dsWdlArgs(true)).then(function (res) {
+      if (res.__err) { dsShow('ds-preview', '✗ 预检失败：' + res.__err, true); return; }
+      var head = '预检（没有提交、不计费）\n流程：' + flow + '  参数：' + Object.keys(c.inputs).length + '/' + c.count +
+                 '  计费：' + (((_dsForm || {}).pricing || {}).price || '以平台为准') +
+                 (c.missing.length ? '\n⚠ 必填还缺：' + c.missing.join(', ') : '') + '\n\n';
+      dsShow('ds-preview', head + (res.command || (res.argv || []).join(' ')));
+    });
+  } else {
+    var cmds = dsVal('ds-scmd');
+    if (!cmds) { dsShow('ds-spreview', '先写要跑的命令（一行一条）', true); return; }
+    dsShow('ds-spreview', '预检中…');
+    dsPost('analysis_run', dsShellArgs(true)).then(function (res) {
+      if (res.__err) { dsShow('ds-spreview', '✗ 预检失败：' + res.__err, true); return; }
+      dsShow('ds-spreview', '预检（没有提交、不计费）\n\n' + (res.command || (res.argv || []).join(' ')));
+    });
+  }
+}
+
+function dsShellArgs(dry) {
+  var cmds = dsVal('ds-scmd').split('\n');
+  return { name: dsVal('ds-sname'), command: cmds, resource: dsVal('ds-sres'), image: dsVal('ds-simg'),
+           mount: dsVal('ds-smount'), output_path: dsVal('ds-sout'), dry_run: !!dry };
+}
+
+function dsSubmitWdl() {
+  if (_dsBusy) return;
+  var c = dsCollectWdl(), flow = dsVal('ds-flow');
+  if (!flow) { dsShow('ds-result', '✗ 先选流程', true); return; }
+  if (c.missing.length) { dsShow('ds-result', '✗ 必填参数还缺：' + c.missing.join(', '), true); return; }
+  var pr = ((_dsForm || {}).pricing || {}).price || '以平台为准';
+  if (!window.confirm('确认投递 WDL 任务？\n\n流程：' + flow + '\n参数：' + Object.keys(c.inputs).length + ' 项\n输出：' +
+                      (dsVal('ds-out') || '(平台默认)') + '\n计费：' + pr)) return;
+  _dsBusy = true;
+  dsShow('ds-result', '提交中…');
+  dsPost('flow_run', dsWdlArgs(false)).then(function (res) {
+    _dsBusy = false;
+    if (res.__err) { dsShow('ds-result', '✗ 投递失败：' + res.__err + (res.hint ? '\n提示：' + res.hint : ''), true); return; }
+    dsShow('ds-result', '✓ 已投递' + (res.task_id ? '：任务号 ' + res.task_id : '（平台没回任务号，看下面列表）') +
+                        '\n命令：' + (res.command || (res.argv || []).join(' ')));
+    dsLoadTasks();
+  });
+}
+
+function dsSubmitShell() {
+  if (_dsBusy) return;
+  if (!dsVal('ds-scmd')) { dsShow('ds-result', '✗ 先写要跑的命令', true); return; }
+  if (!window.confirm('确认投递离线作业？\n\n命令：' + dsVal('ds-scmd').slice(0, 200) + '\n资源：' +
+                      (dsVal('ds-sres') || '(平台默认)') + '\n输出：' + (dsVal('ds-sout') || '(平台默认)') +
+                      '\n\n离线作业按资源与时长计费，确认继续？')) return;
+  _dsBusy = true;
+  dsShow('ds-result', '提交中…');
+  dsPost('analysis_run', dsShellArgs(false)).then(function (res) {
+    _dsBusy = false;
+    if (res.__err) { dsShow('ds-result', '✗ 投递失败：' + res.__err + (res.hint ? '\n提示：' + res.hint : ''), true); return; }
+    dsShow('ds-result', '✓ 已投递' + (res.task_id ? '：任务号 ' + res.task_id : '') +
+                        '\n命令：' + (res.command || (res.argv || []).join(' ')));
+    dsLoadTasks();
+  });
+}
+
+function dsLoadImages() {
+  var dl = document.getElementById('ds-imglist');
+  if (!dl) return Promise.resolve();
+  return dsPost('images', { page_size: 100 }).then(function (res) {
+    if (res.__err) return;
+    var html = '';
+    for (var i = 0; i < (res.images || []).length; i++) html += '<option value="' + _dsEsc(res.images[i].ref) + '"></option>';
+    dl.innerHTML = html;
+  });
+}
+
+function dsLoadTasks() {
+  var box = document.getElementById('ds-tasks');
+  if (box) box.innerHTML = '<div class="ds-hint">加载中…</div>';
+  return Promise.all([dsPost('flow_tasks', { page_size: 10 }), dsPost('tasks', { page_size: 10 })]).then(function (arr) {
+    var rows = [], i;
+    var wdl = ((arr[0] || {}).tasks) || [];
+    for (i = 0; i < wdl.length; i++) {
+      var w = wdl[i];
+      rows.push(['WDL', w.task_id, w.wf_name || '-', w.status || '-', w.create_time || '-', (w.expense || '') + '', 'workflow']);
+    }
+    var anaRaw = (arr[1] || {}).tasks;
+    var ana = (anaRaw && (anaRaw.records || anaRaw)) || [];
+    for (i = 0; i < ana.length; i++) {
+      var a = ana[i];
+      rows.push(['离线', a.task_id, a.task_name || '-', a.task_num || '-', a.create_time || '-', '', 'analysis']);
+    }
+    if (!box) return;
+    if (!rows.length) { box.innerHTML = '<div class="ds-hint">还没有任务（或两个列表都为空）</div>'; return; }
+    var html = '<table class="ds-table"><tr><th>类</th><th>任务号</th><th>名称</th><th>状态</th><th>时间</th><th>费用</th><th></th></tr>';
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      html += '<tr><td>' + r[0] + '</td><td class="ds-mono">' + _dsEsc(r[1]) + '</td><td>' + _dsEsc(r[2]) +
+              '</td><td>' + _dsEsc(r[3]) + '</td><td>' + _dsEsc(r[4]) + '</td><td>' + _dsEsc(r[5]) +
+              '</td><td><button class="cc-btn" onclick="dsCancel(\'' + r[6] + '\',\'' + _dsEsc(r[1]) + '\')">取消</button></td></tr>';
+    }
+    box.innerHTML = html + '</table>';
+  });
+}
+
+function dsCancel(kind, id) {
+  if (!window.confirm('确认取消 ' + kind + ' 任务 ' + id + '？会真的停掉云上作业。')) return;
+  dsPost('task_cancel', { kind: kind, task_id: id }).then(function (res) {
+    dsShow('ds-result', res.__err ? ('✗ 取消失败：' + res.__err) : ('✓ 已取消 ' + id), !!res.__err);
+    dsLoadTasks();
   });
 }
 
@@ -17512,12 +17786,13 @@ async function saveUpdateConfig(mode) {
       <span class="cc-tabs">
         <button class="cc-btn" id="dcs-tab-projects" onclick="dcsTabProjects()" title="项目列表：当前 / 欠费一眼看到">📁 项目</button>
         <button class="cc-btn primary" id="dcs-tab-browse" onclick="dcsTabData()">🗂 数据</button>
+        <button class="cc-btn" id="dcs-tab-submit" onclick="dcsTabSubmit()" title="向云平台投递：WDL 流程 / 离线作业（先预检再提交）">🚀 投递</button>
         <button class="cc-btn" id="dcs-tab-log" onclick="dcsSetView('log')">🧾 日志</button>
         <button class="cc-btn" id="dcs-tab-queue" onclick="dcsTabQueue()" title="下载队列">⬇ 队列<span id="dcs-qbadge" class="dcs-qbadge" style="display:none;"></span></button>
       </span>
       <button class="cc-btn" id="dcs-tab-tasks" onclick="dcsQuick('tasks')">📋 任务</button>
       <button class="cc-btn" onclick="dcsQuick('upload')">⬆ 上传</button>
-      <button class="cc-btn" onclick="dcsToggleCfg()">⚙️ 设置</button>
+      <button class="cc-btn" id="dcs-tab-cfg" onclick="dcsToggleCfg()" title="连接器设置（PAT / 下载目录 / 超时）">⚙️ 设置</button>
       <button class="cc-btn" onclick="dcsClose()">✕ 关闭</button>
     </div>
     <div class="cc-cfg" id="dcs-cfg" style="display:none;">
@@ -17561,6 +17836,62 @@ async function saveUpdateConfig(mode) {
       <div class="dcs-qhead" id="dcs-qhead"></div>
       <div class="dcs-rows" id="dcs-qrows"><div class="dcs-empty">队列是空的</div></div>
     </div>
+      <div class="cc-submit" id="dcs-submit" style="display:none;">
+        <div class="ds-tabs">
+          <button class="ds-tab ds-on" id="ds-kind-wdl" onclick="dsKind('wdl')">🧬 WDL 流程</button>
+          <button class="ds-tab" id="ds-kind-shell" onclick="dsKind('shell')">🖥 离线作业（shell）</button>
+          <span class="ds-hint">先「🔍 预检」看将提交的命令，再「🚀 提交」——投递会计费</span>
+        </div>
+
+        <div id="ds-wdl">
+          <div class="ds-row">
+            <label>流程</label>
+            <select id="ds-flow" onchange="dsFlowChange()"><option value="">（点右边 ⟳ 拉流程列表）</option></select>
+            <button class="cc-btn" onclick="dsLoadFlows()">⟳ 流程列表</button>
+            <span class="ds-hint" id="ds-flow-meta"></span>
+          </div>
+          <div class="ds-row">
+            <label>版本</label><input id="ds-ver" style="width:90px;" placeholder="留空=最新">
+            <label>输出目录</label><input id="ds-out" style="min-width:240px;" placeholder="/Files/项目/out">
+            <label>样本 entity</label><input id="ds-entity" style="width:120px;" placeholder="可选（-e）">
+          </div>
+          <div id="ds-params" class="ds-params"></div>
+          <div class="ds-actions">
+            <button class="cc-btn" onclick="dsPreview()">🔍 预检（看将提交的命令）</button>
+            <button class="cc-btn ds-go" onclick="dsSubmitWdl()">🚀 提交 WDL</button>
+          </div>
+          <pre id="ds-preview" class="ds-preview" style="display:none;"></pre>
+        </div>
+
+        <div id="ds-shell" style="display:none;">
+          <div class="ds-row"><label>任务名</label><input id="ds-sname" placeholder="可选"></div>
+          <div class="ds-row"><label>命令</label><textarea id="ds-scmd" rows="2" placeholder="sh /work/用户名/run.sh（一行一条 = 多个 -i）"></textarea></div>
+          <div class="ds-row">
+            <label>资源</label><input id="ds-sres" style="min-width:260px;" placeholder="vf=32g,num_proc=8[,gpu=L4]">
+            <label>输出目录</label><input id="ds-sout" style="min-width:200px;" placeholder="/Files/out">
+          </div>
+          <div class="ds-row">
+            <label>镜像</label><input id="ds-simg" list="ds-imglist" style="min-width:260px;" placeholder="留空=平台默认">
+            <datalist id="ds-imglist"></datalist>
+            <button class="cc-btn" onclick="dsLoadImages()">⟳ 镜像</button>
+            <label>挂载</label><input id="ds-smount" style="min-width:180px;" placeholder="/Files/a,/Files/b">
+          </div>
+          <div class="ds-actions">
+            <button class="cc-btn" onclick="dsPreview()">🔍 预检（看将提交的命令）</button>
+            <button class="cc-btn ds-go" onclick="dsSubmitShell()">🚀 提交作业</button>
+          </div>
+          <pre id="ds-spreview" class="ds-preview" style="display:none;"></pre>
+        </div>
+
+        <div id="ds-result" class="ds-result" style="display:none;"></div>
+
+        <div class="ds-row ds-recent">
+          <label>最近任务</label>
+          <button class="cc-btn" onclick="dsLoadTasks()">⟳ 刷新</button>
+          <span class="ds-hint">WDL 与离线任务各取最近 10 条；「取消」会真的停掉云上作业</span>
+        </div>
+        <div id="ds-tasks" class="ds-tasks"></div>
+      </div>
     <div class="cc-out" id="dcs-out" style="display:none;"></div>
     <div class="cc-input">
       <select id="dcs-mode" onchange="dcsModeChange()"></select>

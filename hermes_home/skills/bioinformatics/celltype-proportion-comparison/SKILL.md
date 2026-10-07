@@ -72,6 +72,7 @@ description: 细胞类型/亚群比例跨组比较箱线图全流程（配对前
   `p_main_scaled <- egg::set_panel_size(p_main, width=unit(N,"mm"), height=unit(32,"mm"))`
   → `ggsave(..., plot=p_main_scaled, dpi=300, bg="white", limitsize=FALSE)`
 - **FDR 版与 p 值版尺寸必须完全一致**（同一亚群同一组别 = 同一宽度 mm）
+- **⛔ 输出格式默认 = 300 dpi + 附 SVG（2026-08-22 用户「特别重要」指定，适用于所有出图任务）**：最低配置 = **PNG（300 dpi 预览）+ SVG（矢量，Illustrator 可再编辑）**，PDF 一并给；**禁止 150 dpi**。本类箱线图/小提琴/热图/效应矩阵统一按此出，**不要等用户开口要 SVG**。
 - **⛔ 定稿导出 = PNG + PDF 一次同时出，不要只出 PNG 等用户开口（2026-08-17 Specialized MF cluster1 实测）**：
   用户拿到 PNG 后追了一句"要生成pdf格式啊"，随即又补"保留png"——**PDF 是矢量投稿版、PNG 是 300dpi 预览版，两者都要，PDF 不是 PNG 的替代品**。
   脚本里对同一 `p_scaled` 对象连续两次 `ggsave`：
@@ -224,6 +225,20 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 
 - 18 程序 = 22 − 4 身份（scoreI/II/IIa/IIx 拆出），程序按 5 功能轴分组（代谢/结构/再生/应激-炎症/萎缩-纤维化）带左侧色带
 - 样式沿用 v7 架构（RdBu_r、无白缝 CELL=1.0、行分组 0.2、面板间距 1.8、亚群标签贴底）
+- 📁 **本族六图 = 同一个脚本**：`results/<sid>/scripts/fig_split_v10.py`（300 行；FigA1≈184-192 / **FigA2≈194-203** / **FigA3≈205-242** / FigB1≈245-253 / FigB2≈255-264 / FigB3≈266-298）。改图只 patch 对应区间常量重跑，不要重写。
+- 🎨 **配色逐条对齐（2026-09-15 用户要求「帮我找这两张图的代码，**颜色这些都要对得上**」时按此核）**：
+  - cmap 一律 `plt.cm.RdBu_r`（蓝 `#2166AC` → 白 `#F7F7F7` → 红 `#B2182B`）
+  - **5 效应图（A2/B2）**：`TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)`，值 = Cohen's d，色条标签 `Cohen's d`，FDR `q<0.05` 打 `*`（`|val|>1.5` 白字否则黑字）
+  - **亚群图（A3/B3）与 6 组图（A1/B1）**：`TwoSlopeNorm(vmin=-2, vcenter=0, vmax=2)`，值 = 行内 z-score，色条标签 `row z-score`，无星号
+  - ⚠️ **5 效应用 ±3、z-score 用 ±2——两个 norm 不同，是本族改图最易串的一处**
+  - 分组色带 `GROUP_COLORS`：Metabolic `#2C7FB8`｜Structural `#7BA05B`｜Regeneration `#F4A261`｜Stress-Inflam `#D64550`｜Atrophy-Fibrosis `#8C5FA8`｜Identity `#6A6A6A`
+  - 布局常量：`CELL=1.0`（无白缝）｜行分组间隙 `0.2`｜`PANEL_GAP=1.8`｜亚群标签 45° 贴底 `y=-0.15` `#333333`｜`subplots_adjust` 手动布局（禁 tight_layout）｜`save()` 统一 `dpi=300` 出 png/pdf/svg
+- 🔎 **「某张图是谁生成的」＝脚本溯源三步法**（用户常问「帮我找 X 图的代码」；**按图名在 `scripts/` 里 `search_files` 会 0 命中**，因为脚本名 `fig_split_v10.py` 不含 `program_5effects`——**不要据此断言「脚本不存在」**，也不要凭记忆复述配色）：
+  1. `skill_evolution(action="query_logs", skill_name="scipilot-figure-skill")` —— `proven_runs` 每条带 script/params/result，命中率最高（实测直接给出「FigA3 生成脚本为 fig_split_v10.py 的 sub_matrix() 函数（第 77 行）」）
+  2. `session_search(query="<图文件名>", role_filter="user,assistant,tool")` —— 历史工具调用里有「图名 → 脚本」映射表与产出清单
+  3. 回 `scripts/` 目录 `search_files` 列全量 + `read_file` 取**逐行代码与颜色常量**（用户要求"颜色对得上"时必须读到源码）
+  - 交付格式：脚本绝对路径 + 该图生成代码段（带行号）+ 配色/归一化参数表 + 数据依赖清单 + 本图命中证据链
+- 📄 完整规格卡（行号索引 / 数据依赖 / helper 函数说明 / 陷阱 / 本次溯源链）→ `references/fig-ab-effect-matrix-family.md`
 - ⚠️ 曾踩坑：脚本里 `Identity` 色键未定义 → `KeyError: 'Identity'`（color_map 的 group 键必须覆盖所有组名，加 `'Identity': ...` 修复）
 
 ### 🎻 亚群 top1 基因集小提琴图（2026-08-16 用户点名要 "每个亚群画自己top1的基因打分的小提琴图"）
@@ -317,7 +332,7 @@ metadata 里带 `score*_AUC` 列（AUCell 打分）时，用**同一套 6 组配
 当用户要"CNS 级别/主刊审美"且数据集是**细胞级 meta CSV**（每行=细胞，含 samplename/type/annotation_L3 + 22 个 AUCell 打分列，50 万细胞级）时，用效应矩阵图组替代逐打分箱线图——一张图回答"哪些打分被衰老/运动/糖尿病改变"。实测成功案例：`MF_AUCell_meta.csv`（508,661 细胞 × 58 列）。
 
 - **⛔ 格式复用铁律（用户原话"按照Figure1的格式出啊"）**：用户认可某图格式后要求扩展（如 3 面板→5 面板），必须**原样复刻布局/配色/标注，只改用户要求的维度**；**从 `results/<session>/log/system_log.jsonl` 提取原图生成代码**（search_files pattern=`输出文件名` → 命中行 args.code）在其上改，禁止凭记忆重写或自行创新布局（曾自作主张改成 50 列大宽图被打回）。
-- **统计设计（防伪重复）**：50 万细胞直接算 = 伪重复。先 `samplename × annotation_L3` 聚合打分均值（48样本×10亚群=479行）→ 每 打分×亚群×效应 组合算 **Cohen's d + Wilcoxon 秩和 p（BH 校正）**
+- **统计设计（防伪重复）**：50 万细胞直接算 = 伪重复。先 `samplename × annotation_L3` 聚合打分均值（48样本×10亚群=479行）→ 每 打分×亚群×效应 组合算 **Cohen's d + p + BH q**。⚠️ **p 是 Welch 双样本 t，不是 Wilcoxon**（2026-09-15 全表 1100/1100 复现锁定；本节旧文写\"Wilcoxon 秩和 p\"是错的）→ 精确口径见下方「五效应统计口径」节
 - **三效应**：Aging(O_Pre−Y_Pre) / Exercise_O(O_Post−O_Pre) / T2D(OD_Pre−O_Pre)
 - **五效应扩展（用户拍板版）**：Aging / T2D / ExYoung(Y_Post−Y_Pre) / ExOld(O_Post−O_Pre) / ExT2D(OD_Post−OD_Pre) 五面板并排 → 回答"糖尿病是否拖累运动对衰老的逆转"。⚠️ L1 辩论 verdict=modify：并排面板无组间检验（ExOld vs ExT2D），**只能当趋势展示，不能下因果结论**
 - **逆转率**（仅对 Aging 显著组合）：`reversal = 1 - (O_Post − Y_Pre)/(O_Pre − Y_Pre)`；>0=向年轻回拉，<0=恶化。实测中位数：Metabolic +0.21 / Identity +0.36 / Senescence −0.07 → "运动是衰老的镜子，只照见代谢-结构这一半"。
@@ -404,6 +419,66 @@ L1 辩论返回 `verdict: need_more_info` + `low` + `verdict_parse_error` 时是
 **必须把 recommended_params/reasoning 的修正意见实际执行**（本案例：p 报 <1e-6、星号补 d、结论弱化）并重跑
 后再汇报，不要把 modify 当"通过"了事。反方意见即便整体被驳回，可操作项（如打印精度）通常值得采纳。连续 2 次
 解析失败才升级 L2/换 mode。
+
+### ⛔ 四组（Y × Pre/Post，无 OD）模式 + 小样本子采样数据的功效校准（2026-09-24 实测 MF_2000.rds）
+
+- **groups** = `Y_Pre/Y_Post/O_Pre/O_Post`；标注 4 个比较 = `Y_Pre vs O_Pre` + `Y_Post vs O_Post`（独立，回答"老年 vs 青年"）+ `Y_Pre vs Y_Post` + `O_Pre vs O_Post`（配对，臂内运动效应）。配色取六色表的 Y 绿/O 蓝 4 色（`#B2DF8A/#33A02C/#80B1D3/#1F78B4`）
+- **多层级同时输出**：meta 里 `celltype`(3) / `annotation_L2`(4) / `annotation`(5) / `annotation_L3`(10) 都可能被用户称作"细胞类型" → 一次跑全 4 层（同一管线，只换分组列），图给逐类型 + 各层总览；**层级嵌套（celltype ⊂ L2 ⊂ L3）→ FDR 各层内独立校正，禁止把多层结果当独立重复计数**（用 celltype×annotation_L3 细胞数交叉表做嵌套审计）
+- ⛔ **`egg::set_panel_size` 返回 gtable：ggsave 不传 width/height 会用默认 7×7in** → PNG 出 178×178mm 大画布、内容只占 26×32mm（PIL 实测 content 仅 0.6%、bbox 只在中间一小块）。修复 = 按 gtable 真实尺寸导出：
+  `w_in <- grid::convertWidth(sum(gt$widths),'in',TRUE); h_in <- grid::convertHeight(sum(gt$heights),'in',TRUE)` → `ggsave(..., width=w_in, height=h_in)`
+- ⛔ **check_env 对 `E:/R-libs` 的 egg/svglite 报 MISSING（只探默认库路径）** → `rail_review(pre)` 的 `required_packages` **不列 egg/svglite**（先 `search_files` 手工核实 `E:/R-libs/R-4.5.3/egg`、`/svglite` 目录存在），脚本内正常 `library` 即可（与 stringr 同源误报）
+- ⛔ **结论强度必须过 Monte Carlo MDE**：比例是离散阶梯 = `1/每样本细胞数`（本数据每样本 17–45 细胞 → 阶梯 2.22pp）。实测 80% 功效 MDE：**低丰度基线(≈2%) = 15/10/10pp、高丰度基线(≈50%) = 30/20/15pp**（n=5/7/10，1000 次/格）。**观测差 < MDE → 只能写"提示性"**；不显著 → 写"未检出差别（功效不足）"，**不能写"无差别"**；Type I 型错误率实测 3.3–4.9%（校准正常）
+- **稀疏要显式报 n**：低丰度类型（RSS）在青年组常只有 5–6/10 样本含该类细胞 → 主口径 n1<10 必须写进交付（不能只报"每组 10 样本"）
+- 交付三件套 = **点估计 + bootstrap 95% CI（B=2000）+ MDE 区间**；CI 跨 0 不得仅凭 FDR<0.05 下结论
+
+### 🎯 打分四组模式 + 结论措辞定档（2026-09-24 MF_2000 `scoreSenMayo_AUC` 实测）
+
+**触发**：用户说「meta 里有 `score*_AUC` 这一列，帮我评估它在四组之间的差异，出图并给结论」= 四组模式的**打分版**，管线与上面比例版完全同构，只换被检验量：分析单位 = `samplename` 级打分均值（防细胞级伪重复）；4 比较、Cliff's δ 方向约定、双 FDR 结构均同比例版；效应量**加样本级 Cohen's d**；功效改用 **MC 400 reps（经验样本级 SD）+ 解析 t 分位 → 80% 功效 MDE**（打分是连续量，没有比例的 1/n_cell 离散阶梯）；出图沿用 **4 柱 26×32mm + p/FDR 两版**，另加细胞级 violin / 功效曲线 / 六组补充（含 OD）/ 稳健性图；另出 `results/RESULTS_wording.md`（措辞定档文本）。脚本分两个文件：`01_*(提取+检验+出图)` / `02_*(裁决可执行项)`。
+
+- 🔴 **报 FDR 家族行数必须实算，不许估**：MF_2000 全表 = `all` 6 比较 + `celltype` 3 类 × 6 = **24 行**（本次按「32 行」估、把 `q≈0.23` 写进 debate context，实算最小 q=**0.0582**）——**喂进辩论的错误数字会污染整个裁决**，事后更正很难收回。裁决前先 `nrow(res)` 打印一次再写 context。
+- 🔴 **结论措辞三档（L2 裁决 verdict=modify 定稿，可复用）**：🟢 **区块内显著**——**仅当这 6 个比较家族被分析计划预锁定为主分析**才可用；🟡 **区块内提示性下降**（默认档：区块内 FDR 过线 + 全局 FDR 未过 → **必须同时把全局 q 写出来**）；⚫ **未检出差别（功效不足）**（p 不显著 / CI 跨 0 / 观测差 < MDE → 绝不写「无差别」）。⛔ **禁用词**：全局显著降低 / 「衰老程序显著减弱」/「更年轻」/「衰老负担降低」。SenMayo 是泛 SASP 签名（PMID 36207451），在终末分化肌纤维中有效性证据不足 ⇒ 只能写「SenMayo_AUC 降低」，不得等同衰老程序改变。
+- 🔴 **裁决要求补做的稳健性三件套（小 n + 抽样版必做）**：① **bootstrap 95% CI**（B=2000，组内重抽样本；主比较 CI 不含 0 才算稳 —— 实测 mean diff [−6.95e-3,−2.46e-3]、Cliff δ [−1.00,−0.40] 均不含 0）；② **精确置换**（小 n 直接用 `combn(n, n1)` 枚举**全部**标签置换，choose(17,10)=19448 秒级完成，比 Wilcoxon 近似更硬 —— 实测 p=0.00437）；③ **组成敏感性** `lm(score ~ type + 纤维型比例)`：**校正后效应增强才算非组成驱动**（实测 β 0.0048→0.0058、p 0.0029→0.0040、R² 0.458→0.589）+ 逐纤维型分层方向一致（TypeI −14.3%/FDR 0.0437、TypeII −15.4%/0.0391、RSS ns）；④ 附 **打分共变 Spearman**（SenMayo vs OxPhos 0.56 / TNFA 0.52 / ROS 0.50 / Sarcomeric 0.49）→ 这是驳回「特异性衰老信号」解读的证据。
+- ⚠️ R 实现两坑（`quantile()` 命名污染 → `bs[["x"]]` 越界；`grep()` 空匹配 → `data.frame` 行列数不匹配）与「`source()` 下 stdout 全丢、必须用 `tryCatch(...)$call` 定位」见 `platform-execution-pitfalls`；完整配方/实测数字/脚本清单见 `references/score-4grp-wording-tiers.md`
+
+### 📊 数据「能不能发文章 / 有没有亮点」快速评估（publishability triage，2026-09-24 MF_2000 实测）
+
+**触发**：用户只给一个数据路径 + 「这份数据能发文章吗 / 帮我看看有没有什么亮点」，**没给方向、没要出图**。
+⇒ 这是**只读评估**，不是分析执行：**不开 task_plan、不出图、不跑 QC 管线**；跑一轮探索 → **直接给判断**。
+⚠️ 别把探索铺成多轮：串联 4–5 次 `search_files`/`read_file` 去挖历史会话产物会被循环检测强制干预
+（实测：列本会话目录 → 找 `*4grp*` → 读 notes → 再列旧会话目录，第 4–5 次即被干预）。**一次批量查完就出结论**。
+
+**一趟扫完的六件事**（写进**一个** `source()` 的 R 脚本，落盘 3 个 CSV，一次 `execute_r` 跑完）：
+
+| # | 查什么 | 关键调用 | 决定了什么 |
+|---|--------|---------|-----------|
+| 1 | 实验设计 | `table(type)` / `table(age,type)` / `table(sex,type)` / 样本数 / **每样本细胞数 summary** | 分辨率上限 + 设计自洽性 |
+| 2 | QC | nCount/nFeature/`percent.mt`/ribo 五数概括 + 超阈细胞数 | 数据洁净度（本例 MT 中位 0.4%、max 4.98%） |
+| 3 | 比例矩阵 | `prop.table(table(annotation_L3, type), 2)*100` | **主证据** |
+| 4 | AUCell 打分 | `grep("_AUC$", colnames(md))` → `tapply(score, type, median)`；亚群 × 打分行内 z | 亚群签名 + 组间程序变化 |
+| 5 | 亚群 marker | `FindAllMarkers(DefaultAssay="SCT", only.pos, min.pct=0.25, logfc.threshold=0.5)` → 每群 top5 | 亚群是不是真的（发表必需） |
+| 6 | **功效校准（必做）** | 把观测差与 **MDE** 逐条对照（见上方四组节） | 决定措辞强度 |
+
+**判据（第 6 步的落法）**：观测差 < MDE ⇒ 只能写「**提示性**」；p 不显著 ⇒ 写「**未检出差别（功效不足）**」，
+**不写「无差别」**。本例每样本 17–45 细胞 → 阶梯 2.22pp；MDE 低丰度基线 10–15pp、高丰度 15–30pp ⇒
+除 RSS（+10~11pp）外大多落在边缘/未达 —— **这一条直接决定「能不能发」的答案，不是修辞**。
+
+**四面硬伤自查（发表可行性 = 设计 × 功效 × 可复现 × 故事完整）**：
+1. **每样本细胞数** —— 抽样版（每样本固定 45 细胞）是分辨率杀手，必须写进交付；
+2. **`sex` 是否单一** —— 全 Female/全 Male 必被审稿人问，主动点出；
+3. **是否已处理对象** —— 有 SCT/harmony/UMAP/注释 ⇒ 只能「再分析」，**不能声称新测序**；
+4. **主题正向锚点是否存在** —— 本例 `scoreSenMayo` 0.033→0.029（几乎零变化）⇒ 点「衰老」主题时缺正向证据，
+   要**主动披露**而不是等审稿人挖出来。
+
+**交付结构（三段，结论先行）**：① 一句话判定（能 / 不能 / 需要什么才够）；② 亮点（**每条带实测数字**）+
+硬伤表；③ 定稿路径（在哪份全量数据上、跑什么检验）。**判定「不能」不等于没价值 —— 说清"这是试金石、
+亮点需要在 X 数据上按 donor 级检验 + MDE 定稿"**。
+
+**实测结论（MF_2000，避免下次重新推导）**：2132 细胞抽样版（48 样本 × 45 细胞、全 Female、已处理对象）
+**不可单独发文**；亮点 = ① RSS 5 倍扩增（2.7%→12.7%→14.0%，≈MDE 边界，唯一强信号）② Specialized MF
+衰老↑ + 运动后进一步↑（O 6.0→12.2%、OD 11.1→17.8%，青年组无此响应）③ scoreI 崩塌（0.778→0.477）+
+Sarcomeric/OxPhos 同向↓ ④ **老年专属** RegMyon 运动响应（青年 0.085→0.083 无变化 vs 老年 0.075→0.109）
+⑤ 糖尿病向糖酵解偏移（scoreII 0.512→0.726）。**故事线 = 「衰老肌纤维重塑（RSS 扩增 + SMF 运动诱导）」，
+不是「逆转」**（SMF 运动方向与衰老同向 = 加深）。完整数字表 + 脚本见 `references/mf2000-publishability-triage.md`。
 
 ## Pitfalls
 - **⛔ 亚群 vs 纯纤维小提琴的两套星号口径并存——用户说「按之前代码画」先分清用哪套（2026-08-20）**：同类「主角 vs 3 纯纤维」图存在两个已验证模板，星号标注口径不同，混用会被用户抓到「怎么跟 Figure X 不是一个图」：① **fig_C1_AMPK_violin_4sub.py（用户当次指定「按我之前代码」）** = 星号按 **Cohen's d 效应量分级**（>=0.8***/0.5**/0.3*/ns），不挂 p，避细胞级伪重复虚标；② **fig_C1_5sub_rawp_effsize.py（另一会话用户拍板）** = **raw p 星号 + d 数值双标注**。**先确认用户指定哪个模板再画**（「参考 fig_C1_AMPK_violin_4sub.py」= d 分级），整套统一口径不混用。详见 references/main-vs-pure-4sub-violin-template.md 与 references/subtype-vs-fiber-violin.md。
@@ -527,7 +602,150 @@ L1 辩论返回 `verdict: need_more_info` + `low` + `verdict_parse_error` 时是
 - 识别要点：读标题（如 "AUcell pathway activity across myofiber subtypes... n=24"）、面板结构（1×5 并排 = Aging/T2D/ExYoung/ExOld/ExT2D）、行顺序（22 打分按功能轴分组）、图例（Cohen's d ±3 红蓝 diverging）
 - 识别后主动确认用途：这张图是谁做的/哪一版/要不要在它基础上改（如更新 Denervation 行）——用户上传旧图常伴随新诉求（改基因集/改版），识别只是入口
 
+## 跨物种细胞比例分析（人/猴 ATAC，2026-08-29 毕业论文交付）
+
+触发场景：meta CSV 含 `individual`（个体，非样本库）+ `age_group`（统一阶段）+ `celltype`，比较 人 40 个体 vs 猴 21 个体 的细胞类型比例随年龄变化。**统计单位 = 个体，不是细胞**（伪重复铁律）。
+
+**meta 文件格式（用户交付标准）**：每行一个细胞，列 = Sample / celltype / Age / age_group / individual。
+- 人脑 `E:\专利\human_meta.csv`（265,909 细胞，40 个体）：Sample 名 `GSM8549615_hc77` → individual = `hc77`（`sub(".*_(hc[0-9]+)","\\1",Sample)`）；age_group = Young/Middle/Old/Exceptionally old（已统一阶段）；celltype = ODC/OPC/Astro/Micro/InN/Unknown/ExN
+- 猴脑 `E:\专利\monkey_meta.csv`（161,497 细胞，21 个体）：Sample 名 `M1_Hip_1` → individual = `M1`（`sub("_Hip_.*","",Sample)`，去 `_1/_2/_3` 文库后缀）；Age_group 原本就有（Middle 等）+ `individual` 列；celltype = ExN/Micro/InN/Astro/OPC/VS/ODC/ChP
+- ⚠️ **人脑 40 个 multiome donor 的精确年龄映射**（Table_S1 权威，40 行 Donor→Age→Age_group→Sex）已固化在 `references/cross-species-hippocampus-proportion.md`——**直接复用，禁止手排**（hc78=20 不是 25，2026-08-29 用户当场抓错）
+
+**个体水平比例计算 + 跨物种合并**：
+```r
+h_tab <- human %>% count(individual, age_group, celltype) %>%
+  group_by(individual) %>% mutate(total=sum(n), pct=100*n/total) %>% ungroup()
+m_tab <- monkey %>% count(individual, Age_group, celltype) %>%
+  rename(age_group=Age_group) %>% group_by(individual) %>%
+  mutate(total=sum(n), pct=100*n/total) %>% ungroup()
+all <- bind_rows(h_tab %>% mutate(species="human"),
+                 m_tab %>% mutate(species="monkey"))
+# 图1 堆叠柱: species×age_group×celltype 平均 pct; 图2 箱线: facet_wrap(~celltype, scales="free_y")
+# 统计: 每 celltype 个体水平 wilcox.test(pct_Young, pct_EO)（共享的 6 类才比）
+```
+
+**年龄组统一 = 按生命阶段对齐（不是绝对数值）**：猴 20 岁已是老年，人 20 岁是青年——绝对年龄跨物种不可比。映射见 `references/cross-species-hippocampus-proportion.md`（猴 Young 5-6y/Middle 10-12y/Old 22-23y/EO 28-31y ↔ 人 20-40/40-60/60-80/80-100，依据张潇原稿 + Zemke Table_S1）。
+
+**⛔ 统计纳入数 = 覆盖数 − QC 剔除（2026-08-29 猴 n=21 vs n=20 实证）**：celltype_pct_individual.csv 覆盖 21 猴个体，但 M4 仅 **61 细胞**（其余个体 2,549–16,159）→ 趋势检验（Spearman）猴侧 **n=20 = 21 − M4**。**报告时必须双写两种 n**：`n=21`（文库覆盖个体数）+ `n=20`（统计纳入数，M4 因细胞太少剔除）——只写一个会被审稿人/用户质疑\"n 对不上\"。跨物种比例的所有猴侧检验（Astro/OPC/Micro/ODC 全 n=20；ExN/InN n=21——ExN/InN 每个个体都有细胞所以 21 全纳入）统一口径写入结论表 §0.2。判定规则：某个体总细胞数 < 其余个体最小值的 ~5% → 视为 QC 剔除候选，先问用户确认是否剔除再算，不要默默改 n。
+
+**已交付的跨物种结论图**（2026-08-29，毕业论文用）：`celltype_stacked_agegroup.png`（堆叠柱）+ `celltype_boxplot_agegroup.png`（6 共有类型箱线 + Young vs EO Wilcoxon）。实测核心发现：人/猴 Astro 比例随年龄同向下调（人 16.8→5.5% p=0.002；猴 15.5→9.0% p=0.067）、OPC 同向下调（人 6.1→3.6 p=0.063；猴 6.5→2.1 p=0.010）、ODC 同向上调——跨物种一致性 = 专利"物种可代替性"第一证据画面。⚠️ 猴脑 Young 只有 4 个体（63 文库覆盖 21 个体，与张潇原文 23 只有差异），报告注明。
+
+## ⛔ 比例算完之后：组成是「中介」不是「混杂」——别把它当协变量调掉（2026-09-13 实测）
+
+**触发**：拿到各细胞类型比例随年龄/条件的变化后，下一步常想做「组织级 pseudobulk 可及性/表达 ~ 条件」的差异分析，并顺手把组成放进协变量"校正掉"。**这一步是陷阱。**
+
+**因果结构**：`条件(年龄/疾病) → 细胞类型组成 → 细胞内在信号`。组成位于因果链**中间**，是**中介（mediator）**，不是外生混杂（confounder）。
+⇒ 把中介塞进回归协变量 = **过度校正（over-adjustment）**，它承载的那部分真实总效应会被一并移除 —— **即使效应 100% 真实，也会出现"校正后信号全塌"**。塌掉不是证据，是过度校正的必然产物。
+
+**实测标本（人海马 40 个体 × 525,137 peak，同批数据只改模型）**：
+| 项 | 值 |
+|---|---|
+| 组成随年龄（个体级 Spearman） | Astro ρ=**−0.663**(p=3.2e-6)、OPC −0.518、Micro −0.445、ODC +0.442（ExN/InN ns） |
+| 方差分解：唯一归 Age | **4.5%** |
+| 方差分解：唯一归组成 | **96.8%** |
+| FDR<0.05 的 peak 数 | 模型 A `~Age` = **309** → 模型 B `~Age+CLR(组成)` = **3**（存留率 0%） |
+| 组成载荷四分位剂量-反应 | Q1 0.0122% → Q4 0.1165%（**9.6×**），校正后各层全部归零 |
+
+**判据（何时能调、何时不能）**：
+- ✅ **可以调**：组成与条件**无关**，只是批次/取样差异
+- ❌ **不可以调**：组成**随条件系统性变化**。**先跑诊断再决定**：各 celltype 占比 vs 条件的 Spearman + 方差分解（唯一归 A / 唯一归 B / 共享）
+
+**正确做法（按目的选）**：
+1. **要回答"细胞内在有没有变"** → **按细胞类型分层聚合**（每个 celltype 单独建 pseudobulk、单独检验）。让"组成变化"与"细胞内信号变化"在**不同层**里各自呈现，而不是硬压成一个数。
+2. **要回答"跨物种/跨组能不能迁移"** → 组成差异本身就是**结论的一部分**（两侧在测不同细胞 ⇒ 总效应不可迁移），应当**报出来**而不是校正掉。
+
+🔴 **两条禁止**：
+- 不要把"校正后塌掉"解读为"细胞内在信号不存在"；
+- 这个数若要进**论文/报告/专利等对外文件**，只写"**组分共线性这一技术问题的发现**"，**不要**把校正后数字当"效应为假"的证据上报（本项目该口径已被 L1 辩论裁决为 `modify`）。
+
+**实现坑**：CLR 遇**结构零** → `log(0) = -Inf` → 协变量矩阵 NaN → `det(crossprod(X)) = NaN` → **全部系数 NaN**（报错落点常伪装成"数据脏"）。CLR 前做 **0.5 零替换**：`Wp = W + 0.5; Pp = Wp/rowSums(Wp); clr = log(Pp) - rowMeans(log(Pp))`，并断言 `anyNA(Z) == FALSE && is.finite(det(crossprod(cbind(1, Z))))`。稀疏细胞类型在 n=40 个体下**必然出现零格**（实测 4/240），不是数据问题。
+
+**同源报告纪律**：产物路径**一律给绝对路径全串**（如 `E:/MemOmics-Agent/results/<sid>/results/组成校正_*.csv`）。只给 `results/xxx_*` 这样的片段，别的 agent/人会按字面去别的根目录搜 → 找不到 → 误判"数据不存在、查无来源"（实测发生）。反之，**核实"查无来源"类指控时第一步是核对搜索范围**，不要慌忙自证或认错。
+
+## ⛔ 五效应统计口径（2026-09-15 全表反推定稿，勿再凭记忆复述）
+
+用户问「**你这个五效应是怎么计算的**」时，**禁止凭 skill/memory 旧说法直接答**（skill 正文曾写「Wilcoxon 秩和 p」= 错的）。`effect5_d_v2.csv` 的真实口径已用**全表 1100/1100 格精确复现**锁定（`max|Δd|`=7.2e-15、`max|Δp|`=8.2e-15、`max|Δq|`=1.1e-14，均浮点精度内）：
+
+| 量 | 实现 | 备注 |
+|---|---|---|
+| 分析单位 | **个体（donor）级**：`(type × annotation_L3 × donor)` 格内取细胞打分均值 | 48 samplename → 24 donor（Y 10 / O 7 / OD 7）；`donor = str_remove(samplename, "_(Pre\|Post)$")` |
+| 效应量 d | `d = (mean_B − mean_A) / sp`，`sp = sqrt(((n1−1)s1²+(n2−1)s2²)/(n1+n2−2))` | **pooled-SD Cohen's d**，正 d = 后项组高 |
+| p | **Welch 双样本 t**（`scipy.stats.ttest_ind(x, y, equal_var=False)`） | ⛔ **不是** Wilcoxon（Aging 0.0553 ✗）、**不是** Student t（0.0369 ✗）、**不是** Brunner-Munzel（0.0344 ✗） |
+| q | BH 校正，**全表 1100 格一起**（22 基因集 × 10 亚群 × 5 效应） | 不是分效应/分亚群校正 |
+
+效应定义：`Aging = O_Pre − Y_Pre`｜`T2D = OD_Pre − O_Pre`｜`ExYoung = Y_Post − Y_Pre`｜`ExOld = O_Post − O_Pre`｜`ExT2D = OD_Post − OD_Pre`（图标签里的 `(O_Pre-Y_Pre)` 就是 A、B 的顺序）
+
+**⚠️ 两个必须主动披露的口径问题**（用户问口径时一并讲，别只报公式）：
+1. **运动前后三项（ExYoung/ExOld/ExT2D）是配对设计，但实现用的是独立 Welch t** —— 配对 t 会更有效力：ExOld p **0.4521 → 0.2874**、ExYoung 0.4272 → 0.4008、ExT2D 0.8341 → 0.8501。**结论方向不变（都 >0.05）**，但口径选择属用户决策：要提功效就切配对，要沿用既有图就保持独立**并显式声明**。
+2. **FDR 分母 = 1100**（全表），星号稀疏是分母大所致 —— 若按效应内 220 格校正，Aging 那格 q **0.289 → 0.082**（仍不显著，但更接近）。
+
+**反推/审计方法（用户问「这个数字怎么算的 / 有没有算错」时照做，别猜）**：
+- 具体配方 → `references/effect5-statistical-convention.md`（含变体排除表、donor 级聚合陷阱、BH 范围判定）
+- 可直接复跑的探针 → `scripts/verify_effect5_formula.py`（读 `E:/骨骼肌锻炼/MF_AUCell_meta.csv` + `effect5_d_v2.csv`，全表复算后逐格报 `max|Δ|` 与命中数）
+
+**纪律**：口径类问题**必须全表复现（1100/1100）后回答**，不许抽样/看头几行就下结论；skill 正文的历史说法也要用数据复核，不能直接复述。
+
+### 🔧 口径升级咨询：「独立用 Hedges' g + 运动前后用配对 d」怎么答（2026-09-25 用户提议，实测评估）
+
+触发：用户看完 FigA2_program_5effects 问「**计算方法到底怎么弄的？不应该是 Aging 和糖尿病独立比较（Hedges' g (grp2−grp1)），三组运动前后配对比较（Cohen's d2 (Post−Pre)），这两个方法怎么样？**」
+
+**必须答全的四点（缺一即答不完整）**：
+
+1. **现状一句话**（先给）：5 个效应用**同一套** pooled-SD Cohen's d `(mean_B−mean_A)/sp` + **Welch 独立 t**；d 无小样本 J 校正（严格说是 Hedges' d 不是 g）；三个运动效应是配对设计却按独立两组检验。
+2. **⚠️ d 侧几乎不改图（反直觉，必须说清）**：n1 = n2 时 pooled `sp` 与 d_av 的尺度定义**数值恒等** ⇒ **运动三列的 d 与"配对 d_av"数值相同，色块一位小数都不变；只有 p 会变**（配对 t：ExOld 0.4521→0.2874）。别把"换配对效应量"说成会让颜色更准——收益在检验功效，不在色块。
+3. **⛔ 配对效应量只能选 d_av，禁用 d_z**：`d_z = mean(diff)/SD(diff)`，`d_z = d_av/√(2(1−r))` ⇒ r=0.8 时**虚高 58%**。五面板共用一条 `TwoSlopeNorm(−3,0,3)` 色标，混入 d_z 会让运动列按个体内相关系统性偏色、与独立列不可比 = 直接产出错误视觉结论。
+4. **⛔ g 与 d 不能分面板混用**：`J = 1−3/(4·df−1)`（df=n1+n2−2；n1=10,n2=7 → J≈0.949，g≈0.95d）只缩 ~5%。若只给 Aging/T2D 上 g、运动三列留未校正 d ⇒ 同一色标下两族系统偏 5%，"跨列比深浅"不严谨，审稿人也会问"为什么只对两列做小样本校正"。**要么 5 列统一 g，要么全留 d 并在图注声明**。
+
+**回应纪律**：结论 + 依据（脚本行号 / 复现证据）→ **弹窗让用户拍板**（沿用现状 / 5 列统一 g / 三列全配对）→ **不擅自改脚本重跑**（口径属用户决策）。
+
+**溯源两跳（问"这张图怎么算的"必走）**：绘图脚本（`scripts/fig_A2_5effects_v3.R`）**只读预计算表**（`effect5_d_table.csv` / `effect5_d_v2.csv`）→ 公式在**表生成脚本**里（镜像 = `scripts/verify_effect5_formula.py`）。只读绘图脚本会得到"没有公式"的假象；交付时把两跳行号一并给出。
+
+完整推导（J 因子实算表、d_z 放大倍率表 r=0.0→0.9、四段式答法）→ `references/effect5-statistical-convention.md` §8。
+
+### 🔴 追问「为什么只有衰老显著 / 其他的为什么不显著」→ 先答**统计可达性**，不要用生物学搪塞（2026-09-15 实测）
+
+小样本秩检验的 p **离散、有下界**，与 BH 门槛比大小即可判定「有没有资格显著」：
+MWU 独立 n₁vs n₂ → `2/C(n₁+n₂,n₁)`；Wilcoxon 配对 n 对 → `2/2ⁿ`；门槛 = `α/m`（m = 检验族）。
+
+| 效应 | 设计 | n | 最小可达 p | 门槛 0.05/220 | q<0.05 | 钉在下界 |
+|---|---|---|---|---|---|---|
+| Aging | 独立 MWU | 10 vs 7 | **1.03e-4** | 2.27e-4 | **111/220** | 24 |
+| T2D | 独立 MWU | 7 vs 7 | 5.83e-4 | 2.27e-4 | 0/220 | 0 |
+| ExYoung | 配对 Wilcoxon | 10 对 | 1.95e-3 | 2.27e-4 | 0/220 | 0 |
+| ExOld | 配对 Wilcoxon | 7 对 | **1.56e-2** | 2.27e-4 | 0/220 | 19 |
+| ExT2D | 配对 Wilcoxon | 7 对 | **1.56e-2** | 2.27e-4 | 0/220 | 1 |
+
+⇒ 只有 Aging 的下界低于门槛 ⇒「只有衰老显著」是**设计层面的数学必然**；措辞写「该样本量下统计上不可检出」，
+⛔ 不写「无效应」。**「p 恰等于下界」的格数（24/19/1）是执行指纹**：既证明检验按该设计真跑了，也证明已饱和到顶。
+⛔ **禁止从结果表 `n₁==n₂` 推断配对/独立**（T2D 是独立 7vs7，不是配对；我据此误判过一次）——只能读**建表脚本的设计字典**。
+用户追问「你真的按独立和配对算了吗」时的三条证据（设计字典行号 / 输出表执行指纹 / 配对恒等式 `r>0` 且 `d_z/d_av≈1/√(2(1−r))`）
+与可引用文献库（Lakens 2013 PMID 24324449、Fay & Proschan 2010 PMID 20414472、Skovlund & Fenstad 2001 PMID 11165471、
+Button 2013 PMID 23571845、离散性 Golikov 2026）→ 姊妹 skill `deg-mixed-design` 的
+`references/nonparametric-discrete-floor-and-null-defense.md` ＋ 探针 `scripts/check_nonparametric_floor.py`。
+
+## ⛔ 打分图的色阶范围与图例（AUCell FeaturePlot，2026-09-21 用户诉求）
+
+用户在 UMAP 上展示 AUCell 打分（`Type_IIA_score` / `score*`）时明确要求：**颜色按该图真实 min→max 分配，图例刻度也显示真实分数值**。要点（完整配方 + 三套 Nature 级配色 hex + 导出 → `references/featureplot-score-color-scale.md`）：
+
+- 🔴 **绝对不要用 `+ scale_*_gradientn()` 覆盖色阶（2026-09-21 实测：整图变黑白）**：Seurat v5 的 `FeaturePlot` 返回 **patchwork**，且**内部把 feature 重缩放到 `1 ~ 2`**（`p[[1]]$data$<feature>` range = `1 2`，自带 colour scale `Limits: 1 -- 2`）。你若传 `limits = range(obj$score)`（如 0~0.974）→ 数据全部落在界外 → 默认 `oob = censor` 全变 **NA** → `na.value` 默认 **`grey50`** → **整张黑白灰图**；把 `oob` 改 `squish` 则全压到一端 → **单色图**。诊断三行：`class(p)`=patchwork / `range(p[[1]]$data$<feature>)`=`1 2` / `head(ggplot_build(p[[1]])$data[[1]]$colour)`=`grey50`（= 全 NA）。**`limits` 取得越"真实"，图越坏。**
+- ✅ **正确做法 = 只用 `cols=` 上色（它本身就按该 feature 的 min→max 线性映射），图例文字改内层 scale**：`cols = c("#440154", …, "#fde725")` + `order=TRUE` 上色后 → `sc <- p[[1]]$scales$get_scales("colour"); sc$breaks <- sc$limits; sc$labels <- sprintf("%.3f", range(obj$score, na.rm=TRUE)); sc$name <- "Score"`（ggplot2 scale 是 R6 引用语义，**原地改立即生效**，无需任何 `+ scale_*`）。**图例只标最低/最高 = `breaks` 给两个值**（给 5 个就显示 5 个刻度）；要字面 `"Min"/"Max"`（用户参考图样式）只改 `sc$labels <- c("Min","Max")`。
+- **交付前必须实跑 + 像素验证**：色阶/图例属版式关键项，不跑一遍就交付 = 把黑白图递给用户（原话"我现在拿到了黑白图。你煞笔吧"、"你要不模拟一下？"）。跑完用 PIL 取非背景像素主色，应是调色板两端 hex（`#fde725` + `#440154` 都在）；**主色出现 `#7f7f7f`(grey50) = 失败**（实测失败图 `#7f7f7f n=64,297`）。交付时附这一行结果，别让用户自己开图验。
+- **别依赖默认范围**：不给 `min.cutoff`/`max.cutoff` 时色阶范围随绘制数据浮动（换 subset / 换 slot 就变）；要锁范围用 `min.cutoff = rng[1]`、`max.cutoff = rng[2]`（`rng <- range(obj$score)`）——**cutoff 只管范围，不是图例标签的解法**，标签只能靠上面的内层 `sc$labels`。
+- `order = TRUE` 必开（高分细胞画在上层，否则被低分盖住看着"没上色"）。AUCell 分数尺度小 → 图例用 **3 位小数**。
+- 🔴 **逐图 min→max 与"跨图可比"不可兼得**：各图各自 `range()` 好看，但同一分数在 A/B 图颜色不同 → 要做**跨亚群/跨组/跨时间点比较**时，所有 panel 必须同一 `limits`（全体范围或统一 0–1）并在图注声明；两者都要 → **拆两套图**，禁止一套图混用。
+- 三套可直粘的连续配色（程序化提取的准确 hex）：viridis `#440154 #3b528b #21918c #5ec962 #fde725`｜Blues `#deebf7 #a7cee4 #58a1cf #1b6aaf #08306b`｜YlOrRd `#ffeda0 #febb56 #fd7034 #da141e #800026`。选型：要安全投刊 → viridis（色盲友好 + 灰度可分）；要干净 → Blues；要强调高值 → YlOrRd。
+- 配套已出产物：色卡 `results/memomics-b145cef6/figures/palette_card_featureplot.png` + 三张上色演示图 `demo_palette_{A_viridis,B_blues,C_ylorrd}.png`；配色可访问性自检脚本 `results/memomics-b145cef6/scripts/palette_accessibility_check.R`。
+- ⚠️ **配色探测/计算/出图合并成一次 `execute_r`**（用户问过"为什么这么久"）：R 内核冷启动 + 拆成 4 轮工具调用是延迟主因，与计算量无关——见 `platform-execution-pitfalls` 对应行。
+- 🔴 **先给最小版，别加码（2026-09-21 用户当场否决过度工程）**：`cols=` **本身就已按该 feature 的 min→max 线性映射**（第一个 hex = 最低分、最后一个 = 最高分），所以"让代码自己识别最低值配 #440154"**默认成立**；手算 `lim` 只为控制**图例标签**，`breaks = lim`（两个值）就是"只显示最低/最高"。**`keep.scale` 只在 `features=` 传多个 feature 时生效**，单 feature 传它是噪声参数。用户明确否决的加码项：`na.rm+floor/ceiling`、`oob=squish`、`na.value`、`guide_colourbar(barwidth…)`、`coord_fixed()`、`suppressWarnings()` 包覆盖警告——**都不进第一版**，`coord_fixed` 只在他提"图被拉变形"时再说。
+- 🔴 **回答纪律（本条覆盖所有"改我的绘图代码"请求）**：用户贴自己代码问"能不能改好看/给专业配色"→ 回复 = **代码块 + ≤2 句说明**；禁止附改动理由表格、原理长段、`ggsave` 导出代码、三套配色全展开、\"要不要我跑\"的追问。用户说"**搞那么复杂干什么？给我代码就可以**"= 硬信号 → 立即瘦身到最小版、不再解释。用户说"不需要跑"→ 只给代码，不动 R 内核、不建 task_plan、不 rail_review、不 debate。
+
 ## 支持文件
+- `references/donor-level-stats-and-submission-figure.md` — **投稿级多 panel 组合图配方 + 图注披露模板（2026-09-24 MF_2000 实测）**：Figure Contract（结论→panel map→导出契约）与**panel 选择纪律（宁删不凑，弱区分度的程序×亚群热图直接不做）**、CVD/灰度安全设计令牌（Okabe-Ito 三色灰度亮度表 + Pre/Post 用线型/形状而非浅深双重编码 + 家族内明度梯度 + **类别多的组成图改单色顺序矩阵而非堆叠柱**）、图内一行披露 footer 模板与必备字段、投稿图注 "Dataset and power limits" 段 + panel c 分母补丁、layout/导出常量（183×196mm 四格式）、**像素级验证基线值与失败对照**、L2 辩论闭环（首轮 modify → 落地 → 复核 support，避免把生产 QA 误当科学阻断）、交付物骨架 + 审稿应答三话术 + 抽样数据的诚实提示模板。触发词：\"发表级组合图\" / \"Nature 风格\" / \"拿去投稿\" / \"CVD/灰度安全\" / \"图注披露\" / \"MDE 措辞分档\"
+- `scripts/verify_figure_pixels.R` — **图件像素级验证探针（可复跑）**：`chk_px(path, expected=c(hex…))` 报 dark%/colored%/near-white%/content bbox/三分带 color%，并**逐预期 hex 计数**——任一为 0 即配色静默失效（本会话实测：键错配时 6 个组别色全 n=0、band3 colored=0.00%，而 dark 仍 3.70%、文件 1.18 MB 全部"正常"）。`chk_all()` 一次体检主图 + 补充图并给总 PASS/FAIL。**任何出图任务交付前必跑。**
+- `references/mf2000-publishability-triage.md` — **数据「能不能发文章」快速评估实测记录（MF_2000，2026-09-24）**：六步扫描表、比例/AUCell/marker 全量数字、**观测差 vs MDE 逐条判定**、四面硬伤（抽样 45 细胞/全 Female/已处理对象/SenMayo 零变化）、可复跑脚本与 `source()` 跑法、下次同类请求的检查单。触发词：\"能发文章吗\" / \"有没有亮点\" / \"数据够不够发\" / \"值不值得做\"
+- `references/featureplot-score-color-scale.md` — **打分图色阶 min→max 锚定 + 图例真实值标注 + 三套 Nature 级连续配色**（2026-09-21）：默认范围为何漂移、**§0 patchwork 陷阱（🔴 禁止 `+ scale_*_gradientn()` 覆盖：Seurat v5 内部把 feature 重缩放到 `1~2` → `limits = range(meta)` 全界外 → 默认 censor 变 NA → `grey50` 全灰黑白图（`oob=squish` 则单色）；正确写法 = `cols` 上色 + 原地改 `p[[1]]$scales$get_scales("colour")` 的 breaks/labels/name，图例只标两端给两个值，可写真实 min/max 或字面 "Min"/"Max"；交付前必实跑 + PIL 主色验证不得为 `#7f7f7f`）**、cutoff 只锁范围不控图例、被否决的过度工程清单（na.rm/取整/oob/na.value/guide_colourbar/coord_fixed/suppressWarnings）+ 回答纪律（改代码请求＝代码块＋≤2 句，不附理由表/原理段/导出代码）**、`keep.scale` 单 feature 无效、跨图可比性铁律（逐图 range vs 统一 limits 二选一）、viridis/Blues/YlOrRd hex 锚点与选型、发表级导出。触发词：\"FeaturePlot 颜色\" / \"从min到max\" / \"图例显示分数\" / \"AUCell 上色\" / \"Nature 级配色\" / \"UMAP 打分图\"
+- `references/effect5-statistical-convention.md` — **五效应 d/p/q 口径规格卡 + 计算口径反推方法（2026-09-15）**：全表 1100/1100 复现配方、五效应公式变体排除表（pooled d + Welch t 唯一吻合）、donor 级聚合的正确写法（`_(Pre|Post)$` 去后缀，**直接 pivot 会得 0 行**）、BH 校正范围判定（全表 vs 分效应差 3.5×）、配对设计误用独立检验的效力差、连带修正旧结论「运动只逆转代谢轴、对炎症轴无效」→ 实测运动三效应所有轴均未检出显著。触发词：\"五效应怎么算的\" / \"Cohen's d 怎么算\" / \"口径\" / \"p 值用的什么检验\" / \"数字怎么来的\"
+- `references/fig-ab-effect-matrix-family.md` — **FigA/B 效应矩阵图族规格卡（2026-09-15 用户要求「找回这两张图的代码，颜色都要对得上」时定稿）**：18 程序 + 4 身份 × {6组/5效应/亚群} 六图的**唯一生成脚本 `fig_split_v10.py`** + 逐图行号索引 + **配色/归一化逐条对齐（RdBu_r；5 效应 ±3 vs z-score ±2；`GROUP_COLORS` 六色 hex；CELL=1.0 无白缝、行分组 0.2、PANEL_GAP=1.8、标签 y=-0.15、dpi=300 png/pdf/svg）** + 数据依赖（MF_AUCell_meta.csv + effect5_d_v2.csv）+ helper 函数说明（agg_matrix/sub_matrix/eff_matrix/draw_panels…）+ 四项陷阱（Identity 色键 KeyError、**脚本名 ≠ 图名**、`_AUC` 后缀全白图、tight_layout 渲染分叉）+ **脚本溯源三步法实测证据链**。触发词：\"找回图的代码\" / \"颜色要对得上\" / \"FigA2 FigA3 的脚本\" / \"program_5effects\" / \"program_subcluster\"
 - `references/metascape-input-top100.md` — **FindMarkers → Metascape 输入表构建（2026-08-22）**：每亚群按 avg_log2FC 降序取 top100 基因，宽表导出（列头=亚群名、下排基因），FindMarkers 输出 `gene_type` 带残留制表符需清洗、utf-8-sig 编码防 Excel 乱码、不足 N 全取、用户未提显著性不加 p_val_adj 过滤、rail_review(post) 判"无图"时补辅助 boxplot（matplotlib 3.9+ `tick_labels=`）。触发词："metascape" / "top100" / "基因表" / "亚群基因宽表" / "findermarker 表格"
 - `references/subtype-vs-fiber-violin.md` — **慢肌类亚群 vs 纯纤维「自己显著高表达基因集」小提琴图**（2026-08-20）：5 亚群 × 3 纯纤维，口径 B 数据实算 avg Cohen's d 选 top1 + **raw p 星号 + 效应量 d 数值双标注**（用户拍板，非效应量分级星号）+ 细胞级 Mann-Whitney 伪重复局限披露 + 可复用脚本 `fig_C1_5sub_rawp_effsize.py`
 - `references/main-vs-pure-4sub-violin-template.md` — **「主角亚群 vs Pure I/IIA/IIX」4-sub 小提琴模板**（2026-08-20 用户指定 fig_C1_AMPK_violin_4sub.py）：单栏 90×62mm nature-figure 版、主角浅蓝+纯纤维标准配色、**星号按 Cohen's d 分级（≥0.8***/0.5**/0.3*/ns）非 p 值**、不截断 Y 轴、PNG+SVG+PDF+TIFF 四格式、5 亚群实例 d 值表 + 期望中位数逐项核对 + 删旧图=移入备份目录。⚠️ 与 subtype-vs-fiber 的 raw-p 星号是两套口径，用户说"按 fig_C1_AMPK_violin_4sub.py / 之前代码画"用本模板。
@@ -562,3 +780,140 @@ L1 辩论返回 `verdict: need_more_info` + `low` + `verdict_parse_error` 时是
 | human | skeletal_muscle | aging | 2026-08-17 | 08_final_3grp_cluster2_pfdr.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-17 | 09_explore_6grp_cluster3_p.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-17 | 10_final_3grp_cluster3_pfdr.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-22 | umap_subcluster_by_type_fixed_centered.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-22 | umap_subcluster_by_type_run.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-22 | umap_subcluster_by_type_run.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_AUCell_meta.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_build_proportion_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_build_proportion_table.py | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-09-24 | 02_significance_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_significance_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_plot_4grp_alltypes.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_plot_4grp_alltypes.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_extract_proportion_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_significance_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_plot_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_debate_required.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 06_l2_verdict_actions.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_score_senmayo_4grp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_verdict_actions.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_prep_composite_data.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-24 | 03_mde_fdr_wording.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-28 | recompute_fdr_sensitivity_v2.py | - | - |  |
+## ⛔ 供体级长表三坑 + MDE 功效校准 + 投稿级组合图收官（2026-09-24 MF_2000 实测）
+
+> 本节覆盖「样本级长表 → 统计 → 分档措辞 → 投稿级组合图」这条链上**实际踩过的坑**与**可直接复用的收官配方**。
+> 完整配方（Figure Contract / CVD-灰度安全设计令牌 / 图注披露模板 / 措辞三档 / 交付物骨架）→ `references/donor-level-stats-and-submission-figure.md`
+> 可复跑的图件验证脚本 → `scripts/verify_figure_pixels.R`
+
+### 1. ⛔ Pre/Post 配对键 = `base_id`，不是 `samplename`（`merge` 静默返 0 行）
+
+`samplename` 自带 `_Pre/_Post` 后缀 ⇒ 两组 key 集合**完全不相交** ⇒ `merge(a, b, by = "samplename")` 返回 **0 行**；
+下游 `wilcox.test(m$value.y, m$value.x, paired = TRUE)` 报 `not enough (non-missing) 'x' observations`
+（**报错在 wilcox，根因在 merge**，容易查错方向）。
+
+```r
+a <- d[d$type == "Y_Pre",  ]; b <- d[d$type == "Y_Post", ]
+m <- merge(a, b, by = c("base_id", "score"))   # ✅ base_id + 指标键；❌ by = "samplename"
+```
+⚠️ **多指标长表必须带指标键**（`score`/`unit`），否则同一 base_id 的多个指标做**笛卡尔积**，n 虚高、p 值全错。
+自查：`stopifnot(nrow(m) == 预期配对数 * 指标数)`。
+
+### 2. ⛔ 长表查值必须同时锁 `unit` + `g1` + `g2`（否则 `if()` 收到长度 ≥2 的条件）
+
+`g1 == "O_Pre"` 会同时命中 **O→OD_Pre** 与 **O→O_Post** 两行 ⇒ 查到长度 2 的向量 ⇒
+`if (!is.na(fdr) && fdr < 0.05)` 报 **`'length = 2' in coercion to 'logical(1)'`**（报错在 if，根因在查值）。
+
+```r
+pick <- function(tab, u, g1, g2, col = "p") {
+  r <- tab[tab$unit == u & tab$g1 == g1 & tab$g2 == g2, ]
+  if (nrow(r) != 1) stop(sprintf("lookup 非唯一: %s %s->%s (%d 行)", u, g1, g2, nrow(r)))
+  r[[col]][1]
+}
+```
+**通用规则**：任何"从统计长表取某个比较的值"都走这个唯一性断言函数，禁止裸写 `df$p[df$g1 == "X"]`。
+
+### 3. ⛔ 配对 Wilcoxon 的 V 与 n(n+1)/2 − V 给出**完全相同**的双侧 P ⇒ 不是 bug
+
+实测 `scoreIIa` 青年运动 **V = 36**、`scoreRegMyon` 青年运动 **V = 19**，两者 P 均为 **0.4316410**。
+n = 10 时秩和上限 = n(n+1)/2 = **55**，55 − 36 = 19 ⇒ 互为对称，双侧 P 必然相同。
+**先做这个 V 对称性核对**（`MF2000_young_exercise_check.csv`），**不要急着当计算 bug 改代码**；
+核对通过后如实说明"这是两个指标在同一组都无响应的真实结果"。
+
+### 4. ⛔ MDE（最小可检出差）Monte Carlo：配对分支必须返回 `p < alpha` 而不是 p 值
+
+```r
+# ❌ 错：配对分支漏写比较 → mean() 得到"p 值均值"→ 永远 <0.80 → 配对 MDE 恒为 NA
+if (paired) suppressWarnings(wilcox.test(x2[1:n2], x1[1:n1], paired = TRUE)$p.value)
+else        suppressWarnings(wilcox.test(x2[1:n2], x1[1:n1])$p.value) < ALPHA
+# ✅ 对：把 < ALPHA 提到 if-else 外面
+if (paired) suppressWarnings(wilcox.test(x2[1:n2], x1[1:n1], paired = TRUE)$p.value) < ALPHA
+else        suppressWarnings(wilcox.test(x2[1:n2], x1[1:n1])$p.value) < ALPHA
+```
+**别用正态近似算比例的 MDE**（比例的 `1/n_cell` 离散阶梯会让近似严重低估）：正确做法 = 每样本 `rbinom(n_cell, p0)`
+阶梯化抽样 + 跑**真实** Wilcoxon 检验 + 取 80% 功效最小可检出差（`nboot = 1000`）。
+
+**实测对照（MF_2000 抽样版 45 核/样本，MC 1000 次/格）**：
+
+| 比较 | 基线中位 | 观测差 | MDE(80%) | 判定 |
+|---|---|---|---|---|
+| RSS Young→Old（独立） | 2.22% | **+8.89 pp** | 6 pp | 观测差 ≥ MDE → 可支持 |
+| Pure Type IIA Young→Old（独立） | 14.44% | −10.00 pp | 10 pp | **边界 → 降为提示性** |
+| RP_high(II) Young→Old（独立） | 11.11% | −4.44 pp | 10 pp | 受限 |
+| Specialized MF Old Pre→Post（配对） | 4.44% | +4.45 pp | 10 pp | 受限 → 未检出（功效不足） |
+| Pure Type IIX Old Pre→Post（配对） | 20.00% | −15.56 pp | 14 pp | 超 MDE 但 FDR 0.359 → 提示性 |
+
+### 5. ⛔ 措辞三档 = "FDR × 观测差/MDE" 联合判定（只看 FDR 会过度断言）
+
+| 档 | 判据 | 允许写法 |
+|---|---|---|
+| 🟢 显著 | FDR < 0.05 **且** 观测差 ≥ MDE | 「显著升高/降低」+ P + FDR + 效应量 |
+| 🟡 提示性 | FDR ≥ 0.05 但 P < 0.05，**或** FDR < 0.05 但观测差 < MDE | 「呈…趋势（P=…，FDR=…）」+ 注明功效受限 |
+| ⚫ 未检出差别 | P ≥ 0.05 | 「未检出差别（该样本量下功效不足）」——**禁写「无差别」** |
+
+**禁用词**：更年轻 / 衰老负担降低 / 无差别 / 稳健下降 / 逆转 / 运动诱导。
+**必做 FDR 家族敏感性**：家族内 BH 与**合并全局 BH** 都算都报（本例 50 + 70 = 120 格，5 个命中在全局校正下**全部存活**，q 0.012–0.038）
+⇒ 这是应对"家族划分是否事后挑选"最硬的一句证据，务必写进方法与图注。
+
+### 6. ⛔ `rail_review(pre)` 的 `required_packages` 只列极小集（防误报拦截执行）
+
+`check_env` 的包库只收录 ggplot2 / patchwork / Seurat / dplyr / ggpubr 等少数包；
+**ggrepel / scales / svglite / ragg / egg / stringr 一律误报 MISSING**（装在 `E:/R-libs` 等非默认库路径），
+会让 `rail_review(pre)` 返回 `should_proceed=false` **真实拦截执行**（本会话连续被拦 2 次）。
+**处置**：先用 `tryCatch(library(p))` 实测（`requireNamespace` 会假阳性），确认可加载后
+**`required_packages` 只填 `ggplot2` + `patchwork`**，脚本内照常 `library(ggrepel)` 等。
+**通用原则**：required_packages 只列脚本实际 import 且 check_env 认识的包，不为"可能用到"付拦截代价。
+
+### 7. ⛔ R 形参默认值自引用 → `promise already under evaluation`
+
+```r
+B <- 300
+f <- function(x, B = B) ...     # ❌ 默认值引用同名形参 → 递归解析自身
+f <- function(x, nboot = 300)   # ✅ 换名
+```
+报错文本：`promise already under evaluation: recursive default argument reference or earlier problems?`
+`ncell = NC` 是安全的（NC 是外部变量、非同形参名），但 `B = B` / `deltas = deltas` 这类必炸。
+
+### 8. ⛔ 命名向量配色键错配 → 箱体填充静默为 NA（图能出、不报错、全是空白箱）
+
+```r
+GRP_HUE <- c(Young = "#009E73", Old = "#0072B2", T2D = "#D55E00")   # ❌
+# 实际 type 取值是 Y_Pre/O_Pre/OD_Pre，sub("_(Pre|Post)$","",g) 得 "Y"/"O"/"OD" → 查表 = NA
+GRP_HUE <- c(Y = "#009E73", O = "#0072B2", OD = "#D55E00")          # ✅ 键 = 真实前缀
+stopifnot(!any(is.na(GRP_HUE[grp_of(GRP)])))                        # ✅ 必须加这道断言
+```
+**这类静默失效只能靠像素级逐 hex 计数抓出来**（`scripts/verify_figure_pixels.R`：任一组别色 `n = 0` 即命中）。
+本次实测：v2 修复前 6 个组别色**全部 n=0**、band3 colored=0.00%（而 dark 仍有 3.7%，因为框线/坐标轴还在——**光看"非白%"会漏判**）。
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| not enough (non-missing) 'x' observations（源自 wilco | samplename 粒度 = 样本（含 Pre/Post 后缀），配对键必须是 | 样本级长表的 Pre/Post 配对必须按 base_id 合并且要带上 score 键：merge |
+| Error in source(...) : subscript out of bounds [Ke | 未定（需定位）。候选：① celltype 实际取值可能为 'Type I'/' | 待定位：改用 tryCatch+traceback 逐段定位（怀疑点：纤维型名称与 'TypeI'/ |
+| 错误于`[.data.frame`(d, d$type == cmp$g1, c("base_id" | 比例表长表列名为 Proportion / Prop_imp0（按口径列 col | 配对分支里 d 只有 Proportion/Prop_imp0 列，却按 v1/v2 列名取子集 → |
+

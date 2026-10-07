@@ -70,3 +70,10 @@
 
 - 结论先行：先一句话说"方案成立但独权重心要移"再给证据表
 - 用户会把方案拿给师兄审：文档必须自包含、有对比依据、有可执行下一步
+
+## 八、2026-09-04 复核补记（现有技术身份核实 + 法理澄清）
+
+- **PMID 识别（已核实）**：40425825 = de Mendoza A. "Genome synteny reveals hidden enhancer conservation"，Nat Genet 2025 Jun（**News & Views 评论，单作者**）。上文第1条现有技术 "Phan et al." 标 PMID 40425826、标题 "Conservation of regulatory elements with highly diverged sequences"（研究文章），其第一作者 "Phan" **未经独立核实**——News & Views 作者 ≠ 它评述的研究文章作者。引用进专利背景技术前必须先点开 40425826 确认真实第一作者，不要盲信 "Phan"
+- **专利真空区确认（已检索）**：Google Patents 检索 "跨物种增强子保守性"（8 条全无关）、"染色质可及性+非人灵长类+衰老"（183 条前 10 全无关）→ 无命中，该精确组合是真实专利空白区
+- **法理澄清（用户 2026-09-04 纠正）**：发表学术文章 ≠ 阻断改进专利。文章只是现有技术（prior art），不阻止做实质改进后申请改进型/从属专利。真正杀死创造性的是改进是否**非显而易见（A22.3）**："换个物种重跑一遍"=显而易见不授权；"发明一种可替代性评分/筛选方法"=有创造性可授权。判断标准是改进的非显而易见性，不是"该领域有没有文章/专利"
+- **检索实操**：Google Patents 用 browser_navigate + URL 编码查询（`%22phrase%22`），不要用 curl XHR（接口已失效）；URL 别带 `after=priority:...` 或空 `assignee=`（触发 UTF-8 解码错误）

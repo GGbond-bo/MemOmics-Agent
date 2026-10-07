@@ -35,10 +35,58 @@
   "parameters": {},
   "detailed_description": "根据用户的研究问题、物种、数据类型，自动确定分析模块，生成 Mermaid 树状技术路线图 + 每步目的/工具/预期产出对照表\n\n适用场景: 任何组学分析开始前的方案设计\n\n难度: intermediate\n\n触发提示: \"帮我设计研究方案\" / \"怎么分析\"\n\n别名: 研究方案, 实验方案, 技术路线, 分析路线",
   "when_to_use": "用户询问\"怎么分析\"、\"用什么方法\"、\"实验方案\"、\"技术路线\"时自动触发",
-  "proven_params": [],
-  "proven_script": null,
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "DEG_research_plan_v1.md + plan_md_to_docx.py",
+      "params": "{\"mode\": \"plan_only_no_analysis\", \"input\": \"task2/results/*.md 实测报告（deg_audit_report/DEG_5contrasts_summary/new_vs_old_deg_summary）\", \"output\": \"task2/results/DEG_research_plan_v1.md (16718 B)\", \"converter\": \"scripts/plan_md_to_docx.py\"}",
+      "date": "2026-09-29",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "输出 DEG 下游研究方案文档（不执行分析）：13 节含实测家底、三条全局红线（共享项伪相关/DiD 不干净/集合大小伪造重合）、Step1.5 口径统一、Step2 方向感知重合分析（逆转改用距离法）、Step3 富集背景=检测基因、脚本落地清单、文献依据 11 篇、Limitations 7 条、缺口清单。markdown 已落盘；docx 转换因缺 python-docx 待定。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "probe_python_docx_interpreters",
+      "params": {
+        "cmd": "for P in .venv/Scripts/python.exe python python3; do $P -c import docx",
+        "finding": ".venv 无 python-docx；系统级 python(3.12.10, C:/Users/23136/.../Python312) 已有 docx"
+      },
+      "date": "2026-09-29",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "探测 python-docx 可用解释器：.venv/Scripts/python.exe 缺失；系统 python 与 python3（同为 Python312 全局安装）均 HAS_DOCX。结论：md→docx 转换改走系统 python，无需安装新包（符合铁律 29 先查用户环境）。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "plan_md_to_docx.py",
+      "params": {
+        "interpreter": "C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe",
+        "input": "DEG_research_plan_v1.md (16718 B)",
+        "output": "DEG_research_plan_v1.docx (46933 B)",
+        "cmd": "python results/memomics-afd2d418/scripts/plan_md_to_docx.py"
+      },
+      "date": "2026-09-29",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "md→docx 转换脚本运行成功：84 段落 / 14 表格 / 46,933 B。实现要点：管道表格转 Light Grid 表（首行加粗 8.5pt）、标题 4 级、代码块 Consolas 8.5pt、引用斜体灰、行内 **加粗** 简易解析、中文 Microsoft YaHei（含 eastAsia rFonts 设置）。"
+    }
+  ],
+  "proven_script": "plan_md_to_docx.py",
   "error_count": 0,
-  "success_count": 0,
+  "success_count": 3,
   "generated": true,
   "trigger_keywords": [
     "技术路线",
@@ -50,5 +98,8 @@
     "研究计划",
     "分析方案"
   ],
-  "trigger_level": "RED"
+  "trigger_level": "RED",
+  "user_prefs": {
+    "last_used_script": "plan_md_to_docx.py"
+  }
 }

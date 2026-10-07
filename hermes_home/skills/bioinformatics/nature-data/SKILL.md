@@ -56,3 +56,11 @@ Data Availability statement and a separate `Code availability` section after
 it and before references; check reviewer access, precise restrictions,
 repository/identifier quality and the Software Submission Checklist for newly
 developed central code.
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-25 | data_availability_statement_human_skeletal_muscle_scRNA | - | - |  |

@@ -23,5 +23,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "segment_with_nn_unet",
+    "segment with nn unet",
+    "segment",
+    "unet"
+  ],
+  "trigger_level": "YEL"
 }

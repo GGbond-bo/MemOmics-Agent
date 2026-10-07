@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "华大智造 MGI dnbc4tools v2.1.3 完整单细胞比对与分析流程（rna run / atac run / vdj run / multi + 输出解读）",
   "success_count": 0,
-  "error_count": 0,
+  "error_count": 1,
   "proven_script": "",
   "proven_params": "",
   "user_prefs": {
@@ -12,6 +12,19 @@
     "platform": "仅Linux x86-64（闭源二进制）；Windows本机不硬跑，提供WSL2/集群/云服务器"
   },
   "notes": "2026-08-28 基于官方仓库 MGI-tech-bioinformatics/DNBelab_C_Series_HT_scRNA-analysis-software tag 2.1.3 完整调查创建；索引构建见 dnbc4tools-index-building；官方文档事实核录见 references/dnbc4tools-v213-official-facts.md",
+  "errors": [
+    {
+      "timestamp": "2026-09-01 03:58",
+      "error_type": "runtime_error",
+      "message": "F盘仅剩161G，2200单库输入93G gz，PISA parse解压中间fq已占64G且继续增长，预计撑不完一个库；排队脚本atac_queue_next.sh未真正挂载（ps只有atac_run_batch.sh单库实例），且完成标志路径错误（实际outdir/{name}/output/多一层）",
+      "root_cause": "输出目录选在接近满盘的F盘(3.7T用3.5T)，dnbc4tools ATAC流程中间文件巨大（reads r1/r2/cb各~25G+）；排队脚本启动方式有误或未持久化；脚本路径假设错误",
+      "fix_applied": "",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    }
+  ],
   "when_to_use": "用户提到 DNBelab/dnbc4tools/华大BGI/华大基因 单细胞 RNA 或 ATAC 的比对/分析流程",
   "trigger_keywords": [
     "dnbc4tools",

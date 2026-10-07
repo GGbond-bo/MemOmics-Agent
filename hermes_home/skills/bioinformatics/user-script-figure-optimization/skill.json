@@ -23,5 +23,25 @@
   "trigger_keywords": [
     "按 nature 优化」「帮我改一下我的脚本"
   ],
-  "when_to_use": "用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样"
+  "when_to_use": "用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样",
+  "success_count": 1,
+  "proven_script": "16_deg_updown_en_recolor.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "16_deg_updown_en_recolor.py",
+      "params": "{\"old_method_colors\": {\"up\": \"#E8A33D\", \"down\": \"#4EA8A0\"}, \"new_method_colors\": {\"up\": \"#B2182B\", \"down\": \"#2166AC\"}, \"hatch\": \"//\", \"lang\": \"en\", \"font_chain\": \"Arial->Helvetica->DejaVu Sans\", \"data_source\": \"task2/results/new_deg_contrast_overview.csv\"}",
+      "date": "2026-09-29",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "DEG 上下调柱状图重出：老方法换独立配色（琥珀/青绿）+ 斜纹，全部标签改英文；4 图落盘（fig_new_deg_updown_bar / fig_deg_new_vs_old 各 png+pdf），复用既有统计量未重算，像素自检通过"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "16_deg_updown_en_recolor.py"
+  }
 }

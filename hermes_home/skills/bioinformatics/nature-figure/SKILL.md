@@ -225,10 +225,21 @@ save_pub_r <- function(plot, filename, width_mm = 183, height_mm = 120, dpi = 60
 | human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v4.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v5.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-19 | fig_A3_CNS_v5.R | - | - |  |
+| - | - | - | 2026-09-24 | pkg_check.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_fig_composite_nature.R | - | - |  |
+| - | - | - | 2026-09-24 | pixel_check_composite.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_fig_composite_nature_v2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_fig_composite_nature_v2.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 17_cns_deg_landscape.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 17_cns_deg_landscape.py | - | - |  |
+| human | skeletal_muscle | exercise | 2026-09-29 | 18_deg_landscape_variants.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 32_freescale_v2_top_left_optimized.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| 图形静默失效：所有箱体无填充（colored=0.00%），但脚本不报错、图正常输出 | 用命名向量做分组配色映射时，键与数据里的真实分组名不匹配 → R 返回 NA 而 | 配色命名向量的键必须与 sub() 后的真实分组前缀一致：type 取值是 Y_Pre/O_Pre/ |
+| promise already under evaluation: recursive defaul | R 的 promise 惰性求值：形参默认值表达式里引用了同名形参（B = B） | 函数形参名与全局变量同名导致默认值自引用：mde_mc <- function(..., B = B |
 | 错误: 不是所有的abs(yc) < 1e-09都是TRUE 停止执行 | R 的 y 轴向上增长 → 按 yc=0 起累加会把 AXES 第一个轴放到图底 | 行布局从底向上累加改为从顶向下递减时，循环里对每个轴都减了一次 GAPY（含最后一个轴），导致总高多 |
 | readxl 未装；ComplexHeatmap requireNamespace=TRUE 预期在 | execute_r 持久内核 .libPaths 未包含 E:/R-libs/R | 改用 openxlsx::read.xlsx 读表；手动 .libPaths 加入 E:/R-lib |
 

@@ -114,3 +114,11 @@ A config template is provided in `templates/literature-push-template.md`.
 3. **Duplicate creep**: Classic papers will reappear; maintain a dedup index
 4. **Wiki safety**: Pipeline writes to `raw/` only; wiki integration is manual
 5. **Cron locality**: Hermes cron is local, not cloud — machine must be running
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-25 | lit_track.py | - | - |  |

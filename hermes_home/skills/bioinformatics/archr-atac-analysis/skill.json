@@ -17,5 +17,51 @@
     "archr atac analysis",
     "archr"
   ],
+  "success_count": 3,
+  "proven_script": "peak_calling_defaults_check.R",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "doublet_umap.R",
+      "params": "lsi_sub=lsi_mat[idx,1:10], n_neighbors=30, min_dist=0.3, spread=2",
+      "date": "2026-08-27",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Human 40 ATAC UMAP computed from LSI embeddings (30K subsample of 265909 cells). DoubletScore range: 0-192, DoubletEnrichment 0-9.1. UMAP successful."
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "官网站点查阅: 12.2 Calling Peaks w/ Macs2",
+      "params": "流程: addGroupCoverages → addReproduciblePeakSet(pathToMacs2, peaksPerCell, reproducibility) → getPeakSet → addPeakMatrix",
+      "date": "2026-08-29",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "官网12.2确认官方peak calling流程：必须先addGroupCoverages生成pseudo-bulk覆盖，再addReproduciblePeakSet用MACS2（pathToMacs2可指定）做reproducible peak calling，两阶段（先per-group reproducible peaks，再union合并），默认reproducibility=2指至少2"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "peak_calling_defaults_check.R",
+      "params": "formals(ArchR::addGroupCoverages), formals(ArchR::addReproduciblePeakSet)",
+      "date": "2026-08-29",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "实测 ArchR 官方默认参数：addGroupCoverages minCells=40/maxCells=500/maxFragments=25e6(不是8e7)/minReplicates=2/maxReplicates=5/sampleRatio=0.8；addReproduciblePeakSet peakMethod=Macs2/reproducibility=\"2\"/peaksPer"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "peak_calling_defaults_check.R"
+  },
   "when_to_use": "ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案…"
 }

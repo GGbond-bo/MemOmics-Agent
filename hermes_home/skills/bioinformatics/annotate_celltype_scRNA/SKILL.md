@@ -136,10 +136,33 @@ When you need annotate celltype scRNA analysis
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | hippocampus | aging | 2026-08-26 | zx_vs_human40_marker_intersect.py | - | - |  |
+| human | hippocampus | aging | 2026-08-26 | zx_vs_human40_annotation.py | - | - |  |
+| - | - | - | 2026-08-27 | annotation_8classes_genes.py | - | - |  |
+| - | - | - | 2026-08-27 | annotation_8classes_genes.py | - | - |  |
+| - | - | - | 2026-08-27 | inspect_archr_rds.R | - | - |  |
+| - | - | - | 2026-08-27 | inspect_archr_qc.R | - | - |  |
+| - | - | - | 2026-08-27 | human_cluster_qc.R | - | - |  |
+| - | - | - | 2026-08-27 | cluster_batch_check.R | - | - |  |
+| - | - | - | 2026-08-27 | human_annotation_apply.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | inspect_monkey_rds.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | inspect_monkey_qc.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | inspect_monkey_embeddings.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_annotation_purity.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_anno8_map_fixed.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_umap_plots.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_annotation_verdict.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_final_annotation.R | - | - |  |
+| monkey | hippocampus | aging | 2026-08-27 | monkey_annotation_full.R | - | - |  |
+| human | hippocampus | aging | 2026-08-27 | extract_8classes_genes.py | - | - |  |
+| - | - | - | 2026-08-27 | annotate_human_30clusters.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | annotate_mf2000_dotplot.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| source('scripts/annotate_mf2000_dotplot.R') 报 inva | ① 普通 pdf()/svg() 设备不认识 windowsFonts 注册的中 | 两处修复：① 中文图在 Windows 下 base pdf()/svg() 设备不支持自定义字体名 |
+| map8[cc$predictedAnno] 命名向量索引 factor 按整数索引而非名字匹配，导 | R 中命名向量用 factor 索引时按整数位置取值，必须 as.charact | map8[as.character(cc$predictedAnno)] 显式转字符再按名字匹配 |
 | *(accumulated from runs)* | | |
 
 - **Source**: Biomni

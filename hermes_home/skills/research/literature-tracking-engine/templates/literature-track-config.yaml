@@ -1,0 +1,107 @@
+# 文献追踪配置模板 — 复制到 <library>/config.yaml 后按主题改
+# 换研究方向只改本文件（queries / keywords / subtopics / weights），引擎代码不用动。
+# ⚠️ 中文注释会被 yaml.safe_load 正常读取；保持 UTF-8 编码。
+version: 1
+updated: 2026-09-25
+
+profile:
+  field: "skeletal muscle aging single-cell"        # 英文主题词（用于元数据与子代理提示）
+  field_zh: "骨骼肌衰老单细胞组学"                   # 日报标题里显示
+  subtopics:                                        # 打分时 topic 维的判据，写清"什么算切题"
+    - 骨骼肌肌纤维类型与衰老
+    - 肌卫星细胞 / 肌干细胞衰老与再生
+    - 肌少症（sarcopenia）分子与细胞机制
+    - 单细胞 / 单核转录组图谱（scRNA / snRNA）
+    - 单细胞多组学（snATAC/多模态）与空间转录组
+    - 细胞衰老（senescence）与 SASP
+    - 运动 / 营养 / 药物干预对肌肉转录组的影响
+    - 跨物种比较（人 / 小鼠 / 非人灵长类）
+
+search:
+  sources: [europepmc, pubmed, openalex]     # 三源均零 API key；europepmc 是唯一带摘要+日粒度过滤
+  lookback_days:
+    initial: 120      # 首次建库窗口（拉一批基线文献进来）
+    daily: 7          # 日常窗口（每周/每天跑用这个）
+  candidate_pool_size: 40                     # 候选池上限（引擎会截断到该数）
+  final_selection_count: 5                    # 每次精读/出日报的条数上限
+  date_field: firstPublicationDate
+  sort: newest_first
+
+keywords:
+  queries:                      # 多查询扩召回：逐条检索后由引擎跨源合并去重
+    - "skeletal muscle aging single-cell RNA sequencing"
+    - "single-nucleus transcriptomics skeletal muscle aging sarcopenia"
+    - "muscle stem cell satellite cell aging single cell"
+    - "skeletal muscle senescence single-cell atlas"
+    - "single-cell multi-omics skeletal muscle aging exercise"
+  must_match_any:               # 🔴 硬门槛：标题+摘要必须命中至少一个（防跨领域串味）
+    - skeletal muscle
+    - skeletal myo
+    - muscle stem cell
+    - satellite cell
+    - sarcopenia
+    - myonuclei
+    - myonuclear
+    - myofiber
+    - myofibre
+    - myogenesis
+    - muscle regeneration
+    - muscle aging
+    - aged muscle
+    - muscle atrophy
+  include:                      # 命中即加分，仅用于候选池排序（relevance_hint），不用于过滤
+    - skeletal muscle
+    - muscle stem cell
+    - satellite cell
+    - sarcopenia
+    - single-cell
+    - single-nucleus
+    - snRNA-seq
+    - scRNA-seq
+    - muscle aging
+    - senescence
+  exclude:                      # 命中即剔除（除非同时命中 strong_keep）
+    - cardiac muscle
+    - myocardium
+    - myocardial
+    - cardiomyocyte
+    - smooth muscle
+    - bladder
+    - uterus
+    - drosophila
+    - zebrafish
+    # 首跑后按噪声样本补：myasthenia / neuromuscular junction / 非模式物种名 …
+  strong_keep:                  # 白名单：命中则可豁免 exclude（保护跨物种/边界命中）
+    - skeletal muscle
+
+scoring:
+  weights:                      # 六维，总分 100；引擎会校验上限并重算总分（防虚高）
+    topic: 35        # 契合度（<10 直接否决）
+    method: 20       # 方法学价值
+    journal: 15      # 期刊/来源质量
+    network: 10      # 关注作者/机构（不是名气）
+    applied: 10      # 实用价值（protocol / 数据集 / benchmark）
+    archival: 10     # 长期存档价值
+  score_scale_display: 10        # 展示为 ⭐ x/10
+  gate: "topic < 10 → 直接否决"
+
+tiers:                          # 笔记目录名（写全名，禁止简写成 A/B/C）
+  A_核心主线: "直接服务主线，值得全文精读"
+  B_章节支撑: "支撑某一章节/子问题"
+  C_工程背景: "背景性/综述性"
+  D_方法借鉴: "方法学可借鉴"
+  E_暂存低优先: "相关但优先级低，暂存（含被门控否决的噪声样本）"
+
+delivery:
+  target: local                 # local = 只落盘；需要推送再填通道
+  format: short_digest
+  push_channel: ""              # 留空 = 不推送；例如 feishu:<chat_id>
+  language: zh
+
+archive:
+  root: "E:/MemOmics-Agent/results/<session_dir>/literature"
+  raw: "raw"
+  notes: "notes"
+  index: "index.json"
+  runs: "runs.jsonl"
+  write_wiki: false             # 只写 raw/ 与 notes/，不动知识库/wiki（保守默认）

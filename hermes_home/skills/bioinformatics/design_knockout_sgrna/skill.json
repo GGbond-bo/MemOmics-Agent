@@ -22,5 +22,6 @@
     "design knockout sgrna",
     "knockout",
     "sgrna"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

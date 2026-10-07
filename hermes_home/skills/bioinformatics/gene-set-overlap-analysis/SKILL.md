@@ -59,6 +59,12 @@ print(((df.regulation == "Up") == (df.coef > 0)).all())   # 必须为 True
 | **same-celltype** | 基因在**同一**亚群里两边都显著 | 严谨的"同一细胞类型内被逆转" |
 | **指定亚群子集** | 只在某几个亚群内算 | 与已有图族口径对齐（如只算 8 个 MF 亚群） |
 
+> ⚠️ **行数 ≠ 基因数（报数前先定口径）**：这类 DEG 表按 `(celltype, gene)` 一行 ⇒ 同一基因在**多个亚群各占一行**，
+> 表里 `regulation` 的计数是**行数**，不是**唯一基因数**。实测同一份 5 对比表的 `Aging` sheet：
+> **22,709 行 Up / 469 行 Down，但只有 6,679 个唯一基因**（22,709 ≈ 6,679 基因 × 多亚群重复）。
+> 同一张表在不同会话里被报成「Aging↑ 22,709」和「Aging↑ 6,571」—— **两个数都对，口径不同**。
+> 汇报一律写清 `X 行（= Y 唯一基因）`；口径混用会让下游的期望值 `E=|A|×|B|/N`、Jaccard、覆盖率全部算错。
+
 **规范**：默认用 gene-level（不擅自丢细胞群体），**同时在汇总表里附一行"仅 N 个亚群"的对照**，
 并在图内写明作用域（`gene-level (significant in any of 10 cell populations); universe N=7,743`）。
 实测：本例 8-MF 口径与全 10 群体口径的**三组交集结果完全相同（7 / 2）**，
@@ -206,6 +212,16 @@ def save(fig, stem):
 `regulation | gene | <对比A>_subclusters | <对比A>_max_absCoef | <对比A>_minFDR | <对比B>_… | n_groups_sig`
 —— 亚群列表用 `;` 连接（一个基因可在多亚群显著），不要只留一个亚群。
 
+### 口径澄清请求（「先别跑」）的响应形状
+
+| 用户说 | 交付 | **不做** |
+|---|---|---|
+| "先别跑，我只是想先把口径和思路理清楚" | **只读核实真实数字**（一条命令读已有 CSV/表做计数，如交集 = 7 上 2 下 = 9；更严的"同亚群"口径 = 6 对）→ **口径候选对比表**（输入 / 基因数 / 统计功效 / 定位，标出推荐档）→ 一句"等你定了再动手" | 不跑分析、不建 task_plan、不弹意图确认表单、不新增产出 |
+| "不要太复杂，简单点" | 结论数 + 清单 + 产物路径；口径说明给**推荐项 + 一句理由** | 不写方法学长文、不多套方案、不追问"要不要我再…" |
+
+> 交集很小（n=2~10）时的完整口径（含「通路层面比较」这条正向替代 + 逐对比功效实测表 + 先别跑协议）
+> → `references/tiny-intersection-list-enrichment.md`
+
 ---
 
 ## 八、坑表
@@ -232,6 +248,12 @@ def save(fig, stem):
   → 手绘 3 集合/2 集合韦恩（含内置版式自检）→ 输出计数表与明细表。
 - `references/overlap-vs-chance-and-venn-layout.md` —— 完整实录：骨骼肌 5 对比（universe 7,743）
   的覆盖率陷阱定量证据、三处标签缺陷的 OCR 发现 → 包围盒修复全过程、几何推导与实测参数。
+- `references/tiny-intersection-list-enrichment.md` —— **交集很小（n=2~10）时下一步富集怎么做**：
+  ① 为什么 tiny list 不能跑 ORA（实算功效上限：universe 7,743 下 n=7 需 3~6/7 基因同属一条通路才过 BH；
+  n=2 基本无解）② 也绝不能按亚群拆开挑（每群剩 0~2 个 + 选择偏倚）③ 正确做法 = **GSEA pre-ranked 主分析
+  + 描述性注释表（不写 P 值）**，附带交集本身的期望值 fold/P ④ fgsea/msigdbr 参数坑（勿传 `eps=0`、
+  列名是 `pval`、msigdbr 新版 `collection`/`subcollection`）⑤ `minGSSize≥15` 预注册 + 全家族 BH
+  ⑥ 用户的中英双语 3 点式交付模板。
 - 相关 skill：`analysis-output-validity-gates`（通吃型集合的上游诊断 + 效应量阈值门）、
   `platform-execution-pitfalls`（出图迭代触发循环检测的处置）、
   `academic-figure-skill` / `cns-visualization`（发表级出图规范）。

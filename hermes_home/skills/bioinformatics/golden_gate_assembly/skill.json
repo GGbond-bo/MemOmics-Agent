@@ -16,5 +16,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "golden_gate_assembly",
+    "golden gate assembly",
+    "golden",
+    "gate",
+    "assembly"
+  ],
+  "trigger_level": "YEL"
 }

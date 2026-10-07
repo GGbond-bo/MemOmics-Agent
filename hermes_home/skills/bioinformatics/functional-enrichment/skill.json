@@ -141,11 +141,245 @@
       "approved": false,
       "custom_script": false,
       "result": "pytest 验证证据落盘：用 -p no:warnings 干净跑项目 venv pytest，输出写入 pytest_verify_go.log 并 echo PYTEST_EXIT 捕获退出码。经验：Windows 下 pytest -q 统计行被警告刷屏/缓冲吞掉，用 -p no:warnings + 输出重定向 + echo $? 三件套拿干净证据。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v6_final_YlOrRd_words_only.R",
+      "params": "YlOrRd 5档(#FFF7EC,#FDD49E,#FC8D59,#D7301F,#7F0000), 0-10, cluster_rows=FALSE, cluster_cols=FALSE, angle_col=45, legend右下横放",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "用户满意 v6 纯词条版。v7 规划: 每亚群按|logq|取top2词条(68->30行), 共享词条合并(->21行), 词条末尾括号附2-3基因, 画布按15列x21行协调(13.5x15.8cm, 1:1.17)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "rebuild_clean_v3.py + write_clean_v3_xlsx.py + fig_signature_integrity_check.py",
+      "params": "{\"源文件\":\"E:/骨骼肌锻炼/pathway_score.xlsx\",\"解析法\":\"zipfile+XML直解(openpyxl无法打开损坏文件)\",\"表头映射\":\"A=Class B=Signature C=Annotation D=Genes\",\"Class填充\":\"空值延续上一行(合并单元格)\",\"基因切分\":\"TAB/逗号/分号\",\"输出\":\"pathway_score_CLEAN_v3.xlsx(24行×203列宽表)+长表csv\",\"图\":\"gene_signature_integrity.png/svg@300dpi\",\"中文字体\":\"Microsoft YaHei挂载\"}",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "从原始 pathway_score.xlsx 重建完整 CLEAN_v3：22 签名/1902 基因，逐集基因数校验 22/22 PASS，回读 xlsx 一致。坏版 CLEAN_v2 仅 1158 基因（10/22 签名被截断，丢 744 基因），已备份为 .broken_bak_20260915_193004.xlsx。产出宽表 xlsx 20,126 B + 长表 csv 222,759 B"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "signature_jaccard_axes.py + write_axis_classification.py",
+      "params": "{\"指标\":\"两两Jaccard=|A∩B|/|A∪B|\",\"聚类\":\"scipy linkage average on 1-Jaccard\",\"分类效度\":\"轴内均值 vs 轴间均值\",\"中文字体\":\"Microsoft YaHei\"}",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "18 基因集 Jaccard 矩阵 + 层次聚类验证 6 轴分类：轴内均值 0.0424 vs 轴间 0.0064（分离度 6.6 倍，支持分类）；轴内最高配对 RegMyon↔Denervation 0.182、Inflammatory↔TNFA-NFKB 0.146、SenMayo↔TNFA-NFKB 0.091 全部落在拟分类内部。层次聚类(5类)独立重现④收缩轴与⑤炎症轴。跨轴最高 Str"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "12_kegg_YPost_vs_OPost.R + 12b_kegg_validation.R + 12c_kegg_collapse_plot.R",
+      "params": "{\"deg_test\":\"FindMarkers wilcox\",\"ident1\":\"Y_Post\",\"ident2\":\"O_Post\",\"min.pct\":0.1,\"logfc.threshold\":0,\"sig\":\"padj<0.05 & |avg_log2FC|>=0.5\",\"enrich\":\"clusterProfiler enrichKEGG hsa\",\"universe\":\"8061 detected genes\",\"pvalueCutoff\":1,\"qvalueCutoff\":1,\"pseudobulk\":\"per-sample CPM-log2 + Wilcoxon (10 vs 7 samples)\",\"redundancy\":\"Jaccard>0.5 greedy collapse\"}",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_2000.rds 人骨骼肌 MF 亚群 Y_Post vs O_Post：细胞级 406 DEG(314上/92下)；KEGG 名义p<0.05 62条/FDR<0.05 33条；上调以 OXPHOS/Glycolysis/Thermogenesis 及被重复注释的疾病名通路(Prion/Parkinson/Alzheimer Jaccard 0.7-0.9)为主；样本级 pseudobul"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF_2000.R",
+      "params": "readRDS + meta/assay 探查",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_2000.rds 结构确认: Seurat 51227 features x 2132 cells, assays=RNA+SCT, 48 samplename, type=Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post(共2132), celltype=TypeI/TypeII/RSS, annotation 5类, annotation_L3 10亚群;"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "env_pkg_and_design_probe.R",
+      "params": "library(tryCatch) 实测 + meta 结构探查",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R内核(4.5.3+E:/R-libs)包实测: OK=msigdbr/limma/edgeR/DESeq2/Seurat/ggplot2/data.table; MISSING=fgsea/clusterProfiler/org.Hs.eg.db/enrichplot(与check_env缓存判断矛盾,以library()为准)。样本结构: 48样本=Y10/O7/OD7供体 x Pre/Pos"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_pseudobulk_limma_A_B_C.R",
+      "params": "install.packages(fgsea, repos=Bioc 3.21, type=win.binary, lib=E:/R-libs/R-4.5.3)",
+      "date": "2026-09-24",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "fgsea 1.34.2 二进制下载成功但加载失败: 缺依赖 fastmatch（警告\"没有''fastmatch''这种依赖关系\"），requireNamespace(fgsea)=FALSE。修复路径=先装 fastmatch(CRAN win.binary) 再重装 fgsea。同时落盘 Step1 脚本 scripts/01_pseudobulk_limma_A_B_C.R（方案A lim"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "install_fgsea_fix.R",
+      "params": "install.packages(fastmatch CRAN win.binary) → install.packages(fgsea Bioc3.21 win.binary) → requireNamespace=TRUE",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "修复成功: fgsea 1.34.2 安装完成并可通过 requireNamespace 加载（根因=缺 fastmatch 依赖）。GSEA 可用官方引擎，无需自实现回退。同时落盘 scripts/02_gsea_atrophy_oxphos.R（三口径 Hallmark/KEGG/GO:BP + 目标通路提取 + 敏感性 + 出图）"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_gsea_atrophy_oxphos.R",
+      "params": "source 02_gsea_atrophy_oxphos.R",
+      "date": "2026-09-24",
+      "score": 5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Step2 首跑报错: do.call(rbind,...) 'arguments imply differing number of rows: 41, 0' —— Hallmark 口径返回41通路(有效), 但 KEGG(C2:CP:KEGG_LEGACY) 或 GO:BP(C5) 口径返回 0 通路 → msigdbr 新版 API 的 collection/subcollection 名"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "msigdbr_api_probe.R",
+      "params": "msigdbr_collections() 诊断 + 各口径调用实测",
+      "date": "2026-09-24",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "msigdbr 26.1.0 诊断: msigdbr_collections() 确认集合名 H/C2:CP:KEGG_LEGACY/C5:GO:BP 均有效; 实测返回 H=50集合(7331行)/KEGG_LEGACY=186集合(12899行)/GO:BP=7538集合(622397行) — 集合获取无问题, 故 Step2 报错(41,0)必在 run_one 合并逻辑/引擎调用。修复=每"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fgsea_minrepro.R",
+      "params": "fgsea 最小复现: 内置 examplePathways vs 本数据 x (默认eps / eps=0)",
+      "date": "2026-09-24",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "根因确认: fgsea 1.34.2 正常(内置例586行; 本数据Hallmark默认eps 41行 OK; 内置例 eps=0 也OK), 失败只在本数据 + eps=0 组合 → eps=0 触发 fgsea 内部 'differing number of rows 41,0'。修复=去掉 eps=0 用默认 eps(1e-10)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_fiber_stratified_qc_recheck.R",
+      "params": "分层GSEA(纤维类型x阈值15, donor块, dupCor) + nPermSimple 1000vs10000 + 全GO:BP家族BH(3970集合) + Jaccard重叠 + 细胞数QC",
+      "date": "2026-09-24",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Step3 关键结论: ①TypeI占比 Young42.1% vs Old42.9% (Wilcoxon p=0.819) → 纤维构成无差异 ②分层后OXPHOS仍下调: TypeI(28样本,rho=0.161) NES=-2.09 GOBP/-1.69 HALLMARK/-2.13 KEGG padj<=0.0028; TypeII(31样本,rho=0.117) NES=-2.80/-2"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "env_probe_GO_engine.R",
+      "params": "{\"probe\": \"execute_r kernel .libPaths() + find.package + library() tryCatch\", \"found\": \"kernel default libs = E:/R-libs/R-4.5.3 + C:/Program Files/R/R-4.5.3/library\", \"missing_in_default\": [\"clusterProfiler\",\"org.Hs.eg.db\",\"enrichplot\",\"DOSE\"], \"fix\": \".libPaths(c(.libPaths(),'C:/Users/23136/R/R-4.5.3-library')) → 四包 library() 全 OK\"}",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GO 富集引擎定位：clusterProfiler/org.Hs.eg.db/enrichplot/DOSE 装在 C:/Users/23136/R/R-4.5.3-library（legacy user lib），execute_r 内核默认 .libPaths() 不含该路径 → library() 报 there is no package called。修复=内核内显式追加该库路径后四包全"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_deg_YPost_vs_OPost.csv",
+      "params": "复用 memomics-32a6e57c/results/deg_YPost_vs_OPost.csv; 列=gene,avg_log2FC,p_val,p_val_adj,direction,sig",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "DEG 输入核对: 8081 检出基因(universe); sig 列 1422 DEG (Up_in_Y_Post 1027 / Down_in_Y_Post 395), 阈值 padj<0.05 & |log2FC|>=0.5; 弹窗提示的 406(314/92) 与文件不一致, 以文件为准"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "11_go_YPost_vs_OPost.R",
+      "params": "DEG=memomics-32a6e57c/results/deg_YPost_vs_OPost.csv(细胞级Wilcoxon, padj<0.05 & |log2FC|>=0.5); ont=BP/CC/MF; universe=检出基因ENTREZID; simplify(cutoff=0.7, Wang)",
+      "date": "2026-09-24",
+      "score": 0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "脚本已写好落盘；首次后台运行疑似卡死(PID 59900, RSS 2335MB, 281s 零CPU/IO)。本记录为落盘留档，卡死根因排查中。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "",
+      "params": "",
+      "date": "2026-09-24",
+      "score": 3,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "12_go_plot 脚本已落盘；首次调用因 R 无 exec() 函数报错，改用 source() 重跑。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "12_go_plot_YPost_vs_OPost.R",
+      "params": "",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "12_go_plot 8秒跑完：BP_up 3584词条/182 FDR显著，BP_down 3165/178；去冗余 up 15→5、down 15→9；出12个图文件(4图×png/pdf/svg)+8张表。根因修复=放弃 simplify(Wang)，改 Jaccard 集合运算。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "ora_power_for_small_lists.py (execute_python 内联计算)",
+      "params": "N=7743(universe, 未过滤全表); n_list=7(UP)/2(DOWN); BH 假设检验数 M=10000; 超几何单尾精确检验(无 scipy，纯 math.comb)",
+      "date": "2026-10-03",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2 基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。"
     }
   ],
-  "proven_script": "pytest_verify_go.log",
-  "error_count": 1,
-  "success_count": 8,
+  "proven_script": "ora_power_for_small_lists.py (execute_python 内联计算)",
+  "error_count": 3,
+  "success_count": 26,
   "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
   "doc_source": "official",
   "prerequisites": {
@@ -155,7 +389,7 @@
     "description": "需要DEG结果"
   },
   "user_prefs": {
-    "last_used_script": "pytest_verify_go.log"
+    "last_used_script": "ora_power_for_small_lists.py (execute_python 内联计算)"
   },
   "errors": [
     {
@@ -168,6 +402,49 @@
       "tissue": "skeletal_muscle",
       "script": "",
       "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 19:24",
+      "error_type": "syntax_error",
+      "message": "<text>:1:106: unexpected symbol  1: exec(open(\".../11_go_YPost_vs_OPost.R\", encoding=\"utf-8\").read",
+      "root_cause": "在 execute_r 的持久 R 内核里沿用了 execute_python 的 exec(open().read()) 调用惯例，R 语言无此语法",
+      "fix_applied": "R 内核不支持 Python 的 exec(open(...).read()) 写法，改用 R 原生 source(\"路径\", encoding=\"UTF-8\") 执行脚本文件",
+      "species": "",
+      "tissue": "",
+      "script": "11_go_YPost_vs_OPost.R",
+      "severity": "low"
+    },
+    {
+      "timestamp": "2026-09-24 19:38",
+      "error_type": "timeout",
+      "message": "R 进程 PID 59900 在 19:25 后零 CPU/IO、RSS 2335MB 卡死，随后进程消失；产出停在 results/go_{BP,CC,MF}_{up,down}.csv（19:24-19:25），figures/ 为空，go_BP_simplified_*.csv / go_BP_all_updown.csv / go_BP_top10_jaccard_up.csv 全部缺失。",
+      "root_cause": "enrichGO 用 pvalueCutoff=1/qvalueCutoff=1 返回全部受检词条（BP_up 表 925KB、BP_down 754KB，数千词条），随后对其调用 clusterProfiler::simplify(measure=\\\\\"Wang\\\\\") —— GOSemSim 需对全部词条两两算语义相似度（O(n²)）+ 加载 GO.db 注释，在数千词条规模上呈指数级放大，导",
+      "fix_applied": "拆分脚本：ORA 结果已落盘 → 不重跑 enrichGO；第 5 步 simplify(measure=\\\\\"Wang\\\\\") 改为「先按 p.adjust<0.05 过滤出显著子集再 simplify」，或直接改用纯集合运算的 Jaccard 去冗余（快，无 GOSemSim 依赖），出图用显著子集。",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "11_go_YPost_vs_OPost.R",
+      "severity": "high"
+    }
+  ],
+  "trigger_keywords": [
+    "富集分析",
+    "GO",
+    "KEGG",
+    "pathway",
+    "functional-enrichment",
+    "functional enrichment",
+    "functional",
+    "enrichment"
+  ],
+  "trigger_level": "RED",
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.5,
+      "evidence": "L1 辩论裁判（stats_design 场景：单细胞统计审稿人）rubrics: pseudoreplication_control=1, independence_replicates=2, decision_readiness=3, redundancy_assessment=6, multiplicity=7 → verdict=modify。缺口：无供体级 pseudobulk/混合模型复现，细胞级 Wilcoxon p/FDR 不能当确证证据。",
+      "date": "2026-09-24 20:42:39"
     }
   ]
 }

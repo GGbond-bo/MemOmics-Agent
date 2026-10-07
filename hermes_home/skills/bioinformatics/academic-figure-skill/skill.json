@@ -9,8 +9,18 @@
   "memomics_module": "",
   "chains_from": [],
   "chains_to": [],
-  "tags": ["visualization", "figure", "plotting", "publication", "journal"],
-  "aliases": ["academic-figure", "academic figure", "学术图"],
+  "tags": [
+    "visualization",
+    "figure",
+    "plotting",
+    "publication",
+    "journal"
+  ],
+  "aliases": [
+    "academic-figure",
+    "academic figure",
+    "学术图"
+  ],
   "trigger_level": "RED",
   "trigger_keywords": [
     "学术图",
@@ -33,10 +43,247 @@
   ],
   "when_to_use": "用户提供出图脚本（未强调 CNS 级）时默认用本 skill 检查出图规范并优化；用户未提供脚本但要专业/期刊级出图时用本 skill；脚本不成熟时优先识别脚本类型并匹配本 skill 的 29 种图型规范。CNS 级（发表级/Nature style/SCI figure）才用 nature-figure。",
   "dependencies": {
-    "python": ["matplotlib", "seaborn", "numpy", "pandas"],
-    "r": ["ggplot2", "patchwork", "ComplexHeatmap", "svglite", "ragg"]
+    "python": [
+      "matplotlib",
+      "seaborn",
+      "numpy",
+      "pandas"
+    ],
+    "r": [
+      "ggplot2",
+      "patchwork",
+      "ComplexHeatmap",
+      "svglite",
+      "ragg"
+    ]
   },
-  "success_count": 0,
-  "proven_params": [],
-  "user_prefs": {}
+  "success_count": 16,
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "10_make_figures_permutation_core.py",
+      "params": "{\"fig4_fix\": \"legend -> fig.legend(loc='lower center', bbox_to_anchor=(0.5,-0.055), ncol=4) 移出绘图区; suptitle 四方法横评->三基线横评\", \"fig2_fix\": \"弃矩匹配 gamma 拟合曲线，改为只呈现归档统计量（obs 6285 / null_mean 258.4 / SD 1075.14 / ratio 24.3228 / p 0.005 / n_units 525137），数据源 results/置换检验统计.csv\", \"new_scripts\": [\"scripts/10_make_figures_permutation_core.py\", \"scripts/11_export_permutation_stats.R\", \"scripts/10_gen_disclosure_docx_v12.py\"], \"table1\": \"7 -> 9 方法（补 基线②b meta|Z|>=3.92 5534/1890=34.2%/精度24.9%、基线③b 仅猴侧|Z2|>=12 67/35=52.2%/精度52.2%）\", \"table3\": \"重写为 12 步，出图拆分为 04_make_figures_v10.py(图1/4/5) + 10_make_figures_permutation_core.py(图2/3)\", \"docx\": \"v12 = 1,262,442 B / 85 段 / 6 表 / 5 图\"}",
+      "date": "2026-09-12",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "交底书 v12 定稿：5 张附图全部重出并复核（图4 遮挡消除，9 个数值标签全可读含 58.7%(827/1409)；图2 改为只呈现归档统计量不再绘制拟合曲线；图3 数据源改为交付目录两份 CSV）。表1 7->9 方法、表3 重写 12 步与磁盘一致。验收 38 PASS / 0 FAIL；陈旧字符串（四方法横评/07_age_shuffle.R/08_gen_disclosure_docx"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v12_words_only.R",
+      "params": "Wi=8.5in, Hi=11.5in, fontsize_row=8, fontsize_col=9, angle_col=45, border_color=NA, color=#FFF7EC→#FDD49E→#FC8D59→#D7301F→#7F0000",
+      "date": "2026-09-15",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v12 GO 热图：48词条×15亚群，YlOrRd五档，0-10截断，pheatmap不聚类，四边padding(T1.0/R1.8/B1.8/L2.8cm)，自绘grid图例右下横放。产出PNG/PDF/SVG三格式。用户要求继续按CNS标准评审优化。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "cleanup_deprecated_figures.sh",
+      "params": "rm -f 作废图",
+      "date": "2026-09-15",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "清理 v7/v8 作废图（v7 cellwidth单位坑致热图压缩成点、v8 内核设备污染致全白）+ _check_* 临时检查图，共 8 个文件。保留 v2-v12 正式版本。为 v13 CNS 规范版清理环境，消除 rail_review 的空白图误报。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_split_v10.R",
+      "params": "{\"figsize\":\"16.5x8.4 / 9x12 / 9x6 in\",\"dpi\":300,\"formats\":\"png,pdf,svg,tiff\",\"palette\":\"RdBu_r 11 anchors -> 256 LUT(linear RGB + round-half-even)\",\"norm\":\"TwoSlopeNorm vmin=-2/0/2 (z), -3/0/3 (Cohen d)\",\"index_rule\":\"PAL256[floor(b*256)+1]\",\"par\":\"mai from subplots_adjust (inches), ps=9, xaxs='i', yaxs='i', xpd=NA\",\"cell\":\"1x1 no gap, PANEL_GAP=1.8, group gap 0.2\",\"package\":\"zero dependency (base R only)\"}",
+      "date": "2026-09-15",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "fig_split_v10.py 成功转为零依赖 R 版 fig_split_v10.R（336 行，base graphics 手工矩形复刻）。6 图 × 4 格式（png/pdf/svg/tiff @300dpi）全部产出，输出到 figures/R_version/。核验：矩阵口径 R vs Python 逐格 max|Δ|=1.0e-14(Z6)/1.4e-14(ZS)/5.1e-15(d"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_transposed_v2.R",
+      "params": "SUBS=10亚群(y轴); PROGRAM=18基因集(x轴); 6轴分类(Artifact/Metabolism/Nutrient/Contractile/Inflamm-aging/Decompensation); RdBu_r 11锚点LUT256; 色块0.42in正方形; x标签6.2pt 45° adj=c(1,1)锚定列中心; y标签7.6pt水平; 画布10.10x6.44in @300dpi; 格式png/pdf/svg/tiff",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 转置版出图成功：亚群移至 y 轴(10行)、基因集在 x 轴(18列)、标签缩小(6.2pt/7.6pt)且锚定各自列中心；Artifact 轴(Stress index)轴间间隔加大到 0.7 单位做视觉隔离(依据 L2 辩论共识)；4 格式 @300dpi 全部落盘非空(148855/9289/233881/580208 B)；OCR 核验 18 个基因集标签全部在画布内无裁切(x"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_transposed_v3.R",
+      "params": "{\"programs\": \"17 (scoreStress 已移除)\", \"axes\": 5, \"cell_in\": 0.42, \"canvas_in\": \"9.39x6.44\", \"dpi\": 300, \"formats\": \"png/pdf/svg/tiff\", \"labels\": \"x 6.2pt 45deg 锚定列中心; y 7.6pt 水平对齐行中心\", \"palette\": \"RdBu_r 11-anchor LUT256, vmin/vc/vmax=-2/0/2\", \"matrix\": \"亚群均值->行内z (ddof=0)\"}",
+      "date": "2026-09-15",
+      "score": 9.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 v3 转置版出图成功（删除 Stress index）：10 亚群(y) x 17 基因集(x) x 5 轴。4 格式 @300dpi 落盘两处（figures/ 根目录 + figures/R_version/）：png 140279 B / pdf 9158 B / svg 230209 B / tiff 529142 B，manifest 8 文件全部存在非空。OCR 核验：17"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A2_5effects_v2.R",
+      "params": "PROGRAM=17集(移除scoreStress); AXES=5轴(Metabolism/Nutrient/Contractile/Inflamm-aging/Decompensation); 行组间隙=0.25; panels=EFFECTS 5; n_sub=10; 着色=Cohen's d TwoSlopeNorm(-3,0,3); 星号=FDR q<0.05; canvas=16.5x8.4in; 四格式@300dpi",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA2_program_5effects 按 5 轴机制分类重画完成：17 程序 × 5 效应面板 × 10 亚群（矩阵 17×50），8 文件（figures/ 与 figures/R_version/ 各 png/pdf/svg/tiff）全部非空（png 281661B / pdf 14818B / svg 429232B / tiff 1889950B），根目录交付名同步覆盖、旧版归档"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "check_axis_effect_summary.R",
+      "params": "输入=effect5_d_v2.csv; 分组=5 轴(Metabolism4/Nutrient4/Contractile3/Inflamm-aging4/Decompensation2); 统计=轴×效应(5×5) 的 median|d|/max|d|/q<0.05 格子数与占比; 对照=运动三效应 生物轴 vs 炎症轴",
+      "date": "2026-09-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA2 配套定量核验完成。核心：Aging 效应最强（Metabolism 轴 34/40 格子 FDR<0.05，中位|d|=2.66；Inflamm-aging 9/40，1.27）；T2D 全轴近零（中位|d| 0.24-0.58，0 显著）；运动三效应（ExYoung/ExOld/ExT2D）在所有轴均弱（显著格子 0-10%，中位|d| 0.24-0.94）。运动「对炎症轴无效」不成"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A2_5effects_v3.R",
+      "params": "canvas 16.5x8.4in; CELL=1.0; PANEL_GAP=1.8; mai=c(0.13*8.4,0.16*16.5,0.08*8.4,0.12*16.5); 17 programs / 5 axes; d in [-3,0,3] TwoSlopeNorm; 300dpi png/pdf/svg/tiff; axis(2) at=NROWS-0.5-row_pos (行中心); draw_group_stripes 移至 draw_cbar 之前",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA2 五效应图 v3：修正①基因标签改为行中心对齐（原用单元格底边，偏下半格）②分类色块渲染 bug——v2 中 draw_group_stripes 在 draw_cbar 之后调用，而 draw_cbar 的 par(fig=c(0,1,0,1),new=TRUE)+plot.window(0,1) 已把坐标系重置为整幅画布 0-1 窗口，导致色块 rect(x=-1.25,y=0..1"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A2_5effects_v4.R",
+      "params": "{\"engine\":\"scipy+pandas\",\"independent\":\"Hedges_g_J_correction + Mann-Whitney U\",\"paired\":\"d_av + Wilcoxon signed-rank\",\"fdr\":\"BH within effect (22 scores x 10 subtypes = 220 cells/effect)\",\"norm\":\"TwoSlopeNorm(-3,0,3)\",\"formats\":\"png/pdf/svg/tiff@300dpi\",\"canvas\":\"16.5x8.4 in\"}",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA2 五效应图【效应量口径修正版 v4】：按正确统计口径全套重算重画。独立比较 Aging/T2D 改用 Hedges' g（含 J=1-3/(4df-1) 小样本校正）+ Mann-Whitney U；配对比较 ExYoung/ExOld/ExT2D 改用 d_av（与独立 d 同尺度）+ Wilcoxon signed-rank（原 v3 全效应用合并 SD Cohen's d + We"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "16_deg_updown_en_recolor.py",
+      "params": "{\"figures\":[\"fig_new_deg_updown_bar\",\"fig_deg_new_vs_old\"],\"labels\":\"English_only\",\"new_method_colors\":{\"up\":\"#B2182B\",\"down\":\"#2166AC\"},\"old_method_colors\":{\"up\":\"#E8A33D\",\"down\":\"#4EA8A0\"},\"old_hatch\":\"//\",\"yscale\":\"symlog linthresh=1\",\"dpi\":300,\"formats\":[\"png\",\"pdf\"],\"counts_source\":\"reused new_deg_contrast_overview.csv (no recompute)\"}",
+      "date": "2026-09-29",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "两张 DEG 上下调柱状图按要求重出：①全部标签改英文（Arial/Helvetica，无 CJK、无 tofu）；②老方法（pseudobulk dreamlet）由原来的 55% alpha 淡版改为独立色对 琥珀#E8A33D(up)/青绿#4EA8A0(down) + \"//\" 斜纹非颜色冗余编码，灰度打印可分辨；新方法保持语义红#B2182B/蓝#2166AC。四文件输出（2 图 x p"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging+diabetes",
+      "script": "42_volcano5_8sub_FINAL.R",
+      "params": "{\"input\":\"D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx (md5=a45d67ee 与 task2/results 副本同源)\",\"canvas\":\"14x7 inch @300dpi = 4200x2100 px\",\"subclusters\":8,\"categories\":\"down_high/up_high/mid_sig_black (无 not_sig)\",\"n_points\":{\"Aging\":16915,\"DM\":269,\"Ex_Young\":99,\"Ex_Old\":1322,\"Ex_DM\":226}}",
+      "date": "2026-09-30",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5 张最终版火山图全部生成：4200x2100px，8 色块各 486px，标签墨迹最宽 425px(占比0.87) 无溢出无跨块；灰类像素 0（图例 OCR 直读仅 3 项：Down/Up/Moderate Sig）；PDF 字体内嵌校验 FontFile×2 通过。点数与过滤表逐一对上（16915/269/99/1322/226）。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "37_MF_v7_arrows_vertical.py",
+      "params": "{\"MF_VARIANT\": \"center\", \"STEM_OVERRIDE\": \"fig_deg_updown_8sub_MF_v7b_arrows_at_center\", \"PANELS\": \"Aging/DM/Ex_Young/Ex_Old/Ex_DM\", \"SUB\": 8, \"xscale\": \"symlog(linthresh=1)\", \"export\": \"png400/pdf/svg/tiff600\"}",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "定位 fig_deg_updown_8sub_MF_v7b_arrows_at_center 的生成脚本 = scripts/37_MF_v7_arrows_vertical.py（a/b 两版共存于同一脚本，靠 MF_VARIANT=right|center 开关切换）。已抽出 v7b 独立可跑版 fig_deg_updown_8sub_MF_v7b_arrows_at_center.py（硬编"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "44_mef2c_locus_from_gtf.py",
+      "params": "{\"figsize\": \"7.2x3.15\", \"dpi\": 300, \"font\": \"DejaVu Sans\", \"formats\": \"png,svg,pdf\", \"label_anchor\": \"ha=right at gene.start-0.02Mb\", \"footnote_y\": 0.052, \"linespacing\": 1.5}",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "44_MEF2C_locus_from_GTF 图内文字全部英文化并重出（PNG 102KB / SVG 96KB / PDF 35KB，1896x832px @300dpi）；OCR 实证零中文残留、两行脚注均完整渲染、无截断无重叠；同时同步一份到会话主 figures/ 目录。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "47_mef2c_deg_heatmap.py",
+      "params": "",
+      "date": "2026-10-01",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "诊断 47 图 SVG 几何：viewBox 367.2x396pt；文字分组 y=22/30(标题)、y=332(列标题)+y=339(mean行)、y=358-387(5行脚注)；热图区 y约40-310；发现列标题与mean行仅隔7pt、脚注5行字号偏小"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "44d_mef2c_as1_audit_map.py",
+      "params": "{\"script\":\"44d_mef2c_as1_audit_map.py\",\"figure_mm\":\"183x138\",\"dpi\":300,\"panels\":3,\"panel_B_labels\":\"markers 1/2/3 + 2-lane banner (y=0.92 / 1.03) + ylim 1.16\",\"panel_A_3prime_text\":\"moved inside axes y=0.035\",\"panel_C_rows\":10,\"selfcheck\":\"text bbox pairwise, texts=74, overlapping_pairs=0, eps=4px2@300dpi\",\"formats\":[\"png\",\"svg\",\"pdf\"]}",
+      "date": "2026-10-02",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "44d 审计核对图文字重叠修复完成。根因三处：①Panel B 三段长坐标标签与顶部加粗横幅同处 y≈1.02/1.095 层叠且 ①(15.9%)与②(33.3%)横向贴住；②Panel A \"3' ends ~750 kb apart\" 置于轴外 y=-0.02 压住 x 轴刻度线；③Panel C 未列三段坐标。修复：Panel B 改为轨道上数字标记 1/2/3 + 虚线引线 + 轴内两条"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "44d_mef2c_as1_audit_map.py"
+  },
+  "proven_script": "44d_mef2c_as1_audit_map.py",
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-09-15 20:35",
+      "error_type": "logic_error",
+      "message": "错误于V[ni, pi * n_sub + ci + 1]: 量度数目不正确 (incorrect number of dimensions)",
+      "root_cause": "R 作用域覆盖：脚本里矩阵变量名 d/q 与后面的循环变量/列名冲突——`for (d in OUTS)` 把 Cohen's d 矩阵 d 覆盖成目录字符串（OUTS 是目录向量），随后 draw_grid(d, ...) 收到字符标量，V[ni, j] 双下标对非数组对象 → \"量度数目不正确\"。同类命名冲突还有 `q`（列名同为 q）。",
+      "fix_applied": "矩阵变量改名为 DM/QM（不与环境变量、循环变量、CSV 列名重名）；循环变量改 outdir；data.frame(dir=) 同步改。重跑 exit 0，17×50 矩阵、8 文件全部非空。",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "fig_A2_5effects_v2.R",
+      "severity": "medium"
+    }
+  ]
 }

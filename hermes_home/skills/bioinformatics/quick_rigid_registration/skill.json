@@ -22,5 +22,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "quick_rigid_registration",
+    "quick rigid registration",
+    "quick",
+    "rigid",
+    "registration"
+  ],
+  "trigger_level": "YEL"
 }

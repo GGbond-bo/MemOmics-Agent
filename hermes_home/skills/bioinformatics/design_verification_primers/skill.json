@@ -27,5 +27,6 @@
     "verification primers",
     "verification",
     "primers"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

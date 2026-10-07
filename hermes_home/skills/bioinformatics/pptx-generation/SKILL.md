@@ -615,3 +615,16 @@ Review the code for these common layout issues before saving:
    Gold accents and typography provide visual hierarchy — no dark slides.
 10. **Mixing colors randomly.** Stick to the Phylo palette. Gold is the accent,
     near-black for headings, warm gray for secondary elements.
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | general | agent_review | 2026-10-05 | build_agent_paradigms_ppt.py | - | - |  |
+| - | - | - | 2026-10-05 | build_agent_paradigms_ppt_v2.py | - | - |  |
+| - | - | - | 2026-10-05 | build_agent_paradigms_ppt_v2.py | - | - |  |
+| - | - | - | 2026-10-05 | build_agent_paradigms_ppt_v2.py | - | - |  |
+| - | - | - | 2026-10-05 | render_slide_previews.py | - | - |  |
+| - | - | - | 2026-10-05 | render_slide_previews.py | - | - |  |

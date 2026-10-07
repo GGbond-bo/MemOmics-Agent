@@ -16,5 +16,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "region_to_ccre_screen",
+    "region to ccre screen",
+    "region",
+    "ccre",
+    "screen"
+  ],
+  "trigger_level": "YEL"
 }

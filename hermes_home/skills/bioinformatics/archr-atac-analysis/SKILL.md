@@ -109,12 +109,166 @@ proj <- addReproduciblePeakSet(proj, groupBy="Clusters", pathToMacs2=pathToMacs2
 - 必须用 `terminal(background=TRUE, notify_on_complete=TRUE)` 或 Popen 脱离式
 - 每步完成后 `saveRDS()` 保存 checkpoint
 
-### Phase 5: 差异可及性
+### ✅ Phase 4 官方参数默认值（formals() 实测 2026-08-29，勿凭记忆写）
+用户会逐行对照 ArchR 官方文档（bookdown chapter 12）检查代码；多写/错写参数会被当场质疑。写参数前先实测：
+```r
+formals(ArchR::addGroupCoverages)        # 官方默认
+formals(ArchR::addReproduciblePeakSet)
+```
+
+| 函数 | 参数名 | 官方默认值 |
+|------|--------|-----------|
+| `addGroupCoverages` | `minCells` | **40** |
+| | `maxCells` | **500** |
+| | `maxFragments` | **25*10^6**（⚠️ 曾误记为 8e7，实际 2500 万） |
+| | `minReplicates` | 2 |
+| | `maxReplicates` | 5 |
+| | `sampleRatio` | 0.8 |
+| `addReproduciblePeakSet` | `peakMethod` | "Macs2"（官方推荐，绝对推荐） |
+| | `reproducibility` | "2"（至少 2 个 pseudo-bulk 重复有 peak） |
+| | `peaksPerCell` | 500（防小群贡献低质量 peak） |
+| | `minCells` | 25 |
+| | `pathToMacs2` | `findMacs2()`（默认就是自动找） |
+| | `shift` / `extsize` | -75 / 150（MACS2 经典 ATAC shift） |
+| | `method` / `cutOff` | "q" / 0.1 |
+| | `additionalParams` | "--nomodel --nolambda" |
+| | `excludeChr` | c("chrM","chrY") |
+
+**官方最小可跑代码**（bookdown 12.1+12.2 原样，只写 3 个参数，其余走默认）：
+```r
+pathToMacs2 <- findMacs2()
+proj <- addGroupCoverages(ArchRProj = proj, groupBy = "celltype")
+proj <- addReproduciblePeakSet(ArchRProj = proj, groupBy = "celltype", pathToMacs2 = pathToMacs2)
+```
+> groupBy 必须用 `colnames(proj@cellColData)` 里真实存在的列名（如 Clusters / cellType8 / 自己加的注释列）。
+
+> 🔴 **官方顺序铁律（2026-08-29 用户逐行对照 bookdown 12.2 当场纠正）**：`findMacs2()` 必须**先**跑（12.2 第一个代码块），再 `addGroupCoverages()`（12.1 峰值前必跑），最后 `addReproduciblePeakSet()`。不要把 findMacs2 排到 addGroupCoverages 之后。
+> ⛔ **只写官网出现的参数**：官方示例只有 3 个参数（ArchRProj/groupBy/pathToMacs2）；minCells/maxCells/maxFragments 等是函数默认值不是官网教程参数，文档对照场景不要主动加——多写/错写会被用户当场质疑。用户问起再讲默认值表。
+
+#### 🔴 `findMacs2()` 找不到 MACS2 → 手动传绝对路径（2026-08-29 用户集群实测）
+
+官网原文："If you have installed MACS2 but ArchR cannot find it, you should provide the path to the function via the `pathToMacs2` parameter." conda 环境装的 macs2 默认不在 PATH 里，`findMacs2()` 会扑空——不是没装，是找不着：
+
+```r
+# 方式 A（推荐）：手动指定绝对路径（bin/macs2 是带 shebang 的 Python 脚本，conda env 的 python 没坏就能跑）
+pathToMacs2 <- "/hwfssz3/.../miniconda3/envs/MACS2/bin/macs2"   # which macs2 或 conda env 路径
+system(paste(pathToMacs2, "--version"))   # 先验证能打印版本号，避免白跑 5-10 分钟
+proj <- addReproduciblePeakSet(proj, groupBy="celltype", pathToMacs2=pathToMacs2)
+
+# 方式 B：把 conda bin 塞进 PATH 再让 findMacs2() 自己找
+Sys.setenv(PATH = paste0("/.../envs/MACS2/bin:", Sys.getenv("PATH")))
+pathToMacs2 <- findMacs2()
+```
+集群上先 `ls -l <path>/macs2` + `<path>/macs2 --version` 自检（Permission denied → `chmod +x`）。
+
+#### 🔴 集群所以为"卡死"实为正常：CPU 不忙 ≠ 没在跑（2026-08-29 用户问"cpu没有太大动静"）
+
+| 阶段 | 实际在做什么 | 瓶颈 | CPU 表现 |
+|------|-------------|------|---------|
+| `addGroupCoverages` | 从所有 Arrow 读 fragments → 合并 pseudo-bulk 覆盖度 → 写临时文件 | **磁盘 I/O**（几十个 200MB+ Arrow，几百 GB 读写） | 🔇 低（等 IO） |
+| `addReproduciblePeakSet` | 逐个 group 调 MACS2（单核程序） | 单核计算 + 读覆盖文件 | 🔉 中（只有 1-6 核在算，50 核看整体自然低） |
+| `addPeakMatrix` | 全量细胞 × ~20 万 peak 构建计数矩阵 | **I/O 绑定的，CPU 再多不加速** | 🔇 低 |
+
+- 判断是否在跑（另开终端）：`ps aux | grep macs2`（有=已到 MACS2 阶段）；`top -u $(whoami)` D 状态=等磁盘 IO（正常）；R 进程消失=可能崩了
+- **只有 addGroupCoverages 支持 threads 参数并行读 Arrow**；MACS2 本身单线程（1 group 1 callpeak）；50 线程也帮不了 addPeakMatrix
+- 20 万细胞 / 8 celltype / 50 线程总耗时 ≈ 30-60 min（组覆盖 10-20 + MACS2 3-8 + PeakMatrix 15-30）；`threads=16` 帮助前两步；RAM ≥128GB 才上 50 线程（每线程 1-2GB）
+
+### Phase 5: 差异可及性 / Marker Features
 ```r
 proj <- addPeakMatrix(proj, force=TRUE)
 markers <- getMarkerFeatures(proj, useMatrix="PeakMatrix",
   groupBy="AgeGroup", bias=c("TSSEnrichment","nFrags"), testMethod="wilcoxon")
 ```
+
+#### ⚠️ `getMarkerFeatures` OOM 陷阱（2026-08-25 实测）
+- 16万细胞 × 30个 cluster = 435次两两比较 → **默认参数会 OOM 崩溃**
+- 崩溃特征：日志在 ~5 分钟后突然停止，**无任何 error/warning**，进程消失，日志末尾缺少 "Completed Pairwise Tests"
+- **根因**：Wilcoxon 检验需要将整个矩阵加载到内存，cluster 对数 = n*(n-1)/2 次加载
+- **修复**（选一）：
+  ```r
+  # 方案 A：限制每组细胞数（内存降到 1/10）
+  markers <- getMarkerFeatures(proj, useMatrix="GeneScoreMatrix",
+    groupBy="Clusters", bias=c("TSSEnrichment","log10(nFrags)"),
+    testMethod="wilcoxon", maxCells=500)
+  # 方案 B：用 Gaussian 近似（快 3-5 倍，内存少一半）
+  markers <- getMarkerFeatures(proj, useMatrix="GeneScoreMatrix",
+    groupBy="Clusters", bias=c("TSSEnrichment","log10(nFrags)"),
+    testMethod="G")
+  ```
+- **优先用 GeneScoreMatrix**（~2万基因）而非 PeakMatrix（~20-50万 peaks），计算量差 1-2 个数量级
+- `testMethod="wilcoxon"` 是 ArchR 官方教程写法，**不是** `"U"`（虽然 `"U"` 也能用但不规范）
+
+#### ATAC 细胞类型注释工作流（非 RNA 可及性打分）
+ATAC 没有 `AddModuleScore`（那是 Seurat 的），正确做法：
+```r
+# 1. 提取 GeneScoreMatrix
+mat <- getMatrixFromProject(proj, useMatrix="GeneScoreMatrix")
+mat <- assays(mat)[[1]]  # 基因 × 细胞
+
+# 2. 手算组合打分（= Seurat AddModuleScore 的等价操作）
+sigs <- list(
+  ExN   = c("SLC17A7","CAMK2A","NEUROD6"),
+  InN   = c("GAD1","GAD2","SLC32A1"),
+  Astro = c("GFAP","S100B","AQP4"),
+  Oligo = c("MBP","PLP1","MOBP"),
+  OPC   = c("PDGFRA","CSPG4","SOX10"),
+  Micro = c("CX3CR1","P2RY12","TMEM119"),
+  Endo  = c("FLT1","PECAM1","CLDN5")
+)
+for (name in names(sigs)) {
+  idx <- which(rownames(mat) %in% sigs[[name]])
+  if (length(idx) > 0) {
+    proj <- addCellColData(proj, data=colMeans(mat[idx,]),
+                           name=paste0("score_", name))
+  }
+}
+# 3. 画 UMAP 看分布 → 每个 cluster 取最高 score 的大群
+```
+
+### 🔴 Phase 5b: DA tiles 伪bulk — 统计单元铁律（2026-09-01 专利多年龄组教训）
+
+**`getGroupSE` 的 `groupBy` 只能是"聚合单元"（individual/样本），绝不能是"分组变量"（年龄组/条件）**。千问生成的代码用 `groupBy="age_group"` 被当场纠正（用户多轮追问"为什么复杂""要用个体的吗"）：
+
+| 写法 | 伪bulk 列数 | 后果 |
+|------|:---:|------|
+| ❌ `groupBy="age_group"` | 4 列（每组 1 列） | n=4 伪重复 → DESeq2 无法估计组内 dispersion → p/FDR 虚高，审稿人必抓 |
+| ✅ `groupBy="individual"` | 40/20 列（每个体 1 列） | n=40（猴 n=20）真实重复 → dispersion 可靠 |
+
+- **年龄组是 DESeq2 的 design 因子**，不是聚合单元：`DESeqDataSet(se, design=~age_group)` + `test="LRT", reduced=~1`
+- **⚠️ 方法选型（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE278576）→ 该文官方方法**不是 DESeq2**，而是**连续年龄 Pearson + shuffle ×5000 + FDR<0.1**。用户被问"你确定人家文章使用的是这个吗?"启发后明确选择 **Pearson + shuffle 版**：每个 tile `cor(log2CPM, Age)`（Age=供体连续年龄），FDR<0.1 且 r>0=Up / r<0=Down；shuffle 置换供体年龄标签×5000 得经验 p；四年龄组只作**下游展示层**（Up/Down tiles 按组画趋势）。50 万 tiles 用向量化 `apply(lcpm,1,cor)` + `pt()` 替代逐行 cor.test（快 1000 倍）。完整脚本 → `references/archr-da-tiles-4age.md`
+- **剔除个体（如猴 M4）必须在 `getGroupSE` 之前**过滤 project 细胞（`proj <- proj[keep, ]`），否则被剔除个体成为 NA-age 列 → stopifnot 报错或污染数据底（与 L2 数据底 meta60=40人+20猴不一致）
+- **PeakMatrix ≠ TileMatrix**：L2 已有的个体级 PeakMatrix SE 不能用于 DA tiles；DA 需在同一 project 上 `getGroupSE(useMatrix="TileMatrix", groupBy="individual")` 重新聚合（分钟级，不贵）
+- **colData 贴分组用 `match()` 按个体名对齐**，不用行号（SE 列顺序与 meta 行顺序不一定一致）
+- **猴侧坐标是 MFA8/T2T 非 hg38**：DA tiles 原样输出，下游 agent 负责 liftover 映射
+- Exceptionally old 组个体 <2 → DESeq2 组内方差不可估报错 → 并入 Old 重跑（Pearson 版无此问题，连续年龄天然处理）
+- 完整人/猴双版本脚本 → `references/archr-da-tiles-4age.md`
+
+#### 🔴 getGroupSE 三大坑（2026-09-02 猴/人双侧 530 万 tiles 实测，源码级确认）
+
+**坑1：`divideN` 默认 TRUE → counts 被除以细胞数 → 全被过滤**
+```r
+se <- getGroupSE(proj, useMatrix="TileMatrix", groupBy="individual",
+                 scaleTo=NULL, divideN=FALSE)   # ★ divideN=FALSE 才返回原始总 counts
+```
+`scaleTo=NULL` 只关归一化；`divideN=TRUE`（默认）在 getGroupSE 源码里还执行 `groupMat <- t(t(groupMat)/as.vector(nCells))` → 每个 tile 得小数"每细胞平均计数" → `rowSums(cnt) >= 2*ncol(cnt)` 全不满足 → 报 **`All tiles filtered out!`**。报错时先查 divideN，别改阈值。
+
+**坑2：`rowRanges(se)` 为空 → 坐标在 `rowData(se)`**
+getGroupSE 源码 69-70 行：`SummarizedExperiment(assays=assayList, colData=cD, rowData=featureDF)` —— **不填 rowRanges**。`rowRanges(se)` 返回 length=0，防御检查 `stop("rowRanges mismatch: length=0 vs nrow=6,085,841")` 必炸。坐标改从 `as.data.frame(rowData(se))` 取。
+
+**坑3：rowData 坐标是 per-chr tile 伪坐标，不是真实坐标（liftover 必错）**
+`.addTileMat` 源码 44-48 行：`featureDF <- DataFrame(seqnames, idx=seq_len(...), start=(idx-1)*tileSize)`。**列顺序 = seqnames, idx, start**：第二列是每染色体内的 tile 序号 idx，第三列是 `(idx-1)*500`（0-based 起点），按染色体分组连续排。直接当 start/end 写 CSV → 值如 `chr1,1587,793000`（end/start≈500、start 连续 +1）→ liftover 全错位。换算：
+```r
+fr <- as.data.frame(rowData(se))[keep, , drop=FALSE][valid, , drop=FALSE]
+out <- data.frame(chr  = fr[[1]],
+                  start = fr[[3]] + 1,        # (idx-1)*500 + 1
+                  end   = fr[[3]] + 500,      # idx*500
+                  r = r, p = p, q = q)
+```
+**自检信号**：正常 500bp tile `end-start ≈ 500` 且 `start` 间隔 500；若出现 `end/start ≈ 500` 或 `start` 连续 +1（1587,1588,1589…）→ 就是 idx 伪坐标没换算。
+- 上千~上万行 CSV 可直接**后处理**修坐标（统计列 r/p/q 与坐标无关，无需重跑 getGroupSE）；r>0=Up / r<0=Down / q<0.1 判定不受影响
+- **猴侧 20 样本 + FDR q<0.1 常见 0 个显著 tiles**（530 万次检验 FDR 极严）——up/down csv 只有表头是正常结果不是报错；M3 秩保守比较用 all.csv 全部 r 值即可，显著集为空只影响"显著 tile 跨物种重叠"类分析，需改用秩保守设计
+
+完整修正脚本（含 divideN + rowData 坐标换算）→ `references/archr-da-tiles-4age.md`（v2.1）
 
 ### Phase 6: TF Footprinting + Motif（专利核心）
 ```r
@@ -131,6 +285,9 @@ seFoot <- getFootprints(proj, positions=motifPositions, groupBy="AgeGroup")
 ---
 
 ## 跨物种 CRE 保守性评估（专利方向）
+> 详见 `references/hippocampus-annotation-markers.md`（人+猴海马 marker 列表 + 对齐表 + 亚群命名规则）
+> 详见 `references/table-s1-donor-age-mapping.md`（GSE278576 样本→年龄映射铁律：只准代码匹配 Table_S1，禁止手写占位——曾因手排 age_map 被用户当场抓错）
+> 详见 `references/archr-peak-calling-cluster-pitfalls.md`（HDF5 写权限根因 / 官方参数实测 / 张潇 NHPABC cCRE 参数 / BSgenome 澄清 / CPU 现象 / 20万细胞时间估算 / 样本名→individual 提取）
 
 ### 需要的数据
 | 数据 | 用途 |
@@ -197,6 +354,22 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 | coverage 600s 超时 | 57 组太多 | 用 background=True 后台跑 |
 | symlink 失败 | Windows 无管理员 | 直接 copy Arrow 文件 |
 | `.libPaths()` 劫持 | `.Rprofile` 硬编码 | 改为版本自适应 |
+| `getMarkerFeatures` 跑 5 分钟后静默死亡 | 16万+细胞 × 30+ cluster = OOM，日志无 error | 加 `maxCells=500` 或改 `testMethod="G"` |
+| `addGroupCoverages` 报 `H5Fcreate: HDF5. File accessibility. Unable to open file` | loadArchRProject 加载的是**他人 Project**（outputDirectory 指向没写权限的目录）→ 创建 coverage .h5 失败；次要：残留损坏 .h5、磁盘满、NFS 写锁 | ① `getOutputDirectory(proj)` 确认指向；`touch <dir>/__test.tmp` 验写权限 ② `copyArchRProject()` 复制到自己可写目录，或改 `proj@projectMetadata$outputDirectory` ③ `unlink("GroupCoverages", recursive=TRUE)` + `force=TRUE` 重跑。完整排查见 `references/archr-peak-calling-cluster-pitfalls.md` |
+| ATAC marker "在好几个亚群高表达" | 用了谱系级 marker（SLC17A7）打亚群 | 分层注释：先大群 → 大群内亚聚类 → 亚群级 marker |
+| `AddModuleScore` 报错 "no applicable method for ArchRProject" | Seurat 函数不能直接用于 ArchRProject | 先 `getMatrixFromProject()` 提取矩阵，手算 `colMeans(mat[idx,])` |
+| 跨物种注释说"用 TransferData 预测" | Zhang Xiao 2026 实际是手动 canonical marker 注释 | 读原文 Methods，不要猜方法 |
+| `getEmbedding(proj, "UMAP")` 报错 "Embedding not in computed embeddings" | Harmony 整合后 embedding 名称为 `UMAPHarmony` 而非 `UMAP` | 用 `getEmbedding(proj, embedding="UMAPHarmony")`；先 `names(proj@embeddings)` 查看可用 embedding 名称 |
+| `no slot of name "cellEmbeddings" for this object of class "ArchRProject"` | ArchRProject 没有 `cellEmbeddings` slot（那是 Seurat 的） | 用 `getEmbedding(proj, embedding="UMAPHarmony")` 或 `proj@embeddings$UMAPHarmony$df` |
+| `getMatrixFromProject(proj, useMatrix="TileMatrix")` 触发 `Cannot allocate vector ... 2^31-1` | 大项目（几十 arrow / 几十万细胞）TileMatrix cell 维太大，`Matrix` cbind 溢出 | 逐 arrow 建 project 聚合到 sample 维（samples × tiles 小矩阵），详见 `references/tilematrix-sample-aggregation.md` |
+| `getMatrixFromProject(..., cellNames=...)` → `unused argument (cellNames=...)` | **该函数没有 `cellNames` 参数**（formals 仅 8 个），且读全部 arrow 后 cbind，无按 cell 子集读单 arrow 的能力 | 每个 arrow 单独 `ArchRProject(ArrowFiles=af[i])` 再取矩阵；`.availableCells` 要写 `ArchR:::.availableCells(...)`。详见 `references/tilematrix-sample-aggregation.md` |
+| 产出 `样本 × ~1万` 矩阵、列名全是 `GSM...#barcode` 细胞条码、体积只有几 MB | `assay(se)` 是 **tile(行) × cell(列)**；用了 `colMeans` 对 cell 求均值 → 拿到 n_cells 长度、名字=条码的向量，不是 tile 覆盖 | **用 `Matrix::rowMeans(assay(se))`**（对行=tile 求均值 → n_tiles≈608万、名=`chr:start-end`、值域 0-1 覆盖比例）。人猴 L2 比对两侧须同口径=覆盖比例。真伪自检：维度 `样本×608万`、列名 tile 坐标、体积 ~400MB。详见 `references/tilematrix-sample-aggregation.md` |
+| `Error in getMatrixFromProject(proj, useMatrix="PeakMatrix"): useMatrix is not in Available Matrices` | **`addPeakMatrix()` 从未执行**——`addReproduciblePeakSet` 只生成 peak **坐标集合**（PeakSet），不生成 细胞×peak **计数矩阵**（PeakMatrix）。保存的 project 若只有 PeakSet，getMatrixFromProject 必然报错（2026-08-30 用户集群实测） | ① `getAvailableMatrices(proj)` 确认缺 "PeakMatrix" ② `proj <- addPeakMatrix(proj, force=TRUE)`（需能访问 Arrow，20万细胞 15-30min，I/O 瓶颈）③ `saveArchRProject(proj, ..., load=TRUE)` ④ 再取矩阵。**给用户的 peak calling 指令必须四步一起给：addReproduciblePeakSet → addPeakMatrix → saveArchRProject → getMatrixFromProject**；不要让用户跑完 call peak 就停下来 |
+| peak CSV 里 `end-start=500` 被误判"非501bp" | **ArchR GRanges 是闭区间**：`width = end - start + 1`，501bp 的 peak 导出后 `end-start=500` 完全正常（2026-08-30 本会话差点误报） | 校验宽度用 `end-start+1`（或 R 的 `width()`），不要用 `end-start`；bed 转 CSV/跨格式对比时注意 0-based/1-based ±1 |
+| `getGroupSE(groupBy="age_group")` 检年龄相关 DA | 把年龄组当聚合单元 → 每组仅 1 列 → n=4 伪重复，DESeq2 dispersion 不可估，p/FDR 虚高 | `groupBy="individual"`（40 列），年龄组放 `design=~age_group` 做 LRT；剔除个体（M4）必须在聚合前过滤 project；详见 `references/archr-da-tiles-4age.md` |
+| `All tiles filtered out!`（getGroupSE 后 rowSums 过滤剩 0） | `divideN=TRUE`（默认）把 counts 除以组内细胞数 → 小数计数全被 `rowSums >= 2*ncol` 过滤 | `getGroupSE(..., scaleTo=NULL, divideN=FALSE)` 才返回原始总 counts；先查 divideN，别改阈值 |
+| `rowRanges mismatch: length=0 vs nrow=...` | getGroupSE 的 SE **不填 rowRanges**，坐标在 `rowData(se)`（源码 `SummarizedExperiment(..., rowData=featureDF)`） | 坐标用 `as.data.frame(rowData(se))`，不要用 `rowRanges(se)`；完整解析见 Phase 5b「getGroupSE 三大坑」 |
+| DA tiles CSV 坐标错（end/start≈500 或 start 连续 +1） | rowData 第 2 列是 per-chr tile idx、第 3 列是 `(idx-1)*500` 伪坐标，被误当 start/end | 换算 `start=col3+1, end=col3+500`（tileSize=500）；统计列 r/p/q 不受影响，可直接后处理修坐标不重跑 |
 
 ## rhdf5 回退方案（`loadArrowFiles` 不可用时）
 
@@ -285,6 +458,25 @@ sample <- h5read(af, "Metadata/Sample")
 
 **关键铁律**：h5ls 输出中实际含 fragment 坐标的 group 名因箭头版本而异，绝不能假设固定路径。先 `h5ls()` 探索，再读取。
 
+## 保存 plotEmbedding 多基因输出
+
+`plotEmbedding(..., name=markerGenes)` 传入多个基因时返回 **named list**（每个元素一张 ggplot），不是单张图。
+
+```r
+# 逐张保存
+dir.create("markerEmbedding", showWarnings = FALSE)
+for(g in names(p)){
+  ggsave(paste0("markerEmbedding/", g, ".png"), p[[g]], width=8, height=6, dpi=150)
+}
+
+# 拼一张大图全览
+library(patchwork)
+wrap_plots(p, ncol=4) |>
+  ggsave("all_markers_UMAP.png", width=24, height=20, dpi=300)
+```
+
+---
+
 ## ⚠️ 远程服务器数据分析工作流
 
 当用户提供远程服务器路径（如 `/data/input/...`、`/hwfssz3/...`）时：
@@ -295,6 +487,10 @@ sample <- h5read(af, "Metadata/Sample")
 - 分步给（不要一次性出整个管线），每步跑完贴输出回来核对
 
 **经验**：这类远程协作场景下，`h5ls()` 探索结构的脚本必须自包含（library + 文件路径 + h5ls + 打印），用户粘贴即可执行。
+
+**🔴 集群脚本极简铁律（2026-09-01 用户当场质疑"这一步为什么要这么复杂？"）**：
+- 能从 project 元数据拿的分组信息，**不要读外部 CSV**。用户给 meta CSV 匹配列时要先想：`cellColData` 里是否已有同源列？有 → 直接 `unique(getCellColData(proj, c("individual","age_group")))` + `match()`，省掉外部文件依赖、还保证与 L2 同源零错位。`unique()` 是为了去重同个体的多细胞行（不加也行，只是不干净）。
+- 用户偏好：脚本直接贴对话（不 write_file 保存、不封装函数、20 行内能跑就行），分步给，每步跑完贴输出回来核对。解释留给回复正文，代码保持极简。
 
 ---
 
@@ -352,3 +548,13 @@ ls E:/专利/ArchR_Output/GroupCoverages/Clusters/ | wc -l
 4. skill_evolution(action="record_run")
 5. 更新 task_plan.md
 ```
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-08-27 | doublet_umap.R | - | - |  |
+| - | - | - | 2026-08-29 |  Macs2 | - | - |  |
+| - | - | - | 2026-08-29 | peak_calling_defaults_check.R | - | - |  |

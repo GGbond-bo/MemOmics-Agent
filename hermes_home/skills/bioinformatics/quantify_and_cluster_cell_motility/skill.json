@@ -21,5 +21,6 @@
     "cluster",
     "cell motility",
     "motility"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

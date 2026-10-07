@@ -10,6 +10,10 @@ prerequisites:
 
 # ATAC-seq 分析 (ArchR)
 
+> 📁 **ArchRProject 对象 API 陷阱**：查可用矩阵用 `getAvailableMatrices(proj)`，**不是** `proj@availableMatrices`（无此 slot，直接报"没有名称为 availableMatrices 的插槽"）；定位项目文件时 `find -iname "ArchRProject"` **搜不到**，要搜 `Save-ArchR-Project.rds`，或直接 `readRDS(rds)` + `class(o)` 判定——`readRDS` 出来的可以是**完整 ArchRProject**（含 TileMatrix / cellColData / reducedDims / getGroupSE 全可用），**不必重建项目**。
+> 📁 跨物种年龄设计的「离散阶段 vs 连续轴」判定与统计量选择 → 见 `cross-species-atac-conservation` 的 `references/staged-design-vs-continuous-age.md`。
+> 📁 **TileMatrix 提取四坑**（`rowMeans` 不是 `colMeans` / `Matrix::rowMeans` 丢名 / 裸 arrow 无 rds 用 h5py 直读 / 年龄在 BioSample 不在 GEO Series Matrix）→ 见本 skill `references/tile-matrix-extraction.md`。
+
 ## Windows 双 R 环境 (ArchR + Seurat/Signac 共存)
 
 ArchR 依赖 TFMPvalue → 需要 R ≥ 4.5.0。但版本选择有讲究：
@@ -25,6 +29,7 @@ ArchR 依赖 TFMPvalue → 需要 R ≥ 4.5.0。但版本选择有讲究：
 调用：普通脚本用 `Rscript`，ArchR 脚本用 `"C:/Program Files/R/R-4.5.3/bin/Rscript.exe"`。
 
 完整安装指南见 `references/windows_archr_setup.md`。
+- **Peak calling 生产流程必读（2026-08-30）**：`references/peak-calling-production-pitfalls.md` — HDF5 "Unable to open file" 写权限根因（共享 Project outputDirectory 无写权限 → `copyArchRProject` 修复）、call peak 后必须 `addPeakMatrix` 否则 `getMatrixFromProject(useMatrix="PeakMatrix")` 报 not in Available Matrices、保存用 `saveArchRProject` 不是 `saveRDS`、猴脑绝不能用 hg38 BSgenome（chromSizes 用 NC_088375.1 校验）、张潇 NHPABC cCRE 官方参数（maxCells=5000/maxPeaks=500000/cutOff=0.01 → 501bp 固定宽）、Windows 本地读 bigWig 全部失败 → phyloP 批量打分必须 Linux 集群 pyBigWig、UCSC 无 T2T-MFA8 chain → 用基因 ortholog 锚定。
 
 ## Signac vs ArchR 选择
 
@@ -268,6 +273,86 @@ with h5py.File("sample.arrow", "r") as f:
 
 > ⚠️ **调试铁律**：优先测 `addTileMatrix` — 它有明确报错信息（`Chromosome chr1 not in ArrowFile! Available: NC_088...`）。`addGroupCoverages` **也会因为同样原因静默崩溃** — 以前被误诊为内存问题。2026-07-29 验证：修复基因组后 TileMatrix 3 样本×21 chr → 全部通过，getMarkerFeatures 6M tiles → 产出 50 个 DA tiles。
 
+> 📑 **L1 保守性评分资源（phyloP/phastCons bigWig URL + 大小 + chain 现状）2026-08-29 实测 → `references/l1-resources-phylop-chain.md`**：hg38 phyloP100way 9.87GB / phastCons100way 5.89GB / phyloP30way 8.40GB 三文件下载清单（UCSC URL，本机用 Python urllib 下载，curl 会 DNS 超时）；**UCSC 无 T2T-MFA8v1.1 chain 已实证**（仅 `hg38ToMacFas5` 旧组装存在；macFas8/mfa8/macFas6/mfaT2T 全 404；NCBI Remap API endpoint 也 404）→ 跨物种 L1 坐标转换沿用基因 ortholog 手工映射（`macaque_da_gene_map.csv` + `l1_phylop_fill_v3.py`），不要下载错版本 chain。
+
+### 🟢 QC-First 工作流：宽松创建 Arrow → 可视化 → 再定过滤阈值（2026-08-25 推荐）
+
+**推荐做法**：不直接用 ArchR 默认值（minFrags=1000, minTSS=2）创建 Arrow，而是先用极低阈值（minFrags=100, minTSS=1）保留几乎所有细胞，画 QC 分布图后人工定阈值。
+
+**为什么**：ArchR 默认的 minFrags=1000 / minTSS=2 会在创建 Arrow 时就过滤掉大量细胞，你看不到被过滤的细胞长什么样。不同组织/物种的 TSS 和 fragments 分布差异很大，默认阈值可能过度过滤或过滤不足。
+
+**代码模式**：
+```r
+# 1. 宽松创建 Arrow（几乎不过滤）
+ArrowFiles <- createArrowFiles(
+  inputFiles = hippo,
+  sampleNames = names(hippo),
+  outputDir = "Arrows",
+  minFrags = 100,   # ArchR 默认 1000，这里故意放低
+  minTSS = 1        # ArchR 默认 2，这里故意放低
+)
+proj <- ArchRProject(ArrowFiles = ArrowFiles, outputDirectory = "ArchR", copyArrows = TRUE)
+
+# 2. 画 QC 分布图（violin + histogram）
+df <- getCellColData(proj, select = c("nFrags", "TSSEnrichment", "Sample"))
+# Violin图
+p1 <- ggplot(df, aes(x=Sample, y=TSSEnrichment, fill=Sample)) +
+  geom_violin(alpha=0.7) + geom_boxplot(width=0.15, fill="white") +
+  theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1))
+p2 <- ggplot(df, aes(x=Sample, y=nFrags, fill=Sample)) +
+  geom_violin(alpha=0.7) + geom_boxplot(width=0.15, fill="white") +
+  theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1))
+# Histogram: log10(nFrags) 按样本分面
+p3 <- ggplot(df, aes(x=log10(nFrags), fill=Sample)) +
+  geom_histogram(bins=50, alpha=0.6, position="identity") +
+  facet_wrap(~Sample, scales="free_y") + theme_bw()
+
+# 3. 看图后定阈值，再 subset 过滤
+# proj <- proj[proj$TSSEnrichment >= 你定的阈值 & proj$nFrags >= 你定的阈值, ]
+```
+
+**常见阈值参考**（最终仍以图为准）：
+- 人类海马：TSSEnrichment ≥ 4, nFrags ≥ 1000-3000
+- 骨骼肌：TSSEnrichment ≥ 4, nFrags ≥ 500-1000
+- 灵长类脑：TSSEnrichment ≥ 4, nFrags ≥ 1000-3000
+
+> ⚠️ `createArrowFiles` 的 `minFrags`/`minTSS` 是**创建时过滤**，设高了就看不到被过滤的细胞。首进建议用 100/1 宽松建，后续再 subset。
+
+### 🔴 一个样本多个文库（library）— sampleName 不能合并 — 2026-08-25 实测
+
+**现象**：用户数据 `/data/input/Files/scATAC_fragment/` 下有 `1469H_snATAC_1.fragments.tsv.gz` 和 `1469H_snATAC_2.fragments.tsv.gz`——同一样本做了两个测序文库。如果用 `sub("_snATAC_.*", "", basename(hippo))` 合并 sampleName → `1469H` 出现两次 → ArchR 报 sampleName 重复错误。
+
+**正确做法**：每个文库单独建 Arrow，sampleName 用完整文件名（去掉 `.fragments.tsv.gz` 后缀）。后续如果要按样本合并，用 `mergeArrowFiles()` 或 ArchR 的 `groupBy="Sample"` 参数。
+
+```r
+# ❌ 错误：合并文库名
+names(hippo) <- sub("_snATAC_.*", "", basename(hippo))  # 1469H, 1469H → 重复！
+
+# ✅ 正确：保留文库名
+names(hippo) <- sub("\\.fragments\\.tsv\\.gz$", "", basename(hippo))
+# 1469H_snATAC_1, 1469H_snATAC_2 → 两个独立 Arrow
+```
+
+> ⚠️ 合并时机：建完 Arrow + QC 过滤后，需要跨文库合并时再用 `mergeArrowFiles()` 或在 ArchRProject 层面按样本名聚合。不要在 `createArrowFiles` 阶段合并。
+
+### 🔴 "宽松建 Arrow → subsetCells 重新过滤"是官方推荐流程，不是 workaround — 2026-08-25 验证
+
+用户质疑"你确定官方这么做过吗"——**确认是 ArchR 官方标准做法，不是野路子。**
+
+**机制**：
+- `createArrowFiles(minFrags=100, minTSS=1)` 的 `minFrags`/`minTSS` 是**创建时硬过滤**——低于阈值的细胞直接不写入 Arrow，你看不到它们
+- QC 指标（TSSEnrichment、nFrags）在 Arrow 创建时就计算好存在 Arrow HDF5 里，**不会因后续 subset 改变**
+- `subsetCells(proj, nFrags=1500, TSSEnrichment=4)` 是**从已有 Arrow 里筛选子集**，秒级完成，不重建 Arrow
+- ArchR 官方 bookdown §3（`creating-arrow-files.html`）的默认流程就是 `createArrowFiles` → 看 QC 分布 → 手动过滤
+
+**标准两步法**：
+1. **宽松建 Arrow**：`minFrags=100, minTSS=1`（保留几乎所有细胞）
+2. **看图定阈值后 subset**：`subsetCells(proj, nFrags=<你定的>, TSSEnrichment=<你定的>)`
+
+这比直接用 ArchR 默认值（minFrags=1000, minTSS=2）更好——默认值会在创建时就删掉你看不到的细胞，无法判断过滤是否合理。
+
+> 📚 来源：ArchR bookdown §3 `creating-arrow-files.html` + ArchR GitHub `FilterCells.R`（`subsetCells` 直接从 ArchRProject 的 cellColData 做子集，不修改 Arrow 文件）。用户想自己看图定阈值时，先出 QC 图再让用户决定过滤参数，不要 Agent 替用户选阈值。
+
 ### 🟡 中文路径导致 terminal() workdir 被拦截
 
 **两种崩溃模式**：
@@ -458,6 +543,28 @@ n_cells_after <- nrow(getCellColData(proj))
 n_doublet <- n_before_doublet - n_cells_after   # ← 唯一的可靠算法
 ```
 filtered_cells.csv 里手动补 `DoubletFilter="Keep"` 列是给 P4 merge 用的约定，不是 ArchR 元数据。
+
+### 🔴 saveArchRProject vs saveRDS — 正确保存方式（2026-08-29 用户问"不是saveRDS吗？"实测）
+
+用户问"保存应该是 saveRDS 吧？"——**ArchR Project 必须用 `saveArchRProject()` 保存，不是 `saveRDS()`**：
+
+| 方法 | 保存什么 | 何时用 |
+|------|---------|--------|
+| `saveRDS(proj)` | 只存 R 对象快照（metadata + cellColData + 指向 Arrow 的路径引用）| 临时/快速；⚠️ **不保存 PeakSet/PeakMatrix**，跨机/重载后大矩阵丢失 |
+| `saveArchRProject(proj, outputDirectory=...)` | 完整 Project 目录：Project 对象 + PeakSet + PeakMatrix + Arrow 引用 + log | **call peak / PeakMatrix 之后必须用**；`loadArchRProject()` 恢复所有结果 |
+
+**为什么不能用 saveRDS 代替**：ArchR Project 是轻量对象，实际数据（Arrow、PeakSet、PeakMatrix）以目录结构存在。`saveRDS` 只序列化对象本身，peak calling 结果不在里面——重载后 access PeakMatrix 会失败（对象已指向失效路径）。用户本会话跑完人脑 peak（525,137 peak）后问"怎么保存"，正确回答就是 `saveArchRProject`。
+
+**两个坑（来自 2026-08-07 实测 + 本次应对）**：
+- ⚠️ **递归嵌套目录爆炸**：outputDirectory 不能放在 project 目录**内部**（否则保存时把自己当 Other Files 递归复制），见下面专门条目——**修复 = saveArchRProject 的输出目录放 project 目录外部**；
+- ⚠️ 保存到你**有写权限**的目录（共享项目/他人项目：outputDirectory 可能指向他人目录 → 用 `getOutputDirectory(proj)` 先查，见上面 H5Fcreate 条目）。人脑跑完 peak 后用户已 `saveArchRProject` 成功保存到自己的目录。
+
+**验证保存成功**：
+```r
+proj2 <- loadArchRProject("你的输出目录")
+length(getPeakSet(proj2))          # 非空且 >0
+getMatrixFromProject(proj2, useMatrix = "PeakMatrix")  # 可取矩阵
+```
 
 ### 🔴 saveArchRProject 递归嵌套目录爆炸 — 2026-08-07 已验证
 
@@ -760,6 +867,127 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 
 **⚠️ bigwig vs fragments 粒度选择（2026-08-02）**：GSE278576 suppl 同时提供①亚群聚合 bigwig（细胞类型×年龄组，~100-350MB，够做 L2 可及性比较）和②GSM 级单细胞 fragments（~1.3GB/样本，才能做 L3 真 footprinting）。**GSM 级 fragments 单独可下，不需要 89GB 的 GSE278576_RAW.tar。** 下载后用 HTTP HEAD 对比 Content-Length 验证完整性（用户此前下载的 hc77/hc78 只有 2MB/0.7MB，真实是 1.31GB = 0.15% 完成度）。完整决策树（L2→bigwig / L3→fragments / 带宽现实）→ 同上 reference 的 "bigwig vs fragments" 一节。
 
+**⚠️ filterRatio 参数来源澄清（2026-08-26 用户问"这个2是怎么来的？"实测）**：
+- **官方默认值是 1，不是 2**——回答用户前先查 ArchR 官方文档 `filterDoublets` 签名（`filterRatio = 1`），不要凭记忆断言"默认 2"（本会话首发错误答案被用户抓"又瞎说"）。
+- **本项目用 2 的原因 = 跨物种管线一致性**：猴侧官方脚本（create_archr_project.R）用 `filterRatio=2`，人侧为了两侧参数可比（审查员必问"QC 是否一致"）对齐到 2。回答模板："官方默认 1，专利项目用 2 是为了跟猴侧 Zhang Xiao 2026 管线对齐"。
+- **机制（filtered_cells.csv 幸存者名单条目已证）**：不按 DoubletScore 硬阈值切，而是按 `DoubletEnrichment` 升序排序保留前 `1/(1+filterRatio)`（ratio=1 保留 1/2，ratio=2 保留 1/3）——filterRatio 越大过滤越狠，不是越宽松。⚠️ 之前曾有错误说法"filterRatio=2 更宽松/保留更多"，**错**，保留比例 = 1/(1+filterRatio)。
+
+### 🔴 猴侧 RDS 注释：predictedAnno 纯度核查 → 8 大类粗粒度映射（远端 Arrow / 本机仅 RDS 场景，2026-08-27 monkey_Hf_ATAC_final.rds 161,497 细胞实证）
+
+**场景**：猴 RDS 在本地（如 `E:/专利/patent/monkey_Hf_ATAC_final.rds`），但 Arrow 全部指向远端集群（`/hwfssz3/PS_JLU/...`）→ **无法 getMarkerFeatures/plotMarkerHeatmap 复核 marker**。注释只能靠 RDS 内自带资产 + QC 交叉验证。
+
+**RDS 内可用资产（检查顺序，勿漏）**：
+```r
+x <- readRDS("monkey_Hf_ATAC_final.rds")
+colnames(x@cellColData)              # ① 先查列名——猴侧 rds 常已带 predictedAnno（label transfer 预测注释）
+getArrowFiles(x)                     # ② 确认 Arrow 远端路径（⚠️ v1.0.3 没有 `arrowFiles` slot！）
+names(x@reducedDims)                 # ③ IterativeLSI / Harmony
+names(x@embeddings)                  # ④ UMAPHarmony ← UMAP 坐标随 RDS 保存，不依赖远端 Arrow
+umap <- getEmbedding(x, embedding="UMAPHarmony")   # ✅ 可画 UMAP 核查分布
+getOutputDirectory(x)                # 远端输出目录
+```
+
+**🔴 R 命名向量索引坑（2026-08-27 实测踩坑，注释结果错乱）**：`map8[cc$predictedAnno]` 当 predictedAnno 是 **factor** 时按整数索引而不是名字匹配 → 注释分布整体错乱（Micro 数量却等于 DG Ex 数量，肉眼难发现）。**必须 `unname(map8[as.character(cc$predictedAnno)])`**。这是 R 通用坑，凡是命名向量按列名取映射都要 as.character。
+
+**purity 核查 → 粗粒度映射 → 裁决流程（18 亚类 → 8 大类）**：
+```r
+# 1. 每簇主注释纯度
+tab <- table(cc$predictedAnno); purity <- max(tab)/sum(tab)
+# 2. 精细亚类 → 8 大类（ExN/InN/Astro/Micro/ODC/OPC/VS/CP/Epend）
+map8 <- c("DG Ex"="ExN","CA1_SUB s_f_Ex"="ExN","CA2_4 EX"="ExN","EC L3_5 EX"="ExN",
+          "EC L6 EX"="ExN","EC L2 EX"="ExN","CAE_SUB deep Ex"="ExN",
+          "CGE CNR1 lnh"="InN","MGE SST lnh"="InN","CGE LAMP5 lnh"="InN","MGE PVALB lnh"="InN",
+          "ODC"="ODC","OPC"="OPC","Astrocyte"="Astro","Microglia"="Micro","VS"="VS",
+          "Ependymal"="Epend","Choroid Plexus"="CP")
+cc$Anno8 <- unname(map8[as.character(cc$predictedAnno)])   # ⚠️ as.character！
+# 3. Ambig 判定：second>20% 且不同大类 → Ambig
+```
+- **大多数"低纯度"是大类内亚型混合**（CA1 vs DG vs EC 都是 ExN；CGE vs MGE 都是 InN）→ 粗粒度映射后自动解决，**不必逐簇人工裁决**（本会话 30 簇中 27 簇纯度 95-99.9%）
+- **Ambig 裁决惯例**：极小簇（<100 cells / 占总细胞 <0.1%）标 Ambig；CP×VS 比值差距 <10pp（ATAC 共可及性混杂，如 47.4% vs 41.1%）不硬归；主类过半但杂类占比 >25% 标 Ambig 并注明优先主类。跨大类混合一律 Ambig_requery 保守处理
+- **L1 辩论 fallback**：L1 采样辩论连续 2 次返回 `need_more_info`（flash 模型上下文切断不 commit 决策）→ **停止重试**，按反方论点共识 + 知识库惯例做保守裁决（Ambig），不再耗 token
+- **输出规范**：中间产物写 `results/<sid>/`（沙箱白名单），勿写数据源目录；注释表附人侧对比列但**人猴簇号不对应（各自独立聚类），跨物种比较按注释类型而非簇号**
+- **成簇即冻结**：猴侧 predictedAnno 若本身由人参考 label transfer 而来，再做人-猴"保守性对比" = 循环论证（见上方专利循环论证风险条目）——必须注明 label transfer 仅用于对齐
+
+> 📋 完整检查清单 + 代码骨架 + 本会话裁决表 → `references/monkey-remote-annotation-2026-08.md`
+
+### 🔴 跨物种注释交付必须两侧对等 + getEmbedding UMAP 列名坑（2026-08-27 人脑 UMAP 缺图实测）
+
+**对等交付铁律**：人猴两侧都注释完后，**交付物（UMAP 图、注释表）必须两侧对等出全**。本会话只给猴脑出了 4 张 UMAP（cluster/predictedAnno/anno8/lowpurity），人脑一张没出 → 用户连续追问"为什么没有图呢？不能出吗？""没有人脑注释的umap啊"。⚠️ 跨物种对比交付前按"两侧都有的清单"核对：UMAP 图（8大类 + cluster + QC 叠加）、注释表、QC 汇总——不能只深耕一侧。人脑注释 UMAP 补齐后交付模板：`human_umap_anno8.png`（8大类着色）+ `human_umap_clusters.png`（30簇）+ `human_umap_TSS.png`（TSS 叠加，可直观反驳"存疑群是噪声"）。
+
+**getEmbedding 列名坑（2026-08-27 实际报错）**：`getEmbedding(proj, embedding="UMAPHarmony", returnDF=TRUE)` 返回的列名是 **`Harmony#UMAP_Dimension_1` / `Harmony#UMAP_Dimension_2`**（不是直觉的 `IterativeLSI..1`）——直接 `aes(x=IterativeLSI..1)` 报 `object 'IterativeLSI..1' not found`。画图前必须先 `colnames(getEmbedding(...))` 看实际列名，或直接统一 rename 成 UMAP1/UMAP2。
+
+**人脑 ArchRProject UMAP 出图零成本**：rds 里 embeddings/UMAPHarmony 随项目保存、不依赖远端 Arrow（即使 ArrowFiles 指向集群 /hwfssz3/...）——注释后 `proj$cellType8 <- anno_map[...]` + `getEmbedding()` + ggplot 秒级出图，**不需要重跑任何 ArchR 计算**。
+
+### 🔴 勿凭 marker 数量判"噪声/垃圾群" — 存疑 cluster 必须 QC + batch 验证（2026-08-27 人 40 样本实证）
+
+**场景**：getMarkerFeatures 输出中某 cluster marker 极少/全是 OR 嗅受体/ncRNA（C25 仅 5 marker 全 OR；C28 仅 3；C29 仅 1 ncRNA），但细胞量很大（数千到数万）。**禁止**凭"marker 少 + 无脑 marker"判垃圾群直接过滤。
+
+**实证教训（用户质疑"细胞量挺大真的是噪声吗"+ plotGroups 见 TSS 高，真实 QC 推翻噪声判断）**：
+- C25/C28 的 TSSEnrichment 高达 11.4/11.3（全体中位 9.8）、DoubletScore≈0、nFrags 正常 → **不是低质量群**
+- **决定性判据 = batch 效应检查**：逐群 top2 样本占比 ≥90% → batch 伪影群。C25 实证：99% 细胞来自 hc13344+hc73 两样本（2207+1817=4024/4066）→ 排除
+- **PromoterRatio 解读**：低(~0.08-0.10)=神经元特征（增强子开放）；高(~0.19)=胶质/ODC。C26 PromoterRatio 0.096 + 含 GAD2/SLC17A6/FOXP2/CALB1 真实神经元基因 + 混 OR/KRTAP/IFNA 异位基因 → **真实神经元混合群，保留重聚类 res=1.5 复查**
+- **getMarkerFeatures CSV 格式坑**：`group` 列是**数字**(1-30)，`group_name` 才是 C1-C30；部分 cluster（C24/C27）**完全没有 marker 条目**
+- 决策矩阵（L1 辩论 modify/high）：QC 正常+样本正常+marker 明确→真实群；QC 正常+top2 样本>90%→batch 伪影排除；QC 正常+样本正常+marker 少/混合→Ambig_requery（重聚类）；通用 QC 阈值 minTSS≥8/maxDoubletScore<0.15/minFrags≥1000
+- **ArchRProject rds 注释无需 Arrow**：`proj$cellType8 <- anno_map[...]` + saveRDS 即可；rds 里 ArrowFiles 可能指向远端集群（/hwfssz3/...）本机不存在——cellColData QC 验证不受影响，但不能重算 GeneScore
+- **猴侧 rds 常已带 predictedAnno**（label transfer 预测注释），先查 `colnames(cellColData)` 再决定是否重注释
+
+> 📋 完整 C25/C26/C28/C29 案例数值、验证代码、8 大类映射 → `references/cluster-qc-batch-verification.md`
+
+### 🔴 markerList 群数 ≠ 真实 cluster 数 — 群数必须从 RDS 读（2026-08-27 用户"人脑不是有30个亚群吗？"纠正实测）
+
+**场景**：`getMarkerFeatures(...)` 输出的 markerList CSV（如 `human_40_markerList.csv`）只有 **28 群**，但用户记得人脑是 30 个亚群 → 实测 RDS `getCellColData(proj)$Clusters` 是 **C1~C30 连续 30 群**（265,909 cells）。**CSV 群数 ≠ 真实群数**。
+
+**根因**：getMarkerFeatures 默认只输出**有显著 marker 的群**（默认截断 FDR≤0.01 & Log2FC≥1）。C24/C27 无任何显著 marker（Wilcoxon 对"渐进区分"的群给不出显著 peak，ArchR 已知现象）→ CSV 里没有它们的行 → 误以为只有 28 群。**不代表群是假的/噪声**。
+
+**铁律**：
+1. **判断"一共多少群"必须读 RDS**：`length(unique(getCellColData(proj)$Clusters))` + `setdiff(paste0('C',1:30), unique(getCellColData(proj)$Clusters))` 找缺失群。**永远不要从 markerList CSV 数群数**——CSV 只记录有显著 marker 的群，无 marker 群被静默省略。
+2. **无 marker 群先做 QC 核查再判真伪**（不是垃圾群）：TSSEnrichment 中位（>4 合格）、nFrags 中位、DoubletScore 中位、样本来源分布（分散在 30+ 个体 = 真实群；集中在单样本 = batch 伪影）。C24（n=3,089, TSS=10.10）/ C27（n=4,821, TSS=8.21）均正常 → 真实群，只是缺显著 marker。
+3. **给无 marker 群找注释依据 = 二值 focused marker，不要跑全 30 群**：
+```r
+grp <- ifelse(getCellColData(proj)$Clusters %in% c("C24","C27"),
+              getCellColData(proj)$Clusters, "Rest")
+proj <- addCellColData(proj, data=grp, name="C24C27", force=TRUE)
+mk <- getMarkerFeatures(proj, useMatrix="PeakMatrix", groupBy="C24C27",
+                        testMethod="wilcoxon", bias=c("TSSEnrichment","log10(nFrags)"))
+m <- getMarkers(mk, groupBy="C24", cutOff="FDR<=0.1")  # 放宽到 1e-1，默认 0.01 又会空
+```
+   只跑缺失群 vs Rest（2 个比较 vs 全 30 群两两 = 快一个量级）；cutOff 放宽到 FDR≤0.1 才有输出。若 Arrow 指向远端集群本机无 PeakMatrix → 放集群跑，或换 GeneScoreMatrix（见上方 AddModuleScore 手动打分条目）。
+4. **⚠️ 验证 C1-C30 连续性别用排序比较**：`all(sort(unique(cls)) == paste0('C',1:30))` 返回 FALSE 是**字符串排序陷阱**（字典序 "C10" < "C2"），不代表缺群。用 `setequal(unique(cls), paste0('C',1:30))` 或 `setdiff()` 判断。
+
+**用户问"UMAP 还需要过滤吗"的三层辨析（2026-08-27 实测回答模板）**：用户看到 UMAP 有可疑群 / 图太挤 → 问"要不要过滤"时，先把问题**拆成三层**再答，不要笼统说"过滤/不过滤"：
+
+| 用户意图 | 动作 | 要点 |
+|---------|------|------|
+| QC 阈值（TSS≥4, nFrags≥3000）要不要调 | ✅ **保持不动** | 跨物种同套是专利最安全策略（审查员必问两侧一致性）；实测存疑群 C25-29 TSS 8.5-11.4 全超阈值 → 身份存疑与 QC 无关，调阈值无效 |
+| 图太挤/看不清（C25 几百到几千个点糊成一团） | 🔧 **画图降采样**（每群 subset ≤2000 细胞出 UMAP） | 是**可视化层面**问题，不改数据本身、不动 QC |
+| 想丢 C25-29 让图干净 | ❌ **过滤解决不了** | C25=样本伪影（99% 来自 2 样本）、C26=神经元混合群 → 需重聚类 + 人工裁决（见上方 batch 验证条目），不是调阈值 |
+
+回答时先问清用户指的哪一层（QC / 画图 / 丢群），再给对应动作。</think>
+
+<｜DSML｜tool_calls>
+<｜DSML｜invoke name="skill_manage">
+<｜DSML｜parameter name="action" string="true">patch（2026-08-26 张潇猴脑 markers × 40 人海马 clusters 实测）
+
+**场景**：有参考物种（猴）已验证的亚群 marker 列表 + 目标物种（人）ArchR `getMarkerFeatures` 输出 CSV（`human_40_markerList.csv`：20326 行，`group/group_name/seqnames/start/end/name/Log2FC/FDR/MeanDiff`，28 cluster C1-C30 缺 C24/C27），要回答"哪些 cluster 能注释成和参考一样的细胞类型"。
+
+**方法（交集命中比例 + 特异性过滤）**：
+```python
+# 1. 解析 getMarkerFeatures CSV → 每 cluster 的基因集合 {name}（+ Log2FC 字典）
+# 2. 参考 marker dict（如张潇 16 亚群）→ 每亚群 genes 列表
+# 3. 命中比例 = |参考基因 ∩ cluster基因| / |参考基因|
+# 4. 🔴 特异性检查 = 每个基因出现在多少 cluster（gene_nclu）—— 出现在越多 cluster 越广谱/越不可靠
+```
+**强注释 = 全 marker 命中（比例 1.0）且基因特异**；**弱注释（比例 0.5-0.67）只能给"大类提示"不能定论**。
+
+**🔴 三个可靠性陷阱（辩论 L1 结论已采纳）**：
+1. **GPNMB 陷阱**：GPNMB 出现在 8/28 cluster（in8clu）→ 广谱 ATAC 背景噪声，**单基因命中不能注释 Mic2**。C1-C6 只命中 GPNMB 的 cluster 一律不注释（"未验证"），必须看它们自己的 top marker（C1 top 是 MYT1/TNR/SEZ6L 更像神经元）。
+2. **星形广谱 marker 无法细分**：SLC1A2/GFAP/WIF1 是全星形 marker，C7-C12 六群全部命中但分不出 Ast1/2/3（CRYAB 区分 Ast2 在人类数据未出现）——**这与张潇原文结论一致**（"subtle non-neuronal subtypes could not be reliably resolved in snATAC-seq"），不是注释方法失败，是 ATAC 分辨率天花板。
+3. **无命中 cluster ≠ 无细胞类型**：C17/18/19/21/25/28/29（8 群）无任何张潇 marker 命中，大概率是 ATAC 分不出的兴奋性神经元亚群（splatter 18 Ex 亚型）/血管细胞——需要它们自己的 top marker 独立注释，不要硬套参考。
+
+**本会话产出**：9 cluster 与张潇完全对齐（C9/C10/C12=Ast1, C14/C15=MGE-Inh, C16=CGE-Inh, C20/C22/C23=Mic1）；热图 `zx_vs_human40_annotation_heatmap.png`（16 亚群 × 28 cluster）+ 汇总 CSV，脚本 `results/memomics-cd677556/task4/scripts/zx_vs_human40_annotation.py`（pandas + matplotlib 命中热图，可直接改 marker 复用）。**可复用脚本模板 →** `scripts/marker_intersect_annotation.py`（改参考 marker dict + CSV 路径即可跑，含热图 + 汇总表 + 坑提醒）。
+
+**跨物种一致性价值**：猴→人能对齐的（星形/抑制性神经元/小胶质/少突）= 进化保守细胞类型，直接支撑专利"跨物种 CRE 保守性"故事；跨物种注释必须用同粒度标签体系（8 大类，见上方跨物种注释统一粒度铁律）。
+
 ### 🟢 用户偏好
 - **写 ArchR 代码前必须先 `skill_view` 本 skill（2026-08-12 用户审计实锤）**：用户问\"你写代码的时候，不调用一下skill吗？\"——交付 ArchR 聚类/注释/过滤代码前，先 skill_view(atac-seq-memomics) 核对参数签名与坑（addClusters input=、ArrowFiles 大写、官方 tutorial 顺序），不要凭记忆直接贴代码。用户会逐行对照官网 + 检查是否加载了 skill。
 - **用户问代码问题时，只回答代码问题，不要 dump 唤醒进度汇报（2026-08-12 用户原话\"我有问你这些进度吗？你一直回我这些干什么呢？我不是问你代码吗？\"）**：唤醒消息是系统自动心跳，用户消息才是真实诉求。用户贴代码/问 ArchR API → 直接回答该问题（给极简可直接运行的代码段）；不要在同一回复里堆 P0-P6 状态表/三源验证摘要。进度汇报只在用户明确问进度时给。
@@ -767,6 +995,7 @@ Phase 4 (TileMatrix + getMarkerFeatures) 完成后进入收尾阶段。完整配
 - **安装必须主动监控** — 不能 fire-and-forget。每 30-60 秒轮询进程状态+库目录变化
 - **优先使用 `pak::pak()` 装 GitHub 包**（而非 `devtools::install_github()` 或 `remotes::install_github()`）
 - **交付集群脚本 = 极简三步式，直接贴对话（2026-08-09 用户原话"我让你写简单一点，脚本就写在交互框上，要什么包，怎么读文件，怎么过滤，干净一点"）** — 用户在自己 Linux 集群跑正式版时，要求：①只给 `library()` 装包行 ②`list.files()` 读文件 ③过滤/统计逻辑，**三段式干净脚本直接贴在回复里**，不要 write_file 保存、不要长篇解释背景、不要完整管线大包。用户逐模块执行、每步把输出贴回来核对，Agent 再给下一步。
+- **"给我代码我自己去集群注释" = 交付自包含 8 大群注释脚本（2026-08-27 猴脑 monkey_Hf_ATAC_final.rds / 人脑 human_Hf_ATAC_40_clustered.rds 实证）**：用户说"注释8大群的代码，我起来自己在集群注释，简单干净"时，交付物 = 单文件极简脚本**直接贴对话里能复制**（不是只给文件路径）：① 头部注释写清 输入/输出 ② `library(ArchR)` + `readRDS("xxx.rds")   # ← 改成你的集群路径` 占位 ③ marker8 列表（ExN/InN/Astro/Micro/OPC/ODC/VS/ChP GeneScore 版）→ `getMatrixFromProject(GeneScoreMatrix)` → 每类 colMeans → argmax → `addCellColData(name="cellType8")` ④ 打印 `table(proj$Clusters, proj$cellType8)` 让用户贴回来核对（勿自动下结论）⑤ `saveRDS` 同名输出。**自包含要求**：rds 里的 Arrow 可能全指向远端集群（本机无法重算 GeneScore），脚本要么靠 GeneScoreMatrix（createArrowFiles 默认生成，集群可跑），要么靠 rds 已有注释列（如猴侧 predictedAnno → 直接 map 到 8 大类，见上方猴侧 RDS 注释条目）。**交付即完成**：脚本写好后文件已存在 + 已贴对话 = 任务完成，禁止反复 read_file/验证（会被系统判循环失控），直接收尾给结论。模板 → `templates/annotate_marker_classes_cluster.R`
 - **用户亲自验证数据** — 用户会自己打开 `_filtered_cells.csv` 看内容、数 `length(arrow_files)`、核对样本数。给脚本时必须考虑"用户会在集群上肉眼检查输出"，关键行加 `length()` / `sum()` / 验证注释。
 
 ### 🔴 集群正式版：40 样本 Arrow 读取陷阱（2026-08-09 Linux 集群实测）
@@ -829,7 +1058,98 @@ saveRDS(markers, "markers.rds")            # ← 必须
 ```
 ---
 
-### 🟢 getMarkerFeatures 必须带 bias 校正（2026-08-12 用户审计实锤：\"你确定这几步没有问题吗？\"）
+### 🔴 R Factor Indexing Bug — map8[factor] 按整数索引（2026-08-27 实测）
+
+**现象**：`proj$cellType8 <- map8[proj$predictedAnno]` 注释结果整体错乱（Micro 数量 = DG Ex 数量，肉眼难发现）。
+
+**根因**：ArchR 存储 categorical 列为 **factor**。R 的命名向量按 factor 索引时用**整数位置**而非名字匹配 → 映射全错。
+
+**修复**：
+```r
+# ❌ 错误
+proj$cellType8 <- map8[proj$predictedAnno]
+
+# ✅ 正确
+proj$cellType8 <- unname(map8[as.character(proj$predictedAnno)])
+```
+
+**铁律**：凡是命名向量按列名取映射，**必须先 as.character()**。这是 R 通用坑，不限于 ArchR。
+
+### 🔴 勿凭 marker 数量判"噪声/垃圾群" — 存疑 cluster 必须 QC + batch 验证（2026-08-27 人 40 样本实证）
+
+**场景**：getMarkerFeatures 输出中某 cluster marker 极少/全是 OR 嗅受体/ncRNA（C25 仅 5 marker 全 OR；C28 仅 3；C29 仅 1 ncRNA），但细胞量很大（数千到数万）。**禁止**凭"marker 少 + 无脑 marker"判垃圾群直接过滤。
+
+**实证教训**：
+- C25/C28 的 TSSEnrichment 高达 11.4/11.3（全体中位 9.8）、DoubletScore≈0 → **不是低质量群**
+- **决定性判据 = batch 效应检查**：逐群 top2 样本占比 ≥90% → batch 伪影群。C25 实证：99% 细胞来自 hc13344+hc73 两样本 → 排除
+- C26 含 GAD2/SLC17A6/FOXP2/CALB1 真实神经元基因 + 混 OR/KRTAP/IFNA 异位基因 → **真实神经元混合群，保留重聚类**
+
+**决策矩阵**：
+| 条件 | 判定 |
+|------|------|
+| QC 正常 + 样本正常 + marker 明确 | 真实群 |
+| QC 正常 + top2 样本 >90% | batch 伪影 → 排除 |
+| QC 正常 + 样本正常 + marker 少/混合 | Ambig_requery（重聚类） |
+
+### 🔴 GEO 补充材料必须先查 — 原文章可能已有注释（2026-08-27 实测）
+
+**场景**：用户问"人脑的，原文章没有自己的注释吗？"→ 查 GSE278576 补充材料 → 发现 `human_hippocampus_cell_metadata.txt.gz` 已有 18 个细胞类型注释。
+
+**铁律**：做自定义注释前，**必须先查 GEO supplementary materials**：
+```python
+get_geo_details(accession="GSE278576")
+# 找 *_cell_metadata.txt.gz 或类似文件
+# 下载检查 cell_type 列
+```
+
+**为什么**：原文章注释经过作者验证，比 marker-based re-annotation 更可靠。自定义注释只在原文章无注释时才需要。
+
+### 🔴 跨物种注释策略 — 用户纠正：细分亚群对齐，非 8 大类粗粒度（2026-08-27）
+
+**用户原话**："能不能讲人类的亚群正常注释，猴脑的也是一样，不一定注释8个大群，而是细分亚群注释上，保证注释相同，其他的就正常按照人和猴脑自己的注释。"
+
+**正确策略**：
+1. **能对齐的细分亚群** → 用相同名字（如 Astrocyte、Microglia、ODC、OPC）
+2. **不能对齐的** → 保留各自原文名字（如人脑 C1-C6 保留 cluster 名，猴脑 DG Ex/CA1 保留原名）
+3. **不要强制归并到 8 大类** — 丢失生物学分辨率
+
+**实现**：基于 marker 交集命中比例 + 特异性过滤（gene_nclu），详见 `cross-species-atac-annotation` skill。
+
+### 🔴 getMarkerFeatures Wilcoxon OOM — 大数据集崩溃诊断（2026-08-25 集群实测）
+
+**现象**：`getMarkerFeatures(testMethod = "wilcoxon")` 在 ~16 万细胞 × 30 cluster 的 GeneScoreMatrix 上运行约5分钟后崩溃，日志最后时间戳后无新输出，无 "Pairwise Tests Complete" 完成标志，进程已消失。
+
+**根因**：Wilcoxon 两两比较的内存复杂度 = O(clusters² × genes × cells_per_cluster)。16 万细胞 × 30 cluster × 3938 基因 = 435 次两两比较，每次都要加载整个矩阵到内存。即使 `maxCells = 500` 也挡不住（内存占用仍超集群限制），被 OOM Kill 直接杀掉——**无报错日志**，只有日志突然中断。
+
+**诊断方法**（日志分析三步）：
+1. **看时间戳跨度**：开始时间 vs 最后一行时间 → 5 分钟就死 ≠ "还在跑两天"
+2. **找完成标志**：正常完成后有 `"Pairwise Tests Complete"` 行；缺少 = 进程异常终止
+3. **检查 diffResult 状态**：日志里能看到部分 cluster 的 diffResult（log2FC/fdr/pval 有值），说明计算过程正常进行到了某步然后被杀
+
+**修复（三选一，按推荐顺序）**：
+
+| 方案 | 改动 | 内存 | 耗时 | 精度 |
+|------|------|------|------|------|
+| **A. Gaussian 近似（首选）** | `testMethod = "G"` | 降一半 | 3-5 min | 足够（500 细胞下 Wilcoxon ≈ Gaussian） |
+| B. 分批跑 | `useGroups = batch`（每次 5 个 cluster） | 降 5 倍 | 15-20 min | 完全一致 |
+| C. 降低 maxCells | `maxCells = 200` | 降 3 倍 | 10 min | 有损（采样偏差） |
+
+**推荐方案 A**：
+```r
+markersGS <- getMarkerFeatures(
+    ArchRProj = proj, 
+    useMatrix = "GeneScoreMatrix", 
+    groupBy = "Clusters",
+    bias = c("TSSEnrichment", "log10(nFrags)"),
+    testMethod = "G"        # ← Gaussian 近似，内存降一半
+)
+```
+
+**⚠️ 为什么 `maxCells = 500` 不够**：`maxCells` 控制每个 cluster 采样 500 个细胞做检验，但 Wilcoxon 的内存峰值出现在排序阶段（所有 cell 的 rank 值同时驻留）。16 万细胞的 rank 向量 ~1.2MB，但 30 cluster 的 435 次比较同时排队 → 峰值内存 = 435 × 1.2MB × (matrix_sparsity_factor) ≈ 数 GB。Gaussian 近似跳过排序，直接用均值/方差 → 内存降到 O(clusters × genes)。
+
+**日志查看技巧**：集群日志通常在 `ArchRLogs/ArchR-getMarkerFeatures-*.log`，用 `tail -50` 看最后几行是否有完成标志。日志中断 + 进程消失 = OOM Kill。
+
+### 🟢 getMarkerFeatures 必须带 bias 校正（2026-08-12 用户审计实锤："你确定这几步没有问题吗？"）
 
 用户对照官方 tutorial 逐行检查时发现我给的 marker 检验缺 `bias` 参数。**官方默认写法必须带 bias**：
 
@@ -923,11 +1243,35 @@ plotEmbedding(ArchRProj = proj, colorBy = "cellColData",
 
 **注意**：ATAC 的 GeneScore 反映的是"染色质开放潜力"，不是"基因表达"。一个基因在 ATAC 上 score 高但 RNA 不表达是正常的（增强子开了但转录没启动）。大群注释用此方法可行，但亚群细分最好结合 snRNA 的 TransferData。
 
+### 🔴 getMatrixFromProject(useMatrix="PeakMatrix") 报 "useMatrix is not in Available Matrices" — PeakMatrix 未构建（2026-08-30 实测）
+
+**现象**：`pm <- getMatrixFromProject(proj, useMatrix = "PeakMatrix")` 报错 `useMatrix is not in Available Matrices see getAvailableMatrices`。
+
+**根因**：只跑了 `addReproduciblePeakSet`（出 peak 坐标列表），**没跑 `addPeakMatrix`**——"peak set（坐标）"和"PeakMatrix（细胞×peak 计数矩阵）"是两步独立操作，getMatrixFromProject 只认后者。
+
+**修复**（先确认再补建再取）：
+```r
+getAvailableMatrices(proj)          # ① 看现有矩阵（应无 "PeakMatrix"）
+proj <- addPeakMatrix(proj, force = TRUE)   # ② 补建（细胞×~50万 peak 稀疏矩阵，吃内存）
+getAvailableMatrices(proj)          # ③ 确认出现 "PeakMatrix"
+pm <- getMatrixFromProject(proj, useMatrix = "PeakMatrix")   # ④ 再取
+```
+- **人脑/猴脑两侧都检查**：跑完 `addReproduciblePeakSet` 后如果直接调 getMatrixFromProject 就可能踩此错；人脑"跑出来了"也要确认 addPeakMatrix 已执行。
+- **⚠️ 保存必须 `saveArchRProject` 而非 `saveRDS`**（见上方 ⚠️ saveArchRProject vs saveRDS 条目）——addPeakMatrix 的大矩阵只有 saveArchRProject 才落盘，saveRDS 只存指针下次 load 不到。
+
+> 📑 完整 peak calling 排错（HDF5 写权限/BSgenome/NHPABC 参数/下载资源/Sample→individual 提取/个体级年龄统计口径）→ `references/archr-peak-calling-troubleshooting.md`（2026-08-29/30 人猴海马项目实战沉淀）
+
 ### 🔴 跨物种海马标签转移（Label Transfer）注释方法（2026-08-25 新增）
 
-Zhang Xiao 2026 Cell 猴脑文章的 16 类 `predictedAnno` = **用人类脑参考图谱做标签转移预测注释**，不是手动打 marker。
+**Zhang Xiao 2026 实际方法（PDF第246-247行确认）**：
+> "The regional cell subtype identities were determined by assessing gene expression and locus chromatin accessibility of canonical markers"
 
-**标准流程**：
+**是手动 canonical marker 注释，不是 TransferData 预测。** PDF 第 231-232 行也确认：
+> "Analysis of the snATAC-seq data revealed the same 16 main cell types"
+
+ATAC 和 RNA 注释结果一致，都用 canonical markers。
+
+**TransferData 预测注释流程**（当没有已注释参考时使用）：
 ```r
 # 1. 准备人类参考（已注释的 snRNA-seq）
 # 2. 准备猴脑 query（未注释的 snRNA-seq）
@@ -944,6 +1288,8 @@ predictions <- TransferData(
 )
 macaque_seurat$predicted_anno <- predictions$predicted.id
 ```
+
+**⚠️ 专利循环论证风险**：猴侧 predictedAnno 若用人类参考 label transfer 预测而来，再用它做"猴-人保守性对比" = 循环论证。专利方法里必须注明"label transfer 仅用于对齐，保守性评估基于独立信号（序列/可及性/TF）"。
 
 **常用跨物种注释工具**：
 
@@ -976,7 +1322,99 @@ macaque_seurat$predicted_anno <- predictions$predicted.id
 - 人猴共有核心marker对照表
 - ATAC Gene Activity Score注释方法说明
 
+**Zhang Xiao 2026 ATAC注释方法详情** → `references/zhangxiao-2026-macaque-atac-annotation.md`
+- 手动canonical marker注释（非TransferData预测）
+- ATAC和RNA注释结果一致（16种主要细胞类型）
+- 亚群marker列表（Ast1-3/Mic1-2/ODC1-2/血管细胞/89种神经元亚群）
+- PDF原文行号锚点
+
 **用户铁律（2026-08-25）**：提供marker时必须附文献PMID/DOI，不能凭LLM预训练知识列marker。
+
+### 🔴 Peak calling 官方流程顺序（2026-08-29 用户逐行对照官网 12.2 纠正）
+
+**官网官方顺序（12.2 Calling Peaks w/ Macs2）——`findMacs2()` 必须在 `addGroupCoverages()` 之前**：
+```r
+pathToMacs2 <- findMacs2()      # ① 先找 MACS2（官网 12.2 第一件事）
+proj <- addGroupCoverages(      # ② 再建组覆盖（峰值前必跑，官网 12.1）
+    ArchRProj = proj,
+    groupBy = "celltype"
+)
+proj <- addReproduciblePeakSet( # ③ MACS2 call peaks（官网 12.2 官方示例同款）
+    ArchRProj = proj,
+    groupBy = "celltype",
+    pathToMacs2 = pathToMacs2
+)
+```
+- **官方示例只有 3 个参数**（ArchRProj / groupBy / pathToMacs2）。`minCells=40 / maxCells=500 / minReplicates=2 / maxReplicates=5 / sampleRatio=0.8` 是 `addGroupCoverages` 的**内置默认值**（官网正文不写，不需要用户传）——不要当作"官方参数"列出来。
+- **`maxFragments` 默认 = `25*10^6`（2500 万），不是 8e7（8000 万）**（2026-08-29 实测 formals 输出纠正）。
+- **`addReproduciblePeakSet` 官方默认参数**：`peakMethod="Macs2"`、`reproducibility="2"`（≥2 个 pseudo-bulk 有 peak 才算可重复）、`peaksPerCell=500`、`minCells=25`、`pathToMacs2=findMacs2()`（默认自动找）、`shift=-75, extsize=150`（MACS2 经典 ATAC 参数）、`excludeChr=c("chrM","chrY")`。
+- 官网正文提到**可选**参数：`peaksPerCell=500`（防小群贡献低质量峰值）、`reproducibility="2"`（或 "(n+1)/2" 多数票）——想加可以，但官方示例省略（用默认）。
+
+**findMacs2() 找不到 MACS2 时（已装但在 conda env / 特定路径）**：
+- 官网原话："If you have installed MACS2 but ArchR cannot find it, you should provide the path to the function via the `pathToMacs2` parameter."
+- 直接手动指定完整路径：`pathToMacs2 <- "/hwfssz3/.../miniconda3/envs/MACS2/bin/macs2"`（或 `Sys.setenv(PATH=paste0("<dir>:", Sys.getenv("PATH")))` 后 `findMacs2()`）。
+- 没装 → `conda install -c bioconda macs2` 或 `pip install macs2`；Linux 集群 1 分钟。Windows 上装不上才走 TileMatrix fallback（见 references/macs2-windows-fallback.md）。
+
+**50 CPU（多核）配置经验（2026-08-29 用户"我设置50个cpu"实测估算）**：
+```r
+addArchRThreads(threads = 50)
+```
+- 20 万细胞 / 8 celltype 分组：addGroupCoverages ~10-20 min（I/O 密集，50 线程吃满）；addReproduciblePeakSet ~3-8 min（MACS2 本身单线程但 8 群并行）；**addPeakMatrix ~15-30 min 是 I/O 瓶颈，CPU 再多不加速**。
+- ⚠️ 50 线程内存峰值 ~40-80GB（每线程 1-2GB），跑前 `free -g` 确认 ≥128GB 才敢上 50；64GB 建议降到 20-30。
+- **CPU 不高 ≠ 卡死**：addGroupCoverages 是磁盘 I/O 密集（读几百个 Arrow 文件聚合 pseudo-bulk），CPU <10% 是常态；MACS2 callpeak 单线程。判定在跑 = `ps aux | grep macs2` 有输出（已到 callpeak 阶段）+ 临时文件在增长 + R 进程存活；R 进程消失才是崩了。
+
+### 🔴 addGroupCoverages H5Fcreate / "HDF5. File accessibility. Unable to open file" — 写权限根因诊断（2026-08-29 集群实测）
+
+**现象**：`addGroupCoverages` 全组 CellGroups 都打出来了（`Astro (1 of 8): CellGroups N = 5`），在写 coverage 文件时报 `Error in H5Fcreate(file): HDF5. File accessibility. Unable to open file.`
+
+**关键区分（决定诊断方向，别一上来就删文件）**：
+- `H5Fopen` 类错误 = 打开**已有**文件失败 → 残留损坏 .h5（unlink GroupCoverages + force=TRUE 正解）
+- **`H5Fcreate` 错误 = 创建【新】文件失败 → 99% 是写权限/配额问题，不是残留文件**
+
+**根因链（本会话实证——加载他人共享的 ArchRProject）**：
+1. `loadArchRProject()` 加载别人保存的项目 → 项目的 `outputDirectory` **写死在对方目录**（如 `/hwfssz3/PS_JLU/zhangxiao6/ArchR/input/Hf/saveProj20250710`）
+2. 当前用户对该目录可能只有读权限 → addGroupCoverages 往 outputDirectory 写 coverage .h5 → H5Fcreate 被拒
+3. ⚠️ `df -h` 显示文件系统有空间 ≠ 你能写——**共享集群还有 per-user quota / 目录级 ACL**，df 看不出来
+
+**诊断三连（30 秒）**：
+```r
+getOutputDirectory(proj)   # ① 先看 coverage 要写哪——项目从谁那 load 的，outputDirectory 就指向谁（他人项目 = 他人目录！）
+```
+```bash
+lfs quota -u <user> <fs> 2>/dev/null || quota -s                                  # ② per-user 配额（df 看不出来）
+touch <outputDirectory>/__test.tmp && echo WRITABLE && rm <outputDirectory>/__test.tmp   # ③ 写权限实测
+```
+
+**修复二选一（不复制大文件的最快路径）**：
+- A（内存改 outputDirectory，不碰原项目）：
+```r
+proj@projectMetadata$outputDirectory <- "/hwfssz3/.../zhangbo/jupyter_zb/Patent/ALL_ATAC"
+dir.create(proj@projectMetadata$outputDirectory, recursive = TRUE)
+unlink(file.path(proj@projectMetadata$outputDirectory, "GroupCoverages"), recursive = TRUE)
+proj <- addGroupCoverages(proj, groupBy = "celltype", force = TRUE)
+```
+- B（长期要写）：`copyArchRProject(projToCopy = proj, outputDirectory = "/hwfssz3/.../zhangbo/...")` 复制到自己的项目，之后全在自己目录跑
+
+**⚠️ 附带反推验证**：日志 `Number of Cells = 500` = 实际生效的 maxCells=500（ArchR 默认）——**从日志反推参数是否真的传进去了**，别以为脚本写了 `maxCells=5000` 就一定生效（可能贴错脚本/没保存/旧版本在跑）。张潇 NHPABC 复现必须显式传 `minCells=40, maxCells=5000, minReplicates=2, maxReplicates=10`。
+
+### 🟢 BSgenome 在 peak calling 不需要（2026-08-29 用户问"猴脑不需要 library(BSgenome.Hsapiens.UCSC.hg38) 吗？"实测）
+
+- **addGroupCoverages / addReproduciblePeakSet 不需要当前 session 加载任何 BSgenome**——基因组注释（genomeAnnotation/geneAnnotation）在 `createArrowFiles()` 时已写入 Arrow 文件，`loadArchRProject()` 自动携带。
+- ⛔ **猴脑（食蟹猴 mfas7 / T2T-MFA8v1.1，NC_088xxx 命名）绝不能 `addArchRGenome("hg38")`**——染色体命名不匹配（NC_088xxx vs chr1），下游全错（见上方"非 UCSC 基因组"条目）。
+- 需要 BSgenome 的场景只有 motif 注释（`addMotifAnnotations` 算背景）等少数；猴侧用 custom BSgenome 包（`BSgenome.Mfascicularis.NCBI.T2TMFA8v1`），不是任何一个 UCSC human 包。
+
+### 🟢 张潇 NHPABC cCRE 参数（用户专利参考基线，2026-08-29 用户贴 GitHub 脚本实测）
+
+| 步骤 | 参数（NHPABC 显式设置） | ArchR 默认 | 差异 |
+|------|------------------------|-----------|------|
+| addGroupCoverages | minCells=40, **maxCells=5000**, minReplicates=2, **maxReplicates=10** | maxCells=500, maxReplicates=5 | 放大 10×/2× 为亚型×个体分组保覆盖深度 |
+| addReproduciblePeakSet | **maxPeaks=500,000**, **cutOff=0.01** | 150,000 / 0.05 | 输出 **501-bp fixed-width** peaks |
+| 后续 cCRE 筛选 | Mean CPM > 4 在 ≥4 猴样本 且 Mean CPM > 0 在 ≥12 样本 | — | PeakMatrix→Seurat RC(CPM, scale=1e6)→Peak×Individual 均值 |
+| peak-to-gene | addCoAccessibility: aggregation k=10, window 500kb, distance 250kb | — | — |
+
+完整 cCRE 流程（PeakMatrix→Seurat RC→CPM 过滤→共可及性）→ atac-paper-reproduction `references/nhpabc-cre-workflow.md`。
+
+**peak 结果验收**：`length(getPeakSet(proj))` 对 265K cells × 8 大类 = **~50 万级（525,137 实测，属正常偏多）**；`summary(width(getPeakSet(proj)))` **全 501** = 501-bp 固定宽成功标志（与 NHPABC 规范一致）；peak 保存必须 `saveArchRProject`（见下方 ⚠️ saveArchRProject vs saveRDS）。
 
 ### 🔴 细胞类型 marker 来源必须逐篇验证物种（2026-08-12 用户质疑"这些数据有来源吗？"实测）
 
@@ -1037,6 +1475,34 @@ macaque_seurat$predicted_anno <- predictions$predicted.id
 
 
 | human | hippocampus | aging | 2026-08-08 | P1_da_young_old.R | - | - |  |
+### ❌ AddModuleScore() does NOT work on ArchRProject
+`Seurat::AddModuleScore()` is a Seurat method; calling it on an ArchRProject object fails with:
+`Error in UseMethod(generic = "AddModuleScore", object = object): no applicable method for 'AddModuleScore' applied to an object of class "ArchRProject"`
+→ Use the manual `colMeans(mat[idx,])` approach above, or convert to Seurat first.
+
+### ❌ testMethod = "wilcoxon" IS correct (do NOT change to "U")
+Despite temptation to simplify, the official ArchR tutorial uses `testMethod = "wilcoxon"`. ArchR accepts both `"wilcoxon"` (full string) and `"U"` (abbreviation) for Wilcoxon rank-sum. The tutorial example:
+```r
+markersGS <- getMarkerFeatures(
+    ArchRProj = proj,
+    useMatrix = "GeneScoreMatrix",
+    groupBy = "Clusters",
+    bias = c("TSSEnrichment", "log10(nFrags)"),
+    testMethod = "wilcoxon"    # ← official tutorial value
+)
+```
+
+### ⚠️ getMarkerFeatures() can OOM on large datasets
+16万+ cells × 30+ clusters = 435 pairwise comparisons. On limited-memory clusters this can cause OOM kill with no error in the log (process silently dies after ~5 min). Mitigation:
+- Use `GeneScoreMatrix` (not `PeakMatrix`) — 2万 features vs 50万, 10-25x less memory
+- Add `maxCells = 500` to cap per-group cells
+- Or use `testMethod = "G"` (Gaussian approximation) for 3-5x speedup with negligible precision loss at N>500
+
+| - | - | - | 2026-08-27 | human_umap_annotation.R | - | - |  |
+| - | - | - | 2026-08-27 | human_umap_annotation.R | - | - |  |
+| - | - | - | 2026-08-27 | human_umap_annotation.R | - | - |  |
+| - | - | - | 2026-08-27 | check_arrow_availability.R | - | - |  |
+| human | hippocampus | aging | 2026-08-27 | human_donor_age_map.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

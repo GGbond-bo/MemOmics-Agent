@@ -180,6 +180,53 @@ CellChat v2配体-受体分析。和弦图/气泡图/信号角色热图。从Seu
 | human | skeletal_muscle | aging | 2026-07-14 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | run_cellchat.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_cellchat.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_probe_R442.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_fix_install_deps.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_verify_cellchat.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | api_signature_audit.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_cellchat_build.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_fix_nmf_to_Rlibs.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_probe_kernel_R453.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_cellchat_compare.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | figure_health_check.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02b_signalingRole_heatmap.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_cellchat_ecm_and_networks.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | figure_health_check_v2.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_key_findings.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_LRsig_columns.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 05_extract_LR_and_summary.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | literature_anchor_search.R | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | process_probe.sh | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | run_audit_all.sh | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | run_audit_all.sh | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 06_sensitivity_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | debate_L2_final_verdict | - | - |  |
+| - | - | - | 2026-09-24 | inspect_meta.R | - | - |  |
+| - | - | - | 2026-09-24 | 07_final_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 07_final_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 08_audit_figures.R | - | - |  |
+| - | - | - | 2026-09-24 | 08_audit_figures.R | - | - |  |
+| - | - | - | 2026-09-24 | 08_audit_figures.py | - | - |  |
+| - | - | - | 2026-09-24 | debate_L2_reopen_verdict | - | - |  |
+| - | - | - | 2026-09-24 | 09_donor_and_ptprm_audit.R | - | - |  |
+| - | - | - | 2026-09-24 | 10_sample_level_pseudobulk.R | - | - |  |
 ## 🚨 Critical Pitfalls (from real runs)
 
 ### P1: h5ad → Seurat metadata corruption (`b'...'` prefix)
@@ -218,6 +265,14 @@ for (col in colnames(seurat_obj@meta.data)) {
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| exit_code=3221225794 (0xC0000142 STATUS_DLL_INIT_F | 两个叠加因素：① 命令行里 `grep -v "建造\/^$" ... / aw | 拆开执行：terminal 只跑单条 Rscript 重定向命令，输出查看另起一步；并先确认系统内存 |
+| 错误于identifyOverExpressedGenes(cc, verbose = FALSE) | CellChat 1.6.1 的函数签名不含 verbose（实测 formal | 去掉所有 verbose 传参：identifyOverExpressedGenes(cc); id |
+| 错误: 无法分配大小为39.3 Mb的向量 / 停止执行（EXIT=1，日志仅打印 STAGE 后即 | 单个 R 进程中同时持有 6 个 CellChat 对象 + Seurat 对象 | 待修复：拆分脚本为 A+B（廉价）/ C 下采样（每次单 rep 独立进程，run 完 rm+gc） |
+| LRsig 无 prob 列, 实际列名: interaction_name, pathway_na | 对 CellChat 对象槽位结构理解不足：误以为显著性 LR 表（LRsig） | 两层修复：① 语法层：cc@LR$LRsig 是 S4Vectors::DataFrame，必须 a |
+| 热图失败: outgoing "grid.draw"没有适用于"c('Heatmap', 'Addi | 平台/包版本差异：CellChat 1.6.1 内部用 ComplexHeatm | CellChat 1.6.1 的 netAnalysis_signalingRole_heatmap |
+| R 4.4.2: package or namespace load failed for 'Seu | R 4.4.2 用户库只有 CellChat/NMF 等少数包，缺 Seurat | 用 R_LIBS 同时挂两个库：4.4.2 用户库（提供 CellChat/NMF）+ E:/R-l |
+| library(CellChat): there is no package called 'Cel | CellChat+NMF 只装在 R 4.4.2 用户库；平台 execute_ | 定位到 CellChat/NMF 实际装在 R 4.4.2 用户库（C:/Users/23136/A |
+| execute_r: <text>:3:103: unexpected symbol — exec( | execute_r 传输长代码时对 exec(open(...).read()) | 改用 source("path", encoding="utf-8") 执行脚本文件，避免 exec |
 | `b'...'` in idents | Python bytes from h5ad metadata | Clean with `gsub("^b['\"](.*?)['\"]$", "\\1", x)` |
 | Small cluster inflated weight | No population.size normalization | Run both FALSE and TRUE, debate ranking changes |
 | signaling role heatmap fails | Centrality not computed | `netAnalysis_computeCentrality(cellchat, slot.name="netP")` first |

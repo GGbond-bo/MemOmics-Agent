@@ -22,11 +22,50 @@
       "date": "2026-07-04",
       "score": 8.0,
       "result": "39,982 cells, 19 donors, 6 iterations, PC30=88.6% variance, UMAP clear separation by age/celltype"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF2000_structure.R",
+      "params": "{\"file\":\"E:/release/_memtest/data/MF_2000.rds\",\"mode\":\"read-only inspect\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "只读检查 MF_2000.rds：51227 genes x 2132 cells，assays=RNA/SCT，reductions=pca/harmony/umap，48 个 samplename（每样本45细胞，n_unique=48 合格 batch_key），10 个 Idents 亚群，meta.data 49 列（含 samplename/age/type/sex/annotatio"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF2000_env_api.R",
+      "params": "{\"action\":\"args()/library() inspect\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "环境与 API 实查：harmony 2.0.5，RunHarmony.Seurat(object, group.by.vars, reduction.use=\"pca\", dims.use, reduction.save, project.dim) —— 参数名是 reduction.use/dims.use（非 reduction/dims）；FNN/RANN/cluster 可加载（用于 L"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "harmony_samplename_integration.R",
+      "params": "探测本机 harmony 版本与 API 白名单",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "本机 harmony 2.0.5 + Seurat 5.5.1。RunHarmony.Seurat(object, group.by.vars, reduction.use, dims.use, reduction.save, project.dim, ...) 会把 ... 透传给 RunHarmony.default(data_mat, meta_data, vars_use, theta, "
     }
   ],
-  "proven_script": "01_harmony_umap.R",
-  "error_count": 1,
-  "success_count": 1,
+  "proven_script": "harmony_samplename_integration.R",
+  "error_count": 6,
+  "success_count": 4,
   "errors": [
     {
       "timestamp": "2026-07-04 04:09",
@@ -38,6 +77,69 @@
       "tissue": "skeletal_muscle",
       "script": "01_harmony_umap.R",
       "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-24 17:24",
+      "error_type": "syntax_error",
+      "message": "execute_r 内用 exec(open(...).read()) 报 <text>:1:116: unexpected symbol",
+      "root_cause": "把 execute_python 的脚本加载写法套用到 execute_r：R 没有 exec()/open() 内建，需 source()",
+      "fix_applied": "R 内核里运行脚本文件必须用 source(path, encoding=\"UTF-8\")；exec(open().read()) 是 Python 语法，进 R 会被解析成非法表达式（错误信息里 .read 被截断）",
+      "species": "",
+      "tissue": "",
+      "script": "harmony_samplename_integration.R",
+      "severity": "low"
+    },
+    {
+      "timestamp": "2026-09-24 17:25",
+      "error_type": "runtime_error",
+      "message": "NA/NaN/Inf in foreign function call (arg 1) — 脚本 harmony_samplename_integration.R 静默失败",
+      "root_cause": "距离矩阵就地修改（diag<-Inf）污染了后续 silhouette 调用；silhouette 的 dmatrix 要求对角为 0、无 Inf/NA",
+      "fix_applied": "kNN 检索把 diag(D)<-Inf 后，同一矩阵又被传给了 cluster::silhouette(dmatrix=D) → 传入 Inf 导致 C 层报错。修复：保留原距离矩阵 D0，ASW 用 as.dist(D0)（对角=0），Inf 对角只用于 kNN order()",
+      "species": "",
+      "tissue": "",
+      "script": "harmony_samplename_integration.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 17:26",
+      "error_type": "runtime_error",
+      "message": "'dmatrix' is not a dissimilarity matrix compatible to 'x' (cluster::silhouette)",
+      "root_cause": "混用 silhouette 的两种距离入参形式：dmatrix 要 matrix、dist 要 dist 对象；传 dist 给 dmatrix 触发兼容性校验失败",
+      "fix_applied": "cluster::silhouette(dmatrix=) 必须传 n×n 对称距离矩阵（对角 0），不能传 as.dist() 的 dist 对象（那个要走第 2 位置参数 dist=）。改用 dmatrix = D0",
+      "species": "",
+      "tissue": "",
+      "script": "harmony_samplename_integration.R",
+      "severity": "low"
+    },
+    {
+      "timestamp": "2026-09-24 17:27",
+      "error_type": "runtime_error",
+      "message": "RunHarmony: Argument assay.use is unhandled. Please refer to the documentation for the valid harmony options!",
+      "root_cause": "harmony 1.2.x 起 RunHarmony 参数白名单变化（assay.use 被移除/改由 DefaultAssay 决定），旧教程写法的参数在新版本会硬报错",
+      "fix_applied": "本机 harmony 版本不接受 assay.use 参数 → 移除该参数；RunHarmony 自动使用 DefaultAssay（已设为 SCT），口径不变",
+      "species": "",
+      "tissue": "",
+      "script": "harmony_samplename_integration.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 17:30",
+      "error_type": "missing_package",
+      "message": "there is no package called 'mclust'（mclust::adjustedRandIndex）",
+      "root_cause": "本机 R-4.5.3 库无 mclust（Seurat 5.5.1 不再把它列为依赖），ARI 需要另找来源",
+      "fix_applied": "不安装包（铁律29 缺包先问用户）；ARI 改为自实现列联表公式：ARI=(idx-exp)/(max-exp)，idx=ΣC(n_ij,2), exp=ΣC(a_i,2)ΣC(b_j,2)/C(n,2), max=½(ΣC(a_i,2)+ΣC(b_j,2))",
+      "species": "",
+      "tissue": "",
+      "script": "harmony_samplename_integration.R",
+      "severity": "low"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "harmony",
+    "embeddings"
+  ],
+  "trigger_level": "YEL",
+  "user_prefs": {
+    "last_used_script": "harmony_samplename_integration.R"
+  }
 }

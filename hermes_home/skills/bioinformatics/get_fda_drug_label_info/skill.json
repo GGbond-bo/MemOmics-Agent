@@ -14,5 +14,14 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "get_fda_drug_label_info",
+    "get fda drug label info",
+    "fda",
+    "drug",
+    "label",
+    "info"
+  ],
+  "trigger_level": "YEL"
 }

@@ -13,7 +13,7 @@ metadata:
     language: R+Python
     category: scRNA
 prerequisites:
-  r_packages: ["DESeq2", "Seurat", "edgeR", "clusterProfiler", "org.Hs.eg.db", "org.Mm.eg.db"]
+  r_packages: ["DESeq2", "Seurat", "edgeR", "matrixStats", "Matrix", "clusterProfiler", "org.Hs.eg.db", "org.Mm.eg.db"]
   python_packages: ["scanpy", "diffxpy"]
 ---
 
@@ -180,6 +180,63 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging | 2026-07-17 | - | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | test_degs.r | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | test_degs.r | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_deg_YPost_vs_OPost.R + 02_deg_pseudobulk_qc_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | data_probe_MF_2000 | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_deg_sensitivity_withinL3_LOO.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_deg_YPost_vs_OPost_MF2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_deg_composition_lfcShrink_tiers.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_deg_collinearity_rankEnrichment_tiers.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | probe_5deg_tables | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | 10_summarize_5deg_tables.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | 11_deg_sig_genes_per_subcluster.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | 11_deg_sig_genes_per_subcluster.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | meta_probe_MF_L3_meta_new | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | 12_replacement_scores_and_proportions.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | probe_local_data_for_celllevel_deg | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | copy_subset_and_probe_Rlibs | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | mast_borrow_and_subset_probe | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | verify_zlm_glmer_support | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | network_probe_nebula_docs | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | mast_celllevel_per_subcluster.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | review_user_RUV_MAST_code + counts_under_monkey_criteria | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | verify_RUVr_signature + review_mast_v2 | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-26 | muscle_RUV_MAST_RE.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | cleanup_non_deg_figures | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | cleanup_non_deg_figures.sh | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | cleanup_non_deg_delete.sh | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | 13_redraw_mast_celllevel_barplot.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | 14_new_deg_updown_bar.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-28 | 15_diag_new_deg_inflation.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 19_coef_threshold_stats.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | lit_verify_coef_thresholds | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | fetch_NHPABC_official_threshold | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 20_coef_threshold_diagnosis.py | - | - |  |
+| human | skeletal_muscle | exercise | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 22_deg_filter_before_after_bar.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 23_subcluster_updown_coef025.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | lit_threshold_search_europepmc | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 30_lit_mast_threshold_extract.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | probe_Seurat_FindMarkers_defaults_and_MAST_filter | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | probe_Seurat_FindMarkers_defaults_and_MAST_filter | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | probe_Seurat_FindMarkers_defaults_and_MAST_filter | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 30_lit_mast_threshold_extract.py + squair_mast_threshold_probe | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 33_MF_v3_unified_symlog_barvalues.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 34_MF_v4_no_panel_letters.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | probe_new_vs_old_deg_files_structure | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 35_MF_v5_sigma_down_first.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 35_MF_v5_sigma_down_first.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | 35_MF_v5_sigma_down_first.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | probe_5deg_xlsx_and_volcano_html | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-30 | probe_fdr_zeros_diagnosis | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-30 | probe_fdr_zeros_diagnosis | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-30 | probe_fdr_zeros_diagnosis | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 21_export_coef025_by_contrast.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 22_fix_fdr_number_format.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 22_fix_fdr_number_format.py | - | - |  |
+| human | skeletal_muscle | aging+exercise | 2026-10-04 | hsp_subcluster_stats.py + hsp_subcluster_frequency_figure.py | - | - |  |
+| human | skeletal_muscle | aging+exercise | 2026-10-04 | hsp_extended_scope_sensitivity.py | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2
@@ -209,6 +266,9 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| error in evaluating the argument 'X' in selecting  | split() 的分组变量为 NULL —— 想当然假设 meta 里有 ind | MF_subset_2000.rds 的 meta.data 不含 individual 列（只有  |
+| variables in design formula cannot contain NA: typ | pseudobulk 聚合列名（colnames(pb)）与 sub$sampl | 待修:pseudobulk meta$type 由 sub$type[match(colnames( |
+| unused argument (compression = "none") — ggsave 在  | ggsave 的 compression 参数按设备分发，png 设备不接受该参 | 拆开三次 ggsave 调用：png/pdf 不传 compression，tiff 传 compr |
 | there is no package called 'MAST' | MAST not installed | `BiocManager::install('MAST')` |
 | design matrix = samples/coefficients | Pseudobulk aggregated by condition, not sample | Aggregate by donor×subcluster, use condition as design variable |
 | lfcShrink type='apeglm' fails | apeglm not installed | Use type='normal' or skip shrinkage |

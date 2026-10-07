@@ -26,5 +26,25 @@
     "deep reading",
     "paper reading"
   ],
+  "success_count": 1,
+  "proven_script": "nature_page_fetch.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "nature_page_fetch.py",
+      "params": "",
+      "date": "2026-08-27",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "成功通过curl获取Nature Medicine论文HTML页面，提取到文章元数据、作者列表、引用信息、Zenodo数据链接。文章DOI: 10.1038/s41591-026-04571-8, 2026年8月21日发表。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "nature_page_fetch.py"
+  },
   "when_to_use": "全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要"
 }

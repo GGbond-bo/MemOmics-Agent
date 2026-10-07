@@ -36,5 +36,14 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "GWAS",
+    "孟德尔",
+    "MR",
+    "mendelian",
+    "randomization",
+    "twosamplemr"
+  ],
+  "trigger_level": "RED"
 }

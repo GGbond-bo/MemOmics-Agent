@@ -16,7 +16,9 @@ import json
 import re
 import shutil
 import time
+import hashlib
 import logging
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -74,18 +76,213 @@ def _archive_to_results_log(record: dict, action: str):
         pass  # 归档失败不阻断主流程
 
 
-def _get_skill_dir(skill_name: str) -> Optional[str]:
-    """找到 skill 目录（先 skills/ 再 hermes_home/skills/bioinformatics/）"""
-    # 动态获取 MemOmics 安装目录
+def _engine_fingerprint() -> str:
+    """引擎版本指纹：判断本次调用走的是「新加载的模块」还是「常驻进程里的旧模块」。
+
+    - enforcement 自动路径：每次 spec_from_file_location + exec_module → 永远最新
+    - 常驻 server 的手动工具路径：启动时 import，需重启进程才更新
+
+    **以文件内容哈希（sha256）为准**，不用 mtime 做版本判据 —— mtime 在
+    git checkout / 打包安装 / rsync·tar 保留时间戳 / 时钟回拨 等场景下会把
+    「内容已变」误判成「没变」（debate 裁决 code_engineering, verdict=modify）。
+    size / mtime_ns / git 短 SHA 仅作人工核对附件，**不得**单独当部署门禁。
+
+    返回示例：skill_evolution.py@sha256:ab12cd34ef56@size:58862@mtime_ns:1790791991000000000@git:4dafd88c
+    """
+    try:
+        _p = os.path.abspath(__file__)
+        _h = hashlib.sha256()
+        with open(_p, "rb") as f:
+            for _chunk in iter(lambda: f.read(65536), b""):
+                _h.update(_chunk)
+        _st = os.stat(_p)
+        try:
+            _git = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=os.path.dirname(_p), capture_output=True, text=True, timeout=5,
+            ).stdout.strip() or "none"
+        except Exception:
+            _git = "none"
+        return (
+            f"{os.path.basename(_p)}@sha256:{_h.hexdigest()[:12]}@size:{_st.st_size}"
+            f"@mtime_ns:{_st.st_mtime_ns}@git:{_git}"
+        )
+    except Exception:
+        return "unknown"
+
+
+# 启动期自证：把「进程内实际加载的引擎版本」绑定到内容哈希（debate 裁决 code_engineering 要求，
+# 用于部署验收 —— 只是文件哈希不足以证明常驻进程已加载新代码，故在 import 期打印一次）
+ENGINE_VERSION = _engine_fingerprint()
+logger.info("skill_evolution engine loaded: file=%s version=%s",
+            os.path.abspath(__file__), ENGINE_VERSION)
+
+
+def _skill_roots() -> list:
+    """技能库根目录候选（旧布局 skills/ + 现行布局 hermes_home/skills/）"""
     memomics_root = _get_memomics_root()
-    candidates = [
-        os.path.join(memomics_root, "skills", skill_name),
-        os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name),
+    return [
+        os.path.join(memomics_root, "skills"),
+        os.path.join(memomics_root, "hermes_home", "skills"),
     ]
-    for p in candidates:
-        if os.path.isdir(p):
-            return p
-    return None
+
+
+def _iter_skill_category_dirs():
+    """枚举技能库下一级分类目录（plotting/ comparison/ statistics/ user-scripts/ 01_RNA/ …）
+
+    Windows 鲁棒性：单目录 listdir/isdir 抛 OSError（无权限 / 坏 junction / 网络盘）
+    → 跳过并记日志，不让一个坏目录中断全部分类解析。
+    """
+    for root in _skill_roots():
+        try:
+            if not os.path.isdir(root):
+                continue
+            entries = sorted(os.listdir(root))
+        except OSError as e:
+            logger.warning(f"_iter_skill_category_dirs: 跳过不可读根目录 {root}: {e}")
+            continue
+        for name in entries:
+            p = os.path.join(root, name)
+            try:
+                if os.path.isdir(p):
+                    yield p
+            except OSError as e:
+                logger.warning(f"_iter_skill_category_dirs: 跳过异常目录 {p}: {e}")
+                continue
+
+
+def _resolve_skill_dir_detail(skill_name: str) -> Dict[str, Any]:
+    """结构化解析 skill 目录 —— 失败也可诊断，不静默吞掉原因。
+
+    返回 dict：
+      status            'found' | 'ambiguous' | 'not_found'
+      skill_name        原始输入（未规范化）
+      path              命中路径（仅 status='found'）
+      candidates        命中的候选路径列表（ambiguous 时 >1）
+      searched_roots    实际搜索过的技能库根目录
+      prefix_attempted  是否走了「分类前缀」分支
+      degenerated_prefix 前缀未命中而退化为末段查找时的原始前缀（否则 None）
+      reason            人读原因
+
+    设计理由（debate 裁决 code_engineering / verdict=modify）：
+    多命中与 0 命中在无人值守的工具调用里只会表现为「无故失败」，必须把
+    候选路径、搜索范围、是否退化过前缀一并暴露，调用方才能区分
+    「前缀写错 / 跨分类同名 / 目录不存在」。
+    """
+    detail: Dict[str, Any] = {
+        "status": "not_found",
+        "skill_name": skill_name,
+        "path": None,
+        "candidates": [],
+        "searched_roots": [],
+        "prefix_attempted": False,
+        "degenerated_prefix": None,
+        "reason": "",
+    }
+    if not skill_name or not str(skill_name).strip():
+        detail["reason"] = "空 skill 名"
+        return detail
+
+    name = str(skill_name).strip().strip("/\\")
+    if not name:
+        detail["reason"] = "空 skill 名"
+        return detail
+
+    roots = _skill_roots()
+    detail["searched_roots"] = list(roots)
+
+    # 1) 带分类前缀：plotting/deg-updown-counts-by-subcluster
+    if "/" in name or "\\" in name:
+        detail["prefix_attempted"] = True
+        rel = name.replace("\\", "/")
+        parts = [s for s in rel.split("/") if s]
+        for root in roots:
+            cand = os.path.join(root, *parts)
+            if os.path.isdir(cand):
+                detail.update(status="found", path=cand, candidates=[cand])
+                return detail
+        # 前缀写错也兜底：退化成只用末段继续往下找（记录退化前缀，便于诊断）
+        detail["degenerated_prefix"] = "/".join(parts[:-1]) if len(parts) > 1 else None
+        name = parts[-1] if parts else name
+
+    # 2) 顶层直放
+    for root in roots:
+        direct = os.path.join(root, name)
+        if os.path.isdir(direct):
+            detail.update(status="found", path=direct, candidates=[direct])
+            return detail
+
+    # 3) 任意一级分类目录：仅当唯一命中才接受（避免跨分类同名静默取首匹配）
+    hits = []
+    for cat_dir in _iter_skill_category_dirs():
+        cand = os.path.join(cat_dir, name)
+        try:
+            if os.path.isdir(cand):
+                hits.append(cand)
+        except OSError as e:
+            logger.warning(f"_resolve_skill_dir_detail: 跳过异常目录 {cand}: {e}")
+            continue
+    if len(hits) == 1:
+        detail.update(status="found", path=hits[0], candidates=hits)
+        return detail
+    if len(hits) > 1:
+        detail.update(
+            status="ambiguous",
+            candidates=hits,
+            reason=(f"跨分类同名：{len(hits)} 处命中，拒绝歧义匹配；"
+                    f"请用带分类前缀的写法（如 'plotting/{name}'）"),
+        )
+        logger.warning(
+            f"_resolve_skill_dir_detail: skill 名 '{name}' 在多处命中 {hits} — 拒绝歧义匹配；"
+            f"原始输入='{skill_name}'，搜索根={roots}。请用带分类前缀的写法（如 'plotting/{name}'）"
+        )
+        return detail
+
+    detail["reason"] = (
+        f"未找到：搜索根={roots}，分类前缀尝试={detail['prefix_attempted']}，"
+        f"退化前缀={detail['degenerated_prefix']}"
+    )
+    logger.warning(
+        f"_resolve_skill_dir_detail: skill '{skill_name}' not_found — 搜索根={roots}，"
+        f"分类前缀尝试={detail['prefix_attempted']}，退化前缀={detail['degenerated_prefix']}"
+    )
+    return detail
+
+
+def resolve_skill_dir(skill_name: str) -> Dict[str, Any]:
+    """公共诊断入口：返回结构化解析结果（候选/搜索根/前缀退化），供调用方与日志使用。"""
+    return _resolve_skill_dir_detail(skill_name)
+
+
+def _diag_brief(detail: Dict[str, Any]) -> Dict[str, Any]:
+    """把解析诊断压成精简字段，**随失败结果一起回给调用方**（不只写日志）。
+
+    用途：调用点（record_error / query_logs / record_success / update_script）
+    在解析失败时把「候选路径 / 搜索根 / 是否退化过前缀」一并返回，
+    使「前缀写错 / 跨分类同名 / 目录不存在」三者在返回值里即可判读。
+    """
+    return {
+        "status": detail.get("status"),
+        "candidates": detail.get("candidates", []),
+        "searched_roots": detail.get("searched_roots", []),
+        "prefix_attempted": detail.get("prefix_attempted", False),
+        "degenerated_prefix": detail.get("degenerated_prefix"),
+        "reason": detail.get("reason", ""),
+    }
+
+
+def _get_skill_dir(skill_name: str) -> Optional[str]:
+    """找到 skill 目录 —— 支持任意分类目录，不再写死 bioinformatics/
+
+    解析顺序：
+      1) skill_name 自带分类前缀（如 'plotting/<名>'、'statistics/<名>'）→ 直接按前缀拼路径
+      2) <技能库根>/<名>                      （顶层直放）
+      3) 遍历 <技能库根>/<任意分类>/<名>       （plotting/ comparison/ statistics/ user-scripts/ …）
+
+    失败的诊断信息（候选路径 / 搜索根 / 前缀退化）由 _resolve_skill_dir_detail
+    写成结构化 WARNING —— 需要它们时直接调 resolve_skill_dir()。
+    """
+    return _resolve_skill_dir_detail(skill_name).get("path")
 
 
 def _get_memomics_root() -> str:
@@ -138,12 +335,15 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
                   species: str = "", tissue: str = "", direction: str = "",
                   script_name: str = "", severity: str = "medium") -> Dict[str, Any]:
     """记录错误到 error_log.md + 更新 SKILL.md Common Issues"""
-    skill_dir = _get_skill_dir(skill_name)
+    _detail = resolve_skill_dir(skill_name)
+    skill_dir = _detail.get("path")
     if not skill_dir:
         return {
-            "success": True, "action": "query_logs", "skill": skill_name,
-            "proven_runs": [], "known_errors": [], "references": [],
-            "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
+            "success": False, "action": "record_error", "skill": skill_name,
+            "error": f"skill '{skill_name}' 目录不存在 — 未写入 error_log、未生成空壳归档",
+            "diagnosis": _diag_brief(_detail),
+            "scanned": "skills/<名> | skills/<分类>/<名> | hermes_home/skills/<分类>/<名>（含 plotting/ comparison/ statistics/ user-scripts/）",
+            "hint": "确认真实目录名后重试；skill 名支持带分类前缀（如 'plotting/<名>'）。",
         }
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -277,11 +477,13 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
 def _query_logs(skill_name: str, species: str = "", tissue: str = "",
                 direction: str = "", script_name: str = "") -> Dict[str, Any]:
     """查同类运行日志：skill.json 的 proven_params + logs/error_log.md + references/"""
-    skill_dir = _get_skill_dir(skill_name)
+    _detail = resolve_skill_dir(skill_name)
+    skill_dir = _detail.get("path")
     if not skill_dir:
         return {
             "success": True, "action": "query_logs", "skill": skill_name,
             "proven_runs": [], "known_errors": [], "references": [],
+            "diagnosis": _diag_brief(_detail),
             "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
         }
 
@@ -458,11 +660,13 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
     🆕 approved: 用户是否确认认可. False = 仅存 logs/ 供调试.
     🆕 custom_script: 是否为用户自定义脚本 (figure_scripts/ 或 user_scripts/).
     """
-    skill_dir = _get_skill_dir(skill_name)
+    _detail = resolve_skill_dir(skill_name)
+    skill_dir = _detail.get("path")
     if not skill_dir:
         return {
-            "success": True, "action": "query_logs", "skill": skill_name,
+            "success": True, "action": "record_success", "skill": skill_name,
             "proven_runs": [], "known_errors": [], "references": [],
+            "diagnosis": _diag_brief(_detail),
             "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
         }
 
@@ -662,11 +866,13 @@ def _record_verdict(skill_name: str = "", topic: str = "",
 def _update_script(skill_name: str, script_name: str, fixed_script_path: str,
                    reason: str = "") -> Dict[str, Any]:
     """用修复后的脚本覆盖原脚本，备份旧版本"""
-    skill_dir = _get_skill_dir(skill_name)
+    _detail = resolve_skill_dir(skill_name)
+    skill_dir = _detail.get("path")
     if not skill_dir:
         return {
-            "success": True, "action": "query_logs", "skill": skill_name,
+            "success": True, "action": "update_script", "skill": skill_name,
             "proven_runs": [], "known_errors": [], "references": [],
+            "diagnosis": _diag_brief(_detail),
             "summary": f"无历史运行记录。skill '{skill_name}' 尚未注册或目录不存在 — 运行后将自动创建记录。",
         }
 
@@ -875,10 +1081,19 @@ def _copy_with_retry(src, dst, max_retries=3, delay=0.5):
 
 
 def _sync_to_hermes_home(skill_name: str, skill_dir: str):
-    """同步更新到 hermes_home/skills/bioinformatics/<skill_name>/ — 动态推导路径"""
+    """同步更新到 hermes_home/skills/<分类>/<skill_name>/ — 尊重真实分类目录（不再写死 bioinformatics/）"""
     try:
         memomics_root = _get_memomics_root()
-        target = os.path.join(memomics_root, "hermes_home", "skills", "bioinformatics", skill_name)
+        hh_skills = os.path.join(memomics_root, "hermes_home", "skills")
+        # 已在 hermes_home/skills 下 → 原地更新（不搬到 bioinformatics）；
+        # 带分类前缀（plotting/<名>）→ 按其分类放置；否则回退历史默认 bioinformatics/
+        resolved = _get_skill_dir(skill_name)
+        if resolved and os.path.abspath(resolved).startswith(os.path.abspath(hh_skills)):
+            target = resolved
+        else:
+            rel_parts = [s for s in skill_name.replace("\\", "/").split("/") if s]
+            target = os.path.join(hh_skills, *rel_parts) if len(rel_parts) >= 2 \
+                else os.path.join(hh_skills, "bioinformatics", skill_name)
         # 如果 hermes_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.hermes 的 bug）
         if not os.path.isdir(target) and os.path.isdir(skill_dir):
             shutil.copytree(skill_dir, target)
@@ -1084,6 +1299,10 @@ def skill_evolution(action: str = "record_error",
     # 需求1c：record_run/record_error 归档到 results/.../log/
     if action in ("record_error", "record_success", "record_run") and isinstance(result, dict):
         _archive_to_results_log(result, action)
+
+    if isinstance(result, dict):
+
+        result.setdefault("engine", _engine_fingerprint())
 
     return json.dumps(result, ensure_ascii=False, indent=2)
 

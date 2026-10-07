@@ -257,6 +257,14 @@ $dnbc4tools atac run --name sample --fastq1 ... --fastq2 ... --genomeDir genomeD
 | <!-- 首次运行后自动填充 --> | | | | | | | |
 
 | - | - | - | 2026-08-28 | - | - | - |  |
+| - | - | - | 2026-09-01 | env_probe_wsl.sh | - | - |  |
+| - | - | - | 2026-09-01 | env_probe_wsl_mem.sh | - | - |  |
+| - | - | - | 2026-09-01 | env_probe_wsl_final.sh | - | - |  |
+| human | brain | atac | 2026-09-01 | ftp_probe.sh | - | - |  |
+| - | - | - | 2026-09-01 | wslconfig_check.sh | - | - |  |
+| - | - | - | 2026-09-01 | wslconfig_write.sh | - | - |  |
+| - | - | - | 2026-09-01 | wsl_shutdown.sh | - | - |  |
+| - | - | - | 2026-09-01 | _step3_mkref_v2.sh | - | - |  |
 ## Common Issues
 
 1. **GTF 缺 gene/transcript 行** → 主流程注释报错。用 `mkgtf --action check --output corrected.gtf` 校正，并检查 Warning 中的多基因重叠位置（该区 reads 会被过滤）。
@@ -268,6 +276,14 @@ $dnbc4tools atac run --name sample --fastq1 ... --fastq2 ... --genomeDir genomeD
 7. **下载链接慢/失效** → 官方 BGI CloudDrive（访问码 CABq）或 GitHub Releases；注意 2026-01-15 有修复 HTML 报告的重新上传版。
 8. **STAR 版本差异** → 官方固定 2.7.2b genomeGenerate（日志首行 `STAR verison: 2.7.2b`），不要手动覆盖 genomeParameters.txt。
 9. **被误触发** → 用户只是说"建索引"但厂家未知（可能是 10X/常规流程）→ 按触发门禁 Step 0 先澄清，不要默认路由到本 skill。
+
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| dnbc4tools atac mkref 报错: dnbc4tools: error: unrec | dnbc4tools 3.1 版 atac mkref 参数与 2.1.3 版不 | 在脚本中删除 --threads 16，保留 --fasta/--ingtf/--species/- |
+
 
 ## References
 

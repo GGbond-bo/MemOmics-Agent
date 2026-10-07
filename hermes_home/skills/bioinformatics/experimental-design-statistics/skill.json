@@ -33,10 +33,37 @@
   "parameters": {
     "steps": "研究问题定义 -> 样本量估算 -> 统计方法选择 -> 效应量计算 -> 多重比较校正"
   },
-  "proven_params": [],
-  "proven_script": null,
+  "proven_params": [
+    {
+      "species": "mouse",
+      "tissue": "skeletal_muscle",
+      "direction": "statistics_review",
+      "script": "stats_review_demo_pseudoreplication.R",
+      "params": "{\"design\":\"3组x6小鼠x20纤维\",\"wrong\":\"fiber-level pairwise t-test\",\"right1\":\"per-mouse mean + ANOVA + TukeyHSD\",\"right2\":\"LMM CSA~Group+(1|Mouse)\",\"right3\":\"Spearman on logit(proportion) + partial Pearson controlling group\",\"power\":\"power.t.test/power.anova.test at n=6\"}",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "同一模拟数据：纤维当 n=360 两两 t 检验 → A-C p=2e-5、B-C p=3e-5（虚假显著，真实效应 d=0.5）；小鼠均值 ANOVA+Tukey → 全部 n.s.（p adj 0.20-0.93）；LMM 固定效应 GroupC p=0.091、ICC=0.313（纤维非独立，1/3 方差来自小鼠）。功效：n=6/组 对 d=0.5 仅 0.12、d=0.8 → 0.24、d"
+    },
+    {
+      "species": "mouse",
+      "tissue": "skeletal_muscle",
+      "direction": "statistics_review",
+      "script": "stats_review_figures.R",
+      "params": "{\"fig\":\"stats_review_pseudoreplication_diagnostics.png 2600x2100 res200 cairo\",\"panels\":\"A -log10(P) 错误vs正确 / B 嵌套结构 boxplot+鼠均值 / C power vs n(d=0.5,0.8,1.2) / D 比例-握力散点(raw Pearson|logit Spearman|偏相关)\",\"font\":\"Microsoft YaHei cairo（中文正常）\"}",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "4-panel 诊断图生成成功（figures/stats_review_pseudoreplication_diagnostics.png）。A：错误做法 p=1.23e-1/3.73e-5/1.65e-3 → -log10(P) 最高约 4.4，而 Tukey p adj=0.783/0.174/0.457（全部 n.s.）；C：n=6 时 power d0.5=0.12/d0.8=0.24/"
+    }
+  ],
+  "proven_script": "stats_review_figures.R",
   "error_count": 0,
-  "success_count": 0,
+  "success_count": 2,
   "trigger_keywords": [
     "样本量",
     "功效分析",
@@ -45,5 +72,8 @@
     "统计方法",
     "统计检验"
   ],
-  "trigger_level": "RED"
+  "trigger_level": "RED",
+  "user_prefs": {
+    "last_used_script": "stats_review_figures.R"
+  }
 }

@@ -19,5 +19,25 @@
     "species",
     "annotation"
   ],
+  "success_count": 1,
+  "proven_script": "annotate_subcluster_alignment.R",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "annotate_subcluster_alignment.R",
+      "params": "alignment_map: C1-C6→OPC, C7-C12→Astrocyte, C13→C13, C14-C16/C18→Inhibitory, C17/C19→Excitatory, C20-C23→Microglia, C25-C26/C28-C29→保留原文, C30→ODC, C24/C27→Unknown",
+      "date": "2026-08-27",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人脑海马 ATAC 细分亚群对齐注释完成：265,909 细胞，12 个注释类别。能对齐的用猴脑名字（OPC/Astrocyte/Inhibitory/Excitatory/Microglia/ODC），不能对齐的保留原文名字（C13/C25/C26/C28/C29）。C24/C27 不在 marker list 中标记为 Unknown。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "annotate_subcluster_alignment.R"
+  },
   "when_to_use": "跨物种单细胞RNA-seq细胞类型注释方法"
 }

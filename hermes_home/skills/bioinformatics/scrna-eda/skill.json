@@ -56,8 +56,8 @@
       "tool": "rail_review"
     }
   ],
-  "success_count": 6,
-  "proven_script": "metascape_top100.py",
+  "success_count": 11,
+  "proven_script": "verify_MF120_grouping_and_MT.R",
   "proven_params": [
     {
       "species": "",
@@ -136,10 +136,75 @@
       "approved": false,
       "custom_script": false,
       "result": "FindMarkers结果(10亚群,1900基因)按 avg_log2FC 降序每亚群取top100，构建Metascape表(列头=亚群名，下排100基因)，全部亚群≥100基因故10列×100行完整，导出utf-8-sig CSV"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "verify_gene_signature_xlsx.py",
+      "params": "openpyxl load_workbook(data_only=True); sheet='Supplementary Table 3'; dims=A1:GU24; 22 signatures, 1158 gene entries",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读取 E:/骨骼肌锻炼/pathway_score_CLEAN_v2.xlsx（sheet 'Supplementary Table 3'）：22 个基因签名、Class 列原始分类（Muscle/Metabolism/Diabete/Aging/Inflammation，无合并单元格，None=延续上一行）。发现多数签名基因数=23 且字母序中途截断（Stress→CX3CR1、OxPhos→L"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF120_rds.R",
+      "params": "{\"file\":\"E:/release/_memtest/data/MF_120.rds\",\"path_type\":\"R rds\",\"engine\":\"readRDS + Seurat\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "成功读取 Seurat 对象：51227 genes x 120 cells，assays=RNA/SCT，reductions=pca/harmony/umap，10 个亚群 Idents，meta.data 50 列（含 samplename/age/type/sex/annotation_L2/L3 + 18 个 AUCell 打分列）。EDA 只读探索完成，未做任何过滤。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF120_stats.R",
+      "params": "{\"file\":\"E:/release/_memtest/data/MF_120.rds\",\"cells\":120,\"genes\":51227,\"groups\":6,\"note\":\"tapply 替代 aggregate（aggregate 对字符分组列报 non-numeric-alike）\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_120 完整 EDA：120 细胞 × 51227 基因，6 组（Y/O/OD × Pre/Post），43 样本，10 个 L3 亚群，18 个 AUCell 打分列。QC 全通过（无低质量/高MT细胞）。产出 3 张 CSV 表 + eda_report.md。关键发现：percent.mt 中位数 0 疑似基于 SCT 计算；每样本仅 1-9 细胞属抽样测试集。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_MF120_EDA_overview.R",
+      "params": "{\"fig\":\"MF120_EDA_overview\",\"panels\":\"A 细胞数/B 样本数/C nFeature/D MT%\",\"engine\":\"base graphics\",\"export\":\"PNG+PDF+TIFF 300dpi\",\"res\":300}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_120 EDA 四联概览图出图成功：六组细胞数(16/22/23/19/18/22)、样本数(9/10/6/6/6/6)、nFeature 与 MT% 箱线（MT% 全组极低，10% 虚线远离箱体）。PNG 65.9KB + PDF 7KB + TIFF 167.6KB，均非空，rail_review 图健康检查通过。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "verify_MF120_grouping_and_MT.R",
+      "params": "{\"check\":\"MT gene reality\",\"MT_genes\":37,\"MTpct_vs_counts_r\":1.0,\"mt_median_pct\":0.36,\"check2\":\"library nesting vs samplename\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "辩论点名核查完成：① percent.mt 经 counts 层重算验证为真实值（r=1.0000，37 个 MT- 基因，median 0.36%），推翻\"基于 SCT 计算\"的猜测；② C 后缀与 O/OD 分组 100% 绑定（零例外），但生物学语义数据无法推断；③ library(65) 完全嵌套于 samplename(43)，无跨组批次混杂。产出 MF120_sample_group_"
     }
   ],
   "user_prefs": {
-    "last_used_script": "metascape_top100.py"
+    "last_used_script": "verify_MF120_grouping_and_MT.R"
   },
   "error_count": 1,
   "errors": [
@@ -155,6 +220,7 @@
       "severity": "medium"
     }
   ],
+  "when_to_use": "有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发",
   "trigger_keywords": [
     "EDA",
     "数据探索",
@@ -164,6 +230,5 @@
     "scrna eda",
     "eda"
   ],
-  "trigger_level": "RED",
-  "when_to_use": "有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发"
+  "trigger_level": "RED"
 }

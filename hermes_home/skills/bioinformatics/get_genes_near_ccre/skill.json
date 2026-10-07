@@ -16,5 +16,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "get_genes_near_ccre",
+    "get genes near ccre",
+    "genes",
+    "near",
+    "ccre"
+  ],
+  "trigger_level": "YEL"
 }

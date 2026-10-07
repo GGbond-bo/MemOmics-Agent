@@ -17,5 +17,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "simulate",
+    "renin",
+    "angiotensin",
+    "dynamics"
+  ],
+  "trigger_level": "YEL"
 }

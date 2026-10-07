@@ -57,3 +57,22 @@ Report specific tool failures and continue with remaining tools; broaden terms w
 ### 5. Reach for references only when needed
 
 The files under `references/` (and `scripts/`) are deep references, not defaults. Open them on demand per the `references.on_demand` table in the manifest — for example `references/source-tiers.md` for the full reliability classification, `references/dedup-engine.md` / `references/citation-parser.md` / `references/search-strategy.md` / `references/ris-bibtex-format.md` for the shared modules, and `scripts/academic_search.py` (no-MCP fallback discovery search) / `scripts/format-converter.py` / `scripts/preflight.py` for the tooling.
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref (json schema probe) | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref (records schema) | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources crossref (2 queries) | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py --help (CLI contract probe) | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref (skeletal muscle aging scRNA) | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref + json parse pipe | - | - |  |
+| - | - | - | 2026-09-25 | lit_bridge.py --help (CLI contract probe) | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref --limit 3 --no-dedup | - | - |  |
+| human | general | general | 2026-10-02 | lit_bridge.py + agent_corpus_harvest | - | - |  |
+| human | general | general | 2026-10-02 | assemble_full_doc.py | - | - |  |
+| human | general | methodology | 2026-10-02 | g2_systematic_search.py | - | - |  |

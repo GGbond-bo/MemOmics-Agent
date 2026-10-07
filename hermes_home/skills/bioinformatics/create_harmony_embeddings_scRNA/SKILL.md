@@ -145,10 +145,21 @@ When you need create harmony embeddings scRNA analysis
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_structure.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_env_api.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_structure.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| there is no package called 'mclust'（mclust::adjust | 本机 R-4.5.3 库无 mclust（Seurat 5.5.1 不再把它列为 | 不安装包（铁律29 缺包先问用户）；ARI 改为自实现列联表公式：ARI=(idx-exp)/(ma |
+| RunHarmony: Argument assay.use is unhandled. Pleas | harmony 1.2.x 起 RunHarmony 参数白名单变化（assay | 本机 harmony 版本不接受 assay.use 参数 → 移除该参数；RunHarmony 自 |
+| 'dmatrix' is not a dissimilarity matrix compatible | 混用 silhouette 的两种距离入参形式：dmatrix 要 matrix | cluster::silhouette(dmatrix=) 必须传 n×n 对称距离矩阵（对角 0） |
+| NA/NaN/Inf in foreign function call (arg 1) — 脚本 h | 距离矩阵就地修改（diag<-Inf）污染了后续 silhouette 调用；s | kNN 检索把 diag(D)<-Inf 后，同一矩阵又被传给了 cluster::silhouet |
+| execute_r 内用 exec(open(...).read()) 报 <text>:1:116 | 把 execute_python 的脚本加载写法套用到 execute_r：R  | R 内核里运行脚本文件必须用 source(path, encoding="UTF-8")；exec |
 | RunHarmony with sample_id (16,003 unique) → 1 iter | sample_id had 16,003 unique values (indi | Switch batch variable from sample_id to donor_id ( |
 | *(accumulated from runs)* | | |
 

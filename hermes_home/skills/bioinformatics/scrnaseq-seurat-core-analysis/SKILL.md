@@ -798,3 +798,11 @@ After completing core scRNA-seq analysis:
 **⛔ Seurat 步骤必须逐个执行：不准在一次 terminal 中跑完 归一化+PCA+聚类+UMAP。**
 **⛔ 每个子步骤都要辩论参数。不确定的参数 → 调 debate_analysis。**
 **⛔ 如果 debate 裁判给出 confidence=low，必须先调整参数重跑。**
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-24 |  06_final_robustness.R | - | - |  |

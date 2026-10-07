@@ -325,7 +325,7 @@ pypdf>=4.0             # 可选；check_figure 字体嵌入检查
 kaleido>=0.2.1         # 可选；plotly 导出 PDF/PNG
 ```
 
-python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotlib.lines, seaborn, scipy（seaborn 用于箱线/regplot；matplotlib.lines 用于自定义图例句柄）
+python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotlib.ticker, matplotlib.lines, matplotlib.patches, seaborn, scipy（seaborn 用于箱线/regplot；matplotlib.lines 用于自定义图例句柄；matplotlib.ticker 用于 FixedLocator 固定刻度、FuncFormatter 自定义刻度格式；matplotlib.patches 用于 Patch 图例句柄）
 
 可选依赖缺失时本技能仍能跑——会优雅降级并提示。
 
@@ -364,6 +364,8 @@ python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotli
 | human | skeletal_muscle | - | 2026-09-21 | palette_accessibility_check.R | - | - |  |
 | human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_source.R | - | - |  |
 | human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_args.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-28 | fig_A2_5effects_v5_rawp.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 24_updown_8sub_combined_bigfig.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

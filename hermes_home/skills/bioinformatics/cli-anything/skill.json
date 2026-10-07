@@ -28,8 +28,8 @@
     "hub": "https://hkuds.github.io/CLI-Anything/",
     "pypi": "cli-anything-hub"
   },
-  "success_count": 15,
-  "proven_script": "gradient-probe rerun on isolated patch (var viaCollection=false)",
+  "success_count": 28,
+  "proven_script": "loop_B artifact manifest + PNG verify + sha256 + pixel recheck",
   "proven_params": [
     {
       "date": "2026-10-04",
@@ -224,10 +224,189 @@
       "approved": false,
       "custom_script": false,
       "result": "隔离副本补 var viaCollection=false; 后 gradient-probe 重跑 rc=0：{\"gradients_collection\":5,\"swatch_typenames\":[\"Swatch\"],\"applied_via_swatch\":false,\"applied_via_collection\":false,\"applied_via_gradientcolor\":tr"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator existence check + ai_loop_A dir",
+      "params": "ls .venv/Scripts/cli-anything-illustrator.exe；mkdir results/memomics-c815adf7/ai_loop_A",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "harness exe 存在（108363 B，2026-10-04 13:46）；产物目录 ai_loop_A 已建"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "cli-anything-illustrator subcommand --help contract probe (round-A)",
+      "params": "--help + 9 个子命令 --help（new-doc/rect/text-add/export/recolor/text-set/move/close-untitled/doctor）",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CLI 契约核实完毕（规则1）：--json 为 group 级选项；export 收位置参数 OUTPUT_PATH；move 的 --index 必填；close-untitled 有 --dry-run；recolor/text-set/export 参数形态实测确认"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A_round1 draw+export",
+      "params": "new-doc 800x600 → rect x60 y60 w300 h180 #e04040 → text-add \"闭环测试 第1轮\" x70 y300 size40 → export loop_A_r1.png -f png --bg white",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "第1轮闭环通过：doc_count=1(未标题-1) / pathitems=1 bounds[60,540,360,360] fill=#e04040 / textframes=1 size=40 contents 中文正确回显 / export exists=true bytes=6845 落盘 ai_loop_A/loop_A_r1.png；全程 saved=false（不落文档）"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A_round2 recolor+text-set+export",
+      "params": "recolor --color #00aa55 --index 0 → text-set --size 60 → export loop_A_r2.png -f png --bg white",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "第2轮调整通过：recolor changed=1/1 fill=#00aa55；text-set changed=1 size=60；export exists=true bytes=9151（比 r1 6845 增大，与字号变大一致）；saved=false"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A_round3 move+text-add+export",
+      "params": "move --index 0 --dx 200 --dy 120 → text-add \"第3轮新增：看图后调整\" x260 y420 size28 #0044cc → export loop_A_r3.png -f png --bg white",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "第3轮调整通过：move ok=true bounds[260,420,560,240]（矩形由[60,540,360,360]右移200下移120，几何精确）；textframes=2 新增蓝字 #0044cc size=28；export exists=true bytes=15454（最大，双文字+位移后）；saved=false"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A_round3 pixel-level color audit (PIL)",
+      "params": "PIL 像素级颜色审计：red/green/blue 通道判别 + 蓝色 bbox + top colors",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "像素级确认第3轮：red_px=0（无红残留）green_px=50939(10.612%) blue_px=2087(0.435%) 蓝字 bbox x261-551 y407-432 与 text-add x260 y420 精确吻合，核心色 (0,68,204)=#0044cc。结论：视觉管道 top5 主色榜未列蓝是因为细笔画占比<0.5%，非缺色"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A cleanup + doctor doc_count=0 + sha256",
+      "params": "close-untitled → doctor → info → ls + sha256sum(3 PNG)",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "收尾清场通过：close-untitled docs_before=1 closed=[\"未标题-1\"] docs_after=0；doctor bridge=true doc_count=0 active_doc=null；info doc_count=0；磁盘仅 3 PNG（6845/9151/15454B）+ sha256 三份唯一，无 .ai/.pdf 落盘"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_A color-cluster adjudication (top5 vs pixel-level)",
+      "params": "核心色精确像素 + 彩色簇 top8 复算（PIL，ΔRGB<=12 近邻 + 饱和度>40 聚类）+ 三图 sha256",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "簇级复算裁定 top5 漏蓝=管道截断非缺色：r1 exact#e04040=53044(11.051%)；r2 exact#00aa55=53044 且红=0；r3 exact#00aa55=50292(10.477%)+exact#0044cc=283(0.059%，抗锯齿边色#7fa1e5/#bfd0f2/#4073d9同族)。视觉管道 top5 报的 #00a040 实为量化合并簇（精确色"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_B_preflight exe check + ai_loop_B dir",
+      "params": "{\"exe\":\"E:/MemOmics-Agent/.venv/Scripts/cli-anything-illustrator.exe\",\"outdir\":\"E:/MemOmics-Agent/results/memomics-486d1516/ai_loop_B\"}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "cli-anything-illustrator.exe 存在(108363 B)；ai_loop_B 目录已创建。闭环 B 前置就绪。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_B_round1 draw(white text + dark rect)+export v1",
+      "params": "{\"new-doc\":\"800x600\",\"text-add\":\"看不见的文字 / x=60 y=120 size=48 #ffffff\",\"rect\":\"x=60 y=360 w=680 h=160 #333333\",\"export\":\"loop_B_v1.png -f png --bg white\"}",
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "闭环B第1轮：new-doc created=true doc_count=1「未标题-1」artboard_rect=[0,600,800,0]；text-add textframes=1 bounds=[60,511.68,348,457.25] fill=#ffffff；rect pathitems=1 bounds=[60,240,740,80] fill=#333333；export e"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_B_round2 recolor text #111111 + export v2 + items",
+      "params": {
+        "recolor": "--target text --index 0 --color #111111",
+        "export": "loop_B_v2.png -f png --bg white"
+      },
+      "date": "2026-10-04",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "闭环B第2轮修复：recolor text changed=1/1 fill=#ffffff→#111111；export v2 exists=true bytes=6393（v1 2419 → v2 6393，+164% 与文字由不可见变为可见一致）；items 复核 textframes[0] fill=#111111 contents「看不见的文字」size=48；saved=false。"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_B cleanup close-untitled + doctor doc_count=0 + pixel audit v1/v2",
+      "params": {
+        "close-untitled": "docs_before=1 closed=['未标题-1'] docs_after=0",
+        "doctor": "bridge=true doc_count=0 active_doc=null",
+        "pixel_audit": "textbox(60,86)-(348,146)"
+      },
+      "date": "2026-10-04",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "闭环B收尾：close-untitled docs_before=1→closes「未标题-1」→docs_after=0；doctor bridge=true cscript=C:\\WINDOWS\\system32\\cscript.EXE doc_count=0 active_doc=null（全程未保存任何文档）。像素审计：同一文本框 v1 dark_px=0/17280(0.0%) vs v"
+    },
+    {
+      "species": "-",
+      "tissue": "software_control",
+      "direction": "cli-anything",
+      "script": "loop_B artifact manifest + PNG verify + sha256 + pixel recheck",
+      "params": {
+        "audit": "PNG verify + sha256 + PIL histogram + text-region dark_px",
+        "manifest": "artifact_manifest.json (role/expected_blank/sha256/bytes/dark_px)"
+      },
+      "date": "2026-10-04",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "闭环B独立复算+产物清单：v1 PNG verify=OK 800x600 2419B sha256=27826fba…e94a dark_px=0/17280(0.0%) role=before_negative_control expected_blank=true；v2 verify=OK 800x600 6393B sha256=e170125a…de31 dark_px=1475/172"
     }
   ],
   "user_prefs": {
-    "last_used_script": "gradient-probe rerun on isolated patch (var viaCollection=false)",
+    "last_used_script": "loop_B artifact manifest + PNG verify + sha256 + pixel recheck",
     "preferred_params": {
       "install_target": "project venv (.venv)",
       "json_flag_position": "before subcommand",

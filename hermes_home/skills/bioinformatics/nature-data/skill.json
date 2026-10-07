@@ -21,5 +21,25 @@
     "FAIR",
     "availability statement"
   ],
-  "when_to_use": "Draft or audit manuscript Data/Code Availability statements, dataset access routes, repository plans, and FAIR metadata. Use for 数据可用性声明、数据共享、数据仓库选择 and dataset citations; not general data cleaning or"
+  "when_to_use": "Draft or audit manuscript Data/Code Availability statements, dataset access routes, repository plans, and FAIR metadata. Use for 数据可用性声明、数据共享、数据仓库选择 and dataset citations; not general data cleaning or",
+  "success_count": 1,
+  "proven_script": "data_availability_statement_human_skeletal_muscle_scRNA",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "data_availability_statement_human_skeletal_muscle_scRNA",
+      "params": "{\"task\": \"metadata + data availability statement (no analysis)\", \"samples\": \"12 old + 12 young\", \"platform\": \"10x Genomics\", \"ontology_verified\": [\"UBERON:0001134 skeletal muscle tissue\", \"EFO:0009922 10x 3' v3\"], \"skill\": \"nature-data v2.2.0 (workflow.md 8-step + FAIR checklist + statement-patterns)\"}",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "依据 nature-data skill 的 8 步工作流与 FAIR 清单，产出人骨骼肌 scRNA-seq（12老+12年轻，10x）的 DataCite 元数据字段、24 样本样本级元数据表、CELLxGENE obs schema 字段、README 模板、Data/Code Availability 中英文声明草案与缺失字段清单；ontology 实测核验 UBERON:0001134 "
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "data_availability_statement_human_skeletal_muscle_scRNA"
+  }
 }

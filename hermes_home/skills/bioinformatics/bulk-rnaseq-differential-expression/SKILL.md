@@ -176,3 +176,22 @@ sig_genes <- subset(res, padj <= 0.05 & abs(log2FoldChange) >= 0.5)
 
 ⛔ 不准一次跑完所有对比组。每对对比单独跑，单独辩论。
 ⛔ debate confidence=low → 调整参数重跑。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-10-01 | gencode_v32_gtf_decompress | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-10-01 | 44_mef2c_locus_from_gtf.py | - | - |  |
+| human | skeletal_muscle | aging+exercise | 2026-10-01 | 44_mef2c_locus_exon_overlap.py | - | - |  |
+| human | skeletal_muscle | aging+exercise | 2026-10-01 | 44b_mef2c_as1_overlap_decomposition.py | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| ValueError: Image size of 30117798x839 pixels is t | 坐标单位换算不一致（Mb 与非 Mb 混用），导致 artist 落在离数据区  | 基因名标签 x 坐标单位重复换算：s 已是 Mb 单位，写成 ax.text(s - 0.02*Mb |
+

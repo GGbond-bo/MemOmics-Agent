@@ -63,5 +63,12 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "https://icbi-lab.github.io/immunedeconv/articles/immunedeconv.html",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "immune-deconvolution",
+    "immune deconvolution",
+    "immune",
+    "deconvolution"
+  ],
+  "trigger_level": "YEL"
 }

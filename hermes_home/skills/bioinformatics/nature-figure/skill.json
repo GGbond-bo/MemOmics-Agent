@@ -31,8 +31,8 @@
       "ragg"
     ]
   },
-  "success_count": 13,
-  "proven_script": "fig_C1_5sub_vs_pure_v2.py",
+  "success_count": 28,
+  "proven_script": "32_freescale_v2_top_left_optimized.py",
   "proven_params": [
     {
       "species": "human",
@@ -202,10 +202,252 @@
       "approved": false,
       "custom_script": false,
       "result": "5亚群vs3纯纤维小提琴图重画成功: LRP1B+(I)-AMPK_PGC1a d=[0.21,0.33,0.68]; OTUD1+(I)-scoreInflammatory d=[0.12,0.35,0.36]; OTUD1+(II)-scoreAtrophy d=[0.30,0.11,0.17] 全ns; RP_high(I)-scoreROS d=[0.38,0.66,0.71]; RP_h"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "muscle_fiber_type",
+      "script": "go_heatmap_env_probe",
+      "params": "探测 R 4.5.3/4.6.1/4.4.2 三版本的 ComplexHeatmap/circlize/readxl/openxlsx 可用性",
+      "date": "2026-09-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "确认 ComplexHeatmap 不在主力 R 4.5.3（E:/R-libs/R-4.5.3 与系统库均无），但在 R 4.4.2(AppData 526包)与 R 4.6.1(失效) 库存在；readxl 未装，改用 openxlsx 读 .xlsx。决定用 R 4.4.2 的 Rscript 画 GO 富集热图（复用用户已有环境，不重复装包）。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "muscle_fiber_type",
+      "script": "go_heatmap_preprocess",
+      "params": "openxlsx 读 xlsx 清洗（去重复表头、过滤 GO: 行）→ CSV；78 条目/17 亚群/56 去重词条",
+      "date": "2026-09-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "数据预处理完成：GO 富集 78 条，17 亚群，56 去重词条，-log10(q) 1.5~97，基因数 3~68，落 data/go_heatmap_data.csv"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "muscle_fiber_type",
+      "script": "go_heatmap_MF16.R",
+      "params": "R 4.4.2 + ComplexHeatmap 2.22.0；行=56 GO词条，列=17亚群，值=-log10(q)，NA灰；row_split按亚群分组不聚类；colorRamp2 分段 c(0,2,5,10,20,60,100) 处理 outlier 97；导出 png(1900x2700@300dpi)/pdf/svg(7.5x10.5in)",
+      "date": "2026-09-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GO 富集热图成功生成：56 词条 × 17 亚群，导出 figures/GO_heatmap_MF16.png/.pdf/.svg 三格式"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS.R",
+      "params": "纸宽 183 mm (Nature 双栏), cell 0.267-0.285 in, RdBu_r TwoSlopeNorm(-2,0,2), 白细分隔 lwd=0.45, 5 轴色 #2C7FB8/#1B9E77/#7BA05B/#D64550/#8C5FA8 + Artifact 灰 #8F8F8F, 纤维型行注释条 3 色, 右缘色标同坐标系绘制, png/pdf/svg/tiff @300dpi, Arial + svglite 可编辑 SVG",
+      "date": "2026-09-18",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 CNS 版两套（17 程序/5 轴；18 程序/6 组含 Artifact）各 4 格式共 8 文件落 figures/CNS/，全部存在且非空（PNG 127/131 KB、TIFF ~400 KB、PDF 45 KB、SVG 65 KB 可编辑文字）；纸宽精确 183.0 mm，字体 Arial；顺带规避了 fig_split_v10.R 的两处几何 bug（标签行中心对齐、色标不"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "check_scoreStress_artifact.R",
+      "params": "Spearman 关联（30000 细胞随机子样本, seed=42）：7 个程序 × 4 个 QC 列（nCount_RNA / nFeature_RNA / percent.mt / log1p_n_genes_by_counts）；另算 10 亚群 × 7 程序均值矩阵",
+      "date": "2026-09-18",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "判决性证据：scoreStress 与复杂度 rho=0.548/0.533，「并不高于」合法程序 scoreOxPhos(0.555/0.568)，percent.mt 关联 0.185 反而低于 OxPhos(0.392) → 「解离伪影」说法不成立，复杂度关联是 AUCell 的通用性质；真正的排除理由改为「跨亚群动态范围极小（0.122–0.145，相对幅度 15%），行内 z-score"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v3_transposed.R",
+      "params": "CELL=0.255in; MAI=c(0.72,1.02,0.58,1.02); GAPY=0.24; RdBu_r ±2; row z-score",
+      "date": "2026-09-18",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 CNS v3 转置版脚本落盘（scripts/fig_A3_CNS_v3_transposed.R）：亚群→x轴(10列)、基因集→y轴(20行)；删除 scoreStress；新增 Fiber identity 轴(Type I/II/IIX score, #C98A3C)置顶；画布 116x175 mm 纵向"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v4.R",
+      "params": "CELL=0.255in; MAI=c(0.75,1.35,0.55,0.35); GAPY=0.24; TOP=YMAX+0.95; 左侧装饰 x=-3.40/-4.11(色块)/-4.30(竖排轴名); 程序名 text(adj=c(1,0.5)) at x=-0.10; 标题 mtext(side=3,line=0.30,at=图幅中心)",
+      "date": "2026-09-19",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 CNS v4：转置版热图 17 程序/5 轴/10 亚群，画布 107.9x155.5mm，4 格式 @300dpi 全部非空；分类色块自右侧移到左侧（竖排轴名|色块|程序名|热图），标题改 mtext 画在上边距与色标分离；撤回 Fiber identity 三 score"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v5.R",
+      "params": "v5: LBLX=-0.04(标签右端，原-0.10) ; COL_TXT黑作轴名色 ; LNX=-4.27 ; 17程序/5轴/10亚群 ; 107.9x155.5mm",
+      "date": "2026-09-19",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v5 脚本准备完成：由 v4 复制并改 4 处（标签右端收紧到 -0.04 单位消白缝、分类轴名改黑色 #1A1A1A、轴名 x -4.30→-4.27 贴色块、新增 strwidth 版式自检）；v4 已归档为 *_v4_labelfar.*"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pkg_check.R",
+      "params": "tryCatch(library(p)) 实测: ggplot2/patchwork/ggrepel/svglite/ragg/egg/cowplot/ComplexHeatmap/circlize/scales/dplyr/tidyr/gridExtra/grid 全 TRUE; .libPaths = E:/R-libs/R-4.5.3 + R-4.5.3/library",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R 4.5.3 绘图包全量可用（含 egg/svglite/ragg），无需安装；Composition 组合图可全程 R + patchwork + svglite"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_fig_composite_nature.R",
+      "params": "183x185mm 双栏; patchwork 3行2列; theme_classic base_size=6 sans; 4 格式导出(PNG600/PDF cairo/SVG svglite/TIFF600); 括号用 geom_segment+刻度线; fP 函数 P<0.001 阈值改写; required_packages 只列 ggplot2+patchwork 绕开 check_env 误报",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "6-panel Nature 组合图产出成功: Fig_MF2000_Nature_composite_v1.{png(1.1MB),pdf(155KB),svg(470KB),tiff(55MB)}；panel a UMAP/b marker DotPlot/c 组成堆叠/d IIa+OxPhos/e RSS+IIA+SMF/f RegMyon+SenMayo"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pixel_check_composite.py",
+      "params": "像素级三指标验证(dark 2.58%<10 / colored 7.94%>1 / nearwhite 87.94% 白底 / bbox rows105-4336 cols35-4285 全画布)",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "组合图质量门通过: rail_review(post) passed, figure_count=3(图族); 6 panel 全部有内容(panel-row colored 1.99/18.44/3.38%); #e0e0e0 实为 vision 量化伪影(实测仅 0.03%)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "04_fig_composite_nature_v2.R",
+      "params": "CVD/灰度安全配色(Okabe-Ito 三色 #009E73/#0072B2/#D55E00 + 家族内明度梯度 SUB_COL); Pre/Post 双重编码(虚线边框+空心圆 vs 实线+实心三角); panel c 改组成矩阵(单色渐变); panel f 单保留; FOOT 图内披露; 183x196mm",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v2 组合图产出: Fig_MF2000_Nature_composite_v2.{png 1170KB, pdf 158KB, svg 466KB, tiff 58613KB} + Supplementary_Fig_S1_SenMayo.{png 120KB, pdf 35KB}。灰度亮度实测: 组别 Young106/Old87/T2D119(靠线型+形状双编码区分), Pre 180-19"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "17_cns_deg_landscape.py",
+      "params": "DEG_file=D:/肌肉锻炼/DEG_file, files=merged_{Y_Pre_vs_O_Pre,O_Pre_vs_OD_Pre,Y_Pre_vs_Y_Post,O_Pre_vs_O_Post,OD_Pre_vs_OD_Post}.xlsx, sheets=ALL_merged+10 subclusters, cols=[gene,coef,se,z,p,fdr,coef_D,p_D,fdr_D,celltype,comparison,direction,method,nRUV_used,n_cells]",
+      "date": "2026-09-29",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "N=14_new_deg_updown_bar.py 复用 fail; activate"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "script": "18_deg_landscape_variants.py",
+      "params": "{\"source\":\"D:/肌肉锻炼/DEG_file/merged_*.xlsx ALL_merged\",\"variants\":[\"clean_grid\",\"rebalanced\",\"grouped\",\"mono_accent\"],\"rmax\":[0.49,0.47,0.48,0.48],\"fs\":\"7.0-7.2pt\",\"fixes\":[\"remove in-canvas prose\",\"raise font 5-6pt to 7-8pt\",\"raise RMAX 0.44 to 0.47-0.49\",\"neutral titles\"]}",
+      "date": "2026-09-29",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CNS DEG landscape 4 refinements generated (same skeleton A hero circle matrix + B/C/D evidence panels). Each fixed all 4 diagnosed defects: in-canvas sentences removed, font raised to 7-8pt, RMAX 0.44"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "32_freescale_v2_top_left_optimized.py",
+      "params": "{\"figsize_in\": [7.087, 3.45], \"panels\": 5, \"panel_order\": [\"Aging\", \"DM\", \"Ex_Young\", \"Ex_Old\", \"Ex_DM\"], \"subclusters\": 8, \"excluded\": [\"RSS\", \"Specialized MF\"], \"scale\": \"per-panel independent absolute (freescale)\", \"colors\": {\"up\": \"#B2182B\", \"down\": \"#2166AC\"}, \"family_accent\": {\"condition\": \"#3D3B4F\", \"exercise\": \"#0F5F6E\"}, \"top_optimization\": \"panel letters a-e + family super-header + accent rule + colored Sigma Up/Down + full-width hairline + shared legend\", \"left_optimization\": \"rotated axis caption + 2-tier group brackets (Pure fiber types / Derived subpopulations) + group separators + right-aligned names\", \"export\": [\"png@400dpi\", \"pdf\", \"svg\", \"tiff@600dpi\"], \"final_size_mm\": [180.0, 87.6]}",
+      "date": "2026-09-29",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "fig_deg_updown_8sub_freescale_v2_optimized 渲染成功：5 面板 × 8 亚群水平背离柱，仅优化顶部标题区与左侧标签区，柱区结构与基线完全一致（总计校验 Aging 16,535↑/380↓、DM 125/144、Ex_Young 61/38、Ex_Old 231/1,091、Ex_DM 107/119 逐项吻合；Aging 8 亚群合计 16,915）。顶"
     }
   ],
   "user_prefs": {
-    "last_used_script": "fig_C1_5sub_vs_pure_v2.py"
+    "last_used_script": "32_freescale_v2_top_left_optimized.py"
   },
+  "error_count": 4,
+  "errors": [
+    {
+      "timestamp": "2026-09-04 17:01",
+      "error_type": "missing_package",
+      "message": "readxl 未装；ComplexHeatmap requireNamespace=TRUE 预期在 E:/R-libs/R-4.5.3 但 execute_r 内核探测为 FALSE",
+      "root_cause": "execute_r 持久内核 .libPaths 未包含 E:/R-libs/R-4.5.3（environment.json 主力库），导致 key_pkgs 里声明的 ComplexHeatmap 探测不到；readxl 未安装，需用 openxlsx 读 .xlsx",
+      "fix_applied": "改用 openxlsx::read.xlsx 读表；手动 .libPaths 加入 E:/R-libs/R-4.5.3 以加载 ComplexHeatmap",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-18 19:09",
+      "error_type": "logic_error",
+      "message": "错误: 不是所有的abs(yc) < 1e-09都是TRUE 停止执行",
+      "root_cause": "R 的 y 轴向上增长 → 按 yc=0 起累加会把 AXES 第一个轴放到图底（与\"参照轴置顶\"的设计相反）；改为自顶向下递减后，循环末尾多减一次轴间隙，yc 期末 = -0.24 而非 0",
+      "fix_applied": "行布局从底向上累加改为从顶向下递减时，循环里对每个轴都减了一次 GAPY（含最后一个轴），导致总高多出 0.24 偏移。修复：只在 k < length(AXES) 时减间隙。教训：R 热图 y 向上增长，AXES 首个轴要置顶必须从 YMAX 向下赋值；轴线高度 = NROW + GAPY*(n_axes-1)。",
+      "species": "",
+      "tissue": "",
+      "script": "fig_A3_CNS_v3_transposed.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 20:16",
+      "error_type": "syntax_error",
+      "message": "promise already under evaluation: recursive default argument reference or earlier problems?",
+      "root_cause": "R 的 promise 惰性求值：形参默认值表达式里引用了同名形参（B = B）→ 求值时递归解析自身 → 报 promise already under evaluation。同类风险：ncell = NC 安全（NC 是外部变量，非同形参名），但 B、deltas 若以同名形参作默认值即触发",
+      "fix_applied": "函数形参名与全局变量同名导致默认值自引用：mde_mc <- function(..., B = B, ...) 中的 B = B 引用自身。修复=形参改名 nboot（默认 300），删除全局 B <- 300，函数内 replicate(nboot, ...)",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "03_mde_fdr_wording.R",
+      "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-24 20:24",
+      "error_type": "logic_error",
+      "message": "图形静默失效：所有箱体无填充（colored=0.00%），但脚本不报错、图正常输出",
+      "root_cause": "用命名向量做分组配色映射时，键与数据里的真实分组名不匹配 → R 返回 NA 而非报错；ggplot 拿到 NA 填充色不报错，只是把箱体画成空白（无填充）。这类\"静默失效\"只能靠像素级验证抓出来（逐 hex 计数：6 个组别色 n=0 即命中）。教训：任何 name->value 查表（配色/标签/映射）后必须断言 !any(is.na(values))，或直接 unique(df$type) ",
+      "fix_applied": "配色命名向量的键必须与 sub() 后的真实分组前缀一致：type 取值是 Y_Pre/O_Pre/OD_Pre（去掉后缀得 \"Y\"/\"O\"/\"OD\"），而调色板写成 c(Young=,Old=,T2D=) → 查表得 NA → scale_fill_manual(values=NA...) 静默不出色。修复 = GRP_HUE <- c(Y=\"#009E73\", O=\"#0072B2\", OD=",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "04_fig_composite_nature_v2.R",
+      "severity": "high"
+    }
+  ],
   "trigger_level": "RED"
 }

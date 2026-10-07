@@ -15,5 +15,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "blast_sequence",
+    "blast sequence",
+    "blast",
+    "sequence"
+  ],
+  "trigger_level": "YEL"
 }

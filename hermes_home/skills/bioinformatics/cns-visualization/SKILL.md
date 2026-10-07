@@ -83,10 +83,36 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_AMPK_violin_4sub.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-21 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | data_probe_MF_2000 | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step1_marker_RNA_SCT_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step1b_marker_L3_10subclusters.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2_marker_heatmap.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | harmony_mixing_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step3_donor_consistency.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_figures.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_figures.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_figures.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | fig_A3_CNS_v5.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | fig_A3_CNS_v6.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | FigA3_CNS_v6_gray_cvd_audit.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-30 | 37_MF_v7_arrows_vertical.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 41_volcano5_8sub_userstyle.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 41_volcano5_8sub_userstyle.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 42_volcano5_8sub_FINAL.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 42_volcano5_8sub_FINAL.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 42_volcano5_8sub_FINAL.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-30 | 42_volcano5_8sub_FINAL.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-01 | 43_sankey_3group_common_deg.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-01 | 43_sankey_3group_common_deg.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-01 | 47_mef2c_deg_heatmap.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-01 | 43_sankey_3group_common_deg.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-01 | 43_sankey_3group_common_deg.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| numbers of columns of arguments do not match | 补标行追加时对 dplyr tibble 使用 base::rbind。dply | 在 rbind 前把 tibble 降级为普通 data.frame（top_genes <- as |
+| error in evaluating the argument 'object' in selec | ComplexHeatmap 的 rowAnnotation 长度必须等于热图矩 | 图2（亚群平均表达热图）中 rowAnnotation(`n`=anno_text(ct_tab[l |
 | *(accumulated from runs)* | | |
 
 ## References

@@ -72,5 +72,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "pdf-translate",
+    "pdf translate",
+    "pdf",
+    "translate"
+  ],
+  "trigger_level": "YEL"
 }

@@ -26,5 +26,25 @@
     "按亚群取基因",
     "合并Metascape表。"
   ],
-  "when_to_use": "用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 Metascape 导入格式的基因列表:"
+  "when_to_use": "用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 Metascape 导入格式的基因列表:",
+  "success_count": 1,
+  "proven_script": "23_build_metascape_5groups.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "23_build_metascape_5groups.py",
+      "params": "源=D:/我的下载/DEG_fdr05_coef025_5contrasts_formatted.xlsx（5 sheet）；规则=celltype(10亚群)×regulation(Up/Down)，|coef|降序(并列fdr升序)取top100，不足全取；列序=亚群字母序×up在前down在后；空列(0基因)跳过；输出tab(utf-8-sig)+xlsx",
+      "date": "2026-09-30",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "生成 5 个 Metascape 输入表到 D:/肌肉锻炼/DEG_metascape/：Aging 20列(30–100基因)、DM 20列(5–39)、Y_EX 20列(1–15)、O_EX 20列(14–100)、DM_EX 19列(2–42)。终检：空列0、列内重复0、表头规范。关键发现：①用户示例7列中5列与「文件自身顺序(fdr升序)」逐位一致、2列(up_OTUD1+(I)/down"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "23_build_metascape_5groups.py"
+  }
 }

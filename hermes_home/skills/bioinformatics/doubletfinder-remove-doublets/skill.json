@@ -48,5 +48,6 @@
     "doubletfinder",
     "remove doublets",
     "doublets"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

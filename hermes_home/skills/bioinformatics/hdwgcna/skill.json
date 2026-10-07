@@ -160,5 +160,9 @@
       "evidence": "{\"call_ids\": [\"\", \"\", \"\"], \"scores\": {}, \"kb_used\": {}}",
       "date": "2026-08-10 20:51:12"
     }
-  ]
+  ],
+  "trigger_keywords": [
+    "hdwgcna"
+  ],
+  "trigger_level": "YEL"
 }

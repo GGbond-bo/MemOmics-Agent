@@ -91,6 +91,8 @@ browser_console(expression="JSON.stringify(...)")   # ③ 断言
 | `patch` 改数字把标签吃掉，产出裸文本行 | old_string 从标签中间起手（如 `;color:transparent">189</h4>`），模糊匹配命中残缺跨度，仍返回 `success:true` | old_string 以整行/完整标签为锚；同常量多处 → `replace_all=true`；**每次 patch 后读 diff**，专查「有 `-` 无 `+`」与「新增行以 `;`/`>` 开头」；打歪就用整行+上下文重打一次 |
 | 数字被质疑 | 手写死/过期数字 | 脚本现场扫描 + 页脚扫描时间 + 原始 JSON 落盘；说明「随使用持续增长」 |
 | 主观评分被当成绩 | 雷达图/评分表未声明 | 页面上显式标注「定性评估，**非基准成绩**」 |
+| HTML 模板走 `%` 格式化时抛 `ValueError: unsupported format character ';' (0x3b)` | 模板里有裸 `%`（典型：CSS 的 `width:100%;`），`%`-formatting 把它当格式符 | ① CSS 里写 `%%`；② **改用 `str.replace("__KEY__", …)` 占位符（推荐，CSS 免改）**。定位用 `search_files(pattern="%[^s(]")`。见 `references/deck-and-html-twin.md` |
+| deck/PPT 交付被判「未生成任何图片」（`figure_count=0`） | rail_review(post) 用「数据图」标准判 deck；且 `output_dir` 只含 `reports/` | **真渲染逐页预览 PNG**（HTML → Edge 无头截图），`output_dir` 传含 `figures/` 的目录。⛔ 不要凑一张占位图。脚本：`scripts/render_slide_previews.py` |
 
 ## 六、内容结构模板（汇报页 10–12 节）
 
@@ -119,5 +121,46 @@ browser_console(expression="JSON.stringify(...)")   # ③ 断言
 | `interactive-html-deliverables`（本 skill） | 构建骨架：设计令牌、组件配方、分段落盘拼接、浏览器验收、rail_review 传参 |
 | `animation-first-showcase` | 动画优先的叙事密度（正文 ≤2000 字）、**五种流动过程图配方**、改版工作流与 6 个坑 |
 
+## 七、PPTX + HTML 双交付（deck 场景）
+
+用户在同一次需求里常同时要 **`.pptx`（可编辑，现场讲）+ `.html`（自包含，转发/离线看）**。
+做这类交付时，本 skill 与 `pptx-generation`（**手工编写、策展不可改**）一起看。
+
+**内容单源、两路渲染**：标题 / 表格 / 流程卡先写成数据（list / dict），再分别喂给 pptx 渲染函数
+与 HTML 渲染函数 —— 不要写两遍内容，否则必然漂移。
+
+**中文汇报 deck 的结构偏好（用户原话级，2026-10 固化）**
+
+| 偏好 | 做法 |
+|------|------|
+| 表格优先（「可以做成一个表格」，两次） | 凡有 ≥2 条可比信息（多项目 / 多方法 / 前后对照）→ 一律表格，不写段落 |
+| 对比页只说优点（「**不要说缺点，说优点**」） | 只列设计初衷 / 解法 / 工作量规模；缺点另设边界页或收在总结页末尾 |
+| 出发点页只讲问题（「**不要说太多，直接说问题**」） | ≤3 条，每条一行，一句话收尾 |
+| 逐页指定结构（「剩下几页，你自己补充一下」） | 严格按指定页序；补充页排在指定页之后；不加多余封面页 |
+| 「**不够简洁**」的真实含义 | 说的是**每页字太多 + 缺表格**，不是页数多 → 压单元格文字，别砍页数 |
+
+- **流线页**（分析流程 / 机制链路）：pptx 原生形状画环节卡 + `MSOSHAPE.RIGHT_ARROW` 连接，
+  ≤8 个环节排两行四列；闭环回流单独做一条居中浅色条。
+  ⛔ **不要贴 Mermaid 截图**（PPTX 渲染不了 Mermaid）。
+- **中文字体**：显式设 `font.name = "Microsoft YaHei"`（**每个 run 都设**，python-pptx 不继承）。
+
+### 幻灯片预览图（deck 交付的必做收尾）
+
+`rail_review(post)` 会用「数据图」标准判 deck（`figure_count=0` → 「未生成任何图片」）；
+**正确修法是真渲染逐页预览 PNG**，不是凑占位图。本机无 LibreOffice / 无 POWERPNT
+（用户办公套件是 **WPS**）时，走 **HTML → Edge 无头截图**：
+
+```bash
+python scripts/render_slide_previews.py <deck.html> <out_dir>/figures
+```
+
+出图后用 `vision_describe` OCR 断言（表头列齐全 / 关键数字都在 / 无裁切）。
+`output_dir` 传**含 `figures/` 的目录**。交付时说明 python-pptx 是标准 OOXML、**WPS 可直接编辑**。
+
+📖 完整细节（`%` 坑的报错与两种修法、三条渲染路径实测对比、rail_review 传参、交付话术）→
+**`references/deck-and-html-twin.md`**
+
 ## Support Files
 - `references/component-recipes.md` — 浅色设计令牌 + 14 类交互的成品 CSS/JS + 浏览器验收断言 + 拼接脚本
+- `references/deck-and-html-twin.md` — PPTX+HTML 双交付、**中文 deck 结构偏好**、`%`-formatting 坑、幻灯片预览图渲染与验收
+- `scripts/render_slide_previews.py` — HTML 幻灯片 → 逐页 PNG 预览图（Edge/Chrome 无头截图 + 自动裁白边）

@@ -69,5 +69,14 @@
   "success_count": 1,
   "user_prefs": {
     "last_used_script": ""
-  }
+  },
+  "trigger_keywords": [
+    "总结论文",
+    "解读",
+    "summarize paper",
+    "精读",
+    "论文要点",
+    "讲一下这篇"
+  ],
+  "trigger_level": "RED"
 }

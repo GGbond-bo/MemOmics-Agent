@@ -39,5 +39,11 @@
   "prerequisites": {
     "requires": [],
     "description": "Bulk数据直接开始"
-  }
+  },
+  "trigger_keywords": [
+    "bulk-omics-clustering",
+    "bulk omics clustering",
+    "clustering"
+  ],
+  "trigger_level": "YEL"
 }

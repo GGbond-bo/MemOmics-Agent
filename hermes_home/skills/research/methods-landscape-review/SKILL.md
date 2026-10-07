@@ -51,6 +51,16 @@ Verification-first comparison of two or more bioinformatics methods/tools, produ
 - **文档 URL 易 404**：readthedocs/satijalab 页面改版频繁；从索引页提取 href 定位真实链接。
 - **KB 工具故障 ≠ 免验证**：KB 不可用时用 PubMed + 官方文档双源验证兜底，报告须注明 KB 不可用及替代路径。
 - **禁止环境性负面结论**：工具/接口一次失败（如 SQLite 线程错误、404）只记录"当时不可用+替代路径"，不写"该工具不能用"。
+- **🔴 用户问"哪个方法更合适"时，文献检索就是答案本身 —— 先做它**：不要先在本机跑环境探测、
+  读本地数据、绕圈子再给方法学意见。曾因此被用户当场发火（「我要你去网上找DEG的方法呀，文章，
+  MAST，什么鬼呀你」）。**正确顺序**：`search_papers` / `query_ncbi` 拿原文 → 给带 PMID/DOI 的
+  分类清单（细胞级 / pseudobulk / 基准 / 领域应用）→ 再谈适配。本地探测**只在判断"能不能跑"时做**。
+- **🔴 不要下绝对化方法学禁令**：如"细胞级不能作主分析""必须用 pseudobulk"——
+  曾据此被用户用一篇已发表 Cell 论文（猴脑图谱 PMID 42612631 走细胞级 MAST+RUV）当场反驳。
+  **先查已发表先例，再下判断**；找不到先例就说"没检索到"，把合理性拆成独立依据讲，别升级成禁令。
+  （与上一条"禁止环境性负面结论"同源：负面断言必须先经检索。）
+- **🔴 方法选型报告的结尾必须带"选完怎么验证"**：换新方法后显著基因暴多**不是**"方法更好"，
+  先假定假阳性膨胀并按六问自证 → 见下方 References 的 statistical-inflation 一节。
 
 ## Deliverable Shape
 
@@ -59,3 +69,8 @@ Markdown 报告（必要时 HTML）：一句话结论 → 核心对比表 → �
 ## References
 
 - `references/seurat-vs-scanpy-integration.md` — Seurat vs Scanpy 单细胞整合流程对比知识库（已核实的 13 篇文献 PMID/DOI、benchmark 结论、官方文档原文要点、2026-08 调研产出）
+- `references/cell-level-vs-pseudobulk-deg.md` — **单细胞 DEG 方法学 landscape**：核实的 22 篇 PMID/DOI
+  （MAST / NEBULA / muscat / dreamlet / limma / propeller / camera / Squair 2021 / Lee & Han 2024 /
+  Gilis 2025 等 + 人骨骼肌运动×衰老×T2D 应用锚点）、**四条合法途径对照表**、
+  猴脑图谱 Cell 2026 的细胞级 RUV-MAST 实证做法（含"它的 |log2FC|>0.25 判据不能搬到 pseudobulk"这一坑）、
+  以及选型后的必做验证入口

@@ -27,5 +27,64 @@
     "heatmap",
     "geometry"
   ],
-  "when_to_use": "出或改**矩阵型热图**（基因集×亚群、基因×样本、GO 词条×亚群、效应值×亚群）并关心版式、期刊尺寸、矢量导出或口径取舍时。 纯 UMAP/Violin/DotPlot 不需要；调色板选择不需要。"
+  "when_to_use": "出或改**矩阵型热图**（基因集×亚群、基因×样本、GO 词条×亚群、效应值×亚群）并关心版式、期刊尺寸、矢量导出或口径取舍时。 纯 UMAP/Violin/DotPlot 不需要；调色板选择不需要。",
+  "success_count": 4,
+  "proven_script": "hsp_direction_by_subcluster.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v5.R",
+      "params": "curl 抓取 Bioconductor AUCell vignette HTML（官方源），sed 去标签 + grep 关键词 comparability/scale",
+      "date": "2026-09-25",
+      "score": 5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "官方 AUCell vignette 抓取成功（2.78 MB HTML）；但直接用 sed 去标签被 CSS 噪声淹没，未取到有效文本 → 改用 GitHub raw 的 AUCell.Rmd 源码提取"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "get_official_aucell_doc.sh",
+      "params": "curl 抓 raw.githubusercontent.com/aertslab/{AUCell,SCENIC}/master/vignettes/*.Rmd",
+      "date": "2026-09-25",
+      "score": 0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "失败：3 个文件均 0 字节（raw.githubusercontent.com 在本机不可达），但 bioconductor.org 可正常访问 → 改用已落盘 /tmp/aucell.html 本地解析 + 官方文档直连"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "parse_aucell_vignette.py",
+      "params": "execute_python: 正则去 script/style/tag 解析 /tmp/aucell.html → 句子级关键词抽取",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "成功：官方 AUCell vignette 正文 32,200 字符，抽到官方原句「The AUC represents the proportion of expressed genes in the signature, and their relative expression value compared to the other genes within the cell.」+「use "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "hsp_direction_by_subcluster.py",
+      "params": "{\"n_groups\": 3, \"groups\": \"Aging/Ex_Old/Ex_DM\", \"n_subclusters\": 10, \"color_scale\": \"shared symmetric TwoSlopeNorm ±0.52 + RdBu_r\", \"cell_annotation\": \"coef 2 decimals\", \"row_order\": \"n_sig_desc → max_abs_coef_desc\", \"footnote_offset\": \"-70pt offset points\", \"export\": \"png/svg/pdf @300dpi\", \"panels\": \"11/4/2 genes\"}",
+      "date": "2026-10-04",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "三组 HSP 方向矩阵图各 1 张 × 3 格式 = 9 文件（figures/HSP_direction_*.png/svg/pdf），矩阵落盘 results/HSP_direction_matrices.xlsx；Aging 44 格全 Up、Ex_Old 13 格（HSPA9/HSPD1 为 Down）、Ex_DM 4 格全 Up；像素级版式核验三图完全一致"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "hsp_direction_by_subcluster.py"
+  }
 }

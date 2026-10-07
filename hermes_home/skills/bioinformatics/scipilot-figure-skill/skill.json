@@ -53,8 +53,8 @@
       "date": "2026-08-12 23:12:16"
     }
   ],
-  "success_count": 15,
-  "proven_script": "subcluster_violin_fig",
+  "success_count": 25,
+  "proven_script": "24_updown_8sub_combined_bigfig.py",
   "proven_params": [
     {
       "species": "",
@@ -250,12 +250,142 @@
       "approved": false,
       "custom_script": false,
       "result": "用户上传正确参考图：RP_high(I)对应scoreROS。之前\"5亚群记忆\"(RP_highI=Sarcomeric)是错误口径，需以用户FigA3/上传图为准。"
+    },
+    {
+      "species": "human, macaca fascicularis",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "celltype_stack_boxplot_v2.py",
+      "params": "Okabe-Ito配色提案；箱线+个体散点；Spearman趋势检验；KW；InN Bootstrap CI(5000次)",
+      "date": "2026-08-29",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "跨物种海马细胞构成随年龄：Astro/OPC/Micro 两物种同向下降（Astro ρ=-0.65/-0.54, OPC ρ=-0.48/-0.63, Micro ρ=-0.38/-0.36）；InN 两物种均无显著趋势但同向微升（ρ=+0.03/+0.23）；ExN/ODC 异向（ODC 人+0.42显著 vs 猴-0.01）。4/6 共享类型同向。产出 v2 三图+PDF+SVG。"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "concordance_astro_opc.py",
+      "params": "Astro/OPC concordance v2, same style as InN_concordance_v2 (mean±SEM + individual dots + Spearman rho + Bootstrap 95% CI), 4.2x3.0in, 300dpi, PNG/PDF/SVG",
+      "date": "2026-08-29",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Astro: human rho=-0.649 p=0.0000 [CI -0.825,-0.395], monkey rho=-0.540 p=0.0139 [CI -0.804,-0.130]; OPC: human rho=-0.478 p=0.0018, monkey rho=-0.629 p=0.0030. 两物种均显著负趋势 = 强同向。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_split_v10.R",
+      "params": "{\"script\":\"fig_split_v10.R\",\"cell\":1.0,\"panel_gap\":1.8,\"dpi\":300,\"palette\":\"RdBu_r 11anchors\",\"norm\":\"TwoSlopeNorm(-2,0,2)\",\"formats\":[\"png\",\"pdf\",\"svg\",\"tiff\"]}",
+      "date": "2026-09-15",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "fig_split_v10.R 1:1 复刻 fig_split_v10.py 完成：6 图×4格式=24 文件落盘 figures/R_version/ @300dpi。矩阵口径 R vs Python 逐格比对 max|Δ|：Z6=1.0e-14 / ZS=1.4e-14 / d=5.1e-15 / q=5.6e-16；取色 RGB 单通道最大差=0；成图像素尺寸一致（4950x2520 / "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_transposed_v2.R",
+      "params": "{\"script\":\"fig_A3_transposed_v2.R\",\"layout\":\"transposed: subtype=y(10 rows), program=x(18 cols)\",\"cell_in\":0.42,\"axis_gap\":0.25,\"artifact_gap\":0.7,\"axis_label_pt\":6.4,\"subtype_label_pt\":7.6,\"xlabel_pt\":6.2,\"xlabel_angle\":45,\"title_pt\":9,\"canvas_in\":\"9.89x6.44\",\"palette\":\"RdBu_r\",\"norm\":\"TwoSlopeNorm(-2,0,2)\",\"dpi\":300}",
+      "date": "2026-09-15",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 转置版（亚群 y 轴 / 基因集 x 轴）+ 6 轴生物机制分类脚本编写完成并过 pre/post 审查。布局要点：色块正方形 0.42in（x/y 单位等长，画布 9.89x6.44in）；轴色条移到顶部横排 + 轴名横排；x 轴基因集标签 45°/6.2pt 锚定各自列中心（adj=c(1,1)）；y 轴亚群水平标签行中心对齐（las=1）；Artifact(QC) 轴后间隙 0."
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "featureplot_nature_palettes.R",
+      "params": "{\"palette_A\": \"viridis-style hex endpoints #440154/#31688E/#35B779/#FDE725 via colorRampPalette\", \"palette_B\": \"RColorBrewer Blues[2:9] colorRampPalette(100)\", \"palette_C\": \"RColorBrewer YlOrRd[2:9] colorRampPalette(100)\", \"fig_width\": \"2.6in demo / 6.4in card\", \"dpi\": 300}",
+      "date": "2026-09-21",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "生成 FeaturePlot 三套 Nature 级连续配色方案（viridis 风格 / Blues / YlOrRd），输出 1 张色卡 + 3 张模拟 UMAP 上色演示图；程序化提取准确 hex 锚点供用户直接粘贴到 cols=；实测环境 viridis=FALSE/RColorBrewer=TRUE/scico=FALSE，故 A 用硬编码 hex 端点、B/C 用 RColorBrew"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "palette_accessibility_check.R",
+      "params": "{\"cvd_api\": \"colorspace 2.1.3 deutan()/protan() + coords()\", \"Lstar\": \"rec709 luminance fallback\", \"dpi\": 300, \"view_cols\": \"Original/Grayscale/Deuteranopia/Protanopia\"}",
+      "date": "2026-09-21",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "配色可达性验证：三套候选色阶灰度 L* 全部单调（A 8.3→86.9 递增100%；B 91.4→17.2；C 92.3→11.7 递减100%），证明灰度打印下高低值可分；输出含 deutan/protan 模拟的四列色带对比图 palette_accessibility_check.png（41.5 KB）。坑：colorspace 2.1.3 的 simulate_cvd 无 type 参"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "inspect_FeaturePlot_source.R",
+      "params": "{\"inspect\": \"deparse(body(Seurat::FeaturePlot))\"}",
+      "date": "2026-09-21",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "源码核验：Seurat 5.5.1 FeaturePlot 内部按 length(cols) 分支处理，最终所有多色路径都走 scale_color_gradientn(colors=...)，故自定义多锚点 hex 可用；需确认 >3 色是否被截断为前 3 个"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "inspect_FeaturePlot_args.R",
+      "params": "{\"inspect\": \"formals(Seurat::FeaturePlot)\"}",
+      "date": "2026-09-21",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "核验 FeaturePlot 关键参数默认值（cols/keep.scale/order/pt.size/raster/blend），确认多色锚点可用且不留警告"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A2_5effects_v5_rawp.R",
+      "params": "数据源=effect5_effsize_v3.csv(p_np列) | 星号判据=raw p<0.05(未校正) | 17程序×10亚群×5效应 | 画布16.5×8.4in | 四格式PNG/PDF/SVG/TIFF@300dpi | 版式与v4一字不动 | 交付名独立FigA2_program_5effects_rawp.*(不覆盖v4校正版)",
+      "date": "2026-09-28",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA2 v5 探索性 raw p 星号版出图成功：8 文件(figures/ + figures/R_version/) + 4 根目录交付，全部非空。星号(17程序×10亚群=170格/效应)：Aging 92 / ExOld 27 / ExYoung 17 / ExT2D 7 / T2D 2；对照 v4 的 q<0.05：Aging 88 / 其余全 0。图注已声明 uncorrected"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "24_updown_8sub_combined_bigfig.py",
+      "params": "{\"data\": \"deg_subcluster_updown_coef025_long.csv (fdr<0.05 & |coef|>0.25)\", \"layout\": \"1x5 panels side-by-side, sharey, horizontal diverging bars\", \"excluded_subclusters\": [\"RSS\", \"Specialized MF\"], \"kept_subclusters\": 8, \"colors\": {\"Up\": \"#B2182B\", \"Down\": \"#2166AC\"}, \"version_A\": \"shared symlog linthresh=10 (cross-panel comparable)\", \"version_B\": \"per-panel free linear scale\", \"figsize\": \"14.0x4.3 in @300dpi\", \"font\": \"Arial->Helvetica->DejaVu\", \"formats\": [\"png\", \"pdf\"]}",
+      "date": "2026-09-29",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "五比较组×8亚群上下调背离柱大图出图成功（4 文件）：版本A 共享 symlog 刻度（跨组可比）+ 版本B 各面板独立刻度（小组细节可读）。剔除 RSS/Specialized MF 后各组合计 Aging 16,915(Up 16,535/Down 380) | Ex_Old 1,322(231/1,091) | DM 269(125/144) | Ex_DM 226(107/119) | E"
     }
   ],
   "user_prefs": {
-    "last_used_script": "subcluster_violin_fig"
+    "last_used_script": "24_updown_8sub_combined_bigfig.py"
   },
-  "error_count": 1,
+  "error_count": 2,
   "errors": [
     {
       "timestamp": "2026-08-14 16:40",
@@ -267,6 +397,17 @@
       "tissue": "",
       "script": "",
       "severity": "high"
+    },
+    {
+      "timestamp": "2026-09-15 20:03",
+      "error_type": "runtime_error",
+      "message": "cmd.exe /c '\\\"C:\\\\Program Files\\\\R\\\\R-4.5.3\\\\bin\\\\x64\\\\Rscript.exe\\\" ...' → \\\"'C:\\\\Program Files\\\\...\\\\Rscript.exe\\\" 不是内部或外部命令",
+      "root_cause": "",
+      "fix_applied": "在 MSYS bash 下经 cmd.exe 调用 R 4.5.3 时，外层单引号 + 内层双引号会被 cmd 误解析为带引号的命令名。修复：绕过 cmd.exe，直接用 MSYS 路径调用 \\\"/c/Program Files/R/R-4.5.3/bin/x64/Rscript.exe\\\" script.R（base graphics 零第三方包场景下不会触发 4.5.3 的 DLL segfa",
+      "species": "",
+      "tissue": "",
+      "script": "fig_A3_transposed_v2.R",
+      "severity": "medium"
     }
   ],
   "when_to_use": "用户给了一个 CSV / Excel / DataFrame 说\"帮我画一下\"或\"用什么图好\""

@@ -19,5 +19,11 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "circular",
+    "dichroism",
+    "spectra"
+  ],
+  "trigger_level": "YEL"
 }

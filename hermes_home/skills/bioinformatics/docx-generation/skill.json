@@ -9,6 +9,53 @@
   "auto_score": 0,
   "approved": false,
   "steps": [],
+  "success_count": 3,
+  "proven_script": "md2docx.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "antiword_extract_doc",
+      "params": "antiword -w 0 -m UTF-8.txt <file>.doc > <file>.txt",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Windows 下读取 .doc 旧版二进制格式：antiword(/mingw64/bin/antiword) 加 -w 0 -m UTF-8.txt 可完整抽取中文正文与表格(|分隔)，5 份吉大论文规范文件成功导出到 results/memomics-293573bf/data/thesis_spec/"
+    },
+    {
+      "species": "human",
+      "tissue": "brain",
+      "direction": "aging",
+      "script": "gen_thesis_docx.py",
+      "params": "{\"output\":\"docx\",\"format_std\":\"吉林大学研究生学位论文撰写及装帧规范(2023-03)\",\"body_font\":\"宋体小四\",\"heading_font\":\"黑体\",\"header_font\":\"楷体小五+单划线\",\"page_num\":\"前置upperRoman/主体decimal restart\",\"figures\":9,\"tables\":41,\"sections\":12}",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "按吉大硕士规范生成 2.0MB DOCX（516段/41表/9图/12节）；页眉逐节=章编号及标题（楷体小五+单划线）已逐节验证；前置罗马数字页码、主体阿拉伯数字 restart 生效"
+    },
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "general",
+      "script": "md2docx.py",
+      "params": "md2docx.py generic markdown->docx converter (Phylo style: gold table headers, Arial, section rules)",
+      "date": "2026-10-02",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "新建通用 md->docx 转换器 scripts/md2docx.py (支持标题/列表/管道表格/代码块/行内粗体+代码)。踩坑: 持久内核 Python 无 python-docx (ModuleNotFoundError: No module named 'docx')，需改用项目 .venv 或 pandoc。定位文档 deliverables/positioning_memomics."
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "md2docx.py"
+  },
+  "when_to_use": "需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用",
   "trigger_keywords": [
     "Word",
     "docx",
@@ -18,6 +65,5 @@
     "导出Word",
     "Word文档"
   ],
-  "trigger_level": "RED",
-  "when_to_use": "需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用"
+  "trigger_level": "RED"
 }

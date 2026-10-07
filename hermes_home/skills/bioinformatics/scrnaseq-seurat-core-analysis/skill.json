@@ -39,10 +39,24 @@
     "max_mt": "20",
     "resolution": "0.5-0.8"
   },
-  "proven_params": [],
-  "proven_script": null,
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_cellcycle_scoring_stats.R / 03_cellcycle_figures_only.R / 06_final_robustness.R",
+      "params": "{\"skill\":\"scrnaseq-seurat-core-analysis\",\"method\":\"Seurat CellCycleScoring\",\"gene_sets\":\"cc.genes.updated.2019 (S43+G2M54)\",\"assay\":\"RNA (log-norm data)\",\"unit_of_inference\":\"sample (n=48, 45 nuclei each)\",\"tests\":\"Kruskal-Wallis + pairwise Wilcoxon BH + Wilcoxon signed-rank paired + donor-level permutation (2000x) + 45-nuclei resampling bootstrap (500x)\",\"ICC\":\"0.0175\",\"design_effect\":\"1.76\",\"effective_n\":\"1212\",\"figures\":\"6 PNG(300dpi)+PDF\"}",
+      "date": "2026-09-24",
+      "score": 7.5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_2000（2132 肌核/48 样本/6 组）细胞周期打分完成：相位 G1 43.8%/S 31.0%/G2M 25.2%。真实增殖标志物 MKI67 检出率 0.00%（全部核/组/供体）、CCNB1≤0.44%、CDK1≤0.37% → 终末分化肌核几乎无增殖细胞。组间比较：样本级 KW 仅 G2M.Score p=0.018（Pre 组 pct_G2M p=0.028），两两 Wilc"
+    }
+  ],
+  "proven_script": "01_cellcycle_scoring_stats.R / 03_cellcycle_figures_only.R / 06_final_robustness.R",
   "error_count": 0,
-  "success_count": 0,
+  "success_count": 1,
   "official_docs": "https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
   "doc_source": "official",
   "prerequisites": {
@@ -58,5 +72,8 @@
     "seurat",
     "Seurat流程"
   ],
-  "trigger_level": "RED"
+  "trigger_level": "RED",
+  "user_prefs": {
+    "last_used_script": "01_cellcycle_scoring_stats.R / 03_cellcycle_figures_only.R / 06_final_robustness.R"
+  }
 }

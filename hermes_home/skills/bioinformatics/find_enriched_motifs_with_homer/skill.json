@@ -21,5 +21,12 @@
   "error_count": 0,
   "success_count": 0,
   "official_docs": "http://homer.ucsd.edu/homer/motif/",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "find",
+    "enriched",
+    "motifs",
+    "homer"
+  ],
+  "trigger_level": "YEL"
 }

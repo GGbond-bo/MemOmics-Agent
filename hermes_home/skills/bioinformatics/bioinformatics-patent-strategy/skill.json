@@ -22,5 +22,61 @@
     "交底书",
     "可专利性"
   ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.0,
+      "evidence": "L1 辩论（2026-09-12，v15 §三（补充）（十三）写入同源置换负结果）裁决 need_more_info / low。rubrics：证据质量 4、效应量 7、混杂控制 4、先验文献 2、可重复性 6。正反双方均把本案数据外推到 A26.3/A26.4/创造性但无审查指南/判例锚点，属推理。数据本身支持：门控触发富集（894 vs 673.0±18.7，1.33×，p<0.005）、核心元件未富集（357 vs 340.1±16.3，1.05×，p=0.164）、方向一致性显著低于随机（41.31%/39.93%/46.36% vs 50.30%/50.54%/50.20%，下侧 ",
+      "date": "2026-09-12 17:37:53"
+    }
+  ],
+  "success_count": 3,
+  "proven_script": "verify_fisherz_branch.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "16_gen_disclosure_docx_v15.py",
+      "params": "{\"permutation_B\": 200, \"seed\": 20260912, \"tau_A\": 12, \"alpha\": 0.05, \"abstract_chars\": 300, \"figures\": \"black-white-lineart\", \"tables\": 8}",
+      "date": "2026-09-12",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v15 技术交底书定稿（第三轮 5 项）：① 附图 1–5 改黑白线条版（patent/figures_bw/，彩色像素 0.000%，符合审查指南 2.4）；② 指定摘要附图 = 图 1；③ 新增 §十 检索记录（3 组检索式 + IPC 建议主分类 G16B 40/00 + 对比文件 D1–D3）；④ 新增 §三（补充）（十三）权 5(2) 同源对应关系置换实施例（实跑：门控触发 894 vs"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "15_make_figures_bw.py",
+      "params": "{\"figure\":\"fig1_pipeline_bw\",\"change\":\"remove all hatch fills across 5 step boxes + output box\",\"distinction_method\":\"pure white fill + black frame + reversed title bar\",\"fontsize\":\"title 10.5->11.5pt, body 8.4->9.4pt\",\"ink_ratio\":\"18.6%->15.54%\",\"color_px\":\"0.0000%\",\"canvas\":\"3129x1122\",\"regen\":\"16_gen_disclosure_docx_v15.py via system Python312\",\"verify\":\"17_verify_v15.py 48 PASS / 0 FAIL\"}",
+      "date": "2026-09-12",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "图1技术链示意图去填充图案（用户反馈\"一堆小点点，看不清楚\"）：5 个步骤框 + 输出框的 hatch 全部清零，改纯白底黑框 + 反白标题条区分；字号放大。重出黑白图并重新成文 v15（1,217,101 B / 表 8 / 图 5），内嵌 image1 = 245,274 B 与新图 sha256 一致，验收 48 PASS / 0 FAIL。"
+    },
+    {
+      "species": "human+macaque",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "verify_fisherz_branch.py",
+      "params": "M2_repro_gene_conservation_all.csv (16029 genes); 人40例/猴20例供体; tile级Pearson r",
+      "date": "2026-09-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "审查员点1判定闭合：tile级单元统计量确认为Pearson r（权2原文+06脚本stouffer()实读）→ Fisher-Z适用（分支①）。实测p机器零饱和真实存在：人侧19.07%/猴侧2.1%的基因级p落机器eps。同向率0.4636复现。n_tiles_h 1-4952(中位66)/n_tiles_m 1-3011(中位51)。猴n=20>4 → Fisher-Z可用但需winsori"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "verify_fisherz_branch.py"
+  },
   "when_to_use": "Bioinformatics method patent strategy and drafting. Covers A25 (intellectual activity rules) defense, claim structuring for bioinformatics workflows, dual-patent architectures…"
 }

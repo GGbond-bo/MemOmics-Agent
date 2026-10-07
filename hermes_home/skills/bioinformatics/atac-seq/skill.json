@@ -101,10 +101,79 @@
   "official_docs": "https://www.archrproject.com/",
   "doc_source": "official+literature",
   "version": "2.0.0",
-  "proven_params": [],
-  "proven_script": null,
-  "error_count": 0,
-  "success_count": 0,
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "detect_conda_for_pybigwig.sh",
+      "params": "conda_path=E:/miniconda3/Scripts/conda.exe; package=pybigwig; channel=conda-forge",
+      "date": "2026-08-30",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "L1 序列保守性 bigWig 读取工具链诊断：pip 无 Windows wheel、rtracklayer 缺 UCSC library、UCSC 无 Windows 命令行版、Python 手写解析 B+ tree 太脆——最终发现用户本机 E:/miniconda3 存在，pyBigWig 可通过 conda-forge 安装 Windows 预编译版。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "bigwig_pure_python_reader.py",
+      "params": "conda install pybigwig timed out at 300s (solution solving slow); fallback=pure-python bigWig reader (struct+mmap)",
+      "date": "2026-08-30",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "conda-forge pybigwig 在 Windows 上安装超时（repodata 解析 >300s），未装成功。改用纯 Python 实现 bigWig reader：header 已解析（magic=0x888FFC26, version=4, fullDataOffset=24196, chromTreeOffset 需确认，zooms 存在）。下一步完成 chromosome B+"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "bigwig_reader_probe.py",
+      "params": "bigWig pure-python reader attempt: header OK, B+tree magic OK, data block scan FAILED (chromId 2897730 bogus); route fallback conda pybigwig (running)",
+      "date": "2026-08-30",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "纯 Python 手写 bigWig 读取器在 Windows 上不可行：header 解析正确（magic 0x888FFC26, chromTree=344, fullData=24196, fullIndex=7.6GB），B+tree magic 验证通过，但数据块扫描 chromId 全乱（2897730 等不合理值），说明块布局推断错误。放弃手写，依赖 conda-forge pybi"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "conda_pybigwig_wait.sh",
+      "params": "conda install pybigwig 347s+ still solving; check UCSC ftp no text alternative for phyloP",
+      "date": "2026-08-30",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "UCSC hgdownload 只提供 bigWig（bw + mod），无文本替代格式，必须解析 bigWig。conda-forge pybigwig 安装仍在 solving environment（347s+，base 环境依赖解析慢）。准备并行方案：pip 直接装 pybigwig wheel（PyPI 可能有 win_amd64 wheel），若不行等 conda 完成后用 conda"
+    }
+  ],
+  "proven_script": "conda_pybigwig_wait.sh",
+  "error_count": 1,
+  "success_count": 4,
+  "user_prefs": {
+    "last_used_script": "conda_pybigwig_wait.sh"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-08-30 21:59",
+      "error_type": "missing_package",
+      "message": "rtracklayer readBigWig fails on Windows: UCSC library operation failed",
+      "root_cause": "rtracklayer 在 Windows 上依赖 UCSC kent library 的本地编译组件，Windows/R 环境缺失或无法加载该库，读 bigWig 直接失败",
+      "fix_applied": "放弃 rtracklayer 读 bigWig，改用 conda-forge 安装 pybigwig（有 Windows 预编译版）或纯 Python 实现读取器",
+      "species": "",
+      "tissue": "",
+      "script": "",
+      "severity": "high"
+    }
+  ],
   "when_to_use": "ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出",
   "trigger_keywords": [
     "atac-seq",

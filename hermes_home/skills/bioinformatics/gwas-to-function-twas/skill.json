@@ -38,5 +38,13 @@
   "error_count": 0,
   "success_count": 1,
   "official_docs": "https://github.com/opentargets/genetics-behavioural",
-  "doc_source": "official"
+  "doc_source": "official",
+  "trigger_keywords": [
+    "gwas-to-function-twas",
+    "gwas to function twas",
+    "gwas",
+    "function",
+    "twas"
+  ],
+  "trigger_level": "YEL"
 }

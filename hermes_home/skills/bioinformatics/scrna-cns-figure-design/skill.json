@@ -17,8 +17,8 @@
     "scrna cns figure design",
     "cns"
   ],
-  "success_count": 3,
-  "proven_script": "phase4_rss_perturbation.R",
+  "success_count": 4,
+  "proven_script": "fig_A3_CNS_v2.R",
   "proven_params": [
     {
       "species": "human",
@@ -58,10 +58,23 @@
       "approved": false,
       "custom_script": false,
       "result": "Phase 4 RSS 衰老特异证据链完成：P3 loading 衰老递增 1.65x（Y 6.22e-5→O 1.03e-4→OD 1.11e-4），运动不响应（delta -6.7e-7），RSS vs 其余群 fold 随衰老扩大（1.70→2.45）；扰动向量场显示 RSS reversibility -0.107（运动不逆转），SP +0.025（运动不逆转轻微同向）。产出 4 图 + "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v2.R",
+      "params": "base graphics 零依赖；纸宽反解色块 183mm；SUBS 顺序按用户指定（Pure Type IIA>IIX>I>LRP1B+(I)>OTUD1+(I)>OTUD1+(II)>RP_high(I)>RP_high(II)>RSS>Specialized MF）；删除左侧纤维型注释条(FIBER/FCOL)+旋转类型名；行内 z-score ddof=0；RdBu_r ±2；MAI=c(1.10,1.00,0.62,0.74)；GAPX=0.22；300dpi png/cairo_pdf/svglite/tiff-lzw",
+      "date": "2026-09-18",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "FigA3 CNS v2：两套图（17程序/5轴 + 18程序/6组含Artifact）各 4 格式 = 8 文件全部写出非空（png 122-125KB / pdf 45KB / svg 63-65KB / tiff 413KB）。左栏注释条已删除，亚群次序改为用户指定顺序；行内 z-score 值不随行序变化（仅重排）。旧 v1 已归档 archive_superseded/*_v1_stri"
     }
   ],
   "user_prefs": {
-    "last_used_script": "phase4_rss_perturbation.R"
+    "last_used_script": "fig_A3_CNS_v2.R"
   },
   "when_to_use": "CNS-level single-cell RNA-seq figure architecture and implementation. Covers condition-resolved UMAP with density contours, continuum scoring multi-condition perturbation vector fields…"
 }

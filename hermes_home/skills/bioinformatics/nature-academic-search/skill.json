@@ -22,5 +22,155 @@
     "查PubMed和Crossref",
     "多源检索"
   ],
-  "when_to_use": "Search literature across sources, verify or manage citations, and build MeSH strategies or citation-impact audits. Use for 文献检索、引文核对、参考文献管理、严格他引 and evidence-backed citer profiles; not for translating"
+  "when_to_use": "Search literature across sources, verify or manage citations, and build MeSH strategies or citation-impact audits. Use for 文献检索、引文核对、参考文献管理、严格他引 and evidence-backed citer profiles; not for translating",
+  "success_count": 11,
+  "proven_script": "g2_systematic_search.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources pubmed",
+      "params": "query=\"skeletal muscle aging single-cell RNA sequencing\" --sources pubmed --limit 8 --json; 走代理 HTTP_PROXY/HTTPS_PROXY=127.0.0.1:6478; 解释器 .venv/Scripts/python.exe",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "PubMed 源检索成功（exit 0），返回 8 条含标题/作者/年/期刊/卷期页/PMID/DOI 的完整元数据（如 10.1038/s43587-022-00250-8 Nature Aging 2022 细胞衰老、10.1093/procel/pwac061 FOXO3 灵长类肌衰老、10.1038/s43587-024-00756-3 小鼠寿命再生）。纯只读检索，未落任何文件。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources pubmed,crossref (json schema probe)",
+      "params": "同命令增加 python -c 管道解析（d.get(\"results\")）; 结果：两源均无打印输出 → 说明 JSON 顶层无 results 键，解析假设错误",
+      "date": "2026-09-25",
+      "score": 3,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "lit_bridge 输出的 JSON 顶层结构与我假设的 {\"results\":[...]} 不一致（管道解析后无输出、也未报 PARSE_FAIL，说明 json.load 成功但 results 键缺失）。教训：先 head 看原始结构再写解析器，不要凭 tail 片段猜 schema。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources pubmed,crossref (records schema)",
+      "params": "lit_bridge.py search --sources pubmed,crossref --limit 3 --json; 解析改记录键 records（顶层: query/count/sources_used/errors/records）",
+      "date": "2026-09-25",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "两源均连通：pubmed 3 条（jcsm 2024/2021/2025 元数据完整含 PMID）；crossref 仅 2 条且均为 Innovation in Aging 会议摘要（igaf122.*，无 PMID）→ Crossref 对 \"single-cell RNA sequencing\" 字面匹配弱、需换检索式。schema 要点：结果键是 records，errors 独立字段。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources crossref (2 queries)",
+      "params": "crossref 换检索式两轮：\"skeletal muscle aging single-cell transcriptomics\" (count=9)、\"human skeletal muscle aging single-nucleus atlas\" (count=6)；--limit 10 --json，按 records 键解析",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Crossref 补齐成功：第一式得 9 条（含 10.14336/ad.2025.0701 综述、10.1101/2025.07.28.667277 SkeletAge 预印本、10.1093/geroni/igaf122.235 会议摘要）；第二式 6 条（含 s13395-020-00236-3 与 s13395-015-0059-1）。经验：Crossref 对 \"single-cell "
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py --help (CLI contract probe)",
+      "params": "lit_bridge.py --help / search --help（CLI 契约探查，纯只读）",
+      "date": "2026-09-25",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "CLI 契约确认（exit 0）：子命令 4 个 = search（多源并发检索）/ paper（按 DOI/PMID/arXiv ID 取元数据）/ cite（生成引用文本）/ mesh（MeSH 词表查询）。search 参数：query（位置参数，必填）+ --sources / --limit / --year-from / --mailto / --json / --no-dedup。经"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources pubmed,crossref (skeletal muscle aging scRNA)",
+      "params": "lit_bridge.py search \"skeletal muscle aging single-cell RNA sequencing\" --sources pubmed / crossref --limit 8 --json（走 HTTP_PROXY=127.0.0.1:6478，.venv/Scripts/python.exe）",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "两源实检索均成功（exit 0，errors 均为空）：PubMed 返回 8 条期刊论文（含 PMID/卷期页，如 36147777 Nature Aging 2022 细胞衰老、36921027 Protein & Cell 2023 FOXO3 灵长类肌衰老、39578558 Nature Aging 2024 小鼠再生、33311464 Nat Commun 2020 snRNA-seq "
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "lit_bridge.py search --sources pubmed,crossref + json parse pipe",
+      "params": "lit_bridge.py search \"skeletal muscle aging single-cell RNA sequencing\" --sources pubmed,crossref --limit 8 --json + python 管道按 count/errors/records 三键解析打印精简清单",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "解析管道可用（exit 0）：PubMed count=8 / errors=[]；Crossref count=6 / errors=[]。精简格式=年|期刊|标题|DOI|PMID|type。PubMed 8 条含 jcsm.13484(2024 卫星细胞-FAP 互作)、jcsm.12643(2021 脂肪浸润脂质组)、jcsm.70045(2025 类器官衰老)、s43587-022-00"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "lit_bridge.py search --sources pubmed,crossref --limit 3 --no-dedup",
+      "params": "lit_bridge.py search \"skeletal muscle aging single-cell RNA sequencing\" --sources pubmed,crossref --limit 3 --no-dedup --json",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "exit 0，errors=[] 两源均连通。count=6（PubMed 3 条含 PMID：38751367 jcsm.13484 2024 卫星细胞-FAP/FGF7、33244879 jcsm.12643 2021 脂肪浸润脂质组、40810394 jcsm.70045 2025 类器官衰老；Crossref 3 条：10.1093/geroni/igaf122.235、10.1111/a"
+    },
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "general",
+      "script": "lit_bridge.py + agent_corpus_harvest",
+      "params": "essential45 selection; Europe PMC fullTextXML per-PMCID; NCBI OA oa.fcgi for PDF",
+      "date": "2026-10-02",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "科研agent文献: wide 6079 -> core 734 -> essential45(18 landmark+27 high-score). 全文XML 31/45 可用(EBI EuropePMC REST 稳定), PDF 仅4/45(download_pdf 三策略: europepmc_pdf_render/pdf=render 与 unpaywall 均被 Cloudflare"
+    },
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "general",
+      "script": "assemble_full_doc.py",
+      "params": "assemble_full_doc.py + build_evidence.py + build_report_html.py : positioning.md + 31 cards -> full md; cards->evidence.csv; HTML 107KB",
+      "date": "2026-10-02",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "交付物组装链跑通: (1) review/evidence.csv 31 条证据(strong 21/moderate 3/weak 7, 覆盖31 DOI); (2) HTML 报告 107KB 含31竞品卡+分类过滤+漏斗/趋势图+证据表+50引用; (3) positioning_full.md 61KB 供 DOCX。踩坑: 子代理精读路线失败——3个子代理中2个 max_iteratio"
+    },
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "methodology",
+      "script": "g2_systematic_search.py",
+      "params": "g2_systematic_search.py: 6 keyword groups x EuropePMC+arXiv+OpenAlex, 2023-2026",
+      "date": "2026-10-02",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "G2 系统检索(裁判必做项#1)完成: 496 条去重命中, 真最近邻 42 条. 决定性发现: G2/G3 非真空白 — 'evidence-gated' 术语已被 Evidence-Gated Memory Writing(ICIPAI 2026)使用; MetaClaw(2026) 同时命中可审计+多组学; RegenHarness(2026) 证据门控+递归自改进; An AI Agent"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "g2_systematic_search.py"
+  }
 }

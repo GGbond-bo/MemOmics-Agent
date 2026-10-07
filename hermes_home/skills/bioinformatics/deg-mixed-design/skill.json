@@ -27,5 +27,112 @@
     "deg",
     "mixed"
   ],
-  "when_to_use": "多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis"
+  "when_to_use": "多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis",
+  "success_count": 5,
+  "proven_script": "audit_effect5_v3.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "explore_MF2000_meta.R",
+      "params": "readRDS MF_2000.rds; Seurat v5 Assay5 用 LayerData(layer=\"counts\")",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "数据探查成功: 2132细胞×51227基因, 48样本=24个体(Young10/Old7/OldC7)×Pre/Post配对, 每样本≤45细胞(降采样), celltype=TypeI/TypeII/RSS, counts为整数raw counts(Seurat v5 Assay5层)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "check_pkgs_R453.R",
+      "params": ".libPaths('E:/R-libs/R-4.5.3'); loadNamespace 逐包真实加载测试",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R4.5.3库缺 variancePartition/muscat/limma/edgeR/lme4/DESeq2/pheatmap(Seurat/ggplot2 OK); check_env 的 installed_now 装到了非 4.5.3 库，实测仍 FAIL → 需按铁律29装到项目内 E:/R-libs/R-4.5.3"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "install_pkgs_R453.R",
+      "params": "install.packages(BiocManager,lme4,pheatmap, lib='E:/R-libs/R-4.5.3') + BiocManager::install(limma,edgeR,variancePartition,muscat, lib='E:/R-libs/R-4.5.3')",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R4.5.3 项目内库装包成功(864s, Bioc 3.22 源, 无ERROR): variancePartition/muscat/limma/edgeR/lme4/DESeq2/pheatmap/BiocParallel 全部 loadNamespace OK"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "deg_pseudobulk_design_check.R",
+      "params": "pseudobulk=ct %*% sparse.model.matrix(~0+sample); filterByExpr(group); 设计矩阵 ~grp+time+grp:time, Young_Pre 参照",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "设计矩阵校验通过(秩6/6非奇异, 对比向量代数正确); pseudobulk 48样本 lib 126K-420K(中位274K), 零比例0.61-0.74; filterByExpr 保留6625基因(12.9%); 分层可行性: TypeI(中位17细胞)/TypeII(25)可分层, RSS 10/48样本零细胞不可分层"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "audit_effect5_v3.py",
+      "params": "{\"fdr_families\":[\"全表1100\",\"每效应220\",\"每score50\",\"每效应x轴\"],\"ci\":\"Hedges-Olkin SE / 1/n+d^2/(2n)\",\"power_sim\":\"2000 reps, d=0.2..0.8, n=7/10\",\"validation\":\"hand-calc + statsmodels multipletests\"}",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "效果量口径修正的配套审计（回应 L1 辩论 5 项 next_actions）。[A] FDR 族敏感性/220 格显著数：全表1100=71、每效应220=111、每score50=90(ExOld 14)、每效应×轴=133(ExOld 16/T2D 3/ExYoung 2) → 检验族实质改变星号分布。[B] 配对 QC：24 donors×2 时间点无孤儿、组别 donor 10/7/7 "
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "audit_effect5_v3.py"
+  },
+  "error_count": 2,
+  "errors": [
+    {
+      "timestamp": "2026-09-24 17:24",
+      "error_type": "syntax_error",
+      "message": "<text>:1:113: unexpected symbol  1: exec(open(\".../deg_paired_pseudobulk_A_B_C.R\", encoding=\"utf-8\").read",
+      "root_cause": "execute_r 内核在传入代码含 exec(open(\"...\").read()) 嵌套括号时发生截断（右侧 () 被剥离），导致 unexpected symbol。这不是脚本本身的问题（脚本已 write_file 落盘且 lint 通过）",
+      "fix_applied": "改用 source(\"脚本路径\", encoding=\"UTF-8\") 执行落盘脚本，避免 exec(open().read()) 形式被内核预处理截断括号",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "deg_paired_pseudobulk_A_B_C.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 17:33",
+      "error_type": "syntax_error",
+      "message": "The levels must be syntactically valid names in R, see help(make.names).  Non-valid names: grpOld:timePost,grpOldC:timePost",
+      "root_cause": "makeContrastsDream 解析对比表达式时，含冒号的交互项系数名必须转义为合法 R 名（反引号），否则报 levels must be syntactically valid names",
+      "fix_applied": "makeContrastsDream/makeContrasts 的对比字符串中交互项必须用反引号包裹: \"timePost + `grpOld:timePost`\"（limma 的 makeContrasts 已有反引号写法，dream 的 makeContrastsDream 同样要求）",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "deg_paired_pseudobulk_A_B_C.R",
+      "severity": "medium"
+    }
+  ],
+  "debate_verdicts": [
+    {
+      "topic": "",
+      "verdict": "",
+      "recommended_params": "",
+      "confidence": 0.9,
+      "evidence": "Lakens 2013 [PMID:24324449] 给出 d_z/d_av/d_rm 三式：d_z 受个体内相关 r 影响、不可与独立 d 共用色标，d_av 与独立 d 同尺度、为跨设计比较推荐式；Hedges 1981 小样本校正 J=1-3/(4df-1)。本项目实测：ExYoung/ExOld 配对组 r 中位 +0.495/+0.413（正，配对有增益），ExT2D r 中位 −0.195（负，配对反而不如独立）；>50 细胞子集 r 中位仍 −0.208 → 非低细胞噪声所致，是数据稳健特征。实现经手算 + statsmodels 双重校验（差 ≤1e-16）。功效模拟：n=7",
+      "date": "2026-09-25 22:57:52"
+    }
+  ]
 }

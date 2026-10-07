@@ -453,3 +453,26 @@ parameter sources, use `"标准分析方法"` or `"standard workflow"`.
 
 **⛔ 禁止手工整理辩论内容。必须从 conclusions.md + debate_*.json 读取。**
 **⛔ 如果 conclusions.md 不存在 → 提示用户先完成分析步骤的辩论，再生成报告。**
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | general | 2026-09-16 | MemOmics_showcase.html | - | - |  |
+
+
+| - | - | general | 2026-09-16 | MemOmics_Showcase.html | - | - |  |
+| human | skeletal_muscle | general | 2026-09-16 | MemOmics_Showcase.html | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
+| human | general | general | 2026-10-02 | build_report_html.py | - | - |  |
+| - | - | - | 2026-10-05 | build_agent_paradigms_ppt.py | - | - |  |
+| - | - | - | 2026-10-05 | build_agent_paradigms_ppt.py | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| [TOOL_ERROR] Tool execution failed: TypeError: 'in | debate_analysis 在 level=L1 且 auto_kb 开/关 | 暂未修复（平台侧 bug）。规避：本次改用 rail_review + 人工撰写"边界与风险"章节替 |
+

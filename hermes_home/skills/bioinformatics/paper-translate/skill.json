@@ -49,5 +49,6 @@
     "paper-translate",
     "paper translate",
     "translate"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

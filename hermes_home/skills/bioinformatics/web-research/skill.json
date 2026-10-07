@@ -52,5 +52,6 @@
     "web research",
     "web",
     "网络调研"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

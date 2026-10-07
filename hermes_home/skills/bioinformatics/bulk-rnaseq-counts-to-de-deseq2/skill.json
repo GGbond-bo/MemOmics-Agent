@@ -45,5 +45,11 @@
   "prerequisites": {
     "requires": [],
     "description": "Bulk counts直接开始"
-  }
+  },
+  "trigger_keywords": [
+    "rnaseq",
+    "counts",
+    "deseq2"
+  ],
+  "trigger_level": "YEL"
 }

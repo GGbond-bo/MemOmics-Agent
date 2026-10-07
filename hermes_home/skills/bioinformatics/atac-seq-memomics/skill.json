@@ -18,8 +18,8 @@
     "seq",
     "memomics"
   ],
-  "success_count": 2,
-  "proven_script": "P1_da_young_old.R",
+  "success_count": 5,
+  "proven_script": "human_donor_age_map.R",
   "proven_params": [
     {
       "species": "macaca",
@@ -46,10 +46,49 @@
       "approved": false,
       "custom_script": false,
       "result": "P1 人海马 4 样本 (35,787 cells, 17 clusters) Young vs Old 差异可及性完成: strict DA Old 2,955 / Young 563 tiles; loose Old 5,037 / Young 972。markers_age_tiles.rds (348MB) + da_tiles_strict_{Old,Young}.bed + volca"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "human_umap_annotation.R",
+      "params": "readRDS(task4/human_Hf_ATAC_40_annotated.rds); getEmbedding(UMAPHarmony)",
+      "date": "2026-08-27",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人脑 rds 加载成功：human_Hf_ATAC_40_annotated.rds 265,909 细胞，cellType8 列存在，UMAPHarmony embedding 可用（265909x2，不依赖远端 Arrow）"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "check_arrow_availability.R",
+      "params": "readRDS both patent rds; getArrowFiles + getCellColData",
+      "date": "2026-08-27",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "HUMAN: 40 arrows 全部指向远端 /hwfssz3/PS_JLU/zhangbo/jupyter_zb/Patent/, 本机 0/40；cellColData 无 Individual/Age_group 列。MONKEY: 63 arrows 全部指向远端 /hwfssz3/PS_JLU/zhangxiao6/, 本机 0/63；21 individuals, 4 age gro"
+    },
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "human_donor_age_map.R",
+      "params": "Table_S1.tsv → Donor→Age_group; 40 multiome samples (GSM8549615-8549654) 全部匹配; C1-C30 → ExN/InN/Astro/Micro/OPC/ODC/Unknown",
+      "date": "2026-08-27",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "人脑 40 样本年龄映射建立成功：40/40 匹配，Age 20-89 岁分 4 组（20-40/40-60/60-80/80-100），265,909 细胞全部写入 Age + Age_group 列。产出 task2/human_Hf_ATAC_40_withAge.rds + human_donor_age_map.csv"
     }
   ],
   "user_prefs": {
-    "last_used_script": "P1_da_young_old.R"
+    "last_used_script": "human_donor_age_map.R"
   },
   "error_count": 3,
   "errors": [

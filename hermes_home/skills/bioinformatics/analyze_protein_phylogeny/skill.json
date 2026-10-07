@@ -16,5 +16,9 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "phylogeny"
+  ],
+  "trigger_level": "YEL"
 }

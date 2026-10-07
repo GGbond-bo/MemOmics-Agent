@@ -19,7 +19,7 @@ on:
       release_tag:
         description: '测试哪个 Release 的 Linux 包 (tag 名)'
         required: false
-        default: 'v2026-08-23'
+        default: 'v2026-09-01'
   push:
     paths:
       - '.github/workflows/linux-smoke.yml'
@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Download shipped Linux package from Release
         run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-08-23' }}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-01' }}"
           echo "Testing release tag: ${RELEASE_TAG}"
           curl -fsSL -o MemOmics-Linux.tar.gz \
             "https://github.com/GGbond-bo/MemOmics-Agent/releases/download/${RELEASE_TAG}/MemOmics-Linux.tar.gz"

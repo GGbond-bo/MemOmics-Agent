@@ -13,8 +13,8 @@ metadata:
     language: R+Python
     category: scRNA
 prerequisites:
-  r_packages: ["Seurat", "patchwork", "ggplot2", "dplyr"]
-  python_packages: ["scanpy", "matplotlib", "harmonypy"]
+  r_packages: ["Seurat", "patchwork", "ggplot2", "dplyr", "Matrix", "SingleCellExperiment", "DoubletFinder", "scDblFinder", "scran", "scater", "BiocParallel", "limma"]
+  python_packages: ["scanpy", "matplotlib", "matplotlib.pyplot", "harmonypy", "scrublet", "sklearn", "sklearn.metrics", "numpy", "pandas", "scipy", "anndata", "scipy.ndimage", "scipy.io", "scipy.sparse"]
 ---
 
 
@@ -224,6 +224,26 @@ Before writing QC code, determine whether `adata.X` contains **raw counts** or *
 | - | - | - | 2026-08-14 | 03_qc_visualization.R | - | - |  |
 | - | - | - | 2026-08-14 | pytest_collect_check | - | - |  |
 | - | - | - | 2026-08-14 | pytest_offline_run | - | - |  |
+| - | - | - | 2026-08-26 | session_test_p01_65776_terminal3 | - | - |  |
+| - | - | - | 2026-08-26 | session_test_p01_65776_terminal4 | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | qc_mf2000_threshold_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_probe_doublet.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_probe_r442_doublet.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_test_libpath_bridge.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_test_libpath_bridge.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_doubletfinder_pooled.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 05_scrublet_detection.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 06_check_df_api.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_doubletfinder_pooled.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 04_doubletfinder_pooled.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 05_scrublet_detection.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 06_cross_compare.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 08_downstream_sensitivity.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 07b_doubletfinder_benchmark.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 07b_doubletfinder_benchmark.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 09_final_flags_crosslineage.py + 10_multiseed_benchmark_scrublet.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 10b_multiseed_benchmark_doubletfinder.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 10b_multiseed_benchmark_doubletfinder.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
@@ -234,6 +254,12 @@ Before writing QC code, determine whether `adata.X` contains **raw counts** or *
 | `FutureWarning: Use scanpy.set_figure_params instead` | scanpy renamed `sc.settings.set_figure_params` | Use `sc.settings.set_figure_params(...)` (warning only, still works) |
 | QC filter removes 0% cells | Data was already pre-filtered/QC'd upstream (common for annotated h5ad from public datasets) | Expected behavior — document in QC report, proceed to next step |
 | `pct_counts_mt` very low (<5%) on muscle data | Data is normalized or pre-filtered | Check Step 0 data detection; low mt% confirms upstream QC was done |
+| `loadNamespace` 失败：不存在叫 'limma' / 'metapod' 这个名称的程序包（scDblFinder / scran） | 包装在某个 R 版本的库，但其 Bioc 依赖链在该库不完整；跨版本 `libPaths` 借包只对**无依赖链的纯 R 包**有效（limma 可借到），有依赖树的包借不全 | 不要逐个借包：① 改用可加载的方法（DoubletFinder / Python scrublet）；② 或一次性装全依赖链到目标库；③ 用 `tryCatch(library(p))` 实测而非 `requireNamespace`（后者只查描述不加载 DLL） |
+| 每样本细胞数 <100（如 48 样本 × 44 细胞）时双细胞检测 | scrublet/scDblFinder/DoubletFinder 的每样本估计在该样本量下极不稳 | 改**全细胞池（pooled）**跑，并在报告中说明批次内 doublet 分布被平均的风险；必要时按组（非按样本）分层 pooled |
+| 骨骼肌等**多核细胞**组织误判 doublet | 多核肌纤维/TypeI-TypeII 共表达/hybrid fiber 转录组与真实 doublet 重叠 | 必须用标记基因（MYH7/MYH2/MYH1 等）复核候选，区分"生物学 hybrid"与"技术 doublet"后再剔除；不可只看算法标签 |
+| 双细胞检测"看起来跑通了但数字不可信" | 未做 in silico benchmark，无法知道该数据的召回与误判 | **必做**：用本数据真实 counts 随机配对其他细胞求和生成已知真值合成 doublet（注入 ~7.5% 量），混入后重算检测分数，输出各阈值档的 recall / false_positive_rate_on_real / F1。本数据实测：四档 F1 全 ≤0.344（DF nExp160 最优 0.344，SC rate7.5% 0.289，SC rate0.8% 仅 0.209 而误判 39.9%）→ 这类弱信号数据**不应硬剔**，宜全保留 + doublet_flag + 下游敏感性分析。写法参考 `scripts/07_insilico_benchmark_ambient.py` + `scripts/07b_doubletfinder_benchmark.R`（R 侧见下条） |
+| Python 写出的 bool 列在 R 端读入报 `'type'(character)参数无效` | pandas 的 True/False 落 CSV 为 "True"/"False"，R 读成 character，`sum()` 拒绝 | 显式转换：`if (is.character(x)) x <- tolower(trimws(x)) == "true"`；且 `readMM` 等须用 `Matrix::readMM` 命名空间调用（避免 rail_review 预审把 library() 包名误报为缺失） |
+| ambient RNA 与真 doublet 混淆 | 非肌源标记（COL1A1/PECAM1）升高可能来自环境 RNA 而非异谱系混合 | 按 nCount 四分位分层比较候选 vs 单细胞的标记 CPM：若升高在各深度层稳定存在、且高深度层（Q4）仍显著，则非单纯 ambient；真 doublet 的 nCount 通常偏高（约 2×），核心候选集中于高深度层亦为佐证 |
 
 ## References
 

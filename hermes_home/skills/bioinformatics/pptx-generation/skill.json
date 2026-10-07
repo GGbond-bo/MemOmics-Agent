@@ -15,5 +15,51 @@
     "pptx generation",
     "pptx"
   ],
-  "trigger_level": "YEL"
+  "trigger_level": "YEL",
+  "success_count": 3,
+  "proven_script": "render_slide_previews.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "agent_review",
+      "script": "build_agent_paradigms_ppt.py",
+      "params": "python-pptx 深色/浅色学术风, 13.333x7.5in 16:9, 6页, 原生形状可编辑; 配套自包含HTML(零CDN, 6 section, 响应式+打印样式)",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "科研Agent范式对比+MemOmics机制6页PPT交付：PPTX 47.5KB/6页(校验通过)，HTML 24.7KB/6段(浏览器实测无JS错误，控制台0报错)。内容线：P1封面五系统定位→P2前四篇四失败模式对比表→P3 MemOmics四痛点→P4执行链强制质检+辩论门控L0/L1/L2→P5知识库三铁轨+闭环→P6边界自审。所有数字均有代码/磁盘出处。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "build_agent_paradigms_ppt_v2.py",
+      "params": "7 页紧凑版 · 浅色学术风 · 16:9 (13.333x7.5in) · python-pptx 原生表格/形状 · Microsoft YaHei",
+      "date": "2026-10-05",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "PPTX 生成成功：reports/research_agent_paradigms_MemOmics.pptx，7 页，48.4 KB。结构 P1 四篇文献一览(表)/P2 四项目初衷与解法(表)/P3 MemOmics 出发点/P4 全流程/P5 知识库/P6 两道门禁+辩论门控/P7 五系统定位。HTML 因 CSS 裸 % 报 ValueError，已定位修复(width:100%%)。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "render_slide_previews.py",
+      "params": "Edge 无头截图(--headless=new, window-size 1600x3000) + PIL 自动裁白边；逐 section 拆分为独立 HTML",
+      "date": "2026-10-05",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "7 页幻灯片预览图渲染成功：slide_01~slide_07.png（1599x524~687）+ 封面 slide_00.png(666x248)，共 8 张，输出至 figures/。方案：HTML<section> 拆分 → 独立 HTML → Edge 无头截图 → PIL 裁白边。环境无 LibreOffice、无 POWERPNT（用户用 WPS），PPTX 原生转图不可用，故走 H"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "render_slide_previews.py"
+  }
 }

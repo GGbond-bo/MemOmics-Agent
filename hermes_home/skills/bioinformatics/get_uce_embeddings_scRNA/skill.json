@@ -16,5 +16,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "get_uce_embeddings_scRNA",
+    "get uce embeddings scRNA",
+    "uce",
+    "embeddings"
+  ],
+  "trigger_level": "YEL"
 }

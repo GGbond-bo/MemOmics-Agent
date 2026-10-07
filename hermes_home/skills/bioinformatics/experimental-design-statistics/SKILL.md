@@ -584,3 +584,12 @@ export_complete_design(batch_design, design_params, output_dir = "design_results
 - 降维参数选择（PC 数量 10 vs 20 vs 30）
 - 差异表达阈值（p<0.05 vs p<0.01, logFC 阈值）
 - 任何需要多方审视的分析决策
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
+| mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_figures.R | - | - |  |

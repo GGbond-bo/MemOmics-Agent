@@ -22,5 +22,6 @@
     "facs",
     "cell sorting",
     "sorting"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

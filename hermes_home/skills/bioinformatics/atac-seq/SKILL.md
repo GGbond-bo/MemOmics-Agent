@@ -223,10 +223,15 @@ save_archr_project(proj, output_dir)
 | *(none yet)* | | | | |
 
 
+| - | - | - | 2026-08-30 | detect_conda_for_pybigwig.sh | - | - |  |
+| - | - | - | 2026-08-30 | bigwig_pure_python_reader.py | - | - |  |
+| - | - | - | 2026-08-30 | bigwig_reader_probe.py | - | - |  |
+| - | - | - | 2026-08-30 | conda_pybigwig_wait.sh | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| rtracklayer readBigWig fails on Windows: UCSC libr | rtracklayer 在 Windows 上依赖 UCSC kent libr | 放弃 rtracklayer 读 bigWig，改用 conda-forge 安装 pybigwig |
 
 
 ## References

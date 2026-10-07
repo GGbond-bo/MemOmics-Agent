@@ -9,7 +9,16 @@
   "memomics_module": "06_示意图",
   "chains_from": [],
   "chains_to": [],
-  "tags": ["diagram", "flowchart", "architecture", "schematic", "svg", "示意图", "流程图", "路线图"],
+  "tags": [
+    "diagram",
+    "flowchart",
+    "architecture",
+    "schematic",
+    "svg",
+    "示意图",
+    "流程图",
+    "路线图"
+  ],
   "difficulty": "basic",
   "when_to_use": "示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure)",
   "prerequisites": {
@@ -24,5 +33,6 @@
     "diagram-design",
     "diagram design",
     "diagram"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

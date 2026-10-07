@@ -62,7 +62,8 @@ from ctxcore.rnkdb import FeatherRankingDatabase as RankingDatabase
 
 def run_complete_grn_workflow(ex_matrix, tf_list_file, database_glob,
                                motif_annotations_file, output_dir="scenic_results",
-                               n_workers=4, seed=42):
+                               n_workers=4, seed=42, client_or_address=None,
+                               prune_client_or_address=None, reuse_adjacencies=False):
     """
     Run complete pySCENIC workflow from expression matrix to regulon activities.
 
@@ -112,25 +113,31 @@ def run_complete_grn_workflow(ex_matrix, tf_list_file, database_glob,
     os.makedirs(output_dir, exist_ok=True)
 
     # Step 1: GRN Inference with GRNBoost2
-    print("\n=== Step 1: GRN Inference (GRNBoost2) ===")
-    print(f"Loading TF list from: {tf_list_file}")
-
-    tf_names = load_tf_names(tf_list_file)
-    tf_names = [tf for tf in tf_names if tf in ex_matrix.columns]
-    print(f"  Using {len(tf_names)} TFs present in expression data")
-
-    print("  Running GRNBoost2 (this may take 10-60 minutes)...")
-    adjacencies = grnboost2(
-        expression_data=ex_matrix,
-        tf_names=tf_names,
-        verbose=True,
-        seed=seed
-    )
-
     adjacencies_file = os.path.join(output_dir, "adjacencies.csv")
-    adjacencies.to_csv(adjacencies_file, index=False)
-    print(f"  Saved: {adjacencies_file}")
-    print(f"✓ GRN inference completed: {len(adjacencies)} TF-target pairs")
+    if reuse_adjacencies and os.path.exists(adjacencies_file):
+        # RESUME: 跳过最耗时的 GRNBoost2，复用已落盘的邻接矩阵（失败重试时省 9+ 分钟）
+        print("\n=== Step 1: GRN Inference (GRNBoost2) === [RESUME]")
+        adjacencies = pd.read_csv(adjacencies_file)
+        print(f"  Reused: {adjacencies_file} ({len(adjacencies)} TF-target pairs)")
+    else:
+        print("\n=== Step 1: GRN Inference (GRNBoost2) ===")
+        print(f"Loading TF list from: {tf_list_file}")
+
+        tf_names = load_tf_names(tf_list_file)
+        tf_names = [tf for tf in tf_names if tf in ex_matrix.columns]
+        print(f"  Using {len(tf_names)} TFs present in expression data")
+
+        print("  Running GRNBoost2 (this may take 10-60 minutes)...")
+        # WARN Windows/memory-limited: pass an explicit dask client via client_or_address;
+        # otherwise arboreto spawns os.cpu_count() workers, each holding a full copy of the matrix
+        _grn_kwargs = dict(expression_data=ex_matrix, tf_names=tf_names, verbose=True, seed=seed)
+        if client_or_address is not None:
+            _grn_kwargs["client_or_address"] = client_or_address
+        adjacencies = grnboost2(**_grn_kwargs)
+
+        adjacencies.to_csv(adjacencies_file, index=False)
+        print(f"  Saved: {adjacencies_file}")
+        print(f"✓ GRN inference completed: {len(adjacencies)} TF-target pairs")
 
     # Step 2: Create Modules
     print("\n=== Step 2: Module Creation ===")
@@ -156,7 +163,14 @@ def run_complete_grn_workflow(ex_matrix, tf_list_file, database_glob,
     print(f"  Loading motif annotations from: {motif_annotations_file}")
     print("  Running cisTarget motif enrichment (this may take 30-120 minutes)...")
 
-    motif_df = prune2df(dbs, modules, motif_annotations_file)
+    # 🔴 根因修复（2026-09-24 实测）：prune2df 默认 client_or_address="dask_multiprocessing"
+    #    → .compute(scheduler="processes", num_workers=cpu_count()) 起满 CPU 数 worker，
+    #      每个 worker 都加载完整 ranking DB → 内存爆炸 → worker 被 OOM 杀 → BrokenProcessPool。
+    #    改走 custom_multiprocessing（每 worker 独占 DB + AUC-first numba JIT，内存可控）
+    #    并显式限制 worker 数 = n_workers。
+    motif_df = prune2df(dbs, modules, motif_annotations_file,
+                        client_or_address=prune_client_or_address or "dask_multiprocessing",
+                        num_workers=n_workers)
     regulons = df2regulons(motif_df)
 
     regulons_file = os.path.join(output_dir, "regulons.pkl")

@@ -1,0 +1,28 @@
+{
+  "id": "delegation-orchestration",
+  "name": "子代理委派编排与回执处理",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "委派子代理（delegate_task）的编排与回执处理协议 —— 批量派发切分、回执「迟到重放」识别与去重、子代理输出健壮 JSON 解析、自报 vs 产物验证、大输出上下文卫生。触发:收到 [ASYNC DELEGATION BATCH COMPLETE] 回执、要合并子代理产出的结构化卡/表、子代理自报「未读完全文 / 达 iteration cap」、不确定某批子代理结果是否已合并过、工具",
+  "starting_prompt": "使用 子代理委派编排与回执处理 进行分析",
+  "source_dir": "skills/bioinformatics/delegation-orchestration",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "delegation",
+    "subagent",
+    "async",
+    "parsing",
+    "context-hygiene"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "delegation-orchestration",
+    "delegation orchestration",
+    "delegation",
+    "orchestration"
+  ],
+  "when_to_use": "委派子代理（delegate_task）的编排与回执处理协议 —— 批量派发切分、回执「迟到重放」识别与去重、子代理输出健壮 JSON 解析、自报 vs 产物验证、大输出上下文卫生。触发:收到 [ASYNC DELEGATION BATCH COMPLETE] 回执、要合并子代理产出的结构化卡/表、子代理自报「未读完全文 / 达 iteration cap」、不确定某批子代理结果是否已合并过、工具"
+}

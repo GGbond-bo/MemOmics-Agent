@@ -14,5 +14,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "find_restriction_enzymes",
+    "find restriction enzymes",
+    "find",
+    "restriction",
+    "enzymes"
+  ],
+  "trigger_level": "YEL"
 }

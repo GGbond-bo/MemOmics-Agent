@@ -13,7 +13,7 @@ metadata:
     language: R+Python
     category: Bulk RNA
 prerequisites:
-  r_packages: []
+  r_packages: [fgsea, msigdbr, limma, edgeR, Matrix, Seurat, ggplot2]
   python_packages: []
 ---
 
@@ -167,13 +167,47 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 | human | skeletal_muscle | aging | 2026-08-14 | 10_go_term_barplot.py | - | - |  |
 | - | - | - | 2026-08-14 | 10_go_term_barplot.py | - | - |  |
 | - | - | - | 2026-08-14 | pytest_verify_go.log | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | go_heatmap_v6_final_YlOrRd_words_only.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | rebuild_clean_v3.py + write_clean_v3_xlsx.py + fig_signature_integrity_check.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | signature_jaccard_axes.py + write_axis_classification.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 12_kegg_YPost_vs_OPost.R + 12b_kegg_validation.R + 12c_kegg_collapse_plot.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | env_pkg_and_design_probe.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_pseudobulk_limma_A_B_C.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_pseudobulk_limma_A_B_C.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 01_pseudobulk_limma_A_B_C.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | install_fgsea_fix.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_gsea_atrophy_oxphos.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | msigdbr_api_probe.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_gsea_atrophy_oxphos.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fgsea_minrepro.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | fgsea_minrepro.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_gsea_atrophy_oxphos.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 02_gsea_atrophy_oxphos.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 03_fiber_stratified_qc_recheck.R | - | - |  |
+| human | skeletal_muscle | - | 2026-09-24 | env_probe_GO_engine.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_deg_YPost_vs_OPost.csv | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 11_go_YPost_vs_OPost.R | - | - |  |
+| - | - | - | 2026-09-24 | - | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | 11_go_YPost_vs_OPost.R | - | - |  |
+| - | - | - | 2026-09-24 | 12_go_plot_YPost_vs_OPost.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-03 | ora_power_for_small_lists.py (execute_python 内联计算) | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| R 进程 PID 59900 在 19:25 后零 CPU/IO、RSS 2335MB 卡死，随后进 | enrichGO 用 pvalueCutoff=1/qvalueCutoff=1 | 拆分脚本：ORA 结果已落盘 → 不重跑 enrichGO；第 5 步 simplify(measu |
+| <text>:1:106: unexpected symbol  1: exec(open("... | 在 execute_r 的持久 R 内核里沿用了 execute_python  | R 内核不支持 Python 的 exec(open(...).read()) 写法，改用 R 原生 |
 | msigdbr() 报错: The `category` argument of `msigdbr( | msigdbr 10.0.0+ 弃用了 category/subcategory | msigdbr 26.1.0 新版 API：category→collection、subcateg |
 | GO+KEGG混排气泡图误导 | KEGG基因集远大于GO CC/MF，统一用GeneCount做气泡大小导致KEGG视觉膨胀 | 按类别分面(facet_wrap)，气泡大小改用Rich Factor/Fold Enrichment；或GO和KEGG分两张图 |
 | 分析前未创建会话目录 | 直接在results/根目录输出文件，散乱无法溯源 | 分析开始前必须先 `update_results_dir` 创建 `results/{species}_{tissue}_{direction}_{date}/`，再建子目录 `figures/scripts/data/results/` |
+| fgsea 结果列名是 `pval` 不是 `pvalue`（fgsea ≥1.30） | 脚本写 `r$pvalue` 取到 NULL（长度 0）→ `data.frame()` 报 `arguments imply differing number of rows: 41, 0`，三口径全空 | 用 `pv <- if (!is.null(r$pval)) r$pval else r$pvalue` 兼容取值；**注意该报错文本会误导成"引擎损坏"，先核对列名** |
+| `install.packages("fgsea")` 后 `requireNamespace` 仍 FALSE | 缺 CRAN 依赖 `fastmatch`（报"没有''fastmatch''这种依赖关系"） | 先装 fastmatch 再装 fgsea：`install.packages(c("fastmatch","fgsea"), lib=<主库>, repos=..., type="win.binary")`；Bioc 3.21 ↔ R 4.5 |
+| fgsea `eps=0` 在大基因集列表上抛 `differing number of rows` | eps=0 下多级算法不产出结果（内置示例 15 个集合时恰好看不出来） | **不要传 `eps`**，用默认值（1e-10） |
+| 小基因集（n<15）在小家族内 BH 后"显著" | 只在含 3 个集合的小家族做 BH，多重检验家族过窄 → 假显著（实例：GOBP_MUSCLE_ATROPHY n=9 padj=0.006，全 GO:BP 家族 3970 集合校正后 padj=0.119 不显著） | 预注册 `minSize≥15`；若要报告小集合，必须在**实际检验的全部集合家族**内统一 BH，并显式标注探索性 |
+| 把 HALLMARK/KEGG/GO:BP 同通路"三口径一致"当作独立验证 | 三库 OXPHOS 高度共享基因（Jaccard 仅 0.25–0.48，三库共识 65/303 基因） | 报结论前先算 Jaccard/leading-edge 重叠；高度共享则**不得**按"多次独立复现"计分 |
+| fgsea 与 clusterProfiler/org.Hs.eg.db 在同一 R 内核里状态不一致 | check_env 说已装但 `library()` 失败（DLL/依赖损坏假象） | 以 `library()` 实测为准；GSEA 路线用 **fgsea + msigdbr** 即可，不依赖 clusterProfiler/org.Hs.eg.db |
+| 设计矩阵不满秩：`~ donor + age_grp` | 供体完全嵌套于年龄组（Y 组与 O 组供体无交集）→ 共线不可识别 | 固定效应路径不可用；配对信息只能由 `duplicateCorrelation(block=donor)` 随机效应承载；敏感性对照组改用 `~ age_grp` |
 
 ### Visualization Pitfalls (from debate)
 

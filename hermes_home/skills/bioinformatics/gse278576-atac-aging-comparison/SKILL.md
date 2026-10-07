@@ -181,3 +181,39 @@ comb$Age_Correlated[comb$fdr < 0.1 & comb$cor < 0] <- "Down"
 | macaca | hippocampus | aging | 2026-08-09 | l1_phylop_fill_v3.py | - | - |  |
 | human | hippocampus | aging | 2026-08-09 |  l3_motif_compare.R | - | - |  |
 | human | hippocampus | aging | 2026-08-11 | - | - | - |  |
+| - | - | - | 2026-08-27 | human_40_marker_analysis.py | - | - |  |
+| - | - | - | 2026-08-27 | human_40_marker_scoring.py | - | - |  |
+| - | - | - | 2026-08-27 | annotation_8classes_final.py | - | - |  |
+| - | - | - | 2026-08-27 | recheck_C12_C13_C20.py | - | - |  |
+| - | - | - | 2026-08-27 | verify_cluster_count.R | - | - |  |
+| - | - | - | 2026-08-27 | verify_cluster_count.R | - | - |  |
+| - | - | - | 2026-08-28 | github_repo_discovery.sh | - | - |  |
+
+
+| - | - | - | 2026-08-28 | github_repo_discovery.sh | - | - |  |
+| - | - | - | 2026-08-28 | github_repo_discovery.sh | - | - |  |
+| - | - | - | 2026-08-28 | github_repo_verification.sh | - | - |  |
+| macaca | hippocampus | aging | 2026-08-31 | l1_phylop_local.py | - | - |  |
+| human | hippocampus | aging | 2026-08-31 | l1_full_peaks_human.py | - | - |  |
+| - | - | - | 2026-08-31 | - | - | - |  |
+| human | hippocampus | aging | 2026-08-31 | l1_full_peaks_human.py（评审前核查） | - | - |  |
+| human | hippocampus | aging | 2026-08-31 | l1_full_peaks_human_v4.py（启动） | - | - |  |
+| macaca_fascicularis | hippocampus | aging | 2026-08-31 | gene_anchor_ortholog_full.py（批量解析修复+验证） | - | - |  |
+| macaca_fascicularis | hippocampus | aging | 2026-08-31 | gene_anchor_ortholog_full.py（全量启动） | - | - |  |
+| macaca_fascicularis | hippocampus | aging | 2026-08-31 | gene_anchor_ortholog_full.py（进度核查） | - | - |  |
+| macaca_fascicularis | hippocampus | aging | 2026-09-02 | - | - | - |  |
+| human | hippocampus | aging | 2026-09-02 | getGroupSE_rowData_diagnosis.R | - | - |  |
+| human | hippocampus | aging | 2026-09-02 | l3_monkey_ageDA_fix_rowData.R | - | - |  |
+| human | hippocampus | aging | 2026-09-02 | l3_human_ageDA.R | - | - |  |
+| human | hippocampus | aging | 2026-09-14 | monkey_meta 列结构核查（只读） | - | - |  |
+| human | hippocampus | aging | 2026-09-14 | - | - | - |  |
+| human | hippocampus | aging | 2026-09-15 | - | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| gene_anchor_ortholog_full.py 产出 monkey_peaks_hg38_ | esummary_coords() 内以 str 为 key 存储坐标（resu | 修复版 gene_anchor_ortholog_fix.py：esummary_coords 返回 |
+| gene_anchor_ortholog_full.py 批量 efetch 测试（5 猴 Gene | NCBI efetch gene XML 格式：Gene-track_genei | 待验证 NCBI 原始 XML 后修复分块正则（pending） |
+| L1 全量打分 v3 被中断：v3/l1_full_human.csv 只有 275,755 行（尾 | 打分进程在中途退出（约 chr9 处），可能在 8-31 19:23 后进程被回 | 编写续跑脚本 l1_resume_human.py：读取已产出 v3/l1_full_human.c |
+| terminal 中 rm -rf 触发系统删除操作拦截，命令整体未执行（exit 2），连带后续  | MemOmics 平台对 rm -rf 类破坏性命令有自动拦截保护，即使目标是  | 改用不带 rm 的命令：直接 git clone 到新的唯一目录名 motrpac_pda_v2（避 |
+

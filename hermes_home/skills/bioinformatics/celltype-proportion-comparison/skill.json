@@ -22,8 +22,8 @@
     "画哪几组",
     "逆转衰老"
   ],
-  "success_count": 10,
-  "proven_script": "10_final_3grp_cluster3_pfdr.R",
+  "success_count": 26,
+  "proven_script": "recompute_fdr_sensitivity_v2.py",
   "proven_params": [
     {
       "species": "human",
@@ -154,10 +154,218 @@
       "approved": false,
       "custom_script": false,
       "result": "cluster3 衰老上升显著: YvsO p=0.0234 FDR=0.0234 δ=-0.64; 老年运动后继续上升显著: O_pre_post p=0.0156 FDR=0.0234 +2.30pp。2比较BH后均显著"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "umap_subcluster_by_type_fixed_centered.R",
+      "params": "execute_r 持久内核; readRDS 英文副本 E:/MemOmics-Agent/results/memomics-0228a136/data/special_MF_annotation_umap.rds; R 4.5.3 + .libPaths(E:/R-libs/R-4.5.3); Seurat 5.5.1",
+      "date": "2026-09-22",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "对象核验成功: 51227基因 x 11630细胞, subcluster=NMJ,zone1-6(7亚群), type=Y/O/OD_Pre/Post(6组), reductions=pca/harmony/umap, @misc 为空→specialized_mf_sub_colors 不在对象内, 需外部提供配色"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "umap_subcluster_by_type_run.R",
+      "params": "Seurat 5.5.1 DimPlot split.by=type 6面板单排1x6; pt.size=2; raster=TRUE raster.dpi=c(300,300); theme_void+strip.text.x.top(hjust=0.5,size=9,bold); plot_grid(p,legend,rel_widths=c(1,0.15)); 画布26x8in; 导出 cairo_pdf+svglite+a gg_tiff(300dpi)+白底png预览; SourceData csv",
+      "date": "2026-09-22",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "成功出图并导出5个产物。关键发现3条: ① subcluster 在对象里是【字符型】不是因子, unique顺序乱(zone6,NMJ,zone5,zone2,zone1,zone3,zone4) → 必须显式 factor(levels=NMJ,zone1-6), 否则图例顺序不可控; ② type 本来就是有序因子(Y_Pre..OD_Post)顺序正确, 无需重排(推翻我上次的判断); ③"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF_AUCell_meta.py",
+      "params": "{\"data\":\"E:/骨骼肌锻炼/MF_AUCell_meta.csv\",\"usecols\":[\"samplename\",\"type\",\"celltype\",\"annotation_L3\",\"annotation_L2\",\"annotation\"]}",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读取 MF_AUCell_meta.csv 确认结构与规模：508,661 细胞 / 48 文库；type 6 组（Y_Pre 113,903 / Y_Post 98,648 / O_Pre 71,514 / O_Post 65,373 / OD_Pre 74,847 / OD_Post 84,376）；celltype 3 类（TypeI/TypeII/RSS）；annotation_L3 10"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_build_proportion_table.py",
+      "params": "{\"script\":\"01_build_proportion_table.py\",\"data\":\"E:/骨骼肌锻炼/MF_AUCell_meta.csv\",\"统计单位\":\"样本(34个Y/O文库)\",\"比例口径\":\"该亚型细胞数/该样本总细胞数*100\"}",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "构建样本×细胞类型比例表成功：480 行(48样本×10类型)，比例和 min/max = 100.000000（自检通过），Y/O 样本 34 个，零细胞格仅 1/480。四组比例中位数(%)：Pure Type IIA Y_Pre 42.77→O_Pre 26.58（衰老大降）、Pure Type I 33.55→39.17（衰老升）、Specialized MF Y_Pre 2.15→O_P"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_significance_4grp.R",
+      "params": "{\"script\":\"02_significance_4grp.R\",\"fix\":\"配对分支列名 bug 已修（val 改名）\",\"comparisons\":\"Y_Pre-vs-O_Pre(独立) / Y_Pre-vs-Y_Post(配对) / O_Pre-vs-O_Post(配对)\"}",
+      "date": "2026-09-24",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "R 统计脚本首跑报错（配对分支取 v1/v2 未定义列）→ 已 patch 修复（先按口径列 col 改名 val 再取子集）。待重跑生成 results/celltype_proportion_significance_4grp.csv。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_plot_4grp_alltypes.R",
+      "params": "{\"script\":\"03_plot_4grp_alltypes.R\",\"style\":\"用户原版 plot_celltype_proportion（theme_bw base_size6 + 六色 + 配对虚线 + 手动括号 + 白底标签）\",\"panel_size\":\"26mm x 32mm (4柱规则)\",\"versions\":\"p + FDR\",\"formats\":\"PNG(300dpi) + PDF\",\"overview\":\"patchwork 5x2, 230x120mm\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "10 类型 × {p,FDR} × {PNG,PDF} = 40 张定稿图 + 总览 4 张全部写出；标注核对 10/10 类型均为 3 个比较（无 NA 漏标）。基线与用户官方函数保持一致（仅加 label_type 参数）。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "inspect_MF_2000.R",
+      "params": "",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "读取 E:/release/_memtest/data/MF_2000.rds (Seurat, 2132 cells x 51227 genes, 48 samplename, 6 组 type, celltype 3 类 TypeI/TypeII/RSS, annotation_L3 10 亚群, annotation 5 类)。确认比例分析可用列：celltype / annotation "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_extract_proportion_4grp.R",
+      "params": "{\"input\":\"E:/release/_memtest/data/MF_2000.rds\",\"stat_unit\":\"sample(个体)\",\"levels\":\"celltype/annotation_L2/annotation/annotation_L3\",\"n_cells_4grp\":1502,\"n_samples\":\"Y_Pre 10, Y_Post 10, O_Pre 7, O_Post 7\",\"cells_per_sample\":\"17-45 (median 45)\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "构建四组样本级比例表：34 样本 × 4 层级共 748 行；零细胞格 10/102(celltype)、27/340(L3)；每样本比例和=100 自检通过。中位数(%): celltype 层 RSS O_Post 15.56 vs Y_Post 2.22（老年显著偏高）"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "03_plot_4grp.R",
+      "params": "{\"groups\":\"Y_Pre/Y_Post/O_Pre/O_Post\",\"colors\":\"#B2DF8A/#33A02C/#80B1D3/#1F78B4\",\"panel\":\"26x32mm (6柱30mm每少1柱-2mm)\",\"versions\":\"p + FDR\",\"formats\":\"PNG300dpi+PDF+SVG\",\"levels\":4,\"files\":42}",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "四组比例箱线图出图：celltype 层逐类型 6 图 + 4 层级总览 8 图 × 三格式 = 42 文件；标注 4 个比较/类型核对通过；PNG 像素检查白底(dark%<6)非空白。⛔ 关键坑：egg::set_panel_size 返回 gtable，ggsave 不传 width/height 会用默认 7×7in → 178×178mm 大画布内容只占 26×32mm；修复=grid:"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "04_debate_required.R",
+      "params": "{\"evidence_1\":\"补0vs不补0敏感性对照\",\"evidence_2\":\"Monte Carlo 功效模拟 (1000 reps, d~U{17..45}, Binomial)\",\"evidence_3\":\"bootstrap 95% CI (B=2000)\",\"evidence_4\":\"嵌套层级 FDR 审计\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "辩论要求的补充证据完成：① RSS 主口径 p=0.0225/FDR=0.045 → 补0 p=0.0019/FDR=0.011 方向一致（更显著，稳健）；TypeI/TypeII 两口径均 ns。② 功效模拟：低丰度(2.2%)MDE=15/10/10pp(n=5/7/10)、高丰度(50%)MDE=30/20/15pp → RSS 实测 4.4pp 低于 MDE、TypeI/II 实测<9pp"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "06_l2_verdict_actions.R",
+      "params": "{\"dual_caliber_table\":\"88 行, 主层=celltype\", \"presence\":\"Fisher 非检出率\", \"abundance\":\"样本级 quasibinomial GLM 两口径\", \"LOO\":\"RSS 两独立比较 × 17 折, FDR 同主表口径(BH 6)\"}",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "L2 裁决落地：① 双口径主表 88 行冻结主层 ② RSS 基线差异含 presence 成分（青年 5/10 无非检出 vs 老年 0/7，Fisher p=0.044）+ abundance 边缘（检出样本内 OR=3.7 p=0.058；补0口径 OR=7.5 p=0.0035）；运动后差异为纯丰度（OR=5.0 p=0.0037，检出率无差异 p=0.34）③ LOO 17 折：Clif"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_score_senmayo_4grp.R",
+      "params": "score=scoreSenMayo_AUC; groups=Y_Pre/Y_Post/O_Pre/O_Post; unit=sample-level mean (samplename); tests=paired Wilcoxon (within-arm) + Mann-Whitney (Y vs O) + Cliff's delta (flipped, +=g2 higher) + Cohen's d; FDR=BH within-block(6 cmp)/global(32 rows); MDE=Monte Carlo 400 reps + analytic t-quantile 80% power; panel=26x32mm; export=PNG300+PDF+SVG",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "All cells: Y_Pre_vs_O_Pre mean 0.03389->0.02910 (-14.1%) p=0.00728 FDR_block=0.0437 Cliff d=-0.80 Cohen d=-1.75 power=0.86 (obs/MDE=1.19); Y_Pre_vs_Y_Post -8.8% p=0.037 FDR=0.068 power=0.47; Y_Post_vs"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "02_verdict_actions.R",
+      "params": "bootstrap B=2000 (sample-level resample, 组内重抽) + 精确置换 (combn 枚举全部 choose(17,10)=19448 种标签置换，非抽样) + 组成敏感性 (score ~ type + TypeI/TypeII 比例回归 + 逐纤维型分层) + 样本级 Spearman 共变; FDR 家族复核 all=24 行",
+      "date": "2026-09-24",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Y_Pre vs O_Pre: mean diff -4.80e-3, bootstrap 95%CI [-6.95e-3,-2.46e-3] 不含 0, Cliff d CI [-1.00,-0.40] 不含 0, 精确置换 p=0.00437 (19448 全枚举) → 稳健; 加纤维型比例协变量后组效应 beta +0.00480→+0.00583 (p 0.0029→0.0040, R2 "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "01_prep_composite_data.R",
+      "params": "样本级单位(48 samples/24 donors); 比例补0口径; AUCell 14 打分样本均值; 5 比较 = YvsO/MW + OvsOD/MW + 3 配对 Wilcoxon; Cliff delta 方向翻转(正=后项高)",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_2000 数据准备完成: UMAP坐标2132 / 比例表480行(sample x 10亚群 x 6组) / 14打分x48样本 / 统计50(比例)+70(打分)行 / dotplot 20基因x10亚群。RSS 衰老 p=0.00159 显著; SMF 老年运动 p=0.11 趋势; 每样本细胞数中位45(抽样版)"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "",
+      "script": "03_mde_fdr_wording.R",
+      "params": "MDE MC 1000 reps/格(阶梯化 45 核二项抽样 + 实际 Wilcoxon 检验 + 80% 功效); FDR 家族内 BH(50/70) vs 合并全局 BH(120); pick() 唯一值查询锁 unit+g1+g2; 配对键 = base_id",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MDE 复算完成: RSS +8.89pp ≥ MDE 6pp 达标; Pure Type IIA -10.0pp vs MDE 10pp 边界; RP_high(II) -4.44 vs 10pp 受限; Specialized MF +4.45 vs 10pp 受限; Pure IIX -15.56 vs 14pp 但 FDR 0.359 提示性。FDR 敏感性: 5 个命中格在合并全局 BH"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "recompute_fdr_sensitivity_v2.py",
+      "params": "p_col=p_np(交付同口径); families=q_all/q_eff/q_prog/q_e_prog/q_axis/q_e_axis + qp_eff(p_par敏感性); bh=tie-corrected(max rank)",
+      "date": "2026-09-28",
+      "score": 0.0,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "修正 fdr_sensitivity 口径：旧表 axis 列实为程序名(22)非生物轴(5)，q_f_eax 实为每效应×程序10格族(被误报为每效应×轴)；补真生物轴族(q_axis 7类/q_e_axis 35组)。真轴族下非衰老效应全归零(ExOld min q=0.0694最接近/T2D 0.0932/ExYoung 0.1953/ExT2D 0.375)；tie修正0格翻转；p_par"
     }
   ],
   "user_prefs": {
-    "last_used_script": "10_final_3grp_cluster3_pfdr.R"
+    "last_used_script": "recompute_fdr_sensitivity_v2.py"
   },
   "debate_verdicts": [
     {
@@ -169,5 +377,41 @@
       "date": "2026-08-17 02:16:49"
     }
   ],
-  "when_to_use": "scRNA-seq 注释后比较各亚群在 6 组（3 条件×Pre/Post，个体配对）中的比例变化，判断\"逆转衰老/逆转糖尿病/运动共同趋势\"，并对已有 AUCell 打分列做同样的跨组差异分析。包含:分组映射、base_id 配对检验、Cliff's delta 效应量方向约定、双 FDR（亚群内+全局）、探索用 raw p 值/定稿用 FDR 标注、egg::set_panel_size 固定…"
+  "when_to_use": "scRNA-seq 注释后比较各亚群在 6 组（3 条件×Pre/Post，个体配对）中的比例变化，判断\"逆转衰老/逆转糖尿病/运动共同趋势\"，并对已有 AUCell 打分列做同样的跨组差异分析。包含:分组映射、base_id 配对检验、Cliff's delta 效应量方向约定、双 FDR（亚群内+全局）、探索用 raw p 值/定稿用 FDR 标注、egg::set_panel_size 固定…",
+  "error_count": 3,
+  "errors": [
+    {
+      "timestamp": "2026-09-24 16:44",
+      "error_type": "logic_error",
+      "message": "错误于`[.data.frame`(d, d$type == cmp$g1, c(\"base_id\", \"v1\")): 选择了未定义的列",
+      "root_cause": "比例表长表列名为 Proportion / Prop_imp0（按口径列 col 选择），配对分支误用 v1/v2 作为源列名取子集，R 报\"选择了未定义的列\"",
+      "fix_applied": "配对分支里 d 只有 Proportion/Prop_imp0 列，却按 v1/v2 列名取子集 → 先把口径列改名成 val 再取，并分别重命名为 v1/v2 后 merge by base_id",
+      "species": "",
+      "tissue": "",
+      "script": "02_significance_4grp.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 19:33",
+      "error_type": "runtime_error",
+      "message": "Error in source(...) : subscript out of bounds [Kernel error: subscript out of bounds] — 02_verdict_actions.R 第一轮运行即失败，stdout 未回显",
+      "root_cause": "未定（需定位）。候选：① celltype 实际取值可能为 'Type I'/'Type II'（含空格），脚本用 comp[['TypeI']] 字面量索引 → 越界；② lm 系数名不存在时 grep 返回空",
+      "fix_applied": "待定位：改用 tryCatch+traceback 逐段定位（怀疑点：纤维型名称与 'TypeI'/'TypeII' 字面量不匹配导致 comp[[ct]] 越界，或 print_c 中 grep 到 0 个系数）",
+      "species": "",
+      "tissue": "",
+      "script": "02_verdict_actions.R",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-09-24 20:17",
+      "error_type": "logic_error",
+      "message": "not enough (non-missing) 'x' observations（源自 wilcox.test(m$value.y, m$value.x, paired=TRUE)，merge 后 0 行）",
+      "root_cause": "samplename 粒度 = 样本（含 Pre/Post 后缀），配对键必须是供体级 base_id（str_remove(samplename, \"_(Pre|Post)$\")）。用 samplename 作配对键时两组 key 集合完全不相交 → merge 返 0 行 → 下游 wilcox.test 收到长度 0 的向量 → 报 \"not enough (non-missing) 'x'",
+      "fix_applied": "样本级长表的 Pre/Post 配对必须按 base_id 合并且要带上 score 键：merge(a, b, by = c(\"base_id\",\"score\"))。原先用 merge(a,b,by=\"samplename\") 得 0 行——因为 samplename 自带 _Pre/_Post 后缀，Young_16_Pre 与 Young_16_Post 是两个不同 key，永远配不上。",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "03_mde_fdr_wording.R",
+      "severity": "high"
+    }
+  ]
 }

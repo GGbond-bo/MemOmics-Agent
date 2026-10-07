@@ -23,5 +23,6 @@
     "bayesian",
     "finemapping",
     "deep vi"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

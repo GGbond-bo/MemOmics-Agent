@@ -138,3 +138,12 @@ fasterq-dump SRR_ACCESSION
    - DC1 = media-1.pdf（补充图 + M&M 文本）；DC2 = media-2.zip（补充表 S1-S24）
    - curl 对 bioRxiv 偶发 SSL error 35 → 用 Python urllib + unverified SSL context
    - Science 正式版付费墙(403) → bioRxiv 预印本 + 补充材料是免费替代（内容一致）
+10. **🔴 核对本地参考基因组文件：'文件在' ≠ '完整下完'（2026-08-28 实测教训）**：用户问"我电脑上有这两个文件吗？不是刚下载但还没下完的"——指 Gencode/EBI 参考文件（`GRCh38.primary_assembly.genome.fa.gz` ≈1.05GB + `gencode.v32.primary_assembly.annotation.gtf.gz` ≈1.2GB，dnbc4tools/STAR mkref 必需）。回答"有/没有"前必须做完整性核对：
+   - **存在性**（Windows 多盘）：① `search_files(target='files', pattern='*GRCh38.primary_assembly.genome.fa.gz')` → ② bash `find /c /d /e -iname '*GRCh38*' 2>/dev/null` → ③ PowerShell 全盘 `Get-ChildItem -Path C:\,D:\,E:\,F:\ -Recurse -Include *.fa.gz,*.gtf.gz -ErrorAction SilentlyContinue | Select-Object FullName,Length`
+   - **残留检测（未下完铁证）**：目标目录/下载目录存在 `.part` / `.crdownload` / `.td` / `.tmp` 同名文件
+   - **gz 完整性**：`gzip -t file.gz && echo OK` 通过 = 可解压；报 CRC/truncated = 损坏需重下
+   - **大小/内容抽查**：几 KB 或与期望偏差 >20% = 损坏或 HTML 占位页；`zcat file.gz | head -c 300` 抽查，FASTA 首行 `>`，GTF 首行 `#!genome-build`
+   - **防误判**：猴子 T2T 注释（`GCF_037993035.2_T2T-MFA8v1.1_genomic.gtf.gz`）≠ 人类 Gencode v32 — 只按 `*.gtf.gz` 全局搜会撞车，必须逐文件核对物种/版本
+   - 报告格式：用表格列出"检查项 / 目标 / 结果"，并标注盘上近似但非目标的文件，避免用户误以为存在
+11. **🔴 GEO 下载通道：https://ftp.ncbi.nlm.nih.gov 可用，ftp:// 全挂（2026-09-03 GSE67978 CaudateNucleus H3K27ac 实测）**：同一批 GSM 文件——`ftp://ftp.ncbi.nlm.nih.gov/geo/samples/...` 6 个全 FAIL、`https://www.ncbi.nlm.nih.gov/geo/download/?acc=...&file=...` **猜文件名必然 404**（必须从 miniml 解析真实文件名）、**`https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1660nnn/<GSM>/suppl/<真实文件名>` 手动 curl = 200 OK 秒下**。**经验：GEO 文件下载首选 `https://ftp.ncbi.nlm.nih.gov` 直链（先手动 curl 单文件验证 200 + Content-Length 再批量）；文件名永远从 GEO miniml（`miniml/GSE*_family.xml.tgz`，tarfile + `ET.iter()` 匹配 `}Sample` 元素 Title/Supplementary-Data）解析，不猜**。GSE67978 档案（98 样本 = 人/黑猩猩/恒河猴 × 8 脑区，H3K27ac，人侧 hg38 / 猴侧 rheMac3，无海马 → CaudateNucleus 人 GSM1660034/35/36 + 恒河猴 GSM1660010/11/12 折中）详见 cross-species-atac-conservation skill `references/crecs-v2-structural-bugs-2026-09-03.md`。
+12. **🔴 bash curl 循环批量下载全 FAIL 但手动 curl 同 URL 成功 → 写 Python urllib 脚本（2026-09-03 实测）**：`download_peaks.sh`（for 循环 6 个 GSM）全部 FAIL（`-s` 静默无错误码，`[ -s out ]` 检查失败），但手动 eval 同 URL 200 OK——bash 循环内 curl 与外部行为不一致（疑似 NCBI 对快速连续请求限流/瞬时抖动）。**教训：批量下载写 Python `urllib.request` 脚本（UA=Mozilla/5.0 + 每文件至多 5 次重试指数退避 + `gzip.open().read(64)` 校验 + 已存在跳过），不写 bash curl 循环**；脚本落盘（`download_peaks.py`）再跑也符合铁律 31 落盘纪律。实测 py 脚本单文件 200 OK、gzip 有效（人侧 GSM1660034 = 1,420,452 bytes）。

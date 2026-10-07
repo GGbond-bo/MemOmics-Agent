@@ -490,6 +490,14 @@ Generated adapters are in `install/`:
 
 ---
 
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| 错误于V[ni, pi * n_sub + ci + 1]: 量度数目不正确 (incorrect  | R 作用域覆盖：脚本里矩阵变量名 d/q 与后面的循环变量/列名冲突——`for | 矩阵变量改名为 DM/QM（不与环境变量、循环变量、CSV 列名重名）；循环变量改 outdir；d |
+
+
 ## References
 
 ### Always Load
@@ -523,3 +531,31 @@ Generated adapters are in `install/`:
 |------|------|
 | `assets/figures/<type>/` | Step 4 — production script scan |
 | `assets/figures/other/` | Long-tail fallback |
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | hippocampus | aging | 2026-09-12 | 10_make_figures_permutation_core.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | go_heatmap_v12_words_only.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | cleanup_deprecated_figures.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_split_v10.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v2.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | check_axis_effect_summary.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-15 | fig_A2_5effects_v3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-25 | fig_A2_5effects_v4.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-29 | 16_deg_updown_en_recolor.py | - | - |  |
+| human | skeletal_muscle | exercise+aging+diabetes | 2026-09-30 | 42_volcano5_8sub_FINAL.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-01 | 37_MF_v7_arrows_vertical.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-01 | 44_mef2c_locus_from_gtf.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-01 | 47_mef2c_deg_heatmap.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-02 | 44d_mef2c_as1_audit_map.py | - | - |  |

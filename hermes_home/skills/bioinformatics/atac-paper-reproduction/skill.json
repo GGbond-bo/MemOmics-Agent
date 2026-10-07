@@ -19,5 +19,25 @@
     "official code",
     "ATAC 复现"
   ],
+  "success_count": 1,
+  "proven_script": "fix_ageDA_coords.R",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "hippocampus",
+      "direction": "aging",
+      "script": "fix_ageDA_coords.R",
+      "params": "getGroupSE rowData start=tile index（每染色体独立1起；CSV end=(idx-1)*500 伪坐标）→ 真实坐标 start=(idx-1)*500+1, end=idx*500；r/p/q 不动；就地 fread/fwrite 修正 6 文件",
+      "date": "2026-09-03",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "human_all 5,555,247 tiles / monkey_all 5,296,656 tiles 坐标修正成功；human up=22 / down=28（q<0.1）；monkey up=0/down=0（20样本+FDR 严格，真实结果非 bug）。坐标换算规律经染色体切换点扫描验证（各染色体 idx 独立重置）"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "fix_ageDA_coords.R"
+  },
   "when_to_use": "ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明。 关键技巧:官方补充表含 cCRE/peak 全集时直接复用坐标做片段计数，跳过本地 peak calling（免装 MACS3/snapatac2）…"
 }

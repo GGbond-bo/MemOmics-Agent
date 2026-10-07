@@ -44,5 +44,6 @@
     "soupx remove background",
     "soupx",
     "环境rna"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

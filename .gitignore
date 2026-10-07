@@ -208,3 +208,9 @@ test_realdata_multiscene.py
 
 # 评测基准导出的用户私有对话数据（脚本可复跑生成）
 scripts/bench_*.json
+
+# 2026-10-07 排敏：DCS PAT（本机凭据）、本机环境扫描、远端任务日志、临时目录 不入库
+hermes_home/dcs_cloud.json
+hermes_home/env_inventory.json
+hermes_home/remote/
+tmp/

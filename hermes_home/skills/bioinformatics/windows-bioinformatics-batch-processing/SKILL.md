@@ -16,7 +16,7 @@ metadata:
 
 ## 🔴 铁规 0: 先调查再回答 — 禁止凭推理断言系统状态
 
-> 📑 2026-08-08 GSE278576 40 样本批量踩坑速查 → `references/batch-concurrency-monitoring-pitfalls.md`（多实例 tmp 竞争 / cmd.exe//c MSYS 转义 / PowerShell $_ 转义 / tasklist grep 误报 / watchdog 误重启 / bridge 兜底）
+> 📑 批量踩坑 → `references/batch-concurrency-monitoring-pitfalls.md` · 文件存在性 → `references/file-existence-verification.md` · **WSL 判活（08-31）→ `references/wsl-process-verification.md`：process list 空≠死；wsl ps + 输出文件增长才判死；未判死禁 rm 重跑**
 
 **这是用户最愤怒的错误模式。** 当用户问"现在还在跑吗？"时，凭"之前做了规划所以不可能在跑"推理断言"没有在跑"——但进程表里有 2 个 CellBender 各占 7.2 GB RAM，GPU 73%。
 

@@ -20,5 +20,6 @@
     "cell cycle",
     "cycle",
     "phase"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

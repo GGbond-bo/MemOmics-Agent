@@ -15,5 +15,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "check_fda_drug_recalls",
+    "check fda drug recalls",
+    "fda",
+    "drug",
+    "recalls"
+  ],
+  "trigger_level": "YEL"
 }

@@ -57,6 +57,7 @@ prerequisites:
 | **先用 Seurat UMAP 建轨迹** | Monocle3 的 `reduce_dimension()` 只有简单 PCA→UMAP，没有 SCTransform/Harmony |
 | **>100K 细胞先 subset** | `learn_graph()` 复杂度 O(n²)，>60K 细胞会卡死 |
 | **有大分支才做分支分析** | 衰老数据通常线性（Young→Old），不一定有分叉；发育数据（干细胞→多种终末细胞）才有明显分叉 |
+| **多 R 版本共存时先定位包的真身** | `check_env`/`rail_review` 报"已装"≠ execute_r 内核的库里有（实测：monocle3/slingshot 只在用户级 R-4.4.2 自带库，内核用的 `E:/R-libs/R-4.5.3` 没有）。先枚举所有 R 安装的 library 确认真身 → 在**有 monocle3 的 R** 跑轨迹、用**有 Seurat 的 R** 导出 counts/meta/UMAP 中转 → `references/multi-r-package-location.md` |
 
 ### 🔬 为什么绝不能用 Monocle3 UMAP？
 
@@ -167,6 +168,9 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | PCA 缺失但 UMAP 存在 | `preprocess_cds(num_dim=50)` 再覆盖 UMAP |
 | 知乎代码的手动替换 UMAP | 仅 Monocle3 < 1.3 需要；v1.3+ 自动带 UMAP |
 | **cluster 是多起源混合群体（如 Specialized MF 含快慢肌两条路线）** | ⛔ 不能强行做单根 Monocle3。先 sub-cluster 拆开，或改用 scVelo/CellRank/条件间矢量场。详见 `references/composite-population-trajectory-pitfalls.md` |
+| `pseudotime(cds)` 报 **"No pseudotime calculated for reduction_method = UMAP"** | `saveRDS(cds)` 落盘点放错：必须在 `order_cells()` **之后**保存（存图骨架不存伪时间槽）；读回后补跑 `order_cells(cds, root_pr_nodes=...)` 亦可。monocle3 另建议 `save_monocle_objects()`（保留 annoy/hnsw 索引） |
+| 换一个端点当 root 后"方向整个反过来" | **root 镜像伪影，不是矛盾证据**：伪时间方向由 root 定义，对侧端点定根必然反号。跨方法/跨子集（如剔除某群后重跑）比较"方向是否一致"之前，必须先把两侧 root 校准到**同一生物学端**，否则会把镜像误读成分歧 |
+| `lm(pt ~ age + celltype)` 报 **找不到对象'celltype'**；`meta$col[cells]` 取子集得全 NA / `-Inf` | data.frame 列没有行名 → 必须 `meta[cells, "col"]`；公式变量先落局部向量（`celltype_v <- as.character(meta$celltype)`），不能直接写列名 |
 
 ### 方法选择速查（含混合群体场景）
 
@@ -248,6 +252,24 @@ g.plot_fate_probabilities(same_plot=False, basis="umap")
 | 查 Monocle3 官方文档 URL 404 | 旧 `/monocle3/reference/*.html` 已失效 | 新站为 `/monocle3/docs/{trajectories,clustering,differential,getting_started}/`（从页面 nav 链接找路径） |
 | Windows 下 curl 抓 GitHub Pages 报 SSL error 35 | Schannel TLS 握手失败（`-k`/`--tlsv1.2` 无效，bioconductor.org 正常） | 改用 Python urllib + 关闭校验的 SSL context（OpenSSL 栈），见 `references/monocle3-vs-slingshot.md` |
 | 需核实论文方法细节/PMID | 凭记忆不可靠 | Europe PMC fullTextXML REST + NCBI efetch 摘要核实（命令见 `references/monocle3-vs-slingshot.md`） |
+
+## 🔬 伪时间结论验证规程（必须做，否则结论不得升级）
+
+> 完整checklist + 实测数值范例：`references/pseudotime-validation-protocol.md`；多 R 版本下 monocle3/slingshot 装在哪、如何中转数据：`references/multi-r-package-location.md`
+
+| # | 检查 | 做法 | 判读 |
+|---|------|------|------|
+| 1 | resolution 稳定性 | 网格 `1e-4/1e-3/3e-3/1e-2/3e-2` × 多 seed（1/7/42/123/2024），记 partition 数 / 簇数 / 与注释的 ARI + seed 两两 ARI | partition 随 resolution 剧烈跳变或 ARI<0.2 → 拓扑不稳，方向/连续性结论降级 |
+| 2 | root 稳健性 | **root-swap**：把所有合格端点（degree=1 & n≥10）轮流当 root，重算 ρ(伪时间, 端标记基因) | 同侧端点一致、对侧镜像 = 正常；任何"方向"结论必须注明"依赖 root 校准" |
+| 3 | 端点生物学端判定 | 用端标记基因（如 MYH7=TypeI / MYH2=TypeII）+ 程序打分 AUCell + 群体比例共同定根，别只用"某组细胞最多" | 端标签与本数据一致才可用；否则先做端注释 |
+| 4 | 两法交叉验证 | Slingshot `reducedDim`/`clusterLabels`/`start.clus`；**start.clus 必须用独立规则选**（如"n≥30 + Young 富集 + MYH7>中位 + MYH2<中位 + 程序打分高/低"），⛔ 不许复用 Monocle 的 root/伪时间 | ρ≥0.7 强、0.5–0.7 中等、0.3–0.5 弱同轴、<0.3 不同轴；符号必须一致 |
+| 5 | 独立性折扣 | 同一嵌入下算一次 ρ，再用**另一个嵌入**（Monocle 自己的 `reduce_dimension()` UMAP，或 PCA）重跑两法再算 ρ；两法跨嵌入自比 | 共享嵌入会膨胀一致度：实测同一对方法 共享 harmony-UMAP ρ=0.901 vs 独立嵌入 ρ=0.619（Slingshot 自身换嵌入仅 0.204）→ **报独立嵌入值为主值**，共享嵌入值只作"技术一致性" |
+| 6 | 伪重复控制 | 细胞级 ρ 会被细胞数灌水：算每样本均值 ρ（样本级）+ ICC + LOO（逐个删样本） | 细胞级 ρ=0.159 / 样本级 ρ=0.488；ICC 0.058；LOO 稳定 = 样本级效应真实但幅度小 → 结论写"样本水平" |
+| 7 | 组成性 vs 核内推进 | `lm(pt ~ age)` → `+celltype` → `lmer(pt ~ age + celltype + (1\|sample))`；再做细胞类型内分层 ρ + 中介（样本级比例进模型） | 校正后系数骤降/CI 含 0 且群内 ρ≈0 → 是**组成性比例变化**，不可写"核内衰老推进"（实测 1.33→0.297→CI[−0.03,0.63] 含 0；RSS 比例中介掉 36%） |
+| 8 | 样本混杂 | 伪时间分箱（n≈20）+ 每箱最大单样本占比 vs **打乱样本标签的置换零分布**（≥500 次，99% 分位为阈值） | 实测 Monocle3 15/107 箱超阈（最大 0.55）、Slingshot 2/69 → 必须写"部分区段受个体驱动" |
+| 9 | 结论分级 | 每条结论给 medium/low + 强制限定语（方向依赖 root / 非独立互证 / 组成性 / 无独立队列与分叉 DE） | 缺独立队列、缺分叉 DE、QC 未做双胞/ambient → 一律不得写 strong 或因果 |
+
+**⚠️ 降级/反向陷阱**：剔除某个群重跑后方向翻转（实测 D3 剔 RSS 后 Spearman vs 主分析 −0.153）**先怀疑 root 落到了对侧端点**——把 root 校准到同一生物学端后实测 ψ(D3校准, D4)=0.834–0.940、ρ 与 Slingshot 0.818–0.870，反向即消失。做任何"敏感性分析矛盾了"的判断前，先做第 2/3 步的 root 校准。
 
 ## 输出目录结构
 

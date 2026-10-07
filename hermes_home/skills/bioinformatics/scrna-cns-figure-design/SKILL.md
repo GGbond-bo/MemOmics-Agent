@@ -457,6 +457,14 @@ tight_layout 与手动 add_axes 的颜色条冲突 → **PNG 渲染异常（热�
 
 > v10 完整交付配方（6 图清单/参数/数据源/常见坑）：`references/aucell-score-split-6figures-v10.md`
 
+**⛔ 转置版式（亚群 = X 轴 / 基因集 = Y 轴）+ 加删打分行的三条硬坑（2026-09-18 实测）**：
+① **R 的 y 轴向上增长** —— "把第一个轴放最顶"必须从 `YMAX` **递减**赋值；按 `yc <- 0` 起累加会让第一个轴掉到**图底**（本次 FigA3 v3 第一版就这样上下翻转，用户要求的"身份轴置顶"变成置底）。循环里**最后一个轴之后不再减间隙**，否则 `yc` 期末 = −GAPY；布局后立刻 `stopifnot(abs(yc) < 1e-9)` 把算术错当场抓出。
+② **脚本 stdout 不是渲染证据** —— `cat("行序（自上而下）:", ...)` 打印的是**设计意图**，行序真翻转过时它照样印对。标签顺序 / 元素存废 / 朝向一律用 `vision_describe(png)` 的 **OCR 坐标**复核（本次：首标签 y=265、末标签 y=1808 判定朝向）；"其他不变"用**同列色值多重集一致**（= 纯置换）+ 被删元素**精准 hex 像素数 before→after**（5115/5104/2542 → 0/0/0）证明。OCR 对 90° 旋转小字与罗马数字**必错**（"Fiber identity"→"Taertrty"、"Type II"→"Type Ill"），属正常噪声，别当 bug 修——竖排文字的存在性改用 SVG text 元素核验。
+③ **改版先归档上一版**（`archive_superseded/<base>_<版本>_<朝向>.<ext>`，四格式，**绝不删除**）+ 逐版本 `*_manifest_QA.csv` / `*_geometry.csv`；**删掉承载信息的图形元素时必须提醒图注补上该信息**（本次删左侧纤维型色条 → I/II 归属不再由图承载）。
+"长而不宽"用 **CELL（单元格边长，英寸）作唯一自由参数**反解纸宽纸高（本次 CELL=0.255 → 116.6 × 175.8 mm，1:1.5）；反向"先定纸宽再解 CELL"只适合横向版式。
+新增打分前先 `col_of()` 查列是否已存在（`scoreI_AUC`/`scoreIIx_AUC` 等常已现成躺在 meta CSV，**不必重算 AUCell**）；与既有轴**性质不同**的打分（纤维型身份 = 注释参照而非功能程序）**单独立轴**并置顶作参照轴，轴色取未占用色。
+完整配方（版式不变量 10 条 / 渲染核验清单 / 归档纪律 / 新轴辩论三问）：`references/base-graphics-matrix-heatmap-layout.md`
+
 ## ⛔ 基因集响应筛选（"哪些打分没响应可以删掉"协议，2026-08-15）
 
 用户拿到 22 打分 × 5 效应 × 10 亚群后问"哪些基因集没有太多响应，可以删掉"——**用长表（effect5_d_v2.csv：1100 行，列 score/sub/effect/d/q）直接算三指标，不重新读原始 meta**：
@@ -702,6 +710,24 @@ YvsOD/OvsOD；IIX：YvsO/YvsOD/OvsOD/O运动±OD运动；OTUD1+(I)：只标 O运
 
 **⛔ 弱信号亚群决策梯（2026-08-12 RP_high(I)/RP_high(II) 实测）**：剩余亚群信号弱时\n按此梯处理，不要一律出定稿也不要一律跳过：\n1. 用户要看（\"RP_high(II)，这个给我看看\"）→ **仍出 6 组探索版**（全比较标注，像素\n   体检后交付），用户要的就是亲眼确认信号弱不弱。\n2. 判断顺序：先列 6 比较 p 值表 → 数 raw p<0.05 的个数：\n   - **0 个**（如 RP_high(II)：最接近的 OvsOD p=0.097，其余全 >0.3）→ 主动建议跳过\n     定稿（\"画出来就是 6 个全标 n.s. 的图，审稿人一眼看出没故事\"），可放补充材料；\n     用户坚持画才出全标 n.s. 版。\n   - **1 个**（如 OTUD1+(I)：只 O 运动 p=0.047）→ 定稿只标该比较（comp_mode=OTUD1I1）。\n   - **2+ 个** → 用户逐个亚群定比较子集（见上条 comp_mode）。\n3. 诚实判断先行：交付探索图时就明说\"这个亚群 6 个比较全不显著，最接近的也差一倍\"，\n   给用户跳过或不跳过的决策依据，不粉饰信号强度。
 
+## 🧬 同族图一致性（figure family：往已有图族里再加一张，2026-09-29 验证）
+
+用户说「**能不能做一下 XX 图，跟 <已有的那张> 差不多**」时，正确做法是**继承**而不是重设计。
+本次实测流程（一次通过，无返工）：
+
+| # | 规则 | 为什么 |
+|---|------|--------|
+| 1 | **先读同族已有图的脚本**（`search_files` 找同目录/同前缀的 `.py`/`.R`），逐项照抄：字体链 / 字号 / figsize / 轴脊处理 / 图例位置+列数 / 数值标签旋转 / 配色 / 刻度类型 | 另起新代码必然漂移；读脚本比凭记忆复现可靠。本次照抄出 `Arial→Helvetica→DejaVu` + `symlog(linthresh=1)` + 数值标签 90° + 图例置底 + 隐藏 top/right |
+| 2 | **横轴类别顺序沿用同族图**，不要按"更合逻辑"的新顺序重排 | 否则两张图无法并排比对。本次沿用旧图顺序（Aging→DM→Ex_Young→Ex_Old→Ex_DM）而非生物学分组序 |
+| 3 | **复用已落盘统计产物，不重算**（读现成 CSV） | 与同族图数字完全一致；写进 docstring 声明"本轮不重算任何统计量" |
+| 4 | **复用的强调色若语义不同 → 图例文字里写死消歧 + 加非颜色冗余编码** | ⚠️ 本次实测冲突：同族旧图 **红=上调**，新图不得不复用红表示 **已交付集**。只靠颜色沟通会让读者并排看两张图得出**相反结论**。解法 = 图例写 `(delivered set)` + 三档用「实心 / `//` / `\\\\` 反向斜纹」，灰度打印与色觉缺陷下仍可分辨。**在交付说明里主动提醒用户这个语义切换** |
+| 5 | **标题只做中性描述**（"画的是什么"），结论交给 figure legend | 与本 skill 既有「conclusion strip / figure contract」规则一致；图面长句是硬伤 |
+| 6 | **数值跨数量级开 symlog**（本次 115 ~ 59,681），否则小柱完全不可见 | 小柱 + 线性轴 = 视觉上"没有数据" |
+| 7 | **出图后必过三指标像素体检 + OCR 复核** | 见本 skill 既有「每张交付图必须过像素检查」三指标（dark%<10 / colored%>1 / bbox）；再 `vision_describe` 核标题/轴/图例/数值标签是否真渲染（防字体 tofu）。**旋转 90° 的数值标签 OCR 必漏字符**（`59,681`→`59,68`）——属正常噪声，数值以脚本 stdout 为准，不要据此改图 |
+
+> 可复制模板（排版基线 + 三档色/斜纹 + symlog + 数值标签 + 出口件 + 出图后自检清单）：
+> `templates/sibling_figure_baseline.py`
+
 ## The F1-F7 Architecture Pattern
 
 | Figure | Content | Unique value |
@@ -928,3 +954,4 @@ When the environment demands "fresh verification evidence" for edited analysis s
 | human | skeletal_muscle | aging | 2026-07-31 | phase4_rss_perturbation.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-31 | five_effects_fastfibers.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-08-01 | run_hdwgcna_official_full.R + resume.R + resume2.R + build_CNS_figure.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-18 | fig_A3_CNS_v2.R | - | - |  |

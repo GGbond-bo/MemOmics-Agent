@@ -244,6 +244,24 @@ content = generate_skill_md(name=..., description=..., category=..., ...)
 
 - 验证 + 审核全部通过 → 继续正常分析流程
 
+| - | - | - | 2026-08-28 | probe_github_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | probe_github_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | probe_github_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | clone_dnb_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | clone_dnb_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | clone_dnb_repo.sh | - | - |  |
+| - | - | - | 2026-08-28 | investigate_dnb_docs.sh | - | - |  |
+| - | - | - | 2026-08-28 | verify_skill_trigger.py | - | - |  |
+| - | - | - | 2026-08-28 | verify_skill_trigger.py | - | - |  |
+| - | - | - | 2026-08-28 | verify_skill_trigger.py | - | - |  |
+| - | - | - | 2026-08-28 | create_dnbc4tools_skill.sh | - | - |  |
+| - | - | - | 2026-08-28 | verify_skill_json.py | - | - |  |
+| - | - | - | 2026-08-28 | pytest -m offline | - | - |  |
+| - | - | - | 2026-08-28 | pytest offline | - | - |  |
+| - | - | - | 2026-08-28 | pytest offline | - | - |  |
+| - | - | - | 2026-08-28 | pytest frontend_ux | - | - |  |
+| - | - | - | 2026-08-28 | clone_dnb_v213.sh | - | - |  |
+| - | - | - | 2026-08-28 | clone_dnb_v213.sh | - | - |  |
 ---
 
 ## When to Use
@@ -621,6 +639,15 @@ results/<模块>/<方法>/
 ## Common Issues
 <常见问题>
 
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| rm -rf 删除操作被安全防护拦截（exit 2），且命令含 rm 触发确认机制 | 命令中 rm -rf 被平台安全层识别为删除操作需要确认 | 去掉 rm -rf，改用唯一目录名 dnb_repo_v2 直接 git clone |
+| 批量 curl raw.githubusercontent.com 下载文档超时（exit 124） | GitHub raw 单个文件逐个 curl 慢；循环连接导致总超时 | 改用 git clone --depth 1 -b version2.0 一次性拉取整个仓库 |
+
+
 ## References
 <文献引用>
 
@@ -748,6 +775,15 @@ pak::pak("user/repo@v1.0")      # 指定版本
 6. **DELIVERY GATE FAILED** -> `_verify_delivery_gate` blocked。逐项修正后重试。
 7. **首次使用后 query_logs 返回空** -> 确认 Step 10 已执行 + skill.json 存在。
 8. **skill_evolution record_run 静默失败** → `record_run` 返回 "Success recorded" 但数据未落盘。检查：`skill.json` 是否存在？SKILL.md 是否有有效的 Proven Scripts 表格？两者缺一都会导致 `_record_success` 写操作被 `try/except pass` 吞掉。修复方法：创建 `skill.json` 并补全 Proven Scripts 表，然后手动归档到 `results/.../log/run_record_*.json`。
+
+
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| rm -rf 删除操作被安全防护拦截（exit 2），且命令含 rm 触发确认机制 | 命令中 rm -rf 被平台安全层识别为删除操作需要确认 | 去掉 rm -rf，改用唯一目录名 dnb_repo_v2 直接 git clone |
+| 批量 curl raw.githubusercontent.com 下载文档超时（exit 124） | GitHub raw 单个文件逐个 curl 慢；循环连接导致总超时 | 改用 git clone --depth 1 -b version2.0 一次性拉取整个仓库 |
+
 
 ## References
 

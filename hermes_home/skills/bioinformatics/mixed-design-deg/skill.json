@@ -29,5 +29,64 @@
     "重复测量",
     "随机效应 donor"
   ],
-  "when_to_use": "多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor"
+  "when_to_use": "多受试者实验含两组独立比较 + 同一受试者重复测量（pre/post、多时间点）时找 DEG:如 三组（Y/O/OD）× 运动前后、干预前后配对 + 组间比较、纵向随访组间对比。触发词:独立+配对、混合设计、配对比较、pre/post、重复测量、随机效应 donor",
+  "success_count": 4,
+  "proven_script": "shared_term_artifact_calc.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "audit_batch_library_MF_L3_meta.py",
+      "params": "只读 meta 审计（无分析模型）：MF_L3_meta_new.csv 列勘察 + library/samplename 嵌套关系 + type 混淆检查",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MF_L3_meta 508,661 细胞 × 10 亚群 × 6 组。批次候选列唯一 = library：96 个 library = 48 样本 × 2（每样本恰 2 个文库，每个文库恰属 1 个样本），6 个 type 各含 8 个样本×2 文库，library 与 type 无混淆（每个 library 只涉及 1 个 type）。library 完全嵌套于 samplename → ps"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "audit_deg_tables_5contrasts.py",
+      "params": "只读审计：5 个对比 DEG 表（Aging/DM/Ex_Young/Ex_Old/Ex_DM）行数/亚群/基因数/FDR 阈值/|logFC| 分布 + 20 个经典运动基因与 17 个经典衰老基因的 FDR 命中检查",
+      "date": "2026-09-25",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "每对比 173,950 行 = 10 亚群 × (12,268–26,879 基因，亚群间 2.2 倍差)。FDR<0.05 计数差异极大：Aging 29,550 / Ex_Old 1,246 / Ex_Young 22 / Ex_DM 4 / DM 1。Aging 生物学合理（CDKN1A +3.77、ATF4、TRIM63、SOD2 命中）。⚠️ 警报：Ex_Old 有 1,246 个显著基"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "audit_deg_signal_diagnostics.py",
+      "params": "只读诊断：名义 P 分布 vs 零假设 5%、Ex_Old top20 基因、14 个经典运动基因跨对比最强命中、DM 对比 16 个胰岛素/糖代谢/OXPHOS 基因、Ex_Old×Aging 显著基因重叠率与符号一致率、age×type 样本级交叉表",
+      "date": "2026-09-25",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "①名义 P<0.05 占比：Aging 32.4% / Ex_Old 16.2% / Ex_Young 9.9% / Ex_DM 7.1% / DM 5.71%（≈零假设 5%）→ DM 对比实质全阴性。②经典运动基因在 Ex_* 全部不达 FDR，但方向大体正确：ANKRD1 Ex_Old +2.01 P=0.010、FOS Ex_Young +1.93 P=0.068、PDK4/TFAM/ES"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "shared_term_artifact_calc.py",
+      "params": "解析计算（numpy）：按 48 样本设计构建 X(48×6)/Z(48×24)，V=ICC·ZZ'+（1−ICC）I，Cov(β̂)=(X'V⁻¹X)⁻¹；算 corr(Ex_Old, Aging) 与 corr(Aging, Ex_x_Aging)，并模拟纯伪影下 Ex_Old 显著基因的预期符号一致率（ICC 0–0.6）",
+      "date": "2026-09-25",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "共享项伪相关定量：corr(Ex_Old, Aging) = −0.542(ICC0) / −0.454(ICC0.3) / −0.343(ICC0.6)；纯伪影预期符号一致率 2.2%/6.3%/12.2%，实测 15.7% → 84% 反向完全可由共享 O_Pre 解释，不构成「运动逆转衰老」证据。⚠️ 修正既有认知：DiD(Ex_x_Aging) 与 Aging 共享 O_Pre 与 Y_P"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "shared_term_artifact_calc.py"
+  }
 }

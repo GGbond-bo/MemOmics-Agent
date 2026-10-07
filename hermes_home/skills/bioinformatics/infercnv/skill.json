@@ -48,5 +48,9 @@
       "scrna-qc"
     ],
     "description": "需要已QC的数据"
-  }
+  },
+  "trigger_keywords": [
+    "infercnv"
+  ],
+  "trigger_level": "YEL"
 }

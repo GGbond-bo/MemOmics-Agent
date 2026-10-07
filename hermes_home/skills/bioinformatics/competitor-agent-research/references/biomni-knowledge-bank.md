@@ -36,6 +36,43 @@
 - 三个 case study: ① 458 个可穿戴传感器文件联合分析 ② 大规模 scRNA-seq & ATAC-seq 分析 ③ 湿实验克隆协议设计(经湿实验验证)
 - 消融实验证明 "代码为中心规划" 是性能核心（Biomni-ReAct 消融 +20.4% 差距）
 
+## 常见误解澄清：2500 篇论文 ≠ Biomni 的 "skill"（2026-10-04 实测）
+
+**用户会这样问**（他本人用过 Biomni，带着强直觉来确认，且会拿它对照 MemOmics 的设计）：
+
+> 「2500 篇论文整理出来的东西，是不是就是它的 **skill** 呢？我用过 biomni，它就是典型的
+> 触发对应的 skill，然后调用里面的工具，然后完成任务。是不是？」
+
+**答案：不完全是——Biomni 恰恰是反着设计的。**
+
+1. **被榨出来的是「能力」，不是「流程」**：AI 驱动 discovery agent 从论文里逐块抽
+   **tasks / software / databases** 三类 actionable insights（Methods · *Action Discovery from Literature*），
+   人工专家再去冗、**剔除 "trivial or easily implementable through simple code" 的条目**
+   （≈1,900 个 recurring tasks 收敛到 150 个专用工具）。落进环境的是
+   **150 专用工具 + 105 软件 + 59 数据库 = 314 个资源**，单位是**工具/数据库**，不是打包好的 skill。
+2. **论文里 "skill" 只出现 1 次**，且是 Discussion 的 "coding **skills**"（编程技能）——
+   88 页全文命中探针：`skill(s)` **1** / `action space` 9 / `retriev*` 27 / `2,500` 1。
+   ⇒ 它**不是** Biomni 的架构概念。
+3. **论文自己的白纸黑字**（Abstract）：
+   > "enabling it to dynamically compose and carry out complex biomedical workflows –
+   > **entirely without relying on predefined templates or rigid task flows**."
+4. **用户直觉对的那半步**：确实有一层「触发」——Methods · *Biomni-A1*：Biomni 建在 **CodeAct**
+   框架上，先让 LLM 出编号计划，再用 **prompt-based retriever（另一个独立 LLM 当路由器）**
+   从 314 个资源里挑最相关的 functions / datasets / software libraries（目的是避免长上下文），
+   然后**现场写代码**在容器里执行并回灌 observation 迭代收敛。
+   ⇒ **被检索出的单位是单个工具，不是流程。** 上面「架构」节的 ToolRetriever 即此层（源码佐证）。
+5. **口径提醒（引用时必须自报）**：正文/图 1 图注 = **2,500 篇 bioRxiv（25 亚领域）**；
+   Methods 写初始迭代 = **2024 年 100 篇** → ~1,900 recurring tasks。两者不矛盾（小样本起步扩量），
+   但表述口径不同，别只挑一个数字当唯一事实。
+
+**一句话定位（可直接复用）**：Biomni 把论文榨成**工具箱**，把「怎么用」交给 LLM 每次现想；
+MemOmics 把经验榨成**菜谱**（流程 + 参数规范 + 审查标准）。他赢泛化，我们赢可复现——
+他 Discussion 自认的局限之一恰是 "risks overlooking foundational concepts and techniques
+that have faded from current discourse despite their enduring relevance"。
+
+> 核验规程（用户带心智模型来求确认时怎么核原文、命中探针脚本）见
+> `bioinformatics-fact-retrieval` §2.7 + `scripts/pdf_probe.py`。
+
 ## 与 MemOmics 对比结论
 
 ### Biomni 有我没有

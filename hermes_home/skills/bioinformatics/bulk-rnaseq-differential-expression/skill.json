@@ -22,5 +22,78 @@
     "differential",
     "expression"
   ],
-  "trigger_level": "YEL"
+  "trigger_level": "YEL",
+  "success_count": 4,
+  "proven_script": "44b_mef2c_as1_overlap_decomposition.py",
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "gencode_v32_gtf_decompress",
+      "params": "gzip -dk gencode.v32.primary_assembly.annotation.gtf.gz（保留原 gz，CRC 先过校验）；输入 43,107,903 B → 输出 1,332,008,985 B；awk 单遍扫描统计行类型 + 抽取 MEF2C-AS1 记录",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "GENCODE v32 (GRCh38/Ensembl98) GTF 完整性校验通过并成功解压（1.09s）。实测总行数 2,900,496：gene 60,668 / transcript 227,529 / exon 1,372,563 / CDS 761,712 / UTR 310,268 / start_codon 87,693 / stop_codon 79,939 / Selenocy"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "44_mef2c_locus_from_gtf.py",
+      "params": "输入 GTF=gencode.v32.primary_assembly.annotation.gtf（2,900,496 行 / 1.33 GB）；单列前缀 chr5 + 'MEF2C' 双级过滤；多转录本外显子区间合并（merge_intervals）；figsize 7.2×3.15 in @300dpi；x 轴 Mb 单位统一；输出 png/svg/pdf",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "从真实 GTF 解析出 MEF2C 基因座并出图（figures/44_MEF2C_locus_from_GTF.png|svg|pdf + results/44_mef2c_locus_stats.csv）。实测：MEF2C chr5:88,717,117-88,904,257(−) protein_coding 56 转录本 / 36 外显子块 / 外显子总长 11,755 bp / 跨度 1"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging+exercise",
+      "script": "44_mef2c_locus_exon_overlap.py",
+      "params": "GENCODE v32 primary_assembly 全量 GTF (1.33 GB / 2,900,496 行); gene_id 过滤 ENSG00000081189 (MEF2C) + ENSG00000248309 (MEF2C-AS1) 的 exon 记录 → merge intervals (相邻+1 合并) → 两基因 merged exon 集合求交集",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "回答合作方\"重叠区如何区分 MEF2C vs MEF2C-AS1 reads\"的关键证据：gene-span 重叠 20,930 bp，但 EXON-level 重叠仅 422 bp（3 段：139/17/266 bp），占重叠区的 2.0%。MEF2C 36 个 merged exon block / 11,755 bp；MEF2C-AS1 22 block / 7,865 bp。两基因链相反（"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging+exercise",
+      "script": "44b_mef2c_as1_overlap_decomposition.py",
+      "params": "GENCODE v32 primary_assembly (1.33GB, 2,900,496行); gene_id ENSG00000081189(MEF2C,-) + ENSG00000248309(MEF2C-AS1,+); exon 记录 → merge(+1相邻) → 交集; 窗口 chr5:88.878-88.912Mb; figsize 183x112mm; DejaVu Sans 全英文; 300dpi PNG+SVG+PDF",
+      "date": "2026-10-01",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "重叠区拆解图出图成功。实测: gene-span overlap 20,930 bp vs EXON-level overlap 仅 422 bp (3段 139/17/266 bp) = 2.0%; 余 20,508 bp 为内含子(标准 UMI 计数不涉及)。MEF2C 36 blocks/11,755bp(−链), MEF2C-AS1 22 blocks/7,865bp(+链), 5'端 h"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "44b_mef2c_as1_overlap_decomposition.py"
+  },
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-10-01 21:51",
+      "error_type": "logic_error",
+      "message": "ValueError: Image size of 30117798x839 pixels is too large. It must be less than 2^23 in each direction.（matplotlib savefig 阶段）",
+      "root_cause": "坐标单位换算不一致（Mb 与非 Mb 混用），导致 artist 落在离数据区 2e4 的位置；tight bbox 收集到该极远 artist 后画布尺寸溢出 matplotlib 的 2^23 像素上限。",
+      "fix_applied": "基因名标签 x 坐标单位重复换算：s 已是 Mb 单位，写成 ax.text(s - 0.02*Mb, ...) 等于 88.7 - 20000 = -19911，该 artist 被 bbox_inches='tight' 纳入后把画布宽度撑到 3.0e7 px 超 matplotlib 上限。改为 ax.text(s - 0.02, ...)（即左移 0.02 Mb）即可。教训：凡是做了 /1",
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "script": "44_mef2c_locus_from_gtf.py",
+      "severity": "medium"
+    }
+  ]
 }

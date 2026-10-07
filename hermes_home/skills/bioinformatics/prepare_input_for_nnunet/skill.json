@@ -15,5 +15,13 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "prepare_input_for_nnunet",
+    "prepare input for nnunet",
+    "prepare",
+    "input",
+    "nnunet"
+  ],
+  "trigger_level": "YEL"
 }

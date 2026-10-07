@@ -354,3 +354,57 @@ results/trajectory_monocle3_{date}/
 3. save_conclusions(module="03_advanced", topic="Trajectory", ...)
 4. skill_evolution(action="record_run")
 5. 更新 task_plan.md
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_2000_traj.R | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-09-24 | monocle3_trajectory.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | probe_r442_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | export_MF2000_for_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | check_RSS_identity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_01_export.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_03_stats_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_04_diagnostics_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step1_monocle3_grid_graph_root.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | debate_L2_trajectory_conclusion | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_06_sensitivity_covariate.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | debate_L2_round2_final_wording | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2a_robustness_RSS_identity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | traj_09_ci_and_anchoring.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step3_summary_tables_figures.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step4_final_checks.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | trajectory_conclusions.md | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | step5b_independent_embedding.R | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| 错误于pseudotime(cds4): No pseudotime calculated for  | step1 脚本把 saveRDS(cds_graph.rds) 放在 orde | cds_graph.rds 是在 learn_graph 之后、order_cells 之前保存的（ |
+| Must group by variables found in `.data`. Column ` | 跨嵌入比较用的 merge 只挑了部分列，后续按 cohort/donor/ti | merge 时把 donor/timepoint/cohort 列一起带进 m（原来只选了 cell |
+| Error in unique(): Must provide a graph object (pr | attach igraph(2.0+) 后 igraph::clusters 遮 | 从脚本中移除 library(igraph)（只用 igraph:: 前缀调用），避免 igraph |
+| cmd //c '...' 经 MSYS bash 传参被吞，cmd 只起了交互式 banner，脚 | MSYS 盘符/引号转换吃掉 cmd //c 的参数，导致命令未传给 cmd | 改为在 bash 里直接调用 Rscript.exe 全路径（"C:/Users/23136/App |
+| Error in library(monocle3) : there is no package c | execute_r 内核的 R 与 check_env/rail_review  | 待定：定位 execute_r 内核实际使用的 R 与 libPaths，把 monocle3 所在 |
+

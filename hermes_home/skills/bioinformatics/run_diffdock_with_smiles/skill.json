@@ -17,5 +17,12 @@
   "proven_params": [],
   "proven_script": null,
   "error_count": 0,
-  "success_count": 0
+  "success_count": 0,
+  "trigger_keywords": [
+    "run_diffdock_with_smiles",
+    "run diffdock with smiles",
+    "diffdock",
+    "smiles"
+  ],
+  "trigger_level": "YEL"
 }

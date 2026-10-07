@@ -46,8 +46,107 @@
   "chains_to": [],
   "detailed_description": "生信分析HTML报告构建器 — 图文并茂、图表画廊、辩论记录、参数来源、生物结论\n\n核心API:\n  - ReportBuilder(title, subtitle, stats, key_findings): 构造器\n  - rb.section(sec_id, title_en, title_zh): 章节上下文管理器\n  - rb.add_figure(fig_path, caption_en, method_zh, result_zh, bio_zh, param_source_zh): 添加图表（4面板）\n  - rb.add_debate(topic, rounds): 添加辩论记录\n  - rb.add_table(table_id, csv_path, title_en, title_zh): 添加表格\n  - rb.save('report.html'): 保存\n\n技术特点: 纯Python f-strings, PNG→base64, CSV→DataTables, CSS/JS内联, 无外部依赖",
   "when_to_use": "当需要生成生信分析HTML报告时触发 — 包含图表、辩论记录、参数来源、生物结论的完整报告",
-  "proven_params": [],
-  "proven_script": null,
-  "error_count": 0,
-  "success_count": 0
+  "proven_params": [
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "general",
+      "script": "MemOmics_showcase.html",
+      "params": "{\"type\":\"self-intro-showcase\",\"theme\":\"light-not-dark\",\"interactive\":true,\"research\":\"Biomni/Co-Scientist/AI-Scientist landscape\"}",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "调研科研 agent 进展（Europe PMC 取 Co-Scientist Nature 2026 / AI Scientist Nature 2026 / Biomni Science 2026 / BAISBench）+ 盘点 MemOmics 自身资产，生成交互式 HTML 展示页"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "general",
+      "script": "MemOmics_Showcase.html",
+      "params": "{\"type\":\"interactive-html-showcase\",\"theme\":\"light\",\"sections\":12,\"interactions\":14,\"file\":\"MemOmics_Showcase.html\",\"size_kb\":115,\"companion_figure\":\"figures/memomics_overview.png(300dpi)\",\"data_scan\":\"_stats.json\",\"research_sources\":\"Co-Scientist Nature2026 / AI Scientist Nature2026 / Biomni Science2026 / BAISBench Bioinformatics2026 / AlphaEvolve arXiv2506.13131 / FutureHouse / Lila / Isomorphic\",\"verify\":\"browser: js_errors=0, canvas rendered, interactions pass, img loaded 4077x1745\"}",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "交付自包含交互式 HTML 展示页（12 章节、14 类交互、浅色主题、含演讲者模式与键盘导航）+ 配套 300dpi 静态总览图 + 5 篇引用入库 BibTeX。浏览器实测 js_errors=0、绘图与交互全部生效、无横向溢出；rail_review(post) 通过（figure_count=1）。修复了构建过程中真实出现的 </style> 提前闭合导致 CSS 失效的缺陷。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "general",
+      "script": "MemOmics_Showcase.html",
+      "params": "animation-first, 10 slides, scroll-snap, no external deps, CSS keyframes + vanilla JS",
+      "date": "2026-09-16",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "展示页 v2 动画版交付：正文 20588 字→1888 字(-91%)，文件 117KB→40KB。10 页全屏：hero 轨道动画 / 数字滚动 / 8 节点流水线火花动画 / 闸门打回-修复-放行循环 / 7 角色辩论交互 / 自进化循环 / 2020-2026 时间线 / 6 竞品可展开卡 / 三阶段路线 / 收尾。实测零 JS 报错，交互全部验证通过（计数器 350/168/495/18"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "build_MF120_html_report.py",
+      "params": "ReportBuilder(skill=bioinformatics-html-report) + auto_fill_from_logs(collect_session_data(\"memomics-0f9b1172\")); source_fig=MF120_EDA_overview.png(300dpi 2600x2000); 4 tables (group_summary/sample_map/celltype_by_group/QC_quantiles); 9 callouts; base64 自包含",
+      "date": "2026-09-24",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "生成自包含 HTML 报告 results/memomics-f5ec9cc2/reports/MF120_EDA_report.html（189 KB），含图1张(MF120 EDA 四联图)+4表+结论/方法/风险点，日志溯源自动填充(44 messages/25 tool calls)"
+    },
+    {
+      "species": "human",
+      "tissue": "general",
+      "direction": "general",
+      "script": "build_report_html.py",
+      "params": "build_report_html.py (stdlib-only md->html + cards grid + category filter + evidence table + bib parser + funnel/trend CSS viz, zero CDN)",
+      "date": "2026-10-02",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "自包含 HTML 报告生成器 scripts/build_report_html.py 通过冒烟测试: 36KB, 45 条引用解析成功, 含漏斗图/年度趋势/路线卡/Gap表/竞品卡网格+分类过滤/证据表/参考文献。踩坑: 持久内核 exec() 不注入 __file__ → 需 try/except NameError 兜底 ROOT。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "build_agent_paradigms_ppt.py",
+      "params": "python_pptx; 6页16:9(13.333x7.5in); 浅色学术风(白底+墨字+低饱和强调色); 原生形状构图(可编辑)",
+      "date": "2026-10-05",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "生成《从读懂到可信：五个科研 Agent 的范式分野》6 页 PPTX 构建脚本。6 页=封面/四系统对比表/MemOmics 四痛点/执行链+辩论门控三级/知识库闭环+铁轨/边界与结论。踩坑：①脚本字符串内用 ASCII 双引号导致 SyntaxError（已改中文引号「」）；②check_env 装的 python-pptx 不在持久内核解释器(E:/MemOmics-Agent/.venv/"
+    }
+  ],
+  "proven_script": "build_agent_paradigms_ppt.py",
+  "error_count": 1,
+  "success_count": 6,
+  "user_prefs": {
+    "last_used_script": "build_agent_paradigms_ppt.py"
+  },
+  "errors": [
+    {
+      "timestamp": "2026-09-16 22:35",
+      "error_type": "runtime_error",
+      "message": "[TOOL_ERROR] Tool execution failed: TypeError: 'in <string>' requires string as left operand, not list",
+      "root_cause": "debate_analysis 在 level=L1 且 auto_kb 开/关两种组合下均报同一 TypeError，说明是引擎侧参数处理缺陷（非入参格式问题）：某处对预期为 str 的字段执行 `x in <string>`，但实际收到 list（疑似角色/kb 注入或 history_errors 字段被序列化成 list）。",
+      "fix_applied": "暂未修复（平台侧 bug）。规避：本次改用 rail_review + 人工撰写\"边界与风险\"章节替代辩论；已把该判断的竞品事实全部标注原文 DOI/PMID 以便人工复核。建议排查 debate_analysis 入参序列化路径（level/auto_kb 组合下疑似把 list 当字符串做 in 判断）。",
+      "species": "",
+      "tissue": "",
+      "script": "debate_analysis",
+      "severity": "medium"
+    }
+  ],
+  "trigger_keywords": [
+    "html"
+  ],
+  "trigger_level": "RED"
 }

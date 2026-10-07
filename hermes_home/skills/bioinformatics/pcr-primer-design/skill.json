@@ -40,5 +40,6 @@
     "pcr primer design",
     "pcr",
     "primer"
-  ]
+  ],
+  "trigger_level": "YEL"
 }

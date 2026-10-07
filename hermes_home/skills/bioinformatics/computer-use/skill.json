@@ -82,5 +82,25 @@
     "键盘输入",
     "点击按钮"
   ],
-  "trigger_level": "GRN"
+  "trigger_level": "GRN",
+  "success_count": 1,
+  "proven_script": "illustrator_artboard_help",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "illustrator_artboard_help",
+      "params": "{\"app\": \"Adobe Illustrator 2026\", \"pid\": \"12300\", \"task\": \"解答画板（02-画板2）无法删除的成因与操作路径\", \"tool\": \"computer_use capture + curl 官方文档核对\"}",
+      "date": "2026-10-03",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "Captured Illustrator window (1567x848, 97 AX elements), 属性面板显示\"未选择对象\"→ 证实用户点击画板边框时选不中任何对象 = 该框是画板(Artboard)而非图层对象。给出两条路径：①画板面板/画板工具(Shift+O)删除；②视图>隐藏画板仅隐藏显示。curl 官方 helpx 页返回空（JS 渲染，无静态正文），改用既有技能知识作答。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "illustrator_artboard_help"
+  }
 }
