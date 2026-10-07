@@ -54,6 +54,7 @@ import json
 import logging
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import threading
@@ -1186,6 +1187,37 @@ def action_task_logs(args: dict) -> dict:
     return _ok({"task_id": tid, "log": res.get("data")})
 
 
+def _split_raw_cmd(text) -> list:
+    """把用户输入切成 argv。三种口径，按优先级：
+
+    * **JSON 数组** —— ``["analysis","run","-i","sh /work/x.sh"]``：唯一能 100% 表达的方式，
+      工具/模型推荐用这种；
+    * **含引号的字符串** —— 按 shell 规则切，让 ``-i "sh /work/x.sh"`` 这种带空格的参数活下来；
+    * **其余** —— 按空白切（老行为；Windows 反斜杠路径不受影响）。
+
+    背景（2026-10-07）：以前一律空白切，投递命令 ``analysis run -i "sh /x.sh"`` 会被拆成
+    ``"sh`` + ``/x.sh"`` 两个参数，命令根本发不出去。
+    """
+    s = str(text or "").strip()
+    if not s:
+        return []
+    if s[0] in "[{":
+        try:
+            v = json.loads(s)
+        except Exception:
+            v = None
+        if isinstance(v, list):
+            return [str(x) for x in v if str(x).strip()]
+    if '"' in s or "'" in s:
+        try:
+            parts = shlex.split(s)
+        except Exception:
+            parts = []
+        if parts:
+            return [str(x) for x in parts if str(x).strip()]
+    return s.split()
+
+
 _RAW_ALLOWED = {"project", "data", "table", "terminal", "analysis", "workflow",
                 "image", "billing", "region", "history"}
 _RAW_FORBIDDEN = {"auth", "login", "logout", "config"}
@@ -1196,7 +1228,7 @@ def action_raw(args: dict) -> dict:
     cfg = load_config()
     raw = args.get("command") or args.get("args") or []
     if isinstance(raw, str):
-        raw = raw.split()
+        raw = _split_raw_cmd(raw)
     raw = [str(x) for x in raw if str(x).strip()]
     if not raw:
         return _err("需要参数 command（字符串或数组，例如 \"project detail --code P123\"）")

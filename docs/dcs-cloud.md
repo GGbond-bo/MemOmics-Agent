@@ -128,6 +128,27 @@ dcs_cloud:
 
 **结论：**「在云上跑分析」的正路 = `dcs_cloud(action="container_open" | "container_exec" | "container_close")` —— 那个容器就是 GenPilot 的智能分析工作区，`/work` 里就是项目数据；重任务再走 `analysis` / `workflow` 投递。
 
+## 🚀 投递任务：离线分析 / WDL 流程怎么走
+
+「在云上跑分析」有三种形态，按粒度从细到粗 —— **MemOmics 只是中介，真正干活的是云平台**：
+
+| 形态 | 什么时候用 | 命令 | MemOmics 里的入口 |
+|------|-----------|------|------------------|
+| **云容器**（交互式） | 调试脚本、跑小算例、看数据、装环境 | `terminal open` → `terminal exec -c "…"` → `terminal close` | 命令模式选 `container_open` / `container_exec` / `container_close`（一句话："开云容器"）。`/work` 里就是项目数据与 400T HPC |
+| **离线分析任务**（一命令一作业） | 单条 shell 作业，要规格 / 挂数据 / 落输出 | `analysis run -i "sh /work/x.sh" -l vf=32g,num_proc=8 --image <img> -o /Files/out`（`-p` 批量、`-m` 挂数据）；随后 `analysis start / info / log / consume / cancel / rm` | 命令模式选 `raw`（见下）；「📋 任务」看列表与日志 |
+| **WDL 流程**（多步、参数表） | 正规流程化分析 | `workflow ls` → `workflow check_parameter -n <流程>` → `workflow run -n <流程> -i k=v -v <版本> -o /Files/out`；`workflow tasks / task_info / task_log / cancel`、多步编排 `workflow plan` | 同上 |
+
+**面板 `raw` 模式怎么填**（白名单逃生舱）：`project / data / table / terminal / analysis / workflow / image / billing / region / history`（凭据类 `auth/login/logout/config` 禁止）。
+
+- 带空格的参数**必须加引号**：`analysis run -i "sh /work/zhangbo11/x.sh" -l vf=32g,num_proc=8 -o /Files/out`
+- 或者直接写 **JSON 数组**（最稳，不受引号/空格影响）：
+  `["workflow","run","-n","Copy-scRNA-seq_v3","-i","SampleID=S1","-o","/Files/out"]`
+- 切分口径在连接器的 `_split_raw_cmd()`：**JSON 数组 → 含引号按 shell 规则 → 其余按空白**（2026-10-07 修；在此之前一律空白切，`-i "sh /x.sh"` 会被拆成 `"sh` + `/x.sh"`，投递命令根本发不出去）。
+
+**开工前五问**（见下一节，不问清不动手）：哪个项目 / 数据在哪（本机 ↔ `/Files` ↔ 容器 `/work` 三套文件系统不互通）/ 跑什么+参数 / 结果回哪 / 费用。
+
+**实测**（2026-10-07，真账号）：`workflow ls` 列出项目上 **16 个免费流程**（Copy-scRNA-seq_v3 / v3.1.5 / v2.3、scATAC-seq(+v3、build-index)、SAW-ST-V8(+makeRef)、DUCKS4、Bandage、NanoPlot、h5ad2seurat 格式转换、scRNA-seq_C4_analysis_pipeline…）；`workflow check_parameter -n Copy-scRNA-seq_v3` 当场返回参数规格（SampleID 必填、Oligo = `Array[Array[File]]`（R1/R2）…）；`analysis ls` 可列出项目现有离线任务（含别人建的）。
+
 ## 🗣️ 「在云平台跑分析」怎么走：开工前确认协议
 
 用户说「帮我在云平台跑分析 / 投递任务」时，**不问清不动手**（对齐仓库铁律 27 / 28 / 35）：

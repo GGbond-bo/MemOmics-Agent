@@ -253,6 +253,31 @@ def test_raw_forbids_credential_subcommands(_isolate):
     assert res["status"] == "error" and "只放行" in res["error"]
 
 
+def test_split_raw_cmd_keeps_quoted_args():
+    """投递命令带空格参数（-i "sh /work/x.sh"）时的切分口径；JSON 数组优先，老行为不回归。"""
+    sp = dc._split_raw_cmd
+    assert sp('analysis run -i "sh /work/x.sh" -l vf=32g,num_proc=8') == \
+        ["analysis", "run", "-i", "sh /work/x.sh", "-l", "vf=32g,num_proc=8"]
+    assert sp('["analysis","run","-i","sh /work/x.sh"]') == \
+        ["analysis", "run", "-i", "sh /work/x.sh"]
+    assert sp(r"data upload E:\data\x.txt /Files/") == \
+        ["data", "upload", r"E:\data\x.txt", "/Files/"]          # 无反斜杠回归
+    assert sp('workflow run -n "Copy-scRNA-seq_v3" -o /Files/out') == \
+        ["workflow", "run", "-n", "Copy-scRNA-seq_v3", "-o", "/Files/out"]
+    assert sp('analysis run -i "unbalanced') == ["analysis", "run", "-i", '"unbalanced']  # 兜底不炸
+    assert sp("") == [] and sp(None) == []
+
+
+def test_raw_accepts_json_array_passthrough(_isolate):
+    """raw 支持数组/JSON：投递命令原样到达 CLI（不用管引号）。"""
+    _write_cfg(_isolate, {"enabled": True,
+                          "cli_path": _fake_cli(_isolate, {"exit_code": 0, "message": "ok", "data": {}})})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    res = dc.dcs_cloud_handler({"action": "raw", "command": '["workflow","ls","-p","2"]'})
+    assert json.loads(res)["status"] == "ok"
+    assert "workflow ls" in _argv_of(_isolate)
+
+
 # ---------------------------------------------------------------------------
 # 5) 模型可见性：模块被 __init__ 导入后，registry 里必须有 dcs_cloud
 # ---------------------------------------------------------------------------
