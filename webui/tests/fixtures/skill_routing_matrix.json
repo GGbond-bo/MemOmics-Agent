@@ -1,6 +1,6 @@
 {
   "schema": "memomics.skill-routing-matrix.v1",
-  "description": "Skill 路由回归矩阵：多场景 x 多意图 x 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；2026-09-23 P0-2b 后缺口清单与过度触发清单都已清零：修好的缺口提升成 cases（必须命中），收敛的过度触发句下沉成 distractors（必须零命中），护栏靠这两个清单继续看守。2026-09-23 P0-2b 极端测试追加：词片段误触发（science/algorithm/mRNA/degree）与裸「怎么修」全部收敛为 distractors 钉住。2026-10-04：新增 adobe-illustrator（AI 操控手册）RED 技能用例 3 条（覆盖新用户口径「第一次用 Illustrator」，命中集含与 cli-anything/windows-com 的合理重叠）。",
+  "description": "Skill 路由回归矩阵：多场景 x 多意图 x 真实用户口径。由 webui/tests/test_skill_routing_matrix.py 消费，也是 scripts/check_skills_gate.py 门禁的一部分。任何触发词 / 索引 / 匹配器改动都必须让本矩阵继续通过；2026-09-23 P0-2b 后缺口清单与过度触发清单都已清零：修好的缺口提升成 cases（必须命中），收敛的过度触发句下沉成 distractors（必须零命中），护栏靠这两个清单继续看守。2026-09-23 P0-2b 极端测试追加：词片段误触发（science/algorithm/mRNA/degree）与裸「怎么修」全部收敛为 distractors 钉住。2026-10-04：新增 adobe-illustrator（AI 操控手册）RED 技能用例 3 条（覆盖新用户口径「第一次用 Illustrator」，命中集含与 cli-anything/windows-com 的合理重叠）。2026-10-07：新增 dcs-cloud（DCS 云 / GenPilot 平台操作 + 开工前确认协议）RED 技能用例 3 条（云平台跑分析 / 云上任务状态 / 投递交办 → 只命中 dcs-cloud）。",
   "cases": [
     {
       "id": "figure-layout-geometry-01",
@@ -768,6 +768,33 @@
         "adobe-illustrator"
       ],
       "max_hits": 2
+    },
+    {
+      "id": "dcs-cloud-01",
+      "intent": "直白",
+      "text": "帮我在云平台跑个分析",
+      "must_hit": [
+        "dcs-cloud"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "dcs-cloud-02",
+      "intent": "口语",
+      "text": "DCS 云上那个项目的任务跑完没有？",
+      "must_hit": [
+        "dcs-cloud"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "dcs-cloud-03",
+      "intent": "高代价交办",
+      "text": "帮我在云上投递一个分析任务，数据在 /Files/Muscle",
+      "must_hit": [
+        "dcs-cloud"
+      ],
+      "max_hits": 3
     }
   ],
   "distractors": [

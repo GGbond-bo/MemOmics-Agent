@@ -1,0 +1,25 @@
+{
+  "name": "dcs-cloud",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "category": "system",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "云平台",
+    "DCS云",
+    "DCS Cloud",
+    "GenPilot",
+    "华大云",
+    "云上",
+    "云上跑",
+    "在云上",
+    "云上分析",
+    "投递任务",
+    "云端任务",
+    "云容器",
+    "上传到云",
+    "云上数据"
+  ],
+  "when_to_use": "用户提到 云平台 / DCS / DCS 云 / GenPilot / 华大云 / 云上跑 / 在云上 / 投递任务 / 云端任务 / 云容器 / 上传到云 / 云上数据，或说明数据的算力在 DCS Cloud 时加载。含：PAT 绑定、项目定位（不替用户默认）、数据浏览与上下传、云容器执行、离线任务与日志；重点是「开工前确认协议」——项目/数据/参数/输出/费用五问，用 ask_user(kind=intent) 一次问清后才动手（对齐铁律 27/28/35）。",
+  "success_count": 0
+}

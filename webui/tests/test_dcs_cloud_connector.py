@@ -270,3 +270,112 @@ def test_registry_contains_dcs_cloud():
     assert proc.returncode == 0, (proc.stderr or "")[-800:]
     names = json.loads((proc.stdout or "").strip().splitlines()[-1])
     assert "dcs_cloud" in names, "dcs_cloud 没注册进 registry（模型看不到它）：%s" % (names,)
+
+
+# ---------------------------------------------------------------------------
+# 6) context：开工前确认上下文（用户要求：不替他默认项目、先把问题列出来）
+#    以及 /api/dcs/pick 的默认目录解析（不弹窗那条路径）
+# ---------------------------------------------------------------------------
+
+def _fake_cli_dispatch(home, table: dict):
+    """多命令假 CLI：按命令行里出现的关键字选 payload（context 要连着跑 3 条命令）。"""
+    (home / "payloads.json").write_text(json.dumps(table, ensure_ascii=True), encoding="utf-8")
+    script = home / "fake_dcs.py"
+    script.write_text(
+        "import json, sys\n"
+        "args = ' '.join(sys.argv[1:])\n"
+        "table = json.load(open(%r, encoding='utf-8'))\n"
+        "for key, payload in table.items():\n"
+        "    if key in args:\n"
+        "        print(json.dumps(payload)); sys.exit(0)\n"
+        "print(json.dumps({'exit_code': 0, 'message': 'ok', 'data': {}}))\n"
+        % str(home / "payloads.json"), encoding="utf-8")
+    if os.name == "nt":
+        path = home / "dcs2.cmd"
+        path.write_text(
+            '@echo off\r\n'
+            'echo %%* > "%%~dp0argv.txt"\r\n'
+            '"%s" "%s" %%*\r\n' % (sys.executable, script),
+            encoding="ascii")
+    else:
+        path = home / "dcs2"
+        path.write_text(
+            '#!/bin/sh\n'
+            'echo "$*" > "$(dirname "$0")/argv.txt"\n'
+            '"%s" "%s" "$@"\n' % (sys.executable, script),
+            encoding="utf-8")
+        path.chmod(0o755)
+    return str(path)
+
+
+_CONTEXT_TABLE = {
+    "config show": {"exit_code": 0, "message": "ok", "data": {
+        "current_user": "tester", "current_project": "P1", "current_region": "BGI-X",
+        "data_cwd": "/Files", "base_url": "https://www.dcs.cloud",
+        "copilot_base_url": "https://genpilot-release.dcs.cloud",
+        "available_regions": ["BGI-X", "BGI-Y"]}},
+    "project ls": {"exit_code": 0, "message": "ok", "data": {
+        "page": 1, "page_size": 20, "total": 2, "projects": [
+            {"project_id": "P1", "project_name": "甲项目", "region": "BGI-X",
+             "current": True, "is_arrears": False},
+            {"project_id": "P2", "project_name": "乙项目", "region": "BGI-X",
+             "current": False, "is_arrears": True}]}},
+    "data ls": {"exit_code": 0, "message": "ok", "data": {
+        "path": "/Files", "page": 1, "page_size": 20, "total": 3, "items": [
+            {"name": "Muscle", "is_directory": True},
+            {"name": "fastq", "is_directory": True},
+            {"name": "readme.txt", "is_directory": False}]}},
+}
+
+
+def test_context_assembles_session_projects_and_data_root(_isolate):
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, _CONTEXT_TABLE),
+                          "download_dir": "E:/data/dcs"})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    res = _call({"action": "context"})
+    assert res["status"] == "ok"
+    assert res["session"]["current_project"] == "P1"
+    assert res["session"]["copilot_base_url"].startswith("https://genpilot")
+    assert [p["project_id"] for p in res["projects"]] == ["P1", "P2"]
+    assert [p["project_id"] for p in res["projects"] if p["is_arrears"]] == ["P2"]
+    assert res["data_root"]["dirs"] == ["Muscle", "fastq"]
+    assert res["download_dir"] == "E:/data/dcs"
+    assert res["projects_total"] == 2
+
+
+def test_context_carries_the_grill_checklist(_isolate):
+    """用户明确要求：执行前必须问清（项目/数据/参数/输出/费用），且不替用户默认项目。"""
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, _CONTEXT_TABLE)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    res = _call({"action": "context"})
+    blob = " ".join(res["questions"]) + " ".join(res["rules"])
+    for must in ("项目", "数据在哪", "参数", "输出", "费用"):
+        assert must in blob, "确认清单少了「%s」：%s" % (must, blob)
+    assert any("不替用户默认项目" in r or "不替用户默认" in r for r in res["rules"]), res["rules"]
+    assert len(res["questions"]) >= 5 and len(res["rules"]) >= 4
+
+
+def test_context_skips_file_listing_when_asked(_isolate):
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, _CONTEXT_TABLE)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    res = _call({"action": "context", "with_files": False})
+    assert res["status"] == "ok" and "data_root" not in res
+
+
+def test_pick_initial_points_at_a_real_dir(_isolate):
+    """不弹窗的默认目录解析（dry_run 走这条路）——必须是真实存在的目录。"""
+    server = pytest.importorskip("server")
+    assert os.path.isdir(server._dcs_pick_initial("dir", "")), server._dcs_pick_initial("dir", "")
+    here = str(_isolate)
+    assert server._dcs_pick_initial("dir", here) == here
+    (_isolate / "config.yaml").write_text("dcs_cloud: {}\n", encoding="utf-8")
+    assert server._dcs_pick_initial("file", str(_isolate / "config.yaml")) == here
+
+
+def test_server_action_whitelist_matches_connector(_isolate):
+    """server._DCS_ACTIONS 与连接器 _ACTIONS 必须一致 —— context 就这么漏过一次（HTTP 报未知 action）。"""
+    server = pytest.importorskip("server")
+    assert set(server._DCS_ACTIONS) == set(dc._ACTIONS), (
+        "server 独有: %s；连接器独有: %s"
+        % (sorted(set(server._DCS_ACTIONS) - set(dc._ACTIONS)),
+           sorted(set(dc._ACTIONS) - set(server._DCS_ACTIONS))))

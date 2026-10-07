@@ -14963,6 +14963,36 @@ async def literature_knowledge_all():
     return {"job_id": job_id, "status": "running"}
 
 
+# ── 2026-10-07：一键全流程管线（翻译+提炼+证据链知识+双语锚定，篇级并发）──
+def _run_lit_process_all(job_id: str, force: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import process_all_papers
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        _result = _json.loads(process_all_papers(progress_cb=_cb, force=force))
+        _lit_jobs[job_id].update({"status": "done", "result": _result,
+                                  "current": f"全流程完成：{_result.get('succeeded', 0)}/{_result.get('pending', 0)} 篇"})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/process-all")
+async def literature_process_all(payload: dict = None):
+    """一键全流程：对全部"三步有缺"的文献跑 翻译→9项提炼→证据链知识→双语锚定（篇级并发 2 路）。
+    force=true 重跑全部（慎用，全量重新调用 LLM）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    _force = bool((payload or {}).get("force"))
+    asyncio.create_task(asyncio.to_thread(_run_lit_process_all, job_id, _force))
+    return {"job_id": job_id, "status": "running"}
+
+
 def _run_lit_enrich(job_id: str, file_or_title: str, do_all: bool = False):
     import json as _json
     from memomics.bio_tools.literature_library import enrich_paper_metadata, enrich_all_metadata
@@ -19900,12 +19930,12 @@ async def api_cluster_exec(request: Request):
 # 与 remote_cluster 同款薄路由：端点只做参数校验与转发；逻辑全在
 # memomics/connectors/dcs_cloud.py（agent 工具 dcs_cloud 用的是同一个 handler）。
 
-_DCS_ACTIONS = ("status", "bind", "unbind", "projects", "use_project", "current",
+_DCS_ACTIONS = ("status", "bind", "unbind", "projects", "use_project", "current", "context",
                 "ls", "find", "info", "download", "upload",
                 "container_open", "container_exec", "container_close",
                 "tasks", "task_logs", "raw")
 _DCS_CFG_FIELDS = ("enabled", "cli_path", "base_url", "region", "default_project",
-                   "timeout", "max_output_chars", "allow_write")
+                   "timeout", "max_output_chars", "allow_write", "download_dir")
 
 
 def _dcs_mod():
@@ -20036,6 +20066,103 @@ async def api_dcs_exec(request: Request):
     args["action"] = action
     try:
         return _dcs_wrap(_dcs_mod().dcs_cloud_handler(args))
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+# 2026-10-07：下载/上传要选本地路径 —— 用本机原生选择框（tkinter 优先，PowerShell 兜底），
+# 用户要求"弹出路径的时候能不能选择"（不要手打）。
+def _dcs_pick_initial(kind: str, initial: str) -> str:
+    initial = str(initial or "").strip()
+    if initial and os.path.isdir(initial):
+        return initial
+    if initial and os.path.isfile(initial):
+        return os.path.dirname(initial)
+    try:
+        _cfg = _dcs_mod().load_config(force=True)
+        _d = str(_cfg.get("download_dir") or "").strip()
+        if _d and os.path.isdir(_d):
+            return _d
+    except Exception:
+        pass
+    _r = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"))
+    return _r if os.path.isdir(_r) else os.path.expanduser("~")
+
+
+def _dcs_pick_path(kind: str = "dir", initial: str = "") -> dict:
+    """弹本机原生选择框；返回 {ok, path} 或 {ok:False, cancelled:True}。"""
+    kind = "file" if str(kind).lower() in ("file", "f") else "dir"
+    start = _dcs_pick_initial(kind, initial)
+    _tk_err = ""
+    # ① tkinter（Python 标准库）
+    try:
+        import tkinter as _tk
+        from tkinter import filedialog as _fd
+        _root = _tk.Tk()
+        _root.withdraw()
+        try:
+            _root.attributes("-topmost", True)
+        except Exception:
+            pass
+        _root.update()
+        if kind == "file":
+            picked = _fd.askopenfilename(title="选择要上传到云上的文件",
+                                         initialdir=start, parent=_root)
+        else:
+            picked = _fd.askdirectory(title="选择本机目录（下载/上传目标）",
+                                      initialdir=start, mustexist=True, parent=_root)
+        try:
+            _root.destroy()
+        except Exception:
+            pass
+        if picked:
+            return {"ok": True, "path": os.path.abspath(picked)}
+        return {"ok": False, "cancelled": True, "error": "已取消选择"}
+    except Exception as _e:
+        _tk_err = "%s: %s" % (type(_e).__name__, _e)
+    # ② PowerShell(System.Windows.Forms) 兜底
+    try:
+        import subprocess as _sp
+        if kind == "file":
+            _ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                   "$d=New-Object System.Windows.Forms.OpenFileDialog;"
+                   "$d.Title='选择要上传到云上的文件';"
+                   "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
+                   "{[Console]::Out.Write($d.FileName)}")
+        else:
+            _ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                   "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+                   "$d.Description='选择本机目录（下载/上传目标）';"
+                   "$d.SelectedPath='%s';"
+                   "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
+                   "{[Console]::Out.Write($d.SelectedPath)}" % start.replace("'", "''"))
+        _pr = _sp.run(["powershell", "-NoProfile", "-STA", "-Command", _ps],
+                      capture_output=True, text=True, timeout=600)
+        _out = (_pr.stdout or "").strip()
+        if _out:
+            return {"ok": True, "path": os.path.abspath(_out), "via": "powershell"}
+        return {"ok": False, "cancelled": True, "error": "已取消选择"}
+    except Exception as _e2:
+        return {"ok": False,
+                "error": "无法弹出选择框（tkinter %s；powershell %s: %s）" % (_tk_err, type(_e2).__name__, _e2),
+                "hint": "可以手动输入路径；或在「设置」里把默认下载目录（download_dir）填好"}
+
+
+@app.post("/api/dcs/pick")
+async def api_dcs_pick(request: Request):
+    """选本机目录/文件：下载目标、上传来源。dry_run=true 只回默认目录，不弹窗（测试用）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    kind = body.get("kind") or "dir"
+    initial = body.get("initial") or ""
+    if body.get("dry_run"):
+        return {"ok": True, "opened": False, "initial": _dcs_pick_initial(kind, initial)}
+    try:
+        return await asyncio.to_thread(_dcs_pick_path, kind, initial)
     except Exception as exc:
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 

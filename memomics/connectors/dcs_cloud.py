@@ -85,6 +85,7 @@ _DEFAULT_CFG = {
     "timeout": 120,
     "max_output_chars": 20000,
     "allow_write": True,
+    "download_dir": "",
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -549,7 +550,14 @@ def action_unbind(args: dict) -> dict:
 
 def action_projects(args: dict) -> dict:
     cfg = load_config()
-    res = _run_cli(["project", "ls"], cfg=cfg)
+    argv = ["project", "ls"]
+    if args.get("page"):
+        argv += ["--page", str(int(args["page"]))]
+    if args.get("page_size"):
+        argv += ["--page-size", str(int(args["page_size"]))]
+    if str(args.get("name") or "").strip():
+        argv += ["-n", str(args["name"]).strip()]
+    res = _run_cli(argv, cfg=cfg)
     if not res.get("ok"):
         return _err(res.get("message") or "查询项目失败", detail=res.get("error"), hint=res.get("hint"))
     return _ok({"projects": res.get("data"), "count": len(res.get("data") or []) if isinstance(res.get("data"), list) else None})
@@ -771,6 +779,71 @@ def action_raw(args: dict) -> dict:
     return _ok(_clip(cfg, payload))
 
 
+def action_context(args: dict) -> dict:
+    """一次拿齐「开工前确认」需要的上下文（只读：不切项目、不动数据）。
+
+    用户说「在云平台/GenPilot 上跑分析」「投递任务」时，模型先调这个，再用 ask_user 把
+    项目、数据位置、参数、输出、费用问清楚 —— 用户有很多项目，**不能替他默认**。
+    """
+    cfg = load_config()
+    out: dict = {"read_only": True}
+    r = _run_cli(["config", "show"], cfg=cfg)
+    if r.get("ok"):
+        d = r.get("data") or {}
+        out["session"] = {k: d.get(k) for k in (
+            "current_user", "current_project", "current_region", "data_cwd",
+            "login_time", "base_url", "copilot_base_url", "lang")}
+        out["available_regions"] = (d.get("available_regions") or [])[:12]
+    else:
+        out["session_error"] = r.get("message")
+    r2 = _run_cli(["project", "ls"], cfg=cfg)
+    if r2.get("ok"):
+        d2 = r2.get("data") or {}
+        plist = d2.get("projects") or []
+        out["projects"] = [{
+            "project_id": p.get("project_id"),
+            "project_name": p.get("project_name"),
+            "region": p.get("region"),
+            "current": bool(p.get("current")),
+            "is_arrears": bool(p.get("is_arrears")),
+        } for p in plist]
+        out["projects_total"] = d2.get("total")
+        out["projects_page"] = d2.get("page")
+    else:
+        out["projects_error"] = r2.get("message")
+    if _truthy(args.get("with_files", True)):
+        path = str(args.get("path") or "/Files")
+        r3 = _run_cli(["data", "ls", path], cfg=cfg)
+        if r3.get("ok"):
+            d3 = r3.get("data") or {}
+            items = (d3.get("items") or []) if isinstance(d3, dict) else []
+            out["data_root"] = {
+                "path": (d3.get("path") if isinstance(d3, dict) else None) or path,
+                "total": (d3.get("total") if isinstance(d3, dict) else None),
+                "dirs": [i.get("name") for i in items if i.get("is_directory")][:20],
+                "files": [i.get("name") for i in items if not i.get("is_directory")][:10],
+            }
+        else:
+            out["data_root_error"] = r3.get("message")
+    out["download_dir"] = cfg.get("download_dir") or ""
+    out["allow_write"] = bool(cfg.get("allow_write"))
+    out["questions"] = [
+        "① 用哪个项目？（当前项目只是候选，用户有多个项目时必须让他确认，尤其投递/计费前）",
+        "② 数据在哪？本机路径 / 云上 /Files 路径 / 云容器内 /work 路径 —— 三套文件系统不互通，先 ls 确认",
+        "③ 跑什么？分析类型或流程名；投递必须写清流程 + 参数 + 输出目录",
+        "④ 结果回哪里？云上输出目录，或下载到本机哪个目录（download_dir 是默认值）",
+        "⑤ 费用与资源：项目是否欠费？开容器/投递会产生费用，是否确认继续",
+    ]
+    out["rules"] = [
+        "不问清不动手：项目/数据/参数/输出/费用确认完再执行（铁律 27/28/35）",
+        "不替用户默认项目：只有用户明说「就用当前项目」或 config 配了 default_project 才直接用",
+        "投递任务 / 上传 / 开容器属高代价写操作：先弹意图确认（ask_user kind='intent'）再执行",
+        "欠费项目先充值再投递（平台会拦；context 的 projects[].is_arrears 可直接判断）",
+        "MemOmics 只是中介：真正干活的是云平台（GenPilot / 离线任务），本地只负责取数与后处理",
+    ]
+    return _ok(out)
+
+
 _ACTIONS = {
     "status": action_status,
     "bind": action_bind,
@@ -778,6 +851,7 @@ _ACTIONS = {
     "projects": action_projects,
     "use_project": action_use_project,
     "current": action_current,
+    "context": action_context,
     "ls": action_ls,
     "find": action_find,
     "info": action_info,

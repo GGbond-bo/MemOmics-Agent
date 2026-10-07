@@ -32,31 +32,33 @@ SCHEMA = {
     "description": (
         "☁️ 华大 DCS Cloud（含 GenPilot）连接器 —— 操作用户**已有**的云平台项目："
         "看数据、上下传文件、在云容器里跑命令、查离线任务与日志。\n"
-        "适用：用户说\"我 DCS 云上有项目/数据\"\"帮我把结果传到云上\"\"在云上跑\"\"查一下云上任务\"，"
-        "或用户的数据/算力在 DCS Cloud（genpilot / dcs.cloud）上。\n"
-        "不适用：本机就能跑的小分析（用 execute_python / execute_r）——除非用户明确要求上云。\n"
-        "凭据：用户先在 DCS 个人中心 → 访问令牌 创建 PAT（最长 1 年），再在 MemOmics「☁️ DCS 云」"
-        "面板绑定。**不要向用户索要密码，也不要索要 PAT 文本**（让他自己在面板里粘贴）；"
-        "如果工具报未绑定，就引导他去面板绑定。\n"
-        "常用流程：status（先看绑定/CLI 状态）→ projects（列项目）→ use_project（切到目标项目）→ "
-        "ls / find（找数据）→ 本地算 or container_exec（云上跑）→ upload / download（往返）→ "
-        "tasks / task_logs（看任务）。\n"
-        "⚠️ 计费与写操作：upload / upload 到的路径、container_open、投递任务都会产生云端费用或改动云端数据——"
-        "执行前先跟用户确认（说清要传什么、传到哪、大概多大）；一次跑不完的长活优先走离线任务。\n"
-        "⚠️ 配对用法：云端容器（OpenSandbox）与本地是两套文件系统；容器内路径是 /work/...，"
-        "Files 里的路径是 /Files/...，本机是 E:/... 之类。路径不对会报错，先 ls 确认再动。"
+        "【什么时候用】用户提到 云平台 / 云上 / DCS / genpilot / 华大云 / 投递任务 / 云端任务 / 云容器 / "
+        "把结果传到云上 / 云上那份数据 —— 或说明数据的算力在 DCS Cloud。"
+        "本机就能跑的小分析不要上云（除非用户要求）。\n"
+        "【开工前必须问清（铁律 27/28/35，不可跳过）】用户有多个项目，**绝不替他默认**：\n"
+        "① 先 action='context' 一次拿到：当前用户/当前项目/候选项目/数据根/默认下载目录/欠费与写开关；\n"
+        "② 再 ask_user(kind='intent') 一次问清：用哪个项目？数据在哪（本机 / 云上 Files / 容器内 /work）？"
+        "跑什么分析或流程、参数是什么？结果回哪里？项目是否欠费、是否确认计费？\n"
+        "③ 用户勾选确认后才执行。upload / container_open / 投递任务 / 切项目都算高代价写操作，先说清再动。\n"
+        "【常用流程】context → projects → use_project → ls / find → 本地算 或 container_exec → "
+        "upload / download → tasks / task_logs。\n"
+        "【凭据】用户自己在 DCS 个人中心 → 访问令牌 创建 PAT（最长 1 年），在 MemOmics「☁️ DCS 云」面板绑定；"
+        "**不要向用户索要密码，也不要索要 PAT 文本**；报未绑定就引导他去面板。\n"
+        "【路径】云上 Files=/Files/...，容器内=/work/...，本机=盘符路径，三者不互通，先 ls 确认再动。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["status", "bind", "unbind", "projects", "use_project", "current",
+                "enum": ["status", "bind", "unbind", "projects", "use_project", "current", "context",
                          "ls", "find", "info", "download", "upload",
                          "container_open", "container_exec", "container_close",
                          "tasks", "task_logs", "raw"],
                 "description": (
-                    "要执行的动作：status=绑定/CLI 状态；projects/use_project/current=项目；"
+                    "要执行的动作：status=绑定/CLI 状态；**context=开工前确认上下文（会话/候选项目/数据根/"
+                    "默认下载目录/必问清单，只读；用户说「在云上跑/投递任务」时第一步就调它）**；"
+                    "projects/use_project/current=项目；"
                     "ls/find/info=浏览与查找 Files；download/upload=云↔本机传文件；"
                     "container_open/exec/close=云上在线容器；tasks/task_logs=离线任务；"
                     "raw=白名单逃生舱（跑任意非凭据类 dcs 子命令）。"
