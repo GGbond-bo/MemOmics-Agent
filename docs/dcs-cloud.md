@@ -59,10 +59,10 @@ dcs_cloud:
 | `memomics/connectors/dcs_cloud.py` | 连接器核心：配置加载、PAT 凭据库、CLI 执行器（强制 `--output json --no-history`）、错误翻译、17 个动作 |
 | `memomics/bio_tools/cloud_connector.py` | agent 工具壳 `dcs_cloud`（schema + `check_fn=enabled`），转调同一个 handler |
 | `memomics/bio_tools/__init__.py` | 导入新模块（不导入 = 模型看不到，见 `test_bio_tools_registry_complete.py` 的事故说明） |
-| `webui/server.py` | `/api/dcs/status|bind|unbind|config|exec` 五条薄路由（与 `/api/cluster/*` 同款） |
-| `webui/index.html` | 左侧「☁️ DCS 云」面板；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
+| `webui/server.py` | 薄路由：`/api/dcs/status|bind|unbind|config|exec|pick` + 下载队列 `/api/dcs/dl/{start,list,cancel,retry,clear,reveal}`（worker 在连接器里） |
+| `webui/index.html` | 左侧「☁️ DCS 云」面板（数据/队列/日志三个标签）；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
 | `scripts/install_dcs_cli.ps1` | 官方 CLI 安装器：官方 CDN + SHA256 校验，校验不过就删文件、绝不执行 |
-| `webui/tests/test_dcs_cloud_connector.py` | 25 项离线回归（假 CLI + 临时 HERMES_HOME，不用真 PAT、不联网） |
+| `webui/tests/test_dcs_cloud_connector.py` | 33 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网） |
 | `webui/middleware_routes.json` | 路由清单已用 `python webui/entry_middleware.py --snapshot` 同步 |
 
 ## 验证记录（2026-10-07）
@@ -89,6 +89,22 @@ dcs_cloud:
 | `📋 任务` 按钮 | 离线任务列表 → 任务详情与日志 | — |
 
 > 2026-10-07 修：此前 `openDcsConsole` 把**项目列表**渲染在「浏览」标签里，旁边又有一个「数据」按钮 —— 三个入口看起来在做同一件事（用户原话："浏览和项目这两栏岂不是重复的？"）。现在：打开即 `/Files` 数据、项目归项目、数据入口只剩标签一个（新增 `_dcsLastPath` 记住路径 + `dcsTabData()` 保证点击确定性）；未绑定时首屏直接给"去 ⚙️ 设置 绑 PAT"的指引。
+
+## ⬇️ 下载队列（进度 / 完成态 / 多文件）
+
+用户原话：「下载文件的时候，没有进度表，没有完成显示，我要下载多个文件，没有队列展示」。
+
+| 环节 | 做法 |
+|------|------|
+| 入队 | 「🗂 数据」里勾选文件（行首复选框）→「⬇ 下载选中（N）」；或文件行「⬇ 加队列」；或文件详情「⬇ 下载到本机」（可先挑目录，用原生选择框） |
+| 看队列 | 「⬇ 队列」标签（标签带 `2⏳ / ✓3` 徽章）：每行有进度条 + 状态徽章 + 用时 + 落盘路径 + 操作 |
+| 进度 | 官方 CLI 不吐百分比 → 后端每 0.5s **盯本机落盘字节**，对照云上 `size` 算百分比；目录/未知大小给"不确定"动画条 + 已落盘字节数；CLI 用临时名（`name.part`）也认得出 |
+| 串行 | 云盘吞吐有限，一次只跑一个（单 worker 线程）；「排队中」明确写在行里 |
+| 完成 | 绿色「✓ 完成」+ 完整本地路径 +「📂 打开所在文件夹」；失败 = 红色 + 平台业务码翻译后的指引（83003 → 先选项目）；取消 = 真杀下载进程 + 保留已落盘字节（可「🔁 重试」重新入队） |
+| 刷新页面不丢 | 任务登记在**服务进程内存**（`dcs_cloud._DL_JOBS`），页面重新 `dl/list` 即恢复；**重启服务才清空**（在跑的会被中断） |
+| 默认目录 | 「⚙️ 设置」的 `download_dir`；留空时用真实生效目录（仓库 `results/dcs`），队列页顶部直接显示"下载到：…"并可「📂 换目录」 |
+
+验证记录（真账号、真文件，2026-10-07）：入队 3 个真文件（260 B / 13 MB / 17 MB）→ 中间进度 **22 → 32 → 36 → 53 → 70 → 100%**，最大并发 1，落盘字节与云上 `size` 逐一相等（合计 30,455,553 B）；真取消在 12% 时变成 `cancelled`（已落盘 11,392,148 B）；离线回归 `pytest webui/tests/test_dcs_cloud_connector.py -k dl_`（假下载器 `webui/tests/fixtures/fake_dcs_download.py`：真进程、真落盘、分块写）。
 
 ## 🗣️ 「在云平台跑分析」怎么走：开工前确认协议
 

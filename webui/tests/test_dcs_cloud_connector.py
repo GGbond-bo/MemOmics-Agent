@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -379,3 +380,158 @@ def test_server_action_whitelist_matches_connector(_isolate):
         "server 独有: %s；连接器独有: %s"
         % (sorted(set(server._DCS_ACTIONS) - set(dc._ACTIONS)),
            sorted(set(dc._ACTIONS) - set(server._DCS_ACTIONS))))
+
+
+# ---------------------------------------------------------------------------
+# 7) 下载队列（2026-10-07）：进度 / 完成态 / 多文件队列
+#    用户原话：「下载文件的时候，没有进度表，没有完成显示，我要下载多个文件，没有队列展示」
+#    锁死的契约：串行（一次只跑一个）、有中间进度百分比、完成/失败/取消三态可辨、
+#    失败带可操作指引、刷新页面不丢（任务登记在进程内存）、取消能真杀掉进程。
+# ---------------------------------------------------------------------------
+
+_FAKE_DL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "fake_dcs_download.py")
+
+
+@pytest.fixture
+def _dl_queue(monkeypatch, tmp_path):
+    """把队列的 CLI 调用换成「假下载器」：真进程、真落盘、分块写、带进度行。"""
+    dc.dl_reset()
+    monkeypatch.setattr(dc, "resolve_cli", lambda cfg=None: "fake-dcs-cli")
+    real_spawn = dc._dl_spawn
+    monkeypatch.setattr(
+        dc, "_dl_spawn",
+        lambda argv: real_spawn([sys.executable, "-X", "utf8", _FAKE_DL] + list(argv)[1:]))
+    yield tmp_path
+    dc.dl_reset()
+
+
+def _dl_wait_idle(timeout: float = 40.0):
+    """等队列跑空；返回 (最后一帧, 观察到的中间进度, 跑过的状态集, 最大并发)。"""
+    mids, states, max_running = [], set(), 0
+    snap = dc.dl_list()
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        snap = dc.dl_list()
+        counts = snap["counts"]
+        max_running = max(max_running, counts["running"])
+        for j in snap["jobs"]:
+            states.add(j["state"])
+            if j["state"] == "running" and j["pct"] is not None:
+                mids.append(j["pct"])
+        if counts["total"] and counts["active"] == 0:
+            break
+        time.sleep(0.15)
+    return snap, mids, states, max_running
+
+
+def test_dl_queue_runs_serially_and_reports_progress(_dl_queue, monkeypatch):
+    monkeypatch.setenv("FAKE_SIZE", "1048576")
+    monkeypatch.setenv("FAKE_DELAY", "0.25")
+    target = str(_dl_queue / "out")
+    start = dc.dl_start({"items": [
+        {"path": "/Files/a.bin", "name": "a.bin", "size": 1048576, "target": target},
+        {"path": "/Files/b.bin", "name": "b.bin", "size": 1048576, "target": target},
+        {"path": "/Files/c.bin", "name": "c.bin", "size": 1048576, "target": target},
+    ]})
+    assert start["status"] == "ok" and len(start["ids"]) == 3
+
+    snap, mids, states, max_running = _dl_wait_idle()
+    assert max_running == 1, "队列必须串行：任何时刻只允许一个任务在跑"
+    assert any(0 < p < 100 for p in mids), "必须报出中间进度（不是只有 0/100）"
+    assert {"queued", "running", "done"} <= states
+    jobs = snap["jobs"]
+    assert len(jobs) == 3 and all(j["state"] == "done" for j in jobs)
+    for j in jobs:
+        assert j["pct"] == 100 and j["got"] == 1048576
+        assert os.path.isfile(os.path.join(target, j["name"]))
+        assert j["message"].startswith("已下载到 ")          # 完成态有明确文案
+    assert [j["name"] for j in reversed(jobs)] == ["a.bin", "b.bin", "c.bin"]   # 按入队顺序
+
+
+def test_dl_cancel_running_job_records_partial(_dl_queue, monkeypatch):
+    monkeypatch.setenv("FAKE_SIZE", str(8 * 1024 * 1024))
+    monkeypatch.setenv("FAKE_DELAY", "0.8")
+    target = str(_dl_queue / "out2")
+    size = 8 * 1024 * 1024
+    jid = dc.dl_start({"path": "/Files/slow.bin", "name": "slow.bin",
+                       "size": size, "target": target})["id"]
+
+    got = 0
+    for _ in range(80):
+        time.sleep(0.15)
+        job = [j for j in dc.dl_list()["jobs"] if j["id"] == jid][0]
+        if job["state"] == "running" and job["got"] > 0:
+            got = job["got"]
+            break
+    assert got > 0, "取消前应该已经有一部分字节落盘"
+
+    assert dc.dl_cancel({"id": jid})["status"] == "ok"
+    job = None
+    for _ in range(80):
+        time.sleep(0.15)
+        job = [j for j in dc.dl_list()["jobs"] if j["id"] == jid][0]
+        if job["state"] == "cancelled":
+            break
+    assert job is not None and job["state"] == "cancelled"
+    assert job["got"] >= got and "取消" in job["message"]
+    assert dc.dl_cancel({"id": jid})["status"] == "ok"        # 重复取消不炸
+
+
+def test_dl_failure_translates_business_code(_dl_queue, monkeypatch):
+    monkeypatch.setenv("FAKE_SIZE", "4096")
+    monkeypatch.setenv("FAKE_DELAY", "0.05")
+    target = str(_dl_queue / "out3")
+    dc.dl_start({"path": "/Files/fail.bin", "name": "fail.bin", "size": 4096, "target": target})
+    snap, _mids, _states, _mr = _dl_wait_idle()
+    job = snap["jobs"][0]
+    assert job["state"] == "failed"
+    assert "请先选择项目" in job["message"]
+    assert "项目" in job["hint"], "业务码 83003 必须翻译成可操作指引（先选项目）"
+
+
+def test_dl_retry_then_clear(_dl_queue, monkeypatch):
+    monkeypatch.setenv("FAKE_SIZE", "4096")
+    monkeypatch.setenv("FAKE_DELAY", "0.05")
+    target = str(_dl_queue / "out4")
+    first = dc.dl_start({"path": "/Files/fail.bin", "name": "fail.bin",
+                         "size": 4096, "target": target})
+    _dl_wait_idle()
+    retried = dc.dl_retry({"id": first["id"]})
+    assert retried["status"] == "ok" and retried["id"] != first["id"], "重试应是新任务"
+    _dl_wait_idle()
+    assert len(dc.dl_list()["jobs"]) == 2
+
+    cleared = dc.dl_clear({})
+    assert cleared["removed"] == 2 and dc.dl_list()["jobs"] == []
+    assert dc.dl_retry({"id": "不存在"})["status"] == "error"
+    assert dc.dl_reveal({"id": "不存在"})["status"] == "error"
+
+
+def test_dl_start_validates_input(_dl_queue):
+    assert dc.dl_start({})["status"] == "error"               # 缺 path
+    assert "path" in dc.dl_start({})["error"]
+    blocker = _dl_queue / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    bad = dc.dl_start({"path": "/Files/x.bin", "target": str(blocker / "sub")})
+    assert bad["status"] == "error" and "建不出来" in bad["error"]
+
+
+def test_dl_start_defaults_to_download_dir(_dl_queue):
+    """不给 target 时落到配置的 download_dir（不留空、不写仓库）。"""
+    home = _dl_queue
+    _write_cfg(home, {"enabled": True, "download_dir": str(home / "dlroot")})
+    monkey_res = dc.dl_start({"path": "/Files/x.bin", "name": "x.bin", "size": 1})
+    assert monkey_res["status"] == "ok"
+    job = dc.dl_list()["jobs"][0]
+    assert job["target"] == str(home / "dlroot")
+    dc.dl_cancel({"id": job["id"]})
+    dc.dl_reset()
+
+
+def test_dl_http_routes_are_registered():
+    """队列接口必须注册进 server.py，且进了中间件路由快照（前端轮询它们）。"""
+    srv = open(os.path.join(_ROOT, "webui", "server.py"), encoding="utf-8").read()
+    snap = json.load(open(os.path.join(_ROOT, "webui", "middleware_routes.json"), encoding="utf-8"))
+    for name in ("dl/start", "dl/list", "dl/cancel", "dl/retry", "dl/clear", "dl/reveal"):
+        assert ('@app.post("/api/dcs/%s")' % name) in srv, "server.py 缺路由 " + name
+        assert ('/api/dcs/%s' % name) in snap, "中间件快照缺路由 " + name

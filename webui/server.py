@@ -19959,6 +19959,8 @@ def _dcs_view() -> dict:
         "default_project": cfg.get("default_project") or "",
         "allow_write": bool(cfg.get("allow_write")),
         "vault": str(_dcs_mod().vault_path()),
+        # 2026-10-07：下载队列要显示"到底存哪" —— 配置为空时给真实生效目录（仓库 results/dcs）
+        "download_dir_effective": _dcs_pick_initial("dir", ""),
         "config": {k: cfg.get(k) for k in _DCS_CFG_FIELDS},
     }
 
@@ -20068,6 +20070,86 @@ async def api_dcs_exec(request: Request):
         return _dcs_wrap(_dcs_mod().dcs_cloud_handler(args))
     except Exception as exc:
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+# 2026-10-07：下载要有进度 / 完成显示 / 多文件队列 —— WebUI 专用的队列接口。
+# 真正的队列 worker 在连接器里（dcs_cloud.dl_*），这里只做薄路由：
+# 任务登记在**服务进程内存**里，所以刷新页面不丢队列，重启服务才清空。
+async def _dcs_body(request: Request):
+    """解析 JSON 请求体；返回 (body, error_response)。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return None, {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return None, {"ok": False, "error": "请求体必须是 JSON 对象"}
+    return body, None
+
+
+def _dcs_dl_call(fn_name: str, body: dict) -> dict:
+    """调连接器里的队列函数（缺函数说明服务进程还是旧代码）。"""
+    fn = getattr(_dcs_mod(), fn_name, None)
+    if fn is None:
+        return {"ok": False,
+                "error": "连接器里没有 %s（服务进程还是旧代码：重启 MemOmics 后再试）" % fn_name}
+    try:
+        return {"ok": True, "result": fn(body or {})}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/dl/start")
+async def api_dcs_dl_start(request: Request):
+    """入队一个/一批下载：立即返回 job id，进度与完成态走 /api/dcs/dl/list 轮询。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_start", body)
+
+
+@app.post("/api/dcs/dl/list")
+async def api_dcs_dl_list(request: Request):
+    """队列快照：jobs[]（最新在前）+ counts（queued/running/done/failed/cancelled/active）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_list", body)
+
+
+@app.post("/api/dcs/dl/cancel")
+async def api_dcs_dl_cancel(request: Request):
+    """取消：排队中的直接标取消，正在跑的杀下载进程。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_cancel", body)
+
+
+@app.post("/api/dcs/dl/retry")
+async def api_dcs_dl_retry(request: Request):
+    """重试失败/已取消的任务（按原参数重新入队）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_retry", body)
+
+
+@app.post("/api/dcs/dl/clear")
+async def api_dcs_dl_clear(request: Request):
+    """清掉已结束的任务（默认全清）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_clear", body)
+
+
+@app.post("/api/dcs/dl/reveal")
+async def api_dcs_dl_reveal(request: Request):
+    """在资源管理器里定位下载好的文件。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_reveal", body)
 
 
 # 2026-10-07：下载/上传要选本地路径 —— 用本机原生选择框（tkinter 优先，PowerShell 兜底），

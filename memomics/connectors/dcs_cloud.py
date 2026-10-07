@@ -56,6 +56,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -663,6 +665,438 @@ def action_download(args: dict) -> dict:
     if not res.get("ok"):
         return _err(res.get("message") or "下载失败", detail=res.get("error"), hint=res.get("hint"))
     return _ok({"downloaded": path, "target": target, "type": dtype, "detail": res.get("data")})
+
+
+# =====================================================================
+# 下载队列（2026-10-07）
+# 用户要求：下载要有进度、要有「完成」显示、下多个文件要能看到队列。
+# 实现取舍：
+#   * 官方 CLI 不吐百分比 → 进度靠**盯本机落盘字节**（对照云上 size 算百分比；
+#     目录/未知大小则给"不确定"进度条 + 已落盘字节数）。
+#   * 队列 = 单线程串行 worker（云盘吞吐有限，并发只会互相拖慢）；
+#     任务登记在**进程内存**里 → 刷新页面不丢队列，重启服务才清空。
+#   * 支持取消（杀进程）、重试（重新入队）、打开所在文件夹。
+# =====================================================================
+_DL_LOCK = threading.Lock()
+_DL_JOBS: dict = {}      # job_id -> job dict
+_DL_ORDER: list = []     # 入队顺序（ID 列表）
+_DL_THREAD = None        # 串行 worker 线程
+_DL_SEQ = 0
+_DL_KEEP = 80            # 队列最多保留多少条（含已结束的）
+
+
+def _dl_now() -> float:
+    return time.time()
+
+
+def _dl_spawn(argv: list):
+    """拉起 dcs 下载进程（测试可替换此函数）。"""
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.Popen(
+        argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace",
+        env=_cli_env(), creationflags=creationflags,
+    )
+
+
+def _dl_locate(target: str, name: str, since: float = 0.0) -> str:
+    """找出真正落盘的文件/目录（CLI 可能用临时名或改名，例如 name.part）。"""
+    if not target or not name:
+        return ""
+    exact = os.path.join(target, name)
+    if os.path.exists(exact):
+        return exact
+    best, best_t = "", 0.0
+    try:
+        for fn in os.listdir(target):
+            if not (fn.startswith(name) or fn.startswith("." + name)):
+                continue
+            p = os.path.join(target, fn)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if since and st.st_mtime < since - 5:
+                continue
+            if st.st_mtime >= best_t:
+                best, best_t = p, st.st_mtime
+    except OSError:
+        pass
+    return best
+
+
+def _dl_measure(target: str, name: str, since: float = 0.0) -> int:
+    """估算已落盘字节数（进度条的分子）。"""
+    path = _dl_locate(target, name, since)
+    if not path:
+        return 0
+    try:
+        if os.path.isfile(path):
+            return os.path.getsize(path)
+        total = 0
+        for root, _dirs, files in os.walk(path):
+            for fn in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, fn))
+                except OSError:
+                    pass
+            if total > 50 * 1024 ** 3:      # 别为进度条把盘拖死
+                break
+        return total
+    except OSError:
+        return 0
+
+
+def _dl_parse_output(text: str) -> dict | None:
+    """CLI 的 JSON 信封（可能混着进度行）：整段先试，再倒数逐行试。"""
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+    for line in reversed([l.strip() for l in text.splitlines() if l.strip()][-40:]):
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            continue
+    return None
+
+
+def _dl_job_public(job: dict) -> dict:
+    """给前端的只读快照。"""
+    out = {
+        "id": job.get("id"), "path": job.get("path"), "name": job.get("name"),
+        "target": job.get("target"), "state": job.get("state"),
+        "size": int(job.get("size") or 0), "got": int(job.get("got") or 0),
+        "local": job.get("local") or "", "message": job.get("message") or "",
+        "hint": job.get("hint") or "", "type": job.get("type") or "web",
+        "created": job.get("created"), "started": job.get("started"), "ended": job.get("ended"),
+        "elapsed": job.get("elapsed") or 0,
+    }
+    size, got = out["size"], out["got"]
+    out["pct"] = int(min(100, round(got * 100.0 / size))) if size > 0 else None
+    return out
+
+
+def _dl_run_one(job: dict) -> None:
+    """跑完一个下载任务（阻塞在这个 worker 线程里）。"""
+    cfg = load_config()
+    cli = resolve_cli(cfg)
+    if not cli:
+        job["state"] = "failed"
+        job["message"] = "没找到 dcs 命令行工具"
+        job["hint"] = "运行 scripts/install_dcs_cli.ps1 安装官方 CLI，或在 config.yaml 的 dcs_cloud.cli_path 里写全路径"
+        job["ended"] = _dl_now()
+        return
+    argv = [cli, "data", "download", "--type", str(job.get("type") or "web"),
+            "--path", str(job.get("path")), "--target", str(job.get("target")),
+            "--output", "json", "--no-history"]
+    job["cmd"] = argv[1:]
+    t0 = _dl_now()
+    try:
+        proc = _dl_spawn(argv)
+    except Exception as exc:
+        job["state"] = "failed"
+        job["message"] = "拉起 dcs CLI 失败: %s" % exc
+        job["hint"] = "检查 cli_path 是否指向可执行文件、是否有杀软拦截"
+        job["ended"] = _dl_now()
+        return
+
+    chunks: list = []
+
+    def _reader():
+        try:
+            fh = proc.stdout
+            if fh is None:
+                return
+            for line in fh:
+                chunks.append(line)
+        except Exception:
+            pass
+
+    th = threading.Thread(target=_reader, name="dcs-dl-read", daemon=True)
+    th.start()
+    killed = False
+    while proc.poll() is None:
+        if job.get("cancel") and not killed:
+            killed = True
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        job["got"] = _dl_measure(str(job.get("target")), str(job.get("name")), t0)
+        job["elapsed"] = round(_dl_now() - t0, 1)
+        time.sleep(0.5)
+    try:
+        th.join(timeout=5)
+    except Exception:
+        pass
+
+    text = "".join(chunks)
+    parsed = _dl_parse_output(text)
+    exit_code = proc.returncode
+    error = (parsed or {}).get("error") or None
+    ok = (exit_code == 0) and not error and not killed
+    job["exit_code"] = exit_code
+    job["request_id"] = (parsed or {}).get("request_id")
+    job["stdout_tail"] = text[-2000:]
+    job["got"] = _dl_measure(str(job.get("target")), str(job.get("name")), t0)
+    job["local"] = _dl_locate(str(job.get("target")), str(job.get("name")), t0)
+    if killed or job.get("cancel"):
+        job["state"] = "cancelled"
+        job["message"] = "已取消（可点「重试」重新入队）"
+    elif ok:
+        job["state"] = "done"
+        job["message"] = "已下载到 %s" % (job.get("local") or job.get("target"))
+    else:
+        job["state"] = "failed"
+        msg = (parsed or {}).get("message") or ""
+        if not msg and isinstance(error, dict):
+            msg = str((error.get("detail") or {}).get("message") or error.get("hint") or "")
+        job["message"] = msg or (text[-400:].strip() or ("下载失败（退出码 %s）" % exit_code))
+        hint = (error or {}).get("hint") if isinstance(error, dict) else ""
+        if not hint:
+            try:
+                friendly = _attach_friendly_hint({
+                    "ok": False, "error": error, "message": msg, "hint": "",
+                    "exit_code": exit_code,
+                })
+                hint = str((friendly or {}).get("hint") or "")
+            except Exception:
+                hint = ""
+        job["hint"] = hint
+    job["ended"] = _dl_now()
+    job["elapsed"] = round(float(job["ended"]) - t0, 1)
+
+
+def _dl_worker() -> None:
+    """串行消费队列；没活了就退出（下次入队再拉起）。"""
+    while True:
+        nxt = None
+        with _DL_LOCK:
+            for jid in list(_DL_ORDER):
+                j = _DL_JOBS.get(jid)
+                if j and j.get("state") == "queued":
+                    j["state"] = "running"
+                    j["started"] = _dl_now()
+                    nxt = j
+                    break
+            if nxt is None:
+                still = any((x or {}).get("state") == "queued" for x in _DL_JOBS.values())
+                if not still:
+                    globals()["_DL_THREAD"] = None
+                    return
+        if nxt is None:
+            time.sleep(0.3)
+            continue
+        try:
+            _dl_run_one(nxt)
+        except Exception as exc:
+            nxt["state"] = "failed"
+            nxt["message"] = "%s: %s" % (type(exc).__name__, exc)
+        if not nxt.get("ended"):
+            nxt["ended"] = _dl_now()
+
+
+def _dl_trim() -> None:
+    """队列太长时丢最老的**已结束**任务（调用方须持锁）。"""
+    while len(_DL_ORDER) > _DL_KEEP:
+        for i, jid in enumerate(_DL_ORDER):
+            j = _DL_JOBS.get(jid) or {}
+            if j.get("state") in ("done", "failed", "cancelled"):
+                _DL_ORDER.pop(i)
+                _DL_JOBS.pop(jid, None)
+                break
+        else:
+            break       # 全是活动任务，先留着
+
+
+def _dl_default_target(cfg: dict) -> str:
+    target = str(cfg.get("download_dir") or "").strip()
+    if not target:
+        target = os.path.abspath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "..", "results", "dcs"))
+    return os.path.abspath(os.path.expanduser(target))
+
+
+def _dl_enqueue_one(raw: dict, cfg: dict) -> tuple:
+    """把一条下载需求变成 job；返回 (job_id, error_message)。"""
+    global _DL_SEQ, _DL_THREAD
+    path = str((raw or {}).get("path") or "").strip()
+    if not path:
+        return "", "需要参数 path（云上路径）"
+    target = str((raw or {}).get("target") or "").strip()
+    target = os.path.abspath(os.path.expanduser(target)) if target else _dl_default_target(cfg)
+    try:
+        os.makedirs(target, exist_ok=True)
+    except OSError as exc:
+        return "", "本机目标目录建不出来（%s）：%s" % (target, exc)
+    name = str((raw or {}).get("name") or "").strip() or path.rstrip("/").rsplit("/", 1)[-1]
+    try:
+        size = int((raw or {}).get("size") or 0)
+    except Exception:
+        size = 0
+    with _DL_LOCK:
+        _DL_SEQ += 1
+        jid = "dl-%s-%03d" % (datetime.now().strftime("%H%M%S"), _DL_SEQ)
+        job = {
+            "id": jid, "path": path, "name": name, "target": target,
+            "size": max(0, size), "got": 0, "state": "queued",
+            "type": str((raw or {}).get("type") or "web").strip() or "web",
+            "created": _dl_now(), "started": None, "ended": None, "elapsed": 0,
+            "local": "", "message": "", "hint": "", "cancel": False,
+        }
+        _DL_JOBS[jid] = job
+        _DL_ORDER.append(jid)
+        _dl_trim()
+        if _DL_THREAD is None or not _DL_THREAD.is_alive():
+            _DL_THREAD = threading.Thread(target=_dl_worker, name="dcs-dl-queue", daemon=True)
+            _DL_THREAD.start()
+    return jid, ""
+
+
+def dl_start(args: dict | None = None, **kwargs) -> dict:
+    """入队下载（立即返回，不等下载完）。支持单条或 items 批量。"""
+    args = dict(args or {})
+    args.update(kwargs)
+    cfg = load_config()
+    items = args.get("items")
+    if isinstance(items, list) and items:
+        if len(items) > 200:
+            return _err("一次最多入队 200 个文件（收到 %d 个）" % len(items))
+        ids, errs = [], []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            jid, err = _dl_enqueue_one(raw, cfg)
+            if jid:
+                ids.append(jid)
+            else:
+                errs.append("%s: %s" % (str((raw or {}).get("path") or "?")[:80], err))
+        if not ids:
+            return _err(errs[0] if errs else "没有可入队的条目")
+        with _DL_LOCK:
+            snap = {"ids": ids, "queued": len(ids), "errors": errs[:8]}
+        return _ok(snap)
+    jid, err = _dl_enqueue_one(args, cfg)
+    if not jid:
+        return _err(err, hint="检查云上路径是否正确、默认下载目录是否可写")
+    with _DL_LOCK:
+        job = _dl_job_public(_DL_JOBS[jid])
+    return _ok({"id": jid, "job": job, "queued": 1})
+
+
+def dl_list(args: dict | None = None, **kwargs) -> dict:
+    """队列全量快照（最新在前）+ 计数；前端轮询这个接口。"""
+    with _DL_LOCK:
+        jobs = [_dl_job_public(_DL_JOBS[j]) for j in _DL_ORDER if j in _DL_JOBS]
+    jobs.reverse()
+    counts = {"queued": 0, "running": 0, "done": 0, "failed": 0, "cancelled": 0}
+    for j in jobs:
+        counts[j["state"]] = counts.get(j["state"], 0) + 1
+    counts["active"] = counts["queued"] + counts["running"]
+    counts["total"] = len(jobs)
+    return _ok({"jobs": jobs, "counts": counts})
+
+
+def dl_cancel(args: dict | None = None, **kwargs) -> dict:
+    """取消一个任务：排队中的直接标取消；正在跑的杀进程（worker 会收尾）。"""
+    args = dict(args or {})
+    args.update(kwargs)
+    jid = str(args.get("id") or "").strip()
+    with _DL_LOCK:
+        job = _DL_JOBS.get(jid)
+        if not job:
+            return _err("没有这个下载任务：%s" % (jid or "（空 id）"))
+        if job.get("state") in ("done", "failed", "cancelled"):
+            return _ok({"id": jid, "state": job.get("state"), "note": "任务已结束，无需取消"})
+        job["cancel"] = True
+        if job.get("state") == "queued":
+            job["state"] = "cancelled"
+            job["message"] = "已取消（还没开始）"
+            job["ended"] = _dl_now()
+        snap = _dl_job_public(job)
+    return _ok({"id": jid, "state": snap["state"], "job": snap})
+
+
+def dl_retry(args: dict | None = None, **kwargs) -> dict:
+    """重试：按原参数重新入队一条（失败/取消的都能重试）。"""
+    args = dict(args or {})
+    args.update(kwargs)
+    jid = str(args.get("id") or "").strip()
+    with _DL_LOCK:
+        old = _DL_JOBS.get(jid)
+    if not old:
+        return _err("没有这个下载任务：%s" % (jid or "（空 id）"))
+    return dl_start({"path": old.get("path"), "name": old.get("name"),
+                     "target": old.get("target"), "size": old.get("size"),
+                     "type": old.get("type")})
+
+
+def dl_clear(args: dict | None = None, **kwargs) -> dict:
+    """清掉已结束的任务（默认全清，也可给 ids 列表）。"""
+    args = dict(args or {})
+    args.update(kwargs)
+    ids = args.get("ids")
+    with _DL_LOCK:
+        drop = []
+        for jid in list(_DL_ORDER):
+            job = _DL_JOBS.get(jid) or {}
+            if job.get("state") not in ("done", "failed", "cancelled"):
+                continue
+            if isinstance(ids, list) and ids and jid not in ids:
+                continue
+            drop.append(jid)
+        for jid in drop:
+            _DL_ORDER.remove(jid)
+            _DL_JOBS.pop(jid, None)
+        left = len(_DL_ORDER)
+    return _ok({"removed": len(drop), "left": left})
+
+
+def dl_reveal(args: dict | None = None, **kwargs) -> dict:
+    """在资源管理器里定位下载好的文件（失败则打开目标目录）。"""
+    args = dict(args or {})
+    args.update(kwargs)
+    jid = str(args.get("id") or "").strip()
+    job = _DL_JOBS.get(jid)
+    if not job:
+        return _err("没有这个下载任务：%s" % (jid or "（空 id）"))
+    local = str(job.get("local") or "").strip()
+    if not local or not os.path.exists(local):
+        cand = _dl_locate(str(job.get("target") or ""), str(job.get("name") or ""))
+        local = cand or str(job.get("target") or "")
+    if not local or not os.path.exists(local):
+        return _err("还没落盘，打不开（目标目录：%s）" % (job.get("target") or "-"))
+    try:
+        if os.name == "nt":
+            if os.path.isdir(local):
+                os.startfile(local)                       # noqa: S606
+            else:
+                subprocess.Popen(["explorer", "/select,", local])
+        else:
+            subprocess.Popen(["xdg-open", local if os.path.isdir(local) else os.path.dirname(local)])
+        return _ok({"revealed": local})
+    except Exception as exc:
+        return _err("打开文件夹失败: %s" % exc, local=local)
+
+
+def dl_reset() -> None:
+    """测试用：清空队列状态。"""
+    with _DL_LOCK:
+        _DL_JOBS.clear()
+        _DL_ORDER.clear()
+        globals()["_DL_THREAD"] = None
 
 
 def action_upload(args: dict) -> dict:
