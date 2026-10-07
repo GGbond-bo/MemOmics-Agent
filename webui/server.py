@@ -19896,6 +19896,150 @@ async def api_cluster_exec(request: Request):
         return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
 
 
+# === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
+# 与 remote_cluster 同款薄路由：端点只做参数校验与转发；逻辑全在
+# memomics/connectors/dcs_cloud.py（agent 工具 dcs_cloud 用的是同一个 handler）。
+
+_DCS_ACTIONS = ("status", "bind", "unbind", "projects", "use_project", "current",
+                "ls", "find", "info", "download", "upload",
+                "container_open", "container_exec", "container_close",
+                "tasks", "task_logs", "raw")
+_DCS_CFG_FIELDS = ("enabled", "cli_path", "base_url", "region", "default_project",
+                   "timeout", "max_output_chars", "allow_write")
+
+
+def _dcs_mod():
+    from memomics.connectors import dcs_cloud as _m
+    return _m
+
+
+def _dcs_view() -> dict:
+    cfg = _dcs_mod().load_config(force=True)
+    cred = _dcs_mod().read_credential()
+    cli = _dcs_mod().resolve_cli(cfg)
+    return {
+        "enabled": bool(cfg.get("enabled")),
+        "bound": bool(cred.get("pat")),
+        "pat_masked": cred.get("masked") or "",
+        "user": cred.get("user") or "",
+        "cli_path": cli or "",
+        "cli_found": bool(cli),
+        "base_url": cfg.get("base_url"),
+        "region": cfg.get("region") or "",
+        "default_project": cfg.get("default_project") or "",
+        "allow_write": bool(cfg.get("allow_write")),
+        "vault": str(_dcs_mod().vault_path()),
+        "config": {k: cfg.get(k) for k in _DCS_CFG_FIELDS},
+    }
+
+
+def _dcs_write_config(values: dict) -> dict:
+    """写 config.yaml 的 dcs_cloud: 段（保留其他键），与 _set_update_config 同款。"""
+    import yaml as _yaml
+    _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    try:
+        with open(_p, encoding="utf-8") as _f:
+            _d = _yaml.safe_load(_f) or {}
+    except Exception:
+        _d = {}
+    sec = _d.get("dcs_cloud")
+    if not isinstance(sec, dict):
+        sec = {}
+        _d["dcs_cloud"] = sec
+    for k, v in values.items():
+        sec[k] = v
+    with open(_p, "w", encoding="utf-8") as _f:
+        _yaml.safe_dump(_d, _f, allow_unicode=True, sort_keys=False)
+    _dcs_mod().load_config(force=True)
+    try:
+        from tools.registry import invalidate_check_fn_cache
+        invalidate_check_fn_cache()   # 开关一变，模型侧立刻看到工具出现/消失
+    except Exception:
+        pass
+    return _dcs_view()
+
+
+def _dcs_wrap(raw) -> dict:
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "连接器未返回 JSON", "raw": str(raw)}}
+
+
+@app.get("/api/dcs/status")
+async def api_dcs_status():
+    try:
+        return {"ok": True, "config": _dcs_view(), "actions": list(_DCS_ACTIONS)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/bind")
+async def api_dcs_bind(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    pat = str((body or {}).get("pat") or "").strip()
+    if not pat:
+        return {"ok": False, "error": "需要 pat 字段（DCS 个人中心 → 访问令牌 → 创建并复制）"}
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "bind", "pat": pat}))
+
+
+@app.post("/api/dcs/unbind")
+async def api_dcs_unbind():
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "unbind"}))
+
+
+@app.post("/api/dcs/config")
+async def api_dcs_config(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    values: dict = {}
+    for k, v in body.items():
+        if k not in _DCS_CFG_FIELDS:
+            continue
+        if k in ("enabled", "allow_write"):
+            values[k] = str(v).strip().lower() in ("1", "true", "yes", "on") if not isinstance(v, bool) else v
+        elif k in ("timeout", "max_output_chars"):
+            try:
+                values[k] = int(v)
+            except Exception:
+                return {"ok": False, "error": "%s 必须是整数" % k}
+        else:
+            values[k] = str(v or "").strip()
+    if not values:
+        return {"ok": False, "error": "没有可写入的字段（可选：%s）" % ", ".join(_DCS_CFG_FIELDS)}
+    try:
+        return {"ok": True, "config": _dcs_write_config(values)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/exec")
+async def api_dcs_exec(request: Request):
+    """把 WebUI 的输入原样转给连接器（与 agent 同一个 handler）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    action = str(body.get("action") or "").strip().lower()
+    if action not in _DCS_ACTIONS:
+        return {"ok": False, "error": "未知 action: %r（可选：%s）" % (action, ", ".join(_DCS_ACTIONS))}
+    args = {k: v for k, v in body.items() if v is not None and v != ""}
+    args["action"] = action
+    try:
+        return _dcs_wrap(_dcs_mod().dcs_cloud_handler(args))
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
 if __name__ == "__main__":
     import uvicorn
     import time as _time
