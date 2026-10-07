@@ -594,6 +594,8 @@ def action_ls(args: dict) -> dict:
         argv.append(path)
     if _truthy(args.get("long")):
         argv.append("-l")
+    if args.get("page"):
+        argv += ["--page", str(int(args["page"]))]
     res = _run_cli(argv, cfg=cfg)
     if not res.get("ok"):
         return _err(res.get("message") or "列目录失败", detail=res.get("error"), hint=res.get("hint"))
@@ -614,6 +616,8 @@ def action_find(args: dict) -> dict:
         return _err("至少给一个查询条件（name / type / path / size / sn / sample …）")
     if args.get("page_size"):
         argv += ["--page-size", str(args["page_size"])]
+    if args.get("page"):
+        argv += ["--page", str(int(args["page"]))]
     res = _run_cli(argv, cfg=cfg)
     if not res.get("ok"):
         return _err(res.get("message") or "搜索失败", detail=res.get("error"), hint=res.get("hint"))
