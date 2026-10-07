@@ -20218,7 +20218,9 @@ async def api_dcs_exec(request: Request):
     args = {k: v for k, v in body.items() if v is not None and v != ""}
     args["action"] = action
     try:
-        return _dcs_wrap(_dcs_mod().dcs_cloud_handler(args))
+        # 连接器里的每条 dcs CLI 都是同步阻塞调用（真机实测一次云往返 1.6–2.8s）：
+        # 必须丢到线程池跑，否则会冻住整个事件循环 —— 队列轮询 / 其它面板接口全跟着卡。
+        return _dcs_wrap(await asyncio.to_thread(_dcs_mod().dcs_cloud_handler, args))
     except Exception as exc:
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 

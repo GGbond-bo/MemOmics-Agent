@@ -1457,6 +1457,150 @@ def action_task_cancel(args: dict) -> dict:
                 "detail": res.get("data")})
 
 
+# ---------------------------------------------------------------------------
+# ⚡ 读缓存 + 先给旧值（stale-while-revalidate）
+#   背景（2026-10-08 实测）：CLI 进程启动只 0.08s，真正慢的是云 API 往返 1.6–2.8s；
+#   面板每开一次至少一次 `project ls`。策略：只读结果缓存；过期先回旧值、后台刷新；
+#   写动作清空整表（宁旧勿错）；fresh=true 强制真跑；失败结果不入缓存。
+# ---------------------------------------------------------------------------
+_CACHE_TTL = {
+    "projects": 45, "current": 30, "context": 30, "ls": 10, "find": 10, "info": 60,
+    "tasks": 20, "task_logs": 15, "flows": 90, "flow_form": 180, "images": 600,
+    "flow_tasks": 20, "flow_task_info": 15,
+}
+# 这些动作会改动云端或本地状态 → 清空缓存
+_CACHE_CLEAR_ON = {
+    "bind", "unbind", "use_project", "download", "upload", "container_open",
+    "container_exec", "container_close", "flow_run", "analysis_run", "task_cancel", "raw",
+}
+_CACHE: dict = {}
+_CACHE_LOCK = threading.RLock()
+_CACHE_EPOCH = [0]
+_CACHE_MAX = 128          # 条目上限，超了丢最旧的（防呆）
+
+
+def _cache_key_for(action: str, args: dict):
+    """缓存键：动作 + 与结果有关的参数（fresh / no_cache 不参与）。"""
+    payload = {k: v for k, v in (args or {}).items() if k not in ("action", "fresh", "no_cache")}
+    try:
+        sig = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        sig = repr(sorted(payload.items()))
+    return action + "|" + sig
+
+
+def _cache_get(key):
+    with _CACHE_LOCK:
+        return _CACHE.get(key)
+
+
+def _cache_put(key, value, epoch=None):
+    """写缓存；若期间发生过清空（epoch 变了），丢掉这次的在途结果。"""
+    with _CACHE_LOCK:
+        if epoch is not None and epoch != _CACHE_EPOCH[0]:
+            return False
+        if len(_CACHE) >= _CACHE_MAX and key not in _CACHE:
+            oldest = min(_CACHE.items(), key=lambda kv: kv[1].get("t", 0))[0]
+            _CACHE.pop(oldest, None)
+        _CACHE[key] = {"t": time.time(), "value": value, "refreshing": False, "hits": 0}
+        return True
+
+
+def _cache_touch(key):
+    with _CACHE_LOCK:
+        ent = _CACHE.get(key)
+        if ent:
+            ent["hits"] = ent.get("hits", 0) + 1
+        return ent
+
+
+def _cache_clear() -> int:
+    with _CACHE_LOCK:
+        n = len(_CACHE)
+        _CACHE.clear()
+        _CACHE_EPOCH[0] += 1
+        return n
+
+
+def _cache_mark(key, refreshing: bool):
+    with _CACHE_LOCK:
+        ent = _CACHE.get(key)
+        if ent:
+            ent["refreshing"] = refreshing
+
+
+def _cache_refresh(key, action, args, epoch):
+    """后台线程：真跑一次并回填（epoch 变了就丢弃）。"""
+    try:
+        clean = {k: v for k, v in (args or {}).items() if k not in ("fresh", "no_cache")}
+        if action not in _ACTIONS:
+            return
+        res = _ACTIONS[action](clean)
+        if isinstance(res, dict) and res.get("status") == "ok":
+            _cache_put(key, res, epoch)
+        else:
+            _cache_mark(key, False)
+    except Exception:
+        logger.debug("缓存后台刷新失败 action=%s", action, exc_info=True)
+        _cache_mark(key, False)
+
+
+def _cache_wrap(action: str, args: dict, cfg: dict):
+    """缓存命中判断。返回 (直接可用的响应, 或 None 表示要真跑)。"""
+    ttl = _CACHE_TTL.get(action)
+    if not ttl or _truthy((args or {}).get("fresh")) or _truthy((args or {}).get("no_cache")):
+        return None
+    key = _cache_key_for(action, args)
+    ent = _cache_get(key)
+    if not ent:
+        return None
+    ent = _cache_touch(key) or ent
+    age = max(0.0, time.time() - float(ent.get("t") or 0))
+    out = dict(ent.get("value") or {})
+    out["cached"] = True
+    out["age"] = round(age, 1)
+    if age <= ttl:
+        out["refreshing"] = False
+        return {"key": key, "value": out, "hit": True, "stale": False}
+    # 过期：先回旧值，后台刷新（同一键只起一个刷新线程）
+    if not ent.get("refreshing"):
+        _cache_mark(key, True)
+        threading.Thread(target=_cache_refresh, args=(key, action, args, _CACHE_EPOCH[0]),
+                         name="dcs-cache-%s" % action, daemon=True).start()
+    out["refreshing"] = True
+    return {"key": key, "value": out, "hit": True, "stale": True}
+
+
+# 单飞：同一个键的并发请求只跑一次 CLI，其余等结果（悬停预热 + 紧接着点开就是这种情形）
+_INFLIGHT: dict = {}
+
+
+def _flight_begin(key):
+    """返回 (flight, is_leader)。leader 负责真跑并 end；跟随者等 event。"""
+    with _CACHE_LOCK:
+        fl = _INFLIGHT.get(key)
+        if fl:
+            return fl, False
+        fl = {"ev": threading.Event(), "t0": time.time()}
+        _INFLIGHT[key] = fl
+        return fl, True
+
+
+def _flight_end(key):
+    with _CACHE_LOCK:
+        fl = _INFLIGHT.pop(key, None)
+    if fl:
+        fl["ev"].set()
+
+
+def _flight_wait(flight, timeout: float) -> bool:
+    """等 leader 跑完；真等到返回 True（结果在缓存里）。"""
+    try:
+        return bool(flight["ev"].wait(timeout=max(1.0, timeout)))
+    except Exception:
+        return False
+
+
 def _split_raw_cmd(text) -> list:
     """把用户输入切成 argv。三种口径，按优先级：
 
@@ -1630,14 +1774,40 @@ def dcs_cloud_handler(args: dict | None = None, **kwargs):
             return json.dumps(_err("未绑定 DCS 账号",
                                    hint="让用户在「☁️ DCS 云」面板粘贴 PAT（个人中心 → 访问令牌 → 创建）后重试"),
                               ensure_ascii=False, indent=2)
+    cached_hit = _cache_wrap(action, args, cfg)
+    if cached_hit:
+        return json.dumps(_clip(cfg, cached_hit["value"]), ensure_ascii=False, indent=2)
+    flight_key = None
+    if action in _CACHE_TTL and not _truthy(args.get("fresh")):
+        flight_key = _cache_key_for(action, args)
+        flight, leader = _flight_begin(flight_key)
+        if not leader:
+            waited = _flight_wait(flight, min(90, int(cfg.get("timeout") or 120)))
+            ent = _cache_get(flight_key)
+            if waited and ent and ent.get("value"):
+                shared = dict(ent["value"])
+                shared["cached"] = True
+                shared["age"] = 0.0
+                shared["shared"] = True
+                return json.dumps(_clip(cfg, shared), ensure_ascii=False, indent=2)
+            flight_key = None      # 等超时/leader 失败：自己跑，别去 end 别人的飞行
     try:
         result = _ACTIONS[action](args)
     except Exception as exc:      # 任何未预期异常都变成结构化错误，别让工具链崩
         logger.exception("dcs_cloud action=%s 失败", action)
         result = _err("%s 执行失败: %s" % (action, exc),
                       hint="先用 action='status' 看绑定与 CLI 状态")
+        if flight_key:
+            _flight_end(flight_key)
+            flight_key = None
     if not isinstance(result, dict):
         result = _ok({"result": result})
+    if action in _CACHE_CLEAR_ON:
+        _cache_clear()
+    elif action in _CACHE_TTL and result.get("status") == "ok":
+        _cache_put(_cache_key_for(action, args), result)
+    if flight_key:
+        _flight_end(flight_key)
     try:
         return json.dumps(_clip(cfg, result), ensure_ascii=False, indent=2)
     except Exception as exc:

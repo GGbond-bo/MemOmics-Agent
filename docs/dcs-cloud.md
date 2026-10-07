@@ -62,13 +62,13 @@ dcs_cloud:
 
 | 文件 | 角色 |
 |------|------|
-| `memomics/connectors/dcs_cloud.py` | 连接器核心：配置加载、PAT 凭据库、CLI 执行器（强制 `--output json --no-history`）、错误翻译、26 个动作（含 8 个投递动作） |
+| `memomics/connectors/dcs_cloud.py` | 连接器核心：配置加载、PAT 凭据库、CLI 执行器（强制 `--output json --no-history`）、错误翻译、26 个动作（含 8 个投递动作）、⚡ 读缓存 + 单飞 |
 | `memomics/bio_tools/cloud_connector.py` | agent 工具壳 `dcs_cloud`（schema + `check_fn=enabled`），转调同一个 handler |
 | `memomics/bio_tools/__init__.py` | 导入新模块（不导入 = 模型看不到，见 `test_bio_tools_registry_complete.py` 的事故说明） |
-| `webui/server.py` | 薄路由：`/api/dcs/status|bind|unbind|config|exec|pick` + 下载队列 `/api/dcs/dl/{start,list,cancel,retry,clear,reveal}`（worker 在连接器里） |
+| `webui/server.py` | 薄路由：`/api/dcs/status|bind|unbind|config|exec|pick` + 下载队列 `/api/dcs/dl/{start,list,cancel,retry,clear,reveal}`（worker 在连接器里）；`/api/dcs/exec` 的同步 CLI 调用走 `asyncio.to_thread`，不冻事件循环 |
 | `webui/index.html` | 左侧「☁️ DCS 云」面板（**互斥视图**：📁 项目 / 🗂 数据 / 🚀 投递 / ⬇ 队列 / 🧾 日志 / ⚙️ 设置）；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
 | `scripts/install_dcs_cli.ps1` | 官方 CLI 安装器：官方 CDN + SHA256 校验，校验不过就删文件、绝不执行 |
-| `webui/tests/test_dcs_cloud_connector.py` | 40 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网） |
+| `webui/tests/test_dcs_cloud_connector.py` | 45 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网；含读缓存/单飞/预检/投递动作） |
 | `webui/middleware_routes.json` | 路由清单已用 `python webui/entry_middleware.py --snapshot` 同步 |
 
 ## 验证记录（2026-10-07）
@@ -185,6 +185,44 @@ dcs_cloud:
 **前端验证**：无头 Edge 跑 `_dcs_probe/build_preview11.py` 生成的预览页（真面板 markup + 真 DCS JS + 假 API），断言全绿：
 点「🚀 投递」→ `view=submit`（项目/数据/队列/日志/设置**同时 none**、标签高亮）；选流程 → 3 行参数、默认值 `3000` 预填、输出目录自动填；预检回显命令 + 缺必填提示；**缺必填点提交 → 前端拦下且一条请求都不发**；补齐后提交 → POST 体里 `flow` / `SampleData`… / `output_path` 正确、回显任务号；离线表单预检命令含带引号参数、提交 `command` 是数组；任务表渲染 2 行。
 
+## ⚡ 为什么点开面板要等很久？（2026-10-08 排查 + 提速）
+
+用户反馈「点击 DCS 云之后加载有点慢，每次都要加载很长」。实测把账算清楚了：
+
+| 环节 | 实测 | 说明 |
+|------|------|------|
+| CLI 进程启动（`dcs --version`） | **0.08s** | 不是瓶颈 |
+| 一次云 API 往返（`project ls` / `project current`） | **1.6–2.8s** | **这才是唯一大头**；`image ls` 冷启动甚至 7.1s |
+| 面板点开的动作数 | 1 次 `project ls` + 1 次 `/api/dcs/status`(0.04s) | 所以每次点开 = 一次 2 秒级等待 |
+
+四个改动（都在 `dcs_cloud.py` / `server.py` / `index.html`）：
+
+1. **读缓存 + 先给旧值（stale-while-revalidate）**
+   只读动作按 `(action, 参数)` 缓存：`projects` 45s / `current` 30s / `tasks` 20s / `ls`·`find` 10s /
+   `flows` 90s / `flow_form` 180s / `images` 600s。命中即回，响应里带 `cached / age / refreshing`；
+   **过期不干等** —— 先把旧数据给你，同时在后台线程刷新。写动作（`upload` / `flow_run` / `use_project` /
+   `raw` …）**清空整表**并推进 epoch（在途刷新不会把旧值写回）；`fresh: true` 强制真跑；失败结果永不入缓存。
+2. **单飞（single-flight）**：同一个键的并发请求只跑一次 CLI，其余等结果共享（`shared: true`）——
+   悬停预热与紧接着点开就是这种情形，否则会各起一次 CLI。
+3. **事件循环解冻**：`/api/dcs/exec` 是 `async def`，里面却是同步阻塞的 CLI 调用 →
+   一次 2 秒的 `project ls` 会把**整个服务**冻住（队列轮询、其它面板接口全跟着卡）。
+   已改成 `await asyncio.to_thread(...)`。
+4. **前端预热 + 反馈**：悬停「☁️ DCS 云」菜单或页面空闲 5s 后，先把默认视图（项目列表）拉进缓存；
+   缓存数据会标注「⏱ 缓存数据（12s 前拉过）」并给「⟳ 重拉」（带 `fresh:true`）；后台刷新落地后自动补拉一次
+   （上限 3 次，避免变成慢轮询）；请求日志按条显示耗时（`▶ projects … · 1.9s`）。
+
+**实测（真账号，重启服务后）**：
+
+| 动作 | 冷（真打云） | 热（缓存） |
+|------|-------------|-----------|
+| `projects` | 2.10s（改前） | **0.003–0.02s** |
+| `tasks` | 1.18s | 0.002s |
+| `flows` | 2.00s | 0.003s |
+| `images` | 7.12s | 0.218s |
+
+并发 3 发相同请求总耗时 1.77s（≈ 一次云往返，未单飞时要 3 次）；慢调用进行中
+`/api/dcs/status`、`/api/dcs/dl/list` 仍是 20ms 级（解冻前会被冻住）。
+
 ## 🗣️ 「在云平台跑分析」怎么走：开工前确认协议
 
 用户说「帮我在云平台跑分析 / 投递任务」时，**不问清不动手**（对齐仓库铁律 27 / 28 / 35）：
@@ -220,5 +258,6 @@ tkinter 优先，缺失时自动退到 PowerShell `System.Windows.Forms`），�
 - ~~`analysis run` / WDL 投递走 `raw` 逃生舱~~ → **2026-10-07 已升级成专用动作**（`analysis_run` / `flow_run` + `flows` / `flow_form` / `images` /
   `flow_tasks` / `flow_task_info` / `task_cancel`），面板有「🚀 投递」表单 + `dry_run` 预检；`raw` 保留给长尾子命令。
 - 还没做的：投递后**自动轮询**（现在是手动「⟳ 刷新」+ 列表）+ 从「📋 任务」直接跳转 WDL 任务详情；`workflow plan`（多步编排）没做表单。
+- 缓存口径：TTL 是「能忍多旧」的取舍，写操作一律清空；如果以后发现某处数据不新鲜，优先给那个动作**调短 TTL 或加 `fresh: true`**，别整体关掉缓存。
 - 可加：`terminal ls_resource`（容器规格列表）、PAT 到期提醒（`status` 已回 `expires_at`）、把云路径纳入
   `remote_cluster locate` 式的"数据在哪"判定（本地 / 集群 / DCS 云三选一）。

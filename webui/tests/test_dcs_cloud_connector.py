@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -34,6 +35,7 @@ def _isolate(monkeypatch, tmp_path):
     monkeypatch.delenv("MEMOMICS_DCS_ENABLED", raising=False)
     dc._CFG_CACHE["mtime"] = None
     dc._CFG_CACHE["cfg"] = None
+    dc._cache_clear()          # 读缓存是模块级的：每个用例从空缓存开始，别互相喂旧数据
     yield tmp_path
     dc._CFG_CACHE["mtime"] = None
     dc._CFG_CACHE["cfg"] = None
@@ -45,6 +47,65 @@ def _write_cfg(home, section: dict):
         yaml.safe_dump({"dcs_cloud": section}, allow_unicode=True), encoding="utf-8")
     dc._CFG_CACHE["mtime"] = None
     dc._CFG_CACHE["cfg"] = None
+
+
+def _fake_cli_counting(home, payload: dict, exit_code: int = 0):
+    """同 _fake_cli，但每次调用都往 calls.txt 追加一行（用来数「CLI 真跑了几次」）。"""
+    text = json.dumps(payload, ensure_ascii=True)
+    if os.name == "nt":
+        path = home / "dcs.cmd"
+        path.write_text(
+            '@echo off\r\n'
+            'echo %%* >> "%%~dp0calls.txt"\r\n'
+            'echo %%* > "%%~dp0argv.txt"\r\n'
+            'echo %s\r\n'
+            'exit /b %d\r\n' % (text, exit_code),
+            encoding="ascii")
+    else:
+        path = home / "dcs"
+        path.write_text(
+            '#!/bin/sh\n'
+            'echo "$*" >> "$(dirname "$0")/calls.txt"\n'
+            'echo "$*" > "$(dirname "$0")/argv.txt"\n'
+            "echo '%s'\n"
+            'exit %d\n' % (text, exit_code),
+            encoding="utf-8")
+        path.chmod(0o755)
+    return str(path)
+
+
+def _slow_fake_cli_counting(home, payload: dict, delay_s: float = 1.2, exit_code: int = 0):
+    """慢速版假 CLI：每次调用先睡 delay_s（模拟云 API 往返），用于并发单飞测试。"""
+    text = json.dumps(payload, ensure_ascii=True)
+    if os.name == "nt":
+        path = home / "dcs.cmd"
+        path.write_text(
+            '@echo off\r\n'
+            'ping -n 2 127.0.0.1 >nul 2>&1\r\n'
+            'echo %%* >> "%%~dp0calls.txt"\r\n'
+            'echo %%* > "%%~dp0argv.txt"\r\n'
+            'echo %s\r\n'
+            'exit /b %d\r\n' % (text, exit_code),
+            encoding="ascii")
+    else:
+        path = home / "dcs"
+        path.write_text(
+            '#!/bin/sh\n'
+            'sleep 1\n'
+            'echo "$*" >> "$(dirname "$0")/calls.txt"\n'
+            'echo "$*" > "$(dirname "$0")/argv.txt"\n'
+            "echo '%s'\n"
+            'exit %d\n' % (text, exit_code),
+            encoding="utf-8")
+        path.chmod(0o755)
+    return str(path)
+
+
+def _calls_of(home) -> int:
+    p = home / "calls.txt"
+    if not p.exists():
+        return 0
+    return len([l for l in p.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip()])
 
 
 def _fake_cli(home, payload: dict, exit_code: int = 0):
@@ -391,6 +452,124 @@ def test_submit_actions_are_visible_to_model():
     for act in ("flows", "flow_form", "flow_run", "analysis_run", "images",
                 "flow_tasks", "flow_task_info", "task_cancel"):
         assert '"%s"' % act in text
+
+
+# ---------------------------------------------------------------------------
+# 8) ⚡ 读缓存 + stale-while-revalidate（2026-10-08：点开面板要等很久 → 云 API 1.6–2.8s/次）
+# ---------------------------------------------------------------------------
+
+_PROJECTS_PAYLOAD = {"exit_code": 0, "message": "ok", "data": {
+    "page": 1, "total": 2, "projects": [
+        {"project_id": "P25Z10200N1075", "project_name": "FSHD", "current": True},
+        {"project_id": "E-chip2304017", "project_name": "chip", "is_arrears": True}]}}
+
+
+def test_read_cache_hit_and_fresh_bypass(_isolate):
+    """第二次直接命中缓存（CLI 不再跑）；fresh=true 强制真跑。"""
+    _write_cfg(_isolate, {"enabled": True,
+                          "cli_path": _fake_cli_counting(_isolate, _PROJECTS_PAYLOAD)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+
+    r1 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    assert r1["status"] == "ok" and not r1.get("cached")
+    assert _calls_of(_isolate) == 1
+
+    t0 = time.time()
+    r2 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    dt = time.time() - t0
+    assert r2["cached"] is True and r2["refreshing"] is False and r2["age"] >= 0
+    assert r2["projects"]["total"] == 2                     # 数据本身没变
+    assert _calls_of(_isolate) == 1                         # 没有再起 CLI
+    assert dt < 0.5, "缓存命中不该再等云 API"
+
+    r3 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1, "fresh": True}))
+    assert not r3.get("cached") and _calls_of(_isolate) == 2
+
+    # 参数不同 = 不同缓存键，不会串味
+    r4 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 2}))
+    assert not r4.get("cached") and _calls_of(_isolate) == 3
+
+
+def test_stale_cache_returns_old_then_refreshes_in_background(_isolate):
+    """过期不干等：先回旧值（refreshing=True），后台线程把新值写回。"""
+    payload = json.loads(json.dumps(_PROJECTS_PAYLOAD))
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_counting(_isolate, payload)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+
+    dc.dcs_cloud_handler({"action": "projects", "page": 1})
+    key = dc._cache_key_for("projects", {"action": "projects", "page": 1})
+    ent = dc._cache_get(key)
+    assert ent and ent["t"]
+    with dc._CACHE_LOCK:
+        ent["t"] -= (dc._CACHE_TTL["projects"] + 10)        # 手动把它变成"过期"
+
+    r = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    assert r["status"] == "ok" and r["cached"] is True and r["refreshing"] is True
+    assert r["age"] >= dc._CACHE_TTL["projects"]
+
+    for _ in range(60):                                     # 等后台刷新落地
+        time.sleep(0.05)
+        ent2 = dc._cache_get(key)
+        if ent2 and not ent2.get("refreshing"):
+            break
+    ent2 = dc._cache_get(key)
+    assert ent2 and not ent2.get("refreshing"), "后台刷新没有收尾"
+    assert time.time() - ent2["t"] < 2, "后台刷新没有把时间戳刷新"
+
+
+def test_write_action_clears_cache(_isolate):
+    """切项目（写）之后，被它影响的列表必须重拉，不能继续吃旧缓存。"""
+    _write_cfg(_isolate, {"enabled": True, "allow_write": True,
+                          "cli_path": _fake_cli_counting(_isolate, _PROJECTS_PAYLOAD)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    dc.dcs_cloud_handler({"action": "projects", "page": 1})
+    key = dc._cache_key_for("projects", {"action": "projects", "page": 1})
+    assert dc._cache_get(key) is not None
+
+    dc.dcs_cloud_handler({"action": "use_project", "project": "P25Z10200N1075"})
+    assert dc._cache_get(key) is None, "写动作没清缓存"
+
+    r = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    assert not r.get("cached") and _calls_of(_isolate) >= 3
+
+
+def test_concurrent_reads_share_one_cli_run(_isolate):
+    """单飞：悬停预热与紧接着点开是同一个请求 → 只跑一次 CLI，后来者共享结果。
+
+    没有单飞的话，这两个并发请求会各起一次 CLI（各等 1.6–2.8s 的云往返）。
+    """
+    _write_cfg(_isolate, {"enabled": True,
+                          "cli_path": _slow_fake_cli_counting(_isolate, _PROJECTS_PAYLOAD)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    out = {}
+
+    def call(tag):
+        out[tag] = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+
+    t1 = threading.Thread(target=call, args=("a",))
+    t2 = threading.Thread(target=call, args=("b",))
+    t1.start()
+    time.sleep(0.3)          # 让 a 先把"飞行"挂上
+    t2.start()
+    t1.join(60)
+    t2.join(60)
+    assert out["a"]["status"] == "ok" and out["b"]["status"] == "ok"
+    assert _calls_of(_isolate) == 1, "并发读没有单飞（跑了 %d 次 CLI）" % _calls_of(_isolate)
+    assert out["b"].get("shared") or out["b"].get("cached"), "后来者没有共享到结果"
+
+
+def test_errors_are_not_cached(_isolate):
+    """失败结果不入缓存（否则一次网络抖动会被记住 45 秒）。"""
+    _write_cfg(_isolate, {"enabled": True,
+                          "cli_path": _fake_cli_counting(
+                              _isolate, {"exit_code": 1, "error": {"type": "biz", "detail": {"business_code": 41201,
+                                       "message": "token expired"}}}, exit_code=1)})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    r1 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    r2 = json.loads(dc.dcs_cloud_handler({"action": "projects", "page": 1}))
+    assert r1["status"] == "error" and r2["status"] == "error"
+    assert not r1.get("cached") and not r2.get("cached")
+    assert _calls_of(_isolate) == 2, "错误被缓存住了"
 
 
 # ---------------------------------------------------------------------------
