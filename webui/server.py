@@ -3360,6 +3360,43 @@ _CHINA_PROVIDERS = [
         ],
     },
 ]
+
+# ── 编程套餐（Code Plan）目录合并（2026-10-07）──
+# Kimi For Coding / GLM 编程套餐 / 阿里云百炼 Coding / 阶跃 Step Plan：独立端点与
+# 独立 key 体系，作为「💳 编程套餐」分组并入目录；保存 key 后自动拉取套餐模型。
+try:
+    from memomics.coding_plans import CODING_PLAN_PROVIDERS as _CODING_PLAN_PROVIDERS
+    _have_pids = {_p["id"] for _p in _CHINA_PROVIDERS}
+    for _cp in _CODING_PLAN_PROVIDERS:
+        if _cp["id"] not in _have_pids:
+            _CHINA_PROVIDERS.append(_cp)
+except Exception as _cp_err:
+    print(f"[WARN] 编程套餐目录加载失败: {_cp_err}")
+
+
+def _effective_models(p, saved=None):
+    """实际生效的模型列表：保存 key 后拉取到的模型优先，否则回退目录预设。
+
+    provider_keys.json 里的 `models` 由 /api/providers/{pid}/models/refresh
+    或「保存 key 自动拉取」写入；有它时模型选择器/同步到底座的列表都用它。
+    """
+    saved = saved if isinstance(saved, dict) else {}
+    pulled = saved.get("models")
+    if isinstance(pulled, list) and pulled:
+        out = []
+        for m in pulled:
+            if isinstance(m, dict) and m.get("id"):
+                out.append({"id": m["id"], "name": m.get("name") or m["id"],
+                            "reasoning": bool(m.get("reasoning")),
+                            "tool_call": bool(m.get("tool_call", True))})
+            elif isinstance(m, str) and m.strip():
+                out.append({"id": m.strip(), "name": m.strip(),
+                            "reasoning": False, "tool_call": True})
+        if out:
+            return out
+    return p.get("models", []) if isinstance(p, dict) else []
+
+
 # 构建索引: provider_id -> provider dict
 _PROVIDERS_INDEX = {p["id"]: p for p in _CHINA_PROVIDERS}
 
@@ -8657,9 +8694,13 @@ async def list_providers():
             "api": p["api"],
             "env_var": p.get("env_var", ""),
             "group": p.get("group", "其他"),
-            "model_count": len(p.get("models", [])),
+            "model_count": len(_effective_models(p, saved)),
             "has_key": _is_valid_api_key(saved.get("api_key")),
             "is_custom": p["id"] == "dcs-cloud",
+            "note": p.get("note", ""),
+            "key_hint": p.get("key_hint", ""),
+            "auto_pull": bool(p.get("auto_pull")),
+            "models_pulled": bool(saved.get("models")),
         })
     # 2026-08-27: 用户自定义 provider（custom-*）并入列表
     for pid, cp in _custom_providers.items():
@@ -8741,20 +8782,69 @@ async def save_imagegen_config(body: dict):
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
 
 
+def _pull_provider_models(pid, p, api_key, timeout=15.0):
+    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。"""
+    try:
+        from memomics.coding_plans import fetch_plan_models
+    except Exception as exc:
+        return {"ok": False, "error": f"拉取模块加载失败: {exc}"}
+    res = fetch_plan_models({
+        "id": pid, "api": p.get("api", ""),
+        "models_url": p.get("models_url"),
+        "extra_headers": p.get("extra_headers"),
+    }, api_key, timeout=timeout)
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("error", "拉取失败"),
+                "tried": res.get("tried", [])}
+    models = res.get("models") or []
+    saved = _provider_keys.setdefault(pid, {})
+    saved["models"] = models
+    saved["models_source"] = res.get("url_used", "")
+    saved["models_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _save_provider_keys()
+    _sync_custom_providers_to_hermes(pid)
+    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{res.get('url_used', '')}）", flush=True)
+    return {"ok": True, "provider": pid, "count": len(models), "models": models,
+            "url_used": res.get("url_used", "")}
+
+
 @app.get("/api/providers/{pid}/models")
 async def get_provider_models(pid: str):
-    """返回指定 provider 的模型列表"""
+    """返回指定 provider 的模型列表（拉取到的模型优先于目录预设）"""
     p = _PROVIDERS_INDEX.get(pid)
     if not p:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
     models = []
-    for m in p.get("models", []):
+    for m in _effective_models(p, saved):
         models.append({
             "id": m["id"], "name": m["name"],
             "reasoning": m.get("reasoning", False),
             "tool_call": m.get("tool_call", False),
         })
-    return {"provider": pid, "models": models, "base_url": p["api"]}
+    return {"provider": pid, "models": models, "base_url": p["api"],
+            "source": saved.get("models_source") or "catalog",
+            "updated_at": saved.get("models_updated_at") or "",
+            "auto_pull": bool(p.get("auto_pull")),
+            "note": p.get("note", ""), "key_hint": p.get("key_hint", "")}
+
+
+@app.post("/api/providers/{pid}/models/refresh")
+async def refresh_provider_models(pid: str):
+    """手动拉取指定 provider 的可用模型并保存（编程套餐保存 key 后自动拉取）。"""
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key，再拉取模型"},
+                            status_code=400)
+    result = _pull_provider_models(pid, p, api_key)
+    if not result.get("ok"):
+        return JSONResponse({"error": result.get("error", "拉取失败"),
+                             "tried": result.get("tried", [])}, status_code=400)
+    return result
 
 
 _OPENCODE_SESSION_HOST = "opencode.ai"
@@ -8853,14 +8943,14 @@ def _sync_custom_providers_to_hermes(pid=None):
                 _api = saved.get("base_url") or p.get("api", "")
                 existing[_pid] = _build_hermes_provider_entry(
                     _pid, p.get("name", _pid), _api, saved["api_key"],
-                    p.get("models", []), existing.get(_pid))
+                    _effective_models(p, saved), existing.get(_pid))
         elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
             saved = _provider_keys[pid]
             _api = saved.get("base_url") or p.get("api", "")
             existing[pid] = _build_hermes_provider_entry(
                 pid, p.get("name", pid), _api, saved["api_key"],
-                p.get("models", []), existing.get(pid))
+                _effective_models(p, saved), existing.get(pid))
         else:
             existing.pop(pid, None)
         cfg["custom_providers"] = list(existing.values())
@@ -8879,7 +8969,13 @@ async def save_provider_key(pid: str, payload: dict):
     key = (payload.get("api_key") or "").strip()
     if not key:
         return JSONResponse({"error": "api_key is required"}, status_code=400)
+    _prev_saved = _provider_keys.get(pid) or {}
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
+    if _prev_saved.get("models"):
+        # 换 key 不清空已拉取的模型列表（下次拉取会覆盖）
+        _provider_keys[pid]["models"] = _prev_saved["models"]
+        _provider_keys[pid]["models_source"] = _prev_saved.get("models_source", "")
+        _provider_keys[pid]["models_updated_at"] = _prev_saved.get("models_updated_at", "")
     _save_provider_keys()
     _sync_custom_providers_to_hermes(pid)
     # 联动：全局模型正在用这个 provider 时，同步新 key——
@@ -8893,7 +8989,15 @@ async def save_provider_key(pid: str, payload: dict):
             if s.get("model_config") and s["model_config"].get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
                 s["model_config"]["api_key"] = key
         print(f"[MemOmics] provider {pid} 的 key 已同步到全局模型配置", flush=True)
-    return {"ok": True, "provider": pid, "has_key": True}
+    _resp = {"ok": True, "provider": pid, "has_key": True}
+    # 编程套餐（Kimi For Coding / GLM / 百炼 Coding / Step Plan）：保存 key 后自动拉模型。
+    # 失败不阻断保存，只把结果回传前端提示。
+    if _PROVIDERS_INDEX[pid].get("auto_pull"):
+        try:
+            _resp["models_pulled"] = _pull_provider_models(pid, _PROVIDERS_INDEX[pid], key, timeout=15.0)
+        except Exception as _pull_err:
+            _resp["models_pulled"] = {"ok": False, "error": str(_pull_err)[:150]}
+    return _resp
 
 
 @app.delete("/api/providers/{pid}/key")
@@ -9190,7 +9294,7 @@ async def list_available_models(session_id: str = ""):
             continue
         is_current = (cur_cfg.get("api_key") == saved.get("api_key") and
                       cur_cfg.get("base_url") == p["api"])
-        for m in p.get("models", []):
+        for m in _effective_models(p, saved):
             models.append({
                 "id": m["id"], "name": m["name"],
                 "provider_id": pid, "provider_name": p["name"].split("(")[0].strip(),
@@ -9200,6 +9304,50 @@ async def list_available_models(session_id: str = ""):
                 "is_current": is_current and cur_cfg.get("model") == m["id"],
             })
     return {"models": models, "total": len(models)}
+
+
+@app.get("/api/usage/overview")
+async def usage_overview(fresh: int = 0, days: int = 30):
+    """用量总览：各通道余额/套餐窗口 + 本机台账 + DeepSeek 峰谷时段（60s 缓存）。
+
+    对标 DSH「使用统计」：key 只在宿主侧使用；用量来自回合级流水
+    token_usage.jsonl（精确归日），余额/套餐来自各厂商官方端点（fresh=1 强制刷新）。
+    """
+    try:
+        from memomics import usage_quota
+    except Exception as exc:
+        return JSONResponse({"error": f"用量模块加载失败: {exc}"}, status_code=500)
+    configured = {}
+    display_names = {}
+    for _pid, _saved in _provider_keys.items():
+        _saved = _saved or {}
+        _p = _PROVIDERS_INDEX.get(_pid) or {}
+        configured[_pid] = {
+            "api_key": _saved.get("api_key", ""),
+            "base_url": _saved.get("base_url") or _p.get("api", ""),
+        }
+        display_names[_pid] = (_p.get("name", _pid).split("(")[0].strip() or _pid)
+    current = {}
+    if _current_model:
+        _cur_base = str(_current_model.get("base_url") or "")
+        _cur_pid = ""
+        for _pid, _p in _PROVIDERS_INDEX.items():
+            if _cur_base and _p.get("api") and _p["api"].rstrip("/") == _cur_base.rstrip("/"):
+                _cur_pid = _pid
+                break
+        current = {
+            "provider_id": _cur_pid,
+            "provider_name": display_names.get(_cur_pid, _cur_pid),
+            "base_url": _cur_base,
+            "model": _current_model.get("model", ""),
+        }
+    try:
+        data = usage_quota.overview(
+            configured, display_names, current=current,
+            days=max(1, min(int(days or 30), 90)), fresh=bool(fresh))
+    except Exception as exc:
+        return JSONResponse({"error": f"用量查询失败: {exc}"}, status_code=500)
+    return data
 
 
 # --- 微信 iLink 连接 ---

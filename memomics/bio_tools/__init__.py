@@ -33,3 +33,5 @@ from . import cloud_connector
 from . import ask_user
 from . import evidence_table
 from . import prisma_flow
+# 2026-10-07：通道余额/套餐额度 + 本机用量台账（对标 DSH「使用统计」）。
+from . import provider_quota

@@ -2222,6 +2222,11 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="settings-group">
           <label data-i18n="model_default">模型 (选择默认)</label>
           <select id="settings-model" onchange="onSettingsModelSelect()"></select>
+          <div id="settings-provider-note" style="font-size:11px;color:var(--text-light);margin-top:4px;"></div>
+          <div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <button onclick="refreshProviderModels()" id="settings-models-refresh-btn" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 拉取模型</button>
+            <span id="settings-models-refresh-status" style="font-size:11px;color:var(--text-light);"></span>
+          </div>
         </div>
         <div class="settings-group">
           <label data-i18n="api_base">API Base URL (自动填充)</label>
@@ -2364,6 +2369,13 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           <div class="ctx-stats" id="ctx-stats"></div>
           <div class="ctx-breakdown" id="ctx-breakdown"></div>
           <div class="ctx-model-info" id="ctx-model-info"></div>
+          <div id="ctx-quota" style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-weight:600;">💠 用量与套餐</span>
+              <button id="ctx-quota-refresh" onclick="loadCtxUsage(true)" title="刷新用量与额度" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text);cursor:pointer;">🔄</button>
+            </div>
+            <div id="ctx-quota-body" style="color:var(--text-light);">打开面板后自动查询…</div>
+          </div>
         </div>
       </div>
     </div>
@@ -7762,11 +7774,20 @@ async function onProviderSelect() {
   }
   document.getElementById('settings-base-url').value = provider.api || '';
   document.getElementById('settings-provider').value = 'openai';
+  // 编程套餐说明 / 拉取状态（2026-10-07）
+  var noteEl = document.getElementById('settings-provider-note');
+  if (noteEl) {
+    var noteHtml = '';
+    if (provider.note) noteHtml += 'ℹ️ ' + escapeHtml(provider.note);
+    if (provider.auto_pull) noteHtml += (noteHtml ? '<br>' : '') + '<span style="color:#2d8659;">保存 Key 后自动拉取套餐模型</span>';
+    noteEl.innerHTML = noteHtml;
+  }
+  var keyHint = provider.key_hint || 'sk-...';
   if (provider.has_key) {
     document.getElementById('settings-api-key').placeholder = '\u2713 已保存，输入新 key 可覆盖';
     document.getElementById('settings-api-key').value = '';
   } else {
-    document.getElementById('settings-api-key').placeholder = 'sk-...';
+    document.getElementById('settings-api-key').placeholder = keyHint;
     document.getElementById('settings-api-key').value = '';
   }
   try {
@@ -7787,6 +7808,12 @@ async function onProviderSelect() {
     } else if (currentProviderModels.length) {
       sel.value = currentProviderModels[0].id;
     }
+    var rSt = document.getElementById('settings-models-refresh-status');
+    if (rSt) {
+      rSt.textContent = (d.source && d.source !== 'catalog')
+        ? ('模型来源: 已拉取 (' + (d.updated_at || '') + ')')
+        : '';
+    }
   } catch(e) {
     document.getElementById('settings-model').innerHTML = '<option value="">(无法加载模型)</option>';
   }
@@ -7806,12 +7833,55 @@ async function saveProviderKey() {
   if (d.ok) {
     var pName = allProviders.find(function(p) { return p.id === pid; });
     pName = pName ? pName.name : pid;
-    alert('\u2705 Key 已保存: ' + pName + '\\n现在可以在交互框切换该 Provider 的模型了');
+    var extraMsg = '';
+    var pulled = d.models_pulled;
+    if (pulled) {
+      extraMsg = pulled.ok
+        ? ('\n\u2705 已自动拉取 ' + pulled.count + ' 个套餐模型')
+        : ('\n\u26a0 模型自动拉取失败: ' + (pulled.error || ''));
+    }
+    alert('\u2705 Key 已保存: ' + pName + extraMsg + '\\n现在可以在交互框切换该 Provider 的模型了');
     document.getElementById('settings-api-key').value = '';
     document.getElementById('settings-api-key').placeholder = '\u2713 已保存';
     await loadProviders();
   } else {
     alert('\u274c 保存失败: ' + (d.error || ''));
+  }
+}
+
+// 手动拉取当前 Provider 的可用模型（2026-10-07：编程套餐/自定义端点通用）
+async function refreshProviderModels() {
+  var pid = document.getElementById('settings-provider-select').value;
+  if (!pid) { alert('请选择 Provider'); return; }
+  var btn = document.getElementById('settings-models-refresh-btn');
+  var st = document.getElementById('settings-models-refresh-status');
+  if (btn) btn.disabled = true;
+  if (st) st.textContent = '拉取中…（最长 15 秒）';
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/refresh', { method: 'POST' });
+    var d = await r.json();
+    if (!r.ok || !d.ok) {
+      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败');
+      return;
+    }
+    if (st) st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型';
+    var sel = document.getElementById('settings-model');
+    var prev = sel ? sel.value : '';
+    currentProviderModels = d.models || [];
+    if (sel) {
+      sel.innerHTML = currentProviderModels.map(function(m) {
+        var label = m.name;
+        if (m.reasoning) label += ' [推理]';
+        if (m.tool_call) label += ' [工具]';
+        return '<option value="' + m.id + '">' + label + '</option>';
+      }).join('');
+      if (prev && currentProviderModels.some(function(x) { return x.id === prev; })) sel.value = prev;
+    }
+    await loadProviders(); // 同步「已连接的模型」列表
+  } catch(e) {
+    if (st) st.textContent = '\u274c ' + e.message;
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -17172,6 +17242,111 @@ function renderContextUsage(data, error) {
     modelInfo.textContent = '模型: ' + (data.model || '未知') +
       ' ｜ 窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知');
   }
+  loadCtxUsage(false); // 用量与套餐（宿主侧 60s 缓存）
+}
+
+// === 用量与套餐（2026-10-07：对标 DSH「使用统计」）===
+// 数据来自宿主 /api/usage/overview：各通道余额/套餐窗口 + 本机台账 + DeepSeek 时段。
+// key 只在宿主侧使用；前端仅展示结果。
+var ctxUsageData = null;
+var ctxUsageAt = 0;
+
+function _ctxTok(n) {
+  n = n || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function _ctxPctColor(pct) {
+  if (pct >= 90) return 'var(--danger)';
+  if (pct >= 70) return 'var(--warning)';
+  return '#2d8659';
+}
+
+async function loadCtxUsage(force) {
+  var body = document.getElementById('ctx-quota-body');
+  if (!body) return;
+  if (!force && ctxUsageData && (Date.now() - ctxUsageAt) < 60000) {
+    renderCtxUsage(ctxUsageData);
+    return;
+  }
+  body.innerHTML = '<span>查询中…</span>';
+  try {
+    var r = await fetch('/api/usage/overview' + (force ? '?fresh=1' : ''), { cache: 'no-store' });
+    var d = await r.json();
+    if (!r.ok || d.error) {
+      body.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(d.error || ('HTTP ' + r.status)) + '</span>';
+      return;
+    }
+    ctxUsageData = d;
+    ctxUsageAt = Date.now();
+    renderCtxUsage(d);
+  } catch (e) {
+    body.innerHTML = '<span style="color:var(--danger);">查询失败: ' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+function renderCtxUsage(d) {
+  var body = document.getElementById('ctx-quota-body');
+  if (!body) return;
+  var html = '';
+  var cur = d.current || {};
+  if (cur.model) {
+    html += '<div style="margin-bottom:4px;">通道: <b>' +
+      escapeHtml(cur.provider_name || cur.provider_id || '-') + '</b> · ' + escapeHtml(cur.model) + '</div>';
+  }
+  var today = (d.ledger || {}).today || {};
+  var bk = today.buckets || {};
+  if (bk.input_tokens || bk.output_tokens || bk.cache_read_tokens) {
+    var bits = ['输入 ' + _ctxTok(bk.input_tokens), '输出 ' + _ctxTok(bk.output_tokens),
+                '缓存读 ' + _ctxTok(bk.cache_read_tokens)];
+    if (bk.cache_write_tokens) bits.push('缓存写 ' + _ctxTok(bk.cache_write_tokens));
+    html += '<div style="margin-bottom:2px;">📊 今日: ' + (today.turns || 0) + ' 回合 · ' + bits.join(' / ') + '</div>';
+  } else {
+    html += '<div style="margin-bottom:2px;">📊 今日暂无本机用量记录</div>';
+  }
+  var per = d.deepseek_period || {};
+  var cost = Number(today.estimated_cost_cny || 0);
+  if (per.label && (today.has_deepseek || cost > 0)) {
+    var extra = per.boundary_minutes ? (' · ' + (per.peak ? '距回落 ' : '距高峰 ') + per.boundary_minutes + ' 分钟') : '';
+    html += '<div style="margin-bottom:2px;">💱 DeepSeek ' + escapeHtml(per.label) + extra +
+            (cost > 0 ? (' · 今日估算 ¥' + cost.toFixed(2)) : '') + '</div>';
+  }
+  var accounts = d.accounts || [];
+  if (accounts.length) {
+    html += '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">';
+    accounts.forEach(function(a) {
+      if (!a.ok) {
+        html += '<div style="color:var(--text-light);">• ' + escapeHtml(a.display || a.provider_id || '') +
+                ': ' + escapeHtml(a.error || '查询失败') + '</div>';
+        return;
+      }
+      if (a.kind === 'balance' && a.balance) {
+        html += '<div>• ' + escapeHtml(a.display || '') + ' 余额 <b>' +
+                escapeHtml(String(a.balance.total)) + ' ' + escapeHtml(a.balance.currency || '') + '</b></div>';
+      } else if (a.kind === 'plan') {
+        (a.windows || []).forEach(function(w) {
+          var pct = (w.percent === null || w.percent === undefined) ? null : Math.max(0, Math.min(100, w.percent));
+          var line = '• ' + escapeHtml(a.display || '') + ' · ' + escapeHtml(w.label || w.key || '');
+          if (pct === null) {
+            html += '<div>' + line + ' 已用 —</div>';
+            return;
+          }
+          html += '<div>' + line + ' 已用 ' + pct.toFixed(1) + '%' +
+                  (w.resets_at ? ' <span style="color:var(--text-light);">(' + escapeHtml(w.resets_at) + ' 重置)</span>' : '') + '</div>' +
+                  '<div style="height:3px;background:var(--border);border-radius:2px;margin:1px 0 3px;">' +
+                  '<div style="width:' + pct.toFixed(1) + '%;height:100%;border-radius:2px;background:' + _ctxPctColor(pct) + ';"></div></div>';
+        });
+      }
+    });
+    html += '</div>';
+  }
+  html += '<div style="margin-top:4px;color:var(--text-light);font-size:10px;">' +
+          (d.cached ? ('缓存 ' + Math.round(d.cache_age_sec || 0) + 's 前查询') : '刚刚查询') +
+          ' · 阶梯计价: 空闲时段半价</div>';
+  body.innerHTML = html;
 }
 
 function updateGauge(pct, cumulative, max) {
