@@ -19933,7 +19933,10 @@ async def api_cluster_exec(request: Request):
 _DCS_ACTIONS = ("status", "bind", "unbind", "projects", "use_project", "current", "context",
                 "ls", "find", "info", "download", "upload",
                 "container_open", "container_exec", "container_close",
-                "tasks", "task_logs", "raw")
+                "tasks", "task_logs",
+                # 🚀 投递（2026-10-07）：只读表单三件套 + 写操作投递/取消
+                "flows", "flow_form", "flow_run", "analysis_run", "images",
+                "flow_tasks", "flow_task_info", "task_cancel", "raw")
 _DCS_CFG_FIELDS = ("enabled", "cli_path", "base_url", "region", "default_project",
                    "timeout", "max_output_chars", "allow_write", "download_dir")
 

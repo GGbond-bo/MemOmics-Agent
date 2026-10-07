@@ -279,6 +279,121 @@ def test_raw_accepts_json_array_passthrough(_isolate):
 
 
 # ---------------------------------------------------------------------------
+# 7) 投递：WDL 流程 / 离线分析任务（2026-10-07，用户："怎么用云平台跑分析、投递任务"）
+# ---------------------------------------------------------------------------
+
+def test_flows_and_flow_form_merge_inputs(_isolate):
+    """流程列表 + 投递表单：workflow info 的英文 inputs 与 check_parameter 的默认值/必填合并。"""
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, {
+        "workflow ls": {"exit_code": 0, "message": "ok", "data": {"page": 1, "total": 2, "records": [
+            {"name": "Copy-scRNA-seq_v3", "price": "free", "official_tag": "DCS", "origin": "公共库"},
+            {"name": "DUCKS4", "price": "free"}]}},
+        "workflow info": {"exit_code": 0, "message": "ok", "data": {
+            "name": "Copy-scRNA-seq_v3", "version": "3.3.4",
+            "pricing": {"price": "free", "mode": "free"},
+            "inputs": [{"name": "SampleID", "type": "String", "required": True, "description": "Sample name"},
+                       {"name": "expectcells", "type": "Int", "required": False, "description": "cells"}]}},
+        "check_parameter": {"exit_code": 0, "message": "ok", "data": {"wdl_parameter": [
+            {"参数名": "expectcells", "类型": "Int", "必填/选填": "必填", "默认值": "3000",
+             "说明": "cells"}]}},
+    })})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+
+    res = json.loads(dc.dcs_cloud_handler({"action": "flows"}))
+    assert res["status"] == "ok"
+    assert [f["name"] for f in res["flows"]] == ["Copy-scRNA-seq_v3", "DUCKS4"]
+    assert res["total"] == 2
+
+    form = json.loads(dc.dcs_cloud_handler({"action": "flow_form", "flow": "Copy-scRNA-seq_v3"}))
+    assert form["status"] == "ok"
+    assert form["version"] == "3.3.4" and form["pricing"]["price"] == "free"
+    by = {i["name"]: i for i in form["inputs"]}
+    assert by["SampleID"]["required"] is True and by["SampleID"]["type"] == "String"
+    assert by["expectcells"]["default"] == "3000"      # 默认值来自 check_parameter
+    assert by["expectcells"]["required"] is True       # 必填口径两处合并
+
+
+def test_flow_run_guards_write_and_composes_inputs(_isolate):
+    """投递 WDL：只读模式直接拒；开写权限后 -i 名=值 / -o 拼装正确；空参数拒。"""
+    args = {"action": "flow_run", "flow": "Copy-scRNA-seq_v3",
+            "inputs": {"SampleID": "S1", "expectcells": "3000"}, "output_path": "/Files/out"}
+    _write_cfg(_isolate, {"enabled": True, "allow_write": False,
+                          "cli_path": _fake_cli(_isolate, {"exit_code": 0, "message": "ok",
+                                                           "data": {"task_id": "W20261007"}})})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    guard = json.loads(dc.dcs_cloud_handler(args))
+    assert guard["status"] == "error" and "只读模式" in guard["error"]
+    assert "workflow run" not in _argv_of(_isolate)          # 碰都没碰 CLI
+
+    _write_cfg(_isolate, {"enabled": True, "allow_write": True,
+                          "cli_path": _fake_cli(_isolate, {"exit_code": 0, "message": "ok",
+                                                           "data": {"task_id": "W20261007"}})})
+    res = json.loads(dc.dcs_cloud_handler(args))
+    assert res["status"] == "ok" and res["task_id"] == "W20261007"
+    argv = _argv_of(_isolate)
+    assert "workflow run -n Copy-scRNA-seq_v3" in argv
+    assert "-i SampleID=S1" in argv and "-i expectcells=3000" in argv and "-o /Files/out" in argv
+    assert "workflow run -n Copy-scRNA-seq_v3" in " ".join(res["argv"])
+
+    bad = json.loads(dc.dcs_cloud_handler({"action": "flow_run", "flow": "X", "inputs": {}}))
+    assert bad["status"] == "error" and "输入参数" in bad["error"]
+
+
+def test_analysis_run_and_task_cancel_compose(_isolate):
+    """离线作业投递与取消：命令/规格/镜像/挂载/输出；cancel 按 kind 分流。"""
+    _write_cfg(_isolate, {"enabled": True, "allow_write": True,
+                          "cli_path": _fake_cli(_isolate, {"exit_code": 0, "message": "ok",
+                                                           "data": {"task_id": "A1"}})})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    bad = json.loads(dc.dcs_cloud_handler({"action": "analysis_run"}))
+    assert bad["status"] == "error" and "command" in bad["error"]
+
+    ok = json.loads(dc.dcs_cloud_handler({"action": "analysis_run", "name": "t1",
+                                          "command": "sh /work/zhangbo11/x.sh",
+                                          "resource": "vf=32g,num_proc=8", "image": "img:latest",
+                                          "mount": "/Files/a,/Files/b", "output_path": "/Files/out"}))
+    assert ok["status"] == "ok" and ok["task_id"] == "A1"
+    argv = _argv_of(_isolate)
+    assert "analysis run" in argv
+    assert "sh /work/zhangbo11/x.sh" in argv          # Windows 下 argv.txt 里这个参数带引号
+    assert "-l vf=32g,num_proc=8" in argv and "--image img:latest" in argv
+    assert "-m /Files/a,/Files/b" in argv and "-o /Files/out" in argv
+
+    json.loads(dc.dcs_cloud_handler({"action": "task_cancel", "task_id": "A1", "kind": "analysis"}))
+    assert "analysis cancel A1" in _argv_of(_isolate)
+    json.loads(dc.dcs_cloud_handler({"action": "task_cancel", "task_id": "W1", "kind": "workflow"}))
+    assert "workflow cancel -n W1" in _argv_of(_isolate)
+
+    assert json.loads(dc.dcs_cloud_handler({"action": "task_cancel"}))["status"] == "error"
+
+
+def test_flow_tasks_and_images_shape(_isolate):
+    """WDL 任务列表 + 镜像列表：字段归一化（status/expense/ref）。"""
+    _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, {
+        "workflow tasks": {"exit_code": 0, "message": "ok", "data": {"page": 1, "total": 1, "records": [
+            {"task_id": "W202607230088006", "status": "运行中", "wf_name": "Copy-scRNA-seq_v3",
+             "wf_version": "v3.2.2", "expense": "27.30", "create_user": "zhangbo11"}]}},
+        "image ls": {"exit_code": 0, "message": "ok", "data": {"page": 1, "total": 1, "records": [
+            {"name": "r441_nebula_probe_d", "tags": "latest", "prog_env": "workflow"}]}},
+    })})
+    dc.save_credential("dcs_pat_abcdef1234567890")
+    t = json.loads(dc.dcs_cloud_handler({"action": "flow_tasks"}))
+    assert t["status"] == "ok" and t["tasks"][0]["task_id"] == "W202607230088006"
+    assert t["tasks"][0]["status"] == "运行中"
+    im = json.loads(dc.dcs_cloud_handler({"action": "images"}))
+    assert im["status"] == "ok" and im["images"][0]["ref"] == "r441_nebula_probe_d:latest"
+
+
+def test_submit_actions_are_visible_to_model():
+    """契约锁：投递动作必须在 agent 工具 schema 的 enum 里（模型才调得到）。"""
+    tool = os.path.join(_ROOT, "memomics", "bio_tools", "cloud_connector.py")
+    text = open(tool, encoding="utf-8").read()
+    for act in ("flows", "flow_form", "flow_run", "analysis_run", "images",
+                "flow_tasks", "flow_task_info", "task_cancel"):
+        assert '"%s"' % act in text
+
+
+# ---------------------------------------------------------------------------
 # 5) 模型可见性：模块被 __init__ 导入后，registry 里必须有 dcs_cloud
 # ---------------------------------------------------------------------------
 

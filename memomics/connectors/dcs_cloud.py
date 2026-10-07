@@ -1187,6 +1187,276 @@ def action_task_logs(args: dict) -> dict:
     return _ok({"task_id": tid, "log": res.get("data")})
 
 
+# ---------------------------------------------------------------------------
+# 🚀 投递：WDL 流程 / 离线分析任务（2026-10-07，用户："怎么用云平台跑分析、投递任务"）
+#    只读三件套（flows / flow_form / images）一次把表单数据拿齐；
+#    投递（flow_run / analysis_run）与取消（task_cancel）是写操作，先过 _write_guard。
+# ---------------------------------------------------------------------------
+
+def _short(text, n: int = 300) -> str:
+    return str(text or "").replace("\r", "").strip()[:n]
+
+
+def _argv_display(argv: list) -> str:
+    """给人看的命令：含空格的参数加引号，方便核对（预检用）。"""
+    return " ".join(('"%s"' % a) if (" " in str(a)) else str(a) for a in argv)
+
+
+def _page_args(args: dict, default_size: int = 50) -> list:
+    return ["--page", str(max(1, int(args.get("page") or 1))),
+            "--page-size", str(min(200, max(1, int(args.get("page_size") or default_size))))]
+
+
+def action_flows(args: dict) -> dict:
+    """列出可投递的 WDL 流程（默认项目内；public=true 查公共库）。"""
+    cfg = load_config()
+    argv = ["workflow", "ls"]
+    if _truthy(args.get("public")):
+        argv.append("--public")
+    if args.get("name"):
+        argv += ["-n", str(args["name"])]
+    argv += _page_args(args)
+    res = _run_cli(argv, cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "查流程列表失败", detail=res.get("error"), hint=res.get("hint"))
+    d = res.get("data") or {}
+    recs = ((d.get("records") if isinstance(d, dict) else d) or [])
+    flows = [{
+        "name": str(r.get("name") or ""),
+        "version": str(r.get("version") or r.get("latest_version") or ""),
+        "tag": str(r.get("official_tag") or r.get("tags") or ""),
+        "price": str(r.get("price") or ""),
+        "origin": str(r.get("origin") or ""),
+        "creator": str(r.get("creator") or ""),
+    } for r in recs if str(r.get("name") or "").strip()]
+    return _ok({"flows": flows,
+                "total": (d.get("total") if isinstance(d, dict) else len(flows)) or len(flows),
+                "page": args.get("page") or 1,
+                "source": "public" if _truthy(args.get("public")) else "project"})
+
+
+def action_flow_form(args: dict) -> dict:
+    """WDL 投递表单：`workflow info`（inputs/版本/计费）+ `workflow check_parameter`（默认值）。"""
+    cfg = load_config()
+    name = str(args.get("flow") or args.get("name") or args.get("workflow") or "").strip()
+    if not name:
+        return _err("需要参数 flow（流程名，先用 action='flows' 查）")
+    argv = ["workflow", "info", "-n", name]
+    if args.get("version"):
+        argv += ["-v", str(args["version"])]
+    res = _run_cli(argv, cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "取流程详情失败（名字对不对？先 action='flows'）",
+                    detail=res.get("error"), hint=res.get("hint"))
+    info = res.get("data") or {}
+    if not isinstance(info, dict):
+        return _err("流程详情格式异常", detail=res.get("data"))
+    spec = {}
+    r2 = _run_cli(["workflow", "check_parameter", "-n", name], cfg=cfg)
+    if r2.get("ok") and isinstance(r2.get("data"), dict):
+        for p in (r2["data"].get("wdl_parameter") or []):
+            nm = str(p.get("参数名") or p.get("name") or "").strip()
+            if nm:
+                spec[nm] = p
+    inputs = []
+    for it in (info.get("inputs") or []):
+        if not isinstance(it, dict):
+            continue
+        nm = str(it.get("name") or "").strip()
+        if not nm:
+            continue
+        sp = spec.get(nm) or {}
+        inputs.append({
+            "name": nm,
+            "type": str(it.get("type") or sp.get("类型") or ""),
+            "required": bool(it.get("required")) or str(sp.get("必填/选填") or "") == "必填",
+            "default": str(sp.get("默认值") or it.get("default") or ""),
+            "description": _short(it.get("description") or sp.get("说明"), 400),
+        })
+    return _ok({"flow": name,
+                "version": str(info.get("version") or ""),
+                "official_tag": str(info.get("official_tag") or ""),
+                "pricing": info.get("pricing") or {},
+                "inputs": inputs,
+                "outputs": info.get("outputs") or [],
+                "description": _short(info.get("description"), 800)})
+
+
+def _flow_input_pairs(args: dict) -> list:
+    raw = args.get("inputs") or {}
+    pairs = []
+    if isinstance(raw, dict):
+        pairs = list(raw.items())
+    elif isinstance(raw, list):
+        for it in raw:
+            if isinstance(it, dict):
+                pairs.append((it.get("name") or it.get("key"), it.get("value")))
+    return pairs
+
+
+def action_flow_run(args: dict) -> dict:
+    """投递 WDL 流程任务（写操作）。inputs 传 {参数名: 值}；output_path 传云上输出目录。"""
+    cfg = load_config()
+    name = str(args.get("flow") or args.get("name") or "").strip()
+    if not name:
+        return _err("需要参数 flow（流程名）")
+    pairs = _flow_input_pairs(args)
+    argv = ["workflow", "run", "-n", name]
+    if args.get("version"):
+        argv += ["-v", str(args["version"])]
+    if args.get("entity"):
+        argv += ["-e", str(args["entity"])]
+    for k, v in pairs:
+        if k is None or v is None or str(v).strip() == "":
+            continue
+        argv += ["-i", "%s=%s" % (k, v)]
+    if args.get("output_path"):
+        argv += ["-o", str(args["output_path"])]
+    if args.get("table"):
+        argv += ["--table", str(args["table"])]
+    if not any(str(v).strip() for _, v in pairs) and not args.get("table"):
+        return _err("至少要填一个输入参数（-i 名=值），或用 --table 参数表文件")
+    if _truthy(args.get("dry_run")):
+        return _ok({"dry_run": True, "flow": name, "argv": ["dcs"] + argv,
+                    "command": _argv_display(["dcs"] + argv),
+                    "note": "预检（dry_run）：没有提交、不计费；核对无误后去掉 dry_run 再提交"})
+    guard = _write_guard(cfg, "flow_run")
+    if guard:
+        return guard
+    res = _run_cli(argv, cfg=cfg, timeout=max(int(cfg.get("timeout") or 120), 240))
+    if not res.get("ok"):
+        return _err(res.get("message") or "投递失败", detail=res.get("error"), hint=res.get("hint"))
+    d = res.get("data")
+    tid = ""
+    if isinstance(d, dict):
+        tid = str(d.get("task_id") or d.get("batch_id") or d.get("id") or "")
+    elif isinstance(d, str):
+        tid = d.strip()
+    return _ok({"task_id": tid, "flow": name, "argv": res.get("cmd") or [],
+                "note": "已投递 → 用 action='flow_tasks' 看进度、'flow_task_info' 看详情与日志"})
+
+
+def action_analysis_run(args: dict) -> dict:
+    """投递离线分析任务（shell，写操作）。command 可多条（每条 = 一个 -i）。"""
+    cfg = load_config()
+    cmd = args.get("command") or args.get("cmd") or args.get("input") or []
+    if isinstance(cmd, str):
+        cmd = [cmd]
+    cmds = [str(x).strip() for x in cmd if str(x).strip()]
+    if not cmds and not args.get("path"):
+        return _err("需要参数 command（要跑的 shell 命令，例：sh /work/<user>/run.sh）")
+    argv = ["analysis", "run"]
+    if args.get("name"):
+        argv += ["-n", str(args["name"])]
+    for x in cmds:
+        argv += ["-i", x]
+    if args.get("resource"):
+        argv += ["-l", str(args["resource"])]
+    if args.get("image"):
+        argv += ["--image", str(args["image"])]
+    if args.get("mount"):
+        argv += ["-m", str(args["mount"])]
+    if args.get("output_path"):
+        argv += ["-o", str(args["output_path"])]
+    if args.get("path"):
+        argv += ["-p", str(args["path"])]
+    if _truthy(args.get("dry_run")):
+        return _ok({"dry_run": True, "argv": ["dcs"] + argv,
+                    "command": _argv_display(["dcs"] + argv),
+                    "note": "预检（dry_run）：没有提交、不计费；核对无误后去掉 dry_run 再提交"})
+    guard = _write_guard(cfg, "analysis_run")
+    if guard:
+        return guard
+    res = _run_cli(argv, cfg=cfg, timeout=max(int(cfg.get("timeout") or 120), 240))
+    if not res.get("ok"):
+        return _err(res.get("message") or "投递失败", detail=res.get("error"), hint=res.get("hint"))
+    d = res.get("data")
+    tid = ""
+    if isinstance(d, dict):
+        tid = str(d.get("task_id") or d.get("batch_id") or d.get("id") or "")
+    elif isinstance(d, str):
+        tid = d.strip()
+    return _ok({"task_id": tid, "argv": res.get("cmd") or [],
+                "note": "已投递 → 用 action='tasks' / 'task_logs' 看进度与日志"})
+
+
+def action_images(args: dict) -> dict:
+    """本机可用的容器镜像列表（离线任务 --image 用）。"""
+    cfg = load_config()
+    argv = ["image", "ls"] + _page_args(args)
+    res = _run_cli(argv, cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "查镜像失败", detail=res.get("error"), hint=res.get("hint"))
+    d = res.get("data") or {}
+    recs = ((d.get("records") if isinstance(d, dict) else d) or [])
+    images = []
+    for r in recs:
+        nm = str(r.get("name") or "").strip()
+        tag = str(r.get("tags") or "").strip().strip(":") or "latest"
+        if nm:
+            images.append({"name": nm, "ref": "%s:%s" % (nm, tag),
+                           "prog_env": str(r.get("prog_env") or ""),
+                           "build_type": str(r.get("build_type") or "")})
+    return _ok({"images": images, "total": (d.get("total") if isinstance(d, dict) else len(images)) or len(images)})
+
+
+def action_flow_tasks(args: dict) -> dict:
+    """WDL 任务列表（投递后看进度）。"""
+    cfg = load_config()
+    argv = ["workflow", "tasks"] + _page_args(args)
+    if args.get("status"):
+        argv += ["-s", str(args["status"])]
+    if args.get("user"):
+        argv += ["-u", str(args["user"])]
+    if args.get("flow"):
+        argv += ["-n", str(args["flow"])]
+    if args.get("task_id"):
+        argv += ["-i", str(args["task_id"])]
+    if _truthy(args.get("all")):
+        argv.append("-a")
+    res = _run_cli(argv, cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "查 WDL 任务失败", detail=res.get("error"), hint=res.get("hint"))
+    d = res.get("data") or {}
+    recs = ((d.get("records") if isinstance(d, dict) else d) or [])
+    return _ok({"tasks": recs,
+                "total": (d.get("total") if isinstance(d, dict) else len(recs)) or len(recs),
+                "page": args.get("page") or 1})
+
+
+def action_flow_task_info(args: dict) -> dict:
+    """WDL 任务详情（含提交信息 / 输入输出 / 运行日志）。"""
+    cfg = load_config()
+    tid = str(args.get("task_id") or args.get("id") or "").strip()
+    if not tid:
+        return _err("需要参数 task_id（先用 action='flow_tasks' 查）")
+    res = _run_cli(["workflow", "task_info", tid], cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "取任务详情失败", detail=res.get("error"), hint=res.get("hint"))
+    return _ok({"task_id": tid, "info": res.get("data")})
+
+
+def action_task_cancel(args: dict) -> dict:
+    """取消任务（kind='workflow' 走 workflow cancel -n；否则 analysis cancel <id>）。写操作。"""
+    cfg = load_config()
+    guard = _write_guard(cfg, "task_cancel")
+    if guard:
+        return guard
+    tid = str(args.get("task_id") or args.get("id") or "").strip()
+    if not tid:
+        return _err("需要参数 task_id")
+    kind = str(args.get("kind") or "analysis").strip().lower()
+    if kind in ("workflow", "wdl", "w"):
+        argv = ["workflow", "cancel", "-n", tid]
+    else:
+        argv = ["analysis", "cancel", tid]
+    res = _run_cli(argv, cfg=cfg)
+    if not res.get("ok"):
+        return _err(res.get("message") or "取消失败", detail=res.get("error"), hint=res.get("hint"))
+    return _ok({"task_id": tid, "kind": "workflow" if kind in ("workflow", "wdl", "w") else "analysis",
+                "detail": res.get("data")})
+
+
 def _split_raw_cmd(text) -> list:
     """把用户输入切成 argv。三种口径，按优先级：
 
@@ -1311,6 +1581,14 @@ def action_context(args: dict) -> dict:
 
 
 _ACTIONS = {
+    "flows": action_flows,
+    "flow_form": action_flow_form,
+    "flow_run": action_flow_run,
+    "analysis_run": action_analysis_run,
+    "images": action_images,
+    "flow_tasks": action_flow_tasks,
+    "flow_task_info": action_flow_task_info,
+    "task_cancel": action_task_cancel,
     "status": action_status,
     "bind": action_bind,
     "unbind": action_unbind,

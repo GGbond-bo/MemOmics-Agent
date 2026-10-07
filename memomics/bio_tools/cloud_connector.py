@@ -54,14 +54,19 @@ SCHEMA = {
                 "enum": ["status", "bind", "unbind", "projects", "use_project", "current", "context",
                          "ls", "find", "info", "download", "upload",
                          "container_open", "container_exec", "container_close",
-                         "tasks", "task_logs", "raw"],
+                         "tasks", "task_logs",
+                         "flows", "flow_form", "flow_run", "analysis_run", "images",
+                         "flow_tasks", "flow_task_info", "task_cancel", "raw"],
                 "description": (
                     "要执行的动作：status=绑定/CLI 状态；**context=开工前确认上下文（会话/候选项目/数据根/"
                     "默认下载目录/必问清单，只读；用户说「在云上跑/投递任务」时第一步就调它）**；"
                     "projects/use_project/current=项目；"
                     "ls/find/info=浏览与查找 Files；download/upload=云↔本机传文件；"
                     "container_open/exec/close=云上在线容器；tasks/task_logs=离线任务；"
-                    "raw=白名单逃生舱（跑任意非凭据类 dcs 子命令）。"
+                    "tasks/task_logs=离线任务；"
+                    "**flows/flow_form=WDL 流程列表与投递表单（参数名/类型/必填/默认值）；flow_run=投递 WDL 任务（写）；"
+                    "analysis_run=投递离线 shell 作业（写）；images=可用镜像；flow_tasks/flow_task_info=WDL 任务进度与日志；"
+                    "task_cancel=取消任务（写）；raw=白名单逃生舱（跑任意非凭据类 dcs 子命令）。"
                 ),
             },
             "path": {"type": "string",
@@ -84,7 +89,22 @@ SCHEMA = {
                         "description": "container_exec：容器内 shell 命令；raw：dcs 子命令（如 \"workflow ls\"）"},
             "cwd": {"type": "string", "description": "container_exec：容器内工作目录"},
             "resource_id": {"type": "string", "description": "container_open：容器规格 ID（先用 raw: terminal ls_resource 查）"},
-            "task_id": {"type": "string", "description": "task_logs：任务 ID（先用 tasks 查）"},
+            "task_id": {"type": "string",
+                        "description": "task_logs/flow_task_info/task_cancel：任务 ID（先用 tasks / flow_tasks 查）"},
+            "flow": {"type": "string",
+                     "description": "flow_form/flow_run/flow_tasks：WDL 流程名（先用 flows 查，如 Copy-scRNA-seq_v3）"},
+            "version": {"type": "string", "description": "flow_form/flow_run：流程版本，留空=最新"},
+            "inputs": {"type": "object",
+                       "description": "flow_run：WDL 输入参数，{参数名: 值}；参数名/必填项用 flow_form 拿"},
+            "output_path": {"type": "string",
+                            "description": "flow_run/analysis_run：云上输出目录（如 /Files/<项目>/out）"},
+            "entity": {"type": "string", "description": "flow_run：样本 entity ID（-e），可选"},
+            "resource": {"type": "string",
+                         "description": "analysis_run：资源规格，如 vf=32g,num_proc=8[,gpu=L4]"},
+            "image": {"type": "string", "description": "analysis_run：容器镜像（先用 images 查）"},
+            "mount": {"type": "string", "description": "analysis_run：挂载云上数据，逗号分隔 /Files/a,/Files/b"},
+            "kind": {"type": "string", "enum": ["analysis", "workflow"],
+                     "description": "task_cancel：取消哪一类任务"},
             "all": {"type": "boolean", "description": "tasks：true = 查全项目任务（-a）"},
             "pat": {"type": "string",
                     "description": "bind：PAT 文本。仅在用户主动把 PAT 直接发给你时才用；"

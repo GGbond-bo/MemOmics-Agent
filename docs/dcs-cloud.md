@@ -14,7 +14,7 @@
 
 首次绑定后建议顺序：`projects` → `use_project` → `ls`。真机上如果 CLI 没装，面板/工具都会明确提示去跑安装脚本，不会静默失败。
 
-## 面板/工具动作（18 个）
+## 面板/工具动作（26 个）
 
 | 动作 | 作用 | 备注 |
 |------|------|------|
@@ -25,7 +25,13 @@
 | `ls` / `find` / `info` | 浏览 Files / 搜索 / 元数据 | `find` 支持名字、类型、大小、时间、样本等过滤 |
 | `download` / `upload` | 云 → 本机 / 本机 → 云 | 小文件 `web`（上 ≤100MB，下 ≤200MB）；大文件用 `raw` 切 `oss`/`raysync` |
 | `container_open` / `container_exec` / `container_close` | 在线容器开关 + 容器内执行 | 打开后等 3–5 秒再 exec（平台返回 83007）；用完关掉释放资源 |
-| `tasks` / `task_logs` | 离线（个性化分析）任务列表 / 日志 | WDL 流程投递暂走 `raw` |
+| `tasks` / `task_logs` | 离线（个性化分析）任务列表 / 日志 | 与 `flow_tasks`（WDL 任务）互补 |
+| `flows` / `flow_form` | **WDL 流程列表 / 投递表单**：参数名、类型、必填、默认值（`workflow info` + `workflow check_parameter` 合并） | 面板「🚀 投递」自动拉；agent 也能直接调 |
+| `flow_run` | **投递 WDL 任务**（`-n 流程 -v 版本 -i 名=值 -e entity -o 输出`） | 写操作，先过 `allow_write`；`dry_run:true` 只回 argv、不提交不计费 |
+| `analysis_run` | **投递离线 shell 作业**（`-i` 命令可多条、`-l` 规格、`--image`、`-m` 挂载、`-o` 输出、`-p` 批量） | 同上，写操作 + `dry_run` 预检 |
+| `images` | 本机可用容器镜像（给 `--image` 挑） | 真机实测 94 个 |
+| `flow_tasks` / `flow_task_info` | WDL 任务列表 / 任务详情（提交信息 + 输入输出 + 运行日志） | 投递后就靠它看进度 |
+| `task_cancel` | 取消任务（`kind=analysis` → `analysis cancel <id>`；`kind=workflow` → `workflow cancel -n <id>`） | 写操作，面板里点「取消」要二次确认 |
 | `raw` | 白名单原生命令（project/data/table/terminal/analysis/workflow/image/billing/region/history） | 凭据类子命令（auth/login/logout/config）**不允许**走 raw |
 
 ## 安全与合规
@@ -56,13 +62,13 @@ dcs_cloud:
 
 | 文件 | 角色 |
 |------|------|
-| `memomics/connectors/dcs_cloud.py` | 连接器核心：配置加载、PAT 凭据库、CLI 执行器（强制 `--output json --no-history`）、错误翻译、17 个动作 |
+| `memomics/connectors/dcs_cloud.py` | 连接器核心：配置加载、PAT 凭据库、CLI 执行器（强制 `--output json --no-history`）、错误翻译、26 个动作（含 8 个投递动作） |
 | `memomics/bio_tools/cloud_connector.py` | agent 工具壳 `dcs_cloud`（schema + `check_fn=enabled`），转调同一个 handler |
 | `memomics/bio_tools/__init__.py` | 导入新模块（不导入 = 模型看不到，见 `test_bio_tools_registry_complete.py` 的事故说明） |
 | `webui/server.py` | 薄路由：`/api/dcs/status|bind|unbind|config|exec|pick` + 下载队列 `/api/dcs/dl/{start,list,cancel,retry,clear,reveal}`（worker 在连接器里） |
-| `webui/index.html` | 左侧「☁️ DCS 云」面板（数据/队列/日志三个标签）；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
+| `webui/index.html` | 左侧「☁️ DCS 云」面板（**互斥视图**：📁 项目 / 🗂 数据 / 🚀 投递 / ⬇ 队列 / 🧾 日志 / ⚙️ 设置）；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
 | `scripts/install_dcs_cli.ps1` | 官方 CLI 安装器：官方 CDN + SHA256 校验，校验不过就删文件、绝不执行 |
-| `webui/tests/test_dcs_cloud_connector.py` | 33 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网） |
+| `webui/tests/test_dcs_cloud_connector.py` | 40 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网） |
 | `webui/middleware_routes.json` | 路由清单已用 `python webui/entry_middleware.py --snapshot` 同步 |
 
 ## 验证记录（2026-10-07）
@@ -135,8 +141,8 @@ dcs_cloud:
 | 形态 | 什么时候用 | 命令 | MemOmics 里的入口 |
 |------|-----------|------|------------------|
 | **云容器**（交互式） | 调试脚本、跑小算例、看数据、装环境 | `terminal open` → `terminal exec -c "…"` → `terminal close` | 命令模式选 `container_open` / `container_exec` / `container_close`（一句话："开云容器"）。`/work` 里就是项目数据与 400T HPC |
-| **离线分析任务**（一命令一作业） | 单条 shell 作业，要规格 / 挂数据 / 落输出 | `analysis run -i "sh /work/x.sh" -l vf=32g,num_proc=8 --image <img> -o /Files/out`（`-p` 批量、`-m` 挂数据）；随后 `analysis start / info / log / consume / cancel / rm` | 命令模式选 `raw`（见下）；「📋 任务」看列表与日志 |
-| **WDL 流程**（多步、参数表） | 正规流程化分析 | `workflow ls` → `workflow check_parameter -n <流程>` → `workflow run -n <流程> -i k=v -v <版本> -o /Files/out`；`workflow tasks / task_info / task_log / cancel`、多步编排 `workflow plan` | 同上 |
+| **离线分析任务**（一命令一作业） | 单条 shell 作业，要规格 / 挂数据 / 落输出 | `analysis run -i "sh /work/x.sh" -l vf=32g,num_proc=8 --image <img> -o /Files/out`（`-p` 批量、`-m` 挂数据）；随后 `analysis start / info / log / consume / cancel / rm` | **「🚀 投递」→ 离线作业表单**（或 agent 调 `analysis_run`）；`raw` 仍可手打；「📋 任务」看列表与日志 |
+| **WDL 流程**（多步、参数表） | 正规流程化分析 | `workflow ls` → `workflow check_parameter -n <流程>` → `workflow run -n <流程> -i k=v -v <版本> -o /Files/out`；`workflow tasks / task_info / task_log / cancel`、多步编排 `workflow plan` | **「🚀 投递」→ WDL 表单**（选流程 → 自动拉参数表 → 预检 → 提交）；agent 走 `flows`/`flow_form`/`flow_run` |
 
 **面板 `raw` 模式怎么填**（白名单逃生舱）：`project / data / table / terminal / analysis / workflow / image / billing / region / history`（凭据类 `auth/login/logout/config` 禁止）。
 
@@ -148,6 +154,36 @@ dcs_cloud:
 **开工前五问**（见下一节，不问清不动手）：哪个项目 / 数据在哪（本机 ↔ `/Files` ↔ 容器 `/work` 三套文件系统不互通）/ 跑什么+参数 / 结果回哪 / 费用。
 
 **实测**（2026-10-07，真账号）：`workflow ls` 列出项目上 **16 个免费流程**（Copy-scRNA-seq_v3 / v3.1.5 / v2.3、scATAC-seq(+v3、build-index)、SAW-ST-V8(+makeRef)、DUCKS4、Bandage、NanoPlot、h5ad2seurat 格式转换、scRNA-seq_C4_analysis_pipeline…）；`workflow check_parameter -n Copy-scRNA-seq_v3` 当场返回参数规格（SampleID 必填、Oligo = `Array[Array[File]]`（R1/R2）…）；`analysis ls` 可列出项目现有离线任务（含别人建的）。
+
+## 🚀 投递面板（表单化，2026-10-07 用户选定方案）
+
+用户问「memOmics 怎么用云平台跑分析、投递任务」→ 选做**一等公民的投递表单**（不再让人手打 `raw` 命令行）。
+
+**入口**：面板工具行新增「🚀 投递」（与项目/数据/队列/日志/设置一样是**互斥视图**），里头两个子表单：
+
+| 子表单 | 流程 | 说明 |
+|--------|------|------|
+| 🧬 **WDL 流程** | 选流程 → 点「⟳ 流程列表」拉当前项目流程 → 选一个**自动拉参数表**（类型 / 必填 / 默认值，必填带 `*`） → 输出目录自动预填 `/Files/<流程>_<时间戳>` → **🔍 预检**（回显将提交的整条命令，缺必填会标红） → **🚀 提交**（弹确认框带流程/参数数/输出/计费） → 结果里给任务号 | 参数来自 `workflow info`（英文 inputs、版本、计费）与 `workflow check_parameter`（中文参数表、默认值）**按参数名合并**；`Array[...]` 类型渲染成多行输入 |
+| 🖥 **离线作业** | 任务名 / 命令（一行一条 = 多个 `-i`）/ 资源 `vf=…,num_proc=…` / 镜像（`⟳ 镜像`拉 datalist）/ 挂载 / 输出目录 → 预检 → 提交 | 对应 `analysis run` |
+
+**预检（`dry_run`）是关键设计**：`flow_run` / `analysis_run` 传 `dry_run: true` 时**只回 argv 字符串**，不碰 CLI、不提交、不计费，而且**不受 `allow_write` 只读开关影响**（只想看命令的人不该被写开关挡住）；确认无误再去掉 `dry_run` 真提交。
+
+**最近任务表**：底部同时拉 `flow_tasks`（WDL）+ `tasks`（离线任务）各 10 条，列「类 / 任务号 / 名称 / 状态 / 时间 / 费用」，每行一个「取消」（`task_cancel`，二次确认）——投递完不用再换视图看进度。
+
+**真机验证（2026-10-07，真账号 + 真 CLI，全程未真提交）**：
+
+| 动作 | 结果 |
+|------|------|
+| `flows` | ✅ 项目内 **16 个免费流程**（Copy-scRNA-seq_v3 / v3.1.5、scATAC-seq、SAW-ST-V8、DUCKS4、Bandage、NanoPlot、h5ad2seurat…），标签 `DCS` / `Genomics`、`price=free` |
+| `flow_form` | ✅ `Copy-scRNA-seq_v3` → 版本 **3.3.4**、计费 `free`、**8 个参数**带默认值（`forcecells=0`、`Cpu=16`、`expectcells=3000`、`Mem=100`；`Oligo`/`cDNA` = `Array[Array[File]]` 必填） |
+| `flow_run`（`dry_run`） | ✅ `dcs workflow run -n Copy-scRNA-seq_v3 -i genomeDir=PROBE_DRYRUN -i forcecells=PROBE_DRYRUN -o /Files/probe_dryrun` —— 只回命令，**没有投递** |
+| `analysis_run`（`dry_run`） | ✅ `dcs analysis run -n probe -i "sh /work/probe.sh" -l vf=4g,num_proc=2 -o /Files/probe_dryrun` |
+| `images` | ✅ **94** 个镜像（`r441_nebula_probe_d:latest` …） |
+| `flow_tasks` | ✅ 该账号历史 **769** 条 WDL 任务（`W202607230088006` 完成 / Copy-scRNA-seq_v3 / 2026-07-23 21:04:22） |
+| 参数校验 | ✅ 空 `task_id` → 「需要参数 task_id」；空 `-i` → 「至少要填一个输入参数」（都不会打到 CLI） |
+
+**前端验证**：无头 Edge 跑 `_dcs_probe/build_preview11.py` 生成的预览页（真面板 markup + 真 DCS JS + 假 API），断言全绿：
+点「🚀 投递」→ `view=submit`（项目/数据/队列/日志/设置**同时 none**、标签高亮）；选流程 → 3 行参数、默认值 `3000` 预填、输出目录自动填；预检回显命令 + 缺必填提示；**缺必填点提交 → 前端拦下且一条请求都不发**；补齐后提交 → POST 体里 `flow` / `SampleData`… / `output_path` 正确、回显任务号；离线表单预检命令含带引号参数、提交 `command` 是数组；任务表渲染 2 行。
 
 ## 🗣️ 「在云平台跑分析」怎么走：开工前确认协议
 
@@ -181,7 +217,8 @@ tkinter 优先，缺失时自动退到 PowerShell `System.Windows.Forms`），�
 ## 限制与后续
 
 - **没有**采用"网页会话自动化（`cld:token`）"方案：那是未公开接口，脆弱且违反稳定性预期；连接器只走官方 CLI。
-- `analysis run`（投递离线任务）与 `workflow submit_task`（WDL 投递）目前走 `raw` 逃生舱，参数模板与计费确认后
-  再升级成专用动作（`analysis_submit` / `workflow_submit`）。
+- ~~`analysis run` / WDL 投递走 `raw` 逃生舱~~ → **2026-10-07 已升级成专用动作**（`analysis_run` / `flow_run` + `flows` / `flow_form` / `images` /
+  `flow_tasks` / `flow_task_info` / `task_cancel`），面板有「🚀 投递」表单 + `dry_run` 预检；`raw` 保留给长尾子命令。
+- 还没做的：投递后**自动轮询**（现在是手动「⟳ 刷新」+ 列表）+ 从「📋 任务」直接跳转 WDL 任务详情；`workflow plan`（多步编排）没做表单。
 - 可加：`terminal ls_resource`（容器规格列表）、PAT 到期提醒（`status` 已回 `expires_at`）、把云路径纳入
   `remote_cluster locate` 式的"数据在哪"判定（本地 / 集群 / DCS 云三选一）。
