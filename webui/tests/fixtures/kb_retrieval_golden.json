@@ -1,7 +1,7 @@
 {
   "schema": "memomics.kb-retrieval-golden.v1",
   "top_k": 5,
-  "note": "黄金检索集：26 条真实意图查询，命中判据是「top_k 内至少一条结果落在期望目录/文件名上」。期望值写的是意图（问人骨骼肌衰老就该回到 Homo_sapiens/skeletal_muscle/aging/），不是把当前输出抄下来——所以它是回归护栏，不是快照。known_gap 的用例只统计不断言（覆盖缺口要留痕，不要靠删用例粉饰）。",
+  "note": "黄金检索集：26 条真实意图查询，命中判据是「top_k 内至少一条结果落在期望目录/文件名上」。期望值写的是意图（问人骨骼肌衰老就该回到 Homo_sapiens/skeletal_muscle/aging/），不是把当前输出抄下来——所以它是回归护栏，不是快照。known_gap 的用例只统计不断言（覆盖缺口要留痕，不要靠删用例粉饰）。forbid_top1（2026-10-07 加）：方法类查询里论文卡（paper_ 前缀、_empirical.yaml 后缀）不得排第一——新写入一批论文卡后它们靠 BM25 量级霸榜，把 deg.yaml 等真正的方法卡挤出了前五（见 kb_search._intent_factor）。",
   "cases": [
     {
       "id": "kb-01",
@@ -131,6 +131,10 @@
       "direction": "",
       "expect_contains": [
         "cellchat"
+      ],
+      "forbid_top1": [
+        "paper_",
+        "_empirical.yaml"
       ]
     },
     {
@@ -154,6 +158,10 @@
         "deg-",
         "deg_",
         "deg.yaml"
+      ],
+      "forbid_top1": [
+        "paper_",
+        "_empirical.yaml"
       ]
     },
     {
@@ -184,6 +192,10 @@
       "direction": "",
       "expect_contains": [
         "spatial"
+      ],
+      "forbid_top1": [
+        "paper_",
+        "_empirical.yaml"
       ]
     },
     {
@@ -194,6 +206,10 @@
       "direction": "",
       "expect_contains": [
         "gwas"
+      ],
+      "forbid_top1": [
+        "paper_",
+        "_empirical.yaml"
       ]
     },
     {

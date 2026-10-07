@@ -448,6 +448,10 @@ def _archetype_weight(fname: str) -> float:
 
     论文/经验条目（paper_*、*_empirical）擅长回答「有没有人做过」，不擅长回答「参数是多少」；
     问 CellChat 参数时，cellchat.yaml 应该压过一篇恰好反复提到 CellChat 的论文条目。
+
+    ⚠️ 这是**固定量级**的微调（±20/30），在 BM25 量级（几百上千）面前基本等于没有；
+    方法类查询真正靠得住的是 _intent_factor() 的乘子。这里保留是因为 os.walk 兜底路径的
+    content_score 是纯词频（几十的量级），±20/30 在那里仍然有效。
     """
     n = (fname or "").lower()
     if n.startswith("paper_") or n.endswith("_empirical.yaml"):
@@ -460,6 +464,39 @@ def _archetype_weight(fname: str) -> float:
     if any(k in n for k in ("key_findings", "biology_knowledge", "gene_sets", "cell_types", "atlas")):
         return 15.0
     return 0.0
+
+
+# 方法意图词：用户问的是「怎么做 / 参数多少 / 步骤」，不是「有没有人做过」。
+_METHOD_INTENT_WORDS = ("方法", "参数", "步骤", "流程", "阈值", "如何", "怎么", "教程", "手册",
+                        "protocol", "pipeline", "parameter", "tutorial", "workflow", "steps", "method")
+
+
+def _has_method_intent(query: str) -> bool:
+    q = (query or "").lower()
+    return any(w in q for w in _METHOD_INTENT_WORDS)
+
+
+def _intent_factor(fname: str, method_intent: bool) -> float:
+    """按查询意图缩放「原型」权重（v6, 2026-10-07）——乘子，不是加数。
+
+    事故：2026-10-07 20:12 建库新写入一批 paper_* 卡后，查「差异表达分析 方法」的前五名
+    被论文卡占满（bm25×10≈388，扣掉固定的 −20 仍是 368），真正的 deg.yaml（27.7 + 路径 90
+    = 117.7）掉到第六 —— 黄金集 kb-15 变红。根因和物种/组织/方向曾经踩过的坑同源
+    （见 _structured_boost）：固定权重压不住 BM25 的量级。
+
+    方法类查询下改成乘子，量级跟着 BM25 一起缩放：方法/工具卡 ×3、论文/经验卡 ×0.3
+    （不是乘 0，论文卡仍留在结果里，只是不再霸榜）。非方法类查询不动（×1），
+    避免影响「有没有人做过」这类问法。
+    """
+    if not method_intent:
+        return 1.0
+    n = (fname or "").lower()
+    if n.startswith("paper_") or n.endswith("_empirical.yaml"):
+        return 0.3
+    stem = n[:-5] if n.endswith(".yaml") else n
+    if "method" in n or stem in _TOOL_FILES:
+        return 3.0
+    return 1.0
 _KB_SPECIES_ROOTS_CACHE = None
 
 
@@ -526,6 +563,7 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
 
     results = []
     queries = _expand_query(query)
+    method_intent = _has_method_intent(query)
     species_variants = _normalize_species(species)
     tissue_variants = _normalize_tissue(tissue)
     direction_variants = _normalize_direction(direction)
@@ -574,7 +612,10 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                     # FTS5 的 rank 是 bm25()：**越负越相关**。旧代码 100+int(rank) 把强匹配算成了低分，
                     # 排序整个反过来（实测：问 CellChat，真正命中 cellchat.yaml 的候选排在只沾了一个
                     # 通用词的 default_kb_method.yaml 后面）。
-                    fts_score = max(0.0, -float(rank)) * 10.0
+                    # v6: 方法类查询再乘一次原型意图乘子（论文卡 ×0.3 / 方法卡 ×3），
+                    #     否则新写入的论文卡会靠 BM25 量级把方法卡挤出前五（见 _intent_factor）。
+                    fts_score = (max(0.0, -float(rank)) * 10.0
+                                 * _intent_factor(os.path.basename(rel_path), method_intent))
                     content_lower = content.lower()
                     # 短词只加分、不过滤：过滤会直接零召回（问 "GWAS 方法"，gwas.yaml 正文里没有
                     # 「方法」两个字，就被一刀切掉了）。
@@ -659,6 +700,8 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
             if matched_terms or path_boost > 0:
                 # 综合评分: 内容匹配 + 路径加权
                 content_score = sum(_word_count(q, content_lower) for q in matched_terms) if matched_terms else 0
+                # v6: 兜底路径同样应用「方法意图」乘子（论文卡在纯词频里也常靠篇幅霸榜）
+                content_score = content_score * _intent_factor(fname, method_intent)
                 score = content_score + path_boost
 
                 if score == 0:

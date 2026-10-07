@@ -56,6 +56,13 @@ def _evaluate(kb_search, case, top_k):
     top = [_norm(r["file"]) for r in res.get("results", [])[:top_k]]
     if case.get("expect_none"):
         return res["total"] == 0, res["total"], top
+    # 2026-10-07: 方法类查询「第一名不得是论文卡」——论文卡靠 BM25 量级霸榜是真实事故
+    # （新写入一批 paper_* 后「差异表达分析 方法」前五被论文卡占满，deg.yaml 掉到第六）。
+    # 判据按条目文件名匹配：paper_ 看前缀，_empirical.yaml 看后缀。
+    for pat in case.get("forbid_top1", []):
+        base = top[0].rsplit("/", 1)[-1] if top else ""
+        if base and (base.startswith(_norm(pat)) or base.endswith(_norm(pat))):
+            return False, res["total"], top
     for pref in case.get("expect_prefix", []):
         if any(f.startswith(_norm(pref)) for f in top):
             return True, res["total"], top
@@ -90,5 +97,6 @@ def test_golden_fixture_shape(golden):
     assert len(ids) == len(set(ids)), "用例 id 重复"
     assert len(ids) >= 20, "黄金集太小，起不到护栏作用"
     for c in golden["cases"]:
-        has_judgement = c.get("expect_none") or c.get("expect_prefix") or c.get("expect_contains")
+        has_judgement = (c.get("expect_none") or c.get("expect_prefix")
+                         or c.get("expect_contains") or c.get("forbid_top1"))
         assert has_judgement or c.get("known_gap"), "%s 既没有判据也不是已知缺口" % c["id"]
