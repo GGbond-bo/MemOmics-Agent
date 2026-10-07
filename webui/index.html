@@ -9520,7 +9520,9 @@ function renderKbYaml(obj, depth) {
   if (typeof obj === 'boolean') return '<span style="color:#e67e22;">' + obj + '</span>';
   if (typeof obj === 'number') return '<span style="color:#3498db;">' + obj + '</span>';
   if (typeof obj === 'string') {
-    if (obj.indexOf('\n') >= 0) return '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;overflow-x:auto;margin:4px 0;white-space:pre-wrap;">' + escapeHtml(obj) + '</pre>';
+    // 2026-10-07 修复白底白字：.file-preview pre 的 color:var(--code-fg)（近白）会渗进这个浅底 pre，
+    // inline 只压得住 background 压不住 color → 浅色主题下「content 白色背景看不清」。显式给 color。
+    if (obj.indexOf('\n') >= 0) return '<pre style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;overflow-x:auto;margin:4px 0;white-space:pre-wrap;">' + escapeHtml(obj) + '</pre>';
     return '<span>' + escapeHtml(obj) + '</span>';
   }
   if (Array.isArray(obj)) {
@@ -16156,6 +16158,25 @@ function dcsPickDir(cb) {
 // 「🗂 数据」标签 = 云上文件浏览：不管当前在看项目还是任务，点它都回到数据视图
 function dcsOpenData() { return dcsNav(_dcsLastPath || '/Files', 1); }
 
+// 2026-10-07（用户）：「📁 项目」挪到工具行最左；点「☁️ DCS 云」默认展示项目信息。
+function dcsTabProjects() { dcsSetView('browse'); dcsShowProjects(1); }
+
+// 标签高亮：数据 / 项目 / 任务 共用 browse 容器，靠 _dcsState.kind 区分
+function dcsMarkTabs() {
+  var kind = (_dcsState || {}).kind || '';
+  var on = {
+    'dcs-tab-projects': _dcsView === 'browse' && kind === 'projects',
+    'dcs-tab-browse': _dcsView === 'browse' && kind !== 'projects' && kind !== 'tasks',
+    'dcs-tab-tasks': _dcsView === 'browse' && kind === 'tasks',
+    'dcs-tab-log': _dcsView === 'log',
+    'dcs-tab-queue': _dcsView === 'queue'
+  };
+  for (var id in on) {
+    var e = document.getElementById(id);
+    if (e) e.className = 'cc-btn' + (on[id] ? ' primary' : '');
+  }
+}
+
 function dcsTabData() {
   dcsSetView('browse');
   if (_dcsState.kind !== 'ls') dcsOpenData();
@@ -16165,14 +16186,10 @@ function dcsSetView(v) {
   _dcsView = v;
   var b = document.getElementById('dcs-browse'), o = document.getElementById('dcs-out'),
       q = document.getElementById('dcs-queue');
-  var tb = document.getElementById('dcs-tab-browse'), tl = document.getElementById('dcs-tab-log'),
-      tq = document.getElementById('dcs-tab-queue');
   if (b) b.style.display = (v === 'browse') ? 'flex' : 'none';
   if (o) o.style.display = (v === 'log') ? 'block' : 'none';
   if (q) q.style.display = (v === 'queue') ? 'flex' : 'none';
-  if (tb) tb.className = 'cc-btn' + (v === 'browse' ? ' primary' : '');
-  if (tl) tl.className = 'cc-btn' + (v === 'log' ? ' primary' : '');
-  if (tq) tq.className = 'cc-btn' + (v === 'queue' ? ' primary' : '');
+  dcsMarkTabs();
 }
 
 function dcsPrint(msg, cls) {
@@ -16263,6 +16280,7 @@ function dcsRowEl(spec) {
 }
 
 function dcsRender(rows, opts) {
+  dcsMarkTabs();
   var el = dcsRowsEl();
   if (!el) return;
   el.innerHTML = '';
@@ -16446,7 +16464,8 @@ function dcsFileDetail(it, full) {
 }
 
 var _dcsLastDir = '';
-var _dcsLastPath = '/Files';   // 最后浏览过的数据路径（数据标签每次都回到它）
+var _dcsLastPath = '/Files';
+var _dcsOpenDefault = false;   // 面板打开时是否强制回项目视图   // 最后浏览过的数据路径（数据标签每次都回到它）
 
 // 调本机原生选择框（宿主进程弹 Windows 对话框），把结果填回输入框
 function dcsPickInto(inputId, kind) {
@@ -16670,8 +16689,9 @@ function dcsLoad() {
     cb('dcs-enabled', c.enabled); cb('dcs-allow-write', c.allow_write);
     var vp = document.getElementById('dcs-vault-path');
     if (vp && c.vault) vp.textContent = c.vault;
-    if (!_dcsState.rows.length) {
-      if (c.enabled && c.bound) { dcsOpenData(); }
+    if (_dcsOpenDefault || !_dcsState.rows.length) {
+      _dcsOpenDefault = false;
+      if (c.enabled && c.bound) { dcsShowProjects(1); }
       else {
         dcsCrumbs([{ label: '🗂 云上数据' }]);
         dcsRender([], { empty: '还没绑定 DCS 访问令牌（PAT）\n点右上「⚙️ 设置」→ 粘贴 dcs_pat_… → 「🔗 绑定」\n绑定后这里直接列出云上 /Files 的数据', loaded: 0, total: 0, more: null });
@@ -16746,6 +16766,7 @@ function openDcsConsole() {
   }
   dcsSetView(_dcsView);
   dcsModeChange();
+  _dcsOpenDefault = true;   // 每次点开面板都回到「📁 项目」
   dcsLoad();
   dcsQRefresh();     // 刷新页面/重开面板时恢复队列（任务登记在服务进程里）
   var box = document.getElementById('dcs-cmd');
@@ -17489,12 +17510,12 @@ async function saveUpdateConfig(mode) {
       <span class="cc-chip" id="dcs-user-chip" style="display:none;"></span>
       <span class="cc-spacer"></span>
       <span class="cc-tabs">
+        <button class="cc-btn" id="dcs-tab-projects" onclick="dcsTabProjects()" title="项目列表：当前 / 欠费一眼看到">📁 项目</button>
         <button class="cc-btn primary" id="dcs-tab-browse" onclick="dcsTabData()">🗂 数据</button>
         <button class="cc-btn" id="dcs-tab-log" onclick="dcsSetView('log')">🧾 日志</button>
         <button class="cc-btn" id="dcs-tab-queue" onclick="dcsTabQueue()" title="下载队列">⬇ 队列<span id="dcs-qbadge" class="dcs-qbadge" style="display:none;"></span></button>
       </span>
-      <button class="cc-btn" onclick="dcsQuick('projects')">📁 项目</button>
-      <button class="cc-btn" onclick="dcsQuick('tasks')">📋 任务</button>
+      <button class="cc-btn" id="dcs-tab-tasks" onclick="dcsQuick('tasks')">📋 任务</button>
       <button class="cc-btn" onclick="dcsQuick('upload')">⬆ 上传</button>
       <button class="cc-btn" onclick="dcsToggleCfg()">⚙️ 设置</button>
       <button class="cc-btn" onclick="dcsClose()">✕ 关闭</button>
