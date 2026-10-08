@@ -39,7 +39,7 @@ StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 herme
       port: 22
       key: C:/Users/me/.ssh/id_ed25519   # 私钥路径；留空则用 ssh-agent/默认密钥
       workdir: /home/zhangsan/proj       # 远端工作目录（默认执行目录）
-      scheduler: auto               # auto | slurm | pbs | none
+      scheduler: auto               # auto | slurm | pbs | gridengine | none
       partition: cpu                # Slurm 默认分区
       queue: ""                     # PBS 默认队列
       local_root: E:/MemOmics-Agent # 与 remote_root 配对，用于路径映射（可选）
@@ -119,6 +119,10 @@ _DEFAULT_CFG = {
     "default_node": "",          # 配了多个节点时可指定默认；留空则多节点必须显式指定
     "node_policy": "ask",        # ask（没说就问）| 预留 auto（自动挑最闲）
     "allow_unlisted_nodes": True,  # True: 传了未登记的名字时按裸主机连（并在返回里标注）
+    # --- Grid Engine（SGE/UGE）微调：按集群 qconf 实际情况改 ---
+    "ge_pe": "smp",              # 并行环境名（qconf -spl 可查；多核作业用 #$ -pe <名> N）
+    "ge_mem_res": "vf",          # 内存资源名（华大系 GE 是 vf=virtual_free；别的 GE 常见 h_vmem/mem_free）
+    "ge_gpu_res": "num_gpu",     # GPU 资源名
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -615,6 +619,13 @@ def _get_conn(cfg: dict, force_reconnect: bool = False):
                 extra_options=cfg["extra_ssh_options"],
             )
             _CONNS[key] = conn
+        # job_dir 开头的 ~ 展开成远端家目录：scp 的目标路径不经 shell 解释，
+        # 字面 '~/...' 会被当成相对路径直接打不开（2026-10-08 dry_run 实踩）
+        jd = str(cfg.get("job_dir") or "")
+        if jd.startswith("~"):
+            home = str(getattr(conn, "_remote_home", "") or "").rstrip("/")
+            if home:
+                cfg["job_dir"] = home + jd[1:]
         return conn
 
 
@@ -796,7 +807,10 @@ _SCHED_BINS = ("sbatch", "squeue", "scancel", "sacct", "scontrol",
 
 _PROBE_SCHED = (
     'for c in ' + " ".join(_SCHED_BINS) + '; do '
-    'p=$(command -v "$c" 2>/dev/null); echo "$c=${p:--}"; done'
+    'p=$(command -v "$c" 2>/dev/null); echo "$c=${p:--}"; done; '
+    # qsub 的版本行用来区分 Grid Engine（SGE 8.1.9 / Univa Grid Engine）和 PBS/Torque
+    # （usage: qsub ...）——两者二进制同名但指令语法完全不同（#$ vs #PBS）
+    'v=$(qsub -help 2>&1 | head -1); echo "qsub_ver=${v:--}"'
 )
 
 _PROBE_TOOLS = (
@@ -820,17 +834,25 @@ def _parse_probe(text: str) -> dict:
     return found
 
 
+def _sched_from_probe(bins: dict) -> str:
+    """探测结果 → 调度器名。slurm 看 sbatch；qsub/qstat 同名二义性用 qsub 版本行区分 GE/PBS。"""
+    if bins.get("sbatch") and bins.get("squeue"):
+        return "slurm"
+    if bins.get("qsub") and bins.get("qstat"):
+        ver = str(bins.get("qsub_ver") or "")
+        if re.search(r"(?i)\b(SGE|UGE|Grid ?Engine|Univa)\b", ver):
+            return "gridengine"
+        return "pbs"
+    return "none"
+
+
 def _detect_scheduler(conn, cfg: dict):
     want = (cfg["scheduler"] or "auto").lower()
-    if want in ("slurm", "pbs", "none"):
+    if want in ("slurm", "pbs", "gridengine", "none"):
         return want, {}
     res = conn.execute(_PROBE_SCHED, timeout=60)
     bins = _parse_probe(res.get("output", ""))
-    if bins.get("sbatch") and bins.get("squeue"):
-        return "slurm", bins
-    if bins.get("qsub") and bins.get("qstat"):
-        return "pbs", bins
-    return "none", bins
+    return _sched_from_probe(bins), bins
 
 
 def _walltime_or_default(value: str) -> str:
@@ -881,6 +903,25 @@ def _build_job_script(cfg: dict, sched: str, command: str, name: str,
         lines.append("#PBS -l walltime=%s" % _walltime_or_default(walltime))
         if queue:
             lines.append("#PBS -q %s" % queue)
+    elif sched == "gridengine":
+        # SGE/UGE：#$ 指令。日志走 GE 默认命名 <jobname>.o<jobid>/.e<jobid>（落在 #$ -cwd
+        # 指定的提交目录）——不要给 GE 传 -o 带 %j 的路径：GE 不认识 %j，会生成一个字面量
+        # 名叫 %j 的文件。记录里的 %j 模板只给我们自己用，事后由 _expand_job_pattern 展开。
+        wd = workdir or cfg["workdir"]
+        out_log = posixpath.join(wd, "%s.o%%j" % name)
+        err_log = posixpath.join(wd, "%s.e%%j" % name)
+        lines.append("#$ -N %s" % name)
+        lines.append("#$ -cwd")
+        lines.append("#$ -S /bin/bash")
+        if queue:
+            lines.append("#$ -q %s" % queue)
+        if cpus:
+            lines.append("#$ -pe %s %s" % (cfg.get("ge_pe") or "smp", int(cpus)))
+        if mem_gb:
+            lines.append("#$ -l %s=%sG" % (cfg.get("ge_mem_res") or "vf", int(mem_gb)))
+        lines.append("#$ -l h_rt=%s" % _walltime_or_default(walltime))
+        if gpu:
+            lines.append("#$ -l %s=%s" % (cfg.get("ge_gpu_res") or "num_gpu", gpu))
     else:
         out_log = posixpath.join(logs, "%s.log" % name)
         err_log = out_log
@@ -935,6 +976,12 @@ def _parse_job_id(sched: str, output: str) -> str:
         for token in text.replace("\n", " ").split():
             if token.isdigit():
                 return token
+    if sched == "gridengine":
+        # GE：'Your job 123456 ("name") has been submitted' → 抓第一个数字
+        m = re.search(r"\b(\d+)\b", text)
+        if m:
+            return m.group(1)
+        return ""
     if sched == "pbs":
         first = text.splitlines()[0].strip() if text else ""
         if first:
@@ -971,14 +1018,9 @@ def _action_check(cfg: dict, args: dict) -> str:
     if _is_conn_error(output):
         _drop_conn(cfg)
     sched_bins = _parse_probe(output)
-    scheduler = cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "none") else "auto"
+    scheduler = cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "gridengine", "none") else "auto"
     if scheduler == "auto":
-        if sched_bins.get("sbatch") and sched_bins.get("squeue"):
-            scheduler = "slurm"
-        elif sched_bins.get("qsub") and sched_bins.get("qstat"):
-            scheduler = "pbs"
-        else:
-            scheduler = "none"
+        scheduler = _sched_from_probe(sched_bins)
     remote_home = getattr(conn, "_remote_home", "")
     return _ok({
         "status": "ok" if res.get("returncode") == 0 else "partial",
@@ -1296,7 +1338,7 @@ def _action_submit(cfg: dict, args: dict) -> str:
     if sched == "slurm":
         res = conn.execute("sbatch %s" % shlex.quote(script_remote),
                            timeout=max(cfg["timeout"], 120))
-    elif sched == "pbs":
+    elif sched in ("pbs", "gridengine"):
         res = conn.execute("cd %s && qsub %s" % (shlex.quote(workdir), shlex.quote(script_remote)),
                            timeout=max(cfg["timeout"], 120))
     else:
@@ -1406,6 +1448,23 @@ def _derive_state(sched: str, output: str) -> str:
             return ("UNKNOWN(队列与 scontrol 都没记录，sacct 未启用 accounting；"
                     "作业大概率已结束——直接 action='logs' 看输出)")
         return "UNKNOWN"
+    if sched == "gridengine":
+        qsec = _probe_section(text, "qstat")
+        ms = re.search(r"state=(\S+)", qsec)
+        if ms:
+            st = ms.group(1)
+            if st in ("r", "t", "Rr", "Rt"):
+                return "RUNNING"
+            if "E" in st:
+                return "ERROR(Eqw 错误态——用 action='logs' 或直接问 qstat -j <id>)"
+            return "PENDING(%s)" % st
+        asec = _probe_section(text, "qacct")
+        me = re.search(r"exit_status\s+(\d+)", asec)
+        if me:
+            return "COMPLETED" if me.group(1) == "0" else "FAILED(exit=%s)" % me.group(1)
+        if "do not exist" in (qsec + asec).lower():
+            return "UNKNOWN(队列和记账里都查不到——可能刚提交还没入账，或 job_id 不对)"
+        return "UNKNOWN"
     m = re.search(r"job_state\s*=\s*(\w+)", text)
     return m.group(1).upper() if m else "UNKNOWN"
 
@@ -1431,7 +1490,7 @@ def _action_status(cfg: dict, args: dict) -> str:
         assumed = True
     conn = _get_conn(cfg)
     sched = ((rec or {}).get("scheduler")
-             or (cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "none") else "auto"))
+             or (cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "gridengine", "none") else "auto"))
     if sched == "auto":
         sched, _ = _detect_scheduler(conn, cfg)
     if sched == "slurm":
@@ -1440,6 +1499,14 @@ def _action_status(cfg: dict, args: dict) -> str:
                "echo '== scontrol =='; (scontrol show job %s 2>&1 "
                "| grep -E 'JobState|RunTime|ExitCode' | head -5); "
                "echo '== sacct =='; (sacct -j %s --format=JobID,State,Elapsed,ExitCode -P -n 2>&1 | head -5)"
+               % (qid, qid, qid))
+    elif sched == "gridengine":
+        qid = shlex.quote(job_id)
+        # GE 两段式：在队列里（qstat 列表抓 state 列）；已离队（qacct 记账拿 exit_status）
+        cmd = ("echo '== qstat =='; "
+               "(qstat -u \"$USER\" 2>&1 | awk -v id=%s '$1==id {print \"state=\"$5\" queue=\"$8}'); "
+               "qstat -j %s 2>&1 | head -2; "
+               "echo '== qacct =='; (qacct -j %s 2>&1 | grep -E '^(exit_status|failed|end_time)' | head -5)"
                % (qid, qid, qid))
     elif sched == "pbs":
         cmd = ("echo '== qstat =='; (qstat -f %s 2>&1 | grep -E 'job_state|exec_host|resources_used' "
@@ -1534,7 +1601,7 @@ def _action_cancel(cfg: dict, args: dict) -> str:
         sched, _ = _detect_scheduler(conn, cfg)
     if sched == "slurm":
         cmd = "scancel %s" % shlex.quote(job_id)
-    elif sched == "pbs":
+    elif sched in ("pbs", "gridengine"):
         cmd = "qdel %s" % shlex.quote(job_id)
     else:
         pid_file = str((rec or {}).get("pid_file") or "")
@@ -1557,13 +1624,13 @@ def _action_cancel(cfg: dict, args: dict) -> str:
 
 def _action_jobs(cfg: dict, args: dict) -> str:
     conn = _get_conn(cfg)
-    sched = cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "none") else "auto"
+    sched = cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "gridengine", "none") else "auto"
     if sched == "auto":
         sched, _ = _detect_scheduler(conn, cfg)
     if sched == "slurm":
         cmd = ("echo '== squeue =='; squeue -u \"$USER\" -o '%.12i %.9P %.30j %.8T %.10M %.6D %R' 2>&1 | head -30; "
                "echo '== sacct (today) =='; (sacct -u \"$USER\" --starttime today --format=JobID,JobName,State,Elapsed -P -n 2>&1 | tail -20)")
-    elif sched == "pbs":
+    elif sched in ("pbs", "gridengine"):
         cmd = "qstat -u \"$USER\" 2>&1 | head -30"
     else:
         # 无调度器时只列本工具提交的作业（按作业目录过滤），避免把登录节点进程全倒出来
@@ -1644,12 +1711,7 @@ def _parse_node_probe(text: str) -> dict:
     if sched_sec:
         bins = _parse_probe(sched_sec)
         info["bins"] = {k: v for k, v in bins.items() if v}
-        if bins.get("sbatch") and bins.get("squeue"):
-            info["scheduler"] = "slurm"
-        elif bins.get("qsub") and bins.get("qstat"):
-            info["scheduler"] = "pbs"
-        else:
-            info["scheduler"] = "none"
+        info["scheduler"] = _sched_from_probe(bins)
     return info
 
 
@@ -2054,6 +2116,218 @@ def _action_locate(cfg: dict, args: dict) -> str:
     })
 
 
+# ---------------------------------------------------------------------------
+# 一键装公钥（WebUI「🔑 安装公钥」专用，2026-10-08）
+# ---------------------------------------------------------------------------
+# 为什么需要它：本工具走 BatchMode 密钥免密，但"第一次把公钥放上集群"这一步
+# 必须过一次密码认证；Windows 自带 ssh.exe 不支持脚本化密码输入，用户在
+# WebUI 里输密码 → 后端用 paramiko 完成这一次安装，之后全部免密。
+# 硬约束：密码只在内存里用这一次 —— 不落盘、不进日志、不缓存、不暴露给模型。
+
+
+def _paramiko():
+    try:
+        import paramiko
+        return paramiko
+    except ImportError:
+        return None
+
+
+def _p_connect(paramiko, host, port, user, password, key_path, sock_factory=None):
+    """按顺序尝试 密钥→密码（哪个给了试哪个）；返回 (client, 认证方式)。全失败抛最后异常。
+
+    sock_factory：走跳板时传一个"开新通道"的 callable —— 每次认证尝试都必须用
+    一条全新的 direct-tcpip 通道（上一次认证失败会把通道 EOF 掉，复用必炸 EOFError）。
+    """
+    attempts = []
+    key_path = os.path.expanduser(str(key_path or "").strip())
+    if key_path and os.path.exists(key_path):
+        attempts.append(("key", key_path))
+    if password:
+        attempts.append(("password", password))
+    last_exc = None
+    for mode, secret in attempts:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        kwargs = {"hostname": host, "port": int(port or 22), "username": user,
+                  "look_for_keys": False, "allow_agent": False,
+                  "timeout": 15, "banner_timeout": 30, "auth_timeout": 20}
+        if sock_factory is not None:
+            kwargs["sock"] = sock_factory()
+        if mode == "key":
+            kwargs["key_filename"] = secret
+        else:
+            kwargs["password"] = secret
+        try:
+            client.connect(**kwargs)
+            return client, mode
+        except Exception as exc:  # noqa: BLE001 — 认证失败换下一方式；网络错误也只会让下一方式再撞一次
+            last_exc = exc
+            try:
+                client.close()
+            except Exception:
+                pass
+    raise last_exc or RuntimeError("没有可用的认证方式（既没找到密钥文件也没给密码）")
+
+
+def _p_exec(client, cmd, timeout=30):
+    _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+    out = stdout.read().decode("utf-8", "replace")
+    err_out = stderr.read().decode("utf-8", "replace")
+    return out, err_out
+
+
+def _install_cmd(pub_line: str) -> str:
+    """幂等安装命令：已有该行就报 ALREADY，否则追加并报 INSTALLED。"""
+    return ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; "
+            "chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; "
+            "grep -qF '%s' ~/.ssh/authorized_keys 2>/dev/null && echo __MEMOMICS_KEY_ALREADY__ "
+            "|| { echo '%s' >> ~/.ssh/authorized_keys && echo __MEMOMICS_KEY_INSTALLED__; }"
+            ) % (pub_line, pub_line)
+
+
+def _exec_install(client, pub_line: str) -> str:
+    """在一台已连上的机器上执行安装；返回 installed / already，拿不到标记抛异常。"""
+    out, err_out = _p_exec(client, _install_cmd(pub_line), timeout=30)
+    if "__MEMOMICS_KEY_ALREADY__" in out:
+        return "already"
+    if "__MEMOMICS_KEY_INSTALLED__" in out:
+        return "installed"
+    raise RuntimeError("远端执行安装命令后没看到完成标记。stdout=%r stderr=%r"
+                       % (out[-500:], err_out[-500:]))
+
+
+def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
+    """用密码登录一次，把本机公钥追加进远端 ~/.ssh/authorized_keys（幂等）。
+
+    流程：解析节点（含 default_node/单节点兜底）→ 能密钥免密就直接报 already_ok
+    → 否则密码登录（带 proxy_jump 的先连跳板再开 direct-tcpip 通道，跳板优先用
+    共享密钥、密钥不行用同一密码）→ 幂等追加公钥 → 立刻用纯密钥重连验证整条链路。
+    """
+    paramiko = _paramiko()
+    if paramiko is None:
+        return _err("缺少 paramiko 库（WebUI 密码装公钥靠它做密码认证，Windows 自带 ssh.exe "
+                    "不支持脚本化密码）。装法：.venv\\Scripts\\python.exe -m pip install paramiko")
+    node_cfg, name, err = _select_node(cfg, node_name)
+    if err:
+        return err
+    host = str(node_cfg.get("host") or "").strip()
+    user = str(node_cfg.get("user") or "").strip()
+    if not host or not user:
+        return _err("节点 %r 缺 host/user，连不了" % (name or node_name), node=name)
+    port = int(node_cfg.get("port") or 22)
+    key_path = str(node_cfg.get("key") or "").strip()
+    pub_path = (os.path.expanduser(key_path) + ".pub") if key_path else ""
+    if not pub_path or not os.path.exists(pub_path):
+        return _err("找不到公钥文件：%s（先在「⚙️ 配置」里填对私钥路径；本机还没有密钥对就先生成："
+                    "ssh-keygen -t ed25519）" % (pub_path or "<未配置 remote.key>"), node=name)
+    with open(pub_path, "r", encoding="utf-8") as fh:
+        pub_line = fh.read().strip()
+    if not pub_line:
+        return _err("公钥文件是空的：%s" % pub_path, node=name)
+    if "'" in pub_line:
+        return _err("公钥内容含单引号，拒绝拼进 shell（异常文件）：%s" % pub_path, node=name)
+
+    # 跳板解析：proxy_jump 形如 [user@]host[:port]，缺省 user/port 继承共享配置
+    raw_entry = (cfg.get("nodes") or {}).get(name) or {}
+    jump_spec = str(raw_entry.get("proxy_jump") or "").strip()
+    jump_client = None
+    client = None
+    via = ""
+    try:
+        sock_factory = None
+        jump_note = ""
+        if jump_spec:
+            m = _LITERAL_HOST_RE.match(jump_spec)
+            if not m:
+                return _err("节点 %r 的 proxy_jump=%r 解析不了（应为 [user@]host[:port]）" % (name, jump_spec),
+                            node=name)
+            j_user = m.group(1) or str(cfg.get("user") or user)
+            j_host = m.group(2)
+            j_port = int(m.group(3) or 22)
+            jump_client, j_mode = _p_connect(paramiko, j_host, j_port, j_user,
+                                             password, str(cfg.get("key") or ""))
+            via = "经跳板 %s@%s:%s(%s) → " % (j_user, j_host, j_port,
+                                            "密钥" if j_mode == "key" else "密码")
+            # 跳板是用密码登进来的 = 跳板上还没有我们的公钥 → 顺手装上。
+            # 不装的话以后所有 key-only 的 ProxyJump（check/run/submit）都会死在跳板这一跳。
+            if j_mode == "password":
+                try:
+                    j_res = _exec_install(jump_client, pub_line)
+                    jump_note = "；跳板公钥%s" % ("也已写入" if j_res == "installed" else "本就在")
+                except Exception as exc:
+                    jump_note = "；⚠️ 跳板公钥写入失败（%s），目标装完跳板仍要补装" % exc
+
+            def sock_factory():
+                return jump_client.get_transport().open_channel(
+                    "direct-tcpip", (host, port), ("127.0.0.1", 0))
+
+        # 目标节点：先试纯密钥（已装过 = already_ok，不再动 authorized_keys）。
+        # 每次尝试都走 sock_factory() 开新通道——认证失败会 EOF 掉旧通道，复用必炸。
+        try:
+            client, mode = _p_connect(paramiko, host, port, user, "", key_path, sock_factory=sock_factory)
+        except Exception:
+            client, mode = _p_connect(paramiko, host, port, user, password, "", sock_factory=sock_factory)
+
+        if mode == "key":
+            return _ok({
+                "status": "already_ok", "node": name, "host": host, "user": user,
+                "via_jump": bool(jump_spec),
+                "summary": ("%s%s@%s:%s 已经能用密钥免密登录，公钥无需重复安装%s"
+                            % (via, user, host, port, jump_note)),
+            })
+
+        try:
+            installed = _exec_install(client, pub_line)
+        except RuntimeError as exc:
+            return _err(str(exc), node=name,
+                        hint="目标节点的 shell 可能不是 POSIX sh（极简容器/csh），需要手工装公钥")
+        try:
+            client.close()
+        except Exception:
+            pass
+        client = None
+
+        # 立刻用纯密钥重连验证整条链路（跳板开着的话走新通道）
+        verify_note = ""
+        try:
+            v_client, _ = _p_connect(paramiko, host, port, user, "", key_path, sock_factory=sock_factory)
+            v_out, _ = _p_exec(v_client, "hostname && whoami", timeout=15)
+            v_client.close()
+            verify_note = "；密钥重连验证通过（%s）" % " / ".join(v_out.strip().splitlines()[:2])
+        except Exception as exc:
+            verify_note = ("；⚠️ 但密钥重连验证失败（%s）——公钥已写入，可能 sshd 禁了 pubkey "
+                           "或该节点 home 不共享，点「🔌 自检」进一步看" % exc)
+
+        return _ok({
+            "status": installed, "node": name, "host": host, "user": user,
+            "via_jump": bool(jump_spec),
+            "summary": ("公钥%s到 %s%s@%s:%s 的 ~/.ssh/authorized_keys%s%s"
+                        % ("已写入" if installed == "installed" else "本就在",
+                           via, user, host, port, jump_note, verify_note)),
+        })
+    except paramiko.ssh_exception.AuthenticationException:
+        return _err("密码认证失败：密码不对，或该节点不允许密码登录。%s" %
+                    ("（跳板 %s 已通，死在目标节点）" % via if via else ""),
+                    node=name, host=host)
+    except EOFError:
+        return _err("对端在 SSH 握手阶段断开了连接（EOF）：%s%s@%s:%s 的 SSH 会话没建立起来。"
+                    "通常是目标节点 sshd 没起 / 端口不对 / 跳板到目标之间被拦。"
+                    % (via, user, host, port),
+                    node=name, host=host,
+                    hint="对照实验：在 MobaXterm 登录口手敲 ssh %s 能通的话，把现象发我" % host)
+    except Exception as exc:
+        return _err("安装失败：%s: %s" % (type(exc).__name__, exc), node=name, host=host,
+                    hint="网络/端口/跳板问题先点「🔌 自检」或「🖥 节点体检」看具体哪一跳不通")
+    finally:
+        for c in (client, jump_client):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+
+
 _ACTIONS = {
     "locate": _action_locate,
     "nodes": _action_nodes,
@@ -2067,6 +2341,38 @@ _ACTIONS = {
     "cancel": _action_cancel,
     "jobs": _action_jobs,
 }
+
+
+def _conn_hint(exc, node_cfg) -> str:
+    """把 OpenSSH 的英文报错翻译成「下一步该点哪里」（WebUI 与 agent 共用这个诊断）。"""
+    text = str(exc).lower()
+    # 从节点实际生效的 extra_ssh_options 里认出跳板地址，提示里指名道姓
+    jump = ""
+    extra = [str(o) for o in (node_cfg.get("extra_ssh_options") or [])]
+    for i, opt in enumerate(extra):
+        low = opt.lower()
+        if "proxyjump=" in low:
+            jump = opt.split("=", 1)[1]
+        elif opt == "-J" and i + 1 < len(extra):
+            jump = extra[i + 1]
+    if "could not resolve hostname" in text:
+        return ("本机解析不了这个主机名——它是集群内网名字，必须给这个节点配「跳板机」"
+                "（⚙️ 配置 → 节点行的跳板机框，填 用户名@登录口IP，如 zhangbo11@192.168.61.11），"
+                "让登录口去解析它。")
+    if "banner" in text or "unknown port 65535" in text:
+        return ("走跳板的连接在跳板那一跳就断了（banner 超时 / UNKNOWN port 65535 的典型表现）——"
+                "九成是跳板（登录口%s）上还没有我们的公钥，密钥认证被拒，管道随之中断。"
+                "先去 ⚙️ 配置 → 输密码 → 点「🔑 安装公钥」（会自动把跳板一并装上），装完再自检。"
+                % (" " + jump if jump else ""))
+    if "permission denied" in text:
+        return ("对方拒绝了密钥认证——公钥还没装到%s，或私钥路径指错。"
+                "先在 ⚙️ 配置里输密码点一次「🔑 安装公钥」。"
+                % ("跳板或目标节点" if jump else "目标节点"))
+    if "connection refused" in text:
+        return "对方端口拒接：检查节点的 host / port 是否填对（sshd 是否在这个端口上）。"
+    if "timed out" in text or "timeout" in text:
+        return "连接超时：检查 IP / 端口 / 网络（要不要连 VPN），或跳板地址是否填对。"
+    return "连接类错误先用 action='nodes' 体检全部节点（或 action='check' 单节点）：密钥/端口/跳板机/known_hosts"
 
 
 def remote_cluster_handler(args=None, **kwargs) -> str:
@@ -2110,7 +2416,7 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
         _drop_conn(node_cfg)
         return _err("%s 执行失败: %s" % (action, exc),
                     node=node_name, host=node_cfg.get("host"),
-                    hint="连接类错误先用 action='nodes' 体检全部节点（或 action='check' 单节点）：密钥/端口/跳板机/known_hosts")
+                    hint=_conn_hint(exc, node_cfg))
 
 
 SCHEMA = {
@@ -2123,7 +2429,8 @@ SCHEMA = {
         "用法：先 action='check' 自检（连通性/调度器/资源/工作目录），再决定 run 还是 submit。\n"
         "  • run    —— 在登录节点跑**轻量**命令（ls/du/head/which/环境自检）。"
         "禁止在登录节点跑重计算，会被管理员封号。\n"
-        "  • submit —— 生成作业脚本并提交（Slurm 用 sbatch，PBS 用 qsub，无调度器则 setsid 脱离会话后台跑），"
+        "  • submit —— 生成作业脚本并提交（Slurm=sbatch；PBS / Grid Engine（SGE/UGE，#$ 指令）=qsub，"
+        "qstat 看队列、qdel 取消、qacct 查已结束作业；无调度器则 setsid 脱离会话后台跑），"
         "返回 job_id；随后 status 看状态、logs 读日志、cancel 取消。\n"
         "  • push / pull —— 本地 ↔ 远端传文件（大文件先 push 再 submit，产物 pull 回本地）。"
         "push 会自动处理 Windows 换行：.sh/.py/.R 等脚本带 CRLF 时转成 LF 再上传（本机文件不动，"
@@ -2136,7 +2443,8 @@ SCHEMA = {
         "不指定节点也能调用。\n"
         "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 ssh3/ssh5）时，"
         "用 node=\"<名字>\" 指定；**只配了一个节点时不用传，工具静默用它**。"
-        "配了多个又没传 node → 工具会拒绝执行并返回 status=needs_node + 候选列表，"
+        "配了多个但没传 node：**若设了 default_node 就静默用默认节点**（用户说「用集群」即默认节点）；"
+        "只有既没传 node 又没配 default_node 才返回 status=needs_node + 候选列表，"
         "此时必须**先问用户要用哪个节点**再重新调用，不许自己挑一个、也不许沿用上次那个。\n"
         "【路径判定：先查清数据在哪，再决定在哪算——不要凭感觉】\n"
         "  ① 用户说了位置 → 以用户为准：本地路径（E:/...、results/...、'我上传的文件'）就在本地跑"

@@ -677,3 +677,134 @@ def test_frontend_env_i18n_keys_are_identical():
     keys_zh = set(_re.findall(r"^\s*(em_[a-z_]+):", zh, _re.M))
     keys_en = set(_re.findall(r"^\s*(em_[a-z_]+):", en, _re.M))
     assert keys_zh == keys_en and len(keys_zh) >= 20
+
+
+# ---------------------------------------------------------------------------
+# 用户声明的环境（environment.json 的 cluster / env_notes 段，2026-10-08）
+# 探针只答"现在有什么"，答不了"该用哪个"—— 后者持久声明在 environment.json 里。
+# ---------------------------------------------------------------------------
+_DECL = {
+    "cluster": {
+        "_rule": "只用声明的环境",
+        "nodes": {"ssh3": {"host": "hpc.example.edu", "user": "me", "workdir": "/data/proj",
+                           "conda_activate": "source /x/bin/activate <env>"}},
+        "policy": {"RNA": {"r_env": "R4.41", "r_version": "4.4.1", "py_env": "sc-analysis",
+                           "scope": "Seurat .rds + AnnData .h5ad"},
+                   "ATAC": {"r_env": "R4.3.3", "r_version": "4.3.3"}},
+    }
+}
+
+
+@pytest.fixture()
+def env_json(tmp_path, monkeypatch):
+    """environment.json -> tmp：真读真写，绝不碰仓库那份真源。"""
+    root = tmp_path / "app"
+    root.mkdir()
+    path = root / "environment.json"
+    path.write_text(json.dumps({"paths": {"python": {"default": "py.exe"}},
+                                "_last_updated": "old"}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(ei, "_app_root", lambda: str(root))
+    return path
+
+
+def _write_decl(path, decl):
+    env = json.loads(path.read_text(encoding="utf-8"))
+    env.update(decl)
+    path.write_text(json.dumps(env, ensure_ascii=False), encoding="utf-8")
+
+
+def test_declared_env_reads_sections(env_json):
+    assert ei.declared_env() == {}                     # 没声明就是空
+    _write_decl(env_json, _DECL)
+    assert ei.declared_env()["cluster"]["policy"]["RNA"]["r_env"] == "R4.41"
+    _write_decl(env_json, {"env_notes": {}})           # 空段不算声明
+    assert "env_notes" not in ei.declared_env()
+
+
+def test_save_declared_persists_and_keeps_other_keys(env_json):
+    res = ei.save_declared({"declared": dict(_DECL, env_notes={"note": "x"})})
+    assert res["ok"] and res["saved"] == ["cluster", "env_notes"]
+    saved = json.loads(env_json.read_text(encoding="utf-8"))
+    assert saved["paths"]["python"]["default"] == "py.exe"          # 其他键原样保留
+    assert saved["cluster"]["policy"]["ATAC"]["r_env"] == "R4.3.3"
+    assert saved["_last_updated"] != "old"                          # 更新时间戳
+    assert (env_json.parent / "environment.json.bak").exists()      # 写前留档
+    assert ei.declared_env()["env_notes"]["note"] == "x"            # 写完立刻能读回
+    assert not (env_json.parent / "environment.json.tmp").exists()  # 原子替换，不留临时文件
+
+
+@pytest.mark.parametrize("bad", [
+    "not-a-dict", {"no_declared": 1}, {"declared": []},
+    {"declared": {"other": {"a": 1}}}, {"declared": {"cluster": {}}},
+])
+def test_save_declared_rejects_bad_payload(env_json, bad):
+    before = env_json.read_text(encoding="utf-8")
+    with pytest.raises(ValueError):
+        ei.save_declared(bad)
+    assert env_json.read_text(encoding="utf-8") == before            # 拒绝时一个字都不写
+
+
+def test_save_declared_rejects_oversized(env_json, monkeypatch):
+    monkeypatch.setattr(ei, "_DECLARED_MAX_BYTES", 8)
+    with pytest.raises(ValueError):
+        ei.save_declared({"declared": _DECL})
+
+
+def test_declared_flows_into_report_digest_and_markdown(env_json, home):
+    _write_decl(env_json, _DECL)
+    _prime_cache_configured(home)
+    report = ei.build_report(cache_only=True, cluster=True)
+    dec = report["cluster"]["declared"]["cluster"]
+    assert dec["policy"]["RNA"]["r_env"] == "R4.41"
+    assert dec["nodes"]["ssh3"]["conda_activate"].startswith("source ")
+    assert "R4.41" in report["agent_digest"] and "R4.3.3" in report["agent_digest"]
+    assert "sc-analysis" in report["agent_digest"]
+    assert len(report["agent_digest"]) < 2600        # 声明别把卡片撑爆
+    md = ei.render_markdown(report)
+    assert "用户声明的环境" in md and "R4.41" in md and "只用声明的环境" in md
+    assert "```" not in md                            # 报告只用 ~~~ 围栏
+
+
+def test_cluster_off_has_no_declared_key(env_json, home):
+    """cluster=0 时不能凭空多出 declared（否则面板会把"没查"当"查过了"）。"""
+    _write_decl(env_json, _DECL)
+    ei._write_cache(local=_canned_local(), local_at=ei._now())
+    assert ei.build_report(cache_only=True, cluster=False)["cluster"] is None
+
+
+def test_digest_without_cluster_skips_declared(env_json, home):
+    """集群没进 report 时不加声明行（保住 2500 字预算）。"""
+    _write_decl(env_json, _DECL)
+    ei._write_cache(local=_canned_local(), local_at=ei._now())
+    assert "固定环境" not in ei.agent_digest()
+
+
+# ---------------------------------------------------------------------------
+# 面板接线：声明显示 + 填写入口 + 保存接口（静态断言）
+# ---------------------------------------------------------------------------
+def test_frontend_declared_editor_wired():
+    text = _read_index()
+    for token in ("emDeclHtml", "emDeclEdit()", "emDeclApply()", "emSaveDecl()",
+                  "'/api/env/declared'", "em-d-json", "em_decl_fill", "em_decl_save",
+                  "em_decl_badjson"):
+        assert token in text, token
+    # 新用户场景：集群 pending / 未配置时也要够得着填写入口
+    assert "emT('em_cluster_pending') + '</div>' + emDeclHtml(cl)" in text
+    seg = text[text.index("function emViewCluster(cl)"):]
+    assert seg.index("out += emDeclHtml(cl);") < seg.index("if (!cl.configured) {")
+
+
+def test_frontend_declared_form_has_all_quick_fields():
+    text = _read_index()
+    for fid in ("em-d-node", "em-d-host", "em-d-user", "em-d-workdir", "em-d-act",
+                "em-d-assay", "em-d-renv", "em-d-pyenv", "em-d-scope"):
+        assert "'" + fid + "'" in text, fid
+
+
+def test_api_declared_endpoint_and_route_registered():
+    with open(os.path.join(WEBUI, "server.py"), encoding="utf-8") as fh:
+        server = fh.read()
+    assert '@app.post("/api/env/declared")' in server
+    assert "await asyncio.to_thread(mod.save_declared, payload)" in server
+    routes = json.load(open(os.path.join(WEBUI, "middleware_routes.json"), encoding="utf-8"))
+    assert routes["/api/env/declared"] == "local"

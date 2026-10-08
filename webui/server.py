@@ -11760,6 +11760,20 @@ async def env_verify_api():
     return result
 
 
+@app.post("/api/env/declared")
+async def env_declared_save(payload: dict):
+    """面板填写/补充的环境声明 → 写回 environment.json（持久，探针重扫不动它）。
+
+    只认 cluster / env_notes 两段，其余键原样保留（写前留 .bak、写后原子替换）。
+    """
+    mod = _env_inv_module()
+    try:
+        # 落盘 + declared_env() 重读都是小文件 IO，但按仓库惯例别占事件循环
+        return await asyncio.to_thread(mod.save_declared, payload)
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+
+
 @app.get("/api/env/report.md")
 async def env_report_md(download: int = 0):
     """人看的 markdown 环境报告（可下载存档 / 贴给同事）。只读缓存，秒回。"""
@@ -20073,6 +20087,34 @@ async def api_cluster_exec(request: Request):
     except Exception:
         return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
 
+
+@app.post("/api/cluster/install_key")
+async def api_cluster_install_key(request: Request):
+    """WebUI「🔑 安装公钥」：用密码登录一次，把本机公钥写进远端 authorized_keys。
+
+    密码只在内存里用这一次：不落盘、不进日志、不进会话历史。装完全部走密钥免密。
+    逻辑在 memomics.bio_tools.remote_cluster.install_pubkey（含 proxy_jump 跳板链路）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    password = str(body.get("password") or "")
+    if not password:
+        return {"ok": False, "error": "密码不能为空（只用于这一次安装，不会保存）"}
+    node = str(body.get("node") or "").strip()
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)
+    try:
+        raw = rc.install_pubkey(cfg, node, password)
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
 
 # === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
 # 与 remote_cluster 同款薄路由：端点只做参数校验与转发；逻辑全在

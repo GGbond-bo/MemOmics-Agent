@@ -277,6 +277,109 @@ def _declared_notes() -> dict:
     return {k: v for k, v in canon.items() if isinstance(v, str) and not k.startswith("_")}
 
 
+# ---------------------------------------------------------------------------
+# 用户声明的环境（environment.json 的 cluster / env_notes 段，2026-10-08）
+# ---------------------------------------------------------------------------
+# 探针只回答"现在有什么"，回答不了"该用哪个、别碰哪些"—— 后者是用户意图，必须持久
+# 声明。落在 environment.json（全局环境唯一真源）里：探针重扫不会覆盖它、新会话照读，
+# 面板还能直接改（WebUI「🧩 环境管理」→ 集群 → ✍️ 填写/补充）。
+_DECLARED_SECTIONS = ("cluster", "env_notes")
+_DECLARED_MAX_BYTES = 65536
+
+
+def declared_env() -> dict:
+    """用户声明的环境（environment.json 的 cluster / env_notes 段）。没有就返回 {}。"""
+    env = _read_environment_json()
+    return {k: env[k] for k in _DECLARED_SECTIONS
+            if isinstance(env.get(k), dict) and env[k]}
+
+
+def save_declared(payload: dict) -> dict:
+    """把面板填写的环境声明写回 environment.json（持久）。
+
+    只认 cluster / env_notes 两段，其余键原样保留；写前留 .bak、写后原子替换 ——
+    手滑也毁不掉本机环境真源。返回 {ok, path, saved, declared}。
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("请求体必须是 JSON 对象")
+    declared = payload.get("declared")
+    if not isinstance(declared, dict):
+        raise ValueError("缺少 declared 对象")
+    keep = {k: v for k, v in declared.items()
+            if k in _DECLARED_SECTIONS and isinstance(v, dict) and v}
+    if not keep:
+        raise ValueError("declared 里没有可写入的段（可选：%s）" % "、".join(_DECLARED_SECTIONS))
+    size = len(json.dumps(keep, ensure_ascii=False))
+    if size > _DECLARED_MAX_BYTES:
+        raise ValueError("声明内容过大（%d 字节 > %d）" % (size, _DECLARED_MAX_BYTES))
+    path = os.path.join(_app_root(), "environment.json")
+    env = _read_environment_json()
+    if not env:
+        raise ValueError("读不到 environment.json：%s" % path)
+    env.update(keep)
+    env["_last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        shutil.copy2(path, path + ".bak")
+    except OSError:
+        pass
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(env, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+    return {"ok": True, "path": path, "saved": sorted(keep), "bytes": size,
+            "declared": declared_env()}
+
+
+def _declared_digest_lines() -> list:
+    """声明 → agent 卡片的 1~3 行（紧凑，别撑爆 2500 字预算）。"""
+    cl = declared_env().get("cluster") or {}
+    policy = {k: v for k, v in (cl.get("policy") or {}).items()
+              if not k.startswith("_") and isinstance(v, dict)}
+    nodes = {k: v for k, v in (cl.get("nodes") or {}).items()
+             if not k.startswith("_") and isinstance(v, dict)}
+    if not policy and not nodes:
+        return []
+    picks = ["%s→%s%s" % (a, s.get("r_env") or "-",
+                          ("+" + str(s["py_env"])) if s.get("py_env") else "")
+             for a, s in policy.items()]
+    out = ["- 🔒 固定环境（用户声明，environment.json）：%s" % "；".join(picks)]
+    for name, info in nodes.items():
+        if info.get("conda_activate"):
+            out.append("  · %s 激活 %s" % (name, info["conda_activate"]))
+    if cl.get("_rule"):
+        out.append("  · ⛔ 只用声明的环境；要换先问用户")
+    return out
+
+
+def _declared_md_lines() -> list:
+    """声明 → markdown 报告段（人看的）。"""
+    cl = declared_env().get("cluster") or {}
+    if not cl:
+        return []
+    out = ["## 🔒 用户声明的环境（environment.json cluster 段，探针重扫不会覆盖）", ""]
+    if cl.get("_rule"):
+        out += ["> ⛔ %s" % cl["_rule"], ""]
+    policy = {k: v for k, v in (cl.get("policy") or {}).items()
+              if not k.startswith("_") and isinstance(v, dict)}
+    if policy:
+        out += [_md_table(["方向", "R 环境", "R 版本", "Python 环境", "负责"],
+                          [[k, v.get("r_env") or "-", v.get("r_version") or "-",
+                            v.get("py_env") or "-", v.get("scope") or ""]
+                           for k, v in policy.items()]), ""]
+    for name, info in (cl.get("nodes") or {}).items():
+        if name.startswith("_") or not isinstance(info, dict):
+            continue
+        bits = [info.get("host"), info.get("workdir"), info.get("scheduler")]
+        out.append("- **%s**：%s" % (name, " ｜ ".join(str(b) for b in bits if b)))
+        if info.get("conda_activate"):
+            out.append("  - 激活：%s" % info["conda_activate"])
+    if cl.get("pitfalls"):
+        out += ["", "已知坑："] + ["- %s" % p for p in cl["pitfalls"]]
+    out.append("")
+    return out
+
+
 # ===========================================================================
 # 缓存
 # ===========================================================================
@@ -1384,6 +1487,12 @@ def build_report(force: bool = False, cluster: bool = True, cache_only: bool = F
         cluster_data = cached_cluster() if cluster else None
     else:
         cluster_data = scan_cluster(force=force) if cluster else None
+    if cluster and cluster_data is None:
+        cluster_data = {}
+    if cluster_data is not None:
+        # 用户声明的环境（固定映射）随 report 一起下发：面板 / markdown / agent 卡片共用
+        cluster_data = dict(cluster_data)
+        cluster_data["declared"] = declared_env()
     warnings = list(local.get("warnings") or [])
     if cluster_data:
         warnings += list(cluster_data.get("warnings") or [])
@@ -1475,6 +1584,7 @@ def agent_digest(report: dict = None) -> str:
                          "详细环境调 env_inventory(action=cluster)")
         else:
             lines.append("- 集群：未配置（%s）" % (cluster.get("hint") or ""))
+        lines += _declared_digest_lines()
     issues = local.get("known_issues") or {}
     if issues:
         pairs = list(issues.items())[:2]
@@ -1638,6 +1748,7 @@ def render_markdown(report: dict = None, force: bool = False, cache_only: bool =
             out += ["- 未配置：%s" % (cluster.get("hint") or ""),
                     "- 配置位置：%s（或 WebUI 的「🖧 远端集群」面板）"
                     % cluster.get("config_path", ""), ""]
+    out += _declared_md_lines()
     out += ["## 给 Agent 的环境卡片", "", "~~~", agent_digest(report), "~~~", ""]
     return "\n".join(out)
 

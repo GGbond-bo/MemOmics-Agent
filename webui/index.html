@@ -1339,6 +1339,9 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .ds-table th, .cc-console .ds-table td { text-align:left; padding:4px 6px;
   border-bottom:1px solid var(--border); font-size:11.5px; }
 .cc-console .ds-mono { font-family:ui-monospace,Consolas,monospace; }
+
+.cc-console .dcs-cache-note { padding:6px 8px; color:var(--muted,#8b949e); font-size:11.5px;
+  border-top:1px dashed var(--border); margin-top:6px; }
 .cc-console .ds-hint { color:var(--muted,#8b949e); }
 
 .cc-console .cc-cfg.dcs-cfg-view { max-height:none; flex:1; overflow-y:auto; }
@@ -1413,6 +1416,9 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 #env-manager .em-btn:hover { background:var(--primary-light); }
 #env-manager .em-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
 #env-manager .em-btn:disabled { opacity:0.55; cursor:default; }
+#env-manager .em-in, #env-manager .em-ta { width:100%; box-sizing:border-box; font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:inherit; }
+#env-manager .em-ta { min-height:180px; font-family:ui-monospace,Consolas,monospace; white-space:pre; }
+#env-manager .em-form { margin:8px 0; padding:10px; border:1px solid var(--border); border-radius:8px; }
 #env-manager .em-tabs { display:flex; gap:6px; padding:8px 14px 0; border-bottom:1px solid var(--border); }
 #env-manager .em-tab { font-size:12px; padding:6px 12px; border:1px solid var(--border); border-bottom:none; border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg); color:var(--text-light); }
 #env-manager .em-tab.active { background:var(--panel); color:var(--text); font-weight:600; }
@@ -15046,7 +15052,25 @@ var EM_I18N = {
     em_agent_cache: '缓存文件', em_agent_home: 'hermes_home', em_act_md: '给人看的完整 markdown 报告',
     em_act_overview: '本机 + 集群全量清单（refresh 会真探测）', em_act_local: '只清点本机', em_act_cluster: '只清点集群（SSH）',
     em_copied: '✅ 报告已复制到剪贴板', em_copy_fail: '复制失败，已改为下载',
-    em_cores: '核', em_free: '可用', em_of: '共', em_more: '还有'
+    em_cores: '核', em_free: '可用', em_of: '共', em_more: '还有',
+    em_decl: '🔒 用户声明的环境（固定映射）',
+    em_decl_hint: '这段是持久声明（探针重扫不会覆盖）：告诉 agent 该用哪个环境、别碰哪些。新用户按自己的集群填一遍即可。',
+    em_decl_fill: '✍️ 填写 / 补充环境声明',
+    em_decl_save: '💾 保存到 environment.json',
+    em_decl_apply: '⬆️ 应用到下方 JSON',
+    em_decl_apply_hint: '先填上面的字段 → 点「应用到下方 JSON」合并进去 → 检查无误再保存。JSON 也可直接手改。',
+    em_decl_json: '声明 JSON（可手改）',
+    em_decl_node: '节点名',
+    em_decl_host: '主机',
+    em_decl_user: '账号',
+    em_decl_workdir: '工作目录',
+    em_decl_activate: 'conda 激活命令',
+    em_decl_assay: '方向',
+    em_decl_scope: '负责什么',
+    em_decl_saved: '✅ 已保存到 environment.json',
+    em_decl_fail: '⚠️ 保存失败：%s',
+    em_decl_badjson: '⚠️ JSON 不合法：%s',
+    em_decl_applied: '✅ 已合并进 JSON，确认后保存'
   },
   en: {
     em_title: '🧩 Environments', em_tab_local: 'Local', em_tab_cluster: 'Cluster', em_tab_agent: 'For the agent',
@@ -15071,7 +15095,25 @@ var EM_I18N = {
     em_agent_cache: 'Cache file', em_agent_home: 'hermes_home', em_act_md: 'full markdown report for humans',
     em_act_overview: 'local + cluster full inventory (refresh really probes)', em_act_local: 'local only', em_act_cluster: 'cluster only (SSH)',
     em_copied: '✅ Report copied to clipboard', em_copy_fail: 'Copy failed, downloading instead',
-    em_cores: 'cores', em_free: 'free', em_of: 'of', em_more: 'more'
+    em_cores: 'cores', em_free: 'free', em_of: 'of', em_more: 'more',
+    em_decl: '🔒 Declared environments (fixed mapping)',
+    em_decl_hint: 'A persistent declaration (probes never overwrite it): it tells the agent which env to use and what to avoid. New users just fill it in once.',
+    em_decl_fill: '✍️ Fill in / extend the declaration',
+    em_decl_save: '💾 Save to environment.json',
+    em_decl_apply: '⬆️ Apply to JSON below',
+    em_decl_apply_hint: 'Fill the fields above → Apply to JSON to merge → review, then save. You can edit the JSON directly too.',
+    em_decl_json: 'Declaration JSON (editable)',
+    em_decl_node: 'Node',
+    em_decl_host: 'Host',
+    em_decl_user: 'User',
+    em_decl_workdir: 'Workdir',
+    em_decl_activate: 'conda activate',
+    em_decl_assay: 'Assay',
+    em_decl_scope: 'Scope',
+    em_decl_saved: '✅ Saved to environment.json',
+    em_decl_fail: '⚠️ Save failed: %s',
+    em_decl_badjson: '⚠️ Invalid JSON: %s',
+    em_decl_applied: '✅ Merged into JSON — review then save'
   }
 };
 function emT(k) {
@@ -15358,7 +15400,7 @@ function emViewLocal(local, warnings) {
   return out;
 }
 function emViewCluster(cl) {
-  if (cl.pending) return '<div class="em-warn">' + emT('em_cluster_pending') + '</div>';
+  if (cl.pending) return '<div class="em-warn">' + emT('em_cluster_pending') + '</div>' + emDeclHtml(cl);
   var out = '';
   // 2026-09-23：集群过期清单也照常展示（放在 out 初始化之后，别踩 TDZ）
   if (cl.stale) out += emStaleNote(cl);
@@ -15368,6 +15410,7 @@ function emViewCluster(cl) {
              emRow('nodes_configured', emVal((cl.nodes_configured || []).join('、') || emT('em_none')));
   out += emCard((cl.configured ? '✅ ' : '⚠️ ') + (cl.configured ? emT('em_cluster_nodes') : emT('em_cluster_off')),
         cl.configured ? 'ok' : 'warn', rows);
+  out += emDeclHtml(cl);
   if (!cl.configured) {
     out += '<div class="em-warn">' + emEsc(cl.hint || '') + '</div>';
     out += '<div style="margin:10px 0"><button class="em-btn primary" onclick="emClose(); openClusterConsole();">' +
@@ -15421,6 +15464,128 @@ function emViewCluster(cl) {
     out += '<div class="em-warn">' + cl.warnings.map(function (w) { return '• ' + emEsc(w); }).join('<br>') + '</div>';
   }
   return out;
+}
+// === 用户声明的环境（固定映射）—— 显示 + 填写/补充，落 environment.json（2026-10-08）===
+// 探针只答"现在有什么"，答不了"该用哪个"；后者是用户意图，必须持久声明。
+// 面板改的就是 environment.json 的 cluster 段（写前留 .bak、写后原子替换）。
+function emDeclHtml(cl) {
+  var C = (cl && cl.declared && cl.declared.cluster) || {};
+  var pol = C.policy || {}, nodes = C.nodes || {};
+  var out = emSec('🔒 ' + emT('em_decl'));
+  out += '<div class="em-hint">' + emT('em_decl_hint') + '</div>';
+  if (C._rule) out += '<div class="em-warn">⛔ ' + emEsc(C._rule) + '</div>';
+  var rows = '';
+  Object.keys(pol).forEach(function (k) {
+    if (k.charAt(0) === '_' || !pol[k] || typeof pol[k] !== 'object') return;
+    var v = pol[k];
+    rows += '<tr><td>' + emEsc(k) + '</td><td>' + emEsc(v.r_env || '-') + '</td><td>' + emEsc(v.r_version || '-') +
+            '</td><td>' + emEsc(v.py_env || '-') + '</td><td class="em-mut">' + emEsc(v.scope || '') + '</td></tr>';
+  });
+  if (rows) {
+    out += '<table class="em-tbl"><tr><th>' + emT('em_decl_assay') + '</th><th>R</th><th>' + emT('em_version') +
+           '</th><th>Python</th><th>' + emT('em_decl_scope') + '</th></tr>' + rows + '</table>';
+  }
+  Object.keys(nodes).forEach(function (n) {
+    if (n.charAt(0) === '_' || !nodes[n] || typeof nodes[n] !== 'object') return;
+    var v = nodes[n];
+    out += emCard('🖧 ' + emEsc(n), 'ok',
+      emRow(emT('em_decl_host'), emEsc(v.host || '-')) +
+      emRow(emT('em_decl_user'), emEsc(v.user || '-')) +
+      emRow(emT('em_decl_workdir'), emEsc(v.workdir || '-')) +
+      emRow('scheduler', emEsc(v.scheduler || '-')) +
+      emRow(emT('em_decl_activate'), '<span class="em-code">' + emEsc(v.conda_activate || '-') + '</span>'));
+  });
+  if (C.pitfalls && C.pitfalls.length) {
+    out += '<div class="em-hint">' + C.pitfalls.map(function (p) { return '⚠️ ' + emEsc(p); }).join('<br>') + '</div>';
+  }
+  out += '<div style="margin:10px 0"><button class="em-btn" onclick="emDeclEdit()">' + emT('em_decl_fill') + '</button></div>';
+  out += '<div id="em-decl-form" style="display:none"></div>';
+  return out;
+}
+function emDeclInput(id, ph) {
+  return '<input class="em-in" id="' + id + '" placeholder="' + emEsc(ph) + '">';
+}
+function emDeclEdit() {
+  var box = document.getElementById('em-decl-form');
+  if (!box) return;
+  var cl = (EM.data && EM.data.cluster) || {};
+  var dec = (cl.declared && cl.declared.cluster) ? { cluster: cl.declared.cluster } : {};
+  box.style.display = 'block';
+  box.innerHTML = '<div class="em-form">' +
+    emRow(emT('em_decl_node'), emDeclInput('em-d-node', 'ssh3')) +
+    emRow(emT('em_decl_host'), emDeclInput('em-d-host', 'login.hpc.example.edu')) +
+    emRow(emT('em_decl_user'), emDeclInput('em-d-user', 'myaccount')) +
+    emRow(emT('em_decl_workdir'), emDeclInput('em-d-workdir', '/data/proj')) +
+    emRow(emT('em_decl_activate'), emDeclInput('em-d-act', 'source .../bin/activate <env>')) +
+    emRow(emT('em_decl_assay'), emDeclInput('em-d-assay', 'RNA')) +
+    emRow('R env', emDeclInput('em-d-renv', 'R4.41')) +
+    emRow('Python env', emDeclInput('em-d-pyenv', 'sc-analysis')) +
+    emRow(emT('em_decl_scope'), emDeclInput('em-d-scope', 'Seurat .rds + AnnData .h5ad')) +
+    '<div class="em-hint">' + emT('em_decl_apply_hint') + '</div>' +
+    '<button class="em-btn" onclick="emDeclApply()">' + emT('em_decl_apply') + '</button>' +
+    emSec(emT('em_decl_json')) +
+    '<textarea class="em-ta" id="em-d-json" spellcheck="false"></textarea>' +
+    '<div style="margin-top:8px"><button class="em-btn primary" onclick="emSaveDecl()">' + emT('em_decl_save') +
+    '</button> <span id="em-d-err" class="em-no"></span></div></div>';
+  document.getElementById('em-d-json').value = JSON.stringify(dec, null, 2);
+  box.scrollIntoView({ block: 'nearest' });
+}
+function emDeclRead() {
+  var ta = document.getElementById('em-d-json'), err = document.getElementById('em-d-err');
+  try {
+    var dec = JSON.parse(ta.value || '{}');
+    if (!dec || typeof dec !== 'object' || Array.isArray(dec)) throw new Error('not an object');
+    err.textContent = '';
+    return dec;
+  } catch (e) {
+    err.textContent = emT('em_decl_badjson').replace('%s', emVal(e.message));
+    return null;
+  }
+}
+function emDeclVal(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function emDeclApply() {
+  var dec = emDeclRead();
+  if (!dec) return;
+  var cl = dec.cluster || {}, node = emDeclVal('em-d-node'), assay = emDeclVal('em-d-assay');
+  if (node) {
+    var nodes = cl.nodes || {}, cur = nodes[node] || {};
+    ['host', 'user', 'workdir'].forEach(function (k) {
+      var v = emDeclVal('em-d-' + k); if (v) cur[k] = v;
+    });
+    var act = emDeclVal('em-d-act'); if (act) cur.conda_activate = act;
+    nodes[node] = cur; cl.nodes = nodes;
+  }
+  if (assay) {
+    var pol = cl.policy || {}, spec = pol[assay] || {};
+    var rv = emDeclVal('em-d-renv'), pv = emDeclVal('em-d-pyenv'), sc = emDeclVal('em-d-scope');
+    if (rv) spec.r_env = rv;
+    if (pv) spec.py_env = pv;
+    if (sc) spec.scope = sc;
+    pol[assay] = spec; cl.policy = pol;
+  }
+  cl._locked_by_user = true;
+  dec.cluster = cl;
+  document.getElementById('em-d-json').value = JSON.stringify(dec, null, 2);
+  document.getElementById('em-d-err').textContent = emT('em_decl_applied');
+}
+async function emSaveDecl() {
+  var dec = emDeclRead();
+  if (!dec) return;
+  try {
+    var r = await fetch('/api/env/declared', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ declared: dec }) });
+    var d = await r.json();
+    if (!d || d.ok === false) {
+      document.getElementById('em-d-err').textContent =
+        emT('em_decl_fail').replace('%s', emVal((d && d.error) || '?'));
+      return;
+    }
+    emToast(emT('em_decl_saved'));
+    EM.polls = 0;
+    emLoad(false);            // 重新拉一次：表单随重绘收起，显示已保存的声明
+  } catch (e) {
+    document.getElementById('em-d-err').textContent = emT('em_decl_fail').replace('%s', emVal(e.message));
+  }
 }
 function emViewAgent(d) {
   var local = d.local || {};
@@ -15602,27 +15767,42 @@ function ccAttr(v) {
     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// === 命名节点编辑器：一行一个节点，留空 = 继承上面的共享配置 ===
+// === 命名节点编辑器：一行一个节点。默认只露 4 个要填的框（名字/host/跳板机/备注），
+// port/user/私钥/工作目录收进「⚙️ 更多」（留空=继承共享配置，有值才自动展开）===
 function clusterNodeRow(spec, eff, isDefault) {
   spec = spec || {};
   eff = eff || {};
   var row = document.createElement('div');
   row.className = 'cc-node-row' + (isDefault ? ' is-default' : '');
   function inh(v, dflt) { return (v == null || v === '') ? (dflt == null ? '空' : dflt) : v; }
+  var hasAdv = !!(spec.port || spec.user || spec.key || spec.workdir || spec.scheduler);
   row.innerHTML =
     '<input class="cc-node-name" placeholder="节点名 如 ssh3" value="' + ccAttr(spec.name) + '">' +
-    '<input class="cc-node-host" placeholder="host（继承 ' + ccAttr(inh(eff.host)) + '）" value="' + ccAttr(spec.host) + '">' +
-    '<input class="cc-node-port" placeholder="port（继承 ' + ccAttr(inh(eff.port, 22)) + '）" value="' + ccAttr(spec.port) + '">' +
-    '<input class="cc-node-user" placeholder="user（继承 ' + ccAttr(inh(eff.user)) + '）" value="' + ccAttr(spec.user) + '">' +
-    '<input class="cc-node-key" placeholder="私钥（继承共享私钥）" value="' + ccAttr(spec.key) + '">' +
-    '<input class="cc-node-workdir" placeholder="工作目录（继承 ' + ccAttr(inh(eff.workdir, '~')) + '）" value="' + ccAttr(spec.workdir) + '">' +
-    '<input class="cc-node-proxy_jump" placeholder="跳板机 proxy_jump（可空）" value="' + ccAttr(spec.proxy_jump) + '">' +
-    '<input class="cc-node-note" placeholder="备注（中文写这里）" value="' + ccAttr(spec.note) + '">' +
+    '<input class="cc-node-host" placeholder="host：节点地址" value="' + ccAttr(spec.host) + '">' +
+    '<input class="cc-node-proxy_jump" placeholder="跳板机（可空；经登录口再跳填 user@IP）" value="' + ccAttr(spec.proxy_jump) + '">' +
+    '<input class="cc-node-note" placeholder="备注（可空，中文写这里）" value="' + ccAttr(spec.note) + '">' +
+    '<span class="cc-node-more" style="display:' + (hasAdv ? 'contents' : 'none') + ';">' +
+    '<input class="cc-node-port" placeholder="port（留空=继承）" value="' + ccAttr(spec.port) + '">' +
+    '<input class="cc-node-user" placeholder="user（留空=继承）" value="' + ccAttr(spec.user) + '">' +
+    '<input class="cc-node-key" placeholder="私钥（留空=继承）" value="' + ccAttr(spec.key) + '">' +
+    '<input class="cc-node-workdir" placeholder="工作目录（留空=继承）" value="' + ccAttr(spec.workdir) + '">' +
+    '<select class="cc-node-scheduler" title="调度器（留空=继承）">' +
+      '<option value="">调度器（留空=继承）</option>' +
+      '<option value="auto">auto 自动探测</option>' +
+      '<option value="slurm">slurm</option>' +
+      '<option value="pbs">pbs</option>' +
+      '<option value="gridengine">gridengine</option>' +
+      '<option value="none">none（直接后台跑）</option>' +
+    '</select>' +
+    '</span>' +
     '<div class="cc-node-eff"></div>' +
     '<div class="cc-node-ops">' +
+      '<button class="cc-btn" onclick="clusterToggleAdv(this)">⚙️ 更多</button>' +
       '<button class="cc-btn" onclick="clusterTestNode(this)">🔌 测试连接</button>' +
       '<button class="cc-btn" onclick="clusterDelNode(this)">🗑 删除</button>' +
     '</div>';
+  var scSel = row.querySelector('.cc-node-scheduler');
+  if (scSel && spec.scheduler) scSel.value = spec.scheduler;
   var effBox = row.querySelector('.cc-node-eff');
   if (effBox) {
     effBox.textContent = '实际会连：' + inh(eff.user, '?') + '@' + inh(eff.host, '?') + ':' + inh(eff.port, 22) +
@@ -15630,6 +15810,13 @@ function clusterNodeRow(spec, eff, isDefault) {
       (isDefault ? '　★ 默认节点' : '');
   }
   return row;
+}
+
+function clusterToggleAdv(btn) {
+  var row = btn && btn.closest ? btn.closest('.cc-node-row') : null;
+  var box = row ? row.querySelector('.cc-node-more') : null;
+  if (!box) return;
+  box.style.display = (box.style.display === 'none') ? 'contents' : 'none';
 }
 
 function clusterFillNodes(c) {
@@ -15657,6 +15844,37 @@ function clusterDelNode(btn) {
   if (row && row.parentNode) row.parentNode.removeChild(row);
 }
 
+// === 一键装公钥（2026-10-08）：密码只在这一次请求里用，不保存 ===
+async function clusterInstallKey() {
+  var pwEl = document.getElementById('cc-password');
+  var note = document.getElementById('cc-install-note');
+  var pw = pwEl ? pwEl.value : '';
+  if (!pw) {
+    if (note) note.textContent = '请先输入集群登录密码';
+    if (pwEl) pwEl.focus();
+    return;
+  }
+  var nodeSel = document.getElementById('cc-node');
+  var node = nodeSel ? (nodeSel.value || '') : '';
+  if (note) note.textContent = '安装中（密码登录' + (node ? ' → ' + node : ' → 默认节点') + '，含跳板链路）…';
+  try {
+    var r = await fetch('/api/cluster/install_key', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, node: node })
+    });
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || '请求失败');
+    var res = d.result || {};
+    if (res.status === 'error') throw new Error(res.error || '安装失败');
+    if (note) note.textContent = '✅ ' + (res.summary || '完成');
+    clusterPrint('🔑 装公钥：' + (res.summary || JSON.stringify(res)), 'ok');
+    if (pwEl) pwEl.value = '';  // 用完立刻清掉输入框
+  } catch (e) {
+    if (note) note.textContent = '❌ ' + e.message;
+    clusterPrint('🔑 装公钥失败：' + e.message, 'err');
+  }
+}
+
 function clusterCollectNodes() {
   var rows = document.querySelectorAll('#cc-nodes .cc-node-row');
   var out = [];
@@ -15669,6 +15887,7 @@ function clusterCollectNodes() {
     out.push({
       name: name, host: g('cc-node-host'), port: g('cc-node-port'), user: g('cc-node-user'),
       key: g('cc-node-key'), workdir: g('cc-node-workdir'), proxy_jump: g('cc-node-proxy_jump'),
+      scheduler: g('cc-node-scheduler'),
       note: g('cc-node-note')
     });
   }
@@ -16271,7 +16490,8 @@ function dcsSelRender() {
 }
 
 // 当前视图重画（清空勾选后要把勾去掉）
-function dcsReloadView() {
+function dcsReloadView(force) {
+  if (force) _dcsFreshNext = true;    // 手动重拉：绕过读缓存
   var st = _dcsState || {};
   if (st.kind === 'projects') return dcsShowProjects(st.page || 1);
   if (st.kind === 'tasks') return dcsShowTasks(st.page || 1);
@@ -16374,17 +16594,24 @@ function dcsSetBusy(busy) {
 }
 
 function dcsCall(args, onOk) {
+  if (_dcsFreshNext) {                 // 手动「⟳ 重拉」：这一次强制打云、不吃缓存
+    var _fa = {}; for (var _k in args) _fa[_k] = args[_k];
+    _fa.fresh = true; args = _fa; _dcsFreshNext = false;
+  }
+  var _t0 = Date.now();
   dcsSetBusy(true);
   return fetch('/api/dcs/exec', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args)
   }).then(function (r) { return r.json(); }).then(function (d) {
     var res = (d && d.result) || {};
-    dcsPrint('▶ ' + args.action + ' ' + JSON.stringify(Object.keys(args).filter(function (k) { return k !== 'action'; }).map(function (k) { return args[k]; })).slice(0, 120), 'sys');
+    dcsPrint('▶ ' + args.action + ' ' + JSON.stringify(Object.keys(args).filter(function (k) { return k !== 'action' && k !== 'fresh'; }).map(function (k) { return args[k]; })).slice(0, 120) + ' · ' + ((Date.now() - _t0) / 1000).toFixed(1) + 's', 'sys');
     if (res.status === 'ok') {
       var shown = JSON.parse(JSON.stringify(res));
       delete shown.status;
-      dcsPrint('✓ ' + args.action + ' 完成\n' + JSON.stringify(shown, null, 2), 'ok');
+      dcsPrint('✓ ' + args.action + ' 完成' + (res.cached ? ('（缓存，' + res.age + 's 前拉过）') : '') + '\n' + JSON.stringify(shown, null, 2), 'ok');
       if (onOk) onOk(res);
+      dcsCacheNote(res, args);          // 缓存提示 + 「⟳ 重拉」
+      dcsSwrFollowup(res, args);        // 后台刷新落地后自动补拉一次
     } else {
       var err = res.error || (d && d.error) || '未知错误';
       dcsPrint('✗ ' + err + (res.hint ? ('\n提示：' + res.hint) : ''), 'err');
@@ -17250,6 +17477,71 @@ function dsCancel(kind, id) {
   });
 }
 
+
+// === ⚡ 读缓存体验（2026-10-08）===
+// 背景：每次云 API 往返 1.6–2.8s，面板每开一次至少一次 project ls。服务端改成
+// "缓存 + 先给旧值、后台刷新"后，这里负责：显示数据年龄、给重拉按钮、
+// 后台刷新完成自动补拉一次、以及在点开面板之前就把项目列表预热好。
+var _dcsSwrDone = {}, _dcsSwrCount = {}, _dcsFreshNext = false;
+
+function dcsCacheNote(res, args) {
+  if (!res || !res.cached) return;
+  if (['projects', 'tasks', 'ls', 'find'].indexOf(args.action) < 0) return;
+  var el = dcsRowsEl();
+  if (!el) return;
+  var d = document.createElement('div');
+  d.className = 'dcs-cache-note';
+  d.appendChild(document.createTextNode(res.refreshing
+    ? ('⏱ 先给你 ' + Math.round(res.age) + 's 前的数据，云上正在后台刷新…')
+    : ('⏱ 缓存数据（' + Math.round(res.age) + 's 前拉过）')));
+  var b = document.createElement('button');
+  b.className = 'cc-btn'; b.style.marginLeft = '8px'; b.textContent = '⟳ 重拉';
+  b.onclick = function () { dcsReloadView(true); };
+  d.appendChild(b);
+  el.appendChild(d);
+}
+
+function dcsSwrFollowup(res, args) {
+  if (!res || !res.cached || !res.refreshing) return;
+  var key = args.action + '|' + JSON.stringify(args);
+  if (_dcsSwrDone[key]) return;
+  if ((_dcsSwrCount[key] || 0) >= 3) return;   // 上限 3 次：后台刷新一直失败也不会变成慢轮询
+  _dcsSwrDone[key] = 1;
+  _dcsSwrCount[key] = (_dcsSwrCount[key] || 0) + 1;
+  setTimeout(function () {
+    _dcsSwrDone[key] = 0;                    // 允许下一轮过期时再来
+    if (_dcsView === 'cfg' || _dcsView === 'submit') return;
+    var st = _dcsState || {};
+    if (args.action === 'projects' && st.kind === 'projects') dcsShowProjects(st.page || 1);
+    else if (args.action === 'tasks' && st.kind === 'tasks') dcsShowTasks(st.page || 1);
+    else if (args.action === 'ls' && st.kind === 'ls') dcsNav(st.path, st.page || 1);
+  }, 1500);
+}
+
+// 预热：悬停「☁️ DCS 云」菜单或页面空闲后，先把默认视图（项目列表）拉进缓存，
+// 这样点开面板时是 0 等待。已绑定才预热，未绑定/未启用不打扰。
+(function () {
+  var warmed = false;
+  function warm() {
+    if (warmed) return;
+    warmed = true;
+    fetch('/api/dcs/status').then(function (r) { return r.json(); }).then(function (d) {
+      var c = (d && d.config) || {};
+      if (!(c.enabled && c.bound)) return;
+      fetch('/api/dcs/exec', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'projects', page: 1 })
+      }).catch(function () {});
+    }).catch(function () {});
+  }
+  window._dcsWarm = warm;
+  document.addEventListener('mouseover', function (e) {
+    var t = e.target;
+    while (t && t !== document.body) { if (t.id === 'nav-dcs') { warm(); return; } t = t.parentNode; }
+  });
+  setTimeout(warm, 2500);   // 页面加载 2.5s 后就把默认视图预热好（服务端已不再阻塞事件循环）
+})();
+
 // === 上下文窗口 ===
 let ctxPollTimer = null;
 let ctxPollRunning = false;
@@ -17964,7 +18256,8 @@ async function saveUpdateConfig(mode) {
       <label>调度器<select id="cc-scheduler">
         <option value="auto">auto（自动探测）</option>
         <option value="slurm">slurm（sbatch）</option>
-        <option value="pbs">pbs（qsub）</option>
+        <option value="pbs">pbs（qsub，#PBS 指令）</option>
+        <option value="gridengine">gridengine（SGE/UGE，qsub + #$ 指令）</option>
         <option value="none">none（无调度器，直接后台跑）</option>
       </select></label>
       <label>Slurm 分区<input id="cc-partition" placeholder="debug / cpu"></label>
@@ -17972,16 +18265,13 @@ async function saveUpdateConfig(mode) {
       <label>本地根目录<input id="cc-local-root" placeholder="E:/data"></label>
       <label>远端根目录<input id="cc-remote-root" placeholder="/home/you/data"></label>
       <label>超时秒<input id="cc-timeout" placeholder="300"></label>
-      <label>默认节点 default_node<input id="cc-default-node" placeholder="留空 = 多节点时必须每次指定"></label>
+      <label>默认节点 default_node<input id="cc-default-node" placeholder="例 ssh3；填了它，说「用集群」就走它，想换就点名"></label>
       <label>没指定节点时<select id="cc-node-policy">
         <option value="ask">ask（多个节点时先问清用哪个）</option>
         <option value="auto">auto（暂未实现，按 ask 处理）</option>
       </select></label>
       <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
-        <b>命名节点（可选）</b>：同一个集群有多个入口时（例：ssh3 满了换 ssh5 跑），在这里登记多个名字，
-        上面这些字段是所有节点共享的默认值；每个节点只填要覆盖的（留空 = 继承上面的值）。
-        节点名只能用字母/数字/点/下划线/短横线（中文写「备注」里，节点名会进入远端作业名和日志名）。
-        只登记 1 个节点时，模型说「用集群」直接用；登记了多个又没说用哪个，工具会拒绝执行并要求先问清用户。
+        <b>命名节点（可选）</b>：多个入口 / 内网节点在这里登记。每行只填要填的框，留空一律继承上面的共享配置。
       </div>
       <div class="cc-nodes" id="cc-nodes"></div>
       <div class="cc-cfg-actions">
@@ -17989,6 +18279,17 @@ async function saveUpdateConfig(mode) {
         <button class="cc-btn primary" onclick="clusterSaveCfg(false)">💾 保存</button>
         <button class="cc-btn" onclick="clusterSaveCfg(true)">💾 保存并自检</button>
         <span id="cluster-cfg-note" class="cc-cfg-note"></span>
+      </div>
+      <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
+        <b>🔑 一键装公钥（打通免密）</b>：第一次接集群在这里输一次密码，MemOmics 会把本机公钥写进目标节点的
+        <code>~/.ssh/authorized_keys</code>，装完<b>永久免密</b>、再也不用输密码。
+        密码只在内存里用这一次，<b>不保存</b>、不进日志。装的目标 = 底部输入栏左边选中的节点（留空 = 默认节点）；
+        走跳板的节点会顺手把公钥也装到跳板上，一次搞定两跳。
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          <input id="cc-password" type="password" placeholder="集群登录密码（用一次即弃）" style="flex:1;min-width:220px;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:12px;">
+          <button class="cc-btn primary" onclick="clusterInstallKey()">🔑 安装公钥</button>
+          <span id="cc-install-note" class="cc-cfg-note" style="flex:1;"></span>
+        </div>
       </div>
     </div>
     <div class="cc-out" id="cluster-out"></div>
