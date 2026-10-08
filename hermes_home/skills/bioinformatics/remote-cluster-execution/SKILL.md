@@ -18,6 +18,19 @@ metadata:
 
 > 与 `dcs-cloud` 的区别：DCS 是华大云 Web/API 平台；本 skill 是 **SSH + 调度器**（remote_cluster 工具）的集群。
 
+## 🔴 铁规 -1：先认清定位 —— 我是 API，不是终端（用户常拿 MobaXterm 比）
+
+被问「你这远端集群怎么实现的 / 稳不稳 / 跟 MobaXterm 什么区别」时**不要凭印象答**：读源码后按固定骨架作答，
+实现地图（逐行 file:line）+ 稳定性边界 + 对照表在
+`skill_view("memomics-internals-qa", "references/remote-cluster-implementation.md")`。要点速记：
+
+- 底层是**同一套 OpenSSH**（ssh/scp，共用 known_hosts/密钥/ProxyJump）；差别在服务对象——MobaXterm 给人
+  （交互终端、密码登录、X11、手动 SFTP），remote_cluster 给 Agent（结构化 JSON、调度器感知、产物自动回传、门禁）。
+- 因此**没有可手敲的终端**：排障只能靠 `status`/`logs` 回执；要现场改命令就切回 MobaXterm/Shell。
+- 三个必须主动交代的固有边界：① `BatchMode=yes` → **只支持密钥登录**；② **无断线续跑队列**，长作业必须 `submit`；
+  ③ 多节点没指定 → `needs_node` 硬拦（设计如此，不是故障）。
+- 实现落点：`memomics/bio_tools/remote_cluster.py`（继承 hermes `SSHEnvironment`，只跳过 `~/.hermes` 同步）。
+
 ## 🔴 铁规 0：先清点环境，再写作业 — **环境名不可信，必须实测**
 
 **这是本 skill 最重要的一条，来自 2026-10-08 ssh3 实测。**

@@ -32,6 +32,17 @@ metadata:
 
 > 用户会追问「**你看过原代码吗？别乱说**」。取证顺序反了会被当场质疑。
 
+**取证工具选择（2026-10-08 实测踩坑，读 2542 行工具源码时踩到）**：
+
+- **一次性规划好取证批次，2 轮内读完**：连续多轮 `read_file` / `search_files` 取证会被平台循环检测判成
+  「连续相似的监控命令」并强制干预（本次被中断两次）→ 先想清楚「这次要回答什么」，把要读的 offset 段
+  与要搜的模式在**同一轮批量发出**，别「看一眼再决定下一眼看什么」。
+- **路径级 content 检索可能静默返回 0**：`search_files(target="content", path=<单个文件>)` 在本次出现
+  已知含关键词的源码/文档返回 `total_count: 0`，而全库检索能命中 → **0 命中时不要相信**，改用
+  `read_file(path, offset, limit)` 分段读，或先全库 `files_only` 定位再定点读。
+- 大文件先全库定位 → 再定点 `read_file` 分段；**不要一次读完 2500 行**（上下文成本高且无必要）。
+- 找「某功能在哪个文件实现」：`search_files(target="files", pattern="*<关键词>*")` 比 content 检索更快命中。
+
 ## 二、机制地图（哪个文件实现什么）
 
 | 机制 | 实现位置 | 说明 |
@@ -44,6 +55,7 @@ metadata:
 | 执行门禁（意图确认） | `webui/enforcement.py::arm_intent_confirm` / `set_awaiting_form` | 服务器层硬拦 |
 | 自进化运行账本 | `skill_evolution` → `results/<sid>/log/run_record_*.json` | 原脚本永不修改 |
 | 长任务包装器 | `memomics/bio_tools/task_run.py` | 面板可见 / 可取消 |
+| 远端集群（SSH） | `memomics/bio_tools/remote_cluster.py`（继承 `hermes-agent/tools/environments/ssh.py::SSHEnvironment`） | 多节点命名 / 调度器 submit / push-pull 产物回传 |
 
 ## 三、已实测的关键事实（2026-10，可直接引用）
 
@@ -125,3 +137,4 @@ search_files(target="files", pattern="debate_*.json")
 
 - `references/gating-and-isolation-implementation.md` — `debate_gate()` 行号级判据表（L0 八条跳过 / L1 / L2 触发条件 / 预算降级）、L1 温度池采样与裁判整理、**隔离的代码证据**、对外汇报话术模板
 - `references/kb-evidence-rails.md` — 三道证据铁轨的源码取证（行号 + 拒绝分支）、五级目录与三知识域、规模构成统计口径、证据质量边界
+- `references/remote-cluster-implementation.md` — 远端集群（`memomics/bio_tools/remote_cluster.py`）行号级实现地图（连接层继承 / Windows mux 降级 / 连接池 / scp SFTP→`-O` 回退 / 调度器探测 / 多节点 `needs_node` 硬拦 / jobs.jsonl 账本）、稳定性「工程处理 vs 固有边界」分栏、**vs MobaXterm 对照表与问答骨架**
