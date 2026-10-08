@@ -1354,6 +1354,35 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .cc-node-row .cc-node-ops { grid-column:4/-1; display:flex; gap:6px; justify-content:flex-end; }
 .cc-console .cc-node-row .cc-node-eff { grid-column:1/4; font-size:11px; color:var(--text-light); align-self:center; }
 .cc-console .cc-node-row.is-default { border-color:var(--primary); }
+.cc-console .cc-nodesec { grid-column:1/-1; display:flex; flex-direction:column; gap:6px; border-top:1px dashed var(--border); padding-top:8px; margin-top:2px; }
+.cc-console .cc-nodesec-head { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+/* 一个节点一张卡：卡头 = 节点名（点开查看/编辑），默认收起 */
+.cc-console .cc-nodecard { border:1px solid var(--border); border-radius:8px; background:var(--panel); overflow:hidden; }
+.cc-console .cc-nodecard-head { display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; user-select:none; font-size:12px; }
+.cc-console .cc-nodecard-head:hover { background:var(--primary-light); }
+.cc-console .cc-nodecard-head .cc-nc-arrow { color:var(--text-light); font-size:11px; width:12px; }
+.cc-console .cc-nodecard-head .cc-nc-star { color:var(--primary); font-size:11px; }
+.cc-console .cc-nodecard-head .cc-nc-sub { color:var(--text-light); font-size:11px; margin-left:auto; }
+.cc-console .cc-nodecard > .cc-node-row { border:none; border-top:1px dashed var(--border); border-radius:0; background:transparent; }
+/* 向导弹层必须压在集群面板（z-index:9999）之上 */
+#cw-mask { z-index:12000; }
+/* === 添加节点向导（2026-10-08）：必填标红 + 分步 + 内嵌装公钥 === */
+.cw-field { margin-bottom:10px; font-size:12px; }
+.cw-field > label { display:block; margin-bottom:3px; font-weight:600; }
+.cw-field input[type="text"], .cw-field input[type="password"], .cw-field input:not([type]), .cw-field select {
+  width:100%; padding:6px 9px; border:1px solid var(--border); border-radius:6px;
+  background:var(--bg); color:var(--text); font-size:12px; box-sizing:border-box; }
+.cw-req { color:#e5534b; }
+.cw-opt { color:var(--text-light); font-weight:normal; font-size:11px; }
+.cw-err { color:#e5534b; font-size:11px; min-height:14px; margin-top:2px; }
+.cw-field.cw-bad input, .cw-field.cw-bad select { border-color:#e5534b; }
+.cw-radio { display:block; font-weight:normal; margin:4px 0; cursor:pointer; }
+.cw-radio input { width:auto !important; margin-right:4px; }
+.cw-adv { margin-top:8px; }
+.cw-adv summary { cursor:pointer; color:var(--text-light); font-size:11px; }
+.cw-adv input, .cw-adv select { margin-top:6px; width:100%; padding:6px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:12px; box-sizing:border-box; }
+.cw-summary { font-size:12px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-bottom:10px; line-height:1.7; }
+.cw-status { font-size:12px; white-space:pre-wrap; margin-top:8px; line-height:1.7; }
 .cc-console .cc-out { flex:1; overflow-y:auto; padding:10px 14px; background:#0d1117; color:#d7e2ec; font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
 .cc-console .cc-out .cc-time { color:#6b7684; }
 .cc-console .cc-out .cc-sys { color:#7fb3ff; }
@@ -15825,8 +15854,38 @@ function clusterFillNodes(c) {
   box.innerHTML = '';
   var nl = (c && c.nodes) || [];
   for (var i = 0; i < nl.length; i++) {
-    box.appendChild(clusterNodeRow(nl[i].spec || { name: nl[i].name }, nl[i].effective || {}, !!nl[i].is_default));
+    box.appendChild(clusterNodeCard(nl[i]));
   }
+  var sum = document.getElementById('cc-nodes-summary');
+  if (sum) sum.textContent = nl.length
+    ? nl.map(function (n) { return n.name + (n.is_default ? '★默认' : ''); }).join(' / ')
+    : '还没有登记节点';
+}
+
+// 一个节点一张卡：卡头 = 节点名（点击展开/收起查看编辑），卡片体 = 行编辑器（复用 clusterNodeRow）
+function clusterNodeCard(nl) {
+  var spec = nl.spec || { name: nl.name };
+  var eff = nl.effective || {};
+  var isDefault = !!nl.is_default;
+  var card = document.createElement('div');
+  card.className = 'cc-nodecard';
+  var head = document.createElement('div');
+  head.className = 'cc-nodecard-head';
+  head.innerHTML = '<span class="cc-nc-arrow">▸</span><b>' + ccAttr(nl.name) + '</b>' +
+    (isDefault ? '<span class="cc-nc-star">★默认</span>' : '') +
+    '<span class="cc-nc-sub">' + ccAttr((eff.user || '') + '@' + (eff.host || '')) + '</span>';
+  head.onclick = function () {
+    var body = card.querySelector('.cc-node-row');
+    var arrow = head.querySelector('.cc-nc-arrow');
+    var open = body && body.style.display !== 'none';
+    if (body) body.style.display = open ? 'none' : 'grid';
+    if (arrow) arrow.textContent = open ? '▸' : '▾';
+  };
+  var body = clusterNodeRow(spec, eff, isDefault);
+  body.style.display = 'none';
+  card.appendChild(head);
+  card.appendChild(body);
+  return card;
 }
 
 function clusterAddNode() {
@@ -15874,6 +15933,147 @@ async function clusterInstallKey() {
     clusterPrint('🔑 装公钥失败：' + e.message, 'err');
   }
 }
+
+// === 添加节点向导（2026-10-08）：必填标红 → 保存 → 弹密码装公钥 → 验证 ===
+var _cw = { step: 1, node: null, busy: false };
+
+function cwOpen() {
+  _cw = { step: 1, node: null, busy: false };
+  ['cw-name', 'cw-host', 'cw-note', 'cw-port', 'cw-user', 'cw-key', 'cw-workdir', 'cw-password'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['cw-name', 'cw-host', 'cw-jumpval', 'cw-password'].forEach(function (id) { cwFieldErr(id, ''); });
+  var sc = document.getElementById('cw-scheduler'); if (sc) sc.value = '';
+  // 跳板默认值 = 共享配置的 user@host（内网节点最常见的情形）
+  var c = _clusterCfg || {};
+  var jumpEl = document.getElementById('cw-jumpval');
+  if (jumpEl && c.host) jumpEl.value = (c.user ? c.user + '@' : '') + c.host + (c.port && String(c.port) !== '22' ? ':' + c.port : '');
+  var jr = document.querySelector('input[name="cw-jump"][value="jump"]'); if (jr) jr.checked = true;
+  cwJumpUi();
+  cwShowStep(1);
+  var m = document.getElementById('cw-mask'); if (m) m.style.display = 'flex';
+  setTimeout(function () { var n = document.getElementById('cw-name'); if (n) n.focus(); }, 50);
+}
+function cwClose() { var m = document.getElementById('cw-mask'); if (m) m.style.display = 'none'; }
+function cwJumpUi() {
+  var jump = document.querySelector('input[name="cw-jump"]:checked');
+  var wrap = document.getElementById('cw-jumpval-wrap');
+  if (wrap) wrap.style.display = (jump && jump.value === 'jump') ? 'block' : 'none';
+}
+function cwShowStep(n) {
+  _cw.step = n;
+  [1, 2, 3].forEach(function (i) {
+    var el = document.getElementById('cw-step' + i); if (el) el.style.display = (i === n) ? 'block' : 'none';
+  });
+  var labels = { 1: '第 1/3 步：基本信息（* 必填）', 2: '第 2/3 步：装公钥打通免密', 3: '第 3/3 步：完成' };
+  var lb = document.getElementById('cw-step-label'); if (lb) lb.textContent = labels[n] || '';
+  var back = document.getElementById('cw-back'); if (back) back.style.display = (n === 2) ? '' : 'none';
+  var next = document.getElementById('cw-next');
+  if (next) next.textContent = n === 1 ? '下一步' : (n === 2 ? '🔑 安装公钥并测试' : '完成');
+  var hint = document.getElementById('cw-hint'); if (hint) hint.textContent = '';
+}
+function cwFieldErr(inputId, msg) {
+  var el = document.getElementById(inputId);
+  var field = el && el.closest ? el.closest('.cw-field') : null;
+  var err = document.getElementById(inputId + '-err');
+  if (field) field.classList.toggle('cw-bad', !!msg);
+  if (err) err.textContent = msg || '';
+  return !msg;
+}
+function cwValidateStep1() {
+  var ok = true;
+  var name = (document.getElementById('cw-name').value || '').trim();
+  var host = (document.getElementById('cw-host').value || '').trim();
+  if (!name) { ok = cwFieldErr('cw-name', '必填：节点名是选机器用的名字（如 ssh3）') && ok; }
+  else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/.test(name)) { ok = cwFieldErr('cw-name', '只能用字母/数字/点/下划线/短横线（≤48 字符）') && ok; }
+  else {
+    var dup = ((_clusterCfg || {}).nodes || []).some(function (n) { return String(n.name).toLowerCase() === name.toLowerCase(); });
+    ok = cwFieldErr('cw-name', dup ? '这个名字已经登记过了，换一个（或在配置里编辑原有那行）' : '') && ok;
+  }
+  ok = cwFieldErr('cw-host', host ? '' : '必填：节点的地址（主机名或 IP）') && ok;
+  var jump = document.querySelector('input[name="cw-jump"]:checked');
+  var jumpVal = (document.getElementById('cw-jumpval').value || '').trim();
+  if (jump && jump.value === 'jump') { ok = cwFieldErr('cw-jumpval', jumpVal ? '' : '必填：跳板 = 登录口地址，形如 user@192.168.61.11') && ok; }
+  else { cwFieldErr('cw-jumpval', ''); }
+  return ok;
+}
+function cwCollect() {
+  var g = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+  var jump = document.querySelector('input[name="cw-jump"]:checked');
+  var node = { name: g('cw-name'), host: g('cw-host'), note: g('cw-note'),
+               port: g('cw-port'), user: g('cw-user'), key: g('cw-key'),
+               workdir: g('cw-workdir'), scheduler: g('cw-scheduler') };
+  if (jump && jump.value === 'jump') node.proxy_jump = g('cw-jumpval');
+  return node;
+}
+async function cwNext() {
+  if (_cw.busy) return;
+  var hint = document.getElementById('cw-hint');
+  if (_cw.step === 1) {
+    if (!cwValidateStep1()) return;
+    _cw.node = cwCollect();
+    // 保存：与已登记节点合并后整体提交（后端按 name 覆盖同名字段）
+    var merged = (((_clusterCfg || {}).nodes) || []).map(function (n) {
+      var s = n.spec || {}; var o = { name: n.name };
+      for (var k in s) { if (s.hasOwnProperty(k)) o[k] = s[k]; }
+      return o;
+    });
+    merged.push(_cw.node);
+    _cw.busy = true;
+    if (hint) hint.textContent = '保存配置中…';
+    try {
+      var r = await fetch('/api/cluster/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: merged }) });
+      var d = await r.json();
+      if (!d.ok) throw new Error(d.error || '保存失败');
+      await clusterRefreshStatus();
+      var n = _cw.node;
+      var sum = document.getElementById('cw-summary');
+      if (sum) sum.innerHTML = '✅ 配置已保存：<b>' + escapeHtml(n.name) + '</b> → ' + escapeHtml(n.host) +
+        (n.proxy_jump ? '（经跳板 ' + escapeHtml(n.proxy_jump) + '）' : '（直连）');
+      var st = document.getElementById('cw-status'); if (st) st.textContent = '';
+      cwShowStep(2);
+      setTimeout(function () { var p = document.getElementById('cw-password'); if (p) p.focus(); }, 50);
+    } catch (e) {
+      if (hint) hint.textContent = '❌ 保存失败：' + e.message;
+    } finally { _cw.busy = false; }
+    return;
+  }
+  if (_cw.step === 2) {
+    var pw = document.getElementById('cw-password').value || '';
+    if (!pw) { cwFieldErr('cw-password', '必填：装公钥要用一次密码（不保存）'); return; }
+    cwFieldErr('cw-password', '');
+    _cw.busy = true;
+    var st2 = document.getElementById('cw-status');
+    if (st2) st2.textContent = '正在装公钥（含跳板链路）…';
+    try {
+      var r2 = await fetch('/api/cluster/install_key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw, node: _cw.node.name }) });
+      var d2 = await r2.json();
+      if (!d2.ok) throw new Error(d2.error || '安装失败');
+      var res = d2.result || {};
+      if (res.status === 'error') throw new Error(res.error || '安装失败');
+      if (st2) st2.textContent = '✅ ' + (res.summary || '公钥就绪') + '\n正在测试连接…';
+      var r3 = await fetch('/api/cluster/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'check', node: _cw.node.name }) });
+      var d3 = await r3.json();
+      var rc = (d3.result || {});
+      var fin = document.getElementById('cw-final');
+      if (rc.status === 'error') {
+        if (fin) fin.textContent = '⚠️ 公钥装好了，但自检没过：\n' + (rc.error || '') + (rc.hint ? '\n' + rc.hint : '');
+      } else {
+        if (fin) fin.textContent = '🎉 节点「' + _cw.node.name + '」已可用！\n连接：' + (rc.user || '') + '@' + (rc.host || '') +
+          '　调度器：' + (rc.scheduler || '-') + '\n工作目录：' + (rc.workdir || '~');
+      }
+      var pEl = document.getElementById('cw-password'); if (pEl) pEl.value = '';
+      clusterPrint('✓ 新节点 ' + _cw.node.name + ' 已添加并验证', 'ok');
+      cwShowStep(3);
+      clusterRefreshStatus();
+    } catch (e) {
+      if (st2) st2.textContent = '❌ ' + e.message + '\n确认密码后可再点一次下方按钮重试（配置已保存，不会丢）。';
+    } finally { _cw.busy = false; }
+    return;
+  }
+  cwClose();
+}
+function cwBack() { if (_cw.step === 2) cwShowStep(1); }
 
 function clusterCollectNodes() {
   var rows = document.querySelectorAll('#cc-nodes .cc-node-row');
@@ -18270,12 +18470,14 @@ async function saveUpdateConfig(mode) {
         <option value="ask">ask（多个节点时先问清用哪个）</option>
         <option value="auto">auto（暂未实现，按 ask 处理）</option>
       </select></label>
-      <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
-        <b>命名节点（可选）</b>：多个入口 / 内网节点在这里登记。每行只填要填的框，留空一律继承上面的共享配置。
+      <div class="cc-nodesec">
+        <div class="cc-nodesec-head">
+          <button class="cc-btn primary" onclick="cwOpen()">＋ 添加节点（向导）</button>
+          <span class="cc-cfg-note" id="cc-nodes-summary" style="margin:0;"></span>
+        </div>
+        <div class="cc-nodes" id="cc-nodes"></div>
       </div>
-      <div class="cc-nodes" id="cc-nodes"></div>
       <div class="cc-cfg-actions">
-        <button class="cc-btn" onclick="clusterAddNode()">＋ 添加节点</button>
         <button class="cc-btn primary" onclick="clusterSaveCfg(false)">💾 保存</button>
         <button class="cc-btn" onclick="clusterSaveCfg(true)">💾 保存并自检</button>
         <span id="cluster-cfg-note" class="cc-cfg-note"></span>
@@ -18300,6 +18502,76 @@ async function saveUpdateConfig(mode) {
       <button class="cc-btn primary" id="cluster-run-btn" onclick="clusterExec()">执行</button>
     </div>
     <div class="cc-hint" id="cluster-hint"></div>
+  </div>
+</div>
+
+<!-- === 添加节点向导（2026-10-08）：必填标红 → 保存 → 弹密码装公钥 → 验证，三步走 === -->
+<div class="skp-mask" id="cw-mask" style="display:none;">
+  <div class="skp-panel" style="width:min(560px,93vw);">
+    <div class="skp-head">
+      <b>🖧 添加节点</b>
+      <span class="skp-sub" id="cw-step-label"></span>
+      <button type="button" class="skp-close" onclick="cwClose()">✕</button>
+    </div>
+    <div class="skp-body">
+      <div id="cw-step1">
+        <div class="cw-field" id="cw-f-name">
+          <label>节点名 <b class="cw-req">*</b></label>
+          <input id="cw-name" type="text" placeholder="如 ssh3（字母/数字/._-，会进入作业名）" onkeydown="if(event.key==='Enter')cwNext()">
+          <div class="cw-err" id="cw-name-err"></div>
+        </div>
+        <div class="cw-field" id="cw-f-host">
+          <label>节点地址 <b class="cw-req">*</b></label>
+          <input id="cw-host" type="text" placeholder="如 cngb-supermem-a15-3 或公网 IP" onkeydown="if(event.key==='Enter')cwNext()">
+          <div class="cw-err" id="cw-host-err"></div>
+        </div>
+        <div class="cw-field">
+          <label>连接方式 <b class="cw-req">*</b></label>
+          <label class="cw-radio"><input type="radio" name="cw-jump" value="jump" checked onchange="cwJumpUi()"> 内网节点 —— 经登录口跳转（集群里的机器选这个）</label>
+          <label class="cw-radio"><input type="radio" name="cw-jump" value="direct" onchange="cwJumpUi()"> 直连 —— 本机直接连得到（公网 IP / 已配 hosts）</label>
+          <div id="cw-jumpval-wrap" style="margin-top:4px;">
+            <input id="cw-jumpval" type="text" placeholder="跳板 = user@登录口IP（已自动填好）" onkeydown="if(event.key==='Enter')cwNext()">
+            <div class="cw-err" id="cw-jumpval-err"></div>
+          </div>
+        </div>
+        <div class="cw-field">
+          <label>备注 <span class="cw-opt">（可选，中文写这里）</span></label>
+          <input id="cw-note" type="text" placeholder="如：大内存节点 / 联网装包节点">
+        </div>
+        <details class="cw-adv">
+          <summary>高级（一般不用填，留空 = 继承共享配置）</summary>
+          <input id="cw-port" type="text" placeholder="port">
+          <input id="cw-user" type="text" placeholder="user">
+          <input id="cw-key" type="text" placeholder="私钥路径">
+          <input id="cw-workdir" type="text" placeholder="工作目录">
+          <select id="cw-scheduler">
+            <option value="">调度器（留空=继承）</option>
+            <option value="auto">auto 自动探测</option>
+            <option value="slurm">slurm</option>
+            <option value="pbs">pbs</option>
+            <option value="gridengine">gridengine</option>
+            <option value="none">none（直接后台跑）</option>
+          </select>
+        </details>
+      </div>
+      <div id="cw-step2" style="display:none;">
+        <div class="cw-summary" id="cw-summary"></div>
+        <div class="cw-field" id="cw-f-password">
+          <label>集群密码 <b class="cw-req">*</b> <span class="cw-opt">只用这一次装公钥，不保存、不进日志；装完永久免密</span></label>
+          <input id="cw-password" type="password" placeholder="集群登录密码" onkeydown="if(event.key==='Enter')cwNext()">
+          <div class="cw-err" id="cw-password-err"></div>
+        </div>
+        <div class="cw-status" id="cw-status"></div>
+      </div>
+      <div id="cw-step3" style="display:none;">
+        <div class="cw-status" id="cw-final"></div>
+      </div>
+    </div>
+    <div class="skp-foot">
+      <span class="skp-hint" id="cw-hint"></span>
+      <button type="button" class="skp-btn ghost" id="cw-back" onclick="cwBack()" style="display:none;">上一步</button>
+      <button type="button" class="skp-btn" id="cw-next" onclick="cwNext()">下一步</button>
+    </div>
   </div>
 </div>
 
