@@ -49,6 +49,30 @@ if not os.path.isdir(MEMOMICS_HOME_DIR) and os.path.isdir(_legacy_home):
 os.environ["MEMOMICS_HOME"] = MEMOMICS_HOME_DIR
 # 上游 hermes-agent 只读 HERMES_HOME（hermes_constants.get_hermes_home 的契约）——镜像一份
 os.environ["HERMES_HOME"] = MEMOMICS_HOME_DIR
+
+
+def _migrate_legacy_config_paths():
+    """把 config.yaml 里残留的 hermes_home 路径迁移为 memomics_home。
+
+    老安装的 config.yaml 不进 git（plugins.hermes-memory-store.db_path 等是相对路径，
+    按 CWD 解析），不改的话启动时会重新创建出 repo/hermes_home/ 旧目录、
+    记忆库落到两份。仅在数据目录已是 memomics_home 时执行（回退到旧目录时保持原样）。
+    """
+    _cfg = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+    try:
+        with open(_cfg, "rb") as _f:
+            _data = _f.read()
+        if b"hermes_home" not in _data:
+            return
+        with open(_cfg, "wb") as _f:
+            _f.write(_data.replace(b"hermes_home", b"memomics_home"))
+        print("[MemOmics] config.yaml 中 hermes_home 路径已迁移为 memomics_home", flush=True)
+    except OSError as _cfg_err:
+        print("[MemOmics] config.yaml 路径迁移跳过: %r" % (_cfg_err,), flush=True)
+
+
+if MEMOMICS_HOME_DIR != _legacy_home:
+    _migrate_legacy_config_paths()
 # 2026-08-14: verify-on-stop 排除运行时产物目录（results/ 下的分析脚本不触发 pytest 验证回路）
 os.environ.setdefault("HERMES_VERIFY_ON_STOP_EXCLUDE", "results/;.backups/;backups/;logs/")
 
