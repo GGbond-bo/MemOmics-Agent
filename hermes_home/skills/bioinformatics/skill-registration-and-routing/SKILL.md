@@ -124,6 +124,14 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 > 🚫 **RED 用例必须字面含关键词**：matcher 是**子串匹配**（`kw in text`），新用例的文案里必须真的出现
 > `trigger_keywords` 里某一条的**原样字串**——写「帮我用 ExtendScript 批量改 Illustrator 里的文字」，
 > 而不是同义改写「用脚本批处理 AI 文件」；否则**用例自己先红**，看着像技能没注册成功。
+>
+> ✅ **补用例前先"探针选句" + 带反向对照**（2026-10-08 实测，省一轮返工）：写一段脚本对 5–7 句真实口语
+> 批量跑 `_match_red_skill_triggers`，**把已经命中的那句原样抄进 `text`**——不要先写用例再赌它会中。
+> 同一轮里带上反向对照：同类易串扰技能（如 `dcs-cloud`）的句子应**仍只命中它自己**、闲聊/无关句必须
+> **0 命中**——这样证明的是"命中对了"，而不是"嘴大命中多"。
+>
+> 💡 **提交与测试证据纪律**（pytest 汇总行才算绿、`[skills-gate]` PASS 行即权威回执、提交范围如何分类）：
+> 见 `skill_view("platform-execution-pitfalls", "references/verification-and-commit-gating.md")`。
 
 ## Parameters
 
@@ -142,6 +150,7 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 |------|------|------|
 | `_match_red_skill_triggers("自然语言")` → `[]` | 索引该行关键词是名称派生 | 真关键词写进 **skill.json** → `--build` → grep 索引行复核 |
 | 索引行关键词 = 技能名 + 空格分词 + 单词 | 原本只有 1 条关键词（`len>=2` 不成立）→ 跌落名称派生 | 补到 ≥10 条，重建 |
+| 索引行关键词 = 名称派生，但 skill.json 里**明明写了** `trigger_keywords` | 写成了**一条斜杠串**：`["集群/ssh 节点/云上算力/他把数据放集群上"]` —— **斜杠不是分隔符**，整个串算 1 条 → 照样 `len>=2` 不成立（2026-10-08 实测：`remote-cluster-execution` 因此"看着注册好了"却永命不中，中文「集群」全 miss） | 改成**真数组**，一词一条：`["集群","远端集群","集群环境","ssh3","用集群跑","在集群上跑","投递任务","qsub","slurm","sge"]` → `--build` → matcher 实跑复核 |
 | 手写关键词「自己消失了」 | `--build` 回填用名称派生值覆盖 | 写完 skill.json 后**必须 grep 复核**；被清了就重写 |
 | `索引有 WebUI 看不到的技能: ['X']` | 技能目录不在 `list_skills()` 扫描根 | 迁到 `hermes_home/skills/bioinformatics/` |
 | `有 N 个 RED 技能没有任何路由用例` | RED 技能未进 `cases` | 补用例（先确认能命中），或写 `coverage_exempt` + 理由 |
