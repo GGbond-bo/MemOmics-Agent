@@ -204,8 +204,10 @@ def test_marker_id_sanitised(lc):
 def test_cli_smoke(tmp_path):
     big = _big(tmp_path / "cli.rds", 110)
     env = dict(os.environ)
-    p = subprocess.run([sys.executable, LC, "scan", big, "--json"],
-                       capture_output=True, text=True, env=env)
+    # CLI 输出含中文（reason 等）：父进程 text=True 默认按 locale(GBK) 解码会炸，
+    # 显式 utf-8 才与子进程 print 的实际编码一致（2026-10-08 实踩）
+    kw = dict(capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+    p = subprocess.run([sys.executable, LC, "scan", big, "--json"], **kw)
     assert p.returncode == 0, p.stderr
     data = json.loads(p.stdout)
     assert data["recommend"] == [big]
@@ -214,10 +216,75 @@ def test_cli_smoke(tmp_path):
     root.mkdir()
     p2 = subprocess.run([sys.executable, LC, "mark", "--task-id", "cli1",
                          "--title", "CLI", "--input", big, "--cache-root", str(root)],
-                        capture_output=True, text=True, env=env)
+                        **kw)
     assert p2.returncode == 0, p2.stderr
     assert "cleanup_cmd" in p2.stdout or "clean" in p2.stdout
 
-    p3 = subprocess.run([sys.executable, LC, "list"],
-                        capture_output=True, text=True, env=env)
+    p3 = subprocess.run([sys.executable, LC, "list"], **kw)
     assert p3.returncode == 0
+
+
+# ------------------------------------------------------------------ 远端（铁规 10 硬闸配套，2026-10-08）
+
+def _load_rc():
+    """按文件路径加载 remote_cluster（绕开包 __init__；_register 需要 hermes-agent 在 sys.path）。"""
+    rc_path = os.path.join(_REPO, "memomics", "bio_tools", "remote_cluster.py")
+    ha = os.path.join(_REPO, "hermes-agent")
+    if ha not in sys.path:
+        sys.path.insert(0, ha)
+    spec = importlib.util.spec_from_file_location("remote_cluster_under_test", rc_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_marker_remote_paths_not_mangled(lc):
+    """remote=True 时输入/产物/cache_root 原样记账（不许被 abspath 拼成 Windows 怪胎）。"""
+    m = lc.new_marker("t-remote", "远端任务", ["/hwfssz3/PS_JLU/zhangbo/x.rds"],
+                      remote=True, cache_root="/hwfssz3/PS_JLU/zhangbo/cache",
+                      artifacts=["/hwfssz3/PS_JLU/zhangbo/cache/x.qs"])
+    assert m["inputs"][0]["path"] == "/hwfssz3/PS_JLU/zhangbo/x.rds"
+    assert m["cache_root"] == "/hwfssz3/PS_JLU/zhangbo/cache"
+    assert m["artifacts"][0] == "/hwfssz3/PS_JLU/zhangbo/cache/x.qs"
+    # 远端 active 标记进查询集合；本机标记不进
+    assert "/hwfssz3/PS_JLU/zhangbo/x.rds" in lc.marked_remote_paths()
+    lc.new_marker("t-local", "本机", [], remote=False)
+    assert not any(p.startswith("t-local") for p in lc.marked_remote_paths())
+    # cleaned 的远端标记不再算数
+    mm = lc.load_marker("t-remote")
+    mm["status"] = "cleaned"
+    lc.save_marker(mm)
+    assert "/hwfssz3/PS_JLU/zhangbo/x.rds" not in lc.marked_remote_paths()
+
+
+def test_persist_gate_paths_extraction():
+    rc = _load_rc()
+    # 读语句里的数据路径被抓；巡检行（ls/stat/du 开头）里的不算
+    cmd = 'readRDS("/hwfssz3/PS_JLU/zhangbo/MuSC.rds")\nls -lh /hwfssz3/PS_JLU/zhangbo/other.rds'
+    assert rc._persist_gate_paths(cmd) == ["/hwfssz3/PS_JLU/zhangbo/MuSC.rds"]
+    assert rc._persist_gate_paths("stat -c '%s' /a/b.rds") == []
+    assert rc._persist_gate_paths("echo hello") == []
+    # --input=/c/d.bam 形式 + 去重
+    p2 = rc._persist_gate_paths("run --input=/c/d.bam --input=/c/d.bam")
+    assert p2 == ["/c/d.bam"]
+
+
+def test_persist_gate_decide():
+    rc = _load_rc()
+    big = [{"path": "/a/big.rds", "size": 200 * 1048576}]
+    payload = rc._persist_gate_decide(big, set(), "ssh3", 100)
+    assert payload["status"] == "needs_persist"
+    assert payload["big_inputs"][0]["path"] == "/a/big.rds"
+    assert "scan --remote" in payload["flow"][0]
+    # 账本已覆盖 → 放行；无大件 → 放行
+    assert rc._persist_gate_decide(big, {"/a/big.rds"}, "ssh3", 100) is None
+    assert rc._persist_gate_decide([], set(), "ssh3", 100) is None
+
+
+def test_persist_gate_wired_into_run_submit():
+    """run/submit 入口静态接线断言（真 SSH 在单测里不可用）。"""
+    with open(os.path.join(_REPO, "memomics", "bio_tools", "remote_cluster.py"),
+              encoding="utf-8") as fh:
+        src = fh.read()
+    assert src.count("gate = _persist_gate(cfg, args, command)") == 2
+    assert "def _persist_gate(" in src and "status\": \"needs_persist\"" in src or "needs_persist" in src

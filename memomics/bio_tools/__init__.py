@@ -1,4 +1,16 @@
 """MemOmics bioinformatics tools — registers with MemOmics tool registry."""
+# 2026-10-08：standalone CLI（python -m memomics.bio_tools.large_cache ...）场景下
+# hermes-agent 不在 sys.path，各工具模块自注册时的 `from tools.registry import registry`
+# 会炸 → 包级崩溃、CLI 直接不可用（当天铁规 10 执行流 silent fail 的另一半根因）。
+# 对策：先把仓库内 hermes-agent 补进 sys.path（服务器场景本就在，幂等无害）。
+import os as _os
+import sys as _sys
+
+_ha = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(
+    _os.path.abspath(__file__)))), "hermes-agent")
+if _os.path.isdir(_os.path.join(_ha, "tools")) and _ha not in _sys.path:
+    _sys.path.insert(0, _ha)
+
 from . import data_scanner
 from . import kb_search
 from . import save_knowledge

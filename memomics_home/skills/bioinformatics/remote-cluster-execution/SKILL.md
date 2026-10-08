@@ -31,6 +31,41 @@ metadata:
   ③ 多节点没指定 → `needs_node` 硬拦（设计如此，不是故障）。
 - 实现落点：`memomics/bio_tools/remote_cluster.py`（继承 memomics `SSHEnvironment`，只跳过 `~/.memomics` 同步）。
 
+## 🔴 铁规 11：集群侧可见性 —— 用户会在 MobaXterm 现场核对（2026-10-08 实测）
+
+用户会拿 MobaXterm 当"对照观察窗"问：「MemOmics 在集群执行任务的时候，我能在 MobaXterm 对应节点看到吗？」
+→ 回答**必须分层给可见性矩阵**（不能只讲 MemOmics 侧回执），并主动给出"登哪个节点 + 敲什么命令"：
+
+| 看什么 | 集群侧怎么看 | 可见？ | 原因（实测） |
+|---|---|---|---|
+| 产物（图/表/日志） | `ls /hwfssz3/PS_JLU/zhangbo/...` | ✅ | 工作盘 NFS **三节点共享** |
+| R/python 进程 | `ps -ef \| grep Rscript` | ⚠️ **仅运行期间** | 作业结束进程即消失；同账号进程全局可见（无需 sudo） |
+| SGE 队列 | `qstat` | ⚠️ 取决于 qmaster 可解析 | qstat 失败 → 工具判 `scheduler=none` → 走 **setsid 后台进程** → **队列里根本没有它**，只能靠 `ps` 看 |
+| 工具账本 | `~/memomics_jobs/` | ❌ **跨节点看不到** | `/home` **不跨节点共享**（ssh3=`10.53.22.9:/vol_1t_sas_3`；ssh23=`10.53.20.27:/export/home`，独立卷）→ 账本只在本节点可见 |
+| Agent 思考/会话/审查 | — | ❌ | 全在 MemOmics 本机侧，集群上没有任何痕迹 |
+
+**由此定下的两条操作要求**：
+1. **作业日志必须落工作盘**（`$WORKDIR/log/`；`scripts/run_cluster_job.sh` 已如此），**不要只落 `~/memomics_jobs`（HOME）**——否则作业跑完/换个节点就查不到。
+2. 用户要现场核对 → 告诉他**登录提交时用的那个节点** + `ps -ef | grep Rscript`（或直接看工作盘产物目录），**别让他依赖 `qstat`**。
+
+⚠️ 登录账号是 **`zhangbo11`**（uid 1003064），**不是**目录名 `zhangbo`——用户 MobaXterm 里也多半是这个账号；
+跨节点"看不看得到"最终取决于**是否同一账号 + 是否同一个 NFS 卷**。
+
+实测证据 / 排查方向 → `references/observability-from-cluster-side.md`。
+
+**2026-10-08 二轮实测补充（htop 可见性实弹取证 + SGE 实况）**
+
+- `ssh23` **已装 htop**（`/usr/bin/htop`）；htop 默认只列**当前用户**进程 → 用 `zhangbo11` 登录即可看到 MemOmics 作业。
+- **实弹证据**：`submit` 一个 300 秒占位作业 → `ps -u zhangbo11` 看到完整链路
+  `bash …/memomics_jobs/scripts/<job>.sh`（PPID=**1**，已脱离 SSH → 断连不死）→ 子进程本体；
+  同期同表还看到**用户自己的两个 `htop`**（`pts/0` 子进程）→ 直接证明"同用户、同机、运行期间"三条件齐备即可见。
+- ⚠️ **`submit` 会返回 `exit=124 / Command timed out after 20s` 的 error，但作业其实已经起来了**
+  （工具 20s 等待窗口太短）。见到这个 error **不要判失败**，先 `ps` / `action="status"` 核实。
+- 🔴 **SGE 在本集群不可用，且不是 DNS 小毛病**：qmaster `10.54.31.75:536` 从 ssh23 **TCP 不可达**
+  （`/dev/tcp` 探测 `TCP536_FAIL`）+ `/etc/hosts` 缺 `cngb-ps-jlu` 条目（ssh3 有）；
+  **`HOSTALIASES` 免 root 补解析实测无效**。→ 无 root/网络开通修不了；
+  因此 `scheduler=none` + **setsid 是被迫的正确路径，不是降级**，且正好满足"htop 可见"的诉求。
+
 ## 🔴 铁规 0：先清点环境，再写作业 — **环境名不可信，必须实测**
 
 **这是本 skill 最重要的一条，来自 2026-10-08 ssh3 实测。**
@@ -90,6 +125,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 - **一轮把要查的全查完** —— 用 `scripts/probe_cluster_envs.sh <conda_root>`（列 env → 版本 → R 包 → Python 包 → activate 测试），或把多个 `echo "=== N. xxx ==="` 段落拼进**同一条**命令。
 - 动手前先想清楚"这次探查要回答什么"，一次问完；不要"看一眼再决定下一眼看什么"。
 - 已被判定循环时不要反复重试同类命令 —— 直接整理已有结果交付（多数情况信息已经够了）。
+- **跨节点校验也算重复**：2026-10-08 实测，因"先在 A 节点查一遍 `ls`/`df`/`qstat`、再在 B 节点查一遍同样的组合"，被判循环失控强制干预。跨节点比对要么**在同一条命令里遍历**（远端 `for` 循环 / 一次 `run` 带全部段落），要么**只查真正有差异的那一项**（例如问"`/home` 是否同一份卷"→ 只跑 `df -h $HOME`，别把整包探针重跑一遍）。
 
 ## 🔴 铁规 7：**用户锁定的环境映射是"持久声明"，不是探针缓存**（2026-10-08）
 
@@ -136,12 +172,49 @@ source <conda_root>/bin/activate <env>      # 推荐
 用户原话：「检测到执行读取数据分析，弹窗询问用户要不要持久化，**大于 100M 的内容，都要推荐持久化**。
 比如 RDS、h5ad，一些超大表格也是一样，并**做好任务标记，方便清理**。」
 
-流程（固定三步，不许跳）：
-1. `python -m memomics.bio_tools.large_cache scan <输入路径...> --json` → 看 `recommend`；
-2. `recommend` 非空 → **`ask_user(kind="intent", multi_select=true)` 弹窗**问要不要持久化
-   （≥100MB 才推荐；低于阈值**不打扰用户**，600MB 重读一次不到 40 秒）；用户答复后再动手；
-3. `mark` 落标记（`--input` / `--cache-root` / `--artifact` / `--remote` / `--ttl-days`），
+### ⛔ 触发点 = 前置门禁，不是"记得时做一下"（2026-10-08 二次教训：规矩写了但没接上入口）
+
+**入口在「用户给了输入路径」→「写脚本 / 投作业」之间。** 只要下一步要读的输入 ≥100MB，
+**先做完本流程再写脚本**——不许先投作业、事后补。
+
+事故原样：本 skill 里已写好铁规 10，随后我仍直接对集群上 662MB 的
+`MuSC_exercise_clean_dele_cluster_umap.rds` 写脚本 + `submit`，**无 scan、无弹窗、无标记**，
+被用户当场追问「**你没有持久化吗？**」。根因**不是不懂规矩**，而是**规矩没接在执行路径上**
+（从"拿到路径"到"投作业"之间没有任何强制前置步骤）。→ 本铁规必须当**前置门禁**执行。
+
+### 🧱 现在有硬闸（2026-10-08 三次教训后落地）：`remote_cluster` 的 run/submit 会先过 `_persist_gate`
+
+命令文本里出现**数据扩展名的远端绝对路径**（.rds/.h5ad/.bam/.csv/.tsv/...）→ 节点上批量 stat →
+≥100MB 且 `cache_markers` 账本里没有它的 active 远端标记 → **返回 `status=needs_persist`，命令不执行**。
+过闸就是下面三步；纯巡检行（`ls/stat/du/head` 开头）不触发；`scan --remote` 走内部 `scan_only` 通道不触发。
+**答不出"违反了哪一步会拦住我"的时代结束：会被 run/submit 拦住。**
+
+### 流程（固定三步，不许跳）
+
+1. **判体积**（按输入在哪分支）：
+   - **本机输入** → `python -m memomics.bio_tools.large_cache scan <路径...> --json` → 看 `recommend`。
+   - **集群输入** → `python -m memomics.bio_tools.large_cache scan --remote --node <节点> <路径...> --json`
+     （2026-10-08 起 `scan` 支持 `--remote`：经 remote_cluster 批量 stat/du，按 size+mtime 判，
+     不取指纹）。⚠️ 不带 `--remote` 喂 `/hwfssz3/...` 只会得到 `exists:false` —— **别据此判"没有大文件"**。
+     想顺带摸同目录一批：`action="run"` + `ls -la --time-style=long-iso <目录> | head -20`。
+     判定 ≥100MB → 直接进第 2 步。
+2. **弹窗**：≥100MB → **`ask_user(kind="intent", multi_select=true)`** 问要不要持久化
+   （低于阈值**不打扰用户**；600MB 重读一次不到 40 秒）；用户答复后再动手。
+3. **落标记**：`mark`（`--input` / `--cache-root` / `--artifact` / `--remote` / `--ttl-days`），
    收尾用 `list` / `verify` / `clean` 管账。
+   ⚠️ 集群产物**必须带 `--remote`**：本机看不见远端文件系统，不带就会被 `os.path.exists=False`
+   误导，且 `clean` 走不到"只打印 `rm -rf` 命令"的正确分支。
+   2026-10-08 起 `--remote` 时输入/产物/cache_root **原样记账**（不再被 `os.path.abspath` 拼成
+   `E:\...\/hwfssz3` 怪胎）；**用户拒绝持久化也要落标记**（`--note 用户选择不持久化`）——
+   账本记的是"已问过"，不是"已持久化"，不落则硬闸每次都拦。
+
+### 顺手做：给项目建「大输入清单」（避免换个文件名就重新漏）
+
+发现某目录是**成批的大文件**时（实例：`/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/` 下 6 个 RDS，
+0.48–1.76 GB：FAP 1.76G / EC_pericyte 861M / Immune 832M / MuSC 662M / ANKRD1 581M / GALNTL6 483M），
+**一次把同目录 ≥100MB 的项全部 `mark`**，形成该项目的清单 —— 而不是每换一个文件名重漏一次。
+
+实测清单与 `scan` 的本地限制 → `references/big-input-inventory.md`。
 
 **清理三道闸（删错比不删贵）**：① artifacts 命中原始输入 → 拒绝（原始数据永不删）；
 ② 产物必须在声明的 `cache_root` 内，未声明则整体拒绝（不猜范围）；③ 默认 dry-run，加 `--yes` 才真删；
@@ -155,7 +228,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 | 目的 | 动作 |
 |---|---|
 | 摸环境 | `action="run"` + `scripts/probe_cluster_envs.sh <conda_root>` |
-| 大输入该不该持久化 | `python -m memomics.bio_tools.large_cache scan <路径> --json` |
+| 大输入该不该持久化 | **本机**：`large_cache scan <路径> --json`；**集群**：`large_cache scan --remote --node <节点> <路径> --json` → ≥100MB 弹窗 → `large_cache mark ... --remote`；**硬闸**：run/submit 读到未标记大输入 → `needs_persist` 拒执行 |
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
@@ -169,6 +242,8 @@ source <conda_root>/bin/activate <env>      # 推荐
 - `references/ssh3-zhangbo-inventory.md` — ssh3（CNGB 深圳超算，SGE 8.1.9）环境实测清单：R4.41 / R4.3.3 / ARCHR / sc-analysis / scenic 等，含每个环境的真实包内容与推荐映射。
 - `references/environment-declaration.md` — 环境声明的机制：`environment.json` 的 `cluster` 段 schema、`declared_env()` / `save_declared()`、WebUI「🧩 环境管理」填写入口与 `POST /api/env/declared`。
 - `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
+- `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `zhangbo11`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
+- `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
 
 **ssh3 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
 
@@ -220,3 +295,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 | - | - | - | 2026-10-08 | large_cache.py | - | - |  |
 | - | - | - | 2026-10-08 | large_cache.py | - | - |  |
 | - | - | - | 2026-10-08 | large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | ssh23_visibility_probe.sh | - | - |  |
+| - | - | - | 2026-10-08 | ssh23_visibility_probe.sh | - | - |  |
+| - | - | - | 2026-10-08 | ssh23_htop_visibility_live_demo.sh | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_ssh3.R | - | - |  |

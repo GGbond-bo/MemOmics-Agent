@@ -124,6 +124,8 @@ _DEFAULT_CFG = {
     "ge_mem_res": "vf",          # 内存资源名（华大系 GE 是 vf=virtual_free；别的 GE 常见 h_vmem/mem_free）
     "ge_gpu_res": "num_gpu",     # GPU 资源名
     "auto_record_env": True,     # check 成功后把节点环境自动沉淀到 🧩 环境管理（environment.json）
+    "persist_gate": True,        # 铁规 10 硬闸：run/submit 要读 ≥100MB 未标记大输入 → 拒绝执行
+    "persist_min_mb": 100,       # 硬闸阈值（MB）
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -1060,10 +1062,104 @@ def _action_check(cfg: dict, args: dict) -> str:
     })
 
 
+# ---------------------------------------------------------------------------
+# 铁规 10 硬闸（2026-10-08）：要读 ≥100MB 未标记大输入的 run/submit，先拦下
+# ---------------------------------------------------------------------------
+# 背景：铁规 10 写进 skill 后仍被同一 agent 当面跳过（662MB MuSC rds 无 scan/弹窗/标记
+# 直接 submit）——规矩没接在执行路径上 = 没有规矩。本闸就是「违反了哪一步会拦住我」的答案：
+# 命令文本里出现数据扩展名的远端绝对路径 → 批量 stat → ≥阈值且账本（large_cache
+# cache_markers）里没有它的 active 远端标记 → 返回 status=needs_persist，拒绝执行。
+# 纯巡检行（ls/stat/du/head... 开头）不触发——那是铁规 10 自己的查体积动作；
+# large_cache.scan_remote 走 scan_only=True 内部通道，同理不触发。
+
+_PERSIST_PATH_RE = re.compile(
+    r"(/[A-Za-z0-9._~+@%/-]+\.(?:rds|rda|rdata|qs|h5ad|h5|hdf5|loom|zarr|mtx|"
+    r"bam|cram|fastq|fq|parquet|feather|csv|tsv))", re.I)
+_PERSIST_INSPECT_RE = re.compile(
+    r"^\s*(ls|ll|stat|du|df|file|head|tail|which|echo|pwd|wc|qstat|squeue|qconf|"
+    r"qhost|realpath|readlink|basename|dirname|test|\[)\b")
+
+
+def _persist_gate_paths(command: str):
+    """从命令文本抠「会被读的大输入候选」：数据扩展名的绝对路径。纯巡检行跳过。"""
+    out = []
+    for line in (command or "").splitlines():
+        if _PERSIST_INSPECT_RE.match(line):
+            continue
+        for m in _PERSIST_PATH_RE.finditer(line):
+            p = m.group(1)
+            if p not in out:
+                out.append(p)
+    return out[:12]
+
+
+def _persist_gate_decide(big, marked, node_name: str, min_mb: float):
+    """纯判定（可离线单测）：大件 ∩ 账本 → None 放行 / needs_persist 载荷。"""
+    unmarked = [b for b in big if b["path"] not in marked]
+    if not unmarked:
+        return None
+    return {
+        "status": "needs_persist",
+        "node": node_name,
+        "error": ("命令要读 %d 个 ≥%gMB 的远端大输入，但它们还没落任务标记（铁规 10）——"
+                  "本次 run/submit 已被拦下，没有执行。" % (len(unmarked), min_mb)),
+        "big_inputs": [{"path": b["path"], "size_h": "%.0fMB" % (b["size"] / 1048576.0)}
+                       for b in unmarked],
+        "flow": [
+            "① 查体积：python -m memomics.bio_tools.large_cache scan --remote --node %s <路径...> --json"
+            % (node_name or "<节点>"),
+            "② 弹窗问用户：ask_user(kind=\"intent\") 要不要持久化（≥100MB 必须问，不许替用户答）",
+            "③ 落标记：python -m memomics.bio_tools.large_cache mark --task-id <任务id> --title <标题> "
+            "--input <路径> --remote（用户拒绝持久化也照落，加 --note 用户选择不持久化）",
+            "④ 原样重发本次调用——账本里有标记就不再拦",
+        ],
+        "note": ("纯巡检命令（ls/stat/du/head 开头的行）不触发本闸；"
+                 "config 里 persist_gate: false 可整闸关闭（不推荐）。"),
+    }
+
+
+def _persist_gate(cfg: dict, args: dict, command: str):
+    """铁规 10 硬闸本体。返回 None=放行；否则返回 needs_persist 的 JSON 字符串。"""
+    if not cfg.get("persist_gate", True):
+        return None
+    if _truthy(args.get("scan_only")):
+        return None
+    paths = _persist_gate_paths(command)
+    if not paths:
+        return None
+    try:
+        min_mb = float(cfg.get("persist_min_mb") or 100)
+    except Exception:
+        min_mb = 100.0
+    conn = _get_conn(cfg)
+    cmd = ("for p in " + " ".join(shlex.quote(p) for p in paths) + "; do "
+           "[ -f \"$p\" ] && echo \"$(stat -c '%s' \"$p\" 2>/dev/null) $p\"; done")
+    res = conn.execute(cmd, timeout=60)
+    big = []
+    for line in (res.get("output") or "").splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) >= min_mb * 1048576:
+            big.append({"path": parts[1].strip(), "size": int(parts[0])})
+    if not big:
+        return None
+    try:
+        from memomics.bio_tools import large_cache as _lc
+        marked = _lc.marked_remote_paths()
+    except Exception:
+        marked = set()
+    payload = _persist_gate_decide(big, marked, cfg.get("_name") or cfg.get("host") or "", min_mb)
+    if payload is None:
+        return None
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 def _action_run(cfg: dict, args: dict) -> str:
     command = (args.get("command") or "").strip()
     if not command:
         return _err("run 需要 command 参数")
+    gate = _persist_gate(cfg, args, command)
+    if gate:
+        return gate
     conn = _get_conn(cfg)
     cwd = args.get("cwd") or cfg["workdir"]
     timeout = int(args.get("timeout") or cfg["timeout"])
@@ -1332,6 +1428,9 @@ def _action_submit(cfg: dict, args: dict) -> str:
     command = (args.get("command") or "").strip()
     if not command:
         return _err("submit 需要 command（要跑的作业命令）")
+    gate = _persist_gate(cfg, args, command)
+    if gate:
+        return gate
     conn = _get_conn(cfg)
     sched, _bins = _detect_scheduler(conn, cfg)
     base_name = (args.get("job_name") or "memomics").strip().replace(" ", "_")
@@ -2476,6 +2575,12 @@ SCHEMA = {
         "和各节点（原样 / 工作目录 / 工作目录/data/），返回 verdict=local|cluster|ambiguous|missing + 命中位置和大小。\n"
         "  ③ verdict=ambiguous（两边都有）或 missing（两边都没有）→ **不要自己挑、不要编路径**："
         "把候选位置和大小报给用户问清楚；missing 时把查过的地方一起报出来，请他给准确路径。\n"
+        "【大输入硬闸（铁规 10）】run/submit 的命令文本里若出现 ≥100MB 的远端数据文件"
+        "（.rds/.h5ad/.bam/大表格等扩展名的绝对路径）且账本里没有它的任务标记 → 返回 "
+        "status=needs_persist 拒绝执行（命令不会跑）。过闸三步："
+        "① large_cache scan --remote --node <节点> <路径>（查体积）→ ② ask_user 弹窗问要不要持久化"
+        "（必须问，不许替用户答）→ ③ large_cache mark --remote 落标记（用户拒绝也落，note 注明）→ 重发。"
+        "纯巡检命令（ls/stat/du/head 开头的行）不触发；config 的 persist_gate: false 可关（不推荐）。\n"
         "【产物分工】集群上只留大文件（原始数据/中间产物/BAM/FASTQ/大矩阵/模型权重），不要往本机拉；"
         "表格/图/脚本/日志这类小产物必须 pull 回本地 results/<会话>/，否则 WebUI 里看不到"
         "（WebUI 只浏览 work/ 和 results/）。判断标准："

@@ -199,6 +199,113 @@ def scan(paths, min_mb: float = DEFAULT_MIN_MB) -> dict:
     }
 
 
+# ---------------------------------------------------------------- 远端 scan（2026-10-08 铁规 10 集群侧补全）
+
+def scan_remote(paths, node: str = "", min_mb: float = DEFAULT_MIN_MB) -> dict:
+    """集群侧的 scan：经 remote_cluster run 批量 stat/du，产出与 scan 同构的 items。
+
+    不取指纹（远端首尾 1MB 要经 SSH 搬回来，收益不抵成本；size+mtime 已够判「变没变」）。
+    远端命令走 scan_only=True 内部通道 —— 那是 remote_cluster 持久化硬闸的自家查体积动作，
+    不该被硬闸自己拦下。
+    """
+    if not paths:
+        return {"schema": SCHEMA_VERSION, "min_mb": float(min_mb), "scanned_at": utc_now(),
+                "items": [], "recommend": [], "remote": True}
+    import shlex
+    # standalone CLI 场景：服务器进程里 HERMES_HOME/MEMOMICS_HOME 已就位；裸 shell 里没有，
+    # remote_cluster 会掉到平台默认 home（找不着仓库的 remote 配置）——指回仓库的 memomics_home
+    # （2026-10-08 起 config.yaml 在 memomics_home/，不在 hermes_home/）
+    _mh = os.path.join(_REPO, "memomics_home")
+    if os.path.isfile(os.path.join(_mh, "config.yaml")):
+        if not os.environ.get("MEMOMICS_HOME"):
+            os.environ["MEMOMICS_HOME"] = _mh
+        if not os.environ.get("HERMES_HOME"):
+            os.environ["HERMES_HOME"] = _mh
+    try:
+        from memomics.bio_tools import remote_cluster as rc
+    except ImportError:
+        # 直跑文件（python memomics/bio_tools/large_cache.py）时仓库根不在 sys.path
+        if _REPO not in sys.path:
+            sys.path.insert(0, _REPO)
+        from memomics.bio_tools import remote_cluster as rc
+    quoted = " ".join(shlex.quote(str(p)) for p in paths[:20])
+    cmd = ("for p in " + quoted + "; do "
+           "if [ -d \"$p\" ]; then "
+           "echo \"DIR $(du -sb \"$p\" 2>/dev/null | cut -f1) $(stat -c '%Y' \"$p\" 2>/dev/null) $p\"; "
+           "elif [ -f \"$p\" ]; then "
+           "echo \"FILE $(stat -c '%s %Y' \"$p\" 2>/dev/null) $p\"; "
+           "else echo \"MISS 0 0 $p\"; fi; done")
+    args = {"action": "run", "command": cmd, "scan_only": True}
+    if node:
+        args["node"] = node
+    raw = rc.remote_cluster_handler(args)
+    try:
+        res = json.loads(raw)
+    except Exception:
+        res = {}
+    if res.get("status") == "error":
+        raise RuntimeError("远端 scan 失败：%s" % res.get("error"))
+    items = []
+    for line in (res.get("output") or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("[") or line.startswith("=="):
+            continue
+        parts = line.split(None, 3)
+        if len(parts) < 4 or parts[0] not in ("FILE", "DIR", "MISS"):
+            continue
+        tag, size_s, mtime_s, pth = parts[0], parts[1], parts[2], parts[3].strip()
+        is_dir = tag == "DIR"
+        try:
+            size = int(size_s)
+        except ValueError:
+            size = 0
+        if tag == "MISS":
+            items.append({"path": pth, "exists": False, "size": 0, "size_h": "-",
+                          "recommend_persist": False, "reason": "远端路径不存在", "remote": True})
+            continue
+        kind = classify(pth, is_dir)
+        mb = size / (1024.0 * 1024.0)
+        rec = mb >= float(min_mb)
+        ratio = _CACHE_RATIO.get(kind, _CACHE_RATIO_DEFAULT)
+        try:
+            mtime_iso = datetime.fromtimestamp(int(mtime_s), timezone.utc).isoformat(timespec="seconds")
+        except ValueError:
+            mtime_iso = ""
+        items.append({
+            "path": pth, "exists": True, "is_dir": is_dir, "size": size,
+            "size_h": human(size), "size_mb": round(mb, 1), "kind": kind,
+            "mtime": mtime_iso, "remote": True,
+            "recommend_persist": rec,
+            "reason": (f"{human(size)} ≥ 阈值 {min_mb:g}MB → 建议持久化（缓存/检查点），"
+                       f"避免每次重读" if rec else
+                       f"{human(size)} < 阈值 {min_mb:g}MB → 无需持久化"),
+            "est_cache_size_mb": round(mb * ratio, 1) if rec else 0,
+            "est_note": "缓存体积为经验估算（非实测），实际取决于保留哪些字段",
+            "fingerprint": "remote:未取（size+mtime 已够判变更）",
+        })
+    return {
+        "schema": SCHEMA_VERSION, "min_mb": float(min_mb), "scanned_at": utc_now(),
+        "items": items, "recommend": [i["path"] for i in items if i.get("recommend_persist")],
+        "remote": True, "node": node,
+    }
+
+
+def marked_remote_paths() -> set:
+    """账本里所有 active 远端标记覆盖的输入路径（裸路径集合；同一集群共享文件系统，
+    按路径判即可）。供 remote_cluster 的持久化硬闸查询。"""
+    out = set()
+    for m in list_markers():
+        if not m.get("remote"):
+            continue
+        if m.get("status") not in (None, "active"):
+            continue
+        for it in m.get("inputs", []):
+            p = it.get("path")
+            if p:
+                out.add(str(p))
+    return out
+
+
 # ---------------------------------------------------------------- 任务标记
 
 def marker_path(task_id: str) -> str:
@@ -251,7 +358,8 @@ def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
                         ("path", "size", "size_h", "kind", "fingerprint", "mtime")
                         if it.get(k) is not None})
         else:
-            ins.append({"path": os.path.abspath(str(it))})
+            # 远端路径不能 os.path.abspath（Windows 上会拼出 E:\...\/hwfssz3 这种怪胎）——原样保留
+            ins.append({"path": str(it) if remote else os.path.abspath(str(it))})
     exp = None
     if ttl_days and int(ttl_days) > 0:
         from datetime import timedelta
@@ -266,8 +374,8 @@ def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
         "session_dir": session_dir,
         "remote": bool(remote),
         "inputs": ins,
-        "cache_root": os.path.abspath(cache_root) if cache_root else "",
-        "artifacts": [os.path.abspath(a) for a in (artifacts or [])],
+        "cache_root": str(cache_root) if remote else (os.path.abspath(cache_root) if cache_root else ""),
+        "artifacts": [(str(a) if remote else os.path.abspath(a)) for a in (artifacts or [])],
         "expires_at": exp or "",
         "ttl_days": int(ttl_days),
         "note": note,
@@ -436,7 +544,7 @@ def clean(task_id: str = "", all_markers: bool = False, stale_days: int = 0,
 # ---------------------------------------------------------------- CLI
 
 def _cmd_scan(a) -> int:
-    res = scan(a.paths, a.min_mb)
+    res = scan_remote(a.paths, node=a.node, min_mb=a.min_mb) if a.remote else scan(a.paths, a.min_mb)
     if a.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
     else:
@@ -453,8 +561,12 @@ def _cmd_scan(a) -> int:
 def _cmd_mark(a) -> int:
     inputs = []
     for p in (a.input or []):
-        sc = scan([p], a.min_mb)["items"][0]
-        inputs.append(sc)
+        if a.remote:
+            # 远端路径本机不 stat/abspath（体积交给 scan --remote 查）；原样记账
+            inputs.append({"path": str(p)})
+        else:
+            sc = scan([p], a.min_mb)["items"][0]
+            inputs.append(sc)
     m = new_marker(a.task_id, a.title or a.task_id, inputs, cache_root=a.cache_root,
                    artifacts=a.artifact or [], remote=a.remote, note=a.note or "",
                    ttl_days=a.ttl_days, session_dir=a.session_dir or "",
@@ -535,6 +647,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("scan", help="扫输入体积，标出建议持久化的项")
     s.add_argument("paths", nargs="+")
+    s.add_argument("--remote", action="store_true",
+                   help="路径在集群上：经 remote_cluster 远端 stat（需先配好 remote 段）")
+    s.add_argument("--node", default="", help="远端节点名（--remote 时用；留空 = 默认节点）")
     s.add_argument("--min-mb", type=float, default=float(
         os.environ.get("MEMOMICS_CACHE_MIN_MB", DEFAULT_MIN_MB)))
     s.add_argument("--json", action="store_true")
