@@ -1,0 +1,29 @@
+type: kb_entry
+name: remote-cluster-execution_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-10-08 16:09
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- remote-cluster-execution_empirical
+content: 'skill: remote-cluster-execution
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  node=ssh23; cmd=ls -la Umap/ + find *.R + ls R4.41 Seurat dir + df; timeout=120
+
+
+  result_summary:
+
+  ssh23 只读探测：确认 MuSC_exercise_clean_dele_cluster_umap.rds 存在(662MB, Jun 11)；同目录 24
+  个 rds/h5ad 产物；项目内无 R 脚本；R4.41 的 Seurat 库目录存在；共享盘 120T/余24T。为后续 UMAP 重绘提供输入与输出目录依据。'
+evidence: 'record_run(remote-cluster-execution): ssh23 只读探测：确认 MuSC_exercise_clean_dele_cluster_umap.rds
+  存在(662MB, Jun 11)；同目录 24 个 rds/h5ad 产物；项目内无 R 脚本；R4.41 的 Seurat 库目录存在；共享盘 120T/余24T。为后续
+  UMAP 重绘提供输入与输出目录依据。'

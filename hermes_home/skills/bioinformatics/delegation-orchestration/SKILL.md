@@ -20,6 +20,7 @@ metadata:
 - 📎 `scripts/extract_llm_json.py` — 健壮 JSON 提取器（裸引号/尾随逗号/截断/容器递归全能）。合并子代理输出时**直接跑它**，别手写解析。
 - 📎 `scripts/verify_batch_replay.py` — 回执重放判定器：把 §二 的 **5 项检查一次跑完**（容器形状预检 / 逐字段归一 diff / 独有串探针 / 闭环不变量 / 交付物指纹），返回码 0=ALREADY_MERGED、3=NEW_WORK。收到回执先跑它，再决定动不动手。
 - 📎 `scripts/audit_store_field_health.py` — **判为重放后顺手跑的字段健康审计**（逐字段长度分布 + 短字段清单 + 合法短值白名单），返回码 1=抓到真缺陷。见 §二 ⓪-d。
+- 📎 `templates/delegation-brief.md` — **派发 brief 模板（复制填空即用）**：目标 JSON 绝对路径 + **增量落盘契约**（每写完一项立即回写）+ ≤5 篇/人 + `fold -s -w 700` 读法 + 逐字引文构造法（`t[i:j]` 切片，⛔ 不手打）+ 字段 schema 与最短字数 + 综述类固定填法 + 降级口径（先交部分 + 点名未完成）+ 完成判据。**新派发前先复制它、⛔ 不要临场手搓 brief** —— §一/§一-b/§四-b 记录的两次失败（6 篇零落盘、草稿只留内核变量）都出自即兴 brief。
 - 📎 `references/owner-exit-lost-batch.md` — §一「产出必须落盘」的展开：**owner 退出型批次失败的诊断与恢复**（`outcome unknown` 为何几乎总是全批丢失、`manifest.status` + `task-*.log` 停点 + 落盘件三源判死法、重派时的落盘契约、派发前检查表）。
 - 📎 `references/delegation-receipt-replay.md` — 迟到重放实测案例与去重协议（含 Δ=0 验证法、live transcript 的硬限制、**§九 回执「反复到达」的台账 read-side 规程 +「重放回执 + 真实新产物同轮」分工**）。
 - 📎 `references/merged-store-field-health-audit.md` — ⓪-d 的展开：长度分布判读、**为什么尾部标点启发式对中文卡片是垃圾**（54 报 1 真）、综述文合法短值白名单、截断字段回源补法、冻结交付物只报告不擅自改、系统注入路径警告要先核实。
@@ -289,6 +290,15 @@ metadata:
 
 回执形如 `--- ✓ TASK 1/3 … (status=completed, api_calls=50, 755.83s) ---`，摘要开头自陈
 `⚠️ Task NOT completed — blocked by iteration limit before file write`。四行逐条读：
+
+> 🔴 **同批里「失败」与「成功」并存是常态，落盘件检查必须按任务粒度**：本批 3 个任务 ——
+> 1 个（6 篇）**零落盘**、2 个（各 5 篇）**各落一盘**（`…_t1.json` 32,544 B / `…_t2.json` 30,096 B）。
+> ⇒ 先 `ls data/*_t*.json` 按**任务号**逐个核对，⛔ 不要按**批**粒度判「这批有没有产出」，
+> 也⛔ 不要因为「其中一个任务报了 NOT completed」就把整批当失败（那会白重跑 2×5 篇精读）。
+> 🔴 **回执头的 `status=completed` 只表示子代理进程正常结束，与任务是否完成无关** ——
+> 本轮同一条回执里，顶着 `status=completed` 的正是**没写任何文件**的那一个任务。
+> ⇒ 判据一句话：**有落盘契约时，「完成」的唯一证据是文件存在 + 可 `json.load` + 报出字节数**；
+> `status`、草稿字数、口头自陈都不算。落盘契约照 §一 / `templates/delegation-brief.md` 写。
 
 | 摘要里的自陈 | 真实含义 | 动作 |
 |---|---|---|

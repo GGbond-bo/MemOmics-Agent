@@ -1,0 +1,32 @@
+type: kb_entry
+name: cns-visualization_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: exercise
+assay_type: RNA
+last_updated: 2026-10-08 16:13
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- cns-visualization_empirical
+content: 'skill: cns-visualization
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  node=ssh23; env=R4.41(read-only,zhangxiao6); reduction=umap; pt.size=0.4; label=TRUE,repel=TRUE;
+  ggsave w=7.5 h=6.5 dpi=300 png+pdf; input=MuSC_exercise_clean_dele_cluster_umap.rds(694MB)
+
+
+  result_summary:
+
+  集群 ssh23 成功重绘 UMAP：Seurat 51227细胞x15810基因（reductions pca/harmony/umap，6亚群 lpMuSC/CCND2+MuSC/dMuSC/zone3/zone2/zone1）。产出
+  4 图：umap_clusters.png(774KB)/pdf(915KB)、umap_by_age.png(1.38MB)/pdf(902KB)，耗时0.78min，exit=0。关键坑：SGE
+  的 qsub/qstat 在 /opt/gridengine/bin/lx-amd64 不在默认PATH → remote_cluster 调度器探测误判 scheduler=none
+  退化为 setsid 后台进程（能跑通，但 submit 的20s等待窗口会返回 exit=124 假失败，实际进程仍会完成，需按日志终态判断而非按 submit
+  返回码）。'
+evidence: 'record_run(cns-visualization): 集群 ssh23 成功重绘 UMAP：Seurat 51227细胞x15810基因（reductions
+  pca/harmony/umap，6亚群 lpMuSC/CCND2+MuSC/dMuSC/zone3/zone2/zone1）。产出 4 图：umap_clusters.png(774KB)/pdf(915KB)、umap_by_age.png(1.38MB)/pdf(902KB)，耗时0.7'

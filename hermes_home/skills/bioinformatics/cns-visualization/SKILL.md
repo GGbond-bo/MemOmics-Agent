@@ -109,6 +109,7 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 | human | skeletal_muscle | exercise+aging | 2026-10-01 | 43_sankey_3group_common_deg.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-08 | fig_A2_5effects_v5_rawp.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-08 | fig_A3_CNS_v6.R | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-08 | cluster_umap_replot_MuSC.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

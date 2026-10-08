@@ -334,13 +334,26 @@
       "approved": false,
       "custom_script": false,
       "result": "核实效应量表：effect5_effsize_v3.csv 含 22 个 score × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含 scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC 完整效应量 → 第二版加肌纤维类型打分无需重算"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "script": "cluster_umap_replot_MuSC.R",
+      "params": "node=ssh23; env=R4.41(read-only,zhangxiao6); reduction=umap; pt.size=0.4; label=TRUE,repel=TRUE; ggsave w=7.5 h=6.5 dpi=300 png+pdf; input=MuSC_exercise_clean_dele_cluster_umap.rds(694MB)",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "集群 ssh23 成功重绘 UMAP：Seurat 51227细胞x15810基因（reductions pca/harmony/umap，6亚群 lpMuSC/CCND2+MuSC/dMuSC/zone3/zone2/zone1）。产出 4 图：umap_clusters.png(774KB)/pdf(915KB)、umap_by_age.png(1.38MB)/pdf(902KB)，耗时0.7"
     }
   ],
-  "proven_script": "fig_A3_CNS_v6.R",
+  "proven_script": "cluster_umap_replot_MuSC.R",
   "error_count": 2,
-  "success_count": 22,
+  "success_count": 23,
   "user_prefs": {
-    "last_used_script": "fig_A3_CNS_v6.R"
+    "last_used_script": "cluster_umap_replot_MuSC.R"
   },
   "trigger_keywords": [
     "UMAP",

@@ -102,11 +102,62 @@ source <conda_root>/bin/activate <env>      # 推荐
 - 改这份声明**只改指定项**，别顺手重排/润色别段（它是本机环境真源，`scripts/validate_env.py` 读它）。
 - 机制细节（段 schema、`declared_env()`/`save_declared()`、WebUI 填写入口）见 `references/environment-declaration.md`。
 
+## 🔴 铁规 8：三个登录口 ≠ 三个算力池；装包只有 `ssh0` 能上网（2026-10-08 实测）
+
+| 节点 | 角色 | 规格 | 外网 |
+|---|---|---|---|
+| `ssh3` | **default_node** / 大内存 | 144 核 / 3.0 TB | ❌ |
+| `ssh23` | 计算节点（常空，重活首选） | 112 核 / 503 GB（本地 `/tmp` **仅 24G**） | ❌ |
+| `ssh0` | **安装节点** | 8 核 / 15.5 GB | ✅（唯一） |
+
+- 三节点挂**同一份 NFS**（`hwfssz3.cngb.sz.hpc:/PS_JLU → /hwfssz3/PS_JLU`，120T / 余 24T / 81% 已用）+ **同一套 SGE 8.1.9**，工作路径 realpath 均 `/hwfssz3/PS_JLU/zhangbo`，可见环境一字不差 → **真决定跑在哪台的是调度器，不是登录口**：别按登录口分配任务、别跨节点搬文件。
+- 🔴 装包 / 下数据 / 下参考基因组**只能在 `ssh0`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `ssh3`/`ssh23` 立即可读。
+- 中间文件写工作盘 `/hwfssz3/...`，**别用 `/tmp`**。
+- 全表（含主机名、选点行为 `default_node=ssh3` / `node_policy=ask`）、工作/装包环境分工、改 `environment.json` 后的验证三件套 → `references/three-node-cluster-facts.md`。
+
+## 🔴 铁规 9：长任务 = **一个作业跑完整链 + 检查点**，不要拆成一堆小作业（2026-10-08 用户拍板方案 A）
+
+用户原话：「我要跑长程任务的时候，我总不能每次都读取一次吧？而且我这个才 600M，我的 MF 可是有 10G，
+难道你也要每次读一下？」
+
+- **被罚的不是「进程不持久」，而是把一条链拆成 n 个小作业** → 大输入被读 n 次。所以：
+  ① 一个作业跑完整条链（大输入只 `readRDS` 一次）；② 读完立刻落**精简缓存**
+  （reductions + meta ≈ 原文件 5%，丢稀疏矩阵）；③ 每个阶段落**检查点 + 参数指纹**，指纹一致就跳过。
+- 模板（直接用，别重写）：`scripts/checkpoint_job.R`（三段式 + `tools::md5sum` 指纹，只用 base R）
+  + `scripts/run_cluster_job.sh`（显式 PATH 的投递包装、日志落 `$WORKDIR/log/`、`#TASK:` 打点）。
+- 语义：**同参数重投 → 跳过已完成阶段；改参数 → 只重跑受影响阶段；大输入不再重读**。
+- ⚠️ 常驻 R 会话（`qlogin`/`qrsh`/Rserve/screen）**能但别默认用**：一直占核与内存、节点被清场即全丢、
+  受 walltime 限制。只有「真·交互式反复调参」才值得，代价必须先跟用户讲清。
+- ⚠️ 缓存只留 reductions+meta → **需要重算表达量的步骤仍回原文件**；检查点指纹只覆盖显式参数
+  （脚本内硬编码常量改了要手动 `rm ckpt/<stage>.done`）。
+
+## 🔴 铁规 10：读 ≥100MB 输入前**必须弹窗问持久化**，并落任务标记（2026-10-08 用户要求）
+
+用户原话：「检测到执行读取数据分析，弹窗询问用户要不要持久化，**大于 100M 的内容，都要推荐持久化**。
+比如 RDS、h5ad，一些超大表格也是一样，并**做好任务标记，方便清理**。」
+
+流程（固定三步，不许跳）：
+1. `python -m memomics.bio_tools.large_cache scan <输入路径...> --json` → 看 `recommend`；
+2. `recommend` 非空 → **`ask_user(kind="intent", multi_select=true)` 弹窗**问要不要持久化
+   （≥100MB 才推荐；低于阈值**不打扰用户**，600MB 重读一次不到 40 秒）；用户答复后再动手；
+3. `mark` 落标记（`--input` / `--cache-root` / `--artifact` / `--remote` / `--ttl-days`），
+   收尾用 `list` / `verify` / `clean` 管账。
+
+**清理三道闸（删错比不删贵）**：① artifacts 命中原始输入 → 拒绝（原始数据永不删）；
+② 产物必须在声明的 `cache_root` 内，未声明则整体拒绝（不猜范围）；③ 默认 dry-run，加 `--yes` 才真删；
+④ **远端产物只打印 `rm -rf` 命令**（由 `remote_cluster run` 执行），不在本机假装删除；⑤ 清理后标记留痕
+（`status=cleaned`），不物理删。
+
+机制全表（schema / 阈值 / 估算口径 / 诚实边界）→ `references/large-input-cache-and-checkpoint.md`。
+
 ## 探查/执行速查
 
 | 目的 | 动作 |
 |---|---|
 | 摸环境 | `action="run"` + `scripts/probe_cluster_envs.sh <conda_root>` |
+| 大输入该不该持久化 | `python -m memomics.bio_tools.large_cache scan <路径> --json` |
+| 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
+| 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
 | 节点连通/负载 | `action="nodes"` |
 | 跑重活 | `action="submit"`（先 `action="check"` 摸调度器/资源） |
@@ -117,6 +168,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 - `references/ssh3-zhangbo-inventory.md` — ssh3（CNGB 深圳超算，SGE 8.1.9）环境实测清单：R4.41 / R4.3.3 / ARCHR / sc-analysis / scenic 等，含每个环境的真实包内容与推荐映射。
 - `references/environment-declaration.md` — 环境声明的机制：`environment.json` 的 `cluster` 段 schema、`declared_env()` / `save_declared()`、WebUI「🧩 环境管理」填写入口与 `POST /api/env/declared`。
+- `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
 
 **ssh3 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
 
@@ -127,4 +179,34 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 `R4.41` 同时带 SeuratDisk + sceasy → **Seurat ↔ AnnData 互转不用另找环境**。
 激活：`source /hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/bin/activate <env>`（R4.41 / sc-analysis / R4.3.3）。
-⚠️ 这两个 R 环境属主是 zhangxiao6（只读）→ 装包不可；用户自有 `zhangbo/envs/R4.4.1_zb` **不在映射内**，默认不用。
+
+### 🔴 工作环境 vs 装包环境 —— 两套并存，不是二选一（2026-10-08 用户澄清）
+
+| 角色 | 环境 | 规则 |
+|---|---|---|
+| **工作环境** | zhangxiao6 的 `R4.41`(RNA) / `R4.3.3`(ATAC) / `sc-analysis` | **正常分析就用它**；属主他人 → **只读，⛔ 禁止在其中装任何包** |
+| **装包环境** | 自有可写 `zhangbo/envs/R4.4.1_zb`（R 4.4.1 + Python 3.14.0） | **只用来补装**：映射环境缺的分析包装这里 → 作业里 `export PATH=/hwfssz3/PS_JLU/zhangbo/envs/R4.4.1_zb/bin:$PATH` 引用它 |
+
+用户原话：「真正工作的是 RNA→R4.41 / ATAC→R4.3.3；`R4.4.1_zb` 这个只是用来装一些包的，**以后装包可以在这里装，然后调用**。因为真正工作的环境是 zhangxiao6 的，**我不能随便在他这里安装包**。正常工作在 zhangxiao 这里，缺少了一些分析包，**在我自己这里安装**。」
+
+⚠️ 本 skill 旧版把 `R4.4.1_zb` 记成「不在映射内，默认不用」——**该说法已作废**：它是**装包落点**，缺包时的指定去处（config.yaml 的 ssh3 note 指向它，不是与 policy 冲突，是分工）。
+装包链：**必须走 `ssh0`（三节点唯一有外网）** → 落到自有 env/库 → 共享 NFS，`ssh3`/`ssh23` 立即可用。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-10-08 | environment.json#cluster | - | - |  |
+| - | - | - | 2026-10-08 | validate_env.py | - | - |  |
+| - | - | - | 2026-10-08 | pytest_env_subset | - | - |  |
+| - | - | - | 2026-10-08 | pytest_full_offline | - | - |  |
+| - | - | - | 2026-10-08 | environment.json#env_usage | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-08 | ssh23_probe_Muscle_96_38_Umap.sh | - | - |  |
+| - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
+| - | - | - | 2026-10-08 | large_cache.py | - | - |  |

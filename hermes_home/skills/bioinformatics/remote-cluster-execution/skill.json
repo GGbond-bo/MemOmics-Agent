@@ -33,5 +33,116 @@
     "slurm",
     "sge"
   ],
-  "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。"
+  "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。",
+  "success_count": 8,
+  "proven_script": "large_cache.py",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "environment.json#cluster",
+      "params": "nodes=ssh3/ssh0/ssh23; source=probe2026-10-08T15:35 + config.yaml remote.nodes; no_reprobe=true",
+      "date": "2026-10-08",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "把三节点规格 + 固定环境映射固化进 environment.json 的 cluster 段：nodes 补 ssh0/ssh23（含实测 host/核数/内存/CPU/本地盘/外网布尔）、新增 shared_storage（NFS /PS_JLU 120T 余24T）、network（唯一外网=ssh0）、environments（三节点一致 35 env + PATH 无 Rscript 坑"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "validate_env.py",
+      "params": "cmd=python scripts/validate_env.py --verbose",
+      "date": "2026-10-08",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "environment.json 改后验证：①JSON 结构断言（cluster 14 键 / 3 节点 / internet_capable=[ssh0] / routing=ssh3+ask / policy=R4.41+sc-analysis+R4.3.3 / pitfalls 9 条 / conflicts 1 条）②patch lint status=ok ③项目自带 scripts/v"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_env_subset",
+      "params": "cmd=pytest -q -k env -m \"not external and not network and not live_llm and not gpu and not ssh and not lab and not docker and not browser\"",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "env 相关测试子集执行（默认 offline marker 门禁），无收集/导入错误，仅 FastAPI on_event 弃用警告；确认全库无测试引用 environment.json，故改动由自带 validate_env.py 校验。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_full_offline",
+      "params": "cmd=pytest -q -m \"not external and not network and not live_llm and not gpu and not ssh and not lab and not docker and not browser\"; log=results/memomics-5b16edc8/log/pytest_verify.log",
+      "date": "2026-10-08",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "environment.json 改后全量 offline pytest：PYTEST_EXIT=0（全部通过）。另 validate_env.py → [OK] All paths verified EXIT=0；JSON 结构断言通过。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "environment.json#env_usage",
+      "params": "assert env_usage/conflicts + python scripts/validate_env.py --verbose",
+      "date": "2026-10-08",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "环境分工澄清后的复验：JSON 断言通过（policy.env_usage 存在、work_env=R4.41/R4.3.3 只读禁装、install_env=R4.4.1_zb 自有可写、conflicts_to_confirm 已解除、ssh3 note 指向 policy.env_usage）+ validate_env.py → [OK] All paths verified, EXIT="
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "script": "ssh23_probe_Muscle_96_38_Umap.sh",
+      "params": "node=ssh23; cmd=ls -la Umap/ + find *.R + ls R4.41 Seurat dir + df; timeout=120",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "ssh23 只读探测：确认 MuSC_exercise_clean_dele_cluster_umap.rds 存在(662MB, Jun 11)；同目录 24 个 rds/h5ad 产物；项目内无 R 脚本；R4.41 的 Seurat 库目录存在；共享盘 120T/余24T。为后续 UMAP 重绘提供输入与输出目录依据。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "test_large_cache.py",
+      "params": "pytest webui/tests/test_large_cache.py -q",
+      "date": "2026-10-08",
+      "score": 5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "首轮：5 failed / 11 passed。定位 4 真 bug（remote 分支被 has-exists 抢先、marker_path 未拦 ../ 穿越、清理闸门顺序）+ 1 测试断言错"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "large_cache.py",
+      "params": "pytest webui/tests/test_large_cache.py -p no:warnings → 12 passed; rail_review(post) passed=true",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "方案A落地交付：large_cache.py（scan/mark/list/verify/clean，≥100MB 推荐持久化，指纹=size+首尾1MB sha256）+ 12 用例全绿 + 检查点模板 checkpoint_job.R / run_cluster_job.sh + skill 铁规 9/10 + references 机制全表"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "large_cache.py"
+  }
 }

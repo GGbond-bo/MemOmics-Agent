@@ -97,3 +97,26 @@ AGENTS.md「一个提交一件事」）。**先分类再暂存**：
 在提交后又被追加了内容（`git status` 重新变 `M`）。**不要当成自己的 bug 去回滚**，也不要顺手
 `git checkout --` 抹掉——那会丢掉别人的增量。正确动作：读 diff 判断内容是否完整自洽 → 报告用户
 → 由用户决定是否补 commit。
+
+## 五、`pytest` 覆盖不到的改动（shell 脚本 / 配置 / 门禁本体）——用**两段式**给证据
+
+**别拿"pytest 覆盖不到它"当免证理由**：改了 `webui/`、`memomics/`、`.githooks/` 这类文件后，平台侧会
+持续把该文件标成 `unverified`，直到你在那一轮真的跑出测试结果。对 shell / 配置 / 门禁本体这类
+pytest 断言不了的东西，正确姿势不是放弃，而是**把证据拆成两层都摆出来**：
+
+| 层 | 验的是 | 怎么做 |
+|---|---|---|
+| 上游（契约） | 它调用的东西没被改坏 | 全量 offline 套件：`.venv/Scripts/python.exe -m pytest -p no:warnings > log 2>&1; echo "PYTEST_EXIT=$?"` → 认**字面汇总行**（如 `2477 passed, 4 skipped, 25 deselected in 204.53s`）+ `PYTEST_EXIT=0`，两者一起才算证据 |
+| 下游（本体行为） | 该跑时真跑、该拦时真拦 | 直接实跑那个脚本：正向 exit 0 且出现应有的回执行（如 `[kb-gate] 暂存区涉及知识库文件`）；反向（塞坏输入）exit ≠ 0 |
+| 语法 | 别把脚本本身写坏 | `bash -n <脚本>` |
+
+**一键跑语法 + 下游**：`scripts/selftest_commit_hook.sh`（非破坏性——只临时改一个 KB yaml 做靶子，
+验完 `git reset` + `git checkout` 还原，不产生提交；正向 + 反向都查）。
+
+汇报时**把两段式讲清楚**：说明「上游全绿 + 下游正/反向实跑通过」，并如实指出哪些是间接覆盖、
+哪些是直接实跑 —— 比反复声称"已验证"可信得多，也不给不存在的证据。
+
+**⚠️ 改 shell 脚本时 `patch` 的坑**：`old_string` / `new_string` 里**不要**夹字面 `\r`。
+本仓库 `.githooks/pre-commit` 是 **LF** 结尾，插进去的 `\r` 会变成脚本里的真实字符，
+bash 直接报 `syntax error near unexpected token ')'`，且只看 diff 很难发现。
+**改完任何 shell 脚本，第一件事就是 `bash -n` 过一遍。**

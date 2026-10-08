@@ -214,3 +214,5 @@ hermes_home/dcs_cloud.json
 hermes_home/env_inventory.json
 hermes_home/remote/
 tmp/
+
+hermes_home/runtime/
