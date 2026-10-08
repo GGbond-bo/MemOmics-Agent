@@ -24,5 +24,19 @@
     "delegation",
     "orchestration"
   ],
-  "when_to_use": "委派子代理（delegate_task）的编排与回执处理协议 —— 批量派发切分、回执「迟到重放」识别与去重、子代理输出健壮 JSON 解析、自报 vs 产物验证、大输出上下文卫生。触发:收到 [ASYNC DELEGATION BATCH COMPLETE] 回执、要合并子代理产出的结构化卡/表、子代理自报「未读完全文 / 达 iteration cap」、不确定某批子代理结果是否已合并过、工具"
+  "when_to_use": "委派子代理（delegate_task）的编排与回执处理协议 —— 批量派发切分、回执「迟到重放」识别与去重、子代理输出健壮 JSON 解析、自报 vs 产物验证、大输出上下文卫生。触发:收到 [ASYNC DELEGATION BATCH COMPLETE] 回执、要合并子代理产出的结构化卡/表、子代理自报「未读完全文 / 达 iteration cap」、不确定某批子代理结果是否已合并过、工具",
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-10-08 01:08",
+      "error_type": "runtime_error",
+      "message": "--- ERROR --- Delegation owner exited before recording a terminal result; outcome unknown (deleg_bfb03f20, 3 tasks x 16 papers)",
+      "root_cause": "派发时的 goal 写了「只输出 JSON，不写任何文件」→ 子代理产出仅存在于 owner 上下文；owner 退出（会话回收/压缩）后整批结果不可恢复。实测证据：live/deleg_bfb03f20/manifest.json 三任务 status 全为 running（派发 20:13:20），task-0/1/2.log 三个日志全部停在 20:15:44（正当校验 evidence_q",
+      "fix_applied": "重派 deleg_c617920e：context 里强制要求子代理把 10 字段 JSON 落盘到绝对路径 data/deep_cards_round2_t{0,1,2}.json（json.dump ensure_ascii=False + os.path.getsize 复核打印），并要求回执正文再贴一份（双通道）。SKILL.md §一 新增「产出必须落盘」行与 owner-exit 回执",
+      "species": "",
+      "tissue": "",
+      "script": "delegate_task batch (deleg_bfb03f20)",
+      "severity": "high"
+    }
+  ]
 }
