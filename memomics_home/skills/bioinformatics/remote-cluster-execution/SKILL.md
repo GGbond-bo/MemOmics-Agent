@@ -239,7 +239,7 @@ FindMarkers、后天 CellChat、反复调参）要的是**活着的进程**。�
 | `session_start` | 节点上起常驻 R（setsid 后台常驻，`ps`/MobaXterm 里看得见，不开公网端口）；带 `input=<大 rds>` 就先**同步读一次**（秒数/对象名/readRDS 审计都回报） | `node` / `input` / `object` / `env`(默认 R4.41) / `rscript` / `restore='latest'` |
 | `session_exec` | 投 R 代码，在**同一进程、同一 globalenv** 接着跑（FindMarkers/CellChat/调参复用内存对象） | `session_id`（可省=该节点最近一个）/ `code` / `async=true` / `wait` |
 | `session_save` | 落检查点 `ckpt/<名>.rds`（进程死掉/换节点靠它回来） | `name` / `objects`（默认全部会话对象） |
-| `session_restore` | 从检查点把对象恢复进会话内存（默认最新一个） | `name`（可省） |
+| `session_restore` | 从检查点把对象恢复进会话内存（默认最新一个） | `name`（可省；**只写一个词时按检查点名理解**，`s-` 开头才当会话号） |
 | `session_status` | pid 活没活 / busy 在跑什么 / RSS / 对象数 / **readRDS 审计** / 队列 / 最近检查点 / **最近一次结果 tail** | `session_id`（可省）/ `live` |
 | `session_stop` | 让会话退出、释放内存（`save=true` 先落检查点） | `save` / `name` |
 | `session_list` | 本机账本 `memomics_home/remote/sessions.json`（id/节点/输入/最近活跃/readRDS 次数） | `live=true` 逐台核实 |

@@ -16284,13 +16284,24 @@ function clusterBuildArgs(mode, text) {
   }
   if (mode === 'session_status' || mode === 'session_stop' || mode === 'session_save' || mode === 'session_restore') {
     var sb = { action: mode };
-    if (tk[0]) sb.session_id = tk[0];
+    var first = tk[0] || '';
+    // session_restore 只给一个 token 时，习惯上写的是**检查点名**（会话号可省 → 用最近看到的）。
+    // 只有 s- 开头的 token 才当会话号；两个 token 时按「会话号 检查点名」（与 session_save 一致）解析。
+    if (mode === 'session_restore' && first && first.indexOf('s-') !== 0) {
+      if (_clusterLastSession) {
+        sb.session_id = _clusterLastSession;
+        clusterPrint('（只给了检查点名 → 用最近看到的会话号 ' + _clusterLastSession + '）', 'sys');
+      }
+      sb.name = first;
+      return sb;
+    }
+    if (first) sb.session_id = first;
     else if (_clusterLastSession) {
       sb.session_id = _clusterLastSession;
       clusterPrint('（留空 → 用最近看到的会话号 ' + _clusterLastSession + '）', 'sys');
     }
     if (mode === 'session_save' && tk[1]) sb.name = tk[1];
-    if (mode === 'session_restore' && !tk[0] && tk[1]) { sb.session_id = _clusterLastSession; sb.name = tk[1]; }
+    if (mode === 'session_restore' && tk[1]) sb.name = tk[1];
     return sb;
   }
   if (mode === 'session_list') {
