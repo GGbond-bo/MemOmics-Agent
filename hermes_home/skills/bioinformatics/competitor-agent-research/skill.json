@@ -28,8 +28,8 @@
     "架构双维对比。"
   ],
   "when_to_use": "用户问自己(MemOmics)与另一个科研/生信 AI Agent 的差距，要求从能力和架构上调研对比",
-  "success_count": 1,
-  "proven_script": "upgrade_deepread_v2.py",
+  "success_count": 2,
+  "proven_script": "merge_round2_deepread.py + upgrade_deepread_v4.py",
   "proven_params": [
     {
       "species": "",
@@ -43,9 +43,22 @@
       "approved": false,
       "custom_script": false,
       "result": "竞品卡深读升级：15/31 卡由薄卡升级为深读卡（arch 48-124字→775-1560字）。cards.json 合并成功（键归一化 \"4\"/\"n=9\"/\"34\"，fix_quotes 容错解析含裸引号的 LLM JSON）；positioning_full.md 附录A 15 章节重渲染（114K→148K 字符）；evidence.csv 72→87 行；DOCX 769KB(3图) +"
+    },
+    {
+      "species": "human/multiple",
+      "tissue": "n/a",
+      "direction": "methodology",
+      "script": "merge_round2_deepread.py + upgrade_deepread_v4.py",
+      "params": "{\"round2_sources\":\"data/deep_cards_round2_t{0a,0b,1,2}.json\",\"cards_total\":31,\"upgraded\":16,\"fields\":10,\"quote_audit\":\"16/16 byte-exact substring of data/text/PMC*.txt\",\"docx_bytes\":793395,\"html_bytes\":1233970}",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "竞品卡 round2 深读升级落地：16 张首轮薄卡（n=1,2,14-17,19-24,26,27,29,31）以 round2 子代理产出做字段级覆盖（卡片总字符 24,796→48,544，+95.8%），n=2 limitations 8 字截断修复为 522 字含原文句。全部 31 卡 deep_read=true、0 薄卡。positioning_full.md 148,814→172"
     }
   ],
   "user_prefs": {
-    "last_used_script": "upgrade_deepread_v2.py"
+    "last_used_script": "merge_round2_deepread.py + upgrade_deepread_v4.py"
   }
 }

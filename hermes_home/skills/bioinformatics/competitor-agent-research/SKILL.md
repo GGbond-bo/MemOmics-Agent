@@ -1,6 +1,6 @@
 ---
 name: competitor-agent-research
-description: "调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构，以及为自家产品做领域缺口论证与发文定位。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biomni'/'BiOmics'/'精读 N 篇论文全文'/'产出结构化竞品卡'/'把竞品卡从薄卡升级为深度卡'/'深度卡'/'只输出我要的 JSON 字段'/'发文定位'/'研究缺口'/'gap 分析'/'出发点是什么'/'帮我解读这个 agent 文章'/'跟 biomni 比呢'/'paper2Agent'/'biomaster'/'BioMaster'/'co-scientist'/'Co-Scientist'/'他们是怎么完成这个工作的'/'你自己能做什么'/'MemOmics 能做什么'/'它的设计初衷'。方法论：身份确认→GitHub API 源码调研→论文 PDF 提取→能力/架构双维对比；批量全文精读出竞品卡见模式 C；缺口论证与定位报告见模式 D；单篇 agent 论文精读 + 与已读竞品做范式对比见模式 F；论文 claim ↔ 开源代码审计见模式 E；读完竞品后转审本家（「那你呢？」）见模式 G。"
+description: "调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构，以及为自家产品做领域缺口论证与发文定位。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biomni'/'BiOmics'/'精读 N 篇论文全文'/'产出结构化竞品卡'/'把竞品卡从薄卡升级为深度卡'/'深度卡'/'只输出我要的 JSON 字段'/'每写完一张立即落盘'/'不要攒到最后写'/'结果写盘到指定 JSON 文件'/'发文定位'/'研究缺口'/'gap 分析'/'出发点是什么'/'帮我解读这个 agent 文章'/'跟 biomni 比呢'/'paper2Agent'/'biomaster'/'BioMaster'/'co-scientist'/'Co-Scientist'/'他们是怎么完成这个工作的'/'你自己能做什么'/'MemOmics 能做什么'/'它的设计初衷'。方法论：身份确认→GitHub API 源码调研→论文 PDF 提取→能力/架构双维对比；批量全文精读出竞品卡见模式 C；缺口论证与定位报告见模式 D；单篇 agent 论文精读 + 与已读竞品做范式对比见模式 F；论文 claim ↔ 开源代码审计见模式 E；读完竞品后转审本家（「那你呢？」）见模式 G。"
 when_to_use: "[competitor-agent-research] 用户问自己(MemOmics)与另一个科研/生信 AI Agent 的差距、要求从能力和架构上调研对比、或问「我们要发文章的话出发点是什么/这个领域还缺什么」需要做缺口论证与发文定位"
 version: 1.0.0
 author: MemOmics
@@ -120,6 +120,11 @@ prerequisites:
   **绝不编数字**。区分：正文报告了 AUROC/准确率 → 照抄并注明口径（如「AUROC 0.933，独立测试集」）。
 - **没读到的论文不许编**：凡未完成全文精读的编号，卡里显式标「本次未读取全文」/字段留空说明，
   并在最终回复里点名哪些 n 未读。**宁可交半份真卡，不可交整份假卡**。
+- 🔴 **字段不许写完引子就断**（2026-10-07 定稿后审计抓出）：`limitations` 这类字段若以「作者自陈：」
+  这类**引子**收尾，说明后面整段丢了（实测 `n=2` 卡 = `"作者自陈：物理能"`，8 字，前三轮无人发现）。
+  ⇒ 派发 brief 里**显式要求每个字段 ≥ 最短字数且以完整句/术语收尾**；**冻结交付物前跑一次字段健康扫描**
+  （`delegation-orchestration` 的 `scripts/audit_store_field_health.py`），把「截断字段」当交付门之一。
+  ⚠️ 别用「结尾有没有句号」当判据——本模式的中文卡**惯常不写句尾句号**，该启发式实测 54 报 1 真。
 
 ### C3 — 工具调用预算是本模式的头号约束
 
@@ -315,7 +320,9 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
 子代理回的深度卡要**落盘并合入既有报告**，这一步有固定**八拍（第 0 拍必做）**：
 
 0. 🔴 **先判「回执重放」再动手（2026-10-07 第二次回执实测补）**：`[ASYNC DELEGATION BATCH COMPLETE]`
-   会被**迟到重放**（同一批可推送两次，`Dispatched:` 仍是旧时间戳、`(Nm ago)` 是错的）。**别照着回执直接合并**——
+   会被**迟到重放**、且**反复**推送（实测同一 `deleg_id` 跨 10-02→10-07→10-08 被推 ≥3 次，
+   `Dispatched:` 仍是旧时间戳、`(Nm ago)` 是错的）⇒ **开工先 `grep` `notes.md` 的回执台账，命中即零写入收场**
+   （台账格式见 `delegation-orchestration` 的 `references/delegation-receipt-replay.md` §九）。**别照着回执直接合并**——
    先跑 `delegation-orchestration` skill 的 `scripts/verify_batch_replay.py`，5 项一起判：
    容器形状 / 落盘解析件**逐字段归一 diff** / 独有串探针 / **闭环不变量 Σ各批卡数 == store 总数** / 交付物字节数与 CSV 行数指纹。
    本轮实测：`deleg_15d8b24b`（15 卡）↔ `data/deep_cards_deleg_15d8b24b.json`
@@ -328,7 +335,34 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
    否则崩在 `'list' object has no attribute 'items'`（本轮白跑一轮）。
    📄 汇报口径：说清 diff 的是「落盘解析件 ↔ store」，并**如实说明为什么没用回执原文/live log**（被截断）——
    把前者包装成后者的逐字 diff 属于夸大证据。
+   🔁 **第三次回执实测补（2026-10-07 晚，重放的是首轮批 `deleg_58d8c19a`）**：两条别忘——
+   ⓐ **老批次数不到溯源字段 ≠ 未合并**（首轮批早于该约定，`deep_read_batch` 查得 0 条）→ 走
+   `delegation-orchestration` §二 **⓪-b 轻量三查**（解析脚本 provenance / **全域字段完整性扫描** / 闭环不变量），
+   本例 3 次只读调用 + 零写入即定案；
+   ⓑ **回执正文的「词中生断」是框架裁剪父上下文的显示假象**（summary 被削成 head1500+tail500，
+   完整原文在 `cache/delegation/subagent-summary-*.txt`）——本例 n=4 卡在回执里断于 `…的 Iteratio`，
+   磁盘上该卡 **1036 字符、以句号收尾、完好无损**。⇒ **只对已合并产物下结论，⛔ 不要据此重派子代理**
+   🔁 **第四次回执实测补（2026-10-07 深夜，重放的是深读批 `deleg_15d8b24b` 本身）——本轮有一条真增量**：
+   ⓐ 该批**带溯源字段**（`deep_read_batch='deleg_15d8b24b'`）⇒ 一跳定案，无需跑 5 项；
+   ⓑ **「已判重放」≠「什么都不看」**：顺手对 `cards.json` 全量跑字段健康扫描
+   （`delegation-orchestration` 的 `scripts/audit_store_field_health.py`），
+   **当场抓出 `n=2`（PMC13573717, *Closing the Empirical Loop*）的 `limitations` 被截成 8 字**
+   （`"作者自陈：物理能"`）—— 前三轮重放都没发现。原句可从 `data/text/PMC13573717.txt`
+   `re.finditer(r"(?i)\bLimitations?\b")` 命中偏移 70392 起取回。
+   ⓒ ⛔ **抓到缺陷后只报告，不擅自改**：只改 `cards.json` 而不重建 `positioning_full.md`/DOCX/HTML
+   ⇒ 交付物自相矛盾；且**该用户的既定偏好是「只改指定清单项，顺手发现的问题单列出来问」**。
+   ⇒ 单列一条 + 附原文原句（用户一句话就能批）+ 说明影响面，并让**已冻结的交付物保持一个字节不动**。
+   ⓓ 同一轮里会话要求块标注「路径不存在」的 PDF **实测存在**（警告字符串自己被截断显示）——
+   **系统注入的资产警告也是「声明」不是「事实」，先 `os.path.exists` 实查再决定转述还是就地更正**。
 
+🔁 **第五次回执实测补（2026-10-07 深夜，同一轮里「完成回执」+「失败回执」并存）**：
+   ⓐ `deleg_15d8b24b`（COMPLETE，3 任务 / 15 卡 / 287 s 全成功）带 `deep_read_batch` 溯源字段 ⇒ **一跳定案为重放**（沿用 ⓪）；
+   ⓑ `deleg_bfb03f20`（`--- ERROR --- owner exited … outcome unknown`）三源判死后**没有重派**——
+   照 `delegation-orchestration` §二 **⓪-f 冗余判定**：该批 16 篇早有首轮卡（非空白）+ 闭环 16+15==31 +
+   交付物 20:35–20:36 已冻结 ⇒ **判冗余、零写入、交付物一个字节不动**（盲重派代价 = 3 组 × 16 篇**全文精读**重读一遍，
+   且冻结后新卡不会回流进 DOCX/HTML ⇒ 交付物自相矛盾）。
+   ⇒ 由此纠正默认动作：**重派的理由是「store 缺了这批要补的窟窿」，与「这批回执报了 ERROR」无关**；
+   两条回执**独立判定**，⛔ 不要因一条失败停掉整轮的合并/定稿动作。
 1. **回收：优先解析批次唤醒消息，其次 session DB，不要抄 live transcript。** live log 里只有截断的流式片段（30KB 的 JSON 只留 2–3KB）→ 回收率 0（与 C8 现象一致）。**取数优先级（2026-10-07 补）**：① **`delegate_task` 批次完成的唤醒消息正文本身就带完整 JSON**（本轮 3 任务 15 张卡逐字完整、未被截断，比查库快得多，也无需 `unique_phrase`）——先直接解析它；② 唤醒消息若被上下文压缩/截断，再回 `hermes_home/state.db` 取全文：
    ```python
    con = sqlite3.connect(r"E:/MemOmics-Agent/hermes_home/state.db")
@@ -344,6 +378,11 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
 4. **合并**：**卡片文件保持原容器形状（C8 红线）**；升级前先快照 `data/cards_v1_snapshot.json`；10 个字段覆盖式写入；旧 `evidence_quote` 另存 `evidence_quote_v1`（审计要留）；打深读标记，供下游渲染「深读 v2」徽标。
    🔴 **字段名以磁盘实测为准**：本轮 `cards.json` 上实际存在的是 **`deep_read` / `deep_read_round` / `deep_read_date`**
    （16 张首轮卡 = `deep_read_round='2026-10-02'` + `deep_read_date='2026-10-07'`；15 张深读卡 = `deep_read_round='2026-10-07'` + `deep_read_date=None`）。
+   🔁 **2026-10-07 二次回执实测刷新（上一行已过时，别再照抄）**：同一 store 的 `n=4` keys 现在是
+   `deep_read` / **`deep_read_batch`** / **`deep_read_at`** / `deep_read_round`（**已无 `deep_read_date`**）；
+   15 张深读卡 = `deep_read_batch='deleg_15d8b24b'` + `deep_read_at='2026-10-07 20:07:10'`。
+   ⇒ **批次溯源字段把「回执重放」判定退化成一次字段查询**（一跳定案，不用跑 5 项 diff）——
+   配方见 `delegation-orchestration` §二⓪；字段名逐轮在变，**永远先 `print(keys())`**。
    下游脚本**先 `print(cards[0].keys())` 再读** —— ⛔ 别凭上一轮记忆写字段名：写错**不报错**，只是静默读不到
    （与 C8「容器形状」同类的静默失败）。
    💡 顺带：**`deep_read_round` 的取值分布 == 各批卡数**（16 / 15）是第 0 拍里最便宜的闭环证据。缺系统名的卡顺手补名（本次 n=36 → `MAESTRO（…）`，旧名存 `name_v1`）。
@@ -357,6 +396,197 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
 
 📄 现成实现见 `scripts/merge_deep_cards.py`（回收+裸引号修复+键归一化+字段覆盖+证据追加）；
 📄 全流程与校验探针见 `references/deepread-merge-and-report-refresh.md`。
+
+### C11 — 小批（N≤5）深度卡升级 + **指定落盘**（「不要只回传内容」，2026-10-08 实测）
+
+触发词补充：「精读 N 篇…把竞品卡从薄卡升级为深读卡」「**把结果写盘到指定 JSON 文件**」「**不要只回传内容**」。
+
+与 C9 同族（薄卡→深度卡），但**N 小（本次 5 篇）且用户点名落盘路径** ⇒ 交付形态不同：
+
+- 🔴 **「不要只回传内容」= 必须真的落盘 + 回读校验 + 报字节数**。只在回复里贴 JSON = 没完成。
+  落盘后**同一轮**跑 `os.path.getsize(p)` + `json.load(open(p))` 回读，回复里给出**路径与字节数**（本次 30096 B）。
+- **落盘约定（用户指定时照抄）**：`json.dump({"cards": {…}}, f, ensure_ascii=False, indent=2)`——
+  外层 `{"cards": {...}}`、键用**原清单编号的字符串**（`"24"`…），每卡 10 个中文字段。
+- 🔴 **别动共享合并文件**（本次 `data/cards.json` 是 `list[dict]`）：深读卡**另存用户指定的新文件**，
+  由主代理统一合并（与 C8/C10「保持容器形状」同源红线）。
+- **回复正文**：用户要求时可贴同一份 JSON，但**只给 JSON，不夹带方法论说明**（同 C9 交付口径）。
+
+**落卡前单脚本机械门（本次配方，合并前必跑）**：一个 `execute_python` 里同时断言——
+`q in txt[n]`（逐字证据可 grep）、`len(architecture) >= 600`、`len(limitations) >= 60`、`len(card) == 10`，
+全过再 `json.dump`；任一不过先改卡。把「字段健康 + 证据可 grep」压成**一次断言**比事后扫描省事。
+（deliverable 与 `scripts/verify_evidence_quotes.py` 等价，但小批时内联更省一次调用。）
+
+**长文（含综述）的关键词偏移地图**：先 `re.finditer` 一次性扫一批关键词
+（`benchmark|pass@|limitation|SWOT|FedAvg|Delphi|Conclusion|Outlook|<专名>`）打印各自 `m.start()` 列表 →
+再 `print(t[a:b])` 定点读窗口。比逐章找头更快，尤其对 90–580KB 综述
+（本次 578KB Chemical Reviews SDL 综述即靠此法定位 Conclusion/Outlook 里的作者自陈局限）。
+⚠️ 仍遵守单段 stdout ≤9500 字符（见「工具陷阱」），分窗口 `print`。
+
+**综述类字段填法**同 C9「综述/观点文固定填法表」：`benchmark` → 「未做量化评测（综述…）」、
+`validation` → 「无（综述论文…）」、`models` → 「未披露（综述性质…盘点对象含 …）」。
+
+📄 本次 5 篇事实底稿（iDesignGPT / SDL 综述 / Co-Scientist / MetaChat / AAI+FL 农业）+ 逐字数字 +
+5 条已 `in` 校验的 evidence_quote 见 `references/deep-card-small-batch-and-verification-gates.md`。
+
+### C11-b — 先读「基准样卡」校准密度（2026-10-08 二次小批新增）
+
+要求「把薄卡升级为深读卡」时，平台常已有一份**已知合格的深读卡样本**（本次 `data/deep_cards_deleg_15d8b24b.json`）。
+**开工第一件事就是读它**，用它校准两件事，比凭记忆写更准：
+- **字段句式与口径**：`benchmark` 的「未做量化评测」写法、`models` 的「原文明确披露」口吻、
+  `limitations` 的「作者自陈 + 我读出的未声明局限」双段。
+- 🔴 **`architecture` 的真实密度上限**：样本实测 **636–1069 字**；本批为写全综述框架写到 **1023–1587 字**。
+  ⇒ C9/C11 的「400–800 字」是**下限参考、不是上限**——样本更厚**就跟样本走**，但更厚会挤压回复通道（见 C11-c）。
+
+### C11-c — 🔴 落盘是主通道；正文贴 32KB JSON 必被截断（2026-10-08 实测）
+
+5 张深读卡（`architecture` 各 ~1–1.6KB）= 落盘 JSON **~32KB**。本轮按「两通道都要」把同一份 JSON 贴进正文 →
+**贴到第 5 张卡中途撞输出长度上限被截断**（工具调用没撞上限，是回复本身太长）。
+- **落盘为主**：`json.dump({"cards": {...}}, ensure_ascii=False, indent=2)` → 同轮 `os.path.getsize(p)` +
+  `json.load(open(p))` 回读 → 回复里报**路径 + 字节数**（本次 32544 B）。这才是「完成了」的证据。
+- **要贴正文时**：**预期会被截断并准备续写**（系统会提示「Continue exactly where you left off」），
+  别误判成自己出错；或先把 `architecture` 压到 ~600 字再贴。
+- 判据：**「不要只回传内容」= 必须真落盘 + 回读校验 + 报字节数**；只在回复里贴 JSON = 没完成。
+
+🔴 **引文逐字坑（本批实测）**：PMC 抽出的全文里公式/疑似冒号前**带一个空格**——`Iterative control loop : planning…`
+（`loop` 与 `:` 之间有空格）。凭印象手打成 `loop: planning` 会 MISS。**引文一律复制粘贴原文片段，不要手打。**
+
+📄 本批（n=19–23，生信/化学 agent「综述+系统」混合批）事实底稿 + 5 条 evidence_quote + 综述类字段填法见
+`references/deep-card-small-batch-2026-10-08-agentic-reviews.md`。
+
+### C11-d — 🔴 落盘是**交付物本身**；把「读+写卡」当主体、把落盘留到最后 = 必撞迭代上限（2026-10-08 实测，N=6）
+
+本轮任务 = 精读 n=1,2,14,15,16,17 六篇、薄卡升级成深读卡、**结果写盘到指定 JSON 文件**（「不要只回传内容」）。
+失败方式：**把全部迭代花在「逐篇读全文 → 在 kernel 里起草卡片」**，n=1/2/14/15 草稿已成（内核变量里）、
+n=16/17 读毕未起草，**迭代耗尽，`json.dump` 一次都没跑 → 文件根本没生成**。这不是"没时间"，是**分工排错了**。
+
+⇒ **N≤8 小批的固定节奏（照抄）**：
+- **先落盘骨架再补卡**：第一件事就把 `{"cards": {}}` 写到用户指定路径（`json.dump` + `getsize`），
+  之后**每完成 2 篇就回写一次**——这样即使后面撞上限，磁盘上也有**可回收的半份真卡**，而不是零。
+- **给落盘+回读预留 ≥2–3 次迭代**：`json.dump(...)` 一次、`os.path.getsize`+`json.load` 回读一次、
+  `q in txt` 逐条证据断言一次。宁可少读一篇正文，不可让文件缺失——**文件不在 = 任务未完成**。
+- **不要"读完全部再统一写"**：读是流式的、可增量；写必须显式发生。作者此轮的教训正是把两者串成了串行大链。
+- 若判到预算确实不够：**先交已起草篇目的完整落盘 JSON + 一行点名未读/未起草编号**（C2 第三条），
+  绝不静默中断、绝不把未起草项糊弄成假卡。
+
+### C11-e — 🔴 evidence_quote 逐字坑之二：PMC 抽取文本用 **U+2010（‐）非 ASCII 连字符**（2026-10-08 实测）
+
+C11-c 记过「冒号前带空格」；本轮又撞一种，且**同时击落了 n=2 的两条候选引文**：
+- 现象：PMC 全文里词间连字符常是 **U+2010 (`‐`)** 而非 ASCII `-`（如 `end‑to‑end`、`domain‐specific`、
+  `real‐world`、`multi‐agent`）。**凭印象手打成 ASCII `-`，`q in t` 必 MISS**，而肉眼几乎看不出差别。
+- ⇒ **引文一律从原文切片构造，不要手打**：`i=t.index(a); j=t.index(b,i)+len(b); q=t[i:j]`
+  （取 ASCII 锚点 `a` 与 `b` 之间的整段），天然逐字、天然含特殊字符。
+- ⇒ **或优先选纯 ASCII 句**：落卡前跑 `all(ord(c)<128 for c in q)`，不通过就换一句；
+  本轮 n=1 用 Abstract 句、n=2 改用纯 ASCII 的 Results 句（`"The system autonomously designed and executed three psychological studies…288 participants…"`）后全过。
+- 交付前仍按 C6/C11 机械校验（`q in txt` 或 `scripts/verify_evidence_quotes.py`），**空白归一化也救不了错字符**。
+
+### C11-f — ✅ 已知可用的逐字引文锚点（n=1,2,14,15,16,17，本轮 `q in t` 全部 True）
+
+> 复用价值：这 6 篇（Robin / Closing-the-Empirical-Loop / 数字材料生态 / 双车道化学动力学 / PANGAEA GPT / PGxAI-Recommender）
+> 若再次出现，直接取用，省一轮 grep。多数字符串已用锚点切片构造。
+
+- n=1 PMC13346116: `"By integrating literature search agents with data analysis agents, Robin can generate hypotheses, propose experiments, interpret experimental results and generate updated hypotheses"`
+- n=2 PMC13573717: `"The system autonomously designed and executed three psychological studies on visual working memory, mental rotation, and imagery vividness, executed online data collection with 288 participants, developed analysis pipelines through 8h+ continuous coding sessions, and produced completed manuscripts."`
+- n=14 PMC12954778: `"By merging verified data, interpretable models, human-inspired reasoning, and standardized automation, the community can move from knowledge accumulation to autonomous scientific discovery"`
+- n=15 PMC12667065: `"Humans remain central: researchers set objectives and priors, approve high-impact actions, and adjudicate new chemical insights."`
+- n=16 PMC12647001: `"It currently lacks rigorous, quantitative empirical validation comparing its performance (e.g., success rates, efficiency) against traditional data discovery methods."`
+- n=17 PMC13369662: `"PGxAI-Recommender achieved the highest average expert score (mean 9.0), compared to baseline models with mean scores ranging from 6.2 to 7.8"`
+
+📄 本批（n=1,2,14,15,16,17）事实底稿（含 **n=2 截断 `limitations` 的原文恢复**——见下一行）+ 上述 6 条引文 + 两个新增工具坑见
+`references/deep-card-small-batch-2026-10-08-n1-2-14-17.md`。
+
+### C11-g — ✅ 「每写完一张卡就立刻落盘」= C11-d 失败的反面；增量 dump 是正解（2026-10-08 第三次小批实测，N=3 全成）
+
+触发词补充：「每写完一张立即 `json.dump` 落盘」「**不要攒到最后写**」。
+
+同一批 `n=15/16/17` 上一轮（C11-d）**把读+起草串成串行大链、迭代耗尽、`json.dump` 一次没跑 → 文件根本没生成**。
+本轮用户**显式给出修复指令**，照做后 N=3 一次跑通。⇒ **把 C11-d 的节奏升级为硬规格**：
+
+- **节奏（每张卡一个循环，照抄）**：读该篇切片 → 组织该篇 10 字段 → 同一轮 `q in t` 逐字校验 →
+  **立即**「读回目标文件（若存在）+ 加本卡 + `json.dump(..., ensure_ascii=False, indent=2)`」→ 下一张卡。
+  本次 3 张卡 = **3 次独立 dump**，每张完成即落盘。撞上限也只会丢「正在写的这一张」，不丢已完成的。
+- **落盘骨架 + 增量回写**：首卡 dump 即建好 `{"cards":{...}}` 骨架；后续每卡 `d=json.load(open(p))` → `d["cards"][n]=card` → 重写。
+- 🔴 **基准样卡容器形状坑（本轮新增，与 C11-b 配套，别被它坑）**：C11-b 要求「先读基准样卡校准密度」——
+  但样卡 `data/deep_cards_deleg_15d8b24b.json` 的容器是**扁平 `dict` 直接以 n 为键**（`{"4":{...}, "5":{...}}`），
+  **不是** `{"cards":{...}}`。⇒ **密度按样卡校准，容器形状按用户指定/交付约定**；读任何 JSON 先
+  `print(type(obj), list(obj)[:5])` 再写逻辑，⛔ 不要照抄样卡形状（曾 KeyError: 'cards'）。
+- **复读同批零浪费**：n=15/16/17 的 `evidence_quote` 与 C11-f 记录**逐字一致**，`q in t` 本轮再次全 True
+  ⇒ C11-f 的锚点表**可长期复用**；本轮三条恰好都是纯 ASCII 句，未撞 C11-e 的 U+2010 坑。
+- **字段密度**：arch **1297–1510**、lim **333–469**（对齐 C11-b「样本更厚就跟样本走」）。
+
+### C11-h — ✅ 增量 dump 节奏**第二次跑通** + 两个坑的再确认（2026-10-08，n=1,2,14）
+
+同一条「每写完一张立即 `json.dump` 落盘、不要攒到最后写」的指令**第二次出现**（本次 n=1,2,14，恰是 C11-f 同批三篇）。
+照 C11-g 节奏一次跑通，无失败 ⇒ **该节奏是稳定规格，不是个别侥幸**：
+
+- **节奏照抄生效**：写完一张 → 若目标文件已存在则 `json.load` → `d["cards"][n]=card` → `json.dump`，**3 张 = 3 次独立 dump**
+  （3489→7489B / 15121B / 21729B）；末轮回读 `missing=[]`、3 条 `quote in text` 全 True、`ALL CHECKS PASS`。
+  ⇒ 即使中途被切断也只丢「正在写的这一张」。
+- 🔁 **C11-f 引文锚点表**（n=1 PMC13346116 / n=2 PMC13573717 / n=14 PMC12954778）**逐字一致、第二次全 True**
+  ⇒ 该表**跨会话长期可复用**，同编号再现时直接取用、不必重 grep。
+- 🔴 **「基准样卡容器形状」坑第二次撞**（与 C11-g 同一条）：样卡 `data/deep_cards_deleg_15d8b24b.json` 仍是
+  **扁平 dict 直接以 n 为键**（`{"4":{...}, "5":{...}}`），写 `d["cards"]` → **`KeyError: 'cards'`**（本轮第一调用即撞）。
+  ⇒ 读任何 JSON **先** `print(type(obj), list(obj)[:5])`；**密度按样卡校准，容器按用户指定/交付约定**
+  （本次交付 `{"cards":{"1":…,"2":…,"14":…}}`）。
+- **字段密度**（本次）：arch **1318 / 1544 / 1204**、lim **413 / 522 / 410**（n=2 偏厚）。
+  n=2 的 `limitations` 本轮**彻底补齐为完整 §4.2 九条（522 字）**——正是 C10-0-ⓑ/C11-d 记录的
+  「被截成 8 字 `作者自陈：物理能`」缺陷的最终修复版（恢复原文见 `references/deep-card-small-batch-2026-10-08-n1-2-14-17.md`）。
+- 交付物：`results/<sid>/data/deep_cards_round2_t0a.json`（`{"cards":{...}}`、`ensure_ascii=False, indent=2`）。
+
+### C12 — 多批次产物归并 → 合入 store → 重出交付物（2026-10-08 实测：16 张卡碎在 4 个文件里）
+
+C10 讲「一批深度卡怎么合回交付物」；C12 讲**同一批任务被反复重派后碎成多份**时怎么办（本轮即此形态）。
+
+- 🔴 **批次会碎成多个文件、跨多个 delegation ID**：同一条「16 张薄卡升级」的指令走了三轮——
+  `deleg_bfb03f20`（owner 退出、全批蒸发）→ 重派 `deleg_c617920e`（t1/t2 完成，t0 撞 `max_iterations`）→
+  补派 `deleg_96407a20`（把 t0 拆成 t0a/t0b）。⇒ **合并前先 `ls data/deep_cards_round2_t*.json` 归并全部散件**，
+  ⛔ 不要只认最后一批（只认最后一批会漏 3 张）。四件合起来必须 == 目标卡数（16）。
+- 🔴 **manifest 的 `status` 是声明，磁盘文件才是事实**：t0a/t0b 在 manifest 里是 `"interrupted"`，
+  但文件**完整落盘**（3 卡 × 10 字段全齐、无短字段、引文全命中）。⇒ 判完整性看**磁盘文件**
+  （字段数 + 字段长度 + 引文命中），⛔ 不要凭 `status` 重派（盲重派 = 再精读 6 篇全文）。
+- 🔴 **把引文硬门内置进合并脚本**（比 C6「交付前单独跑 `verify_evidence_quotes.py`」更强）：
+  合并循环里逐卡做 `norm(q) in norm(txt)`（`norm = re.sub(r"\s+"," ",s).strip()`，按该卡 `pmcid` 取本地全文），
+  不通过就**拒写该字段**（保留旧值）并在报告里点名 `rejected`。**门开在写入路径上，坏引文就进不了 store**
+  （本次 16/16 通过、`rejected=[]`）。
+- **代次字段归一化（渲染徽标要干净）**：`deep_read_round` 存**纯日期**（`2026-10-08` / `2026-10-07`），
+  批次语义另存 `deep_read_pass`（`round2` / `round1-deep`）——否则徽标会渲染成「全文精读 round2-2026-10-08」。
+- **md 附录重渲染分两类处理**：升级过的卡**从 `cards.json` 重新 render 整节**（单源真相，防止 md 与 store 分叉）；
+  未升级的卡**只改那一行代次标记**（regex 仅替换 `^\*（…深读|精读…）\*$`），正文一个字不碰。
+- **合并前快照 + 报告落盘**：`data/cards_v3_snapshot.json`（首见即建，⛔ 别覆盖已有快照）+
+  `log/*_merge_report.json`（逐卡 filled/skipped/grew）+ `log/*_quote_audit.json`。
+  报告里的**字段长度 diff**（`arch 373->1318`）是「升级是否真发生」最直观的证据；
+  总量口径照给（本次卡内容总字符 `24,796 → 48,544`，`+95.8%`；0 薄卡）。
+
+#### C12-b — 交付物终态断言（重出 DOCX/HTML 后必跑）
+
+不要只看「脚本 exit 0 / 文件变大了」——**要在产物本身上做「存在 + 不存在」双向断言**：
+
+| 断言 | 取数方式 | 本次期望值（实际） |
+|---|---|---|
+| 代次徽标分布 == 各批卡数 | HTML：`grep -o 'class="drd">[^<]*' \| sort \| uniq -c` | 16×`round2 · 2026-10-08` + 15×`2026-10-07` |
+| **旧代次标记归零** | `grep -c "首轮合并 2026-10-02"` | **0**（只查"新在"不够，**必须查"旧不在"**）|
+| 已知截断缺陷归零 | 全文搜 `作者自陈：物理能` | **0** |
+| 图片没丢 | `zipfile` 数 `word/media/` + `len(doc.inline_shapes)` | 3 + 3 |
+| 结构规模 | `len(d.paragraphs)` / `len(d.tables)` | 708 / 15 |
+| 副标题口径同步 | 读 `d.paragraphs[1].text` | 含「round2 深读升级 16 篇 + 深读升级 15 篇」+ 证据表 97 条 |
+
+> 分工：DOCX 由 `scripts/md2docx.py` 重出（读 md 母本，标题/副标题走命令行参数）；
+> HTML 由 `scripts/build_report_html.py` 重出（卡片**直接读 `cards.json`** ⇒ 重跑即自动升级，只需同步副标题口径）。
+
+#### C12-c — DOCX 重出前先探解释器（别假设项目 venv 有 python-docx）
+
+`md2docx.py` 依赖 `python-docx`，而**项目 `.venv` 里可能没有**（本轮实测没有）。开工先探一枚命令，命中就用它：
+
+```bash
+for p in "$(which python)" "$(which python3)" "E:/MemOmics-Agent/.venv/Scripts/python.exe"; do
+  "$p" -c "import docx;print('$p OK')" 2>/dev/null; done
+```
+
+HTML 生成只依赖标准库（os/re/json/html/csv）⇒ 用项目 venv 跑即可。
+⛔ 不要因为一个包缺失就往用户环境 `pip install`（铁律 29：先查用户环境、经同意再装）；
+✅ 交付时把「用哪个解释器重建的」写进回复与 `notes.md`，用户能复现。
+
+📄 本次多批次归并的全量数字、四个散件清单、断言实测输出与脚本路径见
+`references/round2-multibatch-merge-and-deliverable-refresh.md`。
 
 ## 模式 D — 发文定位与缺口论证（Gap claim / positioning，2026-10-02 新增）
 
@@ -705,6 +935,7 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 | 陷阱 | 现象 | 修复 |
 |------|------|------|
 | execute_python 的 /tmp ≠ bash 的 /tmp | execute_python 写 `/tmp/xxx` 后 bash `ls /tmp` 看不到 | 直接写显式路径（如 `E:/MemOmics-Agent/results/<session>/`）再 read_file |
+| 🔴 execute_python 是 **Windows 原生 Python**，不认 MSYS 虚拟路径 | kernel 里 `open("/e/MemOmics-Agent/...")` → `FileNotFoundError`（bash 里同路径却能 `ls`） | **kernel 一律用原生盘符路径 `E:/MemOmics-Agent/...`**；`terminal`(bash) 才用 `/e/…`。与上一行 /tmp 同源 |
 | web_extract 后端不可用 | DuckDuckGo search-only 后端无法 extract URL | 用 execute_code 内 hermes_tools.web_extract 或 urllib 直接抓 |
 | git clone 曾超时 | 2026-08 曾见 github.com:443 超时；**2026-10-04 实测 `git clone --depth 1` 正常可通**（Biomni 全仓 5MB，数秒完成） | **先试 clone**（一次拿到完整文件树 + git log，比 API 逐文件拉省下大量调用）；确实连不上再退 GitHub REST API（api.github.com） |
 | ⚠️ 用 AST 数「空壳函数」会大幅高估 | 只匹配 `ast.Import`（`import X`）、漏掉 `ast.ImportFrom`（`from X import Y`）→ 本次一度误报「70% 工具无真实动作」，严格重扫实为 **19%** | 收集**两种 import 节点**并用 `sys.stdlib_module_names` 过滤第三方；**任何量化结论先手工核 1–2 个样本函数体再出口**；现成探针 `scripts/audit_agent_repo_claims.py` |
@@ -745,6 +976,11 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 - `references/deep-card-schema-and-agentic-agents-2026.md` — **模式 C9：深度卡 10 字段 schema + 薄卡→深度卡升级变体**；含本次 4 篇新竞品事实底稿（**Agentomics** 七步验证闸门流水线 / **ChemGraph** LangGraph 多 agent / **CASSIA** 五 agent 注释链 / **SPARK** crewAI 病理发现闭环）+ 逐字 benchmark 数字 + 模型分工 + 成本 + 五条已 `count==1` 校验的 evidence_quote
 - `scripts/merge_deep_cards.py` — **模式 C10：深度卡回收合并器**（从 `state.db` 取回 delegation 结果 / **字符串内裸引号**状态机修复 + 截断·尾随逗号·重复键回退 / 顶层键归一化 `"n=9"→9` / 10 字段覆盖写入 / **保持 cards.json 原容器形状** / 快照 + 深读标记 / 证据行追加并提醒同步 deliverables）
 - `references/deepread-merge-and-report-refresh.md` — **模式 C10 全流程**（回收→合并→附录 md 章节重渲染→HTML·DOCX 重出→探针式机械校验；含 **f-string 花括号注入**与 **md2docx 图片路径/解释器** 两个脚本坑）
+- `references/deep-card-small-batch-2026-10-08-agentic-reviews.md` — **模式 C11 小批（N=5）深读卡**事实底稿：生信/化学 agent「4 综述 + 1 系统」混合批（n=19–23，含 DOI/PMCID/类型/一句话架构）+ 5 条已 `q in t` 校验的 evidence_quote + **落卡前单脚本机械门（内联断言）** + **综述/观点类四字段固定填法** + 3 条新增经验（先读基准样卡校准密度 / 32KB JSON 贴正文必被截而落盘为主 / PMC 引文「冒号前带空格」逐字坑）
+- `references/deep-card-small-batch-and-verification-gates.md` — **模式 C11：小批（N≤5）深度卡升级 + 指定落盘**（「不要只回传内容」= 真落盘 + `getsize`/`json.load` 回读 + 报字节数 / `{"cards":{...}}` 外层 + 编号字符串键 / 不动 `cards.json` 容器 / **单脚本机械门** `q in txt` + `arch≥600` + `lim≥60` + 字段数 10 / **关键词偏移地图**读长文与综述）+ n=24,26,27,29,31 五篇事实底稿与 5 条已校验 evidence_quote
+- `references/deep-card-small-batch-2026-10-08-n1-2-14-17.md` — **模式 C11 小批续（n=1,2,14,15,16,17）**：本轮**落盘未完成**的教训底稿（读+起草烧光迭代、`json.dump` 一次没跑）+ 两个新增工具坑（execute_python 的 **`/e/…` MSYS 路径失效**、单篇全文远超 stdout 上限）+ 6 条已 `q in t` 校验的 evidence_quote + 六篇逐字数字 + **n=2 截断 `limitations` 的完整原文恢复**（Discussion §4.2 九条）+ 落盘约定
+- `references/round2-multibatch-merge-and-deliverable-refresh.md` — **模式 C12：多批次产物归并 + 交付物重出的全量底稿**（批次链路表〔蒸发→撞上限→拆 t0a/t0b〕/ 4 个散件清单 / 引文硬门代码 / 16 卡 before→after 字符表〔24,796→48,544〕/ md 重渲染两类处理 / DOCX·HTML 重建命令与字节数 / **终态双向断言清单** / 汇报口径）
+- `scripts/merge_round2_deepread.py` — **模式 C12 归并器**：多散件归并 → **逐字引文硬门（拒写不通过字段）** → 保持 store 容器形状 → 代次字段归一化（`deep_read_round` 纯日期 + `deep_read_pass` 批次）→ 引文审计与字段长度 diff 报告
 
 ## Common Issues
 
@@ -766,3 +1002,4 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
 | - | - | - | 2026-10-07 | upgrade_deepread_v2.py | - | - |  |
+| human/multiple | n/a | methodology | 2026-10-08 | merge_round2_deepread.py + upgrade_deepread_v4.py | - | - |  |
