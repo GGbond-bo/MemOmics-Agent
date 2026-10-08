@@ -1,0 +1,37 @@
+{
+  "id": "remote-cluster-execution",
+  "name": "远端集群执行规程（SSH + 调度器）",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。",
+  "starting_prompt": "使用 远端集群执行规程（SSH + 调度器） 进行分析",
+  "source_dir": "skills/bioinformatics/remote-cluster-execution",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "remote-cluster",
+    "ssh",
+    "sge",
+    "slurm",
+    "conda-env",
+    "environment-inventory"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "集群",
+    "远端集群",
+    "集群环境",
+    "集群有哪些环境",
+    "帮我看看集群",
+    "ssh3",
+    "用集群跑",
+    "在集群上跑",
+    "投递任务",
+    "qsub",
+    "slurm",
+    "sge"
+  ],
+  "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。"
+}

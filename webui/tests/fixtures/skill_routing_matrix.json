@@ -795,6 +795,24 @@
         "dcs-cloud"
       ],
       "max_hits": 3
+    },
+    {
+      "id": "remote-cluster-execution-01",
+      "intent": "口语",
+      "text": "帮我在集群上跑一下这个脚本",
+      "must_hit": [
+        "remote-cluster-execution"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "remote-cluster-execution-02",
+      "intent": "环境清点",
+      "text": "ssh3 上现在有哪些环境？",
+      "must_hit": [
+        "remote-cluster-execution"
+      ],
+      "max_hits": 3
     }
   ],
   "distractors": [
