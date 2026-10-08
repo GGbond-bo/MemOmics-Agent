@@ -371,3 +371,5 @@ cell_proportion_*.csv，共 290KB` —— 与执行脚本的清单**逐字对上
 | - | - | - | 2026-09-26 | terminal hostname; whoami | - | - |  |
 | - | - | platform_smoke_test | 2026-09-26 | terminal hostname | - | - |  |
 | - | - | - | 2026-09-26 | terminal hostname | - | - |  |
+| - | - | - | 2026-10-08 | ssh3_env_probe.sh | - | - |  |
+| - | - | - | 2026-10-08 | ssh3_env_probe.sh | - | - |  |

@@ -23,8 +23,8 @@
     "execution",
     "pitfalls"
   ],
-  "success_count": 23,
-  "proven_script": "terminal hostname",
+  "success_count": 24,
+  "proven_script": "ssh3_env_probe.sh",
   "proven_params": [
     {
       "species": "",
@@ -324,10 +324,23 @@
       "approved": false,
       "custom_script": false,
       "result": "exit_code=0；输出 DESKTOP-0DISV65（Windows 机器名，与 bash 用户名 23136 不同，二者不可混用）；未写任何文件。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "ssh3_env_probe.sh",
+      "params": "remote_cluster run, node=ssh3(default), 只读 ls/--version 探测",
+      "date": "2026-10-08",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "ssh3 环境首轮探测：zhangxiao6 miniconda3 可访问（drwxr-xr-x），envs 实际名 R4.41/R4.3.3/R4.2.2（用户记 R441/R443 有偏差）；sc-analysis=Python 3.9.23 可用；zhangbo/envs/R4.4.1_zb=R 4.4.1 可用"
     }
   ],
   "user_prefs": {
-    "last_used_script": "terminal hostname"
+    "last_used_script": "ssh3_env_probe.sh"
   },
   "when_to_use": "任何会话遇到 execute_r / execute_code / skill_view / rail_review / terminal 门禁相关的非数据类报错时先查本 skill；写 R/Python 分析代码前快速扫一遍坑表。"
 }
