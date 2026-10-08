@@ -9,17 +9,24 @@
 #
 # 安装：python scripts/install_git_hooks.py   （等价于 git config core.hooksPath .githooks）
 # 跳过：SKILLS_GATE=0 git commit ...  /  KB_GATE=0 git commit ...  或  git commit --no-verify
+#       ⚠️ 两个开关**各自独立**：只关一个不得连带关掉另一个（2026-10-08 修的盲点——
+#       原先 SKILLS_GATE=0 在开头直接 exit 0，把 KB 门禁一起跳过了，与本节注释自相矛盾）。
 # 卸载：git config --unset core.hooksPath
 
+SKILLS_ON=1
 if [ "${SKILLS_GATE:-1}" = "0" ]; then
-    echo "[skills-gate] SKILLS_GATE=0，跳过技能门禁"
-    exit 0
+    echo "[skills-gate] SKILLS_GATE=0，跳过技能门禁（KB 门禁照常执行）"
+    SKILLS_ON=0
 fi
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$ROOT" || exit 0
 
-CHANGED=$(git diff --cached --name-only --diff-filter=ACDMR 2>/dev/null)
+# -z + tr 是必须的：默认 `--name-only` 对**非 ASCII 路径加引号**输出
+# （`"memomics/knowledge_base/.../03_\346\265\213..."`），会让下面 `^memomics/knowledge_base/`
+# 锚点永远匹配不上。KB 五级目录的类别目录（01_生物学知识/02_质控参数/03_测序方法）全是中文，
+# 等于 KB 门禁从未触发（2026-10-08 实测发现并修复）。凡按路径 grep 做门禁/白名单处都要查这一点。
+CHANGED=$(git diff --cached --name-only -z --diff-filter=ACDMR 2>/dev/null | tr '\0' '\n')
 if [ -z "$CHANGED" ]; then
     exit 0
 fi
@@ -55,7 +62,7 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
-if [ -n "$MATCHED" ]; then
+if [ -n "$MATCHED" ] && [ "$SKILLS_ON" = "1" ]; then
     echo "[skills-gate] 暂存区涉及技能面文件，跑门禁："
     printf '%s\n' "$MATCHED" | sed 's/^/    /'
     "$PY" scripts/check_skills_gate.py --quiet
