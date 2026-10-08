@@ -36,16 +36,89 @@ except ModuleNotFoundError:
 # === MemOmics-Agent 独立运行 ===
 MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEMOMICS_HOME_DIR = os.path.join(MEMOMICS_DIR, "memomics_home")
-# 老安装迁移（2026-10-08 改名）：memomics_home 不存在而旧 hermes_home 还在时整体改名，
-# 保住老用户的技能 / PAT / config.yaml / 记忆；改名失败则回退继续用旧目录，绝不影响启动。
+# 老安装迁移（2026-10-08 改名）：hermes_home → memomics_home。
+# 覆盖升级 vs 首次安装靠"用户数据标记"检测（_home_has_user_data）：
+#   ① 首次安装：没有 hermes_home（新目录只有包内产品文件）→ 静默 noop，不做任何替换；
+#   ② 既有安装（覆盖）：hermes_home 含 config/state.db/记忆/PAT 等标记 → 迁移：
+#      - 新目录不存在 → 整体改名；
+#      - 双存在、新目录是产品空壳（更新包/fix_bundle 先造出来的）→ 旧目录缺失项搬进新目录；
+#      - 双存在、两边都有用户数据 → 只告警，不自动合并（人工确认）。
+# 重名文件保留新目录版本＝与"覆盖升级"一致的语义；只搬不删；异常绝不阻塞启动。
 _legacy_home = os.path.join(MEMOMICS_DIR, "hermes_home")
-if not os.path.isdir(MEMOMICS_HOME_DIR) and os.path.isdir(_legacy_home):
+
+
+def _home_has_user_data(_d):
+    """数据目录是否含用户数据（区分"既有安装"与"产品空壳"）。"""
+    if not os.path.isdir(_d):
+        return False
+    for _marker in ("config.yaml", "state.db", "provider_keys.json", "model_config.json",
+                    "memories", "sessions", "auth.json", "channel_directory.json",
+                    "weixin_account.json", "dcs_cloud.json", "cron", ".install_path"):
+        if os.path.exists(os.path.join(_d, _marker)):
+            return True
+    return False
+
+
+def _carry_missing_items(_src, _dst, _depth=0):
+    """把 _src 中 _dst 缺失的项搬进 _dst（重名项保留 _dst 版本）。"""
+    _moved = 0
     try:
-        os.rename(_legacy_home, MEMOMICS_HOME_DIR)
-        print("[MemOmics] 旧数据目录 hermes_home 已迁移为 memomics_home", flush=True)
-    except OSError as _mig_err:
-        print("[MemOmics] hermes_home -> memomics_home 迁移失败，继续用旧目录: %r" % (_mig_err,), flush=True)
-        MEMOMICS_HOME_DIR = _legacy_home
+        _names = sorted(os.listdir(_src))
+    except OSError:
+        return 0
+    for _name in _names:
+        _s, _t = os.path.join(_src, _name), os.path.join(_dst, _name)
+        try:
+            if not os.path.exists(_t):
+                shutil.move(_s, _t)
+                _moved += 1
+            elif os.path.isdir(_s) and os.path.isdir(_t) and _depth < 6:
+                _moved += _carry_missing_items(_s, _t, _depth + 1)
+        except OSError:
+            continue
+    return _moved
+
+
+def migrate_legacy_home(_new_home, _old_home):
+    """hermes_home → memomics_home 迁移（幂等）。
+
+    返回 renamed / merged:N / conflict / noop / error:…（启动垫片与更新器共用）。
+    首次安装（无旧目录）→ noop；检测不到旧安装任何痕迹时不碰文件系统。
+    """
+    try:
+        if not os.path.isdir(_old_home):
+            return "noop"
+        _old_has = _home_has_user_data(_old_home)
+        if not os.path.isdir(_new_home):
+            os.rename(_old_home, _new_home)
+            return "renamed"
+        _new_has = _home_has_user_data(_new_home)
+        if _old_has and not _new_has:
+            _n = _carry_missing_items(_old_home, _new_home)
+            try:
+                os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
+            except OSError:
+                pass  # 退休失败不算错：数据已搬完，旧目录留着下次再退休
+            return "merged:%d" % _n
+        if _old_has and _new_has:
+            return "conflict"
+        return "noop"
+    except Exception as _e:  # 迁移失败绝不影响启动
+        return "error:%r" % (_e,)
+
+
+if os.path.isdir(_legacy_home) and _legacy_home != MEMOMICS_HOME_DIR:
+    _mig = migrate_legacy_home(MEMOMICS_HOME_DIR, _legacy_home)
+    if _mig == "renamed":
+        print("[MemOmics] 检测到既有安装：旧数据目录 hermes_home 已迁移为 memomics_home", flush=True)
+    elif _mig.startswith("merged"):
+        print("[MemOmics] 检测到覆盖升级：hermes_home 已合并进 memomics_home（%s），旧目录退休为 .migrated_ 备份" % _mig, flush=True)
+    elif _mig == "conflict":
+        print("[MemOmics] 警告：hermes_home 与 memomics_home 都含用户数据，跳过自动合并，请人工确认", flush=True)
+    elif _mig.startswith("error"):
+        print("[MemOmics] hermes_home -> memomics_home 迁移失败，继续原样启动: %s" % _mig, flush=True)
+        if not os.path.isdir(MEMOMICS_HOME_DIR):
+            MEMOMICS_HOME_DIR = _legacy_home
 os.environ["MEMOMICS_HOME"] = MEMOMICS_HOME_DIR
 # 上游 hermes-agent 只读 HERMES_HOME（hermes_constants.get_hermes_home 的契约）——镜像一份
 os.environ["HERMES_HOME"] = MEMOMICS_HOME_DIR
@@ -11568,7 +11641,9 @@ async def update_apply(payload: dict):
     """执行更新（用户已确认）：下载平台安装包 → 校验 → 差异覆盖代码（保留用户数据）→ fix_bundle。
 
     覆盖范围：zip 内除保留清单（memomics_home/results/.venv/runtime/node_modules 等）外的代码文件。
-    完成后需用户重启服务生效。
+    完成后需用户重启服务生效。覆盖前会先检测老数据目录：只有在 hermes_home 含用户数据
+    时迁移（2026-10-08 改名；双存在时把旧目录缺失项搬进新目录，旧目录退休为 .migrated_ 备份）；
+    首次安装检测不到旧目录，不做任何替换。
     """
     confirmed = payload.get("confirmed")
     if not confirmed:
@@ -11611,6 +11686,14 @@ async def update_apply(payload: dict):
                                         os.path.isfile(os.path.join(cand, "start.sh"))):
                 extract_root = cand
                 break
+        # 2.5 覆盖前先检测并迁掉老数据目录（2026-10-08 改名；老安装升级场景）
+        _hmig = "noop"
+        try:
+            _hmig = migrate_legacy_home(MEMOMICS_HOME_DIR, _legacy_home)
+            if _hmig != "noop":
+                print("[MemOmics] 更新前置：检测到覆盖升级，home 迁移=%s" % _hmig, flush=True)
+        except Exception as _hme:
+            _hmig = "error:%r" % (_hme,)
         # 3. 差异覆盖（保留用户数据）
         copied = _apply_overlay(extract_root, tops)
         # 4. 应用文件级迁移
@@ -11628,7 +11711,10 @@ async def update_apply(payload: dict):
         new_local = _local_version_info()
         _UPDATE_TASK["running"] = False
         _UPDATE_TASK["stage"] = "done"
-        return {"ok": True, "message": f"已覆盖 {copied} 个代码文件", "fix_log": fix_log,
+        _msg = f"已覆盖 {copied} 个代码文件"
+        if _hmig.startswith(("renamed", "merged")):
+            _msg += "；检测到覆盖升级，已自动迁移旧数据目录（hermes_home→memomics_home）"
+        return {"ok": True, "message": _msg, "fix_log": fix_log,
                 "new_version": new_local.get("version"), "restart_required": True,
                 "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:

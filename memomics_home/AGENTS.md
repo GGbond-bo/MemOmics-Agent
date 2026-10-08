@@ -21,6 +21,7 @@
 - 默认只更新 MemOmics-update.zip（老用户一键更新）；全量 5 包仅新装机需要。
 - 版本号 = 真实当天日期（如 v2026-08-31）；禁止未来日期/旧 tag 覆盖。
 - 完整流程 + SHA + 坑位见 docs/UPDATE_WORKFLOW.md（打包时随包发布）。
+- **覆盖升级迁移（2026-10-08 改名配套）**：安装里还有 `hermes_home` 时，更新/解压覆盖后首次启动自动检测并迁移到 `memomics_home`（只搬不删；双存在＝缺失项搬入、重名保留新版；旧目录退休为 `hermes_home.migrated_<时间戳>`；config.yaml 路径同步迁移）；**首次安装检测不到旧目录，不做任何替换**；一键更新器在覆盖前先跑同一迁移。
 - 绝不打包：API key / provider_keys / auth / weixin / channel_directory / model_config / state.db / sessions / results / uploads / work / .memory / 本机路径 / 测试数据。
 - 最新：2026-08-31 · v2026-08-31（记忆分层 L0 结论失败注册表 + L3 索引、待确认绑定、L2 轮速览、辩论 v2、BGI 技能、渲染/超时修复）。
 

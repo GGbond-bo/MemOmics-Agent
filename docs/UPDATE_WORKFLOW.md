@@ -1,7 +1,7 @@
 # MemOmics-Agent 更新/发布工作流（持久记录，新会话必读）
 
 > 本文档 + memomics_home/AGENTS.md 为「跨会话记忆」：任何会话接手「更新/打包/发布」任务时，先读本文。
-> 最后更新：2026-08-31（当天最新 tag = v2026-08-31）
+> 最后更新：2026-10-08（hermes→memomics 改名迁移配套）
 
 ## 1. 更新什么、更新到哪里
 
@@ -11,6 +11,7 @@
 | 全量包 | MemOmics-Windows.zip / Linux.tar.gz / macOS-arm64 / macOS-x86_64 / Cluster.tar.gz —— 仅新装用户需要；一般不必每次重打，但同一天发布时建议全打保持一致 |
 | 更新到哪里 | GitHub release：https://github.com/GGbond-bo/MemOmics-Agent/releases/tag/v<当天日期> |
 | 版本号 | 必须=真实当天日期（如 v2026-08-31）；禁止未来日期、禁止旧 tag 覆盖（WebUI 按 tag 字符串比对） |
+| 老名字迁移 | 安装里还有 `hermes_home` 时，更新/解压覆盖后**首次启动自动检测并迁移**到 `memomics_home`（只搬不删；双存在＝旧目录缺失项搬入新目录、重名保留新版；旧目录退休为 `hermes_home.migrated_<时间戳>`；config.yaml 内路径同步迁移）。**首次安装检测不到旧目录，不做任何替换**。一键更新器在覆盖前也会先跑同一检测迁移。 |
 | 本地 VERSION | 打包时写 v<当天>；打完恢复 vdev-<当天> |
 
 ## 2.0 快速流程（默认：只更新 update 包）
