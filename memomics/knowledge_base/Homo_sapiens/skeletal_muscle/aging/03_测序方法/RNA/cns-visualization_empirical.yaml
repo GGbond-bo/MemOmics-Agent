@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-10-01 20:55
+last_updated: 2026-10-08 00:03
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,19 +12,18 @@ auto_trigger:
 - cns-visualization_empirical
 content: 'skill: cns-visualization
 
-  quality_score: 8.0
+  quality_score: 9.0
 
 
   params_used:
 
-  {"src": "D:/肌肉锻炼/DEG_file/DEG_fdr05_coef025_5contrasts_formatted.xlsx", "sheets":
-  ["Y_EX","O_EX","DM_EX"], "intersection": "set.intersection 三组共同显著基因", "band_width":
-  "该(亚群,基因)对被几个条件共同支持(1/2/3)", "layout": "手写三次贝塞尔 + 独立左右布局", "export": "PNG300/SVG/PDF/TIFF"}
+  csv=effect5_effsize_v3.csv; rows=1100; scores=22; effects=5; subs=10
 
 
   result_summary:
 
-  三组运动共同 DEG 桑基图 2 张（Up: 7 基因/56 带；Down: 2 基因/19 带），产出 PNG+SVG+PDF+TIFF 共 8 文件；含链接表
-  CSV'
-evidence: 'record_run(cns-visualization): 三组运动共同 DEG 桑基图 2 张（Up: 7 基因/56 带；Down: 2
-  基因/19 带），产出 PNG+SVG+PDF+TIFF 共 8 文件；含链接表 CSV'
+  核实效应量表：effect5_effsize_v3.csv 含 22 个 score × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含
+  scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC 完整效应量 → 第二版加肌纤维类型打分无需重算'
+evidence: 'record_run(cns-visualization): 核实效应量表：effect5_effsize_v3.csv 含 22 个 score
+  × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含 scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC
+  完整效应量 → 第二版加肌纤维类型打分无需重算'

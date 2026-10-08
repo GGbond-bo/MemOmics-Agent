@@ -308,13 +308,39 @@
       "approved": false,
       "custom_script": false,
       "result": "修复热图\"亚群名 vs 行色块不对齐\"：真根因=行色块 data 中心在 0.517/1.517/.../9.517（非脚本假设的 0..9），标签恒偏半个行高 60.5px。改自校准（量渲染 PNG 色带中心→transData 反算→设定标签 y）。复测 10 行偏差 ≤3.3px（容差 6px）PASS。同时修掉假自检（对象级包围盒退化）。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A2_5effects_v5_rawp.R",
+      "params": "data=MF_AUCell_meta.csv; cols=58; programs=17; subclusters=10; effects=5",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "核实数据列名：typeI/II/IIX 打分已在 MF_AUCell_meta.csv（scoreI_AUC=35, scoreII_AUC=36, scoreIIa_AUC=37, scoreIIx_AUC=38 列）；SenMayo=scoreSenMayo_AUC(44)、Adipogenesis=Adipogenesis_AUC(55)。共 22 个打分列"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "fig_A3_CNS_v6.R",
+      "params": "csv=effect5_effsize_v3.csv; rows=1100; scores=22; effects=5; subs=10",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "核实效应量表：effect5_effsize_v3.csv 含 22 个 score × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含 scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC 完整效应量 → 第二版加肌纤维类型打分无需重算"
     }
   ],
-  "proven_script": "47_mef2c_deg_heatmap.py",
+  "proven_script": "fig_A3_CNS_v6.R",
   "error_count": 2,
-  "success_count": 20,
+  "success_count": 22,
   "user_prefs": {
-    "last_used_script": "47_mef2c_deg_heatmap.py"
+    "last_used_script": "fig_A3_CNS_v6.R"
   },
   "trigger_keywords": [
     "UMAP",
