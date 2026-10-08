@@ -336,7 +336,7 @@
 | 19 | heartbeat-monitor | 长任务心跳监控 — 独立后台进程持续记录进度，Agent 随时读取汇报 | 心跳, 监控, heartbeat, 进度汇报, 跑多久了, 还在跑吗, heartbeat-monitor, heartbeat monitor | RED 必触发 |
 | 20 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
 | 21 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
-| 22 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge | RED 必触发 |
+| 22 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
 | 23 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)

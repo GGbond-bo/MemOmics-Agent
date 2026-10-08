@@ -126,6 +126,10 @@ _DEFAULT_CFG = {
     "auto_record_env": True,     # check 成功后把节点环境自动沉淀到 🧩 环境管理（environment.json）
     "persist_gate": True,        # 铁规 10 硬闸：run/submit 要读 ≥100MB 未标记大输入 → 拒绝执行
     "persist_min_mb": 100,       # 硬闸阈值（MB）
+    # --- 常驻 R 会话（kernel 式持久化，2026-10-09）---
+    # remote.session: {env, rscript, roots, dir, load_timeout, wait, save_wait, max_sessions}
+    # 节点级可覆盖：remote.nodes.<名字>.session: {...}（比如某台机器上 R 在别的路径）
+    "session": {},
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -1112,6 +1116,8 @@ def _persist_gate_decide(big, marked, node_name: str, min_mb: float):
             "③ 落标记：python -m memomics.bio_tools.large_cache mark --task-id <任务id> --title <标题> "
             "--input <路径> --remote（用户拒绝持久化也照落，加 --note 用户选择不持久化）",
             "④ 原样重发本次调用——账本里有标记就不再拦",
+            "（另一条路）若用户想要的是「读一次、后面一直用」：直接 action='session_start', input=<路径> "
+            "开常驻 R 会话——会话会自己落标记；之后 FindMarkers/CellChat/参数扫描都复用内存对象，不再回读文件。",
         ],
         "note": ("纯巡检命令（ls/stat/du/head 开头的行）不触发本闸；"
                  "config 里 persist_gate: false 可整闸关闭（不推荐）。"),
@@ -2449,6 +2455,50 @@ def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
                 pass
 
 
+# ---------------------------------------------------------------------------
+# 常驻 R 会话（kernel 式持久化）—— 转发到 cluster_session 模块  2026-10-09
+#
+# 为什么挂在 remote_cluster 的动作位上、而不是再造一个工具：会话要和 push/pull/submit
+# 共用同一套节点选择、SSH 引擎、体积闸门与账本；挂进来后 WebUI 控制台与 agent 自然走
+# 同一条代码路径。重活仍归 run/submit，会话负责「读一次、一直用」的交互式分析。
+# ---------------------------------------------------------------------------
+
+
+def _action_session_start(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_start(cfg, args)
+
+
+def _action_session_exec(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_exec(cfg, args)
+
+
+def _action_session_save(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_save(cfg, args)
+
+
+def _action_session_restore(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_restore(cfg, args)
+
+
+def _action_session_status(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_status(cfg, args)
+
+
+def _action_session_stop(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_stop(cfg, args)
+
+
+def _action_session_list(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_list(cfg, args)
+
+
 _ACTIONS = {
     "locate": _action_locate,
     "nodes": _action_nodes,
@@ -2461,6 +2511,14 @@ _ACTIONS = {
     "logs": _action_logs,
     "cancel": _action_cancel,
     "jobs": _action_jobs,
+    # 常驻 R 会话（kernel 式持久化）—— 转发到 cluster_session 模块，见下方转发函数
+    "session_start": _action_session_start,
+    "session_exec": _action_session_exec,
+    "session_save": _action_session_save,
+    "session_restore": _action_session_restore,
+    "session_status": _action_session_status,
+    "session_stop": _action_session_stop,
+    "session_list": _action_session_list,
 }
 
 
@@ -2526,6 +2584,33 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
             logger.exception("remote_cluster action=nodes 失败")
             return _err("nodes 执行失败: %s" % exc)
 
+    if action == "session_list":
+        # 只看本机账本（列有哪些会话），不需要连节点
+        try:
+            from memomics.bio_tools import cluster_session as _cs
+            return _cs.action_list(cfg, args)
+        except Exception as exc:
+            logger.exception("remote_cluster action=session_list 失败")
+            return _err("session_list 执行失败: %s" % exc)
+
+    if action.startswith("session_") and action != "session_start":
+        # 会话动作默认跟随会话记录里的节点（否则会落到 default_node 上连错机器）
+        args = dict(args)
+        if not str(args.get("node") or "").strip():
+            try:
+                from memomics.bio_tools import cluster_session as _cs
+                sid = str(args.get("session_id") or "").strip()
+                rec = _cs.find_session(sid) if sid else _cs.latest_session()
+                if rec:
+                    args["node"] = str(rec.get("node") or "")
+                elif not sid:
+                    return _err(
+                        "本机账本里还没有任何常驻会话，没法定位到节点。",
+                        hint=("用 action='session_list' 看全部会话；要新建用 "
+                              "action='session_start'（可带 input=<大 rds 路径>，读一次一直用）。"))
+            except Exception:
+                pass
+
     requested = str(args.get("node") or args.get("host") or "").strip()
     node_cfg, node_name, err = _select_node(cfg, requested)
     if err:
@@ -2558,6 +2643,19 @@ SCHEMA = {
         "用 crlf='keep' 可关掉）；pull 有体积闸门，超过 max_mb（默认 512MB）直接拒绝，"
         "避免手滑把几百 GB 的 BAM 拖回本机。\n"
         "  • jobs   —— 列队列与最近提交记录。\n"
+        "  • session_start / session_exec / session_save / session_restore / session_status / "
+        "session_stop / session_list —— **常驻 R 会话（kernel 式持久化）**，专治「大输入读一次一直用」：\n"
+        "      session_start 在节点上起一个常驻 R 进程（setsid 常驻，ps/MobaXterm 里看得见，不开公网端口）；"
+        "带 input=<大 rds 路径> 就先**同步读一次**进内存（读了几秒、对象名、readRDS 审计都会回报）。\n"
+        "      随后 session_exec 投 R 代码（同一个进程、同一个 globalenv）：FindMarkers / CellChat / "
+        "参数扫描都复用内存对象，**不再回读原文件**（结果头部的 readrds_calls 可以验证）。\n"
+        "      session_save 落检查点（ckpt/<名>.rds）、session_restore 拉回来（daemon 死掉/换节点后用 "
+        "session_start + restore='latest' 恢复，不必重读原文件）；session_status 看 pid/内存/对象/队列；"
+        "session_stop 退出（save=true 先存检查点）；session_list 列本机账本（live=true 逐台核实）。\n"
+        "      要点：① 长命令（FindMarkers 几分钟）用 async=true 投递，再用 session_status 查，别让 ssh 干挂；"
+        "② 会话内可调 mm_info() / mm_reads() / mm_save() / mm_restore() / mm_quit()；"
+        "③ 铁规 10 的大输入流程：用户要求开常驻会话本身就是在回答「要不要持久化」（工具会自动落标记），"
+        "但**别在用户拒绝持久化时偷偷开会话**；④ 会话占内存，用完记得 session_stop。\n"
         "  • locate —— **判定一个路径在本地还是在集群上**（用户没说数据在哪时先跑这个，再决定在哪儿算）；"
         "远端没配置时也能用，只报本地那一半。\n"
         "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
@@ -2591,8 +2689,9 @@ SCHEMA = {
         "默认不覆盖本机已有同名文件（返回 status=exists，给 overwrite=true 才覆盖）。\n"
         "连接配置在 memomics_home/config.yaml 的 remote: 段（host 或 nodes /user/port/key/workdir/"
         "scheduler/local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
-        "⚠️ 两点别搞混：① 本工具只把**命令/作业**送到远端，execute_python / execute_r 的持久内核仍在本地跑——"
-        "要在集群上算就把代码写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"
+        "⚠️ 两点别搞混：① 本工具只把**命令/作业/会话请求**送到远端；execute_python / execute_r 的持久内核仍在本地跑——"
+        "要在集群上做**交互式分析**（读一次大 rds 后反复 FindMarkers / CellChat / 调参）用 session_*，"
+        "一次性重活写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"
         "push/pull 可用 local_root/remote_root 自动换算。"
     ),
     "parameters": {
@@ -2601,7 +2700,9 @@ SCHEMA = {
             "action": {
                 "type": "string",
                 "enum": ["locate", "nodes", "check", "run", "push", "pull", "submit", "status",
-                         "logs", "cancel", "jobs"],
+                         "logs", "cancel", "jobs",
+                         "session_start", "session_exec", "session_save", "session_restore",
+                         "session_status", "session_stop", "session_list"],
                 "description": "要执行的动作",
             },
             "node": {
@@ -2647,6 +2748,40 @@ SCHEMA = {
                      "description": ("push：Windows 换行处理。auto（默认）= .sh/.py/.R/.sbatch 等脚本"
                                      "检测到 CRLF 自动转 LF 再上传（本机原文件不动）；"
                                      "keep = 原样上传；lf = 强制转 LF。")},
+            "session_id": {"type": "string",
+                           "description": ("session_exec/save/restore/status/stop：会话号（可省 = 该节点最近一个会话）。"
+                                           "session_start 时传它 = 复用同一会话目录（配 restore 可把旧对象拉回来）。")},
+            "code": {"type": "string",
+                     "description": "session_exec：要执行的 R 代码（可多行；在会话的同一个进程里跑）"},
+            "input": {"type": "string",
+                      "description": ("session_start：要读一次的大文件（rds 等）。给了它就先同步读入内存，"
+                                      "之后所有分析复用（这就是「读一次一直用」）；省略 = 起一个空会话。")},
+            "object": {"type": "string",
+                       "description": "session_start：读入后的对象名（默认按文件名推导，如 musc）"},
+            "env": {"type": "string",
+                    "description": ("session_start：conda 环境名（默认 remote.session.env；本集群 RNA 用 R4.41，"
+                                    "ATAC 用 R4.3.3）——按 <roots>/envs/<env>/bin/Rscript 去找 Rscript。")},
+            "rscript": {"type": "string",
+                        "description": "session_start：Rscript 绝对路径（覆盖自动探测；自己 env 里的 R 用这个）"},
+            "restore": {"type": "string",
+                        "description": ("session_start：从检查点恢复（'latest' = 最新一个，也可给 ckpt 里的名字）。"
+                                        "daemon 死后/换节点时把对象拉回来，不用重读原文件。")},
+            "name": {"type": "string",
+                     "description": ("session_save：检查点名（默认时间戳）；"
+                                     "session_restore：检查点路径或名字（默认最新）")},
+            "objects": {"type": "array", "items": {"type": "string"},
+                        "description": "session_save：要保存的对象名列表（默认全部会话对象）"},
+            "wait": {"type": "integer",
+                     "description": ("session_exec/save/restore：等待秒数（默认 session.wait=1200；"
+                                     "save 用 save_wait=3600）。async=true 时忽略（投递即返回）。")},
+            "async": {"type": "boolean",
+                      "description": ("session_exec/save：true = 投递后立即返回（长任务推荐），"
+                                      "之后用 session_status 查进度；结果文件在 done/<req>.res.txt。")},
+            "title": {"type": "string", "description": "session_start：会话标题（默认 input 文件名）"},
+            "save": {"type": "boolean",
+                     "description": "session_stop：true = 退出前先落检查点（大对象会慢；保住工作成果用）"},
+            "live": {"type": "boolean",
+                     "description": "session_list：true = 逐台连上去核实进程真的活着（慢，但最准）"},
         },
         "required": ["action"],
     },

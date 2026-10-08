@@ -344,12 +344,16 @@ def save_marker(marker: dict) -> str:
 def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
                artifacts=None, remote: bool = False, note: str = "",
                ttl_days: int = DEFAULT_TTL_DAYS, session_dir: str = "",
-               cache_scope: str = "") -> dict:
+               cache_scope: str = "", not_included=None) -> dict:
     """建一个任务标记（并落盘）。inputs: scan 的 items 或裸路径列表。
 
     ``cache_scope`` / ``not_included`` 是 2026-10-08 L2 辩论席位一致点名的溯源缺口：
     用户看到「有缓存」会以为全量都缓存了，而精简缓存**不含表达量矩阵**（DE/CellChat/
     轨迹仍需回读原文件）。所以标记里显式声明缓存范围与**未包含**的内容。
+
+    ``not_included``（2026-10-09 新增，可选）：默认仍是精简缓存那三项；**常驻 R 会话**
+    这类「全量都在内存里」的持久化应显式传 ``[]``，避免标记把「有缓存但没矩阵」的错误
+    语义套到会话头上。
     """
     ins = []
     for it in inputs or []:
@@ -380,7 +384,9 @@ def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
         "ttl_days": int(ttl_days),
         "note": note,
         "cache_scope": cache_scope or "未声明（缓存内容以作业脚本为准）",
-        "not_included": ["expression_matrix", "counts", "scale.data"],
+        "not_included": (["expression_matrix", "counts", "scale.data"]
+                         if not_included is None
+                         else [str(x) for x in not_included]),
         "cleanup_cmd": "python -m memomics.bio_tools.large_cache clean " + str(task_id),
         "status": "active",
     }

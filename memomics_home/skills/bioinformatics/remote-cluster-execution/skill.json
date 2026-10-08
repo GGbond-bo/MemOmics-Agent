@@ -3,7 +3,7 @@
   "name": "远端集群执行规程（SSH + 调度器）",
   "category": "bioinformatics",
   "language": "R+Python",
-  "description": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。",
+  "description": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用：session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。",
   "starting_prompt": "使用 远端集群执行规程（SSH + 调度器） 进行分析",
   "source_dir": "skills/bioinformatics/remote-cluster-execution",
   "memomics_module": "",
@@ -15,7 +15,9 @@
     "sge",
     "slurm",
     "conda-env",
-    "environment-inventory"
+    "environment-inventory",
+    "persistent-session",
+    "kernel-persistence"
   ],
   "aliases": [],
   "trigger_level": "RED",
@@ -31,11 +33,15 @@
     "投递任务",
     "qsub",
     "slurm",
-    "sge"
+    "sge",
+    "常驻会话",
+    "读一次一直用",
+    "不要重复读取 rds",
+    "kernel 式持久化"
   ],
-  "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。",
-  "success_count": 8,
-  "proven_script": "large_cache.py",
+  "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用：session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。",
+  "success_count": 12,
+  "proven_script": "r_session_daemon.R",
   "proven_params": [
     {
       "species": "",
@@ -140,9 +146,61 @@
       "approved": false,
       "custom_script": false,
       "result": "方案A落地交付：large_cache.py（scan/mark/list/verify/clean，≥100MB 推荐持久化，指纹=size+首尾1MB sha256）+ 12 用例全绿 + 检查点模板 checkpoint_job.R / run_cluster_job.sh + skill 铁规 9/10 + references 机制全表"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "ssh23_visibility_probe.sh",
+      "params": "node=ssh23; whoami/id/hostname/ps/memomics_jobs/home-df/qstat/sge-path 一条批量只读",
+      "date": "2026-10-08",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MobaXterm 可见性核查（ssh23）：① 登录账号 zhangbo11(uid 1003064)——注意工作目录名是 zhangbo 但账号是 zhangbo11；② 无任何 Rscript 分析进程在跑（仅系统 root python2 服务）；③ memomics_jobs 账本在 $HOME（/home 盘 = 10.53.20.27:/export/home 1.0T 66%），非"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "ssh23_htop_visibility_live_demo.sh",
+      "params": "submit sleep 300 @ssh23 + ps -u zhangbo11 现场取证；qmaster TCP 536 探测；HOSTALIASES 补解析对照",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "实弹验证 htop 可见性：submit 返回 exit=124 超时错误但作业已起（PID 87424 sleep 300，PPID=1 已脱离 SSH）；ps -u zhangbo11 同时看到用户自己的两个 htop(pts/0) → 同用户同机可见。SGE 实况：ssh23 无 sge_execd；qmaster 10.54.31.75:536 TCP 不可达(仅 DNS+网络双失败)；H"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "script": "musc_umap_prop_ssh3.R",
+      "params": "IN=MuSC_exercise_clean_dele_cluster_umap.rds (662MB); ENV=/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/envs/R4.41/bin/Rscript; OUT=/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/umap_prop_20261008; launch=setsid nohup on ssh3 (直接在本节点，不走 SGE 队列以保证 htop 可见)",
+      "date": "2026-10-08",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "ssh3 直启成功：ps -u zhangbo11 可见 bash wrapper(PID 127336) + Rscript(127350) + tee(127351)，host=cngb-supermem-a15-3 确认跑在 ssh3；脚本自适应 introspect meta.data 后出多张 UMAP(亚群/分组/分面) + 亚群比例堆叠图(counts+100%)，并写比例 CSV "
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise",
+      "script": "r_session_daemon.R",
+      "params": "session=s-20261009-014300-vq48; node=ssh23; env=R4.41; input=MuSC_exercise_clean_dele_cluster_umap.rds (661.8MB); 验收口径=读 rds 跑 umap，隔几分钟再 FindMarkers，证明不重读",
+      "date": "2026-10-09",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "常驻 R 会话（kernel 式持久化）落地并通过用户口径验收：readRDS 661.8MB 一次 16.3s（readrds_calls=1），RunUMAP(harmony 1:30) 38.9s（对象 2GB，RSS 2.5→3.0GB），约 7 分钟后 FindMarkers(lpMuSC vs dMuSC) 3.6s（20266 行/1323 显著，CSV 1.25MB），全程同一 pid=109595、readrds_calls 始终=1 → 证明复用内存对象不回读文件。实现=base-R daemon + 文件队列（staging→queue 原子 mv）+ state 心跳 + ckpt 检查点；19 个离线用例全绿。"
     }
   ],
   "user_prefs": {
-    "last_used_script": "large_cache.py"
+    "last_used_script": "r_session_daemon.R"
   }
 }

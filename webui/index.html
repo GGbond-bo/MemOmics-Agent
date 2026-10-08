@@ -15645,7 +15645,7 @@ function emViewAgent(d) {
 // === 远端集群控制台（2026-09-19）===
 // WebUI 里直接敲 SSH 命令 / 交作业：走 /api/cluster/*，最终调用的是 remote_cluster 工具的同一个
 // handler，所以 UI 与 agent 的行为完全一致（只是 UI 不过 rail_review / 辩论门禁——那是给模型看的闸）。
-var _clusterHist = [], _clusterHistIdx = -1, _clusterCfg = null, _clusterBusy = false, _clusterLastJob = '';
+var _clusterHist = [], _clusterHistIdx = -1, _clusterCfg = null, _clusterBusy = false, _clusterLastJob = '', _clusterLastSession = '';
 
 var CLUSTER_MODES = {
   run:    { opt: 'run · 同步执行',    ph: '在登录节点执行的命令，例：squeue -u $USER  或  ls -lh /root/data', hint: 'run：登录节点同步执行。只放轻量命令（ls/du/head/which），重计算会被管理员封号；要算重活请用 submit。' },
@@ -15658,7 +15658,14 @@ var CLUSTER_MODES = {
   locate: { opt: 'locate · 路径判定',  ph: '要判定的路径（用户给的原话就行）  例：shared.bam   或  /root/data/x.bam   或  E:/data/x.vcf', hint: 'locate：判定一个路径到底在本地还是在集群上——本机查原样/work//results 各会话目录/uploads，各节点查原样/工作目录（含 data/），返回 local / cluster / ambiguous（两边都有）/ missing。用户没说数据在哪时先跑这个，别猜。' },
   check:  { opt: 'check · 自检',      ph: '（不用输入，直接点执行）', hint: 'check：连通性 / 调度器 / CPU·内存 / 工作目录 / 已装工具自检。第一次连集群先跑这个。' },
   nodes:  { opt: 'nodes · 节点体检',  ph: '（不用输入；上面的节点选一个就只查那一个）', hint: 'nodes：列出配置里的所有节点，逐个探连通性 + CPU核数 + 负载 + 工作目录剩余空间，用来判断「现在哪台空着」。' },
-  jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' }
+  jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' },
+  session_start:   { opt: '🧠 会话 · 开常驻', ph: '要读一次的大文件（可留空 = 空会话）  例：/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/musc_annotation_umap_clean.rds', hint: 'session_start：在节点上起一个常驻 R 进程（setsid，ps 里看得见），带大文件就先同步读进内存——之后 FindMarkers / CellChat / 参数扫描都复用这个对象，不再回读。大文件（≥100MB）会自动落任务标记。' },
+  session_exec:    { opt: '🧠 会话 · 投代码', ph: 'R 代码（多行；同一个进程里接着跑）  例：\nDimPlot(musc, reduction = "umap")\nFindMarkers(musc, ident.1 = "MuSC", only.pos = TRUE)', hint: 'session_exec：把 R 代码投给常驻会话（同一个 globalenv）。留空 = 看状态。跑得久的命令（FindMarkers 几分钟）建议走 agent 用 async=true，或先投再点「看状态」。' },
+  session_status:  { opt: '🧠 会话 · 看状态', ph: '会话号（留空 = 最近一个）', hint: 'session_status：pid 活没活 / busy 在跑什么 / 内存 RSS / 对象数 / readRDS 审计 / 队列 / 检查点 / 日志尾巴。' },
+  session_save:    { opt: '🧠 会话 · 存检查点', ph: '会话号 [检查点名]（会话号可留空）', hint: 'session_save：把会话对象落成 ckpt/<名>.rds（默认全部会话对象 + 时间戳名）。大对象会慢，但进程死了/换节点就靠它恢复。' },
+  session_restore: { opt: '🧠 会话 · 恢复检查点', ph: '会话号 [检查点名]（留空检查点名 = 最新一个）', hint: 'session_restore：从 ckpt/*.rds 把对象恢复进会话内存（默认最新一个）。换节点后：先 session_start（同 session_id）再 restore。' },
+  session_stop:    { opt: '🧠 会话 · 停', ph: '会话号（留空 = 最近一个）', hint: 'session_stop：让常驻进程退出、释放内存。想留住对象请先 session_save（agent 侧可传 save=true）。' },
+  session_list:    { opt: '🧠 会话 · 列表', ph: '（不用输入，直接点执行）', hint: 'session_list：本机账本里的全部常驻会话（id/节点/标题/输入/最近活跃/readRDS 次数）。' }
 };
 
 function openClusterConsole() {
@@ -15667,7 +15674,8 @@ function openClusterConsole() {
   el.style.display = 'flex';
   var sel = document.getElementById('cluster-mode');
   if (sel && !sel.options.length) {
-    var order = ['run', 'submit', 'status', 'logs', 'cancel', 'push', 'pull', 'locate', 'check', 'nodes', 'jobs'];
+    var order = ['run', 'submit', 'status', 'logs', 'cancel', 'push', 'pull', 'locate', 'check', 'nodes', 'jobs',
+                 'session_start', 'session_exec', 'session_status', 'session_save', 'session_restore', 'session_stop', 'session_list'];
     for (var i = 0; i < order.length; i++) {
       var o = document.createElement('option');
       o.value = order[i];
@@ -16265,6 +16273,29 @@ function clusterBuildArgs(mode, text) {
     if (!t.trim()) { clusterPrint('✗ locate 需要给出要判定的路径', 'err'); return null; }
     return { action: 'locate', path: t.trim() };
   }
+  if (mode === 'session_start') {
+    var sa = { action: 'session_start' };
+    if (t.trim()) sa.input = t.trim();
+    return sa;
+  }
+  if (mode === 'session_exec') {
+    if (!t.trim()) { clusterPrint('（没输代码 → 当作看会话状态）', 'sys'); return { action: 'session_status' }; }
+    return { action: 'session_exec', code: t };
+  }
+  if (mode === 'session_status' || mode === 'session_stop' || mode === 'session_save' || mode === 'session_restore') {
+    var sb = { action: mode };
+    if (tk[0]) sb.session_id = tk[0];
+    else if (_clusterLastSession) {
+      sb.session_id = _clusterLastSession;
+      clusterPrint('（留空 → 用最近看到的会话号 ' + _clusterLastSession + '）', 'sys');
+    }
+    if (mode === 'session_save' && tk[1]) sb.name = tk[1];
+    if (mode === 'session_restore' && !tk[0] && tk[1]) { sb.session_id = _clusterLastSession; sb.name = tk[1]; }
+    return sb;
+  }
+  if (mode === 'session_list') {
+    return { action: 'session_list' };
+  }
   if (mode === 'push') {
     if (!tk[0]) { clusterPrint('✗ push 需要本地路径', 'err'); return null; }
     var c = { action: 'push', local_path: tk[0] };
@@ -16323,6 +16354,62 @@ function clusterRenderResult(mode, res) {
     }
     if (r.tip) clusterPrint(r.tip, 'sys');
     clusterPrint('👉 在上面「节点」下拉里选一台，再点执行；不知道哪台空着就先点「🖥 节点体检」。', 'sys');
+    return;
+  }
+  if (r.session_id) _clusterLastSession = String(r.session_id);
+  if (mode.indexOf('session_') === 0) {
+    var hs = '▸ ' + mode + (r.node ? (' · 节点 ' + r.node) : '') + (r.session_id ? (' · 会话 ' + r.session_id) : '');
+    if (r.seconds != null && r.seconds !== '') hs += '  (' + r.seconds + 's)';
+    if (r.pid) hs += ' · pid ' + r.pid;
+    clusterPrint(hs, bad ? 'err' : 'ok');
+    if (r.summary) clusterPrint(r.summary, 'sys');
+    if (r.status === 'exists') clusterPrint('ℹ️ 这个会话目录下已经有常驻进程在跑了，没有重复拉起；直接投代码即可。', 'sys');
+    if (r.status === 'accepted') clusterPrint('⏳ 请求已投递（不等待）：结果会写到 done/ 目录，用「看状态」查进度。', 'sys');
+    if (r.status === 'running') clusterPrint('⏳ 还在跑：过一会儿再点「看状态」。', 'sys');
+    if (r.alive === false) clusterPrint('⚠️ 进程已不在（daemon 停了，内存对象随之释放）；ckpt/ 里有检查点的话可用 session_start + restore=latest 拉回来。', 'err');
+    if (r.alive === true || r.daemon_status) {
+      var sm = 'daemon：' + (r.daemon_status || '?');
+      if (r.busy) sm += '（busy' + (r.current_request ? ': ' + r.current_request : '') + '）';
+      if (r.rss_h) sm += ' · 内存 ' + r.rss_h;
+      if (r.objects != null && r.objects !== '') sm += ' · 对象 ' + r.objects;
+      if (r.jobs_done != null && r.jobs_done !== '') sm += ' · 已跑 ' + r.jobs_done + ' 个请求';
+      clusterPrint(sm, 'sys');
+    }
+    if (r.r_version) clusterPrint('R：' + r.r_version, 'sys');
+    if (r.readrds_calls != null && r.readrds_calls !== '') clusterPrint('readRDS 审计：本会话累计 ' + r.readrds_calls + ' 次（FindMarkers/CellChat 这类步骤不该新增——新增了说明真的又读了文件）', 'sys');
+    if (r.input) clusterPrint('输入：' + r.input + (r.object ? ('　→ 对象 ' + r.object) : ''), 'sys');
+    if (r.load && r.load.output) clusterPrint('读入：' + String(r.load.output).replace(/\s+$/, ''), 'ok');
+    if (r.ckpt) clusterPrint('检查点：' + r.ckpt, 'ok');
+    if (r.queue) clusterPrint('队列：' + String(r.queue).replace(/\n/g, ' | '), 'sys');
+    if (r.ckpt_recent) clusterPrint('最近检查点：\n' + r.ckpt_recent, 'sys');
+    if (r.last_result_tail) clusterPrint('最近一次结果（tail）：\n' + r.last_result_tail, 'ok');
+    if (r.log_tail) clusterPrint('日志尾巴：\n' + r.log_tail, null);
+    if (r.output) clusterPrint(String(r.output).replace(/\s+$/, ''), null);
+    if (r.mem_note) clusterPrint('内存：' + r.mem_note, 'sys');
+    if (r.marker_note) clusterPrint(r.marker_note, 'sys');
+    if (r.advisory) clusterPrint('⚠️ ' + r.advisory, 'sys');
+    if (r.error) clusterPrint(r.error, 'err');
+    if (r.hint) clusterPrint('提示：' + r.hint, 'sys');
+    if (r.sessions) {
+      for (var si = 0; si < r.sessions.length; si++) {
+        var ss = r.sessions[si];
+        clusterPrint('   • ' + ss.id + '　' + (ss.node || '') + '　' + (ss.status || '')
+          + (ss.title ? ('　' + ss.title) : '')
+          + (ss.r_version ? ('　' + ss.r_version) : '')
+          + (ss.readrds_calls != null && ss.readrds_calls !== '' ? ('　readRDS ' + ss.readrds_calls) : '')
+          + (ss.alive === false ? '　（进程不在）' : ''), 'ok');
+      }
+      if (!r.sessions.length) clusterPrint('   （还没有会话；用「🧠 会话 · 开常驻」建一个）', 'sys');
+    }
+    var skipS = { output: 1, status: 1, summary: 1, hint: 1, session_id: 1, node: 1, pid: 1,
+                  alive: 1, daemon_status: 1, busy: 1, current_request: 1, rss_h: 1, objects: 1,
+                  readrds_calls: 1, queue: 1, ckpt_recent: 1, ckpt: 1, log_tail: 1, sessions: 1,
+                  last_result_tail: 1,
+                  error: 1, seconds: 1, load: 1, input: 1, object: 1, r_version: 1, mem_note: 1,
+                  marker_note: 1, advisory: 1, jobs_done: 1, dir: 1, request_id: 1, readrds: 1 };
+    var restS = {};
+    for (var ks in r) { if (!skipS[ks]) restS[ks] = r[ks]; }
+    if (Object.keys(restS).length) clusterPrint(JSON.stringify(restS, null, 2), bad ? 'err' : null);
     return;
   }
   if (r.job_id) _clusterLastJob = String(r.job_id);

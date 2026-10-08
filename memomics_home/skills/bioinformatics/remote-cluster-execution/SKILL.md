@@ -162,8 +162,10 @@ source <conda_root>/bin/activate <env>      # 推荐
 - 模板（直接用，别重写）：`scripts/checkpoint_job.R`（三段式 + `tools::md5sum` 指纹，只用 base R）
   + `scripts/run_cluster_job.sh`（显式 PATH 的投递包装、日志落 `$WORKDIR/log/`、`#TASK:` 打点）。
 - 语义：**同参数重投 → 跳过已完成阶段；改参数 → 只重跑受影响阶段；大输入不再重读**。
-- ⚠️ 常驻 R 会话（`qlogin`/`qrsh`/Rserve/screen）**能但别默认用**：一直占核与内存、节点被清场即全丢、
-  受 walltime 限制。只有「真·交互式反复调参」才值得，代价必须先跟用户讲清。
+- ⚠️ 常驻 R 会话：**「读一次、一直用」的交互式分析现在有正规入口 `session_*`（见下节）** ——
+  2026-10-09 用户拍板落地（「就做集群持久化，类似 kernel 那样」）。老写法（`qlogin`/`qrsh`/Rserve/
+  裸 `screen`）仍不推荐：端口/依赖/walltime 问题。会话的代价照旧要讲清：占内存、节点清场即丢内存、
+  靠 `mm_save` 检查点兜底。
 - ⚠️ 缓存只留 reductions+meta → **需要重算表达量的步骤仍回原文件**；检查点指纹只覆盖显式参数
   （脚本内硬编码常量改了要手动 `rm ckpt/<stage>.done`）。
 
@@ -223,12 +225,56 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 机制全表（schema / 阈值 / 估算口径 / 诚实边界）→ `references/large-input-cache-and-checkpoint.md`。
 
+## 🧠 常驻 R 会话（kernel 式持久化）—— 「读一次、一直用」的正规入口（2026-10-09 落地）
+
+用户原话：「我希望的持久化，是我读取了这个 rds 数据，这个数据就应该一直在……你只是弄了 10.9MB
+精简缓存，但是我还想继续做 findmarker、cellchat 其他分析呢？不会有问题吗？……就做集群持久化，
+类似 kernel 那样。」
+
+**精简缓存（铁规 9 的方案 A）只解决「同一条链别重读」**；跨天/来回的交互式分析（今天 UMAP、明天
+FindMarkers、后天 CellChat、反复调参）要的是**活着的进程**。现在它有正式入口，不用 qlogin/Rserve：
+
+| 动作 | 干什么 | 关键参数 |
+|---|---|---|
+| `session_start` | 节点上起常驻 R（setsid 后台常驻，`ps`/MobaXterm 里看得见，不开公网端口）；带 `input=<大 rds>` 就先**同步读一次**（秒数/对象名/readRDS 审计都回报） | `node` / `input` / `object` / `env`(默认 R4.41) / `rscript` / `restore='latest'` |
+| `session_exec` | 投 R 代码，在**同一进程、同一 globalenv** 接着跑（FindMarkers/CellChat/调参复用内存对象） | `session_id`（可省=该节点最近一个）/ `code` / `async=true` / `wait` |
+| `session_save` | 落检查点 `ckpt/<名>.rds`（进程死掉/换节点靠它回来） | `name` / `objects`（默认全部会话对象） |
+| `session_restore` | 从检查点把对象恢复进会话内存（默认最新一个） | `name`（可省） |
+| `session_status` | pid 活没活 / busy 在跑什么 / RSS / 对象数 / **readRDS 审计** / 队列 / 最近检查点 / **最近一次结果 tail** | `session_id`（可省）/ `live` |
+| `session_stop` | 让会话退出、释放内存（`save=true` 先落检查点） | `save` / `name` |
+| `session_list` | 本机账本 `memomics_home/remote/sessions.json`（id/节点/输入/最近活跃/readRDS 次数） | `live=true` 逐台核实 |
+
+**实测验收（2026-10-09，ssh23，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
+`readRDS` 16.3s 灌进内存（01:41:06）→ `RunUMAP(harmony 1:30)` 38.9s、对象 2GB、进程 RSS 2.5→3.0GB
+→ **约 7 分钟后**（01:54:10）跑 `FindMarkers(lpMuSC vs dMuSC)`：3.6s、20,266 行、1,323 个显著
+（上调 874）、CSV 1.25MB 落 `out/`；**全程同一个 pid=109595、`readrds_calls` 始终 = 1**（没有回读文件）。
+完整证据链与协议细节 → `references/persistent-r-session.md`。
+
+**用法纪律（都是实测踩出来的）**：
+- 会话里 `dir` 就是会话目录：图/表写 `file.path(dir, "out", ...)`；`queue/`（求情）、`done/`（结果）、
+  `ckpt/`（检查点）、`staging/`（投递缓冲，别手动放）、`state.txt`（心跳）、`session.log`。
+- **名字纪律**：结果写回**同一个对象名**（`X <- RunUMAP(X, ...)`）。实测踩坑：改写到了 `obj`，下次请求
+  又从规范名拿回旧副本 → UMAP 白跑一次。同一份内存对象可以有多个名字，但别再从旧名字取。
+- 代码要用的包**自己 `library()`**：会话是全新 R 进程，`library(Seurat)` 不会顺带 `ggplot2`——
+  实测 `ggtitle` 报 "could not find function" 就是这么来的（补 `library(ggplot2)` 即好）。
+- 长命令（FindMarkers/CellChat 几分钟~几十分钟）用 `async=true` 投递，再 `session_status` 查；
+  同步等待容易把 ssh 连接挂死。
+- 会话占内存（MuSC ~2.5GB；MF 那种 22GB rds 会到几十 GB）：**用完 `session_stop`**；同节点建议 ≤2 个
+  （`remote.session.max_sessions`，超了只提示不硬拦）。
+- 铁规 10 口径：**用户要求开常驻会话 = 已经回答了「要不要持久化」**（`session_start` 自动落
+  `not_included=[]` 的标记，不再背「精简缓存没矩阵」的语义）；但**不许在用户拒绝持久化时偷偷开会话**。
+- 进程被清场/节点重启 → 内存对象没了：`session_start(session_id=<旧 id>, restore='latest')` 从检查点
+  拉回来（不必重读原文件）；没存检查点就只能重读（600MB ≈ 20 秒，先跟用户讲清代价）。
+- 工作环境/装包环境的分工不变：会话默认用 zhangxiao6 的 `R4.41`（只读，⛔ 不装包）；缺包在
+  `zhangbo/envs/R4.4.1_zb` 装好后从会话里 `.libPaths()` / `PATH` 引用。
+
 ## 探查/执行速查
 
 | 目的 | 动作 |
 |---|---|
 | 摸环境 | `action="run"` + `scripts/probe_cluster_envs.sh <conda_root>` |
 | 大输入该不该持久化 | **本机**：`large_cache scan <路径> --json`；**集群**：`large_cache scan --remote --node <节点> <路径> --json` → ≥100MB 弹窗 → `large_cache mark ... --remote`；**硬闸**：run/submit 读到未标记大输入 → `needs_persist` 拒执行 |
+| 常驻会话（读一次一直用） | `action="session_start" input="<大 rds>"` → `action="session_exec" code="..."`（长任务 `async=true`）→ `session_status`（含 readRDS 审计与结果 tail）→ `session_save`/`session_restore` → 用完 `action="session_stop"` |
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
@@ -244,6 +290,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 - `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
 - `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `zhangbo11`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
+- `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、以及 4 个实测踩坑。
 
 **ssh3 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
 
@@ -299,3 +346,5 @@ source <conda_root>/bin/activate <env>      # 推荐
 | - | - | - | 2026-10-08 | ssh23_visibility_probe.sh | - | - |  |
 | - | - | - | 2026-10-08 | ssh23_htop_visibility_live_demo.sh | - | - |  |
 | human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_ssh3.R | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
+| - | - | - | 2026-10-09 | test_cluster_session.py（19 用例） | - | - |  |
