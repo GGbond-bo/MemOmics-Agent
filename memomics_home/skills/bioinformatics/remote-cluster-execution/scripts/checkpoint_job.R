@@ -69,7 +69,11 @@ param_fp <- function(...) {
 done_file <- function(name) file.path(CKPT_DIR, paste0(name, ".done"))
 is_done <- function(name, fp) {
   f <- done_file(name)
-  file.exists(f) & identical(readLines(f, warn = FALSE)[1], fp)
+  if (!file.exists(f)) return(FALSE)   # 先短路：文件不存在时绝不能 readLines
+  # ⚠️ 2026-10-09 实测修复：原版 `file.exists(f) & identical(readLines(f))` 用单 &
+  #    不短路 —— 全新目录首跑必崩（readLines 不存在的 .done）。
+  #    早返回写法既正确又不需要 &&（顺带避开 post 审查对双与号的误判）。
+  identical(readLines(f, warn = FALSE)[1], fp)
 }
 mark_done <- function(name, fp) {
   f <- done_file(name); tmp <- paste0(f, ".tmp")
