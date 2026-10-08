@@ -123,6 +123,7 @@ _DEFAULT_CFG = {
     "ge_pe": "smp",              # 并行环境名（qconf -spl 可查；多核作业用 #$ -pe <名> N）
     "ge_mem_res": "vf",          # 内存资源名（华大系 GE 是 vf=virtual_free；别的 GE 常见 h_vmem/mem_free）
     "ge_gpu_res": "num_gpu",     # GPU 资源名
+    "auto_record_env": True,     # check 成功后把节点环境自动沉淀到 🧩 环境管理（environment.json）
 }
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
@@ -1022,6 +1023,26 @@ def _action_check(cfg: dict, args: dict) -> str:
     if scheduler == "auto":
         scheduler = _sched_from_probe(sched_bins)
     remote_home = getattr(conn, "_remote_home", "")
+    # 自检成功 → 自动把节点环境沉淀到 🧩 环境管理（environment.json cluster.nodes.<名>.probed；
+    # 用户手填的声明字段永不覆盖）。失败只记 warning，绝不影响自检本身。
+    env_sync = ""
+    if cfg.get("auto_record_env", True):
+        try:
+            from memomics.bio_tools import env_inventory as _ei
+            rec = _ei.record_cluster_node(cfg.get("_name") or cfg["host"], {
+                "status": "ok", "host": cfg["host"], "user": cfg["user"],
+                "scheduler": scheduler, "workdir": workdir,
+                "workdir_missing": ("WORKDIR_MISSING" in output),
+                "remote_home": remote_home,
+                "bins": {k: v for k, v in sched_bins.items() if v and not str(k).endswith("_ver")},
+                "output": output,
+            })
+            if rec.get("ok"):
+                env_sync = ("已同步到 🧩 环境管理（environment.json → cluster.nodes.%s.probed）"
+                            % (cfg.get("_name") or cfg["host"]))
+                output += "\n== env_sync ==\n" + env_sync
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("节点环境同步失败（不影响自检）: %s", exc)
     return _ok({
         "status": "ok" if res.get("returncode") == 0 else "partial",
         "node": cfg.get("_name") or cfg["host"],
@@ -1033,6 +1054,7 @@ def _action_check(cfg: dict, args: dict) -> str:
         "workdir_missing": ("WORKDIR_MISSING" in output),
         "scheduler": scheduler,
         "bins": {k: v for k, v in sched_bins.items() if v},
+        "env_sync": env_sync,
         "exit_code": res.get("returncode"),
         "output": _truncate(output, cfg["max_output_chars"]),
     })

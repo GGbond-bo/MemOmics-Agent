@@ -15522,7 +15522,12 @@ function emDeclHtml(cl) {
       emRow(emT('em_decl_user'), emEsc(v.user || '-')) +
       emRow(emT('em_decl_workdir'), emEsc(v.workdir || '-')) +
       emRow('scheduler', emEsc(v.scheduler || '-')) +
-      emRow(emT('em_decl_activate'), '<span class="em-code">' + emEsc(v.conda_activate || '-') + '</span>'));
+      emRow(emT('em_decl_activate'), '<span class="em-code">' + emEsc(v.conda_activate || '-') + '</span>') +
+      (v.probed ? emRow('🔬 实测', emEsc((v.probed.cpus ? v.probed.cpus + ' 核' : '') +
+        (v.probed.mem_total_gb ? ' / ' + v.probed.mem_total_gb + ' GB' : '') +
+        (v.probed.scheduler_detected ? ' / ' + v.probed.scheduler_detected : ''))) +
+        emRow('版本', emEsc([((v.probed.versions || {}).r || ''), ((v.probed.versions || {}).python || '')].filter(Boolean).join('；') || '-')) +
+        emRow('同步于', emEsc(String(v.probed.at || '').slice(0, 19))) : ''));
   });
   if (C.pitfalls && C.pitfalls.length) {
     out += '<div class="em-hint">' + C.pitfalls.map(function (p) { return '⚠️ ' + emEsc(p); }).join('<br>') + '</div>';
@@ -15787,6 +15792,8 @@ function clusterFillCfg(c) {
   clusterSetVal('cc-default-node', c.default_node);
   var np = document.getElementById('cc-node-policy');
   if (np) np.value = c.node_policy || 'ask';
+  var ar = document.getElementById('cc-auto-record-env');
+  if (ar) ar.checked = (c.auto_record_env !== false);
   clusterFillNodes(c);
   clusterFillNodeSelect();
 }
@@ -16206,6 +16213,8 @@ async function clusterSaveCfg(andCheck) {
   body.default_node = clusterGetVal('cc-default-node');
   var npEl = document.getElementById('cc-node-policy');
   body.node_policy = npEl ? npEl.value : 'ask';
+  var arEl = document.getElementById('cc-auto-record-env');
+  body.auto_record_env = !!(arEl && arEl.checked);
   try {
     var r = await fetch('/api/cluster/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var d = await r.json();
@@ -18470,6 +18479,7 @@ async function saveUpdateConfig(mode) {
         <option value="ask">ask（多个节点时先问清用哪个）</option>
         <option value="auto">auto（暂未实现，按 ask 处理）</option>
       </select></label>
+      <label title="自检成功后，自动把节点环境（核数/内存/调度器/R·Python 版本）沉淀到 🧩 环境管理；你手填的声明字段不会被覆盖">自检后自动同步到环境管理<input type="checkbox" id="cc-auto-record-env"></label>
       <div class="cc-nodesec">
         <div class="cc-nodesec-head">
           <button class="cc-btn primary" onclick="cwOpen()">＋ 添加节点（向导）</button>

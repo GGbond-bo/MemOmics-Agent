@@ -294,6 +294,22 @@ def declared_env() -> dict:
             if isinstance(env.get(k), dict) and env[k]}
 
 
+def _write_environment_json(env: dict) -> str:
+    """原子写 environment.json（写前留 .bak）。返回路径；调用方负责把 env 内容填好。"""
+    path = os.path.join(_app_root(), "environment.json")
+    env["_last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        shutil.copy2(path, path + ".bak")
+    except OSError:
+        pass
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(env, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+    return path
+
+
 def save_declared(payload: dict) -> dict:
     """把面板填写的环境声明写回 environment.json（持久）。
 
@@ -312,23 +328,84 @@ def save_declared(payload: dict) -> dict:
     size = len(json.dumps(keep, ensure_ascii=False))
     if size > _DECLARED_MAX_BYTES:
         raise ValueError("声明内容过大（%d 字节 > %d）" % (size, _DECLARED_MAX_BYTES))
-    path = os.path.join(_app_root(), "environment.json")
     env = _read_environment_json()
     if not env:
-        raise ValueError("读不到 environment.json：%s" % path)
+        raise ValueError("读不到 environment.json：%s" % os.path.join(_app_root(), "environment.json"))
     env.update(keep)
-    env["_last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    try:
-        shutil.copy2(path, path + ".bak")
-    except OSError:
-        pass
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(env, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
-    os.replace(tmp, path)
+    path = _write_environment_json(env)
     return {"ok": True, "path": path, "saved": sorted(keep), "bytes": size,
             "declared": declared_env()}
+
+
+def _parse_check_resources(output: str) -> dict:
+    """从 remote_cluster check 输出的 == cpu_mem == 段抠核数（nproc）与内存 GB（free -g）。"""
+    out = {}
+    m = re.search(r"== cpu_mem ==\n(.*?)(?=\n== |\Z)", output or "", re.S)
+    if not m:
+        return out
+    lines = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
+    if lines and lines[0].isdigit():
+        out["cpus"] = int(lines[0])
+    for ln in lines:
+        if ln.lower().startswith("mem:"):
+            parts = ln.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                out["mem_total_gb"] = int(parts[1])
+            break
+    return out
+
+
+def record_cluster_node(node_name: str, payload: dict) -> dict:
+    """把一次成功的 remote_cluster check 沉淀进 environment.json 的 cluster.nodes.<名>.probed。
+
+    合并规则（用户 2026-10-08 定：自己触发、自己整理保存）：
+      * probed 命名空间每次全量刷新（机器实测数据：核数/内存/调度器/版本/工具）；
+      * 用户手填的声明字段（host/user/workdir/scheduler/conda_activate）只在缺失时补，
+        永不覆盖 —— 探针管"现在有什么"，声明管"该用哪个"。
+    永不抛异常：任何失败返回 {"ok": False, "error": ...}，自检流程不能被记录打断。
+    """
+    try:
+        name = str(node_name or "").strip()
+        if not name or not isinstance(payload, dict) or payload.get("status") == "error":
+            return {"ok": False, "error": "无有效自检结果"}
+        env = _read_environment_json()
+        if not env:
+            return {"ok": False, "error": "读不到 environment.json"}
+        cluster = env.get("cluster")
+        if not isinstance(cluster, dict):
+            cluster = {}
+            env["cluster"] = cluster
+        nodes = cluster.get("nodes")
+        if not isinstance(nodes, dict):
+            nodes = {}
+            cluster["nodes"] = nodes
+        entry = nodes.get(name)
+        if not isinstance(entry, dict):
+            entry = {}
+            nodes[name] = entry
+        # 声明字段只补不覆盖
+        for k, v in (("host", payload.get("host")), ("user", payload.get("user")),
+                     ("workdir", payload.get("workdir"))):
+            if not entry.get(k) and v:
+                entry[k] = str(v)
+        sched = str(payload.get("scheduler") or "").strip()
+        if not entry.get("scheduler") and sched and sched != "auto":
+            entry["scheduler"] = sched
+        output = str(payload.get("output") or "")
+        probed = {
+            "at": _iso(),
+            "scheduler_detected": sched,
+            "remote_home": str(payload.get("remote_home") or ""),
+            "workdir_ok": not bool(payload.get("workdir_missing")),
+            "versions": _cluster_versions(output),
+            "bins": payload.get("bins") or {},
+        }
+        probed.update(_parse_check_resources(output))
+        entry["probed"] = probed
+        path = _write_environment_json(env)
+        return {"ok": True, "path": path, "node": name}
+    except Exception as exc:  # noqa: BLE001 — 记录失败绝不能打断自检
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 
 
 def _declared_digest_lines() -> list:
@@ -347,6 +424,15 @@ def _declared_digest_lines() -> list:
     for name, info in nodes.items():
         if info.get("conda_activate"):
             out.append("  · %s 激活 %s" % (name, info["conda_activate"]))
+        pr = info.get("probed")
+        if isinstance(pr, dict) and pr.get("cpus"):
+            bits = ["%s核" % pr["cpus"]]
+            if pr.get("mem_total_gb"):
+                bits.append("%sGB" % pr["mem_total_gb"])
+            rver = str((pr.get("versions") or {}).get("r") or "")
+            if rver:
+                bits.append(rver[:36])
+            out.append("  · %s 实测 %s（%s 同步）" % (name, "/".join(bits), str(pr.get("at") or "")[:10]))
     if cl.get("_rule"):
         out.append("  · ⛔ 只用声明的环境；要换先问用户")
     return out
@@ -374,6 +460,23 @@ def _declared_md_lines() -> list:
         out.append("- **%s**：%s" % (name, " ｜ ".join(str(b) for b in bits if b)))
         if info.get("conda_activate"):
             out.append("  - 激活：%s" % info["conda_activate"])
+        pr = info.get("probed")
+        if isinstance(pr, dict) and pr:
+            pbits = []
+            if pr.get("cpus"):
+                pbits.append("%s 核" % pr["cpus"])
+            if pr.get("mem_total_gb"):
+                pbits.append("%s GB 内存" % pr["mem_total_gb"])
+            if pr.get("scheduler_detected"):
+                pbits.append("调度器 %s" % pr["scheduler_detected"])
+            ver = pr.get("versions") or {}
+            for vk in ("r", "python"):
+                if ver.get(vk):
+                    pbits.append(str(ver[vk])[:60])
+            if pr.get("workdir_ok") is False:
+                pbits.append("⚠️ 工作目录不存在")
+            pbits.append("同步于 %s" % str(pr.get("at") or "")[:19])
+            out.append("  - 实测：%s" % " ｜ ".join(pbits))
     if cl.get("pitfalls"):
         out += ["", "已知坑："] + ["- %s" % p for p in cl["pitfalls"]]
     out.append("")

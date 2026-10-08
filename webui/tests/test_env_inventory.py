@@ -808,3 +808,84 @@ def test_api_declared_endpoint_and_route_registered():
     assert "await asyncio.to_thread(mod.save_declared, payload)" in server
     routes = json.load(open(os.path.join(WEBUI, "middleware_routes.json"), encoding="utf-8"))
     assert routes["/api/env/declared"] == "local"
+
+
+# ---------------------------------------------------------------------------
+# check → 环境管理自动沉淀（record_cluster_node，2026-10-08）
+# 探针数据进 probed 命名空间（每次全量刷新）；用户声明字段只补不覆盖。
+# ---------------------------------------------------------------------------
+_CHECK_PAYLOAD = {
+    "status": "ok",
+    "host": "cngb-supermem-a15-3",
+    "user": "zhangbo11",
+    "scheduler": "gridengine",
+    "workdir": "/hwfssz3/PS_JLU/zhangbo/",
+    "workdir_missing": False,
+    "remote_home": "/home/zhangbo11",
+    "bins": {"qsub": "/opt/gridengine/bin/lx-amd64/qsub", "git": "/usr/bin/git"},
+    "output": (
+        "== host ==\ncngb-supermem-a15-3\nzhangbo11\n"
+        "== cpu_mem ==\n144\n              total        used        free\n"
+        "Mem:           3023        1967        1045\n"
+        "== versions ==\nRscript (R) version 4.4.1 (2024-06-14)\n"
+    ),
+}
+
+
+def test_record_cluster_node_merges_without_clobbering(env_json):
+    _write_decl(env_json, _DECL)  # ssh3 已有用户手填声明（host/conda_activate）
+    r = ei.record_cluster_node("ssh3", dict(_CHECK_PAYLOAD))
+    assert r["ok"], r
+    env = json.loads(env_json.read_text(encoding="utf-8"))
+    node = env["cluster"]["nodes"]["ssh3"]
+    # 用户声明字段不被覆盖
+    assert node["host"] == "hpc.example.edu"
+    assert node["conda_activate"] == "source /x/bin/activate <env>"
+    # probed 全量落盘
+    pr = node["probed"]
+    assert pr["cpus"] == 144
+    assert pr["mem_total_gb"] == 3023
+    assert pr["scheduler_detected"] == "gridengine"
+    assert pr["versions"]["r"].startswith("Rscript (R) version 4.4.1")
+    assert pr["bins"]["qsub"].endswith("qsub")
+    # 再记一次：probed 刷新、声明依旧
+    p2 = dict(_CHECK_PAYLOAD)
+    p2["output"] = _CHECK_PAYLOAD["output"].replace("144", "128", 1)
+    assert ei.record_cluster_node("ssh3", p2)["ok"]
+    node2 = json.loads(env_json.read_text(encoding="utf-8"))["cluster"]["nodes"]["ssh3"]
+    assert node2["probed"]["cpus"] == 128
+    assert node2["host"] == "hpc.example.edu"
+
+
+def test_record_cluster_node_new_node_fills_declared_fields(env_json):
+    _write_decl(env_json, _DECL)
+    r = ei.record_cluster_node("ssh23", dict(_CHECK_PAYLOAD))
+    assert r["ok"], r
+    env = json.loads(env_json.read_text(encoding="utf-8"))
+    node = env["cluster"]["nodes"]["ssh23"]
+    # 新节点：声明字段缺失 → 由实测补齐
+    assert node["host"] == "cngb-supermem-a15-3"
+    assert node["workdir"] == "/hwfssz3/PS_JLU/zhangbo/"
+    assert node["scheduler"] == "gridengine"
+    assert node["probed"]["cpus"] == 144
+    # digest / markdown 都带实测行
+    digest = "\n".join(ei._declared_digest_lines())
+    assert "ssh23" in digest and "144核" in digest
+    md = "\n".join(ei._declared_md_lines())
+    assert "实测" in md and "3023 GB" in md
+
+
+def test_record_cluster_node_never_raises(env_json):
+    assert not ei.record_cluster_node("", {})["ok"]
+    assert not ei.record_cluster_node("ssh3", {"status": "error"})["ok"]
+
+
+def test_frontend_and_backend_auto_record_wired():
+    text = _read_index()
+    assert 'id="cc-auto-record-env"' in text
+    assert "auto_record_env" in text
+    with open(os.path.join(WEBUI, "server.py"), encoding="utf-8") as fh:
+        assert '"auto_record_env"' in fh.read()
+    rc = os.path.join(_ROOT, "memomics", "bio_tools", "remote_cluster.py")
+    with open(rc, encoding="utf-8") as fh:
+        assert "record_cluster_node" in fh.read()

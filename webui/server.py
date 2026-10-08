@@ -19812,7 +19812,7 @@ async def ws_endpoint(ws: WebSocket):
 _CLUSTER_FIELDS = (
     "enabled", "host", "user", "port", "key", "workdir", "scheduler",
     "partition", "queue", "local_root", "remote_root", "timeout", "job_dir",
-    "extra_ssh_options", "default_node", "node_policy",
+    "extra_ssh_options", "default_node", "node_policy", "auto_record_env",
 )
 # 单个命名节点里允许覆盖的字段（前端节点编辑器渲染的就是这些；其余字段走共享配置）
 _CLUSTER_NODE_FIELDS = (
