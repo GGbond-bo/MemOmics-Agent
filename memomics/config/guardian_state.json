@@ -1,13 +1,13 @@
 {
   "consecutive_failures": 0,
   "last_snapshot": {
-    "label": "hermes-verify",
+    "label": "memomics-verify",
     "commit_hash": "f626f6ece1d210dd254b88e2ac4251069705b392",
     "timestamp": "2026-07-24 18:42:30"
   },
   "snapshot_history": [
     {
-      "label": "hermes-verify",
+      "label": "memomics-verify",
       "commit_hash": "f626f6ece1d210dd254b88e2ac4251069705b392",
       "timestamp": "2026-07-24 18:42:30"
     }

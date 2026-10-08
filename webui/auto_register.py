@@ -427,7 +427,7 @@ def sync_new_skills(verbose: bool = False) -> dict:
     reg = _registry()
     if reg is None:
         return {"ok": False, "error": "skills_registry unavailable"}
-    # 只扫产品自己的技能面（hermes_home/skills/bioinformatics）。Hermes 框架自带的那批只有
+    # 只扫产品自己的技能面（memomics_home/skills/bioinformatics）。MemOmics 框架自带的那批只有
     # SKILL.md 的技能（apple-notes / arxiv / notion …）**故意不进索引**，避免污染模型触发面
     # —— 见 skills_registry.scan_skills() 的注释。2026-09-24 实测：若对整棵 skills/ 树补
     # skill.json，索引会从 357 行涨到 440 行，把 83 个无关技能灌进触发面（已回滚）。
@@ -447,7 +447,7 @@ def sync_new_skills(verbose: bool = False) -> dict:
                 need_json.append(dirpath)
     except OSError as e:
         return {"ok": False, "error": f"scan failed: {e}"}
-    # 第二种漂移（2026-09-24 真机抓到：hermes_home/skills/bioinformatics/doublet-detection 只有
+    # 第二种漂移（2026-09-24 真机抓到：memomics_home/skills/bioinformatics/doublet-detection 只有
     # SKILL.md + references/，没有 skill.json）：WebUI 技能选择器直接读 SKILL.md，所以用户「选得到」；
     # 索引只收带 skill.json 的目录，所以模型「触发不到」。这里补 skill.json（与启动 scan 同一动作），
     # 补完它才会进入下面的索引比对。

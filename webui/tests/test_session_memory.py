@@ -7,7 +7,7 @@
 3. 注入层    —— holographic prefetch 四源 + system_prompt_block（临时 db + 临时 state.db）
 
 护栏：
-- 全部使用 tmp_path，绝不触碰真实 hermes_home/memory_store.db 与 state.db
+- 全部使用 tmp_path，绝不触碰真实 memomics_home/memory_store.db 与 state.db
 - prefetch 的 history 源通过 monkeypatch get_hermes_home 指向临时目录
 - 断言不依赖真实 LLM / 网络 / 服务
 """
@@ -437,12 +437,12 @@ class TestAutoExtract:
         assert ae["default"] == "true"
 
     def test_yaml_config_reads_true(self):
-        """真实 hermes_home/config.yaml 的 auto_extract 已是 true（配置链路生效）。"""
+        """真实 memomics_home/config.yaml 的 auto_extract 已是 true（配置链路生效）。"""
         import pathlib
         import hermes_constants
         _orig = hermes_constants.get_hermes_home
         root = pathlib.Path(__file__).resolve().parent.parent.parent  # 项目根
-        hermes_constants.get_hermes_home = lambda: root / "hermes_home"
+        hermes_constants.get_hermes_home = lambda: root / "memomics_home"
         try:
             p = HolographicMemoryProvider(config={})
             assert p._config.get("auto_extract") is True
@@ -499,7 +499,7 @@ class TestDelegation:
         provider.on_delegation(task="z", result="abc")  # 不抛异常
 
     def test_delegation_toolset_registered(self):
-        """Hermes TOOLSETS 注册表含 delegation（tools=[delegate_task]）。"""
+        """MemOmics TOOLSETS 注册表含 delegation（tools=[delegate_task]）。"""
         from toolsets import TOOLSETS
         assert "delegation" in TOOLSETS
         assert "delegate_task" in TOOLSETS["delegation"]["tools"]
@@ -563,7 +563,7 @@ class TestProdCompat:
         from pathlib import Path
         # __file__ = webui/tests/test_session_memory.py → 上三级 = 项目根
         root = Path(__file__).resolve().parent.parent.parent
-        real = root / "hermes_home" / "memory_store.db"
+        real = root / "memomics_home" / "memory_store.db"
         if not real.exists():
             pytest.skip("生产库不存在（CI/临时环境）")
         conn = sqlite3.connect(f"file:{real}?mode=ro", uri=True)

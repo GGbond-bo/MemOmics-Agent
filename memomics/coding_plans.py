@@ -5,7 +5,7 @@
 百炼 Coding、阶跃 Step Plan）使用**独立端点 + 独立 key 体系**，与按量计费的
 开放平台端点不通用（sk-kimi- 前缀的 key 只在 api.kimi.com/coding 生效等）。
 本模块把这些套餐作为 WebUI「设置 → API 提供商」里的独立分组，并在用户保存
-key 后自动向套餐端点拉取可用模型（拉到的模型会并入模型选择器与 Hermes 底座）。
+key 后自动向套餐端点拉取可用模型（拉到的模型会并入模型选择器与 MemOmics 底座）。
 
 条目字段（与 server._CHINA_PROVIDERS 同构 + 扩展）：
   id/name/api/env_var/group/models —— 基础字段
@@ -147,7 +147,7 @@ def _http_get_json(url: str, headers: Dict[str, str], timeout: float = 15.0) -> 
     req_headers = {"Accept": "application/json", "User-Agent": "MemOmics/1.0"}
     req_headers.update({k: v for k, v in (headers or {}).items() if v})
     try:
-        import httpx  # hermes 底座依赖，优先使用（自带 certifi 信任库）
+        import httpx  # memomics 底座依赖，优先使用（自带 certifi 信任库）
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             resp = client.get(url, headers=req_headers)
             if resp.status_code >= 400:

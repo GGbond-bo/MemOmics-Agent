@@ -13,7 +13,7 @@ API: Ensembl REST API (https://rest.ensembl.org/)
 
 速率限制: Ensembl 限制 15 次/秒，建议间隔 0.1s。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import json
@@ -218,7 +218,7 @@ def query_ensembl(query: str, query_type: str = "symbol", species: str = "human"
         }, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(

@@ -1,6 +1,6 @@
 """execute_r — R 代码执行工具，带 SCTransform 铁轨 + OOM 自动修复。
 
-从 MemOmics 老版迁移核心逻辑，适配 hermes registry 格式。
+从 MemOmics 老版迁移核心逻辑，适配 memomics registry 格式。
 """
 import json
 import os

@@ -5,7 +5,7 @@
   代码级修复（server.py/enforcement.py/execute_r 等）只能靠换新包文件生效；
   文件级修复（config.yaml 限额等）可以在旧代码上直接迁移生效。
 本模块负责后者：幂等、只动旧默认值（用户自定义过的值不碰）、
-写 hermes_home/.fix_bundle 标记当前修复级别，供 /api/version 报告新旧。
+写 memomics_home/.fix_bundle 标记当前修复级别，供 /api/version 报告新旧。
 
 调用方：
   scripts/apply_fix_bundle.py（start.bat 启动时）
@@ -25,9 +25,9 @@ _CONFIG_MIGRATIONS = (
 )
 
 
-def _migrate_config(hermes_home: str) -> str:
+def _migrate_config(memomics_home: str) -> str:
     """config.yaml 记忆限额 10000→30000（仅当恰为旧默认值时迁移）。"""
-    p = os.path.join(hermes_home, "config.yaml")
+    p = os.path.join(memomics_home, "config.yaml")
     if not os.path.isfile(p):
         return "config.yaml 不存在，跳过"
     try:
@@ -53,10 +53,10 @@ def _migrate_config(hermes_home: str) -> str:
     return f"限额迁移 {changed} 项"
 
 
-def apply_fix_bundle(hermes_home: str, dry_run: bool = False) -> dict:
+def apply_fix_bundle(memomics_home: str, dry_run: bool = False) -> dict:
     """应用文件级迁移并推进 .fix_bundle 标记。幂等。"""
-    os.makedirs(hermes_home, exist_ok=True)
-    marker = os.path.join(hermes_home, ".fix_bundle")
+    os.makedirs(memomics_home, exist_ok=True)
+    marker = os.path.join(memomics_home, ".fix_bundle")
     try:
         with open(marker, "r", encoding="utf-8") as f:
             cur = f.read().strip()
@@ -64,7 +64,7 @@ def apply_fix_bundle(hermes_home: str, dry_run: bool = False) -> dict:
         cur = ""
     if cur >= BUNDLE:
         return {"ok": True, "up_to_date": True, "bundle": cur}
-    result = {"config": _migrate_config(hermes_home)}
+    result = {"config": _migrate_config(memomics_home)}
     if not dry_run:
         try:
             with open(marker, "w", encoding="utf-8") as f:
@@ -75,10 +75,10 @@ def apply_fix_bundle(hermes_home: str, dry_run: bool = False) -> dict:
             "to": BUNDLE, "migrations": result}
 
 
-def fix_bundle_level(hermes_home: str) -> str:
+def fix_bundle_level(memomics_home: str) -> str:
     """当前安装的修复级别（无标记 → 空串 = 旧安装）。"""
     try:
-        p = os.path.join(hermes_home, ".fix_bundle")
+        p = os.path.join(memomics_home, ".fix_bundle")
         if os.path.isfile(p):
             with open(p, "r", encoding="utf-8") as f:
                 return f.read().strip()

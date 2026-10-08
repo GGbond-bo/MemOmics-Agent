@@ -1,6 +1,6 @@
 """skill_evolution 技能目录解析（_get_skill_dir / resolve_skill_dir）回归测试。
 
-背景：引擎原先把技能目录写死为 hermes_home/skills/bioinformatics/<名>，导致用户脚本库
+背景：引擎原先把技能目录写死为 memomics_home/skills/bioinformatics/<名>，导致用户脚本库
 的分类目录（plotting/ comparison/ statistics/ user-scripts/）无法被 record_run/record_error
 识别（返回「尚未注册」并写出 action 记错的空壳归档）。
 
@@ -11,7 +11,7 @@
   L2 裁决（code_engineering, verdict=modify）边界：nested>1 不命中 / 坏根 WARNING 可断言 /
           双根同名歧义 / 结构化诊断字段 / 指纹内容哈希（非 mtime）
   L1 复审补充：调用点消费 diagnosis（query_logs / update_script，含 ambiguous）/ 无静默
-          bioinformatics 猜测 / _sync_to_hermes_home 尊重分类前缀 / CRLF·LF 指纹漂移 /
+          bioinformatics 猜测 / _sync_to_memomics_home 尊重分类前缀 / CRLF·LF 指纹漂移 /
           读失败返回 unknown
 
 纯本地文件系统操作，无外部依赖 → 默认 offline 集内可跑。
@@ -51,7 +51,7 @@ def engine(tmp_path, monkeypatch):
     if not SE_PATH.is_file():
         pytest.skip(f"engine not found: {SE_PATH}")
 
-    skills = tmp_path / "hermes_home" / "skills"
+    skills = tmp_path / "memomics_home" / "skills"
     (skills / "plotting" / "deg-updown-counts-by-subcluster").mkdir(parents=True)
     (skills / "plotting" / "deg-volcano-5comps-8sub-R").mkdir(parents=True)
     (skills / "statistics" / "cell-proportion-significance").mkdir(parents=True)
@@ -126,7 +126,7 @@ def test_root_oserror_isolated(tmp_path, monkeypatch):
     if not SE_PATH.is_file():
         pytest.skip(f"engine not found: {SE_PATH}")
 
-    skills = tmp_path / "hermes_home" / "skills"
+    skills = tmp_path / "memomics_home" / "skills"
     (skills / "plotting").mkdir(parents=True)
     (skills / "statistics" / "good-skill").mkdir(parents=True)
 
@@ -264,10 +264,10 @@ def test_degenerated_prefix_recorded(engine):
 
 
 def test_dual_root_same_name_ambiguous(tmp_path, monkeypatch):
-    """两套根目录（skills/ 与 hermes_home/skills/）各有一处同名 → 必须拒绝歧义。"""
+    """两套根目录（skills/ 与 memomics_home/skills/）各有一处同名 → 必须拒绝歧义。"""
     if not SE_PATH.is_file():
         pytest.skip(f"engine not found: {SE_PATH}")
-    old_root, new_root = tmp_path / "skills", tmp_path / "hermes_home" / "skills"
+    old_root, new_root = tmp_path / "skills", tmp_path / "memomics_home" / "skills"
     (old_root / "plotting" / "same-name").mkdir(parents=True)
     (new_root / "statistics" / "same-name").mkdir(parents=True)
     mod = _load_engine()
@@ -364,7 +364,7 @@ def test_no_silent_path_guess(engine):
 
 
 def test_sync_respects_category_prefix(tmp_path, monkeypatch):
-    """_sync_to_hermes_home：带分类前缀的新 skill 必须落到其分类目录，不搬去 bioinformatics/。"""
+    """_sync_to_memomics_home：带分类前缀的新 skill 必须落到其分类目录，不搬去 bioinformatics/。"""
     if not SE_PATH.is_file():
         pytest.skip(f"engine not found: {SE_PATH}")
     mod = _load_engine()
@@ -375,11 +375,11 @@ def test_sync_respects_category_prefix(tmp_path, monkeypatch):
     (src / "SKILL.md").write_text("# x", encoding="utf-8")
     (src / "scripts" / "s.R").write_text("1", encoding="utf-8")
 
-    mod._sync_to_hermes_home("plotting/brand-new-skill", str(src))
+    mod._sync_to_memomics_home("plotting/brand-new-skill", str(src))
 
-    landed = tmp_path / "hermes_home" / "skills" / "plotting" / "brand-new-skill"
+    landed = tmp_path / "memomics_home" / "skills" / "plotting" / "brand-new-skill"
     assert landed.is_dir(), "带前缀的 skill 未落到分类目录"
-    assert not (tmp_path / "hermes_home" / "skills" / "bioinformatics").exists(), \
+    assert not (tmp_path / "memomics_home" / "skills" / "bioinformatics").exists(), \
         "不得回退到 bioinformatics/ 猜测"
 
 

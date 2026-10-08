@@ -18,7 +18,7 @@
 | 用户自己翻终端 | 每次都要重来，agent 也学不到 |
 
 环境管理把它们收敛成**一份实测清单 + 一个缓存文件 + 三个出口**（面板 / 工具 / agent 提示词），
-三方读的是同一个 `hermes_home/env_inventory.json`，所以**面板看到的和 agent 用到的永远一致**。
+三方读的是同一个 `memomics_home/env_inventory.json`，所以**面板看到的和 agent 用到的永远一致**。
 
 ## 2. 三个出口（同一份数据）
 

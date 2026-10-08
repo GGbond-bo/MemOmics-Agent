@@ -1,8 +1,8 @@
-"""MemOmics 远端集群（SSH）工具 — 把 hermes 的 SSH 后端接进 MemOmics。
+"""MemOmics 远端集群（SSH）工具 — 把 memomics 的 SSH 后端接进 MemOmics。
 
 背景
 ----
-hermes 框架本身带 SSH 执行后端（hermes-agent/tools/environments/ssh.py 的
+memomics 框架本身带 SSH 执行后端（hermes-agent/tools/environments/ssh.py 的
 SSHEnvironment：ControlMaster 连接复用 + 持久会话快照 + cwd 标记），但 MemOmics
 的算力链是**本地**的（execute_r/execute_python 直接 subprocess 调本机 Rscript/
 python）。因此本工具把那条 SSH 链路单独接出来，给 MemOmics 增加"连集群"的能力：
@@ -13,13 +13,13 @@ python）。因此本工具把那条 SSH 链路单独接出来，给 MemOmics �
   * status/logs/cancel/jobs — 看作业状态、读日志、取消、列队列
   * push/pull  — 本地 ↔ 远端文件同步（重活产物回传本地，继续用 execute_r 分析）
 
-与 hermes SSHEnvironment 的关系（重要）
+与 memomics SSHEnvironment 的关系（重要）
 -------------------------------------
 ClusterSSH 直接继承 SSHEnvironment，复用它的 _build_ssh_command /
 _establish_connection / _detect_remote_home / _run_bash / execute / cleanup
 （即整条 SSH 传输与执行引擎），只覆盖两处：
 
-  1. 不调用父类 __init__ 里那两步"把本地 ~/.hermes 同步到远端"的逻辑
+  1. 不调用父类 __init__ 里那两步"把本地 ~/.memomics 同步到远端"的逻辑
      （file_sync.iter_sync_files 会把 credentials/skills/cache 上传到远端）。
      集群登录节点是共享机器，把本机凭据/技能推上去既不必要也不安全，
      实测本机该清单含 10 个 skills/_debates/*.json；配置了凭据时还会带凭据文件。
@@ -27,10 +27,10 @@ _establish_connection / _detect_remote_home / _run_bash / execute / cleanup
      集群场景不需要。
 
 除这两点外，SSH 命令构造（ControlMaster/ControlPersist/BatchMode/
-StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 hermes
-完全一致，因此行为可预期、出问题可按 hermes 文档排查。
+StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 memomics
+完全一致，因此行为可预期、出问题可按 memomics 文档排查。
 
-配置（hermes_home/config.yaml）
+配置（memomics_home/config.yaml）
 -------------------------------
     remote:
       enabled: true                 # 总开关；false 或缺省时本工具不出现在工具列表
@@ -56,7 +56,7 @@ StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 herme
 网关限制：ssh 使用 BatchMode=yes，**只支持密钥登录**，不支持密码交互。
 本机没有 ssh/scp 时工具自检报错并说明装法。
 
-平台差异：hermes 的 SSH 后端默认用 ControlMaster 复用连接，但 Windows 自带的
+平台差异：memomics 的 SSH 后端默认用 ControlMaster 复用连接，但 Windows 自带的
 Win32-OpenSSH 没有 mux 支持（报 "getsockname failed: Not a socket"）。本工具会自动
 探测并降级为"每次新建连接"（Linux/macOS 上仍走 ControlMaster），不需要手工配置。
 """
@@ -130,12 +130,12 @@ _CFG_CACHE = {"mtime": None, "cfg": None}
 
 
 def _get_config_path() -> Path:
-    """定位 hermes_home/config.yaml（与 debate_analysis._get_config_path 同源）。"""
+    """定位 memomics_home/config.yaml（与 debate_analysis._get_config_path 同源）。"""
     try:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
     return base / "config.yaml"
 
 
@@ -381,7 +381,7 @@ def _select_node(cfg: dict, requested: str = ""):
     table = _node_table(cfg)
     if not table:
         return None, "", _err(
-            "没有可用的远端节点：请在 hermes_home/config.yaml 的 remote: 段配置 "
+            "没有可用的远端节点：请在 memomics_home/config.yaml 的 remote: 段配置 "
             "host: <登录节点> 或 nodes: {名字: {host: ...}}"
         )
     req = str(requested or "").strip()
@@ -467,7 +467,7 @@ def _rec_matches_node(rec: dict, cfg: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# SSH 连接层（继承 hermes SSHEnvironment，跳过 ~/.hermes 同步）
+# SSH 连接层（继承 memomics SSHEnvironment，跳过 ~/.memomics 同步）
 # ---------------------------------------------------------------------------
 
 def _ensure_ssh_available() -> None:
@@ -482,13 +482,13 @@ def _ensure_ssh_available() -> None:
 
 
 def _cluster_env_class():
-    """延迟导入 hermes 的 SSHEnvironment（失败时给出清晰原因）。"""
+    """延迟导入 memomics 的 SSHEnvironment（失败时给出清晰原因）。"""
     try:
         from tools.environments.base import BaseEnvironment
         from tools.environments.ssh import SSHEnvironment
     except Exception as exc:
         raise RuntimeError(
-            "无法导入 hermes 的 SSH 后端（tools.environments.ssh）：%s。"
+            "无法导入 memomics 的 SSH 后端（tools.environments.ssh）：%s。"
             "确认 hermes-agent 目录在本进程 sys.path 上。" % exc
         )
     return BaseEnvironment, SSHEnvironment
@@ -501,7 +501,7 @@ _CLUSTER_SSH_CLS = None
 # Windows 版 OpenSSH（Win32-OpenSSH）没有编译 mux 支持，带
 # ControlMaster/ControlPath 会直接失败：getsockname failed: Not a socket。
 # 这里做能力探测：先用 mux 试连，命中该错误就永久降级为"每次新建连接"
-# （仍然复用 hermes 的 SSH 命令构造与执行引擎，只是没有连接复用）。
+# （仍然复用 memomics 的 SSH 命令构造与执行引擎，只是没有连接复用）。
 _MUX_KNOWN_UNSUPPORTED = False
 
 _MUX_ERROR_MARKERS = (
@@ -522,10 +522,10 @@ def _make_conn_class():
     BaseEnvironment, SSHEnvironment = _cluster_env_class()
 
     class ClusterSSH(SSHEnvironment):
-        """hermes SSHEnvironment 的集群变体：同样走 ssh/scp，但不做 ~/.hermes 同步。
+        """memomics SSHEnvironment 的集群变体：同样走 ssh/scp，但不做 ~/.memomics 同步。
 
         父类 __init__ 会调用 FileSyncManager.sync(force=True)，把本地
-        credentials/skills/cache 上传到远端 ~/.hermes —— 对共享登录节点不合适，
+        credentials/skills/cache 上传到远端 ~/.memomics —— 对共享登录节点不合适，
         这里刻意跳过；SSH 命令构造与执行引擎仍完全复用父类。
         """
 
@@ -541,7 +541,7 @@ def _make_conn_class():
 
             # Windows 没有 unix socket / Win32-OpenSSH 无 mux：默认关掉连接复用
             self.use_mux = (not _MUX_KNOWN_UNSUPPORTED) and os.name != "nt"
-            self.control_dir = Path(tempfile.gettempdir()) / "hermes-ssh"
+            self.control_dir = Path(tempfile.gettempdir()) / "memomics-ssh"
             self.control_dir.mkdir(parents=True, exist_ok=True)
             _socket_id = hashlib.sha256(
                 ("%s@%s:%s" % (user, host, self.port)).encode()
@@ -1368,7 +1368,7 @@ def _action_submit(cfg: dict, args: dict) -> str:
         # 实测只写 "&"、或者 setsid 不带 -f、哪怕三个 fd 全部重定向，后台进程
         # 仍留在 sshd 的会话里，ssh 通道不关闭，客户端会一直挂到超时。
         # 作业 PID 由脚本自己写进 pid 文件（setsid -f 之后 $! 拿不到真 PID）。
-        # rewrite_compound_background=False：hermes 的 execute() 默认会把 "A && B &"
+        # rewrite_compound_background=False：memomics 的 execute() 默认会把 "A && B &"
         # 改写成 "{ A && B & }"，会把后台提交命令改坏（bash: syntax error near 'echo'）。
         probe = conn.execute("setsid -f true >/dev/null 2>&1 && echo yes || echo no", timeout=60)
         detached = "yes" in (probe.get("output") or "")
@@ -1805,7 +1805,7 @@ _BOUNDED_CAPTURE_OK = None
 
 def _exec_env(conn, command: str, timeout: int = None, cwd: str = None,
               stdin_data: str = None) -> dict:
-    """调 environment.execute()：老版本 hermes 的 BaseEnvironment 不认 bounded_capture，自动降级。
+    """调 environment.execute()：老版本 memomics 的 BaseEnvironment 不认 bounded_capture，自动降级。
 
     这里刻意用签名探测而不是 try/except 包住 execute——否则命令内部的 TypeError 会被
     误判成"版本不支持"，导致同一条命令被跑第二次（有副作用的命令会出事）。
@@ -2410,7 +2410,7 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
             return _err("locate 执行失败: %s" % exc)
     if not remote_cluster_enabled():
         return _err(
-            "远端集群未配置或未启用。请在 hermes_home/config.yaml 的 remote: 段配置，两种写法任选：\n"
+            "远端集群未配置或未启用。请在 memomics_home/config.yaml 的 remote: 段配置，两种写法任选：\n"
             "① 单节点：\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
             "  key: <私钥路径>\n  workdir: <远端工作目录>\n"
             "② 多节点（命名节点，用 node= 选机器）：\n  enabled: true\n  user: <用户名>\n"
@@ -2484,7 +2484,7 @@ SCHEMA = {
         "**这时先问用户要不要拉**，确认了再带 max_mb 或 allow_large=true。"
         "pull 支持通配符（远端 *.tsv 会展开成多个文件，放进 local_path 目录）和目录（递归）；"
         "默认不覆盖本机已有同名文件（返回 status=exists，给 overwrite=true 才覆盖）。\n"
-        "连接配置在 hermes_home/config.yaml 的 remote: 段（host 或 nodes /user/port/key/workdir/"
+        "连接配置在 memomics_home/config.yaml 的 remote: 段（host 或 nodes /user/port/key/workdir/"
         "scheduler/local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
         "⚠️ 两点别搞混：① 本工具只把**命令/作业**送到远端，execute_python / execute_r 的持久内核仍在本地跑——"
         "要在集群上算就把代码写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"

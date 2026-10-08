@@ -2488,7 +2488,7 @@ setTimeout(function() {
   if (_ss2 && _ss2.value && document.activeElement !== _ss2) _ss2.value = '';
 }, 1200);
 
-// 欢迎问候语 (学 hermes intro-copy 风格)
+// 欢迎问候语 (学 memomics intro-copy 风格)
 const _introLines = [
   '准备好分析你的组学数据了吗？',
   '上传数据或描述你的项目，我来扫描、推荐模块、逐步引导。',
@@ -2808,7 +2808,7 @@ function handleMessage(msg) {
       refreshTodos(); refreshChanges();
     }
   } else if (msg.type === 'notice_clear') {
-    // Hermes notice_clear_callback: 按 key 清除对应通知
+    // MemOmics notice_clear_callback: 按 key 清除对应通知
     if (msg.key) {
       for (var i = progressItems.length - 1; i >= 0; i--) {
         if (progressItems[i].noticeKey === msg.key) {
@@ -2834,7 +2834,7 @@ function handleMessage(msg) {
     // 分析过程中生成了新图 → 自动展示 + 刷新结果面板
     if (msg.figure) handleNewFigure(msg.figure);
   } else if (msg.type === 'event') {
-    // Hermes 统一事件流（session:compress 等）
+    // MemOmics 统一事件流（session:compress 等）
     if (msg.event_type === 'session:compress') {
       addProgressItem('上下文已压缩', 'done', '', msg.ts || _nowTs());
     }
@@ -6767,7 +6767,7 @@ function _isInjectMsg(m) {
 
 // === 历史回放：同一轮的多个 LLM 片段合并回一个气泡（2026-10-07）===
 // 实时流里「一条用户提问 = 一个气泡」：delta 一直往同一个 currentAssistantEl 里累加，
-// 中间的工具调用只进进度时间线。但历史里 Hermes 每次 LLM 调用都存成独立的 assistant
+// 中间的工具调用只进进度时间线。但历史里 MemOmics 每次 LLM 调用都存成独立的 assistant
 // 消息（中间夹 tool 消息），回放时若一条一个气泡，同一轮就被拆成一串碎片 —— 每片还各带
 // 自己的 ⏱/🛠/📋 复制按钮，看着像很多条回答（刷新/切会话后必现，用户 2026-10-07 报）。
 // 这里按 turn（一条用户提问 = 一轮）合并连续 assistant 片段：文本按原顺序拼接、
@@ -6784,7 +6784,7 @@ function _renderHistoryFlow(msgs) {
     var text = '', elapsed = 0, hasElapsed = false, tools = 0, names = [];
     group.items.forEach(function(m) {
       var seg = String(m.content == null ? '' : m.content);
-      // Hermes 对「空响应」写入的哨兵 "(empty)"（run_agent.py / conversation_loop.py）：
+      // MemOmics 对「空响应」写入的哨兵 "(empty)"（run_agent.py / conversation_loop.py）：
       // 实时流里这种片段什么都不显示，回放也不能把它当正文拼进去。
       if (seg.trim() && seg.trim() !== '(empty)') {
         if (!text) text = seg;
@@ -10703,7 +10703,7 @@ async function litPaperTab(tab) {
     '<button onclick="litPaperTab(\'cite\')" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">📎 引用</button>' +
     '<button onclick="litAskAgent()" title="把解读请求发给文献库绑定的 Agent 会话" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;cursor:pointer;">💬 让 Agent 解读</button>' +
     '</div>';
-  if (d.markdown_file) html2 += '<div style="color:var(--text-light);font-size:11px;margin-bottom:6px;">📄 原文 Markdown: hermes_home/papers/markdown/' + escapeHtml(stem) + '.md（会话里可 read_file）</div>';
+  if (d.markdown_file) html2 += '<div style="color:var(--text-light);font-size:11px;margin-bottom:6px;">📄 原文 Markdown: memomics_home/papers/markdown/' + escapeHtml(stem) + '.md（会话里可 read_file）</div>';
   if (!d.summary_done) {
     html2 += '<div style="color:var(--text-light);">这篇还没有提炼。' +
       '<button onclick="summarizePaper(\'' + ref + '\')" style="margin:8px 0;font-size:12px;padding:4px 12px;border-radius:6px;background:var(--primary);color:#fff;border:none;cursor:pointer;">📝 立即提炼</button></div>';
@@ -15078,7 +15078,7 @@ var EM_I18N = {
     em_cluster_pending: '正在后台探测集群（要逐个 SSH，较慢），稍后自动更新。',
     em_agent_intro: 'agent 已经注册了只读工具 env_inventory：直接问它「我本机有什么环境」「集群几个核、队列排到哪」，它自己调这个工具拿结果，不用你贴。',
     em_agent_actions: '可用动作', em_agent_digest: 'agent 每轮开场就看到的紧凑环境卡片（只读缓存、不探测）',
-    em_agent_cache: '缓存文件', em_agent_home: 'hermes_home', em_act_md: '给人看的完整 markdown 报告',
+    em_agent_cache: '缓存文件', em_agent_home: 'memomics_home', em_act_md: '给人看的完整 markdown 报告',
     em_act_overview: '本机 + 集群全量清单（refresh 会真探测）', em_act_local: '只清点本机', em_act_cluster: '只清点集群（SSH）',
     em_copied: '✅ 报告已复制到剪贴板', em_copy_fail: '复制失败，已改为下载',
     em_cores: '核', em_free: '可用', em_of: '共', em_more: '还有',
@@ -15121,7 +15121,7 @@ var EM_I18N = {
     em_cluster_pending: 'Probing the cluster in the background (SSH per node, slow); it updates itself.',
     em_agent_intro: 'The agent has a read-only env_inventory tool: just ask "what environments do I have" or "how many cores does the cluster have, how busy is the queue" and it calls the tool itself.',
     em_agent_actions: 'Actions', em_agent_digest: 'Compact environment card the agent sees at the start of every turn (cache only, no probing)',
-    em_agent_cache: 'Cache file', em_agent_home: 'hermes_home', em_act_md: 'full markdown report for humans',
+    em_agent_cache: 'Cache file', em_agent_home: 'memomics_home', em_act_md: 'full markdown report for humans',
     em_act_overview: 'local + cluster full inventory (refresh really probes)', em_act_local: 'local only', em_act_cluster: 'cluster only (SSH)',
     em_copied: '✅ Report copied to clipboard', em_copy_fail: 'Copy failed, downloading instead',
     em_cores: 'cores', em_free: 'free', em_of: 'of', em_more: 'more',
@@ -15424,7 +15424,7 @@ function emViewLocal(local, warnings) {
       return '<b>' + emEsc(k) + '</b>：' + emEsc(notes[k]); }).join('<br>') + '</div>';
   }
   out += '<div class="em-hint">environment.json：' + emEsc(local.environment_json || '') +
-         ' ｜ hermes_home：' + emEsc(local.hermes_home || '') +
+         ' ｜ memomics_home：' + emEsc(local.memomics_home || '') +
          ' ｜ 本次探测耗时 ' + emVal(local.duration_s) + ' 秒</div>';
   return out;
 }
@@ -15632,7 +15632,7 @@ function emViewAgent(d) {
         emRow('markdown', emT('em_act_md')));
   out += emCard('📁 ' + emT('em_agent_cache'), 'mut',
         emRow(emT('em_agent_cache'), emEsc(d.cache_path || '')) +
-        emRow(emT('em_agent_home'), emEsc(local.hermes_home || '')) +
+        emRow(emT('em_agent_home'), emEsc(local.memomics_home || '')) +
         emRow('environment.json', emEsc(local.environment_json || '')));
   if (d.agent_digest) {
     out += emSec('📇 ' + emT('em_agent_digest'));
@@ -18243,15 +18243,15 @@ async function checkForUpdate(showAll) {
       }
       if (d.update_mode === 'zip_overlay' && remote.asset_name) {
         if (remote.asset_kind === 'update') {
-          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>轻量代码更新包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 仅覆盖代码文件（保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>轻量代码更新包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 仅覆盖代码文件（保留 memomics_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
         } else {
-          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>完整安装包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 hermes_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
+          html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>完整安装包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 memomics_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
         }
         html += '<div style="margin-top:6px;color:var(--text-light);">更新完成后请自行重启 MemOmics 生效。</div>';
         btn.style.display = 'inline-block';
         updateStatusDot('有更新', 'var(--warning)');
       } else {
-        html += '<div style="margin-top:8px;color:var(--danger);">⚠️ 当前平台暂无匹配的自动更新包。请手动更新：下载安装包解压覆盖（保留 hermes_home/ 与 results/）。</div>';
+        html += '<div style="margin-top:8px;color:var(--danger);">⚠️ 当前平台暂无匹配的自动更新包。请手动更新：下载安装包解压覆盖（保留 memomics_home/ 与 results/）。</div>';
         btn.style.display = 'none';
         updateStatusDot('需手动更新', 'var(--danger)');
       }
@@ -18620,7 +18620,7 @@ async function saveUpdateConfig(mode) {
         <b>账号（PAT 访问令牌）</b>：打开
         <a href="https://www.dcs.cloud" target="_blank" style="color:var(--primary);">www.dcs.cloud</a>
         → 个人中心 → <b>访问令牌</b> → 创建（有效期最长 1 年）→ 复制，粘贴到下面。
-        令牌只存本机 <code id="dcs-vault-path">hermes_home/dcs_cloud.json</code>，不进日志、不随安装包分发；
+        令牌只存本机 <code id="dcs-vault-path">memomics_home/dcs_cloud.json</code>，不进日志、不随安装包分发；
         在 DCS 侧删除令牌即刻失效。<b>MemOmics 不保存账号密码</b>（平台有双因子，密码自动登录本来就走不通）。
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           <input id="dcs-pat" type="password" placeholder="dcs_pat_…" style="flex:1;min-width:240px;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:12px;">

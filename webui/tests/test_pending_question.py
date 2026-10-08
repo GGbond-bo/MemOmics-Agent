@@ -26,7 +26,7 @@ def _make_db(tmp_path):
 
 def test_detects_confirmed_pending_question(tmp_path, monkeypatch):
     db = _make_db(tmp_path)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(tmp_path))
     ctx = server._build_pending_question_context({"id": "s1"}, "1.需要。 2.为什么你在电脑上做不了？")
     assert "待确认任务提醒" in ctx
     assert "整理进专利结论表" in ctx
@@ -35,14 +35,14 @@ def test_detects_confirmed_pending_question(tmp_path, monkeypatch):
 
 def test_no_acceptance_returns_empty(tmp_path, monkeypatch):
     _make_db(tmp_path)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(tmp_path))
     ctx = server._build_pending_question_context({"id": "s1"}, "为什么你看不到我的文件？")
     assert ctx == ""
 
 
 def test_negative_answer_returns_empty(tmp_path, monkeypatch):
     _make_db(tmp_path)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(tmp_path))
     ctx = server._build_pending_question_context({"id": "s1"}, "不用了，先算了")
     assert ctx == ""
 
@@ -66,7 +66,7 @@ def _make_db_with_turns(tmp_path):
 
 def test_recent_turns_digest_includes_prior_qa(tmp_path, monkeypatch):
     _make_db_with_turns(tmp_path)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(tmp_path))
     digest = server._build_recent_turns_digest({"id": "s1"}, max_turns=8)
     assert "最近几轮对话速览" in digest
     assert "phyloP" in digest
@@ -80,6 +80,6 @@ def test_recent_turns_digest_empty_session(tmp_path, monkeypatch):
     conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT)")
     conn.commit()
     conn.close()
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(tmp_path))
     assert server._build_recent_turns_digest({"id": "s1"}) == ""
 

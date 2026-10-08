@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 _THIS = os.path.abspath(__file__)
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(_THIS)))
 RUNTIME_DIR = os.environ.get("MEMOMICS_RUNTIME_DIR") or os.path.join(
-    _REPO, "hermes_home", "runtime")
+    _REPO, "memomics_home", "runtime")
 MARKERS_DIR = os.environ.get("MEMOMICS_CACHE_MARKERS_DIR") or os.path.join(
     RUNTIME_DIR, "cache_markers")
 INDEX_FILE = os.path.join(MARKERS_DIR, "index.jsonl")
@@ -236,8 +236,14 @@ def save_marker(marker: dict) -> str:
 
 def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
                artifacts=None, remote: bool = False, note: str = "",
-               ttl_days: int = DEFAULT_TTL_DAYS, session_dir: str = "") -> dict:
-    """建一个任务标记（并落盘）。inputs: scan 的 items 或裸路径列表。"""
+               ttl_days: int = DEFAULT_TTL_DAYS, session_dir: str = "",
+               cache_scope: str = "") -> dict:
+    """建一个任务标记（并落盘）。inputs: scan 的 items 或裸路径列表。
+
+    ``cache_scope`` / ``not_included`` 是 2026-10-08 L2 辩论席位一致点名的溯源缺口：
+    用户看到「有缓存」会以为全量都缓存了，而精简缓存**不含表达量矩阵**（DE/CellChat/
+    轨迹仍需回读原文件）。所以标记里显式声明缓存范围与**未包含**的内容。
+    """
     ins = []
     for it in inputs or []:
         if isinstance(it, dict):
@@ -265,6 +271,8 @@ def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
         "expires_at": exp or "",
         "ttl_days": int(ttl_days),
         "note": note,
+        "cache_scope": cache_scope or "未声明（缓存内容以作业脚本为准）",
+        "not_included": ["expression_matrix", "counts", "scale.data"],
         "cleanup_cmd": "python -m memomics.bio_tools.large_cache clean " + str(task_id),
         "status": "active",
     }
@@ -449,7 +457,8 @@ def _cmd_mark(a) -> int:
         inputs.append(sc)
     m = new_marker(a.task_id, a.title or a.task_id, inputs, cache_root=a.cache_root,
                    artifacts=a.artifact or [], remote=a.remote, note=a.note or "",
-                   ttl_days=a.ttl_days, session_dir=a.session_dir or "")
+                   ttl_days=a.ttl_days, session_dir=a.session_dir or "",
+                   cache_scope=a.cache_scope or "")
     print(f"标记已落盘: {marker_path(m['task_id'])}")
     print(f"  输入 {len(m['inputs'])} 项 / 产物 {len(m['artifacts'])} 项 / "
           f"cache_root={m['cache_root'] or '-'} / 过期 {m['expires_at'] or 'never'}")
@@ -536,6 +545,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--title", default="")
     s.add_argument("--input", action="append", default=[])
     s.add_argument("--cache-root", default="")
+    s.add_argument("--cache-scope", default="",
+                   help='缓存范围声明，如 "reductions+metadata（不含表达量矩阵）"')
     s.add_argument("--artifact", action="append", default=[])
     s.add_argument("--remote", action="store_true", help="产物在远端集群")
     s.add_argument("--note", default="")

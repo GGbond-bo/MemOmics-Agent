@@ -43,7 +43,7 @@
   使用增强后 query
 - `webui/server.py::_build_memory_digest`：`fts_recall` 的 query 改为
   `extract_entity(user_text) or user_text`（server 侧同一接线的另一半）
-- 注意：Hermes 底座 `turn_context.py` 传给 provider 的是原始用户消息
+- 注意：MemOmics 底座 `turn_context.py` 传给 provider 的是原始用户消息
   （意图值拿不到），因此 entity 从会话状态块取——该块由 server 的
   意图分类+P1-4 旁路共同维护，等价于意图驱动，且不违反"不动底座"约束。
 
@@ -61,7 +61,7 @@
 - 根因：`auxiliary.compression` 未配置 → auto 解析到 `mimo-v2.5`
   （opencode.ai 网关），8-29 实测 404 "The model does not exist or is not
   deployed"，compression_fallback_streak=2（errors.log 两处 WARNING）
-- `hermes_home/config.yaml`：显式
+- `memomics_home/config.yaml`：显式
   `auxiliary.compression: {provider: openai, model: deepseek-v4-flash}`
   （DCS 同主模型 provider，1M 窗口 ≥ 主模型压缩阈值，可行性检查可过）
 - config.yaml 被 gitignore（含 API key），不受 git 状态影响。

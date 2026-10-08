@@ -1,7 +1,7 @@
 #!/bin/sh
 # MemOmics pre-commit hook：技能门禁（P0-1）+ 知识库门禁
 #
-# 技能面（暂存区命中 hermes_home/skills 等）-> scripts/check_skills_gate.py：
+# 技能面（暂存区命中 memomics_home/skills 等）-> scripts/check_skills_gate.py：
 #   1) SKILLS_INDEX.md 必须与磁盘上的 skill.json 逐字一致（索引漂移是历史事故源头）；
 #   2) 注册表护栏 + 触发词矩阵 + 路由回归矩阵（多场景/多意图/极端输入）必须全绿。
 # 知识库（暂存区命中 memomics/knowledge_base）-> memomics/bio_tools/validate_kb.py：
@@ -32,7 +32,7 @@ if [ -z "$CHANGED" ]; then
 fi
 
 # 技能面：技能目录 / 索引 / SOUL / 注册表与自动注册器 / 相关测试与门禁自身
-PATTERN='^(hermes_home/skills/|hermes_home/SKILLS_INDEX\.md$|hermes_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|contracts/skill_triggers\.json$|webui/server\.py$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
+PATTERN='^(memomics_home/skills/|memomics_home/SKILLS_INDEX\.md$|memomics_home/SOUL(-detail)?\.md$|webui/skills_registry\.py$|webui/auto_register\.py$|webui/tests/test_skill|webui/tests/fixtures/skill_routing_matrix\.json$|contracts/skill_triggers\.json$|webui/server\.py$|scripts/check_skills_gate\.py$|scripts/install_git_hooks\.py$|\.githooks/|\.pre-commit-config\.yaml$|\.github/workflows/skills-gate\.yml$)'
 # 排除知识库自己的测试：KB 测试由下面的 kb-gate 负责，不该把整个技能面门禁拖进来
 MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN" | grep -v -E '^webui/tests/test_validate_kb\.py$')
 

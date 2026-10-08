@@ -13,7 +13,7 @@ import sqlite3
 import time
 
 DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                  "hermes_home", "memory_store.db")
+                  "memomics_home", "memory_store.db")
 
 
 def main():

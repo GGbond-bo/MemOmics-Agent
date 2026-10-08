@@ -8,7 +8,7 @@ E: server._extract_and_store_requirements 在真实消息上的误报率（临�
 import sys, os, json, re, tempfile
 sys.path.insert(0, r'E:\MemOmics-Agent\webui')
 sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('HERMES_HOME', r'E:\MemOmics-Agent\hermes_home')
+os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
 
 clean = json.load(open(r'E:\MemOmics-Agent\scripts\bench_clean_msgs.json', encoding='utf-8'))
 msgs = [{"role": "user", "content": m["text"]} for m in clean]

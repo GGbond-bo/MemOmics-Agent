@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """发布包文献库清洗（批O5 2026-08-16）。
 
-打包前对 hermes_home/papers 做脱敏与可移植化：
+打包前对 memomics_home/papers 做脱敏与可移植化：
 1. .pdf_index.json 里的绝对路径（打包机 E:/MemOmics-Agent/...）→ 相对可移植
-   路径 "hermes_home/papers/<文件名>"（运行时代码有 _resolve_paper_path 兜底，
+   路径 "memomics_home/papers/<文件名>"（运行时代码有 _resolve_paper_path 兜底，
    即使不重写也能按文件名在库内找到 PDF）。
 2. 清空 imported_from / imported_by（用户源路径与导入人标识不进包）。
 3. 删除运行态文件：.binding.json（会话绑定）、*.part.json（断点续译进度）、
@@ -17,7 +17,7 @@ import sys
 
 
 def scrub(pkg_dir: str) -> int:
-    papers = os.path.join(pkg_dir, "hermes_home", "papers")
+    papers = os.path.join(pkg_dir, "memomics_home", "papers")
     if not os.path.isdir(papers):
         print(f"[skip] {papers} 不存在")
         return 0
@@ -39,7 +39,7 @@ def scrub(pkg_dir: str) -> int:
             for e in entries:
                 fname = e.get("file") or ""
                 if fname:
-                    e["path"] = f"hermes_home/papers/{fname}"
+                    e["path"] = f"memomics_home/papers/{fname}"
                     n += 1
                 if "imported_from" in e:
                     e["imported_from"] = ""

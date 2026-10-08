@@ -8,7 +8,7 @@
 4. 折叠分工：c0 确定性折叠后 skip_rebuild=True，不摘要套摘要；
 5. 结论注册表 e2e：append → 文件落盘 → 注入上下文 → L3 归档索引。
 
-护栏：全部 tmp_path，绝不触碰真实 hermes_home/memory_store.db / state.db。
+护栏：全部 tmp_path，绝不触碰真实 memomics_home/memory_store.db / state.db。
 """
 import json
 import os
@@ -155,7 +155,7 @@ class TestIntentEnhancedPrefetch:
         p = HolographicMemoryProvider(config={})
         p._config["db_path"] = str(tmp_path / "mem.db")
         p.initialize(session_id="sess-i-1")
-        # history 源需要 hermes_home/state.db —— 指向临时目录（不存在 → 安全空）
+        # history 源需要 memomics_home/state.db —— 指向临时目录（不存在 → 安全空）
         monkeypatch.setattr("hermes_constants.get_hermes_home", lambda: tmp_path)
         yield p
         p.shutdown()

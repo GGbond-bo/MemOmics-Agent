@@ -52,7 +52,7 @@ def state_db_path() -> str:
     override = os.environ.get("MEMOMICS_STATE_DB", "").strip()
     if override:
         return override
-    return os.path.join(_repo_root(), "hermes_home", "state.db")
+    return os.path.join(_repo_root(), "memomics_home", "state.db")
 
 
 def _to_num(value: Any) -> Optional[float]:
@@ -118,7 +118,7 @@ def _http_get_json(url: str, headers: Dict[str, str], timeout: float = 10.0) -> 
     req_headers = {"Accept": "application/json", "User-Agent": "MemOmics-Usage/1.0"}
     req_headers.update({k: v for k, v in (headers or {}).items() if v})
     try:
-        import httpx  # hermes 底座依赖，优先；
+        import httpx  # memomics 底座依赖，优先；
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             resp = client.get(url, headers=req_headers)
             raw = resp.content

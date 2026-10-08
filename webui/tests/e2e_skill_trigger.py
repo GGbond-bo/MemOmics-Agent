@@ -19,7 +19,7 @@ import uuid
 import websockets
 
 WS_URL = "ws://127.0.0.1:8899/ws"
-DB = r"E:\MemOmics-Agent\hermes_home\state.db"
+DB = r"E:\MemOmics-Agent\memomics_home\state.db"
 TIMEOUT = 120  # 每用例最长等待（秒）
 
 # (期望skill, 场景, 用户表述)

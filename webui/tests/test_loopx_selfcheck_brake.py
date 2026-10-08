@@ -173,11 +173,11 @@ def test_waiting_review_survives_a_round_trip():
     """提示词让模型标 waiting_review，store 却把它改写成 pending → 紧急唤醒判据
     （server.py:18712）永远为假。"""
     spec = importlib.util.spec_from_file_location(
-        "hermes_todo_tool_wr",
+        "memomics_todo_tool_wr",
         os.path.join(os.path.dirname(server.__file__), "..", "hermes-agent", "tools", "todo_tool.py"),
     )
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["hermes_todo_tool_wr"] = mod
+    sys.modules["memomics_todo_tool_wr"] = mod
     spec.loader.exec_module(mod)
     store = mod.TodoStore()
     store.write([{"id": "t1", "content": "待审阅的聚类结果", "status": "waiting_review"}])

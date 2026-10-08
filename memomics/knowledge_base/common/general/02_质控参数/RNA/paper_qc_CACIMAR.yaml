@@ -15,7 +15,7 @@ content: '- expressed cells = >=10 cells（每个物种去除表达少于10个�
 
   - 基因在细胞中表达比例 = 至少 5% 细胞（小鼠 7147、斑马鱼 4083、鸡 4559 个表达基因进入 marker 鉴定）'
 evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
-  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'
+  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/memomics_home/papers/CACIMAR.pdf'
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

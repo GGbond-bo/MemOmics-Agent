@@ -15,7 +15,7 @@ import sys
 import urllib.request
 
 ROOT = r"E:\MemOmics-Agent"
-os.environ.setdefault("HERMES_HOME", os.path.join(ROOT, "hermes_home"))
+os.environ.setdefault("MEMOMICS_HOME", os.path.join(ROOT, "memomics_home"))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "hermes-agent"))
 
@@ -71,7 +71,7 @@ for n in memomics_registered:
 check("registry: 所有 memomics handler 可调用", not bad, bad[:5])
 
 # ── B. 文献库一致性 ──
-papers = os.path.join(ROOT, "hermes_home", "papers")
+papers = os.path.join(ROOT, "memomics_home", "papers")
 idx_path = os.path.join(papers, ".pdf_index.json")
 idx = json.load(open(idx_path, encoding="utf-8")) if os.path.isfile(idx_path) else []
 on_disk = {f for f in os.listdir(papers) if f.lower().endswith(".pdf")} if os.path.isdir(papers) else set()
@@ -88,10 +88,10 @@ summed = sum(1 for e in idx if e.get("summary_done"))
 kbed = sum(1 for e in idx if e.get("kb_done"))
 check("文献库: 全部分类打标", tagged == len(idx), f"{tagged}/{len(idx)}")
 print(f"  [info] 已全文提炼 {summed}/{len(idx)}，已入库 {kbed}/{len(idx)}")
-refs = json.load(open(os.path.join(ROOT, "hermes_home", "references.json"), encoding="utf-8"))
+refs = json.load(open(os.path.join(ROOT, "memomics_home", "references.json"), encoding="utf-8"))
 check("引用库: references.json 条数 ≈ 索引条数", abs(len(refs) - len(idx)) <= 3, f"refs={len(refs)} idx={len(idx)}")
 for ext in ("bib", "ris"):
-    p = os.path.join(ROOT, "hermes_home", f"references.{ext}")
+    p = os.path.join(ROOT, "memomics_home", f"references.{ext}")
     check(f"引用库: references.{ext} 存在", os.path.isfile(p) and os.path.getsize(p) > 0)
 
 # ── C. 知识库 ──
@@ -134,7 +134,7 @@ except Exception as e:
     check("会话卫生: API 可用", False, e)
 
 # ── E. 配置健康 ──
-cfg = yaml.safe_load(open(os.path.join(ROOT, "hermes_home", "config.yaml"), encoding="utf-8"))
+cfg = yaml.safe_load(open(os.path.join(ROOT, "memomics_home", "config.yaml"), encoding="utf-8"))
 check("配置: config.yaml 可解析", cfg is not None)
 check("配置: 压缩阈值 0.3（1M 窗口按 30% 触发）", cfg.get("compression", {}).get("threshold") == 0.3,
       cfg.get("compression"))

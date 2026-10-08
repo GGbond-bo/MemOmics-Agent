@@ -39,7 +39,7 @@ start.bat
    - **API Key**: �?`sk-...`
    - **Model**: �?`deepseek-chat` / `gpt-4o`
 4. 点击「开始使用�?
-> 也可以通过环境变量配置（见 `.env.example`），或直接编�?`hermes_home/config.yaml`
+> 也可以通过环境变量配置（见 `.env.example`），或直接编�?`memomics_home/config.yaml`
 
 ### 三、环境检�?
 点击左侧栏底部「�?环境检测」，查看�?- Python / R 版本
@@ -131,10 +131,10 @@ MemOmics 支持多种 web 搜索后端（用于文献检索）�?
 
 | 文件 | 作用 |
 |------|------|
-| `hermes_home/config.yaml` | LLM API + 全局配置 |
-| `hermes_home/model_config.json` | 当前模型配置（首次向导写入） |
-| `hermes_home/memories/USER.md` | 用户画像（自动学习） |
-| `hermes_home/memories/MEMORY.md` | 记忆（自动积累） |
+| `memomics_home/config.yaml` | LLM API + 全局配置 |
+| `memomics_home/model_config.json` | 当前模型配置（首次向导写入） |
+| `memomics_home/memories/USER.md` | 用户画像（自动学习） |
+| `memomics_home/memories/MEMORY.md` | 记忆（自动积累） |
 | `.env` | 环境变量（可选，�?`.env.example`�?|
 
 ---
@@ -155,20 +155,20 @@ A: 确保 `nvidia-smi` 命令可用。无 GPU 也能运行，只是大数据集�
 ### Q: 如何切换模型
 A: 左侧「⚙�?设置」→ 选择模型。支�?DeepSeek / GPT / Claude 等�?
 ### Q: 会话数据在哪
-A: `hermes_home/state.db`（SQLite�? `results/` 目录（分析结果）
+A: `memomics_home/state.db`（SQLite�? `results/` 目录（分析结果）
 
 ---
 
 ## 技术支�?
-- 基于 [Hermes Agent](https://github.com/NousResearch/) 框架
+- 基于 [MemOmics Agent](https://github.com/NousResearch/) 框架
 - 内置 272 个生信技能模�?- 物种/组织/方向三维知识�?- 铁轨审查 + 多角色辩论机�?
 
 ## �����ɰ�װ�����оɰ��û��ض���
 
 1. �������·�������Windows �� .zip��Linux/macOS �� .tar.gz��
 2. �ر��������е� MemOmics���ص��������� / ���� python ���̣�
-3. ��ѹ�°���**���帲��**�ɰ�װĿ¼��hermes_home ��� API ���á��Ự��������Զ�������
-   �°��� hermes_home ֻ���� skills/SOUL �ȿɸ������ݣ�
+3. ��ѹ�°���**���帲��**�ɰ�װĿ¼��memomics_home ��� API ���á��Ự��������Զ�������
+   �°��� memomics_home ֻ���� skills/SOUL �ȿɸ������ݣ�
 4. ����˫�� ����.bat��Windows��/ ���� start.sh ���� �������Զ�����
 5. �״�������**�Զ�ִ���޸�Ǩ��**��apply_fix_bundle��config �����޶���ļ����޸����ݵȣ���
    ���뼶�޸����°��ļ�ֱ����Ч���ײ�״̬���ɲ鿴 fix_bundle ����ȷ�������°�

@@ -14,7 +14,7 @@
 - 集群：remote_cluster（同一份 config.yaml 的 remote: 段、同一套 SSH 探针），
   所以面板里看到的和 agent 投作业时用的是同一个配置。
 
-缓存：hermes_home/env_inventory.json（本机 1 小时 / 集群 10 分钟）。
+缓存：memomics_home/env_inventory.json（本机 1 小时 / 集群 10 分钟）。
 集群探测可能几十秒 —— 绝不在请求里同步等：server 侧起后台线程刷，面板轮询；
 force=True / invalidate() 强刷。
 """
@@ -87,20 +87,20 @@ def _app_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def _hermes_home() -> str:
-    """定位 hermes_home（配置/缓存都在这）。
+def _memomics_home() -> str:
+    """定位 memomics_home（配置/缓存都在这）。
 
-    webui/server.py 启动时就设了 HERMES_HOME=<root>/hermes_home；但本模块也会在
-    server 之外跑（CLI、测试、独立进程），那时 HERMES_HOME 可能是空的，框架的
-    get_hermes_home() 会回落到平台默认目录（Windows 上是 LOCALAPPDATA 下的 hermes），
+    webui/server.py 启动时就设了 MEMOMICS_HOME=<root>/memomics_home；但本模块也会在
+    server 之外跑（CLI、测试、独立进程），那时 MEMOMICS_HOME 可能是空的，框架的
+    get_hermes_home() 会回落到平台默认目录（Windows 上是 LOCALAPPDATA 下的 memomics），
     那里没有本应用的 config.yaml —— 于是集群配置会被读成"未配置"（实测踩过）。
-    所以顺序：环境变量 → 仓库自带 hermes_home（存在即用，和生产一致）→ 框架默认
+    所以顺序：环境变量 → 仓库自带 memomics_home（存在即用，和生产一致）→ 框架默认
     → 仓库路径兜底。
     """
-    env = os.environ.get("HERMES_HOME") or ""
+    env = os.environ.get("MEMOMICS_HOME") or ""
     if env:
         return env
-    local = os.path.join(_app_root(), "hermes_home")
+    local = os.path.join(_app_root(), "memomics_home")
     if os.path.isdir(local):
         return local
     try:
@@ -114,7 +114,7 @@ def _hermes_home() -> str:
 
 
 def _cache_path() -> str:
-    return os.path.join(_hermes_home(), "env_inventory.json")
+    return os.path.join(_memomics_home(), "env_inventory.json")
 
 
 def _now() -> float:
@@ -1215,7 +1215,7 @@ def scan_local(force: bool = False) -> dict:
         "canonical_notes": _declared_notes(),
         "canonical_alerts": _canonical_alerts(),
         "known_issues": _declared_known_issues(),
-        "hermes_home": _hermes_home(),
+        "memomics_home": _memomics_home(),
     }
     local["capabilities"] = _capabilities(local)
     local["warnings"] = _local_warnings(local)
@@ -1237,17 +1237,17 @@ def _cluster_module():
 def _config_path() -> str:
     """remote_cluster 真正会读的那份配置（agent 投作业用的是它）。
 
-    HERMES_HOME 没设时 get_hermes_home() 会回落到平台默认目录，remote_cluster
-    就会指到 C:/Users/<user>/AppData/Local/hermes/config.yaml —— 那里根本没有
+    MEMOMICS_HOME 没设时 get_hermes_home() 会回落到平台默认目录，remote_cluster
+    就会指到 C:/Users/<user>/AppData/Local/memomics/config.yaml —— 那里根本没有
     本应用的集群配置（实测踩到：面板会显示一个不存在的路径让用户去改）。
-    所以：优先用"已存在的 config.yaml"，其次用本应用 hermes_home 下的路径。
+    所以：优先用"已存在的 config.yaml"，其次用本应用 memomics_home 下的路径。
     """
     path = ""
     try:
         path = str(_cluster_module()._get_config_path())
     except Exception:
         path = ""
-    home = _hermes_home()
+    home = _memomics_home()
     cand = os.path.join(home, "config.yaml") if home else ""
     if cand and os.path.isfile(cand):
         return cand
@@ -1272,7 +1272,7 @@ def cluster_configured() -> dict:
             "workdir": (cfg or {}).get("workdir", ""),
             "default_node": (cfg or {}).get("default_node", ""),
             "node_policy": (cfg or {}).get("node_policy", ""),
-            "hermes_home": _hermes_home(), "config_path": config_path}
+            "memomics_home": _memomics_home(), "config_path": config_path}
 
 
 def _cluster_hint(state: dict) -> str:
@@ -1280,7 +1280,7 @@ def _cluster_hint(state: dict) -> str:
         return ("集群未启用：在 %s 的 remote: 段写 enabled: true + host/user/key/workdir，"
                 "或直接打开 WebUI 的「🖧 远端集群」面板填表保存"
                 "（agent 的 remote_cluster 工具读同一份配置）"
-                % state.get("config_path", "hermes_home/config.yaml"))
+                % state.get("config_path", "memomics_home/config.yaml"))
     if not state.get("nodes"):
         return ("集群已启用但没有登记节点：config.yaml 的 remote: 段填 host（单节点）"
                 "或 nodes: 段登记多台机器（ssh3: {} / ssh5: {}）")
@@ -1726,7 +1726,7 @@ def render_markdown(report: dict = None, force: bool = False, cache_only: bool =
            "- 生成时间：%s" % report.get("scanned_at", _iso()),
            "- 本机清单：%s（缓存 %.0f 秒前）" % (local.get("scanned_at", "?"), age or 0),
            "- 缓存文件：%s" % (report.get("cache_path") or _cache_path()),
-           "- hermes_home：%s" % local.get("hermes_home", ""),
+           "- memomics_home：%s" % local.get("memomics_home", ""),
            "- 平台：%s %s（%s）" % (sysinfo.get("os", ""), sysinfo.get("os_release", ""),
                                   sysinfo.get("machine", "")), ""]
     if report.get("warnings"):
@@ -1871,7 +1871,7 @@ SCHEMA = {
         "verify（**便宜地再确认一遍**：毫秒级，指纹没变就直接复用清单，变了才重扫 —— "
         "分析开工前用它，代替无脑重扫）/ "
         "markdown（人看的报告）。结果有缓存（本机 1 小时 / 集群 10 分钟），不会每次都真探测。"
-        "本机清单缓存在 <hermes_home>/env_inventory.json，WebUI 的「🧩 环境管理」面板"
+        "本机清单缓存在 <memomics_home>/env_inventory.json，WebUI 的「🧩 环境管理」面板"
         "与它同源 —— 用户看到的和你用的是同一份。"
     ),
     "parameters": {
@@ -1933,7 +1933,7 @@ def _register():
 
 try:
     _register()
-except Exception:  # 脱离 hermes 运行时（单测 / CLI）不注册，不影响 import
+except Exception:  # 脱离 memomics 运行时（单测 / CLI）不注册，不影响 import
     pass
 
 

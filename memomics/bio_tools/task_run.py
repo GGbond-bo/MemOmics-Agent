@@ -6,7 +6,7 @@
 查看当前执行的脚本……把执行任务简要说明，或者把重要参数信息都展示出来。」
 
 设计（三层里的第一层 + 第二层，服务端只读不猜）：
-1. 契约落盘：hermes_home/runtime/tasks/<task_id>.json，原子写（tmp + os.replace），
+1. 契约落盘：memomics_home/runtime/tasks/<task_id>.json，原子写（tmp + os.replace），
    服务重启后按「PID + 进程创建时间」核对存活：活着接管显示，死了标 interrupted。
 2. 打点通道（跨语言）：stdout 标记行 —— R/Python/shell 任何语言写一行就能上报：
       #TASK:STAGE 训练
@@ -41,7 +41,7 @@ from datetime import datetime, timezone
 
 _THIS = os.path.abspath(__file__)
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(_THIS)))
-RUNTIME_DIR = os.environ.get("MEMOMICS_RUNTIME_DIR") or os.path.join(_REPO, "hermes_home", "runtime")
+RUNTIME_DIR = os.environ.get("MEMOMICS_RUNTIME_DIR") or os.path.join(_REPO, "memomics_home", "runtime")
 TASKS_DIR = os.environ.get("MEMOMICS_TASKS_DIR") or os.path.join(RUNTIME_DIR, "tasks")
 FALLBACK_LOG_DIR = os.path.join(RUNTIME_DIR, "logs")
 

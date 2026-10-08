@@ -68,7 +68,7 @@ content: '- 蛋白/磷酸化位点/乙酰化位点检测率 = 至少30%样本（
   - adjusted p-value = Benjamini-Hochberg（激酶活性p值校正）'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
-  | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+  | E:/MemOmics-Agent/memomics_home/papers/lung_no-smoking_clinic.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

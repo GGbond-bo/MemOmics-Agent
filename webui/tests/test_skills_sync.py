@@ -2,7 +2,7 @@
 """SKILLS_INDEX 自愈（auto_register.sync_new_skills）回归测试。
 
 2026-09-24 真机事故：wave4 真机测试期间，磁盘上多出一个技能目录
-（hermes_home/skills/bioinformatics/trajectory-conclusion-validation），SKILLS_INDEX.md 里没有它的行。
+（memomics_home/skills/bioinformatics/trajectory-conclusion-validation），SKILLS_INDEX.md 里没有它的行。
 SKILLS_INDEX.md 是唯一会被注入 system prompt 的技能清单 —— 缺行等于模型永远看不到这个技能；
 同一条漂移还会让 webui/tests/test_skills_registry.py 的「索引行集合 == 磁盘技能集合」两条断言直接红。
 根因：索引只在进程启动 scan_and_register_all() 和「注册技能」工具里重建，agent 会话中途用 write
@@ -41,14 +41,14 @@ def _write_index(path: str, names) -> None:
 
 @pytest.fixture()
 def sandbox(tmp_path, monkeypatch):
-    """把技能目录 + 索引都指到临时目录，避免碰真实 hermes_home。"""
+    """把技能目录 + 索引都指到临时目录，避免碰真实 memomics_home。"""
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
     index = tmp_path / "SKILLS_INDEX.md"
     monkeypatch.setattr(auto_register, "SKILLS_BIO_DIR", str(skills_dir), raising=False)
     # 关键：auto_register._registry() 优先 `import skills_registry`（webui/ 在 sys.path 上），
     # pytest 里又可能是 `webui.skills_registry` —— 两个模块对象，必须打在生产代码真正用的那个上，
-    # 否则 rebuild 会去写真实 hermes_home/SKILLS_INDEX.md（第一次写这条测试时就这么脏过一次）。
+    # 否则 rebuild 会去写真实 memomics_home/SKILLS_INDEX.md（第一次写这条测试时就这么脏过一次）。
     reg = auto_register._registry()
     assert reg is not None, "skills_registry 不可用"
     monkeypatch.setattr(reg, "SKILLS_DIR", str(skills_dir))
@@ -102,7 +102,7 @@ def test_sync_generates_missing_skill_json(sandbox):
 
 def test_sync_ignores_skills_outside_product_surface(sandbox):
     """技能面（SKILLS_BIO_DIR）之外的 SKILL.md-only 目录不许补 json ——
-    那批是 Hermes 自带的技能，故意不进索引；补了会把 83 个无关技能灌进模型触发面。
+    那批是 MemOmics 自带的技能，故意不进索引；补了会把 83 个无关技能灌进模型触发面。
     """
     skills_dir, index = sandbox
     outside = skills_dir.parent / "other-category" / "arxiv"

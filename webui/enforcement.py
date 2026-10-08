@@ -535,7 +535,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
     # P2(2026-08-10): 预算护栏从 config.yaml debate.budget 读取（缺省 3）
     try:
         import yaml as _y
-        _cfg_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hermes_home", "config.yaml")
+        _cfg_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memomics_home", "config.yaml")
         if os.path.exists(_cfg_p):
             _d = _y.safe_load(open(_cfg_p, encoding="utf-8")) or {}
             _b = ((_d.get("debate") or {}).get("budget")) or None
@@ -564,7 +564,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             msg.update(kwargs)
             session_emit_fn(session, msg)
             # P2-6(2026-08-10): 门控提示注入 agent 上下文 —
-            # require 事件通过 Hermes 原生 _pending_steer 通道注入，
+            # require 事件通过 MemOmics 原生 _pending_steer 通道注入，
             # 下一批工具调用后 LLM 就能看到（零底座改动，运行中即时生效）
             if etype == "enforcement" and kwargs.get("action") == "require" and agent_ref:
                 _inject_agent_hint(agent_ref[0], "【系统强制提示】" + str(kwargs.get("message", "")))
@@ -572,7 +572,7 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             pass
 
     def _inject_agent_hint(agent, text: str) -> bool:
-        """把提示注入 agent 上下文（Hermes 原生 _pending_steer 通道）。"""
+        """把提示注入 agent 上下文（MemOmics 原生 _pending_steer 通道）。"""
         try:
             lock = getattr(agent, "_pending_steer_lock", None)
             if lock is not None:

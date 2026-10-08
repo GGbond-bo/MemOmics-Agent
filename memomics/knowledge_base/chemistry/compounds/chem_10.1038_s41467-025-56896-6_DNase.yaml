@@ -18,7 +18,7 @@ content: '- 靶点: —
 
   - 效应: 去除 DNA'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
-  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+  beyond myosin heavy chains | E:/MemOmics-Agent/memomics_home/papers/10.1038_s41467-025-56896-6.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

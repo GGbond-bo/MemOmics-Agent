@@ -102,7 +102,7 @@ def test_main_missing_driver_exit_2(mod, monkeypatch, capsys):
         raise ImportError("cua_backend 不可用")
     monkeypatch.setattr(mod, "_backend", _boom)
     assert mod.main(["--out", "whatever.png"]) == 2
-    assert "hermes computer-use install" in capsys.readouterr().err
+    assert "memomics computer-use install" in capsys.readouterr().err
 
 
 def test_main_send_wechat_failure_exit_4(mod, tmp_path, monkeypatch):
@@ -158,5 +158,5 @@ def test_import_error_path_reports_interpreter(mod, monkeypatch, capsys):
     monkeypatch.setattr(mod, "_backend", _no_driver)
     assert mod.main(["--out", "x.png"]) == 2
     err = capsys.readouterr().err
-    assert "hermes computer-use install" in err and "当前解释器" in err
+    assert "memomics computer-use install" in err and "当前解释器" in err
 

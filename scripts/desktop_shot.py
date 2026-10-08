@@ -3,7 +3,7 @@
 """桌面截图落盘（computer_use 的「最后一公里」）。
 
 为什么要这个脚本：
-  computer_use(action="capture") 返回的 PNG 只进**模型上下文**（Hermes 把 base64 拼进
+  computer_use(action="capture") 返回的 PNG 只进**模型上下文**（MemOmics 把 base64 拼进
   tool_result 的图片块），不落盘；而 MemOmics 的「新图片自动推微信」只认磁盘上的图片文件。
   于是「截图 → 发微信」中间缺一环。这个脚本补的就是那一环：用**同一个 cua-driver 后端**
   截图并写文件，写出来的图既能在 WebUI 当产物看，也能被微信推送链路捡走。
@@ -116,7 +116,7 @@ def main(argv=None) -> int:
     except ImportError as e:
         print("驱动不可用：%s" % e, file=sys.stderr)
         print("当前解释器：%s" % sys.executable, file=sys.stderr)
-        print("先装驱动：hermes computer-use install（装完重跑本脚本即可，webui/cua_bootstrap 会自动定位 cua-driver）",
+        print("先装驱动：memomics computer-use install（装完重跑本脚本即可，webui/cua_bootstrap 会自动定位 cua-driver）",
               file=sys.stderr)
         return 2
     except Exception as e:

@@ -331,7 +331,7 @@ content: '## 测序方法
 
   - GitHub：代码可用性，https://github.com/rmj822/human_skeletal_muscle_fiber_heterogeneity_beyond_myosin_heavy_chains.git'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
-  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+  beyond myosin heavy chains | E:/MemOmics-Agent/memomics_home/papers/10.1038_s41467-025-56896-6.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

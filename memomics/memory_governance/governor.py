@@ -7,7 +7,7 @@
    默认 dry_run 只产出建议报告；apply=True 才真正迁移（保守设计）。
 
 L2 外置：memory_store.db facts 表（holographic 已有 trust_score/retrieval_count）。
-L3 归档：hermes_home/memories/archive/YYYY-MM.md（永不删除）。
+L3 归档：memomics_home/memories/archive/YYYY-MM.md（永不删除）。
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .memory_score import (build_index, parse_entries, parse_meta, score_entry,
                            decide_layer)
 
 MEMORIES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))), "hermes_home", "memories")
+    os.path.abspath(__file__)))), "memomics_home", "memories")
 INDEX_PATH = os.path.join(MEMORIES_DIR, "index.json")
 ARCHIVE_DIR = os.path.join(MEMORIES_DIR, "archive")
 MEMORY_FILE = os.path.join(MEMORIES_DIR, "MEMORY.md")

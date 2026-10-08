@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """极端评测 A/G：脚手架污染 + facts 质量审计 + 干净消息样本导出。"""
 import sqlite3, re, json, hashlib
-DB = r'E:\MemOmics-Agent\hermes_home\state.db'
+DB = r'E:\MemOmics-Agent\memomics_home\state.db'
 c = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 rows = c.execute(
     "SELECT id, content FROM messages WHERE session_id='memomics-cd677556' "
@@ -29,7 +29,7 @@ uniq_scaff = len(set(
 print(f"unique scaffold texts: {uniq_scaff} (injected {scaffold} times)")
 
 # facts 质量审计
-DB2 = r'E:\MemOmics-Agent\hermes_home\memory_store.db'
+DB2 = r'E:\MemOmics-Agent\memomics_home\memory_store.db'
 c2 = sqlite3.connect(f'file:{DB2}?mode=ro', uri=True)
 facts = c2.execute("SELECT fact_id, content, category, tags, trust_score FROM facts").fetchall()
 c2.close()

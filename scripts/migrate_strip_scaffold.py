@@ -19,8 +19,8 @@ import sqlite3
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATE_DB = os.path.join(ROOT, "hermes_home", "state.db")
-MEM_DB = os.path.join(ROOT, "hermes_home", "memory_store.db")
+STATE_DB = os.path.join(ROOT, "memomics_home", "state.db")
+MEM_DB = os.path.join(ROOT, "memomics_home", "memory_store.db")
 
 _PREFIXES = ("[会话要求", "[相关历史记忆", "[会话锚点", "[System:", "[数据读取配方", "📊 LoopX")
 # 整条注入（无用户原文）：唤醒消息从头到尾都是系统内容，剥离后剩的还是系统指令

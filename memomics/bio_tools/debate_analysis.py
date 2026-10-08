@@ -49,12 +49,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # === 会话级隔离（ContextVar，替代 threading.local） ===
-# 2026-08-16 修复：threading.local 不跨线程传播——Hermes 的 tool_executor 会把
+# 2026-08-16 修复：threading.local 不跨线程传播——MemOmics 的 tool_executor 会把
 # 工具调用丢到 ThreadPoolExecutor worker 线程执行（tool_executor.py 的
 # _execute_tool_calls_concurrent），worker 线程拿不到 _do_run 线程里
 # set_session_context 设置的 threading.local 值，导致 execute_r/execute_python
 # 在工具线程里 get_session_sid() 返回空 → 全部退化到 "default" kernel（会话串染）。
-# ContextVar 会被 Hermes 的 propagate_context_to_thread（contextvars.copy_context）
+# ContextVar 会被 MemOmics 的 propagate_context_to_thread（contextvars.copy_context）
 # 自动传播到 worker 线程，会话隔离才对工具执行真正生效。
 import contextvars as _contextvars
 
@@ -181,7 +181,7 @@ class _ProgressHeartbeat:
 #   3) 整场辩论总预算（默认 900s = 15 分钟，MEMOMICS_DEBATE_BUDGET 可覆盖）：
 #      预算耗尽后 _call_llm_sync 直接返回失败，不再发 HTTP —— 剩下的席位/轮次
 #      毫秒级跑完，整场不会再挂 20 分钟
-# 预算取值有实测依据：扫 hermes_home/logs/agent.log*（324 个 debate_analysis 时长样本）
+# 预算取值有实测依据：扫 memomics_home/logs/agent.log*（324 个 debate_analysis 时长样本）
 # 得 min 1.0 / p25 59 / 中位 100.9 / p75 325.1 / p90 585.6 / max 1252.7 秒，
 # >480s 占 15.7%、>600s 占 8.6%。所以硬上限定 900s：只砍真正病态的长尾
 # （p90 以上约 8%），不会把正常的长辩论一起误杀。
@@ -1369,10 +1369,10 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
 def _provider_extra_headers(base_url: str) -> dict:
     """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
 
-    本模块用裸 httpx 直发请求，绕过 Hermes 底座的 openai SDK 客户端，因此拿不到
+    本模块用裸 httpx 直发请求，绕过 MemOmics 底座的 openai SDK 客户端，因此拿不到
     get_custom_provider_extra_headers 注入的附加头。opencode.ai 的 zen 网关要求每个
     请求带 x-opencode-session，缺则一律 400 MissingSessionID —— 050e0d14 只修了
-    Hermes 底座路径，辩论链路仍 400。这里按 base_url/api_base 匹配 provider 条目并
+    MemOmics 底座路径，辩论链路仍 400。这里按 base_url/api_base 匹配 provider 条目并
     返回其 extra_headers，使任何 provider 的附加头都能生效。匹配不到返回 {}。
     """
     if not base_url:
@@ -1632,7 +1632,7 @@ _TEMP_POOL = [0.3, 0.5, 0.7, 0.9, 1.1]
 
 
 def _get_config_path() -> Path:
-    """定位 hermes_home/config.yaml（与 _get_debates_dir 同源）。"""
+    """定位 memomics_home/config.yaml（与 _get_debates_dir 同源）。"""
     try:
         for p in list(sys.path):
             if p.endswith('hermes-agent') or p.endswith('hermes-agent\\') or p.endswith('hermes-agent/'):
@@ -1640,7 +1640,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
     return base / "config.yaml"
 
 
@@ -1699,7 +1699,7 @@ def _load_debate_config() -> dict:
 
 
 def _load_provider_keys() -> dict:
-    """读取 hermes_home/provider_keys.json: {provider_id: {api_key, base_url}}。"""
+    """读取 memomics_home/provider_keys.json: {provider_id: {api_key, base_url}}。"""
     try:
         keys_path = _get_config_path().parent / "provider_keys.json"
         if not keys_path.exists():
@@ -1736,7 +1736,7 @@ def _looks_like_placeholder_key(value) -> bool:
 
 
 def _load_global_model_config() -> dict:
-    """读取 hermes_home/model_config.json —— 界面「当前模型」的落盘位置。
+    """读取 memomics_home/model_config.json —— 界面「当前模型」的落盘位置。
 
     按 mtime 缓存重读：用户在界面换了模型/提供商，辩论下一次调用立刻生效。
     （旧实现只在 server 启动时把 DEEPSEEK_* 注入 env 一次，换模型后辩论仍用旧通道。）
@@ -2152,7 +2152,7 @@ def _role_model_id(label: str, cfg: dict) -> str:
 # ==================== 辩论结果持久化 ====================
 
 def _get_debates_dir() -> Path:
-    """获取辩论历史存储目录：hermes_home/skills/bioinformatics/_debates/"""
+    """获取辩论历史存储目录：memomics_home/skills/bioinformatics/_debates/"""
     try:
         import sys
         # hermes-agent 在 sys.path 中时优先用 get_hermes_home()
@@ -2163,7 +2163,7 @@ def _get_debates_dir() -> Path:
         base = Path(get_hermes_home())
     except Exception:
         # fallback: 环境变量或硬编码
-        base = Path(os.environ.get("HERMES_HOME", "E:/MemOmics-Agent/hermes_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
     debates_dir = base / "skills" / "bioinformatics" / "_debates"
     debates_dir.mkdir(parents=True, exist_ok=True)
     return debates_dir
@@ -2569,7 +2569,7 @@ def _archive_debate_to_results(topic: str, context: str, result_json: str):
 def _auto_match_skill(topic: str) -> str:
     """P2-12(2026-08-10): 从 topic 自动匹配 skill 名 — 断点 A 修复。
 
-    reflow_skill 未配置时，扫描 hermes_home/skills/bioinformatics/ 下各 skill
+    reflow_skill 未配置时，扫描 memomics_home/skills/bioinformatics/ 下各 skill
     的 SKILL.md frontmatter name + skill.json name，若 topic（小写）包含
     skill 名或其中文名，选最长匹配项。让裁决能自动沉淀到正确的 skill.json。
     匹配不到返回 ""（只归档不写 skill.json，保持安全默认）。
@@ -3677,6 +3677,6 @@ def _register():
             max_result_size_chars=40_000,
         )
     except ImportError:
-        pass  # 不在 Hermes 环境中时不注册
+        pass  # 不在 MemOmics 环境中时不注册
 
 _register()

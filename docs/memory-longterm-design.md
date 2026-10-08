@@ -2,7 +2,7 @@
 
 > 2026-08-11 重写。v1 是六层大架构（L0-L5），本轮根据两个输入收敛：
 > ① 用户方向："优先保障单会话不受压缩影响、记住用户给的脚本/路径/文件；跨会话复用现有 memory，只加检索能力，不被跨会话记忆污染"
-> ② 代码验证：Hermes 底座已有三个原生机制（on_pre_compress / memory_tool / volatile 段重建），不需要自研大工程。
+> ② 代码验证：MemOmics 底座已有三个原生机制（on_pre_compress / memory_tool / volatile 段重建），不需要自研大工程。
 
 ---
 
@@ -11,14 +11,14 @@
 | 不做 | 为什么 | 替代 |
 |---|---|---|
 | L2 笔记层自动写（LLM 每回合总结） | 写入时机原生存在（on_pre_compress / commit_memory_session / sync_all）；科研要的是"事实"不是"洞见"，事实可规则提取；自动笔记 = 成本+噪音+幻觉污染 | 规则粗筛 + 用户确认 |
-| L5 工作记忆块大改 | system prompt 三段结构（stable/context/volatile）+ 压缩时 invalidate+rebuild 已天然支持压缩免疫；大改 = 与 Hermes 上游分叉 + 高风险零增益 | 注册 memory provider 增量扩展 volatile 段 |
+| L5 工作记忆块大改 | system prompt 三段结构（stable/context/volatile）+ 压缩时 invalidate+rebuild 已天然支持压缩免疫；大改 = 与 MemOmics 上游分叉 + 高风险零增益 | 注册 memory provider 增量扩展 volatile 段 |
 | 自研压缩回写钩子 | `on_pre_compress(messages) -> str` 返回值**原生进入压缩摘要 prompt**；回写 = 亡羊补牢 + 双份结论 | 直接用原生 `on_pre_compress` 让资产在压缩中存活 |
 
-核心洞察一句话：**Hermes 的记忆设计已经就是"压缩免疫 + 事件驱动 + 全量画像注入"，MemOmics 只需要往这条管道里注入"科研资产"这一种内容，并加一条跨会话检索通道。**
+核心洞察一句话：**MemOmics 的记忆设计已经就是"压缩免疫 + 事件驱动 + 全量画像注入"，MemOmics 只需要往这条管道里注入"科研资产"这一种内容，并加一条跨会话检索通道。**
 
 ---
 
-## 1. Hermes 原生机制盘点（本轮代码验证结论）
+## 1. MemOmics 原生机制盘点（本轮代码验证结论）
 
 ### 1.1 system prompt 三段结构（`agent/system_prompt.py` build_system_prompt_parts）
 
@@ -101,7 +101,7 @@ protect_last_n                       # 保留尾部最近 N 条
 
 **⑤ 压缩免疫（已验证：保险 B 是唯一可靠机制）**
 - **保险 B（主）**：压缩时 `_invalidate_system_prompt()` + `_build_system_prompt(system_message)` 重建（conversation_compression.py:554/615/652）→ volatile 段重新生成 → `system_prompt_block()` 再次执行 → 资产清单直接回来。**压缩只归档 messages，不销毁 system prompt 的生成源**
-- ~~保险 A~~：`on_pre_compress(messages)` 返回值在 conversation_compression.py:578 **被丢弃**（未拼进压缩摘要）——当前不可用；若未来启用需改 Hermes 一行（P2 可选补丁，遵循"不动底座"原则暂缓）
+- ~~保险 A~~：`on_pre_compress(messages)` 返回值在 conversation_compression.py:578 **被丢弃**（未拼进压缩摘要）——当前不可用；若未来启用需改 MemOmics 一行（P2 可选补丁，遵循"不动底座"原则暂缓）
 - ~~保险 C~~：不可靠（压缩重建用的 system_message 是旧缓存值，新资产不会进）——已删除
 
 **⑥ 失效/更新**
@@ -177,7 +177,7 @@ protect_last_n                       # 保留尾部最近 N 条
 
 - ❌ LLM 自动写笔记/总结（无用户确认不写任何记忆）
 - ❌ embedding/rerank 检索（FTS5 起步，有失败样本再升级）
-- ❌ 修改 Hermes 底座（memory_manager / system_prompt / compression 一律不动）；唯一例外：扩展 MemOmics 自家插件 holographic（`plugins/memory/holographic/`，不算底座）
+- ❌ 修改 MemOmics 底座（memory_manager / system_prompt / compression 一律不动）；唯一例外：扩展 MemOmics 自家插件 holographic（`plugins/memory/holographic/`，不算底座）
 - ❌ MEMORY.md 自动写入（资产不进全局画像，防污染）
 - ❌ 跨会话目标/进度注入（只注入已完成的**事实**，不注入**目标**——防诱导延续旧任务，违背铁律-5）
 
@@ -185,11 +185,11 @@ protect_last_n                       # 保留尾部最近 N 条
 
 ## 7. 三问补充设计（2026-08-11，用户三问 + 业界调查）
 
-> 触发：用户提出三个核心问题（①几十轮对话怎么记住之前内容 ②用户每次对话提供的信息/诉求怎么记住 ③怎么用意图识别找记忆——话题切换检测 + "继续跑热图"式旧资产召回）。本轮补充代码验证 + 业界调查（Letta/MemGPT memory blocks、Anthropic Context Engineering、Claude auto-compact、mem0），结论：**Hermes 现有机制已覆盖业界全部组件，缺的是"接线"而非"新建"**。
+> 触发：用户提出三个核心问题（①几十轮对话怎么记住之前内容 ②用户每次对话提供的信息/诉求怎么记住 ③怎么用意图识别找记忆——话题切换检测 + "继续跑热图"式旧资产召回）。本轮补充代码验证 + 业界调查（Letta/MemGPT memory blocks、Anthropic Context Engineering、Claude auto-compact、mem0），结论：**MemOmics 现有机制已覆盖业界全部组件，缺的是"接线"而非"新建"**。
 
 ### 7.0 业界对照表（调查结论）
 
-| 业界模式 | 代表 | Hermes 对应（已验证） | 差距 |
+| 业界模式 | 代表 | MemOmics 对应（已验证） | 差距 |
 |---|---|---|---|
 | Core memory（常驻块，永不检索） | Letta memory blocks（label+description+value+limit，XML prepend，agent 可读写） | volatile 段 `system_prompt_block()` | 缺"任务状态块"和"诉求块"两块内容 |
 | Compaction（近满自动压缩） | Claude auto-compact / MemGPT | `compress_context`（50% 阈值，auxiliary LLM 总结 middle） | 无（已强） |
@@ -296,7 +296,7 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 
 - `webui/tests/test_session_memory.py`：25 用例（store 层 / 模块层 / 注入层 / 生产兼容），全绿
 - 全量回归：`198 passed, 1 skipped, 3 deselected`，exit 0（未破坏既有功能）
-- 生产库补表无损：真实 `hermes_home/memory_store.db` 打开自动补 assets/session_state，68 条 facts 原样保留
+- 生产库补表无损：真实 `memomics_home/memory_store.db` 打开自动补 assets/session_state，68 条 facts 原样保留
 
 ---
 
@@ -314,7 +314,7 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 - holographic Source 4 渲染："⚠️ 话题已切换：热图 → umap（旧任务暂停，以用户最新诉求为准）"
 - 每轮 prefetch 注入，agent 感知切换不继续旧任务
 
-### Hermes 记忆能力连接盘点（14 个 Provider 接口）
+### MemOmics 记忆能力连接盘点（14 个 Provider 接口）
 
 | 接口 | 连接状态 | 说明 |
 |---|---|---|
@@ -335,7 +335,7 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 
 ### auto_extract 增强（2026-08-11 追加）
 
-- `hermes_home/config.yaml` 的 `plugins.hermes-memory-store.auto_extract` 已是 `true`（配置层已开）
+- `memomics_home/config.yaml` 的 `plugins.memomics-memory-store.auto_extract` 已是 `true`（配置层已开）
 - 原 `_auto_extract_facts` 只有英文正则（I prefer / we decided…），中文会话零命中 → 补充**中文偏好/决策模式**（我习惯/我喜欢/以后都用/记住：/我们决定/项目统一用…），保守匹配防噪音（普通分析句不提取），内容长度门槛 10→6
 - `get_config_schema` 默认值对齐 `true`
 - 验证：中文偏好 3 类提取 + 噪音控制 + 去重（add_fact UNIQUE）+ 英文模式保留；45 用例全绿，全量 218 passed
@@ -345,7 +345,7 @@ P0-5 + P0-6 已实施并全量回归通过（198 passed）。
 ## 第 10 章 子代理（delegation）接入（2026-08-11）
 
 ### 启用方式
-- `server.py` `_create_agent` 的 `enabled_toolsets` 加入 `"delegation"`（Hermes TOOLSETS 注册：`tools=["delegate_task"]`，子代理继承父工具集、剥离黑名单：delegate_task/clarify/memory/send_message/execute_code/cronjob）
+- `server.py` `_create_agent` 的 `enabled_toolsets` 加入 `"delegation"`（MemOmics TOOLSETS 注册：`tools=["delegate_task"]`，子代理继承父工具集、剥离黑名单：delegate_task/clarify/memory/send_message/execute_code/cronjob）
 - 子代理是**独立上下文的纯执行单元**（system prompt 只有 task/context/workspace，无 SOUL 铁律），深度默认 1（父→子扁平，MAX_DEPTH=1）
 
 ### 何时启用子代理（SOUL.md 铁律 -7）

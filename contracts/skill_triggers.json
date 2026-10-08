@@ -9,10 +9,10 @@
     "由 webui/tests/test_skill_trigger_contract.py 逐条钉住；任何人改了语义而没改契约，测试会红。"
   ],
   "truth_chain": [
-    "hermes_home/skills/<name>/skill.json#trigger_keywords  （人工维护的真相源，优先级最高）",
-    "hermes_home/skills/<name>/SKILL.md frontmatter        （次之；注意 normalize_meta(existing=) 会保留 skill.json 里的旧词）",
-    "hermes_home/SOUL.md 必触发表                          （人工用户口径，合并时排在最前）",
-    "hermes_home/SKILLS_INDEX.md                            （派生产物：唯一被注入 system prompt 的形态）",
+    "memomics_home/skills/<name>/skill.json#trigger_keywords  （人工维护的真相源，优先级最高）",
+    "memomics_home/skills/<name>/SKILL.md frontmatter        （次之；注意 normalize_meta(existing=) 会保留 skill.json 里的旧词）",
+    "memomics_home/SOUL.md 必触发表                          （人工用户口径，合并时排在最前）",
+    "memomics_home/SKILLS_INDEX.md                            （派生产物：唯一被注入 system prompt 的形态）",
     "webui/server.py:_match_red_skill_triggers()            （运行时匹配器，只吃索引里的 RED 行）"
   ],
   "sources_precedence": {

@@ -888,7 +888,7 @@ content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L
 
   - 肌酸/肌酸类似物：靶点 — | 剂量 — | IC50 — | 模型 力量举运动员骨骼肌 | 肌酸含量和快肌比例与Wilks系数相关。[45]'
 evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
-  response and training adaptation in skeletal muscle | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
+  response and training adaptation in skeletal muscle | E:/MemOmics-Agent/memomics_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
 evidence_chain:
   standard: kb-evidence-v1
   level_distribution:

@@ -41,7 +41,7 @@ content: '- 基因数 = 500–8,000（保留细胞标准）
 
   - 空间CM活性缩放 = 第99百分位值设为1（空间CM可视化）'
 evidence: DOI 10.1038/s41586-025-09053-4 | Cross-tissue multicellular coordination
-  and its rewiring in cancer | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41586-025-09053-4.pdf
+  and its rewiring in cancer | E:/MemOmics-Agent/memomics_home/papers/10.1038_s41586-025-09053-4.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

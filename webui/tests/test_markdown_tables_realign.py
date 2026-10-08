@@ -1,4 +1,4 @@
-"""hermes 表格重排器（hermes-agent/agent/markdown_tables.py）的转义竖线回归测试。
+"""memomics 表格重排器（hermes-agent/agent/markdown_tables.py）的转义竖线回归测试。
 
 为什么放这儿而不是 hermes-agent/tests/：仓库 .gitignore 第 54 行的 test_*.py 只放行
 webui/tests/，hermes-agent/tests 整个目录是不跟踪的（2135 个文件被忽略）。放那儿的

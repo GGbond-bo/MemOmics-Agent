@@ -18,7 +18,7 @@ STRING score 语义:
 
 速率限制: STRING 建议请求间隔，大批量查询建议分批。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import json
@@ -206,7 +206,7 @@ def query_string(proteins: str, species: int = 9606, query_type: str = "network"
         }, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(

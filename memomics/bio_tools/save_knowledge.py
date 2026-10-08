@@ -161,7 +161,7 @@ def canonical_species(name: str) -> str:
 
 
 def _kb_root():
-    """KB 根目录：MEMOMICS_KB_DIR → kb_search 推导 → hermes_home/skills。"""
+    """KB 根目录：MEMOMICS_KB_DIR → kb_search 推导 → memomics_home/skills。"""
     try:
         from memomics.bio_tools.kb_search import _find_kb_root
         root = _find_kb_root()
@@ -172,11 +172,11 @@ def _kb_root():
     env_dir = os.environ.get("MEMOMICS_KB_DIR")
     if env_dir and os.path.isdir(env_dir):
         return env_dir
-    # 最后兜底：hermes_home/skills（agent 实际加载的技能目录）
+    # 最后兜底：memomics_home/skills（agent 实际加载的技能目录）
     here = os.path.dirname(os.path.abspath(__file__))
     for _cand in (
-        os.path.normpath(os.path.join(here, "..", "..", "hermes_home", "skills")),
-        "E:/MemOmics-Agent/hermes_home/skills",
+        os.path.normpath(os.path.join(here, "..", "..", "memomics_home", "skills")),
+        "E:/MemOmics-Agent/memomics_home/skills",
     ):
         if os.path.isdir(_cand):
             return _cand

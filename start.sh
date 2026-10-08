@@ -276,7 +276,8 @@ elif [ -f /.dockerenv ] 2>/dev/null; then
 fi
 
 # === Set environment ===
-export HERMES_HOME="$SCRIPT_DIR/hermes_home"
+export MEMOMICS_HOME="$SCRIPT_DIR/memomics_home"
+export HERMES_HOME="$MEMOMICS_HOME"
 export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
 export MEMOMICS_PORT="$PORT"
 # P1-A: 任务完成闸门（防老任务被自动重启）——默认开启，出问题可注释此行回退

@@ -21,7 +21,7 @@
 ### 2.1 目录结构（两层，兼容现有 skill 发现机制）
 
 ```
-hermes_home/skills/
+memomics_home/skills/
 ├── plotting/                        ← 顶层分类：用户画图 skill 专属库（隔离）
 │   ├── README.md                    ← 库规范（沉淀流程/询问铁律/分流策略）
 │   └── <script-name>/               ← 每个用户脚本一个 skill（可被发现/注入）
@@ -43,7 +43,7 @@ name: <script-name>
 description: >-
   <一句话使用场景：图类型 + 风格 + 数据形态 + 触发词示例；禁止泛词>
 metadata:
-  hermes:
+  memomics:
     category: user-skill          # ← 显示为"用户技能"（隔离标识）
     tags: [user, plotting]        # ← user = 用户提供，plotting = 画图类
 source: user                      # user / adapted / verified
@@ -182,9 +182,9 @@ skill 被触发运行产生的记录 ──→ 该 skill 自身目录（自进�
 | 5.1 意图识别：画 UMAP 分面 → analysis 0.60 ✅；火山图换柱状图 CNS 配色 → analysis 0.75 ✅；天气 → chat 0.90 ✅ | 画图意图 2/2 |
 | 5.1 观察项：'把结果用 PPT 汇报一下' → analysis 0.50（期望 report；既有行为，非本次回归） | 记录不修 |
 | 5.2 分类显示：`_test-user-plot`（category: user-skill）→「用户技能」✅；`user-plotting` →「用户画图」✅ | 2/2 |
-| 5.3 注入：build_skills_system_prompt 含两个测试 skill 的 description ✅（需设 HERMES_HOME） | 1/1 |
+| 5.3 注入：build_skills_system_prompt 含两个测试 skill 的 description ✅（需设 MEMOMICS_HOME） | 1/1 |
 | 5.4 规则存在性 9 项 ✅；四场景 9 分支（门禁拦截 4 项均正确拒绝/阻塞）✅；分流机制确认（record_run→skill.json proven、record_error→logs/error_log.md）✅ | 全过 |
 | 架构坑：list_skills 只扫 SKILLS_DIR + bioinformatics/，plotting/ 不在浏览索引 → 已修复 scan_dirs | 修复 |
-| 架构坑：独立进程测注入需设 HERMES_HOME（server.py 顶部才设置） | 记录 |
+| 架构坑：独立进程测注入需设 MEMOMICS_HOME（server.py 顶部才设置） | 记录 |
 
 **遗留**：运行中的 8899 server 需重启才加载新 scan_dirs/分类映射（manifest 会在下次调用自动重建 snapshot）。

@@ -23,13 +23,13 @@ PAT 是唯一正确的凭据形态。
 1. **只走官方 CLI**：稳定、有版本、有 `--schema`/`--describe` 自省；所有命令强制
    `--output json --no-history`（JSON 好解析；不把 MemOmics 触发的调用写进 CLI 历史）。
 2. **PAT 双份存法**：CLI 自己在 `~/.dcs/config.yaml` 维护会话（`encrypt: true`）；
-   本连接器另存一份到 ``hermes_home/dcs_cloud.json``，用于（a）会话失效后自动重登、
+   本连接器另存一份到 ``memomics_home/dcs_cloud.json``，用于（a）会话失效后自动重登、
    （b）状态展示（掩码）、（c）用户解绑时能彻底清理。
 3. **写操作先问用户**：上传/投递会改动云端数据并产生计费，工具描述里要求模型先确认；
    `allow_write: false` 可一键封掉所有写动作（只读模式）。
 4. 不做 token 轮换/共享：一人一 PAT（平台 API Key 使用声明明确"仅供账号本人使用"）。
 
-配置（hermes_home/config.yaml）
+配置（memomics_home/config.yaml）
 ------------------------------
     dcs_cloud:
       enabled: true                     # 总开关；false/缺省时工具对模型不可见
@@ -93,20 +93,20 @@ _DEFAULT_CFG = {
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
 
-VAULT_FILENAME = "dcs_cloud.json"   # 相对 hermes_home；PAT 落盘处
+VAULT_FILENAME = "dcs_cloud.json"   # 相对 memomics_home；PAT 落盘处
 
 
-def _hermes_home() -> Path:
+def _memomics_home() -> Path:
     try:
         from hermes_constants import get_hermes_home
         return Path(get_hermes_home())
     except Exception:
-        return Path(os.environ.get("HERMES_HOME", str(Path.cwd() / "hermes_home")))
+        return Path(os.environ.get("MEMOMICS_HOME", str(Path.cwd() / "memomics_home")))
 
 
 def _config_path() -> Path:
-    """定位 hermes_home/config.yaml（与 remote_cluster / debate_analysis 同源）。"""
-    return _hermes_home() / "config.yaml"
+    """定位 memomics_home/config.yaml（与 remote_cluster / debate_analysis 同源）。"""
+    return _memomics_home() / "config.yaml"
 
 
 def _truthy(value) -> bool:
@@ -183,7 +183,7 @@ def dcs_cloud_enabled() -> bool:
 # ---------------------------------------------------------------------------
 
 def vault_path() -> Path:
-    return _hermes_home() / VAULT_FILENAME
+    return _memomics_home() / VAULT_FILENAME
 
 
 def mask_pat(pat: str) -> str:

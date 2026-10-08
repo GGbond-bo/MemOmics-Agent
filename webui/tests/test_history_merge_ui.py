@@ -5,7 +5,7 @@
 一串碎片气泡（每片各带自己的 ⏱ 耗时 / 🛠 工具数 / 📋 复制按钮），并要求
 「原本是怎么展示的，那么刷新或者切换回来都还是怎么展示的」。
 
-根因：Hermes 每次 LLM 调用都存成独立的 assistant 消息（中间夹 role=tool 消息），
+根因：MemOmics 每次 LLM 调用都存成独立的 assistant 消息（中间夹 role=tool 消息），
 历史回放按「一条消息一个气泡」渲染；而实时流是把整轮的 delta 一直累加进
 同一个 currentAssistantEl。修法：两条回放路径统一走 _renderHistoryFlow()，
 按 turn（一条用户提问 = 一轮）把连续 assistant 片段合并回一个气泡。
@@ -50,7 +50,7 @@ class TestHistoryMergeStatic:
         assert "flushGroup()" in body
 
     def test_empty_sentinel_skipped(self):
-        """Hermes 空响应哨兵 "(empty)" 不能当正文拼进合并气泡（实时流也不显示）。"""
+        """MemOmics 空响应哨兵 "(empty)" 不能当正文拼进合并气泡（实时流也不显示）。"""
         i = HTML.index("function _renderHistoryFlow(msgs) {")
         body = HTML[i:i + 4200]
         assert "'(empty)'" in body

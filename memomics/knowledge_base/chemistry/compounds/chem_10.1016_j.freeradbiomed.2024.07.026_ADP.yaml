@@ -18,7 +18,7 @@ content: '- 靶点: AMPK/代谢比值
 
   - 效应: 运动时ADP:ATP比值升高'
 evidence: DOI 10.1016/j.freeradbiomed.2024.07.026 | Molecular aspects of the exercise
-  response and training adaptation in skeletal muscle | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
+  response and training adaptation in skeletal muscle | E:/MemOmics-Agent/memomics_home/papers/10.1016_j.freeradbiomed.2024.07.026.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

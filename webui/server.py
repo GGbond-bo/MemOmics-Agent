@@ -26,7 +26,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
-# === Hermes UTF-8 bootstrap (Windows 中文支持) ===
+# === MemOmics UTF-8 bootstrap (Windows 中文支持) ===
 # 必须在所有其他 import 之前，确保 Windows 上 stdio 用 UTF-8
 try:
     import hermes_bootstrap  # noqa: F401
@@ -35,13 +35,25 @@ except ModuleNotFoundError:
 
 # === MemOmics-Agent 独立运行 ===
 MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERMES_HOME_DIR = os.path.join(MEMOMICS_DIR, "hermes_home")
-os.environ["HERMES_HOME"] = HERMES_HOME_DIR
+MEMOMICS_HOME_DIR = os.path.join(MEMOMICS_DIR, "memomics_home")
+# 老安装迁移（2026-10-08 改名）：memomics_home 不存在而旧 hermes_home 还在时整体改名，
+# 保住老用户的技能 / PAT / config.yaml / 记忆；改名失败则回退继续用旧目录，绝不影响启动。
+_legacy_home = os.path.join(MEMOMICS_DIR, "hermes_home")
+if not os.path.isdir(MEMOMICS_HOME_DIR) and os.path.isdir(_legacy_home):
+    try:
+        os.rename(_legacy_home, MEMOMICS_HOME_DIR)
+        print("[MemOmics] 旧数据目录 hermes_home 已迁移为 memomics_home", flush=True)
+    except OSError as _mig_err:
+        print("[MemOmics] hermes_home -> memomics_home 迁移失败，继续用旧目录: %r" % (_mig_err,), flush=True)
+        MEMOMICS_HOME_DIR = _legacy_home
+os.environ["MEMOMICS_HOME"] = MEMOMICS_HOME_DIR
+# 上游 hermes-agent 只读 HERMES_HOME（hermes_constants.get_hermes_home 的契约）——镜像一份
+os.environ["HERMES_HOME"] = MEMOMICS_HOME_DIR
 # 2026-08-14: verify-on-stop 排除运行时产物目录（results/ 下的分析脚本不触发 pytest 验证回路）
 os.environ.setdefault("HERMES_VERIFY_ON_STOP_EXCLUDE", "results/;.backups/;backups/;logs/")
 
 # === 启动时路径扫描：写入 .install_path 供 Agent 读取，避免硬编码路径 ===
-_install_path_file = os.path.join(HERMES_HOME_DIR, ".install_path")
+_install_path_file = os.path.join(MEMOMICS_HOME_DIR, ".install_path")
 try:
     with open(_install_path_file, "w", encoding="utf-8") as _f:
         _f.write(MEMOMICS_DIR.replace("\\", "/") + "\n")
@@ -61,7 +73,7 @@ except ModuleNotFoundError:
     pass
 
 # === computer_use：cua-driver 定位引导（2026-09-25）===
-# 必须在 Hermes 的 tools.computer_use 被 import 之前跑：cua_backend 在 import 时读一次
+# 必须在 MemOmics 的 tools.computer_use 被 import 之前跑：cua_backend 在 import 时读一次
 # HERMES_CUA_DRIVER_CMD，之后只用 shutil.which() 判断可用性。官方安装器把二进制放进
 # 用户目录并追加到 User PATH，而 PATH 是进程启动时的快照 —— 不重开终端就找不到，
 # computer_use 会整个从模型工具表里消失（现象＝"MemOmics 不能操控电脑"）。
@@ -152,7 +164,7 @@ async def sandbox_audit(limit: int = 50, codes: int = 0):
         return JSONResponse({"error": str(_e)}, status_code=500)
 
 import logging
-# Enable Hermes weixin debug logging
+# Enable MemOmics weixin debug logging
 logging.getLogger("gateway.platforms.weixin").setLevel(logging.DEBUG)
 logging.getLogger("gateway.platforms.weixin").addHandler(logging.StreamHandler())
 logger = logging.getLogger("memomics")
@@ -163,7 +175,7 @@ _SKILLS_WARMED = False
 @app.on_event("startup")
 async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
-    元数据快照写入 hermes_home/.skills_prompt_snapshot.json。
+    元数据快照写入 memomics_home/.skills_prompt_snapshot.json。
     此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
     同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。
     自动注册新 skill：补全缺失的 skill.json + SKILLS_INDEX 条目。"""
@@ -184,7 +196,7 @@ async def _warm_skills_snapshot():
         asyncio.ensure_future(_memory_governor_loop())
     except Exception as e:
         logger.warning(f"[MemOmics] 记忆治理初始化失败: {e}")
-    # === Hermes 插件发现（image_gen 等 backend 插件） ===
+    # === MemOmics 插件发现（image_gen 等 backend 插件） ===
     # 插件发现默认只在 CLI/gateway 启动时执行（gateway/run.py:7550）；
     # MemOmics 进程内集成必须手动触发，否则 image_gen_registry 为空，
     # image_generate 工具没有可用后端，agent 感知不到图像生成能力。
@@ -193,18 +205,18 @@ async def _warm_skills_snapshot():
         PluginManager().discover_and_load()
         from agent import image_gen_registry as _igr
         _n = len(_igr.list_providers())
-        logger.info(f"[MemOmics] Hermes 插件发现完成，image_gen 后端 {_n} 个已注册")
+        logger.info(f"[MemOmics] MemOmics 插件发现完成，image_gen 后端 {_n} 个已注册")
     except Exception as e:
-        logger.warning(f"[MemOmics] Hermes 插件发现失败: {e}（图像生成功能将不可用）")
+        logger.warning(f"[MemOmics] MemOmics 插件发现失败: {e}（图像生成功能将不可用）")
     # 已保存过图像生成配置的用户：启动时把 provider 同步进 config.yaml，
     # 否则 image_generate 工具 check_fn 判定不可用（修复 2026-08-12 之前保存的配置没有这一步）
-    _sync_imagegen_provider_to_hermes()
+    _sync_imagegen_provider_to_memomics()
     try:
         from webui import auto_register
         auto_register.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         result = auto_register.scan_and_register_all()
         if result.get("json_generated", 0) > 0 or result.get("index_added", 0) > 0:
@@ -219,7 +231,7 @@ async def _warm_skills_snapshot():
         _SKILLS_WARMED = True
         logger.info(
             f"[MemOmics] Skills snapshot warmed: {len(result)} chars prompt, "
-            f"snapshot at {os.path.join(HERMES_HOME_DIR, '.skills_prompt_snapshot.json')}"
+            f"snapshot at {os.path.join(MEMOMICS_HOME_DIR, '.skills_prompt_snapshot.json')}"
         )
     except Exception as e:
         logger.warning(f"[MemOmics] Skills snapshot warm failed (will cold-scan on first request): {e}")
@@ -235,7 +247,7 @@ async def _warm_skills_snapshot():
     except Exception as e:
         logger.warning(f"[MemOmics] 微信自动重连调度失败: {e}")
 
-# === Hermes Cron Ticker — 在 MemOmics 进程中启动原生 cron 调度器 ===
+# === MemOmics Cron Ticker — 在 MemOmics 进程中启动原生 cron 调度器 ===
 import threading as _threading
 _cron_stop_event = _threading.Event()
 
@@ -297,7 +309,7 @@ async def _seed_self_check_startup():
 async def _start_process_completion_poller():
     """notify_on_complete push 链（2026-08-16 修复）。
 
-    terminal(background=True, notify_on_complete=True) 的进程退出时，Hermes 把
+    terminal(background=True, notify_on_complete=True) 的进程退出时，MemOmics 把
     完成事件写进 process_registry.completion_queue，但 MemOmics WebUI 从不消费
     它 —— 之前只能靠自检轮询（60s~5min 延迟）才发现进程结束。这里起守护线程消费
     队列，按 session_key（= session id，见 terminal_tool 的 session_key 接线）
@@ -355,7 +367,7 @@ async def _apply_fix_bundle_startup():
     """
     try:
         from memomics.fix_bundle import apply_fix_bundle, BUNDLE
-        _rep = apply_fix_bundle(HERMES_HOME_DIR)
+        _rep = apply_fix_bundle(MEMOMICS_HOME_DIR)
         if not _rep.get("up_to_date"):
             logger.info("[FixBundle] 已应用文件级迁移: %s", _rep)
             print(f"[FixBundle] 已应用文件级迁移: {_rep}", flush=True)
@@ -532,7 +544,7 @@ async def _start_memory_governance():
     async def _loop():
         while True:
             try:
-                _marker = os.path.join(HERMES_HOME_DIR, "memories", ".governance_last")
+                _marker = os.path.join(MEMOMICS_HOME_DIR, "memories", ".governance_last")
                 _last = 0.0
                 if os.path.isfile(_marker):
                     try:
@@ -544,7 +556,7 @@ async def _start_memory_governance():
                     init_index(verbose=False)
                     _rep = run_governance(dry_run=False, verbose=False)
                     # 2026-08-14: KB 陈旧度周检（每周一次，写报告 + 在线会话提示）
-                    _kb_marker = os.path.join(HERMES_HOME_DIR, "memories", ".kb_staleness_last")
+                    _kb_marker = os.path.join(MEMOMICS_HOME_DIR, "memories", ".kb_staleness_last")
                     _kb_last = 0.0
                     if os.path.isfile(_kb_marker):
                         try:
@@ -569,7 +581,7 @@ async def _start_memory_governance():
                                                 _stale_dirs.append(str(_p.relative_to(_kbr)).replace("\\", "/"))
                                     except Exception:
                                         continue
-                            with open(os.path.join(HERMES_HOME_DIR, "memories", "kb_staleness.json"), "w", encoding="utf-8") as _sf:
+                            with open(os.path.join(MEMOMICS_HOME_DIR, "memories", "kb_staleness.json"), "w", encoding="utf-8") as _sf:
                                 json.dump({"checked_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "stale": _stale_dirs[:50], "count": len(_stale_dirs)}, _sf, ensure_ascii=False, indent=2)
                             with open(_kb_marker, "w", encoding="utf-8") as _mf:
                                 _mf.write(str(time.time()))
@@ -599,35 +611,35 @@ async def _start_memory_governance():
 
 
 @app.on_event("startup")
-async def _start_hermes_cron_ticker():
-    """在 MemOmics FastAPI 进程中启动 Hermes 原生 cron ticker。
+async def _start_memomics_cron_ticker():
+    """在 MemOmics FastAPI 进程中启动 MemOmics 原生 cron ticker。
     
-    cron ticker 每 60 秒扫描一次 hermes_home/cron/jobs.json，
+    cron ticker 每 60 秒扫描一次 memomics_home/cron/jobs.json，
     执行到期的 cron job。这是长任务心跳监控的核心引擎。
     """
-    # 2026-09-10: 启动时同步一次 custom_providers 到 Hermes 底座——补齐 base_url 与
+    # 2026-09-10: 启动时同步一次 custom_providers 到 MemOmics 底座——补齐 base_url 与
     # per-provider extra_headers（opencode.ai 网关的 x-opencode-session），
     # 让已装用户无需重新保存 key 即可修复。失败不阻塞启动。
     try:
-        _sync_custom_providers_to_hermes()
+        _sync_custom_providers_to_memomics()
     except Exception as _e_sync:
         logger.warning(f"[MemOmics] 启动同步 custom_providers 失败（不阻塞）: {_e_sync}")
     try:
         from cron.scheduler_provider import InProcessCronScheduler
-        # 确保 HERMES_HOME 正确：cron 数据存在 hermes_home/cron/ 下
-        os.environ.setdefault("HERMES_HOME", HERMES_HOME_DIR)
+        # 确保 MEMOMICS_HOME 正确：cron 数据存在 memomics_home/cron/ 下
+        os.environ.setdefault("MEMOMICS_HOME", MEMOMICS_HOME_DIR)
         _ticker_thread = _threading.Thread(
             target=lambda: InProcessCronScheduler().start(
                 _cron_stop_event,
                 adapters=None,   # 不需要消息平台投递
                 loop=None,       # 不需要 live adapter
-                interval=60,     # 60s tick，与 Hermes 默认一致
+                interval=60,     # 60s tick，与 MemOmics 默认一致
             ),
             daemon=True,
             name="memomics-cron-ticker",
         )
         _ticker_thread.start()
-        logger.info("[MemOmics] Cron ticker started — hermes_home/cron/jobs.json, interval=60s")
+        logger.info("[MemOmics] Cron ticker started — memomics_home/cron/jobs.json, interval=60s")
     except Exception as e:
         logger.warning(f"[MemOmics] Cron ticker 启动失败（长任务心跳不可用）: {e}")
     # 2026-08-23 迁移 MiMo-Code：启动后台自动检查更新（静默失败，不阻塞启动）
@@ -638,7 +650,7 @@ async def _start_hermes_cron_ticker():
         pass
 
 @app.on_event("shutdown")
-async def _stop_hermes_cron_ticker():
+async def _stop_memomics_cron_ticker():
     """优雅停止 cron ticker。"""
     _cron_stop_event.set()
     logger.info("[MemOmics] Cron ticker stopped")
@@ -726,10 +738,10 @@ def _is_suicide_command(cmd: str) -> bool:
     return False
 
 
-# === Hermes SessionDB (state.db) — 原生会话持久化 ===
+# === MemOmics SessionDB (state.db) — 原生会话持久化 ===
 _session_db = None
 def _get_session_db():
-    """惰性初始化 Hermes SessionDB"""
+    """惰性初始化 MemOmics SessionDB"""
     global _session_db
     if _session_db is None:
         try:
@@ -747,11 +759,11 @@ def _get_session_db():
 
 
 def _restore_session_model_config(sid, base_cfg):
-    """从 Hermes state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
+    """从 MemOmics state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
 
     只认 sessions.model_config 列（会话级切换时写入的完整 JSON，含 api_key）；
     该列没有值 = 该会话从未做过会话级切换 → 跟随全局 base_cfg。
-    不回退 model/billing 列：那两列是 Hermes 首次调用时自动填的，
+    不回退 model/billing 列：那两列是 MemOmics 首次调用时自动填的，
     可能过时（全局切换后未更新），会导致重启后会话用了旧模型。
     """
     try:
@@ -774,7 +786,7 @@ def _restore_session_model_config(sid, base_cfg):
 
 
 def _build_session_stats(session_id, agent=None):
-    """构建 session token 统计：以 state.db 持久化累计为准（Hermes 每轮 API 调用后
+    """构建 session token 统计：以 state.db 持久化累计为准（MemOmics 每轮 API 调用后
     自动 update_token_counts 增量写入 sessions 表）。
 
     修复(2026-08-07)：原实现优先 agent 内存（session_*_tokens），切换模型重建 agent
@@ -1794,7 +1806,7 @@ def _session_has_active_work(session):
 
 
 def _session_has_external_work(session):
-    """M1: 是否有外部工作在跑（Hermes 进程注册表有活进程 / batch 活跃）。
+    """M1: 是否有外部工作在跑（MemOmics 进程注册表有活进程 / batch 活跃）。
 
     用于"兜底唤醒先做便宜检查"：只有进程/batch 活着且无新进展时才跳过
     LLM 唤醒；进程退出或 batch 完成 → 立即让 LLM 去收结果。
@@ -2832,7 +2844,7 @@ _current_model = {   # 默认模型配置 (打包后为空, 首次启动配置)
 }
 
 # === 模型配置持久化 ===
-_MODEL_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "model_config.json")
+_MODEL_CONFIG_FILE = os.path.join(MEMOMICS_HOME_DIR, "model_config.json")
 
 def _atomic_write_json(path: str, obj) -> None:
     """原子写 JSON：临时文件 + fsync + os.replace，避免进程中止留下半个文件"""
@@ -2850,22 +2862,22 @@ def _save_model_config():
     except Exception as e:
         print(f"[WARN] 保存模型配置失败: {e}")
 
-def _hermes_config_read():
-    """读取 Hermes 底座 config.yaml（真相源）。
+def _memomics_config_read():
+    """读取 MemOmics 底座 config.yaml（真相源）。
 
-    用 Hermes 自己的 load_config()（展开 env 引用、deep-merge 默认值），
+    用 MemOmics 自己的 load_config()（展开 env 引用、deep-merge 默认值），
     另用 read_raw_config() 判断键是否真的在磁盘上设置过。
     """
     try:
         from hermes_cli.config import load_config, read_raw_config
         return load_config() or {}, read_raw_config() or {}
     except Exception as e:
-        print(f"[WARN] 读取 hermes config.yaml 失败: {e}")
+        print(f"[WARN] 读取 memomics config.yaml 失败: {e}")
         return {}, {}
 
 
-def _hermes_config_write(updates: dict) -> bool:
-    """原子合并写 Hermes config.yaml（用 Hermes 自己的 atomic_config_write）。"""
+def _memomics_config_write(updates: dict) -> bool:
+    """原子合并写 MemOmics config.yaml（用 MemOmics 自己的 atomic_config_write）。"""
     try:
         from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
         cfg = read_raw_config() or {}
@@ -2873,21 +2885,21 @@ def _hermes_config_write(updates: dict) -> bool:
         atomic_config_write(get_config_path(), cfg)
         return True
     except Exception as e:
-        print(f"[WARN] 写入 hermes config.yaml 失败: {e}")
+        print(f"[WARN] 写入 memomics config.yaml 失败: {e}")
         return False
 
 
 def _load_model_config():
-    """从 Hermes 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
+    """从 MemOmics 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
 
-    原来 MemOmics 维护自己的 model_config.json，与 Hermes 底座的 config.yaml
+    原来 MemOmics 维护自己的 model_config.json，与 MemOmics 底座的 config.yaml
     各自独立 → 两套配置漂移（UI 显示 A、底座实际用 B）。现统一：
     1. config.yaml 有 api_key+api_base → 以其为准（load_config 已展开 env 引用）
     2. 没有 → 回退旧 model_config.json 并一次性迁移回写 config.yaml
     """
     global _current_model
     # ── 迁移方向（2026-08-08）：以 model_config.json 为准（用户在 UI 最近设置的
-    # 实际生效配置），并回写 Hermes config.yaml —— 一次迁移后 config.yaml 成为
+    # 实际生效配置），并回写 MemOmics config.yaml —— 一次迁移后 config.yaml 成为
     # 唯一真相源，两套配置不再漂移。model_config.json 缺失时才读 config.yaml。
     _legacy = None
     if os.path.exists(_MODEL_CONFIG_FILE):
@@ -2900,12 +2912,12 @@ def _load_model_config():
         for k in ("provider", "base_url", "api_key", "model"):
             if _legacy.get(k):
                 _current_model[k] = _legacy[k]
-        print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 Hermes config.yaml)")
+        print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 MemOmics config.yaml)")
         _save_model_config()
         return
-    # 回退：Hermes config.yaml（load_config 会把 model 规范化为 dict:
+    # 回退：MemOmics config.yaml（load_config 会把 model 规范化为 dict:
     # {default, provider, base_url}，此处兼容两种形态）
-    _full, _raw = _hermes_config_read()
+    _full, _raw = _memomics_config_read()
     if _raw.get("api_key") and _raw.get("api_base"):
         _m = _full.get("model")
         _m_dict = _m if isinstance(_m, dict) else {}
@@ -2920,7 +2932,7 @@ def _load_model_config():
         if _model_key:
             _current_model["api_key"] = _model_key
         _current_model["provider"] = _model_provider or _current_model.get("provider", "openai")
-        print(f"[INFO] 已从 Hermes config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
+        print(f"[INFO] 已从 MemOmics config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
         try:
             _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)  # 镜像同步（兼容）
         except Exception:
@@ -2934,8 +2946,8 @@ def _load_model_config():
             for k in ("provider", "base_url", "api_key", "model"):
                 if saved.get(k):
                     _current_model[k] = saved[k]
-            print(f"[INFO] 已加载旧 model_config.json（迁移回写 Hermes config.yaml）: model={_current_model['model']}")
-            _hermes_config_write({
+            print(f"[INFO] 已加载旧 model_config.json（迁移回写 MemOmics config.yaml）: model={_current_model['model']}")
+            _memomics_config_write({
                 "provider": _current_model["provider"],
                 "api_base": _current_model["base_url"],
                 "api_key": _current_model["api_key"],
@@ -2946,8 +2958,8 @@ def _load_model_config():
 
 
 def _save_model_config():
-    """写 Hermes config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
-    _hermes_config_write({
+    """写 MemOmics config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
+    _memomics_config_write({
         "provider": _current_model.get("provider", "openai"),
         "api_base": _current_model.get("base_url", ""),
         "api_key": _current_model.get("api_key", ""),
@@ -2967,7 +2979,7 @@ try:
 except ImportError:
     from runtime import JobStore, TaskSupervisor, ResourceScheduler, ResourceCapacity
 
-_job_store = JobStore(os.path.join(HERMES_HOME_DIR, "runtime", "jobs.json"))
+_job_store = JobStore(os.path.join(MEMOMICS_HOME_DIR, "runtime", "jobs.json"))
 _task_supervisor = TaskSupervisor(store=_job_store)
 _resource_scheduler = ResourceScheduler(ResourceCapacity.detect())
 
@@ -3401,7 +3413,7 @@ def _effective_models(p, saved=None):
 _PROVIDERS_INDEX = {p["id"]: p for p in _CHINA_PROVIDERS}
 
 # === 多 Provider Key 存储 ===
-_PROVIDER_KEYS_FILE = os.path.join(HERMES_HOME_DIR, "provider_keys.json")
+_PROVIDER_KEYS_FILE = os.path.join(MEMOMICS_HOME_DIR, "provider_keys.json")
 
 _provider_keys = {}  # provider_id -> {api_key, base_url}
 
@@ -3467,7 +3479,7 @@ _load_provider_keys()
 # === 自定义 Provider 定义存储（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
 # 与 provider_keys.json 分工：本文件存"定义"（名称/base_url/模型列表），key 仍走
 # provider_keys.json（现有同步/联动逻辑不变）。启动时 merge 进 _PROVIDERS_INDEX。
-_CUSTOM_PROVIDERS_FILE = os.path.join(HERMES_HOME_DIR, "custom_providers.json")
+_CUSTOM_PROVIDERS_FILE = os.path.join(MEMOMICS_HOME_DIR, "custom_providers.json")
 
 _custom_providers = {}  # pid -> {id, name, api, models[]}
 
@@ -3491,8 +3503,8 @@ def _save_custom_providers():
 
 _load_custom_providers()
 
-# === 图像生成配置（image_gen_config.json，独立于 Hermes 主配置） ===
-_IMAGE_GEN_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "image_gen_config.json")
+# === 图像生成配置（image_gen_config.json，独立于 MemOmics 主配置） ===
+_IMAGE_GEN_CONFIG_FILE = os.path.join(MEMOMICS_HOME_DIR, "image_gen_config.json")
 _IMAGE_GEN_DEFAULTS = {
     "provider": "openai-compatible",
     "openai_compatible": {
@@ -3542,14 +3554,14 @@ def _save_image_gen_config():
         print(f"[WARN] 保存图像生成配置失败: {e}")
 
 
-def _sync_imagegen_provider_to_hermes():
-    """把图像生成配置同步为 Hermes config.yaml 的 image_gen.provider。
+def _sync_imagegen_provider_to_memomics():
+    """把图像生成配置同步为 MemOmics config.yaml 的 image_gen.provider。
 
     修复 2026-08-12：image_generate 工具的 check_fn
     （check_image_generation_requirements）只认 config.yaml 的 image_gen.provider
     —— 不写这里，工具永远不会被收集（check_fn 返回 False），agent 感知不到
     图像生成能力，即使设置页已保存 key。保存配置时同步一份到 config.yaml，
-    与 _sync_custom_providers_to_hermes 同一范式。
+    与 _sync_custom_providers_to_memomics 同一范式。
     """
     try:
         from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
@@ -3561,7 +3573,7 @@ def _sync_imagegen_provider_to_hermes():
         section["provider"] = provider
         cfg["image_gen"] = section
         atomic_config_write(get_config_path(), cfg)
-        logger.info(f"[MemOmics] 已同步 image_gen.provider={provider} 到 Hermes config.yaml")
+        logger.info(f"[MemOmics] 已同步 image_gen.provider={provider} 到 MemOmics config.yaml")
     except Exception as exc:
         logger.warning(f"[WARN] 同步 image_gen.provider 到 config.yaml 失败: {exc}")
 
@@ -3666,13 +3678,13 @@ except ImportError:
     create_bioinformatics_router = None
 
 _bio_reference_registry = ReferenceRegistry(
-    os.path.join(HERMES_HOME_DIR, "bioinformatics", "references.json"),
+    os.path.join(MEMOMICS_HOME_DIR, "bioinformatics", "references.json"),
     allowed_roots=[MEMOMICS_DIR, RESULTS_DIR, _uploads_dir],
 )
 if create_bioinformatics_router is not None:
     app.include_router(create_bioinformatics_router(_bio_reference_registry, [MEMOMICS_DIR, RESULTS_DIR, _uploads_dir]))
-SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
-SKILLS_INDEX_PATH = os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md")
+SOUL_PATH = os.path.join(MEMOMICS_HOME_DIR, "SOUL.md")
+SKILLS_INDEX_PATH = os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md")
 _SKILLS_INDEX_CACHE = None  # 模块级缓存：服务器启动后只读一次，所有会话共享
 _SKILLS_INDEX_MTIME = None  # 缓存对应的文件 mtime，用于热更新检测
 
@@ -3689,7 +3701,7 @@ def _read_skills_index():
     """读取技能目录 (SKILLS_INDEX.md)，作为 ephemeral_system_prompt 注入。
     预加载缓存：首次调用时读取，后续返回缓存，避免每次会话都读 27KB 文件。
     mtime 感知：SKILLS_INDEX.md 被外部修改（如 auto_register 重建）后自动重读，
-    无需重启 server。SOUL.md 由 Hermes 框架从 HERMES_HOME 自动加载，此处不重复加载。"""
+    无需重启 server。SOUL.md 由 MemOmics 框架从 MEMOMICS_HOME 自动加载，此处不重复加载。"""
     global _SKILLS_INDEX_CACHE, _SKILLS_INDEX_MTIME
     try:
         cur = os.path.getmtime(SKILLS_INDEX_PATH) if os.path.isfile(SKILLS_INDEX_PATH) else -1
@@ -3864,8 +3876,8 @@ def _skill_roots():
     from pathlib import Path as _P8
     cands = [
         _P8(SKILLS_DIR),
-        _P8(HERMES_HOME_DIR) / "skills" / "bioinformatics",
-        _P8(HERMES_HOME_DIR) / "skills" / "plotting",
+        _P8(MEMOMICS_HOME_DIR) / "skills" / "bioinformatics",
+        _P8(MEMOMICS_HOME_DIR) / "skills" / "plotting",
     ]
     out = []
     for c in cands:
@@ -4250,7 +4262,7 @@ def _skill_usage_get(sid: str) -> dict:
     used = {}
     try:
         import sqlite3 as _p8_sqlite
-        conn = _p8_sqlite.connect(os.path.join(HERMES_HOME_DIR, "state.db"), timeout=10)
+        conn = _p8_sqlite.connect(os.path.join(MEMOMICS_HOME_DIR, "state.db"), timeout=10)
         conn.execute("PRAGMA busy_timeout=5000")
         rows = conn.execute(
             "SELECT args_json FROM tool_calls_log WHERE session_id=? AND tool_name='skill_view' ORDER BY id DESC LIMIT 200",
@@ -4870,7 +4882,7 @@ def _detect_domain_from_text(text: str) -> str:
 # 自己组织回答：真在问身份就用这些事实自然作答，在问别的就正常回答那个问题。
 _SELF_FACTS_ZH = (
     "关于 MemOmics 的真实事实（供你参考，不是要照抄的文案）：\n"
-    "- 身份：基于 Hermes 框架的自进化多组学生信分析平台；不是聊天机器人，而是能自己扫描数据、分析、出报告的自主 Agent，用户不用写代码。\n"
+    "- 身份：基于 MemOmics 框架的自进化多组学生信分析平台；不是聊天机器人，而是能自己扫描数据、分析、出报告的自主 Agent，用户不用写代码。\n"
     "- 数据扫描：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等格式，检测物种、组织、细胞数、注释状态，推荐分析路径。\n"
     "- 完整流程：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC → 生存分析 → 报告生成。\n"
     "- 双引擎：默认 R/Seurat，数据量大于 60 万细胞自动切 Python/Scanpy；缺包自动安装（BiocManager/remotes/pip/conda）。\n"
@@ -4881,7 +4893,7 @@ _SELF_FACTS_ZH = (
 )
 _SELF_FACTS_EN = (
     "Facts about MemOmics (reference material, not text to copy verbatim):\n"
-    "- Identity: a self-evolving multi-omics bioinformatics platform built on the Hermes framework; an autonomous agent that scans data, runs analyses and writes reports - users write no code.\n"
+    "- Identity: a self-evolving multi-omics bioinformatics platform built on the MemOmics framework; an autonomous agent that scans data, runs analyses and writes reports - users write no code.\n"
     "- Data scanning: auto-detects scRNA-seq / scATAC-seq / spatial transcriptomics / bulk RNA-seq, plus species, tissue, cell counts and annotation status; recommends an analysis path.\n"
     "- Pipeline: QC (decontamination -> doublet filtering -> normalization) -> dimensionality reduction -> clustering -> annotation -> DE -> pathway enrichment -> cell communication -> trajectory -> SCENIC -> survival analysis -> report.\n"
     "- Dual engine: R/Seurat by default, auto-switches to Python/Scanpy above 600K cells; auto-installs missing packages (BiocManager/remotes/pip/conda).\n"
@@ -5968,7 +5980,7 @@ def _restore_single_session(sid):
     if not db:
         return None
     try:
-        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (memomics default=20)
         for s in sessions:
             s_id = s.get("session_id") or s.get("id")
             if s_id != sid:
@@ -6135,14 +6147,14 @@ def _restore_one_persisted_session(db, s):
 
 
 def _load_persisted_sessions():
-    """启动时从 Hermes state.db 恢复历史会话"""
+    """启动时从 MemOmics state.db 恢复历史会话"""
     db = _get_session_db()
     if not db:
         print("[MemOmics] SessionDB 不可用，跳过会话恢复", flush=True)
         return
     try:
         # 自愈（2026-08-08）：清理 sessions.model_config 里的空串/坏 JSON。
-        # 空串 '' 不是合法 JSON，Hermes 的 list_sessions_rich 内部对
+        # 空串 '' 不是合法 JSON，MemOmics 的 list_sessions_rich 内部对
         # model_config 做 json_extract 时抛 "malformed JSON" → 整个会话恢复
         # 中断（内存 0 会话）→ 前端所有会话级操作（切模型等）404 静默失败。
         # 坏数据的来源：任何把 model_config 写成 '' 而非 NULL 的路径。
@@ -6155,7 +6167,7 @@ def _load_persisted_sessions():
                 db._conn.commit()
         except Exception:
             pass
-        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (memomics default=20)
         count = 0
         for s in sessions:
             try:
@@ -6207,7 +6219,7 @@ def _load_persisted_sessions():
 
 
 def _persist_session_message(session, role, content):
-    """把消息持久化到 Hermes state.db"""
+    """把消息持久化到 MemOmics state.db"""
     db = _get_session_db()
     if not db:
         return
@@ -6442,7 +6454,7 @@ def _recall_facts(text, limit=6, max_chars=450):
                 if w.lower() not in _FACT_RECALL_STOP][:8]
         if not _kws:
             return ""
-        _db = os.path.join(HERMES_HOME_DIR, "memory_store.db")
+        _db = os.path.join(MEMOMICS_HOME_DIR, "memory_store.db")
         if not os.path.isfile(_db):
             return ""
         import sqlite3 as _sq
@@ -6652,7 +6664,7 @@ def _build_read_recipes(session, db_path=None, limit_rows=40):
         sid = session.get("id", "") or ""
         if not sid:
             return ""
-        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = db_path or os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return ""
         import sqlite3 as _sq
@@ -6678,7 +6690,7 @@ def _resolve_message_id(session_id: str, content_hint: str) -> int:
         return 0
     try:
         import sqlite3 as _sq
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return 0
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -6751,7 +6763,7 @@ def _build_rollup_checkpoint(session, head):
         pass
     try:
         import sqlite3 as _sq
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         _rows = []
         try:
             _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -6803,7 +6815,7 @@ def _build_recent_turns_digest(session, max_turns=8):
         sid = session.get("id", "")
         if not sid:
             return ""
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.exists(_dbp):
             return ""
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -6859,7 +6871,7 @@ def _build_pending_question_context(session, user_text):
         sid = session.get("id", "")
         if not sid or not (user_text or "").strip():
             return ""
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.exists(_dbp):
             return ""
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -7460,7 +7472,7 @@ def _extract_input_paths(session, limit=10, db_path=None) -> list:
         sid = session.get("id", "") or ""
         if not sid:
             return []
-        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = db_path or os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return []
         import sqlite3 as _sq
@@ -7694,9 +7706,9 @@ def _env_digest_block() -> str:
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
-    链接 Hermes 原生能力：
+    链接 MemOmics 原生能力：
     - checkpoints_enabled: 会话快照与回滚
-    - session_id: 关联 Hermes 会话状态目录
+    - session_id: 关联 MemOmics 会话状态目录
     - context_compressor: 自动启用（agent_init 内置）
     - background_review: 自动启用（conversation_loop 内置）
     """
@@ -7709,7 +7721,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         pass
     cfg = model_config or (session or {}).get("model_config") or _current_model
     # 2026-08-08：provider 名按 base_url 智能映射。MemOmics 统一存 provider='openai'，
-    # 但 Hermes 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
+    # 但 MemOmics 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
     # TLS 间歇性挂起需要短超时（60s）让外层 loop 重试，不能吃 openai 的 900s。
     _provider = cfg.get("provider", "openai")
     try:
@@ -7937,7 +7949,7 @@ def _sync_meta_display_name(session, title):
 def _append_rename_event(sid, old_title, new_title, source="manual"):
     """改名审计：只追加 JSONL（学 OpenAI4S Action Ledger），可追溯可回滚。"""
     try:
-        events_dir = os.path.join(HERMES_HOME_DIR, "sessions")
+        events_dir = os.path.join(MEMOMICS_HOME_DIR, "sessions")
         os.makedirs(events_dir, exist_ok=True)
         with open(os.path.join(events_dir, "rename_events.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps({
@@ -8135,7 +8147,7 @@ def _session_display_stats(sid, start_ua=0):
     返回 (stats, meta)：meta[k] = 第 (start_ua+k) 个 user/assistant 消息的
     {elapsed, tool_count, tool_names}——页脚显示用。"""
     import sqlite3 as _sq
-    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
     try:
         _conn = _sq.connect(_dbp, timeout=5)
         _usage = _conn.execute(
@@ -8174,7 +8186,7 @@ def _session_display_stats(sid, start_ua=0):
 def _last_tool_of(sid):
     """会话最近一次工具调用（刷新后运行状态条显示 agent 在干什么）。"""
     import sqlite3 as _sq
-    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
     try:
         _conn = _sq.connect(_dbp, timeout=5)
         _row = _conn.execute(
@@ -8438,10 +8450,10 @@ async def delete_session(sid: str):
         logger.warning(f"[MemOmics] 会话 {sid} 结果目录删除失败: {purge['failed']}")
     if purge["external"]:
         logger.info(f"[MemOmics] 会话 {sid} 外部目录保留（非 results/ 内，未删）: {purge['external']}")
-    # 删除 Hermes 会话转录文件（hermes_home/sessions/ 下的 request_dump_*）
+    # 删除 MemOmics 会话转录文件（memomics_home/sessions/ 下的 request_dump_*）
     try:
         import glob as _glob
-        for _f in _glob.glob(os.path.join(HERMES_HOME_DIR, "sessions", f"*{sid}*")):
+        for _f in _glob.glob(os.path.join(MEMOMICS_HOME_DIR, "sessions", f"*{sid}*")):
             try:
                 os.remove(_f)
             except Exception:
@@ -8460,12 +8472,12 @@ async def delete_session(sid: str):
 
 # --- Skill 个性化管理 ---
 
-SKILLS_BIO_DIR = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics")
+SKILLS_BIO_DIR = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics")
 
 def _load_skills_config() -> dict:
     """读取 config.yaml 的 skills 部分"""
     import yaml as _yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = _yaml.safe_load(f) or {}
@@ -8476,7 +8488,7 @@ def _load_skills_config() -> dict:
 def _save_skills_disabled(disabled_list: list):
     """保存 disabled skill 列表到 config.yaml"""
     import yaml as _yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = _yaml.safe_load(f) or {}
@@ -8497,9 +8509,9 @@ async def register_skill(request: Request):
         trigger_kw = data.get("trigger_keywords", None)
         register_soul = data.get("register_soul", False)
         auto_register.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         result = auto_register.register_skill(skill_name, trigger_kw, register_soul)
         return result
@@ -8568,7 +8580,7 @@ async def switch_model(payload: dict):
     """切换模型
 
     - 带 session_id：会话级切换 — 只影响该会话（独立 model_config + 重建该会话 agent），
-      持久化到 Hermes state.db（update_session_model / update_session_billing_route），
+      持久化到 MemOmics state.db（update_session_model / update_session_billing_route），
       重启/重连后自动恢复；不影响其他会话和全局 _current_model。
     - 不带 session_id：全局切换（兼容旧行为）— 广播所有会话 + 写 model_config.json。
     """
@@ -8634,7 +8646,7 @@ async def switch_model(payload: dict):
             except Exception:
                 pass
             s["agent"] = None
-        # 持久化到 Hermes state.db（重启后自动恢复会话级模型）
+        # 持久化到 MemOmics state.db（重启后自动恢复会话级模型）
         # 会话级锁定：此后全局模型切换不再覆盖本会话（互不影响）
         s["model_locked"] = True
         try:
@@ -8776,7 +8788,7 @@ async def save_imagegen_config(body: dict):
                         continue  # 脱敏值不回写
                     sub[k] = v
         _save_image_gen_config()
-        _sync_imagegen_provider_to_hermes()  # image_generate 工具可见性依赖 config.yaml 的 image_gen.provider
+        _sync_imagegen_provider_to_memomics()  # image_generate 工具可见性依赖 config.yaml 的 image_gen.provider
         return {"ok": True, "provider": _image_gen_config.get("provider")}
     except Exception as exc:
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
@@ -8802,7 +8814,7 @@ def _pull_provider_models(pid, p, api_key, timeout=15.0):
     saved["models_source"] = res.get("url_used", "")
     saved["models_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _save_provider_keys()
-    _sync_custom_providers_to_hermes(pid)
+    _sync_custom_providers_to_memomics(pid)
     print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{res.get('url_used', '')}）", flush=True)
     return {"ok": True, "provider": pid, "count": len(models), "models": models,
             "url_used": res.get("url_used", "")}
@@ -8854,7 +8866,7 @@ def _provider_extra_headers_for(base_url):
     """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
 
     opencode.ai zen 网关要求每个请求带 x-opencode-session，缺则一律 400
-    MissingSessionID。Hermes 底座走 openai SDK 时由
+    MissingSessionID。MemOmics 底座走 openai SDK 时由
     get_custom_provider_extra_headers 注入，但 MemOmics 侧自建 httpx 调用
     （会话自动命名等）绕过底座，必须自行合并。匹配不到返回 {}。
     """
@@ -8881,10 +8893,10 @@ def _provider_extra_headers_for(base_url):
     return {}
 
 
-def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None):
-    """构造写入 Hermes config.yaml 的 custom_providers 条目（2026-09-10 修复）。
+def _build_memomics_provider_entry(pid, name, api_base, api_key, models, prev=None):
+    """构造写入 MemOmics config.yaml 的 custom_providers 条目（2026-09-10 修复）。
 
-    1) 同时写 `base_url`：Hermes 的 ProviderProfile / per-provider `extra_headers`
+    1) 同时写 `base_url`：MemOmics 的 ProviderProfile / per-provider `extra_headers`
        匹配只认 `base_url`（hermes_cli/config.py:get_custom_provider_extra_headers），
        此前只写 `api_base` → 该类配置永远匹配不上，静默失效。
     2) 保留原有附加字段（extra_headers / api_mode / ssl_* / context_length…）：
@@ -8899,7 +8911,7 @@ def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None
         "id": pid,
         "name": name,
         "api_base": api_base,     # MemOmics 自身读取的字段
-        "base_url": api_base,     # Hermes 底座/匹配器读取的字段
+        "base_url": api_base,     # MemOmics 底座/匹配器读取的字段
         "api_key": api_key if _is_valid_api_key(api_key) else "",
         "models": models,
     })
@@ -8918,11 +8930,11 @@ def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None
     return entry
 
 
-def _sync_custom_providers_to_hermes(pid=None):
-    """把「有 key 的 provider」同步为 Hermes config.yaml 的 custom_providers。
+def _sync_custom_providers_to_memomics(pid=None):
+    """把「有 key 的 provider」同步为 MemOmics config.yaml 的 custom_providers。
 
     修复 2026-08-08：provider key 原来只存 MemOmics 的 provider_keys.json，
-    Hermes 底座（config.yaml）看不到 → 底座侧模型路由/校验对不上。现每个
+    MemOmics 底座（config.yaml）看不到 → 底座侧模型路由/校验对不上。现每个
     保存/删除 key 的操作都同步一份到 config.yaml，与底座本地配置一致。
     """
     try:
@@ -8934,21 +8946,21 @@ def _sync_custom_providers_to_hermes(pid=None):
                 existing[c["id"]] = c
         if pid is None:
             # 2026-08-27: 遍历所有有 key 的 provider（内置 + 用户自定义 custom-*），
-            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 Hermes 底座
+            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 MemOmics 底座
             for _pid in list(_provider_keys.keys()):
                 saved = _provider_keys.get(_pid)
                 if not (saved and saved.get("api_key")):
                     continue
                 p = _PROVIDERS_INDEX.get(_pid) or {}
                 _api = saved.get("base_url") or p.get("api", "")
-                existing[_pid] = _build_hermes_provider_entry(
+                existing[_pid] = _build_memomics_provider_entry(
                     _pid, p.get("name", _pid), _api, saved["api_key"],
                     _effective_models(p, saved), existing.get(_pid))
         elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
             saved = _provider_keys[pid]
             _api = saved.get("base_url") or p.get("api", "")
-            existing[pid] = _build_hermes_provider_entry(
+            existing[pid] = _build_memomics_provider_entry(
                 pid, p.get("name", pid), _api, saved["api_key"],
                 _effective_models(p, saved), existing.get(pid))
         else:
@@ -8963,7 +8975,7 @@ def _sync_custom_providers_to_hermes(pid=None):
 
 @app.post("/api/providers/{pid}/key")
 async def save_provider_key(pid: str, payload: dict):
-    """保存指定 provider 的 API Key（同时同步 Hermes config.yaml custom_providers）"""
+    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）"""
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
@@ -8977,7 +8989,7 @@ async def save_provider_key(pid: str, payload: dict):
         _provider_keys[pid]["models_source"] = _prev_saved.get("models_source", "")
         _provider_keys[pid]["models_updated_at"] = _prev_saved.get("models_updated_at", "")
     _save_provider_keys()
-    _sync_custom_providers_to_hermes(pid)
+    _sync_custom_providers_to_memomics(pid)
     # 联动：全局模型正在用这个 provider 时，同步新 key——
     # 否则"设置页存 key + 设全局模型"的顺序反了就会用旧 key（微信/新会话都会中招）
     if _current_model.get("provider") == pid or _current_model.get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
@@ -9002,11 +9014,11 @@ async def save_provider_key(pid: str, payload: dict):
 
 @app.delete("/api/providers/{pid}/key")
 async def delete_provider_key(pid: str):
-    """删除指定 provider 的 API Key（同步移除 Hermes config.yaml custom_providers 条目）"""
+    """删除指定 provider 的 API Key（同步移除 MemOmics config.yaml custom_providers 条目）"""
     if pid in _provider_keys:
         del _provider_keys[pid]
         _save_provider_keys()
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     return {"ok": True}
 
 
@@ -9032,7 +9044,7 @@ async def add_local_provider(payload: dict):
     _provider_keys[pid] = {"api_key": "", "local": True, "base_url": base_url}
     _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes()
+        _sync_custom_providers_to_memomics()
     except Exception:
         pass
     return {"ok": True, "provider_id": pid, "model": model}
@@ -9219,7 +9231,7 @@ async def add_custom_provider(payload: dict):
         _provider_keys[pid] = {"api_key": api_key, "base_url": base_url}
         _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True, "provider_id": pid}
@@ -9247,7 +9259,7 @@ async def update_custom_provider(pid: str, payload: dict):
         _provider_keys[pid] = {"api_key": _key, "base_url": _def["api"]}
         _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True, "provider_id": pid}
@@ -9255,7 +9267,7 @@ async def update_custom_provider(pid: str, payload: dict):
 
 @app.delete("/api/providers/custom/{pid}")
 async def delete_custom_provider(pid: str):
-    """删除自定义 provider（定义 + key + Hermes 同步）"""
+    """删除自定义 provider（定义 + key + MemOmics 同步）"""
     if pid not in _custom_providers:
         return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
     del _custom_providers[pid]
@@ -9264,7 +9276,7 @@ async def delete_custom_provider(pid: str):
     _save_custom_providers()
     _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True}
@@ -9368,7 +9380,7 @@ _weixin_state = {
 # 从磁盘恢复已保存的微信凭据
 def _load_weixin_persist():
     try:
-        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
+        persist_path = os.path.join(MEMOMICS_HOME_DIR, "weixin_account.json")
         if os.path.exists(persist_path):
             with open(persist_path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
@@ -9385,8 +9397,8 @@ def _load_weixin_persist():
 
 def _save_weixin_persist():
     try:
-        os.makedirs(HERMES_HOME_DIR, exist_ok=True)
-        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
+        os.makedirs(MEMOMICS_HOME_DIR, exist_ok=True)
+        persist_path = os.path.join(MEMOMICS_HOME_DIR, "weixin_account.json")
         with open(persist_path, "w", encoding="utf-8") as f:
             json.dump({
                 "account_id": _weixin_state["account_id"],
@@ -9441,7 +9453,7 @@ async def resource_status():
 
 # ---------------------------------------------------------------------------
 # 后台任务查看（T2/4，2026-09-24）：读的是任务自己写的契约，服务端只读不猜
-# 契约文件：hermes_home/runtime/tasks/<task_id>.json（memomics/bio_tools/task_run.py 原子写）
+# 契约文件：memomics_home/runtime/tasks/<task_id>.json（memomics/bio_tools/task_run.py 原子写）
 # ---------------------------------------------------------------------------
 
 def _task_run():
@@ -9627,7 +9639,7 @@ def _spawn_retry(d: dict, plan: dict) -> tuple:
              "--param", "第几次重试=%d" % plan["attempt"]]
     argv += ["--"] + argv_cmd
     env = dict(os.environ)
-    # wrapper 按 env 找任务目录：必须显式钉到服务端正在读的那个 HERMES_HOME，
+    # wrapper 按 env 找任务目录：必须显式钉到服务端正在读的那个 MEMOMICS_HOME，
     # 否则测试/多实例下会写去另一个目录，面板永远看不到这次重试。
     env["MEMOMICS_TASKS_DIR"] = _tasks_dir()
     env["MEMOMICS_RUNTIME_DIR"] = os.path.dirname(_tasks_dir())
@@ -9636,7 +9648,7 @@ def _spawn_retry(d: dict, plan: dict) -> tuple:
         cwd = str(d.get("session_dir") or "")
     if not (cwd and os.path.isdir(cwd)):
         cwd = MEMOMICS_DIR
-    log_dir = os.path.join(HERMES_HOME_DIR, "runtime", "logs")
+    log_dir = os.path.join(MEMOMICS_HOME_DIR, "runtime", "logs")
     result = {"argv": argv, "cwd": cwd, "pid": None, "log": ""}
     try:
         os.makedirs(log_dir, exist_ok=True)
@@ -9681,8 +9693,8 @@ async def _retry_later(d: dict, plan: dict, delay: float) -> None:
 
 
 def _tasks_dir() -> str:
-    """每次现算：HERMES_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
-    return os.path.join(HERMES_HOME_DIR, "runtime", "tasks")
+    """每次现算：MEMOMICS_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
+    return os.path.join(MEMOMICS_HOME_DIR, "runtime", "tasks")
 
 
 def _task_api_token() -> str:
@@ -9886,9 +9898,9 @@ def _task_auto_sweep() -> dict:
 
 
 def _bind_task_run(tr):
-    """让 task_run 指向当前 hermes_home（面板与 wrapper 必须看同一个目录）。"""
+    """让 task_run 指向当前 memomics_home（面板与 wrapper 必须看同一个目录）。"""
     tr.TASKS_DIR = _tasks_dir()
-    tr.FALLBACK_LOG_DIR = os.path.join(HERMES_HOME_DIR, "runtime", "logs")
+    tr.FALLBACK_LOG_DIR = os.path.join(MEMOMICS_HOME_DIR, "runtime", "logs")
     return tr
 
 
@@ -10621,7 +10633,7 @@ async def cancel_background_task(task_id: str, payload: dict = None, request: Re
     if (t.data.get("status") or "") not in tr.LIVE_STATES:
         return JSONResponse({"ok": False, "error": "任务已结束（%s），无需取消" % t.data.get("status")},
                             status_code=409)
-    denied = _sandbox_precheck("proc.exec", t.path, [HERMES_HOME_DIR], "tasks.cancel")
+    denied = _sandbox_precheck("proc.exec", t.path, [MEMOMICS_HOME_DIR], "tasks.cancel")
     if denied:
         return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
 
@@ -10685,7 +10697,7 @@ async def retry_background_task(task_id: str, payload: dict = None, request: Req
     plan = _retry_plan(t.data, _retry_index(all_items, _RETRY_INFLIGHT))
     if not plan["allowed"]:
         return JSONResponse({"ok": False, "error": plan["reason"], "retry": plan}, status_code=409)
-    denied = _sandbox_precheck("proc.exec", t.path, [HERMES_HOME_DIR], "tasks.retry")
+    denied = _sandbox_precheck("proc.exec", t.path, [MEMOMICS_HOME_DIR], "tasks.retry")
     if denied:
         return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
     # 退避 >0 时不在请求里干等（面板不用吊着），排个后台任务到点再拉起来。
@@ -10728,7 +10740,7 @@ async def delete_background_task(task_id: str, payload: dict = None, request: Re
                             status_code=401)
     safe = os.path.basename(str(task_id or ""))
     denied = _sandbox_precheck("fs.delete", os.path.join(_tasks_dir(), safe + ".json"),
-                               [HERMES_HOME_DIR, _tasks_dir()], "tasks.delete")
+                               [MEMOMICS_HOME_DIR, _tasks_dir()], "tasks.delete")
     if denied:
         return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
     one = _task_delete_one(tr, task_id)
@@ -10774,7 +10786,7 @@ async def cleanup_background_tasks(payload: dict = None, request: Request = None
         ttl = None if ttl in (None, "") else float(ttl)
     except (TypeError, ValueError):
         return JSONResponse({"ok": False, "error": "ttl_hours 得是数字（小时）"}, status_code=400)
-    denied = _sandbox_precheck("fs.delete", _tasks_dir(), [HERMES_HOME_DIR, _tasks_dir()],
+    denied = _sandbox_precheck("fs.delete", _tasks_dir(), [MEMOMICS_HOME_DIR, _tasks_dir()],
                                "tasks.cleanup")
     if denied:
         return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
@@ -10790,7 +10802,7 @@ async def api_version():
     """前端版本标识：git commit + server 启动时间 + 修复包级别。
 
     修复包（fix_bundle）：打包分发的安装没有 .git（rev=unknown），
-    用 hermes_home/.fix_bundle 标记当前修复级别；outdated=True 表示
+    用 memomics_home/.fix_bundle 标记当前修复级别；outdated=True 表示
     文件级修复已落后（旧安装/部分覆盖更新），WebUI 可据此提示升级。
     """
     import subprocess as _sp
@@ -10807,7 +10819,7 @@ async def api_version():
     _outdated = False
     try:
         from memomics.fix_bundle import BUNDLE as _BUNDLE, fix_bundle_level as _level_fn
-        _level = _level_fn(HERMES_HOME_DIR) or "none"
+        _level = _level_fn(MEMOMICS_HOME_DIR) or "none"
         _outdated = _level < _BUNDLE
         _bundle = _BUNDLE
     except Exception:
@@ -10908,7 +10920,7 @@ _sandbox_ensure_app_grants()
 
 
 def _get_update_config() -> dict:
-    """读取更新策略配置（hermes_home/config.yaml 的 update 段）。
+    """读取更新策略配置（memomics_home/config.yaml 的 update 段）。
 
     对齐 MiMo-Code autoupdate 语义：
       notify — 仅通知用户有新版本（默认，更新由用户决定）
@@ -10919,7 +10931,7 @@ def _get_update_config() -> dict:
     cfg = {"autoupdate": "notify", "enabled": True}
     try:
         import yaml as _yaml
-        _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
         if os.path.isfile(_p):
             with open(_p, encoding="utf-8") as _f:
                 _d = _yaml.safe_load(_f) or {}
@@ -10940,7 +10952,7 @@ def _get_update_config() -> dict:
 def _set_update_config(autoupdate: str) -> dict:
     """写更新策略回 config.yaml（保留其他键）。"""
     import yaml as _yaml
-    _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(_p, encoding="utf-8") as _f:
             _d = _yaml.safe_load(_f) or {}
@@ -11196,24 +11208,24 @@ def _platform_asset() -> str:
 
 # ── 差异覆盖的保留清单（对齐打包.bat 排除：用户数据/环境/密钥绝不覆盖）──
 _KEEP_DIRS = (".venv", ".git", ".backups", "node_modules", "miniconda_env", "miniconda",
-              "runtime", "hermes_home", "results", "uploads", "log", "ArchRLogs",
+              "runtime", "memomics_home", "results", "uploads", "log", "ArchRLogs",
               "__pycache__", ".pytest_cache", ".idea", ".vscode")
 _KEEP_FILES = (".env", ".install_path", "venv_deps_ok.txt", "venv_vision_ok.txt",
                "VERSION",  # 本地版本标识不被远端覆盖（覆盖会破坏比较）
                )
-_KEEP_TOP_LEVEL = ("hermes_home", "results", "uploads", "log", ".venv", "runtime",
+_KEEP_TOP_LEVEL = ("memomics_home", "results", "uploads", "log", ".venv", "runtime",
                    "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
 
 
 def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = True) -> bool:
     """判断 zip 内相对路径是否应保留（不覆盖）。
 
-    检查路径的每一段：任何一段命中保留目录（node_modules/.venv/hermes_home 等）
+    检查路径的每一段：任何一段命中保留目录（node_modules/.venv/memomics_home 等）
     都保留——例如 hermes-agent/node_modules/xxx 命中 node_modules 段。
 
     2026-08-23 细化（轻量 update 包场景）：
-    - hermes_home/ 整体保留（config/memories/sessions 是用户数据）
-    - 但 hermes_home/skills/ 例外：技能库是发布内容，随版本更新
+    - memomics_home/ 整体保留（config/memories/sessions 是用户数据）
+    - 但 memomics_home/skills/ 例外：技能库是发布内容，随版本更新
     - VERSION 例外：update 包携带发布版 VERSION，允许覆盖（更新后版本号变化）
     """
     rel = rel.replace("\\", "/").lstrip("/")
@@ -11224,8 +11236,8 @@ def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = Tru
         return True
     top = parts[0]
     if top in _KEEP_TOP_LEVEL:
-        # 例外 1: hermes_home/skills 技能库随版本更新
-        if top == "hermes_home" and len(parts) > 1 and parts[1] == "skills":
+        # 例外 1: memomics_home/skills 技能库随版本更新
+        if top == "memomics_home" and len(parts) > 1 and parts[1] == "skills":
             return False
         return True
     # 路径任何段命中保留目录 → 保留（覆盖 hermes-agent/node_modules、memomics/vendor 等）
@@ -11387,9 +11399,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
         roots.append(("", extract_root))  # 覆盖 extract_root 下所有内容到 MEMOMICS_DIR
     else:
         for top in tops:
-            # 2026-08-23: hermes_home 顶层特殊处理——允许进入（skills 技能库随版本更新），
+            # 2026-08-23: memomics_home 顶层特殊处理——允许进入（skills 技能库随版本更新），
             # 内部子目录仍按 _is_keep_path 过滤（config/memories/sessions 保留）
-            if top == "hermes_home":
+            if top == "memomics_home":
                 src_dir = os.path.join(extract_root, top)
                 if os.path.isdir(src_dir):
                     roots.append((top, src_dir))
@@ -11407,9 +11419,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
             keep_dirs = []
             for d in dirs:
                 rel_d = os.path.join(prefix, rel_sub, d).replace("\\", "/")
-                # 2026-08-23: hermes_home 必须进入 walk（内部 skills 更新），
-                # 仅当整路径命中保留时才剪枝（如 hermes_home/memories）
-                if rel_d.lstrip("./") == "hermes_home" or not _is_keep_path(rel_d):
+                # 2026-08-23: memomics_home 必须进入 walk（内部 skills 更新），
+                # 仅当整路径命中保留时才剪枝（如 memomics_home/memories）
+                if rel_d.lstrip("./") == "memomics_home" or not _is_keep_path(rel_d):
                     keep_dirs.append(d)
             dirs[:] = keep_dirs
             for fn in files:
@@ -11531,7 +11543,7 @@ async def update_check():
 async def update_apply(payload: dict):
     """执行更新（用户已确认）：下载平台安装包 → 校验 → 差异覆盖代码（保留用户数据）→ fix_bundle。
 
-    覆盖范围：zip 内除保留清单（hermes_home/results/.venv/runtime/node_modules 等）外的代码文件。
+    覆盖范围：zip 内除保留清单（memomics_home/results/.venv/runtime/node_modules 等）外的代码文件。
     完成后需用户重启服务生效。
     """
     confirmed = payload.get("confirmed")
@@ -11647,7 +11659,7 @@ async def setup_config(req: Request):
     _current_model["model"] = model
     _save_model_config()
     try:
-        _cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        _cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
         _cfg_lines = [
             f"api_base: {base_url}",
             f"api_key: {api_key}",
@@ -11966,7 +11978,7 @@ async def weixin_qr_poll():
                 print(f"[MemOmics] QR confirmed: account={account_id[:20] if account_id else 'empty'}, user={user_id[:20] if user_id else 'empty'}", flush=True)
                 _save_weixin_persist()
                 try:
-                    _start_weixin_poll()  # 启动 Hermes WeixinAdapter
+                    _start_weixin_poll()  # 启动 MemOmics WeixinAdapter
                 except Exception as e:
                     print(f"[MemOmics] 启动微信适配器异常: {e}", flush=True)
                 return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
@@ -12009,7 +12021,7 @@ async def weixin_disconnect():
 
 
 async def _send_weixin_progress(message: str) -> bool:
-    """向微信发送进度消息 — 使用 Hermes 原生 WeixinAdapter.send()（带节流+熔断）"""
+    """向微信发送进度消息 — 使用 MemOmics 原生 WeixinAdapter.send()（带节流+熔断）"""
     if _weixin_adapter is None:
         return False
     if not _gate_weixin_send(message, min_interval=2.0):
@@ -12041,7 +12053,7 @@ async def _send_weixin_progress(message: str) -> bool:
 
 
 async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
-    """向微信发送本地图片 — 使用 Hermes 原生 WeixinAdapter.send_image_file()"""
+    """向微信发送本地图片 — 使用 MemOmics 原生 WeixinAdapter.send_image_file()"""
     if _weixin_adapter is None:
         return False
     if not os.path.isfile(image_path):
@@ -12068,7 +12080,7 @@ async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
 
 
 async def _send_weixin_document(file_path: str, caption: str = "") -> bool:
-    """向微信发送文件 — 使用 Hermes 原生 WeixinAdapter.send_document()"""
+    """向微信发送文件 — 使用 MemOmics 原生 WeixinAdapter.send_document()"""
     if _weixin_adapter is None:
         return False
     if not os.path.isfile(file_path):
@@ -12167,12 +12179,12 @@ _weixin_seen_ids = set()     # 已处理消息 ID 去重
 _weixin_sync_buf = ""        # iLink 增量轮询 sync_buf
 _weixin_poll_task = None     # 后台轮询 asyncio.Task
 _weixin_adapter = None
-_weixin_last_user_id = ""     # Last user who sent a message      # Hermes 原生 WeixinAdapter 实例
+_weixin_last_user_id = ""     # Last user who sent a message      # MemOmics 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
-_WEIXIN_MSGS_FILE = os.path.join(HERMES_HOME_DIR, "runtime", "weixin_messages.json")
+_WEIXIN_MSGS_FILE = os.path.join(MEMOMICS_HOME_DIR, "runtime", "weixin_messages.json")
 
-# 2026-08-14: 跨入口共享去重 — server 轮询(_weixin_poll_loop)与 Hermes 适配器回调
-# (_hermes_weixin_message_handler) 各自拉同一条消息时，只处理一次，防双会话/双回复。
+# 2026-08-14: 跨入口共享去重 — server 轮询(_weixin_poll_loop)与 MemOmics 适配器回调
+# (_memomics_weixin_message_handler) 各自拉同一条消息时，只处理一次，防双会话/双回复。
 _WEIXIN_SHARED_SEEN = set()
 _WEIXIN_SHARED_SEEN_MAX = 5000
 
@@ -12231,7 +12243,7 @@ _load_weixin_msg_store()
 # 场景：agent 在长任务（如 git 依赖安装）中陷入
 # "继续监控 → tail 日志 → 仍在进行 → 继续监控" 的无限循环，
 # 上下文不断膨胀、注意力崩溃，stall watchdog 因 agent "一直在动" 无法触发。
-# 检测两类循环，命中后通过 Hermes 原生 _pending_steer 通道注入强制收尾提示：
+# 检测两类循环，命中后通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示：
 #   A. 工具调用循环：最近 8 次调用中 ≥6 对是同工具 + 相似命令
 #   B. 重复表述循环：最近 8 个回合文本片段中 ≥6 对高度相似
 from difflib import SequenceMatcher as _SeqMatcher
@@ -12390,7 +12402,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
 
 
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
-    """通过 Hermes 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
+    """通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
     try:
         if agent is None and session is not None:
             agent = session.get("running_agent")
@@ -12578,7 +12590,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+    # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
     # 更新会话标题（首次消息）
     phone_icon = "\U0001f4f1"
@@ -12764,7 +12776,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+            # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
             _session_emit(session, {"type": "complete", "session_id": sid})
             _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
@@ -12930,26 +12942,26 @@ async def _weixin_poll_loop():
 
 
 def _start_weixin_poll():
-    """启动 Hermes 原生 WeixinAdapter"""
+    """启动 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
         return
-    asyncio.create_task(_connect_hermes_weixin_adapter())
-    print("[MemOmics] Hermes 微信适配器启动中...", flush=True)
+    asyncio.create_task(_connect_memomics_weixin_adapter())
+    print("[MemOmics] MemOmics 微信适配器启动中...", flush=True)
 
 
 def _stop_weixin_poll():
-    """停止 Hermes 原生 WeixinAdapter"""
+    """停止 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
-        asyncio.create_task(_disconnect_hermes_weixin_adapter())
+        asyncio.create_task(_disconnect_memomics_weixin_adapter())
 
 # ================================================================
-# Hermes 原生 WeixinAdapter 集成
+# MemOmics 原生 WeixinAdapter 集成
 # ================================================================
 
 def _build_weixin_platform_config():
-    """用当前 _weixin_state 构建 Hermes PlatformConfig"""
+    """用当前 _weixin_state 构建 MemOmics PlatformConfig"""
     import sys as _sys
     _hermes_root = os.path.join(os.path.dirname(__file__), "..", "hermes-agent")
     _sys.path.insert(0, _hermes_root)
@@ -12968,8 +12980,8 @@ def _build_weixin_platform_config():
     )
 
 
-async def _hermes_weixin_message_handler(event):
-    """Hermes 消息回调 — 存储、推送、自动回复"""
+async def _memomics_weixin_message_handler(event):
+    """MemOmics 消息回调 — 存储、推送、自动回复"""
     global _weixin_msg_store, _WEIXIN_WS_CLIENTS
     try:
         msg_id = event.message_id or str(int(time.time() * 1000))
@@ -13045,7 +13057,7 @@ async def _hermes_weixin_message_handler(event):
             _WEIXIN_WS_CLIENTS -= dead
             # 更新 last_active
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+            # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
         print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
 
@@ -13074,8 +13086,8 @@ async def _auto_reconnect_weixin():
         # 等待 uvicorn 完全启动 (让事件循环就绪)
         await asyncio.sleep(2)
         
-        # 调用 Hermes WeixinAdapter 连接
-        await _connect_hermes_weixin_adapter()
+        # 调用 MemOmics WeixinAdapter 连接
+        await _connect_memomics_weixin_adapter()
         
         if _weixin_adapter and _weixin_state.get("connected"):
             logger.info("[MemOmics] 微信自动重连成功!")
@@ -13087,8 +13099,8 @@ async def _auto_reconnect_weixin():
     except Exception as e:
         logger.warning(f"[MemOmics] 微信自动重连异常: {e}")
 
-async def _connect_hermes_weixin_adapter():
-    """连接 Hermes 原生 WeixinAdapter"""
+async def _connect_memomics_weixin_adapter():
+    """连接 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     try:
         import sys as _sys
@@ -13101,27 +13113,27 @@ async def _connect_hermes_weixin_adapter():
         config = _build_weixin_platform_config()
         print(f"[MemOmics] adapter config: token={'YES' if config.token else 'NO'}, account={_weixin_state.get('account_id','')[:20]}", flush=True)
         _weixin_adapter = WeixinAdapter(config)
-        _weixin_adapter.set_message_handler(_hermes_weixin_message_handler)
+        _weixin_adapter.set_message_handler(_memomics_weixin_message_handler)
         ok = await _weixin_adapter.connect()
         print(f"[MemOmics] adapter connect result: {ok}", flush=True)
         if ok:
-            print("[MemOmics] Hermes 微信适配器已连接", flush=True)
+            print("[MemOmics] MemOmics 微信适配器已连接", flush=True)
             _weixin_state["connected"] = True
             _save_weixin_persist()
         else:
-            print("[MemOmics] Hermes 微信适配器连接失败", flush=True)
-            _weixin_state["last_error"] = "Hermes 适配器连接失败"
+            print("[MemOmics] MemOmics 微信适配器连接失败", flush=True)
+            _weixin_state["last_error"] = "MemOmics 适配器连接失败"
             _weixin_adapter = None
     except Exception as e:
-        print(f"[MemOmics] Hermes 微信适配器异常: {e}", flush=True)
+        print(f"[MemOmics] MemOmics 微信适配器异常: {e}", flush=True)
         import traceback
         traceback.print_exc()
         _weixin_state["last_error"] = str(e)
         _weixin_adapter = None
 
 
-async def _disconnect_hermes_weixin_adapter():
-    """断开 Hermes 原生 WeixinAdapter"""
+async def _disconnect_memomics_weixin_adapter():
+    """断开 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
         try:
@@ -13131,7 +13143,7 @@ async def _disconnect_hermes_weixin_adapter():
         _weixin_adapter = None
     _weixin_state["connected"] = False
 
-    print("[MemOmics] Hermes 微信适配器已停止", flush=True)
+    print("[MemOmics] MemOmics 微信适配器已停止", flush=True)
 
 
 
@@ -13157,7 +13169,7 @@ async def weixin_messages(since: str = ""):
 
 @app.post("/api/weixin/send")
 async def weixin_send(body: dict = None):
-    """向微信用户发送/回复消息 — 使用 Hermes 原生 WeixinAdapter"""
+    """向微信用户发送/回复消息 — 使用 MemOmics 原生 WeixinAdapter"""
     global _weixin_msg_store
     if not body:
         return JSONResponse({"ok": False, "error": "请求体为空"}, status_code=400)
@@ -13728,12 +13740,12 @@ async def file_open(req: FileOpenRequest):
 
 @app.get("/api/papers")
 async def serve_papers(path: str = ""):
-    """文献原文/产物只读服务（批N1 2026-08-16）：仅限 hermes_home/papers/ 内。
+    """文献原文/产物只读服务（批N1 2026-08-16）：仅限 memomics_home/papers/ 内。
 
     - path 为相对路径（如 xxx.pdf / markdown/xxx.md / translations/xxx.zh.md）
     - PDF → application/pdf（浏览器 iframe 原生阅读器）；md → text/markdown
     """
-    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    papers_root = os.path.join(MEMOMICS_HOME_DIR, "papers")
     try:
         from webui.security import resolve_within_roots, UnsafePathError
         # 相对路径拼到 papers 根后再校验（防 ../ 穿越）
@@ -13758,7 +13770,7 @@ async def serve_paper_page(path: str = "", page: int = 0, dpi: int = 150):
     - page: 0-based 页码；dpi: 80-300（默认 150，含图清晰可读）
     - PyMuPDF get_pixmap 整页渲染（含全部图/表）；Cache-Control 供浏览器缓存
     """
-    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    papers_root = os.path.join(MEMOMICS_HOME_DIR, "papers")
     try:
         from webui.security import resolve_within_roots, UnsafePathError
         full = str(resolve_within_roots(os.path.join(papers_root, path or ""), [papers_root]))
@@ -14166,7 +14178,7 @@ async def list_skills():
         # 0l. functional-enrichment / gene_set_enrichment -> scRNA-seq 下游分析
         if any(kw in nl for kw in ["functional-enrichment", "gene_set_enrichment", "pathway-enrichment"]):
             return "scRNA-seq"
-        # 1. 读 SKILL.md frontmatter 里的 metadata.hermes.tags / metadata.hermes.category
+        # 1. 读 SKILL.md frontmatter 里的 metadata.memomics.tags / metadata.memomics.category
         if skill_md_content:
             import re
             # 提取 tags
@@ -14229,14 +14241,14 @@ async def list_skills():
     # Read disabled skills from config.yaml
     disabled_skills = _read_disabled_skills()
 
-    # Scan both SKILLS_DIR (project root skills/) and hermes_home/skills/bioinformatics/
+    # Scan both SKILLS_DIR (project root skills/) and memomics_home/skills/bioinformatics/
     scan_dirs = [Path(SKILLS_DIR)]
-    bio_dir = Path(HERMES_HOME_DIR) / "skills" / "bioinformatics"
+    bio_dir = Path(MEMOMICS_HOME_DIR) / "skills" / "bioinformatics"
     if bio_dir.exists() and bio_dir not in scan_dirs:
         scan_dirs.append(bio_dir)
     # 用户专属 skill 库（画图等用户提供脚本沉淀，category: user-skill）
     # 未来新增 user-skill-<类别> 分类目录时在此登记
-    user_plot_dir = Path(HERMES_HOME_DIR) / "skills" / "plotting"
+    user_plot_dir = Path(MEMOMICS_HOME_DIR) / "skills" / "plotting"
     if user_plot_dir.exists() and user_plot_dir not in scan_dirs:
         scan_dirs.append(user_plot_dir)
 
@@ -14295,9 +14307,9 @@ async def list_skills():
 # ── Skill management: enable/disable via config.yaml ──
 
 def _read_disabled_skills() -> set:
-    """Read skills.disabled from hermes_home/config.yaml."""
+    """Read skills.disabled from memomics_home/config.yaml."""
     import yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     if not os.path.exists(cfg_path):
         return set()
     try:
@@ -14314,9 +14326,9 @@ def _read_disabled_skills() -> set:
 
 
 def _write_disabled_skills(disabled: set):
-    """Write skills.disabled to hermes_home/config.yaml (preserving other keys)."""
+    """Write skills.disabled to memomics_home/config.yaml (preserving other keys)."""
     import yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     cfg = {}
     if os.path.exists(cfg_path):
         try:
@@ -14335,10 +14347,10 @@ def _write_disabled_skills(disabled: set):
 async def toggle_skill(name: str):
     """Toggle a skill on/off (enable <-> disable)."""
     disabled = _read_disabled_skills()
-    # Check both SKILLS_DIR and hermes_home/skills/bioinformatics
+    # Check both SKILLS_DIR and memomics_home/skills/bioinformatics
     skill_dir = os.path.join(SKILLS_DIR, name)
     if not os.path.isdir(skill_dir):
-        skill_dir = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics", name)
+        skill_dir = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics", name)
     if not os.path.isdir(skill_dir):
         return {"error": f"Skill '{name}' not found"}
     if name in disabled:
@@ -14601,9 +14613,9 @@ language: {req.language}
     with open(os.path.join(skill_dir, "skill.json"), "w", encoding="utf-8") as f:
         json.dump(skill_json, f, indent=2, ensure_ascii=False)
 
-    # 同步到 hermes_home/skills/bioinformatics/
+    # 同步到 memomics_home/skills/bioinformatics/
     import shutil
-    dest = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics", safe_name)
+    dest = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics", safe_name)
     if os.path.exists(dest):
         shutil.rmtree(dest)
     shutil.copytree(skill_dir, dest)
@@ -14614,9 +14626,9 @@ language: {req.language}
     try:
         from webui import auto_register as _ar
         _ar.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         _r = _ar.scan_and_register_all()
         print(f"[MemOmics] Auto-rebuilt skill index after creating {safe_name}: {_r}", flush=True)
@@ -15624,7 +15636,7 @@ def _debate_display_count(sid: str, ts_epoch: float = 0.0) -> int:
     失败返回 -1，前端会退化成「追加到末尾」。"""
     try:
         import sqlite3 as _sq
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.exists(_dbp):
             return -1
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -16117,7 +16129,7 @@ _GOAL_STATUSES = ("active", "done", "blocked", "cancelled")
 
 
 def _kv_get(key, default=None):
-    """读 Hermes state.db 的 kv 表（与微信会话映射同一张表，见 _get_session_db）。"""
+    """读 MemOmics state.db 的 kv 表（与微信会话映射同一张表，见 _get_session_db）。"""
     try:
         db = _get_session_db()
         if not db or not getattr(db, "_conn", None):
@@ -17298,10 +17310,10 @@ async def wakeup_session(sid: str):
 def _memory_api_token() -> str:
     """P1-10(2026-08-13): 记忆写 API 轻量鉴权 token。
 
-    服务首次启动时生成随机 token 持久化到 hermes_home/memory_api_token。
+    服务首次启动时生成随机 token 持久化到 memomics_home/memory_api_token。
     同源 WebUI 通过 GET /api/memory 拿到 token 后随写请求携带。
     """
-    _tok_path = os.path.join(HERMES_HOME_DIR, "memory_api_token")
+    _tok_path = os.path.join(MEMOMICS_HOME_DIR, "memory_api_token")
     try:
         if os.path.exists(_tok_path):
             with open(_tok_path, encoding="utf-8") as f:
@@ -17318,8 +17330,8 @@ def _memory_api_token() -> str:
         pass
     return _tok
 
-# 记忆文件限额：真相源是 hermes_home/config.yaml 的 memory_char_limit / user_char_limit
-# （Hermes MemoryStore 用的就是这两个数）。
+# 记忆文件限额：真相源是 memomics_home/config.yaml 的 memory_char_limit / user_char_limit
+# （MemOmics MemoryStore 用的就是这两个数）。
 # 2026-09-23 修：原来硬编码 10000，而 config.yaml 写的是 30000 —— 于是记忆栏的
 # 「追加/覆盖」在这台机器上 100% 被 413 挡死（MEMORY.md 早已 29530 字符），
 # 用户看到的就是"添加完全没用"。注释当时声称"与 config 保持一致"，其实从来没读过 config。
@@ -17332,7 +17344,7 @@ def _memory_char_limit(filename: str) -> int:
     _name = os.path.basename(str(filename or "MEMORY.md"))
     _key = _MEMORY_LIMIT_KEYS.get(_name, "memory_char_limit")
     try:
-        _cfg, _raw = _hermes_config_read()
+        _cfg, _raw = _memomics_config_read()
         _mem = (_cfg or {}).get("memory") or {}
         _val = _mem.get(_key) or _mem.get("memory_char_limit") or _MEMORY_DEFAULT_LIMIT
         _val = int(_val)
@@ -17343,7 +17355,7 @@ def _memory_char_limit(filename: str) -> int:
 
 def _memory_usage():
     """记忆文件占用/限额（面板占用条 + 治理体检共用；限额真相源=config.yaml）。"""
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     out = {}
     for name in ("MEMORY.md", "USER.md"):
         path = os.path.join(mem_dir, name)
@@ -17386,7 +17398,7 @@ async def memory_govern(payload: dict = None, request: Request = None):
             if _token != _memory_api_token():
                 return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"},
                                     status_code=401)
-            _target = os.path.join(HERMES_HOME_DIR, "memories", "MEMORY.md")
+            _target = os.path.join(MEMOMICS_HOME_DIR, "memories", "MEMORY.md")
             _denied = _sandbox_precheck("fs.write", _target, [MEMOMICS_DIR], "memory.govern")
             if _denied:
                 return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
@@ -17408,7 +17420,7 @@ async def memory_govern(payload: dict = None, request: Request = None):
 @app.get("/api/memory")
 async def get_memory():
     """读取外置记忆内容（响应携带写 API token，供同源页面使用）"""
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     result = {"entries": [], "api_token": _memory_api_token(),
               "usage": _memory_usage()}
     try:
@@ -17441,7 +17453,7 @@ async def write_memory(payload: dict, request: Request):
     _token = request.headers.get("x-memory-token", "") or str(payload.get("token", ""))
     if _token != _memory_api_token():
         return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     os.makedirs(mem_dir, exist_ok=True)
     target = payload.get("target", "MEMORY.md")  # MEMORY.md or USER.md
     content = payload.get("content", "")
@@ -17450,7 +17462,7 @@ async def write_memory(payload: dict, request: Request):
     if not target.endswith(".md"):
         return JSONResponse({"error": "Only .md files allowed"}, status_code=400)
     file_path = os.path.join(mem_dir, os.path.basename(target))
-    # 限额检查（防记忆无限膨胀；数值与 Hermes MemoryStore 同源：config.yaml）
+    # 限额检查（防记忆无限膨胀；数值与 MemOmics MemoryStore 同源：config.yaml）
     _limit = _memory_char_limit(target)
     _existing = ""
     if mode != "overwrite" and os.path.exists(file_path):
@@ -17460,7 +17472,7 @@ async def write_memory(payload: dict, request: Request):
     if _new_total > _limit:
         return JSONResponse({
             "error": (f"超出记忆限额：{_new_total}/{_limit} 字符"
-                      f"（限额取自 hermes_home/config.yaml 的 memory_char_limit / user_char_limit）。"
+                      f"（限额取自 memomics_home/config.yaml 的 memory_char_limit / user_char_limit）。"
                       f"请先删除或压缩旧条目，或用「🧹 治理」归档低价值条目再写入。"),
             "current": len(_existing), "limit": _limit,
         }, status_code=413)
@@ -17493,7 +17505,7 @@ async def memory_delete_entry(payload: dict = None, request: Request = None):
     target = os.path.basename(str(payload.get("target", "MEMORY.md")))
     if target not in ("MEMORY.md", "USER.md"):
         return JSONResponse({"error": "只允许 MEMORY.md / USER.md"}, status_code=400)
-    file_path = os.path.join(HERMES_HOME_DIR, "memories", target)
+    file_path = os.path.join(MEMOMICS_HOME_DIR, "memories", target)
     _denied = _sandbox_precheck("fs.write", file_path, [MEMOMICS_DIR], "memory.entry_delete")
     if _denied:
         return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
@@ -17518,7 +17530,7 @@ async def delete_memory(filename: str, request: Request):
         return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
     if not filename.endswith(".md"):
         return JSONResponse({"error": "Only .md files"}, status_code=400)
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     file_path = os.path.join(mem_dir, os.path.basename(filename))
     if os.path.exists(file_path):
         # P2-4：删动作过沙箱门（观察模式不拦；强制 fs.delete 后越界/无授权 -> 403）
@@ -17864,7 +17876,7 @@ async def ws_endpoint(ws: WebSocket):
                     if await _thread_state.begin_turn_serialized(session["id"], source="user") is None:
                         logger.warning("[ThreadState] session %s: 串行化门等待超时，按原行为继续",
                                        session["id"][:12])
-                # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
+                # state.db 持久化由 MemOmics 框架 _persist_session 自动完成（agent 带 session_db），
                 # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
                 # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
@@ -18064,7 +18076,7 @@ async def ws_endpoint(ws: WebSocket):
                 # light 只是不再注入 KB/领域尾部；heavy 的 KB 注入已走 _kb_tail。
                 _soul_detail = ""
                 try:
-                    _detail_path = os.path.join(HERMES_HOME_DIR, "SOUL-detail.md")
+                    _detail_path = os.path.join(MEMOMICS_HOME_DIR, "SOUL-detail.md")
                     if os.path.isfile(_detail_path):
                         with open(_detail_path, encoding="utf-8") as _f:
                             _soul_detail = _f.read()
@@ -18157,7 +18169,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 2026-08-16 修订(memomics-2274ab75 用户反馈):
                         #   - 拦截范围限定"单轮"：每轮新用户消息都会清零 _tool_dedup ——
                         #     用户合法地反复重跑相同代码（改图改很多遍）不受任何限制
-                        #   - 记录带 tid：hermes 对同一调用会触发两次回调(预检+执行worker)，
+                        #   - 记录带 tid：memomics 对同一调用会触发两次回调(预检+执行worker)，
                         #     同一调用的第二次触发不算重复，只有"别的调用"提交相同代码才拦截
                         #   - 跳过的调用以非零退出码结束(status=error)，模型不会再误报"已生成"
                         _dedup = _s.setdefault("_tool_dedup", {})
@@ -18362,7 +18374,7 @@ async def ws_endpoint(ws: WebSocket):
                                 _dt = list(getattr(_es_plan, "debate_todos", []) or [])
                                 _plan = dict(getattr(_es_plan, "debate_plan", {}) or {})
                                 if _dt:
-                                    # 注意：Hermes TodoStore 只有 {id, content, status} 三字段，
+                                    # 注意：MemOmics TodoStore 只有 {id, content, status} 三字段，
                                     # 且没有 add()（只有 write(merge=True)）——写错会静默丢失待办。
                                     if hasattr(_agent, "_todo_store") and _agent._todo_store is not None:
                                         # 别再把 status 无条件写成 pending：write(merge=True) 见到
@@ -18437,7 +18449,7 @@ async def ws_endpoint(ws: WebSocket):
                             import json as _tcl_json
                             import time as _tcl_time
                             import os as _tcl_os  # 2026-08-20: 局部别名, 规避闭包作用域 os 未绑定
-                            _db_path = _tcl_os.path.join(HERMES_HOME_DIR, "state.db")
+                            _db_path = _tcl_os.path.join(MEMOMICS_HOME_DIR, "state.db")
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
@@ -18486,14 +18498,14 @@ async def ws_endpoint(ws: WebSocket):
                                     try:
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
                                         if isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and result_obj.get("todos"):
-                                            hermes_todos = []
+                                            memomics_todos = []
                                             for i, td in enumerate(result_obj["todos"]):
-                                                hermes_todos.append({
+                                                memomics_todos.append({
                                                     "id": td.get("id", f"todo_{i}"),
                                                     "content": f"[{td.get('module_id','')}] {td.get('substep_name','')}",
                                                     "status": td.get("status", "pending"),
                                                 })
-                                            _agent._todo_store.write(hermes_todos)
+                                            _agent._todo_store.write(memomics_todos)
                                             # 同时缓存为 pipeline_todos 供 skill 映射
                                             _s["_pipeline_todos"] = result_obj["todos"]
                                         # 兜底: todo_manage 未传 modules → 0个todo → 自动生成默认待办
@@ -18504,14 +18516,14 @@ async def ws_endpoint(ws: WebSocket):
                                                     from memomics.memomics_pipeline import modules_to_todos
                                                     default_ids = ["01","02","03","04","05"]
                                                     pipe_todos = modules_to_todos(default_ids)
-                                                    hermes_todos = []
+                                                    memomics_todos = []
                                                     for i, td in enumerate(pipe_todos):
-                                                        hermes_todos.append({
+                                                        memomics_todos.append({
                                                             "id": td.get("id", f"todo_{i}"),
                                                             "content": td.get("title", td.get("name", f"Module {td.get('module','')}-{td.get('substep','')}")),
                                                             "status": "pending",
                                                         })
-                                                    _agent._todo_store.write(hermes_todos)
+                                                    _agent._todo_store.write(memomics_todos)
                                                     session["_pipeline_todos"] = pipe_todos
                                                     logger.info(f"[TODO-FALLBACK] 自动生成 {len(pipe_todos)} 个默认待办")
                                                 except Exception:
@@ -18525,7 +18537,7 @@ async def ws_endpoint(ws: WebSocket):
                                     if isinstance(t, str):
                                         store_todos.append({"title": t, "status": "pending", "skill": "", "module": ""})
                                     elif isinstance(t, dict):
-                                        # Hermes TodoStore 格式: {id, content, status} → {title, status, skill, module}
+                                        # MemOmics TodoStore 格式: {id, content, status} → {title, status, skill, module}
                                         if "content" in t and "title" not in t:
                                             store_todos.append({
                                                 "title": t.get("content", ""),
@@ -18644,14 +18656,14 @@ async def ws_endpoint(ws: WebSocket):
                         pass
 
                 def notice_clear_cb(key, _s=session):
-                    """Hermes notice_clear_callback: 清除前端对应的通知"""
+                    """MemOmics notice_clear_callback: 清除前端对应的通知"""
                     try:
                         _session_emit(_s, {"type": "notice_clear", "key": str(key), "session_id": _s["id"]})
                     except Exception:
                         pass
 
                 def tool_gen_cb(tool_name, partial_args="", _s=session):
-                    """Hermes tool_gen_callback: 工具参数生成中实时回调"""
+                    """MemOmics tool_gen_callback: 工具参数生成中实时回调"""
                     try:
                         _session_emit(_s, {"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
@@ -18662,7 +18674,7 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_turn_activity_ts"] = time.time()
                     except Exception:
                         pass
-                    """Hermes tool_progress_callback: 工具执行进度更新"""
+                    """MemOmics tool_progress_callback: 工具执行进度更新"""
                     try:
                         # 问题9: 翻译英文事件名为会话语言
                         msg_str = str(progress_msg)
@@ -18936,9 +18948,9 @@ async def ws_endpoint(ws: WebSocket):
                             pass
                 _heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
 
-                # 统一事件流：Hermes event_callback 转发所有结构化事件到 WebSocket
+                # 统一事件流：MemOmics event_callback 转发所有结构化事件到 WebSocket
                 def event_cb(event_type, data, _s=session):
-                    """Hermes event_callback(event_type, data) — 统一事件流"""
+                    """MemOmics event_callback(event_type, data) — 统一事件流"""
                     try:
                         _session_emit(_s, {"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
@@ -19441,17 +19453,17 @@ async def ws_endpoint(ws: WebSocket):
                                         _session_emit(_session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
-                        # Hermes 中断是优雅的：run_conversation() 正常返回
+                        # MemOmics 中断是优雅的：run_conversation() 正常返回
                         if getattr(_agent, "_interrupt_requested", False):
                             _agent.clear_interrupt()
                             _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                             _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                             return
-                        # 记录助手回复到 _session（state.db 由 Hermes 框架 _persist_session 自动写）
+                        # 记录助手回复到 _session（state.db 由 MemOmics 框架 _persist_session 自动写）
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         # 尝试提取 todo
-                        # P1-1 修正：原代码调 _agent.get_todos()，该方法在 Hermes 全仓 grep
+                        # P1-1 修正：原代码调 _agent.get_todos()，该方法在 MemOmics 全仓 grep
                         # 0 命中（根本不存在）→ 这个分支恒为 []，等于每轮结束什么都没同步。
                         # 真源是 _todo_store.read()；四个推送点的回写统一走 _session_emit
                         # 收口，这里只在 store 非空时补齐一次（store 空时不清空已有待办）。
@@ -19807,7 +19819,7 @@ async def ws_endpoint(ws: WebSocket):
 # 让用户直接在 WebUI 里敲 SSH 命令 / 交作业，不必先跟模型说话。三点取舍：
 #  1. 复用 remote_cluster 的 handler —— UI 与 agent 走同一条代码路径，行为不漂移；
 #  2. UI 里敲的命令是用户自己的操作，不过 rail_review / 辩论门禁（那是给模型看的闸）；
-#  3. 配置写回用「文本块替换」而不是 _hermes_config_write —— 后者整文件 yaml.dump，
+#  3. 配置写回用「文本块替换」而不是 _memomics_config_write —— 后者整文件 yaml.dump，
 #     会把 config.yaml 的注释全抹掉（本机已被抹过一次，注释模板就是这么没的）。
 _CLUSTER_FIELDS = (
     "enabled", "host", "user", "port", "key", "workdir", "scheduler",
@@ -20161,7 +20173,7 @@ def _dcs_view() -> dict:
 def _dcs_write_config(values: dict) -> dict:
     """写 config.yaml 的 dcs_cloud: 段（保留其他键），与 _set_update_config 同款。"""
     import yaml as _yaml
-    _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(_p, encoding="utf-8") as _f:
             _d = _yaml.safe_load(_f) or {}

@@ -1,13 +1,13 @@
 # MemOmics-Agent 更新/发布工作流（持久记录，新会话必读）
 
-> 本文档 + hermes_home/AGENTS.md 为「跨会话记忆」：任何会话接手「更新/打包/发布」任务时，先读本文。
+> 本文档 + memomics_home/AGENTS.md 为「跨会话记忆」：任何会话接手「更新/打包/发布」任务时，先读本文。
 > 最后更新：2026-08-31（当天最新 tag = v2026-08-31）
 
 ## 1. 更新什么、更新到哪里
 
 | 项 | 规则 |
 |---|---|
-| 默认只更新 | MemOmics-update.zip（老用户一键更新/解压覆盖代码，保留 hermes_home/results/.venv） |
+| 默认只更新 | MemOmics-update.zip（老用户一键更新/解压覆盖代码，保留 memomics_home/results/.venv） |
 | 全量包 | MemOmics-Windows.zip / Linux.tar.gz / macOS-arm64 / macOS-x86_64 / Cluster.tar.gz —— 仅新装用户需要；一般不必每次重打，但同一天发布时建议全打保持一致 |
 | 更新到哪里 | GitHub release：https://github.com/GGbond-bo/MemOmics-Agent/releases/tag/v<当天日期> |
 | 版本号 | 必须=真实当天日期（如 v2026-08-31）；禁止未来日期、禁止旧 tag 覆盖（WebUI 按 tag 字符串比对） |
@@ -48,12 +48,12 @@ gh release edit v2026-08-31 --repo GGbond-bo/MemOmics-Agent \
 7. 更新 E:\release\RELEASE_NOTES.md（标题=当天、追加变更、同步全部资产 SHA256）；
 8. 发布：gh release create v<当天> --repo GGbond-bo/MemOmics-Agent --notes-file E:/release/RELEASE_NOTES.md；再 upload（--clobber）——**只上传 MemOmics-update.zip**；全量包仅在用户明确要求时一并 upload；最后 release edit 更新说明；
 9. 恢复 VERSION=vdev-<当天>；
-10. 提交 docs/UPDATE_WORKFLOW.md + hermes_home/AGENTS.md + VERSION 到 git。
+10. 提交 docs/UPDATE_WORKFLOW.md + memomics_home/AGENTS.md + VERSION 到 git。
 
 ## 3. 绝不打包的内容（凭据守卫 + 手动双查）
 
 - provider_keys.json、auth.json、weixin_account.json、channel_directory.json、model_config.json、state.db；
-- hermes_home/sessions/、hermes_home/memories/、results/、uploads/、work/、.memory/、.install_path；
+- memomics_home/sessions/、memomics_home/memories/、results/、uploads/、work/、.memory/、.install_path；
 - 本机路径（C:/Users/23136、E:/MemOmics-Agent、E:/R-libs）、真实 API key；
 - 用户测试数据/专利数据/微信聊天/个人记忆文件。
 

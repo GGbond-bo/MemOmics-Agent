@@ -2,7 +2,7 @@
 """Skill 注册表构建器（使用场景 / 触发词 / 触发级别 单一真源）
 
 背景（2026-09-23 审计）：
-    hermes_home/SKILLS_INDEX.md 是唯一会被注入 system prompt、且被
+    memomics_home/SKILLS_INDEX.md 是唯一会被注入 system prompt、且被
     server._match_red_skill_triggers() 解析做自动触发的技能目录。它原先由
     webui/auto_register.py 的「只追加」逻辑维护，结果：
       · 355 个 skill 里只有 ~273 个有行（82 个 skill 对 agent 完全不可见）
@@ -33,10 +33,10 @@ SQ = chr(39)      # 单引号
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
-HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.join(_ROOT, "hermes_home")
-SKILLS_DIR = os.path.join(HERMES_HOME, "skills")
-INDEX_PATH = os.path.join(HERMES_HOME, "SKILLS_INDEX.md")
-SOUL_PATH = os.path.join(HERMES_HOME, "SOUL.md")
+MEMOMICS_HOME = os.environ.get("MEMOMICS_HOME") or os.path.join(_ROOT, "memomics_home")
+SKILLS_DIR = os.path.join(MEMOMICS_HOME, "skills")
+INDEX_PATH = os.path.join(MEMOMICS_HOME, "SKILLS_INDEX.md")
+SOUL_PATH = os.path.join(MEMOMICS_HOME, "SOUL.md")
 # 触发词契约（规则值单点真源：长度/条数/停用词/豁免词/通用词台账）
 CONTRACT_PATH = os.path.join(_ROOT, "contracts", "skill_triggers.json")
 
@@ -50,7 +50,7 @@ SECTIONS = [
     ("06_微生物植物", "06_微生物植物 - 微生物/植物"),
     ("07_药物临床", "07_药物临床 - 药物/临床"),
     ("08_报告", "08_报告 - 报告/可视化"),
-    ("09_内置", "09_内置 - Hermes系统"),
+    ("09_内置", "09_内置 - MemOmics系统"),
     ("10_多组学整合", "10_多组学整合 - 多组学整合"),
     ("11_文献搜索", "11_文献搜索 - 文献/数据库"),
     ("12_分子生物学", "12_分子生物学 - 分子克隆"),
@@ -446,7 +446,7 @@ def _section_from_text(*chunks) -> str:
         ("13_组织学病理", ("histolog", "patholog", "ihc", "组织学", "病理", "免疫组化")),
         ("14_细胞生物学实验", ("cell culture", "viability", "细胞培养", "细胞实验")),
         ("15_CRISPR基因编辑", ("crispr", "cas9", "guide rna", "基因编辑")),
-        ("09_内置", ("hermes", "agent", "memory", "系统级")),
+        ("09_内置", ("memomics", "agent", "memory", "系统级")),
         ("01_RNA", ("scrnaseq", "scrna", "seurat", "scanpy", "single-cell", "单细胞", "trajectory", "轨迹")),
         ("08_报告", ("figure", "plot", "visual", "report", "html", "ppt", "docx", "画图", "出图", "报告", "可视化")),
     ]
@@ -523,7 +523,7 @@ def scan_skills() -> list:
     for root, dirs, files in os.walk(SKILLS_DIR):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         # 只收已注册技能（有 skill.json），与 GET /api/skills/catalog 的 355 个一致；
-        # Hermes 框架自带的「只有 SKILL.md」技能不进索引，避免污染触发面。
+        # MemOmics 框架自带的「只有 SKILL.md」技能不进索引，避免污染触发面。
         if "skill.json" not in files:
             continue
         name = os.path.basename(root)
@@ -587,7 +587,7 @@ def render_index(entries: list) -> str:
         "| RED | 必触发 | user mentions -> skill_view immediately |",
         "| YEL | 讨论触发 | confirm plan first then trigger |",
         "| GRN | 按需触发 | only on explicit mention |",
-        "| WHT | 系统级 | Hermes internal |",
+        "| WHT | 系统级 | MemOmics internal |",
         "",
         "> 「触发词」列会被 server._match_red_skill_triggers() 用于消息级自动匹配（RED 行），",
         "> 只写有区分度的词，不要写 rna/scrna 这类分类水词。",

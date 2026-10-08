@@ -16,7 +16,7 @@ MEMORY.md 已 29530 字符、USER.md 已 22039 字符，而 server.py 把限额*
   C. 既有安全边界不回退：token 鉴权、只允许 .md。
   D. P2-4 沙箱接线：写/删动作过门；观察模式零变更，强制后越界 403 且不落盘。
 
-纪律：全离线；临时 HERMES_HOME —— 绝不碰真机 memories/MEMORY.md、USER.md。
+纪律：全离线；临时 MEMOMICS_HOME —— 绝不碰真机 memories/MEMORY.md、USER.md。
 """
 import os
 
@@ -28,10 +28,10 @@ from webui import sandbox as SB
 
 @pytest.fixture()
 def tmp_home(tmp_path, monkeypatch):
-    """临时 HERMES_HOME（token 与 memories/ 都落在 tmp，不碰真机记忆）。"""
-    home = tmp_path / "hermes_home"
+    """临时 MEMOMICS_HOME（token 与 memories/ 都落在 tmp，不碰真机记忆）。"""
+    home = tmp_path / "memomics_home"
     (home / "memories").mkdir(parents=True)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(home))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(home))
     return home
 
 
@@ -67,7 +67,7 @@ def _write(client, token, target, content, mode="append"):
 # --- A. 限额真相源 ---------------------------------------------------------
 
 def test_a1_limit_comes_from_config(monkeypatch):
-    monkeypatch.setattr(server, "_hermes_config_read",
+    monkeypatch.setattr(server, "_memomics_config_read",
                         lambda: ({"memory": {"memory_char_limit": 30000,
                                              "user_char_limit": 21000}}, {}))
     assert server._memory_char_limit("MEMORY.md") == 30000
@@ -77,29 +77,29 @@ def test_a1_limit_comes_from_config(monkeypatch):
 def test_a2_unreadable_config_falls_back_to_default_not_10k(monkeypatch):
     def _boom():
         raise RuntimeError("config.yaml 读不到")
-    monkeypatch.setattr(server, "_hermes_config_read", _boom)
+    monkeypatch.setattr(server, "_memomics_config_read", _boom)
     # 关键：兜底值必须够大，绝不能退回曾经把写入全挡死的 10000
     assert server._memory_char_limit("MEMORY.md") == server._MEMORY_DEFAULT_LIMIT
     assert server._memory_char_limit("MEMORY.md") > 10000
 
 
 def test_a3_zero_or_garbage_limit_falls_back(monkeypatch):
-    monkeypatch.setattr(server, "_hermes_config_read",
+    monkeypatch.setattr(server, "_memomics_config_read",
                         lambda: ({"memory": {"memory_char_limit": 0}}, {}))
     assert server._memory_char_limit("MEMORY.md") == server._MEMORY_DEFAULT_LIMIT
-    monkeypatch.setattr(server, "_hermes_config_read",
+    monkeypatch.setattr(server, "_memomics_config_read",
                         lambda: ({"memory": {"memory_char_limit": "abc"}}, {}))
     assert server._memory_char_limit("MEMORY.md") == server._MEMORY_DEFAULT_LIMIT
-    monkeypatch.setattr(server, "_hermes_config_read", lambda: ({}, {}))
+    monkeypatch.setattr(server, "_memomics_config_read", lambda: ({}, {}))
     assert server._memory_char_limit("USER.md") == server._MEMORY_DEFAULT_LIMIT
 
 
 def test_a4_real_config_matches_real_limit():
     """真机回归：真 config.yaml 的 memory_char_limit 必须等于接口实际限额。"""
-    cfg_path = os.path.join(server.HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(server.MEMOMICS_HOME_DIR, "config.yaml")
     if not os.path.isfile(cfg_path):
         pytest.skip("无 config.yaml（CI/安装包环境）")
-    cfg, _raw = server._hermes_config_read()
+    cfg, _raw = server._memomics_config_read()
     want = int(((cfg or {}).get("memory") or {}).get("memory_char_limit", 0) or 0)
     if want <= 0:
         pytest.skip("config.yaml 没写 memory_char_limit")
@@ -127,7 +127,7 @@ def test_b2_over_limit_is_413_and_writes_nothing(monkeypatch, client, tmp_home, 
     限额在这里固定成 30000（不读真机 config）——2026-09-24 真机限额已提到 60000，
     29990 字符不再超限；把限额钉住，这条测试才不会随 config 漂移而失效。
     """
-    monkeypatch.setattr(server, "_hermes_config_read",
+    monkeypatch.setattr(server, "_memomics_config_read",
                         lambda: ({"memory": {"memory_char_limit": 30000,
                                              "user_char_limit": 30000}}, {}))
     p = tmp_home / "memories" / "MEMORY.md"
@@ -153,7 +153,7 @@ def test_b3_overwrite_up_to_limit_works(client, tmp_home, mem_token):
 
 def test_b4_config_limit_really_governs(monkeypatch, client, tmp_home, mem_token):
     """把 config 改成 5000：6000 要 413、4000 要 200 —— 证明数值真的跟着 config 走。"""
-    monkeypatch.setattr(server, "_hermes_config_read",
+    monkeypatch.setattr(server, "_memomics_config_read",
                         lambda: ({"memory": {"memory_char_limit": 5000}}, {}))
     r = _write(client, mem_token, "MEMORY.md", "y" * 6000, "overwrite")
     assert r.status_code == 413 and r.json()["limit"] == 5000
@@ -194,7 +194,7 @@ def test_d1_write_passes_the_gate_and_denies_outside_roots(sb, monkeypatch, clie
     # 观察模式契约：判定照算（越界 allow=False）、但 blocked=False —— 一个字节都不拦
     hits = [i for i in sb.audit(50)["items"] if i["source"] == "memory.write"]
     assert hits and hits[-1]["action"] == "fs.write" and hits[-1]["blocked"] is False
-    # 强制 fs.write 且临时 HERMES_HOME 在真根之外 -> 403 且不落盘
+    # 强制 fs.write 且临时 MEMOMICS_HOME 在真根之外 -> 403 且不落盘
     os.environ["MEMOMICS_SANDBOX_ENFORCE"] = "fs.write"
     p = tmp_home / "memories" / "USER.md"
     r = _write(client, mem_token, "USER.md", "不该落盘", "overwrite")

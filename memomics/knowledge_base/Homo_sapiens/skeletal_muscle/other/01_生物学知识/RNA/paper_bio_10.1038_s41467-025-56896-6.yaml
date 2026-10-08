@@ -465,7 +465,7 @@ content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L
   - ProLong Diamond Antifade Mountant：靶点 — | 剂量 — | IC50 — | 模型 human muscle sections
   | 封片'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
-  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+  beyond myosin heavy chains | E:/MemOmics-Agent/memomics_home/papers/10.1038_s41467-025-56896-6.pdf
 evidence_chain:
   standard: kb-evidence-v1
   level_distribution:

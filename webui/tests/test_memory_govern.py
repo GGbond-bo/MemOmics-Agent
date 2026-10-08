@@ -16,7 +16,7 @@
      短到换索引行反而变长的条目也不动（MIN_FREE_GAIN）。
   D. 路由语义：无 body / mode=dry 只读；mode=apply 需 token；被比例守卫拦返回 409。
 
-纪律：全离线；HERMES_HOME 与 governor 的目录常量都指到 tmp —— 绝不碰真机记忆文件。
+纪律：全离线；MEMOMICS_HOME 与 governor 的目录常量都指到 tmp —— 绝不碰真机记忆文件。
 """
 import json
 import os
@@ -28,9 +28,9 @@ import server
 
 @pytest.fixture()
 def tmp_home(tmp_path, monkeypatch):
-    home = tmp_path / "hermes_home"
+    home = tmp_path / "memomics_home"
     (home / "memories").mkdir(parents=True)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(home))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(home))
     return home
 
 

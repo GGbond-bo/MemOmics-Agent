@@ -21,7 +21,7 @@ NEW_SKILLS = [
 
 
 def _index_text():
-    with open(os.path.join(ROOT, "hermes_home", "SKILLS_INDEX.md"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "memomics_home", "SKILLS_INDEX.md"), encoding="utf-8") as f:
         return f.read()
 
 

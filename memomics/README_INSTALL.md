@@ -45,7 +45,7 @@ start.bat
    - **Model**: 如 `deepseek-chat` / `gpt-4o`
 4. 点击「开始使用」
 
-> 也可以通过环境变量配置（见 `.env.example`），或直接编辑 `hermes_home/config.yaml`
+> 也可以通过环境变量配置（见 `.env.example`），或直接编辑 `memomics_home/config.yaml`
 
 ### 三、环境检测
 
@@ -128,7 +128,7 @@ ssh -L 8899:localhost:8899 user@cluster
 
 ### 在集群上跑作业（`remote_cluster` 工具）
 
-MemOmics 本体**不含**集群能力；要连集群需要在 `hermes_home/config.yaml` 里打开 `remote:` 段（见文件末尾注释模板，也可用 `MEMOMICS_REMOTE_HOST` 等环境变量覆盖）。没配 = 模型看不到这个工具，配了才出现。
+MemOmics 本体**不含**集群能力；要连集群需要在 `memomics_home/config.yaml` 里打开 `remote:` 段（见文件末尾注释模板，也可用 `MEMOMICS_REMOTE_HOST` 等环境变量覆盖）。没配 = 模型看不到这个工具，配了才出现。
 
 ```yaml
 remote:
@@ -145,7 +145,7 @@ remote:
 **必须知道的三条边界**：
 
 1. **不会把执行搬过去**：`execute_r`/`execute_python` 的持久内核仍在本机跑。想在集群上算，得把代码写成脚本用 `submit`/`run` 送过去，再把产物 `pull` 回来。
-2. **不会把凭据同步过去**：复用的是 hermes 的 SSH 传输层，但**刻意跳过了**它默认的 `~/.hermes` 凭据/技能同步——登录节点是共享机器，不该落本地密钥。`push` 之后远端文件权限会被收紧成 0700/0600。
+2. **不会把凭据同步过去**：复用的是 memomics 的 SSH 传输层，但**刻意跳过了**它默认的 `~/.memomics` 凭据/技能同步——登录节点是共享机器，不该落本地密钥。`push` 之后远端文件权限会被收紧成 0700/0600。
 3. **平台差异自动处理**：Windows 自带的 OpenSSH 没有连接复用（ControlMaster），工具会自动降级为每条命令新建连接；Linux/macOS 上自动复用。
 
 ### 多用户部署
@@ -179,10 +179,10 @@ MemOmics 支持多种 web 搜索后端（用于文献检索）：
 
 | 文件 | 作用 |
 |------|------|
-| `hermes_home/config.yaml` | LLM API + 全局配置 |
-| `hermes_home/model_config.json` | 当前模型配置（首次向导写入） |
-| `hermes_home/memories/USER.md` | 用户画像（自动学习） |
-| `hermes_home/memories/MEMORY.md` | 记忆（自动积累） |
+| `memomics_home/config.yaml` | LLM API + 全局配置 |
+| `memomics_home/model_config.json` | 当前模型配置（首次向导写入） |
+| `memomics_home/memories/USER.md` | 用户画像（自动学习） |
+| `memomics_home/memories/MEMORY.md` | 记忆（自动积累） |
 | `.env` | 环境变量（可选，见 `.env.example`） |
 
 ---
@@ -208,13 +208,13 @@ A: `./start.sh 9000` 或 `set MEMOMICS_PORT=9000 && start.bat`
 A: 左侧「⚙️ 设置」→ 选择模型。支持 DeepSeek / GPT / Claude 等。
 
 ### Q: 会话数据在哪
-A: `hermes_home/state.db`（SQLite）+ `results/` 目录（分析结果）
+A: `memomics_home/state.db`（SQLite）+ `results/` 目录（分析结果）
 
 ---
 
 ## 技术支持
 
-- 基于 [Hermes Agent](https://github.com/NousResearch/) 框架
+- 基于 [MemOmics Agent](https://github.com/NousResearch/) 框架
 - 内置 272 个生信技能模板
 - 物种/组织/方向三维知识库
 - 铁轨审查 + 多角色辩论机制

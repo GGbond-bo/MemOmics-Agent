@@ -109,12 +109,12 @@ jobs:
       - name: Boot server (core-only, no OCR)
         run: |
           cd MemOmics
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export MEMOMICS_PORT=8899
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           # 首启配置
-          if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$HERMES_HOME/config.yaml.example" ]; then
-            cp "$HERMES_HOME/config.yaml.example" "$HERMES_HOME/config.yaml"
+          if [ ! -f "$MEMOMICS_HOME/config.yaml" ] && [ -f "$MEMOMICS_HOME/config.yaml.example" ]; then
+            cp "$MEMOMICS_HOME/config.yaml.example" "$MEMOMICS_HOME/config.yaml"
           fi
           nohup .venv/bin/python webui/server.py > server.log 2>&1 &
           BOOTED=0

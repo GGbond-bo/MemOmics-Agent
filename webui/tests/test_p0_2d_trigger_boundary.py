@@ -249,13 +249,13 @@ def test_red_router_results_unchanged_by_p0_2d():
 
 def _sample_skill_dirs():
     import glob as _g
-    root = os.path.join(server.MEMOMICS_DIR, "hermes_home", "skills")
+    root = os.path.join(server.MEMOMICS_DIR, "memomics_home", "skills")
     return _g.glob(os.path.join(root, "**", "skill.json"), recursive=True)
 
 
 def _sample_md_lines():
     import glob as _g
-    root = os.path.join(server.MEMOMICS_DIR, "hermes_home", "skills")
+    root = os.path.join(server.MEMOMICS_DIR, "memomics_home", "skills")
     out = []
     for p in _g.glob(os.path.join(root, "**", "SKILL.md"), recursive=True)[:120]:
         try:

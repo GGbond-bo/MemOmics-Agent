@@ -200,7 +200,7 @@ class TestTranslationUnits:
 
     def test_translate_reassembles_units_into_same_block_count(self, tmp_path, monkeypatch):
         """整篇翻译完成后：译文段数 == 原文段数，且每段都含其全部单元译文。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         (tmp_path / "papers").mkdir()
         md = ("# Title\n\n" + ("This is a very long paragraph sentence. " * 240)
               + "\n\nshort tail paragraph.")
@@ -315,7 +315,7 @@ class TestParallelChunkExtraction:
 
     def test_long_paper_skips_llm_merge_and_keeps_all_fragments(self, tmp_path, monkeypatch):
         """碎片过大时必须跳过 LLM 合并（会失败）并保留全部碎片内容。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         (tmp_path / "papers").mkdir()
         big_md = ("\n\n".join("Body paragraph %d about single cell RNA sequencing. " % i
                               for i in range(3000)))     # >18000 字符 → 走分块
@@ -449,7 +449,7 @@ def _make_syn_pdf(path, toc=True):
 class TestBilingualBuilder:
     def test_build_with_toc(self, tmp_path, monkeypatch):
         import pymupdf as fitz
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         papers.mkdir()
         pdf_path = papers / "demo.pdf"
@@ -470,7 +470,7 @@ class TestBilingualBuilder:
                 assert p["rect"] is None or len(p["rect"]) == 4
 
     def test_build_without_toc_falls_back(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         papers.mkdir()
         pdf_path = papers / "notoc.pdf"
@@ -497,7 +497,7 @@ class TestBilingualBuilder:
         assert all(0 <= v <= 1 for v in rect)
 
     def test_missing_paper_error(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         (tmp_path / "papers").mkdir()
         r = json.loads(LL.build_bilingual("nope.pdf"))
         assert r["ok"] is False
@@ -508,7 +508,7 @@ class TestGetSummaryFix:
     def test_summary_and_authors_not_empty(self, tmp_path, monkeypatch):
         """历史 bug：get_summary 从 list_library 投影读 summary/authors → 恒为空。
         修复后必须从 .pdf_index.json 原始条目返回完整九项摘要 + 作者 + 引用。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         papers.mkdir()
         entry = {
@@ -536,7 +536,7 @@ class TestGetSummaryFix:
 
     def test_summary_md_fallback(self, tmp_path, monkeypatch):
         """index 里没有 summary 但 summaries/<stem>.md 存在时，反解析九项。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         sdir = papers / "summaries"
         sdir.mkdir(parents=True)
@@ -550,7 +550,7 @@ class TestGetSummaryFix:
         assert "结论一" in r["summary"].get("conclusion", "")
 
     def test_list_library_includes_new_fields(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         papers.mkdir()
         with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
@@ -768,7 +768,7 @@ class TestDownloadAutoImport:
     def test_finish_download_auto_imports_and_dedupes(self, tmp_path, monkeypatch):
         """download_pdf 成功后自动 import_pdfs 入正式库，并从下载索引摘除条目。"""
         from memomics.bio_tools import literature_search as LS
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         # 离线：Crossref 反查与 LLM 分类打桩
         monkeypatch.setattr(LL, "_extract_metadata", lambda dest, text, src: {
             "title": "Auto imported paper", "journal": "Test Journal",
@@ -799,7 +799,7 @@ class TestDownloadAutoImport:
     def test_failed_import_keeps_agent_index(self, tmp_path, monkeypatch):
         """正式入库失败时保留下载索引兜底，文献库仍可见该文献。"""
         from memomics.bio_tools import literature_search as LS
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         out = tmp_path / "work" / "papers"
         out.mkdir(parents=True)
         pdf = out / "broken.pdf"
@@ -816,7 +816,7 @@ class TestDownloadAutoImport:
 
     def test_list_library_cross_index_dedupe(self, tmp_path, monkeypatch):
         """历史遗留双份（同一 PDF 在正式库与下载索引各一条）只显示一次。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers"
         papers.mkdir()
         with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
@@ -858,7 +858,7 @@ class TestImportSpeedup:
 
     def test_dup_name_size_skips_before_hashing(self, tmp_path, monkeypatch):
         """已导入过的文件（同名同大小）应在算 sha256 之前就跳过 —— 否则重复导入白读全文。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers";
         papers.mkdir()
         src = self._fake_pdf(tmp_path / "a.pdf")
@@ -878,7 +878,7 @@ class TestImportSpeedup:
 
     def test_crossref_cache_hit_avoids_second_lookup(self, tmp_path, monkeypatch):
         """同一篇文献（同 DOI）第二次导入不再打 Crossref；缓存落盘后新进程也命中。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         (tmp_path / "papers").mkdir()
         self._fresh_cr_cache(monkeypatch)
         calls = {"n": 0}
@@ -903,7 +903,7 @@ class TestImportSpeedup:
 
     def test_import_prefetches_metadata_once_per_file(self, tmp_path, monkeypatch):
         """并发预取的元数据必须被复制入库阶段复用：每篇只解析一次，且返回耗时。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         (tmp_path / "papers").mkdir()
         self._fresh_cr_cache(monkeypatch)
         monkeypatch.setattr(LL, "_pdf_text", lambda p, pages=2: "text")
@@ -929,7 +929,7 @@ class TestImportSpeedup:
 
     def test_bg_classification_overwrites_rule_tags(self, tmp_path, monkeypatch):
         """后台精细分类只改 tags、按文件名对号入座，不阻塞也不需要用户等待。"""
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("MEMOMICS_HOME", str(tmp_path))
         papers = tmp_path / "papers";
         papers.mkdir()
         idx = papers / ".pdf_index.json"

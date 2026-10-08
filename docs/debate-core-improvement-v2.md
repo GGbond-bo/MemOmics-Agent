@@ -201,9 +201,9 @@ role_preset 装配（7 or 9 角色，可配置）  ←── 结构化证据卡�
 | memomics/bio_tools/debate_analysis.py | 提示词 v2、证据契约、结构化 schema 解析、多裁判、证据卡注入、rounds 上限、verdict 枚举、L1 judge_error、max_tokens 配置化 | P0 |
 | memomics/bio_tools/kb_search.py（只读） | 供证据卡组装复用；无改动则用现有 _search_kb | P1 |
 | webui/enforcement.py | debate_gate 支持 uncertainty/high_impact 不变；新增 judge_count/role_preset 从 config 读取；预算按 judge_count 折算 | P1 |
-| hermes_home/config.yaml | debate: 增加 role_preset/judge_count/max_tokens/rounds_max/evidence_mode | P1 |
-| hermes_home/skills/bioinformatics/debate-core/SKILL.md | 更新机制说明/排障（并发描述滞后已确认） | P2 |
-| hermes_home/SOUL.md | 铁律 5 措辞更新（证据卡替代“KB 背景”） | P2 |
+| memomics_home/config.yaml | debate: 增加 role_preset/judge_count/max_tokens/rounds_max/evidence_mode | P1 |
+| memomics_home/skills/bioinformatics/debate-core/SKILL.md | 更新机制说明/排障（并发描述滞后已确认） | P2 |
+| memomics_home/SOUL.md | 铁律 5 措辞更新（证据卡替代“KB 背景”） | P2 |
 | docs/debate-core-design.md | 追加 v2 章节（本设计） | P2 |
 | webui/tests/test_debate_extreme.py | 新增上述测试 | P0 |
 

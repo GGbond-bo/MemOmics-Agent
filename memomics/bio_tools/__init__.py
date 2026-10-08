@@ -1,4 +1,4 @@
-"""MemOmics bioinformatics tools — registers with Hermes tool registry."""
+"""MemOmics bioinformatics tools — registers with MemOmics tool registry."""
 from . import data_scanner
 from . import kb_search
 from . import save_knowledge

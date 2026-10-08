@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """test_lit_flows.py — 文献库批量跳过逻辑 + 会话绑定 12h 行为（批K，2026-08-16）。
 
-确定性测试：临时 HERMES_HOME + 桩函数，不产生真实 LLM 调用。
+确定性测试：临时 MEMOMICS_HOME + 桩函数，不产生真实 LLM 调用。
 """
 import json
 import os
@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 
-os.environ["HERMES_HOME"] = tempfile.mkdtemp(prefix="lit_flows_")
+os.environ["MEMOMICS_HOME"] = tempfile.mkdtemp(prefix="lit_flows_")
 sys.path.insert(0, ".")
 sys.path.insert(0, "hermes-agent")
 

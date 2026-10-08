@@ -10,10 +10,10 @@
 """
 import asyncio, json, os, sys, sqlite3, time, uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("HERMES_HOME", r"E:\MemOmics-Agent\hermes_home")
+os.environ.setdefault("MEMOMICS_HOME", r"E:\MemOmics-Agent\memomics_home")
 
 WS = "ws://127.0.0.1:8899/ws"
-DB = r"E:\MemOmics-Agent\hermes_home\state.db"
+DB = r"E:\MemOmics-Agent\memomics_home\state.db"
 RESULTS = r"E:\MemOmics-Agent\results"
 
 QUESTIONS = [

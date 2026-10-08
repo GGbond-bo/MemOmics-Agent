@@ -11,7 +11,7 @@ import re
 import pytest
 
 SKILL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
-                     "hermes_home", "skills", "bioinformatics",
+                     "memomics_home", "skills", "bioinformatics",
                      "literature-review", "SKILL.md")
 
 pytestmark = pytest.mark.unit

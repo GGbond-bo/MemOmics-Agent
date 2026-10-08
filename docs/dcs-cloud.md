@@ -37,12 +37,12 @@
 ## 安全与合规
 
 - **不保存账号密码**：DCS 有双因子，且中国站点用密码登录还要手机验证；不少用户是微信扫码/短信注册，根本没有密码。只托管 PAT。
-- PAT 只落 `hermes_home/dcs_cloud.json`（写入时尽力收窄权限 0600）；工具输出里只出现掩码（`dcs_pat_9f2a…abcd`）；不进日志、不进安装包。
+- PAT 只落 `memomics_home/dcs_cloud.json`（写入时尽力收窄权限 0600）；工具输出里只出现掩码（`dcs_pat_9f2a…abcd`）；不进日志、不进安装包。
 - 一人一 PAT、不做共享账号（平台明确"API Key 仅供账号本人使用"）；用户在 DCS 侧删掉令牌即刻失效。
 - 写操作（上传 / 开容器 / 投递）会改动云端数据并计费：工具描述要求模型先跟用户确认；面板对 upload 有二次确认；`allow_write: false` 可一键只读。
 - 平台业务码已翻译成可操作指引：`41201/60003` → 重新绑定 PAT；`83003` → 先选项目；`83006/83007` → 容器没开/刚开。
 
-## 配置（`hermes_home/config.yaml`）
+## 配置（`memomics_home/config.yaml`）
 
 ```yaml
 dcs_cloud:
@@ -68,7 +68,7 @@ dcs_cloud:
 | `webui/server.py` | 薄路由：`/api/dcs/status|bind|unbind|config|exec|pick` + 下载队列 `/api/dcs/dl/{start,list,cancel,retry,clear,reveal}`（worker 在连接器里）；`/api/dcs/exec` 的同步 CLI 调用走 `asyncio.to_thread`，不冻事件循环 |
 | `webui/index.html` | 左侧「☁️ DCS 云」面板（**互斥视图**：📁 项目 / 🗂 数据 / 🚀 投递 / ⬇ 队列 / 🧾 日志 / ⚙️ 设置）；远端集群的 `cc-*` 样式改为 `.cc-console` 类，两个面板共用 |
 | `scripts/install_dcs_cli.ps1` | 官方 CLI 安装器：官方 CDN + SHA256 校验，校验不过就删文件、绝不执行 |
-| `webui/tests/test_dcs_cloud_connector.py` | 45 项离线回归（假 CLI / 假下载器 + 临时 HERMES_HOME，不用真 PAT、不联网；含读缓存/单飞/预检/投递动作） |
+| `webui/tests/test_dcs_cloud_connector.py` | 45 项离线回归（假 CLI / 假下载器 + 临时 MEMOMICS_HOME，不用真 PAT、不联网；含读缓存/单飞/预检/投递动作） |
 | `webui/middleware_routes.json` | 路由清单已用 `python webui/entry_middleware.py --snapshot` 同步 |
 
 ## 验证记录（2026-10-07）
@@ -247,7 +247,7 @@ tkinter 优先，缺失时自动退到 PowerShell `System.Windows.Forms`），�
 
 ## 🧠 技能：dcs-cloud（RED 必触发）
 
-`hermes_home/skills/bioinformatics/dcs-cloud/`：16 个触发词（云平台 / DCS / DCS Cloud / GenPilot / 华大云 /
+`memomics_home/skills/bioinformatics/dcs-cloud/`：16 个触发词（云平台 / DCS / DCS Cloud / GenPilot / 华大云 /
 云上跑 / 在云上 / 云上分析 / 投递任务 / 云端任务 / 云容器 / 云平台项目 / 上传到云 / 云上数据 …），
 已登记进 `SKILLS_INDEX.md`（09_内置 · RED）与 `SOUL.md` 必触发表。技能内写死：铁律、触发场景（含"不该触发"
 的反例：本机小分析不要上云）、确认协议五问、项目定位规则、四套配方（取数 / 云上算 / 看任务 / 投递）、坑表。

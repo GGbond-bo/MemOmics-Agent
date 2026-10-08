@@ -207,7 +207,7 @@ content: '## 测序方法
 
   - TRANSFAC：转录调控数据库/从模式到谱'
 evidence: 'DOI 10.1093/bib/bbae283 | CACIMAR: cross-species analysis of cell identities,
-  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/hermes_home/papers/CACIMAR.pdf'
+  markers, regulations, and interactions using single-cell RNA sequencing data | E:/MemOmics-Agent/memomics_home/papers/CACIMAR.pdf'
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

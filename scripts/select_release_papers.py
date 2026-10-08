@@ -72,7 +72,7 @@ def select(src_papers: str, dst_papers: str, limit: int = 10) -> int:
                 shutil.copy2(s, os.path.join(dst_papers, d, f"{stem}{suffix}"))
         e = dict(by_file.get(fname) or {})
         e["file"] = fname
-        e["path"] = f"hermes_home/papers/{fname}"
+        e["path"] = f"memomics_home/papers/{fname}"
         e["imported_from"] = ""
         e["imported_by"] = ""
         out_entries.append(e)

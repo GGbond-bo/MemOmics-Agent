@@ -11,7 +11,7 @@
 - local：本机台账（results/*/token_usage.jsonl 回合级流水）今日 / 近 7 天
   用量，按「通道 × 模型」聚合；DeepSeek 官方通道附带 CNY 消费估算。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ import json
 import os
 
 _MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_HERMES_HOME = os.path.join(_MEMOMICS_DIR, "hermes_home")
+_MEMOMICS_HOME = os.path.join(_MEMOMICS_DIR, "memomics_home")
 
 
 def _provider_keys():
-    path = os.path.join(_HERMES_HOME, "provider_keys.json")
+    path = os.path.join(_MEMOMICS_HOME, "provider_keys.json")
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
@@ -34,7 +34,7 @@ def _provider_keys():
 
 
 def _current_model_cfg():
-    path = os.path.join(_HERMES_HOME, "model_config.json")
+    path = os.path.join(_MEMOMICS_HOME, "model_config.json")
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)

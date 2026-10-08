@@ -52,7 +52,7 @@ LABELS = {
     33245: ("direct_exec", {"direct_exec", "analysis"}),
 }
 
-DB = r'E:\MemOmics-Agent\hermes_home\state.db'
+DB = r'E:\MemOmics-Agent\memomics_home\state.db'
 c = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 texts = {}
 for mid in LABELS:

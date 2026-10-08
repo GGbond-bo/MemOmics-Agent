@@ -58,7 +58,7 @@ content: '- 检测基因数 = >1000（过滤标准，保留检测基因数超过
 
   - Negative 3-plex probe (#320871) = used（RNAscope组织质量控制）'
 evidence: DOI 10.1038/s41467-025-56896-6 | Human skeletal muscle fiber heterogeneity
-  beyond myosin heavy chains | E:/MemOmics-Agent/hermes_home/papers/10.1038_s41467-025-56896-6.pdf
+  beyond myosin heavy chains | E:/MemOmics-Agent/memomics_home/papers/10.1038_s41467-025-56896-6.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

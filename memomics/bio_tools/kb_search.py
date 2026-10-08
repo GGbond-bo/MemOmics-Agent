@@ -880,6 +880,6 @@ def _register():
             max_result_size_chars=8_000,
         )
     except ImportError:
-        pass  # 不在 Hermes 环境中时不注册
+        pass  # 不在 MemOmics 环境中时不注册
 
 _register()

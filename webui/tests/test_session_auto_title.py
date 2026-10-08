@@ -338,9 +338,9 @@ def test_angle_rename_event_audited(new_session, monkeypatch):
     s["title"] = "pytest-初始标题"
     _set_user_msgs(new_session, [f"内容{i}" for i in range(6)])
     server._auto_summarize_title(new_session)
-    log_path = os.path.join(server.HERMES_HOME_DIR, "sessions", "rename_events.jsonl")
+    log_path = os.path.join(server.MEMOMICS_HOME_DIR, "sessions", "rename_events.jsonl")
     if not os.path.isfile(log_path):
-        pytest.skip("rename_events.jsonl 不存在（HERMES_HOME 未初始化）")
+        pytest.skip("rename_events.jsonl 不存在（MEMOMICS_HOME 未初始化）")
     last = json.loads(open(log_path, encoding="utf-8").read().strip().split("\n")[-1])
     assert last["session_id"] == new_session
     assert last["source"] == "auto"

@@ -73,7 +73,7 @@ def tmp_sid():
         server._PINNED_SKILLS_CACHE.pop(sid, None)
         server._sessions.pop(sid, None)
         try:
-            conn = sqlite3.connect(os.path.join(server.HERMES_HOME_DIR, "state.db"), timeout=10)
+            conn = sqlite3.connect(os.path.join(server.MEMOMICS_HOME_DIR, "state.db"), timeout=10)
             conn.execute("DELETE FROM kv WHERE key=?", ("pinned_skills:" + sid,))
             conn.commit()
             conn.close()

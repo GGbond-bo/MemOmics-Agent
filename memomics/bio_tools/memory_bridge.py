@@ -2,7 +2,7 @@
 """
 MemOmics ↔ Holographic Memory Bridge
 =====================================
-直连 SQLite FTS5，与 Hermes Holographic 同 schema，零 Hermes 依赖。
+直连 SQLite FTS5，与 MemOmics Holographic 同 schema，零 MemOmics 依赖。
 
 记忆分类 (category):
   - user_pref     — 用户偏好（可视化风格、工具选择、脚本偏好）
@@ -32,10 +32,10 @@ _lock = threading.Lock()
 
 
 def _get_db_path():
-    """获取记忆数据库路径（与 Hermes 共用 hermes_home/memory_store.db）。"""
+    """获取记忆数据库路径（与 MemOmics 共用 memomics_home/memory_store.db）。"""
     cur = Path(__file__).resolve().parent.parent.parent  # E:/MemOmics-Agent/
-    hermes_home = cur / "hermes_home"
-    return str(hermes_home / "memory_store.db")
+    memomics_home = cur / "memomics_home"
+    return str(memomics_home / "memory_store.db")
 
 
 def _get_conn():
@@ -56,7 +56,7 @@ def _get_conn():
 
 
 def _ensure_schema(conn):
-    """确保数据库有 facts 表和 FTS5 索引（与 Hermes 兼容）。"""
+    """确保数据库有 facts 表和 FTS5 索引（与 MemOmics 兼容）。"""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS facts (
             fact_id         INTEGER PRIMARY KEY AUTOINCREMENT,

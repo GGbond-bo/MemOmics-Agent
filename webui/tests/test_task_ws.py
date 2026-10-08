@@ -43,9 +43,9 @@ def tr():
 
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
-    h = tmp_path / "hermes_home"
+    h = tmp_path / "memomics_home"
     (h / "runtime" / "tasks").mkdir(parents=True)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(h))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(h))
     return h
 
 

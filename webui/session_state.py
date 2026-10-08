@@ -1,6 +1,6 @@
 """会话级状态捕获：用户诉求 + 任务状态 + 资产候选提取。
 
-与 holographic 插件共享 ``hermes_home/memory_store.db``：
+与 holographic 插件共享 ``memomics_home/memory_store.db``：
 - ``session_state`` 表：task_json（任务状态块）+ requests_json（用户诉求，最近 20 条）
 - ``assets`` 表：用户提供的脚本/路径（status=pending，待确认后由 agent 侧确认）
 
@@ -84,10 +84,10 @@ def _get_store():
 
 
 def _get_db_path() -> str:
-    """hermes_home/memory_store.db（与 holographic 插件共享同一库）。"""
+    """memomics_home/memory_store.db（与 holographic 插件共享同一库）。"""
     from pathlib import Path
     cur = Path(__file__).resolve().parent.parent  # E:/MemOmics-Agent/
-    return str(cur / "hermes_home" / "memory_store.db")
+    return str(cur / "memomics_home" / "memory_store.db")
 
 
 def get_store():

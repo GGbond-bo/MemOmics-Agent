@@ -119,11 +119,11 @@ logger.info("skill_evolution engine loaded: file=%s version=%s",
 
 
 def _skill_roots() -> list:
-    """技能库根目录候选（旧布局 skills/ + 现行布局 hermes_home/skills/）"""
+    """技能库根目录候选（旧布局 skills/ + 现行布局 memomics_home/skills/）"""
     memomics_root = _get_memomics_root()
     return [
         os.path.join(memomics_root, "skills"),
-        os.path.join(memomics_root, "hermes_home", "skills"),
+        os.path.join(memomics_root, "memomics_home", "skills"),
     ]
 
 
@@ -288,7 +288,7 @@ def _get_skill_dir(skill_name: str) -> Optional[str]:
 def _get_memomics_root() -> str:
     """动态获取 MemOmics 安装根目录"""
     # 1. 从 .install_path 读取
-    install_path_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "hermes_home", ".install_path")
+    install_path_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "memomics_home", ".install_path")
     try:
         if os.path.isfile(install_path_file):
             with open(install_path_file, "r", encoding="utf-8") as f:
@@ -342,7 +342,7 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
             "success": False, "action": "record_error", "skill": skill_name,
             "error": f"skill '{skill_name}' 目录不存在 — 未写入 error_log、未生成空壳归档",
             "diagnosis": _diag_brief(_detail),
-            "scanned": "skills/<名> | skills/<分类>/<名> | hermes_home/skills/<分类>/<名>（含 plotting/ comparison/ statistics/ user-scripts/）",
+            "scanned": "skills/<名> | skills/<分类>/<名> | memomics_home/skills/<分类>/<名>（含 plotting/ comparison/ statistics/ user-scripts/）",
             "hint": "确认真实目录名后重试；skill 名支持带分类前缀（如 'plotting/<名>'）。",
         }
 
@@ -456,8 +456,8 @@ def _record_error(skill_name: str, error_message: str, error_type: str = "",
         except Exception:
             pass
 
-    # 4. 同步到 hermes_home
-    _sync_to_hermes_home(skill_name, skill_dir)
+    # 4. 同步到 memomics_home
+    _sync_to_memomics_home(skill_name, skill_dir)
 
     return {
         "success": True,
@@ -793,8 +793,8 @@ def _record_success(skill_name: str, script_name: str = "", params_used: str = "
         except Exception:
             pass
 
-    # 3. 同步到 hermes_home
-    _sync_to_hermes_home(skill_name, skill_dir)
+    # 3. 同步到 memomics_home
+    _sync_to_memomics_home(skill_name, skill_dir)
 
     return {
         "success": True,
@@ -903,8 +903,8 @@ def _update_script(skill_name: str, script_name: str, fixed_script_path: str,
     new_entry = f"- **{timestamp}** `{script_name}` — Reason: {reason or 'bug fix'} — Backup: `{backup_name}`\n"
     _write_file(update_log_path, existing.rstrip() + "\n" + new_entry + "\n")
 
-    # 4. 同步到 hermes_home
-    _sync_to_hermes_home(skill_name, skill_dir)
+    # 4. 同步到 memomics_home
+    _sync_to_memomics_home(skill_name, skill_dir)
 
     return {
         "success": True,
@@ -983,7 +983,7 @@ def _register_skill(skill_name: str, keywords: str = "",
                     category: str = "") -> Dict[str, Any]:
     """注册新 skill 到 SOUL.md 的 AUTO_SKILL_INSERT_MARKER 上方，使下次可自动触发。"""
     memomics_root = _get_memomics_root()
-    soul_path = os.path.join(memomics_root, "hermes_home", "SOUL.md")
+    soul_path = os.path.join(memomics_root, "memomics_home", "SOUL.md")
     if not os.path.exists(soul_path):
         return {"success": False, "error": f"SOUL.md not found at {soul_path}"}
 
@@ -1060,7 +1060,7 @@ def _register_skill(skill_name: str, keywords: str = "",
         "message": (
             f"Skill '{skill_name}' 已注册到 SOUL.md。"
             f"关键词: {keywords}。重启 server 后 SKILLS_INDEX.md 将自动重建。"
-            f"验证: grep 'skill_view(\"{skill_name}\")' hermes_home/SOUL.md"
+            f"验证: grep 'skill_view(\"{skill_name}\")' memomics_home/SOUL.md"
         )
     }
 
@@ -1080,12 +1080,12 @@ def _copy_with_retry(src, dst, max_retries=3, delay=0.5):
                 raise
 
 
-def _sync_to_hermes_home(skill_name: str, skill_dir: str):
-    """同步更新到 hermes_home/skills/<分类>/<skill_name>/ — 尊重真实分类目录（不再写死 bioinformatics/）"""
+def _sync_to_memomics_home(skill_name: str, skill_dir: str):
+    """同步更新到 memomics_home/skills/<分类>/<skill_name>/ — 尊重真实分类目录（不再写死 bioinformatics/）"""
     try:
         memomics_root = _get_memomics_root()
-        hh_skills = os.path.join(memomics_root, "hermes_home", "skills")
-        # 已在 hermes_home/skills 下 → 原地更新（不搬到 bioinformatics）；
+        hh_skills = os.path.join(memomics_root, "memomics_home", "skills")
+        # 已在 memomics_home/skills 下 → 原地更新（不搬到 bioinformatics）；
         # 带分类前缀（plotting/<名>）→ 按其分类放置；否则回退历史默认 bioinformatics/
         resolved = _get_skill_dir(skill_name)
         if resolved and os.path.abspath(resolved).startswith(os.path.abspath(hh_skills)):
@@ -1094,7 +1094,7 @@ def _sync_to_hermes_home(skill_name: str, skill_dir: str):
             rel_parts = [s for s in skill_name.replace("\\", "/").split("/") if s]
             target = os.path.join(hh_skills, *rel_parts) if len(rel_parts) >= 2 \
                 else os.path.join(hh_skills, "bioinformatics", skill_name)
-        # 如果 hermes_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.hermes 的 bug）
+        # 如果 memomics_home 中不存在，自动创建并全量复制（修复 skill_manage 写到 ~/.memomics 的 bug）
         if not os.path.isdir(target) and os.path.isdir(skill_dir):
             shutil.copytree(skill_dir, target)
             return
@@ -1123,7 +1123,7 @@ def _sync_to_hermes_home(skill_name: str, skill_dir: str):
                         shutil.copy2(os.path.join(src_scripts, f), os.path.join(dst_scripts, f))
     except Exception as e:
         import sys
-        print(f"[skill_evolution] WARNING: sync to hermes_home failed for '{skill_name}': {e}", file=sys.stderr)
+        print(f"[skill_evolution] WARNING: sync to memomics_home failed for '{skill_name}': {e}", file=sys.stderr)
 
 
 # ─── MAIN ENTRY ───────────────────────────────────
@@ -1307,7 +1307,7 @@ def skill_evolution(action: str = "record_error",
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
-# ─── HERMES TOOL REGISTRATION ──────────────────────
+# ─── MEMOMICS TOOL REGISTRATION ──────────────────────
 # 注意：必须用 OpenAI function-calling 格式 (name + description + parameters 嵌套)，
 # 不能把 properties 直接放顶层，否则 registry.get_definitions() 传给 LLM 的
 # function.parameters.properties 会是空的，LLM 看不到任何参数。

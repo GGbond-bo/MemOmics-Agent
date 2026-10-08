@@ -21,14 +21,15 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-set "HERMES_HOME=%~dp0hermes_home"
+set "MEMOMICS_HOME=%~dp0memomics_home"
+set "HERMES_HOME=%MEMOMICS_HOME%"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
 
 REM --- 首次安装：config.yaml 不存在时从模板生成（升级保留用户配置）---
-if not exist "%HERMES_HOME%\config.yaml" (
-    if exist "%HERMES_HOME%\config.yaml.example" (
-        copy /y "%HERMES_HOME%\config.yaml.example" "%HERMES_HOME%\config.yaml" >nul
+if not exist "%MEMOMICS_HOME%\config.yaml" (
+    if exist "%MEMOMICS_HOME%\config.yaml.example" (
+        copy /y "%MEMOMICS_HOME%\config.yaml.example" "%MEMOMICS_HOME%\config.yaml" >nul
         echo [INFO] 已生成默认 config.yaml。API Key 请在 WebUI 设置页填写。
     )
 )

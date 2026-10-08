@@ -7,7 +7,7 @@
 import sys, os, json
 sys.path.insert(0, r'E:\MemOmics-Agent\webui')
 sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('HERMES_HOME', r'E:\MemOmics-Agent\hermes_home')
+os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
 
 from plugins.memory.holographic import HolographicMemoryProvider, _enhance_query
 
@@ -26,7 +26,7 @@ QUERIES = [
     ("q12", "猴孬海马怎么注释", "memomics-cd677556"),  # 错别字鲁棒性
 ]
 
-p = HolographicMemoryProvider(config={'db_path': r'E:\MemOmics-Agent\hermes_home\memory_store.db'})
+p = HolographicMemoryProvider(config={'db_path': r'E:\MemOmics-Agent\memomics_home\memory_store.db'})
 p.initialize(session_id='memomics-cd677556')
 
 report = {}

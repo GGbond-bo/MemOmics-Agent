@@ -292,7 +292,7 @@ def test_webui_picker_and_prompt_index_agree():
     只允许两个既有的已登记差异（子集判定，修好任一个都不算回归）：
       · _debates：运行期辩论数据目录（skills/bioinformatics/_debates/），带一个 SKILL.md
         就被选择器当成技能列出；它没有 skill.json，所以不进注入索引。
-      · translate-book：Hermes 自带 productivity 类技能，选择器不扫这个根目录，
+      · translate-book：MemOmics 自带 productivity 类技能，选择器不扫这个根目录，
         但它有完整 skill.json，所以进注入索引（且 trigger_level=RED）。
     差异一旦超出这两个，说明两侧口径又漂了。
     """

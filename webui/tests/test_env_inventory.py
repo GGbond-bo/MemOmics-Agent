@@ -5,7 +5,7 @@
 - HTTP 接口只读缓存、绝不探测 —— 这里用"探测就报错"的桩来钉死这条不变量；
 - 本机 1 小时 / 集群 10 分钟 的 TTL 语义、pending 语义、force 语义都要能被前端依赖；
 - 集群聚合从 remote_cluster 的 nodes/check 输出来（真 SSH 在单测里不可用 → 喂 canned JSON）；
-- 缓存目录一律指到 tmp_path 的 hermes_home，绝不碰真实缓存；
+- 缓存目录一律指到 tmp_path 的 memomics_home，绝不碰真实缓存；
 - 前端断言是静态文本检查（index.html 无构建步骤，直接读文件）。
 """
 import asyncio
@@ -30,10 +30,10 @@ INDEX = os.path.join(WEBUI, "index.html")
 
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
-    """hermes_home -> tmp（缓存彻底隔离，不碰真实缓存、不触发探测）。"""
-    h = tmp_path / "hermes_home"
+    """memomics_home -> tmp（缓存彻底隔离，不碰真实缓存、不触发探测）。"""
+    h = tmp_path / "memomics_home"
     h.mkdir()
-    monkeypatch.setattr(ei, "_hermes_home", lambda: str(h))
+    monkeypatch.setattr(ei, "_memomics_home", lambda: str(h))
     monkeypatch.setattr(ei, "_CACHE_MEM", {"data": None, "mtime": None})
     return str(h)
 
@@ -48,7 +48,7 @@ def _canned_local():
         "duration_s": 4.2,
         "pending": False,
         "environment_json": "E:/MemOmics-Agent/environment.json",
-        "hermes_home": "E:/MemOmics-Agent/hermes_home",
+        "memomics_home": "E:/MemOmics-Agent/memomics_home",
         "platform": "Windows 11",
         "system": {
             "hostname": "BOX", "os": "Windows", "os_release": "11", "machine": "AMD64",
@@ -136,14 +136,14 @@ def _node(name, reachable=True, nproc=64, load1=0.5, **extra):
 
 
 def _configured(**extra):
-    state = {"configured": True, "enabled": True, "config_path": "X:/hermes_home/config.yaml",
+    state = {"configured": True, "enabled": True, "config_path": "X:/memomics_home/config.yaml",
              "scheduler": "slurm", "node_policy": "ask", "default_node": "ssh3",
              "nodes": ["ssh3"], "error": ""}
     state.update(extra)
     return state
 
 
-def _unconfigured(path="X:/hermes_home/config.yaml"):
+def _unconfigured(path="X:/memomics_home/config.yaml"):
     return {"configured": False, "enabled": False, "config_path": path, "scheduler": "auto",
             "node_policy": "ask", "default_node": "", "nodes": [], "error": ""}
 
@@ -151,7 +151,7 @@ def _unconfigured(path="X:/hermes_home/config.yaml"):
 # ---------------------------------------------------------------------------
 # 缓存语义（前端轮询依赖它：pending / cached / age_s / TTL）
 # ---------------------------------------------------------------------------
-def test_cache_path_lives_in_hermes_home(home):
+def test_cache_path_lives_in_memomics_home(home):
     assert ei._cache_path() == os.path.join(home, "env_inventory.json")
 
 
@@ -298,7 +298,7 @@ def test_cluster_configured_stale_returns_pending_when_no_data(home, monkeypatch
     monkeypatch.setattr(ei, "cluster_configured", lambda: _configured())
     got = ei.cached_cluster()
     assert got["pending"] is True and got["configured"] is True
-    assert got["config_path"] == "X:/hermes_home/config.yaml"
+    assert got["config_path"] == "X:/memomics_home/config.yaml"
     assert got["nodes_configured"] == ["ssh3"]
 
 
@@ -316,7 +316,7 @@ def test_cluster_configured_stale_serves_last_nodes(home, monkeypatch):
     assert got["nodes"][0]["name"] == "ssh3"
     assert got["resources"]["total_cores"] == 64
     # 配置态仍然以现算为准（这条不变量不能被污染）
-    assert got["config_path"] == "X:/hermes_home/config.yaml"
+    assert got["config_path"] == "X:/memomics_home/config.yaml"
 
 
 def test_invalidate_keeps_data_and_marks_force(home):

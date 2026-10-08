@@ -11,7 +11,7 @@
 
 ## 它是什么
 
-MemOmics-Agent 是一个以 Hermes Agent 框架为底座、专为组学数据分析打造的自主科研 Agent。你只需要给出**数据路径 + 科学问题**，它会自主完成：
+MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent。你只需要给出**数据路径 + 科学问题**，它会自主完成：
 
 ```
 加载技能 → 环境校验 → 执行前审查 →（必要时）多角色辩论
@@ -85,8 +85,8 @@ tar -xzf MemOmics-Linux.tar.gz && cd MemOmics && bash start.sh
 MemOmics-Agent/
 ├── memomics/          # 领域核心：分析工具、知识库、控制平面（LoopX）、进程监控
 ├── webui/             # Web 服务：会话、审查门禁、自愈看门狗、任务状态机
-├── hermes-agent/      # Agent 底座（Hermes 框架）：工具执行器、持久内核、记忆
-├── hermes_home/       # 技能库(400+) / 记忆 / 文献 / 会话数据库
+├── hermes-agent/      # Agent 底座：Hermes 框架（Nous Research, MIT）工具执行器、持久内核、记忆
+├── memomics_home/       # 技能库(400+) / 记忆 / 文献 / 会话数据库
 ├── results/           # 每个会话的分析结果（独立目录）
 ├── docs/              # 设计文档
 ├── 启动.bat / start.sh # 各平台启动器（Linux/macOS/集群分版）
@@ -95,7 +95,7 @@ MemOmics-Agent/
 
 ## 升级旧安装
 
-下载新包 → 关闭旧程序 → **解压整体覆盖旧目录**（hermes_home 中的 API 配置/会话/记忆自动保留）→ 重新启动。首次启动自动执行修复迁移；底部状态栏可核对 `fix_bundle` 版本号。详见 `README_INSTALL.md`。
+下载新包 → 关闭旧程序 → **解压整体覆盖旧目录**（memomics_home 中的 API 配置/会话/记忆自动保留）→ 重新启动。首次启动自动执行修复迁移；底部状态栏可核对 `fix_bundle` 版本号。详见 `README_INSTALL.md`。
 
 ## 常见问题
 
@@ -106,10 +106,10 @@ MemOmics-Agent/
 
 ## 技术栈与致谢
 
-- [Hermes Agent](https://github.com/NousResearch/Hermes-Agent) 框架（MIT）
+- [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架（MIT，© Nous Research）：MemOmics 借用其**工具层**（工具执行器 / 持久内核 / 会话与记忆原语），源码 vendor 于 `hermes-agent/`，其 LICENSE 保留在该目录。WebUI、运行逻辑（审轨/看门狗/长任务托管）与生信工具链为 MemOmics 自研。
 - [LoopX](https://github.com/) 控制平面（MIT，vendor 于 `memomics/vendor/loopx`）
 - Seurat / Scanpy / ArchR / data.table 等社区生信生态
 
 ## License
 
-本仓库当前未附带 LICENSE 文件。Hermes Agent 与 LoopX 等依赖分别遵循其原始开源许可；请根据你的发布计划选择并添加合适的许可证。
+本仓库整体以 MIT 发布（见 [LICENSE](LICENSE)，© GGbond-bo）；`hermes-agent/` 与 `memomics/vendor/loopx` 等 vendor 组件分别遵循其原始许可，版权归各自作者所有。

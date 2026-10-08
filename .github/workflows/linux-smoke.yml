@@ -110,7 +110,7 @@ jobs:
       - name: Test - persistent R kernel reuse (变量跨调用存活 = 持久化)
         run: |
           cd MemOmics
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           ./.venv/bin/python - <<'PYEOF'
           from tools.persistent_kernel import KERNEL_POOL
@@ -127,7 +127,7 @@ jobs:
       - name: Test - persistent Python kernel reuse
         run: |
           cd MemOmics
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           ./.venv/bin/python - <<'PYEOF'
           from tools.persistent_kernel import KERNEL_POOL

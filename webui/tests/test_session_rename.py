@@ -51,7 +51,7 @@ def test_rename_unknown_session(client):
 
 
 def test_rename_duplicate_conflict(new_session, client):
-    """同名冲突必须友好失败，不能静默覆盖（Hermes sessions 表 title 唯一约束）"""
+    """同名冲突必须友好失败，不能静默覆盖（MemOmics sessions 表 title 唯一约束）"""
     # 把 new_session 改成一个唯一名，再用另一个会话撞它
     r1 = client.post(f"/api/sessions/{new_session}/rename", json={"title": "撞名测试会话"})
     assert r1.json()["ok"] is True

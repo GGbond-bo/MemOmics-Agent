@@ -9,7 +9,7 @@
 搜索策略: PubMed → EuropePMC → (不足时) Semantic Scholar
 合并去重, 相关性优先排序 (查询特异度 > 引用数)。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import hashlib
@@ -630,7 +630,7 @@ def _auto_import_to_library(fp: str) -> dict:
     """下载成功后自动正式入库（批O5f 2026-08-16）。
 
     用户要求"下载即正式入库"：不再只是 work/papers 索引合并显示，而是走
-    import_pdfs 完整链路——复制进 hermes_home/papers/ + Crossref 元数据反查 +
+    import_pdfs 完整链路——复制进 memomics_home/papers/ + Crossref 元数据反查 +
     去重 + 引用库注册。失败不影响下载结果本身（调用方保留下载索引兜底显示）。
     """
     try:
@@ -688,7 +688,7 @@ def _finish_download(result: dict, output_dir: Path, doi: str, source_url: str) 
 def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str:
     """下载文献 PDF 到 work/papers/ 目录。强制多源尝试。
 
-    下载成功后自动正式入库：复制到全局文献库 hermes_home/papers/ 并做
+    下载成功后自动正式入库：复制到全局文献库 memomics_home/papers/ 并做
     Crossref 元数据反查（标题/期刊/作者/年份/卷期页码）+ 去重 + 引用库注册，
     无需再手动导入。入库失败时兜底：仍写 work/papers/.pdf_index.json，文献库
     照常显示（可后续点"补全元数据"）。
@@ -787,19 +787,19 @@ def download_pdf(url_or_pmid: str, output_dir: str = None, doi: str = "") -> str
 def _find_extract_pdf_script() -> Path:
     """动态定位 literature-param-extraction skill 的 extract_pdf.py。
 
-    运行环境不同（顶层 hermes_home / memomics 包内副本 / HERMES_HOME env），
+    运行环境不同（顶层 memomics_home / memomics 包内副本 / MEMOMICS_HOME env），
     静态相对路径会失效，这里按候选顺序探测。
     """
     here = Path(__file__).resolve().parent  # .../memomics/bio_tools
     candidates = []
-    # 1. 顶层 hermes_home skills（标准运行环境）
-    candidates.append(here.parent.parent / "hermes_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
-    # 2. 包内 hermes_home 副本（memomics/hermes_home）
-    candidates.append(here.parent / "hermes_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    # 1. 顶层 memomics_home skills（标准运行环境）
+    candidates.append(here.parent.parent / "memomics_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
+    # 2. 包内 memomics_home 副本（memomics/memomics_home）
+    candidates.append(here.parent / "memomics_home" / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
     # 3. 旧静态路径（源码树根 skills，保留兼容）
     candidates.append(here.parent.parent / "skills" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
-    # 4. HERMES_HOME 环境变量
-    _hh = os.environ.get("HERMES_HOME")
+    # 4. MEMOMICS_HOME 环境变量
+    _hh = os.environ.get("MEMOMICS_HOME")
     if _hh:
         candidates.append(Path(_hh) / "skills" / "bioinformatics" / "literature-param-extraction" / "scripts" / "extract_pdf.py")
     for c in candidates:
@@ -888,7 +888,7 @@ def extract_params_from_pdf(pdf_path: str, species: str = "", tissue: str = "", 
         return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(
@@ -951,7 +951,7 @@ def register(registry):
             "description": (
                 "下载文献 PDF 到 work/papers/ 目录。强制多源尝试下载。\n"
                 "下载策略（依次尝试）：1)直接URL 2)PMID→PMC全文 3)DOI→Unpaywall 4)DOI直接解析\n"
-                "下载成功后自动导入全局文献库（hermes_home/papers/，Crossref 元数据+去重），无需再手动导入。\n"
+                "下载成功后自动导入全局文献库（memomics_home/papers/，Crossref 元数据+去重），无需再手动导入。\n"
                 "下载后可用 extract_params_from_pdf 提取参数。\n"
                 "搜索文献时拿到 pdf_url/fulltext_url/doi/pmid 后，尽量传给此工具下载。"
             ),

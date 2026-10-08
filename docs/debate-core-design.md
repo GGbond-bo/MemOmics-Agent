@@ -22,11 +22,11 @@
 |---|---|---|
 | 辩论引擎 | `memomics/bio_tools/debate_analysis.py`（998 行） | v3 多角色：正方 3 编辑（生物/统计/生信）+ 反方 4 编辑（+历史经验）+ 裁判。**全部角色读同一组环境变量 `DEEPSEEK_API_KEY/BASE_URL/MODEL` → 单模型同构** |
 | 知识库分科 | 同上 | `biology_kb/statistics_kb/bioinfo_kb` 参数，空则回退通用；`_auto_load_kb()` 按物种/组织/方向自动加载 |
-| 缓存去重 | `_save_debate/_load_debate` | md5(topic+context) → `hermes_home/skills/bioinformatics/_debates/`，72h TTL；失败结果不缓存（P0-1 已修） |
+| 缓存去重 | `_save_debate/_load_debate` | md5(topic+context) → `memomics_home/skills/bioinformatics/_debates/`，72h TTL；失败结果不缓存（P0-1 已修） |
 | 归档 | `_archive_debate_to_results` | `results/<sid>/log/debate_{ts}_{hash}.json` |
 | 强制触发 | `webui/enforcement.py` | 仅 1 处钩子：`rail_review(post)` 通过且 `analysis_level == "analysis"` 且 `debate_done == False` → 弹窗强制 `debate_analysis`（L302-305） |
-| 铁律 | `hermes_home/SOUL.md` | 铁律 -6：禁止多角色 LLM 并发（已改串行）；分析级 9 步含 debate；统计级 7 步跳过；轻量级 5 步跳过 |
-| 运行手册 | `hermes_home/skills/bioinformatics/multi-role-debate/SKILL.md`（109 行） | 偏排障（8/8 失败排查），**文档与代码脱节**：仍写 `_call_role_parallel` 用 ThreadPoolExecutor 8 路并发（代码已改串行） |
+| 铁律 | `memomics_home/SOUL.md` | 铁律 -6：禁止多角色 LLM 并发（已改串行）；分析级 9 步含 debate；统计级 7 步跳过；轻量级 5 步跳过 |
+| 运行手册 | `memomics_home/skills/bioinformatics/multi-role-debate/SKILL.md`（109 行） | 偏排障（8/8 失败排查），**文档与代码脱节**：仍写 `_call_role_parallel` 用 ThreadPoolExecutor 8 路并发（代码已改串行） |
 | Key 注入 | `webui/server.py::_sync_debate_env()`（L1645） | 优先 `_current_model` → deepseek 官方 → dcs 匹配；dcs-cloud key 已失效(401) |
 | 模型池 | `config.yaml::custom_providers` + `server.py::_CHINA_PROVIDERS` | dcs-cloud / opencode-go / deepseek 三 provider；DeepSeek V4、GLM-5.x、Kimi K2.6-K3、Qwen3.7/3.8、MiniMax-M3、MiMo 等 10+ 模型；**opencode-go 聚合平台 key 有效 → 异构多模型在基础设施上零成本可行** |
 | 历史存档 | `_debates/`（17 份，7/8~8/1） | 含成功案例（如 2026-07-14 DEG 辩论）与失败残留（8/1 hdWGCNA 8/8 失败） |
@@ -47,7 +47,7 @@
 
 ### L1 — 辩论引擎参数化（地基，改 `debate_analysis.py`）
 
-#### 3.1.1 配置源：`hermes_home/config.yaml` 新增 `debate:` 段
+#### 3.1.1 配置源：`memomics_home/config.yaml` 新增 `debate:` 段
 
 ```yaml
 debate:
@@ -98,7 +98,7 @@ debate:
 
 ### L2 — 独立 `debate-core` skill（核心机制运行手册）
 
-位置：`hermes_home/skills/bioinformatics/debate-core/SKILL.md`（新目录；`multi-role-debate` 退役或降级为排障附录并入）。
+位置：`memomics_home/skills/bioinformatics/debate-core/SKILL.md`（新目录；`multi-role-debate` 退役或降级为排障附录并入）。
 
 内容大纲：
 1. **机制说明**：角色模型、隔离模型、mode 选择指南（附成本矩阵）
@@ -110,7 +110,7 @@ debate:
 
 同时修正 `multi-role-debate/SKILL.md` 的过时并发描述（L60-63），避免误导。
 
-### L3 — 触发面扩展（改 `webui/enforcement.py`，不改 Hermes 底座）
+### L3 — 触发面扩展（改 `webui/enforcement.py`，不改 MemOmics 底座）
 
 `tool_start_cb` / `tool_complete_cb` 已是工具生命周期钩子，直接扩展：
 
@@ -210,7 +210,7 @@ debate verdict + confidence + recommended_params
 > - P0: `debate_analysis.py` 参数化（mode/rounds/role_model_map + config.yaml debate 段 + 缓存指纹）→ 8 角色真实端到端 95.4s 成功、同架构缓存命中、异架构隔离
 > - P1: `skill_evolution` 新增 `record_verdict`（skill.json debate_verdicts + run_record 归档 + topic 去重）；`_reflow_verdict` 自动回流；multi-role-debate 文档修正
 > - P2: `enforcement.py` 新增 `debate_gate()` 三级门控（8/8 场景测试）+ 五类信号 + 预算护栏 + `debated_topics` 去重 + config budget 贯通
-> - P3: `debate-core` skill 成稿（hermes_home/skills/bioinformatics/debate-core/SKILL.md）+ SOUL.md 铁律 5 门控化
+> - P3: `debate-core` skill 成稿（memomics_home/skills/bioinformatics/debate-core/SKILL.md）+ SOUL.md 铁律 5 门控化
 
 | 阶段 | 内容 | 工作量 | 验收标准 | 状态 |
 |---|---|---|---|---|

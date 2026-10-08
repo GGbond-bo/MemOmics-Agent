@@ -379,7 +379,7 @@ content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L
 
   - CD14：CD14+ 单核细胞，up，选择标准：蛋白丰度均值中心化后 CD14 > 2'
 evidence: DOI 10.1016/j.cels.2021.04.005 | Hotspot identifies informative gene modules
-  across modalities of single-cell genomics | E:/MemOmics-Agent/hermes_home/papers/hotspot.pdf
+  across modalities of single-cell genomics | E:/MemOmics-Agent/memomics_home/papers/hotspot.pdf
 evidence_chain:
   standard: kb-evidence-v1
   level_distribution:

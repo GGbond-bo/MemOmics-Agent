@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 from pathlib import Path as _Path
 from hermes_constants import get_hermes_home as _get_hermes_home
 _ENV_CACHE = None
-# 缓存文件路径：优先用 HERMES_HOME 环境变量，回退项目根目录
-_ENV_CACHE_DIR = os.environ.get("HERMES_HOME", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "hermes_home"))
+# 缓存文件路径：优先用 MEMOMICS_HOME 环境变量，回退项目根目录
+_ENV_CACHE_DIR = os.environ.get("MEMOMICS_HOME", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "memomics_home"))
 _ENV_CACHE_PATH = os.path.join(_ENV_CACHE_DIR, "environment.json")
 _CACHE_TTL = 86400  # 24小时过期
 

@@ -28,7 +28,7 @@ import sys
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _BIO = os.path.join(_ROOT, "memomics", "bio_tools")
 _INIT = os.path.join(_BIO, "__init__.py")
-_HERMES = os.path.join(_ROOT, "hermes-agent")
+_MEMOMICS = os.path.join(_ROOT, "hermes-agent")
 
 # 事故里被漏掉的那三个（真源：各自模块内的 registry.register(name=...)）
 _MUST_BE_REGISTERED = ("ask_user", "evidence_write", "evidence_query", "prisma_flow")
@@ -100,7 +100,7 @@ def test_registry_really_contains_the_tools_after_package_import():
         "import memomics.bio_tools\n"
         "from tools.registry import registry\n"
         "print(json.dumps(sorted(registry.get_tool_names_for_toolset('memomics'))))\n"
-    ) % (_ROOT, _HERMES)
+    ) % (_ROOT, _MEMOMICS)
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=300, cwd=_ROOT)
     assert proc.returncode == 0, "import memomics.bio_tools 失败：%s" % (proc.stderr or "")[-800:]
@@ -120,7 +120,7 @@ def test_package_import_is_robust():
         "sys.path.insert(0, %r)\n"
         "import memomics.bio_tools as b\n"
         "print('OK', len([n for n in dir(b) if not n.startswith('_')]))\n"
-    ) % (_ROOT, _HERMES)
+    ) % (_ROOT, _MEMOMICS)
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=300, cwd=_ROOT)
     assert proc.returncode == 0, (proc.stderr or "")[-800:]

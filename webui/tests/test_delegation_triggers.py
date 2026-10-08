@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 def _soul_text():
-    with open(os.path.join(ROOT, "hermes_home", "SOUL.md"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "memomics_home", "SOUL.md"), encoding="utf-8") as f:
         return f.read()
 
 

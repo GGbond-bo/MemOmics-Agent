@@ -20,7 +20,7 @@ content: '- 靶点: 半胱氨酸
   - 效应: 室温暗处30 min烷基化半胱氨酸'
 evidence: DOI 10.1038/s41467-024-54434-4 | Proteogenomic analysis reveals non-small
   cell lung cancer subtypes predicting chromosome instability, and tumor microenvironment
-  | E:/MemOmics-Agent/hermes_home/papers/lung_no-smoking_clinic.pdf
+  | E:/MemOmics-Agent/memomics_home/papers/lung_no-smoking_clinic.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

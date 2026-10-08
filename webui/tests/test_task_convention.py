@@ -15,7 +15,7 @@ import pytest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
 TRCLI = os.path.join(_REPO, "memomics", "bio_tools", "task_run.py")
-SOUL = os.path.join(_REPO, "hermes_home", "SOUL.md")
+SOUL = os.path.join(_REPO, "memomics_home", "SOUL.md")
 
 
 def _load_task_run():

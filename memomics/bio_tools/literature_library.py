@@ -3,7 +3,7 @@
 
 用户问题：文献库"怎么算"——不只是 agent 自己下载的 PDF，用户自己下载好的文献也能导入。
 本模块提供：
-- import_pdfs(paths): 导入本地 PDF（文件或目录）到全局文献库 hermes_home/papers/
+- import_pdfs(paths): 导入本地 PDF（文件或目录）到全局文献库 memomics_home/papers/
   - 自动提取元数据：DOI 正则 → Crossref 反查（期刊/文章名/作者/年份）
   - 标识字段：journal(期刊) / title(文章名) / authors / year / doi
     / downloaded_at(下载日期=原文件修改时间) / imported_at(导入时间) / sha256
@@ -53,11 +53,11 @@ def _clean_doi(raw: str) -> str:
 
 
 def _library_dir() -> str:
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     if hh:
         return os.path.join(hh, "papers")
     here = Path(__file__).resolve().parent.parent.parent
-    return str(here / "hermes_home" / "papers")
+    return str(here / "memomics_home" / "papers")
 
 
 def _agent_papers_index() -> str:
@@ -591,7 +591,7 @@ def _markdown_dir() -> str:
 
 
 def pdf_to_markdown(path: str, force: bool = False) -> str:
-    """PDF → Markdown 落盘（批N 2026-08-16）：hermes_home/papers/markdown/<名>.md。
+    """PDF → Markdown 落盘（批N 2026-08-16）：memomics_home/papers/markdown/<名>.md。
 
     pymupdf4llm 优先（标题/段落结构化）；失败回退纯文本；扫描版走 OCR。
     已存在且非 force → 直接复用缓存。
@@ -991,7 +991,7 @@ def list_library() -> str:
 
 
 def _load_provider_keys() -> dict:
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     if hh:
         try:
             with open(os.path.join(hh, "provider_keys.json"), encoding="utf-8") as f:
@@ -1481,7 +1481,7 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     except Exception:
         pass
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
-                       "translation_file": f"hermes_home/papers/translations/{stem}.zh.md",
+                       "translation_file": f"memomics_home/papers/translations/{stem}.zh.md",
                        "blocks": len(blocks), "chars": len(zh)}, ensure_ascii=False, indent=2)
 
 
@@ -1772,7 +1772,7 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         logger.warning(f"summary mark failed: {e}")
     _cb("done", 1, 1, "全文提炼完成")
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
-                       "summary": summary, "markdown_file": f"hermes_home/papers/summaries/{stem}.md"},
+                       "summary": summary, "markdown_file": f"memomics_home/papers/summaries/{stem}.md"},
                       ensure_ascii=False, indent=2)
 
 
@@ -1817,7 +1817,7 @@ def summarize_all_papers(progress_cb=None) -> str:
     _cb("done", n, n, f"全文提炼完成: {ok_n}/{n} 篇成功")
     return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
                        "results": results,
-                       "note": "9 项摘要已写入 hermes_home/papers/summaries/，可在文献库查看。"},
+                       "note": "9 项摘要已写入 memomics_home/papers/summaries/，可在文献库查看。"},
                       ensure_ascii=False, indent=2)
 
 
@@ -2200,7 +2200,7 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
     - 生物学知识：结论、基因 marker、细胞类型、通路、类器官/培养条件、化合物/化学信息
     - 生信知识：测序方法（技术/平台/建库/深度）、分析流程、软件包（含版本/语言）、
       关键参数、质控阈值、参考基因组、数据库
-    产物：hermes_home/papers/knowledge/<名>.md（人读）+ 索引 knowledge JSON（机读）
+    产物：memomics_home/papers/knowledge/<名>.md（人读）+ 索引 knowledge JSON（机读）
           + knowledge_base 五级目录 YAML 条目（给 AI 检索复用）。
     """
     _cb = progress_cb or (lambda *a, **k: None)
@@ -2344,7 +2344,7 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
     return json.dumps({
         "ok": True, "paper": hit.get("title"), "file": hit.get("file"), "doi": hit.get("doi"),
         "knowledge": knowledge, "written": written, "rejected": rejected,
-        "knowledge_file": f"hermes_home/papers/knowledge/{stem}.md",
+        "knowledge_file": f"memomics_home/papers/knowledge/{stem}.md",
         "note": "生物学知识(结论/marker/类器官/化学) → 01_生物学知识；生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
 
@@ -4083,7 +4083,7 @@ def bind_session(session_id: str, force: bool = False) -> dict:
 SCHEMA = {
     "name": "literature_import",
     "description": (
-        "导入用户已有的本地 PDF 文献（文件或目录路径）到全局文献库 hermes_home/papers/。"
+        "导入用户已有的本地 PDF 文献（文件或目录路径）到全局文献库 memomics_home/papers/。"
         "自动提取并标识：期刊(journal)、文章名(title)、作者、年份、DOI、下载日期；"
         "自动注册进引用库（BibTeX/RIS）。重复文件自动跳过。"
         "用户说'这是我下载的文献/论文 PDF'时用它导入，不要用 download_pdf 重复下载。"
@@ -4109,7 +4109,7 @@ EXTRACT_SCHEMA = {
         "生物学知识（结论/基因marker/细胞类型/通路/类器官培养条件/化合物化学信息）→ 01_生物学知识；"
         "生信知识（测序方法/分析流程/软件包含版本/关键参数/QC阈值/参考基因组/数据库）→ 03_测序方法；"
         "质控阈值 → 02_质控参数。写入 knowledge_base 五级目录（物种/组织/方向/类别/assay），"
-        "evidence 带 DOI 溯源，另存人读版 hermes_home/papers/knowledge/<名>.md。"
+        "evidence 带 DOI 溯源，另存人读版 memomics_home/papers/knowledge/<名>.md。"
         "用户说'把这篇文献的参数/生物学知识/生信知识提炼进知识库/入库'时使用。"
         "【重要】用户要'总结文章思路/论文解读/全文提炼/9项摘要'时不要用本工具——那走 summarize_paper。"
     ),
@@ -4153,7 +4153,7 @@ def _register():
                 "description": (
                     "文献全文思路提炼（给人看的方向）：对文献库里一篇文章提取 9 项结构化摘要"
                     "（思路、背景、物种、组织、问题、怎么解决、方法、结论、怎么验证），写入 "
-                    "hermes_home/papers/summaries/ 并标记已提炼。"
+                    "memomics_home/papers/summaries/ 并标记已提炼。"
                     "用户说'总结这篇文章/这篇文章的思路/讲了什么/论文解读/全文提炼/9项摘要'时使用。"
                     "【重要】提炼生信参数/知识库条目（给 AI 调用）走 kb_extract_from_paper，"
                     "两者分工不同，不要混用。"

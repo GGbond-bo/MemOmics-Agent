@@ -36,12 +36,12 @@ jobs:
       - name: Overlay latest runtime code (code=update.zip, tests=repo)
         run: |
           U=pkg/MemOmics
-          rm -rf hermes_home
+          rm -rf memomics_home
           cp -rf $U/webui/* webui/
           cp -rf $U/memomics/* memomics/
           cp -rf $U/hermes-agent/* hermes-agent/
           cp -rf $U/scripts/* scripts/
-          cp -rf $U/hermes_home .
+          cp -rf $U/memomics_home .
           cp -f $U/*.txt $U/*.py $U/VERSION $U/environment.json . 2>/dev/null || true
           # 验证：运行代码是最新版（含 Linux 修复），测试保留仓库版
           grep -c 'environment discovery' webui/server.py && echo 'OK server.py = latest'
@@ -66,7 +66,7 @@ jobs:
 
       - name: Boot real server + chain smoke (HTTP/health/update/env)
         run: |
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export MEMOMICS_PORT=8899
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           nohup .venv/bin/python webui/server.py > server.log 2>&1 &
@@ -94,7 +94,7 @@ jobs:
 
       - name: Chain - persistent kernel reuse (R + Python, 变量跨调用存活)
         run: |
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           .venv/bin/python - <<'PYEOF'
           from tools.persistent_kernel import KERNEL_POOL
@@ -115,7 +115,7 @@ jobs:
 
       - name: pytest - extreme matrices (多意图多场景极端测试)
         run: |
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           .venv/bin/python -m pytest \
             webui/tests/test_grill_extreme.py \
@@ -138,7 +138,7 @@ jobs:
 
       - name: pytest - full offline suite
         run: |
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           .venv/bin/python -m pytest webui/tests -q --tb=line --junitxml=full.xml 2>&1 | tail -80
           echo "FULL_EXIT=${PIPESTATUS[0]}"
@@ -148,15 +148,15 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          export HERMES_HOME="$PWD/hermes_home"
+          export MEMOMICS_HOME="$PWD/memomics_home"
           export MEMOMICS_PORT=8899
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           # 注入 key 到 config.yaml（测试实例专用）
           .venv/bin/python - <<'PYEOF'
           import os, yaml
-          cfg = os.path.join(os.environ['HERMES_HOME'], 'config.yaml')
+          cfg = os.path.join(os.environ['MEMOMICS_HOME'], 'config.yaml')
           if not os.path.isfile(cfg):
-              example = os.path.join(os.environ['HERMES_HOME'], 'config.yaml.example')
+              example = os.path.join(os.environ['MEMOMICS_HOME'], 'config.yaml.example')
               if os.path.isfile(example):
                   import shutil; shutil.copy(example, cfg)
           with open(cfg, 'r', encoding='utf-8') as f:

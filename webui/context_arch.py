@@ -470,7 +470,7 @@ def build_extras(session) -> dict:
             pass
     gm = ""
     try:
-        hh = os.environ.get("HERMES_HOME", "")
+        hh = os.environ.get("MEMOMICS_HOME", "")
         for name in ("MEMORY.md", "USER.md"):
             mp = os.path.join(hh, "memories", name) if hh else ""
             if mp and os.path.isfile(mp):
@@ -535,7 +535,7 @@ def _cjk_tokens(text):
 
 
 def _facts_db_path():
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     p = os.path.join(hh, "memory_store.db") if hh else ""
     return p if p and os.path.isfile(p) else ""
 

@@ -18,7 +18,7 @@
   J. 失败任务一键重试（T12）：只重跑契约里记下的命令；退避/上限全用 retry_backoff；
      重试任务带 重试来源/重试根/第几次重试；并且必须真起进程真跑完（不是写份契约就算）。
 
-纪律：HERMES_HOME_DIR 指到 tmp，绝不许碰真机 hermes_home。
+纪律：MEMOMICS_HOME_DIR 指到 tmp，绝不许碰真机 memomics_home。
 """
 import asyncio
 import importlib.util
@@ -56,10 +56,10 @@ def tr():
 
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
-    """把 HERMES_HOME_DIR 指到 tmp，并建好 runtime/tasks 目录。"""
-    h = tmp_path / "hermes_home"
+    """把 MEMOMICS_HOME_DIR 指到 tmp，并建好 runtime/tasks 目录。"""
+    h = tmp_path / "memomics_home"
     (h / "runtime" / "tasks").mkdir(parents=True)
-    monkeypatch.setattr(server, "HERMES_HOME_DIR", str(h))
+    monkeypatch.setattr(server, "MEMOMICS_HOME_DIR", str(h))
     return h
 
 

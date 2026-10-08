@@ -1,6 +1,6 @@
 """execute_python — Python 代码执行工具，带 conda 环境检测 + 超时 kill。
 
-从 MemOmics 老版迁移核心逻辑，适配 hermes registry 格式。
+从 MemOmics 老版迁移核心逻辑，适配 memomics registry 格式。
 """
 import os
 import re

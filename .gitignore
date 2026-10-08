@@ -57,27 +57,27 @@ test_*.py
 verify_*.py
 
 # === 鏁忔劅/涓汉鏁版嵁锛堜笉杩?git锛?==
-hermes_home/provider_keys.json
-hermes_home/image_gen_config.json
-hermes_home/model_config.json
-hermes_home/memories/
-hermes_home/state.db
-hermes_home/state.db-shm
-hermes_home/state.db-wal
-hermes_home/sessions/
-hermes_home/checkpoints/
-hermes_home/cache/
-hermes_home/.install_path
-hermes_home/.skills_prompt_snapshot.json
-hermes_home/.usage.json
-hermes_home/skills/.usage.json
+memomics_home/provider_keys.json
+memomics_home/image_gen_config.json
+memomics_home/model_config.json
+memomics_home/memories/
+memomics_home/state.db
+memomics_home/state.db-shm
+memomics_home/state.db-wal
+memomics_home/sessions/
+memomics_home/checkpoints/
+memomics_home/cache/
+memomics_home/.install_path
+memomics_home/.skills_prompt_snapshot.json
+memomics_home/.usage.json
+memomics_home/skills/.usage.json
 *.db-shm
 *.db-wal
 
 # === MemOmics Test Artifacts ===
 *.bak_test
-hermes_home/memory_store.db
-hermes_home/hermes_home/
+memomics_home/memory_store.db
+memomics_home/memomics_home/
 test_search.db
 state.db
 Rplots.pdf
@@ -85,42 +85,42 @@ nul
 
 # === 杩愯浜х墿锛堜笉鍏?git锛?==
 hdwgcn_src/
-hermes_home/environment.json
-hermes_home/skills/bioinformatics/_debates/
+memomics_home/environment.json
+memomics_home/skills/bioinformatics/_debates/
 webui/uploads/
 
 # === 杩愯鎬佸櫔闊筹紙姣忔杩愯鑷姩鍙樺寲锛屼笉鍏ュ簱锛?===
-hermes_home/cron/ticker_*
-hermes_home/cron/.hb_*.tmp
-hermes_home/gateway_state.json
-hermes_home/logs/
-hermes_home/skills/bioinformatics/atac-seq-memomics/logs/
-hermes_home/models_dev_cache.json
-hermes_home/env_probe_cache.json
-hermes_home/runtime/jobs.json
-hermes_home/runtime/weixin_messages.json
-hermes_home/session_usage/
-hermes_home/processes.json
-hermes_home/lsp/bin/
+memomics_home/cron/ticker_*
+memomics_home/cron/.hb_*.tmp
+memomics_home/gateway_state.json
+memomics_home/logs/
+memomics_home/skills/bioinformatics/atac-seq-memomics/logs/
+memomics_home/models_dev_cache.json
+memomics_home/env_probe_cache.json
+memomics_home/runtime/jobs.json
+memomics_home/runtime/weixin_messages.json
+memomics_home/session_usage/
+memomics_home/processes.json
+memomics_home/lsp/bin/
 .backups/
 # 澶囦唤鏂囦欢涓嶅叆搴?*.bak*
 memory_api_token
 
 # === 鏁忔劅/杩愯鏃讹紙2026-08-14 鍋滄璺熻釜锛?==
-hermes_home/config.yaml
-hermes_home/backup_plaintext_*/
-hermes_home/verification_evidence.db
-hermes_home/weixin/accounts/
-hermes_home/skills/**/logs/
+memomics_home/config.yaml
+memomics_home/backup_plaintext_*/
+memomics_home/verification_evidence.db
+memomics_home/weixin/accounts/
+memomics_home/skills/**/logs/
 
 # === 嵌套副本已归档（2026-08-14 收敛到 .backups/code_copies_20260814）===
 memomics/hermes-agent/
-memomics/hermes_home/
+memomics/memomics_home/
 memomics/memomics/
 memomics/webui/
 
 # 浼氳瘽閿氱偣杩愯鏃舵枃浠讹紙姣忎細璇濅竴鏉★紝璺ㄥ帇缂╂寔涔咃級
-hermes_home/session_anchors/
+memomics_home/session_anchors/
 
 # start.bat 渚濊禆瀹夎鏍囪锛堣杩囦竴娆″氨璺宠繃锛?.venv_deps_ok.txt
 .venv_vision_ok.txt
@@ -128,15 +128,15 @@ hermes_home/session_anchors/
 # 渚挎惡鎵撳寘杩愯鏃讹紙鎵撳寘.bat 鐢熸垚鐨勫唴缃?Python锛?runtime/
 
 # 用户文献库与引用库（个人数据，不入库）
-hermes_home/papers/
-hermes_home/references.bib
-hermes_home/references.ris
-hermes_home/references.json
+memomics_home/papers/
+memomics_home/references.bib
+memomics_home/references.ris
+memomics_home/references.json
 
 # 凭据类（历史已跟踪，防未来修改被 add -A 误提交）
-hermes_home/auth.json
-hermes_home/channel_directory.json
-hermes_home/weixin_account.json
+memomics_home/auth.json
+memomics_home/channel_directory.json
+memomics_home/weixin_account.json
 
 # 本地备份/运行标记（不入库）
 *.bak_*
@@ -144,16 +144,16 @@ hermes_home/weixin_account.json
 .venv_deps_ok.txt
 .venv_vision_ok.txt
 
-hermes_home/.fix_bundle
+memomics_home/.fix_bundle
 
 # 2026-08-23 发布脱敏：本机脚本/微信集成/上传图片/调试残留不进仓库与安装包
 server-start.cmd
-integrate_hermes_weixin.py
+integrate_memomics_weixin.py
 webui/uploads/
 tmp_diff*.py
 
 # 2026-08-23 发布脱敏 v2：研究计划/调研报告/日志/本机环境/开发脚本 不进仓库
-.hermes/
+.memomics/
 log/
 plans/
 task_plan.md
@@ -178,7 +178,7 @@ test_p1*.py
 test_proc_watchdog_e2e.py
 test_realdata_multiscene.py
 # 2026-08-23 发布脱敏 v2（UTF-8 可靠版）：研究计划/调研报告/日志/本机环境/开发脚本 不进仓库
-.hermes/
+.memomics/
 log/
 plans/
 task_plan.md
@@ -210,9 +210,9 @@ test_realdata_multiscene.py
 scripts/bench_*.json
 
 # 2026-10-07 排敏：DCS PAT（本机凭据）、本机环境扫描、远端任务日志、临时目录 不入库
-hermes_home/dcs_cloud.json
-hermes_home/env_inventory.json
-hermes_home/remote/
+memomics_home/dcs_cloud.json
+memomics_home/env_inventory.json
+memomics_home/remote/
 tmp/
 
-hermes_home/runtime/
+memomics_home/runtime/

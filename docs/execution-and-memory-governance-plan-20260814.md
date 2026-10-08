@@ -55,7 +55,7 @@ finally(8466) → _schedule_self_check → pop(_urgent_wakeup) → _wakeup(3s) �
 2. **状态载体错误**：task_plan.md 文本当状态机 → "无 in_progress Phase"字样锁死完成判定（已有 3 次补丁记录）
 3. **会话内存态重启即丢** → 重启后任务状态全失，靠"播种自检"猜补，又误判已完成任务
 4. **补丁叠加**：batch/ 目录存 run_serial.sh v1/v2/v3 + watchdog v2/v3 + guardian v5 共 10+ 脚本；单实例锁修了三遍（PID 文件→mkdir 锁→再加 PID 锁）
-5. **terminal(background=True) 路径已被实战证伪**：进程树绑定 Hermes 会话生命周期，会话回收→级联 kill（skill 文档有实测记录）
+5. **terminal(background=True) 路径已被实战证伪**：进程树绑定 MemOmics 会话生命周期，会话回收→级联 kill（skill 文档有实测记录）
 
 ### 修复路线
 
@@ -93,7 +93,7 @@ finally(8466) → _schedule_self_check → pop(_urgent_wakeup) → _wakeup(3s) �
 │   按查询检索注入（prefetch ≤5 条，已有机制）        │
 │   索引：facts_fts(FTS5) + hrr_vector + 新 importance │
 ├─────────────────────────────────────────────────┤
-│ L3 归档层（hermes_home/memories/archive/）         │
+│ L3 归档层（memomics_home/memories/archive/）         │
 │   180 天未用或 score<0.3，移出全部注入链            │
 │   永不删除（用户要求"一直保留"）                    │
 │   索引文件 memories/index.json                    │
@@ -132,7 +132,7 @@ pinned（用户强调位）:
 
 ### 索引设计
 
-`hermes_home/memories/index.json`（L2/L3 条目统一索引）：
+`memomics_home/memories/index.json`（L2/L3 条目统一索引）：
 
 ```json
 {

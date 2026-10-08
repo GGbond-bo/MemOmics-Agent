@@ -2,9 +2,9 @@
 
 ## 项目路径
 - 项目根目录：E:/MemOmics-Agent/
-- Hermes 框架：E:/MemOmics-Agent/hermes-agent/
+- MemOmics 框架：E:/MemOmics-Agent/hermes-agent/
 - 知识库：E:/MemOmics-Agent/memomics/knowledge_base/ (90个YAML)
-- 技能库：~/.hermes/skills/bioinformatics/ (241个SKILL.md)
+- 技能库：~/.memomics/skills/bioinformatics/ (241个SKILL.md)
 - 分析结果：E:/MemOmics-Agent/hermes-agent/results/
 
 ## 数据库

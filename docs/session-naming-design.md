@@ -1,21 +1,21 @@
 # 历史会话命名与目录识别设计（Session Naming & Identity）
 
 > 状态：设计定稿（待实施）
-> 调研对象：Hermes（本地 `hermes-agent`）、Reasonix（本机运行环境）、OpenAI4S（PKU-YuanGroup，GitHub main @ 2026-08-11）
+> 调研对象：MemOmics（本地 `hermes-agent`）、Reasonix（本机运行环境）、OpenAI4S（PKU-YuanGroup，GitHub main @ 2026-08-11）
 > 目标：保证「会话目录 ↔ 会话」双向正确识别，目录永不丢、恢复永不找错
 
 ---
 
 ## 1. 三家调研结论
 
-### 1.1 Hermes（本地 hermes-agent，MemOmics 底座）
+### 1.1 MemOmics（本地 hermes-agent，MemOmics 底座）
 
 - **会话 id**：`agent.session_id = f"{timestamp_str}_{short_uuid}"`，`timestamp_str = %Y%m%d_%H%M%S`、`short_uuid = uuid4().hex[:6]`
   → 形如 `20260811_023000_3f8a2b`（agent_init.py:1283-1290）
-- **canonical 存储**：`~/.hermes/state.db`（SQLite，`hermes_state.py` 的 SessionDB），`sessions` 表字段：
+- **canonical 存储**：`~/.memomics/state.db`（SQLite，`hermes_state.py` 的 SessionDB），`sessions` 表字段：
   `id`(PK) / `title` / `display_name` / `parent_session_id` / `source` / `model` / `cwd` / `git_branch` / `git_repo_root` / `started_at` / `ended_at` / token 计数 / cost 字段 …
 - **会话识别三要素**：`id`（唯一锚点）+ `title`（人类可读，可更新，`get_session_title`）+ **git 项目绑定**（`git_repo_root`/`cwd`/`git_branch`）
-- **可选 JSON 快照**：`hermes_home/sessions/session_{sid}.json`（opt-in，`sessions.write_json_snapshots`，默认 False；state.db 是 canonical）
+- **可选 JSON 快照**：`memomics_home/sessions/session_{sid}.json`（opt-in，`sessions.write_json_snapshots`，默认 False；state.db 是 canonical）
 - **恢复**：`--resume` 按 session_id 查 state.db
 
 要点：时间戳保证可排序，uuid 尾保证唯一；项目归属靠 git 三元组；快照只是外部工具便利，DB 是唯一真相。
@@ -50,7 +50,7 @@
 
 ### 1.4 三家对照表
 
-| 维度 | Hermes | Reasonix | OpenAI4S |
+| 维度 | MemOmics | Reasonix | OpenAI4S |
 | --- | --- | --- | --- |
 | 会话 id | `时间戳_uuid6` | 文件名 `时间戳.微秒-模型` | `语义前缀_uuid12`（无时间戳） |
 | 存储 | SQLite state.db（canonical）+ 可选 JSON | JSONL 主文件 + sidecar 组 | 单一 SQLite Store + CAS blob |
@@ -63,7 +63,7 @@
 
 ## 2. 设计共识（三家交叉验证的规则）
 
-1. **唯一锚点 + 可排序**：时间戳前缀（排序）⊕ uuid 尾（唯一）——Hermes/Reasonix 直接编码进 id/文件名；OpenAI4S 放弃时间戳导致排序必须查字段（教训：id 里带时间戳更省事）
+1. **唯一锚点 + 可排序**：时间戳前缀（排序）⊕ uuid 尾（唯一）——MemOmics/Reasonix 直接编码进 id/文件名；OpenAI4S 放弃时间戳导致排序必须查字段（教训：id 里带时间戳更省事）
 2. **内容自描述**：文件名只是索引，**会话 id 必须冗余写在文件内容/sidecar 里**（Reasonix `.meta`、OpenAI4S 字段）——改名/迁移/复制后仍可识别
 3. **项目归属是第一识别维度**：无归属的会话无法区分（三家分别用 git 三元组 / slug 目录 / project_id）
 4. **恢复链不许断**：压缩/归档/快照必须带指针（OpenAI4S `ledger_cursor/recovery_pointer/generation_id`、Reasonix `.recovery.json`）
@@ -73,7 +73,7 @@
 
 ## 3. MemOmics 会话命名设计（四层）
 
-### 第 1 层：会话身份（沿用 Hermes 原生，不改）
+### 第 1 层：会话身份（沿用 MemOmics 原生，不改）
 
 - `session_id = %Y%m%d_%H%M%S_<uuid6>`（state.db canonical，`parent_session_id` 已支持会话链）
 - 恢复入口不变：`--resume <session_id>` / state.db 查询
@@ -108,7 +108,7 @@ results/<project>/<topic-slug>_<YYYYMMDD-HHMMSS>_<hash8>/
 
 ### 第 3 层：子产物命名（语义前缀 + 短 id + 时间戳）
 
-学 OpenAI4S 的语义前缀，保留 Hermes 的时间戳：
+学 OpenAI4S 的语义前缀，保留 MemOmics 的时间戳：
 
 | 产物 | 命名 | 示例 |
 | --- | --- | --- |
@@ -151,7 +151,7 @@ results/<project>/<topic-slug>_<YYYYMMDD-HHMMSS>_<hash8>/
 
 ## 5. 附：调研证据索引
 
-- Hermes：`hermes-agent/agent/agent_init.py:1283-1306`（session_id 生成、logs_dir）、`hermes-agent/hermes_state.py:762-800`（sessions 表 DDL）、`:2012`（create_session）、`:3454`（get_session_title）
+- MemOmics：`hermes-agent/agent/agent_init.py:1283-1306`（session_id 生成、logs_dir）、`hermes-agent/hermes_state.py:762-800`（sessions 表 DDL）、`:2012`（create_session）、`:3454`（get_session_title）
 - Reasonix：`%APPDATA%/reasonix/projects/<slug>/sessions/`（实际文件组 + subagents/）、顶层 `sessions/` 迁移标记
 - OpenAI4S：`openai4s/storage/README_zh.md`（仓储职责全景）、`openai4s/storage/metadata.py`（`note_{uuid12}`/`ca-{uuid12}`/`hc-{uuid12}` id 模式、compaction_archives 指针字段）、`openai4s/storage/frames.py`（frame 层级 + keyset 游标）、`snapshots.py`（WorkspaceCAS + SessionSnapshotRepository）、`checkpoint_state.py`（SHA-256 摘要）、`actions.py`（Action Ledger 只追加）
 
@@ -176,7 +176,7 @@ results/<project>/<topic-slug>_<YYYYMMDD-HHMMSS>_<hash8>/
 
 **身份与名字早已分离**：`sid = memomics-<uuid8>` 是唯一 key（server.py L2628），`title` 只是展示字段。改名只写 title，所有链路天然不断。
 
-Hermes 原生已备好改名后端（hermes_state.py）：
+MemOmics 原生已备好改名后端（hermes_state.py）：
 - `sanitize_title`（L3292）：消毒（控制字符/零宽/RTL 覆盖/超长）
 - `set_session_title`（L3435）：改名；同名/非法抛 ValueError；空串归一化 None
 - `set_auto_title_if_empty`（L3445）：自动命名且**不覆盖手动名**（事务内判断，防并发覆盖）

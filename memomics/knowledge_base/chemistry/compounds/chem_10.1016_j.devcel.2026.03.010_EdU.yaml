@@ -18,7 +18,7 @@ content: '- 靶点: DNA合成/S期
 
   - 效应: 标记肌核增生，量化EdU+ SynM，Fig.3H–J。'
 evidence: DOI 10.1016/j.devcel.2026.03.010 | A skeletal muscle atlas shows neuromuscular
-  junction adaptations to growth and atrophy | E:/MemOmics-Agent/hermes_home/papers/10.1016_j.devcel.2026.03.010.pdf
+  junction adaptations to growth and atrophy | E:/MemOmics-Agent/memomics_home/papers/10.1016_j.devcel.2026.03.010.pdf
 evidence_chain:
   standard: kb-evidence-v1
   grading: source_only

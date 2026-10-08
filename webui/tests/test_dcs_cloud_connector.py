@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""☁️ dcs_cloud 连接器回归测试（全程离线：假 CLI + 临时 HERMES_HOME，不用真 PAT）。
+"""☁️ dcs_cloud 连接器回归测试（全程离线：假 CLI + 临时 MEMOMICS_HOME，不用真 PAT）。
 
 首版随「PAT + 官方 dcs CLI 接入 MemOmics」（2026-10-07）落盘。锁死的契约：
   1. 配置来源：config.yaml 的 dcs_cloud: 段，环境变量 MEMOMICS_DCS_* 优先；
-  2. PAT 只落 hermes_home/dcs_cloud.json，工具输出只出现掩码、绝无明文；
+  2. PAT 只落 memomics_home/dcs_cloud.json，工具输出只出现掩码、绝无明文；
   3. 未绑定 / 未启用时的报错必须是"可操作指引"（引导去面板绑定），不是裸错误；
   4. 平台业务码翻译：41201/60003 → 重绑 PAT；83003 → 选项目；83006/83007 → 容器动作；
   5. allow_write=false 时写动作（upload / container_open）在碰 CLI 之前就被拒；
@@ -30,8 +30,8 @@ from memomics.connectors import dcs_cloud as dc  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    """每个用例都在自己的 HERMES_HOME 里跑，并清掉模块级配置缓存。"""
-    monkeypatch.setattr(dc, "_hermes_home", lambda: tmp_path)
+    """每个用例都在自己的 MEMOMICS_HOME 里跑，并清掉模块级配置缓存。"""
+    monkeypatch.setattr(dc, "_memomics_home", lambda: tmp_path)
     monkeypatch.delenv("MEMOMICS_DCS_ENABLED", raising=False)
     dc._CFG_CACHE["mtime"] = None
     dc._CFG_CACHE["cfg"] = None

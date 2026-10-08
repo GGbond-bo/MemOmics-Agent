@@ -13,10 +13,10 @@ on:
   push:
     branches: [master, main]
     paths:
-      - 'hermes_home/skills/**'
-      - 'hermes_home/SKILLS_INDEX.md'
-      - 'hermes_home/SOUL.md'
-      - 'hermes_home/SOUL-detail.md'
+      - 'memomics_home/skills/**'
+      - 'memomics_home/SKILLS_INDEX.md'
+      - 'memomics_home/SOUL.md'
+      - 'memomics_home/SOUL-detail.md'
       - 'webui/skills_registry.py'
       - 'webui/auto_register.py'
       - 'webui/server.py'
@@ -31,10 +31,10 @@ on:
       - '.github/workflows/skills-gate.yml'
   pull_request:
     paths:
-      - 'hermes_home/skills/**'
-      - 'hermes_home/SKILLS_INDEX.md'
-      - 'hermes_home/SOUL.md'
-      - 'hermes_home/SOUL-detail.md'
+      - 'memomics_home/skills/**'
+      - 'memomics_home/SKILLS_INDEX.md'
+      - 'memomics_home/SOUL.md'
+      - 'memomics_home/SOUL-detail.md'
       - 'webui/skills_registry.py'
       - 'webui/auto_register.py'
       - 'webui/server.py'

@@ -15,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "hermes-agent"))
-os.environ.setdefault("HERMES_HOME", os.path.join(ROOT, "hermes_home"))
+os.environ.setdefault("MEMOMICS_HOME", os.path.join(ROOT, "memomics_home"))
 
 from memomics.bio_tools import literature_library as LL  # noqa: E402
 

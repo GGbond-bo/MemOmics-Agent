@@ -9,7 +9,7 @@ REQUIREMENTS.md + conclusions.md 各放 5 条。跑 server 的真实折叠链
 import sys, os, json, tempfile
 sys.path.insert(0, r'E:\MemOmics-Agent\webui')
 sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('HERMES_HOME', r'E:\MemOmics-Agent\hermes_home')
+os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
 os.environ['MEMOMICS_ROLLUP_BUDGET'] = '30000'
 os.environ['MEMOMICS_ROLLUP_TAIL'] = '8'
 

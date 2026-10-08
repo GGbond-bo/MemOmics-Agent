@@ -1010,7 +1010,7 @@ LIVE_DETAIL = {
             "memomics_env": {"MEMOMICS_PORT": "8899"}, "env_updated": "2026-09-24"},
     "paths": {"session_dir": "E:/MemOmics-Agent/results/memomics-live01",
               "system_log": "E:/MemOmics-Agent/results/memomics-live01/log/system_log.jsonl",
-              "tasks_dir": "C:/hermes_home/runtime/tasks"},
+              "tasks_dir": "C:/memomics_home/runtime/tasks"},
     "task": None,
 }
 

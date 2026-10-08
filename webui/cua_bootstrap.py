@@ -3,7 +3,7 @@
 
 为什么需要这个模块
 ------------------
-Hermes 的 `computer_use` 工具集（截屏 / 鼠标 / 键盘 / 窗口）由外部二进制
+MemOmics 的 `computer_use` 工具集（截屏 / 鼠标 / 键盘 / 窗口）由外部二进制
 cua-driver 驱动，而 `hermes-agent/tools/computer_use/cua_backend.py` 在 **import 时**
 只读一次 `HERMES_CUA_DRIVER_CMD`（缺省 "cua-driver"），之后用 `shutil.which()`
 判断可用性。找不到二进制时工具不是报错，而是**整个从模型的工具表里消失**。
@@ -17,7 +17,7 @@ PATH 是进程启动时冻结的快照：装完不重开终端（更别说已经
 `shutil.which("cua-driver")` 就是 None。用户看到的现象是"MemOmics 不能操控电脑"，
 真实原因只是没找到二进制。
 
-本模块在 Hermes 工具被 import 之前跑一次：
+本模块在 MemOmics 工具被 import 之前跑一次：
 
 1. `HERMES_CUA_DRIVER_CMD` 已被显式设置 → 完全尊重，不动；
 2. 否则 PATH → 各平台已知安装位置 依次定位；
@@ -50,7 +50,7 @@ _POSIX_CANDIDATES = (
 
 INSTALL_HINT = (
     "cua-driver 未找到：computer_use（截屏/鼠标/键盘）将不可用。"
-    "启用方式：hermes computer-use install（macOS/Windows/Linux 均支持）"
+    "启用方式：memomics computer-use install（macOS/Windows/Linux 均支持）"
 )
 
 

@@ -44,7 +44,7 @@ async def main():
         print(f"回合: 总输入={billed:,} 未缓存={d['input_tokens']:,} 命中={hit:.0f}% (重启后首轮)")
         # 4) 跨会话 facts 检查
         import sqlite3
-        db = sqlite3.connect(r"E:\MemOmics-Agent\hermes_home\memory_store.db")
+        db = sqlite3.connect(r"E:\MemOmics-Agent\memomics_home\memory_store.db")
         rows = db.execute(
             "SELECT content, trust_score FROM facts WHERE category='user_pref' AND content LIKE '%300dpi%'"
         ).fetchall()

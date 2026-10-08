@@ -126,7 +126,7 @@ def guardian_reset_counters() -> dict:
     return {"ok": True, "message": "failure counters reset"}
 
 
-# ── Hermes registration ──
+# ── MemOmics registration ──
 SCHEMA = {
     "name": "guardian",
     "description": "Guardian rollback: git snapshots before file mods; auto-rollback after 3 consecutive rail_review failures.",
@@ -143,7 +143,7 @@ SCHEMA = {
 
 
 def guardian(action: str, label: str = "", failure_count: int = 0) -> str:
-    """guardian 工具入口。返回 JSON 字符串（Hermes 工具契约）。"""
+    """guardian 工具入口。返回 JSON 字符串（MemOmics 工具契约）。"""
     if action == "snapshot":
         result = guardian_snapshot(label=label)
     elif action == "check":
