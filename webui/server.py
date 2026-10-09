@@ -455,6 +455,153 @@ async def _start_process_completion_poller():
     logger.info("[MemOmics] process completion poller started")
 
 
+# ---------------------------------------------------------------------------
+# 集群作业轮询（2026-10-09 P1 集群监督）
+#
+# 本机进程有 completion_queue（进程退出 → 3 秒内唤醒 agent）；集群作业没有事件源，
+# 过去只能靠 agent 主动 status 或人问。这个守护线程每 60s 让
+# remote_cluster.poll_jobs 把未终态作业查回来写进 remote/job_states.json，**只在
+# 状态发生变化时**把通知投回提交它的会话并立即唤醒（复用 _trigger_agent_turn 链路）。
+#   · 纯本地账本 + 只读远端查询；节点连不上只记 errors，不打断循环
+#   · 会话忙 → 事件留着下一轮补投；没有归属会话（老记录/会话已关）→ 只落账本不猜
+#   · 开关：MEMOMICS_CLUSTER_POLL=0 关闭；间隔：MEMOMICS_CLUSTER_POLL_SEC（默认 60）
+# ---------------------------------------------------------------------------
+_CLUSTER_POLL_INTERVAL = max(15.0, float(os.environ.get("MEMOMICS_CLUSTER_POLL_SEC", "60") or 60))
+_CLUSTER_POLL_ENABLED = str(os.environ.get("MEMOMICS_CLUSTER_POLL", "1")).lower() not in ("0", "false", "off", "no")
+_CLUSTER_EVENT_QUEUE = []          # 会话忙时留下的待投递事件（只放状态转移）
+_CLUSTER_EVENT_QUEUE_MAX = 20
+
+
+def _cluster_job_event_text(tr: dict) -> str:
+    """状态转移 → 会话通知文本（人直接能看懂 + 给下一步动作）。"""
+    _state = str(tr.get("state") or "")
+    _icon = {"done": "✅", "failed": "❌", "cancelled": "⛔"}.get(_state, "⚠️")
+    _lines = [
+        "%s 集群作业状态变化：%s → %s" % (_icon, tr.get("from") or "?", _state or "?"),
+        "· 作业：%s（节点 %s，job_id=%s）" % (tr.get("name") or "(未命名)",
+                                              tr.get("node") or "?", tr.get("job_id") or "?"),
+    ]
+    if tr.get("state_raw"):
+        _lines.append("· 远端原话：%s" % str(tr.get("state_raw"))[:200])
+    _lines.append("· 日志：%s" % (tr.get("stdout") or "（记录里没有 stdout 路径，用 action='logs' 查）"))
+    if _state == "done":
+        _lines.append("· 下一步：action='logs' 看产出确认 → action='pull' 取回 → 继续主线（别重复轮询同一条命令）")
+    elif _state == "failed":
+        _lines.append("· 下一步：action='logs' 看最后 30 行定位原因（OOM/路径/依赖），修好后重投；"
+                      "长任务按铁规 9 走检查点续跑（同参数重投会跳过已完成阶段）")
+    else:
+        _lines.append("· 下一步：确认是否需要清理现场或重投")
+    return "\n".join(_lines)
+
+
+def _dispatch_cluster_job_event(tr: dict, loop) -> str:
+    """把一条状态转移投给提交它的会话；返回 dispatched|queued|dropped|no_session。"""
+    _sid = str(tr.get("session_id") or "")
+    if not _sid or _sid not in _sessions:
+        logger.info("[cluster-poll] 作业 %s@%s → %s，但没有归属会话（老记录/会话已关）→ 只落账本",
+                    tr.get("job_id"), tr.get("node"), tr.get("state"))
+        return "no_session"
+    _s = _sessions[_sid]
+    if _s.get("running_agent") or _s.get("running_task"):
+        if len(_CLUSTER_EVENT_QUEUE) < _CLUSTER_EVENT_QUEUE_MAX:
+            _CLUSTER_EVENT_QUEUE.append(tr)
+        return "queued"
+    # 尊重 RunGate：任务已退役/轮数耗尽 → 只把事实留进会话，不自动唤醒（M2 同款语义）
+    _gate_stop = False
+    _reason = ""
+    try:
+        from webui.runtime.run_gate import check_gate
+        _rd = str(_s.get("results_dir") or "")
+        if _rd:
+            _verdict, _reason = check_gate(_rd, is_auto_wake=True)
+            _gate_stop = (_verdict == "stop")
+    except Exception:
+        _gate_stop = False
+    _text = _cluster_job_event_text(tr)
+    _s.setdefault("messages", []).append({
+        "role": "system",
+        "content": ("⏰ 集群作业状态变化（任务已退役/暂停，未自动唤醒，发消息即可继续）：\n\n"
+                    if _gate_stop else
+                    "⏰ 集群作业完成通知，请立即查看结果并推进主线：\n\n") + _text,
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "source": "cluster_job",
+    })
+    if _gate_stop:
+        logger.info("[cluster-poll] 会话 %s 自动唤醒被 RunGate 拦截（%s）→ 只留通知",
+                    _sid[:12], _reason if isinstance(_reason, str) else "")
+        return "notified_no_wake"
+    try:
+        loop.call_soon_threadsafe(
+            lambda _s=_s, _t=_text: asyncio.ensure_future(_trigger_agent_turn(_s, _t))
+        )
+    except Exception as exc:
+        logger.warning("[cluster-poll] 唤醒调度失败（消息已进会话）: %s", exc)
+        return "dropped"
+    logger.info("[cluster-poll] 会话 %s 已唤醒：作业 %s@%s → %s",
+                _sid[:12], tr.get("job_id"), tr.get("node"), tr.get("state"))
+    return "dispatched"
+
+
+def _poll_cluster_jobs_once(loop=None, poll=None) -> dict:
+    """跑一轮集群作业轮询并投递状态转移（测试入口：poll 可注入假实现）。"""
+    if loop is None:
+        try:
+            loop = asyncio.get_event_loop()
+        except Exception:
+            loop = None
+    _pending = list(_CLUSTER_EVENT_QUEUE)
+    _CLUSTER_EVENT_QUEUE.clear()
+    for _tr in _pending:
+        _dispatch_cluster_job_event(_tr, loop)
+    try:
+        if poll is None:
+            from memomics.bio_tools import remote_cluster as _rc
+            poll = _rc.poll_jobs
+        res = poll() or {}
+    except Exception as exc:
+        logger.warning("[cluster-poll] 轮询失败（忽略本轮）: %s", exc)
+        return {"ok": False, "error": str(exc), "transitions": 0,
+                "pending": len(_CLUSTER_EVENT_QUEUE)}
+    _trans = res.get("transitions") or []
+    for _tr in _trans:
+        _dispatch_cluster_job_event(_tr, loop)
+    if _trans or _pending or (res.get("errors") or []):
+        logger.info("[cluster-poll] checked=%s transitions=%s errors=%s pending=%s",
+                    res.get("checked"), len(_trans), len(res.get("errors") or []),
+                    len(_CLUSTER_EVENT_QUEUE))
+    return {"ok": bool(res.get("ok", True)), "checked": res.get("checked") or 0,
+            "transitions": len(_trans), "errors": res.get("errors") or [],
+            "nodes": res.get("nodes") or [], "pending": len(_CLUSTER_EVENT_QUEUE)}
+
+
+@app.on_event("startup")
+async def _start_cluster_job_poller():
+    """集群作业轮询守护线程（2026-10-09 P1）：让集群作业也有「完成即唤醒」。"""
+    if not _CLUSTER_POLL_ENABLED:
+        logger.info("[MemOmics] cluster job poller disabled (MEMOMICS_CLUSTER_POLL=0)")
+        return
+    # 测试环境绝不启动真 ssh 轮询（pytest 里 TestClient lifespan 会拉起 startup）
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        logger.info("[MemOmics] cluster job poller skipped (test environment)")
+        return
+    try:
+        _loop = asyncio.get_event_loop()
+    except Exception:
+        _loop = None
+
+    def _worker():
+        time.sleep(min(30.0, _CLUSTER_POLL_INTERVAL))   # 启动先等一轮，避开 agent 播种
+        while True:
+            try:
+                _poll_cluster_jobs_once(_loop)
+            except Exception as exc:
+                logger.warning("[cluster-poll] 轮询循环异常（继续）: %s", exc)
+            time.sleep(_CLUSTER_POLL_INTERVAL)
+
+    _threading.Thread(target=_worker, daemon=True, name="cluster-job-poller").start()
+    logger.info("[MemOmics] cluster job poller started (interval=%ss)", int(_CLUSTER_POLL_INTERVAL))
+
+
 @app.on_event("startup")
 async def _apply_fix_bundle_startup():
     """旧安装自愈（2026-08-16）：启动时应用文件级修复（config 限额等）。
@@ -1866,6 +2013,24 @@ def _task_plan_active(rd):
     return True
 
 
+def _cluster_work_evidence(session):
+    """集群侧「还有活在跑」的证据（2026-10-09 P0 集群监督）。
+
+    为什么需要：下面的 _session_has_active_work / _session_no_live_work 只看
+    process_registry 和 results_dir。集群作业提交后本机没有任何痕迹——集群还在跑、
+    本机 15 分钟没写盘时会被当成「外部工作已停」：task_plan 可能被提前归档、
+    mark_done 关掉心跳；没有 task_plan 的会话更糟，自检根本不调度。
+    证据来自 remote_cluster.cluster_work_evidence（读 jobs.jsonl + job_states.json +
+    sessions.json + session_touches.json）：纯本地、不 ssh、读不到一律当无证据。
+    """
+    try:
+        from memomics.bio_tools import remote_cluster as _rc
+        return _rc.cluster_work_evidence(str((session or {}).get("id") or ""))
+    except Exception as exc:
+        logger.debug("集群工作证据读取失败（按无证据处理）: %s", exc)
+        return {"live": False, "reasons": [], "items": []}
+
+
 def _session_has_active_work(session):
     """会话是否有活跃批处理任务（长任务监督用，修复 2026-08-07）。
 
@@ -1873,7 +2038,15 @@ def _session_has_active_work(session):
     此时自检因 has_plan=False 永不调度 → 长任务无主动唤醒。
     判定：results_dir/batch 目录存在且 monitor.log 未写 COMPLETE，
     且 2 小时内有文件活动 → 视为活跃，持续监督。
+    2026-10-09 追加：集群侧有作业/常驻会话在跑也算活跃（本机没有进程和写盘痕迹时
+    自检必须续跑——这正是「集群长任务没人回来查」的洞）。
     """
+    _cluster_ev = _cluster_work_evidence(session)
+    if _cluster_ev.get("live"):
+        logger.info("[Supervise] session %s: 集群侧仍有工作在跑 → %s",
+                    str(session.get("id", ""))[:12],
+                    "；".join(_cluster_ev.get("reasons") or [])[:200])
+        return True
     _rd = session.get("results_dir", "") or ""
     if not _rd or not os.path.isdir(_rd):
         return False
@@ -1923,7 +2096,15 @@ def _session_no_live_work(session):
     无活跃后台进程 + results_dir 无近期文件活动（15 分钟窗口）。
     仅当 task_plan 主线区无 in_progress/pending 时才参与完成判定，
     所以不会把"步骤间等待唤醒"误判为完成。
+    2026-10-09 集群监督（P0）：集群侧有活在跑 → 直接 False（绝不当作完成信号），
+    否则「集群作业还在跑 + 本机 15 分钟没写盘」会被拿来提前归档 task_plan。
     """
+    _cluster_ev = _cluster_work_evidence(session)
+    if _cluster_ev.get("live"):
+        logger.info("[Supervise] session %s: 集群侧有活在跑，不判完成 → %s",
+                    str(session.get("id", ""))[:12],
+                    "；".join(_cluster_ev.get("reasons") or [])[:200])
+        return False
     try:
         from tools.process_registry import process_registry
         if process_registry.count_running() > 0:
@@ -2477,27 +2658,47 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 # 中断；LoopX goal:active 为残留状态误导）
                 _plan_p = os.path.join(s.get("results_dir", ""), "task_plan.md") if s.get("results_dir") else ""
                 if not (_plan_p and os.path.isfile(_plan_p)):
-                    logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
-                    return
-                # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
-                # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
-                # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
-                # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
-                try:
-                    with open(_plan_p, "r", encoding="utf-8") as _pf:
-                        _ptext = _pf.read()
-                    if _plan_is_complete_text(_ptext):
-                        logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                    # 2026-10-09 集群长任务修复：没有 task_plan 但**外部工作还在跑**（batch/集群）
+                    # 时必须继续注入「检查外部工作」唤醒 —— 旧行为（2026-08-26 防空转守卫）在
+                    # 没 plan 时一律静默 return，把 2026-08-07 的 batch 监督修复也一起挡掉了，
+                    # 集群作业跑完没人回来收结果（实测 memomics-a09d6710）。
+                    # 外部工作确实停了才走静默分支（真正完成任务后不再空转）。
+                    if not _session_has_active_work(session):
+                        logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan 且外部工作已停，跳过无任务唤醒")
                         return
-                except Exception:
-                    pass
-                wake_msg = (
-                    _loopx_ctx +
-                    f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
-                    "1. 读 task_plan.md 看当前 Phase\n"
-                    "2. search_files 看最新产出\n"
-                    "3. 继续执行下一个待办"
-                )
+                    logger.info(f"[Supervise] session {sid[:12]}: 无 task_plan 但外部工作仍在跑 → 注入检查唤醒")
+                    wake_msg = (
+                        _loopx_ctx +
+                        f"⏰ [系统唤醒 #{_sc}] 没有 task_plan，但外部工作还在跑\n"
+                        "请执行以下检查（看完就停手，等下一次唤醒，不要空转）：\n"
+                        "1. 本机后台进程：process(action='list') / process(action='poll')\n"
+                        "2. 集群作业：remote_cluster(action='jobs') 看队列快照；"
+                        "action='status'(job_id=…) 看具体作业；已完成/失败 → action='logs' 读日志、"
+                        "action='pull' 取产物\n"
+                        "3. results_dir 最新产出：search_files\n"
+                        "4. 有产出 → 按现有流程推进（修错/收结果/写 task_plan.md 记结论）；"
+                        "外部工作全部结束 → 汇报用户或以 task_plan.md 收口"
+                    )
+                else:
+                    # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
+                    # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
+                    # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
+                    # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
+                    try:
+                        with open(_plan_p, "r", encoding="utf-8") as _pf:
+                            _ptext = _pf.read()
+                        if _plan_is_complete_text(_ptext):
+                            logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                            return
+                    except Exception:
+                        pass
+                    wake_msg = (
+                        _loopx_ctx +
+                        f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
+                        "1. 读 task_plan.md 看当前 Phase\n"
+                        "2. search_files 看最新产出\n"
+                        "3. 继续执行下一个待办"
+                    )
             # 2026-08-14: 唤醒成功——重排计数清零
             s.pop("_wakeup_retry_n", None)
             # 2026-08-16 任务卡死诊断：watchdog 冻结判定留下的诊断指令优先注入

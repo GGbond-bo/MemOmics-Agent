@@ -738,6 +738,368 @@ def _job_owner_node(job_id: str) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# 集群作业监督（P0 本机证据 + P1 轮询回写；2026-10-09）
+#
+# 背景：server 的自检唤醒链判断「还有没有活在跑」时只看 process_registry 与
+# results_dir——集群作业提交后本机没有任何痕迹，于是有两种坏情况：
+#   · 集群在跑但本机 15 分钟没写盘 → _session_no_live_work=True → 被当「已完成」
+#   · 会话没有 task_plan/todos 时根本不调度自检 → 没人回来查作业
+# 这组函数把「集群侧还有活在跑」变成**纯本地可判定**的证据（绝不 ssh），并给
+# 轮询提供状态回写：
+#   · session_touches.json  哪个 agent 会话最近碰过集群（归属用）
+#   · job_states.json       每次轮询/status 落下的作业状态（queued/running/done/failed…）
+# 不变量：读不到/解析失败 → 一律「无证据」，不抛异常（失败开放给本机逻辑）。
+# ---------------------------------------------------------------------------
+_JOB_STATES_FILE = "job_states.json"
+_TOUCHES_FILE = "session_touches.json"
+_TERMINAL_JOB_STATES = ("done", "failed", "cancelled")
+_LIVE_JOB_STATES = ("submitted", "queued", "running", "unknown")
+_EVIDENCE_MAX_AGE_H = 24.0    # 账本多久没刷新 / 多新的提交仍算「可能在跑」
+_EVIDENCE_ABS_MAX_H = 168.0   # 兜底：7 天前的提交不再当活跃工作（轮询也不再重探）
+_TOUCH_FRESH_H = 12.0         # 会话碰过集群多久之内算「在这个集群上干活」
+_SESSION_LIVE_H = 72.0        # 常驻会话 status=active 且 updated 多久之内算活着
+                              # （注册表的 updated 是「上次查询时间」不是心跳时间：
+                              #   查得少 ≠ 死了，所以给足 3 天，宁可多保护也别误判死亡）
+_POLL_MAX_AGE_H = 168.0       # 超过一周的未终态记录不再自动重探（省 ssh）
+_POLL_MAX_NODES = 8
+_MAX_TOUCHES = 50
+
+
+def _supervision_dir() -> Path:
+    base = _get_config_path().parent / "remote"
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return base
+
+
+def _read_json_file(path: Path, default):
+    try:
+        if not path.exists():
+            return default
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as exc:
+        logger.warning("监督台账 %s 读取失败（按无数据处理）: %s", path.name, exc)
+        return default
+
+
+def _write_json_atomic(path: Path, payload) -> bool:
+    try:
+        tmp = path.parent / (path.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(tmp, path)
+        return True
+    except Exception as exc:
+        logger.warning("监督台账 %s 写入失败: %s", path.name, exc)
+        return False
+
+
+def _hours_since(stamp, now: float | None = None) -> float:
+    """时间戳（epoch / '%Y-%m-%d %H:%M:%S' / ISO）距现在多少小时；解析不了 → 大数。"""
+    if isinstance(stamp, (int, float)):
+        return max(0.0, ((now or time.time()) - float(stamp)) / 3600.0)
+    s = str(stamp or "").strip()
+    if not s:
+        return 1e9
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+        try:
+            t = time.mktime(time.strptime(s[:19], fmt))
+            return max(0.0, ((now or time.time()) - t) / 3600.0)
+        except Exception:
+            continue
+    return 1e9
+
+
+def _current_agent_session() -> str:
+    """当前 agent 会话 id（回合内调用才有；WebUI 直调可能拿不到 → 空串）。"""
+    sid = ""
+    try:
+        from gateway.session_context import get_session_env
+        sid = str(get_session_env("HERMES_SESSION_ID", "") or "")
+    except Exception:
+        sid = ""
+    if not sid:
+        sid = os.environ.get("HERMES_SESSION_ID") or os.environ.get("HERMES_SESSION_KEY") or ""
+    return str(sid).strip()[:120]
+
+
+def _normalize_job_state(raw: str) -> str:
+    """_derive_state 的词表 → 监督用状态：queued|running|done|failed|cancelled|unknown。"""
+    t = str(raw or "").strip().upper()
+    if not t:
+        return "unknown"
+    if t.startswith("COMPLETED"):
+        return "done"
+    if t.startswith("CANCELLED") or t.startswith("CANCELED"):
+        return "cancelled"
+    for kw in ("FAILED", "TIMEOUT", "OUT_OF_MEMORY", "NODE_FAIL", "PREEMPTED", "ERROR"):
+        if kw in t:
+            return "failed"
+    if t.startswith("PENDING") or t.startswith("CONFIGURING") or t.startswith("SUSPENDED"):
+        return "queued"
+    if t.startswith("RUNNING") or t.startswith("COMPLETING"):
+        return "running"
+    return "unknown"
+
+
+def _job_key(node: str, job_id: str) -> str:
+    return "%s|%s" % (str(node or "?"), str(job_id or "?"))
+
+
+def touch_session(node: str = "", action: str = "", session_id: str = "") -> None:
+    """记「某 agent 会话最近碰过集群」——归属证据；失败静默，绝不影响工具调用。"""
+    try:
+        sid = str(session_id or "").strip() or _current_agent_session()
+        if not sid:
+            return
+        path = _supervision_dir() / _TOUCHES_FILE
+        data = _read_json_file(path, {})
+        touches = data.get("touches") if isinstance(data, dict) and isinstance(data.get("touches"), dict) else {}
+        touches[sid] = {"at": _now(), "ts": time.time(),
+                        "node": str(node or ""), "action": str(action or "")[:40]}
+        if len(touches) > _MAX_TOUCHES:
+            keep = sorted(touches, key=lambda k: (touches[k] or {}).get("ts") or 0)[-_MAX_TOUCHES:]
+            touches = {k: touches[k] for k in keep}
+        _write_json_atomic(path, {"version": 1, "touches": touches})
+    except Exception as exc:
+        logger.debug("记录集群触点失败（忽略）: %s", exc)
+
+
+def _load_touches() -> dict:
+    data = _read_json_file(_supervision_dir() / _TOUCHES_FILE, {})
+    touches = data.get("touches") if isinstance(data, dict) and isinstance(data.get("touches"), dict) else {}
+    return {str(k): v for k, v in touches.items() if isinstance(v, dict)}
+
+
+def load_job_states() -> dict:
+    """{'<node>|<job_id>': {...}} —— 轮询/status 落下的作业状态账本。"""
+    data = _read_json_file(_supervision_dir() / _JOB_STATES_FILE, {})
+    jobs = data.get("jobs") if isinstance(data, dict) and isinstance(data.get("jobs"), dict) else {}
+    return {str(k): v for k, v in jobs.items() if isinstance(v, dict)}
+
+
+def save_job_states(jobs: dict, last_poll: dict | None = None) -> bool:
+    path = _supervision_dir() / _JOB_STATES_FILE
+    old = _read_json_file(path, {})
+    payload = {"version": 1, "jobs": jobs,
+               "last_poll": last_poll if last_poll is not None
+               else (old.get("last_poll") if isinstance(old, dict) else None)}
+    return _write_json_atomic(path, payload)
+
+
+def update_job_state(node: str, job_id: str, **fields) -> dict:
+    """单条作业状态合并写（提交时先落一条 submitted；status 手查也会刷新它）。"""
+    jobs = load_job_states()
+    key = _job_key(node, job_id)
+    entry = dict(jobs.get(key) or {})
+    entry.update({"node": str(node or ""), "job_id": str(job_id or ""),
+                  "updated": _now(), "ts": time.time()})
+    entry.update(fields)
+    jobs[key] = entry
+    save_job_states(jobs)
+    return entry
+
+
+def _submitted_records(limit: int = 200) -> dict:
+    """最新提交记录，按 '<node>|<job_id>' 去重（新记录覆盖旧记录）。"""
+    out: dict = {}
+    for rec in _iter_jobs(limit):
+        jid = str(rec.get("job_id") or "").strip()
+        if not jid:
+            continue
+        node = str(rec.get("node") or rec.get("host") or "")
+        out[_job_key(node, jid)] = rec
+    return out
+
+
+def cluster_work_evidence(session_id: str = "", now: float | None = None) -> dict:
+    """「这个会话在集群上还有活在跑吗」——纯本地读，绝不 ssh、绝不抛。
+
+    两类证据：
+      · 作业：有提交记录 且（账本状态 queued/running/unknown，或没轮询过但是 24h 内提交）
+      · 常驻会话：sessions.json 里 status=active 且 updated 在 12h 内
+    归属：记录带 session_id 就精确比；老记录没有 → 只有「本会话 12h 内碰过该节点」才算。
+    返回 {live, reasons[], items[]}；方向性：宁枉勿纵（假 live 只多花唤醒预算，
+    假 dead 会把还在跑的会话当已完成归档）。
+    """
+    now = float(now if now is not None else time.time())
+    sid = str(session_id or "").strip()
+    states = load_job_states()
+    touches = _load_touches()
+    touch = touches.get(sid) if sid else None
+    my_nodes = set()
+    if isinstance(touch, dict) and _hours_since(touch.get("ts") or touch.get("at"), now) <= _TOUCH_FRESH_H:
+        node = str(touch.get("node") or "")
+        if node:
+            my_nodes.add(node)
+    items: list = []
+    for key, rec in _submitted_records().items():
+        node = str(rec.get("node") or rec.get("host") or "")
+        jid = str(rec.get("job_id") or "")
+        st = states.get(key) or {}
+        state = str(st.get("state") or "")
+        age_h = _hours_since(rec.get("ts"), now)
+        if state in _TERMINAL_JOB_STATES:
+            continue
+        checked_age_h = _hours_since(st.get("checked_at") or st.get("updated"), now)
+        if state not in _LIVE_JOB_STATES and age_h > _EVIDENCE_MAX_AGE_H:
+            continue
+        if age_h > _EVIDENCE_ABS_MAX_H and checked_age_h > _EVIDENCE_MAX_AGE_H:
+            continue
+        rec_sid = str(rec.get("session_id") or st.get("session_id") or "")
+        if rec_sid:
+            if rec_sid != sid:
+                continue
+        elif not (node and node in my_nodes):
+            continue
+        items.append({"kind": "job", "key": key, "node": node, "job_id": jid,
+                      "name": rec.get("name") or "", "state": state or "未轮询",
+                      "session_id": rec_sid, "age_h": round(age_h, 1),
+                      "checked_at": st.get("checked_at")})
+    try:
+        from memomics.bio_tools import cluster_session as _cs
+        reg = _cs._load_registry()
+    except Exception:
+        reg = {}
+    if isinstance(reg, dict):
+        for rid, srec in reg.items():
+            if not isinstance(srec, dict) or str(srec.get("status") or "") != "active":
+                continue
+            age_h = _hours_since(srec.get("updated") or srec.get("last_active"), now)
+            if age_h > _SESSION_LIVE_H:
+                continue
+            node = str(srec.get("node") or "")
+            rec_sid = str(srec.get("agent_session_id") or "")
+            if rec_sid:
+                if rec_sid != sid:
+                    continue
+            elif not (node and node in my_nodes):
+                continue
+            items.append({"kind": "session", "key": str(rid), "node": node, "job_id": "",
+                          "name": srec.get("title") or "", "state": "active",
+                          "session_id": rec_sid, "age_h": round(age_h, 1),
+                          "checked_at": srec.get("updated")})
+    reasons = []
+    for it in items[:6]:
+        if it["kind"] == "job":
+            reasons.append("集群作业 %s@%s 状态=%s（%.1fh 前提交）"
+                           % (it["job_id"], it["node"] or "?", it["state"], it["age_h"]))
+        else:
+            reasons.append("常驻 R 会话 %s@%s status=active（%.1fh 前有活动）"
+                           % (it["key"], it["node"] or "?", it["age_h"]))
+    return {"live": bool(items), "reasons": reasons, "items": items[:8]}
+
+
+def _poll_backoff_sec(probe_count: int) -> float:
+    """同一状态的重复探测退避：60 → 120 → 240 → 480 → 600s 封顶。
+
+    状态一变就重置（下一次 60s），所以「快变期勤查、长期稳态省 ssh」两者兼得——
+    与 skills 里「核对一次之后就不要再每轮重复同一条监控命令」同一条纪律。
+    """
+    try:
+        n = max(0, int(probe_count))
+    except Exception:
+        n = 0
+    if n <= 0:
+        return 60.0
+    return min(600.0, 60.0 * (2 ** min(n, 4)))
+
+
+def poll_jobs(cfg: dict | None = None, limit: int = 20, force: bool = False) -> dict:
+    """把未终态作业的远端状态查回来写进 job_states.json，返回本次状态转移。
+
+    一次最多查 limit 个作业、最多 _POLL_MAX_NODES 个节点；某个节点连不上只记 errors
+    继续下一台，绝不因为一台炸掉整轮。transitions 只含**状态发生变化**的作业——
+    上层按它决定要不要唤醒会话（幂等：状态已落盘，下一轮不会重复报）。
+    """
+    cfg = cfg or _load_remote_config()
+    if not remote_cluster_enabled():
+        return {"ok": True, "checked": 0, "nodes": [], "transitions": [], "errors": [],
+                "skipped": [], "note": "远端未启用（remote.enabled=false）"}
+    states = load_job_states()
+    groups: dict = {}
+    skipped: list = []
+    for key, rec in _submitted_records().items():
+        st = states.get(key) or {}
+        if str(st.get("state") or "") in _TERMINAL_JOB_STATES and not force:
+            continue
+        age_h = _hours_since(rec.get("ts"))
+        if age_h > _POLL_MAX_AGE_H and not force:
+            skipped.append(key)
+            continue
+        if not force:
+            _last_ts = st.get("checked_ts") or 0
+            try:
+                _due = (time.time() - float(_last_ts)) >= _poll_backoff_sec(st.get("probe_count") or 0)
+            except Exception:
+                _due = True
+            if _last_ts and not _due:
+                skipped.append(key)
+                continue
+        node = str(rec.get("node") or rec.get("host") or "")
+        groups.setdefault(node, []).append((key, rec))
+    checked = 0
+    transitions: list = []
+    errors: list = []
+    nodes_polled: list = []
+    for node_name in sorted(groups, key=lambda n: -len(groups[n]))[:_POLL_MAX_NODES]:
+        if checked >= limit:
+            break
+        recs = sorted(groups[node_name], key=lambda kv: str(kv[1].get("ts") or ""), reverse=True)
+        node_cfg, found_name, err = _select_node(cfg, node_name)
+        if err or not node_cfg:
+            errors.append({"node": node_name, "error": "节点不可用（配置里找不到这个节点，或用 node= 指定）"})
+            continue
+        try:
+            conn = _get_conn(node_cfg)
+        except Exception as exc:
+            errors.append({"node": node_name, "error": "%s: %s" % (type(exc).__name__, exc)})
+            continue
+        nodes_polled.append(found_name or node_name)
+        for key, rec in recs:
+            if checked >= limit:
+                break
+            jid = str(rec.get("job_id") or "")
+            try:
+                probe = _status_probe(conn, node_cfg, rec, jid, want_log_tail=False)
+            except Exception as exc:
+                errors.append({"node": found_name or node_name, "job_id": jid,
+                               "error": "%s: %s" % (type(exc).__name__, exc)})
+                continue
+            checked += 1
+            raw = str(probe.get("state") or "")
+            new_state = _normalize_job_state(raw)
+            old = states.get(key) or {}
+            old_state = str(old.get("state") or "")
+            entry = {
+                "node": found_name or node_name, "job_id": jid, "name": rec.get("name"),
+                "state": new_state, "state_raw": raw[:160], "scheduler": probe.get("scheduler"),
+                "session_id": rec.get("session_id") or old.get("session_id") or "",
+                "checked_at": _now(), "updated": _now(), "ts": time.time(),
+                "stdout": probe.get("stdout") or rec.get("stdout") or "",
+            }
+            # 退避记账：状态一变就重置探测计数（下一轮 60s 后再查），稳态逐步放慢
+            entry["checked_ts"] = time.time()
+            try:
+                entry["probe_count"] = 1 if old_state != new_state else (int(old.get("probe_count") or 0) + 1)
+            except Exception:
+                entry["probe_count"] = 1
+            if new_state in _TERMINAL_JOB_STATES:
+                entry["finished_at"] = entry["checked_at"]
+            if old_state != new_state:
+                transitions.append(dict(entry, **{"from": old_state or "submitted"}))
+            states[key] = entry
+    save_job_states(states, last_poll={"at": _now(), "ts": time.time(), "checked": checked,
+                                       "nodes": nodes_polled, "transitions": len(transitions)})
+    return {"ok": True, "checked": checked, "nodes": nodes_polled,
+            "transitions": transitions, "errors": errors, "skipped": skipped[:10]}
+
+
 def _map_local_to_remote(cfg: dict, local_path: str) -> str:
     if not cfg["local_root"] or not cfg["remote_root"]:
         return ""
@@ -1507,8 +1869,16 @@ def _action_submit(cfg: dict, args: dict) -> str:
         "scheduler": sched, "job_id": job_id, "name": name,
         "script": script_remote, "stdout": out_log, "stderr": err_log,
         "workdir": workdir, "command": command[:4000], "pid_file": pid_file,
+        "session_id": _current_agent_session(),   # 监督归属：哪个会话提交的
     }
     _record_job(record)
+    # 立刻落一条 submitted 到监督账本：即使本机还没轮询过，证据也能精确归属到会话
+    try:
+        update_job_state(record["node"], job_id, state="submitted", source="submit",
+                         name=name, scheduler=sched, session_id=record["session_id"],
+                         stdout=out_log, checked_at=_now())
+    except Exception:
+        pass
     return _ok({
         "status": "submitted", "scheduler": sched, "job_id": job_id,
         "node": cfg.get("_name") or "", "host": cfg["host"],
@@ -1597,6 +1967,65 @@ def _derive_state(sched: str, output: str) -> str:
     return m.group(1).upper() if m else "UNKNOWN"
 
 
+def _status_command(sched: str, job_id: str, rec, cfg: dict) -> str:
+    """拼 status 探测命令（status / poll_jobs 共用；不在这里执行）。"""
+    if sched == "slurm":
+        qid = shlex.quote(job_id)
+        return ("echo '== squeue =='; squeue -j %s -h -o '%%T %%M %%R' 2>&1; "
+                "echo '== scontrol =='; (scontrol show job %s 2>&1 "
+                "| grep -E 'JobState|RunTime|ExitCode' | head -5); "
+                "echo '== sacct =='; (sacct -j %s --format=JobID,State,Elapsed,ExitCode -P -n 2>&1 | head -5)"
+                % (qid, qid, qid))
+    if sched == "gridengine":
+        qid = shlex.quote(job_id)
+        # GE 两段式：在队列里（qstat 列表抓 state 列）；已离队（qacct 记账拿 exit_status）
+        return ("echo '== qstat =='; "
+                "(qstat -u \"$USER\" 2>&1 | awk -v id=%s '$1==id {print \"state=\"$5\" queue=\"$8}'); "
+                "qstat -j %s 2>&1 | head -2; "
+                "echo '== qacct =='; (qacct -j %s 2>&1 | grep -E '^(exit_status|failed|end_time)' | head -5)"
+                % (qid, qid, qid))
+    if sched == "pbs":
+        return ("echo '== qstat =='; (qstat -f %s 2>&1 | grep -E 'job_state|exec_host|resources_used' "
+                "|| qstat -x %s 2>&1 | grep -E 'job_state' || echo 'not in queue')"
+                % (shlex.quote(job_id), shlex.quote(job_id)))
+    pid_file = str((rec or {}).get("pid_file") or "")
+    if pid_file:
+        return ("pidf=%s; if [ -f \"$pidf\" ]; then p=$(cat \"$pidf\"); "
+                "if kill -0 \"$p\" 2>/dev/null; then echo \"STATE=RUNNING pid=$p\"; "
+                "else echo \"STATE=NOT_RUNNING pid=$p\"; fi; "
+                "else echo 'STATE=UNKNOWN 没有 pid 文件'; fi; "
+                "ps -p %s -o pid=,etime=,stat=,cmd= 2>/dev/null || true"
+                % (shlex.quote(pid_file), shlex.quote(job_id)))
+    return ("ps -p %s -o pid=,etime=,stat=,cmd= 2>/dev/null || echo 'not running'"
+            % shlex.quote(job_id))
+
+
+def _status_probe(conn, cfg: dict, rec, job_id: str, want_log_tail: bool = True) -> dict:
+    """跑一次作业状态探测（status / poll_jobs 共用）。
+
+    返回 {scheduler,state,output,stdout,stderr}；scheduler=auto 时按节点探测一次。
+    want_log_tail=False 时不带日志尾巴（轮询只关心状态，省流量）。
+    """
+    sched = ((rec or {}).get("scheduler")
+             or (cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "gridengine", "none") else "auto"))
+    if sched == "auto":
+        sched, _ = _detect_scheduler(conn, cfg)
+    cmd = _status_command(sched, job_id, rec, cfg)
+    out_path = err_path = ""
+    if rec and rec.get("stdout"):
+        out_path = _expand_job_pattern(str(rec["stdout"]), job_id,
+                                       str(rec.get("name") or ""), cfg["user"])
+        err_path = _expand_job_pattern(str(rec.get("stderr") or ""), job_id,
+                                       str(rec.get("name") or ""), cfg["user"])
+        if want_log_tail:
+            cmd += "\necho '== log tail =='; tail -n 15 %s 2>/dev/null || echo '(no log yet)'" % shlex.quote(out_path)
+    res = conn.execute(cmd, timeout=max(cfg["timeout"], 120))
+    output = (res.get("output") or "").strip()
+    return {"scheduler": sched, "state": _derive_state(sched, output), "output": output,
+            "stdout": out_path or (rec or {}).get("stdout") or "",
+            "stderr": err_path or (rec or {}).get("stderr") or ""}
+
+
 def _action_status(cfg: dict, args: dict) -> str:
     job_id = str(args.get("job_id") or "").strip()
     rec = _find_job(cfg, job_id) if job_id else None
@@ -1617,60 +2046,26 @@ def _action_status(cfg: dict, args: dict) -> str:
         job_id = str(rec.get("job_id"))
         assumed = True
     conn = _get_conn(cfg)
-    sched = ((rec or {}).get("scheduler")
-             or (cfg["scheduler"] if cfg["scheduler"] in ("slurm", "pbs", "gridengine", "none") else "auto"))
-    if sched == "auto":
-        sched, _ = _detect_scheduler(conn, cfg)
-    if sched == "slurm":
-        qid = shlex.quote(job_id)
-        cmd = ("echo '== squeue =='; squeue -j %s -h -o '%%T %%M %%R' 2>&1; "
-               "echo '== scontrol =='; (scontrol show job %s 2>&1 "
-               "| grep -E 'JobState|RunTime|ExitCode' | head -5); "
-               "echo '== sacct =='; (sacct -j %s --format=JobID,State,Elapsed,ExitCode -P -n 2>&1 | head -5)"
-               % (qid, qid, qid))
-    elif sched == "gridengine":
-        qid = shlex.quote(job_id)
-        # GE 两段式：在队列里（qstat 列表抓 state 列）；已离队（qacct 记账拿 exit_status）
-        cmd = ("echo '== qstat =='; "
-               "(qstat -u \"$USER\" 2>&1 | awk -v id=%s '$1==id {print \"state=\"$5\" queue=\"$8}'); "
-               "qstat -j %s 2>&1 | head -2; "
-               "echo '== qacct =='; (qacct -j %s 2>&1 | grep -E '^(exit_status|failed|end_time)' | head -5)"
-               % (qid, qid, qid))
-    elif sched == "pbs":
-        cmd = ("echo '== qstat =='; (qstat -f %s 2>&1 | grep -E 'job_state|exec_host|resources_used' "
-               "|| qstat -x %s 2>&1 | grep -E 'job_state' || echo 'not in queue')"
-               % (shlex.quote(job_id), shlex.quote(job_id)))
-    else:
-        pid_file = str((rec or {}).get("pid_file") or "")
-        if pid_file:
-            cmd = ("pidf=%s; if [ -f \"$pidf\" ]; then p=$(cat \"$pidf\"); "
-                   "if kill -0 \"$p\" 2>/dev/null; then echo \"STATE=RUNNING pid=$p\"; "
-                   "else echo \"STATE=NOT_RUNNING pid=$p\"; fi; "
-                   "else echo 'STATE=UNKNOWN 没有 pid 文件'; fi; "
-                   "ps -p %s -o pid=,etime=,stat=,cmd= 2>/dev/null || true"
-                   % (shlex.quote(pid_file), shlex.quote(job_id)))
-        else:
-            cmd = ("ps -p %s -o pid=,etime=,stat=,cmd= 2>/dev/null || echo 'not running'"
-                   % shlex.quote(job_id))
-    out_path = err_path = ""
-    if rec and rec.get("stdout"):
-        out_path = _expand_job_pattern(str(rec["stdout"]), job_id,
-                                       str(rec.get("name") or ""), cfg["user"])
-        err_path = _expand_job_pattern(str(rec.get("stderr") or ""), job_id,
-                                       str(rec.get("name") or ""), cfg["user"])
-        cmd += "\necho '== log tail =='; tail -n 15 %s 2>/dev/null || echo '(no log yet)'" % shlex.quote(out_path)
-    res = conn.execute(cmd, timeout=max(cfg["timeout"], 120))
-    output = (res.get("output") or "").strip()
-    state = _derive_state(sched, output)
+    probe = _status_probe(conn, cfg, rec, job_id)
+    # 手查也顺手刷新监督账本（P1 轮询看的就是它，越查越准）
+    try:
+        update_job_state(cfg.get("_name") or "", job_id,
+                         state=_normalize_job_state(probe["state"]),
+                         state_raw=str(probe["state"])[:160],
+                         scheduler=probe["scheduler"], checked_at=_now(),
+                         name=(rec or {}).get("name"),
+                         session_id=(rec or {}).get("session_id") or "")
+    except Exception:
+        pass
     return _ok({
-        "job_id": job_id, "scheduler": sched, "name": (rec or {}).get("name"),
+        "job_id": job_id, "scheduler": probe["scheduler"], "name": (rec or {}).get("name"),
         "node": cfg.get("_name") or "", "host": cfg["host"],
-        "state": state,
+        "state": probe["state"],
         **({"note": "未指定 job_id，用的是最近一次提交"} if assumed else {}),
         **({"cross_node_note": cross_note} if cross_note else {}),
-        "stdout": out_path or (rec or {}).get("stdout"),
-        "stderr": err_path or (rec or {}).get("stderr"),
-        "output": _truncate(output, cfg["max_output_chars"]),
+        "stdout": probe["stdout"] or (rec or {}).get("stdout"),
+        "stderr": probe["stderr"] or (rec or {}).get("stderr"),
+        "output": _truncate(probe["output"], cfg["max_output_chars"]),
     })
 
 
@@ -2775,6 +3170,9 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
     args = args or {}
     cfg = _load_remote_config()
     action = str(args.get("action") or "").strip().lower()
+    # 集群触点（监督归属用）：某会话碰过这个节点，才算它「在这个集群上干活」。
+    # 纯记账、失败静默，绝不影响工具调用本身。
+    touch_session(str(args.get("node") or ""), action)
     if action == "locate":
         # 路径判定：用户没说文件在哪时先用它查（远端没配也能用，只报本地那一半）
         try:

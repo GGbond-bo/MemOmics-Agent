@@ -573,6 +573,42 @@ def test_d_budget_exhausted_blocks_even_urgent_injection(wake_env, tmp_path):
 # E. M4 对账极端
 # ═══════════════════════════════════════════════════════════════════════════
 
+def test_d_no_plan_but_cluster_work_still_wakes(wake_env, tmp_path, monkeypatch):
+    """2026-10-09 集群监督 P0：没有 task_plan 但外部工作（batch/集群）还在跑 →
+    必须注入检查唤醒。旧版（2026-08-26 防空转守卫）在没 plan 时一律静默 return，
+    把 2026-08-07 的 batch 监督修复也一起挡掉了 —— 集群作业跑完没人回来收。"""
+    rd = str(tmp_path / "noplan-work")
+    _seed(rd, "running")
+    sess = _make_session(rd)
+    sess["todos"] = []                      # 无 todos、且不建 task_plan.md
+    server = wake_env["server"]
+    server._sessions[sess["id"]] = sess
+    monkeypatch.setattr(server, "_session_has_active_work", lambda s: True)
+    monkeypatch.setattr(server, "_session_no_live_work", lambda s: False)
+
+    server._schedule_self_check(sess, object(), asyncio.new_event_loop(), trigger="task_done")
+    assert _run_wakeup(wake_env) is True, "外部工作还在跑时必须注入检查唤醒"
+    msg = wake_env["triggered"][-1]
+    assert "没有 task_plan" in msg and "集群作业" in msg and "action='jobs'" in msg
+    assert run_gate.round_budget(rd)["rounds_started"] == 1
+
+
+def test_d_no_plan_and_work_stopped_stays_silent(wake_env, tmp_path, monkeypatch):
+    """没有 plan 且外部工作确实停了 → 保持旧的静默行为（真完成后不空转烧 token）。"""
+    rd = str(tmp_path / "noplan-idle")
+    _seed(rd, "running")
+    sess = _make_session(rd)
+    sess["todos"] = []
+    server = wake_env["server"]
+    server._sessions[sess["id"]] = sess
+    monkeypatch.setattr(server, "_session_has_active_work", lambda s: False)
+
+    server._schedule_self_check(sess, object(), asyncio.new_event_loop(), trigger="task_done")
+    assert _run_wakeup(wake_env) is False
+    assert wake_env["triggered"] == []
+    # 注：老行为在这个分支之前已走过 M3，会消耗 1 轮后彻底静默（链不再重排）
+
+
 def test_e_reconcile_idempotent(tmp_path):
     """对账幂等：跑两次第二次无归档告警。"""
     rd = str(tmp_path / "ridem")
