@@ -65,6 +65,7 @@ gh release edit v2026-08-31 --repo GGbond-bo/MemOmics-Agent \
 | 日期 | tag | 内容 |
 |---|---|---|
 | 2026-08-31 | v2026-08-31 | 记忆分层 L0 结论/失败注册表 + L3 索引、待确认绑定、L2 最近轮速览、辩论 v2、BGI 技能、渲染/超时修复、全量 5 包重建 |
+| 2026-10-09 | v2026-10-09 | 隐私裁剪两档（技能整排除/脱敏）+ 文献库留空 + 内部文档不进包 + 更新三件套与目录名适配 + 片头默认关闭（Win/MacARM/MacX64/update 四包） |
 | 2026-08-27 | v2026-08-27 | 早期辩论/技能/稳定性（历史） |
 
 ## 5. 备注
@@ -72,3 +73,27 @@ gh release edit v2026-08-31 --repo GGbond-bo/MemOmics-Agent \
 - gh 路径：C:/Users/23136/AppData/Local/gh-cli/bin/gh.exe；默认代理 127.0.0.1:6478，不可用时 unset 后直连（已实测可用）。
 - _test_update.ps1 尾部 exit 2 历史怪象：功能校验通过即可；发布前再手动解包启动一次。
 - Windows 编码坑：.bat 是 GBK；含中文 .ps1 必须 UTF-8 BOM。
+## 6. 2026-10-09 改版细则（技能两档裁剪 / 更新兜底 / 新装默认值）
+
+用户当天确认的六条规则（打包脚本已落地）：
+
+1. **技能两档裁剪**（`E:\release\_prune_skills.py`，**只作用于包副本，绝不动开发版**）：
+   - 一档整技能排除：`EXCLUDE_NAMES`（课题复现/跨物种/专利策略/集群云平台/内部机制/私有技能）+ 真实密钥命中。
+   - 二档脱敏后照发：`骨骼肌→示例组织`、`23136→<用户>`、`NHPABC→示例队列`、`MF_AUCell→示例评分方法`、
+     `GSE278576→GSE000000`、`专利→知识产权`、`ssh3/5→node1/2`、`zhangbo11→user`、`hwfssz3→cluster` 等；
+     若命中位于 `references/` → 该技能 references 整目录删（那是研究笔记），正文里枚举这些笔记的行也删。
+   - 恒删：`logs/`、`_debates`、`.archive`、`.curator_backups`、`.usage.json*`、`.curator_state`；
+     `skill.json` 的 `success_count/error_count/proven_params/proven_script/user_prefs/errors…` 运行字段全部剥掉。
+   - 裁剪后重建 `SKILLS_INDEX.md`（`MEMOMICS_HOME=<包内 home> python -m webui.skills_registry --build --backfill-json`），
+     并删掉 `SOUL.md` 里指向"未随包技能"的引用行（本次 10 行）。
+2. **文献库留空**：完整包只建空 `memomics_home/papers/`；`references.json/.bib/.ris` 一律不进包。
+3. **内部文档不进包**：根 `AGENTS.md`、`docs/**`（含 UPDATE_WORKFLOW.md）、`memomics_home/AGENTS.md`。
+4. **更新兜底三件套随包**：`更新说明.txt`、`update_windows.bat`(+`.ps1`)、`update_macos_linux.sh`
+   —— 自动定位安装目录（`memomics_home/.install_path` 优先）→ 只覆盖代码 → 跳过 `memomics_home` 等用户数据 → 不删文件。
+   一键更新本身与目录名无关（`MEMOMICS_DIR` = 正在运行的代码目录）；结果页会回报实际覆盖到的目录。
+5. **新装默认值**：片头默认关闭（`webui/index.html` 的 `introCfg()` 默认 `clip:'off'`）、浅色主题、无背景图。
+6. **更新包根目录名** 维持 `MemOmics`（与安装目录同名，便于解压即合并覆盖）；旧包曾用 `MemOmics-update`，
+   那个文件夹可以删，不影响。
+
+发布前额外自检：`_test_update.ps1` 已加断言（技能数≥300、技能目录个人标识零残留、`docs/`/`AGENTS.md` 不在包内、
+`papers` 为空、更新三件套存在、`/api/health`+`/api/update/autocheck` 带本地版本号）。
