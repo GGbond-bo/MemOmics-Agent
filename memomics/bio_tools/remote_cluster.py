@@ -74,6 +74,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -2516,6 +2517,201 @@ def _action_session_plot(cfg: dict, args: dict) -> str:
     return cs.action_plot(cfg, args)
 
 
+# ---------------------------------------------------------------------------
+# R 包清单（按节点 + env）—— 「按执行位置审查」的集群半边（2026-10-09）
+#
+# 用户实测事故：rail_review(pre) 只查**本机** R 包清单，本地缺 RUVSeq 就把**集群投递**硬拦了
+# （"Missing packages: RUVSeq"），而 ssh23 的 R4.41 里其实装着。于是：
+#   本地的任务查本地包、集群的任务查集群包、云平台单独标"没法在本地核实"。
+# 这里负责集群侧的事实来源：一次 ssh 读全量包清单 → 本地缓存（默认 12h）→
+# env_check(scope="cluster") 与 rail_review(location="cluster") 都吃它。
+# 纯读：不装包、不改远端任何东西。
+# ---------------------------------------------------------------------------
+
+_PKGS_MARK = "#MM-PKGS v1"
+_PKGS_TTL = 43200  # 12 小时（R 包变动不频繁；refresh=true 强制重读）
+_PKGS_R_EXPR = ('ip <- rownames(installed.packages()); cat("%s\\n"); '
+                'cat(paste(ip, collapse="\\n"), "\\n")') % _PKGS_MARK
+
+
+def _pkgs_cache_dir() -> str:
+    """缓存目录：跟 config.yaml 同一份 home（get_hermes_home 解析），别自己另起炉灶。"""
+    try:
+        return str(_get_config_path().parent / "remote" / "env_pkgs")
+    except Exception:
+        home = os.environ.get("HERMES_HOME") or os.environ.get("MEMOMICS_HOME")
+        home = home or os.path.join(str(_memomics_root()), "memomics_home")
+        return os.path.join(home, "remote", "env_pkgs")
+
+
+def _pkgs_cache_file(node: str, env: str, rscript: str) -> str:
+    def _safe(s) -> str:
+        return (re.sub(r"[^A-Za-z0-9_.-]+", "_", str(s or "?")).strip("_") or "?")[:60]
+
+    tag = _safe(env)
+    if rscript:
+        tag += "__" + _safe(os.path.basename(rscript))
+    return os.path.join(_pkgs_cache_dir(), "%s__%s.json" % (_safe(node), tag))
+
+
+def _pkgs_cache_read(path: str, ttl: int):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not data.get("packages"):
+        return None
+    if ttl and ttl > 0:
+        try:
+            age = time.time() - float(data.get("ts") or 0)
+        except Exception:
+            age = ttl + 1
+        if age > ttl:
+            return None
+    return data
+
+
+def _pkgs_cache_write(path: str, payload: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        logger.warning("R 包清单缓存写入失败：%s", path, exc_info=True)
+
+
+def r_inventory(node: str = "", env: str = "", rscript: str = "", ttl: int = _PKGS_TTL,
+                force: bool = False, cfg: dict = None) -> dict:
+    """读某节点某 R 环境的**全量包清单**（一次 ssh；默认缓存 12 小时）。纯读动作。
+
+    返回 {ok, node, env, rscript, r_version, count, packages[], checked_at, cached}；
+    连不上/找不到 Rscript → ok=False + error + hint（调用方按"没法核实"处理，不要当成缺包）。
+    """
+    cfg = cfg or _load_remote_config()
+    node_cfg, node_name, err = _select_node(cfg, node or "")
+    if err:
+        return {"ok": False, "node": node or "", "env": env,
+                "error": "没有可用的节点（远端未配置或需要指定 node）", "hint": err}
+    try:
+        from memomics.bio_tools import cluster_session as cs
+        sess = cs._session_cfg(cfg, node_cfg)
+    except Exception:
+        sess = dict(cfg.get("session") or {})
+        cs = None
+    env = str(env or sess.get("env") or "R4.41").strip()
+    rscript = str(rscript or "").strip()
+    node_label = node_name or str(node_cfg.get("host") or "")
+    cache_path = _pkgs_cache_file(node_label, env, rscript)
+    if not force:
+        hit = _pkgs_cache_read(cache_path, ttl)
+        if hit:
+            out = dict(hit)
+            out.update({"ok": True, "cached": True, "node": node_label, "env": env})
+            return out
+    try:
+        conn = _get_conn(node_cfg)
+        probe = cs._probe_rscript(conn, sess, env, rscript) if cs else {"ok": False}
+    except Exception as exc:
+        return {"ok": False, "node": node_label, "env": env,
+                "error": "连不上节点或探测 Rscript 失败：%s" % exc,
+                "hint": "先用 action='nodes' 看节点连通性；或 action='check' 看环境"}
+    if not probe.get("ok"):
+        return {"ok": False, "node": node_label, "env": env, "rscript": "",
+                "error": "节点 %s 上没找到可用的 Rscript（env=%s）" % (node_label, env),
+                "hint": ("用 action='check' 看节点上有什么；或显式给 rscript=<绝对路径>"
+                         "（conda 环境一般长这样 <root>/envs/<env>/bin/Rscript）")}
+    found = str(probe.get("rscript") or "")
+    cmd = "%s -e '%s'" % (shlex.quote(found), _PKGS_R_EXPR)
+    res = cs._exec_full(conn, cmd, timeout=240)
+    out = str(res.get("output") or "")
+    pkgs, seen_mark = [], False
+    for line in out.splitlines():
+        line = line.strip()
+        if not seen_mark:
+            if line == _PKGS_MARK:
+                seen_mark = True
+            continue
+        if line and not line.startswith(">"):
+            pkgs.append(line)
+    if not seen_mark or not pkgs:
+        return {"ok": False, "node": node_label, "env": env, "rscript": found,
+                "error": "R 包清单读取失败（Rscript 没吐出预期输出）", "raw": _truncate(out, 400),
+                "hint": "跑 action='run' + command='%s -e \"rownames(installed.packages())\"' 手查" % found}
+    payload = {"node": node_label, "env": env, "rscript": found,
+               "r_version": str(probe.get("version") or ""),
+               "count": len(set(pkgs)), "packages": sorted(set(pkgs)),
+               "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+               "ts": time.time()}
+    _pkgs_cache_write(cache_path, payload)
+    out = dict(payload)
+    out.update({"ok": True, "cached": False})
+    return out
+
+
+def r_inventory_for_check(node: str = "", env: str = "", rscript: str = "",
+                          ttl: int = _PKGS_TTL, force: bool = False):
+    """给 env_check / rail_review 用的薄封装（同一份缓存与解析）。"""
+    return r_inventory(node=node, env=env, rscript=rscript, ttl=ttl, force=force)
+
+
+def r_packages_check(node: str = "", env: str = "", rscript: str = "", packages=None,
+                     refresh: bool = False, full: bool = False, ttl: int = _PKGS_TTL,
+                     cfg: dict = None) -> dict:
+    """判定一批包在**集群**上有没有（供工具与门禁共用，返回 dict 不是 JSON 串）。
+
+    语言歧义保护：不在 R 清单里的名字，如果看着像 Python 包（env_check 的 Python 名单里），
+    归到 unverified 而不是 missing —— 集群 Python 环境这一层还没接，不能拿 R 清单判它。
+    """
+    inv = r_inventory(node=node, env=env, rscript=rscript, ttl=ttl, force=refresh, cfg=cfg)
+    if not inv.get("ok"):
+        out = {"status": "error", "node": inv.get("node") or node, "env": inv.get("env") or env,
+               "error": inv.get("error") or "R 包清单读取失败",
+               "hint": inv.get("hint") or "", "packages": [], "count": None,
+               "missing": [], "installed": [], "unverified": []}
+        return out
+    pkgs = set(inv.get("packages") or [])
+    try:
+        from memomics.bio_tools import env_check as _ec
+        py_names = {str(n).lower() for n in _ec.PYTHON_PACKAGES_BIO}
+    except Exception:
+        py_names = set()
+    installed, missing, unverified = [], [], []
+    for p in (packages or []):
+        name = str(p).strip()
+        if not name:
+            continue
+        if name in pkgs:
+            installed.append(name)
+        elif name.lower() in py_names:
+            unverified.append(name)
+        else:
+            missing.append(name)
+    out = {"status": "ok", "node": inv.get("node"), "env": inv.get("env"),
+           "rscript": inv.get("rscript"), "r_version": inv.get("r_version"),
+           "count": inv.get("count"), "checked_at": inv.get("checked_at"),
+           "cached": inv.get("cached"), "installed": sorted(installed),
+           "missing": sorted(missing), "unverified": sorted(unverified)}
+    if full:
+        out["packages"] = inv.get("packages")
+    else:
+        out["note"] = "只回判定结果；要看全量清单加 full=true（共 %s 个包）" % (inv.get("count") or 0)
+    return out
+
+
+def _action_r_packages(cfg: dict, args: dict) -> str:
+    res = r_packages_check(
+        node=str(args.get("node") or ""), env=str(args.get("env") or ""),
+        rscript=str(args.get("rscript") or ""), packages=args.get("packages") or [],
+        refresh=bool(args.get("refresh")), full=bool(args.get("full")), cfg=cfg)
+    if res.get("status") != "ok":
+        return _err(res.get("error") or "R 包清单读取失败", node=res.get("node") or "",
+                    env=res.get("env") or "", hint=res.get("hint") or "")
+    return _ok(res)
+
+
 _ACTIONS = {
     "locate": _action_locate,
     "nodes": _action_nodes,
@@ -2538,6 +2734,8 @@ _ACTIONS = {
     "session_list": _action_session_list,
     "session_cells": _action_session_cells,
     "session_plot": _action_session_plot,
+    # 集群侧 R 包清单（rail_review 按位置审查用；也用来回答「集群上有没有这个包」）
+    "r_packages": _action_r_packages,
 }
 
 
@@ -2681,6 +2879,11 @@ SCHEMA = {
         "会话里画的图会自动抓成 plots/<请求号>_NN.png（默认设备改写，一个顶层表达式一张）。\n"
         "  • locate —— **判定一个路径在本地还是在集群上**（用户没说数据在哪时先跑这个，再决定在哪儿算）；"
         "远端没配置时也能用，只报本地那一半。\n"
+        "  • r_packages —— **查集群上的 R 包**（不是本机！）：一次 ssh 读目标节点/env 的全量包清单"
+        "（缓存 12 小时，refresh=true 强制重读），给了 packages=[...] 就报 installed/missing。"
+        "用途：决定「这个包集群上有没有」、以及 rail_review(location='cluster') 的包审查依据。"
+        "**别拿本机包清单去判集群任务**（本地缺 ≠ 集群缺——实测本地缺 RUVSeq 曾把投递硬拦，"
+        "而 ssh23 的 R4.41 里是有的）。\n"
         "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
         "不指定节点也能调用。\n"
         "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 ssh3/ssh5）时，"
@@ -2726,7 +2929,7 @@ SCHEMA = {
                          "logs", "cancel", "jobs",
                          "session_start", "session_exec", "session_save", "session_restore",
                          "session_status", "session_stop", "session_list",
-                         "session_cells", "session_plot"],
+                         "session_cells", "session_plot", "r_packages"],
                 "description": "要执行的动作",
             },
             "node": {
@@ -2810,6 +3013,14 @@ SCHEMA = {
                      "description": "session_stop：true = 退出前先落检查点（大对象会慢；保住工作成果用）"},
             "live": {"type": "boolean",
                      "description": "session_list：true = 逐台连上去核实进程真的活着（慢，但最准）"},
+            "packages": {"type": "array", "items": {"type": "string"},
+                         "description": ("r_packages：要看哪几个包在不在集群（如 [\"RUVSeq\",\"CellChat\"]）；"
+                                         "不传 = 只回报全量包数量。R 清单判不了的名字（像 Python 包）"
+                                         "会进 unverified，不会误报 missing。")},
+            "refresh": {"type": "boolean",
+                        "description": "r_packages：true = 忽略 12 小时缓存，重新 ssh 读一遍包清单"},
+            "full": {"type": "boolean",
+                     "description": "r_packages：true = 连全量包名一起返回（默认只回数量与判定结果）"},
         },
         "required": ["action"],
     },

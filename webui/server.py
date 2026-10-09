@@ -19942,7 +19942,7 @@ _CLUSTER_NODE_FIELDS = (
     "proxy_jump", "scheduler", "partition", "queue",
 )
 _CLUSTER_NODE_LIST_FIELDS = ("extra_ssh_options",)
-_CLUSTER_ACTIONS = ("locate", "nodes", "check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs", "session_start", "session_exec", "session_save", "session_restore", "session_status", "session_stop", "session_list", "session_cells", "session_plot")
+_CLUSTER_ACTIONS = ("locate", "nodes", "check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs", "session_start", "session_exec", "session_save", "session_restore", "session_status", "session_stop", "session_list", "session_cells", "session_plot", "r_packages")
 _CLUSTER_NODE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
 
 

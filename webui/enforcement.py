@@ -122,6 +122,31 @@ _REMOTE_CLUSTER_TOOL = "remote_cluster"
 _REMOTE_CLUSTER_EXEC_ACTIONS = {"run", "submit"}
 
 
+def _location_mismatch(es, tool_name, args):
+    """执行位置与 rail_review(pre) 的审查位置对不上 → 软提醒（2026-10-09，不硬拦）。
+
+    用户实测事故：本地缺 RUVSeq，rail_review(pre)（老逻辑只查本机）把**集群投递**硬拦了，
+    而集群 R4.41 里其实装着。现在 pre 会自报 location（local/cluster/cloud），这里负责在
+    "审查位置 ≠ 执行位置" 时提示重审 —— 只提醒不 block：拦死会造出新的死锁（正是要修的坑）。
+    """
+    loc = str(getattr(es, "rail_pre_location", "") or "")
+    if not loc or not getattr(es, "rail_pre_done", False):
+        return ""
+    is_remote_tool = tool_name == _REMOTE_CLUSTER_TOOL
+    remote_exec = is_remote_tool and _is_exec_call(tool_name, args)
+    local_exec = (not is_remote_tool) and _is_exec_call(tool_name, args)
+    if remote_exec and loc == "local":
+        return ("⚠️ 这次是**集群**执行，但上一次 rail_review(pre) 按**本机**环境审的"
+                "（本地包清单 ≠ 集群包清单：本地缺的包集群上可能有，反之亦然，别据此拒跑）。"
+                "请重审：rail_review(phase='pre', location='cluster', node=<节点>, env=<环境>)；"
+                "包清单用 remote_cluster(action='r_packages', packages=[...]) 查集群。")
+    if local_exec and loc in ("cluster", "cloud"):
+        return ("⚠️ 上一次 rail_review(pre) 按 **%s** 审的，但这次在**本机**跑"
+                "（execute_r/terminal 用的是本机 R）。本地任务请用 location='local' 重审，"
+                "否则本地缺包会被漏掉。" % ("集群" if loc == "cluster" else "云平台"))
+    return ""
+
+
 def _args_as_dict(args):
     if isinstance(args, dict):
         return args
@@ -372,6 +397,10 @@ class EnforcementState:
         self.knowledge_searched: bool = False
         self.rail_pre_done: bool = False
         self.rail_post_done: bool = False
+        # 2026-10-09 用户要求：审查要区分「在哪审的」（本机/集群/云）
+        # 存 rail_review(pre) 自报的位置，执行时对不上就软提醒（不硬拦）
+        self.rail_pre_location: str = ""      # local | cluster | cloud | ""
+        self.rail_pre_line: str = ""          # 审查结果里那句「📍 审查位置：…」
         self.debate_done: bool = False  # 🔧 P2(2026-08-10): 保留兼容字段，新逻辑用 debated_topics
         self.debated_topics: set = set()  # P2: topic 级去重 — 同一主题只辩一次
         self.debate_count: int = 0  # P2: 单会话辩论次数（预算护栏）
@@ -436,6 +465,8 @@ class EnforcementState:
             "knowledge_searched": self.knowledge_searched,
             "rail_pre_done": self.rail_pre_done,
             "rail_post_done": self.rail_post_done,
+            "rail_pre_location": self.rail_pre_location,
+            "rail_pre_line": self.rail_pre_line,
             "debate_done": self.debate_done,
             "debated_topics": list(self.debated_topics),  # P2
             "debate_count": self.debate_count,  # P2
@@ -612,6 +643,12 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                                "解绑后执行工具才会放行；反复被拦请检查 rail_review 的参数。"))
             return {"blocked": True,
                     "message": _base + f"（已连续拦截 {es._blocked_attempts} 次）" + _hint}
+
+        # 2026-10-09：执行位置 vs 审查位置对不上 → 软提醒（只提醒一次，不拦）
+        _lm = _location_mismatch(es, tool_name, args)
+        if _lm and getattr(es, "_loc_warned", "") != _lm[:60]:
+            es._loc_warned = _lm[:60]
+            _emit("enforcement", action="warning", message=_lm)
 
         # P3(2026-09-22): 意图确认门禁 —— 问完了没等到答复，不许开工
         _fg = _form_gate(es, tool_name, args)
@@ -871,6 +908,10 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         pass
                     if phase == "pre" or r.get("phase") == "pre":
                         es.rail_pre_done = True
+                        # 2026-10-09：记住这次审查是按哪个位置审的（本机/集群/云），
+                        # 执行时位置对不上就软提醒——本地包清单不该拿来判集群任务
+                        es.rail_pre_location = str(r.get("location") or r.get("env_source") or "")
+                        es.rail_pre_line = str(r.get("location_line") or "")
                         should_proceed = r.get("should_proceed", True)
                         if not should_proceed:
                             issues = r.get("issues", [])

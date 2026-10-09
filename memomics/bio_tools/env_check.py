@@ -107,8 +107,20 @@ SCHEMA = {
             "auto_install": {
                 "type": "boolean",
                 "default": True,
-                "description": "Auto-install missing packages"
-            }
+                "description": "Auto-install missing packages（只对 scope=local 生效）"
+            },
+            "scope": {
+                "type": "string",
+                "enum": ["local", "cluster", "cloud"],
+                "default": "local",
+                "description": ("在哪执行就查哪里的包：local=本机 R/Python（可自动装）；"
+                                "cluster=目标节点/env 的 R 包清单（一次 ssh，缓存 12h，不改远端）；"
+                                "cloud=云平台（本机核不了 → 全部 unverified，绝不算缺包）。"
+                                "集群任务别用 local 判——本地缺 ≠ 集群缺。")
+            },
+            "node": {"type": "string", "description": "scope=cluster：节点名（如 ssh23；只配一个节点时可省）"},
+            "env": {"type": "string", "description": "scope=cluster：conda 环境名（如 R4.41）"},
+            "rscript": {"type": "string", "description": "scope=cluster：Rscript 绝对路径（覆盖自动探测）"},
         },
         "required": ["packages"]
     }
@@ -277,8 +289,101 @@ def _install_python_package(pkg):
         return False
 
 
-def check_env(packages, language="both", auto_install=True):
-    """Check and optionally install packages. Uses persisted cache to skip re-checks."""
+def _check_r_packages_remote(packages, node="", env="", rscript=""):
+    """在**集群**上查 R 包（一次 ssh 读全量清单，缓存 12h）。
+
+    返回 (status_dict, meta)：status_dict = {包名: bool}；meta 说明这份清单来自哪里、
+    是不是"没法核实"。连不上集群时 status 里全是 None（不是 False！）——**不能把"查不到"
+    当成"缺包"**，否则又会拿不可用的事实去拦人（用户实测：本地缺 RUVSeq 拦了集群投递）。
+    """
+    meta = {"source": "cluster", "node": node, "env": env, "rscript": "",
+            "checked_at": "", "cached": None, "r_version": "", "count": None,
+            "reachable": False, "error": "", "hint": ""}
+    try:
+        from memomics.bio_tools import remote_cluster as rc
+    except Exception as exc:  # 没装/没配也不该崩
+        meta["error"] = "读不到集群模块：%s" % exc
+        return {p: None for p in packages}, meta
+    try:
+        res = rc.r_packages_check(node=node, env=env, rscript=rscript, packages=list(packages))
+    except Exception as exc:
+        meta["error"] = "集群包清单查询异常：%s" % exc
+        return {p: None for p in packages}, meta
+    if res.get("status") != "ok":
+        meta["error"] = str(res.get("error") or "集群包清单读取失败")
+        meta["hint"] = str(res.get("hint") or "")
+        meta["node"] = str(res.get("node") or node)
+        meta["env"] = str(res.get("env") or env)
+        return {p: None for p in packages}, meta
+    meta.update({"reachable": True, "node": str(res.get("node") or node),
+                 "env": str(res.get("env") or env), "rscript": str(res.get("rscript") or ""),
+                 "r_version": str(res.get("r_version") or ""),
+                 "checked_at": str(res.get("checked_at") or ""),
+                 "cached": res.get("cached"), "count": res.get("count")})
+    ok = {str(p): True for p in (res.get("installed") or [])}
+    # unverified（R 清单判不了的名字，如 Python 包）→ None，不报缺
+    for p in (res.get("unverified") or []):
+        ok[str(p)] = None
+    for p in (res.get("missing") or []):
+        ok[str(p)] = False
+    for p in packages:
+        ok.setdefault(str(p), None)
+    return ok, meta
+
+
+def _check_scope(packages, scope, node="", env="", rscript=""):
+    """按执行位置查包：local 查本机 / cluster 查节点 / cloud 没法在本地核实。
+
+    返回 (status_dict, meta, unverified_list)。
+    """
+    scope = (scope or "local").strip().lower()
+    if scope in ("local", "localhost", "本机"):
+        return None, {"source": "local"}, []          # None = 交给原来的本地逻辑
+    if scope in ("cluster", "remote", "集群"):
+        status, meta = _check_r_packages_remote(packages, node=node, env=env, rscript=rscript)
+        unverified = [p for p, v in status.items() if v is None]
+        return status, meta, unverified
+    # 云平台/其他位置：本机根本看不到那个环境 —— 一律"没法核实"，绝不报缺、绝不拦
+    meta = {"source": scope or "cloud", "reachable": False, "node": node, "env": env,
+            "error": "", "hint": "云平台环境无法在本机核实：请在目标平台上自查（或在任务里加环境自检）"}
+    return {p: None for p in packages}, meta, list(packages)
+
+
+def check_env(packages, language="both", auto_install=True, scope="local",
+              node="", env="", rscript=""):
+    """Check and optionally install packages. Uses persisted cache to skip re-checks.
+
+    scope（2026-10-09 新增，用户口径）：
+      * local（默认）—— 老行为：查本机 R/Python，缺了还能自动装；
+      * cluster —— 查**目标节点/env** 的 R 包清单（不碰本机、不装任何东西）；
+      * cloud/其他 —— 没法在本地核实：全部进 unverified，**绝不报 missing**。
+    结果里带 scope/source/node/env/checked_at/unverified，调用方据此区分"在哪审的"。
+    """
+    _scope_status, _scope_meta, _scope_unverified = _check_scope(
+        packages, scope, node=node, env=env, rscript=rscript)
+    if _scope_status is not None:
+        result = {"installed": {}, "missing": {}, "installed_now": {}, "from_cache": {},
+                  "scope": (_scope_meta.get("source") or scope), "node": _scope_meta.get("node", ""),
+                  "env": _scope_meta.get("env", ""), "rscript": _scope_meta.get("rscript", ""),
+                  "r_version": _scope_meta.get("r_version", ""),
+                  "checked_at": _scope_meta.get("checked_at", ""),
+                  "source": _scope_meta.get("source", scope),
+                  "reachable": bool(_scope_meta.get("reachable")),
+                  "count": _scope_meta.get("count"),
+                  "cached": _scope_meta.get("cached"),
+                  "error": _scope_meta.get("error", ""), "hint": _scope_meta.get("hint", ""),
+                  "unverified": list(_scope_unverified)}
+        for pkg, ok in _scope_status.items():
+            if ok is True:
+                result["installed"][pkg] = "R"
+            elif ok is False:
+                result["missing"][pkg] = "R"
+            elif pkg not in result["unverified"]:
+                result["unverified"].append(pkg)
+        if _scope_meta.get("cached"):
+            result["from_cache"] = {p: "R" for p in result["installed"]}
+        return result
+
     cache = _load_env_cache()
     cached_pkgs = cache.get("packages", {})
     result = {"installed": {}, "missing": {}, "installed_now": {}, "from_cache": {}}
@@ -386,12 +491,22 @@ def check_env(packages, language="both", auto_install=True):
     cache["packages"] = cached_pkgs
     _save_env_cache()
 
+    # 位置信息一律带上（本地也要显式声明，rail_review 靠它区分「在哪审的」）
+    result.setdefault("scope", "local")
+    result.setdefault("source", "local")
+    result.setdefault("node", "")
+    result.setdefault("env", "")
+    result.setdefault("checked_at", "")
+    result.setdefault("reachable", True)
+    result.setdefault("unverified", [])
     return result
 
 
-def check_env_handler(packages, language="both", auto_install=True):
+def check_env_handler(packages, language="both", auto_install=True, scope="local",
+                      node="", env="", rscript=""):
     """Handler for check_env tool."""
-    result = check_env(packages, language, auto_install)
+    result = check_env(packages, language, auto_install, scope=scope,
+                       node=node, env=env, rscript=rscript)
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
@@ -404,7 +519,11 @@ def _register():
         handler=lambda args, **kw: check_env_handler(
             args.get("packages", []),
             args.get("language", "both"),
-            args.get("auto_install", True)
+            args.get("auto_install", True),
+            args.get("scope", "local"),
+            args.get("node", ""),
+            args.get("env", ""),
+            args.get("rscript", "")
         ),
         emoji="🔧",
         max_result_size_chars=20_000,
