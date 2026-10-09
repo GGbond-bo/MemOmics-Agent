@@ -58,6 +58,8 @@ _SESSION_DEFAULTS = {
     "wait": 1200,                   # session_exec 默认等待上限（秒）
     "save_wait": 3600,              # session_save 默认等待上限（秒，检查点可能很大）
     "max_sessions": 2,              # 同节点并行常驻会话的建议上限（超了只提示，不硬拦）
+    "cells_limit": 12,              # session_cells：一次拉回多少个 cell（Notebook 总端）
+    "plot_max_bytes": 4000000,      # session_plot：单张图 base64 回传的大小上限
 }
 
 # ---------------------------------------------------------------------------
@@ -364,11 +366,11 @@ def _load_code(input_path: str, obj_name: str) -> str:
     return code.replace("{INP}", _r_str(input_path)).replace("{OBJ}", str(obj_name))
 
 
-_MARKERS = ("---OUTPUT---", "---WARNINGS---", "---ERROR---", "---READS---")
+_MARKERS = ("---OUTPUT---", "---WARNINGS---", "---ERROR---", "---READS---", "---PLOTS---")
 
 
 def _parse_res(text: str) -> dict:
-    """解析 daemon 写的 done/<id>.res.txt（头部 key:value + 四个分段）。"""
+    """解析 daemon 写的 done/<id>.res.txt（头部 key:value + 五个分段）。"""
     header, sections = {}, {}
     cur, buf = None, []
     for line in (text or "").splitlines():
@@ -392,6 +394,11 @@ def _parse_res(text: str) -> dict:
         if len(parts) >= 3:
             reads.append({"time": parts[0].strip(), "bytes": parts[1].strip(),
                           "path": parts[2].strip()})
+    plots = []
+    for ln in (sections.get("---PLOTS---") or "").splitlines():
+        parts = ln.split("\t")
+        if len(parts) >= 2 and parts[0].strip():
+            plots.append({"path": parts[0].strip(), "bytes": parts[1].strip()})
     err = (sections.get("---ERROR---") or "").strip()
     try:
         calls = int(header.get("readrds_calls") or 0)
@@ -412,6 +419,8 @@ def _parse_res(text: str) -> dict:
         "warnings": (sections.get("---WARNINGS---") or "").strip(),
         "error": err,
         "reads": reads,
+        "plots": plots,
+        "plots_skipped": header.get("plots_skipped") or "0",
         "raw": text,
     }
 
@@ -792,6 +801,8 @@ def _run_code_action(cfg: dict, args: dict, code: str, op: str, default_wait_key
         "error": parsed.get("error") or "",
         "readrds": {"calls": parsed.get("readrds_calls"),
                     "recent": parsed.get("reads", [])[-5:]},
+        "plots": parsed.get("plots") or [],
+        "plots_skipped": parsed.get("plots_skipped") or "0",
         "session_objects": parsed.get("objects"),
         "rss_kb": parsed.get("rss_kb"),
         "res_path": parsed.get("res_path"),
@@ -861,6 +872,9 @@ def _status_command(sdir: str) -> str:
         "echo '==DONE=='", "ls -1t done/*.res.txt 2>/dev/null | head -n 5",
         "echo '==LASTRES=='",
         "tail -n 40 $(ls -1t done/*.res.txt 2>/dev/null | head -n1) 2>/dev/null",
+        "echo '==PLOTS=='",
+        "ls -1t plots/*.png 2>/dev/null | head -n 8; echo '--count--'; "
+        "ls -1 plots/*.png 2>/dev/null | wc -l",
         "echo '==CKPT=='", "ls -lht ckpt/*.rds 2>/dev/null | head -n 5",
         "echo '==LOG=='", "tail -n 12 session.log 2>/dev/null",
     ])
@@ -906,6 +920,9 @@ def action_status(cfg: dict, args: dict) -> str:
         "queue": (sec.get("QUEUE") or "").strip(),
         "done_recent": (sec.get("DONE") or "").strip(),
         "last_result_tail": rc._truncate((sec.get("LASTRES") or "").strip(), 4000),
+        "plots_total": state.get("plots_total") or "",
+        "plots_last": state.get("plots_last") or "",
+        "plots_recent": (sec.get("PLOTS") or "").strip(),
         "ckpt_recent": (sec.get("CKPT") or "").strip(),
         "log_tail": rc._truncate((sec.get("LOG") or "").strip(), 3000),
         "input": rec.get("input") or "", "object": rec.get("object") or "",
@@ -918,6 +935,192 @@ def action_status(cfg: dict, args: dict) -> str:
                            "可以 action='session_start', session_id='%s', restore='latest' 拉回来"
                            "（不用重读 input）。" % rec.get("id"))
     return rc._ok(payload)
+
+
+# ---------------------------------------------------------------------------
+# 动作：session_cells / session_plot —— Notebook 总端（cell 视图 + 图内联）
+# ---------------------------------------------------------------------------
+
+_PLOT_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+              ".svg": "image/svg+xml", ".pdf": "application/pdf"}
+
+
+def _cells_command(sdir: str, limit: int) -> str:
+    """一次 ssh 拿回最近 N 个 cell：头部 + 代码 + 输出尾 + 报错 + 图清单。
+
+    为什么用一个 shell 循环：notebook 刷新很频繁，N 个 cell 各发一条命令会把 ssh 连接
+    打成筛子；这里一次拿全，本机侧只做解析。
+    """
+    q = shlex.quote
+    n = max(1, min(60, int(limit)))
+    return "\n".join([
+        "cd %s 2>/dev/null || { echo MM_NO_DIR; exit 0; }" % q(sdir),
+        "for f in $(ls -1t done/*.res.txt 2>/dev/null | head -n %d); do" % n,
+        '  id=$(basename "$f" .res.txt)',
+        '  echo "==CELL== $id"',
+        '  sed -n "1,16p" "$f"',
+        '  echo "==CODE=="',
+        '  sed -n "1,120p" "done/$id.req.R" 2>/dev/null',
+        '  echo "==OUTPUT=="',
+        "  awk '/^---OUTPUT---$/{flag=1;next} /^---WARNINGS---$/{flag=0} flag' \"$f\" | tail -n 60",
+        '  echo "==WARNINGS=="',
+        "  awk '/^---WARNINGS---$/{flag=1;next} /^---ERROR---$/{flag=0} flag' \"$f\" | head -n 6",
+        '  echo "==ERROR=="',
+        "  awk '/^---ERROR---$/{flag=1;next} /^---READS---$/{flag=0} flag' \"$f\" | head -n 8",
+        '  echo "==PLOTS=="',
+        "  awk '/^---PLOTS---$/{flag=1;next} flag' \"$f\"",
+        'done',
+        "echo '==END=='",
+    ])
+
+
+def _cells_from_output(text: str, limit: int) -> list:
+    """解析 _cells_command 的输出 → cell 列表（新的在前，调用方决定要不要倒序）。"""
+    cells, cur = [], None
+    for line in (text or "").splitlines():
+        s = line.strip()
+        if s.startswith("==CELL== "):
+            if cur:
+                cells.append(cur)
+            cur = {"id": s[len("==CELL== "):].strip(), "code": "", "output": "",
+                   "warnings": "", "error": "", "plots": [], "header": {}, "_sec": "CELL"}
+            continue
+        if s == "==END==":
+            if cur:
+                cells.append(cur)
+            cur = None
+            continue
+        if cur is None:
+            continue
+        if s in ("==CODE==", "==OUTPUT==", "==WARNINGS==", "==ERROR==", "==PLOTS=="):
+            cur["_sec"] = s.strip("=")
+            continue
+        sec = cur.get("_sec")
+        if sec == "CELL":
+            if ":" in line:
+                k, v = line.split(":", 1)
+                cur["header"][k.strip()] = v.strip()
+        elif sec == "CODE":
+            cur["code"] = (cur["code"] + "\n" + line) if cur["code"] else line
+        elif sec == "OUTPUT":
+            cur["output"] = (cur["output"] + "\n" + line) if cur["output"] else line
+        elif sec == "WARNINGS":
+            cur["warnings"] = (cur["warnings"] + "\n" + line) if cur["warnings"] else line
+        elif sec == "ERROR":
+            cur["error"] = (cur["error"] + "\n" + line) if cur["error"] else line
+        elif sec == "PLOTS":
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0].strip():
+                cur["plots"].append({"path": parts[0].strip(), "bytes": parts[1].strip()})
+    for c in cells:
+        c.pop("_sec", None)
+        h = c["header"]
+        c["status"] = h.get("status") or "ok"
+        c["ms"] = h.get("ms") or ""
+        c["started"] = h.get("started") or ""
+        c["finished"] = h.get("finished") or ""
+        c["readrds_calls"] = h.get("readrds_calls") or ""
+        c["objects"] = h.get("objects") or ""
+        # 请求文件第一行是 #MM-REQ 头注释（投递方写的），展示时去掉
+        c["code"] = "\n".join(ln for ln in (c["code"] or "").splitlines()
+                              if not ln.startswith("#MM-REQ")).strip("\n")
+    return cells[:max(1, min(60, int(limit)))]
+
+
+def action_cells(cfg: dict, args: dict) -> str:
+    """Notebook 总端：列出会话最近的 cell（代码 + 输出 + 状态 + 图清单）。"""
+    rec, node, node_name, err = _resolve_session(cfg, args)
+    if err:
+        return err
+    sess = _session_cfg(cfg, node)
+    conn = rc._get_conn(node)
+    sdir = str(rec.get("dir") or "")
+    limit = args.get("limit") or sess.get("cells_limit") or _SESSION_DEFAULTS.get("cells_limit", 12)
+    try:
+        limit = int(float(limit))
+    except Exception:
+        limit = 12
+    res = _exec_full(conn, _cells_command(sdir, limit), timeout=90)
+    out = res.get("output") or ""
+    if "MM_NO_DIR" in out:
+        return rc._err("会话目录不在（%s）——可能被清理了；用 action='session_list' 看现状。" % sdir,
+                       session_id=rec.get("id"), node=node_name)
+    cells = _cells_from_output(out, limit)
+    cells.reverse()          # notebook 顺序：旧的在上、新的在下
+    return rc._ok({
+        "status": "ok", "session_id": rec.get("id"), "node": node_name, "dir": sdir,
+        "cells": cells,
+        "count": len(cells),
+        "note": ("code/output 已按展示截断（输出尾 60 行、代码 120 行）；完整结果在 done/*.res.txt。"
+                 "接着跑用 action='session_exec'，同步等结果用 wait，长任务用 async=true。"),
+    })
+
+
+def action_plot(cfg: dict, args: dict) -> str:
+    """取一张图（base64）给面板内联显示；路径必须在会话目录内。"""
+    rec, node, node_name, err = _resolve_session(cfg, args)
+    if err:
+        return err
+    sess = _session_cfg(cfg, node)
+    conn = rc._get_conn(node)
+    sdir = str(rec.get("dir") or "")
+    raw = str(args.get("path") or args.get("name") or "").strip()
+    if not raw:
+        return rc._err("需要 path='plots/<file>.png'（相对会话目录，或会话目录内的绝对路径）",
+                       session_id=rec.get("id"), node=node_name)
+    try:
+        max_bytes = int(float(args.get("max_bytes") or sess.get("plot_max_bytes")
+                              or _SESSION_DEFAULTS.get("plot_max_bytes", 4000000)))
+    except Exception:
+        max_bytes = 4000000
+    q = shlex.quote
+    cmd = "\n".join([
+        "D=%s" % q(sdir),
+        "F=%s" % q(raw),
+        'case "$F" in /*) ;; *) F="$D/$F" ;; esac',
+        'case "$F" in "$D"/*) ;; *) echo MM_OUTSIDE; exit 0 ;; esac',   # 只允许会话目录内的文件
+        '[ -f "$F" ] || { echo MM_MISSING; exit 0; }',
+        'case "$F" in *.png|*.jpg|*.jpeg|*.svg|*.pdf) ;; *) echo MM_BADTYPE; exit 0 ;; esac',
+        'S=$(wc -c < "$F" | tr -d " ")',
+        'if [ "$S" -gt %d ]; then echo "MM_TOOBIG:$S"; exit 0; fi' % max_bytes,
+        'echo "MM_BYTES:$S"',
+        'echo "MM_NAME:$(basename "$F")"',
+        'if base64 -w0 "$F" >/dev/null 2>&1; then base64 -w0 "$F"; else base64 "$F" | tr -d "\\n"; fi',
+    ])
+    # 注意用 _exec_full（不走 bounded_capture）：bounded_capture 默认只留约 50KB，
+    # base64 图片会被截断成半张图 —— 这里必须全保真，体积闸门靠上面的 max_bytes。
+    res = _exec_full(conn, cmd, timeout=180)
+    out = res.get("output") or ""
+    if "MM_OUTSIDE" in out:
+        return rc._err("拒绝：只允许读会话目录内的图（%s）" % sdir,
+                       session_id=rec.get("id"), node=node_name)
+    if "MM_MISSING" in out:
+        return rc._err("图不存在：%s" % raw, session_id=rec.get("id"), node=node_name)
+    if "MM_BADTYPE" in out:
+        return rc._err("只支持 png/jpg/svg/pdf：%s" % raw, session_id=rec.get("id"), node=node_name)
+    if "MM_TOOBIG:" in out:
+        big = out.split("MM_TOOBIG:", 1)[1].split()[0] if out.split("MM_TOOBIG:", 1)[1].split() else "?"
+        return rc._err("图太大（%s 字节 > 上限 %d）：用 action='pull' 拉到本机看，或先在会话里压小"
+                       % (big, max_bytes), session_id=rec.get("id"), node=node_name)
+    if "MM_BYTES:" not in out:
+        return rc._err("取图失败：%s" % rc._truncate(out.strip() or "无输出", 400),
+                       session_id=rec.get("id"), node=node_name)
+    head, _, blob = out.partition("MM_NAME:")
+    name = blob.splitlines()[0].strip() if blob else raw
+    b64 = "".join(blob.splitlines()[1:]) if "\n" in blob else blob
+    b64 = "".join(ch for ch in b64 if ch not in "\r\n\t ")
+    bytes_n = ""
+    for ln in head.splitlines():
+        if ln.startswith("MM_BYTES:"):
+            bytes_n = ln.split(":", 1)[1].strip()
+    ext = posixpath.splitext(name.lower())[1]
+    mime = _PLOT_MIME.get(ext, "application/octet-stream")
+    return rc._ok({
+        "status": "ok", "session_id": rec.get("id"), "node": node_name,
+        "path": raw, "name": name, "bytes": bytes_n, "mime": mime,
+        "b64": b64, "b64_len": len(b64),
+        "data_uri_prefix": "data:%s;base64," % mime,
+    })
 
 
 def action_stop(cfg: dict, args: dict) -> str:

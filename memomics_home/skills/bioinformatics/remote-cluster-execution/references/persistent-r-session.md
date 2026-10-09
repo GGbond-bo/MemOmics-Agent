@@ -118,5 +118,49 @@ objects=19 / rss_h=3.0GB`，`done/` 下 8 个结果文件，`out/` 下 `umap_ver
 - **配置**：`memomics_home/config.yaml` 的 `remote.session`（`env` 默认 `R4.41`、`roots` 找 Rscript 的
   根目录、`dir` 会话根、`load_timeout`/`wait`/`save_wait` 等待上限）；节点级可覆盖
   `remote.nodes.<名字>.session`。
-- **测试**：`webui/tests/test_cluster_session.py`（19 用例，离线；含「staging→mv 入队」和
-  「live=true 不再把 dict 当字符串」两条回归）。
+- **测试**：`webui/tests/test_cluster_session.py`（28 用例，离线；含「staging→mv 入队」、
+  「live=true 不再把 dict 当字符串」两条回归，以及**本机真起 Rscript 跑 daemon 的抓图实测**）。
+
+## 8. 抓图与 📓 Notebook 总端（2026-10-09 第二批）
+
+**要解决的问题**：非交互 R 进程里画图会掉进 `Rplots.pdf` 或干脆不落盘 —— 「像 Jupyter 一样看到图」
+就差这一层。WebUI 于是没有一个统一的「看会话里跑过什么」的地方。
+
+**协议扩展（daemon v2）**：
+
+| 位置 | 变化 |
+|---|---|
+| `<会话>/plots/` | 新增产物目录：每张图一个 PNG，名 `<请求号>_NN.png`（1440×1080 @144dpi，白底） |
+| 绘图设备 | `options(device = .mm_device)`：R 一旦要开默认设备，就开成写进 `plots/` 的 `png()` |
+| 请求执行 | `.mm_eval_code()` 取代 `source()`：**逐顶层表达式** eval + 可见值 print，**每个表达式后关掉我们开的设备** → 一个表达式一张图 |
+| 结果文件 | 头部新增 `plots:` / `plots_skipped:`；新增第五个分段 `---PLOTS---`（`路径<TAB>字节数`） |
+| `state.txt` | 新增 `plots_total=`（会话累计）/ `plots_last=`（上一个 cell 抓了几张） |
+| 会话内 | `mm_plots(n)` 列最近抓到的图；`mm_info()` 里也带一行 |
+
+**为什么必须「每个表达式收尾」**：R 的默认设备是**复用的**——`plot()` 开一个 png，
+紧接着的 `hist()` 会画在**同一个**设备上，第二次落盘直接覆盖第一张。实测第一版就是「画两张只剩一张」，
+本机真跑 R 抓出来后改成逐表达式 `dev.off()`（只关自己开的那个，记在 `plots$dev`，不误伤用户的设备）。
+边界仍在：**同一个表达式里画多张（如 for 循环连续 plot）只留最后一张**；cell 结束时还开着的设备会被
+自动关掉并在 `warnings` 里记一条。
+
+**读侧（agent / WebUI 共用，无新增 HTTP 路由）**：
+
+| 动作 | 说明 |
+|---|---|
+| `session_cells` | 一条 ssh 拿回最近 N 个 cell：`==CELL==/==CODE==/==OUTPUT==/==WARNINGS==/==ERROR==/==PLOTS==` 六段（`limit` 默认 12、上限 60；输出尾 60 行、代码 120 行） |
+| `session_plot` | 取一张图：`path` 必须在会话目录内（`case "$F" in "$D"/*` 闸门）、类型限 png/jpg/svg/pdf、`max_bytes` 默认 4MB，返回 `{mime, b64, data_uri_prefix}` |
+
+⚠️ **`session_plot` 必须走 `_exec_full`（不要 `_exec_env`）**：`bounded_capture` 默认只留约 50KB，
+base64 会被截成半张图（`hermes-agent/tools/environments/base.py` 的 `get_max_bytes()`）。
+
+**WebUI**：输入框区域最上面是「📓 总端条」（状态点/会话名/一行状态），点开是覆盖式面板
+（`#nb-mask`）——顶部状态行、运行中 cell 的 ⏳ 卡片（`plots_recent` 过滤出**当前请求**的图，
+所以长 cell 也能边跑边冒图）、历史 cell 列表（代码/输出/警告/报错/图）、底部新 cell 输入框
+（Enter 运行 = `session_exec async=true`，投递后立刻插一张「已投递」卡）。
+面板开着 2.5s 轮询 `session_status`，只在 `plots_total/plots_last` 变了、或上一次在跑这次跑完、
+或手动刷新时才拉 `session_cells`；关面板即停轮询，条上另有一条 30s 慢拍。图按需取（一次最多 4 张、
+缓存 40 张）。面板只看**集群常驻会话**；本地 `execute_r/execute_python` 的变量与图不在这里，
+`plotly/htmlwidgets` 这类交互图退化成静态 PNG（daemon 抓的就是静态图）。
+
+**本机可复现的验收**：`webui/tests/test_cluster_session.py::test_daemon_plot_capture_end_to_end`
+（Rscript 起 daemon → 投两格 → 断两个表达式两张图、第二个 cell 零张、PNG 魔数、`state.plots_total`）。

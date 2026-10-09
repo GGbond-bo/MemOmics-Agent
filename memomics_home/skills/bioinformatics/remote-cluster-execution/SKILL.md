@@ -150,6 +150,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 - 🔴 装包 / 下数据 / 下参考基因组**只能在 `ssh0`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `ssh3`/`ssh23` 立即可读。
 - 中间文件写工作盘 `/hwfssz3/...`，**别用 `/tmp`**。
 - 全表（含主机名、选点行为 `default_node=ssh3` / `node_policy=ask`）、工作/装包环境分工、改 `environment.json` 后的验证三件套 → `references/three-node-cluster-facts.md`。
+- ⚠️ **节点上的 `python` 是 Python 2.7.5（ssh23 没有 python3）**：远端任何 `python -c "..."` 一句话都要 **py2/py3 双兼容** —— 不许用 `print(...)` 当表达式（`[print(x) for x in xs]` 在 py2 直接 SyntaxError）、不许 f-string。实测事故（2026-10-09）：`pull`/`locate` 带通配符时远端 glob 助手写成了 `[print(...)]`，整条路报「远端没找到」，看着像路径错，其实是脚本没跑起来。修法：`sys.stdout.write("\n".join([...]))`，先试 `python3` 再退 `python`。
 
 ## 🔴 铁规 9：长任务 = **一个作业跑完整链 + 检查点**，不要拆成一堆小作业（2026-10-08 用户拍板方案 A）
 
@@ -243,6 +244,19 @@ FindMarkers、后天 CellChat、反复调参）要的是**活着的进程**。�
 | `session_status` | pid 活没活 / busy 在跑什么 / RSS / 对象数 / **readRDS 审计** / 队列 / 最近检查点 / **最近一次结果 tail** | `session_id`（可省）/ `live` |
 | `session_stop` | 让会话退出、释放内存（`save=true` 先落检查点） | `save` / `name` |
 | `session_list` | 本机账本 `memomics_home/remote/sessions.json`（id/节点/输入/最近活跃/readRDS 次数） | `live=true` 逐台核实 |
+| `session_cells` | **Notebook 读侧**：一次拉回最近 N 个 cell（代码 + 输出尾 + 状态/耗时/readRDS + 图清单） | `session_id` / `limit`（默认 12，上限 60） |
+| `session_plot` | **Notebook 读侧**：把 `plots/` 里某张图按 base64 取回来内联（只准会话目录内的 png/jpg/svg/pdf） | `path`（如 `plots/<请求号>_01.png`）/ `max_bytes` |
+
+**📓 Notebook 总端（WebUI，2026-10-09 落地）**：输入框最上方那一条「📓 总端」点开就是 cell 视图
+（像接了个 Jupyter）——历史 cell 的代码/输出/图、正在跑的 cell（⏳ 卡片，图边跑边冒）、以及一个新
+cell 输入框。实现要点：
+- **图是自动抓的**：daemon 把默认绘图设备改写成往会话目录 `plots/<请求号>_NN.png` 写 PNG，
+  **每个顶层表达式收尾一次**（不管是 `plot()`/`hist()` 还是 `print(ggplot)`），cell 结果里的
+  `---PLOTS---` 分段就是清单。所以「画了图却看不到」不再是常态；同一表达式里画多张只留最后一张。
+- 面板/agent 侧只用既有动作读：`session_cells`（一次 ssh 拿全，代码/输出/图清单）+
+  `session_plot`（按需取图，默认上限 4MB/张，**不能**走 bounded_capture，否则 base64 被截断）。
+- 边界（如实说）：秒级轮询、不是字节流；正在跑的 cell **不能中断**（打断=丢内存对象，要停就
+  `session_stop`）；本地 `execute_r`/`execute_python` 的变量与图不在这张面板里（它看的是集群常驻会话）。
 
 **实测验收（2026-10-09，ssh23，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
 `readRDS` 16.3s 灌进内存（01:41:06）→ `RunUMAP(harmony 1:30)` 38.9s、对象 2GB、进程 RSS 2.5→3.0GB
@@ -275,6 +289,7 @@ FindMarkers、后天 CellChat、反复调参）要的是**活着的进程**。�
 | 摸环境 | `action="run"` + `scripts/probe_cluster_envs.sh <conda_root>` |
 | 大输入该不该持久化 | **本机**：`large_cache scan <路径> --json`；**集群**：`large_cache scan --remote --node <节点> <路径> --json` → ≥100MB 弹窗 → `large_cache mark ... --remote`；**硬闸**：run/submit 读到未标记大输入 → `needs_persist` 拒执行 |
 | 常驻会话（读一次一直用） | `action="session_start" input="<大 rds>"` → `action="session_exec" code="..."`（长任务 `async=true`）→ `session_status`（含 readRDS 审计与结果 tail）→ `session_save`/`session_restore` → 用完 `action="session_stop"` |
+| 看会话里跑过的 cell / 图 | `action="session_cells"`（代码+输出+图清单）→ 逐张 `action="session_plot" path="plots/<请求号>_01.png"`（WebUI 里就是输入框上方「📓 总端」那张面板） |
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
@@ -290,7 +305,7 @@ FindMarkers、后天 CellChat、反复调参）要的是**活着的进程**。�
 - `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
 - `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `zhangbo11`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
-- `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、以及 4 个实测踩坑。
+- `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、4 个实测踩坑，以及**第二批的抓图/Notebook 总端**（`plots/` + `---PLOTS---` 分段 + 逐表达式 `dev.off()` 的原因 + `session_cells`/`session_plot` 读侧 + bounded_capture 截断陷阱）。
 
 **ssh3 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
 

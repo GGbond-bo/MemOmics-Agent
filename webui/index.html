@@ -1430,6 +1430,69 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .dcs-bar > i { display:block; height:100%; width:0; background:var(--primary); border-radius:4px; transition:width .3s; }
 .cc-console .dcs-bar.indet > i { width:32%; animation:dcsIndet 1.15s linear infinite; }
 .cc-console .ds-jacts { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+/* 入口是顶部横栏里「后台任务」旁边那枚胶囊（#nav-notebook），点开是覆盖式面板。
+   数据全部走既有 /api/cluster/exec 动作：session_status / session_cells / session_plot / session_exec。 */
+.nb-dot { width:8px; height:8px; border-radius:50%; background:#6b7280; flex:none; display:inline-block; }
+.nb-dot.on { background:#22c55e; }
+.nb-dot.busy { background:#f59e0b; }
+.nb-dot.dead { background:#ef4444; }
+.nb-mini-session { max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--text-light); font-size:11.5px; }
+.nb-mini { font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid var(--border);
+  background:var(--panel); color:var(--text); cursor:pointer; font-family:inherit; }
+.nb-mini:hover { background:var(--primary-light); }
+.nb-mini.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+.nb-mini:disabled { opacity:0.55; cursor:default; }
+.nb-mask { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9998; display:none;
+  align-items:center; justify-content:center; }
+.nb-mask.on { display:flex; }
+.nb-box { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  width:min(96vw,1180px); height:min(92vh,900px); display:flex; flex-direction:column; overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,0.45); }
+.nb-head { display:flex; align-items:center; gap:8px; padding:9px 14px; border-bottom:1px solid var(--border);
+  font-size:13px; flex-wrap:wrap; }
+.nb-head .nb-title { font-weight:600; }
+.nb-head select { padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--bg);
+  color:var(--text); font-size:12px; font-family:inherit; max-width:34%; }
+.nb-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tool-bg);
+  color:var(--text-light); max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nb-chip.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+.nb-chip.busy { background:rgba(245,158,11,0.15); color:#f59e0b; }
+.nb-chip.err { background:rgba(239,68,68,0.15); color:#ef4444; }
+.nb-stat { padding:6px 14px; font-size:11.5px; color:var(--text-light); border-bottom:1px solid var(--border);
+  background:var(--bg); word-break:break-all; }
+.nb-cells { flex:1; overflow-y:auto; padding:10px 14px 16px; background:var(--bg); }
+.nb-cell { border:1px solid var(--border); border-radius:10px; margin-bottom:10px; background:var(--panel);
+  overflow:hidden; }
+.nb-cell.running { border-color:var(--primary); }
+.nb-cell.err { border-color:rgba(239,68,68,0.55); }
+.nb-cell-head { display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:11.5px;
+  color:var(--text-light); background:var(--tool-bg); flex-wrap:wrap; }
+.nb-badge { font-size:10.5px; padding:1px 7px; border-radius:9px; background:var(--tool-bg); flex:none; }
+.nb-badge.ok { background:rgba(34,197,94,0.15); color:#22c55e; }
+.nb-badge.err { background:rgba(239,68,68,0.15); color:#ef4444; }
+.nb-badge.run { background:rgba(245,158,11,0.18); color:#f59e0b; }
+.nb-code, .nb-out { font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.5;
+  white-space:pre-wrap; word-break:break-word; margin:0; padding:8px 10px; }
+.nb-code { background:#0d1117; color:#d7e2ec; }
+.nb-out { color:var(--text); border-top:1px dashed var(--border); max-height:280px; overflow-y:auto; }
+.nb-out.err { color:#ff8a8a; }
+.nb-plots { display:flex; flex-wrap:wrap; gap:8px; padding:8px 10px; border-top:1px dashed var(--border); }
+.nb-plots img { max-width:100%; max-height:430px; border:1px solid var(--border); border-radius:8px;
+  background:#fff; cursor:zoom-in; }
+.nb-plot-ph { font-size:11px; color:var(--text-light); padding:6px 9px; border:1px dashed var(--border);
+  border-radius:8px; }
+.nb-empty { padding:16px 14px; font-size:12px; color:var(--text-light); text-align:center; white-space:pre-wrap; }
+.nb-run { border-top:1px solid var(--border); padding:8px 14px 10px; display:flex; flex-direction:column; gap:6px; }
+.nb-run textarea { resize:vertical; min-height:54px; max-height:190px; padding:7px 9px; border-radius:6px;
+  border:1px solid var(--border); background:var(--bg); color:var(--text);
+  font-family:Consolas,'Courier New',monospace; font-size:12px; line-height:1.5; }
+.nb-runrow { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.nb-runrow .nb-hint { font-size:11px; color:var(--text-light); }
+.nb-zoom { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:10001; display:none;
+  align-items:center; justify-content:center; cursor:zoom-out; }
+.nb-zoom.on { display:flex; }
+.nb-zoom img { max-width:96vw; max-height:96vh; }
 @keyframes dcsIndet { 0% { margin-left:-34%; } 100% { margin-left:100%; } }
 /* === 环境管理面板（2026-09-22）=== */
 #env-manager { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:none; align-items:center; justify-content:center; }
@@ -1700,7 +1763,7 @@ var I18N = {
     'subtitle':'自进化多组学生信分析平台','new_session':'+ 新建会话','new_session_title':'新会话','search_session':'🔍 搜索会话...',
     'batch_mgmt':'☑ 批量管理','batch_delete':'🗑 删除选中','batch_cancel':'✕ 取消',
     'nav_chat':'💬 对话分析','nav_results':'📊 分析结果','nav_files':'📁 文件浏览','nav_kb':'📚 知识库',
-    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'后台任务','nav_cluster':'🖧 远端集群','nav_dcs':'☁️ DCS 云','nav_env_mgr':'🧩 环境管理',
+    'nav_skills':'🧩 Skill库','nav_settings':'⚙️ 设置','nav_memory':'🧠 记忆','nav_context':'📐 上下文窗口','nav_weixin':'💬 微信消息','nav_tasks':'后台任务','nav_notebook':'总端','nav_cluster':'🖧 远端集群','nav_dcs':'☁️ DCS 云','nav_env_mgr':'🧩 环境管理',
     'settings_title':'设置','connected_models':'已连接的模型 (交互框可切换)','global_model':'全局','session_model':'当前会话',
     'results_title':'分析结果','files_title':'文件浏览','refresh':'🔄 刷新','tab_figures':'🖼️ 图片','tab_files':'📁 文件','back':'← 返回',
     'view':'查看','download':'下载','download_file':'⬇ 下载文件','download_trans':'⬇ 下载译文','open_preview':'打开完整预览','binary_no_preview':'二进制文件，无法文本预览',
@@ -1790,7 +1853,7 @@ var I18N = {
     'subtitle':'Self-evolving multi-omics bioinformatics platform','new_session':'+ New Session','new_session_title':'New Session','search_session':'🔍 Search sessions...',
     'batch_mgmt':'☑ Batch','batch_delete':'🗑 Delete selected','batch_cancel':'✕ Cancel',
     'nav_chat':'💬 Chat','nav_results':'📊 Results','nav_files':'📁 Files','nav_kb':'📚 Knowledge',
-    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'Background Tasks','nav_cluster':'🖧 Cluster','nav_dcs':'☁️ DCS Cloud','nav_env_mgr':'🧩 Environments',
+    'nav_skills':'🧩 Skills','nav_settings':'⚙️ Settings','nav_memory':'🧠 Memory','nav_context':'📐 Context Window','nav_weixin':'💬 WeChat','nav_tasks':'Background Tasks','nav_notebook':'Notebook','nav_cluster':'🖧 Cluster','nav_dcs':'☁️ DCS Cloud','nav_env_mgr':'🧩 Environments',
     'settings_title':'Settings','connected_models':'Connected models (switchable in chat)','global_model':'Global','session_model':'Current session',
     'results_title':'Analysis Results','files_title':'Files','refresh':'🔄 Refresh','tab_figures':'🖼️ Images','tab_files':'📁 Files','back':'← Back',
     'view':'View','download':'Download','download_file':'⬇ Download file','download_trans':'⬇ Download translation','open_preview':'Open full preview','binary_no_preview':'Binary file, text preview not available',
@@ -1947,6 +2010,9 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div style="display:flex; align-items:center; min-width:0; flex:1;">
         <div class="title" id="chat-title">生信分析对话</div>
         <div class="chat-nav-chip" id="nav-tasks" onclick="toggleTaskDock()" title="正在跑 / 在排队的后台任务（跨会话，点开看详情）">⏱ <span data-i18n="nav_tasks">后台任务</span><span class="chat-nav-badge" id="task-nav-badge"></span></div>
+        <!-- 2026-10-09: 📓 Notebook 总端 —— 顶部横栏入口（后台任务旁边）。点开像接了个 Jupyter：
+             看集群常驻 R 会话里跑过的 cell、代码、输出与图，还有正在跑的活。 -->
+        <div class="chat-nav-chip" id="nav-notebook" onclick="openNotebook()" title="📓 Notebook 总端：像 Jupyter 一样看集群常驻 R 会话里跑过的 cell / 代码 / 图（大 rds 只读一次）"><span class="nb-dot" id="nb-dot"></span> 📓 <span data-i18n="nav_notebook">总端</span><span class="nb-mini-session" id="nb-session-mini">未接会话</span><span class="chat-nav-badge live" id="nb-badge"></span></div>
       </div>
       <div style="display:flex; align-items:center; gap:12px;">
         <button id="lang-toggle" onclick="toggleUILang()" title="Switch language / 切换语言" style="font-size:11px;padding:2px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;">EN</button>
@@ -16485,6 +16551,8 @@ async function clusterExec() {
     if (btn) { btn.disabled = false; btn.textContent = '执行'; }
     var b2 = document.getElementById('cluster-cmd');
     if (b2) b2.focus();
+    // 📓 总端条跟着刷新：控制台里开/停会话、投代码之后，条上的状态立刻对上
+    if (typeof nbInit === 'function') nbInit();
   }
 }
 
@@ -16495,8 +16563,461 @@ function clusterQuick(action) {
   clusterExec();
 }
 
+// === 📓 Notebook 总端（集群常驻 R 会话的 cell 视图，2026-10-09）===
+// 目标：像接了个 Jupyter —— 历史 cell（代码/输出/图）看得见，新 cell 直接投进同一个常驻进程。
+// 数据全走既有动作（不新增 HTTP 路由）：session_list → session_status → session_cells → session_plot → session_exec。
+// 诚实边界：① 秒级轮询（不是字节流），长 cell 的输出要等这一格跑完才成 cell，但图会边跑边冒；
+//          ② 本地内核（execute_python/execute_r）的变量/图不在这里 —— 这张面板看的是「集群常驻会话」；
+//          ③ 正在跑的 cell 不能中断（打断 = 丢内存里的对象），要停就在控制台 session_stop。
+var _nbSessionId = '', _nbSessions = [], _nbStatus = null, _nbCells = [], _nbPending = [];
+var _nbPlotCache = {}, _nbPlotOrder = [], _nbTimer = null, _nbBarTimer = null;
+var _nbPanelOpen = false, _nbLastBusy = false, _nbLastPlots = '', _nbNote = '', _nbRunBusy = false;
+
+function nbEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function nbFmtMs(ms) {
+  var n = parseInt(ms, 10);
+  if (!n || n < 0) return '';
+  if (n < 1000) return n + ' ms';
+  if (n < 60000) return (n / 1000).toFixed(1) + ' s';
+  var m = Math.floor(n / 60000), s = Math.round((n % 60000) / 1000);
+  return m + ' 分 ' + s + ' 秒';
+}
+
+function nbStatusLine(st) {
+  // 纯函数：session_status 的 payload → 一行状态（总端条 + 面板顶部共用）
+  if (!st) return '未接会话';
+  if (st.status === 'stopped' || st.alive === false) return (st.node || '?') + ' · 已停止（session_start 可恢复）';
+  var bits = [];
+  bits.push(st.node || '?');
+  if (st.pid) bits.push('pid ' + st.pid);
+  bits.push(st.busy ? ('跑 ' + (st.current_request || '…')) : '空闲');
+  if (st.rss_h) bits.push('RSS ' + st.rss_h);
+  if (st.objects) bits.push('对象 ' + st.objects);
+  if (st.readrds_calls !== undefined && st.readrds_calls !== '') bits.push('readRDS ' + st.readrds_calls);
+  if (st.plots_total) bits.push('图 ' + st.plots_total);
+  return bits.join(' · ');
+}
+
+function nbStatusClass(st) {
+  // 纯函数：给状态点/胶囊挑颜色类
+  if (!st) return '';
+  if (st.status === 'stopped' || st.alive === false) return 'dead';
+  return st.busy ? 'busy' : 'on';
+}
+
+function nbBuildExecArgs(code, sessionId) {
+  // 纯函数：Notebook 里运行 = 投给常驻会话；async 避免长 cell 把浏览器那条 fetch 挂死
+  return { action: 'session_exec', session_id: sessionId || '', code: String(code == null ? '' : code), async: true };
+}
+
+function nbSessionOptions(rows) {
+  // 纯函数：session_list 的 sessions → 下拉选项（label 带节点与最后活跃时间，便于认人）
+  var out = [];
+  for (var i = 0; i < (rows || []).length; i++) {
+    var r = rows[i] || {};
+    var label = String(r.id || '');
+    if (r.node) label += ' · ' + r.node;
+    if (r.title) label += ' · ' + r.title;
+    if (r.last_active) label += ' · ' + r.last_active;
+    out.push({ value: String(r.id || ''), label: label });
+  }
+  return out;
+}
+
+function nbRunningPlots(st, limit) {
+  // 纯函数：正在跑的那个 cell 已经冒出来的图（从 status 的 plots_recent 里挑当前请求的）
+  if (!st) return [];
+  var cur = String(st.current_request || ''), out = [], seen = {};
+  var lines = String(st.plots_recent || '').split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var p = lines[i].trim();
+    if (!p || p === '--count--' || p.indexOf('.png') < 0) continue;
+    if (cur && p.split('/').pop().indexOf(cur + '_') !== 0) continue;
+    if (seen[p]) continue;
+    seen[p] = 1;
+    out.push(p);
+    if (out.length >= (limit || 4)) break;
+  }
+  return out;
+}
+
+function nbPlotsOfCells(cells) {
+  // 纯函数：cell 列表里的全部图路径（新→旧，去重；一次只取几张，剩下的滚动时再取）
+  var seen = {}, out = [];
+  for (var i = (cells || []).length - 1; i >= 0; i--) {
+    var ps = (cells[i] && cells[i].plots) || [];
+    for (var j = 0; j < ps.length; j++) {
+      var p = ps[j] && ps[j].path;
+      if (p && !seen[p]) { seen[p] = 1; out.push(p); }
+    }
+  }
+  return out;
+}
+
+function nbCellHtml(c, idx) {
+  // 纯函数：一个历史 cell → HTML（idx = 在 _nbCells 里的下标，用来「复用代码」）
+  var ok = (c && c.status) !== 'error';
+  var cls = ok ? 'ok' : 'err';
+  var h = '<div class="nb-cell ' + cls + '" data-nb-id="' + nbEsc(c && c.id) + '">';
+  h += '<div class="nb-cell-head"><span class="nb-badge ' + cls + '">' + (ok ? '✓ ok' : '✗ error') + '</span>';
+  h += '<span>[' + idx + '] ' + nbEsc(c && c.id) + '</span>';
+  if (c && c.ms) h += '<span>' + nbFmtMs(c.ms) + '</span>';
+  if (c && c.readrds_calls !== undefined && c.readrds_calls !== '') h += '<span>readRDS ' + nbEsc(c.readrds_calls) + '</span>';
+  if (c && c.objects) h += '<span>对象 ' + nbEsc(c.objects) + '</span>';
+  if (c && c.finished) h += '<span>' + nbEsc(c.finished) + '</span>';
+  h += '<span style="flex:1"></span>';
+  h += '<button class="nb-mini" onclick="nbLoadCodeAt(' + idx + ')" title="把这段代码放回下面的输入框">↩ 复用代码</button>';
+  h += '</div>';
+  if (c && c.code) h += '<pre class="nb-code">' + nbEsc(c.code) + '</pre>';
+  if (c && c.output) h += '<pre class="nb-out">' + nbEsc(c.output) + '</pre>';
+  if (c && c.warnings) h += '<pre class="nb-out">⚠️ ' + nbEsc(c.warnings) + '</pre>';
+  if (c && c.error) h += '<pre class="nb-out err">' + nbEsc(c.error) + '</pre>';
+  var ps = (c && c.plots) || [];
+  if (ps.length) {
+    h += '<div class="nb-plots">';
+    for (var i = 0; i < ps.length; i++) {
+      var path = ps[i] && ps[i].path;
+      h += '<div class="nb-plot-ph" data-nb-plot="' + nbEsc(path) + '">🖼 ' + nbEsc(String(path || '').split('/').pop()) + '（载入中…）</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function nbRunningHtml(st, plots) {
+  // 纯函数：正在跑的 cell 卡片（含「边跑边冒」的图）
+  if (!st || !st.busy) return '';
+  var h = '<div class="nb-cell running">';
+  h += '<div class="nb-cell-head"><span class="nb-badge run">⏳ 跑着呢</span>';
+  h += '<span>' + nbEsc(st.current_request || '…') + '</span>';
+  if (st.busy_since) h += '<span>开始于 ' + nbEsc(st.busy_since) + '</span>';
+  h += '<span style="flex:1"></span><span>本会话累计图 ' + nbEsc(st.plots_total || 0) + ' 张</span></div>';
+  if (st.last_result_tail) {
+    var tail = String(st.last_result_tail).split('\n').slice(-12).join('\n');
+    h += '<pre class="nb-out">' + nbEsc(tail) + '</pre>';
+  }
+  var ps = plots || [];
+  if (ps.length) {
+    h += '<div class="nb-plots">';
+    for (var i = 0; i < ps.length; i++) {
+      h += '<div class="nb-plot-ph" data-nb-plot="' + nbEsc(ps[i]) + '">🖼 ' + nbEsc(String(ps[i]).split('/').pop()) + '（载入中…）</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function nbPendingHtml() {
+  // 纯函数：刚投出去、还没成 cell 的那些请求（排队/跑着）
+  if (!_nbPending.length) return '';
+  var h = '';
+  for (var i = 0; i < _nbPending.length; i++) {
+    var p = _nbPending[i] || {};
+    h += '<div class="nb-cell running" data-nb-pending="' + nbEsc(p.id) + '">';
+    h += '<div class="nb-cell-head"><span class="nb-badge run">⏳ 已投递</span><span>' + nbEsc(p.id) + '</span>';
+    if (p.at) h += '<span>' + nbEsc(p.at) + '</span>';
+    h += '<span style="flex:1"></span><span>跑完自动贴回</span></div>';
+    h += '<pre class="nb-code">' + nbEsc(p.code || '') + '</pre>';
+    h += '</div>';
+  }
+  return h;
+}
+
+async function nbCall(payload) {
+  var resp = await fetch('/api/cluster/exec', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  return await resp.json();
+}
+
+function nbNote(msg) {
+  _nbNote = String(msg || '');
+  var el = document.getElementById('nb-hint');
+  if (el) el.textContent = _nbNote || 'Enter 运行 · Shift+Enter 换行 · 跑完（含图）自动贴回上面的 cell';
+}
+
+function nbUpdateBar() {
+  // 顶部横栏那枚「📓 总端」胶囊：状态点 + 会话名 + 小徽标（在跑 / 图数）
+  var dot = document.getElementById('nb-dot');
+  var ses = document.getElementById('nb-session-mini');
+  var badge = document.getElementById('nb-badge');
+  var chip = document.getElementById('nav-notebook');
+  if (dot) {
+    var k = nbStatusClass(_nbStatus);
+    dot.className = k ? ('nb-dot ' + k) : 'nb-dot';
+    dot.title = _nbStatus ? nbStatusLine(_nbStatus) : '未接集群会话：先在 🖧 远端集群控制台里 session_start';
+  }
+  if (ses) ses.textContent = _nbSessionId ? ('会话 ' + _nbSessionId.slice(-6)) : '未接会话';
+  if (badge) {
+    var b = '';
+    if (_nbStatus && _nbStatus.busy) b = '在跑';
+    else if (_nbStatus && _nbStatus.plots_total) b = _nbStatus.plots_total + ' 图';
+    badge.textContent = b ? ('· ' + b) : '';
+  }
+  if (chip) chip.title = _nbStatus
+    ? ('📓 Notebook 总端 —— ' + nbStatusLine(_nbStatus))
+    : '📓 Notebook 总端：像 Jupyter 一样看集群常驻 R 会话里跑过的 cell / 代码 / 图（大 rds 只读一次）';
+}
+
+function nbRenderSessionSelect() {
+  var sel = document.getElementById('nb-session-sel');
+  if (!sel) return;
+  var opts = nbSessionOptions(_nbSessions);
+  sel.innerHTML = '';
+  var o0 = document.createElement('option');
+  o0.value = '';
+  o0.textContent = opts.length ? '（未选择）' : '（本机账本里还没有常驻会话）';
+  sel.appendChild(o0);
+  for (var i = 0; i < opts.length; i++) {
+    var o = document.createElement('option');
+    o.value = opts[i].value;
+    o.textContent = opts[i].label;
+    sel.appendChild(o);
+  }
+  sel.value = _nbSessionId || '';
+}
+
+function nbHasSession(id) {
+  for (var i = 0; i < _nbSessions.length; i++) if (_nbSessions[i] && _nbSessions[i].id === id) return true;
+  return false;
+}
+
+async function nbInit() {
+  // 总端条初始化/刷新：读账本选一个会话（最近活跃的），只发一条 session_list（不 live，快）
+  try {
+    var r = await nbCall({ action: 'session_list' });
+    _nbSessions = (r && r.sessions) || [];
+    if (!_nbSessionId || !nbHasSession(_nbSessionId)) {
+      _nbSessionId = _nbSessions.length ? String(_nbSessions[0].id || '') : '';
+    }
+    nbRenderSessionSelect();
+    if (_nbSessionId) {
+      var st = await nbCall({ action: 'session_status', session_id: _nbSessionId });
+      _nbStatus = (st && st.ok === false) ? null : st;
+      if (_nbStatus && nbHasSession(_nbSessionId)) {
+        // 顺手把账本数据并进来（列表里没有 rss/busy）
+        _nbStatus.session_list_row = _nbSessions[0];
+      }
+    } else {
+      _nbStatus = null;
+    }
+  } catch (e) {
+    nbNote('读会话失败：' + e.message);
+  }
+  nbUpdateBar();
+  if (_nbSessionId && !_nbBarTimer) {
+    _nbBarTimer = setInterval(function () { if (!_nbPanelOpen && _nbSessionId) nbBarTick(); }, 30000);
+  }
+}
+
+async function nbBarTick() {
+  // 面板关着的时候只更新总端条（30 秒一拍，别把 ssh 打成筛子）
+  try {
+    var st = await nbCall({ action: 'session_status', session_id: _nbSessionId });
+    if (st && st.ok !== false) _nbStatus = st;
+  } catch (e) { /* 静默：条上保持上一次状态 */ }
+  nbUpdateBar();
+}
+
+async function nbRefresh(manual) {
+  if (!_nbSessionId) await nbInit();
+  if (!_nbSessionId) { nbRender(); return; }
+  try {
+    var st = await nbCall({ action: 'session_status', session_id: _nbSessionId });
+    if (!st || st.ok === false) {
+      nbNote('✗ ' + ((st && st.error) || '状态查询失败（会话可能被清理了）'));
+      _nbStatus = null;
+      nbUpdateBar();
+      nbRender();
+      return;
+    }
+    _nbStatus = st;
+    nbUpdateBar();
+    var plotsKey = String(st.plots_total || '') + '/' + String(st.plots_last || '');
+    var needCells = manual || _nbCells.length === 0 || plotsKey !== _nbLastPlots || (_nbLastBusy && !st.busy);
+    if (needCells) {
+      var cc = await nbCall({ action: 'session_cells', session_id: _nbSessionId, limit: 20 });
+      if (cc && cc.ok !== false) {
+        _nbCells = cc.cells || [];
+        _nbLastPlots = plotsKey;
+      } else if (cc) {
+        nbNote('✗ ' + (cc.error || 'cell 列表失败'));
+      }
+    }
+    _nbLastBusy = !!st.busy;
+    nbRender();
+  } catch (e) {
+    nbNote('✗ ' + e.message);
+  }
+}
+
+function nbRender() {
+  var box = document.getElementById('nb-cells');
+  var chip = document.getElementById('nb-chip');
+  var line = document.getElementById('nb-stat-line');
+  if (chip) {
+    chip.className = 'nb-chip ' + nbStatusClass(_nbStatus);
+    chip.textContent = _nbStatus ? nbStatusLine(_nbStatus) : '未接会话';
+  }
+  if (line) {
+    line.textContent = _nbStatus ? (nbStatusLine(_nbStatus) + ' · 账本 ' + _nbSessions.length + ' 个会话 · cells ' + _nbCells.length + ' 个')
+                                 : '还没有可看的会话。第一次用：🖧 控制台 →「🧠 会话 · 开常驻」填大 rds 路径 → 执行。';
+  }
+  if (!box) return;
+  // 投递中的那些，一旦变成真 cell 就从「已投递」里去掉
+  if (_nbPending.length && _nbCells.length) {
+    _nbPending = _nbPending.filter(function (p) {
+      for (var i = 0; i < _nbCells.length; i++) if (_nbCells[i].id === p.id) return false;
+      return true;
+    });
+  }
+  var h = nbRunningHtml(_nbStatus, nbRunningPlots(_nbStatus, 4)) + nbPendingHtml();
+  if (!h && !_nbCells.length) {
+    h = '<div class="nb-empty">这个会话还没有 cell。\n'
+      + '在下面输入 R 代码点「▶ 运行」——就是在那个常驻进程里接着跑（大对象不用重读）。\n'
+      + '跑过的 cell 会一条条贴在这里，带代码、输出和自动抓到的图。</div>';
+  }
+  for (var i = 0; i < _nbCells.length; i++) h += nbCellHtml(_nbCells[i], i);
+  box.innerHTML = h;
+  box.scrollTop = box.scrollHeight;
+  nbLoadImages();
+}
+
+async function nbLoadImages() {
+  // 图按需取（一次最多 4 张，避免一次拖几 MB）：session_plot → data URI
+  var phs = document.querySelectorAll('#nb-cells [data-nb-plot]');
+  var budget = 4;
+  for (var i = 0; i < phs.length && budget > 0; i++) {
+    var ph = phs[i];
+    var path = ph.getAttribute('data-nb-plot');
+    if (!path || ph.getAttribute('data-nb-loading') === '1') continue;
+    ph.setAttribute('data-nb-loading', '1');
+    budget--;
+    var uri = _nbPlotCache[path];
+    if (!uri) {
+      try {
+        var r = await nbCall({ action: 'session_plot', session_id: _nbSessionId, path: path });
+        if (!r || r.ok === false) {
+          ph.textContent = '🖼 ' + path.split('/').pop() + '（' + ((r && r.error) || '取图失败') + '）';
+          continue;
+        }
+        uri = (r.data_uri_prefix || 'data:image/png;base64,') + r.b64;
+        _nbPlotCache[path] = uri;
+        _nbPlotOrder.push(path);
+        if (_nbPlotOrder.length > 40) { delete _nbPlotCache[_nbPlotOrder.shift()]; }
+      } catch (e) {
+        ph.textContent = '🖼 ' + path.split('/').pop() + '（' + e.message + '）';
+        continue;
+      }
+    }
+    var name = path.split('/').pop();
+    var img = document.createElement('img');
+    img.src = uri;
+    img.title = name;
+    img.onclick = nbZoom;
+    ph.parentNode.replaceChild(img, ph);
+  }
+}
+
+function nbZoom(e) {
+  var src = (e && e.currentTarget && e.currentTarget.src) || (e && e.target && e.target.src) || '';
+  if (!src) return;
+  var box = document.getElementById('nb-zoom');
+  var img = document.getElementById('nb-zoom-img');
+  if (img) img.src = src;
+  if (box) box.classList.add('on');
+}
+
+async function nbRun() {
+  if (_nbRunBusy) return;
+  var box = document.getElementById('nb-code');
+  var code = box ? box.value : '';
+  if (!String(code).trim()) { nbNote('先写点 R 代码再运行 —— 例：mm_info()'); return; }
+  if (!_nbSessionId) { nbNote('没有可用的常驻会话：先在 🖧 控制台里「🧠 会话 · 开常驻」起一个。'); return; }
+  var payload = nbBuildExecArgs(code, _nbSessionId);
+  var btn = document.getElementById('nb-run-btn');
+  _nbRunBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '投递中…'; }
+  try {
+    var r = await nbCall(payload);
+    if (!r || r.ok === false) { nbNote('✗ ' + ((r && r.error) || '投递失败')); return; }
+    _nbPending.push({ id: (r && r.request_id) || '(未知请求号)', code: String(code), at: new Date().toTimeString().slice(0, 8) });
+    if (box) box.value = '';
+    nbNote('已投递 ' + ((r && r.request_id) || '') + ' —— 长 cell 可以关掉面板去干别的，回来还在跑。');
+    nbRefresh(true);
+  } catch (e) {
+    nbNote('✗ 请求失败：' + e.message);
+  } finally {
+    _nbRunBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行'; }
+  }
+}
+
+function nbQuick(code) {
+  var box = document.getElementById('nb-code');
+  if (box) box.value = code;
+  nbRun();
+}
+
+function nbKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); nbRun(); }
+}
+
+function nbLoadCodeAt(i) {
+  var c = _nbCells[i];
+  if (!c) return;
+  var box = document.getElementById('nb-code');
+  if (box) { box.value = c.code || ''; box.focus(); }
+  nbNote('已把 [' + i + '] 的代码放回输入框（改完点运行）。');
+}
+
+function nbSessionChange() {
+  var sel = document.getElementById('nb-session-sel');
+  _nbSessionId = sel ? String(sel.value || '') : '';
+  _nbCells = []; _nbPending = []; _nbLastPlots = ''; _nbStatus = null;
+  nbUpdateBar();
+  nbRefresh(true);
+}
+
+function nbRevealConsole() {
+  nbClose();
+  openClusterConsole();
+}
+
+function openNotebook() {
+  var m = document.getElementById('nb-mask');
+  if (!m) return;
+  m.classList.add('on');
+  _nbPanelOpen = true;
+  nbRender();
+  nbRefresh(true);
+  if (!_nbTimer) _nbTimer = setInterval(function () { nbRefresh(false); }, 2500);
+  var t = document.getElementById('nb-code');
+  if (t) t.focus();
+}
+
+function nbClose() {
+  var m = document.getElementById('nb-mask');
+  if (m) m.classList.remove('on');
+  _nbPanelOpen = false;
+  if (_nbTimer) { clearInterval(_nbTimer); _nbTimer = null; }
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && _nbPanelOpen) nbClose();
+});
+
 // 启动后检测
 setTimeout(checkFirstRun, 1000);
+// 📓 总端条：启动时读一次本机账本（最近活跃的常驻会话），之后面板开着自动轮询
+setTimeout(function () { if (typeof nbInit === 'function') nbInit(); }, 1500);
 
 // === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
 // 面板走 /api/dcs/*，与 agent 工具 dcs_cloud 共用同一个 handler（后端 memomics/connectors/dcs_cloud.py）。
@@ -18612,6 +19133,37 @@ async function saveUpdateConfig(mode) {
     <div class="cc-hint" id="cluster-hint"></div>
   </div>
 </div>
+
+<!-- === 📓 Notebook 总端（2026-10-09）：常驻 R 会话的 cell 视图 ===
+     像 Jupyter：每个 cell 的代码 + 输出 + 图（图由 daemon 抓进 plots/，面板按需 session_plot 取回内联）。
+     正在跑的 cell 会在最上面显示「⏳ 跑着呢」卡片，并把已经冒出来的图贴出来（边跑边看）。 -->
+<div class="nb-mask" id="nb-mask">
+  <div class="nb-box">
+    <div class="nb-head">
+      <span class="nb-title">📓 Notebook 总端</span>
+      <select id="nb-session-sel" onchange="nbSessionChange()" title="看哪个常驻会话（集群节点上的 R 进程）"></select>
+      <span class="nb-chip" id="nb-chip">读取中…</span>
+      <span class="nb-spacer" style="flex:1"></span>
+      <button class="nb-mini" onclick="nbRefresh(true)">⟳ 刷新</button>
+      <button class="nb-mini" onclick="nbRevealConsole()" title="切到 🖧 远端集群控制台（开会话 / 跑命令 / 交作业）">🖧 控制台</button>
+      <button class="nb-mini" onclick="nbClose()">✕ 关闭</button>
+    </div>
+    <div class="nb-stat" id="nb-stat-line">—</div>
+    <div class="nb-cells" id="nb-cells"></div>
+    <div class="nb-run">
+      <textarea id="nb-code" rows="3" onkeydown="nbKey(event)"
+        placeholder="R 代码 —— 投给同一个常驻进程接着跑（大 rds 只读一次）&#10;例：DimPlot(musc, reduction = &quot;umap&quot;)&#10;例：mk <- FindMarkers(musc, ident.1 = &quot;MuSC&quot;); head(mk)"></textarea>
+      <div class="nb-runrow">
+        <button class="nb-mini primary" id="nb-run-btn" onclick="nbRun()">▶ 运行</button>
+        <button class="nb-mini" onclick="nbQuick('mm_info()')" title="会话自检：pid/内存/对象/readRDS/图">mm_info()</button>
+        <button class="nb-mini" onclick="nbQuick('mm_reads()')" title="readRDS 审计：这个会话到底读了几次">mm_reads()</button>
+        <button class="nb-mini" onclick="nbQuick('mm_plots()')" title="最近抓到的图">mm_plots()</button>
+        <span class="nb-hint" id="nb-hint">Enter 运行 · Shift+Enter 换行 · 跑完（含图）自动贴回上面的 cell</span>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="nb-zoom" id="nb-zoom" onclick="this.classList.remove('on')"><img id="nb-zoom-img" alt=""></div>
 
 <!-- === 添加节点向导（2026-10-08）：必填标红 → 保存 → 弹密码装公钥 → 验证，三步走 === -->
 <div class="skp-mask" id="cw-mask" style="display:none;">

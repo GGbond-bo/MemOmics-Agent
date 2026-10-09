@@ -13,7 +13,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import time
 import types
 
 import pytest
@@ -210,11 +213,27 @@ def test_save_restore_code(pair):
 def test_daemon_script_present_and_protocol_markers():
     assert os.path.exists(DAEMON), "daemon 脚本不见了：%s" % DAEMON
     src = open(DAEMON, encoding="utf-8").read()
-    for token in ("#MM-RESULT v1", "---OUTPUT---", "---READS---", "queue", "done",
+    for token in ("#MM-RESULT v2", "---OUTPUT---", "---READS---", "queue", "done",
                   "daemon.lock", "readRDS <- function", "mm_save <- function",
-                  "mm_restore <- function", "mm_quit", "setsid"):
+                  "mm_restore <- function", "mm_quit", "setsid",
+                  # 抓图（Notebook 总端）：默认设备改写 + 每表达式收尾 + 图清单分段
+                  "options(device = .mm_device)", ".mm_close_own_device", ".mm_eval_code",
+                  "---PLOTS---", "mm_plots <- function", "plots_total"):
         assert token in src, "daemon 少了协议标记：%s" % token
     assert "\r\n" not in src, "daemon 脚本必须是 LF（CRLF 会让远端 R 报 \\r 语法错）"
+
+
+def test_daemon_plot_flush_is_per_expression():
+    """抓图的关键：每个顶层表达式后关掉我们开的设备，否则一个 cell 里第二张图会覆盖第一张。"""
+    src = open(DAEMON, encoding="utf-8").read()
+    body = re.search(r"\.mm_eval_code <- function.*?\n\}", src, re.S)
+    assert body, "daemon 里找不到 .mm_eval_code"
+    text = body.group(0)
+    assert ".mm_close_own_device()" in text, ".mm_eval_code 丢了逐表达式收尾 → 会只剩最后一张图"
+    assert "withVisible(eval(" in text, ".mm_eval_code 丢了 print.eval 语义（可见值要打印）"
+    dev = re.search(r"\.mm_device <- function.*?\n\}", src, re.S)
+    assert dev and "plots$dev <- grDevices::dev.cur()" in dev.group(0), \
+        ".mm_device 没记住自己开的设备号（会导致误关用户自己的设备）"
 
 
 def test_daemon_restore_resolves_bare_name_with_rds_suffix():
@@ -233,12 +252,14 @@ def test_daemon_restore_resolves_bare_name_with_rds_suffix():
 def test_remote_cluster_wiring(pair):
     cs, rc = pair
     for act in ("session_start", "session_exec", "session_save", "session_restore",
-                "session_status", "session_stop", "session_list"):
+                "session_status", "session_stop", "session_list",
+                "session_cells", "session_plot"):
         assert act in rc._ACTIONS, "remote_cluster 没接动作：%s" % act
         assert act in rc.SCHEMA["parameters"]["properties"]["action"]["enum"]
     assert "session" in rc._DEFAULT_CFG
     # 转发函数真的存在且能指向 cluster_session
     assert callable(rc._action_session_status)
+    assert callable(rc._action_session_cells) and callable(rc._action_session_plot)
     # 会话动作的节点解析：账本里没有会话时给出可操作提示，而不是 needs_node 糊脸
     out = json.loads(rc.remote_cluster_handler({"action": "session_status"}))
     assert out["status"] == "error" and "session_list" in out.get("hint", "")
@@ -393,3 +414,208 @@ def test_new_marker_not_included_override(tmp_path):
     assert m["not_included"] == []                     # 会话不背「没矩阵」的锅
     m2 = lc.new_marker("light-1", "精简缓存", ["/hw/a.rds"], remote=True, cache_root="/hw/c")
     assert m2["not_included"] == ["expression_matrix", "counts", "scale.data"]  # 默认不变
+
+
+# ------------------------------------------------------------------ Notebook 总端（cell 视图 + 抓图）
+# 设计见 references/persistent-r-session.md：session_cells 一次 ssh 拉回最近 N 个 cell，
+# session_plot 按 base64 取一张图内联；图由 daemon 的默认设备改写自动落到 plots/。
+
+
+def test_parse_res_plots_section(pair):
+    cs, _rc = pair
+    text = "\n".join([
+        "#MM-RESULT v2", "id: r-9", "status: ok", "ms: 1234", "started: 2026-10-09 10:00:00",
+        "finished: 2026-10-09 10:00:01", "readrds_calls: 1", "objects: 5",
+        "plots: 2", "plots_skipped: 0",
+        "---OUTPUT---", "hello", "---WARNINGS---", "", "---ERROR---", "",
+        "---READS---", "2026-10-09 09:59:00\t661800000\t/hw/MuSC.rds",
+        "---PLOTS---",
+        "/hw/sess/s-9/plots/r-9_01.png\t7524",
+        "/hw/sess/s-9/plots/r-9_02.png\t15733",
+    ])
+    parsed = cs._parse_res(text)
+    assert [p["path"].rsplit("/", 1)[-1] for p in parsed["plots"]] == ["r-9_01.png", "r-9_02.png"]
+    assert parsed["plots"][0]["bytes"] == "7524"
+    assert parsed["plots_skipped"] == "0"
+    assert parsed["readrds_calls"] == 1 and parsed["objects"] == 5
+    # 没有图时是空列表（老版本结果文件同样能解析）
+    plain = cs._parse_res("id: r-1\nstatus: ok\n---OUTPUT---\nx\n---READS---\n")
+    assert plain["plots"] == []
+
+
+def test_cells_command_targets_recent_results(pair):
+    cs, _rc = pair
+    cmd = cs._cells_command("/hw/sess/s-9", 6)
+    assert "cd /hw/sess/s-9" in cmd
+    assert "ls -1t done/*.res.txt" in cmd and "head -n 6" in cmd      # 只要最近的
+    for marker in ("==CELL== ", "==CODE==", "==OUTPUT==", "==PLOTS==", "==END=="):
+        assert marker in cmd
+    # 上限钳制：不会有人拉 1000 个 cell 把 ssh 打爆
+    assert "head -n 60" in cs._cells_command("/x", 1000)
+
+
+def test_cells_from_output_parses_and_strips_header(pair):
+    cs, _rc = pair
+    out = "\n".join([
+        "==CELL== r-2", "status: ok", "ms: 38900", "started: 2026-10-09 01:52:44",
+        "finished: 2026-10-09 01:53:23", "readrds_calls: 1", "objects: 20",
+        "==CODE==", "#MM-REQ v1 op=eval id=r-2", 'obj <- RunUMAP(obj, reduction = "harmony")',
+        "==OUTPUT==", "UMAP done in 38.9s", "==WARNINGS==", "", "==ERROR==", "", "==PLOTS==",
+        "/hw/s/plots/r-2_01.png\t7524",
+        "==CELL== r-1", "status: error", "ms: 16300", "readrds_calls: 1", "objects: 5",
+        "==CODE==", "#MM-REQ v1 op=eval id=r-1", 'obj <- readRDS("/hw/MuSC.rds")',
+        "==OUTPUT==", "read ok", "==WARNINGS==", "some warning", "==ERROR==", "boom", "==PLOTS==",
+        "==END==",
+    ])
+    cells = cs._cells_from_output(out, 10)
+    assert [c["id"] for c in cells] == ["r-2", "r-1"]
+    assert cells[0]["status"] == "ok" and cells[0]["ms"] == "38900"
+    assert cells[0]["plots"][0]["bytes"] == "7524" and cells[0]["readrds_calls"] == "1"
+    assert cells[1]["status"] == "error" and cells[1]["error"] == "boom"
+    assert cells[1]["plots"] == []
+    # 请求头注释（投递方写的 #MM-REQ）不该出现在展示的代码里
+    assert all("#MM-REQ" not in c["code"] for c in cells)
+    assert "RunUMAP" in cells[0]["code"] and "readRDS" in cells[1]["code"]
+
+
+def test_action_cells_reverses_to_notebook_order(pair, monkeypatch):
+    cs, rc = pair
+    cs._registry_upsert({"id": "s-nb", "node": "ssh23", "dir": "/wd/sess/s-nb", "status": "active"})
+    out = "\n".join([
+        "==CELL== r-2", "status: ok", "ms: 39000", "readrds_calls: 1", "objects: 20",
+        "==CODE==", 'obj <- RunUMAP(obj)', "==OUTPUT==", "umap ok",
+        "==WARNINGS==", "", "==ERROR==", "", "==PLOTS==", "/wd/sess/s-nb/plots/r-2_01.png\t900",
+        "==CELL== r-1", "status: ok", "ms: 16000", "readrds_calls: 1", "objects: 5",
+        "==CODE==", 'obj <- readRDS("/hw/MuSC.rds")', "==OUTPUT==", "read ok",
+        "==WARNINGS==", "", "==ERROR==", "", "==PLOTS==",
+        "==END==",
+    ])
+    fake = _wire_status(cs, rc, monkeypatch, out)
+    payload = json.loads(cs.action_cells({}, {"session_id": "s-nb", "limit": 4}))
+    assert payload["status"] == "ok" and payload["session_id"] == "s-nb"
+    assert [c["id"] for c in payload["cells"]] == ["r-1", "r-2"], "notebook 顺序应是旧的在上"
+    assert payload["count"] == 2 and payload["cells"][1]["plots"][0]["path"].endswith("r-2_01.png")
+    assert any("head -n 4" in c for c in fake.commands), "limit 没透传到远端命令"
+    # 会话目录不在时给可操作报错（而不是空 notebook）
+    fake2 = _wire_status(cs, rc, monkeypatch, "MM_NO_DIR")
+    err = json.loads(cs.action_cells({}, {"session_id": "s-nb"}))
+    assert err["status"] == "error" and "session_list" in err["error"]
+
+
+def test_action_plot_returns_data_uri_and_guards(pair, monkeypatch):
+    cs, rc = pair
+    cs._registry_upsert({"id": "s-plot", "node": "ssh23", "dir": "/wd/sess/s-plot",
+                         "status": "active"})
+    b64 = "iVBORw0KGgoAAAANSUhEUg=="
+    fake = _wire_status(cs, rc, monkeypatch, "MM_BYTES:1234\nMM_NAME:r-9_01.png\n" + b64)
+    payload = json.loads(cs.action_plot({}, {"session_id": "s-plot", "path": "plots/r-9_01.png"}))
+    assert payload["status"] == "ok"
+    assert payload["mime"] == "image/png" and payload["b64"] == b64
+    assert payload["data_uri_prefix"] == "data:image/png;base64,"
+    cmd = fake.commands[0]
+    assert 'case "$F" in "$D"/*)' in cmd, "缺少「只允许会话目录内」的闸门"
+    assert "MM_TOOBIG" in cmd and "base64 -w0" in cmd
+    assert "4000000" in cmd, "默认体积上限没进命令"
+
+
+def test_action_plot_error_paths(pair, monkeypatch):
+    cs, rc = pair
+    cs._registry_upsert({"id": "s-plot2", "node": "ssh23", "dir": "/wd/sess/s-plot2",
+                         "status": "active"})
+    cases = [
+        ("MM_OUTSIDE", "拒绝"),
+        ("MM_MISSING", "不存在"),
+        ("MM_BADTYPE", "只支持"),
+        ("MM_TOOBIG:9999999", "太大"),
+    ]
+    for out, expect in cases:
+        _wire_status(cs, rc, monkeypatch, out)
+        payload = json.loads(cs.action_plot({}, {"session_id": "s-plot2", "path": "plots/x.png"}))
+        assert payload["status"] == "error", out
+        assert expect in (payload.get("error") or ""), (out, payload.get("error"))
+    # 没给 path：直接告诉怎么用，不发命令
+    fake = _wire_status(cs, rc, monkeypatch, "")
+    payload = json.loads(cs.action_plot({}, {"session_id": "s-plot2"}))
+    assert payload["status"] == "error" and "plots/" in payload["error"]
+    assert fake.commands == []
+
+
+# ------------------------------------------------------------------ daemon 抓图：本机真跑一遍 R
+RSCRIPT = shutil.which("Rscript") or shutil.which("Rscript.exe")
+
+
+@pytest.mark.integration
+@pytest.mark.sessions
+@pytest.mark.skipif(not RSCRIPT, reason="本机没有 Rscript，跳过 daemon 抓图实测")
+def test_daemon_plot_capture_end_to_end(tmp_path):
+    """真起一个 daemon（本机 Rscript），投两个请求：画图那个要落 PNG 且清单进结果。
+
+    这是抓图链路的唯一真相来源：R 的默认设备是复用的，如果不在每个表达式后收尾，
+    「画两张图」只会留下最后一张 —— 静态标记检查不出这个，必须真跑 R。
+    """
+    work = str(tmp_path / "sess")
+    for d in ("queue", "run", "done", "ckpt", "out", "staging", "plots"):
+        os.makedirs(os.path.join(work, d), exist_ok=True)
+    log = open(os.path.join(work, "daemon.out.log"), "wb")
+    proc = subprocess.Popen([RSCRIPT, DAEMON, "--dir", work], stdout=log,
+                            stderr=subprocess.STDOUT, cwd=work)
+    try:
+        def state():
+            try:
+                txt = open(os.path.join(work, "state.txt"), encoding="utf-8", errors="replace").read()
+            except OSError:
+                return {}
+            return dict(ln.split("=", 1) for ln in txt.splitlines() if "=" in ln)
+
+        deadline = time.time() + 90
+        while time.time() < deadline and state().get("status") not in ("idle", "busy"):
+            time.sleep(0.3)
+        assert state().get("pid"), "daemon 没起来（看 session.log）"
+
+        def run_cell(rid, code, timeout=120):
+            stage = os.path.join(work, "staging", rid + ".req.R")
+            with open(stage, "w", encoding="utf-8", newline="\n") as f:
+                f.write("#MM-REQ 1 op=eval id=%s\n" % rid + code + "\n")
+            os.replace(stage, os.path.join(work, "queue", rid + ".req.R"))
+            res = os.path.join(work, "done", rid + ".res.txt")
+            end = time.time() + timeout
+            while time.time() < end:
+                if os.path.exists(res):
+                    return open(res, encoding="utf-8", errors="replace").read()
+                time.sleep(0.3)
+            raise AssertionError("等结果超时：" + rid)
+
+        t1 = run_cell("r-e2e-1", 'plot(1:10, main = "a")\nhist(rnorm(100))\ncat("two plots done\\n")')
+        p1 = cs_parse_plots(t1)
+        assert len(p1) == 2, "两个表达式应该落两张图（被覆盖 = 只剩 1 张）：%r" % (p1,)
+        assert "two plots done" in t1
+        t2 = run_cell("r-e2e-2", 'cat("no plot\\n")')
+        assert cs_parse_plots(t2) == [], "第二个 cell 不该继承上一个 cell 的图"
+        files = sorted(f for f in os.listdir(os.path.join(work, "plots")) if f.endswith(".png"))
+        assert len(files) == 2, files
+        for f in files:
+            raw = open(os.path.join(work, "plots", f), "rb").read(8)
+            assert raw == b"\x89PNG\r\n\x1a\n", "%s 不是合法 PNG" % f
+            assert os.path.getsize(os.path.join(work, "plots", f)) > 1000
+        assert state().get("plots_total") == "2"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except Exception:
+            proc.kill()
+        log.close()
+
+
+def cs_parse_plots(res_text):
+    """从结果文本里读 ---PLOTS--- 分段（测试自己的小解析器，别依赖被测代码）。"""
+    out, grab = [], False
+    for ln in res_text.splitlines():
+        if ln.strip() == "---PLOTS---":
+            grab = True
+            continue
+        if ln.strip().startswith("---") and grab:
+            grab = False
+        if grab and ln.strip():
+            out.append(ln.split("\t")[0])
+    return out

@@ -2030,15 +2030,22 @@ def _glob_local(raw: str, root: Path) -> list:
     return out
 
 
+# 远端展开通配符用的 python 一句话：**必须 py2/py3 双兼容**。
+# 实测踩坑（2026-10-09，ssh23）：节点上只有 /usr/bin/python = Python 2.7.5，没有 python3；
+# 原来的 `[print(...) for p in ps]` 在 py2 里是语法错误（print 是语句），整条 pull/locate 通配符
+# 直接报 SyntaxError「远端没找到」。所以：不用 print()、不用 f-string，只留两边都合法的写法。
 _REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
                    '[ps.extend(glob.glob(p)) for p in sys.argv[1:]];'
                    'ps=sorted(set(ps))[:50];'
-                   '[print(("D" if os.path.isdir(p) else "F")+":"+'
-                   'str(os.path.getsize(p) if os.path.isfile(p) else 0)+":"+p) for p in ps]')
+                   'sys.stdout.write("\\n".join([("D" if os.path.isdir(p) else "F")+":"+'
+                   'str(os.path.getsize(p) if os.path.isfile(p) else 0)+":"+p for p in ps]))')
 
 
 def _locate_remote_glob(conn, cands: list, out: dict) -> dict:
-    """远端通配符：借节点上的 python3 展开（shell 里带引号的 glob 不会自己展开）。"""
+    """远端通配符：借节点上的 python 展开（shell 里带引号的 glob 不会自己展开）。
+
+    先试 python3 再退 python —— 有些节点（ssh23）只有 Python 2.7.5，所以脚本本身要 py2 也能跑。
+    """
     pats = " ".join(shlex.quote(c) for c in cands if c)
     cmd = ("for PY in python3 python; do command -v $PY >/dev/null 2>&1 || continue; "
            "$PY -c '%s' %s && break; done" % (_REMOTE_GLOB_PY, pats))
@@ -2499,6 +2506,16 @@ def _action_session_list(cfg: dict, args: dict) -> str:
     return cs.action_list(cfg, args)
 
 
+def _action_session_cells(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_cells(cfg, args)
+
+
+def _action_session_plot(cfg: dict, args: dict) -> str:
+    from memomics.bio_tools import cluster_session as cs
+    return cs.action_plot(cfg, args)
+
+
 _ACTIONS = {
     "locate": _action_locate,
     "nodes": _action_nodes,
@@ -2519,6 +2536,8 @@ _ACTIONS = {
     "session_status": _action_session_status,
     "session_stop": _action_session_stop,
     "session_list": _action_session_list,
+    "session_cells": _action_session_cells,
+    "session_plot": _action_session_plot,
 }
 
 
@@ -2644,7 +2663,8 @@ SCHEMA = {
         "避免手滑把几百 GB 的 BAM 拖回本机。\n"
         "  • jobs   —— 列队列与最近提交记录。\n"
         "  • session_start / session_exec / session_save / session_restore / session_status / "
-        "session_stop / session_list —— **常驻 R 会话（kernel 式持久化）**，专治「大输入读一次一直用」：\n"
+        "session_stop / session_list / session_cells / session_plot —— **常驻 R 会话（kernel 式持久化）**，"
+        "专治「大输入读一次一直用」：\n"
         "      session_start 在节点上起一个常驻 R 进程（setsid 常驻，ps/MobaXterm 里看得见，不开公网端口）；"
         "带 input=<大 rds 路径> 就先**同步读一次**进内存（读了几秒、对象名、readRDS 审计都会回报）。\n"
         "      随后 session_exec 投 R 代码（同一个进程、同一个 globalenv）：FindMarkers / CellChat / "
@@ -2656,6 +2676,9 @@ SCHEMA = {
         "② 会话内可调 mm_info() / mm_reads() / mm_save() / mm_restore() / mm_quit()；"
         "③ 铁规 10 的大输入流程：用户要求开常驻会话本身就是在回答「要不要持久化」（工具会自动落标记），"
         "但**别在用户拒绝持久化时偷偷开会话**；④ 会话占内存，用完记得 session_stop。\n"
+        "      session_cells / session_plot 是 **Notebook 总端**用的读侧：session_cells 一次拉回最近 N 个 cell"
+        "（代码 + 输出尾 + 状态 + 图清单），session_plot 把 plots/ 里的一张图按 base64 取回来内联显示。"
+        "会话里画的图会自动抓成 plots/<请求号>_NN.png（默认设备改写，一个顶层表达式一张）。\n"
         "  • locate —— **判定一个路径在本地还是在集群上**（用户没说数据在哪时先跑这个，再决定在哪儿算）；"
         "远端没配置时也能用，只报本地那一半。\n"
         "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
@@ -2702,7 +2725,8 @@ SCHEMA = {
                 "enum": ["locate", "nodes", "check", "run", "push", "pull", "submit", "status",
                          "logs", "cancel", "jobs",
                          "session_start", "session_exec", "session_save", "session_restore",
-                         "session_status", "session_stop", "session_list"],
+                         "session_status", "session_stop", "session_list",
+                         "session_cells", "session_plot"],
                 "description": "要执行的动作",
             },
             "node": {
@@ -2733,8 +2757,12 @@ SCHEMA = {
             "dry_run": {"type": "boolean", "description": "submit 时 true = 只生成脚本不提交"},
             "path": {"type": "string",
                      "description": ("locate：要判定的路径（用用户消息里的原话，本地/远端都行）；"
-                                     "logs：直接指定远端日志文件路径")},
+                                     "logs：直接指定远端日志文件路径；"
+                                     "session_plot：要取的图（相对会话目录，如 plots/<请求号>_01.png，"
+                                     "只能是会话目录内的 png/jpg/svg/pdf）")},
             "lines": {"type": "integer", "description": "logs：看末尾多少行（默认 100）"},
+            "limit": {"type": "integer",
+                      "description": "session_cells：拉回最近多少个 cell（默认 12，上限 60）"},
             "max_mb": {"type": "number",
                        "description": ("pull：允许拉回的最大体积（MB，默认 %d）。超过会返回 "
                                        "status=too_large 并拒绝下载——先问用户；确认要拉再显式给更大的值。"
