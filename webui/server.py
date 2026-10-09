@@ -11912,12 +11912,12 @@ async def update_apply(payload: dict):
         new_local = _local_version_info()
         _UPDATE_TASK["running"] = False
         _UPDATE_TASK["stage"] = "done"
-        _msg = f"已覆盖 {copied} 个代码文件"
+        _msg = f"已覆盖 {copied} 个代码文件到 {MEMOMICS_DIR}" + ("" if os.path.basename(os.path.normpath(extract_root)) == os.path.basename(os.path.normpath(MEMOMICS_DIR)) else f"（安装目录名 {os.path.basename(os.path.normpath(MEMOMICS_DIR))} 与包内目录名不同，已按实际运行目录覆盖，不用改名）")
         if _hmig.startswith(("renamed", "merged")):
             _msg += "；检测到覆盖升级，已自动迁移旧数据目录（hermes_home→memomics_home）"
         return {"ok": True, "message": _msg, "fix_log": fix_log,
                 "new_version": new_local.get("version"), "restart_required": True,
-                "asset_size_mb": remote.get("asset_size_mb")}
+                "install_dir": MEMOMICS_DIR, "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:
         _UPDATE_TASK["running"] = False
         _UPDATE_TASK["error"] = str(e)

@@ -19488,7 +19488,7 @@ function introCfg() {
   var clipOk = c.clip === 'off' || INTRO_CLIPS.some(function (x) { return x.id === c.clip; });
   var whenOk = INTRO_WHENS.some(function (x) { return x.id === c.when; });
   return {
-    clip: clipOk ? c.clip : 'brand',
+    clip: clipOk ? c.clip : 'off',   // 2026-10-09: 默认不播片头（无片头=默认；用户想开去「🎬 片头设置」）
     when: whenOk ? c.when : 'always',
     fit: c.fit === 'contain' ? 'contain' : 'cover',
     brand: c.brand === 'deepseek' ? 'deepseek' : 'memomics'

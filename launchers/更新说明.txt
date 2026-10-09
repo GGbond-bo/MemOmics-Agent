@@ -1,0 +1,37 @@
+﻿MemOmics 更新包说明（构建日期 2026-10-09 / 版本号 v2026-10-09）
+==============================================================
+
+【这个包是什么】
+  MemOmics-update.zip = 轻量代码更新包（不含内置 Python/Miniconda、不含文献库与知识库）。
+  安装目录里的用户数据（memomics_home、results、.venv 等）不会被覆盖，也不会被删除。
+
+【推荐：让 MemOmics 自己更新（最省事）】
+  打开 MemOmics →「检查更新」→ 一键应用 → 按提示重启。
+  一键更新不需要目录名匹配：它把包覆盖到"当前正在运行的那份代码所在的目录"，
+  所以安装目录叫 MemOmics / MemOmics-Agent / MemOmics-2 … 都能正常更新。
+
+【手动更新（三步）】
+  1) 确认安装目录：就是双击「启动.bat」（macOS/Linux 是 start.sh）所在的文件夹，
+     里面能看到 webui、memomics_home、hermes-agent 这些子目录。目录名是什么都行。
+  2) 覆盖（二选一）：
+     · 推荐用包内脚本（自动找安装目录、只覆盖代码、跳过用户数据、不删除任何文件）：
+         Windows：双击 update_windows.bat
+         macOS/Linux：chmod +x update_macos_linux.sh && ./update_macos_linux.sh
+     · 手动：把本包解压出的全部内容复制进安装目录，提示覆盖时选"全部覆盖"。
+       注意不要把 memomics_home 里的 config.yaml / state.db / memories 等用户数据覆盖掉。
+  3) 重启：关闭 MemOmics 后重新启动（Windows 双击「启动.bat」；macOS/Linux 重跑 start.sh）。
+
+【目录名对不上怎么办】
+  · 旧版本（≤2026-09-10）的数据目录叫 hermes_home：本版首次启动会自动迁移为 memomics_home
+    （只搬不删；旧目录改名为 hermes_home.migrated_<时间戳> 备份；config.yaml 内路径同步改）。
+  · 更早的 update 包根目录叫 MemOmics-update：如果你之前解压出过这个文件夹，删掉即可，不影响使用。
+  · 一键更新与包内脚本都不依赖目录名；只有"手动复制"需要你把内容复制进真实的安装目录。
+
+【本版默认设置（新装用户）】
+  · 片头动画：默认关闭（想开：侧栏「🎬 片头设置」）
+  · 界面：浅色主题、不加载背景图（想换：🧠 设置 里的主题/背景）
+  · 文献库 / 知识库：为空，导入自己的文献后即可使用
+  · 技能库：只带产品自带技能（个人沉淀技能不随包分发，用户可以自己积累）
+
+【日期】
+  本更新包构建于 2026-10-09；版本号 v2026-10-09；发布页见 GitHub GGbond-bo/MemOmics-Agent Releases。
