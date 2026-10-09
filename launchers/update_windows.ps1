@@ -1,9 +1,10 @@
 ﻿# MemOmics 更新覆盖脚本（Windows，2026-10-09）
 # 用法：双击同目录的 update_windows.bat；或 右键本文件 →「使用 PowerShell 运行」
-#       加 -Yes 可跳过人工确认（自动化用）。
+#       加 -Yes 可跳过人工确认（自动化用）；自动找不到安装目录时可用 -InstallDir 显式指定：
+#         powershell -File update_windows.ps1 -InstallDir "D:\apps\MemOmics-Agent"
 # 特点：自动定位安装目录（不依赖文件夹名字）→ 只覆盖代码 → 跳过用户数据 → 不删除任何文件。
 [CmdletBinding()]
-param([switch]$Yes)
+param([switch]$Yes, [string]$InstallDir = '')
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -55,7 +56,11 @@ foreach ($c in $cands) {
         if ($recorded -and (Test-InstallDir $recorded)) { $preferred = (Resolve-Path -LiteralPath $recorded).Path; break }
     }
 }
-if ($preferred) {
+if ($InstallDir) {
+    if (-not (Test-InstallDir $InstallDir)) { Write-Host "[X] -InstallDir 指向的目录不像 MemOmics 安装目录: $InstallDir" -ForegroundColor Red; exit 1 }
+    Write-Host "  按 -InstallDir 指定的安装目录: $((Resolve-Path -LiteralPath $InstallDir).Path)" -ForegroundColor Green
+    $install = (Resolve-Path -LiteralPath $InstallDir).Path
+} elseif ($preferred) {
     Write-Host "  按 memomics_home\.install_path 记录的安装目录: $preferred" -ForegroundColor Green
     $install = $preferred
 } elseif ($cands.Count -eq 1) {

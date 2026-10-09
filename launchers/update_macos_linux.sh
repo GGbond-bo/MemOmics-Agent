@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # MemOmics 更新覆盖脚本（macOS / Linux，2026-10-09）
-# 用法: chmod +x update_macos_linux.sh && ./update_macos_linux.sh [-y]
+# 用法: chmod +x update_macos_linux.sh && ./update_macos_linux.sh [-y] [安装目录]
+#   -y 跳过确认；自动找不到安装目录时可显式给一个路径: ./update_macos_linux.sh -y /opt/MemOmics-Agent
 # 特点：自动定位安装目录（不依赖文件夹名字）→ 只覆盖代码 → 跳过用户数据 → 不删除任何文件。
 set -euo pipefail
 
 PKG="$(cd "$(dirname "$0")" && pwd)"
 YES=0
-[ "${1:-}" = "-y" ] && YES=1
+INSTALL_ARG=""
+for a in "$@"; do
+  case "$a" in
+    -y|--yes) YES=1 ;;
+    *) INSTALL_ARG="$a" ;;
+  esac
+done
 
 if [ ! -f "$PKG/webui/server.py" ]; then
   echo "[X] 本脚本必须放在更新包（MemOmics 文件夹）内运行 —— 当前目录没有 webui/server.py"
@@ -46,6 +53,12 @@ found=("${uniq_found[@]:-}")
 
 # .install_path 记录的路径优先
 INSTALL=""
+if [ -n "${INSTALL_ARG:-}" ]; then
+  is_install "$INSTALL_ARG" || { echo "[X] 指定的安装目录不像 MemOmics 安装目录: $INSTALL_ARG"; exit 1; }
+  INSTALL="$(cd "$INSTALL_ARG" && pwd)"
+  echo "  按参数指定的安装目录: $INSTALL"
+fi
+if [ -z "$INSTALL" ]; then
 for f in "${found[@]:-}"; do
   ap="$f/memomics_home/.install_path"
   if [ -f "$ap" ]; then
@@ -53,6 +66,7 @@ for f in "${found[@]:-}"; do
     if is_install "$rec"; then INSTALL="$(cd "$rec" && pwd)"; echo "  按 memomics_home/.install_path 记录的安装目录: $INSTALL"; break; fi
   fi
 done
+fi
 if [ -z "$INSTALL" ]; then
   n="${#found[@]}"
   if [ "$n" = "1" ]; then

@@ -17,6 +17,10 @@
      · 推荐用包内脚本（自动找安装目录、只覆盖代码、跳过用户数据、不删除任何文件）：
          Windows：双击 update_windows.bat
          macOS/Linux：chmod +x update_macos_linux.sh && ./update_macos_linux.sh
+       脚本自动找不到安装目录时（比如装在别的盘、别的名字），可以手动把安装目录告诉它：
+         Windows：右键 update_windows.ps1 →「使用 PowerShell 运行」，或在命令行执行
+                  powershell -File update_windows.ps1 -InstallDir "D:\apps\MemOmics-Agent"
+         macOS/Linux：./update_macos_linux.sh -y "/opt/MemOmics-Agent"
      · 手动：把本包解压出的全部内容复制进安装目录，提示覆盖时选"全部覆盖"。
        注意不要把 memomics_home 里的 config.yaml / state.db / memories 等用户数据覆盖掉。
   3) 重启：关闭 MemOmics 后重新启动（Windows 双击「启动.bat」；macOS/Linux 重跑 start.sh）。
