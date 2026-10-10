@@ -424,8 +424,16 @@ def _select_node(cfg: dict, requested: str = ""):
         for name, node in table.items():
             if name.lower() == default_node.lower():
                 return node, name, None
+        # 2026-10-10（用户报「装公钥失败：remote.default_node='https://…' 不在 nodes 里」）：
+        # 只配了一个节点时，default_node 写错了不该把用户挡在门外 —— 一个节点谈不上歧义，直接用。
+        if len(table) == 1:
+            name = next(iter(table))
+            node = dict(table[name])
+            node["_note"] = ("⚠️ remote.default_node=%r 不是已配置的节点名，已自动改用唯一的节点 %r"
+                             "（建议在「⚙️ 配置」里把默认节点清空或改成它）" % (default_node, name))
+            return node, name, None
         return None, "", _err(
-            "remote.default_node=%r 不在 nodes 里，已配置：%s"
+            "remote.default_node=%r 不在 nodes 里，已配置：%s（把默认节点改成其中之一，或清空它、每次点名）"
             % (default_node, "、".join(table)),
             nodes=_nodes_brief(table),
         )

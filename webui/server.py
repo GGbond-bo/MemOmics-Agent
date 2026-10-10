@@ -20349,6 +20349,18 @@ def _cluster_view() -> dict:
     out["config_path"] = str(rc._get_config_path())
     out["tool_visible"] = bool(rc.remote_cluster_enabled())
     out["job_dir_effective"] = cfg.get("job_dir")
+    # 2026-10-10：给前端一个"到底能不能用"的判断 + 还缺哪个字段，别再让用户猜
+    out["ready"] = bool(cfg.get("enabled")) and bool(cfg.get("host") or cfg.get("nodes")) and bool(cfg.get("user"))
+    _miss = []
+    if not cfg.get("enabled"):
+        _miss.append("启用")
+    if not (cfg.get("host") or cfg.get("nodes")):
+        _miss.append("登录节点")
+    if not cfg.get("user"):
+        _miss.append("用户名")
+    if not cfg.get("key"):
+        _miss.append("私钥路径")
+    out["missing"] = _miss
     # 命名节点：既回显「用户显式写了什么」（spec），也回显「实际会连什么」（effective）。
     # effective 由 remote_cluster._node_table 算出来，和真正连的时候用的是同一份逻辑。
     table = rc._node_table(cfg)
@@ -20509,6 +20521,25 @@ def _cluster_write_config(values: dict) -> dict:
             for k, v in old.items():
                 item.setdefault(k, v)
         values["nodes"] = seq
+    # 2026-10-10（用户报「保存后还说没配置远端」+「default_node='https://…' 不在 nodes 里」）：
+    # 落盘前把 default_node 规范化、把"填了 host 却没启用"自动打开，别再让用户对着报错猜。
+    notes = []
+    node_names = [str((x or {}).get("name") or "").strip()
+                  for x in (values.get("nodes") or []) if isinstance(x, dict)]
+    node_names = [x for x in node_names if x]
+    dn = str(merged.get("default_node") or "").strip()
+    if dn and dn not in node_names:
+        if len(node_names) == 1:
+            merged["default_node"] = node_names[0]
+            notes.append("默认节点 %r 不是已配置的节点，已自动改成唯一节点 %r" % (dn, node_names[0]))
+        else:
+            merged.pop("default_node", None)
+            notes.append("默认节点 %r 不在节点列表里，已清空（多节点时请在调用里点名）" % dn)
+    if not merged.get("enabled") and (merged.get("host") or merged.get("nodes")):
+        merged["enabled"] = True
+        notes.append("填了 host/节点但没勾「启用」，已自动启用（不启用时所有集群动作都会报『还没配置远端』）")
+    if merged.get("enabled") and not merged.get("user"):
+        notes.append("还没填「用户名」：SSH 登录需要它，补齐后再保存一次")
     lines = ["remote:"]
     for key in _CLUSTER_FIELDS:
         if key not in merged:
@@ -20545,7 +20576,9 @@ def _cluster_write_config(values: dict) -> dict:
         invalidate_check_fn_cache()  # 让模型侧立刻看到工具出现/消失，不用重启
     except Exception:
         pass
-    return _cluster_view()
+    out = _cluster_view()
+    out["notes"] = notes
+    return out
 
 
 @app.get("/api/cluster/status")
@@ -20719,6 +20752,12 @@ async def api_dcs_bind(request: Request):
     if not pat:
         return {"ok": False, "error": "需要 pat 字段（DCS 个人中心 → 访问令牌 → 创建并复制）"}
     return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "bind", "pat": pat}))
+
+
+@app.post("/api/dcs/diagnose")
+async def api_dcs_diagnose():
+    """🩺 DCS 一键体检（2026-10-10 用户报「新电脑完全无法绑定」后加的排障入口）：逐项查 CLI/版本/站点/PAT/可达性。"""
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "diagnose"}))
 
 
 @app.post("/api/dcs/install_cli")

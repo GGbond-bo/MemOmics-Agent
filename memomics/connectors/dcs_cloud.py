@@ -588,6 +588,60 @@ def _clip(cfg: dict, payload: dict) -> dict:
     return payload
 
 
+def _probe_url(url: str, timeout: int = 8) -> dict:
+    """探站点/API 是否可达（🩺 诊断用；失败不抛）。"""
+    import urllib.request
+    if not url:
+        return {"ok": False, "detail": "未配置"}
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "MemOmics/diagnose"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {"ok": True, "detail": "HTTP %s（站点可达）" % getattr(resp, "status", "?")}
+    except Exception as exc:  # noqa: BLE001
+        code = getattr(exc, "code", None)
+        if code:
+            return {"ok": True, "detail": "HTTP %s（站点可达，返回码非 2xx 属正常）" % code}
+        return {"ok": False, "detail": "%s: %s" % (type(exc).__name__, exc)}
+
+
+def action_diagnose(args: dict) -> dict:
+    """🩺 一键体检：把「为什么绑不上」逐项说清楚（用户 2026-10-10 报新电脑绑不上后加的）。
+
+    诊断本身不需要 PAT、也不受 allow_write 限制 —— 它就是用来排障的。
+    """
+    cfg = load_config()
+    items = []
+    cli = resolve_cli(cfg)
+    items.append({"check": "官方 dcs CLI", "ok": bool(cli),
+                  "detail": cli or ("未找到（绑定 PAT 时会自动从官方 CDN 下载安装；"
+                                    "若下载失败＝公司网络/代理问题，手动跑仓库里的 scripts/install_dcs_cli.ps1）")})
+    if cli:
+        r = _run_cli(["--version"], cfg=cfg, timeout=45, with_json_output=False)
+        out = (r.get("stdout_tail") or r.get("message") or "").strip()
+        items.append({"check": "CLI 能跑起来", "ok": bool(r.get("ok")), "detail": out[:160] or "无输出"})
+    base = str(cfg.get("base_url") or "").strip()
+    items.append({"check": "站点 base_url", "ok": bool(base),
+                  "detail": base or ("未配置（默认 %s）" % _DEFAULT_CFG["base_url"])})
+    reach = _probe_url(base or _DEFAULT_CFG["base_url"])
+    items.append({"check": "站点可达", "ok": reach["ok"], "detail": reach["detail"]})
+    cred = read_credential() or {}
+    pat = str(cred.get("pat") or "")
+    pat_ok = pat.startswith("dcs_pat_") and len(pat) > 24
+    items.append({"check": "本机 PAT", "ok": pat_ok,
+                  "detail": (cred.get("masked") or "未绑定")
+                            + ("" if pat_ok else "（PAT 应以 dcs_pat_ 开头；去 DCS 个人中心 → 访问令牌 重新创建）")})
+    ok_all = all(i["ok"] for i in items)
+    return {
+        "status": "ok" if ok_all else "warn",
+        "items": items,
+        "cli_path": cli or "",
+        "base_url": base,
+        "hint": ("全部正常 ✅ 直接点「绑定 PAT」或重试绑定。" if ok_all else
+                 "按上面 ❌ 那项处理；CLI 下载失败就手动跑 scripts/install_dcs_cli.ps1；"
+                 "站点地址不对（比如用的是别的片区）就在「⚙️ 设置 → 站点」改。"),
+    }
+
+
 def action_status(args: dict) -> dict:
     cfg = load_config()
     cli = resolve_cli(cfg)
@@ -1858,6 +1912,7 @@ _ACTIONS = {
     "status": action_status,
     "bind": action_bind,
     "install_cli": action_install_cli,
+    "diagnose": action_diagnose,
     "unbind": action_unbind,
     "projects": action_projects,
     "use_project": action_use_project,
@@ -1887,11 +1942,11 @@ def dcs_cloud_handler(args: dict | None = None, **kwargs):
     if action not in _ACTIONS:
         return json.dumps(_err("未知 action: %r（可选：%s）" % (action, ", ".join(sorted(_ACTIONS)))),
                           ensure_ascii=False, indent=2)
-    if not cfg.get("enabled") and action not in ("status", "bind", "unbind", "install_cli"):
+    if not cfg.get("enabled") and action not in ("status", "bind", "unbind", "install_cli", "diagnose"):
         return json.dumps(_err("DCS 连接器未启用（config.yaml 的 dcs_cloud.enabled=false）",
                                hint="在 WebUI「☁️ DCS 云」面板或 config.yaml 打开开关"),
                           ensure_ascii=False, indent=2)
-    if action not in ("status", "bind", "unbind", "install_cli"):
+    if action not in ("status", "bind", "unbind", "install_cli", "diagnose"):
         cred = read_credential()
         if not cred.get("pat"):
             return json.dumps(_err("未绑定 DCS 账号",

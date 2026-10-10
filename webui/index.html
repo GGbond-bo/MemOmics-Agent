@@ -2438,6 +2438,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="settings-group">
           <label>背景图</label>
           <div class="theme-options" id="bg-options"><!-- 动态渲染（BACKGROUNDS） --></div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button onclick="resetAppearance()" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">↩ 恢复默认外观（无背景 + 浅色 + 无片头）</button>
+            <span id="bg-reset-note" style="font-size:11px;color:var(--text-light);"></span>
+          </div>
           <div style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.65;">
             背景插画来自第三方皮肤 <b>深海女仆工坊</b>（maid-atelier），授权
             <b>CC BY-NC-SA 4.0</b>：需署名、<b>禁止商业性使用</b>、衍生须同协议共享。
@@ -9501,6 +9505,14 @@ function renderBackgroundOptions() {
     box.appendChild(b);
   });
 }
+function resetAppearance() {
+  // 2026-10-10：装完包想一键回到出厂外观（默认=无背景 + 浅色 + 无片头）
+  setBackground('none');
+  setTheme('light');
+  try { localStorage.removeItem('memomics-intro'); localStorage.removeItem('memomics-intro-lastday'); } catch (e) {}
+  var note = document.getElementById('bg-reset-note');
+  if (note) note.textContent = '✅ 已恢复默认外观：无背景 / 浅色 / 无片头（刷新后保持）';
+}
 function setBackground(id) {
   var valid = BACKGROUNDS.some(function(p) { return p.id === id; });
   if (!valid) id = 'none';   // 白名单校验，未知值回退（和 setTheme 一致）
@@ -16294,7 +16306,7 @@ function clusterGetVal(id) {
 async function clusterSaveCfg(andCheck) {
   var en = document.getElementById('cc-enabled');
   var body = {
-    enabled: !!(en && en.checked),
+    enabled: !!(en && en.checked) || !!clusterGetVal('cc-host'),
     host: clusterGetVal('cc-host'),
     user: clusterGetVal('cc-user'),
     key: clusterGetVal('cc-key'),
@@ -16321,7 +16333,13 @@ async function clusterSaveCfg(andCheck) {
     seen[nm.toLowerCase()] = 1;
   }
   body.nodes = nodes;
-  body.default_node = clusterGetVal('cc-default-node');
+  var _dnVal = clusterGetVal('cc-default-node');
+  var _names = nodes.map(function(n) { return String(n.name || '').toLowerCase(); });
+  if (_dnVal && _names.indexOf(_dnVal.toLowerCase()) < 0) {
+    if (_names.length === 1) { _dnVal = nodes[0].name; clusterPrint('（默认节点不是已配置的节点，已自动改成唯一节点「' + _dnVal + '」）', 'sys'); }
+    else { clusterPrint('（默认节点「' + _dnVal + '」不在节点列表里，已清空；多节点时请每次点名）', 'sys'); _dnVal = ''; }
+  }
+  body.default_node = _dnVal;
   var npEl = document.getElementById('cc-node-policy');
   body.node_policy = npEl ? npEl.value : 'ask';
   var arEl = document.getElementById('cc-auto-record-env');
@@ -16333,8 +16351,13 @@ async function clusterSaveCfg(andCheck) {
     var nSaved = (d.config.nodes || []).length;
     clusterPrint('✓ 已写入 config.yaml 的 remote 段（host=' + (d.config.host || '空') + ', user=' + (d.config.user || '空') +
       ', scheduler=' + d.config.scheduler + (nSaved ? ', 节点=' + nSaved + ' 个' : '') + '）', 'ok');
+    (d.config.notes || []).forEach(function(n) { clusterPrint('· ' + n, 'sys'); });
+    if (!d.config.ready) {
+      clusterPrint('⚠️ 还没配齐：缺 ' + ((d.config.missing || []).join('、') || '?') + '。补齐后再保存一次。', 'sys');
+    }
     await clusterRefreshStatus();
     if (andCheck) { clusterQuick('check'); }
+    else if (d.config.ready) { clusterPrint('（下一步：点顶部「🔌 自检」验连通；要免密就点下面「🔑 安装公钥」）', 'sys'); }
   } catch (e) {
     clusterPrint('✗ 保存请求失败：' + e.message, 'err');
   }
@@ -17962,6 +17985,26 @@ function dcsLoad() {
   }).catch(function (e) { dcsPrint('✗ 状态读取失败：' + e.message, 'err'); });
 }
 
+async function dcsDiagnose() {
+  // 2026-10-10：绑不上时的排障入口 —— 逐项查 CLI / 版本 / 站点 / PAT / 可达性
+  var note = document.getElementById('dcs-cfg-note');
+  if (note) note.textContent = '🩺 体检中…（试连站点 / 查 CLI / 看 PAT）';
+  try {
+    var r = await fetch('/api/dcs/diagnose', { method: 'POST' });
+    var d = await r.json();
+    var res = (d && d.result) || {};
+    var items = res.items || [];
+    var allOk = items.every(function(i) { return i.ok; });
+    dcsPrint('🩺 DCS 体检结果\n' + items.map(function(i) {
+      return (i.ok ? '  ✅ ' : '  ❌ ') + i.check + '：' + i.detail;
+    }).join('\n') + '\n' + (res.hint || ''), allOk ? 'ok' : 'err');
+    if (note) note.textContent = allOk ? '✅ 全部正常' : '❌ 有问题，见输出区';
+  } catch (e) {
+    if (note) note.textContent = '';
+    dcsPrint('✗ 体检请求失败：' + e.message, 'err');
+  }
+}
+
 function dcsBind() {
   var el = document.getElementById('dcs-pat');
   var pat = el ? el.value.trim() : '';
@@ -19138,6 +19181,11 @@ async function saveUpdateConfig(mode) {
       <button class="cc-btn" onclick="clusterClose()">✕ 关闭</button>
     </div>
     <div class="cc-cfg" id="cluster-cfg" style="display:none;">
+      <div class="cc-cfg-note" style="border-bottom:1px dashed var(--border); padding-bottom:8px;">
+        <b>🚀 第一次接集群，三步就好：</b>① 填「登录节点」「用户名」「私钥路径」→ ② 点
+        <b>「💾 保存并检测连接」</b>（其它格子先不用管）→ ③ 看到 ✅ 之后，在下面输一次密码点
+        <b>「🔑 安装公钥」</b>，以后永久免密。只接一台机器时「默认节点」留空即可。
+      </div>
       <label>启用<input type="checkbox" id="cc-enabled"></label>
       <label>登录节点 host<input id="cc-host" placeholder="cluster.example.edu"></label>
       <label>端口<input id="cc-port" placeholder="22"></label>
@@ -19170,8 +19218,8 @@ async function saveUpdateConfig(mode) {
         <div class="cc-nodes" id="cc-nodes"></div>
       </div>
       <div class="cc-cfg-actions">
-        <button class="cc-btn primary" onclick="clusterSaveCfg(false)">💾 保存</button>
-        <button class="cc-btn" onclick="clusterSaveCfg(true)">💾 保存并自检</button>
+        <button class="cc-btn primary" onclick="clusterSaveCfg(true)">💾 保存并检测连接</button>
+        <button class="cc-btn" onclick="clusterSaveCfg(false)">💾 只保存</button>
         <span id="cluster-cfg-note" class="cc-cfg-note"></span>
       </div>
       <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
@@ -19339,7 +19387,7 @@ async function saveUpdateConfig(mode) {
       </div>
       <div class="cc-cfg-note" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <span>命令行工具（官方 dcs CLI）：<b id="dcs-cli-state">检查中…</b></span>
-        <button class="cc-btn" onclick="dcsInstallCli()" style="padding:2px 8px;">🔧 一键安装 / 修复</button>
+        <button class="cc-btn" onclick="dcsInstallCli()" style="padding:2px 8px;">🔧 一键安装 / 修复</button> <button class="cc-btn" onclick="dcsDiagnose()" title="逐项检查：CLI、CLI 版本、站点地址、PAT、站点可达性">🩺 诊断</button>
         <span style="opacity:.75;">官方 CDN 下载 + SHA256 校验；绑定 PAT 时若缺失会自动安装</span>
       </div>
       <details style="grid-column:1/-1;">
