@@ -627,9 +627,14 @@ def action_diagnose(args: dict) -> dict:
     cred = read_credential() or {}
     pat = str(cred.get("pat") or "")
     pat_ok = pat.startswith("dcs_pat_") and len(pat) > 24
-    items.append({"check": "本机 PAT", "ok": pat_ok,
-                  "detail": (cred.get("masked") or "未绑定")
-                            + ("" if pat_ok else "（PAT 应以 dcs_pat_ 开头；去 DCS 个人中心 → 访问令牌 重新创建）")})
+    items.append({"check": "本机 PAT", "ok": True, "state": "bound" if pat_ok else "unbound",
+                  "detail": ((cred.get("masked") or "") + " 已绑定，可直接用") if pat_ok
+                            else "还没绑（正常）—— 把 PAT 粘进面板点「🔗 绑定」即可，绑成功会自动启用连接器"})
+    last = _read_last_error()
+    if last and not pat_ok:
+        items.append({"check": "上次绑定/动作错误（%s %s）" % (last.get("action") or "?", last.get("time") or ""),
+                      "ok": False,
+                      "detail": (last.get("message") or "") + (" ｜ " + (last.get("detail") or ""))[:300]})
     ok_all = all(i["ok"] for i in items)
     return {
         "status": "ok" if ok_all else "warn",
@@ -684,6 +689,104 @@ def action_status(args: dict) -> dict:
     return info
 
 
+_LAST_ERROR_PATH = None
+
+
+def _last_error_path() -> Path:
+    global _LAST_ERROR_PATH
+    if _LAST_ERROR_PATH is None:
+        _LAST_ERROR_PATH = _config_path().parent / "dcs_last_error.txt"
+    return _LAST_ERROR_PATH
+
+
+def _sanitize(text: str) -> str:
+    """把任何 PAT 字样抹掉再落盘（错误信息里可能带 user 内容，但绝不留令牌）。"""
+    import re as _re
+    return _re.sub(r"dcs_pat_[A-Za-z0-9._\-]+", "dcs_pat_***", str(text or ""))
+
+
+def _remember_error(action: str, res: dict) -> None:
+    """记录最后一次 DCS 动作失败（供「🩺 诊断」和人工排障读取）。"""
+    try:
+        import json as _json
+        payload = {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "action": action,
+            "message": _sanitize(res.get("message") or res.get("error") or ""),
+            "detail": _sanitize(_json.dumps(res.get("error") or res.get("detail") or {}, ensure_ascii=False)),
+            "hint": _sanitize(res.get("hint") or ""),
+            "cmd": _sanitize(" ".join(res.get("cmd") or [])),
+        }
+        _last_error_path().write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _read_last_error() -> dict:
+    try:
+        import json as _json
+        p = _last_error_path()
+        if p.exists():
+            return _json.loads(p.read_text(encoding="utf-8")) or {}
+    except Exception:
+        pass
+    return {}
+
+
+def _clear_last_error() -> None:
+    try:
+        p = _last_error_path()
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
+
+def _enable_in_config() -> bool:
+    """把 config.yaml 里 dcs_cloud.enabled 打开（2026-10-10）。
+
+    新用户绑完 PAT 却"像没生效"：enabled 默认 false，agent 工具不出现、面板功能受限。
+    这里只做行内替换/追加，不整文件 yaml.dump —— 保住配置里的注释。
+    """
+    path = _config_path()
+    try:
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+    except Exception:
+        return False
+    lines = text.splitlines()
+    has_section = any(ln.strip().startswith("dcs_cloud:") and not ln[:1].isspace() for ln in lines)
+    out, in_sec, done = [], False, False
+    for ln in lines:
+        stripped = ln.strip()
+        if stripped.startswith("dcs_cloud:") and not ln[:1].isspace():
+            in_sec = True
+            out.append(ln)
+            continue
+        if in_sec:
+            if ln and not ln[:1].isspace():
+                if not done:
+                    out.append("  enabled: true")
+                    done = True
+                in_sec = False
+            elif stripped.startswith("enabled:"):
+                indent = ln[:len(ln) - len(ln.lstrip())]
+                out.append("%senabled: true" % indent)
+                done = True
+                continue
+        out.append(ln)
+    if in_sec and not done:
+        out.append("  enabled: true")
+        done = True
+    if not has_section:
+        out += ["", "dcs_cloud:", "  enabled: true"]
+        done = True
+    try:
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except Exception:
+        return False
+    return done
+
+
 def action_bind(args: dict) -> dict:
     cfg = load_config()
     pat = str(args.get("pat") or args.get("token") or "").strip()
@@ -697,6 +800,7 @@ def action_bind(args: dict) -> dict:
                     hint=ens.get("hint"))
     res = _run_cli(["auth", "login", "--token", pat], cfg=cfg)
     if not res.get("ok"):
+        _remember_error("bind", res)   # 2026-10-10：失败落盘，面板/诊断/人工都能看到原因
         return _err("绑定失败：%s" % (res.get("message") or "未知错误"),
                     detail=res.get("error"), hint=res.get("hint"))
     data = res.get("data") if isinstance(res.get("data"), dict) else {}
@@ -705,6 +809,9 @@ def action_bind(args: dict) -> dict:
     expires = data.get("token_expires_at") or data.get("expires_at")
     save_credential(pat, user=user, user_id=user_id, expires_at=expires,
                     base_url=str(cfg.get("base_url") or ""))
+    _clear_last_error()
+    _enabled_now = _enable_in_config()   # 2026-10-10：绑完自动启用，否则用户会以为"没绑上"
+    load_config(force=True)
     _default_project_guard(cfg)
     cur = _run_cli(["project", "current"], cfg=cfg)
     return _ok({
@@ -715,7 +822,10 @@ def action_bind(args: dict) -> dict:
         "expires_at": expires,
         "current": cur.get("data") if cur.get("ok") else None,
         "cli_installed": bool(ens.get("installed")),
-        "message": "DCS 账号已绑定（PAT 保存在本机 %s，不进日志、不随安装包分发）" % VAULT_FILENAME,
+        "enabled": bool(_enabled_now),
+        "message": "DCS 账号已绑定（PAT 保存在本机 %s，不进日志、不随安装包分发）"
+                   "%s" % (VAULT_FILENAME,
+                           "，并已自动启用连接器" if _enabled_now else "（注意：连接器仍是关闭状态，请在面板打开开关）"),
     })
 
 
