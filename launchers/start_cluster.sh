@@ -11,6 +11,44 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 PORT="${MEMOMICS_PORT:-8899}"
+
+# 2026-10-10: 端口占用检测 —— 只有确认是本 MemOmics 才当作"已在运行"；
+# 被别的程序占用时自动往后找空闲端口（可用 MEMOMICS_STRICT_PORT=1 禁止自动切换）。
+_mm_port_state() {  # $1=port -> free | memomics | busy
+    _busy=0
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 && _busy=1
+    elif command -v ss >/dev/null 2>&1; then
+        if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1$"; then _busy=1; fi
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -an 2>/dev/null | grep -E "[:.]$1[[:space:]].*LISTEN" >/dev/null 2>&1 && _busy=1
+    fi
+    if [ "$_busy" = "0" ]; then echo free; return 0; fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -s -m 3 "http://127.0.0.1:$1/api/health" 2>/dev/null | grep -q MemOmics; then
+            echo memomics; return 0
+        fi
+    fi
+    echo busy
+}
+_mm_tries=0
+while :; do
+    _st="$(_mm_port_state "$PORT")"
+    [ "$_st" = "free" ] && break
+    if [ "$_st" = "memomics" ]; then
+        echo "[INFO] MemOmics 已在运行 http://127.0.0.1:$PORT（不重复启动）"
+        exit 0
+    fi
+    if [ "${MEMOMICS_STRICT_PORT:-}" = "1" ]; then
+        echo "[ERROR] 端口 $PORT 被其他程序占用，且已设置 MEMOMICS_STRICT_PORT=1"; exit 1
+    fi
+    _mm_tries=$((_mm_tries + 1))
+    if [ "$_mm_tries" -ge 12 ]; then
+        echo "[ERROR] 连续 12 个端口都被占用，请手动指定端口，例如：./start.sh 8901"; exit 1
+    fi
+    echo "[WARN] 端口 $PORT 被其他程序占用，自动改用端口 $((PORT + 1))"
+    PORT=$((PORT + 1))
+done
 SLURM_MODE=false
 
 for arg in "$@"; do

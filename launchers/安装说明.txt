@@ -1,0 +1,45 @@
+﻿MemOmics 安装说明（完整安装包 / 版本号 {{VERSION}}）
+================================================================
+
+【这是什么】
+  完整安装包，自带运行环境，解压即用。新用户用本包即可（不需要更新包）。
+
+【怎么装（三步）】
+  1) 解压到任意目录（建议路径别太深，别放同步网盘里）。
+  2) 启动：
+     · Windows：双击「启动.bat」
+     · macOS  ：终端执行  chmod +x start.sh && ./start.sh
+                （首次若提示"未验证的开发者"：右键 → 打开；或  xattr -dr com.apple.quarantine .）
+     · Linux  ：同样  chmod +x start.sh && ./start.sh
+     随包 Python 已内置，首次启动只做依赖自检（秒级）。
+  3) 浏览器打开 http://127.0.0.1:8899 —— 启动器会自动开页面。
+
+【端口被占 / 打不开页面】
+  默认端口 8899。启动器会先确认占用端口的程序是不是 MemOmics：
+    · 是 → 提示"已在运行"并打开页面（不重复启动）；
+    · 不是（例如被 MiPCAudio 等程序占着）→ 自动改用 8900 / 8901 …，窗口里会打印实际端口；
+    · 也可手动指定端口：Windows「启动.bat 8901」；macOS/Linux「./start.sh 8901」；
+    · 不想自动换端口：先设 MEMOMICS_STRICT_PORT=1 再启动。
+
+【首次使用要做的事】
+  · 打开「⚙️ 设置」填自己的模型 API Key（DeepSeek 官方或任意 OpenAI 兼容网关）；
+  · 文献库 / 知识库初始为空，导入自己的文献后即可用；
+  · 技能库只带产品自带技能（个人沉淀技能不随包分发，用户可以自己积累）。
+
+【默认设置】
+  · 片头动画：默认关闭（想开：侧栏「🎬 片头设置」）
+  · 界面：浅色主题、不加载背景图（想换：🧠 设置 → 主题/背景）
+  · 所有数据只存在本机：memomics_home\ 与 results\
+
+【以后怎么更新】
+  · 推荐：MemOmics 里「检查更新」→ 一键应用（按当前运行目录覆盖，不依赖文件夹名字）；
+  · 手动：下载官方 MemOmics-update.zip，用本目录里的 update_windows.bat
+    （macOS/Linux 用 update_macos_linux.sh）覆盖 —— 会自动找安装目录、只覆盖代码、
+    跳过 memomics_home（配置/记忆/会话）等用户数据、不删除任何文件；
+  · 找不到安装目录时可显式指定：
+      powershell -File update_windows.ps1 -InstallDir "D:\apps\MemOmics"
+      ./update_macos_linux.sh -y "/opt/MemOmics"
+  · 老版本（≤2026-09-10）数据目录叫 hermes_home：本版首次启动自动迁移为 memomics_home
+    （只搬不删，旧目录改名为 hermes_home.migrated_<时间戳> 备份）。
+
+【发布页】https://github.com/GGbond-bo/MemOmics-Agent/releases

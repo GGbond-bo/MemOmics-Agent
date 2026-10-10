@@ -11,15 +11,47 @@ echo         MemOmics-Agent v2.0  —  解压即用一键启动
 echo ============================================================
 echo.
 
-REM --- 端口占用检测（已有实例运行则不重复启动/不重复开浏览器）---
-netstat -ano | findstr /r /c:":%PORT% .*LISTENING" >nul 2>&1
-if not errorlevel 1 (
+REM --- 端口占用检测（2026-10-10 修复）---
+REM   旧逻辑只看端口有没有人在听，别的程序（如 MiPCAudio 占 8899）会被误判成
+REM   "MemOmics 已在运行" → 启动器直接退出，用户双击永远起不来。
+REM   现在必须先用 /api/health 确认真的是 MemOmics；不是本程序就自动改端口。
+REM   想固定端口、不自动切换：先 set MEMOMICS_STRICT_PORT=1 再启动。
+set "PORT_TRIES=0"
+:port_check
+call :mm_probe_port %PORT%
+if not defined PORT_STATE set "PORT_STATE=busy"
+if not defined PORT_OWNER set "PORT_OWNER=未知进程"
+if "%PORT_STATE%"=="free" goto :port_ready
+if "%PORT_STATE%"=="memomics" (
     echo [INFO] MemOmics 已在运行 http://127.0.0.1:%PORT%
     echo        请使用已打开的页面，不重复启动。
+    if not "%MEMOMICS_SKIP_RUN%"=="1" start "" /min powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open_webui.ps1" %PORT%
     echo.
     pause
     exit /b 0
 )
+if not "%MEMOMICS_STRICT_PORT%"=="1" goto :port_try_next
+echo [ERROR] 端口 %PORT% 被占用：%PORT_OWNER%
+echo         已设置 MEMOMICS_STRICT_PORT=1，不自动换端口。
+pause
+exit /b 1
+
+:port_try_next
+echo [WARN] 端口 %PORT% 被其他程序占用：%PORT_OWNER%
+set /a PORT_TRIES+=1
+if !PORT_TRIES! lss 12 goto :port_try_next2
+echo [ERROR] 连续 12 个端口都被占用，请手动指定端口，例如：启动.bat 8901
+pause
+exit /b 1
+
+:port_try_next2
+set /a PORT+=1
+echo [WARN] 已自动改用端口 %PORT%（也可手动指定：启动.bat 8901）
+goto :port_check
+
+:port_ready
+echo [INFO] 本次端口: %PORT%
+echo.
 
 set "MEMOMICS_HOME=%~dp0memomics_home"
 set "HERMES_HOME=%MEMOMICS_HOME%"
@@ -27,12 +59,20 @@ set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=%PORT%"
 
 REM --- 首次安装：config.yaml 不存在时从模板生成（升级保留用户配置）---
+REM 2026-10-10：老用户数据还在 hermes_home 时，不要先造 memomics_home 空壳 ——
+REM 否则服务端迁移会判定两边都有数据，用户会以为会话/记忆全丢了。
+set "MM_LEGACY_SHELL="
+if exist "%~dp0hermes_home\config.yaml" set "MM_LEGACY_SHELL=1"
+if exist "%~dp0hermes_home\sessions" set "MM_LEGACY_SHELL=1"
+if exist "%~dp0hermes_home\state.db" set "MM_LEGACY_SHELL=1"
+if defined MM_LEGACY_SHELL goto :mm_skip_gen_config
 if not exist "%MEMOMICS_HOME%\config.yaml" (
     if exist "%MEMOMICS_HOME%\config.yaml.example" (
         copy /y "%MEMOMICS_HOME%\config.yaml.example" "%MEMOMICS_HOME%\config.yaml" >nul
         echo [INFO] 已生成默认 config.yaml。API Key 请在 WebUI 设置页填写。
     )
 )
+:mm_skip_gen_config
 set "MEMOMICS_RUN_GATE=1"
 
 REM ============================================================
@@ -230,4 +270,22 @@ if exist "F:\CellBender_v2\heartbeat_v2.py" (
 echo.
 echo Exit code: %errorlevel%
 pause
+exit /b 0
+
+:mm_probe_port
+REM  %1=端口；回填 PORT_STATE=free|memomics|busy 与 PORT_OWNER
+REM  注意：本子程序必须放在文件末尾（主流程 exit /b 0 之后），只由 call 进入。
+set "PORT_STATE=free"
+set "PORT_OWNER="
+set "PORT_PID="
+set "MM_NET=%TEMP%\memomics_net_%RANDOM%.txt"
+netstat -ano > "%MM_NET%" 2>nul
+for /f "tokens=5" %%a in ('findstr /r /c:":%1 .*LISTENING" "%MM_NET%"') do if not defined PORT_PID set "PORT_PID=%%a"
+del "%MM_NET%" >nul 2>&1
+if not defined PORT_PID exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 'http://127.0.0.1:%1/api/health'; if($r.Content -match 'MemOmics'){exit 7}}catch{}; exit 0" >nul 2>&1
+if errorlevel 7 (set "PORT_STATE=memomics" & exit /b 0)
+set "PORT_STATE=busy"
+for /f "tokens=1 delims=," %%a in ('tasklist /FI "PID eq %PORT_PID%" /NH /FO CSV 2^>nul') do if not defined PORT_OWNER set "PORT_OWNER=%%~a PID %PORT_PID%"
+if not defined PORT_OWNER set "PORT_OWNER=PID %PORT_PID%"
 exit /b 0

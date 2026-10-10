@@ -10,6 +10,45 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 PORT="${1:-${MEMOMICS_PORT:-8899}}"
 
+# 2026-10-10: 端口占用检测 —— 只有确认是本 MemOmics 才当作"已在运行"；
+# 被别的程序占用时自动往后找空闲端口（可用 MEMOMICS_STRICT_PORT=1 禁止自动切换）。
+_mm_port_state() {  # $1=port -> free | memomics | busy
+    _busy=0
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 && _busy=1
+    elif command -v ss >/dev/null 2>&1; then
+        if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1$"; then _busy=1; fi
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -an 2>/dev/null | grep -E "[:.]$1[[:space:]].*LISTEN" >/dev/null 2>&1 && _busy=1
+    fi
+    if [ "$_busy" = "0" ]; then echo free; return 0; fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -s -m 3 "http://127.0.0.1:$1/api/health" 2>/dev/null | grep -q MemOmics; then
+            echo memomics; return 0
+        fi
+    fi
+    echo busy
+}
+_mm_tries=0
+while :; do
+    _st="$(_mm_port_state "$PORT")"
+    [ "$_st" = "free" ] && break
+    if [ "$_st" = "memomics" ]; then
+        echo "[INFO] MemOmics 已在运行 http://127.0.0.1:$PORT（不重复启动）"
+        exit 0
+    fi
+    if [ "${MEMOMICS_STRICT_PORT:-}" = "1" ]; then
+        echo "[ERROR] 端口 $PORT 被其他程序占用，且已设置 MEMOMICS_STRICT_PORT=1"; exit 1
+    fi
+    _mm_tries=$((_mm_tries + 1))
+    if [ "$_mm_tries" -ge 12 ]; then
+        echo "[ERROR] 连续 12 个端口都被占用，请手动指定端口，例如：./start.sh 8901"; exit 1
+    fi
+    echo "[WARN] 端口 $PORT 被其他程序占用，自动改用端口 $((PORT + 1))"
+    PORT=$((PORT + 1))
+done
+export MEMOMICS_PORT="$PORT"
+
 echo "╔══════════════════════════════════════════════╗"
 echo "║       MemOmics-Agent v2.0 Starting...        ║"
 echo "╚══════════════════════════════════════════════╝"
@@ -22,7 +61,13 @@ export MEMOMICS_HOST="0.0.0.0"
 
 # === 首次安装检测：config.yaml 不存在时从模板生成 ===
 # （升级覆盖解压时保留用户已有 config.yaml/API Key，不被覆盖）
-if [ ! -f "$MEMOMICS_HOME/config.yaml" ] && [ -f "$MEMOMICS_HOME/config.yaml.example" ]; then
+# 2026-10-10：老用户数据还在 hermes_home 时不要先造 memomics_home 空壳（否则迁移走合并分支）
+_MM_BASE="$(cd "$(dirname "$0")" && pwd)"
+_MM_LEGACY=0
+for _mm_f in "$_MM_BASE/hermes_home/config.yaml" "$_MM_BASE/hermes_home/sessions" "$_MM_BASE/hermes_home/state.db"; do
+    if [ -e "$_mm_f" ]; then _MM_LEGACY=1; fi
+done
+if [ "$_MM_LEGACY" = "0" ] && [ ! -f "$MEMOMICS_HOME/config.yaml" ] && [ -f "$MEMOMICS_HOME/config.yaml.example" ]; then
     cp "$MEMOMICS_HOME/config.yaml.example" "$MEMOMICS_HOME/config.yaml"
     echo "[INFO] 已生成默认 config.yaml（首次安装）。API Key 请在 WebUI 设置页填写。"
 fi

@@ -7768,6 +7768,42 @@ async function loadModels() {
   } catch(e) { console.error('loadModels error', e); }
 }
 
+// 2026-10-10: ① 旧进程检测（磁盘已更新但进程还是旧代码）② 数据目录迁移通知（老用户更新后）
+// 都用同一条顶部横幅，避免用户误判成"功能没了 / 数据丢了"。
+function mmTopBanner(id, html, bg, fg, bd) {
+  if (document.getElementById(id)) return;
+  var el = document.createElement('div');
+  el.id = id;
+  el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:' + bg + ';color:' + fg +
+    ';border-bottom:1px solid ' + bd + ';padding:8px 14px;font-size:13px;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.08)';
+  el.innerHTML = html + '<span style="cursor:pointer;margin-left:14px;opacity:.7" onclick="this.parentNode.remove()">✕</span>';
+  document.body.appendChild(el);
+  try { document.body.style.paddingTop = '46px'; } catch (e) {}
+}
+async function checkStaleVersion() {
+  try {
+    var r = await fetch('/api/version');
+    var d = await r.json();
+    if (!d) return;
+    if (d.restart_required) {
+      mmTopBanner('mm-stale-banner',
+        '⚠️ 代码已更新到 <b>' + (d.pkg_version || '') + '</b>，但当前运行的还是旧版本 <b>' +
+        (d.code_version_at_start || '') + '</b> —— 新版功能（API 供应商、结果文件查看等）不会生效。' +
+        '请<b>完全关闭 MemOmics 窗口</b>后重新双击「启动.bat」，然后刷新本页。' +
+        '<span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="location.reload()">我已重启，刷新页面</span>',
+        '#fff4e5', '#7a4b00', '#ffd08a');
+    }
+    if (d.migration_notice && !window.__mmMigShown) {
+      window.__mmMigShown = 1;
+      var t = String(d.migration_notice).replace(/</g, '&lt;').replace(/\n/g, '<br>');
+      mmTopBanner('mm-mig-banner',
+        '📦 <b>已从旧数据目录（hermes_home）迁移数据</b>，会话/记忆/配置都在新目录里，可放心使用。<br>' +
+        '<span style="opacity:.85">' + t + '</span>', '#e8f4ff', '#0b4a7a', '#a9d5f2');
+    }
+  } catch (e) {}
+}
+try { checkStaleVersion(); setInterval(checkStaleVersion, 30000); } catch (e) {}
+
 async function loadProviders() {
   try {
     var r = await fetch('/api/providers');

@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 
-BUNDLE = "2026-08-16"  # 本次修复包级别（新增迁移时递增）
+BUNDLE = "2026-10-10"  # 本次修复包级别（新增迁移时递增）
 
 _CONFIG_MIGRATIONS = (
     # (字段, 旧默认值, 新值)
@@ -53,6 +53,104 @@ def _migrate_config(memomics_home: str) -> str:
     return f"限额迁移 {changed} 项"
 
 
+# 2026-10-10：依赖自愈 —— 老安装更新 update 包后，新功能可能需要新依赖；
+# 随包 .venv 不会被覆盖，所以这里用"当前解释器"补装 requirements.txt。
+# 触发条件（幂等）：requirements.txt 哈希变了，或关键包 import 失败。
+# 失败不阻塞启动（下次启动重试）；MEMOMICS_SKIP_DEPS_SYNC=1 可跳过。
+_CRIT_CAND = (
+    ("fastapi", "fastapi"), ("starlette", "starlette"), ("uvicorn", "uvicorn"),
+    ("websockets", "websockets"), ("httpx", "httpx"), ("pydantic", "pydantic"),
+    ("yaml", "pyyaml"), ("openai", "openai"), ("multipart", "python-multipart"),
+    ("openpyxl", "openpyxl"), ("PIL", "pillow"), ("docx", "python-docx"),
+    ("pptx", "python-pptx"), ("pandas", "pandas"), ("aiofiles", "aiofiles"),
+)
+
+
+def _critical_modules(requirements_txt: str):
+    """只检查 requirements.txt 里确实声明的关键包。"""
+    try:
+        with open(requirements_txt, "r", encoding="utf-8", errors="replace") as f:
+            req = f.read().lower()
+    except Exception:
+        req = ""
+    out = []
+    for mod, pkg in _CRIT_CAND:
+        if pkg in req:
+            out.append(mod)
+    return out
+
+
+def _missing_modules(requirements_txt: str):
+    import importlib
+    miss = []
+    for mod in _critical_modules(requirements_txt):
+        try:
+            importlib.import_module(mod)
+        except Exception:
+            miss.append(mod)
+    return miss
+
+
+def _deps_sync(memomics_home: str) -> str:
+    """requirements.txt 变化或关键包缺失 → 用当前解释器补装（幂等，失败不阻塞）。"""
+    import hashlib
+    import json
+    import subprocess
+    import sys
+    import time
+
+    if os.environ.get("MEMOMICS_SKIP_DEPS_SYNC") == "1":
+        return "已跳过（MEMOMICS_SKIP_DEPS_SYNC=1）"
+    root = os.path.dirname(os.path.abspath(memomics_home.rstrip("/\\"))) or os.getcwd()
+    req = os.path.join(root, "requirements.txt")
+    if not os.path.isfile(req):
+        return "无 requirements.txt，跳过"
+    try:
+        h = hashlib.sha256(open(req, "rb").read()).hexdigest()[:16]
+    except Exception as e:
+        return f"requirements 读取失败: {e}"
+    state_p = os.path.join(memomics_home, ".deps_state.json")
+    old = {}
+    try:
+        old = json.load(open(state_p, "r", encoding="utf-8")) or {}
+    except Exception:
+        old = {}
+    miss = _missing_modules(req)
+    same = (old.get("req_hash") == h)
+    if same and not miss:
+        return "依赖一致（%s）" % h
+    why = []
+    if not same:
+        why.append("requirements 已更新")
+    if miss:
+        why.append("缺包: " + ", ".join(miss))
+    print("[DepsSync] %s → pip install -r requirements.txt（首次可能几分钟）" % "；".join(why), flush=True)
+    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--no-user",
+             "--disable-pip-version-check", "-q", "-r", req],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800,
+        )
+        ok = (r.returncode == 0)
+        tail = (r.stdout or "")[-400:] + (r.stderr or "")[-800:]
+    except Exception as e:
+        ok = False
+        tail = f"{type(e).__name__}: {e}"
+    if not ok:
+        print("[DepsSync] 补装未成功（不影响启动，下次启动重试）: %s" % tail.strip()[-300:], flush=True)
+        return "补装失败: %s" % tail.strip()[-120:]
+    miss2 = _missing_modules(req)
+    try:
+        json.dump({"req_hash": h, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "missing": miss2},
+                  open(state_p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    if miss2:
+        return "补装完成但仍有缺失: %s" % ", ".join(miss2)
+    print("[DepsSync] 依赖已就绪", flush=True)
+    return "依赖已就绪（%s）" % h
+
+
 def apply_fix_bundle(memomics_home: str, dry_run: bool = False) -> dict:
     """应用文件级迁移并推进 .fix_bundle 标记。幂等。"""
     os.makedirs(memomics_home, exist_ok=True)
@@ -65,6 +163,11 @@ def apply_fix_bundle(memomics_home: str, dry_run: bool = False) -> dict:
     if cur >= BUNDLE:
         return {"ok": True, "up_to_date": True, "bundle": cur}
     result = {"config": _migrate_config(memomics_home)}
+    # 2026-10-10: 依赖自愈（老安装更新后功能要齐，必须把 requirements 补上）
+    try:
+        result["deps"] = _deps_sync(memomics_home)
+    except Exception as _e:
+        result["deps"] = f"跳过（{type(_e).__name__}: {_e}）"
     if not dry_run:
         try:
             with open(marker, "w", encoding="utf-8") as f:

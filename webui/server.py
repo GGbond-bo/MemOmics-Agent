@@ -47,15 +47,55 @@ MEMOMICS_HOME_DIR = os.path.join(MEMOMICS_DIR, "memomics_home")
 _legacy_home = os.path.join(MEMOMICS_DIR, "hermes_home")
 
 
+def _dir_has_files(_p):
+    """目录里有文件才算数据（空目录是产品壳）。"""
+    try:
+        for _r, _ds, _fs in os.walk(_p):
+            if _fs:
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def _config_is_default(_d):
+    """config.yaml 是否只是从 config.yaml.example 复制来的模板。
+
+    2026-10-10（数据安全修复）：启动器（启动.bat）会在服务启动前就把模板复制成
+    memomics_home\config.yaml —— 旧逻辑据此判定"新目录也有用户数据"，于是迁移走
+    conflict 分支不合并，老用户的会话/记忆/配置看似全没了。模板一致 → 不算用户数据。
+    """
+    _c = os.path.join(_d, "config.yaml")
+    _e = os.path.join(_d, "config.yaml.example")
+    if not os.path.isfile(_c):
+        return False
+    try:
+        if os.path.isfile(_e):
+            with open(_c, "rb") as _f1, open(_e, "rb") as _f2:
+                return _f1.read().strip() == _f2.read().strip()
+    except OSError:
+        return False
+    return False
+
+
 def _home_has_user_data(_d):
-    """数据目录是否含用户数据（区分"既有安装"与"产品空壳"）。"""
+    r"""数据目录是否含用户数据（区分"既有安装"与"产品空壳"）。
+
+    2026-10-10：只认强标记 —— 去掉 cron/.install_path（程序启动自己会建，会把空壳误判成用户数据）；
+    sessions/memories 要求目录里真的有文件；config.yaml 仅在"与模板不同"时算用户数据。
+    """
     if not os.path.isdir(_d):
         return False
-    for _marker in ("config.yaml", "state.db", "provider_keys.json", "model_config.json",
-                    "memories", "sessions", "auth.json", "channel_directory.json",
-                    "weixin_account.json", "dcs_cloud.json", "cron", ".install_path"):
+    for _marker in ("state.db", "memory_store.db", "provider_keys.json", "model_config.json",
+                    "auth.json", "channel_directory.json", "weixin_account.json",
+                    "dcs_cloud.json", "references.json"):
         if os.path.exists(os.path.join(_d, _marker)):
             return True
+    for _marker in ("sessions", "memories"):
+        if _dir_has_files(os.path.join(_d, _marker)):
+            return True
+    if os.path.isfile(os.path.join(_d, "config.yaml")) and not _config_is_default(_d):
+        return True
     return False
 
 
@@ -79,6 +119,67 @@ def _carry_missing_items(_src, _dst, _depth=0):
     return _moved
 
 
+def _merge_user_home(_old, _new, _depth=0):
+    """旧 home 用户数据安全并入新 home。返回 (moved, kept_both, replaced)。
+
+    规则（2026-10-10 数据安全修复）：
+      · 新目录缺的项 → 整体搬过去；
+      · 两边都是目录 → 递归；
+      · 两边都是同名文件 → 绝不覆盖用户数据：旧版另存 <name>.from_hermes_<时间戳>；
+        例外：新目录的 config.yaml 若只是模板（启动器复制的），就用用户的旧配置顶上，
+        模板另存 <name>.default_<时间戳>。
+      · 旧目录最后整体退休为 <old>.migrated_<时间戳>（只搬不删，最坏情况也有兜底）。
+    """
+    _moved = _kept = _replaced = 0
+    try:
+        _names = sorted(os.listdir(_old))
+    except OSError:
+        return 0, 0, 0
+    _ts = time.strftime("%Y%m%d-%H%M%S")
+    for _name in _names:
+        _s, _t = os.path.join(_old, _name), os.path.join(_new, _name)
+        try:
+            if not os.path.exists(_t):
+                shutil.move(_s, _t)
+                _moved += 1
+                continue
+            if os.path.isdir(_s) and os.path.isdir(_t) and _depth < 6:
+                _m, _k, _r = _merge_user_home(_s, _t, _depth + 1)
+                _moved += _m
+                _kept += _k
+                _replaced += _r
+                continue
+            if os.path.isfile(_s) and os.path.isfile(_t):
+                if _name == "config.yaml" and _config_is_default(_new):
+                    shutil.copy2(_t, _t + ".default_" + _ts)
+                    shutil.copy2(_s, _t)
+                    _replaced += 1
+                else:
+                    shutil.copy2(_s, _t + ".from_hermes_" + _ts)
+                    _kept += 1
+        except OSError:
+            continue
+    return _moved, _kept, _replaced
+
+
+def _write_migration_notice(_home, _moved, _kept, _replaced, _conflict):
+    r"""把迁移结果写成 memomics_home\MIGRATION_NOTICE.txt（前端横幅+人工核对用）。"""
+    try:
+        _txt = (
+            "MemOmics 数据目录迁移记录\n"
+            "时间: %s\n"
+            "来源: hermes_home（旧数据目录）\n"
+            "结果: 搬入 %d 项；重名文件另存备份 %d 项；用旧配置替换模板 %d 项%s\n"
+            "说明: 旧目录已整体改名为 hermes_home.migrated_<时间戳>（只搬不删，可手工核对/回滚）。\n"
+            % (time.strftime("%Y-%m-%d %H:%M:%S"), _moved, _kept, _replaced,
+               "（两边原本都有数据，已按安全合并处理）" if _conflict else "")
+        )
+        with open(os.path.join(_home, "MIGRATION_NOTICE.txt"), "w", encoding="utf-8") as _f:
+            _f.write(_txt)
+    except OSError:
+        pass
+
+
 def migrate_legacy_home(_new_home, _old_home):
     """hermes_home → memomics_home 迁移（幂等）。
 
@@ -94,14 +195,26 @@ def migrate_legacy_home(_new_home, _old_home):
             return "renamed"
         _new_has = _home_has_user_data(_new_home)
         if _old_has and not _new_has:
-            _n = _carry_missing_items(_old_home, _new_home)
+            # 2026-10-10 数据安全修复：新目录只是"产品空壳"（典型：启动器预生成了模板
+            # config.yaml）时，也必须让用户已有的 config.yaml/记忆/会话优先 —— 否则
+            # 用户的配置项与供应商设置会被模板顶掉，看起来就是"设置没同步到新版本"。
+            _m, _k, _r = _merge_user_home(_old_home, _new_home)
             try:
                 os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
             except OSError:
                 pass  # 退休失败不算错：数据已搬完，旧目录留着下次再退休
-            return "merged:%d" % _n
+            _write_migration_notice(_new_home, _m, _k, _r, False)
+            return "merged:%d/%d/%d" % (_m, _k, _r)
         if _old_has and _new_has:
-            return "conflict"
+            # 2026-10-10 数据安全修复：不再"只告警不合并"——那会让老用户觉得会话/记忆全没了。
+            # 现在做安全并入（重名用户文件另存备份，旧目录整体退休），最坏情况也能从备份找回。
+            _m, _k, _r = _merge_user_home(_old_home, _new_home)
+            try:
+                os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
+            except OSError:
+                pass
+            _write_migration_notice(_new_home, _m, _k, _r, True)
+            return "conflict-merged:%d/%d/%d" % (_m, _k, _r)
         return "noop"
     except Exception as _e:  # 迁移失败绝不影响启动
         return "error:%r" % (_e,)
@@ -112,7 +225,13 @@ if os.path.isdir(_legacy_home) and _legacy_home != MEMOMICS_HOME_DIR:
     if _mig == "renamed":
         print("[MemOmics] 检测到既有安装：旧数据目录 hermes_home 已迁移为 memomics_home", flush=True)
     elif _mig.startswith("merged"):
-        print("[MemOmics] 检测到覆盖升级：hermes_home 已合并进 memomics_home（%s），旧目录退休为 .migrated_ 备份" % _mig, flush=True)
+        print("[MemOmics] 检测到覆盖升级：hermes_home 已并入 memomics_home（搬入/另存/替换 = %s），"
+              "旧目录退休为 .migrated_ 备份，详见 memomics_home/MIGRATION_NOTICE.txt"
+              % _mig.split(":", 1)[1], flush=True)
+    elif _mig.startswith("conflict-merged"):
+        print("[MemOmics] 检测到覆盖升级：hermes_home 与 memomics_home 都有数据，已安全并入"
+              "（搬入/另存/替换 = %s），旧目录退休为 .migrated_ 备份，详见 memomics_home/MIGRATION_NOTICE.txt"
+              % _mig.split(":", 1)[1], flush=True)
     elif _mig == "conflict":
         print("[MemOmics] 警告：hermes_home 与 memomics_home 都含用户数据，跳过自动合并，请人工确认", flush=True)
     elif _mig.startswith("error"):
@@ -9228,6 +9347,15 @@ def _build_memomics_provider_entry(pid, name, api_base, api_key, models, prev=No
     return entry
 
 
+def _norm_saved_key_entry(_v):
+    """provider_keys.json 里的一项：新格式是 dict，旧格式可能直接是字符串 key。"""
+    if isinstance(_v, dict):
+        return _v
+    if isinstance(_v, str) and _v.strip():
+        return {"api_key": _v.strip()}
+    return {}
+
+
 def _sync_custom_providers_to_memomics(pid=None):
     """把「有 key 的 provider」同步为 MemOmics config.yaml 的 custom_providers。
 
@@ -9246,7 +9374,7 @@ def _sync_custom_providers_to_memomics(pid=None):
             # 2026-08-27: 遍历所有有 key 的 provider（内置 + 用户自定义 custom-*），
             # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 MemOmics 底座
             for _pid in list(_provider_keys.keys()):
-                saved = _provider_keys.get(_pid)
+                saved = _norm_saved_key_entry(_provider_keys.get(_pid))
                 if not (saved and saved.get("api_key")):
                     continue
                 p = _PROVIDERS_INDEX.get(_pid) or {}
@@ -9254,9 +9382,9 @@ def _sync_custom_providers_to_memomics(pid=None):
                 existing[_pid] = _build_memomics_provider_entry(
                     _pid, p.get("name", _pid), _api, saved["api_key"],
                     _effective_models(p, saved), existing.get(_pid))
-        elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
+        elif pid in _provider_keys and _norm_saved_key_entry(_provider_keys[pid]).get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
-            saved = _provider_keys[pid]
+            saved = _norm_saved_key_entry(_provider_keys[pid])
             _api = saved.get("base_url") or p.get("api", "")
             existing[pid] = _build_memomics_provider_entry(
                 pid, p.get("name", pid), _api, saved["api_key"],
@@ -11095,6 +11223,43 @@ async def cleanup_background_tasks(payload: dict = None, request: Request = None
     return res
 
 
+def _git_rev_at_start() -> str:
+    r"""启动时取一次 git 短 rev（打包分发的安装没有 .git → "unknown"）。
+
+    2026-10-10：原来是每个 /api/version 请求都同步跑 git（最多阻塞 3 秒），
+    在非 git 目录/慢盘上会把接口拖到前端读不到；改成启动一次、请求只读缓存。
+    """
+    import subprocess as _sp
+    try:
+        _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
+                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+        if _r.returncode == 0 and _r.stdout.strip():
+            return _r.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+_GIT_REV_AT_START = _git_rev_at_start()
+
+
+def _pkg_version_on_disk() -> str:
+    """读安装目录 VERSION（打包发布的版本号；开发树可能是 v<日期> 或旧值）。"""
+    for _cand in (os.path.join(MEMOMICS_DIR, "VERSION"), os.path.join(MEMOMICS_HOME_DIR, "VERSION")):
+        try:
+            if os.path.isfile(_cand):
+                with open(_cand, "r", encoding="utf-8", errors="replace") as _f:
+                    return _f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+
+# 2026-10-10: 进程启动时磁盘上的版本号。若之后磁盘 VERSION 变了（用户刚应用 update 包但没重启），
+# /api/version 会报 restart_required=True，前端顶部横幅提示重启 —— 解决"更新了但界面/接口还是旧的"。
+_CODE_VERSION_AT_START = _pkg_version_on_disk()
+
+
 @app.get("/api/version")
 async def api_version():
     """前端版本标识：git commit + server 启动时间 + 修复包级别。
@@ -11103,15 +11268,12 @@ async def api_version():
     用 memomics_home/.fix_bundle 标记当前修复级别；outdated=True 表示
     文件级修复已落后（旧安装/部分覆盖更新），WebUI 可据此提示升级。
     """
-    import subprocess as _sp
-    rev = "unknown"
-    try:
-        _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
-                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
-        if _r.returncode == 0:
-            rev = _r.stdout.strip()
-    except Exception:
-        pass
+    global _GIT_REV_AT_START
+    rev = _GIT_REV_AT_START
+    if rev == "unknown":          # 启动时没取到（例如 git 当时不在 PATH）再懒取一次并缓存
+        rev = _git_rev_at_start()
+        if rev != "unknown":
+            _GIT_REV_AT_START = rev
     # 2026-08-16: 修复包级别（启动事件已自动应用文件级迁移，此处只报告）
     _level = "none"
     _outdated = False
@@ -11122,13 +11284,32 @@ async def api_version():
         _bundle = _BUNDLE
     except Exception:
         _bundle = ""
+    # 2026-10-10: 磁盘版本 vs 进程启动时版本 —— 识别"更新包已覆盖但仍在跑旧进程"
+    # （前端顶部横幅据此提示重启；老用户最常见的"更新了没生效"根因）
+    _pkg_now = _pkg_version_on_disk()
+    _code_at_start = _CODE_VERSION_AT_START
+    _stale = bool(_pkg_now and _code_at_start and _pkg_now != _code_at_start)
+    # 2026-10-10: 数据目录迁移通知（老用户更新后前端横幅提示，避免"数据看起来丢了"的恐慌）
+    _notice = ""
+    try:
+        _np = os.path.join(MEMOMICS_HOME_DIR, "MIGRATION_NOTICE.txt")
+        if os.path.isfile(_np):
+            with open(_np, "r", encoding="utf-8", errors="replace") as _nf:
+                _notice = _nf.read().strip()[:800]
+    except OSError:
+        _notice = ""
     return {"version": rev, "started": _SERVER_STARTED_STR,
-            "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated}
+            "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated,
+            "pkg_version": _pkg_now, "code_version_at_start": _code_at_start,
+            "restart_required": _stale, "migration_notice": _notice}
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
+    _pn = _pkg_version_on_disk()
+    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions),
+            "pkg_version": _pn,
+            "restart_required": bool(_pn and _CODE_VERSION_AT_START and _pn != _CODE_VERSION_AT_START)}
 
 
 # === 检查更新 / 在线更新（2026-08-23，迁移 MiMo-Code 更新架构：自动检查 + autoupdate 策略） ===

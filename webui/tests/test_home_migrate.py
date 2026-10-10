@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
 """hermes_home → memomics_home 覆盖升级迁移回归（2026-10-08 改名配套）。
 
-锁死六条不变量：
+锁死八条不变量（2026-10-10 数据安全加固后）：
 1. 首次安装（无 hermes_home）→ noop，绝不碰文件系统；
 2. 只有 hermes_home（既有安装）→ 整体改名，数据原地保留；
-3. 双存在 + 新目录是产品空壳（更新包/fix_bundle 先造出来的）→ 缺失项搬进新目录，
-   重名文件保留新目录版本（＝覆盖升级语义），旧目录退休为 .migrated_ 备份（不是删除）；
-4. 双存在 + 两边都有用户数据 → 只返回 conflict，不动任何文件（防误合并）；
-5. 检测依据是用户数据标记（config.yaml/state.db/memories/.install_path 等），
-   单靠 .fix_bundle 之类运行标记不算"既有安装的数据"；
-6. update_apply 在 _apply_overlay 之前调用同一迁移（源码级护栏，「先迁移、再覆盖」）。
+3. 双存在 + 新目录是产品空壳（更新包/启动器先造出来的）→ 先安全并入再退休旧目录；
+   重名文件保留新目录版本并另存 .from_hermes_ 备份（零丢失）；
+4. 双存在 + 两边都有用户数据 → **不再只告警**：安全并入（缺失项搬入、重名另存备份、
+   旧目录退休 .migrated_）—— 修的就是"更新后会话/记忆看起来全没了"；
+5. 启动器预生成的模板 config.yaml（占位符 YOUR_API_KEY_HERE / 与 config.yaml.example 一致）
+   不算用户数据，且用户自己的 config.yaml 会顶掉它（模板另存 .default_ 备份）；
+6. 检测依据是强标记（state.db/provider_keys.json/sessions 有文件/真 key 的 config.yaml），
+   .fix_bundle、.install_path、cron 等程序自己会建的标记不算；
+7. 任何分支都不删数据：旧目录一律退休为 hermes_home.migrated_<时间戳>，并写 MIGRATION_NOTICE.txt；
+8. update_apply 在 _apply_overlay 之前调用同一迁移（源码级护栏，「先迁移、再覆盖」）。
 """
 import os
+import shutil
 
 import server
 
@@ -60,8 +65,9 @@ def test_merge_when_new_is_product_shell(tmp_path):
     assert (new / "config.yaml").read_text(encoding="utf-8") == "cfg"
     assert (new / "memories" / "MEMORY.md").is_file()
     assert (new / "skills" / "mine" / "SKILL.md").read_text(encoding="utf-8") == "user-skill"
-    # 重名文件：新版赢（= 覆盖升级语义）
+    # 重名文件：新版赢（= 覆盖升级语义），旧版另存 .from_hermes_ 备份（零丢失）
     assert (new / "skills" / "product" / "SKILL.md").read_text(encoding="utf-8") == "new-product"
+    assert list((new / "skills" / "product").glob("SKILL.md.from_hermes_*"))
     assert (new / "SOUL.md").is_file()
     # 旧目录退休为备份（不是删除），备份里只剩重名项
     left = list(tmp_path.glob("hermes_home.migrated_*"))
@@ -69,25 +75,67 @@ def test_merge_when_new_is_product_shell(tmp_path):
     assert (left[0] / "skills" / "product" / "SKILL.md").is_file()
 
 
-def test_conflict_when_both_have_user_data(tmp_path):
+def test_conflict_merges_safely_never_loses_data(tmp_path):
+    """两边都有用户数据 → 安全并入（2026-10-10 起；旧行为"只告警"会让用户以为数据丢了）。"""
     old = tmp_path / "hermes_home"
     new = tmp_path / "memomics_home"
-    _write(str(old / "config.yaml"))
-    _write(str(new / "state.db"))
-    before_old = sorted(p.name for p in old.iterdir())
-    before_new = sorted(p.name for p in new.iterdir())
-    assert MIG(str(new), str(old)) == "conflict"
-    assert sorted(p.name for p in old.iterdir()) == before_old
-    assert sorted(p.name for p in new.iterdir()) == before_new
-    assert not list(tmp_path.glob("hermes_home.migrated_*"))
+    _write(str(old / "config.yaml"), "api_key: sk-olduser-abcdef123456\nmax_turns: 177\n")
+    _write(str(old / "sessions" / "s1.json"), '{"marker": "OLD"}')
+    _write(str(old / "sessions" / "s2.json"), '{"marker": "OLD2"}')
+    _write(str(new / "state.db"), "db")
+    _write(str(new / "sessions" / "s1.json"), '{"marker": "NEW"}')
+    res = MIG(str(new), str(old))
+    assert res.startswith("conflict-merged:")
+    # 新目录自己的数据一律保留
+    assert (new / "state.db").read_text(encoding="utf-8") == "db"
+    assert (new / "sessions" / "s1.json").read_text(encoding="utf-8") == '{"marker": "NEW"}'
+    # 旧目录缺失项搬入；重名项另存备份（零丢失）
+    assert (new / "sessions" / "s2.json").read_text(encoding="utf-8") == '{"marker": "OLD2"}'
+    assert list((new / "sessions").glob("s1.json.from_hermes_*"))
+    # 用户旧配置在新目录缺失 → 直接搬入
+    assert (new / "config.yaml").read_text(encoding="utf-8").startswith("api_key: sk-olduser-abcdef123456")
+    # 旧目录退休为备份（不删除），并留下迁移通知
+    assert len(list(tmp_path.glob("hermes_home.migrated_*"))) == 1
+    assert (new / "MIGRATION_NOTICE.txt").is_file()
+
+
+def test_template_config_replaced_by_user_config(tmp_path):
+    """启动器预生成的模板 config.yaml 必须被用户自己的配置顶掉（模板另存 .default_）。"""
+    old = tmp_path / "hermes_home"
+    new = tmp_path / "memomics_home"
+    tpl = "provider: openai\nmodel: deepseek-chat\napi_base: https://api.deepseek.com/v1\napi_key: YOUR_API_KEY_HERE\n"
+    _write(str(old / "config.yaml"), "provider: openai\napi_key: sk-realolduser-abcdef123456\nmax_turns: 177\n")
+    _write(str(old / "sessions" / "s1.json"), "{}")
+    _write(str(new / "config.yaml"), tpl)
+    _write(str(new / "config.yaml.example"), tpl)
+    assert server._config_is_default(str(new)) is True
+    res = MIG(str(new), str(old))
+    assert res.startswith("merged:")
+    cfg = (new / "config.yaml").read_text(encoding="utf-8")
+    assert "sk-realolduser-abcdef123456" in cfg and "max_turns: 177" in cfg
+    assert list(new.glob("config.yaml.default_*"))
+    assert (new / "sessions" / "s1.json").is_file()
 
 
 def test_marker_detection_rules(tmp_path):
-    """.install_path 算既有安装标记；只有 .fix_bundle 的空壳不算数据。"""
+    """强标记才算用户数据（2026-10-10 收紧）：程序自建标记/模板配置不算。"""
     old = tmp_path / "hermes_home"
     _write(str(old / ".fix_bundle"), "x")
-    assert server._home_has_user_data(str(old)) is False
     _write(str(old / ".install_path"), "E:/MemOmics")
+    _write(str(old / "cron" / "jobs.json"), "[]")
+    assert server._home_has_user_data(str(old)) is False
+    # 模板 config.yaml（占位符）不算
+    tpl = "api_key: YOUR_API_KEY_HERE\n"
+    _write(str(old / "config.yaml"), tpl)
+    _write(str(old / "config.yaml.example"), tpl)
+    assert server._home_has_user_data(str(old)) is False
+    # 真 key 的 config.yaml 才算
+    _write(str(old / "config.yaml"), "api_key: sk-someone-abcdef1234567890\n")
+    assert server._home_has_user_data(str(old)) is True
+    # 只有空目录的 sessions 不算，含文件才算
+    shutil.rmtree(str(old)); os.makedirs(str(old / "sessions"), exist_ok=True)
+    assert server._home_has_user_data(str(old)) is False
+    _write(str(old / "sessions" / "s1.json"), "{}")
     assert server._home_has_user_data(str(old)) is True
 
 

@@ -1,4 +1,4 @@
-﻿# MemOmics 更新覆盖脚本（Windows，2026-10-09）
+# MemOmics 更新覆盖脚本（Windows，2026-10-09）
 # 用法：双击同目录的 update_windows.bat；或 右键本文件 →「使用 PowerShell 运行」
 #       加 -Yes 可跳过人工确认（自动化用）；自动找不到安装目录时可用 -InstallDir 显式指定：
 #         powershell -File update_windows.ps1 -InstallDir "D:\apps\MemOmics-Agent"
@@ -123,5 +123,12 @@ $vp = Join-Path $install 'VERSION'
 if (Test-Path $vp) { $ver = (Get-Content $vp -Raw).Trim() }
 Write-Host ""
 Write-Host "[OK] 覆盖完成，安装目录版本号: $ver" -ForegroundColor Green
-Write-Host "     请关闭 MemOmics 后重新启动（Windows 双击「启动.bat」）使新代码生效。" -ForegroundColor Green
+Write-Host ""
+Write-Host "  ============================================================" -ForegroundColor Yellow
+Write-Host "  [重要] 必须重启才生效 —— 更新只换了磁盘上的代码。" -ForegroundColor Yellow
+Write-Host "         请【完全关闭】MemOmics 窗口（旧的启动.bat 控制台）后，" -ForegroundColor Yellow
+Write-Host "         再重新双击「启动.bat」。若界面顶部出现""运行的是旧版本""提示，" -ForegroundColor Yellow
+Write-Host "         说明进程还没重启（设置里的供应商列表、结果栏看文件都依赖新进程）。" -ForegroundColor Yellow
+Write-Host "  ============================================================" -ForegroundColor Yellow
+Write-Host "     重新启动时还会自动补装新版依赖（首次可能几分钟）。" -ForegroundColor Green
 Write-Host "     首次启动会自动把旧的 hermes_home 数据目录迁移为 memomics_home（只搬不删）。" -ForegroundColor DarkGray
