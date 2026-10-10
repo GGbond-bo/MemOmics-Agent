@@ -15,6 +15,7 @@
   "/api/dcs/dl/reveal": "public",
   "/api/dcs/dl/start": "public",
   "/api/dcs/exec": "public",
+  "/api/dcs/install_cli": "public",
   "/api/dcs/pick": "public",
   "/api/dcs/status": "public",
   "/api/dcs/unbind": "public",

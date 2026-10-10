@@ -119,13 +119,14 @@ def _carry_missing_items(_src, _dst, _depth=0):
     return _moved
 
 
-def _merge_user_home(_old, _new, _depth=0):
+def _merge_user_home(_old, _new, _depth=0, backup_collisions=True):
     """旧 home 用户数据安全并入新 home。返回 (moved, kept_both, replaced)。
 
     规则（2026-10-10 数据安全修复）：
       · 新目录缺的项 → 整体搬过去；
       · 两边都是目录 → 递归；
-      · 两边都是同名文件 → 绝不覆盖用户数据：旧版另存 <name>.from_hermes_<时间戳>；
+      · 两边都是同名文件 → 默认把旧版另存 <name>.from_hermes_<时间戳>（零丢失）；
+        产品空壳场景（backup_collisions=False）只保留新版，不产生上千个垃圾备份；
         例外：新目录的 config.yaml 若只是模板（启动器复制的），就用用户的旧配置顶上，
         模板另存 <name>.default_<时间戳>。
       · 旧目录最后整体退休为 <old>.migrated_<时间戳>（只搬不删，最坏情况也有兜底）。
@@ -144,7 +145,7 @@ def _merge_user_home(_old, _new, _depth=0):
                 _moved += 1
                 continue
             if os.path.isdir(_s) and os.path.isdir(_t) and _depth < 6:
-                _m, _k, _r = _merge_user_home(_s, _t, _depth + 1)
+                _m, _k, _r = _merge_user_home(_s, _t, _depth + 1, backup_collisions)
                 _moved += _m
                 _kept += _k
                 _replaced += _r
@@ -155,8 +156,12 @@ def _merge_user_home(_old, _new, _depth=0):
                     shutil.copy2(_s, _t)
                     _replaced += 1
                 else:
-                    shutil.copy2(_s, _t + ".from_hermes_" + _ts)
-                    _kept += 1
+                    # 2026-10-10：产品空壳场景（更新包铺出来的新目录）不再另存备份 ——
+                    # 一次更新会产生上千个 .from_hermes_ 垃圾（用户实测 2290 个）。
+                    # 真·两边都有用户数据时仍照常另存（零丢失）。
+                    if backup_collisions:
+                        shutil.copy2(_s, _t + ".from_hermes_" + _ts)
+                        _kept += 1
         except OSError:
             continue
     return _moved, _kept, _replaced
@@ -198,7 +203,7 @@ def migrate_legacy_home(_new_home, _old_home):
             # 2026-10-10 数据安全修复：新目录只是"产品空壳"（典型：启动器预生成了模板
             # config.yaml）时，也必须让用户已有的 config.yaml/记忆/会话优先 —— 否则
             # 用户的配置项与供应商设置会被模板顶掉，看起来就是"设置没同步到新版本"。
-            _m, _k, _r = _merge_user_home(_old_home, _new_home)
+            _m, _k, _r = _merge_user_home(_old_home, _new_home, 0, backup_collisions=False)
             try:
                 os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
             except OSError:
@@ -20651,6 +20656,7 @@ def _dcs_view() -> dict:
         "user": cred.get("user") or "",
         "cli_path": cli or "",
         "cli_found": bool(cli),
+        "cli_ok": bool(cli),            # 2026-10-10：与连接器 action_status 的字段名对齐（前端/agent 同一口径）
         "base_url": cfg.get("base_url"),
         "region": cfg.get("region") or "",
         "default_project": cfg.get("default_project") or "",
@@ -20713,6 +20719,12 @@ async def api_dcs_bind(request: Request):
     if not pat:
         return {"ok": False, "error": "需要 pat 字段（DCS 个人中心 → 访问令牌 → 创建并复制）"}
     return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "bind", "pat": pat}))
+
+
+@app.post("/api/dcs/install_cli")
+async def api_dcs_install_cli():
+    """一键安装官方 dcs CLI（官方 CDN + SHA256 校验）——老用户更新后 DCS 云开箱可用。"""
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "install_cli"}))
 
 
 @app.post("/api/dcs/unbind")

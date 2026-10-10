@@ -7793,13 +7793,6 @@ async function checkStaleVersion() {
         '<span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="location.reload()">我已重启，刷新页面</span>',
         '#fff4e5', '#7a4b00', '#ffd08a');
     }
-    if (d.migration_notice && !window.__mmMigShown) {
-      window.__mmMigShown = 1;
-      var t = String(d.migration_notice).replace(/</g, '&lt;').replace(/\n/g, '<br>');
-      mmTopBanner('mm-mig-banner',
-        '📦 <b>已从旧数据目录（hermes_home）迁移数据</b>，会话/记忆/配置都在新目录里，可放心使用。<br>' +
-        '<span style="opacity:.85">' + t + '</span>', '#e8f4ff', '#0b4a7a', '#a9d5f2');
-    }
   } catch (e) {}
 }
 try { checkStaleVersion(); setInterval(checkStaleVersion, 30000); } catch (e) {}
@@ -17953,6 +17946,11 @@ function dcsLoad() {
     cb('dcs-enabled', c.enabled); cb('dcs-allow-write', c.allow_write);
     var vp = document.getElementById('dcs-vault-path');
     if (vp && c.vault) vp.textContent = c.vault;
+    var cs = document.getElementById('dcs-cli-state');
+    if (cs) {
+      if (c.cli_found) { cs.textContent = '已就绪' + (c.cli_version ? '（' + c.cli_version + '）' : ''); cs.style.color = '#2e7d32'; }
+      else { cs.textContent = '未找到'; cs.style.color = '#c0392b'; }
+    }
     if (_dcsOpenDefault || !_dcsState.rows.length) {
       _dcsOpenDefault = false;
       if (c.enabled && c.bound) { if (_dcsView !== 'cfg') dcsShowProjects(1); }
@@ -17968,18 +17966,39 @@ function dcsBind() {
   var el = document.getElementById('dcs-pat');
   var pat = el ? el.value.trim() : '';
   if (!pat) { dcsPrint('✗ 先粘贴 PAT（个人中心 → 访问令牌 → 创建）', 'err'); return; }
-  dcsPrint('⏳ 正在校验并绑定…', 'sys');
+  dcsPrint('⏳ 正在校验并绑定…（首次会自动安装官方 dcs 命令行工具，约 30–60 秒）', 'sys');
   fetch('/api/dcs/bind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pat: pat }) })
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var res = (d && d.result) || {};
       if (res.status === 'ok') {
         if (el) el.value = '';
-        dcsPrint('✓ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : ''), 'ok');
+        dcsPrint('✓ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : '') +
+                 (res.cli_installed ? '（已自动安装命令行工具）' : ''), 'ok');
         dcsLoad();
         dcsShowProjects(1);
       } else {
         dcsPrint('✗ 绑定失败：' + (res.error || (d && d.error) || '未知'), 'err');
+        if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
+        if (/命令行|cli_missing|自动安装/.test(String(res.error || ''))) {
+          dcsPrint('可点右上「⚙️ 设置」→「🔧 一键安装命令行工具」重试。', 'sys');
+        }
+      }
+    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+}
+
+function dcsInstallCli() {
+  dcsPrint('⏳ 正在从官方 CDN 下载 dcs 命令行工具，并做 SHA256 校验（校验不过不会安装）…', 'sys');
+  fetch('/api/dcs/install_cli', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var res = (d && d.result) || {};
+      if (res.status === 'ok') {
+        dcsPrint('✓ ' + (res.message || '命令行工具已就绪') +
+                 (res.sha256 ? ('（SHA256 ' + String(res.sha256).slice(0, 12) + '…）') : ''), 'ok');
+        dcsLoad();
+      } else {
+        dcsPrint('✗ 安装失败：' + (res.error || (d && d.error) || '未知'), 'err');
         if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
       }
     }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
@@ -19302,28 +19321,36 @@ async function saveUpdateConfig(mode) {
     <div class="cc-cfg" id="dcs-cfg" style="display:none;">
       <label>启用连接器<input type="checkbox" id="dcs-enabled"></label>
       <label>站点 base_url<input id="dcs-base-url" placeholder="https://www.dcs.cloud"></label>
-      <label>片区 region（可空）<input id="dcs-region" placeholder="留空 = 站点默认"></label>
-      <label>默认项目 ID（可空）<input id="dcs-default-project" placeholder="P…；留空 = 用 CLI 当前项目"></label>
-      <label>命令超时秒<input id="dcs-timeout" placeholder="120"></label>
-      <label>默认下载目录<input id="dcs-download-dir" placeholder="留空 = 仓库 results/；可点右侧按钮选">
+      <label>下载目录<input id="dcs-download-dir" placeholder="留空 = results/（可点右侧选）">
         <span style="display:inline-flex;gap:6px;margin-top:2px;"><button class="cc-btn" type="button" onclick="dcsPickInto('dcs-download-dir','dir')">📂 选择</button></span>
       </label>
       <label>允许写操作（上传/开容器）<input type="checkbox" id="dcs-allow-write"></label>
-      <label>CLI 路径（可空 = 自动探测）<input id="dcs-cli-path" placeholder="留空自动找 %LOCALAPPDATA%\MemOmics\tools\dcs\dcs.exe"></label>
       <div class="cc-cfg-note" style="grid-column:1/-1;">
         <b>账号（PAT 访问令牌）</b>：打开
         <a href="https://www.dcs.cloud" target="_blank" style="color:var(--primary);">www.dcs.cloud</a>
         → 个人中心 → <b>访问令牌</b> → 创建（有效期最长 1 年）→ 复制，粘贴到下面。
-        令牌只存本机 <code id="dcs-vault-path">memomics_home/dcs_cloud.json</code>，不进日志、不随安装包分发；
-        在 DCS 侧删除令牌即刻失效。<b>MemOmics 不保存账号密码</b>（平台有双因子，密码自动登录本来就走不通）。
+        令牌只存本机 <code id="dcs-vault-path">memomics_home/dcs_cloud.json</code>（不进日志、不随包分发），DCS 侧删除即刻失效；MemOmics 从不保存账号密码。
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           <input id="dcs-pat" type="password" placeholder="dcs_pat_…" style="flex:1;min-width:240px;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:12px;">
           <button class="cc-btn primary" onclick="dcsBind()">🔗 绑定</button>
           <button class="cc-btn" onclick="dcsUnbind()">解除绑定</button>
           <span id="dcs-bind-note" class="cc-cfg-note" style="flex:1;"></span>
         </div>
-        <div style="margin-top:6px;">没装命令行工具？跑一次 <code>scripts\install_dcs_cli.ps1</code>（官方 CDN 下载 + SHA256 校验）。</div>
       </div>
+      <div class="cc-cfg-note" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span>命令行工具（官方 dcs CLI）：<b id="dcs-cli-state">检查中…</b></span>
+        <button class="cc-btn" onclick="dcsInstallCli()" style="padding:2px 8px;">🔧 一键安装 / 修复</button>
+        <span style="opacity:.75;">官方 CDN 下载 + SHA256 校验；绑定 PAT 时若缺失会自动安装</span>
+      </div>
+      <details style="grid-column:1/-1;">
+        <summary style="cursor:pointer;font-size:12px;opacity:.75;">高级（片区 / 默认项目 / 命令超时 / CLI 路径）</summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 14px;margin-top:8px;">
+          <label>片区 region（可空）<input id="dcs-region" placeholder="留空 = 站点默认"></label>
+          <label>默认项目 ID（可空）<input id="dcs-default-project" placeholder="P…；留空 = 用 CLI 当前项目"></label>
+          <label>命令超时秒<input id="dcs-timeout" placeholder="120"></label>
+          <label>CLI 路径（可空 = 自动探测）<input id="dcs-cli-path" placeholder="留空自动找 %LOCALAPPDATA%\MemOmics\tools\dcs\dcs.exe"></label>
+        </div>
+      </details>
       <div class="cc-cfg-actions">
         <button class="cc-btn primary" onclick="dcsSaveCfg()">💾 保存</button>
         <button class="cc-btn" onclick="dcsLoad()">⟳ 刷新状态</button>

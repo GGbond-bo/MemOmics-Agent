@@ -151,6 +151,45 @@ def _deps_sync(memomics_home: str) -> str:
     return "依赖已就绪（%s）" % h
 
 
+def _tidy_from_hermes_dupes(memomics_home: str) -> tuple:
+    """清掉迁移留下的、与本体逐字节相同的 .from_hermes_* 备份（零信息损失）。
+
+    2026-10-10：用户实测一次更新产生 2290 个重复备份；这里只删"内容完全相同"的，
+    有差异的一律保留（真正的用户改动不会被删）；>8MB 的不比较，直接保留。
+    """
+    import hashlib
+    removed = kept = 0
+    if not memomics_home or not os.path.isdir(memomics_home):
+        return 0, 0
+    for root, dirs, files in os.walk(memomics_home):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for name in files:
+            if ".from_hermes_" not in name:
+                continue
+            path = os.path.join(root, name)
+            base = os.path.join(root, name.split(".from_hermes_")[0])
+            try:
+                if not os.path.isfile(base):
+                    kept += 1
+                    continue
+                sa, sb = os.path.getsize(base), os.path.getsize(path)
+                if sa != sb or sa > 8 * 1024 * 1024:
+                    kept += 1
+                    continue
+                with open(base, "rb") as f:
+                    ha = hashlib.sha256(f.read()).hexdigest()
+                with open(path, "rb") as f:
+                    hb = hashlib.sha256(f.read()).hexdigest()
+                if ha == hb:
+                    os.remove(path)
+                    removed += 1
+                else:
+                    kept += 1
+            except OSError:
+                kept += 1
+    return removed, kept
+
+
 def apply_fix_bundle(memomics_home: str, dry_run: bool = False) -> dict:
     """应用文件级迁移并推进 .fix_bundle 标记。幂等。"""
     os.makedirs(memomics_home, exist_ok=True)
@@ -174,6 +213,12 @@ def apply_fix_bundle(memomics_home: str, dry_run: bool = False) -> dict:
                 f.write(BUNDLE)
         except Exception as e:
             result["marker_error"] = str(e)
+    try:
+        _rm, _kp = _tidy_from_hermes_dupes(memomics_home)
+        result["tidy"] = "清理重复迁移备份 %d 个（保留有差异的 %d 个）" % (_rm, _kp)
+    except Exception as exc:
+        result["tidy"] = "跳过：%s" % exc
+
     return {"ok": True, "up_to_date": False, "from": cur or "none",
             "to": BUNDLE, "migrations": result}
 

@@ -282,6 +282,122 @@ def resolve_cli(cfg: dict | None = None) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# 官方 CLI 自动安装（2026-10-10）
+#   用户反馈：老用户用 update 包更新后「DCS 云」绑不上 —— 根因是各安装包都没带
+#   scripts/install_dcs_cli.ps1，而绑定必须先有官方 dcs CLI。现在：绑定/一键按钮
+#   都会自动从官方 CDN 下载（先校验 SHA256，校验不过直接删、绝不执行）。
+# ---------------------------------------------------------------------------
+_CDN_BASE = "https://cdn-refs.dcs.cloud/app/dcs_cli"
+
+
+def _cli_platform_file() -> str:
+    import platform as _pf
+    sysname = _pf.system().lower()
+    machine = (_pf.machine() or "").lower()
+    if sysname.startswith("win"):
+        return "dcs.exe"
+    arm = machine in ("arm64", "aarch64")
+    if sysname == "darwin":
+        return "dcs-darwin-arm64" if arm else "dcs-darwin-amd64"
+    return "dcs-linux-arm64" if arm else "dcs-linux-amd64"
+
+
+def _cli_default_dest() -> str:
+    local = os.environ.get("LOCALAPPDATA") or ""
+    if os.name == "nt" and local:
+        return str(Path(local) / "MemOmics" / "tools" / "dcs")
+    return str(Path.home() / ".memomics" / "tools" / "dcs")
+
+
+def install_cli(version: str = "", dest: str = "", force: bool = False) -> dict:
+    """下载并安装官方 dcs CLI（CDN → SHA256 校验 → 落盘）。永不抛，返回结构化结果。"""
+    import hashlib
+    import urllib.request
+    dest = str(dest or _cli_default_dest())
+    try:
+        os.makedirs(dest, exist_ok=True)
+    except OSError as exc:
+        return {"ok": False, "error": "创建安装目录失败：%s" % exc}
+    fname = _cli_platform_file()
+    headers = {"User-Agent": "MemOmics-Agent/dcs-cli-installer"}
+    try:
+        if not version:
+            with urllib.request.urlopen(urllib.request.Request(_CDN_BASE + "/version.txt", headers=headers), timeout=60) as r:
+                version = r.read().decode("utf-8", "replace").strip().split("\n")[0].strip()
+        if version and not version.startswith("v"):
+            version = "v" + version
+        target = os.path.join(dest, fname)
+        if os.path.isfile(target) and not force:
+            return {"ok": True, "already": True, "path": target, "message": "本机已有 dcs CLI：%s" % target}
+        sums_url = "%s/%s/SHA256SUMS" % (_CDN_BASE, version)
+        with urllib.request.urlopen(urllib.request.Request(sums_url, headers=headers), timeout=60) as r:
+            sums = r.read().decode("utf-8", "replace")
+        expected = ""
+        for line in sums.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[-1].lstrip("*") == fname:
+                expected = parts[0].strip().lower()
+                break
+        if not expected:
+            return {"ok": False, "error": "SHA256SUMS 里没有 %s（%s）" % (fname, version)}
+        tmp = target + ".download"
+        with urllib.request.urlopen(urllib.request.Request("%s/%s/%s" % (_CDN_BASE, version, fname), headers=headers),
+                                    timeout=900) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f, 1024 * 512)
+        h = hashlib.sha256()
+        with open(tmp, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        actual = h.hexdigest().lower()
+        if actual != expected:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return {"ok": False, "error": "SHA256 校验失败（期望 %s，实际 %s）——已删除下载文件，未安装" % (expected, actual)}
+        if os.name == "nt" and os.path.isfile(target):
+            try:
+                os.remove(target)
+            except OSError:
+                pass
+        shutil.move(tmp, target)
+        if os.name != "nt":
+            os.chmod(target, 0o755)
+        return {"ok": True, "path": target, "version": version, "sha256": actual,
+                "message": "已安装官方 dcs CLI：%s（%s）" % (target, version)}
+    except Exception as exc:
+        return {"ok": False, "error": "下载/安装失败：%s: %s" % (type(exc).__name__, exc),
+                "hint": "网络受限可手工跑 scripts/install_dcs_cli.ps1，或在 config.yaml 的 dcs_cloud.cli_path 写 dcs.exe 全路径"}
+
+
+def ensure_cli(*, auto: bool = True) -> dict:
+    """绑定/查询前确保 CLI 可用：没有就自动装一次（auto=False 只探测）。"""
+    cfg = load_config()
+    cur = resolve_cli(cfg)
+    if cur:
+        return {"ok": True, "path": cur, "already": True}
+    if not auto:
+        return {"ok": False, "error": "没找到 dcs 命令行工具",
+                "hint": "点「🔧 一键安装命令行工具」，或跑 scripts/install_dcs_cli.ps1"}
+    r = install_cli()
+    if r.get("ok"):
+        return {"ok": True, "path": r.get("path"), "installed": True, "version": r.get("version"),
+                "sha256": r.get("sha256")}
+    return {"ok": False, "error": r.get("error") or "自动安装失败", "hint": r.get("hint")}
+
+
+def action_install_cli(args: dict) -> dict:
+    """一键安装/修复 CLI。已在且可用 → 直接返回 ok。"""
+    cur = resolve_cli(load_config())
+    if cur and not args.get("force"):
+        return _ok({"already": True, "path": cur, "message": "本机已有 dcs CLI：%s" % cur})
+    out = install_cli(str(args.get("version") or ""), str(args.get("dest") or ""), bool(args.get("force")))
+    if out.get("ok"):
+        return _ok(out)
+    return _err(out.get("error") or "安装失败", hint=out.get("hint"))
+
+
 def _cli_env() -> dict:
     env = dict(os.environ)
     env.pop("DCS_PAT", None)   # 会话走 CLI 自己的登录态，不靠临时环境变量
@@ -302,8 +418,8 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
         return {
             "ok": False, "exit_code": None, "data": None, "error": {"type": "cli_missing"},
             "message": "没找到 dcs 命令行工具",
-            "hint": ("先安装官方 CLI：`scripts/install_dcs_cli.ps1`（从官方 CDN 下载并校验 SHA256），"
-                     "或在 config.yaml 的 dcs_cloud.cli_path 里写 dcs.exe 全路径"),
+            "hint": ("在「☁️ DCS 云」面板点「🔧 一键安装 / 修复」（官方 CDN 下载 + SHA256 校验，"
+                     "绑定 PAT 时也会自动装），或在 config.yaml 的 dcs_cloud.cli_path 里写 dcs.exe 全路径"),
             "cmd": [],
         }
     argv = [cli] + [str(a) for a in args]
@@ -488,6 +604,7 @@ def action_status(args: dict) -> dict:
         "expires_at": cred.get("expires_at"),
         "saved_at": cred.get("saved_at"),
         "cli_path": cli or "(未找到)",
+        "cli_ok": bool(cli),
         "cli_version": version,
         "base_url": cfg.get("base_url"),
         "region": cfg.get("region") or "(站点默认)",
@@ -498,7 +615,7 @@ def action_status(args: dict) -> dict:
     if not cred.get("pat"):
         hints.append("还没绑定 PAT：DCS 个人中心 → 访问令牌 → 创建 → 复制后粘贴到「☁️ DCS 云」面板")
     if not cli:
-        hints.append("先装官方 CLI：scripts/install_dcs_cli.ps1（官方 CDN + SHA256 校验），"
+        hints.append("还没装官方 dcs 命令行工具：点面板「🔧 一键安装命令行工具」（绑定 PAT 时也会自动装），"
                      "或在 config.yaml 写 dcs_cloud.cli_path")
     if cli and cred.get("pat"):
         cur = _run_cli(["project", "current"], cfg=cfg)
@@ -520,6 +637,10 @@ def action_bind(args: dict) -> dict:
         return _err("missing_pat", hint="需要参数 pat（在 DCS 个人中心 → 访问令牌 里创建并复制）")
     if not pat.startswith("dcs_pat_"):
         return _err("PAT 格式不对：应以 dcs_pat_ 开头", hint="确认复制完整（令牌只显示一次）")
+    ens = ensure_cli()                      # 2026-10-10：没有 CLI 就自动装（老用户更新后开箱可用）
+    if not ens.get("ok"):
+        return _err("绑定前需要官方 dcs 命令行工具，且自动安装未成功：%s" % ens.get("error"),
+                    hint=ens.get("hint"))
     res = _run_cli(["auth", "login", "--token", pat], cfg=cfg)
     if not res.get("ok"):
         return _err("绑定失败：%s" % (res.get("message") or "未知错误"),
@@ -539,6 +660,7 @@ def action_bind(args: dict) -> dict:
         "user_id": user_id,
         "expires_at": expires,
         "current": cur.get("data") if cur.get("ok") else None,
+        "cli_installed": bool(ens.get("installed")),
         "message": "DCS 账号已绑定（PAT 保存在本机 %s，不进日志、不随安装包分发）" % VAULT_FILENAME,
     })
 
@@ -1735,6 +1857,7 @@ _ACTIONS = {
     "task_cancel": action_task_cancel,
     "status": action_status,
     "bind": action_bind,
+    "install_cli": action_install_cli,
     "unbind": action_unbind,
     "projects": action_projects,
     "use_project": action_use_project,
@@ -1764,11 +1887,11 @@ def dcs_cloud_handler(args: dict | None = None, **kwargs):
     if action not in _ACTIONS:
         return json.dumps(_err("未知 action: %r（可选：%s）" % (action, ", ".join(sorted(_ACTIONS)))),
                           ensure_ascii=False, indent=2)
-    if not cfg.get("enabled") and action not in ("status", "bind", "unbind"):
+    if not cfg.get("enabled") and action not in ("status", "bind", "unbind", "install_cli"):
         return json.dumps(_err("DCS 连接器未启用（config.yaml 的 dcs_cloud.enabled=false）",
                                hint="在 WebUI「☁️ DCS 云」面板或 config.yaml 打开开关"),
                           ensure_ascii=False, indent=2)
-    if action not in ("status", "bind", "unbind"):
+    if action not in ("status", "bind", "unbind", "install_cli"):
         cred = read_credential()
         if not cred.get("pat"):
             return json.dumps(_err("未绑定 DCS 账号",

@@ -5,7 +5,7 @@
 1. 首次安装（无 hermes_home）→ noop，绝不碰文件系统；
 2. 只有 hermes_home（既有安装）→ 整体改名，数据原地保留；
 3. 双存在 + 新目录是产品空壳（更新包/启动器先造出来的）→ 先安全并入再退休旧目录；
-   重名文件保留新目录版本并另存 .from_hermes_ 备份（零丢失）；
+   重名文件保留新目录版本；旧版仍在退休目录里（零丢失），但不再另存上千个 .from_hermes_ 备份；
 4. 双存在 + 两边都有用户数据 → **不再只告警**：安全并入（缺失项搬入、重名另存备份、
    旧目录退休 .migrated_）—— 修的就是"更新后会话/记忆看起来全没了"；
 5. 启动器预生成的模板 config.yaml（占位符 YOUR_API_KEY_HERE / 与 config.yaml.example 一致）
@@ -65,9 +65,10 @@ def test_merge_when_new_is_product_shell(tmp_path):
     assert (new / "config.yaml").read_text(encoding="utf-8") == "cfg"
     assert (new / "memories" / "MEMORY.md").is_file()
     assert (new / "skills" / "mine" / "SKILL.md").read_text(encoding="utf-8") == "user-skill"
-    # 重名文件：新版赢（= 覆盖升级语义），旧版另存 .from_hermes_ 备份（零丢失）
+    # 重名文件：新版赢（= 覆盖升级语义）；2026-10-10 起产品空壳场景不再另存 .from_hermes_ 备份
+    # （用户实测一次更新产生 2290 个垃圾备份）；旧版仍留在退休目录里可手工找回（零丢失）
     assert (new / "skills" / "product" / "SKILL.md").read_text(encoding="utf-8") == "new-product"
-    assert list((new / "skills" / "product").glob("SKILL.md.from_hermes_*"))
+    assert not list((new / "skills" / "product").glob("SKILL.md.from_hermes_*"))
     assert (new / "SOUL.md").is_file()
     # 旧目录退休为备份（不是删除），备份里只剩重名项
     left = list(tmp_path.glob("hermes_home.migrated_*"))
@@ -147,3 +148,19 @@ def test_update_apply_migrates_before_overlay():
     seg = src[i:j]
     assert "migrate_legacy_home(MEMOMICS_HOME_DIR, _legacy_home)" in seg
     assert "检测到覆盖升级" in seg
+
+def test_tidy_from_hermes_dupes_only_removes_identical(tmp_path):
+    """2026-10-10：历史迁移留下的 .from_hermes_ 备份，只有与本体逐字节相同才清掉。"""
+    import pytest
+    fb = pytest.importorskip("memomics.fix_bundle")
+    home = tmp_path / "memomics_home"
+    _write(str(home / "a.txt"), "same")
+    _write(str(home / "a.txt.from_hermes_20261010-170544"), "same")      # 相同 → 删
+    _write(str(home / "b.txt"), "new")
+    _write(str(home / "b.txt.from_hermes_20261010-170544"), "user-edit")  # 有差异 → 留
+    _write(str(home / "c.txt.from_hermes_20261010-170544"), "orphan")     # 本体缺失 → 留
+    removed, kept = fb._tidy_from_hermes_dupes(str(home))
+    assert removed == 1 and kept == 2
+    assert not (home / "a.txt.from_hermes_20261010-170544").exists()
+    assert (home / "b.txt.from_hermes_20261010-170544").is_file()
+    assert (home / "c.txt.from_hermes_20261010-170544").is_file()
