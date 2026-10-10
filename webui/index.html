@@ -1720,6 +1720,14 @@ html[data-bg="maid"] .chat-input button,
 html[data-bg="chibi"] .chat-input button { padding:0 12px; }
 html[data-bg="maid"] .img-upload-btn,
 html[data-bg="chibi"] .img-upload-btn { margin-left:var(--bg-input-balance, 0px); }
+
+/* 2026-10-10：小屏下 maid 模式的输入框被「上传 + 发送 + 停止」从两侧挤成一小块，
+   而输入框两侧还空着（用户截图圈出两侧空档）。把 textarea 提为独占一行、吃满整行
+   内容宽；按钮挪到下一行（上传居左、发送/停止居右），不再从两侧挤输入框。
+   输入框独占一行后不再偏左，--bg-input-balance 居中补偿也就不需要了（归 0）。 */
+html[data-bg="maid"] .chat-input .input-row { flex-wrap:wrap; }
+html[data-bg="maid"] .chat-input textarea { flex:1 1 100%; order:-1; }
+html[data-bg="maid"] .chat-input .img-upload-btn { margin-left:0; margin-right:auto; }
 </style>
 </head>
 <body>
