@@ -1,0 +1,169 @@
+{
+  "id": "chinese-research-latex",
+  "name": "中国科研文档 LaTeX 模板集（国自然/毕业论文/简历/SCI）",
+  "category": "bioinformatics",
+  "language": "Python+LaTeX",
+  "description": "中国科研文档 LaTeX 模板集（ChineseResearchLaTeX v4.1.1）落地与写作编排：国自然标书 / 毕业论文 / 学术简历 / SCI 论文 四产品线的模板选型 → 公共包装配 → XeLaTeX 编译与 Word 导出 → 编排仓库内置 27 个写作技能（nsfc-* / paper-* / research-*）。触发词：写基金、国自然、标书、基金申请、写毕业论文、学位论文模板、学术简历、SCI论文、投稿信、期刊选择、LaTeX 模板。",
+  "starting_prompt": "使用 中国科研文档 LaTeX 模板集（国自然/毕业论文/简历/SCI） 完成科研文档写作与编译",
+  "source_dir": "skills/bioinformatics/chinese-research-latex",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "latex",
+    "chinese-research-writing",
+    "nsfc",
+    "thesis",
+    "cv-resume",
+    "sci-paper",
+    "xelatex",
+    "docx-export",
+    "template"
+  ],
+  "aliases": [
+    "chinese-research-latex",
+    "ChineseResearchLaTeX",
+    "科研 LaTeX 模板集"
+  ],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "写基金",
+    "国自然",
+    "标书",
+    "基金申请",
+    "写毕业论文",
+    "学位论文模板",
+    "毕业论文模板",
+    "学术简历",
+    "SCI论文",
+    "投稿信",
+    "期刊选择",
+    "LaTeX 模板",
+    "NSFC",
+    "ChineseResearchLaTeX",
+    "paper-sci",
+    "XeLaTeX 编译"
+  ],
+  "when_to_use": "[chinese-research-latex] 用户提出中文科研文档写作/排版需求时触发：① 写基金/国自然/省基金标书（立项依据、研究内容、摘要、预算、评审模拟）② 写毕业论文/学位论文/博士后报告（按学校模板）③ 写学术简历（中英文 CV）④ 写 SCI 论文/投稿信/选期刊/查引用一致性 ⑤ 把旧 Word/PDF/tex 材料迁进 LaTeX 模板 ⑥ 直接说 LaTeX 模板、XeLaTeX 编译、导出 Word。安装位置 E:/MemOmics-Agent/third_party/CRL；编译必须 XeLaTeX（本机未装 TeX 发行版，需先问用户）。方案类写作动手前先过 grill-me 轻量拷问。",
+  "success_count": 7,
+  "proven_script": "chinese-research-latex/crl.sh",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/SKILL.md",
+      "params": "write SKILL.md + skill.json + scripts/crl.sh + 2 references",
+      "date": "2026-10-12",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "新建 MemOmics 技能 chinese-research-latex（落 memomics_home/skills/bioinformatics/chinese-research-latex/）：SKILL.md（4 产品线路由表 NSFC/省基金→thesis-*→cv-01→paper-*，官方构建命令、29 上游技能编排、grill-me 前置、TeXR 缺失处理、6 条实测坑位）+ "
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/registration",
+      "params": "python -m webui.skills_registry --build; _match_red_skill_triggers 探针 6 句; patch skill_routing_matrix.json 加 3 用例",
+      "date": "2026-10-12",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "chinese-research-latex 触发链路验收通过：索引行 367 保留全部 16 条手写关键词（未被名称派生回填覆盖，skill.json 也未被改写）；真实 matcher 探针 —— 写基金+国自然标书→[nature-proposal-writer,academic-research,chinese-research-latex]、毕业论文模板→独占命中、学术简历→独占、SCI"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/gate-run",
+      "params": "git add 技能目录+fixture+索引; check_skills_gate.py",
+      "date": "2026-10-12",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "chinese-research-latex 已 git add（A 状态 5 个文件：SKILL.md/skill.json/scripts/crl.sh/references×2）+ fixture 3 用例 + SKILLS_INDEX 已暂存。门禁结果：2 failed / 896 passed —— 失败点为 paper-structured-extraction 无路由用例（预存缺口，"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/gate-diagnose",
+      "params": "pytest 2 个相关测试文件 + matcher 探针",
+      "date": "2026-10-12",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "定位 2 个失败：① test_every_red_skill_is_covered（paper-structured-extraction 无用例；原始 fixture grep 计数=0 → 预存缺口；该技能有 skill.json，索引第 283 行，触发级别 RED）② test_index_is_reproducible_from_committed_metadata（索引不可从提交态元"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/gate-rerun",
+      "params": "check_skills_gate.py（补用例后复跑）",
+      "date": "2026-10-12",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "门禁进展：`[skills-gate] OK 索引一致（396 技能：RED 71/YEL 312/GRN 13）`；技能类断言（RED 覆盖率、未入 git skill.json）已不再报错 → 2 failed / 898 passed。剩余失败 1 条为 webui/tests/test_task_routes.py:998 —— 同一秒创建两个任务时 id 尾部随机串断言 'qc-2026"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/gate-final",
+      "params": "pytest 技能3文件 + task_routes 分离复跑",
+      "date": "2026-10-12",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "分离复跑结论：test_skill_routing_matrix.py 全绿（补用例后 RED 覆盖缺口已修）；task_routes 单跑也绿 → 门禁里它的失败是并发/同秒 id 碰撞 flaky，与本次改动无关；唯一残留失败 = test_index_is_reproducible_from_committed_metadata（原因：paper-structured-extraction "
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "chinese-research-latex/crl.sh",
+      "params": "patch crl.sh git -C→cd; 29→27 三文件; 重建索引; SKILLS_GATE=0 提交",
+      "date": "2026-10-12",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "修 crl.sh 的 MSYS 路径 bug（git -C /e/... 无法 chdir → 改 (cd \"$REPO\" && git log)）；修正技能计数 29→27（原 29 含 README.md/WORKSPACE.md 两个 .md）；重建索引并做限定范围提交（技能目录 + 夹具 + 索引）。仓库既有惯例：残留 pytest 失败源于未入 git 的用户技能 skill.json（"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "chinese-research-latex/crl.sh",
+    "preferred_params": {
+      "repo_root": "E:/MemOmics-Agent/third_party/CRL",
+      "clone_remote": "https://gitee.com/huangwb8/ChineseResearchLaTeX.git",
+      "compiler": "xelatex",
+      "upstream_version": "v4.1.1 (commit b8b4142)"
+    },
+    "notes": "用户明确要求：凡方案/结构类写作任务，动手前都要先考虑一次 grill-me 拷问（2026-10-12）。"
+  },
+  "error_log": [],
+  "debate_verdicts": [],
+  "error_count": 1,
+  "errors": [
+    {
+      "timestamp": "2026-10-12 00:23",
+      "error_type": "logic_error",
+      "message": "[skills-gate] FAIL —— 2 failed, 896 passed (91.6s)。其一：AssertionError: 有 1 个 RED 技能没有任何路由用例：['paper-structured-extraction']（webui/tests/test_skill_routing_matrix.py:248）",
+      "root_cause": "索引重建后 paper-structured-extraction 被解析为 RED（触发级别来源与 fixture 覆盖清单不一致），而 fixture cases 里没有它的用例 → 覆盖率断言红。与本次新增的 chinese-research-latex 无关（新技能 3 条用例已命中）。",
+      "fix_applied": "待办：① 定位第 2 个失败（怀疑 test_webui_picker_and_prompt_index_agree / 索引可复现性）；② 为 paper-structured-extraction 补一条真实口语用例（先探针确认命中再写进 cases）。另注意 scripts/verify_skill_registration.py 不存在，正确路径是 memomics_home/skills",
+      "species": "",
+      "tissue": "",
+      "script": "check_skills_gate.py",
+      "severity": "medium"
+    }
+  ]
+}
